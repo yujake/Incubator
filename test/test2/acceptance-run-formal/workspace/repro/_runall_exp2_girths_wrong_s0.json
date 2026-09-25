@@ -1,0 +1,1101 @@
+{
+  "counterexample": null,
+  "evidence_kind": "cross_check",
+  "negation_kind": "no_local_evidence",
+  "observations": {
+    "caught_by": "m3.S.affine_reflection_intact: with s_0 = (tau_0, 0) the affine reflection test fails: [[[1, 0, 0], [0, 0, 1], [1, 0, 0], 's_0']]; m3.S.girth_matches_theorem: girth S~_3 = 4, theorem says 6 (ball radius 3 has 6 elements); m4.S.affine_reflection_intact: with s_0 = (tau_0, 0) the affine reflection test fails: [[[1, 0, 0, 0], [0, 0, 0, 1], [1, 0, 0, 0], 's_0']]; m5.S.affine_reflection_intact: with s_0 = (tau_0, 0) the affine reflection test fails: [[[1, 0, 0, 0, 0], [0, 0, 0, 0, 1], [1, 0, 0, 0, 0], 's_0']]",
+    "checks": [
+      {
+        "check": "m3.K.girth_equals_6",
+        "detail": "edge-deletion girth of K(3) = 6 (ball 19, radius 3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.K.dfs_agrees_with_edge_deletion",
+        "detail": "exhaustive simple-cycle DFS gives 6, edge-deletion gives 6",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.K.exhaustive_shortest_cycle_through_0_is_6",
+        "detail": "shortest simple cycle through 0^3 has length 6 (counts by length: {3: 0, 4: 0, 5: 0, 6: 6, 7: 0})",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.K.no_odd_cycles_up_to_7",
+        "detail": "K(m) is bipartite (Remark 3.2), so no odd cycles: counts {3: 0, 5: 0, 7: 0}",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.K.explicit_6cycle_is_a_cycle",
+        "detail": "all consecutive pairs adjacent, all 6 vertices distinct; coordinate sums [0, 1, 0, 1, 0, 1]",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.S.affine_reflection_intact",
+        "detail": "with s_0 = (tau_0, 0) the affine reflection test fails: [[[1, 0, 0], [0, 0, 1], [1, 0, 0], 's_0']]",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.S.coxeter_relations_hold",
+        "detail": "with s_0 = (tau_0, 0) the Coxeter check 'diagram_matches_realisation' says: measured orders equal the A~ diagram",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.S.girth_matches_theorem",
+        "detail": "girth S~_3 = 4, theorem says 6 (ball radius 3 has 6 elements)",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.S.explicit_6cycle_is_a_cycle",
+        "detail": "all consecutive pairs adjacent, all 6 vertices distinct (rank-two parabolic <s_i,s_j> ~ S_3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.S.no_commuting_pair_hence_no_4cycle",
+        "detail": "measured orders of s_i s_j: [[1, 3, 3], [3, 1, 3], [3, 3, 1]] -- all 3, so there is no commuting pair and no 4-cycle (text:376-378)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.S.no_loops_no_double_edges",
+        "detail": "the 3 generators are distinct involutions, so the Cayley graph has no loop and no double edge (text:338-341)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.K.girth_equals_6",
+        "detail": "edge-deletion girth of K(4) = 6 (ball 41, radius 3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.K.dfs_agrees_with_edge_deletion",
+        "detail": "exhaustive simple-cycle DFS gives 6, edge-deletion gives 6",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.K.exhaustive_shortest_cycle_through_0_is_6",
+        "detail": "shortest simple cycle through 0^4 has length 6 (counts by length: {3: 0, 4: 0, 5: 0, 6: 24, 7: 0})",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.K.no_odd_cycles_up_to_7",
+        "detail": "K(m) is bipartite (Remark 3.2), so no odd cycles: counts {3: 0, 5: 0, 7: 0}",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.K.explicit_6cycle_is_a_cycle",
+        "detail": "all consecutive pairs adjacent, all 6 vertices distinct; coordinate sums [0, 1, 0, 1, 0, 1]",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.S.affine_reflection_intact",
+        "detail": "with s_0 = (tau_0, 0) the affine reflection test fails: [[[1, 0, 0, 0], [0, 0, 0, 1], [1, 0, 0, 0], 's_0']]",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.S.coxeter_relations_hold",
+        "detail": "with s_0 = (tau_0, 0) the Coxeter check 'diagram_matches_realisation' says: measured orders equal the A~ diagram",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.S.girth_matches_theorem",
+        "detail": "girth S~_4 = 4, theorem says 4 (ball radius 3 has 24 elements)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.S.explicit_4cycle_is_a_cycle",
+        "detail": "all consecutive pairs adjacent, all 4 vertices distinct (m >= 4, s_1 and s_3 commute)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.S.no_loops_no_double_edges",
+        "detail": "the 4 generators are distinct involutions, so the Cayley graph has no loop and no double edge (text:338-341)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.K.girth_equals_6",
+        "detail": "edge-deletion girth of K(5) = 6 (ball 76, radius 3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.K.exhaustive_shortest_cycle_through_0_is_6",
+        "detail": "shortest simple cycle through 0^5 has length 6 (counts by length: {3: 0, 4: 0, 5: 0, 6: 60, 7: 0})",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.K.no_odd_cycles_up_to_7",
+        "detail": "K(m) is bipartite (Remark 3.2), so no odd cycles: counts {3: 0, 5: 0, 7: 0}",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.K.explicit_6cycle_is_a_cycle",
+        "detail": "all consecutive pairs adjacent, all 6 vertices distinct; coordinate sums [0, 1, 0, 1, 0, 1]",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.S.affine_reflection_intact",
+        "detail": "with s_0 = (tau_0, 0) the affine reflection test fails: [[[1, 0, 0, 0, 0], [0, 0, 0, 0, 1], [1, 0, 0, 0, 0], 's_0']]",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.S.coxeter_relations_hold",
+        "detail": "with s_0 = (tau_0, 0) the Coxeter check 'diagram_matches_realisation' says: measured orders equal the A~ diagram",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.S.girth_matches_theorem",
+        "detail": "girth S~_5 = 4, theorem says 4 (ball radius 3 has 120 elements)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.S.explicit_4cycle_is_a_cycle",
+        "detail": "all consecutive pairs adjacent, all 4 vertices distinct (m >= 4, s_1 and s_3 commute)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.S.no_loops_no_double_edges",
+        "detail": "the 5 generators are distinct involutions, so the Cayley graph has no loop and no double edge (text:338-341)",
+        "ok": true,
+        "severity": "must_hold"
+      }
+    ],
+    "elapsed_seconds": 0.074,
+    "failed_checks": [
+      "m3.S.affine_reflection_intact",
+      "m3.S.girth_matches_theorem",
+      "m4.S.affine_reflection_intact",
+      "m5.S.affine_reflection_intact"
+    ],
+    "injected_bug": "wrong_s0",
+    "max_seconds": 60.0,
+    "n_checks": 30,
+    "n_failed": 4,
+    "n_undecided": 0,
+    "notes": [
+      "NEGATIVE CONTROL ACTIVE: wrong_s0"
+    ],
+    "paper_claims": {
+      "our_role": "numerical cross-check only",
+      "proved_in_paper": true,
+      "theorem": "Theorem 1.4 (text:70-71): girth K(m) = 6 for m >= 3; girth S~_m = 6 for m = 3 and 4 for m >= 4"
+    },
+    "per_m": {
+      "m3": {
+        "affine_reflection_check": {
+          "detail": "s_0 (or some s_i) does not act as specified",
+          "failures": [
+            [
+              [
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                0,
+                0
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                0,
+                0
+              ],
+              [
+                2,
+                0,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                1,
+                0,
+                -1
+              ],
+              [
+                -1,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                -1
+              ],
+              "s_0"
+            ]
+          ],
+          "ok": false
+        },
+        "cycles_through_origin_by_length": {
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 6,
+          "7": 0
+        },
+        "expected": {
+          "girth_K": 6,
+          "girth_Stilde": 6
+        },
+        "explicit_cycle_K": {
+          "coordinate_sums": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "reason": "all consecutive pairs adjacent, all 6 vertices distinct",
+          "valid": true,
+          "vertices": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              1,
+              -1,
+              0
+            ],
+            [
+              1,
+              -1,
+              1
+            ],
+            [
+              0,
+              -1,
+              1
+            ],
+            [
+              0,
+              0,
+              1
+            ]
+          ]
+        },
+        "explicit_cycle_Stilde": {
+          "reason": "all consecutive pairs adjacent, all 6 vertices distinct",
+          "valid": true,
+          "vertices": [
+            [
+              [
+                0,
+                1,
+                2
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                1,
+                0,
+                2
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                1,
+                2,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                2,
+                1,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                2,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                2,
+                1
+              ],
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ]
+        },
+        "girth_K_dfs": {
+          "ball_size": 19,
+          "girth": 6,
+          "steps": 103
+        },
+        "girth_K_edge_deletion": {
+          "ball_size": 19,
+          "girth": 6,
+          "method": "edge-deletion shortest cycle",
+          "radius": 3,
+          "root": [
+            0,
+            0,
+            0
+          ],
+          "searched_vertices": 19
+        },
+        "girth_Stilde": {
+          "ball_size": 6,
+          "girth": 4,
+          "method": "edge-deletion shortest cycle",
+          "radius": 3,
+          "searched_vertices": 6
+        },
+        "group_self_check": {
+          "associativity": true,
+          "coxeter_relations": true,
+          "diagram_matches_realisation": true,
+          "generators_are_involutions": true,
+          "generators_distinct": true
+        },
+        "group_self_check_detail": {
+          "associativity": "associativity holds on 60 random triples from the radius-3 ball",
+          "coxeter_relations": "all (s_i s_j)^m_ij == e",
+          "diagram_matches_realisation": "measured orders equal the A~ diagram",
+          "generators_are_involutions": "s_i^2 == e for all i = 0..2",
+          "generators_distinct": "the m generators are pairwise distinct and none is the identity"
+        },
+        "m": 3,
+        "seconds": 0.027,
+        "stilde3_no_commuting_generators": true,
+        "stilde_ball": {
+          "capped": false,
+          "seconds": 0.0,
+          "size": 6
+        },
+        "stilde_generators_simple": {
+          "distinct": true,
+          "involutions": true
+        }
+      },
+      "m4": {
+        "affine_reflection_check": {
+          "detail": "s_0 (or some s_i) does not act as specified",
+          "failures": [
+            [
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                1,
+                1,
+                0,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                0,
+                1,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                0,
+                0,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                1,
+                0,
+                0,
+                -1
+              ],
+              [
+                -1,
+                0,
+                0,
+                1
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              "s_0"
+            ]
+          ],
+          "ok": false
+        },
+        "cycles_through_origin_by_length": {
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 24,
+          "7": 0
+        },
+        "expected": {
+          "girth_K": 6,
+          "girth_Stilde": 4
+        },
+        "explicit_cycle_K": {
+          "coordinate_sums": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "reason": "all consecutive pairs adjacent, all 6 vertices distinct",
+          "valid": true,
+          "vertices": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              -1,
+              0,
+              0
+            ],
+            [
+              1,
+              -1,
+              1,
+              0
+            ],
+            [
+              0,
+              -1,
+              1,
+              0
+            ],
+            [
+              0,
+              0,
+              1,
+              0
+            ]
+          ]
+        },
+        "explicit_cycle_Stilde": {
+          "reason": "all consecutive pairs adjacent, all 4 vertices distinct",
+          "valid": true,
+          "vertices": [
+            [
+              [
+                0,
+                1,
+                2,
+                3
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                1,
+                0,
+                2,
+                3
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                1,
+                0,
+                3,
+                2
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                1,
+                3,
+                2
+              ],
+              [
+                0,
+                0,
+                0,
+                0
+              ]
+            ]
+          ]
+        },
+        "girth_K_dfs": {
+          "ball_size": 41,
+          "girth": 6,
+          "steps": 337
+        },
+        "girth_K_edge_deletion": {
+          "ball_size": 41,
+          "girth": 6,
+          "method": "edge-deletion shortest cycle",
+          "radius": 3,
+          "root": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "searched_vertices": 41
+        },
+        "girth_Stilde": {
+          "ball_size": 24,
+          "girth": 4,
+          "method": "edge-deletion shortest cycle",
+          "radius": 3,
+          "searched_vertices": 24
+        },
+        "group_self_check": {
+          "associativity": true,
+          "coxeter_relations": true,
+          "diagram_matches_realisation": true,
+          "generators_are_involutions": true,
+          "generators_distinct": true
+        },
+        "group_self_check_detail": {
+          "associativity": "associativity holds on 60 random triples from the radius-3 ball",
+          "coxeter_relations": "all (s_i s_j)^m_ij == e",
+          "diagram_matches_realisation": "measured orders equal the A~ diagram",
+          "generators_are_involutions": "s_i^2 == e for all i = 0..3",
+          "generators_distinct": "the m generators are pairwise distinct and none is the identity"
+        },
+        "m": 4,
+        "seconds": 0.01,
+        "stilde_ball": {
+          "capped": false,
+          "seconds": 0.0006780624389648438,
+          "size": 24
+        },
+        "stilde_generators_simple": {
+          "distinct": true,
+          "involutions": true
+        }
+      },
+      "m5": {
+        "affine_reflection_check": {
+          "detail": "s_0 (or some s_i) does not act as specified",
+          "failures": [
+            [
+              [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                1,
+                1,
+                0,
+                0,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                1,
+                0,
+                1,
+                0,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                0,
+                0,
+                1,
+                -1
+              ],
+              "s_0"
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0,
+                1
+              ],
+              [
+                1,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                2,
+                0,
+                0,
+                0,
+                -1
+              ],
+              "s_0"
+            ]
+          ],
+          "ok": false
+        },
+        "cycles_through_origin_by_length": {
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 60,
+          "7": 0
+        },
+        "expected": {
+          "girth_K": 6,
+          "girth_Stilde": 4
+        },
+        "explicit_cycle_K": {
+          "coordinate_sums": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "reason": "all consecutive pairs adjacent, all 6 vertices distinct",
+          "valid": true,
+          "vertices": [
+            [
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              -1,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              -1,
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              -1,
+              1,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          ]
+        },
+        "explicit_cycle_Stilde": {
+          "reason": "all consecutive pairs adjacent, all 4 vertices distinct",
+          "valid": true,
+          "vertices": [
+            [
+              [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                1,
+                0,
+                2,
+                3,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                1,
+                0,
+                3,
+                2,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            [
+              [
+                0,
+                1,
+                3,
+                2,
+                4
+              ],
+              [
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ]
+          ]
+        },
+        "girth_K_edge_deletion": {
+          "ball_size": 76,
+          "girth": 6,
+          "method": "edge-deletion shortest cycle",
+          "radius": 3,
+          "root": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "searched_vertices": 76
+        },
+        "girth_Stilde": {
+          "ball_size": 120,
+          "girth": 4,
+          "method": "edge-deletion shortest cycle",
+          "radius": 3,
+          "searched_vertices": 120
+        },
+        "group_self_check": {
+          "associativity": true,
+          "coxeter_relations": true,
+          "diagram_matches_realisation": true,
+          "generators_are_involutions": true,
+          "generators_distinct": true
+        },
+        "group_self_check_detail": {
+          "associativity": "associativity holds on 60 random triples from the radius-3 ball",
+          "coxeter_relations": "all (s_i s_j)^m_ij == e",
+          "diagram_matches_realisation": "measured orders equal the A~ diagram",
+          "generators_are_involutions": "s_i^2 == e for all i = 0..4",
+          "generators_distinct": "the m generators are pairwise distinct and none is the identity"
+        },
+        "m": 5,
+        "seconds": 0.037,
+        "stilde_ball": {
+          "capped": false,
+          "seconds": 0.003348827362060547,
+          "size": 120
+        },
+        "stilde_generators_simple": {
+          "distinct": true,
+          "involutions": true
+        }
+      }
+    },
+    "script": "exp2_girths.py",
+    "wrong_s0_summary": {
+      "caught_by": [
+        "affine_reflection_check",
+        "coxeter_relations",
+        "girth_matches_theorem"
+      ],
+      "effect": "the affine part vanishes: W_a collapses to the finite S_m (the radius-6 ball has only m! elements), the affine reflection test fails, (s_0 s_2)^3 = e fails, and girth S~_3 is computed as 4 instead of 6",
+      "what": "s_0 = (tau_0, 0) instead of (tau_0, theta)"
+    }
+  },
+  "result": "refutes"
+}

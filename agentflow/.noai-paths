@@ -1,0 +1,122 @@
+# ============================================================================
+# .noai-paths —— FC-27 禁 AI 区（人类专属区）机器可读清单
+# ============================================================================
+#
+# ## 这个文件是什么
+#
+# 一份 **glob 清单**：命中清单里任何一条的改动，都属于"人类专属区"，
+# 必须由**人**编写或**人**逐行走查，并且需要 **2 名 reviewer** 批准。
+# 机器检查器是 `scripts/noai_gate.py`（CI 入口）。
+#
+# ## 为什么存在（逐字引用 `draft/LESSONS-工程经验清单（FC-01…FC-27）.md:716`）
+#
+#   "`07-...md` §C.3.4 给出了 7 类必须由人主导的区域，理由是这些区域的错误
+#    代价不可逆（认证被跳过、支付算错、密钥泄漏、迁移毁数据、发布脚本失控）；
+#    `07-...md` §D.2.1 把它制度化：'IF 改动落在禁改区（认证/授权/支付/加密/
+#    迁移/CI 配置/对外 API 破坏性变更）THEN 必须人工编写或人工逐行走查，且需要
+#    **2 名 reviewer approve**'——'否则会：**测试全绿、上线即越权**'。"
+#
+# 在本框架（面向数学研究的多智能体协同框架）里，"认证/支付/加密"平移成
+# "求解器核心算法 / 检查器桥接层 / 去重键 / schema 迁移 / 评测口径 /
+#  发布脚本 / 权限与审计"——七类，见下面的分组。
+#
+# ## 格式（机器可读 + 人能读）
+#
+#   1. `#` 开头 = 注释 / 空行 = 忽略。
+#   2. `[category: <英文 id>] <中文名>`  = 分组头，声明后续条目的类别。
+#   3. 条目行 = `<glob>  [category: <英文 id>]  <理由>`
+#      - `glob`   必填，仓库相对路径（`/` 分隔），可用 `*` `?` `[seq]` `**`。
+#      - `[category: <id>]` 必填（FC-03：一个条目的类别只有一处声明，
+#        且与所属分组**必须一致**，写错就报错并给出行号）。
+#      - `<理由>` 必填，非空（"为什么这一条不可逆"）。
+#   4. 解析器：`scripts/noai_gate.py::load_manifest`。任何一行不合格式
+#      ⇒ 抛 `NoaiError`，消息带**行号**，绝不静默跳过。
+#
+# ## 理由里**刻意不写行号**（这是本清单的一条维护纪律）
+#
+# 理由里用反引号写出**符号名**（函数 / 类 / 常量），不写 `文件:行号`。
+# 行号是**易失**的：本仓库正被多个子任务并行修改，实测在写下清单的几十分钟内，
+# `dedup.py` / `tools/base.py` 的行号就漂了（`dedup.py` 的 `normalize_doi`
+# 从 26 行漂到 44 行）。一个写着旧行号的清单会把人指向**另一段代码**，
+# 而**没有任何检查会发现**。
+#
+# 取而代之：`tests/test_noai_gate.py::test_python_manifest_referenced_symbols_exist`
+# 会解析理由里的反引号符号名，并断言该符号**真的存在于对应的源文件里**。
+# 它比行号更强 —— 改了行号它不响，**删了/改了那个函数它必响**。
+#
+# ## 两处落地必须逐条一致（FC-27 判据①，符合 FC-03）
+#
+# 本文件与 `AGENTS.md` 里 `<!-- NOAI-MANIFEST:BEGIN -->` …
+# `<!-- NOAI-MANIFEST:END -->` 之间的清单**逐条一致**，
+# 由 `scripts/noai_gate.py::check_manifest_consistency()` 断言。
+# 改一处不改另一处 ⇒ 检查器报差异（有负控用例，见 `tests/test_noai_gate.py`）。
+#
+# ## 已知的**刻意重复**（不是 bug）
+#
+# `src/agentflow/dedup.py` 与 `src/agentflow/providers.py` 同时出现在
+# 第 1 类和第 3 类：这两个文件各自既有"核心算法"（判重/检索编排）又有
+# "来源解析与去重键"（`normalize_doi` / `literature_keys` / `decide_relation`）。
+# 两类**都要**命中它们，所以两处各登记一条，理由是各自独立的。
+# ============================================================================
+
+
+[category: solver-core] 一、数值求解器的核心算法（检索/抽取/判重的算法主通道）
+
+# 核心算法错一处，全流水线的证据就都是错的，而且**测试全绿**：
+# 单测只覆盖我们想得到的情形，而算法错在想不到的那一类输入上。
+src/agentflow/providers.py       [category: solver-core] 检索核心：查询编排 `_plan_mode`、精筛 `_precise_keep`、候选打分 `_broad_sort_key`、各 provider 的 `_parse_work`/`_parse_item` —— 检索口径一旦偏移，"找到的文献"与"声称找到的文献"就分家了
+src/agentflow/dedup.py           [category: solver-core] 判重主通道：`decide_relation` 决定一条关系是新增/重复/存疑 —— 判重错则概念图静默地少一条或多一条边，没有任何地方会报错
+src/agentflow/extract.py         [category: solver-core] 文本抽取主通道 `extract_text` 及其 PDF 后端：PDF/正文 → 可回验文本 —— 抽取错一个字符，逐字引文回验就会把**真**引文判成幻觉（B 的唯一自动幻觉防线反被摧毁）
+
+
+[category: prover-bridge] 二、证明检查器的桥接层（与外部检查器交互的部分）
+
+# 这一层是"算对了"与"证完了"之间的唯一闸门。桥接层把 no_backend 与
+# checked=False 折叠成 False，下游就会把"我们没验证"读成"验证没过"，
+# 甚至读成"没问题"（`verify_tools.py` 开头的三态纪律）。
+src/agentflow/tools/verify_tools.py  [category: prover-bridge] `detect_verifier` 与 `check_formal`：探测 Lean/Coq/Isabelle 并解释其输出 —— 桥接层说谎 ⇒ proof 级证据是假的，而报告照样打印
+src/agentflow/quoteverify.py         [category: prover-bridge] `check_quote` 引文级回验：把一条断言与来源文本逐字比对 —— 它是"外部证据"与"我们自己的断言"之间的桥，错判即幻觉引文进报告
+
+
+[category: provenance-dedup] 三、来源解析与去重键（同一篇文献必须只有一个键）
+
+# 去重键是**整个文献库的主键**。键的推导一变，历史数据全体重键，
+# 而已有的 relations 仍指向旧键 —— 图书馆不会报错，只会悄悄裂成两份。
+src/agentflow/dedup.py           [category: provenance-dedup] `normalize_doi` / `literature_keys` / `title_key`：来源标识的归一化 —— 归一化规则偏移即"同一篇文献两个主键"
+src/agentflow/providers.py       [category: provenance-dedup] `normalize_doi` / `dedup_key_of` / `map_type_code`：provider 原始记录 → 统一候选键 —— 这里错则跨库同一篇文献无法合并
+
+
+[category: schema-migration] 四、schema 迁移（存储布局与 ID 分配）
+
+# 迁移是**不可逆**的：它动的是磁盘上的既有数据，出错时"回滚"本身
+# 也需要一份没有被破坏的备份。ID 分配与加锁顺序错则并发写入互相等待或串号。
+src/agentflow/schema.py          [category: schema-migration] `SCHEMA_VERSION` 与 `TABLES`：表结构与版本号 —— 改它等于改磁盘格式契约
+src/agentflow/store.py           [category: schema-migration] `LOCK_ORDER` / `rebuild` / `alloc_id` / `_atomic_write`：加锁顺序、事件重放、ID 分配、原子落盘 —— 四者任一错都是**数据毁灭级**
+
+
+[category: eval-criteria] 五、评测口径的定义（一个数字是什么，由口径决定）
+
+# 同一个 miniF2F 数字在四个口径下相差 13–30 个百分点（`schema.py` 里
+# `EVAL_REQUIRED_FIELDS` 的注释有逐字论证）。口径不是数字的补充说明，
+# 口径**就是**那个数字的一部分。
+src/agentflow/schema.py          [category: eval-criteria] `EVAL_REQUIRED_FIELDS` 与 `EvalResult`：必填口径字段与比率口径（0..1）—— 改它等于追溯性地改写历史报告里每个数字的含义
+
+
+[category: release-deploy] 六、发布与部署脚本（发出去就收不回来）
+
+# 发布脚本是"测试环境"与"不可逆的外部世界"之间唯一的界面。
+src/agentflow/release_check.py   [category: release-deploy] 发布前检查入口（**登记时并不存在**：先登记路径，一旦有人在这里新建它，它会自动落入本清单而不是绕过门；截至本次登记仍未出现）
+scripts/release_check.py         [category: release-deploy] 发布前的一键检查 `main` 与它跑的那八项：发布门本身 —— 改宽它等于让"发出去的东西"不再受检；另一种落位也一并登记，以免"换个目录就绕过"
+tools/release_all.py             [category: release-deploy] 一键发布检查的**编排层** `main` / `build_steps` / `overall`：它调用并汇总全部门（含验收测试与论文复现），并决定"跳过的步骤记成 `unknown` 还是 `pass`"—— 那一条取舍就是"发布门能不能被 `--skip` 绕过"，改它等于改门的强度
+pyproject.toml                   [category: release-deploy] `[project]` 与 `[build-system]`：包名、版本、依赖、构建后端 —— 这三个决定"发出去的到底是什么"，且版本号一旦发布无法撤回
+
+
+[category: auth-audit] 七、权限与审计（谁能做什么，以及谁做过了什么）
+
+# 这是"认证/授权"在本框架里的平移：角色即权限面。
+# 权限面被悄悄放宽 ⇒ **测试全绿、上线即越权**（FC-27 的原话）。
+src/agentflow/tools/__init__.py  [category: auth-audit] `ROLES` 的引入、`READ_ONLY_ROLES` 与 `SIDE_EFFECTS_WRITE`：只读角色（C/H）的权限面单一来源
+src/agentflow/tools/base.py      [category: auth-audit] `for_role` 的结构性过滤：只读角色一律拿不到写工具 —— 它是**实现**，与上面的**声明**分处两文件，两者必须同时人审
+src/agentflow/verify.py          [category: auth-audit] `verify_all` 的一致性审计：不变量检查的判据本身被改宽 ⇒ 审计从此永远"通过"
+src/agentflow/interactions.py    [category: auth-audit] `check_conflict` / `admitting` 一类的角色间交互与授权规则（A–H 的调用矩阵）—— 矩阵错则"不该能调的工具"变成"能调"
+.noai-approvals.json             [category: auth-audit] 批准台账：`sha256` 钉住「被批准的那一版」、`reviewers` 记「谁逐行走查过」—— 改它等于改审计记录本身；台账**不能批准自己**（理由码 `ledger_self_approval`），且 `--baseline` 永远不写 `reviewers`（登记 ≠ 批准）

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "reprocess_id": "p-0001",
+      "timestamp": "2026-09-23T23:19:17+08:00",
+      "reason": "need_context",
+      "submitted_by": "human",
+      "relation_ids": [
+        "0000"
+      ],
+      "lit_id": null,
+      "detail": "验收 P2b：定向重抽取 0000（reason=need_context）",
+      "status": "done",
+      "result": "found",
+      "result_note": "reason=need_context；目标 1 条\n[0000] found：声明页码 p. 3（实际取第 2-4 页）原文片段（逐字，供 D 做 L3 溯源；**只读**，未改动关系）：\nDefinition 1.2 (the chamber graph eSm). Let Q∨= {x ∈Zm : P\ni xi = 0} ∼= Zm−1 be the\ncoroot lattice of Am−1 and let Wa( eAm−1) = Q∨⋊Sm be the affine Weyl group, acting on Zm\nby x 7→w(x) + λ with w ∈Sm, λ ∈Q∨. Let s1, . . . , sm−1 be the simple reflections of the finite\nWeyl group and s0 =\n\u0000sθ, θ\n\u0001\nthe affine reflection, where θ = e1 −em and sθ is the transposition of\ncoordinates 1 and m. The chamber graph eSm := Cay\n\u0000Wa, {s0, s1, . . . , sm−1}\n\u0001\nis the graph on the\nchambers in which two chambers are adjacent when they share a wall.\nBoth graphs are m-regular, infinite, locally finite and vertex-transitive, and both carry a free\naction of a rank-(m −1) free abelian group with finite quotient: Q∨:= {x ∈Zm : P\ni xi = 0} acts\non VK by translation for K(m), and it acts on Wa by left translation for eSm. We record this in\nSection 2 and use it to define the spectrum.\n1.2\nMain results\nTheorem 1.3 (spectrum of K(m)). Let m ≥3. Then Spec K(m) = [−m, m], where the spectrum\nof a periodic graph is the closure of the union of the spectra of its Floquet (Bloch) matrices over\nthe dual torus, as recalled in Section 2.\nTheorem 1.4 (girths). Let m ≥3. Then girth K(m) = 6. For the chamber graph, girth eSm = 6\nwhen m = 3 and girth eSm = 4 for every m ≥4.\nTheorem 1.5 (the pair is cospectral and non-isomorphic). Let m ∈{4, 5}. Then K(m) and eSm\nare both m-regular, infinite, vertex-transitive, of periodic rank m −1, and\nSpec K(m) = [−m, m] = Spec eSm,\nbut girth K(m) = 6̸ = 4 = girth eSm. In particular K(m)̸ ∼= eSm: the spectrum does not determine\nthe graph.\nRemark 1.6. The spectrum of eSm is taken from the companion book [6, Thm. 6.5], where Spec eSm =\n[−m, m] is proved for 3 ≤m ≤5 (for m ≥6 the inclusion Spec eSm ⊆[−m, m] and the two endpoints\n±m are proved there, and the equality is open). Our Theorem 1.5 is therefore stated for m = 4, 5,\nmatching the known range; the case of eSm for m ≥6 is an…",
+      "touched_relation_ids": [],
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "last_error": null
+    }
+  ]
+}

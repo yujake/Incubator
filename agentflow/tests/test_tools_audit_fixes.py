@@ -1,0 +1,1037 @@
+"""工具层审计修复的性质测试（每一条修复都有正/负两个方向）。
+
+对应 `temp/inventory/INVENTORY.md` 第 4 节「可疑清单」里被点名、并且在本轮修掉的条目。
+本文件刻意不复述实现细节：每一条断言都打在"新的、正确的判据"上 ——
+也就是"修之前这一条会失败"的那个判据。凡是能造出"好数据/坏数据"两面的，
+都成对写（只有绿灯证明不了闸门在工作）。
+
+条目对照（缺陷 → 本文件的用例）：
+
+| 缺陷 | 用例 |
+|---|---|
+| P0-1 `review.scan_document` 依赖没查却判 accepted | `test_scan_document_*` |
+| P0-2 `doc.build_document` 允许假引用落库 | `test_build_document_*` / `test_check_citations_*` |
+| P1-3/4 `search.providers` / `ocr.run` / `ocr.backends` 的 side_effect 说假话 | `test_side_effect_*` |
+| P1-5 `r-NNNN` 三份分配器语义冲突 | `test_request_id_*` |
+| P1-6 `search.dedup_check` 读表失败静默报「不是重复」 | `test_dedup_check_*` / `test_literature_*` |
+| P1-7 `trace.chain` 无图可查却报 ok | `test_trace_*` |
+| P2-8/9 `verify.detect_verifier` / `check_formal` 声明与实现不一致 | `test_detect_verifier_*` / `test_check_formal_*` |
+| P2-10 非 `ToolError` 逃逸成无声的 `unexpected` | `test_no_unexpected_escape_*` |
+| 4.5 docstring 与实现不一致（trace L3 词表、returns= 漂移、H/G 判据漂移） | `test_l3_status_*` / `test_declared_returns_*` / `test_scan_document_matches_scan_claim_*` |
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+from pathlib import Path
+
+import pytest
+
+from agentflow import interactions as IX
+from agentflow import schema as S
+from agentflow.store import Store
+from agentflow.tools import doc_tools as DT
+from agentflow.tools import ocr_tools as OT
+from agentflow.tools import research_tools as RT
+from agentflow.tools import review_tools as RV
+from agentflow.tools import search_tools as ST
+from agentflow.tools import table_tools as TT
+from agentflow.tools import trace_tools as TR
+from agentflow.tools import verify_tools as VT
+from agentflow.tools.base import ToolError, ToolRegistry
+
+from conftest import add_literature, add_request, write_library_file
+
+TS = "2026-01-01T00:00:00+00:00"
+
+
+# ============================================================ 小工具
+
+
+def clean_claim(**over: object) -> dict:
+    """一条完全合规的断言（与 test_agent_h 的同类夹具同形，但本文件自带一份，
+    避免测试文件之间互相 import 造成的隐式耦合）。"""
+    claim = {
+        "claim_id": "claim-1",
+        "section": "主要结果",
+        "text": "谱落在区间内。",
+        "evidence_kind": "proof",
+        "citations": ["rel:0000", "lit:0000#p.12-13"],
+        "is_negative": False,
+        "negation_kind": None,
+        "disclaimer": "",
+    }
+    claim.update(over)
+    return claim
+
+
+def doc_row(doc_id: str = "0000", claims: list[dict] | None = None, *, status: str = "draft") -> dict:
+    return S.Document(
+        doc_id=doc_id,
+        kind="paper",
+        title=f"稿件 {doc_id}",
+        markdown_path=None,
+        claims=[dict(c) for c in (claims or [clean_claim()])],
+        status=status,
+        review_rounds=0,
+        created_at=TS,
+        updated_at=TS,
+    ).to_dict()
+
+
+def seed_document(store: Store, row: dict) -> None:
+    """经 store 写一行合法稿件（schema 会把关 —— 坏样本另用直接改盘的方式造）。"""
+    S.row_from_dict("documents", row).validate()
+    with store.tx("documents", actor="test", note="fixture") as tx:
+        tx.upsert("documents", row)
+
+
+def parse_declared_keys(returns: str) -> tuple[set[str], str]:
+    """三态入口：从 `ToolSpec.returns` 里抽键名，并把"抽的结果"如实分类。
+
+    返回值是 ``(键集合, 状态)``，状态取三个值之一：
+
+    ======================  ==========================================================
+    状态                     含义
+    ======================  ==========================================================
+    ``"parsed"``            抽到了至少一个键 —— 声明是机器可读的
+    ``"empty_declaration"`` 声明本身是空串/全空白 —— 这个工具没有声明返回形状
+    ``"unparseable"``       声明非空，但一个键都抽不出来 —— 说明它不是键列表写法
+    ======================  ==========================================================
+
+    ## 为什么要有这个函数（三态纪律）
+
+    旧的 `declared_keys` 返回空集表达"没抽到"，而空集在下游是真空通过 ——
+    "我没抽到键"与"它没有键"是两件事，必须分开（三态纪律）。
+
+    这条纪律在本仓库里已经付过代价：下游断言是 ``declared - actual == set()``，
+    而空集永远是任何集合的子集 ⇒ 一个 ``returns="data={src, dst}"`` 这样不带引号
+    的声明会让"声明 vs 实现一致"这条判据静默地什么都不检查。本轮实测：
+    55 个工具里有 36 个（65%）的 `returns=` 属于这种写法，也就是说这条判据
+    在三分之二的工具上从来没有真正执行过（改声明不会红、改实现也不会红）。
+
+    所以：判据必须建立在非空键集合上，而"抽不到"必须是一个可判定的事实、
+    而不是一个恰好能被当成"通过"的空集。谁要放行 `unparseable`，必须显式
+    在豁免清单里写出理由（见 `tests/test_tools_returns_declaration.py`）。
+
+    解析规则刻意保持与旧实现逐字一致（只认单引号包裹的
+    ``'[a-z_][a-z0-9_]*'``）：本轮不改判据的"严格程度"，只把"没抽到"从不合格
+    的空集提升为一个会被检查的状态。
+    """
+    if not (returns or "").strip():
+        return set(), "empty_declaration"
+    keys = set(re.findall(r"'([a-z_][a-z0-9_]*)'", returns))
+    return (keys, "parsed") if keys else (set(), "unparseable")
+
+
+def declared_keys(returns: str) -> set[str]:
+    """从 `ToolSpec.returns` 里抽出它承诺的键名（只取键的薄封装）。
+
+    这是本文件里"声明与实现一致"这条判据的机器可读入口：声明写成
+    ``{'a','b'}`` 这样的键列表，测试逐字解析它去和实际返回的键集合比对 ——
+    于是"声明一套、返回另一套"不可能再悄悄发生（改声明就会红，改实现也会红）。
+
+    它只回答"键是什么"，不回答"抽到没有" —— 抽不到时它返回空集，
+    而空集在下游是真空通过。要判"这份声明到底能不能机器读"，请用
+    :func:`parse_declared_keys`（三态：parsed / empty_declaration / unparseable）。
+    本函数保留（签名与返回值逐字不变）只是为了不连累既有的调用方，
+    实现上转发给三态入口，避免同一判据长出两份实现（linter R003 会抓）。
+    """
+    return parse_declared_keys(returns)[0]
+
+
+def registry_for(module: object, store: Store, **kw: object) -> ToolRegistry:
+    reg = ToolRegistry(name="audit")
+    module.register(reg, store=store, **kw)  # type: ignore[attr-defined]
+    return reg
+
+
+def corrupt(store: Store, filename: str) -> None:
+    """把一张表写成不是合法 JSON 的文件（模拟"快照损坏"这类真实故障）。
+
+    为什么用这种造法而不是打桩：`Store._load` 对坏 JSON 抛 `StoreError`
+    （`store.py:297-302`），这正是"表读不出来"在生产里的形态。
+    """
+    (store.data / filename).write_text("{ 这不是 JSON", encoding="utf-8")
+
+
+# ============================================================ P0-1 review.scan_document
+
+
+def test_scan_document_without_dependencies_is_unverified_not_accepted():
+    """核心：`dependencies=None` ⇒ `checked=False` ⇒ verdict 不得是 accepted。
+
+    修之前的判据是 `"rejected" if errors else ("accepted_with_warnings" if warnings else "accepted")`
+    —— 它完全不读 `dep_check["checked"]`，于是同一个返回值里
+    `dep_check` 说"没查依赖闭合"、`verdict` 说"accepted"。
+    """
+    doc = doc_row()
+    unchecked = RV.scan_document(doc)
+
+    assert unchecked["dep_check"]["checked"] is False
+    assert unchecked["error_count"] == 0, "这份稿件本身是干净的 —— 问题在于依赖没查"
+    assert unchecked["verdict"] not in ("accepted", "accepted_with_warnings"), (
+        "依赖闭合没查时不许判通过：那会把'从未检查'读成'检查通过'"
+    )
+    assert unchecked["verdict"] == "unverified"
+    assert "没查" in unchecked["reason"] and "不能判 accepted" in unchecked["reason"], (
+        "verdict 必须配一句可读的 reason，否则调用方无从知道 unverified 指的是什么"
+    )
+
+
+def test_scan_document_with_checked_dependencies_may_be_accepted():
+    """负控：查了、确实没有未闭合依赖 ⇒ 才可以判 accepted（闸门不能永远关着）。"""
+    doc = doc_row()
+    checked = RV.scan_document(doc, dependencies=[])
+    assert checked["dep_check"]["checked"] is True
+    assert checked["verdict"] == "accepted"
+
+    warned = RV.scan_document(
+        doc,
+        dependencies=[
+            {
+                "dep_id": "0000",
+                "status": "external_unavailable",
+                "label": "companion book",
+                "status_reason": "不在可得范围内",
+            }
+        ],
+    )
+    assert warned["dep_check"]["checked"] is True
+    assert warned["verdict"] == "accepted_with_warnings", "已知边界是 warning，不该升级成'没查'"
+
+
+def test_scan_document_error_dominates_but_never_becomes_accepted():
+    """有 error 时是 rejected（无论依赖查没查），但任何时候都不许 accepted*。"""
+    bad = clean_claim(citations=[])
+    doc = doc_row(claims=[bad])
+    unchecked = RV.scan_document(doc)
+    assert unchecked["error_count"] == 1
+    assert unchecked["verdict"] == "rejected"
+    assert unchecked["verdict"] not in ("accepted", "accepted_with_warnings")
+
+
+def test_scan_document_tool_path_omitted_dependencies_is_unverified(store: Store):
+    """工具层：`review.scan_document` 省略 `dependencies` ⇒ unverified（不是 accepted）。
+
+    工具没接 store（`side_effect="none"`），所以"省略"只能等价于"没查"。
+    修之前 handler 把省略映射成 `None`，而 verdict 根本不看这个位。
+    """
+    reg = registry_for(RV, store)
+    res = reg.call("review.scan_document", doc=doc_row())
+    assert res.ok, res.error
+    assert res.data["dep_check"]["checked"] is False
+    assert res.data["verdict"] == "unverified"
+    # 显式给空清单是"查了" ⇒ 才可能通过
+    res2 = reg.call("review.scan_document", doc=doc_row(), dependencies=[])
+    assert res2.data["verdict"] == "accepted"
+
+
+def test_scan_document_and_review_document_agree_on_verdict(store: Store):
+    """两条入口必须同口径：只读的 `scan_document` 与写库的 `review_document`。
+
+    写入路径早就有 `elif not dep_checked: verdict = "unverified"` 这条纪律
+    （`review_tools.py` 的注释写着"不许在这个前提下判 accepted"）；
+    这次修的是只读路径与它对齐。若只改一处，"读一遍"与"审一遍"会对同一份稿件
+    给出两个都不报错的相反结论。
+    """
+    seed_document(store, doc_row())
+    reader = RV.scan_document(store.rows("documents")[0], dependencies=None)
+    writer = RV.review_document(store, "0000", dependencies=None)
+    assert writer["dep_check"]["checked"] is False
+    assert writer["verdict"] == "unverified"
+    assert reader["verdict"] == writer["verdict"], "只读路径与写入路径的 verdict 必须一致"
+    assert store.rows("documents")[0]["status"] != "accepted"
+
+
+@pytest.mark.parametrize(
+    ("sample", "expected_kind"),
+    [
+        (clean_claim(evidence_kind="prooof"), "garbled"),
+        (clean_claim(negation_kind="not_proved"), "garbled"),
+        (clean_claim(is_negative=True, negation_kind="maybe"), "missing_negation_kind"),
+        (clean_claim(citations=["", "  "]), "garbled"),
+    ],
+    ids=["bad-evidence-kind", "negation-kind-on-positive-claim", "bad-negation-kind", "empty-citation-element"],
+)
+def test_scan_document_flags_the_checks_it_used_to_miss(sample: dict, expected_kind: str):
+    """4.5#10：H 侧曾经漏掉的四条检查，现在必须由 H 自己判出来（不依赖 G）。
+
+    这四条是 H 与 G 漂移的实证：修之前它们只在 G 侧有，H 会把同一份稿件读成干净的。
+    这里不经过 G，直接打在 H 上 —— 于是"另一路的判据层怎么演进"都不会让本用例
+    变得没有意义。
+    """
+    h = RV.scan_document(doc_row(claims=[sample]), dependencies=[])
+    kinds = {f["kind"] for f in h["findings"] if f["level"] == "error"}
+    assert expected_kind in kinds, f"H 没判出 {expected_kind}：{h['findings']}"
+    assert h["error_count"] >= 1
+    assert h["verdict"] == "rejected"
+    # 负控：合规样本不许被这些新检查误伤
+    assert RV.scan_document(doc_row(), dependencies=[])["error_count"] == 0
+
+
+def test_scan_document_never_passes_a_document_that_g_rejects():
+    """4.5#10 的危险方向：G 判 error ⇒ H 也必须判 error（H 可以更严，不许更松）。
+
+    "G 认为违规、H 认为通过"是没有任何报错的静默分裂 —— 它会让审校环节
+    变成 G 的橡皮图章。反向（H 更严）是安全的：H 面对的是盘上可能绕过 schema
+    写进来的历史行，fail-closed 是它的本分。
+
+    # 待修：G 侧的判据层正在被迁移到 `agentflow.claimanatomy`（本轮实测到它在
+    # 十几分钟内改了两次 code→kind 映射：`unknown_status_axis` 先映射成
+    # `missing_negation_kind`、后映射成 `scope_drift`；`negation_kind='maybe'`
+    # 一度在 G 侧不产生 error）。因此当 G 对某个样本当前没有 error 时，
+    # 本用例跳过该样本（无法断言"G 判 error"这件事），只把它记进这段话里。
+    # 彻底消除漂移的正解是让 `scan_document` 也转发 `claimanatomy`
+    # （同一份判据 + 同一份 code→kind 映射）—— 那要等 claimanatomy 稳定后再做，
+    # 已上报主控。
+    """
+    samples = [
+        clean_claim(evidence_kind="prooof"),
+        clean_claim(negation_kind="not_proved"),
+        clean_claim(is_negative=True, negation_kind="maybe"),
+        clean_claim(citations=["", "  "]),
+        clean_claim(text="因此我们已证明 X。", evidence_kind="cross_check"),
+    ]
+    checked = 0
+    for sample in samples:
+        g = DT.scan_claim(sample)
+        assert g["findings"], f"夹具本身应当被 G 判出问题：{sample}"
+        g_errors = {f["kind"] for f in g["findings"] if f["level"] == "error"}
+        if not g_errors:
+            continue  # 见 docstring 的"待修"：G 侧当前没判 error，无从断言
+        checked += 1
+        h = RV.scan_document(doc_row(claims=[sample]), dependencies=[])
+        assert h["error_count"] >= 1, (
+            f"H 放过了 G 判为 error 的稿件（G 拒绝、H 通过 = 静默分裂）："
+            f"{sample} → G={sorted(g_errors)} H={[f['kind'] for f in h['findings']]}"
+        )
+    assert checked >= 1, "一个能断言的样本都没有 —— 闸门实际上没被验证过"
+
+    # 负控：干净样本两侧都不许报 error
+    assert DT.scan_claim(clean_claim())["error_count"] == 0
+    assert RV.scan_document(doc_row(), dependencies=[])["error_count"] == 0
+    # 负控：干净样本两侧都不许报 error
+    assert DT.scan_claim(clean_claim())["error_count"] == 0
+    assert RV.scan_document(doc_row(), dependencies=[])["error_count"] == 0
+
+
+# ============================================================ P0-2 doc.build_document
+
+
+def _build(reg: ToolRegistry, claims: list[dict], **kw: object):
+    params = {"kind": "note", "title": "带引用的稿件", "claims": claims}
+    params.update(kw)
+    return reg.call("doc.build_document", **params)
+
+
+def test_build_document_refuses_dangling_citation_and_writes_nothing(store: Store, tmp_path: Path):
+    """核心：`citations=["lit:9999"]` ⇒ 不写库（逐字节比对）+ 逐条列出坏引用。
+
+    修之前 `scan_claim` 只查"citations 非空"，假引用照样写库 + 渲染。
+    """
+    reg = registry_for(DT, store, workspace_root=store.root)
+    before = (store.data / "documents.json").read_bytes()
+
+    claims = [DT.compose_claim("一个引用了不存在文献的断言。", citations=["lit:9999"], evidence_kind="heuristic", section="s")]
+    res = _build(reg, claims)
+
+    assert res.ok is False
+    assert res.meta.get("kind") == "dangling_citation"
+    assert res.meta.get("created") is False
+    assert [m["citation"] for m in res.meta["missing"]] == ["lit:9999"]
+    # 必须指出是哪一条断言的引用（compose_claim 会派生 claim_id，不假定它叫 claim-1）
+    assert res.meta["missing"][0]["claim_id"] == claims[0]["claim_id"]
+    assert res.meta["missing"][0]["claim_id"]
+    assert "literature" in res.meta["missing"][0]["why"]
+    # ---- 逐字节比对：一个字都没写
+    assert (store.data / "documents.json").read_bytes() == before
+    assert store.rows("documents") == []
+    docs_dir = store.root / "documents"
+    assert not docs_dir.exists() or list(docs_dir.glob("*.md")) == [], "坏引用不许留下 markdown"
+
+
+@pytest.mark.parametrize(
+    ("citation", "table_word"),
+    [
+        ("rel:9999", "relations"),
+        ("lit:9999", "literature"),
+        ("exp:9999", "experiments"),
+        ("eval:9999", "eval_results"),
+        ("谁也不知道:1", "无法识别"),
+    ],
+)
+def test_build_document_checks_every_citation_kind(store: Store, citation: str, table_word: str):
+    """四张表都要核；前缀不认识也 fail-closed（"没法核对存在性"不等于"存在"）。"""
+    reg = registry_for(DT, store, workspace_root=store.root)
+    claims = [DT.compose_claim("x", citations=[citation], evidence_kind="heuristic", section="s")]
+    res = _build(reg, claims)
+    assert res.ok is False and res.meta.get("kind") == "dangling_citation"
+    assert table_word in res.meta["missing"][0]["why"]
+    assert store.rows("documents") == []
+
+
+def test_build_document_accepts_real_citations_and_writes(store: Store):
+    """负控：引用真的存在 ⇒ 正常落库 + 渲染（闸门不能把好数据一起拦掉）。"""
+    add_literature(store, "0000", title="真实文献", processed=True)
+    reg = registry_for(DT, store, workspace_root=store.root)
+
+    claims = [
+        DT.compose_claim("引用真实文献的断言。", citations=["lit:0000", "lit:0000#p.3"], evidence_kind="heuristic", section="s")
+    ]
+    res = _build(reg, claims)
+    assert res.ok, res.error
+    doc = res.data
+    assert doc["doc_id"] == "0000"
+    assert store.rows("documents")[0]["doc_id"] == "0000"
+    md = store.root / str(doc["markdown_path"])
+    assert md.is_file() and "lit:0000" in md.read_text(encoding="utf-8")
+    # 同一次调用里的另一条断言带上假引用 ⇒ 整笔回滚（不许"部分成功"）
+    before = (store.data / "documents.json").read_bytes()
+    mixed = claims + [DT.compose_claim("y", citations=["exp:9999"], evidence_kind="heuristic", section="s")]
+    res2 = _build(reg, mixed)
+    assert res2.ok is False and (store.data / "documents.json").read_bytes() == before
+    assert len(store.rows("documents")) == 1, "坏引用那次不该新增行"
+
+
+def test_check_citations_separates_not_checked_from_checked(store: Store):
+    """三态：`rows_of=None`（没法查）不等于"引用都存在"。"""
+    claims = [clean_claim()]
+    no_store = DT.check_citations(None, claims)
+    assert no_store["checked"] is False
+    assert "没法核对" in no_store["reason"]
+    assert no_store["missing"] == []
+
+    def rows_of(table: str):
+        return store.rows(table)
+
+    checked = DT.check_citations(rows_of, [clean_claim(citations=["lit:9999"])])
+    assert checked["checked"] is True
+    assert [m["ref"] for m in checked["missing"]] == ["9999"]
+    # 负控：真的有 ⇒ 无 missing
+    add_literature(store, "0000", title="真实文献", processed=True)
+    ok_res = DT.check_citations(rows_of, [clean_claim(citations=["lit:0000"])])
+    assert ok_res["checked"] is True and ok_res["missing"] == [] and ok_res["resolved"] == 1
+
+
+# ============================================================ P1-3/4 side_effect 如实
+
+
+def test_side_effect_search_providers_declares_network(store: Store):
+    """`search.providers` 真的发 HTTP ⇒ 必须声明 network（需要审批）。"""
+    reg = registry_for(ST, store, workspace=store.root)
+    spec = reg.get("search.providers")
+    assert spec.side_effect == "network", "真实探测 = 联网，声明 read 等于绕开审批闸门"
+    assert spec.needs_approval is True
+
+
+def test_side_effect_ocr_tools_are_declared_individually(store: Store, tmp_path: Path):
+    """`ocr.run`（下载模型）/`ocr.backends`（工作区外 mkdir）/`ocr.detect_text_layer` 分级如实。"""
+    reg = registry_for(OT, store, workspace=tmp_path, backends=[OT.NullBackend()])
+    assert reg.get("ocr.run").side_effect == "network"
+    assert reg.get("ocr.run").needs_approval is True
+    assert reg.get("ocr.backends").side_effect == "write_local"
+    assert reg.get("ocr.backends").needs_approval is True
+    # ---- 负控：真的只读的那个不许被顺手改成写（否则审批会变成噪音）
+    assert reg.get("ocr.detect_text_layer").side_effect == "read"
+    assert reg.get("ocr.detect_text_layer").needs_approval is False
+
+
+def test_side_effect_declarations_do_not_leak_write_tools_to_read_only_roles(store: Store):
+    """防误伤：改成 network/write_local 之后，只读角色 C/H 的工具面仍然没有任何写工具。"""
+    from agentflow.tools import READ_ONLY_ROLES, build_registry
+
+    build = build_registry(store=store, workspace_root=store.root)
+    assert build.registry.role_filter_notes == {}, "声明错了才会留痕；这里应当为空"
+    for role in READ_ONLY_ROLES:
+        leaks = [s.name for s in build.registry.for_role(role) if s.needs_approval]
+        assert leaks == [], f"{role} 拿到了需要审批的工具：{leaks}"
+
+
+# ============================================================ P1-5 r-NNNN 分配器
+
+
+def test_research_tools_request_id_is_the_interactions_implementation():
+    """`research_tools` 的那份副本已被删除：它现在就是 `interactions` 的实现本身。"""
+    assert RT.next_prefixed_id is IX.next_prefixed_id
+    assert RT._next_request_id.__module__ == "agentflow.tools.research_tools"
+
+    rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}, {"request_id": "not-an-id"}]
+    assert RT._next_request_id(list(rows)) == IX.next_prefixed_id(rows, "request_id", "r") == "r-0004"
+    # 负控：旧副本没有前缀守卫（`interactions` 有）⇒ 现在的转发必须同样拒绝
+    with pytest.raises(ValueError):
+        IX.next_prefixed_id([], "request_id", "r-")
+    assert RT.next_prefixed_id is IX.next_prefixed_id
+
+
+def test_table_tools_and_research_tools_share_the_one_request_id_implementation():
+    """`table_tools` 与 `research_tools` 的取号必须与权威实现逐个一致（FC-11）。
+
+    历史：全项目曾有三份 `r-NNNN` 分配器（`table_tools` 取最小可用号、
+    `research_tools` 取 max+1 且无守卫、`interactions.next_prefixed_id` 取 max+1
+    且带前缀守卫）。同一张 `search_requests` 表因此有三个取号器，语义互相冲突：
+    表里只有 `r-0001`、`r-0003` 时，一个给 `r-0000`、另一个给 `r-0004`。
+
+    这里曾经有一条"记录分歧"的断言（断言 `table_tools` 给 `r-0000`）。
+    它属于"这里本该一致"的那一类 —— 最小可用号会复用已删行的号，而
+    `literature.source_request_ids` / `research_questions.waiting_request_ids`
+    长期引用 `r-NNNN`，号被复用会让溯源静默指向另一条请求。
+    所以它被改成了一致性断言（连同 `tests/test_tools_table_fs.py` 里
+    断言 `"r-0000"` 的那一行），并保留了"曾经分歧"这个事实作为注释。
+    """
+    rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}, {"request_id": "not-an-id"}]
+    expected = IX.next_prefixed_id(rows, "request_id", "r")
+    assert expected == "r-0004"
+    assert TT._next_request_id(rows) == expected, "table_tools 必须与权威实现同号"
+    assert RT._next_request_id(list(rows)) == expected, "research_tools 必须与权威实现同号"
+    # 同一份实现（不是副本）：两个模块都只是转发
+    assert RT.next_prefixed_id is IX.next_prefixed_id
+    assert TT.next_prefixed_id is IX.next_prefixed_id
+
+    # 空表：两处都必须给 r-0001（旧语义 r-0000 已废弃）
+    assert TT._next_request_id([]) == RT._next_request_id([]) == IX.next_prefixed_id([], "request_id", "r") == "r-0001"
+    # 负控：任何输入下都必须与权威实现一致，且绝不发出已占用的号
+    for probe in (
+        [{"request_id": "r-0000"}],
+        [{"request_id": "r-0000"}, {"request_id": "r-0002"}],
+        [{"request_id": "r-0009"}, {"request_id": "r-0001"}],
+    ):
+        want = IX.next_prefixed_id(probe, "request_id", "r")
+        assert TT._next_request_id(probe) == want == RT._next_request_id(list(probe))
+        assert want not in {r["request_id"] for r in probe}
+
+
+def test_table_tools_request_id_fails_closed_when_the_space_is_exhausted():
+    """编号用尽必须显式失败：`next_prefixed_id` 自己不设上限，会静默给 5 位号。
+
+    `"r-10000"` 违反 `r-NNNN` 的 4 位契约（`store.py:52-53` 的"用满即 fail-closed"，
+    以及 `tests/test_agent_c_service.py:637` 对 `S.is_valid_id(...)` 的断言），
+    因此 `assert_request_id_in_space` 把这道守卫放在两处转发之后 ——
+    取号只有一份实现，空间判据也只有一份。
+
+    # 待修：按 FC-03，这道上限最终应下沉进 `interactions.next_prefixed_id` 本身：
+    # agent_c / agent_d / agent_f / cli / demo 都直接调它，因此那些路径现在
+    # 仍会产出 `r-10000`。`interactions.py` 是 FC-27 禁改区（auth-audit），
+    # 我不改它 —— 已上报主控。本用例只覆盖工具层的两个入口。
+    """
+    rows = [{"request_id": f"r-{i:04d}"} for i in range(0, 10000)]
+    with pytest.raises(ToolError):
+        TT._next_request_id(rows)
+    with pytest.raises(ToolError):
+        RT._next_request_id(list(rows))
+    # 负控：还没用满时不许炸（否则守卫会变成"永远拒绝"）
+    assert TT._next_request_id(rows[:-1]) == "r-9999"
+
+
+def test_research_submit_gap_uses_the_authority_for_new_request_ids(store: Store):
+    """端到端：`research.submit_gap` 发出的号 == 权威实现按同一批行算出的号。"""
+    reg = ToolRegistry(name="d")
+    RT.install(reg, store)
+    with store.tx("research_questions", actor="test", note="seed") as tx:
+        tx.upsert(
+            "research_questions",
+            S.ResearchQuestion(
+                question_id="0000",
+                question="q",
+                origin="C:paths:0000->0001",
+                related_concept_ids=["0000"],
+                priority="high",
+                created_at=TS,
+                updated_at=TS,
+            ).to_dict(),
+        )
+    add_request(store, "r-0001", done=True, last_error="no_results")
+    add_request(store, "r-0003", done=True, last_error="no_results")
+
+    expected = IX.next_prefixed_id(store.rows("search_requests"), "request_id", "r")
+    res = reg.call("research.submit_gap", question_id="0000", topic="非交换环", mode="topical")
+    assert res.ok, res.error
+    assert res.data["request_id"] == expected == "r-0004"
+    assert {r["request_id"] for r in store.rows("search_requests")} == {"r-0001", "r-0003", "r-0004"}
+
+
+# ============================================================ P1-6 search.dedup_check
+
+
+def test_dedup_check_does_not_claim_new_when_the_table_cannot_be_read(store: Store):
+    """核心：读表失败 ⇒ 结构化失败，绝不给出 `would_be_duplicate=False`。"""
+    reg = registry_for(ST, store, workspace=store.root)
+
+    # ---- 负控 1：健康的空表 ⇒ 这是一个有效结论（查了、不是重复）
+    healthy = reg.call("search.dedup_check", title="Nobody wrote about this", year=2020)
+    assert healthy.ok and healthy.data["checked"] is True
+    assert healthy.data["would_be_duplicate"] is False
+    assert healthy.data["existing_table_size"] == 0
+    assert healthy.data["store_read_error"] is None
+
+    # ---- 负控 2：没有 store ⇒ 早就是 fail-closed（对照用）
+    no_store = ToolRegistry(name="no-store")
+    ST.register(no_store, workspace=store.root)
+    miss = no_store.call("search.dedup_check", title="x", year=2020)
+    assert miss.ok is False and miss.meta["kind"] == "no_store" and miss.meta["checked"] is False
+
+    # ---- 正例：表坏了 ⇒ 不许退化成"没有重复"
+    corrupt(store, "literature.json")
+    broken = reg.call("search.dedup_check", title="Nobody wrote about this", year=2020)
+    assert broken.ok is False
+    assert broken.meta["kind"] == "table_unreadable"
+    assert broken.meta["checked"] is False
+    assert broken.data is None, "失败时不许返回任何形如判重结论的字典"
+    assert "假阴性" in broken.error
+
+
+def test_literature_search_marks_candidates_unknown_when_the_table_is_broken(store: Store):
+    """同一根因的第二处：`search.literature` 也不许把"没查成"写成 `is_new=True`。"""
+
+    class _StubProvider:
+        name = "stub"
+
+        def search(self, topic, mode="topical", description="", limit=10):  # noqa: ARG002
+            from agentflow import providers as P
+
+            return [P.Candidate(title="Some paper", year=2020, doi="10.1000/x", type_code="J", provider="stub")]
+
+    reg = registry_for(ST, store, workspace=store.root, providers=[_StubProvider()])
+
+    good = reg.call("search.literature", topic="群", mode="topical", provider="stub").data
+    assert good["store_checked"] is True and good["candidates"][0]["is_new"] is True
+
+    corrupt(store, "literature.json")
+    bad = reg.call("search.literature", topic="群", mode="topical", provider="stub").data
+    assert bad["store_checked"] is False
+    assert bad["candidates"][0]["is_new"] is None, "表读不出来 ⇒ 判重结论必须是 None（未知）"
+    assert bad["existing_table_size"] is None
+    assert bad["store_read_error"], "必须留下读表失败的原因"
+    assert any("没查" in w for w in bad["warnings"])
+
+
+# ============================================================ P1-7 trace.* 三态
+
+
+def test_trace_chain_without_any_graph_is_not_checked_not_ok():
+    """核心：无 store 无 graph ⇒ `checked=False` + ok=False（不是 ok=True + step_count=0）。"""
+    reg = ToolRegistry(name="trace-none")
+    TR.register(reg)  # 既不给 store 也不给 graph
+    res = reg.call("trace.chain", relation_ids=["0000"])
+    assert res.ok is False
+    assert res.meta.get("kind") == "no_graph"
+    assert res.meta.get("checked") is False
+    assert res.data is None, "不许返回 ok=True + step_count=0 —— 那会被读成'这些代号都不存在'"
+    assert "没查" in res.error
+
+
+def test_trace_chain_with_a_graph_distinguishes_broken_chain_from_no_lookup(store: Store):
+    """有图时：链条确实断裂 ⇒ ok=True + checked=True + missing 非空（"查了、没有"）。"""
+    reg = registry_for(TR, store)
+    res = reg.call("trace.chain", relation_ids=["9999"])
+    assert res.ok is True, res.error
+    assert res.data["checked"] is True
+    assert res.data["missing"] == ["9999"]
+    assert res.data["step_count"] == 0
+    assert "9999" in res.data["chain_text"]
+
+
+def test_trace_lookups_without_graph_say_not_checked_not_not_found(store: Store):
+    """4.3(a)⑤⑥：L1/L2/L3 在"没有图可查"时也必须说"没查"，不许说"查了、没有"。"""
+    reg = ToolRegistry(name="trace-none")
+    TR.register(reg)
+    cases = (
+        ("trace.relation", {"relation_id": "0000"}),
+        ("trace.concept", {"concept_id": "0000"}),
+        ("trace.literature", {"lit_id": "0000"}),
+        ("trace.chain", {"relation_ids": ["0000"]}),
+    )
+    for name, params in cases:
+        res = reg.call(name, **params)
+        assert res.ok is False, name
+        assert res.meta.get("kind") == "no_graph", (name, res.meta)
+        assert res.meta.get("checked") is False, name
+
+    # ---- 负控：有图、代号确实不存在 ⇒ 是"查了、没有"（kind=not_found + checked=True）
+    reg2 = registry_for(TR, store)
+    for name, params, key in (
+        ("trace.relation", {"relation_id": "9999"}, "known_relations"),
+        ("trace.concept", {"concept_id": "9999"}, "known_concepts"),
+        ("trace.literature", {"lit_id": "9999"}, "known_literature"),
+    ):
+        res = reg2.call(name, **params)
+        assert res.ok is False and res.meta.get("kind") == "not_found", (name, res.meta)
+        assert res.meta.get("checked") is True, name
+        assert key in res.meta, name
+
+
+def test_trace_literature_every_branch_carries_pages_returned_and_truncated(store: Store):
+    """4.5 #4：`pages_returned`/`truncated` 在每一条返回分支上都必须存在。
+
+    修之前它们只在成功分支上给 —— 恰恰在"读不到"的场景缺席，而那种场景下
+    "我请求了哪些页、实际给了哪些页"才是调用方最需要的信息。
+    """
+    add_literature(store, "0000", title="有正文", path="0000/source.txt", processed=True)
+    add_literature(store, "0001", title="没下载", path=None, processed=False)
+    add_literature(store, "0002", title="文件丢了", path="0002/gone.txt", processed=False)
+    write_library_file(store, "0000/source.txt", "An abelian group is a group.\n")
+
+    reg = registry_for(TR, store)
+    seen_status = set()
+    for lit_id, expected in (("0000", "ok"), ("0001", "no_path"), ("0002", "file_missing")):
+        data = reg.call("trace.literature", lit_id=lit_id).data
+        assert data["status"] == expected
+        assert "pages_returned" in data and "truncated" in data, (lit_id, sorted(data))
+        assert data["status"] in TR.L3_STATUSES
+        seen_status.add(data["status"])
+    assert seen_status == {"ok", "no_path", "file_missing"}
+
+
+def test_l3_status_vocabulary_is_actually_enforced():
+    """4.5 #9：`L3_STATUSES` 不能只是一句注释 —— 编外的 status 必须当场炸。"""
+    assert TR._status("file_missing") == "file_missing"
+    with pytest.raises(ToolError):
+        TR._status("file_mising")  # 拼错一个字母：以前会照原样返回给下游
+
+
+# ============================================================ P2-8/9 verify.*
+
+
+def test_detect_verifier_side_effect_is_read_and_checked_is_honest(store: Store, monkeypatch: pytest.MonkeyPatch):
+    """`checked` 必须真有 False 路径；`side_effect` 必须是 read（它起子进程）。"""
+    reg = registry_for(VT, store, root=store.root)
+    spec = reg.get("verify.detect_verifier")
+    assert spec.side_effect == "read", "它 `shutil.which` + `subprocess.run` 外部二进制，不是'无副作用'"
+    assert spec.needs_approval is False
+
+    # ---- 路径 1：探测本身失败 ⇒ checked=False（旧实现硬编码 True，没有这条路）
+    def boom(_name):
+        raise OSError("PATH 读不了")
+
+    monkeypatch.setattr(shutil, "which", boom)
+    failed = VT.detect_verifier()
+    assert failed["checked"] is False
+    assert failed["probe_errors"], "失败原因必须逐条可见"
+    assert "没做成" in failed["reason"]
+
+    # ---- 路径 2：探测完成、环境里确实没有 ⇒ checked=True + available=[]
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    done = VT.detect_verifier()
+    assert done["checked"] is True
+    assert done["available"] == [] and done["available_names"] == []
+    assert done["probe_errors"] == []
+    assert "没有" in done["reason"]
+
+
+def test_detect_verifier_checked_false_when_the_version_probe_fails(store: Store, monkeypatch: pytest.MonkeyPatch):
+    """二进制在、但版本探测起不来 ⇒ 仍记入 available，同时 `checked=False`（部分探测）。"""
+    import subprocess
+
+    monkeypatch.setattr(shutil, "which", lambda name: rf"C:\fake\{name}.exe")
+
+    def boom(*_a, **_kw):
+        raise OSError("起不来")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    det = VT.detect_verifier()
+    assert det["checked"] is False
+    assert det["available"], "它确实在 PATH 上 —— 这个事实不该被抹掉"
+    assert det["probe_errors"]
+
+
+def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeypatch: pytest.MonkeyPatch):
+    """声明与实现不许再分裂：`returns=` 里承诺的键 == 各条路径实际返回的键。
+
+    本用例在 P1 接线（`check_formal` 转发到 `formalgw.check_lean`）之后被改过两处，
+    两处都是旧断言的收敛，而不是判据放宽：
+
+    - `summary` 过去必须含"未接线"（那时它确实没接线）；现在必须说清它会真跑一次；
+    - 第三条路径过去断言 `reason == "not_implemented"`。那条路径给的是
+      `script_path="proofs/x.lean"`，而工作区里没有这个文件：接线之后它读不到源码，
+      于是 `formalgw` 按"文件里没有你要证的东西"给出 `decl_mismatch`（`checked=True`，
+      因为那确实是一个查完的结论）。这正是接线要的效果：路径写错了不再是一句
+      "没实现"，而是一条可诊断的结论。三条路径的键集合仍必须逐字相同。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    spec = reg.get("verify.check_formal")
+    declared = declared_keys(spec.returns)
+    assert declared == {"checked", "verified", "claim", "reason", "detail", "verifier_output"}
+    assert "真跑" in spec.summary, "summary 必须如实说明它会真的跑一次检查器"
+    assert "未接线" not in spec.summary, "它已经接线了，声明里不许再写未接线"
+
+    # ---- 路径 1：无后端
+    monkeypatch.setattr(
+        VT, "detect_verifier", lambda: {"checked": True, "available": [], "available_names": [], "reason": "无", "probe_errors": []}
+    )
+    d1 = reg.call("verify.check_formal", claim="1+1=2").data
+    # ---- 路径 2：有后端、没给脚本
+    monkeypatch.setattr(
+        VT,
+        "detect_verifier",
+        lambda: {
+            "checked": True,
+            "available": [{"name": "lean", "path": "lean", "version": "4"}],
+            "available_names": ["lean"],
+            "reason": "有",
+            "probe_errors": [],
+        },
+    )
+    d2 = reg.call("verify.check_formal", claim="1+1=2").data
+    # ---- 路径 3：有后端 + 给了脚本路径，但盘上没有这个文件
+    d3 = reg.call("verify.check_formal", claim="1+1=2", script_path="proofs/x.lean").data
+
+    for branch in (d1, d2, d3):
+        assert set(branch) == declared, f"返回的键与 returns= 不一致：{sorted(branch)}"
+        assert branch["verifier_output"] == ""
+    # 前两条是"没查成"：checked=False 且没有验证结论。
+    for branch in (d1, d2):
+        assert branch["checked"] is False
+        assert branch["verified"] is None, "没跑过 ⇒ verified 必须是 None，不许写成 False"
+    # 第三条是"查了"（源码里没有那个声明）⇒ 不许被读成通过。
+    assert d3["checked"] is True
+    assert d3["verified"] is False, "声明名对不上不许判通过"
+    assert [d["reason"] for d in (d1, d2, d3)] == ["no_backend", "no_script", "decl_mismatch"]
+    # 负控：任何分支都不许声称验证过
+    assert all(b["verified"] is not True for b in (d1, d2, d3))
+
+
+def test_declared_returns_are_a_subset_of_what_the_tools_actually_return(store: Store):
+    """通用防漂移：`returns=` 承诺的键必须在实际 payload 里都存在（4.5 #4/#7/#8）。"""
+    from conftest import add_concept, add_relation
+
+    add_concept(store, "0000", "群")
+    add_concept(store, "0001", "阿贝尔群")
+    add_relation(store, "0000", ["0000", "0001"], "0000", quote="An abelian group is a group.")
+    add_literature(store, "0000", title="有正文", path="0000/source.txt", processed=True)
+    write_library_file(store, "0000/source.txt", "An abelian group is a group.\n")
+
+    trace_reg = registry_for(TR, store)
+    cases = (
+        ("trace.relation", {"relation_id": "0000"}),
+        ("trace.concept", {"concept_id": "0000"}),
+        ("trace.literature", {"lit_id": "0000", "max_chars": 200}),
+        ("trace.chain", {"relation_ids": ["0000"]}),
+    )
+    for name, params in cases:
+        res = trace_reg.call(name, **params)
+        assert res.ok, (name, res.error)
+        missing = declared_keys(trace_reg.get(name).returns) - set(res.data)
+        assert not missing, f"{name} 的 returns= 承诺了但没给：{sorted(missing)}"
+
+    verify_reg = registry_for(VT, store, root=store.root)
+    for name, params in (
+        ("verify.evidence_for", {"claim_key": "k"}),
+        ("verify.evidence_for", {}),
+        ("verify.list_experiments", {}),
+    ):
+        res = verify_reg.call(name, **params)
+        assert res.ok, (name, res.error)
+        missing = declared_keys(verify_reg.get(name).returns) - set(res.data)
+        assert not missing, f"{name} 的 returns= 承诺了但没给：{sorted(missing)}"
+    det = verify_reg.call("verify.detect_verifier").data
+    assert not declared_keys(verify_reg.get("verify.detect_verifier").returns) - set(det)
+
+
+# ============================================================ P2-10 非 ToolError 逃逸
+
+
+def _assert_not_unexpected(res: object, expected_kind: str) -> None:
+    assert res.ok is False  # type: ignore[attr-defined]
+    kind = res.meta.get("kind")  # type: ignore[attr-defined]
+    assert kind == expected_kind, (kind, res.error)  # type: ignore[attr-defined]
+    assert kind != "unexpected", "修之前它会逃出工具层，被 base.py 兜成无声的 kind='unexpected'"
+
+
+def test_no_unexpected_escape_doc_and_review_store_failure(store: Store):
+    """`doc.*` / `review.*`：`StoreError`（RuntimeError）不再逃逸成 `unexpected`。"""
+    doc_reg = registry_for(DT, store, workspace_root=store.root)
+    rev_reg = registry_for(RV, store)
+    assert doc_reg.call("doc.list_documents").ok is True
+    assert rev_reg.call("review.list_findings").ok is True
+
+    # `documents` 表坏了 ⇒ 读侧（list_documents）与写侧（build_document）都要结构化失败。
+    # 这里让 citation 核对先通过（否则会先撞上 dangling_citation，测不到 StoreError）：
+    # 把 documents 表弄坏、但 literature 表是好的。
+    add_literature(store, "0000", title="真实文献", processed=True)
+    corrupt(store, "documents.json")
+    _assert_not_unexpected(doc_reg.call("doc.list_documents"), "store_error")
+    _assert_not_unexpected(
+        doc_reg.call(
+            "doc.build_document",
+            kind="note",
+            title="t",
+            claims=[DT.compose_claim("x", citations=["lit:0000"], evidence_kind="heuristic", section="s")],
+        ),
+        "store_error",
+    )
+
+    # `review_findings` 表坏了 ⇒ 同一个 guard_result 也要把它变成 store_error
+    store2 = Store(store.root)
+    corrupt(store2, "review_findings.json")
+    _assert_not_unexpected(registry_for(RV, store2).call("review.list_findings"), "store_error")
+
+
+def test_no_unexpected_escape_trace_store_failure(store: Store):
+    corrupt(store, "relations.json")
+    res = registry_for(TR, store).call("trace.chain", relation_ids=["0000"])
+    _assert_not_unexpected(res, "store_error")
+    assert res.meta.get("checked") is False
+
+
+def test_no_unexpected_escape_verify_store_reads(store: Store):
+    corrupt(store, "experiments.json")
+    reg = registry_for(VT, store, root=store.root)
+    _assert_not_unexpected(reg.call("verify.evidence_for", claim_key="k"), "store_error")
+    _assert_not_unexpected(reg.call("verify.list_experiments"), "store_error")
+
+
+def test_no_unexpected_escape_verify_code_hash_io(store: Store, monkeypatch: pytest.MonkeyPatch):
+    """`verify.code_hash`：`open()` 的 OSError（文件被占用/ACL 拒绝）不再逃逸。
+
+    桩打在 `open` 上，不打在被测的 `code_hash` 上。这一点是本用例的关键：
+    把桩打在 `code_hash` 上等于把整个函数体换掉 —— 于是"逃逸已修好"这件事
+    根本没有被执行过（实测：改成打 `open` 之后，`code_hash` 的真实函数体
+    确实收到了那个路径并抛出 `PermissionError`，见 `temp/_probe_g35_patch_target.py`）。
+    `raising=False` 只为容忍"某天实现把 `open` 显式导进了本模块 globals"这种改写。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    (store.root / "probe.py").write_text("print(1)\n", encoding="utf-8")
+
+    def boom(*_a, **_k):
+        raise PermissionError("拒绝访问")
+
+    monkeypatch.setattr(VT, "open", boom, raising=False)
+    _assert_not_unexpected(reg.call("verify.code_hash", path="probe.py"), "io_error")
+    # 负控：正常的哈希路径照旧可用（撤掉桩，同一个文件、同一条路径）
+    monkeypatch.undo()
+    ok_res = reg.call("verify.code_hash", path="probe.py")
+    assert ok_res.ok and len(ok_res.data["code_hash"]) == 16
+
+
+def test_no_unexpected_escape_verify_run_experiment_out_of_workspace(store: Store):
+    """`verify.run_experiment`：脚本越界抛的是 `ExperimentError(RuntimeError)`，不再逃逸。"""
+    reg = registry_for(VT, store, root=store.root)
+    before = (store.data / "experiments.json").read_bytes()
+    res = reg.call(
+        "verify.run_experiment",
+        claim="c",
+        claim_key="k",
+        script_path="../../../outside.py",
+    )
+    assert res.ok is False
+    assert res.meta.get("kind") in ("experiment_error", "validation_error", "param_error"), res.meta
+    assert res.meta.get("kind") != "unexpected"
+    assert (store.data / "experiments.json").read_bytes() == before, "失败不许留下实验行"
+
+
+def test_no_unexpected_escape_ocr_page_count_and_pdf_pages(store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """`ocr.detect_text_layer` / `ocr.run`：页数探测与逐页读取的异常都要结构化。"""
+    reg = registry_for(OT, store, workspace=tmp_path, backends=[_StubBackend("stub", "TEXT")])
+    # ---- detect_text_layer：page_count 抛
+    txt = tmp_path / "a.txt"
+    txt.write_text("hello", encoding="utf-8")
+
+    def boom(_p):
+        raise RuntimeError("没有 fitz")
+
+    monkeypatch.setattr(OT, "page_count", boom)
+    _assert_not_unexpected(reg.call("ocr.detect_text_layer", path="a.txt"), "page_count_failed")
+
+    # ---- ocr.run：逐页 load_page 抛（所有页都失败 ⇒ all_pages_failed，且逐页留痕）
+    fitz = pytest.importorskip("fitz", reason="栅格化 PDF 需要 PyMuPDF")
+    pdf = tmp_path / "two.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(str(pdf))
+    doc.close()
+
+    class _BoomDoc:
+        page_count = 2
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def load_page(self, _i):
+            raise RuntimeError("页坏了")
+
+    monkeypatch.setattr(fitz, "open", lambda *_a, **_kw: _BoomDoc())
+    res = reg.call("ocr.run", path="two.pdf")
+    assert res.ok is False
+    assert res.meta.get("kind") == "all_pages_failed", res.meta
+    assert res.meta.get("kind") != "unexpected"
+    assert all("读取第" in p["error"] for p in res.meta["pages"]), res.meta["pages"]
+
+
+def test_no_unexpected_escape_search_register_schema_failure(store: Store, monkeypatch: pytest.MonkeyPatch):
+    """`search.register` 的 `row.validate()` 不再无声逃逸（同一调用类型 42 行后被显式 guard 过）。"""
+    reg = registry_for(ST, store, workspace=store.root)
+
+    def boom(_self):
+        raise ValueError("title 超过 600 字符（夹具故意）")
+
+    monkeypatch.setattr(S.Literature, "validate", boom)
+    res = reg.call("search.register", title="T", type_code="J", summary="s")
+    _assert_not_unexpected(res, "validation_error")
+    assert res.meta.get("lit_id")
+    assert store.rows("literature") == [], "校验失败的行不许落盘"
+
+    # 负控：取消打桩后，正常的登记照旧成功
+    monkeypatch.undo()
+    ok_res = reg.call("search.register", title="正常的文献", type_code="J", summary="s")
+    assert ok_res.ok and ok_res.data["created"] is True
+    assert store.rows("literature")[0]["title"] == "正常的文献"
+
+
+# ============================================================ 4.1 零断言工具的契约
+
+
+def test_table_list_total_is_the_filtered_total_not_the_page_size(store: Store):
+    """4.1：`table.list` 的 `total` 是过滤后总数 —— 分页逻辑唯一的依据，此前零断言。"""
+    reg = registry_for(TT, store)
+    for i in range(5):
+        reg.call("table.create", table="concepts", row={"name": f"c{i}", "definition": "d", "related_concepts": []})
+
+    page1 = reg.call("table.list", table="concepts", limit=2)
+    assert page1.ok, page1.error
+    assert page1.data["total"] == 5, "total 必须是过滤后的总数，不是本页条数"
+    assert page1.data["returned"] == 2 and len(page1.data["rows"]) == 2
+
+    page3 = reg.call("table.list", table="concepts", limit=2, offset=4)
+    assert page3.data["total"] == 5 and page3.data["returned"] == 1, "最后一页只有 1 条，但 total 仍是 5"
+
+    filtered = reg.call("table.list", table="concepts", limit=10, filter={"name": "c1"})
+    assert filtered.data["total"] == 1, "total 说的是**过滤后**的总数"
+
+
+def test_table_count_is_not_affected_by_limit(store: Store):
+    """4.1：`table.count` 的 docstring 明说"计数不该受 limit 影响" —— 这条不变量此前没被测。"""
+    reg = registry_for(TT, store)
+    for i in range(4):
+        reg.call("table.create", table="concepts", row={"name": f"c{i}", "definition": "d", "related_concepts": []})
+    assert reg.call("table.count", table="concepts").data == 4
+    # count 没有 limit 参数，但被列表的 limit 影响才是真正的缺陷：连开两次 list 后 count 不变
+    reg.call("table.list", table="concepts", limit=1)
+    assert reg.call("table.count", table="concepts").data == 4
+    # 负控：过滤时总数按过滤后的口径
+    assert reg.call("table.count", table="concepts", filter={"name": "c2"}).data == 1
+
+
+# ---------------------------------------------------------------- 测试用 OCR 桩
+
+
+class _StubBackend:
+    """本文件自带的 OCR 测试桩（不是真 OCR，只回一个固定字符串）。"""
+
+    produces_text = True
+
+    def __init__(self, name: str, text: str = "") -> None:
+        self.name = name
+        self._text = text
+        self.checks: dict = {"role": "测试桩"}
+
+    def available(self, *, refresh: bool = False) -> tuple[bool, str]:  # noqa: ARG002
+        return True, "桩"
+
+    def ocr_image(self, _image, _languages) -> str:
+        return self._text

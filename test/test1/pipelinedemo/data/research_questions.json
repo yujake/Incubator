@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "question_id": "0000",
+      "question": "从「群」到「域」经由关系链 [0009->0010->0005] 的推导是否成立？该链条的每一步是否都有原文支撑、能否被反例削弱？",
+      "origin": "C:paths:0000:0009->0010->0005",
+      "related_concept_ids": [
+        "0000",
+        "0002",
+        "0007",
+        "0008"
+      ],
+      "related_relation_ids": [
+        "0005",
+        "0009",
+        "0010"
+      ],
+      "status": "researching",
+      "priority": "high",
+      "evidence_lit_ids": [
+        "0000",
+        "0001",
+        "0003",
+        "0004",
+        "0005",
+        "0006",
+        "0007",
+        "0008"
+      ],
+      "waiting_request_ids": [],
+      "gap_reason": "",
+      "notes": "[ingest] 来源报告 0000（kind=paths）。理由：C 报告 0000 判定该路径信息量为 high（score=4.8333，breakdown={'inputs': {'hops': 3, 'quote_verified_true': 3, 'quote_verified_false': 0, 'quote_verified_unknown': 0, 'suspect': 0, 'distinct_literature': 2, 'average_description_length': 18.33, 'concepts_outside_hot_set': ['0007'], 'hot_set_size': 5}, 'terms': [{'name': '引文已校验比例', 'detail': 'quote_verified=True 的跳数 3/3 = 1.00', 'weight': 2.0, 'contribution': 2.0}, {'name': '引文校验失败比例', 'detail': 'quote_verified=False 的跳数 0/3 = 0.00', 'weight': -1.5, 'contribution': -0.0}, {'name': 'suspect 比例', 'detail': 'status=suspect 的跳数 0/3 = 0.00', 'weight': -1.0, 'contribution': -0.0}, {'name': '跳数', 'detail': 'min(跳数 3, 3) = 3（边际递减）', 'weight': 0.6, 'contribution': 1.8}, {'name': '跨文献多样性', 'detail': '不同文献 2 篇 / 跳数 3 = 0.67', 'weight': 0.8, 'contribution': 0.5333}, {'name': '描述过短', 'detail': '平均描述长度 18.3 字符 → 不计入', 'weight': -0.5, 'contribution': -0.0}, {'name': '绕开最常见节点', 'detail': \"不在热门集里的概念 ['0007'] → 计入\", 'weight': 0.5, 'contribution': 0.5}], 'total': 4.8333, 'thresholds': {'high': 3.0, 'medium': 1.5}, 'level': 'high'}，hops=3）\n[consider] 证据足够（无判据触发）=> 进入 researching，准备写结论\n[research] 置信度=high（判据：无；证据 11 条，quote_verified=True 10 条；LLM=no）\n[research] 置信度=high（判据：无；证据 11 条，quote_verified=True 10 条；LLM=no）",
+      "created_at": "2026-09-23T22:33:35+08:00",
+      "updated_at": "2026-09-23T22:33:36+08:00"
+    },
+    {
+      "question_id": "0001",
+      "question": "从「群」到「域」经由关系链 [0011->0014->0003] 的推导是否成立？该链条的每一步是否都有原文支撑、能否被反例削弱？",
+      "origin": "C:paths:0000:0011->0014->0003",
+      "related_concept_ids": [
+        "0000",
+        "0002",
+        "0004",
+        "0005"
+      ],
+      "related_relation_ids": [
+        "0003",
+        "0011",
+        "0014"
+      ],
+      "status": "researching",
+      "priority": "high",
+      "evidence_lit_ids": [
+        "0000",
+        "0001",
+        "0003",
+        "0004",
+        "0005",
+        "0006",
+        "0007",
+        "0008"
+      ],
+      "waiting_request_ids": [],
+      "gap_reason": "",
+      "notes": "[ingest] 来源报告 0000（kind=paths）。理由：C 报告 0000 判定该路径信息量为 high（score=4.3333，breakdown={'inputs': {'hops': 3, 'quote_verified_true': 3, 'quote_verified_false': 0, 'quote_verified_unknown': 0, 'suspect': 0, 'distinct_literature': 2, 'average_description_length': 14.33, 'concepts_outside_hot_set': [], 'hot_set_size': 5}, 'terms': [{'name': '引文已校验比例', 'detail': 'quote_verified=True 的跳数 3/3 = 1.00', 'weight': 2.0, 'contribution': 2.0}, {'name': '引文校验失败比例', 'detail': 'quote_verified=False 的跳数 0/3 = 0.00', 'weight': -1.5, 'contribution': -0.0}, {'name': 'suspect 比例', 'detail': 'status=suspect 的跳数 0/3 = 0.00', 'weight': -1.0, 'contribution': -0.0}, {'name': '跳数', 'detail': 'min(跳数 3, 3) = 3（边际递减）', 'weight': 0.6, 'contribution': 1.8}, {'name': '跨文献多样性', 'detail': '不同文献 2 篇 / 跳数 3 = 0.67', 'weight': 0.8, 'contribution': 0.5333}, {'name': '描述过短', 'detail': '平均描述长度 14.3 字符 → 不计入', 'weight': -0.5, 'contribution': -0.0}, {'name': '绕开最常见节点', 'detail': '不在热门集里的概念 无 → 不计入', 'weight': 0.5, 'contribution': 0.0}], 'total': 4.3333, 'thresholds': {'high': 3.0, 'medium': 1.5}, 'level': 'high'}，hops=3）\n[consider] 证据足够（无判据触发）=> 进入 researching，准备写结论\n[research] 置信度=high（判据：无；证据 13 条，quote_verified=True 12 条；LLM=no）\n[research] 置信度=high（判据：无；证据 13 条，quote_verified=True 12 条；LLM=no）",
+      "created_at": "2026-09-23T22:33:35+08:00",
+      "updated_at": "2026-09-23T22:33:36+08:00"
+    }
+  ]
+}

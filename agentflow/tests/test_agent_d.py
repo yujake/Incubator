@@ -1,0 +1,490 @@
+"""智能体 D（`agent_d.py`）的性质测试。
+
+D 的核心是管理"问题 → 证据 → 缺口 → 新证据"的循环（DESIGN-TOOLS §4），
+这里锁住五条最容易悄悄做错的性质：
+
+- `ingest` 提取的问题必须带代号溯源（origin 里有报告号与关系代号链，
+  `related_*_ids` 非空且都真实存在）；
+- `assess` 的判据必须可核实（关键词零命中 / 度数低且无可核验引文 / 表述互相矛盾）；
+- `submit_gap` 对"已有未完成请求"的问题不得重复提交；
+- `poll` 只看等待集 + 请求终局 + 文献 processed（这是"D 继续"能自动接上的唯一依据）；
+- 置信度不许拔高：证据不足就是 `low`，LLM 钩子只能调低。
+
+全部离线、确定性：`trace_tools` 走真身（它已经落地），不联网、不调 LLM。
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from agentflow import schema as S
+from agentflow.agent_c import AgentC
+from agentflow.agent_d import AgentD, analyze_gaps, detect_contradictions, evidence_confidence, install_d_tools
+from agentflow.store import Store
+from agentflow.tools import research_tools as RT
+from agentflow.verify import verify_all
+
+from conftest import add_concept, add_literature, add_relation, add_request, sync_counters
+from demo_dataset_helper import build_demo
+
+TS = "2026-01-01T00:00:00+00:00"
+
+
+# ============================================================ 辅助
+
+
+def add_question(st: Store, qid: str, **kw) -> dict:
+    """插入一条合法的 research_questions 行（conftest 里没有这个问题表的构造器）。"""
+    row = S.ResearchQuestion(
+        question_id=qid,
+        question=kw.get("question", "这是一个研究问题"),
+        origin=kw.get("origin", "C:paths:0000:0000"),
+        related_concept_ids=list(kw.get("related_concept_ids", [])),
+        related_relation_ids=list(kw.get("related_relation_ids", [])),
+        status=kw.get("status", "open"),
+        priority=kw.get("priority", "medium"),
+        evidence_lit_ids=list(kw.get("evidence_lit_ids", [])),
+        waiting_request_ids=list(kw.get("waiting_request_ids", [])),
+        notes=kw.get("notes", ""),
+        created_at=TS,
+        updated_at=TS,
+    )
+    row.validate()
+    with st.tx("research_questions", actor="test", note="fixture") as tx:
+        tx.upsert("research_questions", row.to_dict())
+    return row.to_dict()
+
+
+def _opaque_store(root) -> Store:
+    """造一个"关键词必然零命中"的小库：概念名是单字（会被关键词切分过滤掉）。
+
+    关系文本刻意用与问题毫无重叠的记号，用来验证判据 (a)：关键词命中数为 0。
+    """
+    st = Store(root)
+    st.init()
+    add_concept(st, "0001", "甲", definition="d", sync=False)
+    add_concept(st, "0002", "乙", definition="d", sync=False)
+    add_relation(
+        st,
+        "0000",
+        ["0001", "0002"],
+        "0000",
+        description="zzz qqq",
+        quote="zzz qqq",
+        quote_verified=None,
+        sync=False,
+    )
+    sync_counters(st)
+    return st
+
+
+class _FakeLLM:
+    """只会把置信度往高里写的假 LLM：用来验证"不许拔高"这条硬规则。"""
+
+    def __init__(self, confidence: str = "high") -> None:
+        self.confidence = confidence
+        self.calls: list[str] = []
+
+    def complete(self, prompt: str) -> str:
+        self.calls.append(prompt)
+        return json.dumps(
+            {"analysis": "LLM 写的分析", "conclusion": "LLM 的结论", "suggestions": ["看看"], "confidence": self.confidence},
+            ensure_ascii=False,
+        )
+
+
+# ============================================================ [1] ingest：代号溯源
+
+
+def test_ingest_questions_carry_origin_and_real_ids(tmp_path):
+    """ingest 产出问题必须带代号溯源：origin 里有报告号与关系代号链，related_*_ids 真实存在。"""
+    st = Store(build_demo(tmp_path / "demo"))
+    report = AgentC(st).paths("0000", "0002", max_paths=8, request="查询 群 与 域 之间的关系")
+    report.persist()
+    rid = str(report.report_id)
+
+    agent = AgentD(st)
+    created = agent.ingest(report)
+    assert created, "一份含 high 路径的报告应当能提出至少一个问题"
+
+    rows = st.rows("research_questions")
+    assert len(rows) == len(created) == len(set(created))
+    real_relations = {r["relation_id"] for r in st.rows("relations")}
+    real_concepts = {r["concept_id"] for r in st.rows("concepts")}
+    expected_chains = {
+        "->".join(p["relation_chain"]) for p in report.payload["paths"] if p["level"] in ("high", "medium")
+    }
+    seen_chains = set()
+    for row in rows:
+        assert row["origin"].startswith(f"C:paths:{rid}:"), row["origin"]
+        chain = row["origin"].split(":", 3)[3]
+        assert chain, "origin 里必须带关系代号链"
+        seen_chains.add(chain)
+        assert set(chain.split("->")) <= real_relations, "origin 里的关系代号必须真实存在"
+        assert row["related_concept_ids"], "related_concept_ids 不能为空"
+        assert row["related_relation_ids"], "related_relation_ids 不能为空"
+        assert set(row["related_concept_ids"]) <= real_concepts
+        assert set(row["related_relation_ids"]) <= real_relations
+        assert row["status"] == "open" and row["priority"] in S.PRIORITIES
+        assert f"来源报告 {rid}" in row["notes"], "问题必须留下它从哪份报告来的"
+    assert seen_chains == expected_chains
+
+
+def test_ingest_then_trace_question_yields_nonempty_l1(tmp_path):
+    """回归：ingest 出来的问题在溯源时必须拿到非空的 L1 证据（D 曾误报"L1/L2 均为空"）。"""
+    st = Store(build_demo(tmp_path / "demo"))
+    report = AgentC(st).paths("0000", "0002", max_paths=8)
+    report.persist()
+    agent = AgentD(st)
+    qid = agent.ingest(report)[0]
+
+    ev = agent.trace_question(qid)
+    assert ev["trace_mode"] == "external", "溯源工具存在时不该走降级替身"
+    assert ev["claims"], "L1 证据为空 —— 链条没接上"
+    assert ev["l2"], "L2 证据为空 —— 概念定义没接上"
+    for claim in ev["claims"]:
+        assert claim["relation_id"] and claim["concept_pair_key"]
+    assert any(t["level"] == "chain" for t in ev["traces"]), "多跳问题应当顺带取回链条的表述"
+
+
+def test_ingest_same_report_twice_is_idempotent(tmp_path):
+    """同一份 C 报告 ingest 两次不得产生重复问题（跨轮次幂等）。"""
+    st = Store(build_demo(tmp_path / "demo"))
+    report = AgentC(st).paths("0000", "0002", max_paths=8)
+    report.persist()
+    agent = AgentD(st)
+    first = agent.ingest(report)
+    assert first
+    before = len(st.rows("research_questions"))
+    again = agent.ingest(report)
+    assert again == []
+    assert len(st.rows("research_questions")) == before
+    assert agent.last_ingest["merged"] or agent.last_ingest["skipped"], "重复 ingest 必须留下被去重的记录"
+
+
+def test_ingest_dedups_by_kind_and_relation_chain_across_reports(tmp_path):
+    """去重口径是 `(kind, 排序后的关系代号)`：不同报告指向同一条链时不得重复建问题。"""
+    st = Store(build_demo(tmp_path / "demo"))
+    agent = AgentD(st)
+    first = AgentC(st).paths("0000", "0002", max_paths=8)
+    first.persist()
+    assert agent.ingest(first)
+
+    second = AgentC(st).paths("0000", "0002", max_paths=8)  # 另一次分析：不同 report_id、同样的链
+    second.persist()
+    assert second.report_id != first.report_id
+
+    before = len(st.rows("research_questions"))
+    created = agent.ingest(second)
+    assert created == [], "同一个研究点被换了个报告号又提了一遍"
+    assert len(st.rows("research_questions")) == before
+    assert agent.last_ingest["merged"], "内容等价的候选必须留下「另见报告」的痕迹"
+    keys = [tuple(c["content_key"]) for c in agent.last_ingest["candidates"]]
+    assert all(k[0] == "paths" and list(k[1]) == sorted(k[1]) for k in keys), "内容键必须是 kind + 排序后的关系代号"
+
+
+# ============================================================ [2]/[3] assess：可核实判据
+
+
+def test_assess_zero_keyword_hits_counts_as_insufficient(tmp_path):
+    """判据 (a)：关键词在现有关系的引文/描述里 0 命中 ⇒ 证据不足，且中间值可逐项复核。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_question(
+        st,
+        "0000",
+        question="关于韦伊猜想的证明路径是否已经完整",
+        related_concept_ids=["0001", "0002"],
+        related_relation_ids=["0000"],
+    )
+    verdict = AgentD(st).assess("0000")
+    assert verdict["insufficient"] is True
+    assert [c["id"] for c in verdict["criteria"]] == ["a_no_keyword_hit", "b_low_degree_unverified"]
+    assert verdict["priority"] == "high", "「库里完全没谈过」应当是高优先级"
+    assert verdict["hits"]["distinct_hit_keywords"] == 0
+    assert verdict["hits"]["keyword_count"] > 0
+    assert sum(verdict["hits"]["per_keyword"].values()) == 0
+
+
+def test_assess_flags_contradiction_as_high_priority(tmp_path):
+    """判据 (c)：两条关键关系给出互相矛盾的表述 ⇒ 优先级 high（这是最有价值的发现）。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    add_concept(st, "0001", "非交换环", definition="d", sync=False)
+    add_concept(st, "0003", "交换性条件", definition="d", sync=False)
+    add_relation(
+        st, "0002", ["0001", "0003"], "0001",
+        description="交换性条件不能推广到非交换环。", quote="", quote_verified=None, status="suspect", sync=False,
+    )
+    add_relation(
+        st, "0003", ["0001", "0003"], "0001",
+        description="交换性条件可以推广到非交换环。", quote="", quote_verified=None, status="suspect", sync=False,
+    )
+    sync_counters(st)
+    add_question(
+        st,
+        "0000",
+        question="交换性条件能否推广到非交换环",
+        origin="C:gaps:0000:0001,0003",
+        related_concept_ids=["0001", "0003"],
+        related_relation_ids=["0002", "0003"],
+        priority="high",
+    )
+
+    verdict = AgentD(st).assess("0000")
+    assert "c_contradiction" in [c["id"] for c in verdict["criteria"]]
+    assert verdict["priority"] == "high"
+    assert len(verdict["contradictions"]) == 1
+    pair = verdict["contradictions"][0]
+    assert pair["relation_ids"] == ["0002", "0003"]
+    assert pair["signals"], "矛盾必须给出可核实的信号（否定标记 / 对立词组）"
+    assert "可以" in "".join(pair["signals"]) or "不" in "".join(pair["signals"])
+
+
+def test_analyze_gaps_and_detect_contradictions_are_pure_functions():
+    """判据总装是纯函数：同样的关系列表必须给出同样的结论与中间值。"""
+    rels = [
+        {"relation_id": "0000", "concept_pair_key": "0000|0001", "statement": "A 是 B", "quote_verified": None},
+        {"relation_id": "0001", "concept_pair_key": "0000|0002", "statement": "A 不是 C", "quote_verified": False},
+    ]
+    out = analyze_gaps(["0000", "0001"], rels, keywords=["完全不存在的词"], degree=1, degree_threshold=2, concept_count=2)
+    assert out["insufficient"] is True
+    assert {c["id"] for c in out["criteria"]} == {"a_no_keyword_hit", "b_low_degree_unverified"}
+    assert out["verified_count"] == 0
+    assert detect_contradictions(rels) == []
+    # 明确矛盾：同一对概念，一句话"可以"、另一句"不能"
+    pair = [
+        {"relation_id": "0000", "concept_pair_key": "0001|0003", "statement": "条件可以推广"},
+        {"relation_id": "0001", "concept_pair_key": "0001|0003", "statement": "条件不能推广"},
+    ]
+    found = detect_contradictions(pair)
+    assert len(found) == 1 and found[0]["relation_ids"] == ["0000", "0001"]
+
+
+# ============================================================ [4] submit_gap：查重
+
+
+def test_submit_gap_does_not_resubmit_while_a_request_is_unfinished(tmp_path):
+    """同一问题已有未完成请求时不得重复提交（否则会刷爆 A 的队列）。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ", related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+
+    reg = install_d_tools(st)
+    first = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical", description="第一次")
+    assert first.ok and first.data["duplicated"] is False
+    assert first.data["request_id"] == "r-0001"
+
+    second = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical", description="第二次")
+    assert second.ok and second.data["duplicated"] is True
+    assert second.data["request_id"] is None
+    assert "未重复提交" in second.data["reason"]
+    assert len(st.rows("search_requests")) == 1, "查重失效：请求表里出现了两条"
+
+    row = st.rows("research_questions")[0]
+    assert row["status"] == "needs_evidence", "提交后状态必须与等待集同时落盘"
+    assert row["waiting_request_ids"] == ["r-0001"]
+
+    # 同一件事在 AgentD 层再做一遍：方法级也要省掉这次调用
+    agent = AgentD(st)
+    assert agent.submit_gaps("0000") == []
+    assert "未重复提交" in agent.last_submit_skip["reason"]
+    assert len(st.rows("search_requests")) == 1
+
+
+def test_submit_gap_respects_budget_and_reports_it(tmp_path):
+    """预算用尽时不提问，但必须把原因写进笔记（静默少提会让报告与事实不符）。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ", related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    agent = AgentD(st, config={"max_requests_per_question": 0})
+    assert agent.submit_gaps("0000") == []
+    assert st.rows("search_requests") == []
+    assert "[budget]" in st.rows("research_questions")[0]["notes"]
+
+
+# ============================================================ [6] poll：等待集
+
+
+def test_poll_waiting_requires_done_request_and_processed_literature(tmp_path):
+    """就绪的两个条件缺一不可：请求已结束 且 其 result_lit_ids 都被 B 消化。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    add_literature(st, "0000", title="补齐文献", processed=False, sync=False)
+    add_request(st, "r-0000", done=False, result_lit_ids=[])
+    add_question(st, "0000", question="q", related_concept_ids=["0001"], waiting_request_ids=["r-0000"], status="needs_evidence")
+
+    step1 = RT.research_poll_waiting(st).data
+    assert step1["counts"] == {"ready": 0, "waiting": 1, "questions_with_waiting": 1}
+    assert "未结束" in step1["waiting"][0]["reason"]
+
+    # A 跑完，但 B 还没消化
+    with st.tx("search_requests", actor="fake-A") as tx:
+        req = tx.find("search_requests", request_id="r-0000")
+        req["done"] = True
+        req["outcome"] = "ok"
+        req["result_lit_ids"] = ["0000"]
+        tx.upsert("search_requests", req)
+    step2 = RT.research_poll_waiting(st).data
+    assert step2["ready"] == []
+    assert step2["waiting"][0]["details"][0]["state"] == "waiting_b"
+    assert step2["waiting"][0]["details"][0]["unprocessed_lit_ids"] == ["0000"]
+    assert "还没被 B 消化" in step2["waiting"][0]["reason"]
+
+    # B 消化完 ⇒ 就绪
+    with st.tx("literature", actor="fake-B") as tx:
+        lit = tx.find("literature", lit_id="0000")
+        lit["processed"] = True
+        tx.upsert("literature", lit)
+    step3 = RT.research_poll_waiting(st).data
+    assert step3["waiting"] == []
+    assert [r["question_id"] for r in step3["ready"]] == ["0000"]
+    assert step3["ready"][0]["new_lit_ids"] == ["0000"]
+    assert "可以拉回 researching" in step3["ready"][0]["reason"]
+
+
+def test_poll_treats_terminal_failure_outcomes_as_finished(tmp_path):
+    """`gave_up` / `no_results` 也是有效结论：D 必须能据此继续，而不是永远等下去。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    add_request(st, "r-0000", done=False, result_lit_ids=[])
+    add_question(st, "0000", question="q", waiting_request_ids=["r-0000"], status="needs_evidence")
+    with st.tx("search_requests", actor="fake-A") as tx:
+        req = tx.find("search_requests", request_id="r-0000")
+        req["outcome"] = "gave_up"
+        req["last_error"] = "上游始终不可达"
+        tx.upsert("search_requests", req)
+
+    data = RT.research_poll_waiting(st).data
+    assert [r["question_id"] for r in data["ready"]] == ["0000"]
+    assert "可以拉回 researching" in data["ready"][0]["reason"]
+
+
+def test_poll_promotes_question_and_merges_new_relations(tmp_path):
+    """就绪的问题被拉回 researching，并把新到的关系并入证据（这就是"D 继续"）。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    add_concept(st, "0001", "甲", definition="d", sync=False)
+    add_concept(st, "0002", "乙", definition="d", sync=False)
+    add_concept(st, "0003", "丙", definition="d", sync=False)
+    add_relation(st, "0000", ["0001", "0002"], "0000", description="zzz", quote="zzz", quote_verified=None, sync=False)
+    sync_counters(st)
+    add_request(st, "r-0000", done=True, result_lit_ids=["0000"])
+    add_literature(st, "0000", title="新文献", processed=True, sync=False)
+    add_question(
+        st, "0000", question="q", related_concept_ids=["0001"], related_relation_ids=["0000"],
+        waiting_request_ids=["r-0000"], status="needs_evidence",
+    )
+    # 新到的关系（A 检索 → B 抽取的产物）
+    add_relation(st, "0001", ["0001", "0003"], "0000", description="新关系", quote="new", quote_verified=True, sync=False)
+
+    agent = AgentD(st)
+    poll = agent.poll()
+    assert poll["promoted"] == ["0000"]
+    assert poll["merged_relations"]["0000"] == ["0001"]
+    row = st.rows("research_questions")[0]
+    assert row["status"] == "researching"
+    assert row["related_relation_ids"] == ["0000", "0001"], "新关系必须并入证据"
+    assert row["evidence_lit_ids"] == ["0000"]
+    assert "[poll]" in row["notes"]
+
+    # 再次 poll：已经不是 needs_evidence/open 了，不该再动它
+    again = agent.poll()
+    assert again["promoted"] == []
+
+
+def test_poll_on_question_without_waiting_set_does_nothing(tmp_path):
+    """没有等待集的问题不该出现在 poll 的 ready/waiting 里（"我没在等谁"是明确的事实）。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="q", related_concept_ids=["0001"])
+    data = RT.research_poll_waiting(st).data
+    assert data["counts"]["questions_with_waiting"] == 0
+    assert data["ready"] == [] and data["waiting"] == []
+
+
+# ============================================================ 状态机不变量
+
+
+def test_verify_flags_stale_waiting_on_terminal_status(tmp_path):
+    """状态机不变量：answered/dropped 的问题不该仍挂着 waiting_request_ids（verify 报 stale_waiting）。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_request(st, "r-0000", done=True, result_lit_ids=[], last_error="查不到（no_results）")
+    add_question(
+        st, "0000", question="q", related_concept_ids=["0001"], waiting_request_ids=["r-0000"],
+        status="answered", notes="已经给出结论",
+    )
+    issues = [i for i in verify_all(st).issues if i.code == "stale_waiting"]
+    assert issues, "verify 没有发现「已完成却还挂着等待项」"
+    assert issues[0].level == "warning"
+    assert issues[0].row_id == "0000"
+
+
+def test_no_stale_waiting_after_the_full_d_loop(tmp_path):
+    """跑完"提交→A 完成→B 消化→poll→research"后，问题表里不该出现任何 stale_waiting。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ", related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    agent = AgentD(st)
+    rid = agent.submit_gaps("0000")[0]
+    with st.tx("search_requests", "literature", actor="fake-A") as tx:
+        req = tx.find("search_requests", request_id=rid)
+        req["done"] = True
+        req["outcome"] = "ok"
+        req["result_lit_ids"] = ["0000"]
+        tx.upsert("search_requests", req)
+        tx.upsert(
+            "literature",
+            S.Literature(lit_id="0000", title="补齐", type="J", summary="s", path=None, processed=True, added_at=TS).to_dict(),
+        )
+    assert agent.poll()["promoted"] == ["0000"]
+    result = agent.research("0000")
+    assert result["confidence"] == "low"
+    codes = {i.code for i in verify_all(st).issues}
+    assert "stale_waiting" not in codes
+
+
+# ============================================================ 置信度
+
+
+def test_confidence_stays_low_when_evidence_is_insufficient(tmp_path):
+    """证据不足时置信度必须是 low（"低"就写"低"，不许为了好看拔高）。"""
+    assert evidence_confidence([]) == "low"
+    st = _opaque_store(tmp_path / "ws")
+    add_question(
+        st, "0000", question="关于韦伊猜想的证明路径是否已经完整", related_concept_ids=["0001", "0002"],
+        related_relation_ids=["0000"], status="researching",
+    )
+    result = AgentD(st).research("0000")
+    assert result["confidence"] == "low"
+    assert "**置信度：低**" in result["conclusion"]
+    assert "不作为可引用的判断" in result["conclusion"]
+    assert result["criteria"] == ["a_no_keyword_hit", "b_low_degree_unverified"]
+
+
+def test_llm_hook_cannot_raise_confidence(tmp_path):
+    """LLM 钩子只能把置信度调低：它写 high 也必须被强制降回确定性算出的 low。"""
+    st = _opaque_store(tmp_path / "ws")
+    add_question(
+        st, "0000", question="关于韦伊猜想的证明路径是否已经完整", related_concept_ids=["0001", "0002"],
+        related_relation_ids=["0000"], status="researching",
+    )
+    llm = _FakeLLM(confidence="high")
+    agent = AgentD(st, llm=llm)
+    result = agent.research("0000")
+    assert llm.calls, "LLM 钩子应当被调用过"
+    assert result["llm_used"] is True
+    assert result["confidence"] == "low", "LLM 把置信度拔高了"
+    assert any("拔高" in str(e.get("error")) for e in agent.last_tool_errors)
+    # 分析文字可以用 LLM 的，但结论与置信度必须保持确定性口径
+    assert result["analysis"] == "LLM 写的分析"
+
+
+def test_install_d_tools_prefers_the_external_trace_tools(tmp_path):
+    """D 的工具栏优先用外部 trace_tools（真身），缺失时才降级到内置替身。"""
+    st = _opaque_store(tmp_path / "ws")
+    reg = install_d_tools(st)
+    names = set(reg.names())
+    assert {"trace.relation", "trace.concept", "trace.literature"} <= names
+    assert {"research.list_gaps", "research.submit_gap", "research.poll_waiting"} <= names
+    assert not getattr(reg, "trace_fallback_reason", None), "外部溯源工具存在时不该走降级替身"
+
+    fallback = install_d_tools(st, trace_tools=None)
+    assert "trace.relation" in fallback

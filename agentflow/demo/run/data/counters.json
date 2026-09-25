@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "counters": {
+    "lit": 5,
+    "concept": 4,
+    "relation": 2
+  }
+}

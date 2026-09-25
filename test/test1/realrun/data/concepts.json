@@ -1,0 +1,458 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "concept_id": "0000",
+      "name": "havior",
+      "definition": "a gauge-invariant",
+      "related_concepts": [],
+      "normalized_name": "havior",
+      "aliases": [],
+      "definition_source_lit_id": "0001",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0001",
+      "name": "e",
+      "definition": "a dimensionless",
+      "related_concepts": [],
+      "normalized_name": "e",
+      "aliases": [],
+      "definition_source_lit_id": "0001",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0002",
+      "name": "Channel polarization",
+      "definition": "the fact that it is",
+      "related_concepts": [],
+      "normalized_name": "channel polarization",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0003",
+      "name": "This paper",
+      "definition": "an attempt to meet this",
+      "related_concepts": [],
+      "normalized_name": "this paper",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0004",
+      "name": "Z(W)",
+      "definition": "an upper bound on the probability",
+      "related_concepts": [],
+      "normalized_name": "z w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0005",
+      "name": "when W",
+      "definition": "a symmetric channel, i",
+      "related_concepts": [],
+      "normalized_name": "when w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0006",
+      "name": "B-DMC W",
+      "definition": "a BEC if for each",
+      "related_concepts": [],
+      "normalized_name": "b dmc w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0007",
+      "name": "operator RN in the ﬁgure",
+      "definition": "a permutation,",
+      "related_concepts": [],
+      "normalized_name": "operator rn in the ﬁgure",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0008",
+      "name": "W",
+      "definition": "a BEC with erasure probability ǫ = 0",
+      "related_concepts": [
+        "0015",
+        "0030",
+        "0037",
+        "0038"
+      ],
+      "normalized_name": "w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0009",
+      "name": "given threshold",
+      "definition": "an important computational problem that",
+      "related_concepts": [],
+      "normalized_name": "given threshold",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0010",
+      "name": "This mapping",
+      "definition": "a coset code: it is a coset of",
+      "related_concepts": [],
+      "normalized_name": "this mapping",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0011",
+      "name": "1 The ratio K/N",
+      "definition": "the code rate",
+      "related_concepts": [],
+      "normalized_name": "1 the ratio k n",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0012",
+      "name": "Equality holds in (27) iff W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "equality holds in 27 iff w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0013",
+      "name": "with equality iff W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "with equality iff w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0014",
+      "name": "If W",
+      "definition": "a BEC with some erasure",
+      "related_concepts": [],
+      "normalized_name": "if w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0015",
+      "name": "if W ′ or W ′′",
+      "definition": "a BEC, then W is BEC",
+      "related_concepts": [
+        "0008"
+      ],
+      "normalized_name": "if w or w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0016",
+      "name": "with equality in (31) iff W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "with equality in 31 iff w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0017",
+      "name": "with equality in (34) iff W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "with equality in 34 iff w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0018",
+      "name": "with equality in (37) iff W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "with equality in 37 iff w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0019",
+      "name": "For the special case that W",
+      "definition": "a BEC with an erasure",
+      "related_concepts": [],
+      "normalized_name": "for the special case that w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0020",
+      "name": "Z(W) ≥1 with equality iff W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "z w ≥1 with equality iff w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0021",
+      "name": "Suppose that W ′",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "suppose that w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0022",
+      "name": "suming that W",
+      "definition": "a symmetric channel",
+      "related_concepts": [],
+      "normalized_name": "suming that w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0023",
+      "name": "We can see that BN",
+      "definition": "a permutation matrix by the following",
+      "related_concepts": [],
+      "normalized_name": "we can see that bn",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0024",
+      "name": "Assume that BN/2",
+      "definition": "a permutation matrix",
+      "related_concepts": [],
+      "normalized_name": "assume that bn 2",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0025",
+      "name": "BN",
+      "definition": "a permutation matrix because it is the product of two",
+      "related_concepts": [],
+      "normalized_name": "bn",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0026",
+      "name": "operation B8",
+      "definition": "a bit-reversal operation",
+      "related_concepts": [],
+      "normalized_name": "operation b8",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0027",
+      "name": "GN",
+      "definition": "a bit-reversal",
+      "related_concepts": [],
+      "normalized_name": "gn",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0028",
+      "name": "Node 4",
+      "definition": "a node at the channel level; so it",
+      "related_concepts": [],
+      "normalized_name": "node 4",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0029",
+      "name": "output of the algorithm",
+      "definition": "an information set",
+      "related_concepts": [],
+      "normalized_name": "output of the algorithm",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0030",
+      "name": "perform on W provided W",
+      "definition": "a degraded version of W ′ in",
+      "related_concepts": [
+        "0008"
+      ],
+      "normalized_name": "perform on w provided w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0031",
+      "name": "where m ≥2",
+      "definition": "a ﬁxed parameter of the construction",
+      "related_concepts": [],
+      "normalized_name": "where m ≥2",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0032",
+      "name": "basic code construction method",
+      "definition": "an area for further research",
+      "related_concepts": [],
+      "normalized_name": "basic code construction method",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0033",
+      "name": "geometric and arithmetic",
+      "definition": "of the numbers x and",
+      "related_concepts": [],
+      "normalized_name": "geometric and arithmetic",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0034",
+      "name": "and observe that Z(W)",
+      "definition": "a decreasing, concave function of",
+      "related_concepts": [],
+      "normalized_name": "and observe that z w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0035",
+      "name": "that W",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "that w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0036",
+      "name": "that the parameter Z(W)",
+      "definition": "a convex function of the channel",
+      "related_concepts": [],
+      "normalized_name": "that the parameter z w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0037",
+      "name": "Suppose W",
+      "definition": "a BEC, but W ′ is not",
+      "related_concepts": [
+        "0008"
+      ],
+      "normalized_name": "suppose w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0038",
+      "name": "y1 or y2",
+      "definition": "an erasure symbol for W",
+      "related_concepts": [
+        "0008"
+      ],
+      "normalized_name": "y1 or y2",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    },
+    {
+      "concept_id": "0039",
+      "name": "assumption that W ′",
+      "definition": "a BEC",
+      "related_concepts": [],
+      "normalized_name": "assumption that w",
+      "aliases": [],
+      "definition_source_lit_id": "0002",
+      "created_at": "2026-09-23T21:38:48+08:00",
+      "updated_at": "2026-09-23T21:38:48+08:00"
+    }
+  ]
+}

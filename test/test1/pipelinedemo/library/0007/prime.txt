@@ -1,0 +1,1 @@
+A prime ideal is a proper ideal such that whenever a product lies in it, at least one factor does.

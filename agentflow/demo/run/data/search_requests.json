@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "request_id": "r-0001",
+      "timestamp": "2026-09-24T08:12:59+08:00",
+      "topic": "群论基础概念",
+      "mode": "broad",
+      "content_description": "",
+      "done": true,
+      "submitted_by": "agent-C",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "0000",
+        "0001",
+        "0002",
+        "0003",
+        "0004"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": ""
+    },
+    {
+      "request_id": "r-0002",
+      "timestamp": "2026-09-24T08:12:59+08:00",
+      "topic": "阿贝尔群与交换律",
+      "mode": "topical",
+      "content_description": "",
+      "done": true,
+      "submitted_by": "agent-C",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "0000",
+        "0001",
+        "0002",
+        "0003",
+        "0004"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": ""
+    },
+    {
+      "request_id": "r-0003",
+      "timestamp": "2026-09-24T08:12:59+08:00",
+      "topic": "域的定义与其对环的依赖",
+      "mode": "precise",
+      "content_description": "field definition in terms of ring",
+      "done": true,
+      "submitted_by": "agent-C",
+      "claimed_by": null,
+      "lease_until": null,
+      "attempts": 1,
+      "result_lit_ids": [
+        "0000",
+        "0001",
+        "0002",
+        "0003",
+        "0004"
+      ],
+      "last_error": null,
+      "outcome": "ok",
+      "priority": "medium",
+      "for_question_id": null,
+      "submit_note": ""
+    }
+  ]
+}

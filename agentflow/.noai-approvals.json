@@ -1,0 +1,192 @@
+{
+  "ledger_version": 1,
+  "generated_at": "2026-09-25T22:47:43+08:00",
+  "entries": [
+    {
+      "path": "pyproject.toml",
+      "glob": "pyproject.toml",
+      "category": "release-deploy",
+      "sha256": "970999dc19730376e50180aec74c329e792e21be2d76c9b1ca6b42fb4602e11d",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "scripts/release_check.py",
+      "glob": "scripts/release_check.py",
+      "category": "release-deploy",
+      "sha256": "568b958e005410d456ad0a7d5484fd6dc837c50a57ca04d24fffd2d439d94c31",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/dedup.py",
+      "glob": "src/agentflow/dedup.py",
+      "category": "solver-core",
+      "sha256": "0000f63e665f5c1e70609dd1be458b39bf2b277e74dca776d5941f072878596b",
+      "authored": "ai-agent",
+      "authored_basis": "inferred",
+      "change_note": "本轮被改（mtime 2026-09-24 07:28:05）。内容（已自行读取核对）：`normalize_doi` 为全项目**唯一**实现（NFKC → 折小写 → 正则吃 `https?://`/`dx.`/`doi.org/` → `rstrip('.')`），新增 `_to_halfwidth` 与 `_DOI_URL_PREFIX_RE`/`_DOI_SCHEME_PREFIX_RE`/`_FULLWIDTH_RE`；`find_concept` 排除 `merged_into` 墓碑；`decide_relation` 三档判重在位。 改动者：本轮改动由 AI 执行单元做出，但**无法从仓库独立判定是哪一个**（登记表 §2 记为「子代理 AI（有报告）」；该归属来自登记表，本台账不当作独立证据）。",
+      "changed_this_session": true,
+      "reviewers": [],
+      "also_hits": [
+        {
+          "glob": "src/agentflow/dedup.py",
+          "category": "provenance-dedup",
+          "reason": "`normalize_doi` / `literature_keys` / `title_key`：来源标识的归一化 —— 归一化规则偏移即\"同一篇文献两个主键\""
+        }
+      ]
+    },
+    {
+      "path": "src/agentflow/extract.py",
+      "glob": "src/agentflow/extract.py",
+      "category": "solver-core",
+      "sha256": "5f2d85a5b5056891ef3fc30c2844306962d0a577dcde87a20e11ffd0d6c5a959",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/interactions.py",
+      "glob": "src/agentflow/interactions.py",
+      "category": "auth-audit",
+      "sha256": "e0d65dc6c13639b880f498bf719ecdc5b89f1b402b0efeffdf642376eb097ba8",
+      "authored": "ai-agent",
+      "authored_basis": "inferred",
+      "change_note": "本轮被改（mtime 2026-09-24 07:26:25）。内容（已自行读取核对）：`CONTRACT_VERSION = 1`（带版本历史注释）；`check_conflict` / `detect_contradictions` / `adjudicate_contradiction` 一族的角色间授权矩阵与三态结果在位。 改动者：本轮改动由 AI 执行单元做出，但**无法从仓库独立判定是哪一个**（登记表 §2 记为「主控 AI」；该归属来自登记表，本台账不当作独立证据）。",
+      "changed_this_session": true,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/providers.py",
+      "glob": "src/agentflow/providers.py",
+      "category": "solver-core",
+      "sha256": "03d38514bc96e1ab2d1604cb41a69cd66b727411ecfd68a8b64d2dd174291e89",
+      "authored": "ai-agent",
+      "authored_basis": "inferred",
+      "change_note": "本轮被改（mtime 2026-09-24 07:41:50）。内容（已自行读取核对）：`normalize_doi` 改为**转发**到 `dedup.normalize_doi`（函数内惰性 import）；`_plan_mode` / `_precise_keep` / `_broad_sort_key` 检索口径在位。⚠️ 符号面与本轮原型相同 ⇒ 改动在函数体内，**改了哪些行无法从仓库判定**。 改动者：本轮改动由 AI 执行单元做出，但**无法从仓库独立判定是哪一个**（登记表 §2 记为「子代理 AI（有报告）」；该归属来自登记表，本台账不当作独立证据）。",
+      "changed_this_session": true,
+      "reviewers": [],
+      "also_hits": [
+        {
+          "glob": "src/agentflow/providers.py",
+          "category": "provenance-dedup",
+          "reason": "`normalize_doi` / `dedup_key_of` / `map_type_code`：provider 原始记录 → 统一候选键 —— 这里错则跨库同一篇文献无法合并"
+        }
+      ]
+    },
+    {
+      "path": "src/agentflow/quoteverify.py",
+      "glob": "src/agentflow/quoteverify.py",
+      "category": "prover-bridge",
+      "sha256": "c66e5545e4996bf5e91d5b5fd8979eabbbc175084125bad31a96e5cd0518833d",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "**本轮未改动**（mtime 2026-09-23 21:22:47，早于本轮全部改动）—— 仅登记基线，供将来比对该文件是否漂移。内容（已自行读取核对）：`check_quote`：声明页窗口 → ±widen → 仅在显式允许时全文回退，并把用的是哪种窗口如实回报；`verified` 为 True/False/None 三态（无文本层 ⇒ None，不假装通过）。 改动者：**无法从仓库判定**。",
+      "changed_this_session": false,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/schema.py",
+      "glob": "src/agentflow/schema.py",
+      "category": "schema-migration",
+      "sha256": "12cd4170adffd8c15b6dabd3fcf1eb915a47da1503d4e502b18abd4e9035fe36",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": [
+        {
+          "glob": "src/agentflow/schema.py",
+          "category": "eval-criteria",
+          "reason": "`EVAL_REQUIRED_FIELDS` 与 `EvalResult`：必填口径字段与比率口径（0..1）—— 改它等于追溯性地改写历史报告里每个数字的含义"
+        }
+      ]
+    },
+    {
+      "path": "src/agentflow/store.py",
+      "glob": "src/agentflow/store.py",
+      "category": "schema-migration",
+      "sha256": "57b11548009f1ad8e744c58f50aa217b48da509e1c5ed7a19075aaf888325dfc",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/tools/__init__.py",
+      "glob": "src/agentflow/tools/__init__.py",
+      "category": "auth-audit",
+      "sha256": "69272d9746a368132ea2af53ea676e2438dc451dba825cc86c9ff5eda9281a28",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "P-13 B1/B2: ToolSpec 第二根轴 + 交叉断言（AI 编写，待 2 名 reviewer 逐行走查）",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/tools/base.py",
+      "glob": "src/agentflow/tools/base.py",
+      "category": "auth-audit",
+      "sha256": "1b6ccc4e30a6ef424497b8ae651ed698f334d7c205006d15d9c25dc6d3e69f8b",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "P-13 B1/B2: ToolSpec 第二根轴 + 交叉断言（AI 编写，待 2 名 reviewer 逐行走查）",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/tools/verify_tools.py",
+      "glob": "src/agentflow/tools/verify_tools.py",
+      "category": "prover-bridge",
+      "sha256": "a99bba5cdbc5c0fee1dd1dbb5550317348313429bb7615efe51964732e32a9bb",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/verify.py",
+      "glob": "src/agentflow/verify.py",
+      "category": "auth-audit",
+      "sha256": "46197051a7ce05d3774ad554dc69e24773dbaf8a782d4e6932f37a2ca7643871",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    },
+    {
+      "path": "tools/release_all.py",
+      "glob": "tools/release_all.py",
+      "category": "release-deploy",
+      "sha256": "ba86d8db713a5a57c8f8542b4275d5a45566232929d3c36e03a48447b81752b6",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "changed_this_session": null,
+      "reviewers": [],
+      "also_hits": []
+    }
+  ]
+}

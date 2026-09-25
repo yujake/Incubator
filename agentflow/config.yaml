@@ -1,0 +1,81 @@
+# A/B 多智能体协同工作流 —— 配置
+#
+# 所有阈值都在这里，不在代码里。理由：判重阈值（dup_strong / dup_review）是
+# **业务判断**而非技术参数，不同学科领域的合适取值差别很大，必须能不改代码就调。
+
+store:
+  root: .            # 相对于 test/test1/；data/ 与 library/ 都建在这里
+
+lease:
+  # 租约时长：超过这个时间未完成的任务会被其他实例重新领取。
+  # 设小了会重复干活，设大了会卡住任务。搜索/下载通常 < 10 分钟，故默认 900s。
+  seconds: 900
+  # 单条任务的最大尝试次数；超过则显式放弃并写 last_error（而不是无限重试）
+  max_attempts: 3
+
+agent_a:
+  # 三种搜索模式的返回条数上限（DESIGN.md §5.1）
+  limits:
+    broad: 20
+    topical: 15
+    precise: 10
+  download: true
+  # 单个请求最多下载几篇全文，防止一次朴素查询把磁盘塞满
+  max_downloads_per_request: 25
+  providers: [openalex]        # 可选：openalex, crossref, doaj, europepmc, fixture
+
+agent_b:
+  # 关系判重阈值（DESIGN.md §3.3）
+  # >= dup_strong 判为重复（拒绝写入）；[dup_review, dup_strong) 写入但标 suspect
+  dup_strong: 0.92
+  dup_review: 0.72
+  # 引文在声明页码里找不到时，向两侧扩展多少页再试
+  quote_widen_pages: 1
+  # 是否允许退化为全文搜索。默认 false —— 见 quoteverify.py 的说明：
+  # 全文兜底会把"页码写错了"这个真实缺陷掩盖掉。
+  allow_fulltext_quote_fallback: false
+
+download:
+  connect_timeout: 20
+  read_timeout: 120
+  max_bytes: 209715200         # 200 MB
+  min_interval_seconds: 1.0    # 对同一主机的最小请求间隔（礼貌爬取）
+  retries: 3
+  # 镜像前缀回退：直连失败时依次尝试。本机 github.com 系域名被 hosts 劫持，
+  # 故默认带一个可用网关；换成你自己的镜像即可。
+  mirrors:
+    - "https://gh-proxy.com/"
+
+search:
+  # 传给 OpenAlex 的 polite-pool 邮箱（可用环境变量 ABFLOW_OPENALEX_MAILTO 覆盖）
+  mailto: ""
+
+# ============================================================================
+# FC-17 上下文预算：压缩（compaction）/ 剪枝（pruning）/ spill 三件套
+# ============================================================================
+#
+# 为什么必须有这一块：极简配置"**没有 compaction**"，长任务会硬撞上下文上限且
+# **没有任何自动缓解**（`06-...md` §9.2）；200,000 token 触发截断时，模型看到的是
+# 被悄悄剪掉一半的世界，它甚至不知道自己少看了东西。所以 FC-17 的判据①就是
+# **这三行配置文件必须存在**，而不是"代码里有这个类"。
+#
+# 读它的是 `agentflow.contextbudget.ContextBudget.from_mapping()`（缺键用默认，
+# 非法值**抛**——"8000" 这种字符串不会被静默转成整数）。
+# 下面每一行右边标注它对应 FC-17 的哪一条。
+#
+# ⚠️ 一个算术事实（别误以为 spill 已经生效）：threshold_chars=8000 配
+# head+tail=4000，剪枝后的内联文本最多 4000 多字符，**永远到不了**
+# max_inline_bytes=64000 ⇒ "压完仍超上限就落盘"这个分支在默认数值下**不可达**。
+# 要让 spill 真的发生，得让 head_chars + tail_chars > max_inline_bytes
+# （见 tests/test_context_budget.py 里专门的用例）。
+context_budget:
+  # —— 剪枝行（FC-17 判据①之"工具结果剪枝行，含 thresholdChars/headChars/tailChars"）
+  threshold_chars: 8000          # 单个工具结果超过它就开始剪（对照 DSH 的 thresholdChars: 8192）
+  head_chars: 3000               # 保留开头这么多字符（对照 DSH 的 headChars: 4096，略收）
+  tail_chars: 1000               # 保留结尾这么多字符：错误信息/退出码/UNSAT core 都在尾部
+  # —— spill 行（FC-17 判据①之"spill 上限（maxInlineBytes）"）
+  spill_dir: spill               # spill 文件落在这里（相对 spill_root，不许绝对路径/..）
+  max_inline_bytes: 64000        # 压完仍超过它（字节）⇒ 整体落盘，内联只剩 path+size+sha256
+  # —— compaction 行（FC-17 判据①之"compaction 行"）
+  compaction_threshold_chars: 200000  # 一串条目总长超过它就压缩（约 200k token 的量级）
+  compaction_keep_recent: 8           # 最近 8 条保留**原文**，更早的折成一条摘要

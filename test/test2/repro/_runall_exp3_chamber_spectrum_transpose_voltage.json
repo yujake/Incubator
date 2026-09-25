@@ -1,0 +1,613 @@
+{
+  "counterexample": null,
+  "evidence_kind": "cross_check",
+  "negation_kind": "no_local_evidence",
+  "observations": {
+    "caught_by": "m3.Hermiticity_gate: max ||A_chi - A_chi^H|| over 34 characters = 4.885e+00 (gate 1e-12); the voltage chi(w(lam_s)) makes A_chi Hermitian, dropping the 'w .' does not; m3.sampled_union_fills_interval: max gap of the sampled union over [-3,3] is 0.41421 (6.90% of the interval; threshold 5.00%) with 864 samples; m3.real_symmetric_form_agrees: eigvalsh vs the real symmetric 2n x 2n route at z = 0.1: max deviation 7.068e-01; m4.Hermiticity_gate: max ||A_chi - A_chi^H|| over 52 characters = 9.590e+00 (gate 1e-12); the voltage chi(w(lam_s)) makes A_chi Hermitian, dropping the 'w .' does not; m4.real_symmetric_form_agrees: eigvalsh vs the real symmetric 2n x 2n route at z = 0.1: max deviation 7.194e-01; m5.Hermiticity_gate: max ||A_chi - A_chi^H|| over 106 characters = 2.191e+01 (gate 1e-12); the voltage chi(w(lam_s)) makes A_chi Hermitian, dropping the 'w .' does not",
+    "cell_degree_m4": {
+      "degree": 4,
+      "distinct_degrees": [
+        4
+      ],
+      "regular": true
+    },
+    "checks": [
+      {
+        "check": "cell.voltage_well_defined",
+        "detail": "replacing a class representative (w,lam) by (w,lam+mu) keeps the target class and shifts the voltage by exactly mu (96 trials); witness None",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "cell.degree_is_m",
+        "detail": "every class of W_a/Q^v has 4 outgoing Cayley edges (s_w != 1 for every generator, so no self-loops)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.cell_has_m_factorial_vertices",
+        "detail": "the cell W_a/Q^v has 6 vertices = 3! (paper section 6, text:414)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.cell_is_m_regular",
+        "detail": "cell degree 3",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.word_metric_ball_size_matches_definition",
+        "detail": "|B_3| in the word metric of {s_0..s_{m-1}} = 19, expected 19; a dropped translation in s_0 or a non-associative group law changes this number (it is how wrong_s0 is detected in exp2)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.Hermiticity_gate",
+        "detail": "max ||A_chi - A_chi^H|| over 34 characters = 4.885e+00 (gate 1e-12); the voltage chi(w(lam_s)) makes A_chi Hermitian, dropping the 'w .' does not",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.identity_char_extremes_are_pm_m",
+        "detail": "at chi = 1 (the 6 x 6 adjacency matrix of the S_m-Cayley cell) eigenvalues run -3.000000000 .. 3.000000000, expected -3 .. 3",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.no_counterexample_leaves_interval",
+        "detail": "864 sampled eigenvalues over a 12-point-per-angle grid lie in [-3.000000000, 3.000000000] vs [-3, 3] -- no counterexample to the inclusion; this does NOT verify the quoted equality",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.endpoints_attained",
+        "detail": "the sampled union attains +3 and -3",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.branches_meet_min_abs_is_small",
+        "detail": "min |lambda| over the sample = 0.0000e+00 (coarse threshold 0.05*m = 0.150); with only 144 grid characters this is a weak signal -- a single generic character already gives min|lambda| ~ 0 because the two branches cross somewhere",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.sampled_union_fills_interval",
+        "detail": "max gap of the sampled union over [-3,3] is 0.41421 (6.90% of the interval; threshold 5.00%) with 864 samples",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.path_branch_matching_is_lipschitz",
+        "detail": "the largest per-step change of the sorted eigenvalue list (2.042e-02) does not exceed the largest matrix step (2.042e-02) (Weyl's inequality), so the branch matching along the paths is genuine and the eigenvalues do follow continuous curves",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.path_stays_in_interval",
+        "detail": "over 7236 path eigenvalues: max |lambda| = 3.000000 <= 3",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.path_sweeps_interval",
+        "detail": "7236 path eigenvalues sweep [-3,3] with maximum gap 0.00799 (0.13% of the interval; 0.2s)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.real_symmetric_form_agrees",
+        "detail": "eigvalsh vs the real symmetric 2n x 2n route at z = 0.1: max deviation 7.068e-01",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.cell_has_m_factorial_vertices",
+        "detail": "the cell W_a/Q^v has 24 vertices = 4! (paper section 6, text:414)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.cell_is_m_regular",
+        "detail": "cell degree 4",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.word_metric_ball_size_matches_definition",
+        "detail": "|B_3| in the word metric of {s_0..s_{m-1}} = 35, expected 35; a dropped translation in s_0 or a non-associative group law changes this number (it is how wrong_s0 is detected in exp2)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.Hermiticity_gate",
+        "detail": "max ||A_chi - A_chi^H|| over 52 characters = 9.590e+00 (gate 1e-12); the voltage chi(w(lam_s)) makes A_chi Hermitian, dropping the 'w .' does not",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.identity_char_extremes_are_pm_m",
+        "detail": "at chi = 1 (the 24 x 24 adjacency matrix of the S_m-Cayley cell) eigenvalues run -4.000000000 .. 4.000000000, expected -4 .. 4",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.no_counterexample_leaves_interval",
+        "detail": "12288 sampled eigenvalues over a 8-point-per-angle grid lie in [-4.000000000, 4.000000000] vs [-4, 4] -- no counterexample to the inclusion; this does NOT verify the quoted equality",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.endpoints_attained",
+        "detail": "the sampled union attains +4 and -4",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.branches_meet_min_abs_is_small",
+        "detail": "min |lambda| over the sample = 3.7337e-18 (coarse threshold 0.05*m = 0.200); with only 512 grid characters this is a weak signal -- a single generic character already gives min|lambda| ~ 0 because the two branches cross somewhere",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.sampled_union_fills_interval",
+        "detail": "max gap of the sampled union over [-4,4] is 0.36684 (4.59% of the interval; threshold 5.00%) with 12288 samples",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.path_branch_matching_is_lipschitz",
+        "detail": "the largest per-step change of the sorted eigenvalue list (1.698e-02) does not exceed the largest matrix step (2.178e-02) (Weyl's inequality), so the branch matching along the paths is genuine and the eigenvalues do follow continuous curves",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.path_stays_in_interval",
+        "detail": "over 18120 path eigenvalues: max |lambda| = 4.000000 <= 4",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.path_sweeps_interval",
+        "detail": "18120 path eigenvalues sweep [-4,4] with maximum gap 0.00933 (0.12% of the interval; 0.5s)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.real_symmetric_form_agrees",
+        "detail": "eigvalsh vs the real symmetric 2n x 2n route at z = 0.1: max deviation 7.194e-01",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.cell_has_m_factorial_vertices",
+        "detail": "the cell W_a/Q^v has 120 vertices = 5! (paper section 6, text:414)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.cell_is_m_regular",
+        "detail": "cell degree 5",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.word_metric_ball_size_matches_definition",
+        "detail": "|B_3| in the word metric of {s_0..s_{m-1}} = 56, expected 56; a dropped translation in s_0 or a non-associative group law changes this number (it is how wrong_s0 is detected in exp2)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.Hermiticity_gate",
+        "detail": "max ||A_chi - A_chi^H|| over 106 characters = 2.191e+01 (gate 1e-12); the voltage chi(w(lam_s)) makes A_chi Hermitian, dropping the 'w .' does not",
+        "ok": false,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.identity_char_extremes_are_pm_m",
+        "detail": "at chi = 1 (the 120 x 120 adjacency matrix of the S_m-Cayley cell) eigenvalues run -5.000000000 .. 5.000000000, expected -5 .. 5",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.no_counterexample_leaves_interval",
+        "detail": "75000 sampled eigenvalues over a 5-point-per-angle grid lie in [-5.000000000, 5.000000000] vs [-5, 5] -- no counterexample to the inclusion; this does NOT verify the quoted equality",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.endpoints_attained",
+        "detail": "the sampled union attains +5 and -5",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.branches_meet_min_abs_is_small",
+        "detail": "min |lambda| over the sample = 5.6560e-17 (coarse threshold 0.05*m = 0.250); with only 625 grid characters this is a weak signal -- a single generic character already gives min|lambda| ~ 0 because the two branches cross somewhere",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.sampled_union_fills_interval",
+        "detail": "max gap of the sampled union over [-5,5] is 0.40763 (4.08% of the interval; threshold 5.00%) with 75000 samples",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.path_branch_matching_is_lipschitz",
+        "detail": "the largest per-step change of the sorted eigenvalue list (2.733e-02) does not exceed the largest matrix step (3.927e-02) (Weyl's inequality), so the branch matching along the paths is genuine and the eigenvalues do follow continuous curves",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.path_stays_in_interval",
+        "detail": "over 38880 path eigenvalues: max |lambda| = 5.000000 <= 5",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.path_sweeps_interval",
+        "detail": "38880 path eigenvalues sweep [-5,5] with maximum gap 0.01063 (0.11% of the interval; 4.6s)",
+        "ok": true,
+        "severity": "must_hold"
+      }
+    ],
+    "elapsed_seconds": 10.382,
+    "failed_checks": [
+      "m3.Hermiticity_gate",
+      "m3.sampled_union_fills_interval",
+      "m3.real_symmetric_form_agrees",
+      "m4.Hermiticity_gate",
+      "m4.real_symmetric_form_agrees",
+      "m5.Hermiticity_gate"
+    ],
+    "independently_verified": false,
+    "injected_bug": "transpose_voltage",
+    "max_seconds": 300.0,
+    "n_checks": 40,
+    "n_failed": 6,
+    "n_undecided": 0,
+    "notes": [
+      "NEGATIVE CONTROL ACTIVE: transpose_voltage"
+    ],
+    "paper_claims": {
+      "obstruction_not_addressed": "the paper says one must show that two eigenvalue branches MEET, with no explicit witness available; sampling cannot show it",
+      "open_problem": "for m >= 6 only the inclusion into [-m,m] and the two endpoints +-m are proved there; the equality is open (text:407-417)",
+      "our_role": "counterexample search in the cell ONLY; a failure to find a counterexample is not a proof of the quoted theorem",
+      "proved_in_this_paper": false,
+      "quoted_theorem": "Remark 1.6 (text:77-81): Spec S~_m = [-m,m] is quoted from the companion book [6, Thm. 6.5], proved there for 3 <= m <= 5",
+      "source_available_to_us": false
+    },
+    "per_m": {
+      "m3": {
+        "ball3_size": 19,
+        "cell_degree": {
+          "degree": 3,
+          "distinct_degrees": [
+            3
+          ],
+          "regular": true
+        },
+        "cell_vertices": 6,
+        "continuous_paths": {
+          "all_branches_consistent": true,
+          "max_gap": 0.007987121813940457,
+          "max_gap_relative": 0.0013311869689900762,
+          "n_eigenvalues": 7236,
+          "n_rays": 6,
+          "rays": [
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.015708,
+              "max_step_jump": 0.015708,
+              "target": [
+                0.5,
+                0.0
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.004084,
+              "max_step_jump": 0.004084,
+              "target": [
+                0.13,
+                0.5
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.008168,
+              "max_step_jump": 0.008168,
+              "target": [
+                0.26,
+                0.63
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.012252,
+              "max_step_jump": 0.012252,
+              "target": [
+                0.39,
+                0.76
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.016336,
+              "max_step_jump": 0.016336,
+              "target": [
+                0.52,
+                0.89
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.02042,
+              "max_step_jump": 0.02042,
+              "target": [
+                0.65,
+                0.02
+              ]
+            }
+          ],
+          "seconds": 0.18,
+          "steps_per_ray": 200,
+          "worst_matrix_step": 0.02041999745440305,
+          "worst_step_jump": 0.020419997454401904
+        },
+        "grid_sampling": {
+          "contained_in_interval": true,
+          "endpoint_minus_m_reached": true,
+          "endpoint_plus_m_reached": true,
+          "grid_points_per_angle": 12,
+          "grid_total": 144,
+          "max": 3.0,
+          "max_gap": 0.4142135623730936,
+          "max_gap_relative": 0.06903559372884893,
+          "min": -3.0,
+          "min_abs_eigenvalue": 0.0,
+          "n_eigenvalues": 864,
+          "seconds": 0.01
+        },
+        "hermiticity": {
+          "gate": 1e-12,
+          "n_characters": 34,
+          "worst_defect": 4.885100255801985
+        },
+        "identity_character": {
+          "hermiticity_defect": 0.0,
+          "lambda_max": 3.0,
+          "lambda_min": -3.0,
+          "n_cell_vertices": 6
+        },
+        "m": 3,
+        "npts": 12,
+        "real_form_cross_check": {
+          "max_abs_deviation": 0.7068191386934277
+        },
+        "seconds": 0.23,
+        "status": "quoted_from_[6]_Thm_6.5",
+        "time_budget_seconds": 300.0
+      },
+      "m4": {
+        "ball3_size": 35,
+        "cell_degree": {
+          "degree": 4,
+          "distinct_degrees": [
+            4
+          ],
+          "regular": true
+        },
+        "cell_vertices": 24,
+        "continuous_paths": {
+          "all_branches_consistent": true,
+          "max_gap": 0.009331054626907642,
+          "max_gap_relative": 0.0011663818283634553,
+          "n_eigenvalues": 18120,
+          "n_rays": 5,
+          "rays": [
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.020944,
+              "max_step_jump": 0.016322,
+              "target": [
+                0.5,
+                0.0,
+                0.5
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.005445,
+              "max_step_jump": 0.004218,
+              "target": [
+                0.13,
+                0.5,
+                0.87
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.010891,
+              "max_step_jump": 0.008488,
+              "target": [
+                0.26,
+                0.63,
+                0.0
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.016336,
+              "max_step_jump": 0.012731,
+              "target": [
+                0.39,
+                0.76,
+                0.13
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.021781,
+              "max_step_jump": 0.016975,
+              "target": [
+                0.52,
+                0.89,
+                0.26
+              ]
+            }
+          ],
+          "seconds": 0.46,
+          "steps_per_ray": 150,
+          "worst_matrix_step": 0.021781278476771634,
+          "worst_step_jump": 0.016975188048199197
+        },
+        "grid_sampling": {
+          "contained_in_interval": true,
+          "endpoint_minus_m_reached": true,
+          "endpoint_plus_m_reached": true,
+          "grid_points_per_angle": 8,
+          "grid_total": 512,
+          "max": 3.9999999999999987,
+          "max_gap": 0.36684002215433686,
+          "max_gap_relative": 0.04585500276929211,
+          "min": -3.9999999999999987,
+          "min_abs_eigenvalue": 3.73366137892328e-18,
+          "n_eigenvalues": 12288,
+          "seconds": 0.27
+        },
+        "hermiticity": {
+          "gate": 1e-12,
+          "n_characters": 52,
+          "worst_defect": 9.589970314993447
+        },
+        "identity_character": {
+          "hermiticity_defect": 0.0,
+          "lambda_max": 3.9999999999999987,
+          "lambda_min": -3.9999999999999987,
+          "n_cell_vertices": 24
+        },
+        "m": 4,
+        "npts": 8,
+        "real_form_cross_check": {
+          "max_abs_deviation": 0.7194429546098586
+        },
+        "seconds": 0.76,
+        "status": "quoted_from_[6]_Thm_6.5",
+        "time_budget_seconds": 300.0
+      },
+      "m5": {
+        "ball3_size": 56,
+        "cell_degree": {
+          "degree": 5,
+          "distinct_degrees": [
+            5
+          ],
+          "regular": true
+        },
+        "cell_vertices": 120,
+        "continuous_paths": {
+          "all_branches_consistent": true,
+          "max_gap": 0.01063290960517449,
+          "max_gap_relative": 0.001063290960517449,
+          "n_eigenvalues": 38880,
+          "n_rays": 4,
+          "rays": [
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.039267,
+              "max_step_jump": 0.027335,
+              "target": [
+                0.5,
+                0.0,
+                0.333333,
+                0.666667
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.01021,
+              "max_step_jump": 0.007108,
+              "target": [
+                0.13,
+                0.5,
+                0.87,
+                0.24
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.02042,
+              "max_step_jump": 0.014215,
+              "target": [
+                0.26,
+                0.63,
+                0.0,
+                0.37
+              ]
+            },
+            {
+              "branches_consistent": true,
+              "max_matrix_step": 0.030629,
+              "max_step_jump": 0.021322,
+              "target": [
+                0.39,
+                0.76,
+                0.13,
+                0.5
+              ]
+            }
+          ],
+          "seconds": 4.63,
+          "steps_per_ray": 80,
+          "worst_matrix_step": 0.039267384921256886,
+          "worst_step_jump": 0.027334618775785944
+        },
+        "grid_sampling": {
+          "contained_in_interval": true,
+          "endpoint_minus_m_reached": true,
+          "endpoint_plus_m_reached": true,
+          "grid_points_per_angle": 5,
+          "grid_total": 625,
+          "max": 5.000000000000003,
+          "max_gap": 0.40763484435833597,
+          "max_gap_relative": 0.040763484435833594,
+          "min": -5.000000000000005,
+          "min_abs_eigenvalue": 5.655991904839347e-17,
+          "n_eigenvalues": 75000,
+          "seconds": 4.3
+        },
+        "hermiticity": {
+          "gate": 1e-12,
+          "n_characters": 106,
+          "worst_defect": 21.908608341332243
+        },
+        "identity_character": {
+          "hermiticity_defect": 0.0,
+          "lambda_max": 5.000000000000003,
+          "lambda_min": -5.000000000000005,
+          "n_cell_vertices": 120
+        },
+        "m": 5,
+        "npts": 5,
+        "seconds": 9.39,
+        "status": "quoted_from_[6]_Thm_6.5",
+        "time_budget_seconds": 300.0
+      }
+    },
+    "script": "exp3_chamber_spectrum.py",
+    "transpose_voltage_control": {
+      "caught_by": "the Hermiticity gate ||A - A^H|| < 1e-12",
+      "what": "chi(lam_s) instead of chi(w(lam_s)) in the Floquet entry",
+      "why_wrong": "the translation realising w -> w s_w is w(lam_s), which depends on the source class w; dropping the 'w .' makes A_chi non-Hermitian"
+    },
+    "what_this_cannot_show": [
+      "Spec S~_m = [-m,m] for 3 <= m <= 5 is a QUOTED theorem ([6, Thm. 6.5], not distributed and not fully cited); we only fail to find a counterexample inside the cell.",
+      "For m >= 6 the equality is an open problem in the paper itself: our numerics are consistent with it but establish neither the equality nor the meeting of the two eigenvalue branches.",
+      "Every number here is a cross_check, never a proof."
+    ]
+  },
+  "result": "refutes"
+}

@@ -1,0 +1,350 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "relation_id": "0000",
+      "concept_ids": [
+        "0000",
+        "0001"
+      ],
+      "description": "阿贝尔群是满足交换律的群",
+      "lit_id": "0001",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "An abelian group is a group in which the commutative law holds for every pair of elements.",
+      "quote_normalized": "an abelian group is a group in which the commutative law holds for every pair of elements.",
+      "quote_verified": true,
+      "statement": "阿贝尔群是满足交换律的群",
+      "concept_group_key": "0000|0001",
+      "dedup_key": "0000|0001::0000",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0001",
+      "concept_ids": [
+        "0000",
+        "0006"
+      ],
+      "description": "子群是群在继承运算下自身成群的子集",
+      "lit_id": "0006",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A subgroup is a subset of a group that is itself a group under the inherited operation.",
+      "quote_normalized": "a subgroup is a subset of a group that is itself a group under the inherited operation.",
+      "quote_verified": true,
+      "statement": "子群是群在继承运算下自身成群的子集",
+      "concept_group_key": "0000|0006",
+      "dedup_key": "0000|0006::0001",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0002",
+      "concept_ids": [
+        "0002",
+        "0003"
+      ],
+      "description": "域是每个非零元都有乘法逆元的环",
+      "lit_id": "0003",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A field is a ring in which every nonzero element has a multiplicative inverse.",
+      "quote_normalized": "a field is a ring in which every nonzero element has a multiplicative inverse.",
+      "quote_verified": true,
+      "statement": "域是每个非零元都有乘法逆元的环",
+      "concept_group_key": "0002|0003",
+      "dedup_key": "0002|0003::0002",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0003",
+      "concept_ids": [
+        "0002",
+        "0004"
+      ],
+      "description": "理想是环的加法子群且对乘法封闭",
+      "lit_id": "0004",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "An ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.",
+      "quote_normalized": "an ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.",
+      "quote_verified": true,
+      "statement": "理想是环的加法子群且对乘法封闭",
+      "concept_group_key": "0002|0004",
+      "dedup_key": "0002|0004::0003",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0004",
+      "concept_ids": [
+        "0002",
+        "0005"
+      ],
+      "description": "模是配环作用的阿贝尔群",
+      "lit_id": "0005",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A module is an abelian group together with a ring action, generalising the notion of a vector space over a field.",
+      "quote_normalized": "a module is an abelian group together with a ring action, generalising the notion of a vector space over a field.",
+      "quote_verified": true,
+      "statement": "模是配环作用的阿贝尔群",
+      "concept_group_key": "0002|0005",
+      "dedup_key": "0002|0005::0004",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0005",
+      "concept_ids": [
+        "0002",
+        "0007"
+      ],
+      "description": "素理想是乘积落入其中则至少一个因子落入的真理想",
+      "lit_id": "0007",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A prime ideal is a proper ideal such that whenever a product lies in it, at least one factor does.",
+      "quote_normalized": "a prime ideal is a proper ideal such that whenever a product lies in it, at least one factor does.",
+      "quote_verified": true,
+      "statement": "素理想是乘积落入其中则至少一个因子落入的真理想",
+      "concept_group_key": "0002|0007",
+      "dedup_key": "0002|0007::0005",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0006",
+      "concept_ids": [
+        "0002",
+        "0008"
+      ],
+      "description": "环同态是保持加法乘法与单位元的映射",
+      "lit_id": "0008",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A ring homomorphism is a map preserving addition, multiplication and the unit element.",
+      "quote_normalized": "a ring homomorphism is a map preserving addition, multiplication and the unit element.",
+      "quote_verified": true,
+      "statement": "环同态是保持加法乘法与单位元的映射",
+      "concept_group_key": "0002|0008",
+      "dedup_key": "0002|0008::0006",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0007",
+      "concept_ids": [
+        "0000",
+        "0002"
+      ],
+      "description": "群与域之间存在某种未在本数据集文献中出现的联系",
+      "lit_id": "0000",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "This sentence does not appear anywhere in the cited document at all.",
+      "quote_normalized": "this sentence does not appear anywhere in the cited document at all.",
+      "quote_verified": false,
+      "statement": "群与域之间存在某种未在本数据集文献中出现的联系",
+      "concept_group_key": "0000|0002",
+      "dedup_key": "0000|0002::0007",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0008",
+      "concept_ids": [
+        "0004",
+        "0005"
+      ],
+      "description": "理想上的模结构（待复核）",
+      "lit_id": "0005",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A module is an abelian group together with a ring action, generalising the notion of a vector space over a field.",
+      "quote_normalized": "a module is an abelian group together with a ring action, generalising the notion of a vector space over a field.",
+      "quote_verified": true,
+      "statement": "理想上的模结构（待复核）",
+      "concept_group_key": "0004|0005",
+      "dedup_key": "0004|0005::0008",
+      "status": "suspect",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0009",
+      "concept_ids": [
+        "0000",
+        "0008"
+      ],
+      "description": "群的运算可经环同态与环的加法结构对应",
+      "lit_id": "0008",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A ring homomorphism is a map preserving addition, multiplication and the unit element.",
+      "quote_normalized": "a ring homomorphism is a map preserving addition, multiplication and the unit element.",
+      "quote_verified": true,
+      "statement": "群的运算可经环同态与环的加法结构对应",
+      "concept_group_key": "0000|0008",
+      "dedup_key": "0000|0008::0009",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0010",
+      "concept_ids": [
+        "0007",
+        "0008"
+      ],
+      "description": "素理想是环同态的核的典型例子",
+      "lit_id": "0007",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A prime ideal is a proper ideal such that whenever a product lies in it, at least one factor does.",
+      "quote_normalized": "a prime ideal is a proper ideal such that whenever a product lies in it, at least one factor does.",
+      "quote_verified": true,
+      "statement": "素理想是环同态的核的典型例子",
+      "concept_group_key": "0007|0008",
+      "dedup_key": "0007|0008::0010",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0011",
+      "concept_ids": [
+        "0000",
+        "0005"
+      ],
+      "description": "阿贝尔群是环上的模的最简单情形",
+      "lit_id": "0005",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "A module is an abelian group together with a ring action, generalising the notion of a vector space over a field.",
+      "quote_normalized": "a module is an abelian group together with a ring action, generalising the notion of a vector space over a field.",
+      "quote_verified": true,
+      "statement": "阿贝尔群是环上的模的最简单情形",
+      "concept_group_key": "0000|0005",
+      "dedup_key": "0000|0005::0011",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0012",
+      "concept_ids": [
+        "0003",
+        "0004"
+      ],
+      "description": "域的理想只有零理想与自身",
+      "lit_id": "0004",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "An ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.",
+      "quote_normalized": "an ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.",
+      "quote_verified": true,
+      "statement": "域的理想只有零理想与自身",
+      "concept_group_key": "0003|0004",
+      "dedup_key": "0003|0004::0012",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0013",
+      "concept_ids": [
+        "0001",
+        "0006"
+      ],
+      "description": "阿贝尔群的子群仍是阿贝尔群",
+      "lit_id": "0001",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "An abelian group is a group in which the commutative law holds for every pair of elements.",
+      "quote_normalized": "an abelian group is a group in which the commutative law holds for every pair of elements.",
+      "quote_verified": true,
+      "statement": "阿贝尔群的子群仍是阿贝尔群",
+      "concept_group_key": "0001|0006",
+      "dedup_key": "0001|0006::0013",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    },
+    {
+      "relation_id": "0014",
+      "concept_ids": [
+        "0004",
+        "0005"
+      ],
+      "description": "模的理想化子给出环作用的核",
+      "lit_id": "0004",
+      "page_range": {
+        "start": 1,
+        "end": 1,
+        "label": "pp. 1-1"
+      },
+      "quote": "An ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.",
+      "quote_normalized": "an ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.",
+      "quote_verified": true,
+      "statement": "模的理想化子给出环作用的核",
+      "concept_group_key": "0004|0005",
+      "dedup_key": "0004|0005::0014",
+      "status": "active",
+      "duplicate_of": null,
+      "created_at": "2026-09-23T22:33:35+08:00"
+    }
+  ]
+}

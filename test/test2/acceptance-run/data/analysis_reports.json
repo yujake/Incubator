@@ -1,0 +1,4518 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "report_id": "0000",
+      "kind": "hottest",
+      "request": "最热概念（验收 P2）",
+      "params": {
+        "top_n": 5
+      },
+      "summary": "最热门的 5 个概念：K(m)(16次)、S̃_m(11次)、spectrum of a periodic graph(11次)、girth(8次)、Floquet matrix(3次)",
+      "payload": {
+        "top_n": 5,
+        "relation_total": 25,
+        "concept_total": 14,
+        "occurrence_basis": "对每条关系的 concept_ids 里每个概念 +1 次出现（3 个概念的关系算 3 次）",
+        "entries": [
+          {
+            "concept_id": "0000",
+            "name": "K(m)",
+            "occurrences": 16,
+            "relation_count": 16,
+            "group_count": 16,
+            "degree": 16,
+            "representative_relations": [
+              {
+                "relation_id": "0023",
+                "concept_ids": [
+                  "0000",
+                  "0008"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "girth"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0008",
+                    "name": "girth"
+                  }
+                ],
+                "description": "Example 1.8：K(4) 中的一个 6-环，(0,0,0,0) → (0,0,0,1) → (−1,0,0,1) → (−1,0,1,1) → (−1,0,1,0) → (0,0,1,0) → 回到起点，差向量 e_4, −e_1, e_3, −e_4, e_1, −e_3。",
+                "statement": "Example 1.8：K(4) 中的一个 6-环，(0,0,0,0) → (0,0,0,1) → (−1,0,0,1) → (−1,0,1,1) → (−1,0,1,0) → (0,0,1,0) → 回到起点，差向量 e_4, −e_1, e_3, −e_4, e_1, −e_3。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                }
+              },
+              {
+                "relation_id": "0016",
+                "concept_ids": [
+                  "0000",
+                  "0005"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "spectrum of a periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Theorem 1.3 的证明 (a)：S(χ) 是 m 个单位复数之和，故 |S(χ)| ≤ m（三角不等式）；0 也被取到（m = 2 取 z_1 = −1；m = 3 取两个本原三次单位根；m ≥ 4 取 z_1 = −1 与全部 (m−2) 次单位根）。",
+                "statement": "Theorem 1.3 的证明 (a)：S(χ) 是 m 个单位复数之和，故 |S(χ)| ≤ m（三角不等式）；0 也被取到（m = 2 取 z_1 = −1；m = 3 取两个本原三次单位根；m ≥ 4 取 z_1 = −1 与全部 (m−2) 次单位根）。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 5,
+                  "end": 5,
+                  "label": "p. 5"
+                }
+              },
+              {
+                "relation_id": "0018",
+                "concept_ids": [
+                  "0000",
+                  "0006"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "Floquet matrix"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0006",
+                    "name": "Floquet matrix"
+                  }
+                ],
+                "description": "Rem. 3.5（陷阱）：把 2m 个有向步 ±e_i 各算一项会得到 S(1) = 2m−1 与 λ_max = 2m−1 —— **错的**；cell 里每个方向只有一条边，故 S(1) = m。m = 4 时错答案 7，而真正的度数是 4。",
+                "statement": "Rem. 3.5（陷阱）：把 2m 个有向步 ±e_i 各算一项会得到 S(1) = 2m−1 与 λ_max = 2m−1 —— **错的**；cell 里每个方向只有一条边，故 S(1) = m。m = 4 时错答案 7，而真正的度数是 4。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 6,
+                  "end": 6,
+                  "label": "p. 6"
+                }
+              }
+            ]
+          },
+          {
+            "concept_id": "0001",
+            "name": "S̃_m",
+            "occurrences": 11,
+            "relation_count": 11,
+            "group_count": 11,
+            "degree": 11,
+            "representative_relations": [
+              {
+                "relation_id": "0021",
+                "concept_ids": [
+                  "0001",
+                  "0008"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "girth"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0008",
+                    "name": "girth"
+                  }
+                ],
+                "description": "§5：把仿射 Weyl 群实现为 {(w,λ)}、群律 (w,λ)(v,μ) = (wv, λ + w(μ))，从 Coxeter 表现构造半径 6 的球，在球内算得 girth 为 6（m = 3）、4（m = 4,5）。",
+                "statement": "§5：把仿射 Weyl 群实现为 {(w,λ)}、群律 (w,λ)(v,μ) = (wv, λ + w(μ))，从 Coxeter 表现构造半径 6 的球，在球内算得 girth 为 6（m = 3）、4（m = 4,5）。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 7,
+                  "end": 7,
+                  "label": "p. 7"
+                }
+              },
+              {
+                "relation_id": "0013",
+                "concept_ids": [
+                  "0001",
+                  "0005"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "§6：m ≥ 6 的障碍是 S̃_m 的 cell 有 m! 个顶点，而 K(m) 的只有两个；对 K(m) 只需证 |S(χ)| 取到 0（有显式见证），对 S̃_m 则必须证明两个分支相交，而**没有显式见证可用**。",
+                "statement": "§6：m ≥ 6 的障碍是 S̃_m 的 cell 有 m! 个顶点，而 K(m) 的只有两个；对 K(m) 只需证 |S(χ)| 取到 0（有显式见证），对 S̃_m 则必须证明两个分支相交，而**没有显式见证可用**。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 8,
+                  "end": 8,
+                  "label": "p. 8"
+                }
+              },
+              {
+                "relation_id": "0012",
+                "concept_ids": [
+                  "0001",
+                  "0005",
+                  "0013"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "companion book [6]"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  },
+                  {
+                    "concept_id": "0013",
+                    "name": "companion book [6]"
+                  }
+                ],
+                "description": "Rem. 1.6：Spec S̃_m = [−m, m] 对该书而言只对 3 ≤ m ≤ 5 已证；对 m ≥ 6 只证明了包含关系 Spec S̃_m ⊆ [−m, m] 与两个端点 ±m，**等号是公开问题**。",
+                "statement": "Rem. 1.6：Spec S̃_m = [−m, m] 对该书而言只对 3 ≤ m ≤ 5 已证；对 m ≥ 6 只证明了包含关系 Spec S̃_m ⊆ [−m, m] 与两个端点 ±m，**等号是公开问题**。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                }
+              }
+            ]
+          },
+          {
+            "concept_id": "0005",
+            "name": "spectrum of a periodic graph",
+            "occurrences": 11,
+            "relation_count": 11,
+            "group_count": 11,
+            "degree": 11,
+            "representative_relations": [
+              {
+                "relation_id": "0016",
+                "concept_ids": [
+                  "0000",
+                  "0005"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "spectrum of a periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "Theorem 1.3 的证明 (a)：S(χ) 是 m 个单位复数之和，故 |S(χ)| ≤ m（三角不等式）；0 也被取到（m = 2 取 z_1 = −1；m = 3 取两个本原三次单位根；m ≥ 4 取 z_1 = −1 与全部 (m−2) 次单位根）。",
+                "statement": "Theorem 1.3 的证明 (a)：S(χ) 是 m 个单位复数之和，故 |S(χ)| ≤ m（三角不等式）；0 也被取到（m = 2 取 z_1 = −1；m = 3 取两个本原三次单位根；m ≥ 4 取 z_1 = −1 与全部 (m−2) 次单位根）。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 5,
+                  "end": 5,
+                  "label": "p. 5"
+                }
+              },
+              {
+                "relation_id": "0017",
+                "concept_ids": [
+                  "0000",
+                  "0005"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "spectrum of a periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "Theorem 1.3 的证明 (a)：χ ↦ |S(χ)| 连续且 T^{m−1} 连通，故 |S(T^{m−1})| 是 [0,m] 的连通子集且含 0 与 m，从而等于 [0,m] —— **这是唯一用到环面拓扑的地方**。",
+                "statement": "Theorem 1.3 的证明 (a)：χ ↦ |S(χ)| 连续且 T^{m−1} 连通，故 |S(T^{m−1})| 是 [0,m] 的连通子集且含 0 与 m，从而等于 [0,m] —— **这是唯一用到环面拓扑的地方**。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 5,
+                  "end": 5,
+                  "label": "p. 5"
+                }
+              },
+              {
+                "relation_id": "0013",
+                "concept_ids": [
+                  "0001",
+                  "0005"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "§6：m ≥ 6 的障碍是 S̃_m 的 cell 有 m! 个顶点，而 K(m) 的只有两个；对 K(m) 只需证 |S(χ)| 取到 0（有显式见证），对 S̃_m 则必须证明两个分支相交，而**没有显式见证可用**。",
+                "statement": "§6：m ≥ 6 的障碍是 S̃_m 的 cell 有 m! 个顶点，而 K(m) 的只有两个；对 K(m) 只需证 |S(χ)| 取到 0（有显式见证），对 S̃_m 则必须证明两个分支相交，而**没有显式见证可用**。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 8,
+                  "end": 8,
+                  "label": "p. 8"
+                }
+              }
+            ]
+          },
+          {
+            "concept_id": "0008",
+            "name": "girth",
+            "occurrences": 8,
+            "relation_count": 8,
+            "group_count": 8,
+            "degree": 8,
+            "representative_relations": [
+              {
+                "relation_id": "0023",
+                "concept_ids": [
+                  "0000",
+                  "0008"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "girth"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "Example 1.8：K(4) 中的一个 6-环，(0,0,0,0) → (0,0,0,1) → (−1,0,0,1) → (−1,0,1,1) → (−1,0,1,0) → (0,0,1,0) → 回到起点，差向量 e_4, −e_1, e_3, −e_4, e_1, −e_3。",
+                "statement": "Example 1.8：K(4) 中的一个 6-环，(0,0,0,0) → (0,0,0,1) → (−1,0,0,1) → (−1,0,1,1) → (−1,0,1,0) → (0,0,1,0) → 回到起点，差向量 e_4, −e_1, e_3, −e_4, e_1, −e_3。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                }
+              },
+              {
+                "relation_id": "0021",
+                "concept_ids": [
+                  "0001",
+                  "0008"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "girth"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "§5：把仿射 Weyl 群实现为 {(w,λ)}、群律 (w,λ)(v,μ) = (wv, λ + w(μ))，从 Coxeter 表现构造半径 6 的球，在球内算得 girth 为 6（m = 3）、4（m = 4,5）。",
+                "statement": "§5：把仿射 Weyl 群实现为 {(w,λ)}、群律 (w,λ)(v,μ) = (wv, λ + w(μ))，从 Coxeter 表现构造半径 6 的球，在球内算得 girth 为 6（m = 3）、4（m = 4,5）。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 7,
+                  "end": 7,
+                  "label": "p. 7"
+                }
+              },
+              {
+                "relation_id": "0024",
+                "concept_ids": [
+                  "0001",
+                  "0008"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "girth"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "Example 1.8：S̃_4 中的一个 4-环是 1, s_1, s_1s_3, s_3 —— 在 Ã_3 的 Coxeter 圈里节点 1 与 3 不相邻，故 s_1 与 s_3 可交换、walk 闭合。",
+                "statement": "Example 1.8：S̃_4 中的一个 4-环是 1, s_1, s_1s_3, s_3 —— 在 Ã_3 的 Coxeter 圈里节点 1 与 3 不相邻，故 s_1 与 s_3 可交换、walk 闭合。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 3,
+                  "end": 3,
+                  "label": "p. 3"
+                }
+              }
+            ]
+          },
+          {
+            "concept_id": "0006",
+            "name": "Floquet matrix",
+            "occurrences": 3,
+            "relation_count": 3,
+            "group_count": 3,
+            "degree": 3,
+            "representative_relations": [
+              {
+                "relation_id": "0018",
+                "concept_ids": [
+                  "0000",
+                  "0006"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "Floquet matrix"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "Rem. 3.5（陷阱）：把 2m 个有向步 ±e_i 各算一项会得到 S(1) = 2m−1 与 λ_max = 2m−1 —— **错的**；cell 里每个方向只有一条边，故 S(1) = m。m = 4 时错答案 7，而真正的度数是 4。",
+                "statement": "Rem. 3.5（陷阱）：把 2m 个有向步 ±e_i 各算一项会得到 S(1) = 2m−1 与 λ_max = 2m−1 —— **错的**；cell 里每个方向只有一条边，故 S(1) = m。m = 4 时错答案 7，而真正的度数是 4。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 6,
+                  "end": 6,
+                  "label": "p. 6"
+                }
+              },
+              {
+                "relation_id": "0015",
+                "concept_ids": [
+                  "0000",
+                  "0005",
+                  "0006"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "spectrum of a periodic graph",
+                  "Floquet matrix"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Lemma 3.1(iii)：Floquet 矩阵的非对角元是这 m 条边的 χ-权之和 S(χ) = χ(0) + Σ_{i<m} χ(e_i) = 1 + Σ_{i<m} z_i。",
+                "statement": "Lemma 3.1(iii)：Floquet 矩阵的非对角元是这 m 条边的 χ-权之和 S(χ) = χ(0) + Σ_{i<m} χ(e_i) = 1 + Σ_{i<m} z_i。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 5,
+                  "end": 5,
+                  "label": "p. 5"
+                }
+              },
+              {
+                "relation_id": "0014",
+                "concept_ids": [
+                  "0000",
+                  "0006"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "Floquet matrix"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "Lemma 3.1(iii)：K(m) 的 cell 是两个顶点、m 条平行边，电压为 0, e_1, …, e_{m−1}。",
+                "statement": "Lemma 3.1(iii)：K(m) 的 cell 是两个顶点、m 条平行边，电压为 0, e_1, …, e_{m−1}。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 5,
+                  "end": 5,
+                  "label": "p. 5"
+                }
+              }
+            ]
+          }
+        ],
+        "hot_ids": [
+          "0000",
+          "0001",
+          "0005",
+          "0008",
+          "0006"
+        ],
+        "isolated_ids": [
+          "0002",
+          "0003",
+          "0010"
+        ],
+        "all_counts_tail": [
+          {
+            "concept_id": "0011",
+            "occurrences": 3,
+            "relation_count": 3,
+            "group_count": 3
+          },
+          {
+            "concept_id": "0004",
+            "occurrences": 2,
+            "relation_count": 2,
+            "group_count": 2
+          },
+          {
+            "concept_id": "0013",
+            "occurrences": 2,
+            "relation_count": 2,
+            "group_count": 2
+          },
+          {
+            "concept_id": "0007",
+            "occurrences": 1,
+            "relation_count": 1,
+            "group_count": 1
+          },
+          {
+            "concept_id": "0009",
+            "occurrences": 1,
+            "relation_count": 1,
+            "group_count": 1
+          },
+          {
+            "concept_id": "0012",
+            "occurrences": 1,
+            "relation_count": 1,
+            "group_count": 1
+          },
+          {
+            "concept_id": "0002",
+            "occurrences": 0,
+            "relation_count": 0,
+            "group_count": 0
+          },
+          {
+            "concept_id": "0003",
+            "occurrences": 0,
+            "relation_count": 0,
+            "group_count": 0
+          },
+          {
+            "concept_id": "0010",
+            "occurrences": 0,
+            "relation_count": 0,
+            "group_count": 0
+          }
+        ],
+        "sort_rule": "occurrences 降序，同分按 concept_id 升序（稳定，保证可复现）"
+      },
+      "markdown_path": "reports/0000-hottest.md",
+      "created_at": "2026-09-23T23:19:17+08:00",
+      "created_by": "agent-C"
+    },
+    {
+      "report_id": "0001",
+      "kind": "paths",
+      "request": "K(m) 与 S̃_m 之间的支撑关系链",
+      "params": {
+        "a": "0000",
+        "b": "0001",
+        "max_paths": 5,
+        "max_len": 4,
+        "max_overlap": 0.5
+      },
+      "summary": "找到 4 条高信息量路径（另有 medium 0 条、low 0 条）：K(m)→S̃_m（0008，score=3.40）；K(m)→spectrum of a periodic graph→cospectral→S̃_m（0016→0007→0007，score=4.57）；K(m)→girth→spectral invariant→S̃_m（0023→0011→0011，score=4.57）",
+      "payload": {
+        "a": {
+          "concept_id": "0000",
+          "name": "K(m)"
+        },
+        "b": {
+          "concept_id": "0001",
+          "name": "S̃_m"
+        },
+        "search": {
+          "raw_path_count": 24,
+          "raw_paths": [
+            [
+              "0000",
+              "0001"
+            ],
+            [
+              "0000",
+              "0004",
+              "0001"
+            ],
+            [
+              "0000",
+              "0005",
+              "0001"
+            ],
+            [
+              "0000",
+              "0005",
+              "0007",
+              "0001"
+            ],
+            [
+              "0000",
+              "0005",
+              "0011",
+              "0001"
+            ],
+            [
+              "0000",
+              "0005",
+              "0011",
+              "0008",
+              "0001"
+            ],
+            [
+              "0000",
+              "0005",
+              "0013",
+              "0001"
+            ],
+            [
+              "0000",
+              "0006",
+              "0005",
+              "0001"
+            ],
+            [
+              "0000",
+              "0006",
+              "0005",
+              "0007",
+              "0001"
+            ],
+            [
+              "0000",
+              "0006",
+              "0005",
+              "0011",
+              "0001"
+            ],
+            [
+              "0000",
+              "0006",
+              "0005",
+              "0013",
+              "0001"
+            ],
+            [
+              "0000",
+              "0007",
+              "0001"
+            ],
+            [
+              "0000",
+              "0007",
+              "0005",
+              "0001"
+            ],
+            [
+              "0000",
+              "0007",
+              "0005",
+              "0011",
+              "0001"
+            ],
+            [
+              "0000",
+              "0007",
+              "0005",
+              "0013",
+              "0001"
+            ],
+            [
+              "0000",
+              "0008",
+              "0001"
+            ],
+            [
+              "0000",
+              "0008",
+              "0011",
+              "0001"
+            ],
+            [
+              "0000",
+              "0008",
+              "0011",
+              "0005",
+              "0001"
+            ],
+            [
+              "0000",
+              "0009",
+              "0001"
+            ],
+            [
+              "0000",
+              "0011",
+              "0001"
+            ],
+            [
+              "0000",
+              "0011",
+              "0005",
+              "0001"
+            ],
+            [
+              "0000",
+              "0011",
+              "0005",
+              "0007",
+              "0001"
+            ],
+            [
+              "0000",
+              "0011",
+              "0005",
+              "0013",
+              "0001"
+            ],
+            [
+              "0000",
+              "0011",
+              "0008",
+              "0001"
+            ]
+          ],
+          "raw_paths_by_hops": {
+            "1": 1,
+            "2": 6,
+            "3": 8,
+            "4": 9
+          },
+          "truncated": false,
+          "truncation_reasons": [],
+          "budget_used": 61,
+          "node_budget": 20000,
+          "max_len": 4,
+          "search_max_paths": 50
+        },
+        "dedup": {
+          "kept_after_overlap_filter": 4,
+          "selected_for_report": 4,
+          "max_overlap": 0.5,
+          "dropped_by_overlap": [
+            {
+              "path": [
+                "0000",
+                "0004",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "periodic graph",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0005",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectrum of a periodic graph",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0007",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "cospectral",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0008",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "girth",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0009",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "vertex-transitive",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0011",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectral invariant",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0005",
+                "0011",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectrum of a periodic graph",
+                "spectral invariant",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.60 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0005",
+                "0013",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectrum of a periodic graph",
+                "companion book [6]",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.60 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0006",
+                "0005",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "Floquet matrix",
+                "spectrum of a periodic graph",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.60 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0007",
+                "0005",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "cospectral",
+                "spectrum of a periodic graph",
+                "S̃_m"
+              ],
+              "max_jaccard": 1.0,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 1.00 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0011",
+                "0005",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectral invariant",
+                "spectrum of a periodic graph",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.60 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0011",
+                "0008",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectral invariant",
+                "girth",
+                "S̃_m"
+              ],
+              "max_jaccard": 1.0,
+              "against": [
+                "0000",
+                "0008",
+                "0011",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 1.00 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0005",
+                "0011",
+                "0008",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectrum of a periodic graph",
+                "spectral invariant",
+                "girth",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.8,
+              "against": [
+                "0000",
+                "0008",
+                "0011",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.80 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0006",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "Floquet matrix",
+                "spectrum of a periodic graph",
+                "cospectral",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.8,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.80 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0006",
+                "0005",
+                "0013",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "Floquet matrix",
+                "spectrum of a periodic graph",
+                "companion book [6]",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0006",
+                "0005",
+                "0011",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0007",
+                "0005",
+                "0011",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "cospectral",
+                "spectrum of a periodic graph",
+                "spectral invariant",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.8,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.80 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0007",
+                "0005",
+                "0013",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "cospectral",
+                "spectrum of a periodic graph",
+                "companion book [6]",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.8,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.80 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0008",
+                "0011",
+                "0005",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "girth",
+                "spectral invariant",
+                "spectrum of a periodic graph",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.8,
+              "against": [
+                "0000",
+                "0008",
+                "0011",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.80 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0011",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectral invariant",
+                "spectrum of a periodic graph",
+                "cospectral",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.8,
+              "against": [
+                "0000",
+                "0005",
+                "0007",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.80 > max_overlap=0.5（本质上同一条路径）"
+            },
+            {
+              "path": [
+                "0000",
+                "0011",
+                "0005",
+                "0013",
+                "0001"
+              ],
+              "concept_names": [
+                "K(m)",
+                "spectral invariant",
+                "spectrum of a periodic graph",
+                "companion book [6]",
+                "S̃_m"
+              ],
+              "max_jaccard": 0.6667,
+              "against": [
+                "0000",
+                "0006",
+                "0005",
+                "0011",
+                "0001"
+              ],
+              "reason": "与已选路径节点重合度 0.67 > max_overlap=0.5（本质上同一条路径）"
+            }
+          ],
+          "dropped_by_max_paths": [],
+          "rule": "节点集合 Jaccard 相似度 > max_overlap 即丢弃（严格大于，等于阈值时保留）"
+        },
+        "levels": {
+          "high": 4,
+          "medium": 0,
+          "low": 0
+        },
+        "has_high": true,
+        "incomplete_paths": [],
+        "paths": [
+          {
+            "concept_path": [
+              "0000",
+              "0001"
+            ],
+            "concept_names": [
+              "K(m)",
+              "S̃_m"
+            ],
+            "relation_chain": [
+              "0008"
+            ],
+            "hops": 1,
+            "hop_details": [
+              {
+                "hop": 1,
+                "from": "0000",
+                "from_name": "K(m)",
+                "to": "0001",
+                "to_name": "S̃_m",
+                "candidate_count": 4,
+                "candidate_ids": [
+                  "0008",
+                  "0007",
+                  "0002",
+                  "0011"
+                ],
+                "chosen": "0008",
+                "chosen_description": "Theorem 1.5：girth K(m) = 6 ≠ 4 = girth S̃_m，故 K(m) ≇ S̃_m —— **谱不决定图**。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": false,
+                "note": "共 4 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              }
+            ],
+            "chain_literature_ids": [
+              "0000"
+            ],
+            "llm_ranked": false,
+            "score": 3.4,
+            "level": "high",
+            "score_breakdown": {
+              "inputs": {
+                "hops": 1,
+                "quote_verified_true": 1,
+                "quote_verified_false": 0,
+                "quote_verified_unknown": 0,
+                "suspect": 0,
+                "distinct_literature": 1,
+                "average_description_length": 71.0,
+                "concepts_outside_hot_set": [],
+                "hot_set_size": 5
+              },
+              "terms": [
+                {
+                  "name": "引文已校验比例",
+                  "detail": "quote_verified=True 的跳数 1/1 = 1.00",
+                  "weight": 2.0,
+                  "contribution": 2.0
+                },
+                {
+                  "name": "引文校验失败比例",
+                  "detail": "quote_verified=False 的跳数 0/1 = 0.00",
+                  "weight": -1.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "suspect 比例",
+                  "detail": "status=suspect 的跳数 0/1 = 0.00",
+                  "weight": -1.0,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "跳数",
+                  "detail": "min(跳数 1, 3) = 1（边际递减）",
+                  "weight": 0.6,
+                  "contribution": 0.6
+                },
+                {
+                  "name": "跨文献多样性",
+                  "detail": "不同文献 1 篇 / 跳数 1 = 1.00",
+                  "weight": 0.8,
+                  "contribution": 0.8
+                },
+                {
+                  "name": "描述过短",
+                  "detail": "平均描述长度 71.0 字符 → 不计入",
+                  "weight": -0.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "绕开最常见节点",
+                  "detail": "不在热门集里的概念 无 → 不计入",
+                  "weight": 0.5,
+                  "contribution": 0.0
+                }
+              ],
+              "total": 3.4,
+              "thresholds": {
+                "high": 3.0,
+                "medium": 1.5
+              },
+              "level": "high"
+            }
+          },
+          {
+            "concept_path": [
+              "0000",
+              "0005",
+              "0007",
+              "0001"
+            ],
+            "concept_names": [
+              "K(m)",
+              "spectrum of a periodic graph",
+              "cospectral",
+              "S̃_m"
+            ],
+            "relation_chain": [
+              "0016",
+              "0007",
+              "0007"
+            ],
+            "hops": 3,
+            "hop_details": [
+              {
+                "hop": 1,
+                "from": "0000",
+                "from_name": "K(m)",
+                "to": "0005",
+                "to_name": "spectrum of a periodic graph",
+                "candidate_count": 7,
+                "candidate_ids": [
+                  "0016",
+                  "0017",
+                  "0019",
+                  "0015",
+                  "0003",
+                  "0022",
+                  "0007"
+                ],
+                "chosen": "0016",
+                "chosen_description": "Theorem 1.3 的证明 (a)：S(χ) 是 m 个单位复数之和，故 |S(χ)| ≤ m（三角不等式）；0 也被取到（m = 2 取 z_1 = −1；m = 3 取两个本原三次单位根；m ≥ 4 取 z_1 = −1 与全部 (m−2) 次单位根）。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": false,
+                "note": "共 7 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 2,
+                "from": "0005",
+                "from_name": "spectrum of a periodic graph",
+                "to": "0007",
+                "to_name": "cospectral",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0007"
+                ],
+                "chosen": "0007",
+                "chosen_description": "Theorem 1.5：对 m ∈ {4,5}，Spec K(m) = [−m, m] = Spec S̃_m，即两者同谱。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 3,
+                "from": "0007",
+                "from_name": "cospectral",
+                "to": "0001",
+                "to_name": "S̃_m",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0007"
+                ],
+                "chosen": "0007",
+                "chosen_description": "Theorem 1.5：对 m ∈ {4,5}，Spec K(m) = [−m, m] = Spec S̃_m，即两者同谱。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              }
+            ],
+            "chain_literature_ids": [
+              "0000"
+            ],
+            "llm_ranked": false,
+            "score": 4.5667,
+            "level": "high",
+            "score_breakdown": {
+              "inputs": {
+                "hops": 3,
+                "quote_verified_true": 3,
+                "quote_verified_false": 0,
+                "quote_verified_unknown": 0,
+                "suspect": 0,
+                "distinct_literature": 1,
+                "average_description_length": 85.0,
+                "concepts_outside_hot_set": [
+                  "0007"
+                ],
+                "hot_set_size": 5
+              },
+              "terms": [
+                {
+                  "name": "引文已校验比例",
+                  "detail": "quote_verified=True 的跳数 3/3 = 1.00",
+                  "weight": 2.0,
+                  "contribution": 2.0
+                },
+                {
+                  "name": "引文校验失败比例",
+                  "detail": "quote_verified=False 的跳数 0/3 = 0.00",
+                  "weight": -1.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "suspect 比例",
+                  "detail": "status=suspect 的跳数 0/3 = 0.00",
+                  "weight": -1.0,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "跳数",
+                  "detail": "min(跳数 3, 3) = 3（边际递减）",
+                  "weight": 0.6,
+                  "contribution": 1.8
+                },
+                {
+                  "name": "跨文献多样性",
+                  "detail": "不同文献 1 篇 / 跳数 3 = 0.33",
+                  "weight": 0.8,
+                  "contribution": 0.2667
+                },
+                {
+                  "name": "描述过短",
+                  "detail": "平均描述长度 85.0 字符 → 不计入",
+                  "weight": -0.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "绕开最常见节点",
+                  "detail": "不在热门集里的概念 ['0007'] → 计入",
+                  "weight": 0.5,
+                  "contribution": 0.5
+                }
+              ],
+              "total": 4.5667,
+              "thresholds": {
+                "high": 3.0,
+                "medium": 1.5
+              },
+              "level": "high"
+            }
+          },
+          {
+            "concept_path": [
+              "0000",
+              "0008",
+              "0011",
+              "0001"
+            ],
+            "concept_names": [
+              "K(m)",
+              "girth",
+              "spectral invariant",
+              "S̃_m"
+            ],
+            "relation_chain": [
+              "0023",
+              "0011",
+              "0011"
+            ],
+            "hops": 3,
+            "hop_details": [
+              {
+                "hop": 1,
+                "from": "0000",
+                "from_name": "K(m)",
+                "to": "0008",
+                "to_name": "girth",
+                "candidate_count": 5,
+                "candidate_ids": [
+                  "0023",
+                  "0008",
+                  "0020",
+                  "0011",
+                  "0005"
+                ],
+                "chosen": "0023",
+                "chosen_description": "Example 1.8：K(4) 中的一个 6-环，(0,0,0,0) → (0,0,0,1) → (−1,0,0,1) → (−1,0,1,1) → (−1,0,1,0) → (0,0,1,0) → 回到起点，差向量 e_4, −e_1, e_3, −e_4, e_1, −e_3。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": false,
+                "note": "共 5 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 2,
+                "from": "0008",
+                "from_name": "girth",
+                "to": "0011",
+                "to_name": "spectral invariant",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0011"
+                ],
+                "chosen": "0011",
+                "chosen_description": "Rem. 1.7：本文中区分这一对的是**围长**，一个初等的度量不变量。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 3,
+                "from": "0011",
+                "from_name": "spectral invariant",
+                "to": "0001",
+                "to_name": "S̃_m",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0011"
+                ],
+                "chosen": "0011",
+                "chosen_description": "Rem. 1.7：本文中区分这一对的是**围长**，一个初等的度量不变量。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              }
+            ],
+            "chain_literature_ids": [
+              "0000"
+            ],
+            "llm_ranked": false,
+            "score": 4.5667,
+            "level": "high",
+            "score_breakdown": {
+              "inputs": {
+                "hops": 3,
+                "quote_verified_true": 3,
+                "quote_verified_false": 0,
+                "quote_verified_unknown": 0,
+                "suspect": 0,
+                "distinct_literature": 1,
+                "average_description_length": 72.0,
+                "concepts_outside_hot_set": [
+                  "0011"
+                ],
+                "hot_set_size": 5
+              },
+              "terms": [
+                {
+                  "name": "引文已校验比例",
+                  "detail": "quote_verified=True 的跳数 3/3 = 1.00",
+                  "weight": 2.0,
+                  "contribution": 2.0
+                },
+                {
+                  "name": "引文校验失败比例",
+                  "detail": "quote_verified=False 的跳数 0/3 = 0.00",
+                  "weight": -1.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "suspect 比例",
+                  "detail": "status=suspect 的跳数 0/3 = 0.00",
+                  "weight": -1.0,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "跳数",
+                  "detail": "min(跳数 3, 3) = 3（边际递减）",
+                  "weight": 0.6,
+                  "contribution": 1.8
+                },
+                {
+                  "name": "跨文献多样性",
+                  "detail": "不同文献 1 篇 / 跳数 3 = 0.33",
+                  "weight": 0.8,
+                  "contribution": 0.2667
+                },
+                {
+                  "name": "描述过短",
+                  "detail": "平均描述长度 72.0 字符 → 不计入",
+                  "weight": -0.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "绕开最常见节点",
+                  "detail": "不在热门集里的概念 ['0011'] → 计入",
+                  "weight": 0.5,
+                  "contribution": 0.5
+                }
+              ],
+              "total": 4.5667,
+              "thresholds": {
+                "high": 3.0,
+                "medium": 1.5
+              },
+              "level": "high"
+            }
+          },
+          {
+            "concept_path": [
+              "0000",
+              "0006",
+              "0005",
+              "0011",
+              "0001"
+            ],
+            "concept_names": [
+              "K(m)",
+              "Floquet matrix",
+              "spectrum of a periodic graph",
+              "spectral invariant",
+              "S̃_m"
+            ],
+            "relation_chain": [
+              "0018",
+              "0015",
+              "0009",
+              "0011"
+            ],
+            "hops": 4,
+            "hop_details": [
+              {
+                "hop": 1,
+                "from": "0000",
+                "from_name": "K(m)",
+                "to": "0006",
+                "to_name": "Floquet matrix",
+                "candidate_count": 3,
+                "candidate_ids": [
+                  "0018",
+                  "0015",
+                  "0014"
+                ],
+                "chosen": "0018",
+                "chosen_description": "Rem. 3.5（陷阱）：把 2m 个有向步 ±e_i 各算一项会得到 S(1) = 2m−1 与 λ_max = 2m−1 —— **错的**；cell 里每个方向只有一条边，故 S(1) = m。m = 4 时错答案 7，而真正的度数是 4。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": false,
+                "note": "共 3 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 2,
+                "from": "0006",
+                "from_name": "Floquet matrix",
+                "to": "0005",
+                "to_name": "spectrum of a periodic graph",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0015"
+                ],
+                "chosen": "0015",
+                "chosen_description": "Lemma 3.1(iii)：Floquet 矩阵的非对角元是这 m 条边的 χ-权之和 S(χ) = χ(0) + Σ_{i<m} χ(e_i) = 1 + Σ_{i<m} z_i。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 3,
+                "from": "0005",
+                "from_name": "spectrum of a periodic graph",
+                "to": "0011",
+                "to_name": "spectral invariant",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0009"
+                ],
+                "chosen": "0009",
+                "chosen_description": "Theorem 1.5 是关于**一个特定程序**的否定结果：任何只用谱（作为集合）的识别都会给 K(m) 与 S̃_m 相同的值，因而无法区分它们。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              },
+              {
+                "hop": 4,
+                "from": "0011",
+                "from_name": "spectral invariant",
+                "to": "0001",
+                "to_name": "S̃_m",
+                "candidate_count": 1,
+                "candidate_ids": [
+                  "0011"
+                ],
+                "chosen": "0011",
+                "chosen_description": "Rem. 1.7：本文中区分这一对的是**围长**，一个初等的度量不变量。",
+                "chosen_status": "active",
+                "chosen_quote_verified": true,
+                "chosen_lit_id": "0000",
+                "chosen_lit_already_used": true,
+                "note": "共 1 条候选，按 quote_verified→status→信息量 的确定性序取最优"
+              }
+            ],
+            "chain_literature_ids": [
+              "0000"
+            ],
+            "llm_ranked": false,
+            "score": 4.5,
+            "level": "high",
+            "score_breakdown": {
+              "inputs": {
+                "hops": 4,
+                "quote_verified_true": 4,
+                "quote_verified_false": 0,
+                "quote_verified_unknown": 0,
+                "suspect": 0,
+                "distinct_literature": 1,
+                "average_description_length": 81.75,
+                "concepts_outside_hot_set": [
+                  "0011"
+                ],
+                "hot_set_size": 5
+              },
+              "terms": [
+                {
+                  "name": "引文已校验比例",
+                  "detail": "quote_verified=True 的跳数 4/4 = 1.00",
+                  "weight": 2.0,
+                  "contribution": 2.0
+                },
+                {
+                  "name": "引文校验失败比例",
+                  "detail": "quote_verified=False 的跳数 0/4 = 0.00",
+                  "weight": -1.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "suspect 比例",
+                  "detail": "status=suspect 的跳数 0/4 = 0.00",
+                  "weight": -1.0,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "跳数",
+                  "detail": "min(跳数 4, 3) = 3（边际递减）",
+                  "weight": 0.6,
+                  "contribution": 1.8
+                },
+                {
+                  "name": "跨文献多样性",
+                  "detail": "不同文献 1 篇 / 跳数 4 = 0.25",
+                  "weight": 0.8,
+                  "contribution": 0.2
+                },
+                {
+                  "name": "描述过短",
+                  "detail": "平均描述长度 81.8 字符 → 不计入",
+                  "weight": -0.5,
+                  "contribution": -0.0
+                },
+                {
+                  "name": "绕开最常见节点",
+                  "detail": "不在热门集里的概念 ['0011'] → 计入",
+                  "weight": 0.5,
+                  "contribution": 0.5
+                }
+              ],
+              "total": 4.5,
+              "thresholds": {
+                "high": 3.0,
+                "medium": 1.5
+              },
+              "level": "high"
+            }
+          }
+        ],
+        "hot_ids": [
+          "0000",
+          "0001",
+          "0005",
+          "0008",
+          "0006"
+        ],
+        "hot_basis": "occurrences 前 5",
+        "score_thresholds": {
+          "high": 3.0,
+          "medium": 1.5
+        },
+        "score_weights": {
+          "quote_true": 2.0,
+          "quote_false": -1.5,
+          "suspect": -1.0,
+          "hop": 0.6,
+          "lit_diversity": 0.8,
+          "short_desc": -0.5,
+          "avoid_hot": 0.5
+        },
+        "hook": {
+          "llm_available": false,
+          "used_for_ordering": false,
+          "note": "未启用 LLM 钩子：路径顺序完全由确定性评分决定。"
+        }
+      },
+      "markdown_path": "reports/0001-paths.md",
+      "created_at": "2026-09-23T23:19:17+08:00",
+      "created_by": "agent-C"
+    },
+    {
+      "report_id": "0002",
+      "kind": "cold",
+      "request": "冷门概念（验收 P2）",
+      "params": {
+        "top_n": 5
+      },
+      "summary": "最冷门的 5 个概念（degree 升序）：cospectral(degree=1)、vertex-transitive(degree=1)、density of states(degree=1)、periodic graph(degree=2)、companion book [6](degree=2)；其中'冷门但连接强'（最可能被低估）2 个：periodic graph、companion book [6]；完全孤立（degree=0）3 个，单独归类。",
+      "payload": {
+        "top_n": 5,
+        "cold_ids": [
+          "0007",
+          "0009",
+          "0012",
+          "0004",
+          "0013"
+        ],
+        "entries": [
+          {
+            "concept_id": "0007",
+            "name": "cospectral",
+            "definition": "同谱：两个图的谱（作为集合）相等。",
+            "degree": 1,
+            "occurrences": 1,
+            "group_count": 1,
+            "relations_to_hot": [
+              {
+                "relation_id": "0007",
+                "concept_ids": [
+                  "0000",
+                  "0001",
+                  "0005",
+                  "0007"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "cospectral"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  },
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Theorem 1.5：对 m ∈ {4,5}，Spec K(m) = [−m, m] = Spec S̃_m，即两者同谱。",
+                "statement": "Theorem 1.5：对 m ∈ {4,5}，Spec K(m) = [−m, m] = Spec S̃_m，即两者同谱。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 1,
+                "weak_score": 0.25,
+                "weak_reasons": [
+                  "它是该概念唯一的连接（一旦失效该概念即完全孤立）"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "weak_relations": [
+              {
+                "relation_id": "0007",
+                "concept_ids": [
+                  "0000",
+                  "0001",
+                  "0005",
+                  "0007"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "cospectral"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  },
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Theorem 1.5：对 m ∈ {4,5}，Spec K(m) = [−m, m] = Spec S̃_m，即两者同谱。",
+                "statement": "Theorem 1.5：对 m ∈ {4,5}，Spec K(m) = [−m, m] = Spec S̃_m，即两者同谱。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 1,
+                "weak_score": 0.25,
+                "weak_reasons": [
+                  "它是该概念唯一的连接（一旦失效该概念即完全孤立）"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "all_relation_count": 1,
+            "strong_connections_to_hot": [],
+            "undervalued": false,
+            "undervalued_reason": "与热门概念的连接全部至少满足一条弱判据，或根本没有与热门概念的连接"
+          },
+          {
+            "concept_id": "0009",
+            "name": "vertex-transitive",
+            "definition": "顶点传递：自同构群在顶点集上传递。",
+            "degree": 1,
+            "occurrences": 1,
+            "group_count": 1,
+            "relations_to_hot": [
+              {
+                "relation_id": "0002",
+                "concept_ids": [
+                  "0000",
+                  "0001",
+                  "0009"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "S̃_m",
+                  "vertex-transitive"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  },
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "两个图都是 m-正则、无限、局部有限、顶点传递的，并且都带一个秩 m−1 的自由阿贝尔群作用、商有限。",
+                "statement": "两个图都是 m-正则、无限、局部有限、顶点传递的，并且都带一个秩 m−1 的自由阿贝尔群作用、商有限。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 1,
+                "weak_score": 0.25,
+                "weak_reasons": [
+                  "它是该概念唯一的连接（一旦失效该概念即完全孤立）"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "weak_relations": [
+              {
+                "relation_id": "0002",
+                "concept_ids": [
+                  "0000",
+                  "0001",
+                  "0009"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "S̃_m",
+                  "vertex-transitive"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  },
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "两个图都是 m-正则、无限、局部有限、顶点传递的，并且都带一个秩 m−1 的自由阿贝尔群作用、商有限。",
+                "statement": "两个图都是 m-正则、无限、局部有限、顶点传递的，并且都带一个秩 m−1 的自由阿贝尔群作用、商有限。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 1,
+                "weak_score": 0.25,
+                "weak_reasons": [
+                  "它是该概念唯一的连接（一旦失效该概念即完全孤立）"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "all_relation_count": 1,
+            "strong_connections_to_hot": [],
+            "undervalued": false,
+            "undervalued_reason": "与热门概念的连接全部至少满足一条弱判据，或根本没有与热门概念的连接"
+          },
+          {
+            "concept_id": "0012",
+            "name": "density of states",
+            "definition": "态密度：比谱（作为集合）更细的谱数据，Rem. 1.7 明确说它**也许**能区分这一对图，而本文的计算并未解决该问题。",
+            "degree": 1,
+            "occurrences": 1,
+            "group_count": 1,
+            "relations_to_hot": [],
+            "weak_relations": [
+              {
+                "relation_id": "0010",
+                "concept_ids": [
+                  "0011",
+                  "0012"
+                ],
+                "concept_names": [
+                  "spectral invariant",
+                  "density of states"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0011",
+                    "name": "spectral invariant"
+                  }
+                ],
+                "description": "Rem. 1.7：论文**不声称**没有谱不变量能区分这一对 —— 更细的数据（如谱测度或态密度）也许能，而 §5 的计算并未解决该问题。",
+                "statement": "Rem. 1.7：论文**不声称**没有谱不变量能区分这一对 —— 更细的数据（如谱测度或态密度）也许能，而 §5 的计算并未解决该问题。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 1,
+                "weak_score": 0.25,
+                "weak_reasons": [
+                  "它是该概念唯一的连接（一旦失效该概念即完全孤立）"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "all_relation_count": 1,
+            "strong_connections_to_hot": [],
+            "undervalued": false,
+            "undervalued_reason": "与热门概念的连接全部至少满足一条弱判据，或根本没有与热门概念的连接"
+          },
+          {
+            "concept_id": "0004",
+            "name": "periodic graph",
+            "definition": "周期图：局部有限连通简单图 X 连同在 V(X) 上自由作用、轨道有限的自由阿贝尔群 Γ ≤ Aut(X)；rank Γ 称为周期秩。",
+            "degree": 2,
+            "occurrences": 2,
+            "group_count": 2,
+            "relations_to_hot": [
+              {
+                "relation_id": "0000",
+                "concept_ids": [
+                  "0000",
+                  "0004"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "K(m) 是 Q^∨-周期的且周期秩为 m−1，且 Q^∨ 在 V_K 上恰有两个轨道（Σx_i = 0 与 Σx_i = 1）。",
+                "statement": "K(m) 是 Q^∨-周期的且周期秩为 m−1，且 Q^∨ 在 V_K 上恰有两个轨道（Σx_i = 0 与 Σx_i = 1）。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 3,
+                  "end": 3,
+                  "label": "p. 3"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              },
+              {
+                "relation_id": "0001",
+                "concept_ids": [
+                  "0001",
+                  "0004"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "S̃_m 是 Q^∨-周期的且周期秩为 m−1，且 |W_a/Q^∨| = m!。",
+                "statement": "S̃_m 是 Q^∨-周期的且周期秩为 m−1，且 |W_a/Q^∨| = m!。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 3,
+                  "end": 3,
+                  "label": "p. 3"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "weak_relations": [],
+            "all_relation_count": 2,
+            "strong_connections_to_hot": [
+              {
+                "relation_id": "0000",
+                "concept_ids": [
+                  "0000",
+                  "0004"
+                ],
+                "concept_names": [
+                  "K(m)",
+                  "periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0000",
+                    "name": "K(m)"
+                  }
+                ],
+                "description": "K(m) 是 Q^∨-周期的且周期秩为 m−1，且 Q^∨ 在 V_K 上恰有两个轨道（Σx_i = 0 与 Σx_i = 1）。",
+                "statement": "K(m) 是 Q^∨-周期的且周期秩为 m−1，且 Q^∨ 在 V_K 上恰有两个轨道（Σx_i = 0 与 Σx_i = 1）。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 3,
+                  "end": 3,
+                  "label": "p. 3"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              },
+              {
+                "relation_id": "0001",
+                "concept_ids": [
+                  "0001",
+                  "0004"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "periodic graph"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  }
+                ],
+                "description": "S̃_m 是 Q^∨-周期的且周期秩为 m−1，且 |W_a/Q^∨| = m!。",
+                "statement": "S̃_m 是 Q^∨-周期的且周期秩为 m−1，且 |W_a/Q^∨| = m!。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 3,
+                  "end": 3,
+                  "label": "p. 3"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "undervalued": true,
+            "undervalued_reason": "与热门概念的连接中至少有一条不满足任何弱判据（引文已证实/状态正常/非唯一连接/另一端热门）"
+          },
+          {
+            "concept_id": "0013",
+            "name": "companion book [6]",
+            "definition": "论文引用的配套书（Companion book on quotient lattices, tori and periodic graphs, vol. 11, Theorem 6.5）。论文的 Spec S̃_m 结果**取自**该书，本文未重证。",
+            "degree": 2,
+            "occurrences": 2,
+            "group_count": 2,
+            "relations_to_hot": [
+              {
+                "relation_id": "0004",
+                "concept_ids": [
+                  "0001",
+                  "0005",
+                  "0013"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "companion book [6]"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Spec S̃_m = [−m, m]（3 ≤ m ≤ 5）**取自配套书 [6, Thm. 6.5]**，本文未重证。",
+                "statement": "Spec S̃_m = [−m, m]（3 ≤ m ≤ 5）**取自配套书 [6, Thm. 6.5]**，本文未重证。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 1,
+                  "end": 1,
+                  "label": "p. 1"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              },
+              {
+                "relation_id": "0012",
+                "concept_ids": [
+                  "0001",
+                  "0005",
+                  "0013"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "companion book [6]"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Rem. 1.6：Spec S̃_m = [−m, m] 对该书而言只对 3 ≤ m ≤ 5 已证；对 m ≥ 6 只证明了包含关系 Spec S̃_m ⊆ [−m, m] 与两个端点 ±m，**等号是公开问题**。",
+                "statement": "Rem. 1.6：Spec S̃_m = [−m, m] 对该书而言只对 3 ≤ m ≤ 5 已证；对 m ≥ 6 只证明了包含关系 Spec S̃_m ⊆ [−m, m] 与两个端点 ±m，**等号是公开问题**。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "weak_relations": [],
+            "all_relation_count": 2,
+            "strong_connections_to_hot": [
+              {
+                "relation_id": "0004",
+                "concept_ids": [
+                  "0001",
+                  "0005",
+                  "0013"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "companion book [6]"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Spec S̃_m = [−m, m]（3 ≤ m ≤ 5）**取自配套书 [6, Thm. 6.5]**，本文未重证。",
+                "statement": "Spec S̃_m = [−m, m]（3 ≤ m ≤ 5）**取自配套书 [6, Thm. 6.5]**，本文未重证。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 1,
+                  "end": 1,
+                  "label": "p. 1"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              },
+              {
+                "relation_id": "0012",
+                "concept_ids": [
+                  "0001",
+                  "0005",
+                  "0013"
+                ],
+                "concept_names": [
+                  "S̃_m",
+                  "spectrum of a periodic graph",
+                  "companion book [6]"
+                ],
+                "other_concepts": [
+                  {
+                    "concept_id": "0001",
+                    "name": "S̃_m"
+                  },
+                  {
+                    "concept_id": "0005",
+                    "name": "spectrum of a periodic graph"
+                  }
+                ],
+                "description": "Rem. 1.6：Spec S̃_m = [−m, m] 对该书而言只对 3 ≤ m ≤ 5 已证；对 m ≥ 6 只证明了包含关系 Spec S̃_m ⊆ [−m, m] 与两个端点 ±m，**等号是公开问题**。",
+                "statement": "Rem. 1.6：Spec S̃_m = [−m, m] 对该书而言只对 3 ≤ m ≤ 5 已证；对 m ≥ 6 只证明了包含关系 Spec S̃_m ⊆ [−m, m] 与两个端点 ±m，**等号是公开问题**。",
+                "quoted": true,
+                "quote_verified": true,
+                "status": "active",
+                "lit_id": "0000",
+                "page_range": {
+                  "start": 2,
+                  "end": 2,
+                  "label": "p. 2"
+                },
+                "weak_points": 0,
+                "weak_score": 0.0,
+                "weak_reasons": [
+                  "四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"
+                ],
+                "has_rejected": false
+              }
+            ],
+            "undervalued": true,
+            "undervalued_reason": "与热门概念的连接中至少有一条不满足任何弱判据（引文已证实/状态正常/非唯一连接/另一端热门）"
+          }
+        ],
+        "undervalued_ids": [
+          "0004",
+          "0013"
+        ],
+        "isolated": [
+          {
+            "concept_id": "0002",
+            "name": "Q^∨"
+          },
+          {
+            "concept_id": "0003",
+            "name": "W_a(Ã_{m-1})"
+          },
+          {
+            "concept_id": "0010",
+            "name": "periodic rank"
+          }
+        ],
+        "hot_ids": [
+          "0000",
+          "0001",
+          "0005",
+          "0006",
+          "0008"
+        ],
+        "weak_criteria": [
+          "quote_verified is not True（引文未获证实）",
+          "status == 'suspect'（判重存疑）",
+          "它是该概念唯一的连接",
+          "另一端概念本身也很冷门（degree <= cold_weak_peer_degree）"
+        ],
+        "weak_score_rule": "四条判据各计 1 分，weak_score = 得分 / 4；全部理由都写进 weak_reasons",
+        "relation_total": 25
+      },
+      "markdown_path": "reports/0002-cold.md",
+      "created_at": "2026-09-23T23:19:17+08:00",
+      "created_by": "agent-C"
+    },
+    {
+      "report_id": "0003",
+      "kind": "gaps",
+      "request": "关系图缺口（验收 P2）",
+      "params": {
+        "limit": 10
+      },
+      "summary": "确实有：发现 10 条值得研究的关系候选（最高置信度 high）。检查范围：15 个概念组、29 个结构洞；被否决项剔除 0 条、净分不足 13 条。（结构洞 29 个、低频概念组 10 个、否决 0 条、净分不足 13 条，截断=False）",
+      "payload": {
+        "verdict": "有",
+        "has_candidates": true,
+        "conclusion": "确实有：发现 10 条值得研究的关系候选（最高置信度 high）。检查范围：15 个概念组、29 个结构洞；被否决项剔除 0 条、净分不足 13 条。",
+        "candidate_gaps": [
+          {
+            "key": "0000|0001|0008",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0000",
+              "0001",
+              "0008"
+            ],
+            "concept_names": [
+              "K(m)",
+              "S̃_m",
+              "girth"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0004",
+                "name": "periodic graph"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              },
+              {
+                "concept_id": "0007",
+                "name": "cospectral"
+              },
+              {
+                "concept_id": "0008",
+                "name": "girth"
+              },
+              {
+                "concept_id": "0009",
+                "name": "vertex-transitive"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系；热门概念参与：K(m)、S̃_m、girth 在热门集里",
+            "positive_score": 3.0,
+            "negative_score": 0.0,
+            "net_score": 3.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系",
+              "热门概念参与：K(m)、S̃_m、girth 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0001",
+              "0004",
+              "0006",
+              "0012",
+              "0013",
+              "0021",
+              "0024"
+            ]
+          },
+          {
+            "key": "0000|0001|0008|0011",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0000",
+              "0001",
+              "0008",
+              "0011"
+            ],
+            "concept_names": [
+              "K(m)",
+              "S̃_m",
+              "girth",
+              "spectral invariant"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0004",
+                "name": "periodic graph"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              },
+              {
+                "concept_id": "0007",
+                "name": "cospectral"
+              },
+              {
+                "concept_id": "0008",
+                "name": "girth"
+              },
+              {
+                "concept_id": "0009",
+                "name": "vertex-transitive"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系；热门概念参与：K(m)、S̃_m、girth 在热门集里",
+            "positive_score": 3.0,
+            "negative_score": 0.0,
+            "net_score": 3.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系",
+              "热门概念参与：K(m)、S̃_m、girth 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0001",
+              "0004",
+              "0006",
+              "0012",
+              "0013",
+              "0021",
+              "0024",
+              "0009",
+              "0010"
+            ]
+          },
+          {
+            "key": "0000|0005|0006",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0000",
+              "0005",
+              "0006"
+            ],
+            "concept_names": [
+              "K(m)",
+              "spectrum of a periodic graph",
+              "Floquet matrix"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              },
+              {
+                "concept_id": "0006",
+                "name": "Floquet matrix"
+              },
+              {
+                "concept_id": "0007",
+                "name": "cospectral"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 4 个共同邻居（S̃_m、Floquet matrix、cospectral、spectral invariant）却无直接关系；热门概念参与：K(m)、spectrum of a periodic graph、Floquet matrix 在热门集里",
+            "positive_score": 3.0,
+            "negative_score": 0.0,
+            "net_score": 3.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 4 个共同邻居（S̃_m、Floquet matrix、cospectral、spectral invariant）却无直接关系",
+              "热门概念参与：K(m)、spectrum of a periodic graph、Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0004",
+              "0009",
+              "0012",
+              "0013"
+            ]
+          },
+          {
+            "key": "0000|0001|0005|0007",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0000",
+              "0001",
+              "0005",
+              "0007"
+            ],
+            "concept_names": [
+              "K(m)",
+              "S̃_m",
+              "spectrum of a periodic graph",
+              "cospectral"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0004",
+                "name": "periodic graph"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              },
+              {
+                "concept_id": "0007",
+                "name": "cospectral"
+              },
+              {
+                "concept_id": "0008",
+                "name": "girth"
+              },
+              {
+                "concept_id": "0009",
+                "name": "vertex-transitive"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系；热门概念参与：K(m)、S̃_m、spectrum of a periodic graph 在热门集里",
+            "positive_score": 3.0,
+            "negative_score": 0.0625,
+            "net_score": 2.9375,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系",
+              "热门概念参与：K(m)、S̃_m、spectrum of a periodic graph 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0001",
+              "0004",
+              "0006",
+              "0012",
+              "0013",
+              "0021",
+              "0024",
+              "0009"
+            ]
+          },
+          {
+            "key": "0001|0005",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0001",
+              "0005"
+            ],
+            "concept_names": [
+              "S̃_m",
+              "spectrum of a periodic graph"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0007",
+                "name": "cospectral"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              },
+              {
+                "concept_id": "0013",
+                "name": "companion book [6]"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 4 个共同邻居（K(m)、cospectral、spectral invariant、companion book [6]）却无直接关系；热门概念参与：S̃_m、spectrum of a periodic graph 在热门集里",
+            "positive_score": 2.5,
+            "negative_score": 0.0,
+            "net_score": 2.5,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 4 个共同邻居（K(m)、cospectral、spectral invariant、companion book [6]）却无直接关系",
+              "热门概念参与：S̃_m、spectrum of a periodic graph 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0001",
+              "0002",
+              "0004",
+              "0006",
+              "0007",
+              "0008",
+              "0011",
+              "0012",
+              "0013",
+              "0021",
+              "0024",
+              "0003",
+              "0009",
+              "0015",
+              "0016",
+              "0017",
+              "0019",
+              "0022"
+            ]
+          },
+          {
+            "key": "0005|0008",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0005",
+              "0008"
+            ],
+            "concept_names": [
+              "spectrum of a periodic graph",
+              "girth"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（K(m)、S̃_m、spectral invariant）却无直接关系；热门概念参与：spectrum of a periodic graph、girth 在热门集里",
+            "positive_score": 2.5,
+            "negative_score": 0.0,
+            "net_score": 2.5,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 3 个共同邻居（K(m)、S̃_m、spectral invariant）却无直接关系",
+              "热门概念参与：spectrum of a periodic graph、girth 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0003",
+              "0004",
+              "0007",
+              "0009",
+              "0012",
+              "0013",
+              "0015",
+              "0016",
+              "0017",
+              "0019",
+              "0022",
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024"
+            ]
+          },
+          {
+            "key": "0000|0001|0009",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0000",
+              "0001",
+              "0009"
+            ],
+            "concept_names": [
+              "K(m)",
+              "S̃_m",
+              "vertex-transitive"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0004",
+                "name": "periodic graph"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              },
+              {
+                "concept_id": "0007",
+                "name": "cospectral"
+              },
+              {
+                "concept_id": "0008",
+                "name": "girth"
+              },
+              {
+                "concept_id": "0009",
+                "name": "vertex-transitive"
+              },
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系；热门概念参与：K(m)、S̃_m 在热门集里",
+            "positive_score": 2.5,
+            "negative_score": 0.0833,
+            "net_score": 2.4167,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系",
+              "热门概念参与：K(m)、S̃_m 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0001",
+              "0004",
+              "0006",
+              "0012",
+              "0013",
+              "0021",
+              "0024"
+            ]
+          },
+          {
+            "key": "0001|0006",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0001",
+              "0006"
+            ],
+            "concept_names": [
+              "S̃_m",
+              "Floquet matrix"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、spectrum of a periodic graph）却无直接关系；热门概念参与：S̃_m、Floquet matrix 在热门集里",
+            "positive_score": 2.0,
+            "negative_score": 0.0,
+            "net_score": 2.0,
+            "confidence": "high",
+            "confidence_deterministic": "high",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、spectrum of a periodic graph）却无直接关系",
+              "热门概念参与：S̃_m、Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0001",
+              "0002",
+              "0004",
+              "0006",
+              "0007",
+              "0008",
+              "0011",
+              "0012",
+              "0013",
+              "0021",
+              "0024",
+              "0014",
+              "0015",
+              "0018"
+            ]
+          },
+          {
+            "key": "0000|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0000",
+              "0013"
+            ],
+            "concept_names": [
+              "K(m)",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（S̃_m、spectrum of a periodic graph）却无直接关系；热门概念参与：K(m) 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（S̃_m、spectrum of a periodic graph）却无直接关系",
+              "热门概念参与：K(m) 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0004",
+              "0012"
+            ]
+          },
+          {
+            "key": "0004|0005",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0005"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "spectrum of a periodic graph"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系；热门概念参与：spectrum of a periodic graph 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+              "热门概念参与：spectrum of a periodic graph 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0003",
+              "0004",
+              "0007",
+              "0009",
+              "0012",
+              "0013",
+              "0015",
+              "0016",
+              "0017",
+              "0019",
+              "0022"
+            ]
+          }
+        ],
+        "rejected_by_llm": [],
+        "vetoed_candidates": [],
+        "low_confidence_candidates": [
+          {
+            "key": "0000|0012",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0000",
+              "0012"
+            ],
+            "concept_names": [
+              "K(m)",
+              "density of states"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系；热门概念参与：K(m) 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系",
+              "热门概念参与：K(m) 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：density of states(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0010"
+            ]
+          },
+          {
+            "key": "0001|0012",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0001",
+              "0012"
+            ],
+            "concept_names": [
+              "S̃_m",
+              "density of states"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系；热门概念参与：S̃_m 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系",
+              "热门概念参与：S̃_m 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：density of states(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0001",
+              "0002",
+              "0004",
+              "0006",
+              "0007",
+              "0008",
+              "0011",
+              "0012",
+              "0013",
+              "0021",
+              "0024",
+              "0010"
+            ]
+          },
+          {
+            "key": "0004|0007",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0007"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "cospectral"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0007"
+            ]
+          },
+          {
+            "key": "0004|0009",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0009"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "vertex-transitive"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0002"
+            ]
+          },
+          {
+            "key": "0005|0012",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0005",
+              "0012"
+            ],
+            "concept_names": [
+              "spectrum of a periodic graph",
+              "density of states"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系；热门概念参与：spectrum of a periodic graph 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系",
+              "热门概念参与：spectrum of a periodic graph 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：density of states(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0003",
+              "0004",
+              "0007",
+              "0009",
+              "0012",
+              "0013",
+              "0015",
+              "0016",
+              "0017",
+              "0019",
+              "0022",
+              "0010"
+            ]
+          },
+          {
+            "key": "0006|0009",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0006",
+              "0009"
+            ],
+            "concept_names": [
+              "Floquet matrix",
+              "vertex-transitive"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（K(m)）却无直接关系；热门概念参与：Floquet matrix 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（K(m)）却无直接关系",
+              "热门概念参与：Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0014",
+              "0015",
+              "0018",
+              "0002"
+            ]
+          },
+          {
+            "key": "0007|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0007",
+              "0013"
+            ],
+            "concept_names": [
+              "cospectral",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（S̃_m、spectrum of a periodic graph）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（S̃_m、spectrum of a periodic graph）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0007",
+              "0004",
+              "0012"
+            ]
+          },
+          {
+            "key": "0008|0012",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0008",
+              "0012"
+            ],
+            "concept_names": [
+              "girth",
+              "density of states"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0011",
+                "name": "spectral invariant"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系；热门概念参与：girth 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（spectral invariant）却无直接关系",
+              "热门概念参与：girth 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：density of states(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024",
+              "0010"
+            ]
+          },
+          {
+            "key": "0009|0011",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0009",
+              "0011"
+            ],
+            "concept_names": [
+              "vertex-transitive",
+              "spectral invariant"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.125,
+            "net_score": 0.875,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0002",
+              "0009",
+              "0010",
+              "0011"
+            ]
+          },
+          {
+            "key": "0007|0009",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0007",
+              "0009"
+            ],
+            "concept_names": [
+              "cospectral",
+              "vertex-transitive"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.25,
+            "net_score": 0.75,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)、vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0007",
+              "0002"
+            ]
+          },
+          {
+            "key": "0004|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0013"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.0,
+            "net_score": 0.5,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0004",
+              "0012"
+            ]
+          },
+          {
+            "key": "0009|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0009",
+              "0013"
+            ],
+            "concept_names": [
+              "vertex-transitive",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系",
+            "positive_score": 0.5,
+            "negative_score": 0.125,
+            "net_score": 0.375,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0002",
+              "0004",
+              "0012"
+            ]
+          },
+          {
+            "key": "0011|0012",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0011",
+              "0012"
+            ],
+            "concept_names": [
+              "spectral invariant",
+              "density of states"
+            ],
+            "common_neighbors": [],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）",
+            "positive_score": 0.0,
+            "negative_score": 0.125,
+            "net_score": -0.125,
+            "confidence": "low",
+            "confidence_deterministic": "low",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [],
+            "negative_signals": [
+              "候选端连接薄弱：density of states(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0009",
+              "0010",
+              "0011"
+            ]
+          }
+        ],
+        "overflow_candidates": [
+          {
+            "key": "0004|0008",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0008"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "girth"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系；热门概念参与：girth 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+              "热门概念参与：girth 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024"
+            ]
+          },
+          {
+            "key": "0005|0011",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0005",
+              "0011"
+            ],
+            "concept_names": [
+              "spectrum of a periodic graph",
+              "spectral invariant"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系；热门概念参与：spectrum of a periodic graph 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+              "热门概念参与：spectrum of a periodic graph 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0003",
+              "0004",
+              "0007",
+              "0009",
+              "0012",
+              "0013",
+              "0015",
+              "0016",
+              "0017",
+              "0019",
+              "0022",
+              "0010",
+              "0011"
+            ]
+          },
+          {
+            "key": "0006|0008",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0006",
+              "0008"
+            ],
+            "concept_names": [
+              "Floquet matrix",
+              "girth"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（K(m)）却无直接关系；热门概念参与：Floquet matrix、girth 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（K(m)）却无直接关系",
+              "热门概念参与：Floquet matrix、girth 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0014",
+              "0015",
+              "0018",
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024"
+            ]
+          },
+          {
+            "key": "0006|0011",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0006",
+              "0011"
+            ],
+            "concept_names": [
+              "Floquet matrix",
+              "spectral invariant"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、spectrum of a periodic graph）却无直接关系；热门概念参与：Floquet matrix 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.0,
+            "net_score": 1.5,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、spectrum of a periodic graph）却无直接关系",
+              "热门概念参与：Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0014",
+              "0015",
+              "0018",
+              "0009",
+              "0010",
+              "0011"
+            ]
+          },
+          {
+            "key": "0005|0009",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0005",
+              "0009"
+            ],
+            "concept_names": [
+              "spectrum of a periodic graph",
+              "vertex-transitive"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系；热门概念参与：spectrum of a periodic graph 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+              "热门概念参与：spectrum of a periodic graph 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0003",
+              "0004",
+              "0007",
+              "0009",
+              "0012",
+              "0013",
+              "0015",
+              "0016",
+              "0017",
+              "0019",
+              "0022",
+              "0002"
+            ]
+          },
+          {
+            "key": "0006|0007",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0006",
+              "0007"
+            ],
+            "concept_names": [
+              "Floquet matrix",
+              "cospectral"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、spectrum of a periodic graph）却无直接关系；热门概念参与：Floquet matrix 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、spectrum of a periodic graph）却无直接关系",
+              "热门概念参与：Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0014",
+              "0015",
+              "0018",
+              "0007"
+            ]
+          },
+          {
+            "key": "0007|0008",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0007",
+              "0008"
+            ],
+            "concept_names": [
+              "cospectral",
+              "girth"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系；热门概念参与：girth 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+              "热门概念参与：girth 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0007",
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024"
+            ]
+          },
+          {
+            "key": "0007|0011",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0007",
+              "0011"
+            ],
+            "concept_names": [
+              "cospectral",
+              "spectral invariant"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 3 个共同邻居（K(m)、S̃_m、spectrum of a periodic graph）却无直接关系",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 3 个共同邻居（K(m)、S̃_m、spectrum of a periodic graph）却无直接关系"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：cospectral(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0007",
+              "0009",
+              "0010",
+              "0011"
+            ]
+          },
+          {
+            "key": "0008|0009",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0008",
+              "0009"
+            ],
+            "concept_names": [
+              "girth",
+              "vertex-transitive"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系；热门概念参与：girth 在热门集里",
+            "positive_score": 1.5,
+            "negative_score": 0.125,
+            "net_score": 1.375,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+              "热门概念参与：girth 在热门集里"
+            ],
+            "negative_signals": [
+              "候选端连接薄弱：vertex-transitive(degree=1)"
+            ],
+            "related_relation_ids": [
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024",
+              "0002"
+            ]
+          },
+          {
+            "key": "0000|0004",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0000",
+              "0004"
+            ],
+            "concept_names": [
+              "K(m)",
+              "periodic graph"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系；热门概念参与：K(m) 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系",
+              "热门概念参与：K(m) 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0002",
+              "0003",
+              "0005",
+              "0007",
+              "0008",
+              "0011",
+              "0014",
+              "0015",
+              "0016",
+              "0017",
+              "0018",
+              "0019",
+              "0020",
+              "0022",
+              "0023",
+              "0001"
+            ]
+          },
+          {
+            "key": "0001|0004",
+            "kind": "rare_group",
+            "concept_ids": [
+              "0001",
+              "0004"
+            ],
+            "concept_names": [
+              "S̃_m",
+              "periodic graph"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              }
+            ],
+            "reason": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 1 个共同邻居（K(m)）却无直接关系；热门概念参与：S̃_m 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（K(m)）却无直接关系",
+              "热门概念参与：S̃_m 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0001",
+              "0002",
+              "0004",
+              "0006",
+              "0007",
+              "0008",
+              "0011",
+              "0012",
+              "0013",
+              "0021",
+              "0024",
+              "0000"
+            ]
+          },
+          {
+            "key": "0004|0006",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0006"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "Floquet matrix"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（K(m)）却无直接关系；热门概念参与：Floquet matrix 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（K(m)）却无直接关系",
+              "热门概念参与：Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0014",
+              "0015",
+              "0018"
+            ]
+          },
+          {
+            "key": "0004|0011",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0004",
+              "0011"
+            ],
+            "concept_names": [
+              "periodic graph",
+              "spectral invariant"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0000",
+                "name": "K(m)"
+              },
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（K(m)、S̃_m）却无直接关系"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0000",
+              "0001",
+              "0009",
+              "0010",
+              "0011"
+            ]
+          },
+          {
+            "key": "0006|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0006",
+              "0013"
+            ],
+            "concept_names": [
+              "Floquet matrix",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（spectrum of a periodic graph）却无直接关系；热门概念参与：Floquet matrix 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（spectrum of a periodic graph）却无直接关系",
+              "热门概念参与：Floquet matrix 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0014",
+              "0015",
+              "0018",
+              "0004",
+              "0012"
+            ]
+          },
+          {
+            "key": "0008|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0008",
+              "0013"
+            ],
+            "concept_names": [
+              "girth",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系；热门概念参与：girth 在热门集里",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 1 个共同邻居（S̃_m）却无直接关系",
+              "热门概念参与：girth 在热门集里"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0005",
+              "0006",
+              "0008",
+              "0011",
+              "0020",
+              "0021",
+              "0023",
+              "0024",
+              "0004",
+              "0012"
+            ]
+          },
+          {
+            "key": "0011|0013",
+            "kind": "structural_hole",
+            "concept_ids": [
+              "0011",
+              "0013"
+            ],
+            "concept_names": [
+              "spectral invariant",
+              "companion book [6]"
+            ],
+            "common_neighbors": [
+              {
+                "concept_id": "0001",
+                "name": "S̃_m"
+              },
+              {
+                "concept_id": "0005",
+                "name": "spectrum of a periodic graph"
+              }
+            ],
+            "reason": "结构洞：两个概念有共同邻居但彼此之间没有直接关系（'应该有边却缺失'的经典信号）；结构洞信号：有 2 个共同邻居（S̃_m、spectrum of a periodic graph）却无直接关系",
+            "positive_score": 1.0,
+            "negative_score": 0.0,
+            "net_score": 1.0,
+            "confidence": "medium",
+            "confidence_deterministic": "medium",
+            "passed_veto": true,
+            "vetoed": false,
+            "veto_reasons": [],
+            "positive_signals": [
+              "结构洞信号：有 2 个共同邻居（S̃_m、spectrum of a periodic graph）却无直接关系"
+            ],
+            "negative_signals": [],
+            "related_relation_ids": [
+              "0009",
+              "0010",
+              "0011",
+              "0004",
+              "0012"
+            ]
+          }
+        ],
+        "veto_rules": [
+          "相关关系的 quote_verified 全部为 False（没有任何可核实的原文依据）",
+          "概念名明显不是概念（过长/纯符号/含停用词/含句读）",
+          "两者已被判重（相关关系的 duplicate_of 非空）"
+        ],
+        "deduction_rules": [
+          "引文校验部分失败（-0.5）",
+          "status=suspect 占比（-0.5 × 占比）",
+          "存在 status=rejected（-0.5）",
+          "候选端连接薄弱（degree <= cold_weak_peer_degree，-0.25 × 占比）"
+        ],
+        "searched": {
+          "group_count": 15,
+          "rare_group_candidates": 10,
+          "structural_holes": 29,
+          "triples_examined": 91,
+          "pair_budget": 5000,
+          "vetoed": 0
+        },
+        "thresholds": {
+          "gap_group_min_count": 2,
+          "limit": 10,
+          "confidence_high_net": 2.0,
+          "confidence_medium_net": 1.0
+        },
+        "hot_ids": [
+          "0000",
+          "0001",
+          "0005",
+          "0008",
+          "0006"
+        ],
+        "hook": {
+          "llm_available": false,
+          "note": "未启用 LLM 钩子：'是否值得研究'完全由确定性信号决定。"
+        },
+        "submitted_request_ids": [],
+        "rejected_requests": [],
+        "skipped_duplicate_topics": [],
+        "request_submission": {
+          "enabled": false,
+          "attempted": 0,
+          "max_per_run": 3,
+          "inflight_limit": 20,
+          "submitted_request_ids": [],
+          "rejected_requests": [],
+          "skipped_duplicate_topics": [],
+          "reason": "submit_requests=False（默认）：C 不写 search_requests。C 的工具面保持**全量只读**，写入只可能来自编排层显式开启这条确定性代码路径"
+        },
+        "structural_duplicates": {
+          "checked": true,
+          "candidate_count": 1,
+          "merge_proposals": 0,
+          "review_proposals": 1,
+          "truncated": false,
+          "sample": [
+            {
+              "concept_ids": [
+                "0004",
+                "0009"
+              ],
+              "concept_names": [
+                "periodic graph",
+                "vertex-transitive"
+              ],
+              "proposal": "review",
+              "name_evidence": "none"
+            }
+          ],
+          "method_note": "结构等价 ≠ 同义：只有结构证据时 proposal=review，合并决定权在 B",
+          "detail_tool": "graph.structural_duplicates（按需取完整候选）"
+        }
+      },
+      "markdown_path": "reports/0003-gaps.md",
+      "created_at": "2026-09-23T23:19:17+08:00",
+      "created_by": "agent-C"
+    }
+  ]
+}

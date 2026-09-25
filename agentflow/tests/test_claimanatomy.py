@@ -1,0 +1,586 @@
+"""`claimanatomy` 的判据测试（每条规则一正一反，断言打在判据上）。
+
+对应规格：`draft/17-正式文稿体例（参考投影度量论）.md` §8.3（第 1021–1052 行）。
+
+## 这个文件要证明的四件事
+
+1. 12 个字段真的能存：带全部 §8.3 字段的 claim 过 `schema.Document.validate()`
+   且过 store 往返后一字不差 —— 这条是本任务"不改 `schema.py` 也能落地"的前置事实，
+   若它被否证，后面所有接线都要推翻重来（所以它是本文件里的第一条用例）。
+2. 两个轴正交：`status`（生命周期）与 `evidence_kind`（证据类型）自由组合，
+   只把已知的不一致组合写成门，判不了时返回第三态。
+3. 三态不退化：`True` / `False` / `None`（含 reason）必须能分开，
+   且"检查器自己没跑成"有独立出口。
+4. `statement` / `text` 只有一份字段名：迁移、存储往返、冲突检测三处都钉住。
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from agentflow import claimanatomy as CA
+from agentflow import schema as S
+from agentflow.store import Store
+from agentflow.tools import doc_tools as DT
+
+from conftest import TS
+
+
+# ============================================================ 夹具
+
+
+def base_claim(**over: object) -> dict:
+    """一条八字段老形态的合法断言（磁盘上历史行的样子）。"""
+    claim = {
+        "claim_id": "claim-1",
+        "section": "主要结果",
+        "text": "谱落在区间内。",
+        "evidence_kind": "proof",
+        "citations": ["rel:0000", "lit:0000#p.12-13"],
+        "is_negative": False,
+        "negation_kind": None,
+        "disclaimer": "",
+    }
+    claim.update(over)
+    return claim
+
+
+def full_claim(**over: object) -> dict:
+    """一条12 字段齐全的断言（§8.3 的目标形态）。"""
+    claim = {
+        "claim_id": "claim-2",
+        "kind": "定理",
+        "statement": "谱落在区间内。",
+        "status": "证",
+        "proof_location": "code/p1.py:12",
+        "numeric_evidence": {
+            "script": "code/p1.py",
+            "range": "d<=33",
+            "n_cases": 256,
+            "n_counterexamples": 0,
+        },
+        "counterexamples": [],
+        "frozen": False,
+        "freeze_reason": "",
+        "allowed_use": "主结果",
+        "scope_caveat": "",
+        "revision_hash": "deadbeefdeadbeef",
+        "errata_ids": [],
+        # ---- 本框架既有的五个字段（参考体例里没有，必须保留）
+        "evidence_kind": "proof",
+        "citations": ["rel:0000"],
+        "is_negative": False,
+        "negation_kind": None,
+        "disclaimer": "",
+        "section": "主要结果",
+    }
+    claim.update(over)
+    return claim
+
+
+def codes(spec: CA.ClaimSpec) -> set[str]:
+    return {i.code for i in spec.issues}
+
+
+# ============================================================ 1. 字段声明表
+
+
+def test_declared_fields_cover_both_the_reference_table_and_our_own():
+    """12 个 §8.3 字段 + 我们既有的 5 个，一个都不许少。"""
+    reference = {
+        "claim_id", "kind", "statement", "status", "proof_location", "numeric_evidence",
+        "counterexamples", "frozen", "freeze_reason", "allowed_use", "scope_caveat",
+        "revision_hash", "errata_ids",
+    }
+    ours = {"citations", "evidence_kind", "is_negative", "negation_kind", "disclaimer"}
+    assert reference <= set(CA.CLAIM_FIELDS), f"§8.3 的字段缺了：{reference - set(CA.CLAIM_FIELDS)}"
+    assert ours <= set(CA.CLAIM_FIELDS), f"本框架既有字段缺了：{ours - set(CA.CLAIM_FIELDS)}"
+    assert "section" in CA.CLAIM_FIELDS
+
+
+def test_required_fields_match_what_schema_already_enforces():
+    """`required_field_names()` 只列 schema 已经在硬拦的那些（保守口径）。
+
+    为什么这条重要：把 §8.3 新增字段设成必填会让磁盘上全部历史行立刻非法，
+    而 `schema.py` 是 FC-27 禁改区，无法同步迁移。
+    """
+    required = set(CA.required_field_names())
+    assert required == {"claim_id", "statement", "citations", "evidence_kind", "is_negative", "section"}
+    assert required.isdisjoint(CA.new_field_names()), "新增字段不许是必填"
+    assert set(CA.required_field_names()) | set(CA.optional_field_names()) == set(CA.CLAIM_FIELDS)
+    assert set(CA.new_field_names()) <= set(CA.optional_field_names())
+
+
+def test_every_field_spec_has_a_why_and_a_source():
+    """每个字段都必须写清"为什么"与"出处"（`DEVELOPMENT.md` 的写作纪律）。"""
+    for name, spec in CA.CLAIM_FIELDS.items():
+        assert spec.why.strip(), f"{name} 没有 why"
+        assert spec.source.strip(), f"{name} 没有 source"
+        assert spec.name == name
+        if spec.domain is not None:
+            assert spec.domain, f"{name} 声明了受控词表却是空的"
+
+
+def test_evidence_kinds_are_not_a_second_copy():
+    """`evidence_kind` 的词表与 `schema.EVIDENCE_KINDS` 是同一个对象（FC-03）。"""
+    assert CA._evidence_kinds() == tuple(S.EVIDENCE_KINDS)
+    assert CA._negation_kinds() == tuple(S.NEGATION_KINDS)
+
+
+def test_overclaim_markers_and_disclaimer_are_not_a_second_copy():
+    """过度声称措辞与免责声明同样只有一处定义（惰性转发到 `doc_tools`）。"""
+    assert CA._overclaim_markers() == tuple(DT.OVERCLAIM_MARKERS)
+    assert CA._cross_check_disclaimer() == DT.CROSS_CHECK_DISCLAIMER
+
+
+# ============================================================ 2. 存储往返（前置事实）
+
+
+def test_full_claim_passes_schema_validate_and_store_round_trip(store: Store):
+    """本任务的前置事实：§8.3 的全部新字段今天就能写、能读、能过 JSON 往返。
+
+    `Document.validate()` 只读它认识的键、不拒绝未知键，而 claim 是
+    `documents.claims` 里的嵌套 dict —— 所以新增字段不需要改 `schema.py`
+    （它在 FC-27 禁 AI 区，本任务无权编辑）。
+
+    若这条被否证（例如某处会裁掉未知键），后面的接线全部作废 ——
+    所以它是本文件的第一条，且断言是逐键相等而不是"有几个键在"。
+    """
+    claim = full_claim()
+    row = S.Document(
+        doc_id="0000",
+        kind="paper",
+        title="断言解剖学的往返测试",
+        markdown_path=None,
+        # 写入前必须转成磁盘形态（`statement` → `text`）：
+        # `schema.Document.validate` 逐字读 `c.get("text")`，而它在 FC-27 禁 AI 区。
+        # 这一行就是"新增字段今天就能存"的全部代价 —— 一次键名转换。
+        claims=[CA.to_storage_claim(claim)],
+        status="draft",
+        created_at=TS,
+        updated_at=TS,
+    )
+    # ① 过 writing-期硬约束
+    row.validate()
+    # ② 落盘 → 再读回来（store 的 JSON 往返）
+    with store.tx("documents", actor="test", note="fixture") as tx:
+        tx.upsert("documents", row.to_dict())
+    back = store.rows("documents")[0]
+    got = dict(back["claims"][0])
+    # 磁盘形态是 `text`（schema 读它），所以比较的是同一份内容的两种键名
+    normalized = CA.migrate_claim(got)
+    expected = CA.migrate_claim(claim)
+    assert normalized == expected, f"往返后有字段变了：{ {k for k in set(normalized) | set(expected) if normalized.get(k) != expected.get(k)} }"
+    # 逐字段点名（防止"整体相等"因为键被裁掉而误判）
+    for name in CA.new_field_names():
+        assert CA.presence_of(got, name) != "absent", f"新字段 {name} 在往返后丢了"
+    for name in ("citations", "evidence_kind", "is_negative", "negation_kind", "disclaimer", "section"):
+        assert CA.presence_of(got, name) != "absent", f"既有字段 {name} 在往返后丢了"
+
+
+def test_documents_json_keeps_the_new_keys_verbatim(store: Store):
+    """再加一道字节级的确认：盘上的 JSON 里那 12 个键真的在。"""
+    claim = full_claim()
+    row = S.Document(
+        doc_id="0000", kind="paper", title="t", markdown_path=None,
+        claims=[CA.to_storage_claim(claim)], created_at=TS, updated_at=TS,
+    )
+    row.validate()
+    with store.tx("documents", actor="test", note="fixture") as tx:
+        tx.upsert("documents", row.to_dict())
+    raw = json.loads((store.data / "documents.json").read_text(encoding="utf-8"))
+    on_disk = dict(raw["rows"][0]["claims"][0])
+    for name in CA.new_field_names():
+        if name == "statement":
+            assert on_disk.get("text") == claim["statement"], "statement 必须落成磁盘键 text（schema 读它）"
+            continue
+        assert name in on_disk, f"新字段 {name} 没有落盘"
+        assert on_disk[name] == claim[name], f"新字段 {name} 落盘后值变了"
+
+
+# ============================================================ 3. statement / text 迁移
+
+
+def test_statement_is_the_canonical_name_and_text_is_its_alias():
+    """`statement` 是正名、`text` 是别名 —— 只有一份字段名（FC-03）。"""
+    spec = CA.CLAIM_FIELDS["statement"]
+    assert spec.aliases == ("text",)
+    # 老形态（只有 text）在 statement 这一项上是 `present`，不是 `absent`
+    assert CA.presence_of(base_claim(), "statement") == "present"
+    assert CA.claim_statement(base_claim()) == "谱落在区间内。"
+    assert CA.claim_statement(full_claim()) == "谱落在区间内。"
+
+
+def test_migrate_claim_renames_text_to_statement_and_drops_the_alias():
+    """迁移后不许同时存在两个键（否则下游会看到两个不同的断言）。"""
+    out = CA.migrate_claim(base_claim())
+    assert "statement" in out and "text" not in out
+    assert out["statement"] == "谱落在区间内。"
+
+
+def test_migrate_claim_rejects_two_keys_with_different_content():
+    """负控：`text` 与 `statement` 内容不同 ⇒ 抛，不许静默取其一。"""
+    bad = full_claim()
+    bad["text"] = "另一句话。"
+    with pytest.raises(ValueError, match="内容不同"):
+        CA.migrate_claim(bad)
+    spec = CA.validate_claim(bad)
+    assert spec.error_count == 1 and "bad_type" in codes(spec)
+
+
+def test_migrate_claim_accepts_two_keys_with_the_same_content():
+    """防误伤：两个键内容相同（迁移中途的正常形态）⇒ 允许，且只剩一个键。"""
+    same = full_claim()
+    same["text"] = same["statement"]
+    out = CA.migrate_claim(same)
+    assert "text" not in out and out["statement"] == same["statement"]
+
+
+def test_storage_round_trip_preserves_every_new_field():
+    """`statement ⇄ text` 的往返逐字段相等（写入路径依赖它）。"""
+    canonical = CA.migrate_claim(full_claim())
+    stored = CA.to_storage_claim(canonical)
+    assert "text" in stored and "statement" not in stored
+    assert CA.migrate_claim(stored) == canonical
+
+
+# ============================================================ 4. 两个轴（正交）
+
+
+def test_status_and_evidence_kind_are_two_independent_axes():
+    """ⓘ 本模块的核心设计点：允许自由组合，只把已知矛盾写成门。
+
+    这里穷举 4×3 = 12 种组合，断言"能自由写"且只有明确列出的那两种被判不一致。
+    """
+    legal_consistent = [
+        ("证", "proof"),
+        ("验", "cross_check"),
+        ("验", "heuristic"),
+        ("待精化", "proof"),
+        ("待精化", "cross_check"),
+        ("待精化", "heuristic"),
+        ("作废", "proof"),
+        ("作废", "cross_check"),
+        ("作废", "heuristic"),
+    ]
+    for status, ek in legal_consistent:
+        claim = full_claim(status=status)
+        claim["evidence_kind"] = ek
+        if status == "作废":
+            claim["errata_ids"] = ["E-01"]
+        if ek == "cross_check":
+            claim["disclaimer"] = DT.CROSS_CHECK_DISCLAIMER
+        spec = CA.validate_claim(claim)
+        assert spec.verdict == CA.CONSISTENT, (status, ek, spec.verdict, spec.undecided_reason)
+        assert "inconsistent_status" not in codes(spec)
+
+    inconsistent = [("证", "cross_check"), ("证", "heuristic"), ("验", "proof")]
+    for status, ek in inconsistent:
+        claim = full_claim(status=status)
+        claim["evidence_kind"] = ek
+        if ek == "cross_check":
+            claim["disclaimer"] = DT.CROSS_CHECK_DISCLAIMER
+        spec = CA.validate_claim(claim)
+        assert spec.verdict == CA.DECIDED_INCONSISTENT, (status, ek)
+        assert "inconsistent_status" in codes(spec)
+        assert spec.decided is False
+
+
+def test_retracted_is_not_an_evidence_kind_but_a_lifecycle_state():
+    """`作废` 是生命周期，与证据类型无关：它必须能表达，且必须有原因。"""
+    retracted = full_claim(status="作废", errata_ids=["E-01"])
+    spec = CA.validate_claim(retracted)
+    assert spec.verdict == CA.CONSISTENT
+    assert CA.is_retracted(retracted) is True
+    assert CA.is_retracted(full_claim(status="证")) is False
+
+    # 负控：作废但不说为什么 ⇒ error
+    no_reason = full_claim(status="作废", errata_ids=[], freeze_reason="")
+    spec2 = CA.validate_claim(no_reason)
+    assert spec2.error_count >= 1
+    assert "inconsistent_status" in codes(spec2)
+
+    # 防误伤：作废 + 冻结理由（合法的另一种原因）⇒ 通过
+    frozen_reason = full_claim(status="作废", errata_ids=[], freeze_reason="连败 5 次，结论作废")
+    assert CA.validate_claim(frozen_reason).verdict == CA.CONSISTENT
+
+
+def test_status_evidence_consistency_returns_three_states():
+    """交叉轴门返回三态，且第三态带 reason（不是布尔）。"""
+    ok, reason = CA.status_evidence_consistency("证", "proof")
+    assert ok == CA.CONSISTENT and reason.strip()
+    bad, reason2 = CA.status_evidence_consistency("证", "heuristic")
+    assert bad == CA.DECIDED_INCONSISTENT and reason2.strip()
+    unknown, reason3 = CA.status_evidence_consistency(None, "proof")
+    assert unknown == CA.CONSISTENCY_UNKNOWN
+    assert "没判" in reason3, "第三态必须说清『这是没判，不是判过一致』"
+
+
+# ============================================================ 5. 三态纪律不退化
+
+
+def test_missing_axis_is_unknown_not_consistent_and_not_error():
+    """缺 `status` 的老行 ⇒ 判不了（既不是 error，也不是"一致"）。"""
+    spec = CA.validate_claim(base_claim())
+    assert spec.checked is True
+    assert spec.decided is False
+    assert spec.verdict == CA.CONSISTENCY_UNKNOWN
+    assert spec.undecided_reason.strip()
+    assert spec.error_count == 0, "缺新字段不是作者的错（历史数据），不许报 error"
+    assert "unknown_status_axis" in codes(spec)
+
+
+def test_lifecycle_verdict_is_three_state():
+    """`lifecycle_verdict` 返回 `True` / `False` / `None` 三种，且都带 reason。"""
+    yes, why_yes = CA.lifecycle_verdict(full_claim())
+    assert yes is True and why_yes.strip()
+    no, why_no = CA.lifecycle_verdict(full_claim(status="验"))
+    assert no is False and why_no.strip()
+    unknown, why_unknown = CA.lifecycle_verdict(base_claim())
+    assert unknown is None and why_unknown.strip()
+
+
+def test_checker_error_has_its_own_exit(monkeypatch: pytest.MonkeyPatch):
+    """"检查器自己没跑成"必须有别于"检查过了没问题"（独立出口）。
+
+    做法：把 `migrate_claim` 打桩成抛 `RuntimeError`（不是 `ValueError`）——
+    于是判据层自己崩了。返回值必须是 `checked=False` + `checker_error`，
+    不许是"通过"，也不许把异常抛给调用方。
+    """
+    def boom(_claim):
+        raise RuntimeError("模拟判据层内部异常")
+
+    monkeypatch.setattr(CA, "migrate_claim", boom)
+    spec = CA.validate_claim(base_claim())
+    assert spec.checked is False
+    assert spec.decided is False
+    assert "checker_error" in codes(spec)
+    assert "RuntimeError" in spec.undecided_reason
+
+
+def test_presence_of_separates_absent_from_empty():
+    """`absent`（没提这件事）与 `empty`（明确写了空）必须分开。"""
+    assert CA.presence_of({"frozen": False}, "frozen") == "present"
+    assert CA.presence_of({"frozen": None}, "frozen") == "empty"
+    assert CA.presence_of({}, "frozen") == "absent"
+    assert CA.presence_of({"kind": ""}, "kind") == "empty"
+    # 空清单是合法形态（"我查过、没有"），不是 empty
+    assert CA.presence_of({"counterexamples": []}, "counterexamples") == "present"
+
+
+# ============================================================ 6. 字段级门（正 + 负）
+
+
+@pytest.mark.parametrize(
+    "mutate,expect_code",
+    [
+        (lambda c: c.update({"kind": "猜想"}), "bad_enum"),
+        (lambda c: c.update({"status": "已证"}), "bad_enum"),
+        (lambda c: c.update({"allowed_use": "附录"}), "bad_enum"),
+        (lambda c: c.update({"evidence_kind": "prooof"}), "bad_enum"),
+        (lambda c: c.update({"frozen": "yes"}), "bad_type"),
+        (lambda c: c.update({"counterexamples": "反例"}), "bad_type"),
+        (lambda c: c.update({"numeric_evidence": [1, 2]}), "bad_type"),
+        (lambda c: c.update({"errata_ids": "E-01"}), "bad_type"),
+        (lambda c: c.update({"numeric_evidence": {"script": "s.py"}}), "empty_required"),
+        (lambda c: c.update({"frozen": True, "freeze_reason": ""}), "empty_required"),
+        (lambda c: c.update({"citations": []}), "empty_required"),
+        (lambda c: c.update({"citations": ["", "  "]}), "bad_type"),
+        (lambda c: c.update({"statement": ""}), "empty_required"),
+        (lambda c: c.pop("claim_id"), "empty_required"),
+    ],
+)
+def test_field_gates_reject_bad_values(mutate, expect_code):
+    """负控：字段存在但非法 —— 必须报出指定的那个 code（不是"有个错误"）。"""
+    claim = full_claim()
+    mutate(claim)
+    spec = CA.validate_claim(claim)
+    assert expect_code in codes(spec), f"期望 {expect_code}，实际 {codes(spec)}"
+    assert spec.error_count >= 1
+
+
+def test_field_gates_accept_the_full_claim():
+    """正控：12 字段齐全且合法的断言必须零 error 且 decided。"""
+    spec = CA.validate_claim(full_claim())
+    assert spec.error_count == 0
+    assert spec.warning_count == 0
+    assert spec.decided is True
+    assert spec.verdict == CA.CONSISTENT
+    assert spec.fields_used == ("status", "evidence_kind")
+
+
+def test_unknown_field_is_reported_but_does_not_break_the_claim():
+    """未声明的键要报出来（warning），但不让整条断言变成非法。"""
+    claim = full_claim()
+    claim["favourite_colour"] = "blue"
+    spec = CA.validate_claim(claim)
+    assert "undeclared_field" in codes(spec)
+    assert spec.error_count == 0
+
+
+def test_strict_mode_asks_for_the_full_twelve_fields_but_only_warns():
+    """`strict=True` 要求补齐 12 字段，但只报 warning（不是 error）。"""
+    spec_lax = CA.validate_claim(base_claim(), strict=False)
+    spec_strict = CA.validate_claim(base_claim(), strict=True)
+    assert spec_lax.warning_count == 0
+    assert spec_strict.warning_count > 0
+    assert spec_strict.error_count == 0, "缺新字段永远不是 error（历史数据）"
+    assert any(i.code == "missing_field" for i in spec_strict.issues)
+
+
+# ============================================================ 7. 稿件级判定与汇总
+
+
+def test_validate_document_claims_reports_duplicate_ids():
+    """同一 claim_id 对应两段不同文字 ⇒ error（审校将无法定位）。"""
+    doc = {"doc_id": "0000", "claims": [full_claim(), full_claim(statement="另一句话。")]}
+    issues = CA.validate_document_claims(doc)
+    dups = [i for i in issues if i.code == "duplicate_claim_id"]
+    assert len(dups) == 1 and dups[0].level == "error"
+
+
+def test_validate_document_claims_without_claims_is_unknown_not_empty():
+    """没有 `claims` 键 ⇒ 没查（不是"没有断言"）——三态纪律在稿件层的形态。"""
+    issues = CA.validate_document_claims({"doc_id": "0000"})
+    assert len(issues) == 1
+    assert issues[0].code == "missing_field" and issues[0].level == "error"
+    assert "没查" in issues[0].message
+
+
+def test_consolidate_issues_keeps_the_undecidable_bucket_separate():
+    """汇总必须单独给出"判不了"这一档（FC-10：禁止单一通过率）。"""
+    issues = CA.validate_document_claims({"doc_id": "0000", "claims": [base_claim()]})
+    agg = CA.consolidate_issues(issues)
+    assert agg["undecidable_count"] == 1
+    assert agg["decided"] is False
+    assert agg["has_errors"] is False
+    assert agg["codes"] == ["unknown_status_axis"]
+    text = CA.summary_counts(issues)["message"]
+    assert "判不了=1" in text
+
+
+def test_has_issue_and_count_by_code_are_queryable():
+    """判据必须能被机器查询（门要用它，而不是再写一遍判断）。"""
+    issues = CA.validate_document_claims({"doc_id": "0000", "claims": [base_claim()]})
+    assert CA.has_issue(issues, "unknown_status_axis") is True
+    assert CA.has_issue(issues, "checker_error") is False
+    assert CA.count_by_code(issues) == {"unknown_status_axis": 1}
+
+
+# ============================================================ 8. 版本 hash（G11）
+
+
+def test_revision_hash_is_stable_and_content_addressed():
+    """内容不变 ⇒ hash 不变；内容一变 ⇒ hash 变。"""
+    a = {"doc_id": "0000", "kind": "paper", "title": "t", "claims": [full_claim()]}
+    b = {"doc_id": "0000", "kind": "paper", "title": "t", "claims": [full_claim()]}
+    assert CA.revision_hash(a) == CA.revision_hash(b)
+    c = {"doc_id": "0000", "kind": "paper", "title": "t", "claims": [full_claim(statement="改了。")]}
+    assert CA.revision_hash(a) != CA.revision_hash(c)
+
+
+def test_revision_hash_ignores_review_bookkeeping():
+    """`status` / `review_rounds` 不参与 hash。
+
+    否则"审校改了稿件状态"这件事本身会改变被审版本的 hash ——
+    于是报告里的 hash 永远对不上被审对象（G11 就自相矛盾了）。
+    """
+    a = {"doc_id": "0000", "kind": "paper", "title": "t", "status": "draft", "review_rounds": 0, "claims": [full_claim()]}
+    b = {"doc_id": "0000", "kind": "paper", "title": "t", "status": "accepted", "review_rounds": 3, "claims": [full_claim()]}
+    assert CA.revision_hash(a) == CA.revision_hash(b)
+
+
+def test_claim_content_hash_excludes_its_own_revision_hash():
+    """自指必须排除：给一条断言打 hash 不能改变它自己的 hash。"""
+    c1 = full_claim()
+    c2 = full_claim(revision_hash="0000000000000000")
+    assert CA.claim_content_hash(c1) == CA.claim_content_hash(c2)
+    # 而正文变了 ⇒ hash 必须变
+    assert CA.claim_content_hash(c1) != CA.claim_content_hash(full_claim(statement="另一句。"))
+
+
+# ============================================================ 9. 渲染层降级门（G14）
+
+
+def test_main_body_claims_excludes_retracted_and_open():
+    """正文主结果区不得出现作废断言与"移入 open"的断言（G14 的渲染层落地）。"""
+    claims = [
+        full_claim(claim_id="a"),
+        full_claim(claim_id="b", status="作废", errata_ids=["E-01"]),
+        full_claim(claim_id="c", allowed_use="移入 open"),
+    ]
+    body = CA.main_body_claims(claims)
+    assert [c["claim_id"] for c in body] == ["a"]
+    assert [c["claim_id"] for c in CA.retracted_claims(claims)] == ["b"]
+
+
+def test_render_markdown_puts_retracted_claims_in_the_appendix_only(store: Store):
+    """渲染层门：作废断言不在正文，但必须出现在附录（并带撤销原因）。
+
+    只把作废断言删掉，读者会把"作者改过主意"读成"这些结论从来没存在过"。
+    """
+    good = DT.compose_claim(
+        "谱落在区间内。", citations=["rel:0000"], evidence_kind="proof", section="主要结果",
+        claim_id="claim-1", kind="定理", status="证",
+    )
+    dead = DT.compose_claim(
+        "这个不等式对所有 n 成立。", citations=["rel:0000"], evidence_kind="cross_check",
+        section="主要结果", claim_id="claim-2", kind="命题", status="作废",
+        errata_ids=["E-01"],
+        scope_caveat="反例 n=3",
+    )
+    doc = {
+        "doc_id": "0000", "kind": "paper", "title": "t", "status": "draft",
+        "review_rounds": 0, "claims": [good, dead], "open_problems": [],
+    }
+    md = DT.render_markdown(doc, dependencies=[])
+    body, _, appendix = md.partition("## 附录 A.")
+    assert "谱落在区间内。" in body
+    assert "这个不等式对所有 n 成立。" not in body, "作废断言不许出现在正文"
+    assert "已作废 1" in md, "正文头必须显式承认有多少条被移出去"
+    assert "这个不等式对所有 n 成立。" in appendix, "作废断言必须在附录里留痕（不许凭空消失）"
+    assert "E-01" in appendix, "附录必须写出撤销原因"
+
+
+def test_compose_claim_carries_the_lifecycle_fields(store: Store):
+    """构造期就带上 §8.3 字段（而不是"写完再补"）。"""
+    claim = DT.compose_claim(
+        "谱落在区间内。", citations=["rel:0000"], evidence_kind="cross_check", section="数值",
+        claim_id="claim-9", kind="命题", status="验",
+        numeric_evidence={"script": "code/s.py", "range": "d<=10", "n_cases": 9, "n_counterexamples": 0},
+        counterexamples=[], allowed_use="Remark only", scope_caveat="仅限有限阶 θ",
+    )
+    assert claim["kind"] == "命题" and claim["status"] == "验"
+    assert claim["allowed_use"] == "Remark only"
+    assert claim["scope_caveat"] == "仅限有限阶 θ"
+    assert claim["numeric_evidence"]["n_cases"] == 9
+    assert claim["disclaimer"] == DT.CROSS_CHECK_DISCLAIMER
+
+
+def test_compose_claim_rejects_retracted_without_a_reason():
+    """负控：`status="作废"` 却不说为什么 ⇒ 构造时就抛。"""
+    with pytest.raises(ValueError, match="作废"):
+        DT.compose_claim(
+            "这条不算了。", citations=["rel:0000"], evidence_kind="heuristic",
+            section="s", status="作废",
+        )
+
+
+def test_compose_claim_rejects_frozen_without_a_reason():
+    """负控：`frozen=True` 却没有 `freeze_reason` ⇒ 构造时就抛。"""
+    with pytest.raises(ValueError, match="freeze_reason"):
+        DT.compose_claim(
+            "冻结但不说为什么。", citations=["rel:0000"], evidence_kind="heuristic",
+            section="s", frozen=True,
+        )
+
+
+def test_compose_claim_does_not_invent_default_values_for_new_fields():
+    """不给就是不写：不许替作者填一个假的默认值（三态纪律）。"""
+    claim = DT.compose_claim(
+        "没有生命周期字段的断言。", citations=["rel:0000"], evidence_kind="heuristic", section="s",
+    )
+    assert "status" not in claim and "kind" not in claim and "allowed_use" not in claim
+    assert "frozen" not in claim

@@ -1,0 +1,34 @@
+# 真实网络小规模试跑用的配置：把下载量压到很小，避免一次跑掉几百 MB。
+store:
+  root: .
+
+lease:
+  seconds: 900
+  max_attempts: 3
+
+agent_a:
+  limits:
+    broad: 5
+    topical: 5
+    precise: 5
+  download: true
+  max_downloads_per_request: 3      # ← 关键：只下 3 篇
+  providers: [openalex]
+
+agent_b:
+  dup_strong: 0.92
+  dup_review: 0.72
+  quote_widen_pages: 1
+  allow_fulltext_quote_fallback: false
+
+download:
+  connect_timeout: 20
+  read_timeout: 120
+  max_bytes: 52428800               # 50 MB 上限，避免抓到超大 PDF
+  min_interval_seconds: 1.5
+  retries: 3
+  mirrors:
+    - "https://gh-proxy.com/"
+
+search:
+  mailto: ""

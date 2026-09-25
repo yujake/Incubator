@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentflow"
+version = "1.0.0"
+description = "面向数学研究的多智能体协同框架（A–H 八角色，共享存储 + 冻结契约 + 写入期硬约束）"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+# 运行期依赖：**刻意保持极小**。
+#
+# 为什么：`agentflow` 的核心（表、事务、契约、验证）只用标准库 —— 那是它能在
+# 任何环境下被复核的前提。文件锁与 PDF 解析是仅有的两处外部依赖，且都只在
+# 具体角色（A/B）的路径上。
+#
+# 注：`requirements.txt` 里还列了 requests/httpx/jsonschema —— 那是**备选**
+# HTTP 客户端与"如果将来要用 JSON Schema"的位置，当前实现并未导入它们。
+# 正式版的依赖以本文件为准（`requirements.txt` 保留为历史说明）。
+dependencies = [
+    "filelock>=3.12",
+]
+
+# 控制台入口：装上之后 `agentflow` 与 `python -m agentflow` 是同一条命令。
+#
+# 为什么需要它：本项目的入口一直只有 `python -m agentflow`（`cli.main`），
+# 而那要求调用方先知道"包在哪、PYTHONPATH 怎么设"。发布形态必须有一个可执行的
+# 名字，否则每一处调用都要各自拼一次解释器与路径 —— 拼错时的症状是
+# "命令不存在"，而不是"检查没过"。
+#
+# 转发目标刻意是 `cli:main` 而不是新增一个包装函数：同一个入口写在两处
+# 早晚会漂移（本项目记过多次），而 `cli.main` 已经是唯一权威实现。
+[project.scripts]
+agentflow = "agentflow.cli:main"
+
+[project.optional-dependencies]
+# 文献解析（agent-b 的 extract.py）
+pdf = [
+    "PyMuPDF>=1.24",
+    "pdfminer.six>=20231228",
+    "PyPDF2>=3.0",
+]
+# OCR（扫描版 PDF / 图片）——**默认不装**：它拖 torch，几百 MB。
+ocr = [
+    "easyocr",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+# rootdir 钉在 tests/（与 `tests/pytest.ini` 同一意图）：
+# `.pytest_cache` / `__pycache__` 只落在 tests/ 下，不污染运行期工作区。
+testpaths = ["tests"]
+# 需要联网的用例默认排除 —— 日常套件必须离线、确定性、可重复。
+#   python -m pytest -q            # 离线
+#   python -m pytest -q -m network # 额外联网
+addopts = "-m 'not network'"
+markers = [
+    "network: 需要真实网络访问；默认排除，用 -m network 显式运行",
+]

@@ -1,0 +1,127 @@
+workspace: D:\Incubator\test\test2\acceptance-run\workspace
+repro 脚本: ['exp1_k_spectrum.py', 'exp2_girths.py', 'exp3_chamber_spectrum.py', 'exp4_size_regularity.py', 'exp5_noniso.py', 'repro_common.py', 'repro_result.py']
+
+===== [P1] 输入：登记文献 + B 抽取（引文逐字回验） =====
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+  [OK] 全部 25 条引文逐字可达
+  [OK] failed=0 且 unknown=0（三分档）
+  [OK] 引文门负控 3/3 生效（篡改引文确实被拒）
+  [OK] B 处理了 1 篇文献
+  [OK] B 侧回验通过 25 条
+  [OK] B 侧引文 0 条失败
+  [OK] I6 闸门 0 次被跳过（无'没检查'）
+  -> ok=True (0.6s)
+
+===== [P2] 分析：C 的四类分析（最热/路径/冷门/缺口） =====
+  [OK] 能按名字解析出概念代号 K(m)=0000 / S̃_m=0001
+  [OK] hottest: 最热门的 5 个概念：K(m)(16次)、S̃_m(11次)、spectrum of a periodic graph(11次)、girth(8次)、Floquet matrix(3次)
+  [OK] paths: 找到 4 条高信息量路径（另有 medium 0 条、low 0 条）：K(m)→S̃_m（0008，score=3.40）；K(m)→spectrum of a periodic graph→cospectral→S̃_m（0016→0007→0007，score=4.57）；K(m)→girth
+  [OK] cold: 最冷门的 5 个概念（degree 升序）：cospectral(degree=1)、vertex-transitive(degree=1)、density of states(degree=1)、periodic graph(degree=2)、companion book [6](degree=
+  [OK] gaps: 确实有：发现 10 条值得研究的关系候选（最高置信度 high）。检查范围：15 个概念组、29 个结构洞；被否决项剔除 0 条、净分不足 13 条。（结构洞 29 个、低频概念组 10 个、否决 0 条、净分不足 13 条，截断=False）
+  [OK] 四类分析各生成 1 份（实际 4）
+  [OK] paths 报告里有**关系代号链**（不是只有自然语言）
+  -> ok=True (0.1s)
+
+===== [P2b] 交互抽查：I1/I3/I4/I5/I7 逐条端到端 =====
+  [OK] I1：4 个服务方法都返回 checked=True（实际 ['contradictions', 'neighbors', 'relations_between', 'structural_duplicates']）
+  [OK] I1：**服务面只读** —— 三张知识表逐字节不变
+  [OK] I1：relations_between(K(m), S̃_m) 找到 4 条关系
+  [OK] I3：新增请求 3 ≤ 上限 3
+  [OK] I3：新请求 submitted_by 都是 agent-C
+  [OK] I3：C 的请求优先级是 medium（I7 表）
+  [OK] I3 **负控**：submit_requests=False（默认）时一条都不新增
+  [OK] I4：提交的 1 条重抽取请求全部有了终态（不是挂着的 pending）
+  [OK] I4：每条完成的重抽取都给出了 result（'做了但没结果'不许留空）
+  [OK] I4：**绝不重置 literature.processed**（literature.json 逐字节不变）
+  [OK] I4：**只改动目标关系**（实际改动 []，目标 0000）
+  [OK] I7：排序里 high 全部排在 low 之前
+  [OK] I7：A 实际取走的是高优先级（priority=high）
+  -> ok=True (0.1s)
+
+===== [P3] 研究：D 建问题台账 + 矛盾闭环 + 提交检索请求 =====
+  [OK] 拿到 4 份 C 报告的登记号
+  [OK] 消化的报告产出了 1 个研究问题
+  [OK] 问题台账只增不减（没有静默丢问题）
+  [OK] D 写出了研究报告
+  -> ok=True (0.2s)
+
+===== [P4] 攻坚：F 立项 + 多轮推进 + 预算终止 =====
+  [OK] 立项成功 plan_id=0000
+  [OK] 三维预算已写入计划
+  [OK] 轮数 9 未超上限 9
+  [OK] **终止性**：循环在预算内自行停下（没有跑满 12 次）
+  [OK] stalled 时带上了 best_partial（不谎报成功，也不丢中间成果）
+  -> ok=True (267.3s)
+
+===== [P5] 实验：E 跑 5 个独立复现脚本 + 登记证据等级 =====
+  [OK] exp1: result=supports evidence_kind=cross_check exit=0 id=0005
+  [OK] exp2: result=supports evidence_kind=cross_check exit=0 id=0006
+  [OK] exp3: result=supports evidence_kind=cross_check exit=0 id=0007
+  [OK] exp4: result=supports evidence_kind=cross_check exit=0 id=0008
+  [OK] exp5: result=supports evidence_kind=cross_check exit=0 id=0009
+  [!!] 登记了 10/5 条实验
+  [OK] **FC-22**：没有计算类实验自称 proof（违规 []）
+  [OK] 证据等级全部是计算类：['cross_check']
+  [OK] 每条实验都做了否定分类：['not_proved']
+  [OK] 有脚本的实验都绑定了 code_hash（缺失 []）
+  -> ok=False (255.9s)
+
+===== [P6] 撰写：G 出复现报告 + 登记依赖闭合 =====
+  [OK] 构造了 10 条带引用的断言
+  [OK] 每条断言都有 citations
+  [OK] 7 条 cross_check 断言都自动带上了 disclaimer
+  [OK] 配套书恰登记 1 条 external_unavailable（实际 1）
+  [OK] 稿件已登记 doc_id=0000
+  [OK] 复现报告 markdown 已落盘
+  -> ok=True (0.6s)
+
+===== [P7] 审校：H 独立复核 + 负控（注入过度声称） =====
+  [OK] **防误伤**：干净稿件 error=0
+  [OK] **负控**：把 cross_check 写成功证明性措辞 → 必须报 overclaim + error
+  [OK] **负控**：无引用断言 → error，且 finding 的 evidence 里含实际值
+  [OK] **落库级负控**：注入过度声称/无引用/未分类否定 ⇒ H 报出 ['missing_negation_kind', 'overclaim', 'unsupported_claim']
+  [OK] H 登记了 0 条审校发现
+  [OK] **每条发现都带 evidence**（审校者的判断也需要证据）
+  -> ok=True (0.1s)
+
+===== [P8] 一致性：verify 全库校验 =====
+  [OK] 0 error（warning 1 条）
+  [warn] dependencies/0000: dangling_dep_external — doc:draft#claim-7 依赖的「Companion book on quotient lattices, tori and periodic graphs, vol. 11, Theorem 」在本项目可得范围之外：论文只给了 '[6]' 与书名/卷号/定理号，**未给出出版信息**；本
+  -> ok=True (0.1s)
+
+===== [P9] 汇总：表计数 + 论文声称 vs 独立验证 =====
+  literature             1
+  concepts               14
+  relations              25
+  analysis_reports       4
+  research_questions     1
+  search_requests        7
+  experiments            10
+  attack_plans           1
+  documents              1
+  dependencies           12
+  review_findings        0
+  论文结论 33 条：computable=21、open=4、proof-only=3、quoted=5
+  -> ok=True (0.0s)
+
+================ 验收汇总 ================
+  [PASS] P1 输入：登记文献 + B 抽取（引文逐字回验）  (0.6s)
+  [PASS] P2 分析：C 的四类分析（最热/路径/冷门/缺口）  (0.1s)
+  [PASS] P2b 交互抽查：I1/I3/I4/I5/I7 逐条端到端  (0.1s)
+         · I4：目标 0000（reason=need_context），受理 1 条、完成 1 条
+         · I5：1 个候选，实际合并 0 个
+  [PASS] P3 研究：D 建问题台账 + 矛盾闭环 + 提交检索请求  (0.2s)
+         · 机器提交的检索请求 4 条（>0 说明缺口/矛盾闭环真的回流到 A 了）
+  [PASS] P4 攻坚：F 立项 + 多轮推进 + 预算终止  (267.3s)
+         · 4 轮被如实记为 no_change（owner∈{C,D,F} 的子目标不会被假装推进）
+  [FAIL] P5 实验：E 跑 5 个独立复现脚本 + 登记证据等级  (255.9s)
+         · 未通过：登记了 10/5 条实验
+  [PASS] P6 撰写：G 出复现报告 + 登记依赖闭合  (0.6s)
+  [PASS] P7 审校：H 独立复核 + 负控（注入过度声称）  (0.1s)
+         · 负控稿件 0001 及其 finding 已清理（不留给 P8 当假红灯）
+  [PASS] P8 一致性：verify 全库校验  (0.1s)
+  [PASS] P9 汇总：表计数 + 论文声称 vs 独立验证  (0.0s)
+         · 论文结论分类：computable=21、open=4、proof-only=3、quoted=5（computable=我们可独立数值验证；quoted/proof-only/open=我们**不能**独立验证）
+
+  通过 9 / 失败 1 / 未执行 0
+  结果 JSON: acceptance-run\acceptance-result.json

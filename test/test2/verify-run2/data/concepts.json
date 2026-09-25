@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "rows": [
+    {
+      "concept_id": "0000",
+      "name": "K(m)",
+      "definition": "论文 Definition 1.1 定义的折叠图：顶点集 V_K = {x ∈ Z^m : Σ_i x_i ∈ {0,1}}，x 与 y 相邻当且仅当 y = x ± e_i。",
+      "related_concepts": [
+        "0001",
+        "0004",
+        "0005",
+        "0006",
+        "0007",
+        "0008",
+        "0009",
+        "0011"
+      ],
+      "normalized_name": "k m",
+      "aliases": [
+        "the folded graph",
+        "折叠图"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0001",
+      "name": "S̃_m",
+      "definition": "论文 Definition 1.2 定义的腔图：仿射 Weyl 群 W_a(Ã_{m-1}) 关于生成元 {s_0, s_1, …, s_{m-1}} 的 Cayley 图。",
+      "related_concepts": [
+        "0000",
+        "0004",
+        "0005",
+        "0007",
+        "0008",
+        "0009",
+        "0011",
+        "0013"
+      ],
+      "normalized_name": "s̃ m",
+      "aliases": [
+        "chamber graph",
+        "the chamber graph",
+        "腔图"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0002",
+      "name": "Q^∨",
+      "definition": "coroot lattice（余根格）：{x ∈ Z^m : Σ_i x_i = 0} ≅ Z^{m-1}。",
+      "related_concepts": [],
+      "normalized_name": "q ∨",
+      "aliases": [
+        "coroot lattice",
+        "余根格"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0003",
+      "name": "W_a(Ã_{m-1})",
+      "definition": "仿射 Weyl 群：Q^∨ ⋊ S_m，作用为 x ↦ w(x) + λ，w ∈ S_m，λ ∈ Q^∨。",
+      "related_concepts": [],
+      "normalized_name": "w a ã m 1",
+      "aliases": [
+        "W_a",
+        "affine Weyl group",
+        "仿射 Weyl 群"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0004",
+      "name": "periodic graph",
+      "definition": "周期图：局部有限连通简单图 X 连同在 V(X) 上自由作用、轨道有限的自由阿贝尔群 Γ ≤ Aut(X)；rank Γ 称为周期秩。",
+      "related_concepts": [
+        "0000",
+        "0001"
+      ],
+      "normalized_name": "periodic graph",
+      "aliases": [
+        "周期图"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0005",
+      "name": "spectrum of a periodic graph",
+      "definition": "周期图的谱：Floquet（Bloch）矩阵的谱在对偶环面上的并的闭包（式 (2)）。",
+      "related_concepts": [
+        "0000",
+        "0001",
+        "0006",
+        "0007",
+        "0011",
+        "0013"
+      ],
+      "normalized_name": "spectrum of a periodic graph",
+      "aliases": [
+        "Spec",
+        "周期图的谱"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0006",
+      "name": "Floquet matrix",
+      "definition": "Floquet 矩阵 A_χ：以 X/Γ 的类为指标，从 x 的类到 y 的类的元素是 χ(λ) 对实现该转移的全部平移 λ 之和。",
+      "related_concepts": [
+        "0000",
+        "0005"
+      ],
+      "normalized_name": "floquet matrix",
+      "aliases": [
+        "Bloch matrix",
+        "Floquet 矩阵"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0007",
+      "name": "cospectral",
+      "definition": "同谱：两个图的谱（作为集合）相等。",
+      "related_concepts": [
+        "0000",
+        "0001",
+        "0005"
+      ],
+      "normalized_name": "cospectral",
+      "aliases": [
+        "cospectrality",
+        "同谱"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0008",
+      "name": "girth",
+      "definition": "围长：图中最短环的长度。",
+      "related_concepts": [
+        "0000",
+        "0001",
+        "0011"
+      ],
+      "normalized_name": "girth",
+      "aliases": [
+        "围长"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0009",
+      "name": "vertex-transitive",
+      "definition": "顶点传递：自同构群在顶点集上传递。",
+      "related_concepts": [
+        "0000",
+        "0001"
+      ],
+      "normalized_name": "vertex transitive",
+      "aliases": [
+        "顶点传递"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0010",
+      "name": "periodic rank",
+      "definition": "周期秩：周期群 Γ 的秩（rank Γ）。",
+      "related_concepts": [],
+      "normalized_name": "periodic rank",
+      "aliases": [
+        "周期秩"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0011",
+      "name": "spectral invariant",
+      "definition": "谱不变量：只由谱（作为集合）决定的量，例如 λ_max、λ_min、'谱是区间'这一陈述。",
+      "related_concepts": [
+        "0000",
+        "0001",
+        "0005",
+        "0008",
+        "0012"
+      ],
+      "normalized_name": "spectral invariant",
+      "aliases": [
+        "谱不变量"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0012",
+      "name": "density of states",
+      "definition": "态密度：比谱（作为集合）更细的谱数据，Rem. 1.7 明确说它**也许**能区分这一对图，而本文的计算并未解决该问题。",
+      "related_concepts": [
+        "0011"
+      ],
+      "normalized_name": "density of states",
+      "aliases": [
+        "态密度"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    },
+    {
+      "concept_id": "0013",
+      "name": "companion book [6]",
+      "definition": "论文引用的配套书（Companion book on quotient lattices, tori and periodic graphs, vol. 11, Theorem 6.5）。论文的 Spec S̃_m 结果**取自**该书，本文未重证。",
+      "related_concepts": [
+        "0001",
+        "0005"
+      ],
+      "normalized_name": "companion book 6",
+      "aliases": [
+        "[6]",
+        "companion book"
+      ],
+      "definition_source_lit_id": "0000",
+      "created_at": "2026-09-23T23:43:02+08:00",
+      "updated_at": "2026-09-23T23:43:02+08:00",
+      "merged_into": null,
+      "merge_reason": "",
+      "merged_at": ""
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "workspace": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace",
+  "phases": [
+    {
+      "phase": "P1",
+      "title": "输入：登记文献 + B 抽取（引文逐字回验）",
+      "ok": true,
+      "seconds": 0.43,
+      "detail": {
+        "quotes": {
+          "total": 25,
+          "verified": 25,
+          "failed": 0,
+          "unknown": 0,
+          "negative_controls_ok": true
+        },
+        "b": {
+          "processed": 1,
+          "concepts_created": 0,
+          "concepts_reused": 73,
+          "relations_added": 0,
+          "relations_duplicate": 25,
+          "relations_suspect": 0,
+          "suspect_by_quote": 0,
+          "quotes_verified": 25,
+          "quotes_failed": 0,
+          "quotes_unknown": 0,
+          "unreadable": 0,
+          "failed": 0,
+          "skipped_lease_active": 0,
+          "gave_up": 0,
+          "conflict_checks_run": 0,
+          "conflicts_detected": 0,
+          "conflict_checks_skipped": 0,
+          "skipped_reason": null,
+          "details": [
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0000",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0001",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0002",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0003",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0004",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0005",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0006",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0007",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0008",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0009",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0010",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0011",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0012",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0013",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0014",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0015",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0016",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0017",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0018",
+              "score": 1.0
+            },
+            {
+              "lit_id": "0001",
+              "stage": "relation",
+              "skipped": "duplicate",
+              "duplicate_of": "0019",
+              "score": 1.0
+            }
+          ]
+        }
+      },
+      "notes": [],
+      "error": null
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "not_run": 0
+  }
+}

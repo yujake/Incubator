@@ -1,0 +1,822 @@
+{
+  "counterexample": null,
+  "evidence_kind": "cross_check",
+  "negation_kind": "not_proved",
+  "observations": {
+    "checks": [
+      {
+        "check": "m3.index_of_mQ_in_Q_is_m_pow_m_minus_1",
+        "detail": "[Q^v : mQ^v]: determinant 9, Smith normal form [3, 3] (product 9), residue count 9, formula m^(m-1) = 9 (Remark 2.3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.class_count_is_2_m_pow_m_minus_1",
+        "detail": "period lattice m Q^v gives 18 classes, expected 2*m^(m-1) = 18",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.every_residue_pair_is_realised",
+        "detail": "level 0: 9 of 9 residue classes realised, level 1: 9 of 9; the residue map V_K -> Z_m^{m-1} x {0,1} is onto, so no class is missed and the count is exactly 2 m^(m-1)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.every_vertex_has_m_neighbours_in_V_K",
+        "detail": "all 13 vertices of the box [-1,1]^3 have exactly 3 neighbours in V_K (first failure: None)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.interior_of_box_is_m_regular",
+        "detail": "box [-2,2]^3: all 13 INTERIOR vertices have induced degree exactly 3; the other 24 box vertices have degrees [2, 3], because neighbours leaving the box are lost -- so a box-based regularity test must exclude the boundary (the whole-box profile is [2, 3], which would falsely suggest irregularity)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.translation_by_coroots_is_an_automorphism",
+        "detail": "x -> x + lam for the coroot basis vectors lam = [[1, -1, 0], [0, 1, -1]] preserves adjacency on the box-induced graph (Lemma 2.2)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.V_K_has_exactly_two_levels",
+        "detail": "the box contains 19 vertices with sum 0 and 18 with sum 1 and no other sums -- the two Q^v-orbits of Lemma 2.2",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m3.paper_table_matches",
+        "detail": "2 m^(m-1) = 18 agrees with the paper's table (18, 128, 1250 for m = 3,4,5; text:389-391)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.index_of_mQ_in_Q_is_m_pow_m_minus_1",
+        "detail": "[Q^v : mQ^v]: determinant 64, Smith normal form [4, 4, 4] (product 64), residue count 64, formula m^(m-1) = 64 (Remark 2.3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.class_count_is_2_m_pow_m_minus_1",
+        "detail": "period lattice m Q^v gives 128 classes, expected 2*m^(m-1) = 128",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.every_residue_pair_is_realised",
+        "detail": "level 0: 64 of 64 residue classes realised, level 1: 64 of 64; the residue map V_K -> Z_m^{m-1} x {0,1} is onto, so no class is missed and the count is exactly 2 m^(m-1)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.every_vertex_has_m_neighbours_in_V_K",
+        "detail": "all 35 vertices of the box [-1,1]^4 have exactly 4 neighbours in V_K (first failure: None)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.interior_of_box_is_m_regular",
+        "detail": "box [-2,2]^4: all 35 INTERIOR vertices have induced degree exactly 4; the other 130 box vertices have degrees [2, 3, 4], because neighbours leaving the box are lost -- so a box-based regularity test must exclude the boundary (the whole-box profile is [2, 3, 4], which would falsely suggest irregularity)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.translation_by_coroots_is_an_automorphism",
+        "detail": "x -> x + lam for the coroot basis vectors lam = [[1, -1, 0, 0], [0, 1, -1, 0], [0, 0, 1, -1]] preserves adjacency on the box-induced graph (Lemma 2.2)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.V_K_has_exactly_two_levels",
+        "detail": "the box contains 85 vertices with sum 0 and 80 with sum 1 and no other sums -- the two Q^v-orbits of Lemma 2.2",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m4.paper_table_matches",
+        "detail": "2 m^(m-1) = 128 agrees with the paper's table (18, 128, 1250 for m = 3,4,5; text:389-391)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.index_of_mQ_in_Q_is_m_pow_m_minus_1",
+        "detail": "[Q^v : mQ^v]: determinant 625, Smith normal form [5, 5, 5, 5] (product 625), residue count 625, formula m^(m-1) = 625 (Remark 2.3)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.class_count_is_2_m_pow_m_minus_1",
+        "detail": "period lattice m Q^v gives 1250 classes, expected 2*m^(m-1) = 1250",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.every_residue_pair_is_realised",
+        "detail": "level 0: 625 of 625 residue classes realised, level 1: 625 of 625; the residue map V_K -> Z_m^{m-1} x {0,1} is onto, so no class is missed and the count is exactly 2 m^(m-1)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.every_vertex_has_m_neighbours_in_V_K",
+        "detail": "all 96 vertices of the box [-1,1]^5 have exactly 5 neighbours in V_K (first failure: None)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.interior_of_box_is_m_regular",
+        "detail": "box [-2,2]^5: all 96 INTERIOR vertices have induced degree exactly 5; the other 650 box vertices have degrees [3, 4, 5], because neighbours leaving the box are lost -- so a box-based regularity test must exclude the boundary (the whole-box profile is [3, 4, 5], which would falsely suggest irregularity)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.translation_by_coroots_is_an_automorphism",
+        "detail": "x -> x + lam for the coroot basis vectors lam = [[1, -1, 0, 0, 0], [0, 1, -1, 0, 0], [0, 0, 1, -1, 0], [0, 0, 0, 1, -1]] preserves adjacency on the box-induced graph (Lemma 2.2)",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.V_K_has_exactly_two_levels",
+        "detail": "the box contains 381 vertices with sum 0 and 365 with sum 1 and no other sums -- the two Q^v-orbits of Lemma 2.2",
+        "ok": true,
+        "severity": "must_hold"
+      },
+      {
+        "check": "m5.paper_table_matches",
+        "detail": "2 m^(m-1) = 1250 agrees with the paper's table (18, 128, 1250 for m = 3,4,5; text:389-391)",
+        "ok": true,
+        "severity": "must_hold"
+      }
+    ],
+    "elapsed_seconds": 0.326,
+    "injected_bug": null,
+    "m5_box_undercount_diagnostic": {
+      "box": 3,
+      "comment": "box enumeration is NOT a valid way to count the classes; the residue count in check 2 is",
+      "n_classes_found": 1243,
+      "n_classes_true": 1250,
+      "undercounts": true
+    },
+    "max_seconds": 60.0,
+    "n_checks": 24,
+    "n_failed": 0,
+    "n_undecided": 0,
+    "paper_claims": {
+      "lemma_2_2": "text:127-145 -- K(m) is Q^v-periodic of rank m-1 with exactly two orbits on V_K; both graphs are m-regular and vertex-transitive",
+      "our_role": "exact-integer and numerical cross-check only",
+      "paper_section_5": "text:389-391 -- |V_K/Lambda| = 2m^{m-1} = 18, 128, 1250 for m = 3,4,5",
+      "proved_in_paper": true,
+      "remark_2_3": "text:146-163 -- Lambda = m Q^v has index m^(m-1) in Q^v and gives a cell with 2 m^(m-1) vertices"
+    },
+    "per_m": {
+      "m3": {
+        "box_degree_profile": {
+          "box": 2,
+          "counts": {
+            "2": 15,
+            "3": 22
+          },
+          "distinct_degrees": [
+            2,
+            3
+          ]
+        },
+        "class_size_check": {
+          "all_candidates_realised": true,
+          "box": 6,
+          "expected_each_level": 9,
+          "expected_total": 18,
+          "m": 3,
+          "n_classes_level_0": 9,
+          "n_classes_level_1": 9,
+          "n_classes_total": 18,
+          "vertices_in_box": 253
+        },
+        "classes": {
+          "n_classes": 18,
+          "n_classes_expected": 18,
+          "representatives_sample": [
+            [
+              [
+                0,
+                0
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                1
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                1
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                2
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                2
+              ],
+              1
+            ],
+            [
+              [
+                1,
+                0
+              ],
+              0
+            ],
+            [
+              [
+                1,
+                0
+              ],
+              1
+            ]
+          ],
+          "sub_lattice": "m Q^v"
+        },
+        "interior_degree_profile": {
+          "boundary_counts": {
+            "2": 15,
+            "3": 9
+          },
+          "boundary_degrees": [
+            2,
+            3
+          ],
+          "box": 2,
+          "interior_counts": {
+            "3": 13
+          },
+          "interior_degrees": [
+            3
+          ],
+          "interior_regular_of_degree_m": true,
+          "n_interior_vertices": 13,
+          "n_vertices_in_box": 37,
+          "note": "neighbors_K(x,m) counts neighbours in V_K (not in the box), and Lemma 2.2 says that count is always m"
+        },
+        "lattice_index": {
+          "all_agree": true,
+          "coordinate_matrix_of_mQcoroot_in_Qcoroot": [
+            [
+              3,
+              0
+            ],
+            [
+              0,
+              3
+            ]
+          ],
+          "coroot_basis": [
+            [
+              1,
+              -1,
+              0
+            ],
+            [
+              0,
+              1,
+              -1
+            ]
+          ],
+          "index_by_determinant": 9,
+          "index_by_residue_count": 9,
+          "index_by_smith_normal_form": 9,
+          "index_formula_m_pow_m_minus_1": 9,
+          "m": 3,
+          "smith_normal_form": [
+            3,
+            3
+          ]
+        },
+        "levels_in_box": {
+          "0": 19,
+          "1": 18
+        },
+        "m": 3,
+        "seconds": 0.002,
+        "vertex_transitivity": {
+          "all_shifts_are_automorphisms": true,
+          "n_vertices_in_box": 37,
+          "shifts": [
+            {
+              "ok": true,
+              "shift": [
+                1,
+                -1,
+                0
+              ],
+              "tested": 27
+            },
+            {
+              "ok": true,
+              "shift": [
+                0,
+                1,
+                -1
+              ],
+              "tested": 27
+            }
+          ]
+        }
+      },
+      "m4": {
+        "box_degree_profile": {
+          "box": 2,
+          "counts": {
+            "2": 6,
+            "3": 88,
+            "4": 71
+          },
+          "distinct_degrees": [
+            2,
+            3,
+            4
+          ]
+        },
+        "class_size_check": {
+          "all_candidates_realised": true,
+          "box": 8,
+          "expected_each_level": 64,
+          "expected_total": 128,
+          "m": 4,
+          "n_classes_level_0": 64,
+          "n_classes_level_1": 64,
+          "n_classes_total": 128,
+          "vertices_in_box": 6545
+        },
+        "classes": {
+          "n_classes": 128,
+          "n_classes_expected": 128,
+          "representatives_sample": [
+            [
+              [
+                0,
+                0,
+                0
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                0
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                0,
+                1
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                1
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                0,
+                2
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                2
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                0,
+                3
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                3
+              ],
+              1
+            ]
+          ],
+          "sub_lattice": "m Q^v"
+        },
+        "interior_degree_profile": {
+          "boundary_counts": {
+            "2": 6,
+            "3": 88,
+            "4": 36
+          },
+          "boundary_degrees": [
+            2,
+            3,
+            4
+          ],
+          "box": 2,
+          "interior_counts": {
+            "4": 35
+          },
+          "interior_degrees": [
+            4
+          ],
+          "interior_regular_of_degree_m": true,
+          "n_interior_vertices": 35,
+          "n_vertices_in_box": 165,
+          "note": "neighbors_K(x,m) counts neighbours in V_K (not in the box), and Lemma 2.2 says that count is always m"
+        },
+        "lattice_index": {
+          "all_agree": true,
+          "coordinate_matrix_of_mQcoroot_in_Qcoroot": [
+            [
+              4,
+              0,
+              0
+            ],
+            [
+              0,
+              4,
+              0
+            ],
+            [
+              0,
+              0,
+              4
+            ]
+          ],
+          "coroot_basis": [
+            [
+              1,
+              -1,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              -1,
+              0
+            ],
+            [
+              0,
+              0,
+              1,
+              -1
+            ]
+          ],
+          "index_by_determinant": 64,
+          "index_by_residue_count": 64,
+          "index_by_smith_normal_form": 64,
+          "index_formula_m_pow_m_minus_1": 64,
+          "m": 4,
+          "smith_normal_form": [
+            4,
+            4,
+            4
+          ]
+        },
+        "levels_in_box": {
+          "0": 85,
+          "1": 80
+        },
+        "m": 4,
+        "seconds": 0.012,
+        "vertex_transitivity": {
+          "all_shifts_are_automorphisms": true,
+          "n_vertices_in_box": 165,
+          "shifts": [
+            {
+              "ok": true,
+              "shift": [
+                1,
+                -1,
+                0,
+                0
+              ],
+              "tested": 116
+            },
+            {
+              "ok": true,
+              "shift": [
+                0,
+                1,
+                -1,
+                0
+              ],
+              "tested": 116
+            },
+            {
+              "ok": true,
+              "shift": [
+                0,
+                0,
+                1,
+                -1
+              ],
+              "tested": 116
+            }
+          ]
+        }
+      },
+      "m5": {
+        "box_degree_profile": {
+          "box": 2,
+          "counts": {
+            "3": 90,
+            "4": 420,
+            "5": 236
+          },
+          "distinct_degrees": [
+            3,
+            4,
+            5
+          ]
+        },
+        "box_undercount_diagnostic": {
+          "box": 3,
+          "comment": "box enumeration is NOT a valid way to count the classes; the residue count in check 2 is",
+          "n_classes_found": 1243,
+          "n_classes_true": 1250,
+          "undercounts": true
+        },
+        "class_size_check": {
+          "all_candidates_realised": true,
+          "box": 10,
+          "expected_each_level": 625,
+          "expected_total": 1250,
+          "m": 5,
+          "n_classes_level_0": 625,
+          "n_classes_level_1": 625,
+          "n_classes_total": 1250,
+          "vertices_in_box": 232926
+        },
+        "classes": {
+          "n_classes": 1250,
+          "n_classes_expected": 1250,
+          "representatives_sample": [
+            [
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                1
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              1
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                3
+              ],
+              0
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                3
+              ],
+              1
+            ]
+          ],
+          "sub_lattice": "m Q^v"
+        },
+        "interior_degree_profile": {
+          "boundary_counts": {
+            "3": 90,
+            "4": 420,
+            "5": 140
+          },
+          "boundary_degrees": [
+            3,
+            4,
+            5
+          ],
+          "box": 2,
+          "interior_counts": {
+            "5": 96
+          },
+          "interior_degrees": [
+            5
+          ],
+          "interior_regular_of_degree_m": true,
+          "n_interior_vertices": 96,
+          "n_vertices_in_box": 746,
+          "note": "neighbors_K(x,m) counts neighbours in V_K (not in the box), and Lemma 2.2 says that count is always m"
+        },
+        "lattice_index": {
+          "all_agree": true,
+          "coordinate_matrix_of_mQcoroot_in_Qcoroot": [
+            [
+              5,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              5,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              5,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              5
+            ]
+          ],
+          "coroot_basis": [
+            [
+              1,
+              -1,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              -1,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              1,
+              -1,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              1,
+              -1
+            ]
+          ],
+          "index_by_determinant": 625,
+          "index_by_residue_count": 625,
+          "index_by_smith_normal_form": 625,
+          "index_formula_m_pow_m_minus_1": 625,
+          "m": 5,
+          "smith_normal_form": [
+            5,
+            5,
+            5,
+            5
+          ]
+        },
+        "levels_in_box": {
+          "0": 381,
+          "1": 365
+        },
+        "m": 5,
+        "seconds": 0.313,
+        "vertex_transitivity": {
+          "all_shifts_are_automorphisms": true,
+          "n_vertices_in_box": 746,
+          "shifts": [
+            {
+              "ok": true,
+              "shift": [
+                1,
+                -1,
+                0,
+                0,
+                0
+              ],
+              "tested": 515
+            },
+            {
+              "ok": true,
+              "shift": [
+                0,
+                1,
+                -1,
+                0,
+                0
+              ],
+              "tested": 515
+            },
+            {
+              "ok": true,
+              "shift": [
+                0,
+                0,
+                1,
+                -1,
+                0
+              ],
+              "tested": 515
+            },
+            {
+              "ok": true,
+              "shift": [
+                0,
+                0,
+                0,
+                1,
+                -1
+              ],
+              "tested": 515
+            }
+          ]
+        }
+      }
+    },
+    "script": "exp4_size_regularity.py"
+  },
+  "result": "supports"
+}

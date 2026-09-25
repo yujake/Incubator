@@ -1,0 +1,1215 @@
+{
+  "workspace": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace",
+  "phases": [
+    {
+      "phase": "P1",
+      "title": "输入：登记文献 + B 抽取（引文逐字回验）",
+      "ok": true,
+      "seconds": 0.45,
+      "detail": {
+        "quotes": {
+          "total": 25,
+          "verified": 25,
+          "failed": 0,
+          "unknown": 0,
+          "negative_controls_ok": true
+        },
+        "b": {
+          "processed": 1,
+          "concepts_created": 14,
+          "concepts_reused": 59,
+          "relations_added": 25,
+          "relations_duplicate": 0,
+          "relations_suspect": 0,
+          "suspect_by_quote": 0,
+          "quotes_verified": 25,
+          "quotes_failed": 0,
+          "quotes_unknown": 0,
+          "unreadable": 0,
+          "failed": 0,
+          "skipped_lease_active": 0,
+          "gave_up": 0,
+          "conflict_checks_run": 25,
+          "conflicts_detected": 0,
+          "conflict_checks_skipped": 0,
+          "skipped_reason": null,
+          "details": []
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P2",
+      "title": "分析：C 的四类分析（最热/路径/冷门/缺口）",
+      "ok": true,
+      "seconds": 0.11,
+      "detail": {
+        "resolved": {
+          "K(m)": "0000",
+          "S̃_m": "0001"
+        },
+        "reports": [
+          {
+            "kind": "hottest",
+            "ok": true,
+            "truncated": false,
+            "summary": "最热门的 5 个概念：K(m)(16次)、S̃_m(11次)、spectrum of a periodic graph(11次)、girth(8次)、Floquet matrix(3次)",
+            "report_id": "0000"
+          },
+          {
+            "kind": "paths",
+            "ok": true,
+            "truncated": false,
+            "summary": "找到 4 条高信息量路径（另有 medium 0 条、low 0 条）：K(m)→S̃_m（0008，score=3.40）；K(m)→spectrum of a periodic graph→cospectral→S̃_m（0016→0007→0007，score=4.57）；K(m)→girth→spectral invariant→S̃_m（0023→0011→0011，score=4.57",
+            "report_id": "0001"
+          },
+          {
+            "kind": "cold",
+            "ok": true,
+            "truncated": false,
+            "summary": "最冷门的 5 个概念（degree 升序）：cospectral(degree=1)、vertex-transitive(degree=1)、density of states(degree=1)、periodic graph(degree=2)、companion book [6](degree=2)；其中'冷门但连接强'（最可能被低估）2 个：periodic graph、companion ",
+            "report_id": "0002"
+          },
+          {
+            "kind": "gaps",
+            "ok": true,
+            "truncated": false,
+            "summary": "确实有：发现 10 条值得研究的关系候选（最高置信度 high）。检查范围：15 个概念组、29 个结构洞；被否决项剔除 0 条、净分不足 13 条。（结构洞 29 个、低频概念组 10 个、否决 0 条、净分不足 13 条，截断=False）",
+            "report_id": "0003"
+          }
+        ],
+        "paths_code_chains": [
+          [
+            "0016",
+            "0007",
+            "0007"
+          ],
+          [
+            "0023",
+            "0011",
+            "0011"
+          ],
+          [
+            "0018",
+            "0015",
+            "0009",
+            "0011"
+          ]
+        ],
+        "report_ids": [
+          "0000",
+          "0001",
+          "0002",
+          "0003"
+        ]
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P2b",
+      "title": "交互抽查：I1/I3/I4/I5/I7 逐条端到端",
+      "ok": true,
+      "seconds": 0.15,
+      "detail": {
+        "I1_services": {
+          "neighbors": {
+            "checked": true,
+            "empty": false,
+            "truncated": false,
+            "count": 11,
+            "reason": "K(m)（0000）在 2 跳内命中 10 个邻居（含起点共 11 个节点、21 条边）"
+          },
+          "relations_between": {
+            "checked": true,
+            "empty": false,
+            "truncated": null,
+            "count": 4,
+            "reason": "查到了 4 条关系：0008、0007、0002、0011"
+          },
+          "contradictions": {
+            "checked": true,
+            "empty": null,
+            "truncated": false,
+            "count": 8,
+            "reason": "范围=all_relations，扫描 25 条关系，命中 8 对字面候选（strong 0 对、weak 8 对）；其中 8 条是 weak（仅否定词出现与否不一致），**实测假阳性极高，不得当作矛盾呈现**，只能作为继续查的线索"
+          },
+          "structural_duplicates": {
+            "checked": true,
+            "empty": null,
+            "truncated": false,
+            "count": 1,
+            "reason": "扫描 14 个概念、25 条关系，命中 1 对结构等价候选（其中 0 对名字侧也有证据 ⇒ proposal=merge，其余 1 对只有结构证据 ⇒ proposal=review，**不得据此合并**）"
+          }
+        },
+        "I3": {
+          "new_request_ids": [
+            "r-0002",
+            "r-0003",
+            "r-0004"
+          ],
+          "priorities": [
+            "medium"
+          ],
+          "submitters": [
+            "agent-C"
+          ],
+          "payload_keys": [
+            "candidate_gaps",
+            "conclusion",
+            "deduction_rules",
+            "has_candidates",
+            "hook",
+            "hot_ids",
+            "low_confidence_candidates",
+            "overflow_candidates",
+            "rejected_by_llm",
+            "rejected_requests",
+            "request_submission",
+            "searched",
+            "skipped_duplicate_topics",
+            "structural_duplicates",
+            "submitted_request_ids",
+            "thresholds",
+            "verdict",
+            "veto_rules",
+            "vetoed_candidates"
+          ],
+          "cap": 3
+        },
+        "I4": {
+          "handled": 1,
+          "by_result": {
+            "found": 1
+          },
+          "rejected": [],
+          "errors": [],
+          "notes": [
+            {
+              "reprocess_id": "p-0001",
+              "result": "found",
+              "touched_relation_ids": "<list>"
+            }
+          ],
+          "skipped_reason": "no_pending_reprocess",
+          "stopped": null,
+          "target": "0000",
+          "reason": "need_context",
+          "rows": [
+            {
+              "reprocess_id": "p-0001",
+              "status": "done",
+              "result": "found",
+              "touched": [],
+              "target": [
+                "0000"
+              ],
+              "note": "reason=need_context；目标 1 条\n[0000] found：声明页码 p. 3（实际取第 2-4 页）原文片段（逐字，供 D 做 L3 溯源；**只读**，未改动关系）：\nDefinition 1.2 (the chamber graph eSm). Let Q∨= {x ∈Zm : P\ni xi "
+            }
+          ],
+          "results": [
+            "found"
+          ],
+          "changed_relations": []
+        },
+        "I5": {
+          "candidates": 1,
+          "checked": true,
+          "detail": [
+            {
+              "concept_ids": [
+                "0004",
+                "0009"
+              ],
+              "proposal": "review",
+              "name_evidence": "none"
+            }
+          ],
+          "outcomes": [
+            {
+              "verdict": "reject",
+              "reason": "邻域相同但规范化名字不同、也无别名交集 ⇒ **结构等价 ≠ 同义**（两个不同的概念完全可能连着同一批邻居）；只有一路证据，不得合并",
+              "survivor_id": null,
+              "merged_id": null,
+              "evidence": {
+                "concept_ids": [
+                  "0004",
+                  "0009"
+                ],
+                "candidate_proposal": "review"
+              },
+              "applied": false,
+              "rewritten_relation_ids": [],
+              "rejected_relation_ids": [],
+              "skipped_relation_ids": []
+            }
+          ]
+        },
+        "I7": {
+          "order": [
+            "r-0006",
+            "r-0002",
+            "r-0003",
+            "r-0004",
+            "r-0005"
+          ],
+          "priorities": [
+            "high",
+            "medium",
+            "medium",
+            "medium",
+            "low"
+          ],
+          "high_id": "r-0006",
+          "low_id": "r-0005",
+          "claim": {
+            "request_id": "r-0006",
+            "priority": "high",
+            "queue_pending": 5
+          }
+        }
+      },
+      "notes": [
+        "I4：目标 0000（reason=need_context），受理 1 条、完成 1 条",
+        "I5：1 个候选，实际合并 0 个"
+      ],
+      "error": null
+    },
+    {
+      "phase": "P3",
+      "title": "研究：D 建问题台账 + 矛盾闭环 + 提交检索请求",
+      "ok": true,
+      "seconds": 0.16,
+      "detail": {
+        "input_report_ids": [
+          "0000",
+          "0001",
+          "0002",
+          "0003"
+        ],
+        "ingest_per_report": [
+          {
+            "report_id": "0000",
+            "kind": "hottest",
+            "new_questions": 1,
+            "candidates": 1,
+            "merged": 0,
+            "equivalent_matched": 0,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": true,
+              "reason": "范围=given_relation_ids，扫描 10 条关系，命中 2 对字面候选（strong 0 对、weak 2 对）；其中 2 条是 weak（仅否定词出现与否不一致），**实测假阳性极高，不得当作矛盾呈现**，只能作为继续查的线索",
+              "raw_count": 2,
+              "skipped": [
+                "弱线索（0016、0017，strength=weak）：只记录，不建问题/不追问",
+                "弱线索（0021、0024，strength=weak）：只记录，不建问题/不追问"
+              ],
+              "weak_clues": [
+                {
+                  "relation_ids": [
+                    "0016",
+                    "0017"
+                  ],
+                  "concept_ids": [
+                    "0000",
+                    "0005"
+                  ],
+                  "strength": "weak",
+                  "signals": "否定标记出现与否不一致（0016 neg=True / 0017 neg=False）—— **这只是线索，不是对立主张**",
+                  "detection": "literal",
+                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                },
+                {
+                  "relation_ids": [
+                    "0021",
+                    "0024"
+                  ],
+                  "concept_ids": [
+                    "0001",
+                    "0008"
+                  ],
+                  "strength": "weak",
+                  "signals": "否定标记出现与否不一致（0021 neg=False / 0024 neg=True）—— **这只是线索，不是对立主张**",
+                  "detection": "literal",
+                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                }
+              ]
+            }
+          },
+          {
+            "report_id": "0001",
+            "kind": "paths",
+            "new_questions": 0,
+            "candidates": 3,
+            "merged": 0,
+            "equivalent_matched": 3,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": null,
+              "reason": "报告 payload 里没有关系代号，无法推导矛盾查询范围 ⇒ **没查**（刻意不退回全图扫描：那会把无关矛盾灌进本报告的台账）",
+              "raw_count": 0,
+              "skipped": [],
+              "weak_clues": []
+            }
+          },
+          {
+            "report_id": "0002",
+            "kind": "cold",
+            "new_questions": 0,
+            "candidates": 2,
+            "merged": 0,
+            "equivalent_matched": 2,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": true,
+              "reason": "范围=given_relation_ids，扫描 7 条关系，命中 0 对字面候选（strong 0 对、weak 0 对）。注意这个结论的强度：它只说明'在可逐字核实的形态下没有发现矛盾'，**不等于'文献之间没有分歧'**（一般语义矛盾本方法判定不了）",
+              "raw_count": 0,
+              "skipped": [],
+              "weak_clues": []
+            }
+          },
+          {
+            "report_id": "0003",
+            "kind": "gaps",
+            "new_questions": 0,
+            "candidates": 3,
+            "merged": 0,
+            "equivalent_matched": 3,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": null,
+              "reason": "报告 payload 里没有关系代号，无法推导矛盾查询范围 ⇒ **没查**（刻意不退回全图扫描：那会把无关矛盾灌进本报告的台账）",
+              "raw_count": 0,
+              "skipped": [],
+              "weak_clues": []
+            }
+          }
+        ],
+        "questions_after_ingest": [
+          "0000"
+        ],
+        "question_statuses": [
+          "open"
+        ],
+        "run_round": {
+          "report_id": "0000",
+          "kind": "hottest",
+          "request": "最热概念（验收 P2）",
+          "summary": "最热门的 5 个概念：K(m)(16次)、S̃_m(11次)、spectrum of a periodic graph(11次)、girth(8次)、Floquet matrix(3次)",
+          "ingested": [],
+          "adjudications": [],
+          "traced": [],
+          "assessed": [],
+          "submitted": [],
+          "researched": [],
+          "confidence": {},
+          "poll": {
+            "ok": true,
+            "ready": [],
+            "waiting": [],
+            "promoted": [],
+            "merged_relations": {},
+            "held": [],
+            "relevance": {},
+            "counts": {
+              "ready": 0,
+              "waiting": 0,
+              "questions_with_waiting": 0
+            },
+            "reasons": {}
+          }
+        },
+        "questions_total": 1,
+        "high_priority_questions": 1,
+        "search_requests_by_submitter": [
+          "agent-B",
+          "agent-C",
+          "human"
+        ],
+        "machine_submitted_requests": 4,
+        "contradiction_questions": 0,
+        "concept_count": 14,
+        "research_report": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace\\research-report.md"
+      },
+      "notes": [
+        "机器提交的检索请求 4 条（>0 说明缺口/矛盾闭环真的回流到 A 了）"
+      ],
+      "error": null
+    },
+    {
+      "phase": "P4",
+      "title": "攻坚：F 立项 + 多轮推进 + 预算终止",
+      "ok": true,
+      "seconds": 155.63,
+      "detail": {
+        "create_plan": {
+          "created": true,
+          "plan_id": "0000",
+          "duplicate": false,
+          "status": "open",
+          "budget": {
+            "max_rounds": 9,
+            "max_parallel_subgoals": 1,
+            "max_persist_attempts": 2,
+            "max_depth": 1
+          },
+          "subgoals": 7,
+          "reason": "已立项 0000（深度 0，子目标 7 个，预算 {'max_rounds': 9, 'max_parallel_subgoals': 1, 'max_persist_attempts': 2, 'max_depth': 1}）"
+        },
+        "timeline": [
+          {
+            "plan_id": "0000",
+            "round": 1,
+            "sid": "sg1",
+            "action": "run_experiment",
+            "outcome": "progress",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 8,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "实验 0000：result=supports，evidence_kind=cross_check ⇒ 子目标 sg1 标 supported_not_proved（**数值支持不是证明**，FC-22）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 2,
+            "sid": "sg2",
+            "action": "run_experiment",
+            "outcome": "progress",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 7,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "实验 0001：result=supports，evidence_kind=cross_check ⇒ 子目标 sg2 标 supported_not_proved（**数值支持不是证明**，FC-22）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 3,
+            "sid": "sg3",
+            "action": "run_experiment",
+            "outcome": "progress",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 6,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "实验 0002：result=supports，evidence_kind=cross_check ⇒ 子目标 sg3 标 supported_not_proved（**数值支持不是证明**，FC-22）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 4,
+            "sid": "sg4",
+            "action": "run_experiment",
+            "outcome": "progress",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 5,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "实验 0003：result=supports，evidence_kind=cross_check ⇒ 子目标 sg4 标 supported_not_proved（**数值支持不是证明**，FC-22）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 5,
+            "sid": "sg5",
+            "action": "run_experiment",
+            "outcome": "progress",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 4,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "实验 0004：result=supports，evidence_kind=cross_check ⇒ 子目标 sg5 标 supported_not_proved（**数值支持不是证明**，FC-22）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 6,
+            "sid": "sg6",
+            "action": "submit_search_request",
+            "outcome": "progress",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 3,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "已向 A 提交检索请求 r-0007（priority=low，mode=precise）⇒ 子目标 sg6 转 in_progress 并等 A 的回填（**在这一轮里它还没有证据**）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 7,
+            "sid": "sg7",
+            "action": "no_change",
+            "outcome": "no_change",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 2,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "子目标 sg7（判定 Theorem 1.5 的论证是否闭合（依赖是否可独立获得））需要 D 的推理，但**本框架尚未接线自动推理** ⇒ **未推进**（这一轮什么都没做，不是'做了但没结果'）。要把 owner=D 的子目标真正推起来，需要 D 侧先接上可调用的推理入口；在此之前 F 只如实记账，绝不用空证据冒充进展"
+          },
+          {
+            "plan_id": "0000",
+            "round": 8,
+            "sid": null,
+            "action": "stop",
+            "outcome": "no_change",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 1,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "没有可推进的子目标（全部 closed/dropped/supported_not_proved 或列表为空）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 9,
+            "sid": null,
+            "action": "stop",
+            "outcome": "no_change",
+            "status": "attacking",
+            "budget_left": {
+              "max_rounds_left": 0,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "没有可推进的子目标（全部 closed/dropped/supported_not_proved 或列表为空）"
+          },
+          {
+            "plan_id": "0000",
+            "round": 9,
+            "sid": null,
+            "action": "stall_detected",
+            "outcome": "no_change",
+            "status": "stalled",
+            "budget_left": {
+              "max_rounds_left": 0,
+              "max_parallel_subgoals": 1,
+              "max_persist_attempts": 2,
+              "max_depth": 1
+            },
+            "reason": "连续 3 轮 outcome=no_change ⇒ 提前判 stalled。**不是失败，也不是成功**：当前最好的部分结果已写入 best_partial。（这个信号此前被生产出来却无人消费 —— 见 LESSONS 的 P4）"
+          }
+        ],
+        "steps": 10,
+        "final_status": "stalled",
+        "rounds": 9,
+        "budget": {
+          "max_rounds": 9,
+          "max_parallel_subgoals": 1,
+          "max_persist_attempts": 2,
+          "max_depth": 1
+        },
+        "no_change_rounds": 4
+      },
+      "notes": [
+        "4 轮被如实记为 no_change（owner∈{C,D,F} 的子目标不会被假装推进）"
+      ],
+      "error": null
+    },
+    {
+      "phase": "P5",
+      "title": "实验：E 跑 5 个独立复现脚本 + 登记证据等级",
+      "ok": true,
+      "seconds": 0.01,
+      "detail": {
+        "experiments": [
+          {
+            "tag": "exp1",
+            "experiment_id": "0000",
+            "result": "supports",
+            "evidence_kind": "cross_check",
+            "exit_code": 0,
+            "reused": true
+          },
+          {
+            "tag": "exp2",
+            "experiment_id": "0001",
+            "result": "supports",
+            "evidence_kind": "cross_check",
+            "exit_code": 0,
+            "reused": true
+          },
+          {
+            "tag": "exp3",
+            "experiment_id": "0002",
+            "result": "supports",
+            "evidence_kind": "cross_check",
+            "exit_code": 0,
+            "reused": true
+          },
+          {
+            "tag": "exp4",
+            "experiment_id": "0003",
+            "result": "supports",
+            "evidence_kind": "cross_check",
+            "exit_code": 0,
+            "reused": true
+          },
+          {
+            "tag": "exp5",
+            "experiment_id": "0004",
+            "result": "supports",
+            "evidence_kind": "cross_check",
+            "exit_code": 0,
+            "reused": true
+          }
+        ],
+        "experiment_rows": 5,
+        "rows_per_script": {
+          "exp1_k_spectrum.py": 1,
+          "exp2_girths.py": 1,
+          "exp3_chamber_spectrum.py": 1,
+          "exp4_size_regularity.py": 1,
+          "exp5_noniso.py": 1
+        },
+        "evidence_kinds": [
+          "cross_check"
+        ],
+        "negation_kinds": [
+          "not_proved"
+        ]
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P6",
+      "title": "撰写：G 出复现报告 + 登记依赖闭合",
+      "ok": true,
+      "seconds": 0.33,
+      "detail": {
+        "claims": 10,
+        "dependencies": [
+          {
+            "dep_id": "0000",
+            "used_by": "doc:draft#claim-7",
+            "kind": "theorem",
+            "label": "Companion book on quotient lattices, tori and periodic graphs, vol. 11, Theorem 6.5（Spec S̃_m = [−m,m] 的来源）",
+            "status": "external_unavailable",
+            "source_lit_id": null,
+            "source_experiment_id": null,
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "论文只给了 '[6]' 与书名/卷号/定理号，**未给出出版信息**；本项目检索不到该书 ⇒ 无法独立核验 Theorem 1.5 的这个前提。这正是论文 Remark 1.6 自己声明的边界。",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          },
+          {
+            "dep_id": "0001",
+            "used_by": "doc:draft#claim-1",
+            "kind": "prior_art",
+            "label": "本复现的输入论文（PDF 全文已入库）",
+            "status": "closed",
+            "source_lit_id": "0000",
+            "source_experiment_id": null,
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          },
+          {
+            "dep_id": "0002",
+            "used_by": "doc:draft#claim-3",
+            "kind": "experiment",
+            "label": "实验 0000：SpecK(m)=[-m,m]",
+            "status": "closed",
+            "source_lit_id": null,
+            "source_experiment_id": "0000",
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          },
+          {
+            "dep_id": "0003",
+            "used_by": "doc:draft#claim-3",
+            "kind": "experiment",
+            "label": "实验 0001：girth",
+            "status": "closed",
+            "source_lit_id": null,
+            "source_experiment_id": "0001",
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          },
+          {
+            "dep_id": "0004",
+            "used_by": "doc:draft#claim-3",
+            "kind": "experiment",
+            "label": "实验 0002：SpecStilde(m)=[-m,m]",
+            "status": "closed",
+            "source_lit_id": null,
+            "source_experiment_id": "0002",
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          },
+          {
+            "dep_id": "0005",
+            "used_by": "doc:draft#claim-3",
+            "kind": "experiment",
+            "label": "实验 0003：size_regularity",
+            "status": "closed",
+            "source_lit_id": null,
+            "source_experiment_id": "0003",
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          },
+          {
+            "dep_id": "0006",
+            "used_by": "doc:draft#claim-3",
+            "kind": "experiment",
+            "label": "实验 0004：nonisomorphic_cospectral",
+            "status": "closed",
+            "source_lit_id": null,
+            "source_experiment_id": "0004",
+            "page_range": {
+              "start": null,
+              "end": null,
+              "label": ""
+            },
+            "quote": "",
+            "status_reason": "",
+            "created_at": "2026-09-24T09:08:32+08:00",
+            "created_by": "agent-G"
+          }
+        ],
+        "dependency_rows": 7,
+        "document": {
+          "doc_id": "0000",
+          "kind": "reproduction_report",
+          "title": "独立推导复现：Cospectral periodic graphs: the spectrum does not determine the graph",
+          "markdown_path": "reproduction-report.md",
+          "sections": [],
+          "claims": [
+            {
+              "claim_id": "claim-9405a4f2",
+              "section": "1. 复现对象",
+              "text": "论文的 Definition 1.1 把 K(m) 定义为 V_K 上、x 与 x±e_i 相邻的图。",
+              "evidence_kind": "proof",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-627b083f",
+              "section": "1. 复现对象",
+              "text": "论文的 Definition 1.2 把 S̃_m 定义为仿射 Weyl 群关于 {s_0,…,s_{m−1}} 的 Cayley 图。",
+              "evidence_kind": "proof",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-5777b097",
+              "section": "2. 独立验证",
+              "text": "我们独立数值验证了 Spec K(m) = [−m, m]（m = 3,4,5）。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-907cb163",
+              "section": "2. 独立验证",
+              "text": "我们独立数值验证了 girth K(m) = 6，以及 girth S̃_3 = 6、girth S̃_m = 4（m ≥ 4）。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-c04d3794",
+              "section": "2. 独立验证",
+              "text": "我们独立验证了 |V_K/Λ| = 2m^{m−1} = 18 / 128 / 1250（m = 3/4/5）以及每个顶点恰有 m 个邻居。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-afea7061",
+              "section": "2. 独立验证",
+              "text": "我们独立数值支持了 Spec S̃_m 在 [−m,m] 上的填充性（m = 3,4,5），并对 m = 6 做了采样探测。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-00243646",
+              "section": "3. 结论",
+              "text": "K(m) 与 S̃_m 在 m = 4,5 时同谱（[−m,m]）但围长不同（6 vs 4），因此不同构。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": false,
+              "negation_kind": null,
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-ba8b664a",
+              "section": "4. 未证明的边界",
+              "text": "我们**未能**独立证明 Spec S̃_m = [−m,m]：该结果是论文引用配套书 [6, Thm. 6.5] 得到的，而该书的出版信息论文未给出，我们无法获得。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": true,
+              "negation_kind": "not_proved",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-138aadb6",
+              "section": "4. 未证明的边界",
+              "text": "m ≥ 6 时 Spec S̃_m = [−m,m] 的等号是论文自己列出的公开问题，我们没有解决它。",
+              "evidence_kind": "cross_check",
+              "citations": "<list>",
+              "is_negative": true,
+              "negation_kind": "not_proved",
+              "disclaimer": "数值交叉验证，不构成证明",
+              "scope_caveat": "",
+              "revision_hash": ""
+            },
+            {
+              "claim_id": "claim-5bbd93c2",
+              "section": "5. 方法与边界",
+              "text": "本环境没有 Lean/Coq 等证明检查器，因此我们没有产出任何 proof 级证据。",
+              "evidence_kind": "heuristic",
+              "citations": "<list>",
+              "is_negative": true,
+              "negation_kind": "not_searched_here",
+              "disclaimer": "",
+              "scope_caveat": "",
+              "revision_hash": ""
+            }
+          ],
+          "open_problems": [
+            "m ≥ 6 时 Spec S̃_m = [−m,m] 的等号（论文 §6 的公开问题）",
+            "配套书 [6, Thm. 6.5] 的证明无法获得，故 Theorem 1.5 的前提无法独立核验",
+            "更细的谱数据（谱测度/态密度）能否区分这一对图（论文 Remark 1.7 留作公开）"
+          ],
+          "status": "draft",
+          "review_rounds": 0,
+          "created_at": "2026-09-24T09:08:32+08:00",
+          "updated_at": "2026-09-24T09:08:32+08:00",
+          "created_by": "agent-G"
+        },
+        "doc_id": "0000"
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P7",
+      "title": "审校：H 独立复核 + 负控（注入过度声称）",
+      "ok": true,
+      "seconds": 0.1,
+      "detail": {
+        "negative_control_clean": {
+          "errors": 0,
+          "verdict": "accepted"
+        },
+        "negative_control_overclaim": {
+          "errors": 1,
+          "kinds": [
+            "overclaim"
+          ]
+        },
+        "negative_control_unsupported": {
+          "errors": 1,
+          "evidence": [
+            "claim_id=c1 的 citations=[]（空）"
+          ]
+        },
+        "negative_control_document": {
+          "doc_id": "0001",
+          "errors": 3,
+          "kinds": [
+            "missing_negation_kind",
+            "overclaim",
+            "unsupported_claim"
+          ]
+        },
+        "review": {
+          "doc_id": "0000",
+          "checked": true,
+          "round": 1,
+          "new_findings": [],
+          "duplicate_skipped": 0,
+          "reopened": [],
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "status": "accepted",
+          "status_updated": true,
+          "status_error": null,
+          "verdict": "accepted",
+          "reason": "机械检查发现 error=0、warning=0、info=0；依赖闭合已检查（检查了 0 条依赖）；新增发现 0 条、与已有发现重复被跳过 0 条。"
+        },
+        "findings": 0,
+        "verify_fixes": {
+          "doc_id": "0000",
+          "round": 2,
+          "resolved": [],
+          "still_open": [],
+          "unresolved_findings": [],
+          "verdict": "accepted",
+          "reason": "第 2 轮复审（上限 max_review_rounds=2）：上一轮 0 条发现里 resolved=0、仍复现=0；error 级未解决 0 条。",
+          "error_count": 0,
+          "warning_count": 0,
+          "info_count": 0,
+          "dep_check": {
+            "checked": true,
+            "reason": "检查了 0 条依赖",
+            "open": []
+          },
+          "finding_updates": [],
+          "status": "accepted",
+          "status_updated": true,
+          "status_error": null
+        },
+        "doc_status": "accepted",
+        "review_rounds": 0
+      },
+      "notes": [
+        "负控稿件 0001 及其 finding 已清理（不留给 P8 当假红灯）"
+      ],
+      "error": null
+    },
+    {
+      "phase": "P8",
+      "title": "一致性：verify 全库校验",
+      "ok": true,
+      "seconds": 0.06,
+      "detail": {
+        "report": {
+          "ok": true,
+          "deep": false,
+          "checked": {
+            "search_requests": 7,
+            "literature": 1,
+            "concepts": 14,
+            "relations": 25,
+            "research_questions": 1,
+            "analysis_reports": 4,
+            "reprocess_requests": 1,
+            "experiments": 5,
+            "attack_plans": 1,
+            "documents": 1,
+            "dependencies": 7,
+            "review_findings": 0,
+            "tasks": 0,
+            "usage_ledger": 0,
+            "eval_results": 0,
+            "counters": 10,
+            "dependencies_closed": 6,
+            "usage_tokens_total": 0
+          },
+          "errors": [],
+          "warnings": [
+            {
+              "level": "warning",
+              "table": "dependencies",
+              "row_id": "0000",
+              "code": "dangling_dep_external",
+              "message": "doc:draft#claim-7 依赖的「Companion book on quotient lattices, tori and periodic graphs, vol. 11, Theorem 」在本项目可得范围之外：论文只给了 '[6]' 与书名/卷号/定理号，**未给出出版信息**；本项目检索不到该书 ⇒ 无法独立核验 Theorem 1.5 的这个前提。这正是论文 Remark 1.6 自己声明的边界。。**引用该结论时必须一并声明这一前提**"
+            }
+          ],
+          "error_count": 0,
+          "warning_count": 1
+        },
+        "error_count": 0,
+        "warning_count": 1,
+        "checked": {
+          "search_requests": 7,
+          "literature": 1,
+          "concepts": 14,
+          "relations": 25,
+          "research_questions": 1,
+          "analysis_reports": 4,
+          "reprocess_requests": 1,
+          "experiments": 5,
+          "attack_plans": 1,
+          "documents": 1,
+          "dependencies": 7,
+          "review_findings": 0,
+          "tasks": 0,
+          "usage_ledger": 0,
+          "eval_results": 0,
+          "counters": 10,
+          "dependencies_closed": 6,
+          "usage_tokens_total": 0
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P9",
+      "title": "汇总：表计数 + 论文声称 vs 独立验证",
+      "ok": true,
+      "seconds": 0.03,
+      "detail": {
+        "stats": {
+          "root": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace",
+          "search_requests": {
+            "count": 7,
+            "done": 2,
+            "pending": 5
+          },
+          "literature": {
+            "count": 1,
+            "processed": 1,
+            "downloaded": 1
+          },
+          "concepts": {
+            "count": 14
+          },
+          "relations": {
+            "count": 25,
+            "by_status": {
+              "active": 25
+            },
+            "quote_verified": 25,
+            "quote_unverified": 0,
+            "quote_unknown": 0
+          },
+          "research_questions": {
+            "count": 1
+          },
+          "analysis_reports": {
+            "count": 4
+          },
+          "reprocess_requests": {
+            "count": 1
+          },
+          "experiments": {
+            "count": 5
+          },
+          "attack_plans": {
+            "count": 1
+          },
+          "documents": {
+            "count": 1
+          },
+          "dependencies": {
+            "count": 7
+          },
+          "review_findings": {
+            "count": 0
+          },
+          "tasks": {
+            "count": 0
+          },
+          "usage_ledger": {
+            "count": 0
+          },
+          "eval_results": {
+            "count": 0
+          },
+          "events": {
+            "appended": 173
+          }
+        },
+        "paper_claims": {
+          "computable": 21,
+          "quoted": 5,
+          "open": 4,
+          "proof-only": 3
+        },
+        "paper_claims_total": 33
+      },
+      "notes": [
+        "论文结论分类：computable=21、open=4、proof-only=3、quoted=5（computable=我们可独立数值验证；quoted/proof-only/open=我们**不能**独立验证）"
+      ],
+      "error": null
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "not_run": 0
+  }
+}

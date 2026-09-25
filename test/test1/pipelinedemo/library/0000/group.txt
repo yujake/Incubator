@@ -1,0 +1,1 @@
+A group is a set with an associative binary operation, an identity element, and inverses for every element.

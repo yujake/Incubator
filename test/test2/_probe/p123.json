@@ -1,0 +1,278 @@
+{
+  "workspace": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace",
+  "phases": [
+    {
+      "phase": "P1",
+      "title": "输入：登记文献 + B 抽取（引文逐字回验）",
+      "ok": true,
+      "seconds": 0.47,
+      "detail": {
+        "quotes": {
+          "total": 25,
+          "verified": 25,
+          "failed": 0,
+          "unknown": 0,
+          "negative_controls_ok": true
+        },
+        "b": {
+          "processed": 1,
+          "concepts_created": 14,
+          "concepts_reused": 59,
+          "relations_added": 25,
+          "relations_duplicate": 0,
+          "relations_suspect": 0,
+          "suspect_by_quote": 0,
+          "quotes_verified": 25,
+          "quotes_failed": 0,
+          "quotes_unknown": 0,
+          "unreadable": 0,
+          "failed": 0,
+          "conflict_checks_run": 25,
+          "conflicts_detected": 0,
+          "conflict_checks_skipped": 0,
+          "skipped_reason": null,
+          "details": []
+        }
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P2",
+      "title": "分析：C 的四类分析（最热/路径/冷门/缺口）",
+      "ok": true,
+      "seconds": 0.11,
+      "detail": {
+        "resolved": {
+          "K(m)": "0000",
+          "S̃_m": "0001"
+        },
+        "reports": [
+          {
+            "kind": "hottest",
+            "ok": true,
+            "truncated": false,
+            "summary": "最热门的 5 个概念：K(m)(16次)、S̃_m(11次)、spectrum of a periodic graph(11次)、girth(8次)、Floquet matrix(3次)",
+            "report_id": "0000"
+          },
+          {
+            "kind": "paths",
+            "ok": true,
+            "truncated": false,
+            "summary": "找到 4 条高信息量路径（另有 medium 0 条、low 0 条）：K(m)→S̃_m（0008，score=3.40）；K(m)→spectrum of a periodic graph→cospectral→S̃_m（0016→0007→0007，score=4.57）；K(m)→girth→spectral invariant→S̃_m（0023→0011→0011，score=4.57",
+            "report_id": "0001"
+          },
+          {
+            "kind": "cold",
+            "ok": true,
+            "truncated": false,
+            "summary": "最冷门的 5 个概念（degree 升序）：cospectral(degree=1)、vertex-transitive(degree=1)、density of states(degree=1)、periodic graph(degree=2)、companion book [6](degree=2)；其中'冷门但连接强'（最可能被低估）2 个：periodic graph、companion ",
+            "report_id": "0002"
+          },
+          {
+            "kind": "gaps",
+            "ok": true,
+            "truncated": false,
+            "summary": "确实有：发现 10 条值得研究的关系候选（最高置信度 high）。检查范围：15 个概念组、29 个结构洞；被否决项剔除 0 条、净分不足 13 条。（结构洞 29 个、低频概念组 10 个、否决 0 条、净分不足 13 条，截断=False）",
+            "report_id": "0003"
+          }
+        ],
+        "paths_code_chains": [
+          [
+            "0016",
+            "0007",
+            "0007"
+          ],
+          [
+            "0023",
+            "0011",
+            "0011"
+          ],
+          [
+            "0018",
+            "0015",
+            "0009",
+            "0011"
+          ]
+        ],
+        "report_ids": [
+          "0000",
+          "0001",
+          "0002",
+          "0003"
+        ]
+      },
+      "notes": [],
+      "error": null
+    },
+    {
+      "phase": "P3",
+      "title": "研究：D 建问题台账 + 矛盾闭环 + 提交检索请求",
+      "ok": true,
+      "seconds": 0.2,
+      "detail": {
+        "input_report_ids": [
+          "0000",
+          "0001",
+          "0002",
+          "0003"
+        ],
+        "ingest_per_report": [
+          {
+            "report_id": "0000",
+            "kind": "hottest",
+            "new_questions": 1,
+            "candidates": 1,
+            "merged": 0,
+            "equivalent_matched": 0,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": true,
+              "reason": "范围=given_relation_ids，扫描 10 条关系，命中 2 对字面候选（strong 0 对、weak 2 对）；其中 2 条是 weak（仅否定词出现与否不一致），**实测假阳性极高，不得当作矛盾呈现**，只能作为继续查的线索",
+              "raw_count": 2,
+              "skipped": [
+                "弱线索（0016、0017，strength=weak）：只记录，不建问题/不追问",
+                "弱线索（0021、0024，strength=weak）：只记录，不建问题/不追问"
+              ],
+              "weak_clues": [
+                {
+                  "relation_ids": [
+                    "0016",
+                    "0017"
+                  ],
+                  "concept_ids": [
+                    "0000",
+                    "0005"
+                  ],
+                  "strength": "weak",
+                  "signals": "否定标记出现与否不一致（0016 neg=True / 0017 neg=False）—— **这只是线索，不是对立主张**",
+                  "detection": "literal",
+                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                },
+                {
+                  "relation_ids": [
+                    "0021",
+                    "0024"
+                  ],
+                  "concept_ids": [
+                    "0001",
+                    "0008"
+                  ],
+                  "strength": "weak",
+                  "signals": "否定标记出现与否不一致（0021 neg=False / 0024 neg=True）—— **这只是线索，不是对立主张**",
+                  "detection": "literal",
+                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                }
+              ]
+            }
+          },
+          {
+            "report_id": "0001",
+            "kind": "paths",
+            "new_questions": 0,
+            "candidates": 3,
+            "merged": 0,
+            "equivalent_matched": 3,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": null,
+              "reason": "报告 payload 里没有关系代号，无法推导矛盾查询范围 ⇒ **没查**（刻意不退回全图扫描：那会把无关矛盾灌进本报告的台账）",
+              "raw_count": 0,
+              "skipped": [],
+              "weak_clues": []
+            }
+          },
+          {
+            "report_id": "0002",
+            "kind": "cold",
+            "new_questions": 0,
+            "candidates": 2,
+            "merged": 0,
+            "equivalent_matched": 2,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": true,
+              "reason": "范围=given_relation_ids，扫描 7 条关系，命中 0 对字面候选（strong 0 对、weak 0 对）。注意这个结论的强度：它只说明'在可逐字核实的形态下没有发现矛盾'，**不等于'文献之间没有分歧'**（一般语义矛盾本方法判定不了）",
+              "raw_count": 0,
+              "skipped": [],
+              "weak_clues": []
+            }
+          },
+          {
+            "report_id": "0003",
+            "kind": "gaps",
+            "new_questions": 0,
+            "candidates": 3,
+            "merged": 0,
+            "equivalent_matched": 3,
+            "skipped": [],
+            "contradictions": {
+              "source": "c_service",
+              "checked": null,
+              "reason": "报告 payload 里没有关系代号，无法推导矛盾查询范围 ⇒ **没查**（刻意不退回全图扫描：那会把无关矛盾灌进本报告的台账）",
+              "raw_count": 0,
+              "skipped": [],
+              "weak_clues": []
+            }
+          }
+        ],
+        "questions_after_ingest": [
+          "0000"
+        ],
+        "question_statuses": [
+          "open"
+        ],
+        "run_round": {
+          "report_id": "0000",
+          "kind": "hottest",
+          "request": "最热概念（验收 P2）",
+          "summary": "最热门的 5 个概念：K(m)(16次)、S̃_m(11次)、spectrum of a periodic graph(11次)、girth(8次)、Floquet matrix(3次)",
+          "ingested": [],
+          "adjudications": [],
+          "traced": [],
+          "assessed": [],
+          "submitted": [],
+          "researched": [],
+          "confidence": {},
+          "poll": {
+            "ok": true,
+            "ready": [],
+            "waiting": [],
+            "promoted": [],
+            "merged_relations": {},
+            "held": [],
+            "relevance": {},
+            "counts": {
+              "ready": 0,
+              "waiting": 0,
+              "questions_with_waiting": 0
+            },
+            "reasons": {}
+          }
+        },
+        "questions_total": 1,
+        "high_priority_questions": 1,
+        "search_requests_by_submitter": [
+          "human"
+        ],
+        "machine_submitted_requests": 0,
+        "contradiction_questions": 0,
+        "concept_count": 14,
+        "research_report": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace\\research-report.md"
+      },
+      "notes": [
+        "机器提交的检索请求 0 条（**本环境无网络检索后端，0 条是预期结果**）"
+      ],
+      "error": null
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "not_run": 0
+  }
+}
