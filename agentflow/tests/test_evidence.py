@@ -435,11 +435,11 @@ def _extract_pages(pages: list[str]):
     return _e
 
 
-def test_acquire_fulltext_ok_records_provenance():
+def test_acquire_fulltext_ok_records_provenance(tmp_path: Path):
     """③ ok：落盘哈希、页数、抽取后端名、字节数四件 provenance 都要有。"""
     sources = [_src_for_fulltext()]
     got = E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_extract_pages(["a", "b"]),
-                             dest_dir=".")
+                             dest_dir=tmp_path)
     ft = sources[0]["fulltext"]
     assert ft["status"] == "ok" and got["counts"]["ok"] == 1
     assert ft["pages"] == 2 and ft["backend"] == "pdf"
@@ -447,17 +447,49 @@ def test_acquire_fulltext_ok_records_provenance():
     assert ft["bytes"] > 0 and ft["reason"]
 
 
-def test_acquire_fulltext_no_pdf_has_a_reason():
+def test_acquire_fulltext_writes_only_under_the_given_dest_dir(tmp_path: Path):
+    """回归钉子：本文件历史上 8 处写成 `dest_dir="."`，把 `paper.pdf` 写进了仓库根。
+
+    那是**实测发生过**的事故：`pytest` 的 cwd 是仓库根，假下载器把夹具 PDF 落在 `.`
+    就等于「每跑一次测试，仓库根就覆写一次 paper.pdf」——审计期实测仓库根里原有的
+    `paper.pdf` 被它从 351623 字节覆盖成 26 字节的夹具文本，而且"同一棵树跑两次
+    得到同样的仓库根"这件事从此不成立。
+
+    判据刻意**不是**"根目录条目集合没变"：旧行为是**覆写**一个已存在的同名文件，
+    条目集合根本不会变，那种写法抓不住这条缺陷。这里盯的是那个具体路径的
+    (存在性, 大小, mtime)，它才是这条缺陷的指纹；正向的一半是"夹具必须真的落在
+    传进来的 dest_dir 里"（否则这条用例可以靠"什么都没写"骗过去）。
+    """
+    root = Path(__file__).resolve().parents[1]
+    target = root / "paper.pdf"
+
+    def fingerprint(p: Path) -> tuple[bool, int, int]:
+        if not p.exists():
+            return (False, -1, -1)
+        st = p.stat()
+        return (True, st.st_size, st.st_mtime_ns)
+
+    before = fingerprint(target)
+    sources = [_src_for_fulltext()]
+    E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_extract_pages(["a"]),
+                       dest_dir=tmp_path)
+    assert fingerprint(target) == before, (
+        f"仓库根的 paper.pdf 被这次调用动过：{before} -> {fingerprint(target)}"
+    )
+    assert (tmp_path / "paper.pdf").is_file(), "夹具 PDF 应该落在传进来的 dest_dir 里"
+
+
+def test_acquire_fulltext_no_pdf_has_a_reason(tmp_path: Path):
     """③ no_pdf：没有可下载的开放全文 ⇒ 与"下载失败"分处两态。"""
     sources = [_src_for_fulltext(pdf_url=None, url="https://doi.org/10.1000/abelian")]
     got = E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_extract_pages(["a"]),
-                             dest_dir=".")
+                             dest_dir=tmp_path)
     assert sources[0]["fulltext"]["status"] == "no_pdf"
     assert got["counts"]["no_pdf"] == 1
     assert "没有可下载" in sources[0]["fulltext"]["reason"]
 
 
-def test_acquire_fulltext_download_failed_has_a_reason():
+def test_acquire_fulltext_download_failed_has_a_reason(tmp_path: Path):
     """③ download_failed：下载器报失败 ⇒ 理由必须来自它，且不许继续去抽取。"""
     called: list[str] = []
 
@@ -469,35 +501,35 @@ def test_acquire_fulltext_download_failed_has_a_reason():
         raise AssertionError("下载失败后不该去抽取")
 
     sources = [_src_for_fulltext()]
-    got = E.acquire_fulltext(sources, fetch_fn=_bad, extract_fn=_never, dest_dir=".")
+    got = E.acquire_fulltext(sources, fetch_fn=_bad, extract_fn=_never, dest_dir=tmp_path)
     assert sources[0]["fulltext"]["status"] == "download_failed"
     assert sources[0]["fulltext"]["reason"] == "http_403"
     assert called == [] and got["counts"]["download_failed"] == 1
 
 
-def test_acquire_fulltext_no_text_layer_means_scanned():
+def test_acquire_fulltext_no_text_layer_means_scanned(tmp_path: Path):
     """③ no_text_layer：能打开、但一页文本都没有（扫描件）⇒ 不是 extract_failed。"""
     sources = [_src_for_fulltext()]
     got = E.acquire_fulltext(sources, fetch_fn=_fetch_ok(),
-                             extract_fn=_extract_pages([]), dest_dir=".")
+                             extract_fn=_extract_pages([]), dest_dir=tmp_path)
     assert sources[0]["fulltext"]["status"] == "no_text_layer"
     assert got["counts"]["no_text_layer"] == 1
     assert "OCR" in sources[0]["fulltext"]["reason"]
 
 
-def test_acquire_fulltext_extract_failed_keeps_the_exception_type():
+def test_acquire_fulltext_extract_failed_keeps_the_exception_type(tmp_path: Path):
     """③ extract_failed：抽取器抛异常 ⇒ 理由里必须带异常类型（不许只说"失败"）。"""
     def _boom(path: str):
         raise RuntimeError("no pdf backend installed")
 
     sources = [_src_for_fulltext()]
-    got = E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_boom, dest_dir=".")
+    got = E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_boom, dest_dir=tmp_path)
     assert sources[0]["fulltext"]["status"] == "extract_failed"
     assert "RuntimeError" in sources[0]["fulltext"]["reason"]
     assert got["counts"]["extract_failed"] == 1
 
 
-def test_acquire_fulltext_over_limit_is_not_configured_not_no_pdf():
+def test_acquire_fulltext_over_limit_is_not_configured_not_no_pdf(tmp_path: Path):
     """③ not_configured（第二种含义）：超 limit 而「没有发起」下载。
 
     这一条是"没做"与"做了没成"的分界：超限的来源绝不许写成 no_pdf，
@@ -511,17 +543,17 @@ def test_acquire_fulltext_over_limit_is_not_configured_not_no_pdf():
         return {"ok": False, "error": "should_not_be_called"}
 
     got = E.acquire_fulltext(sources, fetch_fn=_count, extract_fn=_extract_pages(["a"]),
-                             dest_dir=".", limit=1)
+                             dest_dir=tmp_path, limit=1)
     assert sources[1]["fulltext"]["status"] == "not_configured"
     assert "没有发起下载" in sources[1]["fulltext"]["reason"]
     assert len(calls) == 1, "超限的来源不许真的去打网络"
     assert got["counts"]["not_configured"] == 1 and got["counts"]["download_failed"] == 1
 
 
-def test_acquire_fulltext_without_impls_is_not_configured():
+def test_acquire_fulltext_without_impls_is_not_configured(tmp_path: Path):
     """③ not_configured（第一种含义）：压根没有下载器/抽取器可造。"""
     sources = [_src_for_fulltext()]
-    got = E.acquire_fulltext(sources, fetch_fn=None, extract_fn=None, dest_dir=".")
+    got = E.acquire_fulltext(sources, fetch_fn=None, extract_fn=None, dest_dir=tmp_path)
     # 生产实现是能被 import 的（本仓库里 fetch/extract 都在），所以这里要的是
     # "没有 setup 失败"这一半；真正的"读不到模块"由 `_acquire_impls` 的返回值表达。
     assert got["configured"] is True and got["checked"] is True
@@ -606,7 +638,7 @@ def test_negative_control_fabricated_quote_against_fulltext_is_not_found():
     assert res["counts"]["not_found"] == 1
 
 
-def test_download_failure_still_verifies_against_the_abstract():
+def test_download_failure_still_verifies_against_the_abstract(tmp_path: Path):
     """⑥ 下载失败 ⇒ download_failed，但整体仍能在有摘要时继续（回验落到摘要级）。
 
     这一条把"全文没拿到"与"没查成"分开：摘要在手上就是查过了，
@@ -618,7 +650,7 @@ def test_download_failure_still_verifies_against_the_abstract():
         return {"ok": False, "error": "network_error: timed out"}
 
     got = E.acquire_fulltext(sources, fetch_fn=_bad, extract_fn=_extract_pages(["x"]),
-                             dest_dir=".")
+                             dest_dir=tmp_path)
     assert sources[0]["fulltext"]["status"] == "download_failed"
     assert got["counts"]["download_failed"] == 1
     res = E.verify_claims([{"text": "它是交换群", "quote": VERBATIM}], sources)
