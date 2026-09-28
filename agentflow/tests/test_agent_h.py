@@ -108,8 +108,13 @@ def overclaim_claim(*, with_disclaimer: bool = True, citations: list[str] | None
 
 
 def document_row(doc_id: str, claims: list[dict], *, status: str = "draft") -> dict:
-    """构造一行 documents（不校验：坏样本要靠它造出来）。"""
-    return S.Document(
+    """构造一行 documents（不校验：坏样本要靠它造出来）。
+
+    `T4-A` 之后每一行稿件都带内容哈希（G 的写侧口径是"每次写都钉"）——
+    不能只在 `status="accepted"` 时补：H 会稍后把 draft 置成 accepted，
+    而 `_set_doc_status` 只改 status，那时再补就晚了。
+    """
+    row = S.Document(
         doc_id=doc_id,
         kind="paper",
         title=f"稿件 {doc_id}",
@@ -120,6 +125,11 @@ def document_row(doc_id: str, claims: list[dict], *, status: str = "draft") -> d
         created_at=TS,
         updated_at=TS,
     ).to_dict()
+    if not row.get("content_sha256"):
+        from agentflow import signatures as _SIG
+
+        row["content_sha256"] = _SIG.content_sha256_of(row)
+    return row
 
 
 def seed_document(st: Store, doc_id: str, claims: list[dict], *, status: str = "draft") -> dict:

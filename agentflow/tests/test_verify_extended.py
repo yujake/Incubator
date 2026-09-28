@@ -81,6 +81,13 @@ def _document(store, did: str, **kw) -> dict:
     base = dict(doc_id=did, kind="reproduction_report", title="复现报告", claims=[claim],
                 status="draft", created_at=TS)
     base.update(kw)
+    # T4-A：每一行稿件都带内容哈希（G 的写侧口径是"每次写都钉"，不是只在 accepted 时补）。
+    # 这个夹具扮演写侧，所以它照做；"accepted 却没有哈希"那种形态由
+    # tests/test_internal_citations.py 直接构造行来测（不在这里被夹具顺手补上）。
+    if not base.get("content_sha256"):
+        from agentflow import signatures as _SIG
+
+        base["content_sha256"] = _SIG.content_sha256_of(base)
     row = S.Document(**base)
     row.validate()
     with store.tx("documents", actor="test") as tx:
@@ -135,7 +142,7 @@ def test_unknown_citation_kind_message_lists_every_declared_prefix(store):
     "消息把人引向哪个写法"，而那个答案不该由被测对象自己提供 —— 从被测对象取
     词表会让"两边一起改错"照样绿。
     """
-    expected_kinds = ("rel", "lit", "exp", "eval")
+    expected_kinds = ("rel", "lit", "exp", "eval", "doc")
     add_literature(store, "0000", title="某文献")
     _eval_row(store)
     _document(store, "0000", claims=[_claim_with(["lit:0000", "eval:0000", "foo:0000"])])
@@ -177,7 +184,10 @@ def test_negative_control_the_old_message_would_be_caught(store):
     from agentflow.verify import CITATION_KINDS
 
     missing = [k for k in CITATION_KINDS if f"{k}:" not in old_message]
-    assert missing == ["eval"], f"夹具算错了：{missing}"
+    # `T4-A` 把 `doc:` 加进词表之后，这句"改前的话"还多漏一档 —— 它当然漏：
+    # 那句话写下时 `doc:` 这一档根本不存在。夹具的意图是"它确实漏了东西"，
+    # 所以这里逐字列出两个漏项，而不是放宽成"漏了就都行"。
+    assert missing == ["eval", "doc"], f"夹具算错了：{missing}"
     # 改前的那句话在当前的判据下必红 —— 而当前实现给的那句话不红
     assert all(f"{k}:" in ws[0]["message"] for k in CITATION_KINDS)
     assert "eval:" not in old_message, "改前形态确实漏了 eval:（D10 的现状）"

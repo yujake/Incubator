@@ -1240,10 +1240,16 @@ def build_document(
             open_problems=probs,
             status="draft",
             review_rounds=0,
+            revision=1,
             created_at=S.now_iso(),
             updated_at=S.now_iso(),
             created_by=actor,
         )
+        # 内容哈希由写侧算一次（`draft/30` §T4-A）：没有它，审批与内部引用都
+        # 钉不住"审/引的是哪一版"。算法只有一份实现（`signatures`），读侧会重算比对。
+        from .. import signatures as SIG
+
+        row.content_sha256 = SIG.content_sha256_of(row.to_dict())
         # 显式校验一次，让错误在写入前带着"哪一句话"抛出，而不是等到提交阶段
         # 变成一句泛泛的 "documents.rows[0] 校验失败"。
         row.validate()

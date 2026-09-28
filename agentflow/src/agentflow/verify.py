@@ -26,6 +26,7 @@ from typing import Any
 
 from . import dedup as D
 from . import schema as S
+from . import signatures as SIG
 from . import textutil as T
 from .agent_b import QUOTE_OUT_OF_DECLARED_RANGE as OUT_OF_DECLARED_RANGE
 from .agent_e import declared_name_of_notes
@@ -46,10 +47,10 @@ from .store import MAX_ID, Store
 #: 给，这里只关心它落在哪一档），于是"词表里有、分支里没有"（或反过来）会直接炸，
 #: 而不是让一条拒绝消息把人指向一个错的写法 —— `D10` 就是那样活了很久：
 #: 没有任何一条既有断言会因为消息写错而变红。
-CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval")
+CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc")
 #: 逐档判据分支里各写了哪些 kind。它与 `CITATION_KINDS` 必须同轮改 ——
 #: 这个常量是"分支那一侧"的声明，为的是让漂移在导入期就可见（见上面的断言）。
-_BRANCH_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval")
+_BRANCH_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc")
 assert set(CITATION_KINDS) == set(_BRANCH_KINDS), (
     f"CITATION_KINDS={sorted(CITATION_KINDS)} 与逐档判据分支 "
     f"{sorted(_BRANCH_KINDS)} 脱钩 —— 两边必须同轮改"
@@ -535,12 +536,30 @@ def verify_all(
         st = str(d.get("status") or "")
         if st == "closed":
             lid, xeid = d.get("source_lit_id"), d.get("source_experiment_id")
+            sdid = str(d.get("source_doc_id") or "")
+            scid = str(d.get("source_claim_id") or "")
             if lid and lid not in lit_by_id:
                 rep.issues.append(Issue("error", "dependencies", did, "dangling_dep",
                                         f"status='closed' 但 source_lit_id={lid} 不在文献表里 ⇒ 空头支票"))
             elif xeid and xeid not in exp_by_id:
                 rep.issues.append(Issue("error", "dependencies", did, "dangling_dep",
                                         f"status='closed' 但 source_experiment_id={xeid} 不在实验表里 ⇒ 空头支票"))
+            elif sdid and sdid not in doc_by_id:
+                # 内部来源（`draft/30` §T4-A）：引用我们自己的一篇稿子
+                rep.issues.append(Issue("error", "dependencies", did, "dangling_dep",
+                                        f"status='closed' 但 source_doc_id={sdid} 不在稿件表里 ⇒ 空头支票"))
+            elif sdid and scid and scid not in {
+                    str(cl.get("claim_id")) for cl in (doc_by_id[sdid].get("claims") or [])
+                    if isinstance(cl, dict)}:
+                rep.issues.append(Issue("error", "dependencies", did, "dangling_dep",
+                                        f"status='closed' 但 source_claim_id={scid} 不在稿件 "
+                                        f"{sdid} 的断言里 ⇒ 空头支票"))
+            elif sdid and str(doc_by_id[sdid].get("status") or "") != "accepted":
+                rep.issues.append(Issue(
+                    "error", "dependencies", did, "internal_dep_not_accepted",
+                    f"内部来源稿件 {sdid} 的 status={doc_by_id[sdid].get('status')!r}（不是 accepted）"
+                    "⇒ 依赖了一条**没审过**的内部断言。内部引用成立的前提是那一版被审过",
+                ))
             else:
                 dep_ok += 1
         elif st == "external_unavailable":
@@ -742,6 +761,17 @@ def verify_all(
 
     for doc in documents:
         docid = doc.get("doc_id")
+        # ---- 行内自洽：`content_sha256` 是"审的是这一版"的锚（`draft/30` §T4-A）。
+        # 它由写侧（G）算一次，这里**重算**比对 —— 存的哈希是一句声称，重算才是判据。
+        stored_hash = str(doc.get("content_sha256") or "")
+        if stored_hash:
+            want_hash = SIG.content_sha256_of(doc)
+            if stored_hash.lower() != want_hash:
+                rep.issues.append(Issue(
+                    "error", "documents", docid, "content_hash_mismatch",
+                    f"content_sha256 与重算不符（存 {stored_hash[:16]}… / 算 {want_hash[:16]}…）"
+                    "⇒「审批/引用钉的是这一版」这句话不成立。内容改过就必须重算（G 的 revise 会做）",
+                ))
         for c in doc.get("claims") or []:
             cid = str(c.get("claim_id") or "")
             cites = c.get("citations") or []
@@ -766,6 +796,45 @@ def verify_all(
                 elif kind == "eval" and ref not in eval_by_id:
                     rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
                                             f"断言 {cid} 引用了不存在的评测结果 {ref}"))
+                elif kind == "doc":
+                    # 内部引用（`draft/30` §T4-A）：`doc:<稿件>#<断言>@<哈希前 16 位>`。
+                    # 三段都要真：稿件在、那条断言在、且**钉的哈希就是目标稿件当前这一版**。
+                    parts = SIG.parse_doc_ref(str(x))
+                    if parts is None:
+                        rep.issues.append(Issue(
+                            "error", "documents", docid, "dangling_doc_citation",
+                            f"断言 {cid} 的内部引用 {x!r} 形状不对："
+                            "应为 doc:<稿件>#<断言>@<内容哈希前 16 位>",
+                        ))
+                    else:
+                        tdoc_id, tclaim_id, thash = parts
+                        tdoc = doc_by_id.get(tdoc_id)
+                        tclaims = {str(cl.get("claim_id")) for cl in (tdoc.get("claims") or [])
+                                   if isinstance(cl, dict)} if tdoc else set()
+                        if tdoc is None or tclaim_id not in tclaims:
+                            rep.issues.append(Issue(
+                                "error", "documents", docid, "dangling_doc_citation",
+                                f"断言 {cid} 引用了不存在内部断言 {tdoc_id}#{tclaim_id}",
+                            ))
+                        elif str(tdoc.get("status") or "") != "accepted":
+                            rep.issues.append(Issue(
+                                "error", "documents", docid, "internal_citation_not_accepted",
+                                f"断言 {cid} 引用的内部断言 {tdoc_id}#{tclaim_id} 所在稿件"
+                                f"status={tdoc.get('status')!r}（不是 accepted）⇒ "
+                                "引文图不能把没审过的稿子当来源（`draft/29` §8.5 第 1 条）",
+                            ))
+                        elif not thash or thash != SIG.content_sha256_of(tdoc)[:SIG.REF_HASH_LEN]:
+                            # 比的是**重算出来的当前内容哈希**，不是行里存的那个字段：
+                            # 内容改了而存字段没刷时，旧引用照样必须失效（存字段的问题
+                            # 另有 `content_hash_mismatch` 单独报）。改一字节即失效，
+                            # 说的就是这条。
+                            rep.issues.append(Issue(
+                                "error", "documents", docid, "internal_citation_stale",
+                                f"断言 {cid} 引用 {tdoc_id}#{tclaim_id} 时钉的是 {thash or '(没钉哈希)'}，"
+                                f"而该稿件当前内容是 "
+                                f"{SIG.content_sha256_of(tdoc)[:SIG.REF_HASH_LEN]}"
+                                " ⇒ 改稿之后旧引用失效（不许静默沿用）",
+                            ))
                 elif kind not in CITATION_KINDS:
                     # `D10`：消息里的词表从上面那个判据元组派生，不许再写一遍字面量 ——
                     # 两处各写一份时实测漏了 `eval:`（而它上一行刚被单独检查过）。

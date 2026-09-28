@@ -2119,6 +2119,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "runflow.py": "端到端一条命令：一个主题 + 一个美元上限 → 一份可复核的运行记录",
     "scheduler.py": "调度：按写集互斥分波并发",
     "schema.py": "数据模型与校验",
+    "signatures.py": "稿件内容的规范哈希（唯一实现）：审批与内部引用都钉在它上面（依据 `draft/30` §T4-A）",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",

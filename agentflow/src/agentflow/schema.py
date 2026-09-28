@@ -1236,6 +1236,13 @@ class Document:
     review_rounds: int = 0
     created_at: str = ""
     updated_at: str = ""
+    #: 内容第几版（G 每次改内容 +1；`draft/30` §T4-A）。新建稿件是 1。
+    #: 它不参与 `content_sha256`（那算的是内容本身），只作"改了几次"的可读刻度。
+    revision: int = 0
+    #: 这一版内容的规范哈希（`signatures.content_sha256_of`；"" = 还没算过）。
+    #: 为什么必须有：审批与引用都是**对某一版**的 —— 没有它，"审批过的版本"与
+    #: "被引用的版本"会静默变成两版（`draft/29` §8.5 第 2 条）。
+    content_sha256: str = ""
     created_by: str = "agent-G"
 
     def validate(self) -> None:
@@ -1246,6 +1253,20 @@ class Document:
             raise ValueError("title 不能为空")
         if self.status not in DOC_STATUSES:
             raise ValueError(f"status 必须是 {DOC_STATUSES} 之一，收到 {self.status!r}")
+        if self.revision < 0:
+            raise ValueError(f"revision 不能为负，收到 {self.revision!r}")
+        if self.content_sha256:
+            h = self.content_sha256.strip().lower()
+            if len(h) != 64 or any(ch not in "0123456789abcdef" for ch in h):
+                raise ValueError(
+                    f"content_sha256 必须是 64 位小写十六进制（收到 {self.content_sha256!r}）；"
+                    "它由 `signatures.content_sha256_of` 产出，不该手写"
+                )
+        if self.status == "accepted" and not self.content_sha256.strip():
+            raise ValueError(
+                "status='accepted' 必须带 content_sha256：审批是**对某一版**的审批，"
+                "没有内容哈希就钉不住它审的是哪一版（`draft/29` §8.5 第 2 条）"
+            )
         if self.markdown_path is not None:
             p = self.markdown_path.replace("\\", "/")
             if p.startswith("/") or ":" in p or ".." in p.split("/"):
@@ -1350,6 +1371,12 @@ class Dependency:
     #: "依赖没闭合"这个结论本身也要有依据。
     status_reason: str = ""
     created_at: str = ""
+    #: 内部来源：本仓的稿件（`draft/30` §T4-A）。与 `source_lit_id` / `source_experiment_id`
+    #: 并列的第三种来源 —— "这条断言依赖我们自己另一篇稿子的某条断言"。
+    source_doc_id: str | None = None
+    #: 内部来源：该稿件里的哪一条断言（`documents.*.claims[].claim_id`）。
+    #: 给了它就必须给 `source_doc_id`（断言脱离稿件没有意义）。
+    source_claim_id: str | None = None
     created_by: str = "agent-G"
 
     def validate(self) -> None:
@@ -1366,10 +1393,18 @@ class Dependency:
             require_id(self.source_lit_id, "source_lit_id")
         if self.source_experiment_id is not None:
             require_id(self.source_experiment_id, "source_experiment_id")
-        if self.status == "closed" and not (self.source_lit_id or self.source_experiment_id):
+        if self.source_doc_id is not None:
+            require_id(self.source_doc_id, "source_doc_id")
+        if self.source_claim_id and not self.source_doc_id:
             raise ValueError(
-                "status='closed' 必须指向一个已入库的来源（source_lit_id 或 source_experiment_id）。"
-                "否则'闭合'只是声称，verify 的依赖闭合检查会立刻发现这是空头支票"
+                "给了 source_claim_id 就必须给 source_doc_id：一条断言脱离它的稿件没有意义"
+                "（`draft/30` §T4-A 的内部来源）"
+            )
+        if self.status == "closed" and not (
+                self.source_lit_id or self.source_experiment_id or self.source_doc_id):
+            raise ValueError(
+                "status='closed' 必须指向一个已入库的来源（source_lit_id / source_experiment_id / "
+                "source_doc_id）。否则'闭合'只是声称，verify 的依赖闭合检查会立刻发现这是空头支票"
             )
         if self.status in ("dangling", "external_unavailable") and not self.status_reason.strip():
             raise ValueError(

@@ -40,6 +40,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from . import claimanatomy as CA
 from . import schema as S
+from . import signatures as SIG
 from .store import Store
 from .tools import build_registry
 from .tools import doc_tools as DT
@@ -505,6 +506,11 @@ class AgentG:
             doc["review_rounds"] = int(doc.get("review_rounds") or 0) + 1
             doc["status"] = "revised"
             doc["updated_at"] = S.now_iso()
+            # 改稿 = 新的一版（`draft/30` §T4-A）：`revision` 前进一格、内容哈希重算。
+            # 旧审批因此自动失效（它钉的是上一版的哈希），这是设计要的：
+            # "审批过的版本"与"被引用的版本"不许静默分家。
+            doc["revision"] = int(doc.get("revision") or 0) + 1
+            doc["content_sha256"] = SIG.content_sha256_of(doc)
             row = S.row_from_dict("documents", doc)
             row.validate()
             payload = row.to_dict()
