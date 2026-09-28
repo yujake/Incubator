@@ -141,6 +141,19 @@ ALLOWED_USE_KINDS = ("主结果", "Remark only", "移入 open")
 #: §8.3 的 `numeric_evidence` 四元组。键名固定，多一个少一个都不可判定。
 NUMERIC_EVIDENCE_KEYS = ("script", "range", "n_cases", "n_counterexamples")
 
+#: `draft/31` P3 的三档来源（断言台账的「来源」列）。
+#:
+#: 三档必须分开，理由与 FC-25 的四类否定同族：「我们自己算出来的」与
+#: 「某篇文献说它是这样」在证据力上不是一回事，而「来源至今没查清」
+#: 更不是前两者中的任何一个 —— 合并之后，读表的人会把「未决」读成「已核实」。
+CLAIM_SOURCE_KINDS: tuple[str, ...] = ("自证", "文献", "未决")
+
+#: `draft/31` P3 的「我方核到什么程度」。分档判据是「我们做了什么」，
+#: 不是结论有多可信：`证明`（形式化/逐步推导，我方自己走通）·
+#: `数值`（复算 / 反例搜索）· `只读了陈述`（连数值核对都没做）。
+#: 中间那一档刻意不叫「验证」：那会把"跑过脚本"说成"验过了"。
+CLAIM_CHECK_KINDS: tuple[str, ...] = ("证明", "数值", "只读了陈述")
+
 #: `evidence_kind` 的受控词表另一处在 `schema.EVIDENCE_KINDS`。
 #: 这里不复制一份字面量 —— 见 `_evidence_kinds()`（惰性转发，理由是 FC-03）。
 _EVIDENCE_KIND_FALLBACK = ("proof", "cross_check", "heuristic")
@@ -452,6 +465,109 @@ CLAIM_FIELDS: dict[str, FieldSpec] = {
         source="本框架既有（doc_tools.compose_claim 的必填参数）",
         from_reference=False,
         nullable=False,
+    ),
+    # ---------------- 断言台账的四列 + 两列出处（`draft/31` P3 / `draft/30` §T3-P3）
+    #
+    # 这六列此前是"断言里多出来的键"：`undeclared_field` 把它们逐条报成 warning，
+    # 而那条 warning 的原文恰恰是「未声明的字段无法被门读到」——
+    # 也就是说台账里的「来源 / 我方核到什么程度 / 能否证伪」落了库、却没有任何判据。
+    # 实测 2026-09-29（P3 首次派 H 审台账）：24 行台账被审出 240 条
+    # `undeclared_field`（10 个自有键 × 24 条），error=0 而 warning 全是这一件事。
+    # 处置是把它们变成声明的字段：取值域受控、类型受判，G 与 H 读的是同一份判据；
+    # 而"这份台账的列"从此也进了 `known_field_names()`，"多出来的键"重新变成异常信号。
+    "source_kind": FieldSpec(
+        name="source_kind",
+        type_desc=f"enum（{'/'.join(CLAIM_SOURCE_KINDS)}）",
+        required=False,
+        domain=CLAIM_SOURCE_KINDS,
+        why=(
+            "这条断言是自证的、引自文献的、还是来源至今未决的。"
+            "三档合并计数会让人把「未决」读成「已核实」，"
+            "也会让「我们自己算的」与「某篇文献说的」在计数上无法区分。"
+        ),
+        source="draft/31 P3（台账的「来源」列）；draft/30 §T3-P3",
+        from_reference=False,
+    ),
+    "our_check": FieldSpec(
+        name="our_check",
+        type_desc=f"enum（{'/'.join(CLAIM_CHECK_KINDS)}）",
+        required=False,
+        domain=CLAIM_CHECK_KINDS,
+        why=(
+            "我方核到了哪一档。这一列的用途是防夸大："
+            "把「只读了陈述」如实写出来，比把它省略掉更有价值 —— "
+            "省略之后，一条没核过的断言与一条数值核过的断言在表里长得一模一样。"
+        ),
+        source="draft/31 P3（台账的「我方核到什么程度」列）；draft/30 §T3-P3",
+        from_reference=False,
+    ),
+    "our_check_note": FieldSpec(
+        name="our_check_note",
+        type_desc="str",
+        required=False,
+        domain=None,
+        why=(
+            "`our_check` 那一档的依据：跑了哪个脚本、覆盖多大、核到了什么。"
+            "与 `falsifiable_note` 分开：『我们核过它』与『我们试图推翻它』"
+            "是两件不同的工作，合成一列之后，一条只被正面核对过的断言"
+            "会看起来像一条被反例搜索过的断言。"
+        ),
+        source="draft/31 P3（台账的「我方核到什么程度」列）；draft/30 §T3-P3",
+        from_reference=False,
+    ),
+    "falsifiable": FieldSpec(
+        name="falsifiable",
+        type_desc="bool",
+        required=False,
+        domain=None,
+        why=(
+            "这条断言能不能被证伪。`True` 是一个承诺：反例搜索的脚本与覆盖范围"
+            "必须写在 `falsifiable_note` 里（「找不到反例」与「没找过」不许混）。"
+            "`False` 也要说清为什么 —— 例如「它是外部定理，不是本文要证的」。"
+        ),
+        source="draft/31 P3（台账的「能否证伪」列）；draft/29 §11「找不到反例不许写 proof」",
+        from_reference=False,
+    ),
+    "falsifiable_note": FieldSpec(
+        name="falsifiable_note",
+        type_desc="str",
+        required=False,
+        domain=None,
+        why=(
+            "`falsifiable` 那一格的依据：搜过什么、范围多大、有没有找到反例。"
+            "单独一列而不是塞进 `statement`：反例搜索的记录属于我方工作，"
+            "写进断言正文就会与「论文说了什么」混在一起。"
+        ),
+        source="draft/31 P3（同上）；draft/30 §T3-P3",
+        from_reference=False,
+    ),
+    "paper_ref": FieldSpec(
+        name="paper_ref",
+        type_desc="str（`相对路径:行号#标签`）",
+        required=False,
+        domain=None,
+        why=(
+            "这条断言在被审论文里的定位，例如 `source/main.tex:211#prop:step`。"
+            "`claim_id` 是我们起的名，论文里并没有这个字符串 ——"
+            "没有这一列，接手的人只能靠猜把台账的每一行对回论文的哪一段。"
+        ),
+        source="draft/31 P3（台账逐条对应 `main.tex` 的定理类环境）",
+        from_reference=False,
+    ),
+    "paper_excerpt": FieldSpec(
+        name="paper_excerpt",
+        type_desc="str（逐字原文片段）",
+        required=False,
+        domain=None,
+        why=(
+            "论文该环境的逐字原文。刻意不放进 `statement`：论文自己会用"
+            "「we prove」「is proved」这类措辞，而台账给同一环境的证据等级往往是"
+            "`cross_check` —— 把原话抄进正文，会让过度声称检查对着论文的措辞报警，"
+            "或者诱使作者为了过检而删掉原话。原文留在这里、正文写我方转述，"
+            "忠实与不过度声称两件事同时成立。"
+        ),
+        source="draft/30 §T3-P3（「原文照留、转述入正文」这一条）",
+        from_reference=False,
     ),
 }
 
@@ -850,7 +966,7 @@ def _cross_check_disclaimer() -> str:
 
 def _bad_type(name: str, val: Any, spec: FieldSpec) -> str:
     """返回类型错误的说明（空串 = 类型没问题）。"""
-    if name in ("frozen",):
+    if name in ("frozen", "is_negative", "falsifiable"):
         if not isinstance(val, bool):
             return f"`{name}` 必须是 bool，收到 {type(val).__name__}（{val!r}）"
     elif name in ("counterexamples", "errata_ids", "citations"):
@@ -861,12 +977,13 @@ def _bad_type(name: str, val: Any, spec: FieldSpec) -> str:
             return f"`{name}` 必须是对象（四元组），收到 {type(val).__name__}（{val!r}）"
     elif name in ("claim_id", "statement", "kind", "status", "proof_location",
                   "freeze_reason", "allowed_use", "scope_caveat", "revision_hash",
-                  "section"):
+                  "section",
+                  # `draft/31` P3 的四列 + 两列出处：词表与类型都必须受判，
+                  # 否则「来源=自证证」这种取值会静默通过（见 CLAIM_FIELDS 里那一段）。
+                  "source_kind", "our_check", "our_check_note", "falsifiable_note",
+                  "paper_ref", "paper_excerpt"):
         if not isinstance(val, str):
             return f"`{name}` 必须是 str，收到 {type(val).__name__}（{val!r}）"
-    elif name == "is_negative":
-        if not isinstance(val, bool):
-            return f"`{name}` 必须是 bool，收到 {type(val).__name__}（{val!r}）"
     _ = spec
     return ""
 

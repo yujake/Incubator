@@ -611,6 +611,20 @@ _N = {"type": "number"}
 _B = {"type": "boolean"}
 _ARR_S = {"type": "array", "items": {"type": "string"}}
 _OBJ = {"type": "object"}
+#: 一行行记录的序列（依赖行、发现行…）。刻意与 `_OBJ` 分开。
+#:
+#: 为什么要单列一个常量：`H.review` / `G.render` 的 `dependencies` 先前都声明成
+#: `_OBJ`，而实现侧（`AgentH.review` → `review.review_document`、
+#: `AgentG.render` → `doc_tools.render_markdown`）交下去的是序列 ——
+#: 于是任何一次"把依赖逐条交给审校/渲染"的派活，都在参数门被判
+#: `H.review 的参数不合法：dependencies. 必须是对象，收到 array`，
+#: 而理由码被记成 `unknown_action`（"这个角色没这个本事"），与真相不符。
+#: 实测 2026-09-29（P3 派 H 审台账）：`summon(role="H", action="review",
+#: params={"doc_id": "0000", "dependencies": [ …13 行 external_unavailable… ]})`
+#: 被参数门拒。导入期的交叉断言（`param_seam_violations`）只比 property 名
+#: 与实现签名，不比类型，所以它照旧全绿 —— 这条注释与
+#: `tests/test_capability_seams.py` 的正控一起，是这一格唯一的机器判据。
+_ARR_OBJ = {"type": "array", "items": {"type": "object"}}
 
 
 # ---------------------------------------------------------------- 动作表
@@ -1039,7 +1053,7 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
         ActionSpec(
             "G", "render",
             "把稿件渲染成 markdown 文本（不写库、不落盘）",
-            _obj({"doc": _OBJ, "dependencies": _OBJ}, ("doc",)),
+            _obj({"doc": _OBJ, "dependencies": _ARR_OBJ}, ("doc",)),
             "markdown 文本", side_effect="read", handler_name="render",
         ),
         ActionSpec(
@@ -1063,14 +1077,14 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
         ActionSpec(
             "H", "review",
             "审一份稿件：落发现 + 更新文档状态",
-            _obj({"doc_id": _S, "round_no": _I, "dependencies": _OBJ}, ("doc_id",)),
+            _obj({"doc_id": _S, "round_no": _I, "dependencies": _ARR_OBJ}, ("doc_id",)),
             "dict（含 checked / verdict / new_findings / error_count）",
             side_effect="write_local", handler_name="review",
         ),
         ActionSpec(
             "H", "verify_fixes",
             "复审：重跑检查判 fixed / 仍 open；到轮数上限则 unresolved_review",
-            _obj({"doc_id": _S, "round_no": _I}, ("doc_id", "round_no")),
+            _obj({"doc_id": _S, "round_no": _I, "dependencies": _ARR_OBJ}, ("doc_id", "round_no")),
             "dict", side_effect="write_local", handler_name="verify_fixes",
         ),
         ActionSpec(
@@ -1113,7 +1127,7 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
             "H", "review_report",
             "产出 G1–G15 的完整审校报告（markdown 落盘，转发 review.report）",
             _obj({"doc_id": _S, "own_errors": _ARR_S, "round_no": _I,
-                  "dependencies": _ARR_S, "run_evidence": _OBJ,
+                  "dependencies": _ARR_OBJ, "run_evidence": _OBJ,
                   "banned_words": _ARR_S, "claim_counts": _OBJ},
                  ("doc_id",)),
             "dict（含 report_path / verdict / pass_count / fail_count / "

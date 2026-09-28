@@ -25,6 +25,7 @@ import json
 import pytest
 
 from agentflow import schema as S
+from agentflow import capabilities as C
 from agentflow.agent_g import AgentG
 from agentflow.agent_h import AgentH, ReviewError, filter_readonly_h_surface, install_h_tools
 from agentflow.store import Store
@@ -557,6 +558,64 @@ def test_verify_fixes_reopens_a_finding_marked_fixed_without_fixing(h_store: Sto
 
 
 # ============================================================ 其它
+
+
+def test_verify_fixes_rechecks_the_dependency_set_the_caller_hands_it(h_store: Store):
+    """复审必须能拿到与 `review` 同一份依赖清单，否则会把未刊依赖静默判成 fixed。
+
+    实测缺口（2026-09-29，P3 台账）：依赖行挂在 `paper/main.tex#<label>` 上，
+    而 `dependencies_for_doc` 只认 `used_by` 的 `doc:` 前缀 ⇒ 复审"从库里读"
+    读到的是**空集**，于是上一轮如实报出的 `dangling_dep`（`external_unavailable`）
+    会被判成 `resolved ⇒ fixed` —— 把一个"已知拿不到的前提"静默宣告成"已解决"。
+
+    两个方向都要断言，缺一个这条就是真空断言：
+    ① 不传清单 ⇒ 那个缺口的形态复现（判成 fixed，本轮不算它 open）；
+    ② 传了清单 ⇒ 同一份前提仍 open（复审维持"拿不到"这个事实）。
+    """
+    agent = AgentH(h_store, config={"max_review_rounds": 5})
+    seed_document(h_store, "0000", [clean_claim()])
+    add_dep(
+        h_store,
+        "0000",
+        # 刻意挂在稿件之外的锚点上：这正是"复审自己去库里读就读不到"的那种依赖
+        used_by="paper/main.tex#claim-1",
+        status="external_unavailable",
+        reason="未刊 companion 拿不到",
+    )
+    deps = h_store.rows("dependencies")
+
+    reviewed = agent.review("0000", dependencies=deps)
+    assert reviewed["warning_count"] == 1 and reviewed["error_count"] == 0
+    finding = only_finding(h_store, "0000", "dangling_dep")
+
+    blind = agent.verify_fixes("0000", round_no=2)
+    assert [f["finding_id"] for f in blind["resolved"]] == [finding["finding_id"]], (
+        "缺口的形态：复审读不到挂在外锚点上的依赖 ⇒ 如实报出的发现被判成 resolved"
+    )
+    assert blind["still_open"] == []
+
+    honest = agent.verify_fixes("0000", round_no=2, dependencies=deps)
+    assert [f["finding_id"] for f in honest["still_open"]] == [finding["finding_id"]]
+    assert honest["still_open"][0]["status"] == "open"
+    assert h_store.rows("review_findings")[0]["status"] == "open", "传了清单就不许被判成 fixed"
+    assert "已知边界" in h_store.rows("review_findings")[0]["message"]
+
+
+def test_review_and_verify_fixes_declare_dependencies_as_row_sequences():
+    """声明面：三个动作的 `dependencies` 都必须声明成"行序列"，不是对象/字符串。
+
+    这一格此前是 `_OBJ`（`review` / `verify_fixes`）与 `_ARR_S`（`review_report`），
+    而实现侧交下去的都是 `[dict(d) …]` —— 于是"把依赖逐条交给 H"的派活
+    会在参数门被判 `dependencies. 必须是对象，收到 array`。
+    工具层四条声明一直写的是 array-of-objects，这里断言两层终于一致。
+    """
+    for action in ("review", "verify_fixes", "review_report"):
+        spec = C.find_action("H", action)
+        assert spec is not None, f"H 没有动作 {action}"
+        dep = (spec.params.get("properties") or {}).get("dependencies")
+        assert dep == {"type": "array", "items": {"type": "object"}}, (
+            f"H.{action}.dependencies 的声明是 {dep!r}，与实现（行序列）不符"
+        )
 
 
 def test_agent_h_selftest_passes(h_store: Store):

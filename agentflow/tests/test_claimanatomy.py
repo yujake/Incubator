@@ -584,3 +584,95 @@ def test_compose_claim_does_not_invent_default_values_for_new_fields():
     )
     assert "status" not in claim and "kind" not in claim and "allowed_use" not in claim
     assert "frozen" not in claim
+
+
+# ============================================================ 8. 断言台账的四列（`draft/31` P3）
+
+
+def ledger_claim(**over: object) -> dict:
+    """一条带台账四列 + 两列出处的断言（P3 的目标形态）。
+
+    `text` 必须去掉：`base_claim` 是磁盘上的老形态（正文在 `text` 里），
+    而这条要用正名 `statement` —— 两个键同时在场且不一致，`migrate_claim`
+    会（正确地）判 `bad_type`。
+    """
+    claim = base_claim()
+    claim.pop("text")
+    claim.update(
+        {
+            "claim_id": "prop:step",
+            "statement": "一步位移：Δ=2πρ，条件期望 0，二阶矩 8。",
+            "evidence_kind": "cross_check",
+            "citations": ["exp:0008"],
+            "disclaimer": DT.CROSS_CHECK_DISCLAIMER,
+            "source_kind": "文献",
+            "our_check": "数值",
+            "our_check_note": "复算 exp:0008 的位移集（|Δ|²=8），1121 个腔室全过。",
+            "falsifiable": True,
+            "falsifiable_note": "反例搜索 1121 个腔室，0 个不符。",
+            "paper_ref": "source/main.tex:211#prop:step",
+            "paper_excerpt": "[one-step displacement; \\cite{Companion5}]",
+        }
+    )
+    claim.update(over)
+    return claim
+
+
+def test_ledger_columns_are_declared_optional_and_domain_controlled():
+    """四列 + 两列出处进了声明表：可选、取值域受控、且不属于 §8.3 那 12 个字段。
+
+    这一条是那个缺口的判据本身：实测 2026-09-29，P3 的 24 行台账被 H 审出
+    240 条 `undeclared_field`（10 个自有键 × 24 条）—— 字段落了库，
+    但门读不到它们。若有人把这几列从 `CLAIM_FIELDS` 里删掉，
+    本条会失败，而不是让台账悄悄退回到"写进去没人看"的状态。
+    """
+    for name in ("source_kind", "our_check", "our_check_note", "falsifiable",
+                 "falsifiable_note", "paper_ref", "paper_excerpt"):
+        assert name in CA.CLAIM_FIELDS, f"台账的列 {name} 没进声明表"
+        assert CA.CLAIM_FIELDS[name].required is False, f"{name} 不该是必填（历史行没有它）"
+        assert name not in CA.new_field_names(), (
+            f"{name} 不是 `draft/17` §8.3 的字段，不许混进 new_field_names()："
+            "那张名单被 strict 模式的『补齐 12 字段』直接读"
+        )
+    assert CA.CLAIM_FIELDS["source_kind"].domain == CA.CLAIM_SOURCE_KINDS
+    assert CA.CLAIM_FIELDS["our_check"].domain == CA.CLAIM_CHECK_KINDS
+    assert CA.CLAIM_FIELDS["falsifiable"].domain is None, "bool 字段不该有词表"
+
+
+def test_ledger_claim_has_no_errors_and_no_undeclared_field_warning():
+    """正控：六列齐全的台账断言零 error、零 warning（含零 `undeclared_field`）。"""
+    spec = CA.validate_claim(ledger_claim())
+    assert spec.error_count == 0, codes(spec)
+    assert spec.warning_count == 0, codes(spec)
+    assert "undeclared_field" not in codes(spec)
+
+
+@pytest.mark.parametrize(
+    "field,value,expect_code",
+    [
+        ("source_kind", "自证证", "bad_enum"),
+        ("source_kind", "文献 ", "bad_enum"),      # 尾随空格不许被宽容匹配
+        ("source_kind", "文献来源", "bad_enum"),
+        ("our_check", "大概看过", "bad_enum"),
+        ("our_check", "数值验证", "bad_enum"),
+        ("falsifiable", "是", "bad_type"),
+        ("falsifiable", 1, "bad_type"),
+        ("our_check_note", 3, "bad_type"),
+        ("falsifiable_note", ["反例搜索"], "bad_type"),
+        ("paper_ref", 211, "bad_type"),
+        ("paper_excerpt", {"text": "…"}, "bad_type"),
+    ],
+)
+def test_ledger_columns_reject_illegal_values(field, value, expect_code):
+    """负控：取值域与类型都是判据，不是注释 —— 逐格报出指定的 code 与字段名。"""
+    spec = CA.validate_claim(ledger_claim(**{field: value}))
+    hits = [(i.code, i.field_name) for i in spec.issues if i.field_name == field]
+    assert (expect_code, field) in hits, f"期望 {expect_code}@{field}，实际 {hits}"
+    assert spec.error_count >= 1
+
+
+def test_ledger_columns_do_not_soften_the_unknown_key_check():
+    """负控：声明了台账的列，不等于"任何键都收"—— 别的键照样报 `undeclared_field`。"""
+    spec = CA.validate_claim(ledger_claim(source_kind_typo="文献"))
+    assert "undeclared_field" in codes(spec)
+    assert spec.error_count == 0, "未声明的键是 warning（不许升级成 error 把红灯长亮）"
