@@ -152,12 +152,17 @@ class AgentA:
         downloader: Any | None = None,
         config: dict | None = None,
         actor: str = "agent-A",
+        # LLM 判定缝（`draft/30` §T0-8）：默认 None = 不接线 ⇒ 本角色一个 LLM 调用都不发。
+        # 判定必须走 `judge.judge_json`（唯一缝协议），失败落 `judge_*` 词表，
+        # 绝不许折成"没找到"。本批只插插座，接线在各条目的伪代码下进行。
+        llm: Any | None = None,
     ):
         self.store = store
         self.providers = list(providers)
         self.downloader = downloader
         self.cfg = config or {}
         self.actor = actor
+        self.llm = llm
         self.lease_seconds = int(self.cfg.get("lease_seconds", 900))
         self.max_attempts = int(self.cfg.get("max_attempts", 3))
         self.limits = self.cfg.get("limits", {"broad": 20, "topical": 15, "precise": 10})

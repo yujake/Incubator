@@ -237,10 +237,15 @@ class AgentF:
         e: Any | None = None,
         tools: ToolRegistry | None = None,
         actor: str = "agent-F",
+        # LLM 判定缝（`draft/30` §T0-8）：默认 None = 不接线 ⇒ 本角色一个 LLM 调用都不发。
+        # 判定必须走 `judge.judge_json`（唯一缝协议），失败落 `judge_*` 词表，
+        # 绝不许折成"没找到"。本批只插插座，接线在各条目的伪代码下进行。
+        llm: Any | None = None,
     ) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = actor
+        self.llm = llm
         self.log = log
 
         # ---- 阈值全部来自 config（与 A–E 的既有做法一致）

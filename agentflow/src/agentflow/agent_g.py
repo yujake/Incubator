@@ -125,10 +125,15 @@ class AgentG:
         workspace_root: str | Path | None = None,
         log: Callable[[str], None] | None = None,
         tools: ToolRegistry | None = None,
+        # LLM 判定缝（`draft/30` §T0-8）：默认 None = 不接线 ⇒ 本角色一个 LLM 调用都不发。
+        # 判定必须走 `judge.judge_json`（唯一缝协议），失败落 `judge_*` 词表，
+        # 绝不许折成"没找到"。本批只插插座，接线在各条目的伪代码下进行。
+        llm: Any | None = None,
     ) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = str(self.cfg.get("actor", "agent-G"))
+        self.llm = llm
         self.workspace_root = (
             Path(workspace_root).resolve() if workspace_root else Path(store.root).resolve()
         )

@@ -662,7 +662,7 @@ def observations(registry: ToolRegistry) -> dict[str, Observation]:
     order = [n for n in registry.names() if n not in MUTATING_LAST]
     order += [n for n in registry.names() if n in MUTATING_LAST]
     out: dict[str, Observation] = {}
-    # `conductor.ensure_project` 会写盘：给它一个**临时**落点，探针绝不碰真实数据面
+    # `conductor.ensure_project` 会写盘：给它一个临时落点，探针绝不碰真实数据面
     # （`D:\Incubator\projects` 是运行数据面，245 MB，已在 .gitignore 里排除）。
     tmp_projects = Path(tempfile.mkdtemp(prefix="probe-projects-"))
     for name in order:
