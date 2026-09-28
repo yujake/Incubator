@@ -949,6 +949,22 @@ class Conductor:
                 # 但把这件事写进 detail（不许悄悄当成 ok）。
                 outcome = "ok"
                 detail = detail or "执行完成（handler 未声明 outcome，按有产出处理）"
+            if outcome is not None and str(outcome) not in S.TASK_OUTCOMES:
+                # ---- 两套词表不许折叠（实测缺陷，2026-09-29 验收 P1）
+                #
+                # 角色有自己的判定词表（F 的子目标判定是 `progress` / `no_change` /
+                # `blocked` …），而这里要的是任务级结果词表
+                # （`TASK_OUTCOMES = ok/no_result/not_applicable/refused/failed/cancelled`）。
+                # 以前这里把角色的判定原样透传 ⇒ `Task.validate` 抛 `ValueError`
+                # ⇒ 整步落 failed，而活其实已经干完了（事务已提交）。
+                # 实测：20/20 条 `F.step` 台账是 `failed`，而 14 条检索请求已经提交、
+                # 11 条以 ok 收尾 —— 台账说"失败"，实际成功。这直接毁掉 P10 的
+                # "台账能重建 M 的决策序列"。
+                #
+                # 处置：任务级结果按"执行完成"记 `ok`，角色的判定原样留在 detail 里
+                # （可见，不是静默丢弃 —— 静默丢弃是本项目最忌的形态）。
+                detail = f"[handler_outcome={outcome}] {detail}".strip()
+                outcome = "ok"
             if status == "failed":
                 outcome = "failed"
             if status == "cancelled":
@@ -957,6 +973,11 @@ class Conductor:
                 tid, status=status, outcome=str(outcome) if outcome else None,
                 detail=detail or "执行完成",
                 error=str(raw["error"]) if raw.get("error") else None,
+                # 角色拒绝时它的理由必须能传到行上：`Task.validate` 逐字要求
+                # `outcome=refused` 带受控的 `refusal_reason`，而这里此前没透传它
+                # ⇒ 角色一拒绝就落 `failed`（"策略说不"被记成"代码崩了"）。
+                # 实测（2026-09-29）：这正是 `test_refused_outcome_is_not_rewritten` 咬出来的。
+                refusal_reason=str(raw["refusal_reason"]) if raw.get("refusal_reason") else None,
                 payload=raw.get("payload", raw.get("data", raw)),
                 artifacts=list(raw.get("artifacts") or []),
                 checked=raw.get("checked", None),
@@ -1019,7 +1040,7 @@ class Conductor:
         if status not in TERMINAL_STATUSES:
             raise ValueError(
                 f"finish 只接受终态 {TERMINAL_STATUSES}，收到 {status!r}。"
-                "中间态由 summon 在**开始**时写（那时才有 started_at）"
+                "中间态由 summon 在开始时写（那时才有 started_at）"
             )
         ended = S.now_iso()
         with self.store.tx("tasks", actor="conductor", note=f"finish:{status}") as tx:
@@ -1143,7 +1164,7 @@ class Conductor:
                 tid = str(row["task_id"])
                 self.finish(
                     tid, status="cancelled", outcome="cancelled",
-                    detail=f"{text}（dispose 时该任务仍在 {row.get('status')}，**结果未知**）",
+                    detail=f"{text}（dispose 时该任务仍在 {row.get('status')}，结果未知）",
                 )
                 closed.append(tid)
         # 在飞集合由 worker 的 `finally` 清空；dispose 不替它们清 ——

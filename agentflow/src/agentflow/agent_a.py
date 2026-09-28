@@ -369,6 +369,37 @@ class AgentA:
         }
 
     # ------------------------------------------------------------------ 主流程
+    def _attach_staged(self, lit_id: str, dl: dict) -> tuple[str | None, dict]:
+        """把 staging 里的字节搬进 `<library>/<lit_id>/`，返回 `(相对路径, 清洗过的 download)`。
+
+        一处实现、两处使用（新建行与补下载共用）：搬文件的判据只有一个 ——
+        `status ∈ ("ok", "content_mismatch")` 且有 staged 字节。`content_mismatch`
+        的字节照样落盘：它是证据（能看到对方返回了什么），只是下游不许拿它当文献抽取；
+        丢掉证据会让"为什么下载不到"变成不可查的问题。
+
+        搬失败（例如目录不可写）⇒ `status="failed"`、`rel_path=None` ——
+        绝不让"没搬成"被下游读成"下到了"。
+        """
+        staged = dl.pop("_staged_path", None)
+        out = {k: v for k, v in dl.items() if not k.startswith("_")}
+        st = dl.get("status")
+        if not (staged and Path(staged).exists() and st in ("ok", "content_mismatch")):
+            return None, out
+        try:
+            rel_dir = self.store.library / lit_id
+            rel_dir.mkdir(parents=True, exist_ok=True)
+            target = rel_dir / Path(staged).name
+            # 同盘 os.replace 原子；跨盘回退到 move
+            shutil.move(str(staged), str(target))
+        except Exception as e:  # 建目录/搬文件失败 => 降级为"未下载"，但不丢元数据
+            # 两个动作放在同一个 try 里是判据逼出来的：只包 move 时，
+            # "`<library>/<lit_id>` 位置上是个文件"会让 `mkdir` 抛出并把整轮 A 带崩 ——
+            # 而正确的语义是"这一篇没拿到"，不是"整个检索挂了"。
+            out["status"] = "failed"
+            out["error"] = f"move_failed: {type(e).__name__}: {e}"
+            return None, out
+        return f"{lit_id}/{target.name}", out
+
     def run_once(self) -> ARunResult:
         """处理至多一条待办请求，返回本轮的完整审计结果。
 
@@ -443,7 +474,41 @@ class AgentA:
                         src = set(existing.get("source_request_ids") or [])
                         src.add(req["request_id"])
                         existing["source_request_ids"] = sorted(src)
-                        tx.upsert("literature", existing, note=f"dup_by:{hit_key}")
+                        # ---- 补下载（`draft/30` §T0-10）：在库但没有可用全文的行，
+                        # 允许这一次把字节补上。没有这一步，"某篇在库却没有文件"就是个
+                        # 死局：候选每次都被判重跳过，而 P1 要求必查的那几篇必须落盘。
+                        old_dl = existing.get("download") or {}
+                        needs_file = (not existing.get("path")) or str(old_dl.get("status")) != "ok"
+                        got_path, dl_clean = self._attach_staged(
+                            str(existing["lit_id"]), dict(entry.get("download") or {}))
+                        backfilled = bool(needs_file and got_path)
+                        # 真的试过（不是"没有 PDF URL"/"预算用尽"那种 skipped）就记账 ——
+                        # 与新建行那一支同一个口径：新建行会让失败留在行上，
+                        # 补下载若什么都不记，"这一篇试过但没拿到"就只活在计数里。
+                        tried = needs_file and str(dl_clean.get("status")) in (
+                            "ok", "failed", "content_mismatch")
+                        if backfilled:
+                            existing["path"] = got_path
+                            existing["download"] = {
+                                **dl_clean, "backfilled": True,
+                                "previous": {"status": old_dl.get("status"),
+                                             "error": old_dl.get("error")},
+                            }
+                            result.downloaded += 1
+                            if str(dl_clean.get("status")) == "content_mismatch":
+                                result.download_suspect += 1
+                        elif tried:
+                            existing["download"] = {
+                                **dl_clean, "backfill_attempt": True,
+                                "previous": {"status": old_dl.get("status"),
+                                             "error": old_dl.get("error")},
+                            }
+                            if str(dl_clean.get("status")) == "failed":
+                                result.download_failed += 1
+                            else:
+                                result.download_suspect += 1
+                        note = f"dup_by:{hit_key}" + ("+backfill" if backfilled else "")
+                        tx.upsert("literature", existing, note=note)
                         result.duplicated += 1
                         new_ids.append(existing["lit_id"])
                         continue
@@ -453,26 +518,13 @@ class AgentA:
                     rel_dir.mkdir(parents=True, exist_ok=True)
 
                     dl = entry.get("download") or {}
-                    staged = dl.pop("_staged_path", None)
-                    rel_path: str | None = None
+                    rel_path, dl_clean = self._attach_staged(lit_id, dict(dl))
                     st = dl.get("status")
-                    # content_mismatch 的字节照样落盘：它是证据（能看到对方返回了
-                    # 什么），只是不允许下游把它当文献抽取。丢掉证据会让"为什么下载不到"
-                    # 变成不可查的问题。
-                    if staged and Path(staged).exists() and st in ("ok", "content_mismatch"):
-                        target = rel_dir / Path(staged).name
-                        # 同盘 os.replace 原子；跨盘回退到 move
-                        try:
-                            shutil.move(str(staged), str(target))
-                        except Exception as e:  # 搬文件失败 => 降级为"未下载"，但不丢元数据
-                            dl["status"] = "failed"
-                            dl["error"] = f"move_failed: {type(e).__name__}: {e}"
+                    if rel_path:
+                        if st == "ok":
+                            result.downloaded += 1
                         else:
-                            rel_path = f"{lit_id}/{target.name}"
-                            if st == "ok":
-                                result.downloaded += 1
-                            else:
-                                result.download_suspect += 1
+                            result.download_suspect += 1
                     elif st == "failed":
                         result.download_failed += 1
 
@@ -747,7 +799,7 @@ def _selftest() -> int:
               _req(st, "r-0004")["done"] is True and _req(st, "r-0004")["outcome"] == "gave_up")
         check("'被有效租约占着'单独计数，且与'队列空了'是不同的 skipped_reason",
               fourth.skipped_lease_active == 1 and fourth.skipped_reason != "no_pending_request")
-        check("被有效租约占着的行**不会**被抢走（claimed_by 原样保留）",
+        check("被有效租约占着的行不会被抢走（claimed_by 原样保留）",
               _req(st, "r-0007")["claimed_by"] == "agent-A-other" and _req(st, "r-0007")["done"] is False)
 
         # ---- 5) 下载失败不阻塞：文献行照常登记（path=null），并单独计数
@@ -783,7 +835,7 @@ def _selftest() -> int:
                    downloader=_Downloader(), config=cfg)
         failed = b.run_once()
         r3 = _req(st, "r-0003")
-        check("搜索失败：请求**没有**被置 done，且 last_error 留下了原因",
+        check("搜索失败：请求没有被置 done，且 last_error 留下了原因",
               failed.outcome is None and r3["done"] is False and "network down" in str(r3["last_error"]))
         check("搜索失败：写了退避租约并把 claimed_by 置空（可重试，且在排序里靠后）",
               bool(r3["lease_until"]) and r3["claimed_by"] is None)
@@ -798,7 +850,7 @@ def _selftest() -> int:
         # attempts 只在 `_claim` 里 +1）。
         re_claim = b._claim()
         r3_after = _req(st, "r-0003")
-        check("搜索失败后的退避租约**被遵守**：再领一次领不到它，attempts 不增",
+        check("搜索失败后的退避租约被遵守：再领一次领不到它，attempts 不增",
               re_claim.request is None and r3_after["attempts"] == 1,
               f"claimed={re_claim.request and re_claim.request.get('request_id')} "
               f"attempts={r3_after['attempts']}")
