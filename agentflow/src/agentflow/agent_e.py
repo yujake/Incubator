@@ -403,7 +403,7 @@ def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str]]:
     if res not in S.EXPERIMENT_RESULTS:
         notes.append(
             f"REPRO_RESULT.result={res!r} 不在受控词表 {S.EXPERIMENT_RESULTS} 里 ⇒ 视为格式非法，"
-            "不认这条结论（**不猜**它想说什么）"
+            "不认这条结论（不猜它想说什么）"
         )
         return None, notes
     return payload, notes
@@ -426,7 +426,7 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
         return _NO_EVIDENCE_KIND
     if kind == "proof" and method != "formal":
         notes.append(
-            f"脚本自报 evidence_kind='proof'，但 method={method!r} 是计算类方法 ⇒ **拒绝并降级为 cross_check**。"
+            f"脚本自报 evidence_kind='proof'，但 method={method!r} 是计算类方法 ⇒ 拒绝并降级为 cross_check。"
             "理由：让被判定的对象自己决定'算不算证明'，等于没有判官；"
             "数学里数值/符号/穷举实验都不构成证明（FC-22）"
         )
@@ -456,7 +456,7 @@ def _derive(
             "negation_kind": "no_local_evidence",
             "observations": {},
             "counterexample": None,
-            "notes": [f"脚本以 exit_code={exit_code} 结束 ⇒ **没有正常跑完**，不得记为任何正面结论"],
+            "notes": [f"脚本以 exit_code={exit_code} 结束 ⇒ 没有正常跑完，不得记为任何正面结论"],
         }
 
     # ---- 规则 2/3：解析脚本给出的结构化结论
@@ -696,7 +696,7 @@ class AgentE:
             return [exe, "-NoProfile", "-NonInteractive", "-File", str(path)]
         raise ExperimentError(
             f"不知道怎么执行 {suf or '（无后缀）'} 文件（已知 {self.allowed_suffixes}）。"
-            "**拒绝猜**：把 .jl 当 Python 跑会得到一个看起来像脚本 bug 的报错，"
+            "拒绝猜：把 .jl 当 Python 跑会得到一个看起来像脚本 bug 的报错，"
             "而真正的错误是调用方给错了文件"
         )
 
@@ -856,9 +856,9 @@ class AgentE:
         notes = list(derived.pop("notes", []) or [])
         head = f"exit_code={run['exit_code']}"
         if run.get("timed_out"):
-            head += f"，**超时**（timeout={timeout}s）"
+            head += f"，超时（timeout={timeout}s）"
         if run.get("launch_error"):
-            head += f"，**启动失败**（{run['launch_error']}）"
+            head += f"，启动失败（{run['launch_error']}）"
         notes.insert(0, f"[run] {head}，runtime={run['runtime_sec']}s，脚本 {script_path}（sha256 前 16 位 {chash}）")
         if run.get("stderr"):
             notes.append(f"[stderr] {_digest(run['stderr'])}")
@@ -867,12 +867,25 @@ class AgentE:
             # 结构化 observations 可读，再贴一段原始输出只是噪声。
             notes.append(f"[stdout] {_digest(run['stdout'])}")
 
+        # ---- [4b]（在事务内写日志：文件名要用实验号，见 [5]）
+
         # ---- [5] 一个事务：alloc_id + 写 experiments
         #
         # `alloc_id` 必须在持锁事务内进行，否则两个 E 实例会拿到同一个
         # experiment_id，而按主键 upsert 会静默互相覆盖（ID 发号与建行必须同锁）。
         with self.store.tx("experiments", actor=self.actor, note="e.run_experiment") as tx:
             eid = tx.alloc_id("experiment")
+            # 原始输出落成产物文件（`draft/30` §T0-12）：上面那条"支持类不贴
+            # stdout 摘要"是刻意的（噪声），但 P4/P5 要求"每条带 code_hash + 退出码 +
+            # 原始输出，且能重跑得到同一读数"。摘要不进 notes，原始输出落文件；
+            # 文件名用实验号 —— 同一脚本跑两次（不同种子）输出不同，按脚本哈希命名会撞。
+            log_rel = f"out/experiments/{eid}.log"
+            log_error = _write_run_log(self.workspace_root / log_rel, claim=claim,
+                                       claim_key=claim_key, script_path=script_path,
+                                       chash=chash, run=run)
+            if log_error:
+                notes.append(f"[log] 原始输出未能落盘（{log_error}）—— 实验行本身照样写")
+                log_rel = ""
             row = build_experiment(
                 eid,
                 claim,
@@ -884,6 +897,7 @@ class AgentE:
                 exit_code=run["exit_code"],
                 runtime_sec=run["runtime_sec"],
                 params=params,
+                artifact_paths=([log_rel] if log_rel else []),
                 for_question_id=for_question_id,
                 extra_notes=notes,
                 created_by=self.actor,
@@ -1229,6 +1243,32 @@ class AgentE:
         return self.run_experiment(claim, claim_key, script_path, **kw)
 
 
+def _write_run_log(target: Path, *, claim: str, claim_key: str, script_path: str,
+                   chash: str, run: Mapping[str, Any]) -> str | None:
+    """把一次实验的原始输出写成产物文件；返回 `None` 表示写成了，否则返回失败原因。
+
+    不许因为日志写不了就丢掉这条实验：调用方拿到原因后照样写实验行，
+    并把这件事记进 `notes`（"有实验没日志"与"没这条实验"要分得开）。
+    """
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            f"# {claim_key}\n"
+            f"# 脚本 {script_path}  sha256={chash}\n"
+            f"# exit_code={run['exit_code']}  runtime={run['runtime_sec']}s"
+            + ("（超时）" if run.get("timed_out") else "")
+            + "\n"
+            f"# claim: {claim}\n"
+            "----- stdout -----\n"
+            f"{run.get('stdout') or ''}"
+            "----- stderr -----\n"
+            f"{run.get('stderr') or ''}",
+            encoding="utf-8")
+        return None
+    except OSError as e:
+        return f"{type(e).__name__}: {e}"
+
+
 def _result_reason(row: S.Experiment) -> str:
     """给人看的一句话解释（不替代 notes，只是列表展示用）。"""
     if row.exit_code not in (0, None):
@@ -1236,11 +1276,11 @@ def _result_reason(row: S.Experiment) -> str:
     if row.evidence_kind == "proof":
         return (
             f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}"
-            "（**有形式化检查器输出**）"
+            "（有形式化检查器输出）"
             + _formal_status_suffix(row)
         )
     if row.result == "supports":
-        return f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}（**不构成证明**）"
+        return f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}（不构成证明）"
     if row.result == "refutes":
         return "实验给出反例 ⇒ disproved（已证否，且反例已登记）"
     return (
