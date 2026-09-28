@@ -2100,6 +2100,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "formalgw.py": "Lean 形式化验证后端（`evidence_kind=\"proof\"` 这句话的落点）",
     "fulltextstore.py": "抽取正文的内容寻址库：整本书的正文只存一份，产物里只留 `text_ref`（依据 `draft/30` §T0-1）",
     "gates.py": "H 的 G1–G15 门引擎（15 道独立、有名字、可单独查询的检查器）",
+    "host.py": "主控接线：把 A–H 接到 `LocalBackend` 的角色登记表（依据 `draft/30` §T3-H；P10 的前置）",
     "interactions.py": "跨智能体交互的冻结契约（I1–I7）与它的闸门实现",
     "judge.py": "LLM 判定的唯一缝协议：`judge_json` 与 `judge_*` 失败词表（依据 `draft/30` §T0-8）",
     "llm.py": "抽取层：`Extractor` 协议 + 离线基线 + 可插拔 `LLMExtractor`",
