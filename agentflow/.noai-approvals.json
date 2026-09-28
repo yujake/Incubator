@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T03:44:14+08:00",
+  "generated_at": "2026-09-29T05:57:25+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "537b46fcdeac30bfebf89222b173b6f51c14e341c54ba434bf11603ee646d7c3",
+      "sha256": "088a4881fbaddf4051b4297f41318231a8b0de114379890910b126fe34191c51",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 db99e69f159d 变为 537b46fcdeac，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "T0-13（2026-09-29）：E.run_experiment 的动作声明补 name/imports（formal 路径的两个参数此前到不了派活闸门，实测被拒 unknown_action）。依据 draft/30 新条目 §T0-13；判据走既有四条（导入期参数交叉断言 / declaration_divergences / test_policy / test_schema_handler_params）+ 验收侧三条 Lean proof。AI 代改，待 2 名 reviewer 走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

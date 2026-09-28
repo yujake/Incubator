@@ -165,7 +165,17 @@ def test_gate_params_is_the_declaration_intersected_with_the_implementation():
     bad = C.check_params(spec, {**ok_params, "sleep": 0.1})
     assert bad is not None and "sleep" in bad, f"接缝参数没被拦下：{bad!r}"
     # 实现侧独有的参数同样进不来（交集是双向的）
-    assert C.check_params(spec, {**ok_params, "imports": ["Mathlib"]}) is not None
+    #
+    # `T0-13`（2026-09-29）之前这里用的例子是 `imports` / `name` —— 那时它们是
+    # `E.run_experiment` 的实现侧独有参数：闸门如实拒收，于是"E 能形式化"与
+    # "M 能派形式化"是两件事（P6 的验收路径被堵）。T0-13 把这两格补进了声明，
+    # 那个例子也随之消失。所以这里：
+    #   ① 换一个凭空参数名，继续守"未声明的参数一律进不来"；
+    #   ② 另加正控：那两格现在进得来（这正是 P6 能经派活跑通的原因）。
+    assert C.check_params(spec, {**ok_params, "nope": 1}) is not None
+    assert C.check_params(spec, {**ok_params, "name": "a_theorem", "imports": []}) is None, (
+        "T0-13 之后 formal 路径的两个参数必须能过闸门 —— 否则 M 派不出形式化验证"
+    )
 
 
 def test_injected_property_is_reported_and_removing_the_seam_reports_sleep():

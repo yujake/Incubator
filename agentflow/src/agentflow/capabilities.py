@@ -884,6 +884,15 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
             _obj({"claim": _S, "claim_key": _S, "script_path": _S, "params": _OBJ,
                   "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
                   "for_question_id": _S, "timeout": _I,
+                  # `T0-13`：formal 路径的两个参数（要核对的声明名、要加载的库）。
+                  # 名字用**方法层**的（`name`/`imports`）：动作的参数直接进
+                  # `AgentE.run_experiment`，不经 `ToolRegistry.call`，所以不撞
+                  # `call` 的第一个形参 `name`（工具层那边叫 `run_name`，是另一条理由）。
+                  # 没有这两格时，**派活这条路根本传不进 formal 的参数**（实测：
+                  # 闸门如实拒绝 `未声明的参数 ['imports','name']`），于是
+                  # "E 能形式化"与"M 能派形式化"变成两件事 —— 而 P6/P10 要的是后者。
+                  "name": _S,
+                  "imports": {"type": "array", "items": {"type": "string"}},
                   # `sleep` 不在真实 `AgentE.run_experiment` 的具名形参里，它也不收
                   # `inspect.Parameter.VAR_KEYWORD`（实测 `inspect.signature`：
                   # 既没有 sleep、也没有那一档）⇒ 它是本表与替身夹具之间唯一的接缝，
