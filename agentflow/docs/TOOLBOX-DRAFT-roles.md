@@ -99,7 +99,7 @@ role: F | core: 攻坚（拆子目标/找卡点/试下一步） | today: 25 | pl
 role: G | core: 撰写（论证结构、断言与证据的对应） | today: 25 | plumbing: 72% | default: doc.assemble + pack.evidence + pack.document + queue.next | not_given: 手工拼引用/页码/等级
 role: H | core: 审校（稿件有没有把自己说清楚） | today: 19 | plumbing: 95% | default: review.pack + doc.scan_claim + queue.next | not_given: 13 个原料工具当默认路径用
 role: M | core: 调度（不推理，只执行给定计划并过策略层） | today: 0 | plumbing: 0% | default: （无工具；不变） | not_given: 任何领域工具
-role: N | core: 现状诊断（哪些偏离重要、数据够不够） | today: 0 | plumbing: 0% | default: brief.ledger + brief.coverage + brief.blockers + cycle.report + mgmt.scan | not_given: 手工遍历 15 张表
+role: N | core: 现状诊断（哪些偏离重要、数据够不够） | today: 0 | plumbing: 0% | default: brief.ledger + brief.coverage + brief.blockers + cycle.report + mgmt.scan | not_given: 手工遍历 16 张表
 role: O | core: 计划（目标可否判定、资源怎么分） | today: 0 | plumbing: 0% | default: brief.coverage + brief.blockers + plan.simulate + mgmt.plan | not_given: 手工验算预算与越界
 role: Q | core: 程序审计（判据有没有真的执行、谁在自审） | today: 0 | plumbing: 0% | default: audit.recompute + brief.ledger + cycle.report + mgmt.audit | not_given: 手工重算指标
 

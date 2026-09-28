@@ -426,6 +426,19 @@ CONTRADICTION_VERDICTS = ("resolved", "unresolved", "new_contradiction", "persis
 #: 研究问题的驱动类型（I2）。见 `ResearchQuestion.kind`。
 QUESTION_KINDS = ("gap", "contradiction")
 
+#: 猜想的状态（`draft/29` §7.5；依据 `draft/30` §T1）。
+#:
+#: 为什么**不**复用 `QUESTION_STATUSES` 的 `answered`：问题由"查明"了结，猜想由
+#: "证明或否证"了结 —— 同一个词同时意味着两件事，正是本仓反复禁止的形态。
+CONJECTURE_STATUSES = ("proposed", "needs_evidence", "testing", "supported_not_proved",
+                       "refuted", "proved", "promoted", "known_in_literature", "withdrawn")
+
+#: 猜想的形态受控词表（写进 `form`）。
+CONJECTURE_FORMS = ("universal", "existential", "identity", "bound", "structural")
+
+#: 陈述句里出现这些词 ⇒ 它是问题而不是猜想（`Conjecture.validate` 用它拒收）。
+CONJECTURE_QUESTION_WORDS = ("谁", "什么", "是否", "吗", "？", "?", "which", "what", "whether")
+
 #: 定向重抽取（I4）的原因词表。受控词表而非自由文本，理由同 DOWNLOAD_STATUSES：
 #: B 靠这个字符串决定**该怎么重做**，拼错会静默走错分支。
 REPROCESS_REASONS = (
@@ -613,6 +626,126 @@ class ResearchQuestion:
     def to_dict(self) -> dict:
         return asdict(self)
 
+
+
+@dataclass
+class Conjecture:
+    """一条猜想（`draft/29` §7.4 的 Shape C；依据 `draft/30` §T1）。
+
+    ## 为什么它是独立对象，而不是 `research_questions` 的一个 kind
+
+    1. **会撞既有不变量**：`ResearchQuestion` 的 `status="needs_evidence"` 必须带非空
+       `waiting_request_ids`（"新到的文献是不是我正在等的那批"，D 的循环靠它接上），
+       而猜想等的是**实验**，没有检索请求可等；
+    2. **命题不是问题**：问题由"查明"了结，猜想由"证明或否证"了结 —— 共用一个
+       `answered` 会让同一个词意味着两件事。
+
+    ## 状态机（`CONJECTURE_STATUSES`）
+
+    `proposed` → `testing` → （`supported_not_proved` | `refuted` | `proved`）→ `promoted`；
+    另有 `needs_evidence`（提不出可检验形式）、`known_in_literature`（别人证过，带文献）、
+    `withdrawn`（撤下，必须写理由）。
+
+    `validate()` 只写"每条状态必须带什么"这类**单行内可判**的拒收条件；
+    跨对象的判据（升格必须挂 proof 实验、被引用的猜想不许硬删）在 `verify.verify_all` 里 ——
+    两处分工的理由：schema 管一行，verify 管一库。
+    """
+
+    conjecture_id: str
+    #: 命题本体：必须是一条**可判真假**的陈述句（含疑问词即拒收）。
+    statement: str
+    #: 否命题（可空）：给"否证"一个明确的对象。
+    negation_statement: str = ""
+    #: 受控词表 `CONJECTURE_FORMS`。
+    form: str = "universal"
+    #: 可检验形式：`{"params": {...}, "bounds": {...}, "why": "..."}`。空 ⇒ 只能落 `needs_evidence`。
+    testable: dict = field(default_factory=dict)
+    #: 必填：从哪来（report_id / `rel:NNNN` / gap / `lit:NNNN`）。防"凭空出现的猜想"。
+    origin: str = ""
+    #: 受控词表 `CONJECTURE_STATUSES`。
+    status: str = "proposed"
+    #: 检验过它的实验（升序去重）。
+    experiment_ids: list[str] = field(default_factory=list)
+    #: 仅 `method="formal"` 且 `evidence_kind="proof"` 的实验。
+    proof_experiment_id: str = ""
+    #: 反例所在的实验（`result="refutes"`）。
+    counterexample_experiment_id: str = ""
+    #: 升格落点：`{"kind": "document_claim", "id": "..."}`。
+    promoted_to: dict = field(default_factory=dict)
+    #: 别人已经证过时的文献代号（"别人证过"与"我们证过"是两件事）。
+    known_lit_id: str = ""
+    #: 撤下理由（`status="withdrawn"` 时必填，不许静默消失）。
+    withdraw_reason: str = ""
+    notes: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    created_by: str = "agent-D"
+
+    def validate(self) -> None:
+        """单行内可判的拒收条件（跨对象判据在 `verify.verify_all`）。
+
+        每一条对应 `draft/29` §7.5 状态机里的一句"禁止的读法"：把"没检验"与
+        "检验过没结论"与"检验过有支持"与"检验过被否证"分开，不许折叠。
+        """
+        require_id(self.conjecture_id, "conjecture_id")
+        if not self.statement.strip():
+            raise ValueError("statement 不能为空：猜想必须是一条可判真假的陈述句")
+        bad = [w for w in CONJECTURE_QUESTION_WORDS if w in self.statement]
+        if bad:
+            raise ValueError(
+                f"statement 里出现疑问词 {bad} ⇒ 它是问题而不是猜想。"
+                "猜想必须是可判真假的陈述句（问题走 research_questions）"
+            )
+        if self.form not in CONJECTURE_FORMS:
+            raise ValueError(f"form 必须是 {CONJECTURE_FORMS} 之一，收到 {self.form!r}")
+        if self.status not in CONJECTURE_STATUSES:
+            raise ValueError(f"status 必须是 {CONJECTURE_STATUSES} 之一，收到 {self.status!r}")
+        if not self.origin.strip():
+            raise ValueError(
+                "origin 必填：猜想的来源必须可追（report_id / rel:NNNN / gap / lit:NNNN）"
+            )
+        if self.status == "proposed" and not self.testable:
+            raise ValueError(
+                "status=proposed 时必须给 testable（可检验形式）；给不出就落 needs_evidence"
+            )
+        if self.status == "needs_evidence" and not (self.notes.strip() or self.withdraw_reason.strip()):
+            raise ValueError(
+                "status=needs_evidence 时必须写清为什么提不出可检验形式（notes 或 withdraw_reason）"
+            )
+        if self.status == "supported_not_proved" and not self.experiment_ids:
+            raise ValueError("status=supported_not_proved 时必须记至少一条检验过它的实验")
+        if self.status == "refuted" and not self.counterexample_experiment_id:
+            raise ValueError(
+                "status=refuted 时必须给 counterexample_experiment_id（反例来自一次实验；"
+                "inconclusive 不得转 refuted）"
+            )
+        if self.status == "proved" and not self.proof_experiment_id:
+            raise ValueError("status=proved 时必须给 proof_experiment_id")
+        if self.status == "promoted" and not (self.proof_experiment_id
+                                              and str(self.promoted_to.get("id") or "").strip()):
+            raise ValueError(
+                "status=promoted 时必须同时有 proof_experiment_id 与 promoted_to.id"
+                "（升格要有证据与落点）"
+            )
+        if self.status == "known_in_literature" and not self.known_lit_id.strip():
+            raise ValueError(
+                "status=known_in_literature 时必须给 known_lit_id：别人证过与我们证过是两件事"
+            )
+        if self.status == "withdrawn" and not self.withdraw_reason.strip():
+            raise ValueError("status=withdrawn 时必须写 withdraw_reason（撤下不许静默消失）")
+        if self.experiment_ids != sorted(set(self.experiment_ids)):
+            raise ValueError(f"experiment_ids 必须升序去重：{self.experiment_ids}")
+        for eid in self.experiment_ids:
+            require_id(eid, "experiment_ids[]")
+        for name in ("proof_experiment_id", "counterexample_experiment_id"):
+            val = getattr(self, name)
+            if val:
+                require_id(val, name)
+        if self.known_lit_id:
+            require_id(self.known_lit_id, "known_lit_id")
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 @dataclass
 class AnalysisReport:
@@ -1906,6 +2039,11 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
         # 合成一个字段就必然丢掉一半信息 —— 这正是上一版踩过的坑。
         "relation_chain": "seq",
     },
+    # 第 9 处触点（`draft/30` §T1 原列了 7 处，实测又漏了这一处）：
+    # `ARRAY_FIELD_KINDS` 是"哪些数组字段当集合/序列"的登记表，未声明即 `verify` 报
+    # `undeclared_array_field`（不静默 —— 这正是 FC-05 要防的"静默把序列当集合"）。
+    # `experiment_ids` 是纯集合（检验过它的实验，顺序无意义），故 "set"。
+    "conjectures": {"experiment_ids": "set"},
     "analysis_reports": {},
     # 产物列表的顺序有意义（生成顺序）；重复的产物引用没有意义，但"顺序"更重要，
     # 所以是 seq 而不是 set。
@@ -1961,6 +2099,8 @@ TABLES: dict[str, dict] = {
     "concepts": {"file": "concepts.json", "row": Concept, "id_field": "concept_id", "id_kind": "concept"},
     "relations": {"file": "relations.json", "row": Relation, "id_field": "relation_id", "id_kind": "relation"},
     "research_questions": {"file": "research_questions.json", "row": ResearchQuestion, "id_field": "question_id", "id_kind": "question"},
+    # 猜想（`draft/29` §7.4 Shape C）：独立对象，不是问题的一个 kind —— 理由见类的 docstring。
+    "conjectures": {"file": "conjectures.json", "row": Conjecture, "id_field": "conjecture_id", "id_kind": "conjecture"},
     "analysis_reports": {"file": "analysis_reports.json", "row": AnalysisReport, "id_field": "report_id", "id_kind": "report"},
     "reprocess_requests": {"file": "reprocess_requests.json", "row": ReprocessRequest, "id_field": "reprocess_id", "id_kind": "reprocess"},
     "experiments": {"file": "experiments.json", "row": Experiment, "id_field": "experiment_id", "id_kind": "experiment"},
@@ -1980,6 +2120,7 @@ ID_COUNTERS = {
     "concept": "concept_id",
     "relation": "relation_id",
     "question": "question_id",
+    "conjecture": "conjecture_id",
     "report": "report_id",
     "experiment": "experiment_id",
     "plan": "plan_id",
@@ -2266,6 +2407,11 @@ def row_from_dict(table: str, raw: dict):
         return Relation(**d)
     if table == "research_questions":
         return ResearchQuestion(**{k: raw[k] for k in raw if k in ResearchQuestion.__dataclass_fields__})
+    # 第 8 处触点（`draft/30` §T1 原列了 7 处，实测漏了这一处）：
+    # `row_from_dict` 是"表名 → 行类"的**第二份名单**，`TABLES` 里有它这里没有，
+    # 症状是 `validate_table` 报"未知表名：conjectures"（写盘当场炸，不是静默）。
+    if table == "conjectures":
+        return Conjecture(**{k: raw[k] for k in raw if k in Conjecture.__dataclass_fields__})
     if table == "analysis_reports":
         return AnalysisReport(**{k: raw[k] for k in raw if k in AnalysisReport.__dataclass_fields__})
     if table == "reprocess_requests":

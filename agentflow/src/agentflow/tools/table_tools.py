@@ -470,6 +470,9 @@ _VOCAB_BY_FIELD: dict[tuple[str, str], str] = {
     ("research_questions", "status"): "QUESTION_STATUSES",
     ("research_questions", "priority"): "PRIORITIES",
     ("analysis_reports", "kind"): "REPORT_KINDS",
+    # 猜想（`draft/30` §T1 第 6 处）：状态与形态各有受控词表，不登记就会被静默不校验。
+    ("conjectures", "status"): "CONJECTURE_STATUSES",
+    ("conjectures", "form"): "CONJECTURE_FORMS",
 }
 
 #: 嵌在 JSON 对象里的词表。`literature.download` 是自由 dict，但它的 `status`
@@ -480,7 +483,8 @@ _NESTED_VOCAB: tuple[tuple[str, str, str], ...] = (("literature", "download.stat
 
 # ---------------------------------------------------------------- 参数片段
 
-_TABLE_PROP = {"type": "string", "enum": list(ALL_TABLES), "description": "6 张表之一"}
+_TABLE_PROP = {"type": "string", "enum": list(ALL_TABLES),
+               "description": f"{len(ALL_TABLES)} 张表之一"}
 _LIMIT_PROP = {
     "type": "integer",
     "minimum": LIST_LIMIT_MIN,

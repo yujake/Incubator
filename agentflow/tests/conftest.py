@@ -112,6 +112,7 @@ DATA_FILES = (
     "relations.json",
     "analysis_reports.json",
     "research_questions.json",
+    "conjectures.json",
     "reprocess_requests.json",
     "experiments.json",
     "attack_plans.json",

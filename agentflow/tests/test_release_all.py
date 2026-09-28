@@ -993,8 +993,10 @@ def schema_table_count() -> int:
     量法与文档里写的那条命令逐字等价：
     `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
     —— 这里在进程内直读同一个对象，不另起解释器（少一次秒级开销）。
-    `schema.py` 在 FC-27 禁改区里，所以这个数只有人签字才会变；钉住它，
-    是为了让"文档说 15 张表、而 `schema.TABLES` 已经是别的数"这种漂能被点名。
+    `schema.py` 在 FC-27 禁改区里，正常情况下这个数只有人签字才会变 —— 但 2026-09-28 起
+    FC-27 的"人先写"顺序按 `docs/NOAI-SUSPENSION-2026-09-28.md` 暂停，`conjectures` 表
+    就是在这段窗口里加的（15 → 16；台账 hash 已重刷，走查签字仍待补）。钉住它，
+    是为了让"文档说 16 张表、而 `schema.TABLES` 已经是别的数"这种漂能被点名。
     """
     import agentflow.schema as _schema  # noqa: PLC0415
 

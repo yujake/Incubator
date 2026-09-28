@@ -1076,4 +1076,42 @@ def verify_all(
                               + ("（表里已记录 quote_verified=false，属已知并承认的缺陷）" if stored is False else ""))
                     )
 
+    # ---- 猜想：它引用的东西必须真的存在（依据 `draft/30` §T1 第 7 处触点）
+    #
+    # schema 管一行内可判的条件（`Conjecture.validate`：proposed 要有 testable、
+    # refuted 要有反例实验……）；这一层管跨对象的那半边：那些代号指的东西在不在。
+    # 分工的理由：schema 不该去查别的表（它没有 store），而 verify 查得到。
+    exp_by_id = {str(r.get("experiment_id")) for r in store.rows("experiments")}
+    doc_by_id = {str(r.get("doc_id")): r for r in store.rows("documents")}
+    for c in store.rows("conjectures"):
+        cid = str(c.get("conjecture_id"))
+        refs = [str(x) for x in (c.get("experiment_ids") or []) if x]
+        for key in ("proof_experiment_id", "counterexample_experiment_id"):
+            val = str(c.get(key) or "")
+            if val:
+                refs.append(val)
+        for eid in refs:
+            if eid not in exp_by_id:
+                rep.issues.append(Issue("error", "conjectures", cid, "dangling_experiment",
+                                        f"猜想引用的实验 {eid!r} 不存在"))
+        lit = str(c.get("known_lit_id") or "")
+        if lit and lit not in lit_by_id:
+            rep.issues.append(Issue("error", "conjectures", cid, "dangling_lit",
+                                    f"known_in_literature 指的文献 {lit!r} 不存在"))
+        if str(c.get("status")) == "promoted":
+            target = c.get("promoted_to") or {}
+            want = str(target.get("id") or "")
+            doc_id, _, claim_id = want.partition("#")
+            doc = doc_by_id.get(doc_id)
+            if doc is None:
+                rep.issues.append(Issue("error", "conjectures", cid, "promotion_target_missing",
+                                        f"promoted_to 指的稿件 {doc_id!r} 不存在（升格落空）"))
+            elif claim_id:
+                claim_ids = {str(cl.get("claim_id")) for cl in (doc.get("claims") or [])
+                             if isinstance(cl, dict)}
+                if claim_id not in claim_ids:
+                    rep.issues.append(Issue("error", "conjectures", cid, "promotion_target_missing",
+                                            f"promoted_to 指的断言 {claim_id!r} 不在稿件 "
+                                            f"{doc_id!r} 里（升格落空）"))
+
     return rep

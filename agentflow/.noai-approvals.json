@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-28T22:57:31+08:00",
+  "generated_at": "2026-09-29T00:45:46+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -504,31 +504,12 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "cc31700d4f516a570301cbf612522b23689ac37c213d03f544862c361a725a99",
+      "sha256": "76d85c22f6b77569d80afb1769deb8bf7522f80135e799e45adf1d4d4893cf65",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "本地书架/项目窗口（src__agentflow__schema.py.txt）",
+      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T17:49:20+08:00",
-          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__schema.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__schema.py.txt",
-          "evidence_sha256": "b8cca5b149d024b87f1d05fc45e986f1c26fddbd7f822400cd17637c8b238846"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T17:49:21+08:00",
-          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__schema.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__schema.py.txt",
-          "evidence_sha256": "b8cca5b149d024b87f1d05fc45e986f1c26fddbd7f822400cd17637c8b238846"
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": [
         {
@@ -542,31 +523,12 @@
       "path": "src/agentflow/store.py",
       "glob": "src/agentflow/store.py",
       "category": "schema-migration",
-      "sha256": "60f4373d3c614e2ac1b24da2b6b2ee1a84076a5adc55d17ee28fc45cec644c6e",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "3c1e784d74965074cd81f1ce297fcfaa6de1a5d4a4b31e583c11555f96ec8c7b",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:27+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:41+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -632,31 +594,12 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "aca66a70d0c93187418b73724145ff6973ba81dbe4565a8355bac8acae8d4a6f",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "8381a0a61d6dcc4f4952cf0ef81e64cf720b9de0ee8f23b2b413ca0020995562",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:27+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:42+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -868,67 +811,12 @@
       "path": "tools/vocab_census.py",
       "glob": "tools/vocab_census.py",
       "category": "auth-audit",
-      "sha256": "884307f460032deefdbeba3dfe0a439929f4315b780455ec96797b75557d88a2",
+      "sha256": "3c66bd52429adabdaf84afca927c8beec5037f80c0a44a0fd2cc04741c774ab4",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（tools__vocab_census.py.txt）",
+      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:40+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
-          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:41+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
-          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:20:58+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
-          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:20:59+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
-          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:54+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
-          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:54+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
-          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     }

@@ -157,6 +157,38 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "留着的理由：引用了外部数据集是一条真实且必须能与 theorem 分开的依赖"
         "（`external_unavailable` 那一档就是为它这类准备的）。"
     ),
+    # ---- `T1`（2026-09-29，依据 `draft/30` §T1）加 `conjectures` 表时新声明的状态机：
+    # `CONJECTURE_STATUSES` 的 9 个取值里有 5 个今天在 `src/` 里没有产出点。
+    # 它们**不是**遗忘，是那份条目逐字写着的"不做"：T1 只加**数据面**（表 / 词表 /
+    # 跨对象不变量），提出、检验、否证、升格这些**语义动作**在 T3 的条目里才接线；
+    # 于是今天这 5 个值只能由 `table.*` 直接写入，没有任何 agent 代码写它们。
+    # 处置按本表 doctrine 的选项 (c) 登记为预留：删值要动 `schema.py` 且会让
+    # `draft/29` §7.5 的状态机残缺；补产出属于 T3 的条目，不属于 T1。
+    # ⚠️ **这 5 条是 AI 代写的登记**（窗口见 `docs/NOAI-SUSPENSION-2026-09-28.md`）。
+    # 本表 docstring 写明"往这张表里加一条是人的动作"，而"留还是删"正是口径裁定 ⇒
+    # 这条注记必须留着，供 2 名 reviewer 走查时推翻。
+    ("CONJECTURE_STATUSES", "proposed"): (
+        "死取值。留着的理由：它是 `Conjecture.status` 的**默认值**（每一行猜想生下来就是它），"
+        "但普查不把『dataclass 默认值』算作产出点 ⇒ 这一条同时是普查的已知缺口"
+        "（见 `draft/28` §136 的 R-30）。写它的语义动作（D 提出猜想）在 T3 接线。"
+    ),
+    ("CONJECTURE_STATUSES", "testing"): (
+        "死取值。留着的理由：`draft/29` §7.5 状态机里『正在检验』这一档；"
+        "写入它的动作（把猜想挂到实验上）属于 T3。删掉它会让『检验中』无处安放。"
+    ),
+    ("CONJECTURE_STATUSES", "refuted"): (
+        "死取值。留着的理由：『被反例否证』是猜想闭环的终点之一，"
+        "`Conjecture.validate` 已经强制它必须带 `counterexample_experiment_id`"
+        "（『检验过没有结论』不得转成『被否证』）；写入它的动作在 T3。"
+    ),
+    ("CONJECTURE_STATUSES", "known_in_literature"): (
+        "死取值。留着的理由：『别人已经证过』与『我们证过』是两件事（同本表 `DOC_KINDS` 一族"
+        "的取舍），它要求非空 `known_lit_id`；写入它的动作在 T3。"
+    ),
+    ("CONJECTURE_STATUSES", "withdrawn"): (
+        "死取值。留着的理由：『撤下必须写理由、不许静默消失』是 `Conjecture.validate` 的硬条件，"
+        "而『撤下』这个动作在 T3 才接线。"
+    ),
 }
 
 

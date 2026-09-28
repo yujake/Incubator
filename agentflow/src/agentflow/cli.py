@@ -239,8 +239,9 @@ def cmd_status(args) -> int:
     print("")
     # 表名清单必须来自 `S.TABLES`，不许在这里写死。
     # 这里原先写死 `("search_requests", "literature", "concepts", "relations")`，
-    # 而 `Store.stats()` 明明返回全部 15 张表 —— 于是"库长什么样"的第一入口
-    # 静默地不显示另外 11 张（analysis_reports / experiments / documents / tasks …）。
+    # 而 `Store.stats()` 明明返回全部表（当时 15 张，加 `conjectures` 后为 16）——
+    # 于是"库长什么样"的第一入口静默地不显示另外 11 张（analysis_reports / experiments /
+    # documents / tasks …）。
     # 写死的第二份名单还会在表被改名/删除时以 `KeyError` 崩掉（`s[t]`），
     # 而不是如实报告。与 `cmd_tools` 里那句"角色清单必须来自 ROLES"同一个道理。
     rows = []

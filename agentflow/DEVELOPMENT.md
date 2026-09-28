@@ -92,7 +92,8 @@
 > 与 §0.3b（计数写法）。本表刻意保留原值**（它证明这些门**曾经报过什么**），
 > **但任何一行都不许当"当前值"引用** —— 例如本表第 1 行的 `1497 passed` 今天是
 > **`1925 passed, 8 deselected, 1 xfailed`**，第 2 行的 `error 0 / warning 2 / info 15`（S2 当次：9 条规则）
-> 今天是 **`error 0 / warning 0 / info 25`（12 条规则，R004/R006 已退休、R011/R012 在册）**，
+> 今天是 **`error 0 / warning 0 / info 30`（12 条规则，R004/R006 已退休、R011/R012 在册；
+> `info` 从 25 变 30 是 T1 登记 5 条 R011 预留取值的直接后果，见 §0.3 的 `LIVE-READINGS` 块）**，
 > 第 5 行的"14 条 `unapproved`"今天是**台账当次读出的数**（`entries` 长度与逐条 `reviewers` 之和；
 > **每签一个字就变 ⇒ 本行不写定值**，当次数见 §1.5 的"三个数"表里那两条命令）。
 > 这几行里 linter 那一行的数值由 §0.3 的 `LIVE-READINGS` 块钉住（`R6-AN-4`：
@@ -144,21 +145,21 @@ LIVE-READINGS:BEGIN
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来。
 lint_rules_rules   = 12   # `len(RULES)`；复跑 `python scripts/lint_rules.py` 摘要行的"规则 N 条"；观测 2026-09-27（G3 复测）
 lint_rules_warning = 0    # `python scripts/lint_rules.py`（日常档）末行的 warning 栏；观测 2026-09-27（G3 复测）
-lint_rules_info    = 25   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位
+lint_rules_info    = 30   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-09-29（T1：25 → **30**）—— 多的 5 条全部来自 R011 的"栏一：已登记为预留"逐条打印（`tools/vocab_census.py::RESERVED_VALUES` 新增 `CONJECTURE_STATUSES` 的 5 个取值；按该表 doctrine，预留项**必须**照样打印含理由，所以这 5 条 info 是设计后果而不是噪音）
 lint_rules_strict_warning = 39 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-09-27（G3 复测）
-lint_rules_strict_info    = 24 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-09-27（G3 复测）
+lint_rules_strict_info    = 29 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-09-29（T1：24 → **29**，同因：R011 的 5 条预留打印）
 noai_paths_glob    = 27   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
 noai_paths_unique  = 24   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
 noai_paths_categories = 7 # `.noai-paths` 里 `[category: …]` 的分组数；观测 2026-09-27（G3 复测）
 tools_star_tools_py   = 12 # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`（+conductor_tools）（外加 `base.py` 与装配点 `__init__.py`）；观测 2026-09-27（G3 复测）
-schema_tables      = 15   # `len(schema.TABLES)`；复跑 `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`；观测 2026-09-27（G3 复测）
+schema_tables      = 16   # `len(schema.TABLES)`；复跑 `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`；观测 2026-09-29（T1 加 `conjectures` 表：15 → 16；表加一行的**触点不止一处**，见 `docs/ROLE-SPECS.md` 与 `draft/30` §T1 的十处清单（9 处代码 + `tests/conftest.DATA_FILES` 这一处判据清单）；`SCHEMA_VERSION` 刻意不动）
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`（观测 2026-09-28 15:4x：随最后一次集中审查的修复（`F-R1d-01` 的退化基线判据 + `F-R1d-04` 的证据锚正控/负控）121 → **124**；再前阶段 B `W1` 的三条新用例 116 → 119、F8-R11 随 F10 那条新用例 115 → 116；量法是"只收集、不真跑"，与该文件 `N passed` 相等的前提是同一行写着的 `0 skipped` + 无 deselect 到 0 + 无失败；本文写这个数的地方见 §9.1 的 FC-27/FC-09 两行）
 LIVE-READINGS:END
 ```
 
 | # | 命令 | 实测输出 | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：63（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools）`；`各角色工具数：{'A': 20, 'B': 18, 'C': 17, 'D': 37, 'E': 21, 'F': 32, 'G': 32, 'H': 22}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-09-27（`G3` 复测））：`build_registry(store=None)` ⇒ **43**；`build_registry(store=None, workspace_root='.')` ⇒ **50**；`cli tools`（含 store）⇒ **55**。⚠️ **`store=None` 单独给不出 50** —— 50 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 22 而不是 23**：B3 收官后 `verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离 | **0** |
+| 1 | `python -m agentflow.cli tools` | `工具总数：63（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 20, 'B': 18, 'C': 17, 'D': 37, 'E': 21, 'F': 32, 'G': 32, 'H': 22}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-09-27（`G3` 复测））：`build_registry(store=None)` ⇒ **43**；`build_registry(store=None, workspace_root='.')` ⇒ **50**；`cli tools`（含 store）⇒ **55**。⚠️ **`store=None` 单独给不出 50** —— 50 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 22 而不是 23**：B3 收官后 `verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离 | **0** |
 | 2 | `python -m agentflow.cli tools --role E` | 正常列出 E 的工具面（S1 时这里报 `invalid choice: 'E' (choose from 'A','B','C','D')` —— **已修**：`choices=list(S.ROLES)`） | **0** |
 | 3 | `python -m agentflow.cli tools --role C` | 列出 `trace.concept` / `trace.literature` / `trace.relation` 等，**全部 `[read]`** | **0** |
 | 4 | `python -m agentflow.cli verify` | `校验完成：通过  错误 0 / 警告 0` | **0** |

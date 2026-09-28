@@ -70,6 +70,8 @@ LOCK_ORDER: tuple[str, ...] = (
     "relations",
     "analysis_reports",
     "research_questions",
+    # 猜想：在研究层产生、在实验层被检验 ⇒ 紧跟 research_questions（`draft/30` §T1 第 5 处）。
+    "conjectures",
     "reprocess_requests",
     "experiments",
     "attack_plans",
