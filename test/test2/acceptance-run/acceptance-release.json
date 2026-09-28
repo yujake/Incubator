@@ -5,7 +5,7 @@
       "phase": "P1",
       "title": "输入：登记文献 + B 抽取（引文逐字回验）",
       "ok": true,
-      "seconds": 0.47,
+      "seconds": 0.52,
       "detail": {
         "quotes": {
           "total": 25,
@@ -25,6 +25,7 @@
           "quotes_verified": 25,
           "quotes_failed": 0,
           "quotes_unknown": 0,
+          "quotes_out_of_declared_range": 0,
           "unreadable": 0,
           "failed": 0,
           "skipped_lease_active": 0,
@@ -43,7 +44,7 @@
       "phase": "P2",
       "title": "分析：C 的四类分析（最热/路径/冷门/缺口）",
       "ok": true,
-      "seconds": 0.12,
+      "seconds": 0.15,
       "detail": {
         "resolved": {
           "K(m)": "0000",
@@ -111,7 +112,7 @@
       "phase": "P2b",
       "title": "交互抽查：I1/I3/I4/I5/I7 逐条端到端",
       "ok": true,
-      "seconds": 0.15,
+      "seconds": 0.22,
       "detail": {
         "I1_services": {
           "neighbors": {
@@ -280,7 +281,7 @@
       "phase": "P3",
       "title": "研究：D 建问题台账 + 矛盾闭环 + 提交检索请求",
       "ok": true,
-      "seconds": 0.19,
+      "seconds": 0.24,
       "detail": {
         "input_report_ids": [
           "0000",
@@ -319,7 +320,7 @@
                   "strength": "weak",
                   "signals": "否定标记出现与否不一致（0016 neg=True / 0017 neg=False）—— **这只是线索，不是对立主张**",
                   "detection": "literal",
-                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ 不建矛盾问题、不提交检索请求"
                 },
                 {
                   "relation_ids": [
@@ -333,7 +334,7 @@
                   "strength": "weak",
                   "signals": "否定标记出现与否不一致（0021 neg=False / 0024 neg=True）—— **这只是线索，不是对立主张**",
                   "detection": "literal",
-                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                  "note": "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，实测 24% 的报警都不是矛盾）⇒ 不建矛盾问题、不提交检索请求"
                 }
               ]
             }
@@ -445,7 +446,7 @@
       "phase": "P4",
       "title": "攻坚：F 立项 + 多轮推进 + 预算终止",
       "ok": true,
-      "seconds": 186.07,
+      "seconds": 136.45,
       "detail": {
         "create_plan": {
           "created": true,
@@ -633,7 +634,7 @@
       "phase": "P5",
       "title": "实验：E 跑 5 个独立复现脚本 + 登记证据等级",
       "ok": true,
-      "seconds": 0.01,
+      "seconds": 0.05,
       "detail": {
         "experiments": [
           {
@@ -678,6 +679,24 @@
           }
         ],
         "experiment_rows": 5,
+        "paper_declaration_problems": [],
+        "paper_declaration_uncovered": [
+          {
+            "tag": "exp1",
+            "script": "exp1_k_spectrum.py",
+            "why": "本脚本没有任何 EXPECT_* 字面量常量 ⇒ P5 无法复核它是否把论文常数写死（补这些常数需要人定论文数值，AI 不编数字）"
+          },
+          {
+            "tag": "exp4",
+            "script": "exp4_size_regularity.py",
+            "why": "本脚本没有任何 EXPECT_* 字面量常量 ⇒ P5 无法复核它是否把论文常数写死（补这些常数需要人定论文数值，AI 不编数字）"
+          },
+          {
+            "tag": "exp5",
+            "script": "exp5_noniso.py",
+            "why": "本脚本没有任何 EXPECT_* 字面量常量 ⇒ P5 无法复核它是否把论文常数写死（补这些常数需要人定论文数值，AI 不编数字）"
+          }
+        ],
         "rows_per_script": {
           "exp1_k_spectrum.py": 1,
           "exp2_girths.py": 1,
@@ -692,14 +711,18 @@
           "not_proved"
         ]
       },
-      "notes": [],
+      "notes": [
+        "论文声称值未覆盖（残余）：exp1_k_spectrum.py —— 本脚本没有任何 EXPECT_* 字面量常量 ⇒ P5 无法复核它是否把论文常数写死（补这些常数需要人定论文数值，AI 不编数字）",
+        "论文声称值未覆盖（残余）：exp4_size_regularity.py —— 本脚本没有任何 EXPECT_* 字面量常量 ⇒ P5 无法复核它是否把论文常数写死（补这些常数需要人定论文数值，AI 不编数字）",
+        "论文声称值未覆盖（残余）：exp5_noniso.py —— 本脚本没有任何 EXPECT_* 字面量常量 ⇒ P5 无法复核它是否把论文常数写死（补这些常数需要人定论文数值，AI 不编数字）"
+      ],
       "error": null
     },
     {
       "phase": "P6",
       "title": "撰写：G 出复现报告 + 登记依赖闭合",
       "ok": true,
-      "seconds": 0.34,
+      "seconds": 0.63,
       "detail": {
         "claims": 10,
         "dependencies": [
@@ -718,7 +741,7 @@
             },
             "quote": "",
             "status_reason": "论文只给了 '[6]' 与书名/卷号/定理号，**未给出出版信息**；本项目检索不到该书 ⇒ 无法独立核验 Theorem 1.5 的这个前提。这正是论文 Remark 1.6 自己声明的边界。",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           },
           {
@@ -736,7 +759,7 @@
             },
             "quote": "",
             "status_reason": "",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           },
           {
@@ -754,7 +777,7 @@
             },
             "quote": "",
             "status_reason": "",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           },
           {
@@ -772,7 +795,7 @@
             },
             "quote": "",
             "status_reason": "",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           },
           {
@@ -790,7 +813,7 @@
             },
             "quote": "",
             "status_reason": "",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           },
           {
@@ -808,7 +831,7 @@
             },
             "quote": "",
             "status_reason": "",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           },
           {
@@ -826,7 +849,7 @@
             },
             "quote": "",
             "status_reason": "",
-            "created_at": "2026-09-25T22:50:38+08:00",
+            "created_at": "2026-09-28T21:16:02+08:00",
             "created_by": "agent-G"
           }
         ],
@@ -842,11 +865,11 @@
               "claim_id": "claim-9405a4f2",
               "section": "1. 复现对象",
               "text": "论文的 Definition 1.1 把 K(m) 定义为 V_K 上、x 与 x±e_i 相邻的图。",
-              "evidence_kind": "proof",
+              "evidence_kind": "cross_check",
               "citations": "<list>",
               "is_negative": false,
               "negation_kind": null,
-              "disclaimer": "",
+              "disclaimer": "数值交叉验证，不构成证明",
               "scope_caveat": "",
               "revision_hash": ""
             },
@@ -854,11 +877,11 @@
               "claim_id": "claim-627b083f",
               "section": "1. 复现对象",
               "text": "论文的 Definition 1.2 把 S̃_m 定义为仿射 Weyl 群关于 {s_0,…,s_{m−1}} 的 Cayley 图。",
-              "evidence_kind": "proof",
+              "evidence_kind": "cross_check",
               "citations": "<list>",
               "is_negative": false,
               "negation_kind": null,
-              "disclaimer": "",
+              "disclaimer": "数值交叉验证，不构成证明",
               "scope_caveat": "",
               "revision_hash": ""
             },
@@ -966,8 +989,8 @@
           ],
           "status": "draft",
           "review_rounds": 0,
-          "created_at": "2026-09-25T22:50:38+08:00",
-          "updated_at": "2026-09-25T22:50:38+08:00",
+          "created_at": "2026-09-28T21:16:02+08:00",
+          "updated_at": "2026-09-28T21:16:02+08:00",
           "created_by": "agent-G"
         },
         "doc_id": "0000"
@@ -979,7 +1002,7 @@
       "phase": "P7",
       "title": "审校：H 独立复核 + 负控（注入过度声称）",
       "ok": true,
-      "seconds": 0.11,
+      "seconds": 0.22,
       "detail": {
         "negative_control_clean": {
           "errors": 0,
@@ -1129,7 +1152,7 @@
       "phase": "P9",
       "title": "汇总：表计数 + 论文声称 vs 独立验证",
       "ok": true,
-      "seconds": 0.04,
+      "seconds": 0.03,
       "detail": {
         "stats": {
           "root": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace",
@@ -1189,7 +1212,7 @@
             "count": 0
           },
           "events": {
-            "appended": 173
+            "appended": 221
           }
         },
         "paper_claims": {

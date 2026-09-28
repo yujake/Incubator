@@ -68,7 +68,7 @@ from .store import Store
 from .tools import attack_tools as AT
 from .tools.base import ToolError, ToolRegistry
 
-__all__ = ["AgentF", "PlanError", "install_f_tools", "selftest"]
+__all__ = ["AgentF", "PlanError", "STEP_OUTCOMES", "install_f_tools", "selftest"]
 
 
 class PlanError(ToolError):
@@ -112,6 +112,59 @@ ACTIONS = (
     "no_change",
     "stop",
 )
+
+#: 一轮推进的 `outcome` 词表（`G-24②`）。
+#:
+#: ## 它与 `schema.TASK_OUTCOMES` 是两套命名空间（同形、不同义）
+#:
+#: 两者都是"结果"词表（短小写英文词，都用于记账），所以它们看起来同形；
+#: 而它们回答的是两个不同的问题：
+#:
+#: - `schema.TASK_OUTCOMES`（`("ok","no_result","not_applicable","refused","failed",
+#:   "cancelled")`）说的是一次任务的终局 —— 它写进 `tasks.outcome`，
+#:   由 `schema.Task.validate` 机械校验，取值面是"这次召唤最后怎么了"；
+#: - `STEP_OUTCOMES`（本表）说的是一轮推进的结果 —— 它写进
+#:   `AttackPlan.history[i]["outcome"]` 与 `AgentF.step` 的返回值，
+#:   取值面是"这一轮有没有让计划往前走"。
+#:
+#: 裁定依据（读代码得来，不是猜）：`step` 把本表的值写进 `history` 的那一条
+#: 记录（`{"round","sid","action","outcome","detail","evidence","at"}`），
+#: 而同一行里还有 `action` / `sid` / `round` —— 它记的是一个子目标的一轮；
+#: 一个计划要跑很多轮才可能到达终局，`resolved` / `stalled` 那些终局状态
+#: 走的是 `schema.ATTACK_STATUSES`（`row["status"]`），不是本表。
+#: `stall_after_no_progress_rounds` 的提前停止判据也是逐轮读本表
+#: （连续 N 轮 `no_change`）—— 终局词表里没有任何一个值是"这一轮没进展"。
+#:
+#: 所以：不许互相赋值。把 `outcome="progress"` 写进 `tasks.outcome`
+#: 会被 schema 当场拒（那是好事），而把 `"refused"` 之类写进 history
+#: 会让停滞检测永远算不出 `no_change`（那是静默的：`len(recent) == stall_after`
+#: 仍然成立，只是 `all(o == "no_change")` 恒假，于是"连续无进展"再也测不出来）。
+#: 两个词表的取值集合不重叠这件事由导入期断言钉住（见下面的 assert）。
+STEP_OUTCOMES: tuple[str, ...] = ("no_change", "progress", "blocked")
+
+assert not (set(STEP_OUTCOMES) & set(S.TASK_OUTCOMES)), (
+    f"STEP_OUTCOMES={STEP_OUTCOMES} 与 schema.TASK_OUTCOMES={S.TASK_OUTCOMES} 有交集 "
+    f"{sorted(set(STEP_OUTCOMES) & set(S.TASK_OUTCOMES))} —— 两者是两套命名空间"
+    "（一轮推进的结果 vs 一次任务的终局），取值一旦重叠，互相赋值就再也拦不住"
+)
+
+
+def _step_outcome(value: Any) -> str:
+    """把一轮 `outcome` 收口到 `STEP_OUTCOMES`（fail-closed）。
+
+    为什么要有这一道（而不是只留一张词表）：词表本身没有消费者时，它就是注释
+    —— 一个拼错的 `outcom="progres"` 会原样写进 `history`，而没有任何地方会报错。
+    写的两个落点（history 与 `step` 的返回值）都过这道闸，于是"词表外的取值"
+    在写入的那一刻就炸，而不是等审计去猜它想说什么。
+    """
+    s = str(value)
+    if s not in STEP_OUTCOMES:
+        raise PlanError(
+            f"一轮推进的 outcome 必须是 {STEP_OUTCOMES} 之一，收到 {value!r} —— "
+            "它与 `schema.TASK_OUTCOMES`（一次任务的终局）是两套命名空间，"
+            "不许互相赋值；词表外的值会让停滞检测静默失效"
+        )
+    return s
 
 #: `status="stalled"` 时，如果连一轮都没跑过，`best_partial` 必须写的如实说明。
 #: 为什么不许留空：`AttackPlan.validate` 要求非空（"攻坚停下来了却什么都不交出去，
@@ -219,6 +272,9 @@ class AgentF:
         self.last_step: dict[str, Any] = {}
         self.last_tool_errors: list[dict] = []
         self.tools = tools if tools is not None else install_f_tools(self.store)
+        # ---- 绑定角色（`P-14`）：注入的注册表同样要绑（`AgentD` 那条注释同族）。
+        if self.tools.bound_role is None:
+            self.tools.bound_role = "F"
 
     # ------------------------------------------------------------ 小工具
 
@@ -456,6 +512,12 @@ class AgentF:
 
         返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason"}``。
 
+        `outcome` 取本模块的 :data:`STEP_OUTCOMES`
+        （``no_change`` / ``progress`` / ``blocked``）：它说的是这一轮推进的结果，
+        与 `schema.TASK_OUTCOMES`（一次任务的终局）是两套命名空间，不许互相赋值
+        —— 裁定依据与后果写在 `STEP_OUTCOMES` 的注释里。写入前会过一次
+        :func:`_step_outcome` 的收口，词表外的取值当场炸。
+
         流程（每一步的理由都写在旁边的注释里）：
 
         1. 读计划 → 终结状态不再推进（不自动重入）；轮数用尽 ⇒ `stalled` + `best_partial`；
@@ -648,7 +710,9 @@ class AgentF:
                 "round": rounds + 1,
                 "sid": sid,
                 "action": deploy["action"],
-                "outcome": deploy["outcome"],
+                # 收口到 `STEP_OUTCOMES`（`G-24②`）：词表外的取值在写入前就炸，
+                # 而不是原样落进 history（那里它会让停滞检测静默失效）。
+                "outcome": _step_outcome(deploy["outcome"]),
                 "detail": deploy["detail"],
                 "evidence": list(deploy.get("evidence") or []),
                 "at": self._stamp(),
@@ -669,7 +733,7 @@ class AgentF:
             "round": rounds + 1,
             "sid": sid,
             "action": deploy["action"],
-            "outcome": deploy["outcome"],
+            "outcome": _step_outcome(deploy["outcome"]),
             "status": row["status"],
             "budget_left": _budget_left(budget, rounds + 1),
             "reason": deploy["detail"],
@@ -803,6 +867,12 @@ class AgentF:
                 method=str(sg.get("method") or "numeric"),
                 for_question_id=plan.get("for_question_id"),
                 timeout=int(sg.get("timeout") or self.cfg.get("timeout", 600)),
+                # `P-8`：形式化子目标要把"核哪个声明、加载哪些库"传下去 ——
+                # 不传的话 E 只能用文件名词干 + 检查器默认库，而"库不可得"
+                # （`import_unavailable`）会让这次检查根本没发生 ⇒ 永远拿不到 proof。
+                # 两个键对计算类子目标不存在（取到 None），E 那一侧因此不会拒绝。
+                name=sg.get("name"),
+                imports=sg.get("imports"),
             )
         except Exception as ex:  # noqa: BLE001 - 任何 E 侧失败都降级为 blocked，不中止攻坚
             return {
@@ -1189,6 +1259,11 @@ def install_f_tools(store: Store, *, registry: ToolRegistry | None = None) -> To
     """装配 F 的工具栏（`attack.*`）。写入逻辑只有一份（见 `attack_tools` 的 docstring）。"""
     reg = registry if registry is not None else ToolRegistry(name="agent-F")
     AT.register(reg, store=store)
+    # 绑定角色（`P-14`）：这张注册表代表 F。F 是 `attack.*` 的唯一写侧主人
+    # （`_WRITE_ROLES = ("F",)`），而读侧还有 D/G/H —— 所以"代表 F"必须显式写下来，
+    # 否则 `AgentF._call` 的每次调用都会因为"调用方没有声明角色"被拒。
+    if reg.bound_role is None:
+        reg.bound_role = "F"
     return reg
 
 

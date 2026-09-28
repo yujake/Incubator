@@ -178,3 +178,86 @@ def test_validate_table_rejects_wrong_schema_version():
     """schema_version 不匹配必须抛错，避免把旧格式当新格式解析。"""
     with pytest.raises(ValueError):
         S.validate_table("concepts", {"schema_version": 999, "rows": []})
+
+
+# ---------------------------------------------------------------- P-17：过程记录不占 4 位空间
+
+
+def test_process_id_kinds_and_counter_kinds_are_disjoint():
+    """正控（`P-17`）：`set(ID_COUNTERS)` 与过程记录前缀的交集必须为空。
+
+    这条契约在此之前唯一的"实现"是 `ID_COUNTERS` 的键里恰好没有 `task` ——
+    一个"缺失"在替一条"契约"说话。现在它有判据了。
+    """
+    assert set(S.ID_COUNTERS) & set(S.PROCESS_ID_PREFIXES.values()) == set()
+    # 声明面（PROCESS_ID_PREFIXES）与派生面（TABLES + ID_COUNTERS）必须一致。
+    assert S.process_id_kinds() == frozenset(S.PROCESS_ID_PREFIXES)
+    assert S.four_digit_id_kinds() == frozenset(S.ID_COUNTERS)
+    # 两半互斥且互补：合起来正好是 TABLES 里全部 id_kind。
+    all_kinds = {spec["id_kind"] for spec in S.TABLES.values()}
+    assert set(S.ID_COUNTERS) | set(S.process_id_kinds()) == all_kinds
+
+
+def test_task_id_shape_is_decidable_and_mutually_exclusive_with_4digit():
+    """正控（`P-17`）：`task_id` 的形态可判定，且与 4 位 ID 判据互斥。
+
+    互斥是关键：若两个判据都接受同一个串，"占不占号空间"就仍然不可判定。
+    """
+    assert S.is_valid_process_id("t-0001") is True
+    assert S.is_valid_id("t-0001") is False
+    assert S.is_valid_id("0000") is True
+    assert S.is_valid_process_id("0000") is False
+    # 形态要求：前缀 + 连接号 + 恰好 4 位数字（不是"含数字就行"）。
+    for bad in ("t-00001", "t0001", "-0001", "t-", "t-abcd", "t-0001x", "", None, 1):
+        assert S.is_valid_process_id(bad) is False, bad
+
+
+def test_negative_control_a_process_prefix_inside_ID_COUNTERS_goes_red():
+    """负控（`P-17`）：往 `ID_COUNTERS` 里塞一个过程前缀 ⇒ 断言必须红。
+
+    注入是真的改 `S.ID_COUNTERS`（随后恢复），所以这条负控证明的是
+    "判据真的读那张表"，而不是"判据恰好对某个字面量成立"。
+    """
+    snapshot = dict(S.ID_COUNTERS)
+    try:
+        S.ID_COUNTERS["t"] = "task_id"
+        with pytest.raises(AssertionError) as ei:
+            S.assert_process_id_contract()
+        assert "过程记录前缀" in str(ei.value), str(ei.value)
+    finally:
+        S.ID_COUNTERS.clear()
+        S.ID_COUNTERS.update(snapshot)
+    # 恢复之后必须重新变绿 —— 否则说明这条负控把模块状态改坏了。
+    S.assert_process_id_contract()
+
+
+def test_negative_control_a_counter_named_task_goes_red():
+    """负控（`P-17` 的第二条独立路径）：把过程表装进 `ID_COUNTERS` ⇒ 声明面与派生面分家 ⇒ 红。
+
+    这一条专治"同义反复"：若判据只是 `set(ID_COUNTERS) & process_id_kinds()`，
+    那么塞 `"task": "task_id"` 会让 `tasks` 同时从派生面掉出去，交集照样为空、
+    判据一声不响。靠声明面与派生面互相对账才抓得住它。
+    """
+    snapshot = dict(S.ID_COUNTERS)
+    try:
+        S.ID_COUNTERS["task"] = "task_id"
+        with pytest.raises(AssertionError) as ei:
+            S.assert_process_id_contract()
+        assert "声明面" in str(ei.value) or "过程记录前缀" in str(ei.value), str(ei.value)
+    finally:
+        S.ID_COUNTERS.clear()
+        S.ID_COUNTERS.update(snapshot)
+    S.assert_process_id_contract()
+
+
+def test_negative_control_a_process_table_pointing_at_a_counter_field_goes_red():
+    """负控（第三条路径）：只动 `TABLES` 一侧（把过程表的 id_field 指向计数器字段）⇒ 也红。"""
+    snapshot_tables = dict(S.TABLES)
+    try:
+        S.TABLES["tasks"] = {**S.TABLES["tasks"], "id_field": "lit_id"}
+        with pytest.raises(AssertionError):
+            S.assert_process_id_contract()
+    finally:
+        S.TABLES.clear()
+        S.TABLES.update(snapshot_tables)
+    S.assert_process_id_contract()

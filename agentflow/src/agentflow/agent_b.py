@@ -38,10 +38,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import dedup as D
 from . import interactions as I
+from . import quoteverify
 from . import schema as S
 from . import textutil as T
 from .quoteverify import check_quote
@@ -58,6 +60,24 @@ REPROCESS_RESULTS = ("found", "not_found", "improved", "unchanged", "rejected_ta
 #: `result_note` 的字符上限。它是给人看的证据（`need_context` 时就是原文片段），
 #: 必须有上限，否则一次请求就能把 json 撑到无法阅读。
 NOTE_LIMIT = 2000
+
+#: `E-11`：`quoteverify.check_quote` 给出的"逐字存在、但不在声明的页码范围内"那一档。
+#:
+#: 为什么在 B 这一层要认识这个字面量：B 是那个"把 `verified` 读成结论"的地方
+#: （`chk.verified is True` ⇒ 计 `quotes_verified`），而这一档的 `verified` 也是
+#: `True` —— 只有 `reason` 能把它与"页码正确"分开。判据必须是一个受控常量而不是
+#: 散在 `if` 里的一句字面量：`quoteverify.py` 在 FC-27 禁改区，它的 reason 一旦改名，
+#: 这里会静默地一条都不再计。下面那条导入期断言就是为了让这种改名立刻炸出来。
+QUOTE_OUT_OF_DECLARED_RANGE = "substring_match_outside_declared_range"
+#: 上游（`quoteverify`）真的会产出上面那个字面量吗 —— 导入期核一次。
+#: 这一条与 `agent_e` 的 `set(formalgw.STATUSES) <= set(映射表)` 是同一形态：
+#: 隐式契约放在导入期，不留给"跑起来才发现"。
+assert QUOTE_OUT_OF_DECLARED_RANGE in Path(quoteverify.__file__).read_text(
+    encoding="utf-8"
+), (
+    f"quoteverify 里找不到 {QUOTE_OUT_OF_DECLARED_RANGE!r} 这个 reason ⇒ "
+    "B 的 quotes_out_of_declared_range 会静默地永远是 0（`E-11` 的那一档又变成了看不见）"
+)
 
 #: 切"候选片段"用的句末标点（含换行）。中文与英文都要切，否则整页会被当成一个片段，
 #: 相似度会被无关句子的 token 稀释到阈值以下（表现为"明明有等价表述却找不到"）。
@@ -94,6 +114,22 @@ class BRunResult:
     quotes_verified: int = 0
     quotes_failed: int = 0
     quotes_unknown: int = 0
+    #: `E-11`：引文逐字存在、但不在关系声明的页码范围内（落在 ±widen 的扩展窗口里）。
+    #:
+    #: 为什么要单独一档：这一档在 `quoteverify.check_quote` 里是
+    #: `verified=True + reason='substring_match_outside_declared_range'` —— 于是
+    #: 它既被计进 `quotes_verified`（"逐字可达"是真的），又不会把关系降为
+    #: `suspect`（`quote_failed` 判的是 `verified is not True`）。结果是
+    #: "全部引文逐字可达"这条判据在所有页码都记错时照样通过，而聚合计数器里
+    #: 也看不出"页码不符"有几条 —— 这个信号原先只留在每行的 `_quote_check` 字典里，
+    #: 全仓库没有任何检查器消费它。
+    #:
+    #: 这一档不改 `verified`（逐字存在是事实，把它抹成 False 会让"真引文被记成
+    #: 幻觉"，那是 FC-02 最贵的一档），也不改 suspect 口径（那需要人裁，
+    #: `draft/28` 的 `E-11` 修法里写明了）。它做的是把这一档从"折进 verified"
+    #: 变成"可判定的独立档"：这里单独计数，`verify --deep` 另有一条
+    #: `page_range_mismatch` 的 warning（见 `verify.verify_all`）。
+    quotes_out_of_declared_range: int = 0
     unreadable: int = 0
     failed: int = 0
     # ---- 取文献侧的审计信息（与 `AgentA.ARunResult` 同口径）。
@@ -405,6 +441,11 @@ class AgentB:
             )
             if chk.verified is True:
                 res.quotes_verified += 1
+                # `E-11`：引文逐字存在、但落在声明的页码之外。判据取 `reason`
+                # 而不是 `window` 前缀（`check_quote` 里只有这一条分支会给出这个
+                # reason，见 `quoteverify.check_quote` 的 widen 分支）。
+                if chk.reason == QUOTE_OUT_OF_DECLARED_RANGE:
+                    res.quotes_out_of_declared_range += 1
             elif chk.verified is False:
                 res.quotes_failed += 1
             else:
@@ -1454,6 +1495,7 @@ class AgentB:
                 "quotes_verified",
                 "quotes_failed",
                 "quotes_unknown",
+                "quotes_out_of_declared_range",
                 "unreadable",
                 "failed",
                 "conflict_checks_run",
@@ -1537,8 +1579,10 @@ def _selftest() -> int:
         （它也确实是 `quoteverify.check_quote` 实际读的全部）。
         """
 
-        def __init__(self, text: str = TEXT):
-            self.pages = [text]
+        def __init__(self, text: str = TEXT, extra_pages: tuple[str, ...] = ()):
+            #: `pages[0]` 是第 1 页。`extra_pages` 是给"页码写错"那一段用的：
+            #: 引文落在第 2 页，而关系声明的是第 1 页（`E-11` 那一档）。
+            self.pages = [text, *extra_pages]
 
         def text_at(self, lo: int, hi: int) -> str:
             return "\n".join(self.pages[lo - 1: hi])
@@ -1639,6 +1683,27 @@ def _selftest() -> int:
                       for r in st.rows("relations")))
         check("I6 闸门计数可观察：跑了就计 conflict_checks_run，没跑就计 skipped（三态不折叠）",
               res3.conflict_checks_run + res3.conflict_checks_skipped >= 1)
+
+        # ---- 3b) `E-11`：引文逐字存在、但页码写错 ⇒ 单独可数（不折进 verified）
+        _drain(st)
+        _write_lit(st, "0005", "selftest")
+        _add_lit(st, "0005", path="0005/selftest.txt")
+        ext3b = _Extractor(relations=[
+            _Relation(["group", "abelian group"], TEXT, "页码写错",
+                      page_range=S.PageRange(1, 1, "p. 1")),
+        ])
+        # 引文在第 2 页，而上面声明的页码是第 1 页；widen=1 ⇒ 落在扩展窗口里命中。
+        # 第 1 页刻意给一段不含引文的文本：`_Doc` 的默认页就是 TEXT，直接用默认
+        # 会让声明窗口内直接命中（`substring_match`），根本走不到"页码写错"那一档。
+        b3b = AgentB(st, extractor=ext3b,
+                     extract_text=lambda _p: _Doc(text="第一页：这里没有那句话。",
+                                                  extra_pages=(TEXT,)),
+                     config={"lease_seconds": 900, "max_attempts": 3, "quote_widen_pages": 1})
+        res3b = b3b.run_once()
+        check("页码写错：引文仍计 quotes_verified（逐字可达是真的），"
+              "但必须**另计** quotes_out_of_declared_range=1（`E-11`）",
+              res3b.quotes_verified == 1 and res3b.quotes_out_of_declared_range == 1,
+              f"verified={res3b.quotes_verified} out_of_range={res3b.quotes_out_of_declared_range}")
 
         # ---- 4) 抽取失败 ⇒ 不置 processed（留给租约到期重试）
         _write_lit(st, "0003", "selftest")

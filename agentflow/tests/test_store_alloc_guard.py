@@ -15,6 +15,14 @@
 并把 `counters` 推到最终号 + 1（缓存自愈）。跳过而不是抛异常：
 漂移是既成事实，崩溃修不好它；这里只负责"不破坏数据"，
 失序由 `verify` 的 `counter_behind` / `id_gap` 负责报告。
+
+## `F-2`（2026-09-26 追加）：那道守卫自己留了一个不报错的缺口
+
+上面那句"在已声明的事务表里查一遍"曾经导致：没声明目标表时整段检查被跳过，
+而发号照旧（`if table is not None and table in self.tables:`）。于是同一条数据丢失
+路径在"只声明 counters"的调用形态下原样存在。实测见
+`temp/auditF-probe1.txt` 的 [D1]，回归判据见本文件的
+`test_alloc_id_without_the_target_table_declared_raises`。
 """
 
 from __future__ import annotations
@@ -22,7 +30,7 @@ from __future__ import annotations
 import pytest
 
 from agentflow import schema as S
-from agentflow.store import IdExhausted, Store
+from agentflow.store import IdExhausted, Store, StoreError
 
 
 def _mk(cid: str, name: str = "X") -> dict:
@@ -74,18 +82,46 @@ def test_alloc_id_records_a_visible_event_when_it_jumps(store):
     assert evs[0]["kind"] == "concept" and evs[0]["jumped"] == 1
 
 
-def test_alloc_id_without_table_declared_still_works(store):
-    """防误伤：事务没声明目标表时不能崩 —— 只是没法查，仍按计数器发号。
+def test_alloc_id_without_the_target_table_declared_raises(store):
+    """`F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回 `"0000"`）。
 
-    （这种用法本身值得怀疑，但把它变成崩溃会破坏既有调用方；
-    真正的保障是"声明了表就一定会查"。）
+    旧版把占用检查写成 `if table is not None and table in self.tables:`，
+    于是"没声明表"这一支整段跳过检查、照样发号。实测（`temp/auditF-probe1.txt`
+    的 [D1]）：把 `counters.lit` 拨回 0 后，只声明 `counters` 的事务给出 `0000`
+    （已被占用），随后写回 `literature` ⇒ `['first','second']` 变成
+    `['OVERWRITER','second']`，行数不变、旧行静默消失。
+
+    所以"不能崩"这个旧口径是错的：它保住的是调用方的方便，代价是静默覆盖。
+    正确的口径是"要发这个号，就必须把那张表声明进来、让我能查占用"。
+
+    本用例同时钉住"抛的是 `StoreError`"—— 调用方（与 `tx()`）读得懂这个类型；
+    裸 `RuntimeError` 会被上游当成"未知异常"。
     """
     store.init()
-    with store.tx("counters", actor="t") as tx:
-        first = tx.alloc_id("concept")
-    with store.tx("counters", actor="t") as tx:
-        second = tx.alloc_id("concept")
-    assert (first, second) == ("0000", "0001")
+    with pytest.raises(StoreError) as ei:
+        with store.tx("counters", actor="t") as tx:
+            tx.alloc_id("concept")
+    msg = str(ei.value)
+    assert "concepts" in msg and "声明" in msg, msg
+
+    # 整笔不落盘：被拒的事务不该留下 counters 的推进
+    assert (store.read("counters") or {}).get("counters", {}) == {}
+
+
+def test_alloc_id_with_the_target_table_declared_still_works(store):
+    """正控（与上一条成对）：声明了目标表 ⇒ 照旧发号，而且真的会跳过占用号。
+
+    没有这一条，"一律抛"也能让上一条通过 —— 那就把判据做成了"谁也别想发号"。
+    """
+    store.init()
+    with store.tx("concepts", "counters", actor="t") as tx:
+        tx.upsert("concepts", _mk("0000", "已被占用"))
+    with store.tx("concepts", "counters", actor="t") as tx:
+        nid = tx.alloc_id("concept")
+        tx.upsert("concepts", _mk(nid, "新的"))
+    assert nid == "0001", nid
+    rows = {r["concept_id"]: r["name"] for r in store.rows("concepts")}
+    assert rows == {"0000": "已被占用", "0001": "新的"}, rows
 
 
 def test_alloc_id_raises_when_space_exhausted(store):

@@ -68,7 +68,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 55
+TOOL_COUNT = 63
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -77,7 +77,7 @@ MAX_SKIPPED = 0
 SUBSET_CHECK_SCOPE = (
     "本判据只抓『声明了却没给』（declared - actual 非空，键在**任意嵌套层**取并集）；"
     "它抓不到『给了却没声明』—— 那种漂移不会让调用方读错字段，只会让它少看到字段。"
-    "它**也不检查数组里逐元素的一致性**：同一个数组的多个元素被并成一份键集合，"
+    "它也不检查数组里逐元素的一致性：同一个数组的多个元素被并成一份键集合，"
     "所以『元素 A 有、元素 B 没有』这种漂移抓不到（那是更强的一条判据，本文件不做）。"
 )
 
@@ -114,15 +114,28 @@ NO_KEY_SET_EXEMPTIONS: dict[str, str] = {
 #
 # 每个工具一次调用，参数取「类型正确的最小占位值」。它们不是测试数据，
 # 而是「让工具走到它的 ok 分支」的最小输入。
+#
+#: proof 级断言的落点（`D-1` 的写入期判据要求它真的存在）。`_seed` 会写出这个文件。
+#: 定义必须在 `CLAIM` 之前：`CLAIM` 里要用它（模块级常量，顺序即依赖）。
+PROOF_REL = "proofs/fixture.lean"
+#
+# `evidence_kind="proof"` 的断言在 `D-1` 之后还要满足写入期判据：必须引一条
+# proof 级实验、并且给出一个盘上真的存在的 `proof_location`。所以这条夹具
+# 引 `exp:0000`（`_seed` 已经把那一行造成 formal/proof），落点用 `PROOF_REL`
+# （`_seed` 会真的在工作区里写出那个文件）。
+# 这不是"为了让判据变绿而造数据"：判据要问的正是"实现到底给不给这些键"，
+# 而一条走不到 ok 分支的探针压根没回答这个问题（与 `_seed` 里那段注释同一条理由）。
 CLAIM: dict = {
     "claim_id": "claim-1",
     "section": "主要结果",
     "text": "谱落在区间内。",
     "evidence_kind": "proof",
-    "citations": ["lit:0000"],
+    "citations": ["exp:0000", "lit:0000"],
     "is_negative": False,
     "negation_kind": None,
     "disclaimer": "",
+    #: proof 级断言的可复核落点（`D-1`）：`_seed` 会真的把它写进工作区。
+    "proof_location": PROOF_REL,
 }
 
 BUDGET: dict = {"max_rounds": 4, "max_parallel_subgoals": 2, "max_persist_attempts": 2, "max_depth": 2}
@@ -167,6 +180,19 @@ def _doc_row() -> dict:
 def tool_params() -> dict[str, dict]:
     """55 个工具各自那一次调用的参数。"""
     return {
+        # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
+        # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
+        # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
+        "conductor.summon": {"target_role": "E", "action": "list_experiments",
+                             "input_key": "probe"},
+        "conductor.ledger": {"view": "stats"},
+        "conductor.stop": {},
+        "conductor.resume_brief": {},
+        "conductor.cancel": {},
+        "conductor.ensure_project": {"project_name": "probe1", "start": "cold"},
+        "conductor.state": {},
+        "conductor.role_spec": {"role_name": "C"},
+
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
         # 「判重命中」那一支（只有 5 个键）—— 而声明的键集合是"成功创建"那一支的。
@@ -265,6 +291,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
         "verify.check_formal", "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
         "verify.list_experiments", "verify.run_experiment",
+        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",
     }
 )
 
@@ -292,6 +319,10 @@ EXECUTED_WITH_CAVEAT: dict[str, str] = {
 #: 顺序是判据的一部分：顺序错了会让本来能跑的工具变成 ok=False ⇒ 白白多一个跳过。
 MUTATING_LAST: frozenset[str] = frozenset(
     {
+        "conductor.summon",
+        "conductor.stop",
+        "conductor.cancel",
+        "conductor.ensure_project",
         "fs.move",
         "fs.delete",
         "fs.write",
@@ -500,13 +531,27 @@ def _seed(store: Store, root: Path) -> None:
                 experiment_id="0000",
                 claim="c",
                 claim_key="k",
-                method="numeric",
+                # `CLAIM` 是 `evidence_kind="proof"` 的探针，而 `D-1` 的写入期判据
+                # 要求它引用的实验本身就是 proof 级（并带检查器输出与受检命题）。
+                method="formal",
                 result="supports",
-                evidence_kind="cross_check",
+                evidence_kind="proof",
                 negation_kind="not_proved",
+                # 证明行的 `verifier_output` 必须是绑了被检查声明名的诊断
+                # （`R2-AN-2`）：从前这里写的是 `"Lean4: no goals"`，
+                # 那种输出里没有声明名 —— 行标着 `proof` 而依据读不出来，
+                # 是夹具在说假话。本文件不跑 `verify_all`，所以变严的审计判据
+                # 没有红它，但夹具仍按检查器真跑过的形态写
+                # （`draft/28` §41.4：改夹具，不许放宽判据）。
+                verifier_output="'k' does not depend on any axioms",
+                verifier_subject_key="k",
                 created_at=TS,
             ).to_dict(),
         )
+    # `D-1`：proof 级断言的落点必须真的在盘上（`check_proofs` 会 `is_file()`）。
+    proof_file = root / PROOF_REL
+    proof_file.parent.mkdir(parents=True, exist_ok=True)
+    proof_file.write_text("theorem fixture : True := trivial\n", encoding="utf-8")
     # 一条审校发现：`review.list_findings` 的 `returns=` 声明了 findings[] 里的嵌套键
     # （finding_id/doc_id/kind/level/target/message/evidence/status）。表里必须有行，
     # 否则那一支返回空数组 ⇒ 嵌套键一个都观察不到 ⇒ 已有声明会被这条判据假红。
@@ -529,6 +574,30 @@ def _seed(store: Store, root: Path) -> None:
     probes = root / "probes"
     probes.mkdir(parents=True, exist_ok=True)
     (probes / "honest.py").write_text(HONEST_PROBE, encoding="utf-8")
+
+
+class _RoleGateBypassedRegistry(ToolRegistry):
+    """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
+
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张
+    正常注册表能调全部 55 个工具 —— 那是设计意图（只读角色拿不到写工具）。
+    本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写
+    那一个谓词。
+
+    为什么这是可接受的、而不是"测试把门拆了"：
+    1. 覆写发生在本文件的子类上，生产类 `ToolRegistry` 一字未改
+       （`test_tools_base.py` / `test_tools_readonly_roles.py` 有成对负控守着那个谓词）；
+    2. 夹具里断言每个工具都至少属于一个角色（`_every_tool_has_a_role`）——
+       于是"绕过"与"工具根本没挂给任何人"仍然分得开（后者是真实的声明缺陷）。
+    """
+
+    def _callable_for(self, spec, role, *, include_registered_writers):  # type: ignore[override]
+        return None
+
+
+def _every_tool_has_a_role(reg: ToolRegistry) -> list[str]:
+    """返回"一个角色都拿不到"的工具名（空列表 = 每个工具都真的挂给了某个角色）。"""
+    return sorted(s.name for s in reg._specs.values() if not s.roles)
 
 
 @pytest.fixture
@@ -567,7 +636,16 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     monkeypatch.setattr(OT, "EasyOcrBackend", _StubOcrBackend)
     monkeypatch.setattr(OT, "PytesseractBackend", _StubOcrBackend)
 
-    reg = build_registry(store=store, workspace_root=store.root, roles=tuple(ROLES)).registry
+    built = build_registry(store=store, workspace_root=store.root, roles=tuple(ROLES)).registry
+    # 见 `_RoleGateBypassedRegistry` 的 docstring：本文件要逐个工具跑，跨每个角色面。
+    # 用 `__class__` 就地换类（而不是重新逐条注册）是为了让这张表与
+    # `build_registry` 的产物逐字节同源 —— 连 `default_budget` 那些装配期属性都不动。
+    built.__class__ = _RoleGateBypassedRegistry
+    reg = built
+    assert reg.bound_role is None
+    assert _every_tool_has_a_role(reg) == [], (
+        f"这些工具不属于任何角色（声明缺失，不是权限问题）：{_every_tool_has_a_role(reg)}"
+    )
     # 先立一个攻坚计划：`attack.status` / `attack.step` 只有计划存在时才走「查到了」
     # 那一支（不存在时它们照样 ok=True，但只有 checked/plan_id/reason 三个键 —— 那不是主路径）。
     bootstrap = reg.call("attack.create_plan", problem="P", problem_key="pk", budget=BUDGET)
@@ -584,8 +662,14 @@ def observations(registry: ToolRegistry) -> dict[str, Observation]:
     order = [n for n in registry.names() if n not in MUTATING_LAST]
     order += [n for n in registry.names() if n in MUTATING_LAST]
     out: dict[str, Observation] = {}
+    # `conductor.ensure_project` 会写盘：给它一个**临时**落点，探针绝不碰真实数据面
+    # （`D:\Incubator\projects` 是运行数据面，245 MB，已在 .gitignore 里排除）。
+    tmp_projects = Path(tempfile.mkdtemp(prefix="probe-projects-"))
     for name in order:
-        res = registry.call(name, **params.get(name, {}))
+        kw = dict(params.get(name, {}))
+        if name == "conductor.ensure_project":
+            kw["projects_dir"] = str(tmp_projects)
+        res = registry.call(name, **kw)
         out[name] = Observation(name, res.ok, res.meta.get("kind"), res.error, res.data, dict(res.meta))
     return out
 
@@ -609,11 +693,19 @@ def _machine_readable_violation(returns: str) -> str | None:
     return f"状态={status!r}（需要一个能被机器读出的键集合）"
 
 
-def _declared_minus_actual(returns: str, obs: Observation) -> set[str]:
-    """`declared - actual`：声明了、但实现没给的那些键（同样走模块属性）。"""
+def _declared_minus_actual(returns: str, obs: Observation) -> set[str] | None:
+    """`declared - actual`：声明了、但实现没给的那些键（同样走模块属性）。
+
+    `None` 表示判不了（返回的 data 不是 dict ⇒ 键集合根本拿不到）。
+
+    这里曾经写成 `if actual is None: return set()` —— 把"拿不到键集合"（判不了）
+    折叠成了"没有缺键"（判过了、没问题），`∅ − ∅ = ∅` 那种纸面通过正是这么来的
+    （`G-21`）。而且因为 `None` 与 `set()` 都是 falsy，调用点的 `if missing:` 也分不出来。
+    三态纪律：判不了必须能被调用方看见，不许与"没问题"同形。
+    """
     actual = obs.keys
     if actual is None:
-        return set()
+        return None
     return shared_declaration.declared_keys(returns) - actual
 
 
@@ -652,7 +744,7 @@ def test_every_tool_returns_declaration_is_machine_readable(registry: ToolRegist
         bad.append(f"  {name}\n      returns={returns!r}\n      问题：{reason}")
     assert not bad, (
         "以下工具的 returns= 抽不出键集合，因此『声明 vs 实现』这条判据在它们身上**真空通过**。\n"
-        "请改写成合规写法（单引号键 + 花括号 + 嵌套列表用 [{...}]），键名从**实现**里读出来；"
+        "请改写成合规写法（单引号键 + 花括号 + 嵌套列表用 [{...}]），键名从实现里读出来；"
         "确实没有键集合的（标量/行对象）请写进 NO_KEY_SET_EXEMPTIONS 并给出理由：\n" + "\n".join(bad)
     )
     # 豁免清单不能是「写了就完事」：每一条都必须在册，且真的是抽不出键的那一类
@@ -776,6 +868,13 @@ def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
             skipped.append(f"  {name}（ok={obs.ok} kind={obs.kind} error={(obs.error or '')[:80]}）")
             continue
         missing = _declared_minus_actual(spec.returns, obs)
+        if missing is None:
+            # 三态：走到这里说明 `obs.comparable` 说是"可比"、而键集合却拿不到 ——
+            # 判据自己矛盾了。显式失败，别让它因为 `None` 是 falsy 而被读成"没有缺键"。
+            raise AssertionError(
+                f"{name}: `comparable` 为真但 data 不是 dict ⇒ 判据自相矛盾（`G-21`），"
+                "不许把它读成『一致』"
+            )
         if missing:
             mismatches.append(
                 f"  {name}\n      声明了但实现没给：{sorted(missing)}\n"
@@ -813,6 +912,7 @@ def test_negative_control_a_declared_key_the_handler_never_returns_makes_the_sub
     assert declared_keys(bogus.returns) == {"concept_id", "degree", "nonexistent_key"}
     control_reg = ToolRegistry(name="control")
     control_reg.register(bogus)
+    control_reg.bound_role = "C"  # `P-14`：`graph.*` 的声明角色是 C/D
     res = control_reg.call("graph.neighbors", concept_id="0000")
     assert res.ok, res.error
     obs = Observation("graph.neighbors", res.ok, res.meta.get("kind"), res.error, res.data, dict(res.meta))
@@ -908,3 +1008,40 @@ def test_declared_keys_still_behaves_exactly_like_before(registry: ToolRegistry)
         assert declared_keys(returns) == old_impl, name
     # 空声明：旧实现返回空集，新实现必须照样返回空集（签名/返回值不变）
     assert declared_keys("") == set()
+
+
+# ---------------------------------------------------------------- G-23：两条分支同一套键
+
+
+def test_search_register_declares_keys_that_the_duplicate_branch_also_returns(
+    registry: ToolRegistry,
+) -> None:
+    """负控（`G-23`）：`search.register` 的判重命中支也必须给全声明里的键。
+
+    为什么这条必须单独走一次"重复登记"：上面那条子集判据对每个工具只跑一次
+    真实调用，走的是"新建成功"那一支 —— 于是另一支成了声明看不见的缺口，
+    `returns=` 只描述主路径也没人发现。修前实测：判重命中支只有 8 个键，
+    缺 `path` / `dedup_key` / `type_code` / `processed` / `download`
+    ⇒ 调用方得先判 `created` 才能安全读 `lit_id`（而那正是让 `returns=` 说谎的根源）。
+
+    修法与口径（我选定的）：两条分支返回同一套键，分支无关处给诚实的
+    `None`/`False`（不许用 `""`/`0` 冒充"没有"）。
+    """
+    args = {"title": "G-23 判重命中支的键集合", "type_code": sorted(S.LIT_TYPES)[0], "summary": "s"}
+    first = registry.call("search.register", **args)
+    assert first.ok, first.error
+    assert first.data["created"] is True, first.data
+
+    second = registry.call("search.register", **args)
+    assert second.ok, second.error
+    assert second.data["created"] is False, second.data
+
+    declared = declared_keys(registry.get("search.register").returns)
+    missing = declared - set(second.data)
+    assert not missing, (
+        f"判重命中支缺少声明里的键：{sorted(missing)} —— "
+        "两条分支的键集合必须相同，否则声明只能描述一支，另一支永远是缺口（G-23）"
+    )
+    # 如实给空值：这两个是"新建成功"那一支才有的东西，本支没发生过
+    assert second.data["path"] is None and second.data["download"] is None, second.data
+    assert first.data["reason"] is None and first.data["existing"] is None, first.data

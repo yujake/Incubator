@@ -42,6 +42,8 @@ import shutil
 import sys
 import time
 import traceback
+#: `E-9`：P5 的 `_paper_declaration_audit` 要 AST 审复现脚本（判"论文声称值是不是字面量"）
+import ast
 from pathlib import Path
 from typing import Any
 
@@ -148,9 +150,20 @@ class Runner:
                     print(f"  !! 阶段失败：{self.p.error}")
                     traceback.print_exception(exc_type, exc, tb)
                     return True  # 不让一个阶段炸掉整轮验收 —— 但会记下来
-                if self.p.ok is None:
-                    self.p.ok = True
-                print(f"  -> ok={self.p.ok} ({self.p.seconds:.1f}s)")
+                # ⚠️ 这里**不许**替调用方下结论（`E-6`）。
+                #
+                # 旧版是 `if self.p.ok is None: self.p.ok = True`，而 `Phase.ok` 的契约
+                # （上面那段 docstring）是**三态**：True 通过 / False 失败 / None 未执行。
+                # 那一行把 `None` 折叠成 `True` ⇒ 阶段里 `if missing: p.ok = None; return`
+                # 这类"未接线"分支被记成 PASS，`summary['not_run']` 恒为 0，
+                # 终结打印里 `{None: 'N/A '}` 成了死分支。实测最小复现见
+                # `temp/auditE-acceptance-probe.json` 的 G1–G4。
+                #
+                # 现在的口径：**没显式设过 `ok` 就是没结论**（保持 None，由 main 计入非绿）。
+                # 为什么不让这里默认成 `False`：那会把"这个阶段什么都没断言"记成失败，
+                # 与"这个阶段跑了、断言不过"混在一起 —— 那是把三态折成两态的另一个方向。
+                print(f"  -> ok={self.p.ok if self.p.ok is not None else 'None(未执行/未接线)'}"
+                      f" ({self.p.seconds:.1f}s)")
                 return False
 
         return _Ctx(self)
@@ -166,9 +179,24 @@ class Runner:
         return [n for n in names if not callable(getattr(obj, n, None))]
 
     def checkpoint(self, p: Phase, cond: bool, msg: str) -> None:
-        """一个可判定的验收点。失败即把阶段标红（后续检查仍会跑完）。"""
+        """一个可判定的验收点。失败即把阶段标红（后续检查仍会跑完）。
+
+        通过时把 `p.ok` 推到 `True`（**除非它已经是 `False`**）：这是"这个阶段真的跑了
+        且断言通过"的**唯一**证据来源。为什么必须在这里写而不是在 `__exit__` 里默认写：
+
+        `E-6` 的修法是"`__exit__` 不再把 `None` 折叠成 `True`"（三态纪律）。
+        一改完，实测全量验收变成 **10 个阶段全部 `N/A`、exit 2** —— 因为旧实现里
+        "有结论"这件事**全靠 `__exit__` 那一行兜底**，`checkpoint()` 只写 `False`。
+        也就是说：那一行同时承担了"没接线 ⇒ 未执行（None）"与"跑了、断言都过 ⇒ 通过（True）"
+        两件相反的事，而它们只在"这一阶段有没有跑过断言"上才分得开。
+
+        现在的分工是干净的：`checkpoint()` 记"跑到了、这一条过没过"，`__exit__` 只记
+        "有没有抛异常"与耗时；**没有任何地方**会在缺少断言证据时替阶段下"通过"的结论。
+        """
         if cond:
             print(f"  [OK] {msg}")
+            if p.ok is not False:
+                p.ok = True
         else:
             print(f"  [!!] {msg}")
             p.ok = False
@@ -685,6 +713,109 @@ def p4_attack(run: Runner) -> dict:
         return p.detail
 
 
+#: 只有这些前缀的模块级字面量常量才算"论文声称的数值"（`E-9`）。
+#: 为什么用命名约定而不是"所有字面量常量"：后者会把 `BUGS` / `DEFAULT_MAX_SECONDS` /
+#: `GRID_POINTS` 这些**调参**常量也算进来（第一版就是这么误伤 5 个脚本的）。
+PAPER_VALUE_PREFIXES = ("EXPECT_", "PAPER_VALUE_")
+
+
+def _paper_declaration_audit(script: Path, claim: str) -> dict:
+    """AST 审一个复现脚本：它的"论文声称值"是不是**可复核的声明**（`E-9`）。
+
+    返回 `{"problems": [...], "expect_constants": [...], "anchored_checks": n}`。
+    `problems` 空 = 合格。判据逐条：
+
+    1. `PAPER_CLAIM` 存在、非空字符串、且与验收计划里那一句**逐字相等** ——
+       「脚本说它验的是哪句」与「计划说论文的哪句」必须对得上。
+    2. `EXPECT_*` / `PAPER_VALUE_*` 常量的右手边**必须是字面量**（`ast.literal_eval` 能求值）。
+       把 `EXPECT_GIRTH_K = 6` 改成计算表达式 ⇒ 这一条当场红，而那正是 `E-9` 要堵的
+       "改成计算值也能 PASS"。
+    3. 每一个这样的常量都必须在一次 `ast.Compare` 里被用到 —— 声明了不比较 = 装饰。
+    4. 至少一个 `check(...)`/`check_maybe(...)` 调用把这些常量之一当参数 ——
+       判据要锚在**声称值**上，而不是两个计算值互相印证。
+
+    脚本若**没有**这类常量，本条不报 problem（不逼 AI 凭空写论文常数），
+    但调用方必须把它列进 `uncovered` 名单 —— 缺口要可见，不许静默通过。
+    """
+    problems: list[str] = []
+    src = script.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as exc:
+        return {"problems": [f"{script.name} 语法错误，无法审计：{exc}"],
+                "expect_constants": [], "anchored_checks": 0}
+
+    literals: dict[str, int] = {}
+    non_literal: dict[str, int] = {}
+    paper_claim: str | None = None
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        tgt = node.targets[0]
+        if not isinstance(tgt, ast.Name):
+            continue
+        if tgt.id == "PAPER_CLAIM":
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                paper_claim = node.value.value
+            continue
+        if not tgt.id.startswith(PAPER_VALUE_PREFIXES):
+            continue
+        try:
+            ast.literal_eval(node.value)
+        except (ValueError, SyntaxError):
+            non_literal[tgt.id] = node.lineno
+            continue
+        literals[tgt.id] = node.lineno
+
+    for name, lineno in sorted(non_literal.items(), key=lambda kv: kv[1]):
+        problems.append(
+            f"{script.name} 的 `{name}`（第 {lineno} 行）右手边**不是字面量** —— "
+            "论文声称值必须写死；由代码算出来时，『论文常数 vs 独立计算』"
+            "就退化成『这段代码 vs 那段代码』（`E-9`）"
+        )
+
+    used_in_compare: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Name) and sub.id in literals:
+                    used_in_compare.add(sub.id)
+    for name in sorted(literals, key=lambda n: literals[n]):
+        if name not in used_in_compare:
+            problems.append(
+                f"{script.name} 的 `{name}`（第 {literals[name]} 行）声明了却没有任何比较用它"
+            )
+
+    anchored = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        fname = getattr(f, "attr", getattr(f, "id", ""))
+        if fname not in ("check", "check_maybe"):
+            continue
+        names = {s.id for s in ast.walk(node) if isinstance(s, ast.Name)}
+        if names & set(literals):
+            anchored += 1
+    if literals and anchored == 0:
+        problems.append(
+            f"{script.name} 的 check 判据里没有任何一条用到上面那些字面量常量 —— "
+            "判据没有锚在论文声称值上"
+        )
+
+    if paper_claim is None:
+        problems.append(
+            f"{script.name} 缺模块级 `PAPER_CLAIM`（字符串字面量）—— 脚本必须自己说清"
+            "『我验的是论文里的哪一句』，且那句话要与验收计划里的逐字相同"
+        )
+    elif paper_claim.strip() != claim.strip():
+        problems.append(
+            f"{script.name} 的 `PAPER_CLAIM` 与验收计划里那一句不一致："
+            f"脚本说 {paper_claim!r}，计划说 {claim!r}"
+        )
+    return {"problems": problems, "expect_constants": sorted(literals),
+            "anchored_checks": anchored}
+
 def p5_experiments(run: Runner) -> dict:
     """P5：E 跑 5 个独立复现脚本并登记实验。"""
     AgentE = _imp("agent_e").AgentE
@@ -758,6 +889,40 @@ def p5_experiments(run: Runner) -> dict:
 
         rows = run.store.rows("experiments")
         p.detail["experiment_rows"] = len(rows)
+        # ---- `E-9`：P5 复核"论文声称值的来源"，而不是只信脚本自报的 supports ----
+        # 逐脚本 AST 审：`PAPER_CLAIM` 必须与计划表逐字相同；`EXPECT_*` 一类常量必须是
+        # 字面量、必须真的参与比较、必须有 check 锚在它上面。
+        # 没有这类常量的脚本**不算失败**（不逼 AI 凭空写论文常数），但要进 uncovered 名单。
+        paper_problems: list[str] = []
+        uncovered: list[dict] = []
+        for tag, claim_text, _key, script_rel in plan:
+            sp = Path(script_rel)
+            if not sp.is_absolute():
+                # 计划表里的路径是 `repro/expN_*.py`（相对本文件所在目录 `_HERE`）
+                sp = _HERE / script_rel
+            got = _paper_declaration_audit(sp, claim_text)
+            paper_problems.extend(got["problems"])
+            if not got["expect_constants"]:
+                uncovered.append({"tag": tag, "script": sp.name,
+                                  "why": "本脚本没有任何 EXPECT_* 字面量常量 ⇒ "
+                                         "P5 无法复核它是否把论文常数写死"
+                                         "（补这些常数需要人定论文数值，AI 不编数字）"})
+            print(f"  [E-9] {tag}: EXPECT 常量 {got['expect_constants']}、"
+                  f"锚定在声称值上的 check {got['anchored_checks']} 条")
+        p.detail["paper_declaration_problems"] = paper_problems
+        p.detail["paper_declaration_uncovered"] = uncovered
+        if uncovered:
+            for u in uncovered:
+                p.notes.append(f"论文声称值未覆盖（残余）：{u['script']} —— {u['why']}")
+                print(f"  [~~] 论文声称值未覆盖（残余）：{u['script']}")
+        if paper_problems:
+            p.ok = False
+            for msg in paper_problems:
+                p.notes.append("论文声称值不可复核：" + msg)
+                print(f"  [!!] 论文声称值不可复核：{msg}")
+        else:
+            print("  [OK] `PAPER_CLAIM` 与验收计划逐字一致；"
+                  "所有 EXPECT_* 常量都是字面量且锚在 check 上")
         # 判据要写成"**每个脚本恰好一行**"：这才是"P4 与 P5 共享同一批证据"
         # 的可判定形式。只数总数会同时放过两种错误 —— 重复登记（行数偏多）
         # 与漏跑（行数偏少）。两种都实测过。
@@ -830,10 +995,17 @@ def p6_document(run: Runner, exp_detail: dict) -> dict:
             hit = [rid for d, rid in rel_by_desc.items() if sub in d]
             return [f"rel:{x}" for x in sorted(hit)]
 
+        # 前两条曾经写作 `evidence_kind="proof"`，`D-1` 的写入期判据把它们拦下了。
+        # 判据是对的，改的是这里：这两条说的是"论文的 Definition 1.1/1.2 这样定义"——
+        # 那是**引用别人的定义**，不是形式化检查器的产出；而本阶段最后一条断言逐字写着
+        # 「本环境没有 Lean/Coq 等证明检查器，因此我们没有产出任何 proof 级证据」。
+        # 也就是说旧稿件**自相矛盾**：同一份文档里既声称两条 proof 级证据，又声明一条都没有。
+        # 这正是 `D-1` 要挡的那一类（`evidence_kind` 被当成可以随手填的标签）。
+        # 现在它们如实标为 `cross_check`（引文级核对），disclaimer 由结构自动补上。
         add("论文的 Definition 1.1 把 K(m) 定义为 V_K 上、x 与 x±e_i 相邻的图。",
-            rel_cite("K(m)") or ([f"lit:{lit0}"] if lit0 else []), "proof", "1. 复现对象")
+            rel_cite("K(m)") or ([f"lit:{lit0}"] if lit0 else []), "cross_check", "1. 复现对象")
         add("论文的 Definition 1.2 把 S̃_m 定义为仿射 Weyl 群关于 {s_0,…,s_{m−1}} 的 Cayley 图。",
-            rel_cite("S̃_m") or ([f"lit:{lit0}"] if lit0 else []), "proof", "1. 复现对象")
+            rel_cite("S̃_m") or ([f"lit:{lit0}"] if lit0 else []), "cross_check", "1. 复现对象")
         add("我们独立数值验证了 Spec K(m) = [−m, m]（m = 3,4,5）。",
             exp_cite("SpecK(m)") or ([f"lit:{lit0}"] if lit0 else []), "cross_check", "2. 独立验证")
         add("我们独立数值验证了 girth K(m) = 6，以及 girth S̃_3 = 6、girth S̃_m = 4（m ≥ 4）。",
@@ -1131,6 +1303,37 @@ def p9_summary(run: Runner) -> dict:
             + "（computable=我们可独立数值验证；quoted/proof-only/open=我们**不能**独立验证）"
         )
         print(f"  论文结论 {len(claims)} 条：" + "、".join(f"{k}={v}" for k, v in sorted(by_kind.items())))
+        # P9 是**纯汇总**阶段：它自己一条判据都没有（表计数与论文声称分类是"读数"，不是"判定"）。
+        # 直接把它留成 `None` 会让整轮验收永远 exit 2（见下方 `E-6` 的退出码口径），
+        # 而那也是不诚实的：那些计数**确实**被读出来了，能判定的恰恰是"前置阶段有没有给出结论"。
+        #
+        # 所以这里等价的判据是：**本阶段之前有没有真的给出结论的阶段** ——
+        #   - 全量跑（P1..P8 都设过 ok）⇒ 前面有结论 ⇒ P9 记 pass；
+        #   - `--phases P9` 单独跑（前面 0 个阶段）⇒ 没有任何可汇总的对象 ⇒ 保持 None ⇒ exit 2。
+        # 后者正是这条修法的负控：旧实现在这种运行下也会打 PASS/exit 0。
+        #
+        # `R2-R3`（重审实测）：这里的判据旧版是"前置阶段的**列表非空**"，而打印与
+        # checkpoint 理由写的是"读到了 N 个前置阶段的**结论**" —— 两者不是一回事。
+        # `--phases P7,P9` 时 P7 是 `N/A`（`ok is None`，没给出任何结论），旧版仍然打印
+        # "[OK] 汇总读到了 1 个前置阶段的结论" 并把 P9 记 PASS。现在判据与措辞都按
+        # "**给出结论**的阶段（`ok is True` 或 `ok is False`）"算，并把 P7 那种
+        # "跑了但没结论"的从计数里剔掉。
+        concluded = [x for x in run.phases
+                     if x.key != "P9" and x.ok is not None]
+        n_na = len([x for x in run.phases if x.key != "P9"]) - len(concluded)
+        if concluded:
+            keys = "、".join(x.key for x in concluded)
+            run.checkpoint(
+                p, True,
+                f"汇总读到了 {len(concluded)} 个**给出结论**的前置阶段（{keys}）"
+                f"；另有 {n_na} 个前置阶段没给出结论（N/A）"
+                "（P9 本身无判据，只做汇总）"
+            )
+        else:
+            p.notes.append(
+                f"前置阶段一个都没给出结论（{n_na} 个跑了但判成 N/A）⇒ 没有可汇总的对象"
+                "（这不是通过）"
+            )
         return p.detail
 
 
@@ -1275,8 +1478,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"         · {n}")
     s = result["summary"]
     print(f"\n  通过 {s['passed']} / 失败 {s['failed']} / 未执行 {s['not_run']}")
+    if s["not_run"]:
+        print(f"  ⇒ 有 {s['not_run']} 个阶段**没有给出结论**（未接线 / 未执行）⇒ 退出码 2（没查成，不是通过）")
     print(f"  结果 JSON: {args.json}")
-    return 0 if s["failed"] == 0 else 1
+
+    # 第三态必须**可判定地**体现在退出码上（`E-6`）。
+    #
+    # 旧版 `return 0 if s["failed"] == 0 else 1` 只看 failed，于是"某阶段未接线/未执行"
+    # （`ok is None`）可以让整轮验收 exit 0 —— 而验收程序是"论文复现链接上了没有"的
+    # **唯一自动化判据**（`tools/release_all.py` 的 acceptance 步骤）。没接线却报绿，
+    # 正是本项目反复记过的"把没做读成通过"。
+    #
+    # 现在的口径（三档，与 `release_check.py` / `release_all.py` 同形）：
+    #   0 = 所有跑到的阶段都通过，且**没有**未执行阶段；
+    #   1 = 有阶段失败；
+    #   2 = 没有失败，但有阶段**没给出结论**（`ok is None`）⇒ 没查成，绝不是通过。
+    # `release_all.py` 给这一步的码表是 `PLAIN_EXIT = {0: "pass"}`（不含 1/2）⇒
+    # 退出码 2 在编排层被记成 `unknown`（而不是 `fail`），与"没查成"的口径一致。
+    if s["failed"]:
+        return 1
+    if s["not_run"]:
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import schema as S
-from agentflow.agent_e import AgentE, ExperimentError
+from agentflow.agent_e import AgentE, ExperimentError, _derive
 from agentflow.store import Store
 from agentflow.tools import verify_tools as VT
 
@@ -156,16 +156,31 @@ def test_script_self_reported_proof_is_downgraded_and_noted(store):
 def test_formal_method_keeps_proof_only_because_schema_requires_verifier_output(store):
     """反误伤：`method="formal"` 时脚本自报 proof 不被降级为 cross_check。
 
-    但 E 的 run_experiment 不产生 verifier_output，所以这条记录仍会因
-    "proof 必须有检查器输出"被 schema 拒 —— 那条路径由 `check_formal` 负责。
-    本用例只断言"降级规则只针对计算类方法"这一条边界。
+    注意：这个用例在 `P-8` 之前断言的是"E 的 run_experiment 不产生 verifier_output，
+    所以这条记录仍会因'proof 必须有检查器输出'被 schema 拒"。那句话描述的是
+    缺陷本身（`P-8`：形式化路径一个证据形状字段都不传 ⇒ E 永远登记不了一条
+    proof 级实验），不是判据。修好之后形式化路径改走检查器
+    （正控见 `tests/test_agent_e_formal_path.py`），所以这里断言的是两件仍然成立的事：
+
+    1. 降级规则只针对计算类方法（直接量 `_derive`，原判据逐字保留）；
+    2. `method="formal"` 而产物不是 `.lean` ⇒ 当场拒绝，且一行都不写
+       —— 这不是放宽 FC-22，而是把"形式化路径的输入"钉死。
     """
     rel = write_script(store, "probes/lying.py", LYING_PROBE)
-    with pytest.raises(ValueError) as ei:
+    lying_stdout = "REPRO_RESULT: " + json.dumps(
+        {"result": "supports", "evidence_kind": "proof", "observations": {},
+         "counterexample": None, "negation_kind": "not_proved"}
+    )
+    # ---- 1. 降级规则只针对计算类方法（`_derive` 是唯一权威表述）
+    assert _derive(0, lying_stdout, method="numeric")["evidence_kind"] == "cross_check"
+    assert _derive(0, lying_stdout, method="symbolic")["evidence_kind"] == "cross_check"
+    assert _derive(0, lying_stdout, method="exhaustive_search")["evidence_kind"] == "cross_check"
+    assert _derive(0, lying_stdout, method="formal")["evidence_kind"] == "proof"
+    # ---- 2. 非 .lean 产物在形式化路径上被拒绝（不是"跑完再让 schema 拒"）
+    with pytest.raises(ExperimentError) as ei:
         make_e(store).run_experiment("形式化方法", "formal-claim", rel, method="formal")
-    # schema 拒绝的理由必须是"缺 verifier_output"，不是"计算类方法不得声称 proof"
-    assert "verifier_output" in str(ei.value)
-    assert store.rows("experiments") == [], "schema 拒绝时必须一行都没写"
+    assert ".lean" in str(ei.value)
+    assert store.rows("experiments") == [], "被拒绝的形式化实验不得留下任何行"
 
 
 # ============================================================ [3] 负控：崩溃 / 超时 / 无结论
@@ -265,11 +280,19 @@ def test_schema_rejects_numeric_experiment_claiming_proof():
 
 
 def test_schema_accepts_formal_proof_with_verifier_output():
-    """防误伤：`method="formal"` + `evidence_kind="proof"` + 非空 `verifier_output` ⇒ 通过。"""
+    """防误伤：`method="formal"` + `evidence_kind="proof"` + 非空 `verifier_output` ⇒ 通过。
+
+    `R2-AN-2` 的夹具处置：这条 `verifier_output` 从前写的是 `"Lean 4: no goals"`
+    —— 那种输出里没有绑定被检查声明名的诊断，于是它是一句假话
+    （行标着 `proof`，而依据读不出来）。它今天不经过 `verify_all`（本用例只调
+    `row.validate()`），所以变严的审计判据并没有红它；但夹具说假话这件事本身要改
+    （`draft/28` §41.4：改夹具，不许放宽判据）。这里换成检查器真跑过时打印的形态：
+    `'<声明名>' does not depend on any axioms`（声明名 = 本行的 `verifier_subject_key`）。
+    """
     row = _experiment(
         method="formal",
         evidence_kind="proof",
-        verifier_output="Lean 4: no goals",
+        verifier_output="'k' does not depend on any axioms",
         # 新硬约束（来自对 DeepMath 的观摩）：检查器输出必须绑定到它管的那个命题。
         # 没有它时，"把命题 A 的检查器输出粘到命题 B 的行上"在结构上合法。
         verifier_subject_key="k",
@@ -327,7 +350,9 @@ def test_evidence_for_three_states(store):
     assert not_checked["checked"] is False
     assert not_checked["experiments"] == []
     assert not_checked["best_evidence_kind"] is None
-    assert not_checked["proved"] is False
+    # rrors-1（登记在 draft/28）：三态里 proved 在"没查"这一支必须是 None，
+    # 不是 False —— 否则只读 proved 的调用方分不清"没查"与"查了没有 proof 级证据"。
+    assert not_checked["proved"] is None, not_checked
     assert "没查" in not_checked["reason"]
 
     none_found = e.evidence_for("不存在的命题键")
@@ -361,7 +386,10 @@ def test_evidence_for_proved_only_with_proof_level_experiment(store):
         claim_key="K",
         method="formal",
         evidence_kind="proof",
-        verifier_output="Lean 4: no goals",
+        # `R2-AN-2` 的夹具处置：从前是 `"Lean 4: no goals"` —— 没有绑声明名的诊断，
+        # 这句话不足以支撑 `proof` 级（依据读不出来）。本用例只查 `evidence_for`
+        # 的判定与列出，变严的审计判据没有红它，但假话要改成检查器真跑过的形态。
+        verifier_output="'K' does not depend on any axioms",
         # 新硬约束：检查器输出必须绑定到它管的命题（否则能把 A 的输出贴到 B 上）
         verifier_subject_key="K",
         exit_code=0,
@@ -564,6 +592,7 @@ def test_verify_store_tools_fail_closed_when_not_wired():
     for name in ("verify.run_experiment", "verify.evidence_for", "verify.list_experiments"):
         res = empty.call(
             name,
+            role="E",  # `P-14`：这张表代表 E（`verify.*` 的写侧含 E）
             **{
                 "verify.run_experiment": {"claim": "c", "claim_key": "k", "script_path": "s.py"},
                 "verify.evidence_for": {"claim_key": "k"},
@@ -608,7 +637,11 @@ def test_proof_requires_verifier_subject_key_matching_the_claim(store):
     """
     store.init()
     base = dict(experiment_id="0000", claim="P", claim_key="P", method="formal",
-                evidence_kind="proof", verifier_output="Lean 4: no goals",
+                evidence_kind="proof",
+                # `R2-AN-2` 的夹具处置：从前是 `"Lean 4: no goals"`（没有绑声明名的
+                # 诊断 ⇒ 一句假话）。本用例只查 schema 的硬约束 2b，
+                # 变严的审计判据没有红它，但夹具仍然要写成检查器真跑过的形态。
+                verifier_output="'P' does not depend on any axioms",
                 result="supports", negation_kind="not_proved", created_at=TS)
     # 缺 verifier_subject_key ⇒ 拒
     with pytest.raises(ValueError, match="verifier_subject_key"):
@@ -654,3 +687,88 @@ def test_numeric_method_still_does_not_need_a_certificate(store):
     S.Experiment(experiment_id="0000", claim="c", claim_key="k", method="numeric",
                  evidence_kind="cross_check", result="supports", negation_kind="not_proved",
                  created_at=TS).validate()
+
+
+# ============================================================ `R2-AN-3`：docstring vs 常量
+#
+# 缺陷形态：模块 docstring 第 3 条（"没查成"）只列了四项，而 `_NOT_CHECKED_REASONS`
+# 是五项（少 `source_unreadable` 与 `param_error`）—— 同一份文件里两处互相矛盾，
+# 而没有任何一条测试会因此变红（`draft/28` §40.3 的 C1/C3 读数）。
+# 修法是把"docstring 里那一档"做成一个机器可核的读法（`_docstring_not_checked_reasons`），
+# 导入期断言 + 下面两条用例共用它（判据本体只有一处，`FC-03`）。
+#
+# 这两条用例守两个方向：正控（当前 docstring 必须覆盖常量）与负控
+# （把 docstring 换回改前的四项 ⇒ 判据必须红）。负控是内存注入，
+# 不动文件 —— 注入是否生效由它自己核对（改前文本与当前 docstring 必须不同，
+# 且改前文本正是 `draft/28` §40.3 记的那一版）。
+
+#: 改前（`R2-AN-3` 修法之前）docstring 的第 3 条，逐字取自备份
+#: `temp/batchS-agent_e.py.bak`。它只列四项。
+_DOCSTRING_ITEM3_BEFORE = (
+    "3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed`）⇒ 同上，\n"
+    "   且 `notes` 里写明是哪一种。三态纪律：没查成绝不等于查了通过。\n"
+)
+
+
+def _swap_docstring_item3(doc: str, new_item3: str) -> str:
+    """把 docstring 的第 3 条换成 `new_item3`（内存注入用；找不到锚点就抛）。"""
+    start = doc.find("3. 没查成")
+    end = doc.find("4. `method", start)
+    assert start >= 0 and end > start, "锚点不见了：docstring 的编号被改过"
+    return doc[:start] + new_item3 + doc[end:]
+
+
+def test_module_docstring_covers_every_not_checked_reason():
+    """正控（`R2-AN-3`）：docstring 第 3 条必须覆盖 `_NOT_CHECKED_REASONS` 全部五项。
+
+    为什么需要它：这条清单的唯一来源是 `_NOT_CHECKED_REASONS`，
+    docstring 只是它的一个读法。导入期断言守着同一个判据，
+    这条用例再把"判据本身"钉住（导入期断言被 `-O` 关掉时它仍然在）。
+    """
+    import agentflow.agent_e as AE
+
+    found = AE._docstring_not_checked_reasons(AE.__doc__ or "")
+    missing = set(AE._NOT_CHECKED_REASONS) - found
+    assert missing == set(), (
+        f"模块 docstring 第 3 条没有覆盖 _NOT_CHECKED_REASONS，缺 {sorted(missing)}；"
+        f"docstring 里读到的是 {sorted(found)}"
+    )
+    # 判据的非平凡性自校：它必须真的能读出东西（空集会让上面那条断言靠缺失通过）
+    assert found, "读法返回了空集 ⇒ 这条正控没有在检查任何东西"
+
+
+def test_docstring_guard_negative_control_four_item_version_goes_red():
+    """负控（`R2-AN-3`）：把 docstring 第 3 条换回改前的四项 ⇒ 判据必须红。
+
+    这条负控同时守两件事：
+    ① 被测对象 —— 判据对"少列两项"这一形态敏感（不是恒真）；
+    ② 判据自己 —— 同一份输入再加一条"必然通过"的形态（把清单补全）校一遍，
+       否则"红"可能只是注入把 docstring 弄坏了。
+
+    注入只发生在内存里（不动 `agent_e.py`）；注入的生效由两条指纹核对：
+    注入后的文本必须与当前 docstring 不同，且替换掉的那一段正是当前实现里的第 3 条。
+    """
+    import agentflow.agent_e as AE
+
+    current = AE.__doc__ or ""
+    assert AE._docstring_not_checked_reasons(current) >= set(AE._NOT_CHECKED_REASONS), (
+        "前置条件不成立：当前 docstring 本身就没过判据 ⇒ 这条负控证明不了任何东西"
+    )
+
+    injected = _swap_docstring_item3(current, _DOCSTRING_ITEM3_BEFORE)
+    # 指纹①：注入确实改了文本（否则"判据红了"与注入无关）
+    assert injected != current, "注入没有生效（文本没变）"
+    # 指纹②：改前那一段确实是"四项"（与 §40.3 的 C1 读数一致）
+    before_found = AE._docstring_not_checked_reasons(injected)
+    assert {"source_unreadable", "param_error"} - before_found == {"source_unreadable",
+                                                                  "param_error"}
+    # 判据红了：缺的正是那两项
+    assert set(AE._NOT_CHECKED_REASONS) - before_found == {"source_unreadable", "param_error"}
+
+    # 同一判据的"必然通过"一侧：把清单补全 ⇒ 判据不红（证明红的来源是缺项而不是文本损坏）
+    fixed = _swap_docstring_item3(
+        current,
+        "3. 没查成（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` / "
+        "`param_error`）⇒ 同上。\n",
+    )
+    assert AE._docstring_not_checked_reasons(fixed) >= set(AE._NOT_CHECKED_REASONS)

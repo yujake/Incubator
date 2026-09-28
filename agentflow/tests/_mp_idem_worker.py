@@ -69,7 +69,7 @@ def _barrier(directory: Path, name: str, n: int, timeout: float) -> None:
 
 def _reply(tokens_in: int = 1000, tokens_out: int = 500) -> ModelReply:
     return ModelReply(ok=True, text="4", tokens_in=tokens_in, tokens_out=tokens_out,
-                      attempts=1, model="deepseek-chat")
+                      attempts=1, model="deepseek-chat", scope="reason")
 
 
 def run(args: argparse.Namespace) -> dict:
@@ -95,7 +95,8 @@ def run(args: argparse.Namespace) -> dict:
 
         MC._find_by_marker = _slow  # type: ignore[assignment]
         res = MC.charge_reply(
-            meter, _reply(), task_id=args.task_id, call_index=args.call_index, now=TS,
+            meter, _reply(), task_id=args.task_id, call_index=args.call_index,
+            scope="reason", now=TS,
         )
         return {"pid": os.getpid(), "mode": args.mode, **{k: res[k] for k in
                 ("charged", "reason", "usage_id", "usd")}}

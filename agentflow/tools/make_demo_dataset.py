@@ -27,6 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from agentflow import dedup as D  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
@@ -161,10 +162,18 @@ def build(dest: Path) -> Path:
             ).to_dict())
 
         for lid, title, ltype, fname, _ in LITS:
+            # `dedup_key` 必须取自唯一的键族 `dedup.literature_keys`（`F-8`）。
+            # 改前这里是 `f"title:{title.lower()}"` —— 第三种标题键形态：
+            # 它既不是 `literature_keys` 的产物（差一个 `|*` 后缀），
+            # 也没有走 `textutil.normalize`（标点与全角不会折平），
+            # 于是演示数据里的 `dedup_key` 与判重时算出的键互相不是成员关系。
+            # 演示集是端到端验证的输入，它带着一个判重路径永远匹配不上的键，
+            # 会让"判重已生效"这件事看起来成立而实际不成立。
+            demo_keys = D.literature_keys(title, 1900 + int(lid), None)
             tx.upsert("literature", S.Literature(
                 lit_id=lid, title=title, type=ltype, summary=f"演示素材：{title}",
                 path=f"{lid}/{fname}", processed=True, source_request_ids=[],
-                dedup_key=f"title:{title.lower()}", doi=None, year=1900 + int(lid), authors=[],
+                dedup_key=demo_keys[0], doi=None, year=1900 + int(lid), authors=[],
                 venue="Demo", language="en", added_at=S.now_iso(),
                 download={"status": "ok", "http_status": 200, "bytes": len(doc_text[lid]),
                           "sha256": "0" * 64, "error": None},

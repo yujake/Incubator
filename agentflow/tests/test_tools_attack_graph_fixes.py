@@ -58,10 +58,35 @@ _BLOCKED_BY_VALUES = {
 
 
 def registry_for(module: object, store: Store, **kw: object) -> ToolRegistry:
-    """注册一个模块的工具（与 `test_tools_audit_fixes.py` 同名同形）。"""
+    """注册一个模块的工具（与 `test_tools_audit_fixes.py` 同名同形）。
+
+    `P-14` 之后 `call` 需要"这次是谁在调"，所以这里按模块绑定一个角色
+    （映射见 `_MODULE_ROLE`）。每个工具模块的角色面是模块级知识
+    （`attack._WRITE_ROLES = ("F",)`、`graph`/`trace` 是 `("C","D")`），
+    没有"测试自己发明一个角色"的余地。
+    """
     reg = ToolRegistry(name="g2g3")
     module.register(reg, store=store, **kw)  # type: ignore[attr-defined]
+    reg.bound_role = _role_for_module(module, reg)
     return reg
+
+
+#: 集合夹具（`registry_for`）用的模块 -> 该表代表的角色。写错会被
+#: `_role_for_module` 的断言抓住（它要求该角色在这张表里真的拿得到工具）。
+_MODULE_ROLE: dict[str, str] = {
+    "attack_tools": "F",   # 写侧唯一主人是 F（`_WRITE_ROLES`），读侧也含 F
+    "graph_tools": "C",    # C/D 共用，取只读的 C
+    "trace_tools": "C",    # 同上
+}
+
+
+def _role_for_module(module: object, reg: ToolRegistry) -> str:
+    """这张注册表该绑哪个角色：按模块名查 `_MODULE_ROLE`，并断言该角色真的拿得到工具。"""
+    mod_name = getattr(module, "__name__", "").rsplit(".", 1)[-1]
+    role = _MODULE_ROLE.get(mod_name)
+    assert role, f"模块 {mod_name!r} 没有在 `_MODULE_ROLE` 里登记角色 —— 夹具不知道该代表谁"
+    assert reg.for_role(role), f"{mod_name}: 绑的角色 {role!r} 在这张表里拿不到任何工具"
+    return role
 
 
 def corrupt(store: Store, filename: str) -> None:
@@ -195,6 +220,7 @@ def test_declared_keys_rejects_the_old_unquoted_empty_result():
 def _attack_reg(store: Store | None) -> ToolRegistry:
     reg = ToolRegistry(name="attack-fix")
     AT.register(reg, store=store)
+    reg.bound_role = "F"  # `P-14`：`attack.*` 的写侧唯一主人是 F
     return reg
 
 
@@ -675,6 +701,7 @@ def test_graph_neighbors_truncates_and_says_so(store: Store):
     """
     g = _star_graph(300)
     reg = ToolRegistry(name="graph-bound")
+    reg.bound_role = "C"  # `P-14`：同上
     GT.register(reg, graph=g)
 
     res = reg.call("graph.neighbors", concept_id="0000")
@@ -712,6 +739,7 @@ def test_graph_neighbors_result_is_not_prunable_by_context_budget(store: Store):
     """
     g = _star_graph(300)
     reg = ToolRegistry(name="graph-prune")
+    reg.bound_role = "C"  # `P-14`：`graph.*` 的声明角色是 C/D，这里代表只读的 C
     GT.register(reg, graph=g)
 
     res = reg.call("graph.neighbors", concept_id="0000", max_neighbors=300)

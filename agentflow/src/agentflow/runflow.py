@@ -71,9 +71,15 @@
 
 ## 熔断是 fail-closed 的：先查钱，再花钱
 
-每一轮调用之前判"已花是否已达 budget_usd"，达了就停并落 `budget_exhausted`。
+每一轮调用之前判"本次运行已花是否已达 budget_usd"，达了就停并落 `budget_exhausted`。
 顺序不能反：先调用后检查意味着最后一次调用可以任意超预算，而"预算"这个词
 在那一次上就变成了"建议"。
+
+口径是"这一次运行"（`G-4`），不是整本台账的累计值：`budget_usd` 是调用方给
+这一次运行的额度，而 `usage_ledger` 属于工作区、跨运行累计（见 `run_topic` 的
+docstring）。改前用的是后者，于是同一工作区里第二次运行会被第一次的花销提前熔断：
+`calls=0` 而 `spent_usd` 报的是上一次的钱。两个数字现在都在产物里，且各自标注
+口径（`cost.json` 的 `spent_usd_this_run` 与 `usage_ledger.usd`）。
 
 ## 回验未通过不改退出码（刻意的取舍）
 
@@ -99,7 +105,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -123,6 +131,11 @@ from .modelgw import (
     Transport,
     spec_from_env,
 )
+# `_reply_failure` 是"失败/没查成结局"的唯一构造点（`modelgw.py` 里逐字写着
+# "防止 ok 与 error_kind 不一致"）。`G-7` 要在调用点把"网关抛出来的异常"
+# 折成三态结局，而折出来的那条结局必须走同一个构造点 —— 在这里自己 new 一个
+# `ModelReply(ok=False, ...)` 就等于开了第二个构造点，两处迟早不一致。
+from .modelgw import _reply_failure
 from .formalgw import check_lean, lean_snippets
 from .tokenmeter import TokenMeter
 
@@ -165,7 +178,26 @@ NOT_WIRED_ITEMS: tuple[tuple[str, str], ...] = (
 
 #: prompt 模板的版本名。写进清单，因为"报告是哪个版本问出来的"决定它能不能与
 #: 别的报告比较 —— 不记版本的产物在两周后就无法解释。
-PROMPT_VERSIONS: tuple[str, ...] = ("v1",)
+#:
+#: `v1`      —— 只要实质结论（三句以内），不要求形式化；
+#: `v2-lean` —— 在 `v1` 的基础上额外要求一个自包含的 Lean 4 代码块。
+#: 为什么需要有这一版：`--lean` 的 proof 级证据只能来自模型答复里的 ```lean 代码块
+#: （`formalgw._FENCE`，约定见 `runflow.py` 里 `lean_snippets` 那段），而 `v1` 从不要求它
+#: ⇒ 用 `v1` + `--lean` 跑出来的永远是"开启=是、跑过=否、没有可检查的代码"。
+PROMPT_VERSIONS: tuple[str, ...] = ("v1", "v2-lean")
+
+#: 本流程里"作答"这一步的用途归口（`schema.USAGE_SCOPES` 之一）。
+#:
+#: 为什么写成常量而不是在调用点写字符串字面量：G-20 的纪律是"每一次 modelgw 调用
+#: 都带一个显式 scope"，而显式不等于随便写一个 —— 它要能被读的人一眼看出
+#: "这一步是整条流程的哪一段"。写成常量之后，改它只有一处，而
+#: `cost.json` 的 `by_scope` 会立刻反映出来。
+SCOPE_ANSWER = "reason"
+
+#: 一次 `agentflow run` 在 `tasks` 表里的动作名。占位行（`run_topic` 里取号那一段）
+#: 与收工改写（`_settle_run_task`）两处必须用同一个值 —— 它同时是"这一行是谁写的"
+#: 这条审计线索的一部分，分成两处写就会漂移。
+TASK_RUN_ACTION = "run"
 
 
 def prompt_for(topic: str, version: str = "v1") -> str:
@@ -176,6 +208,20 @@ def prompt_for(topic: str, version: str = "v1") -> str:
     """
     if version not in PROMPT_VERSIONS:
         raise ValueError(f"未知 prompt 版本 {version!r}（已知 {PROMPT_VERSIONS}）")
+    if version == "v2-lean":
+        return (
+            f"主题：{topic}\n\n"
+            "请按两段作答。\n"
+            "第一段：只陈述你确知的实质结论，最多三句，不要罗列参考文献，"
+            "无法确知的部分明确写“不确定”。\n"
+            "第二段：给出一个 ```lean4 代码块，把第一段里一条可机械检查的断言"
+            "写成最小形式化。硬要求：① 自包含，只用 Lean 4 核心语法，"
+            "不要 import Mathlib 或任何第三方库；② 只用核心策略"
+            "（`rfl` / `decide` / `simp` / `exact` / `norm_num` 之一）；"
+            "③ 代码块必须能被 `lean` 单独编译通过，所以宁可把断言化成具体的有限计算，"
+            "不要写需要大量库引理的抽象命题；④ 若你无法给出能通过的代码块，"
+            "就明确写“无法给出可检查的形式化”，不要写通不过的代码。"
+        )
     return (
         f"主题：{topic}\n\n"
         "请只陈述你确知的实质结论，最多三句，不要罗列参考文献，"
@@ -207,7 +253,8 @@ class CallRecord:
         """落清单用的扁平结构（reply 走它自己的 `to_dict()`，不另抄一份字段）。"""
         return {
             "call_index": self.index,
-            "idempotency_key": idempotency_key(self.task_id, self.index),
+            "idempotency_key": idempotency_key(self.idem_scope or self.task_id,
+                                              self.index),
             "reply": self.reply.to_dict(),
             "charge": dict(self.charge),
             "usd": self.usd,
@@ -216,6 +263,14 @@ class CallRecord:
 
     #: 由 `run_topic` 在构造后设置：同一次运行的所有调用共享一个 task_id。
     task_id: str = ""
+
+    #: 幂等键的命名空间（`G-2` 的运行标识）。与 `task_id` 分开的理由：
+    #: `task_id` 每一跑都必须新（`t-NNNN` 契约），而幂等键问的是"是不是同一次
+    #: 逻辑运行的同一笔"，那个身份由 `_run_scope()` 按「主题摘要 + `now`」算。
+    #: `R5-F5` 之后生产形态（不给 `now`）还会带一个每次调用都不同的随机后缀 ——
+    #: 于是"同一秒内两次真运行"不再被折叠成一次（那是 `G-2` 的残余缺陷），
+    #: 而显式传同一个 `now` 仍然是"同一次逻辑运行"（测试与复现靠它）。
+    idem_scope: str = ""
 
 
 def _write_json(path: Path, doc: Any) -> None:
@@ -233,6 +288,46 @@ def _write_text(path: Path, text: str) -> None:
 def _budget_left(budget_usd: float, spent_usd: float) -> float:
     """还剩多少预算（按 6 位小数收口，与账本精度一致，避免浮点尾巴）。"""
     return round(float(budget_usd) - float(spent_usd), 6)
+
+
+def _spent_this_run(meter: TokenMeter, task_id: str) -> float:
+    """本次运行已经花掉多少（`G-4` / `F5-FOUND-1`）。
+
+    ## 口径：按 `task_id` 过滤账本，不是工作区增量
+
+    账本里每一行都带 `task_id`（这次运行所有调用的共同挂点），所以"本次运行
+    已经花掉多少"这个问题有精确解：把该 `task_id` 的那些行加起来
+    （`TokenMeter.usd_for` 就是这件事）。
+
+    改前用的是工作区增量：开跑时取一次 `TokenMeter.spent()`（整本台账求和）
+    当基线，之后判 `spent() - baseline`。那个近似只在"同一个工作区里两次运行
+    不可能重叠"时等价于本次花销 —— 而它从未被写下来过，只是成立过。
+    并发修通（`R5-AN-1`）之后它就不成立了：另一个进程在我取基线之后入账，
+    它的钱会落进我的差额里。实测（两真进程、A 的传输层睡 3s）：
+    A 的 `spent_usd_this_run=6e-06`（正确），B 的 `spent_usd_this_run=1.2e-05`
+    （= 自己那一笔 6e-06 + A 在我基线之后提交的 6e-06），而 B 自己的
+    `calls_usd` 是 6e-06 ⇒ B 那一跑被判"账本对不上"（其实它一分钱都没漏）。
+    同一个位还喂预算熔断：并发下别人的花销会算进自己的额度、可能提前熔断。
+
+    为什么这是"照 intended semantics 修"而不是"改口径"：基线的存在本身就说明
+    意图是"本次运行的花销"；工作区增量只是它在不可重叠前提下的一种实现。
+    `G-4` 的 docstring（`run_topic`）已按新口径逐字改写。
+
+    为什么把这一步做成函数而不是在循环里内联：口径必须是一处，且负控要能
+    "改回工作区增量"看到读数变坏（负控变体 `V8-found1-workspace-delta`）。
+    """
+    return round(float(meter.usd_for(task_id)), 6)
+
+
+def _run_entry_count(meter: TokenMeter, task_id: str) -> int:
+    """本次运行在账本里落了几行（口径与 `_spent_this_run` 同：按 `task_id` 过滤）。
+
+    为什么必须与花销同一个口径：产物里 `entries_this_run` 与
+    `spent_usd_this_run` 并排给出，两个数各说一件事（"花了几行账"与"花了多少钱"）
+    —— 一个按本次运行过滤、另一个按工作区增量算，读者会把它们的差当成事实。
+    """
+    rows = meter.store.rows("usage_ledger")
+    return sum(1 for r in rows if str(r.get("task_id")) == str(task_id))
 
 
 def _is_exhausted(budget_usd: float, spent_usd: float) -> bool:
@@ -267,8 +362,49 @@ def _exit_code_for(reason: str, *, successes: int) -> int:
     return 2 if reason in NOT_CHECKED else 1
 
 
+def _complete_or_not_checked(gw: ModelGateway, prompt: str, *, scope: str,
+                             system: str = SYSTEM_PROMPT,
+                             model: str = "") -> ModelReply:
+    """调一次模型，并把"网关自己抛出来了"折回三态里的"没查成"（`G-7`）。
+
+    ## 缺陷（2026-09-26 全面体检 · 子代理 G 实测）
+
+    `ModelGateway.complete` 的 docstring 承诺"返回三态结局，从不抛异常"，
+    而 `modelgw._once` 只捕 `TimeoutError` / `ConnectionError`。实测
+    （`temp/auditG-probe1.txt` P6 段）：传输层抛 `ValueError` ⇒ `complete` 原样抛出；
+    `urllib_transport` 把 `urllib.request.Request(...)` 建在 `try` 之外，于是
+    `AGENTFLOW_MODEL_BASE_URL` 写错时抛 `ValueError: unknown url type`。
+    调用点没有 `try` ⇒ 一个配置错误让整条 run 崩在这一次调用上：六件产物一件都不写、
+    账本一行都没有、预算熔断完全不生效，而"没查成"与"代码崩了"在下游无法区分。
+
+    ## 这里堵的是调用点（口径二），不是网关（口径一）
+
+    折成的结局是 `error_kind="unknown"`：它在 `modelgw.NOT_CHECKED` 里，
+    因此这次运行按"没查成"记（退出码 2），而不是被记成"查了、结论是失败"。
+    `G-7` 的口径一（在 `complete` 里套一层 `except Exception`，并把 `urllib_transport`
+    里 `Request(...)` 的构造挪进 `try`）落点在 `modelgw.py`，不在本文件 ——
+    所以这里只保证本调用点不崩栈，别的调用方仍然会崩，这一点如实写在这里，
+    不假装整条路径已经被彻底修好。两句都成立时口径一才是根治，本函数可以原样留着：
+    它是"网关违约时的最后一道兜底"，而不是"网关应该抛"的许可。
+    """
+    try:
+        return gw.complete(prompt, system=system, scope=scope)
+    except Exception as exc:  # noqa: BLE001 —— 见 docstring：任何异常都折成『没查成』
+        return _reply_failure(
+            "unknown",
+            f"网关抛出了 {type(exc).__name__}：{exc}"
+            "（`ModelGateway.complete` 承诺从不抛异常，`G-7` 登记了这个缺口；"
+            "已按『没查成』处置，但异常本身仍需在 modelgw 侧收口）",
+            model=model, scope=scope,
+        )
+
+
 def _ledger_view(meter: TokenMeter) -> dict[str, Any]:
-    """账本汇总 + 按角色归口（`cost.json` 必须与它一致，所以只算一次）。"""
+    """账本汇总 + 按角色归口 + 按用途归口（`cost.json` 必须与它一致，所以只算一次）。
+
+    `by_scope` 是 G-20 的产物：没有它，"搜索/抽取/审校各花了多少"这个问题
+    在产物里没有位置可放。它每一档都在（含零值），所以"某档归零"是可见的。
+    """
     spent = meter.spent()
     return {
         "entries": int(spent["entries"]),
@@ -276,8 +412,274 @@ def _ledger_view(meter: TokenMeter) -> dict[str, Any]:
         "usd": round(float(spent["usd"]), 6),
         "attempts": int(spent["attempts"]),
         "by_role": meter.by_role(),
+        "by_scope": meter.by_scope(),
         "retry_overhead": meter.retry_overhead(),
     }
+
+
+def _new_task_row(*, task_id: str, topic: str, status: str, outcome: str | None,
+                  detail: str, started_at: str, ended_at: str | None, tokens: int,
+                  usd: float, error: str = "") -> dict:
+    """一次 `agentflow run` 的 `tasks` 行的唯一构造点（`G-3`）。
+
+    为什么把构造与写入分开、但构造只有一份：这一行有两个写入点 ——
+    开跑时的占位行（`run_topic` 里取号那一段，`status="running"`）与收工时
+    的终态行（`_settle_run_task`）。两处各拼一份 dict 的话，"这次运行是哪一次"
+    （`role` / `action` / `called_by` / `depth` / `input_key`）与
+    "哪些字段该留空"（`artifacts`）这两组决定就会漂移 ——
+    而漂移的表现是同一张表里两种形状的行，没有任何判据会响。
+
+    `task_id` 是返回 dict 的第一个键：快照按 dict 的键顺序序列化，而
+    `rebuild()` 用 `Task.to_dict()`（dataclass 字段顺序，`task_id` 在最前）
+    重建行。第一次落盘时把它排在后面，`rebuild()` 之后键顺序会变，
+    于是 `tasks.json` 逐字节不一致（I-9 直接失败）—— 数据没错，但
+    "可重建"这条承诺破了。同一纪律写在 `conductor._write_new_row` 的 docstring 里。
+
+    `I-9` 还有更强的一半（本批实测踩到）：返回的 dict 必须是 `Task.to_dict()`，
+    而不是"我手动列的字段"。手工列全十八个字段是不可能长期守住的承诺 ——
+    第一版只列了十五个（少了 `parent_task_id` / `refusal_reason` / `error`），
+    盘上的 `tasks.json` 于是缺三列，而 `rebuild()` 从 dataclass 重建会补上它们
+    ⇒ 前后 1091 与 1172 字节、逐字节不一致，而数据一个字段都没错
+    （读数 `temp/fix6_f5-shape.txt`）。让 dataclass 自己产出之后，
+    这条承诺由构造保证。
+    """
+    row = S.Task(
+        task_id=task_id,
+        role="M",
+        action=TASK_RUN_ACTION,
+        called_by="cli",
+        # `Task.validate` 要求 `depth >= 1`（`depth` 从 1 开始 = 主控发起）。
+        # 这一行是最外层的那一次召唤（CLI 让主控跑一次），所以是 1。
+        depth=1,
+        input_key=topic[:120],
+        status=status,
+        outcome=outcome,
+        detail=detail,
+        # `FINAL-R5-01`（最后一次集中审查抓到的）：这一行改前从不设 `error`，
+        # 而 `schema.Task.validate` 要求 `status="failed"` 必须带非空 `error`
+        # 且 `outcome="failed"`。于是 `_settle_run_task` 里那次 validate 抛异常、
+        # `written=False`，占位行永远停在 `running` —— 受害面正是
+        # `modelgw.MODEL_ERROR_KINDS` 里不在 `NOT_CHECKED` 的那三个码
+        # （`auth_failed` / `rate_limited` / `bad_response`）。
+        # 为什么把参数默认成空串而不是 None：调用方（开跑时的占位行）不需要知道
+        # 这个字段；只有终态是 failed 的那条路径才必须给。
+        error=(error or None),
+        started_at=started_at,
+        ended_at=ended_at,
+        tokens=int(tokens),
+        usd=round(float(usd), 6),
+        # `R5-F3`（第一次重审实测的修法）：`tasks.artifacts` 的契约是
+        # `verify.py` 里那一条 —— 每一项形如 `"<表名>:<行 id>"`，指向
+        # 库里真的存在的一行。旧版把六个文件名塞进这个字段，
+        # 于是每跑一次 `agentflow run` 都新增 6 条
+        # `unknown_artifact_kind` warning（测试只断言 `errors`，所以完全不可见）。
+        # 一次 `run` 产出的六件东西是磁盘文件，不是表里的行 ——
+        # 它不该占用这个字段。所以这里留空，把那六个名字放进 `detail`
+        # （人读的说明），并把"留空"这件事写清楚，免得读的人以为是漏了。
+        artifacts=[],
+        # `inputs` 与 `artifacts` 是同一条纪律：声明为集合的字段必须升序去重
+        # （`Task.validate` 实测会拒"未升序"）。所以这里也过 `sorted_unique`。
+        inputs=S.sorted_unique([
+            f"topic={topic}",
+            "budget_usd=<见 cost.json>",
+            "prompt_version=<见 run-manifest.json>",
+        ]),
+    )
+    return row.to_dict()
+
+
+def _settle_run_task(store: Any, *, task_id: str, topic: str, reason: str, exit_code: int,
+                     records: Sequence[CallRecord],
+                     meter: TokenMeter, started_at: str, stamp: str) -> dict:
+    """把这次 `run_topic` 的 `tasks` 行改写成终态（`G-3` / `R5-AN-1`）。
+
+    ## 为什么必须有这一行（而不是把 usage 行的 task_id 置 None）
+
+    `usage_ledger.task_id` 是审计的挂点：`verify` 有一条 `dangling_usage_task` 检查
+    （账本行指向的任务不在 `tasks` 表里）。`run_topic` 一直是给了 task_id 但没建任务行，
+    于是每跑一次 `agentflow run` 就让全库审计多两条 error 级发现 ——
+    而 error 永远红就等于 error 没有区分力。
+
+    另一个口径（把 task_id 置 None）改动更小，但它把"这次花了多少"从审计面里摘出去：
+    账本会干净，事实会少一份。这里选补任务行。
+
+    ## 它写的是"改写"，不是"新写"（`R5-AN-1` 之后的口径）
+
+    这一行在开跑时就已经由取号那一段以 `status="running"` 落库了（号必须当场
+    占住，否则并发的第二次运行会拿到同一个 `t-NNNN`）。本函数按同一个
+    `task_id` 整行改写它 —— 所以"每个 start 恰好一个 end"这条口径是由
+    "先占号、后收工"两步共同保证的，而不是由本函数单独保证。
+    本函数仍然不依赖那一行存在：它对同一个 `task_id` 做整行 upsert，占位行丢了也能补写。
+
+    ## 六条口径与 `conductor._charge_and_settle` 对齐
+
+    - `role="M"`：这次运行是主控发起的（`agentflow run` 就是主控自己跑一遍）；
+    - `status`：`done` / `failed`（可被取消的调用方还会拿到 `cancelled`）——
+      与 `exit_code` 的三态不是同一件事，所以按 `reason` 映射而不是按退出码。
+      `R5-F4`：这条通路上可达的只有 `done`（跑完了）与 `failed`（模型侧
+      查过了、确实不行，例如 `auth_failed` / `rate_limited` / `bad_response`）；
+      `cancelled` 只有将来接进取消面的调用方才拿得到。逐条依据见
+      `_run_task_verdict` 的 docstring 与 `RUN_TOPIC_REASON_LITERALS`；
+    - `outcome`：`ok` / `no_result`（跑完了但没拿到模型结论）/ `failed`；
+    - `tokens` / `usd`：用 `meter.tokens_for(task_id)` / `usd_for(task_id)`
+      —— 与账本同一条口径（同一个 task_id），不是第二份计算；
+    - `artifacts`：留空。那六件产物是磁盘文件（不是表里的行），所以不占这个
+      字段（它的契约是 `"<表名>:<行 id>"`）；六个名字写在 `detail` 里。
+      `R5-AN-5`：这句 docstring 此前把 `artifacts` 写成"本运行承诺的
+      六件产物"，与同一屏里的实现（`artifacts=[]`）互相矛盾 —— 那是 `R5-F3`
+      已经改掉的旧形态，照着旧文写回去会立刻新增 6 条
+      `unknown_artifact_kind` warning；
+      `inputs`：主题与预算（同样只写形状，具体数字在产物里）；
+    - `detail`：写清"这一行是谁写的、为什么"（读台账的人不该去猜）。
+    - `error`：只在 `status="failed"` 时非空 —— `schema.Task.validate` 的硬要求
+      （`FINAL-R5-01`：改前这里不给 `error`，于是失败那三个码的行写不进去，
+      占位行永远停在 `running`；这条不是措辞问题，是台账缺行）。
+
+    ## 三态纪律
+
+    写失败不吞：返回值里 `written=False` 与 `error`，而 `run_topic` 会把它落进
+    `run-manifest.json` 的 `task_row` 段、并往 `unknowns` 加一行（`R5-F6`：
+    这句 docstring 此前写的是"让这一项在返回值里可见"，而那个返回值从未被读过
+    —— 写失败恰恰意味着那一行 `tasks` 不存在，于是连 `detail` 都留不下来，
+    产物与退出码一字不变，消费者完全看不出来）。
+    退出码仍然不改 —— 产物已经落盘了，而那才是这次运行的结果；
+    账本挂点缺失是审计面的问题，把它折叠成"运行失败"会让读者以为结论不可用。
+
+    `R5-AN-5` 的另一半：本函数此前还收着 `out` 与 `ledger` 两个形参，
+    而函数体里一次都没用过它们（AST 读数见 `temp/reaudit6-R5-p4.txt`）。
+    形参也是接口面 —— 列着不用的形参，会让读 docstring 的人以为
+    "产物目录与账本汇总参与了这一行的构造"。它们已经删掉：
+    产物目录由调用方自己用，账本汇总由 `meter` 现算（`tokens_for` / `usd_for`），
+    本函数不需要第二份输入。
+    """
+    tokens = int(meter.tokens_for(task_id))
+    usd = round(float(meter.usd_for(task_id)), 6)
+    ok_calls = sum(1 for r in records if r.reply.ok)
+    status, outcome = _run_task_verdict(reason=reason, exit_code=exit_code)
+    # `FINAL-R5-01`：`schema.Task.validate` 对 `status="failed"` 有两条硬要求 ——
+    # `error` 非空、`outcome == "failed"`。改前这一行只给 status/outcome，
+    # 于是"模型侧确实失败了"这三个码在台账上永远停在 `running`（占位行）。
+    # 理由串逐字就是这一跑的 `reason`，加上退出码，便于人顺着追。
+    task_error = (f"模型侧结局 {reason!r}（exit_code={exit_code}）"
+                  if status == "failed" else "")
+    detail = (
+        f"`agentflow run` 的一次运行：主题「{topic[:60]}」，{len(records)} 次模型调用"
+        f"（成功 {ok_calls}），退出码 {exit_code}，理由 {reason!r}。"
+        "这次运行产出的磁盘文件（不是表里的行，所以不进 `artifacts`）："
+        + "、".join(str(a) for a in ARTIFACTS) + "。"
+        "这一行由 `runflow._settle_run_task` 写（`G-3`）：在此之前 `run_topic` 只写账本、"
+        "不建任务行，于是账本上的钱挂不到任何一次召唤上，`verify` 每次运行都报 error。"
+    )
+    try:
+        with store.tx("tasks", actor="agent-M", note=f"runflow settle {task_id}") as tx:
+            row = _new_task_row(
+                task_id=task_id, topic=topic, status=status, outcome=outcome,
+                detail=detail, started_at=started_at, ended_at=stamp,
+                tokens=tokens, usd=usd, error=task_error,
+            )
+            S.Task(
+                **{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__}
+            ).validate()
+            tx.upsert("tasks", row, note=f"runflow settle {task_id}")
+        written = True
+        err = ""
+    except Exception as exc:  # noqa: BLE001 - 写不进去要说出来，但不改退出码
+        written = False
+        err = f"{type(exc).__name__}: {exc}"
+    return {"task_id": task_id, "written": written, "error": err,
+            "status": status, "outcome": outcome, "tokens": tokens, "usd": usd}
+
+
+#: `tasks.status` 的三档（`R5-F4`）：`_run_task_verdict` 只许返回它们。
+TASK_STATUSES: frozenset[str] = frozenset({"done", "failed", "cancelled"})
+
+#: `run_topic` 今天真的会赋给 `reason` 的字面量（`R5-F4` 的可达性判据）。
+#:
+#: 逐字对应 `run_topic` 里的赋值点：没 key / 检索没查成两档 / 预算熔断 /
+#: 跑满 max_calls（`success` 或 `no_call`）。模型侧的错误码不在这张表里 ——
+#: 那些来自 `reply.error_kind`（`modelgw.MODEL_ERROR_KINDS`），是运行时值不是字面量，
+#: 由 `_run_task_verdict` 按 `NOT_CHECKED` 分档。
+#:
+#: 这里刻意没有 `cancelled`，也没有任何取消入口：`run_topic` 不收 CancelToken，
+#: `cli.py` 里也没有 signal / KeyboardInterrupt 处理 ⇒
+#: "`agentflow run` 能产出 status=cancelled"这句话今天是假的。
+#: 判据在 `tests/test_r5_orchestration_cost.py`：它对 `run_topic` 做 AST 扫描，
+#: 断言字面量集合与本表一致 —— 往 `run_topic` 里加一个新的 `reason = "…"`
+#: 而不在这里分档，那条用例会红。
+RUN_TOPIC_REASON_LITERALS: frozenset[str] = frozenset({
+    # `""` 是初值：`run_topic` 里 `reason = ""` 那一句。它到不了 `_settle_run_task`
+    # （每条路径都会赋一个真结局），但它是"赋给 reason 的字面量"之一，
+    # 而这张表的判据就是"声明 == 源码里赋的字面量"（见测试里的 AST 扫描）。
+    "",
+    "success", "no_key", "no_call",
+    "retrieval_failed", "retrieval_not_configured",
+    "budget_exhausted",
+})
+
+#: 本函数显式判成 `done` 的理由：`run_topic` 那张表，外加老版本留下的三条
+#: （`retrieval_not_measured` / `no_claims` / `unparsable`）—— 它们在
+#: `run_topic` 的赋值点上已经不存在了，但它们曾是本函数的接口面，
+#: 别的调用方（测试夹具、将来的编排层）可能还在传。留着是兼容，
+#: 而"它们今天不再由 `run_topic` 产出"这件事由 `RUN_TOPIC_REASON_LITERALS` 如实表达。
+TASK_DONE_REASONS: frozenset[str] = RUN_TOPIC_REASON_LITERALS | frozenset({
+    "retrieval_not_measured", "no_claims", "unparsable",
+})
+
+
+def _run_task_verdict(*, reason: str, exit_code: int) -> tuple[str, str]:
+    """`(tasks.status, tasks.outcome)`（`G-3`）。
+
+    为什么不直接按 `exit_code` 映射：退出码是三态（0/1/2 = 有结论/有问题/没查成），
+    而 `tasks.status` 说的是"这次召唤的终态"。两者有交集但不是同一件事：
+    一次 `no_key` 的运行退出码是 2（没查成），而它在任务台账里的终态是
+    `done`（这一行确实跑完了、结论是"没有 key 所以没调模型"）。
+    把它写成 `failed` 会让"环境缺 key"看起来像"这次召唤崩了"。
+
+    ## 可达性（`R5-F4`：这里原先有三处与事实不符）
+
+    1. `cancelled` 一档在 `run_topic` 这条通路上到不了 —— 它没有取消入口
+       （不收 CancelToken，`cli.py` 里也没有 signal / KeyboardInterrupt 处理）。
+       这一档留着是因为本函数是纯映射，将来接进取消面的调用方要用它；
+       但"`agentflow run` 会产出 status=cancelled"是假的，不许这么读。
+    2. `failed` 曾经也不可达：旧实现只认字面量 `"error"`，而 `run_topic` 赋给
+       `reason` 的是 `reply.error_kind`（`timeout` / `auth_failed` / `rate_limited`
+       这些），于是"模型调用确实失败了"被静默记成 `done` / `no_result`。
+       现在按 `modelgw` 的两张词表分档（见下）。
+    3. 旧实现里有一段 `if reason in (…7 个常量…): pass` —— 一个空块。
+       它看起来在分档、实际什么都没做（`success` 由下面单独判、其余走兜底）。
+       现在那张名单是 `TASK_DONE_REASONS`，而且是真被用来判定的。
+
+    ## 模型侧结局怎么分档（与 `modelgw.NOT_CHECKED` 同一口径）
+
+    - `reason in NOT_CHECKED`（`no_key` / `timeout` / `network` / `server_error` /
+      `unknown`）：这是"没查成"，不是"查了没通过" ⇒ 这一行跑完了，`done` /
+      `no_result`；
+    - 其余 `MODEL_ERROR_KINDS`（`auth_failed` / `rate_limited` / `bad_response`…）：
+      查过了、确实不行 ⇒ `failed` / `failed`。
+    把第 2 类读成第 1 类，正是 `G-7` 那一族"把失败折叠成没有结论"的形态。
+    """
+    from .modelgw import MODEL_ERROR_KINDS, NOT_CHECKED
+
+    if reason == "cancelled":
+        # 见上面第 1 条：`run_topic` 到不了这里，只有接进取消面的调用方才用得上。
+        return "cancelled", "cancelled"
+    if reason == "success":
+        return "done", "ok"
+    if reason == "error":
+        # 老接口面留下的字面量：`run_topic` 今天不产出它（模型结局走 `error_kind`），
+        # 但它曾经是本函数的输入之一 —— 去掉这一支会把一个"失败"悄悄变成
+        # "没有结论"，而那是本条目要修的同一族方向。
+        return "failed", "failed"
+    if reason in TASK_DONE_REASONS:
+        # 显式列出"落进 done"的那些理由：读的人不必去猜默认分支覆盖了谁。
+        return "done", "no_result"
+    if reason in MODEL_ERROR_KINDS:
+        if reason in NOT_CHECKED:
+            return "done", "no_result"
+        return "failed", "failed"
+    # 认不出的理由：如实落"跑完了、没有结论"，并把这件事留给读者
+    # （`unknowns` 里已经有一行写着"本次以 <reason> 结束 ⇒ 结论不完整"）。
+    return "done", "no_result"
 
 
 def _lean_md(lean: Mapping[str, Any] | None) -> list[str]:
@@ -497,7 +899,8 @@ def _report_md(*, topic: str, reason: str, exit_code: int, price: tuple[float, f
                budget_usd: float, prompt_version: str, not_wired: list[dict],
                unknowns: list[str], evidence: Mapping[str, Any] | None = None,
                verification: Mapping[str, Any] | None = None,
-               lean: Mapping[str, Any] | None = None) -> str:
+               lean: Mapping[str, Any] | None = None,
+               run_spent_usd: float | None = None) -> str:
     """人读报告。unknowns 段永远存在（没有未知项时也要显式写"本次无未知项"）。
 
     为什么这是一个独立的函数而不是塞在 `run_topic` 里：这一段是给人读的那一份事实，
@@ -508,7 +911,14 @@ def _report_md(*, topic: str, reason: str, exit_code: int, price: tuple[float, f
     "本次运行没有检索记录"）。段落存在与否是判据，而不能靠"某次运行刚好没有"。
     `lean` 缺省为 `None`：形式化验证小节只在真的开了这一层时出现
     （关着的时候写一整段"没用 Lean"会把证据段变成公告栏）。
+
+    `run_spent_usd` 是"这一次运行"花掉的钱（`G-4`），缺省 `None` 表示调用方没给
+    （那时退回账本累计值，与改前的行为逐字相同）。预算那一行必须同时印两个数：
+    只印累计值时，"这次运行花了多少"与"这个工作区一共花了多少"是同一个数字，
+    而预算判的只是前者。
     """
+    spent_for_budget = (round(float(ledger["usd"]), 6) if run_spent_usd is None
+                        else round(float(run_spent_usd), 6))
     lines = [
         f"# 运行报告：{topic}",
         "",
@@ -516,15 +926,16 @@ def _report_md(*, topic: str, reason: str, exit_code: int, price: tuple[float, f
         f"- 退出原因：{reason}",
         f"- prompt 版本：{prompt_version}",
         f"- 单价（美元每百万 token）：输入 {price[0]} / 输出 {price[1]}",
-        f"- 预算：{budget_usd} 美元；已花：{ledger['usd']} 美元；"
-        f"余：{_budget_left(budget_usd, ledger['usd'])} 美元",
+        f"- 预算：{budget_usd} 美元（本次运行口径）；本次已花：{spent_for_budget} 美元；"
+        f"余：{_budget_left(budget_usd, spent_for_budget)} 美元",
+        f"- 该工作区账本累计：{ledger['usd']} 美元（跨运行累计，不是本次预算的口径）",
         f"- 调用次数：{len(records)}（成功 {sum(1 for r in records if r.reply.ok)}）",
         f"- 账本行数：{ledger['entries']}；token 合计：{ledger['tokens']}；"
         f"重试额外开销：{ledger['retry_overhead']['extra_tokens']} token",
         "",
         "## 逐次调用",
         "",
-        "| 序号 | 结局 | 未查成 | tokens_in | tokens_out | 美元 | 累计美元 |",
+        "| 序号 | 结局 | 未查成 | tokens_in | tokens_out | 美元 | 本次累计美元 |",
         "|---|---|---|---|---|---|---|",
     ]
     for r in records:
@@ -610,7 +1021,8 @@ def _why_not_full_ledger(verification: Mapping[str, Any],
 
 def _verification_from_ledger(rows: Sequence[Mapping[str, Any]], split: Any,
                               evidence: Mapping[str, Any], *,
-                              quote_fn_name: str = "quoteverify.check_quote") -> dict[str, Any]:
+                              quote_fn_name: str = "quoteverify.check_quote",
+                              text_ref_problems: Sequence[str] = ()) -> dict[str, Any]:
     """把原子断言台账折成 `verify_claims` 同形的返回值（下游读数字的唯一入口）。
 
     为什么要这一层：下游（报告证据段、`run-manifest.json` 的 `claims`、
@@ -646,6 +1058,12 @@ def _verification_from_ledger(rows: Sequence[Mapping[str, Any]], split: Any,
     else:
         reason = (f"对 {len(rows)} 条原子断言做了逐字比对；本次回验到达的级别："
                   f"{'／'.join(levels_reached) or '无'}")
+    # 全文引用取不到的那些来源（`draft/30` §T0-5）：必须进产物，否则"降级到摘要级"
+    # 会被读成"这篇没有全文"。键只在真出问题时出现 —— 常驻空列表会被读成"永远没问题"。
+    if text_ref_problems:
+        counts["fulltext_text_unavailable"] = len(text_ref_problems)
+        reason += (f"；另有 {len(text_ref_problems)} 条来源声称拿到全文，但逐页文本引用取不到 ⇒ "
+                   "那几条没做成全文级回验（不是'这篇没有全文'）")
     return {
         "claims": [dict(r) for r in rows],
         "counts": counts,
@@ -657,6 +1075,7 @@ def _verification_from_ledger(rows: Sequence[Mapping[str, Any]], split: Any,
             # 拆分层的结论与台账一起落进 `verification`：读者要能一眼看出
             # "这次拆出多少条、有没有被截断、依据是哪一层"，而不是从台账行数反推。
             "splitting": split.to_dict() if hasattr(split, "to_dict") else dict(split or {}),
+            **({"fulltext_text_unavailable": list(text_ref_problems)} if text_ref_problems else {}),
         },
         "checked": checked,
         "reason": reason,
@@ -671,16 +1090,40 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
               fulltext: bool = False, fetch_fn: Any = None,
               extract_fn: Any = None, lean: bool = False,
               lean_run_fn: Any = None, claims_parse_fn: Any = None,
-              claims_max: int = claims_mod.DEFAULT_MAX_CLAIMS) -> dict:
+              claims_max: int = claims_mod.DEFAULT_MAX_CLAIMS,
+              text_store_dir: str | Path | None = None) -> dict:
     """跑一次端到端：检索 → 取全文 → 作答 → 逐字回验 → 记账 → 熔断 → 六件产物 → 退出三态。
 
-    返回 ``{"exit_code", "reason", "out_dir", "artifacts", "calls", "spent_usd"}``。
+    返回 ``{"exit_code", "reason", "out_dir", "artifacts", "calls", "spent_usd",
+    "spent_usd_this_run"}``。
 
     无论走到哪一步都产出六件产物：一份"因为没 key 所以什么都没写"的目录，
     与"根本没跑"在磁盘上长得一样 —— 而它们必须能分辨。
 
+    `FINAL-R5-02` 的边界（这一条不能靠 docstring 之外的任何东西兜）：被中断的那一跑例外。
+    这条通路今天没有取消面（`run_topic` 不收 `CancelToken`），`KeyboardInterrupt` 是
+    `BaseException`，会穿出本函数的 `except Exception` 兜底 —— 磁盘上留下的是"部分产物"，
+    与"从来没跑过"和"跑了但没 key"三者不同形但都不可消费。所以 `cli.main` 把
+    `KeyboardInterrupt` 折成退出码 2（没查成） 并打印一句显式说明；
+    真正的修法（走完六件产物 + `status=cancelled`）要接进取消面，属于第 3 层。
+
     `store` 是工作区（`usage_ledger` 的落点）；`out_dir` 是产物的落点。
     两者刻意分开：账本属于工作区（跨运行累计），产物属于这一次运行。
+
+    `budget_usd` 是"这一次运行"的额度（`G-4`），不是工作区的累计额度。
+    本次花销的口径（`F5-FOUND-1` 之后）：按 `task_id` 过滤 `usage_ledger`
+    （这次运行的所有调用共享开跑时取到的那个 `task_id`），所以同一个工作区里
+    并发的另一次运行不会被算进我的额度，历史花销也不会。
+
+    改前的口径是"工作区增量"：开跑时取一次整本台账的和当基线，之后判
+    `spent() - baseline`。那个近似只在"同一工作区里两次运行不可能重叠"时
+    等于本次花销 —— `R5-AN-1` 把并发修通之后它不再成立（别人的钱落进我的差额，
+    既可能让我提前熔断，也会让对账自检误报）。逐字读数与论证见
+    `_spent_this_run` 的 docstring。
+
+    两个口径都在产物里：`spent_usd_this_run` 是本次运行（按 `task_id` 过滤），
+    `cost.json` 的 `usage_ledger.usd` 与返回值里的 `spent_usd` 是工作区累计。
+    只印一个数会让"这次花了多少"与"这个工作区一共花了多少"无法分辨。
 
     `now` 只为测试注入固定时间戳（不注入就是当前时间）：可复现的产物才好逐字断言。
     `search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` 是四个动作的测试接缝
@@ -689,8 +1132,10 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
 
     `fulltext` 控制要不要拿开放全文，缺省关闭：全文获取是逐条的网络下载，
     默认打开会让每一次运行都变成一次批量下载。关闭时 `fulltext` 会如实写进
-    未接线清单（"没有接进本流程"），而不是让读者以为"取了但没有全文" ——
-    它与打开后逐条六态记录（`no_pdf` / `download_failed` / ...）是两件事。
+    未接线清单，且理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，
+    与 `lean` 那条同形）—— 常量里那句"没有接进本流程"是关于流程的断言，
+    而真相是"接了、本次没要"，两句话的处置不同（`X-NEW-2` / `draft/28` §98.4）；
+    它也与打开后逐条六态记录（`no_pdf` / `download_failed` / ...）是两件事。
 
     `lean` 控制要不要真的跑 Lean 检查，缺省关闭。打开后：模型答复里每一个
     `` ```lean `` 代码块都会被交给 `formalgw.check_lean` 真跑一次，逐条结论与
@@ -725,9 +1170,98 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     out.mkdir(parents=True, exist_ok=True)
     stamp = now or S.now_iso()
     started_at = stamp
-    # 先截断再加前缀：反过来写会把 "run-" 三个字符也吃掉，而 task_id 是幂等键的
-    # 输入（同一主题必须永远派生出同一个 task_id，否则幂等会在长主题上静默失效）。
-    task_id = "run-" + topic[:110]
+    # `G-2`：幂等键必须按这一次运行命名，不能只按主题。
+    #
+    # 缺陷（2026-09-26 全面体检 · 子代理 G 实测，`temp/auditG-probe4.txt` A 段）：
+    # 旧版是 `"run-" + topic[:110]`，于是同一工作区里同一主题跑第二遍时，
+    # 每一次调用的幂等键都与第一遍相同 ⇒ `charge_reply` 走 duplicate 快速通道，
+    # 第 2 次的 `per_call` 全部变成 `{charged: false, reason: 'duplicate'}`
+    # 却仍然带着第 1 次那一行的 usd/tokens，`spent_usd` 也报第 1 次的钱。
+    # 两个方向同时错：① 账本少记整整一轮真实花费（生产里每次调用都是真计费的
+    # HTTP 请求）⇒ 预算熔断看不到这部分钱；② 第 2 次的 cost.json / run-manifest
+    # 把第 1 次的花费记在自己名下。没有任何断言会响。
+    #
+    # 两个口径各管一件事，谁也不复用谁（2026-09-26 所有者裁定，`draft/28` §24）：
+    #
+    # ① task_id 走契约：`schema.Task.validate` 要求 `t-NNNN`
+    #    （`PROCESS_ID_PREFIXES["task"] = "t"`，即 `P-17`）。此前这里造的是
+    #    `run-<主题>-<时刻>`，写入时被 `require_process_id` 拒掉；而
+    #    `_settle_run_task` 把写失败收进 detail 不抛，于是 `tasks` 表恒 0 行
+    #    —— 静默失败。取号算法与 `conductor._write_new_row` 同一做法
+    #    （读现有行取 max+1）；`R5-AN-1` 之后连临界区也同一做法
+    #    （取号与建行在同一个 `store.tx` 里，见下面那一段的说明）。
+    # ② 幂等键走运行标识：键是 `(运行标识, call_index)` 的摘要。运行标识取
+    #    「主题的摘要 + `now`（+ 生产形态下的随机后缀，见 `R5-F5`）」——
+    #    同一次运行的多次调用共享同一个运行标识（`call_index` 区分）⇒ `FC-19`
+    #    （重试也计入）不受影响；它仍会拿到自己的 `t-NNNN` 行，
+    #    所以审计面 `usage_ledger.task_id → tasks` 不会悬空。
+    #    显式传同一个 `now` 的第二跑算出同一个键 ⇒ 判 duplicate
+    #    （`test_cli_run.py` 的 `test_rerunning_the_same_topic_does_not_double_charge`
+    #    要的正是这个：显式 `now` = "这是同一次逻辑运行"）。
+    #
+    # ---- `R5-F5`（重审实测）：那条"秒粒度是代价"的说法里有两处不是代价、是缺陷 ----
+    #
+    # (a) `topic[:100]` 是截断：两个前 100 字相同、后缀不同的主题在同一个
+    #     `now` 下算出同一个运行标识 ⇒ 第二个主题被整轮判重放。不同的主题
+    #     本来就该是不同的逻辑运行，这与"同一主题跑第二次"不是一回事。
+    #     修法是拿整个主题的 sha256 摘要（不再截断）。
+    # (b) 默认路径（不给 `now`，也就是生产形态）的运行标识只由
+    #     `now`（`S.now_iso()`，秒粒度）决定 ⇒ 同一秒内两次真运行撞同一个键，
+    #     第二次真发出去的 HTTP 花销在账上完全不存在（重审实测：两次默认路径
+    #     运行共 0.099s，`usage_ledger` 只有 1 行、`per_call` 全是 duplicate）。
+    #     修法：`now is None`（生产形态）时给运行标识加一个每次调用都不同的
+    #     随机后缀 —— 运行标识的职责就是"标识这一次运行"，而每一次调用都是一次
+    #     独立的运行。显式给了 `now` 时不给后缀（见上：那是"同一次逻辑运行"的声明）。
+    # 两处都改了之后，"同一主题同一秒跑两次"仍然可以复现成同一次逻辑运行 ——
+    # 只要你显式传同一个 `now`；不传时它们就是两次运行，各记各的账。
+    _run_stamp = (stamp or "").replace(":", "").replace("+", "").replace("-", "")[:15]
+    _topic_digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()[:16]
+    _run_nonce = "" if now is not None else "-" + uuid.uuid4().hex[:8]
+    _idem_scope = "run-" + _topic_digest + "-" + (_run_stamp or "nostamp") + _run_nonce
+    from .interactions import next_prefixed_id
+    # `R5-AN-1`（第 6 轮重审实测的修法）：取号必须与建行在同一个临界区里。
+    #
+    # 缺陷形态（两个真进程并发 `agentflow run`，读数见 `temp/reaudit6-R5-p6.txt`）：
+    # 旧版在 `store.tx` 之外读一份无锁快照取号，行却在整条 run 结束时的另一个
+    # tx 里才写 ⇒ 两个进程都拿到 `t-0001`；`tasks` 表最后只剩 1 行，而存活
+    # 那一行的 `tokens` 是两跑之和；两条 `usage_ledger` 都挂 `t-0001`；
+    # 而 `verify_all` 的 code 集合是 []（一条都不报）—— 静默丢行。
+    #
+    # 为什么"把取号搬进 tx"不够（本条修法的必要性来自读数，不是来自与
+    # `conductor._write_new_row` 同形）：`next_prefixed_id` 是纯函数（读现有行取
+    # max+1），它没有计数器；只把取号搬进 tx、行仍然等到收工才写，第二个进程
+    # 在第一个进程写行之前进 tx，读到的还是同一份快照 ⇒ 照样撞号。
+    # 我按条件 1 实测过这条最小修法（`temp/fix6_f5-minimal.txt`，两真进程）：
+    # E1/E2/E3/E5 四条判据全部仍为 False（症状一个都没消失）。
+    # 所以"取号"这一步必须同时落一行才算占住号：号只有在盘上可见时
+    # 才对下一个进程有意义。`store.insert_unique` 的 docstring 讲的是同一条纪律
+    # （唯一性只在"读与写同一个临界区"内成立）。
+    #
+    # 为什么占位行的 `status` 只能是 `running`：`schema.Task.validate` 要求
+    # 终态（done/cancelled/failed）必须带 `ended_at`，而这次运行还没结束、结局
+    # 还不知道。写一个假终态就是往台账里塞一句还没发生的事实。
+    # 它的 `tokens`/`usd` 是 0 且 `outcome=None`：占位行只声明"这个号被占了、
+    # 有人在这儿跑"，收工时由 `_settle_run_task` 整行改写（同一个 task_id）。
+    # 崩在收工之前会留下一行 `running` —— `verify_all` 有专门的
+    # `task_still_running` 把它报成 warning（这是刻意的：僵尸行是事实，
+    # 不是噪音）。
+    with store.tx("tasks", actor="agent-M", note="runflow allocate") as tx:
+        task_id = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
+        reserved = _new_task_row(
+            task_id=task_id, topic=topic, status="running", outcome=None,
+            detail=(
+                f"`agentflow run` 占位行：这次运行（主题「{topic[:60]}」）已经开始，"
+                "结局还不知道。"
+                "这一行在取号与建行同一个临界区内写下（`R5-AN-1`）—— "
+                "号只有在盘上可见时才对下一个并发进程有意义。"
+                "收工时 `runflow._settle_run_task` 会整行改写成终态。"
+            ),
+            started_at=started_at, ended_at=None, tokens=0, usd=0.0,
+        )
+        S.Task(
+            **{k: v for k, v in reserved.items() if k in S.Task.__dataclass_fields__}
+        ).validate()
+        tx.upsert("tasks", reserved, note=f"runflow allocate {task_id}")
     not_wired: list[dict[str, str]] = [
         {"name": name, "reason": why} for name, why in NOT_WIRED_ITEMS
     ]
@@ -741,6 +1275,14 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     # 记账接线：无论有没有 key 都建 meter —— 账本本身就是产物之一（cost.json）
     # 的一部分，而"因为没 key 所以连账本口径都不给"会让 cost.json 无从解释。
     meter = TokenMeter(store, budget_usd=float(budget_usd))
+    # `G-4` / `F5-FOUND-1`：预算熔断看的是"这一次运行"的量，口径是
+    # 按 `task_id` 过滤账本（见 `_spent_this_run` 的 docstring）。
+    #
+    # 为什么不再取"开跑时的账本基线"：基线口径（工作区增量）只在"同一工作区里
+    # 两次运行不可能重叠"时等于本次花销，而 `R5-AN-1` 把并发修通之后这个前提
+    # 没了 —— 另一个进程在我取基线之后入账，它的钱会落进我的差额，先污染
+    # 熔断、再污染对账自检。`task_id` 在开跑时已经存在（取号那一段落的就是它），
+    # 所以这里不需要任何基线。
     records: list[CallRecord] = []
     transcript: list[dict] = []
     reason = ""
@@ -784,28 +1326,36 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
                 acquisition = acquire_fulltext(
                     evidence["sources"], fetch_fn=fetch_fn, extract_fn=extract_fn,
                     dest_dir=out / "fulltext", limit=int(retrieval_limit),
+                    text_store_dir=text_store_dir,
                 )
                 not_wired = [n for n in not_wired if n["name"] != "fulltext"]
             sent_prompt = base_prompt + materials_block(evidence["sources"])
             gw = ModelGateway(cfg, transport=transport)
             for i in range(int(max_calls)):
-                spent_before = meter.spent()["usd"]
+                # `G-4` / `F5-FOUND-1`：只算本次运行（同一个 `task_id`）已经花了多少。
+                # 改前这里减的是"开跑时的账本基线"（工作区增量）：那样同一个工作区里
+                # 并发的另一次运行在基线之后入的账会被算进我的额度，可能让我提前熔断。
+                spent_before = _spent_this_run(meter, task_id)
                 # 熔断在调用之前：达线就停，一次都不多花。
                 if _is_exhausted(budget_usd, spent_before):
                     reason = "budget_exhausted"
                     stopped_by = "budget"
                     break
-                reply = gw.complete(sent_prompt, system=SYSTEM_PROMPT)
+                # `G-7`：调用点不让异常穿出去（网关承诺不抛，但今天会抛）。
+                reply = _complete_or_not_checked(gw, sent_prompt, scope=SCOPE_ANSWER,
+                                                 model=cfg.model)
                 charge = charge_reply(
                     meter, reply, role="modelgw", task_id=task_id,
-                    scope="reason", call_index=i,
+                    scope=SCOPE_ANSWER, call_index=i,
                     extra_note=f"run_topic:{topic}"[:120], now=stamp,
+                    idem_scope=_idem_scope,
                 )
-                spent_after = meter.spent()["usd"]
+                spent_after = _spent_this_run(meter, task_id)
                 rec = CallRecord(index=i, reply=reply, charge=charge,
                                  usd=float(charge["usd"]),
                                  spent_after_usd=round(float(spent_after), 6))
                 rec.task_id = task_id
+                rec.idem_scope = _idem_scope
                 records.append(rec)
                 transcript.append({"call_index": i, **reply.to_dict()})
                 if not reply.ok:
@@ -838,6 +1388,26 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
                     "⇒ 本次的逐字回验最多只能到达摘要级"
                 )
 
+    # 全文获取段的按次改写（`X-NEW-2` / `T15-RECON-1`，`draft/28` §98.4）：
+    # 与上面 `lean` 那一段同形 —— 常量里那句写的是"开放全文获取（fetch/extract）
+    # 没有接进本流程"，那是关于流程的断言；而真相是"接了（`cli.py`
+    # 有 `--fulltext` 开关、`run_topic` 在 `fulltext=True` 时真的调
+    # `acquire_fulltext`，见上面 `if fulltext:` 那一段）、本次没要"。
+    # 后果是可验证的：读者把"存在但未启用"读成"不存在" —— §98.4 记的那次，
+    # 受害的正是本轮 goal 文本（它据此把"接 fulltext"排成了一件工程活）。
+    #
+    # 判据是"这一次有没有发起"（`fulltext` 这个形参本身），不是"这一层在不在"：
+    #   * `fulltext=True` ⇒ 这一项已在 `if fulltext:` 那一段被摘牌；检索没查成时
+    #     上面那段会把它改写成"本次没有对象"；
+    #   * `fulltext=False` ⇒ 留在这里并改写成按次口径（与 `lean` 同形的第三态）。
+    if not fulltext:
+        for item in not_wired:
+            if item["name"] == "fulltext":
+                item["reason"] = (
+                    "本次没有发起全文获取（`--fulltext` 默认关）"
+                    "⇒ 本次的逐字回验最多只能到达摘要级，不是全文级"
+                )
+
      # 断言台账：把每一条成功答复拆成原子断言（`claims.split_claims`：先按
     # 模型自己写的 `||` 切，再按列表标记，最后按句末标点兜底），跨次调用去重，
     # 再逐条回验。为什么拆分与回验分两步：拆分判的是"这段话里有几条断言"，
@@ -852,10 +1422,13 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
                                               max_claims=int(claims_max),
                                               parse_fn=claims_parse_fn))
     split_result = claims_mod.merge_splits(splits, max_claims=int(claims_max))
+    # 回验结果整份留着：`claims` 给台账，`check` 里的"全文引用取不到"要一起带进产物
+    # （`draft/30` §T0-5）。只取 `["claims"]` 会把那条缺陷丢掉。
+    verify_result = verify_claims([c.to_dict() for c in split_result.claims],
+                                  evidence["sources"], quote_fn=quote_fn)
     claims_ledger = claims_mod.ledger_rows(
         split_result,
-        verify_claims([c.to_dict() for c in split_result.claims],
-                      evidence["sources"], quote_fn=quote_fn)["claims"],
+        verify_result["claims"],
     )
     # 这一份台账的形状与 `verify_claims` 的返回值同形（`claims` / `counts` /
     # `check`），所以下游（报告、清单、evidence.json）读数字的代码不用改，
@@ -863,6 +1436,7 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     verification = _verification_from_ledger(
         claims_ledger, split_result, evidence,
         quote_fn_name=("injected" if quote_fn is not None else "quoteverify.check_quote"),
+        text_ref_problems=tuple(verify_result["check"].get("fulltext_text_unavailable") or ()),
     )
 
     # 摘牌判据：`claims_ledger` 只有在真的拆过（`parsed`）之后才从"未接线"
@@ -896,12 +1470,67 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     exit_code = _exit_code_for(reason, successes=successes)
     ledger = _ledger_view(meter)
 
+    # `G-4` / `F5-FOUND-1`：三个 `run_*` 都是"本次运行"的口径，按 `task_id`
+    # 过滤账本算出来（不是工作区增量）。`ledger` 是工作区累计（跨运行，权威账本）。
+    run_spent_usd = _spent_this_run(meter, task_id)
+    run_tokens = int(meter.tokens_for(task_id))
+    run_entries = _run_entry_count(meter, task_id)
+
     # 产物之间必须自洽：本次实际花掉的（逐次相加）与账本汇总不等，
     # 就说明有一条调用没进账 —— 那正是这一层要抓的形态，不许静默写两份数字。
-    calls_usd = round(sum(r.usd for r in records), 6)
-    reconciled = abs(calls_usd - ledger["usd"]) < 1e-9
+    #
+    # `R5-AN-3`（第 6 轮重审实测的修法）：只累加真的入账的那些调用。
+    # 只写 `sum(r.usd for r in records)` 会把重放路径上继承来的 usd 也算进来：
+    # `charge_reply` 判 duplicate 时返回的是上一次那一行的 usd（那样调用方还能
+    # 读出"这笔账本来是多少"），而本次的真实增量是 0 ⇒ 一次完全正常、被刻意
+    # 支持的重放被这个自检位判成"账本对不上"（实测
+    # `spent_usd_this_run=0.0 calls_usd=6e-06 reconciled=False`）。
+    # 自检位在正常操作上翻红就等于它失去区分力（本项目自己的纪律：
+    # "error 永远红就等于 error 没有区分力"）。
+    # 过滤之后"重放 ⇒ 0 == 0"成立，而"有一次 charged=True 的调用却没进账"
+    # 这条判据对真漏账的分辨力一点没少（那种调用仍然被算进来）。
+    calls_usd = round(sum(r.usd for r in records if r.charge.get("charged")), 6)
+    # 判据用增量：`records` 只含本次的调用，与整本台账比会永远不等（工作区里有历史）。
+    reconciled = abs(calls_usd - run_spent_usd) < 1e-9
+
+    # ---- `G-3`：给这次运行补一行 `tasks`，否则账本上的钱挂不到任何一次召唤上
+    #
+    # 缺陷（2026-09-26 全面体检 · 子代理 G 实测，`temp/auditG-probe2.txt` S1 段）：
+    # `run_topic` 写 `usage_ledger` 行时给了 `task_id='run-<主题>'`，但全文件没有任何
+    # `store.tx("tasks")` 或 `Task(...)` 写入（跨行的两个星号在源码里不算强调，
+    # R009 会照报 —— 这是本轮第三次踩到它）⇒ `tasks` 表行数为 0。
+    # 后果：`verify_all` 每跑一次 `agentflow run` 就报 2 条 error 级
+    # `dangling_usage_task`（"这笔花销挂不到任何一次召唤上"）+ 1 条 warning
+    # `usage_task_total_mismatch`。error 信号因此失去区分力（它永远红），
+    # 而"按召唤/按角色归口花了多少"这条账在 run 路径上答不出来。
+    #
+    # 口径选的是"补一行 tasks"（而不是把 usage 行的 task_id 置 None）：
+    # 前者信息多——读者能看出"这一次运行花了多少、跑到哪一步"，
+    # 后者只是把那条账从审计面里摘出去（看着更干净，但少了一份事实）。
+    #
+    # `R5-F6`（重审实测）：`_settle_run_task` 的返回值此前赋值给 `task_row` 之后
+    # 从未被读过，而它的 docstring 逐字说"写失败不吞：它会被记进 `detail` 并让
+    # 这一项在返回值里可见" —— 两件都不成立：写失败时恰恰没有那一行 tasks，
+    # 于是 detail 也不存在；产物与退出码一字不变，消费者看不出来。
+    # 现在两个出口都接上：
+    #   - `manifest["task_row"]` 把 written / error 落进产物（谁都能查）；
+    #   - 没写成时往 `unknowns` 加一行（"这笔花销挂不到召唤上"是本次运行的未知项）。
+    # 退出码仍然不改：结论与六件产物已经落盘，账本挂点缺失是审计面的事
+    # （把它折叠成"运行失败"会让读者以为结论不可用）。
+    task_row = _settle_run_task(store, task_id=task_id, topic=topic, reason=reason,
+                                exit_code=exit_code,
+                                records=records, meter=meter,
+                                started_at=started_at, stamp=stamp)
+    task_row_written = bool(task_row.get("written"))
+    task_row_error = str(task_row.get("error") or "")
 
     unknowns: list[str] = [f"{n['name']}：{n['reason']}" for n in not_wired]
+    if not task_row_written:
+        unknowns.append(
+            f"本次运行的 `tasks` 行没写成（{task_row_error or '原因未记录'}）⇒ "
+            "usage_ledger 上这次运行的钱挂不到任何一次召唤上，"
+            "`verify` 会报 dangling_usage_task；产物与退出码不受影响"
+        )
     if reason != "success":
         unknowns.append(f"本次以 {reason} 结束 ⇒ 主题的结论不完整，未知项比上面列出的更多")
     if split_result.truncated:
@@ -988,11 +1617,26 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
             "ledger_usd": ledger["usd"],
             "tokens": ledger["tokens"],
             "entries": ledger["entries"],
+            # `G-4`：本次运行的口径与账本累计口径同时给出（见 cost.json 的同名字段）。
+            "spent_usd_this_run": run_spent_usd,
+            "tokens_this_run": run_tokens,
+            "entries_this_run": run_entries,
+            "budget_usd": float(budget_usd),
+            "budget_exhausted": _is_exhausted(budget_usd, run_spent_usd),
+            # `FINAL-R5-07`：熔断只在每次调用之前检查 ⇒ 单跑可能超出预算至多一次调用的钱。
+            # 这个字段把"超了多少"显式写出来（不超就是 0.0），免得读者以为
+            # `budget_usd` 是一次运行花销的硬上界 —— 它是一条"调用前检查线"。
+            "budget_overshoot_usd": round(max(0.0, float(run_spent_usd) - float(budget_usd)), 9),
             "reconciled_with_usage_ledger": reconciled,
         },
         "exit_reason": reason,
         "exit_code": exit_code,
         "stopped_by": stopped_by,
+        # `R5-F6`：这次运行的 `tasks` 行写成了没有。写失败时它是本次运行唯一的
+        # 结构化出口（那一行 tasks 本身写不进去，所以不能指望从表里读出来），
+        # 读者据此判断"账本挂点缺失"是不是这一次的已知事实。
+        "task_row": {"task_id": task_id, "written": task_row_written,
+                     "error": task_row_error},
         "not_wired": not_wired,
         "unknowns": unknowns,
         "artifacts": list(ARTIFACTS),
@@ -1063,14 +1707,26 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     }
     cost = {
         "budget_usd": float(budget_usd),
+        # `G-4`：两个口径各自标注，名字里就写着是哪一个。
+        # `spent_usd` 保持"与 `usage_ledger` 同口径"（跨运行累计），因为
+        # `tests/test_cli_run.py` 断言 `cost["usage_ledger"]["usd"] == cost["spent_usd"]`；
+        # 判预算的那个数字是 `spent_usd_this_run`（本次运行增量）。
         "spent_usd": ledger["usd"],
-        "remaining_usd": _budget_left(budget_usd, ledger["usd"]),
-        "budget_exhausted": _is_exhausted(budget_usd, ledger["usd"]),
+        "spent_usd_this_run": run_spent_usd,
+        "tokens_this_run": run_tokens,
+        "entries_this_run": run_entries,
+        "remaining_usd": _budget_left(budget_usd, run_spent_usd),
+        "remaining_usd_ledger": _budget_left(budget_usd, ledger["usd"]),
+        "budget_exhausted": _is_exhausted(budget_usd, run_spent_usd),
+        "budget_scope": "this_run",
         "price_usd_per_m": {"in": price[0], "out": price[1], "source": "modelcost.price_of"},
         "per_call": [
             {"call_index": r.index, "usage_id": r.charge["usage_id"], "usd": r.usd,
              "tokens_in": r.charge["tokens_in"], "tokens_out": r.charge["tokens_out"],
-             "charged": r.charge["charged"], "reason": r.charge["reason"]}
+             "charged": r.charge["charged"], "reason": r.charge["reason"],
+             # 这一笔是为了什么（G-20）。与 `usage_ledger.by_scope` 同源：
+             # 逐笔看得见归口，汇总才对得上账。
+             "scope": r.charge.get("scope") or ""}
             for r in records
         ],
         "calls_usd": calls_usd,
@@ -1083,6 +1739,7 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
         ledger=ledger, budget_usd=float(budget_usd), prompt_version=prompt_version,
         not_wired=not_wired, unknowns=unknowns,
         evidence=evidence_doc, verification=verification, lean=lean_doc,
+        run_spent_usd=run_spent_usd,
     )
 
     # 落盘顺序：先写"事实"（清单/抄本/证据/台账/账），最后写人读报告 —— 报告里引用的
@@ -1102,6 +1759,10 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
         "artifacts": list(ARTIFACTS),
         "calls": len(records),
         "spent_usd": ledger["usd"],
+        # `G-4`：本次运行的增量（预算判的是它）。`spent_usd` 保留累计口径，
+        # 两个键并存是刻意的 —— 调用方要能分辨"这次花了多少"与"这个工作区一共花了多少"。
+        "spent_usd_this_run": run_spent_usd,
+        "budget_exhausted": _is_exhausted(budget_usd, run_spent_usd),
         "reconciled_with_usage_ledger": reconciled,
         # 三态与台账摘要也回传一份：调用方（CLI/脚本）不必再去读产物文件才能
         # 知道"这次检索到底查了没有"。它们是同一份事实的第二个出口，不是第二份计算。
@@ -1178,6 +1839,19 @@ def selftest() -> int:
         if not cost["reconciled_with_usage_ledger"]:
             problems.append(f"cost.json 与 usage_ledger 对不上：{cost['calls_usd']} vs "
                             f"{cost['usage_ledger']['usd']}")
+        # G-20 正控：这一跑真的把花销归了口，且归口在产物里读得出来。
+        by_scope = cost["usage_ledger"]["by_scope"]
+        if by_scope[SCOPE_ANSWER]["entries"] < 1:
+            problems.append(f"这一次调用必须落在 {SCOPE_ANSWER!r} 档：{by_scope}")
+        if by_scope["search"]["entries"] != 0:
+            problems.append("没花过钱的档必须以零值出现（不是缺席）："
+                            f"{sorted(by_scope)}")
+        if cost["per_call"] and cost["per_call"][0]["scope"] != SCOPE_ANSWER:
+            problems.append(f"逐笔也要看得见归口：{cost['per_call']}")
+        # 归口只改"分档"，不改"总额"：三档相加必须等于账本总额。
+        summed = sum(int(v["tokens"]) for v in by_scope.values())
+        if summed != int(cost["usage_ledger"]["tokens"]):
+            problems.append(f"分档之和必须等于总额：{summed} != {cost['usage_ledger']['tokens']}")
         led = json.loads((root / "ok" / "claims.json").read_text(encoding="utf-8"))
         if [c["verdict"] for c in led["claims"]] != ["verified"]:
             problems.append(f"存在材料里的引文必须 verified：{led['claims']}")

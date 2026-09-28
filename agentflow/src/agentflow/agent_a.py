@@ -646,7 +646,10 @@ def _selftest() -> int:
 
     class _FailDownloader:
         def download(self, url, dest_dir, hint):
-            return FetchResult(ok=False, path=None, http_status=500, bytes=0, sha256=None, error="selftest boom")
+            # `kind` 是 `FetchResult` 的受控失败档（`F-6`）：失败的下载必须
+            # 说得出"为什么"是受控词表里的一档，否则失败原因无法按轴统计。
+            return FetchResult(ok=False, kind="http_500", path=None, http_status=500,
+                               bytes=0, sha256=None, error="selftest boom")
 
     def _cand(**kw) -> SimpleNamespace:
         """鸭子类型的候选。刻意不 import `providers.Candidate`：这里要验证的是

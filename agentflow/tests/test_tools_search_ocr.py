@@ -66,6 +66,7 @@ def test_search_providers_marks_network_sources_unverified_when_offline(store, m
     """ABFLOW_SKIP_NETWORK=1 时网络源必须标成「未探测」（available=None），不是"可用"也不是"不可用"。"""
     monkeypatch.setenv("ABFLOW_SKIP_NETWORK", "1")
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, store=store, workspace=store.root)
 
     res = reg.call("search.providers")
@@ -87,6 +88,7 @@ def test_search_providers_marks_network_sources_unverified_when_offline(store, m
 def test_search_literature_rejects_precise_mode_without_description(store):
     """mode=precise 缺 description 时必须 fail（与 schema.SearchRequest 的约束一致）。"""
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, store=store, workspace=store.root)
     res = reg.call("search.literature", topic="群", mode="precise")
     assert res.ok is False
@@ -102,6 +104,7 @@ def test_search_literature_flags_new_and_existing_candidates(store):
 
     stub = _StubProvider([_cand("Duplicate paper", doi="10.1000/dup"), _cand("Brand new paper", doi="10.1000/new")])
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, store=store, providers=[stub], workspace=store.root)
 
     res = reg.call("search.literature", topic="群", mode="topical", limit=5, provider="stub")
@@ -120,6 +123,7 @@ def test_search_literature_without_store_reports_unknown_instead_of_new(store):
     """没有 store 时，判重结论必须是 None（未知）—— 把"没查"写成"新的"会让 A 重复登记。"""
     stub = _StubProvider([_cand("Some paper", doi="10.1000/x")])
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, providers=[stub], workspace=store.root)
 
     data = reg.call("search.literature", topic="群", mode="topical", provider="stub").data
@@ -133,6 +137,7 @@ def test_search_literature_without_store_reports_unknown_instead_of_new(store):
 def test_search_literature_empty_result_is_a_conclusion_not_a_failure(store):
     """检索正常执行但零命中是有效结论（ok + 空列表 + 说明），不是故障。"""
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, store=store, providers=[_StubProvider([])], workspace=store.root)
     res = reg.call("search.literature", topic="没人写过的东西", mode="topical", provider="stub")
     assert res.ok is True
@@ -143,6 +148,7 @@ def test_search_literature_empty_result_is_a_conclusion_not_a_failure(store):
 def test_search_dedup_check_requires_store(store):
     """search.dedup_check 没有 store 时必须 fail（返回"看起来新的"就是假阴性）。"""
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, workspace=store.root)
     res = reg.call("search.dedup_check", title="任意标题", year=2020)
     assert res.ok is False
@@ -156,6 +162,7 @@ def test_search_dedup_check_matches_existing_doi(store):
 
     add_literature(store, "0000", title="On abelian groups", doi="10.1000/dup", year=1930, dedup_key="doi:10.1000/dup")
     reg = ToolRegistry(name="search")
+    reg.bound_role = "A"  # P-14：search.* 只有 A
     search_tools.register(reg, store=store, workspace=store.root)
 
     hit = reg.call("search.dedup_check", title="Completely different title", doi="10.1000/dup").data
@@ -176,6 +183,7 @@ def test_ocr_backends_probe_is_injectable_and_reported_truthfully(store, tmp_pat
     """ocr.backends 必须如实报告探测结论：可用 / 不可用 + 逐条理由。"""
     down = _StubBackend("stub-down", available=False, reason="桩：故意不可用")
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[down])
 
     res = reg.call("ocr.backends")
@@ -193,6 +201,7 @@ def test_ocr_run_fails_instead_of_faking_success_when_no_backend(store, tmp_path
     png = tmp_path / "page.png"
     _write_png(png)
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[_StubBackend("stub-down", available=False)])
 
     res = reg.call("ocr.run", path=str(png))
@@ -208,6 +217,7 @@ def test_ocr_run_marks_empty_backend_output_as_ran_but_empty(store, tmp_path):
     _write_png(png)
     stub = _StubBackend("stub-empty", "")
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[stub])
 
     res = reg.call("ocr.run", path=str(png))
@@ -233,6 +243,7 @@ def test_ocr_run_reports_max_pages_truncation(store, tmp_path):
     doc.close()
 
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[_StubBackend("stub-text", "STUB-TEXT")])
 
     res = reg.call("ocr.run", path=str(pdf), max_pages=1)
@@ -248,6 +259,7 @@ def test_ocr_run_reports_max_pages_truncation(store, tmp_path):
 def test_ocr_run_rejects_the_none_backend_via_schema(store, tmp_path):
     """`none` 不是 OCR 后端而是"明确的退路"，参数词表里就不该有它。"""
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[ocr_tools.NullBackend()])
     res = reg.call("ocr.run", path=str(tmp_path / "x.pdf"), backend="none")
     assert res.ok is False
@@ -259,6 +271,7 @@ def test_ocr_null_backend_is_never_selected_for_auto_and_produces_nothing(store,
     null = ocr_tools.NullBackend()
     assert isinstance(null, ocr_tools.OcrBackend)
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[null])
 
     data = reg.call("ocr.backends").data
@@ -275,6 +288,7 @@ def test_ocr_null_backend_is_never_selected_for_auto_and_produces_nothing(store,
 def test_ocr_detect_text_layer_fails_clearly_for_missing_file(store, tmp_path):
     """文本层探测：文件不存在时给出明确的 file_missing，而不是"没有文本层"。"""
     reg = ToolRegistry(name="ocr")
+    reg.bound_role = "B"  # P-14：ocr.* 只有 B
     ocr_tools.register(reg, store=store, workspace=tmp_path, backends=[_StubBackend("stub-text", "x")])
     res = reg.call("ocr.detect_text_layer", path=str(tmp_path / "nope.pdf"))
     assert res.ok is False

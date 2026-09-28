@@ -261,9 +261,45 @@ def test_misdeclared_page_is_flagged_in_stored_quote_check(store):
     assert rel["quote_verified"] is True
     assert rel["status"] == "active"
     assert res.quotes_verified == 1
+    # `E-11`：这一档必须单独可数，否则"页码不符"在聚合读数里看不见
+    # （它原先只活在下面那个 `_quote_check` 字典里，没有检查器消费它）。
+    assert res.quotes_out_of_declared_range == 1, res.to_dict()
     check = rel["_quote_check"]
     assert check["reason"] == "substring_match_outside_declared_range", "页码错误必须被显式记录"
     assert check["matched_page"] == 2
+
+
+def test_a_correct_page_does_not_count_as_out_of_declared_range(store):
+    """`E-11` 正控的反面：页码正确的引文计 `verified`，不计"页码不符"。
+
+    没有这一条，把判据写成"凡 verified 就 +1"也能让上面那条绿 ——
+    而那样这一档就又折回 `quotes_verified` 里了（正是 `E-11` 的现状）。
+    """
+    write_library_file(store, "0000/a.txt", "占位")
+    add_literature(store, "0000", title="A", path="0000/a.txt")
+    doc = DocumentText(text=QUOTE, pages=[QUOTE, "第二页。"], source_kind="pdf")
+    extractor = StubExtractor(
+        concepts=[
+            ConceptDraft(name="群", definition="d", aliases=[], source_lit_id="0000"),
+            ConceptDraft(name="阿贝尔群", definition="d", aliases=[], source_lit_id="0000"),
+        ],
+        relations=[
+            RelationDraft(
+                concept_names=["群", "阿贝尔群"],
+                description="d",
+                quote=QUOTE,
+                page_range=PageRange(1, 1, "p. 1"),   # 引文就在第 1 页
+            )
+        ],
+    )
+    res = _agent_b(store, extractor, extract=lambda _p: doc, quote_widen_pages=1).run_once()
+
+    rel = store.rows("relations")[0]
+    assert rel["_quote_check"]["reason"] == "substring_match"
+    assert res.quotes_verified == 1
+    assert res.quotes_out_of_declared_range == 0, (
+        "页码正确的引文被算进了'页码不符'那一档 ⇒ 这一档又失去意义了"
+    )
 
 
 def test_not_found_quote_forces_suspect_status(store):

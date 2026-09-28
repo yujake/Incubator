@@ -98,5 +98,9 @@ def test_rebuild_ignores_corrupt_events_without_dying(store):
         f.write("这不是 JSON\n")
 
     out = store.rebuild(backup=False)
-    assert out["skipped"] >= 0  # 坏行进不了 state；关键是没抛异常
+    # `I-5`（登记在 `draft/28`）：旧断言是 `out["skipped"] >= 0` —— 恒真
+    # （`skipped` 在 `rebuild` 里只增不减），于是"日志里有坏行"这件事
+    # 在被测判据里完全看不见，"没抛异常"就被读成"日志是好的"。
+    # 现在返回值里有 `corrupt_events`（坏行条数），本用例钉住它。
+    assert out["corrupt_events"] == 2, out  # 上面写进去的正是 2 行坏行
     assert len(store.rows("literature")) == 1, "好数据仍应重建出来"

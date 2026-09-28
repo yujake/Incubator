@@ -103,6 +103,163 @@ _H_FINDING_KIND_OF_CA_CODE: dict[str, str] = {
 }
 
 
+# ---- `P-9` 候选 A 的四键 + 「最小修法」：产出侧的唯一声明表（`X-96.3-1`）
+#
+# 背景（`draft/28` §96.3 第 1 条，`temp/FIXG4.md` §9.1）：`gates.gate_g10` 只对
+# `created_at >= schema.REVIEW_FINDING_FORMAT_SINCE`（2026-09-27）的发现要求四键齐，
+# 而今天的真实产出方就是本模块 —— 本模块一个都不产，于是 G10 对每一条今天写出的
+# 发现都只能报 `unknown`（"schema 里没有这四个字段"改判成"产出方还没补键"）。
+# 四个字段本身已在 `schema.ReviewFinding` 里（禁 AI 区，2026-09-27 所有者裁定候选 A），
+# 缺的只有产出侧，所以本文件的改动就是"补参 + 补 `scan_document` 的产出"。
+#
+# 两条纪律（写在 `schema.ReviewFinding` 的类 docstring 里，这里落地）：
+#   1. 这四键不进去重键 —— `_dedup_key` 仍是 `(kind, target, message)`，一字未动。
+#      把 `line`/`verbatim_quote` 塞进去会让稿件每改一个词就产生一批新发现，
+#      并打断"标了 fixed 但其实还在"的重开逻辑。
+#   2. 表里给出的取值全部非空。空值不是"更宽松"：G10 的六字段判据会把空值读成
+#      "缺这一格" ⇒ 整批发现被打回（`fail`），比原来那句 `unknown` 更坏 ——
+#      那等于把"产出方没给"报成"这一批不合格式"。
+#
+# 每条取值的判据（不是"看起来对"）：
+#
+# * `axis`（取值域 = `gates.AXES` = 数学/体例/工程/证据）—— 这条缺陷落在哪条轴上。
+#   判据是"它判的是外部依据还是稿件自己的表述"：判外部依据的
+#   （没有引用 / 引了拿不到的结论）走 `证据`（与 G2/G6/G7/G8 同轴）；判稿件自己
+#   怎么写、字段合不合规、哪里自相矛盾的走 `体例`（与 G3/G4/G9/G13 同轴）。
+# * `maths`（`yes`/`no`，取值域 = `schema.FINDING_MATHS_VALUES`）—— 同一把尺子的另
+#   一半：这条发现要读断言本身（断言内容 / 它的证据等级 / 里面的数字 / 否定分类）
+#   才能判 ⇒ `yes`；只判它的机械形态或登记簿（词表外的取值、未声明字段、
+#   依赖登没登记原因）⇒ `no`。
+# * `suggestion`（G10 六格里的"最小修法"，与历史键名 `minimal_fix` 同格）——
+#   逐 kind 一句最小动作：它要能被执行，不是"请注意质量"。
+_FOUR_GATE_KEYS_OF_KIND: dict[str, tuple[str, str, str]] = {
+    # kind                    axis    maths  最小修法(suggestion)
+    "unsupported_claim": ("证据", "yes",
+                          "给这条断言补上出处（`citations` 非空），或把它降为 remark"),
+    "overclaim": ("体例", "yes",
+                  "把证明性措辞改成它实际的证据等级；`cross_check` 另需补 `disclaimer`"),
+    "missing_negation_kind": ("体例", "yes",
+                              "补 `negation_kind`，或把 `is_negative` 与它改成同一轴"),
+    "inconsistent_number": ("体例", "yes",
+                            "同一个 `claim_id` 只留一段正文（重复的那条改号或合并）"),
+    "scope_drift": ("体例", "no",
+                    "把这个字段写进 `claimanatomy.CLAIM_FIELDS`，或从断言里删掉它"),
+    "garbled": ("体例", "no",
+                "把这一格改回受控词表/合法类型的取值（是哪一格见本发现的 `message`）"),
+    "dangling_dep": ("证据", "no",
+                     "给这条依赖补 `status_reason`，或把它登记为 `external_unavailable`"),
+}
+
+#: 表外的 kind 的兜底档。为什么要有兜底而不是留空：留空会被 G10 读成"缺这一格"，
+#: 于是"我们还没给这个 kind 登记最小修法"变成"这一批发现不合格式"。兜底档本身也
+#: 是一条可执行的指令（去读 `message`），只是不假装知道逐条的修法。
+#: 今天 `schema.FINDING_KINDS` 里没有走到这里的取值（`quote_mismatch` 是预留、
+#: 无产出路径），所以它是反真空而不是常态。
+_FOUR_GATE_KEYS_FALLBACK: tuple[str, str, str] = (
+    "体例", "no", "按本发现 `message` 指出的那一格改正（这个 kind 还没登记逐条最小修法）"
+)
+
+#: `line` 这一格为什么是第三态（`None` + 自证理由），而不是一个数字。
+#:
+#: `P-9` 的口径逐字是"行号只有在版本冻结（G11）之后才有意义"（`docs/PROPOSALS.md:239-240`）。
+#: 未冻结时记下的行号在改稿之后就是错的，而它看起来一样精确 —— `.noai-paths` 里
+#: "理由里刻意不写行号"是与它同一条纪律的另一面。`scan_document` 是纯函数，只拿到
+#: `documents` 那一行，没有任何行号来源；G11 的冻结结论也还没有接进 H 的产出方
+#: （`draft/28` §96.3 第 2 条：`GateContext` 里 `findings` 与 `observed_hash` 不相绑）。
+#: ⇒ 如实给 `None` + 这一句理由，而不是猜一个数字（猜出来的行号是一个发明出来的数字）。
+_LINE_UNAVAILABLE_REASON = (
+    "本次拿不到行号：审校是纯函数、只读 `documents` 那一行，没有行号来源；"
+    "且 `P-9` 的口径是「行号只有在版本冻结（G11）之后才有意义」，"
+    "而 G11 的冻结结论还没有接进本产出方（`draft/28` §96.3 第 2 条）"
+)
+
+
+def _verbatim_quote(seed: Any) -> str:
+    """把触发这条发现的正文截成 ≤20 词的逐字引文（`X-96.3-1`）。
+
+    两条口径都不在本文件另造：
+
+    * 词数口径 = `gates._quote_word_count`（中文按字、英文按空白切词）。
+      `schema.ReviewFinding.validate()` 读的也是它 —— 各写一份必然漂移，
+      而漂移的表现是"写入期说 20 词、门说 21 词"。惰性引用私有名与
+      `schema.py` 里那处 `from .gates import AXES, _quote_word_count` 同形。
+    * 上限 = `draft/17` §8.4 的"≤20 词逐字引文"。
+
+    截口用省略号标出：不重写、不概括 —— 引文一旦被改写就不再是"逐字"，
+    而 G10 要的正是"你看到的那句话长什么样"。
+    空种子返回空串（调用方保证非空；真为空说明这一行里连定位符都没有）。
+    """
+    text = " ".join(str(seed or "").split())
+    if not text:
+        return ""
+    if G._quote_word_count(text) <= 20:
+        return text
+    keep: list[str] = []
+    for ch in text:
+        if G._quote_word_count("".join(keep) + ch) > 19:
+            break
+        keep.append(ch)
+    return "".join(keep).rstrip() + "…"
+
+
+def _finding(
+    kind: str,
+    *,
+    level: str,
+    target: str,
+    evidence: str,
+    message: str,
+    quote: Any,
+    line: int | None = None,
+    line_reason: str = "",
+) -> dict:
+    """造一条 H 的发现：既有六格不变，另按声明表补齐 `P-9` 的四键 + 最小修法。
+
+    这个构造函数存在的唯一理由是只有一处补齐逻辑（FC-03）：四键写在十几个
+    `findings.append` 里，下一次改声明表就会漏掉其中几处，而漏掉的表现是
+    G10 对部分发现报 `unknown` —— 比全缺更难发现。
+
+    `quote` 是"这条发现指向的那段正文"（逐字取自本次输入；断言 → 它的正文，
+    依赖 → 它的标签，拿不到就退到 `target` 一类逐字存在的定位符）。
+
+    `line` / `line_reason`（`FINAL-R5-05`）：行号只有产出方拿得到带行号的正文时
+    才给得出；`scan_document` 的输入是结构化的 `claims`/`dependencies`，
+    正常没有正文，所以默认 `line=None` + 受控理由串。给了 `line` 时理由串留空。
+    """
+    axis, maths, suggestion = _FOUR_GATE_KEYS_OF_KIND.get(kind, _FOUR_GATE_KEYS_FALLBACK)
+    return {
+        "kind": kind,
+        "level": level,
+        "target": target,
+        "evidence": evidence,
+        "message": message,
+        # ---- `P-9` 候选 A 的四键 + "最小修法"那一格（`X-96.3-1`）
+        "axis": axis,
+        "line": line,
+        "line_unavailable_reason": "" if line is not None else (line_reason or _LINE_UNAVAILABLE_REASON),
+        "verbatim_quote": _verbatim_quote(quote),
+        "maths": maths,
+        "suggestion": suggestion,
+    }
+
+
+def _line_of(text: str, needle: str) -> int | None:
+    """在被审正文里找 `needle` 首次出现的 1 起行号；找不到（或没有正文）⇒ None。
+
+    为什么要有它（`FINAL-R5-05`）：G10 在版本冻结时把 `行号(line)` 判成必填，
+    而产出方此前结构上给不出行号 ⇒ 那一条判据在"先冻结再审校"的顺序下恒红。
+    有了正文就现算：`needle` 逐字来自这份正文（引文/标签/registry 号），
+    所以"找得到"这件事本身就是那个引文确实在正文里出现过的第二个证据。
+    """
+    body = text or ""
+    if not body or not needle:
+        return None
+    pos = body.find(needle)
+    if pos < 0:
+        return None
+    return body.count("\n", 0, pos) + 1
+
+
 # ---------------------------------------------------------------- 纯函数判据
 
 
@@ -152,13 +309,16 @@ def scan_document(
     for i, c in enumerate(claims):
         if not isinstance(c, Mapping):
             findings.append(
-                {
-                    "kind": "garbled",
-                    "level": "error",
-                    "target": f"claims[{i}]",
-                    "evidence": f"claims[{i}] 的类型是 {type(c).__name__}，不是对象",
-                    "message": "断言必须是对象",
-                }
+                _finding(
+                    "garbled",
+                    level="error",
+                    target=f"claims[{i}]",
+                    evidence=f"claims[{i}] 的类型是 {type(c).__name__}，不是对象",
+                    message="断言必须是对象",
+                    # 这一行连对象都不是 ⇒ 没有正文可引；引文退到这一行在稿件里的
+                    # 定位符（它是这一格里唯一逐字存在的东西），不编一句话出来
+                    quote=f"claims[{i}]",
+                )
             )
             continue
         cid = str(c.get("claim_id") or f"claims[{i}]")
@@ -169,13 +329,14 @@ def scan_document(
         # ---- 无引用
         if not cites:
             findings.append(
-                {
-                    "kind": "unsupported_claim",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": f"claim_id={cid} 的 citations={cites!r}（空）",
-                    "message": "断言没有引用：数学断言的价值取决于它来自哪里",
-                }
+                _finding(
+                    "unsupported_claim",
+                    level="error",
+                    target=cid,
+                    evidence=f"claim_id={cid} 的 citations={cites!r}（空）",
+                    message="断言没有引用：数学断言的价值取决于它来自哪里",
+                    quote=text or cid,
+                )
             )
         else:
             # 与 `doc_tools.scan_claim:205-214` 对齐：空元素/非字符串等于没有引用，
@@ -183,13 +344,14 @@ def scan_document(
             bad_cites = [x for x in cites if not isinstance(x, str) or not x.strip()]
             if bad_cites:
                 findings.append(
-                    {
-                        "kind": "garbled",
-                        "level": "error",
-                        "target": cid,
-                        "evidence": f"claim_id={cid} 的 citations={cites!r} 含空/非字符串元素：{bad_cites!r}",
-                        "message": "引用里有空元素：空引用等于没有引用",
-                    }
+                    _finding(
+                        "garbled",
+                        level="error",
+                        target=cid,
+                        evidence=f"claim_id={cid} 的 citations={cites!r} 含空/非字符串元素：{bad_cites!r}",
+                        message="引用里有空元素：空引用等于没有引用",
+                        quote=repr(cites),
+                    )
                 )
         # ---- 证据等级是否合法（与 `doc_tools.scan_claim:217-224` 对齐）
         #
@@ -198,36 +360,41 @@ def scan_document(
         # 于是一条把 evidence_kind 写成 "prooof" 的断言在 H 眼里是干净的。
         if ek not in S.EVIDENCE_KINDS:
             findings.append(
-                {
-                    "kind": "garbled",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": f"claim_id={cid} 的 evidence_kind={ek!r} 不在 {S.EVIDENCE_KINDS} 里",
-                    "message": f"证据等级必须是 {S.EVIDENCE_KINDS} 之一",
-                }
+                _finding(
+                    "garbled",
+                    level="error",
+                    target=cid,
+                    evidence=f"claim_id={cid} 的 evidence_kind={ek!r} 不在 {S.EVIDENCE_KINDS} 里",
+                    message=f"证据等级必须是 {S.EVIDENCE_KINDS} 之一",
+                    quote=repr(ek),
+                )
             )
         # ---- 过度声称
         if ek == "cross_check" and not str(c.get("disclaimer") or "").strip():
             findings.append(
-                {
-                    "kind": "overclaim",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": f"evidence_kind={ek!r} 且 disclaimer 为空",
-                    "message": "数值交叉验证必须显式声明'不构成证明'",
-                }
+                _finding(
+                    "overclaim",
+                    level="error",
+                    target=cid,
+                    evidence=f"evidence_kind={ek!r} 且 disclaimer 为空",
+                    message="数值交叉验证必须显式声明'不构成证明'",
+                    quote=text or cid,
+                )
             )
         if ek in S.EVIDENCE_KINDS and ek != "proof":
             hit = [m for m in OVERCLAIM_MARKERS if m in text]
             if hit:
                 findings.append(
-                    {
-                        "kind": "overclaim",
-                        "level": "error",
-                        "target": cid,
-                        "evidence": f"evidence_kind={ek!r} 但正文含 {'、'.join(hit)}；正文摘要：{text[:80]!r}",
-                        "message": "把交叉验证写成了证明",
-                    }
+                    _finding(
+                        "overclaim",
+                        level="error",
+                        target=cid,
+                        evidence=f"evidence_kind={ek!r} 但正文含 {'、'.join(hit)}；正文摘要：{text[:80]!r}",
+                        message="把交叉验证写成了证明",
+                        # 触发的就是这几个词，它们逐字在正文里 ⇒ 引文直接用它们
+                        # （与 `test_p910_p9_review_finding_format` 的正控夹具同形）
+                        quote="、".join(hit),
+                    )
                 )
         # ---- 否定分类
         #
@@ -236,16 +403,17 @@ def scan_document(
         # 才可能被判据对照用例双向核对（`test_scan_document_checks_match_scan_claim_both_ways`）。
         if c.get("is_negative") is True and not c.get("negation_kind"):
             findings.append(
-                {
-                    "kind": "missing_negation_kind",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": (
+                _finding(
+                    "missing_negation_kind",
+                    level="error",
+                    target=cid,
+                    evidence=(
                         f"is_negative=True 且 negation_kind={c.get('negation_kind')!r}"
                         "（字段 `negation_kind` 缺失/为空）"
                     ),
-                    "message": "'未证明'与'已证否'必须分开",
-                }
+                    message="'未证明'与'已证否'必须分开",
+                    quote=text or cid,
+                )
             )
         # ---- 与 G 侧判据对齐的两条
         #
@@ -258,40 +426,43 @@ def scan_document(
         # 那不是"提醒一下"就能放过的。
         if c.get("is_negative") is not True and c.get("negation_kind") is not None:
             findings.append(
-                {
-                    "kind": "garbled",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": (
+                _finding(
+                    "garbled",
+                    level="error",
+                    target=cid,
+                    evidence=(
                         f"is_negative={c.get('is_negative')!r}（不是否定型）"
                         f"却带了 negation_kind={c.get('negation_kind')!r}"
                     ),
-                    "message": "非否定型断言带了否定分类：两轴矛盾，否定计数必然虚高",
-                }
+                    message="非否定型断言带了否定分类：两轴矛盾，否定计数必然虚高",
+                    quote=repr(c.get("negation_kind")),
+                )
             )
         if c.get("negation_kind") is not None and c.get("negation_kind") not in S.NEGATION_KINDS:
             findings.append(
-                {
-                    "kind": "missing_negation_kind",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": (
+                _finding(
+                    "missing_negation_kind",
+                    level="error",
+                    target=cid,
+                    evidence=(
                         f"claim_id={cid} 的 negation_kind={c.get('negation_kind')!r} "
                         f"不在 {S.NEGATION_KINDS} 里"
                     ),
-                    "message": f"否定分类必须是 {S.NEGATION_KINDS} 之一",
-                }
+                    message=f"否定分类必须是 {S.NEGATION_KINDS} 之一",
+                    quote=repr(c.get("negation_kind")),
+                )
             )
         # ---- 重复 claim_id 且文本不同（可判定的"自相矛盾"）
         if cid in seen_ids and seen_ids[cid] != text:
             findings.append(
-                {
-                    "kind": "inconsistent_number",
-                    "level": "error",
-                    "target": cid,
-                    "evidence": f"同一 claim_id={cid} 出现两次且 text 不同：{seen_ids[cid][:60]!r} vs {text[:60]!r}",
-                    "message": "同一断言标识对应两段不同文字",
-                }
+                _finding(
+                    "inconsistent_number",
+                    level="error",
+                    target=cid,
+                    evidence=f"同一 claim_id={cid} 出现两次且 text 不同：{seen_ids[cid][:60]!r} vs {text[:60]!r}",
+                    message="同一断言标识对应两段不同文字",
+                    quote=text or cid,
+                )
             )
         seen_ids[cid] = text
 
@@ -323,13 +494,14 @@ def scan_document(
                 # 单独表达，并由 `gates` 的门（G9/G10）如实登记"判不了"。
                 continue
             findings.append(
-                {
-                    "kind": _H_FINDING_KIND_OF_CA_CODE.get(issue.code, "garbled"),
-                    "level": issue.level,
-                    "target": issue.claim_id if issue.claim_id not in ("", "?") else fallback_cid,
-                    "evidence": f"字段 `{issue.field_name}`：{issue.evidence}",
-                    "message": f"{issue.message}（判据出处：claimanatomy，code={issue.code}）",
-                }
+                _finding(
+                    _H_FINDING_KIND_OF_CA_CODE.get(issue.code, "garbled"),
+                    level=issue.level,
+                    target=issue.claim_id if issue.claim_id not in ("", "?") else fallback_cid,
+                    evidence=f"字段 `{issue.field_name}`：{issue.evidence}",
+                    message=f"{issue.message}（判据出处：claimanatomy，code={issue.code}）",
+                    quote=str(c.get("text") or "") or fallback_cid,
+                )
             )
 
     # ---- 依赖闭合（FC-23）
@@ -356,21 +528,32 @@ def scan_document(
             # 而 `dangling` 是"登记了一个依赖却既没闭合、也没说明为什么拿不到" —— 那是
             # 没交代，属于 error。把两者都报成 error 会把红灯训练成噪音。
             lvl = "warning" if d["status"] == "external_unavailable" else "error"
+            # `FINAL-R5-09`：`label` 与 `dep_id` 都为空的依赖不能再走 `dangling_dep` ——
+            # 那时引文只能是空串，而 G10 把空 `verbatim_quote` 读成"缺 ≤20 词逐字引文"
+            # 并把整批发现打回（fail）；这条依赖真正的问题是"对象本身不合法
+            # （既没有标签也没有登记号）"，所以换一种发现 `garbled`，引文退到占位串
+            # （它逐字就是被审那一行里的那个空字段）。
+            has_anchor = bool(d["label"] or d["dep_id"])
             findings.append(
-                {
-                    "kind": "dangling_dep",
-                    "level": lvl,
-                    "target": d["dep_id"],
-                    "evidence": (
+                _finding(
+                    "dangling_dep" if has_anchor else "garbled",
+                    level=lvl,
+                    target=d["dep_id"] or d["label"] or "(空)",
+                    evidence=(
                         f"dep_id={d['dep_id']} status={d['status']!r} label={d['label']!r}；"
                         f"status_reason={d['status_reason'][:120]!r}"
                     ),
-                    "message": (
-                        "引用了外部结论但本项目拿不到来源（已知边界，需人确认前提）"
+                    message=(
+                        "依赖项既没有 label 也没有 dep_id ⇒ 这条对象本身不合法"
+                        if not has_anchor
+                        else "引用了外部结论但本项目拿不到来源（已知边界，需人确认前提）"
                         if d["status"] == "external_unavailable"
                         else "依赖悬空且没有说明原因"
                     ),
-                }
+                    # 引文取这条依赖在被审那一行里逐字存在的东西：标签优先（"引的是什么"），
+                    # 退到 `dep_id`（登记号本身也是逐字的），再退到上面那个占位串。
+                    quote=d["label"] or d["dep_id"] or "(空：既无 label 也无 dep_id)",
+                )
             )
         dep_check = {"checked": True, "reason": f"检查了 {len(list(dependencies))} 条依赖", "open": open_deps}
 
@@ -400,6 +583,22 @@ def scan_document(
     else:
         verdict = "accepted"
 
+    # `FINAL-R5-05`：有正文就把行号补上（G10 在版本冻结时把 `行号` 判成必填，
+    # 而此前产出方在任何情形下都只给 `line=None` + 理由串 ⇒ 那条判据在
+    # "先冻结再审校"的顺序下恒红）。逐条按引文在正文里定位：
+    # 引文逐字来自这份正文，所以"找得到"本身就是它确实出现过的第二个证据。
+    # 找不到（或调用方没给正文）⇒ 保持 `line=None` + 受控理由串，判据照旧判它。
+    doc_text = str(doc.get("text") or doc.get("body") or doc.get("markdown") or "")
+    lines_located = 0
+    if doc_text:
+        for f in findings:
+            if f.get("line") is None:
+                located = _line_of(doc_text, str(f.get("verbatim_quote") or ""))
+                if located is not None:
+                    f["line"] = located
+                    f["line_unavailable_reason"] = ""
+                    lines_located += 1
+
     reason = (
         f"机械检查 error={len(errors)}、warning={len(warnings)}、info={len(findings) - len(errors) - len(warnings)}；"
         + (
@@ -407,6 +606,7 @@ def scan_document(
             if dep_checked
             else f"依赖闭合**没查**（{dep_check.get('reason')}）⇒ 不能判 accepted"
         )
+        + (f"；行号：按正文定位到 {lines_located} 条" if doc_text else "；行号：本次没有正文可定位")
     )
     return {
         "checked": True,
@@ -587,6 +787,16 @@ def review_document(
                     message=str(f["message"]),
                     round=round_no,
                     suggestion=str(f.get("suggestion") or ""),
+                    # ---- `P-9` 候选 A 的四键（`X-96.3-1`）----
+                    # `scan_document` 已经把取值按声明表补齐，这里原样落库，不在这里
+                    # 重算（重算就会出现两份判据）。`line` 走第三态：`None` + 自证理由
+                    # （理由由 `_LINE_UNAVAILABLE_REASON` 给，见那里的口径）。
+                    # 这四键不进去重键（`_dedup_key` 仍是 `(kind, target, message)`）。
+                    axis=str(f.get("axis") or ""),
+                    line=f.get("line"),
+                    line_unavailable_reason=str(f.get("line_unavailable_reason") or ""),
+                    verbatim_quote=str(f.get("verbatim_quote") or ""),
+                    maths=str(f.get("maths") or ""),
                     status="open",
                     resolution_note="",
                     created_at=S.now_iso(),

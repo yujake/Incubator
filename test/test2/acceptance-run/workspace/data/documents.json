@@ -12,7 +12,7 @@
           "claim_id": "claim-9405a4f2",
           "section": "1. 复现对象",
           "text": "论文的 Definition 1.1 把 K(m) 定义为 V_K 上、x 与 x±e_i 相邻的图。",
-          "evidence_kind": "proof",
+          "evidence_kind": "cross_check",
           "citations": [
             "rel:0000",
             "rel:0014",
@@ -20,7 +20,7 @@
           ],
           "is_negative": false,
           "negation_kind": null,
-          "disclaimer": "",
+          "disclaimer": "数值交叉验证，不构成证明",
           "scope_caveat": "",
           "revision_hash": ""
         },
@@ -28,7 +28,7 @@
           "claim_id": "claim-627b083f",
           "section": "1. 复现对象",
           "text": "论文的 Definition 1.2 把 S̃_m 定义为仿射 Weyl 群关于 {s_0,…,s_{m−1}} 的 Cayley 图。",
-          "evidence_kind": "proof",
+          "evidence_kind": "cross_check",
           "citations": [
             "rel:0001",
             "rel:0004",
@@ -37,7 +37,7 @@
           ],
           "is_negative": false,
           "negation_kind": null,
-          "disclaimer": "",
+          "disclaimer": "数值交叉验证，不构成证明",
           "scope_caveat": "",
           "revision_hash": ""
         },
@@ -161,8 +161,8 @@
       ],
       "status": "accepted",
       "review_rounds": 0,
-      "created_at": "2026-09-25T22:50:38+08:00",
-      "updated_at": "2026-09-25T22:50:38+08:00",
+      "created_at": "2026-09-28T21:16:02+08:00",
+      "updated_at": "2026-09-28T21:16:02+08:00",
       "created_by": "agent-G"
     }
   ]

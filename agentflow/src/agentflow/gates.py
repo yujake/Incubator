@@ -17,8 +17,8 @@
 ```text
 pass            查过了，没有该门判据下的问题
 fail            查过了，有该门判据下的问题
-unknown         **没查成**（缺输入 / 依赖读不到 / 本轮没跑过）
-not_applicable  **这道门在本项目的数据模型上没有可判定的对象**（附理由）
+unknown         没查成（缺输入 / 依赖读不到 / 本轮没跑过）
+not_applicable  这道门在本项目的数据模型上没有可判定的对象（附理由）
 ```
 
 参考体例的教训逐字是（`draft/17-…md:675-676`）：
@@ -62,6 +62,8 @@ from pathlib import Path
 from typing import Any
 
 from . import claimanatomy as CA
+from . import schema as S
+from .tools import doc_tools
 
 __all__ = [
     "GATES",
@@ -84,9 +86,13 @@ __all__ = [
 
 # ---------------------------------------------------------------- 受控词表
 
-#: 三道轴（`STYLE/RUBRIC.md:30-33` 的口径，见 §8.4 G10 行）。
+#: 轴见 `AXES`（`STYLE/RUBRIC.md:30-33` 的口径，见 §8.4 G10 行）。
 #: 「每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法 + maths: yes/no」——
 #: 所以"轴"是一个受控词，不是自由文本。
+#:
+#: 词表里有几个轴以元组本身为准（今天 4 个：数学 / 体例 / 工程 / 证据）：
+#: 这里原先写的是"三道轴"，与元组不一致 —— 一个写着旧数字的注释会把人指向
+#: 另一套口径，而没有任何判据会发现它（`temp/DRIFT-LIST.md` §2.2 登记过这一处）。
 AXES = ("数学", "体例", "工程", "证据")
 
 #: 门判不了轴时的占位（不是一个轴）。刻意与 `AXES` 分开：
@@ -271,6 +277,27 @@ class GateContext:
     literals: Mapping[str, Any] | None = None
     #: 上一轮审校时钉住的 hash（G11：比对"审校期间文件有没有被改"）。
     observed_hash: str | None = None
+    #: 版本是否真的冻结（G11 通过 = `observed_hash` 与 :attr:`revision_hash` 逐字相等）。
+    #:
+    #: `findings` 与 `observed_hash` 的耦合（`X-96.3-2`，依据 `draft/28` §96.3 第 2 条）：
+    #: `line` 的判据是「G11 通过后必填」，而"G11 通过"这件事在跑 G10 的那一刻
+    #: 只能由本上下文回答 —— 门与门之间不互相传 `verdict`（:func:`run_all_gates`
+    #: 各跑各的），所以"冻没冻"必须在这里算一次、由两边共用同一份口径，
+    #: 不许 G10 另写一遍 `observed_hash == revision_hash`（FC-03）。
+    #:
+    #: 三态，与 :meth:`build` 的推导逐字对应：
+    #:   * `True`  = 冻结成立（G11 会 pass）⇒ `line` 这一格必填
+    #:     （给 `line_unavailable_reason` 不再是合规的第三态：版本已冻结，
+    #:     "行号拿不到"这句话与事实矛盾）；
+    #:   * `False` = 没冻（`observed_hash` 没给 / 与 :attr:`revision_hash` 不匹配）
+    #:     ⇒ `line` 这一格不判（G11 自己会判 `unknown` 或 `fail`）；
+    #:   * `None`  = 判不了（没给 `findings`，或稿件为空/算不出 hash）
+    #:     ⇒ 不据此判任何东西（三态纪律：判不了 ≠ 没冻）。
+    #:
+    #: 注意：这是 :meth:`build` 那一刻的快照（`build` 之后直接改
+    #: `ctx.observed_hash` 不会刷新它 —— 夹具与调用方都这么干过）。所以消费方
+    #: 不许读这一格：要用的是 :meth:`frozen_version`，它每次现算。
+    findings_version_pinned: bool | None = None
     #: 调用方显式声明的"我这一轮犯的错"（G15 的输入）。
     own_errors: Sequence[str] | None = None
     #: 被审对象的内容 hash（G11 的输出，建上下文时算一次）。
@@ -290,16 +317,29 @@ class GateContext:
 
         `dependencies=None` 与 `dependencies=[]` 的区别就是三态纪律本身：
         前者是"没查"，后者是"查了、一条依赖都没有"。
+
+        ---- `findings` 与 `observed_hash` 的接线（`X-96.3-2`）----
+
+        这里多算一格 :attr:`findings_version_pinned`：`findings` 给了、且
+        `observed_hash` 与刚算出的版本 hash 逐字相等 ⇒ 版本确实冻结，于是
+        `line` 那一格从"可给可不给"变成"必填"（`G10` 消费它）。
+        反过来 `findings` 没给 / hash 不匹配 / 算不出 hash ⇒ 这一格不适用
+        （`None` / `False`），`G10` 不据此判任何东西 —— 它与 G11 各报各的，
+        不折叠成一档（"没冻"与"判不了"必须分得开）。
         """
         deps: Sequence[Mapping[str, Any]] | None = dependencies
         checked = deps is not None
+        revision_hash = CA.revision_hash(doc) if isinstance(doc, Mapping) else ""
         ctx = cls(
             doc=doc,
             dependencies=deps,
             deps_checked=checked,
-            revision_hash=CA.revision_hash(doc) if isinstance(doc, Mapping) else "",
+            revision_hash=revision_hash,
             **kw,
         )
+        # 在上面那一次构造之后推导：`observed_hash` 可能来自 `**kw`，
+        # 在构造前读 `cls(...)` 的字段会漏掉调用方给的那一份。
+        ctx.findings_version_pinned = _derive_findings_version_pinned(ctx)
         return ctx
 
     # ---- 小工具（门共用，避免每道门自己写一遍而漂移）
@@ -324,6 +364,45 @@ class GateContext:
     def workspace(self) -> Path | None:
         """工作区根（用于判断"文件在不在"）。没有就返回 None ⇒ 门判 unknown。"""
         return Path(self.workspace_root) if self.workspace_root is not None else None
+
+    def frozen_version(self) -> bool | None:
+        """现算的"版本冻结了吗"（`X-96.3-2`）—— 消费方只许用这一个入口。
+
+        与 :attr:`findings_version_pinned`（`build()` 那一刻的快照）同一份判据
+        （:func:`_derive_findings_version_pinned`），区别只在何时算：
+        直接改过 `ctx.observed_hash` / `ctx.doc` 的调用方（夹具与 `gate_report`
+        的调用路径都这么干）不会刷新那份快照，而门是在跑的那一刻判案的
+        —— `gate_g10` 因此走这个入口，与 `gate_g11` 自己"每次现算
+        `observed_hash == revision_hash`"的做法逐字对齐。
+        """
+        return _derive_findings_version_pinned(self)
+
+
+def _derive_findings_version_pinned(ctx: "GateContext") -> bool | None:
+    """`:attr:`GateContext.findings_version_pinned`` 的唯一推导处（`X-96.3-2`）。
+
+    模块级而不是方法：它被 :meth:`GateContext.build` 与
+    :meth:`GateContext.frozen_version` 两处调用，口径只此一份（FC-03）。
+    私有（名字带下划线）是因为消费方不该直接调它 —— 要用的是
+    :meth:`GateContext.frozen_version`。
+
+    判据逐字来自 `draft/28` §96.3 第 2 条："`line` 的『G11 通过后必填』没接线
+    （`GateContext` 里 `findings` 与 `observed_hash` 不相绑）"。
+    "G11 通过"在这里等价于 :func:`gate_g11` 自己那一句
+    `str(ctx.observed_hash) == ctx.revision_hash`（它 pass 的充要条件）——
+    刻意不在 G10 里重写一遍那个比较（FC-03：判据只有一份）。
+
+    三态（与 `findings_version_pinned` 的字段文档逐字对应）：
+
+    * `None`：`findings is None`（没有可判的对象）或 `revision_hash` 为空
+      （算不出被审版本的 hash ⇒ "冻没冻"这件事本身判不了）；
+    * `True`：给了 `findings`、算得出 hash、且 `observed_hash` 与之逐字相等
+      ⇒ 版本冻结成立 ⇒ `line` 必填；
+    * `False`：其余（`observed_hash` 没给、给了但不匹配）⇒ 没冻，`line` 不判。
+    """
+    if ctx.findings is None or not ctx.revision_hash:
+        return None
+    return bool(ctx.observed_hash) and str(ctx.observed_hash) == ctx.revision_hash
 
 
 # ---------------------------------------------------------------- 门实现
@@ -373,8 +452,23 @@ def _looks_like_path(text: str) -> bool:
     名字说的是"像路径"，不是"在工作区内"：判定内外是 G1 自己的事
     （见 :func:`_resolve_against_root`）。把两件事混在一个谓词里，
     正是 G-6 那个缺陷的形状 —— 候选筛选通过了，内外判定却把盘符切掉了。
+
+    ## `D-7` 第 (1) 步：先切尾部 `:行号`，再判形态
+
+    本函数此前直接拿原串判形态，于是框架自己规定的证明位置形态恰好
+    落在候选之外：`claimanatomy.py` 把 `proof_location` 的形态定成
+    "`file:line` 或 `claim_id`"，而 `"PROOF-DOES-NOT-EXIST.lean:1"` 的尾部是
+    `:1` 而不是 `.lean` ⇒ 形态正则（要求 `.ext` 结尾）不命中，串上也没有
+    `[/\\]` ⇒ 这个候选被静默丢掉。后果是 G1 数出"检查的路径数 = 0"、
+    报 `pass` —— 一道"一条都没看见"的门用零发现伪装成通过（`D-7` 的实测）。
+
+    切法复用 :func:`_strip_line_suffix`（同一处切法；本仓库已经有过
+    "两处 `file:line` 切法不一致"的教训，不许再出现第三套）。
+    切完再判形态，于是 `code/p1.py:12` 与 `PROOF-…​.lean:1` 走同一条路，
+    而 `claim-1:3`（claim_id + 行号，G3 允许的自指形态）切完是 `claim-1`
+    ⇒ 被下面那条 `claim` 形态排除，仍然不会被当成路径。
     """
-    t = text.strip()
+    t = _strip_line_suffix(text.strip())
     if not t or " " in t and "." not in t:
         return False
     if re.match(r"^claim[-_\w]*$", t):
@@ -400,6 +494,13 @@ _ABS_PATH_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/])")
 
 #: `file:line` 的尾部行号（只在最后一个 `:` 后面真的是数字时才切）。
 _LINE_SUFFIX_RE = re.compile(r":(\d+)$")
+
+#: 通配符形态（`*` / `?` / `[`）。带它的候选不判存在性：
+#: `Path("*").exists()` 恒为 `False`，拿它去判会把一条合法的通配引用
+#: 误判成"材料不存在"（假阳性）。通配符的解析归 G2 —— 它的判据逐字写着
+#: "每个『材料/路径』引用可解析（含通配符）"，本门不抢那件事，
+#: 只把它数出来（`counts["未展开的通配符"]`），不许静默放行。
+_GLOB_TEXT_RE = re.compile(r"[*?\[]")
 
 
 def _strip_line_suffix(raw: str) -> str:
@@ -471,6 +572,43 @@ def gate_g1(ctx: GateContext) -> GateResult:
     与 `dependencies[*]` 的自由文本标签。我们没有"包"这个概念，
     这里把"包内"读成"工作区内"。
 
+    ## `D-7`：criterion 的第二句以前没有实现
+
+    这道门的 `criterion` 逐字是两句："正文不得引用工作区外的路径；
+    每个被引材料必须在工作区内存在"。第二句在 2026-09-27 之前的实现里
+    一个字都没有（AST 实测：`gate_g1` 的函数体里没有任何一处
+    对解析出来的目标调用 `Path.exists` —— 旧实现只做了一次 `relative_to`
+    判内外），于是"指向一个盘上不存在的材料"与"指向一个真实文件"
+    在 `counts` / `verdict` 上完全同形。
+
+    这三步（`D-7` 的修法）是配套的，缺一步这条门就还是空的：
+
+    1. 候选筛选先切尾部 `:行号` 再判形态（见 :func:`_looks_like_path`）
+       —— 不切的话 `PROOF-….lean:1` 这种框架自己规定的形态根本进不了候选；
+    2. 本函数里补存在性判据：工作区内、不含通配符的候选逐个判"盘上在不在"，
+       不在 ⇒ `error` 发现（阻断交付）；连这个都抛异常 ⇒ `unknown`
+       （"没查成"不许折成"通过"）；
+    3. `criterion` 文本与实现对齐 —— 这一条选的是"实现第二句"而不是
+       "改掉文本"，因为参考体例（`selfcontain_check.py`）的判据本来就是两句，
+       删掉第二句等于把这道门的范围改窄（那是口径变更，不是修缺陷）。
+
+    ## 自述读数纪律（`R2b-gates-1`）
+
+    这道门的 `counts` 与 `reason` 是它自己的读数，两者必须逐档对齐：`reason`
+    只在某一档计数非零时提它，并且带上那个数。反过来的两个坑各登记一条：
+
+    - `pass` 那一支不许在存在性没判全时说"都存在" —— 未展开的通配符的存废
+      本条不判（`Path.exists()` 对通配符恒为假），所以只要 `globbed > 0`，
+      `reason` 就必须说明有几条没判过存在性，以及真正判过的那几条的结论；
+    - "存在性没查成"（`exists()` 抛异常）在任何一支里都不许消失：单独出现时
+      它把 verdict 降为 `unknown`；与真发现同时出现时 verdict 是 `fail`
+      （更严的那一档优先），但 `reason` 必须显式写出这一档的条数 ——
+      否则这条旁路会被发现分支永久吃掉；
+    - 这一条是三支共同的：任一档非零就必须在 `reason` 里出现并带自己的数，
+      包括 `unknown` 支里的 `globbed`（`R2b7-gates-1`：那里原来只报
+      "存在性没查成"一档，而 `counts` 里通配符那档是非零的）。
+      `globbed == 0` 时那半句不出现，所以它是"非零才出现"，不是恒加一句。
+
     绝对路径必须按字符串形态识别，不能靠 `Path.is_absolute()`：
     这个判据要判的是"这段文字写的是一个绝对路径吗"，而 `Path.is_absolute()`
     是平台相关的 —— Linux 上 `C:/x/y.py` 不是绝对路径、Windows 上
@@ -498,7 +636,7 @@ def gate_g1(ctx: GateContext) -> GateResult:
         )
     candidates = [p for p in _iter_doc_files(ctx) if _looks_like_path(p)]
     findings: list[dict] = []
-    inside = outside = unresolvable = 0
+    inside = outside = unresolvable = missing = globbed = existence_undecidable = 0
     root_resolved = root.resolve()
     for raw in candidates:
         target, why = _resolve_against_root(raw, root)
@@ -531,27 +669,130 @@ def gate_g1(ctx: GateContext) -> GateResult:
                     "evidence": f"路径 {raw!r} 解析为 {target}，不在工作区 {root} 内",
                 }
             )
+            continue
+        # ---- `D-7` 第 (2) 步：criterion 的第二句此前在实现里不存在。
+        #
+        # 旧实现只判"在不在工作区内"（一次 `relative_to`），于是
+        # "指向一个盘上不存在的材料"与"指向一个真实文件"在 `counts` 与 `verdict`
+        # 上完全同形（都是 `工作区内=1`、都是 `pass`）—— 而这道门的 criterion
+        # 逐字写着两句，第二句是"每个被引材料必须在工作区内存在"。一条指向
+        # `PROOF-DOES-NOT-EXIST.lean:1` 的证明引用因此拿到
+        # `reason='0 条路径全部在工作区内'` 的"通过"（`D-7` 的原始读数）。
+        #
+        # 判据强度刻意停在 criterion 的字面口径（存在），不擅自升级成
+        # `is_file()`：写入期 `doc_tools.check_proofs` 用的是 `is_file()`，
+        # 那是另一条判据（`D-1`），混起来会造出第二份口径。
+        if _GLOB_TEXT_RE.search(raw):
+            globbed += 1
+            continue
+        try:
+            exists = target.exists()
+        except OSError:
+            # 连"存在与否"都问不出来 ⇒ 三态里的第三档，不许折进 pass 或 fail。
+            existence_undecidable += 1
+            continue
+        if not exists:
+            missing += 1
+            findings.append(
+                {
+                    "gate": gate_id,
+                    "axis": axis,
+                    "severity": "error",
+                    "target": raw,
+                    "message": "被引材料在**工作区内不存在** ⇒ 交付物不自含（criterion 第二句）",
+                    "evidence": (
+                        f"路径 {raw!r} 解析为 {target}，在工作区 {root} 内但盘上没有这个路径"
+                    ),
+                }
+            )
     counts = {
         "检查的路径数": len(candidates),
         "工作区内": inside,
+        "工作区内不存在": missing,
         "工作区外": outside,
         "内外无法判定": unresolvable,
+        "未展开的通配符": globbed,
+        "存在性无法判定": existence_undecidable,
     }
     proc = (
         f"从 claims[*].proof_location 与 dependencies[*] 的自由文本里抽出"
         f"{len(candidates)} 个像路径的字符串，逐个切掉尾部 `:行号`（只切数字）、"
-        f"按盘符/POSIX 根判绝对路径、resolve() 后 relative_to(workspace_root)（工作区 {root}）"
+        f"按盘符/POSIX 根判绝对路径、resolve() 后 relative_to(workspace_root)"
+        f"（工作区 {root}）；再对工作区内、不含通配符的候选逐个判存在性"
+        f"（`D-7` 补上的 criterion 第二句），存在性问不出来的记 `unknown`"
     )
+    # `reason` 的每一句都必须对应一个真的数出来的分类（`R2b-gates-1`）。
+    #
+    # 旧写法在 `findings` 非空时无条件写"有 {outside} 条引用指向工作区外的路径"：
+    # 一条"工作区内不存在"的发现因此被自述成一条区外引用（`outside` 记的是另一个
+    # 集合，那时它是 0），而"未展开的通配符"与"存在性无法判定"这两条旁路在
+    # `reason` 里一个字都不出现 —— 门自述的读数与它实际判过的东西不一致。
+    # 现在每一档只在它非零时出现，且各自带自己的数；反过来，`pass` 那一支
+    # 不许在存在性没判全的时候说"都存在"（通配符的存废本条不判）。
+    # 这条纪律对下面四支一律成立（`R2b7-gates-1` 就是 `unknown` 支漏了 `globbed`）。
+    if findings:
+        verdict = "fail"
+        parts: list[str] = []
+        if outside:
+            parts.append(f"有 {outside} 条引用指向工作区外的路径")
+        if missing:
+            parts.append(f"{missing} 条指向工作区内**不存在**的材料")
+        if unresolvable:
+            parts.append(f"{unresolvable} 条内外无法判定")
+        if existence_undecidable:
+            parts.append(
+                f"另有 {existence_undecidable} 条的存在性没查成（`exists()` 抛异常）"
+                "⇒ 这一档**没查成**，不许被上面的发现盖掉"
+            )
+        if globbed:
+            parts.append(f"另有 {globbed} 条是未展开的通配符（本条不判它们的存废）")
+        # 背景提名（`X-91.5-5 ②`）：上面每一句都是"有问题的那几档"，
+        # 于是 fail 支的读者看不到"其实还有若干条在工作区内"这个上下文 ——
+        # 一条 `工作区内不存在` 的发现会被读成"整篇都在引用区外材料"。
+        # `FINAL-R5-04`：这一句改前用的是 `inside`，而 `missing ⊆ inside`
+        # （"不存在"的路径当然也算在工作区内）⇒ 唯一一条候选就是缺材料时，
+        # 这一句会说"有 1 条在区内"，把同一批材料数了两遍。现在只数
+        # 判过存在性且真的在盘上的那些（= `inside - missing`，通配符另计）。
+        # 放在末句（不是首句）：反过来的两个口径坑都要避开 ——
+        # ① `pass` 支的"N 条路径都在工作区内"是结论，fail 支这句只是背景，
+        #    换一个说法才不会让读者以为这一支也在说"都在"；
+        # ② 与 `missing` 那句"…条指向工作区内不存在…的材料"不共用字面
+        #    （同族：`R2b7-gates-1` 的"同一个计数键在两支里换一个说法"）。
+        present = max(0, inside - missing - globbed)
+        parts.append(f"背景：其余 {present} 条在工作区内且都在盘上")
+        reason = "，".join(parts) + " ⇒ **阻断交付**"
+    elif existence_undecidable:
+        verdict = "unknown"
+        # 这一支同样逐档自述：`existence_undecidable` 与 `globbed` 可以同时非零，
+        # 而"没查成"这一档的存在不代表通配符那一档可以被省掉（`R2b7-gates-1`：
+        # 形态是报告不实，不是假通过 —— 这一支的 verdict 反而比 pass 更严）。
+        # 档名用与 fail 支同一处字面（"存在性没查成"），并保留旧读法
+        # （"存在性问不出来"）：同一个计数键在两支里换一个说法，就是让读者
+        # 拿两句不同的话去对同一个数。
+        parts = [
+            f"{inside} 条路径都在工作区内，但有 {existence_undecidable} 条的**存在性没查成**"
+            f"（`exists()` 抛异常 ⇒ 存在性问不出来）"
+        ]
+        if globbed:
+            parts.append(f"另有 {globbed} 条是未展开的通配符（本条不判它们的存废）")
+        reason = "，".join(parts) + " ⇒ 记 `unknown`，**不记 pass**（没查成 ≠ 通过）"
+    elif globbed:
+        # 通配符不是一条"材料"：`Path.exists()` 对它恒为假，所以它的存废本条不判
+        # （那是 G6 那一类"通配符匹配不到东西"的判据的地盘）。这一支仍然是
+        # `pass`，但自述读数必须把"有几条没判过存在性"如实写出来。
+        verdict = "pass"
+        reason = (
+            f"{inside} 条路径都在工作区内；其中 {globbed} 条是未展开的通配符，"
+            f"本条不判它们的存废（`Path.exists()` 对通配符恒为假）；"
+            f"真正判过存在性的 {inside - globbed} 条都在盘上"
+        )
+    else:
+        verdict = "pass"
+        reason = f"{inside} 条路径全部在工作区内且都存在"
     return GateResult(
         gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
-        verdict="fail" if findings else "pass",
-        reason=(
-            f"有 {outside} 条引用指向工作区外的路径"
-            + (f"，另有 {unresolvable} 条内外无法判定" if unresolvable else "")
-            + " ⇒ **阻断交付**"
-            if findings
-            else f"{inside} 条路径全部在工作区内"
-        ),
+        verdict=verdict,
+        reason=reason,
         findings=tuple(findings),
         self_attestation=_attest_text(attest(proc, counts, evidence_used=("documents.claims", "dependencies", "workspace_root"))),
         counts=counts,
@@ -670,8 +911,22 @@ def gate_g3(ctx: GateContext) -> GateResult:
     "窗口取最近锚点、不跨句号"是散文文本里的引用消解规则；
     我们的稿件的引用是结构化字段（`citations` / `proof_location`），
     不存在"锚点窗口"这个对象。所以这里判的是结构可解性：
-    每条 `proof_location` 要么是能被解析的 `file:line`，
-    要么是本文档内真实存在的 `claim_id`（"允许自指"）。
+    每条 `proof_location` 要么是本文档的 `claim_id`（裸写或带行号，即"允许自指"），
+    要么是一个可解析的 `file:line` 形态。
+
+    注意：分类只有一份实现（`R2R2-R1`）：形态判定调
+    `tools.doc_tools.classify_proof_location`，与写入期的 `check_proofs` 同一个函数。
+    经实测，两处曾经各写一套正则，同一份数据 18 档里有 9 档给出不同分类
+    （最难看的一档：断言自己没有 `claim_id` 时 `claim-1:3` 被本门当成 `file:line` 而 pass）。
+    现在：
+    - `self_ref` ⇒ pass（自指）；
+    - `cross_ref` ⇒ error（形态是交叉引用但那个 id 不在本文档里。事后门分不清
+      "忘了登记"与"根本不存在"，所以 fail-closed）；
+    - `file` ⇒ pass（只判形态可解析、不读盘；存在性由写入期与 `verify` 侧负责）。
+      注意：这一层比 `check_proofs` 弱，是刻意的：本门是事后门，历史行没有写入期判据兜。
+
+    第三行那句"要么是本文档的 `claim_id`，要么是可解析的 `file:line`"因此是准确的；
+    不要把它读成"本门会去查文件在不在"。
 
     `criterion_revision` 的唯一来源是 `GATE_CRITERIA_REVISION[gate_id]`
     （声明表）；上面那段适配说明只是"为什么要适配"的论证，不构成第二份声明（FC-03）。
@@ -686,6 +941,7 @@ def gate_g3(ctx: GateContext) -> GateResult:
     findings: list[dict] = []
     declared = 0
     by_id = 0
+    by_name = 0
     by_loc = 0
     for c in claims:
         cid = str(c.get("claim_id") or "?")
@@ -693,10 +949,16 @@ def gate_g3(ctx: GateContext) -> GateResult:
         if not loc:
             continue
         declared += 1
-        if loc in known_ids:
+        # `R2R2-R2`：分类与实际一致，且三格分开计 —— 旧版把 `claim-1:12`
+        # （乃至断言自己没有 claim_id 时的 `claim-1:3`）算进 `指向 file:line`，
+        # 那是门在自述读数上撒谎（计数说有一堆 `file:line`，其实一条都没有）。
+        kind, base = doc_tools.classify_proof_location(loc, known_ids)
+        if kind == "self_ref":
             by_id += 1
+            if base == loc:
+                by_name += 1
             continue
-        if re.match(r"^[^:\s]+:\d+(-\d+)?$", loc) or re.match(r"^[\w./\\-]+\.[A-Za-z0-9]{1,6}(:\d+)?$", loc):
+        if kind == "file":
             by_loc += 1
             continue
         findings.append(
@@ -705,19 +967,28 @@ def gate_g3(ctx: GateContext) -> GateResult:
                 "axis": axis,
                 "severity": "error",
                 "target": cid,
-                "message": "`proof_location` 既不是本文档内的 claim_id，也不是可解析的 file:line",
-                "evidence": f"claim_id={cid} proof_location={loc!r}；本文档已知 claim_id 数={len(known_ids)}",
+                "message": (
+                    "`proof_location` 既不是本文档内真实存在的 `claim_id`，"
+                    "也不是可解析的 `file:line` 形态"
+                ),
+                "evidence": (
+                    f"claim_id={cid} proof_location={loc!r}；"
+                    f"本文档已知 claim_id 数={len(known_ids)}；"
+                    f"分类为 `cross_ref`（去掉行号后是 {base!r}，不在已知集合里）"
+                ),
             }
         )
     counts = {
         "声明了 proof_location 的断言": declared,
         "指向本文档内 claim_id": by_id,
-        "指向 file:line": by_loc,
+        "其中裸写 claim_id": by_name,
+        "指向 file:line 形态": by_loc,
         "两者都不是": len(findings),
     }
     proc = (
         f"从 {len(claims)} 条断言里取出 {declared} 个 proof_location，"
-        f"逐个比对本文档的 {len(known_ids)} 个 claim_id 与 file:line 形态"
+        f"逐个与本文档的 {len(known_ids)} 个 claim_id 比对形态"
+        "（分类函数与写入期 `doc_tools.classify_proof_location` 同一份）"
     )
     return GateResult(
         gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
@@ -1242,31 +1513,153 @@ def _quote_word_count(text: str) -> int:
     return cjk + latin
 
 
+#: G10 六格里"最小修法"那一格的键名（`P-9` 候选 A 的对齐动作，2026-09-27 所有者裁定）。
+#:
+#: `schema.ReviewFinding` 里这一格叫 `suggestion`，而 `P-9` 正文与旧夹具写的是
+#: `minimal_fix`。它们是同一个格子的两个键名，判据只有这一处实现（FC-03）：
+#: 取值时正名优先、历史键名兜底；两个名字都不写才算缺这一格。
+#: 只在一边改名的后果是实测过的：G10 会因为读不到键而把每一条发现都打成"不合格式"。
+_MINIMAL_FIX_KEYS = ("suggestion", "minimal_fix")
+
+
+def _minimal_fix_of(f: Mapping[str, Any]) -> str:
+    """取"最小修法"那一格（正名 `suggestion` 优先，历史键名 `minimal_fix` 兜底）。"""
+    for key in _MINIMAL_FIX_KEYS:
+        value = f.get(key)
+        if str(value or "").strip():
+            return str(value)
+    return ""
+
+
+#: `created_at` 的日期形态（`YYYY-MM-DD` 前缀）。判据见 `_finding_format_in_scope`。
+_CREATED_AT_DATE_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+
+def _finding_format_in_scope(f: Mapping[str, Any]) -> bool:
+    """这条发现是否落在审校格式契约（`P-9` 候选 A）的作用面内。
+
+    契约只对 `created_at >= schema.REVIEW_FINDING_FORMAT_SINCE` 的发现要求
+    `line` / `verbatim_quote` / `suggestion` / `maths` 四键齐；更早的行是契约生效前
+    落盘的历史行，按 `created_at` 豁免（不许回填 —— `line` 只能从 `target` 猜出来，
+    猜出来的行号是一个发明出来的数字；理由见 `schema.REVIEW_FINDING_FORMAT_SINCE`）。
+
+    `created_at` 缺失、为空、或不是 `YYYY-MM-DD` 形态，都不豁免：拿不到合法创建
+    时刻就不能主张豁免，否则"把 created_at 删掉或截断"就成了绕过这道门的万能钥匙
+    （三态纪律：未知不是通过）。判据是"日期形态命中后取前 10 个字符比较"，
+    而不是纯字典序比较 —— 常量的真前缀（`'2026-09-2'` / `'2026-09-'` /
+    `'2026-0'` / `'2'` 这四个截断串）字典序比常量小，纯比较会把它们读成
+    "契约生效前的历史行"而豁免掉，比空串还宽松（第 10 轮独立重审 `R2b-AN-2` 实测）。
+    """
+    created = str(f.get("created_at") or "").strip()
+    if not _CREATED_AT_DATE_PREFIX_RE.match(created):
+        return True
+    return created[:10] >= S.REVIEW_FINDING_FORMAT_SINCE
+
+
+def _has_the_four_gate_keys(f: Mapping[str, Any]) -> bool:
+    """四键是否"存在"（不管值有没有意义）。
+
+    "键存在"与"值有意义"是两件事（`P-9` 候选 A 的口径）：前者由这道门判、
+    后者由写入期的判据判。所以这里用 `in` 而不是真值 —— `line=None` 且给了
+    `line_unavailable_reason` 的行是合规的第三态，它在这一格里算"有"。
+    """
+    return (
+        "line" in f
+        and "verbatim_quote" in f
+        and "maths" in f
+        and any(key in f for key in _MINIMAL_FIX_KEYS)
+    )
+
+
+def _line_cell(f: Mapping[str, Any]) -> str:
+    """`行号(line)` 那一格的三态取值（供"缺字段"那条判据用）。
+
+    返回非空 = 这一格有东西；返回空串 = 缺字段。三态：
+      * 给了行号（不管合不合法）⇒ 返回它的字符串（不合法由下面的取值判据报，
+        不在这里重复报成"缺字段"）；
+      * 拿不到行号（缺键 / `None` / 空串）但自证了 `line_unavailable_reason`
+        ⇒ 返回一个非空占位（"行号拿不到"是一个可判定的结论，不是空白）；
+      * 其余 ⇒ 空串。
+    """
+    value = f.get("line")
+    if value is not None and str(value).strip():
+        return str(value)
+    if str(f.get("line_unavailable_reason") or "").strip():
+        return "未冻结（已自证）"
+    return ""
+
+
+def _line_cell_for_frozen_version(f: Mapping[str, Any]) -> str:
+    """版本已冻结（G11 通过）时 `行号(line)` 那一格的取值（`X-96.3-2`）。
+
+    与 :func:`_line_cell` 只差第三条支：`line=None` + `line_unavailable_reason`
+    在未冻结时是合规的第三态，在已冻结时不是 —— 版本已经冻住了，
+    "这一次拿不到行号"与事实矛盾，而 `line` 的判据逐字是"G11 通过后必填"。
+
+    也就是说这一格的口径是"G11 通过 ⇒ 必填"，
+    不是"G11 通过 ⇒ 必填或自证拿不到"（后者会让这条判据在版本冻结之后
+    仍然可以被一句自证绕过 —— 那正是 `X-96.3-2` 说的"没接线"）。
+    """
+    value = f.get("line")
+    if value is not None and str(value).strip():
+        return str(value)
+    return ""
+
+
 def gate_g10(ctx: GateContext) -> GateResult:
     """G10 审校格式门（照搬 `STYLE/RUBRIC.md:30-33`、`:111-126`、`:128-134`）。
 
     判据（§8.4）："每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 +
     最小修法 + `maths: yes/no`。" 失败处置：不合格式的发现打回。
 
-    这道门有两条返回路径，G-12 的核心事实就在这里（"实现者用证据反驳简报"的那一处）：
+    这道门有多条返回路径，G-12 的核心事实就在这里（"实现者用证据反驳简报"的那一处）：
     `criterion_revision` 的唯一来源是 `GATE_CRITERIA_REVISION[gate_id]`（声明表），
-    两条路径打的是同一句话。读实现（本函数的两个 `return`）与读测试
-    （`tests/test_coverage_gates.py` 的 `test_gate_g10_is_unknown_because_schema_lacks_the_four_fields`
-    与 `test_gate_g10_accepts_a_conforming_finding_list`）后，事实是：
+    每条路径打的是同一句话。
 
-    * 发现侧四字段缺失时（本项目的常态）：我们的 `ReviewFinding`
-      （`schema.py:1175-1207`，禁 AI 区）只有
-      `kind / level / target / message / evidence / status / round / resolution_note`
-      —— 没有 `line`、`verbatim_quote`、`minimal_fix`、`maths`。这一段判据
-      不可判定 ⇒ 报 `unknown`，并把缺失字段逐条列进发现里（不删门）；
-    * 发现侧六字段齐全时：这道门按 §8.4 逐字判（六字段 + ≤20 词逐字引文）
-      —— 那两条测试证明这条路真的走通了（字段齐全 ⇒ `pass`；引文超 20 词 ⇒ 报出来）。
-      等 `review_findings` 补齐那四个字段（见
-      `docs/SCHEMA-MIGRATION-PROPOSAL-claims.md`），第一条路会自动变成可判定。
+    ---- `P-9` 候选 A 落地之后的形态（2026-09-27 所有者裁定）----
 
-    所以"适配（实测缺口）⇒ unknown"与"逐字照搬 §8.4"不是两句对立的话，
-    而是同一道门的两条路（见报告：这一点与 G-12 简报的措辞有出入）。
-    登记表把两者写成一句；任何一条返回路径都不许再写第二份字面量。
+    `schema.ReviewFinding` 现在带 `axis` / `line` / `verbatim_quote` / `maths`
+    四个字段（"最小修法"那一格与 `suggestion` 对齐），所以"本项目结构性不可判"
+    这句话不再成立。剩下的判断分两半：
+
+    * 键不全的行：仍然报 `unknown` 并把缺的键逐条列出来（不删门、不判 pass）。
+      这些行是契约生效日之前落盘的历史行，或尚未补键的产出方写出的行 ——
+      两种都要看得见；
+    * 键齐全的行：按 §8.4 逐字判（六字段齐 + 引文 ≤20 词 + 轴与 maths 在
+      取值域内 + 行号是 1 起的整数），不合格式的发现打回。
+
+    两半之间还有一条按 `created_at` 的豁免（`_finding_format_in_scope`）：
+    契约生效前的历史行不参与"四键齐不齐"这条判据 —— 它们落盘时契约还不存在，
+    而 `store.rebuild()` 会把任何 `validate()` 抛异常的行静默丢掉，
+    所以"补齐"这件事只能向前做，历史行不许回填。
+
+    四条返回路径（第 10 轮独立重审 `R2b-AN-1`/`R2b-AN-3` 之后的口径）：
+
+    * `findings is None`（调用方没给列表）⇒ `unknown`；
+    * 零发现（`findings == []`，一篇没有任何发现的稿件）⇒ `pass`
+      —— 有可判定的对象，只是列表里没有需要判格式的行；
+    * 有发现而契约作用面内为空（全是生效日前的历史行）⇒ `not_applicable`；
+      这一支要求发现数大于 0（`temp/FIXG4.md` §2.2 的原文）：零发现走上面那一支，
+      否则 reason 会断言"0 条发现全部是历史行"而自己的 `counts` 说豁免 = 0；
+    * 作用面内缺四键 ⇒ `unknown`；键齐但不合格式 ⇒ `fail`；其余 ⇒ `pass`。
+
+    ---- `line` 那一格挂着 G11（`X-96.3-2`）----
+
+    `line` 的判据不是"总要给行号"，而是"G11 通过后必填"：行号只有在版本冻结
+    之后才有意义。判据的一头一尾因此必须接上，接法有两处、都在本模块里：
+
+    1. :meth:`GateContext.build` 把"冻没冻"算一次（:attr:`GateContext.
+       findings_version_pinned`，判据与 `gate_g11` 自己那一句同源）；
+    2. 本门据它换掉 `行号(line)` 那一格的取值函数：冻结时用
+       :func:`_line_cell_for_frozen_version`（`line_unavailable_reason` 不再是
+       合规第三态），没冻/判不了时用 :func:`_line_cell`（原来的三态）。
+
+    另有一条前置耦合：给了 `findings` 就必须同时给 `observed_hash`（反之亦然），
+    否则本门返回 `unknown`（fail-closed）—— 两者缺一时"这一轮审的是哪一版"
+    无从谈起，`line` 那一格也就没有依据。这一支不记 pass。
+
+    字段词表与词数口径都只有一份实现：轴读 `AXES`、`maths` 读
+    `schema.FINDING_MATHS_VALUES`、词数读 `_quote_word_count`（本模块自己那份）。
     """
     gate_id, axis = "G10", "体例"
     criterion = GATES[gate_id]["criterion"]
@@ -1283,27 +1676,77 @@ def gate_g10(ctx: GateContext) -> GateResult:
             evidence_used=("ctx.findings",),
             criterion_revision=criterion_revision,
         )
+    all_findings = list(ctx.findings)
+    in_scope = [f for f in all_findings if _finding_format_in_scope(f)]
+    exempt = len(all_findings) - len(in_scope)
+    #: 版本是否冻结（G11 通过）—— `line` 那一格的判据挂着它（`X-96.3-2`）。
+    #: 现算（不是读快照）：调用方可以在 `build()` 之后直接改 `observed_hash`。
+    frozen_version = ctx.frozen_version()
+    line_cell = _line_cell_for_frozen_version if frozen_version is True else _line_cell
     findings_out: list[dict] = []
-    for f in ctx.findings:
+    for f in in_scope:
         fid = str(f.get("finding_id") or f.get("id") or "?")
         missing = [
             name
-            for name, key in (
-                ("轴(axis)", "axis"),
-                ("严重度(severity)", "level"),
-                ("行号(line)", "line"),
-                ("≤20 词逐字引文(verbatim_quote)", "verbatim_quote"),
-                ("最小修法(minimal_fix)", "minimal_fix"),
-                ("maths: yes/no", "maths"),
+            for name, getter in (
+                ("轴(axis)", lambda x: x.get("axis")),
+                ("严重度(severity)", lambda x: x.get("level")),
+                ("行号(line)", line_cell),
+                ("≤20 词逐字引文(verbatim_quote)", lambda x: x.get("verbatim_quote")),
+                ("最小修法(suggestion；历史键名 minimal_fix)", _minimal_fix_of),
+                ("maths: yes/no", lambda x: x.get("maths")),
             )
-            if not str(f.get(key) or "").strip()
+            if not str(getter(f) or "").strip()
         ]
         if missing:
+            # `FINAL-R5-05`：`行号` 这一格在版本冻结时是必填，而唯一真实产出方
+            # （`review_tools.scan_document`）只在调用方给了带行号的正文时才给得出 ——
+            # 不给正文时它按设计给 `line=None` + 受控理由串。所以这里在不改判据
+            # 的前提下把"是谁的缺口、怎么补"写进 evidence（判据照旧打回，只是不再
+            # 让读者以为那是产出方格式马虎）。
+            gap_hint = ""
+            if "行号(line)" in missing:
+                gap_hint = (
+                    "；行号那一格：版本已冻结 ⇒ 必填。产出方只有在拿到带行号的正文时"
+                    "才给得出（`review_tools.scan_document(doc)` 的 `doc['text'/'body'/'markdown']`）；"
+                    "补法在产出侧或流程侧（冻结前补行号），不在本门放宽判据"
+                )
             findings_out.append(
                 {
                     "gate": gate_id, "axis": axis, "severity": "warning", "target": fid,
                     "message": "发现不合参考体例的格式（缺字段）—— 打回",
-                    "evidence": f"finding_id={fid} 缺 {missing}；实际键={sorted(f)}",
+                    "evidence": f"finding_id={fid} 缺 {missing}；实际键={sorted(f)}{gap_hint}",
+                }
+            )
+        f_axis = str(f.get("axis") or "").strip()
+        if f_axis and f_axis not in AXES:
+            findings_out.append(
+                {
+                    "gate": gate_id, "axis": axis, "severity": "warning", "target": fid,
+                    "message": "轴不在参考体例的轴词表里 —— 打回",
+                    "evidence": f"finding_id={fid} axis={f_axis!r} 不在 {AXES}",
+                }
+            )
+        f_maths = str(f.get("maths") or "").strip()
+        if f_maths and f_maths not in S.FINDING_MATHS_VALUES:
+            findings_out.append(
+                {
+                    "gate": gate_id, "axis": axis, "severity": "warning", "target": fid,
+                    "message": "maths 取值不是 yes/no —— 打回",
+                    "evidence": f"finding_id={fid} maths={f_maths!r} 不在 {S.FINDING_MATHS_VALUES}",
+                }
+            )
+        f_line = f.get("line")
+        if (
+            f_line is not None
+            and str(f_line).strip()
+            and not (isinstance(f_line, int) and not isinstance(f_line, bool) and f_line >= 1)
+        ):
+            findings_out.append(
+                {
+                    "gate": gate_id, "axis": axis, "severity": "warning", "target": fid,
+                    "message": "行号必须是 1 起的整数（或给 line_unavailable_reason）—— 打回",
+                    "evidence": f"finding_id={fid} line={f_line!r}",
                 }
             )
         if str(f.get("verbatim_quote") or "").strip() and _quote_word_count(str(f["verbatim_quote"])) > 20:
@@ -1314,20 +1757,83 @@ def gate_g10(ctx: GateContext) -> GateResult:
                     "evidence": f"finding_id={fid} 词数={_quote_word_count(str(f['verbatim_quote']))}",
                 }
             )
-    counts = {"发现数": len(list(ctx.findings)), "不合格式": len(findings_out)}
-    proc = f"逐条检查 {counts['发现数']} 条发现的六个必需字段与引文词数上限（≤20 词）"
-    structural_gap = counts["发现数"] - len(
-        [f for f in ctx.findings if {"line", "verbatim_quote", "minimal_fix", "maths"} <= set(f)]
+    counts = {
+        "发现数": len(all_findings),
+        "契约作用面内": len(in_scope),
+        "豁免(契约生效前的历史行)": exempt,
+        "不合格式": len(findings_out),
+    }
+    # "版本冻结(G11 通过)"这一格只在真的判了行号那一格时才出现：
+    # 作用面内为 0 时这道门没判过任何 `line`，凭空多一个键就是
+    # 把"这一轮冻没冻"塞进一份与它无关的读数里（同名口径：非零才出现）。
+    if in_scope:
+        counts["版本冻结(G11 通过)"] = (
+            "判不了" if frozen_version is None else ("是" if frozen_version else "否")
+        )
+    proc = (
+        f"逐条检查 {len(in_scope)} 条落在格式契约作用面内的发现的六个必需字段、"
+        f"引文词数上限（≤20 词）、轴与 maths 的取值域以及行号形态"
+        # 豁免那一档只在非零时出现并带自己的数（`draft/28` §88.3）——
+        # 0 豁免时连"另有 0 条…"这句都不出现（`R2b-AN-3`）。
+        + (
+            f"；另有 {exempt} 条为契约生效日（{S.REVIEW_FINDING_FORMAT_SINCE}）之前的历史行，"
+            "按 created_at 豁免（不许回填）"
+            if exempt
+            else ""
+        )
     )
+    structural_gap = len(in_scope) - len([f for f in in_scope if _has_the_four_gate_keys(f)])
+    # ---- `findings` 与 `observed_hash` 的耦合（`X-96.3-2`）----
+    #
+    # 接线前的实测形态（`draft/28` §96.3 第 2 条逐字）：`GateContext` 里这两个输入
+    # 互不相干，于是"一条带行号的发现"可以在一份没钉版本 hash 的报告里通过 G10
+    # —— 而 `line` 的判据是"G11 通过后必填"：它的全部意义恰恰是"版本冻住之后，
+    # 行号才有意义"。不接线时的后果不是假通过那么远，而是这条判据的结论没有依据：
+    # G10 读不到"冻没冻"，于是它判的 `line` 与它自述的判据是两回事。
+    #
+    # 这里的处置是 fail-closed（`unknown`，不是 `pass`）：给了 `findings` 就必须
+    # 同时给出 `observed_hash`（"这一轮审的是哪一版"），反之亦然 —— 只有两样都在场，
+    # `line` 那一格才是可判的。三态纪律：判不了 ⇒ 明说判不了，不许静默按"没冻"处理
+    # （那正好把这条判据架空）。
+    has_observed = bool(str(ctx.observed_hash or "").strip())
+    if has_observed != (frozen_version is True):
+        unpinned = [f for f in in_scope if f.get("line") is not None and str(f.get("line")).strip()]
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="unknown",
+            reason=(
+                "`findings` 与 `observed_hash` 不相绑 ⇒ 这道门的『行号(line)：G11 通过后必填』"
+                "那一格判不了（`X-96.3-2`）："
+                + (
+                    f"调用方给了发现列表，却没给上一轮报告里钉住的 `observed_hash`"
+                    f"（其中 {len(unpinned)} 条带行号 —— 而行号只有在版本冻结之后才有意义；"
+                    "请把 `observed_hash` 一并给出，或把那些行号按第三态写成 `line_unavailable_reason`）"
+                    if not has_observed
+                    else
+                    "调用方给的 `observed_hash` 与本轮重算的被审版本 hash 不一致"
+                    "（G11 判定为『未冻结』/『审校期间被改过』）⇒ 这一轮不该带带行号的发现："
+                    "行号指向的是一个已经失效的版本"
+                )
+                + "。不记 pass：判不了 ≠ 没冻（三态纪律）"
+            ),
+            findings=tuple(findings_out),
+            self_attestation=_attest_text(attest(proc, counts, evidence_used=("ctx.findings", "ctx.observed_hash"))),
+            counts=counts,
+            evidence_used=("ctx.findings", "ctx.observed_hash", "schema.ReviewFinding"),
+            criterion_revision=criterion_revision,
+        )
     if structural_gap:
         return GateResult(
             gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
             verdict="unknown",
             reason=(
-                f"{structural_gap} / {counts['发现数']} 条发现**缺 `line`/`verbatim_quote`/`minimal_fix`/`maths` "
-                "字段本身**（不是写错，是 `schema.ReviewFinding` 里没有这四个字段，而它在禁 AI 区）"
-                "⇒ 这道门的完整判据在本项目**当前不可判定**。保留门并如实报 unknown，"
-                "而不是删门（删门会让『15 道门都在跑』变成假话）"
+                f"{structural_gap} / {len(in_scope)} 条落在格式契约作用面内的发现**缺 `line`/"
+                "`verbatim_quote`/`suggestion`(=`minimal_fix`)/`maths` 字段本身**（不是写错）"
+                "⇒ 这道门的完整判据对这些行**不可判定**。字段本身已在 `schema.ReviewFinding`"
+                "（禁 AI 区；2026-09-27 所有者裁定候选 A，AI 代录入台账）里补齐 ——"
+                "缺键的行是契约生效日前落盘的历史行，或尚未补键的产出方写出的行："
+                "保留门并如实报 unknown，而不是删门（删门会让『15 道门都在跑』变成假话）"
+                + (f"；本次另有 {exempt} 条历史行按 created_at 豁免，不计入这个缺口" if exempt else "")
             ),
             findings=tuple(findings_out),
             self_attestation=_attest_text(attest(proc, counts, evidence_used=("ctx.findings", "schema.ReviewFinding 的字段集"))),
@@ -1335,14 +1841,55 @@ def gate_g10(ctx: GateContext) -> GateResult:
             evidence_used=("ctx.findings", "schema.ReviewFinding"),
             criterion_revision=criterion_revision,
         )
+    if all_findings and not in_scope:
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="not_applicable",
+            reason=(
+                f"{len(all_findings)} 条发现全部是格式契约生效日（{S.REVIEW_FINDING_FORMAT_SINCE}）"
+                "之前落盘的历史行（发现数 > 0，但契约作用面内的行数为 0）⇒ "
+                "这道门在本次输入上没有可判定的对象。"
+                "这不是通过：历史行按 created_at 豁免，且不许回填 ——"
+                "下一次拿到契约生效后产出的发现时，这道门才会真正判一次"
+            ),
+            counts=counts,
+            evidence_used=("ctx.findings", "schema.ReviewFinding"),
+            criterion_revision=criterion_revision,
+        )
+    # 三条出口共用一个 `GateResult(...)`：`findings_out` 非空 ⇒ fail；
+    # 作用面内有行且无发现 ⇒ pass（reason 带上豁免那一档）；
+    # 零发现（`all_findings == []`，走到这里说明不是"全是历史行"）⇒ pass。
+    #
+    # 走得到这里就说明"冻没冻"与"给没给 hash"是自洽的（上面那道耦合守卫已经过了），
+    # 所以这一句是对得上号的口径说明、不是替调用方猜：判过 `line` 那一格时
+    # 必须让读者看见"行号是必填还是可省"这件事是谁定的（`X-96.3-2`）。
+    line_basis = (
+        "；行号那一格按 G11 已通过（版本冻结）判必填"
+        if frozen_version is True
+        else "；版本未冻结 ⇒ 行号那一格按可省判（拿不到时自证理由）"
+    )
+    if findings_out:
+        verdict = "fail"
+        reason = f"{len(findings_out)} 条发现不合格式 ⇒ 打回" + (line_basis if in_scope else "")
+    elif in_scope:
+        verdict = "pass"
+        reason = f"作用面内 {len(in_scope)} 条发现全部符合六字段格式" + line_basis
+        if exempt:
+            reason += f"；另有 {exempt} 条历史行按 created_at 豁免，未参与本判定"
+    else:
+        verdict = "pass"
+        reason = (
+            "0 条发现 ⇒ 本次输入里有可判定的对象（发现列表），但没有任何行需要判格式"
+            "（与『调用方没有提供发现列表』的 unknown 不同）"
+        )
     return GateResult(
         gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
-        verdict="fail" if findings_out else "pass",
-        reason=(f"{len(findings_out)} 条发现不合格式 ⇒ 打回" if findings_out else "全部发现符合六字段格式"),
+        verdict=verdict,
+        reason=reason,
         findings=tuple(findings_out),
-        self_attestation=_attest_text(attest(proc, counts, evidence_used=("ctx.findings",))),
+        self_attestation=_attest_text(attest(proc, counts, evidence_used=("ctx.findings", "ctx.observed_hash"))),
         counts=counts,
-        evidence_used=("ctx.findings",),
+        evidence_used=("ctx.findings", "ctx.observed_hash"),
         criterion_revision=criterion_revision,
     )
 
@@ -1907,9 +2454,11 @@ GATE_CRITERIA_REVISION: dict[str, str] = {
     "G8": "逐字照搬 §8.4（该行标注为『新增』，摘自 RP/00_STANDARD.md:149-150 门 B）",
     "G9": "适配：『所有文件』读成『同一份稿件在不同读取路径下的数字 + 调用方声明的计数』",
     "G10": (
-        "**适配（实测缺口）**：`schema.ReviewFinding` 缺 line / verbatim_quote / minimal_fix / maths "
-        "四个字段 ⇒ 那些发现不可判定、本门报 unknown 并逐条列出缺哪些字段；"
-        "**字段齐全的发现按 §8.4 逐字判**（六字段 + ≤20 词逐字引文）"
+        "适配（缺口已按裁决补齐）：`schema.ReviewFinding` 自 2026-09-27 起带 "
+        "`axis` / `line` / `verbatim_quote` / `maths` 四个字段，'最小修法'那一格与 "
+        "`suggestion` 对齐（`minimal_fix` 作为历史键名继续接受）—— `P-9` 候选 A，所有者裁定；"
+        "生效日之前落盘的行按 `created_at` 豁免、缺键不计入结构缺口且**不许回填**；"
+        "**字段齐全的发现按 §8.4 逐字判**（六字段 + ≤20 词逐字引文 + 轴/maths 取值域 + 行号形态）"
     ),
     "G11": "适配：`observed_hash` 来自上一轮报告；未提供时只能证明『钉住了 hash』，故判 unknown",
     "G12": "适配：反例搜索的痕迹载体是 counterexamples / numeric_evidence.n_counterexamples",

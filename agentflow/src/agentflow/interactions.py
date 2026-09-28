@@ -57,6 +57,10 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import schema as S
+# `MAX_ID` 是"4 位 ID 的上限"的**唯一定义处**（`store.py`）。这里 import 它而不是
+# 另写一个 9999：上限一旦有两个字面量就会漂移，而漂移的表现是"一处 fail-closed、
+# 另一处照样发 5 位号"。`store.py` 只依赖 `schema`，不会与 `interactions` 成环。
+from .store import MAX_ID
 
 #: 本契约模块的版本。**语义变化就要升它**（见 `agentflow.__init__` 的说明）。
 #:
@@ -65,9 +69,57 @@ from . import schema as S
 #:        写集无关的纯函数、`DEFAULTS` 里的全部闸门）。
 CONTRACT_VERSION = 1
 
+
+class IdSpaceExhausted(ValueError):
+    """4 位 ID 空间用尽（`P-4`：上限下沉进 :func:`next_prefixed_id`）。
+
+    ## 为什么是一个**具名**异常，而不是裸 `ValueError`
+
+    上限下沉之后，`interactions.next_prefixed_id` 会在**取号那一刻**就挡住越界 ——
+    这比"只靠工具层那道守卫"强（`agent_c` / `agent_d` / `agent_f` / `cli` / `demo`
+    都直接调它，绕不过）。
+
+    但工具层的契约是"受控失败抛 `ToolError`"（`tools/base.py`）：裸 `ValueError`
+    到了工具层会被兜成 `kind='unexpected'`，于是"编号空间用尽"（一个**已知、
+    可处理**的情况）与"工具内部有 bug"在下游长得一模一样。
+
+    所以这里给它一个**具名**类型：工具层 `except IdSpaceExhausted` 精确翻译成
+    `ToolError`，既保住"判据只有一份"，又保住"工具层的失败类型不降级"。
+    它继承 `ValueError` 是为了让**非工具层**的既有调用方（把 `ValueError`
+    当受控失败的那些）行为不变。
+
+    另：`ToolRegistry` / `table_tools` 的 `assert_request_id_in_space` 是**第二道**
+    守卫（覆盖"别人自己拼了一个号传进来"的情形），它**不**依赖本异常。
+    """
+
+
+class MalformedContradictionRecord(ValueError):
+    """一条矛盾记录不成形态：``relation_ids`` 不是恰好两条（`errors-4`）。
+
+    ## 为什么是一条具名异常，而不是裸 `ValueError`
+
+    与 :class:`IdSpaceExhausted` 同一条理由，也是本仓库对"受控失败"的统一口径：
+    裸 `ValueError` 到了工具层会被 `tools/base.py` 兜成 ``kind='unexpected'``，
+    于是"调用方递进来一条不成形态的矛盾记录"（一个已知、可归因到输入、
+    可处理的情况）与"工具内部有 bug"在下游长得一模一样，
+    而这两种情况该由不同的人去处理。
+
+    继承 `ValueError` 是刻意的，与 :class:`IdSpaceExhausted` 同一取舍：
+    非工具层的既有调用方（把 `ValueError` 当受控失败的那些，含既有测试）
+    行为不变；同时工具层可以用 `except MalformedContradictionRecord`
+    精确翻成 `ToolError`。
+
+    消息里必须同时给出收到的数量与期望的数量（2），并且给出收到的那个列表：
+    只说"不成形态"的报错会让排障的人回去读源码才知道哪里不对，
+    而数量恰恰是唯一可判定的那一部分。
+    """
+
+
 __all__ = [
     "DEFAULTS",
     "CONFLICT_SCOPE",
+    "IdSpaceExhausted",
+    "MalformedContradictionRecord",
     "contains",
     "negated",
     "opposite_flags",
@@ -349,7 +401,7 @@ ADJUDICATION_POLICY_CODES = (
 def adjudicate_contradiction(
     original: Mapping[str, Any],
     *,
-    scope_relations: Sequence[Mapping[str, Any]],
+    scope_relations: Sequence[Mapping[str, Any]] | None,
     rounds: int = 0,
     max_rounds: int | None = None,
 ) -> dict:
@@ -359,9 +411,15 @@ def adjudicate_contradiction(
     ----
     original
         一条 :func:`detect_contradictions` 产出的记录（至少要有 ``relation_ids``）。
+        不是恰好两条关系时抛 :class:`MalformedContradictionRecord`（具名受控异常，
+        见该异常自己的 docstring 说明为什么不是裸 `ValueError`）。
     scope_relations
         **重新读到的**关系集合。必须包含原来的两条（或显式地不包含 —— 那就是
         "一方已被删除/合并"的证据）。调用方负责给全，本函数不做范围推导。
+        传 ``None`` 的语义是"我这次没能读到关系集合" ⇒ 返回 ``checked=False``
+        （与 :func:`check_conflict` 的 ``existing_relations=None`` 同一口径：
+        "没查"绝不允许被读成"查过了、不矛盾"）。省略这个参数仍然不行，
+        没有默认值。
     rounds
         这条矛盾**已经追问过**几轮（0 表示还没追问过）。
     max_rounds
@@ -371,6 +429,19 @@ def adjudicate_contradiction(
     ----
     ``{"verdict", "code", "reason", "winner_relation_id", "new_relation_ids",
        "checked", "rounds", "rounds_after"}``
+
+    ``checked`` 这一位在本函数上确实有两个可能取值（`errors-4` 的修复）：
+
+    - ``checked=True`` —— 查了，``verdict`` / ``code`` 给出结论（下面那四档）；
+    - ``checked=False`` —— 没查成（``scope_relations is None``）：此时
+      ``verdict`` 与 ``code`` 都是 ``None``，``new_relation_ids`` 与
+      ``winner_relation_id`` 都是空的，且 ``rounds_after == rounds``
+      （没查成就不推进轮次 —— 推进了会让"追问预算用尽"这条判据凭空收紧）。
+
+    为什么没查成时 ``verdict`` / ``code`` 给 ``None`` 而不是某个看起来像结论的值：
+    :data:`ADJUDICATION_CODES` 是一张封闭的理由词表（测试按集合逐字钉住它），
+    往里塞一个"没查成"的码会把"关系层说还对立 / 没对立"与"这一轮根本没查"
+    混进同一个词表；而三态纪律要的恰恰是这两者分得开。
 
     裁决四选一（见 `schema.CONTRADICTION_VERDICTS`）：
 
@@ -395,9 +466,33 @@ def adjudicate_contradiction(
     """
     rel_ids = [str(x) for x in (original.get("relation_ids") or [])]
     if len(rel_ids) != 2:
-        raise ValueError(f"矛盾记录必须恰有 2 个 relation_ids，收到 {rel_ids!r}")
+        # 具名受控异常（不是裸 ValueError）：数量是唯一可判定的那一部分，
+        # 所以消息里把收到的数量与收到的列表都写出来，期望值 2 也写出来。
+        raise MalformedContradictionRecord(
+            f"矛盾记录必须恰有 2 个 relation_ids，收到 {len(rel_ids)} 个"
+            f"（期望 2 个，实际是 {rel_ids!r}）—— 矛盾只可能发生在谈同一件事的两句话之间"
+        )
     a_id, b_id = rel_ids
     mr = DEFAULTS["max_rounds_per_contradiction"] if max_rounds is None else int(max_rounds)
+
+    if scope_relations is None:
+        # 三态纪律的第三档（`errors-4`）：调用方没能读到关系集合 ⇒ 这一轮没查成。
+        # 它必须与"查过、双方都已不在关系里"（下面第一档 resolved/side_removed）
+        # 分得开 —— 后者是结论，前者是"没有结论可给"。
+        return {
+            "checked": False,
+            "verdict": None,
+            "code": None,
+            "reason": (
+                "调用方未提供重新读到的关系集合（scope_relations=None）⇒ 没查成。"
+                "注意：这与'查过、双方都已不在关系里'是两回事，不得读成'矛盾已解决'"
+            ),
+            "winner_relation_id": None,
+            "new_relation_ids": [],
+            "rounds": int(rounds),
+            # 没查成就不推进轮次：推进了会把"追问预算"凭空消耗掉。
+            "rounds_after": int(rounds),
+        }
 
     by_id: dict[str, Mapping[str, Any]] = {}
     for r in scope_relations:
@@ -419,6 +514,10 @@ def adjudicate_contradiction(
     alive_b, code_b = _alive(b_id)
 
     def _pack(verdict: str, code: str, reason: str, winner: str | None = None, new_ids: Sequence[str] = ()) -> dict:
+        # `checked=True` 在这里是写死的，但它不是恒真位：这一支是"查成了"的那一支，
+        # 它的前提是上面已经读过 scope_relations（`scope_relations is None` 那条
+        # 早返回走的是另一个字典，`checked=False`）。两处分开写，是为了让
+        # "没查成"不可能被顺手折进这里 —— 折进来正是 `errors-4` 的原始形态。
         return {
             "checked": True,
             "verdict": verdict,
@@ -1151,6 +1250,21 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
 
     现在：docstring 说清 `prefix="r"`，并且**在这里 fail-closed 拒绝含分隔符的前缀** ——
     与其让一个写错的参数静默产生坏 ID，不如当场炸。
+
+    ## ⚠️ 4 位上限在这里（`P-4`：上限下沉，判据只有一份）
+
+    `r-NNNN` 是**4 位契约**，不是风格偏好：`store.MAX_ID = 9999` 是它唯一的常量来源
+    （本函数直接 import 它，**不另写一个 9999**），而 `store.alloc_id` 用满即
+    `IdExhausted`。本函数此前**没有任何上限**：表里已用到 `r-9999` 时它会给出
+    ``"r-10000"`` —— 一个 5 位号，而 `SearchRequest.validate` 只查"非空"，
+    所以它会**静默落库**，一直到某个下游按 4 位解析时才暴露。
+
+    这正是"静默升位宽"。所以越界时这里抛**具名**的 `IdSpaceExhausted`（`ValueError` 的子类，
+    fail-closed，与工具层 `table_tools.assert_request_id_in_space` 同一语义），错误信息里给出上限值。
+    为什么是具名类型而不是裸 `ValueError`：工具层据此精确翻成 `ToolError`，
+    否则"空间用尽"会被兜成 `kind='unexpected'`、与"内部 bug"同形。
+    为什么上限必须在**这里**而不是只放在工具层：`agent_c` / `agent_d` / `agent_f` /
+    `cli` / `demo` 都**直接调用本函数**，它们绕不过工具层那道守卫。
     """
     if not prefix or not prefix.isalnum():
         raise ValueError(
@@ -1166,6 +1280,19 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
     n += 1
     while f"{prefix}-{n:04d}" in used:
         n += 1
+    if n > MAX_ID:
+        # 越界**不许**静默产出超长 ID。消息里必须给出上限，否则调用方只知道
+        # "炸了"，不知道"还能不能补"。
+        # 类型是**具名**的 `IdSpaceExhausted`（见它的 docstring）：工具层据此精确翻成
+        # `ToolError`，避免被兜成 `kind='unexpected'`（那会让"空间用尽"与"内部 bug"同形）。
+        raise IdSpaceExhausted(
+            f"{prefix}-NNNN 的 4 位编号空间已用尽（上限 {MAX_ID}）：下一个要发的号是 "
+            f"{prefix}-{n}，它是 {len(str(n))} 位，违反 4 位 ID 契约"
+            "（`store.MAX_ID` 是这条上限的唯一定义处，`schema.is_valid_id` 只认 4 位）。"
+            "静默产出 5 位号会让它一路落库、直到某个下游按 4 位解析才暴露 —— "
+            "所以这里 fail-closed 拒绝。处理：归档/清理该表的历史行，"
+            "或把这次位宽变更当成人审项（改 `MAX_ID` 等于改磁盘契约）。"
+        )
     return f"{prefix}-{n:04d}"
 
 

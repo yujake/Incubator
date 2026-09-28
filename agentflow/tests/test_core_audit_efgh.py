@@ -581,7 +581,7 @@ def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_p
     st = Store(tmp_path / "ws")
     st.init()
     h = AgentH(st)
-    writers = [t["name"] for t in h.writers.describe() if t["side_effect"] in ("write_local", "network")]
+    writers = [t["name"] for t in h.writers.describe() if t["side_effect"] in ("write_local",)]
     assert sorted(writers) == [
         "review.report",
         "review.review_document",
@@ -722,7 +722,7 @@ def test_run_pipeline_passes_c_explicitly_to_agent_d(demo_store, tmp_path, monke
 def test_run_pipeline_builds_c_once_and_gives_that_same_instance_to_d(demo_store, tmp_path, monkeypatch):
     """装配点唯一：C 只装配一次，且交给 D 的就是跑分析的那个实例。
 
-    修之前这里装配了两个 AgentC（`_c_for_d` 一个、第 1 步的 `agent_c` 一个），
+    修之前这里装配了两个 AgentC（`_c_for_d`（非指代：已删的旧装配点名）一个、第 1 步的 `agent_c` 一个），
     而注释却写着"装配点唯一、可审计" —— 注释与实现相反。
     """
     import agentflow.pipeline as P

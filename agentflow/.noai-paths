@@ -18,7 +18,7 @@
 #
 # 在本框架（面向数学研究的多智能体协同框架）里，"认证/支付/加密"平移成
 # "求解器核心算法 / 检查器桥接层 / 去重键 / schema 迁移 / 评测口径 /
-#  发布脚本 / 权限与审计"——七类，见下面的分组。
+#  发布脚本 / 权限与审计"——七类（实测 2026-09-27 12:19 +0800：本文件 `[category: ...]` 分组头去重 = 7，命令 `(Select-String -Path .noai-paths -Pattern '^\[category:').Count`），见下面的分组。
 #
 # ## 格式（机器可读 + 人能读）
 #
@@ -108,6 +108,9 @@ src/agentflow/schema.py          [category: eval-criteria] `EVAL_REQUIRED_FIELDS
 src/agentflow/release_check.py   [category: release-deploy] 发布前检查入口（**登记时并不存在**：先登记路径，一旦有人在这里新建它，它会自动落入本清单而不是绕过门；截至本次登记仍未出现）
 scripts/release_check.py         [category: release-deploy] 发布前的一键检查 `main` 与它跑的那八项：发布门本身 —— 改宽它等于让"发出去的东西"不再受检；另一种落位也一并登记，以免"换个目录就绕过"
 tools/release_all.py             [category: release-deploy] 一键发布检查的**编排层** `main` / `build_steps` / `overall`：它调用并汇总全部门（含验收测试与论文复现），并决定"跳过的步骤记成 `unknown` 还是 `pass`"—— 那一条取舍就是"发布门能不能被 `--skip` 绕过"，改它等于改门的强度
+tools/coverage_zero_test.py      [category: release-deploy] 发布门的两道子门之一（`release_all` 的 `coverage` 步）：`_classify` 按 AST 判据（写路径 / 判据决策 / 只读 / 呈现四档，`_CRITERIA` 里 1a–4c）逐函数分档，`_propagate_levels` 做传递闭包，`_EXONERATED` 是逐条登记的豁免表 —— 改它等于改"零直接测试"这个判据本身与风险分档口径，于是发布门 `release_all` 的 `coverage` 子门放行的东西换了口径而门照样亮绿（本处刻意不写步号：该步骤表实测 2026-09-27 12:19 +0800 为 `['release-check','acceptance','repro','role-specs','coverage','per-file']`（6 步），命令 `python -c "import sys,pathlib;sys.path.insert(0,'.');from tools.release_all import build_steps;print([s.key for s in build_steps(pathlib.Path('.').resolve())])"`；原写的"第 8 步"在该表里没有出处）
+tools/run_each_test_file.py      [category: release-deploy] 发布门的两道子门之二（`release_all` 的 `per-file` 步）：`classify_pytest_result` 把 `exit=5`/`exit=0` 按汇总行拆成 `deselected` / `no_tests` / `all_skipped` / `all_xfail`，`audit_exemptions` 是"允许整文件被跳过/筛掉"的豁免面（上限 `MAX_EXEMPT_ALL_SKIPPED`）—— 改它等于改"哪些文件的绿灯算数、哪些只是没跑"，豁免一放宽就等于把文件从这条门里静默摘掉
+
 pyproject.toml                   [category: release-deploy] `[project]` 与 `[build-system]`：包名、版本、依赖、构建后端 —— 这三个决定"发出去的到底是什么"，且版本号一旦发布无法撤回
 
 
@@ -116,7 +119,13 @@ pyproject.toml                   [category: release-deploy] `[project]` 与 `[bu
 # 这是"认证/授权"在本框架里的平移：角色即权限面。
 # 权限面被悄悄放宽 ⇒ **测试全绿、上线即越权**（FC-27 的原话）。
 src/agentflow/tools/__init__.py  [category: auth-audit] `ROLES` 的引入、`READ_ONLY_ROLES` 与 `SIDE_EFFECTS_WRITE`：只读角色（C/H）的权限面单一来源
-src/agentflow/tools/base.py      [category: auth-audit] `for_role` 的结构性过滤：只读角色一律拿不到写工具 —— 它是**实现**，与上面的**声明**分处两文件，两者必须同时人审
+src/agentflow/tools/base.py      [category: auth-audit] `for_role` 的结构性过滤（工具面：只读角色一律拿不到写工具）与 `call` / `_callable_for` 的调用期角色判据（可调用面）以及 `READONLY_CALL_EXCEPTIONS` 这张逐条登记的例外表（只读角色仍可调用的那几个落库代理只由它产生）三处共用同一个私有谓词 `_role_surface` —— 它们是同一件事的**实现**，与上面的**声明**分处两文件，必须同时人审；只读角色的权限面由这三处共同决定，改任意一处都是改权限（`P-14` 之后 `for_role` 只是这三处里的第一处）
 src/agentflow/verify.py          [category: auth-audit] `verify_all` 的一致性审计：不变量检查的判据本身被改宽 ⇒ 审计从此永远"通过"
-src/agentflow/interactions.py    [category: auth-audit] `check_conflict` / `admitting` 一类的角色间交互与授权规则（A–H 的调用矩阵）—— 矩阵错则"不该能调的工具"变成"能调"
+src/agentflow/interactions.py    [category: auth-audit] 跨智能体交互的冻结契约与它的闸门实现：`check_conflict` 是写入期一致性闸门（B 在事务内调，签名里不许有 `store`）、`adjudicate_contradiction` 是矛盾闭环的收敛点、`admit_search_request` / `admit_reprocess_request` 是 I7/I4 的准入配额闸门 —— 这里定的是"哪个角色调得到什么、哪些请求被放行"，并靠三态位（`checked` / `admitted`）保证"没查"与"查过了没问题"分得开；把闸门改宽或把三态折平，等于"不该能做的动作"变成"能做"，而测试照样全绿（注：**A–H 调用矩阵的权威定义不在这里**，在 `src/agentflow/capabilities.py` 的 `ALLOWED_EDGES`）
+src/agentflow/capabilities.py    [category: auth-audit] A–H 调用矩阵的**权威定义**：`ALLOWED_EDGES` / `CAPABILITIES` / `WRITE_SETS` / `NON_SUMMONABLE` —— interactions.py 的理由串自己承认「矩阵真身在这里」，而它此前**不在清单里** ⇒ 改「哪个角色调得到什么」不需要任何人审（P-18 / H-4 的同族）；verify.py 的一致性审计把它当真身读 ⇒ 改它等于改权限面本身
 .noai-approvals.json             [category: auth-audit] 批准台账：`sha256` 钉住「被批准的那一版」、`reviewers` 记「谁逐行走查过」—— 改它等于改审计记录本身；台账**不能批准自己**（理由码 `ledger_self_approval`），且 `--baseline` 永远不写 `reviewers`（登记 ≠ 批准）
+.noai-paths                      [category: auth-audit] 禁改区清单本体：它决定哪些路径受保护 —— 改它等于改「保护范围」本身。它必须自己也在清单里，否则「放宽门」这件事不需要任何人审；一致性检查只保证两处一致，不保证两处都没被动过
+AGENTS.md                        [category: auth-audit] 上面那份清单在 `AGENTS.md` 里的副本（机器按位比对两处）：副本若能随便改，「两处一致」就失去了意义 —— 同一份清单的两个落位必须同时受保护
+scripts/noai_gate.py             [category: auth-audit] 判据本体：`REQUIRED_APPROVALS_ON_HIT` / `MIN_INDEPENDENT_AUDITORS` / `MIN_DISTINCT_DIMENSIONS` / `LEDGER_NAME` / `AUDIT_RECEIPT_NAME` 与批准台账的读写 —— 改它等于改「一个批准算不算数」；它此前不在自己的清单里，于是「放宽门」这件事不需要任何人审（`H-4`）
+scripts/lint_rules.py            [category: auth-audit] 判据本体：`Finding` / `LintReport` 与 `rule_R001_bare_except_pass` … `rule_R011_dead_vocab` 各条规则 —— 改它等于改「哪一类形态算缺陷」；同样此前不在清单里（`H-4`）
+tools/vocab_census.py            [category: auth-audit] lint 判据 R011（受控词表死取值）的**实现本体**：`census` 扫出全部词表定义点与产出点、`RESERVED_VALUES` 是"已登记为预留"的唯一落点、`MIN_VOCABS` / `MIN_PRODUCER_LINES` 是反真空下限（扫不到就判 `unknown`）—— `rule_R011_dead_vocab` 直接加载本文件当判据用，改它等于改"哪个取值算死、哪个算已登记"，而 lint 报告与发布门的 lint 步会照着新口径继续亮绿

@@ -3,7 +3,18 @@
 集中在一个模块，因为三种判重的**哲学不同**，混在各自 agent 里最容易写歪：
 
 - **文献**：可以而且应该激进判重（同一篇论文从三个 provider 命中是常态），
-  用三级硬键（DOI → 标题+年 → 文件哈希），命中即复用，没有"模糊"档。
+  用两级硬键（DOI → 标题[+年]），命中即复用；此外还有一档带年份容差的
+  仅标题兜底（:func:`find_existing_literature` 的第 3 轮，`year_tolerance=2`，
+  规则与理由见它的 docstring）。这一档是旧版声明漏掉的那一半：旧版只写了
+  "两级硬键、命中即复用"，读的人会以为硬键之外没有别的匹配档，`R6-AN-3`
+  按实现把它补上。
+  文件级去重（同一份字节）不在这里：它由 ``literature.download.sha256``
+  承担 —— 那条路径要等下载之后才有哈希，而本模块的三轮匹配都在下载之前。
+  （改前这里写的是"三级硬键（DOI → 标题+年 → 文件哈希）"：文件哈希那一级
+  在 `literature_keys` / `find_existing_literature` 里不存在，全仓也没有任何
+  判重路径读 `literature.download.sha256`。`F-9` 登记了这处"声明与实现不符"。
+  本节按实现改成两级，不是因为文件级判重不该有，而是因为声明必须能被对账：
+  写成三级而只有两级，读的人会以为重复文件已经被挡住。）
 - **概念**：**只按规范化名字精确合并**，不做相似度自动归并。
   理由：把"群"和"环"合并的代价远大于漏合并，且错误归并会污染所有下游关系。
   相似但不相同 → 交给复核，不自动合。
@@ -34,6 +45,35 @@ from . import textutil as T
 _DOI_URL_PREFIX_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/")
 _DOI_SCHEME_PREFIX_RE = re.compile(r"^doi:\s*")
 _FULLWIDTH_RE = re.compile(r"[\uff01-\uff5e]")
+
+#: 判重时从 DOI 尾部剥掉的句末标点（`F-9`）。
+#:
+#: 为什么需要它：:func:`normalize_doi` 的 docstring 早就声明了"去掉尾随标点
+#: （句末标点被一起复制进 DOI 是常见脏数据）"，但改前的实现只 `rstrip(".")`，
+#: 而 `_to_halfwidth` 只覆盖 U+FF01–FF5E、NFKC 不折 U+3002（`。`）——
+#: 于是实测 `normalize_doi('10.1000/ABC。') == '10.1000/abc。'`，
+#: 中文句末标点留在键里：同一篇文献"一个带、一个不带"就生成两个 DOI 键
+#: （`temp/auditF-probe4.txt`）。
+#:
+#: ## 为什么是这张显式表，而不是"所有 Unicode 标点"
+#:
+#: 过删比漏删危险得多，而且是不可逆的：把两个真的不同的 DOI 合并成一个键，
+#: 等于一篇文献被永久吞掉，没有任何报错（这正是 `dedup` 落在 FC-27 禁改区的理由）。
+#: 所以这里逐字列出"作为句末标点出现"的字符：
+#:
+#: - 半角 `.,;:` —— 尾随的逗号/分号/冒号在引文里几乎只可能是标点；
+#:   它们是 `.` 的同类，而"只认 ASCII 句点"是改前那句声明与实现的分歧本身；
+#: - `。、，．；：！？` —— 中文/全角的句末标点。注意其中 `，．；：！？` 是
+#:   U+FF01–FF5E，NFKC 之后已经变成半角，落在上面那一组里；这里仍列出全角形态，
+#:   是为了不依赖"NFKC 恰好折了它"这个偶然事实（顺序改了也不出错）；
+#: - `…` —— 摘要里被截断的引用常以省略号结尾。
+#:
+#: 刻意不含右括号类（`)）]】》」』`）：`10.1002/(SICI)1099-0542(1997)5:1<1::AID-CAE1>3.0.CO;2-B`
+#: 这种老式 Wiley DOI 合法地以 `)` 或字母数字结尾，而 SICI 形态的 DOI 内部
+#: 必然带 `(`/`)` —— 把右括号算进句末标点会让两款不同的老 DOI 有被合并的风险。
+#: 宁可漏删一个（顶多多一个键，事后跨库判重还有标题级兜底），
+#: 也不可多删一个（键一合并就不可逆）。
+_DOI_TRAILING_PUNCT = ".,;:。、，．；：！？…"
 
 
 def _to_halfwidth(text: str) -> str:
@@ -69,20 +109,33 @@ def normalize_doi(doi: str | None) -> str | None:
     2. 折小写（DOI 大小写不敏感）；
     3. 去 ``https?://`` + 可选 ``dx.`` + ``doi.org/`` 前缀；
     4. 去 ``doi:`` / ``doi: `` 前缀；
-    5. 去首尾空白与**尾随 ``.``**（句末标点被一起复制进 DOI 是常见脏数据）。
-       用 ``rstrip`` 而不是 ``strip``：前导 ``.`` 不是已知的脏数据形态，
-       多删一个字符就是"两个不同的 DOI 被合并"这种不可逆的错误。
+    5. 去首尾空白与**尾随标点**（句末标点被一起复制进 DOI 是常见脏数据）。
+       用 ``rstrip`` 而不是 ``strip``：前导标点不是已知的脏数据形态
+       （`。10.1000/abc` 与 `10.1000/abc` 是两个不同的串，多删一个字符
+       就是"两个不同的 DOI 被合并"这种不可逆的错误）。
+       剥哪些标点、为什么不含右括号，见 :data:`_DOI_TRAILING_PUNCT` 的说明。
+       顺序是"先去空白、再剥标点、再去空白"：改前是
+       `_to_halfwidth(text).strip().rstrip(".")`，于是 `'10.1000/abc.  '`
+       里的 `.` 不在末尾、剥不掉（`F-9` 的另一半）。
 
     入参不是 ``str`` 时按"没有 DOI"处理（返回 ``None``），绝不抛 ——
     判重路径宁可退到下一级键，也不该因为一个畸形字段把整批文献的处理打断。
     """
     if not doi or not isinstance(doi, str):
         return None
-    text = unicodedata.normalize("NFKC", doi).lower().strip()
+    # 顺序是刻意的（`F-9`）：先去尾随标点，再做 NFKC。
+    #
+    # 反过来（改前 + 只剥 ASCII）会漏掉一批：`！` / `？` / `，` / `；` / `：` 是
+    # U+FF01–FF5E，NFKC 会把它们折成半角 `!? ,;:`，于是"剥全角标点"这一步在
+    # NFKC 之后就再也看不见原来的形态了。先剥再折，两份写法都能收进同一张表。
+    text = doi.strip().rstrip(_DOI_TRAILING_PUNCT).strip()
+    text = unicodedata.normalize("NFKC", text).lower().strip()
     text = _DOI_URL_PREFIX_RE.sub("", text)
     text = _DOI_SCHEME_PREFIX_RE.sub("", text)
-    text = _to_halfwidth(text).strip().rstrip(".")
-    return text.strip() or None
+    text = _to_halfwidth(text).strip()
+    # NFKC 之后可能又露出一个半角标点（例如 `。` 与全角句点混排），再剥一次。
+    text = text.rstrip(_DOI_TRAILING_PUNCT).strip()
+    return text or None
 
 
 def literature_keys(title: str, year: int | None, doi: str | None) -> list[str]:
@@ -91,6 +144,14 @@ def literature_keys(title: str, year: int | None, doi: str | None) -> list[str]:
     第三个键 `title:<norm>|*` **不是装饰**：预印本与正式版的年份常常不同，
     只按 `标题+年` 匹配会把同一篇工作登记两次。它在
     :func:`find_existing_literature` 的第 3 轮里被真正使用（并带年份容差保护）。
+
+    ## 这一族是**唯一**的键来源（`F-8`）
+
+    年份缺失时给 `|*`，**不给 `|na`**：`na` 是一个正常值形态，
+    它会让"无年份的那个源"与"有年份的那个源"算出两个不同的键，
+    于是同一次搜索里的跨源合并失败（而事后跨库判重又会把它们合上 ——
+    两个判重口径互相矛盾）。`|*` 是显式的"年份未知"通配形态，
+    与 :func:`find_existing_literature` 第 3 轮的语义一致。
     """
     keys: list[str] = []
     nd = normalize_doi(doi)
@@ -105,6 +166,15 @@ def literature_keys(title: str, year: int | None, doi: str | None) -> list[str]:
 
 
 def title_key(title: str) -> str:
+    """标题的裸规范化形态（`title:<norm>`，不带 `|<year>` / `|*` 后缀）。
+
+    它不是键 —— `literature_keys` 从不产出这个形态，`_row_keys` 也因此永远
+    匹配不到它。唯一的用处是给 :func:`find_existing_literature` 第 3 轮拼出
+    ``f"{title_key(title)}|*"``（那条路径要回答"命中的是哪个键"）。
+    这一点显式写下来，是因为 `F-8` 实测登记过三种标题键形态在飞
+    （`title:<norm>` / `title:<norm>|na` / `title:{title.lower()}`），
+    它们互相不是成员关系；现在只剩 `literature_keys` 那一族。
+    """
     return f"title:{T.normalize(title)}"
 
 

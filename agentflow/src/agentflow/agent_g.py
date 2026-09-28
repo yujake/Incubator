@@ -41,7 +41,7 @@ from typing import Any, Callable, Mapping, Sequence
 from . import claimanatomy as CA
 from . import schema as S
 from .store import Store
-from .tools import build_for_role
+from .tools import build_registry
 from .tools import doc_tools as DT
 from .tools.base import ToolRegistry
 
@@ -73,10 +73,20 @@ def install_g_tools(
 ) -> ToolRegistry:
     """装配 G 的工具栏。
 
-    为什么走 `build_for_role("G")` 而不是手工挑几个工具：角色即权限面（FC-06），
-    装配结果必须可枚举、可比对；手工挑会在"新增工具时忘了给 G"这种地方静默漏水。
+    为什么按角色装配（`build_registry(...).scoped_to("G")`）而不是手工挑几个工具：
+    角色即权限面（FC-06），装配结果必须可枚举、可比对；手工挑会在"新增工具时忘了
+    给 G"这种地方静默漏水。
 
-    为什么还要检查 `doc.*` 是否在里面：`build_for_role` 会容忍模块缺失
+    「注册面」与「可调用面」是两件事，混起来会多算工具（`R7-AN-2` 的教训）：
+    `scoped_to("G")` 给的是同一个注册表的视图，它仍然登记全部 spec
+    （`names()` 是全集，含 G 根本调不到的写侧工具）；"G 到底能调什么"必须问
+    `call_surface("G")` 或 `for_role("G")` —— 实测两者相等。
+    `build_for_role` 那条老路会先把 spec 裁成子表（于是 `names()` 恰好等于工具面），
+    代价是装配期的属性（FC-17 的 `default_budget` / `default_spill_root`、`P-14` 的
+    `bound_role`）静默留空 —— 所以这里走 `scoped_to`，方向是拿回那两格，
+    不是放宽权限面。
+
+    为什么还要检查 `doc.*` 是否在里面：装配会容忍模块缺失
     （并行开发的现实），而 G 没有 doc 工具就什么也做不了。这种降级必须
     显式补上并留痕，而不是让 G 悄悄少一只手（FC-08：不得静默降级为空）。
     """
@@ -84,10 +94,18 @@ def install_g_tools(
     if registry is not None:
         reg = registry
     else:
-        reg = build_for_role("G", store=store, workspace_root=root).registry
+        # `scoped_to` 不裁 spec 表（`names()` 仍是全集），`build_for_role` 会裁成子表
+        # （`names()` 就等于工具面）。这里要的是 `build_registry` 的完整装配：FC-17 的
+        # 上下文预算（`default_budget` / `default_spill_root`）与 `P-14` 的
+        # `bound_role="G"` 跟着过来，走 `build_for_role` 那两格会静默留空。
+        # G 只通过 `self.tools.call(...)` 用工具，没有绑定角色的注册表会让每次调用都被拒。
+        # "G 到底能调什么"由 `call_surface("G")` / `for_role("G")` 回答，不是 `names()`。
+        reg = build_registry(store=store, workspace_root=root).registry.scoped_to("G")
     if not any(n.startswith("doc.") for n in reg.names()):
         DT.register(reg, store=store, root=root, workspace_root=root)
-        setattr(reg, "doc_fallback_reason", "build_for_role('G') 结果里没有任何 doc.* 工具")
+        setattr(reg, "doc_fallback_reason", "这次 scoped_to('G') 装配的结果里没有任何 doc.* 工具")
+    if reg.bound_role is None:
+        reg.bound_role = "G"
     return reg
 
 
@@ -127,6 +145,9 @@ class AgentG:
             if tools is not None
             else install_g_tools(self.store, workspace_root=self.workspace_root)
         )
+        # ---- 绑定角色（`P-14`）：注入的注册表同样要绑（`AgentD` 那条注释同族）。
+        if self.tools.bound_role is None:
+            self.tools.bound_role = "G"
 
     # ------------------------------------------------------------ 小工具
 
@@ -227,8 +248,10 @@ class AgentG:
 
         为什么 G 需要它：`build_document` 是"要么全过、要么全不写"的闸门，
         而在组装阶段（手里还在改稿）往往只想问"现在这版有几条不合格"。
-        它返回的 `decided` / `undecidable` 就是三态纪律的落点：
-        "字段缺失"与"字段非法"与"检查器没跑成"必须能分开处置。
+        它返回的 `undecidable_count` 就是三态纪律第三态的落点
+        （同一个返回里的 `decided` 是由它推出的布尔结论，不是第三个计数）：
+        "字段缺失"与"字段非法"与"检查器没跑成"必须能分开处置 ——
+        后者单独占 `undecidable_count` 一档，不许并进任何别的档。
 
         判据来自 `claimanatomy.CLAIM_FIELDS`（唯一来源），本方法只是汇总。
         """
@@ -454,6 +477,25 @@ class AgentG:
                     "`normalize_claims` 只看 citations 非空，查不出这一点"
                 )
 
+            # 第三道闸：proof 级断言的证据锚（`D-1`）。与 `doc.build_document`
+            # 复用同一个 `DT.check_proofs`，理由与上面那条逐字相同 ——
+            # 少一道，"修订"就是绕过它的后门。这条不是推演：实测把 `revise` 的
+            # 新断言换成一条只引 `lit:`、没有 `proof_location` 的 proof 断言，
+            # 它能成功写库（`temp/r2-revise-bypass.txt`，本文件修之前跑出来的）。
+            proofs = DT.check_proofs(tx.rows, normalized, workspace_root=self.workspace_root)
+            if not proofs["checked"]:
+                raise DocumentError(
+                    f"修订 doc:{doc_id} 时无法核对 proof 级断言的证据：{proofs['reason']} ⇒ 整笔不写库"
+                )
+            if proofs["problems"]:
+                bad = "；".join(f"[{p['claim_id']}] {p['detail']}" for p in proofs["problems"])
+                raise DocumentError(
+                    f"修订 doc:{doc_id} 被拒：{len(proofs['problems'])} 条 proof 级断言的证据"
+                    f"不成立，整笔不写库（documents/review_findings 都不动）：{bad}。"
+                    "`evidence_kind='proof'` 享受最高一档的证据待遇，所以改写这条路"
+                    "也必须指向一条真的跑过检查器的实验行、并给出盘上真的存在的落点"
+                )
+
             doc["claims"] = normalized
             doc["review_rounds"] = int(doc.get("review_rounds") or 0) + 1
             doc["status"] = "revised"
@@ -515,10 +557,26 @@ class AgentG:
     # ------------------------------------------------------------ 自检
 
     def selftest(self) -> int:
-        """对当前 store 做一次最小自检：能不能构造断言、写稿、渲染。
+        """就地冒烟自检：只做"构造断言 + 内存渲染"两步，不碰 store。
+
+        真正被调用的只有这两处（与实现逐条对应）：
+        1. `self.compose_claim(...)` 造一条断言 —— 覆盖断言构造那一道闸
+           （它直接转发工具层的纯函数，不走 `self._call`、不碰注册表）；
+        2. `self.render({...}, dependencies=None)` 把它渲染成 markdown
+           —— `dependencies=None` 是有意的"没查"：连依赖表都不读，
+           于是这次自检对 store 连一次读都没有，更不会写；
+           最后核对渲染结果里出现"自检断言"与 "lit:0000"。
+
+        它刻意不做的事（读的人不要以为已被覆盖）：
+        - 不调 `build_document`：稿件落盘与随之而来的 schema 校验
+          没有任何就地检查，那一路的回归只能靠测试与模块级 `_selftest()`；
+        - 不写 store：不落 `documents`，也不 `register_dependency`。
+          自检不该改用户的库 —— `Store` 是用户的数据，一次冒烟检查
+          没有资格往里写（顺带它也才能在只读工作区里被调用）。
 
         返回 0（成功）/ 1（失败）。它与模块级 `_selftest()` 的分工：
-        后者建临时工作区跑一遍完整流程并打印，前者是"就地可调用"的冒烟检查。
+        后者建临时工作区跑一遍完整流程（含 build_document 与落盘）并打印，
+        前者是"就地可调用"的冒烟检查。
         """
         try:
             claim = self.compose_claim(
@@ -594,12 +652,19 @@ def _selftest() -> int:
                 evidence_kind="proof",
                 result="supports",
                 negation_kind="not_proved",
-                verifier_output="Lean4: no goals",
+                # 输出必须是绑了被检查声明名的检查器诊断（`R2-AN-2` /
+                # `R2b-agentg-1`）：从前这里写的是 `"Lean4: no goals"`，那种输出里
+                # 没有声明名 ⇒ 审计判据（`verify.verify_all` 的 `selfreported_proof`）
+                # 只能把这一行读成"自报的 proof"，而夹具本身就在演示那个形态。
+                # 写成 `'<声明名>' does not depend on any axioms` 才是 Lean 真跑过的形态。
+                verifier_output="'SpecK(m)=[-m,m]' does not depend on any axioms",
                 # `evidence_kind="proof"` 时 schema 硬要求这一字段，且必须
-                # 与本行的 `claim_key` 逐字相等（`schema.py:822-832`）：检查器输出
-                # 必须绑定到它管的那个命题，否则"把 A 命题的输出贴到 B 命题上"
+                # 与本行的 `claim_key` 逐字相等（判据在 `schema.Experiment.validate`）：
+                # 检查器输出必须绑定到它管的那个命题，否则"把 A 命题的输出贴到 B 命题上"
                 # 在结构上合法。少了它自检块直接退出码 1
-                # （`DEVELOPMENT.md:1021` 已登记为本文件的待修项）。
+                # （`DEVELOPMENT.md` 的 §8.4「待办」已把这条登记为本文件的待修项。
+                #  这里刻意只写小节名不写行号：行号在并行开发下几十分钟就漂，
+                #  而小节名与符号名可核 —— `.noai-paths` 的维护纪律）。
                 verifier_subject_key="SpecK(m)=[-m,m]",
                 created_at=S.now_iso(),
             ).to_dict(),
@@ -619,16 +684,44 @@ def _selftest() -> int:
         )
     line("[1] 造数据：文献 2 篇、实验 2 条（1 条 formal/proof、1 条 numeric/cross_check）")
 
+    # [1b] 夹具自己必须过审计：这条 formal/proof 行的 `verifier_output` 要能读出
+    # 被检查的声明名，否则它是一个"自报的 proof"（`selfreported_proof`，`R2b-agentg-1`）。
+    # 从前没有人跑这一步 —— `_selftest` 不调 `verify_all`、也没有任何测试调 `_selftest`，
+    # 于是那条矛盾的夹具不会以任何红的方式出现。这里把它接上（fail-closed：报告不出
+    # 就退出码 1，不是打印一行了事）。
+    from .verify import verify_all
+
+    audit = verify_all(st)
+    selfreported = [i for i in audit.issues if i.code == "selfreported_proof"]
+    if selfreported:
+        for i in selfreported:
+            line(f"    [红] 自检夹具产出了自报的 proof：{i.table}:{i.row_id} {i.message[:120]}")
+        line("SELF-CHECK FAILED（agent_g；夹具的 proof 行读不出依据）")
+        return 1
+    line("[1b] 审计读数：本自检夹具的 selfreported_proof 命中 = 0（proof 行的依据可读）")
+
     g = AgentG(st, config={"docs_subdir": "documents"}, log=None)
-    line(f"[2] G 的工具面：{sorted(g.tools.names())}")
+    # `names()` 是注册面（含 G 调不到的写侧工具），`call_surface("G")` 才是可调用面。
+    line(f"[2] G 的可调用面（call_surface('G')）：{sorted(g.tools.call_surface('G'))}")
+    line(f"    注册面（names()，含 G 调不到的工具）：{len(g.tools.names())} 个；"
+         f"可调用面 {len(g.tools.call_surface('G'))} 个")
 
     line("[3] compose_claim：三条正向 + 三条负控")
+    # `D-1`：proof 级断言必须给出一个盘上真的存在的落点
+    # （`doc_tools.check_proofs` 会在 `build_document` 里按工作区根解析并 `is_file()`）。
+    # 自检自己造一份最小 Lean 文件当落点 —— 不写它，自检会在第 [4] 步被自己的新判据拦下。
+    proof_dir = root / "proofs"
+    proof_dir.mkdir(parents=True, exist_ok=True)
+    (proof_dir / "selftest.lean").write_text(
+        "theorem selftest_proof : True := trivial\n", encoding="utf-8"
+    )
     proof = g.compose_claim(
         "由形式化检查器核验：Spec K(m) = [−m, m]。",
         citations=["exp:0000", "lit:0000"],
         evidence_kind="proof",
         section="主要结果",
         claim_id="claim-1",
+        proof_location="proofs/selftest.lean:1",
     )
     cross = g.compose_claim(
         "数值抽样在 10^4 个点上支持 Spec K(m) ⊆ [−m, m]。",

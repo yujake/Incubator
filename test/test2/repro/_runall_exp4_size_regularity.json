@@ -149,7 +149,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 0.329,
+    "elapsed_seconds": 0.299,
     "injected_bug": null,
     "m5_box_undercount_diagnostic": {
       "box": 3,
@@ -316,7 +316,7 @@
           "1": 18
         },
         "m": 3,
-        "seconds": 0.002,
+        "seconds": 0.0,
         "vertex_transitivity": {
           "all_shifts_are_automorphisms": true,
           "n_vertices_in_box": 37,
@@ -516,7 +516,7 @@
           "1": 80
         },
         "m": 4,
-        "seconds": 0.011,
+        "seconds": 0.014,
         "vertex_transitivity": {
           "all_shifts_are_automorphisms": true,
           "n_vertices_in_box": 165,
@@ -763,7 +763,7 @@
           "1": 365
         },
         "m": 5,
-        "seconds": 0.316,
+        "seconds": 0.285,
         "vertex_transitivity": {
           "all_shifts_are_automorphisms": true,
           "n_vertices_in_box": 746,

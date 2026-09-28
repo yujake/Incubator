@@ -114,7 +114,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 9.502,
+    "elapsed_seconds": 7.685,
     "failed_checks": [
       "m3.e.coarse_grid_finds_the_zero",
       "m4.e.coarse_grid_finds_the_zero",
@@ -247,7 +247,7 @@
           "n_eigenvalues_sampled": 3600,
           "random_extra": 200
         },
-        "seconds": 0.147,
+        "seconds": 0.133,
         "witness_ABS_S_zero": {
           "S": [
             -2.220446049250313e-16,
@@ -380,7 +380,7 @@
           "n_eigenvalues_sampled": 31650,
           "random_extra": 200
         },
-        "seconds": 1.337,
+        "seconds": 1.169,
         "witness_ABS_S_zero": {
           "S": [
             0.0,
@@ -521,7 +521,7 @@
           "n_eigenvalues_sampled": 131472,
           "random_extra": 200
         },
-        "seconds": 8.017,
+        "seconds": 6.383,
         "witness_ABS_S_zero": {
           "S": [
             -2.220446049250313e-16,

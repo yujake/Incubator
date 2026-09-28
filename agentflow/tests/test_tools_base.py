@@ -162,6 +162,9 @@ def test_registry_unknown_tool_returns_failed_result_not_exception():
 def test_registry_param_errors_return_failed_result_not_exception():
     """参数错误同样返回 ok=False（含"多给了参数""少了必填参数""类型不对"三种）。"""
     reg = ToolRegistry(name="t")
+    # `P-14`：没有绑定角色的注册表上 `call` 一律被拒（fail-closed）。本用例测的是
+    # 参数校验，所以先绑定一个角色（"这次是谁在调"这件事由装配期决定）。
+    reg.bound_role = "A"
     reg.register(
         ToolSpec(
             name="demo.echo",
@@ -174,6 +177,7 @@ def test_registry_param_errors_return_failed_result_not_exception():
             },
             handler=lambda n: ok(n),
             returns="回显进来的整数",
+            roles=("A",),
         )
     )
     for label, kwargs in (
@@ -187,6 +191,16 @@ def test_registry_param_errors_return_failed_result_not_exception():
         assert res.meta.get("kind") == "param_error", label
         assert res.error, label
     assert reg.call("demo.echo", n=7).data == 7
+    # ---- `P-14` 的负控（成对写，否则"绑了角色"这件事没有任何东西在守）：
+    # 同一张表上不声明角色 ⇒ 拒；声明另一个角色的身份 ⇒ 也拒。
+    bare = reg.scoped_to("A")
+    bare.bound_role = None
+    denied = bare.call("demo.echo", n=7)
+    assert denied.ok is False and denied.meta.get("kind") == "role_denied", denied
+    assert "角色" in (denied.error or ""), denied.error
+    forged = reg.scoped_to("A").call("demo.echo", n=7, role="H")
+    assert forged.ok is False and forged.meta.get("kind") == "role_denied", forged
+    assert "'H'" in (forged.error or ""), forged.error
 
 
 def test_registry_wraps_handler_exception_as_unexpected():
@@ -196,8 +210,10 @@ def test_registry_wraps_handler_exception_as_unexpected():
         raise RuntimeError("handler 炸了")
 
     reg = ToolRegistry(name="t")
+    reg.bound_role = "A"  # `P-14`：见 test_registry_param_errors_… 的同一条注释
     reg.register(ToolSpec(name="demo.boom", summary="会炸的工具",
                           params={"type": "object", "properties": {}}, handler=boom,
+                          roles=("A",),
                           returns="（不会返回：handler 抛异常）"))
     res = reg.call("demo.boom")
     assert res.ok is False
@@ -213,8 +229,10 @@ def test_registry_wraps_tool_error_with_tool_error_kind():
         raise ToolError("拒绝：文件不存在")
 
     reg = ToolRegistry(name="t")
+    reg.bound_role = "A"  # `P-14`：见 test_registry_param_errors_… 的同一条注释
     reg.register(ToolSpec(name="demo.refuse", summary="会拒绝的工具",
                           params={"type": "object", "properties": {}}, handler=refuse,
+                          roles=("A",),
                           returns="（不会返回：handler 抛 ToolError）"))
     res = reg.call("demo.refuse")
     assert res.ok is False
@@ -225,6 +243,7 @@ def test_registry_wraps_tool_error_with_tool_error_kind():
 def test_registry_wraps_bare_return_value_into_ok():
     """handler 返回裸值时被自动包成 ok(...)，脚本模式与 LLM 模式共用同一份实现。"""
     reg = ToolRegistry(name="t")
+    reg.bound_role = "A"  # `P-14`：见 test_registry_param_errors_… 的同一条注释
     reg.register(
         ToolSpec(
             name="demo.bare",
@@ -232,6 +251,7 @@ def test_registry_wraps_bare_return_value_into_ok():
             params={"type": "object", "properties": {}, "additionalProperties": False},
             handler=lambda: {"value": 1},
             returns="{'value'}",
+            roles=("A",),
         )
     )
     res = reg.call("demo.bare")
@@ -255,11 +275,18 @@ def test_registry_tool_decorator_roundtrip_and_duplicate_name():
         return v.upper()
 
     reg = ToolRegistry(name="t")
+    reg.bound_role = "C"  # `P-14`：见 test_registry_param_errors_… 的同一条注释
     spec = reg.register_function(decorated)
     assert spec.name == "demo.decorated"
     assert reg.call("demo.decorated", v="abc").data == "ABC"
-    with pytest.raises(ValueError):
+    # `errors-7`：重名是工具层配置失败，必须与 `_reject_unknown_roles` 同一类型
+    # （`ToolError`）——改前这里抛的是裸 `ValueError`，于是按 ToolError 分类处理
+    # 装配失败的调用方会静默漏掉这一类。这条断言改的是类型，不是"放宽"：
+    # `ToolError` 是 `RuntimeError` 的子类，它比 `ValueError` 更窄（见 `ToolError` 的
+    # docstring："调用方只需捕这一个类型"）。
+    with pytest.raises(ToolError, match="工具名重复") as dup:
         reg.register(spec)
+    assert dup.value.tool == "demo.decorated", "重名失败必须带上工具名（与未知角色那条一致）"
     with pytest.raises(ValueError):
         reg.register_function(lambda: 1)
     with pytest.raises(ToolError):
@@ -300,7 +327,7 @@ def test_toolspec_rejects_invalid_side_effect():
 
 
 def test_toolspec_needs_approval_tracks_dangerous_side_effects():
-    """只有 write_local / network 需要审批；none / read 可以任意调用。"""
+    """只有 write_local 需要审批；none / read 可以任意调用（`network` 已是非法取值）。"""
     def sp(effect: str) -> ToolSpec:
         return ToolSpec(name="x.y", summary="样本", params={"type": "object", "properties": {}},
                         handler=lambda: None, returns="（样本不返回）", side_effect=effect)
@@ -308,7 +335,54 @@ def test_toolspec_needs_approval_tracks_dangerous_side_effects():
     assert sp("none").needs_approval is False
     assert sp("read").needs_approval is False
     assert sp("write_local").needs_approval is True
-    assert sp("network").needs_approval is True
+    # 负控：B3 收官把遗留取值 `network` 从词表里删掉了 ⇒ 它现在必须在构造期就炸，
+    # 而不是"仍然被接受、只是需要审批"。删掉词表却不改这条断言，就等于
+    # 让一个已经不存在的取值在这里继续被当成合法输入。
+    with pytest.raises(ValueError, match="side_effect"):
+        sp("network")
+
+
+def test_network_is_no_longer_a_legal_side_effect():
+    """`network` 是非法取值：装配期就抛，且错误信息里给出真正的词表（负控）。
+
+    这条用例是"词表里真的没有 `network` 了"的直接证据 —— 它不看文档、不看常量，
+    只看 `ToolSpec` 的构造行为。负控的另一半（正控）在同一用例里：
+    三个合法取值必须都能构造出来，否则上面那条 `pytest.raises` 可能是因为
+    夹具本身坏了（`params` 写错之类）而通过的 —— 那是一条不会失败的断言。
+    """
+    for good in ("none", "read", "write_local"):
+        spec = ToolSpec(name="sample.one", summary="样本",
+                        params={"type": "object", "properties": {}}, handler=lambda: None,
+                        returns="（样本不返回）", side_effect=good)
+        assert spec.side_effect == good
+    with pytest.raises(ValueError) as excinfo:
+        ToolSpec(name="sample.one", summary="样本", params={"type": "object", "properties": {}},
+                 handler=lambda: None, returns="（样本不返回）", side_effect="network")
+    # 错误信息里必须给出真正的词表（三个合法取值），而不是只骂一句"非法"：
+    # 下一个人要知道该写什么，而不是只知道写错了。
+    message = str(excinfo.value)
+    assert "'none', 'read', 'write_local'" in message
+    assert "network" in message
+
+
+def test_legacy_translation_tables_are_gone():
+    """两张遗留翻译表与其全部下游名字都不存在了（结构性判据，不读文档）。
+
+    为什么断言"名字不存在"而不是"表是空的"：空表仍然是"第二个词表"，
+    它会在下一次有人想加一个折中取值时被当成现成的落点。P-13 §3.2 的
+    原话是"只增不减的迁移不是迁移，是把第二个词表永久留在仓库里"。
+    """
+    from agentflow import capabilities as C
+    from agentflow import tools as T
+    from agentflow.tools import base as B
+
+    for mod, name in ((B, "LEGACY_SIDE_EFFECTS"), (B, "LEGACY_EFFECTS_BY_TOOL"),
+                      (B, "NEEDS_APPROVAL"), (T, "LEGACY_TRANSLATIONS"),
+                      (T, "untranslated_legacy_tools"), (C, "LEGACY_NETWORK_AXES")):
+        assert not hasattr(mod, name), f"{mod.__name__}.{name} 应当已随 B3 收官删除"
+    assert B.SIDE_EFFECTS == ("none", "read", "write_local")
+    assert C.SIDE_EFFECTS == ("none", "read", "write_local")
+    assert T.SIDE_EFFECTS_WRITE == ("write_local",)
 
 
 def test_toolspec_name_requires_group_prefix_and_function_schema_replaces_dots():
@@ -347,61 +421,41 @@ def test_effect_axis_is_derived_from_side_effect_not_a_second_declaration():
     assert _sample().effect == "none"
 
 
-def test_legacy_network_is_translated_explicitly_per_tool():
-    """遗留取值 `network` 走逐工具翻译表：两根轴上的值都由人写下来。
+def test_migrated_tools_pin_the_four_tuple(store):
+    """B3 收官迁移的四个工具：`(effect, external, needs_approval, sandbox_required)` 逐条钉住。
 
-    实测的两个方向都在这里钉住：`search.download` 会写工作区（`write_local`），
-    `ocr.run` 首次构造 Reader 会下模型（同口径）。不许静默重新解释：
-    没登记的遗留工具在构造期就被拒。
+    这四条本来是"遗留取值 `network` + 逐工具翻译表"说的事，现在由工具自己的
+    两个声明直接说出来。逐条钉住的理由是"迁移必须可差分验收"：
+    这四个工具是本轮唯一的真行为变化来源，一条四元组就是它的全部可观测面。
     """
-    from agentflow.tools.base import LEGACY_EFFECTS_BY_TOOL
-
-    assert LEGACY_EFFECTS_BY_TOOL["search.download"] == ("egress", "write_local")
-    assert LEGACY_EFFECTS_BY_TOOL["ocr.run"] == ("egress", "write_local")
-    assert LEGACY_EFFECTS_BY_TOOL["search.providers"] == ("egress", "read")
-
-    # 负控：遗留工具上"翻译表说 egress、声明说 exec"这种两个说法不许同时存在。
-    # （装配期还有一条：声明了 network 却忘了登记原意的工具会让 build_registry
-    # 报 `<legacy>` —— 那条由 tests 里的 `test_unregistered_legacy_tool_is_reported_at_assembly` 守。）
-    with pytest.raises(ValueError, match="external"):
-        _sample(name="sample.conflict", side_effect="network", declared_external="exec")
-
-
-def test_unregistered_legacy_tool_is_reported_at_assembly(store):
-    """装配期可见：新加的遗留工具若忘了登记原意 ⇒ 报告里必须出现它。
-
-    这是"不许静默重新解释"的装配期形态：`effect` 会退回翻译表的默认值，
-    而默认值恰好是 `network` 这个取值字面上说过的话（"不改我们的东西"）——
-    "它其实会写我们的东西"这个事实会被丢掉，且没有任何地方报错。
-    判据走的是 `build_registry` 用的同一个函数（不是测试里重写一遍）。
-    """
-    from agentflow.tools import LEGACY_EFFECTS_BY_TOOL, untranslated_legacy_tools
-
-    reg = build_registry(store=store, workspace_root=store.root).registry
-    assert untranslated_legacy_tools(reg) == [], "真实树上四个遗留工具都登记过原意"
-
-    reg.register(ToolSpec(name="sample.unregistered", summary="遗留样本",
-                          params={"type": "object", "properties": {}}, handler=lambda: None,
-                          returns="（样本不返回）", side_effect="network"))
-    assert untranslated_legacy_tools(reg) == ["sample.unregistered"]
-    assert "sample.unregistered" not in LEGACY_EFFECTS_BY_TOOL
-
-
-def test_real_tree_legacy_tools_translate_to_the_documented_axes(store):
-    """真实树上的四个遗留工具，翻译结果必须与 P-13 §4.2/§4.3 逐条一致。"""
     build = build_registry(store=store, workspace_root=store.root)
     expected = {
-        "search.providers": ("egress", "read"),
-        "search.literature": ("egress", "read"),
-        "search.download": ("egress", "write_local"),
-        "ocr.run": ("egress", "write_local"),
+        # 两个只读检索：读我们拥有的表 + 出网
+        "search.providers": ("read", "egress", True, True),
+        "search.literature": ("read", "egress", True, True),
+        # 两个会写我们的东西 + 出网（这正是遗留取值丢掉的那个事实）
+        "search.download": ("write_local", "egress", True, True),
+        "ocr.run": ("write_local", "egress", True, True),
     }
-    for name, (ext, eff) in expected.items():
+    for name, (eff, ext, appr, sandbox) in expected.items():
         spec = build.registry.get(name)
-        assert (spec.external, spec.effect) == (ext, eff), name
-        # 行为不变：遗留取值继续需要审批（P-13 §5 的审批面表）
-        assert spec.needs_approval is True, name
-        assert spec.sandbox_required is True, name
+        assert (spec.effect, spec.external, spec.needs_approval, spec.sandbox_required) == (
+            eff, ext, appr, sandbox), name
+        # 第二根轴是人写下来的声明，不是从别处推出来的（G-45：字段名是 declared_external）
+        assert spec.declared_external == ext, name
+
+
+def test_unregistered_legacy_tool_is_now_rejected_at_construction():
+    """负控：想再声明一个遗留取值 `network` 的工具 ⇒ 构造期就抛（装配期检查已不需要）。
+
+    迁移期的形态是"装配期把它记进 `skipped`，让人看见有人新加了遗留工具却忘了
+    登记原意"。B3 收官删掉那个取值之后，这条判据前移成构造期拒绝：
+    判据更强（不是"可见"而是"不可能"），也不再需要一张必须与真实树同步的表。
+    """
+    with pytest.raises(ValueError, match="side_effect"):
+        ToolSpec(name="sample.unregistered", summary="遗留样本",
+                 params={"type": "object", "properties": {}}, handler=lambda: None,
+                 returns="（样本不返回）", side_effect="network")
 
 
 def test_needs_approval_and_sandbox_required_are_derived(monkeypatch):
@@ -452,6 +506,10 @@ def test_six_piece_validation_really_runs_in_post_init():
     """§4.3 第 1 项承诺的"六件套由 `__post_init__` 校验"必须真的接上。
 
     这是本轮修掉的那处"文档承诺了不存在的门"的证据：每一条都单独触发一次。
+
+    `D6`：`roles` 那半的"元组"判据此前也只是一句注释（实测 `roles=['E']` 被接受），
+    所以这里连它一起钉住 —— 元组放行、list 拒绝，两个方向都断言
+    （只断言"list 被拒"会放过一个"什么都拒"的实现）。
     """
     with pytest.raises(ValueError, match="summary"):
         _sample(summary="   ")
@@ -461,6 +519,11 @@ def test_six_piece_validation_really_runs_in_post_init():
         _sample(params=[])
     with pytest.raises(ValueError, match="returns"):
         _sample(returns=None)
+    # `D6` 的正控：元组放行。
+    assert _sample(roles=("E",)).roles == ("E",)
+    # `D6` 的负控：list 必须被拒，且理由里点名 roles / 元组。
+    with pytest.raises(ValueError, match="roles"):
+        _sample(roles=["E"])
 
     spec = ToolSpec(
         name="table.create",

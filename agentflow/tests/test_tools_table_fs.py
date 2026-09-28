@@ -21,6 +21,9 @@ from agentflow.tools.base import ToolRegistry
 def tables(store):
     """绑定了 store 的表工具注册表。"""
     reg = ToolRegistry(name="tables")
+    # 绑定角色（`P-14`）：本文件要真的写表，所以取一个非只读角色
+    # （`table.*` 的声明角色含 A；C/H 是只读角色，拿不到写工具）。
+    reg.bound_role = "A"
     table_tools.register(reg, store=store)
     return reg
 
@@ -29,6 +32,7 @@ def tables(store):
 def fs(store):
     """绑定了工作区根的沙箱文件工具注册表。"""
     reg = ToolRegistry(name="fs")
+    reg.bound_role = "A"  # `P-14`：同上（`fs.*` 的声明角色是 A/B/C/D）
     fs_tools.register(reg, root=store.root)
     return reg
 

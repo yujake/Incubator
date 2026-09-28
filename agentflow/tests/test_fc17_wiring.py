@@ -38,6 +38,14 @@ BIG = "X" * 5000
 
 
 def _big_tool(reg, *, declares_budget: bool = False) -> None:
+    """装一个"返回大字符串"的工具，并把注册表绑定到 `A`（`P-14`）。
+
+    为什么在这里绑角色：本模块的用例全部走 `build_registry(...).registry`，而那张
+    完整注册表默认不绑定任何角色（`bound_role=None`）⇒ 每次 `call` 都会被
+    "调用方没有声明角色"拒掉。`zz.big` 声明的角色是 `A`，所以这张表代表 `A`。
+    """
+    if reg.bound_role is None:
+        reg.bound_role = "A"
     props = {"type": "object", "properties": {}, "additionalProperties": False}
     if declares_budget:
         props["properties"] = {"budget": {"type": "object"}}

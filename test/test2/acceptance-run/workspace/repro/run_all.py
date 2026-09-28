@@ -84,13 +84,37 @@ def run_script(script, argv, json_path, timeout=900):
     }
 
 
+def _named_failing_check(rec):
+    """The names of the checks that failed, per the record's own observations.
+
+    Returns `[]` when the record names none -- which is exactly the case a crash
+    produces (there was no check to fail; the process died).
+    """
+    obs = (rec["result"] or {}).get("observations") or {}
+    names = obs.get("failed_checks") or []
+    if names:
+        return list(names)
+    caught = obs.get("caught_by") or ""
+    return [caught] if caught else []
+
+
 def verdict_of(rec):
     """Map a run to a verdict, refusing to call an exit != 0 a success.
 
     exit 0  + result supports      -> supports
-    exit 1  + result refutes       -> caught_the_injected_bug (clean run: refuted)
-    exit 2  + result inconclusive  -> inconclusive (e.g. the time budget ran out)
+    exit 1  + result refutes, **and the record names the check that failed**
+                                   -> caught_the_injected_bug (clean run: refuted)
+    exit 2  + result inconclusive  -> inconclusive (time budget, or a crash)
     exit != 0 without a REPRO_RESULT -> crashed
+    exit != 0 + refutes but no failing check named -> crashed
+
+    The last line is the `E-7` fix.  Before it, `r == "refutes"` alone was enough
+    for `caught_the_injected_bug`; the module docstring already said the negative
+    controls "are checked for the right failure, not just for a non-zero exit:
+    the JSON must name the check that caught the injected bug", but nothing
+    enforced it.  So a script that raised `ImportError` inside its own
+    `--inject-bug` branch was scored as a successful negative control, and the
+    aggregate could print ALL CHECKS PASS while catching nothing.
     """
     r = (rec["result"] or {}).get("result")
     if rec["returncode"] == 0:
@@ -98,6 +122,8 @@ def verdict_of(rec):
             return "supports"
         return "unknown" if r else "crashed"
     if r == "refutes":
+        if not _named_failing_check(rec):
+            return "crashed"
         return "caught_the_injected_bug"
     if r == "inconclusive":
         return "inconclusive"
@@ -105,10 +131,10 @@ def verdict_of(rec):
 
 
 def caught_by(rec):
-    obs = (rec["result"] or {}).get("observations", {})
-    names = obs.get("failed_checks")
+    names = _named_failing_check(rec)
     if names:
         return ", ".join(names[:4])
+    obs = (rec["result"] or {}).get("observations", {})
     return obs.get("caught_by", "")
 
 
@@ -192,7 +218,12 @@ def main():
     exp_ok = all(r["verdict"] == "supports" for r in clean_runs)
     ev_kind_ok = all((r["result"] or {}).get("evidence_kind") == "cross_check"
                      for r in clean_runs + bug_runs if r["result"])
-    bugs_ok = all(r["verdict"] == "caught_the_injected_bug" for r in bug_runs)
+    # `E-7`：除了 verdict，还**必须点名**是哪条 check 抓住了注入的 bug。
+    # 只判 verdict 的话，"refutes 但一条 failed_checks 都没有"的记录（崩溃那一形态）
+    # 仍然会走进这个 all()（旧版 verdict_of 就是这么给它的）。
+    bugs_ok = all(r["verdict"] == "caught_the_injected_bug"
+                  and bool(_named_failing_check(r)) for r in bug_runs)
+    bugs_named = all(bool(_named_failing_check(r)) for r in bug_runs)
     banners_ok = all(r["banner_pass"] for r in clean_runs) and \
         all(r["banner_fail"] for r in bug_runs)
     no_hang_ok = all(rec["verdict"] != "crashed" for rec in clean_runs + bug_runs)
@@ -201,6 +232,7 @@ def main():
     print("  all five experiments report supports .......... %s" % exp_ok)
     print("  every result carries evidence_kind=cross_check %s" % ev_kind_ok)
     print("  every negative control was caught ............. %s" % bugs_ok)
+    print("  every caught control NAMES the failing check .. %s" % bugs_named)
     print("  banners match (PASS clean / FAIL injected) .... %s" % banners_ok)
     print("  no script crashed or timed out ................ %s" % no_hang_ok)
 
@@ -217,6 +249,7 @@ def main():
             "negative_controls": len(bug_runs),
             "all_experiments_supports": exp_ok,
             "all_negative_controls_caught": bugs_ok,
+            "all_negative_controls_named_the_failing_check": bugs_named,
             "all_evidence_kind_cross_check": ev_kind_ok,
             "banners_match": banners_ok,
             "no_script_hung_or_crashed": no_hang_ok,

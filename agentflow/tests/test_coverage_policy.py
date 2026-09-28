@@ -150,3 +150,102 @@ def test_check_action_does_not_consult_other_roles_actions():
     for role, action, owner in pairs[:5]:
         ref = P.check_action(role, action)
         assert ref is not None and ref.reason == "unknown_action", (role, action, owner, ref)
+
+
+# ============================================================ 交叉断言（`D-5`）
+
+
+def test_capability_actions_and_check_action_agree_on_every_role():
+    """`D-5` 的判据：能力表声明的动作集合 == `check_action` 认的动作集合。
+
+    ## 为什么这条断言是 `D-5` 缺的那一半
+
+    `D-5` 的实测事实是："H 有哪些动作"有两套说法 ——
+    能力表说 3 个，而工具级只读例外表 `READONLY_CALL_EXCEPTIONS['H']` 里有
+    `review.report`（它由 `agent_h._H_WRITABLE_TOOLS` 派生），
+    且 `AgentH.review_report` 真实存在、走的就是那个工具。
+    后果是 `policy.check_action('H','review_report')` 返回 `unknown_action` ——
+    主控没有办法让 H 产出审校报告。
+
+    这条断言把"两套说法"钉成一套，用两个来源各说一次：
+
+    1. 能力表声明的每个动作，`check_action` 必须放行
+       （漏放 = 声明了却调不动，正是 `D-5` 的形态；`D-5` 修完之后
+       `H.review_report` 就落在这条上）；
+    2. 能力表声明的每个动作，在工具层那一边必须有一个确定的说法：
+       要么 `matching_tool_name` 唯一对上一个工具，要么它被逐条登记进
+       `capabilities._KNOWN_UNMATCHED_ACTIONS`（"没比对成"必须留痕）。
+       这一条是"以后加动作忘登记"当场红的那道门：只在能力表里加一个动作，
+       工具层那一边不会有任何东西红，而对账面会静默缩小。
+       它不写死任何动作名 —— 集合直接从 `two_layer_reconciliation()` 与
+       `_KNOWN_UNMATCHED_ACTIONS` 现取，所以新动作会被自动覆盖到。
+
+    ## 这道门红在哪（而不是"看起来像判据"）
+
+    - 删掉 `H.review_report` 的 `ActionSpec` ⇒ 第 1 条不再覆盖它，
+      而 `assert_capabilities` 第 [7c] 条在导入期就炸（例外表要求它有个动作）；
+    - 把某动作的 `handler_name` 改成不存在的名字 ⇒ 导入期第 [2] 条炸；
+    - 把 `check_action` 换成永远放行的实现 ⇒ 导入期与第 1 条的负向样本
+      （下面最后一段）都会红。
+
+    夹具不写死任何角色名与动作名（§5.3）：全部从 `capabilities` /
+    `schema.ROLES` / 工具层现取。
+    """
+    from agentflow import agent_h as H
+
+    checked = 0
+    for role in (*S.ROLES, S.CONDUCTOR_ROLE):
+        declared = {spec.action for spec in C.actions_for(role)}
+        # 探针 1：能力表声明了的，check_action 必须认。
+        for spec in C.actions_for(role):
+            ref = P.check_action(role, spec.action)
+            assert ref is None, (
+                f"能力表声明了 {role}.{spec.action}，而 policy.check_action 拒绝它：{ref} —— "
+                "声明了却调不动（`D-5` 的形态）"
+            )
+            checked += 1
+        # 探针 1 的反面：`D-5` 要求的那个动作必须真的在表里（不许退回旧形态）。
+        if role == "H":
+            assert "review_report" in declared, (
+                "H 的能力表里没有 `review_report` ⇒ 退回 `D-5` 的旧形态："
+                "只读例外表承认 `review.report`，而主控调不动对应动作"
+            )
+            assert P.check_action("H", "review_report") is None, (
+                "`check_action('H','review_report')` 必须放行（`D-5` 的正控）"
+            )
+            # 工具层那一边必须仍然承认它 —— 两个落点同轮改的钉子。
+            assert "review.report" in {n for n, _ in H.READONLY_CALL_EXCEPTIONS["H"]}, (
+                "只读例外表里的 `review.report` 不见了 —— `D-5` 的两个落点必须同轮存在"
+            )
+            assert H.AgentH.review_report is not None, "`AgentH.review_report` 必须真实存在"
+    # 探针 2：每个动作在工具层那一边必须有一个确定的说法。
+    # 来源全部现取，不写死动作名：`two_layer_reconciliation()` 给出三格分区，
+    # `_KNOWN_UNMATCHED_ACTIONS` 给出"没比对成"的登记表。
+    recon = C.two_layer_reconciliation()
+    compared = {name for name, _tool in recon["compared"]}
+    unmatched = set(recon["unmatched"])
+    ambiguous = set(recon["ambiguous"])
+    all_actions = {f"{s.role}.{s.action}" for r in C.CAPABILITIES for s in C.CAPABILITIES[r]}
+    accounted = compared | unmatched | ambiguous
+    assert all_actions == accounted, (
+        f"这些动作在两层对账面上没有落到任何一格：{sorted(all_actions - accounted)}；"
+        f"反向多出来的：{sorted(accounted - all_actions)} —— 对账面漏了动作，"
+        "而门会显示为通过（`G-19` 的同族形态）"
+    )
+    unregistered = sorted(unmatched - C._KNOWN_UNMATCHED_ACTIONS)
+    assert not unregistered, (
+        f"这些动作既没有在工具层对上工具，也没有登记进 `_KNOWN_UNMATCHED_ACTIONS`："
+        f"{unregistered} ⇒ 新加一个动作而忘了登记，对账面会静默缩小。"
+        "请登记它（并写明为什么两层无可比对）"
+    )
+    stale_registry = sorted(C._KNOWN_UNMATCHED_ACTIONS - unmatched)
+    assert not stale_registry, (
+        f"这些动作以前『没比对』、现在对上了，却还留在登记表里：{stale_registry} ⇒ "
+        "登记表会烂成噪音，请把它们删掉"
+    )
+    assert "H.review_report" in unmatched, (
+        "`H.review_report` 必须落在 unmatched 这一格里被显式登记 —— "
+        "它的 `handler_name` 是 `review_report`、工具名是 `review.report`，"
+        "两者不同名，唯一性约定拒绝猜"
+    )
+    assert checked > 0, "没有枚举到任何声明动作 ⇒ 这条断言是真空的"

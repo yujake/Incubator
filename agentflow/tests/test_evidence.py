@@ -23,6 +23,8 @@ import pytest
 
 from agentflow import claims as C
 from agentflow import evidence as E
+from agentflow import providers as P
+from agentflow.tools import search_tools as ST
 
 #: 固定时间戳：产物里的时间戳可复现，断言才稳得住。
 TS = "2026-01-01T00:00:00+00:00"
@@ -30,17 +32,88 @@ TS = "2026-01-01T00:00:00+00:00"
 ABSTRACT = "An abelian group is a group in which the commutative law holds."
 #: 材料里确实存在的那句话（正控用的引文）。
 VERBATIM = "the commutative law holds"
+#: 中文题面（抽不出英文关键词）：改前它照样被打给英文库，报告里却写着"检索 ok"。
+CJK_TOPIC = "素数分布中的筛法"
 
 
-def _fake_search(items, *, seen: list | None = None):
-    """造一个检索接缝：返回固定条目，并把调用参数记进 `seen`（验契约用）。"""
+def _fake_search(items, *, seen: list | None = None, report: dict | None = None,
+                 raises: Exception | None = None):
+    """造一个检索接缝：返回固定条目，并把调用参数记进 `seen`（验契约用）。
+
+    `report` / `raises` 给"逐条判决面"那一组用：生产实现的闭包把 provider
+    实例挂在 `provider` 属性上，这里用同一种形态模拟 —— 台账是 `report`
+    底下那个 `last_topicality`（裸函数没有它 ⇒ 产物里就没有那几列，
+    见 `evidence._report_fields`）。
+    """
+    holder: dict = {}
 
     def _s(topic: str, *, limit: int, timeout_sec: float):
         if seen is not None:
             seen.append({"topic": topic, "limit": limit, "timeout_sec": timeout_sec})
+        if raises is not None:
+            raise raises
         return list(items)
 
+    if report is not None:
+        holder["last_topicality"] = dict(report)
+        # 只实现"读台账"所需的属性（不是真 provider）：第三态下 provider
+        # 已经拒绝发查询，条目一条都没有，所以这里也不需要 http 替身。
+        _s.provider = type("_ReportHolder", (), holder)()  # type: ignore[attr-defined]
     return _s
+
+
+def _report(*, state: str, counts: dict, detail: tuple = (), total: int | None = None,
+            query_notes: tuple | None = None) -> dict:
+    """一份台账替身（形状与 `providers.TopicalityReport.to_dict()` 相同）。
+
+    `query_notes` 是 `C-4` 之后台账上的查询级字段。刻意用 `None` 表示"这份台账
+    没有这条读数"（字段缺席），与"有这条读数但是空的"（空 tuple）分开 ——
+    折平它们正是本仓反复踩的那类坑。
+    """
+    out = {"state": state, "counts": dict(counts), "detail": tuple(detail),
+           "total": sum(counts.values()) if total is None else int(total)}
+    if query_notes is not None:
+        out["query_notes"] = tuple(query_notes)
+    return out
+
+
+def _verdict(title: str, note: str, verdict) -> dict:
+    """台账里的一条逐条判决（形状与 `providers.TopicalityVerdict.to_dict()` 相同）。"""
+    return {"title": title, "filter_note": note, "verdict": verdict}
+
+
+#: 替身 HTTP（判据里读真 provider 的逐条判决面时才需要；默认载荷 = 零条目）。
+class _HttpStub:
+    """`providers.http_get_json` 的替身：记录"真的发出去了"的调用（第三态下应为 0 次）。
+
+    `routes` 让载荷随检索串变化（`C-4a` 的接线判据要造出"整串短语 0 条、
+    词项形态 3 条"这一形态）；不给 `routes` 时行为与改前逐字相同。
+    """
+
+    def __init__(self, payload: dict | None = None, routes: dict | None = None) -> None:
+        self.payload = payload if payload is not None else {"results": []}
+        self.routes = dict(routes or {})
+        self.calls: list[dict] = []
+
+    def __call__(self, url, params=None, **kwargs):  # noqa: ANN001, ANN003 - 签名随被替者
+        got = dict(params or {})
+        self.calls.append({"url": url, "params": got})
+        return self.routes.get(str(got.get("search", "")), self.payload)
+
+
+def _real_provider_fns(stub: _HttpStub) -> dict:
+    """真 provider + 替身 HTTP：两个源各一个检索函数（形状与生产同形）。"""
+    built = P.build_providers(["openalex", "crossref"],
+                              config={"min_interval": 0.0, "retries": 0})
+    out: dict = {}
+    for provider in built:
+        def _bound(topic: str, *, limit: int, timeout_sec: float, _p=provider):  # noqa: ANN202
+            return _p.search(topic, "precise", "", int(limit))
+
+        # 与生产同形（`evidence._default_sources` 把 provider 挂在这个属性上）。
+        _bound.provider = provider  # type: ignore[attr-defined]
+        out[provider.name] = _bound
+    return out
 
 
 def _source(**kw) -> dict:
@@ -402,6 +475,338 @@ def test_two_different_dois_stay_two_sources():
     assert len(got["sources"]) == 2
 
 
+# =================================================== 逐源判决面：三档分列 + filter_note
+# 这一组是 `R12-R3-3` 的验收（产物面接线）。改前 `sources_detail` 每条只有
+# `{source,status,count,rejected,reason,conflicts}`：三档只挂在 provider 的
+# `last_topicality` 上，逐条的 `filter_note` 算完即丢 ⇒ 下游照报告面取数时
+# `rejected` 恒 0、弃权不可见（`draft/28` §100.3 的形态）。
+# 判据两条：① 三档相加 == 该源候选总数、逐条带 `filter_note`；
+# ② 第三态下 `sources_detail[*].status` 逐字是第三态名（不是原因文本里的字）。
+
+
+def test_sources_detail_has_the_three_columns_and_per_row_notes():
+    """正控（`R12-R3-3`）：三档分列相加 == 候选总数，且逐条 `filter_note` 进产物。
+
+    台账里 3 条候选：2 条判过且切题、1 条被剔除。返回值只有 2 条（被剔除的不返回），
+    所以 `count(2) != total(3)` 是对的 —— 三档加起来才是候选总数，
+    而 `count + rejected` 永远不等于它（`rejected` 那一列说的是"缺来源被拒收"）。
+    """
+    report = _report(
+        state="judged",
+        counts={"judged_relevant": 2, "rejected": 1, "unjudged_no_ascii_keywords": 0},
+        detail=(
+            _verdict("A spectral sequence", "keyword_hit", True),
+            _verdict("The Wang sequence", "keyword_hit", True),
+            _verdict("Review on motion control", "keyword_miss;similarity=0.07", False),
+        ),
+    )
+    got = E.retrieve(
+        "long exact sequence of derived functors", now=TS, limit=5,
+        search_fn={"openalex": _fake_search(
+            [_source(title="A spectral sequence", doi="10.1000/a"),
+             _source(title="The Wang sequence", doi="10.1000/b")],
+            report=report)},
+    )
+    assert got["status"] == "ok", got
+    entry = got["sources_detail"][0]
+    buckets = entry["topicality_buckets"]
+    assert {k: buckets[k] for k in ("judged_relevant", "rejected",
+                                    "unjudged_no_ascii_keywords")} == {
+        "judged_relevant": 2, "rejected": 1, "unjudged_no_ascii_keywords": 0}
+    assert sum(buckets[k] for k in ("judged_relevant", "rejected",
+                                    "unjudged_no_ascii_keywords")) == buckets["total"] == 3
+    assert buckets["complete"] is True
+    assert entry["topicality_state"] == "judged"
+    # 逐条 filter_note：三条候选各一句，含被剔除的那一条（改前它连理由一起消失）。
+    assert entry["topicality_notes"] == {"keyword_hit": 2,
+                                         "keyword_miss;similarity=0.07": 1}
+    assert entry["count"] == 2 and entry["rejected"] == 0, \
+        "count 是返回值条数、rejected 是缺来源被拒收的条数 —— 都不等于三档之和"
+
+
+def test_unjudged_column_is_visible_through_the_evidence_layer():
+    """正控的同族：弃权（无法判定 ⇒ 放行）必须在产物里可见，且不许被改判成 reject。
+
+    中文 topic + 英文 description 是合法发出的（查询里有英文关键词），
+    而逐条判决全部走"弃权"那一支。改前这一跑在 `sources_detail` 里长得
+    与"精筛跑过了、一条都不该剔"一模一样。
+    """
+    report = _report(
+        state="judged",
+        counts={"judged_relevant": 0, "rejected": 0, "unjudged_no_ascii_keywords": 3},
+        detail=tuple(_verdict(f"W{i}", "no_ascii_keywords;not_filtered", None)
+                     for i in range(3)),
+    )
+    got = E.retrieve(
+        CJK_TOPIC, now=TS, limit=5,
+        search_fn={"openalex": _fake_search(
+            [_source(title="W0", doi="10.1000/a"), _source(title="W1", doi="10.1000/b"),
+             _source(title="W2", doi="10.1000/c")], report=report)},
+    )
+    entry = got["sources_detail"][0]
+    assert entry["topicality_buckets"]["unjudged_no_ascii_keywords"] == 3
+    assert entry["topicality_buckets"]["rejected"] == 0, "弃权不许被改判成 reject"
+    assert entry["topicality_notes"] == {"no_ascii_keywords;not_filtered": 3}
+    assert entry["topicality_state"] == "judged"
+    assert "no_ascii_keywords" in "".join(entry["topicality_notes"]), \
+        "逐条理由必须带得出，否则弃权仍然只以一个数字存在"
+
+
+# ============================================================ `C-4`：查询级事实进产物
+#
+# 为什么这几句必须进 `sources_detail` 而不是只留日志：`O6 = 0` 那条链的起点就是
+# "整串短语零召回 ⇒ 一个源 0 条 ⇒ 材料为空"。只看得见 `count = 0` 时，
+# "这一路换了词项串才查到"与"上游本来就没有这个主题"在产物上完全同形。
+
+EN_LONG_TOPIC = "long exact sequence of derived functors in homological algebra"
+
+
+def test_positive_query_notes_reach_the_sources_detail():
+    """正控：台账上的查询级几句话逐字进 `sources_detail`。"""
+    report = _report(
+        state="judged",
+        counts={"judged_relevant": 1, "rejected": 0, "unjudged_no_ascii_keywords": 0},
+        detail=(_verdict("A spectral sequence", "keyword_hit", True),),
+        query_notes=("phrase_zero_recall_fallback[precise]：整串短语零召回 ⇒ 改词项检索（3 条）",),
+    )
+    got = E.retrieve(
+        EN_LONG_TOPIC, now=TS, limit=5,
+        search_fn={"openalex": _fake_search(
+            [_source(title="A spectral sequence", doi="10.1000/a")], report=report)},
+    )
+    entry = got["sources_detail"][0]
+    assert entry["topicality_query_notes"] == [
+        "phrase_zero_recall_fallback[precise]：整串短语零召回 ⇒ 改词项检索（3 条）"]
+    # 与逐条 `filter_note` 分列：两件事不许混进同一个字段。
+    assert entry["topicality_notes"] == {"keyword_hit": 1}
+
+
+def test_negative_control_without_query_notes_the_column_is_absent():
+    """负控：台账上没有这条读数 ⇒ 那一列不出现（不是空列表）。
+
+    "三档都是 0"与"没有这条读数"是两件事，这一列照同一条纪律办：
+    补一个 `[]` 会让"这次没有降级、也没有哪一路失败"与"查询级事实没接线"
+    长得一模一样。
+    """
+    report = _report(
+        state="judged",
+        counts={"judged_relevant": 1, "rejected": 0, "unjudged_no_ascii_keywords": 0},
+        detail=(_verdict("A spectral sequence", "keyword_hit", True),),
+    )
+    got = E.retrieve(
+        EN_LONG_TOPIC, now=TS, limit=5,
+        search_fn={"openalex": _fake_search(
+            [_source(title="A spectral sequence", doi="10.1000/a")], report=report)},
+    )
+    entry = got["sources_detail"][0]
+    assert "topicality_query_notes" not in entry, entry
+    assert entry["topicality_notes"] == {"keyword_hit": 1}, "逐条那一列照旧"
+
+
+def test_positive_real_provider_fallback_lands_in_the_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """正控（端到端）：真 provider + 替身 HTTP ⇒ 降级那件事出现在产物里。
+
+    这一条是"接线真的通了"的证据：上一条正控用的是手造的台账替身，
+    只能证明折算函数对；这一条从 `_phrase_query` 的整串短语出发，
+    经过真 `OpenAlexProvider.search` 的降级、`_record_topicality` 的台账，
+    一路走到 `sources_detail` 的那一列。
+    """
+    phrase = f'"{EN_LONG_TOPIC}"'
+    terms = P._term_query(EN_LONG_TOPIC)
+    assert phrase != terms
+    stub = _HttpStub(routes={
+        phrase: {"results": [], "meta": {"count": 0}},
+        terms: {"results": [{"id": "https://openalex.org/W1", "title": "A spectral sequence",
+                             "type": "article", "publication_year": 2020,
+                             "cited_by_count": 5, "language": "en",
+                             "abstract_inverted_index": {"Spectral": [0], "sequences": [1]}}],
+                  "meta": {"count": 1}},
+    })
+    monkeypatch.setattr(P, "http_get_json", stub)
+    fns = _real_provider_fns(stub)
+
+    got = E.retrieve(EN_LONG_TOPIC, now=TS, limit=5,
+                     search_fn={"openalex": fns["openalex"]})
+
+    entry = got["sources_detail"][0]
+    assert entry["status"] == "ok" and entry["count"] == 1, entry
+    notes = entry["topicality_query_notes"]
+    assert any("phrase_zero_recall_fallback[precise]" in n for n in notes), notes
+    assert [c["params"]["search"] for c in stub.calls] == [phrase, terms], \
+        "产物说发生了降级，替身必须真的收到过这两条检索串"
+
+
+def test_negative_control_without_the_report_the_three_columns_are_missing():
+    """负控（无台账）：读不到台账 ⇒ 那几列不出现，不补零。
+
+    这一条是"接线真的在起作用"的证明：同一个检索函数，只有当它的
+    `last_topicality` 读得到时，正控那两条断言才成立。今天（改前）的形态
+    就是这里断言的样子 —— `topicality_buckets` 不在产物里，
+    所以"三档分列相加 == 候选总数"这条断言在改前必然红。
+    顺带钉住另一半纪律：读不到 ≠ 三档都是 0（补零会把"没接线"重新藏起来）。
+    """
+    got = E.retrieve(
+        "long exact sequence of derived functors", now=TS, limit=5,
+        search_fn={"openalex": _fake_search(
+            [_source(title="A spectral sequence", doi="10.1000/a"),
+             _source(title="The Wang sequence", doi="10.1000/b")])},
+    )
+    entry = got["sources_detail"][0]
+    assert "topicality_buckets" not in entry, "读不到台账时不许编一个三档都是 0 的台账"
+    assert "topicality_notes" not in entry
+    assert entry["status"] == "ok" and entry["count"] == 2
+
+
+def test_a_bare_single_search_fn_still_reports_its_source_row():
+    """单源路径也要有逐源台账（改前它只有 `sources_status`，没有 detail）。
+
+    报告渲染读的是 `sources_status`，判据读的是 `sources_detail` ——
+    两个出口对"这一跑怎么落的"必须给出同一个答案。
+    """
+    got = E.retrieve(CJK_TOPIC, now=TS, search_fn=_fake_search([_source(title="W0")]))
+    assert got["sources_status"] == {"search_fn": "ok"}
+    assert [d["source"] for d in got["sources_detail"]] == ["search_fn"]
+    assert got["sources_detail"][0]["status"] == "ok"
+    assert got["sources_detail"][0]["count"] == 1
+    assert got["sources_detail"][0]["conflicts"] == 0
+
+
+def test_third_state_name_lands_in_sources_detail_status_verbatim(monkeypatch):
+    """正控（`R12-R3-3` 的核心）：中文题面 ⇒ 逐源 `status` 逐字是第三态名。
+
+    走真 provider（`build_providers`）+ 替身 HTTP，两个源都不适用 ⇒
+    一次上游调用都没有（这是止血那一半，已在 `R12-R3-2` 验证）；
+    这里断言的是产物那一半：`sources_detail[*].status` 逐字是
+    `query_not_applicable_cjk`，不是闭集里的 `failed` 加上一句自由文本。
+    """
+    stub = _HttpStub()
+    monkeypatch.setattr(P, "http_get_json", stub)
+    got = E.retrieve(CJK_TOPIC, limit=3, now=TS, search_fn=_real_provider_fns(stub))
+    assert stub.calls == [], "第三态下不许有任何上游请求"
+    assert got["status"] == "retrieval_failed" and got["checked"] is False
+    assert got["sources"] == [] and got["rejected"] == []
+    for source in ("openalex", "crossref"):
+        assert got["sources_status"][source] == P.QUERY_NOT_APPLICABLE_CJK
+    assert len(got["sources_detail"]) == 2, got["sources_detail"]
+    for entry in got["sources_detail"]:
+        assert entry["status"] == P.QUERY_NOT_APPLICABLE_CJK, entry
+        assert P.QUERY_NOT_APPLICABLE_CJK in entry["reason"]
+        assert entry["topicality_state"] == P.QUERY_NOT_APPLICABLE_CJK
+        assert entry["topicality_buckets"]["total"] == 0
+        assert entry["topicality_buckets"]["complete"] is True
+        assert entry["count"] == 0 and entry["rejected"] == 0
+
+
+def test_source_detail_row_has_exactly_one_construction_point():
+    """判据面自证：`sources_detail` 的键集只有 `_source_detail` 一处决定。
+
+    为什么值得一条机器判据：产物新增列的漂移形态是"某个入口少一列"，
+    而两个入口（单源 / 多源）各自都自洽、都不会报错。这里把
+    "多源行的键 == 单源行的键 == 构造点的键"钉住。
+    """
+    plain = E._source_detail("x", status="ok", count=0, rejected=0, reason="r")
+    multi = E.retrieve("阿贝尔群", now=TS, search_fn={"a": _fake_search([_source()])})
+    single = E.retrieve("阿贝尔群", now=TS, search_fn=_fake_search([_source()]))
+    assert set(multi["sources_detail"][0]) == set(plain) | {"conflicts"}
+    assert set(single["sources_detail"][0]) == set(plain)
+
+
+def test_negative_control_without_the_summary_the_third_state_is_failed(monkeypatch):
+    """负控（拆装置）：把"折进产物"的那三处拆掉 ⇒ 读数退回改前的形态。
+
+    注入的是改前那三处定义（`SOURCE_STATUSES` 的第三态取值、读台账的
+    `_topicality_of`、写台账列的 `_report_fields`），所以这一跑的产物
+    逐字等于改前：逐源 `status` 退回闭集里的 `failed`、`sources_detail`
+    里没有三档、第三态名只剩在 `reason` 自由文本里。正控那两条断言
+    （"逐源 status 逐字是第三态名"、"三档分列相加 == 候选总数"）
+    在这个注入下必然红 —— 这就是"今天的形态就是红的"那句读数的机器形态。
+    """
+    stub = _HttpStub()
+    monkeypatch.setattr(P, "http_get_json", stub)
+    got = E.retrieve(CJK_TOPIC, limit=3, now=TS, search_fn=_real_provider_fns(stub))
+    assert got["sources_status"] == {"openalex": P.QUERY_NOT_APPLICABLE_CJK,
+                                     "crossref": P.QUERY_NOT_APPLICABLE_CJK}
+
+    monkeypatch.setattr(E, "SOURCE_STATUSES", ("ok", "no_results", "failed"))
+    monkeypatch.setattr(E, "_topicality_of", lambda fn: None)
+    monkeypatch.setattr(E, "_report_fields", lambda report: {})
+    flipped = E.retrieve(CJK_TOPIC, limit=3, now=TS, search_fn=_real_provider_fns(stub))
+    assert flipped["sources_status"] == {"openalex": "failed", "crossref": "failed"}, \
+        "闭集里没有第三态时，这一跑只能退回 failed（这就是改前的形态）"
+    for entry in flipped["sources_detail"]:
+        assert entry["status"] == "failed"
+        assert "topicality_buckets" not in entry, "拆掉之后台账那一行不许留着三档"
+        assert P.QUERY_NOT_APPLICABLE_CJK in entry["reason"], \
+            "改前的形态正是：状态名只留在 reason 文本里，机器判不了"
+
+
+def test_default_production_wiring_folds_the_report(monkeypatch):
+    """正控（生产接线）：`search_fn=None`（真 provider）也带得出逐源台账。
+
+    这是"接线真的在生产路径上"的证明：`evidence._default_sources` 造的闭包
+    必须把 provider 实例挂出来，否则 `last_topicality` 读不到 ——
+    手写的替身读得到不算数，这条走真实现（替身只替换 HTTP）。
+    """
+    stub = _HttpStub()
+    monkeypatch.setattr(P, "http_get_json", stub)
+    got = E.retrieve(CJK_TOPIC, limit=3, now=TS)  # search_fn=None ⇒ 生产实现
+    assert stub.calls == [], "第三态下不许有任何上游请求"
+    assert got["status"] == "retrieval_failed" and got["checked"] is False
+    assert got["sources_status"] == {"openalex": P.QUERY_NOT_APPLICABLE_CJK,
+                                     "crossref": P.QUERY_NOT_APPLICABLE_CJK}
+    assert len(got["sources_detail"]) == 2, got["sources_detail"]
+    for entry in got["sources_detail"]:
+        assert entry["status"] == P.QUERY_NOT_APPLICABLE_CJK
+        assert entry["topicality_state"] == P.QUERY_NOT_APPLICABLE_CJK
+        assert entry["topicality_buckets"] == {
+            "judged_relevant": 0, "rejected": 0, "unjudged_no_ascii_keywords": 0,
+            "total": 0, "complete": True,
+        }
+
+
+def test_default_production_wiring_folds_the_three_columns(monkeypatch):
+    """正控（生产接线②）：英文题面的生产路径把三档与逐条 `filter_note` 带进产物。
+
+    三条候选走真 `OpenAlexProvider.search`（替身 HTTP）：两条判过且切题、
+    一条被剔除 ⇒ 产物里的三档相加 == 候选总数，且三条的 `filter_note` 都在。
+    `CrossrefProvider`（这个替身载荷下解析不出条目）与它各占一行，互不干扰。
+    """
+    works = [
+        {"id": "W1", "title": "A spectral sequence for the homotopy of nice spaces",
+         "doi": "10.1000/a", "type": "article", "publication_year": 2020,
+         "cited_by_count": 5, "language": "en",
+         "open_access": {"is_oa": True, "oa_url": None},
+         "primary_location": {"source": {"display_name": "J. Test"}, "pdf_url": None}},
+        {"id": "W2", "title": "The Wang sequence for half-exact functors",
+         "doi": "10.1000/b", "type": "article", "publication_year": 2020,
+         "cited_by_count": 5, "language": "en",
+         "open_access": {"is_oa": True, "oa_url": None},
+         "primary_location": {"source": {"display_name": "J. Test"}, "pdf_url": None}},
+        {"id": "W3", "title": "Review on motion control of autonomous vehicles",
+         "doi": "10.1000/c", "type": "article", "publication_year": 2020,
+         "cited_by_count": 5, "language": "en",
+         "open_access": {"is_oa": True, "oa_url": None},
+         "primary_location": {"source": {"display_name": "J. Test"}, "pdf_url": None}},
+    ]
+    stub = _HttpStub({"results": works, "meta": {"count": len(works)}})
+    monkeypatch.setattr(P, "http_get_json", stub)
+    got = E.retrieve("long exact sequence of derived functors in homological algebra",
+                     limit=5, now=TS)  # 生产实现（多源）
+    assert stub.calls, "英文题面必须照旧发出查询"
+    entry = {d["source"]: d for d in got["sources_detail"]}["openalex"]
+    buckets = entry["topicality_buckets"]
+    assert (buckets["judged_relevant"], buckets["rejected"],
+            buckets["unjudged_no_ascii_keywords"]) == (2, 1, 0)
+    assert buckets["total"] == 3 and buckets["complete"] is True
+    assert entry["topicality_state"] == "judged"
+    assert entry["topicality_notes"] == {"keyword_hit": 2,
+                                         "keyword_miss;similarity=0.07": 1}
+    assert entry["count"] == 2, "被剔除的那一条不返回，但它照样要在三档里"
+    assert entry["rejected"] == 0, "`rejected` 那一列说的是缺来源被拒收的条数，不是精筛剔除数"
+
+
 # =================================================== 全文获取：六态各一例
 # 六种状态每一种都要有理由字段 —— 没有理由的失败与"没做"在产物里长得一样。
 
@@ -450,12 +855,12 @@ def test_acquire_fulltext_ok_records_provenance(tmp_path: Path):
 def test_acquire_fulltext_writes_only_under_the_given_dest_dir(tmp_path: Path):
     """回归钉子：本文件历史上 8 处写成 `dest_dir="."`，把 `paper.pdf` 写进了仓库根。
 
-    那是**实测发生过**的事故：`pytest` 的 cwd 是仓库根，假下载器把夹具 PDF 落在 `.`
+    那是实测发生过的事故：`pytest` 的 cwd 是仓库根，假下载器把夹具 PDF 落在 `.`
     就等于「每跑一次测试，仓库根就覆写一次 paper.pdf」——审计期实测仓库根里原有的
     `paper.pdf` 被它从 351623 字节覆盖成 26 字节的夹具文本，而且"同一棵树跑两次
     得到同样的仓库根"这件事从此不成立。
 
-    判据刻意**不是**"根目录条目集合没变"：旧行为是**覆写**一个已存在的同名文件，
+    判据刻意不是"根目录条目集合没变"：旧行为是覆写一个已存在的同名文件，
     条目集合根本不会变，那种写法抓不住这条缺陷。这里盯的是那个具体路径的
     (存在性, 大小, mtime)，它才是这条缺陷的指纹；正向的一半是"夹具必须真的落在
     传进来的 dest_dir 里"（否则这条用例可以靠"什么都没写"骗过去）。
@@ -565,10 +970,15 @@ def test_acquire_fulltext_without_impls_is_not_configured(tmp_path: Path):
 
 
 def _source_with_fulltext(text_pages: list[str], **kw) -> dict:
-    """一条既有摘要又有全文的来源（回验分级的输入形态）。"""
+    """一条既有摘要又有全文的来源（回验分级的输入形态）。
+
+    形态与生产写侧的内联路径一致：只有 `text_pages`，没有 `text`
+    （`text` 是 `"\\n".join(pages)` 的重复，实测无读者；见 `draft/30` §T0-2）。
+    """
     src = _src_for_fulltext(**kw)
-    src["fulltext"] = {"status": "ok", "text": "\n".join(text_pages),
+    src["fulltext"] = {"status": "ok",
                        "text_pages": list(text_pages), "pages": len(text_pages),
+                       "text_store": "inline",
                        "backend": "pdf", "sha256": "x", "bytes": 1}
     return src
 
@@ -670,13 +1080,100 @@ def test_no_comparable_text_at_all_is_the_only_case_that_is_not_checked():
     assert res["checked"] is False
 
 
+# ================== `R2-AN-5` / `R2-AN-6`：比过了没找到 ≠ 没有可比文本；拒绝判定要有名字
+#
+# 两条缺陷都在"`_check_quote_levels` 的第五个返回值 / `_read_verdict` 的默认值"这一小段里：
+#
+# - `R2-AN-5`：「有全文、没有摘要、全文逐字比过但没命中」从前返回 `comparable=False`，
+#   调用方把它读成"这条来源没有可比文本" ⇒ 台账落 `unknown` +
+#   `no_comparable_text_in_any_source`。判决与理由都是不实陈述：全文真的比过，
+#   结论是"没找到"。方向是 fail-closed（不是假通过），但硬事实被丢掉，
+#   而且一个假理由会真的写进库（`draft/28` §40.4）。
+# - `R2-AN-6`：`_read_verdict` 在 `verified is None` 时默认给 `"unknown"`，
+#   于是调用方那句 `or "verifier_refused_to_judge"` 永远走不到 ——
+#   一个更具体的字面量成了死词汇。默认值因此搬进 `_read_verdict`（唯一一处定义）。
+#
+# 同一条修法里不许顺手删掉 `or "not_found"`：`verified=False` 时第二项可以是
+# 空串（与 `verified is None` 不同），那条兜底是可达的。下面最后一条用例守它。
+
+
+def _verdict_fn(verified, reason=""):
+    """回验器的桩：逐字比对本身是 `quoteverify` 的事，本组只测"判决怎么被记下来"。"""
+    def _f(doc, quote, page_range, widen=0, allow_fulltext_fallback=False):
+        return {"verified": verified, "reason": reason}
+    return _f
+
+
+#: 一条只有全文、没有摘要的来源（`R2-AN-5` 的形态）。
+_FULL_ONLY_SRC = {"source_id": "S1", "fulltext": {"status": "ok", "text_pages": ["alpha beta"]}}
+_MISS_CLAIM = {"text": "断言", "quote": "zzz-not-here", "evidence_source": "S1"}
+
+
+def test_a_fulltext_compared_and_missed_is_not_found_not_unchecked():
+    """正控（`R2-AN-5`）：全文比过了、逐字没找到、这条来源没有摘要 ⇒ `not_found` + 真理由。"""
+    res = E.verify_claims([_MISS_CLAIM], [_FULL_ONLY_SRC], quote_fn=_verdict_fn(False, "quote_absent"))
+    row = res["claims"][0]
+    assert (row["verdict"], row["reason"]) == ("not_found", "quote_absent")
+    assert row["reason"] != "no_comparable_text_in_any_source", (
+        "全文真的比过 ⇒ 不许写成'一条来源都没比对过'"
+    )
+    assert row["checked"] is True, "这是查过了（比过了、没找到），不是没查成"
+
+
+def test_a_fulltext_hit_without_an_abstract_is_still_verified_at_fulltext_level():
+    """防误伤（`R2-AN-5`）：同一条来源命中 ⇒ 仍是 `verified` / `fulltext` 级。"""
+    res = E.verify_claims([_MISS_CLAIM], [_FULL_ONLY_SRC], quote_fn=_verdict_fn(True, "substring_match"))
+    row = res["claims"][0]
+    assert (row["verdict"], row["level"], row["checked"]) == ("verified", "fulltext", True)
+
+
+def test_a_refusing_verifier_is_recorded_under_its_own_name():
+    """正控（`R2-AN-6`）：回验器拒绝判定 ⇒ 理由写 `verifier_refused_to_judge`。
+
+    两处都读：读法（`_read_verdict`）与结果（`verify_claims` 落的那一行）。
+    只读前者会漏掉"调用方又加了一层同义兜底"这种改法，只读后者会漏掉
+    "默认值放错层"。
+    """
+    assert E._read_verdict({"verified": None, "reason": ""}) == (None, "verifier_refused_to_judge")
+    assert E._read_verdict({"verified": None}) == (None, "verifier_refused_to_judge")
+    res = E.verify_claims([_MISS_CLAIM], [_FULL_ONLY_SRC], quote_fn=_verdict_fn(None, ""))
+    row = res["claims"][0]
+    assert row["verdict"] == "unknown", "拒绝判定仍是 unknown 判决（不许折成 not_found）"
+    assert row["reason"] == "verifier_refused_to_judge"
+    assert row["checked"] is False
+
+
+def test_a_not_found_verdict_without_a_reason_keeps_the_not_found_fallback():
+    """负控（`R2-AN-6` 的边界）：`verified=False` 且回验器没给理由 ⇒ 兜底仍是 `not_found`。
+
+    这一条守的是"别把 `or "not_found"` 一起删掉"：`verified=False` 时第二项可以是
+    空串（探针 `D2`），所以那条兜底可达。删掉它会写出 `reason=''` 的台账行 ——
+    一条没有理由的判决。
+    """
+    assert E._read_verdict({"verified": False, "reason": ""}) == (False, "")
+    src = {"source_id": "S2", "abstract": "gamma delta"}
+    res = E.verify_claims([{"text": "断言", "quote": "zzz", "evidence_source": "S2"}], [src],
+                          quote_fn=_verdict_fn(False, ""))
+    row = res["claims"][0]
+    assert (row["verdict"], row["reason"], row["checked"]) == ("not_found", "not_found", True)
+
+
 def test_acquire_statuses_are_a_controlled_vocabulary():
-    """③ 的同族：六态词表是判据，改坏它要让用例红（写在两处的判据早晚会漂移）。"""
+    """③ 的同族：六态词表是判据，改坏它要让用例红（写在两处的判据早晚会漂移）。
+
+    `SOURCE_STATUSES` 同样不许含糊：第三态（这一问压根没发给这个源）与
+    `ok` / `no_results` / `failed` 是四件不同的事，把它折回 `failed`
+    会让"未接线"重新与"上游坏了"同形（`R12-R3-3` 的产物面缺口）。
+    """
     assert E.ACQUIRE_STATUSES == ("ok", "no_pdf", "download_failed", "no_text_layer",
                                   "extract_failed", "not_configured")
     assert E.EVIDENCE_LEVELS == ("abstract", "fulltext")
-    assert E.SOURCE_STATUSES == ("ok", "no_results", "failed")
-
+    assert E.SOURCE_STATUSES == ("ok", "no_results", "failed",
+                                 "query_not_applicable_cjk", "query_empty")
+    # 第三态名与禁改区 `providers` 侧逐字相同（不许另立一套拼写）。
+    P = pytest.importorskip("agentflow.providers")
+    assert E.SOURCE_STATUSES[3] == P.QUERY_NOT_APPLICABLE_CJK
+    assert E.SOURCE_STATUSES[4] == P.QUERY_EMPTY
 
 # ================================================= 原子断言拆分：三态 / 不丢弃 / 截断
 # 这一组是本工作包的验收。四条判据：
@@ -906,3 +1403,84 @@ def test_no_source_or_test_file_contains_a_real_looking_key():
                 if found and found.group(0).strip("'\"") not in _KNOWN_FAKE_KEYS:
                     hits.append(f"{path.relative_to(root)}:{lineno}: {found.group(0)[:20]}...")
     assert hits == [], f"出现形如密钥的字面量：{hits}"
+
+
+# ======================================================================
+# 正文存哪：内联 vs 内容寻址引用（依据 `draft/30` §T0-2 / §T0-3 / §T0-4）
+#
+# 这一组守的是"整本书的正文只存一份"这件事的两个方向：
+# 写侧两种形态都自报家门（`text_store`），读侧两种形态都必须能核，
+# 而引用坏了必须被点名计数 —— 不许折成"这篇没有全文"。
+# ======================================================================
+
+
+def test_inline_fulltext_keeps_pages_and_drops_the_dead_text_field(tmp_path: Path):
+    """不给 store 目录 ⇒ 逐页文本内联，且不再写那个没人读的 `text` 字段。"""
+    sources = [_src_for_fulltext()]
+    E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_extract_pages(["a", "b"]),
+                       dest_dir=tmp_path)
+    ft = sources[0]["fulltext"]
+    assert ft["text_store"] == "inline"
+    assert ft["text_pages"] == ["a", "b"]
+    assert "text_ref" not in ft
+    assert "text" not in ft, "`text` 是 join(pages) 的重复，全仓实测无读者"
+
+
+def test_ref_fulltext_stores_once_and_records_the_reference(tmp_path: Path):
+    """给 store 目录 ⇒ 正文存进 `.fulltext`，产物里只留引用（且不带 text_pages）。"""
+    store = tmp_path / ".fulltext"
+    sources = [_src_for_fulltext()]
+    E.acquire_fulltext(sources, fetch_fn=_fetch_ok(), extract_fn=_extract_pages(["a", "b"]),
+                       dest_dir=tmp_path, text_store_dir=store)
+    ft = sources[0]["fulltext"]
+    assert ft["text_store"] == "ref"
+    assert "text_pages" not in ft and "text" not in ft
+    ref = ft["text_ref"]
+    assert Path(ref["path"]).parent == store and Path(ref["path"]).is_file()
+    assert ref["pages"] == 2 and ft["chars"] == 2
+
+    # 幂等：同一份正文再存一次，不新增文件（内容寻址的意义就在这里）
+    E.acquire_fulltext([_src_for_fulltext()], fetch_fn=_fetch_ok(),
+                       extract_fn=_extract_pages(["a", "b"]),
+                       dest_dir=tmp_path, text_store_dir=store)
+    assert len(list(store.glob("*.json"))) == 1
+
+
+def test_ref_and_inline_give_the_same_verdict_level_and_locator(tmp_path: Path):
+    """两种存法对同一条引文必须给出同一判决、同一级别、同一页号。"""
+    pages = ["Page one is about something else.", f"Page two states that {_FT_QUOTE}."]
+    inline = _source_with_fulltext(pages)
+    ref_src = _src_for_fulltext()
+    E.acquire_fulltext([ref_src], fetch_fn=_fetch_ok(), extract_fn=_extract_pages(pages),
+                       dest_dir=tmp_path, text_store_dir=tmp_path / ".fulltext")
+    claims = [{"text": "单位元唯一", "quote": _FT_QUOTE}]
+    a = E.verify_claims(claims, [inline])["claims"][0]
+    b = E.verify_claims(claims, [ref_src])["claims"][0]
+    assert (a["verdict"], a["level"], a["locator"]) == (b["verdict"], b["level"], b["locator"])
+    assert a["level"] == "fulltext" and a["locator"] == {"kind": "page", "page": 2}
+
+
+def test_broken_ref_is_counted_and_never_read_as_no_fulltext(tmp_path: Path):
+    """坏引用（store 文件被删）⇒ 降级 + 点名计数 + 理由不说是"这篇没有全文"。"""
+    store = tmp_path / ".fulltext"
+    src = _src_for_fulltext()
+    E.acquire_fulltext([src], fetch_fn=_fetch_ok(),
+                       extract_fn=_extract_pages([f"x {_FT_QUOTE}"]),
+                       dest_dir=tmp_path, text_store_dir=store)
+    Path(src["fulltext"]["text_ref"]["path"]).unlink()
+
+    res = E.verify_claims([{"text": "单位元唯一", "quote": _FT_QUOTE}], [src])
+    row = res["claims"][0]
+    assert row["level"] != "fulltext", "引用取不到时绝不许报全文级"
+    assert res["counts"]["fulltext_text_unavailable"] == 1
+    assert "store_file_missing" in " ".join(res["check"]["fulltext_text_unavailable"])
+    assert "store_file_missing" in res["reason"]
+    assert "不是'这篇没有全文'" in res["reason"]
+
+
+def test_unavailable_key_is_absent_when_nothing_is_broken():
+    """键只在真出问题时出现：常驻的空列表会让读者以为"这一栏永远是空的、所以没问题"。"""
+    src = _source_with_fulltext([f"body text with {_FT_QUOTE}"])
+    res = E.verify_claims([{"text": "单位元唯一", "quote": _FT_QUOTE}], [src])
+    assert "fulltext_text_unavailable" not in res["check"]
+    assert "fulltext_text_unavailable" not in res["counts"]

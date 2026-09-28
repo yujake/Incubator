@@ -67,6 +67,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from .schema import USAGE_SCOPES
 from .tokenmeter import Charge, TokenMeter, marker_of, row_with_idem_key
 
 __all__ = [
@@ -272,12 +273,36 @@ def _charge_note(reply: Any, *, call_index: int, extra_note: str) -> str:
 
 
 def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_ROLE,
-                 task_id: str, scope: str = "reason", extra_note: str = "",
+                 task_id: str, scope: str, extra_note: str = "",
                  call_index: int = 0, price: tuple[float, float] | None = None,
-                 now: str | None = None) -> dict:
+                 now: str | None = None, idem_scope: str | None = None) -> dict:
     """把一次模型调用的花销经 `TokenMeter` 写进 `usage_ledger`，并如实报告结局。
 
-    返回 ``{"charged", "usage_id", "tokens_in", "tokens_out", "usd", "reason"}``。
+    返回 `{"charged", "usage_id", "tokens_in", "tokens_out", "usd", "reason", "scope"}`。
+
+    ## 七个键在四条分支上恒在场（`R5-AN-2`）
+
+    这个返回值有四个出口（`meter=None` 的未接线、无锁快速通道判重放、写入竞态
+    判重放、真的入账），它们必须给出同形的 dict：调用方按 `d["scope"]` 取值
+    时，四种结局不该有两种行为。此前那个无锁快速通道的 duplicate 分支漏了
+    `scope`（另外三支都有），于是重放路径上 `cost.json` 的 `per_call[].scope`
+    静默变成空串 —— 而 G-20 的承诺是"逐笔看得见归口，汇总才对得上账"。
+    `runflow` 自己用 `.get(...) or ""` 兜住了，别的调用方不一定。
+    重放那一笔的 `scope` 就是账本里 `prior` 行的那一列：判重放的是账本，
+    归口也该从账本读，不能拿本次调用点的实参去覆盖历史事实。
+
+    ## `scope` 是必填的（G-20）
+
+    它回答"这笔钱是为了什么"，取值只能在 `schema.USAGE_SCOPES` 里。没有缺省值：
+    缺省值曾是 `"reason"`，于是每一个忘记传 scope 的调用点都静默落进"推理"档 ——
+    账本的总额与条目数完全自洽，而"搜索/抽取/审校各花了多少"这个问题永远答不出来
+    （这就是 G-20 登记的形态：`USAGE_SCOPES` 五档全无产出）。
+    缺省也不许是 `"other"`：那会把"有人忘了写"伪装成一个正常的分类。
+
+    如果 `reply` 自己带着 `scope`（`modelgw.ModelReply` 是），两者必须一致 ——
+    不一致时抛 `ValueError`。为什么要在意：网关声明了"这次是 extract"、
+    账本记成"review"，两个数字都自洽而互相矛盾，且没有任何地方会报错；
+    把它变成当场报错，是唯一能保住"台账那一列可信"的做法。
 
     三种结局各有各的 `reason`，绝不折叠：
 
@@ -295,7 +320,33 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
     把一个总额当成单次价传进去，会让重试被乘两遍，账面静默翻倍。
 
     `price` 缺省时读环境变量；`now` 只为测试注入固定时间戳（不注入就是当前时间）。
+
+    ## `idem_scope`：幂等键的命名空间可以与 `task_id` 不同（`P-17` × `G-2`）
+
+    `task_id` 是审计挂点（`usage_ledger.task_id` 要指得到 `tasks` 表的实体行，
+    `verify` 有 `dangling_usage_task` 检查），所以它必须服从 `schema` 的 `t-NNNN`
+    契约、每一跑都是新号。而"是不是同一笔账"要按运行标识判：同一秒同一主题的
+    第二跑必须算出同一个键才判得成 `duplicate`（`test_cli_run.py:437`）。
+
+    把两件事挤进同一个字符串，结果只有两种：要么 task_id 违反契约（写入被拒、
+    静默不落库），要么第二跑换了 task_id 而重复扣费。所以这里多一个可选参数：
+    给了 `idem_scope` 就只用它算键，`task_id` 照旧写进行里；不给就退回旧口径
+    （键按 `task_id` 算），既有调用点行为不变。
     """
+    if scope not in USAGE_SCOPES:
+        raise ValueError(
+            f"scope 必须是 {USAGE_SCOPES} 之一，收到 {scope!r} —— "
+            "它是这笔花销的用途归口；缺省值/兜底值会让忘记传的调用点静默落档，"
+            "而账本仍然完全自洽"
+        )
+    reply_scope = str(getattr(reply, "scope", "") or "").strip()
+    if reply_scope and reply_scope != scope:
+        raise ValueError(
+            f"reply 声明的 scope 是 {reply_scope!r}，入账时给的是 {scope!r} ⇒ "
+            "同一次调用在两处有两个归口，两个数字都会自洽而互相矛盾。"
+            "请让调用点只声明一次（`modelgw.complete(..., scope=...)`），"
+            "入账处用同一个值"
+        )
     if meter is None:
         return {
             "charged": False,
@@ -304,9 +355,10 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
             "tokens_out": 0,
             "usd": 0.0,
             "reason": "not_wired",
+            "scope": scope,
         }
 
-    key = idempotency_key(task_id, call_index)
+    key = idempotency_key(idem_scope or task_id, call_index)
     prior = _find_by_marker(meter, key)
     if prior is not None:
         return {
@@ -316,6 +368,11 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
             "tokens_out": int(prior.get("tokens_out") or 0),
             "usd": float(prior.get("usd") or 0.0),
             "reason": "duplicate",
+            # `R5-AN-2`：这一支此前没有 `scope`，于是重放路径上逐笔的归口是空串。
+            # 取 `prior` 行的值（判重放的是账本，归口也以账本为准）；
+            # `prior` 行理论上可能没有这一列（手工写的行），那时退回本次实参
+            # —— 实参已经过 `USAGE_SCOPES` 校验，不会是空串。
+            "scope": str(prior.get("scope") or scope),
         }
 
     ok = bool(getattr(reply, "ok", False))
@@ -373,6 +430,9 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
             "tokens_out": int(prior.get("tokens_out") or 0),
             "usd": float(prior.get("usd") or 0.0),
             "reason": "duplicate",
+            # 与上面那条无锁快速通道同一口径（`R5-AN-2`）：归口以账本那一行为准，
+            # 那一行缺列时才退回本次实参。
+            "scope": str(prior.get("scope") or scope),
         }
     if not ok:
         reason = str(getattr(reply, "error_kind", "") or "unknown")
@@ -388,6 +448,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
         "tokens_out": tokens_out,
         "usd": usd,
         "reason": reason,
+        "scope": scope,
     }
 
 
@@ -414,7 +475,8 @@ def selftest() -> int:
 
     problems: list[str] = []
 
-    stuck = charge_reply(None, _fake_reply(ok=True, tokens_in=10, tokens_out=5), task_id="t0")
+    stuck = charge_reply(None, _fake_reply(ok=True, tokens_in=10, tokens_out=5), task_id="t0",
+                         scope="reason")
     if stuck["charged"] or stuck["reason"] != "not_wired":
         problems.append(f"meter=None 时必须 not_wired 且不入账：{stuck}")
 
@@ -423,19 +485,32 @@ def selftest() -> int:
         st.init()
         meter = TokenMeter(st, budget_usd=1.0)
         r = _fake_reply(ok=True, tokens_in=1_000_000, tokens_out=1_000_000, attempts=1)
-        first = charge_reply(meter, r, task_id="t1", call_index=0)
-        again = charge_reply(meter, r, task_id="t1", call_index=0)
+        first = charge_reply(meter, r, task_id="t1", call_index=0, scope="reason")
+        again = charge_reply(meter, r, task_id="t1", call_index=0, scope="reason")
         rows = st.rows("usage_ledger")
         if len(rows) != 1:
             problems.append(f"重复入账必须只写一行，实际 {len(rows)} 行")
+        if rows and str(rows[0].get("scope")) != "reason":
+            problems.append(f"scope 必须如实落账：{rows[0].get('scope')!r}")
+        by_scope = meter.by_scope()
+        if by_scope["reason"]["entries"] != 1:
+            problems.append(f"by_scope 必须看得见这一档：{by_scope['reason']}")
+        if by_scope["search"]["entries"] != 0:
+            problems.append("没花过钱的档必须以零值出现，而不是缺席")
         if again["reason"] != "duplicate":
             problems.append(f"第二次入账应当是 duplicate：{again}")
         want = DEFAULT_PRICE_IN_USD_PER_M + DEFAULT_PRICE_OUT_USD_PER_M
         if abs(first["usd"] - want) > 1e-9:
             problems.append(f"一百万一进一百万出的价应当是 {want}：{first}")
-        third = charge_reply(meter, r, task_id="t1", call_index=1)
+        third = charge_reply(meter, r, task_id="t1", call_index=1, scope="search")
         if third["reason"] != "charged":
             problems.append(f"换了 call_index 就是另一笔：{third}")
+        if meter.by_scope()["search"]["entries"] != 1:
+            problems.append("第二笔落在 search 档 ⇒ 那一档必须非零")
+        if meter.spent()["tokens"] != 2 * 2_000_000:
+            problems.append(
+                f"总额不许因为换档而变化（重放那一笔不入账）：{meter.spent()}"
+            )
 
     for p in problems:
         print(f"  [FAIL] {p}")

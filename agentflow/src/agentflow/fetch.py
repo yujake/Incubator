@@ -47,6 +47,9 @@ __all__ = [
     "infer_extension",
     "DEFAULT_MIRRORS",
     "DEFAULT_USER_AGENT",
+    "ERROR_KINDS",
+    "is_controlled_error_kind",
+    "RETRYABLE_STATUS",
 ]
 
 logger = logging.getLogger(__name__)
@@ -72,6 +75,54 @@ DEFAULT_RETRIES = 3
 
 #: 需要重试的 HTTP 状态码。
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+#: `FetchResult.kind` 的受控词表（`F-6`）。
+#:
+#: 为什么需要它：改前失败原因是自由字符串（`dir(F)` 里只有 `DownloadError` /
+#: `RETRYABLE_STATUS`），实测形态含 `dest_dir_unusable` / `too_large_declared` /
+#: `write_failed` / `read_failed` / `all_sources_failed` / `http_<code>` /
+#: `network_error: …` / `timeout: …` / `io_error: …` / `content_type_mismatch`。
+#: 下游只有四值词表 `schema.DOWNLOAD_STATUSES = (ok, content_mismatch, failed,
+#: skipped)`，于是"限流/被墙/解析失败/网络失败"全部折成同一个 `failed` ——
+#: 按那条轴统计答不出来。
+#:
+#: 这些都是一次下载尝试为什么没成的原因档（`ok=False` 侧）；
+#: 唯一的 `ok=True` 软警告是 `content_type_mismatch`（文件已完整落盘）。
+#: `http_<code>` 是参数化形态：码在名字里，档仍是受控的（`http_` 前缀 + 三位数）。
+ERROR_KINDS = (
+    "empty_url",
+    "unsupported_scheme",
+    "missing_host",
+    "blocked_host",
+    "dest_dir_unusable",
+    "too_large_declared",
+    "too_large_stream",
+    "write_failed",
+    "read_failed",
+    "empty_body",
+    "network_error",
+    "timeout",
+    "io_error",
+    "all_sources_failed",
+    "not_attempted",
+    "fixture_missing",
+    "non_fixture_url",
+    "content_type_mismatch",
+    "unknown_error",
+)
+
+#: 受控档的判定：`ERROR_KINDS` 之一，或 `http_<三位数>`。
+_ERROR_KIND_RE = re.compile(r"^http_\d{3}$")
+
+
+def is_controlled_error_kind(kind: str | None) -> bool:
+    """`kind` 是不是受控档（`ERROR_KINDS` 之一或 `http_NNN`）。
+
+    `None` 也算合法：成功且无警告时它就该是空的。
+    """
+    if kind is None:
+        return True
+    return kind in ERROR_KINDS or bool(_ERROR_KIND_RE.match(kind))
 
 #: 认定为"是文档"的扩展名，用于 Content-Type 与 URL 后缀的一致性检查。
 DOCUMENT_EXTENSIONS = frozenset(
@@ -106,6 +157,19 @@ class FetchResult:
     * 真失败（``ok=False``）：``error`` 是失败原因，``path`` 为 None；
     * 软警告（``ok=True``）：文件已完整落盘，``error`` 是如 ``content_type_mismatch``
       的提示，交由上层判断是否可用（§5.2 允许"登记行但内容可疑"）。
+
+    ## ``kind`` 是受控的那一半（`F-6`）
+
+    ``error`` 保留自由文本（给人读的细节，含异常消息），``kind`` 是
+    :data:`ERROR_KINDS` 里的受控档（给统计读的）。为什么两列都要：
+    只留自由文本则"按失败原因统计"不成立（`http_429` 与 `network_error: ...`
+    是同一列里两种形态）；只留受控档则丢掉了排障需要的原文。
+    分列之后，"限流 / 被墙 / 解析失败 / 网络失败"这条轴可以直接数出来。
+
+    ``kind`` 与 ``ok`` 的关系是单向的：`ok=True` 时 ``kind`` 要么是 `None`
+    （干净成功），要么是 `content_type_mismatch`（落盘成功、内容可疑）；
+    `ok=False` 时 ``kind`` 一定不是 `None`。这条由 :func:`is_controlled_error_kind`
+    与 ``tests`` 守住 —— 一个失败的下载没有受控原因，就等于没说为什么失败。
     """
 
     ok: bool = False
@@ -114,6 +178,35 @@ class FetchResult:
     bytes: int = 0
     sha256: str | None = None
     error: str | None = None
+    #: 受控的失败/警告档（`ERROR_KINDS` 或 `http_NNN`）。见类 docstring。
+    kind: str | None = None
+
+    def __post_init__(self) -> None:
+        """把"失败的下载必须带上受控原因"变成构造期的硬约束（`F-6`）。
+
+        为什么不能只在 `HttpDownloader` 里记得填：`FetchResult` 是下载层的
+        公共返回类型，任何下载器实现（`demo.FixtureDownloader`、测试里的假下载器）
+        都能造它。判据落在类型自己身上，才不依赖"每个实现都记得"。
+        这条约束没有例外：第一版把 `http_status is None` 当例外，于是
+        `demo.FixtureDownloader` 的两条失败路径合法地不带档 —— 那正是
+        "合约改了、调用方没跟"的口子。`F-6` 的判据是"失败的下载必须答得出
+        为什么"，没有"连 HTTP 层都没到就不算失败"的道理。
+        """
+        if not is_controlled_error_kind(self.kind):
+            raise ValueError(
+                f"FetchResult.kind={self.kind!r} 不是受控档（ERROR_KINDS 之一或 http_NNN）"
+            )
+        if not self.ok and self.kind is None:
+            raise ValueError(
+                "失败的下载必须给出受控的 kind（F-6）：只有自由文本的 error 时，"
+                "『限流/被墙/解析失败/网络失败』这条轴统计不出来 —— "
+                "上游只有 schema.DOWNLOAD_STATUSES 四值，六种原因会全折成 failed"
+            )
+        if self.ok and self.kind not in (None, "content_type_mismatch"):
+            raise ValueError(
+                f"ok=True 时 kind 只能是 None 或 content_type_mismatch，收到 {self.kind!r} —— "
+                "成功的下载不该带失败档"
+            )
 
 
 class Downloader(Protocol):
@@ -265,7 +358,7 @@ def _retry_after_seconds(headers: Any) -> float | None:
 
 def _backoff_delay(attempt: int) -> float:
     """指数退避 + 抖动。抖动是为了让并发下载在限流恢复后不要同时猛冲。"""
-    return min(2.0**attempt, 30.0) * (0.8 + 0.4 * random.random())
+    return min(2.0 ** attempt, 30.0) * (0.8 + 0.4 * random.random())
 
 
 class _ConnectThenReadHTTPConnection(http.client.HTTPConnection):
@@ -436,8 +529,11 @@ class HttpDownloader:
        目标路径上不会留下半个文件——上层据 ``path`` 是否存在即可判断完整性。
     2. 流式：边读边写边算 sha256，内存占用与文件大小无关。
     3. 镜像回退：直连失败后依次尝试镜像；每个 URL 各自享有完整重试预算。
-    4. 不覆盖已有文件：同名时追加短哈希后缀，避免两次下载互相踩踏
-       （``sha256`` 已在 ``literature.download`` 里承担"重复文件"判定的职责）。
+    4. 不覆盖已有文件：同名时追加短哈希后缀，避免两次下载互相踩踏。
+       （改前这里写的是"``sha256`` 已在 `literature.download` 里承担『重复文件』
+       判定的职责"—— 那句话与实现不符：全仓没有任何判重路径读
+       `literature.download.sha256`，它只是"这份字节长这样"的证据。
+       同族的两处声明修正见 `dedup` 模块 docstring 与登记册 `F-9`。）
     """
 
     def __init__(
@@ -479,11 +575,15 @@ class HttpDownloader:
         try:
             dest.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            return FetchResult(ok=False, error=f"dest_dir_unusable: {exc}")
+            return FetchResult(
+                ok=False, kind="dest_dir_unusable",
+                error=f"dest_dir_unusable: {exc}",
+            )
 
-        safe_error = self._validate_url(url)
-        if safe_error:
-            return FetchResult(ok=False, error=safe_error)
+        rejected = self._validate_url(url)
+        if rejected is not None:
+            kind, detail = rejected
+            return FetchResult(ok=False, kind=kind, error=detail)
 
         candidates = [url]
         for rule in self.mirrors:
@@ -496,6 +596,7 @@ class HttpDownloader:
                 candidates.append(rewritten)
 
         last_error: str | None = None
+        last_kind: str | None = None
         last_status: int | None = None
         for index, candidate_url in enumerate(candidates):
             if index > 0:
@@ -505,38 +606,49 @@ class HttpDownloader:
             if result.ok or result.bytes > 0:
                 return result
             last_error = result.error
+            last_kind = result.kind
             last_status = result.http_status
 
         self.stats["failures"] = self.stats.get("failures", 0) + 1
         detail = f"all_sources_failed: {last_error}" if last_error else "all_sources_failed"
         if len(candidates) > 1:
             detail += f" (tried {len(candidates)} urls)"
-        return FetchResult(ok=False, http_status=last_status, error=detail)
+        # `all_sources_failed` 是受控档，但"为什么全失败了"必须留在 `kind` 旁边的
+        # `error` 里 —— 上游只看 `kind` 会以为所有失败同因，原档在 `last_kind`。
+        return FetchResult(
+            ok=False, kind="all_sources_failed", http_status=last_status,
+            error=detail if last_kind is None else f"{detail} [last_kind={last_kind}]",
+        )
 
     # -- 内部实现 -----------------------------------------------------------------
 
-    def _validate_url(self, url: str) -> str | None:
-        """返回错误字符串表示不可下载；None 表示通过。"""
+    def _validate_url(self, url: str) -> tuple[str, str] | None:
+        """返回 `(受控档, 细节文本)` 表示不可下载；`None` 表示通过。
+
+        为什么返回二元组而不是一个字符串、再由调用方去切前缀：改前调用方拿的是
+        `"blocked_host: 127.0.0.1"` 这样一个串，要拿到受控档只能 `split(":")[0]`
+        —— 那是"同一件事两个落位"的又一例（详情文本一改，档就静默变了）。
+        """
         if not isinstance(url, str) or not url.strip():
-            return "empty_url"
+            return "empty_url", "empty_url"
         parts = urllib.parse.urlsplit(url.strip())
         scheme = (parts.scheme or "").lower()
         if scheme not in ("http", "https"):
             # 显式挡掉 file:// 等本地读取途径：下载器只应接触网络。
-            return f"unsupported_scheme: {scheme or 'none'}"
+            return "unsupported_scheme", f"unsupported_scheme: {scheme or 'none'}"
         host = (parts.hostname or "").lower()
         if not host:
-            return "missing_host"
+            return "missing_host", "missing_host"
         if self.allow_private_hosts:
             return None
         if host in ("localhost", "localhost.localdomain") or host.endswith(".local"):
-            return f"blocked_host: {host}"
+            return "blocked_host", f"blocked_host: {host}"
         try:
             ip = ipaddress.ip_address(host)
         except ValueError:
             return None
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            return f"blocked_host: {host}"
+            return "blocked_host", f"blocked_host: {host}"
         return None
 
     def _open(self, request: urllib.request.Request, timeout: Any) -> Any:
@@ -564,6 +676,7 @@ class HttpDownloader:
         timeout = (self.connect_timeout, self.read_timeout)
         last_status: int | None = None
         last_error: str | None = None
+        last_kind: str = "unknown_error"
 
         for attempt in range(self.retries + 1):
             self._limiter.acquire(host)
@@ -579,13 +692,15 @@ class HttpDownloader:
                     return self._consume(response, status, url, dest, filename_hint)
             except urllib.error.HTTPError as exc:
                 last_status = int(getattr(exc, "code", 0) or 0)
-                last_error = f"http_{last_status}"
+                last_kind = f"http_{last_status}"
+                last_error = last_kind
                 if last_status not in RETRYABLE_STATUS or attempt >= self.retries:
                     break
                 delay = _retry_after_seconds(getattr(exc, "headers", None)) or _backoff_delay(attempt)
                 logger.warning("下载 %s 得到 HTTP %s，%.1fs 后重试（%d/%d）", url, last_status, delay, attempt + 1, self.retries)
                 self._sleep(delay)
             except urllib.error.URLError as exc:
+                last_kind = "network_error"
                 last_error = f"network_error: {exc.reason}"
                 if attempt >= self.retries:
                     break
@@ -597,14 +712,28 @@ class HttpDownloader:
                 # 断流/超时是瞬时故障——实测 AMS 的大 PDF 会在传到几百 KB 时读超时，
                 # 重试一次往往就能读完，所以必须重试；而 ENOSPC/EACCES 这类本地 I/O
                 # 错误重试无用，立即失败更快把问题暴露给上层。
+                #
+                # `F-6` 的归因修正：`ConnectionResetError` 也是 `OSError` 的子类，
+                # 而改前它落在"非 TimeoutError ⇒ io_error"那一支里 ——
+                # 于是一次网络中途断流被记成 `io_error`（读账的人会去查磁盘）。
                 is_transient = isinstance(exc, TimeoutError)
-                last_error = f"timeout: {exc}" if is_transient else f"io_error: {exc}"
+                if is_transient:
+                    last_kind, last_error = "timeout", f"timeout: {exc}"
+                elif isinstance(exc, ConnectionError):
+                    # 被墙/被重置/连接断开：这是网络轴上的事，不是本地 I/O。
+                    # 与 `timeout` 同样重试（下一跳或镜像往往能过）。
+                    is_transient = True
+                    last_kind, last_error = "network_error", f"network_error: {exc}"
+                else:
+                    last_kind, last_error = "io_error", f"io_error: {exc}"
                 if not is_transient or attempt >= self.retries:
                     break
                 delay = _backoff_delay(attempt)
                 logger.warning(
                     "%s %s（%s），%.1fs 后重试（%d/%d）",
-                    "下载超时" if is_transient else "下载 I/O 失败",
+                    {"timeout": "下载超时", "network_error": "下载连接中断"}.get(
+                        last_kind, "下载 I/O 失败"
+                    ),
                     url,
                     exc,
                     delay,
@@ -613,7 +742,10 @@ class HttpDownloader:
                 )
                 self._sleep(delay)
 
-        return FetchResult(ok=False, http_status=last_status, error=last_error or "unknown_error")
+        return FetchResult(
+            ok=False, kind=last_kind, http_status=last_status,
+            error=last_error or "unknown_error",
+        )
 
     def _consume(
         self,
@@ -623,7 +755,19 @@ class HttpDownloader:
         dest: Path,
         filename_hint: str,
     ) -> FetchResult:
-        """流式落盘。任何异常都转成 ``FetchResult(ok=False)``，绝不向上抛。"""
+        """流式落盘。任何异常都转成 ``FetchResult(ok=False)``，绝不向上抛。
+
+        0 字节也是"没拿到内容"（`F-5`，见下面 `written == 0` 那一段）：
+        "下载成功"必须同时意味着"内容确实存在"，否则 `ok` 会同时表示两件事。
+
+        ## 落盘的 `kind` 归因（`F-6`）
+
+        改前这里只有一个 `except OSError` 兜住写文件与读响应两件事，
+        于是一次"读到一半连接被重置"（`ConnectionResetError`，`OSError` 子类）
+        被归成 `write_failed` —— 读账的人会去查磁盘，而问题在网络。
+        现在的结构是：`response.read()` 在内层 try 里单独兜，
+        `read_failed` 只可能来自读；外层 `except OSError` 只可能是落盘失败。
+        """
         headers = getattr(response, "headers", None)
         content_type = ""
         if headers is not None and headers.get("Content-Type"):
@@ -637,6 +781,7 @@ class HttpDownloader:
         if declared is not None and declared > self.max_bytes:
             return FetchResult(
                 ok=False,
+                kind="too_large_declared",
                 http_status=status,
                 bytes=0,
                 error=f"too_large_declared: {declared} > {self.max_bytes}",
@@ -652,7 +797,15 @@ class HttpDownloader:
             fd, temp_path = tempfile.mkstemp(prefix=".agentflow-", suffix=".part", dir=str(dest))
             with os.fdopen(fd, "wb") as handle:
                 while True:
-                    chunk = response.read(self.chunk_size)
+                    # 读响应单独兜：这里的异常是网络的事，不是磁盘的事。
+                    try:
+                        chunk = response.read(self.chunk_size)
+                    except Exception as exc:
+                        self._cleanup(temp_path)
+                        return FetchResult(
+                            ok=False, kind="read_failed", http_status=status, bytes=written,
+                            error=f"read_failed: {type(exc).__name__}: {exc}",
+                        )
                     if not chunk:
                         break
                     written += len(chunk)
@@ -665,14 +818,46 @@ class HttpDownloader:
             os.replace(temp_path, target)
             temp_path = None
         except DownloadError as exc:
+            # 只有 `too_large_stream` 会走到这里：上限是本地判据，不是写失败。
             self._cleanup(temp_path)
-            return FetchResult(ok=False, http_status=status, bytes=written, error=str(exc))
+            return FetchResult(
+                ok=False, kind="too_large_stream", http_status=status,
+                bytes=written, error=str(exc),
+            )
         except OSError as exc:
+            # 走到这里只剩下"落盘"这一类（读已经在上面单独兜住了）。
             self._cleanup(temp_path)
-            return FetchResult(ok=False, http_status=status, bytes=written, error=f"write_failed: {exc}")
-        except Exception as exc:  # 网络在 read() 中途断开
-            self._cleanup(temp_path)
-            return FetchResult(ok=False, http_status=status, bytes=written, error=f"read_failed: {exc}")
+            return FetchResult(
+                ok=False, kind="write_failed", http_status=status, bytes=written,
+                error=f"write_failed: {type(exc).__name__}: {exc}",
+            )
+
+        if written == 0:
+            # `F-5`：0 字节的 200 响应不是"下载成功"。
+            #
+            # 缺陷（2026-09-26 全面体检 · 子代理 F 实测，`temp/auditF-probe3.txt` [L] 段）：
+            # 改前 `written` 不参与成功判定，于是"这个 URL 什么都没给"落成一个空文件 +
+            # 空串的 sha256 + `ok=True`；`agent_a._stage_download` 按 `res.ok` 记
+            # `download.status='ok'`，B 随后把它抽成 `pages=[]`，结论链变成
+            # "下载成功 + 扫描件需要 OCR"。`schema.DOWNLOAD_STATUSES` 的 `ok` 从此
+            # 不再等于"内容确实拿到了"。
+            #
+            # 处置：把刚落下去的那个空文件删掉（`_target_path` 保证 `target` 此前不存在，
+            # 所以这里删掉的必然是本次刚写的那个），并按"没拿到内容"返回。
+            # 刻意不复用 `ok`：一个"合法的 0 字节文件"如果真需要，应当另设受控取值，
+            # 而不是让 `ok` 同时表示两件事。
+            try:
+                target.unlink()
+            except OSError:
+                # 删不掉也不许把"没拿到内容"翻回成功：文件残留只是脏，谎报成功是错。
+                pass
+            return FetchResult(
+                ok=False,
+                kind="empty_body",
+                http_status=status,
+                bytes=0,
+                error="empty_body: 上游返回 0 字节 ⇒ 本次没有拿到任何内容",
+            )
 
         warning = _content_type_warning(content_type, extension, _url_suffix(url))
         return FetchResult(
@@ -682,6 +867,9 @@ class HttpDownloader:
             bytes=written,
             sha256=digest.hexdigest(),
             error=warning,
+            # 软警告（`ok=True`）时 `kind` 说的是"内容可疑"这一类；
+            # 没有警告时是 `None`（干净成功）—— 与 `ok=False` 侧的失败档同属一张词表。
+            kind="content_type_mismatch" if warning else None,
         )
 
     def _target_path(self, dest: Path, filename_hint: str, url: str, extension: str) -> Path:
@@ -873,7 +1061,7 @@ def _selftest() -> int:
         return 0
 
     downloader = default_downloader({"min_interval": 1.0})
-    result: FetchResult = FetchResult(ok=False, error="not_attempted")
+    result: FetchResult = FetchResult(ok=False, kind="not_attempted", error="not_attempted")
     with tempfile.TemporaryDirectory(prefix="agentflow-fetch-selftest-") as tmp:
         result = downloader.download(pdf_url, Path(tmp), candidates[0].title)
         print(json.dumps(

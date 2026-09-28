@@ -220,199 +220,13 @@ def test_r003_exempts_allowlisted_names(tmp_path):
     assert all(g.level == "info" for g in got), got
 
 
-# ============================================================ R004 注册表绕道
-
-
-def test_r004_flags_registry_outside_tools(tmp_path):
-    """正向：工具层之外构造 `ToolRegistry` ⇒ warning（绕过 roles 校验）。"""
-    root = _tree(tmp_path, {"agent_x.py": "def install():\n    reg = ToolRegistry(name='x')\n    return reg\n"})
-    got = L.rule_R004_registry_outside_tools(root)
-    assert len(got) == 1 and got[0].line == 2
-
-
-def test_r004_ignores_selftest_scaffolding(tmp_path):
-    """负控（校准）：`_selftest()` 里的局部注册表是测试脚手架，不是装配点。"""
-    root = _tree(tmp_path, {
-        "agent_x.py": "def _selftest():\n    reg = ToolRegistry(name='x')\n    return reg\n",
-    })
-    assert L.rule_R004_registry_outside_tools(root) == []
-
-
-def test_r004_does_not_match_inside_docstring(tmp_path):
-    """负控（第二次校准）：docstring / 注释里提到 `ToolRegistry(` 不算构造注册表。
-
-    这是本条规则一次真实的假阳性：`agent_d.validate_tool_roles` 的 docstring 里
-    逐字写着
-
-    ```text
-    ``ToolRegistry(name="agent-D")`` + ``register_function``
-    ```
-
-    —— 那是在解释这个反模式（说明 `install_d_tools` 不走 `build_registry`），
-    却被逐行正则当成了缺陷本身。"描述一个反模式"不等于"采用了这个反模式"，
-    这条负控就是钉住这一点。
-    """
-    root = _tree(tmp_path, {
-        "agent_x.py": (
-            'def validate(reg):\n'
-            '    """它自己 ``ToolRegistry(name="agent-D")`` + register_function。"""\n'
-            "    return reg\n"
-        ),
-    })
-    assert L.rule_R004_registry_outside_tools(root) == []
-
-
-def test_r004_info_when_validator_is_declared(tmp_path, monkeypatch):
-    """负控（校准三）：函数体里调用了已登记的校验器 ⇒ 降为 `info`，不是 warning。
-
-    这正是规则提示里那句"或显式调用同一份校验函数（不要复制它的判据）"的
-    可判定形式。用 monkeypatch 造一个临时名单，不动真实名单 ——
-    否则这条测试会随真实名单增删而变红/变绿，那就不是在测判据了。
-    """
-    monkeypatch.setattr(L, "ROLE_VALIDATOR_CALLS", {"validate_roles": "测试用：假装它执行了同一份判据"})
-    root = _tree(tmp_path, {
-        "agent_x.py": (
-            "def install():\n"
-            "    reg = ToolRegistry(name='x')\n"
-            "    validate_roles(reg)\n"
-            "    return reg\n"
-        ),
-    })
-    got = L.rule_R004_registry_outside_tools(root)
-    assert len(got) == 1 and got[0].level == "info", got
-    assert "validate_roles" in got[0].message
-
-
-def test_r004_still_warns_when_validator_is_called_elsewhere_in_file(tmp_path, monkeypatch):
-    """负控的反面（收紧边界）：校验器在文件里别处被调用 ⇒ 仍然是 warning。
-
-    豁免必须按"最内层函数体"判定。若放宽到文件级，这条规则就退化成
-    "文件级忽略" —— 而文件级忽略正是本项目最反对的形态（假阴性且看不出来）。
-    """
-    monkeypatch.setattr(L, "ROLE_VALIDATOR_CALLS", {"validate_roles": "测试用"})
-    root = _tree(tmp_path, {
-        "agent_x.py": (
-            "def install():\n"
-            "    reg = ToolRegistry(name='x')\n"      # ← 这一处没校验
-            "    return reg\n"
-            "\n"
-            "def other():\n"
-            "    validate_roles(None)\n"              # ← 校验在别的函数里
-        ),
-    })
-    got = L.rule_R004_registry_outside_tools(root)
-    assert len(got) == 1 and got[0].level == "warning", got
-
-
-def test_role_validator_names_exist_in_the_real_tree():
-    """反腐烂：`ROLE_VALIDATOR_CALLS` 里的每个名字都必须在真实代码里存在。
-
-    没有这一条，名单会腐烂：函数被改名/删掉之后，名单里留着一个不存在的名字，
-    于是豁免永远命中不了 —— 那是静默失效（门还在，只是再也不生效）。
-    与 `.noai-paths` 的"理由里写符号名并由测试断言符号存在"是同一个手法。
-    """
-    import re as _re
-
-    src = Path(__file__).resolve().parents[1] / "src" / "agentflow"
-    text = "\n".join(
-        p.read_text(encoding="utf-8") for p in src.rglob("*.py") if "__pycache__" not in p.parts
-    )
-    missing = [n for n in L.ROLE_VALIDATOR_CALLS if not _re.search(rf"\bdef\s+{_re.escape(n)}\b", text)]
-    assert not missing, f"ROLE_VALIDATOR_CALLS 里的这些名字在源码树里没有 `def`：{missing}"
-
-
-def test_registry_builders_exist_in_the_tools_layer():
-    """反腐烂：`REGISTRY_BUILDERS` 里的名字必须在工具层里有 `def`。
-
-    为什么钉在工具层：这两个名字的全部意义是"用正规的装配入口"。
-    如果 `build_registry` 被挪走或改名，豁免就会指向一个不存在的东西 ——
-    而那时 R004 会看起来还在工作（其它点仍会报），只是这一侧静默失效。
-    """
-    import re as _re
-
-    tools = Path(__file__).resolve().parents[1] / "src" / "agentflow" / "tools"
-    text = "\n".join(
-        p.read_text(encoding="utf-8") for p in tools.rglob("*.py") if "__pycache__" not in p.parts
-    )
-    missing = [n for n in L.REGISTRY_BUILDERS if not _re.search(rf"\bdef\s+{_re.escape(n)}\b", text)]
-    assert not missing, f"REGISTRY_BUILDERS 里的这些名字在工具层里没有 `def`：{missing}"
-
-
-def test_r004_exempts_a_function_that_calls_a_registry_builder(tmp_path):
-    """负控（校准四）：同一函数体里调了 `build_registry` ⇒ roles 校验跑过 ⇒ 不当 warning。
-
-    真实案例：`agent_h.install_h_tools` 先 `build_registry(...)`（roles 已核），
-    再从它的 `for_role("H")` 结果里筛出只读子集重新注册。这不是绕过。
-
-    结果记成 `info` 而不是彻底不报：这条规则的价值有一半在"每一处构造注册表的
-    地方都留下一条可审计的记录"。彻底不报会让"我没看见"与"校验过了"在输出里长得一样。
-    """
-    root = _tree(tmp_path, {
-        "agent_x.py": (
-            "def install():\n"
-            "    build = build_registry(store=store)\n"
-            "    reg = ToolRegistry(name='x')\n"
-            "    return reg\n"
-        ),
-    })
-    got = L.rule_R004_registry_outside_tools(root)
-    assert len(got) == 1 and got[0].level == "info", got
-    assert "build_registry" in got[0].message
-
-
-def test_r004_exempts_nested_helpers_inside_a_selftest(tmp_path):
-    """负控（校准三）：命中点在嵌套小工具里、而祖先函数是自检 ⇒ 不报。
-
-    真实案例：`tools/fs_tools.py` 的自检里先定义了 `def check(...)`，
-    然后在自检函数体里构造 `ToolRegistry(name="selftest")`。
-    只按"最内层 def"判会让这条命中被当装配点（两个纯假阳性）；
-    按整条嵌套链判才看得出它是 `_selftest` 里的脚手架。
-    """
-    root = _tree(tmp_path, {
-        "tools_like.py": (
-            "def _selftest():\n"
-            "    def check(label, cond):\n"
-            "        return label\n"
-            "    reg = ToolRegistry(name='selftest')\n"
-            "    return check('x', True)\n"
-        ),
-    })
-    assert L.rule_R004_registry_outside_tools(root) == []
-
-
-def test_r004_allowed_sites_still_exist():
-    """反腐烂：`R004_ALLOWED_SITES` 的每个 `(文件, 函数)` 都必须在真实树里存在。
-
-    例外的价值全在"它指的是真实存在的那个装配点"。
-    一旦函数被改名或文件被挪走，键就指向空气 —— 例外永久静默，而报告里看不出
-    （这不是"少报了一条"，是"豁免了一条不存在的规则"）。
-    """
-    repo = Path(__file__).resolve().parents[1]
-    bad: list[str] = []
-    for (rel, fn), reason in L.R004_ALLOWED_SITES.items():
-        p = repo / rel
-        if not p.is_file():
-            bad.append(f"{rel} 不存在")
-            continue
-        if not re.search(rf"\bdef\s+{re.escape(fn)}\b", p.read_text(encoding="utf-8")):
-            bad.append(f"{rel} 里没有 `def {fn}`")
-        if len(reason.strip()) < 20:
-            bad.append(f"({rel}, {fn}) 的理由太短 —— 写不出理由就该改代码，而不是加例外")
-    assert not bad, bad
-
-
-def test_r004_reports_a_declared_site_as_info_not_warning(tmp_path, monkeypatch):
-    """正向：已登记的例外降为 `info`，且消息里带着理由（可审计，不是静默放过）。"""
-    monkeypatch.setattr(
-        L, "R004_ALLOWED_SITES",
-        {("src/agentflow/agent_x.py", "install"): "测试用：该装配点用内联的 fail-closed 断言执行了同一条判据"},
-    )
-    root = _tree(tmp_path, {
-        "agent_x.py": "def install():\n    reg = ToolRegistry(name='x')\n    return reg\n",
-    })
-    got = L.rule_R004_registry_outside_tools(root)
-    assert len(got) == 1 and got[0].level == "info", got
-    assert "已逐点登记为例外" in got[0].message
+# ============================================================ R004 注册表绕道（已退休）
+#
+# R004 的全部用例随判据一起退休 —— 它们断言的是"lint 能探测出绕过装配期角色校验的
+# 构造点"，而 `P-1` 把判据下沉到 `ToolRegistry.register*` 之后这个探测面变成真空。
+# 退休的可断言形态（登记 + 不产生 findings + 编号保留 + 接替者真的在 + 豁免表已收掉）
+# 见 `tests/test_lint_rules_r004_retired.py`（与 R006 的 `test_lint_rules_r006_retired.py`
+# 逐条同族）。旧用例留在这里会断言三张已经不存在的豁免表 —— 那是"永不生效的豁免"。
 
 
 # ============================================================ R005 写死角色名单
@@ -511,13 +325,12 @@ def test_r008_accepts_script_with_exit_code(tmp_path):
 
 # ============================================================ R010 装置轴与代码不符
 
-#: R010 的合成工具层最小骨架：`base.py` 里那张逐工具遗留翻译表（规则会去读它）。
-#: 默认给空表：每个用例只放它自己要触发的那一条，别的条目会让
-#: "翻译表里有多余条目"那条 warning 一起出现，把断言变成"数几条 warning"。
-_R010_BASE = (
-    '"""合成 base。"""\n'
-    "LEGACY_EFFECTS_BY_TOOL: dict[str, tuple[str, str]] = {}\n"
-)
+#: R010 的合成工具层最小骨架。
+#:
+#: B3 收官删掉了遗留取值 `network` 与两张翻译表，R010 因此不再读任何
+#: `base.py` 里的表。这个骨架只留一个文件，让合成树与真实树同形
+#: （规则只扫 `src/agentflow/tools/`，`base.py` 缺了不影响判定）。
+_R010_BASE = '"""合成 base（B3 收官后 R010 不再从 base.py 读任何表）。"""\n'
 
 
 def _tools_tree(tmp_path: Path, body: str, *, base: str = _R010_BASE) -> Path:
@@ -536,9 +349,9 @@ def _r010(body: str, tmp_path: Path, *, base: str = _R010_BASE) -> list:
 def test_r010a_flags_process_call_under_a_non_exec_declaration(tmp_path):
     """正控（必须命中 error）：声明 `external="none"` 而 handler 链里起子进程。
 
-    这是 R006 的对偶方向：R006 问"声明读、实际联网/起进程"，
-    R010-a 问"声明不执行、实际起子进程"。两者的判据形态不同：R010 按工具判，
-    所以这个合成样本里没有别的 `side_effect="read"` 声明也照样命中。
+    判据形态与 R006（已退休）不同：R006 是文件级共现、指不出是哪一个工具；
+    R010 按工具判 —— 所以这个合成样本里没有别的 `side_effect="read"` 声明也照样命中，
+    而且断言的是"消息里点名了那个工具"（`sample.spawn`），那正是 R006 做不到的那一格。
     """
     got = _r010(
         "import subprocess\n"
@@ -562,6 +375,58 @@ def test_r010a_flags_process_call_under_a_non_exec_declaration(tmp_path):
     errors = [f for f in got if f.level == "error"]
     assert len(errors) == 1, got
     assert "sample.spawn" in errors[0].message and "起子进程" in errors[0].message
+
+
+def test_r010a_does_not_flag_a_tool_declaring_declared_external(tmp_path):
+    """负控：真实写法 `declared_external="exec"` 必须被读到（G-45 的字段名）。
+
+    这条用例是"读错字段名"的直接负控：`ToolSpec` 的字段叫 `declared_external`
+    （`external` 是属性名，写进构造器会 `TypeError`），而 `@tool` 装饰器的
+    关键字叫 `external`。只认后者时，真实树上所有 `ToolSpec(..., declared_external=…)`
+    都会被读成默认值 `none` —— 于是一个如实的 `exec` 声明会被报成 error，
+    而报告里"声明写错"与"声明没被读见"长得一模一样（三态纪律要防的正是它）。
+    """
+    got = _r010(
+        "import subprocess\n"
+        "\n"
+        "\n"
+        "def _spawn():\n"
+        "    return subprocess.run(['echo', 'x'])\n"
+        "\n"
+        "\n"
+        "def _to_specs():\n"
+        "    return [ToolSpec(name='sample.spawn', summary='起进程', declared_external='exec',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _spawn(),\n"
+        "                     side_effect='read')]\n",
+        tmp_path,
+    )
+    assert [f for f in got if f.level == "error"] == [], got
+    assert [f for f in got if "sample.spawn" in f.message and f.level in ("error", "warning")] == [], got
+
+
+def test_r010a_still_flags_declared_external_none_with_a_process_call(tmp_path):
+    """正控：显式写 `declared_external="none"` 而起进程 ⇒ 仍然必须 error。
+
+    与上一条成对：只有"能读到这个字段名"才会让这条 error 出现/消失，
+    两条一起才说明判据接上的是真实字段（而不是"谁都不报"）。
+    """
+    got = _r010(
+        "import subprocess\n"
+        "\n"
+        "\n"
+        "def _spawn():\n"
+        "    return subprocess.run(['echo', 'x'])\n"
+        "\n"
+        "\n"
+        "def _to_specs():\n"
+        "    return [ToolSpec(name='sample.spawn', summary='起进程', declared_external='none',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _spawn(),\n"
+        "                     side_effect='read')]\n",
+        tmp_path,
+    )
+    errors = [f for f in got if f.level == "error"]
+    assert len(errors) == 1, got
+    assert "sample.spawn" in errors[0].message
 
 
 def test_r010a_does_not_flag_a_declared_exec_tool(tmp_path):
@@ -628,53 +493,116 @@ def test_r010b_does_not_flag_egress_with_a_real_network_call(tmp_path):
     assert [f for f in got if f.level in ("error", "warning")] == [], got
 
 
-def test_r010_reports_legacy_count_and_the_per_tool_translation_table(tmp_path):
-    """遗留取值必须被数出来，且逐工具翻译表必须与它逐条一致。
+def test_r010c_flags_a_none_declaration_that_reaches_a_network_call(tmp_path):
+    """正控（必须命中 warning）：声明 `external="none"` 而 handler 链里真的联网。
 
-    这是 P-13 §3.2 的"一个不可行动的数字没有价值"的可判定形式：
-    报告要给出清单（工具名），而不只是一个数字；而"表里有、声明里没有"
-    与"声明里有、表里没有"两个方向都要能被判出来（前者是翻译表该删了，
-    后者是有人新加了遗留工具却忘了登记原意）。
+    这是 R006 当年问的那个方向（`side_effect="read"` / `external="none"` 的工具
+    实际联网），在 R010 的逐工具口径下的落地。为什么必须有它：R006 退休时
+    `RETIRED_RULES` 写的是"判据移入 R010"，而 R010 此前只有"非 exec 而起子进程"
+    与"声明 egress 而看不到网络"两条 —— 于是这个方向在门里没有任何判据看得见
+    （`R7-R6-1` 在人造树上实测：改前 R010 报 0 条、而改前的 R006 报 1 条）。
+
+    级别是 warning 而不是 error：判据是"字面标记可达"，而 `search` / `download`
+    两条标记按末段相等匹配，真实树上会被 `re.search` / `rx.search` 这类正则方法命中
+    （那两条已登记在 `_R010_NETWORK_FALSE_POSITIVES`）。
     """
-    body = (
-        "def _pure():\n"
-        "    return 1\n"
+    got = _r010(
+        "from agentflow import providers as P\n"
+        "\n"
+        "\n"
+        "def _fetch():\n"
+        "    return P.http_get_json('https://example.invalid/x')\n"
         "\n"
         "\n"
         "def _to_specs():\n"
-        "    return [ToolSpec(name='sample.legacy', summary='遗留', side_effect='network',\n"
-        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _pure())]\n"
-    )
-    legacy_base = (
-        '"""合成 base。"""\n'
-        "LEGACY_EFFECTS_BY_TOOL: dict[str, tuple[str, str]] = {\n"
-        '    "sample.legacy": ("egress", "read"),\n'
-        "}\n"
-    )
-    got = _r010(body, tmp_path, base=legacy_base)
-    infos = " | ".join(f.message for f in got if f.level == "info")
-    assert "遗留计数" in infos and "1 处" in infos and "sample.legacy" in infos, got
-    assert "逐条一致" in infos, got
-
-    # 反方向：声明里有、翻译表里没有 ⇒ error（新加的遗留工具必须显式登记原意）
-    got2 = _r010(
-        "def _pure():\n"
-        "    return 1\n"
-        "\n"
-        "\n"
-        "def _to_specs():\n"
-        "    return [ToolSpec(name='sample.untranslated', summary='没登记', side_effect='network',\n"
-        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _pure())]\n",
+        "    return [ToolSpec(name='sample.fetch', summary='声称不对外', declared_external='none',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _fetch(),\n"
+        "                     side_effect='read')]\n",
         tmp_path,
     )
-    assert any("没有它们的原意" in f.message for f in got2 if f.level == "error"), got2
+    warnings = [f for f in got if f.level == "warning"]
+    assert len(warnings) == 1, got
+    assert "sample.fetch" in warnings[0].message, warnings[0].message
+    assert "R006" in warnings[0].message, "这条要写清它是 R006 那个方向的接续"
+    # 与 R010-a 分开：它起的是"联网"这件事，不该被误报成起进程
+    assert [f for f in got if f.level == "error"] == [], got
 
 
-def test_r010_reports_unknown_when_the_translation_table_is_missing(tmp_path):
-    """三态：读不到逐工具翻译表 ⇒ error（没查成），不是"通过"。
+def test_r010c_does_not_flag_a_none_declaration_without_any_network_call(tmp_path):
+    """负控（必须不命中）：声明 `none` 而链里只有本地处理 ⇒ 一个字都不报。
 
-    这与 R009 的"清单读不到就报 unknown"是同一条纪律：
-    判据解析出空集时无条件通过，是本项目记过的 P16。
+    与上一条成对：判据的两侧都要有名字，否则"补了一条新判据"与"补了一条常红的灯"
+    在报告里长得一模一样。
+    """
+    got = _r010(
+        "def _read(path):\n"
+        "    with open(path, encoding='utf-8') as fh:\n"
+        "        return fh.read()\n"
+        "\n"
+        "\n"
+        "def _to_specs():\n"
+        "    return [ToolSpec(name='sample.read', summary='只读本地', declared_external='none',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _read('x'),\n"
+        "                     side_effect='read')]\n",
+        tmp_path,
+    )
+    assert [f for f in got if f.level in ("error", "warning")] == [], got
+
+
+def test_r010c_does_not_flag_an_egress_declaration_that_really_goes_out(tmp_path):
+    """负控（必须不命中）：声明 `egress` 且确实联网 ⇒ 那是如实的声明，不许报。
+
+    这一条同时钉住"方向"：`external == 'egress'` 走的是 R010-b（声明出网却看不到网络），
+    不是这一档；把两个方向混成"只要链里有网络标记就报"会把如实的 `egress` 声明也算成缺陷。
+    """
+    got = _r010(
+        "from urllib import request\n"
+        "\n"
+        "\n"
+        "def _fetch():\n"
+        "    return request.urlopen('http://example.invalid')\n"
+        "\n"
+        "\n"
+        "def _to_specs():\n"
+        "    return [ToolSpec(name='sample.egress', summary='真出网', declared_external='egress',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _fetch(),\n"
+        "                     side_effect='read')]\n",
+        tmp_path,
+    )
+    assert [f for f in got if f.level in ("error", "warning")] == [], got
+
+
+def test_r010c_known_false_positives_are_reported_not_hidden():
+    """R010-c 的假阳性登记表必须在报告里出现，且它指的工具真的还命中这一档。
+
+    为什么要把"我判不了的那几条"变成判据（而不是注释）：静默豁免是本项目最忌的形态。
+    这条与 `test_r010_egress_blind_spots_still_exist` 同族 —— 一张永不生效的豁免表
+    会腐烂成"看起来还在挡着什么"。
+    """
+    root = Path(__file__).resolve().parents[1]
+    got = L.rule_R010_external_axis_mismatch(root)
+    infos = " | ".join(f.message for f in got if f.level == "info")
+    assert "R010-c" in infos, "这一档的读数必须出现在报告里（判据接上了没有的证据）"
+    assert "_R010_NETWORK_FALSE_POSITIVES" in infos or "已知字面假阳性" in infos, infos[:400]
+    for name, reason in L._R010_NETWORK_FALSE_POSITIVES.items():
+        hit = [f for f in got if f.level == "info" and name in f.message]
+        assert hit, f"{name} 在真实树上没有命中 R010-c —— 假阳性表过期了（或它已改声明）"
+        assert reason.strip(), name
+    assert [f for f in got if f.level == "warning"] == [], (
+        "真实树上不该有 R010-c 的 warning：命中的每一条都必须在假阳性表里（否则要改声明）"
+    )
+
+
+def test_r010_reports_zero_legacy_and_no_longer_reads_any_translation_table(tmp_path):
+    """B3 收官：遗留取值已清零，规则不再读任何翻译表。
+
+    迁移期这条规则会去读 `base.py` 的 `LEGACY_EFFECTS_BY_TOOL`，并在读不到时
+    报 error（"没查成"）。那个取值与那两张表都删掉之后，这条判据的对象消失了：
+    留着它就是一条"永远读不到、永远报 error"的灯 —— 而常红的门与常绿的门
+    一样没有信息量。所以现在断言两件事：
+
+    1. 报告里有一条明确的"0 处遗留取值"info（而不是这个事实从报告里消失）；
+    2. 合成树里没有任何翻译表时，规则不报 error（它不再依赖那张表）。
     """
     got = _r010(
         "def _pure():\n"
@@ -682,7 +610,52 @@ def test_r010_reports_unknown_when_the_translation_table_is_missing(tmp_path):
         tmp_path,
         base='"""没有翻译表的合成 base。"""\n',
     )
-    assert any(f.level == "error" and "LEGACY_EFFECTS_BY_TOOL" in f.message for f in got), got
+    assert [f for f in got if f.level == "error"] == [], got
+    infos = " | ".join(f.message for f in got if f.level == "info")
+    assert "遗留取值：0 处" in infos, got
+    assert "LEGACY_EFFECTS_BY_TOOL" in infos, "这条 info 应当点名被删掉的那两张表"
+
+
+def test_network_is_no_longer_recognised_as_a_legacy_declaration(tmp_path):
+    """负控：合成树里写 `side_effect="network"` ⇒ 规则不再把它翻译成 `egress`。
+
+    迁移期这一条会被翻译成 `egress` 并走进 R010-b 的判据。现在那个取值已从
+    词表里删掉，真实树上它连 `ToolSpec` 都构造不出来；这条用例锁的是
+    规则里也不再留那条旁路 —— 它只按声明说话（这里是默认的 `none`）。
+
+    合成树因此分两条：`sample.legacy`（`side_effect='network'`、handler 纯净）
+    用来问"没有那条翻译旁路"；`sample.notexec`（默认 `none`、handler 起进程）
+    用来问"起进程却声明不是 exec 照旧是 error"。第二块是 `R7-R6-1` 之后补的：
+    补进 R010-c 之后，一个起进程的 handler 会同时命中"起进程"与"网络标记"
+    （`subprocess` 本来就在 `_R010_NETWORK_MARKERS` 里），于是把两块分开写
+    才让这条用例继续锁它真正要锁的东西（而不是被新那一档的文案顶替掉）。
+    """
+    got = _r010(
+        "import subprocess\n"
+        "\n"
+        "\n"
+        "def _pure():\n"
+        "    return 1\n"
+        "\n"
+        "\n"
+        "def _spawn():\n"
+        "    return subprocess.run(['echo', 'x'])\n"
+        "\n"
+        "\n"
+        "def _to_specs():\n"
+        "    return [ToolSpec(name='sample.legacy', summary='旧写法', side_effect='network',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _pure()),\n"
+        "            ToolSpec(name='sample.notexec', summary='起进程', declared_external='none',\n"
+        "                     params={'type': 'object', 'properties': {}}, handler=lambda: _spawn())]\n",
+        tmp_path,
+    )
+    warnings = " | ".join(f.message for f in got if f.level == "warning")
+    assert "sample.legacy" not in warnings, (
+        "规则仍在把 side_effect='network' 当出网声明来判 —— 那条旁路必须删掉"
+    )
+    # `sample.legacy` 的 handler 现在是纯净的 ⇒ 它一个字都不该报（旧写法不再带来任何判据）
+    assert [f for f in got if "sample.legacy" in f.message] == [], got
+    assert any(f.level == "error" and "sample.notexec" in f.message for f in got), got
 
 
 def test_r010_reports_count_so_a_broken_scanner_cannot_pass_silently(tmp_path):
@@ -711,8 +684,9 @@ def test_r010_reports_count_so_a_broken_scanner_cannot_pass_silently(tmp_path):
 def test_r010_allowed_sites_still_exist():
     """例外清单不许腐烂：每个键都必须真的指向一个"起进程、且没声明 exec"的工具。
 
-    没有这条断言，例外清单会变成一张"永不生效的豁免"（本项目 R004 的
-    `R004_ALLOWED_SITES` 也是这么守的）。判据直接在真实树上量：
+    没有这条断言，例外清单会变成一张"永不生效的豁免"（R004 的
+    `R004_ALLOWED_SITES` 就是那样退场的：判据改由注册期承担之后，那张表
+    连同它的豁免一起收掉了）。判据直接在真实树上量：
     R010-a 的字面判据命中它，而它不在 error 列表里（说明豁免真的接上了）。
     """
     root = Path(__file__).resolve().parents[1]
@@ -730,6 +704,43 @@ def test_r010_known_gaps_are_reported_not_hidden():
     infos = " | ".join(f.message for f in got if f.level == "info")
     for name in L._R010_KNOWN_GAPS:
         assert name in infos, f"{name} 是已知漏检，但报告里没提它：{infos}"
+
+
+def test_r010_egress_blind_spots_are_registered_and_still_fire():
+    """R010-b 的已知盲区：登记了、真的还命中、且报告里看得见（不许静默豁免）。
+
+    三条一起断言，缺一条这张表就变形：
+    - 每条都写了理由（否则它是一张没有内容的豁免）；
+    - 每条都真的命中 R010-b（否则它是一张永不生效的豁免 —— `R004_ALLOWED_SITES`
+      退场时就是那个形态）；
+    - 登记后仍然以 info 出现在报告里（"哪一段我核不了"必须可见）。
+    """
+    root = Path(__file__).resolve().parents[1]
+    got = L.rule_R010_external_axis_mismatch(root)
+    infos = " | ".join(f.message for f in got if f.level == "info")
+    warnings = " | ".join(f.message for f in got if f.level == "warning")
+    for name, why in L._R010_EGRESS_BLIND_SPOTS.items():
+        assert why.strip(), f"{name} 的盲区登记没有写理由"
+        assert name in infos, f"{name} 登记为盲区，但报告里没提它：{infos}"
+        assert name not in warnings, (
+            f"{name} 已登记为已知盲区，却仍然以 warning 出现 —— 登记没接上判据"
+        )
+
+
+def test_r010_never_uses_a_silent_exemption_for_an_unregistered_egress_tool(tmp_path):
+    """负控：一个没有登记的 egress 工具必须仍然报 warning（登记不是开后门）。"""
+    got = _r010(
+        "def _to_specs():\n"
+        "    return [ToolSpec(name='sample.egress', summary='s',\n"
+        "                     params={'type': 'object', 'properties': {}},\n"
+        "                     side_effect='read', declared_external='egress',\n"
+        "                     handler=lambda: 1)]\n",
+        tmp_path,
+    )
+    warnings = " | ".join(f.message for f in got if f.level == "warning")
+    assert "sample.egress" in warnings, got
+    # 且提示里必须给出"怎么登记"这条路（可动作），而不是一句"要么……要么……"
+    assert "_R010_EGRESS_BLIND_SPOTS" in warnings, warnings
 
 
 def test_r010_real_tree_has_no_error(tmp_path):

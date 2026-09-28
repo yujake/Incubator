@@ -187,19 +187,43 @@ class Budget:
 
 def guard(fn):
     """Wrap a main() so that the process exit code is the one from emit() and an
-    unexpected exception still produces a well-formed (refuting) REPRO_RESULT
-    line and a non-zero exit."""
+    unexpected exception still produces a well-formed REPRO_RESULT line and a
+    non-zero exit.
+
+    An unhandled exception is **inconclusive**, NOT a refutation.
+    (Changed 2026-09-26 -- see the `E-7` note below.)
+
+    Why: `emit()` returns the exit code from `result`, and the aggregate runner
+    (`run_all.py::verdict_of`) used to read "exit != 0 + result == refutes" as
+    `caught_the_injected_bug`.  A crash therefore looked exactly like a
+    successful negative control: the injected bug was never caught, nothing was
+    measured, and the summary still printed ALL CHECKS PASS.
+
+    This contradicts the module docstring's own promise ("An inconclusive result
+    is NOT a pass") and `emit()`'s three-way split, which already has the right
+    category: the experiment did not reach a decided outcome.  So a crash is
+    reported as `inconclusive` (exit 2) with a synthetic `script_completed`
+    check recorded as failed, and `observations["guard_error"]` naming the
+    exception so nobody has to parse the traceback to tell the two apart.
+    """
     try:
         code = fn()
     except Exception as exc:                          # noqa: BLE001
         tb = traceback.format_exc()
         res = {
-            "result": "refutes",
+            "result": "inconclusive",
             "evidence_kind": "cross_check",
             "negation_kind": "no_local_evidence",
             "observations": {"exception": "%s: %s" % (type(exc).__name__, exc),
-                             "traceback": tb, "checks": [
+                             "guard_error": "%s: %s" % (type(exc).__name__, exc),
+                             "traceback": tb,
+                             "inconclusive_reason":
+                                 "the script raised before reaching a decided "
+                                 "outcome; this is NOT a refutation and NOT a "
+                                 "caught bug",
+                             "checks": [
                                  {"check": "script_completed", "ok": False,
+                                  "severity": "must_hold",
                                   "detail": "unhandled %s" % type(exc).__name__}]},
             "counterexample": None,
         }

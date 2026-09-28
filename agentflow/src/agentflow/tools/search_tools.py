@@ -231,9 +231,19 @@ def _provider_diagnostics(prov: Any) -> dict:
 
     这是"为什么只回来 2 条"的唯一可查证据：``last_query_text`` 说明实际发出去的
     检索串，``filter_notes`` 说明有多少条被 precise 的标题过滤筛掉。
+    ``last_phrase_fallbacks`` 与 ``last_channel_errors`` 是 `C-4` 之后新增的两条
+    （短语零召回 ⇒ 退了词项检索 / 这一路抛了异常）：缺了它们，"只回来 2 条"
+    与"整串短语把召回打成 0"在读数上长得一模一样。
+
+    `FINAL-R3-05`：`stats` 里那几个计数是跨多跑累积的（同一个 provider 对象被
+    反复读时它一直涨），而 `last_*` 全是逐跑读数 —— 两组数并排放着容易被读成
+    同一时刻的同一件事。产物里没有"这一跑的 stats 快照"这一档（本次没有加：
+    加字段要动 `evidence` 侧的折算），所以读的时候请以 `last_*` 为准，
+    `stats` 只用来看"这个对象一共发过多少请求"。
     """
     out: dict[str, Any] = {}
-    for attr in ("stats", "last_query_text", "last_filter_notes", "last_filtered_out"):
+    for attr in ("stats", "last_query_text", "last_filter_notes", "last_filtered_out",
+                 "last_phrase_fallbacks", "last_channel_errors"):
         value = getattr(prov, attr, None)
         if value is not None:
             out[attr] = value
@@ -771,6 +781,11 @@ def _h_register(
         existing, hit_key = D.find_existing_literature(tx.rows("literature"), title, year, doi)
         if existing is not None:
             updated = _link_request(tx, request_id, existing.get("lit_id"), warnings)
+            # 判重命中支与"新建成功"支返回同一套 13 个键（`G-23`）：两条分支给不同
+            # 键集合时，`returns=` 只能描述一支，另一支永远是声明看不见的缺口，
+            # 调用方得先判 `created` 才能安全读 `lit_id`。本支的 `matched_key` 是
+            # 判重真的命中的那个键，新建支没有这个事实、如实给 `None`。
+            # 分支无关的字段给诚实的 `None`/`False`（不许用 `""`/`0` 冒充"没有"）。
             return ok(
                 {
                     "created": False,
@@ -780,6 +795,11 @@ def _h_register(
                     "existing": _lit_summary(existing),
                     "keys": keys,
                     "request_linked": updated,
+                    "path": None,
+                    "dedup_key": existing.get("dedup_key"),
+                    "type_code": existing.get("type"),
+                    "processed": bool(existing.get("processed")),
+                    "download": None,
                     "warnings": warnings + [
                         "判重命中：复用既有 lit_id，未新建行（同一篇文献两个代号会污染下游溯源）。"
                     ],
@@ -863,6 +883,13 @@ def _h_register(
             "download": dl,
             "request_linked": linked,
             "warnings": warnings,
+            # 判重命中支才有的三个键，这里如实给 None/False（`G-23`：两条分支同一套
+            # 13 键，分支无关处给诚实的 None）。`matched_key` 是判重命中的那个键，
+            # 新建支根本没有"命中"这件事 —— 用 None 说"没有"，而不是不出现；
+            # `reason` 只在 duplicate 支有意义，`existing` 只在命中时才有那一行。
+            "matched_key": None,
+            "reason": None,
+            "existing": None,
         }
     )
 
@@ -966,9 +993,10 @@ def register(
             "ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。",
             params={"type": "object", "properties": {}, "additionalProperties": False},
             handler=lambda: _h_providers(ctx),
-            # network：探测会给每个网络源发一次真实 HTTP 请求（见模块 docstring 第 3 条）。
-            # 声明成 read 会让这个工具绕过审批，而它确实在对外发请求。
-            side_effect="network",
+            # external=egress：探测会给每个网络源发一次真实 HTTP 请求（见模块 docstring 第 3 条）。
+            # 声明成 read + external=none 会让这个工具绕过审批，而它确实在对外发请求。
+            side_effect="read",
+            declared_external="egress",
             roles=("A",),
             # 键名逐个从 `_h_providers` 的 ok(...) 读出（该分支不需要真跑：
             # 数据字典在源码里逐字写着）。providers[] 每项是
@@ -999,7 +1027,8 @@ def register(
             handler=lambda topic, mode="topical", description="", limit=10, provider=DEFAULT_PROVIDER: _h_literature(
                 ctx, topic, mode, description, limit, provider
             ),
-            side_effect="network",
+            side_effect="read",
+            declared_external="egress",
             roles=("A",),
             # 键名逐个从 `_h_literature` 的 data 字典读出（没真跑过联网检索：
             # 本轮观测到的是一次真实 429 之后的 fail，不是 ok 分支 —— 如实留痕）。
@@ -1033,7 +1062,8 @@ def register(
             handler=lambda url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTES: _h_download(
                 ctx, url, hint, max_bytes
             ),
-            side_effect="network",
+            side_effect="write_local",
+            declared_external="egress",
             roles=("A",),
             # 键名逐个从 `_h_download` 的 data 字典读出（没真跑过：需要一次
             # 成功的真实下载；本轮观测到的是 fail 分支 —— 如实留痕）。
@@ -1094,11 +1124,16 @@ def register(
             ),
             side_effect="write_local",
             roles=("A",),
-            # 键名从一个真实调用读出（`search.register`，created=true 那一支）。
-            # 两条分支的键集合不同：判重命中那一支是
-            # {'created','reason','lit_id','matched_key','existing','keys','request_linked','warnings'}
-            # —— 这里的键集合按"新建成功"那一支声明，因为它是主路径。
-            returns="{'created','lit_id','path','dedup_key','keys','type_code','processed','download','request_linked','warnings'}（created=false 表示判重命中，复用了既有 lit_id）",
+            # 键名从一个真实调用读出（`search.register`）。`created=true` 与
+            # `created=false`（判重命中）两支返回同一套 13 个键：判重支的
+            # `matched_key` 是命中的那个键、新建支为 `None`，新建支的
+            # `dedup_key`/`path`/`download` 在判重支为 `None` —— 调用方不必先判
+            # `created` 才能安全读键（`G-23`）。
+            returns=(
+                "{'created','reason','lit_id','matched_key','existing','keys','request_linked',"
+                "'path','dedup_key','type_code','processed','download','warnings'}"
+                "（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同）"
+            ),
             tags=("search", "register"),
         ),
     ]
@@ -1129,6 +1164,8 @@ def _selftest() -> int:
     store = Store(ws)
     store.init()
     registry = ToolRegistry(name="selftest-A")
+    # 绑定角色（`P-14`）：本自检调的是 `search.*`，它们的 `roles` 只有 A。
+    registry.bound_role = "A"
     register(registry, store=store, workspace=ws)
 
     print("=" * 78)

@@ -62,6 +62,12 @@ DEFAULT_MAX_SECONDS = 300.0
 #: word-metric ball sizes |B_3| of {s_0,...,s_{m-1}}; verified by this module
 #: (build_w_ball) for m = 3..7.  A dropped translation in s_0 makes the group
 #: finite and collapses this number, which is how wrong_s0 is caught by name.
+#: 本脚本验证的**论文命题原文**（`E-9`）：与 `run_acceptance.py` 的 P5 计划表
+#: 逐字相同，由 P5 的 `_paper_declaration_audit()` 交叉核对。
+#: 为什么要写在这里：脚本自报的 `supports` 需要有一个**外部锚** —— 否则
+#: 『论文声称 vs 独立计算』就只剩脚本自己作证。
+PAPER_CLAIM = 'Spec S̃_m 的区间填充性（3≤m≤5 数值旁证；m=6 公开问题）'
+
 EXPECT_BALL3 = {3: 19, 4: 35, 5: 56, 6: 84}
 GRID_POINTS = {3: 12, 4: 8, 5: 5, 6: 3}      # points per angle (recorded in JSON)
 GAP_THRESHOLD = {3: 0.05, 4: 0.05, 5: 0.05, 6: 0.02}

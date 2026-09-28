@@ -71,16 +71,25 @@ def sync_all_counters(st: Store) -> None:
 
 
 def clean_claim() -> dict:
-    """一条完全合规的断言（schema 与审校都过得去）。"""
+    """一条完全合规的断言（schema 与审校都过得去）。
+
+     `evidence_kind` 是 `cross_check` 而不是 `proof`：这条断言的引文是
+    `rel:0000`（一条关系）与 `lit:0000#p.12-13`（一页文献），没有任何形式化
+    检查器参与过。标成 `proof` 在语义上是错的，而 `D-1` 的写入期判据
+    （`doc_tools.check_proofs`）会因此拒绝它。这与"为了绕过判据而改数据"无关：
+    判据改正了一处误标（同一形态在 `test/test2/run_acceptance.py` 里也出现了，
+    见 `temp/r2-e6-out7.txt`）。改后它仍然满足本文件的要求：0 error / 0 warning
+    —— 前提是 `disclaimer` 一起填上（`cross_check` 的「不构成证明」声明是结构强制的）。
+    """
     return {
         "claim_id": "claim-1",
         "section": "主要结果",
         "text": "谱落在区间内。",
-        "evidence_kind": "proof",
+        "evidence_kind": "cross_check",
         "citations": ["rel:0000", "lit:0000#p.12-13"],
         "is_negative": False,
         "negation_kind": None,
-        "disclaimer": "",
+        "disclaimer": CROSS_CHECK_DISCLAIMER,
     }
 
 

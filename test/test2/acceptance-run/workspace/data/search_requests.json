@@ -3,7 +3,7 @@
   "rows": [
     {
       "request_id": "r-0001",
-      "timestamp": "2026-09-25T22:47:31+08:00",
+      "timestamp": "2026-09-28T21:13:44+08:00",
       "topic": "Cospectral periodic graphs: the spectrum does not determine the graph",
       "mode": "precise",
       "content_description": "人直接提供的一篇未发表论文（PDF，8 页，有文本层）。不是 A 检索来的 —— 这一点必须如实记录，否则'文献从哪来'这条链会说假话。",
@@ -23,7 +23,7 @@
     },
     {
       "request_id": "r-0002",
-      "timestamp": "2026-09-25T22:47:31+08:00",
+      "timestamp": "2026-09-28T21:13:45+08:00",
       "topic": "K(m)、S̃_m、girth",
       "mode": "topical",
       "content_description": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系；热门概念参与：K(m)、S̃_m、girth 在热门集里",
@@ -41,7 +41,7 @@
     },
     {
       "request_id": "r-0003",
-      "timestamp": "2026-09-25T22:47:31+08:00",
+      "timestamp": "2026-09-28T21:13:45+08:00",
       "topic": "K(m)、S̃_m、girth、spectral invariant",
       "mode": "topical",
       "content_description": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 6 个共同邻居（periodic graph、spectrum of a periodic graph、cospectral、girth、vertex-transitive、spectral invariant）却无直接关系；热门概念参与：K(m)、S̃_m、girth 在热门集里",
@@ -59,7 +59,7 @@
     },
     {
       "request_id": "r-0004",
-      "timestamp": "2026-09-25T22:47:31+08:00",
+      "timestamp": "2026-09-28T21:13:45+08:00",
       "topic": "K(m)、spectrum of a periodic graph、Floquet matrix",
       "mode": "topical",
       "content_description": "概念组频次 1 < 阈值 2（该组合只被研究过 1 次）；结构洞信号：有 4 个共同邻居（S̃_m、Floquet matrix、cospectral、spectral invariant）却无直接关系；热门概念参与：K(m)、spectrum of a periodic graph、Floquet matrix 在热门集里",
@@ -77,7 +77,7 @@
     },
     {
       "request_id": "r-0005",
-      "timestamp": "2026-09-25T22:47:31+08:00",
+      "timestamp": "2026-09-28T21:13:45+08:00",
       "topic": "验收：低优先级",
       "mode": "topical",
       "content_description": "",
@@ -95,7 +95,7 @@
     },
     {
       "request_id": "r-0006",
-      "timestamp": "2026-09-25T22:47:31+08:00",
+      "timestamp": "2026-09-28T21:13:45+08:00",
       "topic": "验收：高优先级",
       "mode": "topical",
       "content_description": "",
@@ -113,7 +113,7 @@
     },
     {
       "request_id": "r-0007",
-      "timestamp": "2026-09-25T22:50:37+08:00",
+      "timestamp": "2026-09-28T21:16:01+08:00",
       "topic": "检索配套书 [6] Thm 6.5 以独立验证 Spec S̃_m 的前提",
       "mode": "precise",
       "content_description": "检索配套书 [6] Thm 6.5 以独立验证 Spec S̃_m 的前提",

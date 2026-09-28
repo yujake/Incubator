@@ -1,190 +1,100 @@
 {
-  "workspace": "D:\\Incubator\\test\\test2\\acceptance-run\\workspace",
+  "workspace": "D:\\Incubator\\temp\\r2r3-p9ws-old",
   "phases": [
     {
-      "phase": "P1",
-      "title": "输入：登记文献 + B 抽取（引文逐字回验）",
+      "phase": "P7",
+      "title": "审校：H 独立复核 + 负控（注入过度声称）",
+      "ok": null,
+      "seconds": 0.11,
+      "detail": {},
+      "notes": [
+        "P6 没有产出的 doc_id ⇒ 审校阶段未执行"
+      ],
+      "error": null
+    },
+    {
+      "phase": "P9",
+      "title": "汇总：表计数 + 论文声称 vs 独立验证",
       "ok": true,
-      "seconds": 0.43,
+      "seconds": 0.01,
       "detail": {
-        "quotes": {
-          "total": 25,
-          "verified": 25,
-          "failed": 0,
-          "unknown": 0,
-          "negative_controls_ok": true
+        "stats": {
+          "root": "D:\\Incubator\\temp\\r2r3-p9ws-old",
+          "search_requests": {
+            "count": 0,
+            "done": 0,
+            "pending": 0
+          },
+          "literature": {
+            "count": 0,
+            "processed": 0,
+            "downloaded": 0
+          },
+          "concepts": {
+            "count": 0
+          },
+          "relations": {
+            "count": 0,
+            "by_status": {},
+            "quote_verified": 0,
+            "quote_unverified": 0,
+            "quote_unknown": 0
+          },
+          "research_questions": {
+            "count": 0
+          },
+          "analysis_reports": {
+            "count": 0
+          },
+          "reprocess_requests": {
+            "count": 0
+          },
+          "experiments": {
+            "count": 0
+          },
+          "attack_plans": {
+            "count": 0
+          },
+          "documents": {
+            "count": 0
+          },
+          "dependencies": {
+            "count": 0
+          },
+          "review_findings": {
+            "count": 0
+          },
+          "tasks": {
+            "count": 0
+          },
+          "usage_ledger": {
+            "count": 0
+          },
+          "eval_results": {
+            "count": 0
+          },
+          "events": {
+            "appended": 0
+          }
         },
-        "b": {
-          "processed": 1,
-          "concepts_created": 0,
-          "concepts_reused": 73,
-          "relations_added": 0,
-          "relations_duplicate": 25,
-          "relations_suspect": 0,
-          "suspect_by_quote": 0,
-          "quotes_verified": 25,
-          "quotes_failed": 0,
-          "quotes_unknown": 0,
-          "unreadable": 0,
-          "failed": 0,
-          "skipped_lease_active": 0,
-          "gave_up": 0,
-          "conflict_checks_run": 0,
-          "conflicts_detected": 0,
-          "conflict_checks_skipped": 0,
-          "skipped_reason": null,
-          "details": [
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0000",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0001",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0002",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0003",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0004",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0005",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0006",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0007",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0008",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0009",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0010",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0011",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0012",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0013",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0014",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0015",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0016",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0017",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0018",
-              "score": 1.0
-            },
-            {
-              "lit_id": "0001",
-              "stage": "relation",
-              "skipped": "duplicate",
-              "duplicate_of": "0019",
-              "score": 1.0
-            }
-          ]
-        }
+        "paper_claims": {
+          "computable": 21,
+          "quoted": 5,
+          "open": 4,
+          "proof-only": 3
+        },
+        "paper_claims_total": 33
       },
-      "notes": [],
+      "notes": [
+        "论文结论分类：computable=21、open=4、proof-only=3、quoted=5（computable=我们可独立数值验证；quoted/proof-only/open=我们**不能**独立验证）"
+      ],
       "error": null
     }
   ],
   "summary": {
-    "total": 1,
+    "total": 2,
     "passed": 1,
     "failed": 0,
-    "not_run": 0
+    "not_run": 1
   }
 }

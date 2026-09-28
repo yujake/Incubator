@@ -56,16 +56,51 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
    ⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
      `evidence_kind="heuristic"`，`notes` 写明"脚本未给出结构化结论"。
 
+## 形式化路径（`method="formal"`）与计算类路径的分工
+
+`method="formal"` 不走上面那三条规则：它把工作区里的 `.lean` 文件交给
+`verify.check_formal`（唯一实现）真跑一次，判据全部来自检查器，而不是来自脚本的
+自我陈述。这是本模块唯一能产出 `evidence_kind="proof"` 的入口，收口规则是：
+
+1. 检查器返回 `verified` ⇒ 登记 `evidence_kind="proof"`、`result="supports"`、
+   `negation_kind="not_proved"`、`verifier_output` 是检查器自己的那句话、
+   `verifier_subject_key` 逐字等于本行的 `claim_key`（schema 硬约束 2/2b 要求）；
+2. 检查器跑了但没通过（`compile_error` / `uses_sorry` / `extra_axioms` /
+   `decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，
+   所以不许落 `cross_check`（那是"另一个方法旁证过"，见 `formalgw.evidence_of`）；
+3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /
+   `source_unreadable` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。
+   其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`
+   （`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` / `param_error`）
+   —— 上面这一行必须覆盖它，导入期断言与 `tests/test_agent_e.py` 各守一遍。
+   为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），
+   而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
+   docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：
+   它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），
+   见 `FORMAL_REASONS` 与 `_FORMAL_REASON_BY_TOOL_REASON`。
+   三态纪律：没查成绝不等于查了通过。
+4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
+   形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"
+   正是 FC-22 要拦的那种越权。
+
+`name` / `imports` 只对形式化路径有意义：给计算类方法传它们会被拒绝，而不是被
+静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，
+实际用的是默认 Mathlib"这种假话没有任何地方会报出来）。
+
 ## 三态纪律在本模块的三处落地
 
 - `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；
   给了参数但库里没有 ⇒ `checked=True, experiments=[], proved=False`（查了、没有）。
 - `check_formal` 无后端 ⇒ `checked=False, reason="no_backend"`，
   不是 `verified=False`（那是"验证没过"，与"没验证"完全不同）。
-  受控理由至少要分清三种：`no_backend` / `timeout` / `tool_crashed`
-  （环境的锅，本次没查成）与 `no_script`（调用方没给源码 —— 有后端时
+  受控理由至少要分清四种：`no_backend` / `timeout` / `tool_crashed` /
+  `source_unreadable`（环境的锅，本次没查成 —— 最后那一档是"`script_path`
+  给的源码文件读不到"，`E-3`）与 `no_script`（调用方没给源码 —— 有后端时
   也会走到这一态，它不是"本机没有检查器"）。把"没查成"的判据写成
   `checked is False` 就会把后两者折叠成前者。
+  这五种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，
+  而检查器原样报的那个状态另走 `verifier_status`（见 :meth:`AgentE.check_formal`
+  的 docstring：收口与透传必须同时在，否则收口就是删信息）。
 - `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
 
 ## 已知边界（如实标注，不要读成缺陷）
@@ -80,6 +115,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -87,6 +123,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from . import schema as S
+from .formalgw import STATUSES as _FORMALGW_STATUSES
 from .store import Store
 from .tools import verify_tools as VT
 from .tools.base import ToolError, ToolRegistry
@@ -94,8 +131,10 @@ from .tools.base import ToolError, ToolRegistry
 __all__ = [
     "AgentE",
     "ExperimentError",
+    "FORMAL_REASONS",
     "REPRO_RESULT_PREFIX",
     "build_experiment",
+    "declared_name_of_notes",
     "install_e_tools",
     "selftest",
 ]
@@ -129,13 +168,170 @@ _STDOUT_SCAN_LIMIT = 4 * 1024 * 1024
 _OUTPUT_DIGEST_WIDTH = 300
 
 #: `check_formal` 的"没查成"理由（环境或工具侧的锅）。
-#: 判据是具体理由而不是 `checked is False`：后者把"没查成"（这三个）
+#: 判据是具体理由而不是 `checked is False`：后者把"没查成"（这几个）
 #: 与"调用方没给源码"（`no_script`）折叠成同一件事，于是有后端时的一次
 #: 调用方失误会被读成"本机没有证明检查器" —— 三态纪律在这里同样是
-#: "不许把没查成与别的处置折叠"。三个理由取自 `formalgw` 的受控状态
-#: （`timeout` / `no_backend` / `tool_crashed`），另加工具层的 `param_error`
-#: （参数不合法，同样是"没查"而不是"查了没过"）。
-_NOT_CHECKED_REASONS = ("no_backend", "timeout", "tool_crashed", "param_error")
+#: "不许把没查成与别的处置折叠"。四个理由取自 `formalgw` 的受控状态
+#: （`timeout` / `no_backend` / `tool_crashed` / `source_unreadable`），
+#: 另加工具层的 `param_error`（参数不合法，同样是"没查"而不是"查了没过"）。
+#: `source_unreadable`（`E-3`）必须在这里：源码文件读不到也是"没查成"，
+#: 这一格是 E 自查"哪些理由表示本次没有结论"时读的那一份。
+_NOT_CHECKED_REASONS = ("no_backend", "timeout", "tool_crashed", "source_unreadable",
+                        "param_error")
+
+#: `check_formal` 的 `reason` 局部受控词表（`G-24①`）。
+#:
+#: 它回答的是"这一行的 reason 允许出现哪些字面量"。在此之前的实现是
+#: `status if status in formalgw.STATUSES else "tool_crashed"` —— 一条
+#: 带兜底的透传：词表之外的新状态会被伪装成 `tool_crashed`（"桥接层自己出错"），
+#: 那是一句具体的假话，而不是"我不认识它"。
+#:
+#: 前九个取值与 `formalgw.STATUSES` 的检查器状态逐字相同，这是刻意的：
+#: 同一个事实只该有一个名字（再起一套同义的英文名只会让两层对账时多一层翻译）。
+#: 这张表的作用不是改名，
+#: 而是登记 + 失败收口：状态必须在这张表里被显式列出，没收口进来的落到
+#: `status_unregistered`（本表里的一个值），而检查器原样报的那个状态照样由
+#: `verifier_status` 逐字透传 —— 收口不等于删信息。
+#:
+#: 其余取值是本层（E）的受控状态，它们不是检查器状态：`no_script` /
+#: `param_error`（调用方没给输入）、`path_outside_workspace`（路径守卫拒绝）、
+#: `tool_failed`（工具层返回了失败，失败种类在 `detail` 里）、
+#: `status_unregistered`（上面那条收口）。
+FORMAL_REASONS: tuple[str, ...] = (
+    "verified",
+    "compile_error",
+    "uses_sorry",
+    "extra_axioms",
+    "decl_mismatch",
+    "timeout",
+    "import_unavailable",
+    "no_backend",
+    "tool_crashed",
+    "source_unreadable",
+    "no_script",
+    "param_error",
+    "path_outside_workspace",
+    "tool_failed",
+    "status_unregistered",
+)
+
+#: 工具层 `reason` 到本层受控词表的显式映射（`G-24①`：不许直传）。
+#:
+#: 左边是 `verify_tools.check_formal` 可能给出的全部 `reason`：十个检查器状态，
+#: 外加它自己那两条受控拒绝（`no_backend` 来自探测不到检查器、`no_script` 来自
+#: 调用方没给源码）。`tests/test_agent_e_formal_reasons.py` 断言这张表与
+#: `formalgw.STATUSES` 逐值对齐 —— 检查器那边新增一个状态而这里没跟上时，
+#: 那条断言会红，而不是让新状态悄悄落进 `status_unregistered`。
+_FORMAL_REASON_BY_TOOL_REASON: dict[str, str] = {
+    "verified": "verified",
+    "compile_error": "compile_error",
+    "uses_sorry": "uses_sorry",
+    "extra_axioms": "extra_axioms",
+    "decl_mismatch": "decl_mismatch",
+    "timeout": "timeout",
+    "import_unavailable": "import_unavailable",
+    "no_backend": "no_backend",
+    "tool_crashed": "tool_crashed",
+    "source_unreadable": "source_unreadable",
+    "no_script": "no_script",
+}
+
+#: 上面那张映射表必须是 `formalgw.STATUSES` 的超集（导入期就核，不留到测试里）。
+#: 为什么放在导入期：本模块与 `formalgw` 之间是"状态词表"这一条隐式契约，
+#: 而它一旦漂移，症状不是崩溃，是某一种检查结论被写成 `status_unregistered`。
+assert set(_FORMALGW_STATUSES) <= set(_FORMAL_REASON_BY_TOOL_REASON), (
+    f"formalgw.STATUSES={_FORMALGW_STATUSES} 里有本模块没有收口的状态："
+    f"{sorted(set(_FORMALGW_STATUSES) - set(_FORMAL_REASON_BY_TOOL_REASON))} —— "
+    "请在 _FORMAL_REASON_BY_TOOL_REASON 里显式收口（不许靠透传兜底）"
+)
+assert set(_NOT_CHECKED_REASONS) <= set(FORMAL_REASONS), (
+    f"_NOT_CHECKED_REASONS={_NOT_CHECKED_REASONS} 必须全部在 FORMAL_REASONS 里 —— "
+    "两处各写一份'哪些算没查成'是 FC-03 的形态"
+)
+
+
+# ---------------------------------------------------------------- 两条跨模块契约
+#
+# 下面两件东西都不是运行时逻辑，而是"同一件事只许有一处定义"的落点：
+# ① 模块 docstring 里那句"没查成"的清单，必须覆盖 `_NOT_CHECKED_REASONS`；
+# ② `notes` 里"被检查的声明名"那一段的写法与读法（`verify` 的事后审计要读它）。
+
+
+def _docstring_not_checked_reasons(doc: str) -> set[str]:
+    """从模块 docstring 第 3 条（"没查成"）那一段里读出 `` `x` `` 标识符集合。
+
+    为什么要有它：`R2-AN-3` 的形态是"docstring 写四项、`_NOT_CHECKED_REASONS`
+    写五项"，而没有任何一条测试会因此变红 —— 于是同一份文件里两处说法不一致。
+    所以把"读 docstring 里那一档"做成一个可判定的读法，让导入期断言与用例
+    共用它（`FC-03`：判据本身也只许有一份）。
+
+    两个锚点（`3. 没查成` 与 `4. \\`method``）是 docstring 的既有编号，
+    改编号就要同时改这里与 `temp/_verify_r2.py` 的 `C1`（那是这批的验收判据）。
+    读不到锚点时返回空集，而空集会让下面那条导入期断言炸，
+    而不是静默地判"文档没问题"（"没查成"绝不等于"查过了没问题"）。
+    """
+    seg = str(doc or "")
+    start = seg.find("3. 没查成")
+    if start < 0:
+        return set()
+    end = seg.find("4. `method", start)
+    if end < 0:
+        return set()
+    return set(re.findall(r"`([a-z_]+)`", seg[start:end]))
+
+
+assert set(_NOT_CHECKED_REASONS) <= _docstring_not_checked_reasons(__doc__ or ""), (
+    "模块 docstring 第 3 条（'没查成'）没有覆盖 _NOT_CHECKED_REASONS="
+    f"{_NOT_CHECKED_REASONS}；缺 "
+    f"{sorted(set(_NOT_CHECKED_REASONS) - _docstring_not_checked_reasons(__doc__ or ''))} "
+    "—— docstring 与常量各说一套是 `R2-AN-3` 的形态，而没人会因此变红，"
+    "所以在这里导入期就核（判据本体见 _docstring_not_checked_reasons）"
+)
+
+#: `notes` 里"被检查的声明名"那一段的唯一写法与读法（`R2-AN-2`）。
+#:
+#: 写入点是 :meth:`AgentE._record_formal` 里调 `_declared_name_note(...)` 的那一步；
+#: 读的人是 `verify` 的事后审计（`selfreported_proof`）：它必须按"检查器实际
+#: 检查的那个声明名"去认输出了哪条诊断。为什么不能拿 `claim_key` 代替：
+#: 生产路径上两者可以合法地不同 —— `tests/test_agent_e_formal_path.py`
+#: 的正控就是 `claim_key='probe-eq'` 而 Lean 声明是 `probe_eq`
+#: （Lean 标识符不许带连字符）。绑 `claim_key` 会把每一条合规的 proof 行
+#: 都判成"自报"（`draft/28` §41.1：判据过窄 ⇒ 红掉合规输入，第 12 次）。
+#:
+#: 写法与读法分处两个文件时，任何一处单独改动都会让审计静默退回
+#: `verifier_subject_key`（那就回到了旧口径），所以两边合在这里一处。
+#:
+#: 这一段的证据上界（`R2b-AN-2-A`）：`notes` 是可写的自由文本，审计侧读到的
+#: 名字不受任何约束，所以 `selfreported_proof` 能到的一层是"依据可以被读出来"，
+#: 不是"依据就是本行命题的"。逐条论证与"为什么不补交叉判据"写在
+#: `verify.verify_all` 里那条判据的注释段（`R2b-AN-2-A`），这里不复制第二份。
+_DECLARED_NAME_RX = re.compile(r"声明名\s*(\S+?)\s*[；;]")
+
+
+def _declared_name_note(declared_name: str) -> str:
+    """`notes` 里"声明名 `<X>`；"那一段的唯一写法（读法：:func:`declared_name_of_notes`）。"""
+    return f"声明名 {declared_name}；"
+
+
+def declared_name_of_notes(notes: Any) -> str:
+    """从一行实验的 `notes` 里读出被检查的声明名；读不到返回空串（不猜）。
+
+    三态：读到名字 / 读不到（历史行、手工行、非形式化实验）。读不到时不在这里
+    退回任何猜测：调用方（`verify`）按"退回 `verifier_subject_key`"处置，
+    那一步的语义是"本行声称检查器管的就是它"，与本函数不同，不许在这里合并。
+
+    `notes` 允许是 `str`，也容忍字符串序列：`build_experiment` 落库时已经拼成
+    一个 `str`（`:480`），但历史行与外部工具改过的快照可能是序列 —— 形状不对时
+    按"读不到"处置（返回空串），绝不 `str()` 一把梭出一个假的声明名。
+    """
+    if isinstance(notes, str):
+        text = notes
+    elif isinstance(notes, Sequence):
+        text = "\n".join(str(x) for x in notes)
+    else:
+        return ""
+    m = _DECLARED_NAME_RX.search(text)
+    return m.group(1).strip() if m else ""
 
 
 class ExperimentError(RuntimeError):
@@ -326,12 +522,32 @@ def build_experiment(
     artifact_paths: Sequence[str] = (),
     for_question_id: str | None = None,
     extra_notes: Sequence[str] = (),
+    verifier_output: str = "",
+    verifier_subject_key: str = "",
+    certificate: Mapping[str, Any] | None = None,
+    search_bound: Mapping[str, Any] | None = None,
     created_by: str = "agent-E",
 ) -> S.Experiment:
     """把"推导结果"装成一行 `Experiment`。纯函数（不碰 store），便于单测。
 
-    它只做装配与校验，不做任何推导 —— 推导在 `_derive`，写入在 `AgentE.run_experiment`。
+    它只做装配与校验，不做任何推导 —— 推导在 `_derive`（计算类方法）或
+    :meth:`AgentE._record_formal`（形式化方法），写入在 `AgentE.run_experiment`。
     这样"为什么这条记录长这样"可以脱离子进程被单独复现。
+
+    ## 四个"证据形状"字段为什么要在这里有位置（`P-8`）
+
+    `schema.Experiment.validate` 有四条与证据形状绑定的硬约束：
+
+    - `evidence_kind="proof"` ⇒ `verifier_output` 必须非空（硬约束 2）；
+    - `evidence_kind="proof"` ⇒ `verifier_subject_key` 必须非空且等于 `claim_key`
+      （硬约束 2b：检查器输出必须绑定到它管的那个命题）；
+    - `method="exhaustive_search"` ⇒ 必须有 `certificate`（硬约束 2c）；
+    - 给了 `certificate` ⇒ 必须有 `search_bound`（证书脱离边界没有意义）。
+
+    本函数此前一个都不收 ⇒ 形式化路径上的 proof 记录在 `row.validate()` 必然抛，
+    于是"E 登记不了一条 proof 级实验"（`P-8`）。这四个参数不是新判据：
+    它们是让推导侧能把已有的硬约束所需的事实交下来的通道。
+    默认值全为空，计算类调用点逐字节不变。
     """
     row = S.Experiment(
         experiment_id=experiment_id,
@@ -349,6 +565,12 @@ def build_experiment(
         runtime_sec=runtime_sec,
         artifact_paths=list(artifact_paths),
         counterexample=derived.get("counterexample"),
+        # 四个证据形状字段从调用方来，不从 `derived` 里猜：它们是"这次检查
+        # 到底产出了什么"的事实，而事实只能来自真的跑过检查器的那一段。
+        verifier_output=str(verifier_output or ""),
+        verifier_subject_key=str(verifier_subject_key or ""),
+        certificate=dict(certificate) if isinstance(certificate, Mapping) else None,
+        search_bound=dict(search_bound) if isinstance(search_bound, Mapping) else {},
         for_question_id=for_question_id,
         notes="\n".join(
             [str(n) for n in list(derived.get("notes") or []) + list(extra_notes) if str(n).strip()]
@@ -418,6 +640,9 @@ class AgentE:
         #: 工具调用失败记录（与 agent_d 的 `last_tool_errors` 同名同义）。
         self.last_tool_errors: list[dict] = []
         self.tools = tools if tools is not None else install_e_tools(self.store, workspace_root=self.workspace_root)
+        # ---- 绑定角色（`P-14`）：注入的注册表同样要绑（`AgentD` 那条注释同族）。
+        if self.tools.bound_role is None:
+            self.tools.bound_role = "E"
 
     # ------------------------------------------------------------ 小工具
 
@@ -538,10 +763,13 @@ class AgentE:
         method: str = "numeric",
         for_question_id: str | None = None,
         timeout: int = 600,
+        name: str | None = None,
+        imports: Sequence[str] | None = None,
     ) -> dict:
         """跑一个实验脚本并登记一条 `Experiment` 行。
 
-        推导规则见模块 docstring（唯一权威表述，实现是 :func:`_derive`）。
+        推导规则见模块 docstring（唯一权威表述）：计算类方法在 :func:`_derive`，
+        形式化方法在 :meth:`_record_formal`。
 
         返回 ``{"experiment_id", "recorded", "result", "evidence_kind",
         "negation_kind", "exit_code", "reason"}``。
@@ -549,6 +777,37 @@ class AgentE:
         schema 校验失败必须让异常冒出来（本方法不做 try/except 兜底）：
         那说明上面的推导规则与 `Experiment.validate` 不一致，
         而"推导规则与 schema 打架"正是本项目最该炸的地方。
+
+        ## 形式化路径（`P-8`）
+
+        `method="formal"` 时登记的不是"这个脚本说了什么"，而是"检查器核了什么"：
+
+        - 产物必须是工作区里的 `.lean` 文件（别的后缀当场拒绝，见模块 docstring）；
+        - `name` / `imports` 只对这条路径有意义，它们是给检查器的参数
+          （`name` 不给时由工具层按其声明取文件名词干，本方法不另猜一次）；
+        - 只有检查器给出 `verified` 才登记 `evidence_kind="proof"`，
+          `verifier_output` 与 `verifier_subject_key` 都来自那一次真实检查。
+
+        计算类方法给了 `name` / `imports` 会被拒绝（不是静默忽略）：
+        静默忽略会让调用方以为自己指定了检查条件，而实际用的是默认值 ——
+        这种假话没有任何地方会报出来。
+
+        ## 这里没有 `sleep` 形参，这是刻意的（`D-2`）
+
+        `capabilities.CAPABILITIES["E"].run_experiment` 的 params 里声明了 `sleep`，
+        而它不在本方法的形参表里，本方法也不收 `inspect.Parameter.VAR_KEYWORD`。
+        这不是漏了一个参数，也不是"反正 kwargs 收得住"：`sleep` 只服务替身夹具
+        （`tests/test_conductor.py` / `tests/test_scheduler.py` 的 `FakeE` 按同一份
+        schema 传它来控制"这次实验跑多久"），已逐条登记在 `capabilities.PARAM_SEAMS`
+        里（键含理由串），并由 `capabilities.assert_capabilities()` 第 [8] 条在
+        `import agentflow.capabilities` 时核过：声明了而实现不收、又不登记 ⇒ 导入失败。
+
+        两条不许做的改动：① 把 `sleep` 从能力表里删掉 —— 那会让替身无法按 schema
+        传参，被测的就不再是那条真实链路；② 在这里补一个具名的 `sleep`，或让它收
+        `inspect.Parameter.VAR_KEYWORD` —— 前者是没人读的假承诺，后者把
+        "我传了但它没看"变成静默成功，而 `conductor.LocalBackend.call` 的 docstring
+        逐字拒绝的正是这个形态。参数门的口径（声明 ∩ 实现签名）见
+        `capabilities.gate_params` / `capabilities.check_params`。
         """
         if not str(claim).strip():
             raise ExperimentError("claim 不能为空（没有命题就没有实验）")
@@ -556,6 +815,12 @@ class AgentE:
             raise ExperimentError("claim_key 不能为空（没有它就无法回答'这条实验检验的是哪个命题'）")
         if method not in S.EXPERIMENT_METHODS:
             raise ExperimentError(f"method 必须是 {S.EXPERIMENT_METHODS} 之一，收到 {method!r}")
+        if method != "formal" and (name is not None or imports is not None):
+            raise ExperimentError(
+                f"name / imports 只对 method='formal' 有效（收到 method={method!r}）—— "
+                "计算类方法的证据等级由 `_derive` 推导，没有任何检查器会读这两个参数。"
+                "静默忽略会让调用方以为自己指定了检查条件（说明了 imports，实际用的是默认值）"
+            )
 
         # ---- [1] 路径解析（越界即拒绝）
         path = self._resolve(script_path)
@@ -567,6 +832,20 @@ class AgentE:
             chash = VT.code_hash(path)
         except ToolError as e:
             raise ExperimentError(f"计算 code_hash 失败：{e}") from e
+
+        # ---- [2b] 形式化路径：判据来自检查器，而不是来自脚本的自我陈述
+        if method == "formal":
+            return self._record_formal(
+                claim,
+                claim_key,
+                path,
+                code_hash=chash,
+                params=params,
+                for_question_id=for_question_id,
+                timeout=timeout if timeout is not None else self.default_timeout,
+                name=name,
+                imports=imports,
+            )
 
         # ---- [3] 独立进程执行 + 超时
         run = self._run_script(path, timeout=timeout if timeout is not None else self.default_timeout)
@@ -627,6 +906,156 @@ class AgentE:
         self._log(f"experiment {eid} recorded", **{k: out[k] for k in ("result", "evidence_kind", "exit_code")})
         return out
 
+    # ------------------------------------------------------------ 形式化路径
+
+    def _record_formal(
+        self,
+        claim: str,
+        claim_key: str,
+        path: Path,
+        *,
+        code_hash: str,
+        params: Mapping[str, Any] | None,
+        for_question_id: str | None,
+        timeout: int,
+        name: str | None,
+        imports: Sequence[str] | None,
+    ) -> dict:
+        """形式化路径：真跑一次检查器，按检查器给的结论登记一行 `Experiment`。
+
+        这是 `P-8` 的接线：此前 `run_experiment` 只有"跑脚本 + 读脚本自报的结论"
+        一条路径，而 `build_experiment` 一个证据形状字段都不传 ⇒ 走到
+        `row.validate()` 必然抛（"evidence_kind='proof' 时必须给出 verifier_output"）
+        ⇒ E 登记不了一条 proof 级实验。这里把"一次真实的形式化检查"与
+        "一行 proof 级实验记录"接起来，判据一条都没有新发明：
+
+        - "什么算证明"只有一处定义（`formalgw`），本方法只读它的结论；
+        - 检查器说 `verified` ⇒ `evidence_kind="proof"`，`verifier_output` 是
+          检查器自己的输出，`verifier_subject_key` 逐字等于 `claim_key`；
+        - 其余一切状态（跑了没通过 / 没查成）⇒ `inconclusive` + `heuristic`，
+          一行都不许标成 proof。为什么不是 `cross_check`：那是"另一个方法旁证过"，
+          而"证明没过"给不出旁证（`formalgw.evidence_of` 的 docstring 逐字写了
+          同一条理由：把它写成 cross_check 会让一次检查失败变成正面证据）。
+
+        `imports` 直接转发：默认 `None` 表示"用工具层的默认值"，本方法不替调用方
+        决定要加载哪个库 —— 这个决定会改变结论（库不可得时 status 是
+        `import_unavailable`，而不是"证明没过"），所以它必须是调用方显式给的。
+        """
+        suffix = path.suffix.lower()
+        if suffix != ".lean":
+            raise ExperimentError(
+                f"method='formal' 的产物必须是 .lean 源文件，收到 {suffix or '（无后缀）'} "
+                f"（{path.name!r}）—— 形式化路径的输入是检查器能读的形式化源码，"
+                "本方法不会把一段 Python/文本当成 Lean 去核。"
+                "数值脚本请用 method='numeric' / 'symbolic' / 'exhaustive_search'；"
+                "让脚本冒充形式化产物正是 FC-22 要拦的那种越权"
+            )
+
+        rel = _relpath(path, self.workspace_root)
+        declared_name = str(name or path.stem)
+        t0 = time.monotonic()
+        data = self.check_formal(
+            claim,
+            script_path=rel,
+            name=name,
+            imports=imports,
+            timeout_sec=float(timeout),
+        )
+        runtime_sec = round(time.monotonic() - t0, 4)
+
+        status = str(data.get("verifier_status") or "")
+        formal_reason = str(data.get("reason") or "")
+        output = str(data.get("verifier_output") or "").strip()
+        verified = data.get("verified") is True
+
+        notes = [
+            f"[formal] 检查器状态 {status!r}（本层受控理由 {formal_reason}）；"
+            # "声明名 <X>；"这一段有唯一写法（`_declared_name_note`）与唯一读法
+            # （`declared_name_of_notes`）：事后审计（`verify.selfreported_proof`）
+            # 按它认"检查器实际检查的是哪条声明"。在这里手写这一段，
+            # 改写法的改动就会让读法静默失配（审计悄悄退回 `verifier_subject_key`）。
+            f"{_declared_name_note(declared_name)}"
+            f"脚本 {rel}（sha256 前 16 位 {code_hash}）；"
+            f"imports={list(imports) if imports is not None else '（工具层默认）'}"
+        ]
+        detail = _digest(data.get("detail") or "", 400)
+        if detail:
+            notes.append(f"[formal] 检查器/工具层的说明：{detail}")
+        if verified:
+            notes.append(f"[formal] 检查器原话：{_digest(output, 400)}")
+            notes.append(
+                "[formal] ⇒ 本次是 proof 级证据（唯一允许'已证明'的一档）："
+                "结论来自检查器，不来自脚本或本模块的推断"
+            )
+        else:
+            notes.append(
+                f"[formal] ⇒ 本次不是 proof：status={status!r} ⇒ result=inconclusive、"
+                f"evidence_kind={_NO_EVIDENCE_KIND}（没查成与查了没通过都不构成正面证据）"
+            )
+            if output:
+                notes.append(f"[formal] 检查器原始输出：{_digest(output, 400)}")
+
+        derived: dict[str, Any] = {
+            "result": "supports" if verified else "inconclusive",
+            "evidence_kind": "proof" if verified else _NO_EVIDENCE_KIND,
+            "negation_kind": "not_proved" if verified else "no_local_evidence",
+            "observations": {
+                "verifier_status": status,
+                "formal_reason": formal_reason,
+                "checked": data.get("checked"),
+                "missing_imports": [str(x) for x in (data.get("missing_imports") or [])],
+            },
+            "counterexample": None,
+            "notes": notes,
+        }
+        # 检查器输出空着时不给 `verifier_subject_key`：绑定一个命题、却没有任何
+        # 检查器的话可作为"它管的是这个命题"的依据，那是一条空绑定。
+        # `verified=True` 而输出为空是不可能的（`verified` 的定义就包含"输出里
+        # 看得到那条声明"）；真出现时让它按 schema 硬约束 2 抛出来，不许在这里兜。
+        subject_key = claim_key if output else ""
+        # `verified` 只可能在检查器退出码 0 时到达（`formalgw.check_lean` 的
+        # 判据顺序：非零退出码全部在前面收口），所以这里记 0 不是编造。
+        exit_code = 0 if verified else None
+
+        with self.store.tx("experiments", actor=self.actor, note="e.run_experiment") as tx:
+            eid = tx.alloc_id("experiment")
+            row = build_experiment(
+                eid,
+                claim,
+                claim_key,
+                method="formal",
+                code_path=rel,
+                code_hash=code_hash,
+                derived=derived,
+                exit_code=exit_code,
+                runtime_sec=runtime_sec,
+                params=params,
+                for_question_id=for_question_id,
+                verifier_output=output,
+                verifier_subject_key=subject_key,
+                created_by=self.actor,
+            )
+            tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
+
+        out = {
+            "experiment_id": eid,
+            "recorded": True,
+            "result": row.result,
+            "evidence_kind": row.evidence_kind,
+            "negation_kind": row.negation_kind,
+            "exit_code": row.exit_code,
+            "runtime_sec": row.runtime_sec,
+            "code_hash": row.code_hash,
+            "notes": row.notes,
+            "reason": _result_reason(row),
+        }
+        self.last_run = out
+        self._log(
+            f"formal experiment {eid} recorded",
+            **{k: out[k] for k in ("result", "evidence_kind", "exit_code")},
+        )
+        return out
+
     # ------------------------------------------------------------ 转发 / 查询
 
     def check_formal(
@@ -648,8 +1077,11 @@ class AgentE:
 
         ## 参数透传（本方法此前只暴露 `claim` / `script_path`）
 
-        工具层 `verify.check_formal` 早就收 `source` / `name` / `imports` /
-        `timeout_sec`，而本方法只转发前两个 —— 于是"给一段内存里的 Lean 源码"、
+        工具层 `verify.check_formal` 早就收 `source` / `checker_name` / `imports` /
+        `timeout_sec`（工具层的形参名是 `checker_name` 而非 `name`，理由见
+        `verify_tools.check_formal` 的 docstring；本方法自己的形参仍叫 `name`：
+        它不是经 `ToolRegistry.call` 调用的，不受那个撞名影响），
+        而本方法只转发前两个 —— 于是"给一段内存里的 Lean 源码"、
         "指定要核对的声明名"、"换 imports"、"给这次检查一个更短的时限"这四件事
         到不了 E：调用方写得出参数，E 收不到，而且不会报错（多给的键被
         Python 静默吃掉或直接 TypeError）。这是一条"能力表声明了、实现没有"的
@@ -660,6 +1092,17 @@ class AgentE:
         与返回结构都未变；新增的四个一律是关键字参数且默认 None
         ⇒ 旧调用点逐字节不受影响（既有用例
         `test_check_formal_without_backend_is_not_checked_not_failed` 未改一字）。
+
+        ## `reason` 的收口与透传（`G-24①`）
+
+        `reason` 取本模块的局部受控词表 :data:`FORMAL_REASONS`，映射表是
+        `_FORMAL_REASON_BY_TOOL_REASON`：工具层给的每一个 `reason` 都必须在那张表里
+        被显式列出，表外的值落到 `status_unregistered`（而不是伪装成 `tool_crashed`
+        —— 那是一句具体的假话："桥接层自己出错"与"我不认识这个状态"是两件事）。
+
+        收口必须有配套的透传，否则收口就是删信息：工具层原样报的那个值逐字放进
+        `verifier_status`，检查器自己的话在 `verifier_output` 与 `detail` 里。
+        透传字段也是"多值不许压成一个模糊值"（`N-5`）在本层的落地形态。
 
         ## `script_path` 的路径守卫（本轮补上）
 
@@ -697,26 +1140,44 @@ class AgentE:
             claim,
             script_path=safe_script,
             source=source,
-            name=name,
+            # 本方法的形参叫 name，工具层的形参叫 checker_name（`C3`：工具层是经
+            # `ToolRegistry.call` 调用的，而它的第一个形参就叫 `name`，工具再声明
+            # 一个 `name` 会抛 `got multiple values for argument 'name'`）。
+            # 这一格是两套名字之间的唯一映射点，改工具层形参名时必须同轮改这里。
+            checker_name=name,
             imports=imports,
             timeout_sec=timeout_sec,
+            # 工作区只有 E 知道：工具层拿到相对路径后要把它解析到「工作区」，
+            # 而不是解析到进程的 CWD。不给这个参数时，"工作区 ≠ CWD"的环境里
+            # 那个 .lean 文件会被报成"读不了 ⇒ decl_mismatch"（实测：
+            # `FileNotFoundError: 'p8_probe.lean'`）—— 一次路径解析问题
+            # 被说成"你证的东西不在文件里"。
+            root=str(self.workspace_root),
         )
         if not res.ok:
-            # 传递失败（如 not_implemented）也带上三态位，避免调用方只看 ok 就当成"没验证过"。
+            # 传递失败也带上三态位，避免调用方只看 ok 就当成"没验证过"。
             # 键集合与"路径越界"那一支共用 `_formal_refusal`（见它的理由）。
-            return self._formal_refusal(
-                claim,
-                f"tool_failed:{res.meta.get('kind') or 'error'}",
-                res.error or "",
-            )
-        return dict(res.data or {})
+            #
+            # `reason` 只写受控值 `tool_failed`：失败种类（`param_error` /
+            # `check_failed` / …）拼进 reason 会造出一个词表外的复合值
+            # （`tool_failed:xxx`），于是"有哪些可能的 reason"这个问题的答案
+            # 就没有边界了。种类改放 `detail`，它照样可见。
+            kind = str(res.meta.get("kind") or "error")
+            return self._formal_refusal(claim, "tool_failed", f"[{kind}] {res.error or ''}")
+        data = dict(res.data or {})
+        raw_reason = str(data.get("reason") or "")
+        data["reason"] = _FORMAL_REASON_BY_TOOL_REASON.get(raw_reason, "status_unregistered")
+        #: 逐字透传：收口之后，调用方仍然拿得到工具层/检查器原样报的那个值。
+        data["verifier_status"] = raw_reason
+        return data
 
     def _formal_refusal(self, claim: str, reason: str, detail: str) -> dict:
         """`check_formal` 的受控拒绝形态（路径越界走这一支）。
 
         为什么单独一个方法而不是内联一个 dict：工具层
         `verify.check_formal` 的契约字符串是
-        ``{'checked','verified','claim','reason','detail','verifier_output'}``，
+        ``{'checked','verified','claim','reason','detail','verifier_output',
+        'missing_imports','verifier_status'}``，
         而 `tests/test_tools_audit_fixes.py` 逐字核对每条分支的键集合。
         把"拒绝"的键集合收在一处，是为了让"多了/少了一个键"在结构上不可能
         只发生在某一条分支里 —— 顺便让下面 `tool_failed` 那一支也用它。
@@ -724,6 +1185,21 @@ class AgentE:
         `verified=None`（不是 `False`）：这次没有查。"查了、没过"是
         `checked=True, verified=False`；把两者折叠，下游会把"路径被拒"
         读成"这个命题被证伪了"。
+
+        ## 为什么要带 `missing_imports`（`G-18` 之后的键集合一致性）
+
+        工具层 `verify.check_formal` 的声明是一个键集合，它对每一条分支都成立
+        （`tests/test_tools_audit_fixes.py` 逐字核对每条分支）。`G-18` 给成功分支加了
+        `missing_imports`（"哪个包不可得"）之后，本方法这条拒绝分支如果还是 6 个键，
+        就会出现"同一个工具的两条分支两个键集合" —— 这正是 `checks` 类契约最容易腐的地方。
+        所以这里补一个空列表（拒绝路径上没有"缺哪个包"这回事，空列表是诚实的值：
+        "我们没有因为缺包而拒绝"，而不是"我们不知道"）。
+
+        ## 为什么 `verifier_status` 是空串（`G-24①` 的透传字段）
+
+        这一支是"根本没起检查器"（路径被拒 / 工具层返回失败）⇒ 没有检查器的原话可透传，
+        空串是诚实的值："这次没有检查器状态"，而不是"我不知道它是什么"。
+        校验器原话在 `detail` 里，检查器输出在 `verifier_output` 里。
         """
         return {
             "checked": False,
@@ -732,6 +1208,8 @@ class AgentE:
             "reason": reason,
             "detail": detail,
             "verifier_output": "",
+            "missing_imports": [],
+            "verifier_status": "",
         }
 
     def evidence_for(self, claim_key: str | None = None, *, for_question_id: str | None = None) -> dict:
@@ -755,14 +1233,35 @@ def _result_reason(row: S.Experiment) -> str:
     """给人看的一句话解释（不替代 notes，只是列表展示用）。"""
     if row.exit_code not in (0, None):
         return f"脚本 exit_code={row.exit_code} ⇒ 未正常跑完，记 inconclusive（崩溃不得当成支持）"
-    if row.result == "supports":
+    if row.evidence_kind == "proof":
         return (
             f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}"
-            + ("（**有形式化检查器输出**）" if row.evidence_kind == "proof" else "（**不构成证明**）")
+            "（**有形式化检查器输出**）"
+            + _formal_status_suffix(row)
         )
+    if row.result == "supports":
+        return f"{row.method} 实验支持该命题，证据等级 {row.evidence_kind}（**不构成证明**）"
     if row.result == "refutes":
         return "实验给出反例 ⇒ disproved（已证否，且反例已登记）"
-    return f"未得到可判定的结论（negation_kind={row.negation_kind}）"
+    return (
+        f"未得到可判定的结论（negation_kind={row.negation_kind}）"
+        + _formal_status_suffix(row)
+    )
+
+
+def _formal_status_suffix(row: S.Experiment) -> str:
+    """形式化行的人话后缀：检查器原样报的状态 + 本层的受控理由。
+
+    为什么它必须出现在这一句里（而不是只躺在 `observations` 里）：
+    `P-8` 之后"形式化检查跑了但没过"与"数值实验没跑出结论"在列表里长得一样
+    （都是 `inconclusive`），而两者的处置完全不同（一个去看检查器输出、
+    一个去看脚本）。这一句是列表页唯一能区分它们的地方。
+    """
+    obs = row.observations if isinstance(row.observations, Mapping) else {}
+    status = str(obs.get("verifier_status") or "")
+    if not status:
+        return ""
+    return f"；检查器状态 {status!r}（本层受控理由 {obs.get('formal_reason') or '（未记）'}）"
 
 
 def _relpath(path: Path, root: Path) -> str:
@@ -804,6 +1303,11 @@ def install_e_tools(
     reg = registry if registry is not None else ToolRegistry(name="agent-E")
     root = Path(workspace_root) if workspace_root is not None else Path(store.root)
     VT.register(reg, store=store, root=root)
+    # ---- 绑定角色（`P-14`）：这张注册表代表 E，`AgentE._call` 的每次调用都会被
+    # 判一次"E 拿不拿得到这个工具"。不绑的话那些调用会全部以"调用方没有声明角色"失败。
+    # 它不改 `E` 的工具面（`for_role` 在这张注册表上没剥掉任何东西）。
+    if reg.bound_role is None:
+        reg.bound_role = "E"
     return reg
 
 
@@ -829,7 +1333,12 @@ def selftest() -> int:
     7. evidence_for 三态：没查 / 查了没有 / 查到了什么；
     8. 只写一行 experiments（事务性）；
     9. `check_formal` 的受控理由：无后端 ⇒ `no_backend`；有后端但没给源码
-       ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）。
+       ⇒ `no_script`（两者都是"没查成"，但理由不同，不可折叠）；
+    10. 形式化路径（`P-8`）：`.lean` 产物真的走检查器那一条 —— 检查器给
+        `verified` 时登记的行必须是 `evidence_kind="proof"` 且
+        `verifier_subject_key == claim_key`；否则一行都不许标成 proof。
+        本机没有 Lean 时这一段的期望值自动降级成"不是 proof"，仍然核对
+        "没查成不许登记成 proof"（三态纪律）。
     """
     import sys as _sys
     import tempfile
@@ -976,6 +1485,56 @@ def selftest() -> int:
         check("有后端 + 给源码 ⇒ verified=True（检查器这一段真的接上了）",
               cf2.get("reason") == "verified" and cf2.get("verified") is True
               and cf2.get("checked") is True)
+        check("`reason` 的收口与透传同时成立（G-24①）",
+              cf2.get("reason") == "verified"
+              and cf2.get("verifier_status") == cf2.get("reason"),
+              f"verifier_status={cf2.get('verifier_status')!r}")
+
+    # ---- 10. 形式化路径（P-8）：`.lean` 产物真的走检查器那一条
+    #
+    # 判据与"本机有没有 Lean"解耦：有检查器且命题为真 ⇒ 必须是 proof；
+    # 否则必须是"不是 proof"（没查成不许登记成 proof）。
+    # 两个方向都不许把 `heuristic` 写成 `proof`，所以这条检查在任何环境下都有信息量。
+    lean_src = (
+        "theorem selfcheck_formal_proof : 1 + 1 = 2 := rfl\n"
+    )
+    s10 = put_script("selfcheck_formal_proof.lean", lean_src)
+    r10 = e.run_experiment(
+        "内核级命题：1+1=2", "selfcheck-formal", s10,
+        method="formal", imports=(),
+    )
+    print(f"[11] formal 路径 ⇒ evidence_kind={r10['evidence_kind']} "
+          f"result={r10['result']} reason={_digest(r10['reason'], 90)!r}")
+    if r10["evidence_kind"] == "proof":
+        row10 = st.rows("experiments")[-1]
+        check("proof 行必须由检查器背书：verifier_subject_key == claim_key",
+              row10["verifier_subject_key"] == "selfcheck-formal")
+        check("proof 行必须有检查器原话（verifier_output 非空）",
+              bool(str(row10["verifier_output"]).strip()))
+        check("proof 行不许出现在非 formal 方法上", row10["method"] == "formal")
+    else:
+        check("检查器没给出 verified 时，一行都不许标成 proof（三态纪律）",
+              r10["evidence_kind"] != "proof" and r10["result"] == "inconclusive")
+        check("没查成/没通过都必须写清检查器状态",
+              "检查器状态" in r10["reason"] or "检查器状态" in r10["notes"])
+
+    # ---- 11. 形式化路径的负控：非 .lean 产物当场拒绝（不留半条记录）
+    before11 = len(st.rows("experiments"))
+    refused = False
+    try:
+        e.run_experiment("用 Python 冒充形式化产物", "formal-python", s1, method="formal")
+    except Exception as ex:  # noqa: BLE001
+        refused = isinstance(ex, ExperimentError)
+    check("method='formal' + 非 .lean 产物 ⇒ 当场拒绝", refused)
+    check("被拒绝的形式化实验不得留下任何行", len(st.rows("experiments")) == before11)
+
+    # ---- 12. 计算类方法不许收 name / imports（静默忽略是假话）
+    ignored = False
+    try:
+        e.run_experiment("数值方法不许收 imports", "numeric-imports", s1, imports=())
+    except Exception as ex:  # noqa: BLE001
+        ignored = isinstance(ex, ExperimentError)
+    check("计算类方法收到 imports ⇒ 拒绝而不是静默忽略", ignored)
 
     print("=" * 72)
     print(f"SELF-CHECK {'DONE' if failures == 0 else 'FAILED'}（agent_e）：失败 {failures} 项")

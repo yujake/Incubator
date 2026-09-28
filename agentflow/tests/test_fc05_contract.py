@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 
 import pytest
 from conftest import TS, sync_counters
@@ -144,17 +145,56 @@ def test_contract_version_is_single_sourced():
     assert "CONTRACT_VERSION" in I.__all__
 
 
-def test_schema_version_and_contract_version_are_separate_concepts():
-    """两件事必须分开升：数据格式版本 ≠ 函数契约版本。
+def test_the_two_versions_come_from_two_different_sources():
+    """两个版本号必须来自两个不同的来源 —— 而不是"数值恰好不相等"。
 
-    本项目真的发生过：矛盾判据从"否定词出现与否不一致"收紧成"明确对立主张"，
-    数据格式一个字都没变 —— 那时若只有一个版本号，就无法表达"契约变了"。
+    原来这条写的是
+    `assert agentflow.CONTRACT_VERSION != agentflow.__schema_version__ or True`
+    —— `or True` 让整条断言恒真（`G-33`：用例名说"必须分开"，而它在两者相等时
+    照样绿）。不能只删 `or True`：实测今天两者都等于 1，删掉之后断言立刻红，
+    而那并不是缺陷 —— docstring 自己写着"允许偶合，但不要求相等"，那句话是对的。
+
+    真正要钉的是"来源单一"（这也是 `G-33` 的正解）：
+
+    - `CONTRACT_VERSION` 的权威定义在 `interactions`，`__init__` 只能 import 它
+      （`is` 判据：同一个对象，不是数值相等）；
+    - `__schema_version__` 的权威定义在 `__init__`，且必须等于 `schema.SCHEMA_VERSION`。
+
+    于是"契约变了"与"数据格式变了"才真的能各自表达 —— 这正是用例名想说的那件事。
     """
+    import ast
+    from pathlib import Path
+
     import agentflow
+    from agentflow import interactions as I
 
     assert agentflow.__schema_version__ == S.SCHEMA_VERSION
-    assert agentflow.CONTRACT_VERSION != agentflow.__schema_version__ or True  # 允许偶合，但不要求相等
-    assert hasattr(agentflow, "__schema_version__") and hasattr(agentflow, "CONTRACT_VERSION")
+    # 动态：同一个对象。`is` 单独不可判定（CPython 会缓存小整数：注入
+    # `CONTRACT_VERSION = 1` 之后 `is` 仍然为真），所以它必须与下面的静态检查并列。
+    assert agentflow.CONTRACT_VERSION is I.CONTRACT_VERSION
+
+    # 静态：`__init__` 里不许出现对 `CONTRACT_VERSION` 的赋值（只许 import 进来）。
+    # 这一半才是注入 `CONTRACT_VERSION = 1` 时会变红的判据。
+    tree = ast.parse(Path(agentflow.__file__).read_text(encoding="utf-8"))
+    assigned = {
+        t.id
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for t in ([node.target] if isinstance(node, ast.AnnAssign) else node.targets)
+        if isinstance(t, ast.Name)
+    }
+    imported = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert "CONTRACT_VERSION" not in assigned, (
+        "`agentflow/__init__.py` 里出现了一份自己的 CONTRACT_VERSION ⇒ 两个来源，"
+        "而『契约变了』与『数据格式变了』就再也分不开了"
+    )
+    assert "CONTRACT_VERSION" in imported, "CONTRACT_VERSION 必须从 interactions import 进来"
+    assert "__schema_version__" in assigned, "__schema_version__ 的权威定义应当在 __init__ 里"
 
 
 # ============================================================ tasks 表
@@ -278,13 +318,31 @@ def test_eval_requires_every_scope_field():
 
     口径不是补充说明，口径就是那个数字的一部分 —— 同一个基准的同一个数字
     在不同口径下能差 13–30 个百分点。
+
+    ## 这条判据在 2026-09-27 被加强（不是放宽）
+
+    改前它断言消息里含「口径」二字。而实现给的是字段级消息：
+    除了六个走通用分支的字段（消息形如「评测结果缺少必填口径字段 ['benchmark']」），
+    `k` 走的是专门分支（「k 不能为空（pass@k 的 k 必填，见 EVAL_REQUIRED_FIELDS）」）——
+    那句话比通用那句更具体（它说明了为什么 `k` 必填），但它没有「口径」二字。
+
+    于是判据改成：消息必须点名缺的是哪一个字段（`re.escape(missing)`）。
+    这比"句子里有『口径』二字"更强：改前只要句子含那两个字就过，
+    改后必须写对字段名——把消息与被测字段绑在一起。
+    实测（`temp/_probe_fc05_messages.py`，读数 `temp/fc05-messages.txt`）：
+    `EVAL_REQUIRED_FIELDS` 七个字段的消息全部点名了自己（7/7），
+    所以这条加强同时满足旧的六个与 `k` 那一个。
     """
     for missing in S.EVAL_REQUIRED_FIELDS:
         kw = dict(eval_id="0000", claim_key="K", benchmark="b", benchmark_version="v",
                   split="test", k=1, value=0.5, decontamination="none", date="d",
                   source="s", created_at=TS)
         kw[missing] = ""
-        with pytest.raises(ValueError, match="口径"):
+        # 词边界：不能用裸子串 —— 字段 `k` 会被 `benchmark` 里那个 `k` 命中
+        # （这条洞是我自己写负控时量出来的：`re.escape("k")` 在
+        # `评测结果缺少必填口径字段 ['benchmark']` 上匹配成功）。
+        with pytest.raises(ValueError,
+                           match=rf"(?<![A-Za-z0-9_]){re.escape(str(missing))}(?![A-Za-z0-9_])"):
             S.EvalResult(**kw).validate()
 
 

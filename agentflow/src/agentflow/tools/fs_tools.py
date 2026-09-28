@@ -912,6 +912,10 @@ def _selftest() -> int:
     sandbox = Path(_tempfile.mkdtemp(prefix="agentflow_fs_selftest_")).resolve()
     try:
         reg = ToolRegistry(name="selftest")
+        # 绑定角色（`P-14`）：本自检要真的写文件，而 `fs.*` 的声明角色是 A/B/C/D ——
+        # 取一个非只读角色（C 是只读，拿不到写工具）。不绑的话每一处 `reg.call`
+        # 都会以"调用方没有声明角色"失败。
+        reg.bound_role = "A"
         register(reg, root=sandbox, roles=("A", "B", "C", "D"))
         print(f"[环境] 沙箱根={sandbox}；已注册工具={reg.names()}")
 

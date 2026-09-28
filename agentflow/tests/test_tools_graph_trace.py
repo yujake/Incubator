@@ -26,6 +26,8 @@ from demo_dataset_helper import build_demo
 def empty_graph_tools(store):
     """空库上的低层图工具。"""
     reg = ToolRegistry(name="graph")
+    # 绑定角色（`P-14`）：`graph.*` 的声明角色是 C/D，这里代表只读的 C。
+    reg.bound_role = "C"
     graph_tools.register(reg, store=store)
     return reg
 
@@ -34,6 +36,7 @@ def empty_graph_tools(store):
 def trace_reg(clean_store):
     """在自洽最小数据集上注册的溯源工具。"""
     reg = ToolRegistry(name="trace")
+    reg.bound_role = "C"  # `P-14`：同上（`trace.*` 的声明角色也是 C/D）
     graph_tools.register(reg, store=clean_store)
     trace_tools.register(reg, store=clean_store)
     return reg
@@ -67,6 +70,7 @@ def test_graph_relations_between_returns_every_relation(clean_store):
     sync_counters(clean_store)
 
     reg = ToolRegistry(name="graph")
+    reg.bound_role = "C"  # `P-14`：`graph.*` 的声明角色是 C/D，这里代表只读的 C
     graph_tools.register(reg, store=clean_store)
     res = reg.call("graph.relations_between", a="0000", b="0001")
     assert res.ok, res.error
@@ -82,6 +86,7 @@ def test_graph_relations_between_returns_every_relation(clean_store):
 def test_graph_neighbors_and_stats_agree_with_the_relation_table(clean_store):
     """邻居与度数必须与关系表逐条对得上（图是索引，不是另一份事实）。"""
     reg = ToolRegistry(name="graph")
+    reg.bound_role = "C"  # `P-14`：同上
     graph_tools.register(reg, store=clean_store)
     nb = reg.call("graph.neighbors", concept_id="0000")
     assert nb.ok and nb.data["degree"] == 1
@@ -214,6 +219,7 @@ def test_trace_chain_returns_every_step(tmp_path):
     dest = build_demo(tmp_path / "demo")
     st = Store(dest)
     reg = ToolRegistry(name="trace")
+    reg.bound_role = "C"  # `P-14`：`trace.*` 的声明角色是 C/D，这里代表只读的 C
     graph_tools.register(reg, store=st)
     trace_tools.register(reg, store=st)
 

@@ -10,7 +10,10 @@
   "应该是多少"，可以直接据此修复，而不是靠人肉比对。
 
 `verify` 分两级：默认只做静态检查（快，随时可跑）；`--deep` 会重新打开文献做引文复核
-（慢，需要文件在本地）。
+（慢，需要文件在本地）。`--deep` 报两类引文问题，分级不同：引文**找不到**
+（`quote_not_found` / `quote_known_unverifiable`）与引文**逐字存在、但页码不在声明的
+范围内**（`page_range_mismatch`，`E-11`）—— 后者的引文是真的，错的是页码标注，
+所以是 warning，处置是改 `page_range` 而不是查幻觉。
 """
 
 from __future__ import annotations
@@ -24,8 +27,34 @@ from typing import Any
 from . import dedup as D
 from . import schema as S
 from . import textutil as T
+from .agent_b import QUOTE_OUT_OF_DECLARED_RANGE as OUT_OF_DECLARED_RANGE
+from .agent_e import declared_name_of_notes
+from .formalgw import concluded_names
 from .quoteverify import check_quote
 from .store import MAX_ID, Store
+
+#: 引用前缀的受控词表 —— `documents.*.claims[].citations` 里允许出现的那几档。
+#:
+#: `D10`：它此前只以字面量的形式各写两份（判据里一份 `("rel","lit","exp","eval")`、
+#: 拒绝消息里一份 `"（应为 rel:/lit:/exp:）"`），而两份不等 —— 消息漏了 `eval:`，
+#: 而 `eval:` 正是上面刚被单独判过的那一档。调用方按消息去改写法，会把一个
+#: 合法的 `eval:` 引用当成非法。所以词表只留这一个来源，判据与消息都从它派生
+#: （`FC-03`：同一件事不许有两份定义）。
+#:
+#: 下面那条导入期断言把词表与"逐档的判据分支"钉在一起：判据是
+#: `elif kind == "rel" and ...` 这样逐档写的（引用形状由 `textutil.citation_ref_parts`
+#: 给，这里只关心它落在哪一档），于是"词表里有、分支里没有"（或反过来）会直接炸，
+#: 而不是让一条拒绝消息把人指向一个错的写法 —— `D10` 就是那样活了很久：
+#: 没有任何一条既有断言会因为消息写错而变红。
+CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval")
+#: 逐档判据分支里各写了哪些 kind。它与 `CITATION_KINDS` 必须同轮改 ——
+#: 这个常量是"分支那一侧"的声明，为的是让漂移在导入期就可见（见上面的断言）。
+_BRANCH_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval")
+assert set(CITATION_KINDS) == set(_BRANCH_KINDS), (
+    f"CITATION_KINDS={sorted(CITATION_KINDS)} 与逐档判据分支 "
+    f"{sorted(_BRANCH_KINDS)} 脱钩 —— 两边必须同轮改"
+    "（改词表就要同时加/删一条 `elif kind == ...` 分支）"
+)
 
 
 @dataclass
@@ -48,7 +77,10 @@ class Issue:
 
 @dataclass
 class VerifyReport:
-    checked: dict[str, int] = field(default_factory=dict)
+    # `checked` 的值是三态的（`errors-5`）：整数 = 查了多少条；
+    # None = 这一项没查成（例如计数器找不到对应的表）。
+    # 缺键仍然只表示"这一类检查不适用于本次审计"，与 None 不是一回事。
+    checked: dict[str, int | None] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
     deep: bool = False
 
@@ -81,10 +113,25 @@ def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], in
 
     空洞本身**不是错误**（ID 只需唯一+单调），但值得报警告：它通常意味着
     "分配了 ID 却没建成行"，也就是某次事务中途出过问题。
+
+    `D-R44`（第 44 轮新发现，判据四第 5 组的负控里撞出来的）：**非数字 ID 不许
+    把审计器炸掉**。实测形态（`temp/g5-mp3.txt`）：库里有一行 `lit_id='raw-p3-97'`
+    （裸写/迁移脚本造出来的坏行）时，旧实现 `int(ids[-1])` 直接抛
+    `ValueError: invalid literal for int() with base 10: 'raw-p3-97'` ——
+    `verify_all` 于是从"审计器"变成"崩溃点"：调用方拿到的是一次 Python 异常，
+    而不是一条"这一行 ID 不合法"的 finding。三态纪律里"查了、结论是坏"与
+    "没查成"必须分开，而**崩掉两者都不是**。
+    现在：非数字 ID 被显式报出来（`missing` 里给出那些串），`maxid` 只取数字 ID 的
+    最大值（一个数字 ID 都没有时为 -1，与"空表"同形 —— 那本身会由 schema 级判据接住）。
     """
-    ids = sorted(r[id_field] for r in rows if id_field in r)
+    ids = sorted(str(r[id_field]) for r in rows if id_field in r)
     if not ids:
         return True, [], -1
+    numeric = [i for i in ids if i.isdigit()]
+    bad = sorted({i for i in ids if not i.isdigit()})
+    if bad:
+        # 有非法 ID ⇒ 这一条判据的结论是"坏"（不是"没查成"），并把它报出来。
+        return False, bad, (max(int(i) for i in numeric) if numeric else -1)
     missing: list[str] = []
     for i in range(len(ids)):
         want = f"{i:04d}"
@@ -169,8 +216,36 @@ def verify_all(
         # 忘了改就会在 verify 里 KeyError（新增 research_questions/analysis_reports 时正是如此）。
         table = next((t for t, sp in S.TABLES.items() if sp["id_field"] == field), None)
         if table is None:
+            # `errors-5`：这里原先直接 continue，既不记 Issue 也不写 checked，
+            # 于是"这个计数器没查成"与"查过、没问题"在报告里完全同形
+            # （checked 里缺一个键不等于有问题，ok 也照样是 True）。
+            # 审计器最不该有的形态就是"悄悄少查一项而仍然报通过"：
+            # 将来某次 schema 改名只改了 ID_COUNTERS，这条路径就会安静地
+            # 让整个计数器检查消失。所以这里显式写三态里的"没查成"这一档，
+            # 并记一条 issue。级别取 warning 而不是 error：它本身不是数据坏了，
+            # 是"这次审计有一项没做" —— 但它必须出现在报告里。
+            # 与上面那处 `idf not in counter_fields` 的跳过区分开：那里的跳过
+            # 是判据的一部分（非 4 位编号空间本就不该做连续性检查），
+            # 这里的跳过是失败。
+            rep.checked[kind] = None
+            rep.issues.append(
+                Issue(
+                    "warning",
+                    "counters",
+                    kind,
+                    "counter_table_missing",
+                    f"计数器 {kind}（id_field={field}）在 schema.TABLES 里找不到对应的表 "
+                    f"⇒ 这一项没查成（不是查过没问题）：无法核对计数器与已用 ID 是否一致。"
+                    "处理：确认 ID_COUNTERS 与 TABLES 是否已被同时改过。",
+                )
+            )
             continue
-        used = [int(r[field]) for r in store.rows(table) if field in r]
+        # `D-R44`：这里也必须容忍非法 ID。旧实现 `int(r[field])` 会把
+        # "库里有一行 ID 不成形态"变成一次 `ValueError` 崩溃 —— 而 `verify_all`
+        # 是审计器，它该把这件事**报出来**（`_id_contiguity` 已经会报），
+        # 不该自己炸。非数字 ID 在这里被跳过（已经由上面那条 `id_gap` 记账）。
+        used = [int(r[field]) for r in store.rows(table)
+                if field in r and str(r[field]).isdigit()]
         want = (max(used) + 1) if used else 0
         got = int(counters.get(kind, 0))
         if got < want:
@@ -504,8 +579,9 @@ def verify_all(
                 continue
             cid = str(c.get("claim_id") or "")
             for x in c.get("citations") or []:
-                kind, _, ref = str(x).partition(":")
-                ref = ref.split("#")[0]
+                # 引用解析的**唯一实现**在 `textutil.citation_ref_parts`（`P-5`：
+                # 这里曾经内联着第二份 `partition(":")` + `split("#")`）。
+                kind, ref = T.citation_ref_parts(x)
                 if kind != "exp":
                     continue
                 e = exp_by_id.get(ref)
@@ -516,6 +592,95 @@ def verify_all(
             "error", "documents", docid, "proof_claim_rests_on_weaker_evidence",
             f"断言 {cid} 声称 evidence_kind='proof'，但它引用的实验 {expid} 只有 "
             f"evidence_kind={exp_kind!r} ⇒ **断言不能强于它的依据**（FC-22）",
+        ))
+
+    # ---- `E-2`（人裁 = verify 侧事后加严，观测时刻 2026-09-26 20:5x）
+    #
+    # 背景：proof 只锚在**自报字段**上 —— 手写一行 `method='formal'` +
+    # `evidence_kind='proof'` + 任意 `verifier_output` 就能进库，而 `verify` 与 gates
+    # 都不会响（重审实测，登记为 `draft/28` 的 `E-2`）。
+    # 所有者裁定走 (b)：**在 verify 里事后加严**（不动 schema、不做迁移）。
+    #
+    # 两条硬检查（都 fail-closed，报 error）：
+    #   1. proof 级实验行的 `verifier_output` 里必须有绑在被检查声明名上的
+    #      结构化诊断（`R2-AN-2`，见下面的实现与它的注释）。
+    #   2. proof 级 claim 不能只引 `lit:` —— 它必须至少引一条 `exp:`。
+    #      （"引了 exp: 但那条实验较弱"由上面那条 `weaker` 判据负责，两条互补。）
+    #
+    # ## 判据 1 为什么从"子串"改成"绑名诊断"（`R2-AN-2`，2026-09-27）
+    #
+    # 旧判据是 `verifier_subject_key in verifier_output`，两个方向都不严：
+    # ① 太宽：`claim_key='L'` 是 `'Lean4: no goals'` 的子串 ⇒ 一条完全自报的 proof 不报；
+    #    名字只出现在一句与结论无关的告警里（`unused variable 'foo'`）也算"检查器管过它"；
+    # ② 太窄（更危险）：把判据绑到 `claim_key` 上本身就是错的 —— 生产路径上 `claim_key` 与
+    #    Lean 声明名可以合法地不同（`tests/test_agent_e_formal_path.py` 的正控：
+    #    `claim_key='probe-eq'` 而 Lean 声明是 `probe_eq`，Lean 标识符不许带连字符）。
+    #    所以判据绑定的是检查器实际检查的那个声明名，它写在 `notes` 里
+    #    （写入点：`agent_e` 的 `_declared_name_note`，读法：`declared_name_of_notes`），
+    #    读不到时才退回 `verifier_subject_key`（"本行声称检查器管的就是它"）。
+    #    命名诊断的读法只有一处实现：`formalgw.concluded_names`（`FC-03`）。
+    #    写入期（`formalgw.check_lean` 的 `nm in blob`）比这里宽是刻意的，
+    #    不是判据漂移：写入期要保"真跑过检查器"，审计期要保"依据能被读出来"。
+    #
+    # ## 这条判据的证据上界（`R2b-AN-2-A`，2026-09-27 如实登记）
+    #
+    # 上面那个"被检查的声明名"取自 `notes` —— 一个可写的自由文本字段，
+    # 而本判据不校验 `notes` 里的名字等于本行的 `claim_key` / `verifier_subject_key`
+    # （后两者由 `schema.Experiment.validate` 强制相等，前者没有任何约束）。
+    # 所以这条判据能到的一层是"这条 proof 行的依据可以被读出来"，
+    # 不是"这条依据就是本行命题的"：手工改写 `notes` 里那一段声明名
+    # （写成另一条输出里真有的名字），可以让一条 claim 与另一命题的 proof 行
+    # 一起通过本判据。`R2b` 的 F 段夹具就是这个形态的实测。
+    #
+    # 为什么不补一条交叉判据（例如要求 `verifier_subject_key` 也出现在输出里）：
+    # 生产路径上"被检查的声明名"与 `claim_key` 可以合法地毫不相干 ——
+    # `agent_f.py` 把子目标的 `name` 直接传给 E（`:874`），而 `claim_key` 可能是
+    # `problem_key#sid`（`:864`）；`.lean` 文件名同样可以与命题名无关
+    # （`agent_e.py` 的 `str(name or path.stem)`）。那种合规行会被判成"自报"，
+    # 正是 §41.1 记过的"判据过窄 ⇒ 红掉合规输入"（那一族已经犯过 12 次）。
+    # 要真把这一层补上，得先在写入期把"声明名"与"本行命题"的对应关系
+    # 变成受约束的事实（那要改 schema 与工具层的参数面），不是审计侧能单方面加的。
+    # 因此这里不改判据，只把上界写清楚：不许再把这条判据读成"绑死了声明名"。
+    selfreported: list[tuple[str, str, str, str]] = []
+    for e in experiments:
+        if str(e.get("evidence_kind")) != "proof":
+            continue
+        eid = str(e.get("experiment_id") or "")
+        key = str(e.get("verifier_subject_key") or "").strip()
+        out_text = str(e.get("verifier_output") or "")
+        # 被检查的声明名：优先 `notes` 里那一段（写入期的事实），
+        # 读不到（历史行 / 手工行）才退回本行自己声称的 `verifier_subject_key`。
+        nm = declared_name_of_notes(e.get("notes")) or key
+        if not key or nm not in concluded_names(out_text):
+            selfreported.append((eid, key, nm, out_text[:80]))
+    for eid, key, nm, out_head in selfreported:
+        rep.issues.append(Issue(
+            "error", "experiments", eid, "selfreported_proof",
+            f"实验 {eid} 声称 evidence_kind='proof'，但 `verifier_output` 里没有**绑在** "
+            f"被检查声明名 {nm!r} 上的检查器诊断（本行 `verifier_subject_key={key!r}`；"
+            f"要的是 `'<声明名>' does not depend on any axioms` 或 "
+            f"`'<声明名>' depends on axioms: [...]`；输出开头：{out_head!r}）"
+            "⇒ **这条 proof 是自报的**：没有任何检查器对这条命题给出过结论。"
+            "处置：拿 `formalgw`/真检查器重跑一次，把它的原始输出写回 `verifier_output`；"
+            "若本来就只是断言，就把 `evidence_kind` 改成它真实的等级"
+            "（`E-2`/`R2-AN-2`，FC-22：断言不能强于它的依据）。",
+        ))
+
+    no_exp_ref: list[tuple[str, str]] = []
+    for doc in documents:
+        docid = str(doc.get("doc_id") or "")
+        for c in doc.get("claims") or []:
+            if c.get("evidence_kind") != "proof":
+                continue
+            kinds = {T.citation_ref_parts(x)[0] for x in (c.get("citations") or [])}
+            if "exp" not in kinds:
+                no_exp_ref.append((docid, str(c.get("claim_id") or "")))
+    for docid, cid in no_exp_ref:
+        rep.issues.append(Issue(
+            "error", "documents", docid, "proof_claim_without_formal_experiment",
+            f"断言 {cid} 声称 evidence_kind='proof'，却**一条 `exp:` 引用都没有** ⇒ "
+            "没有任何形式化实验参与过这条断言（`E-2`，与 `doc_tools.check_proofs` 的写入期"
+            "判据同口径，差别只是这一条事后也对**历史行**生效）。",
         ))
 
     for d in dependencies:
@@ -585,8 +750,10 @@ def verify_all(
                                         f"断言 {cid} 没有 citations（无引用的断言不允许进入稿件）"))
                 continue
             for x in cites:
-                kind, _, ref = str(x).partition(":")
-                ref = ref.split("#")[0]
+                # 唯一实现在 `textutil.citation_ref_parts`（`P-5`）。与
+                # `doc_tools.citation_ref_parts` 是**同一个函数**：两边不可能再给出
+                # 不同答案（否则"G 认为合法"与"verify 认为悬空"会静默分家）。
+                kind, ref = T.citation_ref_parts(x)
                 if kind == "rel" and ref not in rel_by_id:
                     rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
                                             f"断言 {cid} 引用了不存在的关系 {ref}"))
@@ -599,9 +766,12 @@ def verify_all(
                 elif kind == "eval" and ref not in eval_by_id:
                     rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
                                             f"断言 {cid} 引用了不存在的评测结果 {ref}"))
-                elif kind not in ("rel", "lit", "exp", "eval"):
+                elif kind not in CITATION_KINDS:
+                    # `D10`：消息里的词表从上面那个判据元组派生，不许再写一遍字面量 ——
+                    # 两处各写一份时实测漏了 `eval:`（而它上一行刚被单独检查过）。
                     rep.issues.append(Issue("warning", "documents", docid, "unknown_citation_kind",
-                                            f"断言 {cid} 的引用 {x!r} 前缀无法识别（应为 rel:/lit:/exp:）"))
+                                            f"断言 {cid} 的引用 {x!r} 前缀无法识别"
+                                            f"（应为 {'/'.join(k + ':' for k in CITATION_KINDS)}）"))
                 # ---- **撤回级联**：引用了已被否决的关系 ⇒ 结论失去依据
                 if kind == "rel" and ref in rejected_by_id:
                     row = rejected_by_id[ref]
@@ -772,7 +942,7 @@ def verify_all(
             m = _bench_number.search(text)
             if not m:
                 continue
-            kinds = {str(x).partition(":")[0] for x in (c.get("citations") or [])}
+            kinds = {T.citation_ref_parts(x)[0] for x in (c.get("citations") or [])}
             if "eval" in kinds:
                 continue
             rep.issues.append(Issue(
@@ -871,6 +1041,25 @@ def verify_all(
                         Issue("warning", "relations", rid, "quote_state_changed",
                               f"重算引文校验为 {chk.verified}（{chk.reason}），表中记录为 {stored}")
                     )
+                if chk.reason == OUT_OF_DECLARED_RANGE:
+                    # `E-11`：引文逐字存在、但落在声明的页码范围之外（±widen 内命中）。
+                    # 修法前这里一声不响：`chk.verified` 是 True，与表里的 True 相同 ⇒
+                    # 上面那条 `quote_state_changed` 不触发；下面那条 `verified is False` 也不触发。
+                    # 于是"全部引文逐字可达"这条判据在所有页码都记错时照样通过。
+                    #
+                    # 加这一条是加严（`verify.py` 是 auth-audit 禁改区，只许加不允许放宽）：
+                    # 不删任何既有判据、不改任何既有分级，只多报一个此前无人看见的形态。
+                    # 定级 warning（不是 error）：引文本身是真的，错的是页码标注 ——
+                    # "这条引文不存在"（error）与"页码写错了"（warning）处置不同。
+                    rep.issues.append(Issue(
+                        "warning", "relations", rid, "page_range_mismatch",
+                        f"引文逐字存在，但不在关系声明的页码范围（{pr.label or pr}）内："
+                        f"实际命中第 {chk.matched_page} 页（窗口 {chk.window!r}）。"
+                        f"引文 {str(r.get('quote') or '')[:80]!r}…"
+                        " ⇒ '逐字可达'是真的，但页码标注是错的：按声明页码去复核的人"
+                        "会翻到一页空文，而那条路径上没有任何别的检查会提醒他（`E-11`）。"
+                        "处置：把 `page_range` 改成实际命中页，或改写引文。",
+                    ))
                 if chk.verified is False:
                     # 区分"表里已经承认这条引文不可核实"与"表里说能核实、实际找不到"：
                     #  - 表里 `quote_verified=False` → 这是一个**已知并被记录**的缺陷，

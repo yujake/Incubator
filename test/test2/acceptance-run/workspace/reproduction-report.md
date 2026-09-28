@@ -18,8 +18,8 @@
 
 | 证据等级 | 含义 | 条数 |
 |---|---|---|
-| `proof` | 形式化核验（proof） | 2 |
-| `cross_check` | 交叉验证（cross_check） | 7 |
+| `proof` | 形式化核验（proof） | 0 |
+| `cross_check` | 交叉验证（cross_check） | 9 |
 | `heuristic` | 启发式（heuristic） | 1 |
 
 说明：一个「通过率 80%」会掩盖「另外 20% 是失败还是没校验」这个决定性差异，因此这里**只报三个分档计数**（FC-10）。
@@ -40,13 +40,17 @@
 
 ### 3.1 1. 复现对象
 
-**`claim-9405a4f2`**｜证据等级 `proof`｜引用：`rel:0000`、`rel:0014`、`rel:0020`
+**`claim-9405a4f2`**｜证据等级 `cross_check`｜引用：`rel:0000`、`rel:0014`、`rel:0020`
 
 论文的 Definition 1.1 把 K(m) 定义为 V_K 上、x 与 x±e_i 相邻的图。
 
-**`claim-627b083f`**｜证据等级 `proof`｜引用：`rel:0001`、`rel:0004`、`rel:0012`、`rel:0013`
+> ⚠️ 数值交叉验证，不构成证明
+
+**`claim-627b083f`**｜证据等级 `cross_check`｜引用：`rel:0001`、`rel:0004`、`rel:0012`、`rel:0013`
 
 论文的 Definition 1.2 把 S̃_m 定义为仿射 Weyl 群关于 {s_0,…,s_{m−1}} 的 Cayley 图。
+
+> ⚠️ 数值交叉验证，不构成证明
 
 ### 3.2 2. 独立验证
 

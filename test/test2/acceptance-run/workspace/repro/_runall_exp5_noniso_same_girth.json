@@ -126,7 +126,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 0.104,
+    "elapsed_seconds": 0.106,
     "failed_checks": [
       "m4.not_isomorphic_because_girth_differs",
       "m5.not_isomorphic_because_girth_differs"
@@ -337,7 +337,7 @@
           "separates": false
         },
         "m": 4,
-        "seconds": 0.035,
+        "seconds": 0.037,
         "spectra": {
           "K": {
             "contained_in_interval": true,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
-from typing import Iterable
+from typing import Any, Iterable
 
 from .schema import PageRange
 
@@ -254,3 +254,40 @@ def concept_group_key(concept_ids: Iterable[str]) -> str:
     关系判重的前置条件（DESIGN.md §3.3）：不同概念组之间文本再像也是不同知识点。
     """
     return "|".join(sorted(set(concept_ids)))
+
+
+# ---------------------------------------------------------------- 引用解析（P-5 的唯一实现）
+
+
+def citation_ref_parts(citation: Any) -> tuple[str, str]:
+    """把一条 citation 拆成 `(前缀, 代号)`：按第一个 `:` 切、再去掉 `#` 之后的部分。
+
+    ## 为什么它是唯一实现、以及为什么放在 `textutil`（`P-5`）
+
+    这条口径此前有两份实现：`verify.py` 的 `dangling_citation` 检查里内联着
+    一份，工具层 `doc_tools.citation_ref_parts()` 又抄了一份。两份必须逐字一致 ——
+    否则"G 认为合法的引用"与"verify 认为悬空的引用"会给出不同答案，而
+    两边各自都自洽（FC-03 禁止的形态）。
+
+    落点选 `textutil` 而不是 `verify.py`，理由是依赖图（改前实测）：
+
+    - `tools/table_tools.py:1135` 有 `from ..verify import verify_all`
+      ⇒ 工具层依赖 `verify`。所以"`verify` 去 import 工具层"是把依赖方向
+      反过来引一条新边，会把工具包的装配（`tools/__init__`）拉进审计模块的
+      import 图里；`verify` 与 `tools/doc_tools` 之间没有任何现有边。
+    - `textutil` 是一个叶子：它只 import `schema`。而 `verify.py` 与
+      `tools/doc_tools.py` 本来就都 import 它（`from . import textutil as T` /
+      `from .. import textutil as T`）。
+    - 于是把实现放在 `textutil` 是零新边、结构上不可能成环的那个方向。
+
+    ## 语义（必须逐字保住，改之前先看这条）
+
+    `partition(":")` 而不是 `split(":")`：只切第一个冒号，代号里再出现 `:` 就留在
+    代号里。`split("#")[0]`：`#` 之后是断言内的锚点（`rel:0001#claim-1`），
+    不参与"这个代号存不存在"的判定。
+
+    边界（有对拍用例守着）：无冒号 ⇒ `("整串", "")`；冒号在开头 ⇒ `("", "代号")`；
+    多个 `#` ⇒ 只取第一段；非字符串 ⇒ 先 `str()` 再切。
+    """
+    kind, _, ref = str(citation).partition(":")
+    return kind, ref.split("#")[0]

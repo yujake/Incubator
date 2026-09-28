@@ -132,7 +132,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 0.068,
+    "elapsed_seconds": 0.062,
     "failed_checks": [
       "m3.class_count_is_2_m_pow_m_minus_1",
       "m4.class_count_is_2_m_pow_m_minus_1",
@@ -244,7 +244,7 @@
           "1": 18
         },
         "m": 3,
-        "seconds": 0.003,
+        "seconds": 0.001,
         "vertex_transitivity": {
           "all_shifts_are_automorphisms": true,
           "n_vertices_in_box": 37,
@@ -368,7 +368,7 @@
           "1": 80
         },
         "m": 4,
-        "seconds": 0.008,
+        "seconds": 0.004,
         "vertex_transitivity": {
           "all_shifts_are_automorphisms": true,
           "n_vertices_in_box": 165,

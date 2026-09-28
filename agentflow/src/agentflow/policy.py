@@ -205,8 +205,16 @@ def check_edge(policy: Policy, frm: str, to: str, **kw: Any) -> Refusal | None:
 
     1. 角色/动作存在性 —— 一个不存在的角色谈不上"边"
     2. 边是否允许 —— 越权优先于深度：`C → B` 无论在什么深度都是越权，
-       报 `depth_exceeded` 会让人以为是"再深一点就行"
+       报 `depth_exceeded` 会让人以为是"再深一点就行"；
+       第 [2] 步里 `NON_SUMMONABLE` 排在角色存在性之前 —— 召唤主控是
+       "这条边不许存在"，不是"角色名拼错了"
     3. 深度 → 4. 循环 → 5. 扇出 → 6. 并发 → 7. 总量 → 8. 预算 → 9. 墙钟
+
+    唯一的例外是主控 `M` 自己：它没有"动作"这件事（`check_action('M', …)`
+    永远返回 `unknown_action`），但"没人能召唤主控"是一条显式的边判据。
+    若把它交给第 1 步，那条判据就永远不可达（`G-11` 实测）。
+    所以 `check` 对 `to == CONDUCTOR_ROLE` 跳过第 1 步，让它落到第 2 步的
+    `NON_SUMMONABLE` 上；`check_action` 本身不动。
 
     第 3/4 步的顺序（深度在循环前）是刻意的：`M→A→B→A` 若报 `cycle_detected`，
     人可能会去"解开循环"；而它其实是深度用尽。反过来，深度没超的
@@ -229,12 +237,22 @@ def check(policy: Policy, d: Decision) -> Refusal | None:
     if not d.role:
         d.role = d.to
 
-    # ---- [1] 角色/动作
-    r = check_action(d.to, d.action)
-    if r is not None:
-        return r
+    # ---- [0] 主控：没有"动作"这件事，但"不可召唤"由第 [2] 步负责（`G-11`）
+    #
+    # 为什么不在这里调 check_action：它会在第一步就把 `to == CONDUCTOR_ROLE`
+    # 判成 `unknown_action` 并返回 ⇒ 下面那两条 NON_SUMMONABLE 判据
+    # （连同它"不靠 ALLOWED_EDGES 里没人写 M 这个偶然事实"的理由）永远不可达。
+    # 处置就是把"主控"这一格让给那两条判据；`check_action` 本身一个字符没动 ——
+    # 它仍然是唯一的角色/动作存在性判据，仍然要能单独回答
+    # `check_action('M','summon')`（那一条有它自己的用例与语义）。
 
-    # ---- [2] 边
+    # ---- [1] 角色/动作
+    if d.to != S.CONDUCTOR_ROLE:
+        r = check_action(d.to, d.action)
+        if r is not None:
+            return r
+
+    # ---- [2] 边：不可召唤 / 角色存在性 / 边是否允许
     if d.to in C.NON_SUMMONABLE:
         return Refusal("forbidden_edge", f"{d.to} 是不可召唤的（没有『召唤主控』这件事）", "edge")
     if d.to not in S.ROLES:

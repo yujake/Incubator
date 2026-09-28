@@ -27,7 +27,9 @@
 1. 函数被间接调用（测试调 A，A 调 B）而 B 的名字从未出现在测试里
    ⇒ B 被误报为"零测试"。规模由 `--json` 的 `indirect_only` 字段给出：
    本脚本额外算一遍"只被 src 内部调用、名字从未出现在测试里"的函数（传递闭包），
-   那是这条误报的上界。实测（2026-02，559 个公开函数）见 `--json`。
+   那是这条误报的上界。实测（`FINAL-R7-10` 更正：原写"2026-02，559 个公开函数"，
+   2026-09-28 实测 **633 个公开函数、零直接测试 78 个**）见 `--json` 的
+   `totals.public_functions` / `totals.zero_test`（那两个数才是权威，别抄定值）。
 2. 名字出现在测试的注释或字符串里（例如 `# 这里不测 parse_work`）
    ⇒ 被误判为"有测试"。这是反向的假阴性（漏报缺口），静态分析无法完全排除，
    只能靠"断言存在"这条更强的判据（本脚本不做 —— 它需要解析测试函数体，
@@ -74,6 +76,14 @@
 
 第一版把 1e/2c 打开，等级 1 从 8 个涨到 13 个、等级 2 从 45 涨到 55 个。
 逐条看过之后发现大部分是假报，根因是传递用的是裸名匹配：
+
+>  上面这两个数字是"`f.level <= 2` 时代"的校准结果，已过期（外部审查第二轮
+> 指出、我复核成立）：那一版把"等级 2 的函数调用了等级 1 的函数"这条边整条砍掉了，
+> 后来改成 `f.level == 1` 才把它接回来（`G-44` 第 4 条）。现在 `--propagate` 下
+> 等级 2 里那些调用等级 1 的函数也会被升到 1，所以等级 1 的增量会比 13 更大、
+> 等级 2 的更小。这两个数字在重跑校准之前不许引用；本节的结论
+> （默认关闭 1e/2c）不受影响 —— 它靠的是下面那三条"同名顶包"的假报，与增量数字无关。
+> 重跑校准的动作登记在 `G-44` 的"已知未做"里。
 
 - `ToolRegistry.register_all` 被判成写路径，因为它的函数体里有 `self.register(...)`，
   而"注册表里有个叫 `register` 的工具函数"恰好被算成写路径 ⇒ `register_all` 被升级。
@@ -161,7 +171,7 @@ TESTS_REL = Path("tests")
 #: 真正的单一来源是 `src/agentflow/tools/__init__.py` 的 `SIDE_EFFECTS_WRITE`，
 #: 本脚本 import 它并断言与这里一致 —— 差异会以退出码 2 报出来，
 #: 而不是静默地用错的判据分类（那正是 R008 说的失败形态）。
-_EXPECT_SIDE_EFFECTS_WRITE = frozenset({"write_local", "network"})
+_EXPECT_SIDE_EFFECTS_WRITE = frozenset({"write_local"})
 
 #: 决策词缀（等级 2 的判据 2a）。这是判据的一部分，写在这里便于复跑。
 _DECISION_TOKENS = (
@@ -285,7 +295,7 @@ def _called_names(node: ast.AST) -> set[str]:
 #: 若在别处被 `from ... import` 走了局部引用就失效。更直接的问题是：一个
 #: "改了却不生效"的变异试验会永远通过，那比不写更糟。
 #: 做成显式的表之后，"注入错误实现"这件事本身是可验证的：表变了，
-#: `_classify` 的行为必然跟着变（下面 `_monkey` 每次调用读表）。
+#: `_classify` 的行为必然跟着变（下面 `_crit` 每次调用读表）。
 _CRITERIA: dict[str, object] = {}
 
 
@@ -370,8 +380,18 @@ def _token_hits(bare: str, tokens: tuple[str, ...]) -> list[str]:
             if any(p == t or p.startswith(t) for p in low):
                 hits.append(t)
         else:
-            # 带尾下划线的词缀（is_/has_/can_/should_/needs_/must_）：按前缀匹配。
-            if any(p.startswith(t) for p in low):
+            # 带尾下划线的词缀（is_/has_/can_/should_/needs_/must_）是前缀词：
+            # 它们的语义是"后面还跟着一个词"，所以判据是"这个词干作为某个非末尾
+            # 片段出现"（`is_valid` 的 `is`、`check_is_valid` 的 `is` 都算；
+            # 末尾的 `is`（`check_is`）不算 —— 那不是一个谓词前缀）。
+            #
+            # 这里曾经写成 `any(p.startswith(t) for p in low)`，而 `parts` 是按
+            # `[^0-9A-Za-z]+` 切的、`_` 已被吃掉 ⇒ `p.startswith("is_")` 永远为假
+            # ⇒ 六个词缀全部失效（实测 `_token_hits("is_valid") == []`）。
+            # 外部审查第 1 条：这是"判据 2a 的一半从没生效"。修完由自检里的
+            # `is_ready` 正例守着。
+            stem = t[:-1]
+            if any(p == stem for p in low[:-1]) or bare.lower().startswith(t):
                 hits.append(t)
     return hits
 
@@ -422,7 +442,11 @@ def _classify(
     if ret_keys:
         lvl2.append(f"2b:return 的字典含判定键 {ret_keys}")
     if info.tool_name and info.side_effect == "read" and _has_raise(node) and hit_tokens:
-        lvl2.append("2c:read 工具 + raise + 决策词缀")
+        # 标签叫 `2a+` 而不是 `2c`（外部审查第 3 条）：这一行不可能是 2a 之外的
+        # 第一触发点（它要求 `hit_tokens` 非空，而那正是 2a 的条件），它只是给已经判 2
+        # 的函数多凑一条理由。而 docstring 表里的 `2c` 指的是另一件事
+        # （`--propagate` 下"直接调用了等级 2 的函数"），同名会让读 `level_why` 的人误判。
+        lvl2.append("2a+:read 工具 + raise + 决策词缀")
     if lvl2:
         info.level = 2
         info.level_why = lvl2
@@ -606,8 +630,13 @@ def _propagate_levels(funcs: list[FuncInfo]) -> None:
     for _ in range(6):
         changed = False
         for f in funcs:
-            if f.level <= 2:
-                continue  # 已经是 1 或 2，不需要升级
+            if f.level == 1:
+                # 只有"已经是 1"才是终态。这里曾经写 `f.level <= 2`（外部审查第 4 条）：
+                # 那会把"等级 2 的函数调用了等级 1 的函数"这条边整条砍掉，
+                # 而按 1e 的定义（"直接调用了一个等级 1 的函数"）它应当升到 1。
+                # 方向上也必须这么改：等级 1 是"写路径"、是最该被盯的一档，
+                # 漏升是危险方向的错（把一个会写盘的函数留在"判据/决策"档）。
+                continue  # 已经是 1，不需要升级
             hits1: set[str] = set()
             hits2: set[str] = set()
             for c in f.calls:
@@ -618,11 +647,21 @@ def _propagate_levels(funcs: list[FuncInfo]) -> None:
                         hits1.add(callee.qualname)
                     elif callee.level == 2:
                         hits2.add(callee.qualname)
-            if hits1:
+            # 只有在等级真的变了的时候才写 `level_why` 与 `changed`。
+            #
+            # 为什么必须有这个前置条件（外部审查第二轮第 1 条，我实测复核过）：
+            # 把上面的 `f.level <= 2` 改成 `== 1` 之后，等级 2 的函数每次迭代都会被
+            # 重新处理，而 `f.level = 2` 对它们是个 no-op ⇒ 却仍然 prepend 一行
+            # `2c:` 并把 `changed` 置真 ⇒ 实测 `level_why` 里堆了 6 条一模一样的
+            # `2c:直接调用判据函数 ['G']`，而且不动点循环因为 `changed` 永远为真而
+            # 跑满 6 轮、永不提前 `break`。
+            # 这不会改分档结果（level 值不变），但会污染 `--json` 的 `level_why`，
+            # 并让"迭代到稳定"这句话变成假话。
+            if hits1 and f.level != 1:
                 f.level = 1
                 f.level_why = [f"1e:直接调用写路径函数 {sorted(hits1)[:4]}"] + f.level_why
                 changed = True
-            elif hits2:
+            elif hits2 and f.level != 2:
                 f.level = 2
                 f.level_why = [f"2c:直接调用判据函数 {sorted(hits2)[:4]}"] + f.level_why
                 changed = True
@@ -667,32 +706,80 @@ _EXONERATED: dict[tuple[str, str], tuple[tuple[str, ...], str]] = {
             "test_adjudicate_new_contradiction_takes_priority_over_unresolved",
         ),
         "tests/test_interactions.py 里 7 条测试**直接**调用 I.adjudicate_contradiction(...)，"
-        "覆盖裁决五选一的全部分支与 rounds/max_rounds 的三态",
+        "覆盖裁决五选一的全部分支与 rounds/max_rounds 的三态"
+        "（`FINAL-R7-06` 更正：本条今天已是二次登记 —— G-34 补的 alias_direct 判据"
+        "（`_QUALIFIED_TMPL`）已经能自己命中它；保留它是为了留下『谁在直接调用它』这份证据，"
+        "而不是因为判据看不见它。`_selfcheck_exonerations` 现在会逐条核引用到的测试"
+        "函数体里是否真的出现目标名，所以这段理由必须与盘上的测试逐字对得上）",
     ),
 }
 
 
 def _selfcheck_exonerations(root: Path) -> None:
-    """豁免名单里的每个测试函数名必须真的存在于 tests/ 里。否则退出码 2。
+    """豁免名单里的每个测试函数名必须真的存在于 tests/ 里，**且真的调用目标**。否则退出码 2。
 
     为什么这条自检是这张表能被信的前提：豁免的语义是"我核实过它被直接测试了"。
     若被引用的测试名不存在（改名 / 被删），那份核实已经过期，
     此时继续豁免等于把缺口静默抹掉 —— 所以它必须是硬失败，不是 warning。
+
+    `FINAL-R7-07`：改前这里只核"测试函数名存在"。副本实测：**伪造一条豁免**
+    （引用 5 个真实存在、但从不调用目标的测试名）可以通过自检，并把一个零测试的
+    等级 1 写路径从门里摘掉（门由红转绿）。现在再加一层：
+    被引用的每个测试函数，其**函数体**里必须出现目标函数的名字（按 `_name_pattern`
+    的同一口径 —— 它与"算不算被测试"用的是同一处实现，不另立一套）。
     """
     blob = _test_text(root)
     defined = set(re.findall(r"\bdef (test_[0-9A-Za-z_]+)\s*\(", blob))
+    bodies = _test_bodies(root)
     bad: list[str] = []
     for (mod, qual), (tests, _why) in sorted(_EXONERATED.items()):
         if not (root / mod).exists():
             bad.append(f"{mod} 不存在（豁免条目已失效）")
+        target_name = qual.rsplit(".", 1)[-1]
+        # 体检查用**允许属性访问**的形态（`I.adjudicate_contradiction(...)` 也算调用）：
+        # `_name_pattern` 的左边界刻意排除了前置的 `.`（那是为全仓文本扫描服务的，
+        # 那边另有 `_QUALIFIED_TMPL` 管属性访问），照搬过来会把"通过模块别名调用"
+        # 整类测试误判成"没调用目标" —— 实测：本项目 7 条 test_adjudicate_* 里有 3 条
+        # 是 `I.adjudicate_contradiction(...)` 这种写法。
+        pattern = re.compile(r"(?<![\w])" + re.escape(target_name) + r"(?![0-9A-Za-z])")
         for t in tests:
             if t not in defined:
                 bad.append(f"{mod}::{qual} 的豁免引用了不存在的测试 {t}()")
+                continue
+            body = bodies.get(t, "")
+            if not body:
+                bad.append(f"{mod}::{qual} 的豁免引用了 {t}()，但读不到它的函数体（无法核实）")
+            elif not pattern.search(body):
+                bad.append(
+                    f"{mod}::{qual} 的豁免引用了 {t}()，但那个测试的函数体里没有调用 "
+                    f"{target_name} —— 引用一个真实存在却与目标无关的测试名，"
+                    "等于用一句话把缺口摘掉（`FINAL-R7-07`）"
+                )
     if bad:
         raise CoverageError(
-            "豁免名单过期（这正是它必须硬失败的理由：过期豁免 = 静默抹掉缺口）：\n  - "
+            "豁免名单过期或不实（这正是它必须硬失败的理由：过期豁免 = 静默抹掉缺口）：\n  - "
             + "\n  - ".join(bad)
         )
+
+
+def _test_bodies(root: Path) -> dict[str, str]:
+    """`{测试函数名: 函数体源码}`（AST 取 `def test_*` 的 body 段）。
+
+    与 `_test_text`/`_name_pattern` 同源：判"有没有引用目标"用的是同一处口径，
+    不另写一套（否则"算被测试"与"算豁免合格"会漂移）。
+    """
+    out: dict[str, str] = {}
+    for p in _iter_py(root / TESTS_REL):
+        if not _readable(p):
+            continue
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                out[node.name] = ast.unparse(node)
+    return out
 
 
 def _exoneration_for(info: FuncInfo) -> tuple[tuple[str, ...], str] | None:
@@ -734,18 +821,37 @@ def _name_pattern(needle: str) -> re.Pattern[str]:
     ## 修正后的规则（两侧不对称，且不对称是刻意的）
 
     - 左边界：`(?<![\\w.]*[\\w]?)` 用 `(?<![\\w.])` —— `needle` 不能是
-      某个更长标识符的尾部。所以 `needle="parse"` 不匹配 `parse_work`
-      （`parse` 后面还有字符，见右边界）；`needle="parse_work"` 也不匹配
-      `_parse_work`（前面是 `_`，是词字符）。
+      某个更长标识符的尾部。所以 `needle="parse_work"` 不匹配 `_parse_work`
+      （前面是 `_`，是词字符），`needle="parse"` 也不匹配 `subparse`。
     - 右边界：`(?![\\w]*[\\w]?)` 即 `(?![0-9A-Za-z])` —— 允许后面是 `_`。
-      于是 `test_adjudicate_contradiction_rejects_x` 与
-      `I.adjudicate_contradiction(` 都能命中。
+      于是 `def test_adjudicate_contradiction_rejects_x` 里的名字能命中。
 
-    代价（如实写清）：`needle="register"` 会命中 `register_graph_tools(`
-    —— 那是另一个函数。所以本判据仍然偏向"算它有测试"（欠报而非过报）。
-    这个方向的偏差是刻意的：本脚本的产出是"待补测试清单"，
-    过报会让人去做无用功，欠报只会让清单更短。两侧偏差的规模都由
-    `--json` 的 `indirect_only` 与 `tested_by` 字段给出，可人工核对。
+     如实写清右边界不管什么（外部审查第 2 条，我实测复核过）：因为
+    `_` 不在 `[0-9A-Za-z]` 里，`needle="parse"` 会命中 `x = parse_work()`。
+    本文件早先的注释曾逐字说"`needle="parse"` 不匹配 `parse_work`" —— 那句是假的
+    （实测 `_name_pattern("parse").search("x = parse_work()")` 命中）。
+    同一个性质在 `_TEST_NAME_TMPL`（`test_parse` 命中 `test_parse_work`）与
+    `_QUALIFIED_TMPL`（`I.parse_work(` 让 `parse` 命中）上同样成立。
+    这是刻意的欠报方向（"算它有测试"），不是 bug；但不许再写成相反的性质。
+
+    ## 但这条正则认不出"别名限定调用"（`G-34`，实测）
+
+    左边界排除 `.` 是刻意的（`parse` 不许匹配 `parse_work` 的尾巴），代价是
+    `I.adjudicate_contradiction(` / `G.gateway_main(` / `FG.evidence_of(` 这类
+    限定的成员调用一个都拿不到。本文件早先的注释曾逐字说
+    "`I.adjudicate_contradiction(` 都能命中" —— 那句是假的，实测命中 0 次。
+    它造成的不是"清单短一点"，而是发布门上的两条假红：`modelgw.gateway_main`
+    与 `formalgw.evidence_of` 明明有直接调用，却被报成"零测试"并让 `coverage` 判 `fail`。
+
+    修法是补一个 needle 形态（`_QUALIFIED_TMPL`，把证据单独记成 `via:alias_direct`），
+    而不是放宽这里的左边界 —— 放宽会牵连既有判据（`parse` vs `parse_work` 的区分）。
+
+    ## 代价（如实写清）
+
+    `needle="register"` 会命中 `register_graph_tools(` —— 那是另一个函数。
+    所以本判据仍然偏向"算它有测试"（欠报而非过报）。这个方向的偏差是刻意的：
+    本脚本的产出是"待补测试清单"，过报会让人去做无用功，欠报只会让清单更短。
+    两侧偏差的规模都由 `--json` 的 `indirect_only` 与 `tested_by` 字段给出，可人工核对。
     """
     return re.compile(rf"(?<![\w.]){re.escape(needle)}(?![0-9A-Za-z])")
 
@@ -783,18 +889,40 @@ def _test_name_occurrences(blob: str, needle: str) -> int:
     return len(re.findall(_TEST_NAME_TMPL.format(n=re.escape(needle)), blob))
 
 
+#: 限定名形态：`别名.函数(`、`模块.函数(`、`对象.方法(`。
+#:
+#: 为什么必须单独一条判据（`G-34`，实测）：`_name_pattern` 的左边界把 `.` 排除，
+#: 于是"别名限定调用"整类拿不到 `via:direct`。实测两处直接调用被报成"零测试"：
+#: `tests/test_modelgw.py` 的 `assert G.gateway_main([]) == 0` 与
+#: `tests/test_formalgw.py` 的 `ev = FG.evidence_of({...})` —— 而这两个假缺口
+#: 正好卡在发布门 `coverage` 的等级 2 上，构成了那条唯一的 `fail`。
+#:
+#: 修法不是改左边界（会牵连 `parse` vs `parse_work` 的既有区分），
+#: 而是补一个 needle 形态并把它单独记成 `via:alias_direct`：
+#: 本判据不做别名解析，所以"前缀是谁"要靠人核 —— 这也正是它单独记一档的理由。
+_QUALIFIED_TMPL = r"(?:[A-Za-z_]\w*\.)+{n}(?![0-9A-Za-z])"
+
+
+def _qualified_occurrences(blob: str, needle: str) -> int:
+    """`needle` 以"被点号限定的成员"形态出现的次数（如 `I.foo(` / `mod.sub.foo(`）。"""
+    return len(re.findall(_QUALIFIED_TMPL.format(n=re.escape(needle)), blob))
+
+
 def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
     """标出每个函数是否"有测试"。
 
-    判据由两条可分辨的分量组成，两条都记进 `tested_by`（带 `via:` 前缀）：
+    判据由三条可分辨的分量组成，三条都记进 `tested_by`（带 `via:` 前缀）：
 
-    - `via:direct` —— 限定名/裸名/工具名作为标识符位置出现在 tests/ 里
-      （例如 `I.adjudicate_contradiction(` 或 `from agentflow import ...`）；
+    - `via:direct` —— 裸名/限定名作为独立标识符出现在 tests/ 里
+      （`adjudicate_contradiction(` 这种）。注意 `_name_pattern` 的左边界排除 `.`，
+      所以"别名限定调用"不在这一档；
+    - `via:alias_direct` —— 以被点号限定的成员形态出现（`I.foo(`、`mod.foo(`）；
     - `via:test_name` —— 出现在项目约定的测试名 `test_<名字>_...` 里。
 
-    为什么分量必须分开记：它们的证据强度不同。`direct` 是"测试真的提到了它"；
+    为什么分量必须分开记：它们的证据强度不同。`direct` 是"测试里出现了这个独立标识符"；
+    `alias_direct` 是"有人用某个前缀调用了这个名字"（前缀是谁要靠人核，本判据不做别名解析）；
     `test_name` 是"有个测试叫这个名字"（名义覆盖，可能测的是别的东西）。
-    混成一个布尔值就等于把两者当成同一件事 —— 而那正是本脚本要避免的失败形态。
+    混成一个布尔值就等于把三者当成同一件事 —— 而那正是本脚本要避免的失败形态。
     """
     blob = _test_text(root)
     for info in funcs:
@@ -803,6 +931,10 @@ def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
             n = _name_occurrences(blob, needle)
             if n:
                 hits.append(f"via:direct {needle}×{n}")
+        for needle in dict.fromkeys([info.qualname, info.bare]):
+            n = _qualified_occurrences(blob, needle)
+            if n:
+                hits.append(f"via:alias_direct {needle}×{n}")
         if info.tool_name:
             n = _name_occurrences(blob, info.tool_name)
             if n:
@@ -906,6 +1038,17 @@ def validate_row(row):
     """判据：名字含 validate，返回带 reason 的字典。"""
     return {"verdict": "ok", "reason": "fine"}
 
+def is_ready(row):
+    """判据：`is_` 是前缀词（后面还跟着东西）⇒ 必须命中 2a。
+
+    为什么要单独放这个正例（外部审查第 1/6 条）：`_token_hits` 的 `parts` 那一步按
+    `[^0-9A-Za-z]+` 切分，会把 `_` 一起吃掉，于是 `is_valid` 只剩 ["is","valid"]，
+    `p.startswith("is_")` 永远为假 —— 六个带尾下划线的词缀
+    （`is_`/`has_`/`can_`/`should_`/`needs_`/`must_`）全部失效，
+    而当时的自检里没有一个这种命名的函数 ⇒ 自检全绿却漏掉一整类。
+    """
+    return {"ok": True, "reason": "ready"}
+
 def negated(text):
     """不是判据：negated 含子串 gate，但按词边界不命中。"""
     return text
@@ -965,6 +1108,9 @@ def _selftest(root: Path) -> int:
     expect = {
         "writes_a_table": 1, "writes_a_file": 1, "writes_via_open": 1,
         "reads_a_topic": 4, "validate_row": 2, "negated": 4,
+        # `is_ready` 是"带尾下划线词缀"那一族的正例（外部审查第 1/6 条：
+        # 六个这类词缀曾经全部失效，而当时的自检里一个这种命名的函数都没有）。
+        "is_ready": 2,
         "reads_rows": 3, "render_markdown": 4,
         # 默认档：编排函数不因调用写路径而升级（1e 默认关闭）。
         # 这条断言本身就是"传递判据默认关闭"这条决定的钉子。
@@ -978,6 +1124,19 @@ def _selftest(root: Path) -> int:
             fails.append(f"{name}: 期望等级 {lv}，实得 {got[name].level}（判据 {got[name].level_why}）")
     if excluded != ["_FakeLLM.judge_gaps"]:
         fails.append(f"私有类方法排除不对：{excluded}")
+
+    # ---- 2a 必须被单独钉住（外部审查第二轮第 2 条，我复核成立）。
+    # `is_ready` 的体返回 `{"ok":…, "reason":…}`，而这两个键都在 `_VERDICT_KEYS` 里
+    # ⇒ 它同时命中 2b。于是"把 `_token_hits` 的 `is_` 分支整个删掉"这件事，光看等级
+    # 仍然是 2 ⇒ 自检照样绿 —— 那条正例测不了它声称要测的东西（与被删掉的
+    # `writes_a_table` 断言同型）。所以额外断言"这个等级 2 是靠 2a 来的"。
+    for name in ("is_ready", "validate_row"):
+        why = got[name].level_why if name in got else []
+        if not any(w.startswith("2a:") for w in why):
+            fails.append(
+                f"{name}: 判到等级 2 了，但不是靠 2a（level_why={why}）—— "
+                "这正是『is_/has_/can_/should_/needs_/must_ 六个词缀全失效』那条 bug 会通过的形态"
+            )
 
     # ---- 传递判据的正控：打开 `--propagate` 后，`orchestrates` 必须升到等级 1。
     # 为什么这条也要有：1e 是"默认关闭"的，若它的实现坏了，默认档下看不出任何差别
@@ -1017,8 +1176,21 @@ def _selftest(root: Path) -> int:
             f"`reads_a_topic` 仍是等级 {fake_got.get('reads_a_topic')} —— "
             "说明『它不是写路径』这条断言不依赖判据，是永远通过的"
         )
-    if fake_got.get("writes_a_table") != 1:
-        fails.append("变异试验失败：假实现下 writes_a_table 不再是等级 1 ⇒ 判据没有真的在用")
+    # 变异试验的第二半（外部审查第 5 条）：原来这里断言的是 `writes_a_table != 1`，
+    # 而它是靠 1b（`store.tx(...)`）判到等级 1 的，根本不走 `open_write_modes`
+    # ⇒ 把那个判据换掉对它没有任何影响 ⇒ 那条断言永远为假（永远通过）。
+    # 换成真正依赖该判据的那两个：`writes_via_open`（应仍为 1）与
+    # `reads_a_topic`（应被误升为 1，上面已单独断言）。
+    if fake_got.get("writes_via_open") != 1:
+        fails.append(
+            "变异试验失败：假实现下 `writes_via_open` 不再是等级 1 ⇒ "
+            "`open_write_modes` 这条判据没有真的接在 1c 上"
+        )
+    if fake_got.get("reads_a_topic") == 4:
+        fails.append(
+            "变异试验失败：把 `open_write_modes` 换成『永远返回 [\"w\"]』之后 "
+            "`reads_a_topic` 仍是等级 4 ⇒ 假实现没有生效（注入本身没做出来）"
+        )
 
     if fails:
         print("[selftest] 退出码 1：判据自检失败", file=sys.stderr)
@@ -1065,7 +1237,25 @@ def _as_dict(items: list[FuncInfo]) -> list[dict]:
     ]
 
 
+def _pin_utf8() -> None:
+    """钉住 stdout/stderr 的编码。
+
+    内联的理由与 `scripts/lint_rules.py` 同：门脚本必须在本包 import 不了时也能跑。
+    规范实现见 `src/agentflow/console.py::pin_utf8`；两处行为由
+    `tests/test_cli_console_encoding.py` 的普查用例统一守着。
+    不钉的后果（实测）：GBK 重定向下打印含 `⇒` 的行抛 UnicodeEncodeError，
+    进程以 1 结束，而 1 是"发现问题"的码。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            # 可以忽略：被重定向或被替换过的流可能没有 reconfigure，不该让门崩掉。
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _pin_utf8()
     ap = argparse.ArgumentParser(
         description="机械地算出 agentflow 的『零直接测试公开函数』并按风险等级分档",
     )

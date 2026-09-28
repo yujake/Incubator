@@ -480,6 +480,8 @@ def test_tool_registry_exposes_only_read_side_effects(demo):
     却可能写盘的工具，会让整张权限表变成空话。
     """
     reg = ToolRegistry(name="c-service")
+    # 绑定角色（`P-14`）：这张表代表只读的 C（下面的用例要真的调 `graph.*`）。
+    reg.bound_role = "C"
     register_graph_tools(reg, store=demo)
     added = AgentC(demo).register_tools(reg)
 

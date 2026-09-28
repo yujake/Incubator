@@ -25,8 +25,10 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -38,6 +40,20 @@ REPO = Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "ROLE-SPECS.md"
 #: N/O/Q 三角色的草稿（登记前不进 `docs/ROLE-SPECS.md`，由 `--roles` 单独查）。
 DRAFT_NOQ = REPO / "docs" / "ROLE-SPECS-DRAFT-N-O-Q.md"
+
+#: 门口径的 stdio 编码（`X-91.5-2`）：判据不许依赖控制台代码页。
+#:
+#: `tools/verify_role_specs.py` 的输出里有非 ASCII（`⇒`、"对账没做"、"`--roles` 非法"、
+#: `[OK ] …` 的中文小节名）。子进程往管道写时 `sys.stdout.encoding` 取的是
+#: `locale.getpreferredencoding(False)` —— 在 GBK 控制台（本机 `chcp` = 936）上是 `cp936`：
+#: 轻则父进程按 `utf-8` 解码成乱码（那 4 条断言红），重则子进程自己
+#: `UnicodeEncodeError` 崩掉、退出码从 2 变成 1（`--no-live` 那一档实测如此）。
+#: 把子进程的 stdio 显式钉成 utf-8 ⇒ 读数是"判据要判的那件事"，与跑它的终端代码页无关；
+#: 这两个变量也正是四道门跑本门时用的环境（`temp/run_gates.py` 显式设了它们）。
+_GATE_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+#: 与 `_GATE_ENV` 同源，但摘掉 `PYTHONPATH`：`test_the_cli_reports_unknown_when_the_package_cannot_be_imported`
+#: 要靠"子进程 import 不到 `agentflow`"来造 `unknown`（父进程的 `PYTHONPATH=src` 会被继承）。
+_GATE_ENV_NO_PYTHONPATH = {k: v for k, v in _GATE_ENV.items() if k != "PYTHONPATH"}
 
 
 def _load_gate():
@@ -77,9 +93,159 @@ def test_cli_gate_exits_zero_on_the_real_document():
     p = subprocess.run(
         [sys.executable, str(REPO / "tools" / "verify_role_specs.py")],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120,
+        timeout=120, env=_GATE_ENV,
     )
     assert p.returncode == 0, p.stdout + p.stderr
+
+
+# ============================================ `H-8`：与现场装配的逐角色对账
+
+
+def test_the_live_reconciliation_agrees_on_the_real_document():
+    """正控：真文档的逐角色工具条数必须与现场装配一致（`H-8` 的核心判据）。"""
+    live, reason = G.live_tool_counts(root=REPO)
+    assert live is not None, reason
+    result = G.check(DOC, live_counts=live, live_reason=reason)
+    assert result["verdict"] == "ok", result["reason"]
+    assert result["live_counts"] == live
+
+
+def test_negative_control_a_wrong_tool_count_is_caught(tmp_path):
+    """负控（`H-8`）：把 §H 的标题数字改成 `1` ⇒ 必须报 `incomplete` 并点名是哪一节。
+
+    改前这一条全绿：旧门只检查"标题里能不能读出一个数字"，不比对现场实测值
+    （审计者 H 的原始负控：把 `37` 改成 `999`、`22` 改成 `1`，门照报 `[OK]`、退出码 0）。
+    """
+    def tamper(lines: list[str]) -> list[str]:
+        return [ln.replace("### H.4 工具面（22 个，实测）", "### H.4 工具面（1 个，实测）")
+                for ln in lines]
+
+    live, reason = G.live_tool_counts(root=REPO)
+    assert live is not None, reason
+    result = G.check(_mutate(tmp_path, tamper), live_counts=live, live_reason=reason)
+    assert result["verdict"] == "incomplete", result["reason"]
+    assert "§H" in result["reason"] and "不符" in result["reason"], result["reason"]
+
+
+def test_negative_control_999_is_also_caught(tmp_path):
+    """负控 2：换成 `999` 同样必须红（判据不是对着数字 `1` 特判）。"""
+    def tamper(lines: list[str]) -> list[str]:
+        return [ln.replace("### H.4 工具面（22 个，实测）", "### H.4 工具面（999 个，实测）")
+                for ln in lines]
+
+    live, reason = G.live_tool_counts(root=REPO)
+    result = G.check(_mutate(tmp_path, tamper), live_counts=live, live_reason=reason)
+    assert result["verdict"] == "incomplete", result["reason"]
+
+
+def test_negative_control_a_correct_number_elsewhere_does_not_excuse_the_bad_one(tmp_path):
+    """`R6-3` 负控：对账必须锚定那一格，别处出现正确数字不算。
+
+    改前判据是 `want not in got`，而 `got` 取的是该角色所有子节标题里的数字
+    ⇒ 只要 §H 下任意别处标题里出现过 `22 个`，§H.4 写成 `999 个` 也照样 `ok`，
+    还会打印"逐角色工具条数与现场装配一致"（重审实测的那个形态）。
+    这里把两件事同时做出来：工具面写 `999`、别处补一个 `22 个` ⇒ 必须红。
+    """
+    def tamper(lines: list[str]) -> list[str]:
+        out: list[str] = []
+        injected = False
+        for ln in lines:
+            ln = ln.replace("### H.4 工具面（22 个，实测）", "### H.4 工具面（999 个，实测）")
+            out.append(ln)
+            # 在 §H 的另一个子节标题后面塞一个正确数字（"别处有 22"）
+            if (not injected and re.match(r"^###\s+H\.\d+\s+", ln)
+                    and "999" not in ln and "工具面" not in ln):
+                out[-1] = ln.rstrip() + "（22 个，实测）"
+                injected = True
+        assert injected, "夹具前提：在 §H 里塞一个『22 个』的别处标题"
+        return out
+
+    live, reason = G.live_tool_counts(root=REPO)
+    result = G.check(_mutate(tmp_path, tamper), live_counts=live, live_reason=reason)
+    assert result["verdict"] == "incomplete", result["reason"]
+    assert "999" in result["reason"], result["reason"]
+    assert "不符" in result["reason"], result["reason"]
+
+
+def test_without_a_live_census_the_check_is_silent_about_the_numbers() -> None:
+    """边界：不注入 `live_counts` ⇒ 只判结构（这样"包 import 不进来"时本门仍能跑）。
+
+    但调用方不许把它读成"数字对上了" —— `main()` 在"要做的对账没做成"时
+    把 verdict 降成 `unknown`（见下一条）。
+    """
+    result = G.check(DOC)
+    assert result["verdict"] == "ok"
+    assert result["live_counts"] is None
+    assert "未与现场装配对账" in result["reason"], result["reason"]
+
+
+def test_the_cli_reports_unknown_when_the_package_cannot_be_imported(tmp_path):
+    """负控 3（三态）：装配不了工具层 ⇒ 退出码 2（没查成），不是 0。
+
+    这条与 `H-8` 的"要不要让门依赖包可导入"那个取舍直接相关：
+    选的是"依赖它、但依赖不上时如实报未知"——不静默退回"只判结构"。
+
+     实测（第一版写错）：`--root <空的 tmp>` 不足以让装配失败 ——
+    `live_tool_counts` 会 `sys.path.insert(0, root/"src")`，而父进程的
+    `PYTHONPATH=src` 会被子进程继承（`agentflow` 于是仍然 import 得到）。
+    判据要按事实造：必须把 `PYTHONPATH` 从子进程环境里摘掉。
+
+    `X-91.5-2`：摘掉 `PYTHONPATH` 的同时必须把 stdio 编码钉回来 ——
+    这条断言读的是子进程打印的中文（"对账没做"），不钉的话在 GBK 控制台下
+    父进程按 utf-8 解码得到乱码、断言红，而它与"包装配不上"这件事无关
+    ⇒ 这里用 `_GATE_ENV_NO_PYTHONPATH`（同源、只少 `PYTHONPATH`）。
+    """
+    root = tmp_path / "nowhere"
+    (root / "docs").mkdir(parents=True)
+    (root / "docs" / "ROLE-SPECS.md").write_text(DOC.read_text(encoding="utf-8"),
+                                                 encoding="utf-8")
+    p = subprocess.run(
+        [sys.executable, str(REPO / "tools" / "verify_role_specs.py"), "--root", str(root)],
+        cwd=str(root), capture_output=True, text=True, encoding="utf-8",
+        errors="replace", timeout=120, env=_GATE_ENV_NO_PYTHONPATH,
+    )
+    assert p.returncode == 2, p.stdout + p.stderr
+    assert "[unknown]" in p.stdout, p.stdout
+    assert "对账没做" in p.stdout, p.stdout
+
+
+def test_every_capturing_subprocess_pins_the_stdio_encoding() -> None:
+    """`X-91.5-2` 的回归判据：本文件里每一个捕获输出的子进程都必须显式钉住 stdio 编码。
+
+    为什么值得一条判据（而不是"这一次改完就算"）：`X-91.5-2` 的形态是只在某些环境里红
+    —— 门口径环境（`PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`）下全绿，GBK 控制台
+    （本机 `chcp` = 936）下 4 条红。一次性修法挡不住下一个人新加一条 `subprocess.run(...)`：
+    新调用不带 `env=` 时，乱码 / 子进程 `UnicodeEncodeError` 那一档就静默回来了，
+    而它在门口径环境下照样绿。
+
+    判据落在本文件自己的源码上（不靠人记得）：`capture_output=True` 的
+    `subprocess.run(...)` 必须在同一个调用里出现 `_GATE_ENV`（`_GATE_ENV_NO_PYTHONPATH`
+    是同一份约定的派生，名字里含它）或逐字写了 `PYTHONIOENCODING`。
+    扫不到任何这样的调用 ⇒ 报"失去对象"（删掉子进程不等于编码被钉住了）。
+    """
+    src = Path(__file__).read_text(encoding="utf-8")
+    capturing: list[int] = []
+    unpinned: list[int] = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, ast.Attribute) and fn.attr == "run"):
+            continue
+        segment = ast.get_source_segment(src, node) or ""
+        if "capture_output=True" not in segment:
+            continue
+        capturing.append(node.lineno)
+        if "_GATE_ENV" not in segment and "PYTHONIOENCODING" not in segment:
+            unpinned.append(node.lineno)
+    assert capturing, (
+        "一条 `capture_output=True` 的 `subprocess.run` 都没扫到 —— 判据失去对象"
+        "（删掉那些子进程、或改掉 `run` 的写法，都不等于编码已经被钉住）"
+    )
+    assert not unpinned, (
+        f"这些捕获输出的子进程没有钉住 stdio 编码（`X-91.5-2` 会在 GBK 控制台下复发）："
+        f"行 {unpinned}"
+    )
 
 
 # ============================================================ 负控：三态都必须可达
@@ -146,7 +312,7 @@ def test_gate_exit_codes_are_three_valued(tmp_path):
     """端到端：三个结论对应三个不同的退出码（`ok`=0 / `incomplete`=1 / `unknown`=2）。"""
     ok = subprocess.run([sys.executable, str(REPO / "tools" / "verify_role_specs.py"), "--json"],
                         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8",
-                        errors="replace", timeout=120)
+                        errors="replace", timeout=120, env=_GATE_ENV)
     assert ok.returncode == 0
     assert json.loads(ok.stdout)["verdict"] == "ok"
 
@@ -156,7 +322,7 @@ def test_gate_exit_codes_are_three_valued(tmp_path):
     unknown = subprocess.run(
         [sys.executable, str(REPO / "tools" / "verify_role_specs.py"), "--root", str(root)],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120,
+        timeout=120, env=_GATE_ENV,
     )
     assert unknown.returncode == 2, unknown.stdout + unknown.stderr
 
@@ -179,13 +345,59 @@ def test_default_role_set_is_unchanged_and_blind_to_n_o_q():
     assert G.check(DOC)["roles"] == list(G.EXPECTED_ROLES)
 
 
+# ============================================================ `R6-6`：默认角色集合的来源
+
+
+def _assert_default_roles_match_live(expected, live_roles, conductor_role) -> None:
+    """默认角色集合必须与现场角色名单逐字相等（正控与负控共用同一段断言，负控才有意义）。"""
+    want = tuple(live_roles) + (conductor_role,)
+    assert tuple(expected) == want, (
+        "`verify_role_specs.EXPECTED_ROLES` 与现场角色名单不一致："
+        f"表里 {tuple(expected)}，现场 {want}。现场加了角色而这张表没跟上时，"
+        "这道门会继续对一个已经不存在的角色集合报 ok（`R6-6`）。"
+    )
+
+
+def test_default_roles_are_cross_asserted_against_the_live_role_list():
+    """正控（`R6-6`）：`EXPECTED_ROLES` 与现场 `tools.ROLES` + `CONDUCTOR_ROLE` 一致。
+
+    改前这条缺口是：`EXPECTED_ROLES` 只与测试里另写的一份字面量比对
+    （上面那条用例的 `== ("A", ..., "M")`），于是"现场多/少一个角色"与
+    "这道门看不见它"可以同时成立，而没有东西会红。这里把两边直接对上 ——
+    现场是 `tools.ROLES`（`ROLES` 的单一来源）加 `schema.CONDUCTOR_ROLE`。
+    """
+    from agentflow import schema as S
+    from agentflow import tools as T
+
+    _assert_default_roles_match_live(G.EXPECTED_ROLES, T.ROLES, S.CONDUCTOR_ROLE)
+
+
+def test_negative_control_a_role_divergence_between_the_gate_and_the_live_list_is_caught():
+    """负控（`R6-6`）：表与现场分家 ⇒ 上面那条交叉断言必须红。
+
+    两个方向都注入：现场多一个角色（表没跟上）、现场少一个角色（表多写了）。
+    没有这条，"两边一致"就无法与"这条断言恒真"区分开。
+    """
+    from agentflow import schema as S
+    from agentflow import tools as T
+
+    with pytest.raises(AssertionError):
+        _assert_default_roles_match_live(
+            tuple(G.EXPECTED_ROLES) + ("N",), T.ROLES, S.CONDUCTOR_ROLE
+        )
+    with pytest.raises(AssertionError):
+        _assert_default_roles_match_live(
+            tuple(G.EXPECTED_ROLES)[:-1], T.ROLES, S.CONDUCTOR_ROLE
+        )
+
+
 def test_cli_roles_flag_checks_the_n_o_q_draft():
     """正向：`--roles N,O,Q --doc <草稿>` ⇒ 三个角色节各 8 个必备子节齐全，退出码 0。"""
     p = subprocess.run(
         [sys.executable, str(REPO / "tools" / "verify_role_specs.py"),
          "--roles", "N,O,Q", "--doc", "docs/ROLE-SPECS-DRAFT-N-O-Q.md", "--json"],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120,
+        timeout=120, env=_GATE_ENV,
     )
     assert p.returncode == 0, p.stdout + p.stderr
     data = json.loads(p.stdout)
@@ -216,7 +428,7 @@ def test_cli_roles_flag_rejects_a_malformed_role_set(tmp_path):
         [sys.executable, str(REPO / "tools" / "verify_role_specs.py"),
          "--roles", "N;O;Q", "--doc", "docs/ROLE-SPECS-DRAFT-N-O-Q.md"],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120,
+        timeout=120, env=_GATE_ENV,
     )
     assert p.returncode == 2, p.stdout + p.stderr
     assert "--roles 非法" in (p.stdout + p.stderr)
@@ -225,10 +437,127 @@ def test_cli_roles_flag_rejects_a_malformed_role_set(tmp_path):
         [sys.executable, str(REPO / "tools" / "verify_role_specs.py"),
          "--roles", "N,O,Q", "--doc", "docs/no-such-draft.md"],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=120,
+        timeout=120, env=_GATE_ENV,
     )
     assert missing_doc.returncode == 2, "文档不存在必须是 unknown(2)，不是通过"
     assert G.check(tmp_path / "gone.md", roles=("N",))["verdict"] == "unknown"
+
+
+# ============================================ `R6-5`：`--no-live` 不许让门报绿
+
+
+def test_no_live_makes_the_gate_unknown_not_green():
+    """负控（`R6-5` 核心）：`--no-live` 跳过对账 ⇒ 退出码非 0、首行 `[unknown]`。
+
+    改前这一跑是 `[ok] …（未与现场装配对账）` + 退出码 0 —— 一个 `--skip` 形态的
+    开关就能把 `H-8` 修好的那步对账整个摘掉，而门照样绿。这条钉住"跳过了就没有结论"。
+    """
+    p = subprocess.run(
+        [sys.executable, str(REPO / "tools" / "verify_role_specs.py"), "--no-live"],
+        cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, env=_GATE_ENV,
+    )
+    assert p.returncode != 0, p.stdout + p.stderr
+    assert p.returncode == 2, f"跳过对账是『没查成』（2），不是『有问题』（1）：{p.returncode}"
+    first = (p.stdout or p.stderr).strip().splitlines()[0]
+    assert first.startswith("[unknown]"), first
+    assert "--no-live" in p.stdout, p.stdout
+
+
+def test_the_live_probe_is_still_the_default():
+    """正控（不许扩大化）：不带 `--no-live` 时门仍然真的对账并给 `ok`。
+
+    没有这一条，"一律退 2"也能让上面那条通过 —— 而那道门就再也不会给结论了。
+    """
+    p = subprocess.run(
+        [sys.executable, str(REPO / "tools" / "verify_role_specs.py"), "--json"],
+        cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, env=_GATE_ENV,
+    )
+    assert p.returncode == 0, p.stdout + p.stderr
+    data = json.loads(p.stdout)
+    assert data["verdict"] == "ok", data["reason"]
+    assert data["live_counts"], "没有做现场装配对账，`ok` 就没有意义"
+
+
+def test_an_incomplete_verdict_is_not_downgraded_by_no_live(tmp_path):
+    """边界（`R6-5`）：`--no-live` 不许把已经查实的 `incomplete` 降级成 `unknown`。
+
+    `incomplete`（查过了、结构有问题）比 `unknown`（没查成）强。把 1 改成 2
+    等于拿"没查成"盖掉一条已经查实的发现 —— 那是把判据往弱的方向改。
+    这里删掉草稿里的一节，让结构判据红，再看 `--no-live` 会不会把它盖掉。
+    """
+    body = DRAFT_NOQ.read_text(encoding="utf-8").replace("### O.3 明确不负责", "### O.3 别的")
+    doc = tmp_path / "draft.md"
+    doc.write_text(body, encoding="utf-8")
+    p = subprocess.run(
+        [sys.executable, str(REPO / "tools" / "verify_role_specs.py"),
+         "--roles", "N,O,Q", "--doc", str(doc), "--no-live"],
+        cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=120, env=_GATE_ENV,
+    )
+    assert p.returncode == 1, p.stdout + p.stderr
+    assert p.stdout.strip().splitlines()[0].startswith("[incomplete]"), p.stdout
+    assert "对账" in p.stdout, p.stdout
+
+
+# ============================================ `R6-6`：角色集合的门内对账
+
+
+def test_the_gate_itself_cross_checks_expected_roles_against_the_live_list():
+    """正控（`R6-6` 工具侧）：门拿到现场角色集合时与 `EXPECTED_ROLES` 对账并通过。
+
+    改前这份对账只在 `tests/` 里（批 J 加的交叉断言）—— 跑门的时候看不见。
+    """
+    live_roles, reason = G.live_roles(root=REPO)
+    assert live_roles is not None, reason
+    assert tuple(G.EXPECTED_ROLES) == tuple(live_roles), (G.EXPECTED_ROLES, live_roles)
+    result = G.check(DOC, live_role_list=live_roles)
+    assert result["verdict"] == "ok", result["reason"]
+    assert result["live_role_list"] == list(live_roles)
+
+
+def test_an_extra_role_in_the_gates_own_table_makes_the_gate_red(monkeypatch):
+    """负控（`R6-6` 工具侧）：门里那份表多塞一个角色 ⇒ 门必须红。
+
+    这正是"现场加了角色、而门里的表没跟上"的反向形态（门里多写了一个）。
+    改前它绿着：门里的表与现场名单之间没有任何判据。
+    """
+    live_roles, reason = G.live_roles(root=REPO)
+    assert live_roles is not None, reason
+    monkeypatch.setattr(G, "EXPECTED_ROLES", (*G.EXPECTED_ROLES, "N"), raising=True)
+    monkeypatch.setattr(G, "DEFAULT_ROLES", None, raising=True)
+    assert "N" in G.EXPECTED_ROLES, "注入没生效"
+    result = G.check(DOC, live_role_list=live_roles)
+    assert result["verdict"] == "incomplete", result["reason"]
+    assert "EXPECTED_ROLES" in result["reason"], result["reason"]
+
+
+def test_a_missing_role_in_the_live_list_makes_the_gate_red(monkeypatch):
+    """负控 2（`R6-6` 工具侧）：现场少一个角色 ⇒ 门同样必须红（两个方向都注入）。"""
+    live_roles, reason = G.live_roles(root=REPO)
+    assert live_roles is not None, reason
+    shorter = tuple(live_roles)[:-1]
+    assert shorter != tuple(live_roles), "注入没生效"
+    result = G.check(DOC, live_role_list=shorter)
+    assert result["verdict"] == "incomplete", result["reason"]
+    assert "EXPECTED_ROLES" in result["reason"], result["reason"]
+
+
+def test_cli_role_set_mismatch_is_reported_end_to_end(monkeypatch, capsys):
+    """端到端（`R6-6`）：`main()` 真的把现场角色集合接进判据，而不是只加了个形参。
+
+    注入走"门里的表多一个角色"，然后跑 `main(["--json"])`：退出码必须是 1
+    （查过了、不一致），而不是 0。
+    """
+    monkeypatch.setattr(G, "EXPECTED_ROLES", (*G.EXPECTED_ROLES, "N"), raising=True)
+    monkeypatch.setattr(G, "DEFAULT_ROLES", None, raising=True)
+    code = G.main(["--json"])
+    out = capsys.readouterr().out
+    assert code == 1, out
+    data = json.loads(out)
+    assert data["verdict"] == "incomplete", data["reason"]
+    assert data["live_role_list"], data
 
 
 # ============================================================ 与实时普查对账
@@ -439,7 +768,10 @@ def rows_to_check(reg, rows: list[dict[str, str]]) -> list[dict[str, str]]:
         doc_says_approval = "是" in r["needs_approval"]
         if doc_says_approval != bool(spec.needs_approval):
             problems.append(f"审批 文档={r['needs_approval']!r} 实际={spec.needs_approval}")
-        doc_roles = [x for x in re.findall(r"\b([A-H])\b", r["roles"])]
+        # 角色字母表要含主控 `M`：工具层的角色词汇是 `TOOL_ROLES` = 可被召唤的 A–H + 主控 M
+        # （主控不可被召唤，但它拿编排面工具）。只认 A–H 会让主控那 8 行的 roles 列
+        # 永远解析成空，于是"文档与注册表不一致"这条判据对它们永远报红（实测撞过）。
+        doc_roles = [x for x in re.findall(r"\b([A-HM])\b", r["roles"])]
         if sorted(doc_roles) != sorted(spec.roles):
             problems.append(f"roles 文档={sorted(doc_roles)} 实际={sorted(spec.roles)}")
         if problems:

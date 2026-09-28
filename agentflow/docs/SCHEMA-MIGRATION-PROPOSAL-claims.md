@@ -190,10 +190,14 @@ FC-27 的原始论证（`AGENTS.md` 逐字引 `draft/LESSONS-工程经验清单�
 1. **不加任何必填**。理由见 §3.2 —— 这是本提案最重要的一个决定。
 2. **不把 `status` 与 `evidence_kind` 建立满射**。`待精化` 可以配任何证据类型；
    `作废` 可以配任何证据类型（撤销与证据类型无关）。只拦 3 种**已知**不一致。
-3. **不改 `review_findings`**。§8.4 的 G10 需要 `line`/`verbatim_quote`/`minimal_fix`/`maths`
-   四个字段，而 `ReviewFinding`（`schema.py:1175-1207`）里没有它们 —— 于是
-   **G10 现在如实判 `unknown`**（`gates.py:gate_g10`）。补这四个字段是**另一份**提案，
-   因为它的风险面（`review_findings` 是落库表、有去重键 `_dedup_key`）与本提案不同。
+3. **本提案不碰 `review_findings`**。§8.4 的 G10 需要 `line`/`verbatim_quote`/`minimal_fix`/
+   `maths` 四个字段；补它们是**另一份**提案（风险面不同：`review_findings` 是落库表、
+   有去重键 `_dedup_key`）。
+   ✅ **那另一份提案后来落地了**（观测 2026-09-27，`X-96.3-3` 更正本句）：`P-9` 候选 A 之后
+   `schema.ReviewFinding` 带上了 `axis` / `line` / `verbatim_quote` / `maths`（"最小修法"那一格
+   与 `suggestion` 对齐）⇒ **"本项目结构性不可判"这句话不再成立**：`gates.gate_g10` 今天只对
+   "键不全的行"（契约生效日前的历史行、或尚未补键的产出方）报 `unknown` 并逐条列出缺哪些键，
+   键齐全的行按 §8.4 逐字判。本提案自己"不改这张表"的判断不受影响。
 
 ### §2.3 改完之后必须同步的**第二处**（FC-03）
 

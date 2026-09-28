@@ -50,3 +50,80 @@ def test_falsely_claimed_verified_quote_is_error(store):
     rep = verify_all(store, deep=True, extract_text=extract_text)
     assert "quote_not_found" in {i.code for i in rep.errors}
     assert not rep.ok
+
+
+# ============================================================ `E-11`：页码写错
+
+
+#: 引文逐字出现在这一页（第 2 页），而下面的关系声明的是第 1 页。
+_PAGE_TWO = "An abelian group is a group in which the commutative law holds."
+
+
+def _seed_misdeclared_page(store) -> None:
+    """造一条"引文逐字存在、但页码写错"的关系（`E-11` 的形态）。"""
+    write_library_file(store, "0000/a.txt", "第一页：这里没有那句话。")
+    add_literature(store, "0000", title="A", path="0000/a.txt", processed=True)
+    add_concept(store, "0000", "group")
+    add_concept(store, "0001", "abelian group")
+    add_relation(
+        store, "0000", ["0000", "0001"], "0000",
+        quote=_PAGE_TWO,
+        page_range=(1, 1),          # 实际在第 2 页（±widen=1 内命中）
+        quote_verified=True,        # 逐字可达是真的 ⇒ 写入期就是这么记的
+    )
+    sync_counters(store)
+
+
+class _MultiPageDoc:
+    """两页文档替身：契约只有 `pages`（`quotecheck` 实际读的那一个）。"""
+
+    pages = ["第一页：这里没有那句话。", _PAGE_TWO]
+
+
+def test_misdeclared_page_range_is_reported_by_deep_verify(store):
+    """`E-11` 正控：页码写错的引文必须被 `--deep` 报出来（修之前一声不响）。
+
+    修之前的读数：`check_quote` 给 `verified=True +
+    reason='substring_match_outside_declared_range'`，而 `--deep` 只比
+    `chk.verified is not stored` —— 重算 True 与表里 True 相同 ⇒ 没有任何 issue；
+    下面的 `verified is False` 那一支也不触发。于是这个信号只留在每行的
+    `_quote_check` 字典里，全仓库没有检查器消费它。
+    """
+    _seed_misdeclared_page(store)
+    rep = verify_all(store, deep=True, extract_text=lambda _p: _MultiPageDoc())
+    codes = {i.code for i in rep.warnings}
+    assert "page_range_mismatch" in codes, rep.to_dict()
+    iss = next(i for i in rep.warnings if i.code == "page_range_mismatch")
+    assert iss.row_id == "0000"
+    assert "第 2 页" in iss.message, iss.message
+
+
+def test_a_correct_page_range_is_not_reported(store):
+    """`E-11` 负控的反面：页码正确的引文不许报 `page_range_mismatch`（防误伤）。
+
+    没有这一条，"凡引文都报一条"的实现也能让上面那条绿 —— 而那种实现会把
+    每一条正常关系都标黄，等于把这一档又变成噪音（红灯被训练成背景）。
+    """
+    write_library_file(store, "0000/a.txt", "占位")
+    add_literature(store, "0000", title="A", path="0000/a.txt", processed=True)
+    add_concept(store, "0000", "group")
+    add_concept(store, "0001", "abelian group")
+    add_relation(store, "0000", ["0000", "0001"], "0000",
+                 quote=_PAGE_TWO, page_range=(2, 2), quote_verified=True)
+    sync_counters(store)
+
+    rep = verify_all(store, deep=True, extract_text=lambda _p: _MultiPageDoc())
+    assert "page_range_mismatch" not in {i.code for i in rep.warnings}, rep.to_dict()
+    assert rep.ok
+
+
+def test_page_range_mismatch_is_warning_not_error(store):
+    """`E-11` 分级：页码写错是 warning（引文本身是真的），不是 error。
+
+    与"引文找不到"（`quote_not_found`，error）的分级对照是刻意的：
+    两者处置不同 —— 一个改页码，一个查幻觉。
+    """
+    _seed_misdeclared_page(store)
+    rep = verify_all(store, deep=True, extract_text=lambda _p: _MultiPageDoc())
+    assert "page_range_mismatch" not in {i.code for i in rep.errors}, rep.to_dict()
+    assert rep.ok, "页码标注错不该让整库校验失败（引文是真的）"

@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shutil
@@ -29,6 +30,7 @@ from pathlib import Path
 
 import pytest
 
+from agentflow import formalgw as FG
 from agentflow import interactions as IX
 from agentflow import schema as S
 from agentflow.store import Store
@@ -52,16 +54,23 @@ TS = "2026-01-01T00:00:00+00:00"
 
 def clean_claim(**over: object) -> dict:
     """一条完全合规的断言（与 test_agent_h 的同类夹具同形，但本文件自带一份，
-    避免测试文件之间互相 import 造成的隐式耦合）。"""
+    避免测试文件之间互相 import 造成的隐式耦合）。
+
+     与 `test_agent_h.clean_claim` 同办：`evidence_kind` 是 `cross_check`。
+    这条断言的引文只有一条关系与一页文献，没有形式化检查器参与，
+    标成 `proof` 是误标（`D-1` 的写入期判据会拒它）。
+    随之而来的一处必须一起改：`cross_check` 的「不构成证明」声明是结构强制的
+    （少它就报 `overclaim`），所以 `disclaimer` 必须填上 —— 否则"合规夹具"变成坏样本。
+    """
     claim = {
         "claim_id": "claim-1",
         "section": "主要结果",
         "text": "谱落在区间内。",
-        "evidence_kind": "proof",
+        "evidence_kind": "cross_check",
         "citations": ["rel:0000", "lit:0000#p.12-13"],
         "is_negative": False,
         "negation_kind": None,
-        "disclaimer": "",
+        "disclaimer": DT.CROSS_CHECK_DISCLAIMER,
     }
     claim.update(over)
     return claim
@@ -143,9 +152,38 @@ def declared_keys(returns: str) -> set[str]:
 
 
 def registry_for(module: object, store: Store, **kw: object) -> ToolRegistry:
+    """注册一个模块的工具，并按模块绑定角色（`P-14`）。
+
+    `P-14` 之后 `call` 需要"这次是谁在调"：角色面是模块级知识（见
+    `_MODULE_ROLE`），测试只是把它写下来，不是自己发明一个角色。
+    """
     reg = ToolRegistry(name="audit")
     module.register(reg, store=store, **kw)  # type: ignore[attr-defined]
+    reg.bound_role = _role_for_module(module, reg)
     return reg
+
+
+#: `registry_for` 的模块 -> 该表代表的角色。写错会被 `_role_for_module` 的断言抓住
+#: （它要求该角色在这张表里真的拿得到工具）。
+_MODULE_ROLE: dict[str, str] = {
+    "doc_tools": "G",        # `doc.*` 的写侧主人是 G
+    "ocr_tools": "B",        # `ocr.*` 只有 B
+    "research_tools": "D",   # `research.*` 只有 D
+    "review_tools": "H",     # 审校工具（含 H 的落库代理）
+    "search_tools": "A",     # `search.*` 只有 A
+    "table_tools": "A",      # `table.*` 的角色含 A/B/C/D/E/F/G —— 取非只读的 A
+    "trace_tools": "C",      # C/D 共用，取只读的 C
+    "verify_tools": "E",     # `verify.*` 的角色含 E/F/G/H，写侧含 E
+}
+
+
+def _role_for_module(module: object, reg: ToolRegistry) -> str:
+    """按模块名查 `_MODULE_ROLE`，并断言该角色在这张表里真的拿得到工具。"""
+    mod_name = getattr(module, "__name__", "").rsplit(".", 1)[-1]
+    role = _MODULE_ROLE.get(mod_name)
+    assert role, f"模块 {mod_name!r} 没有在 `_MODULE_ROLE` 里登记角色 —— 夹具不知道该代表谁"
+    assert reg.for_role(role), f"{mod_name}: 绑的角色 {role!r} 在这张表里拿不到任何工具"
+    return role
 
 
 def corrupt(store: Store, filename: str) -> None:
@@ -419,24 +457,57 @@ def test_check_citations_separates_not_checked_from_checked(store: Store):
 # ============================================================ P1-3/4 side_effect 如实
 
 
-def test_side_effect_search_providers_declares_network(store: Store):
-    """`search.providers` 真的发 HTTP ⇒ 必须声明 network（需要审批）。"""
+def test_side_effect_search_providers_declares_read_plus_egress(store: Store):
+    """`search.providers` 真的发 HTTP ⇒ 第二根轴必须是 `egress`（需要审批）。
+
+    B3 收官把它从遗留取值 `network` 迁到两根轴上的确定值：效果轴 `read`
+    （它不写我们的东西）、外部轴 `egress`（它真的对外发请求）。
+    审批面在当前环境下不变（沙箱未声明 ⇒ `external != "none"` 仍要审批）。
+    """
     reg = registry_for(ST, store, workspace=store.root)
     spec = reg.get("search.providers")
-    assert spec.side_effect == "network", "真实探测 = 联网，声明 read 等于绕开审批闸门"
+    assert spec.side_effect == "read", "真实探测只读我们的表，效果轴是 read"
+    assert spec.declared_external == "egress", "真的对外发 HTTP ⇒ 外部轴必须是 egress"
     assert spec.needs_approval is True
 
 
 def test_side_effect_ocr_tools_are_declared_individually(store: Store, tmp_path: Path):
     """`ocr.run`（下载模型）/`ocr.backends`（工作区外 mkdir）/`ocr.detect_text_layer` 分级如实。"""
     reg = registry_for(OT, store, workspace=tmp_path, backends=[OT.NullBackend()])
-    assert reg.get("ocr.run").side_effect == "network"
-    assert reg.get("ocr.run").needs_approval is True
+    run = reg.get("ocr.run")
+    # B3 收官：`network` -> `write_local`（它会下模型并 mkdir 模型目录）+ `egress`（真的下）
+    assert run.side_effect == "write_local"
+    assert run.declared_external == "egress"
+    assert run.needs_approval is True
     assert reg.get("ocr.backends").side_effect == "write_local"
     assert reg.get("ocr.backends").needs_approval is True
     # ---- 负控：真的只读的那个不许被顺手改成写（否则审批会变成噪音）
     assert reg.get("ocr.detect_text_layer").side_effect == "read"
     assert reg.get("ocr.detect_text_layer").needs_approval is False
+
+
+def test_side_effect_check_formal_declares_exec_and_needs_approval(store: Store):
+    """`verify.check_formal` 起的是调用方给内容的检查器 ⇒ `read` + `exec`，且需要审批。
+
+    B3 收官的行为变化（P-15/P-19）：它此前声明 `read` 且 `external="none"`，
+    于是"起检查器进程"这个事实只在注释里。现在第二根轴如实为 `exec`：
+
+    - `needs_approval` 从 `False` 变 `True`（沙箱未声明 ⇒ 起进程要签字）；
+    - `sandbox_required` 从 `False` 变 `True`；
+    - `roles` 从 `_ROLES`（含 H）改成 `_ROLES_WRITE` ⇒ H 的工具面少一个。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    spec = reg.get("verify.check_formal")
+    assert spec.side_effect == "read", "它读的是检查器的输出，不改我们的东西"
+    assert spec.declared_external == "exec"
+    assert spec.needs_approval is True
+    assert spec.sandbox_required is True
+    assert "H" not in spec.roles, "声明必须正确：它现在需要审批，H 只读 ⇒ 不能拥有它"
+    # 负控：同一族的 `detect_verifier` 跑的是工具自己写死的 `--version` 探测，
+    # 调用方决定不了跑什么 ⇒ 它保持 `read` + `none`（R010 已逐条登记为例外）。
+    probe = reg.get("verify.detect_verifier")
+    assert (probe.side_effect, probe.declared_external) == ("read", "none")
+    assert probe.needs_approval is False
 
 
 def test_side_effect_declarations_do_not_leak_write_tools_to_read_only_roles(store: Store):
@@ -529,6 +600,7 @@ def test_research_submit_gap_uses_the_authority_for_new_request_ids(store: Store
     """端到端：`research.submit_gap` 发出的号 == 权威实现按同一批行算出的号。"""
     reg = ToolRegistry(name="d")
     RT.install(reg, store)
+    reg.bound_role = "D"  # `P-14`：`research.*` 只有 D
     with store.tx("research_questions", actor="test", note="seed") as tx:
         tx.upsert(
             "research_questions",
@@ -569,6 +641,7 @@ def test_dedup_check_does_not_claim_new_when_the_table_cannot_be_read(store: Sto
     # ---- 负控 2：没有 store ⇒ 早就是 fail-closed（对照用）
     no_store = ToolRegistry(name="no-store")
     ST.register(no_store, workspace=store.root)
+    no_store.bound_role = "A"  # `P-14`：`search.*` 只有 A
     miss = no_store.call("search.dedup_check", title="x", year=2020)
     assert miss.ok is False and miss.meta["kind"] == "no_store" and miss.meta["checked"] is False
 
@@ -614,6 +687,7 @@ def test_trace_chain_without_any_graph_is_not_checked_not_ok():
     """核心：无 store 无 graph ⇒ `checked=False` + ok=False（不是 ok=True + step_count=0）。"""
     reg = ToolRegistry(name="trace-none")
     TR.register(reg)  # 既不给 store 也不给 graph
+    reg.bound_role = "C"  # `P-14`：`trace.*` 的声明角色是 C/D，这里代表只读的 C
     res = reg.call("trace.chain", relation_ids=["0000"])
     assert res.ok is False
     assert res.meta.get("kind") == "no_graph"
@@ -637,6 +711,7 @@ def test_trace_lookups_without_graph_say_not_checked_not_not_found(store: Store)
     """4.3(a)⑤⑥：L1/L2/L3 在"没有图可查"时也必须说"没查"，不许说"查了、没有"。"""
     reg = ToolRegistry(name="trace-none")
     TR.register(reg)
+    reg.bound_role = "C"  # `P-14`：同上
     cases = (
         ("trace.relation", {"relation_id": "0000"}),
         ("trace.concept", {"concept_id": "0000"}),
@@ -737,22 +812,40 @@ def test_detect_verifier_checked_false_when_the_version_probe_fails(store: Store
 
 
 def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeypatch: pytest.MonkeyPatch):
-    """声明与实现不许再分裂：`returns=` 里承诺的键 == 各条路径实际返回的键。
+    """声明与实现不许再分裂：`returns=` 里承诺的键 == 每一条 ok 分支实际返回的键。
 
     本用例在 P1 接线（`check_formal` 转发到 `formalgw.check_lean`）之后被改过两处，
     两处都是旧断言的收敛，而不是判据放宽：
 
     - `summary` 过去必须含"未接线"（那时它确实没接线）；现在必须说清它会真跑一次；
     - 第三条路径过去断言 `reason == "not_implemented"`。那条路径给的是
-      `script_path="proofs/x.lean"`，而工作区里没有这个文件：接线之后它读不到源码，
-      于是 `formalgw` 按"文件里没有你要证的东西"给出 `decl_mismatch`（`checked=True`，
-      因为那确实是一个查完的结论）。这正是接线要的效果：路径写错了不再是一句
-      "没实现"，而是一条可诊断的结论。三条路径的键集合仍必须逐字相同。
+      `script_path="proofs/x.lean"`，而工作区里没有这个文件：接线之后它读不到源码。
+      `E-3` 之前这里报的是 `decl_mismatch`（"文件里没有你要证的东西"，`checked=True`），
+      那是"错的旧形态" —— 读不到源码是"没查成"，不是"查了、命题不成立"。
+      现在 `formalgw` 给出 `source_unreadable`，于是 `checked=False`、
+      `verified=None`（不是 `False`）。改这条断言不是为了让测试变绿，
+      而是断言本身断的就是那个错的旧形态（`E-3` 的现状读数与 `draft/28` §26.2
+      的授权都在）。四条 ok 分支的键集合仍必须逐字相同。
+    - `missing_imports`（B8a/G-18）是新加的第 7 个键：`import_unavailable` 要能回答
+      "哪个库不可得"，而六键形态里没有位置放它。它四条路径都在（历史形态"要么都有、
+      要么都没有"保持不变），空列表只表示"检查器没有抱怨找不到包"。
+    - `verifier_status`（B5b/B8b 的 `G-24①`）是第 8 个键：`reason` 收口进
+      `agent_e.FORMAL_REASONS`/本层受控词表之后，检查器原样报的那个状态必须有
+      一个透传栏（收口与透传成对存在，否则收口就是删信息）。四条路径都在，
+      拒绝路径上是空串（"没有检查器状态可透传"）。
+    - 第 4 条 ok 分支 `tool_crashed`（`E-4`：探测本身没做成）此前没有被采样
+      （`B-R7` 登记过这件事），现在补上。
+
+    这里采的是 ok 分支。三条 `return fail(...)` 分支给的是 `ok=False` + `data=None`
+    （一个键都不给），由本文件里逐条 `return` 比对声明的用例与运行期那条
+    `test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind` 钉住
+    （`I-4`/`T3`/`C2`）。
     """
     reg = registry_for(VT, store, root=store.root)
     spec = reg.get("verify.check_formal")
     declared = declared_keys(spec.returns)
-    assert declared == {"checked", "verified", "claim", "reason", "detail", "verifier_output"}
+    assert declared == {"checked", "verified", "claim", "reason", "detail",
+                        "verifier_output", "missing_imports", "verifier_status"}
     assert "真跑" in spec.summary, "summary 必须如实说明它会真的跑一次检查器"
     assert "未接线" not in spec.summary, "它已经接线了，声明里不许再写未接线"
 
@@ -775,21 +868,343 @@ def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeyp
     )
     d2 = reg.call("verify.check_formal", claim="1+1=2").data
     # ---- 路径 3：有后端 + 给了脚本路径，但盘上没有这个文件
+    # （`E-3`：这是"没查成"`source_unreadable`，不是 `decl_mismatch`）
     d3 = reg.call("verify.check_formal", claim="1+1=2", script_path="proofs/x.lean").data
+    # ---- 路径 4（`E-4`，`B-R7` 之前没采）：探测本身没做成 ⇒ tool_crashed。
+    # `available=[]` 与 `checked=False` 是两条独立的事实：这一支说的不是
+    # "环境里没有检查器"，而是"我们不知道环境里有没有"。
+    monkeypatch.setattr(
+        VT,
+        "detect_verifier",
+        lambda: {
+            "checked": False,
+            "available": [],
+            "available_names": [],
+            "reason": "探测本身没做成（桩）",
+            "probe_errors": ["PATH 读不了（桩）"],
+        },
+    )
+    d4 = reg.call("verify.check_formal", claim="1+1=2").data
 
-    for branch in (d1, d2, d3):
+    for branch in (d1, d2, d3, d4):
         assert set(branch) == declared, f"返回的键与 returns= 不一致：{sorted(branch)}"
         assert branch["verifier_output"] == ""
-    # 前两条是"没查成"：checked=False 且没有验证结论。
-    for branch in (d1, d2):
+    # 三条是"没查成"：checked=False 且没有验证结论。
+    for branch in (d1, d2, d3, d4):
         assert branch["checked"] is False
         assert branch["verified"] is None, "没跑过 ⇒ verified 必须是 None，不许写成 False"
-    # 第三条是"查了"（源码里没有那个声明）⇒ 不许被读成通过。
-    assert d3["checked"] is True
-    assert d3["verified"] is False, "声明名对不上不许判通过"
-    assert [d["reason"] for d in (d1, d2, d3)] == ["no_backend", "no_script", "decl_mismatch"]
+    # 第三条路径（`E-3` 之后）：盘上没有那个脚本 ⇒ 没查成（`source_unreadable`）。
+    # 它过去被折成 `decl_mismatch`（"声明名对不上"，`checked=True`/`verified=False`），
+    # 那是把"路径写错了"报成"你证的东西不在文件里" —— 调用方会去改数学而不是改路径。
+    assert [d["reason"] for d in (d1, d2, d3, d4)] == [
+        "no_backend", "no_script", "source_unreadable", "tool_crashed",
+    ]
+    # `verifier_status`（`G-24①`）：检查器原样报的那个状态。工具层这一栏与 `reason`
+    # 逐字相同（收口发生在 E 那一层，见 tests/test_agent_e_formal_reasons.py）。
+    # `d1` / `d2` 是"没起检查器"（无后端 / 调用方没给源码）⇒ 空串
+    # （"没有检查器状态可透传"）；`d4` 是探测本身没做成，也没有检查器状态。
+    # `d3` 例外：`source_unreadable` 是 `formalgw` 报出来的状态，所以它照样透传
+    # —— 它同时是 `reason` 与 `verifier_status`，因为这一档说的就是"这次检查没发生"。
+    assert [d["verifier_status"] for d in (d1, d2, d4)] == ["", "", ""]
+    assert d3["verifier_status"] == "source_unreadable"
     # 负控：任何分支都不许声称验证过
-    assert all(b["verified"] is not True for b in (d1, d2, d3))
+    assert all(b["verified"] is not True for b in (d1, d2, d3, d4))
+
+
+def test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """`I-4`/`T3`/`C2`：三条拒绝分支逐条采样 —— 失败时 `ok=False`、`data=None`、kind 在声明里。
+
+    拒绝分支没有键集合可谈（`base.fail` 逐字 `data=None`），所以声明用分号把
+    "失败：ok=False + kind(...) + data=None"写成了另一节。此前没有任何用例采过
+    这三条分支（`D2` 登记过），于是把它们改成猜测/放行在套件里看不出来。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    spec = reg.get("verify.check_formal")
+    declared_kinds = _declared_failure_kinds(spec.returns)
+    assert declared_kinds, f"声明里没有可解析的失败 kind 词表：{spec.returns!r}"
+
+    monkeypatch.setattr(
+        VT, "detect_verifier",
+        lambda: {"checked": True, "available": [{"name": "lean", "path": "lean", "version": "4"}],
+                 "available_names": ["lean"], "reason": "有", "probe_errors": []},
+    )
+
+    # ---- 拒绝 1：给了源码但源码里没有具名声明，调用方也没给 checker_name
+    # ⇒ 不回退成文件名词干（猜一个名字等于把"声明名核对"这条判据悄悄关掉）。
+    r1 = reg.call("verify.check_formal", claim="c", source="example : True := trivial")
+    # ---- 拒绝 2：`formalgw.check_lean` 对非法参数抛 ValueError ⇒ param_error
+    def raise_value_error(*_a, **_kw):
+        raise ValueError("（桩）声明名不合法")
+
+    monkeypatch.setattr(FG, "check_lean", raise_value_error)
+    r2 = reg.call("verify.check_formal", claim="c", source="theorem t : True := trivial",
+                  checker_name="t")
+    # ---- 拒绝 3：桥接层抛别的异常 ⇒ check_failed（"没查成"，既不是通过也不是证伪）
+    def raise_runtime_error(*_a, **_kw):
+        raise RuntimeError("（桩）桥接层崩了")
+
+    monkeypatch.setattr(FG, "check_lean", raise_runtime_error)
+    r3 = reg.call("verify.check_formal", claim="c", source="theorem t : True := trivial",
+                  checker_name="t")
+
+    got = [r1, r2, r3]
+    assert [r.ok for r in got] == [False, False, False], [r.error for r in got]
+    assert [r.data for r in got] == [None, None, None], (
+        "拒绝分支不许给键集合（`base.fail` 逐字 `data=None`）—— 给了键就等于"
+        "声明里那节'失败分支不承诺上面那套键'是假的"
+    )
+    kinds = [r.meta.get("kind") for r in got]
+    assert kinds == ["param_error", "param_error", "check_failed"], kinds
+    for kind in kinds:
+        assert kind in declared_kinds, (
+            f"实测 kind={kind!r} 不在声明的失败词表 {sorted(declared_kinds)} 里 —— "
+            "调用方按声明写错误处理就会漏掉这一档（`C1` 是同一个形态）"
+        )
+
+
+def test_code_hash_failure_kinds_match_its_declaration_every_branch(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """`C1`：`verify.code_hash` 的 `returns=` 失败词表与各分支实测 kind 集合逐值相同。
+
+    现状（`C1` 登记）：声明写 ``kind(io_error/param_error)``，而两条最可能的失败
+    ——脚本路径越界、工作区内文件不存在——都抛 `ParamError`（`ToolError` 的子类），
+    被 `base.ToolRegistry.call` 的 `except ToolError` 兜成泛化的 `kind="tool_error"`：
+    声明的取值集合里少了一个真实取值，而承诺的那两个一个都不出现。
+    修法选的是"让实现产出声明承诺的 kind"，所以这条断言是双向的：
+    每个分支的实测 kind 都要在声明的词表里，且词表里每个 kind 都真的被某个分支产出
+    （只测一个方向时，"声明里多写一个永远不出现的 kind"照样能绿）。
+
+    负控（见 `temp/batchL-probe.py`）：把 `_hash_of` 的两支收口撤掉（回到
+    `except ToolError: raise`）⇒ 越界与文件不存在两支变回 `tool_error`，本条必红。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    spec = reg.get("verify.code_hash")
+    declared_kinds = _declared_failure_kinds(spec.returns)
+    assert declared_kinds == {"io_error", "param_error"}, (
+        f"声明里的失败词表变了：{spec.returns!r} ⇒ 抽到 {sorted(declared_kinds)}"
+    )
+
+    (store.root / "probe.py").write_text("print(1)\n", encoding="utf-8")
+
+    # ---- ok 分支：工作区内的真实文件
+    good = reg.call("verify.code_hash", path="probe.py")
+    assert good.ok, good.error
+    assert set(good.data) == declared_keys(spec.returns)
+
+    # ---- 失败 1：路径越界（`_resolve` 的守卫拒绝）
+    out_of_bounds = reg.call("verify.code_hash", path="../outside.py")
+    # ---- 失败 2：工作区内、但盘上没有这个文件（`code_hash` 的 ParamError）
+    missing = reg.call("verify.code_hash", path="probes/not_here.py")
+    # ---- 失败 3：`open()` 抛 OSError（文件被占用 / ACL 拒绝）
+    (store.root / "locked.py").write_text("print(1)\n", encoding="utf-8")
+
+    def boom(*_a, **_k):
+        raise PermissionError("拒绝访问")
+
+    monkeypatch.setattr(VT, "open", boom, raising=False)
+    unreadable = reg.call("verify.code_hash", path="locked.py")
+    # ---- 失败 4：通用参数校验（框架那一层拒的，与工具自身无关）
+    bad_param = reg.call("verify.code_hash", path=5)
+    monkeypatch.undo()
+
+    got = [out_of_bounds, missing, unreadable, bad_param]
+    assert [r.ok for r in got] == [False, False, False, False], [r.error for r in got]
+    assert [r.data for r in got] == [None, None, None, None], (
+        "拒绝分支不许给键集合（`base.fail` 逐字 `data=None`）"
+    )
+    kinds = [r.meta.get("kind") for r in got]
+    assert kinds == ["param_error", "io_error", "io_error", "param_error"], kinds
+    assert "tool_error" not in kinds, (
+        "泛化的 tool_error 意味着有一条失败路径逃出了本工具自己的收口 ⇒ "
+        "声明里承诺的 kind 一个都没被产出（`C1` 的现状形态）"
+    )
+    for kind in kinds:
+        assert kind in declared_kinds, (
+            f"实测 kind={kind!r} 不在声明的失败词表 {sorted(declared_kinds)} 里"
+        )
+    # 反向：声明里每个 kind 都必须被至少一个分支真的产出（否则是空承诺）
+    assert set(kinds) == declared_kinds, (
+        f"声明承诺 {sorted(declared_kinds)}，而实测只产出 {sorted(set(kinds))} —— "
+        "声明里写了永远不出现的取值时，按声明写错误处理的调用方会白写一档"
+    )
+    # 削掉桩之后同一条路径照旧可用（负控的反面：失败不是因为桩一直在）
+    ok_again = reg.call("verify.code_hash", path="locked.py")
+    assert ok_again.ok and len(ok_again.data["code_hash"]) == 16
+
+
+# ------------------------------------------------------------ 分支级契约（`I-4`/`T3`）
+
+
+def _declared_failure_kinds(returns: str) -> set[str]:
+    """从 `returns=` 的失败节里抽出 kind 词表（形如 `kind(io_error/param_error)`）。
+
+    只认括号里用 `/` 分隔的写法 —— 那是本仓库 `verify.*` 的既有写法
+    （`verify.code_hash` 与 `verify.check_formal` 都是这样写的）。抽不到就返回空集，
+    调用方必须把"空集"读成"没抽到"（三态纪律：抽不到不是通过）。
+    """
+    out: set[str] = set()
+    for group in re.findall(r"kind\(([^()]*)\)", returns or ""):
+        out |= {x.strip() for x in group.split("/") if x.strip()}
+    return out
+
+
+def _function_segment(source: str, func: str) -> str:
+    """从模块源码里取出某个顶层函数的源码片段（用来做逐分支的语法级检查）。"""
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == func:
+            seg = ast.get_source_segment(source, node)
+            assert seg, f"取不出 {func} 的源码片段"
+            return seg
+    raise AssertionError(f"{func} 不在这个模块的源码里")
+
+
+def _branch_shapes(source: str, func: str):
+    """逐条 `return` 抽形状，返回 `(ok 分支键集合, fail 分支键集合, fail 分支 kind, 其它)`。
+
+    规则（与 `base.ok` / `base.fail` 的签名一致）：
+
+    - `return ok({...})` ⇒ ok 分支，键集合 = 那个字典字面量的键。第一个位置参数
+      不是字典字面量时记 `None`（读不出 —— 由调用方判红，读不出不是通过）；
+    - `return fail(...)` ⇒ fail 分支，键集合记它第一个位置参数（不是字典时 `None`），
+      kind 取 `kind=` 那个关键字；
+    - 其它形态（返回变量、三元表达式……）进"其它"，调用方必须断言它是空的，
+      否则一条"把字典挪到别处再 return"的重构会让判据静默失效。
+    """
+    seg = _function_segment(source, func)
+    fn = ast.parse(seg).body[0]
+    assert isinstance(fn, ast.FunctionDef)
+    ok_keys: list[frozenset[str] | None] = []
+    fail_keys: list[frozenset[str] | None] = []
+    fail_kinds: list[str | None] = []
+    other: list[str] = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Return) or node.value is None:
+            continue
+        call = node.value
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+            other.append(ast.dump(call)[:80])
+            continue
+        name = call.func.id
+        if name not in ("ok", "fail"):
+            other.append(name)
+            continue
+        first = call.args[0] if call.args else None
+        keys: frozenset[str] | None = None
+        if isinstance(first, ast.Dict):
+            keys = frozenset(
+                str(k.value) for k in first.keys if isinstance(k, ast.Constant)
+            )
+        if name == "ok":
+            ok_keys.append(keys)
+        else:
+            kind = None
+            for kw in call.keywords:
+                if kw.arg == "kind" and isinstance(kw.value, ast.Constant):
+                    kind = str(kw.value.value)
+            fail_keys.append(keys)
+            fail_kinds.append(kind)
+    return ok_keys, fail_keys, fail_kinds, other
+
+
+def test_every_return_of_check_formal_matches_its_declaration(store: Store):
+    """`I-4`/`T3`：逐条 `return` 与声明比对 —— 覆盖全部 ok 分支与全部 fail 分支。
+
+    旧判据只采 3 条 ok 分支，于是「分支间键集合不一致」与「失败分支被改成放行」
+    在套件里结构性看不见（`I-4` 的注入实验：把拒绝分支改成猜一个名字，104 条
+    相关用例照样全绿）。这里改成语法级判据：从 `verify_tools` 的源码里把
+    `check_formal` 的每一条 `return` 抽出来，逐条与声明比对。
+
+    三条硬要求：
+
+    1. 每一条 ok 分支的键集合必须与声明的键集合逐字相同（不是子集）；
+    2. 每一条 fail 分支都不许给键集合（`data=None`）；
+    3. 每条 fail 分支的 `kind` 必须在声明的失败词表里；
+    4. 没有"读不出形状"的 `return` —— 读不出不许算通过。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    spec = reg.get("verify.check_formal")
+    declared = declared_keys(spec.returns)
+    declared_kinds = _declared_failure_kinds(spec.returns)
+    src = Path(VT.__file__).read_text(encoding="utf-8")
+    ok_keys, fail_keys, fail_kinds, other = _branch_shapes(src, "check_formal")
+
+    assert not other, f"check_formal 里有读不出形状的 return：{other}"
+    assert len(ok_keys) >= 4, (
+        f"只抽到 {len(ok_keys)} 条 ok 分支 —— 判据没覆盖到该覆盖的分支"
+        "（今天有：探测没做成 / 无后端 / 无脚本 / 跑完一次）"
+    )
+    for keys in ok_keys:
+        assert keys is not None, (
+            "有一条 ok 分支的返回不是字典字面量 ⇒ 键集合读不出来。"
+            "把字典挪到别处构造会让这条判据静默失效，请把它写成字面量或显式登记例外"
+        )
+        assert keys == declared, (
+            f"ok 分支的键与 `returns=` 不一致：多 {sorted(keys - declared)}，"
+            f"少 {sorted(declared - keys)}"
+        )
+    assert fail_keys, "一条 fail 分支都没抽到 —— 这条判据其实没在检查拒绝路径"
+    for keys in fail_keys:
+        assert keys is None, (
+            f"fail 分支居然给了键集合 {sorted(keys)}，而声明写的是 `data=None`（一个键都不给）"
+        )
+    assert declared_kinds, f"声明里没有可解析的失败 kind 词表：{spec.returns!r}"
+    assert len(fail_kinds) == len(fail_keys)
+    for kind in fail_kinds:
+        assert kind in declared_kinds, (
+            f"fail 分支的 kind={kind!r} 不在声明的失败词表 {sorted(declared_kinds)} 里"
+        )
+
+
+def test_negative_control_the_branch_checker_catches_an_extra_key_in_an_ok_branch(store: Store):
+    """负控（`I-4`）：给一条 ok 分支多塞一个键 ⇒ 逐分支判据必须发现。
+
+    注入打在真实源码片段的文本上（把 `return ok(` 的第一个位置参数换成一个
+    多带一个键的字典）。第一句断言"注入确实改了源码片段"：锚点哪天失效，
+    这条会红，而不是静默地什么都没注入（空转的负控与没有负控是一回事）。
+    """
+    reg = registry_for(VT, store, root=store.root)
+    declared = declared_keys(reg.get("verify.check_formal").returns)
+    src = Path(VT.__file__).read_text(encoding="utf-8")
+    seg = _function_segment(src, "check_formal")
+    mutated = seg.replace("return ok(", 'return ok({"leaked_key": 1}, ', 1)
+    assert mutated != seg, "注入锚点失效（`return ok(` 的写法变了）—— 重新对准锚点"
+    ok_keys, _, _, _ = _branch_shapes(mutated, "check_formal")
+    assert any(keys is not None and keys != declared for keys in ok_keys), (
+        "给一条 ok 分支多塞一个键，逐分支判据居然没发现"
+    )
+
+
+def test_negative_control_the_branch_checker_catches_a_keyed_fail_branch(store: Store):
+    """负控（`I-4`/`C2`）：让一条 fail 分支返回字典 ⇒ 逐分支判据必须发现。
+
+    这正是 `I-4` 注入实验的形态：把拒绝分支改成"给一套键 / 猜一个名字"，
+    旧判据全绿。现在它必须响。
+    """
+    src = Path(VT.__file__).read_text(encoding="utf-8")
+    seg = _function_segment(src, "check_formal")
+    mutated = seg.replace("return fail(", 'return fail({"leaked_key": 1}, ', 1)
+    assert mutated != seg, "注入锚点失效（`return fail(` 的写法变了）—— 重新对准锚点"
+    _, fail_keys, _, _ = _branch_shapes(mutated, "check_formal")
+    assert any(keys is not None for keys in fail_keys), (
+        "fail 分支返回了字典，逐分支判据居然没发现"
+    )
+
+
+def test_negative_control_the_branch_checker_catches_an_unreadable_return():
+    """负控（`I-4`）：把返回的构造器换成一个不认识的函数 ⇒ 必须落进"读不出"而不是静默通过。
+
+    这模拟的是"把字典挪到别处再 return"那类重构：形状读不出来时判据必须响，
+    否则一条判据会在重构之后静默地什么都不检查。
+    """
+    seg = _function_segment(Path(VT.__file__).read_text(encoding="utf-8"), "check_formal")
+    mutated = seg.replace("return ok(", "return _payload(", 1)
+    assert mutated != seg, "注入锚点失效（`return ok(` 的写法变了）—— 重新对准锚点"
+    _, _, _, other = _branch_shapes(mutated, "check_formal")
+    assert other, "把返回的构造器换成不认识的函数之后，逐分支判据居然什么都没报"
 
 
 def test_declared_returns_are_a_subset_of_what_the_tools_actually_return(store: Store):

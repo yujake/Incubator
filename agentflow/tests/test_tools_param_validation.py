@@ -65,6 +65,25 @@ def _names(registry) -> list[str]:
     return sorted(registry.names())
 
 
+class _RoleGateBypassedRegistry(ToolRegistry):
+    """测试专用子类：参数门要逐个工具跑，而"所有工具"跨越每一个角色面。
+
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张
+    正常注册表能调全部 55 个工具（那是设计的意图：只读角色拿不到写工具）。
+    本模块的判据是"参数校验对每个工具都生效"，与权限无关 —— 所以这里只覆写
+    那一个谓词，让参数门能覆盖全表。
+
+    为什么这是可接受的、而不是"测试把门拆了"：
+    1. 覆写发生在本文件的子类上，生产类 `ToolRegistry` 一字未改（有
+       `test_tools_base.py` 的成对负控守着那个谓词本身）；
+    2. `_role_surface` 的只读剥离不经过本覆写，所以下面"探针表与真表工具面一致"
+       那条自检仍然在同一个过滤判据上（它比的是 `names()`，不是"能不能调"）。
+    """
+
+    def _callable_for(self, spec, role, *, include_registered_writers):  # type: ignore[override]
+        return None
+
+
 def _spy_registry(registry, hits: list[str]) -> ToolRegistry:
     """把每个 handler 换成"一被调用就往 `hits` 里记一笔"的探针，装进一个新注册表。
 
@@ -78,7 +97,11 @@ def _spy_registry(registry, hits: list[str]) -> ToolRegistry:
     一个"先干活再报参数错"的实现，返回值看起来与正确实现完全一样。
     `FrozenInstanceError` 挡住的是"测试篡改规格"，挡不住"`call` 里的顺序写反了"。
     """
-    spy_reg = ToolRegistry(name="param-gate-spy")
+    spy_reg = _RoleGateBypassedRegistry(name="param-gate-spy")
+    # 见 `_RoleGateBypassedRegistry` 的 docstring：本模块测的是参数门，不是权限门。
+    # 规格本身逐字段不变（只换 handler），所以下面"探针表与真表工具面一致"
+    # 那条自检仍然成立。
+    assert spy_reg.bound_role is None
 
     def make(_original, _name: str):
         def spy(*args, **kwargs):
@@ -231,7 +254,7 @@ def test_param_error_is_a_controlled_refusal_not_a_crash(registry):
     把参数错误报成"未知异常"会让调用方以为框架坏了（于是去查框架），
     而真相是"你自己传错了"。两者必须能分开 —— 这是本项目三态纪律在工具层的落点。
     """
-    res = registry.call("table.count", __bogus_extra_param__="x")
+    res = registry.call("table.count", __bogus_extra_param__="x", role="A")
     assert res.ok is False
     assert _kind(res) == "param_error", res.meta
     assert "参数错误" in (res.error or ""), res.error

@@ -51,6 +51,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
 from . import capabilities as C
+from . import cancellation as CX
 from . import policy as P
 from . import schema as S
 from .cancellation import CANCEL_CODES, CancelRequested, CancelToken, detail_of
@@ -202,6 +203,22 @@ class LocalBackend:
         它的形参名就是它与调用方的契约。把多出来的参数丢掉会让
         "我传了 `submit_requests=True` 但它被忽略了"看起来像一次成功 ——
         于是 `gaps()` 报告里说"已提交"，而请求一条也没有。
+
+        ## `G-1`：token 不再"收下就扔"
+
+        旧版末行是 `return fn(**given)` —— `token` 收了，然后一个字都没往下传，
+        于是"取消"只覆盖待启动的任务：已经在跑的 handler 照样跑完，
+        以 `done/ok` 结束（实测 `temp/auditG-probe1.txt`）。
+
+        现在的形态：调用期间把 `token` 放进一个 `ContextVar`，handler 通过
+        `cancellation.current_token()` / `raise_if_cancelled()` 读它，
+        起子进程时用 `cancellation.run_cancellable(..., token=...)`。
+        为什么用 ContextVar 而不是给实例挂属性：`resolve(role)` 按角色
+        缓存实例，两个并发召唤会共享同一个对象 ⇒ 挂实例属性会让 A 的 token
+        被 B 覆盖（静默串味：A 按了停止却停掉了 B）。ContextVar 按执行上下文隔离。
+
+        调用前先查一次 token：已经取消的召唤不该进 handler（否则会白干一轮，
+        还可能写半张表）。
         """
         spec = C.find_action(role, action)
         if spec is None:  # pragma: no cover - summon 已经查过，这里是纵深防御
@@ -224,7 +241,21 @@ class LocalBackend:
                     f"{role}.{action}（{spec.handler_name}）不认这些参数：{unknown}；"
                     f"它只接 {sorted(declared)}。静默丢弃会让'我传了但它没看'看起来像成功"
                 )
-        return fn(**given)
+        # `G-1`：把 signal 送进 handler 的执行上下文；已取消 ⇒ 不进 handler
+        token.raise_if_cancelled()
+        var = CX._CURRENT_TOKEN
+        reset = var.set(token)
+        try:
+            # 显式声明了 `token` / `cancel_token` 形参的 handler 直接收到它 ——
+            # 这让"这个 handler 支持取消"在签名上可见（AST 扫得出来），
+            # 而不必读实现才知道。没声明的走 ContextVar（今天全部如此）。
+            for name in ("token", "cancel_token"):
+                if name in declared:
+                    given[name] = token
+                    break
+            return fn(**given)
+        finally:
+            var.reset(reset)
 
 
 class SubagentBackend:
@@ -626,8 +657,23 @@ class Conductor:
                 # `note` 那一层跨版本可用，字段那一层有表级唯一性断言。
                 outcome = self.meter.charge_once(charge, idem_key=settle_key(res.task_id))
                 if outcome["duplicate"]:
-                    self._log(f"跳过重复记账（{res.task_id} 的账已存在）", task_id=res.task_id)
-                    return res
+                    # `G-8`：这一支不许早退。
+                    #
+                    # 走到这里说明账上已经有这一笔 —— 典型现场是"账已落、
+                    # `tasks` 还没写回就崩了"（或两个写者竞争，其中一个先落了账）。
+                    # 早退会把下面的 `tokens_for()` 抄回与 `_set_usage()` 一起跳过，
+                    # 于是 `tasks.tokens` 停在旧值（0）而账本是 1500：
+                    # `verify_all` 报 `usage_task_total_mismatch`，
+                    # `stats()['budget']` 也跟着与权威账分家 —— 同一件事两个数字。
+                    #
+                    # 修法是"落到同一条路径上"：`tokens_for()` 与 `_set_usage()`
+                    # 读写的都是账本上的值（不是累加），所以重放是幂等的 ——
+                    # "先 charge 再抄回"这条构造性等式因此在重放路径上也成立。
+                    self._log(
+                        f"重复记账（{res.task_id} 的账已存在）⇒ 不再落账，"
+                        f"但仍把账上的值抄回 tasks（`G-8`）",
+                        task_id=res.task_id,
+                    )
             else:
                 # 没有 `task_id` ⇒ 没有稳定的身份 ⇒ 构不成幂等键。
                 # 如实退化成"每次都记"（与既有行为一致），不假装它幂等。
@@ -841,8 +887,10 @@ class Conductor:
         # ---- [7] 记账：权威账是 `usage_ledger`，`tasks.tokens/usd` 由它派生
         #
         # 为什么"先 charge、再把账本的值抄进 tasks"，而不是 `summon` 自己累加一遍：
-        # `verify.py:708-713` 会检查 `tasks.tokens` 与 `usage_ledger` 里该 task 的
-        # 汇总相等（不等就报 `usage_task_total_mismatch`："预算判断会按哪一份？"）。
+        # `verify.verify_all` 的 `dangling_usage_task`（账本行挂不到任务行）与
+        # `usage_task_total_mismatch`（`tasks.tokens` 与 `usage_ledger` 里该 task 的
+        # 汇总不等，文案是"预算判断会按哪一份？"）两条检查都在这条链上 ——
+        # 它们要的是同一件事：两处对同一次召唤的花销必须给出同一个数字。
         # 自己累加的那个相等只是"两处各算一遍但愿它们相等" —— 任何一条漏记
         # （一次重试、一个还没接线的 `_call`）都会让它静默不等。
         # 现在的写法让相等由构造保证。
@@ -1162,10 +1210,17 @@ class Conductor:
         # 视图与权威账对账（以账为准）：`stats()` 是唯一读这个视图的地方，
         # 每次问都先对齐 —— 这样"本次 run 花了多少"不会因为某条路径漏推视图
         # 而与台账给出不同的数字。
-        self.budget.reconcile(
-            tokens=sum(int(r.get("tokens") or 0) for r in rows),
-            usd=round(sum(float(r.get("usd") or 0.0) for r in rows), 6),
-        )
+        #
+        # `G-8`：对账的来源必须是权威账（`usage_ledger`），不是 `tasks` 求和。
+        # `tasks.tokens/usd` 是派生列，而"派生"不等于"随时同步"：
+        # 崩溃窗口（账已落、写回没做）里它停在旧值 —— 拿它去 reconcile
+        # 等于"把视图对齐到另一份可能过期的派生数据"，而
+        # `MemoryBudgetTracker` 的契约逐字是"以账为准"（见它的 docstring
+        # 与 `reconcile()` 的说明）。`TokenMeter.spent()` 每次都从
+        # `usage_ledger` 现读，是账本口径的唯一读取口。
+        ledger = self.meter.spent()
+        self.budget.reconcile(tokens=int(ledger["tokens"]),
+                              usd=round(float(ledger["usd"]), 6))
         by_role: dict[str, int] = {}
         by_outcome: dict[str, int] = {}
         by_status: dict[str, int] = {}

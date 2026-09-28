@@ -38,6 +38,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
@@ -318,15 +319,18 @@ class DocToolError(ValueError):
 
 
 def citation_ref_parts(citation: Any) -> tuple[str, str]:
-    """把一条 citation 拆成 `(前缀, 代号)`。与 `verify.py` 的 `dangling_citation` 同一口径。
+    """把一条 citation 拆成 `(前缀, 代号)`。
 
-    # 待修：这仍是第二份引用解析实现（第一份在 `verify.py:585-602` 里内联着）。
-    # 正解是 `verify.py` 导出一个 `parse_citation()` 让两边共用 —— 但 `verify.py`
-    # 是 FC-27 禁改区（auth-audit），我不改它，只把口径抄齐并写清来源。
-    # 只要 `verify.py` 那边的解析改了（例如支持新的前缀），这里必须同步改。
+    这里是转发，不是实现：唯一实现在 `agentflow.textutil.citation_ref_parts`
+    （`P-5` 把两份实现合成了一份）。转发体刻意只做"取到别处的对象并原样调用" ——
+    在转发之外补默认值、吞异常或改返回值，就等于又长出一份语义不同的实现，
+    而那正是 `P-5` 要消掉的东西（`lint_rules` 的 R003 也按这个形状识别转发）。
+
+    曾经这里是第二份实现（抄了 `verify.py` 的 `dangling_citation` 内联解析），
+    并带着一条"待修"注释。现在 `verify.py` 与这里调的是同一个函数：改口径只需改一处，
+    而且"G 认为合法的引用"与"verify 认为悬空的引用"在结构上不可能再分家。
     """
-    kind, _, ref = str(citation).partition(":")
-    return kind, ref.split("#")[0]
+    return T.citation_ref_parts(citation)
 
 
 def check_citations(rows_of: Any, claims: Sequence[Mapping[str, Any]]) -> dict:
@@ -401,6 +405,255 @@ def check_citations(rows_of: Any, claims: Sequence[Mapping[str, Any]]) -> dict:
             + (f"**{len(missing)} 条指向不存在的东西**" if missing else "没有坏引用")
         ),
         "missing": missing,
+        "resolved": resolved,
+    }
+
+
+def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str, str]:
+    """`proof_location` 的形态分类：整个仓库只有这一份实现（`R2R2-R1`/`R2R2-R2`）。
+
+    为什么必须只有一份：写入期（本模块的 :func:`check_proofs`）与事后门
+    （`gates.gate_g3`）对同一个字符串必须给出同一个分类。旧版各写一套正则、
+    彼此没有交叉断言，实测同一份数据 18 档里有 9 档分歧 —— 其中最难看的一档是
+    "断言自己连 `claim_id` 都没有，`proof_location="claim-1:3"`"：
+    写入期报"指向一个不存在的断言"，事后门却判成 `file:line` 并 pass。
+
+    返回 `(kind, base)`：
+
+    - `("self_ref", base)`：`loc` 是本文档里真实存在的 `claim_id`（裸写、或
+      `claim_id:行号`）；`base` 是那个 `claim_id`。
+    - `("cross_ref", base)`：形态是 `名字:数字`（没有点号后缀 ⇒ 不是文件名），
+      但 `base` 不在 `known_ids` 里。两个调用方对此处置不同、分类相同：
+      `gate_g3` 报 error（事后分不清"忘了登记"与"根本不存在"，fail-closed）；
+      `check_proofs` 报 `proof_location_not_found`（写入期能说得更准）。
+      注意：这条差别是刻意的：分类同口径 ≠ 处置同强度。
+    - `("file", base)`：其余一切，当路径看。是否真的存在由调用方决定 ——
+      `check_proofs` 要求"工作区内、盘上真实存在"，`gate_g3` 只要求"形态可解析"
+      （它是事后门，不读盘；这层强弱差别同样刻意的，见 `gate_g3` 的适配说明）。
+    """
+    rel = str(loc or "").strip().split("#")[0].strip()
+    known = {str(x) for x in known_ids}
+    #: 形态 `名字:数字`（或 `名字:数字-数字`）—— 本文档内交叉引用的写法。
+    is_xref_form = re.match(r"^[^:\\/]+:\d+(-\d+)?$", rel) is not None
+    head = rel.rsplit(":", 1)[0] if re.match(r"^.+:\d+(-\d+)?$", rel) else rel
+    if rel in known:
+        return "self_ref", rel
+    if head in known:
+        return "self_ref", head
+    # 有"点号 + 1–6 位字母数字后缀"就当文件名（`real.lean:3` / `x.py` / `p1.py:12`）。
+    looks_like_file = re.search(r"[.][A-Za-z0-9]{1,6}", rel) is not None
+    if is_xref_form and not looks_like_file:
+        return "cross_ref", head
+    # 兜底：既没有扩展名、也没有任何路径分隔符的字符串不是文件描述
+    # （`见上文所述` / `see above`）。旧版事后门把它判成 fail，写入期也报
+    # `proof_location_not_found`；改成共用一份实现时这里必须先收窄，
+    # 否则"抽公共函数"这一次改动会把事后门放宽（实测：旧用例
+    # `test_gate_g3_rejects_a_proof_location_that_is_neither_id_nor_path` 变红）。
+    if not looks_like_file and not re.search(r"[/\\]", rel):
+        return "cross_ref", head
+    return "file", (rel.rsplit(":", 1)[0] if re.match(r"^.+:\d+(-\d+)?$", rel) else rel)
+
+
+def check_proofs(
+    rows_of: Any,
+    claims: Sequence[Mapping[str, Any]],
+    *,
+    workspace_root: Any = None,
+) -> dict:
+    """核对 `evidence_kind="proof"` 的断言真的挂在一份形式化证据上（`D-1`）。
+
+    ## 为什么需要它（`temp/auditD-proof-selfreport.txt` 那次复现）
+
+    `check_citations` 只回答"引用的对象存不存在"。而 `evidence_kind="proof"` 这一档
+    在写入期一条判据都没有：实测（`temp/r2-d1-probe.txt`）下面四种形态全部写库成功：
+
+    ① `proof_location="PROOF-DOES-NOT-EXIST.lean:1"`（文件根本不在盘上）；
+    ② 连 `proof_location` 都不给；
+    ③ 只引 `lit:`（不引任何 `exp:` —— 没有任何实验参与过）；
+    ④ 引一条 `evidence_kind="cross_check"` 的数值实验却声称 proof。
+    四种的共同后果：`documents` 里出现一条"看起来有形式化背书"的断言，
+    而没有任何检查器参与过；下游（报告、gates）把 `evidence_kind` 当证据等级读。
+    `verify` 侧只有"引用了 `exp:` 时才查那条实验的等级"（`verify.py` 的
+    `proof_claim_rests_on_weaker_evidence`），所以 ③ 那种"一条 exp: 都不引"的形态
+    连事后也查不出来。
+
+    ## 四条判据（全部 fail-closed）
+
+    ==========================================  ==========================================
+    条件                                        要求
+    ==========================================  ==========================================
+    `evidence_kind == "proof"`                  必须至少有 1 条 `exp:` 引用
+    被引用的 `exp:` 行                          `evidence_kind` 必须是 `"proof"`
+    同一条断言                                  必须给出 `proof_location`
+    `proof_location`                            必须指向工作区内真实存在的文件；或者
+                                                是本文档里真实存在的 `claim_id`（自指）
+    ==========================================  ==========================================
+
+    第四条只证明"文件在"，不证明"文件里有那条证明" —— 那是形式化检查器
+    （`formalgw`）的事，本函数不冒充它。这两件事必须分开写，否则读者会把
+    "文件存在"读成"证明成立"（本项目最忌的那种折叠）。
+
+    注意：第四条曾经有个可被满足的形态缺口（`R2-R1` / `R2-R2`，重审实测）：
+    只要 `proof_location` 长得像 `名字:数字`（例如 `not-a-claim:7`）就整条跳过，
+    于是"指向一个不存在的断言"与"指向工作区外的文件"两种写法都写库成功。
+    现在两条都报问题。
+
+    注意口径的准确说法（`R2R2-R1` 更正）：本函数与事后门 `gates.gate_g3`
+    共用同一份形态分类实现（:func:`classify_proof_location`），但判据强度不同 ——
+    `check_proofs` 在分类之上加两道（工作区包含性 + 盘上存在性），
+    `gate_g3` 只做形态可解析（事后门，不读盘）。所以写入期拦下的，事后门不一定拦得住
+    （历史行靠事后门兜）。说"两处口径一致"是错的；准确说法是"同分类、不同强度"。
+
+    ## 三态
+
+    与 `check_citations` 同形：`rows_of is None` ⇒ `checked=False`（没查成，
+    不得读成"证据都齐"）。
+
+    返回 ``{"checked", "reason", "problems": [{claim_id, kind, detail}], "resolved"}``。
+    """
+    if rows_of is None:
+        return {
+            "checked": False,
+            "reason": (
+                "没有 store ⇒ **没法核对 proof 级断言的证据**。这是'没查'，"
+                "不是'证据都齐'（两者折叠会让自报的 proof 静默落库）"
+            ),
+            "problems": [],
+            "resolved": 0,
+        }
+
+    exp_rows = rows_of("experiments")
+    exp_by_id: dict[str, Mapping[str, Any]] = {}
+    for r in exp_rows:
+        rid = str(r.get("experiment_id") or "")
+        if rid:
+            exp_by_id[rid] = r
+
+    base = Path(workspace_root).resolve() if workspace_root else None
+    #: `R2-R1` 修法：本文档真实存在的 claim_id 集合（唯一来源 = claims 自己）。
+    #: 旧版在这一段是 `continue` —— 只要 `proof_location` 长得像 `名字:数字` 就整条跳过，
+    #: 于是 `not-a-claim:7`（不存在的字符串）也报 `problems=[]` + "proof_location 都成立"。
+    #: 分类本身交给 `classify_proof_location`（`gate_g3` 用同一个函数，
+    #: 所以两处对同一形态给同一分类；但本函数另外加了两道强度检查，见它的 docstring）。
+    known_ids = {str(c.get("claim_id")) for c in claims if (c or {}).get("claim_id")}
+    problems: list[dict] = []
+    resolved = 0
+    for i, c in enumerate(claims, 1):
+        c = c or {}
+        if str(c.get("evidence_kind") or "") != "proof":
+            continue
+        cid = str(c.get("claim_id") or f"claim-{i}")
+        exp_refs = [
+            citation_ref_parts(x)[1]
+            for x in (c.get("citations") or [])
+            if citation_ref_parts(x)[0] == "exp"
+        ]
+        if not exp_refs:
+            problems.append({
+                "claim_id": cid,
+                "kind": "proof_claim_without_formal_experiment",
+                "detail": (
+                    "声称 evidence_kind='proof'，却**一条 `exp:` 引用都没有** ⇒ "
+                    "没有任何形式化实验参与过这条断言。proof 级证据必须指向一条"
+                    "真的跑过检查器的实验行（FC-22：断言不能强于它的依据）"
+                ),
+            })
+        else:
+            for ref in exp_refs:
+                row = exp_by_id.get(ref)
+                if row is None:
+                    # 引用不存在由 `check_citations` 报（它先跑）⇒ 这里不重复报，
+                    # 只把它算作"没有可用的形式化证据"。
+                    continue
+                if str(row.get("evidence_kind") or "") != "proof":
+                    problems.append({
+                        "claim_id": cid,
+                        "kind": "proof_claim_rests_on_weaker_evidence",
+                        "detail": (
+                            f"声称 evidence_kind='proof'，但它引用的实验 {ref} 的等级是 "
+                            f"{str(row.get('evidence_kind'))!r} ⇒ **断言不能强于它的依据**"
+                            "（与 `verify.proof_claim_rests_on_weaker_evidence` 同一条口径，"
+                            "只是提前到写入现场）"
+                        ),
+                    })
+                else:
+                    resolved += 1
+
+        loc = str(c.get("proof_location") or "").strip()
+        if not loc:
+            problems.append({
+                "claim_id": cid,
+                "kind": "proof_claim_without_proof_location",
+                "detail": (
+                    "声称 evidence_kind='proof'，却没有 `proof_location` ⇒ "
+                    "读者无法打开任何一个文件去复核。文件位置是形式化证据"
+                    "唯一可被外部检查的锚点（`formalgw` 的检查器输出也落在这里）"
+                ),
+            })
+            continue
+        # `file:line` / `file` —— 行号部分不参与存在性判断（行号会漂，文件不会）。
+        # 分类只有一份实现（`classify_proof_location`）：写入期与事后门 `gate_g3`
+        # 必须对同一个字符串给同一个分类（`R2R2-R1` 的修法）。
+        kind, rel = classify_proof_location(loc, known_ids)
+        if kind == "self_ref":
+            resolved += 1
+            continue
+        if kind == "cross_ref":
+            # `R2-R1`：形态像交叉引用、但这个 claim_id 不在本文档里 ⇒ 报问题。
+            # 旧版在这里整条 `continue`，于是"指向一个不存在的断言的锚点"写库成功。
+            problems.append({
+                "claim_id": cid,
+                "kind": "proof_location_not_found",
+                "detail": (
+                    f"`proof_location={loc!r}` 既不是本文档里真实存在的 claim_id"
+                    f"（本文档已知 {len(known_ids)} 个），也长得不像文件路径 —— "
+                    "这种写法会让读者以为它指向本文档里的某条断言，而那条断言并不存在"
+                ),
+            })
+            continue
+        candidate = Path(rel)
+        if candidate.is_absolute():
+            full = candidate
+        elif base is None:
+            full = None
+        else:
+            full = base / rel
+        if full is not None and base is not None:
+            try:
+                full.resolve().relative_to(base)
+            except ValueError:
+                # `R2-R2`：绝对路径与 `../` 都能"绕过"工作区 —— 旧版只判 `is_file()`，
+                # 于是工作区外的文件（如 `../outside.lean`）也算"落点成立"。
+                # 这是把"工作区内真实存在的文件"这句声明兑现掉，不是在放宽它。
+                problems.append({
+                    "claim_id": cid,
+                    "kind": "proof_location_outside_workspace",
+                    "detail": (
+                        f"`proof_location={loc!r}` 解析到工作区之外（工作区根 {base}）⇒ "
+                        "报告的可复核范围是工作区，落点跑到外面等于引用了一份读者拿不到的文件"
+                    ),
+                })
+                continue
+        if full is None or not full.is_file():
+            problems.append({
+                "claim_id": cid,
+                "kind": "proof_location_not_found",
+                "detail": (
+                    f"`proof_location={loc!r}` 指向的文件在盘上找不到"
+                    f"（按工作区根解析成 {full}）⇒ 这条 proof 级断言没有任何可复核的落点。"
+                    "注意这一条只证明'文件在不在'，**不证明**文件里有那条证明"
+                ),
+            })
+        else:
+            resolved += 1
+
+    return {
+        "checked": True,
+        "reason": (
+            f"已核 {len(claims)} 条断言里的 proof 级条目；"
+            + (f"**{len(problems)} 条不成立**" if problems else "证据锚与 proof_location 都成立")
+        ),
+        "problems": problems,
         "resolved": resolved,
     }
 
@@ -903,6 +1156,13 @@ def build_document(
     直到事后 `verify` 才报 `dangling_citation` —— 而那时坏引用已经进了稿件。
     现在写库前用 `check_citations` 核一遍四张表；有坏引用就整笔不写，
     并把每一条坏引用逐条列进失败详情（`kind="dangling_citation"`）。
+
+    ## `evidence_kind="proof"` 的证据锚（`D-1`）
+
+    引用存在还不够：一条自报 `proof` 的断言即使引用都存在，也可能"没有任何
+    形式化检查参与过"（实测四种形态全部写库成功，见 `temp/r2-d1-probe.txt`）。
+    所以紧接着再跑 `check_proofs`：必须有 `exp:` 引用、那条实验必须是 proof 级、
+    必须有 `proof_location`、且那个文件必须真的在盘上。
     """
     if kind not in S.DOC_KINDS:
         raise ValueError(f"kind 必须是 {S.DOC_KINDS} 之一，收到 {kind!r}")
@@ -949,6 +1209,24 @@ def build_document(
                 "`scan_claim` 只看 citations 非空，查不出这一点，所以必须在这里用真实数据核。",
                 kind="dangling_citation",
                 details={"created": False, "citation_check": cites, "missing": cites["missing"]},
+            )
+        # ---- `D-1`：proof 级断言必须真的挂在一份形式化证据上（判据见 `check_proofs`）
+        proofs = check_proofs(tx.rows, norm, workspace_root=root)
+        if not proofs["checked"]:
+            raise DocToolError(
+                f"无法核对 proof 级断言的证据：{proofs['reason']}",
+                kind="proof_check_not_possible",
+                details={"created": False, "proof_check": proofs},
+            )
+        if proofs["problems"]:
+            bad = "；".join(f"[{p['claim_id']}] {p['detail']}" for p in proofs["problems"])
+            raise DocToolError(
+                f"稿件里有 {len(proofs['problems'])} 条 proof 级断言的证据不成立，整笔不写库：{bad}。"
+                "`evidence_kind='proof'` 享受的是最高一档的证据待遇，所以在写入现场就要"
+                "指向一条真的跑过检查器的实验行、并且给出一个盘上真的存在的落点 —— "
+                "否则报告里会出现'看起来有形式化背书'的结论（`D-1`）。",
+                kind="proof_evidence_not_found",
+                details={"created": False, "proof_check": proofs, "problems": proofs["problems"]},
             )
         doc_id = tx.alloc_id("doc")
         rel, absolute = _resolve_out_path(root, out_path, doc_id, default_subdir)

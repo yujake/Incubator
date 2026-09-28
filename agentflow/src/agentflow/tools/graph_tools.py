@@ -1084,6 +1084,8 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
 
     print("[7] 工具层：graph.build / stats / neighbors / relations_between（全为 read）")
     reg = ToolRegistry(name="selftest")
+    # 绑定角色（`P-14`）：`graph.*` 的声明角色是 C/D，而这张表代表的是只读的 C。
+    reg.bound_role = "C"
     names = register(reg, graph=g)
     print(f"    注册：{names}")
     for n in names:

@@ -575,6 +575,9 @@ def test_registry_call_without_budget_returns_exactly_what_it_used_to(store):
     写成"结构性断言"（只查键存在）会漏掉"多塞了一个 meta 键"这种静默变化。
     """
     reg = build_registry(store=store, workspace_root=store.root).registry
+    # `P-14`：完整注册表默认不绑定角色 ⇒ `call` 一律被拒。本用例测的是"不传 budget
+    # 时返回值逐字段不变"，所以先绑定一个合法角色（`table.count` 的角色含 A）。
+    reg.bound_role = "A"
     res = reg.call("table.count", table="concepts")
     assert res.to_dict() == {
         "ok": True,
@@ -592,6 +595,7 @@ def test_registry_call_does_not_prune_automatically(store):
     所有既有调用方拿到的数据都会悄悄变短 —— 这条用例会立刻变红。
     """
     reg = ToolRegistry(name="t")
+    reg.bound_role = "A"  # `P-14`：见 test_registry_call_without_budget_… 的同一条注释
     reg.register(
         ToolSpec(
             name="demo.huge",
@@ -599,6 +603,7 @@ def test_registry_call_does_not_prune_automatically(store):
             params={"type": "object", "properties": {}, "additionalProperties": False},
             handler=lambda: ok({"body": BIG}),
             returns="{'body'}（超长字符串）",
+            roles=("A",),
         )
     )
     res = reg.call("demo.huge")
@@ -610,6 +615,7 @@ def test_registry_call_with_budget_prunes_and_spills(tmp_path: Path):
     """显式传 `budget` 时才剪枝；且 `ok` 不变、内联在上限内、文件在盘上。"""
     b = _spill_budget()
     reg = ToolRegistry(name="t")
+    reg.bound_role = "A"  # `P-14`：见 test_registry_call_without_budget_… 的同一条注释
     reg.register(
         ToolSpec(
             name="demo.huge",
@@ -617,6 +623,7 @@ def test_registry_call_with_budget_prunes_and_spills(tmp_path: Path):
             params={"type": "object", "properties": {}, "additionalProperties": False},
             handler=lambda: ok({"body": BIG}),
             returns="{'body'}（超长字符串）",
+            roles=("A",),
         )
     )
     res = reg.call("demo.huge", budget=b, spill_root=tmp_path)
@@ -636,6 +643,7 @@ def test_budget_keyword_is_not_stolen_from_tools_that_declare_it(store):
     assert "budget" in (real.params.get("properties") or {}), "前提变了：这个工具不再声明 budget 参数"
 
     reg = ToolRegistry(name="t")
+    reg.bound_role = "A"  # `P-14`：见 test_registry_call_without_budget_… 的同一条注释
     reg.register(
         ToolSpec(
             name="demo.own_budget",
@@ -648,6 +656,7 @@ def test_budget_keyword_is_not_stolen_from_tools_that_declare_it(store):
             },
             handler=lambda budget: ok({"got": budget}),
             returns="{'got'}（回显传进来的 budget）",
+            roles=("A",),
         )
     )
     res = reg.call("demo.own_budget", budget={"max_rounds": 3})

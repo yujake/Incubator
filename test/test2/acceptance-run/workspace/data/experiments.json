@@ -10,7 +10,7 @@
       "result": "supports",
       "negation_kind": "not_proved",
       "code_path": "repro/exp1_k_spectrum.py",
-      "code_hash": "51adf95612b7b430",
+      "code_hash": "335fa6e01b82a734",
       "params": {},
       "observations": {
         "checks": [
@@ -105,7 +105,7 @@
             "severity": "must_hold"
           }
         ],
-        "elapsed_seconds": 1.167,
+        "elapsed_seconds": 1.188,
         "injected_bug": null,
         "max_seconds": 60.0,
         "n_checks": 15,
@@ -220,7 +220,7 @@
               "n_eigenvalues_sampled": 3600,
               "random_extra": 200
             },
-            "seconds": 0.138,
+            "seconds": 0.174,
             "witness_ABS_S_zero": {
               "S": [
                 -2.220446049250313e-16,
@@ -343,7 +343,7 @@
               "n_eigenvalues_sampled": 31650,
               "random_extra": 200
             },
-            "seconds": 0.239,
+            "seconds": 0.253,
             "witness_ABS_S_zero": {
               "S": [
                 0.0,
@@ -474,7 +474,7 @@
               "n_eigenvalues_sampled": 131472,
               "random_extra": 200
             },
-            "seconds": 0.79,
+            "seconds": 0.76,
             "witness_ABS_S_zero": {
               "S": [
                 -2.220446049250313e-16,
@@ -493,7 +493,7 @@
         "script": "exp1_k_spectrum.py"
       },
       "exit_code": 0,
-      "runtime_sec": 1.453,
+      "runtime_sec": 1.547,
       "artifact_paths": [],
       "counterexample": null,
       "verifier_output": "",
@@ -501,8 +501,8 @@
       "certificate": null,
       "search_bound": {},
       "for_question_id": null,
-      "notes": "[run] exit_code=0，runtime=1.453s，脚本 repro/exp1_k_spectrum.py（sha256 前 16 位 51adf95612b7b430）",
-      "created_at": "2026-09-25T22:47:33+08:00",
+      "notes": "[run] exit_code=0，runtime=1.547s，脚本 repro/exp1_k_spectrum.py（sha256 前 16 位 335fa6e01b82a734）",
+      "created_at": "2026-09-28T21:13:47+08:00",
       "created_by": "agent-E"
     },
     {
@@ -514,7 +514,7 @@
       "result": "supports",
       "negation_kind": "not_proved",
       "code_path": "repro/exp2_girths.py",
-      "code_hash": "aff7c4dece794456",
+      "code_hash": "500250a3aa314c4f",
       "params": {},
       "observations": {
         "checks": [
@@ -853,11 +853,11 @@
               "generators_distinct": "the m generators are pairwise distinct and none is the identity"
             },
             "m": 3,
-            "seconds": 0.031,
+            "seconds": 0.034,
             "stilde3_no_commuting_generators": true,
             "stilde_ball": {
               "capped": false,
-              "seconds": 0.0011293888092041016,
+              "seconds": 0.0010025501251220703,
               "size": 64
             },
             "stilde_generators_simple": {
@@ -1034,10 +1034,10 @@
               "generators_distinct": "the m generators are pairwise distinct and none is the identity"
             },
             "m": 4,
-            "seconds": 0.022,
+            "seconds": 0.005,
             "stilde_ball": {
               "capped": false,
-              "seconds": 0.003253459930419922,
+              "seconds": 0.0,
               "size": 195
             },
             "stilde_generators_simple": {
@@ -1224,10 +1224,10 @@
               "generators_distinct": "the m generators are pairwise distinct and none is the identity"
             },
             "m": 5,
-            "seconds": 0.073,
+            "seconds": 0.088,
             "stilde_ball": {
               "capped": false,
-              "seconds": 0.009305715560913086,
+              "seconds": 0.011637449264526367,
               "size": 456
             },
             "stilde_generators_simple": {
@@ -1239,7 +1239,7 @@
         "script": "exp2_girths.py"
       },
       "exit_code": 0,
-      "runtime_sec": 0.391,
+      "runtime_sec": 0.375,
       "artifact_paths": [],
       "counterexample": null,
       "verifier_output": "",
@@ -1247,8 +1247,8 @@
       "certificate": null,
       "search_bound": {},
       "for_question_id": null,
-      "notes": "[run] exit_code=0，runtime=0.391s，脚本 repro/exp2_girths.py（sha256 前 16 位 aff7c4dece794456）",
-      "created_at": "2026-09-25T22:47:33+08:00",
+      "notes": "[run] exit_code=0，runtime=0.375s，脚本 repro/exp2_girths.py（sha256 前 16 位 500250a3aa314c4f）",
+      "created_at": "2026-09-28T21:13:47+08:00",
       "created_by": "agent-E"
     },
     {
@@ -1260,7 +1260,7 @@
       "result": "supports",
       "negation_kind": "not_proved",
       "code_path": "repro/exp3_chamber_spectrum.py",
-      "code_hash": "6df02c6be0892fe5",
+      "code_hash": "18ef76afcee219ec",
       "params": {},
       "observations": {
         "cell_degree_m4": {
@@ -1351,7 +1351,7 @@
           },
           {
             "check": "m3.path_sweeps_interval",
-            "detail": "7236 path eigenvalues sweep [-3,3] with maximum gap 0.00814 (0.14% of the interval; 0.3s)",
+            "detail": "7236 path eigenvalues sweep [-3,3] with maximum gap 0.00814 (0.14% of the interval; 0.2s)",
             "ok": true,
             "severity": "must_hold"
           },
@@ -1429,7 +1429,7 @@
           },
           {
             "check": "m4.path_sweeps_interval",
-            "detail": "18120 path eigenvalues sweep [-4,4] with maximum gap 0.00761 (0.10% of the interval; 0.7s)",
+            "detail": "18120 path eigenvalues sweep [-4,4] with maximum gap 0.00761 (0.10% of the interval; 0.6s)",
             "ok": true,
             "severity": "must_hold"
           },
@@ -1507,7 +1507,7 @@
           },
           {
             "check": "m5.path_sweeps_interval",
-            "detail": "38880 path eigenvalues sweep [-5,5] with maximum gap 0.00789 (0.08% of the interval; 5.8s)",
+            "detail": "38880 path eigenvalues sweep [-5,5] with maximum gap 0.00789 (0.08% of the interval; 4.1s)",
             "ok": true,
             "severity": "must_hold"
           },
@@ -1519,12 +1519,12 @@
           },
           {
             "check": "m6.open_case_sample_resolution_is_sufficient",
-            "detail": "m = 6: the 243-character grid leaves a maximum gap of 0.12061 (1.01% of the interval) and the 28080 path eigenvalues leave 0.04136 (0.34%); 168.7s. Even if this passes, it does not determine coverage of the interval by the true spectrum, and it does NOT address the paper's obstruction ('two branches must meet, with no explicit witness'). Marked undecided when the 2% threshold is missed.",
+            "detail": "m = 6: the 243-character grid leaves a maximum gap of 0.12061 (1.01% of the interval) and the 28080 path eigenvalues leave 0.04136 (0.34%); 121.8s. Even if this passes, it does not determine coverage of the interval by the true spectrum, and it does NOT address the paper's obstruction ('two branches must meet, with no explicit witness'). Marked undecided when the 2% threshold is missed.",
             "ok": true,
             "severity": "undecided"
           }
         ],
-        "elapsed_seconds": 182.6,
+        "elapsed_seconds": 132.373,
         "independently_verified": false,
         "injected_bug": null,
         "max_seconds": 300.0,
@@ -1547,7 +1547,7 @@
           "path_worst_step_jump": 0.17967083737569922,
           "resolution_sufficient": true,
           "resolves_the_obstruction": false,
-          "seconds": 168.71,
+          "seconds": 121.83,
           "status": "OPEN QUESTION IN THE PAPER (Remark 1.6, text:407-417)"
         },
         "paper_claims": {
@@ -1631,7 +1631,7 @@
                   ]
                 }
               ],
-              "seconds": 0.26,
+              "seconds": 0.21,
               "steps_per_ray": 200,
               "worst_matrix_step": 0.027959263856522844,
               "worst_step_jump": 0.014291498591820107
@@ -1666,7 +1666,7 @@
             "real_form_cross_check": {
               "max_abs_deviation": 1.7763568394002505e-15
             },
-            "seconds": 0.31,
+            "seconds": 0.27,
             "status": "quoted_from_[6]_Thm_6.5",
             "time_budget_seconds": 300.0
           },
@@ -1738,7 +1738,7 @@
                   ]
                 }
               ],
-              "seconds": 0.65,
+              "seconds": 0.63,
               "steps_per_ray": 150,
               "worst_matrix_step": 0.03727807399947657,
               "worst_step_jump": 0.01783673623541948
@@ -1773,7 +1773,7 @@
             "real_form_cross_check": {
               "max_abs_deviation": 3.2890357104520263e-15
             },
-            "seconds": 1.08,
+            "seconds": 1.05,
             "status": "quoted_from_[6]_Thm_6.5",
             "time_budget_seconds": 300.0
           },
@@ -1839,7 +1839,7 @@
                   ]
                 }
               ],
-              "seconds": 5.8,
+              "seconds": 4.13,
               "steps_per_ray": 80,
               "worst_matrix_step": 0.06831634820084448,
               "worst_step_jump": 0.028600074192100644
@@ -1856,7 +1856,7 @@
               "min": -5.000000000000005,
               "min_abs_eigenvalue": 2.0522715837984694e-18,
               "n_eigenvalues": 75000,
-              "seconds": 6.06
+              "seconds": 4.54
             },
             "hermiticity": {
               "gate": 1e-12,
@@ -1871,7 +1871,7 @@
             },
             "m": 5,
             "npts": 5,
-            "seconds": 12.5,
+            "seconds": 9.23,
             "status": "quoted_from_[6]_Thm_6.5",
             "time_budget_seconds": 300.0
           },
@@ -1879,7 +1879,7 @@
             "m": 6,
             "max_gap_relative": 0.010051229869014152,
             "path_max_gap_relative": 0.0034469067321963496,
-            "seconds": 168.71,
+            "seconds": 121.83,
             "status": "open_case"
           }
         },
@@ -1891,7 +1891,7 @@
         ]
       },
       "exit_code": 0,
-      "runtime_sec": 182.89,
+      "runtime_sec": 132.641,
       "artifact_paths": [],
       "counterexample": null,
       "verifier_output": "",
@@ -1899,8 +1899,8 @@
       "certificate": null,
       "search_bound": {},
       "for_question_id": null,
-      "notes": "[run] exit_code=0，runtime=182.89s，脚本 repro/exp3_chamber_spectrum.py（sha256 前 16 位 6df02c6be0892fe5）",
-      "created_at": "2026-09-25T22:50:36+08:00",
+      "notes": "[run] exit_code=0，runtime=132.641s，脚本 repro/exp3_chamber_spectrum.py（sha256 前 16 位 18ef76afcee219ec）",
+      "created_at": "2026-09-28T21:16:00+08:00",
       "created_by": "agent-E"
     },
     {
@@ -1912,7 +1912,7 @@
       "result": "supports",
       "negation_kind": "not_proved",
       "code_path": "repro/exp4_size_regularity.py",
-      "code_hash": "a9fd47e5b261bea2",
+      "code_hash": "8f5bbbe305bbd599",
       "params": {},
       "observations": {
         "checks": [
@@ -2061,7 +2061,7 @@
             "severity": "must_hold"
           }
         ],
-        "elapsed_seconds": 0.349,
+        "elapsed_seconds": 0.329,
         "injected_bug": null,
         "m5_box_undercount_diagnostic": {
           "box": 3,
@@ -2428,7 +2428,7 @@
               "1": 80
             },
             "m": 4,
-            "seconds": 0.016,
+            "seconds": 0.015,
             "vertex_transitivity": {
               "all_shifts_are_automorphisms": true,
               "n_vertices_in_box": 165,
@@ -2675,7 +2675,7 @@
               "1": 365
             },
             "m": 5,
-            "seconds": 0.333,
+            "seconds": 0.314,
             "vertex_transitivity": {
               "all_shifts_are_automorphisms": true,
               "n_vertices_in_box": 746,
@@ -2731,7 +2731,7 @@
         "script": "exp4_size_regularity.py"
       },
       "exit_code": 0,
-      "runtime_sec": 0.61,
+      "runtime_sec": 0.781,
       "artifact_paths": [],
       "counterexample": null,
       "verifier_output": "",
@@ -2739,8 +2739,8 @@
       "certificate": null,
       "search_bound": {},
       "for_question_id": null,
-      "notes": "[run] exit_code=0，runtime=0.61s，脚本 repro/exp4_size_regularity.py（sha256 前 16 位 a9fd47e5b261bea2）",
-      "created_at": "2026-09-25T22:50:37+08:00",
+      "notes": "[run] exit_code=0，runtime=0.781s，脚本 repro/exp4_size_regularity.py（sha256 前 16 位 8f5bbbe305bbd599）",
+      "created_at": "2026-09-28T21:16:01+08:00",
       "created_by": "agent-E"
     },
     {
@@ -2752,7 +2752,7 @@
       "result": "supports",
       "negation_kind": "not_proved",
       "code_path": "repro/exp5_noniso.py",
-      "code_hash": "dd2b0873dcc62bbd",
+      "code_hash": "85b0a459d002963a",
       "params": {},
       "observations": {
         "checks": [
@@ -2877,7 +2877,7 @@
             "severity": "must_hold"
           }
         ],
-        "elapsed_seconds": 0.115,
+        "elapsed_seconds": 0.112,
         "honest_split": {
           "proved_by_the_paper_and_cross_checked_here": [
             "K(m) is m-regular, vertex-transitive, periodic of rank m-1 (Lemma 2.2)",
@@ -3081,7 +3081,7 @@
               "separates": true
             },
             "m": 4,
-            "seconds": 0.044,
+            "seconds": 0.032,
             "spectra": {
               "K": {
                 "contained_in_interval": true,
@@ -3297,7 +3297,7 @@
               "separates": true
             },
             "m": 5,
-            "seconds": 0.071,
+            "seconds": 0.08,
             "spectra": {
               "K": {
                 "contained_in_interval": true,
@@ -3326,7 +3326,7 @@
         "script": "exp5_noniso.py"
       },
       "exit_code": 0,
-      "runtime_sec": 0.375,
+      "runtime_sec": 0.453,
       "artifact_paths": [],
       "counterexample": null,
       "verifier_output": "",
@@ -3334,8 +3334,8 @@
       "certificate": null,
       "search_bound": {},
       "for_question_id": null,
-      "notes": "[run] exit_code=0，runtime=0.375s，脚本 repro/exp5_noniso.py（sha256 前 16 位 dd2b0873dcc62bbd）",
-      "created_at": "2026-09-25T22:50:37+08:00",
+      "notes": "[run] exit_code=0，runtime=0.453s，脚本 repro/exp5_noniso.py（sha256 前 16 位 85b0a459d002963a）",
+      "created_at": "2026-09-28T21:16:01+08:00",
       "created_by": "agent-E"
     }
   ]

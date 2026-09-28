@@ -5,11 +5,34 @@
   或 ``test/test1/demo/run/``（那是演示数据，必须保持干净）。
 - 只通过 ``sys.path`` 注入 ``src/``，不要求安装包。
 - 时间戳一律写死为常量，避免测试依赖"当前时间/时区"。
-"""
 
+## 为什么这里要显式钉临时根（`X-2` 的剩余面）
+
+`draft/25` 的 `X-2` 登记过一处残留：仓库根冒出 `pytest-of-unknown/`。读 pytest 9.1.0
+的 `TempPathFactory.getbasetemp` 可以看清成因 —— 没有显式 `--basetemp` 时，它算的是
+
+    temproot = Path(os.environ.get("PYTEST_DEBUG_TEMPROOT") or tempfile.gettempdir()).resolve()
+    rootdir  = temproot / f"pytest-of-{get_user() or 'unknown'}"
+
+而 `tempfile.gettempdir()` 在没有任何可写临时目录时会退回当前工作目录
+（Python 的既有行为，不是 pytest 的 bug）⇒ 这时 basetemp 就落在仓库根；
+`PYTEST_DEBUG_TEMPROOT` 若给的是相对路径，`.resolve()` 也会把它解到 cwd。
+
+本文件在导入期把 `PYTEST_DEBUG_TEMPROOT` 钉到一个先验证过可写的绝对路径。
+为什么是导入期而不是某个 hook：`getbasetemp()` 是惰性的（第一次用 `tmp_path` 才调用），
+而它每次都现读这个环境变量；conftest 的导入早于任何用例执行，所以这个写入一定在它之前生效。
+为什么不用 `pytest_load_initial_conftests` 往 args 里插 `--basetemp`（第一版这么写过，
+实测不生效：pytest 9.1.0 下 `tests/conftest.py` 的这个 hook 根本没被调用 —— 加了
+调试打印也一行都不出）。教训与 `draft/28` 的"装置陷阱"同族：注入要证明它真的生效，
+本模块的自测用例（`test_x2_temp_root_is_pinned`）就是钉这件事的。
+
+候选临时根一个都写不了时退回包内固定目录（`.pytest-tmp/`，已在仓库根 `.gitignore` 登记）。
+于是"跑一次全量 ⇒ 仓库根不新增目录"这条判据不再依赖环境变量对不对。
+"""
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,6 +42,61 @@ import pytest
 _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+
+#: 包根（`agentflow/`）：临时根全都不可写时的兜底落点就在它下面。
+_PROJ = Path(__file__).resolve().parents[1]
+
+#: 关掉钉临时根这一手（只为负控用：让"残留会不会出现"这件事能被观察一次）。
+_NO_PIN_ENV = "AGENTFLOW_NO_TEMPROOT_PIN"
+
+
+def _writable_temp_root() -> Path | None:
+    """挑一个真的能写的临时根；一个都没有时返回 None。
+
+    为什么不用 `tempfile.gettempdir()` 当判据：它只回答"我认为哪个目录能当临时目录"，
+    在没有可写候选时它自己就退回 cwd，于是"用它再拼一层"并不能躲开那个坑。
+    这里的判据是写一个探针文件再删掉。
+    """
+    candidates = [
+        os.environ.get("TMPDIR"),
+        os.environ.get("TEMP"),
+        os.environ.get("TMP"),
+        str(Path(os.environ["USERPROFILE"]) / "AppData" / "Local" / "Temp")
+        if os.environ.get("USERPROFILE") else "",
+        "/tmp",
+    ]
+    for raw in candidates:
+        if not raw:
+            continue
+        root = Path(raw)
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            probe = root / f".agentflow-temp-probe-{os.getpid()}"
+            probe.write_bytes(b"")
+            probe.unlink()
+        except OSError:
+            continue
+        return root
+    return None
+
+
+def _pin_temp_root() -> str:
+    """把 `PYTEST_DEBUG_TEMPROOT` 钉成绝对路径；返回这一次钉到的值（空串 = 没钉）。"""
+    if os.environ.get(_NO_PIN_ENV):
+        return ""
+    if os.environ.get("PYTEST_DEBUG_TEMPROOT"):
+        return os.environ["PYTEST_DEBUG_TEMPROOT"]
+    root = _writable_temp_root()
+    target = (root / "agentflow-pytest") if root is not None else (_PROJ / ".pytest-tmp")
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return ""
+    os.environ["PYTEST_DEBUG_TEMPROOT"] = str(target.resolve())
+    return os.environ["PYTEST_DEBUG_TEMPROOT"]
+
+
+PINNED_TEMP_ROOT = _pin_temp_root()
 
 from agentflow import schema as S  # noqa: E402
 from agentflow.store import Store  # noqa: E402

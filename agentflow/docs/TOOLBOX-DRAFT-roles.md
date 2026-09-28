@@ -78,8 +78,14 @@ M        0     0     0     0     0       0%     调度（不推理）
 > 每个 `tool:` 行给六件套的一件（`name`/`summary`/`params`/`returns`/`side_effect`/`roles`）
 > 外加三格**本设计特有**的属性：`replaces`（替掉哪几轮机械劳动）、`saves`（省几轮）、`prose`（谁不再需要自己想这件事）。
 >
-> `side_effect` 取值域 = `none` / `read` / `write_local` / `network`（`tools/base.py:199`）。
-> **只读角色（C/H/N/Q）不得拿 `write_local`/`network`** —— 这条由 `for_role` 结构性执行，
+> `side_effect`（第一根轴，= 属性 `effect`）取值域 = `none` / `read` / `write_local`；
+> **第二根轴 `external`** 取值域 = `none` / `egress` / `exec`（字段名是 `declared_external`，属性名是 `external`）。
+> 两处的单一来源都是 `src/agentflow/tools/base.py`（`SIDE_EFFECTS` / `EXTERNAL`；
+> ⚠️ 本文原写"`tools/base.py:199`"并含遗留取值 `network` —— 那是 **B3 迁移前**的事实，
+> `network` 已从词表**删除**，声明它会直接抛 `ValueError`）。
+> **只读角色（C/H）不得拿 `write_local`/`network`** —— 这条由 `for_role` 结构性执行，
+> **B3 收官后判据更强**：只读角色同时被剥掉 `external == "exec"`（除非沙箱被声明可用），
+> 所以 H 今天连 `verify.check_formal` 都拿不到（实测 H = 22 个工具、零 `exec`、零 `egress`）。
 > 本设计把它写进验收，避免"设计时给了、登记时被剥掉"的静默偏差。
 
 <!-- TOOLBOX:BEGIN -->
@@ -104,7 +110,7 @@ tool: brief.coverage | summary: 覆盖度视图（无证据问题/未回验关�
 tool: pack.evidence | summary: 一条断言的全部证据（按判定顺序排好） | params: claim_key 或 relation_id | returns: {quotes[]{text,page,lit}, evidence_kind, deps_status, experiments[]} | side_effect: read | roles: D,G,H | replaces: trace.relation + verify.evidence_for + doc.scan_claim 的手工拼接 | saves: 3 | prose: 一条断言的全部证据（引文原文/页码/等级/依赖闭合/已有实验）按判定顺序排好
 tool: pack.document | summary: 一篇稿件的可裁定片段（断言+引用+等级+待判项） | params: doc_id、section（可选） | returns: {claims[]{text,evidence,level,open_items[]}} | side_effect: read | roles: G,H | replaces: doc.list_documents + 逐条 doc.scan_claim | saves: 4 | prose: 一篇稿件的可裁定片段（断言+引用+等级+待判项），H 只判内容
 tool: queue.next | summary: 按确定性次序给出接下来 n 个可做动作及其入参 | params: role、n（默认 3） | returns: {actions[]{action, args, why, blocked_by}} | side_effect: none | roles: A,B,C,D,E,F,G,H,N,O | replaces: 靠猜"下一步该查哪个 id"的试探轮次 | saves: 2 | prose: 按确定性次序给出接下来 n 个可做动作**及其入参**（复用 attack.pick_next_subgoal 的思路，扩到全局）
-tool: search.harvest | summary: 一轮检索端到端（执行→去重→登记→落盘→触发抽取） | params: topic、mode、budget、max_items | returns: {admitted[], duplicates[], failed[]{reason_code}, registered[]} | side_effect: network | roles: A | replaces: search.download + search.register + search.dedup_check + search.literature 的逐条编排 | saves: 3 | prose: 一轮检索端到端（执行→去重→登记→落盘→触发抽取），失败原因按受控码分类
+tool: search.harvest | summary: 一轮检索端到端（执行→去重→登记→落盘→触发抽取） | params: topic、mode、budget、max_items | returns: {admitted[], duplicates[], failed[]{reason_code}, registered[]} | side_effect: read | external: egress | roles: A | replaces: search.download + search.register + search.dedup_check + search.literature 的逐条编排 | saves: 3 | prose: 一轮检索端到端（执行→去重→登记→落盘→触发抽取），失败原因按受控码分类
 tool: doc.ingest | summary: 一篇文献的整理端到端（抽取→候选概念/关系→矛盾预筛） | params: lit_id、mode（text/ocr） | returns: {text_ref, concept_candidates[], relation_candidates[], contradiction_candidates[]} | side_effect: write_local | roles: B | replaces: ocr.run + ocr.detect_text_layer + table.create/update 的逐条编排 | saves: 3 | prose: 一篇文献的整理端到端（抽取→候选概念/关系→矛盾预筛），B 只判语义
 tool: graph.answer | summary: 四类结构分析（热点/路径/冷门/缺口）的统一答案结构 + provenance | params: kind（hottest/paths/cold/gaps）、参数随 kind | returns: {answer, candidates[]{ref,score,why}, provenance[]} | side_effect: read | roles: C | replaces: graph.build + graph.stats + graph.neighbors + graph.relations_between 的四连查 | saves: 3 | prose: 四类结构分析（热点/路径/冷门/缺口）的统一答案结构 + 每个结论的 provenance
 tool: experiment.harness | summary: 实验端到端（探测→跑→绑 hash→登记） | params: method、script_path、params | returns: {backend, code_hash, result, evidence_kind, registered:"experiment_id"} | side_effect: write_local | roles: E | replaces: verify.detect_verifier + verify.code_hash + verify.run_experiment 的手工编排 | saves: 3 | prose: 实验端到端（探测→跑→绑 hash→登记），环境缺失时如实给 no_backend

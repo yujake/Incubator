@@ -109,6 +109,22 @@ def test_parse_page_range_unknown_is_explicit():
 # ------------------------------------------------------------------ concept_group_key
 
 
+def test_is_cjk_true_for_cjk_false_for_latin():
+    """`is_cjk`：中文（含扩展区）为真，纯拉丁为假。
+
+    为什么这条测试是被一个判据逼出来的（而不是随手补的）：`coverage_zero_test`
+    的 2a 判据里 `is_` 这一族词缀曾经全部失效（`_token_hits` 按
+    `[^0-9A-Za-z]+` 切分时把 `_` 一起吃掉了）。修好之后 `is_cjk` 才被正确归到
+    等级 2（判据/决策），于是它在发布门 `coverage` 上露出来 —— 一条真实的缺口。
+    """
+    assert T.is_cjk("群") is True
+    assert T.is_cjk("阿贝尔群 is abelian") is True
+    assert T.is_cjk("㐀") is True, "扩展 A 区（U+3400–U+4DBF）也算 CJK"
+    assert T.is_cjk("abelian group") is False
+    assert T.is_cjk("") is False, "空串不是 CJK（`text or \"\"` 这一支）"
+    assert T.is_cjk(None) is False, "None 不许抛，按空串处理"
+
+
 def test_concept_group_key_sorted_and_deduped():
     """概念组键必须升序去重，保证"同一概念组"判定稳定。"""
     assert T.concept_group_key(["0002", "0001", "0002"]) == "0001|0002"

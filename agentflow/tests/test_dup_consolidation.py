@@ -416,20 +416,22 @@ def test_install_d_tools_rejects_bad_role_name_at_assembly_time(store) -> None:
     （``tools/__init__.py:189-207``），于是拼错的角色名一路装到底。
     """
     bad = ToolRegistry(name="bad")
-    bad.register(
-        ToolSpec(
-            name="trace.bogus",
-            summary="故意拼错角色名",
-            params={"type": "object", "properties": {}, "additionalProperties": False},
-            handler=lambda: ok({"never": True}),
-            side_effect="read",
-            roles=("agent-X",),  # type: ignore[arg-type]
-            returns="{'never'}",
-        )
-    )
     with pytest.raises(ToolError) as ei:
-        validate_tool_roles(bad)
+        # `P-1`：判据已下沉到注册期，所以非法角色在 `register` 那一刻就炸
+        # （比原来的"装配期 validate_tool_roles"更早，且覆盖所有绕过 `build_registry` 的入口）。
+        bad.register(
+            ToolSpec(
+                name="trace.bogus",
+                summary="故意拼错角色名",
+                params={"type": "object", "properties": {}, "additionalProperties": False},
+                handler=lambda: ok({"never": True}),
+                side_effect="read",
+                roles=("agent-X",),  # type: ignore[arg-type]
+                returns="{'never'}",
+            )
+        )
     msg = str(ei.value)
+    assert "ROLES" in msg, msg
     assert "trace.bogus" in msg and "agent-X" in msg, msg
 
 
@@ -440,19 +442,25 @@ def test_install_d_tools_with_injected_registry_also_validates(store) -> None:
     拼错角色名的 spec，而它同样会被静默过滤掉。
     """
     injected = ToolRegistry(name="injected")
-    injected.register(
-        ToolSpec(
-            name="trace.relation",
-            summary="冒充外部 trace_tools 的坏声明",
-            params={"type": "object", "properties": {}, "additionalProperties": False},
-            handler=lambda: ok({}),
-            side_effect="read",
-            roles=("agent-D",),  # type: ignore[arg-type]
-            returns="{}",
+    with pytest.raises(ToolError) as ei:
+        # `P-1`：坏声明在 `register` 那一刻就被拒（不必等到 `install_d_tools` 的
+        # 装配期校验）。断言按更强的形态写：注册期就炸，且说得清是谁、哪个角色。
+        injected.register(
+            ToolSpec(
+                name="trace.relation",
+                summary="冒充外部 trace_tools 的坏声明",
+                params={"type": "object", "properties": {}, "additionalProperties": False},
+                handler=lambda: ok({}),
+                side_effect="read",
+                roles=("agent-D",),  # type: ignore[arg-type]
+                returns="{}",
+            )
         )
-    )
-    with pytest.raises(ToolError):
-        install_d_tools(store, registry=injected)
+    assert "trace.relation" in str(ei.value) and "agent-D" in str(ei.value), str(ei.value)
+    # 这张注入表里没有装进任何东西 —— 后续 `install_d_tools(registry=injected)` 也照样
+    # 走它自己的装配期双保险（`validate_tool_roles`，`P-1` 之后是冗余的那一道）。
+    assert injected.names() == []
+    install_d_tools(store, registry=injected)  # 不抛：坏 spec 根本没进表
 
 
 def test_validate_tool_roles_uses_the_single_source_of_truth(store) -> None:
@@ -476,16 +484,32 @@ def test_validate_tool_roles_uses_the_single_source_of_truth(store) -> None:
         )
     validate_tool_roles(reg)  # 全部合法：不得抛
 
-    reg.register(
-        ToolSpec(
-            name="t.bad",
-            summary="多一个非法角色",
-            params={"type": "object", "properties": {}, "additionalProperties": False},
-            handler=lambda: ok({}),
-            side_effect="read",
-            roles=(ROLES[0], "agent-Z"),
-            returns="{}",
+    with pytest.raises(ToolError) as ei:
+        # `P-1`：第二道（装配期 `validate_tool_roles`）仍然在、仍然会说同一句话，
+        # 但它现在理论上不可达 —— 非法角色进不了注册表。这一条用例同时钉住
+        # "注册期会拦"与"装配期那道双保险没被删掉"。
+        reg.register(
+            ToolSpec(
+                name="t.bad",
+                summary="多一个非法角色",
+                params={"type": "object", "properties": {}, "additionalProperties": False},
+                handler=lambda: ok({}),
+                side_effect="read",
+                roles=(ROLES[0], "agent-Z"),
+                returns="{}",
+            )
         )
+    assert "agent-Z" in str(ei.value), str(ei.value)
+    # 手工绕过注册期（直接改内部表）才能让装配期那一道真正被执行 —— 它是"双保险"，
+    # 不这么做的话它永远不会被走到，而"没被走到"与"已经失效"分不开（`G-19` 的形态）。
+    reg._specs["t.bad"] = ToolSpec(
+        name="t.bad",
+        summary="手工塞进内部表的非法角色",
+        params={"type": "object", "properties": {}, "additionalProperties": False},
+        handler=lambda: ok({}),
+        side_effect="read",
+        roles=(ROLES[0], "agent-Z"),
+        returns="{}",
     )
     with pytest.raises(ToolError):
         validate_tool_roles(reg)

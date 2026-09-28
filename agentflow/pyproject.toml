@@ -54,8 +54,14 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.pytest.ini_options]
-# rootdir 钉在 tests/（与 `tests/pytest.ini` 同一意图）：
-# `.pytest_cache` / `__pycache__` 只落在 tests/ 下，不污染运行期工作区。
+# `FINAL-R1d-06` 更正：这段注释此前写"rootdir 钉在 tests/（与 `tests/pytest.ini` 同一意图）：
+# `.pytest_cache` / `__pycache__` 只落在 tests/ 下" —— 三处与事实不符，逐条更正：
+#   · `tests/pytest.ini` **不存在**（本文件才是那个 inifile）；
+#   · `testpaths` **不决定** rootdir：实测 rootdir = 含 `pyproject.toml` 的目录
+#     （`D:\Incubator\agentflow`），`agentflow/.pytest_cache/` 确实存在；
+#   · `__pycache__` 的落点由 `PYTHONDONTWRITEBYTECODE` / `python -B` 控制，与 rootdir 无关。
+# 缓存落点的真实防线见 `.gitignore` 的第 3 节与 `tests/conftest.py` 里的**临时根钉子**
+# （`X-2`：导入期把 `PYTEST_DEBUG_TEMPROOT` 钉到系统临时目录，跑测试不再往仓内写临时目录）。
 testpaths = ["tests"]
 # 需要联网的用例默认排除 —— 日常套件必须离线、确定性、可重复。
 #   python -m pytest -q            # 离线

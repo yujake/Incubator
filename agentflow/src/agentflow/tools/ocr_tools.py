@@ -541,26 +541,99 @@ def _h_detect_text_layer(ctx: _Ctx, path: str) -> Any:
     # quote_verified 置 null 而不是 false（DESIGN.md §6.3）。
     has_layer = bool(doc.pages)
     pages_with_text = [i + 1 for i, t in enumerate(doc.pages) if t.strip()]
+    # `F-4`：逐页三态。`pages[i] == ""` 有两种原因（本来空白 / 抽取时抛异常），
+    # 而下游的引文校验必须能分开它们：把后者读成前者会把真引文判成幻觉。
+    failed_pages = tuple(int(x) for x in getattr(doc, "failed_pages", lambda: ())())
+    # `R3B-1`（第二轮重审实测的修法）：页数也要三态。
+    #
+    # `page_count()` 只认 `.pdf` 后缀，别的一律返回 `None`（见它的 docstring：
+    # "非 PDF 或读不到 ⇒ None"）。而抽取是按内容魔数分派的：一份真 PDF 只要
+    # 扩展名不是 `.pdf`（例如快照被存成 `.bin`），内容照样走 PDF 链、`pages=[]`
+    # 照样是"无文本层"—— 但 `total` 是 `None`，于是下面旧版的 `elif total:`
+    # 为假，落到最后那一支，报出方向相反的处置："这不是 PDF 扫描件，
+    # 走 OCR 大概率也没有内容""先确认文件是否为空"。
+    #
+    # 后果有两个：① 该走 OCR 的扫描件被劝退；② `R3-2` 刚修好的"整篇抽取失败"
+    # 那一支在一整类真实文件（非 `.pdf` 后缀的 PDF）上仍然不可达。
+    #
+    # 修法：`total` 只表示"后端报的页数"，不知道就写 None；
+    # 需要页数时优先用抽取结果自己的长度（`pages` 或逐页状态的长度）。
+    #
+    # `R6-AN-4`：这还不是全部 —— "已知为 0"与"真取不到"必须分开。
+    # 旧写法把两者都折成 None（`pages_known or None`），于是空文件的 reason
+    # 逐字说"文件页数为未知且抽取结果为空"，而空文件的页数是已知的 0
+    # （`extract_text` 对"空文件 / 剥标签后为空"两条支都显式返回 `pages=[]`）。
+    # 现在的口径：
+    #   - 后端报了页数 ⇒ 用它的；
+    #   - 抽取结果自己带长度（`pages` 或逐页状态）⇒ 用那个长度；
+    #   - 文本类文件（txt/md/html）抽出来是空的 ⇒ 页数已知为 0；
+    #   - PDF 后端一页都没返回、也没有逐页状态 ⇒ 页数确实取不到，才是未知。
+    pages_known = len(doc.pages) or len(getattr(doc, "page_status", ()) or ())
+    if total:
+        known_total = total
+    elif pages_known:
+        known_total = pages_known
+    elif (doc.source_kind or "") in ("txt", "md", "html"):
+        known_total = 0
+    else:
+        known_total = None
 
-    if has_layer:
+    if has_layer and failed_pages:
+        reason = (
+            f"**部分页抽取失败**：{len(doc.pages)} 页里有 {len(failed_pages)} 页"
+            f"（第 {', '.join(str(p) for p in failed_pages[:10])}"
+            + ("…" if len(failed_pages) > 10 else "")
+            + " 页）在抽取时抛了异常，这几页的文本是空的 —— 但**它们不是空白页**。"
+            "落在这些页上的引文只能判 `quote_verified=null`（无法校验），"
+            "**不许**判成 `false`（那会把真引文记成幻觉，见 DESIGN.md §6.3 与 `F-4`）。"
+            "其余页的引文仍可正常判定。"
+        )
+        suggestion = (
+            "建议：换一个 PDF 后端（`ocr.backends` 看可用后端；fitz/pdfminer/PyPDF2 对"
+            "同一份 PDF 的成功率并不一致），或对失败页单独走 OCR。"
+        )
+    elif has_layer:
         reason = (
             f"有文本层：{len(doc.pages)} 页可定位文本，共 {len(doc.text)} 字符"
             f"（有文字的页：{len(pages_with_text)} 页）。引文校验可以正常判定 true/false。"
         )
         suggestion = "无需 OCR：优先用文本层（快且可定位页码）。"
-    elif total:
+    elif known_total:
+        # 这里曾经无条件写"每页抽出的文本去空白后都为空" —— 但"全空"也可能
+        # 是每一页都抽取失败造成的。两者都该走 OCR，但报告里必须说清是哪一种：
+        # 前者是"扫描件"，后者是"我们的抽取链在这份文件上全崩了"（处置不同）。
+        if failed_pages:
+            reason = (
+                f"**无文本层，且原因是抽取失败**：文件共 {known_total} 页，"
+                f"其中 {len(failed_pages)} 页在抽取时抛了异常。"
+                "这与「扫描件没有文本层」不是一件事：那份文件里可能**有**文本层，"
+                "只是我们的后端没读出来。按 DESIGN.md §6.3 仍须置 quote_verified=null，"
+                "但处置是**换后端重试**，而不是直接判定'需要 OCR'。"
+            )
+            suggestion = "建议下一步：`ocr.backends` 看可用后端，换一个后端重试抽取。"
+        else:
+            reason = (
+                f"**无文本层**：文件共 {known_total} 页，但每页抽出的文本去空白后都为空"
+                "（疑似扫描件/纯图片页）。"
+                "这**不是**「引文校验失败」，而是「无法校验」—— 按 DESIGN.md §6.3，"
+                "引文校验必须置 quote_verified=null，并且这份文献需要走 OCR。"
+            )
+            suggestion = "建议下一步：ocr.backends 看有没有可用后端，再 ocr.run 逐页识别。"
+    elif known_total == 0:
+        # `R6-AN-4`：抽取结果为空、且页数是已知的 0。旧版把这一档与"页数未知"
+        # 并在同一句里，于是报告让人"去找页数"，而该做的是"确认文件是否为空"。
         reason = (
-            f"**无文本层**：文件共 {total} 页，但每页抽出的文本去空白后都为空（疑似扫描件/纯图片页）。"
-            "这**不是**「引文校验失败」，而是「无法校验」—— 按 DESIGN.md §6.3，"
-            "引文校验必须置 quote_verified=null，并且这份文献需要走 OCR。"
-        )
-        suggestion = "建议下一步：ocr.backends 看有没有可用后端，再 ocr.run 逐页识别。"
-    else:
-        reason = (
-            "没有可定位文本：文件页数为未知且抽取结果为空（空文件，或 HTML/文本剥标签后为空）。"
-            "这不是 PDF 扫描件，走 OCR 大概率也没有内容。"
+            "没有可定位文本：抽取结果为空（空文件，或 HTML/文本剥标签后为空），"
+            "页数为 0。这不是 PDF 扫描件，走 OCR 大概率也没有内容。"
         )
         suggestion = "先确认文件本身是否为空/格式是否正确。"
+    else:
+        # 真取不到页数的那一档：PDF 后端一页都没返回、也没有逐页状态。
+        reason = (
+            "没有可定位文本：文件页数为未知（后端没报页数，逐页状态也没有）"
+            "且抽取结果为空。这不是 PDF 扫描件，走 OCR 大概率也没有内容。"
+        )
+        suggestion = "先确认文件本身是否为空/格式是否正确；若是 PDF，用 ocr.backends 看可用后端。"
 
     return ok(
         {
@@ -569,7 +642,16 @@ def _h_detect_text_layer(ctx: _Ctx, path: str) -> Any:
             "has_text_layer": has_layer,
             "pages": len(doc.pages),
             "page_count": total,
+            # `R3B-1`：页数的三个来源分开给，读的人自己判断"未知"是哪一种未知。
+            # `R6-AN-4` 补第四态"抽取结果为空（已知 0 页）"：它与"未知"不再是同一句。
+            "page_count_known": known_total,
+            "page_count_source": ("page_count()" if total else
+                                  ("抽取结果的逐页状态" if pages_known else
+                                   ("抽取结果为空" if known_total == 0 else "未知"))),
             "pages_with_text": len(pages_with_text),
+            # `F-4` 的读法：这几页上的引文只能判 null。空元组 = 没有失败的页
+            # （不是"没查" —— 没查这一档由 has_text_layer / pages 表达）。
+            "failed_pages": list(failed_pages),
             "chars": len(doc.text),
             "encoding": doc.encoding,
             "reason": reason,
@@ -972,9 +1054,10 @@ def register(
             handler=lambda path, pages=None, backend="auto", languages=None, dpi=200, max_pages=20: _h_run(
                 ctx, path, pages, backend, languages, dpi, max_pages
             ),
-            # network：easyocr 首次构造 Reader 会下载约 100MB 模型（`_reader` :252）。
+            # external=egress：easyocr 首次构造 Reader 会下载约 100MB 模型（`_reader` :252）。
             # "本机没有可用后端"只是当前环境的结论，不能用来把能力声明成只读。
-            side_effect="network",
+            side_effect="write_local",
+            declared_external="egress",
             roles=("B",),
             # 键名逐个从 `_h_run` 的 ok(data) 读出（不是在真实调用里数出来的：
             # 走通它需要 PyMuPDF / Pillow / 一个真后端，本轮没有真跑过 —— 如实留痕）。
@@ -1038,6 +1121,8 @@ def _selftest() -> int:
     blank = demo / "blank.pdf"
 
     registry = ToolRegistry(name="selftest-B")
+    # 绑定角色（`P-14`）：`ocr.*` 的声明角色只有 B（`ocr.run` 是 write_local）。
+    registry.bound_role = "B"
     register(registry, workspace=Path(tempfile.gettempdir()))
 
     print("=" * 78)
@@ -1134,6 +1219,7 @@ def _selftest() -> int:
     print("-" * 78)
     print("[6] 测试桩后端（**不是真 OCR**）：验证空文本语义 / 逐页循环 / max_pages 截断")
     stub_reg = ToolRegistry(name="selftest-B-stub")
+    stub_reg.bound_role = "B"  # `P-14`：这张表代表 B（`ocr.*` 的声明角色只有 B）
     stub_empty = _StubBackend("stub-empty", "")
     register(stub_reg, workspace=Path(tempfile.gettempdir()), backends=[stub_empty])
     res = stub_reg.call("ocr.run", path=str(sample), pages=[1])
@@ -1153,6 +1239,7 @@ def _selftest() -> int:
 
     stub_text = _StubBackend("stub-text", "STUB-RECOGNIZED-TEXT")
     stub_reg2 = ToolRegistry(name="selftest-B-stub2")
+    stub_reg2.bound_role = "B"  # `P-14`：同上
     register(stub_reg2, workspace=Path(tempfile.gettempdir()), backends=[stub_text])
     res = stub_reg2.call("ocr.run", path=str(sample), max_pages=1, dpi=120)
     if res.ok:

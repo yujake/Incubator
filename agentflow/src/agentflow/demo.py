@@ -178,13 +178,17 @@ class FixtureDownloader:
         if not url.startswith("abfixture:"):
             if self.fallback is not None:
                 return self.fallback.download(url, dest_dir, filename_hint)
-            return FetchResult(ok=False, path=None, http_status=None, bytes=0, sha256=None,
+            # `kind` 是 `FetchResult` 的受控失败档（`F-6`）：契约要求"失败的下载
+            # 必须答得出为什么"，所以这里不能再只给自由文本的 error。
+            return FetchResult(ok=False, kind="non_fixture_url", path=None, http_status=None,
+                               bytes=0, sha256=None,
                                error=f"non-fixture_url:{url[:60]}")
 
         name = url.split(":", 1)[1]
         src = self.sources / name
         if not src.exists():
-            return FetchResult(ok=False, path=None, http_status=None, bytes=0, sha256=None,
+            return FetchResult(ok=False, kind="fixture_missing", path=None, http_status=None,
+                               bytes=0, sha256=None,
                                error=f"fixture_missing:{name}")
 
         dest_dir = Path(dest_dir)

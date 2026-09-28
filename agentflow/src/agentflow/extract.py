@@ -2,35 +2,35 @@
 
 设计基线：``test/test1/DESIGN.md`` §4.1（接口契约）与 §6.3（引文校验）。
 
-本模块的**唯一职责**是把一个本地文件变成"逐页可定位的文本"，它不负责
+本模块的唯一职责是把一个本地文件变成"逐页可定位的文本"，它不负责
 概念/关系抽取（那是 llm.py），也不负责引文校验（那是 agent_b + verify）。
 
 三条贯穿全模块的设计原则（先说明，后面不再重复）：
 
-1. **逐页是硬要求，不是可选优化。**
+1. 逐页是硬要求，不是可选优化。
    §1.4 的 ``relations.page_range`` 与 §6.3 的引文校验都要求"这条引文出自
    第几页"。如果只保留全文拼接串，页码就退化成模型/正则的猜测。因此 PDF
    一定保留 ``pages[i] == 第 i+1 页``，``text`` 只是 ``"\\n".join(pages)``
    的派生投影。
 
-2. **"无文本层"必须与"文档为空"显式区分（§6.3 的关键）。**
+2. "无文本层"必须与"文档为空"显式区分（§6.3 的关键）。
    扫描版 PDF 能被成功打开、页数正常，但每页抽出来的都是空白。此时如果
    老老实实返回 ``pages=["", "", ...]``，下游 ``text_at()`` 会返回空串，
    §6.3 的子串匹配就会失败——失败方向恰好是安全的（不会假通过），
-   但**语义上说不清"校验失败"还是"根本没法校验"**。二者对用户的意义完全
+   但语义上说不清"校验失败"还是"根本没法校验"。二者对用户的意义完全
    不同：前者是抽取质量问题，后者是"这份文献需要 OCR"。因此本模块约定：
    所有页去空白后皆为空 ⇒ ``pages == []``、``text == ""``。
-   调用方（agent_b）**只用 ``pages == []`` 判断无文本层**，并必须据此把
+   调用方（agent_b）只用 ``pages == []`` 判断无文本层，并必须据此把
    ``quote_verified`` 置 ``null``（而不是 ``true``/``false``）。见 §6.3 末段
    "不假装通过"。
 
-3. **超限一律抛异常，绝不静默截断。**
+3. 超限一律抛异常，绝不静默截断。
    2000 页 / 50 MB 是资源保护，不是业务粒度。静默截断会让"引文在文件里
    存在但没被读到"变成一条看似正常的 ``quote_verified=false``，把资源问题
    伪装成数据问题。所以宁可显式失败，让人去调 ``--max-pages``。
 
 依赖策略：``fitz``/``pdfminer``/``PyPDF2`` 都是重量级 C 扩展或纯 Python 大包，
-且要支持"谁在就用谁"的回退链，因此一律**函数内惰性 import**；模块顶层只依赖
+且要支持"谁在就用谁"的回退链，因此一律函数内惰性 import；模块顶层只依赖
 标准库。这样即使某个 PDF 后端没装，``import agentflow.extract`` 也不会炸。
 """
 
@@ -73,7 +73,7 @@ DEFAULT_MAX_BYTES: Final[int] = 50 * 1024 * 1024
 #: - ``utf-8-sig`` 兜住带 BOM 的文件（严格 utf-8 其实能解出 BOM，但会留下 U+FEFF，
 #:   见 ``_decode_text`` 里对 BOM 的显式剥离）；
 #: - ``gb18030`` 兜住中文旧文献（它是 GBK/GB2312 的超集，覆盖面最广）；
-#: - ``latin-1`` 是**永不失败**的兜底（1 字节 = 1 码点），保证最后一个分支能收尾。
+#: - ``latin-1`` 是永不失败的兜底（1 字节 = 1 码点），保证最后一个分支能收尾。
 _ENCODING_CHAIN: Final[tuple[str, ...]] = ("utf-8", "utf-8-sig", "gb18030", "latin-1")
 
 #: 扩展名 → source_kind 的映射。无扩展名走文本分支（离线素材里很常见）。
@@ -109,7 +109,7 @@ class HtmlNotSupported(ExtractError):
     两者对调用方的含义完全不同。扩展名不支持说的是"这个后缀的格式我们不认识"，
     而这里的内容确实是 HTML（正文就在里面，剥标签就能拿到可回验文本）—— 只是
     文件被存成了 `.bin` 这类名字（实测出现过：Crossref 链接落下来的响应是 HTML，
-    却被存成 `.bin`）。旧行为会报成"不支持的扩展名"，把一次**可处理**的内容
+    却被存成 `.bin`）。旧行为会报成"不支持的扩展名"，把一次可处理的内容
     说成"格式不认识"，调用方据此只能放弃；现在的理由直接告诉他怎么处理。
     """
 
@@ -127,12 +127,12 @@ class DocumentText:
 
     - ``text``：全文（PDF 情况下即 ``"\\n".join(pages)``）。供不关心页码的
       全文检索 / 交给 LLM 的一次性输入使用。
-    - ``pages``：**逐页**文本，1-based，``pages[i]`` 是第 ``i + 1`` 页。
-      ``pages == []`` 表示**无文本层**（扫描件）或文件确实没有正文，
+    - ``pages``：逐页文本，1-based，``pages[i]`` 是第 ``i + 1`` 页。
+      ``pages == []`` 表示无文本层（扫描件）或文件确实没有正文，
       调用方必须把它当作"无法校验引文"处理（§6.3）。
     - ``source_kind``：``pdf | txt | md | html``，记录走了哪条抽取路径，
       便于事后审计"这条引文来自 PDF 还是 HTML 快照"。
-    - ``encoding``：纯文本类文件**实际生效**的编码名（PDF/HTML 走字节解析
+    - ``encoding``：纯文本类文件实际生效的编码名（PDF/HTML 走字节解析
       时为 ``None``）。记录它是为了可复现：gb18030 与 latin-1 都能"成功"
       解码同一份字节但结果完全不同，不记录就无法解释抽取结果为何如此。
 
@@ -145,34 +145,83 @@ class DocumentText:
     pages: list[str]
     source_kind: str
     encoding: str | None = None
+    #: 逐页三态（`F-4`）：`ok` / `empty` / `failed`。它记录的是后端上报的
+    #: 真实页数，不保证与 `pages` 等长：`_finish_pdf` 的"无文本层"那一支会
+    #: 刻意把 `pages` 置空而保留逐页状态（`R3-2` 的取舍，`R6-AN-2` 把这条写清）。
+    #: 要用就用 `page_status` / `failed_pages()`，不要拿 `pages` 的长度去索引它
+    #: —— 空 `pages` 会让 `zip(pages, page_status)` 静默变空，越界索引若兜成
+    #: `"ok"` 会把"这一页读到了"判给一个没读到的页。
+    #:
+    #: 为什么需要它：`pages[i] == ""` 有两种完全不同的原因 ——
+    #: "这一页本来就是空白"与"这一页抽取时抛异常了"。旧实现把两者都写成 `""`，
+    #: 于是下游（`ocr.inspect`、`quoteverify.check_quote`）无法区分，
+    #: 结果是真引文被判成幻觉（`not_found`）而 OCR 检查同时告诉人
+    #: "有文本层，引文校验可以正常判定"。
+    #:
+    #: 空元组 = "没有逐页信息"（历史构造点、或整篇只有一个文本单元的文类），
+    #: 此时 `page_status_of()` 一律返回 `"ok"` —— 与旧行为逐字一致，
+    #: 所以这个字段是纯增量，不会把历史调用方变成"整篇不可读"。
+    page_status: tuple[str, ...] = ()
 
     @property
     def has_text_layer(self) -> bool:
         """是否存在可定位的文本层。
 
-        这是 agent_b 判断 §6.3 分支的**唯一**依据：``False`` ⇒
+        这是 agent_b 判断 §6.3 分支的唯一依据：``False`` ⇒
         ``quote_verified = None``、``status = "suspect"``，并在报告里计入
         "因无文本层未能校验"的条数。
         """
         return bool(self.pages)
 
+    def failed_pages(self) -> tuple[int, ...]:
+        """抽取时抛过异常的页号（1-based）。`F-4` 的消费点都用它。"""
+        if not self.page_status:
+            return ()
+        return tuple(i + 1 for i, s in enumerate(self.page_status) if s == "failed")
+
+    def page_status_of(self, page: int) -> str:
+        """第 `page` 页（1-based）的状态；无逐页信息时返回 ``"ok"``。"""
+        if not self.page_status or not (1 <= page <= len(self.page_status)):
+            return "ok"
+        return self.page_status[page - 1]
+
+    def page_unreadable(self, start: int | None, end: int | None) -> bool:
+        """`[start, end]`（1-based 闭区间，已收窄）里有任何一页不可读吗。
+
+        引文校验用它来区分"这句话不在这页上"与"这页根本没抽出来"：
+        后者必须走 `quote_verified=None`（没法判定），而不是 `False`（判成不存在）。
+
+        `R3-5`：这句话在 2026-09-26 之前是假的 —— 那时生产代码里没有调用点，
+        `quoteverify.check_quote` 自己用 `failed_pages()` + 区间过滤重写了同一判据。
+        现在 `check_quote` 真的调本方法（判据只有这一份实现），
+        所以"引文校验用它"是事实而不是愿望。
+        传 `None` 表示"窗口未给" ⇒ 返回 `False`（判不了，而不是"全篇都要查"）。
+        """
+        if not self.page_status or start is None or end is None:
+            return False
+        lo = max(1, int(start))
+        hi = min(len(self.page_status), int(end))
+        if lo > hi:
+            return False
+        return any(self.page_status_of(p) == "failed" for p in range(lo, hi + 1))
+
     def text_at(self, start: int | None, end: int | None) -> str:
-        """取第 ``start`` 页到第 ``end`` 页的文本（**1-based 闭区间**）。
+        """取第 ``start`` 页到第 ``end`` 页的文本（1-based 闭区间）。
 
         为什么页号是闭区间：§1.4 的 ``page_range = {start, end}`` 和
         §6.2/§6.3 的"±1 页扩大窗口重试"都是按"页"这个人类单位讨论的，
         闭区间与需求原文（"页码范围"）一致，也避免了"end 是开是闭"的经典歧义。
 
-        边界行为与**为什么**这样定：
+        边界行为与为什么这样定：
 
         - ``pages == []``（无文本层）⇒ 返回 ``""``。此时没有可校验的对象。
         - ``start`` 或 ``end`` 为 ``None`` ⇒ 返回 ``""``。
           这是刻意的、与"None 视为全文"相反的取舍：``text_at`` 的调用方是
-          §6.3 的引文校验，它的语义是"**这一页上**确实有这句话"。
+          §6.3 的引文校验，它的语义是"这一页上确实有这句话"。
           若把 ``None`` 当作全文，等于让"引文出现在文档任意位置"冒充
           "引文出现在所声称的页上"——页码字段就失去了约束力，
           ``quote_verified=true`` 会变成一句无法追究的空话。
-          取不到页范围就意味着**无法定位**，而无法定位就不该声称能校验，
+          取不到页范围就意味着无法定位，而无法定位就不该声称能校验，
           所以返回空串，让校验自然走向"未命中"这一失败方向（fail-closed）。
         - 越界自动收窄到 ``[1, len(pages)]``（例：``text_at(0, 999)`` 在 3 页
           文档上等价于 ``text_at(1, 3)``）。收窄而不是抛异常，是因为 §6.1
@@ -196,7 +245,7 @@ class DocumentText:
         """定位子串 ``needle`` 首次出现的页号（1-based）。
 
         RuleExtractor 用它把"原句"映射回页码。若找不到则返回 ``default``
-        （默认 1）——注意这**不是**在伪造定位：RuleExtractor 的句子本来
+        （默认 1）——注意这不是在伪造定位：RuleExtractor 的句子本来
         就是从某一页的原文里切出来的，走的是同一个规范化路径，找不到只可能
         是调用方传了别处来的串。为了不让调用方悄悄拿到错页码，这里返回
         ``default`` 并在 docstring 里写明它只是兜底值。
@@ -217,10 +266,10 @@ class DocumentText:
 def _decode_text(raw: bytes) -> tuple[str, str]:
     """按 ``_ENCODING_CHAIN`` 依次尝试解码，返回 ``(text, 实际编码名)``。
 
-    BOM 的处理：``utf-8`` 严格解码对带 BOM 的文件是**成功**的（BOM 是一个
+    BOM 的处理：``utf-8`` 严格解码对带 BOM 的文件是成功的（BOM 是一个
     合法码点 U+FEFF），所以链里第二个 ``utf-8-sig`` 几乎永远不会被触发。
     为保证文本干净，这里在解码成功后显式剥掉开头的 U+FEFF。
-    （把这些编码**全部**失败的情况留给调用方是不可能的：``latin-1``
+    （把这些编码全部失败的情况留给调用方是不可能的：``latin-1``
     对任意字节序列都成立，所以本函数不会抛异常。）
     """
     last_error: Exception | None = None
@@ -272,7 +321,7 @@ def _extract_plain_text(path: Path, *, max_bytes: int) -> tuple[str, str, str]:
 class _HTMLTextExtractor(HTMLParser):
     """极简 HTML → 文本。只用标准库 ``html.parser``（不引入 bs4，见约束）。
 
-    目标不是还原排版，而是**拿到正文串**，使引文可以在其中做子串匹配。
+    目标不是还原排版，而是拿到正文串，使引文可以在其中做子串匹配。
     两条关键规则：
 
     - ``script``/``style``/``head``/``noscript``/``template`` 里的内容是
@@ -329,7 +378,7 @@ class _HTMLTextExtractor(HTMLParser):
     def get_text(self) -> str:
         text = "".join(self._parts)
         # 行尾空白与 3 个以上连续空行折叠掉：这些差异会干扰 §6.3 之外的
-        # 下游启发式（如按空行切段），但**不影响**子串匹配（匹配前会规范化）。
+        # 下游启发式（如按空行切段），但不影响子串匹配（匹配前会规范化）。
         text = re.sub(r"[ \t\f\v]+", " ", text)
         text = re.sub(r" *\n *", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
@@ -351,39 +400,60 @@ def _strip_html(raw: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _pdf_pages_fitz(path: Path, max_pages: int) -> list[str]:
-    """首选方案：PyMuPDF。抽出的文本层质量最好，且能可靠拿到页数。"""
+def _pdf_pages_fitz(path: Path, max_pages: int) -> tuple[list[str], list[str]]:
+    """首选方案：PyMuPDF。抽出的文本层质量最好，且能可靠拿到页数。
+
+    返回 `(pages, status)`（`F-4`）；`status[i]` 是 ``ok`` / ``empty``。
+    PyMuPDF 的整篇抽取是原子的一步调用（没有逐页异常可以单独记），
+    所以这里只会出现 `ok` / `empty` 两种。
+    """
     import fitz  # 惰性：重依赖，且要允许未安装时回退
 
     with fitz.open(str(path)) as doc:
         total = int(doc.page_count)
         if total > max_pages:
             raise ExtractTooLarge(f"PDF 页数超过上限: {total} > {max_pages} ({path})")
-        return [doc.load_page(i).get_text("text") or "" for i in range(total)]
+        pages = [doc.load_page(i).get_text("text") or "" for i in range(total)]
+    return pages, ["ok" if p.strip() else "empty" for p in pages]
 
 
-def _pdf_pages_pdfminer(path: Path, max_pages: int) -> list[str]:
-    """次选方案：pdfminer.six。纯 Python，对个别 PDF 的排版还原比 fitz 好。"""
+def _pdf_pages_pdfminer(path: Path, max_pages: int) -> tuple[list[str], list[str]]:
+    """次选方案：pdfminer.six。纯 Python，对个别 PDF 的排版还原比 fitz 好。
+
+    返回 `(pages, status)`（`F-4`）。pdfminer 是逐页生成器，所以单页解析
+    抛异常是可以单独记下来的：那一页记 ``failed`` 而不是插一个空串。
+    """
     from pdfminer.high_level import extract_pages
     from pdfminer.layout import LAParams, LTTextContainer
 
     laparams = LAParams()
     pages: list[str] = []
+    status: list[str] = []
     for layout in extract_pages(str(path), laparams=laparams):
         if len(pages) >= max_pages:
             raise ExtractTooLarge(f"PDF 页数超过上限: >{max_pages} ({path})")
         # 只取顶层文本容器：pdfminer 会把文字按行/框组织，逐层递归拼接
         # 会重复计入（父容器已含子容器内容）。
-        pages.append(
-            "".join(
+        try:
+            got = "".join(
                 el.get_text() for el in layout if isinstance(el, LTTextContainer)
             )
-        )
-    return pages
+        except Exception:
+            pages.append("")
+            status.append("failed")
+            continue
+        pages.append(got)
+        status.append("ok" if got.strip() else "empty")
+    return pages, status
 
 
-def _pdf_pages_pypdf2(path: Path, max_pages: int) -> list[str]:
-    """末选方案：PyPDF2。兜底，抽取质量最弱，但覆盖面广。"""
+def _pdf_pages_pypdf2(path: Path, max_pages: int) -> tuple[list[str], list[str]]:
+    """末选方案：PyPDF2。兜底，抽取质量最弱，但覆盖面广。
+
+    返回 `(pages, status)`：`status[i]` 是 ``ok`` / ``empty`` / ``failed``（`F-4`）。
+    单页抛异常记 ``failed`` 而不再是"与空白页同形的空串" —— 两者在返回形态上
+    必须能分开，否则引文校验会把"这页没抽出来"读成"这句话不在这页上"。
+    """
     from PyPDF2 import PdfReader
 
     reader = PdfReader(str(path))
@@ -391,20 +461,25 @@ def _pdf_pages_pypdf2(path: Path, max_pages: int) -> list[str]:
     if total > max_pages:
         raise ExtractTooLarge(f"PDF 页数超过上限: {total} > {max_pages} ({path})")
     pages: list[str] = []
+    status: list[str] = []
     for page in reader.pages:
         try:
-            pages.append(page.extract_text() or "")
+            got = page.extract_text() or ""
         except Exception:
-            # 单页失败不该毁掉整篇：记为空页，后续"全空 ⇒ 无文本层"的判断
-            # 依然成立（fail-closed，不会伪造出内容）。
+            # 单页失败不该毁掉整篇：记为空串并记 failed，后续"全空 ⇒ 无文本层"
+            # 的判断依然成立（fail-closed，不会伪造出内容）。
             pages.append("")
-    return pages
+            status.append("failed")
+            continue
+        pages.append(got)
+        status.append("ok" if got.strip() else "empty")
+    return pages, status
 
 
 def _sniff(raw: bytes) -> str:
     """读文件头几十字节判它到底是什么 ⇒ ``"pdf" | "html" | ""``（空串 = 看不出来）。
 
-    为什么必须有它：调用方给的扩展名**不是**内容的证据。实测（真实数学文献的
+    为什么必须有它：调用方给的扩展名不是内容的证据。实测（真实数学文献的
     全文获取路径）两次 `extract_failed` 都是同一个形态：Crossref 链接返回的是
     HTML，落盘时被存成 `.bin`，而分派只看扩展名 ⇒ 直接判"格式不支持"。内容是
     完好的，失败的只是"我们按名字猜格式"这一步。
@@ -418,12 +493,12 @@ def _sniff(raw: bytes) -> str:
       而真正的 XML（如 JATS 全文）不是本模块承诺的格式，误判会让下游拿到
       "剥完标签什么都没有"的空正文。
     - 其余一律返回空串 ⇒ 调用方保持原有行为（按扩展名分派），所以本函数
-      **只可能把"原本会失败的分派"救回来，不会改变任何原本成功的路径**。
+      只可能把"原本会失败的分派"救回来，不会改变任何原本成功的路径。
     """
     head = raw[:_SNIFF_BYTES]
     if head.startswith(b"%PDF"):
         return "pdf"
-    # 为什么要用 `errors="ignore"` 而不是让解码抛：这是一次**嗅探**，
+    # 为什么要用 `errors="ignore"` 而不是让解码抛：这是一次嗅探，
     # 二进制垃圾（截断的 PDF、压缩流）必然混在这里，而"解不出字符"与
     # "内容不是 HTML"是同一件事 —— 不 ignore 就会让嗅探本身成为一条崩溃路径。
     text = head.decode("utf-8", "ignore")
@@ -438,15 +513,23 @@ def _sniff(raw: bytes) -> str:
     return ""
 
 
-def _pdf_pages(path: Path, max_pages: int) -> tuple[list[str], str]:
-    """按 fitz → pdfminer → PyPDF2 顺序抽取，返回 ``(pages, 生效后端名)``。
+def _pdf_pages(path: Path, max_pages: int) -> tuple[list[str], list[str], str]:
+    """按 fitz → pdfminer → PyPDF2 顺序抽取，返回 ``(pages, status, 生效后端名)``。
 
     为什么每条链都重试而不是只认第一个：这三个库读同一份 PDF 的成功率并不
     一致（fitz 对加密/损坏文件更严格，pdfminer 对老式 Type3 字体更宽容）。
     失败原因会被逐条累积到异常信息里，方便定位是哪一层坏。
 
-    注意：``ExtractTooLarge`` **不参与回退**——它是策略性拒绝，换个后端也
-    还是超限，继续回退只会浪费几十秒。
+    注意：``ExtractTooLarge`` 直接上抛、不参与回退（`R6-AN-6`）：这是策略性拒绝，
+    而不是"超限在三条链上都是免费的前置检查"—— 三条链各自判自己的上限
+    （fitz 先 `fitz.open`、用 `doc.page_count` 判、判完才 `load_page`；
+    pdfminer / PyPDF2 是已经启动解析、抽到上限才抛），所以对"页数被后端误报为
+    超限的损坏文件"，回退确实会逐条诚实地失败；这里止住回退是不让一次拒绝在
+    三条链上各付一次解析代价。
+
+    `status` 是 `F-4` 的逐页三态（``ok`` / ``empty`` / ``failed``），与它同时
+    返回的 `pages` 等长。注意下游 `_finish_pdf` 在"无文本层"那一支会把 `pages`
+    置空而保留 `status` ⇒ 到了 `DocumentText` 那一层两者可以不等长（`R6-AN-2`）。
     """
     errors: list[str] = []
     for name, fn in (
@@ -455,7 +538,8 @@ def _pdf_pages(path: Path, max_pages: int) -> tuple[list[str], str]:
         ("PyPDF2", _pdf_pages_pypdf2),
     ):
         try:
-            return fn(path, max_pages), name
+            pages, status = fn(path, max_pages)
+            return pages, status, name
         except ExtractTooLarge:
             raise
         except Exception as exc:  # 记住失败原因后继续回退
@@ -468,7 +552,7 @@ def page_count(path: Path | str) -> int | None:
 
     - 非 PDF（txt/md/html）⇒ ``None``：文本类文件没有"页"这个概念，
       返回 ``1`` 会诱导调用方以为页码可定位。
-    - 读取失败 ⇒ ``None``：这是**诊断性**函数，失败不该让调用方崩溃；
+    - 读取失败 ⇒ ``None``：这是诊断性函数，失败不该让调用方崩溃；
       真要失败详情请调 ``extract_text``（它会抛出带原因链的异常）。
     """
     p = Path(path)
@@ -485,7 +569,7 @@ def page_count(path: Path | str) -> int | None:
         from PyPDF2 import PdfReader
 
         return len(PdfReader(str(p)).pages)
-    except Exception:  # PyPDF2 也不成 ⇒ 再试 pdfminer；这是**诊断性**函数，失败即 None
+    except Exception:  # PyPDF2 也不成 ⇒ 再试 pdfminer；这是诊断性函数，失败即 None
         pass
     try:
         from pdfminer.pdfpage import PDFPage
@@ -501,18 +585,93 @@ def page_count(path: Path | str) -> int | None:
 # --------------------------------------------------------------------------- #
 
 
-def _finish_pdf(pages: Sequence[str], backend: str) -> DocumentText:
+def _page_status_of(pages: Sequence[str], status: Sequence[str] | None,
+                    *, expected: int | None = None,
+                    backend: str = "?") -> tuple[str, ...]:
+    """逐页三态。后端给了（且长度对得上）就用它的；否则按内容推。
+
+    抽出来是为了让 `_finish_pdf` 的两支共用同一条长度校验规则：旧版只在"有文本层"
+    那一支用它，无文本层那一支硬写空元组 —— 那正是 `R3-2`（整篇抽取失败被
+    报成"疑似扫描件"）的成因。`R6-AN-5` 补一句：两支传的 `expected` 不同
+    （无文本支要给，正常支不传，见下一段），相同的只是"长度校验"这一步，
+    不是"两支走完全相同的路径"。
+
+    `expected` 用来处理一个故意留下的小错位：无文本层时 `pages` 被置空（§6.3 契约），
+    而后端给的 `status` 仍然与**真实页数**等长。此时不能因为"长度与 `pages` 不等"
+    就把整份状态丢掉 —— 那正是被修掉的那个缺陷。给了 `expected` 就按它比长度。
+
+    `R3-8`：长度确实对不上时**不许静默降级**。旧版在这里无声地改按内容推，
+    于是后端上报的 `failed` 凭空消失、回到"真引文被判成幻觉"的那条路径，
+    而没有任何信号（重审实测：`_finish_pdf(['第一页','','第三页'], 'PyPDF2', ['ok'])`
+    ⇒ `page_status=('ok','empty','ok')`、`failed_pages=()`）。
+    现在留一条 warning（带 backend 与两个长度）—— 按内容推仍然是结论
+    （抛异常会让"后端少报一页状态"变成整篇抽取失败，代价更大），
+    但它是"被记录过的降级"，可以被断言、也可以被人看见。
+    """
+    materialized = [str(page) for page in pages]
+    if status is not None:
+        n_want = len(materialized) if expected is None else int(expected)
+        if len(status) == n_want:
+            return tuple(str(s) for s in status)
+        logger.warning(
+            "后端 %s 给的逐页状态与页数不符（status=%d 项，期望 %d 项，pages=%d 页）"
+            "⇒ 本次按内容推逐页状态（ok/empty）：后端上报的 failed 会因此丢失，"
+            "`R3-8` 记的就是这个形态（`failed_pages` 这一层可能被判成『没有失败页』）",
+            backend, len(status), n_want, len(materialized),
+        )
+    # 后端没给状态（或给的长度确实对不上）⇒ 按内容推：这与旧行为一致，
+    # 不会凭空制造"这一页不可读"。
+    return tuple("ok" if p.strip() else "empty" for p in materialized)
+
+
+def _finish_pdf(pages: Sequence[str], backend: str,
+                status: Sequence[str] | None = None) -> DocumentText:
     """统一的收尾：判断无文本层 + 拼接全文。
 
-    "无文本层"的判据是**所有页去空白后都为空**，而不是"某一页为空"：
+    "无文本层"的判据是所有页去空白后都为空，而不是"某一页为空"：
     正常 PDF 里插图页/章节扉页常常没有文字，把它误判成扫描件会让整篇文献
     的引文全部落到 ``quote_verified=null``，代价过大。
+
+    `status` 是逐页三态（`F-4`）；不给时按"空 ⇒ empty、非空 ⇒ ok"推出来 ——
+    这与旧行为逐字一致（"没有 failed 这个概念"），所以调用方不传它不会变严。
     """
     if not pages or all(not page.strip() for page in pages):
         # 无文本层：pages=[] 是给 agent_b 的信号（§6.3），
         # source_kind 仍保持 "pdf"，好让报告能区分"扫描版 PDF"与"非 PDF"。
-        logger.info("PDF 无文本层（疑似扫描件），后端=%s：pages 置空", backend)
-        return DocumentText(text="", pages=[], source_kind="pdf", encoding=None)
+        #
+        # `R3-2`（重审实测的修法）：逐页状态**必须带出去**。
+        # 旧版在这里无条件写 `page_status=()`，于是"整篇每一页都抽取失败"这一档
+        # 在 `failed_pages()` 眼里是"没有失败的页" ⇒ `ocr_tools` 里专为
+        # "抽取失败"写的那一支（`失败原因是抽取失败`）成了**死代码**，
+        # 工具把"我们的后端在这份文件上全崩了"报成"疑似扫描件（本来就是空白页）"，
+        # 而这两种情况的处置完全不同（换后端重试 vs 走 OCR）。
+        #
+        # 为什么仍然置 `pages=()`：那是 §6.3 的契约（`agent_b` 据此把
+        # `quote_verified` 置 null），改它会把下游整片改掉；而"哪些页不可读"
+        # 本来就由 `page_status` 承载。注意这里两者是刻意不等长的（`R6-AN-2`：
+        # `page_status` 记的是后端上报的真实页数，`pages` 是空元组），所以要读
+        # 就用 `page_status` / `failed_pages()`，不要拿 `pages` 的长度去索引它
+        # —— 空 `pages` 会让按它兜底的读者静默读空。两者分开正是 `F-4` 的用意。
+        # `R3B-2`（第二轮复审实测）：日志行必须和工具面一样**分开这两件事**。
+        # 旧版无论哪一种都打同一句「PDF 无文本层（疑似扫描件）」——
+        # 于是"我们的抽取链在这份文件上全崩了"与"它本来就是扫描件"
+        # 在日志里长得一模一样（`ocr_tools` 那边已经分开，日志这边还没有）。
+        status_now = _page_status_of(pages, status, backend=backend,
+                                     expected=len(pages) or (len(status) if status else 0))
+        n_failed = sum(1 for s in status_now if s == "failed")
+        if n_failed:
+            logger.warning(
+                "PDF 无文本层，且原因是**抽取失败**（不是扫描件）：后端=%s，"
+                "%d/%d 页在抽取时抛了异常 ⇒ pages 置空、逐页状态保留为 %d 个 failed",
+                backend, n_failed, len(status_now), n_failed,
+            )
+        else:
+            logger.info("PDF 无文本层（疑似扫描件：每页去空白后都为空），后端=%s：pages 置空",
+                        backend)
+        # `expected`：`pages` 为空但 `status` 非空时（"后端一页都没返回、但逐页状态还在"），
+        # 长度按状态自己算 —— 不能因为"与空的 pages 不等长"就把状态丢掉。
+        return DocumentText(text="", pages=[], source_kind="pdf", encoding=None,
+                            page_status=status_now)
     logger.debug("PDF 抽取成功：后端=%s 页数=%d", backend, len(pages))
     materialized = [str(page) for page in pages]
     return DocumentText(
@@ -520,6 +679,7 @@ def _finish_pdf(pages: Sequence[str], backend: str) -> DocumentText:
         pages=materialized,
         source_kind="pdf",
         encoding=None,
+        page_status=_page_status_of(materialized, status, backend=backend),
     )
 
 
@@ -576,8 +736,8 @@ def extract_text(
             "（扩展名是这里唯一的判据，本模块不改写调用方的文件名）。"
         )
     if sniffed == "pdf" or suffix == ".pdf":
-        pages, _backend = _pdf_pages(p, max_pages)
-        return _finish_pdf(pages, _backend)
+        pages, status, _backend = _pdf_pages(p, max_pages)
+        return _finish_pdf(pages, _backend, status)
 
     if suffix in _TEXT_SUFFIXES or suffix == "":
         text, kind, encoding = _extract_plain_text(p, max_bytes=max_bytes)
@@ -596,7 +756,7 @@ def extract_text(
 
 if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     # 本文件即 __main__，因此上面定义的名字（extract_text / page_count / …）
-    # 直接可用，**不要**再 `from .extract import ...`，否则会加载出第二份模块实例。
+    # 直接可用，不要再 `from .extract import ...`，否则会加载出第二份模块实例。
     import json
     import sys
     from dataclasses import asdict, is_dataclass

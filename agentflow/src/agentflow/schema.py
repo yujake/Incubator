@@ -73,6 +73,18 @@ RELATION_STATUS = ("active", "suspect", "rejected")
 #:   no_results    —— 搜索正常执行但确实没有命中（这是一个**有效结论**）
 #:   search_failed —— 所有 provider 都失败，且已用尽重试
 #:   gave_up       —— 超过最大尝试次数被放弃
+#:
+#: ⚠️ **别与 `TASK_OUTCOMES` 串了（两套命名空间只差一个字母）**：
+#: 本词表（`search_requests.outcome`，搜索请求那一行）用的是复数 `no_results`；
+#: 而 `TASK_OUTCOMES`（`tasks.outcome`，一次召唤的终局）用的是单数 `no_result`。
+#: 两者字面像、含义也不同：这里是"这一次搜索没有命中"，那里是"这次召唤完成了但没产出"。
+#:
+#: 这一条必须靠注释说出来，因为**错一个字母不会有任何东西变红**：
+#: `SearchRequest.validate` 只查"在不在 `SEARCH_OUTCOMES` 里"，所以写 `no_result`
+#: 会被拒绝（那是好事），但**反过来** —— 有人在读 `tasks` 的报错提示时照抄
+#: `no_results` —— `Task.validate` 同样会拒绝，只是没人知道自己串了哪一套。
+#: 登记册里曾经有一条提案（`P-21`）正是把这两个词表读串了，以为
+#: `SEARCH_OUTCOMES` 登记的是单数、要改 `verify.py` 的文案；**已撤回**（前提不成立）。
 SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 
 #: `literature.download.status` 的受控词表。
@@ -190,6 +202,9 @@ class SearchRequest:
     def validate(self) -> None:
         if not self.request_id:
             raise ValueError("request_id 不能为空")
+        # `c-1` / `c-2`：非空之外还必须过过程记录 ID 的完整判据（形态 + 前缀）。
+        # 此前只查非空 ⇒ `r--0001` / `0000` / `gb-0001` 全部通过 `validate()`。
+        require_process_id(self.request_id, "request")
         if self.mode not in SEARCH_MODES:
             raise ValueError(f"mode 必须是 {SEARCH_MODES} 之一，收到 {self.mode!r}")
         if not self.topic.strip():
@@ -464,6 +479,8 @@ class ReprocessRequest:
     def validate(self) -> None:
         if not self.reprocess_id:
             raise ValueError("reprocess_id 不能为空")
+        # `c-1` / `c-2`：与 `SearchRequest.validate` 同一条判据（前缀是 p-）。
+        require_process_id(self.reprocess_id, "reprocess")
         if self.reason not in REPROCESS_REASONS:
             raise ValueError(f"reason 必须是 {REPROCESS_REASONS} 之一，收到 {self.reason!r}")
         if self.status not in REPROCESS_STATUSES:
@@ -704,14 +721,33 @@ DEP_STATUSES = ("closed", "dangling", "external_unavailable")
 #: H 的审校发现类型。**每一类都必须能机械判定**，否则审校会退化成"我感觉"。
 #:   unsupported_claim       —— 断言没有引用（可判定：citations 为空）
 #:   dangling_dep            —— 依赖悬空 / 外部不可得（可判定：dependencies 表）
-#:   quote_mismatch          —— 引文与原文不符（可判定：回到原文比对）
 #:   overclaim               —— 把 cross_check 写成 proved（可判定：evidence_kind）
 #:   missing_negation_kind   —— 否定型结论没分类（可判定：is_negative + negation_kind）
 #:   scope_drift             —— 把假设当公理、结论范围被放大
 #:   garbled                 —— 表述错误 / 自相矛盾
 #:   inconsistent_number     —— 同一个数字在不同处不一致
+#:
+#: ## 这里曾经有一个引文档，`E-10`（2026-09-27 裁定 (b)）把它删掉了
+#:
+#: 旧词表里有一条 `` `quote` + `_mismatch` ``（"引文与原文不符"），注释还写着
+#: "可判定：回到原文比对"。那句话是假的：`quoteverify.check_quote` 的 reason
+#: 取值里从来没有"找到了但不一样"这一档（只有 `substring_match*` / `not_found*` /
+#: `no_text_layer` / `empty_quote` / `page_unreadable` / `page_status_unknown`），
+#: 而 `doc_tools` / `review_tools` 两张 code→kind 映射表里也都没有它 ——
+#: 没有任何生产路径能产出它。于是"引文被改写"与"整句编造"在本系统里
+#: 给出的判决逐字相同（都是 `not_found`）。
+#:
+#: 处置选了 (b) 而不是 (a)（给回验加一档近似匹配）：把"逐字不在"细分成"被改写"，
+#: 会把一次编造软化成一档更轻的指控，而两者的处置方向相反（改写 ⇒ 去改引文；
+#: 编造 ⇒ 去查幻觉）—— 证据链上往轻判是最危险的方向；而且近似匹配需要一个
+#: 今天无法标定的阈值（token 覆盖率），那是发明数字，本仓库的纪律不许。
+#: ⇒ 删掉假承诺，并让边界可见：本系统只能判"逐字不在"，不能判"被改写/拼接"
+#: （边界写在 :func:`agentflow.quoteverify.check_quote` 的 docstring 里）。
+#:
+#: 为什么删它不必担心追溯性：它从未被任何路径产出过 ⇒ 历史 `findings` 行里
+#: 不可能有这个取值，删它不改写任何历史报告的含义。
 FINDING_KINDS = (
-    "unsupported_claim", "dangling_dep", "quote_mismatch", "overclaim",
+    "unsupported_claim", "dangling_dep", "overclaim",
     "missing_negation_kind", "scope_drift", "garbled", "inconsistent_number",
 )
 
@@ -725,6 +761,23 @@ FINDING_LEVELS = ("error", "warning", "info")
 
 #: 审校发现的状态。`wontfix` / `disputed` 必须写理由（同 `dropped` 必须写 notes）。
 FINDING_STATUSES = ("open", "fixed", "wontfix", "disputed")
+
+#: `maths` 的取值域（`P-9` 候选 A，2026-09-27 所有者裁定；落点见 `docs/PROPOSALS.md`）。
+#:
+#: 名字刻意不以 `_KINDS` / `_STATUSES` / `_OUTCOMES` / `_SCOPES` 结尾：它不是一张
+#: "产出方从中挑一个"的业务词表，而是 `gates.gate_g10` 那条 `maths: yes/no` 判据的
+#: 取值域本身。`tools/vocab_census.py` 按后缀认定候选词表，把它命名成词表只会多出
+#: 一条"死取值/无产出点"的诊断噪音（它的产出方是 H 的审校发现，不在 `src/` 里）。
+FINDING_MATHS_VALUES = ("yes", "no")
+
+#: 审校格式契约（`P-9` 候选 A）的生效日。唯一的读者是 `gates.gate_g10`。
+#:
+#: 语义只有一句：`created_at` 早于这一天的发现是"契约生效前落盘的历史行"，
+#: G10 对它们不要求 `line` / `verbatim_quote` / `suggestion`(=`minimal_fix`) / `maths`
+#: 四个键。为什么豁免面必须是一个常量而不是"看情况"：`store.rebuild()` 对重放的每一行
+#: 调 `validate()`，抛异常的行被 `skipped += 1` 静默丢掉 —— 那是数据遗失，不是格式错误。
+#: 历史行不许回填：`line` 只能从 `target` 猜出来，猜出来的行号是一个发明出来的数字。
+REVIEW_FINDING_FORMAT_SINCE = "2026-09-27"
 
 
 @dataclass
@@ -1040,6 +1093,10 @@ class Document:
     #: ``{"claim_id","section","text","evidence_kind","citations":[...],
     #:    "is_negative","negation_kind","disclaimer"}``
     #: 其中 `citations` 的元素形如 ``"rel:0007"`` / ``"lit:0003#p.4"`` / ``"exp:0002"``。
+    #: 反例字段有两个来源，语义互不替代（`P-10` 候选 A，2026-09-27 所有者裁定）：
+    #: `counterexamples` = 人 / 文献已知的清单；`numeric_evidence.n_counterexamples`
+    #: = 那一次数值运行机器扫到的条数。两者不等时 `scope_caveat` 必填
+    #: （判据在下面的 `validate()` 里，不在 G12 那道门上）。
     claims: list[dict] = field(default_factory=list)
     open_problems: list[str] = field(default_factory=list)
     status: str = "draft"
@@ -1104,6 +1161,29 @@ class Document:
                     f"claims[{cid}] 不是否定型断言却带了 negation_kind={c.get('negation_kind')!r}"
                     "（会让'否定'的计数虚高）"
                 )
+            # ---- 硬约束 4：反例的两个来源（`P-10` 候选 A，2026-09-27 所有者裁定）----
+            #
+            # 两个字段各司其职，谁都不许被读成另一个（口径写清 = 本候选的全部内容）：
+            #   * `counterexamples` = 人 / 文献已知的反例清单（可能来自别处）。
+            #     它是空清单时只说"没有已知反例"，不说"机器没扫到反例"；
+            #   * `numeric_evidence.n_counterexamples` = 那一次数值运行扫到的条数
+            #     （机器产生，与 `script` / `range` / `n_cases` 同属一个四元组）。
+            # 两者本来就不该相等，所以这里不判相等、也不判谁更权威；
+            # 只判一件事：不相等时必须用 `scope_caveat` 把差异来源写成一句可判定的话
+            # （例："文献已知反例，非本次扫描"）。
+            # 这不是一致性门：G12 一行不改，它继续把两个来源并列当"搜过"的痕迹。
+            ces = c.get("counterexamples")
+            ne = c.get("numeric_evidence")
+            n_ce = ne.get("n_counterexamples") if isinstance(ne, dict) else None
+            if isinstance(ces, (list, tuple)) and len(ces) > 0 and n_ce is not None:
+                if len(ces) != n_ce and not str(c.get("scope_caveat") or "").strip():
+                    raise ValueError(
+                        f"claims[{cid}] 的 counterexamples 有 {len(ces)} 条（人/文献已知），"
+                        f"而 numeric_evidence.n_counterexamples={n_ce!r}（那一次运行机器扫到的），"
+                        "两者不等却没有 scope_caveat。"
+                        "两个数本来就不该相等（一个来自人/文献、一个来自机器），"
+                        "但差异必须自证：不给 scope_caveat，读者无法判断哪个数在说什么（P-10）"
+                    )
         if self.review_rounds < 0:
             raise ValueError("review_rounds 不能为负")
 
@@ -1183,6 +1263,33 @@ class ReviewFinding:
     是实现方拿证据顶回来才纠正的。若审校记录可以只写"这里有问题"而
     不给依据，那么审校就会变成**另一种幻觉的来源**，而且因为审校者的
     位置更高，它更难被纠正。
+
+    ---- `P-9` 候选 A（2026-09-27 所有者裁定）：G10 六键里的四键 ----
+
+    `draft/17` §8.4 的 G10 审校格式门要求"每条发现必须有：轴 + 严重度 +
+    行号 + ≤20 词逐字引文 + 最小修法 + `maths: yes/no`"。这六格里，
+    `axis` / `line` / `verbatim_quote` / `maths` 原本在本表上不存在
+    （概念上缺 4 个），而"最小修法"那一格是"概念上有、键名不同"
+    （G10 读 `minimal_fix`，本表叫 `suggestion`）—— 所以补齐的动作是"4 个新字段
+    + 1 处键名对齐"，不是 5 个新字段。
+
+    两条纪律写在这里，因为它们都是"看起来更严、实际更糟"的形态：
+
+    1. 本表的 `validate()` 刻意不含"这四个字段必须非空"这类断言。
+       理由不是宽容，是 `store.rebuild()` 的实测行为：它逐行调
+       `S.row_from_dict(...)` + `obj.validate()`，任何异常都被
+       `except Exception: skipped += 1; continue` 吃掉 —— 加上非空断言，
+       契约生效前落盘的历史 finding 行会在下一次重建时整行消失，
+       而且不报错。完整性（四键齐不齐、行号拿不到有没有自证）由
+       `gates.gate_g10` 判，且 G10 只对 `created_at >=
+       REVIEW_FINDING_FORMAT_SINCE` 的行要求它；历史行按 `created_at`
+       豁免，不许回填。
+    2. 这四个字段一律不进去重键。去重键是
+       `(kind, target, message)`（`tools/review_tools._dedup_key`），
+       `verify_fixes` 的重开逻辑与 `test_agent_h` 的去重断言都靠它。
+       把 `line`（行号易失）或 `verbatim_quote`（改一个词就变）塞进键里，
+       会让每一次微小的稿件改动都产生一批新发现，并打断"标了 fixed
+       但其实还在"的重开逻辑。
     """
 
     finding_id: str
@@ -1198,6 +1305,35 @@ class ReviewFinding:
     resolution_note: str = ""
     created_at: str = ""
     created_by: str = "agent-H"
+    #: 轴。取值域 = `gates.AXES`（数学 / 体例 / 工程 / 证据）。
+    #: 不在本模块重抄一份词表（FC-03）：`validate()` 里按 `gates.AXES` 判。
+    axis: str = ""
+    #: 1 起的行号，指向 `doc_id` 那一行。`None` = "这一次拿不到行号"，
+    #: 此时必须给 `line_unavailable_reason`（否则"拿不到"是一个没有结论的空白）。
+    #: 为什么行号是有条件的：行号只有在版本冻结（G11）之后才有意义 ——
+    #: 未冻结时记下的行号在改稿之后就是错的，而它看起来一样精确
+    #: （`.noai-paths` 里"理由里刻意不写行号"那条纪律是同一件事的另一面）。
+    #:
+    #: `X-96.3-2`：上面那句"G11 通过后必填"此前**没接线** ——
+    #: `gates.GateContext` 里 `findings` 与 `observed_hash` 互不相干，于是
+    #: 一条带行号的发现可以在一份没钉版本 hash 的输入里通过 G10。接线落在
+    #: `gates` 侧（`GateContext.findings_version_pinned` + `gate_g10`，
+    #: 判据 `draft/28` §96.3 第 2 条）；本表**不加**非空断言，理由同上一条注释
+    #: 第 1 点：`store.rebuild()` 会把任何 `validate()` 抛异常的行静默丢掉，
+    #: 所以"必填"这件事由门判、不由写入期契约判。这里只把口径写清楚：
+    #: **版本已冻结（G11 通过）时 `line_unavailable_reason` 不是合规的第三态**
+    #: ——"行号拿不到"与"版本已冻住"是互相矛盾的，G10 会按缺字段打回。
+    line: int | None = None
+    #: 逐字引文（≤20 词；中文按字、英文按空白切词）。词数口径只有一份实现：
+    #: `gates._quote_word_count`，由 `validate()` 复用，不另造一套。
+    verbatim_quote: str = ""
+    #: `maths` 档。取值域 = `FINDING_MATHS_VALUES`（`"yes"` / `"no"`）。
+    maths: str = ""
+    #: `line is None` 时必须非空的理由（"为什么这一次拿不到行号"）。
+    #: `X-96.3-2`：这一格只在**版本未冻结**时才是合规的第三态；G11 通过
+    #: （`observed_hash` 与被审版本 hash 逐字相等）时 `line` 必填，
+    #: 此时填了本字段也会被 G10 按"缺 `行号(line)`"打回。
+    line_unavailable_reason: str = ""
 
     def validate(self) -> None:
         require_id(self.finding_id, "finding_id")
@@ -1224,6 +1360,31 @@ class ReviewFinding:
                 f"status={self.status!r} 时必须写 resolution_note"
                 "（不接受修但不说明为什么，与 'dropped 必须写 notes' 同一条纪律）"
             )
+        # ---- `P-9` 候选 A 的取值判据（2026-09-27 所有者裁定）----
+        #
+        # 只判"给了值就必须给对"，刻意不判"必须给值"（见类 docstring 第 1 条：
+        # 非空断言会让 store.rebuild() 静默丢历史行）。完整性由 G10 判。
+        # 词表与词数口径都只有一份实现，都在 `gates` 里，这里惰性 import：
+        # `gates` 顶层 import `tools.doc_tools`，而后者顶层 import 本模块 ——
+        # 模块级互相 import 会成环（与 `store` 那处惰性 import 同一条理由）。
+        from .gates import AXES, _quote_word_count
+
+        if self.axis.strip() and self.axis not in AXES:
+            raise ValueError(f"axis 必须是 {AXES} 之一，收到 {self.axis!r}")
+        if self.maths.strip() and self.maths not in FINDING_MATHS_VALUES:
+            raise ValueError(f"maths 必须是 {FINDING_MATHS_VALUES} 之一，收到 {self.maths!r}")
+        if self.line is not None:
+            if isinstance(self.line, bool) or not isinstance(self.line, int) or self.line < 1:
+                raise ValueError(
+                    f"line 必须是 1 起的行号（int）或 None（拿不到行号时给 None），收到 {self.line!r}"
+                )
+        if self.verbatim_quote.strip():
+            words = _quote_word_count(self.verbatim_quote)
+            if words > 20:
+                raise ValueError(
+                    f"verbatim_quote 是 {words} 词，超过参考体例的 20 词上限"
+                    "（口径 = `gates._quote_word_count`：中文按字、英文按空白切词）"
+                )
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -1271,6 +1432,12 @@ TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed")
 #: `refused` 单列是刻意的：**"我们没做"与"做了没成"是最容易被混为一谈的一对**
 #: （本项目在引文校验、OCR、D 溯源、C 预算截断四处都踩过）。拒绝是**策略**的决定，
 #: 失败是**执行**的结果，二者需要完全不同的处置。
+#:
+#: ⚠️ **别与 `SEARCH_OUTCOMES` 串了（两套命名空间只差一个字母）**：
+#: 本词表（`tasks.outcome`，一次召唤的终局）用的是单数 `no_result`；
+#: 而 `SEARCH_OUTCOMES`（`search_requests.outcome`，一次搜索请求的终局）
+#: 用的是复数 `no_results`。见 `SEARCH_OUTCOMES` 上面那段 —— 两处必须成对读，
+#: 因为"错一个字母"在两边都只会得到一句"不在词表里"，而不会告诉你串了哪一套。
 TASK_OUTCOMES = ("ok", "no_result", "not_applicable", "refused", "failed", "cancelled")
 
 #: 框架拒绝执行的具体理由（受控词表）。`outcome="refused"` 必须带其中之一。
@@ -1341,6 +1508,8 @@ class Task:
     def validate(self) -> None:
         if not str(self.task_id or "").strip():
             raise ValueError("task_id 不能为空")
+        # `c-1` / `c-2`：与 `SearchRequest.validate` 同一条判据（前缀是 t-）。
+        require_process_id(self.task_id, "task")
         if self.role not in (*ROLES, CONDUCTOR_ROLE):
             raise ValueError(f"role 必须是 {(*ROLES, CONDUCTOR_ROLE)} 之一，收到 {self.role!r}")
         if not str(self.action or "").strip():
@@ -1412,7 +1581,91 @@ class Task:
 
 #: 花销台账的**归口**。为什么必须有受控词表：没有它，"这次花了多少"就没有可比口径
 #: （"搜索"与"审校"的 token 花在一个池子里，等于什么也没说）。
-USAGE_SCOPES = ("summon", "experiment", "search", "extract", "review", "reason", "other")
+#:
+#: 六档，没有 `"other"`。为什么删掉它（`G-6`，2026-09-26 全面体检）：
+#: `modelgw.complete` 的 docstring 自己写着"缺省也不许是「其它」：一个「其他」档会把
+#: 「有人忘了写」伪装成一个正常的分类"，而 `"other"` 恰恰就在词表里 ——
+#: 于是那句承诺在数据上不成立：`Charge(scope="other")` 不拒，
+#: `by_scope["other"]` 与正常档长得一模一样。一个"什么都不是"的档要么有真实产出点、
+#: 要么不在词表里；本仓今天没有任何地方会产出 `"other"`，所以按后者处置。
+#: 编外的值不会被丢掉 —— `tokenmeter.by_scope` 把它们归到显式的 `SCOPE_UNCLASSIFIED`
+#: 档并记下原值（那里能看出"有人写了一个编外归口"）。
+USAGE_SCOPES = ("summon", "experiment", "search", "extract", "review", "reason")
+
+#: "这一行没有可辨的归口"的显式取值。它**不在** `USAGE_SCOPES` 里，理由是
+#: 那六个值是调用方声明的用途，而这个值是读账方在遇到编外/空 scope 时的落位：
+#: 把它塞进词表会让"有人写了一个编外归口"看起来像一个合法的分类
+#: （G-20 的纪律逐字："缺省不许静默落到某个'其它'档"）。它只出现在**只读汇总**
+#: （`tokenmeter.by_scope`）里；写入方必须给出 `USAGE_SCOPES` 里的一个值。
+SCOPE_UNCLASSIFIED = "unclassified"
+
+#: 每一档归口的产出点登记（`G-6`）。值是一个二元组：
+#: `(产出点标识, 说明)`，或 `None` 表示"本版本没有产出点"。
+#:
+#: 为什么需要它：`by_scope` 对每一档都给固定键，零值档也在场 ——
+#: 于是"没有任何生产代码会产出这一档"与"查过、这一档没花钱"在产物里长得一模一样。
+#: 把产出点写成一张可对账的表之后，"某一档归零"这件事才有确定的读法。
+#:
+#: 判据（`_assert_usage_scope_production_contract` 在导入期执行）：
+#: `USAGE_SCOPES` 的每一档都必须在这张表里出现 —— 新增一档而不登记产出点，
+#: 导入期就炸，而不是等读者从 `by_scope` 的全零里猜。
+#:
+#: 注意这张表是人写的声明，不是推导出来的：能推导出来的只有"源码里出现了
+#: 这个字面量"，而那正是 `G-6` 要否掉的那种证据（`'other'` 在 modelgw 的自检里
+#: 也出现过）。所以这里逐档写下"谁产出它"，由测试与真实产物两条判据交叉验证。
+USAGE_SCOPE_PRODUCERS: dict[str, tuple[str, str] | None] = {
+    "summon": ("conductor._charge_and_settle", "召唤级结算：Charge(scope='summon')"),
+    "experiment": None,
+    "search": None,
+    # `extract` 原先登记为 None（"本版本没有产出点"）。2026-09-28 加了模型抽取那条
+    # 通路（`projects.extract_with_model` 经 `modelclient.ModelClient` 调模型，
+    # 归口 scope='extract'）⇒ 这一档从此有产出点，声明必须跟上：
+    # 声明写着"没有代码会产出它"而实际有，就是一句假话（`G-6` 要防的正是这个）。
+    "extract": ("modelclient.ModelClient.complete",
+                "模型读本地文献那一步：charge_reply(scope='extract')"),
+    "review": None,
+    "reason": ("runflow.SCOPE_ANSWER", "runflow 的作答调用点：charge_reply(scope=SCOPE_ANSWER)"),
+}
+
+
+def usage_scope_production() -> dict[str, str]:
+    """每一档归口的三态产出状态（`G-6`）：`produced` / `not_produced`。
+
+    刻意不把"没有产出点"折成 `False` 或空串：读的人要能一眼看出
+    "这一档是查过没花钱"还是"根本没有代码会产出它"。两者在 `by_scope` 的全零里
+    完全同形，这正是 `G-6` 登记的缺陷形态。
+    """
+    return {s: ("produced" if USAGE_SCOPE_PRODUCERS.get(s) else "not_produced") for s in USAGE_SCOPES}
+
+
+def scopes_without_producer() -> list[str]:
+    """本版本没有任何生产产出点的归口（按词表顺序）。"""
+    return [s for s in USAGE_SCOPES if not USAGE_SCOPE_PRODUCERS.get(s)]
+
+
+def _assert_usage_scope_production_contract() -> None:
+    """导入期对账：词表的每一档都必须登记了产出状态，且不许登记词表外的档。
+
+    与 `assert_process_id_contract()` 同一手法（声明面与派生面互相对账）：
+    只比 `set(USAGE_SCOPES)` 与 `set(USAGE_SCOPE_PRODUCERS)` 是不对称的 ——
+    前者多一档就漏了，后者多一档是垃圾。两条都判。
+    """
+    missing = [s for s in USAGE_SCOPES if s not in USAGE_SCOPE_PRODUCERS]
+    if missing:
+        raise AssertionError(
+            f"归口 {missing} 没有在 USAGE_SCOPE_PRODUCERS 里登记产出点 —— "
+            "新增一档归口时必须同时说明'谁产出它'，否则 by_scope 里的全零"
+            "既可能是'没花钱'也可能是'没有产出点'，读者分不出来（G-6）"
+        )
+    extra = [s for s in USAGE_SCOPE_PRODUCERS if s not in USAGE_SCOPES]
+    if extra:
+        raise AssertionError(
+            f"USAGE_SCOPE_PRODUCERS 登记了词表外的归口 {extra} ⇒ "
+            "两张表已经分家，`by_scope` 的键集合不再等于词表（G-6）"
+        )
+
+
+_assert_usage_scope_production_contract()
 
 
 @dataclass
@@ -1534,9 +1787,17 @@ class EvalResult:
         require_id(self.eval_id, "eval_id")
         if not str(self.claim_key or "").strip():
             raise ValueError("claim_key 不能为空（这条数字检验的是哪个命题）")
+        # `k` 由下面 `_validate_k` 独占校验，所以它先从这条泛化判据里摘出去。
+        #
+        # 缺陷（2026-09-26 全面体检 · 子代理 E 实测，`temp/auditE-quote-eval-probe.json`，
+        # 登记册 `E-13`）：`EVAL_REQUIRED_FIELDS` 里的 `k` 走的是
+        # `str(getattr(self, f) or "")` 这条非空判据，而它把 `0` 读成"空" ——
+        # 于是 `k=0` 报的是"缺少必填口径字段 ['k']"。那句话把修法指错了方向：
+        # 读者会去补字段，而真因是 `k < 1`（pass@k 的 k 从 1 开始）。
+        # 剩下六个字段仍然走泛化判据 —— 它们没有第二处独立判据，不存在这个问题。
         missing = [
             f for f in EVAL_REQUIRED_FIELDS
-            if not str(getattr(self, f) or "").strip()
+            if f != "k" and not str(getattr(self, f) or "").strip()
         ]
         if missing:
             raise ValueError(
@@ -1545,8 +1806,7 @@ class EvalResult:
                 "同一个基准的同一个数字在不同口径下能差 13–30 个百分点。"
                 "缺任一字段的数字不得进入对外报告。"
             )
-        if self.k < 1:
-            raise ValueError(f"k 从 1 开始（pass@k 的 k），收到 {self.k}")
+        self._validate_k()
         if not (0.0 <= float(self.value) <= 1.0):
             raise ValueError(
                 f"value 是**比率**（0..1），收到 {self.value}。"
@@ -1556,6 +1816,49 @@ class EvalResult:
             raise ValueError("samples 给了就必须 >= 1")
         if not str(self.created_at or "").strip():
             raise ValueError("created_at 不能为空")
+
+    def _validate_k(self) -> None:
+        """`k` 的唯一判据：非空、不是布尔、是整数、从 1 开始。
+
+        ## 为什么这四件事必须在同一处（登记册 `E-13`）
+
+        改前 `k` 有两处判据、且各自只说对一半：
+
+        - `EVAL_REQUIRED_FIELDS` 的非空判据 `str(k or "")` —— 它把 `0` 当空串，
+          于是 `k=0` 报"缺少必填口径字段 ['k']"（真因是 `k < 1`）；
+        - `if self.k < 1` —— `k=True` 因为 `bool` 是 `int` 的子类而通过
+          （`True < 1` 为假），于是"pass@True"这种无意义口径能进库。
+          更坏的是 `k="1"`：它过得了非空判据，然后在 `<` 上抛 `TypeError` ——
+          一个不是 `ValueError` 的异常从 `validate()` 里逃出去，
+          而本项目所有调用方都按"`validate()` 抛 `ValueError`"处理。
+
+        合并成一处之后，"什么样的 k 合法"只有一个答案，且失败形态恒为
+        `ValueError`（口径错误就该是 `ValueError`，不该是别的异常类型）。
+
+        ## 为什么拒绝 `bool` 与 `float`（加严，不是放宽）
+
+        `k=True` 与 `k=1.0` 今天都能过。它们不是"另一种写法"，而是口径不明：
+        读 `eval_results` 的人无法判断 `1.0` 是"k=1"还是"某处做了浮点运算漏了取整"。
+        `EvalResult.k` 的声明类型是 `int`，把"声明是 int、实际可以是 bool/float"
+        这种缺口留着，正是"判据与声明之间的缺口"（`E-13` 的条目名）本身。
+        `allows_sorry` / `samples` 是否升为必填不在本次改动内 ——
+        那是一次口径裁定，按批次纪律只增判据、不改口径。
+        """
+        if self.k is None or (isinstance(self.k, str) and not self.k.strip()):
+            raise ValueError("k 不能为空（pass@k 的 k 必填，见 EVAL_REQUIRED_FIELDS）")
+        if isinstance(self.k, bool):
+            raise ValueError(
+                f"k 不能是布尔值（收到 {self.k!r}）—— bool 是 int 的子类，"
+                "`True < 1` 为假，于是 k=True 会静默通过，"
+                "把一个无意义的口径（pass@True）写进库"
+            )
+        if not isinstance(self.k, int):
+            raise ValueError(
+                f"k 必须是整数（收到 {self.k!r}，类型 {type(self.k).__name__}）—— "
+                "浮点/字符串形态会让 k 的口径不可判定"
+            )
+        if self.k < 1:
+            raise ValueError(f"k 从 1 开始（pass@k 的 k），收到 {self.k}")
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -1686,6 +1989,213 @@ ID_COUNTERS = {
     "usage": "usage_id",
     "eval": "eval_id",
 }
+
+
+# ---------------------------------------------------------------- 过程记录 ID（P-17）
+
+#: 过程记录 ID 的形态：`<前缀>-NNNN`（前缀是字母数字、且不带连接号）。
+#: 与 4 位 ID 的 `_ID_RE` 成对：两者**互斥**，而"互斥"正是
+#: "过程记录不占 4 位编号空间"这句话可判定的原因。
+_PROCESS_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-\d{4}$")
+
+#: 过程记录前缀的**唯一来源**就是"哪些表不在 `ID_COUNTERS` 里"。
+#: 不写死前缀名单（`r` / `p` / `t`）的理由：那会是第二份实现，而本项目
+#: 已经因为"另写一张名单"崩过 —— `verify.py` 曾写死
+#: `if table == "search_requests": continue`，新增 `reprocess_requests` 后
+#: `_id_contiguity` 对 `p-0001` 做 `int()` 直接把 verify 自己搞崩。
+#: 这里的判据只有一条：**`id_field` 不被 `ID_COUNTERS` 覆盖的表就是过程记录**。
+#: 于是新增一张过程记录表时它会自动被算进来，不需要谁记得改这里。
+
+
+#: 过程记录类别 -> 它的 ID 前缀（`P-17` 的**声明面**）。
+#:
+#: 为什么需要一个声明面，而不是全靠从 `ID_COUNTERS` 推：那样推出来的判据是
+#: **同义反复**。`process_id_kinds()` 的定义是"`id_field` 不被 `ID_COUNTERS`
+#: 覆盖的那些表"，于是 `set(ID_COUNTERS) & process_id_kinds()` 恒为空 ——
+#: 有人往 `ID_COUNTERS` 里塞 `"task": "task_id"` 时，`tasks` 会同时从
+#: `process_id_kinds()` 里**掉出去**，交集照样为空，**判据一声不响**。
+#: 所以这里把契约的另一半写下来，让两边**互相对账**（本项目对"同一件事两个落位"
+#: 的标准做法，见 `.noai-paths` 与 `AGENTS.md` 的按位比对）：
+#: 声明面（本表）与派生面（`TABLES` + `ID_COUNTERS`）一旦不一致就导入期炸。
+PROCESS_ID_PREFIXES: dict[str, str] = {
+    "request": "r",     # search_requests.request_id  = "r-NNNN"
+    "reprocess": "p",   # reprocess_requests.reprocess_id = "p-NNNN"
+    "task": "t",        # tasks.task_id = "t-NNNN"（见 Task.task_id 的说明）
+}
+
+
+def process_id_kinds() -> frozenset[str]:
+    """**不占** 4 位编号空间的 ID 类别（`P-17`）。
+
+    返回 `id_kind`（`search_requests` 是 `"request"`、`reprocess_requests` 是
+    `"reprocess"`、`tasks` 是 `"task"`），因为 `id_kind` 才是与 `ID_COUNTERS`
+    的键同层的东西。
+
+    这张表是从 `TABLES` 与 `ID_COUNTERS` **派生**的；它与声明面
+    `PROCESS_ID_PREFIXES` 的键必须相等（由 `assert_process_id_contract()` 守）——
+    单看它自己是同义反复，见 `PROCESS_ID_PREFIXES` 的说明。
+    """
+    counter_fields = set(ID_COUNTERS.values())
+    return frozenset(
+        spec["id_kind"] for spec in TABLES.values() if spec["id_field"] not in counter_fields
+    )
+
+
+def four_digit_id_kinds() -> frozenset[str]:
+    """占 4 位编号空间的那几类（= `ID_COUNTERS` 的键）。与 `process_id_kinds()` 互斥。"""
+    return frozenset(ID_COUNTERS)
+
+
+def is_valid_process_id(value: Any, id_kind: str | None = None) -> bool:
+    """过程记录 ID 的形态判据（如 `r-0001` / `p-0001` / `t-0001`）。
+
+    为什么不并进 `is_valid_id`：那个是 4 位知识实体 ID 的判据。两者必须能
+    互相**排除** —— 合并成一个"两种都接受"的函数，就等于把
+    "占不占编号空间"这个区分抹掉了，而那正是 `P-17` 说"不可判定"的成因。
+
+    ## 第二个参数 `id_kind`（`c-2`）
+
+    不给 `id_kind` 时这条判据只校**形态**（前缀-4 位数字），它刻意是宽的：
+    `assert_process_id_contract()` 用它证明"过程 ID 与 4 位 ID 互斥"。
+    给了 `id_kind` 就同时校**前缀**：`id_kind='request'` 只接受 `r-`。
+
+    为什么前缀比对必须挂在这里而不是另写一份正则：`PROCESS_ID_PREFIXES` 是
+    "哪张表用哪个前缀"的**唯一声明面**。另写一份 `^r-\\d{4}$` 就是第二份实现，
+    而"同一件事两个落位"正是 `normalize_doi` 那族缺陷的成因。
+    前缀比对与形态比对因此共用同一个正则，只是多一个 `dict` 查找。
+    """
+    if not (isinstance(value, str) and bool(_PROCESS_ID_RE.match(value))):
+        return False
+    if id_kind is None:
+        # 只校形态：这是 `P-17` 的"两半互斥"契约需要的宽口径，不许收紧 ——
+        # 收紧它会连带拒绝 `assert_process_id_contract()` 里 `gb-` 那类样本，
+        # 而那条负控正是靠"形态判据本身不认前缀"来证明前缀是**另一条**判据。
+        return True
+    want = PROCESS_ID_PREFIXES.get(id_kind)
+    if want is None:
+        return False
+    return value.split("-", 1)[0] == want
+
+
+def require_process_id(value: Any, id_kind: str) -> str:
+    """过程记录 ID 的**完整**判据（形态 + 前缀），失败即抛。
+
+    `c-1` 与 `c-2` 的共同落点：三个行校验器（`SearchRequest.validate` /
+    `ReprocessRequest.validate` / `Task.validate`）此前只查"非空"，
+    于是 `r--0001` / `r-10000` / `0000` / `gb-0001` 这类号可以静默落库。
+    这里把"该表的 `id_kind`"显式传进来，于是两张判据（形态、前缀）
+    都由调用点强制走一遍 —— 而不是靠每个调用方记得自己比一遍前缀。
+    """
+    if not is_valid_process_id(value, id_kind):
+        want = PROCESS_ID_PREFIXES.get(id_kind)
+        raise ValueError(
+            f"{id_kind} 的过程记录 ID 必须是「前缀 {want!r} + 连接号 + 恰好 4 位数字」"
+            f"（如 {want}-0001），收到 {value!r}。"
+            "只查非空会让 5 位号、双连接号、越界号与错前缀号静默落库，"
+            "直到某个下游按 4 位解析或按前缀过滤时才暴露（`c-1` / `c-2`）。"
+        )
+    return value
+
+
+# ---- `P-17` 的断言：把这条契约变成**导入期就炸**的东西。
+#
+# 在此之前，这条契约唯一的"实现"是 `ID_COUNTERS` 的键里恰好没有 `task` ——
+# 一个"缺失"在替一条"契约"说话。于是有人给任务号装一个计数器（或把 `task`
+# 塞进 `ID_COUNTERS`）时**没有任何东西会红**，而
+# `interactions.next_prefixed_id` 越界产 5 位号的那个口子（`P-4`）就多一个入口。
+#
+# 写成函数再在导入期调用，而不是把断言直接摊在模块级：函数可被测试**再次调用**，
+# 于是"往 ID_COUNTERS 里塞一个过程前缀 ⇒ 必须红"这条负控才是可写的
+# （模块级断言只在 import 时跑一次，注入之后就再也触发不了）。
+
+
+def assert_process_id_contract() -> None:
+    """断言"过程记录不占 4 位编号空间"（`P-17`）。导入期自动跑一次。
+
+    四条判据。**声明面与派生面互相对账**，所以它们不是同义反复：
+
+    1. `set(ID_COUNTERS)` 与过程**前缀**（`r`/`p`/`t`）的交集为 **空**
+       —— 直接钉住"占号空间"这件事本身；
+    2. `set(PROCESS_ID_PREFIXES)`（声明面）与 `process_id_kinds()`（派生面）**相等**
+       —— 有人给过程表装上 4 位计数器时，派生面会变而声明面不变，两条路都炸；
+    3. 每一张过程记录表的 `id_field` 都不在 `ID_COUNTERS` 的值里；
+    4. 过程 ID 与 4 位 ID 的形态判据**互斥且各自可判定**
+       （`"0000"` 不是过程 ID，`"t-0001"` 不是 4 位 ID）。
+    """
+    process_kinds = process_id_kinds()
+    counter_kinds = four_digit_id_kinds()
+    prefixes = set(PROCESS_ID_PREFIXES.values())
+
+    assert not (counter_kinds & prefixes), (
+        f"ID_COUNTERS 里有过程记录前缀 {sorted(counter_kinds & prefixes)}："
+        "过程记录（r-/p-/t-）刻意不占 4 位编号空间。给它装计数器会让 4 位空间被"
+        "过程记录吃掉，并且给 next_prefixed_id 的越界产号多开一个入口（P-17 / P-4）。"
+        "要么把它从 ID_COUNTERS 里去掉，要么这是一次需要人裁的口径变更。"
+    )
+    assert set(PROCESS_ID_PREFIXES) == set(process_kinds), (
+        f"声明面 PROCESS_ID_PREFIXES={sorted(PROCESS_ID_PREFIXES)} 与派生面 "
+        f"process_id_kinds()={sorted(process_kinds)} 不一致："
+        "过程记录不占 4 位编号空间这条契约的**两个落位分家了**。"
+        "派生面变了而声明面没变（或反之）都必须有人看一眼 —— 直接改派生面"
+        "（例如把 task 塞进 ID_COUNTERS）会让任务号开始吃 4 位空间。"
+    )
+    for tname, spec in TABLES.items():
+        if spec["id_kind"] in process_kinds:
+            assert spec["id_field"] not in counter_kinds, (
+                f"表 {tname} 是过程记录，它的 {spec['id_field']} 不该出现在 ID_COUNTERS 的值里"
+            )
+    # 两个形态判据必须**互斥**、且各自可判定 —— 否则"task_id 是什么形态"仍然只是注释。
+    assert is_valid_id("0000") and not is_valid_process_id("0000"), "4 位 ID 不被过程判据接受"
+    assert is_valid_process_id("t-0001") and not is_valid_id("t-0001"), "过程 ID 不被 4 位判据接受"
+    assert is_valid_process_id("r-9999") and is_valid_process_id("p-0001"), (
+        "过程 ID 形态判据要求 前缀+连接号+4 位数字"
+    )
+
+
+def assert_id_space_contract() -> None:
+    """断言"4 位契约"只有**一个**定义处，且它真的还是 4 位（`F-9` 第 4 条）。导入期自动跑一次。
+
+    为什么需要这一条：`store.MAX_ID = 9999` 是"4 位 ID 的上限"的唯一定义处
+    （`interactions.py` 明确说它 import 那个常量而不是另抄一份），`schema._ID_RE`
+    是形态的唯一定义处，而两者之间此前**没有任何对账** ——
+    把 `MAX_ID` 改成 999（三位）或 99999（五位）不会有任何东西响，
+    而 `is_valid_id` 照样只认 4 位 ⇒ "上限"与"形态"分家，发出来的号
+    要么被 `require_id` 拒掉、要么永久无法表达。
+
+    判据两条：
+    1. `MAX_ID` 必须是 `_ID_RE` 那种宽度的**最大值**（`10**位数 - 1`）——
+       改窄/改宽都会红，而"改它等于改磁盘契约"这句话此前只写在注释里；
+    2. 每一类 ID（`TABLES` 的 `id_kind`）必须**恰好**落在两半之一：
+       要么进 `ID_COUNTERS` 吃 4 位空间，要么进 `PROCESS_ID_PREFIXES` 不占 ——
+       一个 `id_kind` 两边都不在，意味着有一张表的 ID 形态没有任何声明面管它。
+    """
+    # 惰性 import：`store` 顶层 `from . import schema as S`，模块级互相 import 会成环。
+    # 函数体内 import 只在本函数被调用时执行（导入期调用时 `store` 已能正常加载）。
+    from .store import MAX_ID
+
+    m = re.match(r"^\^\\d\{(\d+)\}\$$", _ID_RE.pattern)
+    assert m is not None, f"_ID_RE 的形状变了（{_ID_RE.pattern!r}），这条对账判据读不懂它"
+    width = int(m.group(1))
+    assert MAX_ID == 10 ** width - 1, (
+        f"store.MAX_ID = {MAX_ID}，而 schema._ID_RE = {_ID_RE.pattern!r} 只表达 "
+        f"{width} 位（该宽度的最大值是 {10 ** width - 1}）⇒ **4 位契约的两个落位分家了**。"
+        "MAX_ID 是上限的唯一定义处，_ID_RE 是形态的唯一定义处；改其中任何一个"
+        "都等于改磁盘格式契约（DESIGN.md §0.1 C4）—— 这是需要人裁的口径变更，"
+        "不许只改一边。"
+    )
+    covered = set(ID_COUNTERS) | set(process_id_kinds())
+    declared = {spec["id_kind"] for spec in TABLES.values()}
+    assert covered == declared, (
+        f"这些 id_kind 不在 ID_COUNTERS 也不在过程记录前缀里：{sorted(declared - covered)}"
+        "（另一侧多出来的："
+        f"{sorted(covered - declared)}）⇒ 有一张表的 ID 形态没有任何声明面管它。"
+        "4 位空间与过程记录空间必须**互补**，否则新增表时会出现一个"
+        "既不占号、也不被 `_PROCESS_ID_RE` 接受的 ID 类别（`F-9` / `P-17`）。"
+    )
+
+
+assert_id_space_contract()
+assert_process_id_contract()
 
 
 def empty_table() -> dict:

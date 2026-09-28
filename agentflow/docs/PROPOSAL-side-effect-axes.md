@@ -129,11 +129,15 @@
 ### 3.2 兼容与迁移：`network` 是**遗留取值**，用显式翻译表，不许静默重解释
 
 - **改哪里（声明层）**：`src/agentflow/tools/__init__.py::SIDE_EFFECTS_WRITE`
-  与 `src/agentflow/tools/base.py::SIDE_EFFECTS` / `NEEDS_APPROVAL` 所在的那一处词表区，
-  新增一张**显式翻译表**（例如 `LEGACY_SIDE_EFFECTS = {"network": ("egress", "none")}`，
-  语义是 `(external, effect)`）。
-- **翻译表要说清三件事**：`network` => `external="egress"` + `effect="none"`；
+  与 `src/agentflow/tools/base.py::SIDE_EFFECTS` 所在的那一处词表区。
+  ⚠️ **B3 已删除**：迁移期那里曾有一张显式翻译表
+  （`LEGACY_SIDE_EFFECTS = {"network": ("egress", "none")}`，语义是 `(external, effect)`），
+  它在 B3 收官时连同遗留取值 `network`、逐工具表 `LEGACY_EFFECTS_BY_TOOL`
+  以及全部下游分支一起**从代码里删除**了（本节余下几条记的是当时的迁移过程，
+  现在只作为历史依据保留）。
+- **翻译表要说清三件事**（迁移期）：`network` => `external="egress"` + `effect="none"`；
   它**只在兼容期有效**；用到它的地方必须**逐条列出来**（见 3.2 的计数要求）。
+  这三件事在 B3 收官后不再有对象 —— 那个取值不是"被翻译"，而是**不存在**。
 - **不许静默重新解释**：迁移期里，一个声明了 `network` 的工具**不改变行为**
   （仍然需要审批），但**必须被数出来**。
 - **lint 报一条 `info` 列出还剩多少处遗留**：在 `scripts/lint_rules.py` 里新增一条

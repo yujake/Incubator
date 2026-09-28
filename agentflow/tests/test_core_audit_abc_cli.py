@@ -150,6 +150,20 @@ def test_cli_tools_role_negative_control_still_rejects_unknown_role(tmp_path: Pa
 # =========================================================================== cli：status
 
 
+def _status_cells(out: str, table: str) -> list[str]:
+    """从 `status` 的表里取出某个表的各列（对画线字符不敏感）。
+
+    为什么不直接断言 `"行数=1"`：`status` 的表在 2026-09-28 改成了画线表格。
+    把判据写成"某一行里第 2 格是那个数字"，改版式时它照样管用；写成字面串
+    就会在每次改版式时红一次，而那种红与"表被漏掉"这件事无关。
+    """
+    for line in out.splitlines():
+        if table in line:
+            parts = [p.strip() for p in line.replace("│", "|").split("|")]
+            return [p for p in parts if p]
+    return []
+
+
 def test_cli_status_lists_every_table_declared_in_schema(tmp_path: Path, capsys) -> None:
     """`status` 必须按 `S.TABLES` 逐张报告 —— 不是写死的 4 张。
 
@@ -170,7 +184,8 @@ def test_cli_status_lists_every_table_declared_in_schema(tmp_path: Path, capsys)
     out = capsys.readouterr().out
     missing = [t for t in S.TABLES if t not in out]
     assert not missing, f"这些表在 status 输出里不见了：{missing}"
-    assert "usage_ledger" in out and "行数=1" in out, out
+    cells = _status_cells(out, "usage_ledger")
+    assert cells and cells[1] == "1", f"usage_ledger 的真实行数必须出现在同一行：{cells}\n{out}"
 
 
 def test_cli_status_negative_control_reports_zero_rows_instead_of_hiding_tables(
@@ -181,7 +196,8 @@ def test_cli_status_negative_control_reports_zero_rows_instead_of_hiding_tables(
     assert cli.main(["--root", str(st.root), "status"]) == 0
     out = capsys.readouterr().out
     assert sum(1 for t in S.TABLES if t in out) == len(S.TABLES)
-    assert "行数=0" in out
+    zero = [_status_cells(out, t) for t in S.TABLES]
+    assert all(cells and cells[1] == "0" for cells in zero), out
 
 
 # =========================================================================== cli：submit
@@ -315,7 +331,7 @@ def test_cli_verify_exit_code_is_nonzero_when_errors_exist(tmp_path: Path, capsy
     rc = cli.main(["--root", str(st.root), "verify"])
     out = capsys.readouterr().out
     assert rc == 1, out
-    assert "**有错误**" in out
+    assert "failed" in out and "错误 1" in out, out
 
 
 def test_cli_verify_negative_control_clean_data_exits_zero(clean_store: Store, capsys) -> None:
@@ -338,7 +354,7 @@ def test_cli_verify_strict_promotes_warnings_and_default_does_not(tmp_path: Path
 
     assert cli.main(["--root", str(st.root), "verify"]) == 0
     out = capsys.readouterr().out
-    assert "WARN" in out and "ERR " not in out, out
+    assert "[warning]" in out and "[error]" not in out, out
     assert cli.main(["--root", str(st.root), "verify", "--strict"]) == 1
     capsys.readouterr()
 
@@ -728,6 +744,8 @@ def test_service_tool_names_resolve_the_documented_collision(tmp_path: Path) -> 
 
     st = _drifted_store(tmp_path)
     reg = ToolRegistry(name="audit-collision")
+    # `P-14`：这张表要调 `graph.*`，绑定只读角色 C（`graph.*` 的声明角色是 C/D）。
+    reg.bound_role = "C"
     register_graph_tools(reg, store=st)
     added = AgentC(st).register_tools(reg)
 

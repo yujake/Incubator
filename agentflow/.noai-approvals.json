@@ -1,41 +1,327 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-25T22:47:43+08:00",
+  "generated_at": "2026-09-28T22:57:31+08:00",
   "entries": [
+    {
+      "path": ".noai-approvals.json",
+      "glob": ".noai-approvals.json",
+      "category": "auth-audit",
+      "sha256": "f71a4e25124c69d40e6fecbbfd0f72cc333cd3fd3fcdd6325428cb91abc65760",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "changed_this_session": null,
+      "reviewers": [],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": ".noai-paths",
+      "glob": ".noai-paths",
+      "category": "auth-audit",
+      "sha256": "5a8fd221260e7fe87cb07725b4dab2b2aad10e584365c2db95c6e6a299e7ddf2",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "题 3（所有者 2026-09-27 授权：允许改禁改区 + 允许签字）：把 src/agentflow/capabilities.py 纳入 auth-audit 区；两处清单各插一行，理由逐字节相同",
+      "changed_this_session": true,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T15:04:01+08:00",
+          "scope": "题 3：在清单 auth-audit 区新增 src/agentflow/capabilities.py 一行（A–H 调用矩阵的权威定义），与另一处逐字节相同；所有者 2026-09-27 授权",
+          "note": "",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T15:04:02+08:00",
+          "scope": "题 3：在清单 auth-audit 区新增 src/agentflow/capabilities.py 一行（A–H 调用矩阵的权威定义），与另一处逐字节相同；所有者 2026-09-27 授权",
+          "note": "",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "AGENTS.md",
+      "glob": "AGENTS.md",
+      "category": "auth-audit",
+      "sha256": "2e2936d132c6bd29bd49167b3f4f0a833f4c168a8635ea9067b66eb4f411ef50",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "题 3（所有者 2026-09-27 授权：允许改禁改区 + 允许签字）：把 src/agentflow/capabilities.py 纳入 auth-audit 区；两处清单各插一行，理由逐字节相同",
+      "changed_this_session": true,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T15:04:02+08:00",
+          "scope": "题 3：在清单 auth-audit 区新增 src/agentflow/capabilities.py 一行（A–H 调用矩阵的权威定义），与另一处逐字节相同；所有者 2026-09-27 授权",
+          "note": "",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T15:04:02+08:00",
+          "scope": "题 3：在清单 auth-audit 区新增 src/agentflow/capabilities.py 一行（A–H 调用矩阵的权威定义），与另一处逐字节相同；所有者 2026-09-27 授权",
+          "note": "",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
     {
       "path": "pyproject.toml",
       "glob": "pyproject.toml",
       "category": "release-deploy",
-      "sha256": "970999dc19730376e50180aec74c329e792e21be2d76c9b1ca6b42fb4602e11d",
+      "sha256": "2ed3a37fcd06f1d279d527a61bb0823673cd4ba32676549bbea478e73604c29f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "change_note": "集中审查后续修复窗口（pyproject.toml.txt）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:42+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
+          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:42+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
+          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:00+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
+          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:00+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
+          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:55+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
+          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:56+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
+          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "scripts/lint_rules.py",
+      "glob": "scripts/lint_rules.py",
+      "category": "auth-audit",
+      "sha256": "1a48dd6351e1ab65a4dded0cc3ae366732bad2b971a35e729995003be12728a4",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:25+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:39+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "scripts/noai_gate.py",
+      "glob": "scripts/noai_gate.py",
+      "category": "auth-audit",
+      "sha256": "920d7ceb9b214acfa32aa07607d621a18c728c16b8c713a3e7183f6d02c0d54c",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "集中审查后续修复窗口（scripts__noai_gate.py.txt）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:37+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
+          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:38+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
+          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:20:55+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
+          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:20:56+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
+          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:51+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
+          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:51+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
+          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "scripts/release_check.py",
       "glob": "scripts/release_check.py",
       "category": "release-deploy",
-      "sha256": "568b958e005410d456ad0a7d5484fd6dc837c50a57ca04d24fffd2d439d94c31",
+      "sha256": "5827645fa9e45530a523e29d99a7d07f72af6eddb4eda77d9687a36c938e9d5c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "change_note": "本地书架/项目窗口（scripts__release_check.py.txt）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T17:49:21+08:00",
+          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__release_check.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__release_check.py.txt",
+          "evidence_sha256": "cd81a46db9ea37b31e3eae364e63f94eb71314d411b6370d13f16633b208a553"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T17:49:21+08:00",
+          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：scripts__release_check.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__release_check.py.txt",
+          "evidence_sha256": "cd81a46db9ea37b31e3eae364e63f94eb71314d411b6370d13f16633b208a553"
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/capabilities.py",
+      "glob": "src/agentflow/capabilities.py",
+      "category": "auth-audit",
+      "sha256": "537b46fcdeac30bfebf89222b173b6f51c14e341c54ba434bf11603ee646d7c3",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "（未提供变更说明：内容 hash 从 db99e69f159d 变为 537b46fcdeac，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/dedup.py",
       "glob": "src/agentflow/dedup.py",
       "category": "solver-core",
-      "sha256": "0000f63e665f5c1e70609dd1be458b39bf2b277e74dca776d5941f072878596b",
+      "sha256": "7a406dfd31b4b9da094dbe44382079f6ce103cf9caf874ff413ce55dbee31205",
       "authored": "ai-agent",
-      "authored_basis": "inferred",
-      "change_note": "本轮被改（mtime 2026-09-24 07:28:05）。内容（已自行读取核对）：`normalize_doi` 为全项目**唯一**实现（NFKC → 折小写 → 正则吃 `https?://`/`dx.`/`doi.org/` → `rstrip('.')`），新增 `_to_halfwidth` 与 `_DOI_URL_PREFIX_RE`/`_DOI_SCHEME_PREFIX_RE`/`_FULLWIDTH_RE`；`find_concept` 排除 `merged_into` 墓碑；`decide_relation` 三档判重在位。 改动者：本轮改动由 AI 执行单元做出，但**无法从仓库独立判定是哪一个**（登记表 §2 记为「子代理 AI（有报告）」；该归属来自登记表，本台账不当作独立证据）。",
-      "changed_this_session": true,
-      "reviewers": [],
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:25+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:40+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
       "also_hits": [
         {
           "glob": "src/agentflow/dedup.py",
@@ -48,36 +334,132 @@
       "path": "src/agentflow/extract.py",
       "glob": "src/agentflow/extract.py",
       "category": "solver-core",
-      "sha256": "5f2d85a5b5056891ef3fc30c2844306962d0a577dcde87a20e11ffd0d6c5a959",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "sha256": "45778b0e3ff0bcdfab1c2400212d7dd44a2c9c2bab4dbfcd1836a46da47f9229",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:26+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:40+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/interactions.py",
       "glob": "src/agentflow/interactions.py",
       "category": "auth-audit",
-      "sha256": "e0d65dc6c13639b880f498bf719ecdc5b89f1b402b0efeffdf642376eb097ba8",
+      "sha256": "171b9cf2ec487edaf9c7687e649383d89c6f5549387ed52d4f5cbbbc4114b444",
       "authored": "ai-agent",
-      "authored_basis": "inferred",
-      "change_note": "本轮被改（mtime 2026-09-24 07:26:25）。内容（已自行读取核对）：`CONTRACT_VERSION = 1`（带版本历史注释）；`check_conflict` / `detect_contradictions` / `adjudicate_contradiction` 一族的角色间授权矩阵与三态结果在位。 改动者：本轮改动由 AI 执行单元做出，但**无法从仓库独立判定是哪一个**（登记表 §2 记为「主控 AI」；该归属来自登记表，本台账不当作独立证据）。",
-      "changed_this_session": true,
-      "reviewers": [],
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:26+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:40+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/providers.py",
       "glob": "src/agentflow/providers.py",
       "category": "solver-core",
-      "sha256": "03d38514bc96e1ab2d1604cb41a69cd66b727411ecfd68a8b64d2dd174291e89",
-      "authored": "ai-agent",
+      "sha256": "1e273d32951f480063155a1e6f94cc26a1bd75561b0205988a08f1870581ad72",
+      "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "本轮被改（mtime 2026-09-24 07:41:50）。内容（已自行读取核对）：`normalize_doi` 改为**转发**到 `dedup.normalize_doi`（函数内惰性 import）；`_plan_mode` / `_precise_keep` / `_broad_sort_key` 检索口径在位。⚠️ 符号面与本轮原型相同 ⇒ 改动在函数体内，**改了哪些行无法从仓库判定**。 改动者：本轮改动由 AI 执行单元做出，但**无法从仓库独立判定是哪一个**（登记表 §2 记为「子代理 AI（有报告）」；该归属来自登记表，本台账不当作独立证据）。",
-      "changed_this_session": true,
-      "reviewers": [],
+      "change_note": "集中审查后续修复窗口（src__agentflow__providers.py.txt）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:36+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
+          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:36+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
+          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:20:54+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
+          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:20:54+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
+          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:50+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
+          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:51+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
+          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
+        }
+      ],
+      "audits": [],
       "also_hits": [
         {
           "glob": "src/agentflow/providers.py",
@@ -90,24 +472,64 @@
       "path": "src/agentflow/quoteverify.py",
       "glob": "src/agentflow/quoteverify.py",
       "category": "prover-bridge",
-      "sha256": "c66e5545e4996bf5e91d5b5fd8979eabbbc175084125bad31a96e5cd0518833d",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "**本轮未改动**（mtime 2026-09-23 21:22:47，早于本轮全部改动）—— 仅登记基线，供将来比对该文件是否漂移。内容（已自行读取核对）：`check_quote`：声明页窗口 → ±widen → 仅在显式允许时全文回退，并把用的是哪种窗口如实回报；`verified` 为 True/False/None 三态（无文本层 ⇒ None，不假装通过）。 改动者：**无法从仓库判定**。",
-      "changed_this_session": false,
-      "reviewers": [],
+      "sha256": "30c3c47213d3caa614ce8e1ac01c63518c4144194481962bab72b964c79ec502",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:26+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:40+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "12cd4170adffd8c15b6dabd3fcf1eb915a47da1503d4e502b18abd4e9035fe36",
+      "sha256": "cc31700d4f516a570301cbf612522b23689ac37c213d03f544862c361a725a99",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "change_note": "本地书架/项目窗口（src__agentflow__schema.py.txt）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T17:49:20+08:00",
+          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__schema.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__schema.py.txt",
+          "evidence_sha256": "b8cca5b149d024b87f1d05fc45e986f1c26fddbd7f822400cd17637c8b238846"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T17:49:21+08:00",
+          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：src__agentflow__schema.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__schema.py.txt",
+          "evidence_sha256": "b8cca5b149d024b87f1d05fc45e986f1c26fddbd7f822400cd17637c8b238846"
+        }
+      ],
+      "audits": [],
       "also_hits": [
         {
           "glob": "src/agentflow/schema.py",
@@ -120,72 +542,394 @@
       "path": "src/agentflow/store.py",
       "glob": "src/agentflow/store.py",
       "category": "schema-migration",
-      "sha256": "57b11548009f1ad8e744c58f50aa217b48da509e1c5ed7a19075aaf888325dfc",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "sha256": "60f4373d3c614e2ac1b24da2b6b2ee1a84076a5adc55d17ee28fc45cec644c6e",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:27+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:41+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/tools/__init__.py",
       "glob": "src/agentflow/tools/__init__.py",
       "category": "auth-audit",
-      "sha256": "69272d9746a368132ea2af53ea676e2438dc451dba825cc86c9ff5eda9281a28",
+      "sha256": "2694b23640ba52e322ca4a6afc71860256607c17c39bffad27fb3d4f37e3beae",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "P-13 B1/B2: ToolSpec 第二根轴 + 交叉断言（AI 编写，待 2 名 reviewer 逐行走查）",
+      "change_note": "（未提供变更说明：内容 hash 从 f823d4d97033 变为 2694b23640ba，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/tools/base.py",
       "glob": "src/agentflow/tools/base.py",
       "category": "auth-audit",
-      "sha256": "1b6ccc4e30a6ef424497b8ae651ed698f334d7c205006d15d9c25dc6d3e69f8b",
+      "sha256": "f54b47310fdfeef2426a7fb433ca1b783e9f7071241a3a16535df797ed61885e",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "P-13 B1/B2: ToolSpec 第二根轴 + 交叉断言（AI 编写，待 2 名 reviewer 逐行走查）",
+      "change_note": "（未提供变更说明：内容 hash 从 69e1715a9061 变为 f54b47310fdf，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "a99bba5cdbc5c0fee1dd1dbb5550317348313429bb7615efe51964732e32a9bb",
+      "sha256": "86c301939c91f644676ec37825c873c0bec63bd7118b5ebad44dd97f55d7e94c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "W5 P1-P4：check_formal 接线到 formalgw.check_lean；extract 魔数嗅探分派；pyproject 加 [project.scripts]；release_check 输出 UTF-8 加固（含子进程输出编码覆盖）。AI 改动，待 2 名 reviewer 逐行走查。",
+      "change_note": "阶段 B W1 写入窗口：阶段 B W1 N-5 / R2-AN-1 tools 半边：断言与登记口径对齐 + G-25③ 那句过期自述改写（去 docstring 后 AST 等价）；所有者授权代记名签字，AI 代录",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T22:23:48+08:00",
+          "scope": "阶段 B W1 N-5 / R2-AN-1 tools 半边：断言与登记口径对齐 + G-25③ 那句过期自述改写（去 docstring 后 AST 等价）；所有者授权代记名签字，AI 代录",
+          "note": "",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T22:23:49+08:00",
+          "scope": "阶段 B W1 N-5 / R2-AN-1 tools 半边：断言与登记口径对齐 + G-25③ 那句过期自述改写（去 docstring 后 AST 等价）；所有者授权代记名签字，AI 代录",
+          "note": "",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "46197051a7ce05d3774ad554dc69e24773dbaf8a782d4e6932f37a2ca7643871",
+      "sha256": "aca66a70d0c93187418b73724145ff6973ba81dbe4565a8355bac8acae8d4a6f",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-2",
+          "at": "2026-09-27T08:58:27+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-27T08:58:42+08:00",
+          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
+          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tools/coverage_zero_test.py",
+      "glob": "tools/coverage_zero_test.py",
+      "category": "release-deploy",
+      "sha256": "d51bffe455702e84fab997139232d37fcaeccfeef1b8048bb2d8f94e692c242c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "change_note": "集中审查后续修复窗口（tools__coverage_zero_test.py.txt）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:39+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
+          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:39+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
+          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:20:57+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
+          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:20:57+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
+          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:53+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
+          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:53+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
+          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+        }
+      ],
+      "audits": [],
       "also_hits": []
     },
     {
       "path": "tools/release_all.py",
       "glob": "tools/release_all.py",
       "category": "release-deploy",
-      "sha256": "ba86d8db713a5a57c8f8542b4275d5a45566232929d3c36e03a48447b81752b6",
+      "sha256": "32f1cd3d81fbd1f3eb2cd900928ae3df7af4ad7285cc4d918171b3134d414b0d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "本轮（2026-09-25）：提案 A 三处落地（UsageEntry.idem_key / validate_table 唯一性断言 / Tx.insert_unique / verify.duplicate_idem_key）+ release_all.py 输出编码与 locale 解耦。登记 hash，reviewers 一律留空（登记不等于批准）。",
+      "change_note": "集中审查后续修复窗口（tools__release_all.py.txt）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:39+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
+          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:39+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
+          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:20:57+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
+          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:20:57+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
+          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:52+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
+          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:52+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
+          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tools/run_each_test_file.py",
+      "glob": "tools/run_each_test_file.py",
+      "category": "release-deploy",
+      "sha256": "7b2f4ec3033893c1884122d4aad6c78b7d07e693c991a9dd052a13d9d49cd69b",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "集中审查后续修复窗口（tools__run_each_test_file.py.txt）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:40+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
+          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:40+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
+          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:20:58+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
+          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:20:58+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
+          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:54+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
+          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:54+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
+          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tools/vocab_census.py",
+      "glob": "tools/vocab_census.py",
+      "category": "auth-audit",
+      "sha256": "884307f460032deefdbeba3dfe0a439929f4315b780455ec96797b75557d88a2",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "集中审查后续修复窗口（tools__vocab_census.py.txt）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:19:40+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
+          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:19:41+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
+          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:20:58+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
+          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:20:59+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
+          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
+        },
+        {
+          "name": "owner-1",
+          "at": "2026-09-28T16:21:54+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
+          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
+        },
+        {
+          "name": "owner-2",
+          "at": "2026-09-28T16:21:54+08:00",
+          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
+          "note": "",
+          "verdict": "逐行走查：tools__vocab_census.py.txt 记的改动与判据已复核",
+          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__vocab_census.py.txt",
+          "evidence_sha256": "39b6e8417bafe0289046b44ace3444d1b04e428d1b62b618f58eb8c80af9b743"
+        }
+      ],
+      "audits": [],
       "also_hits": []
     }
   ]

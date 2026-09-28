@@ -91,7 +91,7 @@ def test_charge_reply_fills_the_idem_key_field(store: Store):
     """正控（真实路径）：模型调用入账后，那一行的 `idem_key` 非空且等于派生的键。"""
     meter = TokenMeter(store)
     out = charge_reply(meter, _reply(ok=True, tokens_in=10, tokens_out=5),
-                       task_id="t-0001", call_index=2, now=TS)
+                       task_id="t-0001", call_index=2, scope="reason", now=TS)
     assert out["charged"] is True
     rows = _usage_rows(store)
     assert len(rows) == 1
@@ -202,7 +202,7 @@ def test_distinct_keys_from_both_writers_coexist(store: Store):
     """
     meter = TokenMeter(store)
     charge_reply(meter, _reply(ok=True, tokens_in=1, tokens_out=1),
-                 task_id="t-0001", call_index=0, now=TS)
+                 task_id="t-0001", call_index=0, scope="reason", now=TS)
     meter.charge_once(Charge(role="E", scope="summon", tokens_out=3, note="结算",
                              task_id="t-0002"),
                       idem_key=settle_key("t-0002"), now=TS)

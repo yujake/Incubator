@@ -532,6 +532,48 @@ class TokenMeter:
             acc["attempts"] += int(r.get("attempts") or 1)
         return out
 
+    def by_scope(self) -> dict[str, dict]:
+        """按用途归口汇总（G-20）：账本要能回答"搜索/抽取/审校各花了多少"。
+
+        与 `by_role` 是两条不同的轴，谁也不能代替谁：角色回答"是谁"，
+        归口回答"为了什么"。同一次工作可以是 D 角色在做 search 归口的事。
+
+        ## 每一个 `USAGE_SCOPES` 档都出现（含零值）
+
+        返回的键集合恒等于 `S.USAGE_SCOPES` 加上 `S.SCOPE_UNCLASSIFIED`。
+        为什么零值档也要出现：`{"search": {...}}` 与"没有 search 这一档"
+        在 `dict.get("search")` 眼里是一样的，而两者含义完全不同 ——
+        前者是"查过、没花钱"，后者是"根本没有这个归口"。做成固定键之后，
+        "某一档归零"这件事在产物里是可见的（这正是 G-20 负控要的形态）。
+
+        ## 内容
+
+        `{"tokens", "usd", "entries", "attempts", "roles"}`：`roles` 是这一档里
+        出现过的角色计数，用来回答"extract 的钱是 B 花的还是 D 花的"。
+        """
+        out: dict[str, dict] = {
+            name: {"tokens": 0, "usd": 0.0, "entries": 0, "attempts": 0, "roles": {}}
+            for name in tuple(S.USAGE_SCOPES) + (S.SCOPE_UNCLASSIFIED,)
+        }
+        for r in self.store.rows("usage_ledger"):
+            raw = str(r.get("scope") or "").strip()
+            # 词表外的值（历史行、或别的写入方）落在显式的"未分类"档里，
+            # 而不是被丢掉、也不是被塞进"其它"：丢掉会让总额对不上，
+            # 塞进 other 会把"有人写了编外的归口"这件事藏起来。
+            k = raw if raw in S.USAGE_SCOPES else S.SCOPE_UNCLASSIFIED
+            acc = out[k]
+            acc["tokens"] += int(r.get("tokens_total") or 0)
+            acc["usd"] = round(acc["usd"] + float(r.get("usd") or 0.0), 6)
+            acc["entries"] += 1
+            acc["attempts"] += int(r.get("attempts") or 1)
+            role = str(r.get("role") or "unknown")
+            acc["roles"][role] = acc["roles"].get(role, 0) + 1
+        out[S.SCOPE_UNCLASSIFIED]["raw_values"] = sorted({
+            str(r.get("scope") or "") for r in self.store.rows("usage_ledger")
+            if str(r.get("scope") or "").strip() not in S.USAGE_SCOPES
+        })
+        return out
+
     def retry_overhead(self) -> dict:
         """重试造成的额外开销（可判定判据②的正面证据）。
 

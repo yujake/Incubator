@@ -441,17 +441,40 @@ def test_i6_intersecting_write_sets_are_serialized(tmp_path):
 
 
 def test_i6_negative_control_disjoint_are_parallel(tmp_path):
-    """I-6 负控：写集不相交的两个任务必须并发（否则判据退化成"永远串行"）。"""
+    """I-6 负控：写集不相交的两个任务必须并发（否则判据退化成"永远串行"）。
+
+    注意：时间判据用相对比较（与"两个都串行"的耗时对比），不用绝对秒数：
+    旧版写死 `elapsed < 0.6 * 0.85`（= 0.51s），而两个任务各自 sleep 0.3s ⇒
+    并发时理论 0.30s、串行时 0.60s，余量只有 0.21s。
+    实测（`R5` 第一次重审的观测窗口 15:5x，机器上同时有 3 个审计者在跑）
+    这条会偶发失败 —— 那是判据的余量太窄，不是并发坏了：
+    重跑 3/3 通过（审计者撤回的怀疑里记了这一条），我在自己跑全量时也撞到一次。
+    改法：同时测"相交 ⇒ 串行"与"不相交 ⇒ 并发"两个形态，只比较它们的比值
+    —— 机器慢会同时拖慢两者，比值不受影响。
+    """
     store = _mk_store(tmp_path)
     pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+
+    # ① 不相交 ⇒ 并发
     c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(sleep=0.3)),
                                                 "C": ("object", FakeC())})
     plan = [_e_call("a", sleep=0.3), SC.TaskCall("C", "hottest", {"top_n": 1})]
     assert len(P.waves_of(plan, limit=4)) == 1
     t0 = time.monotonic()
     c.run_plan(plan)
-    elapsed = time.monotonic() - t0
-    assert elapsed < 0.6 * 0.85, f"不相交的两个任务没有并发（耗时 {elapsed:.3f}s）"
+    parallel = time.monotonic() - t0
+
+    # ② 相交 ⇒ 串行（同一份 sleep）
+    store2 = _mk_store(tmp_path / "s2")
+    c2 = _conductor(store2, policy=pol, registry={"E": ("object", FakeE(sleep=0.3))})
+    t0 = time.monotonic()
+    c2.run_plan([_e_call("a", sleep=0.3), _e_call("b", sleep=0.3)])
+    serial = time.monotonic() - t0
+
+    assert serial > parallel * 1.4, (
+        f"不相交的两个任务没有并发：并行 {parallel:.3f}s vs 串行 {serial:.3f}s"
+        "（比值必须 > 1.4；机器慢会同时拖慢两者，比值不受影响）"
+    )
 
 
 # ---------------------------------------------------------------- I-7

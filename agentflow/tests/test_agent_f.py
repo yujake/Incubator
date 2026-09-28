@@ -268,6 +268,51 @@ def test_owner_e_subgoal_really_produces_an_experiment(store):
     assert sg["negation_kind"] == "not_proved"
 
 
+def test_owner_e_formal_subgoal_reaches_proof_and_closes_only_with_proof(store, monkeypatch):
+    """`P-8` 的 F 侧接线：形式化子目标要把 `name` / `imports` 传给 E。
+
+    不传的话 E 只能用文件名词干 + 检查器默认库：裸 `lean` 解析不到 Mathlib
+    （`import_unavailable`）⇒ 那次检查根本没发生 ⇒ F 永远拿不到 proof 级证据、
+    子目标永远关不掉。这里用桩检查器证明"参数真的到了检查器"，
+    并断言只有 `verified` 才把子目标标 `closed`。
+    """
+    from agentflow import formalgw as FG
+    from agentflow.tools import verify_tools as VT
+
+    monkeypatch.setattr(VT, "detect_verifier", lambda: {
+        "checked": True,
+        "available": [{"name": "lean", "path": "lean", "version": "(桩)"}],
+        "available_names": ["lean"], "probe_errors": [], "reason": "（桩）探测到 lean",
+    })
+    seen: dict = {}
+
+    def _fake(source, *, name, imports, timeout_sec, run_fn=None, workdir=None, source_path=None):
+        seen.update({"name": name, "imports": tuple(imports), "source_path": source_path})
+        raw = {"status": "verified", "reason": "（桩）通过", "stdout": "（桩）no axioms",
+               "stderr": "", "axioms": [], "sorry_count": 0, "decl_matches": True,
+               "declared_in_source": True, "ran": True, "backend": {"status": "ok"}}
+        return FG._conclude(raw, "verified", raw["reason"])
+
+    monkeypatch.setattr(FG, "check_lean", _fake)
+    rel = write_script(store, "proofs/f_probe.lean", "theorem f_probe : 1 + 1 = 2 := rfl\n")
+    f = make_f(store)
+    pid = f.create_plan("难题", "PK-FORMAL", subgoals=[
+        {"sid": "s1", "text": "把这条命题形式化", "owner": "E", "method": "formal",
+         "script_path": rel, "name": "f_probe", "imports": []},
+    ])["plan_id"]
+    out = f.step(pid)
+
+    assert seen["name"] == "f_probe", "声明名没有传到检查器"
+    assert seen["imports"] == (), "imports 没有传到检查器（空列表 ⇒ 纯内核检查）"
+    assert out["outcome"] == "progress"
+    row = store.rows("experiments")[0]
+    assert row["evidence_kind"] == "proof"
+    assert row["verifier_subject_key"] == row["claim_key"], "检查器输出必须绑定到这条命题"
+    sg = store.rows("attack_plans")[0]["subgoals"][0]
+    assert sg["proof_experiment_ids"] == [row["experiment_id"]]
+    assert sg["status"] == "closed", "只有 proof 级证据才允许关闭子目标（FC-22）"
+
+
 def test_owner_e_without_script_path_is_recorded_as_not_advanced(store):
     """E 的子目标没给 `script_path` ⇒ `no_change` + "未推进"，不是"跑了但没结果"。"""
     f = make_f(store)
@@ -710,6 +755,7 @@ def test_attack_store_tools_fail_closed_when_not_wired():
 
     empty = ToolRegistry(name="no-store")
     AT.register(empty, store=None, root=None)
+    empty.bound_role = "F"  # `P-14`：这张表代表 F（`attack.*` 的写侧唯一主人）
     assert empty.call("attack.create_plan", problem="p", problem_key="k").meta["kind"] == "not_wired"
     assert empty.call("attack.step", plan_id="0000").meta["kind"] == "not_wired"
     assert empty.call("attack.status", plan_id="0000").meta["kind"] == "not_wired"

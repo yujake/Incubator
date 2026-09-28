@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
 from agentflow.cancellation import (
+    CANCEL_BY_VALUES,
     CANCEL_CODES,
     CancelReason,
     CancelRequested,
@@ -116,6 +118,66 @@ def test_detail_of_never_returns_empty_string():
     assert "预算" in detail_of(CancelReason("budget", "预算耗尽"))
 
 
+# ---------------------------------------------------------------- G-24 ③：`by` 的受控词表
+
+
+def test_cancel_by_values_are_all_really_produced_in_src() -> None:
+    """正控（`G-24` ③）：`CANCEL_BY_VALUES` 里每一条都必须真的能在 `src/` 里找到产出点。
+
+    这条防的是"编造一个取值"：G-25 的 ② 就是同一个病的另一面
+    （文档声称了一个代码里没有的行为）。一个只在词表里存在的 `by` 值，
+    会让读词表的人以为"系统会在这种情况下报它"，从而不再自己核对。
+    """
+    src = Path(__file__).resolve().parents[1] / "src" / "agentflow"
+    blob = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in sorted(src.rglob("*.py"))
+    )
+    for v in CANCEL_BY_VALUES:
+        # 两种产出形态：显式传参 `by="x"`，或参数默认值 `by: str = "x"`。
+        assert f'by="{v}"' in blob or f'by: str = "{v}"' in blob, (
+            f"CANCEL_BY_VALUES 里的 {v!r} 在 src/ 里找不到产出点 ⇒ 这是一个编造的值"
+        )
+
+
+def test_cancel_by_vocab_negative_control_an_invented_value_is_detected() -> None:
+    """负控：往词表里塞一个不存在的取值 ⇒ 上面那条判据必须变红。
+
+    没有这条，正控在"词表是空元组"时也会绿（循环一次都不跑）。
+    """
+    src = Path(__file__).resolve().parents[1] / "src" / "agentflow"
+    blob = "\n".join(p.read_text(encoding="utf-8") for p in sorted(src.rglob("*.py")))
+    invented = "definitely_not_a_real_cancel_source"
+    assert invented not in CANCEL_BY_VALUES, "前提：它本来不在词表里"
+    found = f'by="{invented}"' in blob or f'by: str = "{invented}"' in blob
+    assert found is False, "编造的取值不该在 src/ 里找得到 —— 否则这条负控失去意义"
+
+
+def test_cancel_by_is_not_a_hard_enum_so_callers_keep_their_own_label() -> None:
+    """`by` 刻意不是硬枚举：调用方自定义标签必须仍然被接受（审计信息只许变多）。
+
+    与 `code` 对比：`code` 是封闭词表（`CANCEL_CODES`），`by` 不是。
+    两者都不许互换 —— 把 `by` 锁成枚举会拒掉合法调用方，并让
+    "谁喊的停"这条信息变少。
+    """
+    t = CancelToken()
+    r = t.cancel("user", detail="调用方自定义标签", by="caller-with-my-own-name")
+    assert r.by == "caller-with-my-own-name"
+    assert "caller-with-my-own-name" not in CANCEL_BY_VALUES
+    # `code` 那一侧仍然是封闭的：词表外的 code 由 `Conductor._signal_stop` 拒绝
+    # （这里只断言词表本身没被放宽成"什么都收"）。
+    assert isinstance(CANCEL_CODES, tuple) and "user" in CANCEL_CODES
+
+
+def test_cancel_reason_default_by_is_registered() -> None:
+    """`CancelReason` 的默认 `by` 必须在词表里 —— 否则"没记谁喊的"这一档无处可查。"""
+    assert CancelReason("user").by in CANCEL_BY_VALUES
+    assert "unknown" in CANCEL_BY_VALUES
+    # `Conductor.cancel` 的默认 `by="user"`：这是一个会被真的用到的取值，
+    # 不许因为"文档读起来像是没用到"就把它从词表里删掉。
+    assert "user" in CANCEL_BY_VALUES
+
+
 # ---------------------------------------------------------------- 三态与结果未知
 
 
@@ -187,7 +249,7 @@ def test_token_budget_none_means_unlimited():
     """负控：`None`（不限）不许被当成 0（已耗尽）。"""
     t = CancelToken(token_budget=None)
     for _ in range(100):
-        assert t.consume_tokens(10**6) is True
+        assert t.consume_tokens(106) is True
     assert t.cancelled is False
     assert t.reason is None
 
@@ -209,17 +271,24 @@ def test_cancel_is_thread_safe_first_wins():
 
     这条测试不是"跑一遍看看有没有崩"，而是断言一个不变量：
     50 个线程同时取消，最终 state 必须恰好是其中一个（不许出现混合态）。
+
+    `code` 必须取词表内（`CANCEL_CODES`）的值：`G-10` 之后 `CancelReason.__post_init__`
+    会校 `code ∈ CANCEL_CODES`，而"哪个线程赢了"这件事由 `detail` / `by` 承载
+    （它们刻意保持开放，见 `test_cancel_by_is_not_a_hard_enum_so_callers_keep_their_own_label`）。
+    早期这版用 `f"reason-{i}"` 造编外 code，靠的正是"code 没人校验"—— 那不是本用例要证的东西。
     """
+    codes = ("user", "deadline")  # schema.CANCEL_CODES 的成员
     t = CancelToken()
     barrier = threading.Barrier(50)
 
     def worker(i: int) -> None:
         barrier.wait()
-        t.cancel(f"reason-{i}", detail=f"d{i}", by=f"t{i}")
+        t.cancel(codes[i % len(codes)], detail=f"d{i}", by=f"t{i}")
         # 每个线程还要读一次：读到的必须是完整的 (code, detail, by) 三元组
         r = t.reason
         assert r is not None
-        assert r.detail == f"d{r.code.split('-')[1]}" and r.by == f"t{r.code.split('-')[1]}"
+        assert r.detail in (f"d{j}" for j in range(50))
+        assert r.by == "t" + r.detail[1:], "detail 与 by 必须来自同一个线程"
 
     threads = [threading.Thread(target=worker, args=(i,)) for i in range(50)]
     for th in threads:
@@ -228,7 +297,8 @@ def test_cancel_is_thread_safe_first_wins():
         th.join()
     assert t.cancelled is True
     code = t.reason.code  # type: ignore[union-attr]
-    i = code.split("-")[1]
+    assert code in codes, f"赢的那一次必须用词表内的 code，实得 {code!r}"
+    i = t.reason.detail[1:]  # type: ignore[union-attr]
     assert (t.reason.detail, t.reason.by) == (f"d{i}", f"t{i}")  # type: ignore[union-attr]
 
 

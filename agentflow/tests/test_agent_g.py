@@ -135,12 +135,32 @@ def add_finding(
     return row.to_dict()
 
 
+#: proof 级断言必须给出的落点（`D-1` 写入期判据）：工作区里的一个真文件。
+#:
+#: 为什么这里要真的写一个 `.lean` 文件而不是编一个路径：新的 `check_proofs` 会在
+#: `build_document` 里按工作区根解析它并 `is_file()`。编路径的夹具会红 ——
+#: 而那样红说明的是"判据在起作用"，不是"夹具写错了"。这条夹具同时是那个判据的正控。
+PROOF_REL = "proofs/fixture_proof.lean"
+
+
 @pytest.fixture
 def g_store(store: Store) -> Store:
     """最小可写稿的数据：1 篇文献 + 1 条 formal/proof 实验 + 1 条 numeric 实验。"""
     add_literature(store, "0000", title="Companion book：[6, Thm 6.5]", processed=True, sync=False)
-    add_experiment(store, "0000", method="formal", evidence_kind="proof", verifier_output="Lean4: no goals")
+    # `E-2`（人裁 = verify 侧事后加严）之后，proof 行的 `verifier_output` 里必须
+    # 出现它自己的 `verifier_subject_key` —— 否则 `verify_all` 报 `selfreported_proof`
+    # （"这条 proof 是自报的"）。夹具于是写成检查器真跑过的那种输出形态：
+    # `formalgw` 真跑 Lean 时打印的正是它检查的那条 key。
+    add_experiment(store, "0000", method="formal", evidence_kind="proof",
+                   verifier_output="Lean4: 'claim-key-0000' does not depend on any axioms")
     add_experiment(store, "0001")
+    # proof 级断言要有一个可复核的落点（`D-1`）：在工作区里放一份能被打开的文件。
+    proof_file = Path(store.root) / PROOF_REL
+    proof_file.parent.mkdir(parents=True, exist_ok=True)
+    proof_file.write_text(
+        "theorem fixture_proof : True := trivial  -- 夹具：仅用于证明落点存在\n",
+        encoding="utf-8",
+    )
     sync_all_counters(store)
     return store
 
@@ -157,6 +177,7 @@ def _clean_claims(g: AgentG) -> list[dict]:
             citations=["exp:0000", "lit:0000"],
             evidence_kind="proof",
             section="主要结果",
+            proof_location=PROOF_REL,
         ),
         g.compose_claim(
             "数值抽样在 10^4 个点上支持 Spec K(m) ⊆ [−m, m]。",
@@ -421,6 +442,7 @@ def test_revise_bumps_round_marks_finding_fixed_and_replaces_a_claim(g: AgentG, 
         evidence_kind="proof",
         section="主要结果",
         claim_id=target,
+        proof_location=PROOF_REL,
     )
     out = g.revise(doc_id, fixed_findings=[finding["finding_id"]], new_claims=[replacement], note="按 H 意见改措辞")
 
@@ -463,6 +485,9 @@ def test_doc_tools_are_registered_with_honest_side_effects(g_store: Store):
     """工具面（FC-06/FC-07）：写工具如实声明 `write_local`，且不挂给 H。"""
     build = build_registry(store=g_store, workspace_root=g_store.root)
     reg = build.registry
+    # `P-14`：完整注册表默认不绑定角色 ⇒ `call` 一律被拒。本用例测的是
+    # `doc.*` 的副作用声明与可用性，所以绑定写侧主人 G。
+    reg.bound_role = "G"
     assert reg.get("doc.build_document").side_effect == "write_local"
     assert reg.get("doc.build_document").needs_approval is True
     assert reg.get("doc.register_dependency").side_effect == "write_local"
@@ -499,6 +524,7 @@ def test_doc_tools_are_registered_with_honest_side_effects(g_store: Store):
 def test_doc_tools_fail_explicitly_when_the_store_is_not_wired():
     """FC-08：没接线必须显式失败（`not_wired`），不得静默返回空列表。"""
     reg = build_registry(store=None, workspace_root=None).registry
+    reg.bound_role = "G"  # `P-14`：`doc.*` 的写侧主人是 G（见上一条用例的注释）
     res = reg.call("doc.list_documents")
     assert res.ok is False
     assert res.meta.get("kind") == "not_wired"

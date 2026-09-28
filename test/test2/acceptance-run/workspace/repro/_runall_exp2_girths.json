@@ -149,7 +149,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 0.161,
+    "elapsed_seconds": 0.106,
     "injected_bug": null,
     "max_seconds": 60.0,
     "n_checks": 24,
@@ -339,11 +339,11 @@
           "generators_distinct": "the m generators are pairwise distinct and none is the identity"
         },
         "m": 3,
-        "seconds": 0.038,
+        "seconds": 0.026,
         "stilde3_no_commuting_generators": true,
         "stilde_ball": {
           "capped": false,
-          "seconds": 0.0020062923431396484,
+          "seconds": 0.0010361671447753906,
           "size": 64
         },
         "stilde_generators_simple": {
@@ -520,10 +520,10 @@
           "generators_distinct": "the m generators are pairwise distinct and none is the identity"
         },
         "m": 4,
-        "seconds": 0.031,
+        "seconds": 0.019,
         "stilde_ball": {
           "capped": false,
-          "seconds": 0.0037169456481933594,
+          "seconds": 0.0019631385803222656,
           "size": 195
         },
         "stilde_generators_simple": {
@@ -710,10 +710,10 @@
           "generators_distinct": "the m generators are pairwise distinct and none is the identity"
         },
         "m": 5,
-        "seconds": 0.092,
+        "seconds": 0.061,
         "stilde_ball": {
           "capped": false,
-          "seconds": 0.007521390914916992,
+          "seconds": 0.0023949146270751953,
           "size": 456
         },
         "stilde_generators_simple": {

@@ -37,6 +37,7 @@ not_applicable  **这道门在本项目的数据模型上没有可判定的对�
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -400,7 +401,6 @@ def test_gate_g3_rejects_a_proof_location_that_is_neither_id_nor_path(ws: Path):
     assert r.counts["两者都不是"] == 1, r.counts
     assert "既不是" in "".join(f["message"] for f in r.findings)
 
-
 # ============================================================
 # G4 账本对账门
 # ============================================================
@@ -693,15 +693,24 @@ def test_gate_g10_returns_unknown_without_a_findings_list(ws: Path):
     assert "与『没有发现』不同" in r.reason
 
 
-def test_gate_g10_is_unknown_because_schema_lacks_the_four_fields(ws: Path):
-    """判据（已知的不可判定）：发现只有 `schema.ReviewFinding` 的字段时 ⇒ `unknown`。
+def test_gate_g10_is_unknown_when_a_finding_lacks_the_four_fields(ws: Path):
+    """判据（键不全的那一半）：这一条发现的键不全 ⇒ `unknown`。
 
-    docstring 逐字："`schema.ReviewFinding`（禁 AI 区）只有
+    `gates.gate_g10` 的 docstring 逐字："键不全的行：仍然报 `unknown` 并把缺的键逐条列出来
+    （不删门、不判 pass）。这些行是契约生效日之前落盘的历史行，或尚未补键的产出方写出的行
+    —— 两种都要看得见。"
+
+    注意：本用例的旧名字与旧 docstring 已过期，`X-96.3-3` 就地更正：它此前叫
+    `test_gate_g10_is_unknown_because_schema_lacks_the_four_fields`，理由是
+    "`schema.ReviewFinding`（禁 AI 区）只有
     `kind/level/target/message/evidence/status/round/resolution_note` ——
     没有 `line`、`verbatim_quote`、`minimal_fix`、`maths` 这四个字段。
-    因此这道门在本项目上不可能逐字判定。"
+    因此这道门在本项目上不可能逐字判定。"那句话已经不成立：`P-9` 候选 A 之后
+    `ReviewFinding` 带上了这四个字段（`axis` 也一并补上），所以 `unknown` 的成因不再是
+    "schema 缺字段"，而是"这一条发现的键不全"（历史行，或还没补键的产出方）。
+    行为与判据一个字都没动 —— 改的只是名字与这句过期的话。
 
-    所以这条测试的期望值就是 `unknown`，而不是"它坏了"。
+    所以这条测试的期望值仍然是 `unknown`，而不是"它坏了"。
     关键断言是：它必须如实报 unknown 并把缺失字段逐条列出来，
     而不是删门或报 pass。
     """
@@ -739,7 +748,9 @@ def test_gate_g10_accepts_a_conforming_finding_list(ws: Path):
 
     为什么这条可行：上一条的夹具只要补上四个字段，`structural_gap` 就变成 0，
     这道门就走可判定的分支。所以"字段齐全 ⇒ 能判"这件事本身是可验证的 ——
-    它证明了 G10 的 unknown 不是"实现懒得判"，而是 schema 缺字段。
+    它证明了 G10 报 `unknown` 不是"实现懒得判"，而是那一行自己键不全
+    （`X-96.3-3` 更正：这句此前写的是"schema 缺字段"，而 `P-9` 候选 A 之后
+    `ReviewFinding` 已经带上那四个字段）。
     """
     ctx = _ctx(ws, findings=[{
         "finding_id": "0000", "kind": "overclaim", "level": "warning", "target": "claim-1",
@@ -1176,9 +1187,10 @@ def test_gate_criterion_revision_texts_are_a_single_source(ws: Path):
     两者"事实性对立"。读实现 + 读测试之后，事实是：两句各说了一条返回路径，
     都不假、也都不全（所以处置不是二选一，而是合成一句）：
 
-    * 发现侧四字段缺失时（本项目的常态：`schema.ReviewFinding` 在禁 AI 区、
-      没有 `line`/`verbatim_quote`/`minimal_fix`/`maths`）⇒ 报 `unknown` 并逐条列出缺哪些
-      —— 证据：`test_gate_g10_is_unknown_because_schema_lacks_the_four_fields`；
+    * 发现侧四字段缺失时（当时的常态：`schema.ReviewFinding` 那时还没有
+      `line`/`verbatim_quote`/`minimal_fix`/`maths`；`P-9` 候选 A 已把这四个字段补上，
+      所以今天这一档管的是"这一条发现键不全"，`X-96.3-3`）⇒ 报 `unknown` 并逐条列出缺哪些
+      —— 证据：`test_gate_g10_is_unknown_when_a_finding_lacks_the_four_fields`；
     * 发现侧六字段齐全时，这道门确实按 §8.4 逐字判 ⇒ 证据：
       `test_gate_g10_accepts_a_conforming_finding_list`（齐全 ⇒ `pass`）与
       `test_gate_g10_rejects_an_overlong_verbatim_quote`（引文超 20 词 ⇒ 报出来）。
@@ -1393,6 +1405,52 @@ def test_run_all_gates_returns_every_gate_id_and_a_consistent_verdict(ws: Path):
     else:
         assert agg["verdict"] in ("accepted", "accepted_with_gaps"), agg
     assert agg["pass"] + agg["fail"] + agg["unknown"] + agg["not_applicable"] == len(G.GATE_IDS), agg
+
+
+def test_run_all_gates_is_accepted_when_g10_sees_zero_findings(ws: Path):
+    """正控（`R2b-AN-1` 的下游后果）：全绿的上下文 + `findings=[]` ⇒ 总体 `accepted`。
+
+    ## 这条测试守的是什么
+
+    `G10` 在 `findings == []` 时曾经落 `not_applicable`（修前的形状：`gate_g10` 里
+    那一句少了 `all_findings and` 这半句守卫）。后果不在 `G10` 自己身上，在汇总表上：
+    `gate_verdict` 只要看见任何一个 `not_applicable` 就报 `accepted_with_gaps`，
+    于是一篇没有任何发现的稿件会被读成"有门没判"。所以守卫必须打在下游：
+    总体结论、`pass` 计数、`not_applicable_gates` 三者一起断言。
+
+    ## 为什么夹具要额外给一份禁词表
+
+    `G5` 的对象是词表，不给词表它判 `not_applicable`（这是三态纪律，不是缺陷）。
+    所以"15 门全绿"的上下文除了 `_frozen_ctx` 之外还需要一份非空词表，
+    而正文里不含该词 ⇒ `G5` 落 `pass`。"缺词表就进不了全绿"这件事由
+    `test_gate_g5_returns_not_applicable_without_a_word_list` 单独钉着。
+
+    ## 最后一个差分块的作用
+
+    它把 `G10` 的结论改回修前那一档（`not_applicable`），断言总体判定与那三个数
+    同时变。这就是本用例"不是恒真"的证据：谁把 A1 的守卫删掉，上面三条断言
+    当场红，而差分块读出的正是红成什么样。
+    """
+    ctx = _frozen_ctx(ws, banned_words=["显然"])
+    assert ctx.findings == [], "夹具前提：这一份上下文里确实是零发现"
+    out = G.run_all_gates(ctx)
+    agg = G.gate_verdict(out)
+    print("[R2b-AN-1 下游] 逐门 " + str({g: r.verdict for g, r in out.items()}))
+    print(f"[R2b-AN-1 下游] 总体={agg['verdict']} pass={agg['pass']} "
+          f"not_applicable_gates={agg['not_applicable_gates']}")
+    assert out["G10"].counts["发现数"] == 0, out["G10"].counts
+    assert out["G10"].verdict == "pass", (out["G10"].verdict, out["G10"].reason)
+    assert agg["verdict"] == "accepted", agg
+    assert agg["pass"] == len(G.GATE_IDS), agg
+    assert agg["not_applicable_gates"] == [], agg
+
+    degraded = {**out, "G10": dataclasses.replace(out["G10"], verdict="not_applicable")}
+    agg_degraded = G.gate_verdict(degraded)
+    print(f"[R2b-AN-1 下游 差分] 总体={agg_degraded['verdict']} pass={agg_degraded['pass']} "
+          f"not_applicable_gates={agg_degraded['not_applicable_gates']}")
+    assert agg_degraded["verdict"] == "accepted_with_gaps", agg_degraded
+    assert agg_degraded["pass"] == len(G.GATE_IDS) - 1, agg_degraded
+    assert agg_degraded["not_applicable_gates"] == ["G10"], agg_degraded
 
 
 def test_run_all_gates_is_unknown_not_accepted_when_inputs_are_missing(ws: Path):

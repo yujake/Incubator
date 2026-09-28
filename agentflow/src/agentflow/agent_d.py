@@ -496,7 +496,7 @@ def _fallback_trace_tools(store: Any) -> list[Any]:
 
         为什么必须转换：``ToolRegistry.call`` 只把 ``ToolError`` 映射成有类型的
         ``kind="tool_error"``，其余异常一律兜成 ``kind="unexpected"``
-        （``tools/base.py:379-382``）—— 那是"类型信息丢失"的失败，
+        （映射点就是 ``tools.base.ToolRegistry.call`` 里那两支 ``except``）—— 那是"类型信息丢失"的失败，
         报告审计一节只能显示 ``StoreError: ...`` 而说不出这是表读不出来。
         转换之后，"表坏了"与"表里确实没有这一行"在 ``last_tool_errors`` 里
         是两种可区分的记录（三态：读到 / 没读到 / 读不了）。
@@ -628,17 +628,23 @@ def validate_tool_roles(reg: ToolRegistry) -> None:
 
     ## 为什么要把这段校验复制到 D 的装配路径上（而不是"再写一份判据"）
 
-    判据本身只有一份，就是 :data:`ROLES`（定义在 ``schema.py``，
-    ``tools/__init__.py:44`` 只是把它引过来）。本函数做的是用同一份判据
-    在第二个装配入口上执行同一条断言：
+    判据本身只有一份，就是 :data:`ROLES`（定义在 ``schema.ROLES``，
+    ``tools/__init__.py`` 里那句 ``from ..schema import ROLES`` 只是把它引过来）。
+    本函数做的是用同一份判据在第二个装配入口上执行同一条断言：
 
-    ``build_registry`` 在 ``tools/__init__.py:189-207`` 已经做过这件事，
+    ``tools/__init__.py`` 的 ``build_registry`` 已经做过这件事，
     但 :func:`install_d_tools` 不走 ``build_registry``（它自己
     ``ToolRegistry(name="agent-D")`` + ``register_function``），于是那段断言
     在这里完全缺席。后果是实测过的：``_fallback_trace_tools`` 的三个 spec
     写成 ``roles=("agent-C", "agent-D")``，角色名非法却一路注册成功，
     ``for_role("C")/("D")`` 永远拿不到它们 —— 静默少工具，
-    正是 ``tools/__init__.py:191-194` 注释里记的那个历史 bug 的同型复发。
+    正是 ``build_registry`` 里那段历史 bug 注释（``tools/__init__.py``，
+    后来由 ``tools.base.ToolRegistry._reject_unknown_roles`` 把判据前移到注册期）
+    记的同型复发。
+
+    这里刻意只写符号名、不写行号：行号在本仓库的并行开发下几十分钟就会漂，
+    而符号名可被断言存在（``.noai-paths`` 的维护纪律：
+    理由里用反引号写符号名、刻意不写 ``文件:行号``）。
 
     为什么不能"什么都不做、只改对角色名"：那样只是修好了这一次的拼写。
     判据必须在每个装配入口都执行，否则下一个改这里的会重犯。
@@ -724,6 +730,12 @@ def install_d_tools(
         setattr(reg, "trace_fallback_reason", f"{type(last).__name__}: {last}" if last else "trace_tools 不可用")
     # 放在最后：降级替身也要过校验（它们曾经正是出错的那一批）。
     validate_tool_roles(reg)
+    # ---- 绑定角色（`P-14`）：这张注册表代表 D，`AgentD._call` 的每次调用都会被
+    # 判一次"D 拿不拿得到这个工具"（`research.*` 是 D 的，`graph.*` / `trace.*` 是 C/D 共用的）。
+    # 不绑的话那些调用会全部以"调用方没有声明角色"失败 —— 只读约束的刀不许靠"没写"来拿，
+    # 但也不能因为"没写"把 D 自己的手一起砍掉。
+    if reg.bound_role is None:
+        reg.bound_role = "D"
     return reg
 
 
@@ -756,6 +768,12 @@ class AgentD:
         self.llm = llm
         #: 工具栏。要么外部注入，要么这里装配（含降级替身）。
         self.tools = tools if tools is not None else install_d_tools(self.store, trace_tools=trace_tools)
+        # ---- 绑定角色（`P-14`）：`AgentD._call` 的每次调用都要能回答"这次是谁在调"。
+        # 注入进来的注册表（测试与调用方都用这条路径）同样要绑 —— 绑不上就等于
+        # D 的每一次工具调用都会以"调用方没有声明角色"被拒，那不是"更安全"，
+        # 那是把 D 的手砍掉了。
+        if self.tools.bound_role is None:
+            self.tools.bound_role = "D"
 
         # ---- 阈值全部来自 config，不写死在代码里（与 config.yaml 的既有做法一致）
         self.max_questions = int(self.cfg.get("max_questions", 5))  # §8 待决问题 2
@@ -1229,7 +1247,7 @@ class AgentD:
                         "seed_names": names,
                         "priority": "medium",
                         "why": f"C 报告 {rid} 的 payload 结构未被识别（key={sorted(payload)[:8]}），"
-                        "按代号集合生成兜底问题（**这是容错路径，不是主路径**）",
+                        "按代号集合生成兜底问题（这是容错路径，不是主路径）",
                     }
                 )
         return out
@@ -1550,7 +1568,7 @@ class AgentD:
                     line = (
                         f"[ingest] weak_conflict_clue: 关系 {'、'.join(sorted(rids))} 出现"
                         f"「{_digest(clue.get('signals'), 160)}」。strength={clue.get('strength')} ⇒ "
-                        "**只记录为线索，不建矛盾问题、不自动追问**（弱信号的假阳性极高，"
+                        "只记录为线索，不建矛盾问题、不自动追问（弱信号的假阳性极高，"
                         "不能让 A 的产能烧在假矛盾上）。若后续证据让其中一方明确被否定，再走 I2。"
                     )
                     old = target.get("notes") or ""
@@ -1709,7 +1727,7 @@ class AgentD:
                         "detection": item.get("detection") or "literal",
                         "note": (
                             "strength != strong ⇒ 只是线索（'否定标记出现与否不一致'的假阳性极高，"
-                            "实测 24% 的报警都不是矛盾）⇒ **不建矛盾问题、不提交检索请求**"
+                            "实测 24% 的报警都不是矛盾）⇒ 不建矛盾问题、不提交检索请求"
                         ),
                     }
                 )
@@ -1797,7 +1815,7 @@ class AgentD:
             # R002 的例外，理由（不是把"没做"折叠成"没有"）：
             # 这是渲染层的辅助函数，问的是"C 的报告里有没有记过这条链的方向"。
             # 报告不在库里时，正确答案就是"我没有依据 → 退回概念组的写法"，
-            # 而不是"方向是空的"。调用方（`_chain_arrow`）拿到 `[]` 后走的是
+            # 而不是"方向是空的"。调用方（`trace_question`）拿到 `[]` 后走的是
             # "不编方向"的分支，不会把 `[]` 当成一个关于世界的断言。
             # 真正的三态由上层负责：证据是否就绪是 `assess()` 的结论，不是这里。
             return []
@@ -2458,7 +2476,7 @@ class AgentD:
                         # ---- 三态之"没查"：既不推进，也不当作"不相关"，更不降级
                         line = (
                             f"[poll] evidence_relevance_unchecked：{relevance.get('reason')}"
-                            " ⇒ 本轮**不推进**（这是「没检查」，不是「不相关」；等待集与优先级都不动）"
+                            " ⇒ 本轮不推进（这是「没检查」，不是「不相关」；等待集与优先级都不动）"
                         )
                         qrow["notes"] = self._append_note_once(qrow, line)
                         qrow["updated_at"] = self._stamp()
@@ -2706,7 +2724,7 @@ class AgentD:
                 "action": "not_a_contradiction",
                 "reason": (
                     f"问题 {qid} 的 kind={qrow.get('kind')!r}，不是矛盾驱动问题 ⇒ "
-                    "**不做矛盾裁决**（这是「没做」，不是「裁决过、没矛盾」）"
+                    "不做矛盾裁决（这是「没做」，不是「裁决过、没矛盾」）"
                 ),
             }
         rel_ids = sorted({str(x) for x in (qrow.get("contradiction_relation_ids") or []) if x})
@@ -2743,7 +2761,7 @@ class AgentD:
                     "reason": (
                         f"{rel_ids[0]} 与 {rel_ids[1]} 目前只有**弱线索**（strength={pair_strength}："
                         "否定标记出现与否不一致，而非一方明确断言肯定式、另一方明确断言否定式）"
-                        "⇒ **不自动追问**，标 persistent 交人复核。"
+                        "⇒ 不自动追问，标 persistent 交人复核。"
                         "弱信号的假阳性极高，拿它驱动检索会把 A 的产能烧在假矛盾上"
                     ),
                 }
@@ -2758,7 +2776,7 @@ class AgentD:
                     "reason": (
                         f"{rel_ids[0]} 与 {rel_ids[1]} 仍对立，但**全局矛盾检索配额已用尽**"
                         f"（{budget['used']}/{budget['limit']}）⇒ 停止自动追问，交人复核。"
-                        "这可能是**真实的文献分歧**（本身就有研究价值），而不是检索不足"
+                        "这可能是真实的文献分歧（本身就有研究价值），而不是检索不足"
                     ),
                 }
             )
@@ -2849,7 +2867,7 @@ class AgentD:
                     if other is not None:
                         line = (
                             f"merged_origins: C:contradictions:{pair_ids[0]}+{pair_ids[1]}"
-                            f"（裁决 {qid} 时再次发现同一对矛盾；**同一对**关系已建过问题，故不新建）"
+                            f"（裁决 {qid} 时再次发现同一对矛盾；同一对关系已建过问题，故不新建）"
                         )
                         if line not in (other.get("notes") or ""):
                             other["notes"] = ((other.get("notes") or "") + "\n" + line)[:20000]
@@ -3166,7 +3184,7 @@ class AgentD:
         head = (
             f"**{C_NO_EVIDENCE}**：本问题对 C 的按需查询**全部没有成功**"
             f"（共 {summary.get('attempted')} 次；{why}）。以下判断只基于 D 侧溯源到的"
-            "关系表述，**未经 C 的图查询核对**，因此不作确定结论 —— "
+            "关系表述，未经 C 的图查询核对，因此不作确定结论 —— "
             "「没问到」不等于「不存在」。"
         )
         tail = (
@@ -3504,7 +3522,7 @@ class AgentD:
         lines.append("3. 「知识不足」由三条可核实判据触发（关键词零命中 / 度数低且无可核验引文 / 表述互相矛盾），")
         lines.append("   不使用「感觉不够」这类无法反驳的判据。")
         lines.append("4. 每个问题都列出**对 C 的按需查询**（I1）：查了就写拿到什么，没查到就写"
-                     f"**{C_NO_EVIDENCE}**，并且那一节的结论不作确定语气。")
+                     f"{C_NO_EVIDENCE}，并且那一节的结论不作确定语气。")
         lines.append("5. 矛盾驱动的问题（I2）走**裁决闭环**：追问有轮数上限与全局配额，"
                      "用尽即标 `persistent`（交人复核），不会无限追问。")
         lines.append("")
@@ -3584,7 +3602,7 @@ class AgentD:
             if ev is None:
                 lines.append(
                     "- **溯源未执行**（`trace_question` 调用失败）：本节没有证据，"
-                    f"但这**不等于**「查询过且没有结果」。失败原因见审计一节。"
+                    f"但这不等于「查询过且没有结果」。失败原因见审计一节。"
                 )
                 claims = []
             else:
@@ -3667,7 +3685,7 @@ class AgentD:
             if not cq:
                 lines.append(
                     "- 本轮**未对 C 发起按需查询**（该问题未进入研究/评估步骤，`evidence.c_queries` 为空）"
-                    f"⇒ 本节**{C_NO_EVIDENCE}**：下面的判断未经 C 的图查询核对。"
+                    f"⇒ 本节{C_NO_EVIDENCE}：下面的判断未经 C 的图查询核对。"
                 )
             else:
                 csum = self._c_summary(cq)
@@ -3723,7 +3741,7 @@ class AgentD:
             else:
                 lines.append(
                     "（本轮未运行到研究步骤：该问题未进入 `researching`，因此没有分析。"
-                    "上一节给出的是**报告期补取的溯源证据**，不是研究结论。）"
+                    "上一节给出的是报告期补取的溯源证据，不是研究结论。）"
                 )
             lines.append("")
 
@@ -3738,7 +3756,7 @@ class AgentD:
                 # 没有判断却写一个"低"，看起来像结论，实则是一个没算过的数。
                 lines.append(
                     "**本轮未形成结论**：该问题还没进入研究步骤（无 `research()` 记录），"
-                    "因此**不给出置信度** —— 没有可评估的证据时，任何档位都是编出来的。"
+                    "因此不给出置信度 —— 没有可评估的证据时，任何档位都是编出来的。"
                 )
             lines.append("")
 

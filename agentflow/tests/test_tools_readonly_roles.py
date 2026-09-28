@@ -55,7 +55,6 @@ def test_for_role_strips_write_tools_from_read_only_roles():
     """
     reg = ToolRegistry(name="t")
     reg.register(_spec("bad.write", "write_local", ("C", "H")))
-    reg.register(_spec("bad.net", "network", ("C",)))
     reg.register(_spec("fine.read", "read", ("C", "H")))
     reg.register(_spec("fine.none", "none", ("C", "H")))
 
@@ -90,6 +89,19 @@ def test_no_role_filter_notes_when_declarations_are_correct():
         reg.for_role(role)
     assert reg.role_filter_notes == {}
 
+    # ---- 差分（`G-22`）：同一个夹具，只把"写工具声明的 roles"换成含只读角色，
+    # 留痕必须非空。为什么必须成对写：上面那条 `== {}` 单看是不可能失败的断言
+    # —— 就算 `for_role` 完全停止剥离，它也照样绿。把正反两侧放进同一个用例，
+    # 任何一侧被抹平都会红。
+    leaky = ToolRegistry(name="t-leaky")
+    leaky.register(_spec("good.read", "read", ROLES))
+    leaky.register(_spec("leaky.write", "write_local", ("A", "H")))
+    leaky.for_role("H")
+    assert leaky.role_filter_notes != {}, (
+        "写工具被放行给只读角色却没留痕 ⇒ 留痕机制本身失效（这正是上一条断言看不见的那种坏法）"
+    )
+    assert "leaky.write" in leaky.role_filter_notes["H"][0], leaky.role_filter_notes
+
 
 def test_real_registry_gives_no_write_tool_to_read_only_roles(store):
     """端到端：真实装配出来的工具层里，C 与 H 的工具面 0 个写工具。"""
@@ -118,9 +130,16 @@ def test_every_write_tool_declares_at_least_one_writing_role(store):
 
 
 def test_side_effect_vocabulary_is_the_single_source():
-    """`SIDE_EFFECTS_WRITE` 必须是 `SIDE_EFFECTS` 的尾部子集（不是另写一份词表）。"""
+    """`SIDE_EFFECTS_WRITE` 必须是 `SIDE_EFFECTS` 的尾部子集（不是另写一份词表）。
+
+    B3 收官之后它只剩 `write_local`：遗留取值 `network` 已从两处词表里删掉，
+    于是"哪些算写"这个问题在只读角色的剥离判据上只有一个答案。
+    """
     assert set(SIDE_EFFECTS_WRITE) <= set(SIDE_EFFECTS)
-    assert set(SIDE_EFFECTS_WRITE) == {"write_local", "network"}
+    assert set(SIDE_EFFECTS_WRITE) == {"write_local"}
+    # 负控：`network` 已经不是合法取值 ⇒ 想用旧的"写副作用"集合绕过剥离是不可能的，
+    # 那个取值在构造 `ToolSpec` 时就会被拒（见 test_tools_base.py 的负控）。
+    assert "network" not in SIDE_EFFECTS
 
 
 # ============================================================ 第二道：external == "exec"
@@ -162,17 +181,73 @@ def test_for_role_releases_exec_when_sandbox_is_declared_available(monkeypatch):
     assert any("沙箱已声明可用" in n and "tool.exec" in n for n in notes), notes
 
 
-def test_real_registry_has_no_exec_tool_and_filter_notes_stay_empty(store):
-    """真实树上的现状：55 个工具里没有一个声明 `external="exec"`。
+#: 真实树上"外部动作 = `exec`"的工具清单。
+#:
+#: 为什么钉成常量，而不是只断言"只读角色拿不到 exec 工具"：后者在"任何" exec
+#: 工具存在时都成立，于是每多一个 exec 工具都不会被任何人注意到 —— 而
+#: `for_role` 的剥离规则意味着"多一个 exec 工具"就等于"C/H 的工具面少一个"
+#: （P-13 §8.2 的受影响清单）。钉住清单 ⇒ 每次迁移都必须显式改这一行，改动可见。
+#:
+#: 现状（B3 收官后）：恰好 2 条 —— `verify.run_experiment`（B3 第 0 步）
+#: 与 `verify.check_formal`（B3 收官）。
+#: 前者同时是写工具（`side_effect="write_local"`）⇒ 就算 exec 轴不存在，
+#: C/H 也照样拿不到它；后者是 `read` + `exec` ⇒ 只有 exec 轴能把它剥掉，
+#: 所以这一条是"第二根轴的剥离规则真的在干活"的证据
+#: （它的 `roles` 也已从 `_ROLES` 改成 `_ROLES_WRITE`，不靠过滤兜底）。
+KNOWN_EXEC_TOOLS = frozenset({"verify.run_experiment", "verify.check_formal"})
 
-    这条断言是"本轮不改变行为"的直接证据：`external` 是本轮新加的轴，
-    默认 `none` ⇒ `for_role` 的新剥离条件对既有工具一次都不触发
-    （`role_filter_notes` 仍然为空）。B3 迁移 `verify.run_experiment` 等工具时，
-    这条断言会变红 —— 那时它正是"受影响清单"的触发器。
+
+def _exec_inventory_delta(registry, expected: frozenset[str]) -> dict[str, list[str]]:
+    """`registry` 里 `external == "exec"` 的工具名集合与 `expected` 的双向差集。"""
+    got = {s.name for s in registry._specs.values() if s.external == "exec"}
+    return {"unexpected": sorted(got - expected), "missing": sorted(expected - got)}
+
+
+def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(store):
+    """真实树上的现状：exec 清单是 2 条（B3 收官），且只读角色仍 0 条。
+
+    这条断言原来写的是"一个 exec 工具都没有"，它的职责从来不是"现状如此"，
+    而是"exec 清单变化必须被人看见"。B3 落地后按设计变红，于是它改为"钉住清单"：
+    形状不变（谁动了清单谁就得改这一行），强度更高（多了/少了都报）。
     """
     build = build_registry(store=store, workspace_root=store.root)
-    execs = sorted(s.name for s in build.registry._specs.values() if s.external == "exec")
-    assert execs == [], f"出现了声明 exec 的工具：{execs}（H/C 会因此少掉它们，见 P-13 §8.2）"
+    assert build.skipped == [], build.skipped
+
+    delta = _exec_inventory_delta(build.registry, KNOWN_EXEC_TOOLS)
+    assert delta == {"unexpected": [], "missing": []}, (
+        f"真实树的 exec 清单与 `KNOWN_EXEC_TOOLS` 不一致：{delta}。"
+        "多了 ⇒ 有工具被标成 exec（C/H 的工具面会因此少一个，见 P-13 §8.2）；"
+        "少了 ⇒ 迁移被回退。两种都要连带更新本常量与 `P-13` 的受影响清单。"
+    )
+
+    # ---- 差分（`G-22`）：把同一个判据函数用在两个夹具上，两个方向都必须报出差异。
+    # 没有这一半，上面那条 `== {"unexpected": [], "missing": []}` 就是不可能失败
+    # 的断言：哪怕 `_exec_inventory_delta` 里那个 `== "exec"` 被写成恒假，
+    # 它也照样绿 —— 而恒假恰好就是"这条清单没人再看"的那种坏法。
+    extra = ToolRegistry(name="t-extra-exec")
+    extra.register(_spec("verify.run_experiment", "write_local", ("E", "F", "G"), external="exec"))
+    extra.register(_spec("verify.check_formal", "read", ("E", "F", "G"), external="exec"))
+    extra.register(_spec("bogus.exec", "none", ("E",), external="exec"))
+    assert _exec_inventory_delta(extra, KNOWN_EXEC_TOOLS) == {
+        "unexpected": ["bogus.exec"], "missing": [],
+    }, _exec_inventory_delta(extra, KNOWN_EXEC_TOOLS)
+
+    absent = ToolRegistry(name="t-absent-exec")
+    absent.register(_spec("verify.check_formal", "read", ("E", "F", "G"), external="exec"))
+    assert _exec_inventory_delta(absent, KNOWN_EXEC_TOOLS) == {
+        "unexpected": [], "missing": ["verify.run_experiment"],
+    }, _exec_inventory_delta(absent, KNOWN_EXEC_TOOLS)
+    none_at_all = ToolRegistry(name="t-no-exec")
+    assert _exec_inventory_delta(none_at_all, KNOWN_EXEC_TOOLS) == {
+        "unexpected": [],
+        "missing": ["verify.check_formal", "verify.run_experiment"],
+    }, _exec_inventory_delta(none_at_all, KNOWN_EXEC_TOOLS)
+
+    # 只读角色侧：真实树上 exec 工具一条都进不去，且留痕为空（= 声明侧也干净）。
     for role in READ_ONLY_ROLES:
-        build.registry.for_role(role)
+        specs = build.registry.for_role(role)
+        assert [s.name for s in specs if s.external == "exec"] == [], (
+            f"{role} 的工具面里出现了 exec 工具："
+            f"{[s.name for s in specs if s.external == 'exec']}"
+        )
     assert build.registry.role_filter_notes == {}, build.registry.role_filter_notes

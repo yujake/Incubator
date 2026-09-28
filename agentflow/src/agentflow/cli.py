@@ -17,10 +17,25 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import schema as S
+from . import tty
+from .console import pin_utf8
 from .store import Store, StoreError
 from .verify import verify_all
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[2]  # test/test1/
+
+
+def _non_negative_int(raw: str) -> int:
+    """argparse 的 `type=`：负数在用法错阶段就被拒（退出码 2 = "没查成"）。
+
+    为什么要这一条（`FINAL-R5-06`）：库层对负 `max_calls` 是显式拒绝（抛 `ValueError`），
+    但 CLI 层不接住它 ⇒ 未捕获异常 + traceback + 退出码 1，而 1 在本项目的三态里
+    是"查过了、有问题"，真相是"一次都没跑"。用法错本来就该退 2。
+    """
+    value = int(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"必须 >= 0（收到 {raw}）")
+    return value
 
 
 # ---------------------------------------------------------------- 配置装载
@@ -124,7 +139,7 @@ def cmd_submit(args) -> int:
                 tx.upsert("search_requests", row.to_dict(), note="submitted")
                 added.append(rid)
     except (ValueError, TypeError) as e:
-        print(f"[submit] 请求不合法，**整批未写入**：{e}", file=sys.stderr)
+        print(f"[submit] 请求不合法，整批未写入：{e}", file=sys.stderr)
         return 2
     print(f"[submit] 已提交 {len(added)} 条：{', '.join(added)}")
     return 0
@@ -220,18 +235,22 @@ def cmd_status(args) -> int:
     if args.json:
         print(json.dumps(s, ensure_ascii=False, indent=2))
         return 0
-    print(f"根目录：{s['root']}")
+    print(tty.paint(f"工作区 {s['root']}", "bold"))
+    print("")
     # 表名清单必须来自 `S.TABLES`，不许在这里写死。
     # 这里原先写死 `("search_requests", "literature", "concepts", "relations")`，
     # 而 `Store.stats()` 明明返回全部 15 张表 —— 于是"库长什么样"的第一入口
     # 静默地不显示另外 11 张（analysis_reports / experiments / documents / tasks …）。
     # 写死的第二份名单还会在表被改名/删除时以 `KeyError` 崩掉（`s[t]`），
     # 而不是如实报告。与 `cmd_tools` 里那句"角色清单必须来自 ROLES"同一个道理。
+    rows = []
     for t in S.TABLES:
         info = s[t]
         extra = " ".join(f"{k}={v}" for k, v in info.items() if k != "count")
-        print(f"  {t:20} 行数={info['count']:<5} {extra}")
-    print(f"  {'events':20} {s['events']['appended']} 条")
+        rows.append((t, str(info["count"]), extra))
+    rows.append(("events", str(s["events"]["appended"]), "追加日志"))
+    for line in tty.table(("表", "行数", "其它"), rows, aligns=("left", "right", "left")):
+        print(line)
     return 0
 
 
@@ -258,11 +277,12 @@ def cmd_verify(args) -> int:
     if args.json:
         print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=2))
     else:
-        print(f"校验完成：{'通过' if rep.ok else '**有错误**'}  "
+        print(f"{tty.badge('ok' if rep.ok else 'failed')}  校验完成  "
               f"错误 {len(rep.errors)} / 警告 {len(rep.warnings)}")
         for i in rep.issues:
-            mark = "ERR " if i.level == "error" else "WARN"
-            print(f"  [{mark}] {i.table}/{i.row_id or '-'} {i.code}: {i.message}")
+            tone = "red" if i.level == "error" else "yellow"
+            print(tty.bullet(tty.paint(f"[{i.level}] {i.table}/{i.row_id or '-'} "
+                                       f"{i.code}: {i.message}", tone)))
     # 退出码三档，与 `scripts/lint_rules.py` / `noai_gate.py` 同一口径：
     #   0 = 通过（无错误，且 --strict 下也无警告）
     #   1 = 查过了、发现问题（error 一律失败；--strict 时 warning 也算失败）
@@ -325,15 +345,18 @@ def cmd_tools(args) -> int:
     这个命令存在的意义：工具层的权限面是设计的一部分（A 拿不到 D 的工具等），
     但它默认是隐式的 —— 加一条命令把它变成可打印的事实，才好在评审时核对。
     """
-    from agentflow.tools import ROLES, build_registry
+    from agentflow.tools import ROLES, TOOL_ROLES, build_registry
 
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
     st.init()
-    # 角色清单必须来自 `ROLES`，不许在这里写死。
+    # 角色清单必须来自 `TOOL_ROLES`（= 可被召唤的 A–H + 主控 M），不许在这里写死。
     # 这里原先写死 `("A","B","C","D")`，于是 E/F/G/H 落地之后，本命令会
     # 一边报告"工具总数 55"，一边只列 4 个角色的工具数 —— 而"角色即权限面"
     # 恰恰是靠这条命令变成可打印的事实的。写死名单让那句"评审时可核对"落空。
+    # 现在补的是同族缺口：用 `ROLES` 会让主控的 8 件编排面工具在普查里完全不出现
+    # （实测 2026-09-28：总数 63，而各角色表里没有 M）—— 那正是"主控有没有手"
+    # 这个问题的答案，不能被漏掉。
     build = build_registry(store=st, workspace_root=root, roles=tuple(ROLES))
     if args.json:
         print(json.dumps(build.summary(), ensure_ascii=False, indent=2))
@@ -354,7 +377,7 @@ def cmd_tools(args) -> int:
         # 只读角色的写工具泄漏必须一眼可见：它是"审校者手里有没有刀"的直接答案。
         from agentflow.tools import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE
 
-        by_role = {r: len(build.registry.for_role(r)) for r in ROLES}
+        by_role = {r: len(build.registry.for_role(r)) for r in TOOL_ROLES}
         print(f"\n各角色工具数：{by_role}")
         leaks = {
             r: [s.name for s in build.registry.for_role(r) if s.side_effect in SIDE_EFFECTS_WRITE]
@@ -556,38 +579,633 @@ def cmd_run(args) -> int:
         # 关闭时"没有形式化验证证据"这件事照样写进未接线清单 ——
         # 少写它会让读者把"没有 proof 级证据"读成"证明了但没写下来"。
         lean=bool(args.lean),
+        # 裸 `run` 没有项目根，所以逐页正文默认内联；要"同一本书只存一份"
+        # 就显式给一个落点（依据 `draft/30` §T0-7）。
+        text_store_dir=getattr(args, "text_store_dir", None),
     )
-    print(f"[run] 工作区：{root}")
-    print(f"[run] 产物目录：{res['out_dir']}")
-    print(f"[run] 退出原因：{res['reason']}；调用 {res['calls']} 次；"
-          f"已花 {res['spent_usd']} 美元（预算 {args.budget_usd}）")
+    # 两个数字、两种口径，必须分开印（`G-4`）：
+    # - `spent_usd_this_run` 是本次运行花掉的（`--budget-usd` 判的就是它）；
+    # - `spent_usd` 是该工作区账本累计（`usage_ledger` 跨运行求和，属于工作区）。
+    # 只印累计值时，"这次运行烧光了预算"与"这个工作区历史上一共花了多少"会是
+    # 同一个数字 —— 一个长期使用的工作区会让每一次 run 看起来都超预算。
+    # 老版本（返回值里还没有这个键时）退回累计值：不猜，但也不隐藏它缺了。
+    this_run = res.get("spent_usd_this_run", res["spent_usd"])
     # 检索三态与断言台账摘要必须打到 stdout：它们是"这次的结论有没有外部依据"
     # 的直接答案。只写在 JSON 里，等于要人先去读文件才知道该不该相信这份报告。
     counts = res["claims"]
-    print(f"[run] 检索：{res['retrieval_status']}；断言 {counts['total']} 条"
-          f"（逐字通过 {counts['verified']}：摘要级 {counts.get('verified_abstract', 0)}、"
-          f"全文级 {counts.get('verified_fulltext', 0)}；未验证 {counts['unverified']}）")
     lean = res.get("lean") or {}
-    print(f"[run] Lean：开启={'是' if lean.get('enabled') else '否'}；"
-          f"跑过={'是' if lean.get('ran') else '否'}；"
-          f"proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}")
-    print("[run] 六件产物：" + "、".join(res["artifacts"]))
+    print("")
+    for line in tty.panel(
+        "端到端跑一个主题",
+        [("退出码", f"{_exit_badge(res['exit_code'])}（{res['reason']}）"),
+         ("模型调用", f"{res['calls']} 次；本次已花 {this_run} 美元"
+                      f"（本次预算 {args.budget_usd}）；该工作区账本累计 {res['spent_usd']} 美元"),
+         ("检索", f"{res['retrieval_status']}；断言 {counts['total']} 条"
+                  f"（逐字通过 {counts['verified']}：摘要级 {counts.get('verified_abstract', 0)}、"
+                  f"全文级 {counts.get('verified_fulltext', 0)}；未验证 {counts['unverified']}）"),
+         ("Lean", f"开启={'是' if lean.get('enabled') else '否'}；"
+                  f"跑过={'是' if lean.get('ran') else '否'}；"
+                  f"proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}"),
+         ("六件产物", "、".join(res["artifacts"]))],
+        # 路径放进 `verbatim`：它是要被抄下来 `cd` 进去的，截断了就等于没打印。
+        verbatim=[("工作区：", str(root)), ("产物目录：", res["out_dir"])],
+        tone="green" if int(res["exit_code"]) == 0 else "yellow",
+    ):
+        print(line)
     # `not_wired` 必须打到 stdout：它是"这次有哪些事确定没做"的直接答案，
     # 只写在 JSON 里等于要人先去读文件才知道不该相信这份报告。
     man = json.loads((out / "run-manifest.json").read_text(encoding="utf-8"))
     for item in man["not_wired"]:
-        print(f"[run] 未接线：{item['name']} —— {item['reason']}")
+        print(tty.bullet(tty.paint(f"未接线：{item['name']} —— {item['reason']}", "yellow")))
     return int(res["exit_code"])
 
 
+# ---------------------------------------------------------------- 证据面（T0-7）
+
+
+def _evidence_verify(run_dir: Path) -> int:
+    """核一个运行目录里的全文引用：逐条比对 `text_ref`，并重算引文命中页。
+
+    为什么必须能独立核：`text_ref` 把"证据正文在哪"从产物内部搬到了产物外部，
+    搬出去就必须有工具回答"这条引用还对不对" —— 否则搬出去等于把可复核性也搬走了。
+    三态：0 = 查过、都对得上；1 = 查过了、有坏引用或页号不符；2 = 没查成。
+    """
+    from . import fulltextstore as FS
+
+    ev_path = run_dir / "evidence.json"
+    if not ev_path.is_file():
+        print(f"[evidence] 没查成：{ev_path} 不存在", file=sys.stderr)
+        return 2
+    try:
+        ev = json.loads(ev_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"[evidence] 没查成：读不了 {ev_path}（{type(exc).__name__}: {exc}）", file=sys.stderr)
+        return 2
+
+    # 运行目录形如 <项目根>/out/run-N ⇒ 项目根是上两级；`allowed_dir` 用它把
+    # "引用只许指向本项目的正文库"这条结构判据钉死。
+    allowed = run_dir.parent.parent / FS.STORE_DIR_NAME
+    rows: list[tuple[str, str, str]] = []
+    bad = 0
+    for src in ev.get("sources") or []:
+        sid = str(src.get("source_id") or "?")
+        ref = (src.get("fulltext") or {}).get("text_ref")
+        if not isinstance(ref, dict):
+            rows.append((sid, "-", "内联或没有全文（不是引用形态）"))
+            continue
+        rep = FS.verify_ref(ref, allowed_dir=allowed)
+        if not rep["ok"]:
+            bad += 1
+            rows.append((sid, "坏", rep["problem"]))
+        else:
+            rows.append((sid, "好", f"{rep['pages']} 页 / {rep['chars']} 字"))
+
+    rows = _verify_quotes(run_dir, ev, rows)
+    bad += sum(1 for r in rows if r[1] == "页不符")
+    for line in tty.table(("来源", "引用", "读数/理由"), rows, aligns=("left", "left", "left")):
+        print(line)
+    print(tty.bullet(f"引用 {len(rows)} 条；坏 {bad} 条。台账：{ev_path}"))
+    return 1 if bad else 0
+
+
+def _verify_quotes(run_dir: Path, ev: Mapping, rows: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    """把 `claims.json` 里登记的页号与我方独立搜出来的页号对一遍（不调用被审对象）。
+
+    独立复核的意义：`claims.json` 的页号是被审实现给的；这里用朴素规范化
+    （NFKC + 折叠空白）自己搜一遍，两处一致才算"这条引用可复核"。
+    """
+    import unicodedata
+
+    from . import fulltextstore as FS
+
+    claims_path = run_dir / "claims.json"
+    if not claims_path.is_file():
+        return rows
+    try:
+        claims = json.loads(claims_path.read_text(encoding="utf-8")).get("claims") or []
+    except (OSError, ValueError):
+        return rows
+    pages_by_sid: dict[str, list[str]] = {}
+    for src in ev.get("sources") or []:
+        ref = (src.get("fulltext") or {}).get("text_ref")
+        if isinstance(ref, dict):
+            pages, _why = FS.load(ref)
+            pages_by_sid[str(src.get("source_id") or "?")] = pages
+    if not pages_by_sid:
+        # 内联形态的产物：本工具不复算页号（它只复算引用形态）。
+        # 这里必须如实说"没复算" —— 绝不许把"没查成"写成"页不符"：
+        # 那会把一次读取能力的缺失记成产物的缺陷。
+        rows.append(("（全部来源）", "未复算",
+                     "产物是内联形态；要复算页号请先 `evidence migrate --apply`"))
+        return rows
+
+    def _norm(text: str) -> str:
+        return " ".join(unicodedata.normalize("NFKC", str(text or "")).casefold().split())
+
+    for c in claims:
+        quote = str(c.get("quote") or "")
+        rec_page = (c.get("locator") or {}).get("page") if isinstance(c.get("locator"), dict) else None
+        if not quote or rec_page is None:
+            continue
+        found = None
+        for _sid, pages in pages_by_sid.items():
+            for idx, page in enumerate(pages, start=1):
+                if _norm(quote) and _norm(quote) in _norm(page):
+                    found = idx
+                    break
+            if found:
+                break
+        state = "页一致" if found == rec_page else "页不符"
+        rows.append((f"claims/{c.get('claim_id') or '?'}", state,
+                     f"登记 {rec_page} / 我方独立搜到 {found}"))
+    return rows
+
+
+def _evidence_store(project_dir: Path) -> int:
+    """盘一个项目的正文库：几个文件、多少字节、每个文件被几份产物引用。
+
+    空目录与"零字节"必须分开说 —— 把空库读成"没问题"正是这一层最常见的误读。
+    """
+    from . import fulltextstore as FS
+
+    store_dir = project_dir / FS.STORE_DIR_NAME
+    rows = FS.inventory(store_dir)
+    if not rows:
+        print(tty.bullet(f"正文库：空（{store_dir} 不存在或没有任何 store 文件）"))
+        return 0
+    referenced: dict[str, int] = {}
+    for ev_path in sorted(project_dir.glob("out/run-*/evidence.json")):
+        try:
+            ev = json.loads(ev_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for src in ev.get("sources") or []:
+            ref = (src.get("fulltext") or {}).get("text_ref")
+            if isinstance(ref, dict) and ref.get("path"):
+                key = Path(str(ref["path"])).name
+                referenced[key] = referenced.get(key, 0) + 1
+    table = [(Path(r["path"]).name, "好" if r["ok"] else "坏",
+              f"{r['bytes']} B / {r['pages']} 页 / 被 {referenced.get(Path(r['path']).name, 0)} 份产物引用",
+              r["problem"]) for r in rows]
+    for line in tty.table(("store 文件", "自校验", "读数", "问题"), table):
+        print(line)
+    print(tty.bullet(f"共 {len(rows)} 个 / {sum(int(r['bytes']) for r in rows)} 字节；落点 {store_dir}"))
+    return 1 if any(not r["ok"] for r in rows) else 0
+
+
+def _evidence_migrate(project_dir: Path, *, apply: bool) -> int:
+    """把历史产物里的内联正文迁成引用形态；默认 dry-run。
+
+    为什么默认只 dry-run：这一步改的是历史证据本体（产物里那一段正文），
+    "改证据"这种事必须由人显式点头（`--apply`），而且每一份都要先备份。
+    """
+    from . import fulltextstore as FS
+
+    store_dir = project_dir / FS.STORE_DIR_NAME
+    todo: list[tuple[Path, int, int]] = []
+    for ev_path in sorted(project_dir.glob("out/run-*/evidence.json")):
+        try:
+            ev = json.loads(ev_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            print(tty.bullet(tty.paint(f"跳过（读不了）：{ev_path}", "yellow")))
+            continue
+        n = 0
+        saved = 0
+        for src in ev.get("sources") or []:
+            full = src.get("fulltext") or {}
+            pages = [str(p) for p in (full.get("text_pages") or [])]
+            if pages and not full.get("text_ref"):
+                n += 1
+                saved += len(json.dumps(pages, ensure_ascii=False).encode("utf-8"))
+        if n:
+            todo.append((ev_path, n, saved))
+
+    if not todo:
+        print(tty.bullet("没有需要迁移的产物（都已经没有内联正文）"))
+        return 0
+    total = sum(s for _p, _n, s in todo)
+    for line in tty.table(("产物", "内联来源数", "可省字节"),
+                          [(str(p.relative_to(project_dir)), str(n), str(s)) for p, n, s in todo]):
+        print(line)
+    if not apply:
+        print(tty.bullet(f"dry-run：将写 {total} 字节进 {store_dir}，"
+                         f"改写 {len(todo)} 份产物（加 --apply 才动盘；动盘前逐份备份）"))
+        return 0
+
+    stamp = S.now_iso().replace(":", "").replace("-", "")[:15]
+    backup_dir = Path(str(store_dir.parent / "temp")) / f"evidence-migrate-{stamp}"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    done = 0
+    for ev_path, _n, _s in todo:
+        ev = json.loads(ev_path.read_text(encoding="utf-8"))
+        backup = backup_dir / f"{ev_path.parent.name}-evidence.json"
+        backup.write_bytes(ev_path.read_bytes())
+        for src in ev.get("sources") or []:
+            full = src.get("fulltext") or {}
+            pages = [str(p) for p in (full.get("text_pages") or [])]
+            if not (pages and not full.get("text_ref")):
+                continue
+            ref = FS.put(pages, store_dir=store_dir, pdf_sha256=str(full.get("sha256") or ""),
+                         pdf_path=str(full.get("path") or ""), pdf_bytes=int(full.get("bytes") or 0),
+                         backend=str(full.get("backend") or ""))
+            full.pop("text_pages", None)
+            full.pop("text", None)
+            full["text_ref"] = ref
+            full["chars"] = int(ref.get("chars") or 0)
+            full["text_store"] = "ref"
+        ev_path.write_text(json.dumps(ev, ensure_ascii=False, indent=1) + "\n",
+                           encoding="utf-8", newline="\n")
+        done += 1
+    print(tty.bullet(f"已迁移 {done} 份产物；备份在 {backup_dir}"))
+    return 0
+
+
+def cmd_evidence(args) -> int:
+    """证据面三件事：核引用 / 盘正文库 / 迁移历史产物（依据 `draft/30` §T0-7）。
+
+    三态（与全仓同一条纪律）：0 = 查过、都对得上；1 = 查过了、有坏引用；
+    2 = 没查成（目标不在 / 读不了）。
+    """
+    target = Path(args.target)
+    if args.action == "verify":
+        return _evidence_verify(target)
+    if args.action == "store":
+        if not target.is_dir():
+            print(f"[evidence] 没查成：{target} 不是目录", file=sys.stderr)
+            return 2
+        return _evidence_store(target)
+    if not target.is_dir():
+        print(f"[evidence] 没查成：{target} 不是目录", file=sys.stderr)
+        return 2
+    return _evidence_migrate(target, apply=bool(args.apply))
+
+
 # ---------------------------------------------------------------- 入口
+
+
+def cmd_project(args) -> int:
+    """项目式用法：一个项目一个文件夹（`projects/project1`…），冷/热启动按文件夹在不在。
+
+    为什么把它做成一个动词而不是让人记一串 `--root`：项目工作区、本地书架、
+    冷热启动这三件事是一起被用到的（"在这个项目上、用这些书、接着上次跑"），
+    拆成散参数就会出现"库指到 A、产物写到 B、书来自 C"这种没人能复核的组合。
+
+    这里是唯一把 `--projects-dir` 与 `--start` 翻译成动作的地方；
+    真正的判定与执行在 `agentflow.projects`（那里有它自己的负控自检）。
+    """
+    from . import projects as P
+
+    root = P.projects_dir(args.projects_dir)
+    try:
+        if args.action == "list":
+            rows = P.list_projects(root)
+            print(tty.paint(f"projects 落点 {root}", "grey"))
+            if not rows:
+                print(tty.bullet("还没有任何项目；第一次跑会自动取 project1。"))
+            else:
+                for line in tty.table(
+                    ("项目", "状态", "冷/热", "上次", "说明"),
+                    [(r["name"], _state_badge(r["state"]), f"{r['cold_runs']}/{r['warm_runs']}",
+                      str(r["last_mode"] or "-"), r["why"]) for r in rows],
+                    aligns=("left", "left", "right", "left", "left"),
+                ):
+                    print(line)
+            return 0
+
+        if args.action == "plan":
+            info = P.plan(root, args.name, start=args.start, books_dir=args.books,
+                          topic=args.topic or "")
+            pj = info["project"]
+            print("")
+            for line in tty.panel(
+                f"计划：{pj['name']}",
+                [("会新建文件夹吗", "会（冷启动）" if info["will_create"] else "不会（热启动，复用）"),
+                 ("判据", f"请求 {pj['requested']} ⇒ 判定 {tty.badge(pj['mode'])}（{pj['reason']}）"),
+                 ("本地书架", info["books_dir"] or "(没给 --books)"),
+                 ("主题", info["topic"] or "(没给 --topic ⇒ 只登记、不调模型)")],
+                body=[info["note"], "这一步只说明会怎么做，不写任何字节。"],
+                verbatim=[("落点：", pj["path"]), ("产物目录：", f"out/run-{info['run_index']}")],
+                tone="cyan",
+            ):
+                print(line)
+            return 0
+
+        res = P.run_project(
+            root, name=args.name, start=args.start, topic=args.topic or "",
+            books_dir=args.books, books_limit=args.books_limit,
+            budget_usd=args.budget_usd, max_calls=args.max_calls,
+            retrieval_limit=args.retrieval_limit, fulltext=not args.no_fulltext,
+            extract=bool(args.extract), extract_rounds=args.extract_rounds,
+            lean=bool(args.lean),
+            now=args.now,
+            # 不给就由 `run_project` 用项目根下的 `.fulltext/`（T0-6 的默认）
+            text_store_dir=getattr(args, "text_store_dir", None),
+        )
+    except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
+        # 三态：这三条都是"这一步没做成"（用法/前提不满足），不是"跑过了、结论是失败"。
+        print(f"[project] 没查成：{exc}", file=sys.stderr)
+        return 2
+
+    pj, run, result = res["project"], res["run"], res["result"]
+    emit = print
+    emit("")
+    for line in tty.panel(
+        f"项目 {pj['name']}",
+        [("本次启动", f"{tty.badge(pj['mode'])}  {pj['reason']}")],
+        verbatim=[("落点：", pj["path"]),
+                  ("产物目录：", run.get("out_dir") or "(本次没跑模型那一步)")],
+        tone="cyan",
+    ):
+        emit(line)
+
+    ing = run.get("ingest") or {}
+    if ing:
+        counts = ing.get("counts") or {}
+        emit("")
+        for line in tty.rule("本地书架"):
+            emit(line)
+        rows = [(k, str(v)) for k, v in counts.items() if v or k in ("ingested", "already_present")]
+        for line in tty.table(("登记结局", "本数"), rows, aligns=("left", "right")):
+            emit(line)
+        # 这两个数只覆盖"本次真的处理过的那几本"：热启动时全部 already_present，
+        # 于是它们会是 0 —— 那不是"这些书没有文本层"，所以必须写清口径。
+        emit(tty.bullet(
+            f"本次处理的书里：有文本层 {ing.get('text_layer_ok')} 本 / 共 {ing.get('pages_total')} 页"
+            f"（已登记的 {counts.get('already_present', 0)} 本没有重抽，故不计入）"))
+
+    ex = run.get("extraction") or {}
+    if ex:
+        emit("")
+        for line in tty.rule("模型读书（概念 / 关系，引文逐字回验）"):
+            emit(line)
+        if ex.get("error"):
+            emit(tty.bullet(tty.paint(f"失败：{ex['error']}", "red")))
+        else:
+            for line in tty.table(
+                ("读数", "值"),
+                [("读懂的书", ex.get("processed")),
+                 ("失败的轮次", ex.get("failed")),
+                 ("新建概念", ex.get("concepts_created")),
+                 ("新增关系", ex.get("relations_added")),
+                 ("引文过验", ex.get("quotes_verified")),
+                 ("引文未过（已剔除）", ex.get("quotes_failed")),
+                 ("无法判定", ex.get("quotes_unknown"))],
+                aligns=("left", "right"),
+            ):
+                emit(line)
+            for err in (ex.get("errors") or [])[:5]:
+                emit(tty.bullet(tty.paint(json.dumps(err, ensure_ascii=False)[:150], "yellow")))
+            mdl = ex.get("model") or {}
+            if mdl:
+                # 这一步的花销不在 `--budget-usd` 的口径里（那个额度是主题作答那一跑的），
+                # 所以必须单独打出来 —— 否则"预算没超"会被读成"这次没花多少钱"。
+                emit(tty.bullet(
+                    f"这一步的模型花销 {tty.paint(str(mdl.get('charged_usd')) + ' USD', 'bold')}"
+                    f" / {mdl.get('calls')} 次调用 / tokens in {mdl.get('tokens_in')} "
+                    f"out {mdl.get('tokens_out')}（不在 --budget-usd 的额度里："
+                    "那个额度只管主题作答那一跑，这里的上界是轮数=本数）"))
+                if mdl.get("uncharged_calls"):
+                    emit(tty.bullet(tty.paint(
+                        f"其中 {mdl['uncharged_calls']} 笔没有入账（meter 未接线或判重放）"
+                        "—— 那不是 0 元，是没记上", "yellow")))
+            if ex.get("store_counts"):
+                emit(tty.bullet(f"库里现在：{ex['store_counts']}"))
+
+    for n in run.get("notes") or []:
+        emit(tty.bullet(tty.paint(n, "yellow")))
+
+    if result:
+        emit("")
+        for line in tty.panel(
+            "这一跑的结果",
+            [("退出码", f"{_exit_badge(result.get('exit_code'))}（{result.get('reason')!r}）"),
+             ("模型调用", f"{result.get('calls')} 次 / 本次花费 {result.get('spent_usd_this_run')} USD"),
+             ("Lean", (lambda ln: f"开启={'是' if ln.get('enabled') else '否'}；"
+                                 f"跑过={'是' if ln.get('ran') else '否'}；"
+                                 f"proof 级证据 {ln.get('proved', 0)} 条"
+                                 f"（片段 {ln.get('snippets', 0)} 个）")(result.get("lean") or {})),
+             ("六件产物", ", ".join(result.get("artifacts") or []) or "(无)")],
+            verbatim=[("产物目录：", run.get("out_dir") or "(无)")],
+            tone="green" if result.get("exit_code") == 0 else "yellow",
+        ):
+            emit(line)
+    else:
+        print("[project] 本次没有跑模型那一步（没给 --topic）")
+    return int(result.get("exit_code", 0)) if result else 0
+
+
+# ---------------------------------------------------------------- 交互台
+
+#: 主菜单：(按键, 说明, 处理函数名)。每一项的处理函数都收 `(ask, out)` 两个口子 ——
+#: `ask` 是"问一行"（缺省 `input`），`out` 是"打一行"（缺省 `print`）。
+#: 之所以把两个口子显式传下去：整台菜单因此可以用脚本化的输入在测试里驱动，
+#: 不必真的占一个终端（本项目的判据一律要能离线、确定性地跑）。
+MENU: tuple[tuple[str, str, str], ...] = (
+    ("1", "项目：列出 / 计划 / 运行（本地书架、冷启动或热启动）", "project"),
+    ("2", "端到端跑一个主题（联网检索；需要模型 key）", "run"),
+    ("3", "看数据状态 / 校验全局不变量", "status"),
+    ("4", "看某个角色的工具面（只读角色看不到写工具）", "tools"),
+    ("5", "离线自检 demo（不联网、不花钱）", "demo"),
+)
+
+
+def _ask_text(ask, prompt: str, default: str = "") -> str:
+    """问一行自由文本；空输入就用缺省值（缺省值会显示在提示里）。"""
+    tail = f" [{default}]" if default else ""
+    got = str(ask(f"{prompt}{tail}: ") or "").strip()
+    return got or default
+
+
+def _ask_yes(ask, prompt: str, *, default: bool = False) -> bool:
+    got = str(ask(f"{prompt} ({'Y/n' if default else 'y/N'}): ") or "").strip().lower()
+    if not got:
+        return default
+    return got in ("y", "yes", "是", "1")
+
+
+def _shell_project(ask, out) -> int:
+    """菜单第 1 项：项目式用法。把用户答的几件事翻成 `project run` 的 argv。"""
+    out("")
+    for line in tty.rule("项目"):
+        out(line)
+    rows = _project_rows()
+    if rows:
+        for line in tty.table(("项目", "状态", "冷/热", "上次"),
+                              [(r["name"], _state_badge(r["state"]),
+                                f"{r['cold_runs']}/{r['warm_runs']}", str(r["last_mode"] or "-"))
+                               for r in rows]):
+            out(line)
+        out(tty.paint("  提示：输入一个已存在的项目名 = 热启动（复用它的库与产物）", "grey"))
+    else:
+        out(tty.paint("  还没有任何项目；第一次跑会自动取 project1。", "grey"))
+
+    name = _ask_text(ask, "  项目名（回车 = 自动取下一个）")
+    books = _ask_text(ask, "  本地书架目录（回车 = 不用本地书，例如 D:\\books）")
+    topic = _ask_text(ask, "  研究主题（回车 = 只做登记与冷/热启动，不调模型）")
+    if not books and not topic:
+        # 三个问题全按回车 ⇒ 这一步什么都不会做，却会新建一个项目文件夹。
+        # 那正是"手滑建出一堆空项目"的来源（2026-09-28 实测：一次菜单冒烟测试
+        # 就这么建出了 project2，项目卡里 run-1 的 result 是 None）。
+        # 缺省必须是"不建"：新建目录是不可逆的动作，不该由三次回车触发。
+        if not _ask_yes(ask, "  什么都没填 —— 这会只新建一个空项目文件夹（登记 0 本、不调模型）。"
+                             "确定要建吗", default=False):
+            out(tty.paint("  （没有建任何东西）", "grey"))
+            return 0
+    argv = ["project", "run"]
+    if name:
+        argv += ["--name", name]
+    if books:
+        argv += ["--books", books]
+    if topic:
+        argv += ["--topic", topic]
+    if books and _ask_yes(ask, "  先让模型把书读一遍（抽概念/关系，逐字回验）", default=False):
+        argv += ["--extract", "--extract-rounds",
+                 _ask_text(ask, "  最多读几本（一轮一本）", "7")]
+    out(tty.paint("  即将执行：agentflow " + " ".join(argv), "grey"))
+    out("")
+    return main(argv)
+
+
+def _shell_run(ask, out) -> int:
+    """菜单第 2 项：联网的端到端主题跑（`agentflow run`）。"""
+    out("")
+    for line in tty.rule("端到端跑一个主题（联网检索）"):
+        out(line)
+    topic = _ask_text(ask, "  研究主题")
+    if not topic:
+        out(tty.paint("  没给主题 ⇒ 什么都没做（这一步没有缺省主题，编一个会让产物对不上）", "yellow"))
+        return 2
+    budget = _ask_text(ask, "  预算（美元，调用前检查）", "0.5")
+    calls = _ask_text(ask, "  最多调用几次模型", "2")
+    out("")
+    return main(["run", "--topic", topic, "--budget-usd", budget, "--max-calls", calls])
+
+
+def _shell_status(ask, out) -> int:
+    out("")
+    for line in tty.rule("数据状态"):
+        out(line)
+    rc = main(["status"])
+    if _ask_yes(ask, "  顺便校验全局不变量（verify）", default=True):
+        out("")
+        rc = max(rc, main(["verify"]))
+    return rc
+
+
+def _shell_tools(ask, out) -> int:
+    out("")
+    for line in tty.rule("角色工具面"):
+        out(line)
+    out(tty.paint("  可用角色：" + " ".join(S.ROLES), "grey"))
+    role = _ask_text(ask, "  角色", "H")
+    out("")
+    return main(["tools", "--role", role])
+
+
+def _shell_demo(ask, out) -> int:
+    out("")
+    for line in tty.rule("离线自检"):
+        out(line)
+    out(tty.paint("  它会自建素材与独立工作区，把整条链路跑一遍；不联网、不花钱。", "grey"))
+    out("")
+    return main(["demo", "--keep"])
+
+
+#: 菜单按键 -> 处理函数。键就是 `MENU` 里那个按键。
+SHELL_ACTIONS = {
+    "1": _shell_project,
+    "2": _shell_run,
+    "3": _shell_status,
+    "4": _shell_tools,
+    "5": _shell_demo,
+}
+
+
+def _state_badge(state: str) -> str:
+    """把项目文件夹的四态翻成徽标（`workspace` 之外的三态都是"还不能直接用"）。"""
+    mapping = {"workspace": "ok", "absent": "cold", "empty": "cold", "not_a_project": "unknown"}
+    return tty.badge(mapping.get(state, state))
+
+
+def _project_rows() -> list[dict]:
+    from . import projects as P
+
+    try:
+        return P.list_projects(P.projects_dir(None))
+    except Exception:  # noqa: BLE001 - 列表读不出来不该让菜单崩掉
+        return []
+
+
+def shell(ask=input, out=print) -> int:
+    """不带参数运行 `agentflow` 时进的那一屏：一份菜单，而不是一串用法错误。
+
+    两个口子（`ask` / `out`）缺省是真的终端输入输出；测试传脚本化的替身。
+    退出：`q` / 回车（空输入）/ EOF / Ctrl-C 都算正常退出（0）——
+    "用户不想继续了"不是错误。
+    """
+    out("")
+    for line in tty.panel(
+        "agentflow · 面向数学研究的多智能体协同框架",
+        [("这是什么", "主控 M 按需唤起 A–H 八个角色；产物带可复核的证据链"),
+         ("先读什么", "README.md §1–§3；规范是 DEVELOPMENT.md 与 docs/ROLE-SPECS.md"),
+         ("现状", "全部代码由 AI 编写，禁改区改动未经人逐行走查（见 HANDOFF）")],
+        tone="cyan",
+    ):
+        out(line)
+    out("")
+    while True:
+        for key, text, _fn in MENU:
+            out(f"  {tty.paint(key, 'bold', 'cyan')}) {text}")
+        out(f"  {tty.paint('q', 'bold', 'cyan')}) 退出")
+        try:
+            choice = str(ask(tty.paint("请选择", "bold") + " > ") or "").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            out("")
+            return 0
+        if choice in ("", "q", "quit", "exit", "0"):
+            out(tty.paint("（退出）", "grey"))
+            return 0
+        action = SHELL_ACTIONS.get(choice)
+        if action is None:
+            out(tty.paint(f"  没有这一项：{choice!r}（可用：{'/'.join(k for k, _t, _f in MENU)}/q）",
+                          "yellow"))
+            continue
+        try:
+            rc = action(ask, out)
+        except (EOFError, KeyboardInterrupt):
+            out("")
+            return 0
+        out("")
+        out(tty.paint(f"  （上一步退出码 {rc}）", "grey"))
+        out("")
+
+
+def _exit_badge(code: Any) -> str:
+    """退出码徽标：0/1/2 对应本项目的三态，不许把 2 折成 1。
+
+    0 = 成功产出（绿）· 1 = 查过了、发现问题（红）· 2 = 没查成（黄）。
+    第一版写成 `success if code == 0 else failed`，于是"没 key ⇒ 退出码 2"被画成了
+    红色的 failed —— 那正是本项目反复强调不许折叠的那一档：
+    它说的是"这一次没查成"，要做的动作是去配 key 或重试，而不是去查结论。
+    """
+    text = str(code)
+    key = {"0": "success", "1": "failed", "2": "not_checked"}.get(text, text)
+    return f"{tty.badge(key)}  {text}"
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agentflow", description="A/B 多智能体协同工作流（原型）")
     p.add_argument("--root", default=None, help="工作目录（默认 test/test1/）")
     p.add_argument("--config", default=None, help="配置文件路径（默认 <root>/config.yaml）")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    # 呈现层的两个开关。为什么做成顶层开关而不是每条命令各带一个：
+    # "这次输出别带颜色"是终端的事，不是某个子命令的事；散在各处就会出现
+    # "project 支持而 run 不支持"这种随命令而变的怪现象。
+    p.add_argument("--no-color", action="store_true",
+                   help="关掉颜色（管道里本来就会自动关；这个开关是给『想强制关』的人）")
+    p.add_argument("--plain", action="store_true",
+                   help="纯 ASCII 输出（制表符/勾号都不画；老终端或想粘到邮件里时用）")
+    p.add_argument("--compact", action="store_true", help="少画框、少空行")
+    sub = p.add_subparsers(dest="cmd")
 
     sp = sub.add_parser("init", help="初始化数据目录与空表")
     sp.add_argument("--force", action="store_true", help="覆盖已有数据（危险）")
@@ -672,11 +1290,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("run", help="端到端跑一个主题（检索→作答→逐字回验→记账→熔断→六件产物）")
     sp.add_argument("--topic", required=True, help="研究主题")
     sp.add_argument("--budget-usd", type=float, default=1.0,
-                    help="美元上限（硬约束：每轮调用前检查，达线即停）")
+                    help="美元上限（每次调用之前检查，达线即停 —— 单跑可能超出至多一次调用，"
+                         "超出量写在 cost.json 的 budget_overshoot_usd 里）")
     sp.add_argument("--out", default=None, help="产物目录（默认新建临时目录并打印路径）")
-    sp.add_argument("--max-calls", type=int, default=3)
+    sp.add_argument("--max-calls", type=_non_negative_int, default=3,
+                    help="最多调用几次模型（库层拒绝负数；这里让它在用法错阶段就以退出码 2 结束）")
     sp.add_argument("--model", default=None, help="只覆盖模型名（key/base_url 一律来自环境变量）")
-    sp.add_argument("--prompt-version", default="v1", help="prompt 模板版本（写进清单）")
+    # `choices` 让非法版本走 argparse 的用法错（退出码 2 = "没查成"），而不是穿到库层抛
+    # ValueError + traceback ⇒ 退出码 1（那在本项目的三态里是"查过了、有问题"）。
+    # 延迟 import：`agentflow.cli` 的顶层不许拉起 runflow（它依赖一长串模块）。
+    from .runflow import PROMPT_VERSIONS as _PROMPT_VERSIONS
+
+    sp.add_argument("--prompt-version", default="v1", choices=list(_PROMPT_VERSIONS),
+                    help="prompt 模板版本（写进清单）")
     sp.add_argument("--fulltext", action="store_true",
                     help="获取开放全文（逐条下载；回验因此可能到达全文级）")
     sp.add_argument("--lean", action="store_true",
@@ -684,16 +1310,95 @@ def build_parser() -> argparse.ArgumentParser:
                          "只有 verified 才算 proof 级证据）")
     # `--now` 只为自动化测试注入固定时间戳：产物里的时间戳可复现，断言才稳得住。
     sp.add_argument("--now", default=None, help=argparse.SUPPRESS)
+    sp.add_argument("--text-store-dir", default=None,
+                    help="逐页正文的内容寻址落点（不给就内联在产物里；给了同一本书只存一份，"
+                         "依据 draft/30 §T0-7）")
     sp.set_defaults(func=cmd_run)
+
+    # 项目式用法：`projects/<名字>` 一个项目一个文件夹，冷/热启动按文件夹在不在。
+    sp = sub.add_parser(
+        "project",
+        help="项目工作区：list / plan / run（一个项目一个文件夹，冷启动还是热启动看文件夹在不在）",
+    )
+    sp.add_argument("action", choices=["list", "plan", "run"],
+                    help="list 列出现有项目；plan 只说明这次会怎么跑（不写字节）；run 真跑")
+    sp.add_argument("--name", default=None,
+                    help="项目名（缺省=自动取下一个 projectN；run 时也接受已有名字=热启动）")
+    sp.add_argument("--projects-dir", default=None,
+                    help="projects 落点（缺省 D:\\Incubator\\projects；"
+                         "也可用环境变量 AGENTFLOW_PROJECTS_DIR）")
+    sp.add_argument("--start", default="auto", choices=["auto", "cold", "warm"],
+                    help="auto=看文件夹在不在（缺省）；cold=必须不存在；warm=必须已存在且初始化过")
+    sp.add_argument("--books", default=None,
+                    help=r"本地书架目录（例如 D:\books）：里面的 PDF 会被登记进项目库")
+    sp.add_argument("--books-limit", type=_non_negative_int, default=None,
+                    help="本次最多登记几本（超出的一本都不登记，清单里写明理由）")
+    sp.add_argument("--topic", default=None, help="研究主题（给了才会调模型；缺省只做登记）")
+    sp.add_argument("--budget-usd", type=float, default=0.5,
+                    help="这一次运行的美元额度（每次调用之前检查）")
+    sp.add_argument("--max-calls", type=_non_negative_int, default=2, help="最多调用几次模型")
+    sp.add_argument("--retrieval-limit", type=_non_negative_int, default=7,
+                    help="最多取几条本地来源进材料段（一本书算一条）")
+    sp.add_argument("--no-fulltext", action="store_true",
+                    help="不取全文（引文只会在 1200 字符的摘要窗口里比对，回验强度更低）")
+    # `--lean` 与 `run` 那个动词同一口径：默认关；关着时"没有任何形式化验证证据"
+    # 照样写进未接线清单。没有这个开关时，本地书架这条主路径上永远拿不到 proof 级证据。
+    sp.add_argument("--lean", action="store_true",
+                    help="对答复里的 Lean 代码块真跑证明检查器（需要环境里已装 Lean；"
+                         "只有 verified 才算 proof 级证据）")
+    sp.add_argument("--extract", action="store_true",
+                    help="先让模型把库里还没抽过的书读一遍（概念/关系；每条关系的引文"
+                         "逐字回验，找不到的当场剔除并计数）")
+    sp.add_argument("--extract-rounds", type=_non_negative_int, default=1,
+                    help="模型抽取最多跑几轮 —— 一轮只处理至多一本书（agent_b.run_once 的契约），"
+                         "所以 7 本书要 --extract-rounds 7")
+    sp.add_argument("--now", default=None, help=argparse.SUPPRESS)
+    sp.add_argument("--text-store-dir", default=None,
+                    help="覆盖逐页正文的落点（不给就用 <项目根>/.fulltext，见 T0-6 的默认）")
+    sp.set_defaults(func=cmd_project)
+
+    # 证据面工具：核引用、盘 store、把历史内联产物迁成引用形态（依据 draft/30 §T0-7）。
+    sp = sub.add_parser(
+        "evidence",
+        help="证据面：verify 核一个运行的全文引用 / store 盘一个项目的正文库 / migrate 迁移历史产物",
+    )
+    sp.add_argument("action", choices=["verify", "store", "migrate"],
+                    help="verify <run_dir>；store <project_dir>；migrate <project_dir> [--apply]")
+    sp.add_argument("target", help="verify 给运行目录；store/migrate 给项目目录")
+    sp.add_argument("--apply", action="store_true",
+                    help="migrate 真的改写产物（缺省只 dry-run：这一步改的是历史证据本体）")
+    sp.set_defaults(func=cmd_evidence)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    # 先把输出编码钉住再做任何事：GBK 控制台编不出摘要里的 `⇒` ⇒ print 抛异常 ⇒ 进程以 1
+    # 结束，而 1 是"查过了、发现问题"。那会把 `run` 无 key 的受控码 2（没跑成）反转成 1。
+    pin_utf8()
+    raw = list(sys.argv[1:] if argv is None else argv)
+    # 不带任何参数 ⇒ 进交互台。理由：这套工具的动词与开关多到"不看文档就用不起来"，
+    # 而它的主要用户是研究者，不是每天敲这串命令的人。给一个菜单不是为了炫技，
+    # 是为了让"能用"这件事不依赖记忆。
+    if not raw:
+        return shell()
+    parser = build_parser()
+    args = parser.parse_args(raw)
+    tty.set_style(color=False if (args.no_color or args.plain) else None,
+                  charset="ascii" if args.plain else None)
+    if args.cmd is None:
+        return shell()
     try:
         return args.func(args)
     except StoreError as e:
         print(f"[store 错误] {e}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        # `FINAL-R5-02`：`agentflow run` 的取消此前是不可达的，而且被中断的那一跑在磁盘上
+        # 与"从来没跑过"同形（`KeyboardInterrupt` 是 `BaseException`，穿出 `except Exception`）。
+        # 这里按三态纪律把它记成"没查成"（退出码 2），并逐字说清"产物可能不完整" ——
+        # 不假装六件产物已经写齐（那要靠真正的取消面才能做到，见 run_topic 的 docstring）。
+        print("[已中断] 本次没有跑完（Ctrl-C）⇒ 退出码 2 = 没查成；"
+              "产物目录里可能只有部分文件，不许当成一次正常运行的读数。", file=sys.stderr)
         return 2
 
 

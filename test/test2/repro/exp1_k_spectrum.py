@@ -33,6 +33,12 @@ import numpy as np
 sys.path.insert(0, __file__.rsplit("\\", 1)[0] if "\\" in __file__ else ".")
 import repro_common as rc
 from repro_result import Budget, Checks, emit, guard
+#: 本脚本验证的**论文命题原文**（`E-9`）：与 `run_acceptance.py` 的 P5 计划表
+#: 逐字相同，由 P5 的 `_paper_declaration_audit()` 交叉核对。
+#: 为什么要写在这里：脚本自报的 `supports` 需要有一个**外部锚** —— 否则
+#: 『论文声称 vs 独立计算』就只剩脚本自己作证。
+PAPER_CLAIM = 'Spec K(m) = [−m, m]（m=3,4,5）'
+
 
 BUGS = ("coarse_grid", "double_count")
 DEFAULT_MAX_SECONDS = 60.0

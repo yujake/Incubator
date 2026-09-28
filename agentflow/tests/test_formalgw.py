@@ -113,17 +113,22 @@ def test_production_path_really_calls_the_frozen_probe_layer(monkeypatch):
 
 
 def test_status_vocabulary_is_controlled():
-    """词表就是这八个；多一个少一个都要人来改这条断言。"""
+    """词表就是这十个；多一个少一个都要人来改这条断言。"""
     assert set(FG.STATUSES) == {
         "verified", "compile_error", "uses_sorry", "extra_axioms", "decl_mismatch",
-        "timeout", "no_backend", "tool_crashed",
+        "timeout", "import_unavailable", "no_backend", "tool_crashed",
+        "source_unreadable",
     }
     assert FG.PROOF_STATUS == "verified"
+    # `source_unreadable`（`E-3`）是"没查成"，必须不在 `_CONCLUDED_STATUSES` 里：
+    # 它在里面时 `evidence_of` 的 `checked` 位为 True，工具层于是把一次
+    # 路径写错折成 `verified=False`（"查了、命题不成立"）。
+    assert "source_unreadable" not in FG._CONCLUDED_STATUSES
 
 
 @pytest.mark.parametrize("status", FG.STATUSES)
 def test_only_verified_may_produce_proof_level_evidence(status: str):
-    """只有 `verified` 允许产出 proof 级证据；其余七个一律不给等级。"""
+    """只有 `verified` 允许产出 proof 级证据；其余九个一律不给等级。"""
     ev = FG.evidence_of({"status": status})
     assert ev["proved"] is (status == "verified")
     assert ev["evidence_kind"] == ("proof" if status == "verified" else None)
@@ -135,7 +140,7 @@ def test_sorry_ax_is_on_the_forbidden_side():
     assert "sorryAx" not in FG.ALLOWED_AXIOMS
 
 
-# ============================================================ 八种 status
+# ============================================================ 十种 status
 
 
 def test_status_verified():
@@ -223,6 +228,45 @@ def test_status_decl_mismatch_when_the_output_never_mentions_it():
     assert out["declared_in_source"] is True and out["decl_matches"] is False
 
 
+def test_status_source_unreadable_when_the_source_path_cannot_be_read():
+    """`E-3` 正控：`source_path` 读不到 ⇒ `source_unreadable`（没查成）。
+
+    这一档与 `decl_mismatch` 的机器可读位相反，是本用例要钉的那条分界：
+    "我读了这份源码、里面没有你要证的东西"（`checked=True`）与
+    "这份源码我根本没读到"（`checked=False`）的处置完全不同。
+    `run_fn` 注入一个必然抛的实现：源码都读不到，检查器一次都不该被起。
+    """
+    def _never(*_a, **_k):
+        raise AssertionError("源码都读不到，检查器一次都不该被起")
+
+    out = FG.check_lean("", source_path="definitely-not-here.lean", name="one_plus_one",
+                        imports=(), run_fn=_never)
+    assert out["status"] == "source_unreadable", out["reason"]
+    assert out["status"] != "decl_mismatch", (
+        "把'路径写错了'报成'你证的东西不在文件里'，会让调用方去改数学而不是改路径"
+    )
+    assert out["evidence"]["checked"] is False, "读不到源码是没查成，不是查了没通过"
+    assert out["evidence"]["proved"] is False
+    assert out["evidence"]["evidence_kind"] is None
+    assert out["ran"] is False
+    assert "FileNotFoundError" in out["reason"], out["reason"]
+
+
+def test_status_decl_mismatch_still_holds_when_the_file_was_read_fine(tmp_path):
+    """`E-3` 负控的反面：文件读得到、只是里面没有那个声明 ⇒ 仍是 `decl_mismatch`。
+
+    没有这一条，把 `read_failed` 那一支整个删掉也能让上面那条用例绿 ——
+    而"文件里没有那条声明"会跟着一起丢掉。
+    """
+    src = tmp_path / "p.lean"
+    src.write_text(GOOD, encoding="utf-8")
+    out = FG.check_lean("", source_path=str(src), name="some_other_theorem", imports=(),
+                        run_fn=_runner(_run(0, CLEAN_OUT)))
+    assert out["status"] == "decl_mismatch"
+    assert out["declared_in_source"] is False
+    assert out["evidence"]["checked"] is True, "读到了源码、也判了，就是'查了'"
+
+
 def test_status_timeout():
     """超时 ⇒ `timeout`（`exit_code` 为 None，半截输出照样带回来）。"""
     out = FG.check_lean(GOOD, name="one_plus_one", imports=(), timeout_sec=1,
@@ -230,6 +274,78 @@ def test_status_timeout():
     assert out["status"] == "timeout"
     assert out["exit_code"] is None and out["stdout"] == "elaborating…"
     assert out["evidence"]["checked"] is False
+
+
+def test_status_import_unavailable_when_the_package_is_not_installed():
+    """库不可得 ⇒ `import_unavailable`，不是 `compile_error`、也不是 `verified`。
+
+    夹具逐字用 Lean 4.7.0 在裸 `lean`（没有 lake 工程）下回的那句话
+    `error: unknown package 'Mathlib'`：库没装时编译根本没开始。
+    把它说成 `compile_error`（"查了没通过"）是一句假话，而两者的处置相反。
+    """
+    raw = _run(1, "probe.lean:1:0: error: unknown package 'Mathlib'\n")
+    out = FG.check_lean(GOOD, name="one_plus_one", imports=("Mathlib",), run_fn=_runner(raw))
+    assert out["status"] == "import_unavailable", out["reason"]
+    assert out["status"] != "compile_error"
+    assert out["status"] != "verified"
+    assert out["missing_imports"] == ["Mathlib"], "必须带上包名，而不是只给一个布尔"
+    assert out["evidence"]["checked"] is False, "库不可得是没查成，不是查了没通过"
+    assert out["evidence"]["proved"] is False
+    assert out["evidence"]["evidence_kind"] is None
+
+
+def test_status_import_unavailable_for_a_nonexistent_package():
+    """负控③：不存在的包名同样归到 `import_unavailable`（带它回的那个名字）。"""
+    raw = _run(1, "probe.lean:1:0: error: unknown package 'Nonexistent'\n")
+    out = FG.check_lean(GOOD, name="one_plus_one", imports=("Nonexistent.Pkg",),
+                        run_fn=_runner(raw))
+    assert out["status"] == "import_unavailable"
+    assert out["missing_imports"] == ["Nonexistent"]
+
+
+def test_a_real_compile_error_is_still_a_compile_error():
+    """核心负控②：注入语法错时新判据不许把真编译错吞成"库不可得"。
+
+    两种形态都要守住：
+    1. 输出里没有 `unknown package` 的编译错 ⇒ 仍是 `compile_error`；
+    2. 输出里同时有 `unknown package` 与真语法错 ⇒ 仍是 `import_unavailable`
+       （包不可得是真的，那次检查确实没发生）—— 这一条写下来是为了说明
+       判据的边界在哪，而不是假装它不存在。
+    """
+    only_syntax = _run(1, "", "probe.lean:1:72: error: unexpected token '#print';"
+                              " expected ':=', 'where' or '|'\n")
+    out = FG.check_lean(GOOD, name="one_plus_one", imports=(), run_fn=_runner(only_syntax))
+    assert out["status"] == "compile_error", out["reason"]
+    assert out["missing_imports"] == []
+
+    both = _run(1, "probe.lean:1:0: error: unknown package 'Mathlib'\n"
+                   "probe.lean:3:42: error: unexpected token '+'\n")
+    out2 = FG.check_lean(GOOD, name="one_plus_one", imports=("Mathlib",),
+                         run_fn=_runner(both))
+    assert out2["status"] == "import_unavailable"
+    assert out2["status"] != "compile_error"
+
+
+def test_import_unavailable_only_after_the_static_gates():
+    """判据顺序：文件里没有那个声明时先报 `decl_mismatch`，不起进程。"""
+    calls: list[int] = []
+
+    def _spy(cmd, *, cwd, timeout_sec):  # noqa: ARG001 - 接缝契约
+        calls.append(1)
+        return _run(1, "error: unknown package 'Mathlib'\n")
+
+    out = FG.check_lean(GOOD, name="some_other_name", imports=("Mathlib",), run_fn=_spy)
+    assert out["status"] == "decl_mismatch"
+    assert calls == [], "静态判据必须在起进程之前收口"
+
+
+def test_missing_imports_of_is_a_narrow_reader():
+    """`missing_imports_of` 只认 `unknown package '<名>'`，去重保序。"""
+    assert FG.missing_imports_of("") == []
+    assert FG.missing_imports_of("error: unknown module 'Foo'") == [], "不认别的形态"
+    assert FG.missing_imports_of(
+        "error: unknown package 'A'\nerror: unknown package 'B'\nerror: unknown package 'A'"
+    ) == ["A", "B"]
 
 
 def test_status_no_backend_when_the_binary_vanished():
@@ -418,6 +534,212 @@ def test_comments_and_strings_do_not_count_as_sorry():
     assert out["sorry_count"] == 0
 
 
+# ============================================================ 工具链版本三态（G-13）
+
+
+def _lean_version(version: str):
+    """造一个只回答 `lean --version` 的假运行函数（本机只有 4.7.0，装不了别的）。"""
+    def _fn(cmd, *, cwd, timeout_sec):  # noqa: ARG001 - 接缝契约
+        return {"exit_code": 0, "stdout": version + "\n", "stderr": "", "timed_out": False}
+
+    return _fn
+
+
+def _fake_mathlib(tmp_path, commit: str, *, via: str = "stamp"):
+    """造一棵"像 Mathlib 工程"的目录，commit 由 `via` 指定来源（stamp 或 git）。"""
+    root = tmp_path / "mathlib4-4.7.0"
+    (root / "Mathlib").mkdir(parents=True, exist_ok=True)
+    with open(root / "lakefile.lean", "w", encoding="utf-8", newline="") as fh:
+        fh.write("import Lake\n")
+    with open(root / "lean-toolchain", "w", encoding="utf-8", newline="") as fh:
+        fh.write("leanprover/lean4:v4.7.0\n")
+    if via == "stamp":
+        (root / ".lake").mkdir(parents=True, exist_ok=True)
+        with open(root / ".lake" / "agentflow-mathlib-rev", "w",
+                  encoding="utf-8", newline="") as fh:
+            fh.write(commit + "\n")
+    else:
+        (root / ".git").mkdir(parents=True, exist_ok=True)
+        with open(root / ".git" / "HEAD", "w", encoding="utf-8", newline="") as fh:
+            fh.write(commit + "\n")
+    return root
+
+
+def test_version_vocabulary_has_exactly_three_states_plus_unknown():
+    """三态就是这三个；"没查成"是它们之外的第 4 个值，不占三态里的位置。"""
+    assert FG.VERSION_STATUSES == ("installed_ok", "version_mismatch", "not_installed")
+    assert FG.VERSION_UNKNOWN not in FG.VERSION_STATUSES
+
+
+def test_not_installed_is_distinct_from_version_mismatch(tmp_path):
+    """正控①：什么都没有 ⇒ `not_installed`（不是 `version_mismatch`）。"""
+    rep = FG.check_toolchain(env={}, which=lambda name: None)
+    assert rep.lean_status == "not_installed"
+    assert rep.mathlib_status == "not_installed"
+    assert rep.status == "not_installed"
+    # 三态不许折叠：这个结论必须与"装了但版本不符"分得开
+    assert rep.status != "version_mismatch"
+    assert rep.status != "installed_ok"
+
+
+def test_installed_but_wrong_commit_is_version_mismatch(tmp_path):
+    """负控②：故意传错的 commit ⇒ 必须报"版本不符"（不是"没装"、不是"通过"）。"""
+    root = _fake_mathlib(tmp_path, "0" * 40, via="git")
+    rep = FG.check_toolchain(
+        mathlib_root=str(root), env={},
+        which=lambda name: "C:/fake/lean.exe" if name == "lean" else None,
+        run_fn=_lean_version("Lean (version 4.7.0, x86_64-w64-windows-gnu, "
+                            "commit deadbeefcafe, Release)"),
+    )
+    assert rep.lean_status == "version_mismatch"
+    assert rep.mathlib_status == "version_mismatch"
+    assert rep.status == "version_mismatch"
+    assert rep.status != "not_installed" and rep.status != "installed_ok"
+    assert FG.PINNED_LEAN_COMMIT[:12] in rep.lean_reason
+    assert FG.PINNED_MATHLIB_COMMIT[:12] in rep.mathlib_reason
+
+
+def test_the_right_version_pins_report_installed_ok(tmp_path):
+    """正控②：版本逐位对上 ⇒ `installed_ok`（三态里的第三态也要能到）。"""
+    root = _fake_mathlib(tmp_path, FG.PINNED_MATHLIB_COMMIT)
+    rep = FG.check_toolchain(
+        mathlib_root=str(root), env={},
+        which=lambda name: "C:/fake/lean.exe" if name == "lean" else None,
+        run_fn=_lean_version(f"Lean (version {FG.PINNED_LEAN_VERSION}, "
+                            f"x86_64-w64-windows-gnu, commit {FG.PINNED_LEAN_COMMIT[:12]}, "
+                            "Release)"),
+    )
+    assert rep.status == "installed_ok", rep.to_dict()
+    assert rep.lean_commit == FG.PINNED_LEAN_COMMIT[:12] or (
+        FG.PINNED_LEAN_COMMIT.startswith(rep.lean_commit))
+    assert rep.mathlib_commit == FG.PINNED_MATHLIB_COMMIT
+
+
+def test_a_right_version_number_with_a_wrong_commit_is_still_a_mismatch(tmp_path):
+    """commit 是独立的一条判据：版本号对上了、commit 不对，仍算版本不符。"""
+    root = _fake_mathlib(tmp_path, FG.PINNED_MATHLIB_COMMIT)
+    rep = FG.check_toolchain(
+        mathlib_root=str(root), env={},
+        which=lambda name: "C:/fake/lean.exe" if name == "lean" else None,
+        run_fn=_lean_version(f"Lean (version {FG.PINNED_LEAN_VERSION}, "
+                            "x86_64-w64-windows-gnu, commit deadbeefcafe, Release)"),
+    )
+    assert rep.lean_status == "version_mismatch"
+    assert "版本号对上了" in rep.lean_reason
+
+
+def test_a_tree_without_a_verifiable_commit_is_check_failed_not_a_mismatch(tmp_path):
+    """没有 commit 可核 ⇒ `check_failed`（未核实），不是"版本不符"。"""
+    root = tmp_path / "mathlib4-4.7.0"
+    root.mkdir()
+    with open(root / "lakefile.lean", "w", encoding="utf-8", newline="") as fh:
+        fh.write("import Lake\n")
+    with open(root / "lean-toolchain", "w", encoding="utf-8", newline="") as fh:
+        fh.write("leanprover/lean4:v4.7.0\n")
+    rep = FG.check_toolchain(mathlib_root=str(root), env={}, which=lambda name: None)
+    assert rep.mathlib_status == FG.VERSION_UNKNOWN
+    assert rep.mathlib_status != "version_mismatch"
+    assert rep.mathlib_status != "not_installed"
+    assert FG.MATHLIB_REV_STAMP in rep.mathlib_reason
+    assert rep.status == FG.VERSION_UNKNOWN, "没查成不许被读成三态里的任何一个"
+
+
+def test_a_probe_that_raises_is_check_failed(tmp_path):
+    """探测自己炸了 ⇒ `check_failed`（不是"没装"）。"""
+    def _boom(cmd, *, cwd, timeout_sec):  # noqa: ARG001
+        raise OSError("起不来")
+
+    rep = FG.check_toolchain(env={}, which=lambda name: "C:/lean.exe", run_fn=_boom)
+    assert rep.lean_status == FG.VERSION_UNKNOWN
+    assert rep.status == FG.VERSION_UNKNOWN
+    assert rep.errors, "没查成必须留下原因"
+
+
+def test_mathlib_root_discovery_uses_the_env_var_then_candidates(tmp_path):
+    """工程根的判据是"同时有 lakefile.lean 与 lean-toolchain"，且候选顺序可注入。"""
+    root = _fake_mathlib(tmp_path, FG.PINNED_MATHLIB_COMMIT)
+    assert FG.find_mathlib_root({FG.ENV_MATHLIB_ROOT: str(root)}) == str(root)
+    assert FG.find_mathlib_root({}, candidates=[root, tmp_path / "nope"]) == str(root)
+    assert FG.find_mathlib_root({}, candidates=[tmp_path / "nope"]) == ""
+
+
+def test_lean_commit_of_reads_the_short_hash_from_the_version_line():
+    """`lean --version` 的 commit 是 12 位短哈希；取不到就是空串（不许猜）。"""
+    assert FG.lean_commit_of(
+        "Lean (version 4.7.0, x86_64-w64-windows-gnu, commit 6fce8f7d5cd1, Release)"
+    ) == "6fce8f7d5cd1"
+    assert FG.lean_commit_of("Lean (version 4.7.0)") == ""
+    assert FG.lean_commit_of("") == ""
+
+
+def test_the_two_pins_are_independent_facts():
+    """pin 是常量，不是从本机观测出来的：本机没装也照样有要求。"""
+    assert FG.PINNED_LEAN_VERSION and FG.PINNED_LEAN_COMMIT
+    assert len(FG.PINNED_LEAN_COMMIT) == 40 and len(FG.PINNED_MATHLIB_COMMIT) == 40
+    assert FG.PINNED_MATHLIB_TAG == "v4.7.0"
+
+
+def test_toolchain_cli_exits_with_the_state_as_a_code(tmp_path, capsys):
+    """可跑：`--toolchain` 的退出码就是三态（0/2/3/4），不是"有没有报错"。"""
+    assert FG.toolchain_main(["--toolchain", "--mathlib-root", str(tmp_path)]) == 2
+    out = capsys.readouterr().out
+    assert "not_installed" in out
+
+
 def test_the_module_selftest_passes_offline():
     """`python -m agentflow.formalgw` 的离线部分必须以 0 结束。"""
     assert FG.selftest() == 0
+
+
+# =========================== `concluded_names`：绑名的公理诊断（`R2-AN-2` 的读法）
+#
+# 它是事后审计（`verify.selfreported_proof`）读"这条 proof 的依据"的唯一入口。
+# 与 `_axioms_of` 的分工：后者回答"这份输出里出现过哪些公理"（刻意不绑名，
+# 判据是公理列表优先、fail-closed），前者回答"哪些声明被指名下过结论"。
+# 本组用例守两件事：① 只认绑名的那两种形态；② `_axioms_of` 的既有行为一个字都没动。
+
+
+def test_concluded_names_reads_only_the_name_bound_diagnostics():
+    """正控（`R2-AN-2`）：只认 `#print axioms <name>` 的两种绑名输出。"""
+    assert FG.concluded_names("'foo' does not depend on any axioms") == {"foo"}
+    assert FG.concluded_names("'foo' depends on axioms: [propext, Classical.choice]") == {"foo"}
+    assert FG.concluded_names(
+        "'a' does not depend on any axioms\n'b' depends on axioms: []") == {"a", "b"}
+    assert FG.concluded_names("") == set()
+    # 去重：同一句话重复出现只留一个名字
+    assert FG.concluded_names(
+        "'foo' does not depend on any axioms\n'foo' depends on axioms: []") == {"foo"}
+
+
+def test_concluded_names_rejects_the_two_shapes_that_are_not_evidence():
+    """负控（`R2-AN-2`）：名字被"提了一句"不算依据。
+
+    两种形态都必须读不出名字 —— 它们正是旧子串判据放行的那两条
+    （`draft/28` §40.3 的 A1/A4）：
+    - 自报输出 `Lean4: no goals`（根本没有名字）；
+    - 名字只出现在一句与结论无关的告警里。
+    """
+    assert FG.concluded_names("Lean4: no goals") == set()
+    assert FG.concluded_names("Lean4: warning: unused variable 'foo'; no goals") == set()
+    # 不绑名的公理诊断也不算：那是"输出里有公理信息"，不是"这条声明的结论"
+    assert FG.concluded_names("depends on axioms: [propext]") == set()
+    # 名字不对上引号形态（例如被别的东西包着）同样不算
+    assert FG.concluded_names("[foo] does not depend on any axioms") == set()
+
+
+def test_the_named_diagnostic_readers_did_not_change_axioms_of():
+    """`FC-03` 的反面：新增 `concluded_names` 不许改 `_axioms_of` 的既有行为。
+
+    `_axioms_of` 的判据是"公理列表优先、fail-closed"（`E-1` 的短路教训），
+    它刻意不绑名：源码里另有一条无关声明带公理时会保守地报 `extra_axioms`。
+    本用例把它的三种既有读数逐字钉住 —— 新增读法不得顺手把它也改严/改宽。
+    """
+    # 公理列表优先（即使别处写了"不依赖"）
+    assert FG._axioms_of("'foo' does not depend on any axioms\n"
+                         "'bar' depends on axioms: [propext]", name="foo") == ["propext"]
+    # 指名它清白 ⇒ 空表
+    assert FG._axioms_of("'foo' does not depend on any axioms", name="foo") == []
+    # 两者都没有 ⇒ 空表（"输出里没有公理信息"）
+    assert FG._axioms_of("Lean4: no goals", name="foo") == []
+    # 不绑名的列表照样被收（审计侧不认，`_axioms_of` 认 —— 两处口径不同是刻意的）
+    assert FG._axioms_of("depends on axioms: [Quot.sound]") == ["Quot.sound"]

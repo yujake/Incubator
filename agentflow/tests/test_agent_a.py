@@ -59,7 +59,9 @@ class FailingDownloader:
     """总是失败的下载器替身（不联网）。"""
 
     def download(self, url: str, dest_dir: Path, filename_hint: str) -> FetchResult:
-        return FetchResult(ok=False, path=None, http_status=500, bytes=0, sha256=None, error="boom")
+        # 失败档必须是受控词表里的一档（`F-6`，`FetchResult.__post_init__` 守）。
+        return FetchResult(ok=False, kind="http_500", path=None, http_status=500,
+                           bytes=0, sha256=None, error="boom")
 
 
 def _cand(**kw) -> Candidate:

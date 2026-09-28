@@ -25,6 +25,9 @@
 
 from __future__ import annotations
 
+import inspect
+import textwrap
+
 import pytest
 
 from agentflow import interactions as I
@@ -223,6 +226,66 @@ def test_admit_reprocess_request_rejects_blank_only_relation_ids():
     got = I.admit_reprocess_request([], relation_ids=["", "  "], reason=_a_reprocess_reason())
     assert got["admitted"] is False, got
     assert "全量重抽" in got["reason"], got
+
+
+# ============================================================ `I-9`：纯空白目标（绿侧的钉）
+
+
+#: `G-8`（`docs/PROPOSALS.md`）的修法方向逐字给出的那一行，以及修好之后的形态。
+_G8_OLD_GUARD = "rids = sorted({str(x) for x in relation_ids if x})"
+_G8_FIXED_GUARD = "rids = sorted({str(x).strip() for x in relation_ids if str(x).strip()})"
+
+
+def _assert_blank_only_targets_are_admitted(admit) -> None:
+    """判据本体（正控与负控共用同一段断言，负控才有意义）：纯空白目标今天被放行。"""
+    got = admit([], relation_ids=["", "  "], reason=_a_reprocess_reason())
+    assert got["admitted"] is True, (
+        "纯空白目标集合如今被拒绝了？那就是 `G-8` / `TEST-RED-2` 被修好了 —— "
+        "请把本文件里那条 `xfail(strict=True)` 删掉、把它改成断言拒绝的正控，"
+        f"并更新 `docs/PROPOSALS.md` 的 G-8。实测：{got!r}"
+    )
+
+
+def test_blank_only_targets_are_still_admitted_today():
+    """正控（`I-9`）：把当前行为如实钉住 —— 纯空白 `["", "  "]` 今天被放行。
+
+    `G-8` 登记的缺陷是：守卫按过滤前的归一集判空，于是 `["", "  "]`（零个有效目标）
+    与 `[]`（空）在语义上同形却走了不同分支 —— 后者拒绝、前者放行，B 于是拿着
+    空目标集退化成全量重抽。
+
+    这条刻意不假装缺陷已修：它断言的就是缺陷本身（`admitted is True`）。
+    目的是让"这个行为被改动"成为可判定的事件 —— 此前这半条判据是零覆盖：
+    `xfail(strict=True)` 只保证"修好时会来删标记"，在改错方向时不会报警。
+    修法落在 `interactions.py`（FC-27 禁改区 auth-audit），不归本批次。
+    """
+    _assert_blank_only_targets_are_admitted(I.admit_reprocess_request)
+
+
+def test_negative_control_the_pinned_assertion_goes_red_once_the_guard_is_fixed():
+    """负控（`I-9`）：按 `G-8` 的修法把守卫改成 strip 之后判空 ⇒ 上面那条必红。
+
+    注入方式是在内存里改源码文本再 exec 出来 —— 不碰 `interactions.py`（它在
+    禁改区，本批次不动它）。第一句断言"注入确实改到了源码"：锚点哪天失效，
+    这条会红，而不是静默地什么都没注入（空转的负控与没有负控是一回事）。
+
+    与 `docs/PROPOSALS.md` 的 `G-5` 条目同一个处置形态：把实测行为钉在纸上，
+    修它的人会看到这条红，从而同时更新登记。
+    """
+    src = textwrap.dedent(inspect.getsource(I.admit_reprocess_request))
+    assert _G8_OLD_GUARD in src, (
+        "`G-8` 的守卫写法变了（锚点失效）—— 先核对 `docs/PROPOSALS.md` 的 G-8 与本条锚点"
+    )
+    fixed = src.replace(_G8_OLD_GUARD, _G8_FIXED_GUARD)
+    assert fixed != src, "注入没生效"
+    ns = dict(vars(I))
+    exec(compile(fixed, "<G-8-fixed>", "exec"), ns)  # noqa: S102 - 受控注入，只为负控
+    fixed_admit = ns["admit_reprocess_request"]
+    assert fixed_admit([], relation_ids=["", "  "], reason=_a_reprocess_reason())["admitted"] is False, (
+        "按 G-8 的修法改出来的实现居然还放行纯空白目标 ⇒ 注入的语义不是修法方向，"
+        "这条负控就没在测它该测的东西"
+    )
+    with pytest.raises(AssertionError):
+        _assert_blank_only_targets_are_admitted(fixed_admit)
 
 
 # ============================================================ evidence_relevance

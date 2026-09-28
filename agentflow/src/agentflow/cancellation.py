@@ -35,9 +35,12 @@
 
 from __future__ import annotations
 
+import contextvars
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any, Mapping, Sequence
 
 
 class CancelRequested(Exception):
@@ -69,8 +72,41 @@ class CancelReason:
     #: 结果是否已知。被中途砍掉的任务它必须是 False ——
     #: 一个跑了一半的实验可能已经写了半张表，声称它"失败"是过度声称。
     outcome_known: bool = False
-    #: 谁发起的取消（"user" / "conductor.dispose" / "deadline" / "budget"）。
+    #: 谁发起的取消。取值见 `CANCEL_BY_VALUES`（不是硬枚举，理由见那里）。
     by: str = "unknown"
+
+    def __post_init__(self) -> None:
+        """`code` 必须是受控词表里的一员（`G-10`）。
+
+        ## 为什么这一条必须在这里，而不是只在 `Conductor._signal_stop` 里
+
+        `_signal_stop` 早就有 `if code not in CANCEL_CODES: raise ValueError(...)`
+        —— 但那只覆盖编排层那一个入口。`CancelReason` 是公开的值对象，
+        任何地方都能直接构造它，而在此之前构造器不做任何校验：
+        实测（`temp/batchG-g10.txt`）`CancelReason("乱写")` 通过、
+        `CancelToken().cancel("reason-7")` 也通过并把编外 code 原样记下。
+
+        词表自己的 docstring 写着"自由文本的原因无法统计，也无法被 verify 检查"
+        —— 那句话只有在对所有构造路径成立时才是真的。核对方式是"两处实现
+        互相印证"：同一族的 `policy.Refusal` 在 `__post_init__` 里就拒词表外的值，
+        而 `CancelReason` 不拒 —— 同一件纪律两种强度，正是本项目点名的
+        "同一件事两个落位"的形态。
+
+        ## 只校 `code`，刻意不校 `by`
+
+        `by` 回答的是"谁喊的停"，它是一个审计标签：`Conductor.cancel(..., by=...)`
+        是公开参数，调用方用自定义标签标自己是谁（`tests/test_cancellation.py`
+        里有 `by="caller-1"` 这类用法，`CANCEL_BY_VALUES` 的注释逐字写明
+        "不是『别人不许传别的』的闸门"）。把 `by` 也锁成枚举会让审计信息变少
+        —— 抓一条缺陷的时候不许顺手砍掉另一条已登记的约定。
+        """
+        if self.code not in CANCEL_CODES:
+            raise ValueError(
+                f"CancelReason.code={self.code!r} 不在受控词表 {CANCEL_CODES} 里。"
+                "取消的理由必须可枚举：自由文本的原因无法被统计，也无法被 verify 检查"
+                "（`G-10`）。若这是一个新的、真实的停止来源，请先把它登记进 "
+                "`CANCEL_CODES` 并写出它的产出点；不要用自由文本绕过词表。"
+            )
 
     def to_dict(self) -> dict:
         return {
@@ -89,6 +125,33 @@ CANCEL_CODES: tuple[str, ...] = (
     "budget",            # 预算耗尽
     "dispose",           # Conductor 被销毁
     "cancelled",         # 未分类（不要用它：它等于没写原因）
+)
+
+#: `CancelReason.by` 的受控词表：本模块与 `Conductor` 自己会产出的那些取值。
+#:
+#: 与 `CANCEL_CODES` 是两个字段、两件事，不许互换：
+#: `code` 回答"为什么停"（封闭词表，`Conductor._signal_stop` 会拒绝词表外的 code）；
+#: `by` 回答"谁喊的停"，它是一个审计标签。
+#:
+#: 为什么 `by` 刻意不做成硬枚举（与 `code` 不同）：
+#: `Conductor.cancel(..., by=...)` 是公开参数，调用方用它标自己是谁
+#: （`tests/test_cancellation.py` 里就有 `by="caller-1"` / `by="t1"` 这类
+#: 调用方自定义标签）。把它锁成枚举会拒掉合法的调用方，并且会让"谁喊的停"
+#: 这条审计信息变少，而不是变准。所以这里是"我们自己产出哪些值"的登记，
+#: 不是"别人不许传别的"的闸门。
+#:
+#: 每一条的产出点（改这里时同改，`tests/test_cancellation.py` 有对齐用例）：
+#:   unknown            —— `CancelReason.by` 的默认值（没记谁喊的）
+#:   user               —— `Conductor.cancel` 的默认 `by="user"`
+#:   deadline           —— `CancelToken.reason` 的惰性路径 + `Conductor` 的 `_signal_stop("deadline", ...)`
+#:   budget             —— `CancelToken.reason` 的惰性路径
+#:   conductor.dispose  —— `Conductor.dispose` 合成终态时
+CANCEL_BY_VALUES: tuple[str, ...] = (
+    "unknown",
+    "user",
+    "deadline",
+    "budget",
+    "conductor.dispose",
 )
 
 
@@ -113,7 +176,8 @@ class CancelToken:
       （停止派新任务 + 协作式取消在跑的），分成两套信号会让"停止"出现两条路径。
     """
 
-    __slots__ = ("_lock", "_reason", "_deadline", "_token_budget", "_tokens_used", "_cancelled_flag")
+    __slots__ = ("_lock", "_reason", "_deadline", "_token_budget", "_tokens_used",
+                 "_cancelled_flag", "_spawned")
 
     def __init__(self, *, deadline: float | None = None, token_budget: int | None = None) -> None:
         self._lock = threading.Lock()
@@ -122,6 +186,64 @@ class CancelToken:
         self._token_budget = token_budget
         self._tokens_used = 0
         self._cancelled_flag = False
+        #: 本 token 名下正在跑的子进程（`G-1`）。`cancel()` 会主动杀掉它们 ——
+        #: 一个跑 600 秒的 Lean 检查不会自己发现"有人按了停止"。
+        self._spawned: list[Any] = []
+
+    # ------------------------------------------------- `G-1` 子进程出生表
+    def _is_cancelled_locked(self) -> bool:
+        """持锁状态下的三态取消判定（与 `cancelled` 同一判据，不重复实现）。
+
+        为什么要单独一个"持锁版"：`_register_spawned` 已经在锁里，
+        而 `cancelled` 自己会再抢一次同一把非重入锁 ⇒ 直接调它会死锁
+        （实测：`deadline` 到点时 `run_cancellable` 永久卡住）。
+        所以这里只能内联同一套条件，并且必须与 `cancelled` 同步改。
+        """
+        if self._cancelled_flag:
+            return True
+        if self._deadline is not None and time.monotonic() >= self._deadline:
+            return True
+        return bool(self._token_budget is not None
+                    and self._tokens_used >= self._token_budget)
+
+    def _register_spawned(self, proc: Any) -> None:
+        with self._lock:
+            # `R5-F2`（重审实测）：守卫旧版只判 `_cancelled_flag` —— 那个标志
+            # 只由显式 `cancel()` 置位，于是 `deadline` 到点与 `token_budget`
+            # 耗尽这两条惰性取消路径下，新起的子进程照样被登记进表、
+            # 没有人会去杀它（端到端实测：`deadline=0.20s` 的 token 起
+            # `sleep(30)` ⇒ 阻塞 30.06 秒才返回，子进程活到最后）。
+            # 判据必须与 `cancelled` 逐条一致：三条路都算"已取消"。
+            if self._is_cancelled_locked():
+                # 取消与起进程的竞态：已经取消了就别留下一个没人管的进程。
+                _kill(proc)
+                return
+            self._spawned.append(proc)
+
+    def _unregister_spawned(self, proc: Any) -> None:
+        with self._lock:
+            try:
+                self._spawned.remove(proc)
+            except ValueError:
+                # 已经被 `cancel()` 从表里摘掉了（它清空整张表）—— 这正是
+                # "取消与收尾同时发生"的形态，摘不到是期望的结果，不是错误。
+                # 唯一不能做的是因此抛出去：那会让一次正常的收尾看起来像失败。
+                pass
+
+    def _kill_spawned(self) -> int:
+        """杀掉本 token 名下所有在跑的子进程，返回杀掉的个数。"""
+        with self._lock:
+            procs = list(self._spawned)
+            self._spawned.clear()
+        for p in procs:
+            _kill(p)
+        return len(procs)
+
+    @property
+    def spawned_count(self) -> int:
+        """当前在跑的子进程数（`0` = 没有）。诊断/报告用，不是判据。"""
+        with self._lock:
+            return len(self._spawned)
 
     # ---------------------------------------------------------------- 构造
     @classmethod
@@ -190,6 +312,25 @@ class CancelToken:
 
         返回第一次定下的那个理由（而不是 None）：调用方拿它去写台账，
         于是"是谁先喊的停"是可审计的。
+
+        ## `G-1`：取消同时杀掉本 token 名下的子进程
+
+        在锁内先收集、在锁外杀（`kill` 是系统调用，持锁做它会拖住所有读
+        `cancelled` 的线程）。取消位只在第一次调用时置，但子进程表每次都清：
+        第二次取消时若又起了新进程，那一个也该被杀（"先到先得"管的是 reason，
+        不是"以后新起的进程就没人管了"）。
+
+        ## `G-10`：`reason` 由 `CancelReason` 校一次受控词表
+
+        这里不另写一份 `if reason not in CANCEL_CODES` —— 判断只在
+        `CancelReason.__post_init__` 一处（同一件事两个落位是本项目反复踩的形态）。
+        于是词表外的 code 会在这里以 `ValueError` 结束，而不会留下一个
+        半取消的状态：`CancelReason` 构造失败发生在 `self._reason` 赋值之前，
+        `_cancelled_flag` 也没被置位。
+
+        为什么这条校验是必要的而不是多余的：`_signal_stop` 那一层的守卫只覆盖
+        编排层入口，而 `cancel()` 本身是公开 API —— 实测它此前接受
+        `"reason-7"` 这类编外值并原样写进台账的 `detail`（`temp/batchG-g10.txt`）。
         """
         with self._lock:
             if self._reason is None:
@@ -202,7 +343,12 @@ class CancelToken:
                     code=reason, detail=detail, outcome_known=False, by=by
                 )
                 self._cancelled_flag = True
-            return self._reason
+            reason_obj = self._reason
+            procs = list(self._spawned)
+            self._spawned.clear()
+        for p in procs:
+            _kill(p)
+        return reason_obj
 
     def consume_tokens(self, n: int) -> bool:
         """记一笔 token 消耗。返回这次消耗之后是否仍然没超预算。
@@ -225,10 +371,23 @@ class CancelToken:
         更实际的理由是：在事务中间强杀会让"已写了半张表"成为常态，
         而半张表比"慢一点"危险得多。所以取消是请求，执行单元在
         它能安全停下的点上响应。
+
+         子进程是这条纪律的例外（`G-1`）：一个跑 600 秒的 Lean 检查
+        "能在安全停下的点上响应"这件事不成立 —— 它根本没有那样的点。
+        所以由 `cancel()` 主动杀（`_kill_spawned`），而不是等它自己发现。
+        杀子进程不破坏上面那条理由：子进程不写我们的表，它写的是自己的工作目录。
         """
         if self.cancelled:
             r = self.reason
             raise CancelRequested(detail_of(r) if r else "cancelled")
+
+    def cancel_children(self) -> int:
+        """杀掉本 token 名下的全部子进程（`G-1`）。返回杀掉的个数。
+
+        `cancel()` 已经会自动调它；这个公开方法给"只想停子进程、不想置取消位"
+        的场合（例如 `dispose()` 里先收尾再决定要不要标取消）。
+        """
+        return self._kill_spawned()
 
     def to_dict(self) -> dict:
         """台账/日志形态。`reason` 为 None 时原样是 None（不折叠成默认理由）。"""
@@ -250,3 +409,157 @@ def detail_of(reason: CancelReason | None) -> str:
     if reason is None:
         return "取消（未给出理由）"
     return f"取消[{reason.code}] {reason.detail}".strip()
+
+
+# ---------------------------------------------------------------- `G-1`：取消要到达 handler
+#
+# ## 缺陷（2026-09-26 全面体检 · 子代理 G 实测，`temp/auditG-probe1.txt`）
+#
+# `LocalBackend.call` 的签名收下了 `token: CancelToken`，但末行是 `return fn(**given)`
+# —— token 收下就扔了。全仓 `raise_if_cancelled` 的调用点为 0，
+# 用 AST 扫 CAPABILITIES 里全部 ActionSpec 的 handler，形参里带 token 的一个都没有。
+# 行为实测：两个各睡 0.6s 的任务，0.15s 时取消 ⇒ 已经在跑的那个照样以
+# `done/ok` 结束，只有还没进 summon 的那一个被取消。
+#
+# ## 修法（口径：把 signal 送到两个真正的执行面上）
+#
+# 1. handler：`LocalBackend.call` 在调用期间把 token 放进一个 `ContextVar`，
+#    handler 通过 `current_token()` / `raise_if_cancelled()` 读它。
+#    为什么用 ContextVar 而不是给实例挂属性：`resolve(role)` 是按角色缓存实例的，
+#    两个并发调用会共享同一个对象 ⇒ 挂实例属性会让 A 的 token 被 B 覆盖（静默串味）。
+#    ContextVar 按执行上下文隔离，正是这里要的语义。
+# 2. 子进程：`run_cancellable()` 起进程并注册到 token 自己的出生表上；
+#    `cancel()` 会立刻杀掉所有已注册的子进程（formalgw 的 Lean、以及将来任何
+#    "调用方决定内容"的子进程）。为什么必须由 `cancel()` 主动杀而不是等 handler
+#    下一次检查：一个正在跑 600 秒的 Lean 检查，协作式取消只能等到它跑完 ——
+#    那不是"按了停止也停不下来"的修复。
+#
+# 三态纪律在这里的形态：`run_cancellable` 在取消时返回 `cancelled=True`
+# （既不是 `timed_out`，也不是普通的非零退出码），而调用方必须把它读成
+# "没查成" —— 它与"超时"的处置不同（超时是加时间，取消是有人喊停）。
+
+#: 当前执行上下文里的取消 token；`LocalBackend.call` 在调用 handler 期间设置它。
+_CURRENT_TOKEN: contextvars.ContextVar["CancelToken | None"] = contextvars.ContextVar(
+    "agentflow_cancel_token", default=None
+)
+
+#: `run_cancellable` 等待子进程时每一段的长度（秒）。见那里的注释：
+#: 一次等到超时会让"在长超时下被取消"这件事晚 `timeout_sec` 才被发现
+#: （实测：`timeout_sec=10`、0.15 秒时取消 ⇒ 旧版要等到 kill 生效才返回，
+#: 而分段等待让它在该段结束时就返回）。这个值越小，取消越灵敏、轮询越密。
+_CANCEL_POLL_SEC: float = 0.05
+
+
+def current_token() -> "CancelToken | None":
+    """当前 handler 执行上下文里的 token（不在 handler 里时是 `None`）。
+
+    返回 `None` 是诚实的："没有取消信号"与"有信号且没取消"是两件事，
+    把它折叠成一个默认 token 会让"这段代码从来没被接进取消面"永远看不见。
+    """
+    return _CURRENT_TOKEN.get()
+
+
+def current_reason_text() -> str:
+    """取消理由的人可读文本；没 token 或没取消时返回空串。"""
+    tok = _CURRENT_TOKEN.get()
+    if tok is None:
+        return ""
+    r = tok.reason
+    return detail_of(r) if r is not None else ""
+
+
+def raise_if_cancelled() -> None:
+    """handler 关键点的协作式检查（模块级形态，供没有实例的地方调用）。
+
+    与 `CancelToken.raise_if_cancelled` 逐字同一个判据，只是从当前上下文取 token；
+    没有 token 时什么都不做（不抛）：那说明这段代码跑在取消面之外，
+    而"投递一个假信号"比"没有信号"更糟。
+    """
+    tok = _CURRENT_TOKEN.get()
+    if tok is not None:
+        tok.raise_if_cancelled()
+
+
+def run_cancellable(
+    cmd: Sequence[str], *,
+    cwd: str | None = None,
+    timeout_sec: float,
+    token: "CancelToken | None" = None,
+    stdin_devnull: bool = True,
+) -> dict:
+    """起一个可被取消的子进程，返回与 `formalgw._default_run` 同形的 dict。
+
+    返回值多两个键（`_normalize_run` 会忽略它们，但调用方要读）：
+    `cancelled: bool` 与 `timed_out: bool`。取消时 `cancelled=True` 且
+    `timed_out=False` —— 两者都落在"没查成"那一档，但处置不同：
+    "超时"是给它更多时间，"取消"是有人喊了停、不该重试。
+
+    实现：`Popen` + `communicate(timeout=...)`，并在 `finally` 里把进程从
+    token 的出生表摘掉。取消不靠轮询：`CancelToken.cancel()` 会主动 kill
+    已注册的进程（见 `_kill_spawned`），所以这个函数等到的是"进程被杀"，
+    而不是"下一次轮询发现取消了"。
+    """
+    tok = token if token is not None else _CURRENT_TOKEN.get()
+    if tok is not None:
+        tok.raise_if_cancelled()  # 已经取消了就别起了
+    kwargs: dict[str, Any] = {}
+    if stdin_devnull:
+        kwargs["stdin"] = subprocess.DEVNULL
+    proc = subprocess.Popen(
+        list(cmd), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", **kwargs,
+    )
+    if tok is not None:
+        tok._register_spawned(proc)
+    try:
+        # `R5-F2`：等待必须是分段的，且每一段之后都看一次"这次取消了吗"。
+        # 旧版只有一次 `communicate(timeout=timeout_sec)`，它有两个后果：
+        #   ① `deadline` 到点与预算耗尽这两条惰性取消路径下，新起的子进程
+        #      没有人会 kill，于是这个函数一直等到子进程自己结束
+        #      （实测 `deadline=0.20s` + `sleep(30)` ⇒ 阻塞 30.06 秒）；
+        #   ② 显式取消时，返回时刻取决于 kill 何时让 `communicate` 解开 ——
+        #      而它的超时上限是整个 `timeout_sec`。
+        # 现在：每段最多等 `_CANCEL_POLL_SEC`，段后先看取消、再看是不是到点了。
+        waited = 0.0
+        out = err = ""
+        timed_out = False
+        while True:
+            slice_sec = _CANCEL_POLL_SEC
+            if timeout_sec is not None:
+                slice_sec = min(_CANCEL_POLL_SEC, max(0.001, timeout_sec - waited))
+            try:
+                out, err = proc.communicate(timeout=slice_sec)
+                break
+            except subprocess.TimeoutExpired:
+                waited += slice_sec
+                if tok is not None and tok.cancelled:
+                    _kill(proc)
+                    out, err = proc.communicate()
+                    return {"exit_code": None, "stdout": out or "", "stderr": err or "",
+                            "timed_out": False, "cancelled": True}
+                if timeout_sec is not None and waited >= timeout_sec:
+                    timed_out = True
+                    _kill(proc)
+                    out, err = proc.communicate()
+                    break
+        if timed_out:
+            return {"exit_code": None, "stdout": out or "", "stderr": err or "",
+                    "timed_out": True, "cancelled": False}
+        if tok is not None and tok.cancelled:
+            # 取消是在 `communicate` 返回前发生的（kill 由 `cancel()` 发出）⇒
+            # 退出码是 -15/-9 那一类，不是检查器对这份输入给出的结论。
+            return {"exit_code": None, "stdout": out or "", "stderr": err or "",
+                    "timed_out": False, "cancelled": True}
+        return {"exit_code": int(proc.returncode), "stdout": out or "",
+                "stderr": err or "", "timed_out": False, "cancelled": False}
+    finally:
+        if tok is not None:
+            tok._unregister_spawned(proc)
+
+
+def _kill(proc: "subprocess.Popen") -> None:
+    """尽力杀掉一个子进程；杀不掉不抛（真正的失败由调用方那一条报出来）。"""
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001 - 已经退出 / 句柄关了，都无所谓
+        pass

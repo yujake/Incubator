@@ -125,7 +125,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 0.109,
+    "elapsed_seconds": 0.117,
     "honest_split": {
       "proved_by_the_paper_and_cross_checked_here": [
         "K(m) is m-regular, vertex-transitive, periodic of rank m-1 (Lemma 2.2)",
@@ -329,7 +329,7 @@
           "separates": true
         },
         "m": 4,
-        "seconds": 0.03,
+        "seconds": 0.043,
         "spectra": {
           "K": {
             "contained_in_interval": true,
@@ -545,7 +545,7 @@
           "separates": true
         },
         "m": 5,
-        "seconds": 0.079,
+        "seconds": 0.074,
         "spectra": {
           "K": {
             "contained_in_interval": true,

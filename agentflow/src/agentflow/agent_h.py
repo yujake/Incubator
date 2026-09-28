@@ -34,7 +34,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import schema as S
 from .store import Store
-from .tools import SIDE_EFFECTS_WRITE, build_registry
+from .tools import READONLY_CALL_EXCEPTIONS, SIDE_EFFECTS_WRITE, build_registry
 from .tools import review_tools as RV
 from .tools.base import ToolRegistry, ToolSpec
 from .tools.doc_tools import CROSS_CHECK_DISCLAIMER
@@ -54,7 +54,11 @@ _UNSPECIFIED: Any = object()
 _H_READONLY_SIDE_EFFECTS = ("none", "read")
 
 #: H 的落库代理里唯一允许带写副作用的三个工具（落点被钉死在这里）。
-#: 它们是 `AgentH` 与 `review_tools` 之间的契约，因此也只有一处定义。
+#:
+#: 注意：它从 `tools/base.READONLY_CALL_EXCEPTIONS["H"]` 派生（`P-14`）：
+#: 那张表是同一件事的单一来源，这里只是把它的名字取出来。
+#: 早先这里是一份独立的三个字面量 —— 同一个概念两个名字，正是 `G-45` 那一类缺陷
+#: （两处可以各自漂移，而且没有任何东西会红）。
 #:
 #: 为什么本轮多了一个 `review.report`：`draft/17` §8.4 要求 H 产出一份
 #: 带版本 hash、带自证数字、带"我这一轮犯的错"一节的审校报告（G11/G13/G15）。
@@ -63,7 +67,9 @@ _H_READONLY_SIDE_EFFECTS = ("none", "read")
 #: 它的落点仍然被钉死：一个报告文件，不碰任何数据表、不碰 `claims`
 #: （`tests/test_gates.py` 有一条断言：跑完 `review_report` 之后
 #: `documents.json` 的 `claims` 逐字节不变）。
-_H_WRITABLE_TOOLS = ("review.review_document", "review.verify_fixes", "review.report")
+_H_WRITABLE_TOOLS: tuple[str, ...] = tuple(
+    name for name, _why in READONLY_CALL_EXCEPTIONS["H"]
+)
 
 
 # ---------------------------------------------------------------- 工具装配
@@ -74,22 +80,34 @@ def filter_readonly_h_surface(
 ) -> tuple[list[ToolSpec], list[dict]]:
     """把 H 的角色面裁成"只读面"，并把被拒的写工具记录下来。
 
-    ## 为什么需要这一层（这是当前工具层的一个真实缺陷）
+    ## 这一层与工具层那一层的关系（`roles-7`：两处注释此前互相否认）
 
-    `table.*` / `fs.*` 这批通用工具的 `roles` 是全部角色，其中
-    `table.create` / `table.update` / `table.delete` / `fs.write` / `fs.delete` /
-    `fs.move` 都是 `write_local`。也就是说，直接按角色过滤得到的"H 的工具面"里
-    混着能改任何一张表的刀：只要 H 手里有 `table.update`，它就能改
-    `documents.claims`，于是"发现问题"与"掩盖问题"重新变得无法区分。
+    工具层已经有一道只读过滤：`tools/base.ToolRegistry._role_surface` 在角色命中
+    `READ_ONLY_ROLES` 时剥掉"写副作用 或 `external == "exec"`"的工具 —— 它看两根轴。
+    本函数是 H 装配路径上的第二道，判据更窄：只看 `side_effect` 属不属于
+    `_H_READONLY_SIDE_EFFECTS`（`none` / `read`）—— 它不看 `external`，也不认 `unknown`。
+    于是在"写"这根轴上本层不会比工具层更宽；子集关系由下面那条可执行的断言钉住
+    （不是只写在注释里），并写明它唯一可能不成立的那一格
+    （`side_effect` 属 none/read 加 `external == "exec"` 加 roles 含 H）。
 
-    本模块不改别人的文件（`tools/__init__.py`、`table_tools.py`、`fs_tools.py`
-    都不属于本次交付），因此在这里显式拒绝并留痕：拒绝清单会挂在注册表的
-    `refused_write_tools` 上，出现在自检与报告里。这比"悄悄继承一个与设计意图
-    相反的权限面"诚实得多（FC-08：降级必须显式，不得静默）。
+    两处判据不同这件事本身无害，有害的是"两处注释互相否认对方存在"：读代码的人会得出
+    "工具层没有只读过滤"而另行加固（制造第三份判据），或者反过来把本层删掉。
+
+    本层仍然必须保留，理由不是"它今天拦到了什么"，而是两个报告字段只在它这里有：
+    `refused_write_tools`（显式拒绝清单）与 `raw_surface_size`（裁剪前的面有多大）。
+    有了它们，"静默丢弃"与"显式拒绝"在报告里才是两件事（FC-08）。
+
+    历史留痕：本函数写在工具层的只读过滤之前，当时 `table.create` / `table.update` /
+    `table.delete` / `fs.write` / `fs.delete` / `fs.move` 这些 `write_local` 工具确实会
+    出现在按角色过滤得到的 H 工具面里；工具层补上 `_role_surface` 之后，本层实测
+    拒不到东西（`refused` 为空），它的价值从"拦刀"变成"留痕"（见 `D-6`）。
     """
+    # 先物化成一份列表：下面要用同一批 specs 跑两遍（本层过滤 + 工具层判据的交叉断言），
+    # 而 `specs` 的形参类型是 `Iterable` —— 生成器在第一遍之后就走空了。
+    items = list(specs)
     kept: list[ToolSpec] = []
     refused: list[dict] = []
-    for s in specs:
+    for s in items:
         if s.side_effect in _H_READONLY_SIDE_EFFECTS:
             kept.append(s)
         else:
@@ -100,6 +118,33 @@ def filter_readonly_h_surface(
                     "reason": "H 的工具面必须全部 none/read：能改表的工具会让审校者同时成为修正者",
                 }
             )
+
+    # ---- `roles-7`：本层判据是工具层判据的子集（交叉断言，不是注释）
+    #
+    # 判据差异逐字写在这里：工具层的 `_role_surface` 剥掉"写副作用 或
+    # external == 'exec'"（两根轴都看），本函数只看 `side_effect`（少看 external）。
+    # 在 side_effect 这根轴上本层更窄；对 external 这根轴它是盲的 —— 所以下面的子集
+    # 关系不是形式定理，而是对声明表的一条不变量：真实表上今天成立（实测 H 的工具面
+    # 里没有任何 external == 'exec' 的 spec），而"read + external=exec + roles 含 H"
+    # 那种 spec 会让它当场红。那一格确实必须由人看：工具层会拒绝它、本层会保留它，
+    # 于是它的名字出现在 H 的自由工具箱里，而每次 `call` 都被拒绝。
+    # 断言的做法是让工具层那个唯一的判据实现自己说话（`_role_surface`），
+    # 而不是在这里重写一遍"哪些算写工具"的名单 —— 那会是 FC-03 禁止的第二份实现。
+    probe = ToolRegistry(name="agent-H:readonly-invariant")
+    for spec in items:
+        probe.register(spec)
+    tool_layer, _ = probe._role_surface("H", filter_readonly=True, call_surface=False)
+    allowed = {s.name for s in tool_layer}
+    leaked = sorted(s.name for s in kept if s.name not in allowed)
+    assert not leaked, (
+        f"filter_readonly_h_surface 放行了工具层不会给 H 的工具 {leaked} —— "
+        "本层判据（只看 side_effect 属不属于 none/read）必须是 "
+        "base._role_surface('H', filter_readonly=True, call_surface=False) 判据的子集。"
+        "最可能的成因是某个 spec 声明了 side_effect ∈ {none, read} 加 external='exec' "
+        "且 roles 含 H（本层对 external 是盲的）：要么它的 roles/external 声明是错的，"
+        "要么本层必须补看 external。无论哪一种，它的名字都会留在 H 的自由工具箱里而"
+        "每次 call 都被拒绝 —— 这一格必须由人看，不许静默通过"
+    )
     return kept, refused
 
 
@@ -111,7 +156,12 @@ def install_h_tools(
     build = build_registry(store=store, workspace_root=root)
     raw = build.registry.for_role("H")
     kept, refused = filter_readonly_h_surface(raw)
+    # 这张表登记的是只读工具面（`kept`），并绑定角色（`P-14`）：此后每次 `call`
+    # 都会再判一次"H 拿不拿得到这个工具"。刻意不用 `scoped_to` 拿"可调用面" ——
+    # 那会把 18 个写工具也登记进来，"H 的工具栏全是只读"这条断言当场失效
+    # （H 自己的落库代理是另一张注册表：`self.writers`）。
     reg = ToolRegistry(name="agent-H")
+    reg.bound_role = "H"
     for spec in kept:
         reg.register(spec)
     # 留痕：降级/拒绝必须是可观测的事实，而不是"少几个工具没人知道"。
@@ -173,6 +223,12 @@ class AgentH:
             )
 
         self.writers = writers if writers is not None else ToolRegistry(name="agent-H:writers")
+        # ---- 落库代理绑定角色（`P-14`）：`self.writers` 代表 H，
+        # 且它的可调用面就是 `READONLY_CALL_EXCEPTIONS["H"]` 那张表。
+        # 不绑的话 `_writer` 的每次 `call` 都会被"调用方没声明角色"拒掉 ——
+        # 那会把 H 写审校发现与报告的能力一起砍掉（`_H_WRITABLE_TOOLS` 的落点也就没了）。
+        if self.writers.bound_role is None:
+            self.writers.bound_role = "H"
         if writers is None:
             RV.register(self.writers, store=self.store, include_writers=True, actor=self.actor)
         # ---- 落库代理的装配期断言（本次审计补上的缺口）。
@@ -207,6 +263,8 @@ class AgentH:
                 pass
 
     def _writer(self, name: str, /, **params: Any) -> dict:
+        #: 这张注册表在 `__init__` 里已绑定 `bound_role="H"`（`P-14` 的调用期判据），
+        #: 所以这里不必逐次传 `role=` —— 逐次传反而会让"它到底代表谁"有两个来源。
         res = self.writers.call(name, **params)
         self.tool_calls.append({"tool": name, "ok": res.ok, "error": res.error})
         if not res.ok:
@@ -337,7 +395,7 @@ class AgentH:
             f"verdict={data.get('verdict')}（pass={data.get('pass_count')}、fail={data.get('fail_count')}、"
             f"unknown={data.get('unknown_count')}、not_applicable={data.get('not_applicable_count')}），"
             f"被审版本 hash={data.get('revision_hash')}，"
-            + (f"自身错误已登记 {len(errs)} 条" if registered else "**自身错误**未登记（own_errors 缺失）")
+            + (f"自身错误已登记 {len(errs)} 条" if registered else "自身错误未登记（own_errors 缺失）")
             + f"；没查成的门={data.get('unknown_gates')}"
         )
         return data
@@ -465,14 +523,22 @@ def _selftest() -> int:
     print("[1] 造数据：概念 2 个、文献 1 篇、关系 1 条")
 
     # ---- 干净稿件（防误伤，schema 合法且审校也该干净）
+    #
+    # `evidence_kind` 是 `cross_check` 而不是 `proof`：这条断言的引文只有
+    # `rel:0000`（一条关系）与 `lit:0000#p.12-13`（一页文献），没有形式化检查器
+    # 参与过。标成 `proof` 是误标，而 `D-1` 的写入期判据（`doc_tools.check_proofs`）
+    # 会在改写这条稿件的路径上拒绝它 —— 自检第 [7] 步就是这么红的。
+    # 降级之后它仍然是"干净稿件"：审校判 `accepted`、`error=0`（见本自检第 [4] 步）。
+    # `disclaimer` 必须跟着填：`cross_check` 的「不构成证明」声明是结构强制的。
     clean = _seed_document(
         st,
         doc_id="0000",
         claims=[
             {
                 "claim_id": "claim-1", "section": "主要结果", "text": "谱落在区间内。",
-                "evidence_kind": "proof", "citations": ["rel:0000", "lit:0000#p.12-13"],
-                "is_negative": False, "negation_kind": None, "disclaimer": "",
+                "evidence_kind": "cross_check", "citations": ["rel:0000", "lit:0000#p.12-13"],
+                "is_negative": False, "negation_kind": None,
+                "disclaimer": CROSS_CHECK_DISCLAIMER,
             }
         ],
     )

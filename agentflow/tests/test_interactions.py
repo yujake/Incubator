@@ -505,7 +505,18 @@ def test_reprocess_counts_ignores_rejected_rows():
 
 
 def test_admit_reprocess_request_negative_control_empty_target():
-    """负控：无目标的重抽取会退化成全量重抽 ⇒ 必须拒绝。"""
+    """负控：无目标的重抽取会退化成全量重抽 ⇒ 必须拒绝。
+
+    这一条只覆盖 `relation_ids=[]` 这一种写法。纯空白 `["", "  "]` 在语义上
+    与它同形（零个有效目标），而实现按过滤前的集合判空 ⇒ 今天被放行：
+    那是已登记为 `G-8` 的缺陷（`docs/PROPOSALS.md`），修法要动
+    `interactions.py`（FC-27 禁改区）。
+
+    所以这里不重复那条断言，只留指路：纯空白当前行为的绿侧判据是
+    `tests/test_coverage_interactions.py::test_blank_only_targets_are_still_admitted_today`
+    （它带一条"按 `G-8` 修好之后必红"的负控）。同一个判据写两处会让两处口径
+    各自漂移（`R003` 的形态）。
+    """
     got = I.admit_reprocess_request([], relation_ids=[], reason="low_information")
     assert got["admitted"] is False and "全量重抽" in got["reason"]
 
@@ -553,3 +564,51 @@ def test_defaults_are_complete_and_positive():
         "still_conflicting", "budget_exhausted", "new_conflict",
     }
     assert set(S.CONTRADICTION_VERDICTS) >= {"resolved", "unresolved", "new_contradiction", "persistent"}
+
+
+# ============================================================ P-4：取号的 4 位上限
+
+
+def test_next_prefixed_id_normal_range_is_unchanged():
+    """正控（`P-4`）：正常范围内的取号序列必须逐字不变。
+
+    上限下沉最大的风险是"顺手改了取号语义"。这条用例把改前的行为逐条钉住
+    （改前实测序列见 `temp/_b5a_p4_before.txt`）。
+    """
+    assert I.next_prefixed_id([], "request_id", "r") == "r-0001"
+    assert I.next_prefixed_id([{"request_id": "r-0001"}], "request_id", "r") == "r-0002"
+    # 中间有空洞 ⇒ 仍然取 max+1（不复用空洞里的号，避免静默指向另一条请求）
+    rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}]
+    assert I.next_prefixed_id(rows, "request_id", "r") == "r-0004"
+    # 前缀各自独立
+    assert I.next_prefixed_id([{"reprocess_id": "p-0042"}], "reprocess_id", "p") == "p-0043"
+    assert I.next_prefixed_id([{"task_id": "t-0005"}], "task_id", "t") == "t-0006"
+    # 上限之内最大的那一档仍然照常发号（9999 本身是合法 4 位 ID）
+    assert I.next_prefixed_id([{"request_id": "r-9998"}], "request_id", "r") == "r-9999"
+
+
+def test_next_prefixed_id_refuses_past_the_4_digit_ceiling():
+    """负控（`P-4`）：编号已到上限 ⇒ 必须抛，且错误信息里给出上限值。
+
+    改前实测：这里静默返回 `"r-10000"`（5 位），而 `SearchRequest.validate`
+    只查非空 ⇒ 它会一路落库。所以这条负控钉的是"静默升位宽"这个形态本身。
+    """
+    from agentflow.store import MAX_ID
+
+    with pytest.raises(ValueError) as ei:
+        I.next_prefixed_id([{"request_id": "r-9999"}], "request_id", "r")
+    msg = str(ei.value)
+    assert str(MAX_ID) in msg, f"错误信息必须给出上限值 {MAX_ID}：{msg}"
+    assert "r-10000" in msg, f"必须回显那个越界号（可诊断）：{msg}"
+
+
+def test_next_prefixed_id_refuses_when_rows_already_contain_5_digit_id():
+    """负控的第二条路径：表里已经有 `r-10000` ⇒ 也要拒绝，不许继续往上加。"""
+    with pytest.raises(ValueError):
+        I.next_prefixed_id([{"request_id": "r-10000"}], "request_id", "r")
+
+
+def test_next_prefixed_id_still_refuses_a_prefix_with_separator():
+    """既有负控不许被这次改动放松：带连接号的前缀仍然当场炸。"""
+    with pytest.raises(ValueError):
+        I.next_prefixed_id([], "request_id", "r-")

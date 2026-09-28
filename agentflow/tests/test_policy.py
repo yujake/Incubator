@@ -162,6 +162,24 @@ def test_unknown_edge_target_is_rejected():
         C.ALLOWED_EDGES["M"] = original
 
 
+def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
+    """负控（`FINAL-R4-01`）：主控的边漏掉一个角色（值少一个）⇒ 能力层自家判据必须炸。
+
+    这一条钉的是"键集判据看不见的那一半"：`set(ALLOWED_EDGES) >= set(S.ROLES)`
+    只问"每个角色有没有出边条目"，不问"主控的边是不是全部角色"。
+    实测（R4 批）：把 `ALLOWED_EDGES["M"]` 写成 7 元字面量后，
+    按权限相关的 7 个测试文件跑子集全绿（守点在别处）。
+    """
+    original = frozenset(C.ALLOWED_EDGES["M"])
+    assert original == frozenset(S.ROLES), "前提：真表上主控的边就是全部角色"
+    C.ALLOWED_EDGES["M"] = frozenset(sorted(original)[:-1])
+    try:
+        with pytest.raises(AssertionError, match="必须恰好等于 schema.ROLES"):
+            C.assert_capabilities()
+    finally:
+        C.ALLOWED_EDGES["M"] = original
+
+
 def test_write_set_of_unknown_role_is_conservative():
     """未知角色的写集不是空集 —— 空集等于"它可以和任何人并发"。
 
@@ -210,42 +228,79 @@ def test_write_sets_non_empty_implies_a_write_like_axis():
         C.CAPABILITIES["A"] = original
 
 
-def test_two_layer_declaration_divergence_is_detectable():
-    """交叉断言二：两层声明不一致必须能被判出来（P-13 §10 第 3 条）。
+def test_two_layer_declarations_agree_on_the_real_tree():
+    """交叉断言二：两层声明在真实树上必须说同一句话（P-13 §10 第 3 条已收敛）。
 
     实测的那一处是 `verify.check_formal`：工具层声明 `read`、能力层声明
-    `network`，而"没有任何机器判据看见过"它（R006 只看工具层且是文件级共现）。
-    本轮让它可判定：能力层用遗留取值 `network` 时，工具层的两根轴必须至少有一根非 `none`，
-    否则就是"保守的假话"（审计问'哪些动作会出网'时会把纯本地的动作列进去）。
+    `network`（遗留取值），而"没有任何机器判据看见过"它（R006 只看工具层且是
+    文件级共现；R006 现已退休，判据面移入 R010 的逐工具判定）。
+    B3 收官把两层同批改成 `read` + `exec` ⇒ 这条不一致消失。
+
+    这条用例因此从"断言不一致存在"翻成"断言不一致不存在"：
+    它仍然是一条可红的判据（下面两条用例把两层各自改错，验证判据真的会报）。
     """
     got = C.declaration_divergences()
     codes = {d.code for d in got}
     assert "two_layer_name_unmatched" in codes, "找不到对应工具的动作必须被报出来（不是'一致'）"
+    # 遗留取值带来的两类码随那个取值一起消失：它们现在是死码。
+    assert "two_layer_legacy_overclaims" not in codes, sorted(codes)
+    assert "two_layer_legacy_imprecise" not in codes, sorted(codes)
+    # 真实树上两层零分歧（除"没有比对"这一类 info 之外）。
+    hard = [d for d in got if d.code.startswith("two_layer_") and d.code != "two_layer_name_unmatched"]
+    assert hard == [], [d.to_dict() for d in hard]
 
-    flagged = {d.where for d in got if d.code == "two_layer_legacy_overclaims"}
-    assert any("E.check_formal" in w for w in flagged), (
-        f"§10 第 3 条那处两层不一致没有被判出来：{sorted(flagged)}"
+
+def test_two_layer_legacy_overclaim_is_still_detectable(monkeypatch):
+    """正控：内部轴估值函数对同一份声明给出一致结果（判据没有变成恒真）。
+
+    为什么要保留这条正控：真实树现在"两层一致"，于是 `declaration_divergences`
+    很容易退化成一条恒真的断言（`G-19`：门接上了，但什么都没比）。
+    这里把工具层的声明改成"没写 external"（第三分量为假）并把能力层也清成
+    未迁移形态，验证：
+
+    1. `_tool_axes` 原样读出 `(side_effect, external, explicit)` —— 它不再查
+       任何翻译表，第三个分量就是"人写没写这个字段"；
+    2. 两边都未迁移时，判据不报任何 external 分歧（默认 `none` 对 `none`）。
+    """
+    base = C._tool_side_effects()
+    assert base["verify.check_formal"] == ("read", "exec", True), base["verify.check_formal"]
+    assert C._tool_axes(("read", "none", False)) == ("none", "read", False)
+    assert C._tool_axes(base["verify.check_formal"]) == ("exec", "read", True)
+
+    monkeypatch.setattr(C, "_tool_side_effects",
+                        lambda: {**base, "verify.check_formal": ("read", "none", False)})
+    original = C.CAPABILITIES["E"]
+    C.CAPABILITIES["E"] = tuple(
+        C.ActionSpec(s.role, s.action, s.summary, s.params, s.returns,
+                     side_effect=s.side_effect,
+                     handler_name=s.handler_name,
+                     external=None if s.action == "check_formal" else s.external)
+        for s in original
     )
-    assert all(d.level == "warning" for d in got if d.code == "two_layer_legacy_overclaims")
+    try:
+        got = [d for d in C.declaration_divergences()
+               if "E.check_formal" in d.where and d.code in
+               ("two_layer_external_divergence", "two_layer_external_imprecise")]
+        assert got == [], [d.to_dict() for d in got]
+    finally:
+        C.CAPABILITIES["E"] = original
 
 
 def test_two_layer_divergence_is_real_when_the_capability_understates(monkeypatch):
     """负控：能力层低估风险轴时必须报 error（而不是被"保守"吞掉）。
 
-    正控是真树：`E.check_formal` 只报 `two_layer_legacy_overclaims`（warning），
-    没有 error —— 因为工具层两根轴都是 `none`，能力层的 `network` 是高估。
-    负控把工具层的声明改成 external='exec'（工具层说"我在执行程序"），
-    而能力层不再声称 network ⇒ 能力层低估了风险轴，必须报 error。
+    正控是真树：`E.check_formal` 两层都说 `read` + `exec`，没有 error。
+    负控把能力层的 `external` 抹掉（回到"没迁移"的默认值），
+    而工具层仍然声明 `exec` ⇒ 能力层低估了风险轴，必须报 error。
     """
     base = C._tool_side_effects()
-    assert base["verify.check_formal"] == ("read", "none", False), base["verify.check_formal"]
-    monkeypatch.setattr(C, "_tool_side_effects",
-                        lambda: {**base, "verify.check_formal": ("read", "exec", True)})
+    assert base["verify.check_formal"] == ("read", "exec", True), base["verify.check_formal"]
     original = C.CAPABILITIES["E"]
     C.CAPABILITIES["E"] = tuple(
         C.ActionSpec(s.role, s.action, s.summary, s.params, s.returns,
-                     side_effect="read" if s.action == "check_formal" else s.side_effect,
-                     handler_name=s.handler_name)
+                     side_effect=s.side_effect,
+                     handler_name=s.handler_name,
+                     external=None if s.action == "check_formal" else s.external)
         for s in original
     )
     try:
@@ -254,6 +309,29 @@ def test_two_layer_divergence_is_real_when_the_capability_understates(monkeypatc
         assert all(d.level == "error" for d in got)
     finally:
         C.CAPABILITIES["E"] = original
+
+
+def test_two_layer_external_imprecise_is_a_warning_not_an_error():
+    """新增判据：两层都非 `none` 但精度不同 ⇒ warning（`two_layer_external_imprecise`）。
+
+    为什么它不能是 error：两层都承认"这个动作会触到我们不拥有的事"，
+    风险面没有被低估，只是精度不同（出网与起进程的承接方式不同）。
+    为什么它也不能不报：静默会让"精度不同"变成一件没人看得见的事 ——
+    而报告里看不见的分歧等于不存在（P15 的反面用法：可见但不升级）。
+    """
+    spec = C.ActionSpec("E", "probe", "样本动作", {"type": "object", "properties": {}},
+                        handler_name="run_experiment", side_effect="read", external="egress")
+    base = C._tool_side_effects()
+    # `verify.run_experiment` 工具层声明 exec，这个替身让能力层说 egress。
+    got = C.declaration_divergences_for({"E": (spec,)}, base)
+    hits = [d for d in got if d.code == "two_layer_external_imprecise"]
+    assert hits, [d.to_dict() for d in got]
+    assert all(d.level == "warning" for d in hits)
+    # 负控：两边一致时不许报（否则它会变成一条常驻噪音）
+    same = C.ActionSpec("E", "probe", "样本动作", {"type": "object", "properties": {}},
+                        handler_name="run_experiment", side_effect="read", external="exec")
+    assert [d for d in C.declaration_divergences_for({"E": (same,)}, base)
+            if d.code == "two_layer_external_imprecise"] == []
 
 
 def test_unmapped_actions_are_reported_not_silently_treated_as_consistent():
@@ -330,8 +408,34 @@ def test_unknown_role_and_unknown_action_are_different_refusals():
     assert r1 is not None and r1.reason == "unknown_role"
     r2 = P.check(P.Policy(), _d(action="没有这个动作"))
     assert r2 is not None and r2.reason == "unknown_action"
+
+
+def test_summoning_the_conductor_is_a_forbidden_edge_not_an_unknown_action():
+    """`G-11`：召唤主控必须报 `forbidden_edge`，而不是 `unknown_action`。
+
+    ## 为什么这条断言换过 reason（这是断言错，不是实现错）
+
+    改前这里断言的是 `unknown_action`（附一句"主控没有 Agent 动作"）。
+    那条断言之所以能一直是绿的，是因为 `check` 把整件事交给了
+    `check_action`：它在第一步就把 `to == S.CONDUCTOR_ROLE` 判成
+    `unknown_action` 并返回，于是 `NON_SUMMONABLE` 那条显式判据
+    （连同它 docstring 里"不靠 `ALLOWED_EDGES` 里没人写 M 这个偶然事实"的理由）
+    从来执行不到 —— 登记册 `G-11` 的实测就是"两条判据不可达"。
+
+    代价是读者拿到 `unknown_action` 会以为"角色名拼错了 / 动作不存在"，
+    而事实上发生的是"召唤主控这件事本身不允许"。两者处置相反：
+    前者去查名字，后者去改设计。所以按 `G-11` 的验收判据改成 `forbidden_edge`，
+    并把"主控没有 Agent 动作"这半句留给 `check_action` 自己的用例
+    （`tests/test_coverage_policy.py::test_check_action_accepts_the_conductor_role_presence_but_never_an_action`
+    —— 那一层一个字符没动）。
+    """
     r3 = P.check(P.Policy(), _d(to=S.CONDUCTOR_ROLE, action="summon"))
-    assert r3 is not None and r3.reason == "unknown_action", "主控没有 Agent 动作"
+    assert r3 is not None and r3.reason == "forbidden_edge", (
+        "召唤主控必须报 forbidden_edge（`G-11`）；拿到 unknown_action 说明 "
+        "NON_SUMMONABLE 判据又不可达了"
+    )
+    assert r3.limit == "edge", r3
+    assert S.CONDUCTOR_ROLE in r3.detail, r3.detail
 
 
 def test_forbidden_edge_c_to_b():

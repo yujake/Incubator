@@ -47,8 +47,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .. import schema as S
-from ..interactions import next_prefixed_id
-from .base import ToolResult, fail, ok, spec_from_dataclass_fields, tool
+from ..interactions import IdSpaceExhausted, next_prefixed_id
+from .base import ToolError, ToolResult, fail, ok, spec_from_dataclass_fields, tool
 from .table_tools import assert_request_id_in_space
 
 __all__ = ["ALL_TOOLS", "LEDGER_FILE", "install", "register", "research_list_gaps"]
@@ -151,11 +151,18 @@ def _next_request_id(rows: list[dict]) -> str:
 
     现在：取号规则只有一份实现（`interactions.next_prefixed_id`，
     `interactions.py:1134`），前缀守卫 / 形态 / 冲突跳过全部由它负责；
-    末尾的 `assert_request_id_in_space` 只做一件事 —— 把"超过 9999 的 5 位号"
-    挡在写入之前（那个函数里写了为什么 `next_prefixed_id` 自己挡不住，
-    以及为什么这条判据只能有一处实现）。
+    `P-4` 之后上限也在它里面，末尾的 `assert_request_id_in_space` 是第二道
+    守卫（覆盖"别人自己拼了一个号传进来"的情形）。
+
+    `P-4` 的翻译：`next_prefixed_id` 越界时抛具名的 `IdSpaceExhausted`
+    （继承 `ValueError`），这里精确翻成工具层的 `ToolError` —— 不翻的话它会冒到
+    `ToolRegistry.call` 被兜成 `kind='unexpected'`，于是"空间用尽（已知、可处理）"
+    与"工具内部有 bug"在下游同形。不翻整个 `ValueError`：前缀违规属调用方编码错误。
     """
-    return assert_request_id_in_space(next_prefixed_id(rows, "request_id", "r"))
+    try:
+        return assert_request_id_in_space(next_prefixed_id(rows, "request_id", "r"))
+    except IdSpaceExhausted as exc:
+        raise ToolError(str(exc)) from exc
 
 
 def _questions(store: Any) -> list[dict]:
@@ -224,9 +231,15 @@ def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -
     },
     side_effect="write_local",
     roles=("D",),
-    # 键名从一个真实调用读出（`research_submit_gap`）：除下面这些外还回带
-    # mode / topic 两个键（调用方不必自己拼上下文）。
-    returns="{'request_id','question_id','duplicated','waiting_request_ids','mode','topic'}",
+    # 键名从一个真实调用读出（`research_submit_gap`）。duplicated 两支返回同一套
+    # 8 个键（`G-23`）：判重支没有被提交的请求，故 `topic`/`mode` 如实给 `None`；
+    # 新建支没有"为什么跳过"这件事、也没有拦下它的未完成请求，故
+    # `reason` 给 `None`、`open_requests` 给空列表 —— 调用方不必先判
+    # `duplicated` 才能安全读键。
+    returns=(
+        "{'request_id','question_id','duplicated','topic','mode','waiting_request_ids',"
+        "'reason','open_requests'}"
+    ),
     tags=("research", "gap", "ask-A"),
 )
 def research_submit_gap(
@@ -267,11 +280,16 @@ def research_submit_gap(
             # ---- 查重（§4.4 的硬要求）
             still_open = pending_requests_of(qrow, req_rows)
             if still_open:
+                # 与"新建成功"支返回同一套 8 个键（`G-23`）。本支没有提交任何请求，
+                # 所以 `request_id`/`topic`/`mode` 如实给 None —— 用 None 说"没有"，
+                # 而不是让键不出现（键不出现会让调用方得先判 `duplicated`）。
                 return ok(
                     {
                         "request_id": None,
                         "question_id": question_id,
                         "duplicated": True,
+                        "topic": None,
+                        "mode": None,
                         "reason": "该问题已有未完成的查询请求，未重复提交（否则会刷爆 A 的队列）",
                         "open_requests": [
                             {"request_id": r.get("request_id"), "outcome": r.get("outcome"), "done": r.get("done")}
@@ -328,6 +346,11 @@ def research_submit_gap(
                 "topic": str(topic).strip(),
                 "mode": mode,
                 "waiting_request_ids": waiting,
+                # 判重支才有的两个键，这里如实给"没有"（`G-23`：两条分支同一套 8 键）。
+                # `reason` 是"为什么跳过"的理由，本支没跳过；`open_requests` 是拦下
+                # 提交的那批未完成请求，本支一条都没有（否则根本走不到这里）。
+                "reason": None,
+                "open_requests": [],
             }
         )
     except Exception as e:  # 事务提交失败（例如 schema 校验拦下）=> 结构化失败
@@ -670,6 +693,8 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     print(f"[0] 临时 store：{tmp}")
 
     reg = ToolRegistry(name="d-tools")
+    # 绑定角色（`P-14`）：`research.*` 的声明角色只有 D。
+    reg.bound_role = "D"
     installed = install(reg, st)
     print(f"[1] 注册工具：{installed}")
     assert set(installed) == {

@@ -41,7 +41,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import dedup as _dedup
 from .. import schema as S
 from .. import textutil as _text
-from ..interactions import next_prefixed_id
+from ..interactions import IdSpaceExhausted, next_prefixed_id
 from ..store import IdExhausted, Store, StoreError, Tx
 from .base import ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
 
@@ -56,7 +56,7 @@ TOOL_ROLES: tuple[str, ...] = ("A", "B", "C", "D")
 LIST_LIMIT_MIN, LIST_LIMIT_MAX, LIST_LIMIT_DEFAULT = 1, 500, 50
 SEARCH_LIMIT_MIN, SEARCH_LIMIT_MAX, SEARCH_LIMIT_DEFAULT = 1, 500, 50
 
-#: 建行前的"探针 ID"。见 `_probe_id`。
+#: 建行前的"探针 ID"里那 4 位数字的取值。见 `_probe_id`。
 _PROBE_ID = "9999"
 
 
@@ -131,15 +131,28 @@ def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
     return obj, {**extra, **canonical}
 
 
-def _probe_id() -> str:
-    """建行前用来"预演校验"的占位 ID。
+def _probe_id(table: str) -> str:
+    """建行前用来"预演校验"的占位 ID（按这张表自己的 ID 契约造）。
 
     为什么需要预演：4 位 ID 是 `alloc_id` 在事务内发出去的，而只要发过号，
     计数器就已经脏了 —— 哪怕这行随后校验失败、什么都没落盘，号也收不回来，
     表现为 `verify` 的 `id_gap` 警告。所以先用一个合法占位 ID 把
     "字段/取值有没有问题"查一遍，只有真到了发号那一步才进入事务。
+
+    ## 占位 ID 必须满足"这张表自己的 ID 契约"（`P-17`）
+
+    `schema` 的过程记录契约是 `<前缀>-NNNN`（`PROCESS_ID_PREFIXES`：
+    `search_requests` = `r`、`reprocess_requests` = `p`、`tasks` = `t`），
+    而实体表用的是裸 4 位。此前这里对所有表都返回裸 `"9999"`，于是
+    `schema` 把 `require_process_id` 接进 `SearchRequest.validate` 之后，
+    `table.create(table="search_requests")` 在预演那一步就被自己的校验拒掉
+    （实测原文：`search_requests 行校验失败：request 的过程记录 ID 必须是
+    「前缀 'r' + 连接号 + 恰好 4 位数字」（如 r-0001），收到 '9999'`），
+    连事务都进不去 —— 建行功能整个失效。占位值因此不能写死一种形态，
+    而要从 `schema` 的声明面读前缀：前缀只有一处定义，这里不另抄一份。
     """
-    return _PROBE_ID
+    prefix = S.PROCESS_ID_PREFIXES.get(_spec_of(table)["id_kind"])
+    return f"{prefix}-{_PROBE_ID}" if prefix else _PROBE_ID
 
 
 def _touch_timestamps(table: str, data: dict, *, create: bool, patch: Mapping[str, Any] | None = None) -> None:
@@ -182,18 +195,20 @@ def assert_request_id_in_space(new_id: str) -> str:
 
     ## 为什么"转发给 `next_prefixed_id`"还不够
 
-    `interactions.next_prefixed_id`（`interactions.py:1134`）负责取号规则
+    `interactions.next_prefixed_id` 负责取号规则
     （max+1、跳过已占用、前缀守卫），但它没有任何上限保护：表里已经用到
     `r-9999` 时，它会给出 `"r-10000"`。
 
     而 `r-NNNN` 是一个4 位契约，不是风格偏好：
 
-    - `store.py:52-53`：`MAX_ID = 9999`，"4 位 ID 的上限。用满即 fail-closed
+    - `store.MAX_ID`：`MAX_ID = 9999`，"4 位 ID 的上限。用满即 fail-closed
       （DESIGN.md §0.1 C4）"——项目级的规则是宁可显式失败，也不静默升位宽；
-    - `tests/test_agent_c_service.py:637` 直接断言
+    - `tests/test_agent_c_service.py` 里直接断言
       `S.is_valid_id(row["request_id"][2:])` —— `"10000"` 不是合法 4 位 ID；
-    - `SearchRequest.validate` 只查"非空"，所以 `"r-10000"` 会静默落库，
-      直到某个下游按 4 位解析才发现 —— 那正是"静默升位宽"的形态。
+    - `SearchRequest.validate` 现在也查前缀与 4 位形态（`P-17` 的
+      `require_process_id`），但那只在落库那一刻生效，而取号发生在落库之前 ——
+      越界号必须在发出来的那一刻就挡住，否则计数器已经脏了（`id_gap`）。
+      判据在"发号"与"落库"两处都在，不是重复：一处保证不发，一处保证落了也非法。
 
     所以这里对结果做一道契约检查：取号仍然只有一份实现，但"号必须落在
     4 位空间内"这条判据只能有一处，且必须在写入之前生效。
@@ -204,14 +219,46 @@ def assert_request_id_in_space(new_id: str) -> str:
     # `interactions.py` 是 FC-27 禁改区（auth-audit），我不改它，因此把守卫放在
     # 工具层的这一个函数里，并让 `research_tools` 也调它（不是各写一份）。
     """
-    digits = new_id[2:] if new_id.startswith("r-") else ""
+    # 判据本体在 `_assert_process_id_in_space`（过程记录通用版）：这里只把
+    # "哪张表用哪个前缀"这两个参数固定成 `search_requests` 与 `r`。
+    # `research_tools` 与既有调用方按这个名字取用，名字与语义都不动。
+    return _assert_process_id_in_space(new_id, prefix="r", table="search_requests")
+
+
+def _assert_process_id_in_space(new_id: str, *, prefix: str, table: str) -> str:
+    """`<前缀>-NNNN` 的 4 位空间守卫（过程记录通用版）。
+
+    为什么参数化成"前缀 + 表名"而不是各写一份：过程记录不止 `search_requests`
+    一张（`schema.PROCESS_ID_PREFIXES` 里还有 `p` 与 `t`），而"号必须落在 4 位
+    空间内"这条判据只能有一处 —— 复制一份出来，两处的上限就会漂移，
+    而漂移的表现是"一处 fail-closed、另一处静默升位宽"。
+    """
+    digits = new_id[len(prefix) + 1:] if new_id.startswith(f"{prefix}-") else ""
     if not digits.isdigit() or int(digits) > 9999:
         raise ToolError(
-            f"search_requests 的 r-NNNN 编号空间已用尽（上限 9999），"
+            f"{table} 的 {prefix}-NNNN 编号空间已用尽（上限 9999），"
             f"取号器给出的是 {new_id!r} —— 5 位号会静默违反 4 位契约"
-            "（`store.py:52-53` 的 fail-closed 规则），因此在这里就拒绝。"
+            "（`store.MAX_ID` 的 fail-closed 规则），因此在这里就拒绝。"
         )
     return new_id
+
+
+def _next_process_id(rows: Sequence[Mapping[str, Any]], *, id_field: str, prefix: str,
+                     table: str) -> str:
+    """过程记录取号（唯一实现 + 空间守卫）；主键字段名与前缀由调用方从 schema 传来。
+
+    这里曾经把"不在 `ID_COUNTERS` 里的表"一律当成 `search_requests`：用写死的
+    `"request_id"` 与 `"r"` 取号。`reprocess_requests`（id_kind `reprocess`、
+    主键 `reprocess_id`、前缀 `p`）因此拿到一个 `r-NNNN` 塞进 `reprocess_id` ——
+    `schema` 把 `require_process_id` 接进校验之前，这会静默落库（错误前缀的号）；
+    之后就变成建行必失败。两种后果都不是取号规则的问题，而是"表与前缀的对应关系"
+    被写死了第二份，所以这里改成由 `_allocate_id` 从 `schema.PROCESS_ID_PREFIXES` 读。
+    """
+    try:
+        new_id = next_prefixed_id(rows, id_field, prefix)
+    except IdSpaceExhausted as exc:
+        raise ToolError(str(exc)) from exc
+    return _assert_process_id_in_space(new_id, prefix=prefix, table=table)
 
 
 def _next_request_id(rows: Sequence[Mapping[str, Any]]) -> str:
@@ -234,16 +281,36 @@ def _next_request_id(rows: Sequence[Mapping[str, Any]]) -> str:
     自己写着"删除中间行不会导致撞号"。所以那个语义被放弃了（连同
     `tests/test_tools_table_fs.py` 里断言 `"r-0000"` 的那一行一起改）——
     那是修正一条编码了错误行为的断言，不是放宽断言。
+
+    ## `P-4` 之后：上限在 `next_prefixed_id` 里，类型在这里翻译
+
+    `interactions.next_prefixed_id` 现在自己挡越界（判据只有一份）。它抛的是
+    具名的 `IdSpaceExhausted`（继承 `ValueError`），这里把它精确翻成工具层的
+    `ToolError` —— 否则它会一路冒到 `ToolRegistry.call` 被兜成 `kind='unexpected'`，
+    于是"编号空间用尽"（已知、可处理）与"工具内部有 bug"在下游同形。
+    不把整个 `ValueError` 都翻掉：`next_prefixed_id` 也会因为"prefix 带了连接号"
+    抛 `ValueError`，那是调用方编码错误，应当保持原样冒出去。
+
+    实现只有一份：`_next_process_id`（过程记录通用），这里只固定
+    "`request_id` + `r` + `search_requests`"这三个参数。
     """
-    return assert_request_id_in_space(next_prefixed_id(rows, "request_id", "r"))
+    return _next_process_id(rows, id_field="request_id", prefix="r",
+                            table="search_requests")
 
 
 def _allocate_id(tx: Tx, table: str) -> str:
+    """按这张表在 `schema` 里的声明发一个主键。
+
+    两类分开：`ID_COUNTERS` 覆盖的实体表走 4 位计数器（用满抛 `IdExhausted`）；
+    过程记录表（`id_kind` 不在 `ID_COUNTERS` 里）走 `interactions.next_prefixed_id`。
+    主键字段名与前缀一律从 `schema` 现取 —— 这里不再写死任何一张表的对应关系。
+    """
     spec = _spec_of(table)
     kind = spec["id_kind"]
     if kind in S.ID_COUNTERS:
         return tx.alloc_id(kind)
-    return _next_request_id(tx.rows(table))
+    return _next_process_id(tx.rows(table), id_field=spec["id_field"],
+                            prefix=S.PROCESS_ID_PREFIXES[kind], table=table)
 
 
 def _mark_dirty(tx: Tx, table: str) -> None:
@@ -550,7 +617,7 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
     data: dict[str, Any] = dict(row or {})
     explicit_id = data.get(idf)
-    probe = str(explicit_id) if explicit_id not in (None, "") else _probe_id()
+    probe = str(explicit_id) if explicit_id not in (None, "") else _probe_id(table)
     try:
         _build_row(table, {**data, idf: probe})
     except ToolError as e:
@@ -949,6 +1016,9 @@ def _selftest() -> int:
         st = Store(tmp)
         st.init()
         reg = ToolRegistry(name="selftest")
+        # 绑定角色（`P-14`）：本自检要真的写表，而 `table.*` 的声明角色是 A/B/C/D ——
+        # 取一个非只读角色（C 是只读，拿不到写工具）。
+        reg.bound_role = "A"
         register(reg, store=st, roles=("A", "B", "C", "D"))
         print(f"[环境] 临时库={tmp}；已注册工具={reg.names()}")
 

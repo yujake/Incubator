@@ -681,6 +681,8 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     print(f"    落库：概念 {len(st.rows('concepts'))} 关系 {len(st.rows('relations'))} 文献 {len(st.rows('literature'))}")
 
     reg = ToolRegistry(name="trace")
+    # 绑定角色（`P-14`）：`trace.*` 的声明角色是 C/D，而这张表代表的是只读的 C。
+    reg.bound_role = "C"
     names = register(reg, store=st)
     print(f"[2] 注册：{names}（side_effect 全为 read）")
     print(f"    {[reg.get(n).side_effect for n in names]}")

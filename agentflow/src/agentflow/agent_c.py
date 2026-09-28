@@ -2009,7 +2009,7 @@ class AgentC:
 
         传进去的是原始表行（图快照里的副本），不预先注入 `concept_pair_key`：
         那个派生字段由 `interactions` 就地推导 —— 这避免了
-        "忘了算派生态 ⇒ 静默拿到空结果"这类失效（见 `_with_pair_key` 的说明）。
+        "忘了算派生态 ⇒ 静默拿到空结果"这类失效（见 `interactions.concept_pair_key` 的说明）。
         """
         g = self._g()
         checked, why = self._service_checkable(g)
@@ -3012,6 +3012,10 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
 
     print("[3] 工具注册（低层图工具 + 溯源工具 + C 分析工具），并确认全是 read")
     reg = ToolRegistry(name="agentc-selftest")
+    # 绑定角色（`P-14`）：本自检只调 `graph.*` / `trace.*`，那些工具的 `roles` 是 `("C","D")`，
+    # 而这张注册表代表的是 C（只读）。不绑的话下面每一处 `reg.call` 都会以
+    # "调用方没有声明角色"失败 —— 只读约束的刀不许靠"没写"来拿。
+    reg.bound_role = "C"
     low = register_graph_tools(reg, store=st)
     tr = register_trace_tools(reg, store=st)
     ana = c.register_tools(reg)

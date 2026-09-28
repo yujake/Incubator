@@ -46,28 +46,52 @@ class ToolSpec:
     summary: str              # 一句话（给 LLM 看）
     params: dict              # JSON Schema（object 根），用于校验 + 未来喂给 function-calling
     handler: Callable[..., Any]
-    side_effect: str          # "none" | "write_local" | "network"  ← 决定是否需要审批
+    side_effect: str          # 第一根轴 "none" | "read" | "write_local"  ← 改不改我们拥有的东西
+    declared_external: str = "none"  # 第二根轴 "none" | "egress" | "exec"  ← 触不触我们不拥有的事
     roles: tuple[str, ...]    # 哪些智能体可以拿这个工具
     returns: str = ""         # 返回结构的人话说明
 ```
 
-`side_effect` 是刻意设计的：`network` 与 `write_local` 的工具在无人值守场景需要审批，
-`none` 的不需要。**把审批判断建立在声明上，而不是靠人工记忆。**
+> ⚠️ **本行是历史记录，已按 B3 收官后的盘上事实更正**（更正于 2026-09-26；`docs/PROPOSALS.md` **P-13**）：
+> 原来的 `side_effect` 词表是 `none | read | write_local | network` 四个值，`network` 把
+> **"出网"**与**"起子进程"**两个正交事实压进了同一个取值。B3 把它拆成**两根轴**：
+> `effect ∈ {none, read, write_local}`（= `side_effect`，属性名 `effect`）与
+> `external ∈ {none, egress, exec}`（字段名 **`declared_external`**，属性名 `external`）。
+> `network` 已从 `tools/base.SIDE_EFFECTS` 与 `capabilities.SIDE_EFFECTS` **删除**
+> （声明它会在 `ToolSpec.__post_init__` 直接抛 `ValueError`）。
+> 词表的单一来源仍是 `src/agentflow/tools/base.py::SIDE_EFFECTS` / `EXTERNAL`。
+
+`side_effect` 是刻意设计的：`effect == "write_local"` 或 `external != "none"`（且沙箱未声明可用）的工具
+在无人值守场景需要审批，两根轴都是 `none` 的不需要。
+**把审批判断建立在声明上，而不是靠人工记忆。** 审批只剩**一条推导规则**（`ToolSpec.needs_approval`），
+原来那张 `NEEDS_APPROVAL` 遗留表已随 B3 一起删除。
 
 ### 1.1 工具清单（本轮）
 
-| 组 | 工具 | 角色 | 副作用 |
-|---|---|---|---|
-| 表 CRUD | `table.list` / `table.get` / `table.create` / `table.update` / `table.delete` / `table.count` / `table.schema` | A B C D | write_local |
-| 文件 CRUD | `fs.list` / `fs.read` / `fs.write` / `fs.delete` / `fs.move` / `fs.stat` / `fs.search` | A B C D | write_local |
-| 文献检索（A 专用） | `search.literature` / `search.download` / `search.dedup_check` / `search.providers` | A | network |
-| OCR（B 专用） | `ocr.run` / `ocr.detect_text_layer` / `ocr.backends` | B | none |
-| 图分析（C 专用） | `graph.build` / `graph.hottest` / `graph.paths` / `graph.cold` / `graph.gaps` | C | none |
-| 溯源（D 专用） | `trace.relation` / `trace.concept` / `trace.literature` / `trace.quote` | C D | none |
-| 研究（D 专用） | `research.submit_gap` / `research.list_gaps` / `research.write_note` | D | write_local / network |
+| 组 | 工具 | 角色 | 副作用（第一根轴 `effect`，**实测**） | 第二根轴 `external`（**实测**） |
+|---|---|---|---|---|
+| 表 CRUD | `table.list` / `table.get` / `table.create` / `table.update` / `table.delete` / `table.count` / `table.schema` | A B C D | **混合**：`create`/`update`/`delete` = `write_local`；`list`/`get`/`count`/`schema` = `read` | 全部 `none` |
+| 文件 CRUD | `fs.list` / `fs.read` / `fs.write` / `fs.delete` / `fs.move` / `fs.stat` / `fs.search` | A B C D | **混合**：`write`/`delete`/`move` = `write_local`；`list`/`read`/`stat`/`search` = `read` | 全部 `none` |
+| 文献检索（A 专用） | `search.literature` / `search.download` / `search.dedup_check` / `search.providers` | A | `literature`/`providers`/`dedup_check` = `read`；`download` = `write_local` | `literature`/`providers`/`download` = **`egress`**；`dedup_check` = `none` |
+| OCR（B 专用） | `ocr.run` / `ocr.detect_text_layer` / `ocr.backends` | B | `detect_text_layer` = `read`；`run`/`backends` = `write_local` | `run` = **`egress`**（首次下 easyocr 模型）；其余 `none` |
+| 图分析（C 组为主） | `graph.build` / `graph.neighbors` / `graph.relations_between` / `graph.stats` | C D | `read` | `none` |
+| 溯源（D 组为主） | `trace.chain` / `trace.concept` / `trace.literature` / `trace.relation` | C D | `read` | `none` |
+| 研究（D 专用） | `research.submit_gap` / `research.list_gaps` / `research.write_note` | D | `list_gaps` = `read`；`submit_gap`/`write_note` = `write_local` | 全部 `none` |
 
-**注意 `graph.*` 与 `trace.*` 都是 `side_effect="none"`（纯读）** —— C 的核心诉求是"用程序分析"，
+> ⚠️ **本表的"副作用"列是写作时的快照**，`network` 那两格今天已不成立（拆成两根轴，见上表说明）；
+> 而且**第一根轴也不是全 `write_local`** ——那两行在写作时就写粗了（一个 CRUD 组里读写混在一起）。
+> **权威展示用** `$env:PYTHONPATH='src'; python -m agentflow.cli tools --role <X>`
+> （它从注册表直接打两根轴），**不要手工维护本表**（`docs/ROLE-SPECS.md` §0.3 是同一个口径）。
+> 上表的实测值观测于 **2026-09-26T05:10:26**（`build_registry(store=…)` + 逐条打印）；
+> `R6-AN-3` 复核（2026-09-27）修正了工具名与角色列：分组栏里的"（X 专用 / X 组为主）"
+> 只是简称，**权威的角色面是"角色"那一列的实测值** —— `graph.*` 与 `trace.*` 今天
+> 都是 `C D`，`search.*` 是 `A`、`ocr.*` 是 `B`、`research.*` 是 `D`。
+
+**注意 `graph.*` 与 `trace.*` 的第一根轴都是 `read`（纯读），第二根轴都是 `none`** —— C 的核心诉求是"用程序分析"，
 它应当能**任意多次、任意组合**地查询，而不触发任何审批或写盘。这是把分析做成工具而不是做成 LLM 提示的关键收益。
+（`R6-AN-3` 改前这里写的是"都是 `side_effect=\"none\"`"：两根轴拆开之后，这 8 个工具的
+第一根轴实测全是 `read`、没有一个是 `none` —— 句子的结论没变（都不触发审批），
+但"工具面事实"那一列当时是假的。）
 
 ---
 

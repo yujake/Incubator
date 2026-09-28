@@ -170,7 +170,7 @@
       },
       {
         "check": "m4.path_sweeps_interval",
-        "detail": "18120 path eigenvalues sweep [-4,4] with maximum gap 0.00933 (0.12% of the interval; 0.4s)",
+        "detail": "18120 path eigenvalues sweep [-4,4] with maximum gap 0.00933 (0.12% of the interval; 0.5s)",
         "ok": true,
         "severity": "must_hold"
       },
@@ -248,12 +248,12 @@
       },
       {
         "check": "m5.path_sweeps_interval",
-        "detail": "38880 path eigenvalues sweep [-5,5] with maximum gap 0.01063 (0.11% of the interval; 4.5s)",
+        "detail": "38880 path eigenvalues sweep [-5,5] with maximum gap 0.01063 (0.11% of the interval; 3.7s)",
         "ok": true,
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 9.899,
+    "elapsed_seconds": 8.438,
     "failed_checks": [
       "m3.Hermiticity_gate",
       "m3.sampled_union_fills_interval",
@@ -352,7 +352,7 @@
               ]
             }
           ],
-          "seconds": 0.15,
+          "seconds": 0.17,
           "steps_per_ray": 200,
           "worst_matrix_step": 0.02041999745440305,
           "worst_step_jump": 0.020419997454401904
@@ -387,7 +387,7 @@
         "real_form_cross_check": {
           "max_abs_deviation": 0.7068191386934277
         },
-        "seconds": 0.2,
+        "seconds": 0.23,
         "status": "quoted_from_[6]_Thm_6.5",
         "time_budget_seconds": 300.0
       },
@@ -459,7 +459,7 @@
               ]
             }
           ],
-          "seconds": 0.44,
+          "seconds": 0.48,
           "steps_per_ray": 150,
           "worst_matrix_step": 0.021781278476771634,
           "worst_step_jump": 0.016975188048199197
@@ -476,7 +476,7 @@
           "min": -3.9999999999999987,
           "min_abs_eigenvalue": 3.73366137892328e-18,
           "n_eigenvalues": 12288,
-          "seconds": 0.28
+          "seconds": 0.27
         },
         "hermiticity": {
           "gate": 1e-12,
@@ -494,7 +494,7 @@
         "real_form_cross_check": {
           "max_abs_deviation": 0.7194429546098586
         },
-        "seconds": 0.75,
+        "seconds": 0.78,
         "status": "quoted_from_[6]_Thm_6.5",
         "time_budget_seconds": 300.0
       },
@@ -560,7 +560,7 @@
               ]
             }
           ],
-          "seconds": 4.54,
+          "seconds": 3.66,
           "steps_per_ray": 80,
           "worst_matrix_step": 0.039267384921256886,
           "worst_step_jump": 0.027334618775785944
@@ -577,7 +577,7 @@
           "min": -5.000000000000005,
           "min_abs_eigenvalue": 5.655991904839347e-17,
           "n_eigenvalues": 75000,
-          "seconds": 3.98
+          "seconds": 3.34
         },
         "hermiticity": {
           "gate": 1e-12,
@@ -592,7 +592,7 @@
         },
         "m": 5,
         "npts": 5,
-        "seconds": 8.95,
+        "seconds": 7.43,
         "status": "quoted_from_[6]_Thm_6.5",
         "time_budget_seconds": 300.0
       }

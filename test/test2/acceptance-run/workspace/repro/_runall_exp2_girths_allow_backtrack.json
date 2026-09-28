@@ -168,7 +168,7 @@
         "severity": "must_hold"
       }
     ],
-    "elapsed_seconds": 0.083,
+    "elapsed_seconds": 0.077,
     "failed_checks": [
       "m3.K.no_backtrack_2cycles",
       "m3.S.girth_matches_theorem",
@@ -381,11 +381,11 @@
           "generators_distinct": "the m generators are pairwise distinct and none is the identity"
         },
         "m": 3,
-        "seconds": 0.033,
+        "seconds": 0.025,
         "stilde3_no_commuting_generators": true,
         "stilde_ball": {
           "capped": false,
-          "seconds": 0.0010082721710205078,
+          "seconds": 0.0010020732879638672,
           "size": 64
         },
         "stilde_generators_simple": {
@@ -575,10 +575,10 @@
           "generators_distinct": "the m generators are pairwise distinct and none is the identity"
         },
         "m": 4,
-        "seconds": 0.011,
+        "seconds": 0.015,
         "stilde_ball": {
           "capped": false,
-          "seconds": 0.004385948181152344,
+          "seconds": 0.007685422897338867,
           "size": 195
         },
         "stilde_generators_simple": {
@@ -779,10 +779,10 @@
           "generators_distinct": "the m generators are pairwise distinct and none is the identity"
         },
         "m": 5,
-        "seconds": 0.039,
+        "seconds": 0.037,
         "stilde_ball": {
           "capped": false,
-          "seconds": 0.007583141326904297,
+          "seconds": 0.009816169738769531,
           "size": 456
         },
         "stilde_generators_simple": {

@@ -224,7 +224,7 @@ def run_waves(
 
     out: list[Any] = [None] * len(calls)
     # 信号量是第二道闸：划分已经保证单波 ≤ max_concurrency，
-    # 但如果有人绕过划分（直接调 `_execute`）或将来改了划分，它兜底。
+    # 但如果有人绕过划分（直接调 `_guarded`）或将来改了划分，它兜底。
     sem = threading.Semaphore(max(1, int(policy.max_concurrency)))
     probe = probe if probe is not None else ConcurrencyProbe()
     # 把探针挂回 conductor：`peak_running` 会低估真并发（落 running 行
