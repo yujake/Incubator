@@ -75,11 +75,22 @@ class _Builder:
         return dict(seg) if isinstance(seg, Mapping) else {}
 
     def agent_a(self, store: Any) -> Any:
-        """A：需要 providers（没给就根本不会走到这里）。"""
+        """A：需要 providers（没给就根本不会走到这里）。
+
+        downloader 也要给（2026-09-29 验收 P1 实测的缺口）：只给 providers 时
+        A 能检索、却一条全文都下不下来，台账里逐条写 `error="no_downloader"` ——
+        而 `no_pdf_url` 是另一回事（那篇本来就没有开放获取 PDF）。两种"没下来"
+        必须分得开；`pipeline._build_agent_a` 一直是给的，这一层漏了。
+        """
+        from . import fetch as F
         from .agent_a import AgentA
 
+        acfg = self._cfg_for("A")
+        downloader = None
+        if acfg.get("download", True):
+            downloader = F.default_downloader(self.cfg.get("download") or {})
         return AgentA(store, providers=list(self.providers), llm=self.llm,
-                      config=self._cfg_for("A"))
+                      config=acfg, downloader=downloader)
 
     def agent_b(self, store: Any) -> Any:
         """B：extractor 决定它有没有 LLM（B 的签名里没有 `llm`）。"""

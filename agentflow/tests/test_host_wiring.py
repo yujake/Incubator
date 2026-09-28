@@ -194,6 +194,33 @@ def test_selftest_passes():
     assert host.selftest() == 0
 
 
+def test_a_factory_wires_a_downloader_only_when_the_config_says_so(tmp_path: Path):
+    """A 的工厂要按 `agent_a.download` 给 downloader（验收 P1 撞出来的缺口）。
+
+    第一版只给了 providers ⇒ A 能检索却一条全文都下不下来，文献行的
+    `download.error` 逐条写 `no_downloader`；而 `no_pdf_url` 是另一回事
+    （"这篇本来没有开放获取 PDF"）。两种"没下来"必须分得开 ——
+    所以这里正控（配了 download ⇒ 有下载器）与负控（显式关掉 ⇒ None）都要测。
+    """
+    st = _store(tmp_path)
+    on = host.build_role_registry(st, providers=[object()],
+                                  config={"agent_a": {"download": True},
+                                          "download": {"retries": 1}})
+    off = host.build_role_registry(st, providers=[object()],
+                                   config={"agent_a": {"download": False}})
+    assert getattr(on["A"][1](store=st), "downloader", None) is not None, \
+        "配了 download 就必须有下载器"
+    assert getattr(off["A"][1](store=st), "downloader", None) is None, \
+        "显式关掉时必须是 None（不是'忘了传'）"
+
+
+def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
+    """负控（反真空）：没有 providers 时 A 根本不进登记表 —— 没有"半接线的 A"。"""
+    st = _store(tmp_path)
+    reg = host.build_role_registry(st, providers=None, config={"agent_a": {"download": True}})
+    assert "A" not in reg
+
+
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     """接了线的工具层：M 的面仍然是那 8 件编排面工具，一件领域工具都没有。"""
     st = _store(tmp_path)
