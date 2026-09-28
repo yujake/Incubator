@@ -565,7 +565,7 @@ def test_verify_fixes_rechecks_the_dependency_set_the_caller_hands_it(h_store: S
 
     实测缺口（2026-09-29，P3 台账）：依赖行挂在 `paper/main.tex#<label>` 上，
     而 `dependencies_for_doc` 只认 `used_by` 的 `doc:` 前缀 ⇒ 复审"从库里读"
-    读到的是**空集**，于是上一轮如实报出的 `dangling_dep`（`external_unavailable`）
+    读到的是空集，于是上一轮如实报出的 `dangling_dep`（`external_unavailable`）
     会被判成 `resolved ⇒ fixed` —— 把一个"已知拿不到的前提"静默宣告成"已解决"。
 
     两个方向都要断言，缺一个这条就是真空断言：

@@ -25,6 +25,7 @@ from agentflow import signatures as SIG
 from agentflow import verify as V
 from agentflow.agent_h import AgentH
 from agentflow.store import Store
+from agentflow.tools import review_tools as RV
 
 from conftest import add_concept, add_literature, add_relation
 
@@ -121,6 +122,87 @@ def test_h_review_signs_the_accepted_revision(tmp_path: Path):
     # 证据快照真的落盘、且哈希对得上（不是只有一句声称）
     snap = Path(st.root) / str(recs[0]["evidence_path"])
     assert snap.is_file(), snap
+
+
+def test_signature_carries_honest_review_coverage(tmp_path: Path):
+    """`draft/31` P7 第 4 项：签名要带 `coverage{claims_total, claims_reviewed}`，且如实。
+
+    正控：两条合规断言 ⇒ 2/2、判成 2。
+    负控（"没审到"的诚实路径）：稿件里混进一条「不是对象」的断言 ⇒
+    逐条检查在它上面根本跑不了 ⇒ `claims_total=3` 而 `claims_reviewed=2` ——
+    签名必须如实说"审了 2/3"，不许四舍五入成"全覆盖"。
+    """
+    st = _store(tmp_path)
+    _doc(st, "0000", claims=[_claim("c1"), _claim("c2")])
+    h = AgentH(st)
+    res = h.review("0000", dependencies=[])
+    assert res["coverage"]["claims_total"] == 2
+    assert res["coverage"]["claims_reviewed"] == 2
+    assert res["coverage"]["claims_decided"] == 2
+    rec = _records(st)[0]
+    assert rec["coverage"]["claims_total"] == 2 and rec["coverage"]["claims_reviewed"] == 2
+    # 覆盖率是元数据：它不进 `content_sha256`，所以"补记覆盖率"不会让这一版失效，
+    # 而"改覆盖率"也换不来一次通过（两者都由这一条钉住）。
+    doc = next(r for r in st.rows("documents") if r["doc_id"] == "0000")
+    assert SIG.verify_signature(st.root, {**rec, "coverage": {"claims_total": 99}}, doc) == "valid"
+
+    # ---- 负控："审不到"的那条路径必须如实反映在覆盖率里
+    #
+    # `scan_document` 是公开的纯函数，调用方可以喂一个内存里的稿件
+    # （例如刚落库之前、或从别处拼出来的行）。那时非对象的条目根本没法逐条检查，
+    # 覆盖率必须说 2/3，而不是四舍五入成"全覆盖"。
+    raw = {"doc_id": "0000", "claims": [_claim("c1"), "这不是一个对象", _claim("c2")]}
+    scan = RV.scan_document(raw, dependencies=[])
+    assert scan["coverage"]["claims_total"] == 3
+    assert scan["coverage"]["claims_reviewed"] == 2, "非对象的条目没有被审过，不许算进覆盖率"
+    assert scan["coverage"]["claims_decided"] == 2
+    assert any(f["kind"] == "garbled" for f in scan["findings"]), "非对象的断言本身必须是发现"
+    # 而且这道防线是两层的：这样的行根本写不进库（schema 在写入期就拦），
+    # 所以"库里查出来的稿件覆盖率 <100%"这件事今天不可达 —— 说清这一点，
+    # 免得读者把这条负控读成"库里存在没审到的断言"。
+    with pytest.raises(ValueError):
+        _doc(_store(tmp_path / "third"), "0000", claims=[_claim("c1"), "这不是一个对象"])
+
+
+def test_two_signatures_on_the_same_revision_do_not_invalidate_each_other(tmp_path: Path):
+    """同一版签两次是正常状态（H 重审一轮就再签一条）：两条都必须仍然有效。
+
+    实测缺口（2026-09-29，P7 重签台账）：证据快照的文件名只含内容哈希 ⇒
+    后一条把前一条的快照覆盖掉 ⇒ 前一条的 `evidence_sha256` 对不上 ⇒
+    那条签名永久失效，而 `signature_problems` 遇到第一条无效就返回 ⇒
+    `formal(doc)` 变假 —— 错在"快照被覆盖"这件与内容无关的事上。
+    """
+    st = _store(tmp_path)
+    doc = _doc(st, "0000", status="accepted")   # 只有 accepted 的稿件才谈"该被签"
+    first = _sign(st, doc, at="2026-01-01T00:00:00+00:00")
+    second = _sign(st, doc, at="2026-01-02T00:00:00+00:00")
+    assert first["evidence_path"] != second["evidence_path"], (
+        "两条签名的证据快照路径必须不同，否则后一条会覆盖前一条"
+    )
+    recs = _records(st)
+    assert len(recs) == 2
+    for r in recs:
+        assert SIG.verify_signature(st.root, r, doc) == "valid", r["evidence_path"]
+    assert SIG.signed(doc, recs, root=st.root) is True
+    assert SIG.formal(doc, recs, root=st.root) is True
+    assert _codes(st) == [], [i.to_dict() for i in V.verify_all(st).issues]
+
+
+def test_one_valid_signature_is_enough_and_the_loss_of_it_is_noticed(tmp_path: Path):
+    """判据是"至少一条成立"：一条历史记录失效不该把整份稿件判成"没签"。
+
+    正控：一条被改动过的旧记录 + 一条完好的新记录 ⇒ 仍然 `signed`。
+    负控：把那条完好的也弄坏 ⇒ 必须立刻不成立（否则这条正控就是真空断言）。
+    """
+    st = _store(tmp_path)
+    doc = _doc(st, "0000", status="accepted")
+    _sign(st, doc, at="2026-01-01T00:00:00+00:00")
+    _sign(st, doc, at="2026-01-02T00:00:00+00:00")
+    recs = [dict(r) for r in _records(st)]
+    recs[0]["evidence_sha256"] = "0" * 64          # 旧记录的证据锚被人改坏了
+    assert SIG.signed(doc, recs, root=st.root) is True, "还有一条完好的签名，就该判成立"
+    recs[1]["evidence_sha256"] = "0" * 64          # 新的也坏了 ⇒ 一条都不成立
+    assert SIG.signed(doc, recs, root=st.root) is False
 
 
 def test_review_does_not_sign_a_document_it_did_not_accept(tmp_path: Path):

@@ -326,7 +326,7 @@ class AgentH:
         下游 `review.verify_fixes` 一直收 `dependencies`，而本方法与
         `capabilities` 的声明都不收 —— 于是复审永远退回"从库里读该稿件的依赖"，
         而 `dependencies_for_doc` 只认 `used_by` 的 `doc:` 前缀。一条挂在
-        **别的锚点**上的依赖（实测：`paper/main.tex#prop:step`）在复审眼里根本不存在，
+        别的锚点上的依赖（实测：`paper/main.tex#prop:step`）在复审眼里根本不存在，
         于是上一轮如实报出的 `dangling_dep`（`external_unavailable`）
         会被判成 `resolved ⇒ fixed` —— 那是把一个"已知拿不到的前提"
         静默宣告成"已经解决"。修好之后，复审能拿到同一份清单，

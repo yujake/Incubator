@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T06:54:16+08:00",
+  "generated_at": "2026-09-29T07:50:54+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "0be8ac1f3d5e3dbfbe142627cb2d14629bd200812ebc3964c2b9ae7bb2e41254",
+      "sha256": "35e8c5c0bd29423baef699e4c4381237ddbe7087601a839f83f067697b83a127",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "P3：H.review / H.verify_fixes / H.review_report 的 dependencies 声明由 object/字符串序列改为行序列（与实现及工具层四条声明一致）",
+      "change_note": "T3-P7：D.register_conjecture 的动作声明 + _TOOL_MODULES 登记 conjecture_tools + D 的工具组 + 两层对账数字（49→50 动作）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

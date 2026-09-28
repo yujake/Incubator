@@ -59,6 +59,11 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # T0-9（2026-09-28）：主控工具模块 8 件，工具体一律 `ok(data, **data)` ——
     # 键由运行时数据决定，静态扫描读不出来，所以这 16 处如实记在"看不清"这一栏。
     "conductor_tools.py": 16,
+    # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
+    # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
+    # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由
+    # `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
+    "conjecture_tools.py": 1,
 }
 
 #: 看得见的 `ok({...})` 调用点下界（判据不许真空：扫描器坏掉时必须先是红）。

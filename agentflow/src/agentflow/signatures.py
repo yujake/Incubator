@@ -240,6 +240,18 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
     """这份稿件在"签名"这件事上的问题（空 = 签过且有效）。
 
     只有 `status="accepted"` 的稿件才谈"该被签" —— 草稿没有签名不是缺陷。
+
+    ## 判据是"至少一条签名完全成立"，不是"第一条签名成立"
+
+    同一版内容被签多次是**正常状态**（H 重审一轮就再签一条；改稿后旧签名作废、
+    新签名钉新版）。所以判据必须是"存在一条有效的"，而不是"台账里第一条有效" ——
+    后者会让一条历史记录的失效把整份稿件判成"没签"。实测（2026-09-29）：
+    同一版内容签了两条，其中一条的证据快照被后一条覆盖（当时快照路径只含内容哈希），
+    于是 `formal(doc)` 变假，而它自己这条函数的 docstring 与 `signed()` 写的是
+    "至少一条签名完全成立"。快照路径的重名问题已在 `append_signature` 里修掉，
+    这里修的是判据本身的语义。
+
+    一条都不成立时，返回**第一条**的具体判据码与证据（人要知道是哪种失效）。
     """
     if str(doc_row.get("status") or "") != "accepted":
         return []
@@ -254,15 +266,17 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
         return [(CODE_ACCEPTED_WITHOUT_SIGNATURE,
                  f"稿件 {doc_row.get('doc_id')} 已是 accepted，却没有任何签名记录 ⇒"
                  "「审过了」这件事没有可核的凭据")]
+    problems: list[tuple[str, str]] = []
     for r in same:
         code = verify_signature(root, r, doc_row)
         if code == "valid":
             return []
-        return [(code, f"稿件 {doc_row.get('doc_id')} 的签名不成立（{code}）："
-                       f"name={r.get('name')!r} verdict={r.get('verdict')!r} "
-                       f"inputs.doc_sha256={str((r.get('inputs') or {}).get('doc_sha256'))[:16]!r} "
-                       f"evidence={r.get('evidence_path')!r}")]
-    return []
+        problems.append((code, f"稿件 {doc_row.get('doc_id')} 的签名不成立（{code}）："
+                               f"name={r.get('name')!r} verdict={r.get('verdict')!r} "
+                               f"inputs.doc_sha256="
+                               f"{str((r.get('inputs') or {}).get('doc_sha256'))[:16]!r} "
+                               f"evidence={r.get('evidence_path')!r}"))
+    return problems[:1]
 
 
 def signed(doc_row: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
@@ -301,18 +315,25 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
     snap_dir.mkdir(parents=True, exist_ok=True)
     doc_id = str(record["doc_id"])
     content = str(record["content_sha256"])
-    rel = f"{EVIDENCE_DIR}/{doc_id}-{content[:REF_HASH_LEN]}.json"
+    records, _problems = read_ledger(ledger_path(base))
+    # 快照文件名必须**逐条唯一**：同一版内容被签多次是正常状态（H 重审一轮就再签一条），
+    # 若文件名只含内容哈希，后一条会把前一条的快照覆盖掉 ⇒ 前一条的 `evidence_sha256`
+    # 从此对不上 ⇒ 那条签名永久失效。实测（2026-09-29，P7 重签台账）：正是这样把
+    # `formal(doc)` 变成假的，而错在"快照被覆盖"这件与内容无关的事上。
+    # 序号取"台账里已有多少条"，确定性、可读、且与新记录一一对应。
+    ordinal = len(records) + 1
+    name = f"{doc_id}-{content[:REF_HASH_LEN]}-{ordinal:03d}.json"
+    rel = f"{EVIDENCE_DIR}/{name}"
     snapshot = {"doc_id": doc_id, "content_sha256": content,
                 "at": str(record.get("at") or ""), "verdict": str(record.get("verdict") or ""),
                 "findings": [dict(f) for f in findings]}
-    snap_path = snap_dir / f"{doc_id}-{content[:REF_HASH_LEN]}.json"
+    snap_path = snap_dir / name
     snap_path.write_text(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
                                     separators=(",", ":")) + "\n", encoding="utf-8")
 
     row = dict(record)
     row["evidence_path"] = rel
     row["evidence_sha256"] = hashlib.sha256(snap_path.read_bytes()).hexdigest()
-    records, _problems = read_ledger(ledger_path(base))
     row["prev_hash"] = line_hash(records[-1]) if records else ""
     line = json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     with ledger_path(base).open("a", encoding="utf-8", newline="\n") as fh:

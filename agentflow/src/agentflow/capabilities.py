@@ -240,7 +240,7 @@ _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     "A": ("search", "table", "fs", "research", "trace", "graph"),
     "B": ("ocr", "table", "fs", "trace", "graph"),
     "C": ("graph", "table", "fs", "trace"),
-    "D": ("research", "search", "trace", "graph", "table", "fs"),
+    "D": ("research", "search", "trace", "graph", "table", "fs", "conjecture"),
     "E": ("verify", "table", "fs"),
     "F": ("attack", "table", "fs"),
     "G": ("doc", "table", "fs"),
@@ -385,6 +385,10 @@ _TOOL_MODULES: tuple[str, ...] = (
     "doc_tools",
     "review_tools",
     "conductor_tools",
+    # `draft/30` §T3-P3：猜想台账的产出面（T1 只落了数据面与判据）。
+    # 这张名单是"两层声明对账"的输入：模块不在名单里，它声明的工具就比对不上，
+    # 症状是导入期断言报 `D.register_conjecture` 属于"新的没比对"。
+    "conjecture_tools",
 )
 
 
@@ -457,7 +461,7 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（B3 收官后）：49 个动作 = 16 compared + 33 unmatched + 0 ambiguous。
+    实测（T3-P7 加 `D.register_conjecture` 之后）：50 个动作 = 17 compared + 33 unmatched + 0 ambiguous。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
     于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。
     本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。
@@ -888,6 +892,21 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
             "把研究结果渲染成 markdown 报告",
             _obj({"out_path": _S}),
             "写出文件的路径", side_effect="write_local", handler_name="write_report",
+        ),
+        ActionSpec(
+            "D", "register_conjecture",
+            "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；状态机由 schema 判，"
+            "被引用的实验/文献必须在库里",
+            _obj({"statement": _S, "origin": _S, "conjecture_id": _S, "testable": _OBJ,
+                  "form": {"type": "string", "enum": list(S.CONJECTURE_FORMS)},
+                  "negation_statement": _S,
+                  "status": {"type": "string", "enum": list(S.CONJECTURE_STATUSES)},
+                  "experiment_ids": _ARR_S, "proof_experiment_id": _S,
+                  "counterexample_experiment_id": _S, "promoted_to": _OBJ,
+                  "known_lit_id": _S, "withdraw_reason": _S, "notes": _S},
+                 ("statement", "origin")),
+            "dict（落库后的 conjectures 行）", side_effect="write_local",
+            handler_name="register_conjecture",
         ),
     ),
     # ---------------- E：实验与形式化验证
@@ -2361,7 +2380,8 @@ def assert_capabilities(
 
     # ---- [7b] 对账面必须是一个分区（D-3）
     #
-    # 上面那条只钉 `unmatched`。实测（B3 收官后）：49 个动作 = 16 compared + 33 unmatched + 0 ambiguous。
+    # 上面那条只钉 `unmatched`。实测（T3-P7 加 `D.register_conjecture` 之后）：
+    # 50 个动作 = 17 compared + 33 unmatched + 0 ambiguous。
     # 于是 `ambiguous` 那一格今天恰好是 0，
     # 而没有任何判据看着它 —— 若将来一个动作的 handler_name 在角色工具组里
     # 撞上两个工具，`declaration_divergences()` 只会多一条 info，导入照样成功，

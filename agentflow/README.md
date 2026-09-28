@@ -246,9 +246,9 @@ agentflow/
 │   ├── contextbudget.py      上下文预算（head/tail/spill）
 │   ├── tokenmeter.py         token 记账（**重试按次计费**）+ 开工前守卫
 │   ├── agent_a..h.py         八个角色（每个都能 `python -m agentflow.agent_x` 自检）
-│   ├── tools/                工具层（**12** 个 `*_tools.py`：table / fs / search / ocr / graph /
-│   │                         trace / research / verify / attack / doc / review / conductor，外加 `base.py`
-│   │                         与装配点 `__init__.py`）
+│   ├── tools/                工具层（**13** 个 `*_tools.py`：table / fs / search / ocr / graph /
+│   │                         trace / research / verify / attack / doc / review / conjecture /
+│   │                         conductor，外加 `base.py` 与装配点 `__init__.py`）
 │   ├── providers.py / fetch.py / extract.py / quoteverify.py / textutil.py / dedup.py
 │   ├── llm.py / pipeline.py / demo.py / cli.py
 ├── tests/                    pytest（离线 + 联网两套；见 §2）

@@ -151,7 +151,7 @@ lint_rules_strict_info    = 29 # 同一档的 info 栏（比日常档少 1：R00
 noai_paths_glob    = 27   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
 noai_paths_unique  = 24   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
 noai_paths_categories = 7 # `.noai-paths` 里 `[category: …]` 的分组数；观测 2026-09-27（G3 复测）
-tools_star_tools_py   = 12 # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`（+conductor_tools）（外加 `base.py` 与装配点 `__init__.py`）；观测 2026-09-27（G3 复测）
+tools_star_tools_py   = 13 # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`（+conductor_tools）（外加 `base.py` 与装配点 `__init__.py`）；观测 2026-09-29（T3-P3 加 `conjecture_tools.py`：12 → 13 —— 猜想台账的产出面，T1 只落了数据面与判据；同时改 `README.md` 文件树那一行的同一读数，两者由 `tests/test_release_all.py` 的两条用例分别对账）
 schema_tables      = 16   # `len(schema.TABLES)`；复跑 `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`；观测 2026-09-29（T1 加 `conjectures` 表：15 → 16；表加一行的**触点不止一处**，见 `docs/ROLE-SPECS.md` 与 `draft/30` §T1 的十处清单（9 处代码 + `tests/conftest.DATA_FILES` 这一处判据清单）；`SCHEMA_VERSION` 刻意不动）
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`（观测 2026-09-28 15:4x：随最后一次集中审查的修复（`F-R1d-01` 的退化基线判据 + `F-R1d-04` 的证据锚正控/负控）121 → **124**；再前阶段 B `W1` 的三条新用例 116 → 119、F8-R11 随 F10 那条新用例 115 → 116；量法是"只收集、不真跑"，与该文件 `N passed` 相等的前提是同一行写着的 `0 skipped` + 无 deselect 到 0 + 无失败；本文写这个数的地方见 §9.1 的 FC-27/FC-09 两行）
 LIVE-READINGS:END

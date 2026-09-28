@@ -305,6 +305,20 @@ def scan_document(
     doc_id = str(doc.get("doc_id") or "?")
     claims = doc.get("claims") or []
 
+    # ---- 覆盖率（`draft/31` P7 第 4 项：签名要带 `coverage{claims_total, claims_reviewed}`）
+    #
+    # 为什么要两个计数而不是一个布尔：`claims_reviewed` 是"逐条检查真的在这条上跑过"，
+    # `claims_decided` 是"其中校验器判成了"（`validate_claim.checker_error` 那种
+    # "检查器自己没跑成"必须与"跑过、没问题"分开）。只报一个比例会把两者折平 ——
+    # 而"审了 100%"与"审的时候检查器崩了"是完全不同的两件事。
+    #
+    # 这一格只覆盖"稿件有没有把自己说清楚"（引用/证据等级/否定分类/字段合规），
+    # 不覆盖"数学对不对" —— 后者的判据是 proof 级证据（FC-22），要另给。
+    # 说清这一点是覆盖率可被信任的前提：一个声称"我审过全部断言"的自动审校器
+    # 会被读成"数学被验过了"，那不是本函数做的事。
+    claims_total = len(claims)
+    reviewed = 0
+    decided = 0
     seen_ids: dict[str, str] = {}
     for i, c in enumerate(claims):
         if not isinstance(c, Mapping):
@@ -321,6 +335,7 @@ def scan_document(
                 )
             )
             continue
+        reviewed += 1
         cid = str(c.get("claim_id") or f"claims[{i}]")
         text = str(c.get("text") or "")
         cites = c.get("citations") or []
@@ -480,6 +495,8 @@ def scan_document(
         if not isinstance(c, Mapping):
             continue
         spec = CA.validate_claim(c)
+        if spec.checked:
+            decided += 1
         fallback_cid = str(c.get("claim_id") or f"claims[{i}]")
         for issue in spec.issues:
             if issue.code in _H_OWN_CODES:
@@ -599,8 +616,20 @@ def scan_document(
                     f["line_unavailable_reason"] = ""
                     lines_located += 1
 
+    coverage = {
+        "claims_total": claims_total,
+        "claims_reviewed": reviewed,
+        "claims_decided": decided,
+        "note": (
+            "`claims_reviewed` = 逐条字段/引用/证据等级检查真的跑过的断言数；"
+            "`claims_decided` = 其中校验器判成了的（判不了的另计）。"
+            "本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——"
+            "后者要 proof 级证据（FC-22），不由本函数给出。"
+        ),
+    }
     reason = (
         f"机械检查 error={len(errors)}、warning={len(warnings)}、info={len(findings) - len(errors) - len(warnings)}；"
+        f"覆盖率 {reviewed}/{claims_total}（判成 {decided}）；"
         + (
             f"依赖闭合已检查（{dep_check.get('reason')}）"
             if dep_checked
@@ -617,6 +646,9 @@ def scan_document(
         "info_count": len(findings) - len(errors) - len(warnings),
         "dep_check": dep_check,
         "verdict": verdict,
+        # 覆盖率与 verdict 必须一起给：`accepted` 只说"没查出问题"，
+        # 说不出"这句话是在多少条断言上成立的"。
+        "coverage": coverage,
         # `reason` 与 verdict 必须一起给：只给一个受控词，调用方看不出
         # "unverified" 到底是"没查依赖"还是"还缺别的输入"。
         "reason": reason,
@@ -854,6 +886,7 @@ def review_document(
     signature, signature_error = _sign_accepted_revision(
         store, doc_id, verdict=verdict, actor=actor, round_no=round_no,
         status_now=status_now, status_updated=status_updated,
+        coverage=scan.get("coverage"),
     )
 
     reason_bits = [
@@ -864,6 +897,8 @@ def review_document(
             else f"依赖闭合**没查**（{scan['dep_check'].get('reason')}）⇒ 不能判 accepted"
         ),
         f"新增发现 {len(new_findings)} 条、与已有发现重复被跳过 {duplicate_skipped} 条",
+        f"覆盖率 {scan['coverage']['claims_reviewed']}/{scan['coverage']['claims_total']}"
+        f"（判成 {scan['coverage']['claims_decided']}）",
     ]
     if reopened:
         reason_bits.append(f"重开 {len(reopened)} 条「标了 fixed 但重跑仍复现」的发现")
@@ -881,6 +916,7 @@ def review_document(
         "warning_count": scan["warning_count"],
         "info_count": scan["info_count"],
         "dep_check": scan["dep_check"],
+        "coverage": scan["coverage"],
         "status": status_now,
         "status_updated": status_updated,
         "status_error": status_error,
@@ -903,6 +939,7 @@ def _sign_accepted_revision(
     round_no: int | None,
     status_now: str,
     status_updated: bool,
+    coverage: Mapping[str, Any] | None = None,
 ) -> tuple[dict | None, str | None]:
     """判 accepted 之后签一条（`draft/29` §8.8；`draft/30` §T4-B）。
 
@@ -939,6 +976,10 @@ def _sign_accepted_revision(
                 "model": "",           # 机械审没有模型（有 LLM 时由接线层填，不在这儿编）
                 "prompt_version": "",
                 "temperature": None,
+                # `draft/31` P7 第 4 项：签名要带"审了多少条断言"。
+                # 它是元数据，不进 `content_sha256`（那一位只覆盖稿件内容）——
+                # 所以补记覆盖率不会让已签的这一版失效，而漏记也不会让签名看起来通过。
+                "coverage": dict(coverage or {}),
                 "inputs": {"doc_sha256": str(doc.get("content_sha256") or ""),
                            "evidence_hashes": []},
                 "basis": {
@@ -1240,6 +1281,10 @@ def review_report(
     markdown = G.render_review_report(report)
     absolute.parent.mkdir(parents=True, exist_ok=True)
     absolute.write_text(markdown, encoding="utf-8")
+    # 覆盖率（`draft/31` P7 第 4 项）：就地重算而不是让调用方传进来 ——
+    # 传进来的覆盖率是可以编的，而这一格的全部意义就是"如实"。
+    # 与 `review_document` 同一份判据源（`scan_document`），所以两处不会给出两个数。
+    coverage = scan_document(doc, dependencies=deps if deps_checked else None)["coverage"]
     return {
         "doc_id": str(doc_id),
         "round": int(round_no),
@@ -1254,6 +1299,7 @@ def review_report(
         "failed_gates": list(report["verdict"]["failed_gates"]),
         "unknown_gates": list(report["verdict"]["unknown_gates"]),
         "own_error_count": len(list(own_errors)),
+        "coverage": coverage,
         "markdown": markdown,
     }
 
@@ -1370,7 +1416,7 @@ def register(
             ),
             side_effect="write_local",
             roles=_WRITER_ROLES,
-            returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error'}",
+            returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage'}",
             tags=("review", "write"),
         )
     )
@@ -1455,7 +1501,7 @@ def register(
             returns=(
                 "{'doc_id','round','report_path','revision_hash','verdict','gates_total',"
                 "'pass_count','fail_count','unknown_count','not_applicable_count',"
-                "'failed_gates','unknown_gates','own_error_count','markdown'}"
+                "'failed_gates','unknown_gates','own_error_count','coverage','markdown'}"
             ),
             tags=("review", "write", "gate"),
         )
