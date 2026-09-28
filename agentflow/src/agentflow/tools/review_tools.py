@@ -847,6 +847,14 @@ def review_document(
 
     target_status = "accepted" if (scan["error_count"] == 0 and dep_checked) else "in_review"
     status_updated, status_error, status_now = _set_doc_status(store, doc_id, target_status, actor=actor)
+    # `T4-B`：判 accepted 就签一条（`draft/29` §8.8.3"接受档签一条，毫不犹豫"）。
+    # 签在状态写成之后：签名钉的是那一版的内容哈希与它读到的发现，
+    # 与状态更新是两个动作（状态失败时仍然可以签 —— 但那会让 signature 与 status 不符，
+    # 所以这里只在状态真的成为 accepted 时签，并把失败如实带回去）。
+    signature, signature_error = _sign_accepted_revision(
+        store, doc_id, verdict=verdict, actor=actor, round_no=round_no,
+        status_now=status_now, status_updated=status_updated,
+    )
 
     reason_bits = [
         f"机械检查发现 error={scan['error_count']}、warning={scan['warning_count']}、info={scan['info_count']}",
@@ -876,12 +884,74 @@ def review_document(
         "status": status_now,
         "status_updated": status_updated,
         "status_error": status_error,
+        "signature": signature,
+        "signature_error": signature_error,
         "verdict": verdict,
         "reason": "；".join(reason_bits) + "。",
     }
 
 
 # ---------------------------------------------------------------- 复审（判 fixed / open）
+
+
+def _sign_accepted_revision(
+    store: Any,
+    doc_id: str,
+    *,
+    verdict: str,
+    actor: str,
+    round_no: int | None,
+    status_now: str,
+    status_updated: bool,
+) -> tuple[dict | None, str | None]:
+    """判 accepted 之后签一条（`draft/29` §8.8；`draft/30` §T4-B）。
+
+    - 只在状态真的成为 `accepted` 时签：签名钉的是"这一版被审过"，而状态没写成
+      （例如盘上那行不合 schema）说明这一版还不是可引来源 ⇒ 签了会与 status 分家；
+    - `instance_id` 取"谁 + 何时"（一次审就是一次调用）。它只作留痕，
+      不作门槛（§8.8.4 收尾那一段逐字说了这件事）；
+    - 返回 `(签名记录 或 None, 错误说明 或 None)` —— 失败如实带回，
+      不吞掉（"审过了但没签上"与"审过并签上"必须分得开）。
+    """
+    if not (status_updated and status_now == "accepted"):
+        return None, None
+    from .. import schema as S
+    from .. import signatures as SIG
+
+    doc = next((r for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)), None)
+    if doc is None:
+        return None, f"签名时稿件 {doc_id} 读不出来"
+    findings = [r for r in store.rows("review_findings") if str(r.get("doc_id")) == str(doc_id)]
+    at = S.now_iso()
+    try:
+        return SIG.append_signature(
+            store.root if getattr(store, "root", None) is not None else ".",
+            {
+                "doc_id": str(doc_id),
+                "content_sha256": str(doc.get("content_sha256") or ""),
+                "claims_hash": SIG.claims_hash_of(doc),
+                "name": SIG.SIGNER_NAME,
+                "at": at,
+                "scope": "document",
+                "verdict": verdict,
+                "note": f"round={round_no}；机械检查判定 {verdict}",
+                "instance_id": f"{actor}@{at}",
+                "model": "",           # 机械审没有模型（有 LLM 时由接线层填，不在这儿编）
+                "prompt_version": "",
+                "temperature": None,
+                "inputs": {"doc_sha256": str(doc.get("content_sha256") or ""),
+                           "evidence_hashes": []},
+                "basis": {
+                    "codes_checked": sorted({str(f.get("kind") or "") for f in findings if f.get("kind")}),
+                    "finding_ids": sorted({str(f.get("finding_id") or "") for f in findings if f.get("finding_id")}),
+                    "rounds": int(round_no or 0),
+                    "dimensions": sorted({str(f.get("axis") or "") for f in findings if f.get("axis")}),
+                },
+            },
+            findings=findings,
+        ), None
+    except (ValueError, OSError) as e:
+        return None, f"{type(e).__name__}: {e}"
 
 
 def verify_fixes(
@@ -1300,7 +1370,7 @@ def register(
             ),
             side_effect="write_local",
             roles=_WRITER_ROLES,
-            returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status'}",
+            returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error'}",
             tags=("review", "write"),
         )
     )

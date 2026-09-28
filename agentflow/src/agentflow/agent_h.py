@@ -460,7 +460,7 @@ def _seed_document(
 ) -> dict:
     """在自检里直接写一行 schema 合法的稿件（不经过 G，保持 H 的自检自足）。
 
-    `T4-A`：内容哈希由**写侧**在每一行稿件上钉住（G 就是这样），所以这里也照做 ——
+    `T4-A`：内容哈希由写侧在每一行稿件上钉住（G 就是这样），所以这里也照做 ——
     不能只在 `status="accepted"` 时补：H 会稍后把 draft 置成 accepted，而
     `_set_doc_status` 只改 status（连 `updated_at` 都不碰）⇒ 那时再来补哈希就晚了。
     """

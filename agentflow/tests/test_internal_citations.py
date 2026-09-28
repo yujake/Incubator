@@ -122,14 +122,35 @@ def _lit(st: Store, lit_id: str = "0000") -> dict:
     return _put(st, "literature", row.to_dict())
 
 
+def _sign(st: Store, doc_row: dict, *, name: str = SIG.SIGNER_NAME,
+          verdict: str = "accepted") -> dict:
+    """给一行稿件签一条（T4-B 之后，"accepted 却没人签"本身也是一种缺陷）。"""
+    cur = SIG.content_sha256_of(doc_row)
+    return SIG.append_signature(st.root, {
+        "doc_id": str(doc_row["doc_id"]),
+        "content_sha256": cur,
+        "name": name,
+        "at": TS,
+        "scope": "document",
+        "verdict": verdict,
+        "instance_id": f"test@{TS}",
+        "inputs": {"doc_sha256": cur, "evidence_hashes": []},
+        "basis": {"codes_checked": [], "finding_ids": [], "rounds": 1, "dimensions": []},
+    })
+
+
 def _cited(st: Store, *, target_status: str = "accepted", target_title: str = "被引稿") -> dict:
     """造一条"引用内部断言"的稿子，返回被引稿那一行。
 
     稿件号用 0000 / 0001（连续 ⇒ 不引入 `id_gap` 这类与本案无关的噪音）。
+    被引稿是 `accepted` 时顺手签一条 —— 否则会多出 `accepted_without_signature`
+    （那是 `draft/30` §T4-B 的判据，与本案要测的内部引用无关）。
     """
     _lit(st)
     target = _doc(st, "0000", [_claim("c1", ["lit:0000"])], status=target_status,
                   title=target_title)
+    if target_status == "accepted":
+        _sign(st, target)
     _doc(st, "0001", [_claim("c1", [SIG.doc_ref("0000", "c1", target)])])
     return target
 

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T02:58:37+08:00",
+  "generated_at": "2026-09-29T03:44:14+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -594,10 +594,10 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "12d4b3d4bafe7aa35c7d80deb5eb3c3abdcdc3e7a261394f6bed57f9d1c1e5c1",
+      "sha256": "7d3bf7cd865eaa198d7ebdb7a0067f7efc7d4341de605c6265dcde5bd1d764e2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T4-A（2026-09-29）：内部引用的数据面 —— Document 加 revision/content_sha256（accepted 必须带哈希）、Dependency 加 source_doc_id/source_claim_id、verify 加 doc: 引用三条判据 + content_hash_mismatch + 内部依赖两条。依据 draft/30 新条目 §T4-A；判据 tests/test_internal_citations.py 16 passed。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
+      "change_note": "T4-B（2026-09-29）：verify_all 加签名台账判据（accepted_without_signature / stale_signature / signature_verdict_not_accepting / signer_not_reviewer / signature_inputs_mismatch / signature_evidence_unverifiable / signature_ledger_corrupt）+ Path 导入。依据 draft/30 新条目 §T4-B；判据 tests/test_doc_signatures.py 17 passed。AI 代改，待 2 名 reviewer 走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

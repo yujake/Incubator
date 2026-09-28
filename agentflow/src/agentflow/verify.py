@@ -22,6 +22,7 @@ import re
 
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from . import dedup as D
@@ -1144,6 +1145,26 @@ def verify_all(
                               f"{r.get('quote', '')[:80]!r}…"
                               + ("（表里已记录 quote_verified=false，属已知并承认的缺陷）" if stored is False else ""))
                     )
+
+    # ---- 签名台账（`draft/30` §T4-B）：`accepted` 的稿件必须有**可核的**签名
+    #
+    # 台账是文件（`DOC-SIGNATURES.jsonl`），不进 `schema.TABLES`（`draft/29` §8.8.7）。
+    # 三态纪律在这块的具体形态：账"读不出来"（坏行/断链）与"没有这条签名"是两件事，
+    # 前者报 `signature_ledger_corrupt`，后者报 `accepted_without_signature`。
+    sig_root = Path(getattr(store, "root", "."))
+    sig_records, sig_bad_lines = SIG.read_ledger(SIG.ledger_path(sig_root))
+    for bad in sig_bad_lines:
+        rep.issues.append(Issue("error", "documents", None, SIG.CODE_LEDGER_CORRUPT,
+                                f"签名台账读不出来：{bad}"))
+    for broken in SIG.chain_problems(sig_records):
+        rep.issues.append(Issue("error", "documents", None, SIG.CODE_LEDGER_CORRUPT,
+                                f"签名台账链断了：{broken}"))
+    sig_checked = 0
+    for d in documents:
+        for code, msg in SIG.signature_problems(sig_root, d, sig_records):
+            rep.issues.append(Issue("error", "documents", d.get("doc_id"), code, msg))
+            sig_checked += 1
+    rep.checked["signatures"] = sig_checked
 
     # ---- 猜想：它引用的东西必须真的存在（依据 `draft/30` §T1 第 7 处触点）
     #

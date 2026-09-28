@@ -28,16 +28,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 #: 参与内容哈希的字段（顺序无关：序列化时 `sort_keys=True`）。
 CANONICAL_FIELDS: tuple[str, ...] = ("kind", "title", "sections", "claims", "open_problems")
 
-#: 三个**列表**字段：缺字段与空列表必须算同一版。
+#: 三个列表字段：缺字段与空列表必须算同一版。
 #:
 #: 实测踩到的坑（`T4-A` 第一批）：夹具/调用方给的字典常常没有 `sections` 键，
 #: 而落库后的行是 `[]` —— 若把"缺键"读成 `None`，同一份内容就有两种哈希，
-#: `content_hash_mismatch` 会在**完全干净**的库上开火
+#: `content_hash_mismatch` 会在完全干净的库上开火
 #: （实测：`test_fully_clean_workspace_has_no_errors` 就是这样红的）。
 LIST_FIELDS: tuple[str, ...] = ("sections", "claims", "open_problems")
 
@@ -48,7 +49,7 @@ REF_HASH_LEN = 16
 def _canonical_bytes(row: Mapping[str, Any]) -> bytes:
     """把稿件的内容序列化成规范字节串（键排序、无多余空白、非 ASCII 原样）。
 
-    列表字段用 `row.get(k) or []` 归一：缺键、`None`、空列表三者在**内容**上
+    列表字段用 `row.get(k) or []` 归一：缺键、`None`、空列表三者在内容上
     是同一件事（"这篇稿子没有那一节"），不许因为写法不同而算出两个哈希。
     """
     payload: dict[str, Any] = {k: row.get(k) for k in CANONICAL_FIELDS}
@@ -94,6 +95,229 @@ def parse_doc_ref(ref: str) -> tuple[str, str, str] | None:
     if not doc_id or not claim_id:
         return None
     return doc_id, claim_id, rev
+
+
+# ---------------------------------------------------------------- 签名台账（T4-B）
+#
+# `draft/29` §8.8：签名对象是"某一个修订版"（`doc_id + content_sha256`），
+# 记录落成文件台账（append-only JSONL），不进 `schema.TABLES`。
+# 这一节只做"记录的写法与读法"；谁有资格签、签得上算不上，由下面几组判据回答。
+
+#: 台账文件名（工作区根下）。
+LEDGER_NAME = "DOC-SIGNATURES.jsonl"
+#: 证据快照目录（工作区根下）。一条签名一份，文件名钉住内容哈希。
+EVIDENCE_DIR = "doc-signatures"
+#: 只有审核角色有资格签（`draft/29` §8.8.2：角色名说明"谁有资格"，
+#: `instance_id` 说明"是哪一次审"）。
+SIGNER_NAME = "agent-H"
+#: "接受档"判定。设计的字面是 `verdict == "accepted"`，而本仓 `review` 的判定词表实测是
+#: `rejected / unverified / accepted_with_warnings / accepted`，且 §8.8.3 明说
+#: "含 `external_unavailable` 依赖 ⇒ H 给 warning（已知边界）"也要签一条。
+#: 所以接受档是这两个 —— 不把 warning 当拒绝（那会把"已知边界"变成"不许发布"）。
+ACCEPTING_VERDICTS: tuple[str, ...] = ("accepted", "accepted_with_warnings")
+
+#: 判据码（`verify` 直接消费）。放在这里是为了让"算法 + 词表"只有一处。
+CODE_ACCEPTED_WITHOUT_SIGNATURE = "accepted_without_signature"
+CODE_STALE_SIGNATURE = "stale_signature"
+CODE_VERDICT_NOT_ACCEPTING = "signature_verdict_not_accepting"
+CODE_SIGNER_NOT_REVIEWER = "signer_not_reviewer"
+CODE_INPUTS_MISMATCH = "signature_inputs_mismatch"
+CODE_EVIDENCE_UNVERIFIABLE = "signature_evidence_unverifiable"
+CODE_LEDGER_CORRUPT = "signature_ledger_corrupt"
+
+#: 一条签名记录必须有的字段（缺一条就不许写进台账）。
+REQUIRED_SIGNATURE_FIELDS: tuple[str, ...] = (
+    "doc_id", "content_sha256", "name", "at", "scope", "verdict", "instance_id",
+    "evidence_path", "evidence_sha256", "inputs", "basis",
+)
+
+#: 其中由 `append_signature` 自己产出的两个（证据锚）：调用方不必给，
+#: 也不能自己填 —— 否则"证据锚"就退化成一个可以随便写的字符串。
+DERIVED_SIGNATURE_FIELDS: tuple[str, ...] = ("evidence_path", "evidence_sha256")
+
+
+def ledger_path(root: str | Path) -> Path:
+    """台账文件路径（只算路径，不建目录）。"""
+    return Path(root) / LEDGER_NAME
+
+
+def evidence_dir(root: str | Path) -> Path:
+    """证据快照目录（只算路径，不建目录）。"""
+    return Path(root) / EVIDENCE_DIR
+
+
+def line_hash(record: Mapping[str, Any]) -> str:
+    """一行的规范哈希（不含 `prev_hash` 自己）—— 链式台账的链节。"""
+    payload = {k: v for k, v in record.items() if k != "prev_hash"}
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def read_ledger(path: str | Path) -> tuple[list[dict], list[str]]:
+    """读台账；返回 `(记录, 问题)`。
+
+    坏行逐条报出来（带行号），不静默跳过 —— "读不出来"与"没有这一行"
+    是两件事（三态纪律）。文件不存在 ⇒ 空台账、零问题（那是合法初态）。
+    """
+    p = Path(path)
+    if not p.is_file():
+        return [], []
+    records: list[dict] = []
+    problems: list[str] = []
+    for i, raw in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw.strip():
+            continue
+        try:
+            obj = json.loads(raw)
+        except ValueError as e:
+            problems.append(f"第 {i} 行读不出来（{type(e).__name__}: {e}）")
+            continue
+        if not isinstance(obj, dict):
+            problems.append(f"第 {i} 行不是 JSON 对象")
+            continue
+        records.append(obj)
+    return records, problems
+
+
+def chain_problems(records: Sequence[Mapping[str, Any]]) -> list[str]:
+    """链完整性：每条记录的 `prev_hash` 必须等于上一行的 `line_hash`；首行为空串。"""
+    out: list[str] = []
+    prev = ""
+    for i, r in enumerate(records):
+        if str(r.get("prev_hash") or "") != prev:
+            out.append(f"第 {i + 1} 条的 prev_hash={str(r.get('prev_hash'))[:12]!r} "
+                       f"与上一行的哈希 {prev[:12]!r} 不符（台账被插队或删过）")
+        prev = line_hash(r)
+    return out
+
+
+def _rel_inside(root: str | Path, path: str | Path) -> tuple[str, Path] | None:
+    """把路径规范化到工作区内；越界/绝对路径 ⇒ `None`（拒绝，不抛）。"""
+    base = Path(root).resolve()
+    raw = str(path).replace("\\", "/")
+    if raw.startswith("/") or ":" in raw or ".." in raw.split("/"):
+        return None
+    target = (base / raw).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        return None
+    return raw, target
+
+
+def verify_signature(root: str | Path, record: Mapping[str, Any],
+                     doc_row: Mapping[str, Any]) -> str:
+    """逐条判一条签名；返回判据码，全部通过则返回 `"valid"`。
+
+    判的顺序与 `draft/29` §8.8.4 的五条逐字对应：谁签的 → 判定档 → 签的是这一版 →
+    它读到的输入是这一版 → 证据锚可复核。
+    """
+    name = str(record.get("name") or "")
+    if name != SIGNER_NAME or name == str(doc_row.get("created_by") or ""):
+        return CODE_SIGNER_NOT_REVIEWER
+    if str(record.get("verdict") or "") not in ACCEPTING_VERDICTS:
+        return CODE_VERDICT_NOT_ACCEPTING
+    cur = content_sha256_of(doc_row)
+    if str(record.get("content_sha256") or "") != cur:
+        return CODE_STALE_SIGNATURE
+    inputs = record.get("inputs") or {}
+    if not isinstance(inputs, Mapping) or str(inputs.get("doc_sha256") or "") != cur:
+        return CODE_INPUTS_MISMATCH
+    located = _rel_inside(root, str(record.get("evidence_path") or ""))
+    if located is None:
+        return CODE_EVIDENCE_UNVERIFIABLE
+    _raw, path = located
+    if not path.is_file():
+        return CODE_EVIDENCE_UNVERIFIABLE
+    got = hashlib.sha256(path.read_bytes()).hexdigest()
+    if got != str(record.get("evidence_sha256") or ""):
+        return CODE_EVIDENCE_UNVERIFIABLE
+    return "valid"
+
+
+def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
+                       records: Sequence[Mapping[str, Any]]) -> list[tuple[str, str]]:
+    """这份稿件在"签名"这件事上的问题（空 = 签过且有效）。
+
+    只有 `status="accepted"` 的稿件才谈"该被签" —— 草稿没有签名不是缺陷。
+    """
+    if str(doc_row.get("status") or "") != "accepted":
+        return []
+    cur = content_sha256_of(doc_row)
+    mine = [r for r in records if str(r.get("doc_id") or "") == str(doc_row.get("doc_id") or "")]
+    same = [r for r in mine if str(r.get("content_sha256") or "") == cur]
+    if not same:
+        if mine:
+            return [(CODE_STALE_SIGNATURE,
+                     f"稿件 {doc_row.get('doc_id')} 已是 accepted，但台账里的 {len(mine)} 条签名"
+                     f"钉的都是别的版本（当前 {cur[:16]}…）⇒ 改稿之后旧审批不许沿用")]
+        return [(CODE_ACCEPTED_WITHOUT_SIGNATURE,
+                 f"稿件 {doc_row.get('doc_id')} 已是 accepted，却没有任何签名记录 ⇒"
+                 "「审过了」这件事没有可核的凭据")]
+    for r in same:
+        code = verify_signature(root, r, doc_row)
+        if code == "valid":
+            return []
+        return [(code, f"稿件 {doc_row.get('doc_id')} 的签名不成立（{code}）："
+                       f"name={r.get('name')!r} verdict={r.get('verdict')!r} "
+                       f"inputs.doc_sha256={str((r.get('inputs') or {}).get('doc_sha256'))[:16]!r} "
+                       f"evidence={r.get('evidence_path')!r}")]
+    return []
+
+
+def signed(doc_row: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
+           *, root: str | Path) -> bool:
+    """`draft/29` §8.8.4 的 `signed(doc)`：至少一条签名完全成立。"""
+    return not signature_problems(root, doc_row, records)
+
+
+def formal(doc_row: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
+           *, root: str | Path) -> bool:
+    """`formal(doc) ⇔ signed(doc) ∧ status == "accepted"`。"""
+    return (str(doc_row.get("status") or "") == "accepted"
+            and signed(doc_row, records, root=root))
+
+
+def append_signature(root: str | Path, record: Mapping[str, Any], *,
+                     findings: Sequence[Mapping[str, Any]] = ()) -> dict:
+    """写一条签名：先落证据快照，再追加台账一行（带 `prev_hash`）。
+
+    写侧闸门（`draft/29` §8.8.7 的"禁自批"）：签名者必须是 `agent-H`、
+    判定必须是接受档、必填字段必须齐 —— 否则 `ValueError`，不写半个文件。
+    """
+    missing = [k for k in REQUIRED_SIGNATURE_FIELDS
+               if k not in DERIVED_SIGNATURE_FIELDS and not record.get(k)]
+    if missing:
+        raise ValueError(f"签名记录缺必填字段 {missing}（`draft/29` §8.8.2 的字段表）")
+    name = str(record.get("name") or "")
+    if name != SIGNER_NAME:
+        raise ValueError(f"只有 {SIGNER_NAME!r} 有资格签，收到 {name!r}（禁自批）")
+    if str(record.get("verdict") or "") not in ACCEPTING_VERDICTS:
+        raise ValueError(f"verdict 必须是接受档 {ACCEPTING_VERDICTS} 之一，"
+                         f"收到 {record.get('verdict')!r}")
+
+    base = Path(root)
+    snap_dir = evidence_dir(base)
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    doc_id = str(record["doc_id"])
+    content = str(record["content_sha256"])
+    rel = f"{EVIDENCE_DIR}/{doc_id}-{content[:REF_HASH_LEN]}.json"
+    snapshot = {"doc_id": doc_id, "content_sha256": content,
+                "at": str(record.get("at") or ""), "verdict": str(record.get("verdict") or ""),
+                "findings": [dict(f) for f in findings]}
+    snap_path = snap_dir / f"{doc_id}-{content[:REF_HASH_LEN]}.json"
+    snap_path.write_text(json.dumps(snapshot, sort_keys=True, ensure_ascii=False,
+                                    separators=(",", ":")) + "\n", encoding="utf-8")
+
+    row = dict(record)
+    row["evidence_path"] = rel
+    row["evidence_sha256"] = hashlib.sha256(snap_path.read_bytes()).hexdigest()
+    records, _problems = read_ledger(ledger_path(base))
+    row["prev_hash"] = line_hash(records[-1]) if records else ""
+    line = json.dumps(row, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    with ledger_path(base).open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(line + "\n")
+    return row
 
 
 def selftest() -> int:
