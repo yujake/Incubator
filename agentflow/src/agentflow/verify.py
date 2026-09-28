@@ -1081,8 +1081,13 @@ def verify_all(
     # schema 管一行内可判的条件（`Conjecture.validate`：proposed 要有 testable、
     # refuted 要有反例实验……）；这一层管跨对象的那半边：那些代号指的东西在不在。
     # 分工的理由：schema 不该去查别的表（它没有 store），而 verify 查得到。
-    exp_by_id = {str(r.get("experiment_id")) for r in store.rows("experiments")}
+    exp_by_id = {str(r.get("experiment_id")): r for r in store.rows("experiments")}
     doc_by_id = {str(r.get("doc_id")): r for r in store.rows("documents")}
+    #: 已闭合依赖的证据侧实验号（`draft/30` §T2 ② 的第二跳要用）。算一次，不在循环里重扫。
+    closed_dep_exps = {str(d.get("source_experiment_id") or "")
+                       for d in store.rows("dependencies")
+                       if str(d.get("status")) == "closed"
+                       and str(d.get("source_experiment_id") or "")}
     for c in store.rows("conjectures"):
         cid = str(c.get("conjecture_id"))
         refs = [str(x) for x in (c.get("experiment_ids") or []) if x]
@@ -1113,5 +1118,89 @@ def verify_all(
                     rep.issues.append(Issue("error", "conjectures", cid, "promotion_target_missing",
                                             f"promoted_to 指的断言 {claim_id!r} 不在稿件 "
                                             f"{doc_id!r} 里（升格落空）"))
+
+        # ---- T2：状态配不配**它自己举出的**证据（依据 `draft/30` §T2）
+        #
+        # 三态纪律在这里的形态：状态是**结论**、不是**声明**。T1 判"代号在不在"，
+        # 这一段判"这个结论有没有它自称的那件证据撑着"。
+        # 缺行的情况（`eid not in exp_by_id`）由上面的 `dangling_experiment` 报，这里不重复报。
+        status = str(c.get("status") or "")
+        exp_ids = [str(x) for x in (c.get("experiment_ids") or []) if x]
+        listed = [exp_by_id[e] for e in exp_ids if e in exp_by_id]
+
+        proof_id = str(c.get("proof_experiment_id") or "")
+        proof = exp_by_id.get(proof_id) if proof_id else None
+        if status == "proved":
+            # FC-22 同族：计算类永远拿不到 proof（method 必须是 formal 且 evidence_kind 是 proof，
+            # 而且 verifier_output 非空 —— 空输出等于没跑过检查器）。
+            why: list[str] = []
+            if not proof_id:
+                why.append("没有 proof_experiment_id（proved 必须挂一个形式化实验）")
+            elif proof is None:
+                pass  # 行不存在 ⇒ 上面的 `dangling_experiment` 已报，这里不重复
+            else:
+                if str(proof.get("method")) != "formal":
+                    why.append(f"method={proof.get('method')!r}（应 formal）")
+                if str(proof.get("evidence_kind")) != "proof":
+                    why.append(f"evidence_kind={proof.get('evidence_kind')!r}（应 proof）")
+                if not str(proof.get("verifier_output") or "").strip():
+                    why.append("verifier_output 为空（没跑过检查器）")
+            if why:
+                rep.issues.append(Issue(
+                    "error", "conjectures", cid, "proved_without_formal_proof",
+                    f"status=proved 但证明不成立：{'；'.join(why)}"))
+
+        if status == "promoted":
+            target = c.get("promoted_to") or {}
+            want = str(target.get("id") or "")
+            doc_id, _, claim_id = want.partition("#")
+            doc = doc_by_id.get(doc_id)
+            claim = None
+            if doc is not None and claim_id:
+                claim = next((cl for cl in (doc.get("claims") or [])
+                              if isinstance(cl, dict) and str(cl.get("claim_id")) == claim_id), None)
+            # 第一跳（猜想→断言）不成立时由上面的 `promotion_target_missing` 报，这里只查第二跳。
+            if claim is not None:
+                cites = [str(x) for x in (claim.get("citations") or [])]
+                bad2: list[str] = []
+                if not proof_id:
+                    bad2.append("猜想没有 proof_experiment_id")
+                if str(claim.get("evidence_kind")) != "proof":
+                    bad2.append(f"升格断言的 evidence_kind={claim.get('evidence_kind')!r}（应 proof）")
+                if proof_id and f"exp:{proof_id}" not in cites:
+                    bad2.append(f"升格断言的 citations 里没有 {'exp:' + proof_id!r}")
+                if proof_id and proof_id not in closed_dep_exps:
+                    bad2.append(f"没有 status=closed 且 source_experiment_id={proof_id!r} 的依赖")
+                if bad2:
+                    rep.issues.append(Issue(
+                        "error", "conjectures", cid, "promoted_without_closed_dep",
+                        f"status=promoted 但升格链断在第二跳：{'；'.join(bad2)}"))
+
+        if status == "refuted":
+            ce_id = str(c.get("counterexample_experiment_id") or "")
+            ce = exp_by_id.get(ce_id) if ce_id else None
+            if not ce_id:
+                rep.issues.append(Issue(
+                    "error", "conjectures", cid, "refuted_without_counterexample",
+                    "status=refuted 却没有任何 counterexample_experiment_id（被否证必须有反例）"))
+            elif ce is not None and str(ce.get("result")) != "refutes":
+                rep.issues.append(Issue(
+                    "error", "conjectures", cid, "refuted_without_counterexample",
+                    f"status=refuted 但反例实验 {ce_id!r} 的 result={ce.get('result')!r}"
+                    "（inconclusive 不得转 refuted：没查成 ≠ 查过了、被否证）"))
+
+        if status == "supported_not_proved" and not any(
+                str(r.get("result")) == "supports" for r in listed):
+            rep.issues.append(Issue(
+                "error", "conjectures", cid, "supported_without_support",
+                f"status=supported_not_proved 但 experiment_ids={exp_ids!r} 里没有 result='supports' 的实验"))
+
+        if status in ("proved", "promoted", "supported_not_proved"):
+            refuters = sorted(e for e in exp_ids
+                              if e in exp_by_id and str(exp_by_id[e].get("result")) == "refutes")
+            if refuters:
+                rep.issues.append(Issue(
+                    "error", "conjectures", cid, "status_conflicts_with_experiment",
+                    f"status={status!r} 自称成功，而 experiment_ids 里的 {refuters!r} 的 result='refutes'"))
 
     return rep

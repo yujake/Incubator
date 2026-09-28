@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T00:45:46+08:00",
+  "generated_at": "2026-09-29T01:08:28+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -594,10 +594,10 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "8381a0a61d6dcc4f4952cf0ef81e64cf720b9de0ee8f23b2b413ca0020995562",
+      "sha256": "c05a6b4c276fd71a1de2c24bb6817010853774504911e300c723f0e87aae4d0e",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
+      "change_note": "T2（2026-09-29）：verify_all 加 5 条猜想状态机不变量（proved_without_formal_proof / promoted_without_closed_dep / refuted_without_counterexample / supported_without_support / status_conflicts_with_experiment）。依据 draft/30 §T2（新增条目）；判据 tests/test_conjectures_status.py 15 passed（5 正控 + 逐条注入负控 + 注入无效自检）。AI 代改，待 2 名 reviewer 走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

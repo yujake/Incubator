@@ -20,7 +20,7 @@
 > - 预算：`interactions.DEFAULTS`、
 >   `tools.attack_tools.DEFAULT_BUDGET`、
 >   各 agent 的 `self.cfg.get(...)` 默认值、`policy.Policy`（`policy.py:38-60`）。
-> - 不变式：`verify.py` 的 71 个 `Issue.code`（机械抽取，见 §0.4）。
+> - 不变式：`verify.py` 的 84 个 `Issue.code`（机械抽取；观测 2026-09-29（T1+T2）⇒ 调用点 95 / 去重 **84**；此数此前写 71，是 `G3`（2026-09-27）之前的旧值，已随 T1/T2 的 7 个新码更正）。
 >
 > **凡未在代码中核实的一律标注** `（据 X，未在代码中核实）`。
 > **凡本文件写"未落地"的，都是"我在代码里找不到实现"**，不是"我猜它没有"。
@@ -111,10 +111,10 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 ⇒ **有第二根轴的角色 = `{'A','B','E','F','G'}`**（命令与原始输出见 `temp/B6-evidence.md` §3；
 `README.md` 的"唯一联网角色"表述按此更正）。
 
-### 0.4 全库不变式检查项（`verify.py`，机械抽取 71 个 `Issue.code`）
+### 0.4 全库不变式检查项（`verify.py`，机械抽取 84 个 `Issue.code`；观测 2026-09-29（T1+T2））
 
 **任何角色**的产出都会被下面这些检查覆盖（`verify_all`，`verify.verify_all`）。
-本节列出与角色直接相关的检查；完整 71 个清单见 `DEVELOPMENT.md` §9 附录。
+本节列出与角色直接相关的检查；完整清单见 `DEVELOPMENT.md` §9 附录（那里连"调用点 95 / 字面量 94 / 去重 84"的三元组与**可复跑的命令**一起写着 —— 本节此前写 71，是 T1/T2 之前的值）。
 
 | 检查码 | 级别 | 判什么 | 主要针对 |
 |---|---|---|---|
@@ -143,6 +143,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `undeclared_array_field` | error | 数组字段未在 `ARRAY_FIELD_KINDS` 声明集合/序列（FC-05） | 全体 |
 | `ledger_corrupt` / `ledger_bad_row` / `ledger_dangling_question` / `ledger_dangling_request` / `ledger_drift` | error×4 / warning | `research_request_ledger.json` 的受控偏离 | D |
 | `deep_unavailable` / `reextract_failed` / `quote_state_changed` / `quote_not_found` / `empty_quote` / `no_text_layer` / `not_found_page_unknown` | warning / error | `--deep` 引文复核（FC-15 的归因分离） | B（写入方）/ H（复核方） |
+| `dangling_experiment` / `promotion_target_missing`（T1）· `proved_without_formal_proof` / `promoted_without_closed_dep` / `refuted_without_counterexample` / `supported_without_support` / `status_conflicts_with_experiment`（T2） | error | **猜想**：T1 判"它引的代号在不在"，T2 判"这个状态配不配它自己举出的证据"（状态是结论、不是声明）。依据 `draft/30` §T1/§T2；五条 T2 码各有正控 + 注入负控（`tests/test_conjectures_status.py`） | D（写入方）/ H（复核方） |
 
 ### 0.5 召唤边（`capabilities.ALLOWED_EDGES`，`capabilities.ALLOWED_EDGES`）
 
@@ -2159,7 +2160,7 @@ M 的自检入口是**两个方法 + 测试文件**：
 | 6 | `review_rounds` 的具体上限数值 | 读了 `tools.review_tools.verify_fixes` 的分支 | 没找到显式常量；上限来自调用方 |
 | 7 | `test_rebuild.py` 是否覆盖 `tasks` 表（I-9） | 读了 `DESIGN-CONDUCTOR.md:264` 声称"`rebuild()` 后 `tasks` 表逐字节一致" | 没读 `tests/test_rebuild.py` 的 3 个用例体 |
 | 8 | `doc.build_document` / `doc.register_dependency` 的断言数/依赖数是否有间接上限 | 读了 `capabilities.CAPABILITIES` 的 params（无 `maxItems`） | 没读 `doc_tools.py` 的 handler 体 |
-| 9 | G 的 `dependencies.used_by` 是否有直接的 verify 检查 | 读了 `verify.py` 的 71 个 code 列表 | 只看到 `dangling_doc_ref`（经 `review_findings`），没看到 `used_by` 的检查 |
+| 9 | G 的 `dependencies.used_by` 是否有直接的 verify 检查 | 读了 `verify.py` 当次的 code 列表（当时写的是 71 个；现为 84 个，见 §0.4） | 只看到 `dangling_doc_ref`（经 `review_findings`），没看到 `used_by` 的检查 |
 | 10 | `G → D/E/F` 的实际召唤是否有代码路径 | 读了边表（`capabilities.ALLOWED_EDGES`） | 没 grep `Conductor.summon("D", …)` 之类的调用点 |
 | 11 | `LocalBackend.registry` 在真实运行里怎么接 | 读了 `conductor.LocalBackend` | 没找到任何生产调用方（**这可能意味着 M 目前只有测试驱动**） |
 | 12 | `usage_ledger` 表是否有任何写入方 | grep 了 `agent_*.py` | 只见到 schema/verify，没见到写入调用（**结论可能是"无写入方"**） |

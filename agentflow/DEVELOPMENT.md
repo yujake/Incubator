@@ -357,7 +357,7 @@ agentflow/
 │   ├── cancellation.py        ★ 协作式取消（一个共享 signal）
 │   ├── contextbudget.py       ★ 上下文压缩 / 剪枝 / spill
 │   ├── interactions.py        ★ 角色间交互（I1–I12 的判据）+ CONTRACT_VERSION
-│   ├── verify.py              ★ 全库不变量校验（`Issue.code` 的**条数按命令当次读**：AST 数 `Issue(...)` 的第 4 个实参去重；观测 2026-09-27（`G3` 复测）⇒ 调用点 85、字面量 84、去重 **77** —— `G3` 之前这里写 71，已过期。⚠️ 它**没有一行命令的出口** ⇒ 量法见 `temp/G3-measure.py`）
+│   ├── verify.py              ★ 全库不变量校验（`Issue.code` 的**条数按命令当次读**：AST 数 `Issue(...)` 的第 4 个实参去重；观测 2026-09-29（T1+T2）⇒ 调用点 95、字面量 94、去重 **84**（T1 加 2 个新码 + T2 加 5 个 = 77+7；`dangling_lit` 是既有码，故不是 +3）—— 再前 `G3`（2026-09-27）是 85/84/**77**，`G3` 之前这里写 71，已过期。**量法有出口**（原来是 `temp/` 里的脚本，`temp/` 不入库 ⇒ 现在把命令写进本节）：`python -c "import ast,pathlib;t=ast.parse(pathlib.Path('src/agentflow/verify.py').read_text(encoding='utf-8'));c=[n for n in ast.walk(t) if isinstance(n,ast.Call) and getattr(n.func,'id','')=='Issue'];v={n.args[3].value for n in c if len(n.args)>=4 and isinstance(n.args[3],ast.Constant)};print(f'调用点 {len(c)} / 去重 {len(v)}')"`）
 │   ├── agent_a.py … agent_h.py  八个角色（**每个角色一个文件**）
 │   ├── cli.py                 命令行入口
 │   ├── pipeline.py            固定顺序流水线（前三阶段的编排）
