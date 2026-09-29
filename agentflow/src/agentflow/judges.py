@@ -141,6 +141,22 @@ _register(Criterion(
     ),
 ))
 
+_register(Criterion(
+    id="reasoning.source_fidelity", faculty="能思辨",
+    name="读的是原始来源还是二手复述",
+    question="结论是回到原始材料（原文/原始证明/一次实验）核对出来的，还是复述别人的转述？",
+    artifact_kind="markdown",
+    verdicts=("primary", "secondary", "authority_only"),
+    pass_verdicts=("primary",),
+    template=(
+        "你在看一段论证。只判它的依据来自哪里：\n"
+        "primary = 回到原始材料（原文那一段、原始证明那一步、一次可复现的实验）核对过；\n"
+        "secondary = 依据是别人的转述或综述，没有回到原始材料；\n"
+        "authority_only = 依据是「某权威这么说」或「以前都这么做」，没有可核对的材料。\n\n"
+        "额外上下文：{context}\n\n被审文本：\n---\n{artifact}\n---\n\n" + _JSON_RULES
+    ),
+))
+
 #: 负控样本：这一条判据必须能把它们判成不通过（准入条件，没有负控的判据不许进表）。
 #: 它们不是"格式错"，而是各自官能上真实会出现的坏形态。
 NEGATIVE_CONTROLS: dict[str, tuple[str, ...]] = {
@@ -160,6 +176,10 @@ NEGATIVE_CONTROLS: dict[str, tuple[str, ...]] = {
     "brain.blocker_specificity": (
         "本项目已全部核对完成，没有发现问题。\n",
         "目前遇到了一些困难，还需要更多时间研究。\n",
+    ),
+    "reasoning.source_fidelity": (
+        "据综述 [3] 所述，该结论已被广泛接受，因此我们采用它。\n",
+        "这是该领域的经典结论，教材上都这么写，所以不必再核。\n",
     ),
 }
 
@@ -296,7 +316,7 @@ def registry_problems() -> list[str]:
             problems.append(f"{cid} 没有负控样本 ⇒ 不许进表（无法证明它能判不通过）")
         elif len(controls) < 2:
             problems.append(f"{cid} 只有 1 条负控：一条样本证明不了判别力")
-    for want in ("高观点", "敢创新", "有品味", "脑子"):
+    for want in ("高观点", "敢创新", "有品味", "脑子", "能思辨"):
         if not any(c.faculty == want for c in CRITERIA.values()):
             problems.append(f"没有一条判据给『{want}』做背书")
     return problems

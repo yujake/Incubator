@@ -262,6 +262,48 @@ def progress_findings(before: Mapping[str, int], after: Mapping[str, int], *,
             "steps": int(steps), "findings": findings, "problem_count": len(findings)}
 
 
+def trace_findings(store: Any, pairs: Sequence[Sequence[str]], *, text: str = "",
+                   ) -> dict[str, Any]:
+    """矛盾的溯源机械半：每一对矛盾引用的材料必须存在，且文内至少点名一份。
+
+    `pairs` 是 `[(表名, id), ...]`（例如 `[("literature", "0001"), ("experiments", "0003")]`）。
+    返回 `{"checked": True, "verdict": "traced"|"untraced"|"dangling", ...}`。
+
+    它判不了"读得忠不忠实"（那是 `quoteverify` 与语义判据的事），
+    但它能判"有没有真的去读"—— 这一步不需要模型，而且是"追本溯源"这句话的最小落地。
+    """
+    from . import schema as S
+
+    dangling: list[str] = []
+    for pair in pairs:
+        if len(pair) < 2:
+            dangling.append("（形态不合法：" + "、".join(map(str, pair)) + "）")
+            continue
+        table, ident = str(pair[0]), str(pair[1])
+        if table not in S.TABLES:
+            dangling.append(f"{table}/{ident}（没有这张表）")
+            continue
+        field = S.TABLES[table]["id_field"]
+        if ident not in {str(r.get(field)) for r in _rows(store, table)}:
+            dangling.append(f"{table}/{ident}")
+    named = [f"{t_}/{i}" for t_, i in ((str(p[0]), str(p[1])) for p in pairs if len(p) >= 2)
+             if str(i) in (text or "")]
+    if dangling:
+        verdict = "dangling"
+    elif named or not text:
+        verdict = "traced"
+    else:
+        verdict = "untraced"
+    findings: list[str] = []
+    if dangling:
+        findings.append("引用的材料不存在或表名不认识：" + "、".join(dangling))
+    if verdict == "untraced":
+        findings.append("文内没有点名任何一份被追溯的材料：追本溯源至少要说清读了哪一份")
+    return {"checked": True, "verdict": verdict, "pairs": len(list(pairs)),
+            "dangling": dangling, "named": named, "findings": findings,
+            "problem_count": len(findings)}
+
+
 def selftest() -> int:
     """自检：三个机械半各自能抓到一种缺陷，且干净样本不被误报。"""
     import tempfile
@@ -343,6 +385,18 @@ def selftest() -> int:
         only = progress_findings(base, base, final="已全部核对完成", steps=4)
         if only["verdict"] != "checked_only" or not only["findings"]:
             problems.append(f"只核对没被抓到：{only}")
+
+        # 能思辨：溯源（存在的材料 + 文内点名 / 点名了不存在的东西 / 什么都没点名）
+        traced = trace_findings(st, [("concepts", "0001"), ("relations", "0001")],
+                                text="见 concepts/0001 的原始定义")
+        if traced["verdict"] != "traced":
+            problems.append(f"溯源正控没通过：{traced}")
+        dangling = trace_findings(st, [("concepts", "0404")], text="见 concepts/0404")
+        if dangling["verdict"] != "dangling":
+            problems.append(f"引到不存在的材料没被抓到：{dangling}")
+        untraced = trace_findings(st, [("concepts", "0001")], text="我查过了，不一致")
+        if untraced["verdict"] != "untraced":
+            problems.append(f"没点名材料没被抓到：{untraced}")
 
     if problems:
         print("SELF-CHECK FAILED")

@@ -227,3 +227,44 @@ def test_the_snapshot_helper_only_counts_data_tables(tmp_path: pathlib.Path):
     assert "tasks" not in snap and "usage_ledger" not in snap
     assert all(v == 0 for v in snap.values()), snap
 
+
+def test_trace_check_separates_traced_untraced_and_dangling(tmp_path: pathlib.Path):
+    """正控（能思辨的机械半）：材料存在且文内点名=traced；点名了不存在的东西=dangling；
+    材料存在但文内一份都没点名=untraced。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    with st.tx("concepts", "relations", actor="probe") as tx:
+        for cid, name in (("0001", "群"), ("0002", "阿贝尔群")):
+            tx.upsert("concepts", {"concept_id": cid, "name": name, "definition": "d",
+                                   "created_at": "2026-01-01T00:00:00+00:00",
+                                   "updated_at": "2026-01-01T00:00:00+00:00"})
+        # 关系行的 concept_ids 必须升序去重（schema 的硬约束），所以两条概念不能写成同一个
+        tx.upsert("relations", {"relation_id": "0001", "concept_ids": ["0001", "0002"],
+                                "description": "阿贝尔群是群", "lit_id": "0001", "quote": "q",
+                                "page_range": {"start": 1, "end": 1},
+                                "created_at": "2026-01-01T00:00:00+00:00",
+                                "updated_at": "2026-01-01T00:00:00+00:00"})
+    traced = FC.trace_findings(st, [("concepts", "0001")], text="见 concepts/0001")
+    assert traced["verdict"] == "traced", traced
+    dangling = FC.trace_findings(st, [("concepts", "0404")], text="见 concepts/0404")
+    assert dangling["verdict"] == "dangling" and "0404" in dangling["findings"][0], dangling
+    untraced = FC.trace_findings(st, [("concepts", "0001")], text="我查过了，不一致")
+    assert untraced["verdict"] == "untraced" and untraced["findings"], untraced
+
+
+def test_the_fifth_criterion_judges_primary_versus_secondary(tmp_path: pathlib.Path):
+    """正控 + 负控（能思辨的语义半）：复述二手结论要判 secondary/authority_only，不算通过。"""
+    assert "reasoning.source_fidelity" in JG.CRITERIA
+    assert len(JG.NEGATIVE_CONTROLS["reasoning.source_fidelity"]) >= 2
+    secondary = json.dumps({"verdict": "secondary", "why": "只有综述转述",
+                            "findings": [{"quote": "据综述 [3] 所述", "why": "没有回到原始材料"}]},
+                           ensure_ascii=False)
+    art = "据综述 [3] 所述，该结论已被广泛接受，因此我们采用它。"
+    v = JG.judge("reasoning.source_fidelity", art, seam=_seam(tmp_path, secondary))
+    assert v.ok is False and v.verdict == "secondary" and len(v.findings) == 1, v.to_dict()
+    primary = json.dumps({"verdict": "primary", "why": "回到原文那一步核对",
+                          "findings": []}, ensure_ascii=False)
+    v2 = JG.judge("reasoning.source_fidelity", "我们回到原文第 12 页那一步，逐字核对后确认。",
+                  seam=_seam(tmp_path, primary))
+    assert v2.ok is True, v2.to_dict()
+

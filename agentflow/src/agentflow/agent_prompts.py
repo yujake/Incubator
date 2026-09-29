@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p13"
+PROMPT_VERSION = "p14"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -109,7 +109,7 @@ FACULTY_LAYERS: dict[str, tuple[str, str]] = {
     "能讨论": ("both", "agentflow.conductor:Conductor.summon"),
     "高观点": ("both", "agentflow.faculty_checks:overview_findings"),
     "能互动": ("both", "agentflow.userio:ask_user"),
-    "能思辨": ("both", "agentflow.agent_prompts:EVIDENCE_CONTRACT"),
+    "能思辨": ("both", "agentflow.faculty_checks:trace_findings"),
     "敢创新": ("both", "agentflow.faculty_checks:conjecture_hygiene"),
     "有品味": ("both", "agentflow.faculty_checks:style_findings"),
 }
