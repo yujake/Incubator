@@ -236,6 +236,98 @@ def test_the_offline_pair_is_declared_in_the_catalog_the_llm_sees(store: Store):
     assert "不联网" in catalog, "目录里要说清哪几个是不联网的（否则 A 无网时不知道还有路）"
 
 
+# ============================================================ 书架可见范围（§191 第 4 条）
+
+
+def test_the_shelf_is_visible_to_c_and_h_too(store: Store):
+    """正控（§191 第 4 条）：书架两件是 `read`，C（推理要引书）与 H（核对引文出处）也拿得到。
+
+    只读角色被结构性剥离的是写工具与 `external="exec"` —— `read` 不受影响。
+    """
+    from agentflow.tools import build_registry
+
+    ws = store.root
+    built = build_registry(store=store, workspace_root=ws, roles=("A", "C", "H"), strict=True)
+    for role in ("A", "C", "H"):
+        names = {s.name for s in built.registry.for_role(role)}
+        assert {"search.shelf", "search.local"} <= names, (role, sorted(names))
+    # 只有 A 能登记（写）—— C/H 拿不到写侧
+    for role in ("C", "H"):
+        names = {s.name for s in built.registry.for_role(role)}
+        assert "search.ingest_local" not in names, (role, sorted(names))
+
+
+# ============================================================ A 自己登记本地目录（§191 第 3 条）
+
+
+def _book_dir(tmp_path: pathlib.Path) -> pathlib.Path:
+    """造一个有两本"书"的目录。
+
+    用 `.txt` + `pattern="*.txt"`，而不是"把文本写成 .pdf"：后者会被 PDF 后端判
+    `unreadable`（夹具第一版就是这么写的，`ingested=0`）—— 那测的就不是"登记"，
+    而是"抽取器拒绝"。
+    """
+    books = tmp_path / "books"
+    books.mkdir(parents=True, exist_ok=True)
+    (books / "甲书.txt").write_text("群是带运算的集合。\n", encoding="utf-8")
+    (books / "乙书.txt").write_text("环是带两种运算的集合。\n", encoding="utf-8")
+    return books
+
+
+def test_a_can_ingest_a_local_directory_with_honest_provenance(store: Store, tmp_path):
+    """正控（§191 第 3 条）：A 登记本地目录，provenance 如实写"由 A 登记"。
+
+    原先 `ingest_directory` 把请求行写死成 `submitted_by="human"` + "人直接提供的一本
+    本地藏书" —— 人调用它时是事实，A 调用它就是假 provenance，而"这篇文献从哪来"
+    正是这条链存在的理由。
+    """
+    reg = _registry(store)
+    res = reg.call("search.ingest_local", books_dir=str(_book_dir(tmp_path)), pattern="*.txt")
+    assert res.ok, (res.error, res.meta)
+    data = res.unwrap()
+    assert data["count"] == 2 and data["ingested"] == 2, data
+    assert data["provenance"]["actor"] == "agent-A", data["provenance"]
+    assert data["provenance"]["submitted_by"] == "unknown", data["provenance"]
+
+    rows = store.rows("search_requests")
+    assert rows, "登记没有落请求行"
+    latest = rows[-1]
+    assert latest["submitted_by"] == "unknown", latest
+    assert "由 agent-A 从一个本地目录登记" in str(latest["content_description"]), latest
+    assert "人直接提供" not in str(latest["content_description"]), latest
+    lits = store.rows("literature")
+    assert len(lits) == 2, lits
+
+
+def test_ingesting_idempotently_does_not_duplicate(store: Store, tmp_path):
+    """负控（幂等）：同一目录登记两次 ⇒ 第二次全是 `already_present`，不新增文献行。"""
+    reg = _registry(store)
+    books = _book_dir(tmp_path)
+    assert reg.call("search.ingest_local", books_dir=str(books), pattern="*.txt").unwrap()["ingested"] == 2
+    second = reg.call("search.ingest_local", books_dir=str(books), pattern="*.txt").unwrap()
+    assert second["ingested"] == 0 and second["already_present"] == 2, second
+    assert len(store.rows("literature")) == 2, store.rows("literature")
+
+
+def test_dry_run_records_nothing(store: Store, tmp_path):
+    """负控（dry_run）：只算不写 —— 库与请求行都不许变。"""
+    reg = _registry(store)
+    res = reg.call("search.ingest_local", books_dir=str(_book_dir(tmp_path)), pattern="*.txt",
+                   dry_run=True)
+    assert res.ok and res.unwrap()["count"] == 2, res.data
+    assert store.rows("literature") == [] and store.rows("search_requests") == [], (
+        store.rows("literature"))
+
+
+def test_a_missing_directory_is_not_checked(store: Store, tmp_path):
+    """负控（三态）：目录不在盘上 ⇒ fail + `recorded=False`（不是"目录里没有书"）。"""
+    reg = _registry(store)
+    res = reg.call("search.ingest_local", books_dir=str(tmp_path / "没有这个目录"))
+    assert not res.ok and res.meta.get("kind") == "io_error", res.meta
+    assert res.meta.get("recorded") is False, res.meta
+    assert store.rows("literature") == []
+
+
 def test_the_two_layer_capability_reconciliation_still_holds():
     """判据（接线面）：新增工具不许把能力层的两层对账弄红。
 

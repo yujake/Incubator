@@ -117,7 +117,7 @@ def test_negative_control_a_wrong_tool_count_is_caught(tmp_path):
     （审计者 H 的原始负控：把 `37` 改成 `999`、`22` 改成 `1`，门照报 `[OK]`、退出码 0）。
     """
     def tamper(lines: list[str]) -> list[str]:
-        return [ln.replace("### H.4 工具面（22 个，实测）", "### H.4 工具面（1 个，实测）")
+        return [ln.replace("### H.4 工具面（25 个，实测）", "### H.4 工具面（1 个，实测）")
                 for ln in lines]
 
     live, reason = G.live_tool_counts(root=REPO)
@@ -130,7 +130,7 @@ def test_negative_control_a_wrong_tool_count_is_caught(tmp_path):
 def test_negative_control_999_is_also_caught(tmp_path):
     """负控 2：换成 `999` 同样必须红（判据不是对着数字 `1` 特判）。"""
     def tamper(lines: list[str]) -> list[str]:
-        return [ln.replace("### H.4 工具面（22 个，实测）", "### H.4 工具面（999 个，实测）")
+        return [ln.replace("### H.4 工具面（25 个，实测）", "### H.4 工具面（999 个，实测）")
                 for ln in lines]
 
     live, reason = G.live_tool_counts(root=REPO)
@@ -142,22 +142,22 @@ def test_negative_control_a_correct_number_elsewhere_does_not_excuse_the_bad_one
     """`R6-3` 负控：对账必须锚定那一格，别处出现正确数字不算。
 
     改前判据是 `want not in got`，而 `got` 取的是该角色所有子节标题里的数字
-    ⇒ 只要 §H 下任意别处标题里出现过 `22 个`，§H.4 写成 `999 个` 也照样 `ok`，
+    ⇒ 只要 §H 下任意别处标题里出现过 `25 个`，§H.4 写成 `999 个` 也照样 `ok`，
     还会打印"逐角色工具条数与现场装配一致"（重审实测的那个形态）。
-    这里把两件事同时做出来：工具面写 `999`、别处补一个 `22 个` ⇒ 必须红。
+    这里把两件事同时做出来：工具面写 `999`、别处补一个 `25 个` ⇒ 必须红。
     """
     def tamper(lines: list[str]) -> list[str]:
         out: list[str] = []
         injected = False
         for ln in lines:
-            ln = ln.replace("### H.4 工具面（22 个，实测）", "### H.4 工具面（999 个，实测）")
+            ln = ln.replace("### H.4 工具面（25 个，实测）", "### H.4 工具面（999 个，实测）")
             out.append(ln)
             # 在 §H 的另一个子节标题后面塞一个正确数字（"别处有 22"）
             if (not injected and re.match(r"^###\s+H\.\d+\s+", ln)
                     and "999" not in ln and "工具面" not in ln):
-                out[-1] = ln.rstrip() + "（22 个，实测）"
+                out[-1] = ln.rstrip() + "（25 个，实测）"
                 injected = True
-        assert injected, "夹具前提：在 §H 里塞一个『22 个』的别处标题"
+        assert injected, "夹具前提：在 §H 里塞一个『25 个』的别处标题"
         return out
 
     live, reason = G.live_tool_counts(root=REPO)
@@ -597,12 +597,12 @@ def test_role_tool_counts_in_the_doc_match_the_live_census():
 def test_unknown_role_in_census_would_be_caught(tmp_path):
     """负控：把文档里 A 的条数改错 ⇒ 上面那条对账会红（证明它有牙）。"""
     def bump(lines: list[str]) -> list[str]:
-        return [ln.replace("工具面（22 个，实测）", "工具面（23 个，实测）")
+        return [ln.replace("工具面（23 个，实测）", "工具面（24 个，实测）")
                 if ln.startswith("### A.4") else ln for ln in lines]
 
     doc = _mutate(tmp_path, bump)
     result = G.check(doc)
-    assert 22 not in result["counts_by_role"]["A"] and 23 in result["counts_by_role"]["A"]
+    assert 23 not in result["counts_by_role"]["A"] and 24 in result["counts_by_role"]["A"]
 
 
 # ============================================================ 逐个工具的契约

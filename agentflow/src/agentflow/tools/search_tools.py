@@ -919,6 +919,61 @@ def _adopt_file(ctx: _Ctx, lit_id: str, raw_path: str | None, warnings: list[str
     return rel, target.stat().st_size, _sha256_of(target)
 
 
+def _h_ingest_local(ctx: _Ctx, books_dir: str, pattern: str = "*.pdf",
+                     limit: int | None = None, max_bytes: int = 25165824,
+                     dry_run: bool = False) -> Any:
+    """``search.ingest_local``：不联网，把一个本地目录登记进书架。
+
+    provenance 三件事如实写（`draft/28` §191）：事务 `actor="agent-A"`、
+    请求行 `submitted_by="unknown"`（A 不在 `SUBMITTER_DEFAULT_PRIORITY` 里 ——
+    A 不提交检索需求）、正文里那句"谁提供的"写成"由 agent-A 从一个本地目录登记"。
+    借 `human` 会把"这篇文献从哪来"这条链说成假话，而那正是它存在的理由。
+    """
+    if ctx.store is None:
+        return fail(
+            "未配置 store：没有库就没有书架可登记（不是「目录里没有书」）。",
+            kind="no_store", recorded=False,
+        )
+    from ..locallib import ingest_directory
+
+    base = Path(books_dir)
+    target = base if base.is_absolute() else (ctx.workspace / base)
+    if not target.is_dir():
+        return fail(f"目录不在盘上：{target}", kind="io_error", recorded=False,
+                    books_dir=str(target))
+    try:
+        report = ingest_directory(
+            ctx.store, target, limit=limit, pattern=pattern or "*.pdf",
+            max_bytes=int(max_bytes), dry_run=bool(dry_run),
+            note=f"agent-A 登记本地文献目录（{target}）",
+            actor="agent-A", submitted_by="unknown",
+            origin_note="由 agent-A 从一个本地目录登记",
+        )
+    except Exception as exc:  # noqa: BLE001 —— 登记失败如实报，不编"登记成功"
+        return fail(f"登记没做成：{type(exc).__name__}: {exc}", kind="io_error", recorded=False)
+    data = report.to_dict()
+    counts = dict(data.get("counts") or {})
+    data["count"] = len(data.get("books") or [])
+    # 计数直接取报告自己的 `counts`（一份实现）：另算一遍会让"谁在数"有两处口径，
+    # 而两处一旦漂移，读的人无法判断哪一个才是"这次登记的结果"。
+    data["ingested"] = counts.get("ingested", 0)
+    data["already_present"] = counts.get("already_present", 0)
+    data["unreadable"] = counts.get("unreadable", 0)
+    data["skipped"] = counts.get("skipped_limit", 0) + counts.get("skipped_too_large", 0)
+    data["provenance"] = {"actor": "agent-A", "submitted_by": "unknown",
+                          "origin_note": "由 agent-A 从一个本地目录登记",
+                          "note": "A 不是检索请求的提交方；这条链如实写「谁登记的」"}
+    # 成功支写成字面量键表：让"返回了哪些键"静态可见（与论文包那几件同一条纪律；
+    # `tests/test_tools_branch_key_sets.py` 抓的就是"看不清的成功支"）。
+    # 键与 `returns=` 声明逐字一致；值仍取自登记的读数（不重算）。
+    return ok({
+        "root": data["root"], "dry_run": data["dry_run"], "limit": data["limit"],
+        "books": data["books"], "count": data["count"], "ingested": data["ingested"],
+        "already_present": data["already_present"], "skipped": data["skipped"],
+        "unreadable": data["unreadable"], "provenance": data["provenance"],
+    })
+
+
 def _h_register(
     ctx: _Ctx,
     title: str,
@@ -1234,7 +1289,7 @@ def register(
             },
             handler=lambda limit=None, lit_id="": _h_shelf(ctx, limit, lit_id),
             side_effect="read",
-            roles=("A",),
+            roles=("A", "C", "H"),
             returns=(
                 "{'count','rows_total','have_path','missing_files','local_ingest','downloaded',"
                 "'truncated','books','note'}；"
@@ -1265,7 +1320,7 @@ def register(
                 ctx, query, limit, max_chars, lit_id, max_books
             ),
             side_effect="read",
-            roles=("A",),
+            roles=("A", "C", "H"),
             returns=(
                 "{'query','searched','count','candidates','scanned','skipped_no_file',"
                 "'unreadable','no_text_layer','hits','elapsed_s','note'}；"
@@ -1331,6 +1386,38 @@ def register(
                 "失败：ok=False + kind(no_store/table_unreadable) + checked=False（**没有做成判重**，不是「没有重复」）"
             ),
             tags=("search", "dedup"),
+        ),
+        ToolSpec(
+            name="search.ingest_local",
+            summary="**不联网**：把一个本地目录里的 PDF 登记进书架（按内容 sha256 幂等；"
+            "dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
+            params={
+                "type": "object",
+                "properties": {
+                    "books_dir": {"type": "string", "minLength": 1, "maxLength": 1000,
+                                  "description": "本地目录（绝对路径或相对工作区）"},
+                    "pattern": {"type": "string", "maxLength": 40},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+                    "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
+                    "dry_run": {"type": "boolean",
+                                "description": "只算 hash 与清单，不写盘、不进事务"},
+                },
+                "required": ["books_dir"],
+                "additionalProperties": False,
+            },
+            handler=lambda books_dir, pattern="*.pdf", limit=None, max_bytes=25165824,
+                           dry_run=False: _h_ingest_local(ctx, books_dir, pattern, limit,
+                                                          max_bytes, dry_run),
+            side_effect="write_local",
+            roles=("A",),
+            returns=(
+                "{'root','dry_run','limit','books','count','ingested','already_present','skipped',"
+                "'unreadable','provenance'}；"
+                "books[] 每项是 {'source','library_name','bytes','sha256','status','note','lit_id',"
+                "'request_id','pages','has_text_layer'}；失败：ok=False + kind(no_store/io_error) "
+                "+ recorded=False（**没登记成**，不是「目录里没有书」）"
+            ),
+            tags=("search", "offline", "ingest"),
         ),
         ToolSpec(
             name="search.register",

@@ -1662,15 +1662,26 @@ def _paper_root(workspace: Path | None, project: str) -> Any:
     return target
 
 
-def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> None:
-    """把"打包 / 编译 / 查渲染锚 / 一次重编"注册成 G 的工具。
+def _paper_state(workspace: Path | None, project: str) -> Any:
+    """`doc.paper_state`：进程内核一份论文包（不起子进程、不出网）。
 
-    四条工具共用 `agentflow.paperbuild` 里那一份实现：判据在项目脚本里，
-    这一层只负责受限地起子进程、读回 `REPRO_RESULT` 契约、把三态翻成 ok/fail。
-
-    `declared_external="exec"` 是刻意的：它们执行的是项目里的脚本（调用方选路径）。
-    声明成 `none` 等于说"这几个工具不执行任何东西"—— 而那正好是审批面最需要看的一栏。
+    为什么要它（`draft/28` §191）：H 是只读角色，结构性拿不到 `exec` 工具，
+    而"这份包与库一致吗"本该由审校者自己回答。判据在 `agentflow.renderanchor` 里，
+    这里只把它读出来 —— 所以这条是 `read` 工具，H 拿得到。
     """
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    got = PB.state(root)
+    return ok({
+        "verdict": got["verdict"], "dimensions": got["dimensions"], "drift": got["drift"],
+        "problems": got["problems"], "why": got["why"], "anchor_path": got["anchor_path"],
+        "anchor_present": got["anchor_present"], "receipt_path": got["receipt_path"],
+        "receipt_present": got["receipt_present"], "rendered_at": got["rendered_at"],
+        "compiled_at": got["compiled_at"], "checked": got["checked"],
+    })
+
+
 #: 论文包四件工具的实现。它们刻意写在模块级而不是嵌在 `_register_paper_tools` 里：
 #: `tests/test_tools_branch_key_sets.py` 的扫描器对每个函数做 `ast.walk`（含嵌套定义），
 #: 四个嵌套 handler 会被算成外层函数的四处分支 ⇒ 判据报「同一个 handler 两种键集合」
@@ -1714,7 +1725,7 @@ def _paper_anchor(workspace: Path | None, project: str, script: str, timeout_sec
     root = _paper_root(workspace, project)
     if not isinstance(root, Path):
         return root
-    got = PB.anchor_check(root, script=script or PB.DEFAULT_RENDER_SCRIPT,
+    got = PB.anchor_check_script(root, script=script or PB.DEFAULT_RENDER_SCRIPT,
                           timeout_sec=timeout_sec)
     # 三态：drifted 是"查过了、有漂移"（fail），unknown 是"没查成"（fail 但 kind 不同）。
     # 两者都 fail：工具层的 ok 只表示"这一步做成了"，而"包与库一致"由 verdict 说。
@@ -1744,8 +1755,7 @@ def _paper_build(workspace: Path | None, project: str, render_script: str, compi
         "ok": got["ok"], "anchor": got["anchor"], "pdf_path": got["pdf_path"],
         "pdf_sha256": got["pdf_sha256"], "pdf_bytes": got["pdf_bytes"],
         "pdf_pages": got["pdf_pages"], "markers_missing": got["markers_missing"],
-        "compiler_exit_codes": got["compiler_exit_codes"],
-        "tex_content_stable": got["tex_content_stable"], "tex_note": got["tex_note"],
+        "compiler_exit_codes": got["compiler_exit_codes"], "receipt": got["receipt"],
         "steps": got["steps"], "problem": got["problem"],
     })
 
@@ -1877,13 +1887,42 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
             roles=("G",),
             returns=(
                 "{'ok','anchor','pdf_path','pdf_sha256','pdf_bytes','pdf_pages','markers_missing',"
-                "'compiler_exit_codes','tex_content_stable','tex_note','steps','problem'}；"
-                "`anchor` 含 {'verdict','exit_code','drift','why','anchor_path','anchor_present',"
-                "'anchor_sha256'}；`steps[]` 每项是 {'step','script','exit_code','ok','result',…}，"
-                "step ∈ render/compile/render_after_compile/anchor_check；"
+                "'compiler_exit_codes','receipt','steps','problem'}；"
+                "`anchor` 含 {'verdict','dimensions','drift','problems','why','anchor_path',"
+                "'anchor_present','receipt_path','receipt_present','anchor_sha256','rendered_at',"
+                "'compiled_at'}；`receipt` 是编译回执（tex_sha256/pdf_sha256/pages/"
+                "compiler_exit_codes）；`steps[]` 每项是 {'step','script','exit_code','ok',…}，"
+                "step ∈ render/compile/anchor_check —— **三步**：锚只管渲染出的源文件，"
+                "PDF 由编译回执管，所以不再需要再渲染一次；"
                 "ok=True 只在锚 verdict=consistent（0 漂移）时为真；"
                 "失败：ok=False + kind=paper_build_failed + problem（指出是哪一步没走成）"
             ),
             tags=("document", "paper", "build"),
+        )
+    )
+
+    registry.register(
+        ToolSpec(
+            name="doc.paper_state",
+            summary="只读核对一份论文包：进程内算渲染锚三维（源表 / 渲染出的源文件 / 编译回执），"
+            "给三态结论与逐条漂移。不起子进程、不出网 —— 只读角色也能自己核。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                },
+                "required": ["project"],
+                "additionalProperties": False,
+            },
+            handler=lambda project: _paper_state(workspace, project),
+            side_effect="read",
+            roles=("G", "H"),
+            returns=(
+                "{'verdict','dimensions','drift','problems','why','anchor_path','anchor_present',"
+                "'receipt_path','receipt_present','rendered_at','compiled_at','checked'}；"
+                "verdict ∈ consistent/drifted/unknown（unknown = 有一维判不了，不是一致）；"
+                "dimensions 含 {'tables','files','receipt'} 三维各自的结论"
+            ),
+            tags=("document", "paper", "read"),
         )
     )

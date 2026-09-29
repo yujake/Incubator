@@ -1,0 +1,279 @@
+"""渲染锚 + 编译回执（`renderanchor`）与只读核对路径（`doc.paper_state`）（`draft/28` §191）。
+
+## 这一组守什么
+
+`draft/28` §188.3 实测出来的装置缺陷：锚原先把编译产物（`main.pdf`）也收进同一张
+哈希表，而锚是渲染那一刻写的 ⇒ 先写锚、后编译必然报漂移，"0 漂移"在物理上不可达。
+用户批准的四条里第一条就是修它：
+
+1. 锚只管渲染产出的源文件；PDF 由编译回执管（记录它由哪一个 tex 哈希编出）⇒
+   `build()` 只需 渲染 → 编译 → 核对 三步，且"PDF 是从旧 tex 编的"可被精确判出；
+2. 只读角色也要能核：判据是框架里的纯函数，`doc.paper_state` 是 `read` 工具，
+   H（只读）拿得到；`doc.paper_anchor` 仍是 `exec`（它跑项目脚本）。
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+from typing import Any
+
+import pytest
+
+from agentflow import paperbuild as PB
+from agentflow import renderanchor as RA
+from agentflow.store import Store
+from agentflow.tools import build_registry
+
+# ============================================================ 夹具
+
+
+def _sealed_project(root: pathlib.Path, *, tex: str = "\\date{2026-01-01}\nbody\n",
+                    store: Store | None = None) -> Store:
+    """造一个"锚与回执都齐"的论文包项目（走 `renderanchor` 的公开函数）。"""
+    out = root / "out" / "paper"
+    out.mkdir(parents=True, exist_ok=True)
+    st = store or Store(root)
+    st.init(force=True)
+    (out / "main.tex").write_text(tex, encoding="utf-8")
+    (out / "main.pdf").write_bytes(b"%PDF-1.4 fake")
+    (out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)), encoding="utf-8")
+    (out / RA.RECEIPT_NAME).write_text(json.dumps(RA.build_receipt(
+        out, tex_sha256=RA.file_digest(out / "main.tex"), pages=21, markers_missing=[],
+        pdf_bytes=13, compiler_exit_codes=[0])), encoding="utf-8")
+    return st
+
+
+def _fake_scripts(root: pathlib.Path) -> None:
+    """假渲染/编译脚本：自己调 `renderanchor` 写锚与回执（与真项目脚本同一条路）。"""
+    src = str(pathlib.Path(RA.__file__).resolve().parents[1])
+    code = root / "code"
+    code.mkdir(parents=True, exist_ok=True)
+    (code / "make_paper.py").write_text(
+        "import json, pathlib, sys\n"
+        f"sys.path.insert(0, {src!r})\n"
+        "from agentflow import renderanchor as RA\n"
+        "from agentflow.store import Store\n"
+        "root = pathlib.Path('.')\n"
+        "out = root / 'out' / 'paper'\n"
+        "out.mkdir(parents=True, exist_ok=True)\n"
+        "if '--check' in sys.argv:\n"
+        "    got = RA.check_package(root)\n"
+        "    sys.exit({'consistent': 0, 'drifted': 1}.get(got['verdict'], 2))\n"
+        "(out / 'main.tex').write_text(chr(10).join(['\\\\date{2026-01-01}', 'body'])"
+        " + chr(10), encoding='utf-8')\n"
+        "st = Store(root); st.init(force=True)\n"
+        "(out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)),"
+        " encoding='utf-8')\n"
+        "print('REPRO_RESULT: ' + json.dumps({'claims': 24}))\n",
+        encoding="utf-8")
+    (code / "compile_paper.py").write_text(
+        "import json, pathlib, sys\n"
+        f"sys.path.insert(0, {src!r})\n"
+        "from agentflow import renderanchor as RA\n"
+        "out = pathlib.Path('out/paper')\n"
+        "(out / 'main.pdf').write_bytes(b'%PDF-1.4 fake')\n"
+        "rec = RA.build_receipt(out, tex_sha256=RA.file_digest(out / 'main.tex'), pages=21,"
+        " markers_missing=[], pdf_bytes=13, compiler_exit_codes=[0])\n"
+        "(out / RA.RECEIPT_NAME).write_text(json.dumps(rec), encoding='utf-8')\n"
+        "print('REPRO_RESULT: ' + json.dumps({'ok': True, 'pages': 21,"
+        " 'markers_missing': [], 'pdf': 'main.pdf', 'pdf_bytes': 13, 'pdf_header': '%PDF-',"
+        " 'text_extractor': 'stub', 'runs': [], 'compiler_exit_codes': [0],"
+        " 'log_tail': 'stub', 'note': '夹具'}))\n",
+        encoding="utf-8")
+
+
+# ============================================================ 三维核对
+
+
+def test_a_sealed_package_is_consistent(tmp_path: pathlib.Path):
+    """正控：锚 + 回执 + 库都没动 ⇒ consistent（三维各自都是）。"""
+    root = tmp_path / "proj"
+    _sealed_project(root)
+    got = RA.check_package(root)
+    assert got["verdict"] == "consistent", (got["drift"], got["problems"])
+    assert set(got["dimensions"].values()) == {"consistent"}, got["dimensions"]
+    assert got["anchor_present"] and got["receipt_present"], got
+
+
+def test_a_missing_anchor_is_not_checked(tmp_path: pathlib.Path):
+    """负控（三态）：锚不在 ⇒ unknown（绝不写成一致）。"""
+    root = tmp_path / "proj"
+    (root / "out" / "paper").mkdir(parents=True)
+    got = RA.check_package(root)
+    assert got["verdict"] == "unknown" and got["problems"], got
+
+
+def test_the_store_changing_makes_it_drifted(tmp_path: pathlib.Path):
+    """负控（要抓的形态）：库长了行 ⇒ 表那一维 drifted（包不再是库里现在的样子）。"""
+    root = tmp_path / "proj"
+    st = _sealed_project(root)
+    with st.tx("conjectures", actor="test") as tx:
+        tx.upsert("conjectures", {"conjecture_id": "0001", "statement": "x", "form": "universal",
+                                  "status": "proposed", "origin": "test", "testable": True,
+                                  "negation_statement": "非 x", "experiment_ids": [],
+                                  "created_at": "2026-01-01T00:00:00", "created_by": "test"})
+    got = RA.check_package(root)
+    assert got["dimensions"]["tables"] == "drifted" and got["verdict"] == "drifted", got
+
+
+def test_a_hand_edited_source_file_makes_it_drifted(tmp_path: pathlib.Path):
+    """负控：渲染之后有人改了源文件 ⇒ 文件那一维 drifted。"""
+    root = tmp_path / "proj"
+    _sealed_project(root)
+    (root / "out" / "paper" / "main.tex").write_text("\\date{2026-01-02}\nbody\n",
+                                                     encoding="utf-8")
+    got = RA.check_package(root)
+    assert got["dimensions"]["files"] == "drifted", got
+
+
+def test_a_pdf_built_from_a_stale_tex_is_reported(tmp_path: pathlib.Path):
+    """正控（这一条是本次要买的能力）：编译之后改了 tex ⇒ 回执那一维报「旧 tex」。
+
+    旧锚做不到这件事：它只知道"PDF 的字节与渲染时不同"，而那个信号在每次重编时
+    都会亮（PDF 内嵌时间戳），于是真漂移与假漂移分不开。
+    """
+    root = tmp_path / "proj"
+    _sealed_project(root)
+    (root / "out" / "paper" / "main.tex").write_text("\\date{2026-01-01}\nbody changed\n",
+                                                     encoding="utf-8")
+    got = RA.check_package(root)
+    assert got["dimensions"]["receipt"] == "drifted", got
+    assert any("旧 tex" in d for d in got["drift"]), got["drift"]
+
+
+def test_a_pdf_swapped_after_compile_is_reported(tmp_path: pathlib.Path):
+    """负控：tex 没变、但 PDF 被换过 ⇒ 也用回执判出来（pdf_sha256 对不上）。"""
+    root = tmp_path / "proj"
+    _sealed_project(root)
+    (root / "out" / "paper" / "main.pdf").write_bytes(b"%PDF-1.4 other")
+    got = RA.check_package(root)
+    assert got["dimensions"]["receipt"] == "drifted", got
+    assert any("与编译回执不符" in d for d in got["drift"]), got["drift"]
+
+
+def test_the_anchor_does_not_cover_the_compile_products(tmp_path: pathlib.Path):
+    """判据（本次修的核心）：锚里不许有 PDF 与编译中间产物 —— 否则"重编一次必报漂移"。"""
+    root = tmp_path / "proj"
+    out = root / "out" / "paper"
+    _sealed_project(root)
+    for junk in ("main.aux", "main.log", "main.out", "compile.log"):
+        (out / junk).write_text("x", encoding="utf-8")
+    anchor = json.loads((out / RA.ANCHOR_NAME).read_text(encoding="utf-8"))
+    bad = [k for k in anchor["files"]
+           if k in RA.COMPILE_PRODUCTS or any(k.endswith(s) for s in RA.COMPILE_SUFFIXES)]
+    assert bad == [], bad
+
+
+def test_the_module_selftest_passes():
+    """判据：模块自检必须过（它是 `python -m agentflow.renderanchor` 的内容）。"""
+    assert RA.selftest() == 0
+
+
+# ============================================================ 三步序列（真机契约）
+
+
+def test_build_runs_three_steps_and_ends_at_zero_drift(tmp_path: pathlib.Path):
+    """正控（§191 的核心）：渲染 → 编译 → 核对 三步，不再需要"再渲染一次"。"""
+    root = tmp_path / "proj"
+    _fake_scripts(root)
+    got = PB.build(root, render_script="code/make_paper.py",
+                   compile_script="code/compile_paper.py", timeout_sec=60)
+    assert [s["step"] for s in got["steps"]] == ["render", "compile", "anchor_check"], got["steps"]
+    assert got["ok"] is True, (got["problem"], got["anchor"])
+    assert got["anchor"]["verdict"] == "consistent"
+    assert got["receipt"].get("tex_sha256"), got["receipt"]
+    for step in got["steps"]:
+        assert isinstance(step.get("ok"), bool), step
+        assert {"step", "ok"} <= set(step), sorted(step)
+
+
+def test_build_reports_the_stale_tex_after_a_hand_edit(tmp_path: pathlib.Path):
+    """负控（真机口径）：build 之后手改 tex ⇒ `state()` 报 receipt drifted。"""
+    root = tmp_path / "proj"
+    _fake_scripts(root)
+    assert PB.build(root, timeout_sec=60)["ok"] is True
+    (root / "out" / "paper" / "main.tex").write_text("\\date{2026-01-01}\nchanged\n",
+                                                     encoding="utf-8")
+    got = PB.state(root)
+    assert got["verdict"] == "drifted" and got["dimensions"]["receipt"] == "drifted", got
+
+
+def test_build_stops_at_the_step_that_failed(tmp_path: pathlib.Path):
+    """负控（不许假装走完）：编译脚本失败 ⇒ 只跑到 compile。"""
+    root = tmp_path / "proj"
+    _fake_scripts(root)
+    (root / "code" / "compile_paper.py").write_text(
+        "import sys\nprint('编译炸了')\nsys.exit(1)\n", encoding="utf-8")
+    got = PB.build(root, timeout_sec=60)
+    assert got["ok"] is False
+    assert [s["step"] for s in got["steps"]] == ["render", "compile"], got["steps"]
+    assert "compile" in got["problem"], got["problem"]
+
+
+# ============================================================ 工具面（只读角色拿得到）
+
+
+def _registry(tmp_path: pathlib.Path):
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    built = build_registry(store=st, workspace_root=ws, roles=("G", "H"), strict=True)
+    built.registry.bound_role = "H"          # H 是只读角色：这一组要证它能核
+    return built.registry, ws
+
+
+def test_h_can_check_the_package_without_exec(tmp_path: pathlib.Path):
+    """正控（本次要买的能力）：H 拿到 `doc.paper_state`（read），核得动一份包。"""
+    registry, ws = _registry(tmp_path)
+    _sealed_project(ws / "projects" / "p2")
+    res = registry.call("doc.paper_state", project="projects/p2")
+    assert res.ok, (res.error, res.meta)
+    data = res.unwrap()
+    assert data["verdict"] == "consistent" and set(data["dimensions"]) == {"tables", "files",
+                                                                          "receipt"}, data
+
+
+def test_h_cannot_get_the_exec_tools(tmp_path: pathlib.Path):
+    """负控（权限面不许放宽）：另外四件是 `exec`，H 一件也拿不到。"""
+    registry, _ws = _registry(tmp_path)
+    names = {s.name for s in registry.for_role("H") if s.name.startswith("doc.paper")}
+    assert names == {"doc.paper_state"}, names
+    for name in ("doc.paper_render", "doc.paper_compile", "doc.paper_build", "doc.paper_anchor"):
+        assert registry.get(name).external == "exec", name
+
+
+def test_the_state_tool_separates_drift_from_unknown(tmp_path: pathlib.Path):
+    """负控（三态进工具层）：漂移与"没查成"在同一件工具上是两个结论。"""
+    registry, ws = _registry(tmp_path)
+    drifted = ws / "projects" / "p3"
+    st = _sealed_project(drifted)
+    with st.tx("conjectures", actor="test") as tx:
+        tx.upsert("conjectures", {"conjecture_id": "0001", "statement": "x", "form": "universal",
+                                  "status": "proposed", "origin": "t", "testable": True,
+                                  "negation_statement": "非 x", "experiment_ids": [],
+                                  "created_at": "2026-01-01T00:00:00", "created_by": "t"})
+    got = registry.call("doc.paper_state", project="projects/p3").unwrap()
+    assert got["verdict"] == "drifted", got
+    empty = ws / "projects" / "p4"
+    (empty / "out" / "paper").mkdir(parents=True)
+    unknown = registry.call("doc.paper_state", project="projects/p4").unwrap()
+    assert unknown["verdict"] == "unknown" and unknown["problems"], unknown
+
+
+def test_the_state_reading_is_json_serializable(tmp_path: pathlib.Path):
+    """判据（可审计）：读数必须能原样落盘。"""
+    registry, ws = _registry(tmp_path)
+    _sealed_project(ws / "projects" / "p2")
+    data: dict[str, Any] = registry.call("doc.paper_state", project="projects/p2").unwrap()
+    assert "receipt" in json.dumps(data, ensure_ascii=False) or "tables" in json.dumps(
+        data, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("bad", ["../outside", "/abs/path", "没有这个目录"])
+def test_a_project_outside_the_workspace_is_refused(tmp_path: pathlib.Path, bad: str):
+    """负控（越界）：`project` 跳出工作区 ⇒ `bad_project`，不起子进程、不读盘。"""
+    registry, _ws = _registry(tmp_path)
+    res = registry.call("doc.paper_state", project=bad)
+    assert not res.ok and res.meta.get("kind") == "bad_project", (bad, res.meta)

@@ -171,15 +171,30 @@ def ingest_directory(
     max_bytes: int = DEFAULT_MAX_BYTES,
     dry_run: bool = False,
     note: str = "",
+    actor: str = "human",
+    submitted_by: str = "human",
+    origin_note: str = "",
 ) -> IngestReport:
     """把一个目录里的 PDF 登记进 `store`。已登记过的（同 sha256）不重复登记。
 
     `dry_run=True` 时只算 hash 与清单，不写文件、不进事务。
+
+    ## 为什么 provenance 要三个参数（`draft/28` §191）
+
+    原先这里把请求行写死成 `submitted_by="human"` + 正文里那句"人直接提供的一本本地藏书"。
+    人调用它时那是事实；A 调用它时那就是假 provenance —— 而"这篇文献从哪来"
+    正是这条链存在的理由。于是三个参数分开：
+
+    - `actor`：写这次事务的角色（`agent-A` / `human`）；
+    - `submitted_by`：请求方。A 不在 `SUBMITTER_DEFAULT_PRIORITY` 里（A 不提交检索需求），
+      所以 A 登记时如实填 `unknown`（= "没有登记在册的请求方"），而不是借 `human`；
+    - `origin_note`：正文里那句"谁提供的"（缺省仍是"人直接提供"）。
     """
     store.init()
     report = IngestReport(root=str(root), dry_run=dry_run, limit=limit)
     known = _known_hashes(store)
     lib = Path(store.library)
+    who = origin_note or "人直接提供"
 
     for idx, src in enumerate(list_books(root, pattern=pattern)):
         size = src.stat().st_size
@@ -230,7 +245,7 @@ def ingest_directory(
             shutil.copy2(src, dest)
 
         with store.tx("search_requests", "literature", "counters",
-                      actor="human", note=note or "ingest local books") as tx:
+                      actor=actor, note=note or "ingest local books") as tx:
             lit_id = tx.alloc_id("lit")
             req_id = I.next_prefixed_id(tx.rows("search_requests"), "request_id", "r")
             title = src.stem.replace("_", " ").strip() or name
@@ -242,16 +257,16 @@ def ingest_directory(
                     topic=title,
                     mode="precise",
                     content_description=(
-                        f"人直接提供的一本本地藏书（源文件 {src.name}，{size} 字节，"
+                        f"{who}的一本本地藏书（源文件 {src.name}，{size} 字节，"
                         f"sha256 {sha[:12]}…）。不是 A 检索来的 —— 这一点必须如实记录，"
                         "否则『这篇文献从哪来』这条链会说假话。"
                     ),
                     done=True,
-                    submitted_by="human",
+                    submitted_by=submitted_by,
                     priority="high",
                     outcome="ok",
                     result_lit_ids=[lit_id],
-                    submit_note="本地文献目录登记（locallib.ingest_directory）",
+                    submit_note=note or f"本地文献目录登记（locallib.ingest_directory，actor={actor}）",
                 ).to_dict(),
             )
             tx.upsert(

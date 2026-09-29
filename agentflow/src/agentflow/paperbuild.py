@@ -31,9 +31,9 @@
 
 也就是说：只要先写锚、后编译，"0 漂移"就不可达。本模块的 `build()` 用一条
 可达的顺序绕开它（渲染 → 编译 → 再渲染一次把锚挪到新 PDF 上 → 核对），
-并把这条顺序的代价如实报出来（`tex_content_stable`：两次渲染的 `main.tex`
-除内嵌日期那一行外是否逐字相同）。真正的修法是"编译回执"（记录 PDF 是从哪一个
-tex 哈希编出来的），那会改锚的文件格式 ⇒ 属于人裁项，本模块只登记、不擅自改。
+修法（`draft/28` §191，用户已批准）：判据搬进 `agentflow.renderanchor`，
+锚只管渲染产出的源文件，PDF 由编译回执（`COMPILE-RECEIPT.json`）管 ——
+于是 `build()` 只需要 渲染 → 编译 → 核对 三步，"PDF 是从旧 tex 编的"变成一个精确可判的事实。
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ DEFAULT_TIMEOUT_SEC = 1800.0
 ANCHOR_NAME = "RENDER-ANCHOR.json"
 
 
-def _sha256_file(path: Path) -> str:
+def _file_digest(path: Path) -> str:
     """文件内容哈希（读不了返回空串 —— 调用方按"读不到"处理，不编哈希）。"""
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -194,9 +194,12 @@ ANCHOR_VERDICTS = {"consistent": 0, "drifted": 1, "unknown": 2}
 _DRIFT_LINE = re.compile(r"^\s*-\s+(表|文件)\s")
 
 
-def anchor_check(project_root: Path | str, *, script: str = DEFAULT_RENDER_SCRIPT,
-                 timeout_sec: float = DEFAULT_TIMEOUT_SEC) -> dict[str, Any]:
-    """跑 `make_paper.py --check`：0 一致 / 1 漂移 / 2 没查成。
+def anchor_check_script(project_root: Path | str, *, script: str = DEFAULT_RENDER_SCRIPT,
+                        timeout_sec: float = DEFAULT_TIMEOUT_SEC) -> dict[str, Any]:
+    """跑项目脚本的 `--check`（默认 `make_paper.py --check`）：0 一致 / 1 漂移 / 2 没查成。
+
+    这条走子进程（起的是项目里的脚本 ⇒ 工具层声明 `exec`），因此只读角色拿不到它；
+    "只读角色也要能核这份包"由 `state()` 提供（同一份判据，进程内跑）。
 
     这条必须保持三态：`--check` 自己就用退出码区分"漂移"与"没查成"（锚不在），
     把它折成布尔会让"锚文件没了"看起来像"一致"。
@@ -230,7 +233,7 @@ def anchor_check(project_root: Path | str, *, script: str = DEFAULT_RENDER_SCRIP
         "script": got["script"],
         "anchor_path": str(root / "out" / "paper" / ANCHOR_NAME),
         "anchor_present": (root / "out" / "paper" / ANCHOR_NAME).is_file(),
-        "anchor_sha256": _sha256_file(root / "out" / "paper" / ANCHOR_NAME),
+        "anchor_sha256": _file_digest(root / "out" / "paper" / ANCHOR_NAME),
         "stdout_tail": got["stdout_tail"],
         "stderr_tail": got["stderr_tail"],
         "elapsed_sec": got["elapsed_sec"],
@@ -239,35 +242,53 @@ def anchor_check(project_root: Path | str, *, script: str = DEFAULT_RENDER_SCRIP
     }
 
 
-#: 渲染时写进 `main.tex` 的日期行（两次渲染的差异只应该在这里）。
-_DATE_LINE = re.compile(r"^\\date\{.*\}$", re.M)
+#: 三维判定词表（与 `renderanchor.VERDICTS` 同一套）。
+ANCHOR_DIMENSIONS: tuple[str, ...] = ("tables", "files", "receipt")
 
 
-def tex_content_stable(before_text: str | None, after_text: str | None) -> tuple[bool, str]:
-    """两次渲染的 `main.tex` 除日期行外是否逐字相同。返回 `(相同?, 说明)`。
+def anchor_check(project_root: Path | str, *, store: Any = None) -> dict[str, Any]:
+    """核一份论文包（进程内，不起子进程、不出网）：三维 + 三态。
 
-    为什么需要这个读数：`build()` 的最后一次渲染是为了把锚挪到新编出来的 PDF 上，
-    而那次渲染会重写 `main.tex`（内嵌日期变了）。于是"PDF 是从哪个版本的 tex 编出来的"
-    就成了一个必须报出来的事实 —— 而不是靠读者相信"应该只差一个日期"。
-
-    为什么收字符串而不是路径：快照文件不能落在 `out/paper/` 里 —— 锚会数那里
-    每一个文件，多一个快照就多一处漂移（那会把判据自己弄脏）。所以快照留在内存里。
+    判据只有一份实现：`agentflow.renderanchor.check`。这里做两件事 ——
+    把三维结论翻成工具层要的三态读数，并把"哪一维判不了"与"哪一维漂移了"分开报
+    （折成一个布尔会让"回执不在、PDF 来路判不了"看起来像"一致"）。
     """
-    if before_text is None or after_text is None:
-        return False, "有一次 main.tex 读不到 ⇒ 比不了（没查成，不是「相同」）"
-    a = _DATE_LINE.sub("", before_text)
-    b = _DATE_LINE.sub("", after_text)
-    if a == b:
-        return True, "两次渲染的 main.tex 除日期行外逐字相同（PDF 的内容对应得上）"
-    return False, "两次渲染的 main.tex 在日期行之外也不同 ⇒ PDF 与磁盘上的 tex 不是同一版"
+    from . import renderanchor as RA
+
+    got = RA.check_package(project_root, store=store)
+    root = Path(project_root)
+    if got["verdict"] == "consistent":
+        why = "包与库/盘都对得上（0 漂移）"
+    elif got["verdict"] == "drifted":
+        why = "有漂移：这份包不是库里现在的样子"
+    else:
+        why = "没查成：" + ("；".join(got["problems"]) or "有一维判不了（不是一致）")
+    return {
+        "verdict": got["verdict"],
+        "expected_exit_code": ANCHOR_VERDICTS[got["verdict"]],
+        "dimensions": got["dimensions"],
+        "drift": got["drift"],
+        "problems": got["problems"],
+        "why": why,
+        "source": "in_process",
+        "anchor_path": got["anchor_path"],
+        "anchor_present": got["anchor_present"],
+        "receipt_path": got["receipt_path"],
+        "receipt_present": got["receipt_present"],
+        "anchor_sha256": _file_digest(root / "out" / "paper" / ANCHOR_NAME),
+        "rendered_at": got.get("rendered_at"),
+        "compiled_at": got.get("compiled_at"),
+        "receipt": got.get("receipt") or {},
+        "checked": got.get("checked") or {},
+        "problem": "" if got["verdict"] != "unknown" else why,
+    }
 
 
-def _read_text(path: Path) -> str | None:
-    """读文本文件；读不到返回 None（不编空串 —— 空串与「读不到」必须分得开）。"""
-    try:
-        return path.read_text(encoding="utf-8")
-    except OSError:
-        return None
+def state(project_root: Path | str, *, store: Any = None) -> dict[str, Any]:
+    """`anchor_check` 的别名：名字直说它不执行任何东西（只读角色走这条）。"""
+    return anchor_check(project_root, store=store)
+
+
 
 
 def build(project_root: Path | str, *, render_script: str = DEFAULT_RENDER_SCRIPT,
@@ -279,9 +300,7 @@ def build(project_root: Path | str, *, render_script: str = DEFAULT_RENDER_SCRIP
     任何一步失败/超时 ⇒ `ok=False` 并指出是哪一步，绝不假装走完了。
     """
     root = Path(project_root)
-    tex = root / "out" / "paper" / "main.tex"
     steps: list[dict[str, Any]] = []
-    tex_before = _read_text(tex)
 
     first = render(root, script=render_script, timeout_sec=timeout_sec)
     steps.append({"step": "render", **first})
@@ -293,15 +312,9 @@ def build(project_root: Path | str, *, render_script: str = DEFAULT_RENDER_SCRIP
     if not built["ok"]:
         return _failed("compile", steps, root)
 
-    # 第三次：再渲染一次。唯一目的是让锚覆盖这一次编出来的 PDF ——
-    # 因为锚是在渲染那一刻写的，而 PDF 是在那之后变的（模块 docstring 记了实测）。
-    again = render(root, script=render_script, timeout_sec=timeout_sec)
-    steps.append({"step": "render_after_compile", **again})
-    if not again["ok"]:
-        return _failed("render_after_compile", steps, root)
-
-    stable, stable_why = tex_content_stable(tex_before, _read_text(tex))
-    checked = anchor_check(root, script=render_script, timeout_sec=timeout_sec)
+    # 三步就够：判据搬进 `renderanchor` 并加上编译回执之后，"PDF 是不是从磁盘上
+    # 这份 tex 编的"由回执那一维回答（`receipt`），不再需要"再渲染一次把锚挪过去"。
+    checked = anchor_check(root)
     # 每一步的形状必须一致（都有 `ok`）：`anchor_check` 的返回值里没有 `ok` 键，
     # 直接塞进来会让读 `steps[*]["ok"]` 的调用方在第四步上 KeyError ——
     # 这是真机读数抓到的（脚本按步打印读数时崩在最后一步）。
@@ -309,16 +322,17 @@ def build(project_root: Path | str, *, render_script: str = DEFAULT_RENDER_SCRIP
     pdf = root / "out" / "paper" / "main.pdf"
     return {
         "ok": checked["verdict"] == "consistent",
-        "anchor": {k: checked[k] for k in ("verdict", "exit_code", "drift", "why",
-                                           "anchor_path", "anchor_present", "anchor_sha256")},
+        "anchor": {k: checked[k] for k in ("verdict", "dimensions", "drift", "problems", "why",
+                                           "anchor_path", "anchor_present", "receipt_path",
+                                           "receipt_present", "anchor_sha256", "rendered_at",
+                                           "compiled_at")},
         "pdf_path": str(pdf),
-        "pdf_sha256": _sha256_file(pdf),
+        "pdf_sha256": _file_digest(pdf),
         "pdf_bytes": pdf.stat().st_size if pdf.is_file() else 0,
         "pdf_pages": (built.get("result") or {}).get("pages"),
         "markers_missing": (built.get("result") or {}).get("markers_missing"),
         "compiler_exit_codes": (built.get("result") or {}).get("compiler_exit_codes"),
-        "tex_content_stable": stable,
-        "tex_note": stable_why,
+        "receipt": checked.get("receipt") or {},
         "steps": steps,
         "problem": ("" if checked["verdict"] == "consistent" else
                     f"锚没到 0 漂移（{checked['verdict']}）：{checked['why']}"),
@@ -336,15 +350,18 @@ def _failed(step: str, steps: list[dict[str, Any]], root: Path) -> dict[str, Any
         "pdf_pages": None,
         "markers_missing": None,
         "compiler_exit_codes": None,
-        "tex_content_stable": False,
-        "tex_note": "",
+        "receipt": {},
         "steps": steps,
         "problem": f"{step} 这一步没走成 ⇒ 后面的步骤没有跑（没查成，不是通过）",
     }
 
 
 def selftest() -> int:
-    """自检（离线、临时目录里造一个假项目）：跑脚本 / 越界拒绝 / 缺结论行 / 三态 / 顺序。"""
+    """自检（离线、临时目录里造一个假项目）：跑脚本 / 越界拒绝 / 缺结论行 / 三态 / 三步。
+
+    假项目的渲染与编译脚本自己调用 `agentflow.renderanchor` 写锚与回执 ——
+    与真项目脚本走同一条路（判据只有一份实现，夹具也不另写一份）。
+    """
     import tempfile
 
     problems: list[str] = []
@@ -352,15 +369,37 @@ def selftest() -> int:
         root = Path(td) / "proj"
         (root / "code").mkdir(parents=True)
         (root / "out" / "paper").mkdir(parents=True)
+        src = str(Path(__file__).resolve().parents[1])
 
-        # 一个合格脚本：写一个日期行，再打一行结论
+        # 假渲染脚本：写 tex + 锚（真项目 `make_paper.py` 的契约）
         (root / "code" / "r.py").write_text(
-            'import json, pathlib\n'
-            'p = pathlib.Path("out/paper/main.tex")\n'
-            'p.parent.mkdir(parents=True, exist_ok=True)\n'
-            'p.write_text("\\\\date{2026-01-01}\\nbody\\n", encoding="utf-8")\n'
-            'print("REPRO_RESULT: " + json.dumps({"ok": True, "pages": 3}))\n',
+            "import json, pathlib, sys\n"
+            f"sys.path.insert(0, {src!r})\n"
+            "from agentflow import renderanchor as RA\n"
+            "from agentflow.store import Store\n"
+            "root = pathlib.Path('.')\n"
+            "out = root / 'out' / 'paper'\n"
+            "out.mkdir(parents=True, exist_ok=True)\n"
+            "(out / 'main.tex').write_text(chr(10).join(['\\\\date{2026-01-01}', 'body'])"
+            " + chr(10), encoding='utf-8')\n"
+            "st = Store(root); st.init(force=True)\n"
+            "(out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)),"
+            " encoding='utf-8')\n"
+            "print('REPRO_RESULT: ' + json.dumps({'claims': 3}))\n",
             encoding="utf-8")
+        # 假编译脚本：写 PDF + 回执
+        (root / "code" / "c.py").write_text(
+            "import json, pathlib, sys\n"
+            f"sys.path.insert(0, {src!r})\n"
+            "from agentflow import renderanchor as RA\n"
+            "out = pathlib.Path('out/paper')\n"
+            "(out / 'main.pdf').write_bytes(b'%PDF-1.4 fake')\n"
+            "rec = RA.build_receipt(out, tex_sha256=RA.file_digest(out / 'main.tex'),"
+            " pages=3, markers_missing=[], pdf_bytes=13, compiler_exit_codes=[0])\n"
+            "(out / RA.RECEIPT_NAME).write_text(json.dumps(rec), encoding='utf-8')\n"
+            "print('REPRO_RESULT: ' + json.dumps({'ok': True, 'pages': 3}))\n",
+            encoding="utf-8")
+
         got = render(root, script="code/r.py", timeout_sec=60)
         if not got["ok"] or got["repro_found"] is not True:
             problems.append(f"渲染脚本没跑成：{got}")
@@ -382,16 +421,16 @@ def selftest() -> int:
         if silent["repro_found"] or silent["ok"]:
             problems.append(f"没有结论行却判了通过：{silent}")
 
-        # `--check` 的三态：三个脚本各自退出 0 / 1 / 2
+        # `--check` 脚本的三态（`doc.paper_anchor` 走这条）
         for code, want in ((0, "consistent"), (1, "drifted"), (2, "unknown")):
             name = f"c{code}.py"
             body = ("import sys\n"
                     "print('[anchor] 渲染时刻 X；锚覆盖 1 个文件')\n"
                     + ("" if code == 0 else
-                       "print('    - 文件 main.pdf：内容与渲染时不同')\n")
+                       "print('    - 文件 main.tex：内容与渲染时不同')\n")
                     + (f"sys.exit({code})\n"))
             (root / "code" / name).write_text(body, encoding="utf-8")
-            seen = anchor_check(root, script=f"code/{name}", timeout_sec=60)
+            seen = anchor_check_script(root, script=f"code/{name}", timeout_sec=60)
             if seen["verdict"] != want:
                 problems.append(f"退出码 {code} 翻成了 {seen['verdict']}（期望 {want}）")
             if code == 1 and not seen["drift"]:
@@ -402,29 +441,52 @@ def selftest() -> int:
         # 矛盾输入：退出码 0 却打了漂移行 ⇒ 必须判「没查成」，不许挑一个信
         (root / "code" / "liar.py").write_text(
             "import sys\n"
-            "print('    - 文件 main.pdf：内容与渲染时不同')\n"
+            "print('    - 文件 main.tex：内容与渲染时不同')\n"
             "sys.exit(0)\n", encoding="utf-8")
-        liar = anchor_check(root, script="code/liar.py", timeout_sec=60)
+        liar = anchor_check_script(root, script="code/liar.py", timeout_sec=60)
         if liar["verdict"] != "unknown" or "矛盾" not in liar["why"]:
             problems.append(f"退出码与输出打架时没判「没查成」：{liar}")
 
-        # 顺序与"没走成就停"：编译脚本失败 ⇒ build 必须在 compile 处停，不跑后面两步
-        (root / "code" / "bad_compile.py").write_text(
-            "import sys\nprint('编译炸了')\nsys.exit(1)\n", encoding="utf-8")
-        stopped = build(root, render_script="code/r.py", compile_script="code/bad_compile.py",
+        # ---- 进程内三维（`anchor_check` / `state`：只读角色走这条）
+        fresh = Path(td) / "fresh"
+        (fresh / "out" / "paper").mkdir(parents=True)
+        seen = anchor_check(fresh)
+        if seen["verdict"] != "unknown" or seen["source"] != "in_process":
+            problems.append(f"没有锚时没判 unknown：{seen}")
+        if state(fresh)["verdict"] != "unknown":
+            problems.append("state() 与 anchor_check() 结论不一致（它们必须是同一条判据）")
+
+        # ---- 三步序列：渲染 → 编译 → 核对
+        done = build(root, render_script="code/r.py", compile_script="code/c.py", timeout_sec=60)
+        names = [s["step"] for s in done["steps"]]
+        if names != ["render", "compile", "anchor_check"]:
+            problems.append(f"步骤不是三步：{names}")
+        if not done["ok"] or done["anchor"]["verdict"] != "consistent":
+            problems.append(f"三步跑完没到 0 漂移：{done['problem']} {done['anchor']}")
+        if not done["receipt"].get("tex_sha256"):
+            problems.append(f"没带出编译回执：{done['receipt']}")
+
+        # 编译之后改 tex ⇒ 回执那一维必须报「旧 tex」
+        (root / "out" / "paper" / "main.tex").write_text(
+            "\\date{2026-01-01}" + "\n" + "body changed" + "\n", encoding="utf-8")
+        stale = anchor_check(root)
+        if stale["dimensions"]["receipt"] != "drifted":
+            problems.append(f"旧 tex 没被判出来：{stale['dimensions']} {stale['drift']}")
+
+        # 编译脚本失败 ⇒ 停在 compile
+        (root / "code" / "bad.py").write_text("import sys\nprint('炸')\nsys.exit(1)\n",
+                                              encoding="utf-8")
+        stopped = build(root, render_script="code/r.py", compile_script="code/bad.py",
                         timeout_sec=60)
-        names = [s["step"] for s in stopped["steps"]]
-        if stopped["ok"] or names != ["render", "compile"]:
-            problems.append(f"编译失败没停在 compile：ok={stopped['ok']} steps={names}")
-        if "compile" not in stopped["problem"]:
-            problems.append(f"失败没指出是哪一步：{stopped['problem']}")
+        if stopped["ok"] or [s["step"] for s in stopped["steps"]] != ["render", "compile"]:
+            problems.append(f"编译失败没停在 compile：{stopped['steps']}")
 
     if problems:
         print("SELF-CHECK FAILED")
         for p in problems:
             print("  -", p)
         return 1
-    print("SELF-CHECK DONE（跑脚本 / 越界与绝对路径拒绝 / 缺结论行 / 三态 / 失败即停）")
+    print("SELF-CHECK DONE（脚本三态 / 进程内三维 / 三步序列 / 旧 tex / 失败即停）")
     return 0
 
 

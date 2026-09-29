@@ -2108,6 +2108,8 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 它们都不是"对拍副本"，所以按 `R6-AN-1` 建议③的要求登记并各写一行理由。
     "locallib.py": "本地书架：把目录里的 PDF 登记进项目库，并作为 `run_topic` 的检索/取全文接缝",
     "paperbuild.py": "论文包的构建/编译/锚核对：受限地起项目脚本、读回 `REPRO_RESULT` 契约、把三态翻成工具层结论（`draft/28` §188）",
+    "renderanchor.py": "渲染锚与编译回执的判据本体（纯函数）：源表/源文件/回执三维 + 三态；只读角色也能调它核包（`draft/28` §191）",
+    "renderanchor.py": "渲染锚与编译回执的判据本体（纯函数）：源表/源文件/回执三维 + 三态；只读角色也能调它核包（`draft/28` §191）",
     "modelclient.py": "把模型网关适配成抽取层要的 `.complete()`（带 scope='extract' 记账）",
     "modelcost.py": "模型花销入账适配器（`ModelReply` → `usage_ledger` 的一笔账）",
     "projects.py": "项目工作区：一个项目一个文件夹、默认命名 project1..N、冷启动/热启动判定",

@@ -71,7 +71,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 70
+TOOL_COUNT = 72
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -220,6 +220,7 @@ def tool_params() -> dict[str, dict]:
         },
         "doc.scan_claim": {"claim": dict(CLAIM)},
         "doc.paper_anchor": {"project": PAPER_PROJECT, "timeout_sec": 60},
+        "doc.paper_state": {"project": PAPER_PROJECT},
         "doc.paper_build": {"project": PAPER_PROJECT, "timeout_sec": 60},
         "doc.paper_compile": {"project": PAPER_PROJECT, "timeout_sec": 60},
         "doc.paper_render": {"project": PAPER_PROJECT, "timeout_sec": 60},
@@ -245,6 +246,7 @@ def tool_params() -> dict[str, dict]:
         "review.list_findings": {},
         "review.scan_document": {"doc": _doc_row(), "dependencies": []},
         "search.dedup_check": {"title": "Nobody wrote about this", "year": 2020},
+        "search.ingest_local": {"books_dir": "books_probe", "pattern": "*.txt"},
         "search.download": {"url": "https://example.invalid/paper.pdf"},
         "search.literature": {"topic": "群", "mode": "topical"},
         "search.local": {"query": "群"},
@@ -292,13 +294,15 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "doc.build_document", "doc.compose_claim", "doc.list_documents", "doc.register_dependency",
         "doc.scan_claim",
         "doc.paper_anchor", "doc.paper_build", "doc.paper_compile", "doc.paper_render",
+        "doc.paper_state",
         "fs.delete", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
         "ocr.backends", "ocr.detect_text_layer",
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
         "research.write_note",
         "review.list_findings", "review.scan_document",
-        "search.dedup_check", "search.literature", "search.local", "search.providers",
+        "search.dedup_check", "search.ingest_local", "search.literature", "search.local",
+        "search.providers",
         "search.register", "search.shelf",
         "table.count", "table.create", "table.delete", "table.get", "table.list", "table.schema",
         "table.search", "table.update",
@@ -626,6 +630,14 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     _seed(store, store.root)
     # `conductor.acceptance` 要一张真的验收表才走成功支：给夹具造一张最小的
     # （十行的形态与项目脚本产出的一致 —— 表头 + 一行判据）。
+    # 登记本地目录的探针要有真目录（否则那一步是 `io_error` ⇒ "没查成"）：
+    _books = store.root / "books_probe"
+    _books.mkdir(parents=True, exist_ok=True)
+    (_books / "probe.txt").write_text("探针书。\n", encoding="utf-8")
+    # 登记本地目录的探针要有真目录（否则那一步是 `io_error` ⇒ "没查成"）：
+    _books = store.root / "books_probe"
+    _books.mkdir(parents=True, exist_ok=True)
+    (_books / "probe.txt").write_text("探针书。\n", encoding="utf-8")
     _acceptance = store.root / "out" / "paper" / "ACCEPTANCE.md"
     _acceptance.parent.mkdir(parents=True, exist_ok=True)
     _acceptance.write_text(
