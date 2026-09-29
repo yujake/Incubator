@@ -423,6 +423,44 @@ def _window_on_tokens(page: str, toks: list[str], weight: dict[str, float],
     return text
 
 
+def page_scores(pages: list[str], query: str) -> list[float]:
+    """每一页与 `query` 的相关度（主键=命中多少个不同主题词，次键=稀有度加权和）。
+
+    ## 为什么把它单独抽出来（`draft/28` §187 真机读数逼出来的）
+
+    原先这套打分只活在 `excerpt_for` 内部，于是任何"要按相关度给「书」排序"的调用方
+    都拿不到分数 —— 我第一版 `search.local` 就因此拿"摘录长度"当排序键，而
+    长度在窗口取满时恒等于 `max_chars`：排序退化成按 `lit_id` 字母序，
+    真机读数里"martingale central limit theorem"的第三名是一篇讲
+    「伊朗城市」的论文（它命中的是 `central`）。判据只有一份实现才不会这样脱节。
+
+    导航页（目录/索引）按住 `_NAV_PENALTY` 压分，理由见 `_looks_like_navigation`。
+    """
+    toks = _tokens(query)
+    if not toks or not pages:
+        return [0.0 for _ in pages]
+    df: dict[str, int] = {t: 0 for t in set(toks)}
+    for page in pages:
+        low = page.lower()
+        for t in df:
+            if t in low:
+                df[t] += 1
+    weight = {t: 1.0 / max(1, n) for t, n in df.items()}
+
+    out: list[float] = []
+    for page in pages:
+        low = page.lower()
+        present = {t for t in weight if t in low}
+        # 主键是覆盖率（这一页到底谈了几个主题词），稀有度只当次键。
+        # 只用 `Σ 1/df(t)` 会让"命中一个稀有词"的页压过"命中三个常见词"的页 ——
+        # 实测代价见 `_COVERAGE_FIRST` 的说明（cosets 那道题就是这么选错的）。
+        score = len(present) * _COVERAGE_FIRST + sum(weight[t] for t in present)
+        if score > 0 and _looks_like_navigation(page):
+            score *= _NAV_PENALTY
+        out.append(score)
+    return out
+
+
 def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple[int, str]:
     """挑出与 `query` 最相关的一页并截一段。返回 `(页码 1-based, 摘录)`。
 
@@ -434,7 +472,7 @@ def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple
     把不连续的高分句子拼起来会让"逐字复制"变成"逐字拼接"—— 而框架的回验
     只认前者，结果是每一条都落 `not_found`，看上去像模型在编，其实是材料被拼过。
 
-    ## 排序口径（2026-09-28 真跑后改的）
+    ## 排序口径（2026-09-28 真跑后改的；打分本体已抽到 `page_scores`）
 
     第一版按"整页里主题词的原始出现次数"排序，真跑实测：主题
     `convex optimization duality and Lagrange multipliers` 选中的那一页讲的是
@@ -445,6 +483,8 @@ def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple
     toks = _tokens(query)
     if not toks:
         return (1, pages[0][:max_chars].strip()) if pages else (0, "")
+    scores = page_scores(pages, query)
+    best_idx = max(range(len(scores)), key=lambda i: (scores[i], -i))
     df: dict[str, int] = {t: 0 for t in set(toks)}
     for page in pages:
         low = page.lower()
@@ -452,21 +492,6 @@ def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple
             if t in low:
                 df[t] += 1
     weight = {t: 1.0 / max(1, n) for t, n in df.items()}
-
-    best_idx, best_score = 0, -1.0
-    for i, page in enumerate(pages):
-        low = page.lower()
-        present = {t for t in weight if t in low}
-        # 主键是覆盖率（这一页到底谈了几个主题词），稀有度只当次键。
-        # 只用 `Σ 1/df(t)` 会让"命中一个稀有词"的页压过"命中三个常见词"的页 ——
-        # 实测代价见 `_COVERAGE_FIRST` 的说明（cosets 那道题就是这么选错的）。
-        score = len(present) * _COVERAGE_FIRST + sum(weight[t] for t in present)
-        # 导航页（目录/索引）天生命中全部主题词，必须压下去：它的内容是最少的，
-        # 而"命中数"这个尺子只会把它排第一（实测见 `_looks_like_navigation` 的说明）。
-        if score > 0 and _looks_like_navigation(page):
-            score *= _NAV_PENALTY
-        if score > best_score:
-            best_idx, best_score = i, score
     return best_idx + 1, _window_on_tokens(pages[best_idx], toks, weight, max_chars)
 
 

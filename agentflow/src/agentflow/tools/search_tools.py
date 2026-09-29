@@ -200,6 +200,180 @@ def _lit_summary(row: Mapping[str, Any]) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- 本地书架（离线）
+
+#: 抽取器在进程内记忆化（键是 `(路径, 大小, mtime_ns)`，见 `locallib.memo_extract_fn`）。
+#: 为什么放在模块级：A 的一个回合里可能连问几次 `search.local`（换一次检索词就是一次），
+#: 一本 400 页的书抽一次要几秒，不记忆化就等于每次重抽整架书。
+_SHELF_EXTRACT: Any = None
+
+
+def _shelf_extract() -> Any:
+    """取（并惰性构造）书架抽取器。惰性是为了注册工具时不必导入抽取后端。"""
+    global _SHELF_EXTRACT
+    if _SHELF_EXTRACT is None:
+        from ..locallib import memo_extract_fn
+
+        _SHELF_EXTRACT = memo_extract_fn()
+    return _SHELF_EXTRACT
+
+
+def _shelf_row(ctx: _Ctx, row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """把一条 literature 行变成书架条目；`path` 不在盘上则返回 None（不是书架上的书）。"""
+    rel = str(row.get("path") or "")
+    if not rel or ctx.store is None:
+        return None
+    abs_path = ctx.store.library_path(rel)
+    if abs_path is None or not Path(abs_path).is_file():
+        return None
+    dl = dict(row.get("download") or {})
+    return {
+        "lit_id": str(row.get("lit_id") or ""),
+        "title": str(row.get("title") or ""),
+        "path": rel,
+        "abs_path": str(abs_path),
+        "bytes": int(dl.get("bytes") or Path(abs_path).stat().st_size),
+        "pages": dl.get("pages"),
+        "has_text_layer": dl.get("has_text_layer"),
+        # 来源如实分两档：「人放到本地目录」进来的（`source_path` 有值）与
+        # 「A 从网上下来」的（没有 `source_path`）。这一栏决定"离线可引用"是否成立，
+        # 也决定"这篇文献从哪来"这条链会不会说假话。
+        "origin": "local_ingest" if dl.get("source_path") else "downloaded",
+        "sha256_12": str(dl.get("sha256") or "")[:12],
+    }
+
+
+def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "") -> Any:
+    """``search.shelf``：不联网，列出库里「全文在盘上」的文献。"""
+    if ctx.store is None:
+        return fail(
+            "未配置 store：读不到文献表，也就说不出书架上有什么"
+            "（空书架与读不到是两件事，不许折叠成一个空列表）。",
+            kind="no_store",
+            counted=False,
+        )
+    rows, read_error = _literature_rows(ctx)
+    if read_error is not None:
+        return fail(f"{read_error} ⇒ 书架**没数成**（不是「书架是空的」）。", kind="table_unreadable",
+                    counted=False, read_error=read_error)
+
+    books: list[dict] = []
+    missing = 0
+    for row in rows:
+        if lit_id and str(row.get("lit_id") or "") != lit_id:
+            continue
+        item = _shelf_row(ctx, row)
+        if item is None:
+            if row.get("path"):
+                missing += 1
+            continue
+        books.append(item)
+    books.sort(key=lambda b: b["lit_id"])
+    truncated = False
+    if limit is not None and len(books) > limit:
+        books = books[:limit]
+        truncated = True
+    return ok(
+        {
+            "count": len(books),
+            "rows_total": len(rows),
+            "have_path": sum(1 for r in rows if r.get("path")),
+            "missing_files": missing,
+            "local_ingest": sum(1 for b in books if b["origin"] == "local_ingest"),
+            "downloaded": sum(1 for b in books if b["origin"] == "downloaded"),
+            "truncated": truncated,
+            "books": books,
+            "note": (
+                "这是**离线**来源：这些文件的正文就在工作区里，"
+                "可以用 search.local 按主题取逐字摘录。"
+                "`missing_files` 是「行上写了 path、但文件不在盘上」的条数 —— "
+                "它不是 0 时，那些书**取不到正文**，不要当它们存在。"
+            ),
+        }
+    )
+
+
+def _h_local(ctx: _Ctx, query: str, limit: int = 5, max_chars: int = 1200,
+             lit_id: str = "", max_books: int | None = None) -> Any:
+    """``search.local``：不联网，在书架的全文里按主题取最相关的一页与逐字摘录。"""
+    import time as _time
+
+    if ctx.store is None:
+        return fail(
+            "未配置 store：读不到书架（不是「书架上没有相关内容」）。",
+            kind="no_store",
+            searched=False,
+        )
+    rows, read_error = _literature_rows(ctx)
+    if read_error is not None:
+        return fail(f"{read_error} ⇒ 检索**没做成**（不是「没有命中」）。", kind="table_unreadable",
+                    searched=False, read_error=read_error)
+
+    from ..locallib import excerpt_for, page_scores
+
+    t0 = _time.monotonic()
+    extract = _shelf_extract()
+    hits: list[dict] = []
+    skipped_no_file: list[str] = []
+    unreadable: list[dict] = []
+    no_text: list[str] = []
+    scanned = 0
+    for row in rows:
+        if lit_id and str(row.get("lit_id") or "") != lit_id:
+            continue
+        item = _shelf_row(ctx, row)
+        if item is None:
+            if row.get("path"):
+                skipped_no_file.append(str(row.get("lit_id") or ""))
+            continue
+        if max_books is not None and scanned >= max(1, int(max_books)):
+            break
+        scanned += 1
+        try:
+            doc = extract(item["abs_path"])
+        except Exception as exc:  # noqa: BLE001 —— 抽不了就是抽不了，逐本如实记一档
+            unreadable.append({"lit_id": item["lit_id"], "why": f"{type(exc).__name__}: {exc}"})
+            continue
+        pages = [str(p) for p in (getattr(doc, "pages", []) or [])]
+        if not pages or not any(p.strip() for p in pages):
+            no_text.append(item["lit_id"])
+            continue
+        # 打分口径不在这里重写：`page_scores` 就是 `excerpt_for` 挑页用的同一份实现
+        # （覆盖率优先 + 导航页惩罚，理由见它的 docstring）。一本书的分数取它最高的那一页。
+        scores = page_scores(pages, query)
+        best_page_score = max(scores) if scores else 0.0
+        page, excerpt = excerpt_for(pages, query, max_chars=max_chars)
+        hits.append({**{k: item[k] for k in ("lit_id", "title", "path", "sha256_12")},
+                     "page": page, "excerpt": excerpt, "pages": len(pages),
+                     "score": round(float(best_page_score), 4)})
+
+    # 排序键是相关度，不是摘录长度：窗口取满时长度恒等于 `max_chars`，
+    # 拿它当主键等于按 lit_id 字母序排（§187 真机读数里"martingale central limit
+    # theorem"的第三名是一篇讲伊朗城市的论文，就是这么来的）。
+    hits.sort(key=lambda h: (-h["score"], h["lit_id"]))
+    kept = hits[: max(1, int(limit))]
+    return ok(
+        {
+            "query": query,
+            "searched": True,
+            "count": len(kept),
+            "candidates": len(hits),
+            "scanned": scanned,
+            "skipped_no_file": skipped_no_file,
+            "unreadable": unreadable,
+            "no_text_layer": no_text,
+            "hits": kept,
+            "elapsed_s": round(_time.monotonic() - t0, 3),
+            "note": (
+                "每条命中给的是**原文里连续的一段**（不是拼起来的句子），"
+                "并带 lit_id 与页码 —— 引文回验比的就是这段原文。"
+                "`skipped_no_file` / `unreadable` / `no_text_layer` 是"
+                "「这一本没查到」的三个不同理由：它们不等于「这本书里没有这个主题」。"
+            ),
+        }
+    )
+
+
 # --------------------------------------------------------------------------- provider 解析
 
 
@@ -1044,6 +1218,63 @@ def register(
                 "'existing_lit_id','dedup_hit_key','batch_duplicate','is_new','channel','cited_by_count'}"
             ),
             tags=("search", "literature"),
+        ),
+        ToolSpec(
+            name="search.shelf",
+            summary="**不联网**：列出工作区里**全文在盘上**的文献（本地书架）。"
+            "给 A 一条离线来源：有它才知道不用网也能引用哪些书。",
+            params={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+                    "lit_id": {"type": "string", "maxLength": 40},
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+            handler=lambda limit=None, lit_id="": _h_shelf(ctx, limit, lit_id),
+            side_effect="read",
+            roles=("A",),
+            returns=(
+                "{'count','rows_total','have_path','missing_files','local_ingest','downloaded',"
+                "'truncated','books','note'}；"
+                "books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages',"
+                "'has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；"
+                "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
+                "（**没数成**，不是「书架是空的」）"
+            ),
+            tags=("search", "offline", "shelf"),
+        ),
+        ToolSpec(
+            name="search.local",
+            summary="**不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**"
+            "（带 lit_id 与页码，引文回验比的就是这段原文）。",
+            params={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "minLength": 1, "maxLength": 400},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                    "max_chars": {"type": "integer", "minimum": 200, "maximum": 8000},
+                    "lit_id": {"type": "string", "maxLength": 40},
+                    "max_books": {"type": "integer", "minimum": 1, "maximum": 500},
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+            handler=lambda query, limit=5, max_chars=1200, lit_id="", max_books=None: _h_local(
+                ctx, query, limit, max_chars, lit_id, max_books
+            ),
+            side_effect="read",
+            roles=("A",),
+            returns=(
+                "{'query','searched','count','candidates','scanned','skipped_no_file',"
+                "'unreadable','no_text_layer','hits','elapsed_s','note'}；"
+                "hits[] 每项是 {'lit_id','title','path','sha256_12','page','excerpt','pages',"
+                "'score'}（按 score 降序；score 是 locallib.page_scores 的同一份口径）；"
+                "失败：ok=False + kind(no_store/table_unreadable) + searched=False"
+                "（**没做成检索**，不是「没有命中」）"
+            ),
+            tags=("search", "offline", "local"),
         ),
         ToolSpec(
             name="search.download",

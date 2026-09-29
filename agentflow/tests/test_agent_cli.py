@@ -218,7 +218,7 @@ def test_gate_without_a_key_is_unknown_not_pass(tmp_path: pathlib.Path, monkeypa
     这一条的要点是"没判成 ≠ 通过"：报告照样落盘、工作项照样写出，
     但结论必须是 `unknown`、退出码必须是 2 —— 折叠成 `pass` 就等于把"没查"读成"没问题"。
 
-    刻意**不**替换 `cli._agent_seam_factory`：走的就是"环境里没有 key"那条真路。
+    刻意「不」替换 `cli._agent_seam_factory`：走的就是"环境里没有 key"那条真路。
     """
     monkeypatch.delenv("AGENTFLOW_MODEL_API_KEY", raising=False)
     root = tmp_path / "ws"

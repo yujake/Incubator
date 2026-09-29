@@ -597,12 +597,12 @@ def test_role_tool_counts_in_the_doc_match_the_live_census():
 def test_unknown_role_in_census_would_be_caught(tmp_path):
     """负控：把文档里 A 的条数改错 ⇒ 上面那条对账会红（证明它有牙）。"""
     def bump(lines: list[str]) -> list[str]:
-        return [ln.replace("工具面（20 个，实测）", "工具面（21 个，实测）")
+        return [ln.replace("工具面（22 个，实测）", "工具面（23 个，实测）")
                 if ln.startswith("### A.4") else ln for ln in lines]
 
     doc = _mutate(tmp_path, bump)
     result = G.check(doc)
-    assert 20 not in result["counts_by_role"]["A"] and 21 in result["counts_by_role"]["A"]
+    assert 22 not in result["counts_by_role"]["A"] and 23 in result["counts_by_role"]["A"]
 
 
 # ============================================================ 逐个工具的契约

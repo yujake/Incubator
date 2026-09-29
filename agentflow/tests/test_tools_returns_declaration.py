@@ -68,7 +68,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 63
+TOOL_COUNT = 65
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -237,6 +237,8 @@ def tool_params() -> dict[str, dict]:
         "search.dedup_check": {"title": "Nobody wrote about this", "year": 2020},
         "search.download": {"url": "https://example.invalid/paper.pdf"},
         "search.literature": {"topic": "群", "mode": "topical"},
+        "search.local": {"query": "群"},
+        "search.shelf": {},
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
         "table.count": {"table": "concepts"},
@@ -285,7 +287,8 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
         "research.write_note",
         "review.list_findings", "review.scan_document",
-        "search.dedup_check", "search.literature", "search.providers", "search.register",
+        "search.dedup_check", "search.literature", "search.local", "search.providers",
+        "search.register", "search.shelf",
         "table.count", "table.create", "table.delete", "table.get", "table.list", "table.schema",
         "table.search", "table.update",
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
