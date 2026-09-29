@@ -46,6 +46,8 @@ from typing import Any, Callable, Iterable, Mapping
 SECTION_ORDERS: dict[str, int] = {
     "AGENT_IDENTITY": 0,
     "ROLE_BOUNDARY": 100,
+    "FACULTIES": 200,                # 十项官能（不是工具清册：先说"你有什么"，再说"按键在哪"）
+    "STANCE": 300,                   # 这个角色的治学姿态（脑子/思辨/创新/品味/高观点）
     "ROLE_POLICY": 500,
     "TOOL_GUIDANCE_BASE": 1000,      # 每工具一条：1000 + 序号 * 10
     "EVIDENCE_CONTRACT": 3000,

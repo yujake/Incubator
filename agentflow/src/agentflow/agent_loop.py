@@ -49,7 +49,21 @@ from . import sessions as SS
 from .llmseam import LlmSeam
 
 #: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
-SHAPES = ("tool", "summon", "message", "final")
+SHAPES = ("tool", "summon", "message", "note", "final")
+
+#: 公共频道。`message.to` 写它 = 所有人都能收到（说话，而不是派活）。
+PUBLIC = "#public"
+
+#: 草稿本目录名：`<项目根>/notes/<角色>.md`。它刻意不在数据面里 ——
+#: 于是只读角色（C / H）也能"有手"：写自己的思考不算写数据。
+NOTES_DIR_NAME = "notes"
+
+#: 子循环的完整产出落点：`<项目根>/runs/<角色>-<时间戳>-<序号>.json`。
+#:
+#: 为什么必须落盘而不是塞进召唤结果：真机实测（2026-09-29）M 拿到的 D 的结论被摘要截断，
+#: 于是它只能发留言去问 D"把结论正文回传" —— 而 D 的循环早已结束，问也问不回来。
+#: 正确做法是把长产出放磁盘、把路径给上游：上游有眼睛（fs.read），自己去读全文。
+RUNS_DIR_NAME = "runs"
 
 #: 单个工具结果回给模型时的字符上限（超了截断并写明截了多少）。
 RESULT_CHARS = 1200
@@ -130,22 +144,26 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
     for i, event in enumerate(events, 1):
         if event.get("kind") != "agent_message":
             continue
-        if str(event.get("to")) != role:
+        to = str(event.get("to"))
+        if to != role and to != PUBLIC:
             continue
+        if str(event.get("from")) == role:
+            continue                     # 自己说的不用再听一遍
         msg_id = str(event.get("msg_id") or f"m{i:04d}")
         out.append({**event, "msg_id": msg_id, "delivered": msg_id in delivered})
     return out, problems
 
 
 def send_message(session_root: Path, *, sender: str, to: str, subject: str, body: str,
-                 sid: str | None = None) -> tuple[str, str]:
-    """发一条消息（append-only）。返回 `(msg_id, 问题)`；问题非空表示没落成。"""
+                 reply_to: str = "", sid: str | None = None) -> tuple[str, str]:
+    """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。"""
     events, _problems = SS.read_session(session_root, sid=sid)
     seq = sum(1 for e in events if e.get("kind") == "agent_message") + 1
     msg_id = f"m{seq:04d}"
     _path, problem = SS.append(session_root, {
         "kind": "agent_message", "msg_id": msg_id, "from": sender, "to": to,
-        "subject": subject, "body": body,
+        "subject": subject, "body": body, "reply_to": reply_to,
+        "channel": "public" if to == PUBLIC else "private",
     }, sid=sid)
     return msg_id, problem
 
@@ -159,6 +177,40 @@ def mark_delivered(session_root: Path, role: str, ids: Sequence[str], *,
         "kind": "agent_inbox", "role": role, "delivered": sorted(set(ids)),
     }, sid=sid)
     return problem
+
+
+def note_path(session_root: Path, role: str) -> Path:
+    """这个角色的草稿本路径：`<项目根>/notes/<角色>.md`。"""
+    return session_root / NOTES_DIR_NAME / f"{role}.md"
+
+
+def write_note(session_root: Path, role: str, text: str, *,
+               sid: str | None = None) -> tuple[str, str]:
+    """往草稿本追加一行。返回 `(路径, 问题)`；问题非空表示没写成。"""
+    path = note_path(session_root, role)
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    line = f"- [{stamp}] {text.strip()}\n"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(line)
+    except OSError as exc:
+        return str(path), f"{type(exc).__name__}: {exc}"
+    _p, problem = SS.append(session_root, {"kind": "agent_note", "role": role,
+                                           "text": text.strip(), "path": str(path)}, sid=sid)
+    return str(path), problem
+
+
+def notebook_digest(session_root: Path, role: str, limit: int = 6) -> str:
+    """草稿本最近几条（进提示词，让"我上一步想过什么"不必靠记忆）。"""
+    path = note_path(session_root, role)
+    if not path.is_file():
+        return "（草稿本还是空的）"
+    try:
+        lines = [ln.rstrip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    except OSError as exc:
+        return f"（草稿本读不出来：{type(exc).__name__}: {exc}）"
+    return "\n".join(lines[-limit:]) if lines else "（草稿本还是空的）"
 
 
 def inbox_digest(session_root: Path, role: str, *, sid: str | None = None) -> tuple[str, list[str], list[str]]:
@@ -203,14 +255,20 @@ def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
             return "", {}, "summon.params 必须是一个对象"
         return key, {"role": role, "action": action, "params": dict(params),
                      "why": str(value.get("why") or "")}, ""
+    if key == "note":
+        text = value if isinstance(value, str) else str((value or {}).get("text") or "")
+        if not text.strip():
+            return "", {}, "note 得有一句话可写"
+        return key, {"text": text.strip()}, ""
     if key == "message":
         if not isinstance(value, Mapping):
             return "", {}, "message 必须是一个对象"
         to = str(value.get("to") or "")
-        if to not in S.ROLES:
-            return "", {}, f"收件人 {to!r} 不在 {S.ROLES} 里"
+        if to != PUBLIC and to not in S.ROLES:
+            return "", {}, f"收件人 {to!r} 既不是角色也不是 {PUBLIC}"
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
-                     "body": str(value.get("body") or "")}, ""
+                     "body": str(value.get("body") or ""),
+                     "reply_to": str(value.get("reply_to") or "")}, ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     return key, {"final": final, "evidence": [str(x) for x in (data.get("evidence") or [])]}, ""
 
@@ -254,6 +312,23 @@ class AgentLoop:
         except Exception as exc:
             return None
 
+    def _hear(self) -> list[dict[str, Any]]:
+        """听一次新消息：把这次运行期间新到的消息取出来并登记投递。"""
+        digest, fresh, problems = inbox_digest(self.session_root, self.role, sid=self.sid)
+        if not fresh:
+            return []
+        problem = mark_delivered(self.session_root, self.role, fresh, sid=self.sid)
+        heard: list[dict[str, Any]] = []
+        messages, _ = read_messages(self.session_root, self.role, sid=self.sid)
+        for m in messages:
+            if str(m.get("msg_id")) in fresh:
+                heard.append({"id": m.get("msg_id"), "from": m.get("from"),
+                              "channel": m.get("channel"), "subject": m.get("subject"),
+                              "body": _clip(m.get("body"), 400)})
+        if problem:
+            heard.append({"投递登记失败": problem})
+        return heard
+
     def _budget_text(self) -> str:
         if self.seam.usd_budget is None:
             return f"未设置上限（已用 {self.seam.spend.usd:.6f} 美元）"
@@ -267,6 +342,7 @@ class AgentLoop:
         self.my_task_id = my_task_id
         self.depth = depth
         inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid)
+        notebook = notebook_digest(self.session_root, self.role)
         run = LoopRun(role=self.role, task=task)
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
         if fresh_ids:
@@ -277,7 +353,8 @@ class AgentLoop:
         availability = self._availability()
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
                      budget_left=self._budget_text(), inbox=inbox,
-                     workspace_root=self.workspace_root, availability=availability)
+                     workspace_root=self.workspace_root, availability=availability,
+                     notebook=notebook)
         run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **facts)
         system = AP.system_prompt(self.role, registry=self.registry, **facts)
         transcript = (f"你的任务：{task}\n\n"
@@ -335,6 +412,11 @@ class AgentLoop:
                 run.stop_reason = "final"
                 break
             result = self._execute(shape, payload)
+            # 耳朵一直开着：这一步做完先听一次新消息，把它并进这一步的结果里
+            # （并进结果而不是只并进 transcript：台账与会话记录要能看到"他当时听到了什么"）。
+            heard = self._hear()
+            if heard:
+                result = {**result, "新消息": heard}
             step_obj = LoopStep(step, shape, payload, result)
             run.steps.append(step_obj)
             SS.append(self.session_root, {
@@ -363,6 +445,8 @@ class AgentLoop:
             return self._do_tool(payload)
         if shape == "summon":
             return self._do_summon(payload)
+        if shape == "note":
+            return self._do_note(payload)
         return self._do_message(payload)
 
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -395,22 +479,49 @@ class AgentLoop:
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             return out
+        payload = res.payload
+        path = str(payload.get("llm_run_path") or "") if isinstance(payload, Mapping) else ""
         out.update(
             ok=bool(res.ok), task_id=res.task_id, status=res.status, outcome=res.outcome,
             refusal_reason=res.refusal_reason, detail=_clip(res.detail, 400),
-            payload=_clip(res.payload, 800), children=list(res.children or []),
+            children=list(res.children or []),
         )
+        if path:
+            # 伙伴是 LLM 循环驱动的：它的完整产出在磁盘上，这里只给路径 + 一段结论。
+            out["llm_run_path"] = path
+            out["final"] = _clip(payload.get("final") or "", 600)
+            out["payload"] = _clip({k: v for k, v in payload.items() if k != "llm_run"}, 400)
+        else:
+            out["payload"] = _clip(payload, 800)
         return out
 
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        msg_id, problem = send_message(self.session_root, sender=self.role,
-                                       to=str(payload.get("to")),
+        to = str(payload.get("to"))
+        reply_to = str(payload.get("reply_to") or "")
+        if to != PUBLIC:
+            allowed = (to in AP.partners_out(self.role) or self.role in AP.partners_out(to)
+                       or bool(reply_to))
+            if not allowed:
+                return {"message": "未发出", "to": to, "ok": False,
+                        "error": f"{self.role} 与 {to} 之间没有协作边（{self.role} 能叫的是 "
+                                 f"{sorted(AP.partners_out(self.role))}）⇒ 私聊不成立；"
+                                 f"要么发到公共频道（to={PUBLIC}），要么先公开开口。"}
+        msg_id, problem = send_message(self.session_root, sender=self.role, to=to,
                                        subject=str(payload.get("subject") or ""),
-                                       body=str(payload.get("body") or ""), sid=self.sid)
+                                       body=str(payload.get("body") or ""),
+                                       reply_to=reply_to, sid=self.sid)
         if problem:
-            return {"message": "未发出", "to": payload.get("to"), "ok": False, "error": problem}
-        return {"message_sent": msg_id, "to": payload.get("to"), "ok": True,
-                "note": "收件人下次运行时会在收件箱里看到它"}
+            return {"message": "未发出", "to": to, "ok": False, "error": problem}
+        where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
+        return {"message_sent": msg_id, "to": to, "channel": where, "ok": True,
+                "note": "收件人下次运行时（或本步之后）会在收件箱里看到它"}
+
+    def _do_note(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        path, problem = write_note(self.session_root, self.role,
+                                   str(payload.get("text") or ""), sid=self.sid)
+        if problem:
+            return {"note": "没写成", "ok": False, "error": problem}
+        return {"note_written": path, "ok": True}
 
 
 # ------------------------------------------------------------------ 后端
@@ -457,12 +568,34 @@ class LlmBackend:
                        summoned_by=str(params.get("_summoned_by") or S.CONDUCTOR_ROLE),
                        my_task_id=str(params.get("_task_id") or self._lookup_task_id(role)),
                        depth=int(params.get("_depth") or 1))
-        return {"llm_run": run.to_dict(), "final": run.final, "stop_reason": run.stop_reason}
+        artifact = self._write_run_artifact(role, run)
+        SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,
+                                      "path": artifact, "stop_reason": run.stop_reason,
+                                      "task_id": run.prompt_audit.get("task_id", "")}, sid=self.sid)
+        out = {"llm_run_path": artifact, "final": run.final, "stop_reason": run.stop_reason,
+               "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent}
+        if not artifact:
+            out["llm_run"] = run.to_dict()      # 落盘失败时退回内联，绝不静默丢产出
+        return out
 
     def _seam(self, role: str) -> LlmSeam:
         if self.seam_factory is not None:
             return self.seam_factory(role)
         raise RuntimeError("LlmBackend 需要 seam_factory（一个按角色造模型缝的调用方）")
+
+    def _write_run_artifact(self, role: str, run: LoopRun) -> str:
+        """把这次循环的完整记录写成文件，返回路径（失败就返回空串并留 note）。"""
+        try:
+            d = self.session_root / RUNS_DIR_NAME
+            d.mkdir(parents=True, exist_ok=True)
+            n = len(list(d.glob(f"{role}-*.json"))) + 1
+            path = d / f"{role}-{time.strftime('%Y%m%d-%H%M%S')}-{n:03d}.json"
+            path.write_text(json.dumps(run.to_dict(), ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8", newline="\n")
+            return str(path)
+        except OSError as exc:
+            run.notes.append(f"产出落盘失败：{type(exc).__name__}: {exc}")
+            return ""
 
     def _lookup_task_id(self, role: str) -> str:
         """从台账里找出"刚刚为这个角色写下的那条 running 行"。

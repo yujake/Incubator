@@ -278,3 +278,141 @@ def test_unregistered_role_and_missing_registry_fail_closed(registry: ToolRegist
         AP.system_prompt("Q", registry=registry)
     with pytest.raises(ValueError):
         AP.system_prompt("A")
+
+
+#: 官能分组测试用的注册表（与文件里其它用例同一份口径：不带 workspace_root，没有 fs 工具）。
+REGISTRY = build_registry().registry
+
+# ---------------------------------------------------------------- 官能的分量（v2）
+#
+# 这一组守的是"分清哪个要求描述哪个角色、哪些是共有的"：
+# 把十项官能做成所有角色都一样的检查表，读起来是能力清单，实际抹平了分工。
+
+def test_every_role_declares_an_emphasis_for_all_ten_faculties():
+    """正控（分量表要完整）：每个角色对十项官能都有明确分量，且三档取值合法。"""
+    names = [f for f, _w, _b in AP.FACULTIES]
+    assert len(names) == 10, names
+    for role in AP.roles_covered():
+        table = AP.FACULTY_EMPHASIS.get(role)
+        assert table is not None, f"{role} 没有分量表"
+        assert sorted(table) == sorted(names), f"{role} 的分量表与十项官能对不上：{sorted(table)}"
+        bad = {k: v for k, v in table.items() if v not in ("core", "minor", "denied")}
+        assert not bad, f"{role} 的分量取值非法：{bad}"
+
+
+def test_core_faculties_are_written_locally_and_denied_ones_are_written_as_forbidden():
+    """正控（分量要落到文字上）：主战官能必须有这一岗的本地说明；不许的必须在禁列里。"""
+    for role in AP.roles_covered():
+        missing = [f for f, level in AP.FACULTY_EMPHASIS[role].items()
+                   if level == "core" and (role, f) not in AP.FACULTY_LOCAL]
+        assert not missing, f"{role} 的主战官能没有本地说明：{missing}"
+        denied_missing = [f for f, level in AP.FACULTY_EMPHASIS[role].items()
+                          if level == "denied" and (role, f) not in AP.FACULTY_LOCAL]
+        assert not denied_missing, f"{role} 的禁止项没有写明理由：{denied_missing}"
+
+        text = AP.faculties_text(role, REGISTRY)
+        assert "主战官能" in text and "结构上不许" in text or "结构上不许" not in text
+        for f, level in AP.FACULTY_EMPHASIS[role].items():
+            if level == "core":
+                # 主战官能那一行带层标签（`- 眼睛［代码保证］：`）：标签是"这一条靠什么保证"，
+                # 所以这里按 `- 名字［` 判，而不是按 `- 名字：`。
+                assert f"- {f}［" in text, f"{role} 的主战官能 {f} 没有出现在正文里"
+            if level == "denied":
+                head = text[text.index("结构上不许"):] if "结构上不许" in text else ""
+                assert f"- {f}：" in head, f"{role} 的禁止项 {f} 没有落在禁列里"
+
+
+def test_read_only_roles_do_not_advertise_hands_on_the_data_plane():
+    """负控（不许把禁止写成能力）：C/H/M 的手是结构禁止的，正文不许给它们列可写工具。"""
+    for role in ("C", "H", "M"):
+        assert AP.FACULTY_EMPHASIS[role]["手"] == "denied", role
+        core_line = AP.faculties_text(role, REGISTRY)
+        core_part = core_line[:core_line.index("结构上不许")] if "结构上不许" in core_line else core_line
+        assert "- 手：" not in core_part, f"{role} 把'手'列进了主战官能：{core_part[-200:]}"
+        assert "数据面上没有写工具" in core_line or "结构禁止" in core_line or "不产出领域对象" in core_line
+
+
+def test_the_shared_layer_is_named_once_and_identical_for_every_role():
+    """正控（共有项只有一份）：共享层在每个角色里都点名，且文字逐字相同。"""
+    note = AP.SHARED_FACULTIES_NOTE
+    assert "证据契约" in note and "三态纪律" in note and "循环协议" in note
+    assert "期刊体例" in note and "不是共享项" in note
+    for role in AP.roles_covered():
+        text = AP.faculties_text(role, REGISTRY)
+        assert note in text, f"{role} 的官能段里没有共享层说明"
+
+
+def test_roles_differ_in_emphasis_not_only_in_wording():
+    """正控（真的分开了）：不同角色的分量表不许雷同，核心项集合也要不一样。"""
+    cores = {role: {f for f, lv in AP.FACULTY_EMPHASIS[role].items() if lv == "core"}
+             for role in AP.roles_covered()}
+    assert len({frozenset(v) for v in cores.values()}) >= 4, f"核心官能集合太像：{cores}"
+    assert "手" in cores["A"] and "手" not in cores["C"], "只读角色与写角色必须在这一项上分开"
+    assert cores["E"] >= {"手", "能思辨", "有品味"}, cores["E"]
+    assert cores["G"] >= {"手", "有品味", "高观点"}, cores["G"]
+    assert cores["M"] >= {"耳朵", "能讨论", "能互动"}, cores["M"]
+
+
+# ---------------------------------------------------------------- 层：提示词 vs 代码
+
+def _resolve_anchor(anchor: str) -> Any:
+    """把 `模块:属性` 解析成真实对象（取不到就抛，由用例报红）。"""
+    import importlib
+
+    mod_name, _, attr_path = anchor.partition(":")
+    obj: Any = importlib.import_module(mod_name)
+    for part in attr_path.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def test_every_faculty_declares_its_layer_and_code_anchors_exist():
+    """正控（分层的锚点必须真实）：声明了代码那一半的官能，锚点要能 import 到。
+
+    这条判据防的是"口头声明"：写一句"由框架结构性保证"很容易，
+    而锚点漂了（改过名字、搬过模块）就说明那句话已经不再对应任何代码。
+    """
+    names = [f for f, _w, _b in AP.FACULTIES]
+    assert sorted(AP.FACULTY_LAYERS) == sorted(names), (
+        f"分层表与十项官能对不上：{sorted(AP.FACULTY_LAYERS)} vs {sorted(names)}")
+    for faculty, (layer, anchor) in AP.FACULTY_LAYERS.items():
+        assert layer in ("prompt", "code", "both"), f"{faculty} 的层非法：{layer}"
+        if layer == "prompt":
+            assert anchor == "", f"{faculty} 声明为纯提示词，却给了锚点 {anchor!r}"
+            continue
+        assert anchor, f"{faculty} 含代码那一半，却没有锚点"
+        assert _resolve_anchor(anchor) is not None, f"{faculty} 的锚点解析为空：{anchor}"
+
+
+def test_structure_not_prompt_items_all_have_a_named_mechanism():
+    """正控（不许把结构约束写成请求）：每一条"框架用结构保证"的事都要说清靠什么。"""
+    assert len(AP.STRUCTURE_NOT_PROMPT) >= 6, AP.STRUCTURE_NOT_PROMPT
+    for what, how in AP.STRUCTURE_NOT_PROMPT:
+        assert what and how, (what, how)
+        assert len(how) >= 8, f"{what} 的机制说明太短，读的人无法复核：{how!r}"
+    text = AP.faculties_text("D", REGISTRY)
+    for what, _how in AP.STRUCTURE_NOT_PROMPT:
+        assert what in text, f"官能段里没有把结构保证的那条讲清楚：{what}"
+
+
+def test_prompt_only_items_are_named_and_not_dressed_up_as_enforcement():
+    """正控（也不许反过来）：纯提示词负责的事要点名，且不许写成"会被拒"。"""
+    assert len(AP.PROMPT_ONLY) >= 4, AP.PROMPT_ONLY
+    text = AP.faculties_text("A", REGISTRY)
+    assert "只由你自己把握的事" in text
+    for item in AP.PROMPT_ONLY:
+        head = item[:6]
+        assert head in text, f"提示词层的那一条没有点名：{item}"
+    tail = text[text.index("只由你自己把握的事"):]
+    for banned in ("会被拒", "一律拒绝", "结构性禁止你"):
+        assert banned not in tail, f"纯提示词那一栏里出现了强制口吻：{banned}"
+
+
+def test_the_two_layers_are_not_the_same_set():
+    """负控（不许全都塞进一层）：两层都要有实质内容，且不是同一批条目。"""
+    codeish = {f for f, (lv, _a) in AP.FACULTY_LAYERS.items() if lv in ("code", "both")}
+    prompted = {f for f, (lv, _a) in AP.FACULTY_LAYERS.items() if lv in ("prompt", "both")}
+    assert codeish and prompted, (codeish, prompted)
+    assert codeish != prompted, "每一项都既代码又提示词，等于没有分层"
+    assert "眼睛" in codeish and "高观点" in prompted
+    assert "手" not in {f for f, (lv, _a) in AP.FACULTY_LAYERS.items() if lv == "prompt"}
