@@ -859,6 +859,10 @@ class HttpDownloader:
                 error="empty_body: 上游返回 0 字节 ⇒ 本次没有拿到任何内容",
             )
 
+        # ---- `R-60`：内容是 PDF 却没有可用扩展名 ⇒ 补成 `.pdf`
+        # （判据本体是模块级函数 `promote_pdf_extension`，理由写在那里）
+        target, extension = promote_pdf_extension(target, extension)
+
         warning = _content_type_warning(content_type, extension, _url_suffix(url))
         return FetchResult(
             ok=True,
@@ -923,6 +927,35 @@ def _safe_join(dest: Path, name: str) -> Path:
     if resolved != dest_resolved and dest_resolved not in resolved.parents:
         raise DownloadError(f"path_escape_detected: {name!r} -> {resolved}")
     return candidate
+
+
+def promote_pdf_extension(target: pathlib.Path, extension: str) -> tuple[pathlib.Path, str]:
+    """`R-60`：内容是 PDF 却没有可用扩展名（`.bin`）⇒ 改名成 `.pdf`。
+
+    只在 `.bin` + 魔数 `%PDF-` 这一个格子里补救，不动 `infer_extension` 的口径 ——
+    "优先 Content-Type、URL 后缀兜底"那条规则本身是对的（`/download?id=1` 那种 URL 常撒谎），
+    缺的只是"落盘之后用魔数再确认一次"。
+
+    实测（F4 的 A 探针）：OSF 直链 `https://osf.io/jw8xb/download` 回的是 `%PDF-1.5`
+    （522 KB），URL 无后缀、Content-Type 是 `application/octet-stream` ⇒ 只能给 `.bin`；
+    抽取器仍读得出（按内容嗅探，39 页），但"按扩展名挑文件"的人与工具会认不出它是论文。
+
+    返回 `(路径, 扩展名)`；改名失败（例如文件被占）原样返回 —— **不许**让一次成功的下载
+    因为改名失败翻成失败。抽成模块级函数是为了让判据能被直接测（探针里不再抄一份逻辑：
+    抄一份的代价这一轮已经付过一次，见 `draft/28` §159 的"断言太弱"那一段）。
+    """
+    if extension != ".bin":
+        return target, extension
+    try:
+        with target.open("rb") as fh:
+            magic = fh.read(5)
+        if magic != b"%PDF-":
+            return target, extension
+        renamed = target.with_suffix(".pdf")
+        target.rename(renamed)
+    except OSError:
+        return target, extension
+    return renamed, ".pdf"
 
 
 def _content_type_warning(
