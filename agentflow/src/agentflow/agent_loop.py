@@ -46,10 +46,11 @@ from . import agent_prompts as AP
 from . import capabilities as C
 from . import schema as S
 from . import sessions as SS
+from . import userio as U
 from .llmseam import LlmSeam
 
 #: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
-SHAPES = ("tool", "summon", "message", "note", "final")
+SHAPES = ("tool", "summon", "message", "note", "ask_user", "final")
 
 #: 公共频道。`message.to` 写它 = 所有人都能收到（说话，而不是派活）。
 PUBLIC = "#public"
@@ -255,6 +256,21 @@ def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
             return "", {}, "summon.params 必须是一个对象"
         return key, {"role": role, "action": action, "params": dict(params),
                      "why": str(value.get("why") or "")}, ""
+    if key == "ask_user":
+        if not isinstance(value, Mapping):
+            return "", {}, "ask_user 必须是一个对象"
+        question = str(value.get("question") or "").strip()
+        if not question:
+            return "", {}, "ask_user 得有一个 question"
+        options = value.get("options") or []
+        if not isinstance(options, (list, tuple)):
+            return "", {}, "ask_user.options 必须是数组"
+        timeout = value.get("timeout_sec")
+        if timeout is not None and not isinstance(timeout, (int, float)):
+            return "", {}, "ask_user.timeout_sec 必须是数字"
+        return key, {"question": question,
+                     "options": [str(x) for x in options],
+                     "timeout_sec": float(timeout) if timeout is not None else None}, ""
     if key == "note":
         text = value if isinstance(value, str) else str((value or {}).get("text") or "")
         if not text.strip():
@@ -288,6 +304,8 @@ class AgentLoop:
     sid: str | None = None
     token: Any = None
     store: Any = None
+    #: 问用户时的默认等待上限（秒）。调用方可以按场景放长或缩短。
+    user_timeout_sec: float = 30.0
     #: 本次运行自己的台账号与深度（由 `run` 设置）。唤起下一环时必须把它当 parent 传下去，
     #: 否则链条在台账里会断成两段互不相干的记录。
     my_task_id: str = ""
@@ -297,7 +315,7 @@ class AgentLoop:
         last = step >= self.max_steps - 1
         tail = ("这是最后一步：不要再调用工具、不要再唤起伙伴，直接输出 "
                 '{"final": "<结论>", "evidence": [...]}。' if last else
-                "请按循环协议输出下一步（一个 JSON 对象，四种形状取其一）。")
+                "请按循环协议输出下一步（一个 JSON 对象，六种形状取其一）。")
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（最多 {self.max_steps} 步）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}")
 
@@ -343,6 +361,8 @@ class AgentLoop:
         self.depth = depth
         inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid)
         notebook = notebook_digest(self.session_root, self.role)
+        replies = AP.user_replies_digest(U.read_replies(self.session_root, role=self.role,
+                                                       sid=self.sid))
         run = LoopRun(role=self.role, task=task)
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
         if fresh_ids:
@@ -354,7 +374,7 @@ class AgentLoop:
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
                      budget_left=self._budget_text(), inbox=inbox,
                      workspace_root=self.workspace_root, availability=availability,
-                     notebook=notebook)
+                     notebook=notebook, user_replies=replies)
         run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **facts)
         system = AP.system_prompt(self.role, registry=self.registry, **facts)
         transcript = (f"你的任务：{task}\n\n"
@@ -447,6 +467,8 @@ class AgentLoop:
             return self._do_summon(payload)
         if shape == "note":
             return self._do_note(payload)
+        if shape == "ask_user":
+            return self._do_ask_user(payload)
         return self._do_message(payload)
 
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -515,6 +537,22 @@ class AgentLoop:
         where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
         return {"message_sent": msg_id, "to": to, "channel": where, "ok": True,
                 "note": "收件人下次运行时（或本步之后）会在收件箱里看到它"}
+
+    def _do_ask_user(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """问用户一个问题并等回答。超时是 `user_no_answer`，不是默许。"""
+        timeout = payload.get("timeout_sec")
+        outcome = U.ask_user(self.session_root, role=self.role,
+                             question=str(payload.get("question") or ""),
+                             options=tuple(payload.get("options") or ()),
+                             timeout_sec=float(self.user_timeout_sec if timeout is None else timeout),
+                             sid=self.sid)
+        if outcome.answered:
+            return {"asked": outcome.qid, "answer": outcome.answer, "by": outcome.by,
+                    "ok": True}
+        return {"asked": outcome.qid, "ok": False, "problem": outcome.problem,
+                "note": ("没等到用户回答（user_no_answer）：这是没查成，不是默许。"
+                         "要么按最保守的做法继续并把这件事写进结论，要么收工等回答；"
+                         "绝不许把它当成用户同意。")}
 
     def _do_note(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         path, problem = write_note(self.session_root, self.role,
@@ -632,7 +670,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
              conductor: Any = None, seam: LlmSeam | None = None, gateway: Any | None = None,
              max_steps: int = 6, usd_budget: float | None = None,
              workspace_root: str = "", sid: str | None = None, token: Any = None,
-             from_env: bool = True) -> LoopRun:
+             from_env: bool = True, user_timeout_sec: float = 30.0) -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
     `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，
@@ -646,7 +684,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                                 usd_budget=usd_budget, sid=sid, from_env=from_env)
     loop = AgentLoop(role=role, session_root=root, registry=registry, seam=seam,
                      conductor=conductor, max_steps=max_steps, workspace_root=workspace_root,
-                     sid=sid, token=token, store=store)
+                     sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec)
     return loop.run(task, summoned_by=(S.CONDUCTOR_ROLE if role == S.CONDUCTOR_ROLE else ""),
                     my_task_id="", depth=1 if role == S.CONDUCTOR_ROLE else 2)
 
@@ -693,7 +731,7 @@ def selftest() -> int:
         for p in problems:
             print("  -", p)
         return 1
-    print("SELF-CHECK DONE（四种形状 + 消息投递与隔离）")
+    print("SELF-CHECK DONE（六种形状的形状判定 + 消息投递与隔离）")
     return 0
 
 

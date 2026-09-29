@@ -1,0 +1,512 @@
+"""自主轮次 + 周期汇报：把"跑一次循环"接成"跑一程并按节拍向用户报账"。
+
+## 这一层补的是哪一个洞
+
+`agent_loop` 解决的是"一次运行里，模型自己决定调工具、唤起伙伴、留言"。
+它一次只跑一轮：给出 `final` 就收工（`max_steps` 或预算耗尽才强制收工），
+下一轮从哪开始、这一轮该不该告诉用户、要不要接着上一轮往下做 —— 全都不在它里面。
+
+于是"自主"这件事在系统里只到"跑一轮"为止：要么调用方自己写 `for` 循环
+（于是每一处循环各有一套停止判据与各自的汇报口径），要么一轮就停。
+这一层给的是那条被写过很多遍的循环的唯一实现：
+
+1. 每一轮都是完整的一次 `run_role(...)`（工具面、权限面、审计面与单轮完全一样）；
+2. 第 N>1 轮的任务 = 原始任务 + 上一轮的结论与"还差什么"（短块，不重述全文）；
+3. 按节拍把阶段汇报发到公共频道，并落一条会话事件（发不出去也要留痕）。
+
+## 停止判据与三态
+
+每一轮开跑前按固定顺序判一次，命中就停，并把命中哪一条如实写进
+`AutonomyRun.stop_reason`（`rounds` / `budget` / `stop_file` / `user_stop`）
+—— 顺序写死是为了"多条同时成立"时也有一个确定的答案，而不是看谁先被读到：
+
+- `rounds`：轮次用尽（这是唯一的正常终点，"跑完了"就是它）；
+- `budget`：花销预算已到（有共享的模型缝就问缝，没有就把各轮的用量加起来）；
+- `stop_file`：磁盘上出现了那个开关文件（人不用等着发指令就能叫停）；
+- `user_stop`：用户最新一条回答里有 `STOP` 这个字（"我看到了，停"）。
+
+`not_wired` 是第五种停法，它在第一轮跑完之后判：没有接线时循环不发起任何请求，
+这时继续排下一轮只会连排 N 次空转 —— 所以停，并说明"后续轮次不再发起"。
+
+## 汇报是结构，不是提示词里的请求
+
+"要定期汇报"写在提示词里不算数：模型可以整轮不说话。所以汇报由这一层发：
+每 `report_every` 轮一次，且在最后一轮必发（最后一轮 = 这一程实际跑到的最后一轮，
+提前停下时那一轮也算），正文里逐条给出轮次、本轮结论、本轮唤起过谁、留言给谁、
+以及剩余预算。两件事分开记，谁也不替谁兜底：
+
+- 发到用户频道的那条消息走 `send_message`，失败原因记进 `RoundReport.report_sent`
+  与 `notes`（空串 = 发出去了）；
+- 会话事件 `autonomy_report` 是审计面，它独立于发送结果：发失败时那条事件仍然落，
+  于是"当时想报的是什么"事后可读，"没发出去"由 `report_sent` 回答。
+
+## 已知缺口（写下来，免得被读成"已经覆盖了"）
+
+- 这一层不做跨进程恢复：会话事件里留下了每一轮的账，但"从第 K 轮接着跑"
+  还没有一条命令来实现；
+- `min_usd_between_reports` 只拦节拍上的汇报，不拦最后一轮 —— "收工要有交代"
+  比"别报得太密"更硬。
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Mapping
+
+from . import sessions as SS
+from .agent_loop import PUBLIC, LoopRun, run_role, send_message
+from .llmseam import LlmSeam
+
+#: 用户在回答里写这个字 = 让这一程停下（它不是"我看看"，是停止信号）。
+STOP_TOKEN = "STOP"
+
+#: 结论进下一轮任务块与进汇报正文时的字符上限（超了截断并写明原文多少字）。
+FINAL_CHARS = 300
+
+#: 一轮的用量里要逐栏相加的计数器（与 `SeamSpend.to_dict` 的键同名，不另立口径）。
+_COUNTER_KEYS = ("calls", "tokens_in", "tokens_out", "unknown_usd_calls")
+
+
+@dataclass
+class RoundReport:
+    """一程里的一轮：它怎么停的、结论是什么、以及这一轮的汇报发出去没有。"""
+
+    index: int
+    stop_reason: str
+    final: str
+    summons: list[str]
+    messages: list[str]
+    report_sent: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """这一轮的扁平记录（`report_sent` 空串 = 阶段汇报已发出）。"""
+        return {"index": self.index, "stop_reason": self.stop_reason, "final": self.final,
+                "summons": list(self.summons), "messages": list(self.messages),
+                "report_sent": self.report_sent}
+
+
+@dataclass
+class AutonomyRun:
+    """一程自主运行的完整账：跑了几轮、每轮汇报如何、为什么停、花了多少、哪里异常。"""
+
+    role: str
+    task: str
+    rounds_done: int = 0
+    reports: list[RoundReport] = field(default_factory=list)
+    stop_reason: str = ""
+    spend: dict[str, Any] = field(default_factory=dict)
+    notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """一程的扁平记录（轮次 + 逐轮汇报 + 停止原因 + 用量 + 异常各一行）。"""
+        return {"role": self.role, "task": self.task, "rounds_done": self.rounds_done,
+                "stop_reason": self.stop_reason, "spend": dict(self.spend),
+                "reports": [r.to_dict() for r in self.reports], "notes": list(self.notes)}
+
+
+# ------------------------------------------------------------------ 小工具
+def _clip(value: Any, limit: int = FINAL_CHARS) -> str:
+    """把一段文本截到上限；超了就写明原文多少字（截断不静默）。"""
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"…（原文 {len(text)} 字，已截断）"
+
+
+def _spend_of(value: Mapping[str, Any] | None) -> dict[str, float]:
+    """把一份用量记录读成可相减的数：缺项按 0 算，None 表示还没用过任何模型。
+
+    为什么要有这一层而不是直接拿 `run.spend` 相加：同一个模型缝在多轮之间是共用的，
+    于是第 2 轮的 `run.spend` 里已经含第 1 轮 —— 直接把各轮相加会把账算多。
+    这里相减出来的才是"这一轮新花的"，各轮相加才等于总数。
+    """
+    if value is None:
+        return {**{k: 0.0 for k in _COUNTER_KEYS}, "usd": 0.0}
+    out = {k: float(value.get(k) or 0) for k in _COUNTER_KEYS}
+    out["usd"] = float(value.get("usd") or 0.0)
+    return out
+
+
+def _spend_delta(before: Mapping[str, float], after: Mapping[str, float]) -> dict[str, float]:
+    """两个用量读数之差（这一轮新花的）：这是各轮可相加的那个量。"""
+    out = {k: float(after.get(k) or 0) - float(before.get(k) or 0) for k in _COUNTER_KEYS}
+    out["usd"] = float(after.get("usd") or 0.0) - float(before.get("usd") or 0.0)
+    return out
+
+
+def _spend_view(total: Mapping[str, float]) -> dict[str, Any]:
+    """累加出来的用量整理成可读视图：计数器取整，美元按 6 位小数收口。"""
+    out: dict[str, Any] = {k: int(round(float(total.get(k) or 0))) for k in _COUNTER_KEYS}
+    out["usd"] = round(float(total.get("usd") or 0.0), 6)
+    return out
+
+
+def _root_of(store: Any, session_root: Path | str | None) -> Path:
+    """会话记录的落点：给了就用给的，否则取 `store.root`（与 `run_role` 同一条口径）。
+
+    两处分开写迟早会出现"汇报落在别处"的静默错位，所以这里与 `run_role` 用同一条规则，
+    并且在两处都不成立时直接报错，而不是退回当前目录（那会让记录落进一个没人看的地方）。
+    """
+    if session_root is not None:
+        return Path(session_root)
+    raw = str(getattr(store, "root", "") or "")
+    if not raw:
+        raise ValueError("run_autonomous 需要 session_root，或一个带 root 的 store")
+    return Path(raw)
+
+
+def _round_task(task: str, previous: RoundReport, index: int) -> str:
+    """第 N>1 轮的任务：原始任务 + 上一轮结论与还差什么（短块，不重述全文）。"""
+    return (f"{task}\n\n---\n"
+            f"上一轮（第 {previous.index} 轮）的结论：{_clip(previous.final) or '（没有给出结论）'}\n"
+            f"上一轮为什么停：{previous.stop_reason}\n"
+            f"还差什么：接着上一轮的结论往下做，不要从头重来（这是第 {index} 轮）。")
+
+
+def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
+                       usd_budget: float | None, stop_path: Path | None,
+                       user_answer: str) -> str:
+    """下一轮开跑前的停止判据；返回停止原因（空串 = 继续跑）。
+
+    顺序是 `rounds` → `budget` → `stop_file` → `user_stop`：先耗尽轮次，再看钱，
+    再看磁盘上那个人工开关，最后看用户最新那句话。多条同时成立时按这个顺序
+    给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，而那是不可复现的。
+    """
+    if index > rounds:
+        return "rounds"
+    if usd_budget is not None and spent_usd >= usd_budget:
+        return "budget"
+    if stop_path is not None and stop_path.exists():
+        return "stop_file"
+    if STOP_TOKEN in user_answer:
+        return "user_stop"
+    return ""
+
+
+def _latest_user_answer(session_root: Path, role: str, *,
+                        sid: str | None) -> tuple[str, list[str]]:
+    """最近一条"对本角色说的"用户回答；返回 `(回答文本, 异常说明)`。
+
+    首选 `userio.read_replies`（它知道一条回答是在答哪个角色的哪个问题）。这一层
+    在本仓库里是存在的，但它不保证永远存在，所以 `import` 失败时改读会话里的
+    `user_answer` 事件 —— 两条路都留着，而不是"import 得到就假定它永远在"。
+
+    两条路都要走一遍：`read_replies` 只认"问过的问题"的回答，而一条直接写着
+    `role` 的回答（问题没落档的场合）同样算"对本角色说的"，它只能从事件里读。
+    答案按事件顺序收集，最后一条才是"最新"的那条。
+    """
+    events, problems = SS.read_session(session_root, sid=sid)
+    notes = [f"读会话记录：{p}" for p in problems]
+    answers: list[str] = []
+    try:
+        from . import userio
+    except ImportError as exc:
+        notes.append(f"userio 读不到（{type(exc).__name__}: {exc}）："
+                     "回退成自己读会话里的 user_answer 事件")
+        for event in events:
+            if event.get("kind") == "user_answer" and str(event.get("role") or "") == role:
+                answers.append(str(event.get("answer") or ""))
+        return (answers[-1] if answers else ""), notes
+    asked_by_role = {str(reply.get("qid") or "")
+                     for reply in userio.read_replies(session_root, role=role, sid=sid)}
+    for event in events:
+        if event.get("kind") != userio.ANSWER_KIND:
+            continue
+        qid = str(event.get("qid") or "")
+        if qid in asked_by_role or str(event.get("role") or "") == role:
+            answers.append(str(event.get("answer") or ""))
+    return (answers[-1] if answers else ""), notes
+
+
+def _report_body(report: RoundReport, *, rounds: int, usd_budget: float | None,
+                 spent_usd: float) -> str:
+    """阶段汇报的正文：轮次、本轮结论、本轮唤起与留言、剩余预算（缺一样都不算报账）。"""
+    left = ("未设置上限" if usd_budget is None
+            else f"{max(0.0, usd_budget - spent_usd):.6f} 美元（上限 {usd_budget:.6f}）")
+    summons = "、".join(report.summons) if report.summons else "（本轮没有唤起任何人）"
+    messages = "、".join(report.messages) if report.messages else "（本轮没有留言）"
+    return (f"第 {report.index}/{rounds} 轮已结束，这一轮的停止原因：{report.stop_reason}。\n"
+            f"本轮结论：{report.final or '（本轮没有给出结论）'}\n"
+            f"本轮唤起过：{summons}\n"
+            f"本轮留言给：{messages}\n"
+            f"花销：累计 {spent_usd:.6f} 美元，剩余预算 {left}")
+
+
+def _publish_report(session_root: Path, *, role: str, report: RoundReport, rounds: int,
+                    usd_budget: float | None, spent_usd: float,
+                    sid: str | None) -> list[str]:
+    """把一轮的阶段汇报发到公共频道并落一条事件；返回异常说明（空列表 = 干净）。
+
+    两件事分开做：发消息（用户看得见的那一半）与会话事件（审计的那一半）。
+    发送失败不改写终态，也不阻止事件落档 —— 事件记的是"当时想报什么"，
+    而"没发出去"由 `RoundReport.report_sent` 与返回的异常说明回答。
+    """
+    subject = f"[自主轮次] {role} 第 {report.index}/{rounds} 轮"
+    body = _report_body(report, rounds=rounds, usd_budget=usd_budget, spent_usd=spent_usd)
+    _msg_id, problem = send_message(session_root, sender=role, to=PUBLIC, subject=subject,
+                                    body=body, sid=sid)
+    report.report_sent = problem
+    notes: list[str] = []
+    if problem:
+        notes.append(f"第 {report.index} 轮的阶段汇报没有发出去：{problem}")
+    _path, write_problem = SS.append(session_root, {
+        "kind": "autonomy_report", "role": role, "round": report.index,
+        "subject": subject, "body": body,
+    }, sid=sid)
+    if write_problem:
+        notes.append(f"第 {report.index} 轮的 autonomy_report 事件没有落进会话记录：{write_problem}")
+    return notes
+
+
+# ------------------------------------------------------------------ 主入口
+def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
+                   conductor: Any = None, session_root: Path | str | None = None,
+                   gateway: Any = None, seam: LlmSeam | None = None,
+                   rounds: int = 3, report_every: int = 1,
+                   usd_budget: float | None = None, max_steps: int = 6,
+                   stop_file: Path | str | None = None, sid: str | None = None,
+                   from_env: bool = True,
+                   min_usd_between_reports: float = 0.0) -> AutonomyRun:
+    """把 `role` 的这件事跑成最多 `rounds` 轮，并按节拍向公共频道发阶段汇报。
+
+    每一轮都是一次完整的 `run_role(...)`：工具面、权限面、审计面与单轮运行完全一样，
+    这一层只负责"接着跑、按节拍报账、按判据停"。
+
+    参数
+    ----
+    store, registry, conductor, session_root, max_steps, sid, from_env
+        原样交给 `run_role`；`session_root` 不给时取 `store.root`，
+        于是汇报落在与运行记录同一个会话里（同一条 `sid`）。
+    gateway, seam
+        替身模型或一条现成的模型缝。给了 `seam` 就整程共用它（用量与预算是一份）；
+        只给 `gateway` 时这里造一条共用的缝。都不给时每一轮各自按 `from_env` 造缝。
+    usd_budget
+        整程的花销上限（不是每轮各一份）。到顶时连模型都不调用，直接以 `budget` 停。
+    report_every, min_usd_between_reports
+        汇报节拍：每 `report_every` 轮一次；两次汇报之间花销不到
+        `min_usd_between_reports` 时跳过（最后一轮不受这条限制 —— 收工要有交代）。
+    stop_file
+        磁盘上的停止开关：每一轮开跑前看一眼，存在就以 `stop_file` 停。
+    """
+    notes: list[str] = []
+    root = _root_of(store, session_root)
+    total_rounds = max(0, int(rounds))
+    every = int(report_every)
+    if every < 1:
+        notes.append(f"report_every={report_every} 不是一个有效的节拍（至少 1）：按每轮都报处理")
+        every = 1
+    min_usd = max(0.0, float(min_usd_between_reports))
+    stop_path = Path(stop_file) if stop_file is not None else None
+    if stop_path is not None and not stop_path.parent.is_dir():
+        notes.append(f"stop_file 的父目录不存在（{stop_path.parent}）：按这个路径，"
+                     "停止开关永远不会出现（路径写错了，不是'还没按'）")
+
+    shared = seam
+    if shared is None and gateway is not None:
+        shared = LlmSeam.for_role(role, session_root=root, gateway=gateway,
+                                  usd_budget=usd_budget, sid=sid, from_env=False)
+
+    total = _spend_of(None)
+    reports: list[RoundReport] = []
+    last_report_usd = 0.0
+    stop_reason = ""
+    index = 1
+
+    def _spent_usd() -> float:
+        """到现在为止花了多少：有共享的缝就问缝，没有就把各轮的增量加起来。"""
+        if shared is not None:
+            return float(shared.spend.usd)
+        return float(total["usd"])
+
+    def _stop_reason_for(next_index: int) -> tuple[str, list[str]]:
+        """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道。"""
+        answer, answer_notes = _latest_user_answer(root, role, sid=sid)
+        reason = _stop_before_round(next_index, rounds=total_rounds, spent_usd=_spent_usd(),
+                                    usd_budget=usd_budget, stop_path=stop_path,
+                                    user_answer=answer)
+        return reason, answer_notes
+
+    while True:
+        reason, answer_notes = _stop_reason_for(index)
+        for line in answer_notes:
+            if line not in notes:
+                notes.append(line)
+        if reason == "user_stop":
+            notes.append(f"用户最新一条回答里有 {STOP_TOKEN}：按用户的意思停在第 {index} 轮之前")
+        if reason:
+            stop_reason = reason
+            break
+
+        round_task = (task if index == 1
+                      else _round_task(task, reports[-1], index))
+        before = _spend_of(shared.spend.to_dict() if shared is not None else None)
+        run: LoopRun = run_role(role, round_task, store=store, registry=registry,
+                                session_root=root, conductor=conductor, seam=shared,
+                                gateway=gateway, max_steps=max_steps, usd_budget=usd_budget,
+                                workspace_root=str(root), sid=sid, from_env=from_env)
+        delta = _spend_delta(before, _spend_of(run.spend))
+        for key in _COUNTER_KEYS:
+            total[key] += delta[key]
+        total["usd"] += delta["usd"]
+
+        _path, problem = SS.append(root, {
+            "kind": "autonomy_round", "role": role, "index": index,
+            "stop_reason": run.stop_reason, "spend": dict(run.spend),
+        }, sid=sid)
+        if problem:
+            notes.append(f"第 {index} 轮的 autonomy_round 事件没有落进会话记录：{problem}")
+
+        report = RoundReport(index=index, stop_reason=run.stop_reason, final=_clip(run.final),
+                             summons=list(run.summons), messages=list(run.messages_sent))
+        reports.append(report)
+
+        # 最后一轮必发：它要么是轮次用尽的那一轮，要么是"跑完这轮就不得不停"的那一轮；
+        # 没有接线时也算收工（那一轮没有产出，更要说清楚）。
+        next_reason, next_notes = _stop_reason_for(index + 1)
+        for line in next_notes:
+            if line not in notes:
+                notes.append(line)
+        closing = (index >= total_rounds) or run.stop_reason == "not_wired" or bool(next_reason)
+        on_beat = index % every == 0
+        if on_beat and not closing and min_usd > 0.0 and (_spent_usd() - last_report_usd) < min_usd:
+            report.report_sent = (f"距上次汇报的花销还没到 {min_usd:.6f} 美元"
+                                  f"（本轮后累计 {_spent_usd():.6f}）")
+        elif on_beat or closing:
+            notes.extend(_publish_report(root, role=role, report=report, rounds=total_rounds,
+                                         usd_budget=usd_budget, spent_usd=_spent_usd(), sid=sid))
+            last_report_usd = _spent_usd()
+        else:
+            report.report_sent = f"本轮不在汇报节拍上（每 {every} 轮一次）"
+
+        if run.stop_reason == "not_wired":
+            stop_reason = "not_wired"
+            notes.append(f"第 {index} 轮没有接线（not_wired）：后续轮次不再发起，"
+                         "免得连排 N 次空转")
+            break
+        index += 1
+
+    return AutonomyRun(role=role, task=task, rounds_done=len(reports), reports=reports,
+                       stop_reason=stop_reason or "rounds", spend=_spend_view(total),
+                       notes=notes)
+
+
+# ------------------------------------------------------------------ 自检
+def selftest() -> int:
+    """自检：三轮跑完 + 阶段汇报 + 预算为零不碰模型 + 用户一句 STOP 就停 + 没接线如实停。
+
+    不需要网络也不需要真工作区：替身模型照剧本回答，工作区是临时目录。
+    """
+    import tempfile
+
+    problems: list[str] = []
+
+    def check(ok: bool, what: str) -> None:
+        """记一条自检结论（不通过就写进 problems，供最后统一打印）。"""
+        if not ok:
+            problems.append(what)
+
+    class Scripted:
+        """照剧本回答的替身模型（与测试里的 ScriptedGateway 同款契约）。"""
+
+        spec = type("Spec", (), {"model": "scripted", "api_key": "fake"})()
+
+        def __init__(self, replies: list[str]) -> None:
+            self.replies = list(replies)
+            self.prompts: list[str] = []
+
+        def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                     **kw: Any) -> Any:
+            """记下这一次的 prompt，并按次序回一句；剧本用完就重复最后一句。"""
+            self.prompts.append(prompt)
+            text = self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
+            return type("Reply", (), {"ok": True, "text": text, "tokens_in": 0,
+                                      "tokens_out": 0, "error_detail": "", "error_kind": ""})()
+
+    class Idle:
+        """一次都不该被叫到的替身：它记下自己被调用了几次。"""
+
+        spec = type("Spec", (), {"model": "idle"})()
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(self, *a: Any, **kw: Any) -> Any:
+            """被叫到就计数并回一句合法的 final（自检据此断言它一次都没被叫到）。"""
+            self.calls += 1
+            return type("Reply", (), {"ok": True, "text": '{"final": "不该跑到这里"}',
+                                      "tokens_in": 0, "tokens_out": 0,
+                                      "error_detail": "", "error_kind": ""})()
+
+    class StubRegistry:
+        """自检用的小注册表：这个角色没有工具，提示词只需要 `for_role`。"""
+
+        def for_role(self, role: str) -> list[Any]:
+            """返回这个角色的工具面（自检里是空的）。"""
+            return []
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        store = type("StubStore", (), {"root": root})()
+        registry = StubRegistry()
+
+        # 正控：三轮跑完，每轮一条汇报（含事件），第 2 轮的任务里有第 1 轮的结论。
+        gw = Scripted([json.dumps({"final": f"第 {i} 轮结论：还差一步"}, ensure_ascii=False)
+                       for i in (1, 2, 3)])
+        run = run_autonomous("D", "把这件事做完", store=store, registry=registry, gateway=gw,
+                             rounds=3, max_steps=3, sid="self")
+        check(run.rounds_done == 3 and run.stop_reason == "rounds",
+              f"三轮没有跑完：{run.to_dict()}")
+        check(len(run.reports) == 3 and all(r.report_sent == "" for r in run.reports),
+              f"阶段汇报有问题：{[r.report_sent for r in run.reports]}")
+        check(len(gw.prompts) >= 2 and "第 1 轮结论" in gw.prompts[1],
+              "第 2 轮的任务里没有第 1 轮的结论")
+        check(run.spend.get("calls") == 3, f"用量没有逐轮相加：{run.spend}")
+        events, bad = SS.read_session(root, sid="self")
+        check(not bad, f"会话记录读回有问题：{bad}")
+        check(sum(1 for e in events if e.get("kind") == "autonomy_report") == 3,
+              "汇报事件数不对")
+        check(sum(1 for e in events if e.get("kind") == "autonomy_round") == 3,
+              "轮次事件数不对")
+
+        # 负控：预算为零 ⇒ 一轮都不跑，而且一次模型调用都不发起。
+        idle = Idle()
+        broke = run_autonomous("D", "别花钱", store=store, registry=registry, gateway=idle,
+                               rounds=3, usd_budget=0.0, sid="self2")
+        check(broke.rounds_done == 0 and broke.stop_reason == "budget",
+              f"预算为零没有拦住：{broke.to_dict()}")
+        check(idle.calls == 0, f"预算耗尽却发起了 {idle.calls} 次模型调用")
+
+        # 负控：用户说 STOP ⇒ 一轮都不跑（answer 走 userio 那条路）。
+        from . import userio
+
+        SS.append(root, {"kind": "user_question", "qid": "q0001", "role": "D",
+                         "text": "还要继续吗？"}, sid="self3")
+        userio.answer_question(root, qid="q0001", answer=f"{STOP_TOKEN} 先停", sid="self3")
+        idle2 = Idle()
+        stopped = run_autonomous("D", "接着做", store=store, registry=registry, gateway=idle2,
+                                 rounds=3, sid="self3")
+        check(stopped.rounds_done == 0 and stopped.stop_reason == "user_stop",
+              f"用户说停却还在跑：{stopped.to_dict()}")
+        check(idle2.calls == 0, "用户说停却发起了模型调用")
+
+        # 三态：没接线 ⇒ 停成 not_wired，也算跑过一轮（不是"零轮、静默收工"）。
+        unwired = run_autonomous("D", "没人接线", store=store, registry=registry,
+                                 rounds=3, from_env=False, sid="self4")
+        check(unwired.rounds_done == 1 and unwired.stop_reason == "not_wired",
+              f"没接线没有如实停：{unwired.to_dict()}")
+
+    if problems:
+        print("SELF-CHECK FAILED")
+        for p in problems:
+            print("  -", p)
+        return 1
+    print("SELF-CHECK DONE（三轮与阶段汇报 / 预算 / 用户 STOP / 没接线四条路）")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(selftest())

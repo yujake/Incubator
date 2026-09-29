@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p9"
+PROMPT_VERSION = "p11"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -65,7 +65,11 @@ LOOP_PROTOCOL = """\
 4) 往自己的草稿本上写一行（记录你的判断、纠结、下一步；它不是数据面，别人不会自动看到）：
    {"note": "<一句话或一段话>"}
 
-5) 收工：
+5) 问用户一个只有他能定的问题（会等他回答；等不到就返回 user_no_answer）：
+   {"ask_user": {"question": "<要问什么>", "options": ["<可选项，可省略>"],
+                 "timeout_sec": 60}}
+
+6) 收工：
    {"final": "<给调用方的结论>", "evidence": ["<你实际用到的 id>"]}
 
 规则：
@@ -81,6 +85,8 @@ LOOP_PROTOCOL = """\
   读到与你当前做法冲突的信息时，改做法，而不是把消息放着不管。
 - 你收到的每一份结果都带着它的来路（谁给的、什么动作、成功还是被拒）。
   不许把被拒或没查成当成正常数据继续往下写。
+- 只有用户能定的取舍（目标、口径、要不要继续、优先级）要用 ask_user 问，不许替他定；
+  等不到回答时按最保守的做法继续，并把"这一条没得到用户确认"写进结论。
 - 收工前先自查两件事：① 有没有'对方之后会用到的约束或口径'还没转达？有就先发 message；
   ② 有没有还没做完但能做的一步？有就做完再收工。两步都查过了，才输出 final。
 - 步数或预算耗尽时你必须收工：输出 {"final": ...}。框架也会在最后一步直接要求你收工。
@@ -102,7 +108,7 @@ FACULTY_LAYERS: dict[str, tuple[str, str]] = {
     "手": ("both", "agentflow.tools.base:ToolRegistry.call"),
     "能讨论": ("both", "agentflow.conductor:Conductor.summon"),
     "高观点": ("prompt", ""),
-    "能互动": ("prompt", ""),
+    "能互动": ("both", "agentflow.userio:ask_user"),
     "能思辨": ("both", "agentflow.agent_prompts:EVIDENCE_CONTRACT"),
     "敢创新": ("prompt", ""),
     "有品味": ("prompt", ""),
@@ -118,6 +124,10 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
     ("没查成与查成了", "`judge.JUDGE_PROBLEMS` 三态词表 + `llmseam` 的落档"),
     ("越预算", "`llmseam` 在发起请求之前拒；`policy` 在召唤之前拒"),
     ("私聊的准入", "`agent_loop._do_message` 按协作边判，无边的当场拒"),
+    ("只有用户能定的取舍", "`userio.ask_user` 把问题送进用户频道并等回答；"
+                          "等不到就是 `user_no_answer`（不是默许），迟到的回答照样会被捞出来"),
+    ("放手后的自主轮与汇报", "`autonomy.run_autonomous`：轮次上限 + 每 N 轮一次公共汇报 + "
+                            "文件/用户回答可随时打断；每轮与每次汇报都落会话记录"),
 )
 
 #: 提示词层负责什么（这些不该做成判据：做法可以合理分歧，写死就成文字狱）。
@@ -126,7 +136,7 @@ PROMPT_ONLY: tuple[str, ...] = (
     "数学品味（哪种证明更干净、哪种写法更糟）",
     "高观点的定性判断（哪个是本质、哪个只是特例）",
     "学术写作的体例与取舍理由",
-    "讨论与汇报的礼节、粒度、先说什么后说什么",
+    "讨论与汇报的礼节、内容取舍、先说什么后说什么（节奏本身由 report_every 结构化）",
     "思辨的具体套路（追原始证明、找共同上游、换一条独立的路）",
 )
 
@@ -223,7 +233,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("C", "敢创新"): "你可以提候选缺口（那是猜想），但不能自己把它变成请求 —— 交给 D 或人判。",
     ("C", "手"): "数据面写是结构禁止的（只读角色）；草稿本 note 照写。",
     ("D", "耳朵"): "E 的反例、C 的结构读数、A 的新文献都可能推翻你上一轮的判断：听到就改做法。",
-    ("D", "能互动"): "低置信度要如实说：结论强度与证据相称，不替用户把话说满。",
+    ("D", "能互动"): "低置信度要如实说：结论强度与证据相称，不替用户把话说满；真要用户定的取舍就用 ask_user 问，等不到就按最保守的做法并写进结论。",
     ("D", "敢创新"): "证不出来时把猜想明确写下来，并给出可判定它真假的路径。",
     ("D", "有品味"): "删掉说不清的段落、把特例归到一般命题下：取舍要能说出口。",
     ("E", "手"): "编脚本、跑脚本、把结果落成可复现的证据；数值判读由代码判，你不替它下结论。",
@@ -231,7 +241,8 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("E", "敢创新"): "构造反例、设计新实验都算创新；形式化只认检查器真的说过的话。",
     ("E", "有品味"): "哪种验证才算证据、验到什么程度算够：这是你的品味，要写出取舍理由。",
     ("F", "耳朵"): "D/E/C 的回信决定下一轮往哪打；预算耗尽时把'停在哪、下一步从哪继续'说清楚。",
-    ("F", "能互动"): "阶段性汇报是交付的一部分：每一轮都要让卡点比上一轮更具体。",
+    ("F", "能互动"): "阶段性汇报是交付的一部分：每一轮都要让卡点比上一轮更具体；"
+                     "要被放手跑多轮时，把「下一轮从哪继续」写清楚。",
     ("F", "敢创新"): "猜想要写成可判定的形式（谁、什么条件下、能不能被一个反例推翻）。",
     ("G", "高观点"): "按论证结构重组，而不是按来源顺序复述：哪条是主线、哪条是支撑。",
     ("G", "有品味"): "删了哪一段、换了哪个记号、给出的一般性：期刊体例与取舍都要说得出理由。",
@@ -243,7 +254,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("M", "眼睛"): "你读的是台账、状态与角色的产出，不是原始文献。",
     ("M", "手"): "你不产出领域对象：派活、收敛、汇报；数据由角色写。",
     ("M", "耳朵"): "角色回来的结论与拒绝理由决定下一步派谁 —— 被拒不是失败，是信息。",
-    ("M", "能互动"): "你是用户的接口：阶段性汇报、关键取舍交回用户，不许替他定。",
+    ("M", "能互动"): "你是用户的接口：关键取舍用 ask_user 交回用户（等不到不许当默许），放手跑多轮时按轮次阶段性汇报。",
     ("M", "高观点"): "全局取舍：先窄后宽、什么时候收手、哪些缺口值得再派一轮。",
     # ---- 补全的逐角色说明（判据要求：每一条 core 与 denied 都要有这一岗的说明）
     ("B", "脑子"): "把一段正文变成可被推理的概念与关系：定义要准，边界要清。",
@@ -703,6 +714,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         task: str = "", summoned_by: str = "",
                         task_id: str = "", depth: int = 1,
                         budget_left: str = "", inbox: str = "", notebook: str = "",
+                        user_replies: str = "",
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
                         availability: Mapping[str, str] | None = None,
                         ) -> PromptRegistry:
@@ -729,6 +741,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         "budget_left": budget_left or "（没有设置预算上限）",
         "inbox": inbox or "（没有收到留言）",
         "notebook": notebook or "（草稿本还是空的）",
+        "user_replies": user_replies or "（用户还没有回答过你的问题）",
         "workspace_root": workspace_root or "（未指定）",
         "prompt_version": PROMPT_VERSION,
     }
@@ -782,6 +795,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     reg.section(Section("TASK_FRAME", SECTION_ORDERS["TASK_FRAME"],
                         "这一次的任务：\n{{task}}\n\n"
                         "你收到的留言（可能为空）：\n{{inbox}}\n\n"
+                        "用户回答过的问题（含迟到送达的回答）：\n{{user_replies}}\n\n"
                         "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
                         "剩余预算：{{budget_left}}"))
     partners = partners_lines(role, availability)
@@ -828,6 +842,28 @@ def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
         "sections": list(assembly.names),
         "variables": sorted(assembly.variables),
     }
+
+
+def user_replies_digest(replies: Sequence[Mapping[str, Any]], limit: int = 6) -> str:
+    """把用户的回答渲染成提示词里的一段（含"这条是迟到的"标记）。
+
+    迟到的回答与及时的一样重要：模型必须知道用户说过什么，
+    哪怕那句话是在它上一次提问超时之后才到的。
+    """
+    if not replies:
+        return ""
+    lines: list[str] = []
+    for r in replies[-limit:]:
+        mark = "（迟到送达）" if r.get("late") else ""
+        lines.append(f"- [{r.get('qid')}]{mark} 问：{_clip_text(r.get('question'), 120)} "
+                     f"→ 用户答（{r.get('by')}）：{_clip_text(r.get('answer'), 300)}")
+    return "\n".join(lines)
+
+
+def _clip_text(value: Any, limit: int) -> str:
+    """截断一段文本（保留尾部省略号说明）。"""
+    text = str(value or "")
+    return text if len(text) <= limit else text[:limit] + "…"
 
 
 def roles_covered() -> tuple[str, ...]:
