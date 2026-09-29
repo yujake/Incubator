@@ -77,6 +77,41 @@ def test_the_paper_pack_section_is_versioned(store: Store):
     assert AP.PROMPT_VERSION == "p15", AP.PROMPT_VERSION
 
 
+# ============================================================ ⑥ 验收表解析（真机抓到的缺陷）
+
+
+def test_the_acceptance_parser_does_not_read_not_ok_as_ok(tmp_path: pathlib.Path):
+    """负控（测试当场抓到的解析缺陷）：`不成立` 不许被读成 `成立`。
+
+    第一版判的是 `"成立" in cells[2]` —— 而 `"不成立"` 里含「成立」这个子串，
+    于是写着「不成立」的那一行被数成成立（实测 2026-09-29：跑完真实验收，
+    REPRO_RESULT 说 9/10，而解析出来的 `ok_count` 是 10）。这正是
+    "看起来查过了、其实读反了"的形态。
+    """
+    from agentflow.tools.conductor_tools import _parse_acceptance
+
+    doc = tmp_path / "ACCEPTANCE.md"
+    doc.write_text(
+        "# 最终验收：P1–P11 逐条读数\n\n结论：**有不成立的条目**（1/2）\n\n"
+        "| 判据 | 名称 | 结论 | 读数 |\n|---|---|---|---|\n"
+        "| P1 | 甲 | 成立 | 读数甲 |\n"
+        "| P2 | 乙 | **不成立** | 读数乙 |\n",
+        encoding="utf-8")
+    got = _parse_acceptance(doc)
+    assert [r["ok"] for r in got["rows"]] == [True, False], got["rows"]
+    assert got["ok_count"] == 1 and got["not_ok_count"] == 1, got
+
+
+def test_the_acceptance_parser_reports_a_bad_table_as_a_problem(tmp_path: pathlib.Path):
+    """负控（三态）：表被写坏时 `rows` 为空而 `problems` 非空 —— 空表 ≠ 解析失败。"""
+    from agentflow.tools.conductor_tools import _parse_acceptance
+
+    doc = tmp_path / "ACCEPTANCE.md"
+    doc.write_text("# 验收\n\n结论：成立\n\n这张表不见了\n", encoding="utf-8")
+    got = _parse_acceptance(doc)
+    assert got["rows"] == [] and got["problems"], got
+
+
 # ============================================================ ⑦ 机械半
 
 

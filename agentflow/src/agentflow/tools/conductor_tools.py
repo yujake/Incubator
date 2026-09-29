@@ -543,7 +543,10 @@ def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
             reading = reading[:max_chars] + "…"
             truncated += 1
         name = cells[1] if len(cells[1]) <= 30 else cells[1][:30] + "…"
-        rows.append({"id": cells[0], "name": name, "ok": "成立" in cells[2],
+        # 「成立」与「不成立」必须分得开：`"成立" in cells[2]` 会把不成立读成成立
+        # （实测 2026-09-29：验收表里 P10/P11 写着「不成立」，解析出来却是 10/10 成立）。
+        verdict = cells[2]
+        rows.append({"id": cells[0], "name": name, "ok": verdict.strip() == "成立",
                      "reading": reading, "reading_chars": len(cells[3])})
     if not rows:
         problems.append("验收表里一行判据都没解析出来（表头是 `| 判据 | 名称 | 结论 | 读数 |` 吗？）")
