@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T07:50:54+08:00",
+  "generated_at": "2026-09-29T09:37:07+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -398,67 +398,12 @@
       "path": "src/agentflow/providers.py",
       "glob": "src/agentflow/providers.py",
       "category": "solver-core",
-      "sha256": "1e273d32951f480063155a1e6f94cc26a1bd75561b0205988a08f1870581ad72",
+      "sha256": "d290cfb3ff9f60a77b597abf31576f93578371979630ff02491425aa173da212",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（src__agentflow__providers.py.txt）",
+      "change_note": "F1/R-46+P-51：REFUSAL_REASONS 补 invalid_params（原表没有『这次调用不成立』的位置，参数门只好借 unknown_action）；_openalex_pdf_url 标记 pdf_url 与落地页逐字相同",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:36+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
-          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:36+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
-          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:20:54+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
-          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:20:54+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
-          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:50+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
-          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:51+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：src__agentflow__providers.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\src__agentflow__providers.py.txt",
-          "evidence_sha256": "1ae5feb1f63c853b2f9d35366dfbe2d8993833c3094a07004bc81fcd96527c2c"
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": [
         {
@@ -504,10 +449,10 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "9815fe9457a53cf7ad3d0f2cecafc47bdad4a0251385d0f2ba7933b41f2d1daa",
+      "sha256": "4a37cfb61f6260bfd4e382325169b779d1f13d651b7100dbd88efa810ec7f198",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T4-A（2026-09-29）：内部引用的数据面 —— Document 加 revision/content_sha256（accepted 必须带哈希）、Dependency 加 source_doc_id/source_claim_id、verify 加 doc: 引用三条判据 + content_hash_mismatch + 内部依赖两条。依据 draft/30 新条目 §T4-A；判据 tests/test_internal_citations.py 16 passed。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
+      "change_note": "F1/R-46+P-51：REFUSAL_REASONS 补 invalid_params（原表没有『这次调用不成立』的位置，参数门只好借 unknown_action）；_openalex_pdf_url 标记 pdf_url 与落地页逐字相同",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

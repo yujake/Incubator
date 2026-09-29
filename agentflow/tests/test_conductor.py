@@ -317,7 +317,10 @@ def test_i3_negative_control_dangling_parent_is_refused(tmp_path):
     c = _conductor(store, registry={"C": ("object", FakeC())})
     r = c.summon("C", "hottest", {"top_n": 1}, parent_task_id="t-9999")
     assert r.status == "done" and r.outcome == "refused"
-    assert r.refusal_reason == "unknown_action"     # 结构问题：这次调用本身不成立
+    # `invalid_params` 而不是 `unknown_action`（`draft/28` §154 的 R-46）：
+    # 父任务不存在是**这次调用本身不成立**，不是"这个角色没这个本事"。
+    # 原来的理由码把两件事混在一起，排查方向会被引到能力表上去。
+    assert r.refusal_reason == "invalid_params"
     assert "不存在" in r.detail
     # 拒绝也落台账（"我们拒绝了它"必须可审计）
     assert len(store.rows("tasks")) == 1
@@ -344,7 +347,7 @@ def test_i4_refused_always_has_controlled_reason(tmp_path):
         assert r.detail.strip(), "拒绝必须带人可读的理由"
         reasons.append(r.refusal_reason)
     assert reasons == ["forbidden_edge", "unknown_role", "unknown_action", "not_wired",
-                       "unknown_action"]
+                       "invalid_params"]
     # 拒绝也落台账 —— 每一行都在表里
     rows = store.rows("tasks")
     assert len(rows) == len(out)
@@ -894,9 +897,10 @@ def test_local_backend_rejects_unknown_params(tmp_path):
             return {"outcome": "ok", "detail": "ok"}
 
     c = CO.Conductor(store, registry={"C": ("object", Strict())})
-    # 参数 schema 会先拦下未声明的键（这是第一道闸）
+    # 参数 schema 会先拦下未声明的键（这是第一道闸）；理由码是 `invalid_params`
+    # （`draft/28` §154 的 R-46：参数问题不许借 `unknown_action` 表达）
     r = c.summon("C", "hottest", {"top_n": 1, "不存在的参数": True})
-    assert r.outcome == "refused" and r.refusal_reason == "unknown_action"
+    assert r.outcome == "refused" and r.refusal_reason == "invalid_params"
     assert "参数不合法" in r.detail
 
 

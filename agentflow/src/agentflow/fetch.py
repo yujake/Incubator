@@ -949,6 +949,21 @@ def _content_type_warning(
             f"content_type_mismatch: {ctype} (URL 期望 {expected}；"
             "可能被代理/劫持或链接并非直链)"
         )
+    if is_html and not expected:
+        # ---- `R-50`（`draft/28` §154）：URL **没有后缀**却回了 HTML ⇒ 软警告。
+        #
+        # 为什么这一格必须存在：本函数的判据是"URL 后缀 vs 实际 Content-Type"，
+        # 而落地页 / 仓库页 / handle 解析器 / 登录墙的 URL 常常**没有后缀**
+        # （实测三条：`link.aps.org/pdf/10.1103/RevModPhys.93.045003`（末段是 DOI）、
+        #  `hdl.handle.net/1773/25218`、`ul.qucosa.de/id/qucosa%3A11139`），
+        # 于是整条判据短路 ⇒ 200 + 字节完整 ⇒ 上层记 `status="ok"`，
+        # "JSTOR 登录墙"在台账里与"论文全文"长得一模一样（6 条实测）。
+        # 这里仍然只是**软**警告（`ok=True` + error 串）：字节照样留作证据，
+        # 由 `agent_a._stage_download` 按约定把状态降级为 `content_mismatch`。
+        return (
+            f"content_type_mismatch: {ctype} (URL 无后缀；"
+            "可能是落地页/登录墙/跳转页，不是直链文件)"
+        )
     if ctype in ("application/pdf", "application/x-pdf") or ctype.startswith("image/"):
         return None
     if ctype.startswith("text/") or ctype in ("application/json", "application/xml", "application/xhtml+xml"):

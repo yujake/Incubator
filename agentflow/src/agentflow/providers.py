@@ -1068,29 +1068,55 @@ def http_get_json(
 
 
 def _openalex_pdf_url(work: Mapping[str, Any]) -> tuple[str | None, str]:
-    """按"可获取性"从高到低挑 PDF 链接，并返回来源说明（便于事后审计）。"""
+    """按"可获取性"从高到低挑 PDF 链接，并返回来源说明（便于事后审计）。
+
+    ## `R-51`（`draft/28` §154）：`pdf_url` 与落地页**逐字相同**时要标出来
+
+    OpenAlex 有时把**落地页/仓库页/handle 解析器**填进 `pdf_url`
+    （实测：`hdl.handle.net/1773/25218`、`ul.qucosa.de/id/qucosa%3A11139`
+    这两条的 `best_oa_location.pdf_url` 与 `landing_page_url` 逐字相同）。
+    那种 URL 下回来的是 HTML，"下载成功"会被读成"拿到全文"。
+
+    这里**不改** `pdf_url` 的取值（字节仍然值得当证据留下，`fetch`/`agent_a`
+    会把它标成 `content_mismatch`），只在来源串上打一个 `|landing_same_as_pdf` 标记 ——
+    于是事后审计能在候选记录里一眼看出"这条根本没有直链"。
+    """
+    landing = _openalex_landing_url(work) or ""
+
+    def mark(url: str, source: str, loc: Any = None) -> tuple[str, str]:
+        """`pdf_url` 与落地页逐字相同 ⇒ 在来源串上打标记（R-51）。
+
+        要比**两处**落地页：work 级 `_openalex_landing_url`（优先 DOI）与该 location
+        自己的 `landing_page_url`。只比前者会漏掉实测那两条（它们的 work 级落地页是
+        DOI，而 location 级落地页与 `pdf_url` 逐字相同）。
+        """
+        loc_landing = _stringify((loc or {}).get("landing_page_url")) if isinstance(loc, Mapping) else ""
+        if url and ((landing and url == landing) or (loc_landing and url == loc_landing)):
+            return url, f"{source}|landing_same_as_pdf"
+        return url, source
+
     best = work.get("best_oa_location") or {}
     if isinstance(best, Mapping):
         url = _stringify(best.get("pdf_url"))
         if url:
-            return url, "best_oa_location"
+            return mark(url, "best_oa_location", best)
     primary = work.get("primary_location") or {}
     if isinstance(primary, Mapping):
         url = _stringify(primary.get("pdf_url"))
         if url:
-            return url, "primary_location"
+            return mark(url, "primary_location", primary)
     locations = work.get("locations") or []
     if isinstance(locations, (list, tuple)):
         for loc in locations:
             if isinstance(loc, Mapping):
                 url = _stringify(loc.get("pdf_url"))
                 if url:
-                    return url, "locations"
+                    return mark(url, "locations", loc)
     oa = work.get("open_access") or {}
     if isinstance(oa, Mapping):
         url = _stringify(oa.get("oa_url"))
         if url:
-            return url, "open_access.oa_url"
+            return mark(url, "open_access.oa_url", oa)
     return None, ""
 
 

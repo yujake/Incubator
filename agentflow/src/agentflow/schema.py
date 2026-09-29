@@ -1609,10 +1609,19 @@ TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed")
 TASK_OUTCOMES = ("ok", "no_result", "not_applicable", "refused", "failed", "cancelled")
 
 #: 框架拒绝执行的具体理由（受控词表）。`outcome="refused"` 必须带其中之一。
+#:
+#: `invalid_params` 是 2026-09-29 补的一档（`draft/28` §154 的 R-46）：这张表原来
+#: **没有**"这次调用本身不成立"的位置，于是参数门只好借用 `unknown_action`
+#: （"这个角色没这个动作"）来报"参数不合法" —— 实测代价是 M 拿到
+#: `refusal_reason=unknown_action` 却看到 detail 写着"dependencies. 必须是对象"，
+#: 排查方向被引到"角色能力表"上去了（那是查名字的方向，而真相是改参数）。
+#: 同一件事在 handler 内部发生时更糟：那里落的是 `failed / 执行中异常`
+#: （"业务拒绝"与"代码崩了"同形）。补这一档之后，两处都落到同一个诚实的位置。
 REFUSAL_REASONS = (
     "unknown_role",  # 角色不存在
     "unknown_action",  # 该角色没有这个动作
-    "forbidden_edge",  # 策略不允许这条召唤边（如 C→B）
+    "forbidden_edge",  # 策略不允许这条召唤边（如 C→B），或目标是不可召唤的主控
+    "invalid_params",  # 参数/前置条件不满足：这次调用本身不成立（不是"角色没这个本事"）
     "depth_exceeded",  # 超过最大召唤深度
     "fanout_exceeded",  # 超过单点最大扇出
     "concurrency_exceeded",  # 超过全局并发上限

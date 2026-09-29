@@ -336,6 +336,15 @@ class AgentA:
             base["error"] = "download_disabled"
             return base
         url = getattr(cand, "pdf_url", None)
+        # ---- `R-45`（`draft/28` §154）：把**试过哪个 URL**记进下载记录。
+        # 审计时撞到的真问题：6 条"ok 其实是 HTML"的行，台账里查不到它们下载的是哪个 URL
+        # （URL 只活在当次 provider 候选里），于是"为什么拿到 HTML"只能靠猜。
+        # 记 URL 与来源（`pdf_url_source`，OpenAlex 侧还会带 `|landing_same_as_pdf` 标记）之后，
+        # 这一格可事后复核。
+        base["url"] = url or None
+        src = getattr(cand, "pdf_url_source", None)
+        if src:
+            base["url_source"] = str(src)
         if not url:
             base["error"] = "no_pdf_url"
             return base
@@ -514,9 +523,13 @@ class AgentA:
                         continue
 
                     lit_id = tx.alloc_id("lit")
-                    rel_dir = self.store.library / lit_id
-                    rel_dir.mkdir(parents=True, exist_ok=True)
 
+                    # ⚠️ 这里**刻意不**建 `<library>/<lit_id>/` 目录（`draft/28` §154 的 R-49）。
+                    # 以前这一处无条件 `mkdir`，于是"下载被跳过（没有 PDF URL）"或
+                    # "下载失败"的行也会留下一个空目录：实测 98 行里留下 60 个空目录，
+                    # 目录树看起来有 98 篇文献，实际只有 38 个文件。
+                    # 建目录的唯一责任人现在是 `_attach_staged` —— 它只在**真的有字节要搬**
+                    # 时才建（同文件 389-390 那一处），判据因此只有一份。
                     dl = entry.get("download") or {}
                     rel_path, dl_clean = self._attach_staged(lit_id, dict(dl))
                     st = dl.get("status")

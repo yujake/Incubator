@@ -44,10 +44,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import inspect
+import json
 import threading
 import time
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from . import capabilities as C
@@ -289,6 +292,34 @@ class NotWiredError(RuntimeError):
 
 
 # ---------------------------------------------------------------- 主控
+
+
+#: 角色代码**故意抛出**的领域错误类名 → 它们在任务台账里算"拒绝这次调用"（R-46）。
+#:
+#: 为什么按**类名**匹配而不是 import 那些类：conductor 在 import 图上位于 agent_* 之上
+#: （agent 模块会 import conductor 的类型），直接 import 会成环。类名匹配的代价是
+#: "改了类名这里就失效" —— 所以下面 `selftest`/用例要有一条正控真的抛一次
+#: `ExperimentError` 并断言落 `refused/invalid_params`（判据不许只活在注释里）。
+_BUSINESS_ERROR_NAMES = frozenset({
+    "ExperimentError", "DocumentError", "PlanError", "ReviewError",
+    "EvidenceError", "ConjectureError", "ToolError",
+})
+
+
+def _business_refusal_code(exc: BaseException) -> str | None:
+    """这次异常算不算"角色拒绝了这次调用"？算就返回受控理由码，否则 `None`。
+
+    两条来源，优先级从高到低：
+    1. 异常自带 `refusal_reason`（显式协议，且必须是受控词表里的值）；
+    2. 异常是上表里的领域错误类（角色**故意**抛的）。
+    其余一律 `None` ⇒ 由调用方记 `failed`（"代码/环境崩了"）。
+    """
+    code = getattr(exc, "refusal_reason", None)
+    if isinstance(code, str) and code in S.REFUSAL_REASONS:
+        return code
+    if type(exc).__name__ in _BUSINESS_ERROR_NAMES:
+        return "invalid_params"
+    return None
 
 
 class Conductor:
@@ -766,6 +797,19 @@ class Conductor:
             )
 
         # ---- [1] 角色 / 动作存在性（不落台账的只有"取消"这一种，见上）
+        #
+        # [1a] 不可召唤要**先于**动作表判（`draft/28` §154 的 R-44）。
+        # 以前 `summon(role="M")` 拿到的是 `unknown_action`（"这个角色没这个动作"），
+        # 而真相是"召唤主控这件事本身不允许"（`NON_SUMMONABLE`）。两者的处置相反：
+        # 前者让人去查名字，后者要求改设计。专用判据 `policy.check` 一直是对的
+        # （`G-11` 修的就是它的可达性），是这条入口把顺序放反了。
+        if str(role) == S.CONDUCTOR_ROLE:
+            return self._refuse(
+                role, action, reason="forbidden_edge",
+                detail=(f"{S.CONDUCTOR_ROLE} 不可被召唤（NON_SUMMONABLE）：主控就是派活方，"
+                        "没有『召唤 M』这条边"),
+                by=by, parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+            )
         edge = P.check_action(role, action)
         if edge is not None:
             return self._refuse(
@@ -779,8 +823,10 @@ class Conductor:
         assert spec is not None  # check_action 已经保证过
         bad = self._check_params(spec, params)
         if bad is not None:
+            # 理由码是 `invalid_params` 而不是 `unknown_action`（R-46）：
+            # "参数不合法"与"角色没这个动作"是两件事，前者要改参数，后者要查能力表。
             return self._refuse(
-                role, action, reason="unknown_action", detail=bad, by=by,
+                role, action, reason="invalid_params", detail=bad, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
             )
 
@@ -788,8 +834,9 @@ class Conductor:
         try:
             depth, parent_role = self._depth_of(parent_task_id)
         except ValueError as e:
+            # 父任务不存在 = 这次调用本身不成立（结构问题），同样落 `invalid_params`
             return self._refuse(
-                role, action, reason="unknown_action", detail=str(e), by=by,
+                role, action, reason="invalid_params", detail=str(e), by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
             )
 
@@ -879,8 +926,27 @@ class Conductor:
             res = self._end(tid, status="done", outcome="refused", refusal_reason="not_wired",
                             detail=str(e))
         except Exception as e:  # noqa: BLE001 —— 这里必须兜住一切，否则僵尸 running
-            res = self._end(tid, status="failed", outcome="failed", error=f"{type(e).__name__}: {e}",
-                            detail=f"{role}.{action} 执行中异常")
+            # ---- R-46：业务拒绝 ≠ 崩溃（`draft/28` §154）
+            #
+            # 角色代码**故意抛出**的领域错误（`ExperimentError` / `DocumentError` /
+            # `PlanError` / `ReviewError` / `EvidenceError` / `ToolError`）表示
+            # "这次调用不成立" —— 与 `refused` 同族；而 `TypeError` / `KeyError` /
+            # `AttributeError` / `OSError` 这些是**代码或环境崩了**，必须留 `failed`。
+            # 以前两者一律落 `failed / 执行中异常`：实测 4 条 `E.run_experiment`
+            # （我把 `name`/`imports` 与 `method="numeric"` 一起传）就这么被记成"崩了"，
+            # 而它其实是一次参数拒绝 —— 读台账的人会去查代码，而该改的是调用。
+            #
+            # 刻意**不**把裸 `ValueError` 算进拒绝：它既可能是校验（业务），
+            # 也可能是判据自身的 bug；宁可把它留在 `failed`（过度报失败比把 bug
+            # 伪装成"策略说不"安全）。
+            code = _business_refusal_code(e)
+            if code is not None:
+                res = self._end(tid, status="done", outcome="refused", refusal_reason=code,
+                                detail=f"{role}.{action} 拒绝了这次调用：{e}")
+            else:
+                res = self._end(tid, status="failed", outcome="failed",
+                                error=f"{type(e).__name__}: {e}",
+                                detail=f"{role}.{action} 执行中异常")
         finally:
             with self._lock:
                 self._running.discard(tid)
@@ -1009,6 +1075,47 @@ class Conductor:
         )
 
     # ---------------------------------------------------------------- finish
+    def _write_task_digest(self, row: Mapping[str, Any], *, payload: Any, status: str,
+                           outcome: str | None, detail: str) -> str:
+        """把一次召唤的返回值摘要写成 `<workspace>/out/tasks/<task_id>.json`；返回相对路径。
+
+        `payload is None` ⇒ 返回空串（没产出就不写文件，免得留下"看起来有产出"的空壳）。
+        写失败**不**影响终态：原因记进日志并返回空串 —— "有产出但摘要没写成"
+        与"没有产出"必须分得开，而终态那一行不能因为日志写不了就丢掉。
+        """
+        if payload is None:
+            return ""
+        task_id = str(row.get("task_id") or "")
+        if not task_id:
+            return ""
+        root = Path(getattr(self.store, "root", ".") or ".")
+        rel = f"out/tasks/{task_id}.json"
+        try:
+            blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+            doc = {
+                "task_id": task_id,
+                "role": str(row.get("role") or ""),
+                "action": str(row.get("action") or ""),
+                "status": status,
+                "outcome": outcome,
+                "detail": detail,
+                "at": S.now_iso(),
+                "payload_sha256": hashlib.sha256(blob.encode("utf-8")).hexdigest(),
+                "payload_bytes": len(blob.encode("utf-8")),
+                # 键集是"这一步产出了什么形状的东西"的最小可读证据；
+                # 预览截断到 2 KB，避免把大对象整份塞进产物。
+                "payload_keys": sorted(str(k) for k in payload) if isinstance(payload, Mapping) else [],
+                "payload_preview": blob[:2000],
+            }
+            target = root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(doc, ensure_ascii=False, sort_keys=True, indent=1) + "\n",
+                              encoding="utf-8")
+        except (OSError, TypeError, ValueError) as e:  # noqa: BLE001 - 见 docstring
+            self._log(f"任务产出摘要没写成：{type(e).__name__}: {e}", task_id=task_id)
+            return ""
+        return rel
+
     def finish(
         self,
         task_id: str,
@@ -1070,6 +1177,17 @@ class Conductor:
             row["ended_at"] = ended
             row["tokens"] = int(tokens or 0)
             row["usd"] = float(usd or 0.0)
+            # ---- R-47：把这次调用的返回值摘要落成产物，并把路径记进 `artifacts`。
+            # 为什么必须落：`tasks` 表不存 payload ⇒ `outcome=ok` **无法自证有产出**
+            # （实测 83 行 detail 是"handler 未声明 outcome，按有产出处理"，
+            # 读台账的人判不出这一步到底产出了什么，见 `draft/28` §154 的 S3/R-47）。
+            # 摘要落 `<workspace>/out/tasks/<task_id>.json`（键集 + 规范化哈希 + 截断预览），
+            # 表里只多一个 artifacts 引用 —— `tasks` 表结构不动（它在 FC-27 禁改区）。
+            digest_rel = self._write_task_digest(row, payload=payload, status=status,
+                                                 outcome=str(outcome) if outcome else None,
+                                                 detail=detail)
+            if digest_rel:
+                artifacts = list(artifacts) + [digest_rel]
             if artifacts:
                 # 合并而不是覆盖：`artifacts` 是 append-only 的产出引用。
                 # 覆盖会让"分两次登记产出"的第二次抹掉第一次。
@@ -1077,6 +1195,28 @@ class Conductor:
                 row["artifacts"] = S.sorted_unique(merged)
             S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__}).validate()
             tx.upsert("tasks", row, note=f"finish:{status}")
+        # ---- 会话记录（按项目存放）：一次终态 = 一条叙事行（`agentflow.sessions`）。
+        #
+        # 为什么在这里写：`tasks` 是运行时状态，而"这次运行的叙事"（谁在何时对谁说了什么、
+        # 产出了什么）以前只活在会话里。落进 `<项目根>/sessions/<会话号>.jsonl` 之后，
+        # 每个项目自带一段可读历史，翻 p2-review 不必读全局目录（学 harness 的按工作区存放）。
+        # 写失败**不**改变终态：叙事不是判据本身，原因进日志。
+        from . import sessions as _SESS
+
+        _path, _problem = _SESS.append(getattr(self.store, "root", "."), {
+            "kind": "task_end",
+            "task_id": task_id,
+            "by": str(row.get("called_by") or ""),
+            "role": str(row.get("role") or ""),
+            "action": str(row.get("action") or ""),
+            "status": status,
+            "outcome": outcome,
+            "refusal_reason": row.get("refusal_reason"),
+            "detail": detail[:200],
+            "artifacts": list(row.get("artifacts") or []),
+        })
+        if _problem:
+            self._log(f"会话记录没写成：{_problem}", task_id=task_id)
         return SummonResult(
             task_id=task_id, role=str(row.get("role") or ""), action=str(row.get("action") or ""),
             status=status, outcome=outcome, refusal_reason=row.get("refusal_reason"),
