@@ -60,7 +60,27 @@ from pathlib import Path
 #: 词表命名的判据：模块里以这些后缀结尾、且值是"字符串元组"的常量。
 #: 刻意不写死"有哪几个词表"（那样新增词表会静默落在普查之外，而数字照样好看）：
 #: 取到几个就报几个，并把名单打进输出（`G-32`：数字要能追溯到对象）。
-VOCAB_SUFFIXES: tuple[str, ...] = ("_KINDS", "_STATUSES", "_OUTCOMES", "_SCOPES")
+#:
+#: `_FORMS` 是 `R-30` 补上的（`draft/28` §136.6）：`CONJECTURE_FORMS` 此前整个落在
+#: 普查之外，"猜想的形状"这一轴的死取值没有任何判据管它。补它之前先量过一次：
+#: 全仓以 `_FORMS` 结尾的常量**只有它一个**（`schema.py:437`）⇒ 不会顺手牵出别的语义面。
+VOCAB_SUFFIXES: tuple[str, ...] = ("_KINDS", "_STATUSES", "_OUTCOMES", "_SCOPES", "_FORMS")
+
+#: 词表**定义点**所在的文件（相对 `<root>/src`）。`R-37` 把它从"只有 `schema.py`"
+#: 扩成"判据层的这几个"：
+#:
+#: 为什么此前只有 `schema.py`：它的值域（表结构、字段词表）确实都在那里。
+#: 为什么不够：判据层自己也会定义受控词表 —— `claimanatomy.py` 有 5 张
+#: （`CLAIM_KINDS` / `CLAIM_STATUSES` / `ALLOWED_USE_KINDS` / `CLAIM_SOURCE_KINDS` /
+#: `CLAIM_CHECK_KINDS`），它们此前**完全不在 R011 的判据面内**（实测 2026-09-29：普查报
+#: "词表 21 个"而名单里没有这 5 张）。
+#:
+#: 一处**已知余量**（如实登记，不假装扫全了）：`src/` 里仍有 15 个受控词表常量落在这份
+#: 名单之外（例如 `fetch.ERROR_KINDS`、`evidence.ACQUIRE_STATUSES`、`verify.CITATION_KINDS`）。
+#: 它们是"还没被纳入的判据面"，不是"没问题" —— 名单是显式的，扩它要单独一次口径变更
+#: （每纳入一张表都可能带出新的死取值 ⇒ 会改 lint 读数）。观测命令与当次读数见
+#: `draft/28` §168。
+VOCAB_DEFINITION_FILES: tuple[str, ...] = ("agentflow/schema.py", "agentflow/claimanatomy.py")
 
 #: 反真空下限：这两个数字不是判据，只是"扫描器确实读到东西了"的最低证据；低于它一律判没查成。
 #: 真实仓库的当次规模不写死（`G-32`）：由 `python tools/vocab_census.py` 的汇总行当次读
@@ -171,6 +191,9 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "死取值。留着的理由：它是 `Conjecture.status` 的**默认值**（每一行猜想生下来就是它），"
         "但普查不把『dataclass 默认值』算作产出点 ⇒ 这一条同时是普查的已知缺口"
         "（见 `draft/28` §136 的 R-30）。写它的语义动作（D 提出猜想）在 T3 接线。"
+        "**`draft/28` §168 起**：普查已把类体默认值算作产出点（R-31 的修法）⇒ 本条从"
+        "『死取值』挪进栏一附（登记了、而普查不见其为死取值），理由的前半句"
+        "（『不把默认值算产出点』）已过期，留着是为了不改写历史登记。"
     ),
     ("CONJECTURE_STATUSES", "testing"): (
         "死取值。留着的理由：`draft/29` §7.5 状态机里『正在检验』这一档；"
@@ -188,6 +211,42 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
     ("CONJECTURE_STATUSES", "withdrawn"): (
         "死取值。留着的理由：『撤下必须写理由、不许静默消失』是 `Conjecture.validate` 的硬条件，"
         "而『撤下』这个动作在 T3 才接线。"
+    ),
+    # ---- `draft/28` §168（`R-30` + `R-37` 的取词表面拓宽）新看见的 17 条里，
+    # **由数据产出**的那 7 条。它们不是"没有产出点"，而是"产出点不在代码里"：
+    # 普查的判据是"这个字面量在 `src/` 里出现过吗"，而这几张词表的值是由**文档/数据**
+    # 写进去的（谁写见每条的理由）。⇒ 判据对它们不适用，登记在这里（栏一），
+    # 附上 2026-09-29 在 `projects/p2-review` 实测到的行数当证据。
+    #
+    # ⚠️ **这 7 条是 AI 代写的登记**（窗口见 `docs/NOAI-SUSPENSION-2026-09-28.md`；
+    # 本表 docstring 写明"往这张表里加一条是人的动作"）⇒ 留还是删由 2 名 reviewer 走查裁定。
+    # 另外 10 条**故意没有登记**（它们是"代码与数据都不产出"的真缺口，三条出路
+    # ——接线/登记为预留/删值——都是口径裁定，AI 不替人做）⇒ 它们留在栏二，
+    # 于是 `R011` 以 error 报出来，逐条见 `draft/28` §168 的 R-64。
+    ("CLAIM_KINDS", "定理"): (
+        "由数据产出（不是代码字面量）：`documents.claims[].kind`，"
+        "`projects/p2-review` 实测 7 行（2026-09-29）。普查的字面量判据看不见它。"
+    ),
+    ("CLAIM_KINDS", "命题"): (
+        "由数据产出：`documents.claims[].kind`，实测 8 行（2026-09-29）。"
+    ),
+    ("CLAIM_KINDS", "引理"): (
+        "由数据产出：`documents.claims[].kind`，实测 9 行（2026-09-29）。"
+    ),
+    ("CLAIM_SOURCE_KINDS", "文献"): (
+        "由数据产出：`documents.claims[].source_kind`，实测 16 行（2026-09-29）。"
+        "『这条断言是从文献里读来的』只能由写稿件的一方给出，代码侧没有产出点。"
+    ),
+    ("CLAIM_SOURCE_KINDS", "自证"): (
+        "由数据产出：`documents.claims[].source_kind`，实测 8 行（2026-09-29）。同 `文献`。"
+    ),
+    ("CLAIM_CHECK_KINDS", "只读了陈述"): (
+        "由数据产出：`documents.claims[].our_check`，实测 4 行（2026-09-29）。"
+        "它是 P3 台账里那三条 `lem:*` 的 `our_check` 取值（`draft/28` 的 R-40 说的就是这一档）。"
+    ),
+    ("CONJECTURE_FORMS", "identity"): (
+        "由数据产出：`conjectures.form`，实测 8 行（2026-09-29）。"
+        "`form` 由提出猜想的一方写（D/人），代码里只有 `universal` 出现过字面量。"
     ),
 }
 
@@ -207,43 +266,99 @@ def _pin_utf8() -> None:
 
 
 def _vocab_constants(schema_py: Path) -> dict[str, list[str]]:
-    """从 `schema.py` 的 AST 里取词表：`名字以 VOCAB_SUFFIXES 结尾` 且值是字符串序列。"""
-    try:
-        tree = ast.parse(schema_py.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError) as exc:
-        raise ValueError(f"schema 读不了或解析失败：{type(exc).__name__}: {exc}") from None
+    """从**一个**文件的 AST 里取词表：`名字以 VOCAB_SUFFIXES 结尾` 且值是字符串序列。
 
-    out: dict[str, list[str]] = {}
-    for node in ast.walk(tree):
-        targets: list[ast.expr] = []
-        value: ast.expr | None = None
-        if isinstance(node, ast.Assign):
-            targets, value = list(node.targets), node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets, value = [node.target], node.value
-        if value is None:
-            continue
-        names = [t.id for t in targets if isinstance(t, ast.Name)]
-        if not names or not any(n.endswith(VOCAB_SUFFIXES) for n in names):
-            continue
-        if not isinstance(value, (ast.Tuple, ast.List, ast.Set)):
-            continue
-        items = [e.value for e in value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
-        if items:
-            out[names[0]] = items
+    保留这个单文件形态：`tests/test_vocab_census.py` 直接调它去核某一个文件的词表
+    （`E-10` 裁定 (b) 那一条），而且"一个文件里有哪些词表"本身是有用的读数。
+    多文件版本是 :func:`_vocab_constants_in`（`R-37`）。
+    """
+    out, err = _vocab_constants_in([schema_py])
+    if err:
+        raise ValueError(err)
     return out
 
 
-def _producer_text(src_dir: Path, exclude: Path) -> tuple[str, int]:
-    """把 `src/**/*.py`（排除词表定义所在的那个文件）读成一大段文本。
+def _vocab_constants_in(paths: list[Path]) -> tuple[dict[str, list[str]], str]:
+    """从若干个定义文件里取全部词表；返回 `(词表字典, 问题)`。
+
+    同名常量在两个文件里都定义 ⇒ 记进 `问题`（两份定义点就是两份"唯一真源"，
+    谁读谁错；报出来而不是后者覆盖前者）。
+    """
+    out: dict[str, list[str]] = {}
+    where: dict[str, str] = {}
+    for p in paths:
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
+            return {}, f"{p} 读不了或解析失败：{type(exc).__name__}: {exc}"
+        for node in ast.walk(tree):
+            targets: list[ast.expr] = []
+            value: ast.expr | None = None
+            if isinstance(node, ast.Assign):
+                targets, value = list(node.targets), node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                targets, value = [node.target], node.value
+            if value is None:
+                continue
+            names = [t.id for t in targets if isinstance(t, ast.Name)]
+            if not names or not any(n.endswith(VOCAB_SUFFIXES) for n in names):
+                continue
+            if not isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+                continue
+            items = [e.value for e in value.elts
+                     if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+            if not items:
+                continue
+            if names[0] in out and where[names[0]] != str(p):
+                return {}, (f"词表 {names[0]} 在两个定义文件里都有："
+                            f"{where[names[0]]} 与 {p} —— 两份定义点必须合成一份")
+            out[names[0]] = items
+            where[names[0]] = str(p)
+    return out, ""
+
+
+def _class_default_literals(paths: list[Path]) -> list[str]:
+    """`R-31`：定义文件里**类体属性默认值**的字符串字面量（例如 `status: str = "proposed"`）。
+
+    为什么需要它：`Conjecture.status` 的默认值就是 `"proposed"` —— **每一行猜想生下来
+    就是它**，那是货真价实的产出点，而定义点整份被排除之后普查看不见。
+
+    为什么**不**把定义文件整份算进产出正文（本条的第一次实现，已否决）：`schema.py`
+    的其余部分有大量注释与报错文案；整份算进去之后，真正死掉的取值会因为
+    "在注释里被提到过"而变成"有产出" —— 实测 `dead_total` 从 6 变成 **0**
+    （见 `draft/28` §168 的对照读数）。只取类体默认值：那是**代码真的会写进数据**的
+    字面量，判据精确，且不动其余口径。
+    """
+    out: list[str] = []
+    for p in paths:
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+            for stmt in cls.body:
+                value: ast.expr | None = None
+                if isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+                    value = stmt.value
+                elif isinstance(stmt, ast.Assign):
+                    value = stmt.value
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    out.append(value.value)
+    return out
+
+
+def _producer_text(src_dir: Path, exclude: set[Path]) -> tuple[str, int]:
+    """把 `src/**/*.py`（排除词表定义点所在的那几个文件）读成一大段文本。
 
     为什么要排除定义点：不排除的话每个取值都会"命中它自己的定义"，于是永远报不出死取值 ——
-    那是这条普查最典型的假绿形态。
+    那是这条普查最典型的假绿形态（实测：把定义文件整份算进产出正文时 `dead_total` 从 6 变 0）。
+    排除的是**定义文件整份**；定义文件里有真实产出面的那部分（类体默认值）由
+    :func:`_class_default_literals` 精确补回来（`R-31`）。
     """
     parts: list[str] = []
     lines = 0
     for p in sorted(src_dir.rglob("*.py")):
-        if p == exclude:
+        if p in exclude:
             continue
         try:
             text = p.read_text(encoding="utf-8")
@@ -257,14 +372,24 @@ def _producer_text(src_dir: Path, exclude: Path) -> tuple[str, int]:
 def census(root: Path) -> dict:
     """跑一次普查，返回结果字典（`checked` 为假表示没查成）。"""
     src = root / "src"
-    schema_py = src / "agentflow" / "schema.py"
-    if not schema_py.is_file():
-        return {"checked": False, "reason": f"读不到 {schema_py}"}
+    definition_paths = [src / rel for rel in VOCAB_DEFINITION_FILES]
+    missing = [str(p) for p in definition_paths if not p.is_file()]
+    if missing:
+        # 少一个定义文件 ⇒ **没查成**（那几张词表会静默落在判据面之外，而读数照样好看）
+        return {"checked": False, "reason": f"读不到定义文件：{missing}"}
     try:
-        vocabs = _vocab_constants(schema_py)
+        vocabs, dup_problem = _vocab_constants_in(definition_paths)
     except ValueError as exc:
         return {"checked": False, "reason": str(exc)}
-    blob, producer_lines = _producer_text(src, schema_py)
+    if dup_problem:
+        return {"checked": False, "reason": dup_problem}
+    blob, producer_lines = _producer_text(src, set(definition_paths))
+    defaults = _class_default_literals(definition_paths)
+    if defaults:
+        # 把类体默认值当成一段"合成产出正文"接在后面（`R-31`）：它们是代码真的会写进
+        # 数据的字面量，而不是"在注释里出现过"。这一段的字节不进 `producer_lines`
+        # （那是"扫过多少行源码"的读数，不该被合成文本灌水）。
+        blob = blob + "\n" + "\n".join(f'DEFAULT = "{d}"' for d in defaults)
     if len(vocabs) < MIN_VOCABS:
         return {"checked": False, "reason": f"只扫到 {len(vocabs)} 个词表（下限 {MIN_VOCABS}）"}
     if producer_lines < MIN_PRODUCER_LINES:

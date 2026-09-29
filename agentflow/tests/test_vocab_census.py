@@ -40,9 +40,16 @@ def _fake_root(tmp_path: Path, *, producer_body: str = 'X = "produced"\n' * 60) 
 
     产出正文重复 60 行是为了过 `MIN_PRODUCER_LINES` 那道反真空下限 ——
     下限本身也有用例（见 `test_too_few_producers_is_unknown_not_clean`）。
+
+    `claimanatomy.py` 也必须写出来：`draft/28` §168 的 `R-37` 把定义点从
+    "只有 `schema.py`" 扩成 `VOCAB_DEFINITION_FILES` 里那几个，**少一个就是"没查成"**
+    （那一格本身有负控）。它带一张自己的词表 `EXTRA_KINDS`，取值用 `produced`
+    与产出模块对齐 —— 这样它不会给"哪些取值是死的"那几条断言添噪音。
     """
     (tmp_path / "src" / "agentflow").mkdir(parents=True)
     (tmp_path / "src" / "agentflow" / "schema.py").write_text(_SCHEMA, encoding="utf-8")
+    (tmp_path / "src" / "agentflow" / "claimanatomy.py").write_text(
+        'EXTRA_KINDS = ("produced",)\n', encoding="utf-8")
     (tmp_path / "src" / "agentflow" / "mod.py").write_text(producer_body, encoding="utf-8")
     return tmp_path
 
@@ -66,6 +73,10 @@ def test_too_few_vocabularies_is_unknown_not_clean(tmp_path: Path) -> None:
     """反真空：词表数低于下限 ⇒ 没查成（2），不是"没有死取值"。"""
     (tmp_path / "src" / "agentflow").mkdir(parents=True)
     (tmp_path / "src" / "agentflow" / "schema.py").write_text("NOT_A_VOCAB = 1\n", encoding="utf-8")
+    # 定义文件必须齐（`R-37`）：少了它走的是"读不到定义文件"那一格，与本用例测的
+    # "词表数低于下限"是两回事 —— 夹具要喂到被测那一格上。
+    (tmp_path / "src" / "agentflow" / "claimanatomy.py").write_text("NOT_A_VOCAB = 1\n",
+                                                                   encoding="utf-8")
     (tmp_path / "src" / "agentflow" / "mod.py").write_text("Z = 1\n" * 60, encoding="utf-8")
     result = V.census(tmp_path)
     assert result["checked"] is False, result

@@ -98,14 +98,31 @@ def test_r011_always_declares_the_unimplemented_direction() -> None:
 
 
 def test_r011_on_the_real_tree_is_info_only_because_unclaimed_is_empty() -> None:
-    """真仓库上：级别集合是 `{"info"}`，因为 `unclaimed` 今天是空的、普查也跑成了。
+    """真仓库上两栏的**级别映射**必须成立：栏一 info、栏二 error（`P-23`）。
 
-    这条不再断言"R011 永远是 info 级"（那会与 `P-23` 的口径冲突）：
-    它断言的是"今天没有无人认领的死取值"这个事实。
+    ## 这条用例被改过一次，为什么
+
+    它原来断言的是"真仓库上 `{f.level} == {'info'}`，因为 `unclaimed` 今天是空的"。
+    `draft/28` §168（`R-30` + `R-37` 拓宽取词表面）之后，真仓库上**第一次**出现了
+    10 条无人认领的死取值（5 条 R011 发现，逐条见 §168 的 R-64）⇒ 那句"今天是空的"
+    不再成立，而它原本要守的东西（"级别由栏目决定"）仍然成立。
+
+    所以现在断言的是**判据本身**，不再依赖"今天恰好没有"：
+      - 每一条 `[栏二 unclaimed]` 都是 `error`（无产出且无人认领 ⇒ 必须吵）；
+      - 每一条 `[栏一 reserved]` / `[栏一附]` / 计数与已知缺口那几条都是 `info`
+        （预留是人的口径裁定，不是缺陷）；
+      - 两栏的取值集合不许有交集（同一条不可能既预留又无人认领）。
     """
     got = L.rule_R011_dead_vocab(ROOT)
-    assert not [f for f in got if "[栏二 unclaimed]" in f.message], "真仓库上出现了无人认领的死取值"
-    assert {f.level for f in got} == {"info"}
+    unclaimed = [f for f in got if "[栏二 unclaimed]" in f.message]
+    reserved = [f for f in got if "[栏一 reserved]" in f.message]
+    assert unclaimed, (
+        "真仓库上一条无人认领的死取值都没有 —— 若这是**修完之后**的事实，请把本用例"
+        "改回'不许出现栏二'那一版（`draft/28` §168 的 R-64 列出了当时那 10 条）"
+    )
+    assert {f.level for f in unclaimed} == {"error"}, [f.level for f in unclaimed]
+    assert {f.level for f in reserved} == {"info"}, [f.level for f in reserved]
+    assert not ({f.message for f in unclaimed} & {f.message for f in reserved})
 
 
 def test_negative_control_an_unreadable_census_tool_is_a_warning_not_info(

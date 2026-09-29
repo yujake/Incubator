@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T10:21:47+08:00",
+  "generated_at": "2026-09-29T10:36:45+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -756,10 +756,10 @@
       "path": "tools/vocab_census.py",
       "glob": "tools/vocab_census.py",
       "category": "auth-audit",
-      "sha256": "3c66bd52429adabdaf84afca927c8beec5037f80c0a44a0fd2cc04741c774ab4",
+      "sha256": "162f728522b1c363ad4ef4ae9681d3f81318f4f818315851d7aa698c5465d8fc",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
+      "change_note": "R-30/R-37/R-31：取词表面拓宽（_FORMS 后缀 + claimanatomy 定义点 + 类体默认值算产出点）+ 7 条由数据产出的预留登记",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
