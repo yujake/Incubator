@@ -11,7 +11,7 @@
 > 例如 `network: 2` 在 B3 之后是 **0**），**少改表格 = 少一处漂移面**；第二根轴的权威展示由
 > `cli tools` 承担（它能直接从注册表打，不必手工维护）。
 > - 工具面：`build_registry(store=Store(tempfile.mkdtemp()), workspace_root=<同目录>, roles=schema.ROLES)`
->   一次装配后的**实测**结果（69 个工具、12 个模块 loaded、0 skipped）。
+>   一次装配后的**实测**结果（70 个工具、12 个模块 loaded、0 skipped）。
 >   命令与输出见 `DEVELOPMENT.md` §9 附录与本文 §0.3。
 > - 自注册工具：读 `agent_c.register_tools` / `agent_d._fallback_trace_tools` /
 >   `tools/review_tools.register(include_writers=True)` 的源码逐个核出。
@@ -199,7 +199,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（69 个，逐条）
+## R0. 全局工具总表（70 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -274,11 +274,12 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 64 | `conductor.stop` | 优雅停止：不再新开任务 → 等在飞收尾（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落续跑简报；幂等（第二次不改第一次的理由） | `write_local` | **是** | M | reason,drain_sec | `{reason,reason_mapped_from,detail,inflight_at_stop,drained_sec,disposed,resume_brief,verify}` | `tests/test_conductor_tools.py` | `reason` 回报**首次生效**的那个（FC-20 终态先到先得） |
 | 65 | `conductor.resume_brief` | 读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）；没有简报时如实说没有，未终态行逐条报出（不自动续跑） | `read` | 否 | M | （无） | `{present,brief,unfinished_now,path}` | `tests/test_conductor_tools.py` | 简报是工作区根下的文件，不是领域表 |
 | 66 | `conductor.cancel` | 硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；与 `conductor.stop` 的区别是 stop 先尝试收尾 | `write_local` | **是** | M | reason,detail | `{reason,reason_mapped_from,detail,inflight}` | `tests/test_conductor_tools.py` | 无 |
-| 67 | `conductor.ensure_project` | 冷启动 / 热启动由主控决定：给 start=auto / cold / warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode；cold 才建目录，warm 必须已存在且是工作区（绝不替人删、也绝不把别人的目录当工作区） | `write_local` | **是** | M | project_name,start,books_dir,books_limit | `{name,path,mode,requested,state,why,created,ingested}` | `tests/test_conductor_tools.py` | 无 |
-| 68 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
-| 69 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
+| 67 | `conductor.acceptance` | 只读：读某个项目的验收表（默认 `out/paper/ACCEPTANCE.md`），逐行解析出 P1–P11 的判据名 / 结论 / 读数 —— 交付说明必须逐条与它对齐 | `read` | 否 | M | project_dir, rel_path | `{found,path,title,conclusion,rows,row_count,ok_count,not_ok_count,problems}`（`rows[]` 每项 `{id,name,ok,reading}`）| `tests/test_paper_pack.py` | **本轮新增**（`draft/28` §189）；解析不出来时 `rows` 空而 `problems` 非空（空表 ≠ 解析失败） |
+| 68 | `conductor.ensure_project` | 冷启动 / 热启动由主控决定：给 start=auto / cold / warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode；cold 才建目录，warm 必须已存在且是工作区（绝不替人删、也绝不把别人的目录当工作区） | `write_local` | **是** | M | project_name,start,books_dir,books_limit | `{name,path,mode,requested,state,why,created,ingested}` | `tests/test_conductor_tools.py` | 无 |
+| 69 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
+| 70 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
 
-### R0.1 69 个工具的公共事实（机械可验证）
+### R0.1 70 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -1923,7 +1924,7 @@ SELF-CHECK DONE（agent_h）
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（8 个编排面工具，实测）= 召唤能力
+### M.4 "工具面"（9 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取）
 
 #### M.4.1 M 能召唤的 8 个角色 × 它们的动作（48 个可召唤动作）
 

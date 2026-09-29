@@ -425,10 +425,133 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
                 "summonable": role_name in C.ALLOWED_EDGES.get(S.CONDUCTOR_ROLE, frozenset())}
         return ok(data, **data)
 
+    @tool(
+        "conductor.acceptance",
+        "只读：读某个项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的"
+        "判据名 / 结论 / 读数。交付说明必须逐条与它对齐 —— 没有这张表就只能靠猜。",
+        {
+            "type": "object",
+            "properties": {
+                "project_dir": {"type": "string",
+                                "description": "项目根（相对工作区；缺省取当前工作区根）"},
+                "rel_path": {"type": "string",
+                             "description": "验收表相对项目根的路径（缺省 out/paper/ACCEPTANCE.md）"},
+                "max_chars": {"type": "integer", "minimum": 0, "maximum": 4000,
+                              "description": "每行读数最多留多少字（缺省 60；0 = 不截断）"},
+                "ids": {"type": "array", "items": {"type": "string"},
+                        "description": "只要这几行（如 ['P5','P6']）；一次读不完时按批读"},
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+        side_effect="read",
+        roles=("M",),
+        returns=("{'found','path','title','conclusion','rows','row_count','ok_count','not_ok_count',"
+                 "'readings_truncated','row_ids','problems'}；"
+                 "rows[] 每项是 {'id','name','ok','reading','reading_chars'}；"
+                 "给了 ids 时多 {'requested','unknown_ids'}"),
+    )
+    def conductor_acceptance(project_dir: str = "", rel_path: str = "",
+                             max_chars: int = 60, ids: list | None = None) -> ToolResult:
+        """工具体：把验收表读成结构化的十行（读不到就如实说读不到，不给空表）。
+
+        `ids` 是给"一次读不完"准备的：真机实测（2026-09-29）十行的完整读数会被
+        上下文预算剪枝，而主控手里没有读文件工具（它的面只有 `conductor.*`）⇒
+        被剪掉的部分读不回来。按批读是"不靠猜"的做法（而不是让 M 猜 P5–P11 写了什么）。
+        """
+        base = Path(project_dir) if project_dir else (store.root if store is not None else Path("."))
+        rel = rel_path or "out/paper/ACCEPTANCE.md"
+        path = (base / rel).resolve()
+        if not path.is_file():
+            return fail(
+                f"验收表不在盘上：{path} ⇒ 没查成（不是「没有判据」）。"
+                "先让项目跑一次验收脚本，或把 rel_path 指对。",
+                kind="no_acceptance_table", path=str(path), found=False,
+            )
+        got = _parse_acceptance(path, max_chars=max_chars)
+        if ids:
+            want = [str(x) for x in ids]
+            keep = [r for r in got["rows"] if r["id"] in want]
+            missing = [x for x in want if x not in {r["id"] for r in got["rows"]}]
+            got["rows"] = keep
+            got["row_count"] = len(keep)
+            got["ok_count"] = sum(1 for r in keep if r["ok"])
+            got["not_ok_count"] = len(keep) - got["ok_count"]
+            got["requested"] = want
+            got["unknown_ids"] = missing
+            if missing:
+                got["problems"] = list(got["problems"]) + [f"这些行不在验收表里：{missing}"]
+        else:
+            # 没给 `ids` 时这两栏也必须在：`returns=` 声明了它们，而"声明了却没给"
+            # 是一条会被机械核的判据（实测撞过）。空列表的语义是"没有指定 / 没有未知"，
+            # 与"没有这一栏"是两件事。
+            got["requested"] = []
+            got["unknown_ids"] = []
+        # 成功支写成字面量键表：让"返回了哪些键"静态可见（与论文包四件同一条纪律）。
+        return ok({
+            "found": got["found"], "path": got["path"], "title": got["title"],
+            "conclusion": got["conclusion"], "rows": got["rows"],
+            "row_count": got["row_count"], "ok_count": got["ok_count"],
+            "not_ok_count": got["not_ok_count"],
+            "readings_truncated": got["readings_truncated"], "row_ids": got["row_ids"],
+            "problems": got["problems"], "requested": got["requested"],
+            "unknown_ids": got["unknown_ids"],
+        })
+
     for fn in (conductor_summon, conductor_ledger, conductor_stop, conductor_resume_brief,
-               conductor_cancel, conductor_ensure_project, conductor_state, conductor_role_spec):
+               conductor_cancel, conductor_ensure_project, conductor_state, conductor_role_spec,
+               conductor_acceptance):
         names.append(registry.register_function(fn).name)
     return names
+
+
+def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
+    """把验收表（markdown）解析成结构化的行。
+
+    认的是项目脚本自己的写法：一行标题（含「P1–P11」之类）、一行结论
+    （`结论：**全部成立**（10/10）`）、一张 `| 判据 | 名称 | 结论 | 读数 |` 表。
+
+    `max_chars` 是交付说明能不能逐条对齐的关键：真机实测（2026-09-29，只读重放）
+    十行的完整读数合起来 >1400 字，工具结果被上下文预算截断，M 只看到 P1–P4，
+    于是它如实写"P5–P11 未核到"。默认截到 120 字/行 ⇒ 十行约 1.2k 字，
+    够 M 逐条引用；需要全量时把 `max_chars` 调大（读数原文仍在盘上，随时可读）。
+
+    解析不出来时 `rows` 为空而 `problems` 非空 —— 空表与"解析失败"必须分得开。
+    """
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    title = next((ln.lstrip("# ").strip() for ln in lines if ln.startswith("#")), "")
+    conclusion = next((ln.strip() for ln in lines if ln.startswith("结论")), "")
+    rows: list[dict[str, Any]] = []
+    problems: list[str] = []
+    truncated = 0
+    in_table = False
+    for ln in lines:
+        if not ln.startswith("|"):
+            in_table = False
+            continue
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        if len(cells) < 4 or set(ln.strip()) <= set("|-: "):
+            continue
+        if cells[0] == "判据":
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        reading = cells[3]
+        if max_chars > 0 and len(reading) > max_chars:
+            reading = reading[:max_chars] + "…"
+            truncated += 1
+        name = cells[1] if len(cells[1]) <= 30 else cells[1][:30] + "…"
+        rows.append({"id": cells[0], "name": name, "ok": "成立" in cells[2],
+                     "reading": reading, "reading_chars": len(cells[3])})
+    if not rows:
+        problems.append("验收表里一行判据都没解析出来（表头是 `| 判据 | 名称 | 结论 | 读数 |` 吗？）")
+    ok_count = sum(1 for r in rows if r["ok"])
+    return {"found": True, "path": str(path), "title": title, "conclusion": conclusion,
+            "rows": rows, "row_count": len(rows), "ok_count": ok_count,
+            "not_ok_count": len(rows) - ok_count, "readings_truncated": truncated,
+            "row_ids": [r["id"] for r in rows], "problems": problems}
 
 
 def selftest() -> int:
@@ -440,8 +563,8 @@ def selftest() -> int:
     except Exception as exc:  # 注册期就炸说明接线本身坏了
         print(f"[conductor_tools] 注册失败：{type(exc).__name__}: {exc}")
         return 1
-    if len(names) != 8:
-        problems.append(f"注册了 {len(names)} 个工具（应有 8 个）：{names}")
+    if len(names) != 9:
+        problems.append(f"注册了 {len(names)} 个工具（应有 9 个）：{names}")
     for spec in reg.for_role(S.CONDUCTOR_ROLE):
         if S.CONDUCTOR_ROLE not in tuple(getattr(spec, "roles", ())):
             problems.append(f"{spec.name} 的 roles 里没有主控")
@@ -451,7 +574,7 @@ def selftest() -> int:
         for p in problems:
             print(f"[conductor_tools] {p}")
         return 1
-    print("[conductor_tools] 自检通过：8 件编排面工具，只有主控拿得到")
+    print("[conductor_tools] 自检通过：9 件编排面工具，只有主控拿得到")
     return 0
 
 

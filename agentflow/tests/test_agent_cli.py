@@ -88,6 +88,28 @@ def test_the_cached_conductor_gets_its_backend_replaced_loudly(tmp_path: pathlib
     assert getattr(first, "backend_note", ""), "换 backend 这件事必须留痕"
 
 
+def test_summoning_a_role_through_the_wired_conductor_actually_runs(tmp_path: pathlib.Path):
+    """正控（真机读数抓出来的缺陷）：经模型驱动的主控派活，确定性实现要真的跑起来。
+
+    §185 那批测试漏了这条路径：那个用例把子角色也登记进 `loops`（走 LLM 循环），
+    于是 `LocalBackend` 一次都没走 —— 而 `wired_llm_conductor` 当时给内层 backend
+    建的是 `LocalBackend(role_reg)`，没把 store 注进去 ⇒ 被召唤的角色在
+    `factory(role, store=None)` 上炸。实测（2026-09-29，只读重放门槛 A）：
+    `run-agent M` 派 H 做 review，两次都是
+    `TypeError: factory(H) 需要一个 store（backend 的契约是 fn(*, store=...)）`，
+    而台账里那两行长得像"H 自己失败了"。
+    """
+    st = Store(tmp_path / "ws")
+    st.init()
+    reset_cache()
+    wiring = wired_llm_conductor(st, loops={}, session_root=st.root, sid="t")
+    res = wiring["conductor"].summon("E", "list_experiments", {}, by="M")
+    assert res.status == "done", (
+        f"被召唤的角色没跑起来：status={res.status} outcome={res.outcome} "
+        f"detail={getattr(res, 'detail', '')} error={getattr(res, 'error', '')}"
+    )
+
+
 def test_run_agent_without_a_key_is_not_checked_and_makes_no_request(tmp_path: pathlib.Path,
                                                                     monkeypatch, capsys):
     """负控（三态）：没有 key ⇒ 退出码 2，且一条模型调用记录都不许留下。"""

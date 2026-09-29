@@ -284,8 +284,19 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     ws = str(workspace_root or getattr(store, "root", "") or "")
     role_reg = build_role_registry(store, llm=None, providers=providers, extractor=extractor,
                                    config=config, workspace_root=workspace_root)
-    inner = LocalBackend(role_reg)
     table = dict(loops or {})
+    conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
+
+    # 内层 backend 必须带着 store：`LocalBackend.store` 由 `Conductor` 注入，
+    # 而 `factory(role, store=None)` 会被角色工厂当场拒（"需要一个 store"）——
+    # 实测 2026-09-29：`run-agent M` 派 H 做 review，两次都以
+    # `TypeError: factory(H) 需要一个 store（backend 的契约是 fn(*, store=...)）` 失败，
+    # 而 §185 那批测试没看见它：那个用例把子角色也登记进 `loops`（走 LLM 循环），
+    # `LocalBackend` 那条路一次都没走。
+    inner = getattr(conductor, "backend", None)
+    if not isinstance(inner, LocalBackend):
+        inner = LocalBackend(role_reg)
+        inner.store = store
 
     def _default_seam(role: str) -> LlmSeam:
         return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget)
@@ -293,7 +304,6 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     backend = LlmBackend(inner=inner, loops=table, session_root=root,
                          seam_factory=seam_factory or _default_seam, store=store,
                          max_steps=max_steps, workspace_root=ws, sid=sid)
-    conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
     if not isinstance(conductor.backend, LlmBackend):
         conductor.backend = backend
         conductor.backend_note = ("backend 被换成 LlmBackend（conductor_for 的缓存忽略后传的 "

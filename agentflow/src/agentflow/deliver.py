@@ -161,7 +161,7 @@ def append_work_item(session_root: Path | str, item: WorkItem) -> str:
 def _mechanical_checks(store: Any, artifact: str, *, claimed_pairs: Sequence[Sequence[str]] = (),
                        require_disclaimer: bool = False, disclaimer: str = "",
                        ) -> list[dict[str, Any]]:
-    """机械半：引用落地 + 体例（不需要模型的那两条）。"""
+    """机械半：引用落地 + 体例 + 断言强度（不需要模型的那三条）。"""
     out: list[dict[str, Any]] = []
     if store is not None and claimed_pairs:
         res = FC.overview_findings(store, artifact, claimed_pairs=claimed_pairs)
@@ -170,6 +170,21 @@ def _mechanical_checks(store: Any, artifact: str, *, claimed_pairs: Sequence[Seq
         for pair in res["unsupported_pairs"]:
             out.append({"kind": "unsupported_pair",
                         "detail": f"{pair['pair']} 在图里没有边也没有路径"})
+    if store is not None:
+        # 断言强度（`draft/28` §189，第 7 步）：把稿件的每一条断言与它挂的证据等级
+        # 逐条比一遍。判不了"这句话证明了没有"（那是语义半），但"证据等级是 cross_check
+        # 却写着『证明』"这种形态不需要模型就能判。
+        claims: list[dict[str, Any]] = []
+        try:
+            for row in store.rows("documents"):
+                claims.extend(dict(c) for c in (row.get("claims") or []))
+        except Exception as exc:  # noqa: BLE001 —— 表读不了如实记一档，不当作"没有断言"
+            out.append({"kind": "claim_strength",
+                        "detail": f"断言台账读不到：{type(exc).__name__}: {exc} ⇒ 强度没判成"})
+        if claims:
+            strength = FC.claim_strength_findings(claims)
+            for finding in strength["findings"]:
+                out.append({"kind": "claim_strength", "detail": finding})
     style = FC.style_findings(artifact, require_disclaimer=require_disclaimer,
                               disclaimer=disclaimer)
     for finding in style["findings"]:

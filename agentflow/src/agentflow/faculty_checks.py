@@ -262,6 +262,63 @@ def progress_findings(before: Mapping[str, int], after: Mapping[str, int], *,
             "steps": int(steps), "findings": findings, "problem_count": len(findings)}
 
 
+#: 判据"结论有没有强于它挂的证据"的机械半只有一份实现：`claimanatomy.validate_claim`
+#: 的 `inconsistent_status`（`evidence_kind != proof` 而正文出现 `OVERCLAIM_MARKERS`）。
+#:
+#: 这一层不再另立词表 —— 第一版我写了 `STRENGTH_WORDS = ("证明","定理",…)`，
+#: 测试当场抓到两个误报（`服从中心极限定理` 是定理的名字、`不构成证明` 是明说不是证明），
+#: 而更要紧的是：`claimanatomy` 早就有这条判据（且它的词表由
+#: `doc_tools.OVERCLAIM_MARKERS` 唯一提供，还有测试钉住两边是同一个对象）。
+#: 于是这里的职责改成"把那份判据的结论翻译成 faculty 视图"，而不是再判一次。
+CLAIM_STRENGTH_CODES: tuple[str, ...] = ("inconsistent_status",)
+
+
+def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
+                            codes: Sequence[str] = CLAIM_STRENGTH_CODES,
+                            ) -> dict[str, Any]:
+    """逐条比对"这条断言说了多强"与"它挂的证据等级"（能思辨的机械半）。
+
+    返回 `{"checked", "verdict", "total", "overclaimed", "missing_evidence", "findings"}`：
+    - `overclaimed`：`claimanatomy` 判成 `inconsistent_status` 的那些断言（逐条带 code/message）；
+    - `missing_evidence`：连 `evidence_kind` 都没有的断言 —— 它不是"没问题"，是"判不了"，
+      两栏分开报（三态纪律）。
+
+    判不了"这句话到底证明了没有"（那是语义半 `judges.claims.conclusion_strength` 的事），
+    也不自己判"证据等级够不够"（那是 `claimanatomy` 的事）。
+    """
+    from . import claimanatomy as CA
+
+    over: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    for i, claim in enumerate(claims or ()):
+        cid = str(claim.get("claim_id") or f"#{i + 1}")
+        if not str(claim.get("evidence_kind") or "").strip():
+            missing.append({"claim_id": cid, "why": "没有证据等级 ⇒ 这一条判不了"})
+            continue
+        try:
+            issues = CA.validate_claim(claim).issues
+        except Exception as exc:  # noqa: BLE001 —— 判不了就如实说判不了，不许静默放过
+            missing.append({"claim_id": cid, "why": f"校验没跑成：{type(exc).__name__}: {exc}"})
+            continue
+        hit = [iss for iss in issues if getattr(iss, "code", "") in codes]
+        if hit:
+            over.append({"claim_id": cid, "evidence_kind": str(claim.get("evidence_kind")),
+                         "codes": [iss.code for iss in hit],
+                         "messages": [iss.message for iss in hit]})
+    total = sum(1 for _ in (claims or ()))
+    if over:
+        verdict = "overclaimed"
+    elif missing:
+        verdict = "unjudgeable"
+    else:
+        verdict = "within_evidence"
+    findings = [f"{o['claim_id']}：{msg}" for o in over for msg in o["messages"]]
+    findings += [f"{m['claim_id']}：{m['why']}" for m in missing]
+    return {"checked": True, "verdict": verdict, "total": total, "overclaimed": over,
+            "missing_evidence": missing, "findings": findings,
+            "problem_count": len(findings), "criterion_source": "claimanatomy.inconsistent_status"}
+
+
 def trace_findings(store: Any, pairs: Sequence[Sequence[str]], *, text: str = "",
                    ) -> dict[str, Any]:
     """矛盾的溯源机械半：每一对矛盾引用的材料必须存在，且文内至少点名一份。

@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p14"
+PROMPT_VERSION = "p15"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -311,6 +311,60 @@ EVIDENCE_CONTRACT = """\
 - 置信度只能等于或低于确定性口径算出来的那一档：模型可以把"高"降成"中"，
   不许把"低"抬成"高"。
 - 结论的强度不得超过引文能支撑的范围：交叉验证不是证明，"我检查了三个例子"不是定理。"""
+
+
+#: 论文包专用段（`draft/28` §189 的第 6 步）。
+#:
+#: 为什么是"论文包专用"而不是塞进 `EVIDENCE_CONTRACT`（那是全角色共享的）：
+#: 这一段只对碰论文包的角色成立（M 统筹交付、G 写稿与打包、H 审校），
+#: 对 A/B/C/E/F 说是噪音 —— 而噪音会稀释它们真正要看的东西。
+#:
+#: 段里的每一句都能在工作区里核对：判据表是 `out/paper/ACCEPTANCE.md`（十行 P1–P11），
+#: 四张表/六件配套/签名/渲染锚是 P7 那一行的读数，五个 PDF 标记由项目脚本
+#: `code/compile_paper.py` 的 `MARKERS` 定义。写在这里的是"去哪看、看什么"，
+#: 不是另立一套标准 —— 两份判据必然漂移。
+PAPER_PACK_ROLES: tuple[str, ...] = ("M", "G", "H")
+
+PAPER_PACK = """\
+论文包（你参与的那份交付物）—— 这一段的每一句都能在工作区里核对：
+
+一、交付物是什么
+- 项目根 `projects/<项目名>/`；论文包在 `out/paper/`。
+- 包里必须有：主稿 `main.tex`、编译产物 `main.pdf`、四张表
+  （`tables/evidence-levels.tex`、`negation.tex`、`dependencies.tex`、`conjectures.tex`，
+  且主稿用 `\\input{tables/...}` 引用它们）、六件配套（`EVIDENCE.md`、`LIT.md`、`NOTES.md`、
+  `REVIEW.md`、`SUBMISSION.md`、`CLAIMS-LEDGER.md`）、H 的签名 `H-SIGNATURE.json`、
+  渲染锚 `RENDER-ANCHOR.json`。
+- 原始论文包是**只读输入**：一个字节都不许改。你的产出落在自己的工作区与台账里。
+
+二、验收表就是 P1–P11，交付说明必须逐条对齐
+- 判据表在 `out/paper/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），
+  每行三列「名称 / 结论 / 读数」。用 `conductor.acceptance` 读它。
+- 一次读不完就按批读（`ids=['P5','P6','P7']`）—— 工具结果被上下文预算剪枝时，
+  剪掉的部分不会自己回来；宁可多读两次，也不要跳过某一行。
+- 你的交付说明不是另写一份总结：它必须逐条回应那十行，每条给读数（数字、路径、退出码）。
+  写「已完成」「符合要求」这种没有读数的句子等于没交付；没核到的行要明写「未核到」，
+  不许折成「没问题」。
+
+三、claims 台账的语义（P3）
+- `documents.claims` 有 24 条断言，每条四列：来源（自证/文献/未决）、证据等级、
+  我方核到什么程度、能否证伪。
+- `cross_check` 不等于证明：它只说明"我们独立核过一遍"。每条 cross_check 断言都必须带
+  「不构成证明」的声明；把检索到的文献说成自己的结论，是这份交付物里最严重的错。
+- 结论不许强于它挂的证据：证据等级不是 proof 时，断言里不许出现「证明」「定理」「必然」这类词
+  （机械半会逐条查，语义半会再判一次）。
+
+四、期刊体例
+- `ctexart` + `booktabs`/`longtable`；表格用 `\\input{tables/...}`；编译后从 PDF 抽出的文本里
+  必须能读到五个标记：`自主评审`、`断言台账`、`external`、`覆盖率`、`猜想表`。
+
+五、完成定义（五条全过才算交付，任何一条没过就不许说"完成"）
+1. 渲染锚 0 漂移（`doc.paper_anchor` 报 consistent 才算）；
+2. `main.pdf` 由**本次**源码编出，页数 >= 1 且五个标记齐全（看 `doc.paper_compile` 的读数，
+   不要看编译器退出码：本机 MiKTeX 会写完 PDF 却以崩溃码退出）；
+3. H 的 findings 全部落 `review_findings` 台账（一条都不许只留在对话里）；
+4. 交付说明里十条判据逐条有读数；
+5. 原始论文包未被修改。"""
 
 
 @dataclass(frozen=True)
@@ -783,6 +837,11 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         del i
     reg.section(Section("EVIDENCE_CONTRACT", SECTION_ORDERS["EVIDENCE_CONTRACT"],
                         EVIDENCE_CONTRACT))
+    if role in PAPER_PACK_ROLES:
+        # 论文包专用段：只给碰它的角色（M 统筹交付 / G 写稿与打包 / H 审校）。
+        # 顺序放在证据契约之后、输出契约之前：它是对"这次交付什么"的补充说明，
+        # 压过它会把通用契约挤到看不见的地方。
+        reg.section(Section("PAPER_PACK", SECTION_ORDERS["EVIDENCE_CONTRACT"] + 100, PAPER_PACK))
 
     acts = actions_lines(role)
     reg.section(Section("OUTPUT_CONTRACT", SECTION_ORDERS["OUTPUT_CONTRACT"],

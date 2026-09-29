@@ -71,7 +71,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 69
+TOOL_COUNT = 70
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -197,6 +197,7 @@ def tool_params() -> dict[str, dict]:
         "conductor.ensure_project": {"project_name": "probe1", "start": "cold"},
         "conductor.state": {},
         "conductor.role_spec": {"role_name": "C"},
+        "conductor.acceptance": {},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -304,7 +305,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
         "verify.check_formal", "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
         "verify.list_experiments", "verify.run_experiment",
-        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",
+        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",
     }
 )
 
@@ -623,6 +624,15 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     store = Store(tmp_path / "ws")
     store.init()
     _seed(store, store.root)
+    # `conductor.acceptance` 要一张真的验收表才走成功支：给夹具造一张最小的
+    # （十行的形态与项目脚本产出的一致 —— 表头 + 一行判据）。
+    _acceptance = store.root / "out" / "paper" / "ACCEPTANCE.md"
+    _acceptance.parent.mkdir(parents=True, exist_ok=True)
+    _acceptance.write_text(
+        "# 最终验收：P1–P11 逐条读数\n\n结论：**全部成立**（1/1）\n\n"
+        "| 判据 | 名称 | 结论 | 读数 |\n|---|---|---|---|\n"
+        "| P1 | 真实检索 | 成立 | 夹具读数（探针用的假表） |\n",
+        encoding="utf-8")
     # 论文包四件要一个真有脚本的项目根；造在夹具的工作区里。
     _make_paper_project(store.root / PAPER_PROJECT, check_exit=0)
 

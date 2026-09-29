@@ -26,6 +26,7 @@ from agentflow.tools import conductor_tools as CT
 ORCHESTRATION_TOOLS = {
     "conductor.summon", "conductor.ledger", "conductor.stop", "conductor.resume_brief",
     "conductor.cancel", "conductor.ensure_project", "conductor.state", "conductor.role_spec",
+    "conductor.acceptance",
 }
 
 
@@ -50,7 +51,7 @@ def _wired(tmp_path: Path, *, role_registry=None):
 
 
 def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
-    """M 拿到的正好是那 8 件编排面工具；只读角色一件也拿不到。"""
+    """M 拿到的正好是那 9 件编排面工具；只读角色一件也拿不到。"""
     _store, _c, reg = _wired(tmp_path)
     assert {s.name for s in reg.for_role("M")} == ORCHESTRATION_TOOLS
     for read_only in ("C", "H"):

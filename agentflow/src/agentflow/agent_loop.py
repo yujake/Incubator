@@ -229,6 +229,13 @@ def inbox_digest(session_root: Path, role: str, *, sid: str | None = None) -> tu
 
 
 # ------------------------------------------------------------------ 循环
+def _sha(text: str) -> str:
+    """文本的 sha256（会话记录里给交付物留指纹用；与 `llmseam._sha` 同一个口径）。"""
+    import hashlib
+
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
 def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
     """把模型的一句输出判成一个形状。判不出来时返回 `("", {}, 原因)`。"""
     present = [k for k in SHAPES if k in data]
@@ -454,6 +461,11 @@ class AgentLoop:
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,
             "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
+            # `final` 是这一岗的交付物本身：只记长度的话，事后没人能核
+            # "它到底与验收表对齐了没有"（实测：终点门槛 A 要逐条核交付说明，
+            # 而会话记录里只有 `final_chars`）。文本与哈希一起留，长度保留是为了
+            # 让"有没有被截断"一眼可见。
+            "final": run.final, "final_sha256": _sha(run.final)[:16],
             "final_chars": len(run.final), "spend": dict(run.spend),
             "elapsed_sec": round(run.elapsed_sec, 3),
         }, sid=self.sid)
