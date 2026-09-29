@@ -1969,17 +1969,39 @@ def audit_task_ledger(
                 f"outcome={outcome!r} 却带了 refusal_reason={rr!r} ⇒ 看着像『已拒绝』的成功行",
             ))
 
-        # ---- artifacts 形如 "table:id"，必须真的存在
+        # ---- artifacts：两种形态都要认（`draft/28` §161 的 R-58）
+        #   ① 行引用 `table:id`（本表原来的口径）；
+        #   ② **文件型产物** `file:<工作区相对路径>`，或直接给一个工作区内存在的相对路径。
+        # 第二种是 R-47/R-52 逼出来的：产出摘要落成文件后，`artifacts` 里出现的是**路径**，
+        # 而这条判据原来只认表名 ⇒ 每一次有产出的召唤都报一条 `unknown_artifact_kind`
+        # （实测 p2-review 上 61 条，而 `verify.py` 里那份副本改成认路径之后，
+        # 这里仍在报 —— 同一判据两份实现的典型形态）。
+        # 三态：显式 `file:` 却找不到 ⇒ error（登记了产出却不在）；裸路径找不到 ⇒
+        # 仍报 `unknown_artifact_kind`（可能只是形态写错，不该判成"文件被删"）。
+        root = Path(getattr(store, "root", ".") or ".")
         for a in r.get("artifacts") or []:
             kind, _, ref = str(a).partition(":")
-            if kind not in S.TABLES:
-                out.append(TaskIssue("unknown_artifact_kind", "warning", tid,
-                                     f"artifacts 里的 {a!r} 前缀无法识别（不在 schema.TABLES 里）"))
+            if kind in S.TABLES:
+                idf = S.TABLES[kind]["id_field"]
+                if not any(str(x.get(idf)) == ref for x in store.rows(kind)):
+                    out.append(TaskIssue("dangling_task_artifact", "error", tid,
+                                         f"artifacts 指向不存在的行：{a!r}"))
                 continue
-            idf = S.TABLES[kind]["id_field"]
-            if not any(str(x.get(idf)) == ref for x in store.rows(kind)):
+            rel = ref if kind == "file" else str(a)
+            candidate = root / rel
+            try:
+                inside = candidate.resolve().is_relative_to(root.resolve())
+            except (OSError, ValueError):
+                inside = False
+            if inside and candidate.is_file():
+                continue
+            if kind == "file":
                 out.append(TaskIssue("dangling_task_artifact", "error", tid,
-                                     f"artifacts 指向不存在的行：{a!r}"))
+                                     f"artifacts 里的文件型产物不存在：{a!r}"))
+            else:
+                out.append(TaskIssue("unknown_artifact_kind", "warning", tid,
+                                     f"artifacts 里的 {a!r} 既不是表名，"
+                                     "也不是工作区内存在的相对路径"))
     return out
 
 

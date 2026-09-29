@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T09:41:42+08:00",
+  "generated_at": "2026-09-29T10:03:53+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "35e8c5c0bd29423baef699e4c4381237ddbe7087601a839f83f067697b83a127",
+      "sha256": "5d245fe74bdef2fb40ed9c9507282b888f2a53a823495ea930354e1d48da9ba8",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T3-P7：D.register_conjecture 的动作声明 + _TOOL_MODULES 登记 conjecture_tools + D 的工具组 + 两层对账数字（49→50 动作）",
+      "change_note": "R-58：artifacts 形态判定（table:id 与文件型产物）补进唯一实现 capabilities.audit_task_ledger，verify.py 改为转发（消除两份实现）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -539,10 +539,10 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "f495c3d18046187ecf8c96ec139471af745b261e49f71c1ca82c8a75e4ecefa0",
+      "sha256": "696bcecda0dbaa37978f7b9e2afba20e98afb9219288a439eea0dcc51b530149",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "F4/R-47+R-52：tasks.artifacts 补文件型产物（file:<相对路径> 或工作区内存在的相对路径），修掉 R-47 摘要落进 artifacts 引出的 61 条 unknown_artifact_kind",
+      "change_note": "R-58：artifacts 形态判定（table:id 与文件型产物）补进唯一实现 capabilities.audit_task_ledger，verify.py 改为转发（消除两份实现）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
