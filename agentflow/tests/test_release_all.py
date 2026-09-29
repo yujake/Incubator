@@ -2125,6 +2125,12 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "sessions.py": "按项目存放的会话记录：`<项目根>/sessions/<会话号>.jsonl`（学 harness 的按工作区存放；`draft/28` §155）",
     "artifacts.py": "产物归属登记：`<工作区根>/ARTIFACTS.jsonl`，回答\"谁在哪个路径产出了什么\"（`R-52` 余；`draft/28` §166）",
     "canonical.py": "规范 JSON 字节串的唯一实现：稿件内容哈希与回执哈希共用的那一份口径（`R-33`；`draft/28` §169/§172）",
+    # 2026-09-29 第二批新增的四个模块（`draft/28` §179）：把 LLM 接入规范化
+    # （装配 / 提示词 / 模型缝 / 循环）。同样逐条登记并写一行理由。
+    "promptkit.py": "提示词装配：有序段 + 变量 + complete + 作用域遮蔽，失败全部抛（学 DSH 的 `dsh-system-prompt`；`draft/28` §179、`draft/34`）",
+    "agent_prompts.py": "A–H 与主控的前置提示词：手写判断 + 现算事实（工具面 / 伙伴边 / 动作参数 / 失败词表；`draft/28` §178/§179）",
+    "llmseam.py": "统一的模型缝：一次调用一条审计记录（版本 / 哈希 / tokens / 花销）+ 三态词表 + 预算守卫（`draft/28` §179）",
+    "agent_loop.py": "LLM 驱动的角色循环：tool / summon / message / final 四种形状，唤起走 `Conductor.summon`、留言落会话记录（`draft/28` §179）",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",

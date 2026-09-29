@@ -255,6 +255,10 @@ agentflow/
 │   ├── artifacts.py          产物归属登记（`<工作区根>/ARTIFACTS.jsonl`：谁在哪个路径产出了什么；
 │   │                         CLI 动词 `artifacts record|list|verify|owners|unowned|report`）
 │   ├── canonical.py          规范 JSON 字节串的**唯一实现**（稿件内容哈希与回执哈希共用的那一份口径）
+│   ├── promptkit.py          LLM 接入（一）：提示词装配（有序段 + 变量 + complete + 作用域遮蔽）
+│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边）
+│   ├── llmseam.py            LLM 接入（三）：统一的模型缝（一次调用一条审计记录 + 三态词表 + 预算守卫）
+│   ├── agent_loop.py         LLM 接入（四）：模型驱动的循环（tool / summon / message / final）
 ├── tests/                    pytest（离线 + 联网两套；见 §2）
 ├── tools/                    开发期探针脚本（`vocab_census.py` 的 R011 判据本体也在这里）
 └── data/ · library/ · demo/  运行时数据 / 下载的文献 / 演示素材

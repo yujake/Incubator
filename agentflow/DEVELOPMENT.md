@@ -91,8 +91,9 @@
 > ⚠️ **本表是 S2 的历史观测。逐行"现在"见 §0.3（13+1 条基线，观测 2026-09-26T04:43–05:01）
 > 与 §0.3b（计数写法）。本表刻意保留原值**（它证明这些门**曾经报过什么**），
 > **但任何一行都不许当"当前值"引用** —— 例如本表第 1 行的 `1497 passed`，今天是
-> **`2843 passed, 3 skipped, 8 deselected, 1 xfailed`**（`python -m pytest -q -p no:cacheprovider`；
-> 观测 2026-09-29 14:49，`draft/28` §176：R-57/R-32 两组新判据 16 条 + `tests/test_sessions.py` 7 条；
+> **`2889 passed, 3 skipped, 8 deselected, 1 xfailed`**（`python -m pytest -q -p no:cacheprovider`；
+> 观测 2026-09-29 16:0x，`draft/28` §179：LLM 接入四件套（`promptkit` / `agent_prompts` / `llmseam` /
+> `agent_loop`）的 46 条判据；§176 那批是 R-57/R-32 16 条 + `tests/test_sessions.py` 7 条；
 > 这个数**每加一条用例就变**，所以只当"当次读数"引用、不要往别处抄），
 > 第 2 行的 `error 0 / warning 2 / info 15`（S2 当次：9 条规则）
 > 今天是 **`error 0 / warning 9 / info 47`（12 条规则，R004/R006 已退休、R011/R012 在册；
