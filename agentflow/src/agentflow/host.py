@@ -245,6 +245,68 @@ def wired_tool_registry(store: Any, *, policy: Any = None, llm: Any = None,
                           workspace_root=workspace_root, config=config, **build_kw)
 
 
+#: 默认的"模型驱动"接线表。刻意是空的：装配期不许因为"环境里有 key"就改变行为。
+#: 要驱动哪些 `(角色, 动作)`，由调用方显式给（CLI 的 `--drive` 或代码里传 `loops=`）。
+DEFAULT_LLM_LOOPS: dict[tuple[str, str], dict[str, Any]] = {}
+
+
+def wired_llm_conductor(store: Any, *, policy: Any = None,
+                        loops: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
+                        session_root: str | Path | None = None, sid: str | None = None,
+                        max_steps: int = 6, usd_budget: float | None = None,
+                        providers: Any = None, extractor: Any = None,
+                        config: Mapping[str, Any] | None = None,
+                        workspace_root: str | Path | None = None,
+                        seam_factory: Any = None) -> dict[str, Any]:
+    """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
+
+    ## 语义（与 `LlmBackend` 的 docstring 逐字一致）
+
+    登记在 `loops` 里的 `(角色, 动作)` 由 LLM 循环执行，其余动作仍走 Python 实现 ——
+    角色的确定性动作（算图、分配号、落一行表）不该被模型取代。
+    默认 `loops` 为空 ⇒ 这个函数建出来的主控与 `wired_conductor` 行为完全一致，
+    差别只是"随时可以接线"。
+
+    ## 为什么要挑明 `conductor_for` 的缓存
+
+    `tools.conductor_tools.conductor_for` 按 `store.root` 缓存实例，而忽略后传的 `backend`：
+    先建过确定性主控、再要一个模型驱动的主控，会静默拿到旧的那个 ——
+    "我要的是模型驱动"与"实际跑的是确定性实现"在读数上长得一模一样。
+    这里显式把 `backend` 换上去并记一条 note（不静默）。
+    """
+    from .agent_loop import LlmBackend
+    from .conductor import LocalBackend
+    from .llmseam import LlmSeam
+    from .tools import build_registry
+    from .tools.conductor_tools import conductor_for
+
+    root = Path(session_root or getattr(store, "root", ".")).resolve()
+    ws = str(workspace_root or getattr(store, "root", "") or "")
+    role_reg = build_role_registry(store, llm=None, providers=providers, extractor=extractor,
+                                   config=config, workspace_root=workspace_root)
+    inner = LocalBackend(role_reg)
+    table = dict(loops or {})
+
+    def _default_seam(role: str) -> LlmSeam:
+        return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget)
+
+    backend = LlmBackend(inner=inner, loops=table, session_root=root,
+                         seam_factory=seam_factory or _default_seam, store=store,
+                         max_steps=max_steps, workspace_root=ws, sid=sid)
+    conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
+    if not isinstance(conductor.backend, LlmBackend):
+        conductor.backend = backend
+        conductor.backend_note = ("backend 被换成 LlmBackend（conductor_for 的缓存忽略后传的 "
+                                  "backend，不换就会静默跑确定性实现）")
+    built = build_registry(store=store, conductor=conductor, role_registry=role_reg,
+                           workspace_root=workspace_root, config=config)
+    backend.registry = built.registry
+    backend.conductor = conductor
+    backend.store = store
+    return {"conductor": conductor, "backend": backend, "registry": built.registry,
+            "loops": table, "session_root": root}
+
+
 def selftest() -> int:
     """自检：登记表形态、逐角色接线态、以及"没给 providers 就不进表"。
 

@@ -1322,6 +1322,136 @@ def _exit_badge(code: Any) -> str:
     return f"{tty.badge(key)}  {text}"
 
 
+#: 产品路径上造模型缝的唯一入口。测试可以 monkeypatch 它来注入替身模型
+#: （这样"CLI 这条路"能在离线单测里被真跑一遍，而不是只测库层）。
+def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: float | None):
+    """按角色造一个模型缝（key 与端点一律来自环境变量）。"""
+    from .llmseam import LlmSeam
+
+    return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget)
+
+
+def _parse_drive(items) -> tuple[dict, str]:
+    """把 `--drive 角色.动作` 解析成接线表；不合法就返回 `(空表, 理由)`。"""
+    table: dict[tuple[str, str], dict] = {}
+    for item in items or []:
+        role, _, action = str(item).partition(".")
+        if not role or not action:
+            return {}, f"--drive 要写成 角色.动作（收到 {item!r}）"
+        table[(role, action)] = {}
+    return table, ""
+
+
+def cmd_run_agent(args) -> int:
+    """真跑一次角色循环（顶层角色走它自己的循环；`--drive` 决定被召唤的子角色）。
+
+    退出码：0 = 跑完了；1 = 跑完了但有被拒/失败的步骤；2 = 没查成（没有 key / 用法错）。
+    """
+    from . import agent_loop as AL
+    from . import autonomy as AU
+    from . import host as H
+
+    table, why = _parse_drive(getattr(args, "drive", None))
+    if why:
+        print(f"[run-agent] 用法错：{why}", file=sys.stderr)
+        return 2
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    st = make_store(root)
+    st.init()
+
+    def seam_for(role_name: str):
+        return _agent_seam_factory(role_name, root=root, sid=args.sid,
+                                   usd_budget=args.budget_usd)
+
+    seam = seam_for(args.role)
+    if not seam.wired:
+        print("[run-agent] 没查成：没有接模型（AGENTFLOW_MODEL_API_KEY 为空）—— "
+              "这是没查成（退出码 2），不是「跑过了没问题」", file=sys.stderr)
+        return 2
+
+    loops = {key: {"max_steps": args.max_steps} for key in table}
+    wiring = H.wired_llm_conductor(st, loops=loops, session_root=root, sid=args.sid,
+                                   max_steps=args.max_steps, usd_budget=args.budget_usd,
+                                   workspace_root=str(root), seam_factory=seam_for)
+    if args.rounds and args.rounds > 1:
+        auto = AU.run_autonomous(args.role, args.task, store=st, registry=wiring["registry"],
+                                 conductor=wiring["conductor"], session_root=root,
+                                 seam=seam, rounds=args.rounds, report_every=args.report_every,
+                                 usd_budget=args.budget_usd, max_steps=args.max_steps,
+                                 sid=args.sid, from_env=False, resume=bool(args.resume),
+                                 stop_file=args.stop_file)
+        print(tty.paint(f"角色 {args.role} 自主跑完 {auto.rounds_done} 轮"
+                        + (f"（其中 {auto.resumed_from} 轮是上一段做过的）"
+                           if auto.resumed_from else ""), "bold"))
+        print(f"  检查点：{auto.checkpoint}")
+        for rep in auto.reports:
+            print(f"  第 {rep.index} 轮：{rep.stop_reason}"
+                  f"{'（汇报已发公共频道）' if not rep.report_sent else '（汇报未发出：' + rep.report_sent + '）'}")
+        print(f"  停止原因：{auto.stop_reason}；用量：{auto.spend}")
+        for note in auto.notes:
+            print(f"  注：{note}")
+        if auto.stop_reason == "checkpoint_mismatch":
+            # 拿一个任务的检查点去续另一个任务是没查成（配置错），不是"跑过了有问题"
+            return 2
+        return 0 if auto.stop_reason in ("rounds", "stop_file", "user_stop", "resumed_done") else 1
+
+    run = AL.run_role(args.role, args.task, store=st, registry=wiring["registry"],
+                      conductor=wiring["conductor"], seam=seam, session_root=root,
+                      workspace_root=str(root), sid=args.sid, max_steps=args.max_steps,
+                      usd_budget=args.budget_usd, from_env=False)
+    if args.json:
+        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if run.stop_reason == "final" else 1
+    print(tty.paint(f"角色 {args.role} 的循环：{run.stop_reason}", "bold"))
+    for step in run.steps:
+        print(f"  [{step.index}] {step.shape}"
+              + (f"：{json.dumps(step.payload, ensure_ascii=False)[:160]}" if step.payload else "")
+              + (f"  ⇒ {step.problem}" if step.problem else ""))
+    if run.final:
+        print(f"  结论：{run.final[:400]}")
+    print(f"  唤起：{run.summons}；留言：{run.messages_sent}；用量：{run.spend}")
+    return 0 if run.stop_reason == "final" else 1
+
+
+def cmd_inbox(args) -> int:
+    """列出等着用户回答的问题（只读）。退出码 0 = 查过了。"""
+    from . import userio as U
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    pend = U.pending_questions(root, sid=args.sid)
+    if args.json:
+        print(json.dumps([q.to_dict() for q in pend], ensure_ascii=False, indent=2))
+        return 0
+    if not pend:
+        print(tty.bullet("没有待回答的问题。"))
+        return 0
+    for line in tty.table(("问题号", "谁在问", "问题", "选项"),
+                          [(q.qid, q.role, q.text[:60], "、".join(q.options) or "—")
+                           for q in pend]):
+        print(line)
+    print(tty.bullet(f"用 `agentflow answer <问题号> <正文>` 回答（共 {len(pend)} 条）"))
+    return 0
+
+
+def cmd_answer(args) -> int:
+    """代用户回答一个问题（写一条 `user_answer`）。退出码 2 = 没查成（问题号不存在）。"""
+    from . import userio as U
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    pend = {q.qid for q in U.pending_questions(root, sid=args.sid)}
+    if args.qid not in pend:
+        # 三态：回答一个不存在/已回答的问题号是"没查成"，不是"答过了"
+        print(f"[answer] 没查成：{args.qid} 不在待答清单里（{sorted(pend) or '现在是空的'}）",
+              file=sys.stderr)
+        return 2
+    problem = U.answer_question(root, qid=args.qid, answer=args.text, sid=args.sid)
+    if problem:
+        print(f"[answer] 没写成：{problem}", file=sys.stderr)
+        return 2
+    print(tty.bullet(f"已回答 {args.qid}：{args.text[:80]}"))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agentflow", description="A/B 多智能体协同工作流（原型）")
     p.add_argument("--root", default=None, help="工作目录（默认 test/test1/）")
@@ -1518,6 +1648,36 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--note", default="", help="record：人读的补充")
     sp.add_argument("--out", default=None, help="report：写到这个文件（缺省打到 stdout）")
     sp.set_defaults(func=cmd_artifacts)
+
+    sp = sub.add_parser("run-agent", help="真跑一次角色循环（模型驱动；没有 key 则退出码 2）")
+    sp.add_argument("role", choices=list(S.ROLES) + [S.CONDUCTOR_ROLE],
+                    help="顶层角色（M = 主控，其余 = A–H）")
+    sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")
+    sp.add_argument("--drive", action="append", default=[],
+                    help="把某个 (角色.动作) 交给模型驱动，可重复；不写则不改变确定性行为")
+    sp.add_argument("--max-steps", type=_non_negative_int, default=6, help="单次循环最多几步")
+    sp.add_argument("--rounds", type=_non_negative_int, default=1,
+                    help="跑几轮（>1 走自主轮：按 --report-every 向公共频道汇报）")
+    sp.add_argument("--report-every", type=_non_negative_int, default=1, help="每几轮汇报一次")
+    sp.add_argument("--budget-usd", type=float, default=None, help="美元上限（在每次请求之前检查）")
+    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
+    sp.add_argument("--resume", action="store_true",
+                    help="从检查点续跑（只跑没做过的轮；任务指纹不一致会被拒）")
+    sp.add_argument("--stop-file", default=None,
+                    help="停止开关：这个文件一出现，就在下一轮开跑之前停（人可随时按停）")
+    sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
+    sp.set_defaults(func=cmd_run_agent)
+
+    sp = sub.add_parser("inbox", help="列出等着用户回答的问题（只读）")
+    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
+    sp.add_argument("--json", action="store_true", help="打成 JSON")
+    sp.set_defaults(func=cmd_inbox)
+
+    sp = sub.add_parser("answer", help="代用户回答一个问题（写 user_answer）")
+    sp.add_argument("qid", help="问题号（见 `agentflow inbox`）")
+    sp.add_argument("text", help="回答正文")
+    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
+    sp.set_defaults(func=cmd_answer)
     return p
 
 

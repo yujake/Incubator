@@ -50,6 +50,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -60,6 +61,60 @@ from .llmseam import LlmSeam
 
 #: 用户在回答里写这个字 = 让这一程停下（它不是"我看看"，是停止信号）。
 STOP_TOKEN = "STOP"
+
+#: 检查点目录与文件名：`<项目根>/runs/autonomy-<角色>.json`。
+#: 为什么要检查点：`run_autonomous` 的一次调用可能跑几十分钟（每轮都要调好几次模型），
+#: 被 Ctrl-C、断电或预算闸门打断之后，"从第 1 轮重跑"会把已经做过的活再做一遍 ——
+#: 而每一轮都可能写了数据、发了汇报。检查点让下一段只跑没做过的那些轮。
+CHECKPOINT_DIR_NAME = "runs"
+
+
+def checkpoint_path(session_root: Path | str, role: str) -> Path:
+    """这个角色的自主轮检查点路径。"""
+    return Path(session_root) / CHECKPOINT_DIR_NAME / f"autonomy-{role}.json"
+
+
+def task_fingerprint(role: str, task: str) -> str:
+    """任务指纹：`角色 + 任务原文` 的哈希前缀。
+
+    恢复之前必须比对它：拿 A 任务的检查点去续 B 任务，会把两件事的进度混成一条，
+    而那条记录看起来完全正常（这正是要拦的形态）。
+    """
+    import hashlib
+
+    return hashlib.sha256(f"{role}\n{task}".encode("utf-8")).hexdigest()[:16]
+
+
+def load_checkpoint(session_root: Path | str, role: str) -> dict[str, Any] | None:
+    """读检查点；不存在或读不出来都返回 None（读不出来另记一条 note 由调用方决定）。"""
+    path = checkpoint_path(session_root, role)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def save_checkpoint(session_root: Path | str, role: str, *, fingerprint: str,
+                    completed_rounds: int, rounds: int, task: str,
+                    spend: Mapping[str, Any], stop_reason: str = "",
+                    last_final: str = "") -> str:
+    """写检查点，返回问题串（空 = 写成了）。写入失败不许静默。"""
+    path = checkpoint_path(session_root, role)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"role": role, "task": task, "fingerprint": fingerprint,
+                   "completed_rounds": int(completed_rounds), "rounds": int(rounds),
+                   "spend": dict(spend), "stop_reason": stop_reason,
+                   "last_final": str(last_final)[:FINAL_CHARS],
+                   "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        with path.open("w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    except OSError as exc:
+        return f"{type(exc).__name__}: {exc}"
+    return ""
 
 #: 结论进下一轮任务块与进汇报正文时的字符上限（超了截断并写明原文多少字）。
 FINAL_CHARS = 300
@@ -97,10 +152,15 @@ class AutonomyRun:
     stop_reason: str = ""
     spend: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    #: 这一段之前已经完成了几轮（检查点里读到的）；0 = 全新开始。
+    resumed_from: int = 0
+    #: 检查点路径（这一段跑完把它写到哪）。
+    checkpoint: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """一程的扁平记录（轮次 + 逐轮汇报 + 停止原因 + 用量 + 异常各一行）。"""
         return {"role": self.role, "task": self.task, "rounds_done": self.rounds_done,
+                "resumed_from": self.resumed_from, "checkpoint": self.checkpoint,
                 "stop_reason": self.stop_reason, "spend": dict(self.spend),
                 "reports": [r.to_dict() for r in self.reports], "notes": list(self.notes)}
 
@@ -268,7 +328,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                    usd_budget: float | None = None, max_steps: int = 6,
                    stop_file: Path | str | None = None, sid: str | None = None,
                    from_env: bool = True,
-                   min_usd_between_reports: float = 0.0) -> AutonomyRun:
+                   min_usd_between_reports: float = 0.0,
+                   resume: bool = False) -> AutonomyRun:
     """把 `role` 的这件事跑成最多 `rounds` 轮，并按节拍向公共频道发阶段汇报。
 
     每一轮都是一次完整的 `run_role(...)`：工具面、权限面、审计面与单轮运行完全一样，
@@ -308,17 +369,63 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         shared = LlmSeam.for_role(role, session_root=root, gateway=gateway,
                                   usd_budget=usd_budget, sid=sid, from_env=False)
 
-    total = _spend_of(None)
+    total = _spend_of(None)          # 本段（这一次调用）的用量，进 run.spend
+    baseline = _spend_of(None)       # 上一段（检查点里读到的）的用量，只进预算口径
     reports: list[RoundReport] = []
     last_report_usd = 0.0
     stop_reason = ""
     index = 1
 
+    # ---- 检查点：恢复之前先比指纹（拿 A 任务的检查点续 B 任务 = 把两件事混成一条）
+    cp_path = checkpoint_path(root, role)
+    fingerprint = task_fingerprint(role, task)
+    resumed_from = 0
+    prev_report = RoundReport(index=0, stop_reason="", final="", summons=[], messages=[])
+    if resume:
+        cp = load_checkpoint(root, role)
+        if cp is None:
+            notes.append(f"要求恢复，但读不到检查点（{cp_path}）⇒ 从第 1 轮开始")
+        elif str(cp.get("fingerprint")) != fingerprint:
+            return AutonomyRun(role=role, task=task, rounds_done=0, reports=[],
+                               stop_reason="checkpoint_mismatch", spend=_spend_view(total),
+                               notes=[f"检查点的任务指纹（{cp.get('fingerprint')}）与本次"
+                                      f"（{fingerprint}）不一致 ⇒ 不许续跑："
+                                      "拿一个任务的进度去续另一个任务会把两件事混成一条"],
+                               checkpoint=str(cp_path))
+        else:
+            resumed_from = int(cp.get("completed_rounds") or 0)
+            # 上一段的花销要并进预算口径：否则每一段都从 0 开始算，总额会超
+            prev = _spend_of(cp.get("spend") if isinstance(cp.get("spend"), Mapping) else None)
+            for key in _COUNTER_KEYS:
+                baseline[key] += prev[key]
+            baseline["usd"] += prev["usd"]
+            notes.append(f"从检查点恢复：前 {resumed_from} 轮已完成（不重跑、不重复汇报）；"
+                         f"上一段花销 {prev['usd']:.6f} 美元已并入预算口径")
+            prev_final = str(cp.get("last_final") or "")
+            if resumed_from and not prev_final:
+                notes.append("检查点里没有上一轮的结论（老格式）⇒ 续跑的第一轮只带原始任务，"
+                             "没有上一轮上下文")
+            prev_report = RoundReport(index=resumed_from,
+                                      stop_reason=str(cp.get("stop_reason") or ""),
+                                      final=prev_final, summons=[], messages=[])
+            index = resumed_from + 1
+            if resumed_from >= total_rounds:
+                return AutonomyRun(role=role, task=task, rounds_done=0, reports=[],
+                                   stop_reason="resumed_done", spend=_spend_view(total),
+                                   notes=notes + [f"检查点显示 {resumed_from}/{total_rounds} 轮已完成"
+                                                  " ⇒ 没有要做的事"],
+                                   resumed_from=resumed_from, checkpoint=str(cp_path))
+
     def _spent_usd() -> float:
-        """到现在为止花了多少：有共享的缝就问缝，没有就把各轮的增量加起来。"""
+        """到现在为止花了多少（含上一段的基线）。
+
+        为什么不只看本段的 seam：续跑的第二段如果从 0 开始算额度，
+        "总额不超预算"这条就只在单段内成立 —— 实测（2026-09-29）正是这样：
+        基线并进了 `total`，而这里返回的是 `shared.spend.usd`，基线被绕过去了。
+        """
         if shared is not None:
-            return float(shared.spend.usd)
-        return float(total["usd"])
+            return float(baseline["usd"] + shared.spend.usd)
+        return float(baseline["usd"] + total["usd"])
 
     def _stop_reason_for(next_index: int) -> tuple[str, list[str]]:
         """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道。"""
@@ -339,8 +446,9 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
             stop_reason = reason
             break
 
-        round_task = (task if index == 1
-                      else _round_task(task, reports[-1], index))
+        # 续跑的第一轮：`reports` 是空的（那些轮在上一段），上一轮结论来自检查点
+        previous = reports[-1] if reports else prev_report
+        round_task = (task if index == 1 else _round_task(task, previous, index))
         before = _spend_of(shared.spend.to_dict() if shared is not None else None)
         run: LoopRun = run_role(role, round_task, store=store, registry=registry,
                                 session_root=root, conductor=conductor, seam=shared,
@@ -380,6 +488,15 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         else:
             report.report_sent = f"本轮不在汇报节拍上（每 {every} 轮一次）"
 
+        cumulative = _spend_view(total)
+        cumulative["usd"] = round(float(baseline["usd"] + total["usd"]), 6)
+        problem_cp = save_checkpoint(root, role, fingerprint=fingerprint,
+                                     completed_rounds=index, rounds=total_rounds, task=task,
+                                     spend=cumulative,
+                                     last_final=reports[-1].final if reports else "")
+        if problem_cp:
+            notes.append(f"第 {index} 轮的检查点没写成：{problem_cp}（下一段会从更早的位置重跑）")
+
         if run.stop_reason == "not_wired":
             stop_reason = "not_wired"
             notes.append(f"第 {index} 轮没有接线（not_wired）：后续轮次不再发起，"
@@ -387,9 +504,20 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
             break
         index += 1
 
+    cumulative_end = _spend_view(total)
+    cumulative_end["usd"] = round(float(baseline["usd"] + total["usd"]), 6)
+    final_cp = save_checkpoint(root, role, fingerprint=fingerprint,
+                               completed_rounds=resumed_from + len(reports),
+                               rounds=total_rounds, task=task, spend=cumulative_end,
+                               stop_reason=stop_reason or "rounds",
+                               last_final=reports[-1].final if reports else prev_report.final)
+    if final_cp:
+        notes.append(f"收工时的检查点没写成：{final_cp}")
+    view = _spend_view(total)
+    view["baseline_usd"] = round(float(baseline["usd"]), 6)
     return AutonomyRun(role=role, task=task, rounds_done=len(reports), reports=reports,
-                       stop_reason=stop_reason or "rounds", spend=_spend_view(total),
-                       notes=notes)
+                       stop_reason=stop_reason or "rounds", spend=view,
+                       notes=notes, resumed_from=resumed_from, checkpoint=str(cp_path))
 
 
 # ------------------------------------------------------------------ 自检
