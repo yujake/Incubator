@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T09:37:07+08:00",
+  "generated_at": "2026-09-29T09:41:42+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -539,10 +539,10 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "7d3bf7cd865eaa198d7ebdb7a0067f7efc7d4341de605c6265dcde5bd1d764e2",
+      "sha256": "f495c3d18046187ecf8c96ec139471af745b261e49f71c1ca82c8a75e4ecefa0",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T4-B（2026-09-29）：verify_all 加签名台账判据（accepted_without_signature / stale_signature / signature_verdict_not_accepting / signer_not_reviewer / signature_inputs_mismatch / signature_evidence_unverifiable / signature_ledger_corrupt）+ Path 导入。依据 draft/30 新条目 §T4-B；判据 tests/test_doc_signatures.py 17 passed。AI 代改，待 2 名 reviewer 走查。",
+      "change_note": "F4/R-47+R-52：tasks.artifacts 补文件型产物（file:<相对路径> 或工作区内存在的相对路径），修掉 R-47 摘要落进 artifacts 引出的 61 条 unknown_artifact_kind",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

@@ -940,7 +940,11 @@ def verify_all(
                                     "离线校验时它是一条**没有 end 的 start**。可能是崩溃残留；"
                                     "本项目**不自动续跑**（重跑一个可能已经写了半张表的任务更危险），"
                                     "由人决定是弃掉还是重发"))
-        # artifacts 形如 "table:id"，必须真的存在
+        # artifacts 形如 "table:id"，必须真的存在；
+        # 另接受**文件型产物**（`draft/28` §155 的 R-47 + §156）：形如 `file:<工作区相对路径>`
+        # 或直接给一个工作区内的相对路径（历史行就是这么写的）。
+        # 为什么必须给它一个位置：`tasks.artifacts` 原来只认行引用，于是"这一步产出了一个文件"
+        # 无处登记 —— 实测代价是 R-47 的产出摘要一落进去就报 61 条 `unknown_artifact_kind`。
         for a in r.get("artifacts") or []:
             kind, _, ref = str(a).partition(":")
             target = {"experiments": exp_by_id, "documents": doc_by_id,
@@ -948,8 +952,23 @@ def verify_all(
                       "eval_results": eval_by_id, "usage_ledger": {x.get("usage_id"): x for x in usage},
                       "tasks": task_by_id}.get(kind)
             if target is None:
+                rel = ref if kind == "file" else str(a)
+                root = Path(getattr(store, "root", "."))
+                candidate = (root / rel)
+                try:
+                    inside = candidate.resolve().is_relative_to(root.resolve())
+                except (OSError, ValueError):
+                    inside = False
+                if inside and candidate.is_file():
+                    continue
+                if kind == "file":
+                    # 显式写了 `file:` 却找不到 ⇒ 这是"登记了产出但文件不在"，算错（fail-closed）
+                    rep.issues.append(Issue("error", "tasks", tid, "dangling_task_artifact",
+                                            f"artifacts 里的文件型产物不存在：{a!r}"))
+                    continue
                 rep.issues.append(Issue("warning", "tasks", tid, "unknown_artifact_kind",
-                                        f"artifacts 里的 {a!r} 前缀无法识别"))
+                                        f"artifacts 里的 {a!r} 前缀无法识别（既不是已知表名，"
+                                        "也不是工作区内存在的相对路径）"))
             elif ref not in target:
                 rep.issues.append(Issue("error", "tasks", tid, "dangling_task_artifact",
                                         f"artifacts 指向不存在的行：{a!r}"))
