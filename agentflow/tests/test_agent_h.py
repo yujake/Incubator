@@ -472,7 +472,20 @@ def _seed_overclaim_and_review(h: AgentH, st: Store, doc_id: str = "0000") -> di
 
 
 def test_verify_fixes_marks_a_genuinely_fixed_finding_as_fixed(h_store: Store):
-    """正向：真修好了 ⇒ resolved，finding 置 fixed，文档回归 accepted。"""
+    """正向：真修好了 ⇒ resolved，finding 置 fixed，状态停在 `in_review` 等一次重审。
+
+    ## 为什么不是"文档回归 accepted"（`R-59`，`draft/28` §161.4 / §172）
+
+    本用例原来断言 `verify_fixes` 之后 `documents[0]["status"] == "accepted"`。
+    那正是被修掉的形态：G 改稿之后**内容哈希变了**，而签名台账里那条钉的是**旧版本** ——
+    复审把状态置回 accepted，于是留下"状态 accepted + 签名钉旧版"，
+    `verify_all` 报 `stale_signature`（"改稿之后旧审批不许沿用"）。
+
+    现在的口径：`verify_fixes` 只在"台账里有签名钉住**当前这一版**"时才置 accepted；
+    否则置 `in_review` 并在 reason 里点名要重新 review。所以本用例分两步断言：
+    ① 复审判 accepted、发现置 fixed、状态停在 in_review（本用例的主题没变）；
+    ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted **且签名钉在当前这一版**上。
+    """
     agent = AgentH(h_store, config={"max_review_rounds": 3})
     finding = _seed_overclaim_and_review(agent, h_store)
     g = AgentG(h_store)
@@ -492,7 +505,20 @@ def test_verify_fixes_marks_a_genuinely_fixed_finding_as_fixed(h_store: Store):
     assert [f["finding_id"] for f in res["resolved"]] == [finding["finding_id"]]
     assert res["still_open"] == [] and res["unresolved_findings"] == []
     assert h_store.rows("review_findings")[0]["status"] == "fixed"
-    assert h_store.rows("documents")[0]["status"] == "accepted"
+    assert h_store.rows("documents")[0]["status"] == "in_review", (
+        "改稿之后旧签名不许沿用 ⇒ 复审不能把状态置回 accepted（R-59）"
+    )
+    assert "不置 `accepted`" in res["reason"]
+
+    # ② 重审一次（H 的唯一签发入口）⇒ accepted 且有签名钉住这一版
+    from agentflow import signatures as SIG
+
+    again = agent.review("0000", dependencies=[])
+    doc_now = h_store.rows("documents")[0]
+    recs, bad = SIG.read_ledger(SIG.ledger_path(h_store.root))
+    assert bad == []
+    assert again["verdict"] == "accepted" and doc_now["status"] == "accepted"
+    assert SIG.signed_revision(doc_now, recs) is not None, "接受了却没有签名钉在当前这一版上"
 
 
 def test_verify_fixes_keeps_an_unfixed_finding_open(h_store: Store):

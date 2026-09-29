@@ -158,7 +158,7 @@ def test_agent_b_skips_content_mismatch_literature(store):
 def test_agent_b_still_processes_normal_downloads(store):
     """回归保护：跳过逻辑不能误伤正常的 ok 下载（避免"修 A 坏 B"）。"""
     from agentflow.extract import extract_text
-    from agentflow.llm import RuleExtractor
+    from agentflow.llm import OfflineFixtureExtractor
 
     write_library_file(
         store, "0000/source.txt",
@@ -171,7 +171,7 @@ def test_agent_b_still_processes_normal_downloads(store):
     )
     sync_counters(store)
 
-    b = AgentB(store, extractor=RuleExtractor(), extract_text=extract_text,
+    b = AgentB(store, extractor=OfflineFixtureExtractor(), extract_text=extract_text,
                config={"seed_concepts": [{"name": "group", "definition": "a set with an operation"}]})
     res = b.run_once()
 

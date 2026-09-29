@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import threading
 import time
 
@@ -1208,8 +1209,15 @@ def test_artifacts_are_recorded_and_verified(tmp_path):
     with store.tx("documents", actor="test") as tx:
         tx.upsert("documents", doc.to_dict())
     r = c.summon("H", "review", {"doc_id": "0001"}, input_key="i1")
-    assert r.artifacts == ["documents:0001"]
-    assert _row(store, r.task_id)["artifacts"] == ["documents:0001"]
+    # `R-47`（`draft/28` §159）之后，除了 handler 自报的产出引用，`finish` 还会把
+    # **本次调用的返回值摘要**落成 `out/tasks/<task_id>.json` 并把路径并进 `artifacts`
+    # —— 因为 `tasks` 表不存 payload，"outcome=ok"无法自证有产出（83 行 detail 是
+    # "handler 未声明 outcome，按有产出处理"）。所以这里断言的是**并集**：
+    # ① handler 自报的那一条；② 摘要文件那一条（且它真的在盘上）。
+    digest = f"out/tasks/{r.task_id}.json"
+    assert sorted(r.artifacts) == sorted([f"documents:0001", digest]), r.artifacts
+    assert _row(store, r.task_id)["artifacts"] == sorted([f"documents:0001", digest])
+    assert (pathlib.Path(store.root) / digest).is_file(), "摘要文件必须真的落在盘上"
     assert c.verify_tasks() == [], "artifact 指向的行确实存在 ⇒ 不该报问题"
 
 

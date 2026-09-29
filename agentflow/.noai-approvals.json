@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T10:39:28+08:00",
+  "generated_at": "2026-09-29T12:08:21+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -183,10 +183,10 @@
       "path": "scripts/noai_gate.py",
       "glob": "scripts/noai_gate.py",
       "category": "auth-audit",
-      "sha256": "610c4c39d33e78ec35074b89ca1add7d0d411c320a567b8665d2a66f29c8ab37",
+      "sha256": "bb35fb72c3675ace4b39beff3b48b53855f14a1c882b34fc819de80cb51944da",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-33：规范哈希改为共用 agentflow/canonical.py（按路径加载，门仍不 import 本包）+ 新增 --check-canonical 一致性判据",
+      "change_note": "R-33 最终口径（§172）：门保留自己的规范字节（必须能被单独复制运行——两条负控就是这么用它的），由新增的 --check-canonical 与 signatures 的实现钉在一起",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

@@ -1170,6 +1170,7 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_KINDS",                     # 命名约定举例（schema 的注释在说"别这样起名"）
     "_STATUSES",                  # 同上
     "_OUTCOMES",                  # 同上
+    "_FORMS",                     # 同上（`draft/28` §168 的 R-30 把 `_FORMS` 加进 `VOCAB_SUFFIXES`，两处注释在说这个后缀，不是符号）
     # —— 只有一个真符号出现点的（自指定义 / 别名 / 被删函数的残留）——
     "_ROLE_PAT",                  # 赋值处一次（`tools/verify_role_specs.py`）
     "_ConcurrencyProbe",          # 兼容旧名 `_ConcurrencyProbe = ConcurrencyProbe`

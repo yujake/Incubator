@@ -1284,6 +1284,31 @@ def verify_fixes(
     target_status = {"accepted": "accepted", "revise_again": "in_review", "unresolved_review": "unresolved_review"}[
         verdict
     ]
+    # ---- `R-59`（`draft/28` §161.4，口径 ②）：**`accepted` 必须由"针对这一版"的签名背书**
+    #
+    # 老形态是一条真的缺口（`_f4_probe_gh.py` 当场咬出来的）：改稿之后 `verify_fixes` 复审
+    # 通过 ⇒ 它把 `documents.status` 置回 `accepted`，而签名台账里那条签的是**旧版本** ⇒
+    # `verify_all` 报 `stale_signature`。那不是误报：`draft/29` §8.8.4 的口径就是
+    # "改稿之后旧审批不许沿用"。
+    #
+    # 判据用 `signatures.signed_revision`（**不许**用 `signed()`）：后者对非 `accepted`
+    # 状态的稿件一律返回真（草稿本来就不该被签），拿它来判会得到"真" ⇒ 恰好放过这一格。
+    # 两条出路里选了"不置 accepted"而不是"补签"：**接受 = 有一次针对这一版的审+签**，
+    # 而 `verify_fixes` 不是一次审（它只重跑旧发现的对应检查、不重判全部判据）——
+    # 让它也能签，等于把"谁能签发"从一处变成两处。
+    accepted_without_signature_for_this_revision = False
+    signed_revision_at: str = ""
+    if target_status == "accepted":
+        from .. import signatures as SIG
+
+        _root = store.root if getattr(store, "root", None) is not None else "."
+        _recs, _bad = SIG.read_ledger(SIG.ledger_path(_root))
+        _pinned = SIG.signed_revision(doc, _recs)
+        if _pinned is None:
+            target_status = "in_review"
+            accepted_without_signature_for_this_revision = True
+        else:
+            signed_revision_at = str(_pinned.get("at") or "")
     status_updated, status_error, status_now = _set_doc_status(store, doc_id, target_status, actor=actor)
 
     unresolved = [f for f in blocking]
@@ -1294,6 +1319,18 @@ def verify_fixes(
     ]
     if not dep_checked:
         reason_bits.append("⚠️ 依赖闭合**没查**（dependencies=None）⇒ 本轮结论不覆盖依赖闭合这一维")
+    if accepted_without_signature_for_this_revision:
+        reason_bits.append(
+            "⚠️ **不置 `accepted`**（置 `in_review`）：本轮复审判定通过，但台账里没有任何签名"
+            "**钉在当前这一版内容上** ⇒ 依 `draft/29` §8.8.4「改稿之后旧审批不许沿用」，"
+            "现在置 accepted 会留下『状态 accepted + 签名钉旧版』（`stale_signature`）。"
+            "请用 `review` 重新判一次并签名 —— 那是「接受 = 有一次针对这一版的审+签」的唯一入口"
+            "（`R-59`，`draft/28` §161.4 的口径 ②）"
+        )
+    elif signed_revision_at and verdict == "accepted":
+        reason_bits.append(
+            f"本版已有签名钉住（{signed_revision_at}）⇒ `accepted` 由它背书，本轮不重复签"
+        )
     if verdict == "unresolved_review":
         reason_bits.append(
             "已达轮数上限且 error 级发现仍 open ⇒ 停止自动修订，交人复核（**未解决的发现已全部列出**，未隐藏）"

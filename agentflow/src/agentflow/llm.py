@@ -313,6 +313,18 @@ def _iter_sentences(page_text: str) -> Iterable[tuple[int, int, str]]:
 class RuleExtractor:
     """规则基线：定义句式 + ``meta['seed_concepts']``，全程离线、确定性。
 
+    ## ⚠️ 它是**框架的回退**，`AgentB` 默认会**拒抽**（`R-56`，`draft/28` §157）
+
+    实测（`projects/p2-review`）：无 LLM 时靠它抽取，会往概念图里灌碎片
+    （`ANU` / `cingled property` / `Ultimately this`），而 `quote_verified=True`
+    让那些碎片看起来有证据 —— "引文回验只证明这句话在文件里，不证明这是一个概念"。
+    所以 `AgentB` 见到**本类**（判据：`is_framework_fallback`）就跳过并记
+    `last_mine_error="no_llm_extractor"`，一行概念都不写。
+
+    想要"显式选择离线基线"（演示 / 单测 / 自检）请用
+    :class:`OfflineFixtureExtractor` —— 它与本类同行为，但**声明自己不是回退**，
+    于是那次选择是**调用方明确点名**的，而不是框架悄悄替你选的。
+
     产出策略：
 
     1. 概念来自两处——
@@ -340,6 +352,12 @@ class RuleExtractor:
       这个过滤是 agent_b 的职责，本类不代替它做决定，以免两个模块对
       "什么算有效关系"各持一套标准。
     """
+
+    #: `AgentB` 用它判"这是不是框架在无 LLM 时替你选的回退"（`R-56`）。
+    #: 判据是**声明**而不是类名：按类名判会被一个"改个名字的复制品"绕过，
+    #: 而声明式判据要绕过就必须显式写一句"我不是回退"（`OfflineFixtureExtractor`
+    #: 就是那样写的，并且它带理由）。
+    is_framework_fallback = True
 
     #: 无文本层时，本抽取器不做任何猜测（返回空），使 §6.3 的
     #: "因无文本层未能校验"成为一句可核查的事实，而不是靠报告口径。
@@ -986,6 +1004,31 @@ class NullExtractor:
         self, doc: "DocumentText", lit_id: str, meta: dict
     ) -> tuple[list[ConceptDraft], list[RelationDraft]]:
         return [], []
+
+
+class OfflineFixtureExtractor(RuleExtractor):
+    """**显式选择的**离线确定性抽取器（演示 / 单测 / 自检用）。
+
+    ## 它与 :class:`RuleExtractor` 的唯一差别是"谁选的"
+
+    `RuleExtractor` 是框架在**没有 LLM 时替你选**的回退 ⇒ `AgentB` 拒抽（`R-56`：
+    它会往概念图里灌 `ANU` / `cingled property` 这类碎片，而 `quote_verified=True`
+    让碎片看起来有证据）。
+
+    本类**行为完全相同**（同一个实现，只是改了一个声明），差别只有一处：
+    `is_framework_fallback = False` ⇒ `AgentB` 认为"这是调用方点名要的抽取器"，
+    于是照常抽取。这条差异是**刻意的**：
+
+    - 演示（`demo.py`）与单测需要一个**离线、确定性**的抽取器来把 A→B→校验整条
+      链路真跑一遍 —— 它们点名要的就是这个；
+    - 而"没有 LLM 就悄悄用它"这件事必须被挡住 —— 那正是 `R-56` 的形态。
+
+    换句话说：**允许人明确选择一条已知较弱的路径，不允许框架在被问到时假装
+    那条路径没有被选过。** 用它写出来的概念/关系仍然只该出现在演示、单测与自检
+    （临时工作区）里；真实项目里想要概念图，请接 `LLMExtractor`。
+    """
+
+    is_framework_fallback = False
 
 
 # --------------------------------------------------------------------------- #

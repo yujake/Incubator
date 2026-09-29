@@ -211,7 +211,11 @@ class FixtureDownloader:
 
 def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     from .extract import extract_text
-    from .llm import RuleExtractor
+    # `R-56`（`draft/28` §172）：演示**点名**要一个离线确定性抽取器，所以用
+    # `OfflineFixtureExtractor`（与 `RuleExtractor` 同实现、声明自己不是框架回退）。
+    # 用 `RuleExtractor` 会被 `AgentB` 当成"框架在无 LLM 时偷偷回退"而拒抽 ——
+    # 那条规矩是对的（它会往概念图里灌碎片），演示要的是"调用方明确选择"。
+    from .llm import OfflineFixtureExtractor
     from .providers import FixtureProvider
 
     root = Path(root).resolve()
@@ -268,7 +272,7 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     # ---------------- 3. B 智能体：整理 ----------------
     agent_b = AgentB(
         st,
-        extractor=RuleExtractor(),
+        extractor=OfflineFixtureExtractor(),
         extract_text=extract_text,
         config={"lease_seconds": 900, "max_attempts": 3, "dup_strong": 0.92, "dup_review": 0.72,
                 "quote_widen_pages": 1, "allow_fulltext_quote_fallback": False},

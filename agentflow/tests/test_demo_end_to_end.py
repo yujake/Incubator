@@ -13,7 +13,7 @@ import pytest
 from agentflow.agent_b import AgentB
 from agentflow.demo import run_demo
 from agentflow.extract import extract_text
-from agentflow.llm import RuleExtractor
+from agentflow.llm import OfflineFixtureExtractor
 from agentflow.store import Store
 from agentflow.verify import verify_all
 
@@ -95,7 +95,7 @@ def test_demo_duplicate_relation_is_rejected_on_rerun(tmp_path: Path) -> None:
 
     out = AgentB(
         st,
-        extractor=RuleExtractor(),
+        extractor=OfflineFixtureExtractor(),
         extract_text=extract_text,
         config={"dup_strong": 0.92, "dup_review": 0.72, "quote_widen_pages": 1},
     ).run_once()
@@ -124,7 +124,7 @@ def test_demo_is_idempotent_on_second_run(demo_root: Path) -> None:
     agent_a = AgentA(st, providers=[FixtureProvider(demo_root / "demo" / "fixtures" / "candidates.json")], downloader=None)
     out = agent_a.run()
     assert out["skipped_reason"] == "no_pending_request"
-    agent_b = AgentB(st, extractor=RuleExtractor(), extract_text=extract_text, config={})
+    agent_b = AgentB(st, extractor=OfflineFixtureExtractor(), extract_text=extract_text, config={})
     assert agent_b.run_once().skipped_reason == "no_unprocessed_literature"
 
     assert len(st.rows("literature")) == before_lit

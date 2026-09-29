@@ -2120,6 +2120,11 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "scheduler.py": "调度：按写集互斥分波并发",
     "schema.py": "数据模型与校验",
     "signatures.py": "稿件内容的规范哈希（唯一实现）：审批与内部引用都钉在它上面（依据 `draft/30` §T4-A）",
+    # 2026-09-29 新增的三个模块（`draft/28` §163/§166/§169 那三批）。按 `R6-AN-1` 建议③
+    # 逐条登记并写一行理由 —— 它们都不是"对拍副本"，是框架的真模块。
+    "sessions.py": "按项目存放的会话记录：`<项目根>/sessions/<会话号>.jsonl`（学 harness 的按工作区存放；`draft/28` §155）",
+    "artifacts.py": "产物归属登记：`<工作区根>/ARTIFACTS.jsonl`，回答\"谁在哪个路径产出了什么\"（`R-52` 余；`draft/28` §166）",
+    "canonical.py": "规范 JSON 字节串的唯一实现：稿件内容哈希与回执哈希共用的那一份口径（`R-33`；`draft/28` §169/§172）",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",

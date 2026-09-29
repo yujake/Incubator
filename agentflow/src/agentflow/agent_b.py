@@ -323,12 +323,25 @@ class AgentB:
     # ------------------------------------------------------------------ 主流程
     @staticmethod
     def _is_fallback_extractor(extractor: Any) -> bool:
-        """这个抽取器是不是框架的**规则回退**（`llm.RuleExtractor`）？
+        """这个抽取器是不是框架的**回退**（`R-56`）？
 
-        按类名判（不 import `llm`，避免把 LLM 那一层的依赖拖进 B 的 import 图）：
-        类名对不上就当作"调用方自己给的抽取器"（单测与自检走这一支）。
+        ## 判据是**声明**，不是类名（`draft/28` §172 的更正）
+
+        第一版按类名判（`type(extractor).__name__ == "RuleExtractor"`）。它有两个问题：
+
+        1. 一个"改个名字的复制品"就能绕过它 —— 而绕过的人不需要撒谎，只需要重命名；
+        2. 更糟的是**误伤**：演示与单测**明确点名**要用离线基线（它们需要一个
+           确定性抽取器），却和"框架偷偷回退"被同一个判据一起挡住 ⇒
+           `demo` 与 `tests/test_demo_end_to_end.py` 当场变红（§172 的读数）。
+
+        现在读类属性 `is_framework_fallback`：
+        `llm.RuleExtractor` 声明 `True`（它就是回退）；`llm.OfflineFixtureExtractor`
+        声明 `False`（同一个实现，但**调用方点名要它**）。没有这个属性的第三方抽取器
+        一律按"调用方自己给的"处理（`getattr(..., False)`）。
+
+        判据仍然不 import `llm`：不去拖 LLM 那一层的依赖进 B 的 import 图。
         """
-        return type(extractor).__name__ == "RuleExtractor"
+        return bool(getattr(extractor, "is_framework_fallback", False))
 
     def _extraction_meta(self, lit: dict) -> dict:
         """构造传给抽取器的元数据。

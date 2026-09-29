@@ -305,6 +305,32 @@ def formal(doc_row: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
             and signed(doc_row, records, root=root))
 
 
+def signed_revision(doc_row: Mapping[str, Any],
+                    records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """**钉在当前这一版内容上**的签名记录（找到第一条就返回它）；没有 ⇒ `None`。
+
+    ## 与 :func:`signed` 的分工（两者不可互换）
+
+    `signed(doc)` 答的是"这份稿件在签名这件事上有没有问题"，而它对
+    **非 `accepted` 状态**的稿件一律返回真（草稿本来就不该被签 ⇒ 没有问题是正常的）。
+    所以它回答不了另一个问题：**"现在盘上这一版内容，有没有一条签名针对它"**。
+
+    那个问题在 `R-59`（`draft/28` §161.4）里是决定性的：`verify_fixes` 复审通过时想把
+    状态置回 `accepted`，而"改过稿之后旧审批不许沿用"（`draft/29` §8.8.4）要求
+    `accepted` 必须由**针对这一版**的审+签背书。用 `signed()` 去判会得到"真"
+    （因为状态那一刻还是 `revised`）⇒ 于是置了 `accepted`、签名却还钉着旧版本 ⇒
+    `stale_signature`。本函数的判据是逐字的：**台账里存在一条 `content_sha256`
+    等于当前内容哈希的记录**。
+    """
+    cur = content_sha256_of(doc_row)
+    for r in records:
+        if str(r.get("doc_id") or "") != str(doc_row.get("doc_id") or ""):
+            continue
+        if str(r.get("content_sha256") or "") == cur:
+            return r
+    return None
+
+
 def append_signature(root: str | Path, record: Mapping[str, Any], *,
                      findings: Sequence[Mapping[str, Any]] = ()) -> dict:
     """写一条签名：先落证据快照，再追加台账一行（带 `prev_hash`）。

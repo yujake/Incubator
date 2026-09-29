@@ -671,8 +671,37 @@ def _selftest() -> int:
     b2 = h.verify_fixes("0002", round_no=3)
     print(f"    修好后 → 复审 verdict={b2['verdict']} resolved={len(b2['resolved'])} "
           f"still_open={len(b2['still_open'])} 库中状态={b2['status']}")
-    if b2["verdict"] != "accepted" or b2["status"] != "accepted":
-        print("    ❌ 修好后应判 accepted")
+    # ---- `R-59`（`draft/28` §161.4 的口径 ②）之后的期望值。
+    #
+    # 本自检原来断言 `b2["status"] == "accepted"` —— 那正是被修掉的那个形态：
+    # G 改稿之后内容哈希变了，而签名还钉着**旧版本**，复审却把状态置回 accepted
+    # ⇒ `verify_all` 报 `stale_signature`（"改稿之后旧审批不许沿用"）。
+    # 现在 `verify_fixes` 只在"台账里有签名钉住**当前这一版**"时才置 accepted；
+    # 否则置 `in_review` 并在 reason 里点名要重新 review。
+    #
+    # 所以这一步拆成两条更强的断言：
+    #   ① 复审判 accepted（判断本身没变），但状态停在 `in_review` 且理由写明；
+    #   ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted **且签名钉在这一版**上。
+    # ② 此前没有任何地方验过，而它恰是"接受 = 有一次针对这一版的审+签"的机器判据。
+    if b2["verdict"] != "accepted" or b2["status"] != "in_review":
+        print("    ❌ 修好后应判 accepted、状态停在 in_review（等一次针对这一版的审+签）")
+        return 1
+    if "不置 `accepted`" not in str(b2.get("reason") or ""):
+        print("    ❌ 复审理由里没有逐字写明'不置 accepted'的原因 ⇒ 读者看不出状态为什么没回去")
+        return 1
+    from . import signatures as _SIG
+
+    b3 = h.review("0002", dependencies=[])
+    _doc2 = next(r for r in st.rows("documents") if r["doc_id"] == "0002")
+    _recs, _bad = _SIG.read_ledger(_SIG.ledger_path(root))
+    _pinned = _SIG.signed_revision(_doc2, _recs) is not None
+    print(f"    重新审一次 → verdict={b3['verdict']} 状态={b3['status']} "
+          f"签名钉住这一版={_pinned}")
+    if b3["verdict"] != "accepted" or b3["status"] != "accepted":
+        print("    ❌ 重新审一次应判 accepted 并把状态落到 accepted")
+        return 1
+    if not _pinned:
+        print("    ❌ 接受了却没有签名钉在当前这一版上 ⇒ 旧审批被沿用了（R-59 的形态）")
         return 1
 
     # ---- 最后才把"schema 不合法的坏行"注入盘上。
