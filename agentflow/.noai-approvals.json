@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T12:08:21+08:00",
+  "generated_at": "2026-09-29T13:18:21+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -183,10 +183,10 @@
       "path": "scripts/noai_gate.py",
       "glob": "scripts/noai_gate.py",
       "category": "auth-audit",
-      "sha256": "bb35fb72c3675ace4b39beff3b48b53855f14a1c882b34fc819de80cb51944da",
+      "sha256": "9b548baa91826919c59c82856b938907d34479a1a6e411d1c13d076b3c034f09",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-33 最终口径（§172）：门保留自己的规范字节（必须能被单独复制运行——两条负控就是这么用它的），由新增的 --check-canonical 与 signatures 的实现钉在一起",
+      "change_note": "§173：R-64 十条估价逐条登记为预留；R-62 让台账 stale 在默认路径可见",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -701,10 +701,10 @@
       "path": "tools/vocab_census.py",
       "glob": "tools/vocab_census.py",
       "category": "auth-audit",
-      "sha256": "162f728522b1c363ad4ef4ae9681d3f81318f4f818315851d7aa698c5465d8fc",
+      "sha256": "b762c4ed9db3bf7b6b9e390703c3eac4bb248f260e87a568dba60bf882cecb46",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-30/R-37/R-31：取词表面拓宽（_FORMS 后缀 + claimanatomy 定义点 + 类体默认值算产出点）+ 7 条由数据产出的预留登记",
+      "change_note": "§173：R-64 十条估价逐条登记为预留；R-62 让台账 stale 在默认路径可见",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

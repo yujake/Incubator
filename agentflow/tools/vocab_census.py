@@ -248,6 +248,51 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "由数据产出：`conjectures.form`，实测 8 行（2026-09-29）。"
         "`form` 由提出猜想的一方写（D/人），代码里只有 `universal` 出现过字面量。"
     ),
+    # ---- 下面 10 条是 `R-64`（`draft/28` §168 咬出、§173 处置）：
+    # 拓宽取词表面之后**第一次看得见**、且"代码与数据都不产出"的取值。
+    # 三条出路里选的是**登记为预留**（`P-23` 的选项 c）：它们是各自分类法里的合法成员，
+    # 只是本工作区（`projects/p2-review`）没用到；删值会让"这一类断言/形状"无处安放。
+    # ⚠️ **这 10 条同样是 AI 代写的登记**（窗口见 `docs/NOAI-SUSPENSION-2026-09-28.md`）⇒
+    # 逐条走查时请判"留还是删"；若判"删"，要动的是 `schema.py`/`claimanatomy.py` 的词表值。
+    ("CLAIM_KINDS", "定义"): (
+        "死取值（无产出且无人认领 ⇒ 本批登记为预留）。它是数学稿件里与定理/引理并列的标准断言种类；"
+        "本包实测 `documents.claims[].kind` 只出现 命题/引理/定理 ⇒ 这一档没有被用到。"
+        "写它的是**写这类断言的稿件**（G 或人），不是代码字面量。"
+    ),
+    ("CLAIM_KINDS", "推论"): (
+        "死取值 ⇒ 预留。同 `CLAIM_KINDS.定义`：分类法成员，本包未用到。"
+    ),
+    ("CLAIM_KINDS", "例"): (
+        "死取值 ⇒ 预留。同 `CLAIM_KINDS.定义`：分类法成员，本包未用到。"
+    ),
+    ("CLAIM_KINDS", "注"): (
+        "死取值 ⇒ 预留。同 `CLAIM_KINDS.定义`：分类法成员，本包未用到。"
+    ),
+    ("CLAIM_STATUSES", "待精化"): (
+        "死取值 ⇒ 预留：`claimanatomy` 的降级规则里有『还没写清』这一档，"
+        "而 `documents.claims[].status` 在本包 24 行里一次都没出现过。"
+    ),
+    ("ALLOWED_USE_KINDS", "Remark only"): (
+        "死取值 ⇒ 预留：降级档之一（把一条断言降到'只作备注'）；"
+        "本包的 `claims[].allowed_use` 没有行用过它。"
+        "⚠️ 顺带记一条：这张词表里三条取值**语言不统一**（`主结果` / `Remark only` / `移入 open`）——"
+        "统一命名是一次独立的清理，不在本批。"
+    ),
+    ("CLAIM_SOURCE_KINDS", "未决"): (
+        "死取值 ⇒ 预留：来源未定档；本包 24 行的 `source_kind` 只出现 文献/自证。"
+    ),
+    ("CONJECTURE_FORMS", "existential"): (
+        "死取值 ⇒ 预留：猜想形状轴上的三档之一（T1 声明的那张词表）；"
+        "数据里只出现 `universal`/`identity`（`conjectures.form`，实测 24 行）。"
+        "**若要收窄词表**（只留实际用过的两档），那是另一次 `schema.py` 变更 ⇒ 需人裁，"
+        "本批不替人做这个减法。"
+    ),
+    ("CONJECTURE_FORMS", "bound"): (
+        "死取值 ⇒ 预留：同 `CONJECTURE_FORMS.existential`。"
+    ),
+    ("CONJECTURE_FORMS", "structural"): (
+        "死取值 ⇒ 预留：同 `CONJECTURE_FORMS.existential`。"
+    ),
 }
 
 

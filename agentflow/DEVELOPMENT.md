@@ -92,10 +92,10 @@
 > 与 §0.3b（计数写法）。本表刻意保留原值**（它证明这些门**曾经报过什么**），
 > **但任何一行都不许当"当前值"引用** —— 例如本表第 1 行的 `1497 passed` 今天是
 > **`1925 passed, 8 deselected, 1 xfailed`**，第 2 行的 `error 0 / warning 2 / info 15`（S2 当次：9 条规则）
-> 今天是 **`error 11 / warning 9 / info 37`（12 条规则，R004/R006 已退休、R011/R012 在册；
-> `info` 从 25 → 30（T1 登记 5 条 R011 预留取值）→ **37**（`draft/28` §168 拓宽取词表面后又登记 7 条"由数据产出"的预留），
-> 而 `error 6 → 11` 是同一批让 R011 的**栏二**多出 10 条无人认领取值的直接后果（处置留给人裁，见 §168 的 R-64）；
-> 两处当次数见 §0.3 的 `LIVE-READINGS` 块）**，
+> 今天是 **`error 6 / warning 9 / info 47`（12 条规则，R004/R006 已退休、R011/R012 在册；
+> `info` 从 25 → 30（T1 登记 5 条 R011 预留取值）→ 37（`draft/28` §168 拓宽取词表面 + 登记 7 条"由数据产出"的预留）
+> → **47**（§173 把 R-64 那 10 条也逐条登记为预留）；`error` 一度到 11（R-64 那 10 条无人认领时），
+> 逐条登记之后回到**基线 6** —— 那 6 条与本目标无关。两处当次数见 §0.3 的 `LIVE-READINGS` 块）**，
 > 第 5 行的"14 条 `unapproved`"今天是**台账当次读出的数**（`entries` 长度与逐条 `reviewers` 之和；
 > **每签一个字就变 ⇒ 本行不写定值**，当次数见 §1.5 的"三个数"表里那两条命令）。
 > 这几行里 linter 那一行的数值由 §0.3 的 `LIVE-READINGS` 块钉住（`R6-AN-4`：
@@ -146,10 +146,10 @@ LIVE-READINGS:BEGIN
 # `live_reading_problems()` 逐键比对"文档写的"与"当次实测的"；对不上就红，并在报错里点名。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来。
 lint_rules_rules   = 12   # `len(RULES)`；复跑 `python scripts/lint_rules.py` 摘要行的"规则 N 条"；观测 2026-09-27（G3 复测）
-lint_rules_warning = 9    # `python scripts/lint_rules.py`（日常档）末行的 warning 栏；观测 2026-09-29（`draft/28` §172：`error 6 → 11`、`warning 9`、`info 30 → 37`。warning 那 9 条与本批无关，是此前就有的；本批的唯一影响在 info 与 error）
-lint_rules_info    = 37   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-09-29（`draft/28` §168：30 → **37**）—— 多的 7 条是 R-37/R-30 拓宽取词表面之后**新登记的 7 条"由数据产出"预留**（`tools/vocab_census.py::RESERVED_VALUES`：`CLAIM_KINDS` 3 条 + `CLAIM_SOURCE_KINDS` 2 条 + `CLAIM_CHECK_KINDS` 1 条 + `CONJECTURE_FORMS` 1 条；按该表 doctrine，预留项**必须**照样打印含理由，所以这 7 条 info 是设计后果而不是噪音。同一批还让 R011 的**栏二**多出 10 条无人认领的取值 ⇒ `error 6 → 11`，那 10 条的处置（接线 / 登记为预留 / 删值）留给人裁，见 `draft/28` §168 的 R-64）
-lint_rules_strict_warning = 51 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-09-29（`draft/28` §172；此前 39）
-lint_rules_strict_info    = 36 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-09-29（`draft/28` §172；同因：新增的 7 条 R011 预留打印）
+lint_rules_warning = 9    # `python scripts/lint_rules.py`（日常档）末行的 warning 栏；观测 2026-09-29（`draft/28` §172/§173：本目标全程这一位没动过，9 条与 R-37 那批之前完全一致）
+lint_rules_info    = 47   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-09-29（`draft/28` §173：30 → 37（§168 拓宽取词面 + 登记 7 条"由数据产出"的预留）→ **47**（§173 又把 R-64 那 10 条登记为预留））。这 17 条 info 全部是 R011"栏一：已登记为预留"的逐条打印（`tools/vocab_census.py::RESERVED_VALUES`）——按该表 doctrine，预留项**必须**照样打印含理由，所以它们是设计后果而不是噪音。同一批一度让 R011 的**栏二**多出 10 条无人认领（`error 6 → 11`），那 10 条已在 §173 逐条登记为预留 ⇒ `error` 回到**基线 6**（那 6 条与本目标无关，是别处的既有项）
+lint_rules_strict_warning = 51 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-09-29（`draft/28` §172/§173；此前 39）
+lint_rules_strict_info    = 46 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-09-29（`draft/28` §173）
 noai_paths_glob    = 27   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
 noai_paths_unique  = 24   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
 noai_paths_categories = 7 # `.noai-paths` 里 `[category: …]` 的分组数；观测 2026-09-27（G3 复测）

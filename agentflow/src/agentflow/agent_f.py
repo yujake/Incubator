@@ -1195,6 +1195,30 @@ class AgentF:
         # "等 A 完成检索请求 r-0019" —— 实测那两个请求早已 `done/ok`（§154 的 A5）。
         # 这里在**只读视图**里对当前状态重算一次：请求已终结 ⇒ 把这句"等"标成**已过期**，
         # 并逐条列进 `stale_blocked`（不隐藏、也不改写盘上那一行 —— 历史不改写）。
+        # ---- `R-61`（`draft/28` §163）：陈话还得分**新旧** —— 只读地从 `history` 反推
+        #
+        # `stale_blocked` 原来只答"是不是陈话"，不答"陈了多久"，于是读者分不出
+        # "我刚停手 1 分钟"与"这个卡点停了 3 天" —— 而在**拉取式**推进下，"停了多久"
+        # 恰恰是唯一能用来排队的量。
+        #
+        # 前置查证（`temp/_r61_recon.py`，只读 p2-review）：`history` 的条目里**记了 `sid`**
+        # （键并集 = `action/at/detail/evidence/outcome/round/sid`）⇒ 这条只读路成立，
+        # **不必**给子目标加 `last_pushed_at`（那是 schema 变更，属禁改区）。
+        # 取"该 sid 的最后一次触碰"：按 `at` 最大，`at` 缺省时退回最大 `round`；
+        # 一条都没有 ⇒ 如实留空（**不编**一个时间出来）。
+        last_touch: dict[str, dict] = {}
+        for entry in (row.get("history") or []):
+            sid = str(entry.get("sid") or "")
+            if not sid:
+                continue
+            at = str(entry.get("at") or "")
+            try:
+                rnd = int(entry.get("round") or 0)
+            except (TypeError, ValueError):
+                rnd = 0
+            prev = last_touch.get(sid)
+            if prev is None or (at, rnd) >= (str(prev.get("at") or ""), int(prev.get("round") or 0)):
+                last_touch[sid] = {"at": at, "round": rnd}
         req_state = {str(x.get("request_id")): str(x.get("outcome") or "")
                      for x in self.store.rows("search_requests")}
         stale_blocked: list[dict] = []
@@ -1209,11 +1233,22 @@ class AgentF:
             ended = [i for i in ids if req_state.get(i, "") in S.SEARCH_OUTCOMES]
             if ended and len(ended) == len(ids):
                 s["blocked_stale"] = True
+                touch = last_touch.get(str(s.get("sid") or ""))
+                # `R-61`：把"最后一次被触碰"也放进**只读视图**（不改盘上那一行）
+                s["last_touched_at"] = str((touch or {}).get("at") or "")
+                s["last_touched_round"] = (touch or {}).get("round")
+                hint = (
+                    f"；该子目标最后一次被触碰是第 {touch['round']} 轮（{touch['at']}）"
+                    "⇒ 从那以后没有人再推进" if touch else
+                    "；`history` 里查不到这个子目标的触碰记录 ⇒ **它从立项起就没动过**"
+                )
                 s["blocked_reason"] = (
                     f"{reason}（**已过期**：{ended} 已经结束 —— 现在的卡点是"
-                    "『没有人再推进一步』，不是『还在等』）"
+                    f"『没有人再推进一步』，不是『还在等』{hint}）"
                 )
-                stale_blocked.append({"sid": s.get("sid"), "requests": ended})
+                stale_blocked.append({"sid": s.get("sid"), "requests": ended,
+                                      "last_touched_at": str((touch or {}).get("at") or ""),
+                                      "last_touched_round": (touch or {}).get("round")})
         return {
             "checked": True,
             "plan_id": row.get("plan_id"),

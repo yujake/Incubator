@@ -930,16 +930,51 @@ def check_paths(
 
     hit_paths = sorted({v["path"] for v in violations})
     cats = sorted({v["category"] for v in violations})
+    explanation = (
+        f"requires_human：{len(hit_paths)} 条改动落在 **FC-27 禁 AI 区**"
+        f"（类别：{'、'.join(cats)}）⇒ 必须由人编写或人逐行走查，"
+        f"并需要 {REQUIRED_APPROVALS_ON_HIT} 名 reviewer 批准。"
+        f"命中：{', '.join(hit_paths)}"
+    )
+    # ---- `R-62`（`draft/28` §164 咬出）：**默认路径也要报 `stale`**
+    #
+    # `stale`（台账里钉的那一版与盘上不是同一版）原来只在 `--check-approvals`
+    # 那一支里算，而 CI 跑的是 `--git --since <ref>` ⇒ 走的是**本函数**这一支
+    # ⇒ 台账漂移在 CI 的路径上**一句话都看不到**。
+    #
+    # 而"钉住的不是提交进去的那一版"恰恰是这条台账唯一要防的事（实测：HEAD 版台账把
+    # `capabilities.py` 钉在 `5d245fe7…`，盘上是 `ac8a0f41…`）。所以这里补一句**只读**的
+    # 台账对账：不改 verdict、不改退出码（命中禁改区本来就要求人），只把"漂了几条、
+    # 哪几条"写进 explanation —— 让默认路径与 CI 也能看见它。
+    stale_note = ""
+    try:
+        # `repo` 已经在本函数开头解析过（`root` 可能是 None）⇒ 复用它，别再造一个 `Path(None)`。
+        ledger_file = ledger_default_path(repo)
+        if ledger_file.is_file():
+            _ledger = load_ledger(ledger_file)
+            stale: list[str] = []
+            for rel in hit_paths:
+                # `ledger.entry_for` 是台账查条目的单一实现（`check_approvals` 也用它）——
+                # 这里不另写一份"怎么在台账里找一条"的逻辑（否则 `stale` 会判在错的那一条上）。
+                entry = _ledger.entry_for(_norm_rel(rel))
+                if entry is None:
+                    continue
+                cur = sha256_file(repo / rel)
+                if str(entry.sha256) != cur:
+                    stale.append(f"{rel}（台账 {str(entry.sha256)[:12]} ≠ 盘上 {cur[:12]}）")
+            if stale:
+                stale_note = (
+                    f"\n⚠️ 台账 **stale** {len(stale)} 条（被批准的那一版与盘上不是同一版 ⇒"
+                    " 旧批准不许沿用；`--check-approvals` 会给出逐条结论）："
+                    + "；".join(stale)
+                )
+    except (OSError, LedgerError, ValueError) as exc:  # noqa: BLE001 - 这里只是补一句读数
+        stale_note = f"\n（台账对账没做成：{type(exc).__name__}: {exc} —— 没查成，不是'没有 stale'）"
     return GateResult(
         verdict="requires_human",
         violations=violations,
         required_approvals=REQUIRED_APPROVALS_ON_HIT,
-        explanation=(
-            f"requires_human：{len(hit_paths)} 条改动落在 **FC-27 禁 AI 区**"
-            f"（类别：{'、'.join(cats)}）⇒ 必须由人编写或人逐行走查，"
-            f"并需要 {REQUIRED_APPROVALS_ON_HIT} 名 reviewer 批准。"
-            f"命中：{', '.join(hit_paths)}"
-        ),
+        explanation=explanation + stale_note,
     )
 
 

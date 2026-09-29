@@ -98,31 +98,27 @@ def test_r011_always_declares_the_unimplemented_direction() -> None:
 
 
 def test_r011_on_the_real_tree_is_info_only_because_unclaimed_is_empty() -> None:
-    """真仓库上两栏的**级别映射**必须成立：栏一 info、栏二 error（`P-23`）。
+    """真仓库上 R011 只报 `info` —— **前提是 `unclaimed` 为空**，这条用例守的就是这个前提。
 
-    ## 这条用例被改过一次，为什么
+    ## 这条用例的往返（读它的人必须知道）
 
-    它原来断言的是"真仓库上 `{f.level} == {'info'}`，因为 `unclaimed` 今天是空的"。
-    `draft/28` §168（`R-30` + `R-37` 拓宽取词表面）之后，真仓库上**第一次**出现了
-    10 条无人认领的死取值（5 条 R011 发现，逐条见 §168 的 R-64）⇒ 那句"今天是空的"
-    不再成立，而它原本要守的东西（"级别由栏目决定"）仍然成立。
+    它原来是这个形状（断言"真仓库上没有栏二、级别全是 info"）。
+    `draft/28` §168（`R-30` + `R-37` 拓宽取词表面）之后真仓库上**第一次**出现 10 条无人认领的
+    死取值 ⇒ 它被改成"断言级别映射"（栏二必 error、栏一必 info）。
+    `draft/28` §173 把那 10 条**逐条登记为预留**（`R-64` 的处置）⇒ `unclaimed` 又空了 ⇒
+    本用例改回原来的形状，并保留这条注释说明中间那一段。
 
-    所以现在断言的是**判据本身**，不再依赖"今天恰好没有"：
-      - 每一条 `[栏二 unclaimed]` 都是 `error`（无产出且无人认领 ⇒ 必须吵）；
-      - 每一条 `[栏一 reserved]` / `[栏一附]` / 计数与已知缺口那几条都是 `info`
-        （预留是人的口径裁定，不是缺陷）；
-      - 两栏的取值集合不许有交集（同一条不可能既预留又无人认领）。
+    它同时是"两种形态都必须被这条判据看见"的证据：无人认领时它**必须**红（error），
+    全部登记为预留之后它**必须**只是 info。任何一边悄悄翻过去都会让它变红。
     """
     got = L.rule_R011_dead_vocab(ROOT)
     unclaimed = [f for f in got if "[栏二 unclaimed]" in f.message]
-    reserved = [f for f in got if "[栏一 reserved]" in f.message]
-    assert unclaimed, (
-        "真仓库上一条无人认领的死取值都没有 —— 若这是**修完之后**的事实，请把本用例"
-        "改回'不许出现栏二'那一版（`draft/28` §168 的 R-64 列出了当时那 10 条）"
+    assert not unclaimed, (
+        "真仓库上出现了无人认领的死取值 ⇒ 三条出路（接线 / 登记为预留 / 删值）任选其一；"
+        "若确实要留作待办，请把本用例改成'断言级别映射'那一版（`draft/28` §172 有那段历史）："
+        f"{[f.message[:80] for f in unclaimed]}"
     )
-    assert {f.level for f in unclaimed} == {"error"}, [f.level for f in unclaimed]
-    assert {f.level for f in reserved} == {"info"}, [f.level for f in reserved]
-    assert not ({f.message for f in unclaimed} & {f.message for f in reserved})
+    assert {f.level for f in got} == {"info"}, [f.level for f in got]
 
 
 def test_negative_control_an_unreadable_census_tool_is_a_warning_not_info(
