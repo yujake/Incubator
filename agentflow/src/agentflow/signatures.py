@@ -31,6 +31,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from . import canonical as CANONICAL
+
 #: 参与内容哈希的字段（顺序无关：序列化时 `sort_keys=True`）。
 CANONICAL_FIELDS: tuple[str, ...] = ("kind", "title", "sections", "claims", "open_problems")
 
@@ -51,12 +53,16 @@ def _canonical_bytes(row: Mapping[str, Any]) -> bytes:
 
     列表字段用 `row.get(k) or []` 归一：缺键、`None`、空列表三者在内容上
     是同一件事（"这篇稿子没有那一节"），不许因为写法不同而算出两个哈希。
+
+    "规范字节串"的**口径**只有一处实现（`agentflow.canonical`，`R-33`）：
+    本函数只负责"哪些字段进哈希 + 列表字段怎么归一"，
+    序列化参数由那边定死（门 `scripts/noai_gate.py` 用的是同一份实现，
+    它按文件路径加载，不 import 本包）。
     """
     payload: dict[str, Any] = {k: row.get(k) for k in CANONICAL_FIELDS}
     for k in LIST_FIELDS:
         payload[k] = payload.get(k) or []
-    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    return text.encode("utf-8")
+    return CANONICAL.canonical_json_bytes(payload)
 
 
 def content_sha256_of(row: Mapping[str, Any]) -> str:
@@ -66,9 +72,7 @@ def content_sha256_of(row: Mapping[str, Any]) -> str:
 
 def claims_hash_of(row: Mapping[str, Any]) -> str:
     """只覆盖 `claims` 的哈希（单条断言级签名用；`draft/29` §8.8.2 的 `claims_hash`）。"""
-    text = json.dumps(row.get("claims") or [], sort_keys=True, ensure_ascii=False,
-                      separators=(",", ":"))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return CANONICAL.canonical_sha256(row.get("claims") or [])
 
 
 def ref_hash_of(row: Mapping[str, Any]) -> str:

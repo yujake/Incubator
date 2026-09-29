@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T10:36:45+08:00",
+  "generated_at": "2026-09-29T10:39:28+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -183,67 +183,12 @@
       "path": "scripts/noai_gate.py",
       "glob": "scripts/noai_gate.py",
       "category": "auth-audit",
-      "sha256": "920d7ceb9b214acfa32aa07607d621a18c728c16b8c713a3e7183f6d02c0d54c",
+      "sha256": "610c4c39d33e78ec35074b89ca1add7d0d411c320a567b8665d2a66f29c8ab37",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（scripts__noai_gate.py.txt）",
+      "change_note": "R-33：规范哈希改为共用 agentflow/canonical.py（按路径加载，门仍不 import 本包）+ 新增 --check-canonical 一致性判据",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:37+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
-          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:38+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
-          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:20:55+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
-          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:20:56+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
-          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:51+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
-          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:51+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__noai_gate.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__noai_gate.py.txt",
-          "evidence_sha256": "3a658bc860c5c00113be31560c1bdf808e83ad8b22b6349af144bd0115eccd19"
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },

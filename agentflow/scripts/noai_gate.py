@@ -1084,11 +1084,101 @@ def _resolve_evidence_file(rel: str, base: Path) -> Path:
     return cand if cand.exists() else (Path.cwd() / rel)
 
 
+def _load_canonical():
+    """按**文件路径**加载 `agentflow/canonical.py`（规范 JSON 字节串的唯一实现）。
+
+    ## 为什么不 `import agentflow.canonical`（`R-33`）
+
+    门有一条硬约束：**必须在本包 import 不了时也能跑**。`import agentflow.canonical`
+    会拉起 `agentflow/__init__`（以及有可能被改坏的那棵树）—— 门去依赖被它审计的
+    那棵树的 import 图，等于把"门能不能跑"押在被审对象上。
+    所以这里按路径加载一个**纯标准库、零包内依赖**的模块：口径只有一份，
+    而门的独立性不受影响。
+
+    找不到就返回 `None`（调用方必须据此报"没查成"，**不许**退回一份内联实现 ——
+    那正是 `R-33` 说的"两份口径"，它的偏差不会报错，只会在跨过去比对时才暴露）。
+    """
+    import importlib.util
+
+    candidates = [
+        Path(__file__).resolve().parents[1] / "src" / "agentflow" / "canonical.py",
+        Path(__file__).resolve().parent / "canonical.py",
+    ]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("_noai_gate_canonical", path)
+            if spec is None or spec.loader is None:
+                continue
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except (OSError, ImportError, SyntaxError, ValueError):
+            continue
+    return None
+
+
+CANONICAL = _load_canonical()
+
+
+class CanonicalUnavailable(RuntimeError):
+    """规范哈希的实现读不到 ⇒ 与"哈希算出来一致"是两件事（三态里的 unknown）。"""
+
+
 def _receipt_digest(record_without_hash: dict) -> str:
-    """一条回执的自身 hash：对它除 `hash` 之外的规范化 JSON 求 sha256。"""
-    body = json.dumps(record_without_hash, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(body).hexdigest()
+    """一条回执的自身 hash：对它除 `hash` 之外的规范化 JSON 求 sha256。
+
+    规范化口径来自 `agentflow/canonical.py`（**唯一实现**，`R-33`）：本函数只是
+    它的调用点。此前这里有一份内联的 `json.dumps(...)`，与 `signatures` 各写一份 ——
+    两份口径只要差一个字符（分隔符 / `ensure_ascii` / 键序），回执链钉的哈希
+    与稿件签名钉的哈希就会分叉，而**没有任何地方会报错**。
+    """
+    if CANONICAL is None:
+        raise CanonicalUnavailable(
+            "读不到规范哈希的唯一实现 `src/agentflow/canonical.py` ⇒ 这条回执的哈希"
+            "**算不出来**（没查成）。不许在这里退回一份内联实现：两份口径的偏差不报错"
+        )
+    return CANONICAL.canonical_sha256(record_without_hash)
+
+
+def check_canonical_consistency() -> dict:
+    """本门用的规范哈希与 `signatures` 用的是不是同一份实现（`R-33` 的机器判据）。
+
+    返回 `{"status": "consistent" | "divergent" | "unknown", "detail": str, ...}`：
+
+    - `consistent`：同一份实现算出来的探针哈希与 `signatures` 侧一致；
+    - `divergent`：**不一致** ⇒ 至少有一处又写了自己的口径（这正是 `R-33` 的形态）；
+    - `unknown`：本包 import 不了（或唯一实现读不到）⇒ 没查成，**不许读成一致**。
+
+    为什么还要这条判据（既然已经共用一份实现）：共用是把口径收在一处，
+    而"有人又写回一份内联实现"这件事**不会**让任何测试变红 —— 它只会让两个哈希
+    悄悄分叉。这条判据把"又分叉了"变成一次可复现的红灯（`[5c]` 同族：
+    两处说法必须由机器判据相连）。
+    """
+    if CANONICAL is None:
+        return {"status": "unknown", "detail": "读不到 `src/agentflow/canonical.py`"}
+    payload = list(CANONICAL.PROBE_PAYLOAD.get("b") or []) + [CANONICAL.PROBE_PAYLOAD.get("a")]
+    gate_hash = _receipt_digest(payload)
+    try:
+        src = Path(__file__).resolve().parents[1] / "src"
+        if str(src) not in sys.path:
+            sys.path.insert(0, str(src))
+        from agentflow import signatures as SIG  # noqa: PLC0415 - 可选依赖：包 import 不了就是 unknown
+        # 两侧算**同一个问题**：`claims_hash_of({"claims": X})` 哈希的就是 `X` 本身，
+        # 与门侧 `_receipt_digest(X)` 的输入逐字相同 ⇒ 结果必须逐字相等。
+        sig_hash = SIG.claims_hash_of({"claims": payload})
+    except Exception as exc:  # noqa: BLE001 - 包 import 不了 ⇒ unknown，不是 divergent
+        return {"status": "unknown",
+                "detail": f"本包 import 不了（{type(exc).__name__}: {exc}）⇒ 没查成",
+                "gate_hash": gate_hash}
+    if gate_hash == sig_hash:
+        return {"status": "consistent", "detail": "同一份实现：同一载荷的哈希逐字相等",
+                "gate_hash": gate_hash, "signatures_hash": sig_hash}
+    return {"status": "divergent",
+            "detail": f"门侧 {gate_hash[:16]}… ≠ signatures 侧 {sig_hash[:16]}… ⇒ "
+                      "至少有一处又写了自己的规范口径（`R-33`）",
+            "gate_hash": gate_hash, "signatures_hash": sig_hash}
 
 
 def check_receipt_chain(
@@ -4048,6 +4138,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--check-canonical",
+        action="store_true",
+        help=(
+            "只查一件事：本门用的规范哈希与 `agentflow.signatures` 用的是不是**同一份口径**"
+            "（`R-33`）。一致 ⇒ 0；不一致 ⇒ 1（有人又写了一份内联实现）；"
+            "本包 import 不了 ⇒ 2（没查成，**不许**读成一致）。不需要 `--paths`。"
+        ),
+    )
+    p.add_argument(
         "--ledger",
         default=None,
         metavar="PATH",
@@ -4601,6 +4700,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         # 也先于 `G-46` 那条可疑 `--paths` 拒绝（本命令不看 `--paths`，
         # 不该因为别处给了一串带逗号的路径而判成没查成）。
         return _run_check_ledger(args, root)
+
+    # ---- `--check-canonical`（`R-33`）：只查"规范哈希是不是只有一份口径"。
+    #
+    # 为什么排在 `--paths` 那些动作之前：它不看改动集，也不写任何东西 ——
+    # 它问的是一个全局事实（门与 signatures 的口径是否同一份）。
+    # 让一串可疑的 `--paths` 把它拦下来，会把"口径分叉了吗"答成"你的路径写得不对"。
+    if args.check_canonical:
+        report = check_canonical_consistency()
+        status = str(report.get("status") or "unknown")
+        if status == "consistent":
+            print(f"[canonical] consistent：{report['detail']}")
+            print(f"            门侧 …{str(report.get('gate_hash'))[:16]} ／ "
+                  f"signatures 侧 …{str(report.get('signatures_hash'))[:16]}")
+            return 0
+        if status == "divergent":
+            print(f"[canonical] DIVERGENT（exit 1）：{report['detail']}", file=sys.stderr)
+            return 1
+        print(f"[canonical] unknown（exit 2）：{report['detail']}", file=sys.stderr)
+        return 2
 
     # ---- `G-46`：可疑的 `--paths` 取值先于一切动作处理（含 `--baseline` / `--approve`）。
     #
