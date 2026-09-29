@@ -1413,6 +1413,61 @@ def cmd_run_agent(args) -> int:
     return 0 if run.stop_reason == "final" else 1
 
 
+def cmd_gate(args) -> int:
+    """交付闸门：跑一组判据 + 机械半，写报告与工作项；`--dispatch` 真把工作项派回去。
+
+    退出码（三态）：0 = 全过；1 = 有确定的不达标（工作项已落）；2 = 没查成（没接线/读不到）。
+    """
+    from . import deliver as D
+    from . import host as H
+    from .agent_loop import LlmSeam
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    st = make_store(root)
+    st.init()
+    artifact = Path(args.artifact)
+    try:
+        text = artifact.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"[gate] 没查成：读不到 {artifact}（{type(e).__name__}: {e}）", file=sys.stderr)
+        return 2
+    seam = _agent_seam_factory("H", root=root, sid=args.sid, usd_budget=args.budget_usd)
+    wiring = H.wired_llm_conductor(st, loops={}, session_root=root, sid=args.sid,
+                                   workspace_root=str(root),
+                                   seam_factory=lambda role: _agent_seam_factory(
+                                       role, root=root, sid=args.sid, usd_budget=args.budget_usd))
+    pairs = [tuple(x.split(",")) for x in (args.pair or [])]
+    res = D.gate(args.name, text, session_root=root, seam=seam,
+                 criteria=args.criterion or (), store=st, claimed_pairs=pairs,
+                 context=args.context or "", require_disclaimer=bool(args.disclaimer),
+                 disclaimer=args.disclaimer or "")
+    if args.json:
+        print(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(tty.paint(f"闸门 {res.name}：{res.verdict}", "bold"))
+        for c in res.criteria:
+            state = c["verdict"] or f"没判成（{c['problem']}）"
+            print(f"  判据 {c['criterion']}（{c['faculty']}）：{state}"
+                  + (f" —— {c['why'][:80]}" if c.get("why") else ""))
+        for m in res.mechanical:
+            print(f"  机械半 {m['kind']}：{m['detail'][:100]}")
+        for w in res.work_items:
+            print(f"  工作项 {w.id} → {w.who or '（未定）'}：{w.what[:100]}")
+        for note in res.notes:
+            print(f"  注：{note}")
+        print(f"  报告：{res.report_path}")
+    if args.dispatch and res.work_items:
+        results = D.dispatch_work_items({**wiring, "session_root": root}, res.work_items,
+                                        budget=None)
+        for r in results:
+            print(f"  派回：{r['id']} ⇒ {r['dispatch']}"
+                  + (f"（{r.get('why') or r.get('refusal_reason') or ''}）")
+                  if r["dispatch"] != "summoned" else f"  派回：{r['id']} ⇒ 任务 {r['task_id']}")
+    if res.verdict == "unknown":
+        return 2
+    return 0 if res.verdict == "pass" else 1
+
+
 def cmd_inbox(args) -> int:
     """列出等着用户回答的问题（只读）。退出码 0 = 查过了。"""
     from . import userio as U
@@ -1667,6 +1722,21 @@ def build_parser() -> argparse.ArgumentParser:
                     help="停止开关：这个文件一出现，就在下一轮开跑之前停（人可随时按停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
     sp.set_defaults(func=cmd_run_agent)
+
+    sp = sub.add_parser("gate", help="交付闸门：逐条判据 + 机械半 → 报告与工作项（三态退出码）")
+    sp.add_argument("name", help="这次交付的名字（报告落在 <root>/gates/<名字>.json）")
+    sp.add_argument("--artifact", required=True, help="被审的交付物（一个文本文件）")
+    sp.add_argument("--criterion", action="append", default=[],
+                    help="只跑这条判据，可重复；不写则跑全部")
+    sp.add_argument("--pair", action="append", default=[],
+                    help="机械半核的概念对，形如 0001,0002，可重复")
+    sp.add_argument("--context", default="", help="给语义判据的额外上下文")
+    sp.add_argument("--disclaimer", default="", help="要求逐字出现的免责声明常量")
+    sp.add_argument("--dispatch", action="store_true", help="把工作项真的派回去（过能力表与策略）")
+    sp.add_argument("--budget-usd", type=float, default=None, help="美元上限")
+    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
+    sp.add_argument("--json", action="store_true", help="打成 JSON")
+    sp.set_defaults(func=cmd_gate)
 
     sp = sub.add_parser("inbox", help="列出等着用户回答的问题（只读）")
     sp.add_argument("--sid", default=None, help="会话号（默认当天）")

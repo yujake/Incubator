@@ -2135,6 +2135,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "autonomy.py": "放手后的自主轮与阶段性汇报：轮次上限 + 每 N 轮一次公共汇报 + 文件/用户回答可打断（`draft/28` §181）",
     "judges.py": "语义判据的接入方式：判据注册表（每条带负控准入）+ 三态 + 引用落地过滤（`draft/28` §182）",
     "faculty_checks.py": "十项官能里可机械判的那一半：引用落地 / 猜想卫生 / 体例 / 推进与卡点（`draft/28` §182）",
+    "deliver.py": "交付闸门：逐条判据 + 机械半 → pass/needs_work/unknown 三态、闸门报告与工作项，并把工作项按能力表派回去（`draft/28` §186）",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",

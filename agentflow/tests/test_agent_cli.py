@@ -56,7 +56,7 @@ def fake_seam_factory(role: str, *, root: pathlib.Path, sid: str | None, usd_bud
 
 
 def _args(tmp_path: pathlib.Path, **kw: Any) -> Namespace:
-    base = dict(root=str(tmp_path / "ws"), sid="t", json=False, budget_usd=None)
+    base = dict(root=str(tmp_path / "ws"), sid="t", json=False, budget_usd=None, dispatch=False)
     base.update(kw)
     return Namespace(**base)
 
@@ -210,4 +210,54 @@ def test_run_agent_refuses_to_resume_a_different_task(tmp_path: pathlib.Path, mo
     out = capsys.readouterr().out
     assert rc == 2, out
     assert "checkpoint_mismatch" in out, out
+
+
+def test_gate_without_a_key_is_unknown_not_pass(tmp_path: pathlib.Path, monkeypatch, capsys):
+    """负控（三态，直接测 `cmd_gate`）：没接线 ⇒ 退出码 2，判据逐条落 `judge_not_wired`。
+
+    这一条的要点是"没判成 ≠ 通过"：报告照样落盘、工作项照样写出，
+    但结论必须是 `unknown`、退出码必须是 2 —— 折叠成 `pass` 就等于把"没查"读成"没问题"。
+
+    刻意**不**替换 `cli._agent_seam_factory`：走的就是"环境里没有 key"那条真路。
+    """
+    monkeypatch.delenv("AGENTFLOW_MODEL_API_KEY", raising=False)
+    root = tmp_path / "ws"
+    root.mkdir()
+    art = tmp_path / "稿.md"
+    art.write_text("# 稿子\n\n一句话。\n", encoding="utf-8")
+    rc = cli.cmd_gate(_args(tmp_path, name="g1", artifact=str(art), criterion=["overview.essence"],
+                           json=False, pair=[], context="", disclaimer=""))
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "unknown" in out and "judge_not_wired" in out, out
+    assert (root / "gates" / "g1.json").is_file(), "没判成也要留下报告（否则没人知道跑过）"
+
+
+def test_gate_writes_a_report_and_work_items_when_a_criterion_fails(tmp_path: pathlib.Path,
+                                                                    monkeypatch, capsys):
+    """正控（直接测 `cmd_gate`）：判据判不通过 ⇒ `needs_work`、退出码 1、工作项落盘。"""
+    monkeypatch.setattr(cli, "_agent_seam_factory", fake_seam_factory)
+    SCRIPTS.clear()
+    SCRIPTS.update({"H": ['{"verdict": "listing", "why": "只是在罗列", "findings": []}']})
+    root = tmp_path / "ws"
+    root.mkdir()
+    art = tmp_path / "稿.md"
+    art.write_text("# 稿子\n\n一句。两句。\n", encoding="utf-8")
+    rc = cli.cmd_gate(_args(tmp_path, name="g2", artifact=str(art), criterion=["overview.essence"],
+                            json=True, pair=[], context="", disclaimer=""))
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    payload = json.loads(out[out.index("{"):])
+    assert payload["verdict"] == "needs_work" and payload["unknown_criteria"] == [], payload
+    assert payload["work_items"], payload
+    assert payload["work_items"][0]["who"] == "C", "高观点不达标该派给 C（FACULTY_FIXERS）"
+
+
+def test_gate_on_a_missing_artifact_is_not_checked(tmp_path: pathlib.Path, capsys):
+    """负控（三态）：交付物读不到 ⇒ 退出码 2，且一条判据都没跑、报告没落。"""
+    rc = cli.cmd_gate(_args(tmp_path, name="g3", artifact=str(tmp_path / "没有这个文件.md"),
+                            criterion=[], json=False, pair=[], context="", disclaimer=""))
+    err = capsys.readouterr().err
+    assert rc == 2 and "没查成" in err, err
+    assert not (tmp_path / "ws" / "gates").exists(), "没查成却落了报告"
 
