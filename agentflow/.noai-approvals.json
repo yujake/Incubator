@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T13:20:45+08:00",
+  "generated_at": "2026-09-29T14:31:17+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -413,10 +413,10 @@
       "path": "src/agentflow/store.py",
       "glob": "src/agentflow/store.py",
       "category": "schema-migration",
-      "sha256": "3c1e784d74965074cd81f1ce297fcfaa6de1a5d4a4b31e583c11555f96ec8c7b",
+      "sha256": "a6216da888d57baba198f4eb63bf375848219cd33170b74af13c037859fe0d77",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "T1 猜想数据面（2026-09-29）：加 conjectures 表（schema 5 处触点、store LOCK_ORDER、verify 跨对象不变量）+ vocab_census 登记 5 条 CONJECTURE_STATUSES 预留取值。AI 代改，FC-27 窗口见 docs/NOAI-SUSPENSION-2026-09-28.md；待 2 名 reviewer 走查。",
+      "change_note": "§176（最终版）：R-57 给 Tx 加 delete（op=delete 事件带整行+key，rebuild 重放并报 deletes_replayed/unknown_ops）；R-32 给 Store.init 加「没有 data/ 又不是工作区就拒绝」的 fail-closed 守卫，白名单 _WORKSPACE_ROOT_ENTRIES={data,library,projects,.agentflow-workspace}（第一版漏了 projects/ 造成误拦，被 tests/test_conductor_tools.py 当场抓住）。判据本体各只有一处实现，配 tests/test_store_delete_events.py（8 条）与 tests/test_store_init_guard.py（8 条）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

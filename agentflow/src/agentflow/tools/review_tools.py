@@ -161,20 +161,20 @@ _FOUR_GATE_KEYS_FALLBACK: tuple[str, str, str] = (
 
 # ---------------------------------------------------------------- 语义判据的接缝（`R-42`）
 #
-# `R-42`（`draft/28` §133）：P9 第 4 条的"结论强于引文"今天只有**措辞级**判据 ——
+# `R-42`（`draft/28` §133）：P9 第 4 条的"结论强于引文"今天只有措辞级判据 ——
 # `OVERCLAIM_MARKERS` 逐词匹配（上面那个循环）加"`cross_check` 缺 disclaimer"。
-# 它能抓住"把交叉验证说成证明"，抓不住**措辞干净但结论确实强于引文**（引文给了 n=3 的
-# 数值检查、断言写成一般性结论）。语义级要 LLM 或人 —— 而本框架默认**零 LLM 调用**。
+# 它能抓住"把交叉验证说成证明"，抓不住措辞干净但结论确实强于引文（引文给了 n=3 的
+# 数值检查、断言写成一般性结论）。语义级要 LLM 或人 —— 而本框架默认零 LLM 调用。
 #
-# 所以这里给的不是"接一个模型"，而是一条**接缝 + 一个显式的没查状态**：
+# 所以这里给的不是"接一个模型"，而是一条接缝 + 一个显式的没查状态：
 # 没接线时 `semantic_check["checked"] is False` 且理由逐字写明；
-# **绝不允许**把"没查"折成"没问题"（三态纪律，与 `dep_check` 逐条同形）。
+# 绝不允许把"没查"折成"没问题"（三态纪律，与 `dep_check` 逐条同形）。
 #
 # 为什么用既有的 `overclaim` 这个 kind 而不新造一个：`schema.FINDING_KINDS` 是受控词表，
 # 新造一个取值要动 FC-27 的 `schema.py`，而这件事的语义就是"过度声称"的一种 ——
-# 语义级判据是让**同一个 kind 更锋利**，不是发明新类别（`evidence` 里会写明来源是语义判据）。
+# 语义级判据是让同一个 kind 更锋利，不是发明新类别（`evidence` 里会写明来源是语义判据）。
 
-#: 语义判据允许的三种判定。`unknown` **必须**存在：模型答不上来与"我判过、没问题"
+#: 语义判据允许的三种判定。`unknown` 必须存在：模型答不上来与"我判过、没问题"
 #: 是两件事，折平之后"判不了"会静默变成"通过"。
 SEMANTIC_VERDICTS: tuple[str, ...] = ("consistent", "stronger_than_evidence", "unknown")
 
@@ -319,7 +319,7 @@ def scan_document(
 
     三态：`dependencies=None` ⇒ `dep_check.checked=False`（没查），
     与「查了、依赖都闭合」（`checked=True, findings=[]`）严格区分。
-    `semantic_judge=None` ⇒ `semantic_check["checked"] is False`（没接线，**同样是没查**），
+    `semantic_judge=None` ⇒ `semantic_check["checked"] is False`（没接线，同样是没查），
     与「判过、都说一致」严格区分（`R-42`：措辞级判据抓不住"措辞干净但结论强于引文"）。
 
     `verdict` 的受控词与分档顺序（必须与写入路径 `review_document` 完全一致）：
@@ -517,22 +517,22 @@ def scan_document(
     # ---- 语义级判据（`R-42`）："结论强于引文"这一条措辞级判据看不见
     #
     # 上面那个循环用的是 `OVERCLAIM_MARKERS` 逐词匹配 —— 它只能抓"把交叉验证说成证明"
-    # 这类**写在脸上**的形态。抓不住的是：措辞干净（没有 `证明`/`定理` 这类词），
-    # 但**结论的强度确实超过引文能支撑的范围**（引文只做了 n=3 的数值检查，
+    # 这类写在脸上的形态。抓不住的是：措辞干净（没有 `证明`/`定理` 这类词），
+    # 但结论的强度确实超过引文能支撑的范围（引文只做了 n=3 的数值检查，
     # 断言写成一般性结论）。那一层要读语义，只有 LLM 或人能判。
     #
-    # 本框架默认零 LLM 调用 ⇒ 这里默认**没查**。三条纪律：
-    #   ① 没接线时 `checked=False` + 逐字理由，**不许**折成"没问题"（与 `dep_check` 同形）；
-    #   ② 判据答 `unknown` 也**不算查过**（`claims_unknown` 单独计数）——
+    # 本框架默认零 LLM 调用 ⇒ 这里默认没查。三条纪律：
+    #   ① 没接线时 `checked=False` + 逐字理由，不许折成"没问题"（与 `dep_check` 同形）；
+    #   ② 判据答 `unknown` 也不算查过（`claims_unknown` 单独计数）——
     #      "模型答不上来"与"我判过、一致"是两件事；
     #   ③ 判据自己抛异常/返回不合法 ⇒ `checker_errors += 1` + 一条 warning 级 `garbled`
     #      （与 `claimanatomy` 的 `checker_error` 同一处置：检查器没跑成不是稿件的错，
     #      但绝不能静默）。
     #
-    # 为什么语义级发现定 **warning** 而不是 error：措辞级那条是机械可判的（error 站得住），
+    # 为什么语义级发现定 warning 而不是 error：措辞级那条是机械可判的（error 站得住），
     # 而语义判定来自一个可能犯错的判据 —— 判错一次就会把一份合格的稿件判成 `rejected`。
-    # 定 warning 让它**可见**（verdict 落 `accepted_with_warnings`）而不越权。要不要升到
-    # error 是**口径**问题，属 FC-27 的 `eval-criteria` 类 ⇒ 留给人裁，不在这里替人定。
+    # 定 warning 让它可见（verdict 落 `accepted_with_warnings`）而不越权。要不要升到
+    # error 是口径问题，属 FC-27 的 `eval-criteria` 类 ⇒ 留给人裁，不在这里替人定。
     semantic_check: dict[str, Any] = {
         "checked": False,
         "judge": "",
@@ -1050,7 +1050,7 @@ def review_document(
         # "两层都查过了"。这里不改 verdict 分档（改动分档是口径，属禁改区）：
         # 语义级判据今天只能通过 `scan_document(semantic_judge=…)` 注入，
         # 而 `review_document` 走的是工具面（`additionalProperties: False`，塞不进判据）
-        # ⇒ 这一格在写入路径上**如实报没查**，并由 `semantic_check` 字段带出去。
+        # ⇒ 这一格在写入路径上如实报没查，并由 `semantic_check` 字段带出去。
         (
             f"语义级判据已判 {scan['semantic_check']['claims_judged']} 条"
             if scan["semantic_check"]["checked"]
@@ -1284,16 +1284,16 @@ def verify_fixes(
     target_status = {"accepted": "accepted", "revise_again": "in_review", "unresolved_review": "unresolved_review"}[
         verdict
     ]
-    # ---- `R-59`（`draft/28` §161.4，口径 ②）：**`accepted` 必须由"针对这一版"的签名背书**
+    # ---- `R-59`（`draft/28` §161.4，口径 ②）：`accepted` 必须由"针对这一版"的签名背书
     #
     # 老形态是一条真的缺口（`_f4_probe_gh.py` 当场咬出来的）：改稿之后 `verify_fixes` 复审
-    # 通过 ⇒ 它把 `documents.status` 置回 `accepted`，而签名台账里那条签的是**旧版本** ⇒
+    # 通过 ⇒ 它把 `documents.status` 置回 `accepted`，而签名台账里那条签的是旧版本 ⇒
     # `verify_all` 报 `stale_signature`。那不是误报：`draft/29` §8.8.4 的口径就是
     # "改稿之后旧审批不许沿用"。
     #
-    # 判据用 `signatures.signed_revision`（**不许**用 `signed()`）：后者对非 `accepted`
+    # 判据用 `signatures.signed_revision`（不许用 `signed()`）：后者对非 `accepted`
     # 状态的稿件一律返回真（草稿本来就不该被签），拿它来判会得到"真" ⇒ 恰好放过这一格。
-    # 两条出路里选了"不置 accepted"而不是"补签"：**接受 = 有一次针对这一版的审+签**，
+    # 两条出路里选了"不置 accepted"而不是"补签"：接受 = 有一次针对这一版的审+签，
     # 而 `verify_fixes` 不是一次审（它只重跑旧发现的对应检查、不重判全部判据）——
     # 让它也能签，等于把"谁能签发"从一处变成两处。
     accepted_without_signature_for_this_revision = False

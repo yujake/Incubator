@@ -98,18 +98,18 @@ def test_r011_always_declares_the_unimplemented_direction() -> None:
 
 
 def test_r011_on_the_real_tree_is_info_only_because_unclaimed_is_empty() -> None:
-    """真仓库上 R011 只报 `info` —— **前提是 `unclaimed` 为空**，这条用例守的就是这个前提。
+    """真仓库上 R011 只报 `info` —— 前提是 `unclaimed` 为空，这条用例守的就是这个前提。
 
     ## 这条用例的往返（读它的人必须知道）
 
     它原来是这个形状（断言"真仓库上没有栏二、级别全是 info"）。
-    `draft/28` §168（`R-30` + `R-37` 拓宽取词表面）之后真仓库上**第一次**出现 10 条无人认领的
+    `draft/28` §168（`R-30` + `R-37` 拓宽取词表面）之后真仓库上第一次出现 10 条无人认领的
     死取值 ⇒ 它被改成"断言级别映射"（栏二必 error、栏一必 info）。
-    `draft/28` §173 把那 10 条**逐条登记为预留**（`R-64` 的处置）⇒ `unclaimed` 又空了 ⇒
+    `draft/28` §173 把那 10 条逐条登记为预留（`R-64` 的处置）⇒ `unclaimed` 又空了 ⇒
     本用例改回原来的形状，并保留这条注释说明中间那一段。
 
-    它同时是"两种形态都必须被这条判据看见"的证据：无人认领时它**必须**红（error），
-    全部登记为预留之后它**必须**只是 info。任何一边悄悄翻过去都会让它变红。
+    它同时是"两种形态都必须被这条判据看见"的证据：无人认领时它必须红（error），
+    全部登记为预留之后它必须只是 info。任何一边悄悄翻过去都会让它变红。
     """
     got = L.rule_R011_dead_vocab(ROOT)
     unclaimed = [f for f in got if "[栏二 unclaimed]" in f.message]

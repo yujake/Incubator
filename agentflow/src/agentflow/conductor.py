@@ -294,9 +294,9 @@ class NotWiredError(RuntimeError):
 # ---------------------------------------------------------------- 主控
 
 
-#: 角色代码**故意抛出**的领域错误类名 → 它们在任务台账里算"拒绝这次调用"（R-46）。
+#: 角色代码故意抛出的领域错误类名 → 它们在任务台账里算"拒绝这次调用"（R-46）。
 #:
-#: 为什么按**类名**匹配而不是 import 那些类：conductor 在 import 图上位于 agent_* 之上
+#: 为什么按类名匹配而不是 import 那些类：conductor 在 import 图上位于 agent_* 之上
 #: （agent 模块会 import conductor 的类型），直接 import 会成环。类名匹配的代价是
 #: "改了类名这里就失效" —— 所以下面 `selftest`/用例要有一条正控真的抛一次
 #: `ExperimentError` 并断言落 `refused/invalid_params`（判据不许只活在注释里）。
@@ -311,7 +311,7 @@ def _business_refusal_code(exc: BaseException) -> str | None:
 
     两条来源，优先级从高到低：
     1. 异常自带 `refusal_reason`（显式协议，且必须是受控词表里的值）；
-    2. 异常是上表里的领域错误类（角色**故意**抛的）。
+    2. 异常是上表里的领域错误类（角色故意抛的）。
     其余一律 `None` ⇒ 由调用方记 `failed`（"代码/环境崩了"）。
     """
     code = getattr(exc, "refusal_reason", None)
@@ -798,7 +798,7 @@ class Conductor:
 
         # ---- [1] 角色 / 动作存在性（不落台账的只有"取消"这一种，见上）
         #
-        # [1a] 不可召唤要**先于**动作表判（`draft/28` §154 的 R-44）。
+        # [1a] 不可召唤要先于动作表判（`draft/28` §154 的 R-44）。
         # 以前 `summon(role="M")` 拿到的是 `unknown_action`（"这个角色没这个动作"），
         # 而真相是"召唤主控这件事本身不允许"（`NON_SUMMONABLE`）。两者的处置相反：
         # 前者让人去查名字，后者要求改设计。专用判据 `policy.check` 一直是对的
@@ -928,15 +928,15 @@ class Conductor:
         except Exception as e:  # noqa: BLE001 —— 这里必须兜住一切，否则僵尸 running
             # ---- R-46：业务拒绝 ≠ 崩溃（`draft/28` §154）
             #
-            # 角色代码**故意抛出**的领域错误（`ExperimentError` / `DocumentError` /
+            # 角色代码故意抛出的领域错误（`ExperimentError` / `DocumentError` /
             # `PlanError` / `ReviewError` / `EvidenceError` / `ToolError`）表示
             # "这次调用不成立" —— 与 `refused` 同族；而 `TypeError` / `KeyError` /
-            # `AttributeError` / `OSError` 这些是**代码或环境崩了**，必须留 `failed`。
+            # `AttributeError` / `OSError` 这些是代码或环境崩了，必须留 `failed`。
             # 以前两者一律落 `failed / 执行中异常`：实测 4 条 `E.run_experiment`
             # （我把 `name`/`imports` 与 `method="numeric"` 一起传）就这么被记成"崩了"，
             # 而它其实是一次参数拒绝 —— 读台账的人会去查代码，而该改的是调用。
             #
-            # 刻意**不**把裸 `ValueError` 算进拒绝：它既可能是校验（业务），
+            # 刻意不把裸 `ValueError` 算进拒绝：它既可能是校验（业务），
             # 也可能是判据自身的 bug；宁可把它留在 `failed`（过度报失败比把 bug
             # 伪装成"策略说不"安全）。
             code = _business_refusal_code(e)
@@ -1080,7 +1080,7 @@ class Conductor:
         """把一次召唤的返回值摘要写成 `<workspace>/out/tasks/<task_id>.json`；返回相对路径。
 
         `payload is None` ⇒ 返回空串（没产出就不写文件，免得留下"看起来有产出"的空壳）。
-        写失败**不**影响终态：原因记进日志并返回空串 —— "有产出但摘要没写成"
+        写失败不影响终态：原因记进日志并返回空串 —— "有产出但摘要没写成"
         与"没有产出"必须分得开，而终态那一行不能因为日志写不了就丢掉。
         """
         if payload is None:
@@ -1178,7 +1178,7 @@ class Conductor:
             row["tokens"] = int(tokens or 0)
             row["usd"] = float(usd or 0.0)
             # ---- R-47：把这次调用的返回值摘要落成产物，并把路径记进 `artifacts`。
-            # 为什么必须落：`tasks` 表不存 payload ⇒ `outcome=ok` **无法自证有产出**
+            # 为什么必须落：`tasks` 表不存 payload ⇒ `outcome=ok` 无法自证有产出
             # （实测 83 行 detail 是"handler 未声明 outcome，按有产出处理"，
             # 读台账的人判不出这一步到底产出了什么，见 `draft/28` §154 的 S3/R-47）。
             # 摘要落 `<workspace>/out/tasks/<task_id>.json`（键集 + 规范化哈希 + 截断预览），
@@ -1200,7 +1200,7 @@ class Conductor:
         # 为什么在这里写：`tasks` 是运行时状态，而"这次运行的叙事"（谁在何时对谁说了什么、
         # 产出了什么）以前只活在会话里。落进 `<项目根>/sessions/<会话号>.jsonl` 之后，
         # 每个项目自带一段可读历史，翻 p2-review 不必读全局目录（学 harness 的按工作区存放）。
-        # 写失败**不**改变终态：叙事不是判据本身，原因进日志。
+        # 写失败不改变终态：叙事不是判据本身，原因进日志。
         from . import sessions as _SESS
 
         _path, _problem = _SESS.append(getattr(self.store, "root", "."), {
@@ -1220,11 +1220,11 @@ class Conductor:
         # ---- 产物归属登记（`R-52` 余；`draft/28` §153 的 A3/A4）。
         #
         # 为什么在这里而不是每个智能体自己记：`tasks.artifacts` 只回答"这次召唤产出了
-        # 哪些引用"，**不回答"这个路径归谁产"** —— A3（两份断言台账同义不同物）与
+        # 哪些引用"，不回答"这个路径归谁产" —— A3（两份断言台账同义不同物）与
         # A4（六个产生验收读数的脚本既非 experiments 行也非 documents 行）都是这个缺口
         # 的形态，而两条都发生在"框架自己落下的产物"上。摘要是这条链路上唯一由框架
         # own 的产物落点，登记它就有了第一条真记录（而不是一个空转的模块）。
-        # 纪律与会话记录逐条相同：**写失败不改终态**，原因进日志。
+        # 纪律与会话记录逐条相同：写失败不改终态，原因进日志。
         if digest_rel:
             from . import artifacts as _ART
 

@@ -319,7 +319,7 @@ def test_i3_negative_control_dangling_parent_is_refused(tmp_path):
     r = c.summon("C", "hottest", {"top_n": 1}, parent_task_id="t-9999")
     assert r.status == "done" and r.outcome == "refused"
     # `invalid_params` 而不是 `unknown_action`（`draft/28` §154 的 R-46）：
-    # 父任务不存在是**这次调用本身不成立**，不是"这个角色没这个本事"。
+    # 父任务不存在是这次调用本身不成立，不是"这个角色没这个本事"。
     # 原来的理由码把两件事混在一起，排查方向会被引到能力表上去。
     assert r.refusal_reason == "invalid_params"
     assert "不存在" in r.detail
@@ -1210,9 +1210,9 @@ def test_artifacts_are_recorded_and_verified(tmp_path):
         tx.upsert("documents", doc.to_dict())
     r = c.summon("H", "review", {"doc_id": "0001"}, input_key="i1")
     # `R-47`（`draft/28` §159）之后，除了 handler 自报的产出引用，`finish` 还会把
-    # **本次调用的返回值摘要**落成 `out/tasks/<task_id>.json` 并把路径并进 `artifacts`
+    # 本次调用的返回值摘要落成 `out/tasks/<task_id>.json` 并把路径并进 `artifacts`
     # —— 因为 `tasks` 表不存 payload，"outcome=ok"无法自证有产出（83 行 detail 是
-    # "handler 未声明 outcome，按有产出处理"）。所以这里断言的是**并集**：
+    # "handler 未声明 outcome，按有产出处理"）。所以这里断言的是并集：
     # ① handler 自报的那一条；② 摘要文件那一条（且它真的在盘上）。
     digest = f"out/tasks/{r.task_id}.json"
     assert sorted(r.artifacts) == sorted([f"documents:0001", digest]), r.artifacts

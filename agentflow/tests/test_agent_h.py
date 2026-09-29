@@ -477,14 +477,14 @@ def test_verify_fixes_marks_a_genuinely_fixed_finding_as_fixed(h_store: Store):
     ## 为什么不是"文档回归 accepted"（`R-59`，`draft/28` §161.4 / §172）
 
     本用例原来断言 `verify_fixes` 之后 `documents[0]["status"] == "accepted"`。
-    那正是被修掉的形态：G 改稿之后**内容哈希变了**，而签名台账里那条钉的是**旧版本** ——
+    那正是被修掉的形态：G 改稿之后内容哈希变了，而签名台账里那条钉的是旧版本 ——
     复审把状态置回 accepted，于是留下"状态 accepted + 签名钉旧版"，
     `verify_all` 报 `stale_signature`（"改稿之后旧审批不许沿用"）。
 
-    现在的口径：`verify_fixes` 只在"台账里有签名钉住**当前这一版**"时才置 accepted；
+    现在的口径：`verify_fixes` 只在"台账里有签名钉住当前这一版"时才置 accepted；
     否则置 `in_review` 并在 reason 里点名要重新 review。所以本用例分两步断言：
     ① 复审判 accepted、发现置 fixed、状态停在 in_review（本用例的主题没变）；
-    ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted **且签名钉在当前这一版**上。
+    ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted 且签名钉在当前这一版上。
     """
     agent = AgentH(h_store, config={"max_review_rounds": 3})
     finding = _seed_overclaim_and_review(agent, h_store)

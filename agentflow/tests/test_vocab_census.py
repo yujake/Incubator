@@ -42,7 +42,7 @@ def _fake_root(tmp_path: Path, *, producer_body: str = 'X = "produced"\n' * 60) 
     下限本身也有用例（见 `test_too_few_producers_is_unknown_not_clean`）。
 
     `claimanatomy.py` 也必须写出来：`draft/28` §168 的 `R-37` 把定义点从
-    "只有 `schema.py`" 扩成 `VOCAB_DEFINITION_FILES` 里那几个，**少一个就是"没查成"**
+    "只有 `schema.py`" 扩成 `VOCAB_DEFINITION_FILES` 里那几个，少一个就是"没查成"
     （那一格本身有负控）。它带一张自己的词表 `EXTRA_KINDS`，取值用 `produced`
     与产出模块对齐 —— 这样它不会给"哪些取值是死的"那几条断言添噪音。
     """

@@ -131,7 +131,7 @@ class BRunResult:
     #: `page_range_mismatch` 的 warning（见 `verify.verify_all`）。
     quotes_out_of_declared_range: int = 0
     unreadable: int = 0
-    #: `R-56`：有文件但**没有够格的抽取器**（框架的规则回退）⇒ 拒抽，不置 `processed`。
+    #: `R-56`：有文件但没有够格的抽取器（框架的规则回退）⇒ 拒抽，不置 `processed`。
     #: 单列一格而不并进 `unreadable`：文件读得到，缺的是"谁来读懂它"。
     skipped_no_extractor: int = 0
     failed: int = 0
@@ -213,19 +213,19 @@ class AgentB:
         self.store = store
         self.extractor = extractor
         self.extract_text = extract_text
-        # ---- `R-56`（`draft/28` §156）：**回退抽取器**必须拒抽。
+        # ---- `R-56`（`draft/28` §156）：回退抽取器必须拒抽。
         #
         # 判据刻意打在"抽取器是不是框架的规则回退"上，而不是"有没有接 LLM"：
-        # 单测与自检会**故意注入替身抽取器**来测流水线（那时不该拒），
+        # 单测与自检会故意注入替身抽取器来测流水线（那时不该拒），
         # 而真正灌碎片的是 `llm.RuleExtractor` 这个回退实现 —— 实测它把网页/PDF
         # 的碎片当成概念与关系（概念名 `ANU` / `tingled property` /
-        # `promote \tsm to this status)`），而引文回验**全真**（那句话确实在文件里）
+        # `promote \tsm to this status)`），而引文回验全真（那句话确实在文件里）
         # ⇒ 在表里看起来像"有逐字引文的证据"。引文回验只证明"这句话在文件里"，
         # 不证明"这是一个概念/关系"。
         #
         # 处置选"拒抽"而不是"标 suspect"：概念表没有可疑档（relations 有，
         # concepts 没有），而给概念图灌碎片是不可逆的污染（下游 C/D 都会读到）。
-        # 拒抽时**不置 `processed`**（与"抽取失败"同一口径），于是接线 LLM 之后
+        # 拒抽时不置 `processed`（与"抽取失败"同一口径），于是接线 LLM 之后
         # 那一轮还会重新领到这些行。
         self.extractor_is_fallback = self._is_fallback_extractor(extractor)
         self.cfg = config or {}
@@ -323,20 +323,20 @@ class AgentB:
     # ------------------------------------------------------------------ 主流程
     @staticmethod
     def _is_fallback_extractor(extractor: Any) -> bool:
-        """这个抽取器是不是框架的**回退**（`R-56`）？
+        """这个抽取器是不是框架的回退（`R-56`）？
 
-        ## 判据是**声明**，不是类名（`draft/28` §172 的更正）
+        ## 判据是声明，不是类名（`draft/28` §172 的更正）
 
         第一版按类名判（`type(extractor).__name__ == "RuleExtractor"`）。它有两个问题：
 
         1. 一个"改个名字的复制品"就能绕过它 —— 而绕过的人不需要撒谎，只需要重命名；
-        2. 更糟的是**误伤**：演示与单测**明确点名**要用离线基线（它们需要一个
+        2. 更糟的是误伤：演示与单测明确点名要用离线基线（它们需要一个
            确定性抽取器），却和"框架偷偷回退"被同一个判据一起挡住 ⇒
            `demo` 与 `tests/test_demo_end_to_end.py` 当场变红（§172 的读数）。
 
         现在读类属性 `is_framework_fallback`：
         `llm.RuleExtractor` 声明 `True`（它就是回退）；`llm.OfflineFixtureExtractor`
-        声明 `False`（同一个实现，但**调用方点名要它**）。没有这个属性的第三方抽取器
+        声明 `False`（同一个实现，但调用方点名要它）。没有这个属性的第三方抽取器
         一律按"调用方自己给的"处理（`getattr(..., False)`）。
 
         判据仍然不 import `llm`：不去拖 LLM 那一层的依赖进 B 的 import 图。
@@ -461,7 +461,7 @@ class AgentB:
                 row["claimed_by"] = None
                 row["lease_until"] = None
                 row["last_mine_error"] = "no_llm_extractor"
-                # 刻意**不**置 `processed`：接线 LLM 之后这一行还要被重新领到
+                # 刻意不置 `processed`：接线 LLM 之后这一行还要被重新领到
                 tx.upsert("literature", row, note="skipped_no_extractor")
             res.skipped_no_extractor += 1
             res.details.append({"lit_id": lit_id, "stage": "extract",

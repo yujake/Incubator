@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""规范 JSON 字节串 —— **唯一实现**（依据 `draft/28` §143.6 的 R-33）。
+"""规范 JSON 字节串 —— 唯一实现（依据 `draft/28` §143.6 的 R-33）。
 
 ## 这一层解决什么
 
@@ -9,25 +9,25 @@
 - `scripts/noai_gate.py`：批准台账回执的自身哈希（`_receipt_digest`，回执链就钉在它上面）。
 
 R-33 记的正是"两处各写一份"：口径只要差一个字符（分隔符、是否 `ensure_ascii`、
-键序），同一份内容就会算出两个哈希 —— 而那种偏差**不会报错**：两个地方各自自洽，
+键序），同一份内容就会算出两个哈希 —— 而那种偏差不会报错：两个地方各自自洽，
 只有跨过去比对（"这条回执钉的哈希对不对得上 `signatures` 算的那一版"）才会暴露。
 
-## 为什么门最终**没有**改成 import 本模块（第一版方案被负控推翻）
+## 为什么门最终没有改成 import 本模块（第一版方案被负控推翻）
 
 `R-33` 的第一版是"让门按文件路径加载本模块"，理由是"门必须能在本包 import 不了时也能跑"。
-它当场被负控推翻：`tests/test_noai_gate_record_audit_cli.py` 的两条负控把**门脚本单独复制**
+它当场被负控推翻：`tests/test_noai_gate_record_audit_cli.py` 的两条负控把门脚本单独复制
 到一个临时目录、注入一处缺陷，证明回执链核对会红 —— 而副本旁边没有本模块 ⇒ 门跑不起来、
-那两条判据无处安放。门要的是"**能被单独复制并在任何位置运行**"，比"不 import 本包"更强。
+那两条判据无处安放。门要的是"能被单独复制并在任何位置运行"，比"不 import 本包"更强。
 
-所以最终口径是：**包里这一份是唯一的实现（`signatures` 用它）；门保留自己的字节，
-并由 `noai_gate.py --check-canonical` 把两者钉在一起**（同一载荷两侧哈希必须逐字相等，
+所以最终口径是：包里这一份是唯一的实现（`signatures` 用它）；门保留自己的字节，
+并由 `noai_gate.py --check-canonical` 把两者钉在一起（同一载荷两侧哈希必须逐字相等，
 否则 `divergent(1)`）。真正被禁掉的是"没人看着的第二份口径"，不是第二份字节。
 
 ## 为什么单开一个模块，而不是放进 `signatures`
 
-`scripts/noai_gate.py` 是**门**，它有一条硬约束（见该文件与 `vocab_census` 的同类注释）：
-**必须在本包 import 不了时也能跑** —— 门不能依赖被它审计的那棵树的 import 图。
-所以它不能 `import agentflow.signatures`；它按**文件路径**加载本模块
+`scripts/noai_gate.py` 是门，它有一条硬约束（见该文件与 `vocab_census` 的同类注释）：
+必须在本包 import 不了时也能跑 —— 门不能依赖被它审计的那棵树的 import 图。
+所以它不能 `import agentflow.signatures`；它按文件路径加载本模块
 （纯标准库、无包内依赖），从而"同一份实现"与"门可独立运行"两件事同时成立。
 
 ## 口径（改动它 = 改动所有已落盘的哈希）
@@ -38,7 +38,7 @@ json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
 `sort_keys` 让键序不参与哈希；`ensure_ascii=False` 让中文原样进字节（本仓的台账与
 稿件里大量中文，转义与否必须定死一处）；`separators` 去掉所有可省的空白。
-**这三项一个都不能改**：改了就等于说"盘上所有历史哈希都不再成立"。
+这三项一个都不能改：改了就等于说"盘上所有历史哈希都不再成立"。
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ def selftest() -> int:
 
     text = canonical_json_text(PROBE_PAYLOAD)
     check("键排序生效", text.startswith('{"a":'), text[:40])
-    # 只查**分隔符后**没有空白：探针的取值里就有空格（"中文与 ASCII 混排"），
+    # 只查分隔符后没有空白：探针的取值里就有空格（"中文与 ASCII 混排"），
     # 第一版写成 `" " not in text` ⇒ 把取值里的空格当成了格式问题（夹具不干净）。
     check("分隔符后无多余空白", ", " not in text and ": " not in text and "\n" not in text, text)
     check("中文未转义", "中文" in text, text[:60])

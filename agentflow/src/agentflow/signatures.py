@@ -54,7 +54,7 @@ def _canonical_bytes(row: Mapping[str, Any]) -> bytes:
     列表字段用 `row.get(k) or []` 归一：缺键、`None`、空列表三者在内容上
     是同一件事（"这篇稿子没有那一节"），不许因为写法不同而算出两个哈希。
 
-    "规范字节串"的**口径**只有一处实现（`agentflow.canonical`，`R-33`）：
+    "规范字节串"的口径只有一处实现（`agentflow.canonical`，`R-33`）：
     本函数只负责"哪些字段进哈希 + 列表字段怎么归一"，
     序列化参数由那边定死（门 `scripts/noai_gate.py` 用的是同一份实现，
     它按文件路径加载，不 import 本包）。
@@ -120,7 +120,7 @@ SIGNER_NAME = "agent-H"
 #: 所以接受档是这两个 —— 不把 warning 当拒绝（那会把"已知边界"变成"不许发布"）。
 ACCEPTING_VERDICTS: tuple[str, ...] = ("accepted", "accepted_with_warnings")
 
-#: 只有这个**稿件状态**才谈"该被签"（`signature_problems` 的判据面）。
+#: 只有这个稿件状态才谈"该被签"（`signature_problems` 的判据面）。
 #:
 #: 为什么单列一个常量：`verify.verify_all` 的覆盖读数要说清"签名这件事查了几行"，
 #: 而那几行正是"状态为这个值的稿件"。若两处各写一份字面量，它们会分叉 ——
@@ -256,7 +256,7 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
 
     ## 判据是"至少一条签名完全成立"，不是"第一条签名成立"
 
-    同一版内容被签多次是**正常状态**（H 重审一轮就再签一条；改稿后旧签名作废、
+    同一版内容被签多次是正常状态（H 重审一轮就再签一条；改稿后旧签名作废、
     新签名钉新版）。所以判据必须是"存在一条有效的"，而不是"台账里第一条有效" ——
     后者会让一条历史记录的失效把整份稿件判成"没签"。实测（2026-09-29）：
     同一版内容签了两条，其中一条的证据快照被后一条覆盖（当时快照路径只含内容哈希），
@@ -264,7 +264,7 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
     "至少一条签名完全成立"。快照路径的重名问题已在 `append_signature` 里修掉，
     这里修的是判据本身的语义。
 
-    一条都不成立时，返回**第一条**的具体判据码与证据（人要知道是哪种失效）。
+    一条都不成立时，返回第一条的具体判据码与证据（人要知道是哪种失效）。
     """
     if str(doc_row.get("status") or "") != SIGNABLE_STATUS:
         return []
@@ -307,20 +307,20 @@ def formal(doc_row: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
 
 def signed_revision(doc_row: Mapping[str, Any],
                     records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
-    """**钉在当前这一版内容上**的签名记录（找到第一条就返回它）；没有 ⇒ `None`。
+    """钉在当前这一版内容上的签名记录（找到第一条就返回它）；没有 ⇒ `None`。
 
     ## 与 :func:`signed` 的分工（两者不可互换）
 
     `signed(doc)` 答的是"这份稿件在签名这件事上有没有问题"，而它对
-    **非 `accepted` 状态**的稿件一律返回真（草稿本来就不该被签 ⇒ 没有问题是正常的）。
-    所以它回答不了另一个问题：**"现在盘上这一版内容，有没有一条签名针对它"**。
+ 非 `accepted` 状态的稿件一律返回真（草稿本来就不该被签 ⇒ 没有问题是正常的）。
+    所以它回答不了另一个问题："现在盘上这一版内容，有没有一条签名针对它"。
 
     那个问题在 `R-59`（`draft/28` §161.4）里是决定性的：`verify_fixes` 复审通过时想把
     状态置回 `accepted`，而"改过稿之后旧审批不许沿用"（`draft/29` §8.8.4）要求
-    `accepted` 必须由**针对这一版**的审+签背书。用 `signed()` 去判会得到"真"
+    `accepted` 必须由针对这一版的审+签背书。用 `signed()` 去判会得到"真"
     （因为状态那一刻还是 `revised`）⇒ 于是置了 `accepted`、签名却还钉着旧版本 ⇒
-    `stale_signature`。本函数的判据是逐字的：**台账里存在一条 `content_sha256`
-    等于当前内容哈希的记录**。
+    `stale_signature`。本函数的判据是逐字的：台账里存在一条 `content_sha256`
+    等于当前内容哈希的记录。
     """
     cur = content_sha256_of(doc_row)
     for r in records:
@@ -355,7 +355,7 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
     doc_id = str(record["doc_id"])
     content = str(record["content_sha256"])
     records, _problems = read_ledger(ledger_path(base))
-    # 快照文件名必须**逐条唯一**：同一版内容被签多次是正常状态（H 重审一轮就再签一条），
+    # 快照文件名必须逐条唯一：同一版内容被签多次是正常状态（H 重审一轮就再签一条），
     # 若文件名只含内容哈希，后一条会把前一条的快照覆盖掉 ⇒ 前一条的 `evidence_sha256`
     # 从此对不上 ⇒ 那条签名永久失效。实测（2026-09-29，P7 重签台账）：正是这样把
     # `formal(doc)` 变成假的，而错在"快照被覆盖"这件与内容无关的事上。

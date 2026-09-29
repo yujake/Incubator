@@ -850,7 +850,7 @@ def cmd_artifacts(args) -> int:
     三态（与全仓同一条纪律）：0 = 查过、都对得上；1 = 查过了、有变了的产物；
     2 = 没查成（路径不给 / 越界 / 文件不存在 / 核对里有读不出来的）。
 
-    `record` 是**唯一写**的动作，而且**先核文件后写台账** —— 一条钉不住内容的登记
+    `record` 是唯一写的动作，而且先核文件后写台账 —— 一条钉不住内容的登记
     不是弱证据，是假证据（见 `agentflow.artifacts` 的模块 docstring）。
     """
     from . import artifacts as A

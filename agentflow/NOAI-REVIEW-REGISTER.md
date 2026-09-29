@@ -787,3 +787,56 @@ $ python scripts/noai_gate.py --check-consistency
 2. `approved 13` 那 13 条是**更早几轮**人走过的（`tools/release_all.py` 等），
    **不是这一轮的**。这一轮 7 条全部 `reviewers=0`。
 
+---
+
+## 9. 2026-09-29 第二批（`draft/28` §175–§176）—— 同样**新开一节**，上面任何旧数字都不动
+
+> 按 §7 的维护规则办：日期 + 复跑命令 + 当次读数。
+
+**这一批的性质**：与前一批同族（AI 代写 + `--baseline` 只登记），但**这一批有明确的人授权**：
+用户逐字授权改 `store.py`（"把 `store.py` 和其它一些改好，这轮我授权你改，当然改后必须仔细测试"）。
+**授权改变的是"谁许可"，不改变 FC-27 的要求** —— 仍然必须由人逐行走查 +
+2 名 reviewer；`--baseline` 只登记，`reviewers` 一律 0。
+
+| # | 路径 | 类别 | 这一批改了什么（走查要点） | 台账（当次） |
+|---:|---|---|---|---|
+| 1 | `src/agentflow/store.py` | `schema-migration` | ① `Tx.delete`：新写方法，追加 `op="delete"` 事件（带**被删的整行** + `key`），返回被删行 / `None`；② `Tx._record` 加 `op=`/`extra=`（**事件长什么样只在这一处定义**，`upsert` 事件逐字节不变）；③ `rebuild()` 重放 delete（只按 `key`、不校验 `row`）+ 两个新读数 `deletes_replayed` / `unknown_ops` + 组行 `dict.fromkeys` 去重；④ `Store.init` 的 `R-32` fail-closed 守卫（白名单 `_WORKSPACE_ROOT_ENTRIES`） | `--baseline` 登记（最终版 `sha256 a6216da888d5…`），`reviewers=0` |
+| 2 | `src/agentflow/tools/table_tools.py` | （**不在清单内**） | `table_delete` 改走 `tx.delete`（原来就地改 `tx.rows`）；删掉 `_mark_dirty` helper；"删到 `None`"那一格改成响亮失败 | 无需登记 |
+
+**走查要点**（读数与正控/负控全在 `draft/28` §176）：
+
+1. `Tx.delete` 的三个取舍：整行入日志（审计面）/ 重放只按 `key`（历史行可能不符合当前 schema）/
+   `deletes_replayed` 与 `applied` 分开报（否则"重建后比删之前多"这件事又被盖住）。
+2. `Store.init` 判据的**宽窄两侧都实测过一次**：窄的反面是事故 B（人的文件夹被补出整套 `data/`），
+   宽的反面是我第一版的**误拦**（工作区根里有 `projects/` 被拒，`tests/test_conductor_tools.py` 当场变红）。
+   这类判据改一个词就是"数据毁灭"与"功能报废"之间的选择，请逐字读 §176.3。
+3. `rebuild()` 的兼容方向：新代码读旧日志 OK（没有 `key` 就从 `row` 取，再取不到 `skipped += 1`）；
+   旧代码读新日志会把 `op="delete"` 当"读不懂的 op"**静默跳过** ⇒ 删除复活（§176.8 第 4 条）。
+
+**当次读数**：
+
+```text
+$ python -c "import json;d=json.load(open('.noai-approvals.json',encoding='utf-8'));print('\n'.join(e['path'] for e in d['entries']))" `
+  | python scripts/noai_gate.py --stdin --check-approvals
+requires_human：命中 23 条禁改区路径，其中 **10 条未获批准**
+  （approved 13 条、insufficient_reviewers 9 条、ledger_self_approval 1 条）  EXIT=1
+
+$ python scripts/noai_gate.py --git
+requires_human：2 条改动落在禁改区（agentflow/.noai-approvals.json、agentflow/src/agentflow/store.py）  EXIT=1
+
+$ python scripts/noai_gate.py --check-canonical
+[canonical] consistent：同一份口径：同一载荷的哈希逐字相等（门侧 …aa5785ee52ba3e46）  EXIT=0
+
+$ python scripts/noai_gate.py --check-consistency
+一致：.noai-paths 与 AGENTS.md 的清单逐条相同  EXIT=0
+```
+
+**两条"别误读"的话**（都踩过）：
+
+1. `--git` 那 2 条里有一条是**台账自己** —— 因为 `--baseline` 刚写过它。
+   它的理由码永远是 `ledger_self_approval`（台账不能批准自己），与 hash 是否一致、
+   `reviewers` 有几个**都无关**；这不表示"这一批动了台账本体"。
+2. `store.py` 那一条是 `insufficient_reviewers`，**不是** `hash_mismatch` ——
+   台账里的哈希与盘上内容**一致**（我改完误拦之后重新登记过一次）。
+   "已登记"不等于"有人看过"：`reviewers=0` 意味着**一次逐行走查都还没有发生**。
+

@@ -313,17 +313,6 @@ def _allocate_id(tx: Tx, table: str) -> str:
                             prefix=S.PROCESS_ID_PREFIXES[kind], table=table)
 
 
-def _mark_dirty(tx: Tx, table: str) -> None:
-    """声明"这张表要写回"。
-
-    `Tx` 的 docstring 说"用 `tx.mark_dirty(t)` 声明要写回"，但类里并没有这个方法
-    （只有 `upsert` 会顺带置位）。而删除既不能 upsert 也不能不置位，所以这里退一步
-    直接操作 dirty 集合。`Tx.rows()` 返回的就是内部那个 list，因此原地改它就等于改快照。
-    若将来 `store.py` 补上公开方法，只需改这一处。
-    """
-    tx._dirty.add(table)  # noqa: SLF001 —— 见上面说明，这是当前唯一可行的写法
-
-
 # ---------------------------------------------------------------- 外键检查
 #: 删除某张表的行之前，必须查清"谁在引用它"。
 #: 格式：被删表 -> ((引用表, 引用字段, 引用表的主键字段), ...)
@@ -761,9 +750,29 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
                     references=refs,
                     kind="referenced",
                 )
-            rows = tx.rows(table)
-            rows[:] = [r for r in rows if r.get(idf) != id]
-            _mark_dirty(tx, table)
+            # `R-57`（`draft/28` §173 登记、§176 修）：必须走 `tx.delete`，不许就地改
+            # `tx.rows(table)`。就地改的形态是"快照变了、事件流里没有痕迹" ⇒ `rebuild()`
+            # 之后这一行复活，而返回的每个计数都"正常"（没有任何读数会告诉读的人
+            # "恢复出来的数据比删之前多"）。
+            # `tx.delete` 会追加一条 `op="delete"` 事件（含被删的整行，供审计）、
+            # 在重建时被重放、并且自己把这张表标脏 —— 所以这里不再需要
+            # §173 那会儿用来绕过 `mark_dirty` 缺失的 `_mark_dirty` helper
+            # （那个 helper 与它的 `noqa: SLF001` 已随本次修法一起删除）。
+            removed = tx.delete(table, id)
+            if removed is None:
+                # 走不到：上面 `tx.find(table, **{idf: id})` 已经找到过它，而 `tx.delete`
+                # 用的是同一个比较（`r.get(idf) == key`）与同一份内存行。
+                # 之所以留着这一格并让它响亮地失败（而不是返回 `ok(False, deleted=False)`）：
+                # ① 三态纪律 —— "没删到"与"删的时候发现库里对不上"是两件事，后者不该折成
+                #    "工具跑完了、什么都没删"；
+                # ② `tests/test_tools_branch_key_sets.py` 把每个模块里看不清的 `ok(...)`
+                #    调用点数钉在表里（`data` 不是字面量 dict 的那种就算看不清），
+                #    而这里返回的是 bool 标量、静态读不出键 ⇒ 多一处就得多改一次那张表；
+                #    走 `fail` 那条路（`except StoreError` 已经在下面）不占那一栏。
+                raise StoreError(
+                    f"{table} {id} 在本次事务里刚刚还在，删除却没命中 —— "
+                    "内存行与主键比较出现了不一致，请先 `verify` 再继续（本次事务已放弃）"
+                )
     except StoreError as e:
         return fail(f"{table} 删除失败：{e}", table=table, id=id, kind="store_error")
     return ok(True, table=table, id=id, found=True, deleted=True, references=refs)

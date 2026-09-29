@@ -1,28 +1,28 @@
 # -*- coding: utf-8 -*-
-"""产物登记：**谁在哪个路径产出了什么**（依据 `draft/28` §153 的 A3/A4 与 R-52）。
+"""产物登记：谁在哪个路径产出了什么（依据 `draft/28` §153 的 A3/A4 与 R-52）。
 
 ## 这一层补的是什么
 
 `tasks.artifacts` 记的是"这次召唤产出了哪些引用"（`table:id` 或 `file:<相对路径>`），
-`documents.markdown_path` 记的是"G 渲染的那一份稿件"。两者都只回答**单个对象自己的**
+`documents.markdown_path` 记的是"G 渲染的那一份稿件"。两者都只回答单个对象自己的
 产出面。没有任何地方回答那个在 §153 里连撞两次的问题：
 
-- **A3**（两份"断言台账"同义不同物）：`out/p2-claims-ledger.md` 与
+- A3（两份"断言台账"同义不同物）：`out/p2-claims-ledger.md` 与
   `out/paper/CLAIMS-LEDGER.md` 并存，而"这个路径归谁"没有登记 —— 于是谁都无法在
   事前判断"我要写的这个路径是不是另一个角色的产物"。
-- **A4**（六个产生验收读数的脚本不在可审计对象图里）：`code/*.py` 既非 `experiments`
-  行也非 `documents` 行 ⇒ 它们**不在任何对象图里**，产出的读数也就没有可核的来源。
-- **R-52**：没有"构建产物"这个对象类型 ⇒ 产出物无法进图；且产物路径没有归属登记。
+- A4（六个产生验收读数的脚本不在可审计对象图里）：`code/*.py` 既非 `experiments`
+  行也非 `documents` 行 ⇒ 它们不在任何对象图里，产出的读数也就没有可核的来源。
+- R-52：没有"构建产物"这个对象类型 ⇒ 产出物无法进图；且产物路径没有归属登记。
 
 本模块不去改 `schema.py`（那是 FC-27 禁改区，且"新表"要人裁），而是把这件事做成
-**工作区级文件台账**（与 `signatures` 的 `DOC-SIGNATURES.jsonl`、`sessions` 的
+工作区级文件台账（与 `signatures` 的 `DOC-SIGNATURES.jsonl`、`sessions` 的
 `sessions/*.jsonl` 同一形态）：`<工作区根>/ARTIFACTS.jsonl`，一行一条。
 
 ## 一条记录里有什么
 
 ```text
 at         产出时刻（ISO，本地时区）
-path       工作区**相对**路径（posix 分隔符；绝对路径与越界路径一律拒收）
+path       工作区相对路径（posix 分隔符；绝对路径与越界路径一律拒收）
 sha256     产出时磁盘内容的 sha256（字节级，不做归一化）
 bytes      字节数
 producer   生产者（角色名 / 工具名 / "M"）
@@ -34,18 +34,18 @@ note       人读的补充（可空）
 
 ## 三态（不许折平）
 
-- **文件找不到** ⇒ `record` **拒收**（fail-closed）。理由：一条"钉不住内容"的登记
-  不是弱证据，是**假证据** —— 它让"这个路径有归属"这件事看起来成立。
-- **路径越出工作区** ⇒ 拒收。理由与 `agent_e._resolve` 的 `script_path` 闸相同：
+- 文件找不到 ⇒ `record` 拒收（fail-closed）。理由：一条"钉不住内容"的登记
+  不是弱证据，是假证据 —— 它让"这个路径有归属"这件事看起来成立。
+- 路径越出工作区 ⇒ 拒收。理由与 `agent_e._resolve` 的 `script_path` 闸相同：
   越界写/读不留痕是框架层的红线。
-- **台账里的 sha256 与盘上不一致** ⇒ `verify_entries` 报 `changed`（**不是** ok）；
-  **读不出来**报 `unreadable`（**不是** missing）；**不在了**报 `missing`。
+- 台账里的 sha256 与盘上不一致 ⇒ `verify_entries` 报 `changed`（不是 ok）；
+  读不出来报 `unreadable`（不是 missing）；不在了报 `missing`。
   三种状态各有各的处置，合成一个"有问题"就没人知道该干什么。
 
 ## 它不是判据的执行者
 
 本模块只登记与核对；"这个产物该不该存在""这份读数可不可信"由各自的判据回答。
-`unowned()` 是唯一的**判断**：给一组路径，答"哪些**没有**归属登记" —— A4 那六个
+`unowned()` 是唯一的判断：给一组路径，答"哪些没有归属登记" —— A4 那六个
 脚本正是靠它才看得见。
 """
 
@@ -86,7 +86,7 @@ def _now() -> str:
 def rel_path(root: Any, path: Any) -> str:
     """把 `path` 归一成工作区相对路径（posix 分隔符）；越界则抛 `ArtifactError`。
 
-    为什么要归一：台账是**给人比对**的（"这个路径归谁"），绝对路径会随工作区搬家
+    为什么要归一：台账是给人比对的（"这个路径归谁"），绝对路径会随工作区搬家
     而失效，`\\` 与 `/` 混写会让同一个文件看起来是两条记录。
     """
     root_p = pathlib.Path(str(root)).resolve()
@@ -125,7 +125,7 @@ def record(
 ) -> dict:
     """登记一条产物；返回写进去的那条记录。
 
-    **先核文件再写台账**：文件不存在 / 不是普通文件 ⇒ `ArtifactError`，一个字节都不写。
+    先核文件再写台账：文件不存在 / 不是普通文件 ⇒ `ArtifactError`，一个字节都不写。
     （"先记账、后产出"的顺序会让台账成为一份愿望清单 —— 而它唯一的用途是核对。）
     """
     if not str(producer).strip():
@@ -186,7 +186,7 @@ def verify_entries(root: Any, records: Sequence[Mapping[str, Any]] | None = None
     """逐条核对：台账钉的 sha256 与盘上现在这一版是不是同一版。
 
     返回每条的 `{path, status, sha256, sha256_now, producer, at, note}`；
-    `status` 取 :data:`STATUSES` 之一（**没有布尔**：`missing` 与 `unreadable` 与
+    `status` 取 :data:`STATUSES` 之一（没有布尔：`missing` 与 `unreadable` 与
     `changed` 是三种不同的处置）。
     """
     if records is None:
@@ -214,10 +214,10 @@ def verify_entries(root: Any, records: Sequence[Mapping[str, Any]] | None = None
 
 
 def owners_of(root: Any, path: Any) -> list[dict]:
-    """这个路径在台账里的**全部**归属记录（按时间序）。空列表 = 没有归属登记。
+    """这个路径在台账里的全部归属记录（按时间序）。空列表 = 没有归属登记。
 
     为什么返回全部而不是最后一条：同一个路径被两个生产者登记过（A3 那两份台账
-    就是这种形态）本身就是一条**发现**，只给最后一条会把它抹掉。
+    就是这种形态）本身就是一条发现，只给最后一条会把它抹掉。
     """
     rel = rel_path(root, path)
     records, _bad = read_ledger(root)
@@ -225,9 +225,9 @@ def owners_of(root: Any, path: Any) -> list[dict]:
 
 
 def unowned(root: Any, paths: Iterable[Any]) -> list[str]:
-    """给定的路径里，**没有**归属登记的（工作区相对路径，排序）。
+    """给定的路径里，没有归属登记的（工作区相对路径，排序）。
 
-    这是本模块唯一的**判断**：A4 那六个脚本（`code/*.py`，既非 `experiments` 行
+    这是本模块唯一的判断：A4 那六个脚本（`code/*.py`，既非 `experiments` 行
     也非 `documents` 行）正是靠它才看得见 —— "不在可审计对象图里"这句话，
     在没有这条判据之前只能靠人肉比对。
     """
@@ -275,7 +275,7 @@ def render_markdown(root: Any, entries: Sequence[Mapping[str, Any]] | None = Non
     """把台账渲染成一份可进包的表（A4 那六个脚本要的就是这一份）。
 
     逐条给：路径 / 生产者 / 类别 / 召唤号 / 退出码 / 字节 / sha256（前 16 位）/
-    现在的状态。状态列**不许省**：一份只列 sha256 的表会让读者以为"列出来就是对的"。
+    现在的状态。状态列不许省：一份只列 sha256 的表会让读者以为"列出来就是对的"。
     """
     if entries is None:
         entries = read_ledger(root)[0]

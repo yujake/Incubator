@@ -1188,24 +1188,24 @@ class AgentF:
         budget = dict(row.get("budget") or {})
         rounds = int(row.get("rounds") or 0)
         tail_n = int(self.cfg.get("history_tail", 5))
-        # ---- `R-53`（`draft/28` §158）：查出**陈话卡点**。
+        # ---- `R-53`（`draft/28` §158）：查出陈话卡点。
         #
-        # F 的推进是**拉取式**的：子目标在 A 的回答落地后要**再派一次 `F.step`** 才推进。
+        # F 的推进是拉取式的：子目标在 A 的回答落地后要再派一次 `F.step` 才推进。
         # M 一停手，子目标就永久停在 `in_flight`，而 `blocked_reason` 还写着
         # "等 A 完成检索请求 r-0019" —— 实测那两个请求早已 `done/ok`（§154 的 A5）。
-        # 这里在**只读视图**里对当前状态重算一次：请求已终结 ⇒ 把这句"等"标成**已过期**，
+        # 这里在只读视图里对当前状态重算一次：请求已终结 ⇒ 把这句"等"标成已过期，
         # 并逐条列进 `stale_blocked`（不隐藏、也不改写盘上那一行 —— 历史不改写）。
-        # ---- `R-61`（`draft/28` §163）：陈话还得分**新旧** —— 只读地从 `history` 反推
+        # ---- `R-61`（`draft/28` §163）：陈话还得分新旧 —— 只读地从 `history` 反推
         #
         # `stale_blocked` 原来只答"是不是陈话"，不答"陈了多久"，于是读者分不出
-        # "我刚停手 1 分钟"与"这个卡点停了 3 天" —— 而在**拉取式**推进下，"停了多久"
+        # "我刚停手 1 分钟"与"这个卡点停了 3 天" —— 而在拉取式推进下，"停了多久"
         # 恰恰是唯一能用来排队的量。
         #
-        # 前置查证（`temp/_r61_recon.py`，只读 p2-review）：`history` 的条目里**记了 `sid`**
+        # 前置查证（`temp/_r61_recon.py`，只读 p2-review）：`history` 的条目里记了 `sid`
         # （键并集 = `action/at/detail/evidence/outcome/round/sid`）⇒ 这条只读路成立，
-        # **不必**给子目标加 `last_pushed_at`（那是 schema 变更，属禁改区）。
+        # 不必给子目标加 `last_pushed_at`（那是 schema 变更，属禁改区）。
         # 取"该 sid 的最后一次触碰"：按 `at` 最大，`at` 缺省时退回最大 `round`；
-        # 一条都没有 ⇒ 如实留空（**不编**一个时间出来）。
+        # 一条都没有 ⇒ 如实留空（不编一个时间出来）。
         last_touch: dict[str, dict] = {}
         for entry in (row.get("history") or []):
             sid = str(entry.get("sid") or "")
@@ -1227,14 +1227,14 @@ class AgentF:
             ids = sorted(set(re.findall(r"\br-\d{4}\b", reason)))
             if not ids:
                 continue
-            # 判据是"**已终结**"，不是"成功了"：`search_failed` / `gave_up` 同样意味着
+            # 判据是"已终结"，不是"成功了"：`search_failed` / `gave_up` 同样意味着
             # "等 A 完成"这句话已经过期（A 完成了，只是失败）—— 那更该露出来。
             # 取值域直接读 `S.SEARCH_OUTCOMES`，不另抄一份（抄一份就会与 schema 漂移）。
             ended = [i for i in ids if req_state.get(i, "") in S.SEARCH_OUTCOMES]
             if ended and len(ended) == len(ids):
                 s["blocked_stale"] = True
                 touch = last_touch.get(str(s.get("sid") or ""))
-                # `R-61`：把"最后一次被触碰"也放进**只读视图**（不改盘上那一行）
+                # `R-61`：把"最后一次被触碰"也放进只读视图（不改盘上那一行）
                 s["last_touched_at"] = str((touch or {}).get("at") or "")
                 s["last_touched_round"] = (touch or {}).get("round")
                 hint = (

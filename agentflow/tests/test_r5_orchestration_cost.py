@@ -1156,6 +1156,7 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_lease_expired",             # 行内键（`interactions.py` 用 r.get("_lease_expired") 读）
     "_conflict_check",            # "没检查"相关字段名（同族叙述）
     "_tables_written_by_action",  # 已删函数的残骸讨论（`capabilities.py` 的记录）
+    "_mark_dirty",                # 已删 helper 的残骸讨论（`draft/28` §176 删除；`table_tools.py` 的注释在解释它为什么没了）
     "_target_text",               # 负控叙述里被删掉的字段名
     "_diag",                      # 举例用的"谁都不认识的键"
     "_plan",                      # 早期散文写法（今天真名是 `_plan_mode`）

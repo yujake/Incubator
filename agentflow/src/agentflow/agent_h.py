@@ -674,14 +674,14 @@ def _selftest() -> int:
     # ---- `R-59`（`draft/28` §161.4 的口径 ②）之后的期望值。
     #
     # 本自检原来断言 `b2["status"] == "accepted"` —— 那正是被修掉的那个形态：
-    # G 改稿之后内容哈希变了，而签名还钉着**旧版本**，复审却把状态置回 accepted
+    # G 改稿之后内容哈希变了，而签名还钉着旧版本，复审却把状态置回 accepted
     # ⇒ `verify_all` 报 `stale_signature`（"改稿之后旧审批不许沿用"）。
-    # 现在 `verify_fixes` 只在"台账里有签名钉住**当前这一版**"时才置 accepted；
+    # 现在 `verify_fixes` 只在"台账里有签名钉住当前这一版"时才置 accepted；
     # 否则置 `in_review` 并在 reason 里点名要重新 review。
     #
     # 所以这一步拆成两条更强的断言：
     #   ① 复审判 accepted（判断本身没变），但状态停在 `in_review` 且理由写明；
-    #   ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted **且签名钉在这一版**上。
+    #   ② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted 且签名钉在这一版上。
     # ② 此前没有任何地方验过，而它恰是"接受 = 有一次针对这一版的审+签"的机器判据。
     if b2["verdict"] != "accepted" or b2["status"] != "in_review":
         print("    ❌ 修好后应判 accepted、状态停在 in_review（等一次针对这一版的审+签）")

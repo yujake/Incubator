@@ -3,13 +3,13 @@
 这一组回答四件事（每条都要正控 + 注入负控，与全仓同一条纪律）：
 
 1. 登记 → 核对 → 归属：一个真文件登记之后 `verify_entries` 报 `ok`、`owners_of` 给出生产者；
-2. 注入负控两种形态：**篡改**必须报 `changed`、**删除**必须报 `missing` ——
+2. 注入负控两种形态：篡改必须报 `changed`、删除必须报 `missing` ——
    两者不许折成同一个状态，更不许折成 `ok`；
-3. fail-closed：不存在的文件、越界路径 ⇒ 拒收，且台账**一个字节都不许多**；
+3. fail-closed：不存在的文件、越界路径 ⇒ 拒收，且台账一个字节都不许多；
 4. 坏行与"没登记"必须与"干净"分开：坏行逐条报出，`unowned` 认得出没有归属的路径。
 
-⚠️ 本文件与 `temp/_r52_probe.py` 是同一批判据的两种落点（探针给读数、本文件给回归）。
-**它们本轮都没有被跑过**（所有者指定不跑门测试）：`tests/` 下所有用例的状态是
+ 本文件与 `temp/_r52_probe.py` 是同一批判据的两种落点（探针给读数、本文件给回归）。
+它们本轮都没有被跑过（所有者指定不跑门测试）：`tests/` 下所有用例的状态是
 "写下了、未执行"，放开跑门时必须真跑。
 """
 
@@ -43,7 +43,7 @@ def test_record_then_verify_ok_and_owner_is_known(tmp_path: pathlib.Path):
 
 
 def test_tampered_file_reports_changed_not_ok(tmp_path: pathlib.Path):
-    """注入负控①：文件被改过 ⇒ `changed`（**不是** ok）。"""
+    """注入负控①：文件被改过 ⇒ `changed`（不是 ok）。"""
     f = _file(tmp_path, "out/a.json", "第一版")
     A.record(tmp_path, path="out/a.json", producer="E")
     f.write_text("第二版", encoding="utf-8")

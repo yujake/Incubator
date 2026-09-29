@@ -336,7 +336,7 @@ class AgentA:
             base["error"] = "download_disabled"
             return base
         url = getattr(cand, "pdf_url", None)
-        # ---- `R-45`（`draft/28` §154）：把**试过哪个 URL**记进下载记录。
+        # ---- `R-45`（`draft/28` §154）：把试过哪个 URL记进下载记录。
         # 审计时撞到的真问题：6 条"ok 其实是 HTML"的行，台账里查不到它们下载的是哪个 URL
         # （URL 只活在当次 provider 候选里），于是"为什么拿到 HTML"只能靠猜。
         # 记 URL 与来源（`pdf_url_source`，OpenAlex 侧还会带 `|landing_same_as_pdf` 标记）之后，
@@ -376,9 +376,9 @@ class AgentA:
             "error": err,
             "_staged_path": getattr(res, "path", None),
         }
-        # ⚠️ `R-45` 的字段必须**也**出现在这条成功分支上。它原来只在
+        # `R-45` 的字段必须也出现在这条成功分支上。它原来只在
         # `no_pdf_url`/`no_downloader`/异常那几条早退分支里（那是我第一次改的时候
-        # 只补了容易看见的几处）⇒ 结果最需要它们的**成功**记录里反而没有 URL。
+        # 只补了容易看见的几处）⇒ 结果最需要它们的成功记录里反而没有 URL。
         # 实测代价：A2 重下六条之后，行上的 `download.url` 全为 `null`，
         # "这一条到底下的是哪个 URL"又变成不可查（正是 R-45 要解决的病）。
         out["url"] = url
@@ -533,11 +533,11 @@ class AgentA:
 
                     lit_id = tx.alloc_id("lit")
 
-                    # ⚠️ 这里**刻意不**建 `<library>/<lit_id>/` 目录（`draft/28` §154 的 R-49）。
+                    # 这里刻意不建 `<library>/<lit_id>/` 目录（`draft/28` §154 的 R-49）。
                     # 以前这一处无条件 `mkdir`，于是"下载被跳过（没有 PDF URL）"或
                     # "下载失败"的行也会留下一个空目录：实测 98 行里留下 60 个空目录，
                     # 目录树看起来有 98 篇文献，实际只有 38 个文件。
-                    # 建目录的唯一责任人现在是 `_attach_staged` —— 它只在**真的有字节要搬**
+                    # 建目录的唯一责任人现在是 `_attach_staged` —— 它只在真的有字节要搬
                     # 时才建（同文件 389-390 那一处），判据因此只有一份。
                     dl = entry.get("download") or {}
                     rel_path, dl_clean = self._attach_staged(lit_id, dict(dl))

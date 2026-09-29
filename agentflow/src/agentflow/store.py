@@ -122,6 +122,30 @@ def make_lease(seconds: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).replace(microsecond=0).isoformat()
 
 
+#: 事件流里**不参与重放、也不是"读不懂"**的那几种 `op`（`R-57` 把这条清单显式化）。
+#: `rebuild()` 只重放 `upsert` 与 `delete`；下面这些是记账/边界用的：
+#:   - `commit`：批次提交标记（重放的分批依据）；
+#:   - `info`：只记日志、不改状态；
+#:   - `corrupt`：`read_events` 给坏行放的占位（半行 JSON 等）。
+#: 不在这个集合里、又不是 `upsert`/`delete` 的 `op` ⇒ 进 `rebuild()` 的 `unknown_ops`
+#: （**必须被看见**：静默忽略一个不认识的 op，等于"日志里有读不懂的东西"没有任何读数）。
+_KNOWN_NON_REPLAY_OPS: frozenset[str] = frozenset({"commit", "info", "corrupt"})
+
+#: 工作区**根目录**上属于本框架的条目（`R-32` 的守卫只看"有没有不属于我们的东西"）。
+#:
+#: 为什么 `projects/` 必须在这里：项目文件夹就住在工作区根下面
+#: （`projects.projects_dir`），所以"根目录里有个 `projects/`"是**正常部署**的样子，
+#: 而不是"别人的目录"。第一版判据漏了它，`tests/test_conductor_tools.py` 里那个
+#: 先建 `projects/<名字>/`、再对根 `init()` 的布局被误拦（`draft/28` §176 记了这次误拦）。
+#: `.agentflow-workspace` 是 `projects.classify` 认的工作区标记，与"有 `data/`"同义。
+#:
+#: 这张表刻意只列**本框架自己会在根上放**的东西：多列一项 = 少拦一种外来目录，
+#: 少列一项 = 多拦一种正常布局。两种代价都实测过一次，所以它是逐条登记的。
+_WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
+    {"data", "library", "projects", ".agentflow-workspace"}
+)
+
+
 class Tx:
     """一次事务。通过 `tx.rows(t)` 拿行、`tx.mark_dirty(t)` 声明要写回。"""
 
@@ -178,6 +202,48 @@ class Tx:
 
     def append(self, table: str, row: dict, note: str = "") -> None:
         self.upsert(table, row, note=note)  # upsert 语义已足够（按主键去重）
+
+    def delete(self, table: str, key: Any, *, key_field: str | None = None,
+               note: str = "") -> dict | None:
+        """按主键删一行；返回**被删的那一行**（没找到 ⇒ `None`，什么都没写）。
+
+        ## 为什么它必须存在（`R-57`）
+
+        在此之前，"删一行"只有一条路：把 `tx.rows(table)` 那个列表**就地改掉**
+        （`tools/table_tools.py::table_delete` 是这么做的），然后 `mark_dirty` 让快照落盘。
+        快照确实变了，但 **`events.jsonl` 里没有任何痕迹** —— 而重建的唯一输入是事件日志
+        ⇒ `rebuild()` 之后那一行**复活**。
+        实测形态（`draft/28` §173 的 R-57）：删掉的行在 rebuild 后回来，而 `rebuild()`
+        返回的每一个计数都"正常"（`batches_incomplete=0`、`snapshot_rows_not_in_log=0`）——
+        也就是说**没有任何读数会告诉读的人"你刚恢复的数据比删之前多"**。
+
+        ## 事件里记什么，为什么
+
+        - `op="delete"`：新的事件类型（`rebuild` 的重放认得它）；
+        - `row`：**被删的整行**。理由与"没有回收站"那条注释相反 —— 台账是审计面，
+          "谁在什么时候删了哪一行、那一行长什么样"必须留在日志里（否则删除是**不可审计**的：
+          事后只能看到"少了一行"，查不出少的是什么）；
+        - `key`：主键的字符串形式。重放**只按它删**，不去校验 `row` —— 被删的历史行
+          可能不符合**当前** schema（schema 升级过），拿它去 `row_from_dict` 会让重建
+          因为一条历史删除而整批失败。
+
+        ## 顺序语义（与 `upsert` 同一个事务里混用时）
+
+        事件按**调用顺序**追加，重放也按顺序折叠 ⇒ 同一事务里 upsert 后 delete ⇒ 删掉了；
+        delete 后 upsert ⇒ 在。这与内存里的效果一致（本方法当场改 `rows`）。
+        """
+        if table not in self.tables:
+            raise StoreError(f"事务未声明表 {table}（声明了 {self.tables}）")
+        idf = key_field or S.TABLES[table]["id_field"]
+        rows = self.rows(table)
+        for i, r in enumerate(rows):
+            if r.get(idf) == key:
+                removed = rows.pop(i)
+                self._dirty.add(table)
+                self._record(table, dict(removed), note, op="delete",
+                             extra={"key": str(key)})
+                return removed
+        return None
 
     def insert_unique(self, table: str, row: dict, key_field: str, note: str = "",
                       id_kind: str | None = None) -> bool:
@@ -353,10 +419,19 @@ class Tx:
         return f"{nxt:04d}"
 
     # ---- 事件
-    def _record(self, table: str, row: dict, note: str = "") -> None:
-        self._events.append(
-            {"op": "upsert", "table": table, "row": row, "actor": self.actor, "note": note or self.note}
-        )
+    def _record(self, table: str, row: dict, note: str = "", *, op: str = "upsert",
+                extra: dict | None = None) -> None:
+        """把一次写追加进本事务的事件流。
+
+        **事件长什么样只在这一处定义**（`R-57` 的删除事件也走这里）：
+        两个调用点各自拼一个 dict，迟早会拼出两种字段顺序 / 两套默认值，
+        而事件流是重建的**唯一**输入 —— 那种偏差不会有任何读数报出来。
+        `extra` 的字段落在 `row` 与 `actor` 之间，既有的 `upsert` 事件因此逐字节不变。
+        """
+        self._events.append({
+            "op": op, "table": table, "row": row, **(extra or {}),
+            "actor": self.actor, "note": note or self.note,
+        })
 
     def info(self, message: str, **extra: Any) -> None:
         """只记日志、不改状态。"""
@@ -409,7 +484,54 @@ class Store:
         `force=True` 会覆盖已有的表 ⇒ 它是"清空这个工作区"的动作，
         所以在写者锁内完成（`G-12`）：这把锁保证**写者之间**互斥（两个清空/事务不会互相踩），
         它不排除并发读者在清空过程中读到中间态 —— 读侧今天不拿这把锁（`R3-1` 已裁定接受现状）。
+
+        ## `R-32`：**没有 `data/` 又不是空目录 ⇒ 拒绝**（默认 fail-closed）
+
+        实测事故（`draft/28` §136.3 事故 B）：一个复核脚本对 `projects/` 下**每个**目录跑
+        `Store(...).init()`，于是 `projects/manual-notes/`（人的文件夹，里面只有 `我的资料.txt`）
+        被补出整套 `data/`（19 个条目）+ `library/`。判态函数对它的判定自始至终是
+        `not_a_project` —— 是那个脚本**先动手、后判态**。
+
+        于是"从工具层走有守卫（`projects.ensure_project` 会拒绝外来目录）、直连 `Store`
+        没有"这件事，被修成两边都有。判据只有一条，刻意做得窄：
+
+        ```text
+        允许 init ⇔  root 不存在
+                   ∨ data/ 已存在              （旧工作区/半成品工作区 ⇒ 只补缺失的表：T1 迁移的用法）
+                   ∨ .agentflow-workspace 在   （`projects.classify` 认的工作区标记）
+                   ∨ root 里没有不属于本框架的条目（白名单见 `_WORKSPACE_ROOT_ENTRIES`）
+        否则 ⇒ StoreError（除非 force=True）
+        ```
+
+        为什么**不**看 `data/` 里的表齐不齐：补齐缺失的表正是 `init()` 的正当用法之一
+        （`draft/30` §T1 加 `conjectures` 表时就是这么给 8 个旧项目补上的）。判据要拦的是
+        "在一个看起来不是我们的目录里凭空建库"，不是"表不齐"。
+
+        ## 白名单为什么要包含 `projects/`（`§176` 当场抓到的一次**误拦**）
+
+        本判据的第一版把"除 `data/` 与 `library/` 之外还有条目"一律当外来目录，
+        于是**工作区根目录里有 `projects/`** 这一种**正常部署**被拦下了 ——
+        项目文件夹就住在工作区根下面（`projects.projects_dir`），而
+        `tests/test_conductor_tools.py::test_ensure_project_refuses_foreign_directory`
+        造的就是这个布局（先建 `projects/<名字>/`，再对根 `init()`）：它在全量套件里当场变红。
+        这正是"守卫做宽 ⇒ 一次数据毁灭事故换成一次功能报废"的实例，所以白名单按
+        **本框架自己在工作区根上会放什么**来列，而不是按"看起来像不像我们的东西"。
         """
+        # `R-32`：先判态、后动手（与那次事故的顺序**正好相反**）。
+        if not force and self._foreign_dir_guard_should_refuse():
+            foreign = sorted(p.name for p in self.root.iterdir()
+                             if p.name not in _WORKSPACE_ROOT_ENTRIES)
+            raise StoreError(
+                f"拒绝 init：{self.root} 既不是工作区（没有 data/）、又不是空目录 —— "
+                f"里面有 {len(foreign)} 个不属于我们的条目：{foreign[:5]}"
+                f"{' …' if len(foreign) > 5 else ''}。"
+                "在别人的目录里凭空建出整套 data/ 与 library/ 是**不可逆**的"
+                "（实测事故：一个复核脚本把 19 个条目写进了一个只放着 `我的资料.txt` 的文件夹，"
+                "见 `draft/28` §136.3 事故 B）。三条出路："
+                "① 这确实是新工作区 ⇒ 换一个空目录；"
+                "② 确认就要在这里建 ⇒ `init(force=True)`（或 CLI `init --force`）；"
+                "③ 走工具层：`projects.ensure_project`，它本来就有「拒绝外来目录」的守卫。"
+            )
         self.data.mkdir(parents=True, exist_ok=True)
         self.library.mkdir(parents=True, exist_ok=True)
         self.locks.mkdir(parents=True, exist_ok=True)
@@ -431,6 +553,22 @@ class Store:
 
     def exists(self) -> bool:
         return all((self.data / s["file"]).exists() for s in S.TABLES.values())
+
+    def _foreign_dir_guard_should_refuse(self) -> bool:
+        """`R-32` 的判据本体（只有这一处实现）：`init()` 该不该拒绝这个目录。
+
+        返回值 `True` = **拒绝**。规则与理由见 :meth:`init` 的 docstring；
+        这里只把它写成一段可单独调用的代码，好让测试可以直接喂各种形态
+        （空目录 / 新目录 / 旧工作区 / 只放着 `projects/` 的工作区根 / 别人的文件夹）
+        而不必真的去建文件。
+        """
+        if not self.root.exists():
+            return False                      # 新目录：init 会连它一起建
+        if self.data.exists():
+            return False                      # 有 data/ ⇒ 当工作区（补缺失的表是正当用法）
+        if (self.root / ".agentflow-workspace").exists():
+            return False                      # 与 `projects.classify` 的判据同一口径
+        return any(p.name not in _WORKSPACE_ROOT_ENTRIES for p in self.root.iterdir())
 
     # ---------------------------------------------------------------- 低级 IO
     @staticmethod
@@ -1123,6 +1261,12 @@ class Store:
         order: dict[str, list[str]] = {t: [] for t in S.TABLES}
         counters: dict[str, int] = {}
         applied = skipped = 0
+        #: `R-57`：重放里真的删掉了几行（与 `applied` 分开报 —— `applied` 的历史含义是
+        #: "写下了几行"，把删除混进去会让既有读数变味）。
+        deleted_replayed = 0
+        #: 认不出的 `op`（既不重放、也不在已知的非重放集合里）。它**必须出现在返回值里**：
+        #: 静默忽略一个不认识的 op = "日志里有我读不懂的东西"这件事没有任何人看得见。
+        unknown_ops: set[str] = set()
 
         # `R3-3`：这次重放真的写下了哪些主键（逐表）。用它去减快照里已有的键，
         # 差集就是"快照里有、日志里没有"的行 —— 那是这次重建会静默丢掉的数据。
@@ -1146,7 +1290,32 @@ class Store:
         snapshot_rows_not_in_log = sum(len(v) for v in snapshot_ahead.values())
 
         for e in replay:
-            if e.get("op") != "upsert":
+            op = e.get("op")
+            if op == "delete":
+                # `R-57`：删除也必须重放。只按 `key` 删（**不校验 `row`**）：
+                # 被删的历史行可能不符合当前 schema，拿它去 `row_from_dict` 会让
+                # 重建因为一条历史删除而整批失败 —— 而这条事件的全部语义就是"这一行没了"。
+                dtable = e.get("table")
+                if dtable == "counters":
+                    continue  # counters 没有"删一行"这回事（它的值由 alloc 事件折叠）
+                if dtable not in S.TABLES:
+                    skipped += 1
+                    continue
+                dkey = e.get("key")
+                if dkey is None:
+                    # 老格式/手写的删除事件没有 `key` ⇒ 从 `row` 里取主键；再取不到就不猜
+                    drow = e.get("row") or {}
+                    dkey = drow.get(S.TABLES[dtable]["id_field"])
+                if dkey is None:
+                    skipped += 1
+                    continue
+                if str(dkey) in state[dtable]:
+                    del state[dtable][str(dkey)]
+                    deleted_replayed += 1
+                continue
+            if op != "upsert":
+                if op not in _KNOWN_NON_REPLAY_OPS:
+                    unknown_ops.add(str(op))
                 continue
             table = e.get("table")
             row = e.get("row") or {}
@@ -1187,7 +1356,15 @@ class Store:
             applied += 1
 
         for table in S.TABLES:
-            rows = [state[table][k] for k in order[table]]
+            # `R-57`：`order` 里可能留着被删掉的键（删除只从 `state` 里摘）⇒
+            # 这里过滤一次，而不是在删除时对列表做手术（保持"首次插入顺序"稳定，
+            # 也避免 `del` 与 `append` 在同一轮里互相错位）。
+            # ⚠️ 还要**去重**：删掉之后又 upsert 同一个主键时，`order` 会追加第二次
+            # （`key not in state` 成立）⇒ 不去重就会拼出两行同 ID，而 `validate_table`
+            # 会以 `ValueError: 出现重复 ID` 报出来（本仓自己的测试当场抓到了这一点：
+            # `tests/test_store_delete_events.py::test_order_inside_one_transaction_is_the_call_order`）。
+            # `dict.fromkeys` 保序去重，语义就是"这个主键第一次出现的位置"。
+            rows = [state[table][k] for k in dict.fromkeys(order[table]) if k in state[table]]
             doc = {"schema_version": S.SCHEMA_VERSION, "rows": rows}
             S.validate_table(table, doc)
             self._atomic_write(self.data / S.TABLES[table]["file"], doc)
@@ -1219,6 +1396,13 @@ class Store:
             # 逐表明细（只有差集非空的表才在里面）：人排查时需要知道是哪张表，
             # 而不只是一个总数。
             "snapshot_ahead": {t: v for t, v in sorted(snapshot_ahead.items())},
+            # `R-57`：这次重放里**真的删掉**了几行（删除事件是被算进重放的）。
+            # 它与 `applied`（写下了几行）分开报：把两者混起来，"重建之后库里比删之前多"
+            # 这件事就看不出来了 —— 而那正是 R-57 的原始形态。
+            "deletes_replayed": deleted_replayed,
+            # 认不出的 `op`：不重放，但**必须被看见**（静默忽略一个不认识的 op
+            # 等于"日志里有读不懂的东西"没有任何读数）。
+            "unknown_ops": sorted(unknown_ops),
         }
 
     # ---------------------------------------------------------------- 路径工具
