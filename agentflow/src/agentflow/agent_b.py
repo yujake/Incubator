@@ -131,6 +131,9 @@ class BRunResult:
     #: `page_range_mismatch` 的 warning（见 `verify.verify_all`）。
     quotes_out_of_declared_range: int = 0
     unreadable: int = 0
+    #: `R-56`：有文件但**没有够格的抽取器**（框架的规则回退）⇒ 拒抽，不置 `processed`。
+    #: 单列一格而不并进 `unreadable`：文件读得到，缺的是"谁来读懂它"。
+    skipped_no_extractor: int = 0
     failed: int = 0
     # ---- 取文献侧的审计信息（与 `AgentA.ARunResult` 同口径）。
     #: 因"`claimed_by` 非空且租约未过期"而被跳过的条数。
@@ -210,6 +213,21 @@ class AgentB:
         self.store = store
         self.extractor = extractor
         self.extract_text = extract_text
+        # ---- `R-56`（`draft/28` §156）：**回退抽取器**必须拒抽。
+        #
+        # 判据刻意打在"抽取器是不是框架的规则回退"上，而不是"有没有接 LLM"：
+        # 单测与自检会**故意注入替身抽取器**来测流水线（那时不该拒），
+        # 而真正灌碎片的是 `llm.RuleExtractor` 这个回退实现 —— 实测它把网页/PDF
+        # 的碎片当成概念与关系（概念名 `ANU` / `tingled property` /
+        # `promote \tsm to this status)`），而引文回验**全真**（那句话确实在文件里）
+        # ⇒ 在表里看起来像"有逐字引文的证据"。引文回验只证明"这句话在文件里"，
+        # 不证明"这是一个概念/关系"。
+        #
+        # 处置选"拒抽"而不是"标 suspect"：概念表没有可疑档（relations 有，
+        # concepts 没有），而给概念图灌碎片是不可逆的污染（下游 C/D 都会读到）。
+        # 拒抽时**不置 `processed`**（与"抽取失败"同一口径），于是接线 LLM 之后
+        # 那一轮还会重新领到这些行。
+        self.extractor_is_fallback = self._is_fallback_extractor(extractor)
         self.cfg = config or {}
         self.actor = actor
         self.lease_seconds = int(self.cfg.get("lease_seconds", 900))
@@ -303,6 +321,15 @@ class AgentB:
             )
 
     # ------------------------------------------------------------------ 主流程
+    @staticmethod
+    def _is_fallback_extractor(extractor: Any) -> bool:
+        """这个抽取器是不是框架的**规则回退**（`llm.RuleExtractor`）？
+
+        按类名判（不 import `llm`，避免把 LLM 那一层的依赖拖进 B 的 import 图）：
+        类名对不上就当作"调用方自己给的抽取器"（单测与自检走这一支）。
+        """
+        return type(extractor).__name__ == "RuleExtractor"
+
     def _extraction_meta(self, lit: dict) -> dict:
         """构造传给抽取器的元数据。
 
@@ -410,6 +437,23 @@ class AgentB:
             res.unreadable += 1
             res.processed = 1
             res.details.append({"lit_id": lit_id, "stage": "acquire", "skipped": unreadable_reason})
+            return res
+
+        # ---- `R-56`：回退抽取器拒抽（判据与理由见 `__init__` 里那一段）。
+        # 位置在"不可读"之后：没有文件的行该报 `no_local_file`（原因不同），
+        # 而这一条说的是"有文件、但我们没有够格的抽取器"。
+        if self.extractor_is_fallback:
+            with self.store.tx("literature", actor=self.actor, note="no_extractor") as tx:
+                row = tx.find("literature", lit_id=lit_id) or lit
+                row["claimed_by"] = None
+                row["lease_until"] = None
+                row["last_mine_error"] = "no_llm_extractor"
+                # 刻意**不**置 `processed`：接线 LLM 之后这一行还要被重新领到
+                tx.upsert("literature", row, note="skipped_no_extractor")
+            res.skipped_no_extractor += 1
+            res.details.append({"lit_id": lit_id, "stage": "extract",
+                                "skipped": "no_llm_extractor",
+                                "why": "规则回退抽取器会把碎片当概念/关系（R-56）"})
             return res
 
         try:
