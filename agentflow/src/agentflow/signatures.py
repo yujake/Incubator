@@ -116,6 +116,15 @@ SIGNER_NAME = "agent-H"
 #: 所以接受档是这两个 —— 不把 warning 当拒绝（那会把"已知边界"变成"不许发布"）。
 ACCEPTING_VERDICTS: tuple[str, ...] = ("accepted", "accepted_with_warnings")
 
+#: 只有这个**稿件状态**才谈"该被签"（`signature_problems` 的判据面）。
+#:
+#: 为什么单列一个常量：`verify.verify_all` 的覆盖读数要说清"签名这件事查了几行"，
+#: 而那几行正是"状态为这个值的稿件"。若两处各写一份字面量，它们会分叉 ——
+#: 分叉的症状是覆盖读数说"查了 N 行"而判据实际一行没查（`R-38` 的同族：
+#: 读数的名字与语义不符）。`verify.py` 直接读本常量，并交叉断言
+#: `SIGNABLE_STATUS in schema.DOC_STATUSES`（不在就当场报错，而不是静默零查）。
+SIGNABLE_STATUS = "accepted"
+
 #: 判据码（`verify` 直接消费）。放在这里是为了让"算法 + 词表"只有一处。
 CODE_ACCEPTED_WITHOUT_SIGNATURE = "accepted_without_signature"
 CODE_STALE_SIGNATURE = "stale_signature"
@@ -253,7 +262,7 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
 
     一条都不成立时，返回**第一条**的具体判据码与证据（人要知道是哪种失效）。
     """
-    if str(doc_row.get("status") or "") != "accepted":
+    if str(doc_row.get("status") or "") != SIGNABLE_STATUS:
         return []
     cur = content_sha256_of(doc_row)
     mine = [r for r in records if str(r.get("doc_id") or "") == str(doc_row.get("doc_id") or "")]

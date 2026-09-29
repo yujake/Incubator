@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T10:17:53+08:00",
+  "generated_at": "2026-09-29T10:21:47+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -539,10 +539,10 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "696bcecda0dbaa37978f7b9e2afba20e98afb9219288a439eea0dcc51b530149",
+      "sha256": "0135143f5ca49d39761e85175cf443cdfa87d7c0b1a67a5bb189f6b207ba79ad",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-58：artifacts 形态判定（table:id 与文件型产物）补进唯一实现 capabilities.audit_task_ledger，verify.py 改为转发（消除两份实现）",
+      "change_note": "R-38：verify_all 的签名读数拆名",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

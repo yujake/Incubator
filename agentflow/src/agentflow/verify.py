@@ -1157,11 +1157,37 @@ def verify_all(
         rep.issues.append(Issue("error", "documents", None, SIG.CODE_LEDGER_CORRUPT,
                                 f"签名台账链断了：{broken}"))
     sig_checked = 0
+    #: 签名判据只对 `SIG.SIGNABLE_STATUS` 的稿件成立 ⇒ "查了几行"数的就是**这些**行。
+    #: 不写死 `"accepted"`：那个字面量的唯一落点现在是 `signatures.SIGNABLE_STATUS`
+    #: （两处各写一份就会分叉 —— 而分叉的症状是读数说"查了 N 行"而判据一行没查）。
+    sig_rows_checked = 0
+    if SIG.SIGNABLE_STATUS not in S.DOC_STATUSES:
+        # 词表分叉的**当场上报**：否则 `SIGNABLE_STATUS` 一旦拼错，签名判据会一份稿件
+        # 都不查，而 `checked` 里那个 0 看起来与"全部干净"逐字一样（P16 族的真空通过）。
+        rep.issues.append(Issue(
+            "error", "documents", None, "signable_status_not_in_doc_statuses",
+            f"`signatures.SIGNABLE_STATUS={SIG.SIGNABLE_STATUS!r}` 不在 `schema.DOC_STATUSES` "
+            f"{S.DOC_STATUSES} ⇒ 签名判据会**一份稿件都不查**，而读数看起来是「零问题」。"
+            "两处词表分叉必须当场吵，不许静默零查。",
+        ))
     for d in documents:
+        if str(d.get("status") or "") == SIG.SIGNABLE_STATUS:
+            sig_rows_checked += 1
         for code, msg in SIG.signature_problems(sig_root, d, sig_records):
             rep.issues.append(Issue("error", "documents", d.get("doc_id"), code, msg))
             sig_checked += 1
-    rep.checked["signatures"] = sig_checked
+    # ---- `R-38`（`draft/28` §150.5）：这一格的**名字**必须说实话
+    #
+    # 原来叫 `checked["signatures"]`，值却是"**签名问题的条数**"（`sig_checked` 只在
+    # 发现问题时 `+= 1`），而同一个 `checked` 字典里相邻的计数全是"查了几行" ——
+    # 同一个字典两种语义 ⇒ `0` 会被读成"没有稿件查过签名"（真相恰好相反：
+    # 0 是"查过、干净"）。现在拆成两个各自说清自己的键：
+    #   - `signature_problems`：问题条数（0 = 干净）；
+    #   - `accepted_documents_checked`：签名判据真正看过的行数（0 = **没查**，不是干净）。
+    # 旧键**删掉**而不是留别名：留一个名字错的别名，`checked.get("signatures", 0)` 的
+    # 读者照样会读错；删掉会让它当场 `KeyError` —— 吵，但不静默。
+    rep.checked["signature_problems"] = sig_checked
+    rep.checked["accepted_documents_checked"] = sig_rows_checked
 
     # ---- 猜想：它引用的东西必须真的存在（依据 `draft/30` §T1 第 7 处触点）
     #
