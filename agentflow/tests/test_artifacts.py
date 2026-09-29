@@ -105,3 +105,55 @@ def test_render_markdown_carries_status_column(tmp_path: pathlib.Path):
 def test_selftest_passes():
     """模块自带的自检（登记→核对→篡改→删除→越界→坏行）必须过。"""
     assert A.selftest() == 0
+
+
+def test_cmd_artifacts_record_then_verify_returns_zero(tmp_path: pathlib.Path, capsys):
+    """正控：`cli.cmd_artifacts` 的 record 与 verify 两个动词都退 0，且打印里有产物名。"""
+    from argparse import Namespace
+
+    from agentflow import cli
+
+    _file(tmp_path, "out/paper/notes.md", "正文")
+    rc = cli.cmd_artifacts(Namespace(command="artifacts", action="record", root=str(tmp_path),
+                                     target=["out/paper/notes.md"], producer="G", kind="note",
+                                     task_id="t-0001", exit_code=0, note="", json=False))
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "notes.md" in out, out
+    rc2 = cli.cmd_artifacts(Namespace(command="artifacts", action="verify", root=str(tmp_path),
+                                      target=[], json=False))
+    out2 = capsys.readouterr().out
+    assert rc2 == 0, out2
+
+
+def test_cmd_artifacts_verify_reports_changed_with_exit_one(tmp_path: pathlib.Path, capsys):
+    """负控：产物被改过 ⇒ 退出码 1（"查过了、有变了的产物"），不是 0 也不是 2。"""
+    from argparse import Namespace
+
+    from agentflow import cli
+
+    f = _file(tmp_path, "out/a.txt", "第一版")
+    cli.cmd_artifacts(Namespace(command="artifacts", action="record", root=str(tmp_path),
+                                target=["out/a.txt"], producer="E", kind="data",
+                                task_id="", exit_code=0, note="", json=False))
+    f.write_text("第二版", encoding="utf-8")
+    rc = cli.cmd_artifacts(Namespace(command="artifacts", action="verify", root=str(tmp_path),
+                                     target=[], json=False))
+    capsys.readouterr()
+    assert rc == 1, "被改过的产物必须让 verify 退 1"
+
+
+def test_cmd_artifacts_list_is_read_only(tmp_path: pathlib.Path, capsys):
+    """正控：`list` 只读，不写台账。"""
+    from argparse import Namespace
+
+    from agentflow import cli
+
+    _file(tmp_path, "out/b.txt", "x")
+    rc = cli.cmd_artifacts(Namespace(command="artifacts", action="list", root=str(tmp_path),
+                                     target=[], producer="", task_id="", kind="",
+                                     json=False))
+    capsys.readouterr()
+    assert rc == 0
+    assert not (tmp_path / "ARTIFACTS.jsonl").exists(), "list 不许写台账"
+

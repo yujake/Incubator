@@ -2133,6 +2133,8 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "agent_loop.py": "LLM 驱动的角色循环：tool / summon / message / final 四种形状，唤起走 `Conductor.summon`、留言落会话记录（`draft/28` §179）",
     "userio.py": "用户频道：ask_user 把问题送进待答清单并等回答，超时是 `user_no_answer`（不是默许），迟到的回答照样捞得出来（`draft/28` §181）",
     "autonomy.py": "放手后的自主轮与阶段性汇报：轮次上限 + 每 N 轮一次公共汇报 + 文件/用户回答可打断（`draft/28` §181）",
+    "judges.py": "语义判据的接入方式：判据注册表（每条带负控准入）+ 三态 + 引用落地过滤（`draft/28` §182）",
+    "faculty_checks.py": "十项官能里可机械判的那一半：引用落地 / 猜想卫生 / 体例 / 推进与卡点（`draft/28` §182）",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",

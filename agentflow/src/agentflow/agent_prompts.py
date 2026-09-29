@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p11"
+PROMPT_VERSION = "p13"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -104,14 +104,14 @@ LOOP_PROTOCOL = """\
 FACULTY_LAYERS: dict[str, tuple[str, str]] = {
     "眼睛": ("code", "agentflow.tools.base:ToolRegistry.for_role"),
     "耳朵": ("both", "agentflow.agent_loop:inbox_digest"),
-    "脑子": ("prompt", ""),
+    "脑子": ("both", "agentflow.faculty_checks:progress_findings"),
     "手": ("both", "agentflow.tools.base:ToolRegistry.call"),
     "能讨论": ("both", "agentflow.conductor:Conductor.summon"),
-    "高观点": ("prompt", ""),
+    "高观点": ("both", "agentflow.faculty_checks:overview_findings"),
     "能互动": ("both", "agentflow.userio:ask_user"),
     "能思辨": ("both", "agentflow.agent_prompts:EVIDENCE_CONTRACT"),
-    "敢创新": ("prompt", ""),
-    "有品味": ("prompt", ""),
+    "敢创新": ("both", "agentflow.faculty_checks:conjecture_hygiene"),
+    "有品味": ("both", "agentflow.faculty_checks:style_findings"),
 }
 
 #: 结构层到底由什么保证：这段话是"哪些不许只写在提示词里"的清单（每条都有锚点）。
@@ -128,6 +128,8 @@ STRUCTURE_NOT_PROMPT: tuple[tuple[str, str], ...] = (
                           "等不到就是 `user_no_answer`（不是默许），迟到的回答照样会被捞出来"),
     ("放手后的自主轮与汇报", "`autonomy.run_autonomous`：轮次上限 + 每 N 轮一次公共汇报 + "
                             "文件/用户回答可随时打断；每轮与每次汇报都落会话记录"),
+    ("官能的质量判定", "`faculty_checks` 的机械半（引用落地 / 猜想卫生 / 体例：查表查文本就能判）"
+                      "＋ `judges` 的语义半（每条判据带负控准入 + 引用落地过滤 + 三态）"),
 )
 
 #: 提示词层负责什么（这些不该做成判据：做法可以合理分歧，写死就成文字狱）。
