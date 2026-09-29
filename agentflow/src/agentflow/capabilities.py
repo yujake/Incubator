@@ -582,6 +582,239 @@ def _divergences(
     return out
 
 
+# ---------------------------------------------------------------- 两层参数**类型**对账（R-36）
+#
+# R-36（`draft/28` §150.5）：`_divergences` 只比 property **名**与两根轴，不比**类型**。
+# 于是"声明的类型与真交下去的值不是一回事"这一整类缺陷看不见 —— §150 那批里三处
+# （`H.review` / `H.verify_fixes` 的 `dependencies` 声明成 `_OBJ`、`H.review_report`
+# 声明成 `_ARR_S`，而工具层四条一直是 array-of-objects）就是它漏的：参数门照能力表
+# 判，把一条**合法**的派活判成 `dependencies. 必须是对象，收到 array`。
+#
+# 为什么不是往 `_divergences` 里加一条：那个函数的输入是 `tools: Mapping[str, tuple[str, str, bool]]`
+# （只有两根轴），要带类型就得改它的形状；而 `declaration_divergences_for` 是**公开**的
+# 纯函数形态，`tests/test_policy.py` 用合成的两层表喂它 —— 改形状会连带改那些用例的
+# 语义。判据多一条不等于判据要长在同一个函数里：这里另起一格，两种形态都给
+# （读全局的 `param_type_divergences()` + 可喂表的 `param_type_divergences_for()`）。
+#
+# 为什么类型也要读源码（AST）而不是装配工具层：理由与 `_tool_side_effects` 逐字相同
+# （`ToolSpec(...)` 现造于 `reset()/register()` 里，装配一次会在导入期碰文件系统）。
+# 差别是这里要读的是**嵌套结构**（`properties.<名>.type` 与 `.items.type`），
+# 所以只认字符串字面量的 `type`：读不出来就记成"没有比对"（unknown），不折成通过。
+
+
+def _dict_value(node: ast.AST | None, key: str) -> ast.AST | None:
+    """从一棵 `ast.Dict` 里取某个字符串字面量键对应的值节点；不是字典就返回 `None`。"""
+    if not isinstance(node, ast.Dict):
+        return None
+    for k, v in zip(node.keys, node.values):
+        if isinstance(k, ast.Constant) and k.value == key:
+            return v
+    return None
+
+
+def _str_value(node: ast.AST | None) -> str | None:
+    """字符串字面量取值；变量/表达式一律 `None`（"读不出来"，不是"没有"）。"""
+    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+def _props_of(params_node: ast.AST | None) -> dict[str, tuple[str | None, str | None]] | None:
+    """`params` 字面量里的 `{property: (type, items.type)}`。
+
+    返回 `None` = **读不出来**（`params` 不是字典字面量，例如 `params=spec.params`）；
+    返回 `{}` = 读出来了、确认没有 `properties`。两者必须分开 —— 合成一态就会把
+    "这条工具的 schema 我看不见"读成"它没有参数，所以没问题"（P16 族的真空通过）。
+    """
+    if not isinstance(params_node, ast.Dict):
+        return None
+    props = _dict_value(params_node, "properties")
+    if props is None:
+        return {}
+    if not isinstance(props, ast.Dict):
+        return None
+    out: dict[str, tuple[str | None, str | None]] = {}
+    for k, v in zip(props.keys, props.values):
+        name = _str_value(k)
+        if name is None:
+            continue
+        items = _dict_value(v, "items")
+        out[name] = (_str_value(_dict_value(v, "type")), _str_value(_dict_value(items, "type")))
+    return out
+
+
+def _module_constants(tree: ast.AST) -> dict[str, ast.AST]:
+    """模块级 `NAME = <字面量>` 的取值节点表，用来解析 `params=EMPTY_PARAMS` 这种写法。"""
+    out: dict[str, ast.AST] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name):
+                    out[tgt.id] = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            out[node.target.id] = node.value
+    return out
+
+
+def _declared_param_schemas(
+    tree: ast.AST,
+) -> list[tuple[str, dict[str, tuple[str | None, str | None]]]]:
+    """从一棵模块 AST 里读出 `(工具名, {property: (type, items.type)})`。
+
+    认三种声明形态（与 `_declared_side_effects` 同一套认名规则，多认一个 `params`）：
+      - `ToolSpec(name="a.b", params={...})` / `ToolSpec("a.b", "...", {...})`；
+      - `@tool("a.b", "...", params={...})` / `@tool("a.b", "...", {...})`；
+      - `params=<模块级常量名>`（解析一层，见 `_module_constants`）。
+
+    `params` 读不出来的工具**不写进表**（调用方按"这条工具没有比对"处理），
+    而不是写一条空 schema —— 后者的症状是"零分歧"，与真相无关。
+    """
+    consts = _module_constants(tree)
+    found: list[tuple[str, dict[str, tuple[str | None, str | None]]]] = []
+
+    def resolve(node: ast.AST | None) -> ast.AST | None:
+        if isinstance(node, ast.Name):
+            return consts.get(node.id, node)
+        return node
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        fname = fn.id if isinstance(fn, ast.Name) else (fn.attr if isinstance(fn, ast.Attribute) else "")
+        if fname not in ("ToolSpec", "tool"):
+            continue
+        # 工具名：`tool` 的第 1 个位置参数、`ToolSpec` 的第 2 个，或关键字 `name=`。
+        name: str | None = None
+        if fname == "tool":
+            name = _str_value(node.args[0]) if node.args else None
+        elif len(node.args) > 1:
+            name = _str_value(node.args[1])
+        params_node: ast.AST | None = node.args[2] if len(node.args) > 2 else None
+        for kw in node.keywords:
+            if kw.arg == "name":
+                name = _str_value(kw.value)
+            elif kw.arg == "params":
+                params_node = kw.value
+        if not name:
+            continue
+        props = _props_of(resolve(params_node))
+        if props is not None:
+            found.append((name, props))
+    return found
+
+
+def _tool_param_schemas() -> dict[str, dict[str, tuple[str | None, str | None]]]:
+    """全仓工具名 -> `{property: (type, items.type)}`（读源码声明，不装配工具层）。"""
+    out: dict[str, dict[str, tuple[str | None, str | None]]] = {}
+    base = Path(__file__).resolve().parent / "tools"
+    for mod_name in _TOOL_MODULES:
+        path = base / f"{mod_name}.py"
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, ValueError):
+            continue
+        for name, props in _declared_param_schemas(tree):
+            out[name] = props
+    return out
+
+
+def _shape(declared: tuple[str | None, str | None]) -> str:
+    """把 `(type, items.type)` 渲染成人能读的一小段（只用于报错信息）。"""
+    t, it = declared
+    if t is None:
+        return "（读不出类型）"
+    return f"array<{it}>" if t == "array" and it else t
+
+
+def param_type_divergences_for(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]],
+    tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]],
+) -> list[DeclarationDivergence]:
+    """判据本体（两张表都由调用方给）：两层对同一个 property 声明的**类型**不一致。
+
+    只在"两层都声明了这个 property、且两层的 `type` 都是字面量"时判 ——
+    其余一律不判（那是"没有比对"，不是"比对通过"；缺属性由 `param_seam_violations` 管）。
+
+    `array` 要连 `items.type` 一起比：`_ARR_S`（array<string>）与 `_ARR_OBJ`
+    （array<object>）的 `type` 都是 `"array"` —— 只比 `type` 的话，
+    §150 那三处缺陷一个都抓不到（`review_report` 那处正是 `_ARR_S` vs array<object>）。
+
+    一处**刻意不判**（写下来免得下一个人以为漏了）：一侧给了 `items.type`、
+    另一侧只写了 `{"type": "array"}` ⇒ 不报。理由是 `validate_params` 对没有 `items`
+    的 array 不施加形状约束，此时两层并不矛盾，只是其中一层说得更细。
+    """
+    out: list[DeclarationDivergence] = []
+    for role, specs in capabilities.items():
+        for spec in specs:
+            cands = _candidates(spec, tool_params)
+            if len(cands) != 1:
+                continue
+            tool_name = cands[0]
+            tool_props = tool_params.get(tool_name)
+            if tool_props is None:
+                continue
+            cap_props = (spec.params or {}).get("properties") or {}
+            for prop, cap_declared in cap_props.items():
+                if prop not in tool_props or not isinstance(cap_declared, Mapping):
+                    continue
+                tool_declared = tool_props[prop]
+                cap_type, cap_items = cap_declared.get("type"), (cap_declared.get("items") or {}).get("type")
+                tool_type, tool_items = tool_declared
+                if cap_type is None or tool_type is None:
+                    continue
+                if cap_type == tool_type and not (cap_type == "array" and cap_items and tool_items
+                                                  and cap_items != tool_items):
+                    continue
+                out.append(DeclarationDivergence(
+                    "two_layer_param_type_divergence", "error",
+                    f"{role}.{spec.action} <-> {tool_name}",
+                    f"property {prop!r}：能力层声明 {_shape((cap_type, cap_items))}，"
+                    f"工具层声明 {_shape((tool_type, tool_items))} —— 两层对"
+                    "『这个参数是什么形状』有两个答案。危害不是报错而是**判错**："
+                    "参数门（`Conductor._check_params`）读的是能力表，而 `ToolRegistry.call` "
+                    "第一步 `validate_params` 读的是工具表 ⇒ 一条合法派活会被能力表判死"
+                    "（§150 的 `dependencies` 就是这样：能力层 `_OBJ` vs 工具层 array<object>），"
+                    "或者反过来放行一个工具层必然拒收的形状。"
+                    "**改哪一层由人定**：工具层是校验的真身，能力层是派活的契约，"
+                    "两者对不上时先问『谁在说谎』，不许让判据替你选。",
+                ))
+    return out
+
+
+def param_type_divergences() -> list[DeclarationDivergence]:
+    """真实树上的类型对账读数（`param_type_divergences_for` 读全局版本）。"""
+    return param_type_divergences_for(CAPABILITIES, _tool_param_schemas())
+
+
+def param_type_coverage() -> dict:
+    """类型对账的覆盖率读数：判据**看进去多少**（P16：零分歧必须配上覆盖读数）。
+
+    - `tools_read`：`params` schema 读出来的工具数；
+    - `compared`：两层都声明了类型、真的逐对比过的 (动作, property) 对数；
+    - `unread`：对上了唯一工具、但那条工具的 `params` 读不出来（三态里的 unknown）。
+
+    刻意不给"应该达到多少"的硬编码下限：工具增删会让它漂。导入期断言用的是
+    "`compared` 不许为 0 而 `unread` 一大堆"（见 `assert_capabilities` 第 [9] 条）。
+    """
+    schemas = _tool_param_schemas()
+    compared = 0
+    unread: list[str] = []
+    for role, specs in CAPABILITIES.items():
+        for spec in specs:
+            cands = _candidates(spec, schemas)
+            if len(cands) != 1:
+                continue
+            tool_props = schemas.get(cands[0])
+            if tool_props is None:
+                unread.append(f"{role}.{spec.action} <-> {cands[0]}")
+                continue
+            for prop, declared in ((spec.params or {}).get("properties") or {}).items():
+                if not isinstance(declared, Mapping):
+                    continue
+                if prop in tool_props and declared.get("type") and tool_props[prop][0]:
+                    compared += 1
+    return {"tools_read": len(schemas), "compared": compared, "unread": sorted(unread)}
+
+
 def _tool_axes(declared: tuple[str, str, bool]) -> tuple[str, str, bool]:
     """工具层一个声明在两根轴上的取值，以及"external 是不是精确声明"。
 
@@ -614,6 +847,18 @@ _I = {"type": "integer"}
 _N = {"type": "number"}
 _B = {"type": "boolean"}
 _ARR_S = {"type": "array", "items": {"type": "string"}}
+#: `array<integer>`。R-36（`draft/28` §164）为 `G.register_dependency.page_range` 新增。
+#:
+#: 为什么必须新列一个：这里原来写的是 `_ARR_S`，而工具层
+#: （`doc_tools` 的 `doc.register_dependency`）写的是
+#: `{"type": "array", "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}` ——
+#: 于是**没有任何一种取值能同时过两道门**（实测 2026-09-29）：
+#: `[45, 46]` 能力层拒（"必须是 string"）工具层放行；`["45", "46"]` 能力层放行
+#: 工具层拒（"必须是 integer"）。实现本体 `doc_tools._coerce_page_range` 两种都收，
+#: 但"两层各自判死一半"意味着这条链路上**没有**合法形状。
+#: 取 `array<integer>` 而不是 `array<string>`：工具层的校验是真身，
+#: 而 `_coerce_page_range` 的规范形态就是 `[start, end]`（`minItems/maxItems` 也对得上）。
+_ARR_I = {"type": "array", "items": {"type": "integer"}}
 _OBJ = {"type": "object"}
 #: 一行行记录的序列（依赖行、发现行…）。刻意与 `_OBJ` 分开。
 #:
@@ -1053,7 +1298,7 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
             "G", "register_dependency",
             "登记外部依赖（`closed` 时必须核到已入库的来源，FC-23）",
             _obj({"used_by": _S, "kind": _S, "label": _S, "source_lit_id": _S,
-                  "source_experiment_id": _S, "page_range": _ARR_S, "quote": _S,
+                  "source_experiment_id": _S, "page_range": _ARR_I, "quote": _S,
                   "status": {"type": "string", "enum": list(S.DEP_STATUSES)},
                   "status_reason": _S},
                  ("used_by", "kind", "label")),
@@ -1223,6 +1468,12 @@ PARAM_SEAMS: dict[tuple[str, str, str], str] = {
 #: warning 级炸）。计数是读数，不是判据的输出 —— 判据仍然只返回 `None`。
 #: 键：`roles` / `actions` / `declared` / `checked` / `seams`。
 PARAM_ASSERT_COVERAGE: dict[str, int] = {}
+
+#: 两层参数**类型**对账上一次的覆盖计数（由 :func:`assert_capabilities` 第 [9] 条就地写）。
+#: 键：`tools_read` / `compared` / `unread`（`unread` 是列表，另存一份计数时用 `len`）。
+#: 与 `PARAM_ASSERT_COVERAGE` 分开放：两条断言的覆盖率不是一回事
+#: （那条数 property 名与实现签名，这条数"两层都给了类型的 (动作, property) 对"）。
+PARAM_TYPE_COVERAGE: dict[str, Any] = {}
 
 
 def handler_accepted(role: str, action: str) -> tuple[frozenset[str], bool]:
@@ -2491,6 +2742,45 @@ def assert_capabilities(
         "两条的修法完全不同，报出来要能一眼分开"
     )
 
+    # ---- [9] 两层参数**类型**对账（`R-36`）
+    #
+    # R-36（`draft/28` §150.5）：上面的 [8] 只比 property **名**与实现签名，不比类型；
+    # [7] 只比两根轴。于是"两层对同一个参数声明的**类型**不一致"这一整类缺陷
+    # 没有任何机器判据 —— §150 那三处（`H.review` / `H.verify_fixes` 的
+    # `dependencies` 声明成 `_OBJ`、`H.review_report` 声明成 `_ARR_S`，工具层四条
+    # 一直是 array-of-objects）就是它漏的。当时的判据是**一条注释 + 一条单测**；
+    # 本批把它变成导入期断言，并当场咬出第四处（`G.register_dependency.page_range`）。
+    #
+    # 为什么类型不一致是 error 而不是 warning：参数门读能力表、工具层校验读工具表，
+    # 两层不一致的后果不是崩溃而是**判错**（合法派活被判死，或必然被拒的形状被放行），
+    # 与 [7] 的"能力层低估风险轴"同一档：错了不吵，静默地错。
+    #
+    # 三条断言的顺序与 [8] 逐条同形，理由也同形：先报"表里有问题"，再报"判据自己没走遍"。
+    type_coverage = param_type_coverage()
+    PARAM_TYPE_COVERAGE.clear()
+    PARAM_TYPE_COVERAGE.update(type_coverage)
+    type_divergences = param_type_divergences()
+    assert not type_divergences, (
+        "两层对同一个参数声明的类型不一致："
+        + "；".join(f"[{d.code}] {d.where}: {d.message}" for d in type_divergences)
+    )
+    assert not type_coverage["unread"], (
+        "这些动作的唯一匹配工具，其 `params` schema **读不出来**（不是字面量，例如 "
+        f"`params=some_variable`）：{type_coverage['unread']}。"
+        "读不出来的工具在这条判据里是 unknown，而 unknown 多了以后『零分歧』"
+        "就不再是证据（P16 真空通过）。两条出路：① 把 `params` 写成字面量 "
+        "（这是判据能看见它的唯一形态，与 `_declared_side_effects` 同一套读源码口径）；"
+        "② 若确实做不到，请把这条动作登记进一张显式表并写明理由 —— "
+        "不许让它静默地落在判据外。"
+    )
+    assert type_coverage["compared"] > 0, (
+        "两层参数类型对账**一对都没比过**（compared=0）—— 这不可能来自'两层都没声明类型'"
+        "（能力表声明了 "
+        f"{PARAM_ASSERT_COVERAGE.get('declared', 0)} 个 property，工具表也有各自的 schema），"
+        "只可能来自判据自身失效（例如 `_tool_param_schemas()` 读不到任何工具模块）。"
+        "零分歧此时不构成证据"
+    )
+
 
 #: 实测的"两层没有可比对对象"的动作（`two_layer_name_unmatched`）。
 #:
@@ -2576,3 +2866,12 @@ _PRINT_COVERAGE = (
     f"{PARAM_ASSERT_COVERAGE.get('actions', 0)} 个动作，接缝 {len(PARAM_SEAMS)} 条"
 )
 print(_PRINT_COVERAGE, file=sys.stderr)
+
+#: `R-36` 的覆盖读数（与上行同一个理由：只在失败时说话的断言，成功时与"没跑"同形）。
+#: 读它：`python -c "import agentflow.capabilities as c; print(c.PARAM_TYPE_COVERAGE)"`。
+_PRINT_TYPE_COVERAGE = (
+    f"[capabilities] 两层参数类型对账：比较 {PARAM_TYPE_COVERAGE.get('compared', 0)} 对"
+    f"（动作, property），读到 {PARAM_TYPE_COVERAGE.get('tools_read', 0)} 个工具的 schema，"
+    f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个"
+)
+print(_PRINT_TYPE_COVERAGE, file=sys.stderr)

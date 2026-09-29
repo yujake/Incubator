@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T10:03:53+08:00",
+  "generated_at": "2026-09-29T10:17:53+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "5d245fe74bdef2fb40ed9c9507282b888f2a53a823495ea930354e1d48da9ba8",
+      "sha256": "9ae0901b3107c5f33710c7621d9503c7aaaeea7fefdf3688defcb8f11de29324",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-58：artifacts 形态判定（table:id 与文件型产物）补进唯一实现 capabilities.audit_task_ledger，verify.py 改为转发（消除两份实现）",
+      "change_note": "R-36：新增两层参数类型对账（导入期断言 [9]）+ 修 G.register_dependency.page_range 声明（_ARR_S -> _ARR_I）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
