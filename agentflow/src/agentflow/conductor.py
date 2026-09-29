@@ -1217,6 +1217,23 @@ class Conductor:
         })
         if _problem:
             self._log(f"会话记录没写成：{_problem}", task_id=task_id)
+        # ---- 产物归属登记（`R-52` 余；`draft/28` §153 的 A3/A4）。
+        #
+        # 为什么在这里而不是每个智能体自己记：`tasks.artifacts` 只回答"这次召唤产出了
+        # 哪些引用"，**不回答"这个路径归谁产"** —— A3（两份断言台账同义不同物）与
+        # A4（六个产生验收读数的脚本既非 experiments 行也非 documents 行）都是这个缺口
+        # 的形态，而两条都发生在"框架自己落下的产物"上。摘要是这条链路上唯一由框架
+        # own 的产物落点，登记它就有了第一条真记录（而不是一个空转的模块）。
+        # 纪律与会话记录逐条相同：**写失败不改终态**，原因进日志。
+        if digest_rel:
+            from . import artifacts as _ART
+
+            try:
+                _ART.record(getattr(self.store, "root", "."), path=digest_rel,
+                            producer=str(row.get("role") or "M"), kind="task-result",
+                            task_id=task_id, note=f"outcome={outcome}")
+            except Exception as e:  # noqa: BLE001 - 登记不是判据本身，不许带走终态
+                self._log(f"产物归属没登记成：{type(e).__name__}: {e}", task_id=task_id)
         return SummonResult(
             task_id=task_id, role=str(row.get("role") or ""), action=str(row.get("action") or ""),
             status=status, outcome=outcome, refusal_reason=row.get("refusal_reason"),

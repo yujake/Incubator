@@ -844,6 +844,134 @@ def cmd_evidence(args) -> int:
 # ---------------------------------------------------------------- 入口
 
 
+def cmd_artifacts(args) -> int:
+    """产物归属：登记 / 列出 / 核对 / 问归属 / 找没归属的 / 渲染成表。
+
+    三态（与全仓同一条纪律）：0 = 查过、都对得上；1 = 查过了、有变了的产物；
+    2 = 没查成（路径不给 / 越界 / 文件不存在 / 核对里有读不出来的）。
+
+    `record` 是**唯一写**的动作，而且**先核文件后写台账** —— 一条钉不住内容的登记
+    不是弱证据，是假证据（见 `agentflow.artifacts` 的模块 docstring）。
+    """
+    from . import artifacts as A
+
+    root = args.root
+    action = args.action
+    targets = list(args.target or [])
+
+    if action == "record":
+        if len(targets) != 1:
+            print("[artifacts] 没查成：record 只收一个路径", file=sys.stderr)
+            return 2
+        if not args.producer.strip():
+            print("[artifacts] 没查成：record 必须给 --producer（不知道是谁产的，"
+                  "这条登记没有归属可言）", file=sys.stderr)
+            return 2
+        try:
+            entry = A.record(root, path=targets[0], producer=args.producer, kind=args.kind,
+                             task_id=args.task_id, exit_code=args.exit_code, note=args.note)
+        except A.ArtifactError as e:
+            print(f"[artifacts] 拒收：{e}", file=sys.stderr)
+            return 2
+        print(tty.bullet(f"已登记 {entry['path']} ← {entry['producer']}"
+                         f"（{entry['kind']}，{entry['bytes']} 字节，{entry['sha256'][:16]}）"))
+        return 0
+
+    if action == "owners":
+        if len(targets) != 1:
+            print("[artifacts] 没查成：owners 只收一个路径", file=sys.stderr)
+            return 2
+        try:
+            rows = A.owners_of(root, targets[0])
+        except A.ArtifactError as e:
+            print(f"[artifacts] 没查成：{e}", file=sys.stderr)
+            return 2
+        if not rows:
+            print(tty.bullet(f"{targets[0]} 在台账里**没有**归属登记 —— "
+                             "这不是'没人产过'，是'没人登记过'（两件事必须分开说）"))
+            return 1
+        for line in tty.table(("生产者", "类别", "召唤", "时刻", "sha256"),
+                              [(r["producer"], r["kind"], r.get("task_id") or "—",
+                                r["at"], str(r["sha256"])[:16]) for r in rows]):
+            print(line)
+        return 0
+
+    if action == "unowned":
+        if not targets:
+            print("[artifacts] 没查成：unowned 至少要给一个路径（目录会被展开成里面的文件）",
+                  file=sys.stderr)
+            return 2
+        files: list[Path] = []
+        for t in targets:
+            p = Path(t)
+            if not p.is_absolute():
+                p = Path(str(root)) / p
+            if p.is_dir():
+                files += [q for q in sorted(p.rglob("*")) if q.is_file()]
+            elif p.is_file():
+                files.append(p)
+            else:
+                print(f"[artifacts] 没查成：{t} 既不是文件也不是目录", file=sys.stderr)
+                return 2
+        try:
+            missing = A.unowned(root, files)
+        except A.ArtifactError as e:
+            print(f"[artifacts] 没查成：{e}", file=sys.stderr)
+            return 2
+        print(tty.bullet(f"查了 {len(files)} 个文件，其中 {len(missing)} 个**没有**归属登记"))
+        for m in missing:
+            print(tty.bullet(m))
+        return 1 if missing else 0
+
+    if action == "list":
+        rows = A.list_artifacts(root, producer=args.producer or None,
+                                task_id=args.task_id or None, kind=args.kind or None)
+        if not rows:
+            print(tty.bullet("台账里没有匹配的记录 —— 目录里没有台账文件也是这一种"
+                             "（'还没登记过'，不是'登记过、没问题'）"))
+            return 0
+        for line in tty.table(("路径", "生产者", "类别", "召唤", "sha256"),
+                              [(r["path"], r["producer"], r["kind"], r.get("task_id") or "—",
+                                str(r["sha256"])[:16]) for r in rows]):
+            print(line)
+        return 0
+
+    if action == "report":
+        text = A.render_markdown(root)
+        if args.out:
+            out_path = Path(args.out)
+            if not out_path.is_absolute():
+                out_path = Path(str(root)) / out_path
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(text, encoding="utf-8", newline="\n")
+            print(tty.bullet(f"已写 {args.out}（{len(text.encode('utf-8'))} 字节）"))
+        else:
+            print(text)
+        return 0
+
+    # ---- verify（默认动作）
+    records, bad = A.read_ledger(root)
+    checks = A.verify_entries(root, records)
+    counts: dict[str, int] = {}
+    for c in checks:
+        counts[c["status"]] = counts.get(c["status"], 0) + 1
+    bad_statuses = ("changed", "missing", "unreadable", "not_a_file")
+    if not records and not bad:
+        print(tty.bullet("台账里一条记录都没有 —— **没查成**，不是'都对得上'"
+                         "（先 `artifacts record` 登记，别把空台账读成绿灯）"))
+        return 2
+    for c in checks:
+        if c["status"] in bad_statuses:
+            print(tty.bullet(f"{c['status']}：{c['path']}"
+                             f"（台账 {c['sha256'][:16] or '—'} / 盘上 {c['sha256_now'][:16] or '—'}）"))
+    for b in bad:
+        print(tty.bullet(f"台账坏行：{b}"))
+    print(tty.bullet(f"核对 {len(checks)} 条：{counts}；坏行 {len(bad)}"))
+    if bad or any(counts.get(s) for s in bad_statuses):
+        return 1
+    return 0
+
+
 def cmd_project(args) -> int:
     """项目式用法：一个项目一个文件夹（`projects/project1`…），冷/热启动按文件夹在不在。
 
@@ -1369,6 +1497,27 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--apply", action="store_true",
                     help="migrate 真的改写产物（缺省只 dry-run：这一步改的是历史证据本体）")
     sp.set_defaults(func=cmd_evidence)
+
+    # 产物归属登记（依据 draft/28 §153 的 A3/A4 与 R-52）：谁在哪个路径产出了什么。
+    sp = sub.add_parser(
+        "artifacts",
+        help="产物归属：record 登记 / list 列出 / verify 核对哈希 / owners 问这个路径归谁 / "
+             "unowned 找出**没有**归属的路径 / report 渲染成表",
+    )
+    sp.add_argument("action",
+                    choices=["record", "list", "verify", "owners", "unowned", "report"],
+                    help="record <路径>；owners <路径>；unowned <目录或文件…>；"
+                         "report 把台账渲染成 markdown（--out 给文件，否则打到 stdout）")
+    sp.add_argument("target", nargs="*", default=[],
+                    help="record/owners 给一个路径；unowned 给一个或多个路径（目录会被展开成文件）")
+    sp.add_argument("--producer", default="", help="record：谁产的（角色名 / 工具名 / M）")
+    sp.add_argument("--kind", default="file", help="record：产物类别（script / report / paper / …）")
+    sp.add_argument("--task-id", default="", help="record：这次产出属于哪一次召唤")
+    sp.add_argument("--exit-code", type=int, default=None,
+                    help="record：产生它的那次执行的退出码（没跑过就别给，不许拿 0 冒充）")
+    sp.add_argument("--note", default="", help="record：人读的补充")
+    sp.add_argument("--out", default=None, help="report：写到这个文件（缺省打到 stdout）")
+    sp.set_defaults(func=cmd_artifacts)
     return p
 
 
