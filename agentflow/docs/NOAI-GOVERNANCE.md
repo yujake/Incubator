@@ -35,11 +35,19 @@
 ### 两条命令
 
 ```text
-python scripts/noai_gate.py --paths <改动文件…>                    # 只判"命中没命中"
+python scripts/noai_gate.py --paths <改动文件…>                    # 只判"命中没命中"（+ 台账 stale 对账一行，见下）
 python scripts/noai_gate.py --check-approvals --paths <改动文件…>   # 命中 + 台账判定（推荐）
 python scripts/noai_gate.py --check-approvals --paths <文件> --json # 同上，机器可读
 python scripts/noai_gate.py --check-consistency                    # 两处清单逐条一致（不一致 ⇒ 2）
+python scripts/noai_gate.py --check-canonical                      # 规范哈希口径一致性（门 vs signatures；见下）
 ```
+
+`--check-canonical`（`R-33`，2026-09-29）：本门算回执哈希用的**规范 JSON 口径**与
+`agentflow.signatures`（稿件内容哈希）**是不是同一份**。同一载荷两侧哈希必须逐字相等，
+否则报 `divergent`（退出码 **1** —— "查过了、口径分叉了"）；本包 import 不了 ⇒ `unknown(2)`
+（**没查成，不许读成一致**）。它存在的原因是：门**不能** import 本包（它必须能被单独复制运行，
+见 `scripts/noai_gate.py::_receipt_digest` 的 docstring），所以那里留了一份自己的字节 ——
+而"没人看着的第二份口径"必须有一条机器判据钉住。
 
 `--check-approvals` 可以配 `--paths` / `--stdin` / `--git` 三者之一 —— 与既有的
 `--paths` 完全相同，**不许两个来源混用**（混用时无法判断"这次到底检查了哪些路径"，直接 2）。
@@ -88,6 +96,21 @@ python scripts/noai_gate.py --check-approvals --paths src/a.py \
 **hash 是字节级的**（不做行尾/编码归一化）。理由是两个方向的代价不对称：
 假 `stale` 只是让人多走查一次（可恢复）；假 `approved` 会让没走查的版本被当成走查过的版本
 （不可恢复）。CRLF/LF 的差别**是**内容差别。
+
+> **`stale` 在默认路径上也报（`R-62`，2026-09-29）**：上面那段是 `--check-approvals` 的输出。
+> 而 CI 跑的是 `--git --since <ref>`（走默认的 `check_paths` 那一支）—— 它原来**一句 stale 都不说**，
+> 于是"台账钉的不是提交进去的那一版"这件事在 CI 的路径上看不见。现在默认路径在命中禁改区之后
+> **只读地**补一句对账（不改 verdict、不改退出码）：
+>
+> ```text
+> [requires_human] required_approvals=2
+> requires_human：1 条改动落在 **FC-27 禁 AI 区**（类别：auth-audit）⇒ …
+> ⚠️ 台账 **stale** 1 条（被批准的那一版与盘上不是同一版 ⇒ 旧批准不许沿用；
+>    `--check-approvals` 会给出逐条结论）：src/agentflow/capabilities.py
+>    （台账 5d245fe74bde ≠ 盘上 ac8a0f41712f）
+> ```
+>
+> 读不到台账时它写的是"**没查成**，不是'没有 stale'"（三态纪律落在这一句上）。
 
 ### 理由码（人需要据此决定下一步动作）
 

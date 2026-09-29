@@ -742,3 +742,48 @@ python scripts/noai_gate.py --check-approvals --paths src/agentflow/verify.py --
 3. **§5「做不到的事」不许删。** 一份只说自己能做什么的合规文档，是这份文档最坏的形态；
    本项目 `02-…md`/`07-…md` 的教训逐字是 *"多数脚本不设退出码，于是『未报错』被误读为『无问题』"* ——
    本表对应的失败形态是 *"登记表在，于是被误读为已走查"*。
+
+---
+
+## 8. 2026-09-29 这一轮（`draft/28` §163–§174 那一批）—— **新开一节，不改上面任何旧数字**
+
+> 按 §7 的维护规则办：这一轮的记录**新开一节**，日期 + 复跑命令 + 当次读数，
+> 旧节的数字一个都不动。
+
+**这一轮的性质**：AI 代写 + `--baseline` 只做登记（`reviewers` 一律 0），
+窗口见 `docs/NOAI-SUSPENSION-2026-09-28.md`。**登记 ≠ 批准**；下面每一条都要人逐行走查。
+
+| # | 路径 | 类别 | 这一轮改了什么（走查要点） | 台账（当次） |
+|---:|---|---|---|---|
+| 1 | `src/agentflow/schema.py` | `schema-migration` + `eval-criteria` | `REFUSAL_REASONS` 加 `invalid_params`（参数门不再把参数错误报成 `unknown_action`） | `--baseline` 登记，`reviewers=0` |
+| 2 | `src/agentflow/providers.py` | `solver-core` + `provenance-dedup` | `_openalex_pdf_url` 标 `\|landing_same_as_pdf`（"落地页当直链"那类假 ok 的第①层） | 同上 |
+| 3 | `src/agentflow/capabilities.py` | `auth-audit` | **新增导入期第 [9] 条**：两层参数**类型**对账（含 `array` 的 `items.type`）+ `G.register_dependency.page_range` 声明由 `array<string>` 改 `array<integer>` | 同上 |
+| 4 | `src/agentflow/verify.py` | `auth-audit` | 签名读数拆名：`signature_problems` / `accepted_documents_checked`（旧键 `signatures` 删除）+ `SIGNABLE_STATUS` 交叉断言 | 同上 |
+| 5 | `src/agentflow/signatures.py` | （**不在清单内**） | 新增 `SIGNABLE_STATUS` 与 `signed_revision`；规范哈希改调 `canonical` | 无需登记 |
+| 6 | `tools/vocab_census.py` | `auth-audit` | 取词表面拓宽（`_FORMS` / 定义文件列表 / 类体默认值算产出点）+ **17 条预留登记**（7 条"由数据产出" + 10 条 `R-64`） | `--baseline`，`reviewers=0` |
+| 7 | `scripts/noai_gate.py` | `auth-audit` | 新增 `--check-canonical`（规范哈希口径一致性）；`check_paths` 补只读的台账 `stale` 对账 | 同上 |
+
+**当次读数**（复跑命令逐条给出；`stale` 与"未获批准"都是**当次**数）：
+
+```text
+$ python -c "import json;d=json.load(open('.noai-approvals.json',encoding='utf-8'));print('\n'.join(e['path'] for e in d['entries']))" `
+  | python scripts/noai_gate.py --stdin --check-approvals
+requires_human：命中 23 条禁改区路径，其中 **10 条未获批准**
+  （approved 13 条、insufficient_reviewers 9 条、ledger_self_approval 1 条）
+  ⇒ 必须由人编写或人逐行走查，并需要 2 名 reviewer 批准。  EXIT=1
+
+$ python scripts/noai_gate.py --check-canonical
+[canonical] consistent：同一份口径：同一载荷的哈希逐字相等（门侧 …aa5785ee52ba3e46）  EXIT=0
+
+$ python scripts/noai_gate.py --check-consistency
+一致：.noai-paths 与 AGENTS.md 的清单逐条相同                              EXIT=0
+```
+
+**两条"别误读"的话**（都踩过）：
+
+1. `stale` 是 **0** —— 但那是**门的口径**（`.noai-approvals.json` 自指那一条会先短路成
+   `ledger_self_approval`，所以它不参与 `stale` 计数）。拿一个"裸 hash 相减"的脚本去量，
+   会得到"stale 1（台账自指）"，那是**量法不同**，不是矛盾（见 `draft/28` §174 的记录）。
+2. `approved 13` 那 13 条是**更早几轮**人走过的（`tools/release_all.py` 等），
+   **不是这一轮的**。这一轮 7 条全部 `reviewers=0`。
+

@@ -1,15 +1,15 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T13:18:21+08:00",
+  "generated_at": "2026-09-29T13:20:45+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
       "glob": ".noai-approvals.json",
       "category": "auth-audit",
-      "sha256": "f71a4e25124c69d40e6fecbbfd0f72cc333cd3fd3fcdd6325428cb91abc65760",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "89c70788255f04e0867fdc0bf5fd21889b79780b60afc46625b55c1317e472e4",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "口径一致：尝试刷新台账自指条目",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

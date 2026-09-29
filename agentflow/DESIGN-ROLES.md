@@ -141,9 +141,20 @@ schema 只能检查"字段非空"，**"这个 lit_id 真的存在"必须由 G �
 ### 2.4 H —— 审校（**只读**）
 
 ```
-review(doc_id, *, round_no) -> dict
-verify_fixes(doc_id, *, round_no) -> dict
+review(doc_id, *, round_no=None, dependencies=<未指定>) -> dict
+verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
 ```
+
+（签名按 2026-09-29 的实测抄：`dependencies` 的三态是**同一套** —— 不传 = 从库里读该稿件的依赖；
+显式 `None` = 没查（结论不覆盖依赖闭合这一维）；显式给行序列 = 按给的清单查。）
+
+> ⚠️ **`verify_fixes` 的接受口径（`R-59`，2026-09-29）**：复审通过**不再**直接把
+> `documents.status` 置回 `accepted`。改稿之后内容哈希变了，而签名台账里那条钉的是**旧版本**
+> ⇒ 旧写法会留下"状态 accepted + 签名钉旧版"（`verify_all` 报 `stale_signature`，
+> 依 `draft/29` §8.8.4"改稿之后旧审批不许沿用"）。现在的口径：**`accepted` 必须由
+> "针对这一版"的签名背书** ⇒ `verify_fixes` 判 accepted 但状态落 `in_review`、并在 `reason` 里
+> 写明要重新 review；要回到 accepted 就再走一次 `review`（H 的唯一签发入口）。
+> 判据本体 `signatures.signed_revision`；规格见 `docs/ROLE-SPECS.md` §G.5(a)。
 
 **H 的工具面全部 `side_effect ∈ {"none","read"}`。** 理由不是洁癖：
 若审校者能直接改，它就同时是"发现者"与"修正者"，

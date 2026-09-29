@@ -514,7 +514,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_a
 | # | 职责 | 判据 |
 |---|---|---|
 | B-1 | 取未处理文献（`processed=false`） | `agent_b.AgentB.run_once` |
-| B-2 | 抽取概念与关系（`RuleExtractor` 离线基线 / `LLMExtractor` 可插拔） | `llm.py`；`extract_text` |
+| B-2 | 抽取概念与关系（`RuleExtractor` 离线基线 / `LLMExtractor` 可插拔）。⚠️ **`R-56`（2026-09-29）之后 `RuleExtractor` 是"框架的回退"而 `AgentB` 默认拒抽**：无 LLM 时不把它的产出灌进概念图（跳过时行上留 `last_mine_error="no_llm_extractor"`、返回值里 `skipped_no_extractor` 计数）。要显式用离线基线请换 `llm.OfflineFixtureExtractor`（同实现、声明自己不是回退），演示与单测走的就是它 | `llm.py`；`extract_text` |
 | B-3 | **逐字引文回验**：回到原文找一遍，定位成功则**存回原文的确切切片** | `quoteverify.py`；`agent_b.AgentB.run_once` |
 | B-4 | 关系判重（三级键 + 相似度档） | `dedup.decide_relation`；阈值 `dup_strong=0.92` / `dup_review=0.72`（`config.yaml:30-31`） |
 | B-5 | 写入期一致性闸门（I6）：问 C 这条新关系与已有关系是否矛盾 | `interactions.check_conflict`；**纯函数、签名里没有 store** |
@@ -1532,14 +1532,29 @@ SELF-CHECK DONE（agent_f）：失败 0 项
 |---|---|---|
 | `draft → in_review` | H 审校（`review.review_document`，写侧） | ✅ |
 | `in_review → revised` | **G** 的 `revise()` | ✅ |
-| `in_review → accepted` | H（仅在 `error_count == 0` **且** `dep_checked` 时） | ✅ |
+| `in_review → accepted` | H（仅在 `error_count == 0` **且** `dep_checked` 时；由 `review_document` 判并**当场签名**） | ✅ |
 | `in_review → unresolved_review` | H 到轮数上限 | ✅ |
 | `accepted` → 任何 | — | ❌（`verify.accepted_with_open_error` 会抓"accepted 但有 open error"） |
-| `revised → in_review` | H 复审 | ✅ |
+| `revised → in_review` | H 复审（`verify_fixes`；**复审通过也不再直接回 `accepted`** —— 见下） | ✅ |
 
 **硬拦**（`tools.review_tools.review_document` / `tools.review_tools.verify_fixes`）：
-`target_status = "accepted" if (scan["error_count"] == 0 and dep_checked) else "in_review"`。
-**逐字注释**（`tools.review_tools.review_document`）："不许在这个前提下判 accepted"。
+
+```text
+review_document: target_status = "accepted" if (scan["error_count"] == 0 and dep_checked) else "in_review"
+                 （判 accepted 之后**紧接着签一条** —— 见下）
+verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
+                 台账里必须**已有签名钉住当前这一版内容**（`signatures.signed_revision`）；
+                 没有 ⇒ 改置 "in_review" 并在 reason 里逐字写明"内容已变，需重新 review 才能重新接受"
+```
+
+**逐字注释**（`review_document`）："不许在这个前提下判 accepted"。
+
+> **`verify_fixes` 那一条为什么必需**：它原来与 `review_document` 用同一个公式 ⇒
+> "G 改稿 → H 复审通过"会留下**状态 accepted + 签名钉旧版本**，`verify_all` 报
+> `stale_signature`（"改稿之后旧审批不许沿用"，`draft/29` §8.8.4）。口径取的是
+> **"接受 = 有一次针对这一版的审+签"**，而 `verify_fixes` 不是一次审（它只重跑旧发现的
+> 对应检查，不重判全部判据）⇒ 它不签发，只把状态推到 `in_review`。
+> 想让它回到 `accepted`，再走一次 `review`（H 的唯一签发入口）。
 
 **(b) `dependencies.status`**
 

@@ -251,10 +251,18 @@ agentflow/
 │   │                         conductor，外加 `base.py` 与装配点 `__init__.py`）
 │   ├── providers.py / fetch.py / extract.py / quoteverify.py / textutil.py / dedup.py
 │   ├── llm.py / pipeline.py / demo.py / cli.py
+│   ├── sessions.py           按项目存放的会话记录（`<项目根>/sessions/<会话号>.jsonl`；学 harness 的按工作区存放）
+│   ├── artifacts.py          产物归属登记（`<工作区根>/ARTIFACTS.jsonl`：谁在哪个路径产出了什么；
+│   │                         CLI 动词 `artifacts record|list|verify|owners|unowned|report`）
+│   ├── canonical.py          规范 JSON 字节串的**唯一实现**（稿件内容哈希与回执哈希共用的那一份口径）
 ├── tests/                    pytest（离线 + 联网两套；见 §2）
-├── tools/                    开发期探针脚本
+├── tools/                    开发期探针脚本（`vocab_census.py` 的 R011 判据本体也在这里）
 └── data/ · library/ · demo/  运行时数据 / 下载的文献 / 演示素材
 ```
+
+> ⚠️ 上面这份树**只列会在意的那些**；完整的顶层模块清单（以及"新增一个模块必须在哪登记"）
+> 由 `tests/test_release_all.py::test_agentflow_top_level_modules_match_the_registry` 守着 ——
+> 那份登记表是判据，这份树是导读（README 自己的第 7 节第 1 条就写着"与代码冲突时以代码为准"）。
 
 ---
 
@@ -269,11 +277,20 @@ agentflow/
 | `data/attack_plans.json` | F 的攻坚计划（子目标 + 预算 + 历史） |
 | `data/experiments.json` | E 的实验记录（`method` 是计算类时 `evidence_kind` **不得**为 `proof`，schema 强制） |
 | `data/documents.json` / `dependencies.json` | G 的稿件与外部依赖（`external_unavailable` 是一等状态） |
+| `data/conjectures.json` | D 的猜想台账（`status` / `form` / 反例与证明实验的外键；依据 `draft/30` §T1） |
 | `data/review_findings.json` | H 的审校发现 |
 | `data/tasks.json` / `usage_ledger.json` / `eval_results.json` | **运行记录层**（编排台账 / token 记账 / 评测口径） |
 | `data/counters.json` | 4 位 ID 分配器 |
 | `data/events.jsonl` | **追加式事件日志，唯一事实源**；快照可从它重建 |
 | `data/.locks/*.lock` | 跨进程排他锁（`store.LOCK_ORDER` 规定加锁顺序） |
+
+**不在 `data/` 里、但同样属于工作区的三样**（都不是表，因此不进 `schema.TABLES`）：
+
+| 文件 / 目录 | 内容 |
+|---|---|
+| `DOC-SIGNATURES.jsonl` | 稿件签名台账（append-only JSONL + 链式哈希；证据快照在 `doc-signatures/`） |
+| `ARTIFACTS.jsonl` | **产物归属登记**：谁在哪个路径产出了什么（`sha256` + 字节 + 生产者 + 召唤号 + 退出码）；`changed/missing/unreadable` 四态由 `artifacts verify` 现算 |
+| `sessions/<会话号>.jsonl` | **按项目存放的会话记录**（一次终态 = 一条叙事行；换项目就是另一段历史，互不污染） |
 
 > 快照被改坏时：`python -m agentflow.cli rebuild`（会先自动备份）。
 
@@ -423,6 +440,14 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
 1. **`README.md` 不是判据。** 与代码冲突时以代码为准；判据入口是 `DEVELOPMENT.md` 与 `docs/ROLE-SPECS.md`。
 2. **抽取质量取决于抽取器。** 离线 `RuleExtractor` 只认定义句式，**真实论文上产出的概念名大多是垃圾**；
    它是**可测试的基线**，不是可用的抽取器。
+   > ⚠️ **`R-56`（2026-09-29）之后它还是"框架的回退"，而 `AgentB` 见到它会直接拒抽**：
+   > 无 LLM 时不会把它的产出灌进概念图（实测症状：`ANU` / `cingled property` / `Ultimately this`
+   > 这类碎片进图，而 `quote_verified=True` 让它们看起来有证据）。跳过时行上留
+   > `last_mine_error="no_llm_extractor"`，`run_once()` 的返回值里有 `skipped_no_extractor` 计数。
+   > **要显式选离线基线**（演示 / 单测 / 自检）请用 `llm.OfflineFixtureExtractor`
+   > ——与 `RuleExtractor` 同实现，只是声明自己**不是**回退；`cli` / `pipeline` / `host` 的默认装配
+   > 仍然是 `RuleExtractor`（也就是：默认**不抽**）。
+   > 口径是：**允许人明确选一条已知较弱的路径，不允许框架在被问到时假装那条路径没有被选过。**
    > ⚠️ **最重要的一条认知**：离线 demo 全绿 + 千条测试全绿 + 真实数据 `verify --deep` 零错误零警告，
    > **三个绿灯叠加仍然不能证明系统有用**，只能证明它**自洽**。不变量检查的是"结构自洽"，
    > 它不检查也无法检查"这个概念名是不是一个概念"。
