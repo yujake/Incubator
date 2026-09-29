@@ -62,6 +62,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import re
+
 from . import interactions as IX
 from . import schema as S
 from .store import Store
@@ -1186,6 +1188,32 @@ class AgentF:
         budget = dict(row.get("budget") or {})
         rounds = int(row.get("rounds") or 0)
         tail_n = int(self.cfg.get("history_tail", 5))
+        # ---- `R-53`（`draft/28` §158）：查出**陈话卡点**。
+        #
+        # F 的推进是**拉取式**的：子目标在 A 的回答落地后要**再派一次 `F.step`** 才推进。
+        # M 一停手，子目标就永久停在 `in_flight`，而 `blocked_reason` 还写着
+        # "等 A 完成检索请求 r-0019" —— 实测那两个请求早已 `done/ok`（§154 的 A5）。
+        # 这里在**只读视图**里对当前状态重算一次：请求已终结 ⇒ 把这句"等"标成**已过期**，
+        # 并逐条列进 `stale_blocked`（不隐藏、也不改写盘上那一行 —— 历史不改写）。
+        req_state = {str(x.get("request_id")): str(x.get("outcome") or "")
+                     for x in self.store.rows("search_requests")}
+        stale_blocked: list[dict] = []
+        for s in subgoals:
+            reason = str(s.get("blocked_reason") or "")
+            ids = sorted(set(re.findall(r"\br-\d{4}\b", reason)))
+            if not ids:
+                continue
+            # 判据是"**已终结**"，不是"成功了"：`search_failed` / `gave_up` 同样意味着
+            # "等 A 完成"这句话已经过期（A 完成了，只是失败）—— 那更该露出来。
+            # 取值域直接读 `S.SEARCH_OUTCOMES`，不另抄一份（抄一份就会与 schema 漂移）。
+            ended = [i for i in ids if req_state.get(i, "") in S.SEARCH_OUTCOMES]
+            if ended and len(ended) == len(ids):
+                s["blocked_stale"] = True
+                s["blocked_reason"] = (
+                    f"{reason}（**已过期**：{ended} 已经结束 —— 现在的卡点是"
+                    "『没有人再推进一步』，不是『还在等』）"
+                )
+                stale_blocked.append({"sid": s.get("sid"), "requests": ended})
         return {
             "checked": True,
             "plan_id": row.get("plan_id"),
@@ -1200,6 +1228,7 @@ class AgentF:
             "parent_plan_id": row.get("parent_plan_id"),
             "subgoals": subgoals,
             "subgoal_counts": counts,
+            "stale_blocked": stale_blocked,
             "best_partial": row.get("best_partial") or "",
             "history_len": len(row.get("history") or []),
             "history_tail": list(row.get("history") or [])[-max(0, tail_n) :],
