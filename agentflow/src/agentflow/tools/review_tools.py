@@ -53,7 +53,7 @@ H 侧当时不检查非法 `evidence_kind`、不检查 `negation_kind` 是否在
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from pathlib import Path
 
 from .. import claimanatomy as CA
@@ -157,6 +157,36 @@ _FOUR_GATE_KEYS_OF_KIND: dict[str, tuple[str, str, str]] = {
 #: 无产出路径），所以它是反真空而不是常态。
 _FOUR_GATE_KEYS_FALLBACK: tuple[str, str, str] = (
     "体例", "no", "按本发现 `message` 指出的那一格改正（这个 kind 还没登记逐条最小修法）"
+)
+
+# ---------------------------------------------------------------- 语义判据的接缝（`R-42`）
+#
+# `R-42`（`draft/28` §133）：P9 第 4 条的"结论强于引文"今天只有**措辞级**判据 ——
+# `OVERCLAIM_MARKERS` 逐词匹配（上面那个循环）加"`cross_check` 缺 disclaimer"。
+# 它能抓住"把交叉验证说成证明"，抓不住**措辞干净但结论确实强于引文**（引文给了 n=3 的
+# 数值检查、断言写成一般性结论）。语义级要 LLM 或人 —— 而本框架默认**零 LLM 调用**。
+#
+# 所以这里给的不是"接一个模型"，而是一条**接缝 + 一个显式的没查状态**：
+# 没接线时 `semantic_check["checked"] is False` 且理由逐字写明；
+# **绝不允许**把"没查"折成"没问题"（三态纪律，与 `dep_check` 逐条同形）。
+#
+# 为什么用既有的 `overclaim` 这个 kind 而不新造一个：`schema.FINDING_KINDS` 是受控词表，
+# 新造一个取值要动 FC-27 的 `schema.py`，而这件事的语义就是"过度声称"的一种 ——
+# 语义级判据是让**同一个 kind 更锋利**，不是发明新类别（`evidence` 里会写明来源是语义判据）。
+
+#: 语义判据允许的三种判定。`unknown` **必须**存在：模型答不上来与"我判过、没问题"
+#: 是两件事，折平之后"判不了"会静默变成"通过"。
+SEMANTIC_VERDICTS: tuple[str, ...] = ("consistent", "stronger_than_evidence", "unknown")
+
+#: 接缝签名：`judge(claim, doc) -> Mapping | None`，返回
+#: `{"verdict": <SEMANTIC_VERDICTS 之一>, "reason": str}`。返回 `None` 视作 `unknown`。
+SemanticJudge = Callable[[Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any] | None]
+
+#: 没接线时那句理由（要能回答"是谁没接线、怎么接"）。
+_SEMANTIC_NOT_WIRED_REASON = (
+    "没接线：语义级判据（「结论是否强于引文」）需要 LLM 或人，本框架默认零 LLM 调用。"
+    "接法：`scan_document(..., semantic_judge=<可调用>)`，签名见 `SemanticJudge`。"
+    "⇒ 这一格的状态是**没查**，不是'查过、没问题' —— 措辞级判据仍然跑过（见 findings）"
 )
 
 #: `line` 这一格为什么是第三态（`None` + 自证理由），而不是一个数字。
@@ -267,6 +297,7 @@ def scan_document(
     doc: Mapping[str, Any],
     *,
     dependencies: Sequence[Mapping[str, Any]] | None = None,
+    semantic_judge: SemanticJudge | None = None,
 ) -> dict:
     """对一份稿件做全量机械审校。纯函数，不碰存储。
 
@@ -288,6 +319,8 @@ def scan_document(
 
     三态：`dependencies=None` ⇒ `dep_check.checked=False`（没查），
     与「查了、依赖都闭合」（`checked=True, findings=[]`）严格区分。
+    `semantic_judge=None` ⇒ `semantic_check["checked"] is False`（没接线，**同样是没查**），
+    与「判过、都说一致」严格区分（`R-42`：措辞级判据抓不住"措辞干净但结论强于引文"）。
 
     `verdict` 的受控词与分档顺序（必须与写入路径 `review_document` 完全一致）：
 
@@ -481,6 +514,105 @@ def scan_document(
             )
         seen_ids[cid] = text
 
+    # ---- 语义级判据（`R-42`）："结论强于引文"这一条措辞级判据看不见
+    #
+    # 上面那个循环用的是 `OVERCLAIM_MARKERS` 逐词匹配 —— 它只能抓"把交叉验证说成证明"
+    # 这类**写在脸上**的形态。抓不住的是：措辞干净（没有 `证明`/`定理` 这类词），
+    # 但**结论的强度确实超过引文能支撑的范围**（引文只做了 n=3 的数值检查，
+    # 断言写成一般性结论）。那一层要读语义，只有 LLM 或人能判。
+    #
+    # 本框架默认零 LLM 调用 ⇒ 这里默认**没查**。三条纪律：
+    #   ① 没接线时 `checked=False` + 逐字理由，**不许**折成"没问题"（与 `dep_check` 同形）；
+    #   ② 判据答 `unknown` 也**不算查过**（`claims_unknown` 单独计数）——
+    #      "模型答不上来"与"我判过、一致"是两件事；
+    #   ③ 判据自己抛异常/返回不合法 ⇒ `checker_errors += 1` + 一条 warning 级 `garbled`
+    #      （与 `claimanatomy` 的 `checker_error` 同一处置：检查器没跑成不是稿件的错，
+    #      但绝不能静默）。
+    #
+    # 为什么语义级发现定 **warning** 而不是 error：措辞级那条是机械可判的（error 站得住），
+    # 而语义判定来自一个可能犯错的判据 —— 判错一次就会把一份合格的稿件判成 `rejected`。
+    # 定 warning 让它**可见**（verdict 落 `accepted_with_warnings`）而不越权。要不要升到
+    # error 是**口径**问题，属 FC-27 的 `eval-criteria` 类 ⇒ 留给人裁，不在这里替人定。
+    semantic_check: dict[str, Any] = {
+        "checked": False,
+        "judge": "",
+        "reason": _SEMANTIC_NOT_WIRED_REASON,
+        "claims_judged": 0,
+        "claims_unknown": 0,
+        "checker_errors": 0,
+        "stronger_than_evidence": 0,
+    }
+    if semantic_judge is not None:
+        semantic_check["checked"] = True
+        semantic_check["judge"] = getattr(semantic_judge, "__name__", "") or type(semantic_judge).__name__
+        reasons: list[str] = []
+        for i, c in enumerate(claims):
+            if not isinstance(c, Mapping):
+                continue
+            cid = str(c.get("claim_id") or f"claims[{i}]")
+            try:
+                got = semantic_judge(c, doc)
+            except Exception as e:  # noqa: BLE001 - 判据自己没跑成，见上面第 ③ 条
+                semantic_check["checker_errors"] += 1
+                findings.append(
+                    _finding(
+                        "garbled", level="warning", target=cid,
+                        evidence=f"语义判据在 claim_id={cid} 上抛了 {type(e).__name__}: {e}",
+                        message="语义判据自己没跑成：这一条是**没查成**，不是'没问题'",
+                        quote=str(c.get("text") or cid),
+                    )
+                )
+                continue
+            verdict_of = ""
+            if got is None:
+                verdict_of = "unknown"
+            elif isinstance(got, Mapping):
+                verdict_of = str(got.get("verdict") or "")
+                reason_one = str(got.get("reason") or "")
+                if reason_one:
+                    reasons.append(f"{cid}: {reason_one}")
+            if verdict_of not in SEMANTIC_VERDICTS:
+                semantic_check["checker_errors"] += 1
+                findings.append(
+                    _finding(
+                        "garbled", level="warning", target=cid,
+                        evidence=f"语义判据返回 {got!r}（verdict={verdict_of!r} 不在 {SEMANTIC_VERDICTS} 里）",
+                        message="语义判据的返回值不在受控词表里：这一条**没查成**",
+                        quote=str(c.get("text") or cid),
+                    )
+                )
+                continue
+            if verdict_of == "unknown":
+                semantic_check["claims_unknown"] += 1
+                continue
+            semantic_check["claims_judged"] += 1
+            if verdict_of == "stronger_than_evidence":
+                semantic_check["stronger_than_evidence"] += 1
+                findings.append(
+                    _finding(
+                        "overclaim", level="warning", target=cid,
+                        evidence=(
+                            f"语义判据（{semantic_check['judge']}）判定结论强于引文："
+                            f"claim_id={cid}，citations={list(c.get('citations') or [])}，"
+                            f"理由={str((got or {}).get('reason') or '')[:160]!r}"
+                        ),
+                        message=(
+                            "结论的强度超出引文能支撑的范围（措辞级判据看不见这一形态 —— "
+                            "它没有出现证明性措辞）。处置：要么把结论减弱到引文支撑得住的范围，"
+                            "要么补一条更强等级的引文（proof 级证据见 FC-22）。"
+                            "本条定 warning 而不是 error：语义判定来自可能犯错的判据，"
+                            "升级口径留给人裁"
+                        ),
+                        quote=str(c.get("text") or cid),
+                    )
+                )
+        semantic_check["reason"] = (
+            f"判过 {semantic_check['claims_judged']} 条、答不上来 {semantic_check['claims_unknown']} 条、"
+            f"判据报错 {semantic_check['checker_errors']} 条、判定'结论强于引文' "
+            f"{semantic_check['stronger_than_evidence']} 条"
+            + ("；逐条理由：" + " ｜ ".join(reasons[:5]) if reasons else "")
+        )
+
     # ---- 生命周期与降级（`claimanatomy` 的判据，H 侧此前完全没有）
     #
     # 这一段是本轮新增的能力：`status`（生命周期轴）与 `allowed_use`（降级规则）
@@ -620,9 +752,15 @@ def scan_document(
         "claims_total": claims_total,
         "claims_reviewed": reviewed,
         "claims_decided": decided,
+        # `R-42`：语义级判据真的判过几条。没接线时恒为 0 —— 它与 `claims_reviewed`
+        # 并排出现，读者一眼能看出"机械检查跑了、语义检查没跑"，而不是把
+        # `accepted` 读成"两层都查过"。
+        "claims_semantically_judged": semantic_check["claims_judged"],
         "note": (
             "`claims_reviewed` = 逐条字段/引用/证据等级检查真的跑过的断言数；"
-            "`claims_decided` = 其中校验器判成了的（判不了的另计）。"
+            "`claims_decided` = 其中校验器判成了的（判不了的另计）；"
+            "`claims_semantically_judged` = 语义级判据（「结论是否强于引文」）真的判过的条数"
+            "（没接线时为 0 = **没查**，不是'没问题'）。"
             "本覆盖率只覆盖「稿件有没有把自己说清楚」，不覆盖「数学对不对」——"
             "后者要 proof 级证据（FC-22），不由本函数给出。"
         ),
@@ -635,6 +773,12 @@ def scan_document(
             if dep_checked
             else f"依赖闭合**没查**（{dep_check.get('reason')}）⇒ 不能判 accepted"
         )
+        + (
+            f"；语义级判据已判 {semantic_check['claims_judged']} 条"
+            if semantic_check["checked"]
+            else "；语义级判据**没查**（未接线）—— 措辞级判据已跑，"
+                 "但'措辞干净而结论强于引文'这一形态看不见"
+        )
         + (f"；行号：按正文定位到 {lines_located} 条" if doc_text else "；行号：本次没有正文可定位")
     )
     return {
@@ -645,6 +789,9 @@ def scan_document(
         "warning_count": len(warnings),
         "info_count": len(findings) - len(errors) - len(warnings),
         "dep_check": dep_check,
+        # 语义级判据的三态（`R-42`）。与 `dep_check` 并排给：两个"没查"各自说清自己，
+        # 合成一个"有些检查没做"就没人知道是哪一层没做、该怎么接。
+        "semantic_check": semantic_check,
         "verdict": verdict,
         # 覆盖率与 verdict 必须一起给：`accepted` 只说"没查出问题"，
         # 说不出"这句话是在多少条断言上成立的"。
@@ -899,6 +1046,16 @@ def review_document(
         f"新增发现 {len(new_findings)} 条、与已有发现重复被跳过 {duplicate_skipped} 条",
         f"覆盖率 {scan['coverage']['claims_reviewed']}/{scan['coverage']['claims_total']}"
         f"（判成 {scan['coverage']['claims_decided']}）",
+        # `R-42`：写入路径也必须把"语义级没查"说出来 —— 否则 `accepted` 会被读成
+        # "两层都查过了"。这里不改 verdict 分档（改动分档是口径，属禁改区）：
+        # 语义级判据今天只能通过 `scan_document(semantic_judge=…)` 注入，
+        # 而 `review_document` 走的是工具面（`additionalProperties: False`，塞不进判据）
+        # ⇒ 这一格在写入路径上**如实报没查**，并由 `semantic_check` 字段带出去。
+        (
+            f"语义级判据已判 {scan['semantic_check']['claims_judged']} 条"
+            if scan["semantic_check"]["checked"]
+            else "语义级判据**没查**（未接线）—— '措辞干净而结论强于引文'这一形态看不见"
+        ),
     ]
     if reopened:
         reason_bits.append(f"重开 {len(reopened)} 条「标了 fixed 但重跑仍复现」的发现")
@@ -916,6 +1073,10 @@ def review_document(
         "warning_count": scan["warning_count"],
         "info_count": scan["info_count"],
         "dep_check": scan["dep_check"],
+        # `R-42`：语义级判据的三态随写回结果一起给出（与 `dep_check` 并排）。
+        # 这是"写回路径也不许把没查说成通过"的落点：`coverage` 里
+        # `claims_semantically_judged=0` 与这里 `checked=False` 一起读。
+        "semantic_check": scan["semantic_check"],
         "coverage": scan["coverage"],
         "status": status_now,
         "status_updated": status_updated,
