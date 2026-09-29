@@ -368,7 +368,7 @@ class AgentA:
         err = getattr(res, "error", None)
         if status == "ok" and err and str(err).startswith("content_type_mismatch"):
             status = "content_mismatch"
-        return {
+        out = {
             "status": status,
             "http_status": getattr(res, "http_status", None),
             "bytes": getattr(res, "bytes", 0) or 0,
@@ -376,6 +376,15 @@ class AgentA:
             "error": err,
             "_staged_path": getattr(res, "path", None),
         }
+        # ⚠️ `R-45` 的字段必须**也**出现在这条成功分支上。它原来只在
+        # `no_pdf_url`/`no_downloader`/异常那几条早退分支里（那是我第一次改的时候
+        # 只补了容易看见的几处）⇒ 结果最需要它们的**成功**记录里反而没有 URL。
+        # 实测代价：A2 重下六条之后，行上的 `download.url` 全为 `null`，
+        # "这一条到底下的是哪个 URL"又变成不可查（正是 R-45 要解决的病）。
+        out["url"] = url
+        if base.get("url_source"):
+            out["url_source"] = base["url_source"]
+        return out
 
     # ------------------------------------------------------------------ 主流程
     def _attach_staged(self, lit_id: str, dl: dict) -> tuple[str | None, dict]:
