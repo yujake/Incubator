@@ -194,7 +194,12 @@ def test_for_role_releases_exec_when_sandbox_is_declared_available(monkeypatch):
 #: C/H 也照样拿不到它；后者是 `read` + `exec` ⇒ 只有 exec 轴能把它剥掉，
 #: 所以这一条是"第二根轴的剥离规则真的在干活"的证据
 #: （它的 `roles` 也已从 `_ROLES` 改成 `_ROLES_WRITE`，不靠过滤兜底）。
-KNOWN_EXEC_TOOLS = frozenset({"verify.run_experiment", "verify.check_formal"})
+#: 现状（§188 之后）：6 条 —— 上面两条，加上论文包四件（渲染 / 编译 / 重编 / 查锚）。
+#: 论文包那四条执行的是项目里的脚本（`project` + `script` 由调用方给）⇒ 按定义是 exec；
+#: 它们的 `roles` 直接写死 `("G",)`，所以"只读角色拿不到"是声明与过滤两道都成立的。
+KNOWN_EXEC_TOOLS = frozenset({"verify.run_experiment", "verify.check_formal",
+                              "doc.paper_render", "doc.paper_compile", "doc.paper_build",
+                              "doc.paper_anchor"})
 
 
 def _exec_inventory_delta(registry, expected: frozenset[str]) -> dict[str, list[str]]:
@@ -225,8 +230,13 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
     # 的断言：哪怕 `_exec_inventory_delta` 里那个 `== "exec"` 被写成恒假，
     # 它也照样绿 —— 而恒假恰好就是"这条清单没人再看"的那种坏法。
     extra = ToolRegistry(name="t-extra-exec")
-    extra.register(_spec("verify.run_experiment", "write_local", ("E", "F", "G"), external="exec"))
-    extra.register(_spec("verify.check_formal", "read", ("E", "F", "G"), external="exec"))
+    for _name, _se, _roles in (("verify.run_experiment", "write_local", ("E", "F", "G")),
+                               ("verify.check_formal", "read", ("E", "F", "G")),
+                               ("doc.paper_render", "write_local", ("G",)),
+                               ("doc.paper_compile", "write_local", ("G",)),
+                               ("doc.paper_build", "write_local", ("G",)),
+                               ("doc.paper_anchor", "read", ("G",))):
+        extra.register(_spec(_name, _se, _roles, external="exec"))
     extra.register(_spec("bogus.exec", "none", ("E",), external="exec"))
     assert _exec_inventory_delta(extra, KNOWN_EXEC_TOOLS) == {
         "unexpected": ["bogus.exec"], "missing": [],
@@ -235,12 +245,15 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
     absent = ToolRegistry(name="t-absent-exec")
     absent.register(_spec("verify.check_formal", "read", ("E", "F", "G"), external="exec"))
     assert _exec_inventory_delta(absent, KNOWN_EXEC_TOOLS) == {
-        "unexpected": [], "missing": ["verify.run_experiment"],
+        "unexpected": [],
+        "missing": ["doc.paper_anchor", "doc.paper_build", "doc.paper_compile",
+                    "doc.paper_render", "verify.run_experiment"],
     }, _exec_inventory_delta(absent, KNOWN_EXEC_TOOLS)
     none_at_all = ToolRegistry(name="t-no-exec")
     assert _exec_inventory_delta(none_at_all, KNOWN_EXEC_TOOLS) == {
         "unexpected": [],
-        "missing": ["verify.check_formal", "verify.run_experiment"],
+        "missing": ["doc.paper_anchor", "doc.paper_build", "doc.paper_compile",
+                    "doc.paper_render", "verify.check_formal", "verify.run_experiment"],
     }, _exec_inventory_delta(none_at_all, KNOWN_EXEC_TOOLS)
 
     # 只读角色侧：真实树上 exec 工具一条都进不去，且留痕为空（= 声明侧也干净）。

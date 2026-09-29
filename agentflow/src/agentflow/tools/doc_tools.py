@@ -42,6 +42,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
+from .. import paperbuild as PB
 from .. import schema as S
 from .. import textutil as T
 from ..store import StoreError
@@ -1618,5 +1619,271 @@ def register(
             # （`S.Dependency` 全字段，12 个）。
             returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
             tags=("document", "dependency", "write"),
+        )
+    )
+
+    _register_paper_tools(registry, workspace=workspace)
+
+
+# ---------------------------------------------------------------- 论文包（打包 / 编译 / 查锚）
+
+
+def _resolve_project_root(workspace: Path | None, project: str) -> tuple[Path | None, str]:
+    """把 `project` 解析成工作区内一个真实目录。返回 `(路径, 问题)`。
+
+    与 `_resolve_out_path` 同一个纪律：越界（绝对路径、`..`、跳到工作区外）一律拒。
+    这一层要起子进程并把它的工作目录设成这个路径 —— 放宽等于把"跑什么、在哪跑"
+    交给调用方，而工具层把那个能力定义成 `exec`（需要审批）。
+    """
+    raw = str(project or "").strip()
+    if not raw:
+        return None, "project 不能为空（它是论文包所在的项目根，例如 projects/p2-review）"
+    cand = Path(raw)
+    if cand.is_absolute():
+        return None, f"project 必须是工作区内的相对路径（收到绝对路径 {raw}）"
+    if workspace is None:
+        return None, "没接线：装配时既没给 workspace_root 也没给 store ⇒ 不知道该相对谁解析 project"
+    root = workspace.resolve()
+    target = (root / cand).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None, f"project 跑出工作区了：{raw}"
+    if not target.is_dir():
+        return None, f"项目目录不在盘上：{target}"
+    return target, ""
+
+
+def _paper_root(workspace: Path | None, project: str) -> Any:
+    """解析项目根；失败时返回一个已经 `fail` 的结果（调用方直接返回它）。"""
+    target, problem = _resolve_project_root(workspace, project)
+    if target is None:
+        return fail(f"论文包：{problem}", kind="bad_project", project=project)
+    return target
+
+
+def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> None:
+    """把"打包 / 编译 / 查渲染锚 / 一次重编"注册成 G 的工具。
+
+    四条工具共用 `agentflow.paperbuild` 里那一份实现：判据在项目脚本里，
+    这一层只负责受限地起子进程、读回 `REPRO_RESULT` 契约、把三态翻成 ok/fail。
+
+    `declared_external="exec"` 是刻意的：它们执行的是项目里的脚本（调用方选路径）。
+    声明成 `none` 等于说"这几个工具不执行任何东西"—— 而那正好是审批面最需要看的一栏。
+    """
+#: 论文包四件工具的实现。它们刻意写在模块级而不是嵌在 `_register_paper_tools` 里：
+#: `tests/test_tools_branch_key_sets.py` 的扫描器对每个函数做 `ast.walk`（含嵌套定义），
+#: 四个嵌套 handler 会被算成外层函数的四处分支 ⇒ 判据报「同一个 handler 两种键集合」
+#: （12/12/12/14 键 —— 查锚那件本来就不是同一个形状）。提出来之后每个 handler 各有一处
+#: 成功支，静态判据读得清，且四条工具的键表各自可见。
+def _paper_render(workspace: Path | None, project: str, script: str, timeout_sec: float) -> Any:
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    got = PB.render(root, script=script or PB.DEFAULT_RENDER_SCRIPT, timeout_sec=timeout_sec)
+    if not got["ok"]:
+        return fail(f"渲染没走成：{got['problem'] or got['stderr_tail'][-200:]}",
+                    kind="paper_render_failed", **got)
+    # 成功支写成字面量键表（见模块里这条纪律的说明）：让"返回了哪些键"静态可见。
+    return ok({
+        "script": got["script"], "script_path": got["script_path"], "argv": got["argv"],
+        "exit_code": got["exit_code"], "timed_out": got["timed_out"], "ok": got["ok"],
+        "result": got["result"], "elapsed_sec": got["elapsed_sec"],
+        "stdout_tail": got["stdout_tail"], "stderr_tail": got["stderr_tail"],
+        "repro_found": got["repro_found"], "problem": got["problem"],
+    })
+
+def _paper_compile(workspace: Path | None, project: str, script: str, timeout_sec: float) -> Any:
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    got = PB.compile_pdf(root, script=script or PB.DEFAULT_COMPILE_SCRIPT,
+                         timeout_sec=timeout_sec)
+    if not got["ok"]:
+        return fail(f"编译没走成：{got['problem'] or got['stderr_tail'][-200:]}",
+                    kind="paper_compile_failed", **got)
+    return ok({
+        "script": got["script"], "script_path": got["script_path"], "argv": got["argv"],
+        "exit_code": got["exit_code"], "timed_out": got["timed_out"], "ok": got["ok"],
+        "result": got["result"], "elapsed_sec": got["elapsed_sec"],
+        "stdout_tail": got["stdout_tail"], "stderr_tail": got["stderr_tail"],
+        "repro_found": got["repro_found"], "problem": got["problem"],
+    })
+
+def _paper_anchor(workspace: Path | None, project: str, script: str, timeout_sec: float) -> Any:
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    got = PB.anchor_check(root, script=script or PB.DEFAULT_RENDER_SCRIPT,
+                          timeout_sec=timeout_sec)
+    # 三态：drifted 是"查过了、有漂移"（fail），unknown 是"没查成"（fail 但 kind 不同）。
+    # 两者都 fail：工具层的 ok 只表示"这一步做成了"，而"包与库一致"由 verdict 说。
+    if got["verdict"] == "consistent":
+        return ok({
+            "verdict": got["verdict"], "expected_exit_code": got["expected_exit_code"],
+            "exit_code": got["exit_code"], "drift": got["drift"], "why": got["why"],
+            "script": got["script"], "anchor_path": got["anchor_path"],
+            "anchor_present": got["anchor_present"], "anchor_sha256": got["anchor_sha256"],
+            "stdout_tail": got["stdout_tail"], "stderr_tail": got["stderr_tail"],
+            "elapsed_sec": got["elapsed_sec"], "repro_found": got["repro_found"],
+            "problem": got["problem"],
+        })
+    kind = "paper_anchor_unknown" if got["verdict"] == "unknown" else "paper_anchor_drifted"
+    return fail(f"渲染锚没到 0 漂移：{got['why']}", kind=kind, **got)
+
+def _paper_build(workspace: Path | None, project: str, render_script: str, compile_script: str, timeout_sec: float) -> Any:
+    root = _paper_root(workspace, project)
+    if not isinstance(root, Path):
+        return root
+    got = PB.build(root, render_script=render_script or PB.DEFAULT_RENDER_SCRIPT,
+                   compile_script=compile_script or PB.DEFAULT_COMPILE_SCRIPT,
+                   timeout_sec=timeout_sec)
+    if not got["ok"]:
+        return fail(f"从源重编没走成：{got['problem']}", kind="paper_build_failed", **got)
+    return ok({
+        "ok": got["ok"], "anchor": got["anchor"], "pdf_path": got["pdf_path"],
+        "pdf_sha256": got["pdf_sha256"], "pdf_bytes": got["pdf_bytes"],
+        "pdf_pages": got["pdf_pages"], "markers_missing": got["markers_missing"],
+        "compiler_exit_codes": got["compiler_exit_codes"],
+        "tex_content_stable": got["tex_content_stable"], "tex_note": got["tex_note"],
+        "steps": got["steps"], "problem": got["problem"],
+    })
+
+
+def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> None:
+    """把"打包 / 编译 / 查渲染锚 / 一次重编"注册成 G 的工具。
+
+    四条工具共用 `agentflow.paperbuild` 里那一份实现：判据在项目脚本里，
+    这一层只负责受限地起子进程、读回 `REPRO_RESULT` 契约、把三态翻成 ok/fail。
+
+    `declared_external="exec"` 是刻意的：它们执行的是项目里的脚本（调用方选路径）。
+    声明成 `none` 等于说"这几个工具不执行任何东西"—— 而那正好是审批面最需要看的一栏。
+    """
+    registry.register(
+        ToolSpec(
+            name="doc.paper_render",
+            summary="跑项目里的渲染脚本（默认 code/make_paper.py）：从库里的行重新产出主稿、"
+            "四张表与六件配套，并写渲染锚。原始退出码与脚本的 REPRO_RESULT 结论一字不改带回。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "script": {"type": "string", "maxLength": 300},
+                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
+                },
+                "required": ["project"],
+                "additionalProperties": False,
+            },
+            handler=lambda project, script="", timeout_sec=900.0: _paper_render(
+                workspace, project, script, timeout_sec),
+            side_effect="write_local",
+            declared_external="exec",
+            roles=("G",),
+            returns=(
+                "{'script','script_path','argv','exit_code','timed_out','ok','result','elapsed_sec',"
+                "'stdout_tail','stderr_tail','repro_found','problem'}；"
+                "`result` 是脚本自己那行 `REPRO_RESULT: {json}`（渲染脚本给 claims/experiments/"
+                "dependencies/conjectures/literature/findings/signature_verdict/coverage/"
+                "render_anchor/anchor_tables 等读数）；"
+                "失败：ok=False + kind=paper_render_failed + problem（超时/脚本不存在/越界/没有结论行）"
+            ),
+            tags=("document", "paper", "exec"),
+        )
+    )
+
+    registry.register(
+        ToolSpec(
+            name="doc.paper_compile",
+            summary="跑项目里的编译脚本（默认 code/compile_paper.py）：从 main.tex 重编 main.pdf。"
+            "本机 MiKTeX 会写完 PDF 却以 0xC0000409 退出 ⇒ 判据是 PDF 的内容，退出码如实带回。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "script": {"type": "string", "maxLength": 300},
+                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
+                },
+                "required": ["project"],
+                "additionalProperties": False,
+            },
+            handler=lambda project, script="", timeout_sec=1800.0: _paper_compile(
+                workspace, project, script, timeout_sec),
+            side_effect="write_local",
+            declared_external="exec",
+            roles=("G",),
+            returns=(
+                "{'script','script_path','argv','exit_code','timed_out','ok','result','elapsed_sec',"
+                "'stdout_tail','stderr_tail','repro_found','problem'}；"
+                "`result` 含 {'ok','pdf','pdf_bytes','pdf_header','pages','text_extractor',"
+                "'markers_missing','runs','compiler_exit_codes','log_tail','note'}；"
+                "失败：ok=False + kind=paper_compile_failed"
+            ),
+            tags=("document", "paper", "exec"),
+        )
+    )
+
+    registry.register(
+        ToolSpec(
+            name="doc.paper_anchor",
+            summary="查渲染锚（默认 code/make_paper.py --check）：三态 —— 0 一致 / 1 有漂移 / "
+            "2 没查成（锚不在盘上）。漂移逐条列出（哪张表、哪个文件）。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "script": {"type": "string", "maxLength": 300},
+                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
+                },
+                "required": ["project"],
+                "additionalProperties": False,
+            },
+            handler=lambda project, script="", timeout_sec=600.0: _paper_anchor(
+                workspace, project, script, timeout_sec),
+            side_effect="read",
+            declared_external="exec",
+            roles=("G",),
+            returns=(
+                "{'verdict','expected_exit_code','exit_code','drift','why','script','anchor_path',"
+                "'anchor_present','anchor_sha256','stdout_tail','stderr_tail','elapsed_sec',"
+                "'repro_found','problem'}；verdict ∈ consistent/drifted/unknown；"
+                "退出码与它打印的漂移行互相矛盾时判 unknown（两个信号打架不许挑一个信）。"
+                "失败：ok=False + kind=paper_anchor_drifted（查过了、有漂移）/ "
+                "paper_anchor_unknown（没查成）"
+            ),
+            tags=("document", "paper", "anchor"),
+        )
+    )
+
+    registry.register(
+        ToolSpec(
+            name="doc.paper_build",
+            summary="从源重编一次论文包并核对渲染锚：渲染 → 编译 → 再渲染（把锚挪到新 PDF 上）"
+            "→ 查锚，返回每一步的读数与最终漂移数。顺序是判据的一部分（见 draft/28 §188）。",
+            params={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "render_script": {"type": "string", "maxLength": 300},
+                    "compile_script": {"type": "string", "maxLength": 300},
+                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
+                },
+                "required": ["project"],
+                "additionalProperties": False,
+            },
+            handler=lambda project, render_script="", compile_script="", timeout_sec=1800.0: _paper_build(
+                workspace, project, render_script, compile_script, timeout_sec),
+            side_effect="write_local",
+            declared_external="exec",
+            roles=("G",),
+            returns=(
+                "{'ok','anchor','pdf_path','pdf_sha256','pdf_bytes','pdf_pages','markers_missing',"
+                "'compiler_exit_codes','tex_content_stable','tex_note','steps','problem'}；"
+                "`anchor` 含 {'verdict','exit_code','drift','why','anchor_path','anchor_present',"
+                "'anchor_sha256'}；`steps[]` 每项是 {'step','script','exit_code','ok','result',…}，"
+                "step ∈ render/compile/render_after_compile/anchor_check；"
+                "ok=True 只在锚 verdict=consistent（0 漂移）时为真；"
+                "失败：ok=False + kind=paper_build_failed + problem（指出是哪一步没走成）"
+            ),
+            tags=("document", "paper", "build"),
         )
     )
