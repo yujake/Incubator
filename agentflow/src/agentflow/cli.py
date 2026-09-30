@@ -1430,10 +1430,33 @@ def cmd_run_agent(args) -> int:
         return 2
 
     loops = {key: {"max_steps": args.max_steps} for key in table}
+    # ---- A 的检索后端（2026-09-30 修）
+    #
+    # 为什么必须在这里建：`wired_llm_conductor` 一直收 `providers=`，但从来没有人传 ⇒
+    # `_Builder.status()` 把 A 判成 `no_provider`、A 不进登记表 ⇒ 任何角色唤起 A 都落
+    # `refused/not_wired`。真机实测（`draft/28` §201）：G 明明按协议唤起了 A，
+    # 拿回来的却是"A 没有接线（registry 里没有它）"—— 文献检索这条最重要的协同边
+    # 在协同运行里从来就没接上过。用户口径："A 的文献检索必须要通关。"
+    #
+    # 口径与 `run-a` 逐字一致（`cmd_run_a` 那三行）：先看 `--provider`，再看配置里的
+    # `agent_a.providers`，都没有才用 openalex。不一致的默认值本身就是"凌乱"的一种，
+    # 所以这里刻意复用同一段逻辑（`_build_providers`）而不是再写一遍。
+    # `args` 在测试里常是手搭的 `Namespace`（那些用例只关心循环本身），所以三个新参数
+    # 一律 `getattr(..., None)` 取 —— 缺了就当"没给"，而不是让整个 `run-agent` 崩在属性上。
+    cfg = load_config(root, getattr(args, "config", None))
+    prov_names = (str(args.provider).split(",") if getattr(args, "provider", None)
+                  else (cfg.get("agent_a") or {}).get("providers", ["openalex"]))
+    providers = _build_providers(cfg, list(prov_names), root)
     wiring = H.wired_llm_conductor(st, loops=loops, session_root=root, sid=args.sid,
                                    max_steps=args.max_steps, usd_budget=args.budget_usd,
                                    workspace_root=str(root), seam_factory=seam_for,
+                                   providers=providers, config=cfg,
                                    semantic_review=bool(getattr(args, "semantic_review", False)))
+    if not providers:
+        # 三态：A 这条路这一轮是没接线（不是"没有文献"）。说清楚，别让人去猜。
+        print(tty.paint(
+            "[run-agent] 注意：A 没有接任何检索后端 ⇒ 唤起 A 会如实落 refused/not_wired"
+            "（想离线验证就用 --provider fixture）", "yellow"))
     if args.rounds and args.rounds > 1:
         auto = AU.run_autonomous(args.role, args.task, store=st, registry=wiring["registry"],
                                  conductor=wiring["conductor"], session_root=root,
@@ -1779,6 +1802,12 @@ def build_parser() -> argparse.ArgumentParser:
                          "改用「确定性动作 + 同角色多实例并发」（`conductor.summon_many`）")
     sp.add_argument("--semantic-review", action="store_true",
                     help="给 H 接上语义判据（「结论是否强于引文」）；不写则那一格如实报「没查」")
+    sp.add_argument("--provider", default=None,
+                    help="A 的检索后端，逗号分隔（openalex/crossref/doaj/europepmc/fixture）；"
+                         "缺省按配置 `agent_a.providers`，再缺省 openalex —— 与 `run-a` 同口径。"
+                         "A 没有后端就不会进登记表：那时任何角色唤起 A 都会如实落 "
+                         "`refused/not_wired`（没查成，不是「这个主题没有文献」）。"
+                         "想离线验证这条链路就写 `--provider fixture`")
     sp.add_argument("--max-steps", type=_non_negative_int, default=6, help="单次循环最多几步")
     sp.add_argument("--rounds", type=_non_negative_int, default=1,
                     help="跑几轮（>1 走自主轮：按 --report-every 向公共频道汇报）")

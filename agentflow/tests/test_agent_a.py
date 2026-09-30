@@ -139,6 +139,102 @@ def test_existing_literature_row_is_not_overwritten_by_duplicate(store):
     assert after["lit_id"] == before["lit_id"]
 
 
+# --------------------------------------------------------------------------- 按主题现查
+#
+# `A.search_literature`（2026-09-30）：用户口径是"A 的文献检索必须要通关"。
+# 下面四条把"通关"拆成四个可判定的面：入队成功、真查到并登记、三态分得开、
+# 走的是同一条准入闸门（不是绕过它开的后门）。
+
+
+def test_search_literature_enqueues_and_returns_the_registered_rows(store):
+    """正控：一次 `search_literature(topic)` 之后，文献真的在库里，来源也在请求行上。"""
+    provider = StubProvider([_cand()])
+    a = _agent_a(store, provider, OkDownloader())
+
+    out = a.search_literature(topic="abelian group", mode="topical")
+
+    assert out["ok"] is True and out["admitted"] is True, out
+    assert out["request_id"] and out["request_id"].startswith("r-"), out
+    assert out["outcome"] == "ok" and out["done"] is True, out
+    rows = store.rows("search_requests")
+    assert len(rows) == 1, "只该入队一条"
+    assert rows[0]["topic"] == "abelian group" and rows[0]["mode"] == "topical"
+    assert rows[0]["submitted_by"] == "agent-A", "出处必须留在行上（谁提的）"
+    lit = store.rows("literature")
+    assert len(lit) == 1 and lit[0]["title"] == _cand().title
+    assert out["result_lit_ids"] == [lit[0]["lit_id"]]
+    assert [x["lit_id"] for x in out["literature"]] == [lit[0]["lit_id"]]
+    assert out["literature"][0]["title"] == lit[0]["title"]
+    # provider 真的被问过（"入队了但没人查"必须与"查到了"分得开）
+    assert provider.calls and provider.calls[0][0] == "abelian group"
+
+
+def test_search_literature_reports_no_results_as_an_outcome_not_an_error(store):
+    """查了但零命中 ⇒ `no_results`（有效结论），而不是错误、也不是异常。"""
+    a = _agent_a(store, StubProvider([]), OkDownloader())
+    out = a.search_literature(topic="there is no such paper anywhere")
+    assert out["ok"] is True and out["outcome"] == "no_results", out
+    assert out["result_lit_ids"] == [] and store.rows("literature") == []
+
+
+def test_search_literature_without_a_provider_writes_nothing(store):
+    """三态：「A 没接检索后端」⇒ 零写入 + 单独的理由码（不是"这个主题没有文献"）。"""
+    a = AgentA(store, providers=[], downloader=OkDownloader(), config={"download": True})
+    out = a.search_literature(topic="abelian group")
+    assert out["ok"] is False and out["kind"] == "no_provider", out
+    assert store.rows("search_requests") == [], "没接线时不许留下一条查不动的请求"
+
+
+def test_search_literature_bad_topic_and_mode_are_refused_before_any_write(store):
+    """参数门：空主题 / 未知 mode 都在入队之前被拒（负控：零写入）。"""
+    a = _agent_a(store, StubProvider([_cand()]), OkDownloader())
+    assert a.search_literature(topic="   ")["kind"] == "bad_topic"
+    assert a.search_literature(topic="x", mode="没有这个模式")["kind"] == "bad_mode"
+    assert store.rows("search_requests") == []
+
+
+def test_search_literature_goes_through_the_inflight_gate(store, monkeypatch):
+    """它必须过闸门：在途请求已达上限 ⇒ 如实拒绝且零写入（不许绕过 I7）。
+
+    为什么单钉这一条：`search_literature` 是"生产队列"的动作，而队列有在途上限
+    （`interactions.admit_search_request`）—— 绕过它，"角色一缺证据就提问"会退化成
+    "每轮都问"，把所有请求一起拖慢。判据用 `max_inflight_requests=1` 制造满员。
+    """
+    from agentflow import interactions as X
+
+    a = _agent_a(store, StubProvider([_cand()]), OkDownloader())
+    monkeypatch.setitem(X.DEFAULTS, "max_inflight_requests", 1)
+    add_request(store, "r-0001", topic="already queued")     # 占住在途额度
+
+    out = a.search_literature(topic="abelian group")
+    assert out["ok"] is True and out["admitted"] is False, out
+    assert out["outcome"] == "rejected_by_gate" and "上限" in str(out["reason"]), out
+    assert len(store.rows("search_requests")) == 1, "被拒时一条都不许写"
+
+
+def test_search_literature_does_not_pretend_someone_elses_request_is_its_own(store):
+    """队列里有更早的请求时，如实报出"这一轮领到的是它"，不冒充成本次的结果。
+
+    三态纪律在这里的落点：`claimed_request_id != request_id` 是一个必须能被看见的
+    区别 —— 否则调用方会把"别人那条的结果"当成"我要的文献"。
+    """
+    a = _agent_a(store, StubProvider([_cand()]), OkDownloader())
+    add_request(store, "r-0001", topic="older request")      # 先来一条（同为 low 优先级）
+    out = a.search_literature(topic="mine", mode="topical")
+    assert out["request_id"] != "r-0001"
+    # 它先替更早那条跑完、再跑自己那条 —— 两条都要如实报出来。
+    assert out["claimed_request_ids"] == ["r-0001", out["request_id"]], out
+    assert out["claimed_own"] is True, out
+    # 两条都在库里，各自都完成了（用的是同一个替身 provider，各登记一篇）
+    by_id = {r["request_id"]: r for r in store.rows("search_requests")}
+    assert by_id["r-0001"]["done"] is True
+    assert by_id[out["request_id"]]["done"] is True
+    assert len(store.rows("literature")) == 1, (
+        "同一个替身候选被两条请求各查了一次 ⇒ 判重合成同一行（不是两行）")
+    lit = store.rows("literature")[0]
+    assert lit["source_request_ids"] == ["r-0001", out["request_id"]], lit["source_request_ids"]
+
+
 # --------------------------------------------------------------------------- 下载失败
 
 

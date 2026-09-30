@@ -176,6 +176,189 @@ class AgentA:
         # 置 0 是合法配置：等价于关闭退避（租约当场过期 ⇒ 立即可重领），
         # 不是"没配"。所以这里用 `get(..., 60)` 而不是 `... or 60`。
         self.retry_backoff_seconds = int(self.cfg.get("retry_backoff_seconds", 60))
+        # `search()` 一次最多领跑几轮（每轮一条请求）。它只影响这个新动作：
+        # `run_once` / `run` 的语义一个字没动。
+        self.search_max_rounds = int(self.cfg.get("search_max_rounds", 3))
+
+    # ------------------------------------------------------- 按主题现查（A.search_literature）
+    #
+    # 名字为什么是 `search_literature` 而不是 `search`（2026-09-30 实测）：
+    # 两层对账按"工具名最后一段 == handler_name"配对，而 A 的工具组里
+    # `fs.search` 与 `table.search` 的最后一段都是 `search` ⇒ 叫 `search` 会让这条
+    # 动作落进 `ambiguous`（两个候选），而导入期第 [7b] 条要求 `ambiguous` 为空。
+    # 换成 `search_literature` 之后它诚实地落进 `unmatched`（没有任何工具同名），
+    # 已按规矩登记进 `capabilities._KNOWN_UNMATCHED_ACTIONS`。
+    def search_literature(self, *, topic: str, mode: str = "precise",
+                          description: str = "") -> dict:
+        """按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方。
+
+        ## 为什么需要这个动作（2026-09-30；用户口径："A 的文献检索必须要通关"）
+
+        A 原有的两个动作（`run_once` / `run`）的参数里没有主题 —— 它们只认
+        "队列里已经有什么"。而队列今天只有三处能写：CLI `submit`、D 的
+        `research.submit_gap`（还要求先有一条研究问题）、C 的 gap 分支。
+        于是"角色缺文献证据 ⇒ 唤起 A"这条路上，召唤方没有办法告诉 A 要查什么：
+        它只能唤一个对着空队列空转的 A（实测：G 唤起 `A.run_once`，落
+        `refused/not_wired`；即使接上线，队列空时也只会得到 `no_pending_request`）。
+        这个动作补的就是那一句"去查这个主题"，并且不绕过任何既有闸门：
+        它走的是与 `submit` 同一条入队路径（`interactions.admit_search_request` 的
+        I7 准入 + `SearchRequest.validate` + 同一个取号口径），随后仍由 `run_once`
+        在既有的领取/租约/退避/判重/下载链路上跑。
+
+        ## 默认 mode 为什么是 `precise` 而不是 `topical`（2026-09-30 实测）
+
+        这个动作的语义是"给我这条命题的来源"，不是"给我这个领域的全景"。
+        实测（同一个 topic，真机打 OpenAlex，`temp/live-a-search-*.txt` 与
+        `temp/_probe_openalex_mode.py` 的读数）：
+
+        | mode | 回来 | 对题 |
+        |---|---|---|
+        | `topical`（原默认） | 15 条 | 1/15（异常扩散 / 分子演化速率 / 神经形态自旋电子学…） |
+        | `precise` | 8 条 | 7/8（The extremal process of BBM、Poissonian statistics…） |
+
+        差别在 `precise` 那一档带 `keyword_hit` 后置过滤，而 `topical` 把长题面拆成
+        词袋去打全文检索 —— 词袋越长，OpenAlex 的相关度排序越差。
+        要"领域全景"就显式传 `mode="broad"` / `"topical"`；默认这一档服务的是
+        "缺哪条证据就去找哪一条"。
+
+        ## 三态纪律的落点（这是它与"返回一个空列表"的分界）
+
+        - 准入被拒（在途请求已达上限）：`admitted=False` + 原因，零写入；
+        - 查了但零命中：`outcome="no_results"`（有效结论，不是错误）；
+        - 搜索失败：`outcome="search_failed"` + `errors`（这条请求没结束，
+          会按既有退避规则重试，不许当"没有这篇文献"）；
+        - 领到的是队列里更早的那条：`claimed_request_id != request_id` 如实报出来，
+          绝不把它冒充成"你这条的结果"。
+        """
+        topic = str(topic or "").strip()
+        if not topic:
+            return {"ok": False, "kind": "bad_topic",
+                    "error": "topic 不能为空（空主题让检索无从构造）"}
+        mode = str(mode or "topical")
+        if mode not in S.SEARCH_MODES:
+            return {"ok": False, "kind": "bad_mode",
+                    "error": f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}"}
+        if not self.providers:
+            # 「没接线」必须与「查了但没命中」分开：这一档零写入，
+            # 调用方据此知道要先去配检索后端，而不是以为这个主题没有文献。
+            return {"ok": False, "kind": "no_provider", "topic": topic, "mode": mode,
+                    "error": "A 没有接任何检索后端（providers 为空）⇒ 这次检索没查成"}
+
+        desc = str(description or "").strip()
+        if mode == "precise" and not desc:
+            # `schema.SearchRequest.validate` 里有一条禁改区判据：
+            # precise 必须带 `content_description`。不改它（那是磁盘格式契约），
+            # 这里用题面本身兜底 —— 实测两种给法（空描述 / 题面当描述）
+            # 在 OpenAlex 上都是 8 条里 7 条对题，所以这一兜底不损失质量。
+            desc = topic
+
+        admitted = self._enqueue_search(topic, mode, desc)
+        if not admitted.get("admitted"):
+            return {"ok": True, "admitted": False, "topic": topic, "mode": mode,
+                    "request_id": None, "outcome": "rejected_by_gate",
+                    "reason": admitted.get("reason"), "gate": admitted}
+
+        rid = str(admitted["request_id"])
+        rounds: list[dict] = []
+        claimed_ids: list[str] = []
+        for _ in range(max(1, int(self.search_max_rounds))):
+            res = self.run_once()
+            rounds.append(res.to_dict())
+            if res.request_id:
+                claimed_ids.append(str(res.request_id))
+            row = self._request_row(rid)
+            if row is not None and (row.get("done") or row.get("outcome")):
+                break
+            if res.request_id is None:
+                break                      # 没有可领的了（原因见 skipped_reason）
+        row = self._request_row(rid) or {}
+        lit_ids = [str(x) for x in (row.get("result_lit_ids") or [])]
+        return {
+            "ok": True,
+            "admitted": True,
+            "request_id": rid,
+            "topic": topic,
+            "mode": mode,
+            "done": bool(row.get("done")),
+            "outcome": row.get("outcome"),
+            # 本轮依次领到过哪些请求。故意给全表而不是只给最后一条：
+            # 队列里有更早的请求时，这个动作会先替它跑完再跑自己那条 ——
+            # 只报最后一条会让调用方以为"我这条一直没被处理"（实测踩过：
+            # 第一版报 `claimed_request_id`，而它等于自己那条，读者据此以为
+            # "队列里没有别人"）。`claimed_own` 才是"我这条被跑到了没有"。
+            "claimed_request_ids": claimed_ids,
+            "claimed_own": rid in claimed_ids,
+            "result_lit_ids": lit_ids,
+            "literature": self._literature_brief(lit_ids),
+            "registered": sum(int(r.get("registered") or 0) for r in rounds),
+            "duplicated": sum(int(r.get("duplicated") or 0) for r in rounds),
+            "downloaded": sum(int(r.get("downloaded") or 0) for r in rounds),
+            "download_failed": sum(int(r.get("download_failed") or 0) for r in rounds),
+            "attempts": int(row.get("attempts") or 0),
+            "last_error": row.get("last_error"),
+            "queue_pending": rounds[0].get("queue_pending") if rounds else 0,
+            "rounds": rounds,
+            "note": (
+                "这一条已经入队并跑过；`outcome=no_results` 是有效结论（查了、没有），"
+                "`search_failed` 不是结论（这条请求还没结束，会按退避规则重试）。"
+            ),
+        }
+
+    def _enqueue_search(self, topic: str, mode: str, description: str) -> dict:
+        """把一条按主题的检索请求入队（过 I7 准入闸门 + 取号 + 落行）。
+
+        与 CLI `submit` 同一套口径：同一个事务、同一个取号函数
+        （`interactions.next_prefixed_id`）、同一份行校验。
+        差别只有一处、且是有意的：这里先过准入闸门。CLI 那条人工路径不闸
+        （人自己知道自己在提交什么），而角色在循环里提问必须受在途上限约束 ——
+        否则"知识不足就提问"会退化成"每轮都问"，把所有请求一起拖慢
+        （`admit_search_request` 的 docstring 逐字写了这件事）。
+        """
+        with self.store.tx("search_requests", actor=self.actor, note="a.search") as tx:
+            rows = tx.rows("search_requests")
+            gate = X.admit_search_request(rows, submitted_by=self.actor)
+            if not gate.get("admitted"):
+                return gate
+            rid = X.next_prefixed_id(rows, "request_id", "r")
+            row = S.SearchRequest(
+                request_id=rid,
+                timestamp=S.now_iso(),
+                topic=topic,
+                mode=mode,
+                content_description=str(description or ""),
+                done=False,
+                submitted_by=self.actor,
+                priority=str(gate.get("priority") or "medium"),
+            )
+            row.validate()                 # 先校验后落盘（与 store 同一条纪律）
+            tx.upsert("search_requests", row.to_dict(), note="a.search")
+        out = dict(gate)
+        out["request_id"] = rid
+        return out
+
+    def _request_row(self, request_id: str) -> dict | None:
+        """读一条请求行（无锁快照读；只用于汇报，不用它做判断依据）。"""
+        for r in self.store.rows("search_requests"):
+            if str(r.get("request_id")) == str(request_id):
+                return dict(r)
+        return None
+
+    def _literature_brief(self, lit_ids: Iterable[str]) -> list[dict]:
+        """把 `result_lit_ids` 变成召唤方读得懂的几行（标题/年份/DOI/有没有全文）。"""
+        want = {str(x) for x in lit_ids}
+        out: list[dict] = []
+        for r in self.store.rows("literature"):
+            if str(r.get("lit_id")) not in want:
+                continue
+            out.append({
+                "lit_id": str(r.get("lit_id")),
+                "title": str(r.get("title") or ""),
+                "year": r.get("year"),
+                "doi": r.get("doi"),
+                "has_fulltext": bool(r.get("path")),
+            })
+        out.sort(key=lambda x: x["lit_id"])
+        return out
 
     # ------------------------------------------------------------------ 取任务
     def _claim(self) -> ClaimOutcome:

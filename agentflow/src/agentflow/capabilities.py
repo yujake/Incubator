@@ -461,7 +461,7 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（T3-P7 加 `D.register_conjecture` 之后）：50 个动作 = 17 compared + 33 unmatched + 0 ambiguous。
+    实测（2026-09-30 加 `A.search_literature` 之后）：51 个动作 = 17 compared + 34 unmatched + 0 ambiguous。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
     于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。
     本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。
@@ -944,6 +944,50 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = {
             _obj({"max_requests": {**_I, "minimum": 1}}),
             "汇总 dict（processed / registered / …）",
             side_effect="write_local", handler_name="run",
+            external="egress",
+        ),
+        # ---- `search_literature`（2026-09-30 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
+        #
+        # 为什么必须有它：上面两个动作的参数里**没有主题** —— 它们只认"队列里已经有什么"，
+        # 而队列今天只有 CLI `submit` / D 的 `research.submit_gap`（要求先有研究问题）/
+        # C 的 gap 分支能写。于是"角色缺文献证据 ⇒ 唤起 A"这条路上，召唤方**没有办法
+        # 告诉 A 要查什么**：它只能唤一个对着空队列空转的 A。用户口径是
+        # "A 的文献检索必须要通关"，指的就是这一格。
+        #
+        # 名字为什么不叫 `search`：两层对账按"工具名最后一段 == handler_name"配对，
+        # 而 A 的工具组里有 `fs.search` 与 `table.search` ⇒ 叫 `search` 会落进
+        # `ambiguous`（两个候选都算对上），而导入期第 [7b] 条要求 `ambiguous` 为空。
+        # 实测：`stale` 断言先报 `['A.search']`（它没进 unmatched），换成
+        # `search_literature` 之后没有任何工具同名 ⇒ 诚实地进 unmatched。
+        #
+        # 两根轴逐条读出（不是照抄工具层）：
+        #   - 效果轴 `write_local`：实现（`AgentA.search_literature`）在一个事务里写
+        #     `search_requests` 一行，随后走既有的 `run_once` 链路再写 `search_requests`
+        #     + `literature` —— 与 `run_once` 是同一组表（`WRITE_SETS["A"]` 登记了这两张）。
+        #   - 外部轴 `egress`：它真的发 HTTP（检索 + 下载都在这条链上），且不执行
+        #     调用方给的程序 ⇒ 不是 `exec`。
+        #
+        # 为什么不改成"给 `run_once` 加一个 topic 参数"：那会把"领任务"与"提交任务"
+        # 合成一个动作，而它们的权限面不同 —— `run_once` 是**消费队列**（谁都能调），
+        # `search_literature` 是**生产队列**（受在途上限这个准入闸门约束）。合成之后，
+        # 想要"只消费"的调用方也会被迫接受"可能新建请求"的副作用。
+        ActionSpec(
+            "A", "search_literature",
+            "按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方",
+            _obj(
+                {
+                    "topic": {**_S, "minLength": 1, "maxLength": 400},
+                    # 缺省 `precise`（实现在 `AgentA.search_literature`）：这一个动作
+                    # 服务的是"给我这条命题的来源"，而真机实测 `topical` 的词袋查询
+                    # 在这个语义下 15 条里只有 1 条对题、`precise` 是 8 条里 7 条对题。
+                    # 要领域全景就显式传 `broad` / `topical`。
+                    "mode": {"type": "string", "enum": list(S.SEARCH_MODES)},
+                    "description": _S,
+                },
+                required=("topic",),
+            ),
+            "ASearchResult（含 request_id / outcome / result_lit_ids / literature）",
+            side_effect="write_local", handler_name="search_literature",
             external="egress",
         ),
     ),
@@ -2662,8 +2706,8 @@ def assert_capabilities(
 
     # ---- [7b] 对账面必须是一个分区（D-3）
     #
-    # 上面那条只钉 `unmatched`。实测（T3-P7 加 `D.register_conjecture` 之后）：
-    # 50 个动作 = 17 compared + 33 unmatched + 0 ambiguous。
+    # 上面那条只钉 `unmatched`。实测（2026-09-30 加 `A.search_literature` 之后）：
+    # 51 个动作 = 17 compared + 34 unmatched + 0 ambiguous。
     # 于是 `ambiguous` 那一格今天恰好是 0，
     # 而没有任何判据看着它 —— 若将来一个动作的 handler_name 在角色工具组里
     # 撞上两个工具，`declaration_divergences()` 只会多一条 info，导入照样成功，
@@ -2826,6 +2870,17 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # 改工具名会同时动 `READONLY_CALL_EXCEPTIONS` / `TOOL_WRITE_SETS` /
     # `agent_h` 的 writer 名单，而那是权限面的改动。
     "H.review_report",
+    # `A.search_literature`（2026-09-30）：A 的**角色级**动作，不是工具调用。工具组里
+    # A 的那几条名字是 `search.providers` / `search.literature` / `search.download` /
+    # `search.dedup_check` / `search.ingest_local` / `search.register` ——
+    # 没有一条的最后一段是 `search_literature`，所以按唯一性约定它诚实地落进 `unmatched`。
+    # （为什么不叫 `search`：那样会与 `fs.search` / `table.search` 撞成 `ambiguous`，
+    # 而导入期第 [7b] 条要求 `ambiguous` 为空 —— 实测过。）
+    # 为什么不给它凑一个同名工具：`search.literature` 只做"查一次"，而本动作是
+    # "入队（过 I7 准入闸门）→ 领跑（领取/租约/退避/判重/下载/落库）→ 交回来源"，
+    # 把两者配成一对会让两层类型对账去比两件不同的事（比 `search.literature` 的
+    # `limit` 与本动作的参数），那种"比上了"比诚实的"没比对"更坏。
+    "A.search_literature",
 })
 
 

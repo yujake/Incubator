@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-30T14:53:43+08:00",
+  "generated_at": "2026-10-01T00:56:21+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -228,10 +228,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "97d80cfacb78f3e41eb67b904ec970e90f5400af215736e41861021efd9ab829",
+      "sha256": "e258cc16b09834117d8d372ef48e4c03e12c788ee708edfa292c694ea8523204",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "§199：G→A、H→A/E 三条边（用户 2026-09-30 逐字批准；登记≠批准，仍待 2 名 reviewer）",
+      "change_note": "§202：给 A 加 search_literature 动作（按主题现查：入队过 I7 准入闸门 → 领跑 → 交回来源）。用户 2026-09-30 明确选择此方案（口径：A 的文献检索必须要通关）；登记≠批准，仍待 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

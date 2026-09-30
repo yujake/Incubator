@@ -17,6 +17,7 @@ from agentflow import schema as S
 from agentflow import host
 from agentflow.agent_c import AgentC
 from agentflow.conductor import Conductor
+from agentflow.providers import Candidate
 from agentflow.store import Store
 
 
@@ -320,3 +321,82 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     assert all(n.startswith("conductor.") for n in m_tools), m_tools
     # 领域工具不许出现在 M 的面上（P10 的红线在接线之后仍然成立）
     assert not [n for n in m_tools if n.startswith(("table.", "fs.", "prov."))], m_tools
+
+
+# ---------------------------------------------------------------- ⑥ A 的文献检索真的通
+
+
+class _OneCandidateProvider:
+    """确定性检索替身：固定一篇候选，记下被问了什么（不联网、无随机）。"""
+
+    name = "stub-one"
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    def search(self, topic, mode, description, limit):
+        self.calls.append((topic, mode, description, limit))
+        return [Candidate(
+            title="The extremal process of branching Brownian motion",
+            year=2012,
+            doi="10.1007/s00440-012-0464-x",
+            authors=["L.-P. Arguin", "A. Bovier", "N. Kistler"],
+            venue="Probability Theory and Related Fields",
+            type_code="J",
+            summary="分支布朗运动的极值过程。",
+            pdf_url=None,          # 没有开放获取 PDF：这件事本身要如实落进 download
+            landing_url=None,
+            language="en",
+            provider="stub-one",
+            raw={"provider": "stub-one"},
+        )]
+
+
+def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path):
+    """`A 通关`的集成判据：接上检索后端之后，一次带主题的召唤真的把文献查回库里。
+
+    为什么单钉这一条：`wired_llm_conductor(providers=...)` 这个参数一直存在，
+    但`run-agent` 从来没传过它 ⇒ `_Builder.status()` 把 A 判成 `no_provider`、
+    A 不进登记表 ⇒ 任何角色唤起 A 都落 `refused/not_wired`。真机实测
+    （`draft/28` §201）：G 按协议唤起了 A，拿回来的是"A 没有接线"。
+    也就是说 —— "缺文献证据就去找 A"这条最重要的协同边，在协同运行里从来没接上过。
+
+    这条判据钉两件互相独立的事：
+    ① 接了后端时，`A.search_literature(topic=…)` 可召唤、真的问到了 provider、
+       文献进了 `literature`，请求行上留着是谁提的；
+    ② 没接后端时同一句话落 `refused/not_wired` 且零写入（三态：没查成 ≠ 没有文献）。
+    """
+    st = _store(tmp_path)
+    provider = _OneCandidateProvider()
+    c = host.wired_conductor(st, providers=[provider])
+
+    res = c.summon(role="A", action="search_literature",
+                   params={"topic": "branching Brownian motion extremal process"},
+                   input_key="lit:bbm-extremal")
+
+    assert (res.status, res.outcome) == ("done", "ok"), (res.status, res.outcome, res.detail)
+    assert provider.calls, "provider 一次都没被问到 ⇒ 没有真的检索"
+    assert provider.calls[0][0] == "branching Brownian motion extremal process"
+    rows = st.rows("literature")
+    assert len(rows) == 1, rows
+    assert rows[0]["title"] == "The extremal process of branching Brownian motion"
+    assert rows[0]["doi"] == "10.1007/s00440-012-0464-x"
+    assert rows[0]["path"] is None, "没有 PDF URL ⇒ path 为空（不是编一个路径）"
+    req = st.rows("search_requests")
+    assert len(req) == 1 and req[0]["submitted_by"] == "agent-A"
+    assert req[0]["result_lit_ids"] == [rows[0]["lit_id"]], "来源必须挂在这条请求上"
+    # 召唤方拿到的是可读的来源，而不只是一句"跑完了"
+    payload = res.payload if isinstance(res.payload, dict) else {}
+    lit_back = payload.get("literature") or []
+    assert lit_back and lit_back[0]["lit_id"] == rows[0]["lit_id"], payload
+    assert c.verify_tasks() == [], c.verify_tasks()
+
+    # ---- 负控：同一句话，只是没有检索后端
+    st2 = _store(tmp_path, "ws2")
+    c2 = host.wired_conductor(st2, providers=[])
+    res2 = c2.summon(role="A", action="search_literature",
+                     params={"topic": "branching Brownian motion extremal process"},
+                     input_key="lit:bbm-extremal")
+    assert (res2.status, res2.outcome, res2.refusal_reason) == ("done", "refused", "not_wired")
+    assert st2.rows("literature") == [], "没接线时不许留下任何文献行"
+    assert st2.rows("search_requests") == [], "没接线时一条请求都不该入队"

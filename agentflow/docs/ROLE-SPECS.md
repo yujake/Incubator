@@ -182,11 +182,11 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，48 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，51 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
-| A | 2 | `run_once` `run` |
+| A | 3 | `run_once` `run` `search_literature` |
 | B | 6 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
 | D | 13 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` |
@@ -361,6 +361,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | A-4 | 下载全文到 `library/<lit_id>/`，记 `sha256` 与 `download.status` | `search.download`；`schema.DOWNLOAD_STATUSES` |
 | A-5 | 把请求标 `done` 并写 `result_lit_ids` / `outcome` | `schema.SEARCH_OUTCOMES` |
 | A-6 | 自己**不抽概念**；检索完请 `B` | `A → B`（`capabilities.ALLOWED_EDGES`） |
+| A-7 | 按**召唤方给的主题**现查一次：入队（过 I7 准入闸门）→ 领跑 → 把来源交回对方 | `AgentA.search_literature`（2026-09-30 加）：落 `search_requests` 一行（`submitted_by=agent-A`）后走既有的 `run_once` 链路；缺省 `mode=precise` |
 
 ### A.3 明确不负责
 
@@ -371,7 +372,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 判断一篇文献"有没有用" | 相关性判断需要图上的结构信息（度数、路径），A 拿到的是候选元数据 | **C**（分析）/ **D**（决策） |
 | 逐字引文回验 | 回验需要**文献正文 + 关系断言**，断言由 B 产出 | **B**（`quoteverify`） |
 | 决定研究问题该不该问 | A 只消费 `search_requests`；"该不该问"是研究判断 | **D**（`research.submit_gap` / `AgentD.submit_gaps`） |
-| 发起第二次检索（"我再多找几篇"） | A 的动作只有 `run_once` / `run`（`capabilities.CAPABILITIES`），**没有"自己决定再搜"这个动作** | **D**（`D → A`）/ **F**（`F → A`） |
+| 发起第二次检索（"我再多找几篇"） | A 的 `run_once` / `run` 只**消费**队列（`capabilities.CAPABILITIES`）；`search_literature` 也只在**被召唤方点名主题**时才查一次 —— "该不该再找、找什么"这个决定不在 A 手里 | **D**（`D → A`）/ **F**（`F → A`），或任何有到 A 的边的角色直接 `summon(A.search_literature, topic=…)` |
 
 ### A.4 工具面（23 个，实测）
 
