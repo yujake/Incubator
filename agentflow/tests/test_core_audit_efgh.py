@@ -989,3 +989,33 @@ def test_module_selftest_exits_zero(module):
         f"--- stdout 末尾 ---\n{(proc.stdout or '')[-1500:]}\n"
         f"--- stderr 末尾 ---\n{(proc.stderr or '')[-1500:]}"
     )
+
+
+# ============================================================ `parse_llm_json` 的两档宽容（§200）
+
+def test_parse_llm_json_tolerates_a_trailing_extra_brace():
+    """真机撞到的第一种坏 JSON：末尾多一个 `}`（M 与 G 的循环各十几次）。
+
+    判据：多一个 `}` 能解析出同一个对象；而"结构上真的坏了"仍然拒绝
+    （只容忍语法噪声，不容忍语义含糊）。
+    """
+    good = '{"concepts": [{"name": "group", "definition": "d"}]}'
+    assert parse_llm_json(good) == parse_llm_json(good + "}")
+    with pytest.raises(ExtractionError):
+        parse_llm_json(good[:-2])          # 少一个 `}`：不补，直接拒绝
+
+
+def test_parse_llm_json_tolerates_a_raw_control_character_in_a_string():
+    """真机撞到的第二种：模型把定义里的换行直接写了进去（没转义）。
+
+    `project run --extract` 实测：一本书的抽取整轮作废，报
+    `Invalid control character at: line 80 column 168` —— 2 本里废 1 本。
+    `strict=False` 是标准库自带的宽容档；它只放行字符串里的裸控制字符。
+    """
+    raw = '{"definition": "line1\nline2"}'.replace("\\n", "\n")   # 真的裸换行
+    got = parse_llm_json(raw)
+    assert got["definition"].strip().startswith("line1")
+    assert "\n" in got["definition"] or "line1" in got["definition"]
+    # 顶层不是对象时仍然拒绝（宽容不等于接受任何东西）
+    with pytest.raises(ExtractionError):
+        parse_llm_json("[1, 2, 3]")

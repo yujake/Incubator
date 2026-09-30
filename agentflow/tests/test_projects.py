@@ -181,6 +181,93 @@ def test_registration_only_run_does_not_consume_a_run_number_or_make_an_out_dir(
     assert Path(res["run"]["out_dir"]).name == "run-1"
 
 
+def test_extract_step_opens_a_real_task_row_and_leaves_verify_clean(
+        tmp_path: Path, monkeypatch) -> None:
+    """`--extract` 的花销必须挂在一条真台账号上，且跑完 `verify` 无错无警。
+
+    为什么单钉这一条：抽取的花销按 `task_id` 记进 `usage_ledger`，而花销必须挂得上
+    一条 `tasks` 行。曾经这里用的是 `f"{project_name}-extract"`（例如 `project1-extract`）
+    —— 既不是台账号格式（`t-NNNN`），台账里也没有对应的行 ⇒ 用户跑完
+    `project run --extract` 再自查，会看到两条 `dangling_usage_task`（error）加一条
+    `usage_task_total_mismatch`（warning）：刚跑成功的那一跑，自查说数据不一致。
+
+    两处负控：
+    - `task_id` 必须是 `t-NNNN` 形态（`alloc_id("task")` 那条歧路实测直接报
+      "未知 ID 类别"并以退出码 2 结束）；
+    - `input_key` 必须非空（留空会被报 `task_without_input_key` —— 这条是修第一处时
+      新撞出来的，第一次修只补了行、没补键）。
+    """
+    from agentflow import verify as V
+    from agentflow.store import Store
+    from agentflow.tokenmeter import Charge, TokenMeter
+
+    fitz = pytest.importorskip("fitz", reason="没有 fitz 就造不出带文本层的 PDF")
+    books = tmp_path / "books"
+    books.mkdir()
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 72), "A group is a set with an operation.")
+    doc.save(str(books / "甲书.pdf"))
+    doc.close()
+
+    seen: dict = {}
+
+    def _fake_extract(store, **kw):
+        tid = str(kw["task_id"])
+        seen["task_id"] = tid
+        # 真实路径上这一笔由 modelgw 记；这里用同一条公开口记，形状一致。
+        TokenMeter(store).charge(Charge(
+            role="B", scope="extract", task_id=tid,
+            tokens_in=1200, tokens_out=300, usd=0.0042, note="模型读书（测试替身）"))
+        return {"processed": 1, "concepts_created": 2, "relations_added": 1,
+                "quotes_verified": 1, "rounds_failed": 0}
+
+    monkeypatch.setattr(P, "extract_with_model", _fake_extract)
+    root = tmp_path / "projects"
+    res = P.run_project(root, name="project1", start="cold", topic="t",
+                        books_dir=books, extract=True, extract_rounds=1,
+                        run_topic_fn=lambda store, **kw: {"exit_code": 0})
+
+    tid = seen.get("task_id", "")
+    assert tid.startswith("t-") and tid[2:].isdigit(), f"必须是真台账号 t-NNNN：{tid!r}"
+
+    store = Store(root / "project1")
+    rows = {str(r.get("task_id")): r for r in store.rows("tasks")}
+    row = rows[tid]
+    assert row["status"] == "done" and row["outcome"] == "ok"
+    assert str(row["input_key"]).strip(), "input_key 留空 ⇒ 会被报 task_without_input_key"
+    assert str(row["input_key"]) == str(books), "键该是本次读的那一架子书"
+    # 花销与台账一致（`tasks.tokens/usd` 是从账本抄回来的，不是各算一遍）
+    meter = TokenMeter(store)
+    assert int(row["tokens"]) == meter.tokens_for(tid) == 1500
+    assert float(row["usd"]) == meter.usd_for(tid) == 0.0042
+
+    rep = V.verify_all(store).to_dict()
+    bad = [i for i in rep.get("errors", []) + rep.get("warnings", [])
+           if i.get("code") in ("dangling_usage_task", "usage_task_total_mismatch",
+                                "task_without_input_key")]
+    assert bad == [], f"跑成功的那一跑自查必须干净，却报：{bad}"
+    assert rep["errors"] == [], f"不许有 error：{rep['errors']}"
+    assert rep["ok"] is True
+    assert res["run"]["extraction"]["task_id"] == tid
+
+
+def test_a_usage_row_with_a_bogus_task_id_is_still_reported(store) -> None:
+    """负控：上一条"自查干净"的断言不是空的。
+
+    把花销挂在一个不存在的 `task_id`（正是修复前那种 `project1-extract` 形态）上，
+    `verify_all` 必须报 `dangling_usage_task`。没有这一条，上面那半张判据就只是
+    "我断言了三个码不在" —— 而它们不在的原因可能是判据根本没跑。
+    """
+    from agentflow import verify as V
+    from agentflow.tokenmeter import Charge, TokenMeter
+
+    TokenMeter(store).charge(Charge(
+        role="B", scope="extract", task_id="project1-extract",
+        tokens_in=10, tokens_out=5, usd=0.0001, note="旧形态：不是台账号"))
+    codes = [i["code"] for i in V.verify_all(store).to_dict()["errors"]]
+    assert "dangling_usage_task" in codes, f"这一笔应当被判为悬空花销，却报：{codes}"
+
+
 def test_the_lean_switch_is_passed_through_to_run_topic(tmp_path: Path) -> None:
     """`--lean` 必须透传：不透传时这条主路径上永远拿不到 proof 级证据。
 

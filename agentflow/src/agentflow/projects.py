@@ -331,6 +331,75 @@ def list_projects(root: Path | str) -> list[dict[str, Any]]:
     return out
 
 
+def _open_extract_task(store: Store, project_name: str, input_key: str = "") -> str:
+    """为"模型读书"这一步开一条真台账号（`t-NNNN`）并写下 `running` 行。
+
+    为什么要它：抽取的花销按 `task_id` 记进 `usage_ledger`，而花销必须挂得上一条
+    任务行（`verify.verify_all` 的 `dangling_usage_task` 就是问这件事）。
+    以前这里用的是 `f"{project_name}-extract"` —— 那既不是台账号格式（`t-NNNN`），
+    台账里也没有对应行 ⇒ 用户跑完 `--extract` 再自查，会看到两条 error 加一条
+    warning（"刚跑成功的那一跑，自查说不一致"）。现在按与主控同一套口径开行：
+    `role=B`（抽取是 B 的职责）、`action=extract`、`called_by=M`、`depth=1`。
+
+    `input_key` 也要给：它是循环检测的键（同一条 `(role, action, input_key)` 出现在
+    祖先链上才算循环），留空会被 `verify_tasks` 报 `task_without_input_key`（warning）
+    —— 实测漏第一次就撞到。取"这一跑读的是哪一架子书"（书架路径）比取项目名更贴近
+    输入本身；没给书架就退回项目名。
+
+    这里刻意不截断（与 `runflow._new_task_row` 把主题截到 120 字不同）：那条截断的
+    理由是"主题是散文，长了对人没用"；而路径不是散文 —— 两个只有末尾不同的书架会在
+    截断后得到同一个键，于是循环检测把一次合法召唤误判成循环（`cycle_detected`）。
+    键的语义是"输入指纹"，截断它就等于让两个不同的输入共用一个指纹。
+    """
+    from . import schema as S
+    from .interactions import next_prefixed_id
+
+    key = str(input_key or "").strip() or project_name
+    with store.tx("tasks", actor="cli") as tx:
+        # 台账号的取法与 `Conductor._write_new_row` 同一套口径：`next_prefixed_id`
+        # 取 max+1（它不是 `store.alloc_id` 的类别 —— `ID_COUNTERS` 里没有 `task`，
+        # 实测踩过：写成 `tx.alloc_id("task")` 会得到"未知 ID 类别"，退出码 2）。
+        tid = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
+        row = S.Task(task_id=tid, role="B", action="extract", called_by="M",
+                     status="running", input_key=key,
+                     detail=f"模型读书（项目 {project_name}）",
+                     started_at=S.now_iso()).to_dict()
+        tx.upsert("tasks", row)
+    return tid
+
+
+def _close_extract_task(store: Store, task_id: str, extraction: Mapping[str, Any]) -> None:
+    """把那条 `running` 行收成终态，并把台账里那一笔花销抄回 `tasks`。
+
+    三态：抽到东西 ⇒ `done/ok`；没 key / 一轮都没成功 ⇒ 仍然 `done`，但 `detail`
+    里逐字写清"没抽到"与原因（抽取失败不是任务失败 —— 它的重试语义由 `last_mine_error`
+    决定，下次还认这本书）。
+    """
+    from . import schema as S
+    from .tokenmeter import TokenMeter
+
+    meter = TokenMeter(store)
+    tokens = int(meter.tokens_for(task_id) or 0)
+    usd = float(meter.usd_for(task_id) or 0.0)
+    got = int(extraction.get("concepts_created") or 0) + int(extraction.get("relations_added") or 0)
+    err = str(extraction.get("error") or "")
+    detail = (f"模型读书：概念 {extraction.get('concepts_created', 0)} / "
+              f"关系 {extraction.get('relations_added', 0)} / "
+              f"读懂 {extraction.get('processed', 0)} 本"
+              + (f"；有轮次失败：{err[:200]}" if err else "")
+              + ("（一条都没抽到）" if got == 0 and not err else ""))
+    with store.tx("tasks", actor="cli") as tx:
+        # 读取必须在锁内（`tx.rows` 而不是 `store.rows`）：`store.rows` 是无锁快照读，
+        # 拿它读到的东西去写，中间就是一个窗口 —— 别的进程刚改过的那条行在这里看不见，
+        # 于是这行会以旧内容被写回（`TokenMeter.charge_once` 的 docstring 逐字踩过同一个坑）。
+        row = {str(r.get("task_id")): dict(r) for r in tx.rows("tasks")}.get(task_id)
+        if row is None:
+            return
+        row.update(status="done", outcome="ok", ended_at=S.now_iso(),
+                   detail=detail, tokens=tokens, usd=usd)
+        tx.upsert("tasks", row)
+
+
 def extract_with_model(store: Store, *, books_limit: int | None = None,
                        extractor: Any = None, extract_text_fn: Any = None,
                        max_rounds: int = 1, task_id: str = "") -> dict:
@@ -401,6 +470,20 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         if processed == 0 and failed == 0:
             break
 
+    # 抽取阶段就被剔除的关系（`LLMExtractor._ground_relations`：模型的 `quote` 在原文里
+    # 逐字找不到 ⇒ 当场丢掉）。必须单独汇总出来：它此前只写进抽取器的 `last_report`，
+    # 于是真跑时会出现"日志里有 7 行『剔除引文无法回验的关系』，而汇总框里
+    # 『引文未过（已剔除）』读 0" —— 同一份输出里两个数互相矛盾，用户没法判断该信哪个。
+    # 实测（2026-09-30，2 本书 87 页）：新增关系 13 / 抽取阶段剔除 7 ⇒ 模型一共提了 20 条。
+    # 两档是两个阶段，不是同一件事的两种说法：这里是"引文在原文里根本找不到"，
+    # 下面的 `quotes_failed` 是"活到落库那一步、但带页码窗口的回验没过"。
+    dropped = 0
+    drop_reasons: list[str] = []
+    for r in rounds:
+        rep = r.get("extractor_report") or {}
+        dropped += int(rep.get("relations_dropped") or 0)
+        drop_reasons.extend(str(x) for x in (rep.get("drop_reasons") or []))
+
     out: dict[str, Any] = {
         "rounds": rounds,
         "processed": sum(int(r.get("processed") or 0) for r in rounds),
@@ -411,6 +494,10 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         "quotes_verified": sum(int(r.get("quotes_verified") or 0) for r in rounds),
         "quotes_failed": sum(int(r.get("quotes_failed") or 0) for r in rounds),
         "quotes_unknown": sum(int(r.get("quotes_unknown") or 0) for r in rounds),
+        # `relations_dropped` 是抽取阶段的剔除数（与 `quotes_failed` 是两个阶段）；
+        # 两者相加才是"模型一共提了多少条关系"，而这个和必须能从输出里读出来。
+        "relations_dropped": dropped,
+        "drop_reasons": drop_reasons,
         # 失败原因必须逐条留下：只报"失败 1 本"读不出下一步该做什么。
         "errors": [d for r in rounds for d in (r.get("details") or [])
                    if d.get("error") or d.get("skipped")],
@@ -476,16 +563,32 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     # 主题那一跑的材料才不只是"一页摘录"，而是有图可查的知识面。
     extraction: dict[str, Any] = {}
     if extract:
+        # 抽取这一步也要有一条自己的 `tasks` 行（2026-09-30 修）。
+        #
+        # 为什么：`modelclient` 按 `task_id` 把花销记进 `usage_ledger`，而原来的
+        # `task_id=f"{ref.name}-extract"`（例如 `first-extract`）既不是合法台账号
+        # （`t-NNNN`），台账里也没有对应的行 ⇒ 用户跑完 `project run --extract` 再跑
+        # `verify`，会看到两条 `dangling_usage_task`（error）加一条
+        # `usage_task_total_mismatch`（warning）。实测就是这么撞到的：
+        # 「刚跑成功的那一跑，自查说数据不一致」—— 那会直接毁掉用户对读数的信任。
+        extract_task = _open_extract_task(store, ref.name,
+                                          input_key=str(books_dir) if books_dir else "")
         try:
             extraction = extract_with_model(
                 store, books_limit=books_limit, extract_text_fn=memo_extract_fn(),
                 max_rounds=extract_rounds,
-                task_id=f"{ref.name}-extract",
+                task_id=extract_task,
             )
         except Exception as exc:  # noqa: BLE001 —— 抽取失败不该毁掉后面的主题那一跑
             extraction = {"error": f"{type(exc).__name__}: {exc}"}
             notes.append(f"模型抽取那一步失败了（{type(exc).__name__}）⇒ 库里没有新的概念/关系；"
                          "主题那一跑照旧，但材料只有摘录")
+        finally:
+            # 把台账号写进这一跑的结果里：用户看到"这一步花了 0.017 USD"之后，
+            # 下一步一定会问"这笔钱挂在哪条任务上"。让卡里直接有这个号，
+            # 比让人去 `tasks.json` 里按 role/action 反查可靠（并发下 role 会重复）。
+            extraction.setdefault("task_id", extract_task)
+            _close_extract_task(store, extract_task, extraction)
 
     spec = spec_from_env()
     if not spec.configured:

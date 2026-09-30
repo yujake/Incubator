@@ -201,6 +201,26 @@ def _run_a_failed(out: Mapping) -> bool:
     return bool(out.get("gave_up")) or out.get("outcome") == "search_failed"
 
 
+def _summarize_drop_reasons(reasons, *, top: int = 4) -> str:
+    """把"抽取阶段被剔除的关系"的原因聚合成一行（`quote_not_found × 8`）。
+
+    为什么不是逐条打：真跑实测 8 条剔除原因全是同一个码，于是终端上出现 8 行
+    一模一样的 `quote_not_found` —— 那既占屏又读不出"到底为什么"。
+    聚合成计数之后，同一份信息一行读完；`top` 之外的原因折算成"另有 N 类"，
+    所以它不会因为截断而变成一句不完整的话。
+    """
+    counts: dict[str, int] = {}
+    for raw in reasons or []:
+        key = str(raw).strip() or "(空原因)"
+        counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return ""
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    head = "、".join(f"{name} × {n}" for name, n in ordered[:top])
+    rest = len(ordered) - len(ordered[:top])
+    return head + (f"（另有 {rest} 类原因）" if rest else "")
+
+
 def cmd_run_b(args) -> int:
     """跑一轮 B。
 
@@ -1080,11 +1100,28 @@ def cmd_project(args) -> int:
                  ("新建概念", ex.get("concepts_created")),
                  ("新增关系", ex.get("relations_added")),
                  ("引文过验", ex.get("quotes_verified")),
+                 # 这两行是两个阶段，不是一个数的两种说法：
+                 # `relations_dropped` = 模型的引文在原文里根本找不到（抽取阶段就丢了）；
+                 # `quotes_failed` = 活到落库那一步、带页码窗口的回验没过。
+                 # 只打后者会让"日志里剔了 7 条、框里写 0"同时出现在一份输出里。
+                 ("抽取阶段剔除", ex.get("relations_dropped")),
                  ("引文未过（已剔除）", ex.get("quotes_failed")),
                  ("无法判定", ex.get("quotes_unknown"))],
                 aligns=("left", "right"),
             ):
                 emit(line)
+            if ex.get("relations_dropped"):
+                # 这里不用 Markdown 的星号强调：`tty` 那一层不做 Markdown 渲染，
+                # 星号会原样打到终端上（要强调就用 `tty.paint`，或把话写进句子里）。
+                emit(tty.bullet(
+                    "「抽取阶段剔除」="
+                    + tty.paint(str(ex.get("relations_dropped")), "bold")
+                    + " 指的是：模型给的关系里有这么多条的引文在原文里逐字找不到"
+                    "（详见下面的剔除原因与日志）—— 它们没有进库，所以"
+                    "「新增关系 + 抽取阶段剔除」才是模型一共提了多少条关系"))
+                why = _summarize_drop_reasons(ex.get("drop_reasons"))
+                if why:
+                    emit(tty.bullet("剔除原因：" + tty.paint(why, "yellow")))
             for err in (ex.get("errors") or [])[:5]:
                 emit(tty.bullet(tty.paint(json.dumps(err, ensure_ascii=False)[:150], "yellow")))
             mdl = ex.get("model") or {}

@@ -408,7 +408,7 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 10    工具总数 73�
 `init`、`submit`、`run-a`、`run-b`、`status`、`verify`、`rebuild`、`repair`、`tools`、
 `analyze`、`research`、`pipeline`、`demo`、`run`、`evidence`、`artifacts`、`project`、
 `run-agent`、`gate`、`inbox`、`answer`。
-其中 `run-agent` 是"一次真实的多智能体运行"的入口（`--role`、`--task`、`--drive`、
+其中 `run-agent` 是"一次真实的多智能体运行"的入口（**角色是位置参数**：`run-agent M --task …`，不是 `--role`；另有 `--drive`、
 `--max-steps`、`--semantic-review` 等）。
 
 ### 8.3 编排与项目工作区
@@ -558,7 +558,7 @@ release-check → acceptance → repro → role-specs → coverage → per-file
 
 ## 11. 一次真实运行的完整时序（每一跳都带路径）
 
-以"给一个任务、只发一次"的运行为例（`--role M --task ... --drive ...`）：
+以"给一个任务、只发一次"的运行为例（`run-agent M --task ... --drive ...`，角色是**位置参数**）：
 
 1. **入口**：`python -m agentflow.cli run-agent` ⇒ `agentflow/src/agentflow/cli.py::cmd_run_agent`。
 2. **装配**：`agentflow/src/agentflow/host.py::wired_tool_registry` /

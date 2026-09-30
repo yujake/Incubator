@@ -706,7 +706,11 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
     数组/对象结尾的多余逗号、以及末尾多一个 ``}``（2026-09-30 加：
     真机里 M 与 G 的循环连着十几次写出 ``…"why": "…"}}``，每次都因为一个
     多余的右花括号丢掉整步；它的意图毫无歧义 —— 而"丢掉整步"的代价是
-    整条协同链停摆）。
+    整条协同链停摆），以及**字符串里的裸控制字符**（同一天加：真机里
+    ``project run --extract`` 抽一本书时模型把定义里的换行直接写了进去，
+    报 ``Invalid control character at: line 80 column 168`` ⇒ 整本书的抽取作废，
+    2 本里废 1 本。``strict=False`` 是标准库自带、文档化的那一档宽容：
+    它只影响"字符串里能不能有裸控制字符"，不改变任何键值语义）。
     最终仍解析不出对象就抛 :class:`ExtractionError`——注意这里是
     "解析失败即失败"，不做"从文本里猜几个概念"的补救：抽取结果直接进库，
     猜出来的东西会污染概念表且无法追溯。
@@ -729,14 +733,17 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
         if candidate.rstrip().endswith("}"):
             reps.append(candidate.rstrip()[:-1])
         for repaired in reps:
-            try:
-                parsed = json.loads(repaired)
-            except json.JSONDecodeError as exc:
-                last_error = exc
-                continue
-            if isinstance(parsed, dict):
-                return parsed
-            last_error = ExtractionError(f"LLM 返回的 JSON 顶层不是对象: {type(parsed).__name__}")
+            # 两档严格度：先按标准 JSON，再放行"字符串里的裸控制字符"。
+            for strict in (True, False):
+                try:
+                    parsed = json.loads(repaired, strict=strict)
+                except json.JSONDecodeError as exc:
+                    last_error = exc
+                    continue
+                if isinstance(parsed, dict):
+                    return parsed
+                last_error = ExtractionError(
+                    f"LLM 返回的 JSON 顶层不是对象: {type(parsed).__name__}")
     raise ExtractionError(f"无法把 LLM 返回解析为 JSON 对象: {last_error}") from last_error
 
 

@@ -20,6 +20,122 @@
 
 ---
 
+## 0. 先跑通（五分钟；前两步不花钱、不联网）
+
+> 这一节是给**第一次用它的人（比如要用它做点东西的数学家）**的。每条命令都在 2026-09-30
+> 实测过，读数写在旁边；跑不通时的对照表在最后。
+
+**装**（二选一）：
+
+```powershell
+# ① 不装：直接进源码目录跑（最快，本机实测可用）
+cd D:\Incubator\agentflow\src
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
+python -m agentflow.cli --help          # 该看到 21 个子命令
+
+# ② 装成一个命令（打包元数据齐：`[project.scripts] agentflow = "agentflow.cli:main"`、
+#    包布局 `src/`、运行期依赖只有 filelock）
+python -m pip install -e "D:\Incubator\agentflow[pdf]"    # 需要 PDF 解析时带 [pdf]
+agentflow --help                        # 与上面是同一个入口
+```
+
+第 ② 条实测（2026-09-30）：在一个 `--system-site-packages` 的干净 venv 里
+`pip install --no-deps --no-build-isolation -e D:\Incubator\agentflow` 装成功，
+产出 `Scripts\agentflow.exe`、`agentflow-1.0.0.dist-info\entry_points.txt` 里逐字是
+`agentflow = agentflow.cli:main`、可编辑落点 `.pth` 指向 `agentflow\src`；
+**换一个目录**（不在源码树下）跑 `agentflow --help` 与 `agentflow demo` 都是**退出码 0**。
+`--no-deps` 的含义是：这里唯一那个运行期依赖 `filelock` 由外层解释器提供
+（本机已有）—— 你在一台干净机器上装，去掉 `--no-deps` 让它自己拉即可。
+
+**只想先看看它能不能跑，就先走第 ① 条**：它不需要装任何东西，实测可用。
+
+**三步验证**（离线、零花费）：
+
+| 命令 | 该看到什么 |
+|---|---|
+| `python -m agentflow.cli demo` | 一串 `✓` 与最后一行「演示成功」，**退出码 0** |
+| `python -m agentflow.cli tools --role H` | H 的工具面清单（只读角色看不到写工具 —— 那是设计） |
+| `python -m agentflow.cli status` | 各表计数表（空工作区全 0 是正常的） |
+
+**跑完之后一定要自查**（这一步是把"跑完了"与"跑对了"分开的唯一手段）：
+
+```powershell
+python -m agentflow.cli --root D:\Incubator\projects\first verify   # 该看到「错误 0 / 警告 0」
+```
+
+`verify` 是**离线的不变量审计**（表之间对不上就报，例如"有一笔花销挂在不存在的任务上"）。
+它绿了**不等于**结论对，但它红了就意味着这份工作区的数据自相矛盾 —— 那一刻产物里的
+任何读数都不该被引用。本项目把"刚跑成功的那一跑、自查却说数据不一致"当成必须修的 bug
+（2026-09-30 实测撞到过一次：`project run --extract` 的花销挂在 `first-extract` 这个
+不存在的任务号上 ⇒ `verify` 报两条 error 加一条 warning；修法见 `draft/28` §200）。
+
+**一步真活：拿你柜子里的 PDF 跑一条研究流水线**（要模型 key；key 只从环境变量来，命令行不许传）：
+
+```powershell
+$env:AGENTFLOW_MODEL_API_KEY = "..."       # DeepSeek 的 key
+python -m agentflow.cli project run --name first --books D:\books `
+    --topic "分支布朗运动的极值过程" --budget-usd 0.05 --max-calls 6
+```
+
+实测（2026-09-30，2 本书 87 页 + 0.05 美元上限）：冷启动登记 2/2 本，6 次模型调用花
+**0.0032 美元**，退出码 0；产物在 `D:\Incubator\projects\first\out\run-1\` 的**六件**：
+`run-manifest.json`（这一跑的全部读数）/ `model-transcript.jsonl`（逐次调用）/
+`evidence.json`（来源 + 全文 sha256 + 逐字回验）/ `claims.json`（拆出来的断言）/
+`cost.json`（花销账）/ `report.md`（**人读的那一份**）。同一次实测里 9 条断言
+**9/9 逐字通过全文级回验**。
+
+**想让库里有概念与关系**（否则 `concepts` 是空的 —— 离线基线抽出来的概念名大多是垃圾，
+所以 B 在没有模型时宁可空着）：加上 `--extract`，它是"模型读书"那一步：
+
+```powershell
+python -m agentflow.cli project run --name first --books D:\books --extract --extract-rounds 2 `
+    --topic "分支布朗运动的极值过程" --budget-usd 0.05 --max-calls 6
+```
+
+实测（2026-09-30，同一批 2 本书，`--extract --extract-rounds 2`）：**0 个失败轮次**、
+新建 **24 个概念 / 16 条关系**，每条关系都回原文逐字找过 —— **16/16 引文过验**；
+另外有 **8 条在抽取阶段就被剔除**（模型给的关系里，引文在原文里逐字找不到的那一些，
+它们没有进库）。
+
+读数框把这两档**分开印**，因为它们是两个阶段、不是一个数的两种说法：
+
+```text
+│ 新增关系           │ 16 │   ← 进库了
+│ 引文过验           │ 16 │
+│ 抽取阶段剔除       │  8 │   ← 模型的引文在原文里根本找不到（没进库）
+│ 引文未过（已剔除） │  0 │   ← 活到落库那一步、带页码窗口的回验没过
+```
+
+所以「模型一共提了多少条关系」= `新增关系 + 抽取阶段剔除` = 16 + 8 = 24。
+抽取那一步花 **0.017294 美元 / 2 次调用**（它**不吃** `--budget-usd`：那个上限只管主题作答
+那一跑，抽取的上界是轮数 = 本数）。这一跑结束时的 `verify` 是**错误 0 / 警告 0**。
+
+**多智能体真跑**（主控 M 自己决定派谁；`role` 是**位置参数**，不是 `--role`）：
+
+```powershell
+python -m agentflow.cli run-agent M --task "读台账并报告各表计数" --max-steps 3
+python -m agentflow.cli run-agent M --task "…" --drive H.review --drive G.revise   # 被召唤的角色走 LLM 循环
+python -m agentflow.cli run-agent M --task "…" --semantic-review                   # 给 H 接上语义判据
+python -m agentflow.cli run-agent M --task "…" --subagents                         # 所有角色动作都交给模型
+```
+
+**卡住时先看这张表**（每一条都实测过）：
+
+| 症状 | 是什么意思 | 怎么办 |
+|---|---|---|
+| `[run-agent] 没查成：没有接模型…`，退出码 **2** | 没有 key（不是"跑过了没问题"） | 设 `AGENTFLOW_MODEL_API_KEY` |
+| `project run` 退出码 2，`report.md` 里写 `检索状态：not_configured` | 同上：检索一次都没发起 | 同上；不带 `--topic` 时只登记书、本来就不调模型 |
+| 汇总框里 `Lean 开启=否；proof 级证据 0 条` | 没装 Lean（或没加 `--lean`） | 装 Lean 后加 `--lean`；否则请把这一格读成"**没形式化核过**"，不是"核过没问题" |
+| 模型连着几步不回 JSON ⇒ 结论写 `bad_json_limit` | 模型没按循环协议回一行 JSON（框架会纠正两次，第三次停） | 重跑；或把 `--max-steps` 调大，让纠正消息有机会生效。**它是如实停，不是崩** |
+| 满屏 `得到 HTTP 429` | 上游限流（AMS 的直链最常见） | 等一会儿重跑；或改用手里的本地书架 |
+| `concepts` 一条没有，`last_mine_error=no_llm_extractor` | 没给 B 抽取器时它**拒绝抽**（离线基线产出的概念名大多是垃圾，所以宁可空着） | 给 key，或在 `project run` 上加 `--extract`；这是设计，不是坏 |
+| `python -m agentflow.cli run-a` 很慢（实测 62s / 15 条） | 默认 `topical` 模式会联网、会下载、会重试 | 只想验证链路就用 `--provider fixture`（**完全离线**，实测 0.4s：3 候选 → 登记 2、判重 1） |
+
+**不建议**在没有网、没有 key、没有 Lean 的机器上跑"真活"那一条：它会如实告诉你缺什么
+（退出码 2 + 一行说明），但不会替你产出结论。
+
+---
+
 ## 1. 这是什么
 
 **一个用户控制的主控（M），按需唤起 A–H 八个角色；角色之间也可以互相唤起。**
