@@ -797,6 +797,16 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
                 if state != "wired":
                     mark = f"（现在没接线：{state}）"
             out.append(f"- {other}：{_duty_of(other)}；可调用动作：{acts or '（没有动作）'}{mark}")
+        if "A" in outs:
+            # `A` 的检索面是英文文献库（`providers.query_applicability` 对抽不出
+            # 英文关键词的题面是 fail-closed：抛 `query_not_applicable_cjk`，
+            # 落第三态"这一问没发出去"）。这条不写进提示词，模型就会拿中文题面去唤起，
+            # 拿到一个"没问出去"的结果却当成"没有这篇文献"（实测：§203 的中文 description
+            # 把 precise 的查询清零，而两层闸门都不拦）。
+            out.append("唤起 A 时注意：它的检索后端以**英文文献**为主 —— `topic` 里要带"
+                       "英文关键词（纯中文题面会被挡在门外，返回 `query_not_applicable`，"
+                       "意思是「这一问没发出去」，不是「没有这篇文献」）；"
+                       "把英文检索式写进 `description` 同样能让它适用。")
     else:
         out.append("你没有任何可以唤起的伙伴（你的边是空的）——这是设计，不是遗漏："
                    "你的产出由别人来收取。")

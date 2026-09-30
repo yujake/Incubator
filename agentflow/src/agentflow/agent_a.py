@@ -228,7 +228,10 @@ class AgentA:
         - 搜索失败：`outcome="search_failed"` + `errors`（这条请求没结束，
           会按既有退避规则重试，不许当"没有这篇文献"）；
         - 领到的是队列里更早的那条：`claimed_request_id != request_id` 如实报出来，
-          绝不把它冒充成"你这条的结果"。
+          绝不把它冒充成"你这条的结果"；
+        - 这一问发不出去（题面里抽不出英文关键词）：入队之前就返回
+          `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`，
+          零写入 —— 不许留一条注定查不动的请求在队列里（那会让调用方读成"检索失败"）。
         """
         topic = str(topic or "").strip()
         if not topic:
@@ -251,6 +254,35 @@ class AgentA:
             # 这里用题面本身兜底 —— 实测两种给法（空描述 / 题面当描述）
             # 在 OpenAlex 上都是 8 条里 7 条对题，所以这一兜底不损失质量。
             desc = topic
+
+        # ---- 入队之前先问一句"这一问发得出去吗"（2026-09-30 加）
+        #
+        # 判据取自 providers 的公开函数 `query_applicability` —— 不在本文件里
+        # 另写一份"题面里有没有英文关键词"（两套判据必然漂移，而漂移的表现是
+        # "一边说能查、一边不发"）。用的正是 provider 将要用的那一对
+        # `(topic, 清洗后的 description)`，所以这里判"不适用"⇒ provider 那边一定也不适用。
+        #
+        # 为什么必须在入队之前判：`providers` 对抽不出英文关键词的题面是 fail-closed
+        # （抛 `query_not_applicable_cjk`），而这条请求一旦入队，`run_once` 会把它当
+        # "搜索失败"处理 —— 试满 `max_attempts` 次、每次留下退避租约，最后落
+        # `search_failed`。对调用方来说，那读起来像"检索出问题了"，而真相是
+        # "这一问根本没发出去"。两件事必须分开（三态纪律），而且这一档零写入。
+        from . import providers as P
+
+        decision = P.query_applicability(topic, self._query_description(topic, desc))
+        if not decision.applicable:
+            return {
+                "ok": True, "admitted": False, "request_id": None,
+                "topic": topic, "mode": mode,
+                "outcome": "query_not_applicable",
+                "kind": getattr(decision, "state", "") or "query_not_applicable",
+                "reason": str(getattr(decision, "refusal_reason", "")),
+                "note": (
+                    "这一问**没有发给上游**（第三态：没问，不是「查了、没有」，"
+                    "也不是「检索失败」）。A 的检索后端以英文文献为主：把 `topic` 换成"
+                    "带英文关键词的检索式，或把英文检索式写进 `description`，再唤起一次。"
+                ),
+            }
 
         admitted = self._enqueue_search(topic, mode, desc)
         if not admitted.get("admitted"):

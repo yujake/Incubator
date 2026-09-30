@@ -267,6 +267,52 @@ def test_a_non_ascii_description_is_kept_for_audit_but_not_used_as_the_query(sto
     assert provider.calls[0][2] == "extremal process of BBM", provider.calls[0][2]
 
 
+def test_search_literature_refuses_a_cjk_only_topic_before_any_write(store):
+    """纯中文题面：入队之前就如实拒，且零写入（不是"入队后查失败"）。
+
+    为什么必须在这一层拦：`providers` 对抽不出英文关键词的题面是 fail-closed
+    （抛 `query_not_applicable_cjk`，第三态"这一问没发出去"）。若让它入队，
+    `run_once` 会把它当搜索失败处理 —— 试满 `max_attempts` 次、每次留退避租约，
+    最后落 `search_failed`，而调用方读到的是"检索出问题了"。
+    真相是"这一问根本没发出去"，两件事必须分开（三态纪律）。
+
+    判据取自 providers 的公开判据（`query_applicability`）—— 这条也顺带钉住
+    "A 用的就是那一份判据"，不是在 `agent_a` 里又写了一份。
+    """
+    provider = StubProvider([_cand()])
+    a = _agent_a(store, provider, OkDownloader())
+
+    out = a.search_literature(topic="分支布朗运动的极值过程", mode="precise")
+
+    assert out["ok"] is True and out["admitted"] is False, out
+    assert out["outcome"] == "query_not_applicable", out
+    assert out["kind"] == "query_not_applicable_cjk", out
+    assert "英文" in str(out.get("note")), out
+    assert provider.calls == [], "这一问根本不该发给 provider"
+    assert store.rows("search_requests") == [], "零写入：不许留一条注定查不动的请求"
+    assert store.rows("literature") == []
+
+
+def test_search_literature_accepts_a_cjk_topic_when_the_description_carries_english(store):
+    """逃生门：中文题面 + 英文描述 ⇒ 这一问发得出去（判据同样取自 providers）。
+
+    为什么要有这条正控：上面那条只证明"拒得对"，没有证明"该怎么救"。
+    真机里角色既可能给中文题面、也可能给英文题面；把它逼到"只能给英文题面"
+    是没必要的严 —— `query_applicability` 明确把"题面 + 描述"一起看。
+    """
+    provider = StubProvider([_cand()])
+    a = _agent_a(store, provider, OkDownloader())
+
+    out = a.search_literature(topic="分支布朗运动的极值过程", mode="precise",
+                              description="branching Brownian motion extremal process")
+
+    assert out["admitted"] is True and out["outcome"] == "ok", out
+    assert provider.calls[0][0] == "分支布朗运动的极值过程", "题面原样交给 provider"
+    assert provider.calls[0][2] == "branching Brownian motion extremal process", (
+        f"英文描述要原样进查询，实得 {provider.calls[0][2]!r}")
+    assert len(store.rows("literature")) == 1
+
+
 # --------------------------------------------------------------------------- 下载失败
 
 

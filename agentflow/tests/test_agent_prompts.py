@@ -140,6 +140,28 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
             assert "不可以被任何人唤起" in text, f"{role} 不可召唤，但提示词没写"
 
 
+def test_roles_that_can_summon_a_are_told_its_index_is_english(registry: ToolRegistry):
+    """能唤起 A 的角色必须被明确告知：A 的检索面是英文文献库。
+
+    为什么值得一条判据：`providers.query_applicability` 对抽不出英文关键词的题面是
+    fail-closed（`query_not_applicable_cjk`）。模型不知道这件事就会拿中文题面去唤起，
+    拿回一个"这一问没发出去"的结果、却当成"没有这篇文献"（真机实测：`draft/28` §203
+    的中文 description 把 `precise` 的查询清零，而两层闸门都不拦它）。
+    这条判据同时钉住两半：有 A 这条边的角色要读到、没有这条边的角色不要读到
+    （无差别地贴一句放之四海皆准的提示词，就是把提示词当噪音）。
+    """
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        can_summon_a = "A" in AP.partners_out(role)
+        assert ("英文关键词" in text) is can_summon_a, (
+            f"{role}：partners_out 里{'有' if can_summon_a else '没有'} A，"
+            f"而提示词里{'有' if '英文关键词' in text else '没有'}那句英文索引提醒")
+        if can_summon_a:
+            assert "query_not_applicable" in text, (
+                f"{role} 的提示词没写清「这一问没发出去」的返回码，"
+                "模型会把缺证据读成没有文献")
+
+
 def test_every_declared_action_is_listed_with_its_required_params(registry: ToolRegistry):
     """角色对外可被调用的动作（capabilities.actions_for）连同必填参数必须逐条写进提示词。
     若这条破了：伙伴按一个错的动作名或漏参去召唤它，拿回 unknown_action / invalid_params，
