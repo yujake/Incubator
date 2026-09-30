@@ -235,6 +235,38 @@ def test_search_literature_does_not_pretend_someone_elses_request_is_its_own(sto
     assert lit["source_request_ids"] == ["r-0001", out["request_id"]], lit["source_request_ids"]
 
 
+def test_a_non_ascii_description_is_kept_for_audit_but_not_used_as_the_query(store):
+    """中文 description 不许进查询串（真机会把结果清零），但请求行上要原样留着。
+
+    真机现场（2026-09-30）：G 写了一段中文 description，`precise` 把它拼进查询串
+    ⇒ `论文包引言 … 分支布朗运动极值过程的 Poisson 点过程 OR <英文词>` ⇒ OpenAlex 0 条；
+    同一句 topic、description 换成英文短语 ⇒ 8 条里 7 条对题。中文描述不是"信息少"，
+    而是把检索带偏（它在英文库里成了主导词），而两层闸门都不拦它
+    （题面+中文描述混排走的是 `applicable_as_is`）—— 这正是"没报错、也没结果"的形态。
+
+    判据两条：① provider 收到的 description 是空串（查询只用题面）；
+    ② 请求行上的 `content_description` 仍是原样中文（审计留痕不许被"修好"掉）。
+    """
+    provider = StubProvider([_cand()])
+    a = _agent_a(store, provider, OkDownloader())
+    cn = "论文包引言 used_by=main.tex:introduction 需要一条外部文献支撑"
+
+    out = a.search_literature(topic="abelian group", mode="precise", description=cn)
+
+    assert out["outcome"] == "ok", out
+    assert provider.calls, "provider 一次都没被问到"
+    assert provider.calls[0][2] == "", (
+        f"查询串里不该出现非 ASCII 描述，实得 {provider.calls[0][2]!r}")
+    row = store.rows("search_requests")[0]
+    assert row["content_description"] == cn, "请求行上的描述必须原样保留（审计留痕）"
+
+    # 正控：英文描述照旧进查询串（只过滤非 ASCII，不是把描述一律丢掉）
+    provider.calls.clear()
+    a.search_literature(topic="abelian group", mode="precise",
+                        description="extremal process of BBM")
+    assert provider.calls[0][2] == "extremal process of BBM", provider.calls[0][2]
+
+
 # --------------------------------------------------------------------------- 下载失败
 
 

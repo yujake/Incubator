@@ -290,6 +290,9 @@ class AgentA:
             "claimed_own": rid in claimed_ids,
             "result_lit_ids": lit_ids,
             "literature": self._literature_brief(lit_ids),
+            # 实际进查询串的那份描述（非 ASCII 会被丢，见 `_query_description`）。
+            # 给出来是为了"我写了描述但结果不对"这类问题能在读数上直接看出来。
+            "query_description": self._query_description(topic, desc),
             "registered": sum(int(r.get("registered") or 0) for r in rounds),
             "duplicated": sum(int(r.get("duplicated") or 0) for r in rounds),
             "downloaded": sum(int(r.get("downloaded") or 0) for r in rounds),
@@ -494,15 +497,47 @@ class AgentA:
             )
 
     # ------------------------------------------------------------------ 搜索
+    @staticmethod
+    def _query_description(topic: str, description: str) -> str:
+        """挑"能进查询串的那一份 description"：只留英文关键词，非 ASCII 的部分丢掉。
+
+        真机实测（2026-09-30，`temp/_probe_precise_desc.py`）：G 很自然地写了一段中文
+        description（"论文包引言 used_by=main.tex:introduction 需要一条外部文献支撑：…"），
+        而 `precise` 模式把它拼进查询串：
+        `论文包引言 … 分支布朗运动极值过程的 Poisson 点过程 OR <英文词>` ⇒ OpenAlex 0 条；
+        同一句 topic、description 换成英文短语 ⇒ 8 条里 7 条对题。
+        中文描述不是"信息少"，而是把检索带偏（它在以英文为主的库里成了主导词）；
+        而两层闸门都不拦它 —— `providers` 只对纯中文题面 fail-closed
+        （抛 `query_not_applicable_cjk`，落第三态"没问"），题面+中文描述混排走的是
+        `applicable_as_is`，于是静默清零。这正是"没报错、也没结果"的形态。
+
+        判据（不是"含不含 ASCII 字母"—— 第一版就是这条，被 `used_by=main.tex:introduction`
+        这种"中文里夹一个英文路径"的描述骗过）：把非 ASCII 字符全部丢成空格之后，
+        至少还剩两个英文词才拿它当查询描述；否则传空串（provider 于是只用题面
+        构造查询 —— 实测那一档 8 条里 7 条对题）。这样 "需要 Poisson point process 的支撑"
+        留下 `Poisson point process`，而 "论文包引言 used_by=main.tex:introduction …"
+        只剩一个词 ⇒ 判为不可用。
+
+        留痕不受影响：`content_description` 在请求行上原样保留，审计仍看得到角色写了什么；
+        `search_literature` 的返回里另给 `query_description`，让调用方知道实际用了什么。
+        """
+        raw = str(description or "")
+        ascii_only = "".join(ch if ch.isascii() else " " for ch in raw)
+        words = [w for w in ascii_only.split() if any(c.isalpha() for c in w)]
+        return " ".join(words) if len(words) >= 2 else ""
+
     def _search(self, req: dict) -> tuple[list[Any], list[str]]:
         """并发度故意为 1（串行 provider）——避免同时打多个 API 触发限流。"""
         mode = req["mode"]
         limit = int(self.limits.get(mode, 10))
+        # 查询串里只用"含 ASCII 关键词"的那一份描述（理由见 `_query_description`）。
+        # 请求行上的 `content_description` 一字不动 —— 那是审计留痕，不是查询串。
+        query_desc = self._query_description(req.get("topic") or "", req.get("content_description") or "")
         out: list[Any] = []
         errors: list[str] = []
         for p in self.providers:
             try:
-                got = p.search(req["topic"], mode, req.get("content_description") or "", limit)
+                got = p.search(req["topic"], mode, query_desc, limit)
                 out.extend(got or [])
             except Exception as e:  # provider 失败不应让整个请求失败
                 errors.append(f"{getattr(p, 'name', type(p).__name__)}: {type(e).__name__}: {e}")

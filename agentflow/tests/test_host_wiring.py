@@ -352,6 +352,55 @@ class _OneCandidateProvider:
         )]
 
 
+def test_the_sources_a_returns_can_be_registered_as_a_closed_dependency(tmp_path: Path):
+    """`A 通关`的第三条腿：A 交回的来源必须能直接写进依赖表（goal 原话：台账与依赖表都留痕）。
+
+    真机（`temp/live-a-roles-*.txt` 场景 II）里 G 就是这么做的：
+    `dependencies/0000 used_by=main.tex:introduction kind=prior_art status=closed
+    source_lit_id=0000`，而 `0000` 正是 A 那一次交回的 `lit_id`。
+    这条离线判据把那条链钉住：`A.search_literature` → 取 `result_lit_ids[0]` →
+    `G.register_dependency(source_lit_id=…)` ⇒ 依赖行是 `closed` 且指向那一行文献。
+    没有它，"来源回来了"与"来源被引用了"这两件事可能各自为真、却接不上。
+    """
+    st = _store(tmp_path)
+    provider = _OneCandidateProvider()
+    c = host.wired_conductor(st, providers=[provider])
+
+    res = c.summon(role="A", action="search_literature",
+                   params={"topic": "branching Brownian motion extremal process"},
+                   input_key="lit:bbm-extremal")
+    assert res.outcome == "ok", (res.status, res.outcome, res.detail)
+    lit_id = (res.payload or {}).get("result_lit_ids", [None])[0]
+    assert lit_id, res.payload
+
+    dep = c.summon(role="G", action="register_dependency",
+                   params={"used_by": "main.tex:introduction", "kind": "prior_art",
+                           "label": "The extremal process of branching Brownian motion",
+                           "source_lit_id": lit_id, "status": "closed"},
+                   input_key=f"dep:{lit_id}")
+    assert dep.outcome == "ok", (dep.status, dep.outcome, dep.detail, dep.error)
+    rows = st.rows("dependencies")
+    assert len(rows) == 1, rows
+    assert rows[0]["status"] == "closed", rows[0]
+    assert rows[0]["source_lit_id"] == lit_id, rows[0]
+    # 台账两处齐：A 那次召唤 + G 那次召唤
+    roles = sorted(str(r.get("role")) for r in st.rows("tasks"))
+    assert roles == ["A", "G"], roles
+    assert c.verify_tasks() == [], c.verify_tasks()
+
+    # 负控（实测撞到的真实形态）：`kind` 不在受控词表里时，工具层会拒 ——
+    # 这条负控是"我第一版写了 kind=literature 就红了"留下来的：能力层的
+    # `G.register_dependency.params.kind` 只是个 string（没有 enum），所以参数门放行、
+    # 由工具层拒。拒得对（它如实写了词表），但两层口径不同这件事登记在 `draft/28` §203。
+    bad = c.summon(role="G", action="register_dependency",
+                   params={"used_by": "main.tex:introduction", "kind": "literature",
+                           "label": "x"},
+                   input_key=f"dep-bad:{lit_id}")
+    assert bad.outcome == "refused", (bad.status, bad.outcome, bad.detail)
+    assert "prior_art" in str(bad.detail), bad.detail
+    assert len(st.rows("dependencies")) == 1, "被拒的那次一条都不许写"
+
+
 def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path):
     """`A 通关`的集成判据：接上检索后端之后，一次带主题的召唤真的把文献查回库里。
 
