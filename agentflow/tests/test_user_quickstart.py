@@ -134,6 +134,32 @@ def test_run_agent_without_a_key_says_so_and_exits_2(tmp_path: Path, monkeypatch
     assert "没有接模型" in out, out[-400:]
 
 
+def test_the_readme_subcommand_count_matches_the_live_parser():
+    """README 里写的"21 个子命令"必须等于 `build_parser()` 当次给出的子命令数（`draft/36` T-4）。
+
+    为什么值得一条判据：这是最容易漂的一类手抄数字（加一个子命令就变），
+    而它此前没有任何判据 —— 只有"README 点名的几个子命令都在 `--help` 里"那一条
+    （那只保证"没写错名字"，不保证"数字没错"）。老实说：这个数字今天是对的，
+    加判据是为了让它以后也一直对。
+    """
+    import re
+
+    from agentflow.cli import build_parser
+
+    parser = build_parser()
+    sub = next((a for a in parser._actions if getattr(a, "choices", None)), None)
+    assert sub is not None, "夹具前提变了：`build_parser()` 里找不到子命令那个 action"
+    live = len(sub.choices)
+
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    found = [int(n) for n in re.findall(r"(\d+)\s*个子命令", text)]
+    assert found, "README 里没有『N 个子命令』这个读数了 —— 要么删干净、要么改这条判据"
+    wrong = [n for n in found if n != live]
+    assert not wrong, (
+        f"README 写了 {wrong} 个子命令，`build_parser()` 当次给出 {live} 个"
+        f"（README 里的读数：{found}）")
+
+
 def test_the_readme_does_not_document_a_flag_that_does_not_exist():
     """反向判据（真机撞到过）：README 里那几条 `run-agent` 命令用到的开关，必须真的存在。
 

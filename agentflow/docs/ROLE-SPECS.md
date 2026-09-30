@@ -48,9 +48,16 @@
 
 ### 0.2 工具面的三条公共事实（实测）
 
+> ⚠️ **本表的"55"是 2026-09-26 那次装配的读数（历史快照）**，不是今天的读数。
+> 今天 `build_registry` 的条数是 **73**（见 §R0.1 的标题，由
+> `tests/test_role_specs_complete.py` 与发布门的 `tools/verify_role_specs.py` 逐条对账）。
+> 本节这两处的口径可能不同（本节记的是当时那次装配的输出，§R0.1 记的是今天的装配条数），
+> 而**没有一条判据盯着 §0.2 这一格** —— 所以：**引用工具总数请以 §R0.1 为准**。
+> 这一段是 `draft/36` 的 T-4 加上去的：让读者一眼看出哪个数字是当次读数、哪个是历史。
+
 | 事实 | 实测值 | 出处 |
 |---|---|---|
-| 工具总数（`build_registry`） | **55** | 本文 §0.3 |
+| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 73） | **55** | 本文 §0.3（带观测时刻的实测输出） |
 | 全部 8 个角色**共有**的工具 | 9 个：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` | 实测（交集） |
 | 只读角色（C/H）工具面里的写工具 | **0**（`role_filter_notes = {}` ⇒ 结构性拦截一次都没触发） | 实测 |
 
@@ -189,11 +196,11 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | A | 3 | `run_once` `run` `search_literature` |
 | B | 6 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
-| D | 13 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` |
+| D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
 | G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
-| H | 3 | `review` `verify_fixes` `list_findings` |
+| H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
 > 装配期由 `capabilities.assert_capabilities()`（**导入期执行**）逐条核：
@@ -1944,18 +1951,24 @@ SELF-CHECK DONE（agent_h）
 
 ### M.4 "工具面"（10 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取 + 1 件批量派活）
 
-#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（48 个可召唤动作）
+#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（51 个可召唤动作）
+
+> 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
+> 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
+> 抓到的正是这里：A 少算 `search_literature`（写 2 实 3）、D 少算 `register_conjecture`（13→14）、
+> H 少算 `review_report`（3→4），标题还写着 48。**要么两处合成一处，要么判据同时盯着两处**；
+> 现在选的是后者（合成一处要动文档结构，收益不如先让它不再漂）。
 
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
-| A | 2 | `run_once` `run` |
+| A | 3 | `run_once` `run` `search_literature` |
 | B | 6 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
-| D | 13 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` |
+| D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
 | G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
-| H | 3 | `review` `verify_fixes` `list_findings` |
+| H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
 
 每个动作的 `params`（JSON Schema 子集）、`returns`、`side_effect`、`handler_name`
 在 `capabilities.CAPABILITIES` + `capabilities.assert_capabilities`；**装配期由 `assert_capabilities()` 用 `importlib`

@@ -237,7 +237,41 @@ LIVE-READINGS:END
 **数字看起来是客观的，于是没有人去问它的口径**。而"口径就是那个数字"这句话，
 `AGENTS.md` 已经把它列成**禁改区的一类理由**（评测口径的定义）。
 
-### 0.4 历史取样（S1，2026-09-24 早，**已全部修复，保留供对照**）
+### 0.3c 手抄数字清单：每个数字**住在哪、谁在守、怎么复跑**（`draft/36` 的 T-4）
+
+**为什么要有这一节**：`draft/36` 的体检读数里，⑥ 是"文档-代码漂移面"。加判据时实测到
+两处动作表已经漂了（`A.search_literature` / `D.register_conjecture` / `H.review_report`
+三处数字与名字都过期），而**没有任何东西会红**。根因不是"打错一个数"，而是：
+**同一个数字抄在好几处、读者分不出哪一处是当次值、哪一处是历史快照。**
+本节把这类数字逐个登记，并写清它属于哪一档：
+
+- **有判据**：改了代码不改文档 ⇒ 有测试会红（列到具体测试名）；
+- **人工维护**：没有判据盯着，改动时请同步（并给出复跑命令）。
+
+| 数字 | 住在哪 | 数的是什么 | 谁在守 | 复跑 |
+|---|---|---|---|---|
+| 工具总数 **73** | `docs/ROLE-SPECS.md` §R0 标题 / §R0.1 / §R0.2 | `build_registry()` 装配出的 `ToolSpec` 条数 | **有判据**：`tests/test_role_specs_complete.py`（§R0 标题 vs 实时装配）、发布门 `tools/verify_role_specs.py` | `python -m agentflow.cli tools` |
+| 逐角色工具数 `{'A':23,…,'M':10}` | `docs/ROLE-SPECS.md` §R0 / 各角色节标题；`DEVELOPMENT.md` §1.5 | 每个角色的工具面条数（含公共工具） | **有判据**：`tools/verify_role_specs.py`（逐角色条数 vs 现场装配）、`tests/test_role_specs_complete.py` | 同上 |
+| 动作总数 **51** | `docs/ROLE-SPECS.md` §0.7 标题 | `capabilities.CAPABILITIES` 的动作条数 | **有判据**（`draft/36` T-3 新增）：`tests/test_role_specs_action_table.py` | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
+| 可召唤动作数 **51** | `docs/ROLE-SPECS.md` §M.4.1 标题 | 按 `ALLOWED_EDGES["M"]` 覆盖的角色的动作之和 | **有判据**（T-3 新增）：同上 `test_the_summonable_table_total_matches_the_edge_table` | 同上 |
+| 逐角色**动作名** | `docs/ROLE-SPECS.md` §0.7 与 §M.4.1 **两处**（同一份数据两个落点） | 每角色有哪些动作 | **有判据**（T-3 新增）：同上（两处都扫，含两条负控：删一行、加动作不改表） | `python -m agentflow.cli tools --role <X>`（工具面）／上面的 `capabilities` 一行（动作面） |
+| 子命令数 **21** | `README.md` §0 与 §4 文件树 | `cli.build_parser()` 的子命令数 | **有判据**（T-4 新增）：`tests/test_user_quickstart.py::test_the_readme_subcommand_count_matches_the_live_parser` | `python -m agentflow.cli --help` |
+| lint 五个读数（规则 12 / warning 9 / info 47 / strict warning 51 / strict info 46） | `DEVELOPMENT.md` §0.3 `LIVE-READINGS` 块 | `scripts/lint_rules.py` 的摘要行 | **有判据**：`tests/test_release_all.py`（`measured_readings()` / `live_reading_problems()` 逐键比对，对不上就红并点名） | `python -B scripts/lint_rules.py` |
+| 禁改区三读数（glob 27 / unique 24 / categories 7） | 同上 | `.noai-paths` 的条目行 | **有判据**：`tests/test_noai_gate.py`（七类齐全）+ 上面的 `live_reading_problems` | `python -B scripts/noai_gate.py --check-consistency` |
+| `schema.TABLES` **16** / `tools_star_tools_py` **13** / `noai_gate_pytest_collected` **124** | 同上 | 表数 / 工具模块数 / 收集到的用例数 | **有判据**：同 `LIVE-READINGS` 那一条 | 见 §0.3 各行的复跑命令 |
+| 角色节结构（9 个角色节 × 8 必备子节） | `DEVELOPMENT.md` §0 顶部 | `docs/ROLE-SPECS.md` 的节结构 | **有判据**：`tools/verify_role_specs.py`、`tests/test_role_specs_complete.py` | `python -B tools/verify_role_specs.py` |
+| 已装模块 **12** | `docs/ROLE-SPECS.md` §0.3 的实测输出、`DEVELOPMENT.md` §1.5 | `tools.build_registry` 装了几个工具模块 | **人工维护**（没有逐模块数的判据；模块名清单见 §1.5） | `python -m agentflow.cli tools` 的摘要行 |
+| `docs/ROLE-SPECS.md` §0.2 的 **55** | §0.2 的表 | 2026-09-26 那次装配的读数 | **历史快照**（T-4 已在原地标注并指向 §R0.1；引用请用 §R0.1 的 73） | 见 §0.3 的观测时刻 |
+| `INVENTORY.md` 的那一组（55 / 17 / …） | `docs/ROLE-SPECS.md` §R0.3 | 对 `test/test1/`（包名 `abflow`）的普查转写，**不是本仓读数** | **人工维护**（它比的是"另一个代码谱系"，引用前先读 §R0.3 的口径警告） | 见 §R0.3 |
+
+**两条使用规矩**（与 §0.3b 同源）：
+
+1. **引用任何计数前先在这张表里找它**：找到"有判据"⇒ 可以信当次值；
+   找到"人工维护"⇒ 它是人写的，改动时请同步；找不到 ⇒ 说明它是一张**没登记的手抄数字**，
+   请登记进来（这一节本身也是 T-4 的交付物：**漂移面的清单**）。
+2. **同一份数据抄在两处就是风险**（§0.7 与 §M.4.1 就是例子）。能合成一处就合成；
+   暂时不能合的（结构上各有各的读者），就**让同一条判据同时盯着两处** ——
+   T-3 采用的是后者。
 
 | 项 | S1 实测 | 当时的证据 |
 |---|---|---|
