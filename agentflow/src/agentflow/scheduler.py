@@ -67,6 +67,10 @@ class TaskCall:
     #: 本次召唤的 token 预算（`{"max_tokens": 5000}`）。None = 用全局预算。
     budget: Mapping[str, Any] | None = None
     lineage: tuple[tuple[str, str, str], ...] = ()
+    #: 实例标签（2026-09-30 加）：同一角色的第 N 个并发实例，例如 `"1"` / `"2"`。
+    #: 空串 = "这个角色只有那一个实例"，与从前逐字同义（写集冲突照旧按角色算）。
+    #: 显式给两个不同的标签 ⇒ 这两个调用允许同波并发（见 `policy.estimate_write_conflict`）。
+    instance: str = ""
 
 
 class MemoryBudgetTracker:
@@ -292,6 +296,7 @@ def _guarded(
             budget=dict(call.budget) if call.budget else None,
             token=token,
             lineage=tuple(call.lineage),
+            instance=str(getattr(call, "instance", "") or ""),
         )
     finally:
         end = _time()

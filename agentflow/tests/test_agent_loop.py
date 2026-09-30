@@ -36,6 +36,12 @@ from agentflow.tools import build_registry
 LOOPS: dict[tuple[str, str], dict[str, Any]] = {
     ("D", "consider"): {},
     ("E", "run_experiment"): {},
+    # `G.revise` / `D.write_report` 进这张表是 2026-09-30 加的：协同链（G 唤起 D）
+    # 只有在"被召唤的那个 (角色, 动作) 是 LLM 循环驱动的"时才成立 —— 这也正是
+    # "各角色像主控的 subagents"这句话的实现面。
+    ("G", "revise"): {},
+    ("D", "write_report"): {},
+    ("H", "review"): {},
 }
 
 
@@ -380,6 +386,177 @@ def test_a_wide_tool_result_keeps_its_later_keys_not_just_the_head_of_one():
     text = _clip_fields({"tool": "conductor.acceptance", "ok": True, "data": data,
                          "error": "", "meta": {}})
     assert "data.documents" in text and "0000" in text, text[-400:]
+
+
+def test_a_forbidden_edge_becomes_a_relay_request_to_the_conductor(tmp_path: pathlib.Path):
+    """判据（§198，真机实测逼出来的）：越权唤起必须转成"请主控代唤"，而不是一句拒绝。
+
+    实测背景：17 个 review 会话里非 M 的召唤只有 F→E 七次 —— 因为缺证据的角色
+    （G 要文献、H 要形式化、C 什么都没有）拿到的只是一句 `forbidden_edge`，
+    然后就"没有然后"了。用户的原话是"如果互相唤起困难，至少要能向主控申请唤起别的
+    智能体做任务"，所以这条判据钉三件事：
+    ① 这一步仍然如实报 `ok=False` / `refusal_reason=forbidden_edge`（不许假装成功）；
+    ② 同时自动发出一条给 M 的「请代唤」留言，并在返回里给出 `relay_requested`；
+    ③ 会话里留下一条结构化事件 `agent_summon_request`（可审计，不靠读留言文本）。
+    """
+    import json as _json
+
+    asking = _json.dumps({"summon": {"role": "A", "action": "run_once",
+                                     "params": {"request": "缺一份 1971 年的原文"}}},
+                         ensure_ascii=False)
+    scripts = {"H": [asking, _json.dumps({"final": "已申请代唤", "evidence": []},
+                                         ensure_ascii=False)]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    run = run_role("H", "发现稿件缺一份引文的原文", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="H", session_root=root, gateway=gw["H"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    step = _summon_step(run)
+    assert step["ok"] is False, step
+    # 真实场景落在这两档之一：目标在边表外（`forbidden_edge`），或者因为"看不到他的
+    # 参数表"而先被参数校验拦下（`invalid_params`）—— 两档都必须转成代唤申请。
+    assert step["refusal_reason"] in ("forbidden_edge", "invalid_params"), step
+    relay = step.get("relay_requested") or {}
+    assert relay.get("to") == "M" and relay.get("message_id"), step
+    assert relay.get("subject") == "请代唤", relay
+    # ② 留言真的进了 M 的收件箱（不是只写在返回值里）
+    from agentflow import agent_loop as AL
+
+    inbox = AL.inbox_digest(root, "M", sid="test-run")[0]
+    assert "请代唤" in inbox, inbox
+    # ③ 结构化事件落档
+    events = _events(root)
+    reqs = [e for e in events if e.get("kind") == "agent_summon_request"]
+    assert reqs and reqs[0]["role"] == "H" and reqs[0]["wants_role"] == "A", reqs
+
+
+def test_relay_is_not_sent_when_the_edge_exists_and_only_the_params_are_wrong(tmp_path: pathlib.Path):
+    """负控（代唤不许被滥用）：目标在我的伙伴表里时，参数写错只是参数错。
+
+    这一条防的是"把主控当成万能的兜底"：`G → D` 是允许的边，参数写错该由 G 自己改，
+    不该往 M 那里发一条代唤申请（那会让主控的收件箱被无关申请灌满，
+    而"申请"这个信号一旦贬值就不再有用）。
+    """
+    import json as _json
+
+    bad = _json.dumps({"summon": {"role": "D", "action": "write_report",
+                                  "params": {"nonsense_key": 1}}}, ensure_ascii=False)
+    scripts = {"G": [bad, _json.dumps({"final": "参数错了，我自己改", "evidence": []},
+                                      ensure_ascii=False)]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    run = run_role("G", "写报告", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="G", session_root=root, gateway=gw["G"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    step = _summon_step(run)
+    assert step["refusal_reason"] == "invalid_params", step
+    assert "relay_requested" not in step, step
+    assert not [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
+
+
+def test_a_child_loop_knows_who_summoned_it_and_how_deep_it_is(tmp_path: pathlib.Path):
+    """判据（§198 修的真 bug）：被协同唤起的角色必须知道"是同伴派的我、我在第几层"。
+
+    旧行为：`LlmBackend.call` 读 `params["_summoned_by"]` / `params["_depth"]`，
+    而全仓没有任何地方生产这两个键 ⇒ 每个子循环都以为自己是主控直接派的、深度 1。
+    真机（`temp/review-task-20260930-111332`）台账是
+    `t-0260 E.run_experiment called_by=F parent=t-0259 depth=2`，
+    而 E 自己的 `agent_run_start` 记的是 `summoned_by=M, depth=1` ——
+    "像主控的 subagent"这句话在孩子自己的认知里断掉。
+    现在权威来源是台账那一行，这条判据就是那个"同源"。
+    """
+    import json as _json
+
+    scripts = {
+        "G": [_json.dumps({"summon": {"role": "D", "action": "write_report",
+                                      "params": {"out_path": "out/r.md"}}},
+                          ensure_ascii=False),
+              _json.dumps({"final": "D 交回来了", "evidence": []}, ensure_ascii=False)],
+        "D": [_json.dumps({"final": "报告写好了", "evidence": []}, ensure_ascii=False)],
+    }
+    st, cond, registry, _gw, root = _wired(tmp_path, scripts, max_steps=3)
+    with st.tx("documents", actor="agent-G") as tx:
+        tx.upsert("documents", S.Document(
+            doc_id="0000", kind="paper", title="探针稿", status="draft", markdown_path=None,
+            created_at=S.now_iso(), created_by="agent-G",
+            claims=[{"claim_id": "C1", "text": "探针断言", "evidence_kind": "cross_check",
+                     "citations": ["lit:0001"], "section": "S1",
+                     "disclaimer": "数值交叉验证，不构成证明"}]).to_dict())
+    cond.summon("G", "revise", {"doc_id": "0000"}, by="M")
+
+    rows = _tasks(st)
+    d_rows = [r for r in rows if str(r.get("role")) == "D"]
+    assert d_rows, [dict(r) for r in rows]
+    assert d_rows[0]["called_by"] == "G", d_rows[0]
+    starts = [e for e in _events(root)
+              if e.get("kind") == "agent_run_start" and str(e.get("role")) == "D"]
+    assert starts, "D 的子循环没有留下 agent_run_start"
+    assert starts[0]["summoned_by"] == "G", starts[0]
+    assert int(starts[0]["depth"]) == int(d_rows[0]["depth"]) >= 2, starts[0]
+
+
+def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
+    """S-2（§198 的端到端判据）："缺证据 → 请主控代唤 → 主控真的派了" 跑通一次。
+
+    这是用户要的"协同"最小闭环，也是这一轮失败的原始形态：
+    - H 审校时发现稿件缺一份原文，它自己够不到 A（边表里 H 只能叫 G）；
+    - 框架把这次越权转成一条「请代唤」留言给 M；
+    - M 在下一步读到它（收件箱随结果一起附上），并真的用 `conductor.summon` 派了 A。
+
+    断言锚在台账上而不是对话上：`tasks` 里必须有一条 `role=A` 且 `called_by=M` 的行，
+    而且它出现在 H 的申请之后。A 有没有接线是另一件事（这里没给 provider ⇒
+    `refused/not_wired` 是正确读数）—— 判据要的是"申请被受理并变成了一次真实的派活"。
+    """
+    import json as _json
+
+    scripts = {
+        "M": [
+            _json.dumps({"summon": {"role": "H", "action": "review",
+                                    "params": {"doc_id": "0000"}}}, ensure_ascii=False),
+            # 第二步：M 读到申请（收件箱在结果里），替 H 派 A
+            _json.dumps({"tool": "conductor.summon",
+                         "args": {"target_role": "A", "action": "run_once",
+                                  "input_key": "A.run_once"}}, ensure_ascii=False),
+            _json.dumps({"final": "已按 H 的申请派 A 去找原文", "evidence": []},
+                        ensure_ascii=False),
+        ],
+        "H": [
+            _json.dumps({"summon": {"role": "A", "action": "run_once",
+                                    "params": {"request": "缺 lit:0037 的原文"}}},
+                        ensure_ascii=False),
+            _json.dumps({"final": "缺原文，已请主控代唤 A", "evidence": []},
+                        ensure_ascii=False),
+        ],
+    }
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=5)
+    with st.tx("documents", actor="agent-G") as tx:
+        tx.upsert("documents", S.Document(
+            doc_id="0000", kind="paper", title="待审稿", status="draft", markdown_path=None,
+            created_at=S.now_iso(), created_by="agent-G",
+            claims=[{"claim_id": "C1", "text": "一条 cross_check 断言",
+                     "evidence_kind": "cross_check", "citations": ["lit:0037"],
+                     "section": "S1", "disclaimer": "数值交叉验证，不构成证明"}]).to_dict())
+    run_role("M", "核验这篇稿子的证据", store=st, registry=registry, conductor=cond,
+             seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                          sid="test-run"), workspace_root=str(root), sid="test-run",
+             from_env=False)
+
+    rows = _tasks(st)
+    h_rows = [r for r in rows if str(r.get("role")) == "H"]
+    direct = [r for r in rows if str(r.get("role")) == "A" and str(r.get("called_by")) == "H"]
+    relayed = [r for r in rows if str(r.get("role")) == "A" and str(r.get("called_by")) == "M"]
+    assert h_rows and h_rows[0]["called_by"] == "M", [dict(r) for r in rows]
+    # H 自己那一次被拒（边表里 H 只能叫 G）—— 这正是要转成代唤申请的那一次
+    assert direct and direct[0]["outcome"] == "refused", direct
+    assert direct[0]["refusal_reason"] in ("forbidden_edge", "invalid_params"), direct[0]
+    # 主控替它派的那一次真的发生了，而且在 H 的申请之后
+    assert relayed, f"M 没有替 H 派 A：{[dict(r) for r in rows]}"
+    assert str(relayed[0]["task_id"]) > str(direct[0]["task_id"]), "派 A 必须发生在 H 的申请之后"
+    # 申请本身也要留痕（不只看留言文本）
+    reqs = [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
+    assert reqs and reqs[0]["wants_role"] == "A", reqs
+    # M 的第二步提示词里必须真的出现了那条申请（否则它只是"碰巧"派了 A）
+    assert "请代唤" in gw["M"].prompts[1], gw["M"].prompts[1][-600:]
 
 
 @pytest.mark.parametrize("role", sorted(S.ROLES))

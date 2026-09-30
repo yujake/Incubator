@@ -24,9 +24,9 @@ from agentflow.tools import build_registry
 from agentflow.tools import conductor_tools as CT
 
 ORCHESTRATION_TOOLS = {
-    "conductor.summon", "conductor.ledger", "conductor.stop", "conductor.resume_brief",
-    "conductor.cancel", "conductor.ensure_project", "conductor.state", "conductor.role_spec",
-    "conductor.acceptance",
+    "conductor.summon", "conductor.summon_many", "conductor.ledger", "conductor.stop",
+    "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
+    "conductor.state", "conductor.role_spec", "conductor.acceptance",
 }
 
 
@@ -70,6 +70,71 @@ def test_summon_runs_the_role_and_lands_a_ledger_row(tmp_path: Path):
     assert len(rows) == 1
     assert rows[0]["called_by"] == "M" and rows[0]["role"] == "E"
     assert rows[0]["ended_at"], "每个 start 必须恰好有一个 end"
+
+
+def test_summon_many_fans_out_the_same_role_in_parallel(tmp_path: Path):
+    """S-1（§198 的核心判据）：`conductor.summon_many` 让同一角色的多个实例真的并发。
+
+    为什么要有这条：并发引擎（`run_plan` → `scheduler.run_waves` → 线程池 + 探针）
+    早就存在，但生产路径上零调用，而 M 的工具面只能一次派一个；
+    更硬的一道是分波按"角色级写集"，于是 3 个 B 会被排成 3 波串行（实测峰值真并发 1）。
+    用户要的形态是"一次任务要读一大批文献，就并发几个 B 一起干"。
+
+    判据四条一起看：① `count` 恒等于输入长度；② 三个不同 `instance` 落同一波；
+    ③ `concurrent_peak == 3`（探针读数，不是墙钟）；④ 三条任务行各自独立、都是 done/ok。
+    """
+    class _SlowE:
+        """替身：睡 0.2s 并记录自己被哪个实例标签调用过。"""
+
+        def __init__(self) -> None:
+            self.instances: list[str] = []
+            self._lock = __import__("threading").Lock()
+
+        def list_experiments(self) -> dict:
+            import threading as _t
+            with self._lock:
+                self.instances.append(_t.current_thread().name)
+            __import__("time").sleep(0.2)
+            return {"experiments": [], "count": 0}
+
+    store, _c, reg = _wired(tmp_path, role_registry={
+        "E": ("factory", lambda *, store=None, instance="": _SlowE())})
+    res = reg.call("conductor.summon_many", role="M", why="探针：三个实例同波",
+                   targets=[{"target_role": "E", "action": "list_experiments", "instance": str(i)}
+                            for i in (1, 2, 3)])
+    assert res.ok, res.error
+    data = res.data
+    assert data["count"] == 3 and len(data["results"]) == 3
+    assert data["waves"] == [3], data["waves"]
+    assert data["concurrent_peak"] == 3, data["concurrent_peak"]
+    assert [r["instance"] for r in data["results"]] == ["1", "2", "3"]
+    assert all(r["status"] == "done" and r["outcome"] == "ok" for r in data["results"])
+    assert len({r["task_id"] for r in data["results"]}) == 3
+    assert len(store.rows("tasks")) == 3
+
+
+def test_summon_many_keeps_the_default_serial_when_no_instance_is_given(tmp_path: Path):
+    """负控：不给 `instance` ⇒ 仍然按角色串行（默认行为不许被这次改动改松）。"""
+    store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
+    res = reg.call("conductor.summon_many", role="M",
+                   targets=[{"target_role": "E", "action": "list_experiments"} for _ in range(3)])
+    assert res.ok, res.error
+    assert res.data["waves"] == [1, 1, 1], res.data["waves"]
+    assert res.data["concurrent_peak"] == 1, res.data["concurrent_peak"]
+    assert len(store.rows("tasks")) == 3
+
+
+def test_summon_many_refuses_a_bad_target_shape(tmp_path: Path):
+    """负控（参数）：targets 里塞一个非对象 ⇒ 当场拒绝（不许静默跳过那一项）。
+
+    工具层把异常转成 `ok=False` 的结果（不抛给调用方）—— 所以判据看 `ok` 与 `error`，
+    并且要确认一条任务都没落（"拒绝了"与"跳过那一项、其余照跑"是两回事）。
+    """
+    store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
+    res = reg.call("conductor.summon_many", role="M", targets=["E.list_experiments"])
+    assert res.ok is False and res.error, res
+    assert "targets" in str(res.error) and "对象" in str(res.error), res.error
+    assert store.rows("tasks") == []
 
 
 def test_summon_without_wiring_refuses_and_still_writes_the_row(tmp_path: Path):

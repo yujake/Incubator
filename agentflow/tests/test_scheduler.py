@@ -321,6 +321,76 @@ def test_intersecting_calls_do_not_overlap(tmp_path):
     assert [r.outcome for r in res] == ["ok", "ok"]
 
 
+def test_same_role_two_instances_really_run_concurrently(tmp_path):
+    """实例轴正控（2026-09-30）：同一角色的两个不同实例必须能同波并发。
+
+    为什么需要这条判据：分波此前只看"角色级写集"，而 B 的两个调用必然都写
+    `literature` ⇒ 3 个 B 被排成 3 波串行（实测 `[[0],[1],[2]]`，峰值真并发 1）。
+    后果不是"慢"，是"再多 B 也没用" —— 而用户要的正是"并发几个 B 一起读一批文献"。
+    数据面本来就支持（B 的写入按行领取 + 租约），卡住的是编排面把角色当成了实例键。
+
+    判据：两个 `instance` 不同的 E ⇒ 同一波、真并发（耗时 < 串行的 0.85 倍、
+    峰值 = 2）；同时断言台账里两条任务各自独立。
+    """
+    sleep = 0.4
+    rec = _Recorder()
+    store = _mk_store(tmp_path)
+    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(rec, sleep=sleep))})
+    plan = [SC.TaskCall("E", "run_experiment",
+                        {"claim": f"c{i}", "claim_key": f"k{i}", "script_path": "s.py"},
+                        instance=str(i))
+            for i in (1, 2)]
+    waves = P.waves_of(plan, limit=pol.max_concurrency)
+    assert len(waves) == 1, f"同角色不同实例必须能同波（实际 {waves}）"
+
+    t0 = time.monotonic()
+    res = c.run_plan(plan)
+    elapsed = time.monotonic() - t0
+    assert [r.outcome for r in res] == ["ok", "ok"]
+    assert elapsed < sleep * 2 * 0.85, f"两个不同实例花了 {elapsed:.3f}s ⇒ 没有真的并发"
+    assert c.peak_running == 2, f"峰值并发 {c.peak_running} ≠ 2"
+    assert len({r.task_id for r in res}) == 2, "两个实例必须各自一条任务行"
+
+
+def test_same_role_without_instance_is_still_serialized(tmp_path):
+    """实例轴负控：不给实例的两个同角色调用，默认行为一个字不许变松。
+
+    这条是上一轮"同角色串行"判据的守门人：如果实例轴被写成"默认打开并发"，
+    那么既有的 `test_intersecting_calls_do_not_overlap` 会静默失效，
+    而"数据被改坏且不报错"正是本项目最危险的形态。
+    """
+    sleep = 0.3
+    rec = _Recorder()
+    store = _mk_store(tmp_path)
+    pol = P.Policy(max_concurrency=4, max_fanout=5, max_tasks_per_run=100, wall_clock_sec=60)
+    c = _conductor(store, policy=pol, registry={"E": ("object", FakeE(rec, sleep=sleep))})
+    plan = [_e_task("e1", sleep=sleep), _e_task("e2", sleep=sleep)]
+    assert len(P.waves_of(plan, limit=pol.max_concurrency)) == 2
+    t0 = time.monotonic()
+    c.run_plan(plan)
+    assert time.monotonic() - t0 >= sleep * 2 * 0.85
+    # 同标签（两边都叫 "s1"）同样算冲突 —— 只有"两边都给了且不同"才豁免。
+    same = [SC.TaskCall("E", "run_experiment",
+                        {"claim": "c", "claim_key": "k", "script_path": "s.py"}, instance="s1"),
+            SC.TaskCall("E", "run_experiment",
+                        {"claim": "c", "claim_key": "k", "script_path": "s.py"}, instance="s1")]
+    assert len(P.waves_of(same, limit=pol.max_concurrency)) == 2
+
+
+def test_instance_axis_only_relaxes_the_same_role(tmp_path):
+    """实例轴负控 2：不同角色的写集相交仍然必须分波（实例轴不许顺手放宽跨角色）。
+
+    A 写 `literature`、B 也写 `literature`：给它们各自的实例标签也没用 ——
+    跨角色的冲突判据回答的是"两张表会不会被两个角色同时改"。
+    """
+    st = _mk_store(tmp_path)
+    plan = [SC.TaskCall("A", "run", {}, instance="1"),
+            SC.TaskCall("B", "run_once", {}, instance="1")]
+    assert len(P.waves_of(plan, limit=4)) == 2, "A 与 B 都写 literature ⇒ 必须分波"
+    assert st is not None
+
+
 def test_concurrency_never_exceeds_policy_limit(tmp_path):
     """I-5：峰值同时运行的任务数 ≤ max_concurrency。
 

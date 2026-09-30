@@ -71,7 +71,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 72
+TOOL_COUNT = 73
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -190,6 +190,16 @@ def tool_params() -> dict[str, dict]:
         # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
         "conductor.summon": {"target_role": "E", "action": "list_experiments",
                              "input_key": "probe"},
+        # 批量派活：夹具里的 Conductor 没有角色接线 ⇒ 每一项都以 `refused/not_wired`
+        # 落台账，而工具照样返回 ok 载荷（拒绝 ≠ 工具失败）。两个 target 用不同
+        # `instance`，正是"同角色并发多实例"那条路（分波与峰值会出现在返回里）。
+        "conductor.summon_many": {
+            "targets": [
+                {"target_role": "E", "action": "list_experiments", "instance": "1"},
+                {"target_role": "E", "action": "list_experiments", "instance": "2"},
+            ],
+            "why": "探针：只验键集，不真的派活",
+        },
         "conductor.ledger": {"view": "stats"},
         "conductor.stop": {},
         "conductor.resume_brief": {},
@@ -309,7 +319,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
         "verify.check_formal", "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
         "verify.list_experiments", "verify.run_experiment",
-        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",
+        "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",
     }
 )
 

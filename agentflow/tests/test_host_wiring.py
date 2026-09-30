@@ -187,6 +187,31 @@ def test_cross_links_are_bound_at_construction_time(tmp_path: Path):
     assert reg["F"][1](store=st).e is e
 
 
+def test_instance_axis_gives_one_object_per_instance(tmp_path: Path):
+    """实例轴（2026-09-30）：显式实例标签 ⇒ 每标签一个对象；不给 ⇒ 仍是单例。
+
+    "并发几个 B 一起读一批文献"要的是 N 个对象：同一个对象被 N 个线程共用，
+    实例状态（actor、recorder、抽取器上的会话）会互相串味 —— 那样"并发"只是
+    把串行改成了更危险的形态。所以实例轴必须一路走到"对象分家"这一层。
+
+    三条一起断言，缺一条都不算：
+    ① 同一标签两次取到同一个对象（幂等，不然每次 summon 都新建一个）；
+    ② 不同标签取到不同对象；
+    ③ 不给标签仍然是单例（既有的 `test_factory_uses_the_store_it_is_given` 语义）。
+    """
+    st = _store(tmp_path)
+    reg = host.build_role_registry(st, providers=[object()])
+    b1 = reg["B"][1](store=st, instance="1")
+    assert reg["B"][1](store=st, instance="1") is b1
+    b2 = reg["B"][1](store=st, instance="2")
+    assert b2 is not b1
+    assert reg["B"][1](store=st) is reg["B"][1](store=st)
+    assert reg["B"][1](store=st) is not b1
+    # actor 带上实例标签（A/D/E/F 有 actor= 形参）：数据行才分得清是谁写的
+    e1 = reg["E"][1](store=st, instance="7")
+    assert getattr(e1, "actor", "") == "agent-E-7", getattr(e1, "actor", "")
+
+
 # ---------------------------------------------------------------- ④ 工具层接线
 
 def test_selftest_passes():
@@ -222,12 +247,13 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 
 
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
-    """接了线的工具层：M 的面仍然是那 9 件编排面工具，一件领域工具都没有。"""
+    """接了线的工具层：M 的面仍然是那 10 件编排面工具，一件领域工具都没有。"""
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    assert len(m_tools) == 9, m_tools
+    assert len(m_tools) == 10, m_tools
+    assert "conductor.summon_many" in m_tools, m_tools
     assert all(n.startswith("conductor.") for n in m_tools), m_tools
     # 领域工具不许出现在 M 的面上（P10 的红线在接线之后仍然成立）
     assert not [n for n in m_tools if n.startswith(("table.", "fs.", "prov."))], m_tools

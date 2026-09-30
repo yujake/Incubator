@@ -38,8 +38,9 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
+from .. import policy as P
 from .. import schema as S
 from ..cancellation import CANCEL_CODES
 from ..conductor import Conductor, NotWiredError, SummonResult
@@ -183,6 +184,107 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
                                   input_key=input_key)
         data = _summon_dict(res)
         return ok(data, **data)
+
+    @tool(
+        "conductor.summon_many",
+        "一次派**一批**活，真的并发：按写集分波（`policy.waves_of`），同波用线程池跑"
+        "（上限 `max_concurrency`）。"
+        "同一角色要开多个实例时，给每个 target 一个不同的 `instance` 标签 —— "
+        "**同角色不同实例允许同波并发**（例：一批文献分给 3 个 B 同时读）；"
+        "不给标签就和从前一样按角色串行。返回里带 `waves` 与 `concurrent_peak`："
+        "'到底并发了没有'看这两个数，不要看墙钟。",
+        {
+            "type": "object",
+            "properties": {
+                "targets": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "description": "一批派活（每项一条）",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "target_role": {"type": "string", "description": "被召唤的角色（A–H）"},
+                            "action": {"type": "string", "description": "该角色登记过的动作名"},
+                            "params": {"type": "object", "description": "动作参数"},
+                            "instance": {"type": "string",
+                                         "description": "实例标签；同角色不同标签 ⇒ 允许同波并发"},
+                            "input_key": {"type": "string", "description": "去重/防活锁的键"},
+                        },
+                        "required": ["target_role", "action"],
+                        "additionalProperties": False,
+                    },
+                },
+                "why": {"type": "string", "description": "这批活是为什么派的（写进日志，便于复盘）"},
+            },
+            "required": ["targets"],
+            "additionalProperties": False,
+        },
+        side_effect="write_local",
+        roles=("M",),
+        returns=("{'count','ok_count','refused_count','failed_count','waves','max_wave',"
+                 "'concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 "
+                 "{'role','action','instance','task_id','status','outcome','refusal_reason',"
+                 "'detail','error','tokens','usd','elapsed_sec','checked','children'}"),
+    )
+    def conductor_summon_many(targets: list, why: str = "") -> ToolResult:
+        """工具体：一次派一批活，走 `Conductor.run_plan`（分波 + 线程池 + 探针）。
+
+        为什么要有它（2026-09-30）：`run_plan` / `run_waves` 这套并发引擎早就存在
+        （分波按写集、同波线程池、`ConcurrencyProbe` 能证明区间重叠），但生产路径
+        上零调用 —— 主控只能一次派一个，于是"并发开 3 个 B 读一批文献"在工具面上
+        根本表达不出来。这个工具就是那条路。
+
+        三态纪律：每一项都必须有自己的结局（`status`/`outcome`/`refusal_reason`），
+        列表长度恒等于输入长度 —— "第 3 个被拒了"不许表达成"只有 2 个任务"。
+        """
+        from .. import scheduler as SC
+
+        c = _conductor()
+        calls = []
+        for i, item in enumerate(targets or []):
+            if not isinstance(item, Mapping):
+                raise ToolError(f"targets[{i}] 必须是对象（收到 {type(item).__name__}）")
+            target_role = str(item.get("target_role") or "")
+            action = str(item.get("action") or "")
+            if not target_role or not action:
+                raise ToolError(f"targets[{i}] 缺 target_role 或 action")
+            calls.append(SC.TaskCall(
+                role=target_role, action=action,
+                params=dict(item.get("params") or {}),
+                by=S.CONDUCTOR_ROLE,
+                input_key=str(item.get("input_key") or ""),
+                instance=str(item.get("instance") or ""),
+            ))
+        t0 = time.monotonic()
+        results = c.run_plan(calls)
+        elapsed = time.monotonic() - t0
+        probe = getattr(c, "_last_probe", None)
+        waves = [len(w) for w in P.waves_of(calls, limit=c.policy.max_concurrency)]
+        items = [{**_summon_dict(r), "instance": str(getattr(call, "instance", "") or "")}
+                 for r, call in zip(results, calls)]
+        payload = {
+            "count": len(items),
+            "ok_count": sum(1 for r in results if getattr(r, "ok", False)),
+            "refused_count": sum(1 for r in results
+                                 if str(getattr(r, "outcome", "")) == "refused"),
+            "failed_count": sum(1 for r in results
+                                if str(getattr(r, "status", "")) == "failed"),
+            "waves": waves,
+            "max_wave": max(waves) if waves else 0,
+            "concurrent_peak": int(getattr(probe, "peak", 0) or 0),
+            "elapsed_sec": round(elapsed, 3),
+            # `why` 恒在（没给就是空串）：声明了却"有时不给"会让读它的人
+            # 把"这一次没给"读成"这个键不存在"（`returns=` 是契约，不是提示）。
+            "why": str(why or ""),
+            "results": items,
+        }
+        # 键表写在这里（字面量）而不是 `ok(payload, **payload)`：本模块的工具体
+        # 历史上都是"看不清的调用点"那一档，静态扫描读不出键；这一件刻意写成
+        # 看得见的形态，于是"声明了哪些键"可以直接对着这段代码核。
+        # （`test_tools_branch_key_sets` 的 `INVISIBLE_OK_SITES` 里
+        # `conductor_tools.py` 的处数因此 +1，已同步改表。）
+        return ok(payload, **payload)
 
     @tool(
         "conductor.ledger",
@@ -521,9 +623,9 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
             "documents": got.get("documents") or [],
         })
 
-    for fn in (conductor_summon, conductor_ledger, conductor_stop, conductor_resume_brief,
-               conductor_cancel, conductor_ensure_project, conductor_state, conductor_role_spec,
-               conductor_acceptance):
+    for fn in (conductor_summon, conductor_summon_many, conductor_ledger, conductor_stop,
+               conductor_resume_brief, conductor_cancel, conductor_ensure_project,
+               conductor_state, conductor_role_spec, conductor_acceptance):
         names.append(registry.register_function(fn).name)
     return names
 

@@ -124,13 +124,19 @@ class _Probe:
 
 
 class _ProbeBackend(LocalBackend):
-    """把 `resolve` 换成一个固定实例（不起真 agent），其余走 `LocalBackend.call`。"""
+    """把 `resolve` 换成一个固定实例（不起真 agent），其余走 `LocalBackend.call`。
+
+    `resolve` 的签名必须与 `LocalBackend.resolve` 逐字同形（`role, instance=""`）：
+    2026-09-30 加了实例轴之后，`Conductor` 会带 `instance` 调它 ——
+    少一个形参就会在并发线程里抛 `TypeError`，而那种失败会被记成
+    `failed`，看起来像角色崩了（实测过：三条 R5 用例当场变红）。
+    """
 
     def __init__(self, obj: object) -> None:
         self._obj = obj
         self.store = None
 
-    def resolve(self, role: str):  # noqa: ARG002
+    def resolve(self, role: str, instance: str = ""):  # noqa: ARG002
         return self._obj
 
 

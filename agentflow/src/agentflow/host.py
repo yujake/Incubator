@@ -74,7 +74,17 @@ class _Builder:
         seg = self.cfg.get(f"agent_{role.lower()}") or {}
         return dict(seg) if isinstance(seg, Mapping) else {}
 
-    def agent_a(self, store: Any) -> Any:
+    #: 角色 → 它的构造签名收不收 `actor=`（2026-09-30 为实例轴查的实测结论）。
+    #: A/D/E/F 有显式 `actor=` 形参；G/H 从 config 的 `actor` 键取；
+    #: B/C 没有 actor 概念（B 的写入走 `claimed_by` 领取，C 只读）。
+    _ACTOR_KWARG: frozenset[str] = frozenset({"A", "D", "E", "F"})
+    _ACTOR_IN_CONFIG: frozenset[str] = frozenset({"G", "H"})
+
+    def _actor_for(self, role: str, instance: str) -> str:
+        """实例标签 → actor 名（空标签就是默认的那个 actor）。"""
+        return f"agent-{role}-{instance}" if instance else f"agent-{role}"
+
+    def agent_a(self, store: Any, instance: str = "") -> Any:
         """A：需要 providers（没给就根本不会走到这里）。
 
         downloader 也要给（2026-09-29 验收 P1 实测的缺口）：只给 providers 时
@@ -90,10 +100,17 @@ class _Builder:
         if acfg.get("download", True):
             downloader = F.default_downloader(self.cfg.get("download") or {})
         return AgentA(store, providers=list(self.providers), llm=self.llm,
-                      config=acfg, downloader=downloader)
+                      config=acfg, downloader=downloader,
+                      actor=self._actor_for("A", instance))
 
-    def agent_b(self, store: Any) -> Any:
-        """B：extractor 决定它有没有 LLM（B 的签名里没有 `llm`）。"""
+    def agent_b(self, store: Any, instance: str = "") -> Any:
+        """B：extractor 决定它有没有 LLM（B 的签名里没有 `llm`）。
+
+        实例轴对 B 是最有用的那一档：B 的写入是"按行领取"（`claimed_by` +
+        租约，见 `agent_b._claim`），所以 N 个 B 并发读同一批文献在数据面本来就安全
+        （既有判据 `tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`）。
+        B 没有 `actor=` 形参，所以实例身份只体现在"对象不同"与并发波形上。
+        """
         from .agent_b import AgentB
         from .extract import extract_text
 
@@ -110,54 +127,68 @@ class _Builder:
         return AgentB(store, extractor=extractor, extract_text=extract_text,
                       config=self._cfg_for("B"))
 
-    def agent_c(self, store: Any) -> Any:
+    def agent_c(self, store: Any, instance: str = "") -> Any:
         """C：只要 store。"""
         from .agent_c import AgentC
 
         return AgentC(store, config=self._cfg_for("C"), llm=self.llm)
 
-    def agent_d(self, store: Any) -> Any:
+    def agent_d(self, store: Any, instance: str = "") -> Any:
         """D：构造期拿到 同一个 C 实例（`D` 的签名里 `c` 是可选关键字）。"""
         from .agent_d import AgentD
 
         return AgentD(store, config=self._cfg_for("D"), llm=self.llm,
-                      c=self.get("C", store))
+                      c=self.get("C", store), actor=self._actor_for("D", instance))
 
-    def agent_e(self, store: Any) -> Any:
+    def agent_e(self, store: Any, instance: str = "") -> Any:
         """E：需要工作区根（它跑实验脚本、写产物）。"""
         from .agent_e import AgentE
 
         return AgentE(store, config=self._cfg_for("E"), llm=self.llm,
-                      workspace_root=self.workspace_root or _root_of(store))
+                      workspace_root=self.workspace_root or _root_of(store),
+                      actor=self._actor_for("E", instance))
 
-    def agent_f(self, store: Any) -> Any:
+    def agent_f(self, store: Any, instance: str = "") -> Any:
         """F：构造期拿到 同一个 E 实例。"""
         from .agent_f import AgentF
 
         return AgentF(store, config=self._cfg_for("F"), llm=self.llm,
-                      e=self.get("E", store))
+                      e=self.get("E", store), actor=self._actor_for("F", instance))
 
-    def agent_g(self, store: Any) -> Any:
+    def agent_g(self, store: Any, instance: str = "") -> Any:
         """G：需要工作区根（它写稿件）。"""
         from .agent_g import AgentG
 
-        return AgentG(store, config=self._cfg_for("G"), llm=self.llm,
+        return AgentG(store, config=self._cfg_with_actor("G", instance), llm=self.llm,
                       workspace_root=self.workspace_root or _root_of(store))
 
-    def agent_h(self, store: Any) -> Any:
+    def agent_h(self, store: Any, instance: str = "") -> Any:
         """H：只要 store（它的落库代理 `writers` 自己会注册）。"""
         from .agent_h import AgentH
 
-        return AgentH(store, config=self._cfg_for("H"), llm=self.llm)
+        return AgentH(store, config=self._cfg_with_actor("H", instance), llm=self.llm)
+
+    def _cfg_with_actor(self, role: str, instance: str) -> dict[str, Any]:
+        """G/H 从 config 读 `actor`：实例标签就写在这里（它们没有 `actor=` 形参）。"""
+        cfg = self._cfg_for(role)
+        cfg["actor"] = self._actor_for(role, instance)
+        return cfg
 
     # ------------------------------------------------------------ 取实例
 
-    def get(self, role: str, store: Any) -> Any:
-        """取（或建）该角色的实例；键含 store 根 ⇒ 换库必换实例。"""
-        key = (role, str(_root_of(store)))
+    def get(self, role: str, store: Any, instance: str = "") -> Any:
+        """取（或建）该角色的实例；键含 store 根 ⇒ 换库必换实例。
+
+        `instance` 是 2026-09-30 加的实例轴：空串 = 那个单例（默认行为逐字不变）；
+        显式标签 ⇒ 键里多一维，于是"N 个 B 一起干活"拿到的是 N 个对象。
+        为什么单例路径必须留着：`D` 与 `F` 在构造期就绑定了邻居（`c=` / `e=`），
+        每召唤一次新建一个 C，就会让 `D.c is C` 这条结构不变式断掉
+        （`tests/test_host_wiring.py` 钉着它）。所以只有显式要实例时才分家。
+        """
+        key = (role, str(instance or ""), str(_root_of(store)))
         if key not in self._made:
             maker = getattr(self, f"agent_{role.lower()}")
-            self._made[key] = maker(store)
+            self._made[key] = maker(store) if not instance else maker(store, instance=instance)
         return self._made[key]
 
     def status(self) -> dict[str, str]:
@@ -189,11 +220,16 @@ def build_role_registry(store: Any, *, llm: Any = None,
 
         # 工厂必须用传进来的 store（不许捕获外层那个）：否则把同一张登记表
         # 交给第二个工作区时，角色会静默写进第一个库。
-        def factory(*, store: Any = None, _role: str = role, _b: _Builder = b) -> Any:
-            """backend 的工厂契约：`fn(*, store=...)` ⇒ 该角色的实例（按角色+库单例）。"""
+        def factory(*, store: Any = None, instance: str = "",
+                    _role: str = role, _b: _Builder = b) -> Any:
+            """backend 的工厂契约：`fn(*, store=..., instance="")` ⇒ 该角色的实例。
+
+            不给 `instance` 时按 `(角色, 库)` 单例（`tests/test_host_wiring.py` 钉着）；
+            给了实例标签 ⇒ 每标签一个对象（"N 个 B 一起干活"要的是 N 个对象）。
+            """
             if store is None:
                 raise TypeError(f"factory({_role}) 需要一个 store（backend 的契约是 fn(*, store=...)）")
-            return _b.get(_role, store)
+            return _b.get(_role, store, instance)
 
         reg[role] = ("factory", factory)
     return reg

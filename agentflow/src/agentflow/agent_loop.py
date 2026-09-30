@@ -52,6 +52,16 @@ from .llmseam import LlmSeam
 #: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
 SHAPES = ("tool", "summon", "message", "note", "ask_user", "final")
 
+#: 这些拒绝理由 ⇒ 自动转成"请主控代唤"的申请（2026-09-30）。
+#:
+#: `forbidden_edge`：目标不在 `capabilities.ALLOWED_EDGES` 里（例如 G 想找 A 要文献）；
+#: `depth_exceeded`：召唤链已经到 `policy.max_depth`。两者都是"这条路今天不通"，
+#: 而不是"我参数写错了" —— 参数错（`invalid_params`）该自己改，越权不该重试。
+RELAY_REFUSALS: frozenset[str] = frozenset({"forbidden_edge", "depth_exceeded"})
+
+#: 代唤申请的留言标题（机器可识别的那一位；改它要同时改提示词里的同一句）。
+RELAY_SUBJECT = "请代唤"
+
 #: 每一步最后读到的那段输出契约（`draft/28` §195）。
 #:
 #: 为什么要在最后一行重述一遍：系统提示词有 6k+ token，循环协议埋在中间；
@@ -83,8 +93,7 @@ NOTES_DIR_NAME = "notes"
 #: 正确做法是把长产出放磁盘、把路径给上游：上游有眼睛（fs.read），自己去读全文。
 RUNS_DIR_NAME = "runs"
 
-#: 单个工具结果回给模型时的字符上限（超了按字段截断并写明截了多少）。
-#:
+#: 单个工具结果回给模型时的字符上限（超了按字段截断并写明截了多少）。#:
 #: 1200 → 3000 是 2026-09-30 的真机读数逼出来的：三次运行里模型自己的抱怨逐字都是
 #: "读数被观测层截断" —— 验收表 10 行、24 条断言台账、253 条 findings，没有一件
 #: 装得进 1200 字，于是它把步数花在"换个姿势再读一遍"上。观测窗口比任务需要的读数小，
@@ -655,6 +664,20 @@ class AgentLoop:
             refusal_reason=res.refusal_reason, detail=_clip(res.detail, 400),
             children=list(res.children or []),
         )
+        if not res.ok and self._needs_relay(role, str(res.refusal_reason or "")):
+            # ---- 越权/超深不是"此路不通"，而是"要换一条路"（2026-09-30）
+            #
+            # 真机实测：被协同唤起的角色一次都没有向主控申请过代唤 ——
+            # 因为它拿到的只是一句 `forbidden_edge`，然后就没有然后了
+            # （17 个 review 会话里非 M 的 summon 只有 F→E 7 次）。
+            # 用户的原话是"如果互相唤起困难，至少要能向主控申请唤起别的智能体做任务"，
+            # 所以这里把"被拒绝"自动转成一次结构化的代唤申请：
+            # 落一条 `agent_summon_request` 事件 + 给 M 发一条 `subject=请代唤` 的留言。
+            # 注意它不是假装成功：`ok` 仍是 False，`relay_requested` 才是这次
+            # 实际发生的事；申请有没有被受理由主控在它自己那一步决定。
+            out["relay_requested"] = self._request_relay(role, action, payload,
+                                                         str(res.refusal_reason or ""),
+                                                         str(res.detail or ""))
         if path:
             # 伙伴是 LLM 循环驱动的：它的完整产出在磁盘上，这里只给路径 + 一段结论。
             out["llm_run_path"] = path
@@ -663,6 +686,66 @@ class AgentLoop:
         else:
             out["payload"] = _clip(payload, 800)
         return out
+
+    def _needs_relay(self, role: str, reason: str) -> bool:
+        """这次拒绝该不该转成"请主控代唤"。
+
+        两档要转：
+
+        - `forbidden_edge` / `depth_exceeded`：这条路今天不通（边表 / 深度），
+          而重试不会让它通。
+        - `invalid_params` 且目标不在我的伙伴表里：这是同一件事的另一种表现 ——
+          我看不到他的动作表（伙伴表只列我能唤起的人），所以我给的参数必然是在猜；
+          `Conductor.summon` 的顺序是"先查参数、再查边"，于是我会拿到 `invalid_params`，
+          而真相是"我根本不该直接找他"。把这一档也算进来，代唤才不会因为
+          "参数猜错"而永远发不出去（这是本轮实测出来的：第一次写这条判据时，
+          真实场景恰恰落在这档上）。
+
+        反过来，目标在我能唤起的伙伴里时 `invalid_params` 就只是"参数写错了"：
+        那种情况该由模型自己改参数，不该占用主控的注意力。
+        """
+        if reason in RELAY_REFUSALS:
+            return True
+        return reason == "invalid_params" and role not in AP.partners_out(self.role)
+
+    def _request_relay(self, role: str, action: str, params: Mapping[str, Any],
+                       reason: str, detail: str) -> dict[str, Any]:
+        """把一次被拒的越权召唤转成"请主控代唤"的申请（留言 + 结构化事件）。
+
+        为什么是留言而不是新造一个形状：`message` 这条通道今天已经通到 M
+        （`to="M"` 的私聊判据 `self.role in partners_out("M")` 对每个角色都成立），
+        且 M 的循环下一步就会 `_hear()` 到它。新造形状要动循环协议、提示词、
+        与会话格式三处，而这一条的用户诉求是"至少能申请"，留言 + 可识别 subject
+        就够了；"M 必须受理"那一半只能靠提示词与审计（`verify.py` 是禁改区）。
+
+        `subject` 用固定常量是为了让机器可识别（人读也一眼懂）；body 里逐项写清
+        "要谁、做什么动作、什么参数、为什么"，让 M 不必回头问。
+        """
+        asked = {k: v for k, v in (params or {}).items() if not str(k).startswith("_")}
+        body_lines = [f"要谁：{role}", f"做什么动作：{action}"]
+        if asked:
+            body_lines.append("参数：" + json.dumps(asked, ensure_ascii=False, default=str)[:600])
+        else:
+            body_lines.append("参数：（这次没有参数）")
+        body_lines.append(f"为什么：我要做的这件事被策略拒了（{reason}）—— {detail[:300]}")
+        if role not in AP.partners_out(self.role):
+            body_lines.append("注意：他不在我的可唤起伙伴里，所以我**看不到他的参数表** —— "
+                              "参数可能不合法，请用 conductor.role_spec 核一遍再派。")
+        body_lines.append(f"申请方：{self.role}（台账号 {self.my_task_id or '未拿到'}）；"
+                          f"批准与否由你决定，我这一步不会替你做。")
+        body = "\n".join(body_lines)
+        msg_id, problem = send_message(self.session_root, sender=self.role, to=S.CONDUCTOR_ROLE,
+                                       subject=RELAY_SUBJECT, body=body, sid=self.sid)
+        rec: dict[str, Any] = {"kind": "agent_summon_request", "role": self.role,
+                               "wants_role": role, "wants_action": action, "params": asked,
+                               "refusal_reason": reason, "message_id": msg_id}
+        if problem:
+            rec["problem"] = problem
+        SS.append(self.session_root, rec, sid=self.sid)
+        return {"to": S.CONDUCTOR_ROLE, "subject": RELAY_SUBJECT, "message_id": msg_id,
+                "problem": problem,
+                "note": ("越权的边不会因为重试而成立 ⇒ 已向主控申请代唤；"
+                         "不要把这条申请当成'对方已经在做'。")}
 
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         to = str(payload.get("to"))
@@ -739,20 +822,24 @@ class LlmBackend:
         """本后端不提供实例（它按动作决定走哪条路），把问题交给内层。"""
         return self.inner.resolve(role)
 
-    def call(self, role: str, action: str, params: Mapping[str, Any], *, token: Any) -> Any:
+    def call(self, role: str, action: str, params: Mapping[str, Any], *, token: Any,
+             instance: str = "", task_id: str = "") -> Any:
         """登记过的 `(角色, 动作)` 走 LLM 循环；其余交给内层后端（确定性实现）。"""
         cfg = self.loops.get((role, action))
         if cfg is None:
-            return self.inner.call(role, action, params, token=token)
+            return self.inner.call(role, action, params, token=token, instance=instance,
+                                   task_id=task_id)
         seam = self._seam(role)
         loop = AgentLoop(role=role, session_root=self.session_root, registry=self.registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
                          workspace_root=self.workspace_root, sid=self.sid, token=token,
                          store=self.store)
+        row = self._running_row(role, task_id)
         run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
-                       summoned_by=str(params.get("_summoned_by") or S.CONDUCTOR_ROLE),
-                       my_task_id=str(params.get("_task_id") or self._lookup_task_id(role)),
-                       depth=int(params.get("_depth") or 1))
+                       summoned_by=str(row.get("called_by") or params.get("_summoned_by")
+                                       or S.CONDUCTOR_ROLE),
+                       my_task_id=str(row.get("task_id") or params.get("_task_id") or ""),
+                       depth=int(row.get("depth") or params.get("_depth") or 1))
         artifact = self._write_run_artifact(role, run)
         SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,
                                       "path": artifact, "stop_reason": run.stop_reason,
@@ -782,25 +869,47 @@ class LlmBackend:
             run.notes.append(f"产出落盘失败：{type(exc).__name__}: {exc}")
             return ""
 
-    def _lookup_task_id(self, role: str) -> str:
-        """从台账里找出"刚刚为这个角色写下的那条 running 行"。
+    def _running_row(self, role: str, task_id: str = "") -> dict[str, Any]:
+        """找出"这次召唤那条 running 行"，整行返回。
+
+        两条取材路径，按可靠性排序：
+
+        1. 给了 `task_id`（`Conductor.summon` 现在会传，见 `conductor.py` 第 [6] 步）：
+           直接按号取那一行 —— 并发多实例下这是唯一可靠的做法（按角色找会同时找到 N 条）。
+        2. 没给号（旧调用方 / 直接建 `LlmBackend` 的单测）：退回"按角色找恰好一条"。
 
         为什么要找而不是让调用方传：`Conductor.summon` 先写 running 行、再调后端，
-        所以后端天然不知道自己的台账号。找得到就用；找不到或有歧义就返回空串
-        （提示词里会如实写"本次运行未拿到台账号"），绝不猜一个号 ——
-        猜错会让两个任务的记录混在一起，而那是审计面最贵的错。
+        所以后端天然不知道自己的台账号。三种"没拿到"必须分得开（没有台账 /
+        读台账失败 / 恰好不是一条），所以返回值带 `checked` 与 `reason`，
+        而不是给一个"看起来像没结果"的空字典。提示词据此如实写"本次运行未拿到台账号"。
+
+        ## 为什么返回整行而不是只返回 `task_id`（2026-09-30 修的 bug）
+
+        子循环的 `summoned_by` / `depth` 以前读 `params["_summoned_by"]` /
+        `params["_depth"]`，而全仓没有任何地方生产这两个键 ⇒ 每一次被同伴
+        唤起的角色都以为"是主控直接派的、深度 1"。实测（`temp/review-task-20260930-111332`）：
+        台账里 `t-0260 E.run_experiment called_by=F parent=t-0259 depth=2`，
+        而 E 自己的 `agent_run_start` 记的是 `summoned_by=M, depth=1` ——
+        协同链在孩子自己的认知里断掉，"像主控的 subagent"这句话就不成立。
+        权威来源本来就是台账那一行（`called_by` / `depth` 都在上面），直接读它。
         """
         store = self.store
         if store is None:
-            return ""
+            return {"checked": False, "reason": "本次运行没有 store（读不到台账）"}
+        want = str(task_id or "")
         try:
-            rows = [r for r in store.rows("tasks")
-                    if str(r.get("role")) == role and str(r.get("status")) == "running"]
-        except Exception:
-            return ""
+            rows = [dict(r) for r in store.rows("tasks")
+                    if (str(r.get("task_id")) == want if want
+                        else (str(r.get("role")) == role and str(r.get("status")) == "running"))]
+        except Exception as exc:
+            return {"checked": False, "reason": f"读 tasks 表失败：{type(exc).__name__}: {exc}"}
         if len(rows) != 1:
-            return ""
-        return str(rows[0].get("task_id") or "")
+            why = (f"台账号 {want} 在 tasks 表里不是恰好一条（{len(rows)} 条）" if want
+                   else f"running 行不是恰好一条（{len(rows)} 条）")
+            return {"checked": False, "reason": why + "，不猜台账号"}
+        row = dict(rows[0])
+        row["checked"] = True
+        return row
 
 
 def _task_text(params: Mapping[str, Any], role: str, action: str) -> str:

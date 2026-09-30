@@ -135,7 +135,7 @@
 - `NON_SUMMONABLE = {'M'}`：主控不可被召唤（它只在顶层发起）。
 - `WRITE_SETS` / `SIDE_EFFECTS` / `EFFECT` / `EXTERNAL`：写集与副作用轴。
 - **导入期自检**（`assert_capabilities`）：参数覆盖 144/144 个 property、50 个动作、
-  两层参数类型对账 73 对（读到 61 个工具的 schema）—— 这行字在**导入 `agentflow.capabilities`
+  两层参数类型对账 73 对（读到 62 个工具的 schema）—— 这行字在**导入 `agentflow.capabilities`
   时**打印（角色与工具的装配必经此处），它是"声明与实现没分家"的现场读数。
 
 复跑：`python -c "import sys;sys.path.insert(0,'agentflow/src');from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()), sum(len(v) for v in C.CAPABILITIES.values()))"`
@@ -177,7 +177,7 @@
 参数校验 `validate_params`；参数缝 `check_param_seams` / `param_seam_reason`；
 只读角色越权的**调用期**判据 `_role_surface` + 逐条登记的 `READONLY_CALL_EXCEPTIONS`。
 
-### 5.3 十二个工具模块与 72 个工具（实测 2026-09-30）
+### 5.3 十二个工具模块与 73 个工具（实测 2026-09-30）
 
 复跑命令：`python -m agentflow.cli tools`（输出即下表来源）。
 
@@ -194,18 +194,20 @@
 | `agentflow/src/agentflow/tools/attack_tools.py` | `attack.*` | 6 | F（D、G、H 借读） |
 | `agentflow/src/agentflow/tools/doc_tools.py` | `doc.*` | 10 | G（H 借 `doc.paper_state` 等只读项） |
 | `agentflow/src/agentflow/tools/review_tools.py` | `review.*` | 2 | H（D、F、G 借读） |
-| `agentflow/src/agentflow/tools/conductor_tools.py` | `conductor.*` | 9 | M |
+| `agentflow/src/agentflow/tools/conductor_tools.py` | `conductor.*` | 10 | M（含 `conductor.summon_many` = 批量并发派活，见 §8.4） |
 | `agentflow/src/agentflow/tools/conjecture_tools.py` | `conjecture.register_conjecture` | 1 | 猜想台账产出面（**不在** `build_registry` 里，由 `agentflow/src/agentflow/agent_d.py::install_d_tools` 另行挂） |
 
 按前缀合计（实测 2026-09-30）：table 8 + fs 7 + search 8 + ocr 3 + graph 4 + trace 4 +
-research 5 + verify 6 + attack 6 + doc 10 + review 2 + conductor 9 = **72**；
+research 5 + verify 6 + attack 6 + doc 10 + review 2 + conductor 10 = **73**；
 另加 `conjecture.register_conjecture` 这一条装配在 D 的安装函数里。
+（另外两个口径：`build_registry(store=None, workspace_root='.')` ⇒ 68；
+`build_registry()` ⇒ 61 —— 缺 store / 缺工作区根时有些模块根本不装配。）
 
 **逐角色工具条数**（同一条命令的另一半输出；`agentflow/tools/verify_role_specs.py` 会拿它
 与 `agentflow/docs/ROLE-SPECS.md` 对账）：
 
 ```text
-A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9     工具总数 72（已装模块 12）
+A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 10    工具总数 73（已装模块 12）
 只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）
 ```
 
@@ -311,7 +313,7 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9     工具总数 72�
 
 ### 7.1 循环：`agentflow/src/agentflow/agent_loop.py`
 
-- **六种形状**：`SHAPES = ('tool', 'summon', 'message', 'note', 'ask_user', 'final')`；
+- **六种形状**：`SHAPES = ('tool', 'summon', 'message', 'note', 'ask_user', 'final')`（2026-09-30 复核：**仍然是六种** —— 代唤走的是 `message` + 固定 subject，没有新造形状）；
   解析入口 `_shape_of`（`tool` 是**字符串**工具名 + `args`，其余为嵌套对象）。
 - **输出契约写在每一轮提示词的最后**（`JSON_TAIL`，六个骨架逐行可解析；
   判据 `agentflow/tests/test_agent_loop.py::test_every_documented_shape_actually_parses`
@@ -326,11 +328,42 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9     工具总数 72�
 - **驱动方式**：`run_role(...)`；`LlmBackend(inner, loops, session_root, seam_factory,
   max_steps, store, sid)` 把"某个（角色, 动作）走 LLM 循环"做成登记表 ——
   **哪些动作走模型是部署选择**（CLI 的 `--drive`），不是写死的。
+  被驱动的那个 `(角色, 动作)` 走的是 `agent_loop.AgentLoop`：**它就是一个 subagent**
+  （自己的工具面、自己的步数上限、自己的台账行、能再唤起别人）。
+- **子循环知道自己在为谁干活**（2026-09-30 修）：`LlmBackend._running_row(role)` 从
+  `tasks` 表读出那条 `running` 行，用它的 `called_by` / `depth` / `task_id` 填
+  `agent_run_start`。此前读的是 `params["_summoned_by"]`（**全仓没有生产者**），
+  于是每个被同伴唤起的角色都以为"是主控直接派的、深度 1"。
+
+### 7.4 协同：够不到的人怎么找（`agent_loop.py`）
+
+边表（`capabilities.ALLOWED_EDGES`）是**设计**：谁该找谁是有意规定的，不是遗漏。
+但"派不动就什么都不做"不是设计，所以框架给每条越权拒绝配了一条**兜底路**：
+
+| 机制 | 落在哪 | 说明 |
+|---|---|---|
+| 自动代唤申请 | `agent_loop.py::_do_summon` → `_request_relay` | 被拒的理由是 `forbidden_edge` / `depth_exceeded`，**或者** `invalid_params` 且目标不在自己的伙伴表里（那时参数根本无从写对）⇒ 自动给 M 发一条 `subject=请代唤` 的留言 + 落一条 `agent_summon_request` 事件；这一步仍如实报 `ok=False`（不许假装成功） |
+| 提示词 | `agent_prompts.py::partners_lines` 与 `LOOP_PROTOCOL` | 每个可被召唤的角色都读到"需要的人不在名单里就发『请代唤』给 M，写清要谁/动作/参数/为什么" |
+| 主控的义务 | `agent_prompts.py` 的 M 简报 policy | "收到 subject=请代唤 的留言**本轮内必须处理**：要么替它派，要么写明为什么没派" |
+| 端到端判据 | `agentflow/tests/test_agent_loop.py::test_the_collaboration_chain_works_end_to_end` | H 够不到 A ⇒ 申请 ⇒ M 读到 ⇒ M 派 A；断言锚在**台账**（`role=A` 且 `called_by=M`，且发生在申请之后） |
+
+### 7.5 并发：同一角色的多个实例（`policy.py` / `scheduler.py` / `conductor.py` / `host.py`）
+
+用户要的形态是"一批文献分给 3 个 B 同时读"。这条路上原本有三道结构闸门，2026-09-30 打通：
+
+| 闸门 | 原来 | 现在 |
+|---|---|---|
+| 分波判据按**角色级**写集 | 3 个 B 必然排 3 波（峰值真并发 1，"再多 B 也没用"） | `scheduler.TaskCall.instance` + `policy._same_role_other_instance`：**同角色、两边都显式给了不同实例标签** ⇒ 不算冲突；没给或标签相同 ⇒ 照旧串行（默认行为一字未变，负控在 `agentflow/tests/test_scheduler.py`） |
+| 每角色只有一个对象 | `LocalBackend._instances` / `host._Builder._made` 键里只有角色 | 缓存键加一维 `instance`；`host` 的工厂契约 `fn(*, store=..., instance="")`，A/D/E/F 把实例写进 `actor`（`agent-E-7`），G/H 写进 config 的 `actor` |
+| 没有批量入口 | `Conductor.run_plan` / `scheduler.run_waves`（分波 + 线程池 + `ConcurrencyProbe`）**生产路径零调用**；M 的工具只能一次派一个 | `agentflow/src/agentflow/tools/conductor_tools.py` 的 **`conductor.summon_many`**（M 专属）：一次派一批，返回里带 `waves` 与 `concurrent_peak` —— "到底并发了没有"看这两个数，不看墙钟 |
+
+四条上限仍然管着这件事（`agentflow/src/agentflow/policy.py`）：
+`max_depth=3` / `max_fanout=5` / `max_concurrency=4` / `max_tasks_per_run=200`。
 
 ### 7.2 提示词装配：`agentflow/src/agentflow/promptkit.py` + `agent_prompts.py`
 
 - `promptkit.py`：`Section` / `Scope` / `Assembly` / `PromptRegistry`（有序段 + 变量 + 作用域遮蔽）。
-- `agent_prompts.py`：`PROMPT_VERSION = "p16"`；`ROLE_BRIEFS` 9 份（A–H + M）；
+- `agent_prompts.py`：`PROMPT_VERSION = "p17"`；`ROLE_BRIEFS` 9 份（A–H + M）；
   段顺序在 `SECTION_ORDERS`：`AGENT_IDENTITY`、`ROLE_BOUNDARY`、`ROLE_POLICY`、`STANCE`、
   `FACULTIES`、`PARTNERS`、`WORKSPACE_FACTS`、`AGENT_TOOLS_SDK`、`TOOL_GUIDANCE_BASE`、
   `EVIDENCE_CONTRACT`、`THREE_STATE`、`OUTPUT_CONTRACT`、`TASK_FRAME`、`DEPLOYMENT_SUFFIX`。
@@ -557,10 +590,11 @@ release-check → acceptance → repro → role-specs → coverage → per-file
 - 位置：`agentflow/tests/`（162 个 `test_*.py`，另有 `conftest.py` 提供 `store` 等夹具）；
   配置在 `agentflow/pyproject.toml`（`[tool.pytest.ini_options]`，**唯一一处**）。
 - 复跑：`cd agentflow && python -m pytest -q -p no:cacheprovider`。
-  实测 2026-09-30（§196 提交 `ffd5621` 之后）：**3071 passed / 1 failed / 3 skipped / 1 xfailed**（23:52）；
-  唯一那条失败是 `agentflow/tests/test_release_all.py::test_every_only_example_in_the_docstring_is_a_real_step_key`
-  —— 它起子进程跑 `release_all --only role-specs,coverage`，而那条命令有 600s 上限；
-  单独复跑 510s 通过（整轮并发下超时）。
+  实测 2026-09-30（§198 之后）：**3083 passed / 0 failed / 3 skipped / 1 xfailed**（21:25）。
+  上一轮（§196 提交 `ffd5621` 之后）是 **3071 passed / 1 failed**，那一条失败是
+  `agentflow/tests/test_release_all.py::test_every_only_example_in_the_docstring_is_a_real_step_key`
+  —— 它起子进程跑 `release_all --only role-specs,coverage`，而那条命令有 600s 上限：
+  **整轮并发下会超时，单独复跑 510s 通过**（两轮都观察到同一现象）。
 - **命名约定**：负控在文件名或函数名里带 `negative_control`；
   每个角色有 `agentflow/tests/test_agent_<role>.py`（见 `agentflow/DEVELOPMENT.md` §4.5）。
 - **注册税**：新增工具/模块必须在
@@ -609,6 +643,16 @@ release-check → acceptance → repro → role-specs → coverage → per-file
    `projects/*/out/paper/BUILD-HISTORY.jsonl`，没有轮转与 actor 字段。
 7. **禁改区有欠签**：`agentflow/.noai-approvals.json` 的批准只能由人签；
    当次欠签数请用 `agentflow/NOAI-REVIEW-REGISTER.md` 的口径现算，不要抄本文。
+8. **协同的那条边表仍然是设计**（2026-09-30 复核）：`G` 够不到 `A`、`H` 够不到 `A`/`E`、
+   `C` 没有任何出边 —— 今天靠 §7.4 的"请主控代唤"兜底，而不是靠直接边。
+   要改成直接边就得改 `agentflow/src/agentflow/capabilities.py`（FC-27 / 权限面，需 2 名 reviewer）。
+9. **"主控必须受理代唤申请"只到提示词 + 可审计这一层**：申请会落
+   `agent_summon_request` 事件与 M 的收件箱，但**没有任何机器判据**强制 M 处理
+   （能加的判据在 `agentflow/src/agentflow/verify.py`，那是禁改区）。
+10. **同角色并发多实例的安全性由派活方负责**：实例轴只回答"允许不允许并发"，
+    它不知道两个实例会不会改同一行。B/A 靠 `claimed_by` + 租约天然安全（既有判据
+    `agentflow/tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`）；
+    D/E/F/G 要并发就必须派到**不同目标**上 —— 框架不做行级冲突检测。
 
 ---
 
@@ -620,8 +664,8 @@ release-check → acceptance → repro → role-specs → coverage → per-file
 
 | # | 命令 | 该看到什么 | 正文哪一节 |
 |---|---|---|---|
-| 1 | `python -c "import sys;sys.path.insert(0,'src');import agentflow.capabilities"` | 两行导入期自检：`覆盖 144 / 声明 144 个 property，50 个动作，接缝 1 条` 与 `两层参数类型对账：比较 73 对（动作, property），读到 61 个工具的 schema` | §4.1 |
-| 2 | `python -m agentflow.cli tools` | `工具总数：72（已装模块 12）` + 逐角色 `A23/B18/C19/D37/E21/F32/G37/H25/M9` + 只读角色写工具泄漏为空 | §5.3 |
+| 1 | `python -c "import sys;sys.path.insert(0,'src');import agentflow.capabilities"` | 两行导入期自检：`覆盖 144 / 声明 144 个 property，50 个动作，接缝 1 条` 与 `两层参数类型对账：比较 73 对（动作, property），读到 62 个工具的 schema` | §4.1 |
+| 2 | `python -m agentflow.cli tools` | `工具总数：73（已装模块 12）` + 逐角色 `A23/B18/C19/D37/E21/F32/G37/H25/M10` + 只读角色写工具泄漏为空 | §5.3 |
 | 3 | `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(s.SCHEMA_VERSION,len(s.TABLES))"` | `1 16` | §3.1 |
 | 4 | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()), sum(len(v) for v in C.CAPABILITIES.values()), C.NON_SUMMONABLE)"` | `26 50 frozenset({'M'})` | §4.1 |
 | 5 | `python -c "import sys;sys.path.insert(0,'src');from agentflow import gates as g, judges as j;print(len(g.GATES), len(j.CRITERIA))"` | `15 6` | §6.3 / §6.4 |

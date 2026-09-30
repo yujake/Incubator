@@ -15,7 +15,7 @@
 > 例如 `network: 2` 在 B3 之后是 **0**），**少改表格 = 少一处漂移面**；第二根轴的权威展示由
 > `cli tools` 承担（它能直接从注册表打，不必手工维护）。
 > - 工具面：`build_registry(store=Store(tempfile.mkdtemp()), workspace_root=<同目录>, roles=schema.ROLES)`
->   一次装配后的**实测**结果（72 个工具、12 个模块 loaded、0 skipped）。
+>   一次装配后的**实测**结果（73 个工具、12 个模块 loaded、0 skipped）。
 >   命令与输出见 `DEVELOPMENT.md` §9 附录与本文 §0.3。
 > - 自注册工具：读 `agent_c.register_tools` / `agent_d._fallback_trace_tools` /
 >   `tools/review_tools.register(include_writers=True)` 的源码逐个核出。
@@ -203,7 +203,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（72 个，逐条）
+## R0. 全局工具总表（73 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -284,8 +284,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 70 | `conductor.ensure_project` | 冷启动 / 热启动由主控决定：给 start=auto / cold / warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode；cold 才建目录，warm 必须已存在且是工作区（绝不替人删、也绝不把别人的目录当工作区） | `write_local` | **是** | M | project_name,start,books_dir,books_limit | `{name,path,mode,requested,state,why,created,ingested}` | `tests/test_conductor_tools.py` | 无 |
 | 71 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
 | 72 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
+| 73 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
 
-### R0.1 72 个工具的公共事实（机械可验证）
+### R0.1 73 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -293,7 +294,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 - `roles_consistent_with_side_effect = true`：**没有任何写工具声明了 C 或 H**。
   两道防线：`fs_tools`/`table_tools` 的 `_effective_roles` 在**注册期**剥掉
   `READ_ONLY_ROLES`；`tools.base.ToolRegistry.for_role`还有第二道结构性拦截。
-- `handler_accepts_kwargs_only = true`（55/55）：`spec.handler(**params)` 不会因位置参数报错。
+- `handler_accepts_kwargs_only = true`（73/73，实测 2026-09-30；这两个数由 §R0 表与 `cli tools` 对账）：`spec.handler(**params)` 不会因位置参数报错。
 - 27 个 handler 是 `lambda`，8 个是具名闭包，20 个是 `functools.partial`。
   **lambda 无法携带 docstring** ⇒ 这 27 个工具的**唯一**文档是 `ToolSpec.summary`。
 
@@ -1930,7 +1931,7 @@ SELF-CHECK DONE（agent_h）
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（9 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取）
+### M.4 "工具面"（10 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取 + 1 件批量派活）
 
 #### M.4.1 M 能召唤的 8 个角色 × 它们的动作（48 个可召唤动作）
 
@@ -1978,11 +1979,23 @@ SELF-CHECK DONE（agent_h）
 | `cycle_detected` | `(role, action, input_key)` 已在祖先链上 |
 | `not_wired` | 该角色该动作未接线（`SubagentBackend` 恒为此） |
 
-#### M.4.3 并发判据：写集相交 ⇒ 串行
+#### M.4.3 并发判据：写集相交 ⇒ 串行（**同一角色的不同实例除外**）
 
 - `policy.waves_of(calls, limit=…)`（`policy.waves_of`）：同一波内**写集互不相交**；
   `limit` 是单波容量（= `max_concurrency`），**"波内并发数 ≤ max_concurrency"由划分保证，
   不需要信号量兜底**。
+- **实例轴（2026-09-30 加）**：`scheduler.TaskCall` 现在带一个 `instance` 标签。
+  **同一角色、两边都显式给了不同标签** ⇒ 不算冲突，可以同波并发
+  （`policy._same_role_other_instance`）；**没给标签或标签相同** ⇒ 照旧按角色串行
+  （默认行为一个字没变，负控在 `tests/test_scheduler.py`）。
+  它解决的是实测出来的结构性死结：3 个 B（都写 `literature`）会被排成 3 波串行
+  （峰值真并发 = 1，"再多 B 也没用"），而数据面本来就支持并发写
+  （B 的领取走 `claimed_by` + 租约；判据
+  `tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`）。
+  角色级 `WRITE_SETS` 的含义因此是"**这个角色的一个实例**会碰哪些表"。
+- **批量入口**：`conductor.summon_many(targets=[…])`（M 专属）一次派一批，
+  走 `Conductor.run_plan` ⇒ `scheduler.run_waves`；返回里带 `waves` 与 `concurrent_peak` ——
+  "到底并发了没有"看这两个数，不看墙钟。
 - 为什么用写集而不是依赖图（`DESIGN-CONDUCTOR.md:226-228` 逐字）：
   "依赖图需要每个动作声明前置，那会逼所有角色改签名；而写集是**从角色推出来的**（`WRITE_SETS`），
   零成本、可判定、可测。代价是它比真依赖图保守（可能少并发），但**保守的代价是多花时间，

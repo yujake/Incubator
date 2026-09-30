@@ -371,13 +371,47 @@ def _write_set(x: Any) -> frozenset[str]:
 
 
 def estimate_write_conflict(a: Any, b: Any) -> bool:
-    """两个角色（或两个 `ActionSpec`）的写集是否相交 ⇒ 它们不该并发。
+    """两个执行单元（角色 / `ActionSpec` / `TaskCall`）的写集是否相交 ⇒ 它们不该并发。
 
     这是并发判据，不是经验规则：它可判定、可测（见 `tests/test_scheduler.py`
     的 I-6）。保守方向的代价是多花时间；激进方向的代价是数据被改坏，
     而后者不会报错。
+
+    实例轴（2026-09-30 加）：`TaskCall` 现在可以带一个 `instance` 标签
+    （同一角色的第 N 个并发实例）。两个同一角色、不同实例的调用不算冲突 ——
+    否则"N 个 B 一起读一批文献"会被结构性地排成 N 波串行（实测：3 个 B ⇒
+    `[[0],[1],[2]]`、真并发峰值 1，再多 B 也没用）。
+
+    为什么这条放宽是安全的、以及它的边界：角色级写集回答的是"这个角色会碰哪些表"，
+    而行级互斥另有机制 —— B/A 的领取走 `claimed_by` + 租约
+    （`agent_b._claim`），C/H 是只读，写者各自 `store.tx` 在同一把 filelock 下串行提交。
+    所以"两个 B 并发"在数据面早就成立（既有判据
+    `tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`
+    实测通过）。同一实例（或没给实例）的两个调用仍然算冲突 ——
+    默认行为逐字不变，并发多实例必须由调用方显式要（见 `waves_of` 的说明）。
     """
+    if _same_role_other_instance(a, b):
+        return False
     return bool(_write_set(a) & _write_set(b))
+
+
+def _instance_of(x: Any) -> str:
+    """执行单元的实例标签（没给就是空串 = "这个角色只有那一个实例"）。"""
+    return str(getattr(x, "instance", "") or "")
+
+
+def _same_role_other_instance(a: Any, b: Any) -> bool:
+    """两个调用是不是"同一角色、各自显式给了不同的实例"。
+
+    只有这一种情形才豁免写集冲突：两边都必须显式给实例（空串不豁免），
+    否则"没给实例"会与"给了实例"被判成不同实例 —— 那就等于默认打开并发，
+    而默认打开会让既有的"同角色串行"判据静默失效。
+    """
+    ia, ib = _instance_of(a), _instance_of(b)
+    if not ia or not ib or ia == ib:
+        return False
+    ra, rb = _role_of(a), _role_of(b)
+    return isinstance(ra, str) and ra == rb
 
 
 def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int]]:
@@ -403,7 +437,9 @@ def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int
         for wave in waves:
             if limit is not None and len(wave) >= limit:
                 continue
-            if any(_write_set(_role_of(other)) & ws for _, other in wave):
+            if any(_write_set(_role_of(other)) & ws
+                   and not _same_role_other_instance(call, other)
+                   for _, other in wave):
                 continue
             wave.append((i, call))
             placed = True

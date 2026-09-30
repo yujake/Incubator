@@ -158,23 +158,29 @@ class LocalBackend:
 
     def __init__(self, registry: Mapping[str, Any] | None = None) -> None:
         self.registry: dict[str, Any] = dict(registry or {})
-        self._instances: dict[str, Any] = {}
+        #: 缓存键是 `(角色, 实例标签)`：空标签 = 那个单例（默认行为逐字不变）；
+        #: 显式标签 ⇒ 每个实例一个对象（"N 个 B 一起干活"要的是 N 个对象，
+        #: 不是一个对象被 N 个线程共用）。
+        self._instances: dict[tuple[str, str], Any] = {}
         self._lock = threading.Lock()
 
     def known_roles(self) -> list[str]:
         return sorted(self.registry)
 
-    def resolve(self, role: str) -> Any:
-        """把注册项变成实例（惰性，且只建一次）。
+    def resolve(self, role: str, instance: str = "") -> Any:
+        """把注册项变成实例（惰性，按 `(角色, 实例)` 缓存）。
 
-        - 传 `("factory", fn)`：调 `fn(store=...)`；
-        - 传 `("object", obj)`：直接用；
+        - 传 `("factory", fn)`：先试 `fn(store=..., instance=...)`，
+          工厂不接受 `instance` 就退回 `fn(store=...)`（旧契约照样能用）；
+        - 传 `("object", obj)`：直接用（显式实例标签下同一个对象会被复用 ——
+          那是调用方自己选择"共享一个实例"，框架不替它分家）；
         - 传 `("class", cls)`：明确拒绝 —— 构造依赖无法自动满足，
           假装能建就是"猜依赖"（见类 docstring）。
         """
+        key = (role, str(instance or ""))
         with self._lock:
-            if role in self._instances:
-                return self._instances[role]
+            if key in self._instances:
+                return self._instances[key]
         entry = self.registry.get(role)
         if entry is None:
             raise NotWiredError(f"{role} 没有接线（registry 里没有它）")
@@ -186,19 +192,23 @@ class LocalBackend:
             )
         if kind == "factory":
             try:
-                inst = value(store=self.store)
+                inst = value(store=self.store, instance=key[1])
             except TypeError:
-                inst = value()
+                try:
+                    inst = value(store=self.store)
+                except TypeError:
+                    inst = value()
         else:
             inst = value
         with self._lock:
-            self._instances[role] = inst
+            self._instances[key] = inst
         return inst
 
     #: 由 `Conductor` 注入（不放进构造签名，是为了让 backend 可以被单测直接建）。
     store: Any = None
 
-    def call(self, role: str, action: str, params: Mapping[str, Any], *, token: CancelToken) -> Any:
+    def call(self, role: str, action: str, params: Mapping[str, Any], *, token: CancelToken,
+             instance: str = "", task_id: str = "") -> Any:
         """调一次 handler。
 
         参数名对不上就拒绝，不许静默丢弃。工具的 `ToolRegistry.call`
@@ -226,7 +236,7 @@ class LocalBackend:
         spec = C.find_action(role, action)
         if spec is None:  # pragma: no cover - summon 已经查过，这里是纵深防御
             raise NotWiredError(f"{role} 没有动作 {action}")
-        obj = self.resolve(role)
+        obj = self.resolve(role, instance)
         fn = getattr(obj, spec.handler_name, None)
         if not callable(fn):
             # 装配期 `assert_capabilities` 核过类上有这个方法；走到这里说明
@@ -283,7 +293,13 @@ class SubagentBackend:
     def __init__(self, reason: str = "") -> None:
         self.reason = reason or "由 DSH 的 subagent/workflow 承担（本进程内的 Conductor 没有该权限面）"
 
-    def call(self, role: str, action: str, params: Mapping[str, Any], *, token: CancelToken) -> Any:
+    def call(self, role: str, action: str, params: Mapping[str, Any], *, token: CancelToken,
+             instance: str = "", task_id: str = "") -> Any:
+        """后端未接线：一律拒绝（`not_wired` 是一等状态，不是失败）。
+
+        `instance` / `task_id` 收下但不使用（本层没有角色可建，谈实例没有意义）；
+        形参必须与 `LocalBackend.call` 逐字同形 —— 两个后端共用一个契约。
+        """
         raise NotWiredError(f"{role}.{action} 未接线：{self.reason}")
 
 
@@ -759,6 +775,7 @@ class Conductor:
         budget: Mapping[str, Any] | None = None,
         token: CancelToken | None = None,
         lineage: Sequence[tuple[str, str, str]] | None = None,
+        instance: str = "",
     ) -> SummonResult:
         """唯一的召唤入口。见模块 docstring 的完整流程。
 
@@ -767,6 +784,12 @@ class Conductor:
         lineage : 祖先链（含父自身）。`scheduler` 会带过来；直接调用时可省略，
             此时从 `tasks` 表按 `parent_task_id` 重建。两者必须一致：
             前者是纯调度（无 store）场景的表达，后者是正常运行时的权威来源。
+        instance : 实例标签（2026-09-30 加）。空串 = 这个角色只有那一个实例
+            （与从前逐字同义）。显式给不同的标签 ⇒ 被 `LocalBackend` 解析成
+            不同的对象，并允许同波并发（`policy.estimate_write_conflict`）。
+            它只影响"哪个实例干活"，不进 `tasks` 行 —— `tasks` 的字段是
+            schema 契约（禁改区），实例身份落在数据行的 `actor` 上（由 `host`
+            按实例造对象时写死），那才是可审计的那一份。
         """
         params = dict(params or {})
         token = token or self.token
@@ -912,11 +935,16 @@ class Conductor:
             self._running.add(tid)
             self._started_total += 1
             self.peak_running = max(self.peak_running, len(self._running))
-        self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}）")
+        self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}"
+                  + (f", instance={instance}" if instance else "") + "）")
 
         # ---- [6] 执行
         try:
-            raw = self.backend.call(role, action, params, token=token)
+            # `task_id` 传下去（2026-09-30）：并发多实例时"按角色找那条 running 行"
+            # 会同时找到 N 条 ⇒ 后端拿不到自己的台账号。台账号是这一次召唤刚写下的，
+            # 这里就是它唯一的权威来源，直接给，别让后端去猜。
+            raw = self.backend.call(role, action, params, token=token, instance=instance,
+                                    task_id=tid)
             res = self._end_from_payload(tid, raw)
         except CancelRequested as e:
             res = self._end(tid, status="cancelled", outcome="cancelled",

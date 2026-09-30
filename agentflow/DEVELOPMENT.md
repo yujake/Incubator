@@ -173,7 +173,7 @@ LIVE-READINGS:END
 
 | # | 命令 | 实测输出 | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：72（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 23, 'B': 18, 'C': 19, 'D': 37, 'E': 21, 'F': 32, 'G': 37, 'H': 25, 'M': 9}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。⚠️ **两个口径的装配点都是 `agentflow/src/agentflow/tools/__init__.py::build_registry`**。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-09-30（2026-09-30 更正：本节原先记的 `63 / 43 / 50 / 55` 与逐角色条数都已过期））：`build_registry(store=None)` ⇒ **60**；`build_registry(store=None, workspace_root='.')` ⇒ **67**；`cli tools`（含 store）⇒ **72**。⚠️ **`store=None` 单独给不出 67** —— 67 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 25**（观测 2026-09-30 实测值；B3 收官那一轮它曾是 22：`verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离，此后 H 的只读面又长回来了） | **0** |
+| 1 | `python -m agentflow.cli tools` | `工具总数：73（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 23, 'B': 18, 'C': 19, 'D': 37, 'E': 21, 'F': 32, 'G': 37, 'H': 25, 'M': 9}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。⚠️ **两个口径的装配点都是 `agentflow/src/agentflow/tools/__init__.py::build_registry`**。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-09-30（2026-09-30 更正：本节原先记的 `63 / 43 / 50 / 55` 与逐角色条数都已过期））：`build_registry(store=None)` ⇒ **60**；`build_registry(store=None, workspace_root='.')` ⇒ **67**；`cli tools`（含 store）⇒ **72**。⚠️ **`store=None` 单独给不出 67** —— 67 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 25**（观测 2026-09-30 实测值；B3 收官那一轮它曾是 22：`verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离，此后 H 的只读面又长回来了） | **0** |
 | 2 | `python -m agentflow.cli tools --role E` | 正常列出 E 的工具面（S1 时这里报 `invalid choice: 'E' (choose from 'A','B','C','D')` —— **已修**：`choices=list(S.ROLES)`） | **0** |
 | 3 | `python -m agentflow.cli tools --role C` | 列出 `trace.concept` / `trace.literature` / `trace.relation` 等，**全部 `[read]`** | **0** |
 | 4 | `python -m agentflow.cli verify` | `校验完成：通过  错误 0 / 警告 0` | **0** |
@@ -191,7 +191,7 @@ LIVE-READINGS:END
 **工具面 census（`cli tools` 实测）**：
 
 ```
-工具总数 72 / 已装模块 12 / 各角色 {'A':23,'B':18,'C':19,'D':37,'E':21,'F':32,'G':37,'H':25,'M':9}
+工具总数 73 / 已装模块 12 / 各角色 {'A':23,'B':18,'C':19,'D':37,'E':21,'F':32,'G':37,'H':25,'M':10}
 只读角色写工具泄漏 {'C': [], 'H': []}（空 = 正常）
 # 三个数都由 `python -m agentflow.cli tools` 当次产出（观测 2026-09-30；M 拿到 9 件编排面工具：
 # conductor.summon/ledger/stop/resume_brief/cancel/ensure_project/state/role_spec/acceptance）；
@@ -216,11 +216,11 @@ LIVE-READINGS:END
    而那不是"回归"，是别的执行体在同一目录里写文件；这两个数是**过去某次观测**的定值，
    所以这一句刻意只当"差异可以有多大"的例子读，**不当读数引用**）。
 2. **必须写清是哪条装配/哪条命令口径**。同一个量在不同命令下**可以**是两个数，
-   且**两个数都不许被丢掉**：本节 §0.3 命令 1（`cli tools`，含 store）⇒ **72**（观测 2026-09-30；
+   且**两个数都不许被丢掉**：本节 §0.3 命令 1（`cli tools`，含 store）⇒ **73**（观测 2026-09-30；
    2026-09-30 更正：本节原先记的 `63 / 50 / 43` 三个数都已过期）；
-   `build_registry(store=None, workspace_root='.')` ⇒ **67**。**把一个口径的数搬到另一个口径下，
+   `build_registry(store=None, workspace_root='.')` ⇒ **68**。**把一个口径的数搬到另一个口径下，
    比写错一个数字更贵** —— 它看起来是精确的。⚠️ **只写 `store=None` 是另一个数**（今天实测
-   **60**；观测 2026-09-30，命令见 §0.3 命令 1 那条）：缺 `workspace_root` 时 fs 组**不装配**，
+   **61**；观测 2026-09-30，命令见 §0.3 命令 1 那条）：缺 `workspace_root` 时 fs 组**不装配**，
    所以"`store=None` 口径就是 `workspace_root` 口径"这句**量法不完整** —— 两个口径都写出来才是完整的。
 3. **"没查成"必须写"没查成"**（三态纪律）：`unknown` / 未核实 ✅ 允许；
    把"没查"写成某个数 ❌ 一律是缺陷（`P16`）。
@@ -732,7 +732,7 @@ C 预算）都踩到同一坑。"
 | 3b | `[ ]` 两层声明（工具层 `ToolSpec` vs 能力层 `ActionSpec`）在两根轴上对同一动作说同一句话 | **`capabilities.declaration_divergences()`**（`assert_capabilities` 第 [7] 条：error 级导入期断言；warning 级只报告） | 判据三种：能力层**低估**外部轴 ⇒ `two_layer_external_divergence`（error）；两层都非 `none` 但**精度不同**（工具说 `egress`、能力层说 `exec`）⇒ `two_layer_external_imprecise`（warning，必须可见）；名字对不上或一对多 ⇒ `two_layer_name_unmatched` / `two_layer_name_ambiguous`（info，三态里的 unknown，不是"一致"）。**B3 收官后真实树上这一类只有 info 级的"没有比对"** |
 | 4 | `[ ]` `roles` 里**没有** `READ_ONLY_ROLES`（若它是写工具） | **`for_role` 结构性剥离** + `role_filter_notes` | `tools/base.py:335-344` |
 | 5 | `[ ]` `params` 是 JSON Schema（object 根），**能原样喂给 function-calling** | 人工 | FC-07 / `LESSONS.md` D4 |
-| 6 | `[ ]` handler **只收关键字参数**（`spec.handler(**params)` 不报位置参数错） | 实测 census | 72/72 true（观测 2026-09-30：含 store 的完整装配下**没有任何一个** `ToolSpec.handler` 带 POSITIONAL_ONLY 形参；2026-09-30 更正：此处原先记的是 55/55） |
+| 6 | `[ ]` handler **只收关键字参数**（`spec.handler(**params)` 不报位置参数错） | 实测 census | 73/73 true（观测 2026-09-30：含 store 的完整装配下**没有任何一个** `ToolSpec.handler` 带 POSITIONAL_ONLY 形参；2026-09-30 更正：此处原先记的是 55/55） |
 | 7 | `[ ]` 参数非法 ⇒ **返回结构化失败**（`ok=False` + `kind`），**不抛异常** | **`ToolRegistry.call`** | `tools/base.py:370-376` |
 | 8 | `[ ]` 未知工具名 ⇒ `ok=False, kind="unknown_tool"` | **`ToolRegistry.call`** | `tools/base.py:375-376` |
 | 9 | `[ ]` **返回结构有契约测试**（不是文档） | 实现者 | `LESSONS.md` B8 |

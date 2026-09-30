@@ -284,7 +284,7 @@ agentflow/
 │   ├── paperbuild.py         论文包的渲染 / 编译 / 锚核对（build = render → compile → anchor_check 三步）
 │   ├── renderanchor.py       渲染锚与编译回执的本体（RENDER-ANCHOR.json / COMPILE-RECEIPT.json / BUILD-HISTORY.jsonl）
 │   ├── promptkit.py          LLM 接入（一）：提示词装配（有序段 + 变量 + complete + 作用域遮蔽）
-│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p16）
+│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p17）
 │   ├── llmseam.py            LLM 接入（三）：统一的模型缝（一次调用一条审计记录 + 三态词表 + 预算守卫）
 │   ├── agent_loop.py         LLM 接入（四）：模型驱动的循环（tool / summon / message / note / ask_user / final 六种形状）
 │   ├── modelgw.py / modelclient.py / modelcost.py / llm.py
@@ -544,7 +544,18 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
     本地灌库的 `books_dir` 未进沙箱（`src/agentflow/locallib.py::ingest_directory`，
     调用面是 `src/agentflow/tools/search_tools.py` 的 `search.ingest_local`，A 专属）；
     锚与回执是"当前状态"而不是全历史（历史另存 `BUILD-HISTORY.jsonl`，无轮转与 actor 字段）。
-14. **逐项带路径的现状描述另有一份**：
+14. **角色之间是"协同"而不是"接力"，但两件事要部署方显式打开**（2026-09-30）：
+    - **角色要能自己唤起同伴**：被召唤的角色必须走 LLM 循环
+      （`src/agentflow/agent_loop.py::LlmBackend`），而默认装配 `DEFAULT_LLM_LOOPS = {}`
+      （`src/agentflow/host.py`，刻意的装配期纪律）⇒ 要用 `--drive` 或在驱动脚本里传 `loops=`。
+      不打开时角色跑的是确定性动作，**不会有任何同伴召唤**。
+    - **够不到的人**：`capabilities.ALLOWED_EDGES` 里 `G` 够不到 `A`、`H` 够不到 `A`/`E`、`C` 没有出边
+      （那是设计）。越权召唤会被自动转成给 M 的 `请代唤` 留言（`agent_loop._request_relay`），
+      M 的提示词要求它本轮内受理。
+    - **同角色并发多实例**：`conductor.summon_many`（M 专属）一次派一批；同一角色的每个 target
+      给不同的 `instance` 才会真的并波（`src/agentflow/policy.py::_same_role_other_instance`），
+      返回里的 `waves` / `concurrent_peak` 是"到底并发了没有"的读数。
+15. **逐项带路径的现状描述另有一份**：
     [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)
     —— 它是导读（不构成判据），但每条都带工作区相对路径，便于拿它逐条核对本文与代码。
 
