@@ -1,5 +1,22 @@
 # SCHEMA 迁移提案：`documents.claims` 的 §8.3 字段（**待人工批准并实施**）
 
+> **现状导读（不构成判据）· 本文是提案/历史状态**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**，**也不要把本文写成现状**。本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+>
+> ⚠️ **本文多处把"提案"当成了"已经这样了"，逐处更正如下（截至 2026-09-30 的实际状态见正文 / 代码，本文是提案）**：
+> - §0/§1 说"`src/agentflow/schema.py` 一个字都没动" ⇒ 这一句**仍然成立**（实测 `SCHEMA_VERSION == 1`，
+>   且 `agentflow/src/agentflow/schema.py` 里查不到 `CLAIM_KINDS` / `CLAIM_STATUSES` /
+>   `ALLOWED_USE_KINDS` / `NUMERIC_EVIDENCE_KEYS`）。**但这不等于本提案的落点还空着**：
+>   那四张词表今天定义在 `agentflow/src/agentflow/claimanatomy.py`（`CLAIM_KINDS` / `CLAIM_STATUSES` /
+>   `ALLOWED_USE_KINDS` / `NUMERIC_EVIDENCE_KEYS`），§2.3 要的"第二处改为转发"因此**仍是提案**，
+>   而 §5 说的"判据层 + 呈现层"（`claimanatomy.py` / `gates.py` / 工具层）**已在盘上**。
+>   所以读本文时不要把"schema.py 未动"读成"整件事没做"。
+> - §5 的"本轮已经落地的部分"把 `claimanatomy.py` / `gates.py` / `doc_tools.py` / `review_tools.py`
+>   那一批写成**当时刚落地** ⇒ 那是历史状态；它们今天都在盘上。
+>   **判据仍是本提案自己列的读法**：以 `agentflow/src/agentflow/` 下的实现与测试为准，
+>   **本文不构成判据**。
+
 > ⚠️ **这份提案不是已落地的改动。** 它由 AI 编写，**必须由人批准并实施**。
 > 它与 `AGENTS.md` 的 FC-27（禁 AI 区）直接相关，理由见 §0。
 >

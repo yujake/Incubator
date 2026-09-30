@@ -1,6 +1,15 @@
 # A/B 多智能体协同工作流 —— 细化草案 (v0.1)
 
-> 本文件是 `test/test1/` 原型的**设计基线**。凡代码与本文冲突，以本文为准；凡本文未定，代码中的 `TODO`/`待决` 标注为准。
+> 本文件是 `test/test1/` 原型（包名 `abflow`）的**设计基线**。凡代码与本文冲突，以本文为准；凡本文未定，代码中的 `TODO`/`待决` 标注为准。
+>
+> 本文件是**设计理由**（"为什么这么设计"），**不构成判据**；与代码冲突处以代码为准。
+> 本文的部分落点（表结构、锁、事件日志、工具层、A/B 角色实现）在正式版 `agentflow/`（包名 `agentflow`）里已经长大成形，
+> 对应路径见下文各节；框架的**权威现状描述与路径索引**见
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
+>
+> **本机实测（版本关系）**：原型在 `test/test1/src/abflow/`，正式版在 `agentflow/src/agentflow/`；两者刻意分开，
+> 定位写在 `agentflow/src/agentflow/__init__.py` 的 docstring 里（"原型是『跑通』的证据，正式版是『可发布』的形态"）。
+> 正式版顶层的 `agentflow/src/agentflow/` 现有 62 个 `*.py`（复跑：`Get-ChildItem agentflow/src/agentflow -Filter *.py | Measure-Object`）。
 
 ---
 
@@ -244,8 +253,10 @@ data/*.json         ← 由事件折叠出的快照投影（可随时从 events 
 
 ## 4. 模块与接口契约
 
+原型实现（包名 `abflow`，落在 `test/test1/src/abflow/`）：
+
 ```
-src/agentflow/
+test/test1/src/abflow/
 ├── schema.py     数据模型、字段校验、(可选) jsonschema 导出
 ├── store.py      Store：锁、原子写、事务、事件日志、ID 分配、rebuild
 ├── textutil.py   normalize / similarity / slugify / parse_page_range
@@ -254,11 +265,33 @@ src/agentflow/
 ├── extract.py    extract_text(path) -> DocumentText（txt/md/html/pdf）
 ├── llm.py        Extractor 协议 + RuleExtractor(离线) + LLMExtractor(可插拔)
 ├── dedup.py      三级判重逻辑（文献/概念/关系）
-├── agent_a.py    AgentA.run_once() / run_forever()
-├── agent_b.py    AgentB.run_once() / run_forever()
+├── agent_a.py    AgentA.run_once()
+├── agent_b.py    AgentB.run_once()
 ├── verify.py     全局不变量校验（含引文可验证性）
 └── cli.py        命令行入口
 ```
+
+正式版（包名 `agentflow`）里同一批模块的路径（相对工作区根 `D:\Incubator`）：
+
+| 原型模块 | 正式版路径（相对工作区根） |
+|---|---|
+| `schema.py` | `agentflow/src/agentflow/schema.py` |
+| `store.py` | `agentflow/src/agentflow/store.py` |
+| `textutil.py` | `agentflow/src/agentflow/textutil.py`（另加 `canonical.py`：规范 JSON 字节串的唯一实现） |
+| `providers.py` | `agentflow/src/agentflow/providers.py` |
+| `fetch.py` | `agentflow/src/agentflow/fetch.py` |
+| `extract.py` | `agentflow/src/agentflow/extract.py` |
+| `llm.py` | `agentflow/src/agentflow/llm.py` |
+| `dedup.py` | `agentflow/src/agentflow/dedup.py` |
+| `agent_a.py` | `agentflow/src/agentflow/agent_a.py` |
+| `agent_b.py` | `agentflow/src/agentflow/agent_b.py` |
+| `verify.py` | `agentflow/src/agentflow/verify.py` |
+| `cli.py` | `agentflow/src/agentflow/cli.py` + `agentflow/src/agentflow/__main__.py` |
+
+**本机实测**：正式版的 `AgentA` / `AgentB` 只保留 `run_once()`（`agentflow/src/agentflow/agent_a.py:421`、
+`agentflow/src/agentflow/agent_b.py:404`），下面 §5/§6 里写的 `run_forever()` 只存在于原型 `test/test1/src/abflow/agent_a.py`；
+正式版把"反复跑"交给了 `agentflow/src/agentflow/agent_loop.py::run_role` 与
+`agentflow/src/agentflow/scheduler.py`。
 
 ### 4.1 关键接口（其余模块必须遵守）
 
@@ -397,7 +430,7 @@ related_concepts(c) = sort( ⋃ over relations r where c ∈ r.concept_ids :
 
 ## 7. CLI
 
-```
+```text
 python -m agentflow init                       # 建表
 python -m agentflow submit --topic ... --mode broad [--content ...] [--by agent-C]
 python -m agentflow run-a [--once|--forever] [--provider openalex,fixture] [--max 5]
@@ -408,23 +441,49 @@ python -m agentflow rebuild                    # 从 events.jsonl 重建快照
 python -m agentflow demo                       # 离线端到端（fixture provider + 内置样本 PDF/txt）
 ```
 
+> **本机实测（CLI 现状）**：原型包名是 `abflow`，`run-a` / `run-b` 是它的两个子命令 ——
+> 原型子命令实测（`test/test1/src/abflow/cli.py`）为
+> `analyze / demo / init / pipeline / rebuild / repair / research / run-a / run-b / status / submit / tools / verify`。
+> **正式版**（`agentflow/src/agentflow/cli.py`）现有 21 个子命令，实测为
+> `init`、`submit`、`run-a`、`run-b`、`status`、`verify`、`rebuild`、`repair`、`tools`、
+> `analyze`、`research`、`pipeline`、`demo`、`run`、`evidence`、`artifacts`、`project`、
+> `run-agent`、`gate`、`inbox`、`answer`（复跑：`python -m agentflow.cli --help`）；
+> 其中 `run-a` / `run-b` 仍在（`agentflow/src/agentflow/cli.py` 的 `sub.add_parser("run-a")` / `("run-b")`），
+> 而"一次真实的多智能体运行"的入口是 `python -m agentflow.cli run-agent`
+> （`agentflow/src/agentflow/cli.py::cmd_run_agent`，带 `--role` / `--task` / `--drive` / `--max-steps`）。
+
 ---
 
 ## 8. 目录布局（`test/test1/`）
 
 ```
 test/test1/
-├── DESIGN.md               本文
+├── DESIGN.md               本文（原型副本）
+├── DESIGN-TOOLS.md / DESIGN-INTERACTIONS.md / DESIGN-ROLES.md   后续三份设计（原型副本）
 ├── README.md               上手说明
 ├── config.yaml             阈值/并发/provider 配置
 ├── requirements.txt
-├── src/agentflow/             §4 的模块
+├── src/abflow/             §4 的模块（包名 `abflow`，不是 `agentflow`）
 ├── tests/                  pytest（含 fixtures）
 ├── data/                   运行时数据（三表 + requests + counters + events.jsonl + .locks/）
 ├── library/                下载的文献（lit_id 子目录）
 ├── demo/                   离线演示素材与产物
 └── logs/
 ```
+
+**正式版对应落点**（相对工作区根 `D:\Incubator`，本次实测）：
+
+| 原型位置 | 正式版路径 |
+|---|---|
+| `test/test1/src/abflow/` | `agentflow/src/agentflow/`（62 个顶层 `*.py`） |
+| `test/test1/tests/` | `agentflow/tests/`（162 个 `test_*.py`） |
+| `test/test1/data/` | `agentflow/data/`（16 张表的快照 JSON + `events.jsonl`） |
+| `test/test1/library/` | `agentflow/library/`（本地书架） |
+| `test/test1/demo/` | `agentflow/demo/`（离线演示素材） |
+| `test/test1/logs/` | 正式版无对应目录；长产出落 `<工作区根>/runs/*.json` 与 `<工作区根>/notes/<角色>.md`（`agentflow/src/agentflow/agent_loop.py`） |
+
+> **判据不在本文**：正式版的分层结构与逐项路径索引见
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
 
 ---
 

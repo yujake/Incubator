@@ -14,6 +14,12 @@
 > - `NOAI-REVIEW-REGISTER.md` —— FC-27 **人读侧**登记表（改了哪些禁改区文件、该走查哪些符号）
 > - `AGENTS.md` —— **只**覆盖禁 AI 区 FC-27 这一节，不重复本文内容
 > - `docs/INDEX.md` —— 上述文档的索引与"按角色怎么读"
+> - `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` ——
+>   **现状导读**：把"现在的系统长什么样"逐项讲清，每条都带**相对工作区根**的路径
+>   （例：`agentflow/src/agentflow/gates.py`）。它**不构成判据** —— 判据在本文 §6
+>   与各门的实现里；与它冲突时以本文与代码为准
+> - `LESSONS.md` —— 本文多处按这个短名引用它，但 **`agentflow/` 下没有这个文件**；
+>   它的实体在工作区根的 `draft/LESSONS-工程经验清单（FC-01…FC-27）.md`（2026-09-30 更正）
 >
 > **本文的写作纪律**（与要求一致）：
 > 1. **每一条规则都必须可判定** —— "要写清楚"不是规则，"每个公开函数必须有 docstring
@@ -48,13 +54,13 @@
 
 | 位置 | 文件 |
 |---|---|
-| 根 | `.noai-paths` `.noai-approvals.json` `AGENTS.md` `config.yaml` `DESIGN.md` `DESIGN-TOOLS.md` `DESIGN-INTERACTIONS.md` `DESIGN-ROLES.md` `DESIGN-CONDUCTOR.md` `pyproject.toml` `README.md` `DEVELOPMENT.md` `NOAI-REVIEW-REGISTER.md` |
-| `src/agentflow/` | `__init__.py` `agent_a.py` `agent_b.py` `agent_c.py` `agent_d.py` `agent_e.py` `agent_f.py` `agent_g.py` `agent_h.py` `capabilities.py` `cancellation.py` **`claimanatomy.py`** `cli.py` `conductor.py` `contextbudget.py` `dedup.py` `demo.py` `extract.py` `fetch.py` **`gates.py`** `interactions.py` `llm.py` `pipeline.py` `policy.py` `providers.py` `quoteverify.py` `scheduler.py` `schema.py` `store.py` `textutil.py` **`tokenmeter.py`** `verify.py`；**此前漏列**：`__main__.py` `claims.py` `console.py` `evidence.py` `formalgw.py` `modelcost.py` `modelgw.py` `runflow.py`（观测 2026-09-26：共 **40** 个 `.py`；复算 `(Get-ChildItem src/agentflow/*.py).Count`） |
-| `src/agentflow/tools/` | `__init__.py` `base.py` `attack_tools.py` `doc_tools.py` `fs_tools.py` `graph_tools.py` `ocr_tools.py` `research_tools.py` `review_tools.py` `search_tools.py` `table_tools.py` `trace_tools.py` `verify_tools.py` |
-| `scripts/` | `__init__.py` `lint_rules.py` `noai_gate.py` `release_check.py`；**此前漏列**：`usage_ledger_audit.py`（观测 2026-09-26：共 **5** 个 `.py`；复算 `(Get-ChildItem scripts/*.py).Count`） |
-| `docs/` | `INDEX.md` `ROLE-SPECS.md` `PROPOSALS.md` `NOAI-GOVERNANCE.md` `SCHEMA-MIGRATION-PROPOSAL-claims.md`；**此前漏列**：`FORMAL-TOOLCHAIN.md` `NOAI-CHANGE-LIST-management.md` `NOAI-SUSPENSION-2026-09-25.md` `PROPOSAL-side-effect-axes.md` `ROLE-SPECS-DRAFT-N-O-Q.md` `SCHEMA-DRAFT-management.md` `SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md` `TOOLBOX-DRAFT-roles.md`（观测 2026-09-26：共 **13** 个文件；复算 `(Get-ChildItem docs -File).Count`） |
-| `tests/` | `test_*.py` 的**份数按命令当次读**（`(Get-ChildItem tests -Filter 'test_*.py').Count`；观测 2026-09-27（`G3` 复测）⇒ 116）+ `conftest.py` + `demo_dataset_helper.py`（这一格原写 89、后又写 105 —— 两个都过期了，所以这里不再写定值）；**全量实测是"区间 + 观测时刻"**：`python -m pytest -q` 的读数随并行施工变化，所以本节只记观测快照，**权威读数取发布门当次的报告**（`python tools/release_all.py`）。本批两次观测：**`4 failed, 2130 passed, 3 skipped, 8 deselected, 1 xfailed`（497.16s，观测 22:28:48→22:37:05）** 与 **`1 failed, 2133 passed, 3 skipped, 8 deselected, 1 xfailed`（417.13s，观测 22:38:29→22:45:26）**；两次的失败**都不是本批改的文件的**（`tests/test_usage_scope_attribution.py` 的 `task_id=f"t-{role}"` 夹具撞上并行批次正在改的 `schema.py` 过程记录号校验；`test_r5_orchestration_cost.py` 那三条当时它正被并行写入，随后单跑 `11 passed`）。历史观测（同一棵树早期）：`1925 passed`（04:43:55→04:48:40）与 `1956 passed, 1 skipped`（05:10:23→05:15:43）。⚠️ **有并发写时实测过失败**（`G-27` 族的顺序依赖/并发态，见 `README.md` §6.1） |
-| 运行期数据 | `data/`（**份数按命令当次读**：`(Get-ChildItem data -Filter '*.json').Count`；观测 2026-09-27（`G3` 复测）⇒ 16 个 JSON）、`library/`、`demo/`（注：**`D:\Incubator\agentflow` 自己不是 git 仓库**；`.git` 在**上一级** `D:\Incubator`。所以 `noai_gate --git` 现在**不再是 `unknown`**，它看的是伞仓库的改动集 —— 见 §7.2 与 `README.md` §7 第 8 条） |
+| `agentflow/`（仓库根） | `.noai-paths` `.noai-approvals.json` `AGENTS.md` `config.yaml` `DESIGN.md` `DESIGN-TOOLS.md` `DESIGN-INTERACTIONS.md` `DESIGN-ROLES.md` `DESIGN-CONDUCTOR.md` `pyproject.toml` `README.md` `DEVELOPMENT.md` `NOAI-REVIEW-REGISTER.md` |
+| `agentflow/src/agentflow/` | **包根一层的全部 62 个 `.py`**（观测 2026-09-30；复算 `(Get-ChildItem src/agentflow/*.py).Count`）：`__init__.py` `__main__.py` `agent_a.py` `agent_b.py` `agent_c.py` `agent_d.py` `agent_e.py` `agent_f.py` `agent_g.py` `agent_h.py` `agent_loop.py` `agent_prompts.py` `artifacts.py` `autonomy.py` `cancellation.py` `canonical.py` `capabilities.py` `claimanatomy.py` `claims.py` `cli.py` `conductor.py` `console.py` `contextbudget.py` `dedup.py` `deliver.py` `demo.py` `evidence.py` `extract.py` `faculty_checks.py` `fetch.py` `formalgw.py` `fulltextstore.py` `gates.py` `host.py` `interactions.py` `judge.py` `judges.py` `llm.py` `llmseam.py` `locallib.py` `modelclient.py` `modelcost.py` `modelgw.py` `paperbuild.py` `pipeline.py` `policy.py` `projects.py` `promptkit.py` `providers.py` `quoteverify.py` `renderanchor.py` `runflow.py` `scheduler.py` `schema.py` `sessions.py` `signatures.py` `store.py` `textutil.py` `tokenmeter.py` `tty.py` `userio.py` `verify.py`。这一格的路径是**相对工作区根**写的（`agentflow/` 前缀）；同一批文件在 `agentflow/` 内部按少一层前缀的形式引用（`src/agentflow/gates.py`）（2026-09-30 更正：本节原先只列了其中一部分、并记"共 40 个 `.py`"，两者都已过期） |
+| `agentflow/src/agentflow/tools/` | `__init__.py` `base.py` `attack_tools.py` `conjecture_tools.py` `conductor_tools.py` `doc_tools.py` `fs_tools.py` `graph_tools.py` `ocr_tools.py` `research_tools.py` `review_tools.py` `search_tools.py` `table_tools.py` `trace_tools.py` `verify_tools.py` —— **15 个文件** = 13 个 `*_tools.py` + `base.py` + `__init__.py`（观测 2026-09-30；复算 `(Get-ChildItem src/agentflow/tools -File).Count`）（2026-09-30 更正：本节原先漏列 `conjecture_tools.py` 与 `conductor_tools.py`） |
+| `agentflow/scripts/` | `__init__.py` `lint_rules.py` `noai_gate.py` `release_check.py` `usage_ledger_audit.py`（观测 2026-09-30：共 **5** 个 `.py`；复算 `(Get-ChildItem scripts/*.py).Count`） |
+| `agentflow/docs/` | `INDEX.md` `ROLE-SPECS.md` `PROPOSALS.md` `NOAI-GOVERNANCE.md` `FORMAL-TOOLCHAIN.md` `NOAI-CHANGE-LIST-management.md` `NOAI-SUSPENSION-2026-09-25.md` `NOAI-SUSPENSION-2026-09-28.md` `PROPOSAL-side-effect-axes.md` `ROLE-SPECS-DRAFT-N-O-Q.md` `SCHEMA-DRAFT-management.md` `SCHEMA-MIGRATION-PROPOSAL-claims.md` `SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md` `TOOLBOX-DRAFT-roles.md`（观测 2026-09-30：共 **14** 个文件，且这一层没有非 `.md` 的文件；复算 `(Get-ChildItem docs -File).Count`） |
+| `agentflow/tests/` | `test_*.py` 的**份数按命令当次读**（`(Get-ChildItem tests -Filter 'test_*.py').Count`；观测 2026-09-30 ⇒ 162）+ `conftest.py` + `demo_dataset_helper.py`；**全量实测是"区间 + 观测时刻"**：`python -m pytest -q -p no:cacheprovider` 的读数随并行施工变化，所以本节只记观测快照，**权威读数取发布门当次的报告**（`python tools/release_all.py`）。本批观测（**据 `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` §12 转记，不是本文作者当次实跑**）：**`3071 passed, 1 failed, 3 skipped, 1 xfailed`（观测 2026-09-30 23:52）**——唯一那条失败是 `tests/test_release_all.py` 里那条起子进程跑 `release_all --only role-specs,coverage` 的用例（600s 上限；单跑 510s 通过，整轮并发下超时）。⚠️ **有并发写时实测过失败**（`G-27` 族的顺序依赖/并发态，见 `README.md` §6.1） |
+| 运行期数据 | `agentflow/data/`（**份数按命令当次读**：`(Get-ChildItem data -Filter '*.json').Count`；观测 2026-09-30 ⇒ 17 个 JSON = 16 张表的快照 + `counters.json`）、`agentflow/library/`、`agentflow/demo/`（注：**`D:\Incubator\agentflow` 自己不是 git 仓库**；`.git` 在**上一级** `D:\Incubator`。所以 `noai_gate --git` 现在**不再是 `unknown`**，它看的是伞仓库的改动集 —— 见 §7.2 与 `README.md` §7 第 8 条） |
 
 > **"预留并如实标注"清单**（这是要求里点名要预留的六 + 三项）：
 >
@@ -167,7 +173,7 @@ LIVE-READINGS:END
 
 | # | 命令 | 实测输出 | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：63（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 20, 'B': 18, 'C': 17, 'D': 37, 'E': 21, 'F': 32, 'G': 32, 'H': 22}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-09-27（`G3` 复测））：`build_registry(store=None)` ⇒ **43**；`build_registry(store=None, workspace_root='.')` ⇒ **50**；`cli tools`（含 store）⇒ **55**。⚠️ **`store=None` 单独给不出 50** —— 50 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 22 而不是 23**：B3 收官后 `verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离 | **0** |
+| 1 | `python -m agentflow.cli tools` | `工具总数：72（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 23, 'B': 18, 'C': 19, 'D': 37, 'E': 21, 'F': 32, 'G': 37, 'H': 25, 'M': 9}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。⚠️ **两个口径的装配点都是 `agentflow/src/agentflow/tools/__init__.py::build_registry`**。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-09-30（2026-09-30 更正：本节原先记的 `63 / 43 / 50 / 55` 与逐角色条数都已过期））：`build_registry(store=None)` ⇒ **60**；`build_registry(store=None, workspace_root='.')` ⇒ **67**；`cli tools`（含 store）⇒ **72**。⚠️ **`store=None` 单独给不出 67** —— 67 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 25**（观测 2026-09-30 实测值；B3 收官那一轮它曾是 22：`verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离，此后 H 的只读面又长回来了） | **0** |
 | 2 | `python -m agentflow.cli tools --role E` | 正常列出 E 的工具面（S1 时这里报 `invalid choice: 'E' (choose from 'A','B','C','D')` —— **已修**：`choices=list(S.ROLES)`） | **0** |
 | 3 | `python -m agentflow.cli tools --role C` | 列出 `trace.concept` / `trace.literature` / `trace.relation` 等，**全部 `[read]`** | **0** |
 | 4 | `python -m agentflow.cli verify` | `校验完成：通过  错误 0 / 警告 0` | **0** |
@@ -180,15 +186,17 @@ LIVE-READINGS:END
 | 11 | `python scripts/noai_gate.py --git` | 建仓**之前**是 `[unknown] … Not a git repository`（**没查成，不是没问题**）。建仓**之后**（`.git` 在上一级 `D:\Incubator`）它看的是**伞仓库**的改动集 ⇒ 现在会给出 `requires_human`；**不给 `--since` 时候"改动集为空"仍判 `unknown`** | **0/1/2** |
 | 12 | `python scripts/lint_rules.py` | **当次数一律见 §0.3 的 `LIVE-READINGS` 块**（观测 2026-09-29 ⇒ `error 0 / warning 9 / info 47`；`--strict` ⇒ `error 0 / warning 51 / info 46`）——**本节不抄定值**：这个数由 `LIVE-READINGS` 块与 `tests/test_release_all.py::test_development_md_linter_readings_and_rule_range_match_the_repo` 对账，任何一处写了别的值都会红，而抄进正文的副本没有人对账（它已经因此错过两回：`info 25` → `30` → `37` → `47`）。**12 条规则** R001–R012，其中 R004/R006 已**退休**、R011/R012 在册。**`warning` 今天不是 0 条**（9 条；那一格原写"唯一那条 warning 是 R010 对 `ocr.run`"，而 R010 的那一条**已降级为 `info`**：判据复核后确认"声明与代码不符"这个结论**不成立**（出网发生在 `easyocr` 库内部）⇒ `H-10` 已更正；今天的 9 条是 R007 一族与 R010-c 登记过的字面假阳性，逐条见当次输出）。R009 的 `info` 是禁改区内待清的装饰（一条聚合 info，逐文件明细见该规则的输出）。**`error 0` 现在是实测值**：`error` 栏由发布门第 5 项按"必须为 0"强制 ⇒ 那 6 条 R009 注释装饰已在 `draft/28` §176 清零，**发布门的 lint 步按该项自己的三态映射表（error 0 + warning 非空 ⇒ `pass`）不再是红的**（本条没实跑发布门，见第 2 行末尾的说明） | **退出码见当次运行**（`tally_claim_problems` 刻意不比 `error` ⇒ **读它的人必须看当次输出**，见该判据的 docstring。观测 2026-09-29 ⇒ 退出码 0（`error 0`；R009 清零后）；此前观测 2026-09-29 12:5x ⇒ 退出码 1（因为 `error 6`）；再前观测 2026-09-27（`G3` 复测）⇒ 退出码 0） |
 | 13 | `python -m pytest -q` | **区间 + 观测时刻**（读数随并行施工变化，权威读数取发布门当次报告）：<br>① `4 failed, 2130 passed, 3 skipped, 8 deselected, 1 xfailed in 497.16s`（观测 22:28:48→22:37:05）<br>② `1 failed, 2133 passed, 3 skipped, 8 deselected, 1 xfailed in 417.13s`（观测 22:38:29→22:45:26）<br>两次的失败都不是本批文件的（`tests/test_usage_scope_attribution.py` 的 `t-<role>` 夹具撞上并行批次正在改的 `schema.py` 过程记录号校验；`test_r5_orchestration_cost.py` 当时正被并行写入，随后单跑 `11 passed`）。历史观测：`1925 passed` / `1956 passed, 1 skipped` | **1**（本批两次观测的退出码都是 1；失败项都不是本批文件的，见左栏） |
-| 14 | `python tools/verify_role_specs.py` | `[OK ]` 逐角色，每行带"工具条数 [`N`] 现场 `N`"（`H-8` 之后这道门**自己真装配一次注册表**再对账）+ `[OK ] §M 主控（Conductor） 子节 10 工具条数 []`（M 没有工具面）。观测 2026-09-26；**行号刻意不抄**（行号易失，`.noai-paths:35-45` 那条纪律同样适用于引用）。`R6-5` 的残余**已修**（`R6-AN-4` 更正：这里原写"`--no-live` 可跳过对账而仍退 0"，那是修前的形态）：今天 `--no-live` 在结构侧为 `ok` 时被降级成 `unknown`（**退出码 2**），只在结构侧已是 `incomplete` 时才保留 **1**（`tools/verify_role_specs.py` 的 `--no-live` 分支逐字给了理由：跳过对账就没有"结构完整"这个结论） | **0** |
+| 14 | `python tools/verify_role_specs.py` | `[ok]` + `[OK ]` 逐角色，每行带"工具条数 [`N`] 现场 `N`"（`H-8` 之后这道门**自己真装配一次注册表**再对账）+ `[OK ] §M 主控（Conductor） 子节 10 工具条数 [9]`（M 的编排面，观测 2026-09-30；2026-09-30 更正：本节原先记的是"M 没有工具面"）。观测 2026-09-30；**行号刻意不抄**（行号易失，`.noai-paths:35-45` 那条纪律同样适用于引用）。`R6-5` 的残余**已修**（`R6-AN-4` 更正：这里原写"`--no-live` 可跳过对账而仍退 0"，那是修前的形态）：今天 `--no-live` 在结构侧为 `ok` 时被降级成 `unknown`（**退出码 2**），只在结构侧已是 `incomplete` 时才保留 **1**（`tools/verify_role_specs.py` 的 `--no-live` 分支逐字给了理由：跳过对账就没有"结构完整"这个结论） | **0** |
 
 **工具面 census（`cli tools` 实测）**：
 
 ```
-工具总数 63 / 已装模块 12 / 各角色 {'A':20,'B':18,'C':17,'D':37,'E':21,'F':32,'G':32,'H':22,'M':8}
+工具总数 72 / 已装模块 12 / 各角色 {'A':23,'B':18,'C':19,'D':37,'E':21,'F':32,'G':37,'H':25,'M':9}
 只读角色写工具泄漏 {'C': [], 'H': []}（空 = 正常）
-# 三个数都由 `python -m agentflow.cli tools` 当次产出（观测 2026-09-28 22:5x，T0-9 之后：主控拿到 8 件编排面工具 conductor.summon/ledger/stop/resume_brief/cancel/ensure_project/state/role_spec）；
+# 三个数都由 `python -m agentflow.cli tools` 当次产出（观测 2026-09-30；M 拿到 9 件编排面工具：
+# conductor.summon/ledger/stop/resume_brief/cancel/ensure_project/state/role_spec/acceptance）；
 # 「加一个工具 / 加一个模块」就变 ⇒ 这里不写死，复跑那条命令即可。
+# （2026-09-30 更正：本节原先记的是 `63 / A20 B18 C17 D37 E21 F32 G32 H22 M8`，已过期。）
 ```
 
 > **"12 条基线里只有 2 条非零退出码"这句话本身不是好消息** —— 退 1 与退 2 是
@@ -208,11 +216,12 @@ LIVE-READINGS:END
    而那不是"回归"，是别的执行体在同一目录里写文件；这两个数是**过去某次观测**的定值，
    所以这一句刻意只当"差异可以有多大"的例子读，**不当读数引用**）。
 2. **必须写清是哪条装配/哪条命令口径**。同一个量在不同命令下**可以**是两个数，
-   且**两个数都不许被丢掉**：本节 §0.3 命令 1（`cli tools`，含 store）⇒ **63**（观测 2026-09-28；T0-9 之前是 55）；
-   `build_registry(store=None, workspace_root='.')` ⇒ **50**。**把一个口径的数搬到另一个口径下，
+   且**两个数都不许被丢掉**：本节 §0.3 命令 1（`cli tools`，含 store）⇒ **72**（观测 2026-09-30；
+   2026-09-30 更正：本节原先记的 `63 / 50 / 43` 三个数都已过期）；
+   `build_registry(store=None, workspace_root='.')` ⇒ **67**。**把一个口径的数搬到另一个口径下，
    比写错一个数字更贵** —— 它看起来是精确的。⚠️ **只写 `store=None` 是另一个数**（今天实测
-   **43**；观测 2026-09-27，命令见 §0.3 命令 1 那条）：缺 `workspace_root` 时 fs 组**不装配**，
-   所以"`store=None` 口径是 50"这句**量法不完整** —— 两个口径都写出来才是完整的。
+   **60**；观测 2026-09-30，命令见 §0.3 命令 1 那条）：缺 `workspace_root` 时 fs 组**不装配**，
+   所以"`store=None` 口径就是 `workspace_root` 口径"这句**量法不完整** —— 两个口径都写出来才是完整的。
 3. **"没查成"必须写"没查成"**（三态纪律）：`unknown` / 未核实 ✅ 允许；
    把"没查"写成某个数 ❌ 一律是缺陷（`P16`）。
 
@@ -276,6 +285,9 @@ DESIGN-*.md         设计理由（**不构成判据**；与代码冲突时以�
    `DESIGN-CONDUCTOR.md`（**设计理由**；它们描述"为什么"，不描述"现在是什么"）
 6. `README.md`（**已知过期**，见 §10-D1）
 7. `temp/inventory/INVENTORY.md` / `tools.json`（**口径不同的另一份普查**，见 §1.4）
+8. `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`
+   （**现状导读**：逐项带"相对工作区根"的路径，便于拿着它逐条去盘上核对。
+   **不构成判据** —— 它排在本清单最后一位，冲突时以代码与本文为准）
 
 ### 1.4 ⚠️ `INVENTORY.md` / `tools.json` 的口径警告（**引用前必读**）
 
@@ -283,12 +295,12 @@ DESIGN-*.md         设计理由（**不构成判据**；与代码冲突时以�
 **`D:\Incubator\test\test1\`（包名 `abflow`）**，**不是** `D:\Incubator\agentflow\`。
 
 | 项 | `INVENTORY.md`（abflow） | 本文实测（agentflow，**55 口径**，观测 2026-09-26T04:44） | 一致？ |
-| ⚠️ 本表是**历史快照**：T0-9（2026-09-28）之后完整口径是 **63 工具 / 12 模块 / `A20 B18 C17 D37 E21 F32 G32 H22 M8`**；下表数字保留原样，只作「当时差多少」的记录 |
+| ⚠️ 本表是**历史快照**（右列是 2026-09-26T04:44 的 55 口径当次观测，下表数字保留原样，只作「当时差多少」的记录）。**当次的完整口径见 §0.3 命令 1 那一格**：观测 2026-09-30 ⇒ `cli tools`（含 store）**72 工具 / 12 模块 / `A23 B18 C19 D37 E21 F32 G37 H25 M9`**；`build_registry(store=None, workspace_root='.')` ⇒ **67**；`build_registry(store=None)` ⇒ **60**（2026-09-30 更正：本行原先写"T0-9（2026-09-28）之后完整口径是 63 工具 / 12 模块 / `A20 B18 C17 D37 E21 F32 G32 H22 M8`"，那三个数已过期） |
 |---|---|---|---|
 | 工具总数 | 55 | 55 | ✅ |
 | 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A20 B18 C17 D37 E21 F32 G32 **H22**` | ❌ **`H` 差 1**：B3 收官后 `verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里剥离（`PROPOSALS.md` `P-19`） |
 | `side_effect` 分布 | `read 32 / write_local 18 / none 5`（B3 收官后实测：遗留取值 `network` 已从词表删除，四个工具迁到两根轴上的确定值） | **同** —— 且**第二根轴** `external` = `none 49 / egress 4 / exec 2`。⚠️ **复跑口径**：`build_registry(store=…, workspace_root='.')` 之后统计 `side_effect` / `declared_external`（观测 2026-09-27（`G3` 复测）⇒ 与左栏逐字相同）；**`cli tools` 今天不打印分布** ⇒ 这两个分布**没有一行命令的出口**，量法见 `temp/G3-measure2.py` | ✅（INVENTORY 未覆盖第二根轴） |
-| 需审批 | 21 / 55（B3 收官后实测；`verify.check_formal` 从"不需要审批"变"需要审批"） | 同（**含 store 的完整装配口径** = 21）；`build_registry(store=None, workspace_root='.')` 的**另一个口径** = 18 / 50。⚠️ **`store=None` 单独是 43 / 15** —— 早前版本把 50 口径标成 `store=None`，**量法不完整**，已改（观测 2026-09-27（`G3` 复测）） | ✅ |
+| 需审批 | 21 / 55（B3 收官后实测；`verify.check_formal` 从"不需要审批"变"需要审批"） | 同（**含 store 的完整装配口径** = 21）。另两个口径的**当次数**（观测 2026-09-30；2026-09-30 更正：本行原先记的是 `18 / 50` 与 `43 / 15`，两者都已过期）：`build_registry(store=None, workspace_root='.')` ⇒ **27 / 67**；`store=None` 单独 ⇒ **24 / 60**。⚠️ 早前版本把 `workspace_root` 口径标成 `store=None`，**量法不完整**，已改 | ✅ |
 | 只读角色泄漏 | 0 | 0 | ✅ |
 | **`Task` / `UsageEntry` / `EvalResult`** | **未覆盖** | **有**（`schema.py:1260/1387/1465`） | ❌ **INVENTORY 落后一版** |
 
@@ -346,6 +358,11 @@ DESIGN-*.md         设计理由（**不构成判据**；与代码冲突时以�
 
 ### 2.1 包布局（不可随意新增顶层目录）
 
+> **路径口径**：下面的树以 `agentflow/` 为根（这是本文内部的写法）。**相对工作区根**
+> 要加一层前缀 —— 例：`schema.py` ⇒ `agentflow/src/agentflow/schema.py`、
+> `gates.py` ⇒ `agentflow/src/agentflow/gates.py`、`tools/` ⇒ `agentflow/tools/`。
+> 包根一层的**完整 62 个 `.py`** 清单见 §0.1（那一格的路径就是相对工作区根写的）。
+
 ```
 agentflow/
 ├── AGENTS.md                  禁 AI 区（人类专属区）硬约束 —— 改它=改门
@@ -355,7 +372,7 @@ agentflow/
 ├── README.md                  ⚠️ 已知过期（§10-D1）
 ├── config.yaml                全部阈值（"所有阈值都在这里，不在代码里"）
 ├── pyproject.toml             构建 + pytest 配置（**在禁 AI 区里**）
-├── src/agentflow/             包
+├── src/agentflow/             包（包根一层 62 个 `.py`，完整清单见 §0.1）
 │   ├── schema.py              ★ 数据模型 + 行级校验 + **全部受控词表**（单一来源）
 │   ├── store.py               ★ 锁 / 原子写 / 事务 / 事件日志 / ID 分配 / 重建
 │   ├── policy.py              ★ 主控策略（四类上限 + 允许边 + 拒绝理由）
@@ -365,16 +382,26 @@ agentflow/
 │   ├── cancellation.py        ★ 协作式取消（一个共享 signal）
 │   ├── contextbudget.py       ★ 上下文压缩 / 剪枝 / spill
 │   ├── interactions.py        ★ 角色间交互（I1–I12 的判据）+ CONTRACT_VERSION
+│   ├── host.py                ★ 接线面：角色登记表 / 接线态 / 接了线的工具层与主控（§0.3 命令 1 的装配入口）
+│   ├── gates.py               ★ H 的门引擎（`GATES` 15 道门，四态裁决）
+│   ├── judges.py / judge.py   ★ 语义判据（`CRITERIA`）与模型判定的唯一缝协议
+│   ├── deliver.py             ★ 交付闸门（`gate(...)` ⇒ `DeliveryGate`；不通过时产出可派回的工作项）
+│   ├── renderanchor.py        ★ 论文包的**三维锚**与回执（`RENDER-ANCHOR.json` / `COMPILE-RECEIPT.json` / 构建历史 `BUILD-HISTORY.jsonl`）
+│   ├── agent_loop.py          ★ 模型驱动的决策循环（六种形状 + 观测层 + 长产出落盘）
+│   ├── agent_prompts.py       ★ 提示词装配（`PROMPT_VERSION` / `ROLE_BRIEFS` / `SECTION_ORDERS`）
+│   ├── modelgw.py             ★ provider 无关的模型网关（**全仓唯一读 API key 的地方**）
+│   ├── llmseam.py             ★ 统一的模型缝：一次调用 = 一条审计记录
+│   ├── projects.py            ★ 项目工作区（一个项目一个文件夹）
 │   ├── verify.py              ★ 全库不变量校验（`Issue.code` 的**条数按命令当次读**：AST 数 `Issue(...)` 的第 4 个实参去重；观测 2026-09-29（T1+T2）⇒ 调用点 95、字面量 94、去重 **84**（T1 加 2 个新码 + T2 加 5 个 = 77+7；`dangling_lit` 是既有码，故不是 +3）—— 再前 `G3`（2026-09-27）是 85/84/**77**，`G3` 之前这里写 71，已过期。**量法有出口**（原来是 `temp/` 里的脚本，`temp/` 不入库 ⇒ 现在把命令写进本节）：`python -c "import ast,pathlib;t=ast.parse(pathlib.Path('src/agentflow/verify.py').read_text(encoding='utf-8'));c=[n for n in ast.walk(t) if isinstance(n,ast.Call) and getattr(n.func,'id','')=='Issue'];v={n.args[3].value for n in c if len(n.args)>=4 and isinstance(n.args[3],ast.Constant)};print(f'调用点 {len(c)} / 去重 {len(v)}')"`）
 │   ├── agent_a.py … agent_h.py  八个角色（**每个角色一个文件**）
 │   ├── cli.py                 命令行入口
 │   ├── pipeline.py            固定顺序流水线（前三阶段的编排）
-│   └── tools/                 工具层（= `*_tools.py` + `base.py` + `__init__.py` —— **不写死份数**：`*_tools.py` 的条数由 §0.3 的 `LIVE-READINGS` 块产出，`(Get-ChildItem src/agentflow/tools -File).Count` 观测 2026-09-27（`G3` 复测）⇒ 13）
-├── scripts/                   发布门 / 门禁 / linter（**不是运行期依赖**）
-├── tests/                     pytest（离线套件；联网套件用 `-m network`）
-├── docs/                      规格文档（`ROLE-SPECS.md`、`INDEX.md`）
-├── tools/                     一次性探针脚本（**不是发布门**）
-└── data/ library/ demo/       运行期数据（⚠️ 见 §10-D6）
+│   └── tools/                 工具层（= `*_tools.py` + `base.py` + `__init__.py`；`*_tools.py` 当次 13 个 —— **不写死份数**：`*_tools.py` 的条数由 §0.3 的 `LIVE-READINGS` 块产出，`(Get-ChildItem src/agentflow/tools -File).Count` 观测 2026-09-30 ⇒ 15）
+├── scripts/                   发布门 / 门禁 / linter（5 个 `.py`；**不是运行期依赖**）
+├── tests/                     pytest（162 个 `test_*.py`；离线套件，联网套件用 `-m network`）
+├── docs/                      规格文档（14 个 `.md`：`ROLE-SPECS.md`、`INDEX.md`、`PROPOSALS.md` 等）
+├── tools/                     开发期工具与探针（14 个 `.py`；其中 `release_all.py`、`coverage_zero_test.py`、`run_each_test_file.py`、`verify_role_specs.py`、`vocab_census.py` 是**发布门/判据本体**，其余是一次性探针）
+└── data/ library/ demo/       运行期数据（`data/` 17 个 JSON = 16 张表的快照 + `counters.json`；⚠️ 见 §10-D6）
 ```
 
 ### 2.2 模块职责边界（**一句话判据**）
@@ -389,6 +416,11 @@ agentflow/
 | `scheduler.py` | 波浪划分 + 有界并发 + 顺序合并 | 不做策略判定（调 `policy`） |
 | `agent_x.py` | 该角色的能力实现（**公开方法名 = `ActionSpec.handler_name`**） | 不直接构造 `ToolRegistry`（§6-P5） |
 | `tools/*.py` | 有名字 / 有 schema / 有校验 / 有结构化返回 / 声明副作用的原子动作 | 不写业务策略；不互相 import |
+| `host.py` | 把角色 / 工具 / 主控接到一起，并如实报出接线态 | 不假装"没接线"是"跑过了"（未接线 ⇒ 不进登记表） |
+| `gates.py` | H 的门引擎：`GATES` 15 道门 + 四态裁决（`GateResult`） | 不做"没查"与"查了没问题"的折叠（零发现必须自证） |
+| `judges.py` / `judge.py` | 语义判据注册表（`CRITERIA`）与模型判定的唯一缝协议 | 不把"没查成"写成"没找到" |
+| `deliver.py` | 交付闸门：给一份产物出裁决，不通过时产出**可派回去的工作项** | 不自己改产物 |
+| `renderanchor.py` | 论文包的**三维锚**（源表 / 渲染出的源文件 / 编译回执）与构建历史（`BUILD-HISTORY.jsonl`） | 不代替项目脚本渲染或编译（只核对与记账） |
 | `verify.py` | 全库不变量审计 | **不许有写路径** |
 | `cli.py` | 入口（把操作固定成几个动词） | 不写业务逻辑（只装配与打印） |
 
@@ -418,7 +450,7 @@ agentflow/
 | **禁止"不是装饰"式注释** | 注释里出现"不是装饰"/"确实"/"真的"这类**防御性措辞**时，**必须**在同一提交里补一条断言 | `LESSONS.md` P9（`literature_keys` 的"不是装饰"四个字透露了 bug 的存在） |
 | **禁止注释/docstring 里的装饰** | 注释或 docstring 里出现**成对的星号强调**、**未配对的残留星号**或 **emoji**，即判违规（先摘掉反引号代码跨度再判：`` `2**20` ``、`` `a/**/b` ``、`` `handler(**params)` `` 是字面语法） | `scripts/lint_rules.py` 的 **R009**：禁改区外 `error`，禁改区内一条汇总 `info`（见 §6-P17） |
 | **行内注释解释"为什么可以忽略异常"** | `except` 行或 `pass` 前有 ≥4 字注释，或 `# noqa: R001` | **R001** 的判据（实测 20 个 error） |
-| **每个模块顶部有模块 docstring** | 文件第一个语句是字符串字面量 | 口径：`(Get-ChildItem src/agentflow -Filter '*.py').Count`（**只数包根一层**，不含 `tools/` 子目录；要含子目录得用 `-Recurse`，那是另一个数）。观测 2026-09-27（`G3` 复测）⇒ 40（`G3` 之前这里写 42，已过期） |
+| **每个模块顶部有模块 docstring** | 文件第一个语句是字符串字面量 | 口径：`(Get-ChildItem src/agentflow -Filter '*.py').Count`（**只数包根一层**，不含 `tools/` 子目录；要含子目录得用 `-Recurse`，那是另一个数）。观测 2026-09-30 ⇒ 62（2026-09-30 更正：此处原先记的是 40） |
 
 ---
 
@@ -700,7 +732,7 @@ C 预算）都踩到同一坑。"
 | 3b | `[ ]` 两层声明（工具层 `ToolSpec` vs 能力层 `ActionSpec`）在两根轴上对同一动作说同一句话 | **`capabilities.declaration_divergences()`**（`assert_capabilities` 第 [7] 条：error 级导入期断言；warning 级只报告） | 判据三种：能力层**低估**外部轴 ⇒ `two_layer_external_divergence`（error）；两层都非 `none` 但**精度不同**（工具说 `egress`、能力层说 `exec`）⇒ `two_layer_external_imprecise`（warning，必须可见）；名字对不上或一对多 ⇒ `two_layer_name_unmatched` / `two_layer_name_ambiguous`（info，三态里的 unknown，不是"一致"）。**B3 收官后真实树上这一类只有 info 级的"没有比对"** |
 | 4 | `[ ]` `roles` 里**没有** `READ_ONLY_ROLES`（若它是写工具） | **`for_role` 结构性剥离** + `role_filter_notes` | `tools/base.py:335-344` |
 | 5 | `[ ]` `params` 是 JSON Schema（object 根），**能原样喂给 function-calling** | 人工 | FC-07 / `LESSONS.md` D4 |
-| 6 | `[ ]` handler **只收关键字参数**（`spec.handler(**params)` 不报位置参数错） | 实测 census | 55/55 true |
+| 6 | `[ ]` handler **只收关键字参数**（`spec.handler(**params)` 不报位置参数错） | 实测 census | 72/72 true（观测 2026-09-30：含 store 的完整装配下**没有任何一个** `ToolSpec.handler` 带 POSITIONAL_ONLY 形参；2026-09-30 更正：此处原先记的是 55/55） |
 | 7 | `[ ]` 参数非法 ⇒ **返回结构化失败**（`ok=False` + `kind`），**不抛异常** | **`ToolRegistry.call`** | `tools/base.py:370-376` |
 | 8 | `[ ]` 未知工具名 ⇒ `ok=False, kind="unknown_tool"` | **`ToolRegistry.call`** | `tools/base.py:375-376` |
 | 9 | `[ ]` **返回结构有契约测试**（不是文档） | 实现者 | `LESSONS.md` B8 |
@@ -828,7 +860,7 @@ C 预算）都踩到同一坑。"
 | 需要联网的用例**显式标记** | `@pytest.mark.network`；`markers` 已注册 | 同上 |
 | 联网套件**独立可跑** | `python -m pytest -q -m network` | 同上 |
 | 限流（429）判 `skip`，**400 一律判失败** | README 逐字（`README.md:52`） | 但**该条针对的是 `test/test1`，§10-D1** |
-| 默认套件规模 | **835 passed / 3 failed / 8 deselected**（最后一次完整跑动） | §0.2 |
+| 默认套件规模 | **不写定值**（读数随并行施工变化）：口径见 §0.1 的 `tests/` 那一格（区间 + 观测时刻）与 §0.3 命令 13 的复跑命令（2026-09-30 更正：此处原先记的是 `835 passed / 3 failed / 8 deselected`，早已过期） | §0.1 / §0.3 |
 
 **"进套件 + 默认 deselect"是两个诉求的唯一交集**（`README.md:50` 逐字）：
 "日常套件必须离线、确定性、可重复 —— 否则一次上游限流就会把 CI 搞红，久而久之没人再看红灯。
@@ -1008,8 +1040,9 @@ python tools\release_all.py --only role-specs      # 调试时只跑一项
 | `release-check` | 全量测试 + 全部自检 + verify + 工具普查 + linter（+ 禁 AI 区门 / 契约版本 / 源码树可导入） |
 | `acceptance` | **验收测试**（`test/test2/run_acceptance.py`，`AGENTFLOW_TARGET=formal`） |
 | `repro` | 论文独立复现（5 个实验 + 7 条负控）—— 用户第 (5) 条要求的证据 |
-| `role-specs` | 角色规格结构完整性（见 §8.6） |
-| `coverage` | 零测试公开函数的**风险分档**清单（等级 1/2 应为 0） |
+| `role-specs` | 角色规格结构完整性（`agentflow/tools/verify_role_specs.py`，见 §8.6） |
+| `coverage` | 零测试公开函数的**风险分档**清单（`agentflow/tools/coverage_zero_test.py`；**发布门的口径是 `--level 2`** ⇒ 等级 ≤ 2 的零测试函数必须为 0、退出码 0；等级 3/4 不在门里，只列清单） |
+| `per-file` | **逐文件单跑门**（`agentflow/tools/run_each_test_file.py`）：把"全量绿掩盖单文件红/顺序依赖"变成可判定的结论（2026-09-30 更正：本表原先只有上面五行，漏了这一步的实际存在） |
 
 **两条刻意的取舍**（改它们等于改门的强度，所以本文件在禁改区里）：
 
@@ -1154,7 +1187,7 @@ python tools/release_all.py --since 4293989 --only release-check --json D:\Incub
 | 20 | 关闭 **G-8**：`interactions.admit_reprocess_request` 对**纯空白**目标集合放行 ⇒ B **退化成全量重抽** | 人工（`interactions.py` 在禁改区） | 判据见 `PROPOSALS.md` G-8 | **待人工**（**唯一剩下的那个 `xfail(strict=True)`**） |
 | 21 | 关闭 **G-5**：`gates.gate_verdict({})` 对**空结果集**判 `accepted` | 需先定口径 | 契约要不要覆盖 `results == []` | **待裁决** |
 | 22 | 关闭 **G-12**：`criterion_revision` 也是两份且 **15/15 漂移**，声明表运行期**从不被读到** | — | 与 G-7 同构 | ✅ **已关闭**（单源化 + 动态哨兵断言"表真的被读到" + AST 覆盖两栏三形态；**并核出第三份副本**：`GateResult` 的默认值修前从 24 条返回路径漏出） |
-| 23 | 补 **G-9**（106 个零直接测试的公开函数，等级 3/4） | — | 清单见 `tools/coverage_zero_test.py --json` | **已量化，未关** |
+| 23 | 补 **G-9**（公开函数里的零直接测试项，等级 3/4） | — | 清单见 `agentflow/tools/coverage_zero_test.py --json`。**发布门的口径是 `--level 2`**（等级 ≤ 2 的零测试函数必须为 0 ⇒ 退出码 0），等级 3/4 **不在门里**、只列清单 | **已量化，未关**（观测 2026-09-30 ⇒ 公开函数 **888** 个、零直接测试 **107** 个，其中等级 1 零测试 0 个 / 等级 2 零测试 0 个 / 等级 3 零测试 5 个 / 等级 4 零测试 102 个；2026-09-30 更正：本行原先记的是"106 个、等级 3/4"且没写 `--level 2` 口径） |
 | 24 | 修 `tools/release_all.py` **第一版的退出码映射缺陷** | — | 三态工具的 `2` 曾被判成 `fail`（"没查成"读成"发现问题"） | ✅ **已修**（每步显式声明 `exit_map`；4 条测试含点名的负控） |
 | 25 | 修 `docs/PROPOSALS.md` 的**编号撞号**（两条 `G-9`）与**空洞**（`G-5` 悬空引用） | — | 编号唯一 + 引用存在 + 空洞写明 | ✅ **已修** + 新建 `tests/test_proposals_register.py`（4 条断言，含作用域限制的论证） |
 
@@ -1195,7 +1228,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 `scripts/release_check.py` 本身在 FC-27 禁改区，**给它加一项要人审**
 （`docs/PROPOSALS.md` 的 P-2/P-3 是同一类待办）。
 所以这道门目前是一个**并列的、可单独复跑**的门，并在 `tests/test_role_specs_complete.py`
-里有 27 条测试（含"删掉一节 ⇒ 必须报 `incomplete`""文档被改名 ⇒ 必须报 `unknown` 而不是 `ok`"
+里有 35 条测试（观测 2026-09-30 的 `--collect-only`；2026-09-30 更正：此处原写 27，用例数一律以当次 `--collect-only` 为准）（含"删掉一节 ⇒ 必须报 `incomplete`""文档被改名 ⇒ 必须报 `unknown` 而不是 `ok`"
 这两条**三态负控**），以及一条**文档 ↔ 实测普查对账**：
 文档每节标题里的工具条数必须等于**真的跑一次** `python -m agentflow.cli tools` 得到的数字
 （而不是测试里硬编码一份 `{'A':20,…}` —— 那会把测试绑死在当前状态上）。
@@ -1237,7 +1270,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 | **FC-19** | token 预算是硬约束，重试也计入 | `policy.Policy.token_budget` / `usd_budget`；`cancellation.CancelToken.token_budget` + `consume_tokens`；`scheduler.MemoryBudgetTracker`；**`tokenmeter.TokenMeter`**（`charge` / `charge_once` / `tokens_for` / `guard`，**唯一的 `usage_ledger` 写入方**）；`conductor` 的 `[4a]` 开工前守卫；`schema.UsageEntry` + `usage_ledger` 表 + `attempts` 字段 | `tests/test_tokenmeter.py` 等（**用例数以 `--collect-only` 为准**：重试按次计费、零值也记账）；`conductor` 的守卫（在写 `running` 行之前，`allowed=False` ⇒ `refused/budget_exceeded`，**双重预算**：本次调用 ∧ 全局 `Policy`）；`tasks.tokens/usd` **由台账 `tokens_for()` 抄回**（不再自己累加） | **已落地（召唤级）**。⚠️ **本条原先自相矛盾**（`G-16`）：主矩阵写"**未落地**（数据结构已备，计量与写入方缺）"而 §9.2 写"✅ **已落地（召唤级）**"。**判据是事实**：写入方 `TokenMeter.charge` 的 `tx.upsert("usage_ledger", …)` 真实存在（`grep -n 'tx.upsert("usage_ledger"' src/agentflow/tokenmeter.py` ⇒ 两处），§9.3 第 5 条的"零写入方"已关闭 ⇒ **一条 FC 只保留这一个状态**。<br>⚠️ **仍未接的一小块（如实保留，但它改的是"打几折"而不是"落没落地"）**：各 agent `_call` 的**逐次尝试**细账（重试粒度），接线说明写在 `_charge_and_settle` 的 docstring 里（含**双记陷阱**） |
 | **FC-20** | 取消：协作式 + 共享 signal + 事件配对 + first-wins | **`cancellation.py`**：`CancelToken`（`cancel` first-wins）、`CANCEL_CODES`、`CancelRequested`；**`conductor.py`**：`cancel` / `cancel_inflight` / `dispose`（合成 `cancelled` end + "结果未知"）、`finish` 幂等（重读磁盘）、`_signal_stop`（记第一次的说明） | 实测 `dispose()` 的 docstring 逐字落地三条纪律；`schema.Task.validate` 的 "pending/running 却已有 ended_at ⇒ 拒" | **已落地** |
 | **FC-21** | 部分失败语义：子任务可降级，整体绝不谎报 | `AgentF._deploy_e` 降级 `blocked` + `blocked_reason` 并继续；`schema.AttackPlan` 的 `stalled` 必须写 `best_partial`（`verify.stalled_without_partial`，error） | `tests/test_agent_f.py`；自检实测 `stalled` + `best_partial` 非空 + 不可重入；**`run_best_effort` / `run_all_or_nothing` 实测 0 命中** ⇒ 无两种显式 API | **部分** |
-| **FC-22** | 数值结果必须标注"仅为交叉验证" | `schema.EVIDENCE_KINDS`（`:633`）+ `Experiment.validate`（五条硬约束，含 `verifier_subject_key`，`schema.py:810`）；E 的降级；H 的 `overclaim`；`verify` 的 `evidence_kind_overclaim` / `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency`；`CROSS_CHECK_DISCLAIMER` 自动附加 | `tests/test_agent_e.py`（30 例）；`agent_e` / `agent_f` / `agent_h` 自检均有 FC-22 断言 | **已落地（最强）** |
+| **FC-22** | 数值结果必须标注"仅为交叉验证" | `schema.EVIDENCE_KINDS`（`:633`）+ `Experiment.validate`（五条硬约束，含 `verifier_subject_key`，`schema.py:810`）；E 的降级；H 的 `overclaim`；`verify` 的 `evidence_kind_overclaim` / `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency`；`CROSS_CHECK_DISCLAIMER` 自动附加 | `tests/test_agent_e.py`（用例数以 `--collect-only` 为准；观测 2026-09-30 ⇒ 34）；`agent_e` / `agent_f` / `agent_h` 自检均有 FC-22 断言 | **已落地（最强）** |
 | **FC-23** | 外部定理显式标记依赖 + 依赖集可闭合检查 | `dependencies` 表 + `DEP_KINDS`/`DEP_STATUSES`；`doc.register_dependency`（`closed` 时**真去核** `literature`/`experiments`）；`verify.dangling_dep` / `dangling_dep_external`（分级）/ `closed_dep_on_inconclusive_experiment` / `proof_claim_with_unclosed_dependency`；`Relation.supporting_lit_ids`（`schema.py:365`，**实测 7 处命中**） | `tests/test_agent_g.py`；`tests/test_fc05_contract.py` 的 `test_document_can_cite_an_eval_result` | **已落地**（并**推翻** FC-23 文档里"一条关系只能引一篇文献"的缺口陈述） |
 | **FC-24** | 基准口径是必填字段 | **`schema.EVAL_REQUIRED_FIELDS`**（`:1454`，7 个必填）+ **`EvalResult`**（`:1465`，`validate()` 缺任一即抛、`value` 必须是 0..1 比率）；`verify.eval_duplicate_conflicting` / `unknown_citation_kind`（`eval:` 引用） | `tests/test_fc05_contract.py`：`test_eval_requires_every_scope_field` / `test_eval_value_must_be_a_ratio` / `test_conflicting_duplicate_eval_is_an_error` / `test_same_value_duplicate_eval_is_clean` | **已落地**（**`draft/13` §7 标为"未落地"的陈述已过期**） |
 | **FC-25** | "未证明/已证否/未搜索"三分 | `schema.NEGATION_KINDS` 四值（`:647`）；`Experiment.negation_kind`；`cold` 报告把 `degree==0` 单列"完全孤立"；`SummonResult` 的 `refused`/`no_result`/`not_applicable` 三分 | `tests/test_agent_e.py`；`agent_e` 自检第 [7] 项逐字："'查了没有' 与 '没查' 的 reason 不同" | **已落地** |

@@ -1,5 +1,11 @@
 # NOAI-GOVERNANCE —— FC-27 禁 AI 区门的机制说明
 
+> **现状导读（不构成判据）**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**；FC-27 的判据在
+> `agentflow/scripts/noai_gate.py` 与 `agentflow/.noai-paths`，开发规范在 `agentflow/DEVELOPMENT.md` §6。
+> 本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+
 > 本文件讲**机制本身**：门怎么判、为什么这么判、以及它**做不到**什么。
 > 配套的两份人读文档是：
 > - `AGENTS.md`（给 AI 编码者的硬约束，含 `NOAI-MANIFEST` 清单区块）；
@@ -15,8 +21,11 @@
 ```text
 0 = clean          查过了：要么没命中禁改区，要么命中项的 hash 与台账一致**且**已有 2 名 reviewer
 1 = requires_human 查过了：命中且**未获批准**（从没登记 / hash 已漂 / 走查人数不足）
-2 = unknown        **没查成**（清单或台账读不到、解析不了、结构不对、不是 git 仓库、没给改动集）
+2 = unknown        **没查成**（清单或台账读不到、解析不了、结构不对、没给改动集）
 ```
+
+（"不是 git 仓库"**不再是**这一档的成因之一：工作区根 `D:\Incubator` 是 git 仓库，
+`.git` 在交付物 `agentflow/` 的上一级。）
 
 **`unknown` 绝不是 `clean`。** 把"没检查"与"检查过了没问题"折叠成同一个"通过"，
 是本项目反复踩过的坑（成熟项目的原话：*"多数脚本不设退出码，于是『未报错』被误读为『无问题』"*）。
@@ -70,8 +79,16 @@ python scripts/noai_gate.py --check-approvals --paths src/a.py \
 
 ## 2. hash 为什么比 git 更强
 
-`D:\Incubator\agentflow` **不是 git 仓库**：`--git` 永远 `unknown(2)`，
-所以"这次改了哪些文件"在这个环境里取不到。但这不是死路 —— **内容 hash 就是版本**。
+`agentflow/` 自己不是 git 仓库根，但**工作区根 `D:\Incubator` 是**（`.git` 在交付物
+`agentflow/` 的**上一级**）⇒ `--git` 取到的是**仓库根相对**路径（形如 `agentflow/src/...`），
+门的路径匹配会同时试三种候选（仓库根相对 / 项目根相对 / 裸文件名）。
+⚠️ **不给基线时它看不见已提交的改动**：若当时的改动集**为空**，它判 `unknown(2)`（不是 `clean`）；
+若改动集非空（只是未提交的改动），它照样报 `clean`——所以那个 `clean` 说的只是
+"**这次这些改动没命中禁改区**"，不是"相对某个基线没有越权改动"。
+要看见已提交的改动，必须给基线：`--since <ref>`。实测 2026-09-30：
+`python scripts/noai_gate.py --git` ⇒ `[clean] required_approvals=0`（14 条未提交改动路径，清单 27 条），
+exit 0；`python scripts/noai_gate.py --git --since HEAD~1` ⇒ 同样 `[clean]`，22 条改动路径。
+但这不是死路 —— **内容 hash 就是版本**。
 
 `.noai-approvals.json` 为每条命中路径记下**当前内容的 sha256**、谁写的（`authored`）、
 改了什么（`change_note`）以及**已完成的人工逐行走查记录**（`reviewers`）。
@@ -284,14 +301,17 @@ python scripts/noai_gate.py --check-approvals --paths src/agentflow/verify.py
 1. **hash 一致 ≠ 实现正确。** 台账证明的是"这一版就是被批准的那一版"，
    **不证明它是对的**。这是两类问题，不要因为门变绿就跳过语义走查。
 2. **它不是 git，没有"改动集"这个客观事实。** `--check-approvals` 需要调用方给出
-   改动集（`--paths` / `--stdin`）；在没有 git 的环境里，**"哪些文件被改了"仍然要人说**。
-   `--git` 在本仓库恒为 `unknown(2)` —— 这是正确行为，不是缺陷。
+   改动集（`--paths` / `--stdin` / `--git`）；`--git` 在**不给基线**时看不见已提交的改动，
+   所以 CI 必须给 `--since <ref>`。**"哪些文件被改了"这件事仍然要人说（或给基线）。**
+   工作区根 `D:\Incubator` 是 git 仓库（`.git` 在 `agentflow/` 的上一级），
+   但门拿到的路径是**仓库根相对**的（形如 `agentflow/src/...`）。
 3. **它抓不到"已经发生"的那次改动内容。** `--baseline` 之后能机械抓到的是**从此往后**的漂移；
    上一轮改了哪几行，只能靠人逐行走查（登记表 §2 里 5 个文件"符号面相同"正是这个缺口）。
 4. **它不保护清单之外的文件。** `.noai-paths` 漏一个文件，门不会报错，只会不命中 ——
    一个**静默的假阴性**。清单的完备性本身要人定期复查。
 5. **`unknown(2)` 需要人真的停下来。** 门会正确报 `unknown`，但**没有任何机制阻止人在
-   `unknown` 状态下继续**（当前 `release_check.py` 只把它记为 `unknown`，不阻断）。
+   `unknown` 状态下继续**（当前 `agentflow/scripts/release_check.py` 只把它记成
+   `unknown` 并让退出码为 **2**，**不阻断**后续步骤）。
    要让 `unknown` 真的拦人，必须把它接到 CI 的**阻断判决**上。
 6. **`--approve` 拦不住一个不诚实的人。** 它记录"谁、什么时候、走了哪些行"，
    但**无法验证**签名者真的读了。它的实际作用是让"没走查"变成一件**需要刻意说谎**

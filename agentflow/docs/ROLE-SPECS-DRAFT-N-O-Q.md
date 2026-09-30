@@ -1,5 +1,18 @@
 # 角色规格（草案）—— N / O / Q 与确定性周期驱动
 
+> **现状导读（不构成判据）· 本文是草案/提案**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**，**也不要把本文写成现状**。本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+>
+> ⚠️ **凡本文把提案当成"已经这样了"的地方，按实际状态读（截至 2026-09-30 的实际状态见正文 / 代码，本文是提案）**：
+> N / O / Q 三个角色、它们的工具（`mgmt.scan` / `mgmt.plan` / `mgmt.audit`）、`diagnoses` /
+> `mgmt_plans` / `audits` / `cycles` 四张表、`READ_ONLY_WRITE_EXCEPTIONS` 的三个窄写面登记、
+> `agentflow/management/*` 三个模块 —— **一个都不在盘上**
+> （实测：`agentflow/src/agentflow/tools/` 下没有 `mgmt` 工具；`schema.TABLES` 16 张；
+> 角色节仍只到 A–H + M，复跑 `python -m agentflow.cli tools` 与
+> `python -c "import sys;sys.path.insert(0,'agentflow/src');import agentflow.schema as s;print(len(s.TABLES), s.ROLES)"`）。
+> 本文自己的性质说明（开头那段"这是一份草案，不是权威规格"）与 §"本文件没能做到的"那一节都成立，**不必修正**。
+
 > **这是一份草案，不是权威规格。** 权威规格是 `ROLE-SPECS.md`（A–H + 主控 M）。
 > 本文档存在的原因：`N`/`O`/`Q` **还没进 `schema.ROLES`**，工具面也没登记；
 > 此刻改 `ROLE-SPECS.md` 等于让权威规范承诺三个不存在的角色。

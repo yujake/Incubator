@@ -22,7 +22,10 @@ from .console import pin_utf8
 from .store import Store, StoreError
 from .verify import verify_all
 
-DEFAULT_ROOT = Path(__file__).resolve().parents[2]  # test/test1/
+#: 不给 `--root` 时的工作区根：`src/agentflow/cli.py` 的 `parents[2]` = 仓库里的 `agentflow/`。
+#: （2026-09-30 更正：这一行原写 `# test/test1/` —— 那是 cli.py 还住在原型
+#: `test/test1/src/agentflow/` 时的解析结果，搬到正式版之后注释没跟着改。）
+DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _non_negative_int(raw: str) -> int:
@@ -1509,8 +1512,10 @@ def cmd_answer(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="agentflow", description="A/B 多智能体协同工作流（原型）")
-    p.add_argument("--root", default=None, help="工作目录（默认 test/test1/）")
+    p = argparse.ArgumentParser(prog="agentflow",
+                                description="面向数学研究的多智能体协同框架（正式版；A–H + 主控 M）")
+    p.add_argument("--root", default=None,
+                   help="工作区根（不给就用 DEFAULT_ROOT = 本仓库的 `agentflow/`）")
     p.add_argument("--config", default=None, help="配置文件路径（默认 <root>/config.yaml）")
     # 呈现层的两个开关。为什么做成顶层开关而不是每条命令各带一个：
     # "这次输出别带颜色"是终端的事，不是某个子命令的事；散在各处就会出现

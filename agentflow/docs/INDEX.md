@@ -4,12 +4,26 @@
 > 开发期探针在仓库根的 `tools/`；**一键发布检查的入口也是 `tools/release_all.py`**
 > （它调用 `scripts/release_check.py` 那八项，并在外面补上**验收测试**与论文复现 ——
 > 因为 `release_check.py` 在禁改区，加一项要人审，见 `PROPOSALS.md` P-11）。
+>
+> 📍 **要先看清"系统现在长什么样"**：读仓库根的
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)
+> —— 七层结构逐项写明，**每一条都带工作区相对路径（相对 `D:\Incubator`）**，并给出每个数字的复跑命令。
+> 它是导读、**不构成判据**。
+>
+> **路径约定**：本目录里的 `../src/agentflow/...`、`../tools/...` 相对 `agentflow/`；
+> 换成相对工作区根（`D:\Incubator`）就是 `agentflow/src/agentflow/...`、`agentflow/tools/...`。
+> 正文（`draft/35`）一律用**工作区根相对**的写法。
 
 | 文件 | 是什么 | 读者 | 权威顺序 |
 |---|---|---|---|
-| [`ROLE-SPECS.md`](ROLE-SPECS.md) | **八个角色 + 主控（M）的详细规格**。每节 10 条同构结构：定位 / 职责 / 明确不负责 / 工具面（逐条契约）/ 状态机（迁移表）/ 预算与终止条件 / 三态与失败模式 / 不变式 / 接口 / 自检入口 | 实现者（改哪个角色读哪节）、审计者、文档维护者 | 低于代码与 `DEVELOPMENT.md`，高于 `DESIGN*.md` |
+| [`ROLE-SPECS.md`](ROLE-SPECS.md) | **八个角色 + 主控（M）的详细规格**。每节 10 个子节（其中 8 个是结构门要求的**必备**子节）：定位 / 职责 / 明确不负责 / 工具面（逐条契约）/ 状态机（迁移表）/ 预算与终止条件 / 三态与失败模式 / 不变式 / 接口 / 自检入口 | 实现者（改哪个角色读哪节）、审计者、文档维护者 | 低于代码与 `DEVELOPMENT.md`，高于 `DESIGN*.md` |
 | [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) | **FC-27 门的机制与人工批准流程**：三种结论与退出码、"登记 ≠ 批准"、hash 台账为什么比 git 更强（能抓"批准后被改"）、台账自指禁止、以及**本机制做不到的事** | 要改动禁改区的人、发布者、评审者 | 与 `../AGENTS.md` 同级；机制细节以本文为准，清单以 `../.noai-paths` 为准 |
 | [`PROPOSALS.md`](PROPOSALS.md) | **已裁决的缺口与提案**。三类分开列：**P**（要改禁 AI 区的提案）/ **G**（已接受的缺口，**必须继续出现在报告里**）/ **N**（看起来像缺陷、经核查是刻意设计）。每条都带"为什么不由 AI 自己做" | 发布者、评审者、发现机械报告里有 warning 的人 | **不构成判据**；但它记录的判定会被 `DEVELOPMENT.md` 与 linter 引用 |
+| [`FORMAL-TOOLCHAIN.md`](FORMAL-TOOLCHAIN.md) | 形式化后端（Lean / Mathlib）的工具链口径与"没查成"的记法 | 用 E 的形式化路径的人 | 低于代码（实现 `../src/agentflow/formalgw.py`） |
+| [`SCHEMA-DRAFT-management.md`](SCHEMA-DRAFT-management.md) · [`SCHEMA-MIGRATION-PROPOSAL-claims.md`](SCHEMA-MIGRATION-PROPOSAL-claims.md) · [`SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md`](SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md) | 表结构与迁移提案（磁盘格式契约的**提案**，不是现状） | 要动表结构的人 | **不构成判据** |
+| [`ROLE-SPECS-DRAFT-N-O-Q.md`](ROLE-SPECS-DRAFT-N-O-Q.md) · [`TOOLBOX-DRAFT-roles.md`](TOOLBOX-DRAFT-roles.md) | 角色与工具栏的草案（讨论稿） | 规格维护者 | **不构成判据** |
+| [`PROPOSAL-side-effect-axes.md`](PROPOSAL-side-effect-axes.md) | 副作用第二根轴（`external`：`egress` / `exec`）的提案与落点清单 | 要动工具声明的人 | **不构成判据**；现状见 `../src/agentflow/tools/base.py` 与 `../DEVELOPMENT.md` |
+| [`NOAI-CHANGE-LIST-management.md`](NOAI-CHANGE-LIST-management.md) · [`NOAI-SUSPENSION-2026-09-25.md`](NOAI-SUSPENSION-2026-09-25.md) · [`NOAI-SUSPENSION-2026-09-28.md`](NOAI-SUSPENSION-2026-09-28.md) | 禁改区的变更清单与两次暂停记录（历史档案） | 审计者 | 历史档案；当前值以 `.noai-approvals.json` 与 `DEVELOPMENT.md` §0.3 为准 |
 
 **本目录的结构完整性有一道门**（`tools/verify_role_specs.py`，退出码 0/1/2）：
 `ROLE-SPECS.md` 必须保持"9 个角色节（A–H + M）× 8 个必备子节"齐全，
@@ -30,13 +44,15 @@
 | `../AGENTS.md` | 禁 AI 区（FC-27）硬约束 | **只覆盖这一节**；与 `../.noai-paths` 逐条一致（`scripts/noai_gate.py --check-consistency`） |
 | `../NOAI-REVIEW-REGISTER.md` | **FC-27 人工复核登记表**（人读）：这一轮改了哪些禁改区文件、复核人该逐行走查哪些符号、批准栏 | 机器可读部分在 `../.noai-approvals.json`；**批准只能由人签** |
 | `../DESIGN.md` `../DESIGN-TOOLS.md` `../DESIGN-INTERACTIONS.md` `../DESIGN-ROLES.md` `../DESIGN-CONDUCTOR.md` | 设计**理由**（"为什么"） | **不构成判据**；与代码冲突时以代码为准 |
-| `../README.md` | 使用说明（怎么跑、当前已知限制） | **不构成判据**；与代码冲突时以代码为准（§7 已声明这一点） |
+| `../README.md` | 使用说明（怎么跑、当前已知限制、目录结构、数据文件速查、发布门状态） | **不构成判据**；与代码冲突时以代码为准（该文件 §7 已声明这一点） |
+| [`../../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md) | **现状描述正文**：七层结构逐项写明，每条带工作区相对路径（相对 `D:\Incubator`）+ 复跑命令 | **不构成判据**；它是"拿着一张表逐条核对代码"的入口 |
 
 ## 怎么读（按角色）
 
 | 你是 | 读什么 | 顺序 |
 |---|---|---|
 | 第一次接触这个仓库 | `../DEVELOPMENT.md` §0（现状快照）→ §1（阅读顺序）→ §3（六条硬纪律） | 1 → 2 → 3 |
+| 想先看清系统全貌 | `../../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`（七层结构 + 逐项路径）→ `../DEVELOPMENT.md` §0 | 1 → 2 |
 | 要改某个角色 | `../DEVELOPMENT.md` §4.5（角色 DoD）→ `ROLE-SPECS.md` 对应那一节 | — |
 | 要加一个工具 | `../DEVELOPMENT.md` §4.3（工具 DoD）→ `ROLE-SPECS.md` §R0（全局工具总表，看格式） | — |
 | 要加一个验证门 | `../DEVELOPMENT.md` §4.6 + §5.1（一正一反） | — |

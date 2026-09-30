@@ -4,11 +4,23 @@
 # **业务判断**而非技术参数，不同学科领域的合适取值差别很大，必须能不改代码就调。
 
 store:
-  root: .            # 相对于 test/test1/；data/ 与 library/ 都建在这里
+  # ⚠️ 这一块**当前不被正式版代码读取**（2026-09-30 更正）：全仓没有一处
+  # `cfg["store"]` / `cfg.get("store")`。工作区根由 `--root` 决定
+  # （`agentflow/src/agentflow/cli.py` 的 `DEFAULT_ROOT` = `agentflow/`），
+  # 再交给 `agentflow/src/agentflow/store.py` 的 `Store(root)`；
+  # `data/` 与 `library/` 都建在那个根下。
+  # 本行原写"相对于 test/test1/；data/ 与 library/ 都建在这里" —— 那是原型
+  # （`test/test1/`，包名 `abflow`，见 `draft/35` §1）的旧布局，已过期。
+  # **键与值原样保留，不改生效语义。**
+  root: .            # 该值当前不被消费（见上）
 
 lease:
   # 租约时长：超过这个时间未完成的任务会被其他实例重新领取。
   # 设小了会重复干活，设大了会卡住任务。搜索/下载通常 < 10 分钟，故默认 900s。
+  # ⚠️ 代码读的键名是 `lease_seconds`（`agentflow/src/agentflow/agent_a.py` 与
+  # `agent_b.py` 的 `self.cfg.get("lease_seconds", 900)`），**不是本行的 `seconds`**
+  # ⇒ 本行当前不被消费（2026-09-30 更正）。生效值因此落在代码默认值 900 上，
+  # 与本行写的数值相同。**键与值原样保留，不改生效语义。**
   seconds: 900
   # 单条任务的最大尝试次数；超过则显式放弃并写 last_error（而不是无限重试）
   max_attempts: 3
@@ -31,7 +43,8 @@ agent_b:
   dup_review: 0.72
   # 引文在声明页码里找不到时，向两侧扩展多少页再试
   quote_widen_pages: 1
-  # 是否允许退化为全文搜索。默认 false —— 见 quoteverify.py 的说明：
+  # 是否允许退化为全文搜索。默认 false —— 见 quoteverify.py 的说明
+  # （`agentflow/src/agentflow/quoteverify.py`）：
   # 全文兜底会把"页码写错了"这个真实缺陷掩盖掉。
   allow_fulltext_quote_fallback: false
 
@@ -55,12 +68,14 @@ search:
 # ============================================================================
 #
 # 为什么必须有这一块：极简配置"**没有 compaction**"，长任务会硬撞上下文上限且
-# **没有任何自动缓解**（`06-...md` §9.2）；200,000 token 触发截断时，模型看到的是
+# **没有任何自动缓解**（`06-...md` §9.2，实体是工作区根下的
+# `draft/06-基于DeepSeek-Harness的最小可用智能体构造方法研究报告.md`）；200,000 token 触发截断时，模型看到的是
 # 被悄悄剪掉一半的世界，它甚至不知道自己少看了东西。所以 FC-17 的判据①就是
 # **这三行配置文件必须存在**，而不是"代码里有这个类"。
 #
 # 读它的是 `agentflow.contextbudget.ContextBudget.from_mapping()`（缺键用默认，
-# 非法值**抛**——"8000" 这种字符串不会被静默转成整数）。
+# 非法值**抛**——"8000" 这种字符串不会被静默转成整数）——
+# 实现落在 `agentflow/src/agentflow/contextbudget.py`。
 # 下面每一行右边标注它对应 FC-17 的哪一条。
 #
 # ⚠️ 一个算术事实（别误以为 spill 已经生效）：threshold_chars=8000 配

@@ -8,6 +8,16 @@
 （开发规范）与 [`docs/ROLE-SPECS.md`](docs/ROLE-SPECS.md)（角色规格）；设计**理由**在
 `DESIGN*.md`（不构成判据，与代码冲突时以代码为准）。
 
+> 📍 **要先看清"系统现在长什么样"**：读
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)
+> —— 那一份把七层结构（数据面 / 声明面 / 工具面 / 角色面 / 循环面 / 接线面 / 质量面）逐项写清，
+> **每一条都标注对应程序相对工作区根（`D:\Incubator`）的路径**，并给出每个数字的复跑命令。
+> 它同样是导读、不构成判据。
+>
+> **本文件的路径约定**：目录树与行文里的 `src/agentflow/...`、`tools/...` 相对**本目录
+> （`agentflow/`）**；换成相对工作区根（`D:\Incubator`）就加一层前缀，写作
+> `agentflow/src/agentflow/...`、`agentflow/tools/...`。
+
 ---
 
 ## 1. 这是什么
@@ -223,50 +233,88 @@ agentflow/
 ├── NOAI-REVIEW-REGISTER.md   ★ FC-27 人工复核登记表（哪一轮改了哪些禁改区文件、谁走查过）
 ├── README.md                 本文件
 ├── DESIGN.md / DESIGN-TOOLS.md / DESIGN-INTERACTIONS.md / DESIGN-ROLES.md / DESIGN-CONDUCTOR.md
-│                             设计理由（不构成判据）
+│                             设计理由（不构成判据；现状导读见 ../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md）
+├── config.yaml               运行时可调项（注释里注明各字段落到哪个模块）
 ├── .noai-paths               禁改区清单（**27** 条 glob / **24** 条唯一路径 / 7 类；**台账条目数与欠签不写定值**（每签一个字就变 —— 量法与当次值见 §6.2 那两格，别再往这一行抄数）；前两个数由 `tests/test_release_all.py::test_readme_file_tree_numbers_match_the_repo` 守着）
 ├── pyproject.toml            包元数据 + pytest 配置（**唯一**一处；不要再加 tests/pytest.ini）
 ├── docs/
 │   ├── INDEX.md              docs/ 的索引与"按角色怎么读"
-│   └── ROLE-SPECS.md         ★ 八个角色 + 主控（M）的详细规格（每节 10 条同构结构）
+│   ├── ROLE-SPECS.md         ★ 八个角色 + 主控（M）的详细规格（每节 10 条同构结构）
+│   ├── NOAI-GOVERNANCE.md    FC-27 门的机制与人工批准流程
+│   ├── PROPOSALS.md          已裁决的缺口与提案（P / G / N 三类）
+│   ├── FORMAL-TOOLCHAIN.md   形式化后端（Lean）的工具链口径
+│   ├── SCHEMA-DRAFT-management.md · SCHEMA-MIGRATION-PROPOSAL-claims.md
+│   │   · SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md
+│   │                         表结构与迁移提案（不是判据）
+│   ├── ROLE-SPECS-DRAFT-N-O-Q.md · TOOLBOX-DRAFT-roles.md
+│   │                         角色与工具栏的草案（不是判据）
+│   ├── PROPOSAL-side-effect-axes.md
+│   │                         副作用第二根轴（external：egress / exec）的提案
+│   └── NOAI-CHANGE-LIST-management.md · NOAI-SUSPENSION-2026-09-25.md · NOAI-SUSPENSION-2026-09-28.md
+│                             禁改区的变更清单与两次暂停记录
 ├── scripts/
 │   ├── lint_rules.py         linter（**规则区间与条数以 `python scripts/lint_rules.py` 的摘要行为准**；当次 R001–R012、R004/R006 已退休；**有退出码**）
 │   ├── noai_gate.py          FC-27 门（0=clean / 1=requires_human / 2=unknown）
-│   └── release_check.py      ★ 发布前八项检查（本文件自身在禁改区里）
+│   ├── release_check.py      ★ 发布前八项检查（test-suite / selftests / tool-census / verify / linter / noai / contract / imports；本文件自身在禁改区里）
+│   └── usage_ledger_audit.py usage_ledger 的存量重复账审计与清洗
 ├── src/agentflow/
-│   ├── schema.py             ★ 数据模型 + 行级校验 + 全部跨模块词表（单一来源）
+│   ├── schema.py             ★ 数据模型 + 行级校验 + 全部跨模块词表（单一来源；SCHEMA_VERSION=1、16 张表）
 │   ├── store.py              ★ 锁 / 原子写 / 事务 / 事件日志 / ID 分配 / 重建
-│   ├── interactions.py       ★ 角色间交互矩阵 + 契约版本 CONTRACT_VERSION
+│   ├── interactions.py       ★ 跨角色交互的冻结契约（I1–I7；纯函数、不接 store）+ 契约版本 CONTRACT_VERSION
+│   ├── capabilities.py       角色能力表 + 写集 + 允许的召唤边（**A–H 调用矩阵的权威定义**；**导入期自检**）
 │   ├── verify.py             ★ 全局不变量校验（审计的判据本身）
-│   ├── capabilities.py       角色能力表 + 写集 + 允许的召唤边（**导入期自检**）
 │   ├── policy.py             策略判定（四类上限、越权边、只读角色写面）
-│   ├── conductor.py          M 的实现：召唤 / 台账 / 合并
+│   ├── conductor.py          M 的实现：召唤 / 台账 / 合并（Conductor + LocalBackend / SubagentBackend）
+│   ├── host.py               接线层：把 A–H 接到 LocalBackend（build_role_registry / wired_* 五件）
 │   ├── scheduler.py          波次调度器（写集相交 ⇒ 串行）
 │   ├── cancellation.py       协作式取消（受控理由见该文件的 `CANCEL_CODES`；**份数按它当次读**、不写定值：观测 2026-09-27（`G3` 复测）⇒ 5 个取值，其中 `cancelled` 是"未分类、不要用"那一档 ⇒ 4 个真实停止来源；无自动重试）
-│   ├── contextbudget.py      上下文预算（head/tail/spill）
+│   ├── contextbudget.py      上下文预算（压缩 / 剪枝 / spill）
 │   ├── tokenmeter.py         token 记账（**重试按次计费**）+ 开工前守卫
-│   ├── agent_a..h.py         八个角色（每个都能 `python -m agentflow.agent_x` 自检）
-│   ├── tools/                工具层（**13** 个 `*_tools.py`：table / fs / search / ocr / graph /
-│   │                         trace / research / verify / attack / doc / review / conjecture /
-│   │                         conductor，外加 `base.py` 与装配点 `__init__.py`）
-│   ├── providers.py / fetch.py / extract.py / quoteverify.py / textutil.py / dedup.py
-│   ├── llm.py / pipeline.py / demo.py / cli.py
-│   ├── sessions.py           按项目存放的会话记录（`<项目根>/sessions/<会话号>.jsonl`；学 harness 的按工作区存放）
-│   ├── artifacts.py          产物归属登记（`<工作区根>/ARTIFACTS.jsonl`：谁在哪个路径产出了什么；
-│   │                         CLI 动词 `artifacts record|list|verify|owners|unowned|report`）
+│   ├── artifacts.py          产物归属登记（谁在哪个路径产出了什么 + sha256 + 退出码）
 │   ├── canonical.py          规范 JSON 字节串的**唯一实现**（稿件内容哈希与回执哈希共用的那一份口径）
+│   ├── sessions.py           按项目存放的会话记录（`<项目根>/sessions/<会话号>.jsonl`；学 harness 的按工作区存放）
+│   ├── fulltextstore.py      抽取正文的内容寻址库（整本书正文只存一份，产物里只留引用）
+│   ├── claims.py / claimanatomy.py
+│   │                         原子断言拆分 / 每条断言的字段规格与生命周期（claims 的唯一判据来源）
+│   ├── signatures.py         稿件内容的规范哈希与签名链（DOC-SIGNATURES.jsonl）
+│   ├── gates.py              ★ H 的 G1–G15 门引擎（四态结论：pass / fail / unknown / not_applicable）
+│   ├── faculty_checks.py     十项官能里可机械判的那一半（引用落地 / 猜想卫生 / 体例）
+│   ├── judge.py / judges.py  语义判定的唯一缝协议 / 判据注册表（6 条判据 × 三态词表 + 负控）
+│   ├── deliver.py            交付前的判据闸门（机械半 ⇒ 结论、报告、可派回去的工作项）
+│   ├── paperbuild.py         论文包的渲染 / 编译 / 锚核对（build = render → compile → anchor_check 三步）
+│   ├── renderanchor.py       渲染锚与编译回执的本体（RENDER-ANCHOR.json / COMPILE-RECEIPT.json / BUILD-HISTORY.jsonl）
 │   ├── promptkit.py          LLM 接入（一）：提示词装配（有序段 + 变量 + complete + 作用域遮蔽）
-│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边）
+│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p16）
 │   ├── llmseam.py            LLM 接入（三）：统一的模型缝（一次调用一条审计记录 + 三态词表 + 预算守卫）
-│   ├── agent_loop.py         LLM 接入（四）：模型驱动的循环（tool / summon / message / final）
-├── tests/                    pytest（离线 + 联网两套；见 §2）
-├── tools/                    开发期探针脚本（`vocab_census.py` 的 R011 判据本体也在这里）
+│   ├── agent_loop.py         LLM 接入（四）：模型驱动的循环（tool / summon / message / note / ask_user / final 六种形状）
+│   ├── modelgw.py / modelclient.py / modelcost.py / llm.py
+│   │                         模型网关（**全仓唯一读 API key 的地方**）/ 抽取层客户端 / 花销入账 / 离线抽取器
+│   ├── providers.py / fetch.py / extract.py / quoteverify.py / evidence.py / locallib.py
+│   │                         检索 provider / 下载 / 文本抽取 / 引文回验 / 证据层 / 本地书架灌入
+│   ├── formalgw.py           Lean 形式化后端（缺工具链 ⇒ inconclusive，不是 fail）
+│   ├── dedup.py / textutil.py / canonical.py
+│   │                         判重 / 文本规范化与相似度 / 规范字节串
+│   ├── projects.py / pipeline.py / runflow.py / autonomy.py
+│   │                         项目工作区 / A→B→C→D 流水线 / 端到端一条命令 / 自主轮次与周期汇报
+│   ├── demo.py / userio.py / console.py / tty.py
+│   │                         离线演示 / 用户频道（提问与"没答"三态）/ 输出编码 / 终端呈现原语
+│   ├── cli.py / __main__.py  命令行入口（21 个子命令，`python -m agentflow.cli --help`）
+│   ├── agent_a..h.py         八个角色（每个都能 `python -m agentflow.agent_x` 自检）
+│   └── tools/                工具层（**13** 个 `*_tools.py`：table / fs / search / ocr / graph /
+│                             trace / research / verify / attack / doc / review / conjecture /
+│                             conductor，外加 `base.py` 与装配点 `__init__.py`；
+│                             组装结果与逐角色条数以 `python -m agentflow.cli tools` 为准）
+├── tests/                    pytest（162 个 `test_*.py`；离线 + 联网两套；见 §2）
+├── tools/                    开发期工具与探针（`release_all.py` 一键发布、`coverage_zero_test.py` 覆盖门、
+│                             `run_each_test_file.py` 逐文件门、`verify_role_specs.py` 规格门、
+│                             `vocab_census.py` = R011 判据本体，其余是 `probe_*` 探针）
 └── data/ · library/ · demo/  运行时数据 / 下载的文献 / 演示素材
 ```
 
 > ⚠️ 上面这份树**只列会在意的那些**；完整的顶层模块清单（以及"新增一个模块必须在哪登记"）
 > 由 `tests/test_release_all.py::test_agentflow_top_level_modules_match_the_registry` 守着 ——
 > 那份登记表是判据，这份树是导读（README 自己的第 7 节第 1 条就写着"与代码冲突时以代码为准"）。
+> **逐项带路径的现状描述**见 [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
 
 ---
 
@@ -288,13 +336,17 @@ agentflow/
 | `data/events.jsonl` | **追加式事件日志，唯一事实源**；快照可从它重建 |
 | `data/.locks/*.lock` | 跨进程排他锁（`store.LOCK_ORDER` 规定加锁顺序） |
 
-**不在 `data/` 里、但同样属于工作区的三样**（都不是表，因此不进 `schema.TABLES`）：
+**不在 `data/` 里、但同样属于工作区的七样**（都不是表，因此不进 `schema.TABLES`）：
 
 | 文件 / 目录 | 内容 |
 |---|---|
-| `DOC-SIGNATURES.jsonl` | 稿件签名台账（append-only JSONL + 链式哈希；证据快照在 `doc-signatures/`） |
-| `ARTIFACTS.jsonl` | **产物归属登记**：谁在哪个路径产出了什么（`sha256` + 字节 + 生产者 + 召唤号 + 退出码）；`changed/missing/unreadable` 四态由 `artifacts verify` 现算 |
-| `sessions/<会话号>.jsonl` | **按项目存放的会话记录**（一次终态 = 一条叙事行；换项目就是另一段历史，互不污染） |
+| `DOC-SIGNATURES.jsonl` | 稿件签名台账（append-only JSONL + 链式哈希；证据快照在 `doc-signatures/`）。实现：`src/agentflow/signatures.py` |
+| `ARTIFACTS.jsonl` | **产物归属登记**：谁在哪个路径产出了什么（`sha256` + 字节 + 生产者 + 召唤号 + 退出码）；`changed/missing/unreadable` 四态由 `artifacts verify` 现算。实现：`src/agentflow/artifacts.py` |
+| `sessions/<会话号>.jsonl` | **按项目存放的会话记录**（一次终态 = 一条叙事行；换项目就是另一段历史，互不污染）。实现：`src/agentflow/sessions.py` |
+| `notes/<角色>.md` | 角色笔记（LLM 循环里 `note` 形状的落点；`inbox`/`notes` 一起构成角色的跨步记忆）。实现：`src/agentflow/agent_loop.py` |
+| `runs/<角色>-<时间戳>-<序号>.json` | **子循环的长产出落盘**：上游拿到的是路径而不是被截断的摘要（`RUNS_DIR_NAME = "runs"`）。实现：`src/agentflow/agent_loop.py` |
+| `.fulltext/` | 抽取正文的**内容寻址库**：整本书的正文只存一份，产物里只留引用。实现：`src/agentflow/fulltextstore.py` |
+| `<项目>/out/paper/`（项目工作区里） | 论文包本体：`main.tex` / `main.pdf` / `ACCEPTANCE.md` / `CLAIMS-LEDGER.md` / `tables/*.tex` / `RENDER-ANCHOR.json` / `COMPILE-RECEIPT.json` / `BUILD-HISTORY.jsonl`。三维锚的实现在 `src/agentflow/renderanchor.py` |
 
 > 快照被改坏时：`python -m agentflow.cli rebuild`（会先自动备份）。
 
@@ -475,6 +527,26 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
    当前值以本文 §6.2 与 `DEVELOPMENT.md` §1.5 的 `LIVE-READINGS` 为准；
    `NOAI-REVIEW-REGISTER.md` §0 是**历史档案**（它自己 §0/§7 逐字声明"当前值以那两处为准"），
    不当当前数字的真源（2026-09-28 集中审查 `R6-F4`：全仓 16 个引用里只有这一处用错）。
+10. **"修订落进台账"与"论文包跟上"是两件事**（2026-09-30 实测）。台账变了而
+    `out/paper/` 没重渲染时，`doc.paper_state` 会报 `drifted`（判据在
+    `src/agentflow/renderanchor.py::check_package`），交付定义第 1 条当场不成立。
+    提示词里已把"重渲染 → 重编译 → 锚回 `consistent`"写成收工判据
+    （`src/agentflow/agent_prompts.py` 的 `PAPER_PACK` 第六节），但**这不是机器强制的**。
+11. **`CAPABILITIES['G']` 里没有"重渲染论文包"这个可召唤动作**（`src/agentflow/capabilities.py`；
+    G 只有 `compose_claim` / `register_dependency` / `build_document` / `render` /
+    `refresh_markdown` / `revise`）。重渲染目前靠 **G 的 LLM 循环自己调**
+    `doc.paper_render` / `doc.paper_compile`（`src/agentflow/tools/doc_tools.py`）——
+    G 那一轮不被驱动时，主控结构上无法让包跟上台账。加动作要改禁改区（需 2 名 reviewer）。
+12. **语义判据是单样本**（`src/agentflow/judges.py`）：同一份产物在不同轮给过不同结论
+    （`brain.blocker_specificity` 实测出现过 `vague` / `vague` / `specific`）。
+    "N 样本一致"或"至少一条落地发现才判 `fail`"这类修法**尚未落地**。
+13. **三处已知边界**：论文包构建只认识 `out/paper/` 这一种布局（`src/agentflow/paperbuild.py`）；
+    本地灌库的 `books_dir` 未进沙箱（`src/agentflow/locallib.py::ingest_directory`，
+    调用面是 `src/agentflow/tools/search_tools.py` 的 `search.ingest_local`，A 专属）；
+    锚与回执是"当前状态"而不是全历史（历史另存 `BUILD-HISTORY.jsonl`，无轮转与 actor 字段）。
+14. **逐项带路径的现状描述另有一份**：
+    [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)
+    —— 它是导读（不构成判据），但每条都带工作区相对路径，便于拿它逐条核对本文与代码。
 
 ---
 

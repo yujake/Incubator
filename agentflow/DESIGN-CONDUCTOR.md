@@ -3,12 +3,21 @@
 > 本文件是**正式版**（`D:\Incubator\agentflow\`）的核心设计之一。
 > 它回答一个问题：**用户只对主控说话，主控按需召唤 A–H；A–H 之间也可以互相召唤；
 > 其中一部分可以并发跑。这套东西在代码里长什么样？**
+>
+> 本文件是**设计理由**（"为什么这么设计"），**不构成判据**；与代码冲突处以代码为准。
+> 框架的**权威现状描述与逐项路径索引**见
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
+> 本文各节的实现落点（相对工作区根）：`agentflow/src/agentflow/conductor.py`（主控与 backend）、
+> `agentflow/src/agentflow/policy.py`（上限与策略）、`agentflow/src/agentflow/capabilities.py`
+> （**召唤边与写集的权威定义**）、`agentflow/src/agentflow/scheduler.py`（分波并发）、
+> `agentflow/src/agentflow/cancellation.py`（协作式取消）、`agentflow/src/agentflow/schema.py`（`tasks` 表与 `REFUSAL_REASONS`）。
 
 ---
 
 ## 0. 与前三阶段的关系
 
-前三阶段的 `pipeline.run_pipeline()` 是一条**固定顺序**的流水线：
+前三阶段的 `pipeline.run_pipeline()` 是一条**固定顺序**的流水线
+（实现：`agentflow/src/agentflow/pipeline.py::run_pipeline`）：
 `C 分析 → D 消化 → A 检索 → B 抽取 → C 再分析 → …`。
 
 它是对的，但它是**编排者写死的**，而不是**主控按情况决定的**。
@@ -16,10 +25,10 @@
 
 | 层 | 是什么 | 谁决定 | 在哪 |
 |---|---|---|---|
-| **领域对象层** | 研究问题、难题攻坚计划、实验、稿件、依赖、审校发现 | 各角色 | `research_questions` / `attack_plans` / `experiments` / `documents` / `dependencies` / `review_findings` |
-| **知识层** | 文献、概念、关系、引文 | A / B | `literature` / `concepts` / `relations` |
-| **运行记录层** | **一次召唤**（谁召唤谁、为了什么、结果如何、花了多少） | 主控与所有角色 | **`tasks`**（本设计新增） |
-| **策略层** | 允许哪些召唤边、深度/扇出/并发/预算上限 | 人 + 主控 | `policy.py` |
+| **领域对象层** | 研究问题、难题攻坚计划、实验、稿件、依赖、审校发现 | 各角色 | `research_questions` / `attack_plans` / `experiments` / `documents` / `dependencies` / `review_findings`（表定义都在 `agentflow/src/agentflow/schema.py`） |
+| **知识层** | 文献、概念、关系、引文 | A / B | `literature` / `concepts` / `relations`（同上） |
+| **运行记录层** | **一次召唤**（谁召唤谁、为了什么、结果如何、花了多少） | 主控与所有角色 | **`tasks`**（本设计新增；在 `agentflow/src/agentflow/schema.py`） |
+| **策略层** | 允许哪些召唤边、深度/扇出/并发/预算上限 | 人 + 主控 | 上限在 `agentflow/src/agentflow/policy.py`；**召唤边与写集在 `agentflow/src/agentflow/capabilities.py`** |
 
 **把"运行记录"与"领域对象"分开，是这份设计最重要的一条取舍。**
 上一阶段已经踩过一次同族问题：`AttackPlan` 的 docstring 里写着
@@ -36,7 +45,8 @@
 - **它不是一个额外的"智能层"**：它不产出知识、不写关系、不改稿件。
   它的产出只有两类：**(a) 召唤**，**(b) 给用户的汇总**。
   这条约束让它可测试：主控的"正确性"= 它发出的召唤序列是否满足策略与预算，而不是"它聪不聪明"。
-- **它在策略之内**：`M` 也在角色名单里（`schema.CONDUCTOR_ROLE`），"谁能召唤谁"的策略表对 M 同样生效。
+- **它在策略之内**：`M` 也在角色名单里（`schema.CONDUCTOR_ROLE`，实测在
+  `agentflow/src/agentflow/schema.py`），"谁能召唤谁"的策略表对 M 同样生效。
   特例化会是权限模型最容易漏的地方。
 
 ### 1.2 A–H 既可以被动召唤，也可以主动召唤
@@ -45,7 +55,8 @@
 - **主动（同伴召唤）**：`D → C`（D 要问图上具体是什么情况）、`E → B`（E 发现引文不可核实，要 B 重抽取）、
   `F → A`（攻坚中发现新缺口要去查）、`H → G`（审校发现问题，请 G 修订）。
 - **同伴召唤不是"自由发挥"**，它受三条约束（见 §3）：
-  1. **边必须被策略允许**（`policy.ALLOWED_EDGES`）；
+  1. **边必须被策略允许**（`capabilities.ALLOWED_EDGES`，实测在
+     `agentflow/src/agentflow/capabilities.py`；`policy.check_edge` 读的就是它）；
   2. **深度有限**（默认 3：`M(1) → A(2) → B(3)` 已到底）；
   3. **同一 `(role, action, input_key)` 不得在祖先链上重复**（防 A→B→A→B 的活锁）。
 
@@ -62,7 +73,8 @@
   - 可并发：`M → (C 分析, E 实验, H 审校)` —— C 只读、H 只读、E 只写 `experiments`；
   - **不可并发**：两个 `B`（都写 `relations`，虽然事务是安全的，但语义上会让判重互相看不见）、
     两个 `G`（都写 `documents`）。
-  - 实现方式：`policy.WRITE_SETS[role]` 列出该角色可能写的表；
+  - 实现方式：`capabilities.WRITE_SETS[role]` 列出该角色可能写的表
+    （实测在 `agentflow/src/agentflow/capabilities.py`；**不在** `policy.py`）；
     **两张写集相交 ⇒ 串行**。这是**判据**，不是经验规则 —— 它可判定、可测。
 
 ---
@@ -130,7 +142,7 @@ res = conductor.summon(
 
 ---
 
-## 3. 策略（`policy.py`）
+## 3. 策略（`agentflow/src/agentflow/policy.py`）
 
 ```python
 @dataclass(frozen=True)
@@ -144,17 +156,22 @@ class Policy:
     usd_budget: float | None = None    # 全局花销预算
 ```
 
+**本机实测**：以上七个字段与默认值逐一与 `policy.Policy` 相同
+（复跑：`python -c "import sys;sys.path.insert(0,'src');import dataclasses,agentflow.policy as p;[print(f.name,f.default) for f in dataclasses.fields(p.Policy)]"`）。
+
 **四类上限必须同时存在**（FC-18）：
 只有 `max_tasks_per_run`（总量）⇒ 瞬时可以把并发打爆；
 只有 `max_concurrency`（瞬时）⇒ 扇出可以无限持续；
 只有 `max_depth` ⇒ 每一层都能无限宽；只有 `max_fanout` ⇒ 链可以无限深。
 **缺任一类，另三类都可以被绕过** —— 所以 `Policy.validate()` 要求四个都是正数，
-且 `run` 启动时断言"四类都在"。
+且 `run` 启动时断言"四类都在"（完整性自检 `policy.assert_policy_complete`）。
 
 ### 3.1 允许的召唤边
 
 `ALLOWED_EDGES: dict[str, frozenset[str]]` —— **谁能召唤谁，写在一处**。
-默认：
+它**不在 `policy.py` 里，而在 `agentflow/src/agentflow/capabilities.py`**
+（`policy.check_edge` 读它）。实测 26 条召唤边，逐角色与下表逐条一致
+（复跑：`python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as C;print(sorted(C.ALLOWED_EDGES))"`）：
 
 ```
 M → A B C D E F G H
@@ -189,7 +206,7 @@ H → G            # 审校发现问题 → 请 G 修订（H 不改稿）
 
 ## 4. 取消（FC-20）
 
-`cancellation.py`：
+`agentflow/src/agentflow/cancellation.py`：
 
 ```python
 class CancelToken:
@@ -213,13 +230,16 @@ class CancelToken:
 
 ---
 
-## 5. 调度（`scheduler.py`）
+## 5. 调度（`agentflow/src/agentflow/scheduler.py`）
 
 极简、确定性：
 
 ```python
 run_tasks(plan: Sequence[TaskCall], *, policy, conductor) -> list[SummonResult]
 ```
+
+（实测该模块的三个公开入口：`run_waves` / `run_tasks` / `wave_summary`；
+分波判据 `policy.waves_of`。）
 
 - **波浪（wave）执行**：同一批里，**写集互不相交**的任务并发跑（线程池，上限 `max_concurrency`）；
   写集相交的**串行**。一个波浪全部结束再进下一波。
@@ -256,7 +276,7 @@ run_tasks(plan: Sequence[TaskCall], *, policy, conductor) -> list[SummonResult]
 | I-1 | 每个 `started_at` 有且仅有一个 `ended_at` | 扫 `tasks`：`status ∈ {done,cancelled,failed}` 的行 `ended_at` 非空；`running` 的行 `ended_at` 为空 |
 | I-2 | 终态不可改写 | 对已结束任务再调 `finish()` ⇒ **零变更**（逐字节比对 `tasks.json`） |
 | I-3 | 深度单调不减 | 子任务的 `depth` 恒等于父 `depth + 1` |
-| I-4 | 拒绝必须带受控理由 | `outcome="refused"` ⇒ `refusal_reason ∈ REFUSAL_REASONS` |
+| I-4 | 拒绝必须带受控理由 | `outcome="refused"` ⇒ `refusal_reason ∈ REFUSAL_REASONS`（实测该词表在 `agentflow/src/agentflow/schema.py`，11 个取值） |
 | I-5 | 并发度不超上限 | 峰值同时 `running` 的行数 ≤ `max_concurrency` |
 | I-6 | 写集相交不并发 | 任一波浪内不存在两个任务写集相交 |
 | I-7 | 预算耗尽后不再新开任务 | 预算用尽 ⇒ 后续召唤 `refused/budget_exceeded` |

@@ -1,5 +1,24 @@
 # 角色工具箱设计（草案）—— 让每一次思考都花在真问题上
 
+> **现状导读（不构成判据）· 本文是设计草案/提案**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**，**也不要把本文写成现状**。本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+>
+> ⚠️ **凡本文把"今天的实测"当成当前事实的地方，按实际状态读（截至 2026-09-30 的实际状态见正文 / 代码，本文是草案）**：
+> - §1 那张"实测现状"表的**逐角色工具数已过期**。实测 2026-09-30
+>   （`python -m agentflow.cli tools`，在 `agentflow/` 下跑）：
+>   **工具总数 72（已装模块 12）；逐角色 A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9**。
+>   本文写的是 A 13 / B 11 / C 13 / D 25 / E 14 / F 25 / G 25 / H 19 / M 0 —— 那是**起草当时**的
+>   `build_for_role(role)` 快照，不是当前值；本文 §6 第 3 条也自陈"口径差异未对账"，**不许**把它当现状引用。
+> - §3 前的说明里"`side_effect` / `external` 的单一来源都是 `src/agentflow/tools/base.py`"⇒
+>   是的，路径是 `agentflow/src/agentflow/tools/base.py`（本文写成 `src/agentflow/tools/base.py`，
+>   那是 `agentflow/` 内的相对写法）。
+> - §3 声明的 16 个聚合工具（`brief.*` / `pack.*` / `queue.next` / `search.harvest` / `doc.ingest` /
+>   `graph.answer` / `experiment.harness` / `attack.workitem` / `plan.simulate` / `audit.recompute` /
+>   `cycle.report`）**一个都还没实装**；它们是提案，不是现状。
+> - 只读角色仍是 `C` / `H`（`agentflow/src/agentflow/tools/__init__.py` 的 `READ_ONLY_ROLES = ("C", "H")`），
+>   N / O / Q **不是**只读角色 —— 它们还不是角色。
+
 > **要解决的问题**（用户逐字）："给每个角色搭建全套工具箱，尽可能让他们的每一次思考都是在想真问题，
 > 而非消耗在无聊的数据处理、信息查询上。"
 >
@@ -123,6 +142,9 @@ tool: cycle.report | summary: 周期报告的确定性渲染（含 unknowns 段�
 
 **共 16 个新工具**（3 个管理角色自有工具 `mgmt.scan`/`mgmt.plan`/`mgmt.audit` 已在
 `ROLE-SPECS-DRAFT-N-O-Q.md` 声明，此处不重复 —— FC-03）。
+（逐条更正：本文 §3 的机器可读块里 `tool:` 行只有 **15** 条，块外按"15 个实装"口径引用；
+`NOAI-CHANGE-LIST-management.md` 第 33 条写的也是 **15 个聚合工具** ⇒ 上面"16 个"是笔误，
+**以块内的 15 行与 `PROPOSED-NAMES` 块的 15 行为准**；本行更正只改这一处数字，不动任何设计取舍。）
 
 ### 3.1 为什么这 16 个而不是别的（取舍记录）
 

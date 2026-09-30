@@ -2,6 +2,10 @@
 
 > 本文件是 `DESIGN.md`（A/B 基线）的**扩展**。凡与 `DESIGN.md` 冲突处，以 `DESIGN.md` 的既有结论为准
 > （数据模型、并发模型、判重、引文校验都不变）；本文件只**新增**。
+>
+> 本文件是**设计理由**（"为什么这么设计"），**不构成判据**；与代码冲突处以代码为准。
+> 框架的**权威现状描述与逐项路径索引**见
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
 
 ---
 
@@ -70,13 +74,13 @@ class ToolSpec:
 
 | 组 | 工具 | 角色 | 副作用（第一根轴 `effect`，**实测**） | 第二根轴 `external`（**实测**） |
 |---|---|---|---|---|
-| 表 CRUD | `table.list` / `table.get` / `table.create` / `table.update` / `table.delete` / `table.count` / `table.schema` | A B C D | **混合**：`create`/`update`/`delete` = `write_local`；`list`/`get`/`count`/`schema` = `read` | 全部 `none` |
+| 表 CRUD | `table.list` / `table.get` / `table.create` / `table.update` / `table.delete` / `table.count` / `table.schema` / `table.search` | A B C D | **混合**：`create`/`update`/`delete` = `write_local`；`list`/`get`/`count`/`schema`/`search` = `read` | 全部 `none` |
 | 文件 CRUD | `fs.list` / `fs.read` / `fs.write` / `fs.delete` / `fs.move` / `fs.stat` / `fs.search` | A B C D | **混合**：`write`/`delete`/`move` = `write_local`；`list`/`read`/`stat`/`search` = `read` | 全部 `none` |
 | 文献检索（A 专用） | `search.literature` / `search.download` / `search.dedup_check` / `search.providers` | A | `literature`/`providers`/`dedup_check` = `read`；`download` = `write_local` | `literature`/`providers`/`download` = **`egress`**；`dedup_check` = `none` |
 | OCR（B 专用） | `ocr.run` / `ocr.detect_text_layer` / `ocr.backends` | B | `detect_text_layer` = `read`；`run`/`backends` = `write_local` | `run` = **`egress`**（首次下 easyocr 模型）；其余 `none` |
 | 图分析（C 组为主） | `graph.build` / `graph.neighbors` / `graph.relations_between` / `graph.stats` | C D | `read` | `none` |
 | 溯源（D 组为主） | `trace.chain` / `trace.concept` / `trace.literature` / `trace.relation` | C D | `read` | `none` |
-| 研究（D 专用） | `research.submit_gap` / `research.list_gaps` / `research.write_note` | D | `list_gaps` = `read`；`submit_gap`/`write_note` = `write_local` | 全部 `none` |
+| 研究（D 专用） | `research.submit_gap` / `research.list_gaps` / `research.write_note` / `research.poll_waiting` / `research.set_status` | D | `list_gaps` / `poll_waiting` = `read`；`submit_gap`/`write_note`/`set_status` = `write_local` | 全部 `none` |
 
 > ⚠️ **本表的"副作用"列是写作时的快照**，`network` 那两格今天已不成立（拆成两根轴，见上表说明）；
 > 而且**第一根轴也不是全 `write_local`** ——那两行在写作时就写粗了（一个 CRUD 组里读写混在一起）。
@@ -86,6 +90,29 @@ class ToolSpec:
 > `R6-AN-3` 复核（2026-09-27）修正了工具名与角色列：分组栏里的"（X 专用 / X 组为主）"
 > 只是简称，**权威的角色面是"角色"那一列的实测值** —— `graph.*` 与 `trace.*` 今天
 > 都是 `C D`，`search.*` 是 `A`、`ocr.*` 是 `B`、`research.*` 是 `D`。
+>
+> ⚠️ **本表已不完整（本机实测）**：它只列了写作时那一批。今天工具层是
+> **12 个已装模块 / 72 个工具**，另有 `conjecture.register_conjecture` 一条不在 `build_registry` 里。
+> 逐模块条数与路径（复跑：`python -m agentflow.cli tools`；实测 2026-09-30）：
+>
+> | 模块（相对工作区根） | 工具前缀 | 条数 |
+> |---|---|---|
+> | `agentflow/src/agentflow/tools/table_tools.py` | `table.*`（`table.search` 是写作时没有的） | 8 |
+> | `agentflow/src/agentflow/tools/fs_tools.py` | `fs.*` | 7 |
+> | `agentflow/src/agentflow/tools/search_tools.py` | `search.*`（`search.local` / `search.shelf` / `search.register` / `search.ingest_local` 是后加的） | 8 |
+> | `agentflow/src/agentflow/tools/ocr_tools.py` | `ocr.*` | 3 |
+> | `agentflow/src/agentflow/tools/graph_tools.py` | `graph.*` | 4 |
+> | `agentflow/src/agentflow/tools/trace_tools.py` | `trace.*` | 4 |
+> | `agentflow/src/agentflow/tools/research_tools.py` | `research.*`（`poll_waiting` / `set_status` 是后加的） | 5 |
+> | `agentflow/src/agentflow/tools/verify_tools.py` | `verify.*` | 6 |
+> | `agentflow/src/agentflow/tools/attack_tools.py` | `attack.*` | 6 |
+> | `agentflow/src/agentflow/tools/doc_tools.py` | `doc.*` | 10 |
+> | `agentflow/src/agentflow/tools/review_tools.py` | `review.*` | 2 |
+> | `agentflow/src/agentflow/tools/conductor_tools.py` | `conductor.*`（M 专用） | 9 |
+> | `agentflow/src/agentflow/tools/conjecture_tools.py` | `conjecture.register_conjecture`（**不在** `build_registry`，由 `agentflow/src/agentflow/agent_d.py::install_d_tools` 另挂） | 1 |
+>
+> 逐角色条数（同一条命令的另一半输出）：
+> `A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9`。
 
 **注意 `graph.*` 与 `trace.*` 的第一根轴都是 `read`（纯读），第二根轴都是 `none`** —— C 的核心诉求是"用程序分析"，
 它应当能**任意多次、任意组合**地查询，而不触发任何审批或写盘。这是把分析做成工具而不是做成 LLM 提示的关键收益。
@@ -98,6 +125,9 @@ class ToolSpec:
 ## 2. 新增数据表
 
 在 `DESIGN.md` §1 的四张表之外新增两张（同样 4 位 ID、同样受 `Store.tx` 保护）：
+`research_questions` 与 `analysis_reports` —— 两张今天都在
+`agentflow/src/agentflow/schema.py::TABLES` 里（实测：正式版共 **16** 张表，
+复跑 `python -c "import sys;sys.path.insert(0,'agentflow/src');import agentflow.schema as s;print(len(s.TABLES))"`）。
 
 ### 2.1 `data/research_questions.json`（D 的工作台）
 
@@ -322,27 +352,62 @@ python -m agentflow.cli pipeline --request "查询 群 与 域 之间的关系" 
 
 ---
 
-## 6. 目录与文件（新增部分）
+## 6. 目录与文件
+
+本节写作时给的是原型布局（`test/test1/src/agentflow/`）；**实测原型包名是 `abflow`**，
+而这段模块清单在正式版里都真实存在。两处路径如下（相对工作区根 `D:\Incubator`）：
+
+原型（`test/test1/src/abflow/`）：
 
 ```
-test/test1/
-├── DESIGN-TOOLS.md              本文件
-├── src/agentflow/
-│   ├── tools/
-│   │   ├── base.py              ToolSpec / ToolResult / ToolRegistry / 参数校验
-│   │   ├── table_tools.py       表 CRUD
-│   │   ├── fs_tools.py          文件 CRUD（沙箱在工作区内）
-│   │   ├── search_tools.py      A：检索 / 下载 / 去重检查
-│   │   ├── ocr_tools.py         B：OCR（后端可插拔）
-│   │   ├── graph_tools.py       C：图索引与查询
-│   │   ├── trace_tools.py       C/D：代号溯源
-│   │   └── research_tools.py    D：问题与缺口
-│   ├── agent_c.py               关系分析
-│   ├── agent_d.py               研究循环
-│   └── pipeline.py              A→B→C→D 编排
-├── reports/                     C 的报告（markdown）+ D 的研究报告
-└── tests/test_tools_*.py, test_agent_c.py, test_agent_d.py
+test/test1/src/abflow/
+├── tools/
+│   ├── base.py              ToolSpec / ToolResult / ToolRegistry / 参数校验
+│   ├── table_tools.py       表 CRUD
+│   ├── fs_tools.py          文件 CRUD（沙箱在工作区内）
+│   ├── search_tools.py      A：检索 / 下载 / 去重检查
+│   ├── ocr_tools.py         B：OCR（后端可插拔）
+│   ├── graph_tools.py       C：图索引与查询
+│   ├── trace_tools.py       C/D：代号溯源
+│   └── research_tools.py    D：问题与缺口
+├── agent_c.py               关系分析
+├── agent_d.py               研究循环
+└── pipeline.py              A→B→C→D 编排
 ```
+
+正式版（下面每条都是本次实测存在的文件；相对工作区根）：
+
+```
+agentflow/src/agentflow/
+├── tools/
+│   ├── __init__.py          装配点：build_registry / build_for_role / ROLES / READ_ONLY_ROLES
+│   ├── base.py              ToolSpec / ToolResult / ToolRegistry / 参数校验（禁改区）
+│   ├── table_tools.py       表 CRUD（8 条）
+│   ├── fs_tools.py          文件 CRUD（7 条，沙箱在工作区内）
+│   ├── search_tools.py      A：检索 / 下载 / 去重检查 / 本地书架（8 条）
+│   ├── ocr_tools.py         B：OCR（3 条，后端可插拔）
+│   ├── graph_tools.py       C/D：图索引与查询（4 条）
+│   ├── trace_tools.py       C/D：代号溯源（4 条）
+│   ├── research_tools.py    D：问题与缺口（5 条）
+│   ├── verify_tools.py      E：数值实验与形式化验证（6 条）
+│   ├── attack_tools.py      F：多轮难题攻坚（6 条）
+│   ├── doc_tools.py         G：稿件与论文包（10 条）
+│   ├── review_tools.py      H：审校（2 条）
+│   ├── conductor_tools.py   M：主控动作（9 条）
+│   └── conjecture_tools.py  猜想台账（1 条，不在 build_registry 里）
+├── agent_c.py               关系分析
+├── agent_d.py               研究循环（含 install_d_tools）
+├── agent_e.py … agent_h.py  E/F/G/H
+├── conductor.py             主控编队：Conductor / LocalBackend / SubagentBackend
+└── pipeline.py              A→B→C→D 编排
+```
+
+- C 的报告与 D 的研究报告落在**项目工作区**里（`agentflow/src/agentflow/projects.py` 的"一个项目一个文件夹"），
+  而不是仓库内的 `reports/`。
+- 测试路径：`agentflow/tests/test_tools_*.py`（实测 10 个：`base` / `table_fs` / `search_ocr` /
+  `graph_trace` / `param_validation` / `returns_declaration` / `readonly_roles` /
+  `branch_key_sets` / `attack_graph_fixes` / `audit_fixes`），
+  以及 `agentflow/tests/test_agent_c.py`、`agentflow/tests/test_agent_d.py`。
 
 ---
 
@@ -374,7 +439,7 @@ test/test1/
 
 ### 9.1 D 的提问台账刻意不进 schema（`data/research_request_ledger.json`）
 
-**是什么**：`tools/research_tools.py` 把"本问题已经问过 A 什么"记在一个**模块私有的 JSON 文件**里，
+**是什么**：`agentflow/src/agentflow/tools/research_tools.py` 把"本问题已经问过 A 什么"记在一个**模块私有的 JSON 文件**里，
 而不是放进 `research_questions` 表。
 
 **为什么允许**（实现方给出的理由，本设计接受）：

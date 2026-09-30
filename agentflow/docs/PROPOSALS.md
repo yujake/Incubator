@@ -1,5 +1,90 @@
 # PROPOSALS —— 已裁决的缺口与提案（**不构成判据**）
 
+> **现状导读（不构成判据）**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**（本文开头的 P / G / N 三分类说明同样成立）。
+> 本文出现的路径一律**相对工作区根**（`D:\Incubator`）；命令在 `agentflow/` 下跑（`cd agentflow`）。
+>
+> ⚠️ **本文是登记册：条目正文记录的是"登记当时"的状态，不是当前状态。**
+> 下面这一节只做一件事 —— 把**截至 2026-09-30 已复跑核实、与正文描述不一致的条目**列出来，
+> 方便读者知道该去哪一行读状态。**本节不改任何编号、不删任何历史记录、不改任何裁决结论**；
+> 每条目自己后附的"✅/🔶"块与"登记状态回写"节**仍以那些块为准**。
+>
+> **⓪ 会漂的数**（本文多处写"55 个工具"/"12 个模块"，那是历史快照）。实测 2026-09-30：
+> `python -m agentflow.cli tools` ⇒ **工具总数 72（已装模块 12；另有 `conjecture.register_conjecture`
+> 一条由 `agentflow/src/agentflow/agent_d.py::install_d_tools` 另挂，合计 73 条）**，
+> 逐角色 **A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9**；
+> `R010` 两层对账读到 **61 个工具的 schema**（本文 `G-19` 写"19 对同名动作"/`4.1` 写"144/144 property、50 个动作"
+> 与 2026-09-30 实测一致）。**凡引用这类数字，请复跑而不是抄本文。**
+>
+> **① 正文把"提案"当成了"还没做"，而实际上已经落地的（逐条给落地事实）**：
+> - `P-2`（`release_check.py` 显式触发能力表自检）⇒ **已落地**：
+>   `agentflow/scripts/release_check.py` 里已有 `[sys.executable, "-c", "import agentflow.capabilities"]`
+>   这一步，并自带"为什么普查之外还要单独跑一次"的说明。
+> - `P-3` / `P-25`（发布门的 noai 项接台账 / 编排层不传改动集）⇒ **已落地**：
+>   `item_noai(rep, changed, *, ledger=...)` 已区分 `None`（`unknown`）与 `[]`（`pass`），
+>   并新增 `--changed-file`；`agentflow/tools/release_all.py` 新增 `--since` / `--changed-file`
+>   与 `_resolve_changed()`（取自 `noai_gate --print-changed`）。
+> - `P-1`（roles 校验下沉到注册期）⇒ **部分落地**：`R004` 已退休（编号保留，判据移入注册期），
+>   但 `agentflow/src/agentflow/agent_d.py::validate_tool_roles` **仍在**（本文 P-1 的
+>   "可以整体删除"是当时的目标，不是已发生的事实）。
+> - `P-4`（4 位 ID 上限下沉进 `next_prefixed_id`）⇒ **已落地**：
+>   `agentflow/src/agentflow/interactions.py::next_prefixed_id` 现在 import
+>   `agentflow/src/agentflow/store.py` 的 `MAX_ID`，越界抛**具名** `IdSpaceExhausted`
+>   （`ValueError` 的子类；不是本文写的裸 `ValueError`）。
+> - `P-5`（引用解析两份实现）⇒ **已落地**：唯一实现是
+>   `agentflow/src/agentflow/textutil.py::citation_ref_parts`；
+>   `agentflow/src/agentflow/verify.py` 与 `agentflow/src/agentflow/tools/doc_tools.py::citation_ref_parts`
+>   **都是转发**（`doc_tools` 那一份的 docstring 逐字说明"这里是转发，不是实现"）。
+> - `P-6` / `P-15` / `P-19` / `P-20`（两轴迁移）⇒ **已落地（B3 完成）**：
+>   实测 2026-09-30 `verify.run_experiment` = `effect=write_local / external=exec /
+>   needs_approval=True`，`verify.check_formal` = `read × exec`（且 `for_role("H")` 已不含它）；
+>   `network` 已从两张词表消失。**本文这几条的正文写的是迁移前的值**。
+> - `P-9` / `P-10`（`review_findings` 字段 / 反例两来源）⇒ **候选 A 已落地**：
+>   `schema.ReviewFinding` 现有 `axis` / `line` / `verbatim_quote` / `maths` /
+>   `line_unavailable_reason` 五个字段；`schema.FINDING_MATHS_VALUES == ('yes', 'no')`；
+>   `gates.AXES == ('数学', '体例', '工程', '证据')`。
+> - `P-11`（`release_all` 编排层）⇒ **已落地并在跑**：`agentflow/tools/release_all.py` 现在是
+>   **6 步**（`release-check → acceptance → repro → role-specs → coverage → per-file`）。
+> - `P-12`（`usage_ledger` 幂等唯一键）⇒ **A 也已落地**（不只是 B）：
+>   `schema.UsageEntry.idem_key` 存在、`store.Tx.insert_unique` 存在、
+>   `verify.py` 报 `duplicate_idem_key`；本文 `/docs/SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md`
+>   开头已就地更正这件事。
+> - `P-13`（两轴拆分）⇒ **已落地（B3 完成）**：`ActionSpec` 有 `external` 字段；
+>   两张翻译表（`LEGACY_*` / `capabilities.LEGACY_NETWORK_AXES`）已删；
+>   `tools.SIDE_EFFECTS` 与 `capabilities.SIDE_EFFECTS` 都不含 `network`。
+> - `P-14`（只读约束不是调用期强制）⇒ **已落地**：
+>   `agentflow/src/agentflow/tools/base.py::ToolRegistry.call` 现在**有** `role` 关键字参数
+>   （签名实测 `call(self, name, args=None, *, role=None, budget=None, spill_root=None, **params)`），
+>   调用期角色判据与 `for_role` 共用 `_role_surface`。
+> - `P-16`（六件套由 `__post_init__` 校验）⇒ **实现侧已落地**（本文的"⚠️ 原位追加"块已记
+>   `roles` 不在其中；`agentflow/src/agentflow/tools/base.py` 现在核 `side_effect` / `external` /
+>   名字含 `.` / `params` 根为 object / `summary` 非空 / `returns` 非空）。
+> - `P-17`（`task_id` 不占 4 位号空间）⇒ **事实仍成立**：`schema.ID_COUNTERS` 13 个 kind 里**没有** task。
+> - `G-4` / `G-21` / `G-23`（`returns=` 判据）⇒ **已修**：本文自己的"✅ 已修"块已记；
+>   本文引用的"55 个工具"仍是历史快照（见上面 ⓪）。
+> - `G-46` 的尾注、`G-43` 的同类补充（判据本体不在清单里）⇒ **已关闭**：实测 2026-09-30
+>   `.noai-paths` 与 `agentflow/AGENTS.md` 的清单**逐条一致**（`--check-consistency` exit 0），
+>   且 `agentflow/scripts/noai_gate.py` / `agentflow/scripts/lint_rules.py` /
+>   `agentflow/tools/vocab_census.py` / `agentflow/src/agentflow/capabilities.py` **都在清单里**。
+>
+> **② 正文把"外部约束"说成事实、而事实上不成立的（只此一条环境事实）**：
+> 本文多处（`P-24`、`G-37`、`G-38`、`G-40`、`P-25` 等）写"本仓库**不是 git 仓库**"
+> ⇒ **不成立**：工作区根 `D:\Incubator` **是** git 仓库（`.git` 在交付物 `agentflow/` 的**上一级**），
+> 只是 `agentflow/` 自己不是仓库根，所以路径是**仓库根相对**的（形如 `agentflow/src/...`）。
+> 那些条目里"提交即隐身 / 未跟踪新文件看不见"的结论**仍然成立**，但成因要按
+> `--git` 的覆盖范围（`agentflow/AGENTS.md` 的§"`--git` 的覆盖范围"）读，不是"没有 git"。
+>
+> **④ 上面①没列到的、确实仍未关的**（避免把"本节很热闹"读成"都清了"）：
+> `P-7`（`quoteverify` 三态）、`P-8`（`AgentE` 的 proof 实验）、`P-16` 的 (b)(c)（文档侧与负控）、
+> `P-17` 的判据落点、`P-25` 之后仍未定的"默认基线"口径、`P-27`（Mathlib 钉法不在仓内）、
+> `G-1`、`G-5`、`G-8`、`G-9`（等级 3/4 的零测试清单）、`G-16`、`G-26` 的反向一半、
+> `G-28`、`G-30`、`G-31`、`G-44` 的遗留 ①–⑤、`G-53`（活读数残余）。
+> 逐条状态**以各条目自己的 ✅/🔶 块为准**，本节不替它们改判。
+>
+> **③ 本文没有改的东西**：任何 `P-xx` / `G-xx` / `N-xx` 编号、任何裁决结论、
+> 任何历史记录（含已被更高轮次块取代的旧说法）。上表只加"哪里能读到当前状态"，**不替它们改判决**。
+
 > 本文件收三类东西，**分开列**，因为它们的处置完全不同：
 >
 > | 类别 | 含义 | 谁来关 |

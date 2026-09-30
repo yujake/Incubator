@@ -1,5 +1,24 @@
 # 管理层设计的禁改区改动清单（移交人审）
 
+> **现状导读（不构成判据）· 本文是移交清单/历史状态**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**。本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+>
+> ⚠️ **本文把"提案/当时状态"当成了"已经这样了"的地方，按实际状态更正如下
+> （截至 2026-09-30 的实际状态见正文 / 代码，本文是清单，不是现状）**：
+> - 开头与 §6 第 3 条说"`noai_gate.py --git` 在本仓库**恒为 `unknown(2)`**（不是 git 仓库）"
+>   ⇒ **不成立**：工作区根 `D:\Incubator` **是** git 仓库（`.git` 在交付物 `agentflow/` 的**上一级**），
+>   实测 2026-09-30 `python agentflow/scripts/noai_gate.py --git` ⇒ `[clean] required_approvals=0`（14 条改动路径，
+>   清单 27 条），exit 0。正确的口径是"`--git` **不给基线时看不见已提交的改动**，
+>   改动集为空才判 `unknown(2)`"。
+> - §3 第 29 条（`tools/verify_role_specs.py`「角色集合与文档路径改为可配置 —— 今天它写死 `[A-HMm]`」）
+>   ⇒ ✅ **已落地**：`agentflow/tools/verify_role_specs.py` 已有 `EXPECTED_ROLES` / `DEFAULT_ROLES` /
+>   `role_letters()` 与 `--roles N,O,Q --doc docs/ROLE-SPECS-DRAFT-N-O-Q.md` 用法
+>   （实测该文件存在且自带 `--roles` 选项）。
+> - §1/§2 的 24 条落点（`schema.py` 加 `cycles` / `diagnoses` / `mgmt_plans` / `audits` 与
+>   `tasks` 的四个新字段）**都还没做**：实测 `schema.TABLES` 仍为 **16** 张、`ID_COUNTERS` 仍为 **13** 个 kind、
+>   `LOCK_ORDER` 仍为 **17** 项。⇒ 这份清单**仍是待办清单**，不是"已完成的记录"。
+
 > **这份清单是给"人"的移交件**，不是给我自己的待办。它把
 > `../draft/20-管理层与责任链的重设计草案.md` §6.2 的落点、
 > §12.5 的补漏项，以及 `SCHEMA-DRAFT-management.md` §8 的存储层落点，
@@ -16,8 +35,10 @@
 > 逐条核对本清单自报的 `zone:` 是否与门的判定一致：
 > `zone: yes` ⟺ 命中且 `required_approvals=2`；`zone: no` ⟹ 未命中。
 >
-> ⚠️ `noai_gate.py --git` 在本仓库**恒为 `unknown(2)`**（不是 git 仓库），
-> 所以只能按路径判定；`unknown` 绝不能读成 `clean`。
+> ⚠️ `noai_gate.py --git` **不给基线时看不见已提交的改动**（本仓库 `.git` 在交付物
+> `agentflow/` 的**上一级**，工作区根 `D:\Incubator` 是 git 仓库）：改动集为空才判 `unknown(2)`，
+> 非空则只对"这些改动"判命中。所以 CI 必须给基线（`--git --since <ref>`）；
+> `unknown` 绝不能读成 `clean`。
 
 ---
 
@@ -74,7 +95,7 @@
 | 26 | `src/agentflow/conductor.py` | `stats()` 的预算口径**删掉**从 `tasks` 求和的第二份实现，改读 `usage_ledger`（`draft/20` §6.4 删除清单第 1 条） | ❌ | AI |
 | 27 | `src/agentflow/scheduler.py` | （可选）按波指定并发上限 —— 分支级资源倾斜的落点 | ❌ | AI |
 | 28 | `src/agentflow/verify.py` | **删除**自带的 tasks 健康检查，改调 `capabilities.audit_task_ledger`（§6.4 删除清单第 2 条，P4 的正解） | ✅ | 人 |
-| 29 | `tools/verify_role_specs.py` | 角色集合与文档路径改为可配置 —— 今天它写死 `[A-HMm]`，**新角色登记后它看不见 N/O/Q**（不报错 = 假通过，`draft/20` §12.5） | ❌ | AI |
+| 29 | `tools/verify_role_specs.py` | 角色集合与文档路径改为可配置 —— 今天它写死 `[A-HMm]`，**新角色登记后它看不见 N/O/Q**（不报错 = 假通过，`draft/20` §12.5）✅ **已落地**（`EXPECTED_ROLES` / `DEFAULT_ROLES` / `role_letters()` / `--roles`，见本文开头导航注） | ❌ | AI |
 | 30 | `docs/ROLE-SPECS.md` | 并入 N/O/Q 三节（10 小节同构）；收窄 §M.1 与 M-9/M-11 的对外语义 | ❌ | AI |
 | 31 | `docs/PROPOSALS.md` | 登记本设计产生的待裁决项（管理池默认值、4 位 ID 额度、`SCHEMA_VERSION` 是否 +1） | ❌ | AI |
 | 32 | `DEVELOPMENT.md` | 若需补一条 DoD（"新表必须声明登记批次"），按规范变更走同一个人审 | ❌ | AI |
@@ -116,7 +137,7 @@ python scripts/noai_gate.py --paths src/agentflow/cli.py             # 应退 0�
 |---|---|
 | 1 | 它**不是**批准记录：`AGENTS.md` 要求 2 名 reviewer 逐条 approve，那要写进 `.noai-approvals.json`（`--approve`），由人做，AI 不得代写 |
 | 2 | 它**不判断**改动内容对不对 —— 那是 review 的职责；它只回答"哪些改动必须由人做" |
-| 3 | `noai_gate.py --git` 在本仓库恒 `unknown`（非 git 仓库），因此**漂移检测**只能靠路径清单 + hash 台账 |
+| 3 | `noai_gate.py --git` **不给基线时看不见已提交的改动**（交付物 `agentflow/` 与仓库根不同层），因此**漂移检测**只能靠路径清单 + hash 台账（或显式给 `--since` 基线） |
 | 4 | 第 5、18 条（`Task` 加字段）会改变 `tasks` 表的磁盘形态：`SCHEMA_VERSION` 是否 +1 **未裁决**（`SCHEMA-DRAFT-management.md` §9 第 4 条） |
 
 ## 机器可读清单（判据的输入）

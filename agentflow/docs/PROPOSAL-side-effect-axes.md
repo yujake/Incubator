@@ -6,6 +6,10 @@
 > 这是 `AGENTS.md` 的禁改区清单已经写下来的纪律）。
 >
 > **登记**：`docs/PROPOSALS.md` 的 **P-13**。
+>
+> 📍 **现状**（本文是提案，提案之外的实际状态）见
+> [`../../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)
+> §5.4 与 `../src/agentflow/tools/base.py` 的 `ToolSpec`；那份正文是导读、不构成判据。
 > **明确不改**：本方案若通过，命中的禁改区文件（`src/agentflow/tools/base.py`、
 > `src/agentflow/tools/__init__.py`）必须由人编写或人逐行走查 + 2 名 reviewer，
 > 见第 8 节。AI 不得代填 `reviewers`、不得新建/修改 `.noai-approvals.json`。

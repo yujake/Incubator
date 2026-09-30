@@ -1,5 +1,14 @@
 # 管理层数据模型（草案）—— 四张表 + `tasks` 三个新字段
 
+> **现状导读（不构成判据）· 本文是提案/草案**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**。**截至 2026-09-30 的实际状态见正文 / 代码，本文是提案**：
+> 本文描述的 `cycles` / `diagnoses` / `mgmt_plans` / `audits` 四张表与 `tasks` 的
+> `cycle_id` / `progress_state` / `progress_reason` / `mgmt_plan_id` 四个新字段
+> **都不在盘上**（实测 `schema.TABLES` 仍为 **16** 张、`ID_COUNTERS` 仍为 **13** 个 kind，
+> 复跑：`python -c "import sys;sys.path.insert(0,'agentflow/src');import agentflow.schema as s;print(len(s.TABLES), len(s.ID_COUNTERS))"`）。
+> 本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+
 > **性质**：字段级**设计**，不写代码。落点是 FC-27 禁改区（`schema.py` / `store.py` / `verify.py`），
 > 因此本文档的用途是**给人审**：审过之后按 §5 的批次登记。
 >

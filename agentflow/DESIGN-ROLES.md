@@ -3,6 +3,15 @@
 > 本文件是 `DESIGN.md`（A/B 基线）、`DESIGN-TOOLS.md`（工具层 + C/D 基线）、
 > `DESIGN-INTERACTIONS.md`（I1–I7）之后的**第四份**。
 > 前三份的结论不变；本文件只加**新角色**与**新交互**，以及 I1–I7 落地后暴露出的调整。
+>
+> 本文件是**设计理由**（"为什么这么设计"），**不构成判据**；与代码冲突处以代码为准。
+> 框架的**权威现状描述与逐项路径索引**见
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
+> 本文件四条硬约束的落点（相对工作区根）：
+> `agentflow/src/agentflow/schema.py`（`validate()` 与各受控词表）、
+> `agentflow/src/agentflow/agent_e.py` / `agent_f.py` / `agent_g.py` / `agent_h.py`、
+> `agentflow/src/agentflow/tools/doc_tools.py::CROSS_CHECK_DISCLAIMER`、
+> `agentflow/src/agentflow/gates.py`（H 的 15 道门）。
 
 ---
 
@@ -32,7 +41,8 @@ A/B/C/D 覆盖了"文献 → 知识 → 分析 → 问题"这条链，但**数�
 ## 1. 三条把"过度声称"变成写入期错误的硬约束
 
 这三条都不是文档里的告诫，而是 `schema.py` 里的 `validate()`，
-**违反即拒绝落库**：
+**违反即拒绝落库**（实现落点：`agentflow/src/agentflow/schema.py`，
+对应的 `validate` 方法分别在 `Experiment` / `AttackPlan` / `Document` 的 dataclass 上）：
 
 ### 1.1 E：计算类方法**永远**拿不到 `proof` 等级（FC-22）
 
@@ -64,14 +74,22 @@ if ek == "cross_check" and not str(c.get("disclaimer") or "").strip():
     raise ValueError(...)
 ```
 这句话**由结构强制，不靠人记得写**。`AgentG.compose_claim` 会自动填上
-`tool.doc_tools.CROSS_CHECK_DISCLAIMER`，而 H 会精确匹配这个常量 ——
+`tool.doc_tools.CROSS_CHECK_DISCLAIMER`（实测常量在
+`agentflow/src/agentflow/tools/doc_tools.py`），而 H 会精确匹配这个常量 ——
 若允许多种写法，审校就只能靠语义判断，而"靠语义判断"正是要避免的东西。
 
 ---
 
 ## 2. 四个角色的接口
 
+四个角色各自的实现文件（相对工作区根）：
+`agentflow/src/agentflow/agent_e.py`、`agentflow/src/agentflow/agent_f.py`、
+`agentflow/src/agentflow/agent_g.py`、`agentflow/src/agentflow/agent_h.py`。
+本节下面列出的签名都在这四个文件里（本机实测：逐个方法名都对得上）。
+
 ### 2.1 E —— 数值实验与形式化验证
+
+`agentflow/src/agentflow/agent_e.py`：
 
 ```
 run_experiment(claim, claim_key, script_path, *, params, method, for_question_id, timeout) -> dict
@@ -92,6 +110,8 @@ evidence_for(claim_key=None, *, for_question_id=None) -> dict
 让被判定的对象自己当判官，是这一层最容易被绕过的地方。
 
 ### 2.2 F —— 多轮难题攻坚
+
+`agentflow/src/agentflow/agent_f.py`：
 
 ```
 create_plan(problem, problem_key, *, for_question_id, subgoals, budget, depth, parent_plan_id) -> dict
@@ -121,6 +141,9 @@ status(plan_id) -> dict
 
 ### 2.3 G —— 论文撰写
 
+`agentflow/src/agentflow/agent_g.py`（稿件面）与
+`agentflow/src/agentflow/tools/doc_tools.py`（动作面）：
+
 ```
 compose_claim(text, *, citations, evidence_kind, section, is_negative, negation_kind) -> dict
 register_dependency(used_by, kind, label, *, source_lit_id, source_experiment_id, page_range, quote, status, status_reason) -> dict
@@ -139,6 +162,8 @@ G 必须真的去 `literature` / `experiments` 表核对该 ID 存在。
 schema 只能检查"字段非空"，**"这个 lit_id 真的存在"必须由 G 用真实数据核**。
 
 ### 2.4 H —— 审校（**只读**）
+
+`agentflow/src/agentflow/agent_h.py`（门引擎在 `agentflow/src/agentflow/gates.py`，15 道有名字的门）：
 
 ```
 review(doc_id, *, round_no=None, dependencies=<未指定>) -> dict
@@ -235,6 +260,25 @@ verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
 这两条缺陷都不是单元测试能发现的：单元测试里我构造的是"人为矛盾"，
 它当然通过。**它们只在把 25 条真实关系过一遍时暴露**。
 所以：**每个新增闸门都必须在 ≥20 条真实样本上跑一遍并记录触发率**。
+
+### 4.4 本文写完之后补上的三处机制（补记，不改变上文主张）
+
+上文的四条硬约束与 I8–I12 是"角色面"的判据；正式版后来又在**同一个方向上**补了三处落点。
+它们的性质与本文一致 —— **仍然是"把判断从人记得写变成结构强制"**，所以在此按路径补记：
+
+1. **语义判据的注册表**：`agentflow/src/agentflow/judges.py`。`CRITERIA`（6 条）把
+   §1 里那几条"靠语义判断"的判据做成**官能 + 三态词表**的登记项
+   （如 `claims.conclusion_strength` 的三态是 `within_evidence` / `overclaimed` / `unjudgeable`），
+   每条必须配负控（`registry_problems` 机械核对）；`semantic_judge_for(seam)` 把它适配成
+   `agentflow/src/agentflow/tools/review_tools.py` 的 `SemanticJudge` 要的形状。
+   缝协议本体在 `agentflow/src/agentflow/judge.py`（`judge_json` / `is_judge_problem` / `reason_of`）。
+2. **交付闸门**：`agentflow/src/agentflow/deliver.py::gate`（`DeliveryGate`），
+   不通过时产出**可派回去的工作项**（`WorkItem` / `append_work_item` / `dispatch_work_items`）——
+   这把"H 判 fail"从"记一笔"变成"有一条能回到 G 的路径"，与 I8 的闭环同源。
+3. **论文包的三维锚**：`agentflow/src/agentflow/renderanchor.py::check_package`，
+   把"源表 / 渲染出的源文件 / 编译回执（`tex_sha256` 与盘上 tex 是否一致）"三维对齐，
+   判定只有 `consistent` / `drifted` / `unknown` 三态 —— 它是 §2.3"依赖闭合第一道闸"在
+   **论文包**这一层的同构物（"这份 PDF 是不是从磁盘上这份 tex 编的"）。
 
 ---
 

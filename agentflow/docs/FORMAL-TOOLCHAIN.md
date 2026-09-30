@@ -1,10 +1,18 @@
 # 形式化验证工具链：装哪个版本、怎么装、装完怎么验
 
+> **现状导读（不构成判据）**：本仓当前分层结构的逐项事实（含路径与复跑命令）见
+> [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
+> 本文只作现状导读、**不构成判据**；判据在 `agentflow/DEVELOPMENT.md` §6 与各门的实现里。
+> 本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+
 > 这份文档只回答三个问题：**装哪个**、**怎么装**、**装完怎么验**。
 > "什么算证明"不在本文的范围里 —— 那是 `formalgw` 模块 docstring 的内容。
 >
-> 判据的实现只有一处：`src/agentflow/formalgw.py` 的 `check_toolchain()`。
+> 判据的实现只有一处：`agentflow/src/agentflow/formalgw.py` 的 `check_toolchain()`。
 > 本文不重复其中的任何一条判据（两处各写一份判据的漂移是静默的）。
+>
+> 路径口径：本文路径一律**相对工作区根**（`D:\Incubator`）；命令在 `agentflow/` 下跑
+> （`cd agentflow`）。
 
 ## 1. 装哪个版本（pin）
 
@@ -15,8 +23,10 @@
 
 两条判据是**独立**的：版本号对了、commit 不对，仍算版本不符（负控 C2 实测）。
 
-**这些数字只写在一个地方**：`formalgw.PINNED_LEAN_VERSION` / `PINNED_LEAN_COMMIT` /
-`PINNED_MATHLIB_COMMIT` / `PINNED_MATHLIB_TAG`。本文上面的表格是它们的副本；
+**这些数字只写在一个地方**：`agentflow/src/agentflow/formalgw.py` 的
+`PINNED_LEAN_VERSION` / `PINNED_LEAN_COMMIT` / `PINNED_MATHLIB_COMMIT` /
+`PINNED_MATHLIB_TAG`（实测 2026-09-30：四个常量都在，值逐字与上表相同）。
+本文上面的表格是它们的副本；
 改 pin 时要同时改两处（代码是判据、文档是说明）。
 
 ## 2. 怎么装
@@ -25,8 +35,8 @@
 
 1. 取 Lean `v4.7.0` 的官方发行包（Windows 是
    `lean-4.7.0-windows.zip`），解压到任意目录，把 `bin/` 放进 `PATH`。
-2. 本机现有的那一份在 `D:\Incubator\temp\lean470\lean-4.7.0-windows\bin`
-   （`lean.exe`）。
+2. 本机现有的那一份在 `temp/lean470/lean-4.7.0-windows/bin`（工作区根相对路径；
+   绝对即 `D:\Incubator\temp\lean470\lean-4.7.0-windows\bin`，里面有 `lean.exe`）。
 
 ### 2.2 Mathlib
 
@@ -47,12 +57,12 @@ commit、并把它的 olean 缓存解出来，`import Mathlib` 才成立。
    ```
 
    为什么这一步不能省：缓存解包出来的树**没有 `.git`**（本机实测的
-   `mathlib-pinned2\mathlib4-4.7.0` 就是这种形态），而"没有 git 元数据"不等于
+   `temp/mathlib-pinned2/mathlib4-4.7.0` 就是这种形态），而"没有 git 元数据"不等于
    "不知道版本"。不写这一行，版本检查会报 `check_failed`（**未核实**）——
    它既不是"没装"也不是"版本不符"，是一个必须由人补上的事实。
 
-   本机已有的两棵树（`temp\mathlib-pinned\mathlib4-4.7.0`、
-   `temp\mathlib-pinned2\mathlib4-4.7.0`）已按上面这一条写好戳文件。
+   本机已有的两棵树（`temp/mathlib-pinned/mathlib4-4.7.0`、
+   `temp/mathlib-pinned2/mathlib4-4.7.0`）已按上面这一条写好戳文件。
 
 ### 2.3 让检查器找得到它
 
@@ -102,5 +112,19 @@ python -m agentflow.formalgw --toolchain --import-check    # 额外真跑一次 
 | 事实 | 值 | 怎么核的 |
 |---|---|---|
 | Lean | `4.7.0` / commit `6fce8f7d5cd1` / x86_64-w64-windows-gnu | `lean --version`、`lean --githash` |
-| Mathlib | 装了（`temp\mathlib-pinned2\mathlib4-4.7.0`，4100 个 olean，`Mathlib.olean` 在） | `check_toolchain` ⇒ `mathlib: installed_ok` |
+| Lean 落在哪 | `temp/lean470/lean-4.7.0-windows/bin`（工作区根相对；**部署选择**，不是仓内可复现的钉法，见 `draft/35-…md` §9.2） | `Test-Path temp/lean470/lean-4.7.0-windows/bin` ⇒ `True` |
+| Mathlib | 装了（`temp/mathlib-pinned2/mathlib4-4.7.0`，4100 个 olean，`Mathlib.olean` 在） | `check_toolchain` ⇒ `mathlib: installed_ok` |
 | Mathlib commit | `a45ae63747140c1b2cbad9d46f518015c047047a` | 该树的 `.lake/agentflow-mathlib-rev` 戳（§2.2 第 4 步写入）；原始来源见 `temp/mathlib-pinned2/EVIDENCE.md` |
+
+**复跑命令**（本文所有路径都相对工作区根 `D:\Incubator`）：
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
+$env:PATH="D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;$env:PATH"
+$env:AGENTFLOW_MATHLIB_ROOT="D:\Incubator\temp\mathlib-pinned2\mathlib4-4.7.0"
+cd D:\Incubator\agentflow
+python -m agentflow.formalgw --toolchain
+```
+
+（上表的 `check_toolchain ⇒ mathlib: installed_ok` 就是这么读出来的；本文件不重抄判定逻辑，
+判据唯一实现仍在 `agentflow/src/agentflow/formalgw.py` 的 `check_toolchain()`。）

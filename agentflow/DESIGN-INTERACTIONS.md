@@ -4,6 +4,12 @@
 > 只写**尚未实现的交互**与**任务分配的调整**；前两份的既有结论不变。
 >
 > 目标：让 A/B/C/D 从"一条链"变成"一张网"，且每个新增交互都**可判定、可审计、可终止**。
+>
+> 本文件是**设计理由**（"为什么这么设计"），**不构成判据**；与代码冲突处以代码为准。
+> 框架的**权威现状描述与逐项路径索引**见
+> [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
+> 本文交互的落点（相对工作区根）：`agentflow/src/agentflow/interactions.py`（I1–I7 的冻结契约与闸门）、
+> `agentflow/src/agentflow/agent_c.py`（C 的查询面）、`agentflow/src/agentflow/schema.py`（`reprocess_requests` 等表）。
 
 ---
 
@@ -43,7 +49,7 @@ D 在追问某个问题时需要"这两个概念之间到底有哪些链条"，�
 **接口**：C 暴露一个**同步、只读、有界**的查询 API；D 通过工具层调用（`graph.*` / `trace.*` 已具备大部分）。
 
 ```python
-# D 侧
+# D 侧（实测这些方法都在 `agentflow/src/agentflow/agent_c.py`）
 c = AgentC(store)                      # 只读，可反复调用
 rep = c.paths("0000", "0002", max_paths=5, max_len=4)
 nodes = c.neighbors("0000")
@@ -126,6 +132,9 @@ C **重新检查这两个具体的关系**（而不是重跑整个分析）
 
 **接口**：新增 `reprocess` 请求表（或复用 `search_requests` 的思路，但**语义不同**，
 应单独一张 `reprocess_requests`：目标关系/文献、原因、状态、结果）。
+**实测**：正式版确实单独建了这张表 —— `agentflow/src/agentflow/schema.py::TABLES` 里有
+`reprocess_requests`（状态词表 `REPROCESS_STATUSES`）；闸门是
+`agentflow/src/agentflow/interactions.py::admit_reprocess_request`。
 
 ⚠️ **要防幂等陷阱**：重抽取**不能**简单地把 `processed` 置回 false（那会触发全量重抽）。
 必须带**目标**（`relation_ids` / `lit_id` + 原因），只在该目标上工作。
@@ -173,6 +182,8 @@ C **重新检查这两个具体的关系**（而不是重跑整个分析）
 ⚠️ **但有个硬约束**：B 在**提交事务内**调用 C，而 C 需要读图。若 C 去查 store 会**重入锁**。
 → 因此这个闸门必须是**纯函数**：`C.check_conflict(draft_relation, *, existing_relations)`，
 **只吃内存数据，不碰 store**。这是"共享存储 + 多智能体"下最容易死锁的地方，必须写死。
+（**实测落点**：判据本体在 `agentflow/src/agentflow/interactions.py::check_conflict`，
+不在类方法上；`interactions.py` 在导入期用 `assert_store_free` 自检"签名里不许有 `store`"。）
 
 **如何验证**：断言 `check_conflict` **不接收 store、不打开事务**（签名级断言），
 且在并发（两个 B 实例）下无死锁。
