@@ -126,8 +126,8 @@
   | D | A、B、C、E、F |
   | E | B、D |
   | F | A、B、C、D、E |
-  | G | D、E、F |
-  | H | G |
+  | G | A、D、E、F（`A` 是 2026-09-30 人批准加的，见 §14 第 8 条） |
+  | H | A、E、G（同上） |
   | M | A、B、C、D、E、F、G、H |
 
 - `CAPABILITIES`：**50** 个动作（实测 2026-09-30），逐角色条数：
@@ -313,7 +313,9 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 10    工具总数 73�
 
 ### 7.1 循环：`agentflow/src/agentflow/agent_loop.py`
 
-- **六种形状**：`SHAPES = ('tool', 'summon', 'message', 'note', 'ask_user', 'final')`（2026-09-30 复核：**仍然是六种** —— 代唤走的是 `message` + 固定 subject，没有新造形状）；
+- **七种形状**：`SHAPES = ('tool', 'summon', 'summon_many', 'message', 'note', 'ask_user', 'final')`。
+  其中 `summon_many` 是 2026-09-30 加的**并发派活**（一次说一批，框架分波并发跑）；
+  代唤走的是 `message` + 固定 subject「请代唤」，**没有**为它新造形状；
   解析入口 `_shape_of`（`tool` 是**字符串**工具名 + `args`，其余为嵌套对象）。
 - **输出契约写在每一轮提示词的最后**（`JSON_TAIL`，六个骨架逐行可解析；
   判据 `agentflow/tests/test_agent_loop.py::test_every_documented_shape_actually_parses`
@@ -345,7 +347,8 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 10    工具总数 73�
 | 自动代唤申请 | `agent_loop.py::_do_summon` → `_request_relay` | 被拒的理由是 `forbidden_edge` / `depth_exceeded`，**或者** `invalid_params` 且目标不在自己的伙伴表里（那时参数根本无从写对）⇒ 自动给 M 发一条 `subject=请代唤` 的留言 + 落一条 `agent_summon_request` 事件；这一步仍如实报 `ok=False`（不许假装成功） |
 | 提示词 | `agent_prompts.py::partners_lines` 与 `LOOP_PROTOCOL` | 每个可被召唤的角色都读到"需要的人不在名单里就发『请代唤』给 M，写清要谁/动作/参数/为什么" |
 | 主控的义务 | `agent_prompts.py` 的 M 简报 policy | "收到 subject=请代唤 的留言**本轮内必须处理**：要么替它派，要么写明为什么没派" |
-| 端到端判据 | `agentflow/tests/test_agent_loop.py::test_the_collaboration_chain_works_end_to_end` | H 够不到 A ⇒ 申请 ⇒ M 读到 ⇒ M 派 A；断言锚在**台账**（`role=A` 且 `called_by=M`，且发生在申请之后） |
+| 端到端判据 | `agentflow/tests/test_agent_loop.py::test_the_collaboration_chain_works_end_to_end` | C 够不到任何人 ⇒ 申请 ⇒ M 读到 ⇒ M 派 A；断言锚在**台账**（`role=A` 且 `called_by=M`，且发生在申请之后） |
+| 申请队列（可判定） | `agentflow/src/agentflow/tools/conductor_tools.py::conductor.ledger(view="relays")` | 每条申请标了 `fulfilled`（台账里有没有出现它要的那个动作）⇒ 主控不必去翻留言。真机实测里 M **自己**想到用它查有没有申请 |
 
 ### 7.5 并发：同一角色的多个实例（`policy.py` / `scheduler.py` / `conductor.py` / `host.py`）
 
@@ -355,7 +358,8 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 10    工具总数 73�
 |---|---|---|
 | 分波判据按**角色级**写集 | 3 个 B 必然排 3 波（峰值真并发 1，"再多 B 也没用"） | `scheduler.TaskCall.instance` + `policy._same_role_other_instance`：**同角色、两边都显式给了不同实例标签** ⇒ 不算冲突；没给或标签相同 ⇒ 照旧串行（默认行为一字未变，负控在 `agentflow/tests/test_scheduler.py`） |
 | 每角色只有一个对象 | `LocalBackend._instances` / `host._Builder._made` 键里只有角色 | 缓存键加一维 `instance`；`host` 的工厂契约 `fn(*, store=..., instance="")`，A/D/E/F 把实例写进 `actor`（`agent-E-7`），G/H 写进 config 的 `actor` |
-| 没有批量入口 | `Conductor.run_plan` / `scheduler.run_waves`（分波 + 线程池 + `ConcurrencyProbe`）**生产路径零调用**；M 的工具只能一次派一个 | `agentflow/src/agentflow/tools/conductor_tools.py` 的 **`conductor.summon_many`**（M 专属）：一次派一批，返回里带 `waves` 与 `concurrent_peak` —— "到底并发了没有"看这两个数，不看墙钟 |
+| 没有批量入口 | `Conductor.run_plan` / `scheduler.run_waves`（分波 + 线程池 + `ConcurrencyProbe`）**生产路径零调用**；M 的工具只能一次派一个 | 两条路：`agentflow/src/agentflow/tools/conductor_tools.py` 的 **`conductor.summon_many`**（M 专属）与**同名循环形状**（任何角色都能用，`agent_loop._do_summon_many`）。返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数，不看墙钟。同一角色在一批里出现多次又没给 `instance` 时，**自动补 `<角色>#N`** |
+| 部署开关 | 被召唤的角色只在 `--drive` 显式列出时才跑 LLM 循环 | `agentflow/src/agentflow/cli.py` 的 **`--subagents`**：把所有已声明的角色动作都交给模型驱动（"各角色像 subagent"）。**代价要记住**：它会**替换掉确定性动作** —— 真机实测把 `B.run_once` 交给 LLM 循环后，3 个 B 实例各烧 7–8 步、以 `bad_json_limit` 收场、概念与关系一条没涨 |
 
 四条上限仍然管着这件事（`agentflow/src/agentflow/policy.py`）：
 `max_depth=3` / `max_fanout=5` / `max_concurrency=4` / `max_tasks_per_run=200`。
@@ -363,7 +367,7 @@ A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 10    工具总数 73�
 ### 7.2 提示词装配：`agentflow/src/agentflow/promptkit.py` + `agent_prompts.py`
 
 - `promptkit.py`：`Section` / `Scope` / `Assembly` / `PromptRegistry`（有序段 + 变量 + 作用域遮蔽）。
-- `agent_prompts.py`：`PROMPT_VERSION = "p17"`；`ROLE_BRIEFS` 9 份（A–H + M）；
+- `agent_prompts.py`：`PROMPT_VERSION = "p18"`；`ROLE_BRIEFS` 9 份（A–H + M）；
   段顺序在 `SECTION_ORDERS`：`AGENT_IDENTITY`、`ROLE_BOUNDARY`、`ROLE_POLICY`、`STANCE`、
   `FACULTIES`、`PARTNERS`、`WORKSPACE_FACTS`、`AGENT_TOOLS_SDK`、`TOOL_GUIDANCE_BASE`、
   `EVIDENCE_CONTRACT`、`THREE_STATE`、`OUTPUT_CONTRACT`、`TASK_FRAME`、`DEPLOYMENT_SUFFIX`。
@@ -643,9 +647,10 @@ release-check → acceptance → repro → role-specs → coverage → per-file
    `projects/*/out/paper/BUILD-HISTORY.jsonl`，没有轮转与 actor 字段。
 7. **禁改区有欠签**：`agentflow/.noai-approvals.json` 的批准只能由人签；
    当次欠签数请用 `agentflow/NOAI-REVIEW-REGISTER.md` 的口径现算，不要抄本文。
-8. **协同的那条边表仍然是设计**（2026-09-30 复核）：`G` 够不到 `A`、`H` 够不到 `A`/`E`、
-   `C` 没有任何出边 —— 今天靠 §7.4 的"请主控代唤"兜底，而不是靠直接边。
-   要改成直接边就得改 `agentflow/src/agentflow/capabilities.py`（FC-27 / 权限面，需 2 名 reviewer）。
+8. **边表：`G → A`、`H → A/E` 已由人批准加上**（2026-09-30，`draft/28` §199）；
+   `C` 仍然没有任何出边（只读角色，设计如此）—— 它靠 §7.4 的"请主控代唤"兜底。
+   这几条边落在 `agentflow/src/agentflow/capabilities.py`（FC-27 / 权限面）⇒
+   改动**已登记进基线、仍待 2 名 reviewer 人审**（登记 ≠ 批准）。
 9. **"主控必须受理代唤申请"只到提示词 + 可审计这一层**：申请会落
    `agent_summon_request` 事件与 M 的收件箱，但**没有任何机器判据**强制 M 处理
    （能加的判据在 `agentflow/src/agentflow/verify.py`，那是禁改区）。
@@ -653,6 +658,22 @@ release-check → acceptance → repro → role-specs → coverage → per-file
     它不知道两个实例会不会改同一行。B/A 靠 `claimed_by` + 租约天然安全（既有判据
     `agentflow/tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`）；
     D/E/F/G 要并发就必须派到**不同目标**上 —— 框架不做行级冲突检测。
+
+11. **`--semantic-review` 曾经会让"确定性角色"全部报 `failed`**（2026-09-30 真机抓到、已修）：
+    `agentflow/src/agentflow/host.py::wired_llm_conductor` 把 H 的语义判据缝当成了**所有角色共用的
+    `llm=`** ⇒ `agent_b` 拿它去造 `LLMExtractor`，而缝不是抽取器 client ⇒ `TypeError`；
+    更糟的是那句错被 `agentflow/src/agentflow/conductor.py::LocalBackend.resolve` 的
+    `except TypeError` 兜成了一句**误导性的**"factory(B) 需要一个 store"。
+    现在：缝按角色给（`llm_by_role={"H": …}`），`resolve` 按**签名**决定怎么调工厂（不吞内部异常）。
+    教训：**"换个参数再试一次"这种兜底会把真错伪装成参数错** —— 判据在
+    `agentflow/tests/test_host_wiring.py`（两条负控）。
+12. **模型侧的 `bad_json` 是当前最大的损耗**（真机实测：M 与 G 都频繁多写一个右花括号）：
+    已做的三道处置都在 `agentflow/src/agentflow/`：`agent_loop.JSON_TAIL` 写明"哪几行以 `}}` 结尾"、
+    `llmseam._json_shape_hint` 给一句话诊断、`llm.parse_llm_json` 容忍**末尾多一个 `}`**
+    （与既有的"容忍代码围栏 / 前后寒暄 / 多余逗号"同族，只容忍语法噪声）。
+    仍未解决的是模型本身的 JSON 纪律 —— 它决定了一次运行能走多少步。
+13. **批量并发只保证"允许并发"，不保证"改的是不同的行"**：派活方要保证目标分开（见第 10 条）。
+
 
 ---
 

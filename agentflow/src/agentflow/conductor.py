@@ -170,8 +170,8 @@ class LocalBackend:
     def resolve(self, role: str, instance: str = "") -> Any:
         """把注册项变成实例（惰性，按 `(角色, 实例)` 缓存）。
 
-        - 传 `("factory", fn)`：先试 `fn(store=..., instance=...)`，
-          工厂不接受 `instance` 就退回 `fn(store=...)`（旧契约照样能用）；
+        - 传 `("factory", fn)`：按签名决定给不给 `store=` / `instance=`
+          （见下面那段注释：靠 `try/except TypeError` 会把工厂内部的真错吞掉）；
         - 传 `("object", obj)`：直接用（显式实例标签下同一个对象会被复用 ——
           那是调用方自己选择"共享一个实例"，框架不替它分家）；
         - 传 `("class", cls)`：明确拒绝 —— 构造依赖无法自动满足，
@@ -191,13 +191,22 @@ class LocalBackend:
                 "自动 new 只能靠猜，而猜错会静默少做事。请注册一个工厂或实例"
             )
         if kind == "factory":
+            # 用签名决定怎么调，而不是 `try/except TypeError`（2026-09-30 修的坑）：
+            # 旧写法把"工厂内部抛的 TypeError"也当成"它不接受这个参数"，
+            # 于是真正的错（实测：`agent_b` 构造 LLM 抽取器时 client 不合规）
+            # 被吞掉，最后抛出一句误导性的"需要一个 store" —— 那正是本项目
+            # 最忌讳的形态（把没说清的说成说清了，而且指着错的地方）。
             try:
-                inst = value(store=self.store, instance=key[1])
-            except TypeError:
-                try:
-                    inst = value(store=self.store)
-                except TypeError:
-                    inst = value()
+                params = inspect.signature(value).parameters
+            except (TypeError, ValueError):
+                params = {}
+            takes_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+            kwargs: dict[str, Any] = {}
+            if takes_kw or "store" in params:
+                kwargs["store"] = self.store
+            if takes_kw or "instance" in params:
+                kwargs["instance"] = key[1]
+            inst = value(**kwargs) if kwargs else value()
         else:
             inst = value
         with self._lock:

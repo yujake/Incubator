@@ -134,16 +134,29 @@ def test_side_effect_read_describes_default_call_only():
 
 
 def test_allowed_edges_match_design_table():
-    """§3.1 的表逐条实现 —— 尤其 C 的边是空的、H 只能召唤 G。"""
+    """§3.1 的表逐条实现 —— 尤其 C 的边是空的。
+
+    2026-09-30（`draft/28` §199，人批准）：给 `G` 加 `A`、给 `H` 加 `A`/`E`。
+    理由逐字写在 `capabilities.ALLOWED_EDGES` 那两行上：G 原状能要形式化（E）
+    却叫不动 A 去查一份原文；H 是"发现者"却只能请 G 修订 —— 发现问题的人
+    不能去要证据。H 是只读角色这件事没变：新加的两条边只让它"请求"，
+    `READ_ONLY_ROLES` 与它的写面一个字未动（下面那条断言仍然成立）。
+    """
     assert C.ALLOWED_EDGES["C"] == frozenset(), "C 一旦能发起动作就成了绕过 B 引文回验的写入路径"
-    assert C.ALLOWED_EDGES["H"] == frozenset({"G"}), "审校者若能让别人改数据，它就同时是发现者与修正者"
+    assert C.ALLOWED_EDGES["H"] == frozenset({"A", "E", "G"}), \
+        "审校者可以向 A/E 要证据、请 G 修订，但**不许自己改数据**（它的只读面在 tools 层）"
     assert C.ALLOWED_EDGES["A"] == frozenset({"B"})
     assert C.ALLOWED_EDGES["B"] == frozenset({"C"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D"})
     assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E"})
-    assert C.ALLOWED_EDGES["G"] == frozenset({"D", "E", "F"})
+    assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
     assert C.ALLOWED_EDGES["M"] == frozenset(S.ROLES)
+    # 负控（这条改动最该守住的边界）：H 仍然是只读角色 —— 新加的两条边只让它
+    # "请求"，权限面（工具层）没有跟着动。
+    from agentflow.tools import READ_ONLY_ROLES as _RO
+
+    assert tuple(_RO) == ("C", "H"), _RO
 
 
 def test_unknown_edge_target_is_rejected():

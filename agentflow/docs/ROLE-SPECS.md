@@ -1530,7 +1530,9 @@ SELF-CHECK DONE（agent_f）：失败 0 项
 | `table.*`（8） | 5 读 3 写 | — | 写侧**需审批** |
 
 > **G 拿不到**：`graph.*` / `trace.*` / `research.*` / `search.*` / `ocr.*`。
-> ⇒ G 想知道"图上是什么情况"必须 `G → D/F`（边表：`G → D E F`）。
+> ⇒ G 想知道"图上是什么情况"必须 `G → D/F`（边表：`G → A D E F`；其中
+> `G → A` 是 2026-09-30 由人批准加上的，见 `draft/28` §199 —— 原来 G 能要形式化
+> 却叫不动 A 去查一份原文）。
 >
 > ⚠️ **G 能跑实验**（`verify.run_experiment` 在 G 的工具面里，`roles=("E","F","G")`）。
 > 这是**刻意的**：`capabilities.CAPABILITIES` 的注释说 G"**自己不改稿，只产出稿件与依赖**"，
@@ -1725,7 +1727,15 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 | H-3 | 复审：重跑检查判 `fixed` / 仍 `open`；到上限则 `unresolved_review` | `agent_h.AgentH.verify_fixes`；`review.verify_fixes`（写侧） |
 | H-4 | 只读列举发现 | `agent_h.AgentH.list_findings` |
 | H-5 | **依赖分级**（FC-13）：`external_unavailable`=warning，`dangling`=error | `tools.review_tools.scan_document`；自检实测逐字 |
-| H-6 | 请 G 修订（**唯一能召唤的人**） | `H → G`（`capabilities.ALLOWED_EDGES`） |
+| H-6 | 请 G 修订 / 向 A 核引文 / 向 E 核形式化 | `H → G`、`H → A`、`H → E`（`capabilities.ALLOWED_EDGES`） |
+
+> **2026-09-30（`draft/28` §199，人批准）**：H 的出边由 `{G}` 扩到 `{A, E, G}`。
+> 原状的理由是"审校者若能让别人改数据，它就同时是发现者与修正者" —— 那条理由
+> 针对的是**改数据**；而 A 的检索与 E 的形式化都**不改 H 正在审的那份稿**
+> （A 写 `literature`/`search_requests`，E 写 `experiments`）。原来的实际后果是：
+> 审校时发现"这条引文对不上"，H 唯一的动作是把问题退回给写稿的 G ——
+> 而 G 也未必拿得到那份原文。**H 仍然是只读角色**（`READ_ONLY_ROLES` 未动、
+> 工具面未动）：新边只让它"请求核实"，不让它"自己改"。
 
 ### H.3 明确不负责
 
@@ -1733,7 +1743,7 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 |---|---|---|
 | **改稿件的任何一句断言** | "若审校者能直接改稿，它就同时是'发现者'与'修正者'，于是**'发现问题'与'掩盖问题'在结构上无法区分**"（`tools/__init__.py` 的模块 docstring 逐字） | **G**（`revise`） |
 | 写知识表 | H 的写集只有 `{review_findings, documents}` | **B** |
-| 召唤除 G 以外的任何人 | "审校者若能让别人改数据，它就同时是发现者与修正者"（`capabilities.ALLOWED_EDGES` 逐字） | — |
+| 召唤除 A / E / G 以外的任何人 | "审校者若能让别人改数据，它就同时是发现者与修正者"（`capabilities.ALLOWED_EDGES` 逐字）—— 该理由针对"改数据"；A/E 不改 H 审的那份稿（`draft/28` §199） | — |
 | 决定一条发现要不要修 | H 只**报**；修与不修是 G/人的决定（`wontfix` 是**人**的判断） | **G** / 人 |
 | 判数学对错 | H 的工具只有机械判据（引用/等级/否定/依赖闭合）；**数学正确性不在机械判据的射程内** | 形式化检查器 / 人 |
 | 自己造证据 | 每条发现必须带 `evidence`；没有证据的发现是 error | `verify.finding_without_evidence`（error） |

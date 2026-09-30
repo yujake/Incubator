@@ -1358,6 +1358,26 @@ def cmd_run_agent(args) -> int:
     if why:
         print(f"[run-agent] 用法错：{why}", file=sys.stderr)
         return 2
+    if bool(getattr(args, "subagents", False)):
+        # `--subagents`（2026-09-30）：把所有已声明的角色动作都交给模型驱动 ——
+        # "各角色像主控的 subagent"这句话的部署开关。
+        #
+        # 为什么是一个显式开关而不是默认值：默认驱动一切会把"确定性代码"的活
+        # （A 的检索编排、B 的按行整理、D 的图计算…）也换成模型调用，
+        # 而 `host.DEFAULT_LLM_LOOPS` 的注释写着装配期纪律："不许因为环境里有 key
+        # 就改变行为"。所以默认仍是"只跑确定性动作"，要 subagent 语义就明说。
+        # 真机实测（`temp/live-collab-fanout-20260930-145743.txt`）：把确定性动作
+        # `B.run_once` 交给 LLM 循环会替换掉那份确定性整理 —— 3 个 B 实例各烧
+        # 7–8 步、以 bad_json_limit 收场、概念与关系一条没涨。批量消化这类活应当
+        # 让角色跑确定性动作（并发由实例轴给），只把"判断类"动作交给模型。
+        from . import capabilities as _C
+        from . import schema as _S
+
+        for _role in _S.ROLES:
+            for _spec in _C.actions_for(_role):
+                table.setdefault((_role, _spec.action), {"max_steps": args.max_steps})
+        print(tty.paint(f"[run-agent] --subagents：已把 {len(table)} 个 (角色,动作) 交给模型驱动"
+                        "（含确定性动作 —— 那会被 LLM 循环替换，见 --help 的说明）", "bold"))
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
     st.init()
@@ -1716,6 +1736,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")
     sp.add_argument("--drive", action="append", default=[],
                     help="把某个 (角色.动作) 交给模型驱动，可重复；不写则不改变确定性行为")
+    sp.add_argument("--subagents", action="store_true",
+                    help="把**所有已声明的角色动作**都交给模型驱动（=「各角色像 subagent」）；"
+                         "注意它会替换掉确定性动作（例如 B 的按行整理），批量消化这类活建议"
+                         "改用「确定性动作 + 同角色多实例并发」（`conductor.summon_many`）")
     sp.add_argument("--semantic-review", action="store_true",
                     help="给 H 接上语义判据（「结论是否强于引文」）；不写则那一格如实报「没查」")
     sp.add_argument("--max-steps", type=_non_negative_int, default=6, help="单次循环最多几步")

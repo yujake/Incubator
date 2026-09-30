@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-09-29T14:31:17+08:00",
+  "generated_at": "2026-09-30T14:53:43+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -228,10 +228,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "9ae0901b3107c5f33710c7621d9503c7aaaeea7fefdf3688defcb8f11de29324",
+      "sha256": "97d80cfacb78f3e41eb67b904ec970e90f5400af215736e41861021efd9ab829",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-36：新增两层参数类型对账（导入期断言 [9]）+ 修 G.register_dependency.page_range 声明（_ARR_S -> _ARR_I）",
+      "change_note": "§199：G→A、H→A/E 三条边（用户 2026-09-30 逐字批准；登记≠批准，仍待 2 名 reviewer）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

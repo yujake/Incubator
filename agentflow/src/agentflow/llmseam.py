@@ -249,15 +249,45 @@ class LlmSeam:
             return None, call
         from .llm import parse_llm_json
 
+        err = ""
         try:
             data = parse_llm_json(call.text)
-        except Exception:
+        except Exception as exc:
+            # 把解析报错原文 + 一句话诊断留下来（2026-09-30）：以前这里只写
+            # "不是 JSON 对象"，于是"它到底哪里写坏了"在台账上不可回答。
+            # 真机实测：模型（M 与 G 的循环都）连着三次多写一个右花括号
+            # （`…"why": "…"}}`）—— 现在这句话会进"纠正消息"，模型下一次就能改对。
             data = None
+            err = f"{type(exc).__name__}: {exc}"
         if not isinstance(data, Mapping):
+            hint = _json_shape_hint(call.text)
             bad = SeamCall(**{**call.__dict__, "ok": False, "problem": "judge_bad_json",
-                              "detail": "模型返回的不是一个 JSON 对象"})
+                              "detail": (f"模型返回的不是一个 JSON 对象（解析报错：{err or '不是对象'}）"
+                                         f"{hint}；原文前 200 字：{str(call.text)[:200]}")})
             return None, bad
         return dict(data), call
+
+
+def _json_shape_hint(text: str) -> str:
+    """坏 JSON 的一句话诊断：`}` 多了或少了是最常见的那两种（真机实测占多数）。
+
+    做法是"试探性修补一次再解析"：能修好，就说明模型犯的正是这个错 ——
+    于是那句纠正消息可以点名它，而不是泛泛地说"不是 JSON 对象"。
+    注意它只用于诊断：修补后的结果不会被当成模型的原意使用
+    （那会让"多一个括号"这种错被静默接受）。
+    """
+    from .llm import parse_llm_json
+
+    t = str(text or "").strip()
+    for cand, why in ((t[:-1], "末尾多了一个 `}`"), (t + "}", "末尾少了一个 `}`")):
+        if not cand or cand == t:
+            continue
+        try:
+            parse_llm_json(cand)
+        except Exception:
+            continue
+        return f"（诊断：{why}）"
+    return ""
 
 
 def selftest() -> int:

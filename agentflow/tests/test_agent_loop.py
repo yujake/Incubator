@@ -42,6 +42,8 @@ LOOPS: dict[tuple[str, str], dict[str, Any]] = {
     ("G", "revise"): {},
     ("D", "write_report"): {},
     ("H", "review"): {},
+    # C 的边是空的（谁也够不到）⇒ 它是"必须请主控代唤"那一档的天然样本
+    ("C", "hottest"): {},
 }
 
 
@@ -248,7 +250,7 @@ def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Pat
                      sid="test-run", store=st)
     prompt = loop._prompt("转录", step=0)
     assert prompt.rstrip().endswith(JSON_TAIL.rstrip()), prompt[-200:]
-    for shape in ("tool", "summon", "message", "note", "ask_user", "final"):
+    for shape in ("tool", "summon", "summon_many", "message", "note", "ask_user", "final"):
         assert f'"{shape}"' in JSON_TAIL, shape
 
 
@@ -288,7 +290,8 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
         shape, _payload, problem = _shape_of(data)
         assert not problem, (line, problem)
         parsed.append(shape)
-    assert sorted(parsed) == sorted(["tool", "summon", "message", "note", "ask_user", "final"]), \
+    assert sorted(parsed) == sorted(["tool", "summon", "summon_many", "message", "note",
+                                          "ask_user", "final"]), \
         parsed
 
 
@@ -404,11 +407,13 @@ def test_a_forbidden_edge_becomes_a_relay_request_to_the_conductor(tmp_path: pat
     asking = _json.dumps({"summon": {"role": "A", "action": "run_once",
                                      "params": {"request": "缺一份 1971 年的原文"}}},
                          ensure_ascii=False)
-    scripts = {"H": [asking, _json.dumps({"final": "已申请代唤", "evidence": []},
+    # 用 C 当申请方：它的出边是空的（`ALLOWED_EDGES["C"] == frozenset()`），
+    # 所以它对任何人都必然越权 —— 而 H 现在有到 A 的边了（`draft/28` §199）。
+    scripts = {"C": [asking, _json.dumps({"final": "已申请代唤", "evidence": []},
                                          ensure_ascii=False)]}
     st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
-    run = run_role("H", "发现稿件缺一份引文的原文", store=st, registry=registry, conductor=cond,
-                   seam=LlmSeam(role="H", session_root=root, gateway=gw["H"], price=(0.0, 0.0),
+    run = run_role("C", "发现稿件缺一份引文的原文", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="C", session_root=root, gateway=gw["C"], price=(0.0, 0.0),
                                 sid="test-run"), workspace_root=str(root), sid="test-run",
                    from_env=False)
     step = _summon_step(run)
@@ -427,7 +432,7 @@ def test_a_forbidden_edge_becomes_a_relay_request_to_the_conductor(tmp_path: pat
     # ③ 结构化事件落档
     events = _events(root)
     reqs = [e for e in events if e.get("kind") == "agent_summon_request"]
-    assert reqs and reqs[0]["role"] == "H" and reqs[0]["wants_role"] == "A", reqs
+    assert reqs and reqs[0]["role"] == "C" and reqs[0]["wants_role"] == "A", reqs
 
 
 def test_relay_is_not_sent_when_the_edge_exists_and_only_the_params_are_wrong(tmp_path: pathlib.Path):
@@ -511,8 +516,8 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
 
     scripts = {
         "M": [
-            _json.dumps({"summon": {"role": "H", "action": "review",
-                                    "params": {"doc_id": "0000"}}}, ensure_ascii=False),
+            _json.dumps({"summon": {"role": "C", "action": "hottest",
+                                    "params": {"top_n": 2, "request": "证据"}}}, ensure_ascii=False),
             # 第二步：M 读到申请（收件箱在结果里），替 H 派 A
             _json.dumps({"tool": "conductor.summon",
                          "args": {"target_role": "A", "action": "run_once",
@@ -520,7 +525,8 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
             _json.dumps({"final": "已按 H 的申请派 A 去找原文", "evidence": []},
                         ensure_ascii=False),
         ],
-        "H": [
+        # C 的出边是空的 ⇒ 它对 A 的召唤必然越权 ⇒ 框架转成"请代唤"给 M。
+        "C": [
             _json.dumps({"summon": {"role": "A", "action": "run_once",
                                     "params": {"request": "缺 lit:0037 的原文"}}},
                         ensure_ascii=False),
@@ -542,21 +548,83 @@ def test_the_collaboration_chain_works_end_to_end(tmp_path: pathlib.Path):
              from_env=False)
 
     rows = _tasks(st)
-    h_rows = [r for r in rows if str(r.get("role")) == "H"]
-    direct = [r for r in rows if str(r.get("role")) == "A" and str(r.get("called_by")) == "H"]
+    c_rows = [r for r in rows if str(r.get("role")) == "C"]
+    direct = [r for r in rows if str(r.get("role")) == "A" and str(r.get("called_by")) == "C"]
     relayed = [r for r in rows if str(r.get("role")) == "A" and str(r.get("called_by")) == "M"]
-    assert h_rows and h_rows[0]["called_by"] == "M", [dict(r) for r in rows]
+    assert c_rows and c_rows[0]["called_by"] == "M", [dict(r) for r in rows]
     # H 自己那一次被拒（边表里 H 只能叫 G）—— 这正是要转成代唤申请的那一次
     assert direct and direct[0]["outcome"] == "refused", direct
     assert direct[0]["refusal_reason"] in ("forbidden_edge", "invalid_params"), direct[0]
-    # 主控替它派的那一次真的发生了，而且在 H 的申请之后
-    assert relayed, f"M 没有替 H 派 A：{[dict(r) for r in rows]}"
+    # 主控替它派的那一次真的发生了，而且在 C 的申请之后
+    assert relayed, f"M 没有替 C 派 A：{[dict(r) for r in rows]}"
     assert str(relayed[0]["task_id"]) > str(direct[0]["task_id"]), "派 A 必须发生在 H 的申请之后"
     # 申请本身也要留痕（不只看留言文本）
     reqs = [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
     assert reqs and reqs[0]["wants_role"] == "A", reqs
     # M 的第二步提示词里必须真的出现了那条申请（否则它只是"碰巧"派了 A）
     assert "请代唤" in gw["M"].prompts[1], gw["M"].prompts[1][-600:]
+
+
+def test_a_role_can_fan_out_a_batch_in_one_step(tmp_path: pathlib.Path):
+    """判据（§198 的第二种 fan-out）：角色自己也能在一步里并发派一批活。
+
+    为什么它必须存在：真机实测里 M 想干这件事时，先试了两次 `{"summon_many": …}`
+    （被判"认不出的形状"，白扔两步）才发现要用工具 —— 而"一批文献分给几个自己去读"
+    是每个角色都会遇到的事，不该只有主控做得到。判据四条：
+    ① 两个同角色目标落同一波且 `concurrent_peak == 2`；
+    ② 自动补的实例标签 `D#1`/`D#2` 在结果里可见；
+    ③ 台账里两条 `role=D` 的行的 `called_by` 都是发起方（`G`）；
+    ④ 结果按输入顺序回来、每一项各有自己的 `task_id`/`status`。
+    """
+    import json as _json
+
+    asking = _json.dumps({"summon_many": {"targets": [
+        {"role": "D", "action": "write_report", "params": {"out_path": "out/a.md"}},
+        {"role": "D", "action": "write_report", "params": {"out_path": "out/b.md"}}],
+        "why": "两份报告可以同时写"}}, ensure_ascii=False)
+    scripts = {
+        "G": [asking, _json.dumps({"final": "两份都派出去了", "evidence": []}, ensure_ascii=False)],
+        "D": [_json.dumps({"final": "写完了", "evidence": []}, ensure_ascii=False)],
+    }
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    run = run_role("G", "同时准备两份报告", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="G", session_root=root, gateway=gw["G"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    step = next(s.result for s in run.steps if s.shape == "summon_many")
+    assert step["count"] == 2 and step["ok_count"] == 2, step
+    assert step["waves"] == [2], step["waves"]
+    assert step["concurrent_peak"] == 2, step["concurrent_peak"]
+    assert [i["instance"] for i in step["results"]] == ["D#1", "D#2"], step["results"]
+    assert len({i["task_id"] for i in step["results"]}) == 2, step["results"]
+    d_rows = [r for r in _tasks(st) if str(r.get("role")) == "D"]
+    assert len(d_rows) == 2 and all(str(r["called_by"]) == "G" for r in d_rows), d_rows
+
+
+def test_a_batch_that_cannot_reach_its_target_still_asks_for_relay(tmp_path: pathlib.Path):
+    """判据（批量路径不许成为"越权就静默失败"的后门）：全被拒 ⇒ 发一条汇总代唤申请。
+
+    G 够不到 A，一次派两个 A 也够不到 —— 框架要把这一批汇总成一条「请代唤」留言
+    （不是两条：灌满主控的收件箱会让这个信号贬值），同时每一项仍各自如实标 `refused`。
+    """
+    import json as _json
+
+    asking = _json.dumps({"summon_many": {"targets": [
+        {"role": "A", "action": "run_once"}, {"role": "A", "action": "run_once"}],
+        "why": "要两批文献"}}, ensure_ascii=False)
+    scripts = {"C": [asking, _json.dumps({"final": "申请了代唤", "evidence": []},
+                                         ensure_ascii=False)]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    run = run_role("C", "要文献", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="C", session_root=root, gateway=gw["C"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    step = next(s.result for s in run.steps if s.shape == "summon_many")
+    assert step["refused_count"] == 2 and step["ok_count"] == 0, step
+    relay = step.get("relay_requested") or {}
+    assert relay.get("to") == "M" and relay.get("message_id"), step
+    reqs = [e for e in _events(root) if e.get("kind") == "agent_summon_request"]
+    assert len(reqs) == 1, f"应当只发一条汇总申请，实际 {len(reqs)} 条"
 
 
 @pytest.mark.parametrize("role", sorted(S.ROLES))

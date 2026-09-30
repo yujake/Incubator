@@ -701,8 +701,12 @@ def _strip_code_fence(raw: str) -> str:
 def parse_llm_json(raw: str) -> dict[str, Any]:
     """宽松解析 LLM 返回的 JSON 对象。
 
-    容忍：```json 围栏、前后寒暄文字（截取首个 ``{`` 到末个 ``}``）、
-    数组/对象结尾的多余逗号。
+    容忍（每一条都是实测撞出来的，且都只容忍语法噪声，不容忍语义含糊）：
+    ```json 围栏、前后寒暄文字（截取首个 ``{`` 到末个 ``}``）、
+    数组/对象结尾的多余逗号、以及末尾多一个 ``}``（2026-09-30 加：
+    真机里 M 与 G 的循环连着十几次写出 ``…"why": "…"}}``，每次都因为一个
+    多余的右花括号丢掉整步；它的意图毫无歧义 —— 而"丢掉整步"的代价是
+    整条协同链停摆）。
     最终仍解析不出对象就抛 :class:`ExtractionError`——注意这里是
     "解析失败即失败"，不做"从文本里猜几个概念"的补救：抽取结果直接进库，
     猜出来的东西会污染概念表且无法追溯。
@@ -719,7 +723,12 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
 
     last_error: Exception | None = None
     for candidate in candidates:
-        for repaired in (candidate, re.sub(r",\s*([}\]])", r"\1", candidate)):
+        reps = [candidate, re.sub(r",\s*([}\]])", r"\1", candidate)]
+        # 末尾多一个 `}`（最常见的坏 JSON）：只在"只差这一个字符"时才算数 ——
+        # 去掉后必须能解析，否则不做任何修补。
+        if candidate.rstrip().endswith("}"):
+            reps.append(candidate.rstrip()[:-1])
+        for repaired in reps:
             try:
                 parsed = json.loads(repaired)
             except json.JSONDecodeError as exc:

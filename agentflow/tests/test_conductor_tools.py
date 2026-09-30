@@ -113,15 +113,50 @@ def test_summon_many_fans_out_the_same_role_in_parallel(tmp_path: Path):
     assert len(store.rows("tasks")) == 3
 
 
-def test_summon_many_keeps_the_default_serial_when_no_instance_is_given(tmp_path: Path):
-    """负控：不给 `instance` ⇒ 仍然按角色串行（默认行为不许被这次改动改松）。"""
+def test_summon_many_auto_assigns_instances_for_a_repeated_role(tmp_path: Path):
+    """正控（自动实例标签，2026-09-30）：同一角色在一批里出现多次、没给标签 ⇒ 自动补序号。
+
+    为什么要这条：模型写一批 target 时经常不写 `instance`，而"同角色不同实例"
+    是并发的唯一开关 —— 不补的话三个 B 会被排成三波串行，而台账看起来是
+    "派了三份活、都成功了"（一种不会报错的失败）。判据：`waves == [3]`、
+    `concurrent_peak == 3`，且每一项都标了 `auto_instance=True`。
+    """
     store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
     res = reg.call("conductor.summon_many", role="M",
                    targets=[{"target_role": "E", "action": "list_experiments"} for _ in range(3)])
     assert res.ok, res.error
-    assert res.data["waves"] == [1, 1, 1], res.data["waves"]
-    assert res.data["concurrent_peak"] == 1, res.data["concurrent_peak"]
+    assert res.data["waves"] == [3], res.data["waves"]
+    assert res.data["concurrent_peak"] == 3, res.data["concurrent_peak"]
+    assert [r["instance"] for r in res.data["results"]] == ["E#1", "E#2", "E#3"]
+    assert all(r["auto_instance"] is True for r in res.data["results"])
     assert len(store.rows("tasks")) == 3
+
+
+def test_summon_many_does_not_relax_cross_role_conflicts(tmp_path: Path):
+    """负控（自动标签不许顺手放宽跨角色）：A 与 B 都写 `literature` ⇒ 仍必须分波串行。
+
+    自动补标签解决的是"同角色的 N 个实例"，不是"不同角色会不会改同一张表"。
+    这条与 `test_scheduler.py::test_instance_axis_only_relaxes_the_same_role` 同族，
+    只是换到工具面上再验一遍。
+    """
+
+    class _A:
+        def run_once(self) -> dict:
+            return {"outcome": "ok"}
+
+    class _B:
+        def run_once(self) -> dict:
+            return {"outcome": "ok"}
+
+    store, _c, reg = _wired(tmp_path, role_registry={"A": ("object", _A()),
+                                                     "B": ("object", _B())})
+    res = reg.call("conductor.summon_many", role="M",
+                   targets=[{"target_role": "A", "action": "run_once"},
+                            {"target_role": "B", "action": "run_once"}])
+    assert res.ok, res.error
+    assert res.data["waves"] == [1, 1], res.data["waves"]
+    assert res.data["concurrent_peak"] == 1, res.data["concurrent_peak"]
+    assert all(r["auto_instance"] is False for r in res.data["results"]), res.data["results"]
 
 
 def test_summon_many_refuses_a_bad_target_shape(tmp_path: Path):
@@ -135,6 +170,50 @@ def test_summon_many_refuses_a_bad_target_shape(tmp_path: Path):
     assert res.ok is False and res.error, res
     assert "targets" in str(res.error) and "对象" in str(res.error), res.error
     assert store.rows("tasks") == []
+
+
+def test_ledger_relays_view_reports_pending_and_fulfilled(tmp_path: Path):
+    """代唤申请的可判定视图（§199）：留言是给人看的，这个视图是给主控看的。
+
+    判据：一条 `agent_summon_request` 算"已受理"，当且仅当台账里存在一条同
+    (角色, 动作) 且 `started_at >= 申请时刻` 的任务行。三态：读不到会话目录时
+    `relay_pending` 必须是 `None`（没查成），不是 `0`（没有申请）。
+    """
+    from agentflow import schema as S
+    from agentflow import sessions as SS
+
+    store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})
+    root = Path(store.root)
+    SS.append(root, {"kind": "agent_summon_request", "role": "H", "wants_role": "A",
+                     "wants_action": "run_once", "refusal_reason": "forbidden_edge",
+                     "ts": "2026-01-01T00:00:00+00:00"}, sid="probe")
+
+    # ① 还没有人派 A ⇒ 待受理 1 条
+    got = reg.call("conductor.ledger", role="M", view="relays")
+    assert got.ok, got.error
+    assert got.data["relay_pending"] == 1, got.data
+    assert got.data["relays"][0]["fulfilled"] is False, got.data["relays"]
+
+    # ② 台账里出现一条之后的 A.run_once ⇒ 视为已受理（判据是台账事实，不是承诺）
+    with store.tx("tasks", actor="probe") as tx:
+        row = S.Task(task_id="t-9001", role="A", action="run_once", called_by="M",
+                     status="done", outcome="ok", input_key="A.run_once",
+                     detail="探针：模拟主控替 H 派了 A",
+                     started_at="2026-01-01T00:00:01+00:00",
+                     ended_at="2026-01-01T00:00:02+00:00").to_dict()
+        tx.upsert("tasks", row)
+    got2 = reg.call("conductor.ledger", role="M", view="relays")
+    assert got2.data["relay_pending"] == 0, got2.data
+    assert got2.data["relays"][0]["fulfilled"] is True, got2.data["relays"]
+    assert got2.data["relays"][0]["fulfilled_by_task"] == "t-9001"
+
+    # ③ 负控（三态）：会话目录不在 ⇒ `None`（没查成），不是 0
+    import shutil
+
+    shutil.rmtree(root / "sessions")
+    got3 = reg.call("conductor.ledger", role="M", view="relays")
+    assert got3.data["relay_pending"] is None, got3.data
+    assert got3.data["relay_note"], got3.data
 
 
 def test_summon_without_wiring_refuses_and_still_writes_the_row(tmp_path: Path):

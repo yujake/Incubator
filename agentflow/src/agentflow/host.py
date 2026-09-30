@@ -59,8 +59,15 @@ class _Builder:
 
     def __init__(self, *, llm: Any = None, providers: Any = None, extractor: Any = None,
                  config: Mapping[str, Any] | None = None,
-                 workspace_root: str | Path | None = None) -> None:
+                 workspace_root: str | Path | None = None,
+                 llm_by_role: Mapping[str, Any] | None = None) -> None:
         self.llm = llm
+        #: 逐角色的模型缝（2026-09-30）：`llm=` 是"所有角色共用这一个"，
+        #: 而 H 的语义判据要的是只给 H 一个缝 —— 把它塞进 `llm=` 会让
+        #: `agent_b` 拿它去造 `LLMExtractor`，而缝不是抽取器 client
+        #: （实测：`TypeError: client 必须提供 complete(prompt: str) -> str 方法`，
+        #: 且当时被 `resolve` 的 `except TypeError` 兜成了一句误导性的"需要一个 store"）。
+        self.llms: dict[str, Any] = dict(llm_by_role or {})
         self.providers = list(providers or [])
         self.extractor = extractor
         self.cfg: dict[str, Any] = dict(config or {})
@@ -68,6 +75,10 @@ class _Builder:
         self._made: dict[tuple[str, str], Any] = {}
 
     # ------------------------------------------------------------ 逐个角色
+
+    def _llm_for(self, role: str) -> Any:
+        """该角色用的模型缝：逐角色优先，否则用共用的那个。"""
+        return self.llms.get(role, self.llm) if role in self.llms else self.llm
 
     def _cfg_for(self, role: str) -> dict[str, Any]:
         """该角色的配置段（`config["agent_c"]` 这类；没有就给空 dict）。"""
@@ -99,7 +110,7 @@ class _Builder:
         downloader = None
         if acfg.get("download", True):
             downloader = F.default_downloader(self.cfg.get("download") or {})
-        return AgentA(store, providers=list(self.providers), llm=self.llm,
+        return AgentA(store, providers=list(self.providers), llm=self._llm_for("A"),
                       config=acfg, downloader=downloader,
                       actor=self._actor_for("A", instance))
 
@@ -116,10 +127,11 @@ class _Builder:
 
         extractor = self.extractor
         if extractor is None:
-            if self.llm is not None:
+            role_llm = self._llm_for("B")
+            if role_llm is not None:
                 from .llm import LLMExtractor
 
-                extractor = LLMExtractor(self.llm)
+                extractor = LLMExtractor(role_llm)
             else:
                 from .llm import RuleExtractor
 
@@ -131,20 +143,20 @@ class _Builder:
         """C：只要 store。"""
         from .agent_c import AgentC
 
-        return AgentC(store, config=self._cfg_for("C"), llm=self.llm)
+        return AgentC(store, config=self._cfg_for("C"), llm=self._llm_for("C"))
 
     def agent_d(self, store: Any, instance: str = "") -> Any:
         """D：构造期拿到 同一个 C 实例（`D` 的签名里 `c` 是可选关键字）。"""
         from .agent_d import AgentD
 
-        return AgentD(store, config=self._cfg_for("D"), llm=self.llm,
+        return AgentD(store, config=self._cfg_for("D"), llm=self._llm_for("D"),
                       c=self.get("C", store), actor=self._actor_for("D", instance))
 
     def agent_e(self, store: Any, instance: str = "") -> Any:
         """E：需要工作区根（它跑实验脚本、写产物）。"""
         from .agent_e import AgentE
 
-        return AgentE(store, config=self._cfg_for("E"), llm=self.llm,
+        return AgentE(store, config=self._cfg_for("E"), llm=self._llm_for("E"),
                       workspace_root=self.workspace_root or _root_of(store),
                       actor=self._actor_for("E", instance))
 
@@ -152,21 +164,21 @@ class _Builder:
         """F：构造期拿到 同一个 E 实例。"""
         from .agent_f import AgentF
 
-        return AgentF(store, config=self._cfg_for("F"), llm=self.llm,
+        return AgentF(store, config=self._cfg_for("F"), llm=self._llm_for("F"),
                       e=self.get("E", store), actor=self._actor_for("F", instance))
 
     def agent_g(self, store: Any, instance: str = "") -> Any:
         """G：需要工作区根（它写稿件）。"""
         from .agent_g import AgentG
 
-        return AgentG(store, config=self._cfg_with_actor("G", instance), llm=self.llm,
+        return AgentG(store, config=self._cfg_with_actor("G", instance), llm=self._llm_for("G"),
                       workspace_root=self.workspace_root or _root_of(store))
 
     def agent_h(self, store: Any, instance: str = "") -> Any:
         """H：只要 store（它的落库代理 `writers` 自己会注册）。"""
         from .agent_h import AgentH
 
-        return AgentH(store, config=self._cfg_with_actor("H", instance), llm=self.llm)
+        return AgentH(store, config=self._cfg_with_actor("H", instance), llm=self._llm_for("H"))
 
     def _cfg_with_actor(self, role: str, instance: str) -> dict[str, Any]:
         """G/H 从 config 读 `actor`：实例标签就写在这里（它们没有 `actor=` 形参）。"""
@@ -205,14 +217,15 @@ class _Builder:
 def build_role_registry(store: Any, *, llm: Any = None,
                         providers: Any = None, extractor: Any = None,
                         config: Mapping[str, Any] | None = None,
-                        workspace_root: str | Path | None = None) -> dict[str, Factory]:
+                        workspace_root: str | Path | None = None,
+                        llm_by_role: Mapping[str, Any] | None = None) -> dict[str, Factory]:
     """给 `LocalBackend` 的角色登记表（`role -> ("factory", fn)`）。
 
     没接线的角色不进这张表 —— 于是 `summon` 会如实落 `refused/not_wired`，
     而不是拿一个空壳对象假装跑过。要看"谁没接线、为什么"，用 :func:`wiring_status`。
     """
     b = _Builder(llm=llm, providers=providers, extractor=extractor,
-                 config=config, workspace_root=workspace_root)
+                 config=config, workspace_root=workspace_root, llm_by_role=llm_by_role)
     reg: dict[str, Factory] = {}
     for role, state in b.status().items():
         if state != "wired":
@@ -328,8 +341,9 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
         h_llm = (seam_factory or (lambda role: _Seam.for_role(role, session_root=root, sid=sid,
                                                              usd_budget=usd_budget)))("H")
-    role_reg = build_role_registry(store, llm=h_llm, providers=providers, extractor=extractor,
-                                   config=config, workspace_root=workspace_root)
+    role_reg = build_role_registry(store, providers=providers, extractor=extractor,
+                                   config=config, workspace_root=workspace_root,
+                                   llm_by_role=({"H": h_llm} if h_llm is not None else None))
     table = dict(loops or {})
     conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
 

@@ -74,7 +74,7 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
 
 def test_the_paper_pack_section_is_versioned(store: Store):
     """判据（可追溯）：段变了版本号就要动 —— 提示词版本是审计记录里的一栏。"""
-    assert AP.PROMPT_VERSION == "p17", AP.PROMPT_VERSION
+    assert AP.PROMPT_VERSION == "p18", AP.PROMPT_VERSION
 
 
 def test_the_paper_pack_says_the_package_must_follow_the_ledger(store: Store):

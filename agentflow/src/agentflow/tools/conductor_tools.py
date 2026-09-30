@@ -118,6 +118,55 @@ def _write_resume_brief(conductor: Conductor) -> dict:
     return brief
 
 
+def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
+    """把会话记录里的 `agent_summon_request` 整理成"受理了没有"的表。
+
+    判据（刻意保守、可复算）：一条申请算已受理，当且仅当台账里存在一条
+    `role == wants_role` 且 `action == wants_action` 的任务行，其 `started_at`
+    不早于该申请的时刻。为什么用"之后有没有出现这个动作"而不是"M 明确说受理了"：
+    后者是一个自然语言承诺，而前者是台账上的事实；两者不一致时该相信台账。
+
+    返回 `(行, 没查成的原因)`：读不到 sessions 目录时返回空表 + 原因，
+    调用方据此报 `relay_pending=None`（没查成 ≠ 没有申请）。
+    """
+    from .. import sessions as SS
+
+    root = Path(getattr(getattr(conductor, "store", None), "root", "."))
+    sess_dir = root / "sessions"
+    if not sess_dir.is_dir():
+        return [], f"没有会话目录 {sess_dir} ⇒ 读不到代唤申请（没查成，不是没有申请）"
+    rows = [dict(r) for r in conductor.store.rows("tasks")]
+    out: list[dict[str, Any]] = []
+    try:
+        files = sorted(sess_dir.glob("*.jsonl"))
+    except OSError as exc:
+        return [], f"列会话文件失败：{type(exc).__name__}: {exc}"
+    for path in files:
+        events, problems = SS.read_session(root, sid=path.stem)
+        if problems:
+            return [], f"读会话 {path.name} 失败：{problems[:1]}"
+        for e in events:
+            if e.get("kind") != "agent_summon_request":
+                continue
+            at = str(e.get("ts") or "")
+            want_role = str(e.get("wants_role") or "")
+            want_action = str(e.get("wants_action") or "")
+            hit = next((r for r in rows
+                        if str(r.get("role")) == want_role
+                        and str(r.get("action")) == want_action
+                        and str(r.get("started_at") or "") >= at), None) if at else None
+            out.append({
+                "role": str(e.get("role") or ""),
+                "wants_role": want_role,
+                "wants_action": want_action,
+                "refusal_reason": str(e.get("refusal_reason") or ""),
+                "at": at,
+                "fulfilled": hit is not None,
+                "fulfilled_by_task": str(hit.get("task_id") or "") if hit else "",
+            })
+    return out, ""
+
+
 def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None,
              role_registry: Any = None, policy: Any = None,
              backend: Any = "local") -> list[str]:
@@ -191,7 +240,9 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
         "（上限 `max_concurrency`）。"
         "同一角色要开多个实例时，给每个 target 一个不同的 `instance` 标签 —— "
         "**同角色不同实例允许同波并发**（例：一批文献分给 3 个 B 同时读）；"
-        "不给标签就和从前一样按角色串行。返回里带 `waves` 与 `concurrent_peak`："
+        "没给标签时：同一角色在一批里出现多次会自动补 `<角色>#N`（返回里标 "
+        "`auto_instance=true`），只出现一次则与从前一样串行。"
+        "返回里带 `waves` 与 `concurrent_peak`："
         "'到底并发了没有'看这两个数，不要看墙钟。",
         {
             "type": "object",
@@ -224,8 +275,9 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
         roles=("M",),
         returns=("{'count','ok_count','refused_count','failed_count','waves','max_wave',"
                  "'concurrent_peak','elapsed_sec','why','results'}；results[] 每项是 "
-                 "{'role','action','instance','task_id','status','outcome','refusal_reason',"
-                 "'detail','error','tokens','usd','elapsed_sec','checked','children'}"),
+                 "{'role','action','instance','auto_instance','task_id','status','outcome',"
+                 "'refusal_reason','detail','error','tokens','usd','elapsed_sec','checked',"
+                 "'children'}"),
     )
     def conductor_summon_many(targets: list, why: str = "") -> ToolResult:
         """工具体：一次派一批活，走 `Conductor.run_plan`（分波 + 线程池 + 探针）。
@@ -241,6 +293,24 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
         from .. import scheduler as SC
 
         c = _conductor()
+        # ---- 实例标签的自动补齐（2026-09-30，加在"用户要一批 B 同时干活"这条路上）
+        #
+        # 为什么要有它：并发多实例要求"同一角色的每个 target 给不同 `instance`"
+        # （`policy._same_role_other_instance`），而模型在写一批 target 时经常不写
+        # 那个标签 —— 于是三个 B 会被排成三波串行，而它看起来"派了三份活、都成功了"。
+        # 那种失败不会报错，只是慢，正是最容易被读成"没问题"的形态。
+        # 所以这里做一件确定性的事：同一个角色在一次批量里出现多次、且没给标签时，
+        # 自动补上序号（`<role>#1`…），并在返回里逐项标 `auto_instance=True`。
+        # 给了标签的一律尊重（那是调用方在明确指定"谁干哪一份"）。
+        seen: dict[str, int] = {}
+        for item in (targets or []):
+            if isinstance(item, Mapping) and not str(item.get("instance") or ""):
+                seen[str(item.get("target_role") or "")] = seen.get(
+                    str(item.get("target_role") or ""), 0) + 1
+        auto: dict[str, list[str]] = {
+            role: [f"{role}#{k}" for k in range(1, n + 1)] for role, n in seen.items() if n > 1
+        }
+        used: dict[str, int] = {}
         calls = []
         for i, item in enumerate(targets or []):
             if not isinstance(item, Mapping):
@@ -249,20 +319,28 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
             action = str(item.get("action") or "")
             if not target_role or not action:
                 raise ToolError(f"targets[{i}] 缺 target_role 或 action")
+            instance = str(item.get("instance") or "")
+            if not instance and target_role in auto:
+                used[target_role] = used.get(target_role, 0) + 1
+                instance = auto[target_role][used[target_role] - 1]
             calls.append(SC.TaskCall(
                 role=target_role, action=action,
                 params=dict(item.get("params") or {}),
                 by=S.CONDUCTOR_ROLE,
                 input_key=str(item.get("input_key") or ""),
-                instance=str(item.get("instance") or ""),
+                instance=instance,
             ))
         t0 = time.monotonic()
         results = c.run_plan(calls)
         elapsed = time.monotonic() - t0
         probe = getattr(c, "_last_probe", None)
         waves = [len(w) for w in P.waves_of(calls, limit=c.policy.max_concurrency)]
-        items = [{**_summon_dict(r), "instance": str(getattr(call, "instance", "") or "")}
-                 for r, call in zip(results, calls)]
+        items = [{**_summon_dict(r), "instance": str(getattr(call, "instance", "") or ""),
+                  "auto_instance": bool(
+                      str(getattr(call, "instance", "") or "").startswith(
+                          f"{call.role}#") and not str(
+                              (targets[i] or {}).get("instance") or ""))}
+                 for i, (r, call) in enumerate(zip(results, calls))]
         payload = {
             "count": len(items),
             "ok_count": sum(1 for r in results if getattr(r, "ok", False)),
@@ -288,12 +366,14 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
 
     @tool(
         "conductor.ledger",
-        "看台账：tree（每行的层级与结局）/ stats（总数与分类计数）/ issues（结构问题）/"
-        "verify（不变式检查）。给主控判断'下一步'用的事实，不含任何建议。",
+        "看台账：tree（每行的层级与结局）/ stats（总数与分类计数）/ issues（结构问题）/ "
+        "verify（不变式检查）/ relays（同伴发来的「请代唤」申请：哪些还没受理）。"
+        "给主控判断'下一步'用的事实，不含任何建议。",
         {
             "type": "object",
             "properties": {
-                "view": {"type": "string", "enum": ["tree", "stats", "issues", "verify"]},
+                "view": {"type": "string",
+                         "enum": ["tree", "stats", "issues", "verify", "relays"]},
                 "root_task_id": {"type": "string", "description": "只看这一棵子树（可空）"},
             },
             "required": [],
@@ -301,13 +381,25 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
         },
         side_effect="read",
         roles=("M",),
-        returns="{'view','rows','stats','issues','verify','task_count'}",
+        returns=("{'view','rows','stats','issues','verify','relays','relay_pending','relay_note',"
+                 "'task_count'}；relays[] 每项含 role / wants_role / wants_action / "
+                 "refusal_reason / at / fulfilled / fulfilled_by_task（逐项键名见 "
+                 "`_relay_requests` 的字面量）"),
     )
     def conductor_ledger(view: str = "tree", root_task_id: str = "") -> ToolResult:
-        """工具体：把台账四个视图之一读出来（只读，不写任何字节）。"""
+        """工具体：把台账的视图读出来（只读，不写任何字节）。
+
+        `view="relays"` 是 2026-09-30 加的（`draft/28` §199）：同伴够不到某个边时，
+        框架会自动给主控发一条 `subject=请代唤` 的留言并落一条 `agent_summon_request`
+        事件（`agent_loop._request_relay`）。留言是给人看的，这个视图是给主控看的 ——
+        它把那些申请整理成一张可判定的表：每条申请后面有没有出现"要的那个
+        (角色, 动作)"的任务行 ⇒ `fulfilled` / 待受理。三态纪律：查不到会话记录时
+        `relay_pending` 报 `None`（没查成），不报 0（"没有申请"）。
+        """
         c = _conductor()
         payload: dict[str, Any] = {"view": view, "rows": [], "stats": {}, "issues": [],
-                                   "verify": [], "task_count": 0}
+                                   "verify": [], "relays": [], "relay_pending": None,
+                                   "relay_note": "", "task_count": 0}
         if view == "tree":
             payload["rows"] = c.tree(root_task_id or None)
         elif view == "stats":
@@ -315,8 +407,15 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
         elif view == "issues":
             payload["issues"] = [i.to_dict() if hasattr(i, "to_dict") else dict(i)
                                  for i in c.task_issues()]
-        else:
+        elif view == "verify":
             payload["verify"] = c.verify_tasks()
+        else:
+            relays, why = _relay_requests(c)
+            payload["relays"] = relays
+            payload["relay_pending"] = (None if why else
+                                        sum(1 for r in relays if not r["fulfilled"]))
+            if why:
+                payload["relay_note"] = why
         payload["task_count"] = len(c.tree())
         return ok(payload, **payload)
 

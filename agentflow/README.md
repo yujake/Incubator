@@ -284,7 +284,7 @@ agentflow/
 │   ├── paperbuild.py         论文包的渲染 / 编译 / 锚核对（build = render → compile → anchor_check 三步）
 │   ├── renderanchor.py       渲染锚与编译回执的本体（RENDER-ANCHOR.json / COMPILE-RECEIPT.json / BUILD-HISTORY.jsonl）
 │   ├── promptkit.py          LLM 接入（一）：提示词装配（有序段 + 变量 + complete + 作用域遮蔽）
-│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p17）
+│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p18）
 │   ├── llmseam.py            LLM 接入（三）：统一的模型缝（一次调用一条审计记录 + 三态词表 + 预算守卫）
 │   ├── agent_loop.py         LLM 接入（四）：模型驱动的循环（tool / summon / message / note / ask_user / final 六种形状）
 │   ├── modelgw.py / modelclient.py / modelcost.py / llm.py
@@ -549,13 +549,22 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
       （`src/agentflow/agent_loop.py::LlmBackend`），而默认装配 `DEFAULT_LLM_LOOPS = {}`
       （`src/agentflow/host.py`，刻意的装配期纪律）⇒ 要用 `--drive` 或在驱动脚本里传 `loops=`。
       不打开时角色跑的是确定性动作，**不会有任何同伴召唤**。
-    - **够不到的人**：`capabilities.ALLOWED_EDGES` 里 `G` 够不到 `A`、`H` 够不到 `A`/`E`、`C` 没有出边
-      （那是设计）。越权召唤会被自动转成给 M 的 `请代唤` 留言（`agent_loop._request_relay`），
-      M 的提示词要求它本轮内受理。
+    - **够不到的人**：`C` 没有任何出边（只读角色，设计如此）。越权召唤会被自动转成给 M 的
+      `请代唤` 留言（`agent_loop._request_relay`），M 的提示词要求它本轮内受理。
+      2026-09-30 起 `G → A`、`H → A`、`H → E` 三条边也已由人批准加上（`draft/28` §199）——
+      在此之前"要证据"这条路在 G/H 身上是断的。
     - **同角色并发多实例**：`conductor.summon_many`（M 专属）一次派一批；同一角色的每个 target
       给不同的 `instance` 才会真的并波（`src/agentflow/policy.py::_same_role_other_instance`），
       返回里的 `waves` / `concurrent_peak` 是"到底并发了没有"的读数。
-15. **逐项带路径的现状描述另有一份**：
+15. **`--semantic-review` 曾经会把"确定性角色"全部打成 `failed`**（2026-09-30 真机抓到、已修）：
+    那个开关把 H 的语义判据缝当成了所有角色共用的 `llm=`，于是 `agent_b` 拿它去造
+    `LLMExtractor` 而报 `TypeError`，还被 `LocalBackend.resolve` 的 `except TypeError`
+    伪装成"factory(B) 需要一个 store"。现在缝按角色给、工厂按签名调用。
+16. **`run-agent --subagents`**（2026-09-30 加）：把所有已声明的角色动作都交给模型驱动 ——
+    "各角色像 subagent"的部署开关。**它会替换掉确定性动作**：真机实测把 `B.run_once`
+    交给 LLM 循环后，3 个 B 实例各烧 7–8 步、以 `bad_json_limit` 收场、概念/关系一条没涨。
+    批量消化这类活应当用"确定性动作 + 同角色多实例并发"（`conductor.summon_many`）。
+17. **逐项带路径的现状描述另有一份**：
     [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)
     —— 它是导读（不构成判据），但每条都带工作区相对路径，便于拿它逐条核对本文与代码。
 

@@ -44,13 +44,20 @@ from typing import Any, Mapping, Sequence
 
 from . import agent_prompts as AP
 from . import capabilities as C
+from . import policy as P
 from . import schema as S
 from . import sessions as SS
 from . import userio as U
 from .llmseam import LlmSeam
 
 #: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
-SHAPES = ("tool", "summon", "message", "note", "ask_user", "final")
+#:
+#: `summon_many`（2026-09-30 加）是并发派活：一次说一批目标，框架按写集分波、
+#: 同波并发跑（`Conductor.run_plan` → `scheduler.run_waves`），结果按输入顺序回来。
+#: 为什么让它进协议而不是只做一个 M 的工具：真机实测里模型自己就试过
+#: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
+#: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
+SHAPES = ("tool", "summon", "summon_many", "message", "note", "ask_user", "final")
 
 #: 这些拒绝理由 ⇒ 自动转成"请主控代唤"的申请（2026-09-30）。
 #:
@@ -70,9 +77,14 @@ RELAY_SUBJECT = "请代唤"
 #: 它不是不听指令，是没读到：中间那句"请只输出一个 JSON 对象"离它的回答太远了。
 JSON_TAIL = (
     "只回一行 JSON（不要解释、不要 Markdown 围栏、不要前后缀）。形状取其一"
-    "（键名与嵌套层级照抄，`<...>` 是占位符）：\n"
+    "（键名与嵌套层级照抄，`<...>` 是占位符）。**括号数看最后两行**："
+    "`tool` 那行只以一个 `}` 结尾；`summon` / `summon_many` / `message` / `ask_user` / "
+    "`final` 这几行**本来就以 `}}` 结尾**（嵌套两层）—— 照抄时别再多补一个，"
+    "实测最常见的坏 JSON 就是多补一个 `}`：\n"
     '{"tool": "<工具名>", "args": {...}}\n'
     '{"summon": {"role": "A-H", "action": "<动作名>", "params": {...}}}\n'
+    '{"summon_many": {"targets": [{"role": "A-H", "action": "<动作名>", "instance": "<可选>"}],'
+    ' "why": "<为什么一次派这一批>"}}\n'
     '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
@@ -401,6 +413,27 @@ def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
             return "", {}, "summon.params 必须是一个对象"
         return key, {"role": role, "action": action, "params": dict(params),
                      "why": str(value.get("why") or "")}, ""
+    if key == "summon_many":
+        if not isinstance(value, Mapping):
+            return "", {}, "summon_many 必须是一个对象（{\"targets\": [...]}）"
+        targets = value.get("targets")
+        if not isinstance(targets, (list, tuple)) or not targets:
+            return "", {}, "summon_many.targets 必须是一个非空数组"
+        clean: list[dict[str, Any]] = []
+        for i, item in enumerate(targets):
+            if not isinstance(item, Mapping):
+                return "", {}, f"summon_many.targets[{i}] 必须是一个对象"
+            role = str(item.get("role") or item.get("target_role") or "")
+            action = str(item.get("action") or "")
+            if role not in S.ROLES:
+                return "", {}, f"summon_many.targets[{i}].role={role!r} 不在 {S.ROLES} 里"
+            params = item.get("params") or {}
+            if not isinstance(params, Mapping):
+                return "", {}, f"summon_many.targets[{i}].params 必须是一个对象"
+            clean.append({"role": role, "action": action, "params": dict(params),
+                          "instance": str(item.get("instance") or ""),
+                          "input_key": str(item.get("input_key") or "")})
+        return key, {"targets": clean, "why": str(value.get("why") or "")}, ""
     if key == "ask_user":
         if not isinstance(value, Mapping):
             return "", {}, "ask_user 必须是一个对象"
@@ -549,8 +582,21 @@ class AgentLoop:
                                            note=f"{self.role}.step{step}")
             if data is None:
                 run.bad_json += 1
-                run.steps.append(LoopStep(step, "invalid", {}, {"problem": call.problem},
+                # 把模型实际说了什么留在这一步里（2026-09-30）：只有 `problem`
+                # 时，"它为什么解析不出来"这个问题在台账上是不可回答的 ——
+                # 真机里 M 连着三次 `judge_bad_json`，我只能靠猜（"是不是我新加的
+                # `summon_many` 骨架太长、它照着抄了带 `<...>` 的一行？"）。
+                # 留一段原文（截断）既能让下一个人直接看见，也让"骨架太长"这类
+                # 假设可以被证实或否证。
+                run.steps.append(LoopStep(step, "invalid", {},
+                                          {"problem": call.problem,
+                                           "raw_reply": _clip(call.text, 600)},
                                           problem=call.problem))
+                SS.append(self.session_root, {
+                    "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+                    "payload": {}, "result": {"problem": call.problem,
+                                              "raw_reply": _clip(call.text, 600)},
+                }, sid=self.sid)
                 if call.problem == "judge_not_wired":
                     run.stop_reason = "not_wired"
                     run.final = ("没有接模型（judge_not_wired）：这次运行没有产生任何判断，"
@@ -562,14 +608,24 @@ class AgentLoop:
                                  f"（最后一次：{call.problem}），停止")
                     break
                 transcript += (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
-                               f"（{call.problem}）。**不要写分析、不要写方案、不要写 Markdown**："
+                               f"（{call.problem}；{_clip(call.detail, 240)}）。"
+                               f"**不要写分析、不要写方案、不要写 Markdown**："
                                f"只回一行 JSON。骨架：\n{JSON_TAIL}")
                 continue
             shape, payload, problem = _shape_of(data)
             if problem:
                 run.bad_json += 1
-                run.steps.append(LoopStep(step, "invalid", payload, {"problem": problem},
+                run.steps.append(LoopStep(step, "invalid", payload,
+                                          {"problem": problem,
+                                           "raw_reply": _clip(json.dumps(data, ensure_ascii=False),
+                                                              600)},
                                           problem=problem))
+                SS.append(self.session_root, {
+                    "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+                    "payload": dict(payload), "result": {
+                        "problem": problem,
+                        "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)},
+                }, sid=self.sid)
                 if run.bad_json > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
                     run.final = f"连续 {run.bad_json} 次形状不合法（最后一次：{problem}），停止"
@@ -621,11 +677,85 @@ class AgentLoop:
             return self._do_tool(payload)
         if shape == "summon":
             return self._do_summon(payload)
+        if shape == "summon_many":
+            return self._do_summon_many(payload)
         if shape == "note":
             return self._do_note(payload)
         if shape == "ask_user":
             return self._do_ask_user(payload)
         return self._do_message(payload)
+
+    def _do_summon_many(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """一次派一批活（并发）：走 `Conductor.run_plan`，按写集分波、同波并发。
+
+        与 `_do_summon` 的区别只有两处，都是有意的：
+
+        - 一次一批：`targets` 是数组，结果按输入顺序回来（长度恒等于输入长度）；
+        - 同角色的多个实例要自己给 `instance`：不给时框架按 `summon_many`
+          工具那条同一套规则自动补 `<角色>#N`（同角色在一批里出现多次时）——
+          "并发几个 B"不该依赖模型记得写那个标签。
+
+        三态纪律照旧：每一项都有自己的 `status`/`outcome`/`refusal_reason`；
+        `waves` / `concurrent_peak` 是"到底并发了没有"的读数（不是墙钟）。
+        """
+        targets = payload.get("targets") or []
+        if self.conductor is None:
+            return {"summoned": [], "ok": False, "error": "本次运行没有接线主控（summon_many 不可用）"}
+        if self.token is not None and getattr(self.token, "cancelled", False):
+            return {"summoned": [], "ok": False, "error": "取消信号已置位：不再发起新的召唤"}
+        from . import scheduler as SC
+
+        c = self.conductor
+        auto: dict[str, list[str]] = {}
+        counted: dict[str, int] = {}
+        for t in targets:
+            if not str(t.get("instance") or ""):
+                counted[str(t.get("role"))] = counted.get(str(t.get("role")), 0) + 1
+        for role, n in counted.items():
+            if n > 1:
+                auto[role] = [f"{role}#{k}" for k in range(1, n + 1)]
+        used: dict[str, int] = {}
+        calls = []
+        for t in targets:
+            instance = str(t.get("instance") or "")
+            if not instance and str(t.get("role")) in auto:
+                used[str(t["role"])] = used.get(str(t["role"]), 0) + 1
+                instance = auto[str(t["role"])][used[str(t["role"])] - 1]
+            calls.append(SC.TaskCall(role=str(t.get("role")), action=str(t.get("action")),
+                                     params=dict(t.get("params") or {}), by=self.role,
+                                     parent_task_id=self.my_task_id or None,
+                                     input_key=str(t.get("input_key") or ""),
+                                     instance=instance))
+        results = c.run_plan(calls, token=self.token)
+        probe = getattr(c, "_last_probe", None)
+        waves = [len(w) for w in P.waves_of(calls,
+                                            limit=getattr(c.policy, "max_concurrency", None))]
+        items = []
+        for r, call in zip(results, calls):
+            items.append({"role": call.role, "action": call.action, "instance": call.instance,
+                          "task_id": r.task_id, "status": r.status, "outcome": r.outcome,
+                          "refusal_reason": r.refusal_reason, "detail": _clip(r.detail, 200)})
+        out: dict[str, Any] = {
+            "summoned": [f"{i['role']}.{i['action']}" for i in items],
+            "count": len(items),
+            "ok_count": sum(1 for i in items if i["outcome"] == "ok"),
+            "refused_count": sum(1 for i in items if i["outcome"] == "refused"),
+            "failed_count": sum(1 for i in items if i["status"] == "failed"),
+            "waves": waves, "concurrent_peak": int(getattr(probe, "peak", 0) or 0),
+            "results": items,
+            "ok": True,
+        }
+        # 批量里的越权也要有出路（与 `_do_summon` 同一条纪律）：一次汇总成一条
+        # 代唤申请，而不是每一项发一条（那会把主控的收件箱灌满，让信号贬值）。
+        need = [i for i in items if self._needs_relay(str(i["role"]), str(i["refusal_reason"] or ""))]
+        if need:
+            want = "、".join(sorted({f"{i['role']}.{i['action']}" for i in need}))
+            first = need[0]
+            out["relay_requested"] = self._request_relay(
+                str(first["role"]), str(first["action"]), {},
+                f"{first['refusal_reason']}（批量共 {len(need)} 项）",
+                f"这一批里 {len(need)} 项派不出去：{want}；明细见 results")
+        return out
 
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         name = str(payload.get("name"))

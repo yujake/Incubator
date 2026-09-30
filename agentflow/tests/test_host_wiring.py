@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from agentflow import schema as S
 from agentflow import host
 from agentflow.agent_c import AgentC
@@ -213,6 +215,67 @@ def test_instance_axis_gives_one_object_per_instance(tmp_path: Path):
 
 
 # ---------------------------------------------------------------- ④ 工具层接线
+
+def test_semantic_review_seam_goes_only_to_h(tmp_path: Path):
+    """负控（真机抓到的）：给 H 的语义判据缝不许被塞给别的角色。
+
+    实测（`temp/live-collab-fanout-20260930-144422.txt`）：`wired_llm_conductor(..., semantic_review=True)`
+    把 H 的 `LlmSeam` 当成了所有角色共用的 `llm=` ⇒ `agent_b` 拿它去造
+    `LLMExtractor`，而缝不是抽取器 client ⇒ `TypeError: client 必须提供 complete(prompt: str) -> str 方法`。
+    更糟的是那句错被 `LocalBackend.resolve` 的 `except TypeError` 兜住，
+    最后报出来的是误导性的"factory(B) 需要一个 store" —— 于是 3 个 B 实例
+    全部 `failed`，而错误信息指着完全不相干的地方。
+
+    判据两条：① 开了 `semantic_review` 之后 B/E 仍然能正常构造并被召唤；
+    ② B 的抽取器仍是 `RuleExtractor`（说明它拿到的 llm 是 None，不是那个缝）。
+    """
+    from agentflow.llmseam import LlmSeam
+    from agentflow.tools.conductor_tools import reset_cache
+
+    st = _store(tmp_path)
+
+    class _G:
+        spec = type("S", (), {"model": "m", "api_key": "k"})()
+
+        def complete(self, prompt: str, **kw):
+            return type("R", (), {"ok": False, "text": "", "tokens_in": 0, "tokens_out": 0,
+                                  "error_detail": "no", "error_kind": "x"})()
+
+    def seam(role: str) -> LlmSeam:
+        return LlmSeam(role=role, session_root=st.root, gateway=_G(), price=(0.0, 0.0), sid="t")
+
+    reset_cache()
+    wiring = host.wired_llm_conductor(st, session_root=st.root, sid="t", max_steps=3,
+                                      workspace_root=str(st.root), seam_factory=seam,
+                                      semantic_review=True)
+    reg = host.build_role_registry(st, providers=[object()], llm_by_role={"H": seam("H")})
+    b = reg["B"][1](store=st)
+    assert type(b.extractor).__name__ == "RuleExtractor", type(b.extractor).__name__
+    c = wiring["conductor"]
+    for role, action in (("B", "run_once"), ("E", "list_experiments")):
+        res = c.summon(role, action, {}, by="M", instance="probe-1")
+        assert res.outcome == "ok", (role, res.status, res.outcome, res.error)
+
+
+def test_a_factory_that_raises_typeerror_is_not_masked(tmp_path: Path):
+    """负控（`resolve` 的调用方式）：工厂内部抛的 `TypeError` 不许被吞掉换成别的调用。
+
+    旧写法是 `try: value(store=…, instance=…) except TypeError: …` —— 它把
+    "工厂不接受这个参数"与"工厂自己炸了"混成一件事。真机里正是这个吞法
+    把 `client 必须提供 complete(...)` 变成了一句"需要一个 store"。
+    现在按签名决定怎么调：工厂炸了就是它炸了，错误原文要原样出来。
+    """
+    from agentflow.conductor import LocalBackend
+
+    def boom(*, store=None, instance=""):
+        raise TypeError("工厂内部的真错：client 必须提供 complete(prompt: str) -> str 方法")
+
+    be = LocalBackend({"B": ("factory", boom)})
+    be.store = _store(tmp_path)
+    with pytest.raises(TypeError) as err:
+        be.resolve("B", "b1")
+    assert "工厂内部的真错" in str(err.value), err.value
+
 
 def test_selftest_passes():
     """`host.selftest()` 自己必须绿（它是这一层的门，不能被判据绕过）。"""
