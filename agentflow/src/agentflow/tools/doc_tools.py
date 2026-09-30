@@ -1679,6 +1679,9 @@ def _paper_state(workspace: Path | None, project: str) -> Any:
         "anchor_present": got["anchor_present"], "receipt_path": got["receipt_path"],
         "receipt_present": got["receipt_present"], "rendered_at": got["rendered_at"],
         "compiled_at": got["compiled_at"], "checked": got["checked"],
+        # 构建历史（`draft/28` §193）：它是读数不是判据 —— 回答"渲染/编译过几次、
+        # 最近一次是什么时候"，不参与三维判定。
+        "history": got.get("history") or {},
     })
 
 
@@ -1919,9 +1922,11 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
             roles=("G", "H"),
             returns=(
                 "{'verdict','dimensions','drift','problems','why','anchor_path','anchor_present',"
-                "'receipt_path','receipt_present','rendered_at','compiled_at','checked'}；"
+                "'receipt_path','receipt_present','rendered_at','compiled_at','checked','history'}；"
                 "verdict ∈ consistent/drifted/unknown（unknown = 有一维判不了，不是一致）；"
-                "dimensions 含 {'tables','files','receipt'} 三维各自的结论"
+                "dimensions 含 {'tables','files','receipt'} 三维各自的结论；"
+                "history 含 {'present','total','renders','compiles','last_render_at',"
+                "'last_compile_at','problems'}（它是读数，不参与判定）"
             ),
             tags=("document", "paper", "read"),
         )

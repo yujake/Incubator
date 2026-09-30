@@ -36,9 +36,18 @@ ANCHOR_TABLES: tuple[str, ...] = ("documents", "dependencies", "experiments", "c
 #: 锚与回执的文件名（都在包目录 `out/paper/` 下）。
 ANCHOR_NAME = "RENDER-ANCHOR.json"
 RECEIPT_NAME = "COMPILE-RECEIPT.json"
+#: 构建历史：追加式日志（一次渲染/编译一行；`draft/28` §193 加）。
+#:
+#: 为什么是"当前状态 + 追加历史"，而不是给锚与回执加时间戳文件名：
+#: 后者会让"最新一次结论在哪"从读一个常量变成读一个目录 —— 而那正是每条判据
+#: 每天都要回答的问题。于是沿用本仓既有的形态（`ARTIFACTS.jsonl` / `work_items.jsonl`
+#: / `sessions/*.jsonl`）：当前状态仍是两个固定文件名，历史另记一行。
+HISTORY_NAME = "BUILD-HISTORY.jsonl"
 
 #: 编译产物：不进锚（它们每次编译都变，锚是渲染时写的）。
-COMPILE_PRODUCTS: tuple[str, ...] = ("main.pdf", "compile.log")
+#: `BUILD-HISTORY.jsonl` 也在这一栏：它是追加式日志，每写一行它自己就变了 ——
+#: 把它收进锚会让"每次构建都报漂移"，与 PDF 当年那个坑同形（`draft/28` §188.3）。
+COMPILE_PRODUCTS: tuple[str, ...] = ("main.pdf", "compile.log", HISTORY_NAME)
 #: LaTeX 的中间产物：连回执也不记（每次编译都变，且没有信息量）。
 COMPILE_SUFFIXES: tuple[str, ...] = (".aux", ".log", ".out", ".toc", ".fls",
                                      ".fdb_latexmk", ".synctex.gz")
@@ -124,6 +133,71 @@ def build_receipt(package_dir: Path | str, *, tex_sha256: str, pages: int | None
         "compiler_exit_codes": list(compiler_exit_codes or []),
         "note": note or "编译回执：`tex_sha256` 是这次编译用的 `main.tex` 的内容哈希。",
     }
+
+
+def append_history(package_dir: Path | str, event: Mapping[str, Any]) -> str:
+    """往 `BUILD-HISTORY.jsonl` 追加一行（时间戳由这里补）。返回问题串（空 = 写成了）。
+
+    这是写操作，只由两个写脚本（渲染 / 编译）调用 —— `check_package` 不写
+    （核对是只读动作，让它写盘等于"看一眼就把包改了"）。
+    """
+    import datetime as _dt
+
+    record = dict(event)
+    record.setdefault("at", _dt.datetime.now().astimezone().replace(microsecond=0).isoformat())
+    path = Path(package_dir) / HISTORY_NAME
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except (OSError, TypeError, ValueError) as exc:
+        return f"{type(exc).__name__}: {exc}"
+    return ""
+
+
+def history(package_dir: Path | str, *, limit: int | None = None) -> dict[str, Any]:
+    """读构建历史。返回 `{present, path, events, total, renders, compiles, problems}`。
+
+    坏行逐条记进 `problems`（不是静默跳过）：历史是审计材料，读不出来必须看得见。
+    `limit` 给最后 N 条（`events` 按时间正序）。
+    """
+    path = Path(package_dir) / HISTORY_NAME
+    if not path.is_file():
+        # 形状与"读到了历史"那一支逐键一致：调用方不必先判 `present` 才能安全读键
+        # （本仓在 `steps[*]` 那件事上已经吃过一次同类亏）。
+        return {"present": False, "path": str(path), "events": [], "total": 0,
+                "renders": 0, "compiles": 0, "last_render_at": None, "last_compile_at": None,
+                "problems": [f"读不到 {HISTORY_NAME}"]}
+    events: list[dict[str, Any]] = []
+    problems: list[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return {"present": True, "path": str(path), "events": [], "total": 0, "renders": 0,
+                "compiles": 0, "last_render_at": None, "last_compile_at": None,
+                "problems": [f"{type(exc).__name__}: {exc}"]}
+    for i, raw in enumerate(lines, 1):
+        if not raw.strip():
+            continue
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            problems.append(f"第 {i} 行不是合法 JSON")
+            continue
+        if not isinstance(obj, dict):
+            problems.append(f"第 {i} 行不是对象")
+            continue
+        events.append(obj)
+    total = len(events)
+    tail = events[-int(limit):] if limit else events
+    return {"present": True, "path": str(path), "events": tail, "total": total,
+            "renders": sum(1 for e in events if str(e.get("event")) == "render"),
+            "compiles": sum(1 for e in events if str(e.get("event")) == "compile"),
+            "last_render_at": next((e.get("at") for e in reversed(events)
+                                    if str(e.get("event")) == "render"), None),
+            "last_compile_at": next((e.get("at") for e in reversed(events)
+                                     if str(e.get("event")) == "compile"), None),
+            "problems": problems}
 
 
 def _read_json(path: Path) -> tuple[dict[str, Any] | None, str]:
@@ -235,6 +309,7 @@ def _result(dimensions: Mapping[str, str], drift: list[str], problems: list[str]
     for v in dimensions.values():
         if order.get(v, 1) > order[verdict]:
             verdict = v
+    hist = history(out, limit=5)
     return {
         "verdict": verdict,
         "dimensions": dict(dimensions),
@@ -249,6 +324,13 @@ def _result(dimensions: Mapping[str, str], drift: list[str], problems: list[str]
         "receipt": dict(receipt or {}),
         "checked": {"tables": len(ANCHOR_TABLES),
                     "files": len((anchor or {}).get("files") or {})},
+        # 历史是读数不是判据：它回答"这份包被渲染/编译过几次、最近一次是什么时候"，
+        # 不参与三维判定（判定只看当前状态）。
+        "history": {"present": hist["present"], "total": hist["total"],
+                    "renders": hist["renders"], "compiles": hist["compiles"],
+                    "last_render_at": hist.get("last_render_at"),
+                    "last_compile_at": hist.get("last_compile_at"),
+                    "problems": hist["problems"]},
         "note": ("三维：tables（源表行数+规范哈希）/ files（渲染出的源文件）/ "
                  "receipt（PDF 由哪个 tex 编出）。总体取最坏的一档；"
                  "unknown = 这一维判不了，不许读成没问题。"),

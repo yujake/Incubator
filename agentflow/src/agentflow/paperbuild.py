@@ -280,6 +280,8 @@ def anchor_check(project_root: Path | str, *, store: Any = None) -> dict[str, An
         "compiled_at": got.get("compiled_at"),
         "receipt": got.get("receipt") or {},
         "checked": got.get("checked") or {},
+        # 构建历史（`draft/28` §193）：读数不是判据，原样透出。
+        "history": got.get("history") or {},
         "problem": "" if got["verdict"] != "unknown" else why,
     }
 

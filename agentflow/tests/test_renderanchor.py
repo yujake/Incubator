@@ -170,6 +170,79 @@ def test_the_module_selftest_passes():
     assert RA.selftest() == 0
 
 
+# ============================================================ 构建历史（§193）
+
+
+def test_history_records_renders_and_compiles(tmp_path: pathlib.Path):
+    """正控（§193）：渲染与编译各追加一行，`history()` 分开数得清。"""
+    root = tmp_path / "proj"
+    out = root / "out" / "paper"
+    _sealed_project(root)
+    assert RA.append_history(out, {"event": "render", "files": 15}) == ""
+    assert RA.append_history(out, {"event": "compile", "pages": 21}) == ""
+    got = RA.history(out)
+    assert got["total"] == 2 and got["renders"] == 1 and got["compiles"] == 1, got
+    assert got["problems"] == [], got
+    assert [e["event"] for e in got["events"]] == ["render", "compile"], got["events"]
+    assert got["last_render_at"] and got["last_compile_at"], got
+
+
+def test_history_does_not_enter_the_anchor(tmp_path: pathlib.Path):
+    """判据（本次要防的坑）：历史自己每写一行就变 ⇒ 它绝不能进锚。
+
+    否则每次构建都会报"文件 BUILD-HISTORY.jsonl 与渲染时不同" —— 与 PDF 当年那个坑同形。
+    """
+    root = tmp_path / "proj"
+    out = root / "out" / "paper"
+    _sealed_project(root)
+    assert RA.append_history(out, {"event": "render"}) == ""
+    got = RA.check_package(root)
+    assert got["verdict"] == "consistent", (got["drift"], got["problems"])
+    anchor = json.loads((out / RA.ANCHOR_NAME).read_text(encoding="utf-8"))
+    assert RA.HISTORY_NAME not in anchor["files"], anchor["files"]
+
+
+def test_a_bad_history_line_is_reported_not_skipped(tmp_path: pathlib.Path):
+    """负控（三态）：坏行必须出现在 `problems` 里 —— 历史是审计材料，读不出来要看得见。"""
+    root = tmp_path / "proj"
+    out = root / "out" / "paper"
+    _sealed_project(root)
+    assert RA.append_history(out, {"event": "render"}) == ""
+    with (out / RA.HISTORY_NAME).open("a", encoding="utf-8") as fh:
+        fh.write("这不是 JSON\n")
+    got = RA.history(out)
+    assert got["total"] == 1 and any("不是合法 JSON" in p for p in got["problems"]), got
+
+
+def test_a_missing_history_is_not_an_error(tmp_path: pathlib.Path):
+    """边界：没有历史文件 ⇒ `present=False` + 一条 problems（"没有历史"要看得见）。"""
+    got = RA.history(tmp_path / "nope")
+    assert got["present"] is False and got["total"] == 0 and got["problems"], got
+
+
+def test_the_check_reading_includes_the_history_summary(tmp_path: pathlib.Path):
+    """判据（读数进核对）：`check_package` 带上历史摘要，但判定不看它。"""
+    root = tmp_path / "proj"
+    out = root / "out" / "paper"
+    _sealed_project(root)
+    assert RA.append_history(out, {"event": "render"}) == ""
+    assert RA.append_history(out, {"event": "compile", "pages": 21}) == ""
+    got = RA.check_package(root)
+    assert got["history"]["total"] == 2 and got["history"]["compiles"] == 1, got["history"]
+    assert got["verdict"] == "consistent", got["drift"]
+
+
+def test_the_checker_does_not_write_anything(tmp_path: pathlib.Path):
+    """判据（只读纪律）：核对一行都不写 —— 它要能被只读角色反复跑。"""
+    root = tmp_path / "proj"
+    _sealed_project(root)
+    out = root / "out" / "paper"
+    before = RA.history(out)["total"]
+    RA.check_package(root)
+    PB.state(root)
+    assert RA.history(out)["total"] == before, "核对动作写了盘（历史被追加了）"
+
+
 # ============================================================ 三步序列（真机契约）
 
 

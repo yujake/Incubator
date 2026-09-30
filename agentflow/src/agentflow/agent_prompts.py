@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p15"
+PROMPT_VERSION = "p16"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -359,7 +359,11 @@ PAPER_PACK = """\
   必须能读到五个标记：`自主评审`、`断言台账`、`external`、`覆盖率`、`猜想表`。
 
 五、完成定义（五条全过才算交付，任何一条没过就不许说"完成"）
-1. 渲染锚 0 漂移（`doc.paper_anchor` 报 consistent 才算）；
+1. 渲染锚 0 漂移（用 `doc.paper_state` 自己核：它是只读的、进程内跑，不起子进程也不出网；
+   报 `consistent` 才算过，`unknown` 是"有一维没判成"，不是过）。三维分别是
+   源表 / 渲染出的源文件 / 编译回执 —— 最后一维回答"这份 PDF 是不是从磁盘上这份 tex 编的"；
+   它还会给一份构建历史（渲染过几次、编译过几次、最近一次是什么时候）。
+   G 在交付说明里要写出 verdict 与漂移条数；H 的核对必须独立于 G 自己做一次。
 2. `main.pdf` 由**本次**源码编出，页数 >= 1 且五个标记齐全（看 `doc.paper_compile` 的读数，
    不要看编译器退出码：本机 MiKTeX 会写完 PDF 却以崩溃码退出）；
 3. H 的 findings 全部落 `review_findings` 台账（一条都不许只留在对话里）；

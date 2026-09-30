@@ -74,7 +74,7 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
 
 def test_the_paper_pack_section_is_versioned(store: Store):
     """判据（可追溯）：段变了版本号就要动 —— 提示词版本是审计记录里的一栏。"""
-    assert AP.PROMPT_VERSION == "p15", AP.PROMPT_VERSION
+    assert AP.PROMPT_VERSION == "p16", AP.PROMPT_VERSION
 
 
 # ============================================================ ⑥ 验收表解析（真机抓到的缺陷）
