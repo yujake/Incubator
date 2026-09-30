@@ -257,7 +257,8 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         providers: Any = None, extractor: Any = None,
                         config: Mapping[str, Any] | None = None,
                         workspace_root: str | Path | None = None,
-                        seam_factory: Any = None) -> dict[str, Any]:
+                        seam_factory: Any = None,
+                        semantic_review: bool = False) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
 
     ## 语义（与 `LlmBackend` 的 docstring 逐字一致）
@@ -282,7 +283,16 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
     root = Path(session_root or getattr(store, "root", ".")).resolve()
     ws = str(workspace_root or getattr(store, "root", "") or "")
-    role_reg = build_role_registry(store, llm=None, providers=providers, extractor=extractor,
+    # H 的语义判据（`draft/28` §196）：默认 False —— 环境里有 key 也不改变确定性行为
+    # （与 `DEFAULT_LLM_LOOPS` 同一条纪律）。打开时 H 拿一个按角色造的模型缝，
+    # `claims_semantically_judged` 才会从 0 变成真读数。
+    h_llm = None
+    if semantic_review:
+        from .llmseam import LlmSeam as _Seam
+
+        h_llm = (seam_factory or (lambda role: _Seam.for_role(role, session_root=root, sid=sid,
+                                                             usd_budget=usd_budget)))("H")
+    role_reg = build_role_registry(store, llm=h_llm, providers=providers, extractor=extractor,
                                    config=config, workspace_root=workspace_root)
     table = dict(loops or {})
     conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")

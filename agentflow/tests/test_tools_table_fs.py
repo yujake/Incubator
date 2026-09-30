@@ -307,3 +307,45 @@ def test_fs_read_refuses_binary_and_directory(fs, store):
     assert res.ok is False and res.meta["kind"] == "binary"
     assert res.data is None
     assert fs.call("fs.read", path="notes").ok is False
+
+
+def test_fs_read_pages_by_lines_and_says_where_to_continue(fs):
+    """分段读：给 `start_line`/`max_lines` 就只拿那一段，并给出下一步的起点。
+
+    这是真机实测（2026-09-30）逼出来的：E 拿 17849 字节的台账，连续 14 步重读同一个开头，
+    因为观测层每次都把它截到 1200 字，而没有任何办法读后面的部分。
+    """
+    body = "".join(f"L{i}\n" for i in range(1, 31))
+    fs.call("fs.write", path="ledger.md", content=body)
+    got = fs.call("fs.read", path="ledger.md", start_line=11, max_lines=5)
+    assert got.ok and got.data == "L11\nL12\nL13\nL14\nL15\n", repr(got.data)
+    assert got.meta["start_line"] == 11 and got.meta["lines_read"] == 5
+    assert got.meta["total_lines"] == 30 and got.meta["windowed"] is True
+    assert got.meta["next_line"] == 16, got.meta
+    assert "start_line=16" in got.meta["note"], got.meta["note"]
+
+
+def test_fs_read_paging_ends_with_next_line_none_at_eof(fs):
+    """读到尾必须给 `next_line=None`（三态：没读完 / 读完了 / 没查 —— 不许混）。"""
+    fs.call("fs.write", path="ledger.md", content="".join(f"L{i}\n" for i in range(1, 31)))
+    tail = fs.call("fs.read", path="ledger.md", start_line=29, max_lines=5)
+    assert tail.data == "L29\nL30\n", repr(tail.data)
+    assert tail.meta["next_line"] is None, tail.meta
+    # 起点越过文件尾：空窗口要如实说是空的，不能说成"文件是空的"。
+    over = fs.call("fs.read", path="ledger.md", start_line=99)
+    assert over.ok and over.data == ""
+    assert over.meta["next_line"] is None and over.meta["lines_read"] == 0
+    assert "是空的" in over.meta["note"], over.meta["note"]
+
+
+def test_fs_read_without_paging_args_is_unchanged_and_marks_byte_truncation(fs):
+    """不给分段参数时行为与从前一致（整段），字节超限仍如实标注。"""
+    fs.call("fs.write", path="ledger.md", content="".join(f"L{i}\n" for i in range(1, 31)))
+    whole = fs.call("fs.read", path="ledger.md")
+    assert whole.meta["windowed"] is False and whole.meta["truncated"] is False
+    assert whole.data.count("\n") == 30 and whole.meta["next_line"] is None
+    cut = fs.call("fs.read", path="ledger.md", max_bytes=6)
+    assert cut.data == "L1\nL2\n" and cut.meta["truncated"] is True
+    assert cut.meta["total_bytes"] > cut.meta["bytes_read"]
+    # 字节截断时"共 N 行"只能算已读窗口内的，措辞必须说出来。
+    assert "已读窗口内" in cut.meta["note"], cut.meta["note"]

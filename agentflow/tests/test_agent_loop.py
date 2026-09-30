@@ -334,6 +334,54 @@ def test_the_prompt_of_each_role_carries_its_tools_partners_and_task(tmp_path: p
     assert system is None or isinstance(system, str)
 
 
+def test_a_clipped_tool_result_still_carries_its_meta_and_a_way_to_continue(tmp_path: pathlib.Path):
+    """判据（§196 真机实测逼出来的）：观测层截断 `data` 时，`meta` 与续读办法必须还在。
+
+    实测：E 要读 17849 字节的台账，每次拿到 1200 字就没了 —— 它连续 14 步重读同一个开头，
+    把整个步数预算烧在"读不完一份文件"上。根因不是工具不给（`fs.read` 那时已读全文），
+    而是观测层把整个结果 JSON 从头截断，`meta`（含 `total_bytes`）与续读位置一起被切掉。
+    这条判据钉住的是：截断可以，但"少给的那部分怎么拿"必须跟着一起递到模型眼前。
+    """
+    scripts = {"E": [json.dumps({"tool": "fs.read",
+                                 "args": {"path": "ledger.md", "start_line": 1, "max_lines": 8}},
+                                ensure_ascii=False),
+                     json.dumps({"final": "读了第一段", "evidence": []}, ensure_ascii=False)]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    (root / "ledger.md").write_text("".join(f"第 {i} 行：这是一条很长的断言，用来把观测层撑爆\n"
+                                           for i in range(1, 61)), encoding="utf-8")
+    # 角色取 E：真机实测里读台账的正是 E 的子循环，而 E 的工具面里确实有 `fs.read`
+    # （`build_registry` 把只读工具发给 A–H；M 是驱动者，不在 A–H 里）。
+    run_role("E", "读台账", store=st, registry=registry, conductor=cond,
+             seam=LlmSeam(role="E", session_root=root, gateway=gw["E"], price=(0.0, 0.0),
+                          sid="test-run"), workspace_root=str(root), sid="test-run",
+             from_env=False)
+    assert len(gw["E"].prompts) >= 2, "至少要有第二次请求才谈得上'下一轮读到了什么'"
+    seen = gw["E"].prompts[1]
+    # 1) 续读位置进了下一轮的输入（否则模型只知道"被截断了"）
+    assert "续读" in seen and "start_line=9" in seen, seen[-500:]
+    # 2) `meta` 的关键读数没被截掉（摊平后键名带前缀，见 `_flatten_one_level`）
+    assert "meta.total_lines" in seen and "meta.next_line" in seen, seen[-500:]
+    # 3) 被截的那个字段要写明是"观测层截断"，不能让人以为内容本来就没有
+    assert "观测层" in seen, seen[-500:]
+
+
+def test_a_wide_tool_result_keeps_its_later_keys_not_just_the_head_of_one():
+    """判据（§196 第二条）：工具结果是十几个键的字典时，观测层要摊平一层再按字段分配。
+
+    实测：`conductor.acceptance` 的结果里 `data.documents`（验收表背后的 `doc_id`）排在
+    `data.rows` 后面 —— 不摊平时 `data` 是一个字段，尾巴被整段切掉，于是 M 只能从
+    验收表标题里猜一个 `draft/31` 去派 H 审校，而真号是 `0000`，核验链在第一跳就断了。
+    """
+    from agentflow.agent_loop import _clip_fields
+
+    data = {"rows": [{"id": f"P{i}", "reading": "读" * 80} for i in range(1, 11)],
+            "documents": [{"doc_id": "0000", "kind": "survey", "title": "台账", "claims": 24}],
+            "problems": [], "requested": [], "unknown_ids": []}
+    text = _clip_fields({"tool": "conductor.acceptance", "ok": True, "data": data,
+                         "error": "", "meta": {}})
+    assert "data.documents" in text and "0000" in text, text[-400:]
+
+
 @pytest.mark.parametrize("role", sorted(S.ROLES))
 def test_every_role_prompt_mentions_its_declared_collaborators(role: str):
     """正控（对账）：每个角色的提示词里，边表给出的伙伴一个不少、一个不多。"""

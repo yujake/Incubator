@@ -322,6 +322,54 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
     return base
 
 
+def semantic_judge_for(seam: Any, *, criterion_id: str = "claims.conclusion_strength",
+                       doc_context: str = "") -> Any:
+    """把一条模型缝接成 `review_tools` 认的 `semantic_judge(claim, doc)`（`draft/28` §196）。
+
+    ## 为什么需要这个适配器（两套词表，一个方向）
+
+    `review_tools.SemanticJudge` 的词表是 `("consistent", "stronger_than_evidence", "unknown")`，
+    而本条判据的词表是 `("within_evidence", "overclaimed", "unjudgeable")`。
+    两套词表各自都对着自己的消费者（前者对着 H 的审校报告，后者对着交付闸门），
+    所以不合并；这里做单向映射，并把映射写在一处：
+
+    | 判据判定 | 接缝判定 |
+    |---|---|
+    | `within_evidence`（通过档） | `consistent` |
+    | `overclaimed` | `stronger_than_evidence` |
+    | `unjudgeable` / 判据没判成（`problem` 非空） | `unknown` |
+
+    ## 三态
+
+    返回 `{"verdict": "unknown", "reason": ...}` 的两种情况必须分得开（都写进 reason）：
+    "模型说它判不了"（`unjudgeable`）与"这次调用就没成"（`problem`，如 `judge_not_wired`、
+    坏 JSON）。没查成不许折成"没问题" —— 这是 H 的审校报告里那一格的全部意义。
+    """
+    def _judge(claim: Mapping[str, Any], doc: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        text = str(claim.get("text") or claim.get("statement") or "")
+        level = str(claim.get("evidence_kind") or "（未标）")
+        cid = str(claim.get("claim_id") or "")
+        title = str((doc or {}).get("title") or "")
+        artifact = (f"断言（claim_id={cid}，证据等级={level}）：\n{text}\n"
+                    + (f"（所属稿件：{title}）\n" if title else "")
+                    + (doc_context or ""))
+        got = judge(criterion_id, artifact, seam=seam,
+                    context=f"逐条判这一条断言。证据等级={level}。")
+        if got.problem:
+            return {"verdict": "unknown",
+                    "reason": f"判据没判成（{got.problem}）：{got.detail or got.why or ''}"[:200]}
+        if got.verdict == "overclaimed":
+            return {"verdict": "stronger_than_evidence",
+                    "reason": (got.why or "结论强于它挂的证据")[:200]}
+        if got.verdict == "within_evidence":
+            return {"verdict": "consistent", "reason": (got.why or "措辞没有超出证据")[:200]}
+        return {"verdict": "unknown",
+                "reason": f"模型说这一条判不了（{got.verdict or '空判定'}）：{got.why or ''}"[:200]}
+
+    _judge.__name__ = f"judge:{criterion_id}"
+    return _judge
+
+
 def registry_problems() -> list[str]:
     """判据表自身的完整性（判据也要有判据）。返回问题清单，空 = 干净。"""
     problems: list[str] = []

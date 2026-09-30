@@ -469,6 +469,27 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
                 kind="no_acceptance_table", path=str(path), found=False,
             )
         got = _parse_acceptance(path, max_chars=max_chars)
+        # 验收表背后的 documents 行（`draft/28` §196 第 2 条）：真机实测 —— M 拿验收表标题里的
+        # `draft/31` 当 doc_id 去派 H 审校，H 回"draft/31 不在 documents 表"，于是
+        # "核验证明"这条链在第一跳就断了。表和行都在库里，工具就该一起给出来，
+        # 而不是让主控从一个标题里猜一个号。
+        if store is not None:
+            try:
+                rows = store.rows("documents")
+            except Exception as exc:  # noqa: BLE001 —— 读不到就如实说，不编一个空清单
+                got["documents"] = []
+                got["problems"] = list(got["problems"]) + [
+                    f"读不到 documents 表：{type(exc).__name__}: {exc} ⇒ 猜不出该审哪一行"]
+            else:
+                got["documents"] = [{"doc_id": str(r.get("doc_id") or ""),
+                                     "kind": str(r.get("kind") or ""),
+                                     "title": str(r.get("title") or ""),
+                                     "status": str(r.get("status") or ""),
+                                     "claims": len(r.get("claims") or [])} for r in rows]
+        else:
+            got["documents"] = []
+            got["problems"] = list(got["problems"]) + [
+                "没有 store ⇒ 说不出验收表背后的 documents 行是哪一条（没查成，不是「没有」）"]
         if ids:
             want = [str(x) for x in ids]
             keep = [r for r in got["rows"] if r["id"] in want]
@@ -496,6 +517,8 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
             "readings_truncated": got["readings_truncated"], "row_ids": got["row_ids"],
             "problems": got["problems"], "requested": got["requested"],
             "unknown_ids": got["unknown_ids"],
+            # 验收表背后的 documents 行（§196 第 2 条）：主控据此派审校，不必从标题猜号。
+            "documents": got.get("documents") or [],
         })
 
     for fn in (conductor_summon, conductor_ledger, conductor_stop, conductor_resume_brief,

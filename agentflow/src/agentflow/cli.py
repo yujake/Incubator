@@ -1372,7 +1372,8 @@ def cmd_run_agent(args) -> int:
     loops = {key: {"max_steps": args.max_steps} for key in table}
     wiring = H.wired_llm_conductor(st, loops=loops, session_root=root, sid=args.sid,
                                    max_steps=args.max_steps, usd_budget=args.budget_usd,
-                                   workspace_root=str(root), seam_factory=seam_for)
+                                   workspace_root=str(root), seam_factory=seam_for,
+                                   semantic_review=bool(getattr(args, "semantic_review", False)))
     if args.rounds and args.rounds > 1:
         auto = AU.run_autonomous(args.role, args.task, store=st, registry=wiring["registry"],
                                  conductor=wiring["conductor"], session_root=root,
@@ -1710,6 +1711,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")
     sp.add_argument("--drive", action="append", default=[],
                     help="把某个 (角色.动作) 交给模型驱动，可重复；不写则不改变确定性行为")
+    sp.add_argument("--semantic-review", action="store_true",
+                    help="给 H 接上语义判据（「结论是否强于引文」）；不写则那一格如实报「没查」")
     sp.add_argument("--max-steps", type=_non_negative_int, default=6, help="单次循环最多几步")
     sp.add_argument("--rounds", type=_non_negative_int, default=1,
                     help="跑几轮（>1 走自主轮：按 --report-every 向公共频道汇报）")

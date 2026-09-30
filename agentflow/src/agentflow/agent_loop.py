@@ -83,8 +83,15 @@ NOTES_DIR_NAME = "notes"
 #: 正确做法是把长产出放磁盘、把路径给上游：上游有眼睛（fs.read），自己去读全文。
 RUNS_DIR_NAME = "runs"
 
-#: 单个工具结果回给模型时的字符上限（超了截断并写明截了多少）。
-RESULT_CHARS = 1200
+#: 单个工具结果回给模型时的字符上限（超了按字段截断并写明截了多少）。
+#:
+#: 1200 → 3000 是 2026-09-30 的真机读数逼出来的：三次运行里模型自己的抱怨逐字都是
+#: "读数被观测层截断" —— 验收表 10 行、24 条断言台账、253 条 findings，没有一件
+#: 装得进 1200 字，于是它把步数花在"换个姿势再读一遍"上。观测窗口比任务需要的读数小，
+#: 表现不是"模型笨"，而是"它反复做同一件事"。
+RESULT_CHARS = 3000
+#: 模型自己那一步说了什么，回显时的上限（够长到能看见自己给的参数没被截成半截路径）。
+ECHO_CHARS = 600
 
 
 def _clip(value: Any, limit: int = RESULT_CHARS) -> str:
@@ -92,6 +99,111 @@ def _clip(value: Any, limit: int = RESULT_CHARS) -> str:
     if len(text) <= limit:
         return text
     return text[:limit] + f"…（原文 {len(text)} 字，已截断）"
+
+
+#: 观测层渲染单个字段时的下限（给最短的那个字段也不能给到 0 字）。
+FIELD_CHARS_MIN = 120
+#: 落进"审计记录/台账"的字符串上限。观测层给模型看的是预算内的视图，
+#: 而记录要的是"他当时到底拿到了什么" —— 这个上限只防"一屏数据把会话文件撑爆"。
+RECORD_CHARS = 2000
+
+
+def _flatten_one_level(result: Mapping[str, Any]) -> dict[str, Any]:
+    """把工具结果里那一层 `data` 字典摊平（`data.rows` 这样带前缀）。
+
+    为什么要摊平：工具的 `data` 常常是一个十几个键的字典，而"按字段分配预算"
+    只有在这一层才谈得上。摊平之前 `data` 是一个字段，它的尾巴（真机里正是
+    `documents` 那一栏 —— 验收表背后的 doc_id）会被整段切掉，而切掉的部分
+    恰好是"下一步该派谁"的读数。
+    """
+    top = list(result.items())
+    flat: dict[str, Any] = {}
+    for key, value in top:
+        if isinstance(value, Mapping) and len(value) > 1:
+            for sub, inner in value.items():
+                flat[f"{key}.{sub}"] = inner
+        else:
+            flat[key] = value
+    return flat
+
+
+def _clip_fields(result: Mapping[str, Any], limit: int = RESULT_CHARS) -> str:
+    """把一步的结果渲染出来，但逐字段限长，而不是整体切掉尾部。
+
+    为什么不是 `_clip(result)`：真机实测（2026-09-30）E 拿到的是 17849 字节台账的前 1200 字，
+    而 `meta`（里面有 `total_bytes` / 续读位置）与同批到达的 `新消息` 都在 JSON 的尾部，
+    整体截断正好把它们切掉 ⇒ 模型只知道"内容很长"，不知道"怎么读剩下的"，
+    于是连续 14 步重读同一个开头。逐字段限长保证每个键都在，代价是每个键都短一点。
+
+    预算按"便宜的先给满、贵的再平分"来分，而不是等分：等分在两头都错 ——
+    一个 `data` 独大的结果（`fs.read`）会被压到 1/5，而十几个键的结果（验收表）
+    会把每一栏都压成 120 字。这里先让"放得下的小字段"整份通过，剩下的额度再给大字段平分。
+    """
+    flat = _flatten_one_level(result or {})
+    rendered = {key: (value if isinstance(value, str)
+                      else json.dumps(value, ensure_ascii=False, default=str))
+                for key, value in flat.items()}
+    cheap_cap = max(FIELD_CHARS_MIN, limit // 8)
+    cheap = [key for key, text in rendered.items() if len(text) <= cheap_cap]
+    big = [key for key, text in rendered.items() if len(text) > cheap_cap]
+    left = max(FIELD_CHARS_MIN, limit - sum(len(rendered[key]) for key in cheap))
+    per = max(FIELD_CHARS_MIN, left // len(big)) if big else 0
+    out: dict[str, Any] = {}
+    for key, value in flat.items():
+        text = rendered[key]
+        budget = len(text) if key in cheap else per
+        if len(text) > budget:
+            out[key] = (text[:budget] +
+                        f"…（该字段原 {len(text)} 字，这里只给了前 {budget} 字 —— 这是**观测层**的截断，"
+                        f"不是内容没了；要后面的部分见下面的续读办法）")
+        else:
+            # 没被截的字段保持原样（结构还在），只有被截的那个退化成"带说明的字符串"。
+            out[key] = value
+    text = json.dumps(out, ensure_ascii=False, default=str)
+    return text if len(text) <= limit * 2 else _clip(text, limit * 2)
+
+
+def _for_record(result: Mapping[str, Any]) -> dict[str, Any]:
+    """落档用的结果视图（长字符串截到 `RECORD_CHARS`，其余原样）。"""
+    out: dict[str, Any] = {}
+    for key, value in (result or {}).items():
+        if isinstance(value, str) and len(value) > RECORD_CHARS:
+            out[key] = value[:RECORD_CHARS] + f"…（落档截断，原 {len(value)} 字）"
+        else:
+            out[key] = value
+    return out
+
+
+def _continue_hint(result: Mapping[str, Any]) -> str:
+    """从结果里读出"还要更多怎么办"，写成一句可执行的话。
+
+    没有续读办法时返回空串（不编造）。这是上一个坑的正面：截断必须附带出路，
+    否则"少给一点并说清楚"仍然等于"给不出来"。
+    """
+    meta = result.get("meta")
+    if not isinstance(meta, Mapping):
+        return ""
+    tool = str(result.get("tool") or "该工具")
+    if meta.get("next_line") is not None:
+        return (f"【续读】{tool} 本次到第 {meta.get('start_line')}–"
+                f"{meta.get('start_line', 1) + max(0, int(meta.get('lines_read') or 0)) - 1} 行"
+                f"（共 {meta.get('total_lines')} 行）：再调一次 {tool}(path=…, "
+                f"start_line={meta['next_line']}) 接着读")
+    if meta.get("truncated"):
+        return (f"【没读完】{tool} 只读了前 {meta.get('bytes_read')} / {meta.get('total_bytes')} 字节："
+                f"要剩余部分就再调一次并给更大的 max_bytes")
+    if meta.get("total_lines") and not meta.get("windowed"):
+        return (f"【分段】{tool} 这次给的是整段（共 {meta.get('total_lines')} 行）："
+                f"要后面的部分再调一次 {tool}(path=…, start_line=N, max_lines=M) —— "
+                f"别反复重读同一个开头")
+    return ""
+
+
+def _observe(result: Mapping[str, Any]) -> str:
+    """一步的结果 → 模型看得见的那段文本（`data` 可截，`meta` 与续读提示必须到）。"""
+    text = _clip_fields(result)
+    hint = _continue_hint(result)
+    return text + ("\n" + hint if hint else "")
 
 
 @dataclass(frozen=True)
@@ -467,14 +579,14 @@ class AgentLoop:
             heard = self._hear()
             if heard:
                 result = {**result, "新消息": heard}
-            step_obj = LoopStep(step, shape, payload, result)
+            step_obj = LoopStep(step, shape, payload, _for_record(result))
             run.steps.append(step_obj)
             SS.append(self.session_root, {
                 "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
-                "payload": dict(payload), "result": dict(result),
+                "payload": dict(payload), "result": dict(step_obj.result),
             }, sid=self.sid)
-            transcript += (f"\n\n[第 {step + 1} 步] 你说了：{_clip(payload, 400)}\n"
-                           f"框架执行结果：{_clip(result)}")
+            transcript += (f"\n\n[第 {step + 1} 步] 你说了：{_clip(payload, ECHO_CHARS)}\n"
+                           f"框架执行结果：{_observe(result)}")
         else:
             run.stop_reason = "max_steps"
             run.final = run.final or f"步数用尽（{self.max_steps} 步）仍未给出 final"
@@ -513,7 +625,7 @@ class AgentLoop:
             res = self.registry.call(name, role=self.role, **args)
         except Exception as exc:  # 工具层抛错也要变成"模型看得见的结果"
             return {"tool": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
-        return {"tool": name, "ok": bool(res.ok), "data": _clip(res.data),
+        return {"tool": name, "ok": bool(res.ok), "data": res.data,
                 "error": res.error or "", "meta": dict(res.meta or {})}
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:

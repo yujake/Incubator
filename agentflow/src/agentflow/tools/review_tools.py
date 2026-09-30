@@ -900,6 +900,11 @@ def review_document(
     round_no: int | None = None,
     dependencies: Any = _UNSPECIFIED,
     actor: str = "agent-H",
+    # 语义判据的接缝（`draft/28` §196）：默认 None = 没接线 ⇒ `semantic_check["checked"]`
+    # 是 False 且理由逐字写明"没查"。接线由 `AgentH`（有 llm 时）与
+    # `host.wired_llm_conductor(..., semantic_review=True)` 提供 ——
+    # 默认路径一个 LLM 调用都不发。
+    semantic_judge: Any = None,
 ) -> dict:
     """审一份稿件：把机械发现落成 `ReviewFinding` 行，并更新 `documents.status`。
 
@@ -925,7 +930,9 @@ def review_document(
     doc_id = str(doc_id)
     doc = _doc_of(store, doc_id)
     deps, _dep_provided = _resolve_deps(store, doc_id, dependencies)
-    scan = scan_document(doc, dependencies=deps)
+    # 语义判据一路透传给 `scan_document`（`draft/28` §196）：不传就等于这一维永远"没查"，
+    # 而 H 的报告里那一格会一直写着 0 —— "没接线"与"查过没问题"必须分得开。
+    scan = scan_document(doc, dependencies=deps, semantic_judge=semantic_judge)
 
     existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
     if round_no is None:
@@ -1417,6 +1424,10 @@ def review_report(
     claim_counts: Mapping[str, Any] | None = None,
     workspace_root: Any = None,    actor: str = "agent-H",
     round_no: int = 1,
+    # 语义判据的接缝（`draft/28` §196）：报告里的 `coverage.claims_semantically_judged`
+    # 就从这里来。不传 ⇒ 那一格是 0 且 `semantic_check["checked"] is False`（没查），
+    # 与"判过、都说一致"严格分开。
+    semantic_judge: Any = None,
 ) -> dict:
     """产出 G1–G15 的完整审校报告（markdown 落盘）—— §8.4 的落地入口。
 
@@ -1482,7 +1493,8 @@ def review_report(
     # 覆盖率（`draft/31` P7 第 4 项）：就地重算而不是让调用方传进来 ——
     # 传进来的覆盖率是可以编的，而这一格的全部意义就是"如实"。
     # 与 `review_document` 同一份判据源（`scan_document`），所以两处不会给出两个数。
-    coverage = scan_document(doc, dependencies=deps if deps_checked else None)["coverage"]
+    coverage = scan_document(doc, dependencies=deps if deps_checked else None,
+                             semantic_judge=semantic_judge)["coverage"]
     return {
         "doc_id": str(doc_id),
         "round": int(round_no),
@@ -1511,6 +1523,7 @@ def register(
     store: Any = None,
     include_writers: bool = False,
     actor: str = "agent-H",
+    semantic_judge: Any = None,
     **_: Any,
 ) -> None:
     """装配审校工具。
@@ -1610,7 +1623,8 @@ def register(
             handler=lambda **kw: (
                 _not_wired()
                 if store is None
-                else _guard_result(lambda: review_document(store, actor=actor, **kw))
+                else _guard_result(lambda: review_document(store, actor=actor,
+                                                          semantic_judge=semantic_judge, **kw))
             ),
             side_effect="write_local",
             roles=_WRITER_ROLES,
@@ -1692,7 +1706,8 @@ def register(
             handler=lambda **kw: (
                 _not_wired()
                 if store is None
-                else _guard_result(lambda: review_report(store, actor=actor, **kw))
+                else _guard_result(lambda: review_report(store, actor=actor,
+                                                         semantic_judge=semantic_judge, **kw))
             ),
             side_effect="write_local",
             roles=_WRITER_ROLES,

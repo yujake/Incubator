@@ -77,6 +77,22 @@ def test_the_paper_pack_section_is_versioned(store: Store):
     assert AP.PROMPT_VERSION == "p16", AP.PROMPT_VERSION
 
 
+def test_the_paper_pack_says_the_package_must_follow_the_ledger(store: Store):
+    """判据（§196 真机实测逼出来的）：改了台账就要让包跟上，这句必须在段里。
+
+    实测（2026-09-30）：一轮跑出 `documents +3`、`experiments +4`，而 `out/paper/main.pdf`
+    一个字节没变、`doc.paper_state` 报 `drifted` —— 台账动了、包没跟上，交付定义第 1 条
+    当场不成立。G 的修订落进 documents 之后没有任何人重渲染，是这一轮真实的失败形态；
+    所以"重渲染 → 重编译 → 锚回 consistent"要写成收工前的动作，而不是一句原则。
+    """
+    text = _prompt("G", store)
+    for fact in ("doc.paper_render", "doc.paper_compile", "doc.paper_state", "drifted",
+                 "包跟上"):
+        assert fact in text, f"论文包段里没有 {fact!r}"
+    # 负控：这句话不能只写给"读了论文包段"的角色 —— M 才是决定收工的人。
+    assert "包跟上" in _prompt("M", store), "主控的提示词里没有这条收工判据"
+
+
 # ============================================================ ⑥ 验收表解析（真机抓到的缺陷）
 
 

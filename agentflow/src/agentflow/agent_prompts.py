@@ -368,7 +368,16 @@ PAPER_PACK = """\
    不要看编译器退出码：本机 MiKTeX 会写完 PDF 却以崩溃码退出）；
 3. H 的 findings 全部落 `review_findings` 台账（一条都不许只留在对话里）；
 4. 交付说明里十条判据逐条有读数；
-5. 原始论文包未被修改。"""
+5. 原始论文包未被修改。
+
+六、收工前的最后一条：**改了台账就要让包跟上**
+- 只要这一轮动了 `documents` / `experiments` / `review_findings`，`out/paper/` 里的表与稿件
+  就已经是旧的了 —— 锚会报 `drifted`，第 1 条过不了。这不是警告，是真机实测的形态
+  （2026-09-30：一轮跑出 `documents +3`、`experiments +4`，而 `main.pdf` 一个字节没变、
+  `doc.paper_state` 报 `drifted`，交付定义第 1 条当场不成立）。
+- 收工之前必须有人（G 走 `doc.paper_render` → `doc.paper_compile`，或主控派 G 做这件事）
+  把包重渲染、重编译，并让 `doc.paper_state` 回到 `consistent`；做不到就如实写"包与台账分家"，
+  不许把漂移留在一份写着"已完成"的交付说明里。"""
 
 
 @dataclass(frozen=True)
@@ -485,6 +494,9 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
         ),
         policy=(
             "形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。",
+            "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。"
+            "被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，"
+            "并把「这一版脚本查的是什么」写进实验结论。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",
@@ -523,6 +535,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "发现证据不足时要回去找 D/E/F 要，而不是把话说软。",
         ),
         deliverable="documents 里的稿件与每条断言的来路字段。",
+        policy=(
+            "改完稿要让**包**跟上，不是只让台账跟上：修订落进 `documents` 之后，"
+            "调 `doc.paper_render` 重渲染、`doc.paper_compile` 重编译，再用 `doc.paper_state` 读一次锚 —— "
+            "真机实测（2026-09-30）：只把修订写进 documents、没重渲染，锚立刻报 `drifted`，"
+            "而交付定义第 1 条要求 0 漂移 ⇒ 那样的修订等于没交付。"
+            "渲染与编译都要看工具给的读数（标记是否齐全、receipt 是否本次），不看编译器退出码。",
+        ),
         stance=(
             "你的品味体现在取舍上：能删掉的冗余、能统一的记号、能给出的一般性，都要说得出为什么。",
             "写稿不是复述：把 D/F/E 的结论按论证结构重组，并让每条断言的强度与它的证据相称。",

@@ -235,7 +235,17 @@ class AgentH:
         if self.writers.bound_role is None:
             self.writers.bound_role = "H"
         if writers is None:
-            RV.register(self.writers, store=self.store, include_writers=True, actor=self.actor)
+            # `draft/28` §196：有 `llm` 就把它接成语义判据（"结论是否强于引文"），
+            # 一路传给 `review.review_document` / `review.review_report`。
+            # 没有 `llm` ⇒ 传 None ⇒ 报告里那一格是 `checked=False` + 逐字理由（没查），
+            # 不是"判过、没问题"。默认路径（`llm=None`）一个 LLM 调用都不发。
+            judge = None
+            if self.llm is not None:
+                from . import judges as JG
+
+                judge = JG.semantic_judge_for(self.llm)
+            RV.register(self.writers, store=self.store, include_writers=True, actor=self.actor,
+                        semantic_judge=judge)
         # ---- 落库代理的装配期断言（本次审计补上的缺口）。
         #
         # `tools` 上面已有一条 fail-closed 断言，而 `writers` 作为构造参数此前

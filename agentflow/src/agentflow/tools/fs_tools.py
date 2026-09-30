@@ -425,11 +425,18 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
 
 @tool(
     "fs.read",
-    "读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注）。",
+    "读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注）。"
+    "**大文件分段读**：给 `start_line`（1 起）与 `max_lines` 只取那一段，"
+    "meta.next_line 是下一段的起点（EOF 时为 null）—— 一次读不完就按它接着读，"
+    "不要反复重读同一个开头。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
             "max_bytes": {"type": "integer", "minimum": 1, "maximum": MAX_READ_BYTES, "default": READ_DEFAULT_BYTES},
+            "start_line": {"type": "integer", "minimum": 1, "default": 1,
+                           "description": "从第几行开始（1 起）；配合 max_lines 做分段读"},
+            "max_lines": {"type": "integer", "minimum": 0, "default": 0,
+                          "description": "最多取多少行；0 = 不按行截（只受 max_bytes 限制）"},
         },
         required=("path",),
     ),
@@ -438,11 +445,13 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
     # 豁免清单成员（见 `tests/test_tools_returns_declaration.py::NO_KEY_SET_EXEMPTIONS`）：
     # data 是标量文本，声明不出键集合。meta 里还有 path/encoding/bytes_read/
     # total_bytes/truncated/had_errors/sha256 —— 那是审计附注，不是 data 的形状。
-    returns="data=文本（**标量，无键集合**）；meta 里给 encoding / bytes_read / total_bytes / truncated / had_errors / sha256。",
+    returns="data=文本（**标量，无键集合**）；meta 里给 encoding / bytes_read / total_bytes / truncated / "
+            "start_line / lines_read / total_lines / next_line / had_errors / sha256。",
     tags=("fs", "read"),
 )
 @_guard
-def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES) -> ToolResult:
+def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
+            start_line: int = 1, max_lines: int = 0) -> ToolResult:
     """读文本。
 
     三种"读不了"被刻意区分开（这是本工具最容易被做烂的地方）：
@@ -450,6 +459,13 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES) -
     - 超限：截断 + `truncated=True` + 真实 `total_bytes`。只回"太大了"就什么都不给，
       对"只想看看开头"的调用方是纯粹的损失。
     - 编码不是 UTF-8：如实报出实际用的编码，而不是假装它就是 UTF-8。
+
+    第四件事是分段读（`start_line`/`max_lines`）：真机实测（2026-09-30）一个 E 子循环
+    拿 17849 字节的台账，连续 14 步反复重读同一个开头 —— 因为它拿到的每个结果都被
+    观测层截断（当时的上限是 1200 字），而没有任何办法读后面的部分。观测层的截断发生在
+    这一步之后（见 `agent_loop._observe`），所以"能分段"必须由本工具提供：`meta.next_line`
+    就是下一段的起点，读到尾时为 `None`。按行而不是按字节分段，是因为按字节切会把一行切两半，
+    而调用方拿到的两半都读不成话。
     """
     target = _resolve(ctx, path)
     if not target.exists():
@@ -486,13 +502,40 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES) -
         note = f"只读了前 {len(raw)} 字节（共 {size} 字节）"
     if clamped:
         note = (note + "；" if note else "") + f"max_bytes 被夹到硬上限 {MAX_READ_BYTES}"
+
+    # 分段读。`start_line <= 1` 且 `max_lines == 0` 时是完全向后兼容的整段读。
+    lines = text.splitlines(keepends=True)
+    total_lines = len(lines)
+    begin = max(1, int(start_line)) - 1
+    windowed = begin > 0 or max_lines > 0
+    if windowed:
+        end = total_lines if max_lines <= 0 else min(total_lines, begin + int(max_lines))
+        picked = lines[begin:end]
+        shown = "".join(picked)
+        next_line = end + 1 if end < total_lines else None
+        # 空窗口（start_line 超过行数）要如实说，且不能说成"文件是空的"。
+        seg = (f"第 {begin + 1}–{end} 行" if picked else f"第 {begin + 1} 行起是空的")
+        note = (note + "；" if note else "") + f"本次给{seg}（共 {total_lines} 行）"
+        if next_line is not None:
+            note += f"；续读 start_line={next_line}"
+    else:
+        shown = text
+        next_line = None
+        if total_lines > 1:
+            scope = "已读窗口内" if truncated else "共"
+            note = (note + "；" if note else "") + f"{scope} {total_lines} 行"
     return ok(
-        text,
+        shown,
         path=_rel(ctx, target),
         encoding=encoding,
         bytes_read=len(raw),
         total_bytes=size,
         truncated=truncated,
+        start_line=begin + 1,
+        lines_read=len(shown.splitlines(keepends=True)),
+        total_lines=total_lines,
+        next_line=next_line,
+        windowed=windowed,
         had_errors=had_errors,
         note=note,
         sha256=_sha256(target) if size <= MAX_READ_BYTES else None,
