@@ -558,6 +558,36 @@ class AgentA:
         words = [w for w in ascii_only.split() if any(c.isalpha() for c in w)]
         return " ".join(words) if len(words) >= 2 else ""
 
+    #: "这一问根本没发出去"的第三态取值（来自 `providers` 的公开常量，
+    #: 不在这里另抄一份字符串字面量）。`QUERY_APPLICABILITY_STATES` 只有三档：
+    #: `applicable_as_is`（发了）与这两档（没发）—— providers 的私有元组
+    #: `_PROVIDER_STAT_REFUSAL_STATUSES` 分的就是这件事，这里用的是它那两个公开名字。
+    _NOT_SENT_STATES: tuple[str, ...] = ()
+
+    def _not_sent_states(self) -> tuple[str, ...]:
+        """懒取第三态取值（不在导入期去碰 providers，免得凭空多一条导入边）。"""
+        if not self._NOT_SENT_STATES:
+            from . import providers as P
+
+            type(self)._NOT_SENT_STATES = (P.QUERY_NOT_APPLICABLE_CJK, P.QUERY_EMPTY)
+        return self._NOT_SENT_STATES
+
+    def _split_errors(self, errors: Sequence[str]) -> tuple[list[str], list[str]]:
+        """把 provider 的失败分成 `(没发出去的, 发出去但失败的)`。
+
+        为什么要分（2026-09-30 加）：`providers` 对抽不出英文关键词的题面是 fail-closed，
+        抛出的 `ProviderError` 消息里逐字带第三态名。若把它与"网络抖动"混成一档，
+        `run_once` 就按可重试处理 —— 试满 `max_attempts`、每次留退避租约，
+        最后落 `search_failed`。而"这一问没发出去"是确定性的：重试一万次也不会变。
+        混档的代价有两个：① 白烧三次上游配额与三次等待；② 读数上"没问"与"问了失败"
+        长得一样（三态被折平）。这一分割不动 `run_once` 对网络抖动的重试语义 ——
+        它只把"不可能靠重试变好的那一类"提前终结。
+        """
+        states = self._not_sent_states()
+        not_sent = [e for e in errors if any(s in e for s in states)]
+        sent_but_failed = [e for e in errors if e not in not_sent]
+        return not_sent, sent_but_failed
+
     def _search(self, req: dict) -> tuple[list[Any], list[str]]:
         """并发度故意为 1（串行 provider）——避免同时打多个 API 触发限流。"""
         mode = req["mode"]
@@ -842,17 +872,40 @@ class AgentA:
                     # DESIGN.md §5.3：搜索失败不等于这条请求结束。
                     # 如果这里就置 done，那么"租约到期重试"和"超过 max_attempts 才放弃"
                     # 两条规则就都失效了 —— 一次网络抖动会把请求永久判死。
+                    #
+                    # 但"这一问根本没发出去"（第三态）不在这条规则里：它是确定性的，
+                    # 重试不会变。混进重试那一档的代价是白烧三次配额 + 读数上"没问"与
+                    # "问了失败"长得一样（`draft/28` §205）。所以先分档：
+                    not_sent, transient = self._split_errors(search_errors)
                     exhausted = int(fresh.get("attempts") or 0) >= self.max_attempts
-                    fresh["last_error"] = "; ".join(search_errors)
-                    if exhausted:
+                    if not_sent and not transient:
+                        fresh["done"] = True
+                        # 词表里没有第四档（`schema.SEARCH_OUTCOMES` 是禁改区契约），
+                        # 所以 outcome 仍是 `search_failed`；区别写在 `last_error` 里，
+                        # 逐字带第三态名，并明说"不重试"。
+                        fresh["outcome"] = "search_failed"
+                        fresh["lease_until"] = None
+                        fresh["last_error"] = (
+                            "这一问没有发给上游（第三态，重试不会变）：" + "; ".join(not_sent))[:500]
+                    elif not_sent and transient:
+                        # 一部分 provider 没发出去、另一部分发出去失败了：
+                        # 按可重试处理（那一条真失败的可能下次就好了），
+                        # 但把"没发出去"的那几条也如实写进同一个字段。
+                        fresh["done"] = False
+                        fresh["outcome"] = None
+                        fresh["lease_until"] = make_lease(self.retry_backoff_seconds)
+                        fresh["last_error"] = "; ".join(search_errors)[:500]
+                    elif exhausted:
                         fresh["done"] = True
                         fresh["outcome"] = "search_failed"
                         fresh["lease_until"] = None
+                        fresh["last_error"] = "; ".join(search_errors)
                     else:
                         fresh["done"] = False
                         fresh["outcome"] = None
                         # 退避租约：既让重试可行，又不会在本进程里立刻重打同一个 API
                         fresh["lease_until"] = make_lease(self.retry_backoff_seconds)
+                        fresh["last_error"] = "; ".join(search_errors)
                 else:
                     # 搜索正常执行但零命中 —— 这是一个有效结论，不是错误
                     fresh["done"] = True

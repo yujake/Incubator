@@ -313,6 +313,61 @@ def test_search_literature_accepts_a_cjk_topic_when_the_description_carries_engl
     assert len(store.rows("literature")) == 1
 
 
+def test_a_query_that_cannot_be_sent_is_not_retried(store):
+    """第三态（这一问没发出去）必须当场终结，不许按"网络抖动"重试三次。
+
+    现场（`draft/28` §204/§205）：`providers` 对抽不出英文关键词的题面 fail-closed，
+    而这条 `ProviderError` 落在 `run_once` 里原来与"网络抖动"同一档 ⇒ 试满
+    `max_attempts`、每次留退避租约、最后落 `search_failed`。
+    两件事必须分得开：网络抖动可能下次就好，"没发出去"不可能靠重试变好。
+
+    这条判据绕开 `search_literature` 的入队前预检，直接把一条注定发不出去的请求塞进队列 ——
+    因为别的入队口（CLI `submit` / `research.submit_gap` / C 的 gap 分支）没有那道预检，
+    它们今天走的就是这条路。
+    """
+    from agentflow import providers as P
+
+    a = _agent_a(store, StubProvider(error=P.ProviderError(
+        f"stub: {P.QUERY_NOT_APPLICABLE_CJK}：查询串里抽不出任何英文关键词 ⇒ 这一问不发")),
+        OkDownloader())
+    add_request(store, "r-0001", topic="分支布朗运动的极值过程", mode="topical")
+
+    first = a.run_once()
+    assert first.processed == 1, first.to_dict()
+    row = store.rows("search_requests")[0]
+    assert row["done"] is True, f"第三态必须当场终结，实得 done={row['done']} lease={row['lease_until']}"
+    assert row["outcome"] == "search_failed", row
+    assert row["lease_until"] is None, "终结了就不该再留退避租约"
+    assert P.QUERY_NOT_APPLICABLE_CJK in str(row["last_error"]), row["last_error"]
+    assert "重试不会变" in str(row["last_error"]), row["last_error"]
+    assert int(row["attempts"]) == 1, f"只该试一次，实得 {row['attempts']}"
+
+    # 再跑一轮：它已经终结，不该被重复领取（attempts 不涨）
+    second = a.run_once()
+    assert second.request_id is None, second.to_dict()
+    assert int(store.rows("search_requests")[0]["attempts"]) == 1
+
+
+def test_a_transient_provider_failure_still_gets_the_backoff_retry(store):
+    """负控（反真空）：网络抖动那一档的重试语义一个字没动。
+
+    没有这条，上面那条判据可能只是"我把所有失败都当场终结了" —— 而那会让
+    "一次网络抖动把请求永久判死"（DESIGN.md §5.3 明确要避免的形态）重新回来。
+    """
+    a = _agent_a(store, StubProvider(error=RuntimeError("connection reset by peer")),
+                 OkDownloader())
+    add_request(store, "r-0001", topic="abelian group", mode="topical")
+
+    res = a.run_once()
+    assert res.processed == 1, res.to_dict()
+    row = store.rows("search_requests")[0]
+    assert row["done"] is False, "网络抖动不许被当场判死"
+    assert row["outcome"] is None, row
+    assert row["lease_until"], "可重试的失败必须留退避租约"
+    assert int(row["attempts"]) == 1
+    assert "connection reset" in str(row["last_error"]), row["last_error"]
+
+
 # --------------------------------------------------------------------------- 下载失败
 
 
