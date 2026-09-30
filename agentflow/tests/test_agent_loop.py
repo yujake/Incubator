@@ -144,6 +144,70 @@ def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathl
     assert m_seam.spend.calls >= 2, "M 至少该调用两次模型（派活 + 收工）"
 
 
+def test_a_role_emitted_summon_still_gets_an_input_key(tmp_path: pathlib.Path):
+    """角色自己发的 `summon` 也必须留下非空 `input_key`（真机实测：它是空的）。
+
+    为什么单钉这一条：`summon` 形状里没有 `input_key` 这个字段（只有
+    role / action / params / why），于是角色自己派活写出来的那一行键为空 ⇒
+    `verify_tasks` 报 `task_without_input_key`，这条召唤结构上无法参与循环检测。
+    真机现场：场景 G 的 `t-0252`（G 自己派 A 去要文献）。M 走的 `conductor.summon`
+    工具有这个字段、提示词也教它给，所以只有"角色主动派活"这条路会漏。
+
+    判据三条：键非空；同一份 `(action, params)` 派两次得到同一个键（循环检测要的
+    就是"同一件事"）；不同参数得到不同的键（否则一切都会被误判成循环）。
+    """
+    from agentflow.agent_loop import _summon_key
+    from agentflow import verify as V
+
+    scripts = {
+        "M": [json.dumps({"summon": {"role": "D", "action": "consider",
+                                     "params": {"qid": "q-0007"},
+                                     "why": "先要一个结论"}}, ensure_ascii=False),
+              json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],
+        "D": [json.dumps({"final": "收到", "evidence": []}, ensure_ascii=False)],
+    }
+    st, cond, registry, gw, root = _wired(tmp_path, scripts)
+    run_role("M", "派一个结论", store=st, registry=registry, conductor=cond,
+             seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                          sid="test-run"), workspace_root=str(root), sid="test-run",
+             from_env=False)
+    rows = _tasks(st)
+    assert rows, "台账里应当有那一环"
+    for r in rows:
+        assert str(r.get("input_key") or "").strip(), (
+            f"这一行的 input_key 是空的 ⇒ 它会无法参与循环检测：{r}")
+    codes = [i.get("code") for i in V.verify_all(st).to_dict()["warnings"]]
+    assert "task_without_input_key" not in codes, codes
+
+    # 键的语义：同一件事 ⇒ 同一个键；不同的事 ⇒ 不同的键。
+    same_a = _summon_key("consider", {"qid": "q-0007"})
+    same_b = _summon_key("consider", {"qid": "q-0007"})
+    other = _summon_key("consider", {"qid": "q-0008"})
+    assert same_a == same_b and same_a and other and same_a != other, (same_a, same_b, other)
+
+
+def test_a_batch_summon_also_gets_input_keys(tmp_path: pathlib.Path):
+    """一批派活（`summon_many`）的每一项也要有键 —— 同一条兜底，两条路都要钉。"""
+    scripts = {
+        "M": [json.dumps({"summon_many": {"targets": [
+            {"role": "B", "action": "run_once", "params": {}},
+            {"role": "B", "action": "run_once", "params": {}},
+        ]}}, ensure_ascii=False),
+            json.dumps({"final": "批派完了", "evidence": []}, ensure_ascii=False)],
+        "B": [json.dumps({"final": "整理完了", "evidence": []}, ensure_ascii=False),
+              json.dumps({"final": "整理完了", "evidence": []}, ensure_ascii=False)],
+    }
+    st, cond, registry, gw, root = _wired(tmp_path, scripts)
+    run_role("M", "并排整理两本书", store=st, registry=registry, conductor=cond,
+             seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                          sid="test-run"), workspace_root=str(root), sid="test-run",
+             from_env=False)
+    rows = _tasks(st)
+    assert rows, "台账里应当有被派出去的那几行"
+    for r in rows:
+        assert str(r.get("input_key") or "").strip(), r
+
+
 def test_messages_are_durable_and_reach_only_the_recipient(tmp_path: pathlib.Path):
     """正控 + 隔离负控：留言落档、收件人读得到、别人读不到、投递只算一次。"""
     scripts = {
@@ -166,6 +230,48 @@ def test_messages_are_durable_and_reach_only_the_recipient(tmp_path: pathlib.Pat
     assert not problems and "n=3" in inbox_e and fresh_e, (inbox_e, fresh_e)
     inbox_d, fresh_d, _ = inbox_digest(root, "D", sid="test-run")
     assert inbox_d == "（没有收到留言）" and fresh_d == [], "留言串到了别人的收件箱"
+
+
+def test_a_role_can_send_a_private_message_to_the_conductor(tmp_path: pathlib.Path):
+    """`to="M"` 必须是一条合法留言 —— 真机实测（场景 G）它曾被判成 `invalid`。
+
+    为什么这条重要：代唤协议说的是"把申请发给主控 M"，而框架自己的自动代唤
+    （`_request_relay`）就是用 `to=S.CONDUCTOR_ROLE` 发的。如果循环协议只认
+    `S.ROLES`（A–H，不含 M），那么角色照协议自己发的那一条会被判成非法
+    （实测报 `收件人 'M' 既不是角色也不是 #public`），它只能退而发 `#public` ——
+    于是"一条只该主控看到的申请"变成广播，还白扔一步。
+
+    判据三条：形状能解析、M 的收件箱真读得到、别的角色读不到（私聊不是广播）。
+    """
+    from agentflow.agent_loop import _shape_of
+    from agentflow import schema as S
+
+    shape, payload, problem = _shape_of(
+        {"message": {"to": "M", "subject": "请代唤", "body": "要谁：A"}})
+    assert problem == "" and shape == "message", (shape, problem)
+    assert payload["to"] == "M" == S.CONDUCTOR_ROLE
+
+    # 负控：既不是角色、也不是主控、也不是公共频道的收件人仍然要被拒。
+    for bad in ("X", "documents", "", "#all"):
+        _s, _p, why = _shape_of({"message": {"to": bad, "subject": "s", "body": "b"}})
+        assert why, f"{bad!r} 不该被当合法收件人"
+
+    scripts = {
+        "G": [json.dumps({"message": {"to": "M", "subject": "请代唤",
+                                      "body": "要谁：A；什么动作：run_once；为什么：本地书架是空的"}},
+                          ensure_ascii=False),
+              json.dumps({"final": "已申请代唤", "evidence": []}, ensure_ascii=False)],
+    }
+    st, cond, registry, gw, root = _wired(tmp_path, scripts)
+    run = run_role("G", "缺文献证据", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="G", session_root=root, gateway=gw["G"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.messages_sent == ["M"], run.to_dict()
+    inbox_m, fresh_m, problems = inbox_digest(root, "M", sid="test-run")
+    assert not problems and "请代唤" in inbox_m and fresh_m, (inbox_m, fresh_m)
+    inbox_d, fresh_d, _ = inbox_digest(root, "D", sid="test-run")
+    assert inbox_d == "（没有收到留言）" and fresh_d == [], "私聊给 M 的申请不该进别人的收件箱"
 
 
 def test_an_illegal_edge_is_refused_by_the_policy_not_by_the_prompt(tmp_path: pathlib.Path):

@@ -815,9 +815,11 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
     if role not in C.NON_SUMMONABLE:
         out.append("如果这件活需要的人**不在**上面的名单里（典型：C 想请 A 去查文献、"
                    "链已到最大深度、或你要找的人这一轮根本没接线）：不要重试越权的边，"
-                   "直接用 message 发给 M，**subject 固定写「请代唤」**，body 里写清四件事："
-                   "要谁、什么动作、什么参数、为什么要。框架在你越权召唤被拒时也会自动帮你发"
-                   "这一条（返回里带 relay_requested），但你自己发能写得更清楚。"
+                   "直接把 message 发给主控 M（`to` 写 \"M\" 是私聊；写 \"#public\" 也收得到，"
+                   "但那是广播给所有角色），**subject 固定写「请代唤」**，"
+                   "body 里写清四件事：要谁、什么动作、什么参数、为什么要。"
+                   "框架在你越权召唤被拒时也会自动帮你发这一条（返回里带 relay_requested），"
+                   "但你自己发能写得更清楚。"
                    "主控受理与否由它决定，你这一步不要假装对方已经在做了。")
     return out
 

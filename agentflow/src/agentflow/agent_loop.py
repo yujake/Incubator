@@ -458,13 +458,40 @@ def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
         if not isinstance(value, Mapping):
             return "", {}, "message 必须是一个对象"
         to = str(value.get("to") or "")
-        if to != PUBLIC and to not in S.ROLES:
-            return "", {}, f"收件人 {to!r} 既不是角色也不是 {PUBLIC}"
+        # `to` 的合法集合 = 八个角色 ∪ 主控 M ∪ 公共频道。
+        #
+        # 为什么 M 必须在内（2026-09-30 真机修）：框架自己的代唤通道
+        # `_request_relay` 就是用 `to=S.CONDUCTOR_ROLE`（= "M"）发的私聊，
+        # 而这里原来只认 `S.ROLES`（A–H，不含 M）⇒ 提示词教角色"直接用 message
+        # 发给 M"、角色照做、却被这一行判成 `invalid`。实测（场景 G）G 因此白扔一步：
+        # `[5] invalid ⇒ 收件人 'M' 既不是角色也不是 #public`，下一步它改发 #public 才成。
+        # 那一步的代价是"一条本来只该主控看到的申请被广播给所有人"，
+        # 外加一次纠正 —— 而 `read_messages(role="M")` 本来就收 `to="M"` 的留言。
+        if to != PUBLIC and to not in (*S.ROLES, S.CONDUCTOR_ROLE):
+            return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
+                            f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}")
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
                      "body": str(value.get("body") or ""),
                      "reply_to": str(value.get("reply_to") or "")}, ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     return key, {"final": final, "evidence": [str(x) for x in (data.get("evidence") or [])]}, ""
+
+
+def _summon_key(action: str, params: Mapping[str, Any]) -> str:
+    """角色没给 `input_key` 时派生一个确定性键。
+
+    为什么必须有这个兜底（2026-09-30 真机）：角色自己发的 `summon` 形状里没有
+    `input_key` 这个字段（形状只有 role / action / params / why），于是那一行落库时
+    `input_key=""` ⇒ `verify_tasks` 报 `task_without_input_key`：这条召唤
+    结构上无法参与循环检测。实测现场是场景 G 的 `t-0252`（G 自己派 A 去要文献）。
+
+    键的语义是"同一件事"：同一份 `(action, params)` 再要一次就是同一个键 ——
+    那正是循环检测要抓的形态（同一条三元组出现在祖先链上即判循环）。
+    参数为空时退化成 action 本身（仍然非空、仍然稳定）。
+    """
+    raw = json.dumps({"action": action, "params": dict(params or {})},
+                     ensure_ascii=False, sort_keys=True, default=str)
+    return f"{action}@{_sha(raw)[:12]}"
 
 
 @dataclass
@@ -724,7 +751,9 @@ class AgentLoop:
             calls.append(SC.TaskCall(role=str(t.get("role")), action=str(t.get("action")),
                                      params=dict(t.get("params") or {}), by=self.role,
                                      parent_task_id=self.my_task_id or None,
-                                     input_key=str(t.get("input_key") or ""),
+                                     input_key=(str(t.get("input_key") or "")
+                                                or _summon_key(str(t.get("action")),
+                                                               dict(t.get("params") or {}))),
                                      instance=instance))
         results = c.run_plan(calls, token=self.token)
         probe = getattr(c, "_last_probe", None)
@@ -780,10 +809,15 @@ class AgentLoop:
         budget: Mapping[str, Any] | None = None
         if self.seam.usd_budget is not None:
             budget = {"usd": max(0.0, self.seam.usd_budget - self.seam.spend.usd)}
+        params = dict(payload.get("params") or {})
+        # `input_key` 由形状给不出（形状里没有这个字段）⇒ 按同一件事派生一个确定性键，
+        # 否则这一行落库时键为空、`verify_tasks` 会报 `task_without_input_key`
+        # （真机实测：场景 G 的 t-0252）。模型若显式给了就用它给的。
+        key = str(payload.get("input_key") or "") or _summon_key(action, params)
         try:
-            res = self.conductor.summon(role, action, dict(payload.get("params") or {}),
+            res = self.conductor.summon(role, action, params,
                                         by=self.role, parent_task_id=self.my_task_id or None,
-                                        budget=budget, token=self.token)
+                                        budget=budget, token=self.token, input_key=key)
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             return out
