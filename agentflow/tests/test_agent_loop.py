@@ -220,6 +220,72 @@ def test_bad_json_stops_the_loop_instead_of_faking_an_answer(tmp_path: pathlib.P
         "坏 JSON 不许被当成一次有效的动作"
 
 
+def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Path):
+    """判据（§195 真机实测逼出来的）：每一步最后读到的一行必须是输出契约的骨架。
+
+    实测：M 做"核验定理与引理的证明"时连着三次回 1400–2400 字的散文（`judge_bad_json` ⇒
+    `bad_json_limit`），那次运行对交付物零贡献。系统提示词 6k+ token，循环协议埋在中间，
+    模型不是不听、是没读到 —— 所以契约要重述在它最后读到的地方。
+    """
+    from agentflow.agent_loop import JSON_TAIL, AgentLoop
+
+    st, cond, registry, gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=3)
+    run = run_role("M", "核验证明", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.prompt_audit.get("prompt_version"), run.prompt_audit
+    # 直接问那条提示词（真跑里它每一轮都会拼一遍）
+    loop = AgentLoop(role="M", session_root=root, registry=registry, conductor=cond,
+                     seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                                  sid="test-run"), max_steps=3, workspace_root=str(root),
+                     sid="test-run", store=st)
+    prompt = loop._prompt("转录", step=0)
+    assert prompt.rstrip().endswith(JSON_TAIL.rstrip()), prompt[-200:]
+    for shape in ("tool", "summon", "message", "note", "ask_user", "final"):
+        assert f'"{shape}"' in JSON_TAIL, shape
+
+
+def test_a_bad_reply_gets_a_sharper_repair_message(tmp_path: pathlib.Path):
+    """负控（修法要真的递出去）：坏 JSON 之后那条纠正消息里要点名"不要写分析"并给骨架。"""
+    from agentflow.agent_loop import JSON_TAIL, AgentLoop
+
+    scripts = {"M": ["我打算先分析一下定理的证明（这段是散文）", json.dumps({"final": "好"})]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    run = run_role("M", "核验证明", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    # 第二条提示词里应当带着那段骨架（纠正是"下一轮的输入"，不是一句口号）
+    assert JSON_TAIL.splitlines()[0] in gw["M"].prompts[-1], gw["M"].prompts[-1][-300:]
+    assert run.stop_reason == "final", run.to_dict()
+
+
+def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
+    """判据（§195：这一次是我的错）：提示词里给的骨架必须能被 `_shape_of` 真解析通过。
+
+    实测（2026-09-30 第二次真机）：我把 `tool` 那一条写成了 `{"tool": {"name": …}}`，
+    而解析器要的是 `{"tool": "<工具名>", "args": …}` ⇒ 模型照着我的骨架说，
+    却被判"tool 必须是一个工具名字符串"，连着三次 ⇒ `bad_json_limit`。
+    骨架是文档，文档必须与解析器同源；这条判据就是那个"同源"。
+    """
+    from agentflow.agent_loop import JSON_TAIL, _shape_of
+
+    # 替换顺序要紧：`{...}` 必须先变成 `{}`，否则 `...` → `x` 会把它改成 `{x}`（非法 JSON）。
+    fixed = (JSON_TAIL.replace("{...}", "{}").replace("<工具名>", "table.list")
+             .replace("<动作名>", "review").replace("A-H", "H")
+             .replace("<伙伴或 #public>", "#public").replace("<结论>", "做完了")
+             .replace("...", "x"))
+    parsed: list[str] = []
+    for line in fixed.splitlines()[1:]:
+        data = json.loads(line)                      # 骨架本身必须是合法 JSON
+        shape, _payload, problem = _shape_of(data)
+        assert not problem, (line, problem)
+        parsed.append(shape)
+    assert sorted(parsed) == sorted(["tool", "summon", "message", "note", "ask_user", "final"]), \
+        parsed
+
+
 def test_no_key_means_not_wired_and_no_request_is_made(tmp_path: pathlib.Path):
     """负控（没接线）：没有 gateway 时一次请求都不发，读数写成 judge_not_wired。"""
     st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]})

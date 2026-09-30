@@ -52,6 +52,23 @@ from .llmseam import LlmSeam
 #: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
 SHAPES = ("tool", "summon", "message", "note", "ask_user", "final")
 
+#: 每一步最后读到的那段输出契约（`draft/28` §195）。
+#:
+#: 为什么要在最后一行重述一遍：系统提示词有 6k+ token，循环协议埋在中间；
+#: 真机实测（2026-09-30，M 做"核验定理与引理的证明"）—— 模型连着三次回 1400–2400 字的散文，
+#: `judge_bad_json` × 3 ⇒ `bad_json_limit`，那次运行对交付物零贡献。
+#: 它不是不听指令，是没读到：中间那句"请只输出一个 JSON 对象"离它的回答太远了。
+JSON_TAIL = (
+    "只回一行 JSON（不要解释、不要 Markdown 围栏、不要前后缀）。形状取其一"
+    "（键名与嵌套层级照抄，`<...>` 是占位符）：\n"
+    '{"tool": "<工具名>", "args": {...}}\n'
+    '{"summon": {"role": "A-H", "action": "<动作名>", "params": {...}}}\n'
+    '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
+    '{"note": "一句话"}\n'
+    '{"ask_user": {"question": "...", "options": ["..."]}}\n'
+    '{"final": {"final": "<结论>", "evidence": []}}'
+)
+
 #: 公共频道。`message.to` 写它 = 所有人都能收到（说话，而不是派活）。
 PUBLIC = "#public"
 
@@ -323,8 +340,13 @@ class AgentLoop:
         tail = ("这是最后一步：不要再调用工具、不要再唤起伙伴，直接输出 "
                 '{"final": "<结论>", "evidence": [...]}。' if last else
                 "请按循环协议输出下一步（一个 JSON 对象，六种形状取其一）。")
+        # 输出契约重述在最后一行（`draft/28` §195 实测）：
+        # 系统提示词有 6k+ token，循环协议埋在中间；真机跑 M 做"核验证明"那种长任务时，
+        # 模型连着三次回了 1400–2400 字的散文（`judge_bad_json` ⇒ `bad_json_limit`），
+        # 而中间那句"请只输出一个 JSON 对象"它没听。把骨架放到它最后读到的那一行。
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（最多 {self.max_steps} 步）。{tail}\n"
-                f"剩余花销预算：{self._budget_text()}")
+                f"剩余花销预算：{self._budget_text()}\n"
+                f"{JSON_TAIL}")
 
     def _availability(self) -> dict[str, str] | None:
         """现在的接线态（哪个伙伴真的能被唤起）。拿不到就返回 None 并留一条 note。"""
@@ -419,7 +441,8 @@ class AgentLoop:
                                  f"（最后一次：{call.problem}），停止")
                     break
                 transcript += (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
-                               f"（{call.problem}）。请只输出一个 JSON 对象，四种形状取其一。")
+                               f"（{call.problem}）。**不要写分析、不要写方案、不要写 Markdown**："
+                               f"只回一行 JSON。骨架：\n{JSON_TAIL}")
                 continue
             shape, payload, problem = _shape_of(data)
             if problem:

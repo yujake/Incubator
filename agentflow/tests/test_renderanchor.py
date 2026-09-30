@@ -243,6 +243,22 @@ def test_the_checker_does_not_write_anything(tmp_path: pathlib.Path):
     assert RA.history(out)["total"] == before, "核对动作写了盘（历史被追加了）"
 
 
+def test_a_missing_anchor_names_the_path_it_looked_at(tmp_path: pathlib.Path):
+    """判据（§195 真机逼出来的）："找不到"必须写出它去哪儿找过。
+
+    实测：H 把包目录 `out/paper` 当成 `project` 传进来（工具要的是项目根），
+    旧消息只说"读不到 RENDER-ANCHOR.json" —— H 读不出到底找了哪，只能自己推断
+    "是路径拼接缺陷"，并把这条推断写进了交付说明。路径写出来，一眼可见双重拼接。
+    """
+    root = tmp_path / "proj"
+    (root / "out" / "paper").mkdir(parents=True)
+    got = RA.check_package(root)
+    assert got["verdict"] == "unknown", got
+    joined = " ".join(got["problems"])
+    assert str(root / "out" / "paper" / RA.ANCHOR_NAME) in joined, joined
+    assert "这里找过" in joined, joined
+
+
 # ============================================================ 三步序列（真机契约）
 
 

@@ -201,15 +201,21 @@ def history(package_dir: Path | str, *, limit: int | None = None) -> dict[str, A
 
 
 def _read_json(path: Path) -> tuple[dict[str, Any] | None, str]:
-    """读一个 JSON 对象。返回 `(数据, 问题)`；读不到或不是对象时数据为 None。"""
+    """读一个 JSON 对象。返回 `(数据, 问题)`；读不到或不是对象时数据为 None。
+
+    问题串里写完整路径（不是文件名）：真机实测（`draft/28` §195）—— H 把包目录
+    `out/paper` 当成 `project` 传进来，工具回了"读不到 RENDER-ANCHOR.json"，H 读不出
+    "它到底去哪找过"，只能自己推断"是路径拼接缺陷"。路径写出来的话，一眼就能看见
+    `…/out/paper/out/paper/RENDER-ANCHOR.json` 这个双重拼接。
+    """
     if not path.is_file():
-        return None, f"读不到 {path.name}"
+        return None, f"读不到 {path}（这里找过）"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return None, f"{path.name} 读不成 JSON：{type(exc).__name__}: {exc}"
+        return None, f"{path} 读不成 JSON：{type(exc).__name__}: {exc}"
     if not isinstance(data, dict):
-        return None, f"{path.name} 不是一个 JSON 对象"
+        return None, f"{path} 不是一个 JSON 对象"
     return data, ""
 
 
