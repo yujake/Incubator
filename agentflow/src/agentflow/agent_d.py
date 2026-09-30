@@ -12,7 +12,7 @@ D 的核心不是"生成文本"，而是管理一个循环（§4.1）：
         └─ 不足 → 向 A 提交查询请求（记入等待集）
                     → A 检索 → B 消化 → D 复查（poll）→ 回到"评估"
 
-## 四个不可让步的设计（每一条都有具体的失败模式在背后）
+## [契约] 四个不可让步的设计（每一条都有具体的失败模式在背后）
 
 1. 提取问题必须是确定性 + 可解释的（``ingest``）。
    绝不做"让 LLM 想几个问题"：那既无法复现，也无法解释"这个问题是怎么来的"。
@@ -46,7 +46,7 @@ D 的核心不是"生成文本"，而是管理一个循环（§4.1）：
    （见 ``_llm_refine`` 里的 ``_rank_min``）。报告里"低"就写"低" ——
    一份把"低"写成"中"的报告会让人把猜想当成结论去用，那比没有报告更坏。
 
-## LLM 的位置
+## [为什么] LLM 的位置
 
 ``llm=None`` 时全部走确定性回退（模板化措辞 + 证据罗列），因此无 API key
 也能端到端跑通（§0 的"最低可用"边界）。LLM 只用于两件事：
@@ -2786,9 +2786,9 @@ class AgentD:
         detected = IX.detect_contradictions(scope)
         this_pair = next((x for x in detected if set(x["relation_ids"]) == set(rel_ids)), None)
         #: 当前这对关系的对立强度。只有 strong 允许驱动状态变更与追问；
-        #: weak（"否定标记出现与否不一致"）的假阳性极高 —— 实测 25 条真实关系里
-        #: weak 报了 24%，没有一条是真矛盾。把 weak 也拿去问 A，等于用 A 的产能
-        #: 换一堆假问题，而 I7 的配额正是为保护产能而设的。
+        #: [踩过] weak（"否定标记出现与否不一致"）的假阳性极高 —— 实测（`draft/12` §2）：
+        #: 25 条真实关系里旧"字面矛盾"判据报出 6 条 `suspect`（24%），没有一条是真矛盾。
+        #: 把 weak 也拿去问 A，等于用 A 的产能换一堆假问题，而 I7 的配额正是为保护产能而设的。
         pair_strength = str((this_pair or {}).get("strength") or "weak")
         if verdict_info.get("verdict") in ("unresolved", "new_contradiction") and pair_strength != "strong":
             verdict_info.update(

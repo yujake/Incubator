@@ -1,6 +1,6 @@
 """F 的工具：多轮难题攻坚。
 
-## 为什么"攻坚"需要独立的预算模型
+## [为什么] 为什么"攻坚"需要独立的预算模型
 
 D 的问题生命周期是"缺口 → 补证据 → 研究 → 回答"：它有终点，因为
 "证据够了"是一个可判定的条件。而难题攻坚没有这个性质 —— "还没做出来"
@@ -18,7 +18,7 @@ D 的问题生命周期是"缺口 → 补证据 → 研究 → 回答"：它有�
 只有并发没有总量 ⇒ 扇出可以无限持续（永不停止）。
 两类必须同时存在，缺一类就等于没有上限。
 
-## `can_round` 的两个维度不能混为一谈（读代码前先看这一段）
+## [契约] `can_round` 的两个维度不能混为一谈（读代码前先看这一段）
 
 `can_round(budget, rounds_done=..., depth=...)` 同时检查两件事，但它们的
 后果完全不同：
@@ -31,14 +31,14 @@ D 的问题生命周期是"缺口 → 补证据 → 研究 → 回答"：它有�
 轮数维度用 `can_round` 做终止判据（见 `agent_f.py` 的说明），
 深度维度由 `can_derive` 单独暴露给"要不要派生"这个决策。
 
-## 工具与智能体的分工
+## [契约] 工具与智能体的分工
 
 `attack.create_plan` / `attack.step` / `attack.status` / `attack.list_plans`
 是对 `agentflow.agent_f.AgentF` 的薄封装（惰性导入避免成环）：写入逻辑只有一份。
 `attack.check_budget` / `attack.pick_next_subgoal` 是纯函数，直接在这里实现，
 `AgentF` 转发过来 —— 与此前一样，"不要发明第二套判据"。
 
-## 六个 handler 都过 `_guard`（修过的缺陷）
+## [踩过] 六个 handler 都过 `_guard`（修过的缺陷；`DEVELOPMENT.md` §3 纪律 3）
 
 六个 handler 此前只有"成功"一条路：`PlanError` / `schema` 的 `ValueError` /
 `StoreError` 会直接逃出工具层，被 `tools/base.py` 兜成 `kind="unexpected"`。
@@ -308,7 +308,7 @@ def _guard(fn: Callable[[], Any]) -> ToolResult:
     这是 `attack_tools` 与 `graph_tools` 共用的一份实现（FC-03：同一判据只有
     一份）。`graph_tools` 由 `from .attack_tools import _guard` 转发，不另写一份。
 
-    ## 为什么必须捕这三类（修之前的实测形态，见报告）
+    ## [踩过] 为什么必须捕这三类（修之前的实测形态，见报告；`draft/28` §150）
 
     ===================  ==========================================  ==========================
     异常                  谁抛                                        修之前调用方看到的 kind

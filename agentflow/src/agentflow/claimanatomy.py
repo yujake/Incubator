@@ -1,6 +1,6 @@
 """断言解剖学 —— `documents.claims` 每个元素的唯一判据来源。
 
-## 这个模块为什么存在
+## [为什么] 这个模块为什么存在
 
 一份数学稿件的可信度，取决于每一条断言能不能被单独解剖：
 它是定义还是定理、它当前处于什么生命周期、它的证明在哪里、
@@ -19,7 +19,7 @@ G 与 H 都调它。新增第二个实现 = 违反 FC-03。
 `citations` / `evidence_kind` / `is_negative` / `negation_kind` / `disclaimer`
 （参考体例里没有这五个，但它们是我们三条 FC 的落地形态，不许为了对齐那张表而删）。
 
-## `statement` 与 `text`：为什么保留 `statement`，并让 `text` 成为它的别名
+## [为什么] `statement` 与 `text`：为什么保留 `statement`，并让 `text` 成为它的别名
 
 §8.3 的字段名是 `statement`，而我们的磁盘上、`schema.py`（禁 AI 区）、
 既有测试与历史数据里一律叫 `text`。两者是同一件事，
@@ -41,7 +41,7 @@ FC-27 条目，本任务不许编辑它，它逐字检查 `c.get("text")`。
 所以 `doc_tools` 在写入前把 `statement` 退回成 `text`（:func:`to_storage_claim`），
 读取后再归一。这条往返由 `tests/test_claimanatomy.py` 的逐字断言钉住。
 
-## `status` 与 `evidence_kind` 是两个正交的轴（本模块的核心设计点）
+## [契约] `status` 与 `evidence_kind` 是两个正交的轴（本模块的核心设计点）
 
 ```text
 evidence_kind ∈ {proof, cross_check, heuristic}   支撑它的证据是**哪一类**
@@ -66,7 +66,7 @@ status        ∈ {证, 验, 待精化, 作废}             它当前处于什�
 最后一行是三态纪律的落点（`DEVELOPMENT.md` §3 纪律 1）：
 "字段缺失"与"字段存在但非法"与"检查器自己没跑成"必须能分开。
 
-## 与 `schema.py` 的关系（本模块不替代它）
+## [契约] 与 `schema.py` 的关系（本模块不替代它）
 
 `schema.Document.validate` 仍是写入期最后一道闸，本模块是构造期/审校期的
 同一份判据。两者的硬约束（无引用 / `cross_check` 缺 disclaimer / 否定未分类）
@@ -471,7 +471,7 @@ CLAIM_FIELDS: dict[str, FieldSpec] = {
     # 这六列此前是"断言里多出来的键"：`undeclared_field` 把它们逐条报成 warning，
     # 而那条 warning 的原文恰恰是「未声明的字段无法被门读到」——
     # 也就是说台账里的「来源 / 我方核到什么程度 / 能否证伪」落了库、却没有任何判据。
-    # 实测 2026-09-29（P3 首次派 H 审台账）：24 行台账被审出 240 条
+    # [踩过] 实测 2026-09-29（P3 首次派 H 审台账）：24 行台账被审出 240 条
     # `undeclared_field`（10 个自有键 × 24 条），error=0 而 warning 全是这一件事。
     # 处置是把它们变成声明的字段：取值域受控、类型受判，G 与 H 读的是同一份判据；
     # 而"这份台账的列"从此也进了 `known_field_names()`，"多出来的键"重新变成异常信号。
