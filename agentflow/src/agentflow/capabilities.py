@@ -1201,19 +1201,63 @@ ALLOWED_EDGES: dict[str, frozenset[str]] = _specs.edges()
 NON_SUMMONABLE: frozenset[str] = _specs.non_summonable()
 
 
-def actions_for(role: str) -> tuple[ActionSpec, ...]:
-    """某角色的动作表。未知角色返回空元组（由 policy 判 unknown_role，这里不抛）。"""
+def registry():
+    """内置角色的声明注册表（`specs/` 是它的真身；懒取一次）。
+
+    为什么放在 `capabilities` 而不是让每个调用方自己 `builtin_registry()`：
+    这一层是"权限面的读法"——查动作、查边、查写集都从这里出发，
+    于是"临时角色能不能被闸门认出来"只取决于**有没有把注册表传下去**这一件事。
+    """
+    global _REGISTRY
+    if _REGISTRY is None:
+        from .agentspec import builtin_registry
+
+        _REGISTRY = builtin_registry()
+    return _REGISTRY
+
+
+#: `registry()` 的缓存（`goal-7f5116c1` M5）。`None` = 还没取过。
+_REGISTRY: Any = None
+
+
+def actions_for(role: str, *, registry: Any = None) -> tuple[ActionSpec, ...]:
+    """某角色的动作表。未知角色返回空元组（由 policy 判 unknown_role，这里不抛）。
+
+    给了 `registry` 就从它读（`M5`：临时角色走这条）；否则读内置那份。
+    """
+    if registry is not None:
+        try:
+            return tuple(registry.get(role).actions)
+        except KeyError:
+            return ()
     return CAPABILITIES.get(role, ())
 
 
-def find_action(role: str, action: str) -> ActionSpec | None:
+def find_action(role: str, action: str, *, registry: Any = None) -> ActionSpec | None:
     """查一个动作。找不到返回 `None` —— 三态纪律：调用方必须区分
     "角色不存在"（`role not in CAPABILITIES`）与"角色存在但没这个动作"，
     这两者对应 `unknown_role` / `unknown_action` 两个不同的拒绝理由。"""
-    for spec in actions_for(role):
+    for spec in actions_for(role, registry=registry):
         if spec.action == action:
             return spec
     return None
+
+
+def roles_in(registry: Any = None) -> tuple[str, ...]:
+    """角色名单（`None` ⇒ 内置那份；`M5` 起闸门用这个，而不是写死 `schema.ROLES`）。"""
+    if registry is not None:
+        return tuple(registry.roles())
+    return (*S.ROLES, S.CONDUCTOR_ROLE)
+
+
+def edges_for(role: str, *, registry: Any = None) -> frozenset[str]:
+    """某角色能召唤谁（`None` ⇒ 内置那份）。"""
+    if registry is not None:
+        try:
+            return frozenset(registry.get(role).edges)
+        except KeyError:
+            return frozenset()
+    return ALLOWED_EDGES.get(role, frozenset())
 
 
 def _write_calls_in(node: ast.AST) -> set[str]:

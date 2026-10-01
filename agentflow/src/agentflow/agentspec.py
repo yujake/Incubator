@@ -186,41 +186,18 @@ class AgentRegistry:
 def builtin_registry() -> AgentRegistry:
     """把内置角色的声明收成一张注册表（读 `specs/` 这个叶子包）。
 
-    为什么读 `specs/` 而不是九个角色模块：角色模块是**实现**（`agent_d` 4000+ 行，
-    连带 store/capabilities/…），而注册表是给装配面与判据用的薄层 ——
-    M2 时只能这么取是因为声明写在角色模块里；M3 把声明搬进 `specs/<角色>.py`（叶子）之后，
-    取声明不再需要拉起任何实现。这一层保持"叶子"这条性质因此是**结构性**的，
-    不再只是注释里的一句承诺。
+    为什么读 `specs/` 而不是九个角色模块：角色模块是实现（`agent_d` 4000+ 行，
+    连带 store / capabilities / …），而注册表是给装配面与判据用的薄层 ——
+    M2 时只能这么取，是因为声明写在角色模块里；M3 把声明搬进 `specs/<角色>.py`
+    （叶子）之后，取声明不再需要拉起任何实现。"这一层是叶子"因此从注释里的承诺
+    变成了结构事实（判据：`tests/test_new_agent_is_one_spec.py` 会断言
+    取注册表不会把实现模块拉进来）。
     """
     from . import specs as _specs
 
     reg = AgentRegistry()
     for role, spec in _specs.builtin_specs().items():
         assert spec.role == role, f"specs/{role.lower()}.py 里的 SPEC.role 是 {spec.role!r}"
-        reg.add(spec)
-    return reg
-
-
-#: `builtin_registry()` 收集 SPEC 的模块（一个角色一个模块；M5 会把它们变成包）。
-_SPEC_MODULES: tuple[str, ...] = (
-    "agent_a", "agent_b", "agent_c", "agent_d", "agent_e", "agent_f", "agent_g", "agent_h",
-    "conductor",
-)
-
-
-def builtin_registry() -> AgentRegistry:
-    """把内置角色的 SPEC 收成一张注册表（延迟 import：本模块保持"叶子"）。
-
-    为什么是函数而不是模块级常量：模块级常量会在 `import agentflow.agentspec` 的那一刻
-    就把 8 个角色模块全拉进来（`agent_d` 4188 行、连带 store/capabilities/…），
-    而 `agentspec` 是给装配面与判据用的薄层 —— 它不该有这种副作用。
-    """
-    reg = AgentRegistry()
-    for name in _SPEC_MODULES:
-        mod = importlib.import_module(f".{name}", __package__)
-        spec = getattr(mod, "SPEC", None)
-        if spec is None:
-            raise ValueError(f"{name} 里没有 SPEC —— 角色模块必须自带声明（M2 的对账判据会点名）")
         reg.add(spec)
     return reg
 
@@ -377,3 +354,72 @@ _OBJ = {"type": "object"}
 #: 与实现签名，不比类型，所以它照旧全绿 —— 这条注释与
 #: `tests/test_capability_seams.py` 的正控一起，是这一格唯一的机器判据。
 _ARR_OBJ = {"type": "array", "items": {"type": "object"}}
+
+
+# ---------------------------------------------------------------- 声明层的审计
+
+
+def audit_registry(registry: AgentRegistry) -> list[str]:
+    """一张注册表"够不够格被装配/召唤/审计"的判据（`goal-7f5116c1` M5）。
+
+    返回人话列表（空 = 通过）。它问的是**声明自己的完整性**，不是行为：
+    一个新的角色只要写一份 `AgentSpec`，就必须先过这一关 —— 这正是"一个模块 + 一次登记"
+    这句话里"一份 spec"要满足的契约。
+
+    逐条：
+    1. `role` 与注册键一致、`brief.duty` / `emphasis` / `local_notes` 非空（门面齐全）；
+    2. 每条 `ActionSpec` 的 `role` 是本角色、`action` 与 `handler_name` 非空，
+       且 `handler_name` **能在实现上取到**（给了 `class_path` 就查类，没给就跳过 ——
+       `class_path` 是可选的信息，构造由 `build` 负责）；
+    3. `edges` / `peers` 指向的角色必须在同一张注册表里（打错一个字母在这里就红，
+       而不是等到某次召唤被拒时才发现）；
+    4. `needs` 里每个名字都是 `BuilderDeps` 的字段、`build` 可调用。
+
+    刻意**不**在这里查"只读角色的动作不许写"：这条第一版写了，当场把内置注册表判红 ——
+    `H` 的三个动作（`review` / `verify_fixes` / `review_report`）都声明 `write_local`。
+    那不是缺陷，是设计：`read_only` 说的是**工具面**（H 拿不到写工具，见
+    `tools/base._role_surface` 与 `tests/test_tools_readonly_roles.py`），
+    而 H 的落库走的是逐条登记在 `READONLY_CALL_EXCEPTIONS` 里的代理。
+    把"工具面只读"误读成"动作不许写"，会让一条**编造的不变量**去否决既有设计 ——
+    这类"自己发明一条判据然后被真相反驳"的经历，正是判据要先在已知对象上跑一遍的理由。
+    """
+    fields = set(BuilderDeps.__dataclass_fields__)
+    known = set(registry.roles())
+    out: list[str] = []
+
+    def _bad(msg: str) -> None:
+        out.append(msg)
+
+    for role in registry.roles():
+        spec = registry.get(role)
+        if spec.role != role:
+            _bad(f"{role}：声明的 role 是 {spec.role!r}，与注册键不一致")
+        if not (spec.brief.duty or "").strip():
+            _bad(f"{role}：没有职责一句（`brief.duty`）")
+        if not spec.emphasis:
+            _bad(f"{role}：没有十项官能的轻重（`emphasis`）")
+        if not spec.local_notes:
+            _bad(f"{role}：没有自己那几句话（`local_notes`）")
+        if spec.build is None or not callable(spec.build):
+            _bad(f"{role}：没有可调用的 `build`")
+        for need in spec.needs:
+            if need not in fields:
+                _bad(f"{role}：needs 里的 {need!r} 不是 BuilderDeps 的字段")
+        for peer in spec.peers:
+            if peer not in known:
+                _bad(f"{role}：peers 里的 {peer!r} 不在注册表里")
+        for edge in spec.edges:
+            if edge not in known:
+                _bad(f"{role}：edges 里的 {edge!r} 不在注册表里")
+        if spec.class_path:
+            cls = spec.cls()
+            for act in spec.actions:
+                if not getattr(cls, act.handler_name, None):
+                    _bad(f"{role}：动作 {act.action!r} 的 handler_name={act.handler_name!r} "
+                        f"在 {spec.class_name} 上不存在")
+        for act in spec.actions:
+            if act.role != role:
+                _bad(f"{role}：动作 {act.action!r} 声明的 role 是 {act.role!r}")
+            if not act.action or not act.handler_name:
+                _bad(f"{role}：有动作缺 action / handler_name")
+    return out

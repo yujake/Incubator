@@ -169,15 +169,16 @@ class Decision:
 # ---------------------------------------------------------------- 判定
 
 
-def check_action(role: str, action: str) -> Refusal | None:
+def check_action(role: str, action: str, *, registry: Any = None) -> Refusal | None:
     """角色与动作是否存在。
 
     两种失败必须分开：`unknown_role`（名单里没这个人）与
     `unknown_action`（人存在，但没这个本事）。合并成一句"不支持"会让
     "我把角色名拼错了"与"我调了一个该角色真的没有的动作"无法区分。
     """
-    if role != S.CONDUCTOR_ROLE and role not in S.ROLES:
-        return Refusal("unknown_role", f"角色 {role!r} 不在 schema.ROLES={S.ROLES} 里", "role")
+    known = C.roles_in(registry)
+    if role not in known:
+        return Refusal("unknown_role", f"角色 {role!r} 不在 {known} 里", "role")
     if role == S.CONDUCTOR_ROLE:
         # 主控只能被召唤这件事本身，它没有"动作"。
         return Refusal(
@@ -185,8 +186,8 @@ def check_action(role: str, action: str) -> Refusal | None:
             "主控 M 没有 Agent 动作（它的动作是 summon 本身，由 Conductor 实现）",
             "action",
         )
-    if C.find_action(role, action) is None:
-        known = [s.action for s in C.actions_for(role)]
+    if C.find_action(role, action, registry=registry) is None:
+        known = [s.action for s in C.actions_for(role, registry=registry)]
         return Refusal(
             "unknown_action",
             f"{role} 没有动作 {action!r}（它有：{known}）",
@@ -195,7 +196,8 @@ def check_action(role: str, action: str) -> Refusal | None:
     return None
 
 
-def check_edge(policy: Policy, frm: str, to: str, **kw: Any) -> Refusal | None:
+def check_edge(policy: Policy, frm: str, to: str, *, registry: Any = None,
+               **kw: Any) -> Refusal | None:
     """唯一的策略判定入口。返回 `None` = 放行；返回 `Refusal` = 拒绝。
 
     它不抛异常、不写台账、不调 handler。判定与执行分开，
@@ -228,7 +230,7 @@ def check_edge(policy: Policy, frm: str, to: str, **kw: Any) -> Refusal | None:
     return check(policy, d)
 
 
-def check(policy: Policy, d: Decision) -> Refusal | None:
+def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | None:
     """按 :class:`Decision` 做全部判定。见 :func:`check_edge` 的顺序说明。"""
     policy.validate()
     # `role` 是写集判定的名字、`to` 是边判定的名字：构造 `Decision` 时容易只填一个。
@@ -248,18 +250,21 @@ def check(policy: Policy, d: Decision) -> Refusal | None:
 
     # ---- [1] 角色/动作
     if d.to != S.CONDUCTOR_ROLE:
-        r = check_action(d.to, d.action)
+        r = check_action(d.to, d.action, registry=registry)
         if r is not None:
             return r
 
     # ---- [2] 边：不可召唤 / 角色存在性 / 边是否允许
-    if d.to in C.NON_SUMMONABLE:
+    if d.to in (C.NON_SUMMONABLE if registry is None
+                else frozenset(r for r in registry.roles()
+                                if not registry.get(r).summonable)):
         return Refusal("forbidden_edge", f"{d.to} 是不可召唤的（没有『召唤主控』这件事）", "edge")
-    if d.to not in S.ROLES:
+    known = C.roles_in(registry)
+    if d.to not in known:
         return Refusal("unknown_role", f"角色 {d.to!r} 不存在", "role")
-    if d.frm not in (*S.ROLES, S.CONDUCTOR_ROLE):
+    if d.frm not in known:
         return Refusal("unknown_role", f"召唤方 {d.frm!r} 不是合法角色", "role")
-    allowed = C.ALLOWED_EDGES.get(d.frm, frozenset())
+    allowed = C.edges_for(d.frm, registry=registry)
     if d.to not in allowed:
         return Refusal(
             "forbidden_edge",

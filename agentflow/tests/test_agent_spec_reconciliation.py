@@ -124,3 +124,57 @@ def test_the_reconciliation_catches_a_drifted_spec() -> None:
         one.add(spec)
     with pytest.raises(KeyError):
         one.get("Z")
+
+
+# ---------------------------------------------------------------- `specs/` 与 FC-27 清单
+
+
+def _manifest_rows(manifest_text: str) -> set[str]:
+    """清单里的条目路径（第一栏；`[category: …]` 那一段之后的理由不参与比对）。"""
+    out: set[str] = set()
+    for line in manifest_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "[category:" not in stripped:
+            continue
+        if stripped.startswith("[category:"):     # 分组头
+            continue
+        out.add(stripped.split()[0])
+    return out
+
+
+def _unregistered_specs(manifest_text: str, specs_dir: pathlib.Path) -> list[str]:
+    """`specs/` 下没有在清单里的文件（返回项目根相对路径，便于直接贴进清单）。"""
+    rows = _manifest_rows(manifest_text)
+    out = []
+    for path in sorted(specs_dir.glob("*.py")):
+        rel = f"src/agentflow/specs/{path.name}"
+        if rel not in rows:
+            out.append(rel)
+    return out
+
+
+def test_every_spec_file_is_registered_in_the_fc27_manifest() -> None:
+    """`specs/` 下每个文件都必须在 FC-27 清单里（`M3` 用 glob 行被打回后留下的那个洞）。
+
+    为什么必须是逐文件的行：`tests/test_noai_gate.py::test_manifest_globs_point_at_real_files`
+    要求每一行指向真实存在的文件；而保护面若漏掉一个文件，改权限面就可以不碰禁改区。
+    这条判据把"新增一个角色时忘了加清单"变成红 —— 它是 M3/§222 留的那条尾巴。
+    """
+    proj = pathlib.Path(__file__).resolve().parents[1]
+    manifest = (proj / ".noai-paths").read_text(encoding="utf-8")
+    missing = _unregistered_specs(manifest, proj / "src" / "agentflow" / "specs")
+    assert not missing, (
+        "这些 specs 文件不在 `.noai-paths` 里（权限面的落点必须逐文件受保护）：\n  - "
+        + "\n  - ".join(missing))
+
+
+def test_the_manifest_coverage_judge_catches_a_missing_row() -> None:
+    """负控：从清单里删掉一行 ⇒ 同一个检查函数必须报出来（否则它是恒真的）。"""
+    proj = pathlib.Path(__file__).resolve().parents[1]
+    manifest = (proj / ".noai-paths").read_text(encoding="utf-8")
+    specs_dir = proj / "src" / "agentflow" / "specs"
+    assert _unregistered_specs(manifest, specs_dir) == [], "基线本身就不全"
+    dropped = "\n".join(ln for ln in manifest.splitlines()
+                        if not ln.startswith("src/agentflow/specs/d.py"))
+    assert dropped != manifest
+    assert _unregistered_specs(dropped, specs_dir) == ["src/agentflow/specs/d.py"]

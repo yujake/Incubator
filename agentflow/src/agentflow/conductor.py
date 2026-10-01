@@ -157,7 +157,14 @@ class LocalBackend:
 
     name = "local"
 
-    def __init__(self, registry: Mapping[str, Any] | None = None) -> None:
+    #: 声明注册表（`None` ⇒ 读内置那份）。**类级**默认值：子类若自己写 `__init__`
+    #: 而没调 `super().__init__()`，仍然拿得到"用内置表"这个默认行为 ——
+    #: 实测于 `tests/test_r5_orchestration_cost.py::_ProbeBackend`（三条取消语义用例）。
+    _specs: Any = None
+
+    def __init__(self, registry: Mapping[str, Any] | None = None,
+                 specs: Any = None) -> None:
+        self._specs = specs
         self.registry: dict[str, Any] = dict(registry or {})
         #: 缓存键是 `(角色, 实例标签)`：空标签 = 那个单例（默认行为逐字不变）；
         #: 显式标签 ⇒ 每个实例一个对象（"N 个 B 一起干活"要的是 N 个对象，
@@ -243,7 +250,7 @@ class LocalBackend:
         调用前先查一次 token：已经取消的召唤不该进 handler（否则会白干一轮，
         还可能写半张表）。
         """
-        spec = C.find_action(role, action)
+        spec = C.find_action(role, action, registry=self._specs)
         if spec is None:  # pragma: no cover - summon 已经查过，这里是纵深防御
             raise NotWiredError(f"{role} 没有动作 {action}")
         obj = self.resolve(role, instance)
@@ -364,14 +371,19 @@ class Conductor:
         backend: str | LocalBackend | SubagentBackend = "local",
         log: Callable[..., None] | None = None,
         token: CancelToken | None = None,
+        specs: Any = None,
     ) -> None:
         self.store = store
         self.policy = policy or P.Policy()
+        #: 角色声明的注册表（`goal-7f5116c1` M5）：给了就从它读"有哪些角色、
+        #: 每个角色有哪些动作、谁能召唤谁"；`None` ⇒ 读内置那份（今天的行为逐字不变）。
+        #: 存在的理由：新增一个角色时，闸门不该只认源码里写死的那张表。
+        self.specs = specs
         self.log = log
         self.token = token or CancelToken()
         if isinstance(backend, str):
             if backend == "local":
-                be: Any = LocalBackend(registry)
+                be: Any = LocalBackend(registry, specs=specs)
             elif backend == "subagent":
                 be = SubagentBackend()
             else:
@@ -843,7 +855,7 @@ class Conductor:
                         "没有『召唤 M』这条边"),
                 by=by, parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
             )
-        edge = P.check_action(role, action)
+        edge = P.check_action(role, action, registry=self.specs)
         if edge is not None:
             return self._refuse(
                 role, action, reason=edge.reason, detail=edge.detail, by=by,
@@ -852,8 +864,8 @@ class Conductor:
 
         # ---- [2] 参数（结构问题在写 running 行之前判掉：跑一个注定炸的
         #          参数会让台账里多一条 failed，而它其实从来没被执行过）
-        spec = C.find_action(role, action)
-        assert spec is not None  # check_action 已经保证过
+        spec = C.find_action(role, action, registry=self.specs)
+        assert spec is not None  # check_action 已经保证过（`specs=` 那份注册表）
         bad = self._check_params(spec, params)
         if bad is not None:
             # 理由码是 `invalid_params` 而不是 `unknown_action`（R-46）：
@@ -908,7 +920,7 @@ class Conductor:
             # 所以预算只由上面那一次 `guard()` 判 —— 单一来源。
             deadline_hit=self.deadline_hit,
         )
-        refusal = P.check(self.policy, d)
+        refusal = P.check(self.policy, d, registry=self.specs)
         if refusal is not None:
             # 墙钟到点：除了拒绝，还要协作式取消在跑的
             # （设计 §3.2："已在跑的协作式取消"）。

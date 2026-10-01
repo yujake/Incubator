@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T18:37:32+08:00",
+  "generated_at": "2026-10-01T19:10:22+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -190,10 +190,10 @@
       "path": "src/agentflow/agentspec.py",
       "glob": "src/agentflow/agentspec.py",
       "category": "auth-audit",
-      "sha256": "df874c423c5910923fb2bef3fcb641dcc2f1208eb8ce4d7889d52c0d91a5976a",
+      "sha256": "7ce1058423d9d9927a92e1e5445a7fd433bf57e80651866d6f322d99eeebc236",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M4（draft/28 §223）：角色的构造期依赖工厂搬进各自的声明（specs/<角色>.py::_build + needs/peers），host._Builder 只剩薄壳 + 通用 _build。声明面变化 ⇒ 重新登记 sha256；reviewers 仍为 0，留给人审。",
+      "change_note": "goal-7f5116c1 M5（draft/28 §224）：给闸门与装配加可选注册表（capabilities.registry/roles_in/edges_for、policy.check/check_action/check_edge 的 registry=、conductor 的 specs=），并给声明层加 audit_registry。默认 None ⇒ 行为逐字不变；新角色 Z 只在测试的局部注册表里存在。reviewers 仍为 0。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -203,10 +203,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "a12780fd3e5241ec1661488d67542ba402efb2a0ee3ceac8655bb2b6c7f77a2d",
+      "sha256": "70f122892d31cd7ae604591aa4d8fa7b343cd49a987e2a76d205bbf98f8b2849",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M3（draft/28 §222）：把角色动作表/召唤边/写集的真身搬进 src/agentflow/specs/<角色>.py（一个角色一个文件），capabilities.py 的四张表改成从它派生；ActionSpec 与四个受控词表搬到叶子层 agentspec.py。清单同步加两行（specs/*.py、agentspec.py 现在是权限面落点）—— 这是把 FC-27 的保护面跟着数据走，不是放宽。登记 ≠ 批准：仍需 2 名 reviewer 逐行走查（尤其'派生方向对不对'与'清单加的两行够不够'）。",
+      "change_note": "goal-7f5116c1 M5（draft/28 §224）：给闸门与装配加可选注册表（capabilities.registry/roles_in/edges_for、policy.check/check_action/check_edge 的 registry=、conductor 的 specs=），并给声明层加 audit_registry。默认 None ⇒ 行为逐字不变；新角色 Z 只在测试的局部注册表里存在。reviewers 仍为 0。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
