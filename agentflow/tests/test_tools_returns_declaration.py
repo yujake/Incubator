@@ -71,7 +71,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 73
+TOOL_COUNT = 74
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -241,6 +241,11 @@ def tool_params() -> dict[str, dict]:
         "fs.search": {"pattern": "abelian"},
         "fs.stat": {"path": SOURCE_REL},
         "fs.write": {"path": "out/new.txt", "content": "hi"},
+        # `fs.edit` 只能改已存在的文件，而 `out/new.txt` 会被 `fs.delete` 先删掉
+        # （`registry.names()` 是字母序 ⇒ delete < edit < write）⇒ 它有自己的目标文件
+        # （`_seed` 里铺的 `out/edit-target.txt`）。
+        "fs.edit": {"path": "out/edit-target.txt", "old_string": "hello", "new_string": "hello!",
+                    "note": "来源登记：真跑一次定点替换"},
         "graph.build": {},
         "graph.neighbors": {"concept_id": "0000"},
         "graph.relations_between": {"a": "0000", "b": "0001"},
@@ -305,7 +310,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "doc.scan_claim",
         "doc.paper_anchor", "doc.paper_build", "doc.paper_compile", "doc.paper_render",
         "doc.paper_state",
-        "fs.delete", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
+        "fs.delete", "fs.edit", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
         "ocr.backends", "ocr.detect_text_layer",
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
@@ -354,6 +359,7 @@ MUTATING_LAST: frozenset[str] = frozenset(
         "fs.move",
         "fs.delete",
         "fs.write",
+        "fs.edit",
         "search.register",
         "doc.build_document",
         "doc.register_dependency",
@@ -531,6 +537,11 @@ def _seed(store: Store, root: Path) -> None:
         group_key="0000|0001",
     )
     write_library_file(store, "0000/source.txt", SOURCE_TEXT)
+    # `fs.edit` 的观测目标：给它一份只属于这一次观测的小文件，别去改别的工具
+    # 还要读的东西（`SOURCE_REL` 与 `probes/honest.py` 后面都有别的工具要看）。
+    edit_target = store.root / "out" / "edit-target.txt"
+    edit_target.parent.mkdir(parents=True, exist_ok=True)
+    edit_target.write_text("hello\n", encoding="utf-8", newline="")
     # 真图片（`ocr.run` 只收 PDF/图片）。用 Pillow 造，避免手写 PNG 字节出错。
     from PIL import Image
 

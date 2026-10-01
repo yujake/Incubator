@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p21"
+PROMPT_VERSION = "p23"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -343,21 +343,26 @@ PAPER_PACK_ROLES: tuple[str, ...] = ("M", "G", "H")
 PAPER_PACK = """\
 论文包（你参与的那份交付物）—— 这一段的每一句都能在工作区里核对：
 
-一、交付物是什么
-- 项目根 `projects/<项目名>/`；论文包在 `out/paper/`。
-- 包里必须有：主稿 `main.tex`、编译产物 `main.pdf`、四张表
-  （`tables/evidence-levels.tex`、`negation.tex`、`dependencies.tex`、`conjectures.tex`，
-  且主稿用 `\\input{tables/...}` 引用它们）、六件配套（`EVIDENCE.md`、`LIT.md`、`NOTES.md`、
-  `REVIEW.md`、`SUBMISSION.md`、`CLAIMS-LEDGER.md`）、H 的签名 `H-SIGNATURE.json`、
-  渲染锚 `RENDER-ANCHOR.json`。
-- 原始论文包是**只读输入**：一个字节都不许改。你的产出落在自己的工作区与台账里。
+一、交付物是什么：**修订后的论文正文**，不是核验结果
+- 项目根 `projects/<项目名>/`；工作区里 `out/paper/main.tex` **就是论文本体**
+  （它是 `source/main.tex` 的逐字副本，**可改、该改**）。`source/` 是**只读基线**：
+  它是用来做前后对比的，一个字节都不许改；要改就改 `out/paper/main.tex`。
+- 交付物的定义只有一句话：**读者拿到的应当是一篇更好的论文**。核验、证据等级、台账表
+  都是手段与附录 —— 把它们堆成主产物，等于交了一份勘误记录，那不是交付。
+- 每次改动都要留下"依据"（引文片段 / 实验 id / 检查器原话 / 论文内部矛盾在哪），
+  一句话即可，但要能被读者核对。改不了、核不到、拿不准的，如实写成"未核到"或
+  "维持原样"，不许把没做的事写成做了。
+- 机械生成的那一半**不要手改**：`out/paper/appendix.tex` 与 `tables/*.tex` 由
+  `doc.paper_render` 从台账生成（四张表 + 台账摘要）；手改它们会在下一次渲染时被覆盖。
+  主稿 `main.tex` 的正文、证明、表述、引用 —— 那才是你写的地方。
 
 二、验收表就是 P1–P11，交付说明必须逐条对齐
 - 判据表在 `out/paper/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），
   每行三列「名称 / 结论 / 读数」。用 `conductor.acceptance` 读它。
 - 一次读不完就按批读（`ids=['P5','P6','P7']`）—— 工具结果被上下文预算剪枝时，
   剪掉的部分不会自己回来；宁可多读两次，也不要跳过某一行。
-- 你的交付说明不是另写一份总结：它必须逐条回应那十行，每条给读数（数字、路径、退出码）。
+- 你的交付说明不是另写一份总结：它必须逐条回应那十行，每条给读数（数字、路径、退出码），
+  **并且点名正文改了哪几处、每处的依据是什么**（一处都没改就要给出"为什么不必改"的读数）。
   写「已完成」「符合要求」这种没有读数的句子等于没交付；没核到的行要明写「未核到」，
   不许折成「没问题」。
 
@@ -369,9 +374,15 @@ PAPER_PACK = """\
 - 结论不许强于它挂的证据：证据等级不是 proof 时，断言里不许出现「证明」「定理」「必然」这类词
   （机械半会逐条查，语义半会再判一次）。
 
-四、期刊体例
-- `ctexart` + `booktabs`/`longtable`；表格用 `\\input{tables/...}`；编译后从 PDF 抽出的文本里
-  必须能读到五个标记：`自主评审`、`断言台账`、`external`、`覆盖率`、`猜想表`。
+四、体例与工作循环
+- 主稿保持**论文自己的体例**（现在是 `article` + `amsmath`/`amsthm`/`hyperref`）：改它的时候
+  不要换文档类、不要把台账表塞进正文 —— 正文是给读者读的论文，台账是附录。
+- `appendix.tex` 与 `tables/*.tex` 由 `doc.paper_render` 生成（`ctexart` + `booktabs`/`longtable`），
+  它们是机械产物，不手改。
+- **工作循环**：改 `out/paper/main.tex`（`fs.read` 读、`fs.write` 写）→ `doc.paper_render`
+  （刷新附录与四张表、重算锚）→ `doc.paper_compile`（重编 `main.pdf`）→ `doc.paper_state`
+  （锚必须回到 `consistent`）。锚的 `files` 维度把主稿也算在内 ⇒ **改了正文不重渲染/重编译，
+  锚一定漂**，第 1 条当场不成立。
 
 五、完成定义（五条全过才算交付，任何一条没过就不许说"完成"）
 1. 渲染锚 0 漂移（用 `doc.paper_state` 核：它是只读的、进程内跑，不起子进程也不出网；
@@ -382,11 +393,12 @@ PAPER_PACK = """\
    **主控手上没有这个工具**（`doc.paper_*` 只发给 G 与 H）⇒ 你要的那份读数只能来自
    "派出去的人回报"：让 G 在修订结果里写 verdict 与漂移条数，再让 H 用 `doc.paper_state`
    独立核一次；缺了这两份读数，第 1 条就只能写"未核到"，不许写"没问题"。
-2. `main.pdf` 由**本次**源码编出，页数 >= 1 且五个标记齐全（看 `doc.paper_compile` 的读数，
+2. `main.pdf` 由**本次**源码编出，页数 >= 1（看 `doc.paper_compile` 的读数，
    不要看编译器退出码：本机 MiKTeX 会写完 PDF 却以崩溃码退出）；
-3. H 的 findings 全部落 `review_findings` 台账（一条都不许只留在对话里）；
-4. 交付说明里十条判据逐条有读数；
-5. 原始论文包未被修改。
+3. **正文有内容级的改动**（定理/引理/证明/引用/表述层面），每处给一句依据；
+   一处都没改就写"为什么不必改"的读数（核了哪几条、结论是什么）；
+4. H 的 findings 全部落 `review_findings` 台账（一条都不许只留在对话里）；
+5. 交付说明里十条判据逐条有读数，**且基线 `source/` 逐字节未改**。
 
 六、收工前的最后一条：**改了台账就要让包跟上**
 - 只要这一轮动了 `documents` / `experiments` / `review_findings`，`out/paper/` 里的表与稿件
@@ -415,8 +427,9 @@ PAPER_PACK = """\
   G7 台账完整）是可操作的修订点 —— 把证据不足以支撑强结论的句子改弱或补证据，改完再重渲染。
   真的没有可操作项时才写"包无需修订"，并给出读数（哪几道门 pass、哪几条 finding 被逐条查过）。
 - **"核验证明"的主路径是 E 的形式化核验**，不是 H 的机械门：派 `E.check_formal` 逐条核工作区里
-  已有的 Lean 源码（`checker_name` 逐字对上声明名；纯核心的源码要 `imports: []`，见 E 那一岗的
-  说明），它给出的 `verified=True` 是**证据升级**（台账里那条断言的证据跟着变，表与稿件跟着变）。
+  已有的 Lean 源码（声明名可自动认名：恰好一条具名声明时不用给 `checker_name`；
+  `imports` 默认不注入任何库，要 Mathlib 才显式传 —— 见 E 那一岗的说明），
+  它给出的 `verified=True` 是**证据升级**（台账里那条断言的证据跟着变，表与稿件跟着变）。
   只让 H 走机械门 + 让 G 重渲染，包的文字不会变 —— 那不是"更优质的论文包"，只是"包刷新了一遍"。
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。"""
 
@@ -538,15 +551,15 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。"
             "被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，"
             "并把「这一版脚本查的是什么」写进实验结论。",
-            "`verify.check_formal` 的 `imports` 形参**默认注入 `(\"Mathlib\",)`**：工作区里的 Lean 源码"
-            "若是纯核心（自己不 import Mathlib），必须**显式传 `imports: []`**，否则拿到的是"
-            "`import_unavailable`（没查成）而不是任何判定 —— 真机实测（2026-10-01）："
-            "`code/lean/p2_rho_sum_zero.lean` 不传 `imports` ⇒ `missing_imports=['Mathlib']`；"
-            "传 `imports: []` ⇒ `verified=True`，检查器原话是 "
-            "`'rho_sum_zero' does not depend on any axioms`。"
-            "另一条同族的调用口径：声明名要用 `checker_name` **逐字**对上源码里的声明名 —— "
-            "不给它时检查器拿文件名当声明名，结果是 `decl_mismatch`（同样是没查成）。"
-            "两者都别读成「证否」。",
+            "`verify.check_formal` 的 `imports` 默认**不注入任何库**（源码自己 import 什么就加载什么）："
+            "要 Mathlib 就显式传 `imports: ['Mathlib']`，或把它写进源码 —— "
+            "别指望工具替你加一行，那会让「被检查的源码」与盘上那份不是同一份。"
+            "声明名**会自动认**：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`"
+            "（不给就报「取不到唯一那条」并列出候选名 —— 以前是拿文件名词干顶替，"
+            "于是「没点名」被报成 `decl_mismatch`，读起来像「查了没通过」）。"
+            "真机读数（2026-10-01）：`code/lean/p2_rho_sum_zero.lean` 在旧默认（注入 Mathlib）下"
+            "⇒ `import_unavailable`（`missing_imports=['Mathlib']`）；默认不注入 ⇒ `verified=True`，"
+            "检查器原话 `'rho_sum_zero' does not depend on any axioms`。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",

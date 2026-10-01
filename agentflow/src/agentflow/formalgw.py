@@ -87,6 +87,9 @@ __all__ = [
     "FORBIDDEN_AXIOMS",
     "detect_backend",
     "declaration_name",
+    "declaration_names",
+    "sole_declaration_name",
+    "DeclarationNameError",
     "lean_snippets",
     "check_lean",
     "evidence_of",
@@ -805,13 +808,16 @@ def _sorry_count(source: str) -> int:
     return len(_SORRY.findall(_strip_lean_noise(source)))
 
 
-def declaration_name(source: str) -> str:
-    """取出源码里第一条具名声明（`theorem` / `lemma` / `def` ...）的名字。
+def declaration_names(source: str) -> list[str]:
+    """源码里全部具名声明的名字（按出现顺序去重）。
 
-    为什么需要它：模型给的 Lean 片段是自由文本，而"这条片段声称证了什么"
-    必须有一个机器可读的答案 —— 公理审计（`#print axioms <name>`）与
-    声明名核对都要求这个名字。`example` 没有名字，返回空串表示"取不到"，
-    调用方不得把它当成"证了某个东西"。
+    为什么要"全部"而不只是第一条（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
+    调用方只想给一份 `.lean` 文件、不想再报一遍声明名时，唯一的两种诚实做法是
+    "文件里恰好只有一条声明 ⇒ 用它"或"不止一条 ⇒ 请调用方点名"。
+    此前那两种都不是：工具层拿文件名词干当声明名（`agent_e` 的 `_record_formal`
+    与 `verify_tools.check_formal` 各有一处），于是"源码里没有这个名字"被报成
+    `decl_mismatch`（`checked=True`，读起来像"查了没通过"），而它其实是
+    "调用方写错了参数" —— 两者的处置完全相反（见本模块 docstring 的判定顺序一节）。
     """
     body = _strip_lean_noise(str(source or ""))
     pat = re.compile(
@@ -819,8 +825,55 @@ def declaration_name(source: str) -> str:
         r"(?:(?:" + "|".join(_MODIFIERS) + r")[ \t]+)*"
         r"(?:" + "|".join(_NAMED_DECL_KEYWORDS) + r")[ \t]+([^\s:{(]+)"
     )
-    m = pat.search(body)
-    return m.group(1).strip() if m else ""
+    return list(dict.fromkeys(m.group(1).strip() for m in pat.finditer(body)))
+
+
+class DeclarationNameError(ValueError):
+    """取不到"唯一那条具名声明" —— 这是调用方参数问题，不是"验证没过"。
+
+    继承 `ValueError`：`check_lean` 的既有契约里"参数不合法"就是 `ValueError`，
+    工具层据此折成 `kind="param_error"`（`checked=False`）。刻意不复用
+    `decl_mismatch`：那个状态的机器可读位是"查了、没通过"。
+    """
+
+
+def sole_declaration_name(source: str) -> str:
+    """源码里恰好一条具名声明的名字；0 条或多条都抛 `DeclarationNameError`。
+
+    多条时把候选名列进消息里（"请显式给名字，并告诉我是哪一个"），
+    而不是替调用方挑第一条 —— 挑错了就等于把"声明名核对"这条判据悄悄关掉。
+    """
+    found = declaration_names(source)
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        raise DeclarationNameError(
+            "源码里没有具名声明（只有 example 或全被注释）⇒ 取不到声明名。"
+            "公理审计（`#print axioms <name>`）与声明名核对都要求这个名字，"
+            "猜一个等于把那条判据悄悄关掉。请显式给出声明名（`name` / `checker_name`），"
+            "或把要核的命题写成具名声明（`theorem` / `lemma` / `def` …）。"
+        )
+    raise DeclarationNameError(
+        f"源码里有 {len(found)} 条具名声明：{found[:8]}{'…' if len(found) > 8 else ''} —— "
+        "取不到「唯一那条」。请显式给出声明名（`name` / `checker_name`）："
+        "替调用方挑一条会把「核的是哪个命题」变成一次猜测。"
+    )
+
+
+def declaration_name(source: str) -> str:
+    """取出源码里第一条具名声明（`theorem` / `lemma` / `def` ...）的名字。
+
+    为什么需要它：模型给的 Lean 片段是自由文本，而"这条片段声称证了什么"
+    必须有一个机器可读的答案 —— 公理审计（`#print axioms <name>`）与
+    声明名核对都要求这个名字。`example` 没有名字，返回空串表示"取不到"，
+    调用方不得把它当成"证了某个东西"。
+
+    与 `sole_declaration_name` 的分工：这一条回答"第一条是谁"（给 `lean_snippets`
+    这类"一段文本里可能有多个片段"的场景用），那一条回答"这一段只有一个候选吗"
+    （给 `check_lean` / `_record_formal` 这类"必须点名核哪一条"的场景用）。
+    """
+    found = declaration_names(source)
+    return found[0] if found else ""
 
 
 def _declared_in_source(source: str, name: str) -> bool:
@@ -1079,7 +1132,7 @@ def _safe_stem(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_]+", "_", name).strip("_") or "claim"
 
 
-def check_lean(source: str, *, name: str, imports: Sequence[str] = ("Mathlib",),
+def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
                timeout_sec: float = 600, run_fn: RunFn | None = None,
                workdir: str | Path | None = None,
                source_path: str | Path | None = None) -> dict:
@@ -1110,15 +1163,24 @@ def check_lean(source: str, *, name: str, imports: Sequence[str] = ("Mathlib",),
     正是同一判据长出两份实现的典型形态。两个都为空时抛 `ValueError` ——
     "没有源码"与"源码里没有那个声明"是两件必须分开的事，前者是调用方写错了。
 
-    `imports` 默认 `("Mathlib",)`。裸 `lean` 不会替你跑 `lake`：
-    若这些模块在当前 `LEAN_PATH` 下不可用，结果是 `import_unavailable`
-    （不是 `compile_error`，也不是 `no_backend`）并带上是哪些包。
-    为什么这两个区分都必要：
+    `imports` 默认空（`goal-a5334ee8` 的 ④，真机实测 2026-10-01 改的口径）：
+    源码自己写 `import Mathlib` 就加载 Mathlib，没写就什么都不注入 ——
+    "源码说什么就是什么"。此前默认注入 `("Mathlib",)`，代价是桥接层替调用方
+    改了被检查的那份源码：工作区里那三份纯核心 Lean 源码（`p2_L0_identity` /
+    `p2_rho_sum_zero` / `p2_step_norm`）因为首行被塞进 `import Mathlib`，
+    在没装 Mathlib 的本机上一律报 `import_unavailable`（= 没查成），
+    而 E 把它读成了"这条路走不通"，于是"核验证明"这一整条主路径看起来不成立。
+    实测探针（`temp/_m8_probe_lean.py`）：
+    默认 ⇒ `missing_imports=['Mathlib']`；`imports=[]` ⇒ `verified=True`，
+    检查器原话 `'rho_sum_zero' does not depend on any axioms`。
+    要 Mathlib 就显式传 `imports=("Mathlib",)`（或在源码里 import 它）——
+    库不可得时仍是 `import_unavailable`（不是 `compile_error`，也不是 `no_backend`），
+    那两条区分的理由见下。
 
-    - 报成 `compile_error` 是假话：`unknown package 'Mathlib'` 说明编译根本
-      没开始，"这个命题没通过"与"这次没查成"是相反的结论；
-    - 报成 `no_backend` 会让一件纯环境配置问题看起来像"环境不支持形式化验证"，
-      于是本该走形式化核验的命题会悄悄停在弱证据等级上。
+    `name` 为空时自动认名（同一次实测的另一半）：源码里恰好一条具名声明就用它；
+    0 条或多条 ⇒ 抛 `DeclarationNameError`（`ValueError` 的子类 ⇒ 工具层折成
+    `param_error`）。此前是"拿文件名词干当声明名"，于是 `decl_mismatch`
+    （`checked=True`，读起来像"查了没通过"）掩盖了真正的问题：调用方没点名。
     """
     src = str(source or "")
     read_failed = ""
@@ -1142,13 +1204,18 @@ def check_lean(source: str, *, name: str, imports: Sequence[str] = ("Mathlib",),
             "会让前者看起来像一次失败的验证"
         )
     nm = str(name or "").strip()
-    if not nm or not _NAME_RE.match(nm):
+    # 只校验"给了名字时它的形状"，不在没给名字时抛错：没给名字是可以的
+    # （下面自动认名），而"源码文件根本没读到"那个更准的状态排在自动认名之前
+    # （`read_failed` 时自动认名只会说"源码里没有具名声明"，那是把
+    # "路径写错了"说成"你要证的命题不在文件里"，两者处置相反 —— 见判定顺序那一节）。
+    if nm and not _NAME_RE.match(nm):
         raise ValueError(
-            f"name 必须是非空的无空白标识符（收到 {name!r}）—— "
+            f"name 必须是无空白标识符（收到 {name!r}）—— "
             "名字会被拼进 `#print axioms`，拼不对时检查器报的是语法错，"
             "而那个错误会被读成'证明没过'"
         )
-    declared = _declared_in_source(src, nm)
+    imports = tuple(imports or ())     # `None` 与 `()` 同义：不注入任何库
+    declared = _declared_in_source(src, nm) if nm else False
     sry = _sorry_count(src)
     result: dict[str, Any] = {
         # 默认是最坏的那个状态：任何没走到结论的路径都不许看起来像通过。
@@ -1218,6 +1285,14 @@ def check_lean(source: str, *, name: str, imports: Sequence[str] = ("Mathlib",),
             "刻意不把它说成'文件里没有那条声明'：路径写错了与命题不在文件里"
             "是两件事，而两者都不是通过。",
         )
+    if not nm:
+        # 自动认名：恰好一条具名声明 ⇒ 用它；0 条或多条 ⇒ 抛 `DeclarationNameError`
+        # （`ValueError` 的子类 ⇒ 工具层折成 `param_error`）。放在 `source_unreadable`
+        # 之后：文件没读到时"没有具名声明"那句话是假话，真原因是路径读不了。
+        nm = sole_declaration_name(src)
+        declared = _declared_in_source(src, nm)
+        result["name"] = nm
+        result["declared_in_source"] = declared
     if not declared:
         return _conclude(
             result, "decl_mismatch",

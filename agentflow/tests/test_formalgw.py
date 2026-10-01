@@ -488,10 +488,62 @@ def test_the_declaration_is_never_audited_when_it_does_not_exist():
 
 
 def test_a_bad_name_is_rejected_instead_of_being_guessed():
-    """名字非法 ⇒ 抛（不许编一个再报"证明没过"）。"""
-    for bad in ("", "   ", "foo bar"):
+    """名字非法 ⇒ 抛（不许编一个再报"证明没过"）。
+
+    `goal-a5334ee8` 的 ④（真机实测 2026-10-01）之后，空名字不再一律抛：
+    它是"自动认名"的入口 —— 源码里恰好一条具名声明就用它（见下面两条用例），
+    0 条或多条则抛 `DeclarationNameError`。这里只留"形状坏了"的那一格，
+    因为编一个名字（拿文件名词干、或挑第一条）才会让"声明名核对"这条判据
+    在无声中失效。
+    """
+    for bad in ("foo bar", "a:b"):
         with pytest.raises(ValueError, match="name"):
             FG.check_lean(GOOD, name=bad, imports=(), run_fn=_runner(_run(0, CLEAN_OUT)))
+
+
+def test_an_empty_name_is_auto_detected_only_when_it_is_unambiguous():
+    """空名字 ⇒ 恰好一条具名声明才认；0 条 / 多条都要抛（不许猜第一条）。
+
+    这条判据是"拿文件名词干当声明名"那处老毛病的正面形态：真机实测里
+    `p2_rho_sum_zero.lean` 里的声明叫 `rho_sum_zero`，文件名一拼就
+    `decl_mismatch`（机器可读位是"查了、没通过"），而真原因是调用方没点名。
+    """
+    # 恰好一条 ⇒ 自动认名，且真的用它去查（`decl_matches` 由检查器输出决定，
+    # 但"查的是哪个名字"在 `out["name"]` 里可读）
+    one = "theorem only_one : 1 + 1 = 2 := rfl\n"
+    out = FG.check_lean(one, imports=(), run_fn=_runner(_run(0, "'only_one' does not depend on any axioms")))
+    assert out["name"] == "only_one", out
+    assert out["status"] == "verified" and out["decl_matches"] is True
+
+    # 0 条：只有 example（没有名字）⇒ 抛，理由里说清"取不到声明名"
+    with pytest.raises(FG.DeclarationNameError, match="没有具名声明"):
+        FG.check_lean("example : 1 + 1 = 2 := rfl\n", imports=(),
+                      run_fn=_runner(_run(0, CLEAN_OUT)))
+
+    # 多条：候选名必须逐个列出来，且不许挑第一条
+    two = "theorem alpha : 1 + 1 = 2 := rfl\n\ntheorem beta : 2 + 2 = 4 := rfl\n"
+    with pytest.raises(FG.DeclarationNameError) as ei:
+        FG.check_lean(two, imports=(), run_fn=_runner(_run(0, CLEAN_OUT)))
+    assert "alpha" in str(ei.value) and "beta" in str(ei.value), str(ei.value)
+
+
+def test_the_default_imports_inject_nothing():
+    """默认不注入任何库（旧默认注入 `Mathlib` ⇒ 纯核心源码一律"没查成"）。
+
+    真机读数（`temp/_m8_probe_lean.py`，2026-10-01）：工作区那三份纯核心 Lean 源码
+    在旧默认下 ⇒ `import_unavailable`（`missing_imports=['Mathlib']`），
+    而 E 把它读成了"这条路走不通"；不注入 ⇒ `verified=True`。
+    这条用例钉的是逐字交给检查器的那份文本里没有多出来的 `import Mathlib`：
+    桥接层替调用方改源码，是 FC-27 那一类"桥接层说谎"的入口。
+    """
+    out = FG.check_lean(GOOD, name="one_plus_one", imports=(),
+                        run_fn=_runner(_run(0, CLEAN_OUT)))
+    assert "import Mathlib" not in out["checked_source"], out["checked_source"]
+    assert out["imports"] == [], out["imports"]
+    # 显式要 Mathlib 时才注进去（调用方的决定，不是默认替他做）
+    out2 = FG.check_lean(GOOD, name="one_plus_one", imports=("Mathlib",),
+                         run_fn=_runner(_run(0, CLEAN_OUT)))
+    assert "import Mathlib" in out2["checked_source"] and out2["imports"] == ["Mathlib"]
 
 
 def test_timeout_and_elapsed_are_recorded():

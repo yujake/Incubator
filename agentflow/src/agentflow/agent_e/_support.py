@@ -121,6 +121,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from .. import schema as S
 from ..formalgw import STATUSES as _FORMALGW_STATUSES
+from ..formalgw import DeclarationNameError, sole_declaration_name
 from ..store import Store
 from ..tools import verify_tools as VT
 from ..tools.base import ToolError, ToolRegistry

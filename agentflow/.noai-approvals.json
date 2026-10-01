@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T22:53:50+08:00",
+  "generated_at": "2026-10-02T02:14:21+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -538,10 +538,10 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "215630abf6e176748ea70458dc2556f11e67b2eb73570b936effc5c492868443",
+      "sha256": "dab900f0d537e0f4cd73106a39917c6de7a147148626f69b66f969b600e65d3b",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/36 T-8（§218.7 / §219）：纯行尾归一（LF → CRLF，回到动代码之前的样子），内容一字未改（git diff --ignore-cr-at-eol 为空）。重新登记是因为台账钉的是 sha256，行尾变了哈希就变。reviewers 仍为 0：§216 的声明搬移仍需 2 名 reviewer 逐行走查。",
+      "change_note": "goal-a5334ee8 ④：verify.check_formal 的两处桥接层口径（禁改区，用户本轮明确授权「允许改动禁改区」）。(1) imports 默认从 (\"Mathlib\",) 改成不注入任何库 —— 依据 temp/_m8_probe_lean.py 的实测：工作区那三份纯核心 Lean 源码在旧默认下报 import_unavailable（missing_imports=[Mathlib]），显式 imports=[] 才 verified=True（检查器原话 does not depend on any axioms）；桥接层替调用方往被检查的源码里塞一行 import，是 FC-27 要防的那类「桥接层说谎」。(2) name 为空时改成「自动认名」：源码里恰好一条具名声明就用它，0 条或多条抛 DeclarationNameError（ValueError 子类 ⇒ 工具层折成 param_error 并列出候选名）；此前是拿文件名词干当声明名，于是「调用方没点名」被报成 decl_mismatch（机器可读位是「查了、没通过」）。判据 tests/test_formalgw.py + tests/test_check_formal_wiring.py + tests/test_agent_e_formal_path.py 共 47 passed（含一条新负控：默认不注入 ⇒ checked_source 里没有 import Mathlib）。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

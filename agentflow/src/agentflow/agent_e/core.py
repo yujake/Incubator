@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ._support import Any, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _relpath, _result_reason, _which, build_experiment, install_e_tools, os, subprocess, sys, time
+from ._support import Any, DeclarationNameError, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _relpath, _result_reason, _which, build_experiment, install_e_tools, os, sole_declaration_name, subprocess, sys, time
 from .run_experiment import _RunExperiment
 from .check_formal import _CheckFormal
 from .evidence_for import _EvidenceFor
@@ -202,12 +202,28 @@ class _Core:
             )
 
         rel = _relpath(path, self.workspace_root)
-        declared_name = str(name or path.stem)
+        declared_name = str(name or "")
+        if not declared_name:
+            # 不拿文件名词干当声明名（`goal-a5334ee8` 的 ④，同 `verify_tools.check_formal`
+            # 的理由）：文件名词干与源码里的声明名通常不是一个东西，于是"源码里没有
+            # 这个名字"被报成 `decl_mismatch`（读起来像"查了、没通过"），
+            # 而真原因是调用方没点名。这里改成从源码认名：恰好一条具名声明就用它，
+            # 0 条或多条 ⇒ 如实说"取不到唯一那条"并请调用方点名。
+            try:
+                declared_name = sole_declaration_name(path.read_text(encoding="utf-8"))
+            except DeclarationNameError as exc:
+                raise ExperimentError(
+                    f"method='formal' 拿不到唯一的声明名（{rel}）：{exc}"
+                ) from exc
+            except OSError as exc:
+                raise ExperimentError(
+                    f"method='formal' 读不了 {rel}：{type(exc).__name__}: {exc}"
+                ) from exc
         t0 = time.monotonic()
         data = self.check_formal(
             claim,
             script_path=rel,
-            name=name,
+            name=declared_name,
             imports=imports,
             timeout_sec=float(timeout),
         )
@@ -226,7 +242,7 @@ class _Core:
             # 改写法的改动就会让读法静默失配（审计悄悄退回 `verifier_subject_key`）。
             f"{_declared_name_note(declared_name)}"
             f"脚本 {rel}（sha256 前 16 位 {code_hash}）；"
-            f"imports={list(imports) if imports is not None else '（工具层默认）'}"
+            f"imports={list(imports) if imports is not None else '（默认：不注入任何库）'}"
         ]
         detail = _digest(data.get("detail") or "", 400)
         if detail:

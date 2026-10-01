@@ -124,6 +124,50 @@ def test_formal_path_registers_a_proof_row_when_the_checker_says_verified(
     assert ev["checked"] is True and ev["proved"] is True, ev
 
 
+def test_the_formal_row_names_the_declaration_from_the_source_not_the_file(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """没给 `name` 时，台账里"声明名 <X>"必须是源码里的名字，不是文件名词干。
+
+    实测形态（`goal-a5334ee8` 的 ④，2026-10-01）：文件 `p2_rho_sum_zero.lean` 里的声明叫
+    `rho_sum_zero`；旧实现把文件名词干当声明名 ⇒ `decl_mismatch`（读起来像"查了没通过"），
+    真正的毛病是调用方没点名。改名这件事必须落在落库那一行上：
+    只改返回值、台账里仍写着文件名的实现，事后审计（`verify.declared_name_of_notes`）
+    照样读到错的名字。
+    """
+    from agentflow import verify as V
+
+    monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
+    monkeypatch.setattr(FG, "check_lean",
+                        _checker_stub(status="verified",
+                                      stdout="'rho_sum_zero' does not depend on any axioms"))
+    rel = write_lean(store, "proofs/p2_rho_sum_zero.lean",
+                     "theorem rho_sum_zero : 1 + 1 = 2 := rfl\n")
+    make_e(store).run_experiment("恒等式", "rho-sum", rel, method="formal")
+    row = store.rows("experiments")[0]
+    assert V.declared_name_of_notes(row["notes"]) == "rho_sum_zero", row["notes"]
+    assert "声明名 p2_rho_sum_zero" not in row["notes"], "文件名词干不许当声明名"
+    assert "imports=（默认：不注入任何库）" in row["notes"], row["notes"]
+
+
+def test_a_formal_run_refuses_to_guess_the_declaration_name(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """负控：文件里有两条具名声明而调用方没点名 ⇒ 拒绝，且一行都不写。
+
+    "挑第一条"看起来无害，但它把"核的是哪个命题"变成一次猜测 —— 而与
+    `decl_mismatch`（查了没通过）不同，这里的正确结论是"调用方写错了参数"。
+    """
+    monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
+    monkeypatch.setattr(FG, "check_lean", _checker_stub(status="verified", stdout="ok"))
+    rel = write_lean(store, "proofs/two.lean",
+                     "theorem alpha : 1 + 1 = 2 := rfl\n\ntheorem beta : 2 + 2 = 4 := rfl\n")
+    with pytest.raises(ExperimentError) as ei:
+        make_e(store).run_experiment("两条声明", "k-two", rel, method="formal")
+    assert "alpha" in str(ei.value) and "beta" in str(ei.value), str(ei.value)
+    assert store.rows("experiments") == [], "拒绝时一行都不许写"
+
+
 def test_formal_path_binds_the_checker_output_to_the_claim_key(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ):

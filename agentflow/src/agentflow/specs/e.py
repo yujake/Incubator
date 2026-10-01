@@ -153,7 +153,7 @@ SPEC = AgentSpec(
         policy=(
             '形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。',
             '跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，并把「这一版脚本查的是什么」写进实验结论。',
-            '`verify.check_formal` 的 `imports` 形参**默认注入 `("Mathlib",)`**：工作区里的 Lean 源码若是纯核心（自己不 import Mathlib），必须**显式传 `imports: []`**，否则拿到的是`import_unavailable`（没查成）而不是任何判定 —— 真机实测（2026-10-01）：`code/lean/p2_rho_sum_zero.lean` 不传 `imports` ⇒ `missing_imports=[\'Mathlib\']`；传 `imports: []` ⇒ `verified=True`，检查器原话是 `\'rho_sum_zero\' does not depend on any axioms`。另一条同族的调用口径：声明名要用 `checker_name` **逐字**对上源码里的声明名 —— 不给它时检查器拿文件名当声明名，结果是 `decl_mismatch`（同样是没查成）。两者都别读成「证否」。',
+            "`verify.check_formal` 的 `imports` 默认**不注入任何库**（源码自己 import 什么就加载什么）：要 Mathlib 就显式传 `imports: ['Mathlib']`，或把它写进源码 —— 别指望工具替你加一行，那会让「被检查的源码」与盘上那份不是同一份。声明名**会自动认**：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`（不给就报「取不到唯一那条」并列出候选名 —— 以前是拿文件名词干顶替，于是「没点名」被报成 `decl_mismatch`，读起来像「查了没通过」）。真机读数（2026-10-01）：`code/lean/p2_rho_sum_zero.lean` 在旧默认（注入 Mathlib）下⇒ `import_unavailable`（`missing_imports=['Mathlib']`）；默认不注入 ⇒ `verified=True`，检查器原话 `'rho_sum_zero' does not depend on any axioms`。",
         ),
         signature_error='把跑不过的代码块当成通过。',
         deliverable='experiments 行与它们的证据字段（数值、检查器输出、复现命令）。',

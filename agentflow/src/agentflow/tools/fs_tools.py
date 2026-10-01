@@ -542,6 +542,33 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
     )
 
 
+#: `fs.edit` 的单次改动上限（字节）。定 2,000 的理由：一次 reply 的实测输出约 191 token
+#: （`draft/37` §1.2 的读数），而"定点改一处"应当落在一次 reply 的额度内 ——
+#: 超过这个量就不是定点替换，而是整段重写，该走 `fs.write` 或拆成几处。
+MAX_EDIT_BYTES = 2000
+
+
+def _atomic_write_bytes(target: Path, payload: bytes) -> None:
+    """同目录临时文件 → `os.replace`：要么旧内容，要么新内容，没有第三种可能。
+
+    为什么把这段抽出来：`fs.write` 与 `fs.edit` 都要它，而"原子落盘"这种事
+    长成两份实现时，两份的差别只会在崩溃的那一刻显形（本项目最贵的一类 bug）。
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # 临时文件必须落在同一个目录：跨盘/跨文件系统的 os.replace 不是原子的。
+    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())  # 先落盘再改名，避免"改名成功但内容还在页缓存里"
+        os.replace(tmp, target)
+    except BaseException:
+        tmp.unlink(missing_ok=True)  # 失败路径不能留下垃圾临时文件
+        raise
+
+
 @tool(
     "fs.write",
     "写文本文件（原子落盘；默认不覆盖已有文件）。",
@@ -594,23 +621,114 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
         )
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    # 临时文件必须落在同一个目录：跨盘/跨文件系统的 os.replace 不是原子的。
-    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.", suffix=".tmp")
-    tmp = Path(tmp_name)
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(payload)
-            f.flush()
-            os.fsync(f.fileno())  # 先落盘再改名，避免"改名成功但内容还在页缓存里"
-        os.replace(tmp, target)
-    except BaseException:
-        tmp.unlink(missing_ok=True)  # 失败路径不能留下垃圾临时文件
-        raise
+    _atomic_write_bytes(target, payload)
     return ok(
         {"path": _rel(ctx, target), "bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest(), "created": not existed},
         path=_rel(ctx, target),
         bytes=len(payload),
         created=not existed,
+    )
+
+
+@tool(
+    "fs.edit",
+    "定点替换文件里的一段文本（old_string → new_string）。整文件覆盖之外的唯一正路："
+    "默认要求 old_string 恰好出现一次，并可选要求 sha256 与调用方读到的那一版一致。",
+    _obj(
+        {
+            "path": {"type": "string", "description": "相对工作区根的路径"},
+            "old_string": {"type": "string", "description": "要被替换的那段原文（逐字，默认必须唯一）"},
+            "new_string": {"type": "string", "description": "替换成什么（空串 = 删掉这一段）"},
+            "sha256": {"type": "string", "description": "可选：调用方读到文件时的 sha256；不符即拒（防「我拿的是旧版」）"},
+            "allow_multiple": {"type": "boolean", "default": False,
+                               "description": "为 true 才允许 old_string 出现多次（全部替换）"},
+            "note": {"type": "string", "description": "为什么改这一处（回在返回值里，供审计）"},
+        },
+        required=("path", "old_string", "new_string"),
+    ),
+    side_effect="write_local",
+    roles=TOOL_ROLES,
+    returns="{'path','sha256_before','sha256_after','replacements','bytes_before','bytes_after','note'}",
+    tags=("fs", "write", "edit"),
+)
+@_guard
+def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
+            sha256: str | None = None, allow_multiple: bool = False,
+            note: str = "") -> ToolResult:
+    """把 `old_string` 换成 `new_string` —— 只动那一处。
+
+    为什么必须有这一件（`draft/37` §1.2/§16 P0，真机实测 2026-10-01）：
+    `fs.write` 是整文件覆盖语义，而观测层每次只回显约 3,000 字。一篇 51,285 字节
+    （≈25.6K token）的论文要改一处措辞，用整文件覆盖就意味着"在一次回复里逐字吐出全文"
+    —— 模型单次输出上限 4,096 token，物理上写不出来；G 因此三次拒绝改稿
+    （原话：「在无法逐字重建全文的前提下做整文件 overwrite，有静默损坏正文的风险」）。
+    定点替换把一次改动的代价从"全文"降到"那一处"。
+
+    三道闸（对应 §16 P0 的判据）：
+    - 唯一匹配：`old_string` 出现多次时默认拒绝（`kind="ambiguous"`）—— 替换错地方比不替换更坏；
+    - 前置版本：给了 `sha256` 就必须与盘上现在这一版相等，否则拒（`kind="sha_mismatch"`）；
+    - 改动上限：`new_string` 超过 `MAX_EDIT_BYTES` 就拒 —— 那说明这次改动不是"定点"。
+    """
+    target = _resolve(ctx, path)
+    if not target.exists():
+        return fail(f"{_rel(ctx, target)} 不存在（定点替换只能改已有文件）",
+                    path=_rel(ctx, target), kind="not_found")
+    if target.is_dir():
+        raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件改")
+    before = target.read_bytes()
+    if len(before) > MAX_READ_BYTES:
+        return fail(f"{_rel(ctx, target)} 有 {len(before)} 字节，超过可改上限 {MAX_READ_BYTES}",
+                    path=_rel(ctx, target), kind="too_large", bytes=len(before))
+    if sha256 and sha256 != hashlib.sha256(before).hexdigest():
+        return fail(
+            f"{_rel(ctx, target)} 现在这一版的 sha256 与调用方给的不符 ⇒ 拒绝改。"
+            "（这一条防的是「我拿到的是别人改之前的那一版」—— 盲改会把别人的改动覆盖掉。）",
+            path=_rel(ctx, target), kind="sha_mismatch",
+            sha256_now=hashlib.sha256(before).hexdigest(),
+        )
+    text, encoding, had_errors = _decode_text(before)
+    if had_errors:
+        return fail(f"{_rel(ctx, target)} 不是干净的 UTF-8（解码时有替换字符）⇒ 拒绝改，"
+                    "免得把编码问题写坏成内容问题",
+                    path=_rel(ctx, target), kind="not_utf8", encoding=encoding)
+    if not old_string:
+        return fail("old_string 不能为空（空串会在每一处之间插入 new_string）",
+                    path=_rel(ctx, target), kind="empty_old_string")
+    count = text.count(old_string)
+    if count == 0:
+        return fail(f"old_string 在 {_rel(ctx, target)} 里找不到（逐字比对，含空白）⇒ 拒绝改",
+                    path=_rel(ctx, target), kind="not_found_old_string")
+    if count > 1 and not allow_multiple:
+        return fail(
+            f"old_string 在 {_rel(ctx, target)} 里出现了 {count} 次 ⇒ 拒绝改。"
+            "要改哪一处，就把 old_string 写长到唯一（带上前后文），"
+            "或显式 allow_multiple=true 表示「每一处都换」。",
+            path=_rel(ctx, target), kind="ambiguous", occurrences=count,
+        )
+    payload = new_string.encode("utf-8")
+    if len(payload) > MAX_EDIT_BYTES:
+        return fail(
+            f"new_string 有 {len(payload)} 字节 > 单次定点替换上限 {MAX_EDIT_BYTES} 字节 ⇒ 拒绝。"
+            "（一次改动这么大就不是「定点」了：请拆成几处，或改用整文件 fs.write。）",
+            path=_rel(ctx, target), kind="too_large", bytes=len(payload),
+            max_bytes=MAX_EDIT_BYTES,
+        )
+    after_text = text.replace(old_string, new_string)
+    after_bytes = after_text.encode("utf-8")
+    _atomic_write_bytes(target, after_bytes)
+    return ok(
+        {
+            "path": _rel(ctx, target),
+            "sha256_before": hashlib.sha256(before).hexdigest(),
+            "sha256_after": hashlib.sha256(after_bytes).hexdigest(),
+            "replacements": count,
+            "bytes_before": len(before),
+            "bytes_after": len(after_bytes),
+            "note": str(note or ""),
+        },
+        path=_rel(ctx, target),
+        replacements=count,
+        note=str(note or ""),
     )
 
 
@@ -879,6 +997,7 @@ _TOOL_FUNCTIONS: tuple[Callable[..., ToolResult], ...] = (
     fs_list,
     fs_read,
     fs_write,
+    fs_edit,
     fs_delete,
     fs_move,
     fs_stat,

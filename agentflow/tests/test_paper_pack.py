@@ -59,22 +59,24 @@ def test_other_roles_do_not_get_the_paper_pack_section(store: Store, role: str):
 
 
 def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
-    """判据（内容）：四件必须说到的事 —— 验收表位置、台账语义、期刊体例、完成定义。
+    """判据（内容）：交付物段必须说到的事 —— 交付物是正文、哪里能改、判据表、台账语义、工作循环。
 
-    每一条都对应一件会真实出错的事：交付说明不对齐验收表（写得像总结）、
-    把 cross_check 说成证明、PDF 缺标记、把"锚漂移"当成小问题。
+    这一条在 `goal-a5334ee8` 的第一刀之后改过一次（旧版要的是 `ctexart` 与五个标记 ——
+    那是评审摘要时代的产物）。用户对 §228 那轮的判词是「你觉得这个产出是论文吗？」：
+    摘要里凑齐五个标记与"一篇更好的论文"是两件事，判据必须钉后者。
     """
     text = _prompt("G", store)
-    for fact in ("out/paper/ACCEPTANCE.md", "P1–P11", "逐条回应那十行",
+    for fact in ("修订后的论文正文", "可改、该改", "只读基线", "appendix.tex",
+                 "out/paper/ACCEPTANCE.md", "P1–P11", "逐条回应那十行",
                  "cross_check", "不构成证明", "结论不许强于它挂的证据",
-                 "ctexart", "五个标记", "自主评审", "断言台账", "覆盖率", "猜想表",
-                 "渲染锚 0 漂移", "review_findings", "只读输入"):
+                 "doc.paper_render", "doc.paper_compile", "doc.paper_state",
+                 "渲染锚 0 漂移", "正文有内容级的改动", "review_findings", "依据"):
         assert fact in text, f"论文包段里没有 {fact!r}"
 
 
 def test_the_paper_pack_section_is_versioned(store: Store):
     """判据（可追溯）：段变了版本号就要动 —— 提示词版本是审计记录里的一栏。"""
-    assert AP.PROMPT_VERSION == "p21", AP.PROMPT_VERSION
+    assert AP.PROMPT_VERSION == "p23", AP.PROMPT_VERSION
 
 
 #: `2026-10-01` 真机实测逼出来的那一条：光说"重渲染 → 重编译 → 锚回 consistent"不够，
@@ -88,7 +90,7 @@ def test_the_paper_pack_section_is_versioned(store: Store):
 #: ⇒ 段里必须点名"核验证明的主路径是 E 的形式化核验"（H 的机械门 + G 重渲染不会让稿子变好）。
 PACK_FOLLOW_FACTS = ("`G.revise`", "build_document", "doc.paper_render", "doc.paper_state",
                      "invalid_params", "verify_fixes", "最后一次写台账之后",
-                     "E.check_formal", "imports: []")
+                     "E.check_formal", "不注入任何库")
 
 
 def pack_follow_problems(text: str) -> list[str]:

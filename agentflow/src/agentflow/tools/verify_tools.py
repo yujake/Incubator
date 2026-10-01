@@ -445,29 +445,22 @@ def check_formal(
                     "—— 读工作区外的文件不在这个工具的语义里"
                 ) from None
         path_arg = str(cand)
-        if not nm:
-            nm = cand.stem
-
-    if not nm:
-        # 没有名字 ⇒ `#print axioms` 与声明名核对都无从谈起。刻意**不**回退成
-        # 文件名：一个猜出来的名字会让"声明名核对"这条判据在无声中失效，
-        # 而它正是拦住"声称证了 foo、文件里却没有 foo"的那一条。
-        return fail(
-            "check_formal：拿不到声明名 —— 源码里没有具名声明（只有 example 或全被注释），"
-            "调用方也没有显式给 checker_name。声明名核对与公理审计都要求这个名字，"
-            "猜一个名字等于把那条判据悄悄关掉。请显式给出 checker_name。"
-            "（参数不叫 name 的理由见本函数的 docstring：name 与 ToolRegistry.call "
-            "的第一个形参撞名，按名传入会 TypeError。）",
-            kind="param_error",
-            claim=claim,
-            checker_name=str(checker_name or ""),
-        )
+        # 刻意**不**回退成 `cand.stem`（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
+        # 拿文件名词干当声明名，会让"源码里没有这个名字"报成 `decl_mismatch`
+        # （机器可读位是"查了、没通过"），而真原因是**调用方没点名**。
+        # 现在把空名字原样交给 `check_lean`：源码里恰好一条具名声明就自动用它，
+        # 0 条或多条则抛 `DeclarationNameError`（ValueError 子类）⇒ 下面的
+        # `except ValueError` 折成 `param_error`，并列出候选名。
+        # （参数不叫 `name` 的理由见本函数的 docstring：`name` 与
+        #  `ToolRegistry.call` 的第一个形参撞名，按名传入会 TypeError。）
 
     try:
         raw = check_lean(
             src,
             name=nm,
-            imports=imports if imports is not None else ("Mathlib",),
+            # `None` 与 `()` 同义（不注入任何库）：注入 Mathlib 会让纯核心源码
+            # 报 `import_unavailable` = 没查成，而它看起来像"这条路走不通"。
+            imports=tuple(imports or ()),
             timeout_sec=float(timeout_sec) if timeout_sec is not None else 600,
             source_path=path_arg,
         )

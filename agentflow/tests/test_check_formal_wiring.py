@@ -132,6 +132,38 @@ def test_check_formal_passes_source_name_imports_timeout_to_the_bridge(
     assert set(got) == CONTRACT_KEYS, got
 
 
+def test_check_formal_does_not_pass_the_filename_as_the_declaration_name(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """判据（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：只给 `script_path` 时
+    声明名交给桥接层从源码认，不许拿文件名词干顶替；默认也不注入任何库。
+
+    实测形态：工作区里 `code/lean/p2_rho_sum_zero.lean` 这条文件的声明叫
+    `rho_sum_zero`。旧实现把 `Path(script_path).stem`（= `p2_rho_sum_zero`）当声明名
+    传下去 ⇒ 桥接层报 `decl_mismatch`（机器可读位是"查了、没通过"），
+    而真原因是调用方没点名；同时旧默认注入 `import Mathlib` ⇒ 纯核心源码
+    一律 `import_unavailable`（没查成）。两件事叠起来，E 在真机上把"核验证明"
+    读成了"这条路走不通"。
+    """
+    seen, fake = _fake_check_lean_seen()
+    monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
+    monkeypatch.setattr(FG, "check_lean", fake)
+    script = Path(store.root) / "code" / "lean" / "p2_rho_sum_zero.lean"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("theorem rho_sum_zero : True := trivial\n", encoding="utf-8")
+
+    make_e(store).check_formal("④ 的判据", script_path=str(script))
+
+    assert seen["name"] == "", (
+        f"只给 script_path 时应当把空名字交给桥接层自动认名，实测收到 {seen['name']!r}")
+    assert seen["name"] != "p2_rho_sum_zero", "文件名词干不许当声明名（老毛病的正面形态）"
+    assert seen["imports"] == (), f"默认不注入任何库，实测 {seen['imports']!r}"
+    # 显式给名字/库时逐字透传（这条判据不是把参数吃掉）
+    make_e(store).check_formal("④ 的判据", script_path=str(script),
+                               name="rho_sum_zero", imports=["Mathlib"])
+    assert seen["name"] == "rho_sum_zero" and seen["imports"] == ("Mathlib",), seen
+
+
 def test_check_formal_normalizes_script_path_and_keeps_old_signature(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ):
