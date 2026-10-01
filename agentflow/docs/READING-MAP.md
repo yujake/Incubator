@@ -91,7 +91,7 @@
 |---|---|
 | `agent_a.py` | A：文献搜索（唯一带网络副作用的角色） |
 | `agent_b.py` | B：文献整理（抽取概念与关系，引文逐字回验） |
-| `agent_c.py` | C：关系分析（程序做分析，LLM 只做排序与措辞） |
+| `agent_c/`（包） | C：关系分析（程序做分析，LLM 只做排序与措辞） |
 | `agent_d.py` | D：研究循环（**最大的文件**，见 §3） |
 | `agent_e.py` | E：数值实验与形式化验证 |
 | `agent_f.py` | F：多轮难题攻坚 |
@@ -167,7 +167,7 @@
 | 动**项目工作区 / 本地书架** | `cli.py`（`cmd_project`） | `projects.py` → `locallib.py` | `tests/test_projects.py`、`tests/test_user_quickstart.py` |
 | 动 **A 的检索** | `agent_a.py` | `providers.py` → `fetch.py` → `tools/search_tools.py` | `tests/test_agent_a.py`、`tests/test_providers_online.py` |
 | 动 **B 的抽取** | `agent_b.py` | `llm.py` → `extract.py` → `dedup.py` | `tests/test_agent_b*.py`、`tests/test_quoteverify.py` |
-| 动 **C 的图分析** | `agent_c.py` | `tools/graph_tools.py`、`tools/trace_tools.py` | `tests/test_agent_c*.py` |
+| 动 **C 的图分析** | `agent_c/`（包） | `tools/graph_tools.py`、`tools/trace_tools.py` | `tests/test_agent_c*.py` |
 | 动 **D 的研究循环** | `agent_d.py` | `claimanatomy.py`、`tools/research_tools.py` | `tests/test_agent_d*.py`、`tests/test_claimanatomy.py` |
 | 动 **E 的实验 / 形式化** | `agent_e.py` | `formalgw.py`、`tools/verify_tools.py`（禁改区） | `tests/test_agent_e*.py` |
 | 动 **F 的攻坚** | `agent_f.py` | `tools/attack_tools.py` | `tests/test_agent_f.py` |
@@ -192,7 +192,7 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d.py` | 4197 | D 的全部动作（14 个）：摄入 / 溯源 / 评估 / 提问 / 裁决 / 研究 / 汇报 | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，14 个叠起来就是几千行 |
-| `agent_c.py` | 3446 | C 的 9 个纯读分析动作（含图算法与格式化的长实现） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
+| `agent_c/core.py` | 1701 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1701 行；`agent_c/_support.py` 是模块级 helper 与常量，325 行） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 2241 | 动作表 + 写集 + 边表 + 导入期交叉断言 | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2880 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2745 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |

@@ -2078,7 +2078,14 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     "agent_a.py": "A 智能体：文献搜索",
     "agent_b.py": "B 智能体：文献整理（抽取 + 逐字回验）",
-    "agent_c.py": "智能体 C：关系分析（程序做分析，LLM 只做排序与措辞）",
+    # `goal-7f5116c1` M6：`agent_c.py`（3446 行）拆成包，一个动作一个文件
+    # （`hottest` / `paths` / `cold` / `gaps` / `neighbors` / `relations_between` /
+    #  `contradictions` / `structural_duplicates` / `handle` 各自一个模块）+
+    # `core.py`（其余成员与 mixin 组装）+ `_support.py`（模块级 helper 与常量）。
+    # 拆法逐字搬移（判据 `tests/test_agent_split_is_one_action_one_file.py`）。
+    "agent_c/": "智能体 C：关系分析（拆包：一个动作一个文件 + core + _support）",
+    "specs/": "每个角色一份**声明真身**（`goal-7f5116c1` M3）：`ACTIONS`（动作表）与 `SPEC` —— "
+              "`capabilities.py` 的四张表由它派生；它在 `.noai-paths` 里逐文件受保护",
     "agent_d.py": "智能体 D：研究循环",
     "agent_e.py": "智能体 E：数值实验与形式化验证",
     "agent_f.py": "智能体 F：多轮难题攻坚",
@@ -2182,8 +2189,18 @@ def agentflow_module_inventory_problems(on_disk: list[str]) -> list[str]:
 
 
 def _agentflow_top_level_modules_on_disk() -> list[str]:
-    """盘上 `src/agentflow/` 的顶层 `*.py` 名字（排好序，`__pycache__` 与 `tools/` 不在内）。"""
-    return sorted(p.name for p in (REPO / "src" / "agentflow").glob("*.py"))
+    """盘上 `src/agentflow/` 的顶层模块名（排好序；`tools/` 与 `__pycache__` 不在内）。
+
+    收两种形态：顶层 `*.py`（名字如 `store.py`）与含 `__init__.py` 的顶层目录
+    （名字带尾斜杠，如 `agent_c/`）—— `goal-7f5116c1` M6 把两个大角色拆成了包，
+    而"包目录里凭空多一个目录"与"多一个 .py"是同一类事，必须同样被点名。
+    """
+    base = REPO / "src" / "agentflow"
+    out = [p.name for p in base.glob("*.py")]
+    out += [f"{p.name}/" for p in base.iterdir()
+            if p.is_dir() and p.name not in {"__pycache__", "tools"}
+            and (p / "__init__.py").is_file()]
+    return sorted(out)
 
 
 def test_agentflow_top_level_modules_match_the_registry():

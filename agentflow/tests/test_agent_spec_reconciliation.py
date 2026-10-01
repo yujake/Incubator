@@ -85,7 +85,14 @@ def test_the_registry_is_not_vacuous() -> None:
 
 
 def test_the_class_path_is_what_host_actually_builds() -> None:
-    """`class_path` 不是自己写的字符串：`host` 的工厂真的会构造出那个类。"""
+    """`class_path` 不是自己写的字符串：`host` 的工厂真的会构造出同一个类对象。
+
+    判据比的是身份（`spec.cls() is type(inst)`），不是 `type(inst).__module__` ——
+    `goal-7f5116c1` M6 把 `agent_c.py` 拆成包之后，类的 `__module__` 变成了
+    `agentflow.agent_c.core`，而 `class_path` 仍然是 `agentflow.agent_c:AgentC`
+    （包的入口再导出它）。两者指向同一个对象，这才是要钉的事：
+    "spec 说的那个类"与"host 造出来的那个类"必须是一个。
+    """
     reg = builtin_registry()
     with tempfile.TemporaryDirectory(prefix="agent-spec-") as td:
         ws = pathlib.Path(td) / "ws"
@@ -96,9 +103,9 @@ def test_the_class_path_is_what_host_actually_builds() -> None:
         assert set(factories) == set(reg.roles()) - {"M"}, sorted(factories)
         for role, (_kind, factory) in sorted(factories.items()):
             inst = factory(store=st)
-            built = f"{type(inst).__module__}:{type(inst).__name__}"
-            assert built == reg.get(role).class_path, (
-                f"{role}：spec 写的是 {reg.get(role).class_path}，host 构造的是 {built}")
+            assert reg.get(role).cls() is type(inst), (
+                f"{role}：spec 写的是 {reg.get(role).class_path}"
+                f"（解析到 {reg.get(role).cls()}），host 构造的是 {type(inst)}")
 
 
 def test_the_reconciliation_catches_a_drifted_spec() -> None:

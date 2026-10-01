@@ -157,7 +157,7 @@ class LocalBackend:
 
     name = "local"
 
-    #: 声明注册表（`None` ⇒ 读内置那份）。**类级**默认值：子类若自己写 `__init__`
+    #: 声明注册表（`None` ⇒ 读内置那份）。类级默认值：子类若自己写 `__init__`
     #: 而没调 `super().__init__()`，仍然拿得到"用内置表"这个默认行为 ——
     #: 实测于 `tests/test_r5_orchestration_cost.py::_ProbeBackend`（三条取消语义用例）。
     _specs: Any = None
