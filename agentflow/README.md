@@ -351,7 +351,7 @@ agentflow/
 ├── DESIGN.md / DESIGN-TOOLS.md / DESIGN-INTERACTIONS.md / DESIGN-ROLES.md / DESIGN-CONDUCTOR.md
 │                             设计理由（不构成判据；现状导读见 ../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md）
 ├── config.yaml               运行时可调项（注释里注明各字段落到哪个模块）
-├── .noai-paths               禁改区清单（**27** 条 glob / **24** 条唯一路径 / 7 类；**台账条目数与欠签不写定值**（每签一个字就变 —— 量法与当次值见 §6.2 那两格，别再往这一行抄数）；前两个数由 `tests/test_release_all.py::test_readme_file_tree_numbers_match_the_repo` 守着）
+├── .noai-paths               禁改区清单（**38** 条 glob / **35** 条唯一路径 / 7 类；**台账条目数与欠签不写定值**（每签一个字就变 —— 量法与当次值见 §6.2 那两格，别再往这一行抄数）；前两个数由 `tests/test_release_all.py::test_readme_file_tree_numbers_match_the_repo` 守着）
 ├── pyproject.toml            包元数据 + pytest 配置（**唯一**一处；不要再加 tests/pytest.ini）
 ├── docs/
 │   ├── INDEX.md              docs/ 的索引与"按角色怎么读"
@@ -567,8 +567,8 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
 
 | 数 | 量的是什么 | 实测（观测 **2026-09-27 15:1x（`FIX11` 题 3 落地后复测）**；这个时间戳是这一格的一部分 —— 数字会变，量法不会） | 复跑方式 |
 |---|---|---:|---|
-| **清单 glob 数** | `.noai-paths` 里的**条目行**数（同一个文件可以登记两次） | 由命令当次产出：**27**（**唯一路径 24**） | `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count` |
-| **唯一路径数** | 上述 glob 去重 | 由命令当次产出：**24** | 同上再加 `ForEach-Object { ($_.Line -split '\s+')[0] } \| Select-Object -Unique` |
+| **清单 glob 数** | `.noai-paths` 里的**条目行**数（同一个文件可以登记两次） | 由命令当次产出：**38**（**唯一路径 35**） | `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count` |
+| **唯一路径数** | 上述 glob 去重 | 由命令当次产出：**35** | 同上再加 `ForEach-Object { ($_.Line -split '\s+')[0] } \| Select-Object -Unique` |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数（= 需要签字的行数） | **不写定值**（每签一个字就变）：当次由右列命令产出 | `python -c "import json;print(len(json.load(open('.noai-approvals.json', encoding='utf-8'))['entries']))"` |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** | `Select-String -Path .noai-paths -Pattern '^\[category:'` |
 | （派生）**欠签** | 台账条目 × 2 名 reviewer | **不写定值**（每签一个字就变）：由右列命令当次产出 `entries × 2 − Σ len(reviewers)`；**0 签的条目也随签字而变**（当次以 `python scripts/noai_gate.py --check-approvals` 的输出为准，这里不点名具体文件） | `python -c "import json;d=json.load(open('.noai-approvals.json',encoding='utf-8'));print(len(d['entries'])*2-sum(len(e['reviewers']) for e in d['entries']))"` |

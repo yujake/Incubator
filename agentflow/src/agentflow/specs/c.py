@@ -1,0 +1,148 @@
+"""角色 C 的声明（`goal-7f5116c1` M3）：动作表 + 边 + 写集 + 职责与门面。
+
+这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
+`WRITE_SETS`，`agent_c.py` 只是把它再导出一次。
+所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
+动作表的每一行都从 `capabilities.py` 逐字搬来（含注释），判据见
+`tests/test_agent_spec_reconciliation.py` 与 `tests/test_capabilities_two_layer.py`。
+"""
+from __future__ import annotations
+
+from .. import schema as S
+from ..agentspec import (
+    _ARR_I,
+    _ARR_OBJ,
+    _ARR_S,
+    _B,
+    _I,
+    _N,
+    _OBJ,
+    _S,
+    ActionSpec,
+    AgentBrief,
+    AgentSpec,
+    _obj,
+)
+
+#: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
+ACTIONS: tuple[ActionSpec, ...] = (
+    ActionSpec(
+        "C", "hottest",
+        "最热概念榜（度数中心性）",
+        _obj({"top_n": {**_I, "minimum": 1}, "request": _S}),
+        "AnalysisReport（内存对象；要落库需显式 persist）",
+        side_effect="read", handler_name="hottest",
+    ),
+
+    ActionSpec(
+        "C", "paths",
+        "两个概念之间的关系路径",
+        _obj({"a": _S, "b": _S, "max_paths": _I, "max_len": _I,
+              "max_overlap": _N, "request": _S}, ("a", "b")),
+        "AnalysisReport", side_effect="read", handler_name="paths",
+    ),
+
+    ActionSpec(
+        "C", "cold",
+        "冷门/完全孤立概念",
+        _obj({"top_n": {**_I, "minimum": 1}, "request": _S}),
+        "AnalysisReport", side_effect="read", handler_name="cold",
+    ),
+
+    ActionSpec(
+        "C", "gaps",
+        "结构缺口候选（可显式选择是否提交检索请求）",
+        _obj({"limit": {**_I, "minimum": 1}, "request": _S, "submit_requests": _B}),
+        "AnalysisReport", side_effect="read", handler_name="gaps",
+    ),
+
+    ActionSpec(
+        "C", "neighbors",
+        "某概念的邻居（可指定深度）",
+        _obj({"concept_id": _S, "depth": {**_I, "minimum": 1}, "max_nodes": _I},
+             ("concept_id",)),
+        "dict", side_effect="read", handler_name="neighbors",
+    ),
+
+    ActionSpec(
+        "C", "relations_between",
+        "两个概念之间的全部关系",
+        _obj({"a": _S, "b": _S, "include_inactive": _B}, ("a", "b")),
+        "dict", side_effect="read", handler_name="relations_between",
+    ),
+
+    ActionSpec(
+        "C", "contradictions",
+        "检测互相矛盾的关系对",
+        _obj({"relation_ids": _ARR_S, "limit": _I}),
+        "dict", side_effect="read", handler_name="contradictions",
+    ),
+
+    ActionSpec(
+        "C", "structural_duplicates",
+        "结构重复候选（I5 的输入）",
+        _obj({"limit": _I}),
+        "dict", side_effect="read", handler_name="structural_duplicates",
+    ),
+
+    ActionSpec(
+        "C", "handle",
+        "自然语言需求 -> 分派到上面某个分析器",
+        _obj({"request_text": _S}, ("request_text",)),
+        "AnalysisReport（kind 可能是 'unknown'，不可落库）",
+        side_effect="read", handler_name="handle",
+    ),
+)
+
+
+#: 本角色的声明。
+SPEC = AgentSpec(
+    role='C',
+    brief=AgentBrief(
+        duty='关系分析：用确定性代码算图与计数，只在排序与措辞这两件事上动用模型',
+        boundary=(
+            '你是只读角色：不许写任何数据，也不许直接向别人发请求（你的可召唤边是空的）。',
+            '计数、索引、图搜索、路径枚举、去重、评分、溯源全部由代码算，你不许用模型重算它们。',
+            '模型的输出只能给一个排列或一个判断（值不值得研究），不许改分数、不许删路径。',
+            '钩子没接线或返回坏结果时必须回退到确定性顺序，并在结论里写明这次排序的来源。',
+        ),
+        policy=('两处钩子各只许做一件事：路径排序只给 index 排列；缺口判断只给 worth 与 confidence。',),
+        signature_error='把模型给的排序当成算出来的评分。',
+        deliverable='图的形状读数、结构重复、候选研究缺口（由 D 或编排层决定要不要变成请求）。',
+        stance=(
+            '你的高观点在于结构：哪些概念是枢纽、哪些关系是冗余、哪条链是绕远路，这些判断要落到具体读数上（度数、重复、绕行长度），不是感觉。',
+            '遇到矛盾的两条关系链时，追到它们的共同上游：矛盾常常来自同一个定义被两种口径使用。',
+            "你只读不写不是缺陷：你的产出由别人收取，正因为如此你才敢说'这条链不成立'。",
+        ),
+    ),
+    emphasis={
+        '眼睛': 'core',
+        '耳朵': 'minor',
+        '脑子': 'core',
+        '手': 'denied',
+        '能讨论': 'core',
+        '高观点': 'core',
+        '能互动': 'minor',
+        '能思辨': 'core',
+        '敢创新': 'core',
+        '有品味': 'minor',
+    },
+    local_notes={
+        '高观点': '枢纽、冗余、绕行：结构判断要落到读数上（度数、重复、绕行长度）。',
+        '能思辨': '两条链矛盾时追共同上游：矛盾常常来自同一个定义被两种口径使用。',
+        '敢创新': '你可以提候选缺口（那是猜想），但不能自己把它变成请求 —— 交给 D 或人判。',
+        '手': '数据面写是结构禁止的（只读角色）；草稿本 note 照写。',
+        '眼睛': '读的是关系图与计数：形状、度数、重复、绕行，不是文献本身。',
+        '脑子': "把'图长什么样'变成'哪条链值得下钻'：判断要可复算。",
+        '能讨论': '把结构读数讲清楚给 D 与人听；你自己不发请求（边是空的）。',
+    },
+    read_only=True,
+    summonable=True,
+    edges=(),
+    write_set=frozenset((
+                     'analysis_reports',
+                     'search_requests',
+                 )),
+    class_path='agentflow.agent_c:AgentC',
+    actions=ACTIONS,
+)

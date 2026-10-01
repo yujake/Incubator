@@ -75,7 +75,7 @@
 > | `tokenmeter.py` | **已存在**（`TokenMeter.charge` 记账 + `guard` **开工前**守卫；**重试按次计费** `(in+out)×attempts`；`tokens_for`/`usd_for` 供 `summon` 把 `tasks.tokens` 派生自台账） |
 > | `claimanatomy.py` | **已存在**（`CLAIM_FIELDS` 的**字段数按命令当次读**：`python -c "import sys;sys.path.insert(0,'src');import agentflow.claimanatomy as c;print(len(c.CLAIM_FIELDS))"`；观测 2026-09-27（`G3` 复测）⇒ 19 —— `G3` 之前这里写 12，已过期）+ `validate_claim` **三态**（`checked`/`decided`/`undecided_reason`）+ `validate_document_claims` + `consolidate_issues` + `revision_hash`；**它是断言解剖学的唯一判据来源**，`doc_tools.scan_claim` 已改为纯适配层转发） |
 > | `gates.py` | **已存在**（H 的 **G1–G15** 门引擎；`GATES` 声明表**门号齐全、每门可单独查询**（`len(gates.GATES)` 的复跑命令见 §0.3 的 `LIVE-READINGS` 块；观测 2026-09-27（`G3` 复测）⇒ 15）；四态结论 `pass`/`fail`/`unknown`/`not_applicable`；`GateResult.__post_init__` **结构强制"零发现必须自证"**） |
-> | `.noai-paths` | **已存在**（**27** 条条目 / **24** 条唯一路径 / 7 个分组；台账条目数 / 欠签 / `stale` 计数**都不写定值**（每签一个字就变），复跑口径见 §1.5 的"三个数"小节） |
+> | `.noai-paths` | **已存在**（**38** 条条目 / **35** 条唯一路径 / 7 个分组；台账条目数 / 欠签 / `stale` 计数**都不写定值**（每签一个字就变），复跑口径见 §1.5 的"三个数"小节） |
 > | `AGENTS.md` | **已存在**（含 `NOAI-MANIFEST` 区块，与 `.noai-paths` **逐条一致**，实测退出码 0） |
 > | `scripts/noai_gate.py` | **已存在**（退出码 0/1/2 三档，实测三个方向都跑过） |
 > | `scripts/release_check.py` | **已存在**（八项检查；docstring 自陈 `authored_by: AI agent，尚未经人逐行走查`、`required_approvals: 2（尚未取得）`） |
@@ -162,8 +162,8 @@ lint_rules_warning = 9    # `python scripts/lint_rules.py`（日常档）末行�
 lint_rules_info    = 47   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-09-29（`draft/28` §173：30 → 37（§168 拓宽取词面 + 登记 7 条"由数据产出"的预留）→ **47**（§173 又把 R-64 那 10 条登记为预留））。这 17 条 info 全部是 R011"栏一：已登记为预留"的逐条打印（`tools/vocab_census.py::RESERVED_VALUES`）——按该表 doctrine，预留项**必须**照样打印含理由，所以它们是设计后果而不是噪音。同一批一度让 R011 的**栏二**多出 10 条无人认领（`error 6 → 11`），那 10 条已在 §173 逐条登记为预留 ⇒ `error` 回到 6，再在 §176 里归零（那 6 条是 R009 的注释装饰，已按"只改注释与文档串"清掉）
 lint_rules_strict_warning = 51 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-09-29（`draft/28` §172/§173；此前 39）
 lint_rules_strict_info    = 46 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-09-29（`draft/28` §173）
-noai_paths_glob    = 27   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
-noai_paths_unique  = 24   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
+noai_paths_glob = 38   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
+noai_paths_unique = 35   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
 noai_paths_categories = 7 # `.noai-paths` 里 `[category: …]` 的分组数；观测 2026-09-27（G3 复测）
 tools_star_tools_py   = 13 # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`（+conductor_tools）（外加 `base.py` 与装配点 `__init__.py`）；观测 2026-09-29（T3-P3 加 `conjecture_tools.py`：12 → 13 —— 猜想台账的产出面，T1 只落了数据面与判据；同时改 `README.md` 文件树那一行的同一读数，两者由 `tests/test_release_all.py` 的两条用例分别对账）
 schema_tables      = 16   # `len(schema.TABLES)`；复跑 `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`；观测 2026-09-29（T1 加 `conjectures` 表：15 → 16；表加一行的**触点不止一处**，见 `docs/ROLE-SPECS.md` 与 `draft/30` §T1 的十处清单（9 处代码 + `tests/conftest.DATA_FILES` 这一处判据清单）；`SCHEMA_VERSION` 刻意不动）
@@ -394,8 +394,8 @@ DESIGN-*.md         设计理由（**不构成判据**；与代码冲突时以�
 
 | 数 | 量的是什么 | 实测（观测 **2026-09-27（`G3` 复测）**；`R6-AN-4` 复核 —— 09-26 当次是 21 / 18 / 16 / 7 / 32） |
 |---|---|---:|
-| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **27**（`(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`） |
-| **唯一路径数** | 上述 glob 去重后的路径数 | **24**（同上再加 `ForEach-Object { ($_.Line -split '\s+')[0] }` 与 `Select-Object -Unique`） |
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **38**（`(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`） |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **35**（同上再加 `ForEach-Object { ($_.Line -split '\s+')[0] }` 与 `Select-Object -Unique`） |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变）—— 当次由 `python -c "import json;print(len(json.load(open('.noai-approvals.json', encoding='utf-8'))['entries']))"` 产出 |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
 | **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变）：由 `sum(len(e['reviewers']) for e in entries)` 当次产出，再算 `entries × 2 − reviewers_total`；**0 签的条目也随签字而变**（当次以 `python scripts/noai_gate.py --check-approvals` 的输出为准，这里不点名具体文件） |
@@ -1083,7 +1083,7 @@ required_approvals: 2（尚未取得）
 
 | 事项 | 去向 |
 |---|---|
-| 哪些路径是禁 AI 区（当次 **27** 条条目 / **24** 条唯一路径 / 7 个分组；口径与复跑命令见 §1.5 与 §0.3 的 `LIVE-READINGS` 块） | **`.noai-paths`** |
+| 哪些路径是禁 AI 区（当次 **38** 条条目 / **35** 条唯一路径 / 7 个分组；口径与复跑命令见 §1.5 与 §0.3 的 `LIVE-READINGS` 块） | **`.noai-paths`** |
 | 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
 | 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
 | 实际判定 | 命令：`python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
@@ -1351,7 +1351,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 | **FC-24** | 基准口径是必填字段 | **`schema.EVAL_REQUIRED_FIELDS`**（`:1454`，7 个必填）+ **`EvalResult`**（`:1465`，`validate()` 缺任一即抛、`value` 必须是 0..1 比率）；`verify.eval_duplicate_conflicting` / `unknown_citation_kind`（`eval:` 引用） | `tests/test_fc05_contract.py`：`test_eval_requires_every_scope_field` / `test_eval_value_must_be_a_ratio` / `test_conflicting_duplicate_eval_is_an_error` / `test_same_value_duplicate_eval_is_clean` | **已落地**（**`draft/13` §7 标为"未落地"的陈述已过期**） |
 | **FC-25** | "未证明/已证否/未搜索"三分 | `schema.NEGATION_KINDS` 四值（`:647`）；`Experiment.negation_kind`；`cold` 报告把 `degree==0` 单列"完全孤立"；`SummonResult` 的 `refused`/`no_result`/`not_applicable` 三分 | `tests/test_agent_e.py`；`agent_e` 自检第 [7] 项逐字："'查了没有' 与 '没查' 的 reason 不同" | **已落地** |
 | **FC-26** | 每个"缺口/结论"必须可核实判据 + 否决项 | D 的三条判据 `a_no_keyword_hit` / `b_low_degree_unverified` / 矛盾；`gaps` 的 **`veto` 与 `score` 分离** | `tests/test_agent_c.py` / `test_agent_d.py`；`agent_d` 自检实测了 `判据=['a_no_keyword_hit']` 与 `['c_contradiction']` | **已落地** |
-| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **27** 条条目 / **24** 条唯一路径 / 7 个分组，见 §1.5；这几个数与下面那条用例数都由 §0.3 的 `LIVE-READINGS` 块与 `tests/test_release_all.py::test_development_md_linter_readings_and_rule_range_match_the_repo` 守着）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py`（**实测已存在，当次 124 passed / 0 skipped**（观测 2026-09-28 15:4x）；复跑 `python -m pytest tests/test_noai_gate.py -q -p no:cacheprovider`，这个数由上面那条文档读数用例按 `--collect-only` 对账）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 124 passed、0 skipped ⇒ 负控真的在跑，见 §9.3 第 3 条与 `G-15`） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次 `reviewers` 元素总数由 `python temp\_ledger_snapshot.py` 当次产出，**本行不写定值**），不是代码坏 —— 见 §8.2b |
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **38** 条条目 / **35** 条唯一路径 / 7 个分组，见 §1.5；这几个数与下面那条用例数都由 §0.3 的 `LIVE-READINGS` 块与 `tests/test_release_all.py::test_development_md_linter_readings_and_rule_range_match_the_repo` 守着）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py`（**实测已存在，当次 124 passed / 0 skipped**（观测 2026-09-28 15:4x）；复跑 `python -m pytest tests/test_noai_gate.py -q -p no:cacheprovider`，这个数由上面那条文档读数用例按 `--collect-only` 对账）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 124 passed、0 skipped ⇒ 负控真的在跑，见 §9.3 第 3 条与 `G-15`） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次 `reviewers` 元素总数由 `python temp\_ledger_snapshot.py` 当次产出，**本行不写定值**），不是代码坏 —— 见 §8.2b |
 
 ### 9.2 ⚠️ **未落地 / 部分落地的完整清单**
 

@@ -64,6 +64,9 @@ class AgentSpec:
     summonable: bool = True
     edges: tuple[str, ...] = ()
     write_set: frozenset[str] = frozenset()
+    #: 本角色的动作表（M3 起由 `specs/<角色>.py` 拥有；`capabilities.CAPABILITIES`
+    #: 从它派生）。`M` 是空元组：主控的"动作"是 `summon()` 本身，不是 Agent 方法。
+    actions: tuple[ActionSpec, ...] = ()
     class_path: str = ""
 
     @property
@@ -141,6 +144,24 @@ class AgentRegistry:
         return {r: s.emphasis for r, s in self._specs.items()}
 
 
+def builtin_registry() -> AgentRegistry:
+    """把内置角色的声明收成一张注册表（读 `specs/` 这个叶子包）。
+
+    为什么读 `specs/` 而不是九个角色模块：角色模块是**实现**（`agent_d` 4000+ 行，
+    连带 store/capabilities/…），而注册表是给装配面与判据用的薄层 ——
+    M2 时只能这么取是因为声明写在角色模块里；M3 把声明搬进 `specs/<角色>.py`（叶子）之后，
+    取声明不再需要拉起任何实现。这一层保持"叶子"这条性质因此是**结构性**的，
+    不再只是注释里的一句承诺。
+    """
+    from . import specs as _specs
+
+    reg = AgentRegistry()
+    for role, spec in _specs.builtin_specs().items():
+        assert spec.role == role, f"specs/{role.lower()}.py 里的 SPEC.role 是 {spec.role!r}"
+        reg.add(spec)
+    return reg
+
+
 #: `builtin_registry()` 收集 SPEC 的模块（一个角色一个模块；M5 会把它们变成包）。
 _SPEC_MODULES: tuple[str, ...] = (
     "agent_a", "agent_b", "agent_c", "agent_d", "agent_e", "agent_f", "agent_g", "agent_h",
@@ -163,3 +184,157 @@ def builtin_registry() -> AgentRegistry:
             raise ValueError(f"{name} 里没有 SPEC —— 角色模块必须自带声明（M2 的对账判据会点名）")
         reg.add(spec)
     return reg
+
+
+# ---------------------------------------------------------------- 从 capabilities.py 搬来的
+#
+# 下面这四块原本在 `capabilities.py`（禁改区）。M3 把"角色动作表"的真身搬进
+# `specs/<角色>.py` 之后，`capabilities` 变成**从它派生** —— 于是"声明类型"与
+# "声明词表"必须待在更低的一层（叶子），否则 `specs` 反过来 import `capabilities` 会成环。
+#
+# 搬移方式：逐字（含注释），判据见 `tests/test_agent_spec_reconciliation.py` 与
+# `tests/test_capabilities_two_layer.py`；`capabilities` 侧改成 `from .agentspec import …`，
+# 公开名与取值一个都没变。
+
+#: 动作的副作用等级。与 `tools/base.SIDE_EFFECTS` 逐字一致（FC-07：副作用是一等公民）。
+#: 为什么不从 `tools.base` import 过来：`capabilities` 是更底层的声明层，
+#: 它要能被 `verify`、能被 CLI 单独读，而不该拖上整个工具层。两处字面量由
+#: :func:`assert_capabilities` 交叉断言（`assert set(SIDE_EFFECTS) == set(TOOL_SIDE_EFFECTS)`），
+#: 于是"两套说法"不可能悄悄分叉。
+#:
+#: B3 收官时 `network` 从这里与 `tools/base.py` 一起删掉（同一个原子改动）。
+SIDE_EFFECTS: tuple[str, ...] = ("none", "read", "write_local")
+
+
+#: 第一根轴（改不改我们拥有的东西）的取值。与 `tools.base.EFFECT` 逐字一致，
+#: 同样由 :func:`assert_capabilities` 交叉断言 —— 形态照抄既有第 5 条，
+#: 不发明第二套机制（P-13 §3.4）。
+EFFECT: tuple[str, ...] = ("none", "read", "write_local")
+
+
+#: 第二根轴（能不能触到我们不拥有的东西）的取值。与 `tools.base.EXTERNAL` 逐字一致。
+#:
+#: 能力层逐动作声明 `external`（`ActionSpec.external`），取值就是这里的三个。
+#: 词表仍必须在本层有一份，因为两份字面量的比对（第 5 条的同族断言）是
+#: "两套说法不可能悄悄分叉"的唯一机器判据。
+EXTERNAL: tuple[str, ...] = ("none", "egress", "exec")
+
+
+#: `side_effect="unknown"` 单独存在，且不在 `SIDE_EFFECTS` 里。
+#:
+#: 为什么需要它：本轮的能力表是从真实代码推导的，有几个方法我读不出它到底写不写
+#: （例如 `AgentC.register_tools` 只改自己进程内的注册表，`AgentF.e` 只是惰性建 E）。
+#: 把它们硬填成 `"read"` 是编造；填 `"none"` 也一样。按三态纪律，这里必须有一个
+#: "我不知道"的值，并且它必须让并发判据保守（未知 ⇒ 当写者处理 ⇒ 串行）。
+UNKNOWN_SIDE_EFFECT = "unknown"
+
+
+@dataclass(frozen=True)
+class ActionSpec:
+    """一个角色动作的声明。参数 schema 用 JSON Schema 子集（与 `tools` 同风格）。
+
+    `params` 的根必须是 object 且给出 `properties`/`required`：主控与
+    `SubagentBackend` 都按它构造调用，"参数是什么"必须是机器可读的，
+    而不是只写在 docstring 里。
+    """
+
+    role: str
+    action: str
+    summary: str
+    #: JSON Schema 子集（object 根）。空参数动作也要写 `properties: {}`，
+    #: 而不是留 None —— None 与"无参数"在下游会被当成两件事。
+    params: Mapping[str, Any] = field(default_factory=dict)
+    #: 该动作产出什么（人可读的一句话；机器可读的部分由 backend 决定）。
+    returns: str = ""
+    side_effect: str = "read"
+    #: `agent_<role>.py` 里 真实存在的公开方法名（装配期逐个 `getattr` 核过）。
+    handler_name: str = ""
+    #: 逐动作的 `external` 声明（`none` / `egress` / `exec`）；`None` = 还没迁移。
+    #:
+    #: 为什么这个字段现在才出现（B3 第 0 步，只读勘察结论）：在此之前
+    #: `action_axes` 只能从 `side_effect` 派生 external（`network` 走遗留翻译表、
+    #: 其余一律 `"none"`）⇒ 能力层结构上表达不了 `external="exec"`。
+    #: 于是"只改工具层"必然是半迁移，而 `declaration_divergences()` 会判成
+    #: "能力层低估了风险轴"、`assert_capabilities()` 第 [7] 条在导入期就炸
+    #: （实测：`pytest tests/test_policy.py` 收集期 ERROR）。
+    #:
+    #: 注意：`None` 默认值在 B3 收官后仍然保留，它是"未迁移"的显式标记，
+    #: 而三态纪律要求"没声明"与"声明成 `none`"是两件事 ——
+    #: 本轮把剩下的动作全部迁移了，判据里也不再有遗留分支，
+    #: 但字段本身不删（删了它，"未迁移"这件事就无法被表达，
+    #: 于是 `action_axes` 会把"没声明"静默读成 `("none", …)`）。
+    external: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.side_effect not in (*SIDE_EFFECTS, UNKNOWN_SIDE_EFFECT):
+            raise ValueError(
+                f"side_effect 必须是 {(*SIDE_EFFECTS, UNKNOWN_SIDE_EFFECT)} 之一，收到 {self.side_effect!r}"
+            )
+        if not str(self.handler_name or "").strip():
+            raise ValueError(
+                f"{self.role}.{self.action} 没有 handler_name —— "
+                "没有实现落点的动作只是一个愿望，主控召唤它时只能失败"
+            )
+        schema = dict(self.params or {})
+        if schema.get("type") != "object":
+            raise ValueError(
+                f"{self.role}.{self.action} 的 params 根必须是 object，收到 {schema.get('type')!r}"
+            )
+        if not isinstance(schema.get("properties"), Mapping):
+            raise ValueError(f"{self.role}.{self.action} 的 params 必须给出 properties")
+
+    def to_dict(self) -> dict:
+        """这条动作声明的可序列化形状（`external` 不在其中：它是派生轴，见 `action_axes`）。"""
+        return {
+            "role": self.role,
+            "action": self.action,
+            "summary": self.summary,
+            "params": dict(self.params),
+            "returns": self.returns,
+            "side_effect": self.side_effect,
+            "handler_name": self.handler_name,
+        }
+
+
+def _obj(props: Mapping[str, Any], required: tuple[str, ...] = ()) -> dict:
+    """构造 object 根 schema 的小工具（与 `tools.base` 的 `obj_schema` 同风格）。"""
+    return {
+        "type": "object",
+        "properties": dict(props),
+        "required": list(required),
+        "additionalProperties": False,
+    }
+
+
+_S = {"type": "string"}
+_I = {"type": "integer"}
+_N = {"type": "number"}
+_B = {"type": "boolean"}
+_ARR_S = {"type": "array", "items": {"type": "string"}}
+#: `array<integer>`。R-36（`draft/28` §164）为 `G.register_dependency.page_range` 新增。
+#:
+#: 为什么必须新列一个：这里原来写的是 `_ARR_S`，而工具层
+#: （`doc_tools` 的 `doc.register_dependency`）写的是
+#: `{"type": "array", "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}` ——
+#: 于是**没有任何一种取值能同时过两道门**（实测 2026-09-29）：
+#: `[45, 46]` 能力层拒（"必须是 string"）工具层放行；`["45", "46"]` 能力层放行
+#: 工具层拒（"必须是 integer"）。实现本体 `doc_tools._coerce_page_range` 两种都收，
+#: 但"两层各自判死一半"意味着这条链路上**没有**合法形状。
+#: 取 `array<integer>` 而不是 `array<string>`：工具层的校验是真身，
+#: 而 `_coerce_page_range` 的规范形态就是 `[start, end]`（`minItems/maxItems` 也对得上）。
+_ARR_I = {"type": "array", "items": {"type": "integer"}}
+_OBJ = {"type": "object"}
+#: 一行行记录的序列（依赖行、发现行…）。刻意与 `_OBJ` 分开。
+#:
+#: 为什么要单列一个常量：`H.review` / `G.render` 的 `dependencies` 先前都声明成
+#: `_OBJ`，而实现侧（`AgentH.review` → `review.review_document`、
+#: `AgentG.render` → `doc_tools.render_markdown`）交下去的是序列 ——
+#: 于是任何一次"把依赖逐条交给审校/渲染"的派活，都在参数门被判
+#: `H.review 的参数不合法：dependencies. 必须是对象，收到 array`，
+#: 而理由码被记成 `unknown_action`（"这个角色没这个本事"），与真相不符。
+#: 实测 2026-09-29（P3 派 H 审台账）：`summon(role="H", action="review",
+#: params={"doc_id": "0000", "dependencies": [ …13 行 external_unavailable… ]})`
+#: 被参数门拒。导入期的交叉断言（`param_seam_violations`）只比 property 名
+#: 与实现签名，不比类型，所以它照旧全绿 —— 这条注释与
+#: `tests/test_capability_seams.py` 的正控一起，是这一格唯一的机器判据。
+_ARR_OBJ = {"type": "array", "items": {"type": "object"}}
