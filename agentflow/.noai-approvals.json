@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T11:28:18+08:00",
+  "generated_at": "2026-10-01T14:16:28+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -452,31 +452,12 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "86c301939c91f644676ec37825c873c0bec63bd7118b5ebad44dd97f55d7e94c",
+      "sha256": "fec86e793a9b314582b117373840660c53a072c1292a85e0619e3645df6b84fa",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "阶段 B W1 写入窗口：阶段 B W1 N-5 / R2-AN-1 tools 半边：断言与登记口径对齐 + G-25③ 那句过期自述改写（去 docstring 后 AST 等价）；所有者授权代记名签字，AI 代录",
+      "change_note": "draft/36 T-8 第②③步（§216）：把 register 里的 6 条工具声明搬到模块级 @tool 装饰器 + 工具体函数（注入值由装配期 partial 按位置绑定）。声明字段与处理器签名靠 tests/test_tool_surface_snapshot.py 逐字钉住；detect_verifier / check_formal 的判据本体未改一行。登记 ≠ 批准：仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-1",
-          "at": "2026-09-27T22:23:48+08:00",
-          "scope": "阶段 B W1 N-5 / R2-AN-1 tools 半边：断言与登记口径对齐 + G-25③ 那句过期自述改写（去 docstring 后 AST 等价）；所有者授权代记名签字，AI 代录",
-          "note": "",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-27T22:23:49+08:00",
-          "scope": "阶段 B W1 N-5 / R2-AN-1 tools 半边：断言与登记口径对齐 + G-25③ 那句过期自述改写（去 docstring 后 AST 等价）；所有者授权代记名签字，AI 代录",
-          "note": "",
-          "verdict": "逐行走查通过",
-          "evidence_path": "",
-          "evidence_sha256": ""
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },

@@ -39,14 +39,16 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
 from .. import paperbuild as PB
 from .. import schema as S
 from .. import textutil as T
 from ..store import StoreError
-from .base import ToolRegistry, ToolSpec, fail, ok
+from .base import ToolRegistry, ToolSpec, fail, ok, tool
 
 #: G 写稿；H 审稿（因此需要同一套判定函数 —— 审校者与撰写者必须用同一套判据，
 #: 否则会出现"G 认为合规、H 认为违规"的静默分裂，而双方都不算错）；
@@ -1411,6 +1413,219 @@ def guard_result(fn: Any) -> Any:
         return fail(f"文件操作失败：{type(e).__name__}: {e}", kind="io_error")
 
 
+@tool(
+    "doc.scan_claim",
+    "对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类",
+    {
+           "type": "object",
+           "properties": {"claim": {"type": "object"}},
+           "required": ["claim"],
+           "additionalProperties": False,
+           },
+    side_effect="none",
+    roles=_ROLES,
+    returns="{'checked','claim_id','ok','findings','error_count','warning_count'}",
+    tags=("document", "gate"),
+)
+def _doc_scan_claim(claim):
+    """doc.scan_claim 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（无）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return ok(scan_claim(claim))
+
+@tool(
+    "doc.compose_claim",
+    (
+            "构造一条合规断言：cross_check 自动补「不构成证明」声明；无引用/否定未分类/过度声称/"
+            "作废无原因在构造时就抛错（不等写库）。可带 §8.3 的生命周期字段"
+            "（kind/status/proof_location/numeric_evidence/counterexamples/frozen/"
+            "allowed_use/scope_caveat/revision_hash/errata_ids）"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "text": {"type": "string"},
+            "citations": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+            "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS)},
+            "section": {"type": "string"},
+            "is_negative": {"type": "boolean"},
+            "negation_kind": {"type": "string", "enum": list(S.NEGATION_KINDS)},
+            "claim_id": {"type": "string"},
+    # ---- §8.3 的生命周期字段（全部可选；判据见 claimanatomy.CLAIM_FIELDS）
+            "kind": {"type": "string", "enum": list(CA.CLAIM_KINDS)},
+            "status": {"type": "string", "enum": list(CA.CLAIM_STATUSES)},
+            "proof_location": {"type": "string"},
+            "numeric_evidence": {"type": "object"},
+            "counterexamples": {"type": "array"},
+            "frozen": {"type": "boolean"},
+            "freeze_reason": {"type": "string"},
+            "allowed_use": {"type": "string", "enum": list(CA.ALLOWED_USE_KINDS)},
+            "scope_caveat": {"type": "string"},
+            "revision_hash": {"type": "string"},
+            "errata_ids": {"type": "array", "items": {"type": "string"}},
+           },
+           "required": ["text", "citations", "evidence_kind", "section"],
+           "additionalProperties": False,
+           },
+    side_effect="none",
+    roles=_ROLES,
+    # 键名逐个从实现读出（`compose_claim`）：必有的 8 个键列在这里；
+    # §8.3 的字段（kind/status/proof_location/numeric_evidence/counterexamples/
+    # allowed_use/scope_caveat/revision_hash/errata_ids/freeze_reason/frozen）
+    # 给了才写 —— 所以它们不进这份键集合（否则就成了"承诺了却不保证给"）。
+    returns=(
+            "{'claim_id','section','text','evidence_kind','citations','is_negative',"
+            "'negation_kind','disclaimer'}（合规的 claim dict）；带 §8.3 字段时原样透出。"
+            "失败：ok=False + kind=validation_error + message（含 issue code）"
+            ),
+    tags=("document", "compose"),
+)
+def _doc_compose_claim(**kw):
+    """doc.compose_claim 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（无）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return guard_result(lambda: compose_claim(**kw))
+
+@tool(
+    "doc.list_documents",
+    "只读列举稿件（代号/类型/标题/状态/审校轮次/断言数与 markdown 路径）",
+    {
+           "type": "object",
+           "properties": {
+            "status": {"type": "string", "enum": list(S.DOC_STATUSES)},
+            "kind": {"type": "string", "enum": list(S.DOC_KINDS)},
+           },
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES,
+    returns="{'count','documents':[{'doc_id','kind','title','status','review_rounds','claim_count','markdown_path'}]}",
+    tags=("document", "read"),
+)
+def _doc_list_documents(_not_wired, store, status=None, kind=None):
+    """doc.list_documents 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _not_wired() if store is None else guard_result(lambda: list_documents(store, status=status, kind=kind))
+
+@tool(
+    "doc.build_document",
+    (
+            "写一行 documents 并渲染 markdown 到工作区内（逐条机械检查 + 核对每条 citation "
+            "指向的对象真的存在，两道闸都过才落库；out_path 越界即拒绝）"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "kind": {"type": "string", "enum": list(S.DOC_KINDS)},
+            "title": {"type": "string"},
+            "claims": {"type": "array", "items": {"type": "object"}, "minItems": 1},
+            "sections": {"type": "array", "items": {"type": "object"}},
+            "open_problems": {"type": "array", "items": {"type": "string"}},
+            "out_path": {"type": "string"},
+           },
+           "required": ["kind", "title", "claims"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITER_ROLES,
+    # 键名从一个真实调用读出（`build_document`）：落库后的 documents 行
+    # （`S.Document` 全字段，12 个）。
+    returns=(
+            "{'doc_id','kind','title','markdown_path','claims','sections','open_problems',"
+            "'status','review_rounds','created_at','updated_at','created_by'}（落库后的 documents 行）；"
+            "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "
+            "missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
+            ),
+    tags=("document", "write"),
+)
+def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=None, claims=None, sections=None, open_problems=None, out_path=None):
+    """doc.build_document 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store, workspace, actor）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _not_wired()
+               if store is None
+               else guard_result(
+                   lambda: build_document(
+                       store,
+                       kind,
+                       title,
+                       claims=claims,
+                       sections=sections,
+                       open_problems=open_problems,
+                       out_path=out_path,
+                       workspace_root=workspace,
+                       actor=actor,
+                   )
+               )
+    )
+
+@tool(
+    "doc.register_dependency",
+    (
+            "登记外部依赖（FC-23）：status='closed' 会先用真实数据核 lit_id/experiment_id 是否已入库；"
+            "dangling / external_unavailable 必须写 status_reason"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "used_by": {"type": "string"},
+            "kind": {"type": "string", "enum": list(S.DEP_KINDS)},
+            "label": {"type": "string"},
+            "source_lit_id": {"type": "string"},
+            "source_experiment_id": {"type": "string"},
+            "page_range": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "minItems": 1,
+                "maxItems": 2,
+            },
+            "quote": {"type": "string"},
+            "status": {"type": "string", "enum": list(S.DEP_STATUSES)},
+            "status_reason": {"type": "string"},
+           },
+           "required": ["used_by", "kind", "label"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITER_ROLES,
+    # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
+    # （`S.Dependency` 全字段，12 个）。
+    returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
+    tags=("document", "dependency", "write"),
+)
+def _doc_register_dependency(_not_wired, store, actor, **kw):
+    """doc.register_dependency 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store, actor）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _not_wired()
+               if store is None
+               else guard_result(lambda: register_dependency(store, actor=actor, **kw))
+    )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_doc_scan_claim, ()),
+    (_doc_compose_claim, ()),
+    (_doc_list_documents, ('_not_wired', 'store')),
+    (_doc_build_document, ('_not_wired', 'store', 'workspace', 'actor')),
+    (_doc_register_dependency, ('_not_wired', 'store', 'actor')),
+)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -1438,189 +1653,18 @@ def register(
             kind="not_wired",
         )
 
-    registry.register(
-        ToolSpec(
-            name="doc.scan_claim",
-            summary="对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类",
-            params={
-                "type": "object",
-                "properties": {"claim": {"type": "object"}},
-                "required": ["claim"],
-                "additionalProperties": False,
-            },
-            handler=lambda claim: ok(scan_claim(claim)),
-            side_effect="none",
-            roles=_ROLES,
-            returns="{'checked','claim_id','ok','findings','error_count','warning_count'}",
-            tags=("document", "gate"),
-        )
-    )
+    _bound: dict[str, Any] = {}
+    _bound['_not_wired'] = _not_wired
+    _bound['store'] = store
+    _bound['workspace'] = workspace
+    _bound['actor'] = actor
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        registry.register(replace(_fn.__tool_spec__,
+                                  handler=partial(_fn, *[_bound[k] for k in _deps])))
 
-    registry.register(
-        ToolSpec(
-            name="doc.compose_claim",
-            summary=(
-                "构造一条合规断言：cross_check 自动补「不构成证明」声明；无引用/否定未分类/过度声称/"
-                "作废无原因在构造时就抛错（不等写库）。可带 §8.3 的生命周期字段"
-                "（kind/status/proof_location/numeric_evidence/counterexamples/frozen/"
-                "allowed_use/scope_caveat/revision_hash/errata_ids）"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "text": {"type": "string"},
-                    "citations": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-                    "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS)},
-                    "section": {"type": "string"},
-                    "is_negative": {"type": "boolean"},
-                    "negation_kind": {"type": "string", "enum": list(S.NEGATION_KINDS)},
-                    "claim_id": {"type": "string"},
-                    # ---- §8.3 的生命周期字段（全部可选；判据见 claimanatomy.CLAIM_FIELDS）
-                    "kind": {"type": "string", "enum": list(CA.CLAIM_KINDS)},
-                    "status": {"type": "string", "enum": list(CA.CLAIM_STATUSES)},
-                    "proof_location": {"type": "string"},
-                    "numeric_evidence": {"type": "object"},
-                    "counterexamples": {"type": "array"},
-                    "frozen": {"type": "boolean"},
-                    "freeze_reason": {"type": "string"},
-                    "allowed_use": {"type": "string", "enum": list(CA.ALLOWED_USE_KINDS)},
-                    "scope_caveat": {"type": "string"},
-                    "revision_hash": {"type": "string"},
-                    "errata_ids": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["text", "citations", "evidence_kind", "section"],
-                "additionalProperties": False,
-            },
-            handler=lambda **kw: guard_result(lambda: compose_claim(**kw)),
-            side_effect="none",
-            roles=_ROLES,
-            # 键名逐个从实现读出（`compose_claim`）：必有的 8 个键列在这里；
-            # §8.3 的字段（kind/status/proof_location/numeric_evidence/counterexamples/
-            # allowed_use/scope_caveat/revision_hash/errata_ids/freeze_reason/frozen）
-            # 给了才写 —— 所以它们不进这份键集合（否则就成了"承诺了却不保证给"）。
-            returns=(
-                "{'claim_id','section','text','evidence_kind','citations','is_negative',"
-                "'negation_kind','disclaimer'}（合规的 claim dict）；带 §8.3 字段时原样透出。"
-                "失败：ok=False + kind=validation_error + message（含 issue code）"
-            ),
-            tags=("document", "compose"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="doc.list_documents",
-            summary="只读列举稿件（代号/类型/标题/状态/审校轮次/断言数与 markdown 路径）",
-            params={
-                "type": "object",
-                "properties": {
-                    "status": {"type": "string", "enum": list(S.DOC_STATUSES)},
-                    "kind": {"type": "string", "enum": list(S.DOC_KINDS)},
-                },
-                "additionalProperties": False,
-            },
-            handler=lambda status=None, kind=None: (
-                _not_wired() if store is None else guard_result(lambda: list_documents(store, status=status, kind=kind))
-            ),
-            side_effect="read",
-            roles=_ROLES,
-            returns="{'count','documents':[{'doc_id','kind','title','status','review_rounds','claim_count','markdown_path'}]}",
-            tags=("document", "read"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="doc.build_document",
-            summary=(
-                "写一行 documents 并渲染 markdown 到工作区内（逐条机械检查 + 核对每条 citation "
-                "指向的对象真的存在，两道闸都过才落库；out_path 越界即拒绝）"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "kind": {"type": "string", "enum": list(S.DOC_KINDS)},
-                    "title": {"type": "string"},
-                    "claims": {"type": "array", "items": {"type": "object"}, "minItems": 1},
-                    "sections": {"type": "array", "items": {"type": "object"}},
-                    "open_problems": {"type": "array", "items": {"type": "string"}},
-                    "out_path": {"type": "string"},
-                },
-                "required": ["kind", "title", "claims"],
-                "additionalProperties": False,
-            },
-            handler=lambda kind=None, title=None, claims=None, sections=None, open_problems=None, out_path=None: (
-                _not_wired()
-                if store is None
-                else guard_result(
-                    lambda: build_document(
-                        store,
-                        kind,
-                        title,
-                        claims=claims,
-                        sections=sections,
-                        open_problems=open_problems,
-                        out_path=out_path,
-                        workspace_root=workspace,
-                        actor=actor,
-                    )
-                )
-            ),
-            side_effect="write_local",
-            roles=_WRITER_ROLES,
-            # 键名从一个真实调用读出（`build_document`）：落库后的 documents 行
-            # （`S.Document` 全字段，12 个）。
-            returns=(
-                "{'doc_id','kind','title','markdown_path','claims','sections','open_problems',"
-                "'status','review_rounds','created_at','updated_at','created_by'}（落库后的 documents 行）；"
-                "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "
-                "missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
-            ),
-            tags=("document", "write"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="doc.register_dependency",
-            summary=(
-                "登记外部依赖（FC-23）：status='closed' 会先用真实数据核 lit_id/experiment_id 是否已入库；"
-                "dangling / external_unavailable 必须写 status_reason"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "used_by": {"type": "string"},
-                    "kind": {"type": "string", "enum": list(S.DEP_KINDS)},
-                    "label": {"type": "string"},
-                    "source_lit_id": {"type": "string"},
-                    "source_experiment_id": {"type": "string"},
-                    "page_range": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "minItems": 1,
-                        "maxItems": 2,
-                    },
-                    "quote": {"type": "string"},
-                    "status": {"type": "string", "enum": list(S.DEP_STATUSES)},
-                    "status_reason": {"type": "string"},
-                },
-                "required": ["used_by", "kind", "label"],
-                "additionalProperties": False,
-            },
-            handler=lambda **kw: (
-                _not_wired()
-                if store is None
-                else guard_result(lambda: register_dependency(store, actor=actor, **kw))
-            ),
-            side_effect="write_local",
-            roles=_WRITER_ROLES,
-            # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
-            # （`S.Dependency` 全字段，12 个）。
-            returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
-            tags=("document", "dependency", "write"),
-        )
-    )
 
     _register_paper_tools(registry, workspace=workspace)
 

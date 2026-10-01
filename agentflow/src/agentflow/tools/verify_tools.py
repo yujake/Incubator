@@ -34,12 +34,14 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from .. import schema as S
 from ..store import StoreError
-from .base import ParamError, ToolError, ToolResult, ToolRegistry, ToolSpec, fail, ok
+from .base import ParamError, ToolError, ToolResult, ToolRegistry, ToolSpec, fail, ok, tool
 
 #: 本模块声明的角色。E 做实验，F 需要读实验结果来推进子目标，
 #: G 需要引用实验作为证据，H 需要核对"证据等级有没有被夸大"。
@@ -693,6 +695,326 @@ def _agent_for(store: Any, root: str | Path | None):
     return AgentE(store, workspace_root=_resolve_root(root))
 
 
+@tool(
+    "verify.code_hash",
+    "计算工作区内一个脚本文件的 sha256（前 16 位），用于实验记录的可复现性绑定",
+    {
+           "type": "object",
+           "properties": {"path": {"type": "string", "description": "工作区内的相对路径"}},
+           "required": ["path"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES,
+    returns=(
+            "{'path': str, 'code_hash': str}；"
+            "失败：ok=False + kind(io_error/param_error) + data=None。"
+            "param_error = 路径越界（工作区参数守卫拒绝）；"
+            "io_error = 工作区内这个文件读不到（不存在 / 是目录 / 被占用 / ACL 拒绝）"
+            ),
+    tags=("experiment", "reproducibility"),
+)
+def _verify_code_hash(_hash_of, path):
+    """verify.code_hash 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_hash_of）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _hash_of(path)
+
+@tool(
+    "verify.detect_verifier",
+    "探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回的是事实，不是猜测",
+    {"type": "object", "properties": {}, "additionalProperties": False},
+    # read（**不是 none**）：它要 `shutil.which` + `subprocess.run` 起外部二进制
+    # （`detect_verifier` 里逐条 `--version`）。声明 `none` 等于说"这个工具
+    # 什么都不做" —— 而"不起进程"与"起了进程但只读"是两件不同的事。
+    side_effect="read",
+    roles=_ROLES,
+    returns="{'checked','available','available_names','reason','probe_errors'}",
+    tags=("experiment", "formal"),
+)
+def _verify_detect_verifier():
+    """verify.detect_verifier 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（无）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return ok(detect_verifier())
+
+@tool(
+    "verify.check_formal",
+    (
+            "把一条命题（Lean 源码）交给检查器真跑一次：只有 verified 才给 proof 级证据；"
+            "compile_error/uses_sorry/extra_axioms/decl_mismatch 是'查了没通过'；"
+            "timeout/import_unavailable/no_backend/tool_crashed/source_unreadable 是'没查成'，"
+            "绝不被读成通过或证伪（import_unavailable = 库不可得，编译根本没开始，"
+            "missing_imports 里是检查器说找不到的包；source_unreadable = "
+            "script_path 给的源码文件读不到）"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "claim": {"type": "string"},
+            "script_path": {
+                "type": "string",
+                "description": "工作区内待检查的 .lean 脚本；给了 source 时以 source 为准",
+            },
+            "source": {"type": "string", "description": "Lean 源码全文（与 script_path 二选一）"},
+    # 注意：参数名是 checker_name，不是 name：ToolRegistry.call 的
+    # 第一个形参就叫 name（tools/base.py），工具自己再声明一个 name
+    # 就永远无法按名传入 —— 实测 reg.call('verify.check_formal',
+    # name='t') 抛 TypeError: got multiple values for argument 'name'。
+    # 详见 check_formal 的 docstring（C3）。
+            "checker_name": {
+                "type": "string",
+                "description": "要核对的声明名（公理审计与声明名核对都要求它；不给时取文件名词干）",
+            },
+    # 这里没有旧名 `name`：`R2b-AN-1-A` 实测它是一条会把人
+    # 引向假 bug 的声明 —— `validate_params` 认它合法、而 handler
+    # 的形参表里没有它 ⇒ `spec.handler(**merged)` 抛 TypeError、
+    # 被 base.py 兜成 kind='unexpected'（'库内部出错'那一类），
+    # 于是调用方拿着 schema 的声明去写参数，拿回来的是一个
+    # 会让人去查工具注册表的分类。父代理裁定删掉它，不接受
+    # "登记为残余"；声明名的唯一入口是 `checker_name`。
+    # 守住它的通用判据在 tests/test_schema_handler_params.py
+    # （schema 的每个 property 都必须被 handler 签名接受）。
+            "imports": {"type": "array", "items": {"type": "string"}},
+            "timeout_sec": {"type": "number", "minimum": 1},
+           },
+           "required": ["claim"],
+           "additionalProperties": False,
+           },
+    # 注意：handler 的形参名必须是 checker_name，不许为了省事沿用它原来的
+    # 名字 name：`ToolRegistry.call` 会用关键字参数调用 handler，
+    # 而它传进来的键名就是这里声明的属性名。名字对不上 ⇒ 每次调用都 TypeError。
+    # 装配时的 root 是"工作区"在这里的唯一来源：相对 script_path
+    # 必须解析到它，而不是解析到进程 CWD（见 `check_formal` 的 docstring）。
+    # read + exec：它真的起检查器子进程（命令内容由调用方给），
+    # 并可能写临时 .lean 文件；两者都如实声明，各占一根轴。
+    # ⚠️ 字段名是 `declared_external`（**不是** `external` —— 后者是属性名，
+    # 写进构造器会 `TypeError`，G-45 已登记）。
+    #
+    # `roles` 从 `_ROLES` 改成 `_ROLES_WRITE`，理由与 `verify.run_experiment`
+    # 同族但更值得写下来：**声明本身必须正确**，不能靠 `for_role` 兜底。
+    # `role_filter_notes` 的语义是"声明写错"的留痕，靠过滤兜底会让留痕
+    # 变成常态噪音 —— 而噪音里会藏着真正的错误。
+    # 行为变化（如实登记）：它从此需要审批（沙箱未声明时 `egress`/`exec`
+    # 一律要签字），H 的工具面因此从 23 条变 22 条。
+    side_effect="read",
+    roles=_ROLES_WRITE,
+    # `records` 声明的是 ok 分支的键集合（与同模块 `verify.code_hash`
+    # 同一种写法：分号后面写失败分支的形态）。分号是刻意的：`C2` 之前这里
+    # 写的是一个无条件的 8 键集合，而本工具有 3 条 `return fail(...)`
+    # 分支（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）走的是
+    # `ok=False` + `data=None`，一个键都不给 —— 声明逐字描述的是成功路径，
+    # 却长得像在描述全部路径，于是读声明的人以为失败分支也给这 8 个键。
+    #
+    # `D2`：这个字符串不是"逐分支采样"的契约。`tests/test_tools_audit_fixes.py`
+    # 的 `test_check_formal_return_shape_matches_its_declaration` 只采样 3 条
+    # ok 分支（无后端 / 无脚本 / 声明名对不上），断言它们的键集合与这里逐字相同；
+    # 3 条 fail 分支由本行的分号形态声明，目前没有逐分支采样用例。
+    # 待办：给失败分支补逐分支采样 —— 由父代理（`tests/` 的归属方）在
+    # C2 的失败分支口径定稿之后补进 tests/test_tools_audit_fixes.py；
+    # 在那之前，"失败分支给什么键"只有这一行声明，没有判据钉着。
+    #
+    # `verifier_status`（`G-24①`）是第 8 个键：它是检查器原样报的那个状态
+    # 的透传栏，与 `reason`（受控词表）成对存在。
+    returns=(
+            "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status'}"
+            "；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None"
+            "（一个键都不给 —— 失败分支不承诺上面那套键）"
+            ),
+    tags=("experiment", "formal"),
+    external="exec",
+)
+def _verify_check_formal(base, claim, script_path=None, source=None, checker_name=None, imports=None, timeout_sec=None):
+    """verify.check_formal 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（base）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    check_formal(
+               claim,
+               script_path=script_path,
+               source=source,
+               checker_name=checker_name,
+               imports=imports,
+               timeout_sec=timeout_sec,
+               # 装配时的 root 是"工作区"在这里的唯一来源：相对 script_path
+               # 必须解析到它，而不是解析到进程 CWD（见 `check_formal` 的 docstring）。
+               root=base,
+               )
+    )
+
+@tool(
+    "verify.run_experiment",
+    (
+            "在独立进程里跑一个工作区内的脚本并登记一条 Experiment 行（会写表 + 跑子进程）。"
+            "脚本自报 evidence_kind='proof' 会被降级为 cross_check；崩溃一律记 inconclusive；"
+            "method='formal' 时改走检查器（.lean 产物），只有检查器 verified 才登记 proof"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "claim": {"type": "string"},
+            "claim_key": {"type": "string"},
+            "script_path": {"type": "string", "description": "工作区内的相对路径（formal 时必须是 .lean）"},
+            "params": {"type": "object"},
+            "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
+            "for_question_id": {"type": "string"},
+            "timeout": {"type": "integer", "minimum": 1},
+    # `P-8`：只对 method='formal' 有意义（`AgentE.run_experiment`
+    # 对计算类方法收到它们时会拒绝，不是静默忽略）。
+    #
+    # 注意：参数名是 run_name，不是 name（`C3`）：`ToolRegistry.call`
+    # 的第一个形参就叫 name，工具再声明一个 name 就永远无法按名传入
+    # （实测 reg.call(..., name='t') 抛 TypeError: got multiple values
+    # for argument 'name'）。理由与写法同 verify.check_formal。
+            "run_name": {
+                "type": "string",
+                "description": "formal：要核对的声明名（不给时取 .lean 文件的名词干）",
+            },
+    # 这里没有旧名 `name`，理由与 verify.check_formal 逐字相同
+    # （`R2b-AN-1-A`：schema 声明了 handler 收不下的参数
+    # ⇒ kind='unexpected' 这个假 bug 分类）。声明名的唯一入口
+    # 是 `run_name`，判据在 tests/test_schema_handler_params.py。
+            "imports": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "formal：这次检查要加载的库（不给时用检查器的默认值）",
+            },
+           },
+           "required": ["claim", "claim_key", "script_path"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    # `P-6` + `P-20`（B3）：它执行调用方给的脚本，所以 `external="exec"` ——
+    # 两根轴各说各的真话：`effect=write_local`（它写 experiments 表）、
+    # `external=exec`（它跑我们不拥有的程序）。
+    #
+    # 这与上一版注释里"严格说应当是 network"是不同的判断：那版把两根轴压成一个
+    # 遗留取值，于是"写盘"与"起进程"分不开。`exec` 更精确，而且行为不变：
+    # 它与 `write_local` 一样需要审批（`NEEDS_APPROVAL`），而只读角色本来就拿不到它
+    # （它是写工具）。所以这一次改的是声明的精度，不是权限面。
+    # 必须与能力层同轮改（`capabilities.py` 的 `E.run_experiment` 也给了 `exec`）。
+    # ⚠️ 字段名是 `declared_external`（`ToolSpec` 的字段），**不是** `external` ——
+    # 后者是属性名，写进构造器会 `TypeError`（我实测踩过：30 个用例直接挂）。
+    roles=_ROLES_WRITE,  # H 只读：不能拥有"跑实验并落库"的能力,
+    # 键名从一个**真实跑通**的调用读出（`tests/test_tools_returns_declaration.py`
+    # 用 `probes/honest.py` 探针脚本走的就是这一支）：观察到的 10 个键是
+    # experiment_id/recorded/result/evidence_kind/negation_kind/exit_code/
+    # reason/code_hash/runtime_sec/notes；后三个是**可选键**（取决于脚本与计时），
+    # 所以键集合只写前 7 个。
+    returns=(
+            "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason'}"
+            "（另有可选键 code_hash / runtime_sec / notes）"
+            "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
+            "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
+            "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
+            ),
+    tags=("experiment", "evidence"),
+    external="exec",
+)
+def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, run_name=None, imports=None):
+    """verify.run_experiment 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, _run_experiment_tool）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _need_store("verify.run_experiment")
+               or _run_experiment_tool(
+                   claim=claim,
+                   claim_key=claim_key,
+                   script_path=script_path,
+                   params=params,
+                   method=method,
+                   for_question_id=for_question_id,
+                   timeout=timeout,
+                   run_name=run_name,
+                   imports=imports,
+               )
+    )
+
+@tool(
+    "verify.evidence_for",
+    (
+            "查一条命题（claim_key）或一个研究问题（for_question_id）已有的实验证据。"
+            "两个参数都不给 ⇒ checked=False（**没查 ≠ 查了没有**）"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "claim_key": {"type": "string"},
+            "for_question_id": {"type": "string"},
+           },
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES,
+    returns=(
+            "{'checked','experiments','count','result_counts','negation_counts',"
+            "'best_evidence_kind','proved','reason'}（FC-10：必须分档计数，不许只给一个布尔；"
+            "三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）"
+            ),
+    tags=("experiment", "evidence"),
+)
+def _verify_evidence_for(_need_store, _read_rows, store, claim_key=None, for_question_id=None):
+    """verify.evidence_for 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, _read_rows, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _need_store("verify.evidence_for")
+               or _read_rows(
+                   "experiments", lambda: evidence_for(store, claim_key, for_question_id=for_question_id)
+               )
+    )
+
+@tool(
+    "verify.list_experiments",
+    "按登记顺序列出实验记录（只读）：没有它就无法回答'这件事到底做过没有'",
+    {
+           "type": "object",
+           "properties": {
+            "claim_key": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 0},
+           },
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES,
+    returns="{'checked','total','returned','truncated','experiments','reason'}",
+    tags=("experiment",),
+)
+def _verify_list_experiments(_need_store, _read_rows, store, claim_key=None, limit=None):
+    """verify.list_experiments 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, _read_rows, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _need_store("verify.list_experiments")
+               or _read_rows(
+                   "experiments", lambda: list_experiments(store, claim_key=claim_key, limit=limit)
+               )
+    )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_verify_code_hash, ('_hash_of',)),
+    (_verify_detect_verifier, ()),
+    (_verify_check_formal, ('base',)),
+    (_verify_run_experiment, ('_need_store', '_run_experiment_tool')),
+    (_verify_evidence_for, ('_need_store', '_read_rows', 'store')),
+    (_verify_list_experiments, ('_need_store', '_read_rows', 'store')),
+)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -849,284 +1171,18 @@ def register(
                 kind="store_error",
             )
 
-    registry.register(
-        ToolSpec(
-            name="verify.code_hash",
-            summary="计算工作区内一个脚本文件的 sha256（前 16 位），用于实验记录的可复现性绑定",
-            params={
-                "type": "object",
-                "properties": {"path": {"type": "string", "description": "工作区内的相对路径"}},
-                "required": ["path"],
-                "additionalProperties": False,
-            },
-            handler=lambda path: _hash_of(path),
-            side_effect="read",
-            roles=_ROLES,
-            returns=(
-                "{'path': str, 'code_hash': str}；"
-                "失败：ok=False + kind(io_error/param_error) + data=None。"
-                "param_error = 路径越界（工作区参数守卫拒绝）；"
-                "io_error = 工作区内这个文件读不到（不存在 / 是目录 / 被占用 / ACL 拒绝）"
-            ),
-            tags=("experiment", "reproducibility"),
-        )
-    )
+    _bound: dict[str, Any] = {}
+    _bound['_hash_of'] = _hash_of
+    _bound['base'] = base
+    _bound['_need_store'] = _need_store
+    _bound['_run_experiment_tool'] = _run_experiment_tool
+    _bound['_read_rows'] = _read_rows
+    _bound['store'] = store
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        registry.register(replace(_fn.__tool_spec__,
+                                  handler=partial(_fn, *[_bound[k] for k in _deps])))
 
-    registry.register(
-        ToolSpec(
-            name="verify.detect_verifier",
-            summary="探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回的是事实，不是猜测",
-            params={"type": "object", "properties": {}, "additionalProperties": False},
-            handler=lambda: ok(detect_verifier()),
-            # read（**不是 none**）：它要 `shutil.which` + `subprocess.run` 起外部二进制
-            # （`detect_verifier` 里逐条 `--version`）。声明 `none` 等于说"这个工具
-            # 什么都不做" —— 而"不起进程"与"起了进程但只读"是两件不同的事。
-            side_effect="read",
-            roles=_ROLES,
-            returns="{'checked','available','available_names','reason','probe_errors'}",
-            tags=("experiment", "formal"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="verify.check_formal",
-            summary=(
-                "把一条命题（Lean 源码）交给检查器真跑一次：只有 verified 才给 proof 级证据；"
-                "compile_error/uses_sorry/extra_axioms/decl_mismatch 是'查了没通过'；"
-                "timeout/import_unavailable/no_backend/tool_crashed/source_unreadable 是'没查成'，"
-                "绝不被读成通过或证伪（import_unavailable = 库不可得，编译根本没开始，"
-                "missing_imports 里是检查器说找不到的包；source_unreadable = "
-                "script_path 给的源码文件读不到）"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "claim": {"type": "string"},
-                    "script_path": {
-                        "type": "string",
-                        "description": "工作区内待检查的 .lean 脚本；给了 source 时以 source 为准",
-                    },
-                    "source": {"type": "string", "description": "Lean 源码全文（与 script_path 二选一）"},
-                    # 注意：参数名是 checker_name，不是 name：ToolRegistry.call 的
-                    # 第一个形参就叫 name（tools/base.py），工具自己再声明一个 name
-                    # 就永远无法按名传入 —— 实测 reg.call('verify.check_formal',
-                    # name='t') 抛 TypeError: got multiple values for argument 'name'。
-                    # 详见 check_formal 的 docstring（C3）。
-                    "checker_name": {
-                        "type": "string",
-                        "description": "要核对的声明名（公理审计与声明名核对都要求它；不给时取文件名词干）",
-                    },
-                    # 这里没有旧名 `name`：`R2b-AN-1-A` 实测它是一条会把人
-                    # 引向假 bug 的声明 —— `validate_params` 认它合法、而 handler
-                    # 的形参表里没有它 ⇒ `spec.handler(**merged)` 抛 TypeError、
-                    # 被 base.py 兜成 kind='unexpected'（'库内部出错'那一类），
-                    # 于是调用方拿着 schema 的声明去写参数，拿回来的是一个
-                    # 会让人去查工具注册表的分类。父代理裁定删掉它，不接受
-                    # "登记为残余"；声明名的唯一入口是 `checker_name`。
-                    # 守住它的通用判据在 tests/test_schema_handler_params.py
-                    # （schema 的每个 property 都必须被 handler 签名接受）。
-                    "imports": {"type": "array", "items": {"type": "string"}},
-                    "timeout_sec": {"type": "number", "minimum": 1},
-                },
-                "required": ["claim"],
-                "additionalProperties": False,
-            },
-            # 注意：handler 的形参名必须是 checker_name，不许为了省事沿用它原来的
-            # 名字 name：`ToolRegistry.call` 会用关键字参数调用 handler，
-            # 而它传进来的键名就是这里声明的属性名。名字对不上 ⇒ 每次调用都 TypeError。
-            handler=lambda claim, script_path=None, source=None, checker_name=None,
-            imports=None, timeout_sec=None: check_formal(
-                claim,
-                script_path=script_path,
-                source=source,
-                checker_name=checker_name,
-                imports=imports,
-                timeout_sec=timeout_sec,
-                # 装配时的 root 是"工作区"在这里的唯一来源：相对 script_path
-                # 必须解析到它，而不是解析到进程 CWD（见 `check_formal` 的 docstring）。
-                root=base,
-            ),
-            # read + exec：它真的起检查器子进程（命令内容由调用方给），
-            # 并可能写临时 .lean 文件；两者都如实声明，各占一根轴。
-            # ⚠️ 字段名是 `declared_external`（**不是** `external` —— 后者是属性名，
-            # 写进构造器会 `TypeError`，G-45 已登记）。
-            #
-            # `roles` 从 `_ROLES` 改成 `_ROLES_WRITE`，理由与 `verify.run_experiment`
-            # 同族但更值得写下来：**声明本身必须正确**，不能靠 `for_role` 兜底。
-            # `role_filter_notes` 的语义是"声明写错"的留痕，靠过滤兜底会让留痕
-            # 变成常态噪音 —— 而噪音里会藏着真正的错误。
-            # 行为变化（如实登记）：它从此需要审批（沙箱未声明时 `egress`/`exec`
-            # 一律要签字），H 的工具面因此从 23 条变 22 条。
-            side_effect="read",
-            declared_external="exec",
-            roles=_ROLES_WRITE,
-            # `records` 声明的是 ok 分支的键集合（与同模块 `verify.code_hash`
-            # 同一种写法：分号后面写失败分支的形态）。分号是刻意的：`C2` 之前这里
-            # 写的是一个无条件的 8 键集合，而本工具有 3 条 `return fail(...)`
-            # 分支（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）走的是
-            # `ok=False` + `data=None`，一个键都不给 —— 声明逐字描述的是成功路径，
-            # 却长得像在描述全部路径，于是读声明的人以为失败分支也给这 8 个键。
-            #
-            # `D2`：这个字符串不是"逐分支采样"的契约。`tests/test_tools_audit_fixes.py`
-            # 的 `test_check_formal_return_shape_matches_its_declaration` 只采样 3 条
-            # ok 分支（无后端 / 无脚本 / 声明名对不上），断言它们的键集合与这里逐字相同；
-            # 3 条 fail 分支由本行的分号形态声明，目前没有逐分支采样用例。
-            # 待办：给失败分支补逐分支采样 —— 由父代理（`tests/` 的归属方）在
-            # C2 的失败分支口径定稿之后补进 tests/test_tools_audit_fixes.py；
-            # 在那之前，"失败分支给什么键"只有这一行声明，没有判据钉着。
-            #
-            # `verifier_status`（`G-24①`）是第 8 个键：它是检查器原样报的那个状态
-            # 的透传栏，与 `reason`（受控词表）成对存在。
-            returns=(
-                "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status'}"
-                "；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None"
-                "（一个键都不给 —— 失败分支不承诺上面那套键）"
-            ),
-            tags=("experiment", "formal"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="verify.run_experiment",
-            summary=(
-                "在独立进程里跑一个工作区内的脚本并登记一条 Experiment 行（会写表 + 跑子进程）。"
-                "脚本自报 evidence_kind='proof' 会被降级为 cross_check；崩溃一律记 inconclusive；"
-                "method='formal' 时改走检查器（.lean 产物），只有检查器 verified 才登记 proof"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "claim": {"type": "string"},
-                    "claim_key": {"type": "string"},
-                    "script_path": {"type": "string", "description": "工作区内的相对路径（formal 时必须是 .lean）"},
-                    "params": {"type": "object"},
-                    "method": {"type": "string", "enum": list(S.EXPERIMENT_METHODS)},
-                    "for_question_id": {"type": "string"},
-                    "timeout": {"type": "integer", "minimum": 1},
-                    # `P-8`：只对 method='formal' 有意义（`AgentE.run_experiment`
-                    # 对计算类方法收到它们时会拒绝，不是静默忽略）。
-                    #
-                    # 注意：参数名是 run_name，不是 name（`C3`）：`ToolRegistry.call`
-                    # 的第一个形参就叫 name，工具再声明一个 name 就永远无法按名传入
-                    # （实测 reg.call(..., name='t') 抛 TypeError: got multiple values
-                    # for argument 'name'）。理由与写法同 verify.check_formal。
-                    "run_name": {
-                        "type": "string",
-                        "description": "formal：要核对的声明名（不给时取 .lean 文件的名词干）",
-                    },
-                    # 这里没有旧名 `name`，理由与 verify.check_formal 逐字相同
-                    # （`R2b-AN-1-A`：schema 声明了 handler 收不下的参数
-                    # ⇒ kind='unexpected' 这个假 bug 分类）。声明名的唯一入口
-                    # 是 `run_name`，判据在 tests/test_schema_handler_params.py。
-                    "imports": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "formal：这次检查要加载的库（不给时用检查器的默认值）",
-                    },
-                },
-                "required": ["claim", "claim_key", "script_path"],
-                "additionalProperties": False,
-            },
-            handler=lambda claim, claim_key, script_path, params=None, method="numeric",
-            for_question_id=None, timeout=600, run_name=None, imports=None: (
-                _need_store("verify.run_experiment")
-                or _run_experiment_tool(
-                    claim=claim,
-                    claim_key=claim_key,
-                    script_path=script_path,
-                    params=params,
-                    method=method,
-                    for_question_id=for_question_id,
-                    timeout=timeout,
-                    run_name=run_name,
-                    imports=imports,
-                )
-            ),
-            side_effect="write_local",
-            # `P-6` + `P-20`（B3）：它执行调用方给的脚本，所以 `external="exec"` ——
-            # 两根轴各说各的真话：`effect=write_local`（它写 experiments 表）、
-            # `external=exec`（它跑我们不拥有的程序）。
-            #
-            # 这与上一版注释里"严格说应当是 network"是不同的判断：那版把两根轴压成一个
-            # 遗留取值，于是"写盘"与"起进程"分不开。`exec` 更精确，而且行为不变：
-            # 它与 `write_local` 一样需要审批（`NEEDS_APPROVAL`），而只读角色本来就拿不到它
-            # （它是写工具）。所以这一次改的是声明的精度，不是权限面。
-            # 必须与能力层同轮改（`capabilities.py` 的 `E.run_experiment` 也给了 `exec`）。
-            # ⚠️ 字段名是 `declared_external`（`ToolSpec` 的字段），**不是** `external` ——
-            # 后者是属性名，写进构造器会 `TypeError`（我实测踩过：30 个用例直接挂）。
-            declared_external="exec",
-            roles=_ROLES_WRITE,  # H 只读：不能拥有"跑实验并落库"的能力
-            # 键名从一个**真实跑通**的调用读出（`tests/test_tools_returns_declaration.py`
-            # 用 `probes/honest.py` 探针脚本走的就是这一支）：观察到的 10 个键是
-            # experiment_id/recorded/result/evidence_kind/negation_kind/exit_code/
-            # reason/code_hash/runtime_sec/notes；后三个是**可选键**（取决于脚本与计时），
-            # 所以键集合只写前 7 个。
-            returns=(
-                "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason'}"
-                "（另有可选键 code_hash / runtime_sec / notes）"
-                "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
-                "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
-                "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
-            ),
-            tags=("experiment", "evidence"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="verify.evidence_for",
-            summary=(
-                "查一条命题（claim_key）或一个研究问题（for_question_id）已有的实验证据。"
-                "两个参数都不给 ⇒ checked=False（**没查 ≠ 查了没有**）"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "claim_key": {"type": "string"},
-                    "for_question_id": {"type": "string"},
-                },
-                "additionalProperties": False,
-            },
-            handler=lambda claim_key=None, for_question_id=None: (
-                _need_store("verify.evidence_for")
-                or _read_rows(
-                    "experiments", lambda: evidence_for(store, claim_key, for_question_id=for_question_id)
-                )
-            ),
-            side_effect="read",
-            roles=_ROLES,
-            returns=(
-                "{'checked','experiments','count','result_counts','negation_counts',"
-                "'best_evidence_kind','proved','reason'}（FC-10：必须分档计数，不许只给一个布尔；"
-                "三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）"
-            ),
-            tags=("experiment", "evidence"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="verify.list_experiments",
-            summary="按登记顺序列出实验记录（只读）：没有它就无法回答'这件事到底做过没有'",
-            params={
-                "type": "object",
-                "properties": {
-                    "claim_key": {"type": "string"},
-                    "limit": {"type": "integer", "minimum": 0},
-                },
-                "additionalProperties": False,
-            },
-            handler=lambda claim_key=None, limit=None: (
-                _need_store("verify.list_experiments")
-                or _read_rows(
-                    "experiments", lambda: list_experiments(store, claim_key=claim_key, limit=limit)
-                )
-            ),
-            side_effect="read",
-            roles=_ROLES,
-            returns="{'checked','total','returned','truncated','experiments','reason'}",
-            tags=("experiment",),
-        )
-    )

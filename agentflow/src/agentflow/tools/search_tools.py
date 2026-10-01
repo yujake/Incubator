@@ -49,11 +49,12 @@ import os
 import shutil
 import time
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
-from .base import ToolError, ToolRegistry, ToolSpec, fail, ok
+from .base import ToolError, ToolRegistry, ToolSpec, fail, ok, tool
 from .. import dedup as D
 from .. import fetch as F
 from .. import providers as P
@@ -1171,6 +1172,276 @@ def _pick_workspace(
     return Path(store.root) if store is not None else Path.cwd()
 
 
+@tool(
+    "search.providers",
+    "列出可用检索源，并**真实探测**各自是否可用（发一次极小请求；"
+            "ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。",
+    {"type": "object", "properties": {}, "additionalProperties": False},
+    # external=egress：探测会给每个网络源发一次真实 HTTP 请求（见模块 docstring 第 3 条）。
+    # 声明成 read + external=none 会让这个工具绕过审批，而它确实在对外发请求。
+    side_effect="read",
+    roles=("A",),
+    # 键名逐个从 `_h_providers` 的 ok(...) 读出（该分支不需要真跑：
+    # 数据字典在源码里逐字写着）。providers[] 每项是
+    # {'name','available','status','reason','latency_s','evidence'}。
+    returns=(
+            "{'skip_network','providers','available','unavailable','unverified',"
+            "'summary','default_provider'}；"
+            "providers[] 每项是 {'name','available','status','reason','latency_s','evidence'}"
+            ),
+    tags=("search", "provider"),
+    external="egress",
+)
+def _search_providers(ctx):
+    """search.providers 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _h_providers(ctx)
+
+@tool(
+    "search.shelf",
+    "**不联网**：列出工作区里**全文在盘上**的文献（本地书架）。"
+            "给 A 一条离线来源：有它才知道不用网也能引用哪些书。",
+    {
+           "type": "object",
+           "properties": {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+            "lit_id": {"type": "string", "maxLength": 40},
+           },
+           "required": [],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=("A", "C", "H"),
+    returns=(
+            "{'count','rows_total','have_path','missing_files','local_ingest','downloaded',"
+            "'truncated','books','note'}；"
+            "books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages',"
+            "'has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；"
+            "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
+            "（**没数成**，不是「书架是空的」）"
+            ),
+    tags=("search", "offline", "shelf"),
+)
+def _search_shelf(ctx, limit=None, lit_id=""):
+    """search.shelf 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _h_shelf(ctx, limit, lit_id)
+
+@tool(
+    "search.local",
+    "**不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**"
+            "（带 lit_id 与页码，引文回验比的就是这段原文）。",
+    {
+           "type": "object",
+           "properties": {
+            "query": {"type": "string", "minLength": 1, "maxLength": 400},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+            "max_chars": {"type": "integer", "minimum": 200, "maximum": 8000},
+            "lit_id": {"type": "string", "maxLength": 40},
+            "max_books": {"type": "integer", "minimum": 1, "maximum": 500},
+           },
+           "required": ["query"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=("A", "C", "H"),
+    returns=(
+            "{'query','searched','count','candidates','scanned','skipped_no_file',"
+            "'unreadable','no_text_layer','hits','elapsed_s','note'}；"
+            "hits[] 每项是 {'lit_id','title','path','sha256_12','page','excerpt','pages',"
+            "'score'}（按 score 降序；score 是 locallib.page_scores 的同一份口径）；"
+            "失败：ok=False + kind(no_store/table_unreadable) + searched=False"
+            "（**没做成检索**，不是「没有命中」）"
+            ),
+    tags=("search", "offline", "local"),
+)
+def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None):
+    """search.local 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _h_local(
+               ctx, query, limit, max_chars, lit_id, max_books
+               )
+    )
+
+@tool(
+    "search.download",
+    "把候选的 pdf_url 下到工作区 downloads/（不覆盖同名文件）；"
+            "filename 由 fetch 层 slug 化。返回 ok/bytes/sha256/path 与内容类型警告。",
+    {
+           "type": "object",
+           "properties": {
+            "url": {"type": "string", "minLength": 8, "maxLength": 2000},
+            "hint": {"type": "string", "maxLength": 200},
+            "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
+           },
+           "required": ["url"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=("A",),
+    # 键名逐个从 `_h_download` 的 data 字典读出（没真跑过：需要一次
+    # 成功的真实下载；本轮观测到的是 fail 分支 —— 如实留痕）。
+    returns=(
+            "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256',"
+            "'http_status','max_bytes_requested','max_bytes_effective','elapsed_s',"
+            "'content_warning','warnings'}"
+            ),
+    tags=("search", "download"),
+    external="egress",
+)
+def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTES):
+    """search.download 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _h_download(
+               ctx, url, hint, max_bytes
+               )
+    )
+
+@tool(
+    "search.dedup_check",
+    "**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明"
+            "'这条会不会被判成已有的某篇'，并给出会命中的键。",
+    {
+           "type": "object",
+           "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 600},
+            "year": {"type": "integer", "minimum": 1000, "maximum": 2999},
+            "doi": {"type": "string", "maxLength": 300},
+           },
+           "required": ["title"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=("A",),
+    # 键名从一个真实调用读出（`_h_dedup_check`）：`existing` 命中时是既有行的
+    # 摘要字典，未命中时是 None（键仍在）。
+    returns=(
+            "{'checked','title','year','doi','would_be_duplicate','matched_key','keys',"
+            "'existing','near_misses','primary_key','rule','note','existing_table_size',"
+            "'store_read_error'}；"
+            "失败：ok=False + kind(no_store/table_unreadable) + checked=False（**没有做成判重**，不是「没有重复」）"
+            ),
+    tags=("search", "dedup"),
+)
+def _search_dedup_check(ctx, title, year=None, doi=None):
+    """search.dedup_check 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _h_dedup_check(ctx, title, year, doi)
+
+@tool(
+    "search.ingest_local",
+    "**不联网**：把一个本地目录里的 PDF 登记进书架（按内容 sha256 幂等；"
+            "dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
+    {
+           "type": "object",
+           "properties": {
+            "books_dir": {"type": "string", "minLength": 1, "maxLength": 1000,
+                          "description": "本地目录（绝对路径或相对工作区）"},
+            "pattern": {"type": "string", "maxLength": 40},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
+            "dry_run": {"type": "boolean",
+                        "description": "只算 hash 与清单，不写盘、不进事务"},
+           },
+           "required": ["books_dir"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=("A",),
+    returns=(
+            "{'root','dry_run','limit','books','count','ingested','already_present','skipped',"
+            "'unreadable','provenance'}；"
+            "books[] 每项是 {'source','library_name','bytes','sha256','status','note','lit_id',"
+            "'request_id','pages','has_text_layer'}；失败：ok=False + kind(no_store/io_error) "
+            "+ recorded=False（**没登记成**，不是「目录里没有书」）"
+            ),
+    tags=("search", "offline", "ingest"),
+)
+def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=25165824, dry_run=False):
+    """search.ingest_local 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _h_ingest_local(ctx, books_dir, pattern, limit,
+                               max_bytes, dry_run)
+    )
+
+@tool(
+    "search.register",
+    "登记一条文献（literature 行，processed=false）：先判重，命中则复用既有 "
+            "lit_id；未命中则 alloc_id('lit') 并把文件收编进 library/<lit_id>/。",
+    {
+           "type": "object",
+           "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 600},
+            "type_code": {"type": "string", "enum": list(S.LIT_TYPES)},
+            "summary": {"type": "string", "maxLength": 20000},
+            "path": {"type": "string", "maxLength": 1000},
+            "doi": {"type": "string", "maxLength": 300},
+            "year": {"type": "integer", "minimum": 1000, "maximum": 2999},
+            "request_id": {"type": "string", "maxLength": 100},
+           },
+           "required": ["title", "type_code", "summary"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=("A",),
+    # 键名从一个真实调用读出（`search.register`）。`created=true` 与
+    # `created=false`（判重命中）两支返回同一套 13 个键：判重支的
+    # `matched_key` 是命中的那个键、新建支为 `None`，新建支的
+    # `dedup_key`/`path`/`download` 在判重支为 `None` —— 调用方不必先判
+    # `created` 才能安全读键（`G-23`）。
+    returns=(
+            "{'created','reason','lit_id','matched_key','existing','keys','request_linked',"
+            "'path','dedup_key','type_code','processed','download','warnings'}"
+            "（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同）"
+            ),
+    tags=("search", "register"),
+)
+def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=None, request_id=None):
+    """search.register 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _h_register(
+               ctx, title, type_code, summary, path, doi, year, request_id
+               )
+    )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_search_providers, ('ctx',)),
+    (_search_shelf, ('ctx',)),
+    (_search_local, ('ctx',)),
+    (_search_download, ('ctx',)),
+    (_search_dedup_check, ('ctx',)),
+    (_search_ingest_local, ('ctx',)),
+    (_search_register, ('ctx',)),
+)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -1215,28 +1486,7 @@ def register(
 
     provider_enum = _known_names(ctx)
 
-    specs = [
-        ToolSpec(
-            name="search.providers",
-            summary="列出可用检索源，并**真实探测**各自是否可用（发一次极小请求；"
-            "ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。",
-            params={"type": "object", "properties": {}, "additionalProperties": False},
-            handler=lambda: _h_providers(ctx),
-            # external=egress：探测会给每个网络源发一次真实 HTTP 请求（见模块 docstring 第 3 条）。
-            # 声明成 read + external=none 会让这个工具绕过审批，而它确实在对外发请求。
-            side_effect="read",
-            declared_external="egress",
-            roles=("A",),
-            # 键名逐个从 `_h_providers` 的 ok(...) 读出（该分支不需要真跑：
-            # 数据字典在源码里逐字写着）。providers[] 每项是
-            # {'name','available','status','reason','latency_s','evidence'}。
-            returns=(
-                "{'skip_network','providers','available','unavailable','unverified',"
-                "'summary','default_provider'}；"
-                "providers[] 每项是 {'name','available','status','reason','latency_s','evidence'}"
-            ),
-            tags=("search", "provider"),
-        ),
+    specs= [
         ToolSpec(
             name="search.literature",
             summary="按 topic/mode 检索文献候选；每条候选都带 dedup_key 与 is_new，"
@@ -1274,187 +1524,12 @@ def register(
             ),
             tags=("search", "literature"),
         ),
-        ToolSpec(
-            name="search.shelf",
-            summary="**不联网**：列出工作区里**全文在盘上**的文献（本地书架）。"
-            "给 A 一条离线来源：有它才知道不用网也能引用哪些书。",
-            params={
-                "type": "object",
-                "properties": {
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 500},
-                    "lit_id": {"type": "string", "maxLength": 40},
-                },
-                "required": [],
-                "additionalProperties": False,
-            },
-            handler=lambda limit=None, lit_id="": _h_shelf(ctx, limit, lit_id),
-            side_effect="read",
-            roles=("A", "C", "H"),
-            returns=(
-                "{'count','rows_total','have_path','missing_files','local_ingest','downloaded',"
-                "'truncated','books','note'}；"
-                "books[] 每项是 {'lit_id','title','path','abs_path','bytes','pages',"
-                "'has_text_layer','origin','sha256_12'}（origin ∈ local_ingest/downloaded）；"
-                "失败：ok=False + kind(no_store/table_unreadable) + counted=False"
-                "（**没数成**，不是「书架是空的」）"
-            ),
-            tags=("search", "offline", "shelf"),
-        ),
-        ToolSpec(
-            name="search.local",
-            summary="**不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**"
-            "（带 lit_id 与页码，引文回验比的就是这段原文）。",
-            params={
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "minLength": 1, "maxLength": 400},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
-                    "max_chars": {"type": "integer", "minimum": 200, "maximum": 8000},
-                    "lit_id": {"type": "string", "maxLength": 40},
-                    "max_books": {"type": "integer", "minimum": 1, "maximum": 500},
-                },
-                "required": ["query"],
-                "additionalProperties": False,
-            },
-            handler=lambda query, limit=5, max_chars=1200, lit_id="", max_books=None: _h_local(
-                ctx, query, limit, max_chars, lit_id, max_books
-            ),
-            side_effect="read",
-            roles=("A", "C", "H"),
-            returns=(
-                "{'query','searched','count','candidates','scanned','skipped_no_file',"
-                "'unreadable','no_text_layer','hits','elapsed_s','note'}；"
-                "hits[] 每项是 {'lit_id','title','path','sha256_12','page','excerpt','pages',"
-                "'score'}（按 score 降序；score 是 locallib.page_scores 的同一份口径）；"
-                "失败：ok=False + kind(no_store/table_unreadable) + searched=False"
-                "（**没做成检索**，不是「没有命中」）"
-            ),
-            tags=("search", "offline", "local"),
-        ),
-        ToolSpec(
-            name="search.download",
-            summary="把候选的 pdf_url 下到工作区 downloads/（不覆盖同名文件）；"
-            "filename 由 fetch 层 slug 化。返回 ok/bytes/sha256/path 与内容类型警告。",
-            params={
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "minLength": 8, "maxLength": 2000},
-                    "hint": {"type": "string", "maxLength": 200},
-                    "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
-                },
-                "required": ["url"],
-                "additionalProperties": False,
-            },
-            handler=lambda url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTES: _h_download(
-                ctx, url, hint, max_bytes
-            ),
-            side_effect="write_local",
-            declared_external="egress",
-            roles=("A",),
-            # 键名逐个从 `_h_download` 的 data 字典读出（没真跑过：需要一次
-            # 成功的真实下载；本轮观测到的是 fail 分支 —— 如实留痕）。
-            returns=(
-                "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256',"
-                "'http_status','max_bytes_requested','max_bytes_effective','elapsed_s',"
-                "'content_warning','warnings'}"
-            ),
-            tags=("search", "download"),
-        ),
-        ToolSpec(
-            name="search.dedup_check",
-            summary="**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明"
-            "'这条会不会被判成已有的某篇'，并给出会命中的键。",
-            params={
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string", "minLength": 1, "maxLength": 600},
-                    "year": {"type": "integer", "minimum": 1000, "maximum": 2999},
-                    "doi": {"type": "string", "maxLength": 300},
-                },
-                "required": ["title"],
-                "additionalProperties": False,
-            },
-            handler=lambda title, year=None, doi=None: _h_dedup_check(ctx, title, year, doi),
-            side_effect="read",
-            roles=("A",),
-            # 键名从一个真实调用读出（`_h_dedup_check`）：`existing` 命中时是既有行的
-            # 摘要字典，未命中时是 None（键仍在）。
-            returns=(
-                "{'checked','title','year','doi','would_be_duplicate','matched_key','keys',"
-                "'existing','near_misses','primary_key','rule','note','existing_table_size',"
-                "'store_read_error'}；"
-                "失败：ok=False + kind(no_store/table_unreadable) + checked=False（**没有做成判重**，不是「没有重复」）"
-            ),
-            tags=("search", "dedup"),
-        ),
-        ToolSpec(
-            name="search.ingest_local",
-            summary="**不联网**：把一个本地目录里的 PDF 登记进书架（按内容 sha256 幂等；"
-            "dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
-            params={
-                "type": "object",
-                "properties": {
-                    "books_dir": {"type": "string", "minLength": 1, "maxLength": 1000,
-                                  "description": "本地目录（绝对路径或相对工作区）"},
-                    "pattern": {"type": "string", "maxLength": 40},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
-                    "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
-                    "dry_run": {"type": "boolean",
-                                "description": "只算 hash 与清单，不写盘、不进事务"},
-                },
-                "required": ["books_dir"],
-                "additionalProperties": False,
-            },
-            handler=lambda books_dir, pattern="*.pdf", limit=None, max_bytes=25165824,
-                           dry_run=False: _h_ingest_local(ctx, books_dir, pattern, limit,
-                                                          max_bytes, dry_run),
-            side_effect="write_local",
-            roles=("A",),
-            returns=(
-                "{'root','dry_run','limit','books','count','ingested','already_present','skipped',"
-                "'unreadable','provenance'}；"
-                "books[] 每项是 {'source','library_name','bytes','sha256','status','note','lit_id',"
-                "'request_id','pages','has_text_layer'}；失败：ok=False + kind(no_store/io_error) "
-                "+ recorded=False（**没登记成**，不是「目录里没有书」）"
-            ),
-            tags=("search", "offline", "ingest"),
-        ),
-        ToolSpec(
-            name="search.register",
-            summary="登记一条文献（literature 行，processed=false）：先判重，命中则复用既有 "
-            "lit_id；未命中则 alloc_id('lit') 并把文件收编进 library/<lit_id>/。",
-            params={
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string", "minLength": 1, "maxLength": 600},
-                    "type_code": {"type": "string", "enum": list(S.LIT_TYPES)},
-                    "summary": {"type": "string", "maxLength": 20000},
-                    "path": {"type": "string", "maxLength": 1000},
-                    "doi": {"type": "string", "maxLength": 300},
-                    "year": {"type": "integer", "minimum": 1000, "maximum": 2999},
-                    "request_id": {"type": "string", "maxLength": 100},
-                },
-                "required": ["title", "type_code", "summary"],
-                "additionalProperties": False,
-            },
-            handler=lambda title, type_code, summary, path=None, doi=None, year=None, request_id=None: _h_register(
-                ctx, title, type_code, summary, path, doi, year, request_id
-            ),
-            side_effect="write_local",
-            roles=("A",),
-            # 键名从一个真实调用读出（`search.register`）。`created=true` 与
-            # `created=false`（判重命中）两支返回同一套 13 个键：判重支的
-            # `matched_key` 是命中的那个键、新建支为 `None`，新建支的
-            # `dedup_key`/`path`/`download` 在判重支为 `None` —— 调用方不必先判
-            # `created` 才能安全读键（`G-23`）。
-            returns=(
-                "{'created','reason','lit_id','matched_key','existing','keys','request_linked',"
-                "'path','dedup_key','type_code','processed','download','warnings'}"
-                "（created=false 表示判重命中，复用了既有 lit_id；两支键集合相同）"
-            ),
-            tags=("search", "register"),
-        ),
     ]
+    _bound: dict[str, Any] = {}
+    _bound['ctx'] = ctx
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        specs.append(replace(_fn.__tool_spec__,
+                             handler=partial(_fn, *[_bound[k] for k in _deps])))
     registry.register_all(specs)
     return specs
 
