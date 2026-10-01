@@ -2128,6 +2128,10 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "sessions.py": "按项目存放的会话记录：`<项目根>/sessions/<会话号>.jsonl`（学 harness 的按工作区存放；`draft/28` §155）",
     "artifacts.py": "产物归属登记：`<工作区根>/ARTIFACTS.jsonl`，回答\"谁在哪个路径产出了什么\"（`R-52` 余；`draft/28` §166）",
     "canonical.py": "规范 JSON 字节串的唯一实现：稿件内容哈希与回执哈希共用的那一份口径（`R-33`；`draft/28` §169/§172）",
+    # 2026-10-01（`draft/28` §211 / `draft/36` 的 T-6）：三处 JSONL 读法合并成一份。
+    # 它是真模块（不是对拍副本）：`artifacts.read_ledger` / `signatures.read_ledger` /
+    # `sessions.read_session` 都转发到它；逐对查证与合并理由见 §211。
+    "jsonlfile.py": "JSONL 文件的读法唯一实现：坏行逐条报出、空行跳过、\"合法 JSON 但不是对象\"单列一档（`draft/36` T-6；`draft/28` §211）",
     # 2026-09-29 第二批新增的四个模块（`draft/28` §179）：把 LLM 接入规范化
     # （装配 / 提示词 / 模型缝 / 循环）。同样逐条登记并写一行理由。
     "promptkit.py": "提示词装配：有序段 + 变量 + complete + 作用域遮蔽，失败全部抛（学 DSH 的 `dsh-system-prompt`；`draft/28` §179、`draft/34`）",

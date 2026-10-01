@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from . import canonical as CANONICAL
+from .jsonlfile import read_jsonl
 
 #: 参与内容哈希的字段（顺序无关：序列化时 `sort_keys=True`）。
 CANONICAL_FIELDS: tuple[str, ...] = ("kind", "title", "sections", "claims", "open_problems")
@@ -171,25 +172,12 @@ def read_ledger(path: str | Path) -> tuple[list[dict], list[str]]:
 
     坏行逐条报出来（带行号），不静默跳过 —— "读不出来"与"没有这一行"
     是两件事（三态纪律）。文件不存在 ⇒ 空台账、零问题（那是合法初态）。
+
+    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`（`draft/36` T-6 合并）。
+    此前这里是第二份完整实现，唯一的差别是那句措辞写"不是 JSON 对象"；
+    合并后统一成"不是对象"（与 `artifacts` / `sessions` 一致，两处对一处）。
     """
-    p = Path(path)
-    if not p.is_file():
-        return [], []
-    records: list[dict] = []
-    problems: list[str] = []
-    for i, raw in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
-        if not raw.strip():
-            continue
-        try:
-            obj = json.loads(raw)
-        except ValueError as e:
-            problems.append(f"第 {i} 行读不出来（{type(e).__name__}: {e}）")
-            continue
-        if not isinstance(obj, dict):
-            problems.append(f"第 {i} 行不是 JSON 对象")
-            continue
-        records.append(obj)
-    return records, problems
+    return read_jsonl(path)
 
 
 def chain_problems(records: Sequence[Mapping[str, Any]]) -> list[str]:

@@ -57,6 +57,8 @@ import pathlib
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
+from .jsonlfile import read_jsonl
+
 #: 台账文件名（工作区根下）。与 `signatures.LEDGER_NAME` 同一层次。
 LEDGER_NAME = "ARTIFACTS.jsonl"
 
@@ -161,25 +163,13 @@ def record(
 
 
 def read_ledger(root: Any) -> tuple[list[dict], list[str]]:
-    """读台账；返回 `(记录, 坏行说明)`。坏行逐条报出，不静默跳过（与 `sessions` 同形）。"""
-    p = ledger_path(root)
-    if not p.is_file():
-        return [], []
-    records: list[dict] = []
-    problems: list[str] = []
-    for i, raw in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
-        if not raw.strip():
-            continue
-        try:
-            obj = json.loads(raw)
-        except ValueError as e:
-            problems.append(f"第 {i} 行读不出来（{type(e).__name__}: {e}）")
-            continue
-        if not isinstance(obj, dict):
-            problems.append(f"第 {i} 行不是对象")
-            continue
-        records.append(obj)
-    return records, problems
+    """读台账；返回 `(记录, 坏行说明)`。
+
+    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`（`draft/36` T-6 合并）。
+    此前这里、`signatures.read_ledger`、`sessions.read_session` 各写了一份同形的循环 ——
+    三份实现意味着"坏行的定义"有三个落点，改一处另两处不会跟着变。
+    """
+    return read_jsonl(ledger_path(root))
 
 
 def verify_entries(root: Any, records: Sequence[Mapping[str, Any]] | None = None) -> list[dict]:

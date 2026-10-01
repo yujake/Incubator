@@ -31,6 +31,8 @@ import pathlib
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 
+from .jsonlfile import read_jsonl
+
 SESSIONS_DIR_NAME = "sessions"
 ENV_SESSION = "AGENTFLOW_SESSION"
 
@@ -67,25 +69,13 @@ def append(root: Any, event: Mapping[str, Any], *, sid: str | None = None) -> tu
 
 
 def read_session(root: Any, sid: str | None = None) -> tuple[list[dict], list[str]]:
-    """读一段会话；返回 `(事件, 问题)`。坏行逐条报出，不静默跳过。"""
-    path = session_path(root, sid)
-    if not path.is_file():
-        return [], []
-    events: list[dict] = []
-    problems: list[str] = []
-    for i, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if not raw.strip():
-            continue
-        try:
-            obj = json.loads(raw)
-        except ValueError as e:
-            problems.append(f"第 {i} 行读不出来（{type(e).__name__}: {e}）")
-            continue
-        if not isinstance(obj, dict):
-            problems.append(f"第 {i} 行不是对象")
-            continue
-        events.append(obj)
-    return events, problems
+    """读一段会话；返回 `(事件, 问题)`。坏行逐条报出，不静默跳过。
+
+    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`（`draft/36` T-6 合并）。
+    合并前三处（这里、`artifacts`、`signatures`）各写了一份同形的循环 ——
+    漂移的表现是"同一份坏文件，`verify` 说它坏、`session show` 说它好"，而没有东西会报错。
+    """
+    return read_jsonl(session_path(root, sid))
 
 
 def list_sessions(root: Any) -> list[dict]:

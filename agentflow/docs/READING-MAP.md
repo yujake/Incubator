@@ -48,6 +48,7 @@
 | `schema.py` | 数据模型与校验（**表的权威定义**；禁改区） |
 | `store.py` | 共享存储：跨进程锁、原子写、事务、事件日志、ID 分配、重建（禁改区） |
 | `canonical.py` | 规范 JSON 字节串 —— 唯一实现（判定"同一份数据"的前提） |
+| `jsonlfile.py` | JSONL 文件的读法 —— 唯一实现（`draft/36` T-6：三处曾各写一份） |
 | `sessions.py` | 按项目存放的会话记录 |
 | `fulltextstore.py` | 抽取正文的内容寻址库：整本书的正文只存一份 |
 | `signatures.py` | 稿件内容的规范哈希 |
