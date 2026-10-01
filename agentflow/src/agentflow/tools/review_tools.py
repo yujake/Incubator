@@ -53,13 +53,15 @@ H 侧当时不检查非法 `evidence_kind`、不检查 `negation_kind` 是否在
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Sequence
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
+from typing import Any, Callable, Mapping, Sequence
 
 from .. import claimanatomy as CA
 from .. import gates as G
 from .. import schema as S
-from .base import ToolRegistry, ToolSpec, fail, ok
+from .base import ToolRegistry, ToolSpec, fail, ok, tool
 from .doc_tools import OVERCLAIM_MARKERS, dependencies_for_doc, guard_result as _guard_result
 
 #: H 审校；G 需要看到发现才能修订（看不到发现的 G 无法闭环）；
@@ -1517,6 +1519,219 @@ def review_report(
 # ---------------------------------------------------------------- 工具装配
 
 
+@tool(
+    "review.scan_document",
+    "对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现都带 evidence",
+    {
+           "type": "object",
+           "properties": {
+            "doc": {"type": "object"},
+            "dependencies": {"type": "array", "items": {"type": "object"}},
+           },
+           "required": ["doc"],
+           "additionalProperties": False,
+           },
+    # 省略 `dependencies` ⇒ 显式传 `None` ⇒ `dep_check.checked=False`，
+    # 于是 `verdict` 是 `unverified`（不是 accepted）。
+    # 这个工具没接 store（`side_effect="none"` 的只读工具不该去抢锁），
+    # 因此"自己去库里读依赖"这条路径只在 `review_document` 里存在。
+    side_effect="none",
+    roles=_ROLES,
+    returns=(
+            "{'checked','doc_id','findings','error_count','warning_count','info_count',"
+            "'dep_check','verdict','reason'}；verdict ∈ {rejected, unverified, "
+            "accepted_with_warnings, accepted}，dep_check.checked=False 时**必为** unverified"
+            ),
+    tags=("review", "gate"),
+)
+def _review_scan_document_tool(doc, dependencies=_UNSPECIFIED):
+    """review.scan_document 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（无）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    ok(
+               scan_document(doc, dependencies=None if dependencies is _UNSPECIFIED else dependencies)
+               )
+    )
+
+@tool(
+    "review.list_findings",
+    "只读列举审校发现（可按稿件/状态/级别过滤），含每条发现的 evidence",
+    {
+           "type": "object",
+           "properties": {
+            "doc_id": {"type": "string"},
+            "status": {"type": "string", "enum": list(S.FINDING_STATUSES)},
+            "level": {"type": "string", "enum": list(S.FINDING_LEVELS)},
+           },
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES,
+    returns="{'count','findings':[{'finding_id','doc_id','kind','level','target','message','evidence','status'}]}",
+    tags=("review", "read"),
+)
+def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, level=None):
+    """review.list_findings 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _not_wired()
+               if store is None
+               else _guard_result(lambda: list_findings(store, doc_id=doc_id, status=status, level=level))
+    )
+
+@tool(
+    "review.review_document",
+    (
+            "审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence），并更新文档状态；"
+            "只写 review_findings 与 documents.status，不改 claims"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "doc_id": {"type": "string"},
+            "round_no": {"type": "integer", "minimum": 1},
+            "dependencies": {"type": "array", "items": {"type": "object"}},
+           },
+           "required": ["doc_id"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITER_ROLES,
+    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage'}",
+    tags=("review", "write"),
+)
+def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw):
+    """review.review_document 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store, actor, semantic_judge）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _not_wired()
+               if store is None
+               else _guard_result(lambda: review_document(store, actor=actor,
+                                                         semantic_judge=semantic_judge, **kw))
+    )
+
+@tool(
+    "review.verify_fixes",
+    (
+            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；"
+            "到 max_review_rounds 仍红则置 unresolved_review 并**列出**未解决项"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "doc_id": {"type": "string"},
+            "round_no": {"type": "integer", "minimum": 1},
+            "dependencies": {"type": "array", "items": {"type": "object"}},
+            "max_review_rounds": {"type": "integer", "minimum": 1},
+           },
+           "required": ["doc_id", "round_no"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITER_ROLES,
+    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict'}",
+    tags=("review", "write"),
+)
+def _review_verify_fixes_tool(_not_wired, store, actor, **kw):
+    """review.verify_fixes 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store, actor）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _not_wired()
+               if store is None
+               else _guard_result(lambda: verify_fixes(store, actor=actor, **kw))
+    )
+
+@tool(
+    "review.report",
+    (
+            "产出 G1–G15 的完整审校报告（markdown 落盘）：报告头钉住被审版本 hash、"
+            "每道门都带零发现自证数字、并强制包含『我这一轮犯的错』一节；"
+            "只写一个报告文件，不碰任何数据表、不碰 claims"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "doc_id": {"type": "string"},
+            "own_errors": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "我这一轮犯的错（§8.4 G15）。必填：不写就是退回，空数组=显式声明零错误",
+            },
+            "out_path": {"type": "string", "description": "工作区内的相对路径；越界即拒绝"},
+            "round_no": {"type": "integer", "minimum": 1},
+            "dependencies": {"type": "array", "items": {"type": "object"}},
+            "banned_words": {"type": "array", "items": {"type": "string"}},
+            "run_evidence": {
+                "type": "object",
+                "description": (
+                    "本轮的实跑记录（G8 可复跑门）："
+                    "{'checked':true,'commands':[{'claim_id','command','output_tail'}]}。"
+                    "**不传 ⇒ G8 判 unknown**（『本轮实跑过』无法判定），"
+                    "绝不判 pass —— 把『没报错』读成『没问题』正是参考体例记录的教训"
+                ),
+            },
+            "claim_counts": {
+                "type": "object",
+                "description": "调用方声明的计数（G9 计数一致门）：declared_claim_count 等",
+            },
+           },
+    # `own_errors` 是 required：G15 的判据是"缺失则退回"，
+    # 而"参数可省略"正是"缺失"在工具层的形态。
+           "required": ["doc_id", "own_errors"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITER_ROLES,
+    returns=(
+            "{'doc_id','round','report_path','revision_hash','verdict','gates_total',"
+            "'pass_count','fail_count','unknown_count','not_applicable_count',"
+            "'failed_gates','unknown_gates','own_error_count','coverage','markdown'}"
+            ),
+    tags=("review", "write", "gate"),
+)
+def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
+    """review.report 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_not_wired, store, actor, semantic_judge）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _not_wired()
+               if store is None
+               else _guard_result(lambda: review_report(store, actor=actor,
+                                                        semantic_judge=semantic_judge, **kw))
+    )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
+_READ_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_review_scan_document_tool, ()),
+    (_review_list_findings_tool, ('_not_wired', 'store')),
+)
+
+#: 会写盘的三个入口：默认不装（结构约束：H 的工具面必须全 read/none）。
+#: 它们与只读面分表，正是因为"装与不装"由 `include_writers` 决定 ——
+#: 混成一张表会让"默认不装"这件事无处表达（`T-8` 搬移时实测过：
+#: 不拆表的话三个写工具会绕过那句早退，H 的工具面当场多出写入口）。
+_WRITE_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_review_review_document_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
+    (_review_verify_fixes_tool, ('_not_wired', 'store', 'actor')),
+    (_review_report_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
+)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -1543,179 +1758,23 @@ def register(
             kind="not_wired",
         )
 
-    registry.register(
-        ToolSpec(
-            name="review.scan_document",
-            summary="对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现都带 evidence",
-            params={
-                "type": "object",
-                "properties": {
-                    "doc": {"type": "object"},
-                    "dependencies": {"type": "array", "items": {"type": "object"}},
-                },
-                "required": ["doc"],
-                "additionalProperties": False,
-            },
-            # 省略 `dependencies` ⇒ 显式传 `None` ⇒ `dep_check.checked=False`，
-            # 于是 `verdict` 是 `unverified`（不是 accepted）。
-            # 这个工具没接 store（`side_effect="none"` 的只读工具不该去抢锁），
-            # 因此"自己去库里读依赖"这条路径只在 `review_document` 里存在。
-            handler=lambda doc, dependencies=_UNSPECIFIED: ok(
-                scan_document(doc, dependencies=None if dependencies is _UNSPECIFIED else dependencies)
-            ),
-            side_effect="none",
-            roles=_ROLES,
-            returns=(
-                "{'checked','doc_id','findings','error_count','warning_count','info_count',"
-                "'dep_check','verdict','reason'}；verdict ∈ {rejected, unverified, "
-                "accepted_with_warnings, accepted}，dep_check.checked=False 时**必为** unverified"
-            ),
-            tags=("review", "gate"),
-        )
-    )
+    _bound: dict[str, Any] = {}
+    _bound['_not_wired'] = _not_wired
+    _bound['store'] = store
+    _bound['actor'] = actor
+    _bound['semantic_judge'] = semantic_judge
+    for _fn, _deps in _READ_TOOL_FUNCTIONS:
+        registry.register(replace(_fn.__tool_spec__,
+                                  handler=partial(_fn, *[_bound[k] for k in _deps])))
 
-    registry.register(
-        ToolSpec(
-            name="review.list_findings",
-            summary="只读列举审校发现（可按稿件/状态/级别过滤），含每条发现的 evidence",
-            params={
-                "type": "object",
-                "properties": {
-                    "doc_id": {"type": "string"},
-                    "status": {"type": "string", "enum": list(S.FINDING_STATUSES)},
-                    "level": {"type": "string", "enum": list(S.FINDING_LEVELS)},
-                },
-                "additionalProperties": False,
-            },
-            handler=lambda doc_id=None, status=None, level=None: (
-                _not_wired()
-                if store is None
-                else _guard_result(lambda: list_findings(store, doc_id=doc_id, status=status, level=level))
-            ),
-            side_effect="read",
-            roles=_ROLES,
-            returns="{'count','findings':[{'finding_id','doc_id','kind','level','target','message','evidence','status'}]}",
-            tags=("review", "read"),
-        )
-    )
 
     if not include_writers:
         # 默认面到此为止：全部 none/read。写入口需要显式打开。
         return
 
-    registry.register(
-        ToolSpec(
-            name="review.review_document",
-            summary=(
-                "审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence），并更新文档状态；"
-                "只写 review_findings 与 documents.status，不改 claims"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "doc_id": {"type": "string"},
-                    "round_no": {"type": "integer", "minimum": 1},
-                    "dependencies": {"type": "array", "items": {"type": "object"}},
-                },
-                "required": ["doc_id"],
-                "additionalProperties": False,
-            },
-            handler=lambda **kw: (
-                _not_wired()
-                if store is None
-                else _guard_result(lambda: review_document(store, actor=actor,
-                                                          semantic_judge=semantic_judge, **kw))
-            ),
-            side_effect="write_local",
-            roles=_WRITER_ROLES,
-            returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage'}",
-            tags=("review", "write"),
-        )
-    )
+    for _fn, _deps in _WRITE_TOOL_FUNCTIONS:
+        registry.register(replace(_fn.__tool_spec__,
+                                  handler=partial(_fn, *[_bound[k] for k in _deps])))
 
-    registry.register(
-        ToolSpec(
-            name="review.verify_fixes",
-            summary=(
-                "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；"
-                "到 max_review_rounds 仍红则置 unresolved_review 并**列出**未解决项"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "doc_id": {"type": "string"},
-                    "round_no": {"type": "integer", "minimum": 1},
-                    "dependencies": {"type": "array", "items": {"type": "object"}},
-                    "max_review_rounds": {"type": "integer", "minimum": 1},
-                },
-                "required": ["doc_id", "round_no"],
-                "additionalProperties": False,
-            },
-            handler=lambda **kw: (
-                _not_wired()
-                if store is None
-                else _guard_result(lambda: verify_fixes(store, actor=actor, **kw))
-            ),
-            side_effect="write_local",
-            roles=_WRITER_ROLES,
-            returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict'}",
-            tags=("review", "write"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="review.report",
-            summary=(
-                "产出 G1–G15 的完整审校报告（markdown 落盘）：报告头钉住被审版本 hash、"
-                "每道门都带零发现自证数字、并强制包含『我这一轮犯的错』一节；"
-                "只写一个报告文件，不碰任何数据表、不碰 claims"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "doc_id": {"type": "string"},
-                    "own_errors": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "我这一轮犯的错（§8.4 G15）。必填：不写就是退回，空数组=显式声明零错误",
-                    },
-                    "out_path": {"type": "string", "description": "工作区内的相对路径；越界即拒绝"},
-                    "round_no": {"type": "integer", "minimum": 1},
-                    "dependencies": {"type": "array", "items": {"type": "object"}},
-                    "banned_words": {"type": "array", "items": {"type": "string"}},
-                    "run_evidence": {
-                        "type": "object",
-                        "description": (
-                            "本轮的实跑记录（G8 可复跑门）："
-                            "{'checked':true,'commands':[{'claim_id','command','output_tail'}]}。"
-                            "**不传 ⇒ G8 判 unknown**（『本轮实跑过』无法判定），"
-                            "绝不判 pass —— 把『没报错』读成『没问题』正是参考体例记录的教训"
-                        ),
-                    },
-                    "claim_counts": {
-                        "type": "object",
-                        "description": "调用方声明的计数（G9 计数一致门）：declared_claim_count 等",
-                    },
-                },
-                # `own_errors` 是 required：G15 的判据是"缺失则退回"，
-                # 而"参数可省略"正是"缺失"在工具层的形态。
-                "required": ["doc_id", "own_errors"],
-                "additionalProperties": False,
-            },
-            handler=lambda **kw: (
-                _not_wired()
-                if store is None
-                else _guard_result(lambda: review_report(store, actor=actor,
-                                                         semantic_judge=semantic_judge, **kw))
-            ),
-            side_effect="write_local",
-            roles=_WRITER_ROLES,
-            returns=(
-                "{'doc_id','round','report_path','revision_hash','verdict','gates_total',"
-                "'pass_count','fail_count','unknown_count','not_applicable_count',"
-                "'failed_gates','unknown_gates','own_error_count','coverage','markdown'}"
-            ),
-            tags=("review", "write", "gate"),
-        )
-    )
+

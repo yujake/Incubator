@@ -40,8 +40,10 @@ L3 要真的去读文件：`extract.extract_text` 打开 PDF、逐页抽文本�
 
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 from .base import ToolError, ToolRegistry, ToolResult, fail, ok, tool
 from .graph_tools import RelationGraph
@@ -166,6 +168,378 @@ def _chain_line(step_no: int, brief: dict) -> str:
 # ---------------------------------------------------------------- 工具注册
 
 
+@tool(
+    "trace.relation",
+    "L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并把概念代号翻译成概念名、附文献元数据。",
+    {
+        "type": "object",
+        "properties": {"relation_id": {"type": "string", "minLength": 4, "maxLength": 4}},
+        "required": ["relation_id"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    returns=(
+        "{'level','relation_id','concept_ids','concept_names','concepts','description','statement',"
+        "'quote','page_range','status','quote_verified','quote_verified_label','lit_id','literature',"
+        "'concept_group_key','duplicate_of','created_at','contains_fulltext'}"
+        "（contains_fulltext 是**常量 False**：L1 永不读文件，它不是每次调用的检查结论）"
+    ),
+)
+def trace_relation(_g, relation_id: str) -> ToolResult:
+    g, err = _g("trace.relation")
+    if err is not None:
+        return err
+    assert g is not None  # _g 的契约：err is None ⇒ g 非空
+    rel = g.relation_by_id.get(relation_id)
+    if rel is None:
+        # `checked=True` = 查过了，确实没有（与 `_g` 的 kind="no_graph"
+        # 严格区分：那个是"没查"）。
+        return fail(
+            f"没有关系 {relation_id}",
+            kind="not_found",
+            checked=True,
+            known_relations=sorted(g.relation_by_id)[:50],
+            hint="关系代号是 4 位十进制字符串；可用 graph.relations_between 先确认代号。",
+        )
+    brief = _relation_brief(g, rel)
+    return ok({"level": "L1", "contains_fulltext": False, **brief})
+
+@tool(
+    "trace.concept",
+    "L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（只给表述与代号，不下钻文献正文）。",
+    {
+        "type": "object",
+        "properties": {
+            "concept_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "with_relations": {"type": "boolean"},
+        },
+        "required": ["concept_id"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    returns=(
+        "{'level','concept','counts','neighbors','relations','relation_count','contains_fulltext','note'}"
+    ),
+)
+def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResult:
+    g, err = _g("trace.concept")
+    if err is not None:
+        return err
+    assert g is not None
+    if concept_id not in g.adjacency and concept_id not in g.concept_by_id:
+        return fail(
+            f"没有概念 {concept_id}",
+            kind="not_found",
+            checked=True,
+            known_concepts=[{"concept_id": c, "name": g.name_of(c)} for c in sorted(g.concept_by_id)[:50]],
+        )
+    concept = _concept_brief(g, concept_id)
+    counts = {
+        "occurrences": g.occurrences(concept_id),
+        "relation_count": g.degree(concept_id),
+        "group_count": g.group_count(concept_id),
+    }
+    data: dict[str, Any] = {
+        "level": "L2",
+        "concept": concept,
+        "counts": counts,
+        "neighbors": [
+            {"concept_id": n, "name": g.name_of(n)} for n in g.neighbors(concept_id)
+        ],
+        "contains_fulltext": False,
+        "note": "本层只给关系表里已有的'表述'；需要文献正文请显式调用 trace.literature（L3，贵）。",
+    }
+    if not with_relations:
+        data["relations"] = []
+        data["relation_count"] = counts["relation_count"]
+        return ok(data)
+
+    rels = []
+    for rid in g.concept_relations.get(concept_id, []):
+        rel = g.relation_by_id.get(rid)
+        if rel is None:
+            continue
+        brief = _relation_brief(g, rel)
+        # L2 的"其它概念"：把自身剔除，方便 D 直接看到"这个概念的邻居是谁"
+        brief["other_concepts"] = [
+            {"concept_id": c["concept_id"], "name": c["name"]}
+            for c in brief["concepts"]
+            if c["concept_id"] != concept_id
+        ]
+        rels.append(brief)
+    data["relations"] = rels
+    data["relation_count"] = len(rels)
+    return ok(data)
+
+@tool(
+    "trace.literature",
+    "L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层会如实报告而不是返回空串。",
+    {
+        "type": "object",
+        "properties": {
+            "lit_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "maxItems": 50},
+            "max_chars": {"type": "integer", "minimum": 200, "maximum": 200000},
+        },
+        "required": ["lit_id"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    returns=(
+        "{'level','literature','requested_pages','max_chars','pages_returned','truncated','status',"
+        "'file_exists','has_text_layer','text','note'}"
+        "（不含 status/text/pages_returned/truncated 的早期分支**不存在了**："
+        "这四项在每一条 ok 分支上都必须给，否则调用方区分不了'没有正文'与'工具忘了填'）"
+    ),
+)
+def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max_chars: int = 4000) -> ToolResult:
+    g, err = _g("trace.literature")
+    if err is not None:
+        # 顺序很关键：这里此前先查 `meta.get("in_table")`，于是"没有 store
+        # 也没有 graph"时会报"文献表里没有 X"（把"没查"说成"查了没有"），
+        # 而下面那句更诚实的"未提供 store，无法解析磁盘路径"永远打不出来。
+        return err
+    assert g is not None
+    meta = _literature_brief(g, lit_id)
+    if not meta.get("in_table"):
+        return fail(
+            f"文献表里没有 {lit_id}",
+            kind="not_found",
+            checked=True,
+            known_literature=sorted(g.literature_by_id)[:50],
+        )
+    rel_path = meta.get("path")
+    base: dict[str, Any] = {
+        "level": "L3",
+        "literature": meta,
+        "requested_pages": list(pages) if pages else None,
+        "max_chars": int(max_chars),
+        # 这两项在每一条分支上都必须存在：调用方拿不到它们时无法区分
+        # "没有正文可返回"与"工具忘了填"。放在 base 里 = 不可能漏。
+        "pages_returned": [],
+        "truncated": False,
+    }
+    if store is None:
+        return fail(
+            "未提供 store，无法把文献路径解析到磁盘（L3 需要它）。L1/L2 仍可正常使用。",
+            kind="no_store",
+            checked=False,
+            detail=base,
+        )
+    if not rel_path:
+        # path 为空 = 没下载/下载失败。这不是"文件不存在"：
+        # 一个是流程没走到，一个是流程走了但文件丢了。
+        return ok(
+            {
+                **base,
+                "status": _status("no_path"),
+                "file_exists": False,
+                "has_text_layer": False,
+                "text": "",
+                "note": "文献表里 path 为空：该文献未下载或下载失败，因此没有正文可读。请让 A 补下载。",
+            }
+        )
+    try:
+        abs_path = store.library_path(rel_path)
+    except Exception as exc:  # StoreError：路径越出 library/
+        return ok(
+            {
+                **base,
+                "status": _status("path_rejected"),
+                "file_exists": False,
+                "has_text_layer": False,
+                "text": "",
+                "note": f"路径被拒绝（越出 library/）：{exc}",
+            }
+        )
+    assert abs_path is not None  # rel_path 非空时 library_path 必返回 Path
+    if not abs_path.exists():
+        return ok(
+            {
+                **base,
+                "status": _status("file_missing"),
+                "abs_path": str(abs_path),
+                "file_exists": False,
+                "has_text_layer": False,
+                "text": "",
+                "note": "文献表登记了路径，但磁盘上没有这个文件（可能被移动/删除）。",
+            }
+        )
+    if not abs_path.is_file():
+        return ok(
+            {
+                **base,
+                "status": _status("not_a_file"),
+                "abs_path": str(abs_path),
+                "file_exists": False,
+                "has_text_layer": False,
+                "text": "",
+                "note": "该路径不是普通文件（可能是目录）。",
+            }
+        )
+
+    # ---- 真的去读文件（这一步是"贵"的来源，所以只在 L3 里做）
+    try:
+        from ..extract import extract_text  # 惰性：fitz/pdfminer 是重依赖
+    except Exception as exc:  # pragma: no cover - 环境缺模块时
+        return ok(
+            {
+                **base,
+                "status": _status("extract_failed"),
+                "abs_path": str(abs_path),
+                "file_exists": True,
+                "has_text_layer": False,
+                "text": "",
+                "note": f"文本抽取模块不可用：{exc}",
+            }
+        )
+    try:
+        doc = extract_text(abs_path)
+    except Exception as exc:  # ExtractError / ExtractTooLarge / UnsupportedFormat
+        return ok(
+            {
+                **base,
+                "status": _status("extract_failed"),
+                "abs_path": str(abs_path),
+                "file_exists": True,
+                "has_text_layer": False,
+                "text": "",
+                "note": f"抽取失败：{type(exc).__name__}: {exc}",
+            }
+        )
+
+    all_pages: list[str] = list(getattr(doc, "pages", []) or [])
+    if not all_pages:
+        # 无文本层：绝不返回 "" 假装读到了 —— 与 quoteverify 的 None 同一精神。
+        return ok(
+            {
+                **base,
+                "status": _status("no_text_layer"),
+                "abs_path": str(abs_path),
+                "file_exists": True,
+                "has_text_layer": False,
+                "source_kind": getattr(doc, "source_kind", None),
+                "page_count": 0,
+                "text": "",
+                "truncated": False,
+                "note": (
+                    "该文件没有文本层（疑似扫描版）：不是'读到了空文本'，而是"
+                    "'没有可读文本'。需要 OCR 才能得到正文，因此本次没有正文片段可给。"
+                ),
+            }
+        )
+
+    want = sorted({int(p) for p in (pages or []) if int(p) >= 1}) or list(
+        range(1, len(all_pages) + 1)
+    )
+    picked: list[int] = []
+    chunks: list[str] = []
+    total = 0
+    truncated = False
+    for p in want:
+        if p > len(all_pages):
+            continue
+        chunk = all_pages[p - 1]
+        if total + len(chunk) > int(max_chars):
+            room = int(max_chars) - total
+            if room > 0:
+                chunks.append(chunk[:room])
+                picked.append(p)
+                total += room
+            truncated = True
+            break
+        chunks.append(chunk)
+        picked.append(p)
+        total += len(chunk)
+    if len(want) > len(picked):
+        truncated = True
+    return ok(
+        {
+            **base,
+            "status": _status("ok"),
+            "abs_path": str(abs_path),
+            "file_exists": True,
+            "has_text_layer": True,
+            "source_kind": getattr(doc, "source_kind", None),
+            "encoding": getattr(doc, "encoding", None),
+            "page_count": len(all_pages),
+            "pages_returned": picked,
+            "text": "\n".join(chunks),
+            "chars_returned": total,
+            "truncated": truncated,
+            "note": "正文片段按需截断到 max_chars；如需其它页请用 pages 参数指定。",
+        }
+    )
+
+@tool(
+    "trace.chain",
+    "把一条关系代号链的每一步表述串起来（D 写报告可直接引用），缺号如实列出。",
+    {
+        "type": "object",
+        "properties": {
+            "relation_ids": {"type": "array", "items": {"type": "string", "minLength": 4, "maxLength": 4}, "minItems": 1, "maxItems": 50}
+        },
+        "required": ["relation_ids"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    returns=(
+        "{'level','relation_ids','steps','step_count','chain_text','missing','checked','contains_fulltext','note'}"
+        "；**没有图可查**时 ok=False + kind=no_graph + checked=False（与"
+        "'查了、链条确实断裂'的 ok=True+checked=True+missing 非空严格区分）"
+    ),
+)
+def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
+    g, err = _g("trace.chain")
+    if err is not None:
+        # 三态纪律（本函数曾经的缺陷）：无 store 无 graph 时 `_g()` 返回过一张
+        # 空图，于是每个代号都落进 `missing`，函数仍然 `ok=True` +
+        # `step_count=0` —— 调用方读到的结论是"这些关系代号都不存在"，
+        # 而真相是"关系图从未构建"。现在：没图可查 ⇒ 明确失败 + checked=False。
+        return err
+    assert g is not None
+    steps: list[dict] = []
+    missing: list[str] = []
+    lines: list[str] = []
+    for i, rid in enumerate(relation_ids, 1):
+        rel = g.relation_by_id.get(rid)
+        if rel is None:
+            missing.append(rid)
+            lines.append(f"{i}. [{rid}] 关系表里没有这个代号（链条在此断裂）")
+            continue
+        brief = _relation_brief(g, rel)
+        steps.append(brief)
+        lines.append(_chain_line(i, brief))
+    return ok(
+        {
+            "level": "chain",
+            "relation_ids": list(relation_ids),
+            "steps": steps,
+            "step_count": len(steps),
+            "chain_text": "\n".join(lines),
+            "missing": missing,
+            # `checked=True` 与 `missing` 非空可以同时成立，而且必须能区分：
+            # 这里说的是"图查过了，这些代号确实不在里面"；
+            # 上面 `_g` 的 `kind="no_graph"` 说的是"根本没图可查"。
+            "checked": True,
+            "contains_fulltext": False,
+            "note": "这是关系链的'表述链'（L1）。要判断证据是否足够，再对关键步骤调 trace.literature（L3）。",
+        }
+    )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (trace_relation, ('_g',)),
+    (trace_concept, ('_g',)),
+    (trace_literature, ('_g', 'store')),
+    (trace_chain, ('_g',)),
+)
+
+
 def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) -> list[str]:
     """注册溯源工具，返回工具名列表。
 
@@ -224,374 +598,19 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) ->
                 checked=False,
             )
 
-    @tool(
-        "trace.relation",
-        "L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并把概念代号翻译成概念名、附文献元数据。",
-        {
-            "type": "object",
-            "properties": {"relation_id": {"type": "string", "minLength": 4, "maxLength": 4}},
-            "required": ["relation_id"],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        returns=(
-            "{'level','relation_id','concept_ids','concept_names','concepts','description','statement',"
-            "'quote','page_range','status','quote_verified','quote_verified_label','lit_id','literature',"
-            "'concept_group_key','duplicate_of','created_at','contains_fulltext'}"
-            "（contains_fulltext 是**常量 False**：L1 永不读文件，它不是每次调用的检查结论）"
-        ),
-    )
-    def trace_relation(relation_id: str) -> ToolResult:
-        g, err = _g("trace.relation")
-        if err is not None:
-            return err
-        assert g is not None  # _g 的契约：err is None ⇒ g 非空
-        rel = g.relation_by_id.get(relation_id)
-        if rel is None:
-            # `checked=True` = 查过了，确实没有（与 `_g` 的 kind="no_graph"
-            # 严格区分：那个是"没查"）。
-            return fail(
-                f"没有关系 {relation_id}",
-                kind="not_found",
-                checked=True,
-                known_relations=sorted(g.relation_by_id)[:50],
-                hint="关系代号是 4 位十进制字符串；可用 graph.relations_between 先确认代号。",
-            )
-        brief = _relation_brief(g, rel)
-        return ok({"level": "L1", "contains_fulltext": False, **brief})
 
-    @tool(
-        "trace.concept",
-        "L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（只给表述与代号，不下钻文献正文）。",
-        {
-            "type": "object",
-            "properties": {
-                "concept_id": {"type": "string", "minLength": 4, "maxLength": 4},
-                "with_relations": {"type": "boolean"},
-            },
-            "required": ["concept_id"],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        returns=(
-            "{'level','concept','counts','neighbors','relations','relation_count','contains_fulltext','note'}"
-        ),
-    )
-    def trace_concept(concept_id: str, with_relations: bool = True) -> ToolResult:
-        g, err = _g("trace.concept")
-        if err is not None:
-            return err
-        assert g is not None
-        if concept_id not in g.adjacency and concept_id not in g.concept_by_id:
-            return fail(
-                f"没有概念 {concept_id}",
-                kind="not_found",
-                checked=True,
-                known_concepts=[{"concept_id": c, "name": g.name_of(c)} for c in sorted(g.concept_by_id)[:50]],
-            )
-        concept = _concept_brief(g, concept_id)
-        counts = {
-            "occurrences": g.occurrences(concept_id),
-            "relation_count": g.degree(concept_id),
-            "group_count": g.group_count(concept_id),
-        }
-        data: dict[str, Any] = {
-            "level": "L2",
-            "concept": concept,
-            "counts": counts,
-            "neighbors": [
-                {"concept_id": n, "name": g.name_of(n)} for n in g.neighbors(concept_id)
-            ],
-            "contains_fulltext": False,
-            "note": "本层只给关系表里已有的'表述'；需要文献正文请显式调用 trace.literature（L3，贵）。",
-        }
-        if not with_relations:
-            data["relations"] = []
-            data["relation_count"] = counts["relation_count"]
-            return ok(data)
 
-        rels = []
-        for rid in g.concept_relations.get(concept_id, []):
-            rel = g.relation_by_id.get(rid)
-            if rel is None:
-                continue
-            brief = _relation_brief(g, rel)
-            # L2 的"其它概念"：把自身剔除，方便 D 直接看到"这个概念的邻居是谁"
-            brief["other_concepts"] = [
-                {"concept_id": c["concept_id"], "name": c["name"]}
-                for c in brief["concepts"]
-                if c["concept_id"] != concept_id
-            ]
-            rels.append(brief)
-        data["relations"] = rels
-        data["relation_count"] = len(rels)
-        return ok(data)
 
-    @tool(
-        "trace.literature",
-        "L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层会如实报告而不是返回空串。",
-        {
-            "type": "object",
-            "properties": {
-                "lit_id": {"type": "string", "minLength": 4, "maxLength": 4},
-                "pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "maxItems": 50},
-                "max_chars": {"type": "integer", "minimum": 200, "maximum": 200000},
-            },
-            "required": ["lit_id"],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        returns=(
-            "{'level','literature','requested_pages','max_chars','pages_returned','truncated','status',"
-            "'file_exists','has_text_layer','text','note'}"
-            "（不含 status/text/pages_returned/truncated 的早期分支**不存在了**："
-            "这四项在每一条 ok 分支上都必须给，否则调用方区分不了'没有正文'与'工具忘了填'）"
-        ),
-    )
-    def trace_literature(lit_id: str, pages: list[int] | None = None, max_chars: int = 4000) -> ToolResult:
-        g, err = _g("trace.literature")
-        if err is not None:
-            # 顺序很关键：这里此前先查 `meta.get("in_table")`，于是"没有 store
-            # 也没有 graph"时会报"文献表里没有 X"（把"没查"说成"查了没有"），
-            # 而下面那句更诚实的"未提供 store，无法解析磁盘路径"永远打不出来。
-            return err
-        assert g is not None
-        meta = _literature_brief(g, lit_id)
-        if not meta.get("in_table"):
-            return fail(
-                f"文献表里没有 {lit_id}",
-                kind="not_found",
-                checked=True,
-                known_literature=sorted(g.literature_by_id)[:50],
-            )
-        rel_path = meta.get("path")
-        base: dict[str, Any] = {
-            "level": "L3",
-            "literature": meta,
-            "requested_pages": list(pages) if pages else None,
-            "max_chars": int(max_chars),
-            # 这两项在每一条分支上都必须存在：调用方拿不到它们时无法区分
-            # "没有正文可返回"与"工具忘了填"。放在 base 里 = 不可能漏。
-            "pages_returned": [],
-            "truncated": False,
-        }
-        if store is None:
-            return fail(
-                "未提供 store，无法把文献路径解析到磁盘（L3 需要它）。L1/L2 仍可正常使用。",
-                kind="no_store",
-                checked=False,
-                detail=base,
-            )
-        if not rel_path:
-            # path 为空 = 没下载/下载失败。这不是"文件不存在"：
-            # 一个是流程没走到，一个是流程走了但文件丢了。
-            return ok(
-                {
-                    **base,
-                    "status": _status("no_path"),
-                    "file_exists": False,
-                    "has_text_layer": False,
-                    "text": "",
-                    "note": "文献表里 path 为空：该文献未下载或下载失败，因此没有正文可读。请让 A 补下载。",
-                }
-            )
-        try:
-            abs_path = store.library_path(rel_path)
-        except Exception as exc:  # StoreError：路径越出 library/
-            return ok(
-                {
-                    **base,
-                    "status": _status("path_rejected"),
-                    "file_exists": False,
-                    "has_text_layer": False,
-                    "text": "",
-                    "note": f"路径被拒绝（越出 library/）：{exc}",
-                }
-            )
-        assert abs_path is not None  # rel_path 非空时 library_path 必返回 Path
-        if not abs_path.exists():
-            return ok(
-                {
-                    **base,
-                    "status": _status("file_missing"),
-                    "abs_path": str(abs_path),
-                    "file_exists": False,
-                    "has_text_layer": False,
-                    "text": "",
-                    "note": "文献表登记了路径，但磁盘上没有这个文件（可能被移动/删除）。",
-                }
-            )
-        if not abs_path.is_file():
-            return ok(
-                {
-                    **base,
-                    "status": _status("not_a_file"),
-                    "abs_path": str(abs_path),
-                    "file_exists": False,
-                    "has_text_layer": False,
-                    "text": "",
-                    "note": "该路径不是普通文件（可能是目录）。",
-                }
-            )
 
-        # ---- 真的去读文件（这一步是"贵"的来源，所以只在 L3 里做）
-        try:
-            from ..extract import extract_text  # 惰性：fitz/pdfminer 是重依赖
-        except Exception as exc:  # pragma: no cover - 环境缺模块时
-            return ok(
-                {
-                    **base,
-                    "status": _status("extract_failed"),
-                    "abs_path": str(abs_path),
-                    "file_exists": True,
-                    "has_text_layer": False,
-                    "text": "",
-                    "note": f"文本抽取模块不可用：{exc}",
-                }
-            )
-        try:
-            doc = extract_text(abs_path)
-        except Exception as exc:  # ExtractError / ExtractTooLarge / UnsupportedFormat
-            return ok(
-                {
-                    **base,
-                    "status": _status("extract_failed"),
-                    "abs_path": str(abs_path),
-                    "file_exists": True,
-                    "has_text_layer": False,
-                    "text": "",
-                    "note": f"抽取失败：{type(exc).__name__}: {exc}",
-                }
-            )
-
-        all_pages: list[str] = list(getattr(doc, "pages", []) or [])
-        if not all_pages:
-            # 无文本层：绝不返回 "" 假装读到了 —— 与 quoteverify 的 None 同一精神。
-            return ok(
-                {
-                    **base,
-                    "status": _status("no_text_layer"),
-                    "abs_path": str(abs_path),
-                    "file_exists": True,
-                    "has_text_layer": False,
-                    "source_kind": getattr(doc, "source_kind", None),
-                    "page_count": 0,
-                    "text": "",
-                    "truncated": False,
-                    "note": (
-                        "该文件没有文本层（疑似扫描版）：不是'读到了空文本'，而是"
-                        "'没有可读文本'。需要 OCR 才能得到正文，因此本次没有正文片段可给。"
-                    ),
-                }
-            )
-
-        want = sorted({int(p) for p in (pages or []) if int(p) >= 1}) or list(
-            range(1, len(all_pages) + 1)
-        )
-        picked: list[int] = []
-        chunks: list[str] = []
-        total = 0
-        truncated = False
-        for p in want:
-            if p > len(all_pages):
-                continue
-            chunk = all_pages[p - 1]
-            if total + len(chunk) > int(max_chars):
-                room = int(max_chars) - total
-                if room > 0:
-                    chunks.append(chunk[:room])
-                    picked.append(p)
-                    total += room
-                truncated = True
-                break
-            chunks.append(chunk)
-            picked.append(p)
-            total += len(chunk)
-        if len(want) > len(picked):
-            truncated = True
-        return ok(
-            {
-                **base,
-                "status": _status("ok"),
-                "abs_path": str(abs_path),
-                "file_exists": True,
-                "has_text_layer": True,
-                "source_kind": getattr(doc, "source_kind", None),
-                "encoding": getattr(doc, "encoding", None),
-                "page_count": len(all_pages),
-                "pages_returned": picked,
-                "text": "\n".join(chunks),
-                "chars_returned": total,
-                "truncated": truncated,
-                "note": "正文片段按需截断到 max_chars；如需其它页请用 pages 参数指定。",
-            }
-        )
-
-    @tool(
-        "trace.chain",
-        "把一条关系代号链的每一步表述串起来（D 写报告可直接引用），缺号如实列出。",
-        {
-            "type": "object",
-            "properties": {
-                "relation_ids": {"type": "array", "items": {"type": "string", "minLength": 4, "maxLength": 4}, "minItems": 1, "maxItems": 50}
-            },
-            "required": ["relation_ids"],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        returns=(
-            "{'level','relation_ids','steps','step_count','chain_text','missing','checked','contains_fulltext','note'}"
-            "；**没有图可查**时 ok=False + kind=no_graph + checked=False（与"
-            "'查了、链条确实断裂'的 ok=True+checked=True+missing 非空严格区分）"
-        ),
-    )
-    def trace_chain(relation_ids: list[str]) -> ToolResult:
-        g, err = _g("trace.chain")
-        if err is not None:
-            # 三态纪律（本函数曾经的缺陷）：无 store 无 graph 时 `_g()` 返回过一张
-            # 空图，于是每个代号都落进 `missing`，函数仍然 `ok=True` +
-            # `step_count=0` —— 调用方读到的结论是"这些关系代号都不存在"，
-            # 而真相是"关系图从未构建"。现在：没图可查 ⇒ 明确失败 + checked=False。
-            return err
-        assert g is not None
-        steps: list[dict] = []
-        missing: list[str] = []
-        lines: list[str] = []
-        for i, rid in enumerate(relation_ids, 1):
-            rel = g.relation_by_id.get(rid)
-            if rel is None:
-                missing.append(rid)
-                lines.append(f"{i}. [{rid}] 关系表里没有这个代号（链条在此断裂）")
-                continue
-            brief = _relation_brief(g, rel)
-            steps.append(brief)
-            lines.append(_chain_line(i, brief))
-        return ok(
-            {
-                "level": "chain",
-                "relation_ids": list(relation_ids),
-                "steps": steps,
-                "step_count": len(steps),
-                "chain_text": "\n".join(lines),
-                "missing": missing,
-                # `checked=True` 与 `missing` 非空可以同时成立，而且必须能区分：
-                # 这里说的是"图查过了，这些代号确实不在里面"；
-                # 上面 `_g` 的 `kind="no_graph"` 说的是"根本没图可查"。
-                "checked": True,
-                "contains_fulltext": False,
-                "note": "这是关系链的'表述链'（L1）。要判断证据是否足够，再对关键步骤调 trace.literature（L3）。",
-            }
-        )
-
-    specs: Iterable = (trace_relation, trace_concept, trace_literature, trace_chain)
+    # \T-8\：声明与工具体都在模块级（\@tool\ 写进 \n.__tool_spec__\），
+    # 这里只把装配期算出来的值按位置绑上去（\partial\）。
+    _bound: dict[str, Any] = {}
+    _bound['_g'] = _g
+    _bound['store'] = store
     names: list[str] = []
-    for fn in specs:
-        spec = registry.register_function(fn)
-        names.append(spec.name)
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        names.append(registry.register(replace(
+            _fn.__tool_spec__, handler=partial(_fn, *[_bound[k] for k in _deps]))).name)
     return names
 
 

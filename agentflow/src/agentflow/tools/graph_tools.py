@@ -71,6 +71,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import partial
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .. import textutil as T
@@ -796,6 +798,193 @@ def _coerce_holder(graph: Any, store: Any) -> _GraphHolder:
 # ---------------------------------------------------------------- 工具注册
 
 
+@tool(
+    "graph.build",
+    "从 store 的三张表构建概念图索引，返回图规模摘要（节点/关系/两两边/孤立概念/度数前5/完整性体检）。",
+    {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    # `returns=` 必须逐个列全，不许写 `...`：`tests` 逐字解析这个字符串
+    # 去和实际返回的键集合比对（`test_graph_returns_declaration_matches_
+    # implementation`）。写 `...` 就等于把"还有什么"交给读的人猜，
+    # 而"声明与实现一致"这条判据必须机械可判（4.3#9：返回结构要有契约测试）。
+    returns=(
+        "{'built_from','concept_count','relation_count','literature_count','pair_count',"
+        "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
+        "'quote_verified_counts','concepts_missing_from_table'}"
+    ),
+)
+def graph_build(holder, ) -> ToolResult:
+    def _build() -> dict:
+        if holder.store is None and holder._graph is None and holder._factory is None:
+            raise ToolError(
+                "未提供 store，无法建图；请在 register(store=...) 时给出，或传入已建的 RelationGraph。"
+            )
+        if holder.store is not None:
+            holder.set(RelationGraph.from_store(holder.store))
+        g = holder.get()
+        data = g.summary()
+        data["built_from"] = "store" if holder.store is not None else "prebuilt"
+        return data
+
+    return _guard(_build)
+
+@tool(
+    "graph.stats",
+    "返回当前图的统计摘要与热度前列（不重建索引；未建图时按需构建一次）。",
+    {
+        "type": "object",
+        "properties": {"top_n": {"type": "integer", "minimum": 1, "maximum": 100}},
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    returns=(
+        "{'top_n','hot','concept_count','relation_count','literature_count','pair_count',"
+        "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
+        "'quote_verified_counts','concepts_missing_from_table'}"
+    ),
+)
+def graph_stats(holder, top_n: int = 10) -> ToolResult:
+    def _stats() -> dict:
+        g = holder.get()
+        counts = g.counts()
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1]["occurrences"], kv[0]))[: int(top_n)]
+        data = g.summary()
+        data["top_n"] = int(top_n)
+        data["hot"] = [
+            {"concept_id": cid, "name": g.name_of(cid), **vals} for cid, vals in ranked
+        ]
+        return data
+
+    return _guard(_stats)
+
+@tool(
+    "graph.neighbors",
+    "返回某概念的邻居概念代号（升序）及其连接的度数信息。"
+    f"邻居列表**有界**（默认 max_neighbors={MAX_NEIGHBORS_DEFAULT}）：超过上限时 "
+    "truncated=True 并说明只给了前几个 —— 绝不静默截断。",
+    {
+        "type": "object",
+        "properties": {
+            "concept_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "max_neighbors": {"type": "integer", "minimum": 0},
+        },
+        "required": ["concept_id"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    # 这里刻意没有 `checked`：低层 `graph.neighbors` 与
+    # `graph.svc_neighbors`（`AgentC.neighbors` 的三态服务版）是两种契约，
+    # 由 `tests/test_core_audit_abc_cli.py::test_service_tool_names_resolve_the_
+    # documented_collision` 钉住。有界/截断是三态之外的另一件事：
+    # 它说的是"这一份结果完整不完整"，不是"这次到底查没查"。
+    returns=(
+        "{'concept_id','name','degree','total_neighbors','returned_neighbors',"
+        "'truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}"
+    ),
+)
+def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -> ToolResult:
+    def _neighbors() -> dict:
+        g = holder.get()
+        if concept_id not in g.adjacency:
+            # "这个概念不存在"是业务上的失败，不是异常 —— 它必须保持原来的
+            # 形态：`ok=False` + `known_concepts`（可操作提示，调用方据此改参数），
+            # 而不是被包成某个 `kind`（改动前实测：meta 里没有 kind）。
+            # 所以用哨兵异常把它送出 `_guard`，出来之后再翻回那个形状 ——
+            # `_guard` 会把任何返回值包成 `ok(...)`，"提前返回失败"只能经异常。
+            raise _UnknownConceptError(concept_id, sorted(g.adjacency)[:50]) from None
+        # 有界 + 截断留痕的判据只有一份：`RelationGraph.neighbors_bounded`
+        # → `bounded_neighbors`。这里不自己切片（那会是第二份实现）。
+        bounded = g.neighbors_bounded(concept_id, max_neighbors=max_neighbors)
+        return {
+            "concept_id": concept_id,
+            "name": g.name_of(concept_id),
+            "degree": g.degree(concept_id),
+            "total_neighbors": bounded["total"],
+            "returned_neighbors": bounded["returned"],
+            "truncated": bounded["truncated"],
+            "reasons": list(bounded["reasons"]),
+            "neighbors": [
+                {
+                    "concept_id": n,
+                    "name": g.name_of(n),
+                    "relation_count": len(g.adjacency[concept_id][n]),
+                    "relation_ids": list(g.adjacency[concept_id][n]),
+                }
+                for n in bounded["neighbors"]
+            ],
+        }
+
+    try:
+        return _guard(_neighbors)
+    except _UnknownConceptError as e:
+        return fail(str(e), known_concepts=list(e.known_concepts))
+
+@tool(
+    "graph.relations_between",
+    "返回同时包含两个概念的全部关系（按 quote_verified/status/信息量确定性排序）。",
+    {
+        "type": "object",
+        "properties": {
+            "a": {"type": "string", "minLength": 4, "maxLength": 4},
+            "b": {"type": "string", "minLength": 4, "maxLength": 4},
+        },
+        "required": ["a", "b"],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("C", "D"),
+    returns=(
+        "{'a','b','a_name','b_name','count',"
+        "'relations':[{'relation_id','concept_ids','description','statement','quote',"
+        "'status','quote_verified','lit_id','page_range'}]}"
+    ),
+)
+def graph_relations_between(holder, a: str, b: str) -> ToolResult:
+    def _between() -> dict:
+        g = holder.get()
+        rels = g.relations_between(a, b)
+        return {
+            "a": a,
+            "b": b,
+            "a_name": g.name_of(a),
+            "b_name": g.name_of(b),
+            "count": len(rels),
+            "relations": [
+                {
+                    "relation_id": r.get("relation_id"),
+                    "concept_ids": list(r.get("concept_ids") or []),
+                    "description": r.get("description"),
+                    "statement": r.get("statement"),
+                    "quote": r.get("quote"),
+                    "status": r.get("status"),
+                    "quote_verified": r.get("quote_verified"),
+                    "lit_id": r.get("lit_id"),
+                    "page_range": r.get("page_range"),
+                }
+                for r in rels
+            ],
+        }
+
+    return _guard(_between)
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (graph_build, ('holder',)),
+    (graph_stats, ('holder',)),
+    (graph_neighbors, ('holder',)),
+    (graph_relations_between, ('holder',)),
+)
+
+
 def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) -> list[str]:
     """把图查询工具注册进 `registry`，返回注册的工具名列表。
 
@@ -812,189 +1001,14 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None) ->
     """
     holder = _coerce_holder(graph, store)
 
-    @tool(
-        "graph.build",
-        "从 store 的三张表构建概念图索引，返回图规模摘要（节点/关系/两两边/孤立概念/度数前5/完整性体检）。",
-        {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        # `returns=` 必须逐个列全，不许写 `...`：`tests` 逐字解析这个字符串
-        # 去和实际返回的键集合比对（`test_graph_returns_declaration_matches_
-        # implementation`）。写 `...` 就等于把"还有什么"交给读的人猜，
-        # 而"声明与实现一致"这条判据必须机械可判（4.3#9：返回结构要有契约测试）。
-        returns=(
-            "{'built_from','concept_count','relation_count','literature_count','pair_count',"
-            "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
-            "'quote_verified_counts','concepts_missing_from_table'}"
-        ),
-    )
-    def graph_build() -> ToolResult:
-        def _build() -> dict:
-            if holder.store is None and holder._graph is None and holder._factory is None:
-                raise ToolError(
-                    "未提供 store，无法建图；请在 register(store=...) 时给出，或传入已建的 RelationGraph。"
-                )
-            if holder.store is not None:
-                holder.set(RelationGraph.from_store(holder.store))
-            g = holder.get()
-            data = g.summary()
-            data["built_from"] = "store" if holder.store is not None else "prebuilt"
-            return data
-
-        return _guard(_build)
-
-    @tool(
-        "graph.stats",
-        "返回当前图的统计摘要与热度前列（不重建索引；未建图时按需构建一次）。",
-        {
-            "type": "object",
-            "properties": {"top_n": {"type": "integer", "minimum": 1, "maximum": 100}},
-            "required": [],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        returns=(
-            "{'top_n','hot','concept_count','relation_count','literature_count','pair_count',"
-            "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
-            "'quote_verified_counts','concepts_missing_from_table'}"
-        ),
-    )
-    def graph_stats(top_n: int = 10) -> ToolResult:
-        def _stats() -> dict:
-            g = holder.get()
-            counts = g.counts()
-            ranked = sorted(counts.items(), key=lambda kv: (-kv[1]["occurrences"], kv[0]))[: int(top_n)]
-            data = g.summary()
-            data["top_n"] = int(top_n)
-            data["hot"] = [
-                {"concept_id": cid, "name": g.name_of(cid), **vals} for cid, vals in ranked
-            ]
-            return data
-
-        return _guard(_stats)
-
-    @tool(
-        "graph.neighbors",
-        "返回某概念的邻居概念代号（升序）及其连接的度数信息。"
-        f"邻居列表**有界**（默认 max_neighbors={MAX_NEIGHBORS_DEFAULT}）：超过上限时 "
-        "truncated=True 并说明只给了前几个 —— 绝不静默截断。",
-        {
-            "type": "object",
-            "properties": {
-                "concept_id": {"type": "string", "minLength": 4, "maxLength": 4},
-                "max_neighbors": {"type": "integer", "minimum": 0},
-            },
-            "required": ["concept_id"],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        # 这里刻意没有 `checked`：低层 `graph.neighbors` 与
-        # `graph.svc_neighbors`（`AgentC.neighbors` 的三态服务版）是两种契约，
-        # 由 `tests/test_core_audit_abc_cli.py::test_service_tool_names_resolve_the_
-        # documented_collision` 钉住。有界/截断是三态之外的另一件事：
-        # 它说的是"这一份结果完整不完整"，不是"这次到底查没查"。
-        returns=(
-            "{'concept_id','name','degree','total_neighbors','returned_neighbors',"
-            "'truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}"
-        ),
-    )
-    def graph_neighbors(concept_id: str, max_neighbors: int | None = None) -> ToolResult:
-        def _neighbors() -> dict:
-            g = holder.get()
-            if concept_id not in g.adjacency:
-                # "这个概念不存在"是业务上的失败，不是异常 —— 它必须保持原来的
-                # 形态：`ok=False` + `known_concepts`（可操作提示，调用方据此改参数），
-                # 而不是被包成某个 `kind`（改动前实测：meta 里没有 kind）。
-                # 所以用哨兵异常把它送出 `_guard`，出来之后再翻回那个形状 ——
-                # `_guard` 会把任何返回值包成 `ok(...)`，"提前返回失败"只能经异常。
-                raise _UnknownConceptError(concept_id, sorted(g.adjacency)[:50]) from None
-            # 有界 + 截断留痕的判据只有一份：`RelationGraph.neighbors_bounded`
-            # → `bounded_neighbors`。这里不自己切片（那会是第二份实现）。
-            bounded = g.neighbors_bounded(concept_id, max_neighbors=max_neighbors)
-            return {
-                "concept_id": concept_id,
-                "name": g.name_of(concept_id),
-                "degree": g.degree(concept_id),
-                "total_neighbors": bounded["total"],
-                "returned_neighbors": bounded["returned"],
-                "truncated": bounded["truncated"],
-                "reasons": list(bounded["reasons"]),
-                "neighbors": [
-                    {
-                        "concept_id": n,
-                        "name": g.name_of(n),
-                        "relation_count": len(g.adjacency[concept_id][n]),
-                        "relation_ids": list(g.adjacency[concept_id][n]),
-                    }
-                    for n in bounded["neighbors"]
-                ],
-            }
-
-        try:
-            return _guard(_neighbors)
-        except _UnknownConceptError as e:
-            return fail(str(e), known_concepts=list(e.known_concepts))
-
-    @tool(
-        "graph.relations_between",
-        "返回同时包含两个概念的全部关系（按 quote_verified/status/信息量确定性排序）。",
-        {
-            "type": "object",
-            "properties": {
-                "a": {"type": "string", "minLength": 4, "maxLength": 4},
-                "b": {"type": "string", "minLength": 4, "maxLength": 4},
-            },
-            "required": ["a", "b"],
-            "additionalProperties": False,
-        },
-        side_effect="read",
-        roles=("C", "D"),
-        returns=(
-            "{'a','b','a_name','b_name','count',"
-            "'relations':[{'relation_id','concept_ids','description','statement','quote',"
-            "'status','quote_verified','lit_id','page_range'}]}"
-        ),
-    )
-    def graph_relations_between(a: str, b: str) -> ToolResult:
-        def _between() -> dict:
-            g = holder.get()
-            rels = g.relations_between(a, b)
-            return {
-                "a": a,
-                "b": b,
-                "a_name": g.name_of(a),
-                "b_name": g.name_of(b),
-                "count": len(rels),
-                "relations": [
-                    {
-                        "relation_id": r.get("relation_id"),
-                        "concept_ids": list(r.get("concept_ids") or []),
-                        "description": r.get("description"),
-                        "statement": r.get("statement"),
-                        "quote": r.get("quote"),
-                        "status": r.get("status"),
-                        "quote_verified": r.get("quote_verified"),
-                        "lit_id": r.get("lit_id"),
-                        "page_range": r.get("page_range"),
-                    }
-                    for r in rels
-                ],
-            }
-
-        return _guard(_between)
-
-    specs = [graph_build, graph_stats, graph_neighbors, graph_relations_between]
+    # T-8：声明与工具体都在模块级（@tool 写进 n.__tool_spec__），
+    # 这里只把装配期算出来的 holder 按位置绑上去（partial）。
+    _bound: dict[str, Any] = {}
+    _bound['holder'] = holder
     names: list[str] = []
-    for fn in specs:
-        spec = registry.register_function(fn)
-        names.append(spec.name)
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        names.append(registry.register(replace(
+            _fn.__tool_spec__, handler=partial(_fn, *[_bound[k] for k in _deps]))).name)
     return names
 
 

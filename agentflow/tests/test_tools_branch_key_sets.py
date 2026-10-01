@@ -44,7 +44,8 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parents[1] / "src" / "agentflow" / "tools"
 
-#: 看不清的 `ok(...)` 调用点：每模块处数（2026-09-27 由本文件的扫描函数量出）。
+#: 看不清的 `ok(...)` 调用点：每模块处数（2026-09-27 由本文件的扫描函数量出；
+#: 2026-10-01 `T-8` 搬移后按调用点去重后重算，见 `scan` 的 docstring）。
 #: 它保守、可复算：任何一处新增/删除都会让 `test_invisible_ok_sites_do_not_grow_silently` 变红。
 INVISIBLE_OK_SITES: dict[str, int] = {
     "attack_tools.py": 1,
@@ -54,14 +55,21 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     "review_tools.py": 1,
     "search_tools.py": 3,
     "table_tools.py": 7,
-    "trace_tools.py": 22,
-    "verify_tools.py": 5,
+    # 2026-10-01（`draft/28` §218.3）：`T-8` 把工具体从 `register` 里搬到模块级之后，
+    # 这两个数字当场减半（22 → 11、18 → 9）—— 不是因为代码变了，而是因为原来的
+    # 数法是 `ast.walk` 每层函数各数一遍（嵌套的 `ok(...)` 被外层与内层各走到一次）。
+    # 真实处数一直是 11 / 9；跟着改的是条数法本身（`scan` 现在按 `(行, 列)` 去重）。
+    "trace_tools.py": 11,
+    # `verify_tools.py` 同族：5 里那 2 处是 `register` 的嵌套 helper 被重复数的，
+    # 真实处数是 3。
+    "verify_tools.py": 3,
     # T0-9（2026-09-28）：主控工具模块 8 件，工具体一律 `ok(data, **data)` ——
-    # 键由运行时数据决定，静态扫描读不出来，所以这 16 处如实记在"看不清"这一栏。
-    # §198（2026-09-30）：`conductor.summon_many` 加进来 ⇒ 16 → 18
-    # （该函数的载荷是运行时算出来的，见它自己的注释；`returns=` 仍逐字声明键集，
-    # 由 `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住）。
-    "conductor_tools.py": 18,
+    # 键由运行时数据决定，静态扫描读不出来，所以这些处如实记在"看不清"这一栏。
+    # §198（2026-09-30）：`conductor.summon_many` 加进来 ⇒ 16 → 18（旧数法）；
+    # 2026-10-01 按调用点去重后是 9（见上）。
+    # 该函数的载荷是运行时算出来的，见它自己的注释；`returns=` 仍逐字声明键集，
+    # 由 `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
+    "conductor_tools.py": 9,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由
@@ -89,11 +97,18 @@ def scan(root: Path) -> tuple[dict[str, list[tuple[int, tuple[str, ...]]]], dict
     """扫一个目录下的 `*_tools.py`。
 
     返回 `(每个函数看得见的 ok 键集合, 每模块看不清的处数)`。
+
+    "看不清"按调用点去重（`(行, 列)`）：`ast.walk` 会从外层函数走进嵌套函数，
+    所以同一个 `ok(...)` 在外层与内层各被走到一次。原来不去重 ⇒ 每模块的处数
+    被嵌套层数放大（实测：`conductor_tools` 18 / `trace_tools` 22 是双倍，
+    真实处数是 9 / 11 —— 见 `draft/28` §218.3 的读数）。`T-8` 把工具体从
+    `register` 里搬到模块级之后那两个数字当场减半，红的就是本条判据。
     """
     found: dict[str, list[tuple[int, tuple[str, ...]]]] = {}
     invisible: dict[str, int] = {}
     for f in sorted(root.glob("*_tools.py")):
         tree = ast.parse(f.read_text(encoding="utf-8"))
+        sites: set[tuple[int, int]] = set()
         for fn in [n for n in ast.walk(tree)
                    if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
             sets: list[tuple[int, tuple[str, ...]]] = []
@@ -105,11 +120,13 @@ def scan(root: Path) -> tuple[dict[str, list[tuple[int, tuple[str, ...]]]], dict
                     continue
                 keys = _literal_keys(call.args[0]) if call.args else None
                 if keys is None:
-                    invisible[f.name] = invisible.get(f.name, 0) + 1
+                    sites.add((call.lineno, call.col_offset))
                 else:
                     sets.append((call.lineno, keys))
             if sets:
                 found[f"{f.name}::{fn.name}"] = sets
+        if sites:
+            invisible[f.name] = len(sites)
     return found, invisible
 
 
