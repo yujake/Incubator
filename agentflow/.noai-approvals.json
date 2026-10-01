@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T14:16:28+08:00",
+  "generated_at": "2026-10-01T15:07:34+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -452,10 +452,10 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "fec86e793a9b314582b117373840660c53a072c1292a85e0619e3645df6b84fa",
+      "sha256": "215630abf6e176748ea70458dc2556f11e67b2eb73570b936effc5c492868443",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/36 T-8 第②③步（§216）：把 register 里的 6 条工具声明搬到模块级 @tool 装饰器 + 工具体函数（注入值由装配期 partial 按位置绑定）。声明字段与处理器签名靠 tests/test_tool_surface_snapshot.py 逐字钉住；detect_verifier / check_formal 的判据本体未改一行。登记 ≠ 批准：仍需 2 名 reviewer 逐行走查。",
+      "change_note": "draft/36 T-8（§218.7 / §219）：纯行尾归一（LF → CRLF，回到动代码之前的样子），内容一字未改（git diff --ignore-cr-at-eol 为空）。重新登记是因为台账钉的是 sha256，行尾变了哈希就变。reviewers 仍为 0：§216 的声明搬移仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
