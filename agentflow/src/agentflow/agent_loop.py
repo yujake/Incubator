@@ -503,8 +503,16 @@ class AgentLoop:
     registry: Any
     seam: LlmSeam
     conductor: Any = None
-    max_steps: int = 6
+    #: 单次循环最多几步。默认 30（`draft/37` §1.2 的第一条读数）：定 6 的时候，
+    #: 一个被驱动的动作连"读完一段正文"都不够 —— 真机实测（2026-10-01）G 的 151 步里
+    #: 89 次在读、53 次在写自己的笔记，最后还是没能落盘一处改动；而框架给它的默认是 6。
+    #: 步数是"能做完一件事"的最低门槛，不是省钱的旋钮：省钱靠 `usd_budget` 与墙钟。
+    max_steps: int = 30
     max_bad_json: int = 2
+    #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
+    #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
+    #: 8,192 是 `deepseek-chat` 一档的输出上限；要改就改这里，别在各处传不同的数。
+    max_output_tokens: int = 8192
     workspace_root: str = ""
     sid: str | None = None
     token: Any = None
@@ -606,7 +614,8 @@ class AgentLoop:
                 break
             data, call = self.seam.ask_json(self._prompt(transcript, step=step),
                                            system=system, task_id=my_task_id,
-                                           note=f"{self.role}.step{step}")
+                                           note=f"{self.role}.step{step}",
+                                           max_tokens=self.max_output_tokens)
             if data is None:
                 run.bad_json += 1
                 # 把模型实际说了什么留在这一步里（2026-09-30）：只有 `problem`
@@ -972,7 +981,7 @@ class LlmBackend:
     registry: Any = None
     conductor: Any = None
     seam_factory: Any = None
-    max_steps: int = 6
+    max_steps: int = 30
     workspace_root: str = ""
     sid: str | None = None
     store: Any = None
@@ -1088,7 +1097,7 @@ def _task_text(params: Mapping[str, Any], role: str, action: str) -> str:
 def run_role(role: str, task: str, *, store: Any, registry: Any,
              session_root: Path | str | None = None,
              conductor: Any = None, seam: LlmSeam | None = None, gateway: Any | None = None,
-             max_steps: int = 6, usd_budget: float | None = None,
+             max_steps: int = 30, usd_budget: float | None = None,
              workspace_root: str = "", sid: str | None = None, token: Any = None,
              from_env: bool = True, user_timeout_sec: float = 30.0) -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。

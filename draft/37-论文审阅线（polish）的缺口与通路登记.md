@@ -1325,3 +1325,116 @@ R7（预算对照）· R15/R17（待命与多实例归因）· §13.4 的 M 步�
 **每一个都要配一条判据**（否则就是"调了个数字"），所以单独一轮做。做法与 §16 P0 一致：
 改默认值 + 加"写稿步的额度足够写一段"的判据 + 用 R7 的对照读数（同任务同模型，只改预算）
 证明"预算就是那道门"。
+
+---
+
+## §19 落地 P0（第二刀）：预算四旋钮落地并绿（含"判据第一次写漏了一个落点"的教训）
+
+**这一节记的是 `draft/37` §16 P0 的后半：把"力气"补上。** §18 补的是"手"（`fs.edit`），
+这一节补的是"这件事到底准不准备让模型做完"—— 步数、输出额度、墙钟、观测窗口四个旋钮。
+规格见 §16 P0 第二/三行与 §17 第一档；这一节只记**做了什么、读数是多少、还差什么**。
+
+### 19.1 做了什么（四个旋钮，每一个都落在"被读走的那一处"）
+
+1. **步数 6 → 30**：`AgentLoop.max_steps`、`LlmBackend.max_steps`、`run_role(max_steps)`、
+   `wired_llm_conductor(max_steps)`、`cli --max-steps` 五处默认值一起改，**外加**
+   `autonomy.run_autonomous(max_steps)`（第六处，见 §19.3）。
+   为什么是 30 而不是更大：真机那一轮 G 拿了 151 步仍未落盘，说明"步数"本身不是唯一的门
+   —— 但默认 6 连"读完一段正文"都不够，这是**门槛**问题，不是**效率**问题。
+   省钱仍然靠 `usd_budget` 与墙钟，不靠把步数掐小（把步数当省钱旋钮，省下的是钱的读数、
+   付出的是"任务永远做不完"）。
+2. **输出额度：新增 `AgentLoop.max_output_tokens = 8192`**，循环步调
+   `seam.ask_json(..., max_tokens=self.max_output_tokens)`；`llmseam.ask` / `ask_json`
+   各加一个 `max_tokens` 参数并**原样转发**给 `gateway.complete`。
+   不给时传 `None` ⇒ 网关按 `ModelSpec.max_tokens`（4,096）兜底 —— 这条负控写在判据里，
+   因为"顺手把缺省也改大"会让所有调用（包括只回一个工具名的那些）都变贵，而读数上看不出来。
+   4,096 → 8,192 的直接理由：网关缺省会把"写一段 LaTeX + JSON 信封"截成半句话，
+   在台账上的表现是 `judge_bad_json`（看起来像"模型不会写 JSON"）。
+3. **墙钟可配**：`cli` 新增 `--wall-clock-sec`（默认 3600.0 秒），`cmd_run_agent` 用它造
+   `Policy(wall_clock_sec=…)` 并传进 `wired_llm_conductor`。
+   `policy.Policy` 自己的缺省仍是 900 秒 —— **两处不同是刻意的，但都必须说得出出处**：
+   900 是"框架默认给一件派活多久"，3600 是"用户从命令行起一次 `run-agent` 时愿意等多久"。
+   非法值（`0` / 负数）由 `Policy.__post_init__` 当场抛，不留给运行期。
+4. **观测窗口**：`RESULT_CHARS=3000` 是 §18 之前就定下的值，这一轮补上它**为什么是 3000**
+   的判据：它必须容得下"一条定理"的切片（≤2,600 字），否则"拆条目逐条改"这条路会在
+   观测层被掐断 —— 而表现是"模型反复读同一段"，不是"模型读不懂"。
+
+### 19.2 判据：`tests/test_budget_knobs.py`（4 条）+ 反真空（4/4 红过）
+
+四条判据各自断言"旋钮真的接到了对方手上"，并各带一条负控：
+
+| 判据 | 正控（旋钮接通） | 负控 / 反真空 |
+|---|---|---|
+| 步数够做完一件事 | **六个落点**读回来必须是同一个值且 ≥ 20 | 拧回 6 ⇒ 判据红（读数：`{'AgentLoop.max_steps': 6, 'LlmBackend.max_steps': 30, …}`） |
+| 写稿步的输出额度 | 循环步传给网关的 `max_tokens` = `max_output_tokens`，且 > 网关缺省 4,096 | 缝吞掉 `max_tokens` ⇒ 判据红（实测收到 `[None]`）；不给旋钮的调用仍必须是 `None` |
+| 观测窗口容得下定理切片 | 2,600 字的切片原样通过 | 超窗字段必须被截断**并写明这是观测层的截断**；`RESULT_CHARS=1200` ⇒ 判据红 |
+| 墙钟可配且是活的 | CLI 显式值一路进到主控的 `policy`；缺省 3600.0 / 框架 900 | 主控把 policy 收下就扔 ⇒ 判据红；`Policy(wall_clock_sec=0)` 必须抛 |
+
+反真空的做法写在 `temp/_p0_reverse_vacuum.py`：把四个旋钮**各自拧回缺陷值**，
+要求对应判据当场失败。**四条全红**（否则"判据通过"与"判据根本没在守"长得一模一样）：
+
+```text
+  ok  步数默认值 = 6（修复前） ⇒ 判据红了
+  ok  缝吞掉 max_tokens（修复前） ⇒ 判据红了（实测收到 [None]）
+  ok  RESULT_CHARS = 1200（修复前） ⇒ 判据红了
+  ok  墙钟传了不生效 ⇒ 判据红了
+REVERSE-VACUUM DONE（四条判据各在缺陷值下红过一次）
+```
+
+### 19.3 教训：判据第一次写漏了第六个落点，而漏掉的正是判据要防的那个形态
+
+第一版步数判据只列了**五个**落点（循环本体 / `run_role` / `LlmBackend` /
+`wired_llm_conductor` / CLI）。写完顺手全仓 grep `max_steps` 才发现
+`autonomy.run_autonomous(max_steps)` **还是 6** —— 自主多轮那条路（`run-agent --rounds N`）
+的默认步数没有跟着改。CLI 那条路因为显式传 `args.max_steps` 而看不出问题，
+**只有直接调用 `run_autonomous` 的人（测试、`temp/` 下的脚本、将来的编排层）会拿到 6**。
+
+两件事因此变了：
+
+1. `autonomy.run_autonomous` 的默认值改为 30；
+2. 判据的落点表补上第六项，并在 docstring 里**逐字写下这次漏检**——
+   不然下一个人看到"六个落点"会以为它是天生的，而不是被一次漏检逼出来的。
+
+这条与 §16 的"提示词优先、动作表尽量不动"不冲突：改的是一个被读走的默认值，
+不是加一个动作；但它再次说明**默认值也是一种接口**，而接口分家时测试不会自己红。
+
+### 19.4 读数（当次）
+
+- **lint**：`error 0 / warning 9 / info 47`（与基线逐字一致）。
+  中途出现过 3 条 R009（我在注释/docstring 里写了 Markdown 强调），逐处改成中文引号后归零
+  —— 记这一笔是因为它正好是 R009 要防的形态：源码不会被渲染成网页。
+- **定向判据**：`test_budget_knobs.py` + `test_agent_loop.py` + `test_agent_cli.py` +
+  `test_host_wiring.py` + `test_context_budget.py` + `test_paper_pack.py` +
+  `test_tools_returns_declaration.py` + 两条尺子 ⇒ **151 passed**；
+  补上 `autonomy` 之后 `test_budget_knobs.py + test_autonomy.py + test_autonomy_resume.py`
+  ⇒ **22 passed**。
+- **FC-27 门**：`--paths src/agentflow/{agent_loop,llmseam,host,cli,autonomy}.py
+  docs/READING-MAP.md tests/test_budget_knobs.py temp/_p0_reverse_vacuum.py` ⇒
+  **clean（退出码 0）**—— 八条改动路径都不在禁改区清单里（这回不用登记基线）。
+- **全量 pytest**：第一次 **3232 passed / 1 failed**，失败的是
+  `test_reading_map.py::test_the_line_counts_in_the_big_file_table_are_current`
+  —— 读图 §3「这些文件为什么这么大」那张表里 `cli.py` 手抄的行数 1884 过期（盘上 1896，
+  正是这一轮给 `cli.py` 加的 12 行）。那条判据的 docstring 自己写着"红了就改数字（一行的事），
+  别改判据"，照办：`1884 → 1896`。改完 **3233 passed / 3 skipped / 8 deselected /
+  1 xfailed / 0 failed（1237.76 秒 = 20 分 37 秒，退出码 0）**。
+  （记这一笔是因为它是本轮唯一一次真实红：**它红的理由与判据设想的完全一样** ——
+  新加一个子命令参数会让"手抄的行数"漂，而漂了以后读者的判断会跟着错。
+  另外它是"全量跑才发现"的那一类：定向判据一条都没覆盖它。）
+
+### 19.5 P0 收口，下一轮是 P1
+
+P0 的两半（"手"= §18 的 `fs.edit`；"力气"= 本节的四旋钮）都落地了，`draft/37` §16 的
+P0 到此为止。**P0 只解决"能不能做完"，不解决"做的是不是论文"** —— 后者才是用户
+2026-10-01 判词里的那一刀（"我们 review 论文包的任务定位是测试系统能否帮忙审阅论文并
+polish 这篇论文，输出一大堆核验结果算个啥玩意"）。所以下一轮按 §16 进 **P1 数据面**：
+
+1. 新表 `statements`（命题原文 + 完整假设 + 证明逐字 + 出处 `lit_id`/`page_range` +
+   `quote_verified` 三态 + `status ∈ {active, disputed, refuted, superseded}` +
+   `derived_from` + `origin ∈ {external_lit, own_result}`）⇒ 走"加一张表要交的十处税"；
+2. `dependencies.status` 增加 `refuted` / `disputed`，并加一条不变量：
+   **proof 级的断言不许压在 refuted/disputed 的依赖上**（§8/§9 的机器化落点）；
+3. `tasks` 加 `instance` 栏（§7 的"谁做的"归属缺口；没有它，"并发"在读台上不可归因）；
+4. B 的"消化"产出（完整假设 + 证明逐字 + 出处）落到哪张表、报告落到哪 —— 登记清楚。
+
+P1 的判据与 P0 一样：每条都要有正控 + 负控 + 反真空，并且**通过不许用"改了 sha / 页数多了 /
+锚点一致 / 表里多了一行"来冒充**（§17 逐字列了这四种冒充）。

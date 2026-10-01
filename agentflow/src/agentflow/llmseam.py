@@ -143,8 +143,13 @@ class LlmSeam:
 
     # -------------------------------------------------------------- 调用
     def ask(self, prompt: str, *, system: str = "", task_id: str = "",
-            note: str = "") -> SeamCall:
-        """发一次调用，落一条审计记录，返回结局（不抛业务异常）。"""
+            note: str = "", max_tokens: int | None = None) -> SeamCall:
+        """发一次调用，落一条审计记录，返回结局（不抛业务异常）。
+
+        `max_tokens` 不给时用网关缺省（4,096）。给它的那一处是循环步
+        （`agent_loop.AgentLoop.max_output_tokens`）：写稿步的回复要比"一个工具调用"
+        长得多，而网关缺省会把"写一段 LaTeX + JSON 信封"截断成半句话（`draft/37` §16 P0）。
+        """
         t0 = time.monotonic()
         base = dict(
             prompt_version=self.prompt_version,
@@ -168,7 +173,8 @@ class LlmSeam:
 
         try:
             reply = self.gateway.complete(prompt, scope=self.scope,
-                                          system=(system or None))
+                                          system=(system or None),
+                                          max_tokens=max_tokens)
         except J.BudgetExhausted as exc:
             return self._finish_failure("judge_over_budget", str(exc), base, t0,
                                         prompt, system, task_id, note)
@@ -242,9 +248,9 @@ class LlmSeam:
         return call
 
     def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
-                 note: str = "") -> tuple[dict[str, Any] | None, SeamCall]:
+                 note: str = "", max_tokens: int | None = None) -> tuple[dict[str, Any] | None, SeamCall]:
         """要一份 JSON：返回 `(判定, 结局)`。坏 JSON 归成 `judge_bad_json`，不静默当空。"""
-        call = self.ask(prompt, system=system, task_id=task_id, note=note)
+        call = self.ask(prompt, system=system, task_id=task_id, note=note, max_tokens=max_tokens)
         if not call.ok:
             return None, call
         from .llm import parse_llm_json

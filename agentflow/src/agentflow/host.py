@@ -333,7 +333,7 @@ DEFAULT_LLM_LOOPS: dict[tuple[str, str], dict[str, Any]] = {}
 def wired_llm_conductor(store: Any, *, policy: Any = None,
                         loops: Mapping[tuple[str, str], Mapping[str, Any]] | None = None,
                         session_root: str | Path | None = None, sid: str | None = None,
-                        max_steps: int = 6, usd_budget: float | None = None,
+                        max_steps: int = 30, usd_budget: float | None = None,
                         providers: Any = None, extractor: Any = None,
                         config: Mapping[str, Any] | None = None,
                         workspace_root: str | Path | None = None,

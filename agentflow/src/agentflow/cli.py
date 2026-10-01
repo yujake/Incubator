@@ -1447,10 +1447,16 @@ def cmd_run_agent(args) -> int:
     prov_names = (str(args.provider).split(",") if getattr(args, "provider", None)
                   else (cfg.get("agent_a") or {}).get("providers", ["openalex"]))
     providers = _build_providers(cfg, list(prov_names), root)
+    # 墙钟可配（`draft/37` §16 P0）：不给 `--wall-clock-sec` 时用 `Policy` 的缺省值，
+    # 于是"这次运行能给多久"从写死的 900 秒变成一个显式参数。
+    from .policy import Policy
+
+    wall = getattr(args, "wall_clock_sec", None)
+    pol = Policy(wall_clock_sec=wall) if wall is not None else None
     wiring = H.wired_llm_conductor(st, loops=loops, session_root=root, sid=args.sid,
                                    max_steps=args.max_steps, usd_budget=args.budget_usd,
                                    workspace_root=str(root), seam_factory=seam_for,
-                                   providers=providers, config=cfg,
+                                   providers=providers, config=cfg, policy=pol,
                                    semantic_review=bool(getattr(args, "semantic_review", False)))
     if not providers:
         # 三态：A 这条路这一轮是没接线（不是"没有文献"）。说清楚，别让人去猜。
@@ -1808,7 +1814,13 @@ def build_parser() -> argparse.ArgumentParser:
                          "A 没有后端就不会进登记表：那时任何角色唤起 A 都会如实落 "
                          "`refused/not_wired`（没查成，不是「这个主题没有文献」）。"
                          "想离线验证这条链路就写 `--provider fixture`")
-    sp.add_argument("--max-steps", type=_non_negative_int, default=6, help="单次循环最多几步")
+    #: 默认 30（`draft/37` §16 P0）：默认 6 的时候，一个被驱动的动作连"读完一段正文"都不够
+    #: —— 真机实测 G 拿了 151 步、89 次在读，最后还是没能落盘一处改动，而框架默认只给 6 步。
+    sp.add_argument("--max-steps", type=_non_negative_int, default=30, help="单次循环最多几步")
+    #: 墙钟（`policy.wall_clock_sec`）默认 900 秒：真机里第 8 次派活就是被它挡下的（`deadline_exceeded`）。
+    #: 放成可配而不是写死：长任务（审一篇论文）该给一小时量级，短任务仍可以压到几分钟。
+    sp.add_argument("--wall-clock-sec", type=float, default=3600.0,
+                    help="这次运行的墙钟上限（秒）；到点后新召唤一律被拒（已在跑的走协作式取消）")
     sp.add_argument("--rounds", type=_non_negative_int, default=1,
                     help="跑几轮（>1 走自主轮：按 --report-every 向公共频道汇报）")
     sp.add_argument("--report-every", type=_non_negative_int, default=1, help="每几轮汇报一次")
