@@ -74,7 +74,48 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
 
 def test_the_paper_pack_section_is_versioned(store: Store):
     """判据（可追溯）：段变了版本号就要动 —— 提示词版本是审计记录里的一栏。"""
-    assert AP.PROMPT_VERSION == "p18", AP.PROMPT_VERSION
+    assert AP.PROMPT_VERSION == "p21", AP.PROMPT_VERSION
+
+
+#: `2026-10-01` 真机实测逼出来的那一条：光说"重渲染 → 重编译 → 锚回 consistent"不够，
+#: 还要点名走哪条动作路径 —— 实测的那次（工作区 `projects/p3-review`）主控派的是
+#: `G.build_document`（两次都被 `invalid_params` 拒），包一个字节没变、锚报 `drifted`，
+#: 21 步打完收工，交付说明里写着"包与台账分家"。
+#: 第二次实测（`projects/p3-review-20261001-220936`）证明点名动作这条路走通了（G 真的重渲染重编译），
+#: 但顺序错了：`H.verify_fixes` 排在 G 之后，它又改了 `review_findings`，锚当场变回 `drifted`
+#: ⇒ 段里必须同时写"会写台账的动作排在最后一次重渲染之前"。
+#: 第三次实测（`projects/p3-review-20261001-221654`）锚一致了，但 `main.tex` 一个字节没变
+#: ⇒ 段里必须点名"核验证明的主路径是 E 的形式化核验"（H 的机械门 + G 重渲染不会让稿子变好）。
+PACK_FOLLOW_FACTS = ("`G.revise`", "build_document", "doc.paper_render", "doc.paper_state",
+                     "invalid_params", "verify_fixes", "最后一次写台账之后",
+                     "E.check_formal", "imports: []")
+
+
+def pack_follow_problems(text: str) -> list[str]:
+    """只做一件事：段里有没有"让包跟上要走哪个动作"这件事（空 = 有）。负控跑的就是它。"""
+    return [f"论文包段里没有 {fact!r}" for fact in PACK_FOLLOW_FACTS if fact not in text]
+
+
+def test_the_paper_pack_names_the_action_that_makes_the_package_follow(store: Store):
+    """判据：段里必须点名 `G.revise` 这条路径，并说清哪个动作不会让包跟上。
+
+    为什么要写到这个粒度：`G.build_document` / `G.render` 只动台账与稿件，
+    只有 `G.revise`（模型驱动那条路）会走 `doc.paper_render` → `doc.paper_compile` →
+    `doc.paper_state`。一个字不写清，主控就会去派那个看起来最像"建包"的动作，而它不会。
+    """
+    problems: list[str] = []
+    for role in ("M", "G"):
+        problems += [f"{role}：{p}" for p in pack_follow_problems(_prompt(role, store))]
+    assert not problems, "；".join(problems)
+
+
+def test_the_pack_follow_judge_catches_a_section_without_the_action() -> None:
+    """负控：把动作名从段里拿掉 ⇒ 同一个检查函数必须报出来（否则那条判据是装饰）。"""
+    good = AP.PAPER_PACK
+    assert pack_follow_problems(good) == [], "正控输入下必须干净"
+    assert pack_follow_problems(good.replace("`G.revise`", "某个动作")), "动作名被拿掉却没报"
+    assert pack_follow_problems(good.replace("build_document", "另一个动作")), "反例没报"
+    assert pack_follow_problems("论文包要重渲染、重编译。"), "空话连篇的段没报"
 
 
 def test_the_paper_pack_says_the_package_must_follow_the_ledger(store: Store):

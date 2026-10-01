@@ -33,7 +33,7 @@ DESIGN-INTERACTIONS.md §1 新增的三件事（I6 / I4 / I5 的决定侧）：
    （结构等价 + 名字侧）才合并，且合并必须留下可被人反驳的理由。
    宁可漏合并（少省一点空间）也不错误合并（把两条知识并成一条，不可逆）。
 
-`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与**命名空间的保持** ——
+`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与命名空间的保持 ——
 拆包不许改变 import 面，所以原来能在 `agentflow.agent_b` 下 import 到的名字（含私有名，也包括住在 `core.py` 的
 `_selftest` / `selftest`）都逐个再导出；动作各自在 `agent_b/<动作>.py`，
 `python -m agentflow.agent_b` 的自检入口在同目录 `__main__.py`。

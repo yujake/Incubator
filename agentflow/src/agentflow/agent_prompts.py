@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p18"
+PROMPT_VERSION = "p21"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -374,11 +374,14 @@ PAPER_PACK = """\
   必须能读到五个标记：`自主评审`、`断言台账`、`external`、`覆盖率`、`猜想表`。
 
 五、完成定义（五条全过才算交付，任何一条没过就不许说"完成"）
-1. 渲染锚 0 漂移（用 `doc.paper_state` 自己核：它是只读的、进程内跑，不起子进程也不出网；
+1. 渲染锚 0 漂移（用 `doc.paper_state` 核：它是只读的、进程内跑，不起子进程也不出网；
    报 `consistent` 才算过，`unknown` 是"有一维没判成"，不是过）。三维分别是
    源表 / 渲染出的源文件 / 编译回执 —— 最后一维回答"这份 PDF 是不是从磁盘上这份 tex 编的"；
    它还会给一份构建历史（渲染过几次、编译过几次、最近一次是什么时候）。
    G 在交付说明里要写出 verdict 与漂移条数；H 的核对必须独立于 G 自己做一次。
+   **主控手上没有这个工具**（`doc.paper_*` 只发给 G 与 H）⇒ 你要的那份读数只能来自
+   "派出去的人回报"：让 G 在修订结果里写 verdict 与漂移条数，再让 H 用 `doc.paper_state`
+   独立核一次；缺了这两份读数，第 1 条就只能写"未核到"，不许写"没问题"。
 2. `main.pdf` 由**本次**源码编出，页数 >= 1 且五个标记齐全（看 `doc.paper_compile` 的读数，
    不要看编译器退出码：本机 MiKTeX 会写完 PDF 却以崩溃码退出）；
 3. H 的 findings 全部落 `review_findings` 台账（一条都不许只留在对话里）；
@@ -392,7 +395,30 @@ PAPER_PACK = """\
   `doc.paper_state` 报 `drifted`，交付定义第 1 条当场不成立）。
 - 收工之前必须有人（G 走 `doc.paper_render` → `doc.paper_compile`，或主控派 G 做这件事）
   把包重渲染、重编译，并让 `doc.paper_state` 回到 `consistent`；做不到就如实写"包与台账分家"，
-  不许把漂移留在一份写着"已完成"的交付说明里。"""
+  不许把漂移留在一份写着"已完成"的交付说明里。
+- **怎么派**（真机实测，2026-10-01）：让包跟上的是 `G.revise` —— 那条路交给模型驱动，
+  G 会自己调 `doc.paper_render` → `doc.paper_compile` → `doc.paper_state`。派它时把要求写进 params：
+  「读完 H 的 findings 把修订落进 `documents`，然后重渲染、重编译，并把 `doc.paper_state` 的
+  verdict 与漂移条数回报」。**反例**：`G.build_document` 只是另写一行稿件，它不会重渲染论文包
+  （真机上主控派了它两次，两次都被 `invalid_params` 拒 —— 它的 `claims` 要的是断言对象，
+  不是 id 列表 —— 而 `main.pdf` 一个字节没变）。
+- 核锚的**时机**与**顺序**：只要这一轮动过台账（哪怕只是 +1 条 experiment），锚就会 drift ⇒
+  在动手**之后**再核一次；在动手之前核出来的 `consistent` 是关于旧包的读数。
+  顺序上有一条真机踩过的坑（2026-10-01）：**会写台账的人先全部收工，最后一步才是让 G 重渲染**。
+  那次主控按「H.review → G.revise（重渲染重编译）→ H.verify_fixes」走，H 那一步又改了
+  `review_findings`（行数没变、内容哈希变了），锚当场从 `consistent` 变回 `drifted`
+  （读数：`表 review_findings：锚 253 行/4d4ccaa4a9fd ≠ 现在 253 行/695150ddb871`）。
+  所以：`H.verify_fixes` 这类**会写台账**的动作必须排在最后一次重渲染之前；
+  最后一次核锚必须是**最后一次写台账之后**。若最后核出来是 `drifted`，唯一能把锚拉回来的
+  动作是再派一次 G 修订（重渲染）—— 不要带着 drift 写"已完成"。
+- 修订要落到**稿件**上，不是只落到台账上：H 报出来的 fail 门（例如 G1 自含性 / G5 结论强度 /
+  G7 台账完整）是可操作的修订点 —— 把证据不足以支撑强结论的句子改弱或补证据，改完再重渲染。
+  真的没有可操作项时才写"包无需修订"，并给出读数（哪几道门 pass、哪几条 finding 被逐条查过）。
+- **"核验证明"的主路径是 E 的形式化核验**，不是 H 的机械门：派 `E.check_formal` 逐条核工作区里
+  已有的 Lean 源码（`checker_name` 逐字对上声明名；纯核心的源码要 `imports: []`，见 E 那一岗的
+  说明），它给出的 `verified=True` 是**证据升级**（台账里那条断言的证据跟着变，表与稿件跟着变）。
+  只让 H 走机械门 + 让 G 重渲染，包的文字不会变 —— 那不是"更优质的论文包"，只是"包刷新了一遍"。
+  核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。"""
 
 
 @dataclass(frozen=True)
@@ -512,6 +538,15 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。"
             "被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，"
             "并把「这一版脚本查的是什么」写进实验结论。",
+            "`verify.check_formal` 的 `imports` 形参**默认注入 `(\"Mathlib\",)`**：工作区里的 Lean 源码"
+            "若是纯核心（自己不 import Mathlib），必须**显式传 `imports: []`**，否则拿到的是"
+            "`import_unavailable`（没查成）而不是任何判定 —— 真机实测（2026-10-01）："
+            "`code/lean/p2_rho_sum_zero.lean` 不传 `imports` ⇒ `missing_imports=['Mathlib']`；"
+            "传 `imports: []` ⇒ `verified=True`，检查器原话是 "
+            "`'rho_sum_zero' does not depend on any axioms`。"
+            "另一条同族的调用口径：声明名要用 `checker_name` **逐字**对上源码里的声明名 —— "
+            "不给它时检查器拿文件名当声明名，结果是 `decl_mismatch`（同样是没查成）。"
+            "两者都别读成「证否」。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",

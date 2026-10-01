@@ -152,10 +152,8 @@ SPEC = AgentSpec(
         ),
         policy=(
             '形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。',
-            (
-                '跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。'
-                '被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，并把「这一版脚本查的是什么」写进实验结论。'
-            ),
+            '跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，并把「这一版脚本查的是什么」写进实验结论。',
+            '`verify.check_formal` 的 `imports` 形参**默认注入 `("Mathlib",)`**：工作区里的 Lean 源码若是纯核心（自己不 import Mathlib），必须**显式传 `imports: []`**，否则拿到的是`import_unavailable`（没查成）而不是任何判定 —— 真机实测（2026-10-01）：`code/lean/p2_rho_sum_zero.lean` 不传 `imports` ⇒ `missing_imports=[\'Mathlib\']`；传 `imports: []` ⇒ `verified=True`，检查器原话是 `\'rho_sum_zero\' does not depend on any axioms`。另一条同族的调用口径：声明名要用 `checker_name` **逐字**对上源码里的声明名 —— 不给它时检查器拿文件名当声明名，结果是 `decl_mismatch`（同样是没查成）。两者都别读成「证否」。',
         ),
         signature_error='把跑不过的代码块当成通过。',
         deliverable='experiments 行与它们的证据字段（数值、检查器输出、复现命令）。',

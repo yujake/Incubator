@@ -71,7 +71,7 @@ D 无法引用一个会变的结论，人也无法审计"你凭什么说它热�
 变成 A 的检索请求），默认关闭，且由 `gaps()` 的确定性代码路径完成 —— 它不经过
 C 的工具与推理，写的也不是知识。工具面（`register_tools`）因此可以保持全量只读。
 
-`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与**命名空间的保持** ——
+`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与命名空间的保持 ——
 拆包不许改变 import 面，所以原来能在 `agentflow.agent_c` 下 import 到的名字（含私有名，也包括住在 `core.py` 的
 `_selftest` / `selftest`）都逐个再导出；动作各自在 `agent_c/<动作>.py`，
 `python -m agentflow.agent_c` 的自检入口在同目录 `__main__.py`。

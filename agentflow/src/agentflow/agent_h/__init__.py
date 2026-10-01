@@ -26,7 +26,7 @@
 前者必须报 `dep_check.checked is False` 且不许判 `accepted`。
 AgentD 的 `_UNSPECIFIED` 哨兵在这里沿用同一种语义。
 
-`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与**命名空间的保持** ——
+`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与命名空间的保持 ——
 拆包不许改变 import 面，所以原来能在 `agentflow.agent_h` 下 import 到的名字（含私有名，也包括住在 `core.py` 的
 `_selftest` / `selftest`）都逐个再导出；动作各自在 `agent_h/<动作>.py`，
 `python -m agentflow.agent_h` 的自检入口在同目录 `__main__.py`。

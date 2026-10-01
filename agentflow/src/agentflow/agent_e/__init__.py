@@ -110,7 +110,7 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
 - 本模块不调用 LLM（`llm` 位置参数仅为与 A–D 的构造签名保持一致，当前未使用）：
   数值实验的判读必须是确定性的（FC-16）。
 
-`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与**命名空间的保持** ——
+`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与命名空间的保持 ——
 拆包不许改变 import 面，所以原来能在 `agentflow.agent_e` 下 import 到的名字（含私有名，也包括住在 `core.py` 的
 `_selftest` / `selftest`）都逐个再导出；动作各自在 `agent_e/<动作>.py`，
 `python -m agentflow.agent_e` 的自检入口在同目录 `__main__.py`。

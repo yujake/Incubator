@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T21:18:29+08:00",
+  "generated_at": "2026-10-01T22:53:50+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -434,10 +434,10 @@
       "path": "src/agentflow/specs/e.py",
       "glob": "src/agentflow/specs/e.py",
       "category": "auth-audit",
-      "sha256": "f70d3c3e2bae60e0385e6ef537c0abc471dd27a306deebd78a256bed2ee6f93b",
+      "sha256": "105217ee67c5483133cac44e80b712adbdfd1aa98854d5b5f879f1814a8a83e2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M4（draft/28 §223）：角色的构造期依赖工厂搬进各自的声明（specs/<角色>.py::_build + needs/peers），host._Builder 只剩薄壳 + 通用 _build。声明面变化 ⇒ 重新登记 sha256；reviewers 仍为 0，留给人审。",
+      "change_note": "goal-7f5116c1 M8（收尾）：角色 E 的声明 specs/e.py 的 brief.policy 增加一条 —— 把 verify.check_formal 的 imports 形参口径写进声明面（纯核心 Lean 源码必须显式传 imports: []；声明名要用 checker_name 逐字对上，不给就按文件名找 ⇒ decl_mismatch）。原因：真机实测（2026-10-01，projects/p3-review）E 因为把「默认注入 Mathlib」读成「这条路走不通」而报「没查成」；探针实测传 imports: [] ⇒ verified=True（检查器原话 does not depend on any axioms）。这一格只是把 agent_prompts.py 里同一段 policy 逐字同步到声明面（判据 tests/test_agent_spec_reconciliation.py 要求两处逐字一致，M2 只搬声明、不许出现第二种值）。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
