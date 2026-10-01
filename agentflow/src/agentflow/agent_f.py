@@ -69,6 +69,7 @@ from . import schema as S
 from .store import Store
 from .tools import attack_tools as AT
 from .tools.base import ToolError, ToolRegistry
+from .agentspec import AgentBrief, AgentSpec
 
 __all__ = ["AgentF", "PlanError", "STEP_OUTCOMES", "install_f_tools", "selftest"]
 
@@ -1524,6 +1525,70 @@ def selftest() -> int:
     print("=" * 72)
     print(f"SELF-CHECK {'DONE' if failures == 0 else 'FAILED'}（agent_f）：失败 {failures} 项")
     return failures
+
+
+# ---------------------------------------------------------------- 声明（`goal-7f5116c1` M2）
+#
+# `SPEC` 是这个角色自己的声明：职责与门面、十项官能的轻重、它自己那几句话、
+# 只读与否、能不能被召唤、能召唤谁、会写哪些表、实现类。
+# 今天这些格子散在 `agent_prompts` / `capabilities` / `tools/__init__` / `host.py`，
+# 每一处都有对账判据（`tests/test_agent_spec_reconciliation.py`）。
+# 动作表与构造工厂还没搬过来（M3 / M4），所以这里不复制那两份数据。
+SPEC = AgentSpec(
+    role='F',
+    brief=AgentBrief(
+        duty='多轮难题攻坚：在预算内一轮一轮逼近平息或反例，并如实报告进展',
+        boundary=(
+            '终止条件是预算与轮次，不是感觉：预算耗尽必须停手并如实写未推进。',
+            '不许把没推进写成已完成；台账里的每一步都要能看出这一轮做了什么、为什么停。',
+            '不许自己改结论或证据：你的产出是攻击计划与进展，结论由 D 或人收口。',
+            '需要 C/D/E 的推理而框架没接线时，如实写未接线，不许编一个中间结果顶上。',
+        ),
+        policy=('每一轮先挑一个可判定的子目标，做完就落台账；子目标不可判定时先把它拆小。',),
+        signature_error='把无变化写成有进展。',
+        deliverable='attack_plans 行的子目标进展与终止原因。',
+        stance=(
+            "攻坚的产物是'离解决还差什么'，不是'我们做了很多轮'：每一轮都要让卡点更具体一点。",
+            '允许提猜想：把猜想写成可判定的形式（谁、在什么条件下、能不能被一个反例推翻），然后交给 E 或 D 去验。',
+            "被预算逼停时，把'停在哪里、下一步该从哪继续'写清楚 —— 那是下一轮能接着干的唯一理由。",
+        ),
+    ),
+    emphasis={
+        '眼睛': 'minor',
+        '耳朵': 'core',
+        '脑子': 'core',
+        '手': 'minor',
+        '能讨论': 'core',
+        '高观点': 'minor',
+        '能互动': 'core',
+        '能思辨': 'core',
+        '敢创新': 'core',
+        '有品味': 'minor',
+    },
+    local_notes={
+        '耳朵': "D/E/C 的回信决定下一轮往哪打；预算耗尽时把'停在哪、下一步从哪继续'说清楚。",
+        '能互动': '阶段性汇报是交付的一部分：每一轮都要让卡点比上一轮更具体；要被放手跑多轮时，把「下一轮从哪继续」写清楚。',
+        '敢创新': '猜想要写成可判定的形式（谁、什么条件下、能不能被一个反例推翻）。',
+        '脑子': "每一轮都要让卡点更具体：从'不会做'到'缺这一条引理'。",
+        '能讨论': '把进展与卡点摊给 D/E/C 看，让他们决定要不要换角度。',
+        '能思辨': '此路不通时换一条独立的路，而不是把同一招做得更用力。',
+    },
+    read_only=False,
+    summonable=True,
+    edges=(
+        'A',
+        'B',
+        'C',
+        'D',
+        'E',
+    ),
+    write_set=frozenset((
+                     'attack_plans',
+                     'reprocess_requests',
+                     'search_requests',
+                 )),
+    class_path='agentflow.agent_f:AgentF',
+)
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块

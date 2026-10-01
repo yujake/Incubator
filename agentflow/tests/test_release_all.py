@@ -2084,6 +2084,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "agent_f.py": "智能体 F：多轮难题攻坚",
     "agent_g.py": "智能体 G：论文撰写",
     "agent_h.py": "智能体 H：审校（只读角色）",
+    "agentspec.py": "一个 agent 的声明与注册表（`AgentSpec`/`AgentBrief`：职责与门面、官能轻重、只读与否、能召唤谁、写集、实现类）——`goal-7f5116c1` 的 M2，每个角色在自己模块里写一份 `SPEC`，装配面逐步改成从这里读",
     "cancellation.py": "取消语义（FC-20 的四条纪律）",
     "capabilities.py": "角色能力表 + 写集 + 允许的召唤边（主控编队的声明层）",
     "claimanatomy.py": "断言解剖学：`documents.claims` 每个元素的唯一判据来源",

@@ -44,10 +44,17 @@ class StubJudge:
 
 
 def _agent_class(role: str):
-    """按角色字母取 Agent 类（唯一来源：模块里的 `Agent?`）。"""
+    """按角色字母取 Agent 类。
+
+    刻意写死名字 `Agent<角色>`（与 `host.py` 的构造器、`agentspec` 的 `class_path` 同一个约定），
+    而不是"在模块里扫第一个以 `Agent` 开头的类"：后者在模块 import 进任何 `Agent…` 名字时
+    （`goal-7f5116c1` 的 M2 就把 `AgentBrief` 导进了角色模块）会静默取错类 ——
+    `dir()` 是字母序，`AgentBrief` 排在 `AgentE` 前面。
+    """
     mod = {"A": agent_a, "E": agent_e, "F": agent_f, "G": agent_g, "H": agent_h}[role]
-    return next(getattr(mod, n) for n in dir(mod)
-                if n.startswith("Agent") and inspect.isclass(getattr(mod, n)))
+    cls = getattr(mod, f"Agent{role}", None)
+    assert inspect.isclass(cls), f"{mod.__name__} 里没有 Agent{role}"
+    return cls
 
 
 def _store(tmp_path: Path) -> Store:
