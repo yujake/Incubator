@@ -116,3 +116,59 @@ def test_every_source_module_is_placed_somewhere_in_the_map() -> None:
     tool_orphans = [m for m in tool_modules if m not in bare]
     assert not tool_orphans, (
         "tools/ 下这些模块在读图里没有位置：" + "、".join(tool_orphans))
+
+
+#: §3「这些文件为什么这么大」那张表的行：`| \`x.py\` | 行数 | 边界 | 为什么大 |`。
+_BIG_TABLE_ROW = re.compile(r"^\|\s*`([A-Za-z0-9_]+\.py)`\s*\|\s*([0-9]+)\s*\|", re.M)
+
+
+def _big_file_rows(text: str) -> list[tuple[str, int]]:
+    """§3 表里的 `(文件名, 图里写的行数)`（只认第二格是数字的行）。"""
+    return [(m.group(1), int(m.group(2))) for m in _BIG_TABLE_ROW.finditer(text)]
+
+
+def _stale_line_counts(text: str) -> list[str]:
+    """图里写的行数与盘上实际行数对不上的那些（返回人话，空列表 = 都对得上）。"""
+    out: list[str] = []
+    for name, claimed in _big_file_rows(text):
+        path = SRC / name
+        if not path.is_file():
+            out.append(f"{name}: 图里有这一行，盘上没有这个文件")
+            continue
+        actual = len(path.read_text(encoding="utf-8").splitlines())
+        if actual != claimed:
+            out.append(f"{name}: 图里写 {claimed} 行，盘上 {actual} 行")
+    return out
+
+
+def test_the_line_counts_in_the_big_file_table_are_current() -> None:
+    """§3 表里的行数是手抄的，所以必须有判据：`T-5`/`T-7` 各改大一次文件后它就漂了。
+
+    漂了不算小事：这张表的用途正是"读之前先知道边界"（哪个文件为什么这么大），
+    一个偏了 140 行的数字会让读者以为拆分没做、或者以为某个文件比实际更大。
+    判据红了就改数字（一行的事），别改判据。
+    """
+    text = DOC.read_text(encoding="utf-8")
+    rows = _big_file_rows(text)
+    assert len(rows) >= 10, (
+        f"§3 表只解析出 {len(rows)} 行 ⇒ 判据没接上（表格格式变了？）—— "
+        "『没命中』在这里不等于『没问题』")
+    stale = _stale_line_counts(text)
+    assert not stale, "读图 §3 的行数过期了（改数字，别改判据）：" + "；".join(stale)
+
+
+def test_the_line_count_judge_catches_a_stale_number() -> None:
+    """负控：上面那条判据真的在读数字，不是"永远绿"。
+
+    做法是把 §3 里第一行的数字 +1 再喂给同一个检查函数 —— 它必须报出来。
+    没有这一条，`_big_file_rows` 哪天正则失配（比如表格换了写法），
+    上面那条判据会以"一行都没解析到"的形态静默变绿（本例的 `>= 10` 也会拦住，
+    但这条负控证明的是检查逻辑本身有效，而不只是"行数够多"）。
+    """
+    text = DOC.read_text(encoding="utf-8")
+    rows = _big_file_rows(text)
+    assert rows, "§3 表一行都没解析到 ⇒ 这条负控没有落脚点"
+    name, claimed = rows[0]
+    doctored = text.replace(f"| `{name}` | {claimed} |", f"| `{name}` | {claimed + 1} |", 1)
+    assert doctored != text, f"负控没改到 `{name}` 那一行 —— 这条负控自己失效了"
+    assert _stale_line_counts(doctored), "数字被改坏了，判据却一声不吭 ⇒ 它是真空的"

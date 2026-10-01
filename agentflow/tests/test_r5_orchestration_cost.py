@@ -560,9 +560,24 @@ def test_run_topic_reason_literals_are_declared() -> None:
 
     src = pathlib.Path(RF.__file__).read_text(encoding="utf-8")
     tree = ast.parse(src)
-    fn = next((n for n in ast.walk(tree)
-               if isinstance(n, ast.FunctionDef) and n.name == "run_topic"), None)
+
+    def _body_of(name: str) -> ast.FunctionDef | None:
+        return next((n for n in ast.walk(tree)
+                     if isinstance(n, ast.FunctionDef) and n.name == name), None)
+
+    fn = _body_of("run_topic")
     assert fn is not None, "找不到 `run_topic` —— 判据的落点变了"
+    # `T-7` 之后 `run_topic` 的函数体按段搬进了 `_phase_*`（只搬位置、不改语义）。
+    # 扫描面必须跟着搬：只扫 `run_topic` 的话，这条判据会以"一个都没扫到"的方式
+    # 真空通过 —— 拆分当天就是这么红的，下面那句 `assert assigned` 抓住了它。
+    # 取法：`run_topic` 的函数体 + 它在函数体里直接按名字调用的模块级函数。
+    holders: list[ast.FunctionDef] = [fn]
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+            continue
+        callee = _body_of(node.func.id)
+        if callee is not None and callee is not fn and callee not in holders:
+            holders.append(callee)
 
     def _literals(expr: ast.AST) -> set[str]:
         """一个赋值右侧"结果可能是哪些字符串"。
@@ -583,12 +598,13 @@ def test_run_topic_reason_literals_are_declared() -> None:
         return set()
 
     assigned: set[str] = set()
-    for node in ast.walk(fn):
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(isinstance(t, ast.Name) and t.id == "reason" for t in node.targets):
-            continue
-        assigned |= _literals(node.value)
+    for holder in holders:
+        for node in ast.walk(holder):
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(isinstance(t, ast.Name) and t.id == "reason" for t in node.targets):
+                continue
+            assigned |= _literals(node.value)
     assert assigned, "一个 `reason = \"…\"` 都没扫到 ⇒ 扫描器没接上（真空通过）"
     assert assigned == set(RF.RUN_TOPIC_REASON_LITERALS), (
         f"`run_topic` 赋给 reason 的字面量 {sorted(assigned)} 与声明的 "

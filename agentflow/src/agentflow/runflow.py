@@ -1082,85 +1082,12 @@ def _verification_from_ledger(rows: Sequence[Mapping[str, Any]], split: Any,
     }
 
 
-def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
-              transport: Transport | None = None, spec: ModelSpec | None = None,
-              max_calls: int = 3, prompt_version: str = "v1",
-              now: str | None = None, search_fn: Any = None, quote_fn: Any = None,
-              retrieval_limit: int = 5, retrieval_timeout_sec: float = 30.0,
-              fulltext: bool = False, fetch_fn: Any = None,
-              extract_fn: Any = None, lean: bool = False,
-              lean_run_fn: Any = None, claims_parse_fn: Any = None,
-              claims_max: int = claims_mod.DEFAULT_MAX_CLAIMS,
-              text_store_dir: str | Path | None = None) -> dict:
-    """跑一次端到端：检索 → 取全文 → 作答 → 逐字回验 → 记账 → 熔断 → 六件产物 → 退出三态。
+def _phase_1(max_calls, now, out_dir, spec, store, topic):
+    """`run_topic` 的第 1 段（行 1164–1264）。
 
-    返回 ``{"exit_code", "reason", "out_dir", "artifacts", "calls", "spent_usd",
-    "spent_usd_this_run"}``。
-
-    无论走到哪一步都产出六件产物：一份"因为没 key 所以什么都没写"的目录，
-    与"根本没跑"在磁盘上长得一样 —— 而它们必须能分辨。
-
-    `FINAL-R5-02` 的边界（这一条不能靠 docstring 之外的任何东西兜）：被中断的那一跑例外。
-    这条通路今天没有取消面（`run_topic` 不收 `CancelToken`），`KeyboardInterrupt` 是
-    `BaseException`，会穿出本函数的 `except Exception` 兜底 —— 磁盘上留下的是"部分产物"，
-    与"从来没跑过"和"跑了但没 key"三者不同形但都不可消费。所以 `cli.main` 把
-    `KeyboardInterrupt` 折成退出码 2（没查成） 并打印一句显式说明；
-    真正的修法（走完六件产物 + `status=cancelled`）要接进取消面，属于第 3 层。
-
-    `store` 是工作区（`usage_ledger` 的落点）；`out_dir` 是产物的落点。
-    两者刻意分开：账本属于工作区（跨运行累计），产物属于这一次运行。
-
-    `budget_usd` 是"这一次运行"的额度（`G-4`），不是工作区的累计额度。
-    本次花销的口径（`F5-FOUND-1` 之后）：按 `task_id` 过滤 `usage_ledger`
-    （这次运行的所有调用共享开跑时取到的那个 `task_id`），所以同一个工作区里
-    并发的另一次运行不会被算进我的额度，历史花销也不会。
-
-    改前的口径是"工作区增量"：开跑时取一次整本台账的和当基线，之后判
-    `spent() - baseline`。那个近似只在"同一工作区里两次运行不可能重叠"时
-    等于本次花销 —— `R5-AN-1` 把并发修通之后它不再成立（别人的钱落进我的差额，
-    既可能让我提前熔断，也会让对账自检误报）。逐字读数与论证见
-    `_spent_this_run` 的 docstring。
-
-    两个口径都在产物里：`spent_usd_this_run` 是本次运行（按 `task_id` 过滤），
-    `cost.json` 的 `usage_ledger.usd` 与返回值里的 `spent_usd` 是工作区累计。
-    只印一个数会让"这次花了多少"与"这个工作区一共花了多少"无法分辨。
-
-    `now` 只为测试注入固定时间戳（不注入就是当前时间）：可复现的产物才好逐字断言。
-    `search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` 是四个动作的测试接缝
-    （生产为 `None`，分别走禁改区里的 `providers` / `quoteverify` / `fetch` / `extract`）；
-    `retrieval_limit` 与 `retrieval_timeout_sec` 只影响检索本身，不改变三态判定。
-
-    `fulltext` 控制要不要拿开放全文，缺省关闭：全文获取是逐条的网络下载，
-    默认打开会让每一次运行都变成一次批量下载。关闭时 `fulltext` 会如实写进
-    未接线清单，且理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，
-    与 `lean` 那条同形）—— 常量里那句"没有接进本流程"是关于流程的断言，
-    而真相是"接了、本次没要"，两句话的处置不同（`X-NEW-2` / `draft/28` §98.4）；
-    它也与打开后逐条六态记录（`no_pdf` / `download_failed` / ...）是两件事。
-
-    `lean` 控制要不要真的跑 Lean 检查，缺省关闭。打开后：模型答复里每一个
-    `` ```lean `` 代码块都会被交给 `formalgw.check_lean` 真跑一次，逐条结论与
-    实际到达的证据等级写进 `claims.json` 的 `lean` 段与报告的形式化验证小节。
-    这一层是 `evidence_kind="proof"` 的唯一来源 —— 所以它默认关、并且在真的
-    跑过之前不许把 lean 从"未接线"清单里摘掉。`lean_run_fn` 是它唯一的测试接缝。
-
-    `claims_parse_fn` 与 `claims_max` 是拆分层的两个旋钮。`claims_parse_fn`
-    缺省 `None`（纯启发式拆分，同一答复必得同一结论）；注入它是"让模型协助
-    拆分"，但注入的那个函数只提供候选 —— 编号、去重、截断与指纹仍由
-    `claims.split_claims` 决定，且用没用它写进产物。`claims_max` 是断言上限，
-     超出部分会被截断，而截掉的条数会写进 `claims.json`、清单与 unknowns。
-    为什么上限要能被调用方收紧：一次运行里"只看前 N 条"是常见需求，
-    而静默截断会让"登记了 200 条"读成"一共只有 200 条"。
-
-    两种"没查成"都不调模型、直接以退出码 2 结束：环境里没有模型 key，
-    或检索没查成。理由是同一条 —— 这次运行的产物本该由"材料 + 逐字引文"支撑，
-    缺了其中任何一半，跑下去只会得到无法回验的结论。全文获取失败「不改」退出码：
-    摘要在手上就还能回验（只是级别停在摘要级），那是一次有效产出。
-    拆分没成（`no_claims` / `unparsable`）同样不改退出码：它说的是
-    "这一层没查成"，处置写在 `claims.json` 与未接线清单里 ——
-    与"结论对不对"不是一件事。
+    由 `temp/_split_any.py` 逐字搬移而来：判据与行为一条没改，只是换了个位置。
+    入参 / 出参见脚本的 dry-run 输出。
     """
-    if prompt_version not in PROMPT_VERSIONS:
-        raise ValueError(f"未知 prompt 版本 {prompt_version!r}（已知 {PROMPT_VERSIONS}）")
     if int(max_calls) < 0:
         raise ValueError(f"max_calls 不能为负（收到 {max_calls}）")
 
@@ -1262,6 +1189,18 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
             **{k: v for k, v in reserved.items() if k in S.Task.__dataclass_fields__}
         ).validate()
         tx.upsert("tasks", reserved, note=f"runflow allocate {task_id}")
+
+    return _idem_scope, cfg, out, price, stamp, started_at, task_id
+
+
+
+
+def _phase_2(budget_usd, prompt_version, store, topic):
+    """`run_topic` 的第 2 段（行 1265–1289）。
+
+    由 `temp/_split_any.py` 逐字搬移而来：判据与行为一条没改，只是换了个位置。
+    入参 / 出参见脚本的 dry-run 输出。
+    """
     not_wired: list[dict[str, str]] = [
         {"name": name, "reason": why} for name, why in NOT_WIRED_ITEMS
     ]
@@ -1288,6 +1227,20 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     reason = ""
     stopped_by = ""
 
+    return acquisition, base_prompt, meter, not_wired, reason, records, sent_prompt, stopped_by, transcript
+
+
+
+
+def _phase_3(_idem_scope, acquisition, base_prompt, budget_usd, cfg, claims_max, claims_parse_fn,
+    extract_fn, fetch_fn, fulltext, lean, lean_run_fn, max_calls, meter, not_wired, out, quote_fn,
+    reason, records, retrieval_limit, retrieval_timeout_sec, search_fn, sent_prompt, stamp,
+    stopped_by, task_id, text_store_dir, topic, transcript, transport):
+    """`run_topic` 的第 3 段（行 1291–1469）。
+
+    由 `temp/_split_any.py` 逐字搬移而来：判据与行为一条没改，只是换了个位置。
+    入参 / 出参见脚本的 dry-run 输出。
+    """
     if not cfg.configured:
         # 没 key 时一次网络请求都不许发（网关自己也拦，这里再拦一次是为了
         # 让"没查成"这件事在产物里就写下来，而不是等网关返回 no_key 再推断）。
@@ -1467,6 +1420,18 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
                 item["reason"] = lean_doc["reason"]
 
     successes = sum(1 for r in records if r.reply.ok)
+
+    return acquisition, evidence, lean_doc, not_wired, reason, sent_prompt, split_result, stopped_by, successes, verification
+
+
+
+
+def _phase_4(meter, reason, records, stamp, started_at, store, successes, task_id, topic):
+    """`run_topic` 的第 4 段（行 1470–1525）。
+
+    由 `temp/_split_any.py` 逐字搬移而来：判据与行为一条没改，只是换了个位置。
+    入参 / 出参见脚本的 dry-run 输出。
+    """
     exit_code = _exit_code_for(reason, successes=successes)
     ledger = _ledger_view(meter)
 
@@ -1524,6 +1489,20 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     task_row_written = bool(task_row.get("written"))
     task_row_error = str(task_row.get("error") or "")
 
+    return calls_usd, exit_code, ledger, reconciled, run_entries, run_spent_usd, run_tokens, task_row_error, task_row_written
+
+
+
+
+def _phase_5(acquisition, base_prompt, budget_usd, calls_usd, cfg, evidence, exit_code, fulltext,
+    lean_doc, ledger, max_calls, not_wired, price, prompt_version, reason, reconciled, records,
+    run_entries, run_spent_usd, run_tokens, sent_prompt, split_result, stamp, started_at,
+    stopped_by, successes, task_id, task_row_error, task_row_written, topic, verification):
+    """`run_topic` 的第 5 段（行 1527–1743）。
+
+    由 `temp/_split_any.py` 逐字搬移而来：判据与行为一条没改，只是换了个位置。
+    入参 / 出参见脚本的 dry-run 输出。
+    """
     unknowns: list[str] = [f"{n['name']}：{n['reason']}" for n in not_wired]
     if not task_row_written:
         unknowns.append(
@@ -1742,6 +1721,17 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
         run_spent_usd=run_spent_usd,
     )
 
+    return claims, cost, evidence_doc, manifest, report
+
+
+
+
+def _phase_6(claims, cost, evidence_doc, manifest, out, report, transcript):
+    """`run_topic` 的第 6 段（行 1745–1753）。
+
+    由 `temp/_split_any.py` 逐字搬移而来：判据与行为一条没改，只是换了个位置。
+    入参 / 出参见脚本的 dry-run 输出。
+    """
     # 落盘顺序：先写"事实"（清单/抄本/证据/台账/账），最后写人读报告 —— 报告里引用的
     # 数字全部来自前面几件，任何一件写失败时都不会留下一份引用不存在数字的报告。
     _write_json(out / "run-manifest.json", manifest)
@@ -1752,6 +1742,112 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     _write_json(out / "cost.json", cost)
     _write_text(out / "report.md", report)
 
+
+def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
+              transport: Transport | None = None, spec: ModelSpec | None = None,
+              max_calls: int = 3, prompt_version: str = "v1",
+              now: str | None = None, search_fn: Any = None, quote_fn: Any = None,
+              retrieval_limit: int = 5, retrieval_timeout_sec: float = 30.0,
+              fulltext: bool = False, fetch_fn: Any = None,
+              extract_fn: Any = None, lean: bool = False,
+              lean_run_fn: Any = None, claims_parse_fn: Any = None,
+              claims_max: int = claims_mod.DEFAULT_MAX_CLAIMS,
+              text_store_dir: str | Path | None = None) -> dict:
+    """跑一次端到端：检索 → 取全文 → 作答 → 逐字回验 → 记账 → 熔断 → 六件产物 → 退出三态。
+
+    返回 ``{"exit_code", "reason", "out_dir", "artifacts", "calls", "spent_usd",
+    "spent_usd_this_run"}``。
+
+    无论走到哪一步都产出六件产物：一份"因为没 key 所以什么都没写"的目录，
+    与"根本没跑"在磁盘上长得一样 —— 而它们必须能分辨。
+
+    `FINAL-R5-02` 的边界（这一条不能靠 docstring 之外的任何东西兜）：被中断的那一跑例外。
+    这条通路今天没有取消面（`run_topic` 不收 `CancelToken`），`KeyboardInterrupt` 是
+    `BaseException`，会穿出本函数的 `except Exception` 兜底 —— 磁盘上留下的是"部分产物"，
+    与"从来没跑过"和"跑了但没 key"三者不同形但都不可消费。所以 `cli.main` 把
+    `KeyboardInterrupt` 折成退出码 2（没查成） 并打印一句显式说明；
+    真正的修法（走完六件产物 + `status=cancelled`）要接进取消面，属于第 3 层。
+
+    `store` 是工作区（`usage_ledger` 的落点）；`out_dir` 是产物的落点。
+    两者刻意分开：账本属于工作区（跨运行累计），产物属于这一次运行。
+
+    `budget_usd` 是"这一次运行"的额度（`G-4`），不是工作区的累计额度。
+    本次花销的口径（`F5-FOUND-1` 之后）：按 `task_id` 过滤 `usage_ledger`
+    （这次运行的所有调用共享开跑时取到的那个 `task_id`），所以同一个工作区里
+    并发的另一次运行不会被算进我的额度，历史花销也不会。
+
+    改前的口径是"工作区增量"：开跑时取一次整本台账的和当基线，之后判
+    `spent() - baseline`。那个近似只在"同一工作区里两次运行不可能重叠"时
+    等于本次花销 —— `R5-AN-1` 把并发修通之后它不再成立（别人的钱落进我的差额，
+    既可能让我提前熔断，也会让对账自检误报）。逐字读数与论证见
+    `_spent_this_run` 的 docstring。
+
+    两个口径都在产物里：`spent_usd_this_run` 是本次运行（按 `task_id` 过滤），
+    `cost.json` 的 `usage_ledger.usd` 与返回值里的 `spent_usd` 是工作区累计。
+    只印一个数会让"这次花了多少"与"这个工作区一共花了多少"无法分辨。
+
+    `now` 只为测试注入固定时间戳（不注入就是当前时间）：可复现的产物才好逐字断言。
+    `search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` 是四个动作的测试接缝
+    （生产为 `None`，分别走禁改区里的 `providers` / `quoteverify` / `fetch` / `extract`）；
+    `retrieval_limit` 与 `retrieval_timeout_sec` 只影响检索本身，不改变三态判定。
+
+    `fulltext` 控制要不要拿开放全文，缺省关闭：全文获取是逐条的网络下载，
+    默认打开会让每一次运行都变成一次批量下载。关闭时 `fulltext` 会如实写进
+    未接线清单，且理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，
+    与 `lean` 那条同形）—— 常量里那句"没有接进本流程"是关于流程的断言，
+    而真相是"接了、本次没要"，两句话的处置不同（`X-NEW-2` / `draft/28` §98.4）；
+    它也与打开后逐条六态记录（`no_pdf` / `download_failed` / ...）是两件事。
+
+    `lean` 控制要不要真的跑 Lean 检查，缺省关闭。打开后：模型答复里每一个
+    `` ```lean `` 代码块都会被交给 `formalgw.check_lean` 真跑一次，逐条结论与
+    实际到达的证据等级写进 `claims.json` 的 `lean` 段与报告的形式化验证小节。
+    这一层是 `evidence_kind="proof"` 的唯一来源 —— 所以它默认关、并且在真的
+    跑过之前不许把 lean 从"未接线"清单里摘掉。`lean_run_fn` 是它唯一的测试接缝。
+
+    `claims_parse_fn` 与 `claims_max` 是拆分层的两个旋钮。`claims_parse_fn`
+    缺省 `None`（纯启发式拆分，同一答复必得同一结论）；注入它是"让模型协助
+    拆分"，但注入的那个函数只提供候选 —— 编号、去重、截断与指纹仍由
+    `claims.split_claims` 决定，且用没用它写进产物。`claims_max` 是断言上限，
+     超出部分会被截断，而截掉的条数会写进 `claims.json`、清单与 unknowns。
+    为什么上限要能被调用方收紧：一次运行里"只看前 N 条"是常见需求，
+    而静默截断会让"登记了 200 条"读成"一共只有 200 条"。
+
+    两种"没查成"都不调模型、直接以退出码 2 结束：环境里没有模型 key，
+    或检索没查成。理由是同一条 —— 这次运行的产物本该由"材料 + 逐字引文"支撑，
+    缺了其中任何一半，跑下去只会得到无法回验的结论。全文获取失败「不改」退出码：
+    摘要在手上就还能回验（只是级别停在摘要级），那是一次有效产出。
+    拆分没成（`no_claims` / `unparsable`）同样不改退出码：它说的是
+    "这一层没查成"，处置写在 `claims.json` 与未接线清单里 ——
+    与"结论对不对"不是一件事。
+    """
+    if prompt_version not in PROMPT_VERSIONS:
+        raise ValueError(f"未知 prompt 版本 {prompt_version!r}（已知 {PROMPT_VERSIONS}）")
+    # `T-7`：本函数的函数体已按段搬进 `_phase_1..6`（只搬位置，一行判据都没改；
+    # 等价判据是 `tests/test_runflow_snapshot.py` 的冻结快照 + `temp/_t7_verify.py`
+    # 的"代码行多重集相同"）。这六段的对应关系就是"取材料 / 跑模型 / 落产物"三段的细分：
+    #   1 定工作区与这一次的账（出目录 / 时间戳 / 取号 / 价格表）
+    #   2 起手：系统提示词、计量器、未接线清单、调用记录表
+    #   3 取材料 → 跑模型 → 逐字回验（最长的一段，含"没 key / 检索没查成"两条早退）
+    #   4 收工：`tasks` 行写终态 + 与 `usage_ledger` 对账
+    #   5 拢出六件产物的内容（清单 / 抄本 / 证据 / 断言 / 账 / 报告）
+    #   6 写盘：先写"事实"，最后写人读报告
+    _idem_scope, cfg, out, price, stamp, started_at, task_id = _phase_1(max_calls, now, out_dir,
+        spec, store, topic)
+    acquisition, base_prompt, meter, not_wired, reason, records, sent_prompt, stopped_by, transcript = _phase_2(budget_usd,
+        prompt_version, store, topic)
+    acquisition, evidence, lean_doc, not_wired, reason, sent_prompt, split_result, stopped_by, successes, verification = _phase_3(_idem_scope,
+        acquisition, base_prompt, budget_usd, cfg, claims_max, claims_parse_fn, extract_fn,
+        fetch_fn, fulltext, lean, lean_run_fn, max_calls, meter, not_wired, out, quote_fn, reason,
+        records, retrieval_limit, retrieval_timeout_sec, search_fn, sent_prompt, stamp, stopped_by,
+        task_id, text_store_dir, topic, transcript, transport)
+    calls_usd, exit_code, ledger, reconciled, run_entries, run_spent_usd, run_tokens, task_row_error, task_row_written = _phase_4(meter,
+        reason, records, stamp, started_at, store, successes, task_id, topic)
+    claims, cost, evidence_doc, manifest, report = _phase_5(acquisition, base_prompt, budget_usd,
+        calls_usd, cfg, evidence, exit_code, fulltext, lean_doc, ledger, max_calls, not_wired,
+        price, prompt_version, reason, reconciled, records, run_entries, run_spent_usd, run_tokens,
+        sent_prompt, split_result, stamp, started_at, stopped_by, successes, task_id,
+        task_row_error, task_row_written, topic, verification)
+    _phase_6(claims, cost, evidence_doc, manifest, out, report, transcript)
     return {
         "exit_code": exit_code,
         "reason": reason,
