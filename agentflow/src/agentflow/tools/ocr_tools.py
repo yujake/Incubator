@@ -56,11 +56,12 @@ from __future__ import annotations
 import importlib
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
-from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Callable, Mapping, Protocol, Sequence, runtime_checkable
 
-from .base import ToolRegistry, ToolSpec, fail, ok
+from .base import ToolRegistry, ToolSpec, fail, ok, tool
 from ..extract import ExtractError, extract_text, page_count
 from ..store import Store
 
@@ -943,6 +944,122 @@ def _pick_workspace(
     return Path(store.root) if store is not None else Path.cwd()
 
 
+@tool(
+    "ocr.backends",
+    "**真实探测** OCR 后端（easyocr / pytesseract / none）各自是否可用，"
+            "并逐条给出理由与修复建议；探测阶段**不会**下载 easyocr 模型。",
+    {
+           "type": "object",
+           "properties": {"refresh": {"type": "boolean"}},
+           "additionalProperties": False,
+           },
+    # write_local：探测会真的 mkdir easyocr 的真实模型目录（在 ~/.EasyOCR，
+    # 工作区之外），并起 `tesseract --version` 子进程。声明成 read 会让
+    # "它到底动不动盘"这个问题在权限面上得到错误答案。
+    side_effect="write_local",
+    roles=("B",),
+    # 键名从一个真实调用读出（`_h_backends`）：8 个键；backends[] 每项是
+    # {'name','available','reason','produces_text','checks','install_hint'}。
+    returns=(
+            "{'backends','any_ocr_backend_available','available','selected_for_auto',"
+            "'auto_chain','verdict','install_hints','note'}；"
+            "backends[] 每项是 {'name','available','reason','produces_text','checks','install_hint'}"
+            ),
+    tags=("ocr", "probe"),
+)
+def _ocr_backends(ctx, refresh=False):
+    """ocr.backends 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _h_backends(ctx, refresh)
+
+@tool(
+    "ocr.detect_text_layer",
+    "判断 PDF 有没有文本层（复用 extract.extract_text，pages==[] 即无文本层）；"
+            "无文本层时说明这是「无法校验」而不是「校验失败」。",
+    {
+           "type": "object",
+           "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}},
+           "required": ["path"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=("B",),
+    # 键名从一个真实调用读出（`_h_detect_text_layer`）。
+    returns="{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule'}",
+    tags=("ocr", "detect"),
+)
+def _ocr_detect_text_layer(ctx, path):
+    """ocr.detect_text_layer 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _h_detect_text_layer(ctx, path)
+
+@tool(
+    "ocr.run",
+    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，"
+            "都不可用时 fail 并给出安装建议（绝不返回空文本假装成功）。",
+    {
+           "type": "object",
+           "properties": {
+            "path": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "pages": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 1},
+                "maxItems": 500,
+            },
+            "backend": {"type": "string", "enum": ["auto", *AUTO_CHAIN]},
+            "languages": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "minItems": 1,
+                "maxItems": 8,
+            },
+            "dpi": {"type": "integer", "minimum": 72, "maximum": 600},
+            "max_pages": {"type": "integer", "minimum": 1, "maximum": 200},
+           },
+           "required": ["path"],
+           "additionalProperties": False,
+           },
+    # external=egress：easyocr 首次构造 Reader 会下载约 100MB 模型（`_reader` :252）。
+    # "本机没有可用后端"只是当前环境的结论，不能用来把能力声明成只读。
+    side_effect="write_local",
+    roles=("B",),
+    # 键名逐个从 `_h_run` 的 ok(data) 读出（不是在真实调用里数出来的：
+    # 走通它需要 PyMuPDF / Pillow / 一个真后端，本轮没有真跑过 —— 如实留痕）。
+    returns=(
+            "{'path','kind','backend','backend_selection','languages','dpi','page_count',"
+            "'pages_requested','pages_attempted','pages_processed','pages_failed',"
+            "'truncated_pages','max_pages','total_chars','pages','text','elapsed_s',"
+            "'warnings','note'}；"
+            "pages[] 每项是 {'page','text_layer_chars','ok','text','chars','empty','error','image_size','elapsed_s'}"
+            ),
+    tags=("ocr", "run"),
+    external="egress",
+)
+def _ocr_run(ctx, path, pages=None, backend="auto", languages=None, dpi=200, max_pages=20):
+    """ocr.run 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（ctx）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _h_run(
+                ctx, path, pages, backend, languages, dpi, max_pages
+            )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_ocr_backends, ('ctx',)),
+    (_ocr_detect_text_layer, ('ctx',)),
+    (_ocr_run, ('ctx',)),
+)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -983,94 +1100,12 @@ def register(
         actor=actor,
     )
 
-    specs = [
-        ToolSpec(
-            name="ocr.backends",
-            summary="**真实探测** OCR 后端（easyocr / pytesseract / none）各自是否可用，"
-            "并逐条给出理由与修复建议；探测阶段**不会**下载 easyocr 模型。",
-            params={
-                "type": "object",
-                "properties": {"refresh": {"type": "boolean"}},
-                "additionalProperties": False,
-            },
-            handler=lambda refresh=False: _h_backends(ctx, refresh),
-            # write_local：探测会真的 mkdir easyocr 的真实模型目录（在 ~/.EasyOCR，
-            # 工作区之外），并起 `tesseract --version` 子进程。声明成 read 会让
-            # "它到底动不动盘"这个问题在权限面上得到错误答案。
-            side_effect="write_local",
-            roles=("B",),
-            # 键名从一个真实调用读出（`_h_backends`）：8 个键；backends[] 每项是
-            # {'name','available','reason','produces_text','checks','install_hint'}。
-            returns=(
-                "{'backends','any_ocr_backend_available','available','selected_for_auto',"
-                "'auto_chain','verdict','install_hints','note'}；"
-                "backends[] 每项是 {'name','available','reason','produces_text','checks','install_hint'}"
-            ),
-            tags=("ocr", "probe"),
-        ),
-        ToolSpec(
-            name="ocr.detect_text_layer",
-            summary="判断 PDF 有没有文本层（复用 extract.extract_text，pages==[] 即无文本层）；"
-            "无文本层时说明这是「无法校验」而不是「校验失败」。",
-            params={
-                "type": "object",
-                "properties": {"path": {"type": "string", "minLength": 1, "maxLength": 1000}},
-                "required": ["path"],
-                "additionalProperties": False,
-            },
-            handler=lambda path: _h_detect_text_layer(ctx, path),
-            side_effect="read",
-            roles=("B",),
-            # 键名从一个真实调用读出（`_h_detect_text_layer`）。
-            returns="{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule'}",
-            tags=("ocr", "detect"),
-        ),
-        ToolSpec(
-            name="ocr.run",
-            summary="对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，"
-            "都不可用时 fail 并给出安装建议（绝不返回空文本假装成功）。",
-            params={
-                "type": "object",
-                "properties": {
-                    "path": {"type": "string", "minLength": 1, "maxLength": 1000},
-                    "pages": {
-                        "type": "array",
-                        "items": {"type": "integer", "minimum": 1},
-                        "maxItems": 500,
-                    },
-                    "backend": {"type": "string", "enum": ["auto", *AUTO_CHAIN]},
-                    "languages": {
-                        "type": "array",
-                        "items": {"type": "string", "minLength": 1},
-                        "minItems": 1,
-                        "maxItems": 8,
-                    },
-                    "dpi": {"type": "integer", "minimum": 72, "maximum": 600},
-                    "max_pages": {"type": "integer", "minimum": 1, "maximum": 200},
-                },
-                "required": ["path"],
-                "additionalProperties": False,
-            },
-            handler=lambda path, pages=None, backend="auto", languages=None, dpi=200, max_pages=20: _h_run(
-                ctx, path, pages, backend, languages, dpi, max_pages
-            ),
-            # external=egress：easyocr 首次构造 Reader 会下载约 100MB 模型（`_reader` :252）。
-            # "本机没有可用后端"只是当前环境的结论，不能用来把能力声明成只读。
-            side_effect="write_local",
-            declared_external="egress",
-            roles=("B",),
-            # 键名逐个从 `_h_run` 的 ok(data) 读出（不是在真实调用里数出来的：
-            # 走通它需要 PyMuPDF / Pillow / 一个真后端，本轮没有真跑过 —— 如实留痕）。
-            returns=(
-                "{'path','kind','backend','backend_selection','languages','dpi','page_count',"
-                "'pages_requested','pages_attempted','pages_processed','pages_failed',"
-                "'truncated_pages','max_pages','total_chars','pages','text','elapsed_s',"
-                "'warnings','note'}；"
-                "pages[] 每项是 {'page','text_layer_chars','ok','text','chars','empty','error','image_size','elapsed_s'}"
-            ),
-            tags=("ocr", "run"),
-        ),
-    ]
+    _bound: dict[str, Any] = {}
+    _bound['ctx'] = ctx
+    specs: list[ToolSpec] = []
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        specs.append(replace(_fn.__tool_spec__,
+                             handler=partial(_fn, *[_bound[k] for k in _deps])))
     registry.register_all(specs)
     return specs
 

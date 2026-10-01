@@ -29,11 +29,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from dataclasses import replace
+from functools import partial
+from typing import Any, Callable, Mapping, Sequence
 
 from .. import schema as S
 from ..store import StoreError
-from .base import ToolRegistry, ToolSpec, fail, ok
+from .base import ToolRegistry, ToolSpec, fail, ok, tool
 
 #: 只有 D 能写猜想台账：猜想的提出者与检验者必须能分开（检验是 E 的实验行）。
 ROLES = ("D",)
@@ -199,6 +201,68 @@ def _guard_result(fn: Any) -> Any:
         return fail(f"文件操作失败：{type(e).__name__}: {e}", kind="io_error")
 
 
+#: 本模块的工具函数：声明随函数走（`@tool` 把 `ToolSpec` 挂在 `fn.__tool_spec__` 上），
+#: `register` 只做装配（`draft/36` 的 `T-8`）。与 `fs_tools` / `table_tools` 同一条路子。
+#:
+#: 为什么声明不放进"名字 ⇒ 字段"的 dict 表：lint `R010` 是按 `@tool(...)` 装饰器
+#: 或 `ToolSpec(name=<字面量>, …)` 读声明的（`scripts/lint_rules.py::_r010_specs`），
+#: 表格化成 `ToolSpec(name=变量, …)` 会让它"看不到这条工具"——而它守的正是
+#: "声明的 `external` 与 handler 链里实际的出网/起进程是否相符"。所以声明留在
+#: 能静态读到的位置，抽出去的是装配这一步。
+@tool(
+    "conjecture.register_conjecture",
+    "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。"
+    "单行内判据只有一份（schema.Conjecture.validate）；"
+    "被引用的实验/文献必须在库里",
+    {
+        "type": "object",
+        "properties": {
+            "statement": {"type": "string"},
+            "origin": {"type": "string"},
+            "conjecture_id": {"type": "string"},
+            "testable": {"type": "object"},
+            "form": {"type": "string", "enum": list(S.CONJECTURE_FORMS)},
+            "negation_statement": {"type": "string"},
+            "status": {"type": "string", "enum": list(S.CONJECTURE_STATUSES)},
+            "experiment_ids": {"type": "array", "items": {"type": "string"}},
+            "proof_experiment_id": {"type": "string"},
+            "counterexample_experiment_id": {"type": "string"},
+            "promoted_to": {"type": "object"},
+            "known_lit_id": {"type": "string"},
+            "withdraw_reason": {"type": "string"},
+            "notes": {"type": "string"},
+        },
+        "required": ["statement", "origin"],
+        "additionalProperties": False,
+    },
+    side_effect="write_local",
+    roles=ROLES,
+    # 键名从一个真实调用读出：落库后的 conjectures 行（`S.Conjecture` 全字段，17 个）。
+    returns=(
+        "{'conjecture_id','statement','negation_statement','form','testable','origin',"
+        "'status','experiment_ids','proof_experiment_id','counterexample_experiment_id',"
+        "'promoted_to','known_lit_id','withdraw_reason','notes','created_at','updated_at',"
+        "'created_by'}（落库后的 conjectures 行）"
+    ),
+    tags=("conjecture", "write"),
+)
+def _conjecture_register_conjecture(store: Any, actor: str, **kw: Any) -> Any:
+    """工具体：注入的 `store` / `actor` 由装配期绑定（`partial`），签名与从前逐字相同。
+
+    `T-8` 只搬位置：这一句与原来那个 `lambda **kw: …` 逐字等价
+    （`store is None` ⇒ 明确"没接线"，否则走 `_guard_result`）。
+    """
+    return (
+        _not_wired()
+        if store is None
+        else _guard_result(lambda: register_conjecture(store, actor=actor, **kw))
+    )
+
+
+#: 装配清单：`register` 只遍历它（`T-8`）。
+_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = (_conjecture_register_conjecture,)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -206,50 +270,10 @@ def register(
     actor: str = "agent-D",
     **_: Any,
 ) -> None:
-    """装配 D 的猜想台账工具（一个动作，见模块 docstring 的取舍）。"""
-    registry.register(
-        ToolSpec(
-            name="conjecture.register_conjecture",
-            summary=(
-                "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。"
-                "单行内判据只有一份（schema.Conjecture.validate）；"
-                "被引用的实验/文献必须在库里"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "statement": {"type": "string"},
-                    "origin": {"type": "string"},
-                    "conjecture_id": {"type": "string"},
-                    "testable": {"type": "object"},
-                    "form": {"type": "string", "enum": list(S.CONJECTURE_FORMS)},
-                    "negation_statement": {"type": "string"},
-                    "status": {"type": "string", "enum": list(S.CONJECTURE_STATUSES)},
-                    "experiment_ids": {"type": "array", "items": {"type": "string"}},
-                    "proof_experiment_id": {"type": "string"},
-                    "counterexample_experiment_id": {"type": "string"},
-                    "promoted_to": {"type": "object"},
-                    "known_lit_id": {"type": "string"},
-                    "withdraw_reason": {"type": "string"},
-                    "notes": {"type": "string"},
-                },
-                "required": ["statement", "origin"],
-                "additionalProperties": False,
-            },
-            handler=lambda **kw: (
-                _not_wired()
-                if store is None
-                else _guard_result(lambda: register_conjecture(store, actor=actor, **kw))
-            ),
-            side_effect="write_local",
-            roles=ROLES,
-            # 键名从一个真实调用读出：落库后的 conjectures 行（`S.Conjecture` 全字段，17 个）。
-            returns=(
-                "{'conjecture_id','statement','negation_statement','form','testable','origin',"
-                "'status','experiment_ids','proof_experiment_id','counterexample_experiment_id',"
-                "'promoted_to','known_lit_id','withdraw_reason','notes','created_at','updated_at',"
-                "'created_by'}（落库后的 conjectures 行）"
-            ),
-            tags=("conjecture", "write"),
-        )
-    )
+    """装配 D 的猜想台账工具（一个动作，见模块 docstring 的取舍）。
+
+    `T-8`：声明数据在模块级（`@tool` 装饰器），这里只把注入的 `store` / `actor` 绑上去。
+    """
+    for fn in _TOOL_FUNCTIONS:
+        registry.register(replace(fn.__tool_spec__, handler=partial(fn, store=store, actor=actor)))
+

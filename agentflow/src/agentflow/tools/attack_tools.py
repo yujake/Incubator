@@ -55,10 +55,12 @@ D 的问题生命周期是"缺口 → 补证据 → 研究 → 回答"：它有�
 
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import partial
 from typing import Any, Callable, Sequence
 
 from ..store import StoreError
-from .base import ParamError, ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok
+from .base import ParamError, ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
 
 #: 读计划的角色：F 做攻坚；D 会把"多轮未收敛的问题"升级给 F，所以要能读；
 #: G 需要读攻关结论来写稿；H 需要核对"stalled 有没有谎报成 resolved"。
@@ -391,6 +393,205 @@ def _plan_error_type() -> type:
     return PlanError
 
 
+@tool(
+    "attack.check_budget",
+    "检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）",
+    {
+           "type": "object",
+           "properties": {
+            "budget": {"type": "object"},
+            "rounds_done": {"type": "integer", "minimum": 0},
+            "depth": {"type": "integer", "minimum": 0},
+           },
+           "required": ["budget"],
+           "additionalProperties": False,
+           },
+    side_effect="none",
+    roles=_READ_ROLES,
+    returns="{'checked','complete','missing','allowed','reason'}",
+    tags=("attack", "budget"),
+)
+def _attack_check_budget(budget, rounds_done=0, depth=0):
+    """attack.check_budget 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（无）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _guard(
+               lambda: can_round(budget, rounds_done=rounds_done, depth=depth)
+               )
+    )
+
+@tool(
+    "attack.pick_next_subgoal",
+    "按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）",
+    {
+           "type": "object",
+           "properties": {"subgoals": {"type": "array", "items": {"type": "object"}}},
+           "required": ["subgoals"],
+           "additionalProperties": False,
+           },
+    side_effect="none",
+    roles=_READ_ROLES,
+    returns="{'picked', 'subgoal', 'reason'}",
+    tags=("attack",),
+)
+def _attack_pick_next_subgoal(subgoals):
+    """attack.pick_next_subgoal 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（无）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _guard(lambda: pick_next_subgoal(subgoals))
+
+@tool(
+    "attack.create_plan",
+    (
+            "为一个难题立项（预算四类键缺一不可，不完整就拒绝创建）。"
+            "同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "problem": {"type": "string"},
+            "problem_key": {"type": "string"},
+            "for_question_id": {"type": "string"},
+            "subgoals": {"type": "array", "items": {"type": "object"}},
+            "budget": {"type": "object"},
+            "depth": {"type": "integer", "minimum": 0},
+            "parent_plan_id": {"type": "string"},
+           },
+           "required": ["problem", "problem_key"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITE_ROLES,
+    # 键名逐个从实现读出（`agent_f.AgentF.create_plan`）：成功分支给
+    # `subgoals`（个数，不是清单）。另有可选键 `missing` ——
+    # 它只在"预算不完整 ⇒ 拒绝创建"那一支出现（三条分支各自的完整键集
+    # 见 `tests/test_tools_returns_declaration.py` 的分支留痕）。
+    returns="{'created','plan_id','duplicate','status','budget','subgoals','reason'}",
+    tags=("attack", "plan"),
+)
+def _attack_create_plan(_need_store, store, problem, problem_key, for_question_id=None, subgoals=None, budget=None, depth=0, parent_plan_id=None):
+    """attack.create_plan 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _need_store("attack.create_plan")
+               or _guard(
+                   lambda: _agent_for(store).create_plan(
+                       problem,
+                       problem_key,
+                       for_question_id=for_question_id,
+                       subgoals=subgoals,
+                       budget=budget,
+                       depth=depth,
+                       parent_plan_id=parent_plan_id,
+                   )
+               )
+    )
+
+@tool(
+    "attack.step",
+    (
+            "推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），"
+            "C/D/F 的推理未接线则如实记 no_change，绝不假装做了"
+            ),
+    {
+           "type": "object",
+           "properties": {"plan_id": {"type": "string"}},
+           "required": ["plan_id"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITE_ROLES,
+    # 键名从实现读出（`agent_f.AgentF.step`）：`sid` 是被推进的那个子目标
+    # 的代号（没有可推进的子目标时为 null）。
+    returns="{'plan_id','round','sid','action','outcome','status','budget_left','reason'}",
+    tags=("attack", "loop"),
+)
+def _attack_step(_need_store, store, plan_id):
+    """attack.step 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _need_store("attack.step") or _guard(lambda: _agent_for(store).step(plan_id))
+
+@tool(
+    "attack.status",
+    "读一个攻坚计划的完整可读视图（子目标状态计数、预算余量、history 尾部）",
+    {
+           "type": "object",
+           "properties": {"plan_id": {"type": "string"}},
+           "required": ["plan_id"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_READ_ROLES,
+    # 键名逐个从实现读出（`agent_f.AgentF.status`）：计划不存在时只有
+    # `checked`/`plan_id`/`reason` 三个键（`checked=False` ⇒ 没查），存在时
+    # 有全部 19 个键；这里写的是"计划存在"那一支的键集合。
+    returns="{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason'}",
+    tags=("attack",),
+)
+def _attack_status(_need_store, store, plan_id):
+    """attack.status 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return _need_store("attack.status") or _guard(lambda: _agent_for(store).status(plan_id))
+
+@tool(
+    "attack.list_plans",
+    "列出全部攻坚计划（可按 problem_key 过滤）。没有它就无法回答'这个难题立过项没有'",
+    {
+           "type": "object",
+           "properties": {
+            "problem_key": {"type": "string"},
+            "include_terminal": {"type": "boolean"},
+           },
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_READ_ROLES,
+    # 键名从一个真实调用读出（`AgentF.list_plans`）：`plans[]` 每项是
+    # plan_id/problem_key/status/rounds/max_rounds/subgoals/depth 的摘要视图。
+    returns="{'checked','total','plans','reason'}",
+    tags=("attack",),
+)
+def _attack_list_plans(_need_store, store, problem_key=None, include_terminal=True):
+    """attack.list_plans 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
+
+    注入值（_need_store, store）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同。
+    """
+    return (
+    _need_store("attack.list_plans")
+               or _guard(
+                   lambda: _agent_for(store).list_plans(
+                       problem_key=problem_key, include_terminal=include_terminal
+                   )
+               )
+    )
+
+#: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+#: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (_attack_check_budget, ()),
+    (_attack_pick_next_subgoal, ()),
+    (_attack_create_plan, ('_need_store', 'store')),
+    (_attack_step, ('_need_store', 'store')),
+    (_attack_status, ('_need_store', 'store')),
+    (_attack_list_plans, ('_need_store', 'store')),
+)
+
+
 def register(
     registry: ToolRegistry,
     *,
@@ -416,168 +617,14 @@ def register(
             )
         return None
 
-    registry.register(
-        ToolSpec(
-            name="attack.check_budget",
-            summary="检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）",
-            params={
-                "type": "object",
-                "properties": {
-                    "budget": {"type": "object"},
-                    "rounds_done": {"type": "integer", "minimum": 0},
-                    "depth": {"type": "integer", "minimum": 0},
-                },
-                "required": ["budget"],
-                "additionalProperties": False,
-            },
-            handler=lambda budget, rounds_done=0, depth=0: _guard(
-                lambda: can_round(budget, rounds_done=rounds_done, depth=depth)
-            ),
-            side_effect="none",
-            roles=_READ_ROLES,
-            returns="{'checked','complete','missing','allowed','reason'}",
-            tags=("attack", "budget"),
-        )
-    )
+    _bound: dict[str, Any] = {}
+    _bound['_need_store'] = _need_store
+    _bound['store'] = store
+    for _fn, _deps in _TOOL_FUNCTIONS:
+        registry.register(replace(_fn.__tool_spec__,
+                                  handler=partial(_fn, *[_bound[k] for k in _deps])))
 
-    registry.register(
-        ToolSpec(
-            name="attack.pick_next_subgoal",
-            summary="按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）",
-            params={
-                "type": "object",
-                "properties": {"subgoals": {"type": "array", "items": {"type": "object"}}},
-                "required": ["subgoals"],
-                "additionalProperties": False,
-            },
-            handler=lambda subgoals: _guard(lambda: pick_next_subgoal(subgoals)),
-            side_effect="none",
-            roles=_READ_ROLES,
-            returns="{'picked', 'subgoal', 'reason'}",
-            tags=("attack",),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="attack.create_plan",
-            summary=(
-                "为一个难题立项（预算四类键缺一不可，不完整就拒绝创建）。"
-                "同一 problem_key 已有未终结的计划时不新建，返回已有 plan_id"
-            ),
-            params={
-                "type": "object",
-                "properties": {
-                    "problem": {"type": "string"},
-                    "problem_key": {"type": "string"},
-                    "for_question_id": {"type": "string"},
-                    "subgoals": {"type": "array", "items": {"type": "object"}},
-                    "budget": {"type": "object"},
-                    "depth": {"type": "integer", "minimum": 0},
-                    "parent_plan_id": {"type": "string"},
-                },
-                "required": ["problem", "problem_key"],
-                "additionalProperties": False,
-            },
-            handler=lambda problem, problem_key, for_question_id=None, subgoals=None, budget=None,
-            depth=0, parent_plan_id=None: (
-                _need_store("attack.create_plan")
-                or _guard(
-                    lambda: _agent_for(store).create_plan(
-                        problem,
-                        problem_key,
-                        for_question_id=for_question_id,
-                        subgoals=subgoals,
-                        budget=budget,
-                        depth=depth,
-                        parent_plan_id=parent_plan_id,
-                    )
-                )
-            ),
-            side_effect="write_local",
-            roles=_WRITE_ROLES,
-            # 键名逐个从实现读出（`agent_f.AgentF.create_plan`）：成功分支给
-            # `subgoals`（个数，不是清单）。另有可选键 `missing` ——
-            # 它只在"预算不完整 ⇒ 拒绝创建"那一支出现（三条分支各自的完整键集
-            # 见 `tests/test_tools_returns_declaration.py` 的分支留痕）。
-            returns="{'created','plan_id','duplicate','status','budget','subgoals','reason'}",
-            tags=("attack", "plan"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="attack.step",
-            summary=(
-                "推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），"
-                "C/D/F 的推理未接线则如实记 no_change，绝不假装做了"
-            ),
-            params={
-                "type": "object",
-                "properties": {"plan_id": {"type": "string"}},
-                "required": ["plan_id"],
-                "additionalProperties": False,
-            },
-            handler=lambda plan_id: (
-                _need_store("attack.step") or _guard(lambda: _agent_for(store).step(plan_id))
-            ),
-            side_effect="write_local",
-            roles=_WRITE_ROLES,
-            # 键名从实现读出（`agent_f.AgentF.step`）：`sid` 是被推进的那个子目标
-            # 的代号（没有可推进的子目标时为 null）。
-            returns="{'plan_id','round','sid','action','outcome','status','budget_left','reason'}",
-            tags=("attack", "loop"),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="attack.status",
-            summary="读一个攻坚计划的完整可读视图（子目标状态计数、预算余量、history 尾部）",
-            params={
-                "type": "object",
-                "properties": {"plan_id": {"type": "string"}},
-                "required": ["plan_id"],
-                "additionalProperties": False,
-            },
-            handler=lambda plan_id: (
-                _need_store("attack.status") or _guard(lambda: _agent_for(store).status(plan_id))
-            ),
-            side_effect="read",
-            roles=_READ_ROLES,
-            # 键名逐个从实现读出（`agent_f.AgentF.status`）：计划不存在时只有
-            # `checked`/`plan_id`/`reason` 三个键（`checked=False` ⇒ 没查），存在时
-            # 有全部 19 个键；这里写的是"计划存在"那一支的键集合。
-            returns="{'checked','plan_id','problem','problem_key','for_question_id','status','rounds','budget','budget_left','depth','parent_plan_id','subgoals','subgoal_counts','best_partial','history_len','history_tail','created_at','updated_at','reason'}",
-            tags=("attack",),
-        )
-    )
 
-    registry.register(
-        ToolSpec(
-            name="attack.list_plans",
-            summary="列出全部攻坚计划（可按 problem_key 过滤）。没有它就无法回答'这个难题立过项没有'",
-            params={
-                "type": "object",
-                "properties": {
-                    "problem_key": {"type": "string"},
-                    "include_terminal": {"type": "boolean"},
-                },
-                "additionalProperties": False,
-            },
-            handler=lambda problem_key=None, include_terminal=True: (
-                _need_store("attack.list_plans")
-                or _guard(
-                    lambda: _agent_for(store).list_plans(
-                        problem_key=problem_key, include_terminal=include_terminal
-                    )
-                )
-            ),
-            side_effect="read",
-            roles=_READ_ROLES,
-            # 键名从一个真实调用读出（`AgentF.list_plans`）：`plans[]` 每项是
-            # plan_id/problem_key/status/rounds/max_rounds/subgoals/depth 的摘要视图。
-            returns="{'checked','total','plans','reason'}",
-            tags=("attack",),
-        )
-    )
