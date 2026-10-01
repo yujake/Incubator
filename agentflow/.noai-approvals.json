@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T00:56:21+08:00",
+  "generated_at": "2026-10-01T11:28:18+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -484,10 +484,10 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "0135143f5ca49d39761e85175cf443cdfa87d7c0b1a67a5bb189f6b207ba79ad",
+      "sha256": "20e0fa05d631d0c5066eb8bfaa6ecd13ebfb42be4cfbc7db45112cd25f4a2b19",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "R-38：verify_all 的签名读数拆名",
+      "change_note": "§210（draft/36 T-5）：把 verify_all（1175 行）按分段横幅逐字搬成 12 个 _check_*，主函数只做编排（30 行）。只搬移、不改任何一行判据；等价性由 tests/test_verify_snapshot.py 的 8 工作区快照逐字证明（拆前已冻结）。用户 2026-10-01 批准本排期并允许改动禁改区；登记≠批准，仍待 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

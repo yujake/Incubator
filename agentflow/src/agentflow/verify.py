@@ -142,23 +142,13 @@ def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], in
     return (not missing), missing, int(ids[-1])
 
 
-def verify_all(
-    store: Store,
-    *,
-    deep: bool = False,
-    extract_text: Any = None,
-    quote_widen: int = 1,
-    allow_fulltext_quote_fallback: bool = False,
-) -> VerifyReport:
-    """校验全局不变量。
+def _check_1(rep, store):
+    """`verify_all` 的第 1 段（行 162–265）。
 
-    `quote_widen` / `allow_fulltext_quote_fallback` **必须与 agent_b 用的一致**，
-    否则 `--deep` 会按一套比写入时更严的规则重算，把"写入时合规"的引文报成
-    `quote_not_found` —— 那是**假报警**，比不校验更糟，因为它会训练人忽略告警。
-    调用方（CLI）负责从同一份配置里取这两个值。
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
     """
-    rep = VerifyReport(deep=deep)
-
     # ---- schema 级（逐表逐行）
     for table in S.TABLES:
         doc = store.read(table)
@@ -264,6 +254,18 @@ def verify_all(
         if got > MAX_ID + 1:
             rep.issues.append(Issue("error", "counters", kind, "counter_overflow", f"{kind} 计数器 {got} 超出 4 位空间"))
 
+    return con_by_id, concepts, lit_by_id, literature, rel_by_id, relations, requests
+
+
+
+
+def _check_2(rep, lit_by_id, literature, requests, store):
+    """`verify_all` 的第 2 段（行 267–335）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- 请求 ↔ 文献 双向可追溯
     for r in requests:
         rid = r.get("request_id")
@@ -334,6 +336,16 @@ def verify_all(
                       "事后无法核查对方返回了什么（缺陷 #8 的契约要求保留）")
             )
 
+
+
+
+def _check_3(rep, con_by_id, lit_by_id, rel_by_id, relations):
+    """`verify_all` 的第 3 段（行 337–402）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- 关系
     for r in relations:
         rid = r.get("relation_id")
@@ -401,6 +413,16 @@ def verify_all(
                               f"{b.get('status')}/{a.get('status')}（判重阈值配置可能被改动）")
                     )
 
+
+
+
+def _check_4(rep, con_by_id, concepts, lit_by_id, rel_by_id, relations, requests, store):
+    """`verify_all` 的第 4 段（行 404–467）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- 概念：related_concepts 是否与关系表派生结果一致
     for c in concepts:
         cid = c.get("concept_id")
@@ -466,6 +488,18 @@ def verify_all(
                 rep.issues.append(Issue("warning", "analysis_reports", arid, "report_file_missing",
                                         f"登记了 markdown_path={mp} 但文件不存在"))
 
+    return questions, req_ids
+
+
+
+
+def _check_5(rep, lit_by_id, questions, store):
+    """`verify_all` 的第 5 段（行 469–580）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- E/F/G/H 新增表的交叉引用（同样是"悬空引用"检查的一部分）
     #
     # 为什么每个新表都要在这里过一遍：`schema.py` 的行校验只能保证**本行内部**自洽
@@ -579,6 +613,18 @@ def verify_all(
                                     "要么补上来源（closed），要么说明为什么拿不到（external_unavailable）"))
     rep.checked["dependencies_closed"] = dep_ok
 
+    return dependencies, doc_by_id, documents, eval_by_id, exp_by_id, experiments, findings
+
+
+
+
+def _check_6(rep, dependencies, documents, exp_by_id, experiments):
+    """`verify_all` 的第 6 段（行 582–716）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- **依赖的缺陷继承**（来自对本地先例 Danus 的观摩）
     #
     # Danus 的收束点是"让**前提不干净**沿着依赖链传播下去"。我们已经有
@@ -715,6 +761,16 @@ def verify_all(
                 "没有结论的实验不能作为已闭合的支撑",
             ))
 
+
+
+
+def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations):
+    """`verify_all` 的第 7 段（行 718–864）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     for d in dependencies:
         if str(d.get("status")) not in ("dangling", "external_unavailable"):
             continue
@@ -863,6 +919,18 @@ def verify_all(
                 rep.issues.append(Issue("error", "documents", docid, "overclaim",
                                         f"断言 {cid} 是 cross_check 却没有 disclaimer（FC-22）"))
 
+    return rejected_by_id
+
+
+
+
+def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
+    """`verify_all` 的第 8 段（行 866–986）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- 研究问题的依据是否也已被撤回（同一类级联，作用在 D 的台账上）
     for q in questions:
         qid = q.get("question_id")
@@ -985,6 +1053,16 @@ def verify_all(
                 "口径相同却给出不同的数字，至少有一条是错的（FC-24：口径就是数字的一部分）",
             ))
 
+
+
+
+def _check_9(rep, documents, questions, req_ids, store):
+    """`verify_all` 的第 9 段（行 988–1073）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- FC-24 的**渲染层 gate**：报告里的数字必须能追到一条带完整口径的评测结果
     #
     # 为什么这条检查必须有：FC-24 的判据②是"缺任一字段的数字**不得进入对外报告**"。
@@ -1072,6 +1150,16 @@ def verify_all(
                                                 "台账认为该问题仍有未完成提问，但 research_questions."
                                                 "waiting_request_ids 为空 —— 两者已漂移，D 的去重判断会失准"))
 
+
+
+
+def _check_10(rep, allow_fulltext_quote_fallback, deep, extract_text, lit_by_id, quote_widen, relations, store):
+    """`verify_all` 的第 10 段（行 1075–1144）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- 深度：重新打开文献复核引文
     if deep:
         if extract_text is None:
@@ -1143,6 +1231,16 @@ def verify_all(
                               + ("（表里已记录 quote_verified=false，属已知并承认的缺陷）" if stored is False else ""))
                     )
 
+
+
+
+def _check_11(rep, documents, store):
+    """`verify_all` 的第 11 段（行 1146–1203）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     # ---- 签名台账（`draft/30` §T4-B）：`accepted` 的稿件必须有**可核的**签名
     #
     # 台账是文件（`DOC-SIGNATURES.jsonl`），不进 `schema.TABLES`（`draft/29` §8.8.7）。
@@ -1201,6 +1299,19 @@ def verify_all(
                        for d in store.rows("dependencies")
                        if str(d.get("status")) == "closed"
                        and str(d.get("source_experiment_id") or "")}
+
+    return closed_dep_exps, doc_by_id, exp_by_id
+
+
+
+
+def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
+    """`verify_all` 的第 12 段（行 1204–1317）。
+
+    由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
+    入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
+    泄漏语义（后面的段确实读到了它们）。
+    """
     for c in store.rows("conjectures"):
         cid = str(c.get("conjecture_id"))
         refs = [str(x) for x in (c.get("experiment_ids") or []) if x]
@@ -1316,4 +1427,34 @@ def verify_all(
                     "error", "conjectures", cid, "status_conflicts_with_experiment",
                     f"status={status!r} 自称成功，而 experiment_ids 里的 {refuters!r} 的 result='refutes'"))
 
+
+def verify_all(
+    store: Store,
+    *,
+    deep: bool = False,
+    extract_text: Any = None,
+    quote_widen: int = 1,
+    allow_fulltext_quote_fallback: bool = False,
+) -> VerifyReport:
+    """校验全局不变量。
+
+    `quote_widen` / `allow_fulltext_quote_fallback` **必须与 agent_b 用的一致**，
+    否则 `--deep` 会按一套比写入时更严的规则重算，把"写入时合规"的引文报成
+    `quote_not_found` —— 那是**假报警**，比不校验更糟，因为它会训练人忽略告警。
+    调用方（CLI）负责从同一份配置里取这两个值。
+    """
+    rep = VerifyReport(deep=deep)
+
+    con_by_id, concepts, lit_by_id, literature, rel_by_id, relations, requests = _check_1(rep, store)
+    _check_2(rep, lit_by_id, literature, requests, store)
+    _check_3(rep, con_by_id, lit_by_id, rel_by_id, relations)
+    questions, req_ids = _check_4(rep, con_by_id, concepts, lit_by_id, rel_by_id, relations, requests, store)
+    dependencies, doc_by_id, documents, eval_by_id, exp_by_id, experiments, findings = _check_5(rep, lit_by_id, questions, store)
+    _check_6(rep, dependencies, documents, exp_by_id, experiments)
+    rejected_by_id = _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations)
+    _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store)
+    _check_9(rep, documents, questions, req_ids, store)
+    _check_10(rep, allow_fulltext_quote_fallback, deep, extract_text, lit_by_id, quote_widen, relations, store)
+    closed_dep_exps, doc_by_id, exp_by_id = _check_11(rep, documents, store)
+    _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store)
     return rep

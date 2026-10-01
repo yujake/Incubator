@@ -147,11 +147,26 @@ def test_the_evidence_ceiling_is_registered_next_to_the_criterion():
     为什么断言在源码文本上：这条修复的形态就是"如实登记边界"（`R2b-AN-2-A`
     的两个可选方向里的第二个）。如果没有任何断言看着它，"注释被删掉"与
     "注释还在"在测试里完全一样 —— 那正是本仓反复登记的"零断言点"形态。
-    这里用 `inspect.getsource` 取判据所在函数的源码，所以断言认的是
-    "这段说明与判据在同一个函数里"，不是"文件里某处有这句话"。
+
+    判据的**意图**是"这段说明与判据在同一个函数里"，而不是"文件里某处有这句话"。
+    所以这里不写死函数名，而是**现算判据的落点**：哪个函数体里同时出现了
+    `selfreported`（判据用的读数）与 `R2b-AN-2-A`（边界登记）。
+    `draft/36` 的 T-5 把 `verify_all`（1175 行）拆成了 12 个 `_check_*`，
+    这条判据因此在拆分后**当场红过一次** —— 当时它写死 `inspect.getsource(V.verify_all)`。
+    写死函数名会让每一次重排都假红；现算落点则既保住意图、又经得起搬家。
     """
-    src = inspect.getsource(V.verify_all)
-    assert "R2b-AN-2-A" in src, "判据旁缺少 `R2b-AN-2-A` 的边界登记"
+    import inspect
+
+    def _holds_the_criterion(fn) -> bool:
+        src = inspect.getsource(fn)
+        return "selfreported" in src and "R2b-AN-2-A" in src
+
+    candidates = [V.verify_all] + [getattr(V, n) for n in dir(V) if n.startswith("_check_")]
+    holder = next((f for f in candidates if _holds_the_criterion(f)), None)
+    assert holder is not None, (
+        "没有任何函数把「判据」（引用 `selfreported`）与「边界登记」（`R2b-AN-2-A`）放在一起 —— "
+        "`T-5` 的拆分把它俩分家了，或者登记被删了")
+    src = inspect.getsource(holder)
     assert "证据上界" in src, "判据旁缺少'证据上界'那一段（上界到不了'依据属于本行'）"
     assert "自由文本" in src, "边界登记必须点明 `notes` 是可写自由文本"
 
