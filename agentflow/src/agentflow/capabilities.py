@@ -1383,7 +1383,9 @@ def _h_writable_tools_is_derived() -> bool:
     而只有后者会随表变化。判据是右侧不是字面量容器（`ast.Tuple`/`ast.List`/
     `ast.Set`），且模块里出现了 `READONLY_CALL_EXCEPTIONS` 这个名字。
     """
-    p = Path(__file__).resolve().parent / "agent_h.py"
+    p = Path(__file__).resolve().parent / "agent_h" / "_support.py"
+    if not p.is_file():  # pragma: no cover - 未拆包时的落点（`goal-7f5116c1` M7 之前）
+        p = Path(__file__).resolve().parent / "agent_h.py"
     if not p.is_file():  # pragma: no cover - 文件不在就说明装配方式变了
         return False
     text = p.read_text(encoding="utf-8")

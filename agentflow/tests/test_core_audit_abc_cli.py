@@ -521,10 +521,16 @@ def test_agent_b_selftest_passes_and_actually_checks_something(capsys) -> None:
 
 
 def test_agent_b_selftest_negative_control_can_fail(monkeypatch, capsys) -> None:
-    """负控：让租约判据恒真（"所有租约都过期"）后，自检必须返回非零。"""
-    from agentflow import agent_b as B
+    """负控：让租约判据恒真（"所有租约都过期"）后，自检必须返回非零。
 
-    monkeypatch.setattr(B, "lease_expired", lambda *a, **kw: True)
+    替身要打在**读它的那个模块**上：`goal-7f5116c1` M7 把 `agent_b.py` 拆成包之后，
+    `_selftest` 住在 `agent_b/core.py`，它读的是 `core` 的模块全局 `lease_expired`
+    （`from ._support import lease_expired`）—— 打在包入口 `agentflow.agent_b` 上
+    够不到它（那样这条负控会静默变成"没注入"：自检仍然返回 0，判据红得莫名其妙）。
+    """
+    from agentflow.agent_b import core as B_core
+
+    monkeypatch.setattr(B_core, "lease_expired", lambda *a, **kw: True)
     assert agent_b._selftest() == 1
     assert "[FAIL]" in capsys.readouterr().out
 

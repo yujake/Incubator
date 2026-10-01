@@ -454,6 +454,12 @@ def item_selftests(rep: Report) -> Item:
     for mod in SELFTEST_MODULES:
         src = SRC / "agentflow" / f"{mod}.py"
         text = src.read_text(encoding="utf-8") if src.exists() else ""
+        if not src.exists():
+            # `goal-7f5116c1` M6/M7：八个角色模块改成了包，`__main__` 自检块搬到
+            # `<角色>/__main__.py`（`python -m agentflow.<角色>` 在包形态下执行的正是它）。
+            # 不认这个落点的话，"有自检块"会被读成"没有" ⇒ 判据从 pass 掉成 unknown。
+            pkg_main = SRC / "agentflow" / mod / "__main__.py"
+            text = pkg_main.read_text(encoding="utf-8") if pkg_main.exists() else ""
         # ⚠️ **"没有自检块"不是"自检通过"**（三态纪律）。
         # 这条判据写下来的当时（`D5`）：`agent_a` / `agent_b` 没有 `__main__` 块，
         # 于是 `python -m agentflow.agent_a` 退出码 0 且输出 0 行 —— 旧判据会把它记成 PASS，

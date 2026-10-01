@@ -3,7 +3,7 @@
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
 > 起因（`draft/36` §3）：`src/agentflow` 77 个文件、77,391 行，**38 个文件超过 800 行**
-> （最大 `agent_d.py` 4188 行）。新人打开任何一个文件都是一本小册子，
+> （最大 `agent_d/`（包） 4188 行）。新人打开任何一个文件都是一本小册子，
 > 于是"从哪读起"本身成了一道门槛 —— 这份图就是为了把这道门槛拆掉。
 >
 > **它自己也有判据**：`tests/test_reading_map.py` 会断言
@@ -89,14 +89,19 @@
 
 | 文件 | 是什么 |
 |---|---|
-| `agent_a.py` | A：文献搜索（唯一带网络副作用的角色） |
-| `agent_b.py` | B：文献整理（抽取概念与关系，引文逐字回验） |
+| `agent_a/`（包） | A：文献搜索（唯一带网络副作用的角色）；`goal-7f5116c1` M7 起：一个动作一个文件 |
+| `agent_b/`（包） | B：文献整理（抽取概念与关系，引文逐字回验）；M7 起同上 |
 | `agent_c/`（包） | C：关系分析（程序做分析，LLM 只做排序与措辞） |
-| `agent_d.py` | D：研究循环（**最大的文件**，见 §3） |
-| `agent_e.py` | E：数值实验与形式化验证 |
-| `agent_f.py` | F：多轮难题攻坚 |
-| `agent_g.py` | G：论文撰写 |
-| `agent_h.py` | H：审校（只读） |
+| `agent_d/`（包） | D：研究循环（**最大的角色**，见 §3） |
+| `agent_e/`（包） | E：数值实验与形式化验证 |
+| `agent_f/`（包） | F：多轮难题攻坚 |
+| `agent_g/`（包） | G：论文撰写 |
+| `agent_h/`（包） | H：审校（只读） |
+
+> 八个角色（除主控）的包形状是一样的（`goal-7f5116c1` M6/M7）：入口 `__init__.py`、
+> 其余成员与 mixin 组装在 `agent_a/core.py` 这样的 core 模块里、模块级 helper 与常量在
+> `agent_a/_support.py`、一个动作一个文件（如 `agent_a/search_literature.py`）、
+> `python -m agentflow.agent_a` 的自检入口在同目录的 `agent_a/__main__.py`。
 | `agents` 的公共零件：`claimanatomy.py` | 断言解剖学 —— `documents.claims` 每个元素的唯一判据来源 |
 | `claims.py` | 原子断言拆分（把一段答复切成可逐条回验的断言） |
 | `quoteverify.py` | 引文校验：引文级回验（禁改区） |
@@ -165,14 +170,14 @@
 | 改**表结构 / 字段** | `schema.py`（禁改区） | `store.py`、`verify.py` | `tests/test_schema.py`、`tests/test_verify*.py` |
 | 跑一次**端到端** | `cli.py`（`cmd_run`） | `runflow.py`（`run_topic`）→ `evidence.py` / `claims.py` | `tests/test_r5_orchestration_cost.py` |
 | 动**项目工作区 / 本地书架** | `cli.py`（`cmd_project`） | `projects.py` → `locallib.py` | `tests/test_projects.py`、`tests/test_user_quickstart.py` |
-| 动 **A 的检索** | `agent_a.py` | `providers.py` → `fetch.py` → `tools/search_tools.py` | `tests/test_agent_a.py`、`tests/test_providers_online.py` |
-| 动 **B 的抽取** | `agent_b.py` | `llm.py` → `extract.py` → `dedup.py` | `tests/test_agent_b*.py`、`tests/test_quoteverify.py` |
+| 动 **A 的检索** | `agent_a/`（包） | `providers.py` → `fetch.py` → `tools/search_tools.py` | `tests/test_agent_a.py`、`tests/test_providers_online.py` |
+| 动 **B 的抽取** | `agent_b/`（包） | `llm.py` → `extract.py` → `dedup.py` | `tests/test_agent_b*.py`、`tests/test_quoteverify.py` |
 | 动 **C 的图分析** | `agent_c/`（包） | `tools/graph_tools.py`、`tools/trace_tools.py` | `tests/test_agent_c*.py` |
-| 动 **D 的研究循环** | `agent_d.py` | `claimanatomy.py`、`tools/research_tools.py` | `tests/test_agent_d*.py`、`tests/test_claimanatomy.py` |
-| 动 **E 的实验 / 形式化** | `agent_e.py` | `formalgw.py`、`tools/verify_tools.py`（禁改区） | `tests/test_agent_e*.py` |
-| 动 **F 的攻坚** | `agent_f.py` | `tools/attack_tools.py` | `tests/test_agent_f.py` |
-| 动 **G 的写作** | `agent_g.py` | `gates.py`、`tools/doc_tools.py`、`paperbuild.py` | `tests/test_agent_g.py`、`tests/test_paper_pack.py` |
-| 动 **H 的审校** | `agent_h.py` | `gates.py`、`tools/review_tools.py` | `tests/test_agent_h.py`、`tests/test_gates.py` |
+| 动 **D 的研究循环** | `agent_d/`（包） | `claimanatomy.py`、`tools/research_tools.py` | `tests/test_agent_d*.py`、`tests/test_claimanatomy.py` |
+| 动 **E 的实验 / 形式化** | `agent_e/`（包） | `formalgw.py`、`tools/verify_tools.py`（禁改区） | `tests/test_agent_e*.py` |
+| 动 **F 的攻坚** | `agent_f/`（包） | `tools/attack_tools.py` | `tests/test_agent_f.py` |
+| 动 **G 的写作** | `agent_g/`（包） | `gates.py`、`tools/doc_tools.py`、`paperbuild.py` | `tests/test_agent_g.py`、`tests/test_paper_pack.py` |
+| 动 **H 的审校** | `agent_h/`（包） | `gates.py`、`tools/review_tools.py` | `tests/test_agent_h.py`、`tests/test_gates.py` |
 | 动**主控编队 / 并发** | `conductor.py` | `scheduler.py` → `host.py` → `tools/conductor_tools.py` | `tests/test_conductor.py`、`tests/test_scheduler.py`、`tests/test_host_wiring.py` |
 | 动**角色循环**（模型自己决定） | `agent_loop.py` | `agent_prompts.py` → `host.py` → `llmseam.py` | `tests/test_agent_loop.py`、`tests/test_agent_prompts.py` |
 | 往**提示词**里加一句话 | `agent_prompts.py` | 它引用的现算来源：`capabilities.py` / `tools.build_registry` | `tests/test_agent_prompts.py`（每条都要与现算一致） |
@@ -191,9 +196,9 @@
 
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
-| `agent_d.py` | 4197 | D 的全部动作（14 个）：摄入 / 溯源 / 评估 / 提问 / 裁决 / 研究 / 汇报 | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，14 个叠起来就是几千行 |
-| `agent_c/core.py` | 1701 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1701 行；`agent_c/_support.py` 是模块级 helper 与常量，325 行） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
-| `capabilities.py` | 2241 | 动作表 + 写集 + 边表 + 导入期交叉断言 | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
+| `agent_d/core.py` | 1606 | D 的全部动作（14 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1606 行；`agent_d/_support.py` 是模块级 helper 与常量，641 行）：摄入 / 溯源 / 评估 / 提问 / 裁决 / 研究 / 汇报 | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，14 个叠起来就是几千行 |
+| `agent_c/core.py` | 1134 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1134 行；`agent_c/_support.py` 是模块级 helper 与常量，325 行） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
+| `capabilities.py` | 2243 | 动作表 + 写集 + 边表 + 导入期交叉断言 | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2880 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2745 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
 | `schema.py` | 2481 | 12 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
@@ -201,7 +206,7 @@
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
 | `cli.py` | 1884 | 21 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1668 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
-| `agent_b.py` | 1859 | B 的三个动作 + 引文逐字回验的接入 | 回验是"每条关系都要过"，代码密度高 |
+| `agent_b/core.py` | 1044 | B 的 6 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1044 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 1460 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 12 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |
 
 ---

@@ -28,9 +28,12 @@ import pytest
 REPO = pathlib.Path(__file__).resolve().parents[1]
 DEV = REPO / "DEVELOPMENT.md"
 
-#: 判据点名的样板文件（`DEVELOPMENT.md` §0.3d 里逐字列了同样四个）。
+#: 判据点名的样板（`DEVELOPMENT.md` §0.3d 里逐字列了同样四个）。
+#: `agent_d` 那一格是包（`goal-7f5116c1` M6 把一个 4188 行的大文件拆成一个动作一个文件），
+#: 于是"样板文件"的粒度跟着从一个文件变成一个包 —— 判据按包取每个 `.py` 的文本之和
+#: 检查三层标签、但逐文件做"标签只在注释/文档串里"这条（多文件拼起来不是一个合法模块）。
 SAMPLES: tuple[str, ...] = (
-    "src/agentflow/agent_d.py",
+    "src/agentflow/agent_d/",
     "src/agentflow/tools/attack_tools.py",
     "src/agentflow/claimanatomy.py",
     "src/agentflow/evidence.py",
@@ -44,8 +47,18 @@ _TAG_SHAPE_RE = re.compile(r"\[[^\]\n]{1,8}\]")
 _TRACE_RE = re.compile(r"(20\d\d-\d\d(-\d\d)?)|(§\s*\d+)|(draft/\d+)")
 
 
+def _sources(rel: str) -> list[tuple[str, str]]:
+    """样板的一格格子 → `[(相对路径, 文本)]`。给目录就是包里的每个 `.py`（按名排序）。"""
+    p = REPO / rel
+    if p.is_dir():
+        return [(f"{rel}{f.name}", f.read_text(encoding="utf-8"))
+                for f in sorted(p.glob("*.py"))]
+    return [(rel, p.read_text(encoding="utf-8"))]
+
+
 def _text(rel: str) -> str:
-    return (REPO / rel).read_text(encoding="utf-8")
+    """整格文本（目录 = 各文件拼起来，只用于"三层标签出现过没有"这类跨文件判断）。"""
+    return "\n".join(text for _name, text in _sources(rel))
 
 
 def _docstring_spans(text: str) -> list[tuple[int, int]]:
@@ -79,27 +92,32 @@ def test_the_convention_section_still_documents_the_three_layers() -> None:
 
 @pytest.mark.parametrize("rel", SAMPLES)
 def test_every_sample_file_shows_all_three_layers(rel: str) -> None:
-    """每个样板文件里三层都要出现过 —— 样板的意义就是"三种都示范一次"。"""
+    """每个样板（文件或包）里三层都要出现过 —— 样板的意义就是"三种都示范一次"。"""
     text = _text(rel)
     found = {tag for tag in LAYERS if re.search(r"\[" + tag + r"\]", text)}
     missing = sorted(set(LAYERS) - found)
     assert not missing, (
-        f"{rel} 缺这几层标签：{missing}。样板文件要三层各示范一次"
-        f"（`DEVELOPMENT.md` §0.3d 是约定；若这一层在这个文件里确实不存在，"
-        "请换一个样板文件，而不是放宽判据）")
+        f"{rel} 缺这几层标签：{missing}。样板要三层各示范一次"
+        f"（`DEVELOPMENT.md` §0.3d 是约定；若这一层在这个格子（文件/包）里确实不存在，"
+        "请换一个样板，而不是放宽判据）")
 
 
 @pytest.mark.parametrize("rel", SAMPLES)
 def test_every_incident_tag_can_be_traced_to_a_reading(rel: str) -> None:
-    """`[踩过]` 必须追得到出处：同行或随后三行里有日期，或 `§NNN` / `draft/N` 这样的编号。"""
-    lines = _text(rel).splitlines()
+    """`[踩过]` 必须追得到出处：同行或随后三行里有日期，或 `§NNN` / `draft/N` 这样的编号。
+
+    逐文件查（一个包里各文件的行号互不相干，拼起来查会把"下一个文件的头三行"
+    当成上一个文件 `[踩过]` 的出处 —— 那会把判据放松成"包里有日期就行"）。
+    """
     bad: list[str] = []
-    for i, line in enumerate(lines):
-        if "[踩过]" not in line:
-            continue
-        window = "\n".join(lines[i:i + 4])
-        if not _TRACE_RE.search(window):
-            bad.append(f":{i + 1} {line.strip()[:80]}")
+    for name, text in _sources(rel):
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if "[踩过]" not in line:
+                continue
+            window = "\n".join(lines[i:i + 4])
+            if not _TRACE_RE.search(window):
+                bad.append(f"{name}:{i + 1} {line.strip()[:80]}")
     assert not bad, (
         "这些 `[踩过]` 没有出处（读者无法判断它是当次读数还是旧事）："
         + "；".join(bad)
@@ -110,26 +128,32 @@ def test_every_incident_tag_can_be_traced_to_a_reading(rel: str) -> None:
 @pytest.mark.parametrize("rel", SAMPLES)
 def test_tags_live_only_in_comments_and_docstrings(rel: str) -> None:
     """标签只出现在注释/文档串里：数量必须对得上（多出来的就是落在代码上了）。"""
-    text = _text(rel)
-    total = len(_TAG_RE.findall(text))
+    sources = _sources(rel)
+    total = sum(len(_TAG_RE.findall(text)) for _name, text in sources)
     assert total > 0, f"{rel} 一个标签都没有"
 
-    in_comment = 0
-    try:
-        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
-            if tok.type == tokenize.COMMENT:
-                in_comment += len(_TAG_RE.findall(tok.string))
-    except (tokenize.TokenError, IndentationError) as exc:  # pragma: no cover
-        pytest.fail(f"{rel} 语法坏了，tokenize 跑不动：{exc}")
+    bad: list[str] = []
+    for name, text in sources:
+        in_comment = 0
+        try:
+            for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+                if tok.type == tokenize.COMMENT:
+                    in_comment += len(_TAG_RE.findall(tok.string))
+        except (tokenize.TokenError, IndentationError) as exc:  # pragma: no cover
+            pytest.fail(f"{name} 语法坏了，tokenize 跑不动：{exc}")
 
-    lines = text.splitlines()
-    in_docstring = 0
-    for a, b in _docstring_spans(text):
-        in_docstring += len(_TAG_RE.findall("\n".join(lines[a - 1:b])))
+        lines = text.splitlines()
+        in_docstring = 0
+        for a, b in _docstring_spans(text):
+            in_docstring += len(_TAG_RE.findall("\n".join(lines[a - 1:b])))
 
-    assert in_comment + in_docstring == total, (
-        f"{rel} 有 {total - in_comment - in_docstring} 处标签不在注释或文档串里 —— "
-        "标签是给人读的标记，落到代码上要么是语法错、要么是字符串污染")
+        here = len(_TAG_RE.findall(text))
+        if in_comment + in_docstring != here:
+            bad.append(f"{name}（{here - in_comment - in_docstring} 处）")
+
+    assert not bad, (
+        "这些文件里有标签不在注释或文档串里 —— "
+        "标签是给人读的标记，落到代码上要么是语法错、要么是字符串污染：" + "、".join(bad))
 
 
 @pytest.mark.parametrize("rel", SAMPLES)
@@ -157,8 +181,8 @@ def test_the_layer_vocabulary_is_closed(rel: str) -> None:
 
 # --------------------------------------------------------------------------- 负控
 #
-# 两条负控都用 `monkeypatch` 把 `_text` 换成一段合成的源码：判据的输入面被换掉，
-# 但被检验的是同一条实现。没有这两条，上面那些断言可能只是"永远为真"。
+# 三条负控都用 `monkeypatch` 把 `_sources`（判据的唯一输入面）换成一段合成的源码：
+# 输入被换掉，但被检验的是同一条实现。没有这几条，上面那些断言可能只是"永远为真"。
 
 
 def test_negative_control_an_incident_tag_without_a_source_is_caught(monkeypatch) -> None:
@@ -166,7 +190,8 @@ def test_negative_control_an_incident_tag_without_a_source_is_caught(monkeypatch
     import sys
 
     fake = "# [踩过] 去年这里踩过一次坑，具体哪天忘了\nX = 1\n"
-    monkeypatch.setattr(sys.modules[__name__], "_text", lambda _rel: fake)
+    monkeypatch.setattr(sys.modules[__name__], "_sources",
+                        lambda _rel: [("合成文件.py", fake)])
     with pytest.raises(AssertionError):
         test_every_incident_tag_can_be_traced_to_a_reading("合成文件.py")
 
@@ -176,7 +201,8 @@ def test_negative_control_a_misspelled_tag_is_caught(monkeypatch) -> None:
     import sys
 
     fake = "# [为什幺] 这一层写错了字，而它照样能被 grep 到\nX = 1\n"
-    monkeypatch.setattr(sys.modules[__name__], "_text", lambda _rel: fake)
+    monkeypatch.setattr(sys.modules[__name__], "_sources",
+                        lambda _rel: [("合成文件.py", fake)])
     with pytest.raises(AssertionError):
         test_the_layer_vocabulary_is_closed("合成文件.py")
 
@@ -186,6 +212,7 @@ def test_negative_control_a_tag_on_a_code_line_is_caught(monkeypatch) -> None:
     import sys
 
     fake = '"""docstring 里有一个 [契约]。"""\nX = "[契约] 这是字符串里的标签"\n'
-    monkeypatch.setattr(sys.modules[__name__], "_text", lambda _rel: fake)
+    monkeypatch.setattr(sys.modules[__name__], "_sources",
+                        lambda _rel: [("合成文件.py", fake)])
     with pytest.raises(AssertionError):
         test_tags_live_only_in_comments_and_docstrings("合成文件.py")

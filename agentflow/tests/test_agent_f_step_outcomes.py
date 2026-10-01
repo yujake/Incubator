@@ -29,7 +29,14 @@ from agentflow import agent_f as AF
 from agentflow import schema as S
 
 ROOT = Path(__file__).resolve().parents[1]
-AGENT_F_SRC = ROOT / "src" / "agentflow" / "agent_f.py"
+#: `goal-7f5116c1` M7：`agent_f.py` 拆成了包（`step` 这个动作现在住在 `agent_f/step.py`），
+#: 所以下面那条 AST 普查扫整包，不是扫一个文件 —— 否则拆包后判据会静默变真空
+#: （`agent_f.py` 不存在 ⇒ 读文件就抛，那还算好的；写成 glob 却漏了目录才是真的静默）。
+AGENT_F_SRC = ROOT / "src" / "agentflow" / "agent_f"
+
+
+def _agent_f_sources() -> list[Path]:
+    return sorted(AGENT_F_SRC.glob("*.py"))
 
 
 def test_step_outcomes_and_task_outcomes_are_disjoint_namespaces():
@@ -47,22 +54,26 @@ def test_step_outcomes_and_task_outcomes_are_disjoint_namespaces():
 
 
 def test_every_outcome_literal_in_agent_f_is_registered():
-    """AST 普查：`agent_f.py` 里出现的 `"outcome"` 字面量全部在词表内。
+    """AST 普查：`agent_f`（包）里出现的 `"outcome"` 字面量全部在词表内。
 
     这就是 `G-24` 的判据形态（代码产出的值必须能被词表登记）。用一个真的解析
     而不是正则，是为了不把注释与字符串里的巧合算进来。
     """
-    tree = ast.parse(AGENT_F_SRC.read_text(encoding="utf-8"))
     found: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Dict):
-            for k, v in zip(node.keys, node.values):
-                if isinstance(k, ast.Constant) and k.value == "outcome" and isinstance(v, ast.Constant):
-                    found.add(str(v.value))
+    files = _agent_f_sources()
+    assert files, f"扫不到任何源码文件：{AGENT_F_SRC} —— 判据的输入面没了"
+    for path in files:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                for k, v in zip(node.keys, node.values):
+                    if (isinstance(k, ast.Constant) and k.value == "outcome"
+                            and isinstance(v, ast.Constant)):
+                        found.add(str(v.value))
     assert found, "AST 普查一个 outcome 字面量都没找到 ⇒ 判据本身失效（不是没问题）"
     outside = sorted(found - set(AF.STEP_OUTCOMES))
     assert not outside, (
-        f"agent_f.py 里出现了词表外的 outcome 字面量：{outside}（词表 {AF.STEP_OUTCOMES}）"
+        f"agent_f 里出现了词表外的 outcome 字面量：{outside}（词表 {AF.STEP_OUTCOMES}）"
     )
 
 

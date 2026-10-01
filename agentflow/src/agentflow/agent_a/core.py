@@ -1,150 +1,17 @@
-"""A 智能体：文献搜索。
+"""角色 A 的实现核心（`goal-7f5116c1` M6）：其余成员 + 把动作 mixin 装起来。
 
-职责（需求原文）：接收文献搜索请求清单 → 搜索 → 把文献下载到本地 → 维护文献表 → 把请求标记完成。
-
-四个刻意的设计选择：
-
-1. 锁只覆盖簿记，不覆盖网络。搜索与下载可能耗时数十秒；若持锁做这些事，
-   B 智能体会被整段时间阻塞。因此流程切成"短事务声明租约 → 无锁做 I/O → 短事务提交"。
-   代价是提交时必须在锁内重做一次判重（另一个 A 实例可能已抢先登记同一篇），
-   这一步不能省。
-2. 先落文献行，再置请求完成（DESIGN.md §2.4）。崩溃时请求仍是未完成，
-   重跑靠 `dedup_key` 幂等，不会重复登记。
-3. 下载失败不算请求失败。文献行照常登记（`path=null`），
-   因为"我知道有这篇论文但拿不到全文"本身就是有价值的结果；B 会跳过它并计数。
-4. 取任务只做排队，不做抢占（I7）。A 按 `interactions.order_pending_requests`
-   给出的顺序取任务，排序键是"优先级 → 租约是否过期 → 提交时间 → request_id"。
-   这里有两条硬约束：
-
-   - 排序键只有那一份实现，本模块不另写一套（哪怕只是 `sort(key=...)`）。
-     一旦 A 的取任务顺序与提交方（C/D）的派发顺序各持一套判据，
-     "high 优先"就会静默失效 —— 不报错，只是最关键的矛盾永远排在后面。
-     这正是 `RuleExtractor` docstring 警告过的"两个模块各持一套判据"。
-   - 不抢占：正在跑的 A 已经付掉了检索与下载的成本，被高优先级请求打断只会让
-     两条请求都变慢，还在 staging 里留下一堆半成品；收益小于代价。
-     高优先级请求在下一次 `_claim()` 时自然排到队首。
-     见 `DESIGN-INTERACTIONS.md` §5 待决问题 3。
+动作方法一个都没留在这里 —— 它们各自在 `agent_a/<动作>.py`。
+这一层与各动作文件共用 `_support.py`（模块级 helper 与常量）。
 """
-
 from __future__ import annotations
 
-import shutil
-import tempfile
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Iterable
-
-from . import dedup as D
-from . import interactions as X
-from . import schema as S
-from . import textutil as T
-from .store import Store, StoreError, lease_expired, make_lease
-from .agentspec import AgentBrief, AgentSpec
+from ._support import Any, ClaimOutcome, Iterable, Path, S, Store, T, X, lease_expired, make_lease, shutil
+from .run_once import _RunOnce
+from .run import _Run
+from .search_literature import _SearchLiterature
 
 
-@dataclass
-class ARunResult:
-    processed: int = 0
-    registered: int = 0
-    duplicated: int = 0
-    downloaded: int = 0
-    download_failed: int = 0
-    download_suspect: int = 0
-    gave_up: int = 0
-    skipped_reason: str | None = None
-    outcome: str | None = None
-    # ---- I7：本轮"取了哪条、为什么是它、有什么被跳过"的审计信息。
-    # 没有这几个字段，I7 的效果无法从外部观察：外部只能看到"处理了 1 条"，
-    # 看不到它是不是优先级最高的那条，也看不到高优先级的那条为什么没被取走。
-
-    #: 本轮取到的请求代号；`None` 表示本轮没取到任何请求（原因见 `skipped_reason`）。
-    request_id: str | None = None
-    #: 该请求的优先级，原样取自行。这里不做任何"修正"：A 的职责是按优先级取任务，
-    #: 不是替提交方决定优先级（那会让"谁提的"这件事在链路上丢失）。
-    priority: str | None = None
-    #: `interactions.priority_rank(priority)`。单独给出是因为判定"为什么它先被取走"
-    #: 靠的是次序而不是字符串 —— 直接比较字符串会得到 `"high" < "low"` 这种错结论。
-    priority_rank: int | None = None
-    #: 提交方（审计线索：这件事是谁提的）。
-    submitted_by: str | None = None
-    #: 定序时队列里的待办条数。
-    queue_pending: int = 0
-    #: 因"租约未过期且 `claimed_by` 非空"而被跳过的条数（别人正在做）。
-    #: 这是"高优先级就在队里却没被取走"的合法解释之一，必须能被外部看见 ——
-    #: 否则运维只能看到"什么都没做"，无从判断是队列空了还是全被别人占着。
-    skipped_lease_active: int = 0
-    #: 因"租约未过期且 `claimed_by` 为空"而被跳过的条数（我们自己上次搜索
-    #: 失败留下的退避租约，`retry_backoff_seconds`）。
-    #: 与 `skipped_lease_active` 分开数：两者要等的对象不同（等别人 / 等自己），
-    #: 处置也不同（换个 A 实例跑 / 什么都别做，到点自然重试）。压在一起会让运维
-    #: 去找一个不存在的"另一个 A 实例"。
-    skipped_lease_backoff: int = 0
-
-    def to_dict(self) -> dict:
-        return {
-            "processed": self.processed,
-            "registered": self.registered,
-            "duplicated": self.duplicated,
-            "downloaded": self.downloaded,
-            "download_failed": self.download_failed,
-            "download_suspect": self.download_suspect,
-            "gave_up": self.gave_up,
-            "outcome": self.outcome,
-            "skipped_reason": self.skipped_reason,
-            "request_id": self.request_id,
-            "priority": self.priority,
-            "priority_rank": self.priority_rank,
-            "submitted_by": self.submitted_by,
-            "queue_pending": self.queue_pending,
-            "skipped_lease_active": self.skipped_lease_active,
-            "skipped_lease_backoff": self.skipped_lease_backoff,
-        }
-
-
-@dataclass
-class ClaimOutcome:
-    """`_claim()` 的结果：取任务这件事本身的结果，而不只是"取到的那一行"。
-
-    为什么不让 `_claim()` 只返回 `dict | None`：一个 `None` 会同时表示几件完全不同的
-    事，而它们对应的处置完全不同（这正是"三态纪律"要防的形态）：
-
-    - ``pending == 0``                      —— 队列是空的（可以停）
-    - ``skipped_lease_active > 0``          —— 有活，但都在别人手里（该等，或换个 A 实例跑）
-    - ``skipped_lease_backoff > 0``         —— 有活，但都在我们自己的退避租约里
-      （`claimed_by` 为空 + 未来的 `lease_until`）—— 处置是"什么都别做，到点自然重试"，
-      与"换个实例跑"恰好相反（换实例也领不到：租约就写在行上，不认人）
-    - ``gave_up > 0``                       —— 有活，但都超了重试上限（终局，别再等）
-
-    压成一个 `None` 的后果不是"少一点信息"，而是误导运维：看到
-    `skipped_reason="no_pending_request"` 会以为队列空了，而实际上队列里躺着一条
-    high 优先级请求在等租约被修好。所以它们必须能被区分，`skipped_reason` 逐个命名。
-    """
-
-    #: 取到的请求（已置 claimed_by / lease_until / attempts+=1）；没取到时为 `None`。
-    request: dict | None = None
-    #: 定序时队列里的待办条数。
-    pending: int = 0
-    #: 租约未过期且 `claimed_by` 非空 ⇒ 跳过的条数（"别人正在做"）。
-    skipped_lease_active: int = 0
-    #: 租约未过期且 `claimed_by` 为空 ⇒ 跳过的条数（"我们自己上次失败的退避"）。
-    skipped_lease_backoff: int = 0
-    #: 本轮当场放弃（attempts 用尽）的条数。
-    gave_up: int = 0
-    #: 没取到请求时的原因，取值见 `_claim` 的 docstring；取到时为 `None`。
-    skipped_reason: str | None = None
-
-    @property
-    def claimed(self) -> bool:
-        """是否取到了请求。不要用 `bool(self.request)` 代替：那会在别处再造一个判据。"""
-        return self.request is not None
-
-
-# ---------------------------------------------------------------------- 智能体
-
-
-class AgentA:
-    """文献搜索智能体。providers/downloader 由外部注入，便于离线测试。"""
-
+class _Core:
     def __init__(
         self,
         store: Store,
@@ -180,166 +47,6 @@ class AgentA:
         # `search()` 一次最多领跑几轮（每轮一条请求）。它只影响这个新动作：
         # `run_once` / `run` 的语义一个字没动。
         self.search_max_rounds = int(self.cfg.get("search_max_rounds", 3))
-
-    # ------------------------------------------------------- 按主题现查（A.search_literature）
-    #
-    # 名字为什么是 `search_literature` 而不是 `search`（2026-09-30 实测）：
-    # 两层对账按"工具名最后一段 == handler_name"配对，而 A 的工具组里
-    # `fs.search` 与 `table.search` 的最后一段都是 `search` ⇒ 叫 `search` 会让这条
-    # 动作落进 `ambiguous`（两个候选），而导入期第 [7b] 条要求 `ambiguous` 为空。
-    # 换成 `search_literature` 之后它诚实地落进 `unmatched`（没有任何工具同名），
-    # 已按规矩登记进 `capabilities._KNOWN_UNMATCHED_ACTIONS`。
-    def search_literature(self, *, topic: str, mode: str = "precise",
-                          description: str = "") -> dict:
-        """按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方。
-
-        ## 为什么需要这个动作（2026-09-30；用户口径："A 的文献检索必须要通关"）
-
-        A 原有的两个动作（`run_once` / `run`）的参数里没有主题 —— 它们只认
-        "队列里已经有什么"。而队列今天只有三处能写：CLI `submit`、D 的
-        `research.submit_gap`（还要求先有一条研究问题）、C 的 gap 分支。
-        于是"角色缺文献证据 ⇒ 唤起 A"这条路上，召唤方没有办法告诉 A 要查什么：
-        它只能唤一个对着空队列空转的 A（实测：G 唤起 `A.run_once`，落
-        `refused/not_wired`；即使接上线，队列空时也只会得到 `no_pending_request`）。
-        这个动作补的就是那一句"去查这个主题"，并且不绕过任何既有闸门：
-        它走的是与 `submit` 同一条入队路径（`interactions.admit_search_request` 的
-        I7 准入 + `SearchRequest.validate` + 同一个取号口径），随后仍由 `run_once`
-        在既有的领取/租约/退避/判重/下载链路上跑。
-
-        ## 默认 mode 为什么是 `precise` 而不是 `topical`（2026-09-30 实测）
-
-        这个动作的语义是"给我这条命题的来源"，不是"给我这个领域的全景"。
-        实测（同一个 topic，真机打 OpenAlex，`temp/live-a-search-*.txt` 与
-        `temp/_probe_openalex_mode.py` 的读数）：
-
-        | mode | 回来 | 对题 |
-        |---|---|---|
-        | `topical`（原默认） | 15 条 | 1/15（异常扩散 / 分子演化速率 / 神经形态自旋电子学…） |
-        | `precise` | 8 条 | 7/8（The extremal process of BBM、Poissonian statistics…） |
-
-        差别在 `precise` 那一档带 `keyword_hit` 后置过滤，而 `topical` 把长题面拆成
-        词袋去打全文检索 —— 词袋越长，OpenAlex 的相关度排序越差。
-        要"领域全景"就显式传 `mode="broad"` / `"topical"`；默认这一档服务的是
-        "缺哪条证据就去找哪一条"。
-
-        ## 三态纪律的落点（这是它与"返回一个空列表"的分界）
-
-        - 准入被拒（在途请求已达上限）：`admitted=False` + 原因，零写入；
-        - 查了但零命中：`outcome="no_results"`（有效结论，不是错误）；
-        - 搜索失败：`outcome="search_failed"` + `errors`（这条请求没结束，
-          会按既有退避规则重试，不许当"没有这篇文献"）；
-        - 领到的是队列里更早的那条：`claimed_request_id != request_id` 如实报出来，
-          绝不把它冒充成"你这条的结果"；
-        - 这一问发不出去（题面里抽不出英文关键词）：入队之前就返回
-          `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`，
-          零写入 —— 不许留一条注定查不动的请求在队列里（那会让调用方读成"检索失败"）。
-        """
-        topic = str(topic or "").strip()
-        if not topic:
-            return {"ok": False, "kind": "bad_topic",
-                    "error": "topic 不能为空（空主题让检索无从构造）"}
-        mode = str(mode or "topical")
-        if mode not in S.SEARCH_MODES:
-            return {"ok": False, "kind": "bad_mode",
-                    "error": f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}"}
-        if not self.providers:
-            # 「没接线」必须与「查了但没命中」分开：这一档零写入，
-            # 调用方据此知道要先去配检索后端，而不是以为这个主题没有文献。
-            return {"ok": False, "kind": "no_provider", "topic": topic, "mode": mode,
-                    "error": "A 没有接任何检索后端（providers 为空）⇒ 这次检索没查成"}
-
-        desc = str(description or "").strip()
-        if mode == "precise" and not desc:
-            # `schema.SearchRequest.validate` 里有一条禁改区判据：
-            # precise 必须带 `content_description`。不改它（那是磁盘格式契约），
-            # 这里用题面本身兜底 —— 实测两种给法（空描述 / 题面当描述）
-            # 在 OpenAlex 上都是 8 条里 7 条对题，所以这一兜底不损失质量。
-            desc = topic
-
-        # ---- 入队之前先问一句"这一问发得出去吗"（2026-09-30 加）
-        #
-        # 判据取自 providers 的公开函数 `query_applicability` —— 不在本文件里
-        # 另写一份"题面里有没有英文关键词"（两套判据必然漂移，而漂移的表现是
-        # "一边说能查、一边不发"）。用的正是 provider 将要用的那一对
-        # `(topic, 清洗后的 description)`，所以这里判"不适用"⇒ provider 那边一定也不适用。
-        #
-        # 为什么必须在入队之前判：`providers` 对抽不出英文关键词的题面是 fail-closed
-        # （抛 `query_not_applicable_cjk`），而这条请求一旦入队，`run_once` 会把它当
-        # "搜索失败"处理 —— 试满 `max_attempts` 次、每次留下退避租约，最后落
-        # `search_failed`。对调用方来说，那读起来像"检索出问题了"，而真相是
-        # "这一问根本没发出去"。两件事必须分开（三态纪律），而且这一档零写入。
-        from . import providers as P
-
-        decision = P.query_applicability(topic, self._query_description(topic, desc))
-        if not decision.applicable:
-            return {
-                "ok": True, "admitted": False, "request_id": None,
-                "topic": topic, "mode": mode,
-                "outcome": "query_not_applicable",
-                "kind": getattr(decision, "state", "") or "query_not_applicable",
-                "reason": str(getattr(decision, "refusal_reason", "")),
-                "note": (
-                    "这一问**没有发给上游**（第三态：没问，不是「查了、没有」，"
-                    "也不是「检索失败」）。A 的检索后端以英文文献为主：把 `topic` 换成"
-                    "带英文关键词的检索式，或把英文检索式写进 `description`，再唤起一次。"
-                ),
-            }
-
-        admitted = self._enqueue_search(topic, mode, desc)
-        if not admitted.get("admitted"):
-            return {"ok": True, "admitted": False, "topic": topic, "mode": mode,
-                    "request_id": None, "outcome": "rejected_by_gate",
-                    "reason": admitted.get("reason"), "gate": admitted}
-
-        rid = str(admitted["request_id"])
-        rounds: list[dict] = []
-        claimed_ids: list[str] = []
-        for _ in range(max(1, int(self.search_max_rounds))):
-            res = self.run_once()
-            rounds.append(res.to_dict())
-            if res.request_id:
-                claimed_ids.append(str(res.request_id))
-            row = self._request_row(rid)
-            if row is not None and (row.get("done") or row.get("outcome")):
-                break
-            if res.request_id is None:
-                break                      # 没有可领的了（原因见 skipped_reason）
-        row = self._request_row(rid) or {}
-        lit_ids = [str(x) for x in (row.get("result_lit_ids") or [])]
-        return {
-            "ok": True,
-            "admitted": True,
-            "request_id": rid,
-            "topic": topic,
-            "mode": mode,
-            "done": bool(row.get("done")),
-            "outcome": row.get("outcome"),
-            # 本轮依次领到过哪些请求。故意给全表而不是只给最后一条：
-            # 队列里有更早的请求时，这个动作会先替它跑完再跑自己那条 ——
-            # 只报最后一条会让调用方以为"我这条一直没被处理"（实测踩过：
-            # 第一版报 `claimed_request_id`，而它等于自己那条，读者据此以为
-            # "队列里没有别人"）。`claimed_own` 才是"我这条被跑到了没有"。
-            "claimed_request_ids": claimed_ids,
-            "claimed_own": rid in claimed_ids,
-            "result_lit_ids": lit_ids,
-            "literature": self._literature_brief(lit_ids),
-            # 实际进查询串的那份描述（非 ASCII 会被丢，见 `_query_description`）。
-            # 给出来是为了"我写了描述但结果不对"这类问题能在读数上直接看出来。
-            "query_description": self._query_description(topic, desc),
-            "registered": sum(int(r.get("registered") or 0) for r in rounds),
-            "duplicated": sum(int(r.get("duplicated") or 0) for r in rounds),
-            "downloaded": sum(int(r.get("downloaded") or 0) for r in rounds),
-            "download_failed": sum(int(r.get("download_failed") or 0) for r in rounds),
-            "attempts": int(row.get("attempts") or 0),
-            "last_error": row.get("last_error"),
-            "queue_pending": rounds[0].get("queue_pending") if rounds else 0,
-            "rounds": rounds,
-            "note": (
-                "这一条已经入队并跑过；`outcome=no_results` 是有效结论（查了、没有），"
-                "`search_failed` 不是结论（这条请求还没结束，会按退避规则重试）。"
-            ),
-        }
-
     def _enqueue_search(self, topic: str, mode: str, description: str) -> dict:
         """把一条按主题的检索请求入队（过 I7 准入闸门 + 取号 + 落行）。
 
@@ -371,14 +78,12 @@ class AgentA:
         out = dict(gate)
         out["request_id"] = rid
         return out
-
     def _request_row(self, request_id: str) -> dict | None:
         """读一条请求行（无锁快照读；只用于汇报，不用它做判断依据）。"""
         for r in self.store.rows("search_requests"):
             if str(r.get("request_id")) == str(request_id):
                 return dict(r)
         return None
-
     def _literature_brief(self, lit_ids: Iterable[str]) -> list[dict]:
         """把 `result_lit_ids` 变成召唤方读得懂的几行（标题/年份/DOI/有没有全文）。"""
         want = {str(x) for x in lit_ids}
@@ -395,8 +100,6 @@ class AgentA:
             })
         out.sort(key=lambda x: x["lit_id"])
         return out
-
-    # ------------------------------------------------------------------ 取任务
     def _claim(self) -> ClaimOutcome:
         """在锁内按 I7 优先级领取一条待办请求：置 claimed_by / lease_until / attempts+=1。
 
@@ -528,8 +231,6 @@ class AgentA:
                 gave_up=gave_up,
                 skipped_reason=reason,
             )
-
-    # ------------------------------------------------------------------ 搜索
     @staticmethod
     def _query_description(topic: str, description: str) -> str:
         """挑"能进查询串的那一份 description"：只留英文关键词，非 ASCII 的部分丢掉。
@@ -558,21 +259,14 @@ class AgentA:
         ascii_only = "".join(ch if ch.isascii() else " " for ch in raw)
         words = [w for w in ascii_only.split() if any(c.isalpha() for c in w)]
         return " ".join(words) if len(words) >= 2 else ""
-
-    #: "这一问根本没发出去"的第三态取值（来自 `providers` 的公开常量，
-    #: 不在这里另抄一份字符串字面量）。`QUERY_APPLICABILITY_STATES` 只有三档：
-    #: `applicable_as_is`（发了）与这两档（没发）—— providers 的私有元组
-    #: `_PROVIDER_STAT_REFUSAL_STATUSES` 分的就是这件事，这里用的是它那两个公开名字。
     _NOT_SENT_STATES: tuple[str, ...] = ()
-
     def _not_sent_states(self) -> tuple[str, ...]:
         """懒取第三态取值（不在导入期去碰 providers，免得凭空多一条导入边）。"""
         if not self._NOT_SENT_STATES:
-            from . import providers as P
+            from .. import providers as P
 
             type(self)._NOT_SENT_STATES = (P.QUERY_NOT_APPLICABLE_CJK, P.QUERY_EMPTY)
         return self._NOT_SENT_STATES
-
     def _split_errors(self, errors: Sequence[str]) -> tuple[list[str], list[str]]:
         """把 provider 的失败分成 `(没发出去的, 发出去但失败的)`。
 
@@ -588,7 +282,6 @@ class AgentA:
         not_sent = [e for e in errors if any(s in e for s in states)]
         sent_but_failed = [e for e in errors if e not in not_sent]
         return not_sent, sent_but_failed
-
     def _search(self, req: dict) -> tuple[list[Any], list[str]]:
         """并发度故意为 1（串行 provider）——避免同时打多个 API 触发限流。"""
         mode = req["mode"]
@@ -605,8 +298,6 @@ class AgentA:
             except Exception as e:  # provider 失败不应让整个请求失败
                 errors.append(f"{getattr(p, 'name', type(p).__name__)}: {type(e).__name__}: {e}")
         return out, errors
-
-    # ------------------------------------------------------------------ 下载
     def _stage_download(self, cand: Any, staging: Path) -> dict:
         """把候选的 PDF 下到 staging 目录（无锁，慢操作）。
 
@@ -666,8 +357,6 @@ class AgentA:
         if base.get("url_source"):
             out["url_source"] = base["url_source"]
         return out
-
-    # ------------------------------------------------------------------ 主流程
     def _attach_staged(self, lit_id: str, dl: dict) -> tuple[str | None, dict]:
         """把 staging 里的字节搬进 `<library>/<lit_id>/`，返回 `(相对路径, 清洗过的 download)`。
 
@@ -699,277 +388,10 @@ class AgentA:
             return None, out
         return f"{lit_id}/{target.name}", out
 
-    def run_once(self) -> ARunResult:
-        """处理至多一条待办请求，返回本轮的完整审计结果。
 
-        三态纪律在这里的落点：取不到请求时不返回一个"看起来正常的空结果"，
-        而是把"没做"的原因原样带出来（`skipped_reason` 四选一，取值与优先级见 `_claim`）。
-        `processed/registered/...` 全是计数（"做了多少"），`skipped_reason` 是
-        "为什么没做" —— 两者正交，调用方必须分别看。
-        """
-        result = ARunResult()
-        claim = self._claim()
-        # 取任务侧的审计信息先落进结果，再决定要不要早退 —— 否则
-        # "有 high 在队里但全被租约占着 / 全在退避中"这类信息会随着 skipped_reason
-        # 一起丢掉，外部就只剩一个"什么都没做"。
-        result.queue_pending = claim.pending
-        result.skipped_lease_active = claim.skipped_lease_active
-        result.skipped_lease_backoff = claim.skipped_lease_backoff
-        result.gave_up = claim.gave_up
-        req = claim.request
-        if req is None:
-            result.skipped_reason = claim.skipped_reason
-            return result
-        # I7：把"本轮取了哪条、它是什么优先级"暴露出来 —— 这是从外部唯一能
-        # 观察到优先级真的生效的地方（文献表里看不出来）。
-        result.request_id = req.get("request_id")
-        result.priority = req.get("priority")
-        result.priority_rank = X.priority_rank(req.get("priority"))
-        result.submitted_by = req.get("submitted_by")
+class AgentA(_RunOnce, _Run, _SearchLiterature, _Core):
+    """文献搜索智能体。providers/downloader 由外部注入，便于离线测试。"""
 
-        candidates, search_errors = self._search(req)
-
-        staging = Path(tempfile.mkdtemp(prefix="agentflow-stage-", dir=str(self.store.library)))
-        try:
-            # ---- 阶段 1（无锁）：先把候选规范化 + 下载到 staging。
-            # 这里不分配 ID、不写表，因此失败/崩溃都不会留下半成品。
-            prepared: list[dict] = []
-            downloads = 0
-            for cand in candidates:
-                title = getattr(cand, "title", "") or ""
-                if not title.strip():
-                    continue
-                entry = {
-                    "title": title,
-                    "type": getattr(cand, "type_code", "Z") or "Z",
-                    "summary": T.clip(getattr(cand, "summary", ""), 1200),
-                    "doi": getattr(cand, "doi", None),
-                    "year": getattr(cand, "year", None),
-                    "authors": list(getattr(cand, "authors", []) or []),
-                    "venue": getattr(cand, "venue", None),
-                    "language": getattr(cand, "language", None),
-                    "provider": getattr(cand, "provider", "?"),
-                    "raw": getattr(cand, "raw", {}) or {},
-                }
-                if downloads < self.max_downloads:
-                    dl = self._stage_download(cand, staging)
-                    downloads += 1 if dl.get("status") != "skipped" else 0
-                    entry["download"] = dl
-                else:
-                    entry["download"] = {"status": "skipped", "error": "max_downloads_reached",
-                                         "http_status": None, "bytes": 0, "sha256": None}
-                prepared.append(entry)
-
-            # ---- 阶段 2（锁内，短）：重新判重 → 分配 ID → 落行 → 搬文件 → 标记请求完成。
-            with self.store.tx("search_requests", "literature", actor=self.actor, note="register") as tx:
-                lit_rows = tx.rows("literature")
-                new_ids: list[str] = []
-                for entry in prepared:
-                    existing, hit_key = D.find_existing_literature(
-                        lit_rows, entry["title"], entry["year"], entry["doi"]
-                    )
-                    if existing is not None:
-                        # 同一篇被另一个请求（或另一个 A 实例）先登记了：只追加来源，不新建行
-                        src = set(existing.get("source_request_ids") or [])
-                        src.add(req["request_id"])
-                        existing["source_request_ids"] = sorted(src)
-                        # ---- 补下载（`draft/30` §T0-10）：在库但没有可用全文的行，
-                        # 允许这一次把字节补上。没有这一步，"某篇在库却没有文件"就是个
-                        # 死局：候选每次都被判重跳过，而 P1 要求必查的那几篇必须落盘。
-                        old_dl = existing.get("download") or {}
-                        needs_file = (not existing.get("path")) or str(old_dl.get("status")) != "ok"
-                        got_path, dl_clean = self._attach_staged(
-                            str(existing["lit_id"]), dict(entry.get("download") or {}))
-                        backfilled = bool(needs_file and got_path)
-                        # 真的试过（不是"没有 PDF URL"/"预算用尽"那种 skipped）就记账 ——
-                        # 与新建行那一支同一个口径：新建行会让失败留在行上，
-                        # 补下载若什么都不记，"这一篇试过但没拿到"就只活在计数里。
-                        tried = needs_file and str(dl_clean.get("status")) in (
-                            "ok", "failed", "content_mismatch")
-                        if backfilled:
-                            existing["path"] = got_path
-                            existing["download"] = {
-                                **dl_clean, "backfilled": True,
-                                "previous": {"status": old_dl.get("status"),
-                                             "error": old_dl.get("error")},
-                            }
-                            result.downloaded += 1
-                            if str(dl_clean.get("status")) == "content_mismatch":
-                                result.download_suspect += 1
-                        elif tried:
-                            existing["download"] = {
-                                **dl_clean, "backfill_attempt": True,
-                                "previous": {"status": old_dl.get("status"),
-                                             "error": old_dl.get("error")},
-                            }
-                            if str(dl_clean.get("status")) == "failed":
-                                result.download_failed += 1
-                            else:
-                                result.download_suspect += 1
-                        note = f"dup_by:{hit_key}" + ("+backfill" if backfilled else "")
-                        tx.upsert("literature", existing, note=note)
-                        result.duplicated += 1
-                        new_ids.append(existing["lit_id"])
-                        continue
-
-                    lit_id = tx.alloc_id("lit")
-
-                    # 这里刻意不建 `<library>/<lit_id>/` 目录（`draft/28` §154 的 R-49）。
-                    # 以前这一处无条件 `mkdir`，于是"下载被跳过（没有 PDF URL）"或
-                    # "下载失败"的行也会留下一个空目录：实测 98 行里留下 60 个空目录，
-                    # 目录树看起来有 98 篇文献，实际只有 38 个文件。
-                    # 建目录的唯一责任人现在是 `_attach_staged` —— 它只在真的有字节要搬
-                    # 时才建（同文件 389-390 那一处），判据因此只有一份。
-                    dl = entry.get("download") or {}
-                    rel_path, dl_clean = self._attach_staged(lit_id, dict(dl))
-                    st = dl.get("status")
-                    if rel_path:
-                        if st == "ok":
-                            result.downloaded += 1
-                        else:
-                            result.download_suspect += 1
-                    elif st == "failed":
-                        result.download_failed += 1
-
-                    keys = D.literature_keys(entry["title"], entry["year"], entry["doi"])
-                    row = S.Literature(
-                        lit_id=lit_id,
-                        title=entry["title"],
-                        type=entry["type"],
-                        summary=entry["summary"],
-                        path=rel_path,
-                        processed=False,  # B 负责置 true
-                        source_request_ids=[req["request_id"]],
-                        dedup_key=keys[0] if keys else f"title:{T.normalize(entry['title'])}|*",
-                        doi=D.normalize_doi(entry["doi"]),
-                        year=entry["year"],
-                        authors=entry["authors"],
-                        venue=entry["venue"],
-                        language=entry["language"],
-                        added_at=S.now_iso(),
-                        download={k: v for k, v in dl.items() if not k.startswith("_")},
-                    )
-                    row.validate()
-                    rowd = row.to_dict()
-                    # 把全部候选键挂上行内（供判重诊断；不进 schema 校验的强约束）
-                    rowd["_keys"] = keys
-                    tx.upsert("literature", rowd, note=f"provider:{entry['provider']}")
-                    # 注意：`lit_rows` 就是 `tx.rows("literature")` 返回的那个列表本身，
-                    # upsert 已经把行放进去了；这里不能再 append，否则会出现重复 ID。
-                    new_ids.append(lit_id)
-                    result.registered += 1
-
-                # 重新读取请求行（可能已被并发修改），再决定这一轮的终局
-                fresh = tx.find("search_requests", request_id=req["request_id"]) or dict(req)
-                fresh["result_lit_ids"] = S.sorted_unique(new_ids)
-                fresh["claimed_by"] = None
-
-                if new_ids:
-                    fresh["done"] = True
-                    fresh["outcome"] = "ok"
-                    fresh["lease_until"] = None
-                    fresh["last_error"] = None
-                elif search_errors:
-                    # DESIGN.md §5.3：搜索失败不等于这条请求结束。
-                    # 如果这里就置 done，那么"租约到期重试"和"超过 max_attempts 才放弃"
-                    # 两条规则就都失效了 —— 一次网络抖动会把请求永久判死。
-                    #
-                    # 但"这一问根本没发出去"（第三态）不在这条规则里：它是确定性的，
-                    # 重试不会变。混进重试那一档的代价是白烧三次配额 + 读数上"没问"与
-                    # "问了失败"长得一样（`draft/28` §205）。所以先分档：
-                    not_sent, transient = self._split_errors(search_errors)
-                    exhausted = int(fresh.get("attempts") or 0) >= self.max_attempts
-                    if not_sent and not transient:
-                        fresh["done"] = True
-                        # 词表里没有第四档（`schema.SEARCH_OUTCOMES` 是禁改区契约），
-                        # 所以 outcome 仍是 `search_failed`；区别写在 `last_error` 里，
-                        # 逐字带第三态名，并明说"不重试"。
-                        fresh["outcome"] = "search_failed"
-                        fresh["lease_until"] = None
-                        fresh["last_error"] = (
-                            "这一问没有发给上游（第三态，重试不会变）：" + "; ".join(not_sent))[:500]
-                    elif not_sent and transient:
-                        # 一部分 provider 没发出去、另一部分发出去失败了：
-                        # 按可重试处理（那一条真失败的可能下次就好了），
-                        # 但把"没发出去"的那几条也如实写进同一个字段。
-                        fresh["done"] = False
-                        fresh["outcome"] = None
-                        fresh["lease_until"] = make_lease(self.retry_backoff_seconds)
-                        fresh["last_error"] = "; ".join(search_errors)[:500]
-                    elif exhausted:
-                        fresh["done"] = True
-                        fresh["outcome"] = "search_failed"
-                        fresh["lease_until"] = None
-                        fresh["last_error"] = "; ".join(search_errors)
-                    else:
-                        fresh["done"] = False
-                        fresh["outcome"] = None
-                        # 退避租约：既让重试可行，又不会在本进程里立刻重打同一个 API
-                        fresh["lease_until"] = make_lease(self.retry_backoff_seconds)
-                        fresh["last_error"] = "; ".join(search_errors)
-                else:
-                    # 搜索正常执行但零命中 —— 这是一个有效结论，不是错误
-                    fresh["done"] = True
-                    fresh["outcome"] = "no_results"
-                    fresh["lease_until"] = None
-                    fresh["last_error"] = None
-
-                if search_errors:
-                    tx.info("search_errors", request_id=req["request_id"], errors=search_errors)
-                # 注意：事务里拿到的是 dict，不能直接调 .validate()；用行对象校验一遍
-                S.row_from_dict("search_requests", fresh).validate()
-                tx.upsert("search_requests", fresh, note=f"finish:{fresh.get('outcome')}")
-                result.processed = 1
-                result.outcome = fresh.get("outcome")
-                # 注意：这里不再碰 `result.gave_up`。放弃（gave_up）只发生在
-                # `_claim()` 里 —— 请求被放弃后根本不会被取出来跑，所以"跑到提交阶段
-                # 才发现 outcome=gave_up"是一个不可能发生的分支。原来那行
-                # `result.gave_up = 1 if fresh.get("outcome") == "gave_up" else 0`
-                # 因此恒为 0，把 `_claim()` 里真正数到的放弃条数覆盖成 0：
-                # 字段存在、名字合理、永远是 0 —— 典型的"看起来在统计、实际恒为假"。
-        finally:
-            # staging 目录里的残留下载一并清掉（成功搬走的已经不在里面了）
-            shutil.rmtree(staging, ignore_errors=True)
-
-        return result
-
-    def run(self, max_requests: int | None = None) -> dict:
-        """处理若干条请求。`max_requests=None` 表示处理到没有待办为止。
-
-        返回的是累加后的 `ARunResult.to_dict()`。三态纪律：`skipped_reason`
-        非空表示"这一轮没取到活的原因"（不是错误），此时循环立即停下 ——
-        继续空转只会把同一句"队列空了"重复无数遍。
-        """
-        total = ARunResult()
-        n = 0
-        while max_requests is None or n < max_requests:
-            r = self.run_once()
-            # 取任务侧的审计信息先汇总，再判断要不要早退：早退的那一轮
-            # （队列空 / 全被别人占着）恰恰是"为什么没干活"最需要被看见的一轮。
-            total.queue_pending = r.queue_pending
-            total.skipped_lease_active += r.skipped_lease_active
-            total.skipped_lease_backoff += r.skipped_lease_backoff
-            total.gave_up += r.gave_up
-            if r.request_id:
-                total.request_id = r.request_id
-                total.priority = r.priority
-                total.priority_rank = r.priority_rank
-                total.submitted_by = r.submitted_by
-            if r.skipped_reason:
-                total.skipped_reason = r.skipped_reason
-                break
-            total.processed += r.processed
-            total.registered += r.registered
-            total.duplicated += r.duplicated
-            total.downloaded += r.downloaded
-            total.download_failed += r.download_failed
-            total.download_suspect += r.download_suspect
-            total.outcome = r.outcome
-            n += 1
-        return total.to_dict()
-
-
-# ---------------------------------------------------------------- 自检
 
 
 def _selftest() -> int:
@@ -995,7 +417,7 @@ def _selftest() -> int:
     import tempfile
     from types import SimpleNamespace
 
-    from .fetch import FetchResult
+    from ..fetch import FetchResult
 
     checks: list[tuple[str, bool]] = []
 
@@ -1211,21 +633,3 @@ def _selftest() -> int:
             print(f"  - {label}")
         return 1
     return 0
-
-
-#: 本角色的声明（`goal-7f5116c1` M3）。
-#:
-#: 真身在 `specs/a.py` —— 那里就是权限面的落点（`.noai-paths` 保护它）。
-#: 这里只做再导出：`agentspec.builtin_registry()`、判据与调用方都按 `mod.SPEC` 取，
-#: 于是"角色模块里能读到自己的声明"这件事仍然成立，而不会多出第二份拷贝。
-from .specs.a import SPEC  # noqa: E402,F401
-
-
-if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块（release_check 第 2 项会跑它）
-    import sys
-
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:  # 控制台编码重配失败无所谓（重定向到文件时就是这种情况），不影响自检结论
-        pass
-    raise SystemExit(_selftest())

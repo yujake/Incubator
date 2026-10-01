@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-01T19:10:22+08:00",
+  "generated_at": "2026-10-01T21:18:29+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -158,31 +158,12 @@
       "path": "scripts/release_check.py",
       "glob": "scripts/release_check.py",
       "category": "release-deploy",
-      "sha256": "5827645fa9e45530a523e29d99a7d07f72af6eddb4eda77d9687a36c938e9d5c",
+      "sha256": "493bd0b36d6348755692cc23279e45525c4c12fd04307d5168cc1eff615603c9",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "本地书架/项目窗口（scripts__release_check.py.txt）",
+      "change_note": "goal-7f5116c1 M7：八个角色模块拆成包之后的落点适配（只改读取路径，不改判据口径）。(1) capabilities._h_writable_tools_is_derived：H 的自检落点从 src/agentflow/agent_h.py 变成 src/agentflow/agent_h/_support.py（拆包后 _H_WRITABLE_TOOLS 的定义住在那儿），旧路径保留为回退分支；判据仍是「右侧不是字面量容器 + 模块里出现 READONLY_CALL_EXCEPTIONS」。(2) scripts/release_check.item_selftests：模块文件不存在时再看 <角色>/__main__.py（包形态下 python -m 执行的正是它；自检块 M7 搬到了那里），「有没有自检块」这条判据的口径不变。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
       "changed_this_session": null,
-      "reviewers": [
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T17:49:21+08:00",
-          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__release_check.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__release_check.py.txt",
-          "evidence_sha256": "cd81a46db9ea37b31e3eae364e63f94eb71314d411b6370d13f16633b208a553"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T17:49:21+08:00",
-          "scope": "本地书架与项目窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：scripts__release_check.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\scripts__release_check.py.txt",
-          "evidence_sha256": "cd81a46db9ea37b31e3eae364e63f94eb71314d411b6370d13f16633b208a553"
-        }
-      ],
+      "reviewers": [],
       "audits": [],
       "also_hits": []
     },
@@ -203,10 +184,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "70f122892d31cd7ae604591aa4d8fa7b343cd49a987e2a76d205bbf98f8b2849",
+      "sha256": "3cc658a4abb3326218af89c0db63923461de9e008693b5c039674f6959be338f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M5（draft/28 §224）：给闸门与装配加可选注册表（capabilities.registry/roles_in/edges_for、policy.check/check_action/check_edge 的 registry=、conductor 的 specs=），并给声明层加 audit_registry。默认 None ⇒ 行为逐字不变；新角色 Z 只在测试的局部注册表里存在。reviewers 仍为 0。",
+      "change_note": "goal-7f5116c1 M7：八个角色模块拆成包之后的落点适配（只改读取路径，不改判据口径）。(1) capabilities._h_writable_tools_is_derived：H 的自检落点从 src/agentflow/agent_h.py 变成 src/agentflow/agent_h/_support.py（拆包后 _H_WRITABLE_TOOLS 的定义住在那儿），旧路径保留为回退分支；判据仍是「右侧不是字面量容器 + 模块里出现 READONLY_CALL_EXCEPTIONS」。(2) scripts/release_check.item_selftests：模块文件不存在时再看 <角色>/__main__.py（包形态下 python -m 执行的正是它；自检块 M7 搬到了那里），「有没有自检块」这条判据的口径不变。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

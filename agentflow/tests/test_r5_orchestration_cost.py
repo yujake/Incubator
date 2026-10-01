@@ -1199,9 +1199,14 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_ConcurrencyProbe",          # 兼容旧名 `_ConcurrencyProbe = ConcurrencyProbe`
     "_NO_AXIOMS",                 # `import ... as _NO_AXIOMS`
     "_NAME_EVIDENCE_TEXT",        # 常量定义处一次
-    "_declared_name_note",        # 函数定义处一次
     "_default_search",            # 函数定义处一次
-    "_short",                     # 函数定义处一次
+    # —— `goal-7f5116c1` M6/M7 拆包后**从本表退出**的两个（登记过期，按等额纪律删掉）——
+    # `_declared_name_note`（`agent_e/_support.py` 定义）与 `_short`（`agent_f/_support.py`
+    # 定义）本来只有一个真符号出现点；拆包后每个用到它们的动作模块都多了一行
+    # `from ._support import ... _declared_name_note`，`tokenize` 数到的 NAME 记号
+    # 因此变成 3 个（> 1）⇒ 它们不再是"只有文本提及"的 token，本表必须同步删掉。
+    # 这不是放宽判据：口径仍是"真符号出现 ≤ 1 次的提及要逐条登记"，
+    # 变的是这两个 token 的真符号数（读数：拆包后各 3 个）。
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

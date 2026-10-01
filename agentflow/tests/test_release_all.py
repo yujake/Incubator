@@ -2076,21 +2076,22 @@ def test_the_design_tools_criterion_is_not_vacuous():
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
-    "agent_a.py": "A 智能体：文献搜索",
-    "agent_b.py": "B 智能体：文献整理（抽取 + 逐字回验）",
-    # `goal-7f5116c1` M6：`agent_c.py`（3446 行）拆成包，一个动作一个文件
-    # （`hottest` / `paths` / `cold` / `gaps` / `neighbors` / `relations_between` /
-    #  `contradictions` / `structural_duplicates` / `handle` 各自一个模块）+
-    # `core.py`（其余成员与 mixin 组装）+ `_support.py`（模块级 helper 与常量）。
-    # 拆法逐字搬移（判据 `tests/test_agent_split_is_one_action_one_file.py`）。
-    "agent_c/": "智能体 C：关系分析（拆包：一个动作一个文件 + core + _support）",
+    # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件
+    # （A 3 / B 6 / C 9 / D 14 / E 5 / F 4 / G 6 / H 4 个动作各自一个模块）+
+    # `core.py`（其余成员与 mixin 组装）+ `_support.py`（模块级 helper 与常量）+
+    # `__main__.py`（`python -m agentflow.<角色>` 的自检入口）。
+    # 拆法是逐字搬移（一次性证明 `temp/_m6_verify_verbatim.py`：28/28），这条清单守的是
+    # "拆完之后还保持这个形状"（判据 `tests/test_agent_split_is_one_action_one_file.py`）。
+    "agent_a/": "智能体 A：文献搜索（拆包：3 个动作各一个文件 + core + _support + __main__）",
+    "agent_b/": "智能体 B：文献整理（拆包：6 个动作各一个文件 + core + _support + __main__）",
+    "agent_c/": "智能体 C：关系分析（拆包：9 个动作各一个文件 + core + _support + __main__）",
+    "agent_d/": "智能体 D：研究循环（拆包：14 个动作各一个文件 + core + _support + __main__）",
+    "agent_e/": "智能体 E：数值实验与形式化验证（拆包：5 个动作各一个文件 + core + _support + __main__）",
+    "agent_f/": "智能体 F：多轮难题攻坚（拆包：4 个动作各一个文件 + core + _support + __main__）",
+    "agent_g/": "智能体 G：论文撰写（拆包：6 个动作各一个文件 + core + _support + __main__）",
+    "agent_h/": "智能体 H：审校（拆包：4 个动作各一个文件 + core + _support + __main__）",
     "specs/": "每个角色一份**声明真身**（`goal-7f5116c1` M3）：`ACTIONS`（动作表）与 `SPEC` —— "
               "`capabilities.py` 的四张表由它派生；它在 `.noai-paths` 里逐文件受保护",
-    "agent_d.py": "智能体 D：研究循环",
-    "agent_e.py": "智能体 E：数值实验与形式化验证",
-    "agent_f.py": "智能体 F：多轮难题攻坚",
-    "agent_g.py": "智能体 G：论文撰写",
-    "agent_h.py": "智能体 H：审校（只读角色）",
     "agentspec.py": "一个 agent 的声明与注册表（`AgentSpec`/`AgentBrief`：职责与门面、官能轻重、只读与否、能召唤谁、写集、实现类）——`goal-7f5116c1` 的 M2，每个角色在自己模块里写一份 `SPEC`，装配面逐步改成从这里读",
     "cancellation.py": "取消语义（FC-20 的四条纪律）",
     "capabilities.py": "角色能力表 + 写集 + 允许的召唤边（主控编队的声明层）",

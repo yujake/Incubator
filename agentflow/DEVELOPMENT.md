@@ -55,7 +55,7 @@
 | 位置 | 文件 |
 |---|---|
 | `agentflow/`（仓库根） | `.noai-paths` `.noai-approvals.json` `AGENTS.md` `config.yaml` `DESIGN.md` `DESIGN-TOOLS.md` `DESIGN-INTERACTIONS.md` `DESIGN-ROLES.md` `DESIGN-CONDUCTOR.md` `pyproject.toml` `README.md` `DEVELOPMENT.md` `NOAI-REVIEW-REGISTER.md` |
-| `agentflow/src/agentflow/` | **包根一层的全部 62 个 `.py`**（观测 2026-09-30；复算 `(Get-ChildItem src/agentflow/*.py).Count`）：`__init__.py` `__main__.py` `agent_a.py` `agent_b.py` `agent_c.py` `agent_d.py` `agent_e.py` `agent_f.py` `agent_g.py` `agent_h.py` `agent_loop.py` `agent_prompts.py` `artifacts.py` `autonomy.py` `cancellation.py` `canonical.py` `capabilities.py` `claimanatomy.py` `claims.py` `cli.py` `conductor.py` `console.py` `contextbudget.py` `dedup.py` `deliver.py` `demo.py` `evidence.py` `extract.py` `faculty_checks.py` `fetch.py` `formalgw.py` `fulltextstore.py` `gates.py` `host.py` `interactions.py` `judge.py` `judges.py` `llm.py` `llmseam.py` `locallib.py` `modelclient.py` `modelcost.py` `modelgw.py` `paperbuild.py` `pipeline.py` `policy.py` `projects.py` `promptkit.py` `providers.py` `quoteverify.py` `renderanchor.py` `runflow.py` `scheduler.py` `schema.py` `sessions.py` `signatures.py` `store.py` `textutil.py` `tokenmeter.py` `tty.py` `userio.py` `verify.py`。这一格的路径是**相对工作区根**写的（`agentflow/` 前缀）；同一批文件在 `agentflow/` 内部按少一层前缀的形式引用（`src/agentflow/gates.py`）（2026-09-30 更正：本节原先只列了其中一部分、并记"共 40 个 `.py`"，两者都已过期） |
+| `agentflow/src/agentflow/` | **包根一层的全部 56 个 `.py` + 8 个角色包**（观测 2026-10-01；复算 `(Get-ChildItem src/agentflow/*.py).Count` ⇒ 56、(Get-ChildItem src/agentflow -Directory).Count 减去 `tools`、`__pycache__` ⇒ 8）：`__init__.py` `__main__.py` `agent_loop.py` `agent_prompts.py` `artifacts.py` `autonomy.py` `cancellation.py` `canonical.py` `capabilities.py` `claimanatomy.py` `claims.py` `cli.py` `conductor.py` `console.py` `contextbudget.py` `dedup.py` `deliver.py` `demo.py` `evidence.py` `extract.py` `faculty_checks.py` `fetch.py` `formalgw.py` `fulltextstore.py` `gates.py` `host.py` `interactions.py` `judge.py` `judges.py` `llm.py` `llmseam.py` `locallib.py` `modelclient.py` `modelcost.py` `modelgw.py` `paperbuild.py` `pipeline.py` `policy.py` `projects.py` `promptkit.py` `providers.py` `quoteverify.py` `renderanchor.py` `runflow.py` `scheduler.py` `schema.py` `sessions.py` `signatures.py` `store.py` `textutil.py` `tokenmeter.py` `tty.py` `userio.py` `verify.py`，外加八个角色包 `agent_a/` … `agent_h/`（`goal-7f5116c1` M6/M7：每个角色一个包，一个动作一个文件；主控 M 不在其列，它是 `conductor.py`）。这一格的路径是**相对工作区根**写的（`agentflow/` 前缀）；同一批文件在 `agentflow/` 内部按少一层前缀的形式引用（`src/agentflow/gates.py`）（2026-10-01 更正：本节原先只列了其中一部分并记"共 40 个 `.py`"，后来又记"62 个" —— 三个数都已过期；62 → 56 是 M6/M7 把 6 个角色模块改成包） |
 | `agentflow/src/agentflow/tools/` | `__init__.py` `base.py` `attack_tools.py` `conjecture_tools.py` `conductor_tools.py` `doc_tools.py` `fs_tools.py` `graph_tools.py` `ocr_tools.py` `research_tools.py` `review_tools.py` `search_tools.py` `table_tools.py` `trace_tools.py` `verify_tools.py` —— **15 个文件** = 13 个 `*_tools.py` + `base.py` + `__init__.py`（观测 2026-09-30；复算 `(Get-ChildItem src/agentflow/tools -File).Count`）（2026-09-30 更正：本节原先漏列 `conjecture_tools.py` 与 `conductor_tools.py`） |
 | `agentflow/scripts/` | `__init__.py` `lint_rules.py` `noai_gate.py` `release_check.py` `usage_ledger_audit.py`（观测 2026-09-30：共 **5** 个 `.py`；复算 `(Get-ChildItem scripts/*.py).Count`） |
 | `agentflow/docs/` | `INDEX.md` `ROLE-SPECS.md` `PROPOSALS.md` `NOAI-GOVERNANCE.md` `FORMAL-TOOLCHAIN.md` `NOAI-CHANGE-LIST-management.md` `NOAI-SUSPENSION-2026-09-25.md` `NOAI-SUSPENSION-2026-09-28.md` `PROPOSAL-side-effect-axes.md` `ROLE-SPECS-DRAFT-N-O-Q.md` `SCHEMA-DRAFT-management.md` `SCHEMA-MIGRATION-PROPOSAL-claims.md` `SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md` `TOOLBOX-DRAFT-roles.md`（观测 2026-09-30：共 **14** 个文件，且这一层没有非 `.md` 的文件；复算 `(Get-ChildItem docs -File).Count`） |
@@ -160,7 +160,7 @@ LIVE-READINGS:BEGIN
 lint_rules_rules   = 12   # `len(RULES)`；复跑 `python scripts/lint_rules.py` 摘要行的"规则 N 条"；观测 2026-09-27（G3 复测）
 lint_rules_warning = 9    # `python scripts/lint_rules.py`（日常档）末行的 warning 栏；观测 2026-09-29（`draft/28` §172/§173：本目标全程这一位没动过，9 条与 R-37 那批之前完全一致）
 lint_rules_info    = 47   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-09-29（`draft/28` §173：30 → 37（§168 拓宽取词面 + 登记 7 条"由数据产出"的预留）→ **47**（§173 又把 R-64 那 10 条登记为预留））。这 17 条 info 全部是 R011"栏一：已登记为预留"的逐条打印（`tools/vocab_census.py::RESERVED_VALUES`）——按该表 doctrine，预留项**必须**照样打印含理由，所以它们是设计后果而不是噪音。同一批一度让 R011 的**栏二**多出 10 条无人认领（`error 6 → 11`），那 10 条已在 §173 逐条登记为预留 ⇒ `error` 回到 6，再在 §176 里归零（那 6 条是 R009 的注释装饰，已按"只改注释与文档串"清掉）
-lint_rules_strict_warning = 51 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-09-29（`draft/28` §172/§173；此前 39）
+lint_rules_strict_warning = 56 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-10-01（`goal-7f5116c1` M6/M7：把 6 个角色模块拆成包 ⇒ 逐模块的 R007 行跟着变多，51 → **56**；此前 39）
 lint_rules_strict_info    = 46 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-09-29（`draft/28` §173）
 noai_paths_glob = 38   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
 noai_paths_unique = 35   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
@@ -312,7 +312,9 @@ LIVE-READINGS:END
    会让下一个人以为那是不能动的承诺；把不变量写成 `[为什么]`，会让它看起来可以商量。
 
 **样板文件**（判据点名的四个，见 `tests/test_comment_layers.py`）：
-`agent_d.py`（4188 行、注释密度最高的大文件）、`tools/attack_tools.py`（工具层最密）、
+`agent_d/`（包；原 `agent_d.py` 4188 行的大文件在 `goal-7f5116c1` M6 拆成了一个动作一个文件，
+三层标签现在分布在 `agent_d/_support.py` 与 `agent_d/adjudicate.py` 等文件里 —— 判据按**整个包**取文本）、
+`tools/attack_tools.py`（工具层最密）、
 `claimanatomy.py`、`evidence.py`。这四份按上面的写法各标了一轮，供新代码照抄。
 
 | 项 | S1 实测 | 当时的证据 |
@@ -469,7 +471,7 @@ agentflow/
 │   ├── llmseam.py             ★ 统一的模型缝：一次调用 = 一条审计记录
 │   ├── projects.py            ★ 项目工作区（一个项目一个文件夹）
 │   ├── verify.py              ★ 全库不变量校验（`Issue.code` 的**条数按命令当次读**：AST 数 `Issue(...)` 的第 4 个实参去重；观测 2026-09-29（T1+T2）⇒ 调用点 95、字面量 94、去重 **84**（T1 加 2 个新码 + T2 加 5 个 = 77+7；`dangling_lit` 是既有码，故不是 +3）—— 再前 `G3`（2026-09-27）是 85/84/**77**，`G3` 之前这里写 71，已过期。**量法有出口**（原来是 `temp/` 里的脚本，`temp/` 不入库 ⇒ 现在把命令写进本节）：`python -c "import ast,pathlib;t=ast.parse(pathlib.Path('src/agentflow/verify.py').read_text(encoding='utf-8'));c=[n for n in ast.walk(t) if isinstance(n,ast.Call) and getattr(n.func,'id','')=='Issue'];v={n.args[3].value for n in c if len(n.args)>=4 and isinstance(n.args[3],ast.Constant)};print(f'调用点 {len(c)} / 去重 {len(v)}')"`）
-│   ├── agent_a.py … agent_h.py  八个角色（**每个角色一个文件**）
+│   ├── agent_a/ … agent_h/     八个角色（**每个角色一个包**：一个动作一个文件 + core.py + _support.py + __main__.py；`goal-7f5116c1` M6/M7）
 │   ├── cli.py                 命令行入口
 │   ├── pipeline.py            固定顺序流水线（前三阶段的编排）
 │   └── tools/                 工具层（= `*_tools.py` + `base.py` + `__init__.py`；`*_tools.py` 当次 13 个 —— **不写死份数**：`*_tools.py` 的条数由 §0.3 的 `LIVE-READINGS` 块产出，`(Get-ChildItem src/agentflow/tools -File).Count` 观测 2026-09-30 ⇒ 15）

@@ -37,7 +37,7 @@ from agentflow import capabilities as C
 from agentflow.tools import base as TB
 
 CAP_PY = pathlib.Path(C.__file__)
-AGENT_H = pathlib.Path(C.__file__).parent / "agent_h.py"
+AGENT_H = pathlib.Path(C.__file__).parent / "agent_h" / "_support.py"
 
 
 def test_the_assertion_passes_on_the_real_tree() -> None:
@@ -186,14 +186,16 @@ def test_the_reverse_guard_catches_a_literal_second_copy(monkeypatch, tmp_path) 
         '    "review.report",\n'
         ")"
     )
-    fake = tmp_path / "agent_h.py"
+    fake = tmp_path / "_support.py"
     fake.write_text(src.replace(derived, literal), encoding="utf-8")
 
     real_read = pathlib.Path.read_text
     #  第一版在替身里调了 `fake.read_text(...)`（自己）⇒ `RecursionError`。
     # 必须把原始方法绑到一个局部变量上再调它。
+    #  另：每个拆了包的角色的落点都叫 `_support.py`（`goal-7f5116c1` M6/M7），
+    #  所以替身要同时按目录名认（只看文件名会把 agent_c/d/… 的那个也一起换掉）。
     def fake_read(self, *a, **kw):
-        if self.name == "agent_h.py":
+        if self.name == "_support.py" and self.parent.name == "agent_h":
             return real_read(fake, *a, **kw)
         return real_read(self, *a, **kw)
 

@@ -119,7 +119,8 @@ def test_every_source_module_is_placed_somewhere_in_the_map() -> None:
 
 
 #: §3「这些文件为什么这么大」那张表的行：`| \`x.py\` | 行数 | 边界 | 为什么大 |`。
-_BIG_TABLE_ROW = re.compile(r"^\|\s*`([A-Za-z0-9_]+\.py)`\s*\|\s*([0-9]+)\s*\|", re.M)
+#: `goal-7f5116c1` M6/M7 把八个角色拆成了包 ⇒ 这一格也可以是包内的文件（`agent_b/core.py`）。
+_BIG_TABLE_ROW = re.compile(r"^\|\s*`([A-Za-z0-9_/]+\.py)`\s*\|\s*([0-9]+)\s*\|", re.M)
 
 
 def _big_file_rows(text: str) -> list[tuple[str, int]]:

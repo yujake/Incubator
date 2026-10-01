@@ -57,6 +57,70 @@ def _read_source(name: str) -> str:
     return (_src_dir() / name).read_text(encoding="utf-8")
 
 
+#: `goal-7f5116c1` M6/M7：八个角色模块改成了包（一个动作一个文件）。
+#: 下面几条结构性判据原本只读一个文件；它们现在必须读整包，
+#: 而且要把动作 mixin（`_Review` / `_Revise` 这类）里的方法算回角色类名下 ——
+#: 否则"`AgentH` 类体内不许写盘"会在拆包后变成真空：动作方法搬进了 mixin，
+#: `startswith("AgentH.")` 再也匹配不到任何东西，判据看起来还是绿的。
+def _role_files(name: str) -> list[Path]:
+    """角色的落点：拆包后是包（按名排好序），未拆包时是单个模块。"""
+    pkg = _src_dir() / name.removesuffix(".py")
+    if pkg.is_dir():
+        return sorted(pkg.glob("*.py"))
+    return [_src_dir() / name]
+
+
+def _role_mixins(name: str) -> set[str]:
+    """角色类的直接基类里那些"动作 mixin"（去掉 `_Core`）。"""
+    role_cls = "Agent" + name.split("_")[1][0].upper()
+    core = _src_dir() / name.removesuffix(".py") / "core.py"
+    if not core.is_file():
+        return set()
+    tree = ast.parse(core.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == role_cls:
+            return {ast.unparse(b).split(".")[-1] for b in node.bases} - {"_Core"}
+    return set()
+
+
+def _role_scan_writes(name: str) -> list[tuple[str, tuple[str, ...], int, str]]:
+    """整包扫写盘；mixin 里的方法归到角色类名下（保持拆包前那几条断言的含义）。"""
+    role_cls = "Agent" + name.split("_")[1][0].upper()
+    mixins = _role_mixins(name)
+    out: list[tuple[str, tuple[str, ...], int, str]] = []
+    for f in _role_files(name):
+        for fname, tables, lineno, kind in _scan_writes(f):
+            head, _, tail = fname.partition(".")
+            if head in mixins:
+                fname = f"{role_cls}.{tail}"
+            out.append((fname, tables, lineno, kind))
+    return out
+
+
+def _role_calls_by_function(name: str) -> dict[str, set[str]]:
+    """整包的"每个函数调了哪些属性名"（同名函数取并集；跨文件拼装成一个视图）。"""
+    out: dict[str, set[str]] = {}
+    for f in _role_files(name):
+        for fname, names in _calls_by_function(f).items():
+            out.setdefault(fname, set()).update(names)
+    return out
+
+
+def _role_claim_literal_lines(name: str) -> list[str]:
+    """整包里"手搓 claim 字面量"的落点（`文件:行号`）。"""
+    hits: list[str] = []
+    for f in _role_files(name):
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            keys = {k.value for k in node.keys
+                    if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+            if {"text", "evidence_kind"} <= keys:
+                hits.append(f"{f.name}:{node.lineno}")
+    return hits
+
+
 # ============================================================ 1. llm.py：引文定位（B 的唯一自动幻觉防线）
 
 
@@ -440,7 +504,7 @@ def test_agent_g_writes_documents_only_through_normalize_claims():
     `revise` 曾经只跑了前者 —— 这条断言把"两条路复用同一判据"变成机械可查的事实，
     而不是靠读代码记得。
     """
-    calls = _calls_by_function(_src_dir() / "agent_g.py")
+    calls = _role_calls_by_function("agent_g.py")
     checked = 0
     for fname, names in calls.items():
         if "tx" not in names or fname == "_selftest":  # 自检的夹具播种，不是写稿路径
@@ -452,21 +516,13 @@ def test_agent_g_writes_documents_only_through_normalize_claims():
 
 
 def test_agent_g_source_never_builds_a_claim_literal_without_citations():
-    """职责边界（G）的结构形式：`agent_g.py` 里不许出现任何"手搓 claim"的字面量。
+    """职责边界（G）的结构形式：`agent_g`（包）里不许出现任何"手搓 claim"的字面量。
 
     所有断言都必须经由 `DT.compose_claim` / `DT.normalize_claims` 构造，
     这样"没有 citations 的断言"在结构上就无处可写。
     """
-    tree = ast.parse(_read_source("agent_g.py"))
-    built: list[int] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Dict):
-            continue
-        keys = {k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
-        # 同时出现 text + evidence_kind 的字典字面量 = 有人在手搓一条断言
-        if {"text", "evidence_kind"} <= keys:
-            built.append(node.lineno)
-    assert built == [], f"agent_g.py 第 {built} 行手搓了 claim 字面量（应走 compose_claim）"
+    built = _role_claim_literal_lines("agent_g.py")
+    assert built == [], f"agent_g 里这些地方手搓了 claim 字面量（应走 compose_claim）：{built}"
 
 
 # ============================================================ 5. agent_h.py：H 只读（结构性）
@@ -511,7 +567,7 @@ def test_agent_h_class_never_writes_any_table_directly():
     `self.writers`（落点被钉死在 `review_findings` 与 `documents.status`）。
     类体内出现 `store.tx` / `write_text` 就意味着有一条绕过落库代理的写路径。
     """
-    calls = [c for c in _scan_writes(_src_dir() / "agent_h.py") if c[0].startswith("AgentH.")]
+    calls = [c for c in _role_scan_writes("agent_h.py") if c[0].startswith("AgentH.")]
     assert calls == [], f"AgentH 类体内出现了直接写盘：{calls}"
 
 
@@ -528,7 +584,7 @@ def test_agent_h_module_writes_tables_only_inside_the_declared_fixture_harness()
     模块里的 `_SELFTEST_HARNESS` 必须正好是这两者的并集 —— 声明与实际不一致
     就说明有人加了一处没登记的写入（这正是"降级必须显式"的形态）。
     """
-    writes = _scan_writes(_src_dir() / "agent_h.py")
+    writes = _role_scan_writes("agent_h.py")
     outside = [c for c in writes if not c[0].startswith("AgentH.") and c[0] not in _SELFTEST_HARNESS]
     assert outside == [], f"自检夹具之外出现了写盘调用：{outside}"
 
@@ -557,17 +613,18 @@ def test_agent_h_source_never_assigns_documents_claims():
     （构造一份坏输入喂给 H，而不是改动一行已有稿件）。现在任何一处
     ``X["claims"] = ...`` 都会让这条变红 —— 包括"我只是想在自检里顺手改一下数据"。
     """
-    tree = ast.parse(_read_source("agent_h.py"))
-    hits: list[int] = []
-    for node in ast.walk(tree):
-        targets = node.targets if isinstance(node, ast.Assign) else (
-            [node.target] if isinstance(node, (ast.AugAssign, ast.AnnAssign)) else []
-        )
-        for t in targets:
-            if isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant) and t.slice.value == "claims":
-                hits.append(node.lineno)
-    assert hits == [], f"agent_h.py 第 {hits} 行改动了 documents.claims（那是 G 的活）"
-
+    hits: list[str] = []
+    for f in _role_files("agent_h.py"):
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            targets = node.targets if isinstance(node, ast.Assign) else (
+                [node.target] if isinstance(node, (ast.AugAssign, ast.AnnAssign)) else []
+            )
+            for t in targets:
+                if (isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant)
+                        and t.slice.value == "claims"):
+                    hits.append(f"{f.name}:{node.lineno}")
+    assert hits == [], f"agent_h 里这些地方改动了 documents.claims（那是 G 的活）：{hits}"
 
 def test_agent_h_writers_registry_exposes_exactly_the_declared_write_tools(tmp_path):
     """职责边界（H）的运行期形式：H 的落库代理里能写的只有这三个工具。

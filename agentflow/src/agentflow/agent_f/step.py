@@ -1,0 +1,242 @@
+"""角色 F 的动作 `step`（`goal-7f5116c1` M6：从 `agent_f.py` 拆出来，逐字未改）。
+
+拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
+"""
+from __future__ import annotations
+
+from ._support import AT, NO_PROGRESS_NOTE, PlanError, TERMINAL_STATUSES, _budget_left, _step_outcome
+
+class _Step:
+    def step(self, plan_id: str) -> dict:
+        """推进一轮。
+
+        返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason"}``。
+
+        `outcome` 取本模块的 :data:`STEP_OUTCOMES`
+        （``no_change`` / ``progress`` / ``blocked``）：它说的是这一轮推进的结果，
+        与 `schema.TASK_OUTCOMES`（一次任务的终局）是两套命名空间，不许互相赋值
+        —— 裁定依据与后果写在 `STEP_OUTCOMES` 的注释里。写入前会过一次
+        :func:`_step_outcome` 的收口，词表外的取值当场炸。
+
+        流程（每一步的理由都写在旁边的注释里）：
+
+        1. 读计划 → 终结状态不再推进（不自动重入）；轮数用尽 ⇒ `stalled` + `best_partial`；
+        2. `pick_next_subgoal` 选目标（复用工具层的排序，不另写一套）；
+        3. 按 owner 分派（见模块 docstring 的表格）；
+        4. 追加一条 history，`rounds += 1`；
+        5. 判定计划状态；
+        6. 一个事务写回。
+        """
+        row = self._plan_row(plan_id)
+        if row is None:
+            raise PlanError(f"攻坚计划 {plan_id} 不存在")
+
+        status = str(row.get("status") or "open")
+        budget = dict(row.get("budget") or {})
+        rounds = int(row.get("rounds") or 0)
+        budget_left = _budget_left(budget, rounds)
+
+        # ---- 终结状态：不再推进（终态先到先得，不许被重入改写）
+        if status in TERMINAL_STATUSES:
+            return {
+                "plan_id": row.get("plan_id"),
+                "round": rounds,
+                "sid": None,
+                "action": "stop",
+                "outcome": "no_change",
+                "status": status,
+                "budget_left": budget_left,
+                "reason": (
+                    f"计划已是终结状态 {status!r} ⇒ 不再推进。"
+                    "**「不再推进」不是「推进了但没有进展」**：终态先到先得，"
+                    "自动重入会把它当活计划重新拾起，于是终止条件形同虚设"
+                ),
+            }
+
+        subgoals: list[dict] = [dict(s) for s in (row.get("subgoals") or [])]
+        history: list[dict] = [dict(h) for h in (row.get("history") or [])]
+
+        # ---- [1] 轮数用尽 ⇒ stalled + best_partial（必须非空，且必须如实）
+        #
+        # 在它之前先判一次连续无进展（来自对 dsh 数学模式的观摩）：
+        # 那种模式要求"连续 N 轮无进展就提前终止"。我们此前只按 `max_rounds` 停，
+        # 而 `history[i]["outcome"] == "no_change"` 这个信号已经被生产出来却无人消费 ——
+        # 这正是本项目自己总结过的 P4（"检测到了却没有消费"）的又一处实例。
+        # 后果：一个"卡在未接线子目标上"的攻坚计划会把预算完整烧完才停，
+        # 而它从第一轮起就不可能再有任何进展。
+        stall_after = int(self.cfg.get("stall_after_no_progress_rounds", 3))
+        recent = [str(h.get("outcome") or "") for h in (row.get("history") or [])][-stall_after:]
+        if stall_after > 0 and len(recent) == stall_after and all(o == "no_change" for o in recent):
+            row["status"] = "stalled"
+            row["best_partial"] = (
+                f"[提前停止] 连续 {stall_after} 轮无进展（全部 outcome=no_change）⇒ 不再烧预算。\n"
+                + self._compose_best_partial(subgoals, rounds)
+            )
+            row["updated_at"] = self._stamp()
+            self._write_plan(row, note=f"f.step:stall_after_{stall_after}_no_progress")
+            self._log(f"plan {row.get('plan_id')} stalled after {stall_after} no-progress rounds")
+            out = {
+                "plan_id": row.get("plan_id"),
+                "round": rounds,
+                "sid": None,
+                "action": "stall_detected",
+                "outcome": "no_change",
+                "status": "stalled",
+                "budget_left": _budget_left(budget, rounds),
+                "reason": (
+                    f"连续 {stall_after} 轮 outcome=no_change ⇒ 提前判 stalled。"
+                    "**不是失败，也不是成功**：当前最好的部分结果已写入 best_partial。"
+                    "（这个信号此前被生产出来却无人消费 —— 见 LESSONS 的 P4）"
+                ),
+            }
+            self.last_step = out
+            return out
+        #
+        # 这里显式传 depth=0：`can_round` 会同时检查轮数与深度，而"深度到顶"
+        # 的后果是"不能再分子问题"，不是"这个计划该停了"。把后者也当成终止判据，
+        # 会让一个深度恰好到顶的计划连第一轮都跑不了 —— 那是把"不能再分子问题"
+        # 读成了"这个问题不能做"（见 attack_tools 模块 docstring 的同一段说明）。
+        if not AT.can_round(budget, rounds_done=rounds, depth=0)["allowed"]:
+            row["status"] = "stalled"
+            row["best_partial"] = self._compose_best_partial(subgoals, rounds)
+            detail = (
+                f"轮数已用尽（{rounds}/{budget.get('max_rounds')}）⇒ 停止并交出 best_partial。"
+                "**stalled 既不是失败也不是成功**：它表示'预算内没做出来'"
+            )
+            # 只有还有位子时才追加 history：`AttackPlan.validate` 要求
+            # `len(history) <= max_rounds × 子目标数`（"有轮次没被预算约束"的守卫）。
+            # 轮数用尽时正好顶到那个上限 —— 再追加一条"停止"记录会违反 schema，
+            # 于是这条计划永远写不回去（"说停"本身被 schema 挡住了）。
+            # 所以把停止理由记进计划级的 best_partial（它是计划级的交接记录），
+            # 而不是挤进已经被预算占满的 history。
+            if len(history) < int(budget.get("max_rounds", 0)) * max(1, len(subgoals)):
+                history.append(
+                    {
+                        "round": rounds + 1,
+                        "sid": None,
+                        "action": "stop",
+                        "outcome": "no_change",
+                        "detail": detail,
+                        "evidence": [],
+                        "at": self._stamp(),
+                    }
+                )
+            row["best_partial"] = f"[停止] {detail}\n{row['best_partial']}"
+            row["history"] = history
+            row["updated_at"] = self._stamp()
+            self._write_plan(row, note="f.step:stalled")
+            self._log(f"plan {row.get('plan_id')} stalled")
+            return {
+                "plan_id": row.get("plan_id"),
+                "round": rounds,
+                "sid": None,
+                "action": "stop",
+                "outcome": "no_change",
+                "status": "stalled",
+                "budget_left": _budget_left(budget, rounds),
+                "best_partial": row["best_partial"],
+                "reason": detail,
+            }
+
+        # ---- [2] 选子目标（复用 attack_tools.pick_next_subgoal）
+        #
+        # 先摘掉 `in_flight` 的子目标：它们这一轮已经"交出去等回填"了
+        # （A/B 的请求在别人手里，C/D/F 的推理本框架还没接）。
+        # 不过滤的话，`pick_next_subgoal` 会一轮又一轮地选中同一个子目标，
+        # 于是 history 被同一条事实灌满，而真正待办的子目标永远轮不到。
+        # 过滤只影响"这一轮选谁"，不改子目标的状态：它们在表里仍然是 blocked，
+        # 卡点仍然对人可见（`blocked_reason` 非空）。
+        pickable = [s for s in subgoals if not s.get("in_flight")]
+        picked = AT.pick_next_subgoal(pickable)
+        if not picked["picked"]:
+            # 无可推进的子目标：这在两种情况下发生 —— 全 closed（成功收口）、
+            # 或全是 dropped/blocked（需要人来解开卡点）。两者都不该静默变成"没轮次"。
+            history.append(
+                {
+                    "round": rounds + 1,
+                    "sid": None,
+                    "action": "stop",
+                    "outcome": "no_change",
+                    "detail": f"没有可推进的子目标：{picked['reason']}",
+                    "evidence": [],
+                    "at": self._stamp(),
+                }
+            )
+            row["subgoals"] = subgoals
+            row["history"] = history
+            row["rounds"] = rounds + 1
+            row["status"] = self._derive_status(subgoals, row)
+            row["updated_at"] = self._stamp()
+            row["best_partial"] = self._compose_best_partial(subgoals, rounds + 1)
+            self._write_plan(row, note="f.step:no_pickable")
+            return {
+                "plan_id": row.get("plan_id"),
+                "round": rounds + 1,
+                "sid": None,
+                "action": "stop",
+                "outcome": "no_change",
+                "status": row["status"],
+                "budget_left": _budget_left(budget, rounds + 1),
+                "reason": picked["reason"],
+            }
+
+        sg = picked["subgoal"]
+        sid = str(sg.get("sid"))
+
+        # ---- [3] 分派
+        deploy = self._deploy(sg, plan=row)
+
+        # ---- 把分派结果写回子目标
+        if deploy.get("experiment_ids"):
+            sg["experiment_ids"] = sorted(set(list(sg.get("experiment_ids") or []) + list(deploy["experiment_ids"])))
+        if deploy.get("proof_experiment_ids"):
+            sg["proof_experiment_ids"] = sorted(
+                set(list(sg.get("proof_experiment_ids") or []) + list(deploy["proof_experiment_ids"]))
+            )
+        if deploy.get("evidence_ids"):
+            sg["evidence_ids"] = sorted(set(list(sg.get("evidence_ids") or []) + list(deploy["evidence_ids"])))
+        if deploy.get("negation_kind") is not None:
+            sg["negation_kind"] = deploy["negation_kind"]
+        if deploy.get("status"):
+            sg["status"] = deploy["status"]
+        if deploy.get("blocked_reason"):
+            sg["blocked_reason"] = deploy["blocked_reason"]
+        if deploy.get("in_flight") is not None:
+            sg["in_flight"] = bool(deploy["in_flight"])
+        sg["attempts"] = int(sg.get("attempts") or 0) + (1 if deploy.get("count_attempt") else 0)
+
+        history.append(
+            {
+                "round": rounds + 1,
+                "sid": sid,
+                "action": deploy["action"],
+                # 收口到 `STEP_OUTCOMES`（`G-24②`）：词表外的取值在写入前就炸，
+                # 而不是原样落进 history（那里它会让停滞检测静默失效）。
+                "outcome": _step_outcome(deploy["outcome"]),
+                "detail": deploy["detail"],
+                "evidence": list(deploy.get("evidence") or []),
+                "at": self._stamp(),
+            }
+        )
+        row["subgoals"] = subgoals
+        row["history"] = history
+        row["rounds"] = rounds + 1
+        row["status"] = self._derive_status(subgoals, row)
+        row["updated_at"] = self._stamp()
+        row["best_partial"] = self._compose_best_partial(subgoals, rounds + 1)
+        if row["status"] == "stalled" and not str(row["best_partial"]).strip():
+            row["best_partial"] = NO_PROGRESS_NOTE
+        self._write_plan(row, note=f"f.step:{deploy['action']}")
+
+        out = {
+            "plan_id": row.get("plan_id"),
+            "round": rounds + 1,
+            "sid": sid,
+            "action": deploy["action"],
+            "outcome": _step_outcome(deploy["outcome"]),
+            "status": row["status"],
+            "budget_left": _budget_left(budget, rounds + 1),
+            "reason": deploy["detail"],
+        }
+        self.last_step = out
+        return out
