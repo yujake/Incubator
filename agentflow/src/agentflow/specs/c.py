@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -95,6 +96,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
 )
 
 
+def _build(d: BuilderDeps) -> Any:
+    """构造 C（只要 store / config / llm）。"""
+    from ..agent_c import AgentC
+
+    return AgentC(d.store, config=dict(d.config), llm=d.llm)
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='C',
@@ -145,4 +153,5 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_c:AgentC',
     actions=ACTIONS,
+    build=_build,
 )

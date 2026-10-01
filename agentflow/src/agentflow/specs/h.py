@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -93,6 +94,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
 )
 
 
+def _build(d: BuilderDeps) -> Any:
+    """构造 H（只要 store / config / llm；它的落库代理 `writers` 自己会注册）。"""
+    from ..agent_h import AgentH
+
+    return AgentH(d.store, config=dict(d.config), llm=d.llm)
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='H',
@@ -150,4 +158,5 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_h:AgentH',
     actions=ACTIONS,
+    build=_build,
 )

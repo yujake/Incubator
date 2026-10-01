@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -135,6 +136,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
 )
 
 
+def _build(d: BuilderDeps) -> Any:
+    """构造 D（构造期拿到同一个 C 实例：`peers["C"]`，由接线层的单例保证）。"""
+    from ..agent_d import AgentD
+
+    return AgentD(d.store, config=dict(d.config), llm=d.llm, c=d.peers["C"], actor=d.actor)
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='D',
@@ -198,4 +206,6 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_d:AgentD',
     actions=ACTIONS,
+    peers=('C',),
+    build=_build,
 )

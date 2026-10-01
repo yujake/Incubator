@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -130,6 +131,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
 )
 
 
+def _build(d: BuilderDeps) -> Any:
+    """构造 E（需要工作区根：它跑实验脚本、写产物）。"""
+    from ..agent_e import AgentE
+
+    return AgentE(d.store, config=dict(d.config), llm=d.llm,
+                  workspace_root=d.workspace_root, actor=d.actor)
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='E',
@@ -185,4 +194,6 @@ SPEC = AgentSpec(
     write_set=frozenset(('experiments',)),
     class_path='agentflow.agent_e:AgentE',
     actions=ACTIONS,
+    needs=('workspace_root',),
+    build=_build,
 )

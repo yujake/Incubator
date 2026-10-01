@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -81,6 +82,18 @@ ACTIONS: tuple[ActionSpec, ...] = (
 )
 
 
+def _build(d: BuilderDeps) -> Any:
+    """构造 B（逐字搬自 `host._Builder.agent_b`；B 的签名里没有 `llm`、没有 `actor`）。
+
+    extract_text 是模块级函数（抽取的唯一实现），直接传下去，不经接线层。
+    """
+    from ..agent_b import AgentB
+    from ..extract import extract_text
+
+    return AgentB(d.store, extractor=d.extractor, extract_text=extract_text,
+                  config=dict(d.config))
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='B',
@@ -132,4 +145,6 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_b:AgentB',
     actions=ACTIONS,
+    needs=('extractor',),
+    build=_build,
 )

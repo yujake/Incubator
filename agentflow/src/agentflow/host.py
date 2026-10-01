@@ -73,6 +73,8 @@ class _Builder:
         self.cfg: dict[str, Any] = dict(config or {})
         self.workspace_root = Path(workspace_root) if workspace_root else None
         self._made: dict[tuple[str, str], Any] = {}
+        #: 角色声明的注册表（懒取一次；`goal-7f5116c1` M4）
+        self._specs: Any = None
 
     # ------------------------------------------------------------ 逐个角色
 
@@ -96,95 +98,124 @@ class _Builder:
         return f"agent-{role}-{instance}" if instance else f"agent-{role}"
 
     def agent_a(self, store: Any, instance: str = "") -> Any:
-        """A：需要 providers（没给就根本不会走到这里）。
+        """A（构造在 `specs/a.py::build`：要 providers 与下载器）。"""
+        return self._build("A", store, instance)
 
-        downloader 也要给（2026-09-29 验收 P1 实测的缺口）：只给 providers 时
-        A 能检索、却一条全文都下不下来，台账里逐条写 `error="no_downloader"` ——
-        而 `no_pdf_url` 是另一回事（那篇本来就没有开放获取 PDF）。两种"没下来"
-        必须分得开；`pipeline._build_agent_a` 一直是给的，这一层漏了。
-        """
-        from . import fetch as F
-        from .agent_a import AgentA
-
-        acfg = self._cfg_for("A")
-        downloader = None
-        if acfg.get("download", True):
-            downloader = F.default_downloader(self.cfg.get("download") or {})
-        return AgentA(store, providers=list(self.providers), llm=self._llm_for("A"),
-                      config=acfg, downloader=downloader,
-                      actor=self._actor_for("A", instance))
 
     def agent_b(self, store: Any, instance: str = "") -> Any:
-        """B：extractor 决定它有没有 LLM（B 的签名里没有 `llm`）。
+        """B（构造在 `specs/b.py::build`：要抽取器；B 的签名里没有 `llm`、没有 `actor`）。"""
+        return self._build("B", store, instance)
 
-        实例轴对 B 是最有用的那一档：B 的写入是"按行领取"（`claimed_by` +
-        租约，见 `agent_b._claim`），所以 N 个 B 并发读同一批文献在数据面本来就安全
-        （既有判据 `tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`）。
-        B 没有 `actor=` 形参，所以实例身份只体现在"对象不同"与并发波形上。
-        """
-        from .agent_b import AgentB
-        from .extract import extract_text
-
-        extractor = self.extractor
-        if extractor is None:
-            role_llm = self._llm_for("B")
-            if role_llm is not None:
-                from .llm import LLMExtractor
-
-                extractor = LLMExtractor(role_llm)
-            else:
-                from .llm import RuleExtractor
-
-                extractor = RuleExtractor()
-        return AgentB(store, extractor=extractor, extract_text=extract_text,
-                      config=self._cfg_for("B"))
 
     def agent_c(self, store: Any, instance: str = "") -> Any:
-        """C：只要 store。"""
-        from .agent_c import AgentC
+        """C（构造在 `specs/c.py::build`：只要 store / config / llm）。"""
+        return self._build("C", store, instance)
 
-        return AgentC(store, config=self._cfg_for("C"), llm=self._llm_for("C"))
 
     def agent_d(self, store: Any, instance: str = "") -> Any:
-        """D：构造期拿到 同一个 C 实例（`D` 的签名里 `c` 是可选关键字）。"""
-        from .agent_d import AgentD
+        """D（构造在 `specs/d.py::build`：构造期拿到同一个 C 实例，`peers=("C",)`）。"""
+        return self._build("D", store, instance)
 
-        return AgentD(store, config=self._cfg_for("D"), llm=self._llm_for("D"),
-                      c=self.get("C", store), actor=self._actor_for("D", instance))
 
     def agent_e(self, store: Any, instance: str = "") -> Any:
-        """E：需要工作区根（它跑实验脚本、写产物）。"""
-        from .agent_e import AgentE
+        """E（构造在 `specs/e.py::build`：要工作区根）。"""
+        return self._build("E", store, instance)
 
-        return AgentE(store, config=self._cfg_for("E"), llm=self._llm_for("E"),
-                      workspace_root=self.workspace_root or _root_of(store),
-                      actor=self._actor_for("E", instance))
 
     def agent_f(self, store: Any, instance: str = "") -> Any:
-        """F：构造期拿到 同一个 E 实例。"""
-        from .agent_f import AgentF
+        """F（构造在 `specs/f.py::build`：构造期拿到同一个 E 实例，`peers=("E",)`）。"""
+        return self._build("F", store, instance)
 
-        return AgentF(store, config=self._cfg_for("F"), llm=self._llm_for("F"),
-                      e=self.get("E", store), actor=self._actor_for("F", instance))
 
     def agent_g(self, store: Any, instance: str = "") -> Any:
-        """G：需要工作区根（它写稿件）。"""
-        from .agent_g import AgentG
+        """G（构造在 `specs/g.py::build`：要工作区根；actor 在 config 里）。"""
+        return self._build("G", store, instance)
 
-        return AgentG(store, config=self._cfg_with_actor("G", instance), llm=self._llm_for("G"),
-                      workspace_root=self.workspace_root or _root_of(store))
 
     def agent_h(self, store: Any, instance: str = "") -> Any:
-        """H：只要 store（它的落库代理 `writers` 自己会注册）。"""
-        from .agent_h import AgentH
+        """H（构造在 `specs/h.py::build`：只要 store / config / llm）。"""
+        return self._build("H", store, instance)
 
-        return AgentH(store, config=self._cfg_with_actor("H", instance), llm=self._llm_for("H"))
 
     def _cfg_with_actor(self, role: str, instance: str) -> dict[str, Any]:
         """G/H 从 config 读 `actor`：实例标签就写在这里（它们没有 `actor=` 形参）。"""
         cfg = self._cfg_for(role)
         cfg["actor"] = self._actor_for(role, instance)
         return cfg
+
+    # ------------------------------------------------------------ 依赖怎么造
+    #
+    # `goal-7f5116c1` M4：角色的构造搬进了它自己的声明（`specs/<角色>.py::build`），
+    # 这里只剩"装配知识"——两个角色专属的默认值，它们不是声明，放这儿才对：
+    # 一个是"没给抽取器时按有没有模型缝选哪一种"，一个是"A 的下载器由配置开关决定"。
+
+    def _extractor_for(self, role: str) -> Any:
+        """B 的抽取器：给了就用；没给则按"该角色有没有模型缝"在 LLM / 规则抽取器之间选。"""
+        if self.extractor is not None:
+            return self.extractor
+        role_llm = self._llm_for(role)
+        if role_llm is not None:
+            from .llm import LLMExtractor
+
+            return LLMExtractor(role_llm)
+        from .llm import RuleExtractor
+
+        return RuleExtractor()
+
+    def _downloader_for(self, role: str) -> Any:
+        """A 的下载器：`agent_<role>` 配置段的 `download` 关掉时明确不给（None = 没接）。
+
+        为什么默认给：只给 providers 时 A 能检索、却一条全文都下不下来，
+        台账里逐条写 `error="no_downloader"` —— 而 `no_pdf_url` 是另一回事
+        （那篇本来就没有开放获取 PDF）。两种"没下来"必须分得开。
+        """
+        cfg = self._cfg_for(role)
+        if not cfg.get("download", True):
+            return None
+        from . import fetch as F
+
+        return F.default_downloader(self.cfg.get("download") or {})
+
+    # ------------------------------------------------------------ 通用构造（读注册表）
+
+    def _registry(self):
+        """角色声明的注册表（每个 `_Builder` 取一次；`agentspec` 是叶子，代价很小）。"""
+        if self._specs is None:
+            from .agentspec import builtin_registry
+
+            self._specs = builtin_registry()
+        return self._specs
+
+    def _build(self, role: str, store: Any, instance: str = "") -> Any:
+        """按声明构造一个角色实例（`goal-7f5116c1` M4）。
+
+        这里只做三件通用的事：① 算该角色的 llm / config / actor（G/H 的 config 带 actor）；
+        ② 按声明里的 `needs` / `peers` 备齐依赖；③ 把 `BuildDeps` 交给 `spec.build`。
+        角色之间的差别（用哪个类、传哪些关键字、要谁的实例）全在声明里 —— 所以
+        "新建一个 agent" 不需要改这个文件。
+        """
+        from .agentspec import BuilderDeps
+
+        spec = self._registry().get(role)
+        if spec.build is None:
+            raise ValueError(f"角色 {role} 的声明里没有 build 工厂（M4 起装配只认它）")
+        cfg = (self._cfg_with_actor(role, instance) if role in self._ACTOR_IN_CONFIG
+               else self._cfg_for(role))
+        deps = BuilderDeps(
+            role=role,
+            store=store,
+            instance=instance,
+            llm=self._llm_for(role),
+            config=cfg,
+            providers=tuple(self.providers) if "providers" in spec.needs else (),
+            extractor=self._extractor_for(role) if "extractor" in spec.needs else None,
+            workspace_root=((self.workspace_root or _root_of(store))
+                            if "workspace_root" in spec.needs else None),
+            actor=self._actor_for(role, instance),
+            downloader=self._downloader_for(role) if "downloader" in spec.needs else None,
+            peers={r: self.get(r, store) for r in spec.peers},
+        )
+        return spec.build(deps)
 
     # ------------------------------------------------------------ 取实例
 

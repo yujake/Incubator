@@ -21,11 +21,19 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
 #: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
 ACTIONS: tuple[ActionSpec, ...] = ()
+
+
+def _build(d: BuilderDeps) -> Any:
+    """构造主控（`Conductor`）。M 没有动作表，但它是角色面上的一员。"""
+    from ..conductor import Conductor
+
+    return Conductor(d.store, config=dict(d.config), llm=d.llm)
 
 
 #: 本角色的声明。
@@ -99,4 +107,5 @@ SPEC = AgentSpec(
     write_set=frozenset(()),
     class_path='agentflow.conductor:Conductor',
     actions=ACTIONS,
+    build=_build,
 )

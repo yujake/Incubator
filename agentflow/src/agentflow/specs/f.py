@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -57,6 +58,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "dict", side_effect="read", handler_name="list_plans",
     ),
 )
+
+
+def _build(d: BuilderDeps) -> Any:
+    """构造 F（构造期拿到同一个 E 实例：`peers["E"]`）。"""
+    from ..agent_f import AgentF
+
+    return AgentF(d.store, config=dict(d.config), llm=d.llm, e=d.peers["E"], actor=d.actor)
 
 
 #: 本角色的声明。
@@ -115,4 +123,6 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_f:AgentF',
     actions=ACTIONS,
+    peers=('E',),
+    build=_build,
 )

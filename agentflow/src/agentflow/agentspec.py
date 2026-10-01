@@ -53,6 +53,36 @@ class AgentBrief:
 
 
 @dataclass(frozen=True)
+class BuilderDeps:
+    """装配期能交给工厂的东西（`host._Builder` 的公开面）。
+
+    工厂（`AgentSpec.build`）**只吃这个对象**，不碰 `_Builder`：这样"一个角色要什么依赖"
+    写在它自己的声明里（`needs` / `peers`），而"这些依赖怎么造"留在接线层（`host`）——
+    两件事分开之后，"新建一个 agent"不需要在 `host` 里加分支（`goal-7f5116c1` M4）。
+    """
+
+    role: str
+    store: Any
+    instance: str = ""
+    #: 该角色用的模型缝（`_llm_for(role)` 已算好）
+    llm: Any = None
+    #: 该角色的配置段（G/H 的那一份**已经带 `actor`**，与今天逐字一致）
+    config: Mapping[str, Any] = field(default_factory=dict)
+    #: 检索后端（声明里 `needs=("providers",)` 时才给）
+    providers: tuple[Any, ...] = ()
+    #: 抽取器（B 用；`needs=("extractor",)` 时才给）
+    extractor: Any = None
+    #: 工作区根（E/G 用；`needs=("workspace_root",)` 时才给）
+    workspace_root: Any = None
+    #: actor 名（实例标签已折进它）
+    actor: str = ""
+    #: 下载器（A 用；`needs=("downloader",)` 时才给）
+    downloader: Any = None
+    #: 构造期要拿到的邻居实例（D→C、F→E）
+    peers: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class AgentSpec:
     """一个 agent 的声明。`class_path` 形如 `agentflow.agent_a:AgentA`。"""
 
@@ -68,6 +98,15 @@ class AgentSpec:
     #: 从它派生）。`M` 是空元组：主控的"动作"是 `summon()` 本身，不是 Agent 方法。
     actions: tuple[ActionSpec, ...] = ()
     class_path: str = ""
+    #: 构造期依赖工厂（M4）：`(BuilderDeps) -> 实例`。写在角色自己的声明里，
+    #: 于是"新建一个 agent"不需要在 `host` 里加分支。
+    build: Callable[[BuilderDeps], Any] | None = None
+    #: 工厂需要哪些装配期资源（`providers` / `downloader` / `extractor` / `workspace_root`）。
+    #: 空元组 = 只要 `store` / `config` / `llm` / `actor`。
+    needs: tuple[str, ...] = ()
+    #: 构造期要拿到的邻居实例（D 要 C、F 要 E）——"谁能叫谁"之外的另一件事：
+    #: 这是"谁在构造期就握着谁"，今天由 `host._Builder.get()` 的同单例保证。
+    peers: tuple[str, ...] = ()
 
     @property
     def module(self) -> str:

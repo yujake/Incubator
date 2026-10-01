@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -81,6 +82,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "dict", side_effect="write_local", handler_name="revise",
     ),
 )
+
+
+def _build(d: BuilderDeps) -> Any:
+    """构造 G（需要工作区根：它写稿件；actor 在 config 里，G 没有 `actor=` 形参）。"""
+    from ..agent_g import AgentG
+
+    return AgentG(d.store, config=dict(d.config), llm=d.llm, workspace_root=d.workspace_root)
 
 
 #: 本角色的声明。
@@ -150,4 +158,6 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_g:AgentG',
     actions=ACTIONS,
+    needs=('workspace_root',),
+    build=_build,
 )

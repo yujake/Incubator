@@ -21,6 +21,7 @@ from ..agentspec import (
     ActionSpec,
     AgentBrief,
     AgentSpec,
+    BuilderDeps,
     _obj,
 )
 
@@ -91,6 +92,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
 )
 
 
+def _build(d: BuilderDeps) -> Any:
+    """构造 A（逐字搬自 `host._Builder.agent_a`：下载器由 `agent_a` 配置段的 `download` 决定）。
+
+    为什么 `providers` 与 `downloader` 必须一起给（2026-09-29 验收 P1 实测的缺口）：
+    只给 providers 时 A 能检索、却一条全文都下不下来，台账里逐条写 `error="no_downloader"`
+    —— 而 `no_pdf_url` 是另一回事（那篇本来就没有开放获取 PDF）。两种"没下来"必须分得开。
+    """
+    from ..agent_a import AgentA
+
+    return AgentA(d.store, providers=list(d.providers), llm=d.llm, config=dict(d.config),
+                  downloader=d.downloader, actor=d.actor)
+
+
 #: 本角色的声明。
 SPEC = AgentSpec(
     role='A',
@@ -138,4 +152,6 @@ SPEC = AgentSpec(
                  )),
     class_path='agentflow.agent_a:AgentA',
     actions=ACTIONS,
+    needs=('providers', 'downloader'),
+    build=_build,
 )
