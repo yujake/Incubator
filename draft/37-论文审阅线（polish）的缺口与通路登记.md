@@ -4306,3 +4306,83 @@ closing：can_close=False，failed=['anchor']（drifted），unknowns=['report_s
   新增"留出最后几步"一条），逐行 diff 核过。
 - FC-27：`specs/m.py` 命中（auth-audit）⇒ 门会要求 2 名 reviewer；按纪律登记基线、
   `reviewers` 留 0（**这一格照红记，不折成绿**）。
+
+---
+
+## §54 第六趟真机：**报告交出来了**（三格内容判据 pass），卡在报告形状与"没问过用户"
+
+第五趟之后的两处修补（§53：M 的正文授权 + 留出最后几步）都生效了，这一趟把报告
+真的写出来并跑了收工门。**剩两处**：报告**只写了五节**（门逐节核，缺四节），
+以及"一次都没问过用户"（`triage_branch_recorded` 只能记"没查成"）。
+
+### 54.1 读数（`temp/_run_judge.py projects/p5-run6 --sid real6`）
+
+```text
+步数 45（--max-steps 45）/ llm_call 45 / 停止理由 final / usd 0.379968 / 零非法形状
+别名映射用过 4 次（conductor_role_spec → conductor.role_spec）
+literature = 1（path=main.pdf ← 论文本体） statements = 3（quote_verified=None）
+documents = 1  review_findings = 0  tasks = 17
+交付说明：REPORT.md **5,153 字节**（这一趟写的，mtime 02:08:34）
+reviewaccept：passed=False
+  attachment_is_honest            pass
+  statements_have_assumptions_and_source pass
+  hops_have_readable_prompts      pass
+  report_sections_have_readings   **fail**（"报告只有 5 节（要 9 节）⇒ 形状就不齐"）
+  triage_branch_recorded          unknown（"一次都没问过用户"）
+  within_cost_cap                 unknown（★ 见 54.4：这是我探针的锅）
+closing：can_close=False，failed=['anchor','report_shape']，unknowns=[]
+       report_shape 读数：缺 ['六、体例与表述','七、我们做的补救','八、未决问题','九、诚实边界']、
+                          缺分栏标记 ['我们补的','原文的']；附件字段 ['依据','sha'] 在
+```
+
+**六格内容判据里三格 pass、一格 fail、两格 unknown** —— 这是六趟真机里最接近的一次。
+
+### 54.2 这一趟里主控自己报出来的两件事（都记它的账，它没撒谎）
+
+1. **`cross_check` 的 disclaimer 是逐字常量**：它连试 5 次 `G.build_document` 都被拒
+   （"claim-1 的 cross_check 缺 disclaimer"），先用中文句子试、又用 `fs.search` 找常量串、
+   最后改用 `evidence_kind='heuristic'` 绕开 —— **花了约 8 步**。
+2. **`G.revise` 不碰主稿**（与第五趟同一个读数）：它 `fs.stat` 核了 sha256 与 mtime，
+   确认两次 `revise` 之后 `out/paper/main.tex` **一个字节没变**；然后按 §53 的授权准备
+   自己用 `fs.write` 落改动（步 35–36 已在逐字定位），**但步数用完了**，
+   最后它选择"先保证报告落盘"（步 37–42）—— 这个取舍是对的（报告没写 = 没交）。
+
+### 54.3 两处修补（本节，非禁改区）
+
+1. **报告九节的形状变成"模型看得见的"**：这九节原先只住在
+   `closing.REPORT_SECTIONS` 里 —— 判据知道、模型不知道，于是"没写全"这件事
+   在第 8 步才发现。现在 `PAPER_PACK` 新增**第八节**逐字列出九节 + 分栏标记 +
+   附件三件套，并写明**"写完先跑一次 `conductor.closing`，它会把缺的节名逐个报出来，按它改"**
+   （把门当仪器用，而不是当裁判）。同节还写清 `project_dir` 给项目根（`"."`）。
+2. **`ask_user` 是这条链的一环**（同节最后一条）：关键取舍要问一次；
+   没人值守时停在"等待用户"是**正确分支** —— 并点名这正是 `triage_branch_recorded`
+   那一格的读数来源（一次都没问过 ⇒ 只能记"没查成"）。
+3. 任务书换成 `temp/TASK-54.txt`：第 4 步点名 `cross_check` 的常量（并给出
+   "拿不准就用 heuristic，别反复试"的出路），第 5 步把"**把正文真正改掉**"单列，
+   第 7 步要求 ask_user，第 8–10 步把报告九节与"留出最后几步"写死。
+
+### 54.4 一处**我自己的**读数错误（记在这里免得下一个人踩）
+
+`within_cost_cap` 报 unknown，原因是我的探针
+`temp/_run_judge.py` 调 `check_review` 时**没给成本上限**（这条判据要求显式给
+`cost_cap_usd`，不给就判"没查成"—— 这是三态纪律，不是缺陷）。参数名是
+`cost_cap_usd`（不是 `cap_usd`），已修。**教训**：判据的"输入不全 ⇒ unknown"这一档
+也会让**跑判据的人**成为变量；每趟的读数要连"我是怎么调判据的"一起记。
+
+### 54.5 读数（补丁部分）
+
+- 判据：`test_paper_pack + test_agent_prompts + test_review_line_prompts` ⇒ **56 passed**；
+  第八节的 8 个必备短语进了 `test_paper_pack` 的表（段被删就红）。
+- lint：`error 0 / warning 9 / info 50`；`PROMPT_VERSION p28 → p29`；
+  `agent_surface_snapshot.json` 重生成（G/H/M 三份多第八节，其余只差版本行）。
+- FC-27：本节改动路径（`agent_prompts.py` / `test_paper_pack.py` / 一份 golden）
+  **都不在禁改区** ⇒ 不新增命中。
+
+### 54.6 下一步（循环继续）
+
+下一趟（第七趟）要看的顺序很清楚：**九节报告过不过**（`report_shape` /
+`report_sections_have_readings`）、**ask_user 有没有被答**（我来当那个用户：
+`triage_branch_recorded` 要的是"问过 + 被回答"，框架有 resume-after-answer 那条路）、
+以及**正文是否真的改了一处**（P2：这是 `anchor` 之外唯一还没做到的一条）。
+锚那一格（`anchor: fail`）要等有人重渲染重编译 —— 主控手上没有 `doc.paper_*`，
+那条路的归属仍然悬着（登记在 §37.4 ①的后继里）。

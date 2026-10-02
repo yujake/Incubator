@@ -78,6 +78,12 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
     for fact in ("登记要指到论文本体", "unsupported_format", "source_lit_id",
                  "quote_verified", "不传（= 还没查）"):
         assert fact in text, f"论文包段里没有 {fact!r}"
+    # 第八节（交付说明的九节形状，`draft/37` §54）：收工门逐节核，缺一节就 fail ——
+    # 而"要哪九节"原先只住在 `closing.REPORT_SECTIONS` 里，模型看不到
+    # （真机实测：报告只写了五节，门当场把缺的四节名字列了出来）。
+    for fact in ("九节形状", "六、体例与表述", "九、诚实边界", "分栏", "我们补的",
+                 "origin=own_result", "project_dir", "ask_user"):
+        assert fact in text, f"论文包段里没有 {fact!r}"
 
 
 def test_the_paper_pack_section_is_versioned(store: Store):

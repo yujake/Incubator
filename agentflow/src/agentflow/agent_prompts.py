@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p28"
+PROMPT_VERSION = "p29"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -449,6 +449,7 @@ PAPER_PACK = """\
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
 
 七、摄取与派活的三条纪律（2026-10-03 加，`draft/37` §48 的真机读数逼出来的）
+
 - **登记要指到论文本体**：`pattern` 指到那份稿件本身（通常是 `*.pdf` —— `.tex` 不在可抽取
   格式内，会被如实报成 `unsupported_format`），**不要**用一个通配把所有文件扫进来：
   第三趟真机用 `pattern="*"` + `limit=5`，于是 5 份配套 md 先被吃掉，
@@ -460,7 +461,22 @@ PAPER_PACK = """\
 - **没核就不传 `quote_verified`**：它是三态 —— `true`（逐字比对通过）/ `false`（比对过、
   不一致）/ **不传（= 还没查）**。"我还没核"**不许**写成 `false`：`false` 在台账里读作
   "比对过而且不一致"，那是另一件事，会进"被发现的问题"那一类统计。不传时按纪律要写
-  `quote_reason` 说明"为什么还没查"（那句话是给下一个人看的）。"""
+  `quote_reason` 说明"为什么还没查"（那句话是给下一个人看的）。
+
+八、交付说明的**九节形状**（`draft/37` §14.4；收工门会逐节核，缺一节就是 `report_shape: fail`）
+- 一、任务与范围 · 二、逐条读数 · 三、定理与引理清单 · 四、形式化覆盖 · 五、引文核验 ·
+  六、体例与表述 · 七、我们做的补救 · 八、未决问题 · 九、诚实边界。
+  **九节都要有小标题**（写"六、体例与表述"或那节的名称都认）—— 真机实测：一趟只写了五节，
+  收工门当场 `report_shape: fail` 并把缺的四节名字列了出来。所以：**写完先跑一次
+  `conductor.closing`**，它会把缺的节名逐个报出来，按它改，再跑一次。
+- 报告里必须**分栏**写"我们补的"与"原文的"（这两句要出现）—— 混在一起写等于没分栏。
+- 附件三件套要在报告里可见：`origin=own_result`、`依据`、`sha`。
+- 报告落点只有一处：`out/review/REPORT.md`（用 `fs.write`；它默认不覆盖，重写要 `overwrite`）。
+- `conductor.closing` 的两个参数都给对：`project_dir` 是**项目根**（这个工作区就是根 ⇒ 给 `"."`；
+  给了 `out/paper` 它会把 `out/paper` 再拼一次），`report_path` 给 `out/review/REPORT.md`。
+- 关键取舍**要问用户**（`ask_user` 那条形状）：问过的问题会落盘；在没人值守的运行里，
+  提问会停在"等待用户"，等回答回来再继续。这不是麻烦，是这道门的一条读数
+  （`triage_branch_recorded`：一次都没问过 ⇒ 那一格只能记"没查成"）。"""
 
 
 @dataclass(frozen=True)
