@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p25"
+PROMPT_VERSION = "p26"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -357,14 +357,19 @@ PAPER_PACK = """\
 - 机械生成的那一半**不要手改**：`out/paper/appendix.tex` 与 `tables/*.tex` 由
   `doc.paper_render` 从台账生成（四张表 + 台账摘要）；手改它们会在下一次渲染时被覆盖。
   主稿 `main.tex` 的正文、证明、表述、引用 —— 那才是你写的地方。
-- **外部论文不是我方稿件**（`draft/37` §41 的用户裁定，方案 A）：盘上拿到的、别人写的那份稿子，
+- **外部论文不是我方稿件**（`draft/37` §41/§43 的用户裁定，方案 A）：盘上拿到的、别人写的那份稿子，
   登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
-  每条带 `source_lit_id` + `page_range` + 逐字 `proof_text`），审阅发现落 H 的 `review_findings`；
+  每条带 `source_lit_id` + `page_range` + 逐字 `proof_text`，`origin="external_lit"`），
   **我方修订稿**才由 G 用 `doc.build_document` 另起一行 `documents`（claims 的 citations
-  引 `lit:` / `exp:`）。**不要**拿外部论文的 `doc_id` 去 `G.revise` / `H.review_report`：
+  引 `lit:` / `exp:`）—— **顺序不能反**：H 的审阅发现挂在**我方稿件**那一行上
+  （`ReviewFinding.doc_id` 是必填的，挂不到 `literature` 行上），所以 G 那一行先有，
+  H 才谈得上审。**不要**拿外部论文的 id 去 `G.revise` / `H.review_report`：
   `documents` 的每一行都必须是我方写的、带 claims 的稿子（`Document.validate()` 逐字要求
-  "claims 不能为空 —— 一份没有任何断言的稿件不是稿件"）。真机实测（§37）：四个审稿动作
-  全被拒，就是因为拿一份还没有 claims 的外部论文去当 `documents` 行用。
+  "claims 不能为空 —— 一份没有任何断言的稿件不是稿件"）。
+  ⚠️ id 是**按表**分配的：第一篇文献与第一份稿件都可能叫 `0000`，两个命名空间互不相干 ——
+  所以拿到一个 id 时要问清"这是哪张表的"，而拒信里那句「稿件 0000 不存在」说的是
+  `documents` 表里没有这一行。真机实测（§37）：四个审稿动作全被拒，就是拿一份还没有
+  claims 的外部论文去当 `documents` 行用。
 
 二、验收表就是 P1–P11，交付说明必须逐条对齐
 - 判据表在 `out/paper/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），

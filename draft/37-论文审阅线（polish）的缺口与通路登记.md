@@ -3320,3 +3320,100 @@ requires_human：1 条改动落在 FC-27 禁 AI 区（类别：auth-audit）⇒ 
 
 **第二次真机发送**（用户已授权）排在 ① 的离线判据之后 —— 那条链要是没跑通就发，
 只是把 §37 的失败再花一次钱。
+
+---
+
+## §43 落地 §37.4 ①（方案 A）：外部论文的摄取链**用既有工具真的走通了**（零新增面）
+
+用户在 §42 开工前裁定走**方案 A**：外部论文 = `literature` + `statements`，我方修订稿 = `documents`。
+这一节把它做成**可跑的判据**（`tests/test_review_intake_chain.py`，3 条用例），
+并把探针撞出来的三条口径写准（其中两条改进了 §42 写进提示词的那段话）。
+
+### 43.1 那条链（每一步都是既有工具/动作，一步不新增）
+
+```text
+[A] search.register          → literature 行（lit_id）            ok=True
+[B] table.create(statements) → 命题行（origin=external_lit,
+                               source_lit_id=lit_id, 逐字 proof_text）ok=True
+[G] doc.build_document       → 我方修订稿（documents, claims 引 lit:）ok=True
+[H] conductor.summon(H.review, doc_id=<我方稿件>)                 outcome=ok, checked=True
+                              → documents.status: draft → accepted（H 记结论的地方）
+```
+
+判据钉两件事（都在 43.2 的"为什么"里）：
+
+1. **可追溯的那条线**：`statements.source_lit_id` 与 `documents.claims[].citations`
+   指向同一个 `lit:` —— 两处同一个 id，才谈得上"改这篇论文时知道依据来自哪一篇"；
+2. **审阅真的发生了**：干净的稿件产出**零条**发现，而"零条发现"与"根本没审"在读数上
+   长得一模一样 ⇒ 必须另有一条读数：实测 `H.review` 在一份合规稿件上会把
+   `documents.status` 由 `draft` 推成 `accepted`（`review_rounds` 不动），
+   所以判据断言的是**状态被推进**，不是"没有报错"。
+
+### 43.2 探针撞出来的三条口径（前两条改进了提示词，第三条是本轮的读数）
+
+1. **`Statement.origin` 取 `external_lit` / `own_result`，而 `evidence_kind` 是证据强度**
+   （`proof` / `cross_check` / `heuristic`），**不是来源** —— 来源走 `source_lit_id`。
+   第一版探针把 `origin` 写成 `literature`，当场被 `validate()` 拒（`kind='validation'`）。
+2. **`ReviewFinding.doc_id` 是必填的**（`require_id(self.doc_id, "doc_id")`）⇒
+   审阅发现只能挂在 `documents` 行上，挂不到 `literature` 行上。于是方案 A 里
+   "我方修订稿"必须**先**有 `documents` 行，H 才审得了 —— 这一条已经补进 `PAPER_PACK`，
+   并在提示词里写成"顺序不能反"（`p25 → p26`）。
+3. **id 是按表分配的**：`lit_id` 与 `doc_id` 都可能是 `0000`（判据里实测撞到，
+   我第一版"外部来源与我方稿件必须是两个不同的 id"的断言就是错的）。
+   这正是 §37 那次混得起来的原因，也是为什么拒信里那句"稿件 0000 不存在"必须点名
+   **是哪张表没有这一行** —— 这一条也补进了提示词。
+
+### 43.3 写侧比读侧更早：一个顺带量出来的事实
+
+判据第一版想造一份"有缺陷的稿件"给 H 审，途径是 `doc.build_document` 写一条
+"`cross_check` 却说已证明"的断言 —— **写不进去**：
+
+```text
+断言 c1 的 evidence_kind='cross_check'（不是 proof），但正文出现「已证明」
+—— 这是把交叉验证说成了证明        （G12 的机械门，写入期就拒）
+```
+
+也就是说：外部论文进来之后真正会出问题的地方是**语义**那一半（机械那一半在写入期就被挡了）。
+要造"有缺陷的稿件"必须绕过工具层（`tests/test_agent_h.py` 的 `inject_raw_document` 就是这么做的，
+那一半的判据在 `test_agent_h.py` 里，本节不重复）。这一条也顺手解释了一件事：
+**"零条发现"在合规稿件上是正常的读数，不是空白**。
+
+### 43.4 负控：§37 那次的失败形态现在被拒得**明确**
+
+```text
+conductor.summon(G.revise,      doc_id=lit_id) → refused
+   detail="G.revise 拒绝了这次调用：稿件 0000 不存在 ⇒ 不能修订一份不存在的稿件"
+conductor.summon(H.review_report, doc_id=lit_id) → refused
+   detail="…review.report 调用失败：校验失败：稿件 0000 不存在（documents 表里没有这一行）
+           ⇒ 不能审一份不存在的稿件"
+且 documents 与 review_findings 两表**零行**（拒了不许写半行）
+```
+
+注意这里有个容易看错的地方：`refusal_reason` 是 `invalid_params`（工具层对"角色拒绝"的统一归类），
+**那句话在 `detail` 里**。判据因此断言 `detail`（下一轮 M 要读的也是它），
+而不是断言 `refusal_reason` —— 这一点是写判据时实测出来的，记在这里免得下次又写错。
+
+### 43.5 这条链**不能**说明什么
+
+- 它不证明"抽取质量"：判据里的 `statements` 行是**手写的夹具**（真实场景里由 B 读正文产出，
+  那由 `statements` 那一组判据与 B 的边界守）；这一节证明的是**通路**，不是**质量**。
+- 它不替代 `test_agent_h.py`：H 的机械/语义判据那半边在那里，本节只走"这条链到得了 H"。
+- 它**不是**"外部论文已经能自动进台账"：链上的每一步仍然要有人（M）**按顺序**派出去 ——
+  这一节把"派什么、什么顺序、依据哪张表"变成了可核的事实（提示词 + 判据两处），
+  这正是 §37 那次到不了的原因（它拿外部论文当 `documents` 行用）。
+
+### 43.6 三个读数
+
+1. **lint**：`error 0 / warning 9 / info 50`（== 钉住的读数）。中间 `error 1` 是新判据文件里的
+   docstring 装饰，`temp/_r009_fix.py --apply` + `_r009_verify.py` 清掉（1/1 通过：
+   代码零改动、行尾零变化）。
+2. **本节判据**：`test_review_intake_chain.py` ⇒ **3 passed**；连同提示词/工具面那一批
+   （`test_agent_surface_snapshot + test_tool_surface_snapshot + test_paper_pack +
+   test_agent_prompts + test_conductor_tools`）⇒ **76 passed**，0 failed。
+3. **全量 pytest**：**3341 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1267.49 s）。比上一刀（§42 的 3338）多 **3** 条 —— 正是本节新增的三条用例。
+4. **FC-27 门**：本节改动路径（`agent_prompts.py` / 新判据文件 / 两份 golden）**都不在清单里**
+   ⇒ 不新增禁改区命中；§42 那条 `specs/m.py` 的"已登记、欠 2 名 reviewer"状态**没有任何变化**。
+
+**两份 golden**：`tool_surface_snapshot.json` **0 处变化**；`agent_surface_snapshot.json`
+9 份提示词（A–F 只差版本行 `p25 → p26`，G/H/M 差 `PAPER_PACK` 那一段），逐行 diff 核过。
