@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p27"
+PROMPT_VERSION = "p28"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -737,8 +737,15 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "不许自己把口径挪一格再继续。这是本项目唯一允许的「停下来等」的理由。",
             "读盘先于猜：fs.list / fs.read / fs.search / fs.stat 是你自己的眼睛 —— "
             "盘上有什么、论文在哪、上一轮产物长什么样，直接读；先 fs.list 一层就够，"
-            "不要用反复试探代替看。fs.write 只用来写交付说明（out/review/REPORT.md）："
-            "论文本体 out/paper/ 是 G 与 H 的活，你只读不写。",
+            "不要用反复试探代替看。fs.write 的第一用途是写交付说明（out/review/REPORT.md）。"
+            "论文正文的**内容判断**归 G 与 H；但**已经定下来的**改动落不到盘上时"
+            "（真机实测：G.revise 只写它自己那份 documents 的 markdown，"
+            "out/paper/main.tex 的 sha256 一步都没变），你有权也有责任用 fs.write "
+            "把那几处改动写进 out/paper/main.tex：逐字定位、只改该改的地方，"
+            "并在交付说明里写清「改了哪几处、每处的依据」。**不许**借这支笔重写整篇论文。",
+            "步数预算有限，**留出最后几步**给交付说明与收工门自检：真机实测有一趟把 30 步"
+            "全花在正文上，报告一个字都没写出来，于是机器判据里的报告形状与诚实性两格"
+            "只能是 unknown —— 那不是「没过」，是「没交」。",
             "工作区已经在手边时不要再 ensure_project：那一件的缺省落点是另一个 projects 目录"
             "（真机实测建出过一个空项目 project11），所以框架会以 already_a_project 拒你。"
             "接着做下去用 conductor.resume_brief / conductor.state / conductor.ledger，"

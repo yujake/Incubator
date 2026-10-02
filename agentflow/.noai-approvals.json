@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-03T00:17:56+08:00",
+  "generated_at": "2026-10-03T02:07:09+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -486,10 +486,10 @@
       "path": "src/agentflow/specs/m.py",
       "glob": "src/agentflow/specs/m.py",
       "category": "auth-audit",
-      "sha256": "cc28086861f4ac5922367d7d1706dd8daa70def1c6cbd91f576fad1cdf2ff4b5",
+      "sha256": "c9b84083ebd82ce40339e82e4a1e9741d8236cbe19261be67e459ea259960d11",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-02 用户裁定（draft/37 §41/§42）：M 的 emphasis['手'] 由 denied 改 minor、交付说明落点写进 deliverable/policy；由用户逐项裁定后应用，2 名 reviewer 的逐行走查仍欠（reviewers 留 0）",
+      "change_note": "2026-10-03 第五趟真机读数（draft/37 §53）：把 M 的'论文本体只读不写'改成有边界的授权（已定改动落不到盘上时 M 可 fs.write 落主稿）+ 新增'留出最后几步给交付说明'；用户裁示是实践循环，本次仍欠 2 名 reviewer 逐行走查（reviewers 留 0）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

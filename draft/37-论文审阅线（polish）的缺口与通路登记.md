@@ -4226,3 +4226,83 @@ step 0 result  ：{"ok": false, "error": "没有名为 'fs_list' 的工具", "me
 
 **下一趟（第五趟）要验的**：模型会不会用原生调用；若仍走文本，`aliased_from` 会告诉我们
 "广告名这条路现在是通的"（29 步全废那种形态不该再出现）。
+
+---
+
+## §53 第五趟真机（全新干净工作区）：链**走完了**，但报告没交出来 —— 两处新堵点
+
+用户 2026-10-03 的裁示是"靠实践反馈循环、直到审阅论文包这个任务通过"。这一节是那个循环的
+**第一次迭代**：造干净工作区 → 跑 → 读读数 → 定位两个新堵点 → 修补 → 登记。
+
+### 53.1 这一次的夹具（每趟都换新工作区，为的是读数只关于这一趟）
+
+脚本 `temp/_p53_new_ws.py` 造 `projects/p5-run5/`：
+
+- `source/` = 论文包逐字复制（只读基线，`main.tex` sha256 `8c5c431b46f7…`）；
+- `out/paper/main.tex` = 逐字副本（可改的主稿）、`out/paper/main.pdf`；
+- `out/paper/ACCEPTANCE.md` = 那份六行 P1–P6 表（逐字取自既有 polish 夹具）；
+- `code/make_paper.py`（只写锚）+ `code/compile_paper.py`（只写回执）；
+- `README-PROVENANCE.md` 钉住"这一轮审的是哪一版"；
+- **空 `data/`**（`Store.init()` 的前置）。
+
+> **为什么每趟都要新的**（`draft/37` §48.4 的教训）：复用工作区时，"读文件"的判据
+> （`attachment_is_honest` / `report_shape`）会拿上一趟的产物当这一趟的，台账里的旧行
+> 也会让 `statements_have_assumptions_and_source` 之类**看起来**过了。
+> 这一趟的读数因此是本轮实测：`literature = 1` 且那一行就是**论文本体**
+> （`lit 0000: path=main.pdf`）—— 干净工作区让这件事一眼可见。
+
+### 53.2 读数（`temp/_run_judge.py projects/p5-run5 --sid real5`）
+
+```text
+步数 30 / llm_call 30 / 停止理由 final / usd 0.218731（上限 2.0）/ 零非法形状
+工具面 advertised=22；别名映射用过 2 次（conductor_role_spec → conductor.role_spec）
+literature = 1（path=main.pdf ← **论文本体**） statements = 3（quote_verified=None ← 三态守住了）
+documents = 1  review_findings = 0  tasks = 11  usage_ledger = 9
+交付说明：不在盘上
+reviewaccept：passed=False；statements_have_assumptions_and_source **pass**、
+              hops_have_readable_prompts **pass**；其余四格 unknown（没有报告）
+closing：can_close=False，failed=['anchor']（drifted），unknowns=['report_shape']
+```
+
+**这一趟把链真的走完了**（这是四趟里第一次）：A 登记**论文本体** → B 登记三条命题
+（`quote_verified=None`，出处指 `lit:0000`）→ G 建 `documents` 行 → H 审我方稿件
+（`doc_id=0000`）→ G 两次 `revise`。四张表第一次同时有行，两格机器判据从
+`fail/unknown` 变成 **`pass`**。§51 的三条纪律**逐条生效**（`pattern="*.pdf"`、
+`sourc_lit_id` 指论文那一行、没核就不传 `quote_verified`），§52 的别名映射也生效
+（2 次 `conductor_role_spec` → 真名，没有再撞 `unknown_tool`）。
+
+### 53.3 两个新堵点（都由主控自己报出来，读数支持它）
+
+1. **报告没交出来**：30 步全花在正文上，`out/review/REPORT.md` **一个字都没写**
+   ⇒ 机器判据里 `attachment_is_honest` / `report_sections_have_readings` 只能是 `unknown`。
+   主控的原话是"本轮未能完成交付，如实报告卡点" —— 它**没撒谎**，但**没交**。
+2. **`G.revise` 不落主稿**：它两次报 `ok`，而 `out/paper/main.tex` 的 sha256 与 mtime
+   **两次都完全没变**（8c5c431b…, 2026-09-21）—— 它只写自己那份 `documents/0000.md`。
+   主控用 `fs.stat` 抓到这一点（步 20、23），并记进草稿本（步 21、24），
+   然后打算"自己用 `fs.write` 把实质修订写进主稿"（步 25–28）——**但步数用完了**。
+
+第 2 条同时暴露我自己在 §42 写的一句政策过宽：那时写的是"论文本体 `out/paper/`
+是 G 与 H 的活，你只读不写"。用户当时的裁定是"M 有笔但不写知识表"，**没有**说过
+"M 不许碰论文正文" —— 而这一句恰好把主控最后那条可行路径堵上了（它想写、也判断对了）。
+
+### 53.4 这一轮的两处修补（都在非禁改区）
+
+1. **M 的政策改写**（`agent_prompts` 与 `specs/m.py` 同步，`p27 → p28`）：把"只读不写"
+   换成一条**有边界的授权 + 一条纪律** ——
+   - 论文正文的**内容判断**归 G 与 H；但**已经定下来的**改动落不到盘上时
+     （点名 `G.revise` 那个实测读数），主控**有权也有责任**用 `fs.write` 把那几处写进
+     `out/paper/main.tex`：逐字定位、只改该改的，并在交付说明里写清"改了哪几处、依据是什么"；
+     **不许借这支笔重写整篇论文**。
+   - 另一条新的政策：**留出最后几步**给交付说明与收工门自检（把"没交"与"没过"分开写）。
+2. **步数预算**：`--max-steps` 是既有旋钮（缺省 30），这一趟用它把上限提到 **45** ——
+   不改代码，只改操作；同时那条新政策让"报告"在预算里有一个确定的位置。
+
+### 53.5 读数（补丁部分）
+
+- 判据：`test_agent_spec_reconciliation + test_review_line_prompts + test_agent_prompts +
+  test_paper_pack` ⇒ **62 passed**（`specs/m.py` 与 `agent_prompts` 逐字镜像的判据仍在守）。
+- lint：`error 0 / warning 9 / info 50`。
+- golden：`agent_surface_snapshot.json` —— A 只差版本行，**M 多两处**（改写的那条政策换了一行、
+  新增"留出最后几步"一条），逐行 diff 核过。
+- FC-27：`specs/m.py` 命中（auth-audit）⇒ 门会要求 2 名 reviewer；按纪律登记基线、
+  `reviewers` 留 0（**这一格照红记，不折成绿**）。
