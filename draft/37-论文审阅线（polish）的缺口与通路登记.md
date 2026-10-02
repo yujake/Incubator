@@ -2275,3 +2275,77 @@ B 的可召唤边里**没有 E** ⇒ B 想让 E 做背书，**只能**走"请代
 **E 的背书产出**（一条 `method="formal"` + `verifier_output` 非空的实验行）。
 这四跳都能用同一个 scripted-gateway 形状继续做（本节又验证了一次这个形状好用），
 但每一跳要单独写剧本。
+
+---
+
+## §30 本目标（`goal-a5334ee8`）的阶段收束登记：验过什么、还差什么、怎么接着跑
+
+**这一节是给接手的人看的**（包括下一轮的我）。它不引入新设计，只把
+`§18`–`§29` 十二节做过的事、**当前可复现的读数**、以及**没做完/被阻塞的部分**
+放在一处 —— 因为"翻十二节才知道状态"本身就是一个协作缺陷。
+
+### 30.1 十二节做了什么（一句话一节）
+
+| 节 | 做了什么 | 它守的判据 |
+|---|---|---|
+| §18 | P0 前半：`fs.edit`（前置 sha + 唯一匹配 + ≤2000 字） | `test_tools_fs_edit.py` 4 条 |
+| §19 | P0 后半：预算四旋钮（步数 30 / 输出 8192 / 墙钟可配 / 观测窗口） | `test_budget_knobs.py` 4 条 + 反真空 4/4 |
+| §20 | P1：`statements` 台账（十处触点）+ 依赖四态 + `tasks.instance` | `test_statements_table.py` 15 + `test_task_instance.py` 5 |
+| §21 | P2：六条提示词口径 + `literature.matched` + `PROMPT_VERSION p24` | `test_review_line_prompts.py` 10 + `test_literature_match.py` 7 |
+| §22 | P3：收工门五条（各自能造红）+ `conductor.closing` + CLI | `test_closing_gate.py` 9 |
+| §23 | P4：矛盾/错文献夹具（R19 四 code + R20 污染面） | `test_contradiction_fixtures.py` 9 |
+| §24 | P4：审稿场景**内容级**验收（五条 + 辅助读数分栏） | `test_review_acceptance.py` 10 |
+| §25 | P4：R25 附件诚实（来源造假 / 过度声称，互相咬） | 同上 +2 条 |
+| §26 | P4：R26 第三段**数据半**（答读得回来 / 没答 ≠ 同意） | `test_resume_after_answer.py` 5 |
+| §27 | P4：R13 第一跳（工具面：B 登记 → 落库 → 下游读得到） | `test_review_chain_hop.py` 6 |
+| §28 | P4：R13 第一跳**循环版** + `dangling_task_artifact` 反真空 | `test_review_chain_loop.py` 4 |
+| §29 | P4：R13 第 5–6 跳（请代唤 → M 派 E） | `test_review_chain_relay.py` 3 |
+
+### 30.2 四项读数（当次，可复跑）
+
+| 读数 | 值 | 复跑命令 |
+|---|---|---|
+| lint | `error 0 / warning 9 / info 50`（`--strict` ⇒ `0 / 56 / 49`） | `python -B scripts/lint_rules.py`（加 `--strict`） |
+| 本目标新增判据 | **93 条全绿**（上表逐行相加：4+4+20+17+9+9+12+5+6+4+3） | `python -B -m pytest tests/test_tools_fs_edit.py tests/test_budget_knobs.py tests/test_statements_table.py tests/test_task_instance.py tests/test_review_line_prompts.py tests/test_literature_match.py tests/test_closing_gate.py tests/test_contradiction_fixtures.py tests/test_review_acceptance.py tests/test_resume_after_answer.py tests/test_review_chain_hop.py tests/test_review_chain_loop.py tests/test_review_chain_relay.py -q` |
+| 全量 pytest | `3318 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed`（21 分 1 秒） | `python -B -m pytest -q -p no:cacheprovider` |
+| FC-27 门 | 命中 **12 条**（`schema.py` / `store.py` / `verify.py` / `tools/vocab_census.py` / `specs/{a,b,c,d,h,m}.py` / `capabilities.py` 的旧基线）⇒ 基线**已刷新、`reviewers` 全为 0**；门仍以**退出码 1**要求 2 名 reviewer | `python -B scripts/noai_gate.py --paths <改动的文件>` |
+
+⚠️ **FC-27 那一条要人做的事没变**：这十二节里凡碰到禁改区的，**都由人逐行走查**
+（`--note` 里写了改了什么、判据在哪）。`reviewers=0` 不是"已批准"。
+
+### 30.3 没做完的三件（按能不能现在做分类）
+
+1. **R13 剩下四跳**（**能做，且不需要 key**）：A 的检索 + 定位确认（用 fixture provider
+   或一次模型循环）、A→D 通知、A→B 交接（消息层判据已在 §27 第 6 条）、
+   **E 的背书产出**（一条 `method="formal"` + `verifier_output` 非空的 `experiments` 行）。
+   做法就是 §28/§29 用过的那个形状：`LlmBackend(loops={("角色","动作"): {}})` +
+   照剧本回答的替身模型 + `LocalBackend` 里的 stub 角色。**每一跳单独写剧本**。
+2. **R26 第三段真跑**（**能做，不需要 key**）：`run_autonomous(..., resume=True)` 那一次
+   跑完，报告被更新 —— 数据半（答读得回来、没答不算同意、说停即停）已在 §26 验过，
+   缺的是"续跑那一次真的动了报告"的读数。可复用 `tests/test_autonomy_resume.py` 的
+   `_wire`/`_run` 两个帮手。
+3. **§17.3 真机一次发送**（**今天做不了**）：需要一个可用的 `AGENTFLOW_MODEL_API_KEY`。
+   就位之后的完整命令与判据：
+
+   ```powershell
+   cd D:\Incubator\agentflow
+   $env:PYTHONPATH='src'; $env:AGENTFLOW_MODEL_API_KEY='<key>'
+   # 一次发送、带成本上限（示例：2 美元）
+   python -B -m agentflow.cli run-agent M --task "审核这份未发表的论文并 polish 它" `
+          --project-dir <论文包目录> --budget-usd 2.0 --wall-clock-sec 3600
+   # 判据（只看内容级六条；辅助读数不参与 passed）
+   python -B -c "import sys,pathlib;sys.path.insert(0,'src');from agentflow import reviewaccept as RX;from agentflow.store import Store;print(RX.check_review(Store(pathlib.Path('<工作区>')), project_dir='<论文包目录>', report_path='<论文包目录>/out/review/REPORT.md', cost_cap_usd=2.0).to_dict())"
+   python -B -m agentflow.cli closing --root <工作区> --project-dir <论文包目录>
+   ```
+
+   **不许**拿 `sha 变了 / 页数对得上 / 锚 consistent 单项 / 任务数增加 / 台账行数增加`
+   当通过（`§17.3` 逐字禁令；`reviewaccept` 把这五种读数放在 `auxiliary` 里，
+   **一个都不参与 `passed`**）。
+
+### 30.4 这条线今天能说的一句话
+
+**P0–P3 验收完毕**（把手、数据面、提示词、收工门与报告形状都在判据里）；
+**P4 已验四分之三**：场景一（审稿内容级验收 + R25）、场景三（矛盾/错文献夹具）、
+R17（既有判据）、R26 数据半、R13 的三跳（B 登记 ×2 + 请代唤→M 派 E）——
+**没有验的是**：R13 的 A 侧与 E 背书四跳、R26 的真续跑、以及**真机那一次发送**
+（阻塞在 key）。这句话本身就是这一节的产出：**别把"十二节都写了"读成"全验过了"**。
