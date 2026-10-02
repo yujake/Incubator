@@ -276,5 +276,56 @@ def test_missing_inputs_are_unknown_not_pass(tmp_path):
     acc = RX.check_review(st, project_dir="", report_path="", cost_cap_usd=None)
     assert acc.criteria["report_sections_have_readings"] == "unknown", acc.to_dict()
     assert acc.criteria["within_cost_cap"] == "unknown", acc.to_dict()
+    assert acc.criteria["attachment_is_honest"] == "unknown", acc.to_dict()
     assert not acc.passed
     assert acc.auxiliary["anchor_verdict"] == "", acc.auxiliary
+
+
+# ============================================================ R25：附件诚实（两条负控）
+
+def test_an_attachment_claiming_a_literature_source_fails(tmp_path):
+    """R25 负控①（来源造假）：把我们补的手稿写成"文献补充" ⇒ 红。
+
+    这一条与下一条必须分开报：来源造假的处置是改正标注，过度声称的处置是
+    降档或补 T3 —— 两件事的接手人不同。
+    """
+    st, report = _good(tmp_path)
+    with report.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n七、我们做的补救：文献补充——定理 1.5 取自 Brown 1971。\n")
+    acc = _check(st, report)
+    assert acc.criteria["attachment_is_honest"] == "fail", acc.to_dict()
+    assert "文献补充" in acc.readings["attachment"]["forgery_markers"], acc.readings
+    assert "来源造假" in acc.details["attachment_is_honest"]
+
+
+def test_claiming_resolved_while_t3_is_missing_fails(tmp_path):
+    """R25 负控②（过度声称）：写了"已解决"，而收工门仍说承重结论缺 T3 ⇒ 红。
+
+    这一条演示的是"两条判据互相咬"：措辞的诚实由证据状态裁定，不由措辞自己裁定。
+    """
+    st, report = _good(tmp_path)
+    # 把那条承重断言设成 proof 级，而台账里没有任何 T3 形态的实验行
+    with st.tx("documents", actor="test") as tx:
+        doc = S.Document(doc_id="0001", kind="paper", title="未发表的论文", status="in_review",
+                         claims=[{"claim_id": "c1", "text": "已证明定理 1.5",
+                                  "citations": ["lit:0000"], "evidence_kind": "proof",
+                                  "section": "§2"}], created_at=TS)
+        doc.validate()
+        tx.upsert("documents", doc.to_dict())
+    sync_counters(st)
+    with report.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n八、未决问题：形式化覆盖缺口已解决。\n")
+    acc = _check(st, report)
+    assert acc.readings["attachment"]["load_bearing"] == "fail", acc.to_dict()
+    assert acc.criteria["attachment_is_honest"] == "fail", acc.to_dict()
+    assert "过度声称" in acc.details["attachment_is_honest"]
+
+    # 反真空：把那条断言如实降档之后，"已解决"这句话就不再是过度声称
+    with st.tx("documents", actor="test") as tx:
+        row = dict(st.rows("documents")[0])
+        row["claims"][0]["evidence_kind"] = "cross_check"
+        row["claims"][0]["disclaimer"] = "数值交叉验证，不构成证明"
+        tx.upsert("documents", row)
+    acc2 = _check(st, report)
+    assert acc2.readings["attachment"]["load_bearing"] == "pass", acc2.to_dict()
+    assert acc2.criteria["attachment_is_honest"] == "pass", acc2.to_dict()

@@ -23,14 +23,24 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-#: 五条内容级判据（顺序即交付说明里的顺序）。
+#: 六条内容级判据（顺序即交付说明里的顺序）。
 CRITERIA: tuple[tuple[str, str], ...] = (
     ("report_sections_have_readings", "报告九节齐全，且**每节都有读数**（数字或台账引用）"),
     ("statements_have_assumptions_and_source", "定理台账每条都有完整假设与出处（含页码）"),
     ("triage_branch_recorded", "三态分支正确：该问用户的真问了，且问题落盘可查"),
     ("within_cost_cap", "在成本上限内完成"),
     ("hops_have_readable_prompts", "每一跳都留下了可读的输入（`input_key`+台账引用不悬空）"),
+    ("attachment_is_honest", "附件诚实：**明确标注是我们补的** + 依据读数 + 版本 sha；"
+                             "没过 T3 的不许写成「已解决」（R25 的两条负控）"),
 )
+
+#: R25 负控①要挡的形态：把"我们补的"写成"文献里的"（来源造假）。
+FORGERY_MARKERS: tuple[str, ...] = (
+    "文献补充", "原文的补充", "摘自文献", "文献原文补充", "文献补遗",
+)
+
+#: R25 负控②要挡的形态：把没上 T3 的东西写成"已解决"。
+RESOLVED_MARKERS: tuple[str, ...] = ("已解决", "已修复", "已闭合", "resolved")
 
 #: §17.3 逐字列出的"不许当通过"的辅助读数。
 AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
@@ -251,6 +261,51 @@ def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
         acc.criteria["hops_have_readable_prompts"] = "pass"
 
 
+def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
+    """⑥ 附件诚实（R25）：两份都要过 —— 来源不造假、不过度声称。
+
+    两条负控（`draft/37` §16 P3 的报告行逐字要求）：
+
+    1. 来源造假：把"我们补的手稿"写成文献里的东西（`FORGERY_MARKERS`）。
+       处置方向是改正来源标注，不是补证据 —— 所以它与下面那条必须分开报；
+    2. 没过 T3 写"已解决"：报告里出现 `RESOLVED_MARKERS`，而收工门的
+       `load_bearing` 仍然判定"承重结论缺 T3"（同一个工作区里跑一次 `closing` 就知道）。
+       处置方向是降档或补 T3。
+
+    附件三件套（`origin=own_result` + 依据读数 + 版本 sha）由 `report_shape` 那条管；
+    这一条只管诚实：说的是不是实话。
+    """
+    if not str(report_path or "").strip() or not Path(report_path).is_file():
+        acc.criteria["attachment_is_honest"] = "unknown"
+        acc.details["attachment_is_honest"] = "报告不在盘上 ⇒ 附件的诚实没查成（不是通过）"
+        return
+    text = Path(report_path).read_text(encoding="utf-8")
+    forged = [m for m in FORGERY_MARKERS if m in text]
+    overclaim = [m for m in RESOLVED_MARKERS if m in text]
+    acc.readings["attachment"] = {"forgery_markers": forged, "resolved_markers": overclaim}
+    problems: list[str] = []
+    if forged:
+        problems.append(f"来源造假：报告里出现 {forged} —— 我们补的东西不许写成文献里的")
+    if overclaim:
+        # "已解决"本身不违规 —— 只有当收工门仍在说"承重结论缺 T3"时它才是过度声称。
+        # 这正是"两条判据互相咬"的形态：措辞的诚实由证据状态裁定，不由措辞自己裁定。
+        if store is not None:
+            from . import closing as CL
+
+            gate = CL.check_closing(store, checks=("load_bearing",))
+            still_bad = gate.status.get("load_bearing") == "fail"
+            acc.readings["attachment"]["load_bearing"] = gate.status.get("load_bearing")
+            if still_bad:
+                problems.append(
+                    f"过度声称：报告写了 {overclaim}，而收工门的承重判据仍是 fail"
+                    "（有 proof 级的结论没有 T3 背书）⇒ 要么降档并改措辞，要么补 T3")
+    if problems:
+        acc.criteria["attachment_is_honest"] = "fail"
+        acc.details["attachment_is_honest"] = "；".join(problems)
+    else:
+        acc.criteria["attachment_is_honest"] = "pass"
+
+
 def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
     """那五种"容易拿到、但证明不了内容"的读数（§17.3 逐字禁止拿来当通过）。"""
     import hashlib
@@ -292,5 +347,6 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
     _c_triage(acc, store, root)
     _c_cost(acc, store, cost_cap_usd)
     _c_hops(acc, store)
+    _c_attachment(acc, store, report_path)
     _auxiliary(acc, store, project_dir)
     return acc
