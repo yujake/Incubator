@@ -75,8 +75,13 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
 
 
 def test_the_paper_pack_section_is_versioned(store: Store):
-    """判据（可追溯）：段变了版本号就要动 —— 提示词版本是审计记录里的一栏。"""
-    assert AP.PROMPT_VERSION == "p23", AP.PROMPT_VERSION
+    """判据（可追溯）：段变了版本号就要动 —— 提示词版本是审计记录里的一栏。
+
+    p23 → p24（`draft/37` §16 P2）：本轮给 A/B/C/D/H/M 六个角色加了审阅线的口径
+    （命中校验与定位确认、命题台账三件套、缺口→检索请求、初步数学审阅+可挽救性、
+    采信规则、每跳写清提示词+目标变更必须 ask_user）。段变了，这一格必须跟着动。
+    """
+    assert AP.PROMPT_VERSION == "p24", AP.PROMPT_VERSION
 
 
 #: `2026-10-01` 真机实测逼出来的那一条：光说"重渲染 → 重编译 → 锚回 consistent"不够，

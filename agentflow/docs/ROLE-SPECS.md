@@ -147,6 +147,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `refuted_dependency_in_use` / `disputed_dependency_in_use` | error / warning | 依赖被证否 / 有争议（`draft/37` §16 P1） | G/D |
 | `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency` / `closed_dep_on_inconclusive_experiment` / `proof_claim_on_refuted_dependency` / `proof_claim_on_disputed_dependency` | error | **过度声称**（FC-22） | G/H |
 | `statements`: `dangling_lit_ref` / `dangling_doc_ref` / `dangling_stmt_ref` / `proof_stmt_on_unusable_stmt`（`disputed` 降 warning）/ `active_stmt_quote_unverified`（warning） | error×3 / warning×2 | 命题台账（`draft/37` §16 P1） | B/D |
+| `mismatch_literature_processed` / `partial_match_processed` | error / warning | 命中校验（`draft/37` §2 R1b / §16 P2） | A |
 | `unsupported_claim` / `dangling_citation` / `citation_to_retracted_relation` / `citation_to_suspect_relation` / `overclaim` / `unknown_citation_kind` | error×5 / warning | 稿件的断言与引用 | G/H |
 | `question_based_on_retracted_relation` | warning | 研究问题建立在被否关系上 | D |
 | `dangling_doc_ref` / `finding_without_evidence` / `accepted_with_open_error` | error | 审校发现自身必须带证据 | H |
@@ -477,6 +478,8 @@ A 的"没有结果"逐个列：
 | **尝试用尽** | `outcome="gave_up"` + `last_error` | `lease.max_attempts` |
 | **下载失败** | `literature.download = {status:"failed", …}` | `DOWNLOAD_STATUSES` |
 | **下载到的东西不是 PDF** | `status="content_mismatch"` + **保留字节** | `verify.mismatch_without_evidence` 保证"有 mismatch 必有证据" |
+| **下回来的不是派活点名的那一篇** | `literature.matched`（`exact` / `partial` / `mismatch` / `""`=还没核） | `verify.mismatch_literature_processed`（`mismatch` + 已消化 ⇒ error）；`partial` + 已消化 ⇒ warning |
+| **这篇里没有那条定理** | A 的**定位结论**（`matched ∈ exact / partial / none` + 页码 + 片段 + 最接近的三段），落在回报里 | §2 R14：`none` 不许交给 B。⚠️ 与上一行的 `matched` **同形不同问**（见 `schema.LIT_MATCH_STATES` 的长注） |
 | **没下载（配置关闭）** | `status="skipped"` | 与 `failed` **分开** —— 这是"没做"不是"做了没成" |
 | **`search.dedup_check` 读不到文献表** | ❌ **已知缺陷**：`_literature_rows` 的 `except Exception: return []`（`tools.search_tools._literature_rows`）⇒ `would_be_duplicate=False`、`existing_table_size=0`、**没有任何 warning** | INVENTORY 4.3(a)③；**这是"把没做折叠成没有"的教科书例子** |
 
@@ -500,6 +503,8 @@ A 的"没有结果"逐个列：
 | 文献文件真的在盘上 | `file_missing` | error |
 | `download.status="ok"` 必须有 `path` | `ok_without_path` | warning |
 | `content_mismatch` 必须有证据 | `mismatch_without_evidence` | warning |
+| 命中校验为 `mismatch` 的文献不许被消化（§2 R1b / §16 P2） | `mismatch_literature_processed` | error |
+| `partial` 停在中间态要被看见 | `partial_match_processed` | warning |
 | ID 唯一、无空洞、counters 不落后 | `duplicate_id` / `id_gap` / `counter_behind` / `counter_overflow` | error×3 / warning |
 | 路径不逃逸工作区 | `path_escape` | error |
 
@@ -1758,6 +1763,7 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 | H-4 | 只读列举发现 | `agent_h.AgentH.list_findings` |
 | H-5 | **依赖分级**（FC-13）：`external_unavailable`=warning，`dangling`=error | `tools.review_tools.scan_document`；自检实测逐字 |
 | H-6 | 请 G 修订 / 向 A 核引文 / 向 E 核形式化 | `H → G`、`H → A`、`H → E`（`capabilities.ALLOWED_EDGES`） |
+| H-7 | **采信规则**（`draft/37` §16 P2）：采信一条命题只有两条路 —— 正文与 B 的台账**逐字一致**（`statements.quote_verified is True` 且文本可比对）+ E 的背书（`experiments.evidence_kind="proof"`）；两条都不在只能说"这条我采信不了" | 提示词口径（`ROLE_BRIEFS["H"].boundary`）；`tests/test_review_line_prompts.py` 的 H 组事实 |
 
 > **2026-09-30（`draft/28` §199，人批准）**：H 的出边由 `{G}` 扩到 `{A, E, G}`。
 > 原状的理由是"审校者若能让别人改数据，它就同时是发现者与修正者" —— 那条理由

@@ -305,6 +305,29 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                     Issue("warning", "literature", lid, "unknown_request_ref",
                           f"source_request_ids 指向未知请求 {rid}")
                 )
+        # ---- 命中校验（`draft/37` §2 R1b + §16 P2 的 A 行）：**下错了的那一篇不许被消化**。
+        #
+        # 为什么这条必须是 error 而不是 warning：真机实测（2026-10-01）里 A 把 Brown 1971
+        # 下成了 2022 年另一篇 CLT 论文 —— 登记成功、下载成功、569,776 字节的真 PDF，
+        # **没有任何地方报出来**，于是下游会拿一篇无关文献去建概念与命题。
+        # 这是"静默登记成找到"的形态，与 FC-23 那一族同源（把不是自己的东西当成自己的）。
+        #
+        # 分级：`mismatch` + 已消化 ⇒ error（必须撤）；`partial` + 已消化 ⇒ warning
+        # （同一篇、元数据有出入，值得看一眼但不必然错）。
+        if str(l.get("matched") or "") == "mismatch" and l.get("processed"):
+            rep.issues.append(Issue(
+                "error", "literature", lid, "mismatch_literature_processed",
+                f"文献 {lid} 的命中校验结论是 matched='mismatch'（检索回来的不是派活时点名的"
+                "那一篇），却已经被 processed ⇒ 下游会拿一篇无关文献建概念与命题。"
+                "要么重新检索到对的那一篇，要么把这一行的 processed 撤回去（§2 R1b："
+                "mismatch 不许进 processed）",
+            ))
+        elif str(l.get("matched") or "") == "partial" and l.get("processed"):
+            rep.issues.append(Issue(
+                "warning", "literature", lid, "partial_match_processed",
+                f"文献 {lid} 的 matched='partial'（同一篇但元数据有出入）且已被消化："
+                "确认了是同一篇就把它改成 exact，不是就按 mismatch 处理 —— 别让它停在中间态",
+            ))
 
     # ---- 文献：文件是否真的在
     for l in literature:

@@ -100,6 +100,27 @@ SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 #:   skipped           —— 未尝试下载（无 pdf_url / 关闭下载 / 达到单请求上限）
 DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 
+#: `literature.matched` 的受控词表（`draft/37` §2 R1b）：**检索回来的到底是不是这一篇**。
+#:
+#:   exact     —— 题名/年份/DOI 都对得上派活时点名的那一篇
+#:   partial   —— 是同一篇，但元数据有出入（年份差一年、题名少一个副标题这类）
+#:   mismatch  —— **不是同一篇**（实测反例：要 Brown 1971，下回来的是 2022 年另一篇 CLT 论文，
+#:                569,776 字节的真 PDF、登记成功、下载成功，**没有任何地方报出来**）
+#:
+#: 空串是**第四态**，不是缺席："" = 还没做命中校验（三态纪律的老规矩 ——
+#: "没查"不能折成"查过了没问题"，所以它既不等于 `exact` 也不等于 `mismatch`）。
+#:
+#: ⚠️ **别与 §5.2 / §16 P2 的另一个 `matched` 串了**（同 `SEARCH_OUTCOMES` vs
+#: `TASK_OUTCOMES` 那一族的形态）：登记册里有**两个**同名但**不同问**的"三态"——
+#:   - 本栏（§2 R1b）：问"**这一篇**是不是我要的那一篇"（文献身份）⇒ `mismatch`；
+#:   - §5.2 / §16 P2 / §2 R14：问"**这条定理在不在这篇里**"（文内定位）⇒ 第三态叫 `none`，
+#:     由 A 在回报里给出（`matched` + 页码 + 片段 + "最接近的三段"），**不落本栏**。
+#: 两者的第三态名字不同（`mismatch` vs `none`）是**故意的**：一个是"拿错了文献"、
+#: 一个是"这篇里没有它"，处置方向相反（重取 vs 换关键词/如实回报）。把它们折成一个
+#: 字段会让"我下错了论文"与"论文里没有这条定理"在台账上同形 —— 而这两件事
+#: 在真机里各自都发生过一次（§1.1 与 §2 R14 的负控①）。
+LIT_MATCH_STATUSES = ("exact", "partial", "mismatch")
+
 _ID_RE = re.compile(r"^\d{4}$")
 
 
@@ -264,6 +285,9 @@ class Literature:
     language: str | None = None
     added_at: str = ""
     download: dict = field(default_factory=dict)
+    #: 命中校验结论（`draft/37` §2 R1b）：`exact` / `partial` / `mismatch` / `""`（= 还没核）。
+    #: 词表与"为什么它和 §5.2 的另一个 matched 不是一回事"见 `LIT_MATCH_STATUSES`。
+    matched: str = ""
     # --- 扩展：B 的并发控制（与 requests 表同样的租约思路）
     claimed_by: str | None = None
     lease_until: str | None = None
@@ -296,6 +320,13 @@ class Literature:
                     "注意：agent_b 依赖 'content_mismatch' 这个精确字符串来跳过非论文内容，"
                     "拼错会让缺陷 #8 静默复发。"
                 )
+        # 命中校验（§2 R1b）：空串是合法的第四态（= 还没核），非空必须在词表里。
+        if self.matched and self.matched not in LIT_MATCH_STATUSES:
+            raise ValueError(
+                f"matched 必须是 {LIT_MATCH_STATUSES} 之一，或空串（= 还没做命中校验），"
+                f"收到 {self.matched!r}。拼错的后果与 download.status 同族："
+                "下游靠这个字符串判断'要不要信这一篇'，而错拼只会静默放行。"
+            )
 
     def to_dict(self) -> dict:
         return asdict(self)

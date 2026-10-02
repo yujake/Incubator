@@ -455,6 +455,10 @@ _VOCAB_BY_FIELD: dict[tuple[str, str], str] = {
     ("search_requests", "mode"): "SEARCH_MODES",
     ("search_requests", "outcome"): "SEARCH_OUTCOMES",
     ("literature", "type"): "LIT_TYPES",
+    # 命中校验（`draft/37` §2 R1b / §16 P2 的 A 行）：`matched` 参与判据分支
+    # （`verify.mismatch_literature_processed` 读它决定"这一篇能不能被消化"）⇒
+    # 必须登记；不登记 = 参数期静默不校验（与 `dependencies.status` 同一族）。
+    ("literature", "matched"): "LIT_MATCH_STATUSES",
     ("relations", "status"): "RELATION_STATUS",
     ("research_questions", "status"): "QUESTION_STATUSES",
     ("research_questions", "priority"): "PRIORITIES",
