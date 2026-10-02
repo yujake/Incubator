@@ -206,7 +206,8 @@ def test_the_contradiction_check_goes_red_alone(tmp_path: pathlib.Path):
     _seal(tmp_path, st)          # 写完台账要重新封锚（否则红的是锚，不是矛盾那一条）
     rep = _gate(st, report)
     assert rep.status["contradictions"] == "fail", rep.to_dict()
-    assert [f.code for f in rep.blockers] == ["unadjudicated_contradiction"]
+    assert [f.code for f in rep.blockers] == ["contradiction_disputed_source"], \
+        [f.code for f in rep.blockers]
     assert {k: v for k, v in rep.status.items() if k != "contradictions"} == {
         "anchor": "pass", "load_bearing": "pass",
         "report_shape": "pass", "user_pending": "pass"}

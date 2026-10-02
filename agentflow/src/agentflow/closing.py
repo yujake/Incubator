@@ -189,40 +189,152 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
         ))
 
 
+def pollution_set(store: Any, stmt_id: str) -> list[str]:
+    """一条命题被推翻时跟着倒的那些命题（`draft/37` §9 / R20 的"污染面"）。
+
+    做法是 `statements.derived_from` 上的传递闭包（谁用到我、谁又用到它……），
+    不含自身。为什么必须有它：§9 的处置不是"把这一条划掉"就完事 ——
+    `draft/37` 的用词是"如果错的是文献，那么压在它上面的结论就不能再算数"，
+    而"压在它上面"在数据面上就是这张有向图。
+
+ 已知边界（写成读数而不是假装完整）：今天的污染面只覆盖命题之间的
+    `derived_from`。正文断言（`documents.claims[].citations`）今天只认 `lit:` / `exp:` /
+    `rel:` 三种前缀，没有引用命题的形式 ⇒ "哪几条正文断言压在这条命题上"判不了。
+    补法是给 citations 加一种 `stmt:` 前缀（属字段取舍，留给人裁）——
+    在补上之前，本函数只对命题层给读数，并把这条边界写进 `readings`。
+    """
+    rows = {str(s.get("stmt_id")): s for s in (store.rows("statements") if store else [])}
+    if stmt_id not in rows:
+        return []
+    seen: set[str] = set()
+    frontier = {stmt_id}
+    while frontier:
+        nxt: set[str] = set()
+        for sid, row in rows.items():
+            if sid in seen or sid == stmt_id:
+                continue
+            if set(str(x) for x in (row.get("derived_from") or [])) & frontier:
+                seen.add(sid)
+                nxt.add(sid)
+        frontier = nxt
+    return sorted(seen)
+
+
 def _check_contradictions(rep: ClosingReport, store: Any) -> None:
-    """未裁决的矛盾：依赖、命题、稿件三处的争议状态都要空。"""
+    """未裁决的矛盾：三种病因各自一个 code（`draft/37` §8 / R19）+ 污染面（R20）。
+
+    为什么不能只报一句"有矛盾"：三种病因的处置方向完全不同，而代码就是处置把手 ——
+
+    | 病因 | code | 谁去做什么 |
+    |---|---|---|
+    | 我们读错了文献（下成另一篇） | `contradiction_wrong_paper` | A：重取对的那一篇（`matched="mismatch"` 已在 P2 落成一栏） |
+    | 来源本身有争议（两篇文献两说） | `contradiction_disputed_source` | D 追原始证明 → 判不了就 `ask_user`（§8 的裁决闭环） |
+    | 我们自己的证明有洞 | `contradiction_own_hole` | D 给可挽救性评估，E 补 T3，或如实降档 |
+    | 稿件审校未过（H 的未决项） | `review_unresolved` | G 修订 / H 复审（§14.4 的"未决问题"那一节） |
+
+    前三种正是 §17.1 要求"三种病因各一条负控"的那三条；第四种来自 §14.4
+    的报告第九节，单列是因为它的处置是"回稿子"而不是"回证据"。
+    """
     if store is None:
         rep.status["contradictions"] = "unknown"
         rep.findings.append(Finding("contradictions", "no_store", "warning",
                                     "没有 store ⇒ 矛盾没查成（不是没有矛盾）"))
         return
-    bad: list[str] = []
-    counts = {"dependencies": 0, "statements": 0, "documents": 0}
+    wrong_paper: list[str] = []
+    disputed_source: list[str] = []
+    own_hole: list[str] = []
+    unresolved_review: list[str] = []
+    pollution: dict[str, list[str]] = {}
+    #: 被证否、且确实有结论压在它上面的那些（§9：压在上面的结论不能再算数）。
+    #: 与 `own_hole` 分开：`own_hole` 说的是"我们的 proof 级证明压在不可用的命题上"，
+    #: 而这一条不管压在上面的那几条是什么证据等级 —— 只要有人用，就必须处置。
+    pollution_items: list[str] = []
+
+    # ---- ① 我们读错了文献：命中校验 mismatch 且已经被消化（P2 的那一栏）
+    for row in store.rows("literature"):
+        if str(row.get("matched") or "") == "mismatch" and row.get("processed"):
+            wrong_paper.append(f"文献 {row.get('lit_id')}"
+                               f"（{str(row.get('title') or '')[:40]}）")
+
+    # ---- ② 来源本身有争议 / 被证否：依赖与命题两处
+    stmt_status = {str(s.get("stmt_id")): str(s.get("status") or "")
+                   for s in store.rows("statements")}
     for row in store.rows("dependencies"):
-        if str(row.get("status") or "") in ("disputed", "refuted"):
-            counts["dependencies"] += 1
-            bad.append(f"依赖 {row.get('dep_id')} status={row.get('status')}"
-                       f"（{str(row.get('label') or '')[:40]}）")
+        st = str(row.get("status") or "")
+        if st in ("disputed", "refuted"):
+            disputed_source.append(f"依赖 {row.get('dep_id')} status={st}"
+                                   f"（{str(row.get('label') or '')[:40]}）")
     for row in store.rows("statements"):
-        if str(row.get("status") or "") == "disputed":
-            counts["statements"] += 1
-            bad.append(f"命题 {row.get('stmt_id')} status=disputed"
-                       f"（{str(row.get('label') or '')[:40]}）")
+        st = str(row.get("status") or "")
+        if st == "disputed":
+            disputed_source.append(f"命题 {row.get('stmt_id')} status=disputed"
+                                   f"（{str(row.get('label') or '')[:40]}）")
+        if st in ("refuted", "disputed"):
+            # ③ 我们自己的证明压在一条不可用的命题上 ⇒ 洞在我们这边
+            for other in store.rows("statements"):
+                if str(other.get("status") or "") != "active":
+                    continue
+                if str(other.get("evidence_kind") or "") != "proof":
+                    continue
+                if str(row.get("stmt_id")) in {str(x) for x in (other.get("derived_from") or [])}:
+                    own_hole.append(f"命题 {other.get('stmt_id')} 的证明压在 {row.get('stmt_id')}"
+                                    f"（status={st}）上")
+            if st == "refuted":
+                downstream = pollution_set(store, str(row.get("stmt_id")))
+                pollution[str(row.get("stmt_id"))] = downstream
+                if downstream:
+                    pollution_items.append(f"命题 {row.get('stmt_id')} 被证否 ⇒ "
+                                           f"{downstream} 跟着倒")
+
     for row in store.rows("documents"):
         if str(row.get("status") or "") == "unresolved_review":
-            counts["documents"] += 1
-            bad.append(f"稿件 {row.get('doc_id')} status=unresolved_review")
-    rep.readings["contradictions"] = counts
-    if bad:
-        rep.status["contradictions"] = "fail"
+            unresolved_review.append(f"稿件 {row.get('doc_id')}")
+
+    rep.readings["contradictions"] = {
+        "wrong_paper": wrong_paper,
+        "disputed_source": disputed_source,
+        "own_hole": own_hole,
+        "review_unresolved": unresolved_review,
+        "pollution": pollution,
+        "pollution_scope": "只覆盖命题之间的 derived_from；正文断言没有引用命题的形式"
+                           "（citations 只认 lit:/exp:/rel:）⇒ 断言级污染面今天判不了",
+    }
+    causes: tuple[tuple[str, str, str, list[str]], ...] = (
+        ("contradiction_wrong_paper", "blocker", "我们读错了文献（下成了另一篇）", wrong_paper),
+        ("contradiction_disputed_source", "blocker", "来源本身有争议或已被证否", disputed_source),
+        ("contradiction_own_hole", "blocker", "我们自己的证明压在不可用的命题上", own_hole),
+        ("contradiction_pollution", "blocker",
+         "污染面：被证否的命题下面**还压着结论**（§9：它们不能再算数）", pollution_items),
+        ("review_unresolved", "blocker", "稿件审校未过（H 的未决项）", unresolved_review),
+    )
+    fired = False
+    for code, level, why, items in causes:
+        if not items:
+            continue
+        fired = True
+        extra = ""
+        if code == "contradiction_disputed_source":
+            extra = ("。处置：追原始证明 → 判不了就 `ask_user`（§8 的裁决闭环）；"
+                     "**不许**把有争议的来源当成已确认的")
+        elif code == "contradiction_wrong_paper":
+            extra = "。处置：重取对的那一篇（这一栏就是 P2 的 `matched`）"
+        elif code == "contradiction_own_hole":
+            extra = ("。处置：D 给可挽救性评估、E 补 T3，或如实降档 —— "
+                     "压在上面的结论在修好之前不能算数")
+        elif code == "review_unresolved":
+            extra = "。处置：G 修订 / H 复审（§14.4 的未决问题那一节）"
+        elif code == "contradiction_pollution":
+            extra = ("。处置：要么把被证否那条的来源换掉（重取 / 换一篇），"
+                     "要么把压在上面的结论一起降档或撤回")
+        pollution_note = ""
+        if code == "contradiction_disputed_source" and pollution:
+            pollution_note = ("；**污染面**（被证否的那些，谁跟着倒）："
+                              + "；".join(f"{k} → {v}" for k, v in sorted(pollution.items())))
         rep.findings.append(Finding(
-            "contradictions", "unadjudicated_contradiction", "blocker",
-            f"有 {len(bad)} 处未裁决的矛盾（disputed/refuted/unresolved_review）："
-            + "；".join(bad[:5])
-            + "。要么裁决（§8/§9 的矛盾闭环），要么把受影响的结论降档 —— 不许带着它交付",
+            "contradictions", code, level,
+            f"{why}：共 {len(items)} 处 —— " + "；".join(items[:5]) + extra + pollution_note,
         ))
-    else:
-        rep.status["contradictions"] = "pass"
+    rep.status["contradictions"] = "fail" if fired else "pass"
 
 
 def _has_t3(exp: Mapping[str, Any]) -> bool:
