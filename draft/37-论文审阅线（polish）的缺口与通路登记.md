@@ -2790,3 +2790,60 @@ python -B -m agentflow.cli --root <ws> run-agent M --task "审核 out/paper 这�
   + 派 G 去 `fs.read` 后 `build_document`）；③ 报告落点给一个有写盘工具的归属人（G）；
   ④ M 的侦察纪律（把 `ensure_project` 从"已存在工作区"的场景里排除）；
   ⑤ 账本记"算不出花销"那一档（要动 `schema.py`/`tokenmeter.py`，属禁改区，留给人裁）。
+
+---
+
+## §38 用户裁定：给 M **只读四件 + `fs.write`**（权限面收窄，不是作废红线）
+
+### 38.1 裁定原文与清单
+
+用户 2026-10-02 原话：**「给只读的4个工具和fs.write」**。落成清单：
+
+- **给 M**：`fs.list` · `fs.read` · `fs.search` · `fs.stat` · `fs.write`（**五件**）；
+- **不给 M**：`fs.edit`（定点改正文——那是 G 的活，且它与"M 不产出领域对象"正面冲突）、
+  `fs.delete` / `fs.move`（**不可逆**，且不属于"看"与"交报告"这两件事）、
+  `table.*`（知识表）、`prov.*` / `search.*`（检索）、`verify.run_experiment`（起进程）。
+
+**为什么这件事必须做（不是"为了方便"）**：§37 那一趟真机 23 步里**15 步在猜"盘上到底有没有论文"**，
+最后交不出报告 —— 它缺的不是判断力，是**眼睛与笔**：看不见盘上的 `out/paper/main.tex`，
+也没有任何工具能写 `out/review/REPORT.md`。用户这一裁定把这两样补上。
+
+### 38.2 改动落点（这一轮摸清的，下一轮照此执行）
+
+1. **`tools/fs_tools.py`**：本模块的注入默认是 `TOOL_ROLES = ("A","B","C","D")`（第 44 行）；
+   装配走 `register(registry, *, roles=…, root=…)`（第 1031 行）→ 逐工具过
+   `_effective_roles(base, injected)`（第 1013 行），其中**写类工具会被剥掉 `READ_ONLY_ROLES`**。
+   ⇒ **M 的成员资格必须逐工具给，不能整组注入**：新增
+   `CONDUCTOR_FS_TOOLS = ("fs.list","fs.read","fs.search","fs.stat","fs.write")`，
+   在 `register()` 里**只给这五件**追加 `CONDUCTOR_ROLE`
+   （整组注入会让 M 连 `fs.edit`/`fs.delete`/`fs.move` 一起拿到 —— 那三件都能不可逆地改工作区）。
+2. **`tools/__init__.py`**：`build_registry` 把 `roles` 透给 `_call_register(mod, registry, deps)`
+   （第 323 行；`roles` 的一致性校验在 450 行附近）。**M 的注入点就在这里** ——
+   下一轮先确认 `deps["roles"]` 的实际取值，再决定是"新增一个 `conductor_roles=` 参数"
+   还是在 `fs_tools.register` 内部认 `CONDUCTOR_ROLE`。
+3. **`specs/m.py`（FC-27 · auth-audit）**：M 的声明面要与注册表同步；
+   改完照纪律**登记基线、`reviewers` 留 0、留人逐行走查**（门会继续以退出码 1 要求签字）。
+4. **判据要改写，不许删**：
+   - `tests/test_host_wiring.py::test_wired_tool_registry_keeps_m_surface_orchestration_only`
+     今天断言"M 的工具名**全部**以 `conductor.` 开头" ⇒ 改成
+     **「`conductor.*` + 白名单五件；且不含 `fs.edit`/`fs.delete`/`fs.move`/`table.*`/`prov.*`」**，
+     并在 docstring 里**逐字写明这次收窄的理由**（红线没有作废，只是从"M 不碰盘"
+     收窄成"M 有眼睛和笔，但不碰知识表、不做检索、不删东西"）。
+   - `tests/test_conductor_tools.py::ORCHESTRATION_TOOLS`：那个集合被判据用来断言"相等" ⇒
+     要么加上五件，要么改成白名单口径（后者更稳：将来加一件不用改两处）。
+5. **"加工具要交的税"**（第一笔是这个目标里第三次交）：
+   `docs/ROLE-SPECS.md` §M.4 标题（11 → 16 件）+ §R0 总表里那五行工具的 roles 列加 M；
+   `DEVELOPMENT.md` 的逐角色工具数字典 `M: 11 → 16`（以及 `工具总数` 若受影响要重读）；
+   两条尺子（`tool_surface_snapshot.json` / `agent_surface_snapshot.json`）按 `--write` 重生成
+   并**逐键核对**（预期只多 M 的成员项与工具数）；`tests/test_tools_returns_declaration.py`
+   若按角色断言工具面也要跟。
+6. 收尾照纪律：lint / 本阶段判据（含负控）/ 全量 pytest / FC-27 门 四个读数，
+   然后登记 §39 并提交。
+
+### 38.3 这一裁定**没有**改变的两件事
+
+1. **摄取仍归 G**：从 26 KB 正文里抽 claims 是**语义判断**（M 自己干就等于"M 产出领域对象"）。
+   M 拿到 `fs.read` 之后要做的是**把路径与行范围说清楚**，然后派 G 去读、去
+   `build_document` —— 这正是 §37.4 第①条缺的那一环。
+2. **第二次真机发送仍要用户点头**（"真机只发一次"的额度在 §37 已用掉）。修完本节再发，
+   否则只是把同一个失败再花一次钱。
