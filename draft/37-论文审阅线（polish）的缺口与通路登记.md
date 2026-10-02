@@ -2637,3 +2637,66 @@ P0 的"制品化"改造（`out/paper/main.tex` 是可改的工作副本）就是
 场景二 R13 七跳（§27–§33）、场景三矛盾/错文献（§23）、R26 三段（§26 + §34，
 且修掉一根没接的线）。**只剩一件**：§17.3 的真机一次发送（阻塞在
 `AGENTFLOW_MODEL_API_KEY`；命令与判据见 §30.3）。
+
+---
+
+## §36 本目标的收口读数与**唯一的未完成项**（外因阻塞：缺模型 key）
+
+### 36.1 收口读数（当次，全部可复跑）
+
+| 读数 | 值 |
+|---|---|
+| 本目标新增判据（17 个文件，**一行命令**） | **107 passed**（30.29 秒） |
+| lint | `error 0 / warning 9 / info 50`（与 §34 基线一致） |
+| 全量 pytest | **3331 passed / 1 failed**（22 分 29 秒）—— 那条失败是**已知的负载相关用例** `test_release_all.py::test_every_only_example_in_the_docstring_is_a_real_step_key`（起子进程跑 `release_all --only`，单跑实测 **522.28 秒通过**，整轮并发下超时；`DEVELOPMENT.md` §0.3 逐字记过）。**不写成"全绿"** |
+| FC-27 门 | 命中 **12 条**，基线全部刷新、**`reviewers` 全为 0**；`--check-ledger` clean；`--check-manifest` 一致 |
+
+复跑命令（逐个文件列在 §30.2；这里给一行合并版）：
+
+```powershell
+cd D:\Incubator\agentflow; $env:PYTHONPATH='src'
+python -B -m pytest tests/test_tools_fs_edit.py tests/test_budget_knobs.py `
+  tests/test_statements_table.py tests/test_task_instance.py `
+  tests/test_review_line_prompts.py tests/test_literature_match.py `
+  tests/test_closing_gate.py tests/test_contradiction_fixtures.py `
+  tests/test_review_acceptance.py tests/test_resume_after_answer.py `
+  tests/test_review_chain_hop.py tests/test_review_chain_loop.py `
+  tests/test_review_chain_relay.py tests/test_review_chain_endorse.py `
+  tests/test_review_chain_locate.py tests/test_resume_runs_and_consumes_answer.py `
+  tests/test_review_polish_loop.py -q -p no:cacheprovider
+```
+
+### 36.2 目标里**已交付并验过**的部分
+
+- **① P0**：`fs.edit`（§18 合成正文 4 条 + §35 **论文包**上 2 条含 R2 的两条负控）；
+  预算四旋钮与观测窗口（§19，4 条 + 反真空 4/4）。
+- **② P1**：`statements` 表（十处触点逐处实交，§20 的 15 + 5 条）；依赖四态与
+  "proof 级不许挂在 refuted/disputed 上"（§20 + §23）；`tasks.instance`（§20）。
+- **③ P2**：六条提示词口径 + `literature.matched` + `PROMPT_VERSION p24`
+  （§21 的 17 条，含"抽掉一个词必须只报一条"的反真空）。
+- **④ P3**：收工门五条（§22 的 9 条，每条单独造红）+ 报告九节与附件诚实（§24/§25）+
+  **"必须上 T3"四条写进门**（含今天判不了的那两条以 `counted_only` 明说）+
+  **`ask_user → cli answer → --resume` 闭环**（§26 数据半 + §34 真跑，且修掉一根没接的线）。
+- **⑤ P4（离线面全部）**：场景一（审 §24/R25 + **polish** §35）；
+  场景二 **R13 七跳**（§27–§33）；场景三矛盾/错文献（§23）；
+  R17 既有判据（§25.2 更正后登记）。
+
+### 36.3 唯一未完成项：**§17.3 的第三档（真机一次发送）**
+
+**阻塞条件（具体、可判定）**：本环境**没有配置模型 key**
+（`AGENTFLOW_MODEL_API_KEY` 为空 ⇒ `LlmSeam` 只落 `judge_not_wired`）。
+这个条件从 §23.6（第 7 轮）起持续存在，期间每一轮都做了别的离线面；
+到本节为止**离线面已经全部做完**（§17.1 第一档、§17.2 第二档），
+所以剩下的这一项**只能等一个 key**，不是"还没做"。
+
+**解锁之后要做的三件事**（命令见 §30.3，判据已就位）：
+
+1. 一次发送、带成本上限：`run-agent M --task "审核这份未发表的论文并 polish 它"`
+   + `--project-dir <论文包>` + `--budget-usd 2.0` + `--wall-clock-sec 3600`；
+2. 判据：`reviewaccept.check_review(...)` 的**六条内容级判据**（`passed` 只看它们，
+   `sha/页数/锚/任务数/行数` 五种辅助读数**一个都不参与**）+ `agentflow closing` 五条；
+3. 把读数登记成 §37（含"每跳提示词可读"与"该问用户的真问了"两条）。
+
+**注意**：拿到 key 之后**不许**把这次发送降级成"跑通就行"——
+§17.3 的判据是内容级的，而 `reviewaccept` 已经把"容易拿到的读数"与"通过判据"分栏，
+就是为了防止那一类自欺。
