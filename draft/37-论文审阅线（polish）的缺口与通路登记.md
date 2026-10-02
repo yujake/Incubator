@@ -2700,3 +2700,93 @@ python -B -m pytest tests/test_tools_fs_edit.py tests/test_budget_knobs.py `
 **注意**：拿到 key 之后**不许**把这次发送降级成"跑通就行"——
 §17.3 的判据是内容级的，而 `reviewaccept` 已经把"容易拿到的读数"与"通过判据"分栏，
 就是为了防止那一类自欺。
+
+---
+
+## §37 §17.3 第三档：**唯一一次真机发送**的读数（用掉了，结果：不能交 —— 而且机器判据也是 `passed=False`）
+
+**这一节是这次目标里唯一一次真机发送的完整读数。** 用户 2026-10-02 给出论文包
+（`C:\Users\ysc20\Desktop\投影度量论\research_papers\p5_stable_norm_counting`，`main.tex`
+26,155 字节 + `main.pdf` 355,253 字节 + 五份配套 md + `code/verify_all.py`）
+与一份模型凭据（框架读的变量名是 `AGENTFLOW_MODEL_API_KEY`，**不是**凭据文件里那个
+`DEEPSEEK_API_KEY` —— 我是映射过去的，密钥没有落进仓库、没有回显）。
+
+### 37.1 工作区怎么建的（洁净室，可复跑）
+
+`agentflow/projects/p5-review-20261002-203856/`：
+
+- `source/` = 论文包**只读基线**（逐字复制，含 `main.tex` / `main.pdf` / 五份 md / `code/`）；
+- `out/paper/main.tex` = `source/main.tex` 的**逐字副本**（sha `8c5c431b46f7…`，两份实测相同）
+  ——**这是 agent 可以改的主稿**；
+- `code/make_paper.py`（**只写锚、绝不碰 `main.tex`**）与 `code/compile_paper.py`
+  （写回执，页数/字节数**照实数记**：7 页 / 355,253 字节；本机**没有 LaTeX 工具链**，
+  所以 PDF 不重排 —— 这件事写在脚本 docstring 里，不许它看起来像"编译过了"）；
+- `README-PROVENANCE.md` 钉住"这一轮审的是哪一版"；
+- 封锚后 `renderanchor.check_package` = **`consistent`**（tables/files/receipt 三维一致）。
+- 建工作区时 `Store.init()` **被它自己的守卫拒过一次**（目录非空且无 `data/` ——
+  `draft/28` §136.3 事故 B 那道闸），处置是**先建空 `data/` 再非 force 初始化**：
+  那道闸红得对，我没有用 `force` 绕它。
+
+### 37.2 那一次发送的读数
+
+```powershell
+python -B -m agentflow.cli --root <ws> run-agent M --task "审核 out/paper 这份未发表的论文并 polish 它…" `
+       --budget-usd 2.0 --wall-clock-sec 3600 --sid real1
+```
+
+- **一次发送**（不重复）；24 次模型调用；23 步；**用量 `usd = 0.091102`**（上限 2.0，远未触顶）；
+  `tokens_in 315,383 / tokens_out 5,407`；`unknown_usd_calls = 0`。
+- **M 的结论：「不能交」**，并给了逐条读数（它**没有**谎报完成 —— 这一点对的）。
+- 它 23 步里做了什么：11 步在**现状侦察**（`conductor.state` / `acceptance` / `ledger` 四个视图 /
+  `resume_brief`），4 步在 `ensure_project`（auto/warm/cold，甚至试图在**已存在的工作区里
+  再建一个项目**），6 次召唤（`G.revise` / `H.review_report` / `H.review` / `G.build_document`×3）
+  **全部被拒**（"稿件 main 不存在" / 参数不合法），1 步 `judge_bad_json`，1 步 `note`，最后 `final`。
+
+### 37.3 机器判据（`reviewaccept.check_review`，六条内容级）
+
+| 判据 | 读数 |
+|---|---|
+| `statements_have_assumptions_and_source` | **fail** ——"定理台账里一条 active 命题都没有 ⇒ 这次审阅没有交出内容" |
+| `hops_have_readable_prompts` | **fail** ——"台账里没有任何成功的召唤 ⇒ 这次审阅没跑起来" |
+| `report_sections_have_readings` | **unknown** ——报告不在盘上（`out/review/REPORT.md` 从未写出） |
+| `triage_branch_recorded` | **unknown** ——一次都没问过用户 |
+| `attachment_is_honest` | **unknown** ——没有报告 |
+| `within_cost_cap` | pass（**只看账本**；见 37.4 第 5 条，账本记的是 0.0） |
+
+**`passed = False`。** 而**辅助读数全是"漂亮"的**：`tex_sha256` 在、`pdf_pages = 7`、
+**`anchor_verdict = consistent`**、`task_rows = 6` —— 五个辅助信号一个不差，内容却是空的。
+**§17.3 逐字禁止的那五种"通过"，这一次正好被真实地演了一遍**：如果验收只看它们，
+这次会被判"通过"。收工门同样 `can_close = False`（`report_shape = unknown`）。
+
+### 37.4 这次真机跑出来的**五条结构缺口**（这才是这一趟最值钱的产出）
+
+1. **论文在盘上、台账里却没有它** ⇒ M 派不动任何审稿动作。
+   `G.revise(doc_id="main")` / `H.review_report(doc_id="main")` / `H.review(...)` /
+   `G.build_document(...)` **全部被拒**，因为 `documents` 表里没有那一行。
+   **缺的是"把盘上的论文登记成一条 documents 行"这一步**（摄取/登记），
+   而它今天没有归属：M 没有 fs 工具、不知道 claims；G 的 `build_document` 要 claims。
+   这是 §16 那条链**最前面缺的一环**，此前所有离线夹具都**默认它已经存在**。
+2. **`conductor.acceptance` 抛 `NameError`** —— M 自己的报告里逐字写了
+   "验收表工具报错（NameError）"。这是**一个活工具里的真 bug**，必须修（下一条待办）。
+3. **M 没有 fs 工具、也读不到盘上那份 tex** ⇒ 它既无法确认论文存在，也无法自己写报告。
+   于是"报告落点 `out/review/REPORT.md`"（§20.7 定的）**没有归属人**：
+   我在任务里点名让它写那个路径，它**做不到**（没有写盘的工具）。落点定了、工具没给，
+   这正是"写好的提示词产出的东西无处可放"的第 N 次复发。
+4. **M 的步数花在侦察上**：§13.4 那条判据（"M 的步数 ≤ 工作项数 + 常数，且没有一步是重复上一轮的
+   同一调用"）这次不成立 —— 11 步侦察 + 4 步 `ensure_project`。其中 `ensure_project` 尤其错：
+   工作区**已经存在**，它却去建项目（还好工具自己拦住了）。
+5. **成本盲区被真机证实**（§24.3 登记过、这次实测）：**spend 说 0.091102，账本说 0.0**。
+   `usage_ledger` 的 `usd` 是 float、而"这次算不出价钱"只记在 spend 的 `unknown_usd_calls` 里
+   ⇒ `within_cost_cap` 这一条**今天只能说"账本上的合计没超上限"**，说不出真话。
+
+### 37.5 结论与下一步（**不再自己发第二次**）
+
+- 这一趟**没有完成任务**，但**它诚实地失败了**，而且失败得很有信息量：
+  它把"论文进不了台账"这个**结构缺口**从"我猜可能有问题"变成了"实测读数 + 五条可修清单"。
+- **那一次发送的额度已经用掉**（用户的原话是"真机只发一次"）。第二次发送**要用户先点头**，
+  而且应当在 37.4 的五条修完之后再发 —— 否则只是把同一个失败再花一次钱。
+- 建议的修复顺序（前三条都在非禁改区）：① 修 `conductor.acceptance` 的 `NameError`；
+  ② 给"把盘上的论文登记成 `documents` 行"一个归属（最可能是 G 的一个动作或 M 的一句提示词
+  + 派 G 去 `fs.read` 后 `build_document`）；③ 报告落点给一个有写盘工具的归属人（G）；
+  ④ M 的侦察纪律（把 `ensure_project` 从"已存在工作区"的场景里排除）；
+  ⑤ 账本记"算不出花销"那一档（要动 `schema.py`/`tokenmeter.py`，属禁改区，留给人裁）。
