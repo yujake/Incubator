@@ -314,7 +314,7 @@
     "additionalProperties": false,
     "properties": {
      "project_dir": {
-      "description": "论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是 unknown）",
+      "description": "项目根（相对工作区；渲染锚在 <它>/out/paper/RENDER-ANCHOR.json —— 传论文包目录会把 out/paper 拼两次；不给 ⇒ 锚那一格是 unknown）",
       "type": "string"
      },
      "report_path": {

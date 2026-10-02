@@ -158,13 +158,21 @@ class ClosingReport:
 # ------------------------------------------------------------------ 各条实现
 
 def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
-    """锚：复用 `renderanchor.check_package`（同一份实现，不另写一个判据）。"""
+    """锚：复用 `renderanchor.check_package`（同一份实现，不另写一个判据）。
+
+    `project_dir` 要的是项目根，不是论文包目录 —— `check_package` 自己会拼
+    `out/paper`。这一点原先只有实现知道、措辞全说反了（工具描述与这里的提示语都写
+    "论文包所在目录"），2026-10-02 的真机读数就是后果：主控照描述传 `out/paper`，
+    工具去找 `out/paper/out/paper/RENDER-ANCHOR.json`，锚那一格变成 `unknown`，
+    白花一步（`draft/37` §44.5）。所以现在两件事一起做：
+    措辞改成"项目根"，并在找不到锚时把期望的路径形状点名。
+    """
     if not str(project_dir or "").strip():
         rep.status["anchor"] = "unknown"
         rep.findings.append(Finding(
             "anchor", "anchor_not_checked", "warning",
             "没给项目根（project_dir）⇒ 渲染锚没查成。这是没查成，不是一致 —— "
-            "交付前必须指到论文包所在的那个目录再跑一次",
+            "交付前必须指到**项目根**再跑一次（锚在 <项目根>/out/paper/RENDER-ANCHOR.json）",
         ))
         return
     got = RA.check_package(project_dir, store=store)
@@ -182,10 +190,17 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
         ))
     else:
         rep.status["anchor"] = "unknown"
+        hint = ""
+        if not got.get("anchor_present"):
+            # 没找到锚时把"该给哪个目录"说清楚：这是最常见的调用姿势错误
+            # （给论文包目录而不是项目根），而原来的错误只说"读不到"。
+            expect = Path(str(project_dir)) / "out" / "paper" / RA.ANCHOR_NAME
+            hint = (f"；锚要在 {expect} —— 若你给的是论文包目录（…/out/paper），"
+                    "请改传**项目根**（check_package 会自己拼 out/paper）")
         rep.findings.append(Finding(
             "anchor", "anchor_unknown", "warning",
             f"渲染锚报 unknown：{('；'.join(list(got.get('problems') or [])[:3]))[:200]} ⇒ "
-            "有一维判不了（锚不在 / 回执不在）。这不是一致",
+            "有一维判不了（锚不在 / 回执不在）。这不是一致" + hint,
         ))
 
 

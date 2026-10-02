@@ -313,3 +313,30 @@ def test_a_missing_report_file_is_unknown_not_a_failure(tmp_path: pathlib.Path):
     assert rep.status["report_shape"] == "unknown", rep.to_dict()
     assert [f.code for f in rep.findings if f.check == "report_shape"] == ["report_not_written"]
     assert CL.tri_state_exit_code(rep) == 2
+
+
+def test_the_wrong_directory_gets_an_actionable_message(tmp_path: pathlib.Path):
+    """正控 + 可行动性（`draft/37` §44.5 / §45）：传错目录时，错误必须说清该传哪一个。
+
+    `project_dir` 要的是项目根，`renderanchor.check_package` 自己会拼 `out/paper`。
+    2026-10-02 那趟真机上，主控照着工具描述（原话"论文包所在目录"）传了 `out/paper`，
+    结果工具去找 `out/paper/out/paper/RENDER-ANCHOR.json`，锚那一格变成 `unknown`，
+    白花一步 —— 而那句错误当时只说"读不到 <双拼路径>"，没有一个字提示路径多了一层。
+
+    所以这条判据守两件事：
+    1. 传项目根 ⇒ `pass`（正确姿势能过）；
+    2. 传论文包目录 ⇒ `unknown`（不改判据口径，仍然不许当"一致"），
+       但 finding 里必须点名期望的路径形状与"改传项目根"这个动作。
+    """
+    st, report = _good(tmp_path)
+    right = _gate(st, report, project_dir=tmp_path)
+    assert right.status["anchor"] == "pass", right.to_dict()
+
+    wrong = _gate(st, report, project_dir=tmp_path / "out" / "paper")
+    assert wrong.status["anchor"] == "unknown", wrong.to_dict()
+    msg = next(f.detail for f in wrong.findings if f.code == "anchor_unknown")
+    # 消息里点出了"被拼了两次的那一段"（平台分隔符），以及该改传什么。
+    doubled = str(pathlib.Path("out") / "paper" / "out" / "paper")
+    assert doubled in msg, msg
+    assert "项目根" in msg and "out/paper" in msg, msg
+

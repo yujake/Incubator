@@ -745,7 +745,9 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
         "type": "object",
         "properties": {
             "project_dir": {"type": "string",
-                            "description": "论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是 unknown）"},
+                            "description": "项目根（相对工作区；渲染锚在 <它>/out/paper/"
+                                           "RENDER-ANCHOR.json —— 传论文包目录会把 out/paper "
+                                           "拼两次；不给 ⇒ 锚那一格是 unknown）"},
             "report_path": {"type": "string",
                             "description": "报告路径（不给 ⇒ 报告形状那一格是 unknown）"},
         },

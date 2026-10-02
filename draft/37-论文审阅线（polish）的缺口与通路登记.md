@@ -3546,3 +3546,64 @@ M 第二次调 `conductor.closing` 时按工具描述传了 `project_dir='out/pa
   这两类失败在读数上完全不同 —— 而**只有真机能区分它们**（离线夹具两条都不覆盖）。
 - 报告落在 `out/review/REPORT.md`（6,616 字节），逐条对齐 P1–P6、明写"未核到"、
   自报 `can_close=false`。**它诚实地失败了，而且这次留下了可读的证词。**
+
+---
+
+## §45 修 §44.5 量到的那处"描述与实现相反"（`conductor.closing` 的 `project_dir`）
+
+§44.5 记了那件事：主控第二次调 `conductor.closing` 时按工具描述
+（原话"**论文包所在目录**（查渲染锚用）"）传了 `project_dir='out/paper'`，
+而实现把它直接交给 `renderanchor.check_package(project_dir)` —— 后者要的是**项目根**
+（它自己会再拼 `out/paper`）。于是工具去找
+`…\out\paper\out\paper\RENDER-ANCHOR.json`，锚那一格变成 `unknown`，白花一步。
+`closing.py::_check_anchor` 的提示语也写反了（"交付前必须指到论文包所在的那个目录"）。
+
+这不是风格问题：**含糊的失败会被读成"暂时不通"**。所以这一节做两件事。
+
+### 45.1 改了什么
+
+1. `tools/conductor_tools.py` 里 `conductor.closing` 的 `project_dir` 描述：
+   "论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是 unknown）" ⇒
+   "**项目根**（相对工作区；渲染锚在 `<它>/out/paper/RENDER-ANCHOR.json` ——
+   传论文包目录会把 `out/paper` 拼两次；不给 ⇒ 锚那一格是 unknown）"。
+2. `closing.py::_check_anchor`：
+   - `project_dir` 没给时的那条提示改成"指到**项目根**（锚在 `<项目根>/out/paper/RENDER-ANCHOR.json`）"；
+   - **找不到锚时点名期望的路径形状**：原话只说"读不到 `<双拼路径>`（这里找过）"，
+     现在在后面补一句"锚要在 `<project_dir>/out/paper/RENDER-ANCHOR.json` ——
+     若你给的是论文包目录（…/out/paper），请改传**项目根**（`check_package` 会自己拼 `out/paper`）"。
+     口径**一个字没放宽**：锚不在仍然是 `unknown`（不是 `pass`，也不是 `fail`），
+     变的只是那句错误有没有说清下一步做什么。
+
+### 45.2 判据（一条正控 + 一个把错误消息当对象的断言）
+
+`tests/test_closing_gate.py::test_the_wrong_directory_gets_an_actionable_message`：
+
+- 传**项目根** ⇒ `status["anchor"] == "pass"`（正确姿势能过）；
+- 传**论文包目录** ⇒ `== "unknown"`（不改口径），且 finding 的 `detail` 里必须出现
+  被拼两次的那一段（`out\paper\out\paper`，按平台分隔符）+ "项目根" + "out/paper"。
+
+第二半是这条判据的重点：**把"错误消息有没有用"也变成可判的东西**。
+本项目此前只判"失败没说成成功"（三态），不判"失败有没有给出下一步" ——
+而 §44 那一步的浪费正是后者造成的。
+
+### 45.3 读数
+
+- **lint**：`error 0 / warning 9 / info 50`（== 钉住的读数）。中间 `error 2` 是新写的
+  docstring 装饰，`temp/_r009_fix.py --apply` + `_r009_verify.py` 清掉（2/2 通过）。
+- **判据**：`test_closing_gate.py + test_conductor_tools.py` ⇒ **32 passed**；
+  两份快照 + `test_tools_returns_declaration` ⇒ **24 passed**。
+- **尺子**：`tool_surface_snapshot.json` **1 处**变化 ——
+  `declarations.conductor.closing.params.properties.project_dir.description`（就是上面那一句）；
+  `agent_surface_snapshot.json` **0 处**变化 —— 这一格本身就是一条读数：
+  **角色提示词里只印工具名与摘要，不印参数描述**，所以改参数描述不会动提示词。
+- **全量 pytest**：**3342 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+  （1273.34 s）。比上一刀（§43 的 3341）多 **1** 条 —— 正是本节新增的那条用例。
+- **FC-27 门**：本节两条改动路径（`tools/conductor_tools.py`、`closing.py`）都**不在清单里**
+  ⇒ 不新增禁改区命中；§42 那条 `specs/m.py` 的状态不变（已登记、仍欠 2 名 reviewer）。
+
+### 45.4 这一节**没有**做的（留给人裁）
+
+§44.4 那条真正的堵点没动：**给 A 与 B 各加一条可召唤的动作**（把既有的
+`search.ingest_local` / `table.create(table="statements")` 包成动作）——
+它落在 `specs/a.py` / `specs/b.py`（FC-27 · auth-audit），按纪律**停在这里等人裁**。
+这一节修的只是"人/主控照描述做事却被描述误导"这一类，与权限面无关。
