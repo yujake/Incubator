@@ -9,6 +9,7 @@ from ._support import Any, ClaimOutcome, Iterable, Path, S, Store, T, X, lease_e
 from .run_once import _RunOnce
 from .run import _Run
 from .search_literature import _SearchLiterature
+from .ingest_local import _IngestLocal
 
 
 class _Core:
@@ -389,7 +390,7 @@ class _Core:
         return f"{lit_id}/{target.name}", out
 
 
-class AgentA(_RunOnce, _Run, _SearchLiterature, _Core):
+class AgentA(_RunOnce, _Run, _SearchLiterature, _IngestLocal, _Core):
     """文献搜索智能体。providers/downloader 由外部注入，便于离线测试。"""
 
 

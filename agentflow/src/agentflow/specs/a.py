@@ -89,6 +89,39 @@ ACTIONS: tuple[ActionSpec, ...] = (
         side_effect="write_local", handler_name="search_literature",
         external="egress",
     ),
+
+    # ---- `ingest_local`（2026-10-02 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
+    #
+    # 为什么必须有它（`draft/37` §44.4 的真机读数，不是设计洁癖）：主控只能
+    # `conductor.summon` **动作**，而"把盘上这个目录里的论文登记进台账"原先只有
+    # **工具**（`search.ingest_local`）—— 于是盘上有论文、台账里没有它，
+    # 后面每一跳（B 登记命题 → G 建我方稿件 → H 审）都因为没有 `lit_id` 而落空。
+    # 那趟真机的断点被主控自己定位到这一格上，逐字写在它的交付说明里。
+    #
+    # 两根轴逐条读出（不是照抄工具层）：
+    #   - 效果轴 `write_local`：实现（`AgentA.ingest_local`）走
+    #     `locallib.ingest_directory`，在一个事务里写 `literature`（+ 需要时写
+    #     `search_requests` 的登记行）—— 与 `WRITE_SETS["A"]` 登记的两张表同一组。
+    #   - 外部轴 `none`：**不联网**（与上面两个 `egress` 的动作不同）。
+    #     这一格是刻意分开的：把这件本地下载的活算成"要出网"，
+    #     会让只读/离线场景把它整条划掉 —— 而它恰恰是离线场景最需要的那一件。
+    ActionSpec(
+        "A", "ingest_local",
+        "把一个本地目录里的文件登记成 literature 行（按内容 sha256 幂等；不联网）",
+        _obj(
+            {
+                "books_dir": {**_S, "minLength": 1, "maxLength": 1000},
+                "pattern": {**_S, "maxLength": 40},
+                "limit": {**_I, "minimum": 1, "maximum": 1000},
+                "max_bytes": {**_I, "minimum": 1024, "maximum": 2_000_000_000},
+                "dry_run": _B,
+            },
+            required=("books_dir",),
+        ),
+        "IngestReport dict（含 counts / books[] / literature_ids / resolved / provenance）",
+        side_effect="write_local", handler_name="ingest_local",
+        external="none",
+    ),
 )
 
 

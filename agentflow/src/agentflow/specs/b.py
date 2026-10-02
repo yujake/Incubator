@@ -79,6 +79,52 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # 效果轴保持 `write_local`（它写 literature/concepts/relations）。
         external="egress",
     ),
+
+    # ---- `register_statement`（2026-10-02 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
+    #
+    # 为什么必须有它（`draft/37` §44.4 的真机读数）：主控只能 `conductor.summon` **动作**，
+    # 而"把论文里的定理登记成 `statements` 行"原先只有**工具**（`table.create`）——
+    # 于是即使文献登记好了，命题台账仍然建不起来（`agent_b/` 里 `statements` 一个字都没有），
+    # G 就没有可引的依据、H 也没有可审的对象。B 的边界里本来就写着"命题台账三件套
+    # 缺一不可"（完整假设的正文 / 逐字证明摘录 / 出处），这个动作就是那句话的执行面。
+    #
+    # 两根轴逐条读出（不是照抄工具层）：
+    #   - 效果轴 `write_local`：实现（`AgentB.register_statement`）在一个事务里写 `statements`
+    #     一行，并在写库前核 `literature`（坏引用不许进库）⇒ 写集里必须有这两张表，
+    #     而 `statements` 原先**不在** `WRITE_SETS["B"]` 里（本轮一并补上 ——
+    #     这个动作让那句声明第一次有了实现）。
+    #   - 外部轴 `none`：纯本地写库，不发 HTTP、不起子进程；`quote_verified` 的逐字比对
+    #     由调用方（或 H 的复核）负责，本动作只登记与预检。
+    ActionSpec(
+        "B", "register_statement",
+        "把一条命题登记进命题台账（完整假设 + 逐字证明摘录 + 出处；写库前核出处存在）",
+        _obj(
+            {
+                "statement_full": {**_S, "minLength": 1},
+                "source_lit_id": _S,
+                "proof_text": _S,
+                "kind": _S,
+                "label": _S,
+                "statement_text": _S,
+                "origin": {"type": "string", "enum": list(S.STATEMENT_ORIGINS)},
+                "page_range": _OBJ,
+                "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS)},
+                # 三态那一栏：`true`/`false` 直接给；**"还没查"（None）靠不传这个参数**表达
+                # —— 工具层的极简 schema 子集不支持联合类型（`["boolean","null"]`
+                # 会在校验期抛 `unhashable type: 'list'`，实测撞过）。不传 = None = 还没查，
+                # 而那时 `quote_reason` 必填（动作里预检）。
+                "quote_verified": {**_B, "description": "逐字比对是否通过；不传 = 还没查（None）"},
+                "quote_reason": _S,
+                "derived_from": _ARR_S,
+                "doc_id": _S,
+                "line_range": _OBJ,
+            },
+            required=("statement_full",),
+        ),
+        "dict（stmt_id / source_lit_id / quote_verified / origin / evidence_kind / row）",
+        side_effect="write_local", handler_name="register_statement",
+        external="none",
+    ),
 )
 
 
@@ -148,6 +194,9 @@ SPEC = AgentSpec(
                      'literature',
                      'relations',
                      'reprocess_requests',
+                     # `draft/37` §46：`register_statement` 让"B 登记命题台账"第一次有了实现
+                     # —— 而写集原先没有这张表（声明落后于边界里那句"三件套缺一不可"）。
+                     'statements',
                  )),
     class_path='agentflow.agent_b:AgentB',
     actions=ACTIONS,

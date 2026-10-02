@@ -200,12 +200,12 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 > 不走写集。等 P2 的提示词落地、B 的实现真的开始写它时，`specs/b.py` 的写集
 > 必须同步加上 `statements`（否则"两个并发任务同时改它"不会被判成冲突）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，51 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，53 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
-| A | 3 | `run_once` `run` `search_literature` |
-| B | 6 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` |
+| A | 4 | `run_once` `run` `search_literature` `ingest_local` |
+| B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
 | D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
@@ -382,6 +382,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | A-5 | 把请求标 `done` 并写 `result_lit_ids` / `outcome` | `schema.SEARCH_OUTCOMES` |
 | A-6 | 自己**不抽概念**；检索完请 `B` | `A → B`（`capabilities.ALLOWED_EDGES`） |
 | A-7 | 按**召唤方给的主题**现查一次：入队（过 I7 准入闸门）→ 领跑 → 把来源交回对方 | `AgentA.search_literature`（2026-09-30 加）：落 `search_requests` 一行（`submitted_by=agent-A`）后走既有的 `run_once` 链路；缺省 `mode=precise` |
+| A-8 | 把**盘上已有的**外部文件登记成 `literature` 行（不联网） | `AgentA.ingest_local`（2026-10-02 加，`draft/37` §46）：走 `locallib.ingest_directory`，与工具 `search.ingest_local` **同一口径**（sha256 幂等 + 同一份 provenance）；`external="none"` —— 真机那趟的断点正是"盘上有论文、动作表里没有登记它的入口" |
 
 ### A.3 明确不负责
 
@@ -561,6 +562,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_a
 | B-5 | 写入期一致性闸门（I6）：问 C 这条新关系与已有关系是否矛盾 | `interactions.check_conflict`；**纯函数、签名里没有 store** |
 | B-6 | 定向重抽取（I4）：处理 `reprocess_requests` | `agent_b.AgentB.reprocess_once`；同关系上限 2（`interactions.DEFAULTS`） |
 | B-7 | 结构重复概念的**合并决定权**（I5） | `decide_structural_duplicate` / `agent_b.resolve_structural_duplicate` |
+| B-8 | 把一条命题登记进**命题台账**（含完整假设 + 逐字证明摘录 + 出处） | `AgentB.register_statement`（2026-10-02 加，`draft/37` §46）：写库前核 `literature` 行存在（坏引用不许进库）、`quote_verified` 三态且非 `True` 必带 `quote_reason`；`statements` 因此第一次进了 `WRITE_SETS["B"]` |
 
 ### B.3 明确不负责
 
@@ -1988,7 +1990,7 @@ SELF-CHECK DONE（agent_h）
 > 第三件是 G 的活）。理由是真机读数：那一趟 23 步里 15 步在猜「盘上有没有论文」，
 > 最后交不出报告 —— M 缺的不是判断力，是**眼睛与笔**。
 
-#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（51 个可召唤动作）
+#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（53 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
@@ -1998,8 +2000,8 @@ SELF-CHECK DONE（agent_h）
 
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
-| A | 3 | `run_once` `run` `search_literature` |
-| B | 6 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` |
+| A | 4 | `run_once` `run` `search_literature` `ingest_local` |
+| B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
 | D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |

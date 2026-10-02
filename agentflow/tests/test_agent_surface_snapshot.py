@@ -137,9 +137,14 @@ def _snapshot(tmp: pathlib.Path) -> dict:
 
 
 def test_the_surface_is_whole_and_not_vacuous() -> None:
-    """反真空：九个角色、51 条动作、29 条边、每角色都有工具与提示词、每条动作都有实现。
+    """反真空：九个角色、每角色都有工具与提示词、每条动作都有实现、条数不许缩水。
 
     没有这一条，一份"什么都没扫到"的快照也能当基线——那时"逐字不变"证明的是空集不变。
+
+    动作总数这一格不再写死（原先写 `== 51`，2026-10-02 加两条动作时它就红了）：
+    真正要防的"真空"是缩水，而"数字该是多少"由 `capabilities` 说话（§0.7 的标题
+    是那个数字的文档落点，由 `tests/test_role_specs_action_table.py` 盯着）。所以这里：
+    ① 与现场的 `CAPABILITIES` 逐数相等（快照没漏扫）；② 不许低于加动作之前的 53（不缩水）。
     """
     from agentflow import capabilities as C
     from agentflow import schema as S
@@ -151,7 +156,11 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
     assert snap["role_count"] == 9, snap["role_count"]
     assert snap["schema_roles"] == list(S.ROLES) == list("ABCDEFGH")
     total_actions = sum(len(v["actions"]) for v in snap["roles"].values())
-    assert total_actions == 51, f"动作总数 {total_actions} ≠ 51"
+    live_actions = sum(len(v) for v in C.CAPABILITIES.values())
+    assert total_actions == live_actions, (
+        f"快照扫到 {total_actions} 条动作，而现场 `CAPABILITIES` 是 {live_actions} 条"
+        "（快照漏扫了某些角色）")
+    assert total_actions >= 53, f"动作总数缩到 {total_actions} 条（加动作之前是 53）"
     assert sum(len(v["edges"]) for v in snap["roles"].values()) == 29
     for role, got in snap["roles"].items():
         assert got["tools"], f"{role} 一个工具都没有"

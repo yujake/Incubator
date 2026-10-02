@@ -11,6 +11,7 @@ from .reprocess_once import _ReprocessOnce
 from .run_reprocess import _RunReprocess
 from .decide_structural_duplicate import _DecideStructuralDuplicate
 from .resolve_structural_duplicate import _ResolveStructuralDuplicate
+from .register_statement import _RegisterStatement
 from .run import _Run
 
 
@@ -771,7 +772,7 @@ class _Core:
         }
 
 
-class AgentB(_RunOnce, _ReprocessOnce, _RunReprocess, _DecideStructuralDuplicate, _ResolveStructuralDuplicate, _Run, _Core):
+class AgentB(_RunOnce, _ReprocessOnce, _RunReprocess, _DecideStructuralDuplicate, _ResolveStructuralDuplicate, _RegisterStatement, _Run, _Core):
     """文献整理智能体。extractor / extract_text 由外部注入，便于离线测试。"""
 
 

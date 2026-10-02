@@ -3607,3 +3607,126 @@ M 第二次调 `conductor.closing` 时按工具描述传了 `project_dir='out/pa
 `search.ingest_local` / `table.create(table="statements")` 包成动作）——
 它落在 `specs/a.py` / `specs/b.py`（FC-27 · auth-audit），按纪律**停在这里等人裁**。
 这一节修的只是"人/主控照描述做事却被描述误导"这一类，与权限面无关。
+
+---
+
+## §46 落地 §44.4 的堵点：给 A 与 B 各加一条**可召唤的动作**（工具层通 → 编排层也通）
+
+用户裁定："同意加这两条动作"。这一节把 §44 定位到的编排层堵点补上 ——
+两处都落在 FC-27（`specs/a.py` / `specs/b.py` / `capabilities.py`），照纪律做完四个读数、
+登记基线、并把"欠 2 名 reviewer"写在明面上。
+
+### 46.1 加的是什么（两条动作，各自的判据面）
+
+| 角色 | 动作 | 做了什么 | 两根轴 |
+|---|---|---|---|
+| A | `ingest_local` | 把一个本地目录里的文件登记成 `literature` 行；调**既有** `locallib.ingest_directory` | 效果 `write_local` / 外部 **`none`**（不联网 —— 与 `run_once`/`search_literature` 的 `egress` 刻意分开） |
+| B | `register_statement` | 把一条命题登记进 `statements`（完整假设 + 逐字证明摘录 + 出处；写库前核出处存在） | 效果 `write_local` / 外部 `none` |
+
+- **A 那一件是 §44 断点的正面回答**：真机那趟"盘上有论文、台账里没有它"，
+  就是因为这件事原先只有**工具**（`search.ingest_local`）、没有**动作**。
+- **B 那一件补的是同一条链的下一跳**：`agent_b/` 里此前 `statements` **一个字都没有**，
+  而 B 的边界里本来就写着"命题台账三件套缺一不可" —— 这个动作是那句话第一次有了实现。
+- **写集**：`statements` 加进了 `WRITE_SETS["B"]`（原先不在里面）。这是**权限面的加宽**，
+  已经逐条写进 `specs/b.py` 的注释与 §B.2 的 B-8 行；门也因此把 `specs/b.py` 判成 `requires_human`。
+
+### 46.2 判据（三层，6 条用例，`tests/test_intake_actions.py`）
+
+1. **动作自身**：
+   - 正控：A 的动作把 `source/external.md` 登记成 1 行 `literature`，且行里的 `path`
+     指回盘上那份文件（"这篇在哪"要能回答）；
+   - 三态负控（"没进来"的三种形态必须分得开）：目录不在盘上 ⇒ `ok=False`/`dir_not_found`/零写入；
+     pattern 没匹配上 ⇒ `ok=True`/`nothing_matched`；**文件在但扩展名不支持**（`.tex`）
+     ⇒ `ok=True`/`unsupported_format`/`unreadable=1`/**零登记**（这一档最容易被读成"成功"）；
+     空目录名 ⇒ `bad_books_dir`。
+2. **与既有工具同一口径**：A 的动作与工具 `search.ingest_local` 对同一个目录必须给出
+   **逐字相同**的 `provenance`、`already_present=1`、**同一个 `lit_id`**，且不多出一行
+   （sha256 幂等）。这条挡的是"两份口径漂移"。
+3. **编排层真的通**（本文件最重要的一条）：主控 `conductor.summon` 四跳 ——
+   `A.ingest_local → B.register_statement → G.build_document → H.review` ——
+   四跳 `outcome=ok`、`status=done`、四张表各有行、我方稿件 `status: draft → accepted`，
+   台账里 4 条 task 行。**§43 证明的是工具层通，这一条证明的是编排层通** ——
+   两者之间正是那趟真机掉下去的地方。
+4. B 的四条负控：出处不存在（`unknown_lit_id`，坏引用不许进库 —— 与
+   `doc.build_document` 的 `check_citations` 同一条纪律）、缺完整假设、缺出处、
+   `quote_verified` 不是 `True` 却没写 `quote_reason`、`evidence_kind` 用了来源词
+   （`literature`）—— 一律零写入。
+
+### 46.3 撞出来的两条实现细节（都记在这里，免得下次再撞）
+
+1. **工具层的极简 schema 子集不支持联合类型**：`"quote_verified": {"type": ["boolean","null"]}`
+   会在参数校验期抛 `unhashable type: 'list'`（真机形态：召唤被 `invalid_params` 拒，
+   而理由串只说"参数不合法"）。处置：声明成 `{"type": "boolean"}`，
+   **三态里的"还没查（None）"靠不传这个参数**表达 —— 这本来就是 JSON 语义，
+   而且与 `Statement.quote_verified=None` 的含义逐字对齐。
+2. **导入期两层对账会要求"新动作要么有同名工具、要么登记进 `_KNOWN_UNMATCHED_ACTIONS`"**：
+   `A.ingest_local` 与工具 `search.ingest_local` 同名（最后一段相等）⇒ 自动比对通过；
+   而 `B.register_statement` 写的是**通用**表工具 `table.create`（最后一段 `create`）
+   ⇒ 诚实地落进 `unmatched`，已按既有惯例逐字登记理由（与 `A.search_literature` /
+   `H.review_report` 两条同族：**不给它凑一个同名工具**，因为那会让两层类型对账
+   去比两件不同的事）。
+
+### 46.4 "加动作要交的税"（逐处都交了 —— 其中**三处是全量 pytest 抓出来的**）
+
+**先说那三处**（这一段比清单本身值钱）：本阶段判据 118 条全绿之后，**全量 pytest 仍然红了 3 条**
+—— 它们都是"加一条动作"的税，而我在开跑全量之前没有把它们数全：
+
+1. `tests/test_agent_surface_snapshot.py::test_the_surface_is_whole_and_not_vacuous`：
+   反真空那条判据里**写死了 `total_actions == 51`**。处置不是改成 53（下次加动作还会红一次，
+   而红了之后人会去改数字、不会去看面），而是改成"与现场 `CAPABILITIES` 逐数相等
+   **且**不许低于 53"—— 真正要防的真空是**缩水**，而"数字该是多少"由 `capabilities`
+   与 §0.7 的标题说话（那条由 `test_role_specs_action_table.py` 盯着）。
+2. `tests/test_r4_roles_surface.py::test_the_reconciliation_numbers_in_the_source_match_the_live_reading`：
+   `capabilities.py` 的 docstring 与 [7b] 注释里各写着一句实测读数
+   `51 个动作 = 17 compared + 34 unmatched + 0 ambiguous` ⇒ 改成
+   `53 = 18 + 35 + 0`（两句都改，旧值留在括号里当历史）。**这两句是"源码里的读数"**，
+   而判据会真跑一次对账再逐字比 —— 这正是本项目"读数必须能被判据改"的形态。
+3. `tests/test_reading_map.py::test_the_line_counts_in_the_big_file_table_are_current`：
+   `docs/READING-MAP.md` §3 那张表是**手抄的行数** ⇒ `capabilities.py` 2243 → **2255**、
+   `agent_b/core.py` 1044 → **1045**（顺带把后者的说明里"B 的 6 个动作"改成 7）。
+
+也就是说：**"加动作要交的税"里有一半不在直觉清单上** —— 它藏在两条反真空判据的写死数字
+与一张手抄的行数表里。这三处修完，全量 pytest 才回到全绿。
+
+其余各处：
+
+- `docs/ROLE-SPECS.md`：§0.7 标题 51 → **53** 个动作、A 行 3 → **4**、B 行 6 → **7**；
+  §M.4.1 标题 51 → **53** 个可召唤动作（同一张表的第二个落点，判据两处都盯）；
+  §A.2 新增 **A-8** 行、§B.2 新增 **B-8** 行（职责表要能读到新动作）。
+- `DEVELOPMENT.md` §1.5：动作总数 51 → **53**。
+- 两份 golden：`tool_surface_snapshot.json` **0 处变化**（这一刀没加工具）；
+  `agent_surface_snapshot.json` **13 处** —— A/B 的 `actions` 各 +1、两个新的
+  `handler_signatures`、B 的 `write_set` +`statements`、**8 份角色提示词的长度**
+  （A 10820→11225、B 10455→10798、D/E/F/G/H/M 也都涨了 —— 因为"能召唤谁做什么"
+  是现算进提示词的，A/B 各多一个动作，伙伴表就跟着长）。
+- 导入期对账读数（`[capabilities]` 那一行）：覆盖 **166 / 声明 166** 个 property、
+  **53** 个动作、接缝 1 条；两层参数类型对账比较 78 对（+5），**没比对 0 个**。
+
+### 46.5 四个读数
+
+1. **lint**：`error 0 / warning 9 / info 50`（== 钉住的读数）。
+   中间 `error 3` 是本轮新写的 docstring 装饰，`temp/_r009_fix.py --apply` +
+   `_r009_verify.py` 清掉（3/3 通过：代码零改动、行尾零变化）。
+2. **本阶段判据**：`test_intake_actions`（6 条，含编排层那条）+ 动作税那一批
+   （`test_agent_split_is_one_action_one_file` / `test_role_specs_action_table` /
+   `test_role_specs_complete` / `test_capabilities_two_layer` / `test_agent_spec_reconciliation` /
+   `test_agent_prompts`）⇒ **118 passed**，0 failed。
+   ⚠️ **但这 118 条不足以给出"改完了"这个结论** —— 46.4 那三处税是全量 pytest 抓出来的
+   （第一次全量：`3 failed, 3345 passed`）。这一条值得单记：**挑着跑绿了不等于改完了**。
+3. **全量 pytest**：**3348 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1309.21 s）。比上一刀（§45 的 3342）多 **6** 条 —— 正是本节新增的六条用例。
+4. **FC-27 门**（这一刀的**主要代价**，照红记录）：
+
+   ```text
+   python -B scripts/noai_gate.py --paths src/agentflow/specs/a.py src/agentflow/specs/b.py src/agentflow/capabilities.py
+   [requires_human] required_approvals=2
+   requires_human：3 条改动落在 FC-27 禁 AI 区（类别：auth-audit）
+   ⚠️ 台账 stale 3 条（capabilities.py / specs/a.py / specs/b.py）
+   ```
+
+   **这一格是红的，应该红**：改的是权限面（两条新动作 + B 的写集加一张表），
+   按 FC-27 需要 2 名 reviewer 逐行走查。已按惯例 `--baseline --note "…"` 登记
+   **这一版**（`reviewers=0`，登记 ≠ 批准），stale 警告随之消失 —— 但
+   `required_approvals=2` 一个字没变，两名 reviewer 的走查**仍然欠着**。
+   用户是本轮改动的裁定人（"同意加这两条动作"），那是"由人主导"的一半；
+   另一半（逐行走查签字）不在我这一侧，写在这里不折成绿。
