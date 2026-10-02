@@ -438,6 +438,34 @@ def test_conductor_selftest_passes_and_has_teeth(monkeypatch: pytest.MonkeyPatch
     assert CT.selftest() == 1, "只读角色拿到了主控工具而自检仍然绿 ⇒ 权限那条检查是空转的"
 
 
+def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
+    """正控 + 红线（`draft/37` §41）：M 的「手」那一档必须与它真拿到的写工具一致。
+
+    这一条与 `tests/test_agent_prompts.py::test_the_conductor_hand_is_minor_not_a_forbidden_line`
+    是一对，差别只在注册表：那一份不带 `workspace_root`（没有 fs 工具），
+    这一份带 —— 于是它能核到用户裁定给 M 的那支笔（`fs.write`）真的出现在提示词里。
+    两半合起来才是"提示词与工具面一致"这件事的完整判据。
+
+    红线那一半（负控）：M 的写工具清单里不许出现任何领域写工具 ——
+    `table.*`（知识表）、`doc.build_document`（稿件）、`fs.edit` / `fs.delete` / `fs.move`
+    都不在它的面上。"有笔"不等于"有知识表写面"，这正是 §38 那条被收窄
+    （而不是作废）的红线。
+    """
+    from agentflow import agent_prompts as AP
+
+    _store, _c, reg = _wired(tmp_path)
+    assert AP.FACULTY_EMPHASIS["M"]["手"] == "minor", "档位必须与工具面一致（denied 会印成结构禁止）"
+    text = AP.faculties_text("M", reg)
+    hand_line = next((ln for ln in text.splitlines() if "手＝" in ln), "")
+    assert hand_line, f"次要官能那一行里没有'手'：{text[-300:]}"
+    for name in ("conductor.summon", "conductor.summon_many", "fs.write"):
+        assert name in hand_line, (name, hand_line)
+    for name in ("table.create", "table.update", "doc.build_document", "fs.edit",
+                 "fs.delete", "fs.move"):
+        assert name not in hand_line, (name, hand_line)
+    assert "可改 6 件" in hand_line, hand_line
+
+
 def test_state_and_role_spec_are_read_only_views(tmp_path: Path):
     """状态视图与角色规格：都与既有单一来源同源，且不写任何字节。"""
     store, _c, reg = _wired(tmp_path)

@@ -80,8 +80,17 @@ def test_the_paper_pack_section_is_versioned(store: Store):
     p23 → p24（`draft/37` §16 P2）：本轮给 A/B/C/D/H/M 六个角色加了审阅线的口径
     （命中校验与定位确认、命题台账三件套、缺口→检索请求、初步数学审阅+可挽救性、
     采信规则、每跳写清提示词+目标变更必须 ask_user）。段变了，这一格必须跟着动。
+
+    p24 → p25（`draft/37` §42）：用户裁定的两句 + ④ 的提示词那半 + ① 的口径
+    （M 的交付说明落点、`emphasis['手']` 由 denied 改 minor、已在项目里别再
+    `ensure_project`、"外部论文不是我方稿件"）。
+
+    判据只要求"不早于 p24"：版本还会前进（P3/P4 之后还有刀），
+    而这条要守的是"P2 那批口径属于 p24 及以后"，不是把版本钉死在今天。
+    原来这里写的是 `== "p24"`（与它自己的意图相反：任何一次正当的段改动都会让它红，
+    而红之后人会去改数字，而不是去看段）—— 2026-10-02 一并改成下界的写法。
     """
-    assert AP.PROMPT_VERSION == "p24", AP.PROMPT_VERSION
+    assert int(AP.PROMPT_VERSION[1:]) >= 24, AP.PROMPT_VERSION
 
 
 #: `2026-10-01` 真机实测逼出来的那一条：光说"重渲染 → 重编译 → 锚回 consistent"不够，

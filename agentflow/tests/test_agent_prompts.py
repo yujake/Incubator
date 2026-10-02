@@ -345,13 +345,42 @@ def test_core_faculties_are_written_locally_and_denied_ones_are_written_as_forbi
 
 
 def test_read_only_roles_do_not_advertise_hands_on_the_data_plane():
-    """负控（不许把禁止写成能力）：C/H/M 的手是结构禁止的，正文不许给它们列可写工具。"""
-    for role in ("C", "H", "M"):
+    """负控（不许把禁止写成能力）：C 与 H 的手是结构禁止的，正文不许给它们列可写工具。
+
+    2026-10-02 用户裁定之后（`draft/37` §41），M 从这条判据里移出：
+    它现在真拿到 6 件写工具（编排面 5 件 + `fs.write`），
+    再把它印在"结构上不许：手"那一档里就与实情相反了 ——
+    而"提示词与事实不一致"正是这一整个文件存在的理由。
+    M 的那一半改由两条判据守：
+    - 这里下面的 `test_the_conductor_hand_is_minor_not_a_forbidden_line`（档位与列位）；
+    - `tests/test_conductor_tools.py::test_conductor_hand_line_lists_its_real_write_tools`
+      （用带 workspace_root 的注册表，逐名核它列出的写工具与"不许出现在里面"的领域写工具）。
+    """
+    for role in ("C", "H"):
         assert AP.FACULTY_EMPHASIS[role]["手"] == "denied", role
         core_line = AP.faculties_text(role, REGISTRY)
         core_part = core_line[:core_line.index("结构上不许")] if "结构上不许" in core_line else core_line
         assert "- 手：" not in core_part, f"{role} 把'手'列进了主战官能：{core_part[-200:]}"
         assert "数据面上没有写工具" in core_line or "结构禁止" in core_line or "不产出领域对象" in core_line
+
+
+def test_the_conductor_hand_is_minor_not_a_forbidden_line():
+    """正控（`draft/37` §41 的用户裁定）：M 的「手」是次要官能，不许再印成"结构上不许"。
+
+    为什么值得一条判据：这一档决定那句本地说明渲染到哪一段
+    （主战 / 次要 / 结构上不许），而三段在提示词里的语气完全不同 ——
+    档位写错时提示词会一边说"你有笔"、一边说"做了也不算数"。
+    """
+    assert AP.FACULTY_EMPHASIS["M"]["手"] == "minor"
+    text = AP.faculties_text("M", REGISTRY)
+    head = text[text.index("结构上不许"):] if "结构上不许" in text else ""
+    assert "- 手：" not in head, f"M 的'手'仍然落在'结构上不许'那一段里：{head[:200]}"
+    minor_line = next(ln for ln in text.splitlines() if "次要官能" in ln)
+    assert "手＝" in minor_line, minor_line
+    # 这一份注册表不带 `workspace_root` ⇒ 没有 fs 工具，那 5 件编排面写工具必须在列。
+    for name in ("conductor.summon", "conductor.summon_many", "conductor.stop"):
+        assert name in minor_line, minor_line
+    assert "可改" in minor_line, minor_line
 
 
 def test_the_shared_layer_is_named_once_and_identical_for_every_role():

@@ -3213,3 +3213,110 @@ clean：51 条改动路径均未命中禁改区（清单 38 条）⇒ 无需额�
 另外 §37.4 ①（论文进台账的归属）按用户裁定的**方案 A**落：外部论文走
 `literature` + `statements`，我方修订稿才走 `documents`；它也要在 `PAPER_PACK` 段补一句口径
 （同样是 FC-27），归到同一刀。
+
+---
+
+## §42 用户裁定的两句 FC-27 提示词 + ④ 的提示词那半 + ① 的口径（`p24 → p25`）
+
+用户 2026-10-02 逐项裁定（本节开工前问过，三个选项都取了我推荐的）：
+② M 的「手」由 `denied` 改 `minor`；③ ① 走**方案 A**（外部论文走 `literature` + `statements`，
+我方修订稿才走 `documents`）；④ 采取"已在项目里 ⇒ 拒绝"（那一半已在 §41 落地）。
+本节把**提示词那一半**做完 —— 而它落在 `src/agentflow/specs/m.py`，**FC-27 禁改区**。
+
+### 42.1 改了哪几句（逐条，都是用户点名的那几句）
+
+| # | 落点 | 前 | 后 |
+|---|---|---|---|
+| 1 | `ROLE_BRIEFS["M"].deliverable` / `SPEC.brief.deliverable` | `一份交付说明：做了什么、谁做的、哪些地方证据不足、还剩什么没做。` | 加"落在 `out/review/REPORT.md`（工作区相对路径，用 `fs.write` 写；默认不覆盖，重写要显式给 `overwrite`）……只写在对话里、没有落盘的交付不算交付" |
+| 2 | `FACULTY_EMPHASIS["M"]["手"]` | `denied` | `minor` |
+| 3 | `FACULTY_LOCAL[("M","手")]` | `你不产出领域对象：派活、收敛、汇报；数据由角色写。` | `手用在两处：派活（conductor.summon / summon_many）与写交付说明（out/review/REPORT.md）；领域对象（文献 / 概念 / 关系 / 实验 / 稿件）仍由角色出品 —— 你有笔，但没有知识表的写面。` |
+| 4 | `ROLE_BRIEFS["M"].policy` 新增两条 | — | 读盘先于猜（`fs.list`/`read`/`search`/`stat` 是眼睛，`fs.write` 只写报告、`out/paper/` 只读不写）；工作区已在手边时不要再 `ensure_project`（会被 `already_a_project` 拒） |
+| 5 | `PAPER_PACK` 新增一段 | — | "外部论文不是我方稿件"：走 A（`literature`）与 B（`statements`，带 `source_lit_id` + `page_range` + 逐字 `proof_text`），审阅落 H 的 `review_findings`；我方修订稿才由 G `build_document`；**不要**拿外部论文的 `doc_id` 去 `revise`/`review_report` |
+| 6 | `PROMPT_VERSION` | `p24` | `p25` |
+
+`ROLE_BRIEFS`（`agent_prompts.py`）与 `specs/m.py` 是**逐字镜像的两份**，
+所以 1/2/3/4 两处都改了（判据 `test_the_role_brief_and_the_spec_are_the_same_object`
+与 `test_agent_spec_reconciliation` 就是守这件事的）。
+
+### 42.2 那两句"顺带"改掉的判据（它们与自己的意图相反）
+
+`tests/test_paper_pack.py` 与 `tests/test_review_line_prompts.py` 里各有一条
+`assert AP.PROMPT_VERSION == "p24"`，而**两条的 docstring 都写着"取 ≥ p24 而不是 == p24"**
+（原文：版本还会再前进，这条要守的是"P2 那批口径属于 p24 及以后"）。
+也就是说：任何一次正当的段改动都会让这两条红，而红了之后人会去改数字、不会去看段 ——
+正是本项目 P15 记的"假报警训练人忽略整条判据"。这一刀把两处都改成只判下界（`>= 24`），
+并把这段道理写进 docstring（**改判据不是放宽判据**：它守的仍是"不早于 p24"）。
+
+同时 `tests/test_agent_prompts.py::test_read_only_roles_do_not_advertise_hands_on_the_data_plane`
+里 M 被**移出**（它的 docstring 原来把 C/H/M 并列成"只读角色"，而 M 现在有 6 件写工具），
+替换成两条更准的判据：
+
+- `test_the_conductor_hand_is_minor_not_a_forbidden_line`（本文件，不带 `workspace_root`
+  的注册表）：档位是 `minor`、"手"不再落在"结构上不许"那一段、次要官能那一行真的列了工具；
+- `tests/test_conductor_tools.py::test_conductor_hand_line_lists_its_real_write_tools`
+  （**带** `workspace_root` 的注册表）：那一行必须列出 `conductor.summon` /
+  `conductor.summon_many` / `fs.write` 与"可改 6 件"，并且**不许**出现
+  `table.create` / `table.update` / `doc.build_document` / `fs.edit` / `fs.delete` / `fs.move`
+  —— 这是"有笔但没有知识表写面"那条收窄过的红线的提示词形态。
+
+### 42.3 尺子（两份 golden）逐行核对，不是只看长度
+
+`tool_surface_snapshot.json`：**0 处变化**（这一刀没动任何工具声明）。
+`agent_surface_snapshot.json`：9 份提示词全动，但**动的行逐条核对过**（脚本 `temp/_prompt_diff.py`）：
+
+- A–F 六份：**只有一行**不同 —— `- 提示词版本：p24` → `+ 提示词版本：p25`
+  （这六份不含 `PAPER_PACK`，brief 也没动；长度不变正是因为 `p24`/`p25` 等长）；
+- G / H：多出 `PAPER_PACK` 那一段（它们是 `PAPER_PACK_ROLES`），其余不变；
+- M：交付说明那一行、次要官能那一行（"手＝可改 6 件：…"）、两条新政策、
+  `PAPER_PACK` 那一段、版本行 —— 共 9 处，逐行 diff 见 `temp/_prompt_diff.py` 的输出。
+
+**这一步是刻意做的**：`--write` 之后如果只看"长度变了多少"，A–F 那六份"长度不变"
+会被读成"没变"，而它们其实变了（版本行）。逐行 diff 才看得出来。
+
+### 42.4 FC-27：这一刀确实落在禁改区，读数与处置照纪律
+
+```text
+python -B scripts/noai_gate.py --paths src/agentflow/specs/m.py src/agentflow/agent_prompts.py
+[requires_human] required_approvals=2
+requires_human：1 条改动落在 FC-27 禁 AI 区（类别：auth-audit）⇒ 必须由人编写或人逐行走查，
+并需要 2 名 reviewer 批准。命中：src/agentflow/specs/m.py
+（第一次跑还报了台账 stale：台账 2f2adb50e459 ≠ 盘上 cc28086861f4）
+```
+
+处置**两步都做了、也两步都没越界**：
+
+1. 这两句改动是**用户逐项裁定**之后应用的（用户在本次会话里选了"手改 minor"与"方案 A"，
+   并明确说"我来裁那两句 FC-27 提示词"）—— 这一条满足 FC-27 的"由人主导"那一半；
+2. `--baseline --note "…"` 把**这一版**登记进台账（`reviewers=0`，登记 ≠ 批准），
+   stale 警告随之消失；**但门仍然以退出码 1 要求 2 名 reviewer 逐行走查**，
+   而那两名 reviewer 至今**没有**（台账里那一条的 `reviewers` 是空数组）。
+   ⇒ 这一格**不是"已批准"**，是"已登记、欠两名独立复核"。任何以"门绿了"为结论的读法都是错的：
+   它现在是**红的**（退出码 1），而且**应该**是红的。
+
+`agent_prompts.py` 不在清单里（它只装配提示词，不改权限面），命中的只有 `specs/m.py`。
+
+### 42.5 四个读数
+
+1. **lint**：日常档 `error 0 / warning 9 / info 50`；`--strict` `error 0 / warning 56 / info 49`
+   —— 与钉住的两个读数逐位相同。（中间读数 `error 2` 又是 R009：本轮新写的
+   docstring 装饰，`temp/_r009_fix.py --apply` + `_r009_verify.py` 清掉，2/2 通过。）
+2. **本阶段判据**：`test_agent_prompts + test_conductor_tools + test_paper_pack +
+   test_review_line_prompts + test_agent_spec_reconciliation + test_role_specs_complete +
+   test_user_quickstart + 两份快照` ⇒ **133 passed**，0 failed；两条新增判据都在里面。
+3. **全量 pytest**：**3338 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1226.82 s）。比上一刀（§41 的 3336）多 **2** 条 —— 正是本节新增的两条判据。
+4. **FC-27 门**：见 42.4 —— `requires_human`、退出码 **1**、`required_approvals=2`。
+   这一格**按红记录**，不折成绿。
+
+### 42.6 这一刀之后，§37.4 五条缺口的账
+
+| 缺口 | 现状 |
+|---|---|
+| ① 论文进台账的归属 | **口径已定并写进提示词**（方案 A：外部论文 = `literature` + `statements`；我方修订稿 = `documents`）。**离线判据还没写**（下一节：用既有工具把这条链真跑一遍，证明"零新增面"可行） |
+| ② `conductor.acceptance` 的 `NameError` | 已修（§39） |
+| ③ 报告落点没有归属人 | 已修：M 拿到 `fs.write`（§39）+ 交付说明落点写进 deliverable（本节） |
+| ④ M 的侦察纪律 | 工具侧守卫已落地（§41）+ 提示词那半在本节 |
+| ⑤ 账本记"算不出花销" | **未动**（要改 `schema.py` / `tokenmeter.py`，FC-27，留给人裁） |
+
+**第二次真机发送**（用户已授权）排在 ① 的离线判据之后 —— 那条链要是没跑通就发，
+只是把 §37 的失败再花一次钱。

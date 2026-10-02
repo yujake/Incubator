@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p24"
+PROMPT_VERSION = "p25"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -229,7 +229,7 @@ FACULTY_EMPHASIS: dict[str, dict[str, str]] = {
     "H": {"眼睛": "core", "耳朵": "minor", "脑子": "core", "手": "denied", "能讨论": "minor",
           "高观点": "minor", "能互动": "minor", "能思辨": "core", "敢创新": "denied",
           "有品味": "core"},
-    "M": {"眼睛": "core", "耳朵": "core", "脑子": "core", "手": "denied", "能讨论": "core",
+    "M": {"眼睛": "core", "耳朵": "core", "脑子": "core", "手": "minor", "能讨论": "core",
           "高观点": "core", "能互动": "core", "能思辨": "minor", "敢创新": "minor",
           "有品味": "minor"},
 }
@@ -269,7 +269,9 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("H", "手"): "数据面写是结构禁止的；发现问题落 findings，再按性质找 A（引文）/ E（形式化）核实或请 G 修订。",
     ("H", "敢创新"): "不改稿、不新增论断：你是判定者，不是作者。",
     ("M", "眼睛"): "你读的是台账、状态与角色的产出，不是原始文献。",
-    ("M", "手"): "你不产出领域对象：派活、收敛、汇报；数据由角色写。",
+    ("M", "手"): "手用在两处：派活（conductor.summon / summon_many）与写交付说明"
+                 "（out/review/REPORT.md）；领域对象（文献 / 概念 / 关系 / 实验 / 稿件）"
+                 "仍由角色出品 —— 你有笔，但没有知识表的写面。",
     ("M", "耳朵"): "角色回来的结论与拒绝理由决定下一步派谁 —— 被拒不是失败，是信息。",
     ("M", "能互动"): "你是用户的接口：关键取舍用 ask_user 交回用户（等不到不许当默许），放手跑多轮时按轮次阶段性汇报。",
     ("M", "高观点"): "全局取舍：先窄后宽、什么时候收手、哪些缺口值得再派一轮。",
@@ -355,6 +357,14 @@ PAPER_PACK = """\
 - 机械生成的那一半**不要手改**：`out/paper/appendix.tex` 与 `tables/*.tex` 由
   `doc.paper_render` 从台账生成（四张表 + 台账摘要）；手改它们会在下一次渲染时被覆盖。
   主稿 `main.tex` 的正文、证明、表述、引用 —— 那才是你写的地方。
+- **外部论文不是我方稿件**（`draft/37` §41 的用户裁定，方案 A）：盘上拿到的、别人写的那份稿子，
+  登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
+  每条带 `source_lit_id` + `page_range` + 逐字 `proof_text`），审阅发现落 H 的 `review_findings`；
+  **我方修订稿**才由 G 用 `doc.build_document` 另起一行 `documents`（claims 的 citations
+  引 `lit:` / `exp:`）。**不要**拿外部论文的 `doc_id` 去 `G.revise` / `H.review_report`：
+  `documents` 的每一行都必须是我方写的、带 claims 的稿子（`Document.validate()` 逐字要求
+  "claims 不能为空 —— 一份没有任何断言的稿件不是稿件"）。真机实测（§37）：四个审稿动作
+  全被拒，就是因为拿一份还没有 claims 的外部论文去当 `documents` 行用。
 
 二、验收表就是 P1–P11，交付说明必须逐条对齐
 - 判据表在 `out/paper/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），
@@ -706,9 +716,19 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "目标变更必须问用户：当要做的这件事与派活时说的不是同一件（「审这篇论文」变成"
             "「研究这个问题」、范围扩大、要改别人的结论），停下并 ask_user —— "
             "不许自己把口径挪一格再继续。这是本项目唯一允许的「停下来等」的理由。",
+            "读盘先于猜：fs.list / fs.read / fs.search / fs.stat 是你自己的眼睛 —— "
+            "盘上有什么、论文在哪、上一轮产物长什么样，直接读；先 fs.list 一层就够，"
+            "不要用反复试探代替看。fs.write 只用来写交付说明（out/review/REPORT.md）："
+            "论文本体 out/paper/ 是 G 与 H 的活，你只读不写。",
+            "工作区已经在手边时不要再 ensure_project：那一件的缺省落点是另一个 projects 目录"
+            "（真机实测建出过一个空项目 project11），所以框架会以 already_a_project 拒你。"
+            "接着做下去用 conductor.resume_brief / conductor.state / conductor.ledger，"
+            "要派活就用 conductor.summon。",
         ),
         signature_error="把派活本身当成结论。",
-        deliverable="一份交付说明：做了什么、谁做的、哪些地方证据不足、还剩什么没做。",
+        deliverable="一份交付说明，落在 out/review/REPORT.md（工作区相对路径，用 fs.write 写；"
+                    "该工具默认不覆盖已有文件，重写要显式给 overwrite）：做了什么、谁做的、"
+                    "哪些地方证据不足、还剩什么没做。只写在对话里、没有落盘的交付不算交付。",
     ),
 }
 

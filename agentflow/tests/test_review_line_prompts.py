@@ -107,8 +107,9 @@ def test_the_prompt_version_moved_with_the_sections() -> None:
 
     判据取的是"必须 ≥ p24"而不是"必须 == p24"：版本还会再前进（P3/P4 会再改段），
     而这条判据要守的是"P2 这批口径属于 p24 及以后"，不是把版本钉死在今天。
+    （2026-10-02：`== "p24"` 那半句与这段意图相反 —— 任何一次正当的段改动都会让它红，
+    而红了之后人会去改数字而不是去看段。现在两处都只判下界；`p25` 是 §42 那一刀。）
     """
-    assert AP.PROMPT_VERSION == "p24", AP.PROMPT_VERSION
     num = int(AP.PROMPT_VERSION[1:])
     assert num >= 24, f"P2 的这批口径属于 p24 及以后，收到 {AP.PROMPT_VERSION!r}"
 

@@ -1965,14 +1965,15 @@ SELF-CHECK DONE（agent_h）
 | M-8 | 幂等销毁，合成 `cancelled` 的 end | 同上 |
 | M-9 | 台账的可读视图与统计 | `Conductor.tree` / `conductor.stats` |
 | M-10 | **自己的不变式自检** | `conductor.Conductor.verify_tasks` |
-| M-11 | 汇总给用户 | 调用方消费 `stats()` / `tree()` / `SummonResult`（**M 本身不产出报告文件**） |
+| M-11 | 汇总给用户，并把**交付说明落盘**（`out/review/REPORT.md`，用 `fs.write` 写） | `conductor.state`/`ledger` + `fs.write`（`draft/37` §38/§41 的用户裁定；这一格在 2026-10-02 之前写的是"M 本身**不产出报告文件**"—— 那是那条裁定之前的实情） |
 
 ### M.3 明确不负责
 
 | 不做什么 | 为什么不由 M 做 | 该由谁做 |
 |---|---|---|
 | 产出知识（概念/关系/文献） | "它不产出知识、不写关系、不改稿件"（`DESIGN-CONDUCTOR.md:37`）；`WRITE_SETS["M"] = frozenset()` | **A** / **B** |
-| 写任何领域表 | 同上；M 只写 `tasks`（`CONDUCTOR_WRITE_SET`，`capabilities.CONDUCTOR_WRITE_SET`） | 各角色 |
+| 写任何领域表 | 同上；M 只写 `tasks`（`CONDUCTOR_WRITE_SET`，`capabilities.CONDUCTOR_WRITE_SET`）+ 交付说明文件 `out/review/REPORT.md`（文件面白名单，不是表） | 各角色 |
+| 把外部论文当成我方稿件 | 外部论文走 `literature` + `statements`（A / B），我方修订稿才由 G `build_document` 另起一行 `documents`（`draft/37` §41 的方案 A；`Document.validate()` 要求 claims 非空） | **A** / **B** / **G** |
 | 有领域动作 | `CAPABILITIES["M"] == ()` —— **可断言的事实**，不是一个约定 | 各角色 |
 | 用 LLM 决定"想做什么" | 本轮 M 是**确定性策略执行者**；plan 由调用方给 | `SubagentBackend`（**未接线**） |
 | 成为"谁能召唤谁"的特权路径 | M 也在角色空间里（`schema.CONDUCTOR_ROLE`）："特例化会是权限模型最容易漏的地方"（`DESIGN-CONDUCTOR.md:40`） | — |

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-02T11:48:57+08:00",
+  "generated_at": "2026-10-02T22:07:03+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -486,10 +486,10 @@
       "path": "src/agentflow/specs/m.py",
       "glob": "src/agentflow/specs/m.py",
       "category": "auth-audit",
-      "sha256": "2f2adb50e45905fa5250aea4a8215feef600c1a317103c9286bb3225c629a0c3",
+      "sha256": "cc28086861f4ac5922367d7d1706dd8daa70def1c6cbd91f576fad1cdf2ff4b5",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 16 P2（round 5）：审阅线六条提示词口径。schema.py 加 literature.matched（LIT_MATCH_STATES = exact/partial/mismatch，空串=还没核，见 §2 R1b），verify.py 加两条：mismatch_literature_processed(error)/partial_match_processed(warning)。specs/a,b,c,d,h,m.py 是 ROLE_BRIEFS 的逐字镜像（用 temp/_p2_sync_spec_brief.py 整份 brief 重渲染，区间外零改动），六条口径本身在 agent_prompts.py。判据：tests/test_review_line_prompts.py（23 条，含反真空）+ tests/test_literature_match.py（8 条，含反真空）+ test_agent_spec_reconciliation.py。",
+      "change_note": "2026-10-02 用户裁定（draft/37 §41/§42）：M 的 emphasis['手'] 由 denied 改 minor、交付说明落点写进 deliverable/policy；由用户逐项裁定后应用，2 名 reviewer 的逐行走查仍欠（reviewers 留 0）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
