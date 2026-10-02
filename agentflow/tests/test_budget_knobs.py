@@ -127,10 +127,18 @@ def test_the_writing_step_passes_a_larger_output_allowance(tmp_path: pathlib.Pat
 
 
 def test_the_observation_window_fits_one_statement_slice() -> None:
-    """观测窗口（`RESULT_CHARS`）必须容得下「一条定理」的切片；超出时仍要截断（负控）。"""
+    """观测窗口（`RESULT_CHARS`）必须容得下「一条定理」的切片；超出时仍要截断（负控）。
+
+    另加一条下界（2026-10-03，`draft/37` §56 的真机读数）：窗口必须 ≥ 两倍定理切片。
+    第七趟真机 45 步里有 20 步是重读 26 KB 的主稿（160 行一段约 9 KB 装不下 3000 字的窗口），
+    结果报告没写出来 —— 窗口太小不是"省 token"，是把步数烧在重读上。
+    """
     assert AL.RESULT_CHARS >= STATEMENT_SLICE_CHARS, (
         f"RESULT_CHARS={AL.RESULT_CHARS} 容不下 {STATEMENT_SLICE_CHARS} 字的定理切片 —— "
         "「拆条目逐条改」这条路会在观测层被掐断（§16 P0 第三行）")
+    assert AL.RESULT_CHARS >= 2 * STATEMENT_SLICE_CHARS, (
+        f"RESULT_CHARS={AL.RESULT_CHARS} 不到定理切片的两倍（{2 * STATEMENT_SLICE_CHARS}）—— "
+        "读一份 20 KB 上下的稿子会退化成「缩窗口反复重读」（第七趟真机：20/45 步）")
     payload = "x" * STATEMENT_SLICE_CHARS
     assert payload in AL._clip_fields({"text": payload}), "一条 2,600 字的切片必须原样通过观测层"
     over = AL._clip_fields({"text": "y" * (AL.RESULT_CHARS + 50)})
