@@ -1597,6 +1597,32 @@ def cmd_answer(args) -> int:
     return 0
 
 
+def cmd_closing(args) -> int:
+    """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
+
+    三态（与 `noai_gate` 同一套口径）：`unknown` 那一档绝不是通过 ——
+    "没查成"（没给项目根、报告还没写）与"查过了有问题"必须给不同的退出码，
+    否则 CI 会把两者读成同一件事。
+    """
+    from . import closing as CL
+    from .store import Store
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    st = Store(root)
+    project = args.project_dir or ""
+    report = args.report or (str(Path(project) / "out" / "review" / "REPORT.md")
+                             if project else "")
+    rep = CL.check_closing(st, project_dir=project, report_path=report)
+    for name in CL.DEFAULT_CHECKS:
+        state = rep.status.get(name, "?")
+        mark = {"pass": "通过", "fail": "拦住", "unknown": "没查成"}.get(state, state)
+        print(tty.bullet(f"{name}：{mark}"))
+    for f in rep.findings:
+        print(f"  [{f.level}] {f.code}：{f.detail}")
+    print(rep.summary())
+    return CL.tri_state_exit_code(rep)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agentflow",
                                 description="面向数学研究的多智能体协同框架（正式版；A–H + 主控 M）")
@@ -1858,6 +1884,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("text", help="回答正文")
     sp.add_argument("--sid", default=None, help="会话号（默认当天）")
     sp.set_defaults(func=cmd_answer)
+
+    sp = sub.add_parser("closing", help="跑收工门（draft/37 §16 P3 的五条；退出码 0/1/2）")
+    sp.add_argument("--project-dir", default="",
+                    help="论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是「没查成」）")
+    sp.add_argument("--report", default="",
+                    help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
+    sp.set_defaults(func=cmd_closing)
     return p
 
 

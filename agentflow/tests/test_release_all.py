@@ -2152,6 +2152,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "judges.py": "语义判据的接入方式：判据注册表（每条带负控准入）+ 三态 + 引用落地过滤（`draft/28` §182）",
     "faculty_checks.py": "十项官能里可机械判的那一半：引用落地 / 猜想卫生 / 体例 / 推进与卡点（`draft/28` §182）",
     "deliver.py": "交付闸门：逐条判据 + 机械半 → pass/needs_work/unknown 三态、闸门报告与工作项，并把工作项按能力表派回去（`draft/28` §186）",
+    "closing.py": "收工门（`draft/37` §16 P3）：锚 consistent / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题，五条各自一个三态读数（`unknown` 不是通过）；工具 `conductor.closing` 与 CLI `agentflow closing` 都调它的 `check_closing`",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",

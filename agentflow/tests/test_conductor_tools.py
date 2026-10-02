@@ -27,6 +27,7 @@ ORCHESTRATION_TOOLS = {
     "conductor.summon", "conductor.summon_many", "conductor.ledger", "conductor.stop",
     "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
     "conductor.state", "conductor.role_spec", "conductor.acceptance",
+    "conductor.closing",
 }
 
 

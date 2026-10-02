@@ -696,6 +696,54 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
         "documents": got.get("documents") or [],
     })
 
+
+@tool(
+    "conductor.closing",
+    "只读：跑收工门（`draft/37` §16 P3 的五条）—— 锚 consistent / 无未裁决矛盾 / "
+    "承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。"
+    "**每条各自一个三态读数，unknown 不是通过**；`can_close` 只在五条全过时为真。",
+    {
+        "type": "object",
+        "properties": {
+            "project_dir": {"type": "string",
+                            "description": "论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是 unknown）"},
+            "report_path": {"type": "string",
+                            "description": "报告路径（不给 ⇒ 报告形状那一格是 unknown）"},
+        },
+        "required": [],
+        "additionalProperties": False,
+    },
+    side_effect="read",
+    roles=("M",),
+    returns=("{'can_close','status','failed','unknowns','findings','readings','summary'}；"
+             "status 的键是五条检查（anchor/contradictions/load_bearing/report_shape/"
+             "user_pending），值是三态之一（通过 / 拦住 / 没查成）；"
+             "findings[] 每项是 {'check','code','level','detail'}"),
+)
+def conductor_closing(store, project_dir: str = "", report_path: str = "") -> ToolResult:
+    """工具体：把收工门包成一次只读调用（判据在 `agentflow.closing`，这里不另写一份）。
+
+    为什么主控需要它：交付说明里"能不能交"这句话必须有可查的读数撑腰。
+    真机读数里最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件事 ——
+    包是旧的、依赖还挂着争议、承重结论只有数值支持。这些每一条都能被机器判，
+    混在一段总结里就只剩一句"基本完成"。
+    """
+    if store is None:
+        return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store", can_close=False)
+    from .. import closing as CL
+
+    rep = CL.check_closing(store, project_dir=project_dir, report_path=report_path)
+    data = rep.to_dict()
+    kind = "" if rep.can_close else ("closing_unknown" if CL.tri_state_exit_code(rep) == 2
+                                     else "closing_blocked")
+    return ok({
+        "can_close": data["can_close"], "status": data["status"],
+        "failed": data["failed"], "unknowns": data["unknowns"],
+        "findings": data["findings"], "readings": data["readings"],
+        "summary": rep.summary(),
+    }, kind=kind, blocked=not rep.can_close,
+        blocker_count=len(rep.blockers), unknown_count=len(rep.unknowns))
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_summon, ('_conductor',)),
@@ -708,6 +756,7 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_state, ('_conductor',)),
     (conductor_role_spec, ('store',)),
     (conductor_acceptance, ('store',)),
+    (conductor_closing, ('store',)),
 )
 
 

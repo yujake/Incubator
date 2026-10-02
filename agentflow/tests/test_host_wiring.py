@@ -311,13 +311,14 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 
 
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
-    """接了线的工具层：M 的面仍然是那 10 件编排面工具，一件领域工具都没有。"""
+    """接了线的工具层：M 的面仍然是编排面工具（`draft/37` §16 P3 起是 11 件），一件领域工具都没有。"""
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    assert len(m_tools) == 10, m_tools
+    assert len(m_tools) == 11, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
+    assert "conductor.closing" in m_tools, m_tools
     assert all(n.startswith("conductor.") for n in m_tools), m_tools
     # 领域工具不许出现在 M 的面上（P10 的红线在接线之后仍然成立）
     assert not [n for n in m_tools if n.startswith(("table.", "fs.", "prov."))], m_tools

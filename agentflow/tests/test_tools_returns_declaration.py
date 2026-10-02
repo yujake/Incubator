@@ -71,7 +71,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 74
+TOOL_COUNT = 75
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -208,6 +208,9 @@ def tool_params() -> dict[str, dict]:
         "conductor.state": {},
         "conductor.role_spec": {"role_name": "C"},
         "conductor.acceptance": {},
+        # 收工门（`draft/37` §16 P3）：默认两格是 unknown（工作区里没有论文包与报告，
+        # 而 unknown 不是失败）—— 这条走的就是那个成功支，`can_close` 为假不算工具失败。
+        "conductor.closing": {},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -324,7 +327,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
         "verify.check_formal", "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
         "verify.list_experiments", "verify.run_experiment",
-        "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",
+        "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",        "conductor.closing",
     }
 )
 

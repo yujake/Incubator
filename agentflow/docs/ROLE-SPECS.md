@@ -49,7 +49,7 @@
 ### 0.2 工具面的三条公共事实（实测）
 
 > ⚠️ **本表的"55"是 2026-09-26 那次装配的读数（历史快照）**，不是今天的读数。
-> 今天 `build_registry` 的条数是 **73**（见 §R0.1 的标题，由
+> 今天 `build_registry` 的条数是 **75**（见 §R0.1 的标题，由
 > `tests/test_role_specs_complete.py` 与发布门的 `tools/verify_role_specs.py` 逐条对账）。
 > 本节这两处的口径可能不同（本节记的是当时那次装配的输出，§R0.1 记的是今天的装配条数），
 > 而**没有一条判据盯着 §0.2 这一格** —— 所以：**引用工具总数请以 §R0.1 为准**。
@@ -57,7 +57,7 @@
 
 | 事实 | 实测值 | 出处 |
 |---|---|---|
-| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 73） | **55** | 本文 §0.3（带观测时刻的实测输出） |
+| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 75） | **55** | 本文 §0.3（带观测时刻的实测输出） |
 | 全部 8 个角色**共有**的工具 | 9 个：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` | 实测（交集） |
 | 只读角色（C/H）工具面里的写工具 | **0**（`role_filter_notes = {}` ⇒ 结构性拦截一次都没触发） | 实测 |
 
@@ -220,7 +220,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（74 个，逐条）
+## R0. 全局工具总表（75 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -303,8 +303,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 72 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
 | 73 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
 | 74 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
+| 75 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的五条）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在五条全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是五条检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 
-### R0.1 73 个工具的公共事实（机械可验证）
+### R0.1 75 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -1977,7 +1978,7 @@ SELF-CHECK DONE（agent_h）
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（10 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取 + 1 件批量派活）
+### M.4 "工具面"（11 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件批量派活）
 
 #### M.4.1 M 能召唤的 8 个角色 × 它们的动作（51 个可召唤动作）
 

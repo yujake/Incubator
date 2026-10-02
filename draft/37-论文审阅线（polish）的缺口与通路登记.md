@@ -1729,3 +1729,115 @@ VOCAB_SUFFIXES = ("_KINDS", "_STATUSES", "_OUTCOMES", "_SCOPES", "_FORMS")
 所以是**人的口径裁定**，本批只登记现象（写进了 `tools/vocab_census.py` 的注释里），不替人做。
 值得记一笔的理由是它是"**判据失去对象**"的形态：判据没红，输出也没少 ——
 `栏二 0` 既可以读成"都有人产出"，也可以读成"这张表根本没被扫到"，**两者在读数上同形**。
+
+---
+
+## §22 落地 P3（收工门与报告）：五条各自能造红的门 + `conductor.closing`（含"必须上 T3"四条写进门）
+
+**这一节记的是 `draft/37` §16 P3 的**门**那一半。** 五条检查落在新模块
+`src/agentflow/closing.py`，**一份实现、两个入口**：主控的工具 `conductor.closing`
+与人的 `agentflow closing`（退出码 0/1/2 三态）。§16 P3 的"每一条都能单独造红"是这一节的
+验收线 —— 所以判据写的是"**只把它弄坏，红的必须正好是它**"，而不是"全好 ⇒ 全绿"。
+
+### 22.1 五条 + 它们各自对应哪个真机失败
+
+| 检查 | 判什么 | 它挡的是哪一种"基本完成" |
+|---|---|---|
+| `anchor` | `renderanchor.check_package` 的 verdict 必须 `consistent` | 包与台账分家（实测：只改台账没重渲染 ⇒ 当场 `drifted`） |
+| `contradictions` | `dependencies.status ∈ {disputed, refuted}`、`statements.status = disputed`、稿件 `status = unresolved_review` 都要空 | 带着一条没裁决的争议就交付（§8/§9 的闭环没走完） |
+| `load_bearing` | 正文里 `evidence_kind="proof"` 的断言必须有 T3 背书，或**已降档** | 数值支持被写成"已证明"（§10.2 的过度声称） |
+| `report_shape` | 报告九节（§14.4）+ "我们补的/原文的"分栏 + 附件三件套 | 报告缺三节、附件来源造假、分栏没写 |
+| `user_pending` | `userio.pending_questions` 必须为空 | 有一个问题在等用户回答，却继续往下跑（把"没回答"当默许） |
+
+**三态**：每条给 `pass` / `fail` / `unknown`，**`unknown` 不是通过**；
+`can_close` 只在五条全 `pass` 时为真；CLI 退出码 0/1/2 与 `noai_gate` 同一套口径。
+
+### 22.2 "什么时候必须上 T3"四条**写进门**
+
+§10.2 的四条连同它们**今天的机械形态**，逐条写在 `closing.MUST_T3_CONDITIONS` 里，
+并且门会对每一条说出"判得了 / 判不了"：
+
+| 条件 | 机械形态 | 状态 |
+|---|---|---|
+| ① 作为定理写进正文 | 正文 `evidence_kind="proof"` 的断言必须引到一条 T3 实验 | **enforced** |
+| ② 有别的结论依赖它 | `statements` 里被 `derived_from` 引到的 `active` 命题 | **counted_only** |
+| ③ 与外部文献冲突 | `dependencies.status ∈ {refuted, disputed}` / `statements = disputed` | **enforced_by_contradictions** |
+| ④ 要进事实库 | `statements` 里 `status="active"` 且 `evidence_kind="proof"` | **counted_only** |
+
+**②④ 为什么今天判不了（这一条要留给人裁）**：`statements` 表**没有**指向实验的字段
+⇒ "这条命题有没有 T3 背书"在数据面上不可判定，只能数出"有几条承重命题、几条已降档"。
+门的做法是**明说 `counted_only` 并把缺口写进 `readings`**，而不是假装它们过了 ——
+那正是"没查成不许折成通过"。补法两条（都要改 `schema.py`，属字段取舍）：给 `statements`
+加一列指向 `experiments`，或让 E 的 T3 实验反过来登记"我背书的是哪条 stmt"。
+
+### 22.3 判据：9 条，五条负控 + 三条反真空
+
+`tests/test_closing_gate.py`：正控（五条全过 ⇒ `can_close`）＋**五条负控**
+（锚漂移 / 挂 disputed 依赖 / 承重结论缺 T3 / 报告缺节与分栏 / 有未答问题），
+每条都断言"**红的正好是它**，其余四条仍然绿"；外加三条反向判据：
+
+1. **已降档的结论不许因缺 T3 而判失败**（§10.2 负控②：省下来的钱要看得见）——
+   只有上一条时，门会把"如实降档"与"过度声称"报成同一件事，那是本末倒置；
+2. **没给项目根 / 没给报告路径 ⇒ `unknown`，而 `unknown` 不算通过**（`can_close=False`、退出码 2）；
+3. **报告"还没写"与"写坏了"分开**：前者 `unknown`（退 2），后者 `fail`。
+
+**两条被数据层当场拦下的负控（写在这里，免得下一个人重走）**：
+① 想造"proof 级实验没有 `verifier_output`"是造不出来的 —— `schema.Experiment.validate`
+直接拒（FC-22 的机械落地）；② `cross_check` 的正文断言必须自带 `disclaimer`。
+所以"承重结论缺 T3"的负控用的是**真实缺陷形态**：一条 `method="numeric"` 的
+`cross_check` 实验被 proof 级断言引用。**数据层比判据更早拦住的东西，本身就是读数。**
+
+### 22.4 新工具要交的税（第二次交，逐处）
+
+`conductor.closing` 是主控工具面上的**第 11 件**（总数 74 → 75）：
+
+- `tests/test_tools_returns_declaration.py`：`TOOL_COUNT` 74→75、工具参数表加一条、
+  `EXECUTED_KEY_SOURCE` 加一条。**中途红过一次，红得对**：我的 `returns=` 里写了
+  `'pass'/'fail'/'unknown'`，那条判据把它们当成了**返回值键**（声明了却没给）⇒
+  改成中文三态描述，并把漏声明的 `summary` 补上；
+- `docs/ROLE-SPECS.md`：§R0 总表加第 75 行、§R0 标题 74→75、§R0.1 标题 73→75（它本来就差一）、
+  §0.2 的"当前读数"73→75、§M.4 标题 10→11；
+- `DEVELOPMENT.md`：`工具总数：74` → 75、逐角色字典 `M: 9` → 11；
+- 两条尺子按 `--write` 重生成并**逐键核过**：工具面 17 处（10 条 CLI 输出 74→75、
+  `declarations/signatures` 各新增 `conductor.closing`、`roles.M` 10→11、`roles_with_m.M` 26→27）、
+  agent 面 2 处（`roles.M.prompt` 的工具清单 + `roles.M.tools`）；
+- `docs/READING-MAP.md`：新增模块行（`closing.py`）+ `cli.py` 行数 1896→1929。
+
+**一处顺手修掉的重复实现**：我给 `closing.py` 写过 `main()`（给 `python -m agentflow.closing` 用），
+而 lint 的 R003 立刻报"公开名 `main` 在 `cli.py` 与 `closing.py` 里各有独立实现"（一条 warning）。
+**判据是对的**：判据本体只该有一个入口层 —— 删掉 `closing.main`，两个入口（工具与 CLI 动词）
+都调 `closing.check_closing`。修完 lint 的 warning 回到基线 9 条（**不是**把 warning 数记进文档了事）。
+
+### 22.5 读数（当次）
+
+- **lint**：`error 0 / warning 9 / info 50`（与 §21 基线逐字一致；`--strict` 56/49）。
+  中途 4 条 R009（37 处 Markdown 强调，4 个文件）用 `temp/_r009_fix.py --apply` 清掉，
+  `temp/_r009_verify.py` 核过 **4/4 通过（代码零改动、行尾零变化）**；
+  中途 `--strict` 的 R007 多报 1 条（`closing.py` 有 4 个公开成员没 docstring）⇒
+  **补 docstring**（`Finding.to_dict` / `blockers` / `failed` 等），strict 回到 56/49。
+- **本阶段判据**：`tests/test_closing_gate.py` **9 passed**（五条负控各自单独红 + 三条反真空）；
+  受影响的判据面（读数块 / 读图 / 角色规格 / 三条尺子 / 声明对账）全绿。
+- **FC-27 门**：**这一阶段没有碰任何禁改区**（`closing.py` 是新文件；
+  `tools/conductor_tools.py`、`cli.py`、`tests/*`、`docs/*` 都不在清单里）⇒ 门对本次改动
+  `clean`（退出码 0），无需新登记基线。
+- **全量 pytest**：第一次 **3274 passed / 5 failed** —— 五条**全是"新东西没进名册"**那一类，
+  逐条补完：① `test_conductor_tools.ORCHESTRATION_TOOLS`（M 的编排面集合）；
+  ② `test_host_wiring` 里"M 的面是 10 件"（10→11，并加一条"closing 在里面"）；
+  ③ `test_release_all._AGENTFLOW_TOP_LEVEL_MODULES`（新顶层模块必须登记 + 一行理由 ——
+  这条判据的原文讲得很清楚："包目录里凭空多出一个模块正是 R6-AN-1 的原始形态"）；
+  ④ 同一条判据的负控（前提被 ③ 破坏）；⑤ README 的"21 个子命令"→22（两处）。
+  **第二次（final）**：**3279 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+  （1242.67 秒 = 20 分 42 秒，退出码 0）。基线是 §21 那次的 3270 ⇒ 本轮净增 9 条，
+  正好是 `tests/test_closing_gate.py` 的条数。
+
+### 22.6 这一阶段**没做**的两件（写下来，不夹带）
+
+1. **`ask_user → answer → --resume` 的"续跑"那一段没有真跑**。门这一半做了：
+   有未答问题 ⇒ `user_pending` 拦门，并把**三段读数**（问过几个 / 答过几个 / 待答几个）
+   写进 `readings`；用户 `agentflow answer` 之后门放行（判据里就是这么验的）。
+   但"回答之后那一段接着跑起来"要一次真的 `--resume` 执行 —— 那是 §16 P4 的端到端
+   （真机只发一次那条纪律），不该在没有成本上限的场合里顺手跑。
+2. **报告九节只做了"形状"判据，没有做"每一栏都能追到台账行"那一半**。§14.4 的纪律
+   要求报告里每一栏可追（不许有"看起来对"的句子）；形状（九节 + 分栏 + 附件三件套）
+   这一轮进门了，"逐栏溯源"要等 P4 的审稿场景跑出真报告再判 —— 拿一份人写的
+   夹具报告去判"它引用得对不对"，只会造出一条测夹具的判据。

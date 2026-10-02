@@ -31,7 +31,7 @@
 # ① 不装：直接进源码目录跑（最快，本机实测可用）
 cd D:\Incubator\agentflow\src
 $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
-python -m agentflow.cli --help          # 该看到 21 个子命令
+python -m agentflow.cli --help          # 该看到 22 个子命令
 
 # ② 装成一个命令（打包元数据齐：`[project.scripts] agentflow = "agentflow.cli:main"`、
 #    包布局 `src/`、运行期依赖只有 filelock）
@@ -414,7 +414,7 @@ agentflow/
 │   │                         项目工作区 / A→B→C→D 流水线 / 端到端一条命令 / 自主轮次与周期汇报
 │   ├── demo.py / userio.py / console.py / tty.py
 │   │                         离线演示 / 用户频道（提问与"没答"三态）/ 输出编码 / 终端呈现原语
-│   ├── cli.py / __main__.py  命令行入口（21 个子命令，`python -m agentflow.cli --help`）
+│   ├── cli.py / __main__.py  命令行入口（22 个子命令，`python -m agentflow.cli --help`）
 │   ├── agent_a..h.py         八个角色（每个都能 `python -m agentflow.agent_x` 自检）
 │   └── tools/                工具层（**13** 个 `*_tools.py`：table / fs / search / ocr / graph /
 │                             trace / research / verify / attack / doc / review / conjecture /
