@@ -2847,3 +2847,168 @@ python -B -m agentflow.cli --root <ws> run-agent M --task "审核 out/paper 这�
    `build_document` —— 这正是 §37.4 第①条缺的那一环。
 2. **第二次真机发送仍要用户点头**（"真机只发一次"的额度在 §37 已用掉）。修完本节再发，
    否则只是把同一个失败再花一次钱。
+
+---
+
+## §39 落地（第十三刀）：M 的文件面五件 + 真机 bug `fail` 未导入 —— 四个读数与一处"留给人的"
+
+§38 是裁定与落点清单，这一节是**执行后的读数**。两件事都做完了：
+（a）用户裁定的五件工具真的能用了（活体读数在 39.2）；
+（b）§37.4 第 ② 条那个真机 bug 修了，并补上了它缺的那条负控。
+
+### 39.1 两件事各落在哪里（以及为什么这一刀没有落进禁改区）
+
+**（a）M 的文件面白名单。** 落点是 `src/agentflow/tools/fs_tools.py` 两处：
+
+1. 新增 `CONDUCTOR_FS_TOOLS = ("fs.list", "fs.read", "fs.search", "fs.stat", "fs.write")`
+   —— 白名单本身就是 M 的文件面边界，注释里逐字写了"为什么不整组注入"
+   （整组会让 M 连 `fs.edit`/`fs.delete`/`fs.move` 一起拿到，而这三件能不可逆地改工作区）；
+2. `_effective_roles(base, injected)` 里**逐工具**追加 `CONDUCTOR_ROLE`
+   （`from ..schema import CONDUCTOR_ROLE`，只在 `base.name in CONDUCTOR_FS_TOOLS` 时）。
+
+§38.2 第 2 条当时留了两个选项（"新增一个 `conductor_roles=` 参数"还是"在 `fs_tools.register`
+内部认 `CONDUCTOR_ROLE`"）。**答案是后者**：`deps["roles"]` 的实参是 `tuple(ROLES)`（不含 M），
+所以 M 的成员资格只能在逐工具这一层加；新增参数要把 `tools/__init__.py`（FC-27 · auth-audit）
+一起改，而收益一样。**这一刀因此没有落在禁改区**：M 的**声明面**（`specs/m.py` 的
+`ACTIONS` / 写集 / 边 / 强调）一个字节没动 —— 动的是"装配期谁拿到哪些工具"。
+门读数见 39.4 第 4 条。
+
+**（b）`conductor.acceptance` 的 `fail` 未导入。** `tools/conductor_tools.py` 的 import 行
+只有 `ok`，而 `fail(...)` 用在"验收表不在盘上"那条分支里 ⇒ 真机那一次拿到的是
+`NameError: name 'fail' is not defined`（§37.4 第 ② 条，M 的报告里逐字写着"验收表工具报错"）。
+修法是把 `fail` 加进那一行 import。**值得记的是它为什么活了这么久**：
+所有既有用例都**先造一张 `ACCEPTANCE.md`**，没人测"表不在盘上"那条分支 ——
+没被守的分支就是没测的分支。补的负控是
+`tests/test_conductor_tools.py::test_acceptance_without_a_table_reports_no_table_instead_of_crashing`：
+它断言 `res.ok is False`、`meta["kind"] == "no_acceptance_table"`、错误串里**没有** `NameError`
+且含有"没查成"（三态纪律：没有表是"没查成"，不是"没问题"，也不是崩溃）。
+
+### 39.2 活体读数：这五件真的能用（不是"判据里写了"）
+
+临时工作区里装配一次注册表，逐条以角色身份真调（脚本 `temp/_p39_m_face_probe.py`，
+可复跑）：
+
+```text
+M 的工具面（16 件）：conductor.acceptance cancel closing ensure_project ledger resume_brief
+                     role_spec state stop summon summon_many + fs.list read search stat write
+[M] fs.write  -> ok=True created=True
+[M] fs.read   -> ok=True 逐字相同=True sha256=c7a60db5356d27d0d7e3b8a1038e92ef41cf80e7bc0b4f79c885b96060937a0
+[M] fs.stat   -> ok=True sha256=同上一行（写入内容与读回的哈希对得上）
+[M] fs.search -> ok=True 命中行=1
+[M] fs.edit   -> ok=False kind='role_denied' "角色 'M' 拿不到工具 'fs.edit'：它不在这个角色的可调用面里"
+[M] fs.delete -> ok=False kind='role_denied'
+[M] fs.move   -> ok=False kind='role_denied'
+[C] fs.write  -> ok=False kind='role_denied'
+[H] fs.write  -> ok=False kind='role_denied'
+[G] fs.write  -> ok=True
+```
+
+两件事由这张读数固定下来：**M 有了眼睛与笔**（写进去的字节读回来逐字相同、哈希复算一致），
+而**不可逆的三件与只读角色的写权限一件都没漏**（`role_denied`，不是"悄悄允许"）。
+
+### 39.3 判据改写（不是删）+ 这一笔"加工具税"
+
+- `tests/test_host_wiring.py::test_wired_tool_registry_keeps_m_surface_orchestration_only`：
+  从"M 的工具名全部以 `conductor.` 开头"改成三件事（白名单五件必须在 / 不可逆三件必须不在 /
+  `table.*`·`prov.*`·`search.*` 必须不在），并在 docstring 里**逐字写明这次收窄的理由**
+  —— 那条红线**是收窄了，不是作废了**：从"M 不碰盘"收窄成"M 有眼睛和笔，
+  但不碰知识表、不做检索、不删东西"。
+- `tests/test_conductor_tools.py`：`M_TOOL_FACE`（11 + 5，用来断言**相等**）；
+  `ORCHESTRATION_TOOLS` 保留成"只守编排面那 11 件"的别名（老判据不用改两处）；
+  反向真空：`fs.write` 不在只读角色（C/H）的面上。
+- **加工具要交的税**（`docs/READING-MAP.md` §2 那张表的四行都在本轮走到了）：
+  `docs/ROLE-SPECS.md` §M.4 标题（11 → **16**）+ §R0 里那五行工具的 roles 列加 M
+  （`fs.list`/`read`/`search`/`stat`/`write`）+ §0.3 的总数 73 → **75**；
+  `DEVELOPMENT.md` 三处（§0.4 第 1 行、§0.4 的 census 块、§1.5 的两行）——
+  顺带发现 §0.4 的 census 块与 §1.5 早已漂到 `73 / M:10`（这一轮一并改成当次读数
+  `75 / M:16`，并把旧值留在括号里当历史）；
+  两条尺子按 `--write` 重生成，**逐键核对**（这一条是纪律，不是形式）：
+  - `tool_surface_snapshot.json`：**7 处**变化 —— 五件工具的 `declarations.*.roles` 各多一个 `M`、
+    `roles.M` 11 → 16、`cli` 那 10 条输出里 `各角色工具数` 的 `M` 11 → 16；
+  - `agent_surface_snapshot.json`：**3 处**变化 —— `roles.M.tools` 11 → 16、
+    `roles.M.write_tools` 5 → 6（多的是 `fs.write`）、`roles.M.prompt` 长度 16191 → 16769
+    （提示词里的工具清册是**现算**的，所以它必然跟着变）；
+  - 两份尺子除这些键以外**一个字节没动**（逐键 diff 脚本 `temp/_golden_diff.py`，可复跑）。
+- `tools/verify_role_specs.py`（发布门的 role-specs 步）：退出码 **0**，
+  §M 那一行读作 `工具条数 [5, 11, 16]`。
+
+### 39.4 四个读数（照本目标的纪律）
+
+1. **lint**：日常档 `error 0 / warning 9 / info 50`；`--strict` `error 0 / warning 56 / info 49`
+   —— 与 `DEVELOPMENT.md` §0.3 钉住的两个读数**逐位相同**。
+   **中间读数值得记**：清之前是 `error 3`，三条全是 R009（注释里的 Markdown 装饰），
+   而且**全部集中在本轮新写的三处注释**（`fs_tools.py` 6 处、`test_conductor_tools.py` 7 处、
+   `test_host_wiring.py` 1 处）。处置是 `temp/_r009_fix.py --apply` + `_r009_verify.py`：
+   后者逐文件核"代码零改动、行尾零变化、改动全在注释/文档串内"（3/3 通过）——
+   也就是说这次清理**没有碰到任何一行代码**。
+2. **本阶段判据（含负控）**：三批，
+   `test_role_specs_complete + test_conductor_tools + test_host_wiring` ⇒ **72 passed**；
+   `test_tool_surface_snapshot + test_agent_surface_snapshot + test_tools_returns_declaration`
+   ⇒ **24 passed**；
+   `test_agent_spec_reconciliation + test_capabilities_two_layer + test_agent_prompts +
+   test_paper_pack + test_review_line_prompts + 两份快照` ⇒ **77 passed**。**0 failed。**
+3. **全量 pytest**：**3333 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1249.76 s）。**这一次没有出现那条已知的负载相关抖动**
+   （`test_release_all.py::test_every_only_example_in_the_docstring_is_a_real_step_key`，
+   见 `DEVELOPMENT.md` §0.3）—— 所以这一格是干净的读数，不是"跳过了它"。
+4. **FC-27 门**：`python -B scripts/noai_gate.py --paths …`（本轮 8 条改动路径）⇒
+   `[clean] required_approvals=0`、退出码 **0**。
+   ⚠️ 同一条门用 `--git --since HEAD` 跑出来的是 `[unknown]`、退出码 **2** ——
+   原因是**退化基线**（`--since HEAD` 与 HEAD 是同一个提交 ⇒ 差集恒空，工具自己拒判），
+   也就是"**没查成**"，不是"没问题"。这一格按三态纪律照抄，不许折成 clean；
+   提交之后要用一个真正的基线（本目标的上一刀 `7399e9b`）再跑一次 `--git`。
+
+### 39.5 这一刀**没有**碰、留给人看的两件（FC-27 与提示词）
+
+1. **M 的提示词那一格没有加"报告落 `out/review/REPORT.md`"。** 要给 M 写这句，
+   动的是 `agent_prompts.ROLE_BRIEFS["M"]` 的 `deliverable`/`policy` ——
+   而它有**逐字镜像** `src/agentflow/specs/m.py`（判据
+   `tests/test_review_line_prompts.py::test_the_role_brief_and_the_spec_are_the_same_object`
+   比的就是这两处），`specs/m.py` 在**禁改区**（auth-audit）⇒ 按 FC-27 停在这里，交给人裁定。
+   **所以 §37.4 第 ③ 条只修了一半**：笔给了（活体读数在 39.2），
+   "交到哪个路径"这句话还欠着，而它是一句提示词、不是一个工具。
+2. **`specs/m.py` 的 `emphasis['手'] = 'denied'` 与新工具面并排出现。** 提示词会把这一档
+   渲染成"结构上不许"里的一条：「手：你不产出领域对象：派活、收敛、汇报；数据由角色写。」
+   逐字读，这句讲的是**领域对象/数据面**（写一份报告不是产出领域对象），与 `fs.write`
+   **不正面冲突**；但"结构上不许：手"这个标题与"你手上现在有 6 件写工具
+   （`conductor.summon`/`summon_many`/`stop`/`cancel`/`ensure_project` + `fs.write`）"
+   并排出现，容易被读成"M 没有手"。要不要把这一档从 `denied` 改成 `minor`
+   （或把 `FACULTY_LOCAL[("M","手")]` 那句补一句"报告除外"），是**一句话的设计裁定**，
+   落在禁改区里 ⇒ 同样留给人。
+
+**§37.4 五条缺口的现状**：② 修了（本节）；③ 半修（见上）；（① 论文进台账的归属、④ M 的侦察
+纪律与"已存在工作区里再 `ensure_project`"、⑤ 账本记"算不出花销"那一档）**一条都没动** ——
+① 与 ④ 在非禁改区，⑤ 要动 `schema.py`/`tokenmeter.py`（禁改区，留给人）。
+
+**第二次真机发送仍然要用户先点头**（§37 的那一次额度已经用掉）。这一刀修掉的正是
+上一次失败里"看不见盘上有没有论文"与"没有笔"这两条；剩下的三条里，① 是"能不能真的审起来"
+的前置，值得在第二次发送前排掉。
+
+---
+
+### 39.6 提交后的复跑：用真正的基线再跑一次 FC-27 门
+
+§39.4 第 4 条留了一句"提交之后要用一个真正的基线再跑一次"。这是那一格的读数：
+
+```text
+python -B scripts/noai_gate.py --git --since 7399e9b
+[clean] required_approvals=0
+clean：51 条改动路径均未命中禁改区（清单 38 条）⇒ 无需额外人工批准。   （退出码 0）
+```
+
+`7399e9b` 是**本目标上一刀（§38）的提交**，也就是这一刀动手之前的状态。51 条改动路径里
+包含**未跟踪**的论文副本工作区 `agentflow/projects/p5-review-20261002-203856/`
+—— 它按 `--git` 的口径就该被扫（未跟踪的新文件是这道门刻意要看的第三类），
+而它不在禁改区清单里，所以照实算进来也不会命中。
+
+同一刻另两条门也复跑过：`--check-ledger` ⇒ `清单 35 条唯一路径全部在台账里有条目`
+（其中 `src/agentflow/release_check.py` 是**刻意预登记**：先登记路径，等有人真建它时
+自动落进门里）；`--check-consistency` ⇒ `一致：.noai-paths 与 AGENTS.md 的清单逐条相同`。
+
+**这三条合起来给的是同一个结论**：这一刀的改动面**没有落在禁改区** ——
+与 39.5 那两条"要动就得看人"是同一件事的两面：真正落在区里的是**没做**的那两件
+（`ROLE_BRIEFS["M"]` / `specs/m.py` 里的那一句与 `emphasis['手']`）。
+
+（本节的提交哈希刻意不写进正文：这一刀的改动是**一次提交**，而"把哈希写进它自己"
+会随任何一次 amend 立刻变成假读数 —— 哈希看 `git log --oneline` 里 `§39` 那一条，
+它前面紧挨着的 `7399e9b` 就是 §38。）

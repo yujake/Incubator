@@ -46,7 +46,7 @@ from .. import policy as P
 from .. import schema as S
 from ..cancellation import CANCEL_CODES
 from ..conductor import Conductor, NotWiredError, SummonResult
-from . import ToolError, ToolRegistry, ToolResult, ok, tool
+from . import ToolError, ToolRegistry, ToolResult, fail, ok, tool
 
 #: 一个工作区一个主控（键 = store 根路径）。主控是会话状态：
 #: 预算、台账、取消信号必须跨多次工具调用连续，否则每次派活都是一个新主控。

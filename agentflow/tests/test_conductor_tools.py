@@ -23,12 +23,21 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import conductor_tools as CT
 
-ORCHESTRATION_TOOLS = {
+#: M 的完整工具面（`draft/37` §38 的用户裁定）：
+#: 编排面 11 件 + 文件面白名单 5 件（只读四件 + `fs.write`）。
+#:
+#: 这份集合被判据用来断言"相等"（而不是"包含"）是刻意的：M 的面是权限面，
+#: 多一件少一件都要有人看见 —— 而 `fs.edit` / `fs.delete` / `fs.move` 故意不在里面
+#: （前两件不可逆，第三件是 G 的活）。
+M_TOOL_FACE = {
     "conductor.summon", "conductor.summon_many", "conductor.ledger", "conductor.stop",
     "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
     "conductor.state", "conductor.role_spec", "conductor.acceptance",
     "conductor.closing",
+    "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write",
 }
+#: 旧的别名（只守编排面那 11 件）；留给"编排面本身"的判据用。
+ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")}
 
 
 class _FakeE:
@@ -51,12 +60,39 @@ def _wired(tmp_path: Path, *, role_registry=None):
     return store, c, reg
 
 
-def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
-    """M 拿到的正好是那 9 件编排面工具；只读角色一件也拿不到。"""
+def test_acceptance_without_a_table_reports_no_table_instead_of_crashing(tmp_path: Path):
+    """负控（2026-10-02 的真机 bug）：没有验收表时必须如实说"没查成"，而不是抛 NameError。
+
+    这个 bug 的形态值得单记：`conductor_acceptance` 在"表不在盘上"那条分支里调了 `fail(...)`，
+    而 `fail` 没有 import（模块只 import 了 `ok`）。它活了很久，因为
+    `tests/test_conductor_tools.py` 里那条验收表用例每次都先造一张表 ——
+    没人测的分支就是没被守的分支。真机那一次（`draft/37` §37）没有 ACCEPTANCE.md，
+    于是 M 看到的是 `NameError: name 'fail' is not defined`，白烧一步。
+    """
     _store, _c, reg = _wired(tmp_path)
-    assert {s.name for s in reg.for_role("M")} == ORCHESTRATION_TOOLS
+    res = reg.call("conductor.acceptance", role="M")
+    assert res.ok is False, res
+    assert res.meta.get("kind") == "no_acceptance_table", res.meta
+    assert "NameError" not in str(res.error or ""), res.error
+    assert "没查成" in str(res.error or ""), res.error
+
+
+def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
+    """M 拿到的正好是 `M_TOOL_FACE`（编排面 11 + 文件面白名单 5）；只读角色拿不到编排面工具。
+
+    这条判据 2026-10-02 按用户裁定（`draft/37` §38）扩过一次：从"只有 `conductor.*`"
+    变成"`conductor.*` + 文件面白名单五件"。扩的不是权限的边界，而是边界的口径——
+    `fs.edit` / `fs.delete` / `fs.move` 仍然一件不给（`M_TOOL_FACE` 里没有它们，
+    而这里的断言是相等，所以多一件就会红）。
+    """
+    _store, _c, reg = _wired(tmp_path)
+    assert {s.name for s in reg.for_role("M")} == M_TOOL_FACE
+    # 只读角色拿不到编排面工具（原来守的就是这一条）
     for read_only in ("C", "H"):
         assert not ({s.name for s in reg.for_role(read_only)} & ORCHESTRATION_TOOLS)
+    # 反真空：只读角色也拿不到 `fs.write`（它们是只读角色，结构性剥离）
+    for read_only in ("C", "H"):
+        assert "fs.write" not in {s.name for s in reg.for_role(read_only)}, read_only
 
 
 def test_summon_runs_the_role_and_lands_a_ledger_row(tmp_path: Path):

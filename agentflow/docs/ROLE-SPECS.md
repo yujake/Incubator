@@ -15,7 +15,8 @@
 > 例如 `network: 2` 在 B3 之后是 **0**），**少改表格 = 少一处漂移面**；第二根轴的权威展示由
 > `cli tools` 承担（它能直接从注册表打，不必手工维护）。
 > - 工具面：`build_registry(store=Store(tempfile.mkdtemp()), workspace_root=<同目录>, roles=schema.ROLES)`
->   一次装配后的**实测**结果（73 个工具、12 个模块 loaded、0 skipped）。
+>   一次装配后的**实测**结果（**75** 个工具、12 个模块 loaded、0 skipped；观测 2026-10-02，
+>   与 §R0 标题及 `cli tools` 当次输出一致。本行原先写 73，已过期）。
 >   命令与输出见 `DEVELOPMENT.md` §9 附录与本文 §0.3。
 > - 自注册工具：读 `agent_c.register_tools` / `agent_d._fallback_trace_tools` /
 >   `tools/review_tools.register(include_writers=True)` 的源码逐个核出。
@@ -247,12 +248,12 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 16 | `doc.paper_state` | 只读核对论文包：**进程内**算渲染锚三维（源表 / 渲染出的源文件 / 编译回执）并给三态结论 | `read` | 否 | G H | **project** | `{verdict,dimensions,drift,problems,why,anchor_path,anchor_present,receipt_path,receipt_present,rendered_at,compiled_at,checked}` | `tests/test_renderanchor.py` | **本轮新增**（`draft/28` §191）：判据是纯函数，不起子进程 ⇒ 只读角色 H 也能自己核这份包 |
 | 17 | `fs.delete` | 删除文件；删目录必须显式 `recursive=true`（且不允许删工作区根） | `write_local` | **是** | A B D E F G | **path**；recursive | `data`=是否真的删掉；`meta.found` 区分本来就没有 | `test_tools_table_fs.py` | — |
 | 18 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
-| 19 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
+| 19 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H **M**（§38） | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
 | 20 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖） | `write_local` | **是** | A B D E F G | **src**,**dst** | `{src,dst}` | `test_tools_table_fs.py` | — |
-| 21 | `fs.read` | 读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注） | `read` | 否 | A B C D E F G H | **path**；max_bytes | `data`=文本；`meta` 给 `encoding`/`bytes_read`/`total_bytes`/`truncated`/`had_errors` | `test_tools_table_fs.py` | — |
-| 22 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」 | `read` | 否 | A B C D E F G H | **pattern**；include, limit, path | `{matches:[{path,line,text}],lines,total,truncated,scanned,skipped}` | `test_tools_table_fs.py` | — |
-| 23 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256 | `read` | 否 | A B C D E F G H | **path** | `{path,exists,is_dir,is_file,is_symlink,size,mtime,sha256,link_target}` | `test_tools_table_fs.py` | — |
-| 24 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件） | `write_local` | **是** | A B D E F G | **path**,**content**；overwrite | `{path,bytes,sha256,created}` | `test_tools_table_fs.py` | — |
+| 21 | `fs.read` | 读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注） | `read` | 否 | A B C D E F G H **M**（§38） | **path**；max_bytes | `data`=文本；`meta` 给 `encoding`/`bytes_read`/`total_bytes`/`truncated`/`had_errors` | `test_tools_table_fs.py` | — |
+| 22 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」 | `read` | 否 | A B C D E F G H **M**（§38） | **pattern**；include, limit, path | `{matches:[{path,line,text}],lines,total,truncated,scanned,skipped}` | `test_tools_table_fs.py` | — |
+| 23 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256 | `read` | 否 | A B C D E F G H **M**（§38） | **path** | `{path,exists,is_dir,is_file,is_symlink,size,mtime,sha256,link_target}` | `test_tools_table_fs.py` | — |
+| 24 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件） | `write_local` | **是** | A B D E F G **M**（§38：主控自己交报告） | **path**,**content**；overwrite | `{path,bytes,sha256,created}` | `test_tools_table_fs.py` | — |
 | 25 | `graph.build` | 从 store 的三张表构建概念图索引，返回图规模摘要 | `read` | 否 | C D | （无） | `{concept_count,relation_count,pair_count,isolated_concepts,degree_top,…}` | `test_tools_graph_trace.py` | INVENTORY 总表：三态位 **无** |
 | 26 | `graph.neighbors` | 返回某概念的邻居概念代号（升序）及其连接的度数信息；**邻居数有上限**，截断时如实报出 | `read` | 否 | C D | **concept_id**；max_neighbors | `{'concept_id','name','degree','total_neighbors','returned_neighbors','truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}` | `test_tools_graph_trace.py` / `test_tools_attack_graph_fixes.py` | ✅ **已修**（本轮）：原先 `neighbors` 是**不可截断的裸列表**，上下文预算的剪枝在它上面不生效（实测 300 邻居 = 27046 字符、`prune_tool_result` 后一条没少）。现在有界层在**工具层**（`max_neighbors` 默认 200），`RelationGraph.neighbors` **保持裸 list**（4 个调用点按 list 语义用它） |
 | 27 | `graph.relations_between` | 返回同时包含两个概念的全部关系（按 `quote_verified`/`status`/信息量确定性排序） | `read` | 否 | C D | **a**,**b** | `{a,b,count,relations:[{relation_id,description,status,quote_verified,lit_id,page_range}]}` | `test_tools_graph_trace.py` | — |
@@ -1978,7 +1979,13 @@ SELF-CHECK DONE（agent_h）
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（11 个编排面工具，实测）= 召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件批量派活）
+### M.4 "工具面"（**16 个**，实测）= 编排面 11 个 + 文件面白名单 5 个（`draft/37` §38 的用户裁定）
+
+> **编排面 11 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件批量派活）。
+> **文件面白名单 5 件**：`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` ——
+> 只读四件加一支笔，**没有** `fs.edit` / `fs.delete` / `fs.move`（前两件不可逆，
+> 第三件是 G 的活）。理由是真机读数：那一趟 23 步里 15 步在猜「盘上有没有论文」，
+> 最后交不出报告 —— M 缺的不是判断力，是**眼睛与笔**。
 
 #### M.4.1 M 能召唤的 8 个角色 × 它们的动作（51 个可召唤动作）
 

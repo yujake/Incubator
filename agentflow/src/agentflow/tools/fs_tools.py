@@ -43,6 +43,17 @@ from .base import ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
 #: 与 `table_tools` 一致：文件 CRUD 对 A/B/C/D 全开。
 TOOL_ROLES: tuple[str, ...] = ("A", "B", "C", "D")
 
+#: 主控（M）的文件面（`draft/37` §38，用户 2026-10-02 裁定）：
+#: 只读四件 + 写一份报告，逐工具给 —— 不是把 M 整组塞进 `TOOL_ROLES`。
+#:
+#: 为什么不整组注入：那样 M 会连 `fs.edit` / `fs.delete` / `fs.move` 一起拿到，
+#: 而这三件都能不可逆地改工作区；用户要的是"M 自己能看、自己交报告"，
+#: 不是"M 能删东西"。所以这份白名单就是 M 的文件面边界（判据按它守）。
+#:
+#: 为什么必须有（真机读数，`draft/37` §37）：那一趟 23 步里 15 步在猜"盘上到底有没有论文"，
+#: 最后交不出报告 —— M 缺的不是判断力，是眼睛与笔。
+CONDUCTOR_FS_TOOLS: tuple[str, ...] = ("fs.list", "fs.read", "fs.search", "fs.stat", "fs.write")
+
 #: 单次读的默认上限（字节）。默认值刻意偏小：多数调用只是想"看一眼开头"，
 #: 真需要全文的场景（如引文复核）应该走 `extract.py` 的抽取链，而不是把原文灌进上下文。
 READ_DEFAULT_BYTES = 200_000
@@ -1025,8 +1036,16 @@ def _effective_roles(base: ToolSpec, injected: tuple[str, ...]) -> tuple[str, ..
     from . import READ_ONLY_ROLES, SIDE_EFFECTS_WRITE
 
     if base.side_effect in SIDE_EFFECTS_WRITE:
-        return tuple(r for r in injected if r not in READ_ONLY_ROLES)
-    return injected
+        out = tuple(r for r in injected if r not in READ_ONLY_ROLES)
+    else:
+        out = tuple(injected)
+    # 主控的成员资格逐工具给（见 `CONDUCTOR_FS_TOOLS` 的说明）：
+    # 白名单里的五件加上 M，其余（`fs.edit` / `fs.delete` / `fs.move`）一律不给。
+    from ..schema import CONDUCTOR_ROLE
+
+    if base.name in CONDUCTOR_FS_TOOLS and CONDUCTOR_ROLE not in out:
+        out = out + (CONDUCTOR_ROLE,)
+    return out
 
 def register(
     registry: ToolRegistry,

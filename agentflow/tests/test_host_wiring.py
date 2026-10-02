@@ -311,17 +311,39 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 
 
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
-    """接了线的工具层：M 的面仍然是编排面工具（`draft/37` §16 P3 起是 11 件），一件领域工具都没有。"""
+    """接了线的工具层：M 的面 = 编排面 11 件 + 文件面白名单 5 件，一件领域工具都没有。
+
+    ## 这条判据 2026-10-02 被收窄过（原文是"M 的工具名全部以 `conductor.` 开头"）
+
+    用户裁定（`draft/37` §38）：给 M 只读四件 + `fs.write`。理由是实测出来的 ——
+    §37 那一趟真机 23 步里 15 步在猜"盘上到底有没有论文"，最后交不出报告：
+    M 缺的不是判断力，是眼睛与笔（它当时一件 `fs.*` 都没有）。
+
+    红线没有作废，只是换了口径：从"M 不碰盘"收窄成
+    「M 有眼睛和笔，但不碰知识表、不做检索、不删东西」。所以这条判据现在守三件事：
+
+    1. 白名单五件必须在（`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write`）；
+    2. `fs.edit` / `fs.delete` / `fs.move` 一件都不许有（前两件不可逆，
+       第三件属于"改论文"——那是 G 的活，且与"M 不产出领域对象"正面冲突）；
+    3. `table.*` / `prov.*` / `search.*` 一件都不许有（知识表与检索仍然是 M 的禁区）。
+    """
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    assert len(m_tools) == 11, m_tools
+    assert len(m_tools) == 16, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
     assert "conductor.closing" in m_tools, m_tools
-    assert all(n.startswith("conductor.") for n in m_tools), m_tools
-    # 领域工具不许出现在 M 的面上（P10 的红线在接线之后仍然成立）
-    assert not [n for n in m_tools if n.startswith(("table.", "fs.", "prov."))], m_tools
+    # ① 文件面白名单五件（`draft/37` §38 的裁定）
+    for name in ("fs.list", "fs.read", "fs.search", "fs.stat", "fs.write"):
+        assert name in m_tools, (name, m_tools)
+    # ② 不可逆的三件一件都不许有
+    for name in ("fs.edit", "fs.delete", "fs.move"):
+        assert name not in m_tools, (name, m_tools)
+    # ③ 知识表与检索仍是禁区
+    assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools
+    # 编排面那 11 件照旧（这条判据原本守的就是它）
+    assert len([n for n in m_tools if n.startswith("conductor.")]) == 11, m_tools
 
 
 # ---------------------------------------------------------------- ⑥ A 的文献检索真的通
