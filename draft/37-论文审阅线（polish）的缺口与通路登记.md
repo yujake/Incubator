@@ -3012,3 +3012,57 @@ clean：51 条改动路径均未命中禁改区（清单 38 条）⇒ 无需额�
 （本节的提交哈希刻意不写进正文：这一刀的改动是**一次提交**，而"把哈希写进它自己"
 会随任何一次 amend 立刻变成假读数 —— 哈希看 `git log --oneline` 里 `§39` 那一条，
 它前面紧挨着的 `7399e9b` 就是 §38。）
+
+---
+
+## §40 同类 bug 的普查：M 的 16 件**每件真调一次**（0 崩溃）+ 那个 `NameError` 为什么没被现成判据挡住
+
+§39.1 说那个 `NameError` 活了很久是因为"所有既有用例都先造一张验收表"。这一节补两件事：
+**把出处钉住**，以及**换一个问法再普查一遍**（别处还有没有同族的崩溃型 bug）。
+
+### 40.1 出处：它被挡在哪一行（不是"我印象里"）
+
+`tests/test_tools_returns_declaration.py` 的夹具逐字写着（第 655–656 行）：
+
+```python
+# `conductor.acceptance` 要一张真的验收表才走成功支：给夹具造一张最小的
+```
+
+然后第 665–671 行真的写了 `out/paper/ACCEPTANCE.md`（表头 + 一行判据）。
+**那张夹具表就是这条分支的盲区**：全仓唯一"每个工具都真调一次"的判据，
+为了让 `acceptance` 走**成功**支而先把表铺好 ⇒ "表不在盘上"这一支从来没有被执行过，
+于是 `fail` 没 import 这件事在 55 个工具的逐条判据下**全绿地活着**，直到真机那一次。
+这正是"**没被守的分支就是没测的分支**"的又一个实例（与 §39.1 同因，这里给出可核的行号）。
+
+### 40.2 普查：换一个问法（会不会崩），16 件各真调一次
+
+脚本 `temp/_p40_m_tool_smoke.py`（可复跑）：临时工作区里装配一次，按每件工具
+`params.required` 逐个补样例参数（`fs.write` 单独给一个不冲突的路径），
+**逐件真调一次**，记三态：`ok` / `fail`（按设计的拒绝）/ **崩溃（抛异常）**。
+样例缺了必填参数就记 `unknown`，不记 `pass`。
+
+```text
+  fail     conductor.acceptance     kind='no_acceptance_table'（夹具没铺表 —— 这次就是要走这条支）
+  ok       conductor.cancel / closing / ensure_project / ledger / resume_brief / role_spec
+  ok       conductor.state / stop / summon / summon_many
+  ok       fs.list / fs.read / fs.search / fs.stat / fs.write
+
+崩溃（抛异常）：0 件 []
+没查成（缺样例）：0 件 []
+```
+
+**读数**：16 件**全部被真正调用过**，**0 件抛异常**，**0 件因缺样例而没查成**。
+其中 `conductor.acceptance` 这一次的 `fail` 是**对的**（工作区里确实没有验收表，
+它现在如实报 `no_acceptance_table` 并写"没查成"）—— 与 §39.1 修的那个 `NameError`
+正好是同一行代码的前后对照。
+
+### 40.3 这个普查**不能**说明什么（免得它被读大）
+
+- 它只问"**调起来崩不崩**"，不问"结果对不对"：16 件里 11 件 `conductor.*` 的逐条语义
+  由 `tests/test_conductor_tools.py` 守着，5 件 `fs.*` 由 `tests/test_tools_table_fs.py`
+  与 `tests/test_tools_returns_declaration.py` 守着；这一普查**不替代**它们。
+- 它**不是**一条常驻判据（跑一次就够、没进 `tests/`）：`conductor.summon` / `summon_many`
+  这几件在探针里走的是"没有接线后端"的路径，把它固化成判据要先把后端的桩做对，
+  而那是另一件事（`§13` 的 board/租约那一条线）。
+- 结论的强度只有一条：**在 M 的工具面这 16 件上，"调用即崩"这一类 bug 现在是 0 件**
+  （而 §37 那一次是 1 件 —— 同一类）。它**不**覆盖 M 之外的角色面。
