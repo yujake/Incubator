@@ -155,3 +155,56 @@ def test_a_mismatch_is_not_reported_as_a_confirmed_theorem(tmp_path):
     assert "mismatch" in heard, heard
     # 措辞上不许出现"已确认"这种把 mismatch 说成找到的说法
     assert "已确认" not in heard, heard
+
+
+def test_a_hands_the_confirmed_text_to_b(tmp_path):
+    """第 3 跳（R13 的最后一跳）：确认之后把原文与页码交给 B 消化。
+
+    这一跳是整链的接缝：A 那边只认"文献与页码"，B 那边要的是"能逐字摘录的正文"。
+    消息里缺 `lit_id` 或页码，B 就只能去猜该抽哪一篇的哪几页 ——
+    而 §3 说得很清楚：B 的消化必须交出可回验的文本。
+    """
+    replies = [
+        json.dumps({"tool": "table.update",
+                    "args": {"table": "literature", "id": "0000", "patch": {"matched": "exact"}},
+                    "why": "确认到了"}, ensure_ascii=False),
+        json.dumps({"message": {"to": "B", "subject": "请消化这条定理",
+                                "body": "matched=exact；出处 lit:0000，页码 pp. 7-8；"
+                                        "请把 Theorem 1.5 的完整假设与证明逐字摘进 statements，"
+                                        "quote_verified 三态要写清。"}},
+                   ensure_ascii=False),
+        json.dumps({"final": "已交给 B", "evidence": ["lit:0000"]}, ensure_ascii=False),
+    ]
+    st, cond, reg, gw = _world(tmp_path, replies)
+    run = _run_a(st, cond, reg, gw)
+    assert run.stop_reason == "final", run.to_dict()
+    heard, ids, _sent = AL.inbox_digest(st.root, "B", sid="t")
+    assert ids, heard
+    assert "lit:0000" in heard and "pp. 7-8" in heard, heard
+    assert "statement_full" in heard or "逐字" in heard, heard
+
+
+def test_a_mismatch_is_not_handed_to_b(tmp_path):
+    """反真空（P2 口径逐字要求的那一条）：`none`/`mismatch` 时不许交给 B。
+
+    做法与上一条配对：同一个剧本骨架，只把结论换成 `mismatch` 且不发给 B 的消息。
+    判据：B 的收件箱空，而 D 的收件箱里有那条如实回报。
+    这两半必须一起断言 —— 只看"B 的收件箱空"无法区分"没交"与"什么都没做"。
+    """
+    replies = [
+        json.dumps({"tool": "table.update",
+                    "args": {"table": "literature", "id": "0000",
+                             "patch": {"matched": "mismatch"}},
+                    "why": "下回来的是另一篇"}, ensure_ascii=False),
+        json.dumps({"message": {"to": "D", "subject": "命中校验失败",
+                                "body": "matched=mismatch：**不许交给 B**，先重取。"}},
+                   ensure_ascii=False),
+        json.dumps({"final": "未交给 B", "evidence": []}, ensure_ascii=False),
+    ]
+    st, cond, reg, gw = _world(tmp_path, replies)
+    _run_a(st, cond, reg, gw)
+    b_heard, b_ids, _bsent = AL.inbox_digest(st.root, "B", sid="t")
+    d_heard, d_ids, _dsent = AL.inbox_digest(st.root, "D", sid="t")
+    assert b_ids == [], f"mismatch 不许交给 B：{b_heard}"
+    assert d_ids, "但必须如实回报给 D —— 否则'没交'与'什么都没做'分不开"
+    assert "mismatch" in d_heard, d_heard
