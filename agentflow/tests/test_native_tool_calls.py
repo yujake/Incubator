@@ -229,3 +229,39 @@ def test_a_seam_without_a_face_still_works(tmp_path: Path):
     seam, _gw = _seam(tmp_path, [{"text": json.dumps({"note": {"text": "一句"}})}])
     data, call = seam.ask_step("t")
     assert data == {"note": {"text": "一句"}} and call.protocol == "text"
+
+
+# ============================================================ 四、广告名 → 真名（§52）
+
+def test_the_advertised_name_is_mapped_back_at_execution(tmp_path: Path):
+    """正控（`draft/37` §52 的真机读数）：模型把广告名写进 `tool` 字段时，执行层要认它。
+
+    第四趟真机实测：模型看到了函数面里的 `fs_list`（带点的真名 `fs.list` 不能当函数名），
+    却仍按文本协议回了一行 JSON，写的就是 `fs_list` ⇒ 执行层报 `unknown_tool`，29 步全废。
+    这一条钉住"逐次映回真名 + 认账（`aliased_from`）"，而不是让那个名字继续撞墙。
+    """
+    from agentflow.agent_loop import AgentLoop
+
+    reg = _wired_registry(tmp_path)
+    loop = AgentLoop(role="A", session_root=tmp_path, registry=reg,
+                     seam=LL.LlmSeam(role="A", session_root=tmp_path,
+                                     gateway=_StubGateway([])))
+    loop._face = LL.build_tool_face("A", reg)
+    res = loop._do_tool({"name": "fs_list", "args": {"path": "."}, "why": "看盘"})
+    assert res["ok"] is True, res
+    assert res["tool"] == "fs.list", res
+    assert res["aliased_from"] == "fs_list", "别名用了就要认账（读数上看得见）"
+
+
+def test_an_unknown_name_is_still_refused_even_with_a_face(tmp_path: Path):
+    """负控：映不回来的名字照旧拒 —— 别名只对"我们广告过的那些"生效。"""
+    from agentflow.agent_loop import AgentLoop
+
+    reg = _wired_registry(tmp_path)
+    loop = AgentLoop(role="A", session_root=tmp_path, registry=reg,
+                     seam=LL.LlmSeam(role="A", session_root=tmp_path,
+                                     gateway=_StubGateway([])))
+    loop._face = LL.build_tool_face("A", reg)
+    res = loop._do_tool({"name": "fs_rm_rf", "args": {}, "why": "编的"})
+    assert res["ok"] is False and "fs_rm_rf" in str(res["error"]), res
+    assert "aliased_from" not in res

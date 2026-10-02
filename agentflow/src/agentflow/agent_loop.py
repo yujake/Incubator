@@ -534,8 +534,19 @@ class AgentLoop:
         # 系统提示词有 6k+ token，循环协议埋在中间；真机跑 M 做"核验证明"那种长任务时，
         # 模型连着三次回了 1400–2400 字的散文（`judge_bad_json` ⇒ `bad_json_limit`），
         # 而中间那句"请只输出一个 JSON 对象"它没听。把骨架放到它最后读到的那一行。
+        #
+        # 原生工具面在场时多一句（`draft/37` §52 的真机读数）：那一趟模型看到了函数面
+        # （`tools` 里有 `fs_list`），却仍然按文本协议回了一行 JSON，并把广告名
+        # （`fs_list`）写进了 `tool` 字段 —— 于是执行层报 `unknown_tool`。
+        # 所以这一句要说清两条写法各自的名字从哪来（真名 vs 广告名）。
+        face_note = ""
+        if getattr(self, "_face", None) is not None:
+            face_note = ("（本岗同时开了原生工具调用：你可以直接走函数调用接口；"
+                         "若仍回一行 JSON，`tool` 字段要写**真名**（工具清册里那个，"
+                         "例如 `fs.read`），不是函数名里的下划线写法。两种都可以。）\n")
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（最多 {self.max_steps} 步）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
+                f"{face_note}"
                 f"{JSON_TAIL}")
 
     def _availability(self) -> dict[str, str] | None:
@@ -625,6 +636,7 @@ class AgentLoop:
             "advertised": len(face.functions) if face is not None else 0,
             "sha256": face.sha256 if face is not None else "",
         }, sid=self.sid)
+        self._face = face          # `_prompt` 要用它决定"名字从哪来"那一句
 
         for step in range(self.max_steps):
             if self.seam.usd_budget is not None and self.seam.spend.usd >= self.seam.usd_budget:
@@ -816,14 +828,40 @@ class AgentLoop:
         return out
 
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        name = str(payload.get("name"))
+        """执行一步工具调用。
+
+        ## 为什么这里要认"广告名"（`draft/37` §52 的真机读数）
+
+        第四趟真机：本岗同时开着原生工具面（`tools` 里有 `fs_list` 这样的函数名 ——
+        带点的真名 `fs.list` 不符合 function name 的字符集，所以广告时被归一化成下划线），
+        而模型仍然按文本协议回了一行 JSON，并把广告名 `fs_list` 写进了 `tool` 字段
+        ⇒ 执行层报 `unknown_tool`，29 步全白花。
+
+        这不是模型的错：它看到的两个名字（工具清册里的 `fs.list` 与函数面里的 `fs_list`）
+        都是我们给的。所以这一层逐次把广告名映回真名，并在结果里留一句
+        `aliased_from` —— 认账，但不静默：谁在用别名、用了几次，读数上看得见。
+        """
+        raw = str(payload.get("name"))
+        name, aliased_from = raw, ""
+        face = getattr(self, "_face", None)
+        known = set(self.registry.names()) if hasattr(self.registry, "names") else set()
+        if raw not in known and face is not None:
+            target = face.names.get(raw, "")
+            if target.startswith("tool:"):
+                real = target.split(":", 1)[1]
+                if real in known:
+                    name, aliased_from = real, raw
         args = dict(payload.get("args") or {})
         try:
             res = self.registry.call(name, role=self.role, **args)
         except Exception as exc:  # 工具层抛错也要变成"模型看得见的结果"
-            return {"tool": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
-        return {"tool": name, "ok": bool(res.ok), "data": res.data,
-                "error": res.error or "", "meta": dict(res.meta or {})}
+            return {"tool": name, "ok": False, "error": f"{type(exc).__name__}: {exc}",
+                    **({"aliased_from": aliased_from} if aliased_from else {})}
+        out = {"tool": name, "ok": bool(res.ok), "data": res.data,
+               "error": res.error or "", "meta": dict(res.meta or {})}
+        if aliased_from:
+            out["aliased_from"] = aliased_from
+        return out
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))

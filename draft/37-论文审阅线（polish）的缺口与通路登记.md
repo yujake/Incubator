@@ -4139,3 +4139,90 @@ python -B -m agentflow.cli --root <ws> run-agent M --task <TASK-47.txt> `
 并在第 7 步保留了 §45 的教训（`project_dir` 给项目根）。开跑前还要做一件事：
 **把上一趟留下的 `out/review/REPORT.md` 归档改名** —— §48.4 已经证明，复用工作区时
 "读文件的判据"（`attachment_is_honest` / `report_shape`）会拿上一趟的产物当这一趟的。
+
+---
+
+## §52 第四趟真机：原生工具面**开了**，而模型仍走文本 —— 于是撞上"广告名 vs 真名"
+
+用户 2026-10-03 裁定"先补派活纪律再发"，所以这一趟带着 §51 的三条纪律
+（`temp/TASK-51.txt`）与 §50 的原生工具面一起发。**结论先说**：
+§50 那一刀**在传输层生效了**（`agent_tool_face` 22 件、每次调用都记 `protocol="tool_calls"`），
+但**模型没有用原生调用**（30 次调用 `tool_calls=0`），它按老协议回了一行 JSON，
+并把**广告名** `fs_list` 写进了 `tool` 字段 ⇒ 执行层 `unknown_tool`，29 步全废。
+这一节记读数，并落两个修复（都已提交）。
+
+### 52.1 那一趟的读数
+
+```powershell
+python -B -m agentflow.cli --root <ws> run-agent M --task <TASK-51.txt> `
+       --budget-usd 2.0 --wall-clock-sec 3600 --sid real4
+```
+
+- **30 步 / 30 次调用**；`tokens_in 536,184 / tokens_out 2,626`；**`usd = 0.147661`**
+  （上限 2.0）；`unknown_usd_calls = 0`；唤起 `[]`（**一跳都没派出去**）；
+  `stop_reason = final`（它自己收工了，没有崩）。
+- 台账变化：`literature 2 → 2`、`statements 5 → 5`、`documents 0`、`review_findings 0`
+  —— 也就是说这一趟**一行都没写**（它 29 步全花在同一个失败上）。
+- 它自己的结论（逐字）："连续 29 步全部返回 `{"ok": false, "error": "没有名为 'fs_list' 的工具"}`……
+  本岗的工具面里 `fs.list` 这个名字不存在（我的工具面登记的是 `fs_list` 这一族，
+  但框架侧未注册该名字）" —— **它把病因的方向说反了**（框架侧注册的是真名 `fs.list`，
+  是它自己用了广告名），但它如实报了"未核到"，这一点是对的。
+
+### 52.2 三个读数说明发生了什么（`sessions/real4.jsonl`）
+
+```text
+kind 分布：agent_run_start 1 / agent_tool_face 1 / llm_call 30 / agent_step 29 / agent_run_end 1
+agent_tool_face：{"advertised": 22, "sha256": "9058f2a744…", "role": "M"}
+llm_call step0 ：{"protocol": "tool_calls", "tools_advertised": 22, "tool_calls": 0, "ok": true}
+step 0 payload ：{"name": "fs_list", "args": {"path": ".", ...}, "why": "先看清盘上有什么…"}
+step 0 result  ：{"ok": false, "error": "没有名为 'fs_list' 的工具", "meta": {"kind": "unknown_tool"}}
+```
+
+三件事各自都清楚：
+
+1. **工具面真的发出去了**（22 件 = 11 件编排面 + 5 件 `fs.*` + 6 个循环形状），
+   摘要与 `agent_tool_face` 事件里的 sha 一致 —— §50 要求 ④（审计读数）成立；
+2. **模型没有走原生调用**：30 次调用的 `tool_calls` 都是 0。它按提示词里那套文本协议
+   回了一行 JSON —— 这完全合理，因为循环协议**逐字要求**它这么做；
+3. **它把广告名当成了真名**：函数面里带点的真名不能直接用（`fs.list` 不是合法函数名），
+   所以广告成了 `fs_list`；而文本协议的 `tool` 字段要的是**真名**。两个名字都是我们给的，
+   它选错的那个，于是 29 步撞在同一堵墙上。
+
+**顺带做的一次真机探针**（`temp/_p52_probe_tools.py`，一次调用）证明**上游本身是支持
+原生调用的**：同样的 `tools` 载荷，模型回了
+`finish_reason: "tool_calls"` + `tool_calls[0].function.name = "fs_list"`。
+也就是说"模型不用原生"**不是**上游能力问题，而是**我们的提示词把它引到文本那条路上去了**。
+
+### 52.3 两个修复（都在非禁改区，都已提交）
+
+1. **执行层认广告名，但认账**（`agent_loop._do_tool`）：`tool` 字段给的若是我们广告过的
+   函数名（`fs_list`），逐次映回真名（`fs.list`）再执行，并在结果里留 `aliased_from`；
+   **映不回来的名字照旧拒**（负控：`fs_rm_rf` ⇒ `unknown_tool`，且没有 `aliased_from`）。
+   为什么不干脆改名让两边一致：带点的工具名是**权限面与台账**的既有写法
+   （`fs.read` / `table.create`），改名要动的是清单、写集与全部判据 —— 而广告名只是
+   传输层的一个技术约束，映一次就够。
+2. **提示词说清"名字从哪来"**（`agent_loop._prompt`）：原生面在场时多一句 ——
+   "可以直接走函数调用接口；若仍回一行 JSON，`tool` 字段要写**真名**（工具清册里那个，
+   例如 `fs.read`），不是函数名里的下划线写法。两种都可以。"
+   这一句只进**循环的逐步提示词**（`_prompt`），不进角色系统提示词 ⇒ 两份 golden 不变
+   （判据读数：`tool_surface` 0 处、`agent_surface` 0 处 —— 实测确认）。
+
+### 52.4 判据与读数
+
+- 新增两条（`tests/test_native_tool_calls.py`）：**广告名映回真名 + 认账**（正控）、
+  **编出来的名字照旧拒**（负控）。文件合计 **12 条**。
+- 本阶段判据：`test_native_tool_calls + test_agent_loop + 两份快照 + test_runflow_snapshot +
+  test_paper_pack + test_intake_actions` ⇒ **49 + 42 passed**（两批），0 failed。
+- lint：`error 0 / warning 9 / info 50`（中间 `error 2` 是新写的 docstring 装饰，
+  `_r009_fix.py` + `_r009_verify.py` 清掉，2/2 通过）。
+- FC-27 门：本节改动路径（`agent_loop.py` / 新判据）**都不在禁改区** ⇒ 不新增命中。
+
+### 52.5 这一趟最值钱的那句话
+
+**"能力已经就位"与"模型会用它"是两件事。** §50 把原生这条路修通了（传输层回得出
+`tool_calls`、审计上看得见），但提示词仍然只教了文本那一条路，于是模型走了文本，
+而我们又在文本那条路上给了它两个名字（真名 / 广告名）。这一趟花 0.1477 美元买到的
+就是这个区别 —— 它离线测不出来（判据里的桩只会照我们写的脚本来）。
+
+**下一趟（第五趟）要验的**：模型会不会用原生调用；若仍走文本，`aliased_from` 会告诉我们
+"广告名这条路现在是通的"（29 步全废那种形态不该再出现）。
