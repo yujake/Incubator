@@ -48,6 +48,7 @@ from . import policy as P
 from . import schema as S
 from . import sessions as SS
 from . import userio as U
+from . import llmseam as LL
 from .llmseam import LlmSeam
 
 #: 循环允许的形状（与 `LOOP_PROTOCOL` 逐字对应；多一个少一个都要改两处）。
@@ -607,15 +608,34 @@ class AgentLoop:
             "prompt_sha256": run.prompt_audit.get("prompt_sha256"),
         }, sid=self.sid)
 
+        # 原生工具面（`draft/37` §49/§50）：广告这一岗的工具 + 循环的非工具形状。
+        # 造不出来（比如一个没有 `for_role` 的注册表、或广告名撞车）不是致命：
+        # 那就回落去文本 JSON 协议，并把原因留在会话记录里 —— 静默回落会让
+        # "这一趟走的是哪条协议"在事前事后都不可读。
+        face = None
+        try:
+            face = LL.build_tool_face(self.role, self.registry)
+        except Exception as exc:  # noqa: BLE001 —— 造不出面就回落，不拖垮整趟
+            SS.append(self.session_root, {
+                "kind": "agent_note", "role": self.role,
+                "note": f"原生工具面没造出来（{type(exc).__name__}: {exc}）⇒ 回落文本 JSON 协议",
+            }, sid=self.sid)
+        SS.append(self.session_root, {
+            "kind": "agent_tool_face", "role": self.role,
+            "advertised": len(face.functions) if face is not None else 0,
+            "sha256": face.sha256 if face is not None else "",
+        }, sid=self.sid)
+
         for step in range(self.max_steps):
             if self.seam.usd_budget is not None and self.seam.spend.usd >= self.seam.usd_budget:
                 run.stop_reason = "budget"
                 run.final = run.final or "预算已耗尽，停止（没有继续调用模型）"
                 break
-            data, call = self.seam.ask_json(self._prompt(transcript, step=step),
-                                           system=system, task_id=my_task_id,
-                                           note=f"{self.role}.step{step}",
-                                           max_tokens=self.max_output_tokens)
+            data, call = self.seam.ask_step(self._prompt(transcript, step=step),
+                                            system=system, task_id=my_task_id,
+                                            note=f"{self.role}.step{step}",
+                                            max_tokens=self.max_output_tokens,
+                                            face=face)
             if data is None:
                 run.bad_json += 1
                 # 把模型实际说了什么留在这一步里（2026-09-30）：只有 `problem`

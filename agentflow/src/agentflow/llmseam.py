@@ -30,6 +30,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+import json
+import re
+
 from . import judge as J
 from . import modelcost as MC
 from . import modelgw as MG
@@ -62,6 +65,18 @@ class SeamCall:
     usd: float | None = None
     elapsed_sec: float = 0.0
     recorded: str = ""      # 空串 = 审计记录已落档；否则是没落成的原因
+    #: 这一趟走的是哪条协议：`"tool_calls"`（原生工具调用）/ `"text"`（文本 JSON 回落）。
+    #: 它是审计读数，不是装饰：`draft/37` §48 那趟真机死在"模型把 `tool` 写成 `name`"，
+    #: 而那条路上"名字由谁给"正是这个字段回答的问题。
+    protocol: str = "text"
+    #: 这一趟广告了几件函数（工具 + 循环形状），以及那份工具面的摘要。
+    tools_advertised: int = 0
+    tools_sha256: str = ""
+    #: 模型给了几条结构化工具调用（0 = 没给，于是回落去解析文本）。
+    tool_calls: int = 0
+    #: 原始的 `tool_calls`（`ask_step` 要把它们翻成循环的形状）。
+    #: 刻意不进 `to_dict()`：审计面留条数与工具面摘要就够，逐条原文会随每次调用膨胀。
+    tool_call_list: tuple[dict[str, Any], ...] = ()
 
     @property
     def not_checked(self) -> bool:
@@ -86,6 +101,10 @@ class SeamCall:
             "usd": self.usd,
             "elapsed_sec": round(self.elapsed_sec, 3),
             "recorded": self.recorded,
+            "protocol": self.protocol,
+            "tools_advertised": self.tools_advertised,
+            "tools_sha256": self.tools_sha256,
+            "tool_calls": self.tool_calls,
         }
 
 
@@ -143,7 +162,8 @@ class LlmSeam:
 
     # -------------------------------------------------------------- 调用
     def ask(self, prompt: str, *, system: str = "", task_id: str = "",
-            note: str = "", max_tokens: int | None = None) -> SeamCall:
+            note: str = "", max_tokens: int | None = None,
+            face: "ToolFace | None" = None) -> SeamCall:
         """发一次调用，落一条审计记录，返回结局（不抛业务异常）。
 
         `max_tokens` 不给时用网关缺省（4,096）。给它的那一处是循环步
@@ -157,6 +177,9 @@ class LlmSeam:
             system_sha256=_sha(system) if system else "",
             model=self.model_name,
             scope=self.scope,
+            protocol="tool_calls" if face is not None else "text",
+            tools_advertised=len(face.functions) if face is not None else 0,
+            tools_sha256=face.sha256 if face is not None else "",
         )
         if not self.wired:
             call = SeamCall(ok=False, problem="judge_not_wired",
@@ -174,7 +197,8 @@ class LlmSeam:
         try:
             reply = self.gateway.complete(prompt, scope=self.scope,
                                           system=(system or None),
-                                          max_tokens=max_tokens)
+                                          max_tokens=max_tokens,
+                                          tools=(face.functions if face is not None else None))
         except J.BudgetExhausted as exc:
             return self._finish_failure("judge_over_budget", str(exc), base, t0,
                                         prompt, system, task_id, note)
@@ -189,6 +213,7 @@ class LlmSeam:
                                         base, t0, prompt, system, task_id, note)
 
         usd, usd_note = self._usd_of(reply)
+        calls = tuple(getattr(reply, "tool_calls", ()) or ())
         call = SeamCall(
             ok=bool(getattr(reply, "ok", False)),
             text=str(getattr(reply, "text", "") or ""),
@@ -198,6 +223,8 @@ class LlmSeam:
             tokens_out=int(getattr(reply, "tokens_out", 0) or 0),
             usd=usd,
             elapsed_sec=time.monotonic() - t0,
+            tool_calls=len(calls),
+            tool_call_list=calls,
             **base,
         )
         if usd_note:
@@ -272,6 +299,233 @@ class LlmSeam:
                                          f"{hint}；原文前 200 字：{str(call.text)[:200]}")})
             return None, bad
         return dict(data), call
+
+    def ask_step(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = "", max_tokens: int | None = None,
+                 face: ToolFace | None = None) -> tuple[dict[str, Any] | None, SeamCall]:
+        """循环的一步：优先用原生工具调用，拿不到就回落去解析文本 JSON。
+
+        为什么要这一层（`draft/37` §48/§49）：文本协议要求模型把调用重新序列化成
+        一行 JSON，于是"键名漂移"（`tool` 写成 `name`）会连累整趟运行
+        （第三趟真机就死在这里）。原生工具调用把名字放进传输层的结构化字段 ——
+        那一类失败在结构上不再存在。回落路径一个字都没放宽：没有原生工具调用的
+        传输层（离线缝 / mock / replay / 没接线的判定）照旧走 `ask_json` 的那一套，
+        既有判据因此一条都不用改。
+        """
+        call = self.ask(prompt, system=system, task_id=task_id, note=note,
+                        max_tokens=max_tokens, face=face)
+        if not call.ok:
+            return None, call
+        if face is not None and call.tool_call_list:
+            if len(call.tool_call_list) > 1:
+                # 本循环的纪律是"一步一件事"（`_shape_of` 同名判据在文本那条路上）。
+                # 多条原生调用不是错误数据，但它与"一步一件事"冲突 ⇒ 明确说清楚，
+                # 而不是默默只执行第一条（那会让模型以为其余几条也生效了）。
+                bad = SeamCall(**{**call.__dict__, "ok": False, "problem": "judge_bad_json",
+                                  "detail": (f"这一步给了 {len(call.tool_call_list)} 条工具调用；"
+                                             "本循环一步只做一件事，请只留一条")})
+                return None, bad
+            data, problem, detail = face.to_shape(call.tool_call_list[0])
+            if data is None:
+                bad = SeamCall(**{**call.__dict__, "ok": False, "problem": problem,
+                                  "detail": detail})
+                return None, bad
+            return data, call
+        # 回落：上游没给结构化调用（或不支持 tools）⇒ 走原来的文本 JSON 那条路。
+        from .llm import parse_llm_json
+
+        err = ""
+        try:
+            data = parse_llm_json(call.text)
+        except Exception as exc:  # noqa: BLE001 —— 与 `ask_json` 同一套处理
+            data = None
+            err = f"{type(exc).__name__}: {exc}"
+        if not isinstance(data, Mapping):
+            hint = _json_shape_hint(call.text)
+            bad = SeamCall(**{**call.__dict__, "ok": False, "problem": "judge_bad_json",
+                              "detail": (f"模型返回的不是一个 JSON 对象（解析报错：{err or '不是对象'}）"
+                                         f"{hint}；原文前 200 字：{str(call.text)[:200]}")})
+            return None, bad
+        return dict(data), SeamCall(**{**call.__dict__, "protocol": "text"})
+
+
+#: 循环协议里那些不是工具的形状（`agent_loop.SHAPES` 减去 `tool`）：
+#: 它们与真工具一起被广告成函数。理由与 DSH 同源 —— 在 DSH 里 `ask_user` /
+#: `present` / `goal` 本身就是工具，于是"这一步要做什么"这件事的名字
+#: 永远来自传输层的结构化字段，而不是模型手写的一行 JSON。
+#:
+#: 每项是 `(广告名, 目标形状, 参数 schema)`；schema 的形状与 `agent_loop._shape_of`
+#: 认的那一套逐字对齐（那里仍是唯一判有效性的地方 —— 这里只负责"把名字翻译过去"）。
+META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
+    ("framework_summon", "summon", {
+        "type": "object",
+        "properties": {
+            "role": {"type": "string", "enum": list("ABCDEFGH")},
+            "action": {"type": "string"},
+            "params": {"type": "object"},
+            "why": {"type": "string"},
+        },
+        "required": ["role", "action"],
+    }),
+    ("framework_summon_many", "summon_many", {
+        "type": "object",
+        "properties": {
+            "targets": {"type": "array", "items": {
+                "type": "object",
+                "properties": {
+                    "role": {"type": "string", "enum": list("ABCDEFGH")},
+                    "action": {"type": "string"},
+                    "params": {"type": "object"},
+                    "instance": {"type": "string"},
+                    "input_key": {"type": "string"},
+                },
+                "required": ["role", "action"],
+            }},
+            "why": {"type": "string"},
+        },
+        "required": ["targets"],
+    }),
+    ("framework_ask_user", "ask_user", {
+        "type": "object",
+        "properties": {
+            "question": {"type": "string"},
+            "options": {"type": "array", "items": {"type": "string"}},
+            "timeout_sec": {"type": "number"},
+        },
+        "required": ["question"],
+    }),
+    ("framework_note", "note", {
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+    }),
+    ("framework_message", "message", {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string"},
+            "subject": {"type": "string"},
+            "body": {"type": "string"},
+            "reply_to": {"type": "string"},
+        },
+        "required": ["to", "body"],
+    }),
+    ("framework_final", "final", {
+        "type": "object",
+        "properties": {
+            "final": {"type": "string"},
+            "evidence": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["final"],
+    }),
+)
+
+
+def _sanitize(name: str) -> str:
+    """工具名 → 函数名。
+
+    为什么必须换名：OpenAI 兼容接口的 function name 只允许 `[A-Za-z0-9_-]`，
+    而本框架的工具名带点（`fs.read` / `table.create`）—— 直接送会被上游拒。
+    换名是可逆的：`ToolFace.names` 把广告名映回真名，模型看到的只是另一个写法。
+    """
+    return re.sub(r"[^A-Za-z0-9_-]", "_", str(name))
+
+
+@dataclass(frozen=True)
+class ToolFace:
+    """这一趟广告给模型的函数面（角色自己的工具 + 循环的非工具形状）。
+
+    `sha256` 是这份面的摘要，随每次调用落进审计记录 —— 要求与 `prompt_sha256` 同级：
+    "这一趟广告了哪份工具面"必须是可复核的事实（工具面变了而没有任何读数变，
+    正是本项目最忌的那种静默漂移）。
+    """
+
+    functions: tuple[dict[str, Any], ...]
+    names: Mapping[str, str]
+    sha256: str
+
+    def to_shape(self, call: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str, str]:
+        """把一条原生工具调用翻成循环协议的形状。返回 `(data, problem, detail)`。
+
+        三态纪律：翻不出来时 `data is None` 且 `problem` 非空 —— 绝不返回一个
+        "看起来像调用"的空对象（那会让下一步去执行一件模型没说过的事）。
+        """
+        raw_name = str(call.get("name") or "")
+        target = self.names.get(raw_name)
+        if target is None:
+            return None, "judge_bad_json", (
+                f"模型调用了一个没广告过的函数 {raw_name!r}（这一趟广告的是 "
+                f"{sorted(self.names)[:6]}…）")
+        raw_args = call.get("arguments")
+        text = raw_args if isinstance(raw_args, str) else json.dumps(raw_args or {},
+                                                                    ensure_ascii=False)
+        try:
+            args = json.loads(text) if text.strip() else {}
+        except json.JSONDecodeError as exc:
+            # 与 DSH 的 `parseArguments` / `ToolArgsError` 同一条纪律：参数坏不是
+            # "认不出的形状" —— 工具名已经从结构化字段拿到了，所以这句纠正能点名
+            # "是哪个函数的参数坏了"，比"键名不对"精确得多。
+            return None, "judge_bad_args", (
+                f"函数 {raw_name} 的参数不是合法 JSON（{exc}）；原文前 200 字：{text[:200]}")
+        if not isinstance(args, Mapping):
+            return None, "judge_bad_args", (
+                f"函数 {raw_name} 的参数必须是一个 JSON 对象，收到 {type(args).__name__}")
+        why = str(args.pop("why", "") or "")
+        if target.startswith("tool:"):
+            return {"tool": target.split(":", 1)[1], "args": dict(args), "why": why}, "", ""
+        if target == "final":
+            payload = dict(args)
+            payload.setdefault("evidence", [])
+            return {"final": payload.get("final") or "", "evidence": payload.get("evidence") or []}, "", ""
+        if target == "note":
+            return {"note": {"text": str(args.get("text") or "")}}, "", ""
+        payload = dict(args)
+        if why:
+            payload.setdefault("why", why)
+        return {target: payload}, "", ""
+
+
+def build_tool_face(role: str, registry: Any) -> ToolFace:
+    """按角色的工具面 + 循环的非工具形状造一份函数面。
+
+    `registry` 必须与真正执行调用的那个注册表是同一个（与提示词那条纪律相同：
+    广告一份、执行另一份，就会出现"模型按广告调、框架说没这个工具"）。
+    """
+    spec_fn = getattr(registry, "for_role", None)
+    specs = list(spec_fn(role)) if callable(spec_fn) else []
+    functions: list[dict[str, Any]] = []
+    names: dict[str, str] = {}
+    for spec in sorted(specs, key=lambda s: str(getattr(s, "name", ""))):
+        real = str(getattr(spec, "name", "") or "")
+        if not real:
+            continue
+        san = _sanitize(real)
+        if san in names:
+            raise ValueError(
+                f"广告名撞车：{real!r} 与另一件工具都归一化成 {san!r} —— "
+                "宁可在这里炸，也不要让模型按一个含糊的名字去调工具")
+        names[san] = f"tool:{real}"
+        params = dict(getattr(spec, "params", None) or {})
+        props = dict(params.get("properties") or {})
+        # `why` 是可选的（原生调用里没有它的位置），但它在审计与提示词里都有用 ——
+        # 所以把它加成每个函数的一个可选属性，而不是丢掉。
+        props.setdefault("why", {"type": "string",
+                                 "description": "一句话说明为什么这一步（可选）"})
+        functions.append({"type": "function", "function": {
+            "name": san,
+            "description": str(getattr(spec, "summary", "") or real),
+            "parameters": {**params, "type": "object", "properties": props},
+        }})
+    for san, target, schema in META_FUNCTIONS:
+        names[san] = target
+        functions.append({"type": "function", "function": {
+            "name": san,
+            "description": f"循环形状 {target}（不是工具：它由框架执行）",
+            "parameters": schema,
+        }})
+    digest = _sha(json.dumps(functions, ensure_ascii=False, sort_keys=True))
+    return ToolFace(functions=tuple(functions), names=dict(names), sha256=digest)
+
+
 
 
 def _json_shape_hint(text: str) -> str:

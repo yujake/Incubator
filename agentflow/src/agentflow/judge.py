@@ -29,10 +29,17 @@ from typing import Any, Mapping
 from .llm import parse_llm_json
 
 #: 受控词表：`judge_failed` 是前缀，实际串是 `judge_failed:<异常类名>`。
+#:
+#: `judge_bad_args`（2026-10-03 加，`draft/37` §49/§50）：工具名是对的、参数不是合法 JSON。
+#: 它与 `judge_bad_json` 必须分开，理由是"下一步该说什么"完全不同：
+#: 坏 JSON 要提醒模型"只回一行 JSON"；而坏参数要提醒它"工具 X 的参数不是对象" ——
+#: 名字已经从传输层的结构化字段拿到了，所以这条错误比"认不出的形状"精确得多
+#: （与 DSH 的 `parseArguments` + `ToolArgsError(INVALID_ARGS)` 同一条纪律）。
 JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_not_wired",
     "judge_timeout",
     "judge_bad_json",
+    "judge_bad_args",
     "judge_over_budget",
     "judge_refused",
     "judge_failed",

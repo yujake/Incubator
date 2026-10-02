@@ -3984,3 +3984,113 @@ python -B -m agentflow.cli --root <ws> run-agent M --task <TASK-47.txt> `
 甲乙两档都要等一句裁定（乙可以先做，甲要单独立项）；`TASK-47.txt` 里那句
 "按动作表里真实存在的名字派"在乙落地之后**仍然有价值**（它省的是被拒的那一步），
 但它的必要性会从"防死"降回"省步"。
+
+---
+
+## §50 落地 §49.3 的"甲"档：循环走**原生工具调用**（名字不再由模型手写）
+
+用户裁定做甲（结构性那一半）。这一节是落地读数与四个读数。**核心一句话**：
+名字从传输层的结构化字段来，第三趟真机那个死法（`tool` 写成 `name`）**在结构上不存在了**；
+而文本 JSON 协议**一个字都没放宽**，仍然是所有离线缝的回落路径。
+
+### 50.1 改了什么（四处，逐处都说明"为什么在这儿改"）
+
+1. **`modelgw.py`（传输层）**：`complete(..., tools=…, tool_choice="auto")` ⇒
+   `_payload` 把 `tools`/`tool_choice` 放进请求体；`_once` 从
+   `choices[0].message.tool_calls[]` 取 `{id, name, arguments}`，放进
+   `ModelReply.tool_calls`。两条判据同时被纠正：
+   - "空内容绝不许当成成功"这条**仍然成立**，但改成"`content` 或 `tool_calls`
+     至少有一个" —— 原生调用时 `content` 本来就可以是空的（DSH 那条路上就是这样）；
+   - `arguments` **保持文本**，不在这里解析：与 DSH 的 `parseArguments` 同一条纪律
+     （坏 JSON 不在传输层被"洗白"）。
+2. **`llmseam.py`（缝）**：新增 `ToolFace` + `build_tool_face(role, registry)`：
+   - 广告面 = **这一岗的工具**（schema 直接取 `ToolSpec.params`，不另抄一份）+
+     **循环的非工具形状**（`META_FUNCTIONS`：`framework_summon` / `_summon_many` /
+     `_ask_user` / `_note` / `_message` / `_final`）。**这一步是照着 DSH 做的** ——
+     在那边 `ask_user` / `present` / `goal` 本身就是工具；
+   - 工具名带点（`fs.read`）而 function name 只允许 `[A-Za-z0-9_-]` ⇒
+     `_sanitize` 归一化 + `names` 映回真名；**两个工具归一化成同一个名字就当场炸**
+     （负控在判据里）；
+   - `face.sha256` + `tools_advertised` + `protocol` + `tool_calls` 进 `SeamCall`
+     并落审计（要求 ④：与 `prompt_version` / `prompt_sha256` 同级）。
+3. **`llmseam.LlmSeam.ask_step(...)`（新入口）**：优先原生、拿不到就回落文本；
+   回落路径**逐字复用** `ask_json` 的那一套（含坏 JSON 的 `judge_bad_json` 与
+   `_json_shape_hint` 的诊断）。
+4. **`agent_loop.py`**：每趟运行前造一次面（造不出来**不致命** —— 记一条
+   `agent_note` 说明原因后回落），运行起点落一条 `agent_tool_face` 事件
+   （广告了几件、摘要多少），每步改调 `ask_step(..., face=face)`。
+
+**新受控码 `judge_bad_args`**（`judge.JUDGE_PROBLEMS`）：参数不是合法 JSON ⇒ 它**不是**
+`judge_bad_json`。理由与 DSH 的 `ToolArgsError(INVALID_ARGS)` 一致：名字已经拿到了，
+所以那句纠正能点名**是哪个函数的参数坏了**（实测文本：`函数 conductor_state 的参数不是
+合法 JSON（…）`），比"认不出的形状（键：[...]）"精确得多。
+
+### 50.2 判据（10 条，`tests/test_native_tool_calls.py`）
+
+| # | 判据 | 形态 |
+|---|---|---|
+| 1 | 广告面 = 工具 + 循环形状；换名可逆；同一份面给同一个摘要 | 正控 |
+| 2 | 两件工具归一化成同一个广告名 ⇒ **当场炸** | 负控 |
+| 3 | **原生调用不需要 `tool` 键**（断言"模型给的参数里没有 `tool`，而结果里有"） | 正控（本组核心） |
+| 4 | `summon` / `note` / `final` 三个非工具形状同样走结构化调用 | 正控 |
+| 5 | 审计链：`protocol` / `tools_advertised` / `tools_sha256` / `tool_calls` 都落，且 `tools` 真的发出去 | 正控 |
+| 6 | 参数不是合法 JSON ⇒ `judge_bad_args` 且**点名函数** | 负控 |
+| 7 | 调了没广告过的函数 ⇒ 拒且消息里点名它 | 负控 |
+| 8 | 一步给两条调用 ⇒ 明确拒（**不许悄悄只执行第一条**） | 负控 |
+| 9 | 上游不给 `tool_calls` ⇒ 回落文本：合法形状照旧解析、坏 JSON 照旧 `judge_bad_json` | 正控（口径零放宽） |
+| 10 | 不给 `face` ⇒ 与改造前逐字相同（既有调用点零改动） | 正控 |
+
+第 3 条是这一刀要的东西：**它不是"漂了也能解析"，而是"那条路上没有键可漂"**。
+
+### 50.3 加"原生工具面"这一刀要交的税（三处，其中一处是事故）
+
+1. **受控码进词表 ⇒ 进**所有**角色的提示词**：`agent_prompts` 会把
+   `judge.JUDGE_PROBLEMS` 渲染成"三态词表"那一行（每个角色的提示词里都有它）——
+   于是 9 份提示词的 golden **全部**变了一行（`judge_bad_json` 后面多了 `judge_bad_args`）。
+   逐行 diff 核过：**只有那一行**（`temp/_prompt_diff.py`）。
+2. **`ModelReply.to_dict()` 多了一个键 ⇒ run-topic 的 golden 变**：
+   `run_topic_snapshot.json` 的两处（`model-transcript.jsonl` 与 `run-manifest.json` 里
+   每条 reply）多了 `"tool_calls": 0`。逐键 diff 核过：**只有这一个键**（`temp/_golden_diff.py`）。
+3. **一处事故（值得单独记）**：`ask_step` 第一版被我放错了位置（落进 `build_tool_face`
+   的函数体里），我用一个**一次性 Python 脚本**把它搬回类里 —— 而那个脚本
+
+   ```python
+   p.write_text("\n".join(new), encoding="utf-8")
+   ```
+
+   在 Windows 上把 `\n` 翻译成了 `\r\n`，于是 `llmseam.py` 从 **LF 变成 CRLF**，
+   `git diff --stat` 报出 `1002 行改动`（整个文件）而真实改动只有 256 行。
+   抓出来靠的是两个读数：`git diff --stat` 的数字**离谱**（文件才 600 多行却显示 1002），
+   以及 `git ls-files --eol` 逐文件给出的 `i/lf w/crlf`。
+   处置：把 `\r\n` 换回 `\n`（`llmseam.py` 回到 `i/lf w/lf`，diff 掉到 256/2）。
+   **这是 `draft/28` §136 那条教训的镜像形态**（那次是"裸 LF 让 git diff 把相邻行也当改动"，
+   这次是"CRLF 让整文件都像改了"）—— 一句话记在这里：**凡是用脚本重写文件，
+   之后必看 `git ls-files --eol` 与 `git diff --stat` 的量级**。
+
+### 50.4 四个读数
+
+1. **lint**：`error 0 / warning 9 / info 50`（== 钉住的读数）。中间 `error 5` 是本轮
+   新写的 docstring 装饰，`temp/_r009_fix.py --apply` + `_r009_verify.py` 清掉（5/5 通过）。
+2. **本阶段判据**：`test_native_tool_calls`（10 条）+ 循环/传输/缝/动作/主控/收工门那几批
+   ⇒ **105 passed**，0 failed（含 `test_agent_loop` 里既有的一整批 —— 回落路径没动它们）。
+3. **全量 pytest**：**3359 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1320.23 s）。比上一次干净读数（§46 的 3348）多 **11** 条：其中 **10** 条是本节新增的
+   判据文件（`test_native_tool_calls.py`），剩下 1 条未逐条归因（★ 不编：要么来自
+   某个既有文件的参数化条数，要么是我漏数了一条 —— 数值本身是当次输出的原话）。
+   **中间那次全量是红的**（`3 failed`）：两条 agent 面 golden + 一条 run-topic golden ——
+   正是 50.3 那两处税，改完重新跑才干净。**挑着跑绿了不等于改完了**（§46 已经记过一次）。
+4. **FC-27 门**：本节改动路径（`modelgw.py` / `llmseam.py` / `agent_loop.py` / `judge.py` /
+   新判据文件）**都不在禁改区** ⇒ 不新增命中；§42/§46 那两批（`specs/m.py`、
+   `specs/a.py`、`specs/b.py`、`capabilities.py`）的状态不变（已登记、仍欠 2 名 reviewer）。
+
+### 50.5 这一刀**没有**做到的（照实写）
+
+- **没接线到真机验证**：原生那条路上的模型行为（它会不会真的用 `tool_calls`、
+  `arguments` 会不会给成非 JSON）只有真机能给读数 —— 判据里的桩只能证明**我们这一侧**
+  的形状对。第四趟真机才会有答案；
+- **`judge_bad_args` 仍然计入 `bad_json` 的次数**（`agent_loop` 的 `data is None` 分支
+  统一计数）：DSH 那一边参数错是**永不致命**的（交回工具层变成一条工具结果）。
+  要照它做，得再给 args 一类单独的计数与停止理由 —— 这一刀刻意不做（避免同时动
+  停止理由词表），**登记为下一步候选**；
+- **多工具并发**：DSH 能一步派多条（按 concurrency-safe 分组），我们仍然"一步一件事"
+  （两条即拒）。这不是缺陷，是既有纪律，写在这里免得被读成"照 DSH 做了一半"。

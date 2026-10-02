@@ -165,6 +165,15 @@ class ModelReply:
     attempts: int = 1
     elapsed_sec: float = 0.0
     model: str = ""
+    #: 这次回复里的结构化工具调用（`tool_calls`），逐条 `{"id","name","arguments"}`。
+    #:
+    #: 为什么要有它（`draft/37` §49：读 DSH 的源码之后按它的做法改）：原生工具调用把
+    #: 工具名放在传输层的结构化字段里，模型不必把调用"序列化成一行 JSON"——
+    #: 那正是第三趟真机 `bad_json_limit` 的病因（模型把 `tool` 写成 `name`）。
+    #: `arguments` 保持文本（与上游一致，不在这里解析）：解析与校验交给工具层，
+    #: 与 DSH 的 `parseArguments`（坏 JSON 原样留着）+ `validateArgs`（`INVALID_ARGS`）
+    #: 同一条纪律。
+    tool_calls: tuple[dict[str, Any], ...] = ()
     #: 这次调用属于哪个用途（`USAGE_SCOPES` 之一）。必填，见 `complete` 的说明。
     #: 它随结局一起回传，因此"这次花了钱"与"这笔钱是为了什么"在同一条记录里，
     #: 不依赖调用方在记账时再回忆一遍（回忆就会写错，而写错是静默的）。
@@ -190,6 +199,7 @@ class ModelReply:
             "model": self.model,
             "not_checked": self.not_checked,
             "scope": self.scope,
+            "tool_calls": len(self.tool_calls),
         }
 
 
@@ -264,18 +274,24 @@ class ModelGateway:
     # ---------------------------------------------------------------- 请求组装
 
     def _payload(self, prompt: str, system: str | None, temperature: float | None,
-                 max_tokens: int | None) -> bytes:
+                 max_tokens: int | None, tools: Sequence[Mapping[str, Any]] | None = None,
+                 tool_choice: str = "auto") -> bytes:
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        body = {
+        body: dict[str, Any] = {
             "model": self.spec.model,
             "messages": messages,
             "temperature": self.spec.temperature if temperature is None else temperature,
             "max_tokens": self.spec.max_tokens if max_tokens is None else max_tokens,
             "stream": False,
         }
+        if tools:
+            # 原生工具面：与 DSH 的请求形状一致（`dsh-llm-deepseek` 也是把
+            # `tools` 原样放进 chat-completions 的 body）。
+            body["tools"] = list(tools)
+            body["tool_choice"] = tool_choice
         return json.dumps(body, ensure_ascii=False).encode("utf-8")
 
     def _headers(self) -> dict[str, str]:
@@ -288,13 +304,16 @@ class ModelGateway:
     # ---------------------------------------------------------------- 单次调用
 
     def _once(self, prompt: str, system: str | None, temperature: float | None,
-              max_tokens: int | None, attempt: int, scope: str) -> ModelReply:
+              max_tokens: int | None, attempt: int, scope: str,
+              tools: Sequence[Mapping[str, Any]] | None = None,
+              tool_choice: str = "auto") -> ModelReply:
         url = f"{self.spec.base_url}/chat/completions"
         started = self._clock()
         try:
-            status, raw = self._transport(url, self._headers(),
-                                          self._payload(prompt, system, temperature, max_tokens),
-                                          self.spec.timeout_sec)
+            status, raw = self._transport(
+                url, self._headers(),
+                self._payload(prompt, system, temperature, max_tokens, tools, tool_choice),
+                self.spec.timeout_sec)
         except TimeoutError:
             return _reply_failure("timeout", f"超过 {self.spec.timeout_sec}s 未返回",
                                   attempt=attempt, elapsed=self._clock() - started,
@@ -320,20 +339,39 @@ class ModelGateway:
 
         choices = data.get("choices") if isinstance(data, dict) else None
         content = ""
+        calls: list[dict[str, Any]] = []
         if isinstance(choices, list) and choices:
             first = choices[0] if isinstance(choices[0], dict) else {}
             message = first.get("message") if isinstance(first.get("message"), dict) else {}
             content = message.get("content") if isinstance(message.get("content"), str) else ""
-        if not content.strip():
-            # 空内容绝不许当成成功：下游会把"没答"读成"答了"
+            raw_calls = message.get("tool_calls")
+            if isinstance(raw_calls, list):
+                for item in raw_calls:
+                    if not isinstance(item, Mapping):
+                        continue
+                    fn = item.get("function") if isinstance(item.get("function"), Mapping) else {}
+                    name = str(fn.get("name") or "")
+                    if not name:
+                        continue
+                    argv = fn.get("arguments")
+                    calls.append({"id": str(item.get("id") or ""), "name": name,
+                                  # `arguments` 保持文本（上游就是这样给的）：
+                                  # 解析与校验交给工具层，坏 JSON 不许在这里被"洗白"。
+                                  "arguments": argv if isinstance(argv, str)
+                                  else json.dumps(argv, ensure_ascii=False)})
+        if not content.strip() and not calls:
+            # 空内容绝不许当成成功：下游会把"没答"读成"答了"。
+            # 但有原生工具调用时 content 本来就可以是空的（DSH 那条路上就是这样），
+            # 所以这一条判据从"content 非空"改成"content 或 tool_calls 至少有一个"。
             return _reply_failure("bad_response",
-                                  "上游返回空内容（choices/message/content 缺失或为空）"
-                                  f"：{raw.strip()[:200]}",
+                                  "上游返回空内容（choices/message/content 缺失或为空，"
+                                  f"且没有 tool_calls）：{raw.strip()[:200]}",
                                   status=status, attempt=attempt, elapsed=elapsed,
                                   model=self.spec.model, scope=scope)
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         return ModelReply(
             ok=True, text=content,
+            tool_calls=tuple(calls),
             http_status=status,
             tokens_in=int(usage.get("prompt_tokens") or 0),
             tokens_out=int(usage.get("completion_tokens") or 0),
@@ -345,7 +383,9 @@ class ModelGateway:
 
     def complete(self, prompt: str, *, scope: str, system: str | None = None,
                  temperature: float | None = None,
-                 max_tokens: int | None = None) -> ModelReply:
+                 max_tokens: int | None = None,
+                 tools: Sequence[Mapping[str, Any]] | None = None,
+                 tool_choice: str = "auto") -> ModelReply:
         """调一次模型。返回三态结局，从不抛异常（异常会让上游编排层的三态判定失效）。
 
         ## "从不抛异常"是怎么做到的（`G-7` 口径一）
@@ -398,7 +438,8 @@ class ModelGateway:
         while attempt <= self.spec.max_retries:
             attempt += 1
             try:
-                reply = self._once(prompt, system, temperature, max_tokens, attempt, scope)
+                reply = self._once(prompt, system, temperature, max_tokens, attempt, scope,
+                                   tools, tool_choice)
             except Exception as exc:  # noqa: BLE001 —— 见 docstring：兜底成"没查成"
                 # `G-7` 口径一：`_once` 只翻译 `TimeoutError` / `ConnectionError`，
                 # 别的异常（传输层实现抛的 `ValueError`、`ssl.SSLError`、
