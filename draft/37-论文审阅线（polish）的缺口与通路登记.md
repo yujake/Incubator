@@ -4386,3 +4386,29 @@ closing：can_close=False，failed=['anchor','report_shape']，unknowns=[]
 以及**正文是否真的改了一处**（P2：这是 `anchor` 之外唯一还没做到的一条）。
 锚那一格（`anchor: fail`）要等有人重渲染重编译 —— 主控手上没有 `doc.paper_*`，
 那条路的归属仍然悬着（登记在 §37.4 ①的后继里）。
+
+---
+
+## §55 §52–§54 三刀合并后的四个读数（补记）
+
+这三刀（§52 别名映射 + 提示词说清两种写法、§53 M 的正文授权 + 留出最后几步、
+§54 报告九节形状）是连着改的，所以按纪律补一次**合并后的**全量读数
+（中途那一跑在代码又变之后被我自己判废了 —— 读数的对象变了，读数就不算数）：
+
+1. **lint**：`error 0 / warning 9 / info 50`（== 钉住的读数；三刀各自的中间态
+   `error 1/2` 都是新写注释里的 R009 装饰，逐次用 `_r009_fix.py` + `_r009_verify.py` 清掉）。
+2. **本阶段判据**：`test_native_tool_calls`（12）+ `test_agent_loop`（30）+
+   提示词那一批（`test_paper_pack` / `test_agent_prompts` / `test_review_line_prompts` /
+   `test_agent_spec_reconciliation`，56）⇒ 全绿。
+3. **全量 pytest**：**3361 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1396.41 s）。比 §50 那次（3359）多 2 条 —— 正是 §52 新增的两条判据
+   （别名映回真名 + 编出来的名字照旧拒）。
+4. **FC-27 门**：`specs/m.py`（§53 改动）命中 auth-audit ⇒ `requires_human`、
+   退出码 1、`required_approvals=2`；已 `--baseline` 登记这一版（`reviewers=0`，
+   登记 ≠ 批准），**欠 2 名 reviewer 逐行走查**照红记录。其余各刀（`modelgw.py` /
+   `llmseam.py` / `agent_loop.py` / `judge.py` / `agent_prompts.py` / 判据文件）
+   都不在清单里 ⇒ 不新增命中。
+
+**累计花费**（六趟真机，用户授权范围内）：0.091102 + 0.19567 + 0.140447 + 0.147661 +
+0.218731 + 0.379968 = **1.173579 美元**；另加一次上游能力探针（约 0.001）。
+每一趟都把"花了多少 / 走到哪一跳 / 死在哪"记在 §37、§44、§48、§52、§54 五节里。
