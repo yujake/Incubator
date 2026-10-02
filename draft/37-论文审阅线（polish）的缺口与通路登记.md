@@ -3417,3 +3417,132 @@ conductor.summon(H.review_report, doc_id=lit_id) → refused
 
 **两份 golden**：`tool_surface_snapshot.json` **0 处变化**；`agent_surface_snapshot.json`
 9 份提示词（A–F 只差版本行 `p25 → p26`，G/H/M 差 `PAPER_PACK` 那一段），逐行 diff 核过。
+
+---
+
+## §44 第二次真机发送（用户已授权）：报告写出来了、眼睛用上了 —— 但链**还是**断在第一步
+
+**这一节是第二次发送的完整读数。** 用户 2026-10-02 授权第二次（第一次在 §37 用掉）。
+这一趟修掉的东西真的生效了：M 读到了盘上的论文、把交付说明**落盘**了；
+但整条链**仍然走不通** —— 而这次的断点比上次**更靠前、也更准确**：
+不是"没人有笔"，是**"把盘上的外部文件登记成 `literature` 行"这件事没有可召唤的动作**。
+
+### 44.1 夹具（发之前逐项体检过）
+
+沿用 §37 的洁净室 `projects/p5-review-20261002-203856`（保留 M 自己那条 `notes/M.md`
+与上一趟的 `sessions/real1.jsonl`，作为续跑上下文），只动了一处：
+
+- **换掉 `out/paper/ACCEPTANCE.md`**：原来那份是上一阶段留下的小表（P1–P6 的 2 行、
+  写着「部分成立 4/6」），**不是**这一轮的验收表。新的六行表逐字取自本仓既有的
+  polish 夹具（`D:\Incubator\projects\p5-polish-20261001-234839\out\paper\ACCEPTANCE.md`）：
+  P1–P6 各一行、五条 `不成立` + P4 `成立`，末行写着"这张表由人给定，**不许改它**"。
+- 换表之后用工作区自己的 `code/make_paper.py` **重新封锚**（那个脚本只写锚、不碰 `main.tex`）：
+  `renderanchor.check_package(<项目根>)` ⇒ **`consistent`**（tables / files / receipt 三维一致，回执在盘上）。
+- **`conductor.acceptance` 体检**（就是 §37 里抛 `NameError` 的那一件）：这次读出
+  **6 行**、结论「全部不成立（0/6）」、逐行 verdict 都在 —— 同一个夹具、同一件工具，
+  前后对照。
+- 密钥：本机凭据文件里的 `DEEPSEEK_API_KEY` 映射到框架读的 `AGENTFLOW_MODEL_API_KEY`
+  （只在本进程内、不回显、不落仓库）；活体探测 HTTP 200。
+  ⚠️ 一处如实记录：探测返回的 `model` 这一次是 **`deepseek-flash`**（§37 那次是 `deepseek-chat`）——
+  服务端对同一个模型名的回显变了，两次都不是我们本地选的名字。
+
+任务书是 `temp/TASK-44.txt`（逐字给出"正确顺序"：先 `fs.*` 看清盘上 → 派 A 登记 → 派 B 登记命题
+→ 派 G 建我方稿件 → 派 H 审 → M 自己写 `out/review/REPORT.md` → `conductor.closing` 自检）。
+
+### 44.2 那一趟的读数
+
+```powershell
+python -B -m agentflow.cli --root <ws> run-agent M --task <TASK-44.txt> `
+       --budget-usd 2.0 --wall-clock-sec 3600 --sid real2
+```
+
+- **30 步 / 30 次模型调用**；`tokens_in 684,865 / tokens_out 9,778`；**`usd = 0.19567`**
+  （上限 2.0，未触顶）；`unknown_usd_calls = 0`；唤起 `['A','B','G','G','G','G','G']`；留言 `[]`。
+- 对比 §37 那一趟：23 步 / 24 次调用 / `usd 0.091102`。**贵了一倍，但买到的东西不一样**。
+
+**新工具真的用上了**（这是 §38/§39 那一刀的验收）：
+
+- 步 0–7、14 全是 `fs.list` / `fs.read` / `fs.stat`：它读了 `out/paper/ACCEPTANCE.md`，
+  并把 `main.tex`（475 行）**分五段读完**（1–120 / 121–300 / 301–360 / 361–475 / 421–475）。
+  对比 §37：那一趟 15 步在**猜**"盘上到底有没有论文"。
+- 步 26 用 `fs.write` 把交付说明写进 `out/review/REPORT.md`（**6,616 字节**，
+  sha256 `e5a9b87d…`），步 27–28 又 `fs.read` 回读确认落盘完整。
+  **§37.4 第 ③ 条（报告落点没有归属人）到此闭合** —— 这一次报告真的在盘上。
+- 步 22/23 两次 `conductor.closing`（第一次没给参数 ⇒ 两格 `unknown`，第二次给了参数）。
+
+### 44.3 机器判据（`reviewaccept.check_review`，六条内容级）
+
+| 判据 | 第一次（§37） | 第二次（本节） |
+|---|---|---|
+| `attachment_is_honest` | **unknown**（没有报告） | **pass**（报告在盘上，且如实写"未能完成"） |
+| `hops_have_readable_prompts` | **fail**（没有任何成功召唤） | **pass**（每一跳都写清了提示词） |
+| `report_sections_have_readings` | unknown（没有报告） | **fail**（报告有六行读数，但形状没过关） |
+| `statements_have_assumptions_and_source` | fail | **fail**（`statements` 仍是 0 行） |
+| `triage_branch_recorded` | unknown | **unknown**（一次都没问过用户） |
+| `within_cost_cap` | pass（只看账本） | **unknown**（账本 0 行 —— ⑤ 那条盲区仍在） |
+| **`passed`** | **False** | **False** |
+
+**辅助读数（不进 `passed`，§17.3 逐字禁止拿它们当"通过"）**：`tex_sha256 = 8c5c431b46f7`、
+`pdf_pages = 7`、**`anchor_verdict = consistent`**、`task_rows = 13`、`ledger_rows = 0`。
+五格依旧"漂亮"，而内容判据两红两灰 —— 与 §37 同一个形态：**辅助读数全绿，交付不成立**。
+
+收工门（`closing.check_closing`，用**项目根**跑）：`can_close = False`，
+`failed = ['report_shape']`、`unknowns = ['anchor']`（锚那一格是我这次调用姿势的问题，见 44.5）。
+
+### 44.4 断点：**"登记外部文件"没有可召唤的动作**（这一趟最值钱的产出）
+
+M 自己在报告里把它写清楚了（逐字）：
+
+> 1. **A 未接线**：接线态 `A: no_provider`。派 `A.run_once` 返回
+>    `processed=0, registered=0, skipped_reason='no_pending_request'`。A 的动作表里**没有**
+>    `search.register` / `search.ingest_local`（任务书里提到的这两个动作在 A 的 `conductor.role_spec` 中不存在）。
+> 2. **B 没有登记入口**：B 的动作表只有 `run_once / reprocess_once / run_reprocess /
+>    decide_structural_duplicate / resolve_structural_duplicate / run` —— 都是"处理**已存在**的
+>    `literature` 行"，**没有把盘上文件登记成 `literature` 的动作**。
+> 6. **我手上没有登记工具**：我的工具面只有 `conductor.*` 与 `fs.*`。
+>    `search.register` / `search.ingest_local` 不在我的工具面上，也不在 A 的动作表上 ⇒ 我无法自己补这一步。
+
+**它说的与我核到的一致** —— 而且这一条把 §43 的判据"补"出了一个洞：
+
+- §43 的正控是**我以角色身份调工具**（`reg.call("search.register", role="A", …)`）——
+  那条链在**工具层**确实通；
+- 真机上 M 只能**召唤动作**（`conductor.summon`），而 A 的动作表里没有 ingest，
+  B 的 `run_once` 只吃"已存在的 `literature` 行"，B 的**动作**里也没有写 `statements` 的那一步
+  （`statements` 今天只有 `table.create` 这个**工具**能写，`agent_b/` 下 `statements` 一个字都没有）。
+- ⇒ **两条链的差**就是这一趟的真读数：**工具层通，编排层不通**。
+  这也解释了为什么离线夹具（§20/§24 那一批）都默认"论文已经在台账里"。
+
+**修法（落在 FC-27 里，要人裁）**：给 A 一条 `ingest_local` 动作（把既有工具
+`search.ingest_local` 包成动作），给 B 一条"登记命题"的动作（把 `table.create(table="statements")`
+包成动作）；两条都在 `specs/a.py` / `specs/b.py`（auth-audit）⇒ 需要 2 名 reviewer，
+**这一节不动它**，只登记。**除此之外还有一条更小的路**（不用新动作）：给 M 之外已接线的角色
+接线（A 的 provider），但那是另一件事（`no_provider` 是环境/配置，不是动作表缺项）。
+
+### 44.5 顺带量到的一处**可行动性**缺陷（不是 M 的错）
+
+M 第二次调 `conductor.closing` 时按工具描述传了 `project_dir='out/paper'`
+（描述逐字写着"论文包所在目录"），于是 `closing` 把它直接交给
+`RA.check_package(project_dir)` —— 而后者要的是**项目根**（它自己会再拼 `out/paper`）。
+结果是去找 `…\out\paper\out\paper\RENDER-ANCHOR.json`，锚那一格变成 `unknown`：
+
+```text
+读不到 D:\…\p5-review-20261002-203856\out\paper\out\paper\RENDER-ANCHOR.json（这里找过）
+```
+
+**这是描述与实现不一致**（`closing.py::_check_anchor` 的提示语也写"指到论文包所在的那个目录"，
+两处都说反了）。M 照着描述做、拿回一个 `unknown`，白花一步 —— 与本项目反复记的
+"含糊的失败会被读成'暂时不通'"同族。处置建议（**不在禁改区**，下一节做）：
+把两处措辞改成"**项目根**（锚在 `<项目根>/out/paper/`）"，
+并让"找不到锚"的错误**点名它期望的路径形状**（现在的错误只说"读不到"，不说"你给的路径多了一层"）。
+
+### 44.6 结论
+
+- 这一趟**仍然"不能交"**，但它把 §37 的"五条结构缺口"推进成 **两条**：
+  - ②（`NameError`）已修（§39）；③（报告落点无归属）已闭合（本节读数）；
+  - ④（侦察纪律）工具侧+提示词侧都已落地（§41/§42），本趟"15 步猜"没再发生；
+  - **① 从"没有归属"变成"缺两条可召唤的动作"** —— 位置精确到动作表，剩下的是一句话的裁定；
+  - ⑤（账本记不出花销）仍在：`spend = 0.19567` vs `ledger = 0`。
+- **两次真机对比最有价值的一条**：第一次失败在"看不见"，第二次失败在"够不着"。
+  这两类失败在读数上完全不同 —— 而**只有真机能区分它们**（离线夹具两条都不覆盖）。
+- 报告落在 `out/review/REPORT.md`（6,616 字节），逐条对齐 P1–P6、明写"未核到"、
+  自报 `can_close=false`。**它诚实地失败了，而且这次留下了可读的证词。**
