@@ -217,12 +217,22 @@ def _root_of(store: Any, session_root: Path | str | None) -> Path:
     return Path(raw)
 
 
-def _round_task(task: str, previous: RoundReport, index: int) -> str:
-    """第 N>1 轮的任务：原始任务 + 上一轮结论与还差什么（短块，不重述全文）。"""
-    return (f"{task}\n\n---\n"
+def _round_task(task: str, previous: RoundReport, index: int, *, user_answer: str = "") -> str:
+    """第 N>1 轮的任务：原始任务 + 上一轮结论与还差什么（短块，不重述全文）。
+
+    `user_answer`（`draft/37` §14.5 第 4 件）必须真的进到这一段里 ——
+    它是 `ask_user → cli answer → --resume` 这条闭环的最后一格：
+    用户答了什么，续跑那一段就按什么做。只把回答写进会话记录不算闭环：
+    真机与离线判据都证明过，"答了但模型看不到"与"没答"在读数上长得一模一样
+    （`tests/test_resume_runs_and_consumes_answer.py` 就是为这一格写的）。
+    """
+    head = (f"{task}\n\n---\n"
             f"上一轮（第 {previous.index} 轮）的结论：{_clip(previous.final) or '（没有给出结论）'}\n"
             f"上一轮为什么停：{previous.stop_reason}\n"
             f"还差什么：接着上一轮的结论往下做，不要从头重来（这是第 {index} 轮）。")
+    if user_answer.strip():
+        head += (f"\n\n---\n用户的最新回答（**按它做**，别再问一遍）：{_clip(user_answer, 400)}")
+    return head
 
 
 def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
@@ -427,16 +437,20 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
             return float(baseline["usd"] + shared.spend.usd)
         return float(baseline["usd"] + total["usd"])
 
-    def _stop_reason_for(next_index: int) -> tuple[str, list[str]]:
-        """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道。"""
+    def _stop_reason_for(next_index: int) -> tuple[str, list[str], str]:
+        """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道（返回 `(原因, 说明, 回答)`）。
+
+        第三个返回值是给下一轮的任务用的（`§14.5` 第 4 件）：读一次就用一次，
+        不要在别处再读一遍 —— 两处各读一次会造出"停的判据用旧回答、任务用新回答"的错位。
+        """
         answer, answer_notes = _latest_user_answer(root, role, sid=sid)
         reason = _stop_before_round(next_index, rounds=total_rounds, spent_usd=_spent_usd(),
                                     usd_budget=usd_budget, stop_path=stop_path,
                                     user_answer=answer)
-        return reason, answer_notes
+        return reason, answer_notes, answer
 
     while True:
-        reason, answer_notes = _stop_reason_for(index)
+        reason, answer_notes, latest_answer = _stop_reason_for(index)
         for line in answer_notes:
             if line not in notes:
                 notes.append(line)
@@ -448,7 +462,13 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
         # 续跑的第一轮：`reports` 是空的（那些轮在上一段），上一轮结论来自检查点
         previous = reports[-1] if reports else prev_report
-        round_task = (task if index == 1 else _round_task(task, previous, index))
+        if index == 1:
+            # 第一轮也要带上用户的最新回答（"先答后跑"与"跑到一半答了"是同一件事：
+            # 问答频道是跨轮的，不该只在第 N>1 轮才被读到）
+            round_task = task + ((f"\n\n---\n用户的最新回答（**按它做**，别再问一遍）："
+                                  f"{_clip(latest_answer, 400)}") if latest_answer.strip() else "")
+        else:
+            round_task = _round_task(task, previous, index, user_answer=latest_answer)
         before = _spend_of(shared.spend.to_dict() if shared is not None else None)
         run: LoopRun = run_role(role, round_task, store=store, registry=registry,
                                 session_root=root, conductor=conductor, seam=shared,
@@ -472,7 +492,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
         # 最后一轮必发：它要么是轮次用尽的那一轮，要么是"跑完这轮就不得不停"的那一轮；
         # 没有接线时也算收工（那一轮没有产出，更要说清楚）。
-        next_reason, next_notes = _stop_reason_for(index + 1)
+        next_reason, next_notes, _next_answer = _stop_reason_for(index + 1)
         for line in next_notes:
             if line not in notes:
                 notes.append(line)
