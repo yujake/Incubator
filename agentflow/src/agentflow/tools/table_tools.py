@@ -462,6 +462,19 @@ _VOCAB_BY_FIELD: dict[tuple[str, str], str] = {
     # 猜想（`draft/30` §T1 第 6 处）：状态与形态各有受控词表，不登记就会被静默不校验。
     ("conjectures", "status"): "CONJECTURE_STATUSES",
     ("conjectures", "form"): "CONJECTURE_FORMS",
+    # 命题台账（`draft/37` §16 P1 第 6 处触点）：`origin` / `status` / `evidence_kind`
+    # 各有一条判据分支（`verify` 的不变量与"报告分栏"都读它们），所以必须登记 ——
+    # 不登记的表现是参数层静默不校验，即"写进去一个谁都不认识的取值，没人响"。
+    # `kind` 刻意不登记：它不是受控词表（理由见 `schema.Statement` 的 docstring）。
+    ("statements", "origin"): "STATEMENT_ORIGINS",
+    ("statements", "status"): "STATEMENT_STATUSES",
+    ("statements", "evidence_kind"): "EVIDENCE_KINDS",
+    # 依赖状态这一条是补的历史缺口：`DEP_STATUSES` 从 FC-23 起就有四档语义
+    # （closed / dangling / external_unavailable，今天又加了 refuted / disputed），
+    # 而它从来没登记在这里 ⇒ 走 `table.*` 写 dependencies 时 `status` 不受词表校验，
+    # 只有 `schema.Dependency.validate()` 那一层拦得住（那是写盘期，不是参数期）。
+    # 两层的区别：参数期拒绝会告诉调用方"允许哪些取值"，写盘期只给一句异常。
+    ("dependencies", "status"): "DEP_STATUSES",
 }
 
 #: 嵌在 JSON 对象里的词表。`literature.download` 是自由 dict，但它的 `status`

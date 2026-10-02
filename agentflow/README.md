@@ -374,7 +374,7 @@ agentflow/
 │   ├── release_check.py      ★ 发布前八项检查（test-suite / selftests / tool-census / verify / linter / noai / contract / imports；本文件自身在禁改区里）
 │   └── usage_ledger_audit.py usage_ledger 的存量重复账审计与清洗
 ├── src/agentflow/
-│   ├── schema.py             ★ 数据模型 + 行级校验 + 全部跨模块词表（单一来源；SCHEMA_VERSION=1、16 张表）
+│   ├── schema.py             ★ 数据模型 + 行级校验 + 全部跨模块词表（单一来源；SCHEMA_VERSION=1、17 张表）
 │   ├── store.py              ★ 锁 / 原子写 / 事务 / 事件日志 / ID 分配 / 重建
 │   ├── interactions.py       ★ 跨角色交互的冻结契约（I1–I7；纯函数、不接 store）+ 契约版本 CONTRACT_VERSION
 │   ├── capabilities.py       角色能力表 + 写集 + 允许的召唤边（**A–H 调用矩阵的权威定义**；**导入期自检**）

@@ -1438,3 +1438,167 @@ polish 这篇论文，输出一大堆核验结果算个啥玩意"）。所以下
 
 P1 的判据与 P0 一样：每条都要有正控 + 负控 + 反真空，并且**通过不许用"改了 sha / 页数多了 /
 锚点一致 / 表里多了一行"来冒充**（§17 逐字列了这四种冒充）。
+
+---
+
+## §20 落地 P1（数据面）：`statements` 台账 + 依赖四态 + `tasks.instance`（含"十处触点"实交与 FC-27 基线）
+
+**这一节记的是 `draft/37` §16 P1：让产出落得下、查得到。** 规格见 §16 P1 的四行表格；
+这一节只记**做了什么、读数是多少、还差什么**。三个新东西各自的判据都在
+`tests/test_statements_table.py`（15 条）与 `tests/test_task_instance.py`（5 条）里。
+
+### 20.1 新表 `statements`：为什么它的字段是这些
+
+这张表解决的故障是**真机读出来的**（2026-10-01 那一轮跑完"审阅并 polish 一篇论文"）：
+
+> 台账里有依赖、有发现、有报告，**却没有一处放得下"定理 1.5 的假设是什么、
+> 它的证明原文长什么样"**。于是 B 消化完只能在会话记录里留一段话，D 要审它得再读一遍
+> PDF，H 要判"正文与台账逐字一致"也没有可比的第二份文本。
+
+字段（`schema.Statement`）与**每一条为什么不能省**：
+
+| 字段 | 取值 | 为什么必须是独立字段 |
+|---|---|---|
+| `origin` | `external_lit` / `own_result` | 报告的"我们补的"与"原文的"要分栏（§16 P3）。**靠 `source_lit_id` 推不出来**：自产的证明同样会引文献 |
+| `kind` | 自由文本（非空） | 命题种类。**刻意不是受控词表**（见下） |
+| `statement_text` / `statement_full` | 短版 / **含完整假设**的正文 | "定理成立"与"在什么假设下成立"是两件事；省掉假设的命题会被下游当成无条件成立（FC-23 在命题级的同一种病） |
+| `proof_text` | 逐字摘录 / 我们自己的证明 | `quote_verified` 的比对对象。没有它，逐字回验无从做起 |
+| `source_lit_id` / `page_range` | 出处 | `external_lit` 必填 —— 不写清是哪一篇，回验就没有第二份文本 |
+| `quote_verified` + `quote_reason` | `True`/`False`/`None` + 原因 | 三态纪律：`False`（不一致）与 `None`（没校验）都必须写原因 |
+| `evidence_kind` | 复用 `EVIDENCE_KINDS` | 与 `documents.claims[].evidence_kind` 同一根轴，不另立词表 |
+| `status` | `active`/`disputed`/`refuted`/`superseded` | §8/§9 的裁决闭环在命题级的落点 |
+| `derived_from[]` | 本表 `stmt_id`，升序去重 | 承重链。§16 P3 的收工门问的就是"承重的那些有没有 T3 或已降档" |
+| `doc_id` / `line_range` | 自产结果落在哪份稿子 | 自产结论要能回到手稿的那几行 |
+
+**`kind` 为什么不做成受控词表**（一个刻意的"少做一点"）：它不参与任何判据分支
+（分支只看 `origin` / `status` / `evidence_kind`），而论文里的命题种类比 `DEP_KINDS` 宽
+（还有 corollary / claim / remark / conjecture）。给它一份词表会立刻产生五六个
+没有产出点的死取值（R011 的债），换不来任何判据。**这是"少写一个词表"的正当理由，
+不是漏了一处。**
+
+### 20.2 "加一张表要动的十处"逐处实交
+
+`draft/29` §10.4 原列 7 处，`draft/30` §T1 实测为 10 处（多出 `row_from_dict` /
+`ARRAY_FIELD_KINDS` / `tests/conftest.DATA_FILES`）。本批**逐处交清**，另外三处
+是这次才第一次被走到的：
+
+| # | 触点 | 落点 | 判据 / 证据 |
+|---|---|---|---|
+| 1 | 行 dataclass + `validate()` | `schema.Statement` | `test_statements_table.py` 的 6 条负控（缺假设 / 缺出处 / 缺证明 / 没写原因 / origin 空 / 自环与乱序） |
+| 2 | `TABLES` 条目 | `"statements"`（`id_field=stmt_id`, `id_kind=stmt`） | `test_the_new_table_is_visible_to_the_generic_table_tools` |
+| 3 | 词表常量 | `STATEMENT_ORIGINS` / `STATEMENT_STATUSES` / `STATEMENT_UNUSABLE_STATUSES` | 上一条判据读 `table.schema` 的 `enum` |
+| 4 | `ID_COUNTERS` | `"stmt": "stmt_id"`（知识实体，吃 4 位空间） | 同一条判据断言 `uses_id_counter`；另断言它**不在** `process_id_kinds()`（两半互斥） |
+| 5 | `LOCK_ORDER` | 插在 `documents` 之后、`dependencies` **之前** | 位置理由写在 `store.py` 那一行：命题是依赖的锚点，先锁锚点再锁依赖 |
+| 6 | `_VOCAB_BY_FIELD` | `statements` 三条 + **补上 `dependencies.status`** | 第 6 处是"自由的"（不在禁改区），但它也是**唯一一处忘了就静默不校验**的地方 |
+| 7 | `verify_all` 不变量 | 新段 `_check_13`（4 类 issue） | 每条一正控一负控（见 §20.4） |
+| 8 | `row_from_dict` | `statements` 分支（含 `page_range` 还原） | `test_a_complete_statement_row_round_trips` 逐字读回 |
+| 9 | `ARRAY_FIELD_KINDS` | `{"derived_from": "set"}` | 乱序/重复/自环三条负控 |
+| 10 | `tests/conftest.DATA_FILES` | `statements.json` | 逐字节快照与"不多出文件"那条判据 |
+| 附 | 旧工作区补表文件 | **`agentflow/data/statements.json`**（40 B，与其它空表逐字节同形） | `temp/_p1_check_data_file.py` 比对规范空表 |
+
+**第 6 处顺带补了一个历史缺口**：`dependencies.status` 从 FC-23 起就有词表，
+却从来没登记在 `_VOCAB_BY_FIELD` 里 ⇒ 走 `table.*` 写 dependencies 时 `status`
+在**参数期**不受校验，只有 `schema.Dependency.validate()`（写盘期）拦得住。
+两层的区别是"告诉调用方允许哪些取值"与"给一句异常"。这一改的代价是
+`doc.register_dependency` 的参数面多了 `enum`（见 §20.6 的尺子 diff）。
+
+### 20.3 `dependencies` 加两档状态：`refuted` / `disputed`
+
+- 词表：`DEP_STATUSES` 3 档 → 5 档；
+- `Dependency.validate()`：这两档**必须写 `status_reason`**（理由与 `dangling` 同族，
+  但更重：它们要触发的是"压在它上面的结论怎么办"，不只是"去把来源补齐"）；
+- `verify` 里分成**两件事**报（处置方向相反，代码就是处置把手）：
+  - `refuted_dependency_in_use`（**error**）：被证否的前提撑不起任何东西 ⇒ 撤或降档；
+  - `disputed_dependency_in_use`（**warning**）：已记录、等裁决 ⇒ 已知边界；
+  - `proof_claim_on_refuted_dependency` / `proof_claim_on_disputed_dependency`（**error**）：
+  §16 P1 逐字要求的那条新不变量 —— `proof` 级断言不许挂在这两档上。
+
+**为什么 `disputed` 在 `verify` 里只是 warning，而 §16 P3 的收工门要拦它**：
+两处问的不是同一件事。`verify` 问"账记得对不对"（记了争议、说清了原因 ⇒ 账是对的），
+收工门问"这样能不能交"（有未裁决的争议 ⇒ 不能交）。**两处不同是刻意的**，
+不是口径漂移 —— 写在 `verify.py` 那段注释里。
+
+### 20.4 判据：30 条，每条不变量都有正控 + 负控 + 反真空
+
+`tests/test_statements_table.py`（15 条）：
+
+- 正控：合规行写进去 → 逐字读回 → `verify` 零 error；新表在 `table.schema` 里可见，
+  且**反真空**断言 `kind` / `label` / `proof_text` 真的不在词表面里；
+- 负控（schema 层，6 条）：缺 `statement_full` 不许 `active`（§16 P1 逐字要求的那条）、
+  `external_lit` 缺出处、`own_result` 缺证明、`quote_verified` 非 `True` 却不写原因、
+  `origin` 空串、`derived_from` 乱序/含自身/非法 id；
+- 负控（verify 层，5 条）：`refuted` / `disputed` 依赖撑 `proof` 断言、命题级承重链缺环、
+  `proof` 级命题压在 `refuted`（error）与 `disputed`（warning）上、`active` 文献命题没回验（warning）；
+- **反真空**：每条负控旁边都有一条"好数据不许误伤"（改成 `closed`/`quote_verified=True`
+  之后那些 issue 必须全部消失），以及 `checked['statements_usable']` 真的在数。
+
+`tests/test_task_instance.py`（5 条）：标签记下来了 / 不给标签时记空串（不许编）/
+同角色三实例在台账里可区分 / 被拒的召唤也带标签 / `rebuild()` 后 `tasks.json` 逐字节不变（I-9）。
+
+### 20.5 读数（当次）
+
+- **lint**：`error 0 / warning 9 / info 49`（基线 47 → 49，多出的 2 条正是本轮登记的
+  两条预留取值；R011 栏二 `unclaimed 0`）。中途出现 3 条 R009（20 处 Markdown 强调），
+  用 `temp/_r009_fix.py --apply` 清掉并 `temp/_r009_verify.py` 逐字节核过
+  **3/3 通过（代码零改动、行尾零变化、改动全在注释/文档串内）**。
+- **本阶段新增判据**：`test_statements_table.py` + `test_task_instance.py` ⇒ **20 passed**；
+  宽面回归（schema / verify / store / tools / 角色规格 / 尺子 / 读图）⇒ **354 passed**。
+- **FC-27 门**：命中 4 条禁改区（`schema.py` / `store.py` / `verify.py` / `tools/vocab_census.py`）
+  ⇒ 四条**基线已刷新**（`reviewers=0`，登记 ≠ 批准），门仍以退出码 1 要求 2 名 reviewer；
+  `--check-ledger` clean（35 条清单路径全部有条目）、`--check-consistency` 一致。
+  **这四条改动是人必须逐行走查的**，每条基线的 `--note` 里写了改了什么、判据在哪。
+- **全量 pytest**：第一次跑 **3249 passed / 4 failed**，四条全部与本轮改动同源、逐条查清后修掉：
+  1. `DEVELOPMENT.md` 的 `LIVE-READINGS` 块与散文里的常数过期（`info 47→49`、
+     `--strict` 的 `info 46→48`、`schema_tables 16→17`）—— 这正是那条判据的用途，
+     改数不改判据；
+  2. 同一条判据的负控（它要求文档里有"当次的三元组"可改，前提被 1 破坏）；
+  3. `verify_all_snapshot.json`：`checked` 多 3 键（§20.6）；
+  4. `run_topic_snapshot.json`：`tasks` 行多 `instance` 一键（§20.6）。
+  **第二次（final）**：**3253 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+  （1230.01 秒 = 20 分 30 秒，退出码 0）。基线是 §19 那次的 3233 passed ⇒ 本轮净增 20 条
+  （`test_statements_table.py` 15 + `test_task_instance.py` 5）。
+
+### 20.6 四条尺子的重生成（逐键核过）
+
+新表让"面"真的变了，四处都按各自的 `--write` 重生成，**先看 diff 再写**
+（`temp/_p1_verify_snapshot_diff.py` / `temp/_p1_runflow_snapshot_diff.py` 是本批新写的
+逐键核对脚本，可复跑）：
+
+- `tests/golden/tool_surface_snapshot.json`：**15 处，全部可解释** ——
+  `doc.register_dependency.params.properties.status.enum` 3→5（§20.3），
+  7 个 `table.*` 工具的 `table.enum` 16→17 与描述 `16 张表之一`→`17 张表之一`。
+  其余一字未动。
+- `tests/golden/agent_surface_snapshot.json`：9 个角色的 `prompt` 各差 **1 行**，
+  内容都是"表：…、`documents`、`dependencies`、**`statements`**、`review_findings`…"
+  这一行里多了一个表名；再加 `roles.G.actions` 里 `register_dependency` 的 `status` enum。
+  重生成后 `_differences(golden, live) == []`，且两条尺子自带的负控（改一个字节必须报）
+  仍然全绿。
+- `tests/golden/verify_all_snapshot.json`：8 个工作区的 `checked` 各多 **3 个键**
+  （`statements`、`statements_usable`、`dependencies_refuted_or_disputed`）= 24 处新增，
+  **消失 0 / 改值 0**；`issues` 一条没变。也就是说这一轮对既有工作区的审计结论
+  是"一模一样 + 三条新读数"，没有把任何一条旧读数改掉。
+- `tests/golden/run_topic_snapshot.json`：`tasks` 行各多一个键 `instance`（值空串），
+  两次运行各一处；`result` / 六件产物 / `usage_ledger` / 公开签名**一字未动**。
+
+### 20.7 报告落点（P1 的第四行）与三件**特意没做**的事
+
+**报告落点定成文件**：`out/review/REPORT.md`（M 用 `fs.write` 落盘）。
+另一条备选（落一行 `analysis_reports`）**这一批不做**，理由是它要往
+`REPORT_KINDS` 加一个取值（`review`），而那个取值今天**没有产出点** ⇒ 会立刻
+在 R011 里变成一条死取值，而且"报告是给人读的九节 markdown"这件事本来就更像文件。
+九节齐全的判据属于 P3（§16 P3 的报告行），本批只把落点定下来。
+
+三件特意没做、并写明理由的事：
+
+1. **没有改任何角色的写集**（`specs/*.py`）。写集登记的是"角色的 **Python 实现**会
+   `store.tx()` 哪些表"；今天没有任何实现写 `statements`，它由持有 `table.*` 的
+   角色**通过通用表工具**写，而通用表工具的落点是数据层校验、不走写集。
+   等 P2 的提示词落地、B 的实现真的开始写它时，`specs/b.py` 必须同步加上
+   （这一条已写进 `docs/ROLE-SPECS.md` 的写集表下方）。
+2. **没有加 `superseded_by`**（被谁取代）字段。§16 P1 的字段表里没有它，
+   而"被取代"这条状态没有指向就不可判定 —— 这是一个**真实的缺口**，但补它
+   要么改字段表（需要登记），要么等 P2/P3 的语义动作接线时一起做。**记在这里，不夹带。**
+3. **没有做 R17 的后一半**（"同一份文献/请求只被一个实例领走"）。本批做的是前一半
+   （台账能归因：`instance` 各不相同）。后一半要一个"领取/租约"机制
+   （`literature` 上今天没有任何 claim 字段），那是多实例并行的活（§16 P5 的
+   R15/R17），不该夹在数据面这一批里做半截。

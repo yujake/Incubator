@@ -293,6 +293,33 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
     ("CONJECTURE_FORMS", "structural"): (
         "死取值 ⇒ 预留：同 `CONJECTURE_FORMS.existential`。"
     ),
+    # ---- `draft/37` §16 P1（2026-10-02）加 `statements` 表时新声明的两套词表。
+    #
+    # ⚠️ **这两条是 AI 代写的登记**（窗口见 `docs/NOAI-SUSPENSION-2026-09-28.md`；
+    # 本表 docstring 写明"往这张表里加一条是人的动作"）⇒ 留还是删由 2 名 reviewer 走查裁定。
+    #
+    # 为什么只有 `superseded` 需要登记（而 `active`/`disputed`/`refuted`/
+    # `external_lit`/`own_result` 不需要）：普查的判据是"这个字面量在 `src/` 里
+    # （除定义文件外）出现过吗"，而 `verify.py` 的新不变量里写着
+    # `s.get("status") == "active"` / `== "external_lit"` 这样的**比较**字面量
+    # ⇒ 它们被判成"有产出"。这是本规则判据的一个已知弱点，比"同形不同义"更宽：
+    # **一次比较也被算作一次产出**。`superseded` 之所以暴露出来，只是因为
+    # 今天没有任何一处写它的字面量（连比较都没有）—— 它是最诚实的那一条。
+    # 这三档（`active`/`disputed`/`refuted`）真正的产出点在 `draft/37` §16 P2 的
+    # 提示词（B 消化入库、D 审阅改状态），届时它们会由**数据**产生。
+    ("STATEMENT_STATUSES", "superseded"): (
+        "死取值 ⇒ 预留。`draft/37` §16 P1 声明的四档状态之一（被后来的一条取代）。"
+        "留着的理由：『我们把它重写成了更强的形式』是命题台账必须能表达的一件事；"
+        "删掉它，一条被取代的命题就只能留在 `active` 里继续被引用 —— 那正是"
+        "`STATEMENT_UNUSABLE_STATUSES` 要防的形态。写它的动作在 P2/P3（D 审阅 + 收工）。"
+    ),
+    ("STATEMENT_UNUSABLE_STATUSES", "superseded"): (
+        "死取值 ⇒ 预留。它是 `STATEMENT_STATUSES` 里『不许再当依据用』的那三档之一"
+        "（`verify` 的 `proof_stmt_on_unusable_stmt` 读的就是这张表）。"
+        "之所以另立一张小词表而不是在 `verify` 里内联一个元组：那张表是**策略**"
+        "（哪些状态会撤销一条命题的依据力），与状态机本身是两个轴；"
+        "内联会让『同一判据两个落位』（`ATTACK_TERMINAL_STATUSES` 是同族的先例）。"
+    ),
 }
 
 

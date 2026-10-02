@@ -577,6 +577,7 @@ class Conductor:
         input_key: str,
         params: Mapping[str, Any],
         depth: int,
+        instance: str = "",
     ) -> SummonResult:
         """写一条"拒绝"的台账行并返回。拒绝也落台账（否则无可审计）。
 
@@ -600,6 +601,9 @@ class Conductor:
             "status": "done",
             "outcome": "refused",
             "refusal_reason": reason,
+            # `instance` 的位置必须与 `Task` 的字段顺序一致（见上面 `task_id` 那条注记）：
+            # 它在 `refusal_reason` 之后、`detail` 之前。
+            "instance": instance,
             "detail": detail,
             "error": None,
             # 拒绝没有真的跑，所以 started_at == ended_at。为什么不留空：
@@ -854,12 +858,14 @@ class Conductor:
                 detail=(f"{S.CONDUCTOR_ROLE} 不可被召唤（NON_SUMMONABLE）：主控就是派活方，"
                         "没有『召唤 M』这条边"),
                 by=by, parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+                instance=instance,
             )
         edge = P.check_action(role, action, registry=self.specs)
         if edge is not None:
             return self._refuse(
                 role, action, reason=edge.reason, detail=edge.detail, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+                instance=instance,
             )
 
         # ---- [2] 参数（结构问题在写 running 行之前判掉：跑一个注定炸的
@@ -873,6 +879,7 @@ class Conductor:
             return self._refuse(
                 role, action, reason="invalid_params", detail=bad, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+                instance=instance,
             )
 
         # ---- [3] 深度链
@@ -883,6 +890,7 @@ class Conductor:
             return self._refuse(
                 role, action, reason="invalid_params", detail=str(e), by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
+                instance=instance,
             )
 
         # ---- [4] 策略判定（边 / 深度 / 循环 / 扇出 / 并发 / 总量 / 预算 / 墙钟）
@@ -910,6 +918,7 @@ class Conductor:
             return self._refuse(
                 role, action, reason="budget_exceeded", detail=grant.reason, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=depth,
+                instance=instance,
             )
         d = Decision(
             frm=by, to=role, action=action, depth=depth, fanout=fanout, running=running,
@@ -929,6 +938,7 @@ class Conductor:
             return self._refuse(
                 role, action, reason=refusal.reason, detail=refusal.detail, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=depth,
+                instance=instance,
             )
 
         # ---- [5] 写 running 行（带 started_at），然后放掉锁再去跑 handler
@@ -947,6 +957,9 @@ class Conductor:
             "role": role, "action": action, "called_by": by,
             "parent_task_id": parent_task_id, "depth": depth, "input_key": input_key,
             "status": "running", "outcome": None, "refusal_reason": None,
+            # 与 `Task` 的字段顺序一致（`refusal_reason` 之后、`detail` 之前）——
+            # 顺序不一致会让 `tasks.json` 在 `rebuild()` 之后逐字节不同（I-9）。
+            "instance": instance,
             "detail": spec.summary, "error": None, "started_at": started, "ended_at": None,
             "tokens": 0, "usd": 0.0,
             "artifacts": [],

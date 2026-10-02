@@ -849,7 +849,43 @@ DOC_STATUSES = ("draft", "in_review", "revised", "accepted", "rejected", "unreso
 #: 引用了但拿不到的来源（例如论文里"companion book [6, Thm 6.5]"）
 #: 既不是 closed，也不该被含糊地写成 dangling。
 DEP_KINDS = ("theorem", "definition", "lemma", "proposition", "dataset", "experiment", "prior_art")
-DEP_STATUSES = ("closed", "dangling", "external_unavailable")
+#: 依赖的状态。**四态而不是两态**（`draft/37` §16 P1 加的 `refuted` / `disputed`）。
+#:
+#:   closed                —— 来源已入库、且引用本身没问题
+#:   dangling              —— 引用悬空（该有的来源没登记）
+#:   external_unavailable  —— 来源可得性之外的原因：我们拿不到它
+#:   refuted               —— 这条被引用的东西**本身被证否了**（文献错了，§9 那个场景）
+#:   disputed              —— 这条引用**有争议、尚未裁决**（可能是我们错了，也可能是文献错了）
+#:
+#: 为什么 `refuted` / `disputed` 不能折进 `dangling`：三者的**处置方向相反**。
+#: `dangling` 要去做的是"把来源补齐"；`refuted` 要做的可能是"把我们的结论一起撤下来"
+#: （§9：如果错的是文献，那么压在这条引用上的结论就不能再算数）；`disputed` 要做的
+#: 是"送去裁决"（`draft/37` §8/§9 的矛盾闭环）。折成一档，等于把"补一个引用"与
+#: "撤一条结论"合并成同一个动作 —— 而后者是不可逆的那一类。
+DEP_STATUSES = ("closed", "dangling", "external_unavailable", "refuted", "disputed")
+
+#: 一条**命题台账**（`statements` 表）的来源（`draft/37` §16 P1）。
+#:
+#:   external_lit —— 从文献里摘出来的（B 的"消化"：完整假设 + 证明逐字 + 出处）
+#:   own_result   —— 我们自己得到的结果（§10 的"自产定理该不该进事实库"）
+#:
+#: 为什么 origin 必须是独立字段、而不从 `source_lit_id` 推：**自产的定理同样会引文献**
+#: （我们的证明用了 Brown 的定理），于是"有 source_lit_id"既可能是"抄来的"也可能是
+#: "我们证的过程中引的"。这两个意思在报告里必须分栏（§16 P3：我们补的与原文的分栏），
+#: 而"分栏"这件事靠推导是推不出来的。
+STATEMENT_ORIGINS = ("external_lit", "own_result")
+
+#: 命题台账的状态（`draft/37` §16 P1，与 §8/§9 的裁决闭环配套）。
+#:
+#:   active     —— 在册、可用作依据
+#:   disputed   —— 有争议、尚未裁决（**不许当依据用**，见 verify 的不变量）
+#:   refuted    —— 被证否（可能是我们证否的，也可能是文献本身错了）
+#:   superseded —— 被后来的一条取代（例如我们把它重写成了更强的形式）
+STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded")
+
+#: 命题台账里**不许再被当作依据**的状态。`verify` 的不变量读的就是这一份名单 ——
+#: 两处各写一份是"同一判据两个落位"，漂移时没有任何地方会红。
+STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded")
 
 #: H 的审校发现类型。**每一类都必须能机械判定**，否则审校会退化成"我感觉"。
 #:   unsupported_claim       —— 断言没有引用（可判定：citations 为空）
@@ -1411,8 +1447,151 @@ class Dependency:
                 f"status={self.status!r} 时必须写 status_reason（依赖为什么没闭合 / 为什么不可得）。"
                 "只标一个状态而不说原因，等于把问题记了一笔却没人能接手"
             )
+        # `refuted` / `disputed`（`draft/37` §16 P1）：这两档同样必须说清"为什么"，
+        # 而且比上面那一档更要紧 —— 它们要触发的是"压在它上面的结论怎么办"（§9），
+        # 而不只是"去把来源补齐"。动机写成一句话，接手的人才知道该撤哪条结论。
+        if self.status in ("refuted", "disputed") and not self.status_reason.strip():
+            raise ValueError(
+                f"status={self.status!r} 时必须写 status_reason（这条引用为什么被证否 / 争议在哪）。"
+                "这一档会让压在它上面的 proof 级断言变成违规（见 verify 的 "
+                "proof_claim_on_refuted_dependency），所以理由不能省"
+            )
         if self.kind == "experiment" and self.source_experiment_id is None:
             raise ValueError("kind='experiment' 的依赖必须给 source_experiment_id")
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["page_range"] = self.page_range.to_dict()
+        return d
+
+
+@dataclass
+class Statement:
+    """一条**命题台账**行：命题原文 + 完整假设 + 证明逐字摘录 + 出处（`draft/37` §16 P1）。
+
+    ## 为什么要有这张表（它解决的是哪一个真实故障）
+
+    真机那一轮（2026-10-01）"审阅并 polish 一篇论文"跑完之后，台账里有依赖、有发现、
+    有报告，**却没有一处放得下"定理 1.5 的假设是什么、它的证明原文长什么样"**。
+    于是"审这条证明对不对"这件事在数据面上无处落脚：B 消化完只能在会话记录里留一段话，
+    D 要审它得再去读一遍 PDF，H 要判"正文与台账逐字一致"也没有可比的第二份文本。
+    这张表就是那个落点。
+
+    它与相邻三张表的分工（**别把三件事混成一件**）：
+
+    - `literature`：那**篇**文献（题录、下载、抽取状态）；
+    - `statements`：文献里（或我们手里）的那**条**命题 —— 本表；
+    - `dependencies`：某个使用点**依赖**了哪条命题（`used_by` → 本表的 `stmt_id` 是自然延伸）。
+
+    ## 四个字段为什么必须分开
+
+    - `statement_full`（含完整假设）vs `statement_text`（短版/人话）：数学里"定理成立"
+      与"在什么假设下成立"是两件事。省掉假设的命题会被下游当成无条件成立 ——
+      这正是 FC-23"把引用的定理当成自己的定理"在**命题级**的同一种病，而它在论文里
+      最常见的形态就是"引用时只抄了结论那一句"。
+    - `proof_text`（逐字摘录）：`quote_verified` 的比对对象就是它。没有逐字原文，
+      "引文回验"这件事无从做起（B 的"消化"必须交出可比对的文本，§3）。
+    - `origin`（`external_lit` / `own_result`）：报告的"我们补的"与"原文的"要分栏
+      （§16 P3），而这一栏靠 `source_lit_id` 推不出来（自产的证明也会引文献）。
+    - `kind`（theorem / lemma / …）：**刻意不是受控词表**。理由：它不参与任何判据分支
+      （分支只看 `origin` / `status` / `evidence_kind`），而论文里的命题种类比
+      `DEP_KINDS` 宽（还有 corollary / claim / remark / conjecture），给它一份词表
+      会立刻产生五六个没有产出点的死取值（R011 的债），换不来任何判据。它有非空要求。
+
+    ## `quote_verified` 是三态，不是布尔
+
+    `True` = 逐字比对通过 / `False` = 比对过、不一致 / `None` = **没校验**。
+    三态纪律的老规矩：`None` 绝不是 `False`，也绝不是 `True`（`quoteverify.QuoteCheck`
+    的 `verified` 就是同一套三态）。所以只要不是 `True`，就必须在 `quote_reason` 里
+    说清"为什么"—— 包括"还没查"。
+    """
+
+    stmt_id: str
+    #: `external_lit`（从文献摘的）或 `own_result`（我们自己得的）。见 `STATEMENT_ORIGINS`。
+    origin: str = ""
+    #: 命题种类（theorem / lemma / proposition / …）。自由文本，非空即可（理由见类 docstring）。
+    kind: str = "theorem"
+    #: 人话标签（如 "Theorem 1.5"）。可空 —— 有些命题在原文里没有编号。
+    label: str = ""
+    #: 短版命题（引用时用的那一句）。可以为空（只有 `statement_full` 齐全才算数）。
+    statement_text: str = ""
+    #: **含完整假设**的命题正文。`status="active"` 时必填 —— 这是本表的核心判据。
+    statement_full: str = ""
+    #: 证明的**逐字摘录**（`external_lit`）或我们自己的证明（`own_result`）。
+    proof_text: str = ""
+    #: 出处文献（`origin="external_lit"` 时必填）。
+    source_lit_id: str | None = None
+    page_range: PageRange = field(default_factory=PageRange)
+    #: 三态：True 逐字通过 / False 比对不一致 / None 没校验。见类 docstring。
+    quote_verified: bool | None = None
+    #: 不是 True 时必填：为什么没通过、或者为什么还没查。
+    quote_reason: str = ""
+    #: 证据等级（复用 `EVIDENCE_KINDS`）：proof / cross_check / heuristic。
+    evidence_kind: str = "heuristic"
+    #: 见 `STATEMENT_STATUSES` / `STATEMENT_UNUSABLE_STATUSES`。
+    status: str = "active"
+    #: 这条命题**用到了哪些别的命题**（本表内的 `stmt_id`，升序去重）。
+    #: 它是"承重结论"可追踪的落点：§16 P3 的收工门问的就是"承重的那些有没有 T3 或已降档"。
+    derived_from: list[str] = field(default_factory=list)
+    #: 自产结果落在哪份稿子里（`documents.doc_id`）。
+    doc_id: str | None = None
+    #: 自产结果在稿子里的行范围（如 "120-148"）。可空。
+    line_range: str = ""
+    created_at: str = ""
+    created_by: str = "agent-B"
+
+    def validate(self) -> None:
+        require_id(self.stmt_id, "stmt_id")
+        if self.origin not in STATEMENT_ORIGINS:
+            raise ValueError(
+                f"origin 必须是 {STATEMENT_ORIGINS} 之一，收到 {self.origin!r} —— "
+                "它是必填的：一条命题是抄来的还是我们自己证的，决定它在报告里进哪一栏"
+            )
+        if not self.kind.strip():
+            raise ValueError("kind 不能为空（theorem / lemma / proposition…）")
+        if self.evidence_kind not in EVIDENCE_KINDS:
+            raise ValueError(f"evidence_kind 必须是 {EVIDENCE_KINDS} 之一，收到 {self.evidence_kind!r}")
+        if self.status not in STATEMENT_STATUSES:
+            raise ValueError(f"status 必须是 {STATEMENT_STATUSES} 之一，收到 {self.status!r}")
+        if self.quote_verified is not None and not isinstance(self.quote_verified, bool):
+            raise ValueError("quote_verified 必须是 bool 或 None（三态：通过 / 不一致 / 没校验）")
+        if self.quote_verified is not True and not self.quote_reason.strip():
+            raise ValueError(
+                f"quote_verified={self.quote_verified!r} 时必须写 quote_reason："
+                "比对不一致要说清哪里不一致，没校验要说清为什么还没校验 —— "
+                "只留一个空字段，等于把'没查'记成了一笔没人能接手的账"
+            )
+        # ---- 出处：external_lit 必须指向一篇文献（否则"逐字摘录"没有比对对象）
+        if self.origin == "external_lit" and not (self.source_lit_id or "").strip():
+            raise ValueError(
+                "origin='external_lit' 必须给 source_lit_id：从文献里摘的命题不写清是哪一篇，"
+                "逐字回验就没有第二份文本可比（这正是 B 的消化必须交出出处的原因）"
+            )
+        if self.source_lit_id is not None:
+            require_id(self.source_lit_id, "source_lit_id")
+        if self.doc_id is not None:
+            require_id(self.doc_id, "doc_id")
+        # ---- 自产结果：证明是它与"一句声称"的唯一分界（§10 的自产入库门）
+        if self.origin == "own_result" and not self.proof_text.strip():
+            raise ValueError(
+                "origin='own_result' 必须给 proof_text：自产的命题没有证明就入库，"
+                "等于把我们自己的猜测抬成事实（§10 的'自产定理该不该进事实库'那一问，"
+                "落成数据面就是这一条）"
+            )
+        # ---- 负控（§16 P1 逐字要求的那一条）：缺完整假设的行不许进 active
+        if self.status == "active" and not self.statement_full.strip():
+            raise ValueError(
+                "status='active' 必须有 statement_full（含完整假设）："
+                "省掉假设的命题会被下游当成无条件成立 —— 这是 FC-23 在命题级的同一种病。"
+                "要么补全假设，要么把状态标成 disputed/refuted/superseded"
+            )
+        # ---- derived_from：升序去重、不含自身、每个都得是合法 id
+        if self.derived_from != sorted(set(self.derived_from)):
+            raise ValueError(f"derived_from 必须升序去重：{self.derived_from}")
+        for dep in self.derived_from:
+            require_id(dep, "derived_from[]")
+        if self.stmt_id in self.derived_from:
+            raise ValueError("derived_from 不能包含自身（自环会让'承重链'永远闭合）")
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -1669,6 +1848,15 @@ class Task:
     outcome: str | None = None
     #: `outcome == "refused"` 时的受控理由（见 `REFUSAL_REASONS`）。
     refusal_reason: str | None = None
+    #: 实例标签（`draft/37` §16 P1）。空串 = 这个角色只有那一个实例。
+    #:
+    #: 为什么必须落到台账上：`instance` 此前**只存在于日志行与后端调用参数里**
+    #: （`conductor.summon(..., instance=…)` → `_log("… , instance=X")`），于是
+    #: "这一轮里 N 个并行实例各自做了什么"在读台上无法归因 —— 台账里同角色同动作的
+    #: 多行长得一模一样（`conductor.py` 早已为"按角色找 running 行会找到 N 条"打过补丁，
+    #: 而那个补丁正是这个缺口的症状）。R17 要的"同一份文献只被一个实例领走"
+    #: 没有这一栏根本判不了。
+    instance: str = ""
     #: 人可读的说明。**"为什么是这个结果"必须能读**，否则台账就只是个计数器。
     detail: str = ""
     error: str | None = None
@@ -2097,6 +2285,9 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     # 章节顺序、断言顺序、开放问题顺序都是有意义的。
     "documents": {"sections": "seq", "claims": "seq", "open_problems": "seq"},
     "dependencies": {},
+    # 命题台账的 `derived_from` 是**集合**：一条命题用到哪几条别的命题，
+    # 顺序没有数学含义（去重才有：重复引用会让"承重面"计数虚高）。
+    "statements": {"derived_from": "set"},
     "review_findings": {},
     "tasks": {"artifacts": "set", "inputs": "set"},
     "usage_ledger": {},
@@ -2151,6 +2342,9 @@ TABLES: dict[str, dict] = {
     "attack_plans": {"file": "attack_plans.json", "row": AttackPlan, "id_field": "plan_id", "id_kind": "plan"},
     "documents": {"file": "documents.json", "row": Document, "id_field": "doc_id", "id_kind": "doc"},
     "dependencies": {"file": "dependencies.json", "row": Dependency, "id_field": "dep_id", "id_kind": "dep"},
+    # 命题台账（`draft/37` §16 P1）：**知识实体**，所以吃 4 位编号空间（见 ID_COUNTERS）。
+    # 放在 dependencies 之后：命题是依赖的锚点，两者相邻便于读图（`store.LOCK_ORDER` 同序）。
+    "statements": {"file": "statements.json", "row": Statement, "id_field": "stmt_id", "id_kind": "stmt"},
     "review_findings": {"file": "review_findings.json", "row": ReviewFinding, "id_field": "finding_id", "id_kind": "finding"},
     "tasks": {"file": "tasks.json", "row": Task, "id_field": "task_id", "id_kind": "task"},
     "usage_ledger": {"file": "usage_ledger.json", "row": UsageEntry, "id_field": "usage_id", "id_kind": "usage"},
@@ -2170,6 +2364,10 @@ ID_COUNTERS = {
     "plan": "plan_id",
     "doc": "doc_id",
     "dep": "dep_id",
+    # 命题台账吃 4 位空间（`draft/37` §16 P1）：一条命题是**知识实体**，
+    # 不是过程记录 —— 它会被别处引用（`dependencies.used_by`、报告的承重栏），
+    # 而过程记录式的短号（`s-NNNN`）在跨会话引用时读不出"这是哪一条"。
+    "stmt": "stmt_id",
     "finding": "finding_id",
     "usage": "usage_id",
     "eval": "eval_id",
@@ -2470,6 +2668,10 @@ def row_from_dict(table: str, raw: dict):
         d = {k: raw[k] for k in raw if k in Dependency.__dataclass_fields__}
         d["page_range"] = PageRange.from_dict(raw.get("page_range"))
         return Dependency(**d)
+    if table == "statements":
+        d = {k: raw[k] for k in raw if k in Statement.__dataclass_fields__}
+        d["page_range"] = PageRange.from_dict(raw.get("page_range"))
+        return Statement(**d)
     if table == "review_findings":
         return ReviewFinding(**{k: raw[k] for k in raw if k in ReviewFinding.__dataclass_fields__})
     if table == "tasks":

@@ -1068,7 +1068,9 @@
       "enum": [
        "closed",
        "dangling",
-       "external_unavailable"
+       "external_unavailable",
+       "refuted",
+       "disputed"
       ],
       "type": "string"
      },
@@ -2400,7 +2402,7 @@
       "type": "object"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2414,6 +2416,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",
@@ -2459,7 +2462,7 @@
       "type": "object"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2473,6 +2476,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",
@@ -2518,7 +2522,7 @@
       "type": "string"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2532,6 +2536,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",
@@ -2577,7 +2582,7 @@
       "type": "string"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2591,6 +2596,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",
@@ -2650,7 +2656,7 @@
       "type": "integer"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2664,6 +2670,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",
@@ -2753,7 +2760,7 @@
       "type": "string"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2767,6 +2774,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",
@@ -2817,7 +2825,7 @@
       "type": "object"
      },
      "table": {
-      "description": "16 张表之一",
+      "description": "17 张表之一",
       "enum": [
        "search_requests",
        "literature",
@@ -2831,6 +2839,7 @@
        "attack_plans",
        "documents",
        "dependencies",
+       "statements",
        "review_findings",
        "tasks",
        "usage_ledger",

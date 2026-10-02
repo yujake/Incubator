@@ -565,6 +565,10 @@ def _check_5(rep, lit_by_id, questions, store):
     # 下面这条检查把"我们依赖了一个拿不到的外部结论"变成一条**可查询的事实**，
     # 而不是藏在引文角标里。
     dep_ok = 0
+    #: `refuted` / `disputed` 的条数（`draft/37` §16 P1 加的两档）。
+    #: 单独记一个读数而不是并进 `dep_ok`：它俩不是"没闭合"，而是"引用本身有问题"，
+    #: 处置方向相反（补来源 / 撤结论）。并进同一个数会让两种局面在读数上同形。
+    dep_refuted_disputed = 0
     for d in dependencies:
         did = d.get("dep_id")
         used_by = str(d.get("used_by") or "")
@@ -611,7 +615,32 @@ def _check_5(rep, lit_by_id, questions, store):
             rep.issues.append(Issue("error", "dependencies", did, "dangling_dep",
                                     f"{used_by} 的依赖「{str(d.get('label') or '')[:80]}」悬空且未闭合。"
                                     "要么补上来源（closed），要么说明为什么拿不到（external_unavailable）"))
+        elif st == "refuted":
+            # `draft/37` §9 的落点：**被证否的前提撑不起任何东西**。
+            # 报 error 而不是 warning：它不是"已知边界"，而是"压在它上面的结论现在
+            # 都不能算数了"，必须有人去撤（或改成 disputed 并送裁决）。
+            rep.issues.append(Issue(
+                "error", "dependencies", did, "refuted_dependency_in_use",
+                f"{used_by} 依赖的「{str(d.get('label') or '')[:80]}」已被证否："
+                f"{str(d.get('status_reason') or '')[:160]}。"
+                "压在它上面的结论必须一起降档或撤回（§9：如果错的是文献，"
+                "那么以它为据的结论就不能再算数）",
+            ))
+        elif st == "disputed":
+            # 与 `external_unavailable` 同级（warning）：这是"我们**已经记录**了
+            # 这里有争议、尚未裁决"，属于已知边界而不是谎报。§16 P3 的收工门会
+            # 把未裁决的 disputed 当成拦路条件 —— 那是**交付**的口径，比 verify 更严；
+            # 两处不同是刻意的：verify 说"账记得对"，收工门说"这样还不能交"。
+            rep.issues.append(Issue(
+                "warning", "dependencies", did, "disputed_dependency_in_use",
+                f"{used_by} 依赖的「{str(d.get('label') or '')[:80]}」有争议、尚未裁决："
+                f"{str(d.get('status_reason') or '')[:160]}。"
+                "在裁决之前，引用它的结论必须带上这个保留（§8/§9 的矛盾闭环）",
+            ))
+        if st in ("refuted", "disputed"):
+            dep_refuted_disputed += 1
     rep.checked["dependencies_closed"] = dep_ok
+    rep.checked["dependencies_refuted_or_disputed"] = dep_refuted_disputed
 
     return dependencies, doc_by_id, documents, eval_by_id, exp_by_id, experiments, findings
 
@@ -771,9 +800,24 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
     入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
     泄漏语义（后面的段确实读到了它们）。
     """
+    #: 哪些依赖状态会让压在它上面的 `proof` 级断言变成违规，以及各自的理由码。
+    #:
+    #: 为什么要分开三个理由码（而不是一个 `proof_claim_on_bad_dependency`）：
+    #: 本仓的代码就是**处置把手** —— `dangling`/`external_unavailable` 要做的是
+    #: "去把来源补齐"，`refuted` 要做的是"把结论撤下来或降档"，`disputed` 要做的是
+    #: "送裁决"。三件事的接手人都不一样（前者 G、中者 D+G、后者人）。合并成一个码，
+    #: 台账上就只剩一句"有个问题"，而"谁去做、做什么"必须靠读 message 才猜得出来。
+    unusable_dep_reasons: dict[str, tuple[str, str]] = {
+        "dangling": ("proof_claim_with_unclosed_dependency", "未闭合"),
+        "external_unavailable": ("proof_claim_with_unclosed_dependency", "在本项目可得范围之外"),
+        "refuted": ("proof_claim_on_refuted_dependency", "已被证否"),
+        "disputed": ("proof_claim_on_disputed_dependency", "有争议、尚未裁决"),
+    }
     for d in dependencies:
-        if str(d.get("status")) not in ("dangling", "external_unavailable"):
+        st = str(d.get("status"))
+        if st not in unusable_dep_reasons:
             continue
+        code, why = unusable_dep_reasons[st]
         used_by = str(d.get("used_by") or "")
         kind, _, ref = used_by.partition(":")
         if kind != "doc":
@@ -787,11 +831,11 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
             continue
         if claim.get("evidence_kind") == "proof":
             rep.issues.append(Issue(
-                "error", "dependencies", d.get("dep_id"), "proof_claim_with_unclosed_dependency",
-                f"断言 {docid}#{cid} 声称 evidence_kind='proof'，却挂在一条未闭合的依赖上"
-                f"（「{str(d.get('label') or '')[:60]}」，status={d.get('status')}）⇒ "
-                "**拿不到的前提撑不起 proof 级的主张**。要么把该断言的等级降为 cross_check，"
-                "要么补上可得的来源。",
+                "error", "dependencies", d.get("dep_id"), code,
+                f"断言 {docid}#{cid} 声称 evidence_kind='proof'，却挂在一条{why}的依赖上"
+                f"（「{str(d.get('label') or '')[:60]}」，status={st}）⇒ "
+                "**拿不到 / 不算数的前提撑不起 proof 级的主张**。要么把该断言的等级降为 "
+                "cross_check，要么补上可得的来源，要么先裁决这条依赖。",
             ))
 
     # ---- 稿件断言的可追溯性（FC-02）
@@ -1428,6 +1472,83 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
                     f"status={status!r} 自称成功，而 experiment_ids 里的 {refuters!r} 的 result='refutes'"))
 
 
+def _check_13(rep, store) -> None:
+    """`verify_all` 的第 13 段：命题台账（`statements`）的不变量（`draft/37` §16 P1）。
+
+    这一段的四条判据，各守一种**已经在真机上出现过**的病：
+
+    1. **出处必须存在**（`dangling_lit_ref` / `dangling_doc_ref`）：一条"从文献里摘的"
+       命题指着一篇不存在的文献 —— 逐字回验就没有第二份文本，而报告照样印。
+       这与 `dangling_dep` 同族，只是发生在命题级。
+    2. **`derived_from` 引用完整性**（`dangling_stmt_ref`）：承重链上少一环，
+       "这条结论靠什么站着"就答不出来（`draft/37` §4 的依赖图读数就是被这种缺口污染的）。
+    3. **`proof` 级命题不许压在不可用的命题上**（`proof_stmt_on_unusable_stmt`）：
+       这是 §8/§9 的矛盾闭环在**命题级**的落点，与依赖级的
+       `proof_claim_on_refuted_dependency` 成对。`refuted` / `superseded` 报 error
+       （结论必须撤或降档），`disputed` 报 warning（等裁决）。
+    4. **`active` 的文献命题却没逐字回验**（`active_stmt_quote_unverified`，warning）：
+       "B 的唯一自动幻觉防线"就是逐字回验（见 `quoteverify` 的 docstring）。
+       它降为 warning 而不是 error，理由与 `external_unavailable` 那条一致：
+       这是**已知未做**、不是谎报；但它在报告里必须看得见。
+    """
+    statements = store.rows("statements")
+    stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
+    lit_ids = {str(x.get("lit_id")) for x in store.rows("literature")}
+    doc_ids = {str(x.get("doc_id")) for x in store.rows("documents")}
+
+    usable = 0
+    for s in statements:
+        sid = str(s.get("stmt_id") or "")
+        lid = str(s.get("source_lit_id") or "")
+        if lid and lid not in lit_ids:
+            rep.issues.append(Issue(
+                "error", "statements", sid, "dangling_lit_ref",
+                f"命题的 source_lit_id={lid} 不在文献表里 ⇒ 逐字回验没有可比对的文本，"
+                "而这条命题照样会被下游当成依据",
+            ))
+        docid = str(s.get("doc_id") or "")
+        if docid and docid not in doc_ids:
+            rep.issues.append(Issue(
+                "error", "statements", sid, "dangling_doc_ref",
+                f"命题的 doc_id={docid} 不在稿件表里（自产结果落在哪份稿子上说不清）",
+            ))
+        for dep in s.get("derived_from") or []:
+            if str(dep) not in stmt_by_id:
+                rep.issues.append(Issue(
+                    "error", "statements", sid, "dangling_stmt_ref",
+                    f"derived_from 里的 {str(dep)!r} 不是一条存在的命题 ⇒ "
+                    "承重链上少了一环，'这条结论靠什么站着'就答不出来",
+                ))
+        if str(s.get("evidence_kind") or "") == "proof":
+            for dep in s.get("derived_from") or []:
+                row = stmt_by_id.get(str(dep))
+                if row is None:
+                    continue  # 上面已按 dangling_stmt_ref 报过，这里不重复
+                dst = str(row.get("status") or "")
+                if dst not in S.STATEMENT_UNUSABLE_STATUSES:
+                    continue
+                level = "warning" if dst == "disputed" else "error"
+                rep.issues.append(Issue(
+                    level, "statements", sid, "proof_stmt_on_unusable_stmt",
+                    f"命题 {sid} 声称 evidence_kind='proof'，却建立在 {str(dep)} 上，"
+                    f"而它的 status={dst!r}（不可用作依据）⇒ "
+                    "要么把这条命题降为 cross_check，要么先解决被引用的那一条"
+                    "（§8/§9：矛盾与错文献都要落到'压在它上面的结论怎么办'）",
+                ))
+        if (str(s.get("status") or "") == "active"
+                and str(s.get("origin") or "") == "external_lit"
+                and s.get("quote_verified") is not True):
+            rep.issues.append(Issue(
+                "warning", "statements", sid, "active_stmt_quote_unverified",
+                f"命题 {sid} 是 active 的文献命题，但 quote_verified={s.get('quote_verified')!r}"
+                f"（{str(s.get('quote_reason') or '没说为什么')[:120]}）⇒ "
+                "逐字回验是 B 那条路上唯一的自动幻觉防线；没做就要在报告里标明",
+            ))
+        if str(s.get("status") or "") == "active":
+            usable += 1
+    rep.checked["statements_usable"] = usable
+
+
 def verify_all(
     store: Store,
     *,
@@ -1457,4 +1578,5 @@ def verify_all(
     _check_10(rep, allow_fulltext_quote_fallback, deep, extract_text, lit_by_id, quote_widen, relations, store)
     closed_dep_exps, doc_by_id, exp_by_id = _check_11(rep, documents, store)
     _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store)
+    _check_13(rep, store)
     return rep

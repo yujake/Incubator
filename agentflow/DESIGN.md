@@ -477,7 +477,7 @@ test/test1/
 |---|---|
 | `test/test1/src/abflow/` | `agentflow/src/agentflow/`（62 个顶层 `*.py`） |
 | `test/test1/tests/` | `agentflow/tests/`（162 个 `test_*.py`） |
-| `test/test1/data/` | `agentflow/data/`（16 张表的快照 JSON + `events.jsonl`） |
+| `test/test1/data/` | `agentflow/data/`（17 张表的快照 JSON + `events.jsonl`） |
 | `test/test1/library/` | `agentflow/library/`（本地书架） |
 | `test/test1/demo/` | `agentflow/demo/`（离线演示素材） |
 | `test/test1/logs/` | 正式版无对应目录；长产出落 `<工作区根>/runs/*.json` 与 `<工作区根>/notes/<角色>.md`（`agentflow/src/agentflow/agent_loop.py`） |

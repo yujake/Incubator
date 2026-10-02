@@ -117,6 +117,7 @@ DATA_FILES = (
     "experiments.json",
     "attack_plans.json",
     "documents.json",
+    "statements.json",
     "dependencies.json",
     "review_findings.json",
     "tasks.json",

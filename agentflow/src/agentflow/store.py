@@ -76,6 +76,11 @@ LOCK_ORDER: tuple[str, ...] = (
     "experiments",
     "attack_plans",
     "documents",
+    # 命题台账（`draft/37` §16 P1）：插在 documents 之后、dependencies 之前。
+    # 位置理由：命题是依赖的**锚点**（`dependencies.used_by` 的自然延伸就是 `stmt_id`），
+    # 于是"先锁锚点、再锁依赖"与读图的顺序一致；反过来（依赖先锁）在
+    # "B 消化入库 + G 登记引用"这种一笔事务里会让两个事务的取锁顺序相反。
+    "statements",
     "dependencies",
     "review_findings",
     "tasks",

@@ -144,7 +144,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `dangling_question_ref` / `evidence_kind_overclaim` / `unhashed_experiment_code` / `refutation_without_counterexample` | error | 实验行的证据纪律 | E |
 | `dangling_question_ref` / `dangling_plan_ref` / `dangling_experiment_ref` / `stalled_without_partial` | error | 攻坚计划 | F |
 | `dangling_dep` / `dangling_dep_external` | error / warning | 依赖闭合（FC-23） | G |
-| `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency` / `closed_dep_on_inconclusive_experiment` | error | **过度声称**（FC-22） | G/H |
+| `refuted_dependency_in_use` / `disputed_dependency_in_use` | error / warning | 依赖被证否 / 有争议（`draft/37` §16 P1） | G/D |
+| `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency` / `closed_dep_on_inconclusive_experiment` / `proof_claim_on_refuted_dependency` / `proof_claim_on_disputed_dependency` | error | **过度声称**（FC-22） | G/H |
+| `statements`: `dangling_lit_ref` / `dangling_doc_ref` / `dangling_stmt_ref` / `proof_stmt_on_unusable_stmt`（`disputed` 降 warning）/ `active_stmt_quote_unverified`（warning） | error×3 / warning×2 | 命题台账（`draft/37` §16 P1） | B/D |
 | `unsupported_claim` / `dangling_citation` / `citation_to_retracted_relation` / `citation_to_suspect_relation` / `overclaim` / `unknown_citation_kind` | error×5 / warning | 稿件的断言与引用 | G/H |
 | `question_based_on_retracted_relation` | warning | 研究问题建立在被否关系上 | D |
 | `dangling_doc_ref` / `finding_without_evidence` / `accepted_with_open_error` | error | 审校发现自身必须带证据 | H |
@@ -188,6 +190,13 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
+
+> **`statements`（命题台账，`draft/37` §16 P1）为什么不在上面任何一行的写集里**：
+> 写集登记的是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
+> 到今天为止，没有任何角色的实现写这张表 —— 它由持有 `table.*` 写工具的角色
+> （B 消化、D 审阅）**通过通用表工具**写，而通用表工具的落点是数据层校验，
+> 不走写集。等 P2 的提示词落地、B 的实现真的开始写它时，`specs/b.py` 的写集
+> 必须同步加上 `statements`（否则"两个并发任务同时改它"不会被判成冲突）。
 
 ### 0.7 动作表（`capabilities.CAPABILITIES`，51 个动作）
 
@@ -1585,15 +1594,20 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 
 **(b) `dependencies.status`**
 
-`DEP_STATUSES = ("closed","dangling","external_unavailable")`（`schema.DEP_STATUSES`）。
+`DEP_STATUSES = ("closed","dangling","external_unavailable","refuted","disputed")`（`schema.DEP_STATUSES`）。
+后两档是 `draft/37` §16 P1 加的（§8/§9 的矛盾与"文献错了"两个场景的落点）。
 
 | 迁移 | 允许？ | 约束 |
 |---|---|---|
 | `→ closed` | ✅ **仅当** `source_lit_id`/`source_experiment_id` 真实存在 | `doc.register_dependency` 真的去核 `literature`/`experiments` 表 |
 | `→ dangling` | ✅ | **必须写 `status_reason`** |
 | `→ external_unavailable` | ✅ | **必须写 `status_reason`**（"本项目拿不到来源"是已知边界，降为 warning） |
+| `→ refuted` | ✅ | **必须写 `status_reason`**（这条引用为什么被证否）。`verify.refuted_dependency_in_use`（error）—— 压在它上面的结论必须一起降档或撤回 |
+| `→ disputed` | ✅ | **必须写 `status_reason`**（争议在哪、等谁裁决）。`verify.disputed_dependency_in_use`（warning，已知未裁决）；`draft/37` §16 P3 的**收工门**把未裁决的 `disputed` 当拦路条件（交付口径比 verify 更严，两处不同是刻意的） |
 | `closed` 但指向文献不存在 | ❌ | `verify.dangling_dep`（error） |
 | `closed` 但指向 `inconclusive` 实验 | ❌ | `verify.closed_dep_on_inconclusive_experiment`（error） |
+| `proof` 级断言挂在 `refuted` 依赖上 | ❌ | `verify.proof_claim_on_refuted_dependency`（error） |
+| `proof` 级断言挂在 `disputed` 依赖上 | ❌ | `verify.proof_claim_on_disputed_dependency`（error） |
 
 **(c) `documents.claims` 的字段级状态**（不是行状态，是**断言**的状态）
 
@@ -1649,7 +1663,14 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 | 引用 `suspect` 关系 | `citation_to_suspect_relation` | warning |
 | 不得过度声称（FC-22） | `overclaim` / `proof_claim_rests_on_weaker_evidence` | error |
 | `proof` 断言的所有依赖必须闭合 | `proof_claim_with_unclosed_dependency` | error |
+| `proof` 断言不得挂在被证否的依赖上（§9） | `proof_claim_on_refuted_dependency` | error |
+| `proof` 断言不得挂在尚未裁决的依赖上（§8） | `proof_claim_on_disputed_dependency` | error |
 | 依赖悬空 | `dangling_dep`（`external_unavailable` 降为 warning） | error / warning |
+| 依赖本身被证否 / 有争议 | `refuted_dependency_in_use` / `disputed_dependency_in_use` | error / warning |
+| 命题的出处（文献 / 稿件）必须存在 | `statements` 的 `dangling_lit_ref` / `dangling_doc_ref` | error |
+| 承重链不得缺环（`derived_from`） | `dangling_stmt_ref` | error |
+| `proof` 级命题不得压在不可用的命题上 | `proof_stmt_on_unusable_stmt`（`disputed` 降 warning） | error / warning |
+| `active` 的文献命题必须逐字回验过 | `active_stmt_quote_unverified` | warning |
 | `closed` 依赖不得指向 `inconclusive` | `closed_dep_on_inconclusive_experiment` | error |
 | 依赖的 `used_by` 指向的稿件存在 | `dangling_doc_ref`（经 review_findings）；**未核到直接的 `used_by` 检查** | ⚠️ 未核实 |
 | 数组字段已声明 | `undeclared_array_field` | error |
@@ -1862,7 +1883,7 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 | 发现指向的稿件存在 | `dangling_doc_ref` | error |
 | 发现必须带证据 | `finding_without_evidence` | error |
 | `accepted` 稿件不得有 open error | `accepted_with_open_error` | error |
-| `proof` 断言的依赖闭合（H 是复核方） | `proof_claim_with_unclosed_dependency` | error |
+| `proof` 断言的依赖闭合（H 是复核方） | `proof_claim_with_unclosed_dependency` / `proof_claim_on_refuted_dependency` / `proof_claim_on_disputed_dependency` | error |
 | 证据等级不得过度声称 | `overclaim` / `proof_claim_rests_on_weaker_evidence` | error |
 | **H 的工具面 0 个写工具** | `filter_readonly_h_surface` 留痕 + `for_role` 结构性剥离 | 实测 0 |
 | **H 只能召唤 G** | `ALLOWED_EDGES["H"] == {"G"}` | 静态表 |
