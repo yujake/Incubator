@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -337,6 +338,104 @@ def test_ensure_project_refuses_foreign_directory(tmp_path: Path, monkeypatch: p
     assert res.ok is False, "存在但不是工作区时必须失败"
     assert "manual-notes" in str(res.error)
     assert sorted(p.name for p in foreign.iterdir()) == ["notes.txt"], "绝不往别人的目录里写东西"
+
+
+def test_ensure_project_refuses_inside_an_existing_workspace(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """正控（`draft/37` §37.4 ④ / §41）：已经在项目里、又没说项目落哪 ⇒ 拒绝，且一个目录都不建。
+
+    这条门是怎么来的（不是设计洁癖，是真机读数）：
+    `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`
+    —— 一个与本工作区无关的默认落点。于是 M 在一个已存在的工作区里调这一件，
+    得到的是在别处新建的一个空项目，而不是"热启动当前项目"：
+
+    - §37 那趟真机 23 步里有 4 步在 `ensure_project`，其中一次真的建出了
+      `D:\\Incubator\\projects\\project11`（`project.json` 的 `created_at`
+      与那次运行同秒级）。当时账本上没有任何一步显示"我建了个项目"。
+    - 同一天本仓库自己的普查探针（没给 `projects_dir`）也建了 `project12`/`project13`
+      —— 写探针的人同样踩，说明缺省值才是因。
+
+    判据取三条，缺一条都算这件事没修好：
+    1. `ok is False` 且 `kind == "already_a_project"`（不是含糊的失败）；
+    2. 缺省落点里一个条目都没多（"拒绝了但顺手建了目录"是最坏的形态）；
+    3. 消息里点名出口（显式给 `projects_dir`）—— 只会说"不行"的守卫会把人卡死。
+    """
+    projects_root = tmp_path / "default-projects"
+    projects_root.mkdir()
+    monkeypatch.setattr(P, "DEFAULT_PROJECTS_DIR", projects_root, raising=True)
+    monkeypatch.delenv(P.ENV_PROJECTS_DIR, raising=False)
+    before = sorted(p.name for p in projects_root.iterdir())
+
+    # 工作区必须是另一个目录：`Store.init()` 会拒绝在非空目录里建工作区
+    # （`draft/28` §136.3 事故 B 那道闸）。夹具自己先撞一次那条闸，是这道守卫值钱的旁证。
+    store, _c, reg = _wired(tmp_path / "ws")
+    assert P.classify(store.root)[0] == "workspace", "夹具前提：当前根确实是一个工作区"
+
+    res = reg.call("conductor.ensure_project", role="M", start="auto")
+    assert res.ok is False, res
+    assert res.meta.get("kind") == "already_a_project", res.meta
+    err = str(res.error or "")
+    assert "不要另建项目" in err and "projects_dir" in err, err
+    assert sorted(p.name for p in projects_root.iterdir()) == before, (
+        "拒绝时必须一个目录都不建（缺省落点里多了东西就是没修好）")
+
+
+def test_ensure_project_still_works_when_the_landing_is_explicit(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """负控（守卫不能是"一律拒绝"）：显式说清项目落哪 ⇒ 冷启动照旧能建。
+
+    这也是既有两条用例（`test_ensure_project_decides_cold_then_warm` /
+    `test_ensure_project_refuses_foreign_directory`）赖以成立的形态：
+    它们在一个工作区里、把项目建到另一个显式指定的目录，是正当用法。
+    """
+    monkeypatch.delenv(P.ENV_PROJECTS_DIR, raising=False)
+    landing = tmp_path / "elsewhere"
+    _store, _c, reg = _wired(tmp_path)
+
+    res = reg.call("conductor.ensure_project", role="M", project_name="p1", start="cold",
+                   projects_dir=str(landing))
+    assert res.ok, res.error
+    assert res.data["created"] is True and res.data["mode"] == "cold"
+    assert (landing / "p1" / ".agentflow-workspace").is_file(), "显式落点下必须真的建出来"
+
+    # 环境变量同样是"操作者说了落在哪"的一种说法（CI / 本机配置都走它）。
+    env_landing = tmp_path / "via-env"
+    monkeypatch.setenv(P.ENV_PROJECTS_DIR, str(env_landing))
+    res2 = reg.call("conductor.ensure_project", role="M", project_name="p2", start="cold")
+    assert res2.ok, res2.error
+    assert (env_landing / "p2" / ".agentflow-workspace").is_file()
+
+
+def test_conductor_selftest_passes_and_has_teeth(monkeypatch: pytest.MonkeyPatch):
+    """正控 + 两条负控（`draft/37` §41）：工具模块的自检必须是绿的，而且真的在看东西。
+
+    这一件 2026-10-02 之前恒返回 1：里面写死"应有 9 个"，而编排面早就是 11 件了 ——
+    而全仓没有任何判据跑 `tools/*_tools.py` 的 `selftest()`（13 个工具模块里只有这一个有），
+    于是它烂在那里没人看见。一条恒红的自检与一条恒绿的自检一样没有信息量。
+
+    两条负控分别盯它现在真在看的两个方向（不是"把数字改小就红"那种假牙）：
+    ① 注册面比声明面少一件（`register` 漏了一件）⇒ 必须红；
+    ② 只读角色拿到主控工具（权限泄漏）⇒ 必须红。
+    """
+    assert CT.selftest() == 0
+
+    real_register = CT.register
+
+    def _dropping(registry, **kw):
+        return real_register(registry, **kw)[:-1]
+
+    monkeypatch.setattr(CT, "register", _dropping, raising=True)
+    assert CT.selftest() == 1, "少注册了一件而自检仍然绿 ⇒ 这条自检没有牙"
+    monkeypatch.undo()
+
+    def _leak_probe() -> object:
+        return CT.ok()
+
+    _leak_probe.__tool_spec__ = dataclasses.replace(  # type: ignore[attr-defined]
+        CT.conductor_state.__tool_spec__, name="conductor.leak_probe", roles=("C",))
+    monkeypatch.setattr(CT, "_TOOL_FUNCTIONS",
+                        (*CT._TOOL_FUNCTIONS, (_leak_probe, ())), raising=True)
+    assert CT.selftest() == 1, "只读角色拿到了主控工具而自检仍然绿 ⇒ 权限那条检查是空转的"
 
 
 def test_state_and_role_spec_are_read_only_views(tmp_path: Path):

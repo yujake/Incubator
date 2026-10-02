@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import replace
 from functools import partial
@@ -105,8 +106,9 @@ def _write_resume_brief(conductor: Conductor) -> dict:
                         "action": r.get("action"), "status": r.get("status"),
                         "outcome": r.get("outcome"),
                         "refusal_reason": r.get("refusal_reason")} for r in rows[-8:]],
-        "how_to_continue": ("再来时用 conductor.ensure_project(start=\"auto\") 热启动，"
-                            "读 conductor.ledger(view=\"stats\") 看还剩什么；"
+        "how_to_continue": ("工作区已在手边时，直接 conductor.resume_brief / conductor.ledger"
+                            "（view=\"stats\"）接着做，不要另建项目；要从默认 projects 目录进，"
+                            "才用 conductor.ensure_project(start=\"auto\") 热启动。"
                             "本简报是事实记录，不代替判断。"),
     }
     try:
@@ -494,7 +496,9 @@ def conductor_cancel(_conductor, reason: str = "user", detail: str = "") -> Tool
     "conductor.ensure_project",
     "冷启动 / 热启动由你决定：给 start=auto|cold|warm，返回四态"
     "（absent/empty/workspace/not_a_project）与最终 mode。cold 才建目录，"
-    "warm 必须已存在且是工作区 —— 绝不替你删、也绝不替你把别人的目录当工作区。",
+    "warm 必须已存在且是工作区 —— 绝不替你删、也绝不替你把别人的目录当工作区。"
+    "⚠️ 你已经在某个工作区里、又没有显式给 projects_dir 时，这一件会被拒"
+    "（kind=already_a_project）：待在项目里不要另建项目。",
     {
         "type": "object",
         "properties": {
@@ -512,11 +516,46 @@ def conductor_cancel(_conductor, reason: str = "user", detail: str = "") -> Tool
     roles=("M",),
     returns="{'name','path','mode','requested','state','why','created','ingested'}",
 )
-def conductor_ensure_project(project_name: str = "", start: str = "auto",
+def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
                              books_dir: str = "", books_limit: int | None = None,
                              projects_dir: str = "") -> ToolResult:
-    """工具体：冷/热启动由主控决定，四态如实返回（不替它猜）。"""
+    """工具体：冷/热启动由主控决定，四态如实返回（不替它猜）。
+
+    ## 为什么"已经在项目里"要直接拒（2026-10-02 真机读数逼出来的守卫）
+
+    `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`
+    —— 一个与工作区无关的默认落点（本机实测 `D:\\Incubator\\projects`）。
+    于是"在一个已存在的工作区里调它"会得到一个在别处新建的空项目，
+    而不是"热启动当前项目"：
+
+    - 真机实测（`draft/37` §37）：那一趟 23 步里有 4 步在 `ensure_project`，
+      其中一次真的建出了 `D:\\Incubator\\projects\\project11`
+      （`project.json` 的 `created_at` = 2026-10-02T20:39:47+08:00，
+      与那次运行同秒级）—— 而当时的账本上没有任何一步显示"我建了个项目"。
+    - 同一天，本仓库自己的普查探针（`temp/_p40_m_tool_smoke.py`）在没给
+      `projects_dir` 时也建了 `project12` / `project13` 两个空项目 ——
+      写探针的人也会踩，说明这不是"M 的纪律问题"，是缺省值的问题。
+
+    守卫的边界刻意很窄：只拒"当前工作区自己就是一个初始化过的项目、
+    而调用方又没显式说项目落在哪"。显式给 `projects_dir`（或设
+    `AGENTFLOW_PROJECTS_DIR`）时照旧工作 —— 那是操作者在说"我知道落在哪"。
+    不这么定就会误伤既有判据：`tests/test_conductor_tools.py` 里那两条
+    冷/热启动用例正是"在一个工作区里、把项目建到另一个显式指定的目录"。
+    """
     from .. import projects as P
+
+    explicit = bool(projects_dir.strip()) or bool(os.environ.get(P.ENV_PROJECTS_DIR, "").strip())
+    inside = store is not None and P.classify(Path(store.root))[0] == "workspace"
+    if inside and not explicit:
+        default_root = P.projects_dir(None)
+        return fail(
+            "你已经在项目" + f" {Path(store.root).name} 里（{store.root}）⇒ 不要另建项目。"
+            "接着做下去用 conductor.resume_brief / conductor.state / conductor.ledger，"
+            "要派活就用 conductor.summon。真要另建一个项目，请显式给 projects_dir"
+            f"（缺省落点是 {default_root}，不是你当前的工作区）；"
+            "这一件拒绝时没有建任何目录。",
+            kind="already_a_project", root=str(store.root), default_projects_dir=str(default_root),
+        )
 
     root = Path(projects_dir) if projects_dir else P.projects_dir(None)
     ref = P.resolve(root, project_name or None, start=start)
@@ -752,7 +791,7 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_stop, ('_conductor',)),
     (conductor_resume_brief, ('_conductor',)),
     (conductor_cancel, ('_conductor',)),
-    (conductor_ensure_project, ()),
+    (conductor_ensure_project, ('store',)),
     (conductor_state, ('_conductor',)),
     (conductor_role_spec, ('store',)),
     (conductor_acceptance, ('store',)),
@@ -851,7 +890,18 @@ def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
 
 
 def selftest() -> int:
-    """自检：注册面非空、且每个工具的 roles 里都有主控；不需要真工作区。"""
+    """自检：注册面与声明面逐名相同、且每个工具的 roles 里都有主控；不需要真工作区。
+
+    ## 为什么条数不再写死（2026-10-02 实测的一处烂账）
+
+    这里原先写的是 `if len(names) != 9` 与"应有 9 个"、外加一句"自检通过：9 件编排面工具"。
+    工具面在 `acceptance` / `closing` / `summon_many` 落地之后就是 11 件了，
+    于是这条自检恒返回 1（实测：`[conductor_tools] 注册了 11 个工具（应有 9 个）`）——
+    而没有任何判据跑 `tools/*_tools.py` 的 `selftest()`（普查 13 个工具模块，
+    只有这一个有 selftest），所以它烂在那里没人看见：一条恒红的自检与一条恒绿的自检
+    一样没有信息量。修法不是把 9 改成 11（下次加工具会再烂一次），
+    而是让"应有几个"由 `_TOOL_FUNCTIONS` 现算 —— 那个元组才是这份声明的唯一来源。
+    """
     problems: list[str] = []
     reg = ToolRegistry(name="conductor-selftest")
     try:
@@ -859,8 +909,13 @@ def selftest() -> int:
     except Exception as exc:  # 注册期就炸说明接线本身坏了
         print(f"[conductor_tools] 注册失败：{type(exc).__name__}: {exc}")
         return 1
-    if len(names) != 9:
-        problems.append(f"注册了 {len(names)} 个工具（应有 9 个）：{names}")
+    declared = [fn.__tool_spec__.name for fn, _deps in _TOOL_FUNCTIONS]
+    if sorted(names) != sorted(declared):
+        problems.append(
+            f"注册面与声明面不一致：注册 {sorted(names)}，`_TOOL_FUNCTIONS` 声明 {sorted(declared)}")
+    # 反向真空：声明了几件就真注册几件（`register` 少绑一件也要看得出来）。
+    if len(names) != len(_TOOL_FUNCTIONS):
+        problems.append(f"注册了 {len(names)} 个工具（`_TOOL_FUNCTIONS` 有 {len(_TOOL_FUNCTIONS)} 件）")
     for spec in reg.for_role(S.CONDUCTOR_ROLE):
         if S.CONDUCTOR_ROLE not in tuple(getattr(spec, "roles", ())):
             problems.append(f"{spec.name} 的 roles 里没有主控")
@@ -870,7 +925,7 @@ def selftest() -> int:
         for p in problems:
             print(f"[conductor_tools] {p}")
         return 1
-    print("[conductor_tools] 自检通过：9 件编排面工具，只有主控拿得到")
+    print(f"[conductor_tools] 自检通过：{len(names)} 件编排面工具，只有主控拿得到")
     return 0
 
 

@@ -3066,3 +3066,150 @@ clean：51 条改动路径均未命中禁改区（清单 38 条）⇒ 无需额�
   而那是另一件事（`§13` 的 board/租约那一条线）。
 - 结论的强度只有一条：**在 M 的工具面这 16 件上，"调用即崩"这一类 bug 现在是 0 件**
   （而 §37 那一次是 1 件 —— 同一类）。它**不**覆盖 M 之外的角色面。
+
+---
+
+## §41 落地 §37.4 ④：`conductor.ensure_project` 在"已经在项目里"时直接拒（附 §37.2 一句错话的更正）
+
+用户 2026-10-02 裁定（本节开工前问过）：接受"无显式 `projects_dir` 且当前已在项目里 ⇒ 拒绝并说明"。
+这一节同时修掉一件同族的东西（工具模块自检恒红），并**更正 §37.2 里我写错的一句话**。
+
+### 41.1 病因：缺省值，不是纪律
+
+`conductor.ensure_project` 的 `projects_dir` 缺省不是当前工作区，而是
+`projects.projects_dir(None)` —— 一个与本工作区无关的落点（本机实测 `D:\Incubator\projects`）。
+于是"在一个已存在的工作区里调它"得到的**不是**"热启动当前项目"，
+而是**在别处新建的一个空项目**。
+
+三条独立读数把它钉住了：
+
+| # | 读数 | 出处 |
+|---|---|---|
+| 1 | `D:\Incubator\projects\project11`，`project.json` 的 `created_at` = `2026-10-02T20:39:47+08:00` | §37 那次真机（工作区建于 20:38:56）—— 那次 23 步里有 4 步在 `ensure_project` |
+| 2 | `project12` (21:22:06) / `project13` (21:22:30) | **本仓库自己的普查探针**（`temp/_p40_m_tool_smoke.py`）第一次跑时没给 `projects_dir` |
+| 3 | `default-projects` 夹具撞上 `Store.init()` 的拒绝初始化闸 | §41.5 的正控夹具（`Store.init` 拒绝在非空目录里建工作区）—— 同一条纪律的另一面 |
+
+**第 2 条是关键**：写探针的人是知道这条纪律的，照样踩。所以这不是"M 的侦察纪律"问题，
+是缺省值的问题 —— 修缺省值比修提示词可靠（提示词那条还要走 FC-27）。
+
+### 41.2 关卡落点（三处，都在非禁改区）
+
+1. `tools/conductor_tools.py::conductor_ensure_project`：加 `store` 形参（
+   `_TOOL_FUNCTIONS` 里从 `()` 改成 `('store',)` —— 依赖按**位置**绑定，
+   所以它必须是第一个形参，与 `conductor_role_spec(store, …)` 同一形态），
+   并在最前面加守卫：
+
+   ```python
+   explicit = bool(projects_dir.strip()) or bool(os.environ.get(P.ENV_PROJECTS_DIR, "").strip())
+   inside = store is not None and P.classify(Path(store.root))[0] == "workspace"
+   if inside and not explicit:
+       return fail(..., kind="already_a_project", root=..., default_projects_dir=...)
+   ```
+
+   边界刻意很窄，两个理由都写在函数的 docstring 里：
+   - **只拒"当前根自己是一个初始化过的项目、而调用方又没说项目落在哪"**。
+     显式给 `projects_dir`、或设 `AGENTFLOW_PROJECTS_DIR`，照旧工作 ——
+     那是操作者在说"我知道落在哪"。
+   - 不这么定就会误伤既有两条判据（`test_ensure_project_decides_cold_then_warm` /
+     `test_ensure_project_refuses_foreign_directory`）：它们正是"在一个工作区里、
+     把项目建到另一个显式指定的目录"。**这是"改判据之前先看清判据为什么那么写"的一次实践**。
+2. 工具摘要（`summary=`）里补一句"已经在工作区里又没给 projects_dir ⇒ 会被拒"：
+   摘要会进提示词，所以这句是给 M 的**在场提示**，不是文档。
+3. `conductor.resume_brief` 的 `how_to_continue` 原来逐字劝"再来时用
+   `conductor.ensure_project(start="auto")` 热启动" —— 在"工作区已在手边"的场景下
+   这恰好是这次要禁掉的动作。改成：工作区已在手边就直接 `resume_brief` / `ledger`，
+   要从默认 projects 目录进才用 `ensure_project`。
+
+**顺带修的同族 bug（"没人跑的检查会烂"）**：`conductor_tools.selftest()` **恒返回 1** ——
+里面写死"应有 9 个"，而编排面早就是 11 件（`acceptance`/`closing`/`summon_many` 落地之后没跟上），
+实测输出 `[conductor_tools] 注册了 11 个工具（应有 9 个）`。普查 13 个 `tools/*_tools.py`：
+**只有这一个有 `selftest`，也只有这一个在烂**。修法不是把 9 改成 11（下次加工具会再烂一次），
+而是让"应有几个"由 `_TOOL_FUNCTIONS` 现算（那份元组才是声明的唯一来源），
+并加一条反向真空（注册面与声明面必须逐名相同）。
+
+### 41.3 更正 §37.2 里我写错的一句话
+
+§37.2 原文（那次真机读数的第 4 条）写着：「其中 `ensure_project` 尤其错：工作区**已经存在**，
+它却去建项目（**还好工具自己拦住了**）」。
+
+**这句是错的**：工具没有拦住，它真的建出了 `D:\Incubator\projects\project11`
+（`created_at` 与那次运行同秒级，见表第 1 行）。当时那句话是我按"工具应该会拦住"的印象写的，
+没有去数盘上的目录 —— 而**盘上多了一个空项目这件事，账本上一个字都没有**。
+更正记在这里，§37.2 原文按登记册纪律**不改写**（只增不改）。
+
+同时交代我自己造成的那次污染：`project12` / `project13` 是本节开工前那个普查探针建的，
+**已删除**（两个都是 21 个文件的空骨架：`project.json` + 空 `data/*.json` + 空 `library/`，
+没有任何内容）；探针也改成把 `projects_dir` 指到临时目录，改后复跑"目录数 25 → 25"。
+`project11` **刻意留着**：它是这次真机误用的物证（`project.json` 里那个时间戳就是读数），
+谁想复核"到底有没有建出来"可以直接去看它。
+
+### 41.4 活体读数：拿 §37 的现场复现一次误用
+
+脚本 `temp/_p41_guard_probe.py`（可复跑；**不设** `AGENTFLOW_PROJECTS_DIR`，
+指向真工作区 `projects/p5-review-20261002-203856`）：
+
+```text
+默认 projects 落点：D:\Incubator\projects（改前目录数 23）
+当前工作区 classify：('workspace', '文件夹存在且是一个初始化过的工作区')
+
+[M] ensure_project(start=auto) 不给 projects_dir
+    ok=False  kind='already_a_project'
+    error=你已经在项目 p5-review-20261002-203856 里（…）⇒ 不要另建项目。接着做下去用
+          conductor.resume_brief / conductor.state / conductor.ledger，要派活就用
+          conductor.summon。真要另建一个项目，请显式给 projects_dir（缺省落点是
+          D:\Incubator\projects，不是你当前的工作区）；这一件拒绝时没有建任何目录。
+
+默认落点目录数：23 -> 23（必须相等）
+读数：守卫生效（拒绝 + 一个目录都没建）
+```
+
+出口也真的通：§41.5 的负控证明"显式给 `projects_dir`"与"设 `AGENTFLOW_PROJECTS_DIR`"
+两条路都还能冷启动建项目 —— 守卫不是"一律拒绝"。
+
+### 41.5 判据（三条用例，含两条负控）
+
+都加在 `tests/test_conductor_tools.py`：
+
+1. `test_ensure_project_refuses_inside_an_existing_workspace`（正控）：`ok is False`、
+   `kind == "already_a_project"`、消息里点名出口 `projects_dir`、
+   **且缺省落点里一个条目都没多**（"拒绝了但顺手建了目录"是最坏的形态）。
+2. `test_ensure_project_still_works_when_the_landing_is_explicit`（守卫的负控）：
+   显式 `projects_dir` ⇒ 冷启动真的建出 `.agentflow-workspace`；走
+   `AGENTFLOW_PROJECTS_DIR` 环境变量 ⇒ 同样能建。**没有这一条，"守卫"与"功能坏了"分不开。**
+3. `test_conductor_selftest_passes_and_has_teeth`（自检的正控 + 两条负控）：
+   `selftest() == 0`；把 `register` 包成"少注册一件" ⇒ 必须变 1；
+   往声明面里塞一件 `roles=("C",)` 的假工具（只读角色拿到主控工具）⇒ 必须变 1。
+   第二条负控证明那条权限检查不是空转的。
+
+两条 golden 按 `--write` 重生成，**逐键核对**（脚本 `temp/_golden_diff.py`）：
+
+- `tool_surface_snapshot.json`：**1 处** —— `declarations.conductor.ensure_project.summary`
+  （摘要里多了那句"会被拒"）；
+- `agent_surface_snapshot.json`：**1 处** —— `roles.M.prompt` 长度 16769 → 16852
+  （工具摘要是现算进提示词的，所以它必然跟着变）；
+- 其余键**一个字节没动**。
+
+### 41.6 四个读数
+
+1. **lint**：日常档 `error 0 / warning 9 / info 50`；`--strict` `error 0 / warning 56 / info 49`
+   —— 与钉住的两个读数逐位相同。（中间读数 `error 2` 全是 R009 装饰，集中在本节新写的
+   注释与 docstring 里，`temp/_r009_fix.py --apply` + `_r009_verify.py` 清掉，
+   2/2 逐文件核"代码零改动、行尾零变化"。）
+2. **本阶段判据**：`test_conductor_tools + test_host_wiring + test_role_specs_complete +
+   test_agent_spec_reconciliation + 两份快照 + test_tools_returns_declaration` ⇒
+   **105 passed**（含本节三条新用例），0 failed。
+3. **全量 pytest**：**3336 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+   （1273.06 s）。比上一刀（§39 那次 3333）多 **3** 条 —— 正好是本节新增的三条用例，
+   其余不变：**没有跳着跑、没有"已知抖动"要解释**。
+4. **FC-27 门**：`--paths`（本节 4 条改动路径）⇒ `[clean] required_approvals=0`、退出码 0。
+   本节改动**全部在非禁改区** —— 正因为如此，它才能在这一刀里落地；
+   要动 `specs/m.py` 的那两句提示词（下一节）不在其列。
+
+### 41.7 这一节**没有**做、留给下一节的
+
+§37.4 ④ 的另一半是**提示词**（"现状侦察最多做一次 / 已在项目里别再 `ensure_project`"），
+它住在 `ROLE_BRIEFS["M"]` 与逐字镜像 `specs/m.py` 里 ⇒ FC-27。用户已经裁定要改的那两句
+（M 的交付物落点、`emphasis['手']`）与这一句会**并成一刀**做，并在同一节里逐条登记基线。
+另外 §37.4 ①（论文进台账的归属）按用户裁定的**方案 A**落：外部论文走
+`literature` + `statements`，我方修订稿才走 `documents`；它也要在 `PAPER_PACK` 段补一句口径
+（同样是 FC-27），归到同一刀。

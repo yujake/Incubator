@@ -376,7 +376,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "冷启动 / 热启动由你决定：给 start=auto|cold|warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode。cold 才建目录，warm 必须已存在且是工作区 —— 绝不替你删、也绝不替你把别人的目录当工作区。",
+   "summary": "冷启动 / 热启动由你决定：给 start=auto|cold|warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode。cold 才建目录，warm 必须已存在且是工作区 —— 绝不替你删、也绝不替你把别人的目录当工作区。⚠️ 你已经在某个工作区里、又没有显式给 projects_dir 时，这一件会被拒（kind=already_a_project）：待在项目里不要另建项目。",
    "tags": []
   },
   "conductor.ledger": {
