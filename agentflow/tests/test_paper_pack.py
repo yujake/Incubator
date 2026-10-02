@@ -72,6 +72,12 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
                  "doc.paper_render", "doc.paper_compile", "doc.paper_state",
                  "渲染锚 0 漂移", "正文有内容级的改动", "review_findings", "依据"):
         assert fact in text, f"论文包段里没有 {fact!r}"
+    # 第七节（摄取与派活的三条纪律，`draft/37` §48 的真机读数）：这三句是行为口径，
+    # 不是说明文字 —— 上一趟真机正是在这三处各栽了一次（通配吃掉配套文档 /
+    # 出处指到配套文档 / 把"没核"写成 false）。
+    for fact in ("登记要指到论文本体", "unsupported_format", "source_lit_id",
+                 "quote_verified", "不传（= 还没查）"):
+        assert fact in text, f"论文包段里没有 {fact!r}"
 
 
 def test_the_paper_pack_section_is_versioned(store: Store):

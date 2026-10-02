@@ -4094,3 +4094,48 @@ python -B -m agentflow.cli --root <ws> run-agent M --task <TASK-47.txt> `
   停止理由词表），**登记为下一步候选**；
 - **多工具并发**：DSH 能一步派多条（按 concurrency-safe 分组），我们仍然"一步一件事"
   （两条即拒）。这不是缺陷，是既有纪律，写在这里免得被读成"照 DSH 做了一半"。
+
+---
+
+## §51 补派活纪律：登记指到论文本体、出处指对那一行、没核就不传 `quote_verified`
+
+用户 2026-10-03 裁定："先补派活纪律再发"。这一节把 §48.2 量出来的三件事写进
+`PAPER_PACK`（`agent_prompts.py`，**非禁改区**），并更新任务书与判据。
+
+### 51.1 加的是哪三条（每一条都有第三趟真机的读数撑着）
+
+| # | 纪律 | 第三趟的读数（§48.2） |
+|---|---|---|
+| 1 | **登记要指到论文本体**：`pattern` 指到那份稿件本身（通常是 `*.pdf`），不要用通配把整个目录扫进来 | 主控先试 `*.tex`（被 `unsupported_format` 如实挡下），改 `pattern="*"` + `limit=5` 之后**5 份配套 md 先被吃掉，论文本体一次都没进台账**（`literature = 2`，两条都是配套文档） |
+| 2 | **命题的 `source_lit_id` 必须指向论文那一行** | 5 条 `statements` 全挂在 `lit_id=0000` 上，而那是 `EVIDENCE.md` |
+| 3 | **没核就不传 `quote_verified`**（三态：不传 = 还没查；`false` = 比对过、不一致） | 5 条命题的 `quote_verified` 全是 `False` —— 台账上是"比对过而且不一致"，而它多半只是"我没核" |
+
+三条都写成**行为口径**（"怎么做"），不是说明文字：第 1 条连 `limit` 一起说，
+第 2 条点明"动作只核存在、不核指对"，第 3 条把两个含义摆在一起对比。
+任务书同步换成 `temp/TASK-51.txt`（旧的 `TASK-47` 留着 —— 它是第三趟的输入，
+读数与输入要对得上）。
+
+### 51.2 判据与税
+
+- `tests/test_paper_pack.py::test_the_paper_pack_section_carries_the_four_required_facts`
+  的必备短语表加了 5 个（`登记要指到论文本体` / `unsupported_format` / `source_lit_id` /
+  `quote_verified` / `不传（= 还没查）`）—— 段变了而这三条悄悄消失时，这条判据会红。
+- `PROMPT_VERSION`：`p26 → p27`。
+- 两份 golden：`tool_surface_snapshot.json` **0 处变化**；
+  `agent_surface_snapshot.json` —— **G/H/M 三份**多出第七节（其余六份只差版本行），
+  逐行 diff 核过（`temp/_prompt_diff.py`）。
+- lint：中间 `error 1`（新写的 docstring 装饰），`_r009_fix.py` + `_r009_verify.py` 清掉（1/1）。
+- 本阶段判据：`test_paper_pack + test_review_line_prompts + test_agent_prompts +
+  两份快照 + test_role_specs_action_table + test_native_tool_calls` ⇒ **64 passed**。
+- 全量 pytest：**3359 passed / 3 skipped / 8 deselected / 1 xfailed / 0 failed**
+  （1280.11 s）。与上一刀（§50）**同一条数** —— 本节只往既有用例里加了断言与短语，
+  没有新增用例；这正是"加口径"该有的形状（红/绿都不靠新用例凑）。
+- FC-27 门：本节改动路径（`agent_prompts.py` / `test_paper_pack.py` / 一份 golden）
+  **都不在禁改区** ⇒ 不新增命中。
+
+### 51.3 这一节之后就是第四趟真机
+
+`temp/TASK-51.txt` 逐条把三条纪律写进了步骤里（第 3 步拆成"登记本体"与"登记命题"两小步），
+并在第 7 步保留了 §45 的教训（`project_dir` 给项目根）。开跑前还要做一件事：
+**把上一趟留下的 `out/review/REPORT.md` 归档改名** —— §48.4 已经证明，复用工作区时
+"读文件的判据"（`attachment_is_honest` / `report_shape`）会拿上一趟的产物当这一趟的。
