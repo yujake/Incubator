@@ -3895,3 +3895,92 @@ python -B -m agentflow.cli --root <ws> run-agent M --task <TASK-47.txt> `
    `source_lit_id` 要用**论文那一行**、没核就不传 `quote_verified`（默认 `None`，
    不许用 `False` 表达"我没核"）。第二条里"提示词那一半"落在 `PAPER_PACK`（`agent_prompts.py`，
    非禁改区），可以下一刀直接做。
+
+---
+
+## §49 第三趟的协议面失败怎么解：**去读 DSH 自己的做法**（用户指派）
+
+用户对 §48.7 第 1 条的裁示是「观察 deepseek harness 的解决方案」。这一节是读它源码的读数
+（本机装的是 `@deepseek-ai/dsh@0.1.5-rc.2`，路径
+`C:\Users\ysc20\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh`，逐条给出文件与行号）。
+**它的做法与我们完全不同 —— 而且不是"更宽容的解析"，是结构上让那一类失败不可能发生。**
+
+### 49.1 DSH 的三步（每一句都有出处）
+
+1. **工具名来自传输层的结构化字段，从来不是模型手写的文本。**
+   `dsh-llm-deepseek/lib/index.js:1291` 起的流式循环逐块收 `delta.tool_calls[]`，
+   把 `call.function.name` 与 `call.function.arguments` 分开累积：
+
+   ```js
+   block.name = acceptIdentity(block.name, call.function?.name);
+   const fragment = call.function?.arguments ?? "";
+   block.text += fragment;
+   ```
+
+   请求侧同样是结构化的（同文件 `:111-123`）：`tool_calls` 由 `content` 里
+   `type === "tool-call"` 的块映射出来。⇒ **"模型把 `tool` 写成 `name`"这件事在 DSH 里
+   根本不存在**，因为它不要求模型把调用"序列化成一行 JSON"。
+
+2. **参数解析刻意宽容，而且把坏 JSON 原样留着。**
+   `dsh-agent-loop/lib/index.js:540-547`：
+
+   ```js
+   /** Parse model arguments, preserving invalid JSON as text and mapping empty input to `{}`. */
+   function parseArguments(raw) {
+       try { return raw ? JSON.parse(raw) : {}; } catch { return raw; }
+   }
+   ```
+
+   注意它**不抛异常、不计"坏 JSON"、不中止**：解析不出来就把**原字符串**往下传。
+
+3. **坏参数在工具层变成一个普通的工具错误，交回给模型。**
+   `dsh-tools/lib/index.js:813-819` 的 `ToolArgsError`（错误码 `INVALID_ARGS`）由
+   `validateArgs(spec, args)`（同文件 `:827`）产生，docstring 逐字写着
+   "Validate model-generated arguments against an implicit parameter schema.
+   **@param args - candidate arguments, however malformed.**"
+   也就是说：**"参数多坏都要走到校验这一步"**，然后模型在下一步看到一条
+   "invalid arguments: …" 的工具结果、自己改。
+
+**一句话概括 DSH 的解法**：**名字结构化（传输层保证）+ 参数宽容（解析层不设卡）+
+错误类型化（工具层负责说清哪里不合规）**。它没有任何"别名表"，因为它不需要 ——
+没有一层要求模型把工具调用重新写成文本。
+
+### 49.2 我们这边是什么样（对照）
+
+- **协议是文本 JSON**：`agent_loop.py:610-649` 每步要模型回一行 JSON，形状由
+  `{"tool": …}` / `{"summon": …}` / … 这套骨架规定；解析不出来就 `judge_bad_json`，
+  `max_bad_json = 2` ⇒ **第 3 次直接 `bad_json_limit` 终止整趟**（§48.3 的形态）。
+- **传输层没用原生工具调用**：在 `modelclient.py` / `llmseam.py` / `modelgw.py` 里
+  grep `"tools"` / `tool_choice` / `tool_calls` / `response_format` ⇒ **一处都没有**；
+  `llmseam.ask_json`（`llmseam.py:250`）就是"发提示词、收文本、试解析"。
+- ⇒ 所以我们的**形状**是模型自己拼的字符串，**别名/键名漂移**这类失败在结构上存在；
+  而 DSH 那条路上不存在。
+
+### 49.3 因此有三档可选（从"最像 DSH"到"最小改动"）
+
+| 档 | 做法 | 像不像 DSH | 代价 |
+|---|---|---|---|
+| **甲（结构层）** | 请求里带 `tools=[…]`（工具面的 JSON Schema 我们**已经有**，`ToolSpec.params` 就是它），读回 `message.tool_calls[].function.{name,arguments}`；名字不再由模型拼 | 完全同构（DSH 就是这个） | 要动 `modelclient`/`llmseam`/`agent_loop` 与全部离线缝（mock/seam 测试），是这一轮里最大的一刀；`judge_json` 那条"让模型判一个 JSON"的路仍可保留文本协议（它不是工具调用） |
+| **乙（解析层）** | 文本协议不动，但**解析宽容**：形状键收 `name` 作 `tool` 的别名（逐次记账）；参数解析失败时把**原文本**交给工具层，让它回一条普通的 `param_error`，**不记 bad_json** | 同构于 `parseArguments`（第 2、3 步） | 只动 `agent_loop.py` 的形状识别与一步反馈；`bad_json_limit` 的阈值不动（散文那类仍然停） |
+| **丙（不动）** | 保持严格；靠提示词把骨架再说一遍 | — | §48 已经证明：骨架是**逐字给过两次**的，模型仍然重复；再发一趟大概率还是同一个死法 |
+
+**我的建议**：**先做乙（当轮就能落地，且与 DSH 的 `parseArguments` 逐条对应），把甲登记成
+一件独立的事**（它是"结构上让这类失败不可能发生"的那一半，值一做，但它会动到所有离线缝，
+不该和"再跑一趟真机"挤在同一刀里）。
+
+**乙的判据**（写在这里，免得落地时只说"宽容一点"）：
+
+1. `{"name": …}` 与 `{"tool": …}` 等价，但**每次用到别名都要在 step payload 里留痕**
+   （`shorthand_used: "name"`），并有判据能数出来（"有没有别名在用"必须是可读的事实）；
+2. 参数不是合法 JSON **不是** `bad_json`：它走到工具层、由参数校验给出
+   `param_error`/`invalid_params`，模型在下一步看到那句错误（这条与 DSH 的
+   `INVALID_ARGS` 逐字对应）；
+3. `bad_json_limit` 只留给"根本不是 JSON 对象"（散文、Markdown、空回复）那一类 ——
+   也就是 DSH 那条路上确实会致命、而在它那里同样由传输层挡住的那些形态。
+
+### 49.4 这一节**没有**做的事
+
+没有改任何代码 —— 用户要的是"观察 DSH 的解决方案"，这是观察的读数。
+甲乙两档都要等一句裁定（乙可以先做，甲要单独立项）；`TASK-47.txt` 里那句
+"按动作表里真实存在的名字派"在乙落地之后**仍然有价值**（它省的是被拒的那一步），
+但它的必要性会从"防死"降回"省步"。
