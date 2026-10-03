@@ -20,6 +20,16 @@ B 的边界里本来就写着"命题台账三件套缺一不可"（完整假设�
  核一次 `literature` 表，引用一个不存在的 `lit_id` 直接拒（`kind="unknown_lit_id"`），
    与 `doc.build_document` 的 `check_citations` 同一条纪律：坏引用不许进库。
 
+## 第四个必填：出处「页码」（`draft/37` §68，第十三趟真机读数）
+
+`external_lit` 的命题还要给非空的 `page_range`（`start` 或 `label` 至少一个）。
+为什么不是"有这一栏就行"：第十三趟主控传的是 `{"start": null, "end": null}` ——
+形状在场、内容是空的 —— 六条命题因此都落成了"看着有出处、其实没有"的行，
+而审稿判据当场判它们缺页码，整条验收不及格。
+写入口与判据必须说同一件事，所以这一条与 `reviewaccept._c_statements` 逐字对齐。
+`own_result` 不在此列：它的出处是 `doc_id`/`line_range`，那两栏的口径另在册
+（见 `draft/37` §69 的待裁项）。
+
 `quote_verified` 是三态：`True` 逐字通过 / `False` 比对不一致 / `None` 还没查。
 只要不是 `True` 就必须给 `quote_reason`（包括"还没查"），这条由 `Statement.validate()`
 与这里的预检双保险 —— 预检存在的理由是把 `kind` 说清楚（调用方要能分辨"参数不对"
@@ -72,6 +82,28 @@ class _RegisterStatement:
             return {"ok": False, "kind": "missing_quote_reason",
                     "error": "quote_verified 不是 True 时必须给 quote_reason —— "
                              "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）"}
+        # 出处页码：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数）。
+        #
+        # 实测（第十三趟）：主控给六条命题传了 `page_range={"start": null, "end": null}`
+        # —— 字段在场、内容是空的 —— 于是这一行在台账上"有出处"，
+        # 而审稿判据（`reviewaccept._c_statements`）当场报"缺 page_range（页码）"，
+        # 整条验收因此不及格。写入口与判据必须说同一件事：判据要求的东西，
+        # 写入口在「进库之前」就要拦（否则台账里会长期躺着一批"看着有、其实没有"的行，
+        # 而只有走完整审稿流程的人才会发现）。
+        #
+        # 判据与 `_c_statements` 逐字对齐：`start` 与 `label` 至少有一个非空。
+        # 只对 `external_lit` 强制：从文献里摘的命题才有"第几页"这件事；
+        # 自有结果（`own_result`）的出处是 `doc_id`/`line_range`，
+        # 那两栏的口径另在册（见 `draft/37` §69 的待裁项）。
+        if origin == "external_lit":
+            page = dict(page_range or {})
+            if not (page.get("start") or str(page.get("label") or "").strip()):
+                return {"ok": False, "kind": "missing_page_range",
+                        "error": "origin='external_lit' 时必须给出处页码："
+                                 "`page_range` 要么给 start（可带 end），要么给 label"
+                                 "（例如「全文未分页」「附录 A」）—— 只传 "
+                                 "`{\"start\": null, \"end\": null}` 等于没给，"
+                                 "审稿判据会判这一行缺出处页码"}
 
         with self.store.tx("literature", "statements", actor=self.actor,
                            note="register_statement") as tx:

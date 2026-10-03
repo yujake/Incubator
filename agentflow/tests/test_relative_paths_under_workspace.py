@@ -94,7 +94,13 @@ def test_a_relative_project_dir_resolves_under_the_workspace(tmp_path: Path, mon
 
 
 def test_reviewaccept_resolves_the_same_way(tmp_path: Path, monkeypatch):
-    """正控（同一口径）：`reviewaccept` 的报告那一格也按工作区根解析。"""
+    """正控（同一口径）：`reviewaccept` 的报告那一格也按工作区根解析。
+
+    §69 的真机读数补上了这一条的最后一格：原先它只断言"报告节数"与"tex sha"，
+    而「附件诚实」那一格（`_c_attachment`）自己另用了一份 `Path(report_path)` ——
+    于是模型给的相对路径在那里判成"报告不在盘上 ⇒ 没查成"，
+    判据没看的那一格正是漏掉的那一格。现在三处共用同一个解析口，都要断言。
+    """
     ws = _ws(tmp_path / "ws")
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
@@ -104,6 +110,21 @@ def test_reviewaccept_resolves_the_same_way(tmp_path: Path, monkeypatch):
     acc = RA2.check_review(st, project_dir=".", report_path="out/review/REPORT.md")
     assert acc.criteria["report_sections_have_readings"] == "pass", acc.details
     assert acc.auxiliary["tex_sha256"], acc.auxiliary
+    assert acc.criteria["attachment_is_honest"] != "unknown", acc.details
+    assert acc.readings["attachment"]["forgery_markers"] == [], acc.readings["attachment"]
+
+
+def test_a_missing_report_is_still_unknown_not_pass(tmp_path: Path, monkeypatch):
+    """负控：真的读不到报告时，那一格必须是 `unknown`（解析路径不许把它变成 pass）。"""
+    ws = _ws(tmp_path / "ws")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    st = Store(ws)
+    st.init()
+    acc = RA2.check_review(st, project_dir=".", report_path="out/review/NOPE.md")
+    assert acc.criteria["attachment_is_honest"] == "unknown", acc.details
+    assert "不在盘上" in acc.details["attachment_is_honest"], acc.details
 
 
 def test_an_absolute_path_is_left_alone(tmp_path: Path):

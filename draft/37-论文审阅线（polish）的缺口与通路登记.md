@@ -5205,3 +5205,135 @@ actor 步数 29：tool 19 / summon 5 / invalid 2 / summon_many 2 / ask_user 1
 只在**落档**时截，模型看到的是 `_clip_fields`/`RESULT_CHARS` 那一份观测。
 `agent_loop.RECORD_CHARS` 的注释现在写明这一点：记录里的 `data` 是审计副本，
 不许拿它当"模型看到了多少"的证据。这次差一点得出反向结论（"6000 太小"）。
+
+---
+
+## §68 真机复验（第十二、十三趟）：**三处修法都在真机上读到了**，并撞出三个新缺陷
+
+用户裁定："跑（推荐）：新工作区 p5-run12 + 回答 q0001 + --resume"。
+花费：第十二趟 **0.109207** + 第十三趟 **0.359098** = **0.468305** 美元（批准的区间是 0.3–0.6）。
+
+### 第十二趟（`projects/p5-run12`，`--sid real12`）：账本修法见证，运行死在一处**新**缺陷上
+
+- 结果：`bad_json_limit`，14 步，0.109207 美元（tokens 377518 + 6615）；
+- **§64 见证**：账本 19 行合计 **0.109207** == 会话 14 条 `llm_call` 合计 == `agent_run_end.spend.usd`
+  —— 三个数逐位相等。逐笔口径：`scope=reason` 14 行（缝逐调用记的）+ `scope=summon` 5 行（召唤级结算，
+  **全是 0**，与 §64 登记的残留一致）；没有重复记账。
+- 三个新读数（都成了这一节的修法）：
+  1. **闸门措辞与实现不一致**：`max_bad_json` 那条写着"连续 N 次"，实现数的是**总数** ——
+     三次坏回复出现在第 7、11、13 步，中间第 8–10、12 步**都成功**，模型明明在恢复，
+     整趟却被判死。修法：`bad_json_streak` / `bad_args_streak`（任何一个解出来的形状都清零），
+     总数（`bad_json` / `bad_args`）保留为审计读数；
+  2. **原生签名的扁平形态**：第 13 步写的是 `{"role": "G", "action": "build_document", "params": {…}}`
+     —— 即 `framework_summon` 的**实参**原样当成一句话，被判"认不出的形状（键：['action','params','role']）"。
+     修法：`FLAT_SHAPE_ALIASES`（`summon` ← `role`+`action`；`summon_many` ← `targets`），
+     改写成规范形态后走**同一条校验**，payload 带 `shape_alias` 留痕；两个别名同时命中一律不收（fail-closed）；
+  3. **诊断没落盘**：那两步的 `problem` 是 `judge_bad_json`，而"为什么没解析出来"
+     （解析报错 + 原文前 200 字，在 `call.detail` 里）**根本没进记录**（只有 `raw_reply`）。
+     修法：invalid 步的 result 现在同时留 `problem` / `detail` / `raw_reply`。
+
+### 第十三趟（`projects/p5-run13`，`--sid real13`）：`final` 收工
+
+- **36 步 / 0.359098 美元**（tokens 1273342 + 13904），收工 `final`；
+- **§68 见证（连击）**：第 14 步 `invalid ⇒ judge_bad_json`，**运行没有死**，第 15 步继续派活 ——
+  同一形态在第十二趟会直接 `bad_json_limit`；
+- **§64 见证**：账本 47 行合计 **0.359098** == 会话 36 条 `llm_call` 合计 == `spend.usd`
+  （36 行 `reason` + 11 行 `summon`，后者全 0）；`reviewaccept` 的 `within_cost_cap` 两头看：
+  `{"usd": 0.359098, "session_usd": 0.359098, "unpriced_calls": 0, "cap_usd": 2.0}` ⇒ **pass**；
+- **§63 见证（本轮的靶心）**：运行内第 32 步 `conductor.closing` 与外部带 `sid=real13` 的读数
+  **逐格相等**：
+
+  ```text
+  运行内: can_close=False failed=['user_pending'] unknowns=[] status={anchor:pass, contradictions:pass,
+          load_bearing:pass, report_shape:pass, user_pending:fail}
+  外部  : can_close=False failed=['user_pending'] unknowns=[] status= 同上
+  user_pending 读数（两边同形）: {"pending": [q0001], "answered": 0, "asked": 1}
+  ```
+
+  修法前这里会是一个假绿（运行内 `user_pending: pass`）—— 与第十一趟那次一模一样。
+  现在模型自己看见了"还有 1 个问题没回答 ⇒ 必须停在等待用户"，并把这句话写进了交付说明；
+- 这一趟做了什么（读数放在这里，免得下一个人去翻会话）：A.ingest_local 登记 `literature 0000`；
+  B.register_statement 登记 7 条命题（`statements 0000–0006`，`source_lit_id=0000`，
+  `quote_verified=None` 全部如实标"还没查"）；G.build_document 建 `documents 0000`；
+  三处 `fs.edit` 改正文（`out/paper/main.tex` 8c5c431b… → 8f9ec073…，26,155 → 26,754 字节）；
+  H.review（`new_findings: []`，机械计数全 0 —— H 的语义缝没接线这条老读数照旧）；
+  **G.paper_package**：`verdict=consistent`、`drift=[]`、三个维度 `files/tables/receipt` 全 consistent；
+  `ask_user` 得到 `user_no_answer`（默认 30 秒超时），如实按最保守的路继续并写进结论；
+  报告 `out/review/REPORT.md` 8,790 字节 / sha `1dcae646d282a5dd…`，九节齐全；
+- **操作员回答之后**（`agentflow answer q0001 …`，没有重跑模型）：
+  `triage_branch_recorded` → pass、`user_pending` → pass、`closing.can_close` → **True**；
+  `reviewaccept` 六条：**5 pass / 1 fail**；
+- 唯一那条 fail 是**内容级**的，而且撞出了一个"写入口与判据不说同一件事"的缺陷：
+  `statements_have_assumptions_and_source: fail` —— `0001–0006 缺 page_range（页码）`。
+  翻台账：那六行的 `page_range` 是 `{"start": null, "end": null}` —— **形状填了、内容是空的**，
+  `proof_text` 也全是空串。原来的 `B.register_statement` 只要求 `statement_full` 非空，
+  于是这类"看着有出处、其实没有"的行**能进库**，而审稿判据当场判它们不合格。
+  修法（写入口与判据对齐，逐字同一条规则：`start` 或 `label` 至少一个非空）：
+  `agent_b/register_statement.py` 新增 `kind="missing_page_range"` 的预检（只对 `external_lit`，
+  因为只有"从文献里摘的命题"才有页码这件事）；夹具里的 `STATEMENT` 补上 `page_range`
+  （**夹具里没有的字段，正是真机上会空着的那一栏**）。
+
+### 判据（本轮新增/改动）
+
+| 文件 | 判据 |
+|---|---|
+| `tests/test_bad_args_counter.py` | +3：恢复中的运行不许被总数判死（真机形态）；连击三次仍然停；invalid 步必须留 `detail` |
+| `tests/test_native_tool_calls.py` | +3：扁平形态解成同一形状（含 `shape_alias` 留痕）；别名不放宽任何校验（角色名不在 ROLES 里照样拒）；两个别名同时命中 fail-closed |
+| `tests/test_agent_loop.py` | +1：扁平召唤**真的派活**（末态是 `summon`，不是一个被认下的字典） |
+| `tests/test_intake_actions.py` | +2：空的 `page_range` 被拒且零写入（`own_result` 的边界也钉住）；写入口放行的行审稿判据不许判缺页码 |
+
+### 残留（登记）
+
+- 第十三趟的 `final` 是**双层信封**（模型写的是 `{"final": "{\"final\": …}"}`）——
+  打印出来难看，但不影响任何判据（`run.final` 就是那个字符串）。属提示词面小瑕疵，未修；
+- 6 条命题的 `proof_text` 是空串而 `origin=external_lit`：审稿判据 `_c_statements` 今天
+  **不查** `proof_text`（它查完整假设 / 出处 / 页码），而 B 的 brief 写着三件套缺一不可。
+  这是口径不一致（判据比 brief 松），且"`own_result` 的 `proof_text` 本来就可以为空"
+  这件事与它纠缠在一起 ⇒ 留给人裁，见 §69 的待裁项；
+- H 的语义缝仍未接线（`review_findings = 0` 是"没查"而不是"干净"），与本轮无关，照旧在册。
+
+---
+
+## §69 第十三趟撞出的第二处缺陷：`_c_attachment` 用**相对路径**判"报告在不在盘上"
+
+### 读数
+
+第十三趟的报告 `out/review/REPORT.md` 是 **8,790 字节、就在盘上**（同一个工作区里
+`fs.read` 与 `conductor.closing` 都读到了它），而外部的审稿判据给出：
+
+```text
+attachment_is_honest: unknown —— "报告不在盘上 ⇒ 附件的诚实没查成（不是通过）"
+```
+
+病因在前一行代码里：`reviewaccept._c_attachment` 用的是
+
+```python
+if not str(report_path or "").strip() or not Path(report_path).is_file():
+```
+
+—— 直接拿模型给的那个**相对工作区**的路径去 `Path(...)`（相对进程 cwd），
+而 §60 修同一类问题时改的是 `_c_report`（报告节数）与 `_auxiliary`（tex sha / 页数 / 锚），
+**漏了附件诚实这一格**。当时那条判据（`tests/test_relative_paths_under_workspace.py`）
+只断言了报告节数与 tex sha —— **判据没看的那一格，正是漏掉的那一格**。
+
+为什么前十一趟没撞到：`temp/_run_judge.py` 那一侧给的是绝对路径（或工作区根下拼好的路径），
+于是这一格一直"碰巧对"。第十三趟的读数由 `check_review(project_dir=".", report_path="out/review/REPORT.md")`
+这条**与真机同形**的调用姿势取，才把它照出来。
+
+### 修法
+
+`_c_attachment` 与另外三处共用同一个解析口（`closing.resolve_under_workspace`）：
+
+```python
+from .closing import resolve_under_workspace
+report_path = resolve_under_workspace(store, report_path)
+```
+
+判据同步补两格（正控 + 负控）：
+
+- 正控：相对路径 + cwd 在别处 ⇒ `attachment_is_honest != "unknown"`，
+  且 `readings["attachment"]["forgery_markers"] == []`（解析对了才谈得上诚实）；
+- 负控：真的读不到报告（`out/review/NOPE.md`）⇒ **仍然是 `unknown`**
+  —— 解析路径不许把"没查成"变成"通过"。
+
+修完之后第十三趟的那一格翻成 **pass**（它确实没有造假标记、也没有过度声称）。

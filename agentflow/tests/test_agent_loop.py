@@ -100,6 +100,32 @@ def _summon_step(run: Any) -> dict:
     return next(s.result for s in run.steps if s.shape == "summon")
 
 
+def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
+    """`draft/37` §68：模型把 `framework_summon` 的「实参」当成一句话写出来 ⇒ 照样派活。
+
+    第十二趟真机第 13 步死在这里（`认不出的形状（键：['action','params','role']）`），
+    而那一步与它前后成功的几步内容相同 —— 漂的只有那个外层键（`summon`）。
+    判据要的是"末态是一环真的召唤"，不是"解析器认得这个字典"：形状解码对了却没执行，
+    与没收下是一回事。
+    """
+    scripts = {
+        "M": [json.dumps({"role": "E", "action": "list_experiments", "params": {},
+                          "why": "扁平形态：直接写了 framework_summon 的实参"},
+                         ensure_ascii=False),
+              json.dumps({"final": "派完了", "evidence": []}, ensure_ascii=False)],
+    }
+    st, cond, registry, _gw, root = _wired(tmp_path, scripts, max_steps=4)
+    run = run_role("M", "派一环", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=_gw["M"], price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+
+    assert run.stop_reason == "final", run.to_dict()
+    assert [s.shape for s in run.steps] == ["summon", "final"], run.to_dict()
+    assert run.steps[0].payload["shape_alias"] == "role", run.steps[0].payload
+    assert run.summons == ["E"], run.summons
+
+
 def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathlib.Path):
     """正控（本组的主判据）：M→D→E 三环都由模型决定，台账逐环可查。"""
     scripts = {

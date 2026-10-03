@@ -128,3 +128,43 @@ def test_one_bad_argument_batch_is_handed_back_and_the_run_continues(tmp_path: p
     assert run.final == "交回后改对了", run.final
     assert run.bad_args == 1 and run.bad_json == 0, run.to_dict()
     assert [s.shape for s in run.steps] == ["invalid", "tool", "final"], run.to_dict()
+
+
+# ============================================ §68：判"原地打转"要看连击，不看总数
+
+def test_a_recovering_run_is_not_killed_by_the_total_count(tmp_path: pathlib.Path):
+    """正控（第十二趟真机的形态）：坏两次、说对一次、再坏一次 ⇒ 不许判死。
+
+    真机读数（§68）：三次坏回复出现在第 7、11、13 步，中间第 8–10、12 步都成功 ——
+    模型在恢复，而按「总数」判的那一版把整趟判成 `bad_json_limit`。
+    这条判据同时钉住"总数确实超过上限"（否则它证明不了分辨力）。
+    """
+    run, _gw = _run(tmp_path, [{"text": "坏一"}, {"text": "坏二"}, _good_call(),
+                               {"text": "坏三"}, _final_call("恢复后交卷")], max_steps=8)
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.bad_json == 3 > 2, run.to_dict()
+    assert run.bad_json_streak == 0, run.to_dict()
+    assert [s.shape for s in run.steps] == ["invalid", "invalid", "tool", "invalid", "final"], \
+        [s.shape for s in run.steps]
+
+
+def test_three_in_a_row_still_stops_the_loop(tmp_path: pathlib.Path):
+    """负控：连击三次 ⇒ 仍然是 `bad_json_limit`（措辞与实现都说"连续"，不许放宽）。"""
+    run, _gw = _run(tmp_path, [{"text": "坏1"}, {"text": "坏2"}, {"text": "坏3"}], max_steps=6)
+    assert run.stop_reason == "bad_json_limit", run.to_dict()
+    assert run.bad_json == run.bad_json_streak == 3, run.to_dict()
+    assert "连续 3 次" in run.final, run.final
+
+
+def test_the_invalid_step_records_the_diagnosis_not_just_the_problem(tmp_path: pathlib.Path):
+    """§68 的另一处欠账：`detail` 必须落进这一步的记录。
+
+    第十二趟的 `problem` 是 `judge_bad_json`，而它「为什么」没解析出来
+    （解析报错 + 原文前 200 字）根本没进记录 —— 于是"这两句 1.6–3.6 KB 的 JSON
+    坏在哪"又一次只能靠猜。这一条钉住"诊断也在盘上"。
+    """
+    run, _gw = _run(tmp_path, [{"text": "这不是 JSON"}, _final_call("改对了")], max_steps=4)
+    bad = [s for s in run.steps if s.shape == "invalid"]
+    assert bad and bad[0].result.get("detail"), bad[0].result
+    assert "不是一个 JSON 对象" in str(bad[0].result["detail"]), bad[0].result["detail"]
+    assert bad[0].result.get("raw_reply"), bad[0].result

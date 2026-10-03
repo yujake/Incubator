@@ -24,9 +24,10 @@
 ## 三态与"不许静默"
 
 - 没接线（没有 key）：整个循环不发起任何请求，`stop_reason="not_wired"`，并落一条记录；
-- 模型返回坏 JSON：计数，超过上限就停（`stop_reason="bad_json_limit"`），不静默当空；
+- 模型返回坏 JSON：计数，「连击」超过上限就停（`stop_reason="bad_json_limit"`），不静默当空；
+  总数（`run.bad_json`）与连击（`run.bad_json_streak`）分开记 —— 停不停的判据是连击（§68）；
 - 工具参数不是合法 JSON（`judge_bad_args`）：「另计一个数」（`run.bad_args`），
-  超过上限停成 `bad_args_limit`（§65）—— 它交回工具层就能改对，不是"形状漂移"；
+  连击超过上限停成 `bad_args_limit`（§65）—— 它交回工具层就能改对，不是"形状漂移"；
 - 工具被拒 / 召唤被拒：结果里带原因码，并且原样回给模型（那是一次纠正，不是失败）；
 - 步数或预算耗尽：停，并把 `stop_reason` 如实写进运行记录。
 
@@ -61,6 +62,22 @@ from .llmseam import LlmSeam
 #: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
 #: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
 SHAPES = ("tool", "summon", "summon_many", "message", "note", "ask_user", "final")
+
+#: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`（`draft/37` §68）。
+#:
+#: 这些键集来自「提示词里那个原生函数面」（`framework_summon(role=…, action=…, params=…)`、
+#: `framework_summon_many(targets=[…])`）。第十二趟真机第 13 步里，模型把 `framework_summon`
+#: 的实参直接当成一句话写了出来 —— 没有 `summon` 这个外层键 —— 整趟运行因此以
+#: `bad_json_limit` 收场。收下它的判据与 §61 逐字相同：「这组键没有第二种含义」
+#: （`role`+`action` 只可能是召唤；`targets` 只可能是批量召唤），而拒收的代价是整趟作废。
+#:
+#: 只登记这两个：`ask_user` / `note` / `message` 的扁平形态今天没有真机证据，
+#: 而且它们的键（`question` / `text` / `to`）更容易与将来的工具参数撞名 ——
+#: 有读数再加，不预先放宽。
+FLAT_SHAPE_ALIASES: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("summon", ("role", "action"), "role"),
+    ("summon_many", ("targets",), "targets"),
+)
 
 #: 这些拒绝理由 ⇒ 自动转成"请主控代唤"的申请（2026-09-30）。
 #:
@@ -269,8 +286,17 @@ class LoopRun:
     stop_reason: str = "final"
     prompt_audit: dict[str, Any] = field(default_factory=dict)
     spend: dict[str, Any] = field(default_factory=dict)
+    #: 坏 JSON 的「总数」（审计读数：这一趟一共说了几次不是 JSON 的话）。
     bad_json: int = 0
-    #: 参数坏（`judge_bad_args`）的次数 —— 与 `bad_json` 「分开计」（`draft/37` §65）。
+    #: 坏 JSON 的「连击数」：停不停的判据，任何一个有效步都会把它清零。
+    #:
+    #: 为什么要有这个数（`draft/37` §68 的第十二趟真机）：`max_bad_json` 这条闸门
+    #: 一直写着"连续 N 次"，而实现数的是「总数」 —— 于是三次坏回复「散布在 14 步里」
+    #: （第 7、11、13 步，中间第 8–10、12 步都成功）也照样把整趟判死，
+    #: 而那一趟的模型其实在恢复（坏一次、下一次就写对）。判"它在原地打转"
+    #: 需要的读数本来就是连击。措辞与实现必须说同一件事。
+    bad_json_streak: int = 0
+    #: 参数坏（`judge_bad_args`）的总数与连击数 —— 与 `bad_json` 「分开计」（`draft/37` §65）。
     #:
     #: 为什么分开：DSH 的 `ToolArgsError` 口径是"参数错交回工具层"，
     #: 不是"模型没给出可解析的形状"。折叠成一个计数会让两件处置方向不同的事
@@ -278,6 +304,7 @@ class LoopRun:
     #: 参数写坏只要把错误交回去让它重说一次 —— 真机里两次 `judge_bad_args`
     #: 就把一趟运行判成 `bad_json_limit` 收场，而它离"改对参数"只差一步。
     bad_args: int = 0
+    bad_args_streak: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
 
@@ -298,7 +325,8 @@ class LoopRun:
             "steps": [s.to_dict() for s in self.steps],
             "final": self.final, "evidence": list(self.evidence),
             "stop_reason": self.stop_reason, "bad_json": self.bad_json,
-            "bad_args": self.bad_args,
+            "bad_json_streak": self.bad_json_streak,
+            "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
             "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
@@ -412,28 +440,60 @@ def _sha(text: str) -> str:
 def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
     """把模型的一句输出判成一个形状。判不出来时返回 `("", {}, 原因)`。
 
-    ## `{"name": …, "args": …}` 是 `{"tool": …}` 的别名（2026-10-03，§61）
+    ## 两个「别名形态」（都只改"从哪取键"，不放宽任何校验）
 
-    真机读数（第八、十趟）：模型有时把工具调用写成 `{"name": "fs.read", "args": {…}}`
-    —— 没有 `tool` 这个键。它此前被判"认不出的形状（键：['args','name']）"，
-    与真·坏形状一起计进 `bad_json`，第 3 次就 `bad_json_limit` 收场（第十趟的步 8/12/35）。
-    （注意这与 §65 的 `judge_bad_args` 是两件事：这里坏的是「形状」，那里坏的是
-    已被认出的那次调用的「参数」。）
+    1. `{"name": …, "args": …}` 是 `{"tool": …}` 的别名（2026-10-03，§61）。
+       真机读数（第八、十趟）：模型有时把工具调用写成这个形状 —— 没有 `tool` 这个键。
+       它此前被判"认不出的形状（键：['args','name']）"，与真·坏形状一起计进
+       `bad_json`，第 3 次就 `bad_json_limit` 收场（第十趟的步 8/12/35）。
+       （这与 §65 的 `judge_bad_args` 是两件事：这里坏的是「形状」，
+       那里坏的是已被认出的那次调用的「参数」。）
+    2. 「原生签名的扁平形态」（2026-10-03，§68 的第十二趟读数）：模型把
+       `framework_summon` 的「实参」直接当成一句话写了出来 ——
+       `{"role": …, "action": …, "params": {…}}`（那一趟的第 13 步就是这么死的）。
+       提示词里那个函数的签名正是这几个键，而"哪些键同时出现"只有一种含义
+       （见 `FLAT_SHAPE_ALIASES`）；拒收的代价是整趟作废。
 
-    收下它的理由：这个形状没有第二种含义 —— 循环协议里只有工具调用用 `name`+`args`
-    （`summon` 用 `role`/`action`，`message` 用 `to`/`body`）。而"名字"这一层本来就有歧义
-    空间（带点的真名 vs 广告名，见 `_do_tool`），多认一个写法比让整趟作废便宜得多。
-    留痕照旧：payload 里带 `shape_alias="name"`，所以"这一趟用了别名"在台账上看得见
+    收下它们的理由同一条：这些键集没有第二种含义，而"名字/签名"这一层本来就有
+    歧义空间（带点的真名 vs 广告名，见 `_do_tool`）—— 多认一个写法比让整趟作废便宜。
+    留痕照旧：payload 里带 `shape_alias`，所以"这一趟用了别名"在台账上看得见
     （与 `_do_tool` 的 `aliased_from` 同一套做法）。
     """
+    rewritten, alias = _unwrap_alias(data)
+    if rewritten is not None:
+        shape, payload, problem = _decode_shape(rewritten)
+        if problem or not shape:
+            return shape, payload, problem
+        return shape, {**payload, "shape_alias": alias}, ""
+    return _decode_shape(data)
+
+
+def _unwrap_alias(data: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str]:
+    """把别名形态改写成规范形态；返回 `(改写后的 data, 别名标签)`，不是别名就 `(None, "")`。
+
+    歧义一律「不收」：两个扁平别名同时命中（例如 `role`/`action` 与 `targets` 都在）
+    返回 `(None, "")`，让它落回"认不出的形状"那条路 —— fail-closed，
+    而不是按表里的先后顺序挑一个（那会让"先写哪个键"决定框架执行哪一件事）。
+    """
+    if [k for k in SHAPES if k in data]:
+        return None, ""
+    if "name" in data and isinstance(data.get("name"), str):
+        # `{"name": …, "args": …}` ⇒ 规范形态 `{"tool": <名字>, "args": …, "why": …}`。
+        # `args` 故意「原样」带过去（不做类型检查）：那条校验在 `_decode_shape` 里，
+        # 别名不是第二条解码路径 —— 它只把键搬到规范位置。
+        return ({"tool": str(data["name"]), "args": data.get("args") or {},
+                 "why": str(data.get("why") or "")}, "name")
+    matched = [t for t in FLAT_SHAPE_ALIASES if all(k in data for k in t[1])]
+    if len(matched) == 1:
+        target, _required, label = matched[0]
+        return {target: dict(data)}, label
+    return None, ""
+
+
+def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
+    """规范形态的解码：七种形状（`tool` / `summon` / `summon_many` / `message` /
+    `ask_user` / `note` / `final`）取其一。别名只负责改写成这里认的形态。"""
     present = [k for k in SHAPES if k in data]
-    if not present and "name" in data and isinstance(data.get("name"), str):
-        # 别名形态：`{"name": <工具名>, "args": {...}, "why": "..."}`
-        args = data.get("args") or {}
-        if not isinstance(args, Mapping):
-            return "", {}, "args 必须是一个对象"
-        return "tool", {"name": str(data["name"]), "args": dict(args),
-                        "why": str(data.get("why") or ""), "shape_alias": "name"}, ""
     if len(present) != 1:
         return "", {}, (f"一次只能说一件事：同时出现 {present}" if present
                         else f"认不出的形状（键：{sorted(data)}）")
@@ -553,6 +613,9 @@ class AgentLoop:
     #: 89 次在读、53 次在写自己的笔记，最后还是没能落盘一处改动；而框架给它的默认是 6。
     #: 步数是"能做完一件事"的最低门槛，不是省钱的旋钮：省钱靠 `usd_budget` 与墙钟。
     max_steps: int = 30
+    #: 坏 JSON 的「连击」上限（不是总数 —— 见 `LoopRun.bad_json_streak` 的说明）。
+    #: 第十二趟真机（§68）：三次坏回复散布在 14 步里，中间四次都成功，
+    #: 而按总数判的那一版把整趟判死了。
     max_bad_json: int = 2
     #: 参数坏多少次才停（`judge_bad_args`，独立的停止理由 `bad_args_limit`）。
     #:
@@ -702,22 +765,24 @@ class AgentLoop:
                 args_error = call.problem == "judge_bad_args"
                 if args_error:
                     run.bad_args += 1
+                    run.bad_args_streak += 1
                 else:
                     run.bad_json += 1
-                # 把模型实际说了什么留在这一步里（2026-09-30）：只有 `problem`
-                # 时，"它为什么解析不出来"这个问题在台账上是不可回答的 ——
-                # 真机里 M 连着三次 `judge_bad_json`，我只能靠猜（"是不是我新加的
-                # `summon_many` 骨架太长、它照着抄了带 `<...>` 的一行？"）。
-                # 留一段原文（截断）既能让下一个人直接看见，也让"骨架太长"这类
-                # 假设可以被证实或否证。
-                run.steps.append(LoopStep(step, "invalid", {},
-                                          {"problem": call.problem,
-                                           "raw_reply": _clip(call.text, 600)},
+                    run.bad_json_streak += 1
+                # 把模型实际说了什么、以及「框架为什么不认」都留在这一步里（2026-09-30；
+                # `draft/37` §68 补齐 `detail`）：只有 `problem` 时，"它为什么解析不出来"
+                # 在台账上是不可回答的 —— 真机里 M 连着三次 `judge_bad_json`，我只能靠猜。
+                # 第十二趟更糟：`problem` 是 `judge_bad_json`，而 `detail`（带解析报错
+                # 与原文前 200 字）「根本没进记录」 —— 于是"为什么这两句 JSON 没解析出来"
+                # 又一次只能靠猜。留 detail + raw_reply，两条判据（"说了什么"与
+                # "框架怎么读的"）都在盘上。
+                bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
+                              "raw_reply": _clip(call.text, 600)}
+                run.steps.append(LoopStep(step, "invalid", {}, bad_result,
                                           problem=call.problem))
                 SS.append(self.session_root, {
                     "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
-                    "payload": {}, "result": {"problem": call.problem,
-                                              "raw_reply": _clip(call.text, 600)},
+                    "payload": {}, "result": dict(bad_result),
                 }, sid=self.sid)
                 if call.problem == "judge_not_wired":
                     run.stop_reason = "not_wired"
@@ -728,18 +793,18 @@ class AgentLoop:
                     # 参数坏：「交回工具层」（`draft/37` §65，DSH 的 `ToolArgsError` 口径）。
                     # 反馈里点名"是哪个函数的参数坏了"（`call.detail` 带着工具名与原文），
                     # 这类错误是可纠正的，不该按"形状漂移"处置。
-                    if run.bad_args > self.max_bad_args:
+                    if run.bad_args_streak > self.max_bad_args:
                         run.stop_reason = "bad_args_limit"
-                        run.final = (f"连续 {run.bad_args} 次把工具参数写成不合法 JSON"
+                        run.final = (f"连续 {run.bad_args_streak} 次把工具参数写成不合法 JSON"
                                      f"（最后一次：{call.detail}），停止")
                         break
                     transcript += (f"\n\n[第 {step + 1} 步] 框架：{call.detail}。"
                                    "工具名我收到了，坏的是那个参数 —— 把参数写成一个合法"
                                    " JSON 对象再调用一次（别改调别的工具，也别写解释）。")
                     continue
-                if run.bad_json > self.max_bad_json:
+                if run.bad_json_streak > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
-                    run.final = (f"连续 {run.bad_json} 次没有给出可解析的 JSON"
+                    run.final = (f"连续 {run.bad_json_streak} 次没有给出可解析的 JSON"
                                  f"（最后一次：{call.problem}），停止")
                     break
                 transcript += (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
@@ -750,23 +815,27 @@ class AgentLoop:
             shape, payload, problem = _shape_of(data)
             if problem:
                 run.bad_json += 1
-                run.steps.append(LoopStep(step, "invalid", payload,
-                                          {"problem": problem,
-                                           "raw_reply": _clip(json.dumps(data, ensure_ascii=False),
-                                                              600)},
+                run.bad_json_streak += 1
+                bad_result = {"problem": problem,
+                              "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
+                run.steps.append(LoopStep(step, "invalid", payload, bad_result,
                                           problem=problem))
                 SS.append(self.session_root, {
                     "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
-                    "payload": dict(payload), "result": {
-                        "problem": problem,
-                        "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)},
+                    "payload": dict(payload), "result": dict(bad_result),
                 }, sid=self.sid)
-                if run.bad_json > self.max_bad_json:
+                if run.bad_json_streak > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
-                    run.final = f"连续 {run.bad_json} 次形状不合法（最后一次：{problem}），停止"
+                    run.final = (f"连续 {run.bad_json_streak} 次形状不合法"
+                                 f"（最后一次：{problem}），停止")
                     break
                 transcript += f"\n\n[第 {step + 1} 步] 框架：{problem}。请按循环协议重说一次。"
                 continue
+            # 说对了一次 ⇒ 连击清零（`draft/37` §68）。清零的判据是"它按协议说出了一个形状"，
+            # 不是"那件事办成了" —— 工具被拒、召唤被拒、参数不合法都算说对了协议，
+            # 那些走的是各自的纠正路径（`RELAY_REFUSALS` / `invalid_params`）。
+            run.bad_json_streak = 0
+            run.bad_args_streak = 0
             if shape == "final":
                 run.final = str(payload.get("final") or "")
                 run.evidence = list(payload.get("evidence") or [])

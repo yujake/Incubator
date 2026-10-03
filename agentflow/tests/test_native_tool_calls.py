@@ -137,6 +137,55 @@ def test_native_tool_call_needs_no_tool_key(tmp_path: Path):
     assert "tool" not in json.loads(_call("fs_read", {"path": "a.txt"})["arguments"])
 
 
+def test_the_flat_native_signature_decodes_to_the_same_shapes():
+    """`draft/37` §68：`framework_summon` 的实参原样写出来 ⇒ 解成同一个 `summon` 形状。
+
+    正控三条：单条召唤、批量召唤、以及别名留痕（`shape_alias`）。
+    这三条都要"解出来的 payload 与包裹形态逐键相同"，否则别名就是第二条解码路径。
+    """
+    from agentflow.agent_loop import _shape_of
+
+    shape, payload, problem = _shape_of({"role": "G", "action": "revise",
+                                         "params": {"doc_id": "0000"}, "why": "派活"})
+    assert (shape, problem) == ("summon", ""), (shape, problem)
+    assert {k: v for k, v in payload.items() if k != "shape_alias"} == {
+        "role": "G", "action": "revise", "params": {"doc_id": "0000"}, "why": "派活"}
+    assert payload["shape_alias"] == "role", payload
+
+    shape2, payload2, problem2 = _shape_of({
+        "targets": [{"role": "B", "action": "run_once", "params": {"limit": 3}}], "why": "批量"})
+    assert (shape2, problem2) == ("summon_many", ""), (shape2, problem2)
+    assert payload2["targets"][0]["role"] == "B" and payload2["shape_alias"] == "targets"
+
+
+def test_the_flat_alias_does_not_widen_any_validation():
+    """负控：别名只改"从哪取键"，校验一个字都不放宽。
+
+    关键的一条是"角色名不在 ROLES 里"：如果别名是另写一条解码路径，
+    很容易把 `summon` 那条 `role not in S.ROLES` 的判据漏掉 —— 那等于用一个
+    新写法绕过了权限面校验的第一道闸。
+    """
+    from agentflow.agent_loop import _shape_of
+
+    shape, _payload, problem = _shape_of({"role": "Z", "action": "revise"})
+    assert not shape and "不在" in problem, (shape, problem)
+    shape2, _p2, problem2 = _shape_of({"role": "G", "action": "revise", "params": "不是对象"})
+    assert not shape2 and "params 必须是一个对象" in problem2, (shape2, problem2)
+
+
+def test_two_flat_aliases_at_once_are_refused():
+    """负控（fail-closed）：两个扁平别名同时命中 ⇒ 仍然判"认不出的形状"。
+
+    不许按别名表里的先后顺序挑一个：那会让"先写哪个键"决定框架执行哪一件事，
+    而两件事的后果完全不同（派一环 vs 派一批）。
+    """
+    from agentflow.agent_loop import _shape_of
+
+    shape, _payload, problem = _shape_of({"role": "G", "action": "revise",
+                                          "targets": [{"role": "B", "action": "run_once"}]})
+    assert not shape and "认不出的形状" in problem, (shape, problem)
+
+
 def test_the_meta_shapes_travel_as_functions(tmp_path: Path):
     """正控：`summon` / `note` / `final` 这些非工具形状也走结构化调用。"""
     seam, _gw = _seam(tmp_path, [

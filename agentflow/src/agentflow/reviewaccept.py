@@ -368,7 +368,20 @@ def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
 
     附件三件套（`origin=own_result` + 依据读数 + 版本 sha）由 `report_shape` 那条管；
     这一条只管诚实：说的是不是实话。
+
+    ## 报告路径必须按工作区根解析（`draft/37` §69 的真机读数）
+
+    这一格此前用 `Path(report_path).is_file()` 直接判 —— 而模型给的报告路径是
+    「相对工作区」的（`out/review/REPORT.md`，见 PAPER_PACK 的第九节口径），
+    于是它在真机上判成"报告不在盘上 ⇒ 没查成"：第十三趟的 8,790 字节报告就在盘上，
+    而这一格是 `unknown`（`unknown` 会挡住 `passed`）。
+    §60 修 `closing` 的锚/报告形状与 `reviewaccept` 的报告节数/辅助读数时「漏了这一处」，
+    而当时的判据（`test_relative_paths_under_workspace`）只断言了报告节数与 tex sha ——
+    判据没看的那一格，正是漏掉的那一格。现在与另外三处共用同一个解析口。
     """
+    from .closing import resolve_under_workspace
+
+    report_path = resolve_under_workspace(store, report_path)
     if not str(report_path or "").strip() or not Path(report_path).is_file():
         acc.criteria["attachment_is_honest"] = "unknown"
         acc.details["attachment_is_honest"] = "报告不在盘上 ⇒ 附件的诚实没查成（不是通过）"

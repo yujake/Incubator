@@ -53,6 +53,9 @@ STATEMENT = {
     "label": "主定理",
     "statement_text": "对任意有限群 G，c(G) ≤ 1",
     "origin": "external_lit",
+    # `external_lit` 的第四个必填（`draft/37` §68）：出处页码。
+    # 这一格此前不在夹具里 —— 而"夹具里没有的字段"正是真机上会空着的那一栏。
+    "page_range": {"start": 1, "end": 2},
     "evidence_kind": "cross_check",
     "quote_verified": True,
     "quote_reason": "逐字比对通过（第 1 页）",
@@ -200,6 +203,56 @@ def test_b_register_statement_refuses_bad_input_without_writing(tmp_path: Path):
     assert bad_kind["ok"] is False and bad_kind["kind"] == "bad_evidence_kind", bad_kind
 
     assert not st.rows("statements"), "被拒的命题不许留下半行"
+
+
+def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
+    """负控（§68 的真机形状）：`page_range` 在场但内容是空的 ⇒ 拒，且零写入。
+
+    第十三趟真机就是这么写进六行的：`{"start": null, "end": null}` ——
+    字段在、内容空 —— 而那六行在审稿判据里全部报了"缺 page_range（页码）"，
+    整条验收不及格。这一条钉住"写入口与判据说同一件事"。
+    """
+    st = _store(tmp_path)
+    lit_id = _lit(st, tmp_path)
+    b = AgentB(st, extractor=None, extract_text=None)
+
+    hollow = b.register_statement(source_lit_id=lit_id,
+                                  **{**STATEMENT, "page_range": {"start": None, "end": None}})
+    assert hollow["ok"] is False and hollow["kind"] == "missing_page_range", hollow
+    assert not st.rows("statements"), "被拒的命题不许留下半行"
+
+    # 正控（逃生口）：没有页码但有别的定位（label）也算给了出处
+    labeled = b.register_statement(source_lit_id=lit_id,
+                                   **{**STATEMENT, "page_range": {"label": "全文未分页"}})
+    assert labeled["ok"] is True, labeled
+    assert len(st.rows("statements")) == 1
+
+    # 边界（刻意的）：`own_result` 不要求页码 —— 它的出处是 doc_id/line_range，
+    # 那两栏的口径是册子里的待裁项（§69）。这一条把"不对称"写成可读的事实。
+    own = b.register_statement(**{**STATEMENT, "origin": "own_result",
+                                  "source_lit_id": "", "page_range": None})
+    assert own["ok"] is True, own
+
+
+def test_the_writer_and_the_reviewer_agree_on_page_range(tmp_path: Path):
+    """判据（两处说同一件事）：写入口放行的行，审稿判据不许判它缺页码。
+
+    这条判据的形状本身就是结论：`register_statement` 的预检与
+    `reviewaccept._c_statements` 是同一件事的两个落点，一处放宽就会出现
+    "台账上看着有出处、审稿时判没有"（第十三趟正是这样）。
+    """
+    from agentflow import reviewaccept as RA
+
+    st = _store(tmp_path)
+    lit_id = _lit(st, tmp_path)
+    b = AgentB(st, extractor=None, extract_text=None)
+    res = b.register_statement(source_lit_id=lit_id, **STATEMENT)
+    assert res["ok"] is True, res
+
+    acc = RA.ReviewAcceptance()
+    RA._c_statements(acc, st)
+    assert acc.criteria["statements_have_assumptions_and_source"] == "pass", acc.details
+    assert acc.readings["statements_missing_fields"] == [], acc.readings
 
 
 # ============================================================ 三、编排层：主控真的走通
