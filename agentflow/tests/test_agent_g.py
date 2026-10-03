@@ -298,6 +298,60 @@ def test_build_document_writes_row_and_renders_required_tables(g: AgentG, g_stor
     assert "非交换环情形尚未处理" in text
 
 
+def test_out_path_may_not_clobber_a_file_the_framework_does_not_own(g: AgentG, g_store: Store):
+    """负控（`draft/37` §91 的真机读数）：`out_path` 指到既有文件 ⇒ 拒，且一个字节都不变。
+
+    T1 第 5 趟实测：主控传 `out_path="out/paper/main.tex"` —— 它把"生成 markdown 的落点"
+    当成了"论文本体该写在哪"（那个参数当时没有任何描述）—— 于是这一动作把 26,155 字节的
+    论文正文整份覆盖成 3,992 字节的台账稿。此后 28 步都在试图把正文从 `source/` 拼回来，
+    26 KB 的 `fs.write` 被输出额度截断 ⇒ 连续三次坏 JSON ⇒ 整趟作废（exit 1）。
+
+    这一条判据的形状就是那次事故：预置一份"不属于框架的"文件（模拟论文主稿），
+    把它当 `out_path`，然后断言 ①拒绝、②文件名点出来、③字节逐字未变、④零行落库。
+    第 ③ 条不能省：只断言"返回体里有错"时，一个"先写后报错"的实现照样能过。
+    """
+    manuscript = Path(g_store.root) / "out" / "paper" / "main.tex"
+    manuscript.parent.mkdir(parents=True, exist_ok=True)
+    body = "\\documentclass{article}\n\\begin{document}\n论文正文\n\\end{document}\n"
+    manuscript.write_text(body, encoding="utf-8")
+    before = manuscript.read_bytes()
+
+    with pytest.raises(DocumentError) as ei:
+        g.build_document("paper", "想覆盖主稿的稿件", claims=_clean_claims(g),
+                         out_path="out/paper/main.tex")
+    problem = str(ei.value)
+    assert "out/paper/main.tex" in problem, problem
+    assert "覆盖" in problem, problem
+    assert manuscript.read_bytes() == before, "被拒的那次调用改了盘上的文件 ⇒ 守卫是假的"
+    assert g_store.rows("documents") == [], "被拒的调用不许留下 documents 行"
+
+    # 正控（不许把守卫做成"什么都写不出去"）：换一个没被占用的路径照样能写。
+    ok = g.build_document("paper", "另存一份", claims=_clean_claims(g),
+                          out_path="documents/another.md")
+    assert ok["markdown_path"] == "documents/another.md"
+    assert (Path(g_store.root) / "documents" / "another.md").is_file()
+
+
+def test_out_path_may_refresh_a_file_a_documents_row_owns(g: AgentG, g_store: Store):
+    """边界（守卫的豁免面）：某个 `documents` 行自己登记的 `markdown_path` 允许再写。
+
+    为什么必须有这一条：`refresh_markdown` 这条动作就是"把某行的 markdown 重渲染到它自己的
+    `markdown_path`"。守卫若一票否决所有既有文件，那条路会立刻坏掉 —— 而它坏掉不会有人
+    当场发现（刷新是低频动作）。所以豁免面要显式钉住：归属由 `documents` 行决定，
+    不是由"文件存不存在"决定。
+    """
+    first = g.build_document("paper", "第一份", claims=_clean_claims(g),
+                             out_path="documents/shared.md")
+    assert first["markdown_path"] == "documents/shared.md"
+    path = Path(g_store.root) / "documents" / "shared.md"
+    assert path.is_file()
+
+    second = g.build_document("paper", "第二份（同一落点）", claims=_clean_claims(g),
+                              out_path="documents/shared.md")
+    assert second["markdown_path"] == "documents/shared.md"
+    assert "第二份（同一落点）" in path.read_text(encoding="utf-8")
+
+
 def test_every_claim_citation_appears_in_the_rendered_markdown(g: AgentG, g_store: Store):
     """逐条断言（不是抽查）：每一条 claim 的每一个引用都出现在渲染结果里。"""
     claims = _clean_claims(g)

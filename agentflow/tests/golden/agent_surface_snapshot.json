@@ -1660,6 +1660,7 @@
         "type": "array"
        },
        "out_path": {
+        "description": "生成 markdown 的落点（工作区内相对路径；缺省 `<工作区>/<documents>/<doc_id>.md`）。**它是这份稿件的渲染产物，不是论文本体**：指到 `out/paper/main.tex` 会把论文正文换成台账稿（真机实测：26 KB → 4 KB，不可逆），所以既有的、不属于任何 `documents` 行的文件一律拒绝覆盖；要改主稿请用 `fs.edit`",
         "type": "string"
        },
        "sections": {

@@ -7472,3 +7472,83 @@ B 也没有第二份文本可以逐字比对。主控在报告 §八.1 写的那
 2. 重跑同一 58 字任务原文（`--sid t1e`、`--budget-usd 5 --max-steps 150`）；
 3. 要看的信号：`relations` 是否非零（引文腿）、`check_formal` 里 `import Mathlib` 是否归零
    （§89 的持续收益）、`statements` / `documents` 是否落行。
+
+---
+
+## §91 T1 第 5 趟：**一次调用把交付物覆盖成生成物** —— 破坏性缺陷的根因与守卫
+
+第 5 趟真机（2026-10-04，工作区 `projects/p5-review-t5`）：夹具按 §90 的结论补齐了
+**6 份被引原文**（`cited/`，只读：N1 那篇 + 第十卷/第十一卷/第八卷里与正文断言直接相关的那几章）
+与 P7/P8 两行。结果：**exit 1**（不是 `final`），90 次调用 / **$1.39492**，
+`stop_reason` = 连续三次坏 JSON。
+
+### 一、时间线与证据（这一次事故可以精确到秒）
+
+| 时刻 | 事件 |
+|---|---|
+| 05:42:43 | **`out/paper/main.tex` 从 26,155 字节变成 3,992 字节** —— 内容变成 `# What survives…` / `- 稿件代号：doc:0000` / `## 0. 阅读须知` 这种**台账稿**（`render_markdown` 的产物） |
+| 05:43:03 | `G.paper_package` 的 render→compile→核锚**跑在被覆盖之后的主稿上**，还写出了 `COMPILE-RECEIPT.json` / `RENDER-ANCHOR.json` |
+| 步 62–89 | 主控发现主稿没了，决定"从 `source/main.tex` 逐段读回再拼"：8 段×60 行读全，然后 `fs.write` 26 KB **两次被输出额度截断** ⇒ 连续三次 `judge_bad_json` ⇒ 整趟作废 |
+
+直接肇因是一次调用（会话记录步 28 的 `params` 逐字）：
+
+```json
+{"role": "G", "action": "build_document",
+ "params": {"kind": "paper", "out_path": "out/paper/main.tex", …}}
+```
+
+也就是：**主控把"生成 markdown 的落点"当成了"论文本体该写在哪"**。
+它没有说谎 —— 它读到的 `out_path` 描述是**空的**。
+
+### 二、根因（三条，全在框架侧）
+
+1. **广告面缺一格**：`specs/g.py` 里 `out_path` 原先是个光秃秃的 `_S`（只声明 `type`），
+   工具 schema 那一侧也一样是 `{"type": "string"}`。⇒ 模型只能猜这个参数是什么意思。
+   这与 §85/§86/§87/§88/§89 是同一个病的第 N 个实例。
+2. **写入口无条件覆盖**：`_resolve_out_path` 只挡"越界"（工作区外、`..`、绝对路径），
+   从不问"这个既有文件是不是我们的产物"。于是一份**渲染产物**可以换掉**论文正文**。
+3. **覆盖之后救不回来**：26 KB 的整文件 `fs.write` 会撞输出额度（`fs_tools.py:59`
+   与 `specs/m.py` 都登记过这条），所以恢复路线在本机上结构性不可行 ——
+   第 5 趟把这条从"提醒"变成了实证：**一次误调用 ⇒ 这一趟的交付物没了**。
+
+### 三、修法
+
+1. **覆盖守卫**（`tools/doc_tools.py`，写在落库之前、渲染之前）：
+   目标文件已存在、且它的相对路径**不是任何 `documents` 行的 `markdown_path`** ⇒
+   整笔拒绝，`kind="out_path_would_clobber"`，读数里带上字节数与后果。
+   判据放在**写之前**："覆盖了再道歉"对论文正文没有意义。
+2. **两处广告面写清它是生成物落点**（`specs/g.py` ⚑ FC-27 + 工具 schema）：
+   「生成 markdown 的落点；**不是论文本体**：指到 `out/paper/main.tex` 会把正文换成台账稿
+   （真机实测 26 KB → 4 KB，不可逆）⇒ 既有且不属于任何 `documents` 行的文件一律拒绝覆盖；
+   要改主稿请用 `fs.edit`」。
+3. **三条判据**（`tests/test_agent_g.py`）：
+   - 负控：预置一份"不属于框架"的文件（模拟主稿）当 `out_path` ⇒ 拒 + 文件名点出 +
+     **字节逐字未变** + `documents` 零行。第三条不能省：只断言"返回体里有错"时，
+     一个"先写后报错"的实现照样能过；
+   - 正控（反真空）：换一个没被占用的路径照样写得出去；
+   - 边界（豁免面）：某个 `documents` 行**自己登记的**落点允许再写 ——
+     否则 `refresh_markdown` 那条路会静默坏掉。归属由 `documents` 行决定，
+     不由"文件存不存在"决定。
+
+### 四、这一趟还有两个次要读数（留给下一轮）
+
+- **被引原文补齐之后，主控真的去读了**（`cited/` 里的卷章进了它的阅读序列），
+  但它在被覆盖事故之后再没能回到引文腿 —— 这一趟的引文腿读数被事故吞掉了，
+  不能当作"补齐夹具没用"的证据；
+- `A` 被召唤了 **2 次**（第 4 趟 1 次），`B` 被召唤 1 次（第 4 趟 0 次）：
+  引文腿的铺路动作开始出现，但仍未产出 `relations` 行。
+
+### 五、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| G 那一组 | `pytest tests/test_agent_g.py -q` | **20 passed**（含新增的负控/正控/边界三条） |
+| 两份冻结快照 | `python tests/test_{agent,tool}_surface_snapshot.py --write` + `pytest` | 各 **5 passed**；diff = `out_path` 那一格多了描述（动作面与工具面各一处） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3483 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1371.24s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`：`specs/g.py`（本轮）、`specs/b.py`、`specs/e.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer —— 不是 `clean` |
+
+复跑第 5 趟**不必**：夹具与任务原文都没问题，缺的只是那条守卫 ——
+下一趟（第 6 趟）用同一套夹具与同一个 58 字任务原文重跑即可，
+第一个要看的信号是：`G.build_document(out_path="out/paper/main.tex")` **被拒**
+（而不是把主稿换掉）。

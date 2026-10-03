@@ -53,7 +53,16 @@ ACTIONS: tuple[ActionSpec, ...] = (
         _obj({"kind": {"type": "string", "enum": list(S.DOC_KINDS)}, "title": _S,
               "claims": {"type": "array", "items": _OBJ},
               "sections": {"type": "array", "items": _OBJ},
-              "open_problems": _ARR_S, "out_path": _S},
+              "open_problems": _ARR_S,
+              # `draft/37` §91：这一格原先是个光秃秃的 `_S`（只声明类型、没有描述），
+              # 于是真机上主控把它当成了"论文本体该写在哪"，把 26 KB 的正文覆盖成
+              # 4 KB 的台账稿（那一趟就此作废）。要求写清：它是生成物落点，不是主稿。
+              "out_path": {"type": "string", "description":
+                           "生成 markdown 的落点（工作区内相对路径；缺省 "
+                           "`<工作区>/<documents>/<doc_id>.md`）。**它是这份稿件的渲染产物，"
+                           "不是论文本体**：指到 `out/paper/main.tex` 会把论文正文换成台账稿"
+                           "（真机实测：26 KB → 4 KB，不可逆），所以既有的、不属于任何 "
+                           "`documents` 行的文件一律拒绝覆盖；要改主稿请用 `fs.edit`"}},
              ("kind", "title", "claims")),
         "dict（doc_id / markdown_path）", side_effect="write_local", handler_name="build_document",
     ),

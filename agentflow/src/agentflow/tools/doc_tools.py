@@ -1233,6 +1233,32 @@ def build_document(
             )
         doc_id = tx.alloc_id("doc")
         rel, absolute = _resolve_out_path(root, out_path, doc_id, default_subdir)
+        # ---- 覆盖守卫（`draft/37` §91 的真机读数：一次调用把交付物覆盖成生成物）
+        #
+        # T1 第 5 趟：主控传 `out_path="out/paper/main.tex"`（它把"生成 markdown 的落点"
+        # 当成了"论文本体该写在哪"，而那个参数当时没有任何描述），于是这一动作把
+        # 26,155 字节的论文正文整份覆盖成 3,992 字节的台账稿（`render_markdown` 的产物）。
+        # 后果不可逆：那一趟此后 28 步都在试图把正文从 `source/` 拼回来，
+        # 26 KB 的 `fs.write` 被输出额度截断 ⇒ 连续三次坏 JSON ⇒ 整趟作废（exit 1）。
+        #
+        # 判据：允许覆盖本动作自己的产物（`documents` 里某行的 `markdown_path`，
+        # 也就是 `refresh_markdown` 那条路），其余既有文件一律拒 —— 它们不是生成物，
+        # 我们没有资格拿一份渲染结果去换掉它们。判据放在写之前（不是写完再警告），
+        # 因为"覆盖了再道歉"对论文正文没有意义。
+        ours = {str(r.get("markdown_path") or "") for r in tx.rows("documents")}
+        if absolute.exists() and rel not in ours:
+            size = absolute.stat().st_size
+            raise DocToolError(
+                f"拒绝覆盖 {rel}（已存在，{size} 字节，且它不是任何 documents 行的 "
+                "`markdown_path`）：这个参数是生成 markdown 的落点，不是主稿 —— "
+                "把它指到 `out/paper/main.tex` 会把论文本体换成一份台账稿，"
+                "而那是不可逆的（真机实测：26 KB 正文被覆盖成 4 KB，那一趟就此作废）。"
+                "要写主稿请用 `fs.edit` / `fs.write`；要生成稿件就换一个没被占用的路径"
+                "（缺省是 `<工作区>/<documents>/<doc_id>.md`）。",
+                kind="out_path_would_clobber",
+                details={"created": False, "out_path": rel, "bytes": size,
+                         "is_registered_markdown": False},
+            )
         row = S.Document(
             doc_id=doc_id,
             kind=kind,
@@ -1558,7 +1584,12 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
             },
             "sections": {"type": "array", "items": {"type": "object"}},
             "open_problems": {"type": "array", "items": {"type": "string"}},
-            "out_path": {"type": "string"},
+            "out_path": {"type": "string", "description":
+                         "生成 markdown 的落点（工作区内相对路径；缺省 "
+                         "`<工作区>/<documents>/<doc_id>.md`）。它是这份稿件的渲染产物，"
+                         "不是论文本体：指到 `out/paper/main.tex` 会把论文正文换成台账稿"
+                         "（真机实测：26 KB → 4 KB，不可逆）⇒ 既有的、不属于任何 "
+                         "`documents` 行的文件一律拒绝覆盖；要改主稿请用 `fs.edit`"},
            },
            "required": ["kind", "title", "claims"],
            "additionalProperties": False,
