@@ -55,10 +55,14 @@ class ScriptedGateway:
     def __init__(self, replies: list[str]) -> None:
         self.replies = list(replies)
         self.prompts: list[str] = []
+        #: 每条请求带上的 system 提示词（`draft/37` §89 的判据要查它：现算事实是
+        #: 装配期拼进 system 的，不在每一步那条 user 提示词里）。
+        self.systems: list[str] = []
 
     def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
                  **kw: Any) -> Any:
         self.prompts.append(prompt)
+        self.systems.append(system or "")
         text = self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
         return type("Reply", (), {"ok": True, "text": text, "tokens_in": 10, "tokens_out": 10,
                                   "error_detail": "", "error_kind": ""})()
@@ -384,6 +388,35 @@ def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Pat
     assert prompt.rstrip().endswith(JSON_TAIL.rstrip()), prompt[-200:]
     for shape in ("tool", "summon", "summon_many", "message", "note", "ask_user", "final"):
         assert f'"{shape}"' in JSON_TAIL, shape
+
+
+def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathlib.Path,
+                                                               monkeypatch):
+    """判据（`draft/37` §89）：角色循环必须把现算的工具链读数递进提示词。
+
+    为什么这条判据落在循环上而不是提示词装配里：工厂（`agent_prompts`）只负责"没传时
+    也要诚实"，真正"把这台机器的读数传下去"的是循环。T1 第 3 趟的 6 次
+    `import Mathlib` 全部撞在"本机没装 Mathlib"上，而框架手里有这条读数却没递出去 ——
+    所以判据要盯着传递链，不是盯着那一段文字。
+
+    用哨兵替换现算函数：只要循环真的调了它，哨兵就会出现在模型收到的提示词里
+    （`gw` 记录每一条发出去的提示词）。
+    """
+    import json as _json
+
+    from agentflow import agent_prompts as AP
+
+    monkeypatch.setattr(AP, "toolchain_facts_text",
+                        lambda: "哨兵：本机没有 Mathlib，自足 Lean 文件可用")
+    scripts = {"E": [_json.dumps({"final": "好"})]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=2)
+    run_role("E", "核验一条断言", store=st, registry=registry, conductor=cond,
+             seam=LlmSeam(role="E", session_root=root, gateway=gw["E"], price=(0.0, 0.0),
+                          sid="test-run"), workspace_root=str(root), sid="test-run",
+             from_env=False)
+    assert gw["E"].systems, "这一次没有发出任何提示词 ⇒ 判据失去对象"
+    assert "哨兵：本机没有 Mathlib，自足 Lean 文件可用" in gw["E"].systems[0], (
+        gw["E"].systems[0][-400:])
 
 
 def test_a_bad_reply_gets_a_sharper_repair_message(tmp_path: pathlib.Path):

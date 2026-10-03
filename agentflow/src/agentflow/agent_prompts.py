@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import capabilities as C
@@ -444,7 +445,8 @@ PAPER_PACK = """\
   真的没有可操作项时才写"包无需修订"，并给出读数（哪几道门 pass、哪几条 finding 被逐条查过）。
 - **"核验证明"的主路径是 E 的形式化核验**，不是 H 的机械门：派 `E.check_formal` 逐条核工作区里
   已有的 Lean 源码（声明名可自动认名：恰好一条具名声明时不用给 `checker_name`；
-  `imports` 默认不注入任何库，要 Mathlib 才显式传 —— 见 E 那一岗的说明），
+  `imports` 默认不注入任何库，要用 Mathlib 才显式传；而这台机器上 Mathlib 能不能用，
+  看上面 TOOLCHAIN_FACTS 那一段的现算读数 —— 见 E 那一岗的说明），
   它给出的 `verified=True` 是**证据升级**（台账里那条断言的证据跟着变，表与稿件跟着变）。
   只让 H 走机械门 + 让 G 重渲染，包的文字不会变 —— 那不是"更优质的论文包"，只是"包刷新了一遍"。
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
@@ -658,10 +660,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。"
             "被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，"
             "并把「这一版脚本查的是什么」写进实验结论。",
-            "`verify.check_formal` 的 `imports` 默认**不注入任何库**（源码自己 import 什么就加载什么）："
-            "要 Mathlib 就显式传 `imports: ['Mathlib']`，或把它写进源码 —— "
-            "别指望工具替你加一行，那会让「被检查的源码」与盘上那份不是同一份。"
-            "声明名**会自动认**：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`"
+            "`verify.check_formal` 的 `imports` 默认不注入任何库（源码自己 import 什么就加载什么）："
+            "要用 Mathlib 得显式传 `imports: ['Mathlib']`、或把它写进源码，"
+            "别指望工具替你加一行（那会让「被检查的源码」与盘上那份不是同一份）；"
+            "而**这台机器上 Mathlib 到底能不能用看上面 TOOLCHAIN_FACTS 那一段的现算读数** —— "
+            "读数说没装就别在源码里 import 它（那会落 `import_unavailable`，是「没查成」），"
+            "改写不依赖 Mathlib 的自足文件。"
+            "声明名会自动认：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`"
             "（不给就报「取不到唯一那条」并列出候选名 —— 以前是拿文件名词干顶替，"
             "于是「没点名」被报成 `decl_mismatch`，读起来像「查了没通过」）。"
             "真机读数（2026-10-01）：`code/lean/p2_rho_sum_zero.lean` 在旧默认（注入 Mathlib）下"
@@ -1028,6 +1033,65 @@ def _numbered_sections(prefix: str, lines: Sequence[str], base_order: int) -> li
     ]
 
 
+#: 没有读到工具链读数时那一段的正文。写在这里是为了让"没读到"也是一句诚实的话：
+#: 空字符串会让模型以为这一栏本来就没有，而"我不知道"与"没有"是两件事。
+_NO_TOOLCHAIN = ("这台机器上的证明工具链：（这一次没有读到读数 —— 探测没做，"
+                 "不是「没有检查器」。要判断能不能做形式化核验，先让框架跑一次 "
+                 "`agentflow doctor`）")
+
+
+@lru_cache(maxsize=1)
+def toolchain_facts_text() -> str:
+    """这台机器上的证明工具链读数（现算一次，之后按进程记忆）。
+
+    ## 为什么这一行必须进模型看得见的地方（`draft/37` §89 的真机读数）
+
+    T1 第 3 趟：`E.check_formal` 被派 8 次，其中 6 次都撞在同一件事上 ——
+    源码里 `import Mathlib` 报 `unknown package 'Mathlib'`（本机没装 Mathlib），
+    于是那 6 次全是「没查成」。而框架知道这件事：`toolchain.mathlib_state()`
+    正是 §82 为这一轴做的读数，`agentflow doctor` 会把它打给人看 ——
+    它只是从没写进模型看得见的地方。更糟的是 E 的既有提示词里那句
+    「要 Mathlib 就显式传 `imports: ['Mathlib']`」在这台没装库的机器上是一句误导。
+
+    这与 §85/§86/§87/§88 是同一个病：框架手里的事实没有进广告面。
+
+    ## 为什么由调用方传入、而不是在这里直接渲染进提示词
+
+    这一行是机器相关的。渲染进基础提示词会让两份冻结快照变成"某一台机器"的快照
+    （换一台装了库的机器就红），而判据的分工是：调用方（`agent_loop`）传现算读数，
+    这里只负责"没传时也要诚实"。按进程记忆一次，是因为探针要起子进程；
+    装了库要重启进程才生效；判据用 `toolchain_facts_text.cache_clear()` 复位。
+    """
+    from . import toolchain as TC
+
+    try:
+        probe = TC.probe_checkers()
+        mathlib = TC.mathlib_state()
+    except Exception as exc:  # noqa: BLE001 —— 读不到就如实说读不到，不编一个「没有」
+        return ("这台机器上的证明工具链：没查成 —— 探测本身失败了"
+                f"（{type(exc).__name__}: {exc}）⇒ 不知道环境里有没有检查器")
+
+    if probe.get("available"):
+        found = "；".join(f"{r['name']} {r.get('version') or '（版本读不出）'}"
+                          for r in probe["available"])
+    elif not probe.get("checked"):
+        found = f"探测没做成（{probe.get('reason')}）⇒ 不知道环境里有没有检查器"
+    else:
+        found = "没有任何受支持的检查器 —— 本环境无法产出 proof 级证据"
+
+    lines = ["这台机器上的证明工具链（现算读数，不是记忆）：", f"- 检查器：{found}"]
+    if not mathlib.get("root"):
+        lines.append(f"- Mathlib：没找到工程根（{mathlib.get('reason')}）"
+                     "⇒ `import Mathlib` 会落「没查成」（`import_unavailable`），"
+                     "那不是「证明不成立」")
+    else:
+        lines.append(f"- Mathlib：工程根 {mathlib['root']}；`import Mathlib` "
+                     f"{mathlib.get('import_mathlib')}")
+    lines.append("- 由上一条推得（推论，不是探针读数）：`check_formal` 可达的写法是"
+                 "不 import Mathlib 的自足文件；把库编出来是另一条路（机器级决定）")
+    return "\n".join(lines)
+
+
 def role_prompt_registry(role: str, *, registry: Any = None,
                         task: str = "", summoned_by: str = "",
                         task_id: str = "", depth: int = 1,
@@ -1035,6 +1099,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         user_replies: str = "",
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
                         availability: Mapping[str, str] | None = None,
+                        toolchain_facts: str = "",
                         ) -> PromptRegistry:
     """按角色装配一份提示词注册表（段 + 变量），供 `render` 或审计使用。
 
@@ -1134,6 +1199,10 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                                "不如改派能做的，或如实说明缺什么。"
                                if unusable else "")))
     reg.section(Section("AGENT_TOOLS_SDK", SECTION_ORDERS["AGENT_TOOLS_SDK"], LOOP_PROTOCOL))
+    # 证明工具链那一轴（`draft/37` §89）：读数是机器相关的，所以由调用方传；
+    # 没传就如实写"这一次没有读到读数"（不是"没有检查器"，也不是什么都不说）。
+    reg.section(Section("TOOLCHAIN_FACTS", SECTION_ORDERS["TOOLCHAIN_FACTS"],
+                        (toolchain_facts or "").strip() or _NO_TOOLCHAIN))
     reg.section(Section("WORKSPACE_FACTS", SECTION_ORDERS["WORKSPACE_FACTS"],
                         "工作区事实（现算，不是记忆）：\n"
                         + f"- 工作区根目录：{{{{workspace_root}}}}\n"

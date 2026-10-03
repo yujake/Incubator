@@ -7224,3 +7224,136 @@ sha256 与第 2 趟逐字相同 `8c5c431b…` ⇒ 可比）、`--budget-usd 5 --
 逐字给出了处置（"换 import 列表"），模型有足够信息；② 这一趟的目的正是看它在拿到
 诚实读数后能不能自己收敛 —— 提前把答案写进提示词，测的就不是系统能力了。
 形式化腿可达性已经用离线探针证明（上表最后一行），所以重跑不是白跑。
+
+---
+
+## §89 T1 第 3 趟裁定：修复生效了，但两条腿仍未做成 —— 形式化腿的新根因是「Mathlib 事实没进广告面」
+
+第 3 趟真机（2026-10-04，工作区 `projects/p5-review-t3`，58 字任务原文不变，
+`source/main.tex` 的 sha256 与第 2 趟逐字相同）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 57 / 38（`by_role` B16 / E13 / G7 / H2） |
+| 花销 | **$0.746597**（预算 $5 内） |
+| 退出 | 0（`final`） |
+| `tasks` 结局 | **`ok` 18 / `refused` 20**（`refusal_reason` 全是 `invalid_params`） |
+| 产出表 | `statements` 3、`experiments` 2、`documents` 1（5 claims，`accepted`）、`relations` **0**、`literature` **0**、`review_findings` **0** |
+| 收工门 | `closing` 六格全过（`can_close=true`） |
+| 报告 | `out/review/REPORT.md` 9639 字节九节；`reports/0000-review.md` 17079 字节（H 的十五门读数） |
+| 正文 | 4 处定点 `fs.edit`（摘要 (iii) 一致化、§1.3 转述口径、§4.1 转述数字、Remark 4.3），两次 `paper_package` 都 `consistent` |
+| 裁定 | **仍不合格**（§83 第六节表：引文腿、形式化腿都没做成），但**第 2 趟的三处病根确认修好** |
+
+### 一、§88 那三处修复的验收：这一趟全是正读数
+
+1. **`refused` 出现在台账上了**：20 条 `refused / invalid_params`，detail 逐条带
+   `[handler_ok=False kind=…]`（`missing_quote_reason` / `missing_proof_text` / …）。
+   第 2 趟那种"报 `ok` 而表里 0 行"的形态**一次都没有**；主控在报告第九节把这些拒绝
+   逐条引用出来（"这些**没有**被写成「已登记」"）。
+2. **`conductor.acceptance(project_dir=".")` 一次成功**：报告第一节直接引用
+   `row_count=6` / `row_ids=[P1..P6]` / `ok_count=1`。第 2 趟它连报两次"验收表不在盘上"、
+   只能改走 `fs.read`。
+3. **`register_statement` 的三级阶梯**（`proof_text` / `line_range` / `quote_reason`）
+   在三次拒绝之后就被改对了：`statements` 落了 3 行（`origin=own_result` + 逐字 `proof_text`
+   + `line_range`）。
+
+也就是说：§88 那一轮修的"读数骗人"确实被修掉了 —— 这一趟的两条腿没做成，
+原因**换了**，而且是新的一层。
+
+### 二、引文腿：`literature` 0 行 —— 不是框架堵住，是主控没走那条路
+
+事实：`A` 一次都没被召唤（`tasks` 里没有 A 的行），而主控的提示词里**逐字列着**
+A 的动作与参数：
+
+```
+- A：…可调用动作：run_once（必填 无）、run（必填 无；可选 max_requests）、
+  search_literature（必填 topic；可选 description、mode）、
+  ingest_local（必填 books_dir；可选 dry_run、limit、max_bytes、pattern）
+```
+
+而 `A.ingest_local` **不联网**（本地目录登记），本工作区里 `source/` 就摆着
+`main.tex` / `main.pdf` / `LIT.md` / `EVIDENCE.md` / `REVIEW.md`。主控在报告第五节写的是
+「`literature` 表 0 行 ⇒ 没有任何一条外部引文被登记」——**它把"没登记"当成了既定条件**，
+连一次 `A.ingest_local` 都没试；报告里那句「A 未接线（`no_provider`）」在整份会话记录里
+找不到任何一次调用支撑（`ingest_local` 在会话记录里出现 **0 次**）。
+
+裁定：这**不是**框架缺陷（动作在广告面上、参数写全了、边也在能力表里）。
+它是主控的规划失误 —— 而"不作提示"是既定纪律（靠加暗示让它变绿等于自欺），
+所以要改的是**夹具的验收口径**（见第五节），不是给它塞一句话。
+
+### 三、形式化腿：8 次 `check_formal`，6 次撞在 `import Mathlib` —— 这次是框架的错
+
+| t-id | 结局 |
+|---|---|
+| t-0018 / t-0019 | 既没给源码也没给脚本路径 ⇒ 没做验证（"沉默的必需"那一档） |
+| t-0021 / t-0022 / t-0030 / t-0031 / t-0032 / t-0034 | **`unknown package 'Mathlib'`** ⇒ 编译没开始 |
+
+而**框架知道本机没装 Mathlib**：`toolchain.mathlib_state()` 正是 §82 为这一轴做的读数
+（`import_mathlib: 不可用…`），`agentflow doctor` 会把它打给人看 —— 它只是从没写进
+模型看得见的地方；更糟的是 E 的提示词里那句「要 Mathlib 就显式传 `imports: ['Mathlib']`」
+在这台机器上是一句误导。于是模型把 6 次调用花在一个**它不可能知道**的事实上。
+
+这与 §85/§86/§87/§88 是同一个病的最后一层：**框架手里的事实没有进广告面**。
+（另有一份离线探针证明这条腿**可达**：不 import Mathlib 的自足文件在本机真的验过 ——
+`theorem t_one : (1:Nat)+1=2 := rfl` 与 `by decide` 两条都是"退出码 0、无 sorry、
+声明被检查到"。）
+
+### 四、修法：`TOOLCHAIN_FACTS` 段（现算，由调用方传入）
+
+- `agent_prompts.toolchain_facts_text()`：现算 `probe_checkers()` + `mathlib_state()`，
+  渲染成三行事实（有哪些检查器 / Mathlib 能不能 `import` / 由此推得可达的写法）。
+  探针要起子进程 ⇒ 按进程记忆一次（装了库要重启进程才生效）；探针本身失败时
+  如实写"没查成"，不许编一个"没有"。
+- 由**调用方传入**（`agent_loop.run` 的 `facts` 里加 `toolchain_facts=`），
+  理由写在 `promptkit.SECTION_ORDERS` 的注释里：这一行是机器相关的，
+  渲染进基础提示词会让两份冻结快照变成"某一台机器"的快照（换台机器就红）。
+  没传时那一段写"这一次没有读到读数（探测没做，不是「没有检查器」）"。
+- 同时消掉 E 提示词里那半句误导：改成"要用 Mathlib 得显式传、而这台机器能不能用
+  看 TOOLCHAIN_FACTS 那一段的现算读数；读数说没装就别在源码里 import 它"。
+
+**判据**（两条，缺一不可）：
+
+1. `tests/test_agent_prompts.py::test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded`
+   —— 每个角色的提示词里都有这一段、没传读数时如实说"没读到"、传了哨兵就逐字出现；
+   并且把探针换成两个不同替身（有 lean / 一个都没有）之后正文跟着变（证明它是投影，
+   不是写死的一句话）。
+2. `tests/test_agent_loop.py::test_the_loop_hands_the_live_toolchain_reading_to_the_model`
+   —— 判据盯着**传递链**：循环必须真的把现算读数递进去（替身模型记下每条的 `system`，
+   哨兵必须出现在里面）。为什么不在装配那一层判：那里只保证"没传时也诚实"，
+   "传下去"是循环的责任 —— T1 第 3 趟正是断在这一跳。
+
+### 五、夹具的验收口径补齐：P7 / P8
+
+第 3 趟暴露的另一件事：工作区里那张验收表（`out/paper/ACCEPTANCE.md`）只有 P1–P6，
+而任务原文里那两句话（"逐条核验引文是否与原文一致"与"能机器验证的定理做形式化验证"）
+**在表里没有对应的判据行** —— 主控拿到的验收口径比它接到的任务窄，
+于是它把 P1–P6 逐条对齐、六格全过就收工了。
+
+处置：`temp/_p53_new_ws.py` 造的验收表补两行（P7 引文逐条核过 / P8 形式化给出检查器读数），
+依据是**任务原文本身**（不引入任何新的暗示；两份文案都在同一句任务里）。
+判据："这张表由人给定、不许改它"这条纪律不变，变的是人给的那张表要与任务同宽。
+
+### 六、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 提示词那一组 | `pytest tests/test_agent_prompts.py -q` | **26 passed**（含新的工具链投影判据） |
+| 角色循环那一组 | `pytest tests/test_agent_loop.py -q` | **34 passed**（含新的传递链判据） |
+| 两份冻结快照 | `python tests/test_agent_surface_snapshot.py --write` + `pytest` | 各 **5 passed**；agent 快照 diff = 9 行（每角色一条 TOOLCHAIN_FACTS 段，内容是"没读到读数"的诚实默认值 ⇒ 快照仍与机器无关） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3481 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1407.82s） |
+| 声明对账（这一轮被它咬了一次） | `pytest tests/test_agent_spec_reconciliation.py -q` | 第一遍**红**：改了 `agent_prompts.ROLE_BRIEFS["E"].policy` 之后，`specs/e.py` 里那份副本与它不再逐字相等。按"一处真相、两处落位"的纪律把 `specs/e.py` 那条同步成同一串（脚本 `temp/_sync_e_policy.py`：从真相那侧读、只替换那一行、写完再断言逐字相等）⇒ 6 passed。⚑ 该文件在 FC-27 禁改区，这一处改动与其余禁改区改动一并等 2 名 reviewer |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+| 形式化腿可达性 | `python -B temp/_t1c_formal_probe.py` | 自足 Lean 文件 `verified`；`import Mathlib` ⇒ `unknown package` |
+
+### 七、下一轮：T1 第 4 趟
+
+同一 58 字任务原文、新工作区 `projects/p5-review-t4`、`--budget-usd 5 --max-steps 150 --sid t1d`。
+要看的三个信号：
+
+1. `E.check_formal` 的失败读数里**还出现不出现 `unknown package 'Mathlib'`**
+   （出现 ⇒ 这一行事实没被读到，得换更靠前的位置；不出现 ⇒ 修法生效）；
+2. `literature` / `relations` 是否非零（引文腿）—— 这一条仍取决于主控自己走
+   `A.ingest_local` + B 的关系抽取，框架不给暗示；
+3. `statements` / `experiments` / `documents` 的计数（确认第 3 趟的读数可复现，
+   不是一次偶然）。

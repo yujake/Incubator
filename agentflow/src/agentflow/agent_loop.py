@@ -824,7 +824,11 @@ class AgentLoop:
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
                      budget_left=self._budget_text(), inbox=inbox,
                      workspace_root=self.workspace_root, availability=availability,
-                     notebook=notebook, user_replies=replies)
+                     notebook=notebook, user_replies=replies,
+                     # 这台机器能不能做形式化核验（现算一次，`draft/37` §89）：
+                     # E 在 T1 第 3 趟把 6 次 check_formal 花在 `import Mathlib` 上，
+                     # 而框架早就知道本机没装 Mathlib —— 事实必须进模型看得见的地方。
+                     toolchain_facts=AP.toolchain_facts_text())
         run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **facts)
         system = AP.system_prompt(self.role, registry=self.registry, **facts)
         if resumed is None:

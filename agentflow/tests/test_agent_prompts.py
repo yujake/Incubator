@@ -93,6 +93,58 @@ def test_every_role_in_schema_has_a_registered_brief():
     assert set(AP.roles_covered()) >= expected, sorted(expected - set(AP.roles_covered()))
 
 
+def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
+        registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
+    """判据（`draft/37` §89）：这台机器的证明工具链读数要进提示词，且它必须现算。
+
+    真机读数（T1 第 3 趟）：`E.check_formal` 被派 8 次，6 次撞在 `import Mathlib`
+    报 `unknown package 'Mathlib'` 上 —— 框架早就知道本机没装 Mathlib
+    （`toolchain.mathlib_state()` 是 §82 为这一轴做的读数），却从没写进模型看得见的地方；
+    而 E 的提示词里那句"要 Mathlib 就显式传 imports"在这台机器上是一句误导。
+
+    判据分两半，缺一不可：
+      ① 每个角色的提示词里都有这一段，且没传读数时它说"没有读到读数"
+         （不许静默缺席 —— 那会让"我不知道"看起来像"本来就没有"）；
+      ② 传了读数时它逐字出现 —— 且把探针换成两个不同的替身，正文跟着变
+         （证明这一行是投影，不是写死的一句话）。
+    """
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        assert "证明工具链" in text, f"{role} 的提示词里没有工具链那一段"
+        assert "没有读到读数" in text, (
+            f"{role} 的提示词在没拿到读数时没有如实写「没读到」：{text[:200]}")
+
+    sentinel = "这台机器上的证明工具链（现算读数，不是记忆）：\n- 检查器：lean 4.7.0"
+    assert sentinel in _prompt("E", registry, toolchain_facts=sentinel)
+
+    from agentflow import agent_prompts as AP2
+    from agentflow import toolchain as TC
+
+    def _probe(**kw: Any) -> dict[str, Any]:
+        return {"checked": True, "available": [{"name": "lean", "version": "4.7.0"}],
+                "available_names": ["lean"], "probe_errors": [], "reason": "探测到 1 个",
+                "looked_in": [], "sources": {"lean": "explicit_dir"}}
+
+    monkeypatch.setattr(TC, "probe_checkers", _probe)
+    monkeypatch.setattr(TC, "mathlib_state",
+                        lambda *a, **k: {"checked": True, "root": "",
+                                         "reason": "没找到 Mathlib 工程根"})
+    AP2.toolchain_facts_text.cache_clear()
+    with_lean = AP2.toolchain_facts_text()
+    assert "lean 4.7.0" in with_lean and "没找到工程根" in with_lean, with_lean
+
+    monkeypatch.setattr(TC, "probe_checkers",
+                        lambda **kw: {"checked": True, "available": [],
+                                      "available_names": [], "probe_errors": [],
+                                      "reason": "探测完成：环境里没有任何受支持的证明检查器",
+                                      "looked_in": [], "sources": {}})
+    AP2.toolchain_facts_text.cache_clear()
+    without = AP2.toolchain_facts_text()
+    assert "没有任何受支持的检查器" in without, without
+    assert without != with_lean, "换了探针读数、这一行却没变 ⇒ 它是写死的"
+    AP2.toolchain_facts_text.cache_clear()
+
+
 def test_every_role_prompt_is_rendered_without_template_leftovers(registry: ToolRegistry):
     """每个角色的提示词非空、没有没被插值的模板组，并且写着它自己的职责。
     若这条破了：角色会拿到一份通用或半插值的提示词（比如任务框里留着 `{{task}}`），
