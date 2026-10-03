@@ -49,6 +49,57 @@ def _root_of(store: Any) -> Path:
     return Path(getattr(store, "root", ".")).resolve()
 
 
+def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
+                notes: list[str] | None = None) -> Any:
+    """B 的抽取器 —— 「唯一装配点」（`run-agent` / `run-b` / `pipeline` 三条路共用）。
+
+    ## 为什么它必须存在（2026-10-03 的根因，见 `draft/37` §83）
+
+    `LLMExtractor` 要一个 `complete(prompt) -> str` 的 client，而「模型缝不是它」
+    （`LlmSeam` 只有 `ask`）。此前三条路各写各的，结果都一样坏：
+
+    - `run-agent` 从不给 B 任何 client ⇒ 退到 `RuleExtractor` ⇒ `B.run_once`
+      「当场拒抽」（`R-56`：规则抽取器会把碎片当概念/关系）⇒ `relations` 一行都没有
+      ⇒ 引文逐字回验这条腿在真机上「结构性不可达」（实测 `p5-run15`：`relations` 0 行、
+      `literature.processed=False`）；
+    - `run-b` / `pipeline` 把 `RuleExtractor()` 写死 ⇒ 同样永远拒抽；
+    - 而唯一正确的配方写在 `projects.py` 里：`client_from_env(scope="extract",
+      meter=TokenMeter(store), role="B", max_tokens=8192)`。`max_tokens` 必须给大
+      （实测 2026-09-28：缺省 4096 会把整份 JSON 截在半句上 ⇒ 解析失败、整篇作废）。
+
+    这里把那个配方收成一处：「有 key ⇒ 计量过的模型 client；没有 key ⇒ 规则档」
+    （后者让 `run_once` 如实报 `no_llm_extractor`，而不是"每篇文献发一次注定失败的请求"）。
+    两种情况都往 `notes` 里记一句，于是"为什么 B 在用规则抽取器"在读数里看得见。
+    """
+    from .extract import extract_text  # noqa: F401  （保留语义：调用方仍需自查）
+    from .llm import LLMExtractor, RuleExtractor
+
+    if not _model_key_present():
+        if notes is not None:
+            notes.append(f"B：没有配置模型 key ⇒ 抽取器退回规则档"
+                         f"（`B.run_once` 会如实拒抽：no_llm_extractor）")
+        return RuleExtractor()
+    from .modelclient import SCOPE_EXTRACT, client_from_env
+    from .tokenmeter import TokenMeter
+
+    client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
+                             task_id="host-wiring", role="B", max_tokens=8192)
+    if notes is not None:
+        notes.append("B：抽取器 = LLMExtractor（client 走 modelclient，作用域 extract、"
+                     "max_tokens=8192、已挂 TokenMeter ⇒ 花销进 usage_ledger）")
+    return LLMExtractor(client)
+
+
+def _model_key_present(env: Mapping[str, str] | None = None) -> bool:
+    """环境里配了模型 key 吗（只看有没有，绝不读值去做别的事）。"""
+    try:
+        from .modelgw import spec_from_env
+
+        return bool((spec_from_env(env).api_key or "").strip())
+    except Exception:  # noqa: BLE001 - 配置读不出来 ⇒ 当作"没有"，让上层如实退规则档
+        return False
+
+
 class _Builder:
     """一次装配的上下文：按需建角色、同 (角色, store 根) 单例。
 
@@ -73,6 +124,8 @@ class _Builder:
         self.cfg: dict[str, Any] = dict(config or {})
         self.workspace_root = Path(workspace_root) if workspace_root else None
         self._made: dict[tuple[str, str], Any] = {}
+        #: "为什么 B 在用规则抽取器"这类装配读数（`b_extractor` 往里写，`wired_llm_conductor` 转出来）
+        self.extractor_notes: list[str] = []
         #: 角色声明的注册表（懒取一次；`goal-7f5116c1` M4）
         self._specs: Any = None
 
@@ -149,18 +202,33 @@ class _Builder:
     # 这里只剩"装配知识"——两个角色专属的默认值，它们不是声明，放这儿才对：
     # 一个是"没给抽取器时按有没有模型缝选哪一种"，一个是"A 的下载器由配置开关决定"。
 
-    def _extractor_for(self, role: str) -> Any:
-        """B 的抽取器：给了就用；没给则按"该角色有没有模型缝"在 LLM / 规则抽取器之间选。"""
+    def _extractor_for(self, role: str, store: Any = None) -> Any:
+        """B 的抽取器：显式给的最优先；否则按"这一路的模型 client 能不能造"选。
+
+        三条分支（顺序就是优先级）：
+
+        1. 调用方显式给了 `extractor=` ⇒ 用它（判据与替身走这条）；
+        2. 该角色拿到的 `llm` 本身就是抽取器 client（有 `.complete`）⇒ 包成 `LLMExtractor`
+          （`tests/test_host_wiring.py` 的假 LLM 走这条）；
+        3. 其余情况 ⇒ :func:`b_extractor`（有 key 用模型 client，没有 key 退规则档）。
+
+        不再把模型缝塞给 `LLMExtractor`。此前那句 `LLMExtractor(role_llm)` 是个陷阱：
+        真实缝没有 `.complete` ⇒ 构造期 `TypeError`，而那个错曾被 `LocalBackend.resolve`
+        的 `except TypeError` 兜成一句误导性的"factory(B) 需要一个 store"（`__init__` 的
+        注释逐字记着这次事故）。现在缝被认出来就记一条 note、走第 3 条，不再硬塞。
+        """
         if self.extractor is not None:
             return self.extractor
         role_llm = self._llm_for(role)
         if role_llm is not None:
-            from .llm import LLMExtractor
+            if hasattr(role_llm, "complete"):
+                from .llm import LLMExtractor
 
-            return LLMExtractor(role_llm)
-        from .llm import RuleExtractor
-
-        return RuleExtractor()
+                return LLMExtractor(role_llm)
+            self.extractor_notes.append(
+                f"{role}：给的模型缝没有 complete()（缝不是抽取器 client）⇒ 不拿它造 "
+                f"LLMExtractor（那会在构造期抛 TypeError）；改走 b_extractor()")
+        return b_extractor(store, config=self.cfg, notes=self.extractor_notes)
 
     def _downloader_for(self, role: str) -> Any:
         """A 的下载器：`agent_<role>` 配置段的 `download` 关掉时明确不给（None = 没接）。
@@ -208,7 +276,7 @@ class _Builder:
             llm=self._llm_for(role),
             config=cfg,
             providers=tuple(self.providers) if "providers" in spec.needs else (),
-            extractor=self._extractor_for(role) if "extractor" in spec.needs else None,
+            extractor=(self._extractor_for(role, store) if "extractor" in spec.needs else None),
             workspace_root=((self.workspace_root or _root_of(store))
                             if "workspace_root" in spec.needs else None),
             actor=self._actor_for(role, instance),
@@ -249,7 +317,8 @@ def build_role_registry(store: Any, *, llm: Any = None,
                         providers: Any = None, extractor: Any = None,
                         config: Mapping[str, Any] | None = None,
                         workspace_root: str | Path | None = None,
-                        llm_by_role: Mapping[str, Any] | None = None) -> dict[str, Factory]:
+                        llm_by_role: Mapping[str, Any] | None = None,
+                        notes: list[str] | None = None) -> dict[str, Factory]:
     """给 `LocalBackend` 的角色登记表（`role -> ("factory", fn)`）。
 
     没接线的角色不进这张表 —— 于是 `summon` 会如实落 `refused/not_wired`，
@@ -257,6 +326,10 @@ def build_role_registry(store: Any, *, llm: Any = None,
     """
     b = _Builder(llm=llm, providers=providers, extractor=extractor,
                  config=config, workspace_root=workspace_root, llm_by_role=llm_by_role)
+    if notes is not None:
+        # 同一个列表对象：装配读数（B 的抽取器是什么、为什么）在装配期就写进去，
+        # 调用方跑完能把它当「这一趟的接线读数」读出来，而不是靠猜。
+        b.extractor_notes = notes
     reg: dict[str, Factory] = {}
     for role, state in b.status().items():
         if state != "wired":
@@ -317,7 +390,7 @@ def wired_tool_registry(store: Any, *, policy: Any = None, llm: Any = None,
 
     `session_root` / `sid` 显式往后传（`draft/37` §63）：会话身份是装配期输入，
     不给 ⇒ `conductor.closing` 的 `user_pending` 记 `unknown`（不是 pass）。
-    这里显式列出而不是靠 `**build_kw` 顺手带过去：靠 `**build_kw` 时，
+    这里显式列出而不是靠 `build_kw` 顺手带过去：靠 `build_kw` 时，
     一个拼错的键会被静默吞进 `deps` 之外、工具照旧按缺省会话读 —— 那正是假绿的形态。
     """
     from .tools import build_registry
@@ -392,7 +465,9 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                                                              usd_budget=usd_budget,
                                                              meter=TokenMeter(
                                                                  store, budget_usd=usd_budget))))("H")
+    notes: list[str] = []
     role_reg = build_role_registry(store, providers=providers, extractor=extractor,
+                                   notes=notes,
                                    config=config, workspace_root=workspace_root,
                                    llm_by_role=({"H": h_llm} if h_llm is not None else None))
     table = dict(loops or {})
@@ -431,7 +506,10 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     return {"conductor": conductor, "backend": backend, "registry": built.registry,
             "loops": table, "session_root": root,
             # 这一趟定下的会话号（§63）：调用方与运维据此核对"工具面读的是哪一段"。
-            "sid": eff_sid}
+            "sid": eff_sid,
+            # 装配读数（B 的抽取器是什么、为什么；2026-10-03 §83 的根因修复）：
+            # 空 = 一切按预期；非空 = 有人该看一眼（例如没 key ⇒ B 会拒抽）。
+            "notes": notes}
 
 
 def selftest() -> int:

@@ -36,6 +36,18 @@ class _FakeLLM:
         raise AssertionError("构建期不许调用 LLM")
 
 
+@pytest.fixture(autouse=True)
+def _no_model_key(monkeypatch):
+    """默认把模型 key 清掉：这一组判据要的是「确定」的接线态。
+
+    为什么必须这么做（2026-10-03，`draft/37` §83）：B 的抽取器现在按「有没有 key」在
+    `LLMExtractor` / `RuleExtractor` 之间选 —— 开发机上恰好配了 key 时，「没 key ⇒ 规则档」
+    这类断言就会随机变红。要 key 的用例自己 `monkeypatch.setenv` 即可。
+    """
+    monkeypatch.delenv("AGENTFLOW_MODEL_API_KEY", raising=False)
+    monkeypatch.delenv("AGENTFLOW_MODEL_BASE_URL", raising=False)
+
+
 def _store(tmp_path: Path, name: str = "ws") -> Store:
     st = Store(tmp_path / name)
     st.init()
@@ -480,3 +492,86 @@ def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path
     assert (res2.status, res2.outcome, res2.refusal_reason) == ("done", "refused", "not_wired")
     assert st2.rows("literature") == [], "没接线时不许留下任何文献行"
     assert st2.rows("search_requests") == [], "没接线时一条请求都不该入队"
+
+
+# ------------------------------------------------- ⑤ B 的抽取器接线（`draft/37` §83）
+
+class _SeamLike:
+    """像 `LlmSeam`：有 `ask`、「没有」 `complete` —— 它不是抽取器 client。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def ask(self, *a, **kw):  # pragma: no cover - 只在被误用时走到
+        self.calls += 1
+        raise AssertionError("构建期不许调用模型")
+
+
+def test_b_extractor_uses_a_metered_model_client_when_a_key_is_configured(
+        tmp_path: Path, monkeypatch):
+    """正控（§83 的根因修复）：配了 key ⇒ B 拿到 `LLMExtractor`，且 client 是 modelclient 造的。
+
+    为什么这条是「引文那条腿能不能通」的判据：`B.run_once` 在规则抽取器下「当场拒抽」
+    （`R-56`：规则抽取器会把碎片当概念/关系），于是 `relations` 一行都不会有、逐字回验
+    无处发生 —— 实测 `p5-run15` 就是 `relations` 0 行、`literature.processed=False`。
+    """
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "fixture-key-not-a-secret")
+    st = _store(tmp_path)
+    notes: list[str] = []
+    reg = host.build_role_registry(st, providers=[object()], notes=notes)
+    b = reg["B"][1](store=st)
+    assert type(b.extractor).__name__ == "LLMExtractor", type(b.extractor).__name__
+    assert b.extractor_is_fallback is False
+    assert type(b.extractor.client).__name__ == "ModelClient", type(b.extractor.client).__name__
+    assert any("max_tokens=8192" in n for n in notes), notes
+
+
+def test_a_seam_is_not_mistaken_for_an_extractor_client(tmp_path: Path, monkeypatch):
+    """负控（真机抓到的形态）：塞一个「缝」给 B 不许抛 `TypeError`。
+
+    旧写法 `LLMExtractor(role_llm)` 对真实缝会当场抛（缝没有 `.complete`），而那句错曾被
+    `LocalBackend.resolve` 的 `except TypeError` 兜成一句误导性的「需要一个 store」。
+    现在的口径：认出来就记一条 note、改走正确的 client；构造期一次模型都不调。
+    """
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "fixture-key-not-a-secret")
+    seam = _SeamLike()
+    st = _store(tmp_path)
+    notes: list[str] = []
+    reg = host.build_role_registry(st, providers=[object()], llm_by_role={"B": seam},
+                                   notes=notes)
+    b = reg["B"][1](store=st)
+    assert type(b.extractor).__name__ == "LLMExtractor", type(b.extractor).__name__
+    assert any("缝不是抽取器 client" in n for n in notes), notes
+    assert seam.calls == 0, "构建期调用了那个缝"
+
+
+def test_without_a_key_b_refuses_to_extract_and_says_so(tmp_path: Path):
+    """负控（三态）：没有 key ⇒ 规则档 + 一条说清的 note（不是静默地什么都不做）。"""
+    st = _store(tmp_path)
+    notes: list[str] = []
+    reg = host.build_role_registry(st, providers=[object()], notes=notes)
+    b = reg["B"][1](store=st)
+    assert type(b.extractor).__name__ == "RuleExtractor", type(b.extractor).__name__
+    assert b.extractor_is_fallback is True
+    assert any("没有配置模型 key" in n for n in notes), notes
+
+
+def test_run_agent_wiring_exposes_the_extractor_notes(tmp_path: Path):
+    """正控（读数可见）：`wired_llm_conductor`（`run-agent` 那条路）把装配读数转出来。
+
+    口径：读数是「B 实例被造出来」那一刻写的（惰性装配），所以判据先让主控真的召唤一次 B，
+    再读 `wiring["notes"]` —— 这也正是运维会看到它的时机（召唤发生在跑的过程中）。
+    """
+    from agentflow.tools.conductor_tools import reset_cache
+
+    st = _store(tmp_path)
+    reset_cache()
+    wiring = host.wired_llm_conductor(st, session_root=st.root, sid="t", max_steps=3,
+                                      workspace_root=str(st.root))
+    assert "notes" in wiring, wiring.keys()
+    assert wiring["notes"] == [], "还没造过 B 就写了读数？那是装配期的谎话"
+    res = wiring["conductor"].summon("B", "run_once", {}, by="M")
+    assert res.status == "done", (res.status, res.outcome, res.error)
+    assert any("B：" in n for n in wiring["notes"]), wiring["notes"]
+    # 负控（同一条读数的另一面）：没有 key 时它必须说清"会拒抽"，而不是沉默
+    assert any("拒抽" in n or "LLMExtractor" in n for n in wiring["notes"]), wiring["notes"]

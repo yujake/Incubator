@@ -6561,3 +6561,136 @@ $env:AGENTFLOW_MATHLIB_ROOT = "D:\Incubator\temp\mathlib-pinned\mathlib4-4.7.0"
 - **Mathlib 那一档**：umbrella 的 `.olean` 不在缓存里 ⇒ `import Mathlib` 仍会
   `import_unavailable`。核 Mathlib 量级的定理要先把 Mathlib 编全（机器级重活，待裁）。
 - **`verify_tools.py` 那两个 reviewer 签名**：门会红成 `requires_human`，等用户签。
+
+---
+
+## §83 T1（review 论文包）开跑前：把「引文查不到」的两个结构性根因挖出来并根除
+
+用户 2026-10-03 的新阶段指示见 `draft/38`（逐字记录 + 五个测试任务 + 纪律）。
+这一节是 **T1 的可行性排查**：要求里写着"如果仍有形式化做不了或者引文查不到的问题就继续针对性优化"，
+所以先把这两条腿逐层查到底。形式化那条已在 §81/§82 修通（`AGENTFLOW_LEAN_BIN` ⇒ `verified` / `proof`）。
+**引文那条查出了两个叠在一起的根因，而且都在装配层。**
+
+### 一、先说清"引文查不到"的三层含义（别混）
+
+1. **机制层**：`quoteverify.check_quote` 本身没问题。实测（`projects/p5-run15/source/main.pdf`，
+   7 页 / 19739 字符）：给了正确 `page_range` ⇒ `verified=True`（`substring_match`）；
+   没有页码但开回退 ⇒ `verified=True`（`substring_match_fulltext`）；**没有页码且不开回退**
+   ⇒ `verified=False, reason=not_found_page_unknown`（三态里的"没查成"，不是"没查到"）。
+   ⇒ 页码从哪来，是这一条腿的真问题。
+2. **抽取层**：页码由 `LLMExtractor` 从提示词里的 `<<<PAGE n>>>` 标记读出（提示词里逐字要求了，
+   还专门警告"不要用印在页脚的页码"）。所以**只要抽取真的跑了**，页码就有来源。
+3. **装配层**：真机上抽取**根本没跑**。这一层才是根因。
+
+### 二、根因（实测证据，两条）
+
+**RC-1：`run-agent` 从不给 B 一个可用的模型 client。**
+`host._extractor_for("B")` 只有当 B 拿到"模型缝"时才造 `LLMExtractor`，而
+`wired_llm_conductor`（`run-agent` 走的那条路）从不给 B 缝 ⇒ 退到 `RuleExtractor`
+⇒ `B.run_once` **当场拒抽**（`R-56`：规则抽取器会把碎片当概念/关系）。
+实测：
+
+```text
+run-agent 现状（llm_by_role=None）: extractor=RuleExtractor   is_fallback=True
+```
+
+**RC-2：那个"给缝"的分支本身是协议陷阱。** `LLMExtractor` 构造期就要求
+`client.complete(prompt) -> str`（`llm.py:770` 显式 `TypeError`），而 `LlmSeam` **没有** `complete`
+（只有 `ask` / `ask_json`）。`host.py` 自己的注释逐字记着这次事故：真实缝被当成 client
+⇒ 构造期 `TypeError`，而那句错被 `LocalBackend.resolve` 的 `except TypeError` 兜成了
+一句误导性的"factory(B) 需要一个 store"，于是 3 个 B 实例全部 `failed`。
+**而 `tests/test_host_wiring.py` 把"B 拿不到缝 ⇒ 仍用 RuleExtractor"钉成了判据** ——
+判据守住了"别把缝塞进去"，代价却是"B 在真机上永远没有抽取器"。
+
+**真机的后果（`p5-run15` 台账，逐条读出来）**：
+
+```text
+tasks: 15 行 —— A.ingest_local ×1、B.register_statement ×10（5 条 invalid_params 被拒）、
+       G.build_document ×3、H.review ×1
+       ⇒ **B.run_once 一次都没被派过**
+literature: 1 行 —— lit 0000, processed=False, last_mine_error=None
+relations: 0 行  ← 引文逐字回验的产物面是空的
+```
+
+即：**"引文核验"这条腿在那一趟里既没有可用机制（RC-1/RC-2），也没有被派（调度面）**，
+报告里自然写不出任何 `quote_verified` 读数。
+
+### 三、根除（不是最小改动）
+
+1. **把"B 的抽取器"收成一处装配点**：`host.b_extractor(store, *, config, notes)` ——
+   配方逐字取自 `projects.py` 里唯一正确的那处：
+   `client_from_env(scope="extract", meter=TokenMeter(store), role="B", max_tokens=8192)`。
+   `max_tokens=8192` **必须**给大（实测 2026-09-28：缺省 4096 会把整份 JSON 截在半句上 ⇒ 整篇作废）。
+   **有 key ⇒ 计量过的模型 client；没有 key ⇒ 规则档**（后者让 `run_once` 如实报
+   `no_llm_extractor`，而不是"每篇文献发一次注定失败的请求"）。两种情况都往 `notes` 记一句。
+2. **拆掉协议陷阱**：`_extractor_for` 只在拿到的 `llm` **本身**有 `.complete` 时才包 `LLMExtractor`；
+   是缝（没有 `.complete`）就记一条 note、走 `b_extractor()` —— 不再抛那个会被兜成
+   "需要一个 store"的 `TypeError`（这个根因值得单独说：**兜住的异常把错误指向了不相干的地方**）。
+3. **三条路共用它**：`run-agent`（`_extractor_for` 现在把 `store` 传进去）、
+   `run-b`（原来写死 `RuleExtractor()` ⇒ 这条命令**结构上不可能抽取**）、
+   `pipeline`（同上）。`run-b` 还把装配读数打到 stderr。
+4. **读数可见**：`wired_llm_conductor` 返回 `"notes"` —— 运维跑完能看到
+   "B 的抽取器是什么、为什么"；没 key 时它会明说"会拒抽"。
+
+### 四、判据（`tests/test_host_wiring.py` 新增 4 条 + 一个 autouse fixture）
+
+| 判据 | 正控 | 负控 |
+|---|---|---|
+| 有 key ⇒ `LLMExtractor` + client 是 `ModelClient` + note 里有 `max_tokens=8192` | ✓ | —— |
+| 塞一个缝 ⇒ **不许抛 TypeError**、note 写明"缝不是抽取器 client"、构建期零调用 | ✓ | ✓ |
+| 没有 key ⇒ `RuleExtractor` + note 说清"会拒抽" | —— | ✓（三态） |
+| `wired_llm_conductor` 转出 `notes`（惰性：召唤 B 之后才写） | ✓ | ✓（"还没造过 B 就写读数"= 谎话） |
+
+**autouse fixture `_no_model_key`（保判据不受开发机影响）**：B 的抽取器现在按"有没有 key"选，
+开发机上恰好配了 key 时，"没 key ⇒ 规则档"这类断言会随机变红 —— 所以这一组默认把 key 清掉，
+要 key 的用例自己 `setenv`。这是**判据的封闭性**问题，不是口味问题。
+
+### 五、读数（2026-10-03）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 装配层三情形（离线、不花钱） | 直接调 `build_role_registry` | 无 key ⇒ `RuleExtractor`+note；有 key ⇒ `LLMExtractor(ModelClient)`+note；塞缝 ⇒ 不再 TypeError、note 说明、零调用 |
+| 接线判据 | `pytest tests/test_host_wiring.py -q` | **23 passed** |
+| 受影响的 CLI / 预算那几面 | `pytest tests/test_host_wiring.py tests/test_core_audit_abc_cli.py tests/test_agent_cli.py tests/test_budget_knobs.py -q` | **88 passed** |
+| 两条密钥扫描判据 + 行数登记税 | `pytest tests/test_cli_run.py tests/test_evidence.py tests/test_reading_map.py tests/test_host_wiring.py -q` | **151 passed**（含修掉的三条红） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| FC-27 门（不给基线） | `python -B scripts/noai_gate.py --git` | `[clean]`，679 条改动路径未命中，退出码 0 —— **但这正是门的已知盲区**：§82 那两处禁改区改动**已经提交**，不给基线就看不见（`AGENTS.md` 逐字警告过：把禁改区改动提交掉，它就再也看不见） |
+| FC-27 门（给基线 `e211c32`） | `python -B scripts/noai_gate.py --git --since e211c32` | **[requires_human] required_approvals=2**：`scripts/lint_rules.py`（auth-audit）、`src/agentflow/tools/verify_tools.py`（prover-bridge），退出码 1 —— 等 2 名 reviewer 签字 |
+| 全量 pytest（第一次） | `python -B -m pytest -q -p no:cacheprovider` | 3 failed / 3453 passed —— 三条红全是本次改动的连带（见第五节），已修 |
+| 全量 pytest（修完再跑） | 同上 | **3456 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（1407.96s，退出码 **0**） |
+
+**本轮全量跑出来的三条红（都是我这次改动的连带，已修）**：
+① 密钥扫描判据（`test_cli_run` / `test_evidence`）：我在判据里写的假 key 是
+`sk-probe-never-called`，含 `sk-` 前缀 ⇒ 被扫描判据命中。改成仓里既有的约定写法
+`fixture-key-not-a-secret`（`test_cli_run.py:42` 就是这么写的）。
+② 行数登记税：`cli.py` 2281 → **2287**（读图 §3）。
+③ 另有一次 R009（我新写的注释里用了成对星号）—— 逐处改成 `「」`。
+
+### 六、T1 的可行性论证（这一节是"开跑前必须给"的那一份）
+
+| 要素 | 现状 | 判"通过"的标准 |
+|---|---|---|
+| 模型 key | 可用（`~/.dsh/.credentials.yaml` 的 `refs.DEEPSEEK_API_KEY`，35 字符；一次最小调用 `ok=True`，9/1 token） | 每趟真机都要能发起调用 |
+| 预算 | `--budget-usd 5`（用户定） | 不超；且**不是钱卡住**（按 15 号那趟均价 0.0098 USD/次 ⇒ 5 美元 ≈ 500 次调用） |
+| 引文腿 | **本轮修通**：有 key ⇒ `B` 拿到 `LLMExtractor`（页码来自 `<<<PAGE n>>>`）；`check_quote` 给了页码就 `verified` | 台账里出现 `relations` 行，且带 `quote` / `page_range` / `quote_verified`；报告第五节给出"真/假/未查"三个数 |
+| 形式化腿 | **§81/§82 修通**：设 `AGENTFLOW_LEAN_BIN` 后 `check_formal` ⇒ `verified`、`run_experiment(method="formal")` ⇒ `evidence_kind=proof` | 台账里出现一条 `formal` 实验（`evidence_kind=proof`）或 `check_formal` 结果；报告第四节如实写结论 |
+| 调度面 | M 要自己派 B 的抽取与 E 的形式化（任务原文不许暗示分工） | 召唤台账里出现 `B.run_once` 与 E 的那条动作；缺了就是**调度缺陷**，按实际结果记 |
+| 交付面 | `conductor.closing` 五格 + 九节报告 | `report_shape` 过；报告里 `quote_verified` 与实验读数能对上台账 |
+
+**结论：可以跑。** 两条腿的机制都已实测通（引文：给了页码/开回退 ⇒ `verified`；
+形式化：`AGENTFLOW_LEAN_BIN` ⇒ `verified`/`proof`），预算与步数都够。
+**跑之前只差两件外部条件**：环境里要有 `AGENTFLOW_MODEL_API_KEY` 与
+`AGENTFLOW_LEAN_BIN`（两条都是每趟命令里即时注入，不落盘）。
+跑完按本节的"判通过标准"逐条对照，把缺的记成缺陷并优化。
+
+### 七、教训
+
+1. **"兜住的异常"会把错误指向不相干的地方。** `except TypeError` 把
+   "缝不是抽取器 client"报成"需要一个 store"，于是那次事故的处置成了"别给 B 缝"——
+   治标。根因是**协议不匹配**，该修的是装配。
+2. **判据也会把病态钉住。** `test_host_wiring.py` 那条"B 仍用 RuleExtractor"本身没错
+   （它防的是 TypeError），但它让"B 在真机上永远没有抽取器"变成了绿灯。
+   所以这一轮把判据改成**同时守两个方向**：缝不许被当 client 用，且**有 key 时必须真的接上 client**。
+3. **台账比报告可信。** 这一节的根因是从 `tasks` / `literature` / `relations` 三张表的原始行
+   读出来的（`B.run_once` 0 次、`relations` 0 行），而不是从报告的文字推断。
+4. **判据要封闭**：环境里有 key 就会让"没 key ⇒ 规则档"随机变红 —— 判据自己得先把环境钉住。

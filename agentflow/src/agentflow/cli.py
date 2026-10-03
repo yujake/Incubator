@@ -229,20 +229,26 @@ def cmd_run_b(args) -> int:
     第 4 条），也就是说"这一轮没干成"—— 那必须能从退出码上看见，
     否则定时任务会把"每轮都在重试同一篇"当成持续成功。
     """
+    from . import host as _H
     from .agent_b import AgentB
     from .extract import extract_text
-    from .llm import RuleExtractor
 
     root = Path(args.root or DEFAULT_ROOT).resolve()
     st = make_store(root)
     st.init()
     cfg = load_config(root, args.config)
+    # 抽取器只有一处装配（`host.b_extractor`）：
+    # 此前这里写死 `RuleExtractor()` ⇒ `B.run_once` 永远拒抽（`R-56`），
+    # 于是"跑一轮 B"这条命令结构上不可能真的抽取出东西（2026-10-03，`draft/37` §83）。
+    _notes: list[str] = []
     agent = AgentB(
         st,
-        extractor=RuleExtractor(),
+        extractor=_H.b_extractor(st, config=cfg, notes=_notes),
         extract_text=extract_text,
         config={**(cfg.get("agent_b") or {}), **(cfg.get("lease") or {})},
     )
+    for _n in _notes:
+        print(f"[run-b] {_n}", file=sys.stderr)
     out = agent.run(max_docs=args.max if args.once else None)
     print(json.dumps(out, ensure_ascii=False, indent=2))
     if out.get("failed"):
@@ -513,10 +519,10 @@ def cmd_research(args) -> int:
 
 def cmd_pipeline(args) -> int:
     """把 A→B→C→D 串起来跑（DESIGN-TOOLS.md §5）。"""
+    from . import host as H
     from agentflow.agent_a import AgentA
     from agentflow.agent_b import AgentB
     from agentflow.extract import extract_text
-    from agentflow.llm import RuleExtractor
     from agentflow.pipeline import run_pipeline
     from agentflow import fetch as F
 
@@ -538,7 +544,7 @@ def cmd_pipeline(args) -> int:
         )
         agent_b = AgentB(
             st,
-            extractor=RuleExtractor(),
+            extractor=H.b_extractor(st, config=cfg),
             extract_text=extract_text,
             config={**(cfg.get("agent_b") or {}), **(cfg.get("lease") or {})},
         )
