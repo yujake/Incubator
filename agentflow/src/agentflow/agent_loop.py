@@ -258,6 +258,73 @@ def _observe(result: Mapping[str, Any]) -> str:
     return text + ("\n" + hint if hint else "")
 
 
+# ---------------------------------------------------------------- 简报行的唯一拼法
+#
+# 下面四个函数是「一步在 transcript 里长什么样」的「唯一拼法」：循环里 `transcript +=`
+# 用的是它们，`resume_transcript(...)`（从会话记录重建续跑用的 transcript）用的也是它们。
+#
+# 为什么必须只有一处（这是这一版最重要的一条结构要求）：续跑要写进 `run.transcript`
+# 的那份简报，必须与当时那一趟逐字一致 —— 否则"续跑"会变成"换一段稍微不同的话
+# 接着问"，而模型对同一件事的下一步会因此漂移，且没有任何判据看得见这个漂移。
+# 两处各写一份 f-string 的形态，实测只会在第一次有人改文案时对不上（而那时没有测试）。
+def _canonical(value: Any) -> Any:
+    """把一份结构按键名递归排序（字典的键顺序在落档时被钉死）。
+
+    为什么需要它：`SS.append` 写事件时用的是 `json.dumps(..., sort_keys=True)`，
+    所以「从事件读回来」的那份 payload/result 是排好序的，而循环手里那份是模型
+    JSON 的原始键序。`_step_line` 两边都要调 —— 于是它在"当时那一份"与"重建那一份"
+    之间必须走同一条口径：按键排序。否则"逐字相等"永远差一个键序，
+    而那种差异在读差异的人眼里看起来像"内容变了"（实测：重建出来的 `[第 1 步]`
+    与当时那一行只是键序不同，判据报的是"没有接着上次那份对话"）。
+    """
+    if isinstance(value, Mapping):
+        return {str(k): _canonical(value[k])
+                for k in sorted(value, key=lambda k: str(k))}
+    if isinstance(value, (list, tuple)):
+        return [_canonical(v) for v in value]
+    return value
+
+
+def _step_line(step: int, payload: Mapping[str, Any], result: Mapping[str, Any]) -> str:
+    """一个有效步的简报行：模型说了什么 + 框架执行结果（键序见 `_canonical`）。"""
+    return (f"\n\n[第 {step + 1} 步] 你说了：{_clip(_canonical(payload), ECHO_CHARS)}\n"
+            f"框架执行结果：{_observe(_canonical(result))}")
+
+
+def _invalid_line(step: int, problem: str) -> str:
+    """一个形状不合法（`_shape_of` 判不出来）的步：请它按协议重说一次。"""
+    return f"\n\n[第 {step + 1} 步] 框架：{problem}。请按循环协议重说一次。"
+
+
+def _bad_args_line(step: int, detail: str) -> str:
+    """工具参数不是合法 JSON 的那一步（`draft/37` §65：交回工具层让它改参数）。"""
+    return (f"\n\n[第 {step + 1} 步] 框架：{detail}。"
+            "工具名我收到了，坏的是那个参数 —— 把参数写成一个合法"
+            " JSON 对象再调用一次（别改调别的工具，也别写解释）。")
+
+
+def _bad_json_line(step: int, problem: str, detail: str) -> str:
+    """整条回复不是可解析 JSON 的那一步（重述输出契约，含骨架）。"""
+    return (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
+            f"（{problem}；{_clip(detail, 240)}）。"
+            f"**不要写分析、不要写方案、不要写 Markdown**："
+            f"只回一行 JSON。骨架：\n{JSON_TAIL}")
+
+
+def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str,
+                        depth: int) -> str:
+    """一趟循环开头的简报（任务 / 收件箱 / 处境）。
+
+    单独抽出来是为了让 `resume_transcript` 能重建同一段开头：当时那句话里的
+    事实（谁发起的、深度多少、台账号）都在 `agent_run_start` 事件里，收件箱那一段
+    则按当前盘上的状态现读（续跑本来就该听到新到的留言 —— 见 `resume_transcript` 的说明）。
+    """
+    return (f"你的任务：{task}\n\n"
+            f"你的收件箱：{inbox}\n\n"
+            f"你的处境：由 {summoned_by or '（顶层发起）'} 发起，"
+            f"召唤链深度 {depth}，台账号 {task_id or '（本次运行未拿到台账号）'}。")
+
+
 @dataclass(frozen=True)
 class LoopStep:
     """循环里的一步：模型说了什么、框架做了什么、结果是什么。"""
@@ -307,6 +374,20 @@ class LoopRun:
     bad_args_streak: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
+    #: 这一趟停在等哪个问题（`stop_reason="waiting_for_user"` 时非空）。
+    #:
+    #: 为什么它是一个独立的字段而不是塞进 `final` 的一句话：人/界面要拿它去对
+    #: 待答清单与回答入口（`agentflow answer <qid>`），从一句话里正则抠一个号
+    #: 是"看起来能用、迟早漂移"的那类做法。
+    waiting_for: str = ""
+    #: 这一趟是从第几步接着跑的（0 = 全新开始，>0 = `--resume` 续跑的第几步）。
+    resumed_from: int = 0
+    #: 这一趟最终的那份简报（重建续跑时的逐字对照物）。
+    #:
+    #: 刻意「不进 `to_dict()`」：那份记录会写成 `runs/*.json` 的产出文件，
+    #: 而简报里有整段观测文本（单字段上限 6000 字 × 步数）—— 把它抄进去会让
+    #: 审计文件翻几倍，而它本来就是 `agent_step` 事件重算得出来的东西。
+    transcript: str = ""
 
     @property
     def summons(self) -> list[str]:
@@ -327,6 +408,7 @@ class LoopRun:
             "stop_reason": self.stop_reason, "bad_json": self.bad_json,
             "bad_json_streak": self.bad_json_streak,
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
+            "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
             "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
@@ -551,8 +633,16 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         timeout = value.get("timeout_sec")
         if timeout is not None and not isinstance(timeout, (int, float)):
             return "", {}, "ask_user.timeout_sec 必须是数字"
+        # 选项两种形状都收（`userio.coerce_option`）：裸字符串是旧形状，
+        # 也是 `llmseam.META_FUNCTIONS` 那张函数面 schema 今天唯一广告的形状；
+        # `{"label", "description"}` 是新形状（DSH 的选项形状）。
+        # 归一化放在这里而不是留给 `ask_user`：这一步的 payload 会被原样落进
+        # `agent_step` 事件，事件里当然要存规范形状，否则事后读不出"当时给了什么选项"。
         return key, {"question": question,
-                     "options": [str(x) for x in options],
+                     "header": str(value.get("header") or ""),
+                     "options": [U.coerce_option(x).to_dict() for x in options],
+                     "multi_select": bool(value.get("multiSelect")
+                                          or value.get("multi_select")),
                      "timeout_sec": float(timeout) if timeout is not None else None}, ""
     if key == "note":
         text = value if isinstance(value, str) else str((value or {}).get("text") or "")
@@ -631,8 +721,16 @@ class AgentLoop:
     sid: str | None = None
     token: Any = None
     store: Any = None
-    #: 问用户时的默认等待上限（秒）。调用方可以按场景放长或缩短。
-    user_timeout_sec: float = 30.0
+    #: 问用户时等多久（秒）。「缺省 `None` = 一直等」（2026-10-03 用户裁定「就停着」）。
+    #: `0` = 登记问题后立刻停（`run-agent --user-wait-sec 0` 那一档）。
+    #:
+    #: 旧缺省是 30.0：超时之后循环继续往下跑，于是"问了、没人答、模型自己把关键取舍
+    #: 定了"这件事在读数上分不出来。语义与理由见 `userio` 的模块 docstring。
+    user_timeout_sec: float | None = None
+    #: 无人值守档（`userio.ASK_POLICY` 的显式覆盖）：`None` = 按模块级常量走，
+    #: `"never"` = 问用户被确定性拒绝（不落问题、不停循环）。CLI 的 `--no-ask` 走它，
+    #: 而不是去改模块全局 —— 一个进程里跑第二趟时不该继承上一趟的档位。
+    ask_policy: str | None = None
     #: 本次运行自己的台账号与深度（由 `run` 设置）。唤起下一环时必须把它当 parent 传下去，
     #: 否则链条在台账里会断成两段互不相干的记录。
     my_task_id: str = ""
@@ -697,8 +795,16 @@ class AgentLoop:
         return f"{left:.6f} 美元（上限 {self.seam.usd_budget:.6f}）"
 
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
-            depth: int = 1) -> LoopRun:
-        """跑一次循环。`task` 是这次要做的事（被召唤时就是调用方给的参数）。"""
+            depth: int = 1, resumed: tuple[str, int] | None = None,
+            waiting_for: str = "") -> LoopRun:
+        """跑一次循环。`task` 是这次要做的事（被召唤时就是调用方给的参数）。
+
+        `resumed` 是 `(重建出来的 transcript, 从第几步接着跑)`（由 `run_role` 在
+        `--resume` 那一趟里从检查点 + 会话记录算出来，见 `resume_transcript`）。
+        给了它就「不再自己拼开头」 —— 那一趟要接着说的正是"它上次说过的那些话"，
+        重拼一遍等于换一段话重新开始。收件箱那一段仍然现读（新到的留言本来就该听到），
+        投递登记也照旧做（那两件事是"这一趟"的事实，不是"上一趟"的）。
+        """
         t0 = time.monotonic()
         self.my_task_id = my_task_id
         self.depth = depth
@@ -720,16 +826,31 @@ class AgentLoop:
                      notebook=notebook, user_replies=replies)
         run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **facts)
         system = AP.system_prompt(self.role, registry=self.registry, **facts)
-        transcript = (f"你的任务：{task}\n\n"
-                      f"你的收件箱：{inbox}\n\n"
-                      f"你的处境：由 {summoned_by or '（顶层发起）'} 发起，"
-                      f"召唤链深度 {depth}，台账号 {my_task_id or '（本次运行未拿到台账号）'}。")
+        if resumed is None:
+            start_step = 0
+            transcript = _opening_transcript(task, inbox=inbox, summoned_by=summoned_by,
+                                             task_id=my_task_id, depth=depth)
+        else:
+            transcript, start_step = resumed
+            run.resumed_from = start_step
+            # 注意：这里「不」把"上一趟停在等谁"写进 `run.waiting_for`。
+            # 那个字段的口径是"这一趟停在等谁"，而上一趟的值只进下面那条 start 事件
+            # （它是续跑的输入面）。混用会让一趟收工（final）的 run_end 事件里
+            # 挂着一个旧 qid —— 读的人会以为它停在等那个问题。
 
         SS.append(self.session_root, {
             "kind": "agent_run_start", "role": self.role, "task": task,
             "summoned_by": summoned_by, "task_id": my_task_id, "depth": depth,
             "prompt_version": run.prompt_audit.get("prompt_version"),
             "prompt_sha256": run.prompt_audit.get("prompt_sha256"),
+            # 续跑那两栏：从第几步接着跑、上一趟停在等谁。两者都是"这一趟不是全新的"
+            # 这件事的读数 —— 事后看会话记录时，"它是从第 5 步接上的"与"它从第 1 步
+            # 重跑了一遍"在别处长得一模一样（步号都从 5 开始之后才分得开）。
+            #
+            # `resumed_from` 的口径逐字是「这一趟真的从第几步接着跑」（0 = 全新开始）。
+            # 被拒的续跑（指纹不符 / 还在等）写的是另一个字段 `resume_attempted_from`
+            # —— 它们一步都没跑，写 0 会被读成"它从第 0 步续的"（见 `_note_resume_refusal`）。
+            "resumed_from": run.resumed_from, "waiting_for": str(waiting_for or ""),
         }, sid=self.sid)
 
         # 原生工具面（`draft/37` §49/§50）：广告这一岗的工具 + 循环的非工具形状。
@@ -751,7 +872,7 @@ class AgentLoop:
         }, sid=self.sid)
         self._face = face          # `_prompt` 要用它决定"名字从哪来"那一句
 
-        for step in range(self.max_steps):
+        for step in range(start_step, self.max_steps):
             if self.seam.usd_budget is not None and self.seam.spend.usd >= self.seam.usd_budget:
                 run.stop_reason = "budget"
                 run.final = run.final or "预算已耗尽，停止（没有继续调用模型）"
@@ -798,19 +919,14 @@ class AgentLoop:
                         run.final = (f"连续 {run.bad_args_streak} 次把工具参数写成不合法 JSON"
                                      f"（最后一次：{call.detail}），停止")
                         break
-                    transcript += (f"\n\n[第 {step + 1} 步] 框架：{call.detail}。"
-                                   "工具名我收到了，坏的是那个参数 —— 把参数写成一个合法"
-                                   " JSON 对象再调用一次（别改调别的工具，也别写解释）。")
+                    transcript += _bad_args_line(step, str(bad_result["detail"]))
                     continue
                 if run.bad_json_streak > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
                     run.final = (f"连续 {run.bad_json_streak} 次没有给出可解析的 JSON"
                                  f"（最后一次：{call.problem}），停止")
                     break
-                transcript += (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
-                               f"（{call.problem}；{_clip(call.detail, 240)}）。"
-                               f"**不要写分析、不要写方案、不要写 Markdown**："
-                               f"只回一行 JSON。骨架：\n{JSON_TAIL}")
+                transcript += _bad_json_line(step, call.problem, str(bad_result["detail"]))
                 continue
             shape, payload, problem = _shape_of(data)
             if problem:
@@ -829,7 +945,7 @@ class AgentLoop:
                     run.final = (f"连续 {run.bad_json_streak} 次形状不合法"
                                  f"（最后一次：{problem}），停止")
                     break
-                transcript += f"\n\n[第 {step + 1} 步] 框架：{problem}。请按循环协议重说一次。"
+                transcript += _invalid_line(step, problem)
                 continue
             # 说对了一次 ⇒ 连击清零（`draft/37` §68）。清零的判据是"它按协议说出了一个形状"，
             # 不是"那件事办成了" —— 工具被拒、召唤被拒、参数不合法都算说对了协议，
@@ -854,17 +970,44 @@ class AgentLoop:
                 "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
                 "payload": dict(payload), "result": dict(step_obj.result),
             }, sid=self.sid)
-            transcript += (f"\n\n[第 {step + 1} 步] 你说了：{_clip(payload, ECHO_CHARS)}\n"
-                           f"框架执行结果：{_observe(result)}")
+            transcript += _step_line(step, payload, result)
+            # ---- 问了用户、还停在等 ⇒ 这一趟停在这里，一步模型请求都不再发
+            #
+            # 为什么这个 break 写在"拼完简报"之后：`agent_step` 事件已经落了这一步，
+            # 而 `resume_transcript` 是从那些事件重建简报的 —— 落事件与拼简报必须
+            # 同时发生，否则续跑那一段会看到比当时多一步或少一步的对话。
+            #
+            # 为什么停了就等于"不烧钱"：等待期间等的是磁盘上的一条 `user_answer`
+            # 事件（`userio.ask_user` 的轮询），一个 token 都不花；而"超时后继续"
+            # 那一版会把剩下的步数继续喂给模型 —— 那笔钱买的是替用户做的决定。
+            if shape == "ask_user" and result.get("state") in ("pending", "cancelled"):
+                qid = str(result.get("asked") or "")
+                question = _clip(str(payload.get("question") or ""), 120)
+                if result.get("state") == "pending":
+                    run.stop_reason = "waiting_for_user"
+                    run.waiting_for = qid
+                    run.final = (f"停在等 {qid} 的回答：{question}；"
+                                 f"用 `agentflow inbox` 看、"
+                                 f"`agentflow answer {qid} \"<回答>\"` 答、"
+                                 f"`agentflow run-agent --resume … --sid {self.sid or ''}` 续跑")
+                else:
+                    run.stop_reason = "ask_cancelled"
+                    run.final = (f"第 {step + 1} 步问用户时被取消（{qid}）：这一趟停在这里。"
+                                 f"问题还在待答清单里 —— 取消不等于用户答过了")
+                break
         else:
             run.stop_reason = "max_steps"
             run.final = run.final or f"步数用尽（{self.max_steps} 步）仍未给出 final"
 
         run.spend = self.seam.spend.to_dict()
         run.elapsed_sec = time.monotonic() - t0
+        run.transcript = transcript
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,
             "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
+            # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，
+            # 不必去解析 `final` 那句话里的 qid。
+            "waiting_for": run.waiting_for,
             # `final` 是这一岗的交付物本身：只记长度的话，事后没人能核
             # "它到底与验收表对齐了没有"（实测：终点门槛 A 要逐条核交付说明，
             # 而会话记录里只有 `final_chars`）。文本与哈希一起留，长度保留是为了
@@ -1136,20 +1279,77 @@ class AgentLoop:
                 "note": "收件人下次运行时（或本步之后）会在收件箱里看到它"}
 
     def _do_ask_user(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """问用户一个问题并等回答。超时是 `user_no_answer`，不是默许。"""
+        """问用户一个问题：默认「停着」等回答，而不是"超时之后继续"。
+
+        ## 五档处置（每一档都在回答"这一步之后循环怎么办"）
+
+        | `state` | 结果给模型 | 循环 |
+        |---|---|---|
+        | `answered` | 原样把那句回答给它（含 `selected` / `custom`） | 继续 |
+        | `refused` | 无人值守档：确定性拒绝（fail-closed） | 「继续」（它是一次普通工具结果） |
+        | `pending` | 还停在等（`user_no_answer` 的含义变了） | 「停」：`stop_reason="waiting_for_user"` |
+        | `cancelled` | 等待被当前轮次的取消信号中止 | 「停」：`stop_reason="ask_cancelled"` |
+        | `""`（问题没落档） | 通道没通 | 继续（没有 qid 就没有人能答） |
+
+        为什么 `refused` 那一档「不许」停：它是"这次运行按无人值守的姿态跑"这个
+        设定本身的结论，而不是"有人在等回答"。停了就等于把一个确定性的拒绝
+        变成了停机 —— 而 CI 里没人会来续跑。
+
+        为什么 `pending` 那一档必须停且「不许」再发模型请求：提问的全部意义是
+        "这个取舍只有人能定"。继续往下跑等于替人定了（真机反复撞到的形态），
+        而停下来不花钱（等的是磁盘上的一条回答事件，不产生 token 开销）。
+        """
+        if self.depth > 1 and self.my_task_id:
+            # 子角色不许直接问用户（DSH 的 `DELEGATED_CALLER`）：它归属另一个 agent，
+            # 未决问题必须写进它自己的最终结果，由主控统一问。
+            #
+            # 判据是"有父任务号且深度大于 1"，不是单独的 `depth > 1`：本框架的
+            # `run_role` 把「顶层」的非 M 角色也标成 `depth=2`（它确实是被主控派的），
+            # 于是只看深度会把 `agentflow run-agent --role D` 这条唯一的真人通道
+            # 判成子角色 —— 每次提问都被拒，而"用户端"这件事从此不可达。
+            # 有父任务号才是"我是被召唤出来的一环"（`LlmBackend._running_row` 给的就是它）。
+            return {"asked": "", "ok": False, "problem": "delegated_asker",
+                    "note": ("你是被召唤的子角色，不许直接问用户：把未决问题写进你的最终结果，"
+                             "由主控统一问（DSH 的 DELEGATED_CALLER：归属另一个 agent 的"
+                             "存活子级被拒，必须在最终结果里包含尚未解决的问题或决定）。")}
         timeout = payload.get("timeout_sec")
-        outcome = U.ask_user(self.session_root, role=self.role,
-                             question=str(payload.get("question") or ""),
-                             options=tuple(payload.get("options") or ()),
-                             timeout_sec=float(self.user_timeout_sec if timeout is None else timeout),
-                             sid=self.sid)
-        if outcome.answered:
+        outcome = U.ask_user(
+            self.session_root, role=self.role,
+            question=str(payload.get("question") or ""),
+            options=payload.get("options") or (),
+            timeout_sec=(self.user_timeout_sec if timeout is None else float(timeout)),
+            sid=self.sid, header=str(payload.get("header") or ""),
+            multi_select=bool(payload.get("multi_select")),
+            policy=self.ask_policy,
+            # DSH：等待"只能通过当前轮次的信号取消"。这里的信号就是这一趟运行自己的
+            # 取消令牌（`Conductor` 在被叫停时置位它）—— 不引入第二个全局开关。
+            cancel_check=(lambda: bool(getattr(self.token, "cancelled", False))
+                          if self.token is not None else False))
+        if outcome.state == U.STATE_ANSWERED:
             return {"asked": outcome.qid, "answer": outcome.answer, "by": outcome.by,
+                    "selected": list(outcome.selected), "custom": outcome.custom,
                     "ok": True}
+        if outcome.state == U.STATE_REFUSED:
+            return {"asked": "", "ok": False, "problem": outcome.problem,
+                    "state": outcome.state,
+                    "note": (outcome.note or "无人值守档：问用户被确定性拒绝。")
+                            + "按最保守的做法继续，并把「这件事本该问用户但没人可问」"
+                              "写进你的结论（不许自己替用户定这个取舍）。"}
+        if outcome.state == U.STATE_PENDING:
+            return {"asked": outcome.qid, "ok": False, "problem": outcome.problem,
+                    "state": outcome.state, "waited_sec": round(outcome.waited_sec, 3),
+                    "note": (outcome.note or "还停在等用户回答。")
+                            + " 框架会停下这一趟等人答完再续跑；"
+                              "绝不许把它当成用户同意，也不许在结论里假装问过了。"}
+        if outcome.state == U.STATE_CANCELLED:
+            return {"asked": outcome.qid, "ok": False, "problem": outcome.problem,
+                    "state": outcome.state, "waited_sec": round(outcome.waited_sec, 3),
+                    "note": (outcome.note or "等待被取消。")
+                            + " 这一趟停在这里；取消不等于用户答过了。"}
+        # 问题没能落档：这不是"停在等回答"（没有 qid 就没有人能答），也不是用户的意见。
         return {"asked": outcome.qid, "ok": False, "problem": outcome.problem,
-                "note": ("没等到用户回答（user_no_answer）：这是没查成，不是默许。"
-                         "要么按最保守的做法继续并把这件事写进结论，要么收工等回答；"
-                         "绝不许把它当成用户同意。")}
+                "note": (outcome.note or "问题没能落进用户频道。")
+                        + " 按最保守的做法继续，并把这件事写进结论。"}
 
     def _do_note(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         path, problem = write_note(self.session_root, self.role,
@@ -1288,16 +1488,221 @@ def _task_text(params: Mapping[str, Any], role: str, action: str) -> str:
             + "\n".join(f"- {k}：{_clip(v, 400)}" for k, v in given.items()))
 
 
+# ---------------------------------------------------------------- 单趟的检查点与续跑
+#
+# ## 为什么需要它（`autonomy` 那一层已经有一份检查点，为什么还要第二份）
+#
+# `autonomy.checkpoint_path` 记的是"这一程跑到第几轮"（按轮粒度，文件名里没有 sid）。
+# 而这一层要解决的是「轮内」的停与续：`ask_user` 让循环停在半路上（`waiting_for_user`），
+# 人答完之后要接着「那一步之后」往下跑，而不是把这一轮从头再做一遍 ——
+# 一轮可能已经写了数据、发了留言、花了几毛钱，重做一遍的代价与"两件事混成一条"
+# 的风险都不小。于是这里按 (角色, 会话号) 记到「步」。
+#
+# 两份检查点不是同一件事的两处实现：轮的对账在 `autonomy`，步的对账在这儿。
+def run_checkpoint_path(session_root: Path | str, role: str, sid: str | None = None) -> Path:
+    """这一趟的检查点路径：`<根>/runs/agent-<角色>-<会话号>.json`。
+
+    `runs` 这个目录名从 `autonomy.CHECKPOINT_DIR_NAME` 读（不在这里再写一份字面量）：
+    两处各写一份，将来改目录名就会变成"一半的检查点落在旧目录里"——
+    而那种漂移没有任何判据看得见（读不到 = 当成"没跑过"）。
+    那个 import 写在函数里是因为 `autonomy` 在模块级 import 本模块（循环依赖）。
+    """
+    from . import autonomy as AU
+
+    sid_text = str(sid or "") or SS.session_id()
+    return Path(session_root) / AU.CHECKPOINT_DIR_NAME / f"agent-{role}-{sid_text}.json"
+
+
+def save_run_checkpoint(session_root: Path | str, role: str, sid: str | None, *,
+                        task: str, step: int, stop_reason: str,
+                        waiting_for: str = "", spend: Mapping[str, Any] | None = None) -> str:
+    """写这一趟的步检查点，返回问题串（空 = 写成了）。写入失败不许静默。
+
+    指纹用 `autonomy.task_fingerprint(role, task)`（同一条口径，不另立一份）：
+    续跑之前必须比对它 —— 拿 A 任务的检查点去续 B 任务，会把两件事的进度混成一条，
+    而那条记录看起来完全正常。
+    """
+    from . import autonomy as AU
+
+    path = run_checkpoint_path(session_root, role, sid)
+    payload = {"role": role, "sid": str(sid or ""), "task": task,
+               "fingerprint": AU.task_fingerprint(role, task),
+               "step": int(step), "stop_reason": str(stop_reason),
+               "waiting_for": str(waiting_for or ""),
+               "spend": dict(spend or {}),
+               "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    except OSError as exc:
+        return f"{type(exc).__name__}: {exc}"
+    return ""
+
+
+def load_run_checkpoint(session_root: Path | str, role: str,
+                        sid: str | None = None) -> dict[str, Any] | None:
+    """读步检查点；不存在或读不出来都返回 `None`（调用方据此如实报"没查成"）。"""
+    path = run_checkpoint_path(session_root, role, sid)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _is_fresh_run_start(event: Mapping[str, Any]) -> bool:
+    """这条 `agent_run_start` 是不是"从第 0 步开始的一趟"。
+
+    为什么需要这个谓词：会话记录里同一个 (角色, 任务) 会有「多条」 run_start ——
+    每次 `--resume` 都写一条（带着 `resumed_from`），每次「被拒的续跑」
+    （指纹不符 / 还在等 / 已收工）也写一条（带着 `resume_refused`）。
+    重建 transcript 要找的是"这一趟对话的起点"，也就是最后一条「全新开始」的那条；
+    把"被拒的续跑"误当成起点，会让重建读到一段空对话（真机撞到过：问了 → 又跑了一次
+    还是没人答 → 人答了 → 续跑却说"没有转录"，而能续的那一段其实还在盘上）。
+    """
+    if event.get("resume_refused"):
+        return False
+    return int(event.get("resumed_from") or 0) == 0
+
+
+def resume_transcript(session_root: Path | str, role: str, sid: str | None,
+                      *, task: str) -> tuple[str, int]:
+    """从会话记录重建"本趟"的 transcript，返回 `(transcript, 下一个 step)`。
+
+    ## 判据：与循环里拼出来的那一份逐字一致
+
+    重建只认两样东西：本趟的起点（最后一条"全新开始"的 `agent_run_start`，
+    它带着任务 / 发起者 / 深度 / 台账号）与它之后逐条落盘的 `agent_step` 事件。
+    每一行的拼法都走 `agent_loop` 里那几个模块级函数
+    （`_opening_transcript` / `_step_line` / `_invalid_line` / ...）——
+    循环里也是它们，所以"两处拼法"这件事在结构上不成立。
+
+    ## 窗口怎么定（这是最容易读错的一段）
+
+    - 「起点」 = 最后一条 `role` 相同、`task` 原文相同、且 `_is_fresh_run_start`
+      为真的 run_start。续跑写下的那些 run_start（`resumed_from>0`）与
+      「被拒的续跑」（`resume_refused`）都不是起点 —— 后者尤其重要：它没有步，
+      若被当成起点，重建就会变成空的那一段，而"能续的那一段"其实还在后面。
+    - 「终点」 = 该角色下一条"全新开始"的 run_start（任何任务）。它挡住两件事：
+      同一任务被从头重跑（那一段应当在它自己的窗口里重建），
+      以及同角色另一个任务的步混进来（`agent_step` 事件里没有任务号，
+      窗口是唯一能把两趟分开的东西）。
+    - 窗口里的「续跑段」照收：步号是全趟单调的（续跑从 `resumed_from` 接着编），
+      所以"续了两趟"的那些步拼起来正好是当时那份对话。
+
+    ## 三条要说清的边界（不假装比实际更强）
+
+    1. 「收件箱那一段是现读的」：开头的"你的收件箱"用 `inbox_digest` 按当前盘上的
+       状态重算（续跑本来就该听到新到的留言）。于是原趟开头若带着"（新）"标记，
+       重建出来的那几行会不同 —— 变的只会是收件箱那一段，而且只会变新，不会变假。
+    2. 「单字段超过落档上限的那一步」：事件里存的是截到 `RECORD_CHARS` 的审计副本，
+       所以那一行的末尾会比当时短（截断标记留在文本里，短了这件事本身可读）。
+       在"两条都要逐字相等"的意义上，这一档是重建能力的上限，不是我漏了。
+    3. 「找不到本趟的起点 ⇒ 返回 `("", 0)`」：不猜、不退回"把所有步都收进来"。
+       调用方（`run_role`）据此判"没查成"，而不是从第 1 步重跑一遍 ——
+       把没读到当成"没做过"，正是这一整套三态纪律要挡的形态。
+    """
+    root = Path(session_root)
+    events, _problems = SS.read_session(root, sid=sid)
+    role_starts = [i for i, e in enumerate(events)
+                   if e.get("kind") == "agent_run_start" and str(e.get("role")) == role]
+    fresh_mine = [i for i in role_starts
+                  if _is_fresh_run_start(events[i]) and str(events[i].get("task")) == task]
+    if not fresh_mine:
+        return "", 0
+    begin = fresh_mine[-1]
+    fresh_any = [i for i in role_starts if _is_fresh_run_start(events[i])]
+    end = next((i for i in fresh_any if i > begin), len(events))
+    head = events[begin]
+    inbox, _fresh, _problems2 = inbox_digest(root, role, sid=sid)
+    parts = [_opening_transcript(task, inbox=inbox,
+                                 summoned_by=str(head.get("summoned_by") or ""),
+                                 task_id=str(head.get("task_id") or ""),
+                                 depth=int(head.get("depth") or 1))]
+    next_step = 0
+    for e in events[begin + 1:end]:
+        if e.get("kind") != "agent_step" or str(e.get("role")) != role:
+            continue
+        step = int(e.get("index") or 0)
+        shape = str(e.get("shape") or "")
+        payload = e.get("payload") if isinstance(e.get("payload"), Mapping) else {}
+        result = e.get("result") if isinstance(e.get("result"), Mapping) else {}
+        if shape == "invalid":
+            problem = str(result.get("problem") or "")
+            if problem == "judge_bad_args":
+                parts.append(_bad_args_line(step, str(result.get("detail") or "")))
+            elif problem == "judge_bad_json":
+                parts.append(_bad_json_line(step, problem, str(result.get("detail") or "")))
+            else:
+                parts.append(_invalid_line(step, problem))
+        else:
+            parts.append(_step_line(step, payload, result))
+        next_step = max(next_step, step + 1)
+    return "".join(parts), next_step
+
+
+def _task_fingerprint(role: str, task: str) -> str:
+    """`autonomy.task_fingerprint` 的转发（延迟 import：`autonomy` 在模块级 import 本模块）。
+
+    为什么不在这里自己算一遍哈希：指纹的口径只有一处才叫口径。两处各算一次，
+    将来任何一边动一个字符（换分隔符、截断长度），续跑就会一边说"指纹一致"、
+    另一边说"不符"，而没有任何判据会因此变红。
+    """
+    from . import autonomy as AU
+
+    return AU.task_fingerprint(role, task)
+
+
+def _note_resume_refusal(root: Path, role: str, task: str, sid: str | None, why: str,
+                         *, attempted_from: int = 0) -> None:
+    """续跑被拒时也落一条 `agent_run_start`：为什么拒必须留在会话记录里。
+
+    为什么不静默返回：`--resume` 被拒的那一趟在盘上什么都没留下，
+    读会话记录的人只会看到"上一趟到此为止" —— 而"它被人要求续过、被拒了"
+    这件事没有任何痕迹。这一条与 `AgentLoop.run` 里那条同名事件的区别有两个，
+    两个都是刻意的：
+
+    - 它带 `resume_refused` 这个码，且「没有」后续的 `agent_step`（一步都没跑）；
+    - 它「不写 `resumed_from`」，而写 `resume_attempted_from`。
+      为什么：`resumed_from` 的口径是"这一趟真的从第几步接着跑"（0 = 全新开始）——
+      被拒的续跑一步都没跑，写 0 会被读成"它从第 0 步续的"（同一个字段两种含义，
+      而读数的人只看得见那个 0）。"它想从第几步续"是另一件事，就得有另一个名字。
+    """
+    SS.append(root, {"kind": "agent_run_start", "role": role, "task": task,
+                     "waiting_for": "", "resume_refused": why,
+                     "resume_attempted_from": int(attempted_from)}, sid=sid)
+
+
 def run_role(role: str, task: str, *, store: Any, registry: Any,
              session_root: Path | str | None = None,
              conductor: Any = None, seam: LlmSeam | None = None, gateway: Any | None = None,
              max_steps: int = 30, usd_budget: float | None = None,
              workspace_root: str = "", sid: str | None = None, token: Any = None,
-             from_env: bool = True, user_timeout_sec: float = 30.0) -> LoopRun:
+             from_env: bool = True, user_timeout_sec: float | None = None,
+             ask_policy: str | None = None, resume: bool = False) -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
     `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，
     两处分开写迟早会出现"审计记录落在别处"的静默错位。
+
+    ## `resume=True`（`agentflow run-agent --resume` 那条路）
+
+    先读这一趟的步检查点，四种结局分开（三态纪律：不许把"没读到"折成"重跑一遍"）：
+
+    | 检查点 | 结局 |
+    |---|---|
+    | 读不到 | `stop_reason="no_checkpoint"`（没查成，一步模型都不调） |
+    | 任务指纹不符 | `stop_reason="checkpoint_mismatch"`（拿 A 的进度续 B = 把两件事混成一条） |
+    | 上一趟已收工（`final`） | `stop_reason="already_finished"`（续跑没有意义，不许重跑） |
+    | 停在等用户 / 其它 | 从 `resume_transcript` 重建的那一段接着跑 |
+
+    无论哪一条路，跑完都写一次步检查点（停在等用户时带 `waiting_for=<qid>`）——
+    于是"上一趟停在等"与"上一趟做完了"在盘上是两件事，`--resume` 分得开。
+    被拒的那几条路也各写一条 `agent_run_start`（带 `resume_refused` 与
+    `resume_attempted_from`）：「只带 `resumed_from` 的那条事件才是真的接着跑了」。
     """
     root = Path(session_root) if session_root is not None else Path(str(getattr(store, "root", "")))
     if not str(root):
@@ -1307,9 +1712,71 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                                 usd_budget=usd_budget, sid=sid, from_env=from_env)
     loop = AgentLoop(role=role, session_root=root, registry=registry, seam=seam,
                      conductor=conductor, max_steps=max_steps, workspace_root=workspace_root,
-                     sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec)
-    return loop.run(task, summoned_by=(S.CONDUCTOR_ROLE if role == S.CONDUCTOR_ROLE else ""),
-                    my_task_id="", depth=1 if role == S.CONDUCTOR_ROLE else 2)
+                     sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec,
+                     ask_policy=ask_policy)
+    summoned_by = S.CONDUCTOR_ROLE if role == S.CONDUCTOR_ROLE else ""
+    start_depth = 1 if role == S.CONDUCTOR_ROLE else 2
+    if resume:
+        cp = load_run_checkpoint(root, role, sid)
+        if cp is None:
+            _note_resume_refusal(root, role, task, sid, "no_checkpoint")
+            return LoopRun(role=role, task=task, stop_reason="no_checkpoint",
+                           final=(f"要求续跑，但读不到这一趟的检查点"
+                                  f"（{run_checkpoint_path(root, role, sid)}）⇒ 没查成。"
+                                  "不许当成'从第 1 步重跑'：重跑会把已经做过的活再做一遍。"))
+        if str(cp.get("fingerprint")) != _task_fingerprint(role, task):
+            # 指纹不符时「不给」 `attempted_from`：那份检查点是另一个任务的，
+            # 它的 `step` 数不是"这件事做到第几步"。
+            _note_resume_refusal(root, role, task, sid, "checkpoint_mismatch")
+            return LoopRun(role=role, task=task, stop_reason="checkpoint_mismatch",
+                           final=("检查点里的任务指纹与这次的任务不一致 ⇒ 不许续跑："
+                                  "拿一个任务的进度去续另一个任务会把两件事混成一条，"
+                                  "而那条记录看起来完全正常。"))
+        if str(cp.get("stop_reason")) == "final":
+            _note_resume_refusal(root, role, task, sid, "already_finished",
+                                 attempted_from=int(cp.get("step") or 0))
+            return LoopRun(role=role, task=task, stop_reason="already_finished",
+                           final="上一趟已收工（final），续跑没有意义：没有要做的事。"
+                                 "要做新的事就给一个新的任务原文（那会换一份检查点）。")
+        waiting = str(cp.get("waiting_for") or "")
+        if waiting:
+            # 上一趟停在等某个问题：还没人答就「再停一次」，不许静默接着跑。
+            #
+            # 为什么这条必须在跑之前判（而不是靠模型自己"看见提示词里没有问题"）：
+            # 续跑那一段的提示词里带着"我上次问了 q0001"，而模型完全可以自行决定
+            # "既然没人答，我按最保守的做法继续" —— 那正是用户 2026-10-03 裁掉的
+            # 形态（"就停着"）。框架这一层必须把"没答"死死地钉住：
+            # 没有回答事件，就没有下一步。
+            answered = {str(r.get("qid") or "") for r in U.read_replies(root, sid=sid)}
+            if waiting not in answered:
+                _note_resume_refusal(root, role, task, sid, "still_waiting",
+                                     attempted_from=int(cp.get("step") or 0))
+                return LoopRun(role=role, task=task, stop_reason="waiting_for_user",
+                               waiting_for=waiting,
+                               final=(f"还在等 {waiting} 的回答：没有人答就不接着跑"
+                                      "（不许把「没答」当成默许，也不许从没答的地方重跑）。"
+                                      f"用 `agentflow answer {waiting} \"<回答>\"` 答完再 --resume。"))
+        rebuilt, step0 = resume_transcript(root, role, sid, task=task)
+        if step0 <= 0:
+            _note_resume_refusal(root, role, task, sid, "resume_no_transcript",
+                                 attempted_from=int(cp.get("step") or 0))
+            return LoopRun(role=role, task=task, stop_reason="resume_no_transcript",
+                           final=("要求续跑，但会话记录里重建不出这一趟的任何一步"
+                                  "（同角色 + 同任务原文的 `agent_step` 一条都没有）"
+                                  "⇒ 没查成：不许从第 1 步重跑。"))
+        run = loop.run(task, summoned_by=summoned_by, my_task_id="", depth=start_depth,
+                       resumed=(rebuilt, step0),
+                       waiting_for=str(cp.get("waiting_for") or ""))
+    else:
+        run = loop.run(task, summoned_by=summoned_by, my_task_id="", depth=start_depth)
+    completed = run.resumed_from + len(run.steps)
+    problem = save_run_checkpoint(root, role, sid, task=task, step=completed,
+                                  stop_reason=run.stop_reason, waiting_for=run.waiting_for,
+                                  spend=run.spend)
+    if problem:
+        run.notes.append(f"这一趟的步检查点没写成（{problem}）：下一趟 `--resume` 会读到"
+                         "更早的一份（或读不到），于是它要么多跑几步、要么如实报'没查成'")
+    return run
 
 
 def selftest() -> int:

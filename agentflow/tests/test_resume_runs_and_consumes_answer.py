@@ -93,18 +93,32 @@ def test_the_answer_reaches_the_resumed_round_prompt(tmp_path):
 
 
 def test_resuming_without_an_answer_does_not_invent_one(tmp_path):
-    """反真空：没答就跑 `resume=True` ⇒ 提示词里不许出现任何"用户说……"的假话。
+    """反真空（按"停着"的新契约改过）：没答就 `resume=True` ⇒ 「根本不开下一轮」。
 
-    与 §26 的数据半配对：那边判"读出来是空串"，这边判"空串没有变成提示词里的一句话"。
+    ## 这条判据为什么改（`draft/37` §72，用户裁定"问了就停着"）
+
+    它原来守的是旧契约："没人答也照跑下一轮，但提示词里不许编一句'用户说……'"。
+    新契约把那条路「堵死在更前面」：上一轮停在等用户回答、而那个问题还挂在待答清单里 ⇒
+    多轮驱动不许开下一轮（`autonomy._stop_before_round` 的 `waiting_for_user` 那一档）。
+    于是"编造回答"这件事在结构上不可能发生 —— 不是靠提示词自律，是靠根本不进那一步。
+
+    判据因此钉两件事：「一个模型请求都没发」（`after == []`），且停因是
+    `waiting_for_user`（不是"跑完了"也不是"没查成"）。原来那句"提示词里不许出现
+    '用户说……'"保留成一条反真空断言：它在 `after` 为空时自动成立，
+    而万一将来有人把这条闸门放宽，它会立刻红。
     """
     st, registry, cond, root, gw = _wire(tmp_path, [_ASK, _FINAL])
     _run(st, registry, cond, root, gw, rounds=1)
-    assert U.pending_questions(root, sid="t"), "夹具前提：问题还没被回答"
+    pend = U.pending_questions(root, sid="t")
+    assert pend, "夹具前提：问题还没被回答"
     before = len(gw.prompts)
-    _run(st, registry, cond, root, gw, rounds=2, resume=True)
+    second = _run(st, registry, cond, root, gw, rounds=2, resume=True)
     after = gw.prompts[before:]
-    assert after, "续跑那一跑必须真的调了模型"
-    for prompt in after:
+    assert after == [], (
+        f"没人答却开了下一轮（发了 {len(after)} 个模型请求）⇒ 等于替人把取舍定了")
+    assert second.stop_reason == "waiting_for_user", second.to_dict()
+    assert second.rounds_done == 0, "停在等用户时一轮都不该跑"
+    for prompt in gw.prompts:
         assert "用户说" not in prompt and "用户的回答" not in prompt, (
             "没回答却在提示词里写了'用户说……' —— 这是把'没答'当成了'答了'")
 

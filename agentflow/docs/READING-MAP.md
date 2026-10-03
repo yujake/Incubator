@@ -33,7 +33,9 @@
 
 | 文件 | 是什么 |
 |---|---|
-| `cli.py` | 命令行入口（21 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`…） |
+| `cli.py` | 命令行入口（23 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`…） |
+| `webui.py` | 用户端网页：全局待回答面板 + 运行态 + 一趟的事件回放（只读投影；唯一写路径是 `POST /answer` → `userio.answer_question`） |
+| `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`） |
 | `__main__.py` | `python -m agentflow` 的入口 |
 | `__init__.py` | 包说明与公开面 |
 | `demo.py` | 离线端到端演示：不访问网络，把 A→B→校验整条链路真跑一遍 |
@@ -206,7 +208,7 @@
 | `schema.py` | 2720 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
 | `runflow.py` | 2039 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层 |
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 1956 | 22 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
+| `cli.py` | 2200 | 22 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1668 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
 | `agent_b/core.py` | 1045 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1045 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 1605 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |

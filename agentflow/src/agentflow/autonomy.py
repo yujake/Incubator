@@ -237,13 +237,30 @@ def _round_task(task: str, previous: RoundReport, index: int, *, user_answer: st
 
 def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
                        usd_budget: float | None, stop_path: Path | None,
-                       user_answer: str) -> str:
+                       user_answer: str, last_stop_reason: str = "",
+                       pending_qids: tuple[str, ...] = ()) -> str:
     """下一轮开跑前的停止判据；返回停止原因（空串 = 继续跑）。
 
-    顺序是 `rounds` → `budget` → `stop_file` → `user_stop`：先耗尽轮次，再看钱，
-    再看磁盘上那个人工开关，最后看用户最新那句话。多条同时成立时按这个顺序
-    给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，而那是不可复现的。
+    顺序是 `waiting_for_user` → `rounds` → `budget` → `stop_file` → `user_stop`：
+    先看"上一轮停在等用户回答、而「那个回答到现在还没来」"（唯一一条不能靠继续跑绕过去的），
+    再耗尽轮次，再看钱，再看磁盘上那个人工开关，最后看用户最新那句话。
+    多条同时成立时按这个顺序给一个确定的答案 —— 否则"为什么停"这件事会取决于读取顺序，
+    而那是不可复现的。
+
+    ## `waiting_for_user` 为什么排在最前，以及为什么要看 `pending_qids`（`draft/37` §72）
+
+    上一轮停在等用户回答时开下一轮，后果很具体：那一轮问了一个只有人能定的取舍、
+    然后停在等；多轮驱动照常开下一轮，模型就在「没有那个回答」的情况下继续做 ——
+    等于替人把取舍定了，还多烧一轮的钱。
+
+    但"上一轮停过"本身不足以判定停机：「人可能已经答了」。人一答，正确答案就是
+    "接着跑"（那正是 autonomy 消费回答的那条路：答案进下一轮的任务原文）。
+    所以判据是两件事同时成立：上一轮停在等用户 「且」 那个问题至今还挂在待答清单里
+    （`pending_qids` 非空）。只看前者会把"答了之后续跑"一起拦掉 —— 实测撞过：
+    `tests/test_resume_runs_and_consumes_answer.py` 两条判据当场红（续跑一次模型都没调）。
     """
+    if last_stop_reason == "waiting_for_user" and tuple(pending_qids):
+        return "waiting_for_user"
     if index > rounds:
         return "rounds"
     if usd_budget is not None and spent_usd >= usd_budget:
@@ -339,6 +356,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                    stop_file: Path | str | None = None, sid: str | None = None,
                    from_env: bool = True,
                    min_usd_between_reports: float = 0.0,
+                   user_timeout_sec: float | None = None,
                    resume: bool = False) -> AutonomyRun:
     """把 `role` 的这件事跑成最多 `rounds` 轮，并按节拍向公共频道发阶段汇报。
 
@@ -437,20 +455,36 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
             return float(baseline["usd"] + shared.spend.usd)
         return float(baseline["usd"] + total["usd"])
 
-    def _stop_reason_for(next_index: int) -> tuple[str, list[str], str]:
+    def _stop_reason_for(next_index: int, last_stop_reason: str = "") -> tuple[str, list[str], str]:
         """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道（返回 `(原因, 说明, 回答)`）。
 
         第三个返回值是给下一轮的任务用的（`§14.5` 第 4 件）：读一次就用一次，
         不要在别处再读一遍 —— 两处各读一次会造出"停的判据用旧回答、任务用新回答"的错位。
+
+        `last_stop_reason` 是「上一轮」的停止理由（`draft/37` §72）：上一轮停在等用户回答时，
+        这里必须停，不许开下一轮。
         """
         answer, answer_notes = _latest_user_answer(root, role, sid=sid)
+        # 还挂在待答清单里的问题（`draft/37` §72）：它非空且上一轮停在等用户 ⇒ 不许开下一轮。
+        # 这里的 import 与 `_latest_user_answer` 里那一处同源（本模块刻意不在顶层 import
+        # `userio`，那是"问答频道可能整层缺席"年代的防御）；但「这一条判据依赖它」：
+        # 读不到待答清单就判不出"人答了没有"。两个模块是一起发的（`agent_loop` 本身就
+        # 通过 `userio` 提问），所以这里不做"读不到就当没人等"的静默回退 ——
+        # 那正好会把"没查成"折成"可以继续跑"。
+        from . import userio
+
+        pending = tuple(q.qid for q in userio.pending_questions(root, sid=sid))
         reason = _stop_before_round(next_index, rounds=total_rounds, spent_usd=_spent_usd(),
                                     usd_budget=usd_budget, stop_path=stop_path,
-                                    user_answer=answer)
+                                    user_answer=answer, last_stop_reason=last_stop_reason,
+                                    pending_qids=pending)
         return reason, answer_notes, answer
 
+    # 上一轮的停止理由（续跑时来自上一段的最后一轮）：`waiting_for_user` 会让这一次
+    # 在开跑下一轮之前就停 —— 见 `_stop_before_round` 的 docstring。
+    last_round_stop = prev_report.stop_reason if prev_report is not None else ""
     while True:
-        reason, answer_notes, latest_answer = _stop_reason_for(index)
+        reason, answer_notes, latest_answer = _stop_reason_for(index, last_round_stop)
         for line in answer_notes:
             if line not in notes:
                 notes.append(line)
@@ -473,7 +507,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         run: LoopRun = run_role(role, round_task, store=store, registry=registry,
                                 session_root=root, conductor=conductor, seam=shared,
                                 gateway=gateway, max_steps=max_steps, usd_budget=usd_budget,
-                                workspace_root=str(root), sid=sid, from_env=from_env)
+                                workspace_root=str(root), sid=sid, from_env=from_env,
+                                user_timeout_sec=user_timeout_sec)
         delta = _spend_delta(before, _spend_of(run.spend))
         for key in _COUNTER_KEYS:
             total[key] += delta[key]
@@ -489,10 +524,11 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         report = RoundReport(index=index, stop_reason=run.stop_reason, final=_clip(run.final),
                              summons=list(run.summons), messages=list(run.messages_sent))
         reports.append(report)
+        last_round_stop = run.stop_reason
 
         # 最后一轮必发：它要么是轮次用尽的那一轮，要么是"跑完这轮就不得不停"的那一轮；
         # 没有接线时也算收工（那一轮没有产出，更要说清楚）。
-        next_reason, next_notes, _next_answer = _stop_reason_for(index + 1)
+        next_reason, next_notes, _next_answer = _stop_reason_for(index + 1, last_round_stop)
         for line in next_notes:
             if line not in notes:
                 notes.append(line)

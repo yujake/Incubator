@@ -1367,6 +1367,8 @@ def historical_marker_leak_problems(text: str) -> list[str]:
 
     口径：一行只要含 `_CURRENT_VALUE_ANCHORS` 里任一特征，就不许含任何一个历史记号。
     一条锚点都没命中 ⇒ 报"失去对象"（删掉这些行不等于它们的数字是对的）。
+    单条锚点在文档里找不到 ⇒ 也报出来：锚点必须是那一行的「逐字副本」，
+    锚点自己漂了（例如把成对星号写成别的括号）就等于那一行的数字脱管。
     """
     problems: list[str] = []
     hits = 0
@@ -1379,6 +1381,11 @@ def historical_marker_leak_problems(text: str) -> list[str]:
             problems.append(
                 f"`DEVELOPMENT.md:{i}` 是当前值 / 当次读数声明，却带了历史记号 {marks} ⇒ "
                 f"整行退出对账（`G3` 修的那个结构性漏口复发了）：{line.strip()[:90]}")
+    for anchor in _CURRENT_VALUE_ANCHORS:
+        if anchor not in text:
+            problems.append(
+                f"当前值锚点 {anchor!r} 在这份文档里找不到 ⇒ 锚点自己漂了"
+                "（锚点必须是那一行的逐字副本；锚点漂了，那一行的数字就不受任何判据看管）")
     if not hits:
         problems.append("一处当前值锚点都没命中 ⇒ 判据失去对象"
                         "（把这些行删掉、或改掉它们的行内特征，都不等于数字是对的）")
@@ -1413,6 +1420,17 @@ def test_the_historical_marker_leak_criterion_is_not_vacuous():
     assert stripped != text, "夹具前提：锚点行可被删掉"
     assert any("失去对象" in p for p in historical_marker_leak_problems(stripped)), (
         "锚点行全删之后必须报失去对象（`G3`：删掉对象不许读成通过）"
+    )
+
+    # 反真空之二：锚点自己漂了（成对星号被改写成别的括号）⇒ 必须报出来。
+    # 这一条是 2026-10-03 实测到的形态：一次「清掉注释里的成对星号」的批量改写
+    # 把锚点字符串里的成对星号一起换掉了，锚点从此与文档不再逐字相同
+    # —— 那一行的数字于是脱管，而上面那条负控仍然绿着。
+    drifted = text.replace(_CURRENT_VALUE_ANCHORS[0],
+                           _CURRENT_VALUE_ANCHORS[0].replace("**", "「", 1))
+    assert drifted != text, "夹具前提：§0.1 的那一行含锚点字面量"
+    assert any("找不到" in p for p in historical_marker_leak_problems(drifted)), (
+        "锚点写法漂了之后判据必须红：否则被看管的那一行悄悄换了形态而没有东西会红"
     )
 
 
@@ -2158,6 +2176,10 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",
     "verify.py": "全局不变量校验",
+    # `draft/37` §72–§74（2026-10-03）：用户端。两者都是「新增」，不是对拍副本；
+    # 登记它们的理由是"包目录里凭空多出一个模块"必须有人解释（`R6-AN-1` 的原始形态）。
+    "webui.py": "用户端网页：`snapshot()` 投影 + 标准库 http.server + 服务端渲染；四条 GET 与 `POST /answer`（唯一写路径走 `userio.answer_question`）",
+    "web/": "网页的样式与令牌包：`assets.py` 把 DSH 的令牌整份照搬（MIT，来源见 `docs/USER-END-DSH-STYLE.md`），`__init__.py` 只放包说明",
 }
 
 

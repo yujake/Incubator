@@ -125,7 +125,20 @@ def test_the_question_is_durable_and_the_answer_comes_back(tmp_path: pathlib.Pat
 
 
 def test_no_answer_is_not_permission(tmp_path: pathlib.Path):
-    """负控（三态）：等不到回答必须是 user_no_answer，且下一步的 prompt 要说明这一点。"""
+    """负控（三态 + 「停着」）：问不到回答 ⇒ 这一趟停在等，而且一步模型都不再发。
+
+    ## 这条判据为什么改了（2026-10-03 的口径变更）
+
+    旧判据断言的是"下一步的 prompt 里要写明这是 `user_no_answer`（没查成）" ——
+    它守的是"超时之后继续跑"那一版的行为：超时是「这一步」的结论，循环照旧往下走。
+    用户 2026-10-03 裁定「就停着」之后，"继续跑"这件事本身被废掉了，
+    于是旧断言里的 `gw.prompts[1]` 根本不存在（索引越界）—— 那不是判据变松了，
+    是它所描述的那条路径不再存在。
+
+    新的判据把同一件事（"没答不是默许"）钉在更硬的地方：这一趟停成
+    `waiting_for_user`、记下 `waiting_for`、「并且没有再发模型请求」
+    （停了之后还发请求 = 又在替用户做决定了，那正是要挡的形态）。
+    """
     st, registry, cond, root = _ws(tmp_path)
     gw = ScriptedGateway([json.dumps({"ask_user": {"question": "要不要继续？",
                                                    "timeout_sec": 0}},
@@ -139,9 +152,12 @@ def test_no_answer_is_not_permission(tmp_path: pathlib.Path):
     step = run.steps[0]
     assert step.result.get("ok") is False, step.result
     assert step.result.get("problem") == U.NO_ANSWER, step.result
+    assert step.result.get("state") == "pending", step.result
     assert "不许把它当成用户同意" in str(step.result.get("note") or ""), step.result
-    assert U.NO_ANSWER in gw.prompts[1], "下一步的 prompt 里没有这条'没查成'"
-    assert run.final.startswith("按最保守"), run.final
+    assert run.stop_reason == "waiting_for_user", run.to_dict()
+    assert run.waiting_for == step.result.get("asked"), run.to_dict()
+    assert len(gw.prompts) == 1, "停在等之后又发了模型请求（停着 = 不烧钱）"
+    assert run.final.startswith("停在等"), run.final
 
 
 def test_a_late_reply_still_reaches_the_next_run(tmp_path: pathlib.Path):

@@ -5506,3 +5506,409 @@ paper_package 已落，**报告里引用的行号都能查到**"）。
 - `experiments` / `review_findings` / `tasks` 的报告引用今天不查（§70 里写明理由）；
 - 报告正文里"我改了两处"这类不可机械核对的叙述，§70 的判据管不了；
 - H 的语义缝没接线 ⇒ `review_findings = 0` 是"没查"而不是"干净"（三轮都没变）。
+
+---
+
+## §72 用户端（一）：人机通道对齐 DSH —— **问了就停着**、人答、接着跑
+
+用户 2026-10-03 的裁定：等待语义"**就停着**"（不许超时后继续跑），
+并且"人家要求用户回答你也要回答呀"——我自己的模拟测试必须老老实实走完
+"提问 → 人答 → 续跑"这一段，不许绕过。
+
+### 学 DSH 学到什么（逐条都有出处，写进了 `docs/USER-END-DSH-STYLE.md`）
+
+- **提问形状**：`{"id","question","header","options":[{"label","description"}],"multiSelect"}`，
+  推荐的选项放首位并在 label 末尾写 `(Recommended)`；
+- **回答形状**：`{"id","selected":[…],"custom":"…"}`（`selected` 0/1/n 个；`custom` 对多选是补充、
+  对单选是覆盖）；**选项归 `selected`、自写归 `custom`**；
+- **阻塞到作答**、不声明超时预算、**等待期间不产生 token 开销**；
+- **没有 answerer 时必须失败，不许降级**；
+- 无人值守 = DSH 的 `never`：**确定性拒绝**；
+- **子 agent 不许直接问用户**（`DELEGATED_CALLER`），必须把未决问题写进自己的结果。
+
+### 落地（`userio` / `agent_loop` / `cli`，都不在禁改区）
+
+| 落点 | 改了什么 |
+|---|---|
+| `userio.py` | `Option`（label/description，**裸字符串照样读**）、`Question.header`/`multi_select`、`AskOutcome.state` 四档（`answered`/`pending`/`cancelled`/`refused`）、`ask_user(wait=…, timeout_sec=None 缺省, cancel_check=…, policy=…)` 的"停着"语义、`ASK_REFUSED`/`ASK_CANCELLED`、`reply_text`、`answer_question(selected=/custom=/answer= 兼容)`、`list_questions`/`session_ids_with_questions` |
+| `agent_loop.py` | `_do_ask_user` 五档处置（**`pending` ⇒ 停成 `waiting_for_user` 且不再发请求**；`refused` ⇒ 继续；子角色 ⇒ `delegated_asker`）；简报行的**唯一拼法**（循环与重建同一处）；`run_checkpoint_path`/`save_run_checkpoint`/`load_run_checkpoint`/`resume_transcript`；`run_role(resume=…)` |
+| `cli.py` | `run-agent` 新增 `--user-wait-sec`（缺省 `None` = 一直等）/`--no-ask`/`--resume`（**单趟也生效**）；退出码四档 **`0/1/2/3`**（3 = 停在等待用户）；`inbox` 不给 `--sid` 扫全部会话 + 会话号/问了多久/选项列 + 空清单时打印最近一趟的停止理由；`answer --select/--custom` + 三态错误分开报 + 下一步提示；新增 `web` 子命令（见 §73） |
+
+### 语义变化（旧 → 新 → 哪条既有判据因此改过）
+
+1. **等待**：30 秒超时后继续跑 → **一直等**（`None`；`0` = 登记后立刻停；上限到了仍是 `pending`，不是失败）。
+   既有判据 `test_interaction::test_no_answer_is_not_permission` 因此改过：它原来断言"下一次 prompt 里
+   要出现 `user_no_answer`"，而新语义下**根本不会有那一次 prompt**（索引越界）。改法是把同一件事
+   （没答 ≠ 默许）钉得更硬：停在 `waiting_for_user` + 一次都不再发。
+2. **`NO_ANSWER` 的含义**：提问失败 → "还停在等"（仍是"没查成"，绝不许当默许）。字面量不变。
+3. **`Question.options`**：裸字符串 → `Option`；事件里的 `options` 变对象（**旧事件照样读**）。
+4. **`user_answer` 事件**：加 `selected`/`custom`，**同时保留 `answer`**（=`reply_text`）。
+   理由：`autonomy._latest_user_answer` 直接读 `event["answer"]`，不写它就等于
+   "`--select` 答的答案续跑读不到"，而"答了读不到"与"没答"在读数上无法区分。
+5. **退出码**：`0/1/2` → `0/1/2/3`。
+6. **每趟写步检查点** `runs/agent-<角色>-<sid>.json`。
+7. **子角色提问**：真的落盘并阻塞 → `delegated_asker`（不落盘、循环继续）。
+8. **多轮路径**（`--rounds N`）：某轮停在等用户、而问题**还挂着**时不开下一轮（见下面 §72.1）。
+
+### §72.1 我在验的过程中抓到并修的两条（A 的交付之外）
+
+1. **`resume_transcript` 会被"没有步的 run_start"吞掉**（我报给 A、它已修）：
+   序列"问 → 没人答又续一次 → 答 → 续"里，第二次续跑只留下一条空的 `agent_run_start`，
+   而重建挑的是"最后一次 run_start 之后"的步 ⇒ 重建为空 ⇒ **能续的那一段再也续不了**
+   （真机上就是"我问了 → 我又跑了一次没答 → 我答了 → 续跑说没有转录"）。
+   A 修好后我把这条序列钉成了负控（`tests/test_user_channel_stop_and_resume.py` 第 11 条）。
+2. **多轮驱动不知道"上一轮停在等用户"**（`autonomy.py` 不在 A 的允许改动范围里，我自己补的）：
+   后果很具体 —— 那一轮问了一个只有人能定的取舍然后停在等，多轮驱动照常开下一轮，
+   模型就在**没有那个回答**的情况下继续做（等于替人定了取舍，还多烧一轮钱）。
+   修法：`_stop_before_round(..., last_stop_reason=, pending_qids=)` 新增最前一档
+   **"上一轮停在等用户 **且** 那个问题还挂在待答清单里 ⇒ 停"**；人一答（清单空了）就放行 ——
+   后者正是 autonomy 消费回答的那条路。
+   判据：`tests/test_resume_after_answer.py` 新增一条（三个方向：停过+还挂着 ⇒ 停；
+   停过+已答 ⇒ 放行；正常收工 ⇒ 不误伤），并把 `test_resume_runs_and_consumes_answer.py`
+   里那条守**旧契约**的判据（"没人答也照跑下一轮，但提示词不许编答案"）改成守新契约
+   （**一个模型请求都不发** + `stop_reason=waiting_for_user`）—— 旧契约描述的那条路被用户裁定废掉了。
+   同时 CLI 的 `--rounds` 路径把 `waiting_for_user` 映射到**退出码 3** 并打印"停在等待用户"。
+3. **原生函数面没跟上新形状**：`llmseam.META_FUNCTIONS` 的 `framework_ask_user` 还在广告
+   `options: array of string`、没有 `header`/`multi_select`（A 诚实登记为"不在允许改动范围"）。
+   我把它改成 DSH 的形状（选项是带 `description` 的对象 + `header` + `multi_select`），
+   并加判据：**广告面必须广告 `userio` 真收的那份形状**，且两种选项形状都真的解得出
+   （`tests/test_native_tool_calls.py`）。广告一份、执行另一份是不能接受的。
+
+### 读数
+
+```text
+tests/test_user_channel_stop_and_resume.py（新，13 条）⇒ 13 passed
+合并指定套件（含既有 interaction/closing/reviewaccept/agent_cli 等）⇒ 107 passed
+tests/test_resume_after_answer.py / test_resume_runs_and_consumes_answer.py ⇒ 全过（含新档）
+lint（日常）⇒ error 0 / warning 9 / info 50     lint（--strict）⇒ error 0 / warning 56 / info 49
+```
+
+### 仍然挂着的残留（诚实登记）
+
+- `ask_cancelled` 是新停理由，CLI 把它归到退出码 1（没有独立码）；只有传 `cancel_check`
+  的调用方能触发（CLI 目前不传）。
+- `resume_transcript` 两条边界（都写在它的 docstring 里）：开头"你的收件箱"是**现读**的
+  （原趟带"（新）"标记时那几行会不同，只会变新不会变假）；单字段 > `RECORD_CHARS` 的那一步
+  尾部会比当时短（落档截断标记可读）。
+- `--rounds > 1` 的 `--resume` 仍走 autonomy 的**轮**检查点，不走向检查点；步检查点只服务单趟。
+
+---
+
+## §73 用户端（二）：`agentflow web` —— DSH 风格的人机界面，以及我在它交付的代码里抓到的两个真缺陷
+
+用户 2026-10-03 的裁定："用户端好好学习 deepseek harness 的设计风格，我很喜欢……甚至允许你复制人家的代码微调。"
+
+### 设计与来源（先把"抄"写清楚）
+
+- 设计基线：`agentflow/docs/USER-END-DSH-STYLE.md`（新增，已登记进 `docs/INDEX.md`）。
+  它把"跟 DSH 学什么"钉在**可复核的出处**上：两层令牌体系、交互规则（阻塞到作答 /
+  无超时降级 / 等待不烧 token / 没有 answerer 必须报错不许降级 / 子 agent 不许问用户 /
+  审批一次性 + `ask`/`never` + fail-closed + `asked`/`decided` 成对）、界面三条（状态不进
+  组件 state、待回答面板必须全局可达、卡片回放已落盘事件），以及我们与 DSH 的三处刻意差异。
+- **许可已核实**：DSH 各包是 MIT，逐字为 `MIT License` + `Copyright (c) 2026 DeepSeek`
+  （读的是 `dsh-client-ui-theme/LICENSE` 与 `dsh-tool-ask-user/LICENSE`）。照搬的文件头
+  保留声明 + 来源路径 + "改了哪几处"。
+- 搬的是什么：DSH 的 `packages/client/ui-theme/src/styles/` 下四份 CSS（`design-platform`
+  两层色板 + `base` 字体/运动 + `scrollbar` + `corner-shape`），从它安装包里内联的
+  `\0dsh-inline-css:` 区块**原样抽出**（`temp/_extract_dsh_css.py`），**令牌名一个字都不改**
+  （机器核对：源里 163 个令牌名全部在产物里）。唯一微调是选择器：`body` → `:root`、
+  `body[data-ds-dark-theme]` → `:root[data-ds-dark-theme]`；滚动条的
+  `@supports not selector(::-webkit-scrollbar){ body,body * {…} }` **刻意保留 `body`**
+  （那两个是元素属性，必须落在真正滚动的元素上，改 `:root` 会失效）。
+
+### 交付的四件（全部新建，未碰禁改区）
+
+| 文件 | 内容 |
+|---|---|
+| `src/agentflow/webui.py` | `snapshot()` 投影 + `serve()` + `run()`；四条 GET + `POST /answer`；服务端渲染（零客户端 JS、零新依赖） |
+| `src/agentflow/web/assets.py` | `THEME_CSS`（DSH 令牌整份照搬）+ `APP_CSS`（只用令牌写组件） |
+| `src/agentflow/web/__init__.py` | 包入口与设计依据 |
+| `tests/test_webui.py` | **15 条判据**（正控 9 / 负控 6） |
+
+路由：`GET /`（**全局待回答面板**，不按会话过滤 + 运行态按会话分组 + 轮次之外的零散事件 +
+台账读数）、`GET /run/<sid>`（事件回放卡片 + 交付说明原文）、`GET /api/state`（读数 JSON）、
+`POST /answer`（303 PRG / 409 / 500）；其余 404、非 GET/HEAD/POST 405。
+
+### 我独立验到的（不靠它自己的判据）
+
+`temp/_user_end_verify.py` 的三条腿 **28 条检查全过**（后来收紧判据后仍是全过）：
+
+```text
+gui        ：待答问题与选项（label+description）都在页面上、HTML 转义（<script> ⇒ &lt;script&gt;）、
+             跨会话两条都在、/api/state 报 2 条、POST 303、答完消失、409 不落事件
+projection ：同一份盘上数据渲染两次**逐字节一致**、往盘上追加一条 ⇒ 页面必须变、
+             /run/<sid> 有步骤卡片与停止理由、交付说明原样显示且转义、不存在的 sid ⇒ 404
+tokens     ：THEME_CSS/APP_CSS 都在、APP_CSS 用到的 33 个令牌**全部有定义**、
+             79 条语义别名 + 原始色板 + 明暗两段 + 运动/字体/圆角齐、**零字面色值**
+```
+
+### 我在它交付的代码里抓到的两个真缺陷（都已修 + 都立了判据）
+
+1. **选项被记成"自己写的"（回答口径错）**：表单提交 `selected=全保留`，落盘却是
+   `selected: []` / `custom: "全保留"` —— 把"人选了它"与"人写了它"折成一档，而这正是
+   审阅线反复要分开的两件事。根因是 GUI 把两者拼成一句 `text` 再以 `answer=text` 落盘，
+   旁边还留了一个**死代码** `payload` 把回答事件的形状抄了第二份。
+   修法：只走 `userio.answer_question(selected=…, custom=…)` 这一个写入口，事件形状只有一处定义。
+   四种提交形态实测：`选一个` ⇒ `selected=['全保留'] / custom=''`；`选+自写` ⇒ 两栏都在；
+   `只自写` ⇒ `selected=[] / custom='…'`；`跳过` ⇒ 两栏都空（DSH 的"跳过"口径）。
+2. **跨会话同名 qid 串味**：每段会话各自从 `q0001` 编号，而待答清单**只按 qid 索引** ⇒
+   给一个**已经答过**的会话再提交，会因为"别的会话还有一个 q0001"而通过存在性检查，
+   往那个会话里写下**第二条**回答（`read_replies` 会把它当真回答读给模型）。
+   修法：按 `(sid, qid)` 这一对精确匹配。实测：答 s1 ⇒ 200（s1 一条、s2 仍待答）；
+   再给 s1 提交 ⇒ **409**（修之前会写进第二条）；答 s2 的同号 q0001 ⇒ 200 且 s1 不留痕。
+
+**顺带的教训（写进判据的注释里）**：这两条都是我**先写松了判据**才漏过去的 ——
+第一条的判据原来是"`selected` 或 `custom` 之一里有那句话"，第二条根本没有判据。
+所以收尾时我把三处松断言收紧成"钉住**哪一栏**承载选项"，并补了跨会话负控。
+松的判据等于没判。
+
+### 我裁决的它留下的三个待裁项
+
+| 它问的 | 裁决 |
+|---|---|
+| `option_view` 要不要收私有 | **保持公开**（判据与详情页都要用它；`__all__` 没列它不构成"第二份实现"，R003 的判据是"两个模块各有一份实现"） |
+| `--root` 要不要严格 cwd 优先 | **保持现状**（默认取 `cli.DEFAULT_ROOT`）：三级回退没有真机证据说要它，而"网页看的根与 CLI 用的根不一致"才是更坏的错 |
+| 回答事件要不要保留 `answer` 兼容栏 | **保留**：`autonomy._latest_user_answer` 直接读 `event["answer"]`，删了会让"已答"读成"没答"（三态纪律）。这一条已在 `userio.answer_question` 的 docstring 里写明理由 |
+
+### 读数
+
+```text
+tests/test_webui.py            ⇒ 15 passed
+我的独立腿 gui/projection/tokens ⇒ 28 条不符 0 条
+真工作区 projects/p5-run15 复核  ⇒ last_run = real15 / M / 30 步 / 31 次 llm_call /
+                                   usd 0.304153 / final；10 条轮次外事件分两组单列
+```
+
+---
+
+## §74 用户端（三）：我的模拟测试怎么做的、它自己出过什么错、以及给人实测的清单
+
+用户要求："**你先模拟测试并调整**，之后我亲自实测"，并且"人家要求用户回答你也要回答呀"。
+
+### 独立脚手架：`temp/_user_end_verify.py`（**不靠两条实现线各自的判据**）
+
+它按规格从外面走一遍，六条腿、**69 条检查**：
+
+| 腿 | 条数 | 验什么 |
+|---|---:|---|
+| `channel` | 17 | 事件形状（`header`/对象选项/`multi_select`）、`state="pending"`、`inbox` **不给 `--sid` 也跨会话**查到并带会话号、`answer --select` 落 `selected`、无人值守档 `refused`/`ask_refused` 且不落盘 |
+| `loop` | 21 | `user_timeout_sec=0` ⇒ `waiting_for_user` + `waiting_for` + **调用数停在 1** + 检查点落盘；没答就续跑 ⇒ 明确还在等 + **不调模型**；指纹不符 ⇒ `checkpoint_mismatch` + 不调模型 + 检查点没被清；**默认口径下真的阻塞**、人一答同一趟跑到 `final`；`resume_transcript` 与循环逐字一致；子角色 `delegated_asker` |
+| `gui` | 10 | 全局面板（不按会话过滤）、选项 label+description、HTML 转义、PRG 303、409 不落事件、**选了选项必须落在 `selected` 里** |
+| `projection` | 7 | 同一份盘上数据渲染两次**逐字节一致**；往盘上追加一条 ⇒ 页面必须变；`/run/<sid>` 卡片 + 交付说明 + 404 |
+| `tokens` | 11 | `APP_CSS` 用到的每个令牌都在搬来的 `THEME_CSS` 里有定义；零字面色值；两层令牌/明暗两套/运动/字体/圆角齐 |
+| `delegated` | 3 | 子角色提问不停循环、不落用户频道、被告知写进结果 |
+
+**当前读数：`合计 69 条，不符 0 条`**（在两条实现线都交付之后跑的）。
+
+### 这个脚手架自己出过的三个错（写下来，因为"判据红了先怀疑工具"）
+
+1. **CLI 子进程没带 `PYTHONPATH`/cwd** ⇒ `No module named agentflow.cli`，于是"通道腿全红"——
+   其实是我工具的错。教训：红的时候先看错误**是不是发生在被测对象身上**。
+2. **写回答时漏了 `sid`** ⇒ 答案落到缺省会话，被测的循环读不到，于是"答了再续跑"与
+   "阻塞后接着跑"两条一起红。这一条最贵：它看起来像被测代码的 bug。
+3. **判据写松了**：`gui` 腿原来断言"`selected` 或 `custom` 之一里有那句话"，
+   于是"点了选项却被记成自写"（真缺陷）从它眼皮底下过去了。收紧成"钉住**哪一栏**"之后才抓住。
+   教训写进了判据的注释：**松的判据等于没判**。
+
+### 我给人的清单：`docs/USER-TEST.md`
+
+七节：造全新工作区 → 起网页（`agentflow web`）→ 跑一趟真机（**会停在等你回答**，退出码 **3**，
+停下后不再烧钱）→ 你答（网页点选项 / 终端 `answer --select|--custom`）→ 接着跑
+（**同一趟进程内继续**，或 `--resume`）→ 验两道门 → 无人值守档（`--no-ask` 的 `ask_refused`）→
+出问题时我要的三样读数。
+
+清单里的命令与"该看到"都是**实测输出**，不是推测；其中起服务那两条我都真跑过：
+
+```text
+python -B -m agentflow.cli --root projects/p5-run15 web --port 0 --json
+  ⇒ {"url": "http://127.0.0.1:58630/", "root": "…\\projects\\p5-run15"}   （立刻，不缓冲）
+  ⇒ /api/state：sessions 2 / runs 1 / pending 0 / orphans 10
+  ⇒ GET /：30,085 字节、有标题、引用 DSH 令牌
+```
+
+### 我在这条线上抓到的真缺陷清单（都在修完之后复验过）
+
+| # | 缺陷 | 谁修的 |
+|---|---|---|
+| 1 | 运行内 `conductor.closing` 假绿（§63） | 我（上一轮） |
+| 2 | 账本整条路不记账（§64） | 我（上一轮） |
+| 3 | `resume_transcript` 被"没有步的 run_start"吞掉 | 报给实现线，它修，我立负控 |
+| 4 | GUI 把"选了选项"记成"自己写的"（`selected: []` / `custom: "全保留"`）+ 死代码抄了第二份事件形状 | 我 |
+| 5 | GUI 跨会话同名 qid 串味（给已答过的会话再提交会写下第二条回答） | 我 |
+| 6 | `--json` 的 URL 那行没 `flush` ⇒ 后台起服务**永远拿不到 URL**（`--json` 的唯一用途） | 我 |
+| 7 | 多轮驱动不知道"上一轮停在等用户"（会替人把取舍定了 + 多烧钱） | 我 |
+| 8 | 原生函数面还在广告裸字符串选项（与 `userio` 真收的形状不一致） | 我 |
+
+另外一次**我自己造成的回归**：给 `_stop_before_round` 加第一版规则时只判"上一轮停过"，
+把"人已经答了、正该接着跑"那条路一起拦掉了 —— `test_resume_runs_and_consumes_answer.py`
+当场两条红。修法是判据加第二个条件（**问题还挂在待答清单里**才算"还在等"），
+并把那条守旧契约的判据按新契约改写（说明写在判据的 docstring 里）。
+
+### 残留（登记）
+
+- 报告正文里"我改了三处"这类**不可机械核对**的叙述，判据管不了（§70 已登记）。
+- 用户端的界面**没有浏览器端自动化**（判据走 HTTP：HTML 转义、PRG、投影一致性、
+  路径穿越、404/405 都验了；视觉与交互手感要靠人实测）。
+- `option_view` 仍是公开名（不在 `__all__`）；`--root` 取 `cli.DEFAULT_ROOT` 而不是严格 cwd 优先 ——
+  两条都由我裁决保持现状，理由写在 §73。
+
+---
+
+## §75 用户端落地时补的"登记税"：新模块、子命令数、行数、悬空引用
+
+全量 pytest 第一次跑（3435 passed / **6 failed**）时，六条红**全是登记税**，
+一条都不是功能缺陷 —— 而它们红得对：这个仓库的纪律是"新增了东西就必须在图上给它位置"。
+逐条记在这里，因为它们是"新模块进来时要动哪儿"的完整清单（下次省一遍摸索）：
+
+| 判据 | 它要什么 | 我改了什么 |
+|---|---|---|
+| `test_r5_orchestration_cost::test_the_quoted_references_in_comments_all_exist` | 注释/docstring 里反引号引用的**私有符号**必须在整棵树里作为真符号出现 >1 次（按**跨模块**计数） | 我在 `webui.py` 的注释里反引号写了 `_num` —— 它是本模块的私有帮手，跨模块只算 1 次 ⇒ 判据红。改法是把那句注释里的模块私有名去掉（改成"用取值帮手"），**不是**去登记表里加一条：那句引用本来就不需要指名道姓 |
+| `test_reading_map::test_every_source_module_is_placed_somewhere_in_the_map` | 每个 `src/agentflow/` 模块都要在 `docs/READING-MAP.md` 里有位置 | 第 0 层加 `webui.py` 与 `web/` 两行 |
+| `test_reading_map::test_the_line_counts_in_the_big_file_table_are_current` | §3 那张大文件表的行数是手抄的，必须有判据钉住 | `cli.py` 1956 → **2200**（本轮它长了 244 行） |
+| `test_release_all::test_agentflow_top_level_modules_match_the_registry`（+ 它的反真空兄弟条） | `src/agentflow/` 里出现未登记的新顶层模块 ⇒ 红（"包目录里凭空多出一个模块"正是 `R6-AN-1` 的原始形态） | 在 `tests/test_release_all.py` 的 `_AGENTFLOW_TOP_LEVEL_MODULES` 里登记 `webui.py` 与 `web/`，各写一行理由（说清"是新增，不是对拍副本"） |
+| `test_user_quickstart::test_the_readme_subcommand_count_matches_the_live_parser` | README 里的子命令数要与 `build_parser()` 当次给出的数一致 | 22 → **23**（两处），`READING-MAP` §1 里那句同口径的 21 → 23 |
+
+**读数**：六条判据单独复跑 ⇒ 18 passed；lint（日常）`error 0 / warning 9 / info 50`、
+严格档 `error 0 / warning 56 / info 49`（都与基线逐字相同）。
+
+**为什么值得单独记一节**：这六条红出现在"功能全绿"之后 —— 它们挡的不是错误，
+是"新东西没有位置"。少了它们，图上会多出一个没人知道为什么在那儿的模块，
+而那是**读的人按图索骥找不到东西**的开始。
+
+---
+
+## §76 用户端交付前最后一段：一条我自己造的红（锚点被"清星号"改掉）+ 一条负载假红 + 清单的路径陷阱
+
+这一节记三件事，都是"交付前最后一段"里真实发生的，且三件都不是功能缺陷 ——
+它们的价值在于**下次能少走一遍**。
+
+### 一、全量里那一条红：`_CURRENT_VALUE_ANCHORS` 被我"清星号"改掉了
+
+第二次全量 pytest：**3440 passed / 1 failed**，唯一那条红是
+`tests/test_release_all.py::test_the_historical_marker_leak_criterion_is_not_vacuous`
+（`G3` 那条"当前值行不许带历史记号"判据的负控）。单跑也红、可复现。
+
+**先查它是不是本来就红**（这一步替我省掉了"去改一份我没碰过的文档"这个错误方向）：
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 被判据读的文档动过没有 | `git status --short -- agentflow/DEVELOPMENT.md` | 空 —— 本轮**没碰过**它 |
+| 拿 `HEAD` 那版文档跑同一条判据 | `git show HEAD:agentflow/DEVELOPMENT.md` + 同一条注入 | 注入生效、判据报出的问题数 **0**（与盘上一致） |
+| 我对这个判据文件改过什么 | `git diff HEAD -- agentflow/tests/test_release_all.py` | 见下，就是根因 |
+
+第二条是关键：**文档换回 `HEAD` 那版，判据一样绿** ⇒ 问题在判据这一侧。
+
+**根因**（`git diff` 里只有三行数据被动过，形态一模一样）：
+
+```text
+-    "| `.noai-paths` | **已存在**",              # §0.1 的当前值行
++    "| `.noai-paths` | 「已存在」",              # §0.1 的当前值行
+-    "| **清单 glob 数** |",                       # §1.5 的三个数（当前值）
++    "| 「清单 glob 数」 |",                       # §1.5 的三个数（当前值）
+-    "| **FC-27** | 禁 AI 区必须显式列出",          # §9.1 的当次读数
++    "| 「FC-27」 | 禁 AI 区必须显式列出",          # §9.1 的当次读数
+```
+
+这三行是 `_CURRENT_VALUE_ANCHORS` —— **`DEVELOPMENT.md` 里那些行的逐字副本**，
+判据靠"行里含不含这个字面量"认出"这是当前值行"。两个**没带行尾注释**的锚点
+（`| **唯一路径数** |`、`| **禁改区类别数** |`）没被动，三个**带行尾注释**的全被改了
+⇒ 那个清 R009 的批量脚本的判据是"这一行有注释 ⇒ 当散文处理"，于是把同一行上的
+**字符串字面量**一起改了。这正是本项目那条纪律的反面案例：**注释改写脚本不许越过引号。**
+
+**为什么它隐蔽**：一条锚点都没命中才报"失去对象"，这里还剩 3 条 ⇒ 反真空分支沉默；
+而负控夹具是**按行内特征**注入到 `.noai-paths` 那一行的，那一行的锚点恰是被改掉的三条之一
+⇒ 注入进去的行不再被认成"当前值行" ⇒ 判据**正确地**放过了它 ⇒ 负控绿。
+即：**恰好在 `G3` 当初出问题的那个文件上，判据静默地失去了覆盖**，而响的是"负控不再能红"
+这条元判据 —— 元判据的价值在这里得到一次实证：**判据漂了，只有看着判据的那条判据会响。**
+
+**修法（两步 + 一条新负控）**：
+
+1. **逐字还原**三个锚点；
+2. `historical_marker_leak_problems` 增加分支：**单个锚点在文档里找不到 ⇒ 报出来**
+   （原文案只报"一条都没命中"）—— 把"锚点可漂"从静默变成红；
+3. 负控里加第二条反真空夹具：把锚点字面量改一个写法（成对星号 → 别的括号）⇒ 必须红。
+
+**修的过程里我又栽了同一类错误一次**：写上面那些说明时，我在注释与 docstring 里写了成对星号
+⇒ `R009` 立刻报 `error 1`（`tests/test_release_all.py:1425`，2 处）。抓住它的不是我的自觉，
+是 `R009` 这条机器判据（代价：一次 26 秒的 lint）。改法：注释/docstring 里的强调一律用 `「」`，
+**只保留锚点字面量里的成对星号**（它在引号里；我读了 `rule_R009_decoration_in_comments` 的
+docstring 确认范围是"注释与 docstring"，不扫字面量）。
+
+### 二、第三次全量的那一条红是**负载假红**（计时判据）
+
+修完锚点后的全量：**1 failed / 3440 passed / 3 skipped / 8 deselected / 1 xfailed**。
+这一条红**换了人**：`tests/test_scheduler.py::test_same_role_two_instances_really_run_concurrently`
+—— 它是**计时判据**（两个不同实例真并发：`elapsed < 0.4×2×0.85 = 0.68s`），
+实得 **0.687s**，差 7 毫秒。
+
+三条读数支持"这是负载假红，不是我的回归"：
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 本轮动过调度面没有 | `git diff --stat HEAD -- src/agentflow/scheduler.py src/agentflow/conductor.py tests/test_scheduler.py` | **空**（一个字节没动） |
+| 单跑三遍 | `pytest tests/test_scheduler.py::test_same_role_two_instances_really_run_concurrently -q` | **3/3 passed** |
+| 那次全量期间机器在干什么 | 我自己 —— 同一段时间里跑了两次 lint、几次聚焦 pytest | 有负载 |
+
+这与 `DEVELOPMENT.md` §0.3 命令 13 早就登记的"并发/顺序态"读法是同一族
+（"两条单跑都绿"），所以它按**已知形态**登记在此，不当作本轮缺陷。
+
+### 三、人实测清单里的两个路径陷阱（都在真机上撞到过）
+
+写 `docs/USER-TEST.md` 时我逐条把**免费的那些命令真跑了一遍**（而不是"看着对"），
+撞到两个坑 —— 它们的共同形态是"报出来的话看着像代码坏了，其实只是路径写错了"：
+
+1. **`PYTHONPATH` 必须写绝对路径**。清单原先每块结尾写 `$env:PYTHONPATH='src'`：
+   只要某一块 `cd` 进工作区（`projects\…`），`src` 就再也解析不到 ⇒
+   `ModuleNotFoundError: No module named 'agentflow'`。改成
+   `$env:PYTHONPATH='D:\Incubator\agentflow\src'` 之后 `cd` 到哪儿都对。
+2. **`closing --project-dir` 是按当前目录解析的**，不是按 `--root`：在 `agentflow\` 下写
+   `--project-dir projects\p5-run15` 会被拼成 `projects\p5-run15\projects\p5-run15\…`
+   ⇒ `anchor_unknown` + `report_not_written`、退出码 **2**（看着像包坏了）。
+   正确形态是 `cd` 进包目录再 `--root . --project-dir . --report out\review\REPORT.md`
+   ⇒ 实测 `收工门：五条全过 ⇒ 可交付`、退出码 0。
+
+顺带把清单里**不可预测的东西**去掉了：原先 §4 写死 `--select "保留（Recommended）"`
+—— 选项是模型当次写出来的，抄一个当次不存在的选项会让用户以为是自己错了。
+现在写的是"把 `inbox`「选项」那一栏的原文抄进去，或直接用 `--custom`"。
+
+还有一处**叙述诚实性**的修正：清单原先自称"每一步的命令都在本机跑过一次"，
+而 `projects\user-test-1` 并不在盘上 ⇒ 那句话不成立。现在清单开头用一张表
+**逐节**写清"我跑过 / 要你跑（付费）"，并把任务原文作为
+`docs/USER-TEST-TASK.txt`（逐字副本，`sha256` 与 `temp/TASK-59.txt` 相同）随交付物一起发出去，
+不再依赖 `temp/` 里那份随时可能被清的临时文件。
+
+### 读数汇总（2026-10-03，全部是修完之后取的）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 被修的两条判据 | `pytest tests/test_release_all.py -q -k "historical_marker or current_value"` | **2 passed** |
+| 连同正控与邻居 | `-k "historical_marker or current_value or development_md_linter"` | **3 passed** |
+| 计时判据单跑三遍 | `pytest tests/test_scheduler.py::test_same_role_two_instances_really_run_concurrently -q` | **3 passed** |
+| 用户端两条判据文件（清单 §1） | `pytest tests/test_user_channel_stop_and_resume.py tests/test_webui.py -q` | **30 passed**（14.70s） |
+| 我自己的独立核对装置 | `python -B D:\Incubator\temp\_user_end_verify.py` | **69 条全过 / 不符 0** |
+| lint 日常 | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 50`（与基线逐字相同） |
+| lint 严格 | `python -B scripts/lint_rules.py --strict` | `error 0 / warning 56 / info 49`（与基线逐字相同） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git` | `[clean] required_approvals=0`，**678** 条改动路径均未命中（清单 38 条），退出码 **0** |
+| 全量 pytest（第四次，机器无其他负载） | `python -B -m pytest -q -p no:cacheprovider` | **3441 passed / 0 failed / 3 skipped / 8 deselected / 1 xfailed**（1363.56s，退出码 **0**） |
+| 清单免费段的真机读数 | 见下 | 全部与 `docs/USER-TEST.md` 里写的"该看到"逐字一致 |
+
+清单免费段的真机读数（`projects\user-test-1` 现场造、逐条跑）：
+
+- 造场：`{"workspace": "…\\projects\\user-test-1", "source_sha256": "8c5c431b…", "files": ["ACCEPTANCE.md","main.pdf","main.tex"]}`；
+  `REPRO_RESULT: {"anchor": "written", "touched_main_tex": false}`。
+- 空工作区 `inbox`：`没有待回答的问题。` + `最近一趟的停止理由：读不到（这些会话里没有 agent_run_end 事件）`，退出码 **0**。
+- 答不存在的号：`[answer] 没查成：没有 q9999 这个问题（当前待答：现在是空的）…`，退出码 **2**。
+- 网页（`--port 0 --json`）：立刻吐 `{"url": "http://127.0.0.1:3036/", …}`；`GET /` ⇒ 200 / **28508** 字节；
+  `GET /api/state` ⇒ `sessions=[] runs=[] pending_questions=[] problems=[]`、`last_run=null`、
+  台账那格 `"台账还没有（合法初态）"`（空工作区不报红）；`GET /nope` ⇒ 404。
+- 真机跑过 15 趟的那个包上跑 `closing`：五格全过 ⇒ `收工门：五条全过 ⇒ 可交付`，退出码 **0**。
+
+### 教训（可复用，三句）
+
+1. **批量改写脚本的判据里必须排除字符串字面量**。"这一行有注释就当散文改"会改掉同一行的数据，
+   而 lint（只看注释/docstring）不会红 —— 只有下游那条**拿数据去对账**的判据才会红，且它红在别处（负控）。
+2. **锚点必须是逐字副本，且"锚点还在不在"要自己有一条判据**。锚点漂 = 覆盖静默丢失，
+   与"判据变软"同类，只是发生在判据的**输入**上。
+3. **交付给人照着敲的清单，免费的那些命令必须真跑一遍**。这一次真跑撞出两个路径陷阱
+   （`PYTHONPATH` 相对、`--project-dir` 解析基准）与一处**不成立的自我声明**
+   （"每一步都跑过"），三件都是"看着对、敲下去就错"的形态 —— 它们比功能缺陷更容易消耗人的信任。

@@ -478,12 +478,25 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         },
         "required": ["targets"],
     }),
+    # `framework_ask_user` 的 schema 必须与 `userio` 真收的形状一致（`draft/37` §72）：
+    # 选项是 `{"label","description"}` 对象、另有 `header` 与 `multi_select`（DSH 的
+    # 形状：稳定 id + 短标题 + 选项带说明 + 多选）。旧形状（裸字符串选项）「照样收」
+    # ——`_shape_of` 走 `userio.coerce_option` 归一化—— 但广告面必须广告真的那一份：
+    # 广告一份、执行另一份，就会让模型按广告写而框架说"这不是我认识的形状"。
     ("framework_ask_user", "ask_user", {
         "type": "object",
         "properties": {
             "question": {"type": "string"},
-            "options": {"type": "array", "items": {"type": "string"}},
-            "timeout_sec": {"type": "number"},
+            "header": {"type": "string", "description": "短标题（一行，给界面用）"},
+            "options": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"label": {"type": "string"},
+                               "description": {"type": "string"}},
+                "required": ["label"],
+            }, "description": "推荐项放首位，并在 label 末尾写 (Recommended)"},
+            "multi_select": {"type": "boolean"},
+            "timeout_sec": {"type": "number",
+                            "description": "不给 = 一直等（停着）；0 = 问了就交还控制权"},
         },
         "required": ["question"],
     }),

@@ -1392,10 +1392,54 @@ def _parse_drive(items) -> tuple[dict, str]:
     return table, ""
 
 
+def _run_agent_exit_code(run) -> int:
+    """单趟 `run-agent` 的退出码阶梯（四档；`--help` 与 `cmd_run_agent` 的 docstring 同口径）。
+
+    为什么"停在等待用户"必须是「第三个」码而不是挤进 0/1/2 里：
+    它既不是完成（0），也不是"跑过了但没给出 final"那种失败（1），
+    更不是"没查成"（2）—— 它是一次「成功的中断」，人答完之后这条路会接着走。
+    把它折进 1 会让 CI/脚本把它读成"这趟不行"，折进 0 会读成"做完了"。
+    """
+    if run.stop_reason == "final":
+        return 0
+    if run.stop_reason == "waiting_for_user":
+        return 3
+    if run.stop_reason in ("checkpoint_mismatch", "no_checkpoint", "already_finished",
+                           "resume_no_transcript"):
+        return 2
+    return 1
+
+
+def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
+    """停在等用户时那一行醒目提示：停在谁身上、下一步该敲什么。
+
+    三件事逐条给出来（问题号 + 问题原文前 80 字 + 三条命令），因为这一刻的读者
+    手里只有终端：只给"waiting_for_user"这个词，她还得自己去翻待答清单。
+    """
+    from . import userio as U
+
+    qid = run.waiting_for or "（没有记到问题号）"
+    text = ""
+    for q in U.pending_questions(root, sid=sid):
+        if q.qid == qid:
+            text = q.text[:80]
+            break
+    return (f"停在等待用户：{qid} {text}；下一步："
+            f"`agentflow inbox --root {root} --sid {sid or ''}` / "
+            f"`agentflow answer {qid} \"<回答>\" --root {root} --sid {sid or ''}` / "
+            f"`agentflow run-agent --resume … --sid {sid or ''}`")
+
+
 def cmd_run_agent(args) -> int:
     """真跑一次角色循环（顶层角色走它自己的循环；`--drive` 决定被召唤的子角色）。
 
-    退出码：0 = 跑完了；1 = 跑完了但有被拒/失败的步骤；2 = 没查成（没有 key / 用法错）。
+    退出码是「四档」，不是两档（`draft/37` §16 的"停下来等用户"那一档在这里落地）：
+
+    - `0` 跑完了（`stop_reason="final"`）；
+    - `1` 跑过了但没给出 final（坏 JSON 超限 / 步数用尽 / 被取消）；
+    - `2` 没查成（没有 key / 用法错 / 检查点读不到 / 指纹不符 / 上一趟已收工）；
+    - `3` 「停在等待用户」：`ask_user` 问了人、还停在等回答。它既不是完成也不是失败 ——
+      人答完（`agentflow answer`）之后用 `--resume` 接着跑那一步之后。
     """
     from . import agent_loop as AL
     from . import autonomy as AU
@@ -1495,7 +1539,8 @@ def cmd_run_agent(args) -> int:
                                  seam=seam, rounds=args.rounds, report_every=args.report_every,
                                  usd_budget=args.budget_usd, max_steps=args.max_steps,
                                  sid=args.sid, from_env=False, resume=bool(args.resume),
-                                 stop_file=args.stop_file)
+                                 stop_file=args.stop_file,
+                                 user_timeout_sec=getattr(args, "user_wait_sec", None))
         print(tty.paint(f"角色 {args.role} 自主跑完 {auto.rounds_done} 轮"
                         + (f"（其中 {auto.resumed_from} 轮是上一段做过的）"
                            if auto.resumed_from else ""), "bold"))
@@ -1509,15 +1554,34 @@ def cmd_run_agent(args) -> int:
         if auto.stop_reason == "checkpoint_mismatch":
             # 拿一个任务的检查点去续另一个任务是没查成（配置错），不是"跑过了有问题"
             return 2
+        # 停在等用户（`draft/37` §72）：自主多轮那一层的停止判据现在有这一档了 ——
+        # 上一轮停在等用户、而那个问题「还挂着」时，它不会开下一轮（`autonomy.py`
+        # 的 `_stop_before_round`，判据在 `tests/test_resume_after_answer.py`）。
+        # 退出码与单趟同档：3 = 停在等待用户（既不是完成也不是失败）。
+        if auto.stop_reason == "waiting_for_user":
+            pending = [r.index for r in auto.reports if r.stop_reason == "waiting_for_user"]
+            print(tty.paint(
+                f"[run-agent] 停在等待用户：第 {pending} 轮问了人、还停在等回答 —— "
+                "后续轮次**没有**再开（不许替人把取舍定了）。"
+                f"用 `agentflow inbox --root {root} --sid {args.sid or ''}` 看，"
+                f"答完再用 `--resume` 接着跑。", "bold"))
+            return 3
         return 0 if auto.stop_reason in ("rounds", "stop_file", "user_stop", "resumed_done") else 1
 
     run = AL.run_role(args.role, args.task, store=st, registry=wiring["registry"],
                       conductor=wiring["conductor"], seam=seam, session_root=root,
                       workspace_root=str(root), sid=args.sid, max_steps=args.max_steps,
-                      usd_budget=args.budget_usd, from_env=False)
+                      usd_budget=args.budget_usd, from_env=False,
+                      user_timeout_sec=getattr(args, "user_wait_sec", None),
+                      ask_policy=("never" if bool(getattr(args, "no_ask", False)) else None),
+                      resume=bool(getattr(args, "resume", False)))
+    code = _run_agent_exit_code(run)
     if args.json:
         print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2))
-        return 0 if run.stop_reason == "final" else 1
+        if code == 3:
+            # JSON 那一份必须保持可解析 ⇒ 那行醒目提示走 stderr
+            print(_waiting_notice(run, root=root, sid=args.sid), file=sys.stderr)
+        return code
     print(tty.paint(f"角色 {args.role} 的循环：{run.stop_reason}", "bold"))
     for step in run.steps:
         print(f"  [{step.index}] {step.shape}"
@@ -1526,7 +1590,11 @@ def cmd_run_agent(args) -> int:
     if run.final:
         print(f"  结论：{run.final[:400]}")
     print(f"  唤起：{run.summons}；留言：{run.messages_sent}；用量：{run.spend}")
-    return 0 if run.stop_reason == "final" else 1
+    if code == 3:
+        print(tty.paint(_waiting_notice(run, root=root, sid=args.sid), "bold"))
+    if code == 2:
+        print(tty.paint(f"[run-agent] 没查成：{run.final}", "yellow"), file=sys.stderr)
+    return code
 
 
 def cmd_gate(args) -> int:
@@ -1585,43 +1653,182 @@ def cmd_gate(args) -> int:
     return 0 if res.verdict == "pass" else 1
 
 
+def _ago(stamp: str) -> str:
+    """一个时间戳距现在多久（人话）；读不出来时如实说读不出来。
+
+    为什么这个读数值得占一列：人打开 `inbox` 最想先知道的是"它等了多久" ——
+    等了 3 秒与等了 3 小时，下一步的动作完全不同（再等等 vs 去答）。
+    """
+    from datetime import datetime
+
+    raw = str(stamp or "").strip()
+    if not raw:
+        return "（没有时间戳）"
+    try:
+        when = datetime.fromisoformat(raw)
+    except ValueError:
+        return f"（时间戳读不出来：{raw[:20]}）"
+    now = datetime.now(when.tzinfo) if when.tzinfo is not None else datetime.now()
+    delta = (now - when).total_seconds()
+    if delta < 0:
+        return f"未来 {abs(delta):.0f} 秒（时间戳比现在晚）"
+    for limit, unit, div in ((60, "秒", 1), (3600, "分钟", 60), (86400, "小时", 3600)):
+        if delta < limit:
+            return f"{delta / div:.0f} {unit}"
+    return f"{delta / 86400:.0f} 天"
+
+
+def _option_text(option: Any) -> str:
+    """一个选项渲染成一栏：`label — description`（没有说明就只给 label）。"""
+    label = str(getattr(option, "label", "") or "")
+    description = str(getattr(option, "description", "") or "")
+    return f"{label} — {description}" if description else label
+
+
+def _latest_run_stop(root: Path, *, sids: list[str] | None = None) -> str:
+    """最近一趟的停止理由（读最新的 `agent_run_end` 事件）；读不到就说读不到。
+
+    为什么它跟着"没有待回答的问题"一起打印：人打开 `inbox` 最常问的两句话是
+    "它在等什么"与"它跑完了吗"。前一句由待答清单回答，后一句只有
+    `agent_run_end` 里的 `stop_reason` 回答得出来 —— 而"什么都没有"这个输出
+    对第二句话是不回答的（读者会把它读成"没事发生"）。
+    """
+    from . import sessions as SS
+
+    want = list(sids) if sids else [str(r.get("sid") or "") for r in SS.list_sessions(root)]
+    best: tuple[str, str, dict] | None = None
+    for sid in want:
+        if not sid:
+            continue
+        events, _problems = SS.read_session(root, sid=sid)
+        for event in events:
+            if event.get("kind") != "agent_run_end":
+                continue
+            ts = str(event.get("ts") or "")
+            if best is None or ts >= best[0]:
+                best = (ts, sid, event)
+    if best is None:
+        return ("最近一趟的停止理由：读不到（这些会话里没有 agent_run_end 事件 —— "
+                "要么还没跑过，要么会话记录被挪走了）")
+    ts, sid, event = best
+    waiting = str(event.get("waiting_for") or "")
+    extra = f"，停在等 {waiting}" if waiting else ""
+    return (f"最近一趟（会话 {sid}，角色 {event.get('role')}，{ts}）的停止理由："
+            f"{event.get('stop_reason')}（步数 {event.get('steps')}）{extra}")
+
+
 def cmd_inbox(args) -> int:
-    """列出等着用户回答的问题（只读）。退出码 0 = 查过了。"""
+    """列出等着用户回答的问题（只读）。
+
+    不给 `--sid` 时扫这个工作区的「所有」会话：DSH 的待答面板是全局的
+    （"入口若只存在于那个会话的对话流里，就会在它正阻塞模型的时候恰好不可达"），
+    而真机每一趟都有自己的 sid ⇒ 只看缺省会话会把"它在等什么"读成"没有待答"。
+    退出码 0 = 查过了（有待答与没有待答都算查过了）。
+    """
     from . import userio as U
 
     root = Path(args.root or DEFAULT_ROOT).resolve()
-    pend = U.pending_questions(root, sid=args.sid)
+    sid = getattr(args, "sid", None)
+    sids = [sid] if sid else U.session_ids_with_questions(root)
+    rows = [(s, q) for s in sids for q in U.pending_questions(root, sid=s)]
     if args.json:
-        print(json.dumps([q.to_dict() for q in pend], ensure_ascii=False, indent=2))
+        print(json.dumps([{**q.to_dict(), "sid": s} for s, q in rows],
+                         ensure_ascii=False, indent=2))
         return 0
-    if not pend:
+    if not rows:
         print(tty.bullet("没有待回答的问题。"))
+        print(tty.bullet(_latest_run_stop(root, sids=sids or None)))
         return 0
-    for line in tty.table(("问题号", "谁在问", "问题", "选项"),
-                          [(q.qid, q.role, q.text[:60], "、".join(q.options) or "—")
-                           for q in pend]):
+    for line in tty.table(("会话号", "问题号", "谁在问", "问了多久", "问题", "选项"),
+                          [(s, q.qid, q.role, _ago(q.ts), q.text[:60],
+                            "、".join(_option_text(o) for o in q.options) or "—")
+                           for s, q in rows]):
         print(line)
-    print(tty.bullet(f"用 `agentflow answer <问题号> <正文>` 回答（共 {len(pend)} 条）"))
+    print(tty.bullet(f"用 `agentflow answer <问题号> \"<回答>\"`（选选项用 `--select`，"
+                     f"写正文用 `--custom`）回答；共 {len(rows)} 条"))
+    print(tty.bullet(_latest_run_stop(root, sids=sids)))
     return 0
 
 
 def cmd_answer(args) -> int:
-    """代用户回答一个问题（写一条 `user_answer`）。退出码 2 = 没查成（问题号不存在）。"""
+    """代用户回答一个问题（写一条 `user_answer`）。
+
+    「没查成」分三种，各自的处置方向不同，所以分开报（折成一句"失败了"
+    会让人不知道该改哪一个）：
+
+    - 没有这个号：列出当前待答的号（它可能在别的会话里 ⇒ 用 `--sid` 指名）；
+    - 已经有回答：谁、什么时候、答了什么（不许覆盖 —— 回答是 append-only 的审计面）；
+    - 写失败：原样报出失败原因。
+
+    回答内容三档来源（等价于 DSH 的回答形状）：`--select <label>`（可重复，可 0/n 个）、
+    `--custom <正文>`、以及 `--text` 位置参数（等价于 `--custom`，老调用方照旧）。
+    退出码：0 = 写成了；2 = 没查成（上面三种，或没给回答内容）。
+    """
     from . import userio as U
 
     root = Path(args.root or DEFAULT_ROOT).resolve()
-    pend = {q.qid for q in U.pending_questions(root, sid=args.sid)}
+    sid = getattr(args, "sid", None)
+    pend = {q.qid: q for q in U.pending_questions(root, sid=sid)}
     if args.qid not in pend:
-        # 三态：回答一个不存在/已回答的问题号是"没查成"，不是"答过了"
-        print(f"[answer] 没查成：{args.qid} 不在待答清单里（{sorted(pend) or '现在是空的'}）",
+        answered = [r for r in U.read_replies(root, sid=sid) if r["qid"] == args.qid]
+        if answered:
+            last = answered[-1]
+            print(f"[answer] 没查成：{args.qid} 已经有回答了 —— {last['by']} 在 "
+                  f"{last['ts']} 答的是「{str(last['answer'])[:80]}」⇒ 不许覆盖"
+                  "（要改主意就让它再问一次：回答是 append-only 的审计面，"
+                  "而续跑读的是最新那一条）", file=sys.stderr)
+            return 2
+        print(f"[answer] 没查成：没有 {args.qid} 这个问题"
+              f"（当前待答：{sorted(pend) or '现在是空的'}）。"
+              "若它落在别的会话里，用 `agentflow inbox` 看会话号，再用 `--sid` 指名",
               file=sys.stderr)
         return 2
-    problem = U.answer_question(root, qid=args.qid, answer=args.text, sid=args.sid)
+    selected = [str(x) for x in (getattr(args, "select", None) or [])]
+    custom = str(getattr(args, "custom", None) or "")
+    legacy = getattr(args, "text", None)
+    if not custom and legacy:
+        custom = str(legacy)
+    if not selected and not custom:
+        print("[answer] 没查成：没给回答内容 —— 用 `--select <选项>`（可重复）、"
+              "`--custom <正文>`，或位置参数 <正文>", file=sys.stderr)
+        return 2
+    problem = U.answer_question(root, qid=args.qid, selected=selected, custom=custom, sid=sid)
     if problem:
         print(f"[answer] 没写成：{problem}", file=sys.stderr)
         return 2
-    print(tty.bullet(f"已回答 {args.qid}：{args.text[:80]}"))
+    question = pend[args.qid]
+    print(tty.bullet(f"已回答 {args.qid}：{(custom or '、'.join(selected))[:80]}"))
+    unknown = [x for x in selected if x not in question.option_labels]
+    if unknown:
+        # 不是错误（回答可以是自由的），但要说出来：label 与选项对不上时，
+        # 模型下一趟读到的就是一句它认不出的选项 —— "照写"与"写得对"是两件事。
+        print(tty.paint(f"  注意：{unknown} 不在这个问题的选项里"
+                        f"（选项：{'、'.join(question.option_labels) or '（没有选项）'}）—— "
+                        "已照写，但模型可能读不懂这个 label", "yellow"))
+    print(tty.bullet(f"下一步：`agentflow run-agent --role {question.role} "
+                     f"--task \"<原任务原文>\" --resume --sid {sid or ''}`"
+                     "（它走的是自主多轮就再加 `--rounds N`）"))
     return 0
+
+
+def cmd_web(args) -> int:
+    """起用户端网页（本地小服务）。退出码 0 = 正常停止（Ctrl-C），2 = 没查成。
+
+    它只是把 CLI 的参数翻成 `agentflow.webui.run()` 的 argv —— 实现在那一个模块里，
+    这里不重写第二份（`R003` 要防的正是"同一个公开名两处各有一份实现"）。
+    `cli.main` 是命令总入口，`webui.run` 是这一个子命令的实现；两者的名字因此不同。
+    """
+    from . import webui
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    argv = ["--root", str(root), "--host", str(args.host), "--port", str(int(args.port))]
+    if args.open:
+        argv.append("--open")
+    if args.json:
+        argv.append("--json")
+    if args.token:
+        argv += ["--token", str(args.token)]
+    return webui.run(argv)
 
 
 def cmd_closing(args) -> int:
@@ -1849,7 +2056,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", default=None, help="report：写到这个文件（缺省打到 stdout）")
     sp.set_defaults(func=cmd_artifacts)
 
-    sp = sub.add_parser("run-agent", help="真跑一次角色循环（模型驱动；没有 key 则退出码 2）")
+    sp = sub.add_parser(
+        "run-agent", help="真跑一次角色循环（模型驱动；退出码 0 收工 / 1 没给出 final / "
+                          "2 没查成 / 3 停在等待用户）",
+        description="真跑一次角色循环。退出码四档：0 = 跑完了（final）；"
+                    "1 = 跑过了但没给出 final；2 = 没查成（没有 key / 用法错 / "
+                    "检查点读不到 / 指纹不符 / 上一趟已收工）；"
+                    "3 = 停在等待用户（问了人、还停在等回答 —— 既不是完成也不是失败，"
+                    "人答完用 --resume 接着跑那一步之后）。")
     sp.add_argument("role", choices=list(S.ROLES) + [S.CONDUCTOR_ROLE],
                     help="顶层角色（M = 主控，其余 = A–H）")
     sp.add_argument("--task", required=True, help="这次要做的事（给角色的任务描述）")
@@ -1880,7 +2094,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--budget-usd", type=float, default=None, help="美元上限（在每次请求之前检查）")
     sp.add_argument("--sid", default=None, help="会话号（默认当天）")
     sp.add_argument("--resume", action="store_true",
-                    help="从检查点续跑（只跑没做过的轮；任务指纹不一致会被拒）")
+                    help="从检查点续跑：`--rounds >1` 时只跑没做过的轮（任务指纹不一致会被拒）；"
+                         "单趟时接着上一趟停下的那一步之后（上一趟停在等用户或步数用尽都能接）。"
+                         "指纹不一致 ⇒ 退出码 2")
+    sp.add_argument("--user-wait-sec", type=float, default=None,
+                    help="问用户时等多久（秒）：缺省 = 一直等到有人答（等待期间不产生 token "
+                         "开销，等的是磁盘上的回答事件）；`0` = 登记问题后立刻停下来等"
+                         "（退出码 3）。用户裁定「问了就停」，所以不再有 30 秒那一档默认值")
+    sp.add_argument("--no-ask", action="store_true",
+                    help="无人值守档：问用户被确定性拒绝（不落问题、不停循环，按最保守的做法"
+                         "继续并把这件事写进结论）。学 DSH 的 never 策略：fail-closed，"
+                         "而不是降级成「问一下试试」")
     sp.add_argument("--stop-file", default=None,
                     help="停止开关：这个文件一出现，就在下一轮开跑之前停（人可随时按停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
@@ -1901,15 +2125,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--json", action="store_true", help="打成 JSON")
     sp.set_defaults(func=cmd_gate)
 
-    sp = sub.add_parser("inbox", help="列出等着用户回答的问题（只读）")
-    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
+    sp = sub.add_parser("inbox", help="列出等着用户回答的问题（只读；不给 --sid 就扫全部会话）")
+    sp.add_argument("--sid", default=None,
+                    help="只查这一个会话；不给则扫该工作区所有会话（真机每一趟都有自己的 "
+                         "sid，只看缺省会话会把「它在等什么」读成「没有待答」）")
     sp.add_argument("--json", action="store_true", help="打成 JSON")
     sp.set_defaults(func=cmd_inbox)
 
-    sp = sub.add_parser("answer", help="代用户回答一个问题（写 user_answer）")
+    sp = sub.add_parser("answer", help="代用户回答一个问题（写 user_answer；回答是 append-only 的）")
     sp.add_argument("qid", help="问题号（见 `agentflow inbox`）")
-    sp.add_argument("text", help="回答正文")
-    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
+    sp.add_argument("text", nargs="?", default=None,
+                    help="回答正文（等价于 --custom；与 --select 可以同时给）")
+    sp.add_argument("--select", action="append", default=None,
+                    help="选中的选项 label，可重复（DSH 的 selected：0/1/n 个）")
+    sp.add_argument("--custom", default=None,
+                    help="补充或覆盖的正文（DSH 的 custom：对多选是补充、对单选是覆盖）")
+    sp.add_argument("--sid", default=None, help="问题所在会话号（见 `agentflow inbox`）")
     sp.set_defaults(func=cmd_answer)
 
     sp = sub.add_parser("closing", help="跑收工门（draft/37 §16 P3 的五条；退出码 0/1/2）")
@@ -1918,6 +2149,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--report", default="",
                     help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
     sp.set_defaults(func=cmd_closing)
+
+    # 用户端网页：给人看"它在等什么、跑到哪了、上一趟干了什么"，并让人在那里回答问题。
+    # 它是「只读投影」（每次请求都从盘上现读），唯一的写路径是 `POST /answer` → `userio.answer_question`。
+    sp = sub.add_parser("web", help="起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）")
+    sp.add_argument("--host", default="127.0.0.1",
+                    help="监听地址（默认只监听本机；给 0.0.0.0 才会被别的机器访问）")
+    sp.add_argument("--port", type=int, default=8788, help="端口（0 = 让系统给一个空闲端口）")
+    sp.add_argument("--open", action="store_true", help="起来之后用默认浏览器打开")
+    sp.add_argument("--json", action="store_true",
+                    help="只打印一行 URL 的 JSON（起后台任务时用它拿确切地址）")
+    sp.add_argument("--token", default="",
+                    help="访问口令（也可用环境变量 AGENTFLOW_WEB_TOKEN；给了就必须带上）")
+    sp.set_defaults(func=cmd_web)
     return p
 
 

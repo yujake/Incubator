@@ -186,6 +186,37 @@ def test_two_flat_aliases_at_once_are_refused():
     assert not shape and "认不出的形状" in problem, (shape, problem)
 
 
+def test_the_advertised_ask_user_schema_matches_what_the_channel_accepts():
+    """`draft/37` §72：广告面必须广告 `userio` 真收的那份形状。
+
+    真机教训的同族：广告一份、执行另一份，模型就会按广告写、框架说"这不是我认识的形状"。
+    所以这一条把两件事钉在一起：广告里有 `header` 与「对象形状」的选项（带 `description`），
+    而 `_shape_of` 对这两种形状都收（裸字符串是旧形状，照样收）。
+    """
+    from agentflow.agent_loop import _shape_of
+    from agentflow import llmseam as LL
+
+    face = {name: schema for name, _shape, schema in LL.META_FUNCTIONS}
+    ask = face["framework_ask_user"]
+    props = ask["properties"]
+    assert "header" in props, props
+    items = props["options"]["items"]
+    assert items.get("type") == "object", items
+    assert "label" in items["properties"] and "description" in items["properties"], items
+    assert "multi_select" in props, props
+
+    # 广告了就得真收：对象形状与旧的裸字符串形状都要能解出来，且都进同一个 payload 形状
+    obj = _shape_of({"ask_user": {"question": "选哪个？", "header": "取舍",
+                                  "options": [{"label": "A", "description": "先做 A"}],
+                                  "multi_select": True}})
+    flat = _shape_of({"ask_user": {"question": "选哪个？", "options": ["A", "B"]}})
+    for shape, payload, problem in (obj, flat):
+        assert (shape, problem) == ("ask_user", ""), (shape, problem, payload)
+        assert payload["options"][0]["label"] == "A", payload
+    assert obj[1]["header"] == "取舍" and obj[1]["multi_select"] is True, obj[1]
+    assert flat[1]["options"][1]["label"] == "B", flat[1]
+
+
 def test_the_meta_shapes_travel_as_functions(tmp_path: Path):
     """正控：`summon` / `note` / `final` 这些非工具形状也走结构化调用。"""
     seam, _gw = _seam(tmp_path, [

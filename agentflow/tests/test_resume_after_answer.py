@@ -75,6 +75,27 @@ def test_saying_stop_halts_before_the_next_round(tmp_path: pathlib.Path):
                                  stop_path=stop_file, user_answer=AU.STOP_TOKEN) == "rounds"
 
 
+def test_a_round_that_stopped_waiting_for_the_user_stops_the_driver(tmp_path: pathlib.Path):
+    """`draft/37` §72：上一轮停在等用户、而那个问题还挂着 ⇒ 多轮驱动「不许」开下一轮。
+
+    三个方向都要判（少一个就有个静默方向）：
+    ① 停过 + 问题还在 ⇒ 停成 `waiting_for_user`；
+    ② 停过 + 人已经答了（待答清单空了）⇒ 「放行」（那一轮要带着回答接着跑，
+       这正是 `tests/test_resume_runs_and_consumes_answer.py` 守的那条路）；
+    ③ 上一轮正常收工 ⇒ 不许误伤（负控）。
+    """
+    base = dict(rounds=9, spent_usd=0.0, usd_budget=None, stop_path=None)
+    assert AU._stop_before_round(2, user_answer="", last_stop_reason="waiting_for_user",
+                                 pending_qids=("q0001",), **base) == "waiting_for_user"
+    assert AU._stop_before_round(2, user_answer="审这篇论文",
+                                 last_stop_reason="waiting_for_user",
+                                 pending_qids=(), **base) == ""
+    assert AU._stop_before_round(2, user_answer="", last_stop_reason="final",
+                                 pending_qids=("q0001",), **base) == ""
+    # 旧口径（不给这两个新参数）行为不变：这一条是"不回归"的钉子
+    assert AU._stop_before_round(2, user_answer="", **base) == ""
+
+
 def test_the_three_segments_are_readable_from_the_same_records(tmp_path: pathlib.Path):
     """三段读数从同一份记录里读得出（问 / 答 / 还欠），而且三段互相咬。"""
     root = tmp_path / "ws"
