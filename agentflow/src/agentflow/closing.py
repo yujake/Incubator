@@ -157,6 +157,32 @@ class ClosingReport:
 
 # ------------------------------------------------------------------ 各条实现
 
+def resolve_under_workspace(store: Any, given: str) -> str:
+    """把"相对工作区"的路径解析成绝对路径（`"."` = 工作区根）。
+
+    ## 为什么必须有它（`draft/37` §60 的真机读数）
+
+    第十趟主控按工具描述传 `project_dir="."` 与 `report_path="out/review/REPORT.md"`
+    （描述逐字写的是"相对工作区"），然后撞上一串怪读数：
+    `closing` 报"报告不在盘上"（它明明刚写完、`fs.stat` 也确认 6,743 字节）、
+    "锚文件读不到"（文件也在盘上），`conductor.acceptance(project_dir=".")`
+    还解析到了工作区上一级。它花了 8 步去查这件事（步 27–34），
+    最后结论："`project_dir='.'` 被解析到工作区上一级"。
+
+    病因在实现侧：`Path(given)` 是按进程当前目录解析的，而工具的契约是
+    "相对工作区" —— 两个口径不一致时，错的读数看起来像"文件不在"。
+    处置：在入口处解析一次（`store.root` 为基准），并把绝对路径原样放过。
+    """
+    raw = str(given or "").strip()
+    if not raw:
+        return ""
+    path = Path(raw)
+    if path.is_absolute():
+        return str(path)
+    root = Path(getattr(store, "root", "."))
+    return str((root / path).resolve())
+
+
 def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
     """锚：复用 `renderanchor.check_package`（同一份实现，不另写一个判据）。
 
@@ -166,6 +192,7 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
     工具去找 `out/paper/out/paper/RENDER-ANCHOR.json`，锚那一格变成 `unknown`，
     白花一步（`draft/37` §44.5）。所以现在两件事一起做：
     措辞改成"项目根"，并在找不到锚时把期望的路径形状点名。
+    相对路径按工作区根解析（见 `resolve_under_workspace`）。
     """
     if not str(project_dir or "").strip():
         rep.status["anchor"] = "unknown"
@@ -175,7 +202,7 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
             "交付前必须指到**项目根**再跑一次（锚在 <项目根>/out/paper/RENDER-ANCHOR.json）",
         ))
         return
-    got = RA.check_package(project_dir, store=store)
+    got = RA.check_package(resolve_under_workspace(store, project_dir), store=store)
     verdict = str(got.get("verdict") or "unknown")
     rep.readings["anchor"] = {"verdict": verdict, "dimensions": got.get("dimensions"),
                               "drift": list(got.get("drift") or [])[:10]}
@@ -435,7 +462,7 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         rep.status["load_bearing"] = "pass"
 
 
-def _check_report_shape(rep: ClosingReport, report_path: str) -> None:
+def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> None:
     """报告九节 + 分栏 + 附件三件套（§14.4 / §16 P3 的报告行）。"""
     if not str(report_path or "").strip():
         rep.status["report_shape"] = "unknown"
@@ -444,7 +471,7 @@ def _check_report_shape(rep: ClosingReport, report_path: str) -> None:
             "没给报告路径 ⇒ 报告形状没查成（不是「报告没问题」）",
         ))
         return
-    path = Path(report_path)
+    path = Path(resolve_under_workspace(store, report_path))
     if not path.is_file():
         rep.status["report_shape"] = "unknown"
         rep.findings.append(Finding(
@@ -530,7 +557,7 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
         elif name == "load_bearing":
             _check_load_bearing(rep, store)
         elif name == "report_shape":
-            _check_report_shape(rep, report_path)
+            _check_report_shape(rep, report_path, store)
         elif name == "user_pending":
             _check_user_pending(rep, root, sid=sid)
         else:

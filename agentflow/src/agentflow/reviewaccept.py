@@ -96,13 +96,15 @@ class ReviewAcceptance:
 
 # ------------------------------------------------------------------ 各条判据
 
-def _c_report(acc: ReviewAcceptance, report_path: str) -> None:
+def _c_report(acc: ReviewAcceptance, report_path: str, store: Any) -> None:
     """① 报告九节齐全，且每节都有读数（不是空标题）。"""
     if not str(report_path or "").strip():
         acc.criteria["report_sections_have_readings"] = "unknown"
         acc.details["report_sections_have_readings"] = "没给报告路径 ⇒ 没查成（不是通过）"
         return
-    path = Path(report_path)
+    from .closing import resolve_under_workspace
+
+    path = Path(resolve_under_workspace(store, report_path))
     if not path.is_file():
         acc.criteria["report_sections_have_readings"] = "unknown"
         acc.details["report_sections_have_readings"] = f"报告不在盘上：{path} ⇒ 没查成"
@@ -311,10 +313,17 @@ def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
 
 
 def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
-    """那五种"容易拿到、但证明不了内容"的读数（§17.3 逐字禁止拿来当通过）。"""
+    """那五种"容易拿到、但证明不了内容"的读数（§17.3 逐字禁止拿来当通过）。
+
+    相对路径按工作区根解析（与 `closing` 共用一份实现）：否则"相对工作区"
+    这个契约在两次判据里会有两个口径，而错的读数看起来像"文件不在"（`draft/37` §60）。
+    """
     import hashlib
 
     from . import renderanchor as RA
+    from .closing import resolve_under_workspace
+
+    project_dir = resolve_under_workspace(store, project_dir)
 
     aux: dict[str, Any] = {}
     tex = Path(project_dir) / "out" / "paper" / "main.tex" if project_dir else None
@@ -354,7 +363,7 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
     """
     acc = ReviewAcceptance()
     root = session_root if session_root is not None else getattr(store, "root", None)
-    _c_report(acc, report_path)
+    _c_report(acc, report_path, store)
     _c_statements(acc, store)
     _c_triage(acc, store, root, sid=sid)
     _c_cost(acc, store, cost_cap_usd)

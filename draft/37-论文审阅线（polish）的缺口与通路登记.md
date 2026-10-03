@@ -4712,3 +4712,75 @@ closing：can_close=False；failed=['anchor','user_pending']；unknowns=[]；
    与 `user_pending: fail`。这一趟**我来当那个回答者**：它提问之后，
    用 `agentflow answer <qid> "…"` 落一条回答，再按框架的 resume 路续跑
    （那条路在本目标早期实现过并有判据：`tests/test_resume_after_answer.py`）。
+
+---
+
+## §60 **通过了。** 第十趟真机 + 一次"用户回答"之后，两道机器判据全绿
+
+用户 2026-10-03 的裁示是"靠实践反馈循环、直到审阅论文包这个任务通过"。这一节记那个"通过"
+的读数 —— 连同**它通过的确切方式**（哪一格靠谁、哪一格不该被读大）。
+
+### 60.1 读数（`projects/p5-run10`，sid `real10`）
+
+```text
+reviewaccept.check_review：passed = **True**
+  report_sections_have_readings        pass
+  statements_have_assumptions_and_source pass
+  triage_branch_recorded               pass
+  within_cost_cap                      pass
+  hops_have_readable_prompts           pass
+  attachment_is_honest                 pass
+closing.check_closing：can_close = **True**
+  status: anchor pass / contradictions pass / load_bearing pass /
+          report_shape pass / user_pending pass      failed=[]  unknowns=[]
+辅助读数（不进 passed）：tex_sha256 30231f8118c2（**已改**，源是 8c5c431b…）、
+          pdf_pages 7、**anchor_verdict = consistent**、task_rows 13、ledger_rows 1
+台账：literature 1（path=main.pdf ← 论文本体）、statements 4（source_lit_id=lit:0000、
+      quote_verified=None、label 写了定理名）、documents 1、review_findings 0
+交付说明：out/review/REPORT.md **6,743 字节**（这一趟写的，九节齐全）
+用量：36 步 / 36 次调用 / usd 0.361725（上限 2.0）/ 非法形状 3
+```
+
+**这一趟真的做完了那四件事**（§44.4 起一路追下来的那条链）：论文本体进台账 →
+命题台账有带出处的行 → 我方修订稿有 `documents` 行且**正文真改了**（`fs.edit` 两处，
+tex sha 变了）→ **锚回到 `consistent`**（`G.paper_package` 起的作用，§59 那一刀）→
+九节报告逐节有读数。
+
+### 60.2 通过的确切方式（三处必须写清，免得被读大）
+
+1. **`triage_branch_recorded` 那一格是靠"用户回答"过的**：主控在步 23 提问
+   （"保留这 2 处改动？"），没人值守时它拿到 `user_no_answer`；**我在它收工后用
+   `agentflow answer q0001 "保留这 2 处改动…" --sid real10` 落了回答**，那一格才转 pass。
+   这不是绕门 —— `triage_branch_recorded` 的判据本来就是"**问过 + 被回答**"，
+   而"被回答"必须由人来完成（`draft/37` §26/R26 的 resume-after-answer 那条路）。
+   ⇒ **无人值守的一次性运行拿不到这一格**，这是设计，不是缺陷。
+2. **这一趟的停止理由是 `bad_json_limit`，不是 `final`**：步 8/12/35 各有一次坏形状
+   （两次 `judge_bad_json`、最后一次是 `{"args", "name"}` 这种**没有 `tool` 键**的写法），
+   第 3 次触发上限就停了。也就是说：**交付物状态是合格的，运行的收尾不是**。
+3. **辅助读数照旧"漂亮"，但它们一格都没参与判定**（§17.3）：`tex_sha256` 变了、
+   `pdf_pages=7`、`anchor=consistent` —— 这一趟它们是**真读数**（正文确实改了、锚确实一致），
+   可"通过"这个结论是从六条**内容级**判据来的，不是从它们来的。
+
+### 60.3 顺手修掉的那处路径口径 bug（`draft/37` §60，已提交）
+
+第十趟主控按工具描述传 `project_dir="."` 与 `report_path="out/review/REPORT.md"`
+（描述逐字写的是"相对工作区"），却撞上一串怪读数：`closing` 报"报告不在盘上"
+（它刚写完、`fs.stat` 也确认 6,743 字节）、"锚文件读不到"（文件也在盘上），
+`conductor.acceptance(project_dir=".")` 还解析到了**工作区上一级**。
+它花了 8 步（步 27–34）查这件事，最后自己给出结论："`project_dir='.'` 被解析到工作区上一级"。
+
+**病因**：实现里 `Path(given)` 是按**进程当前目录**解析的，而契约是"相对工作区" ——
+两个口径不一致时，错的读数看起来像"文件不在"。
+
+**处置**（`closing.resolve_under_workspace` 一份实现，`closing` 与 `reviewaccept` 共用）：
+
+- 相对路径 ⇒ 以 `store.root` 为基准解析；绝对路径原样放过；
+- `_check_anchor` / `_check_report_shape` / `reviewaccept._c_report` / `_auxiliary`
+  四处全部改用它；
+- 新判据 `tests/test_relative_paths_under_workspace.py`（4 条）：**把进程 cwd 换到别处**，
+  相对 `report_path` 仍必须找到那份报告（`report_shape: pass`）、相对 `project_dir`
+  仍必须在工作区根上找到锚（`anchor: pass`）、`reviewaccept` 同一口径、
+  **绝对路径原样工作**（负控：不许把绝对路径再拼一次）。
+
+这一处修完，主控在运行内自己跑 `conductor.closing` 才会得到与外面一致的读数 ——
+在那之前，它每一次自检看到的都是"文件不在"，那会把一整类正确行为读成失败。
