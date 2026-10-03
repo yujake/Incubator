@@ -43,7 +43,13 @@ ANSWER = {"kind": "user_answer", "qid": "q0001", "answer": "保留", "by": "user
 
 
 def _ws(tmp_path: Path, *, sid: str | None, answered: bool = False) -> Path:
-    """一个最小工作区 + 一段会话记录（提问按 `sid` 落，`None` = 缺省会话）。"""
+    """一个最小工作区 + 一段会话记录（提问按 `sid` 落，`None` = 缺省会话）。
+
+    这一组判据读的是「会话身份」那两格；夹具刻意是最小工作区 ⇒
+    收工门里新加的 `substance`（实质产出，`draft/37` §86）在这份夹具上是
+    预期为 fail 的（它本来就没有产出）—— 相关的断言把这一格显式排除掉，
+    而不是靠"整份门恰好没有别的红"来间接表达。
+    """
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     st = S.Store(tmp_path)
     st.init()
@@ -107,7 +113,8 @@ def test_both_readings_flip_together_after_the_user_answers(tmp_path: Path):
     outside = CL.check_closing(st, project_dir="", report_path="", sid=SID)
     assert data["status"]["user_pending"] == "pass", data["status"]
     assert outside.status["user_pending"] == "pass", outside.to_dict()
-    assert data["failed"] == outside.failed == []
+    assert data["failed"] == outside.failed, (data["failed"], outside.failed)
+    assert set(data["failed"]) <= {"substance"}, data["failed"]  # substance 是这份夹具预期的红
 
 
 # -------------------------------------------- 负控：没有身份 ⇒ 没查成，不是 pass

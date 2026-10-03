@@ -628,7 +628,42 @@
     "additionalProperties": false,
     "properties": {
      "claims": {
+      "description": "每条断言是一个对象。字段各有其位（2026-10-03，`draft/37` §86）：`evidence_kind='cross_check'` 的免责声明必须写在独立的 `disclaimer` 栏，写进 `text` 里不算 —— T1 实测在这里连拒 7 次",
       "items": {
+       "properties": {
+        "citations": {
+         "description": "必须非空（FC-02）：`lit:<id>` / `stmt:<id>` / `doc:<id>#<claim>` 这类可回查的引用。没有引用的断言不许进稿件",
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        "claim_id": {
+         "description": "不给时按 text+citations 自动生成",
+         "type": "string"
+        },
+        "disclaimer": {
+         "description": "`evidence_kind='cross_check'` **必需**：逐字写「数值交叉验证，不构成证明」。它是这条断言的独立一栏，不写在 `text` 里",
+         "type": "string"
+        },
+        "evidence_kind": {
+         "description": "证据等级：proof / cross_check / heuristic。注意没有 'own_result' 这个取值 —— 那是 `origin`（来源）的词表，不是这一栏的",
+         "enum": [
+          "proof",
+          "cross_check",
+          "heuristic"
+         ],
+         "type": "string"
+        },
+        "section": {
+         "description": "这条断言落在稿件的哪一节",
+         "type": "string"
+        },
+        "text": {
+         "description": "断言原文（读者看到的那句话）",
+         "type": "string"
+        }
+       },
        "type": "object"
       },
       "minItems": 1,

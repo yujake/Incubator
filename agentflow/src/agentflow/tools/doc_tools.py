@@ -1525,7 +1525,37 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
            "properties": {
             "kind": {"type": "string", "enum": list(S.DOC_KINDS)},
             "title": {"type": "string"},
-            "claims": {"type": "array", "items": {"type": "object"}, "minItems": 1},
+            "claims": {
+                "type": "array",
+                "minItems": 1,
+                "description": ("每条断言是一个对象。字段各有其位（2026-10-03，`draft/37` §86）："
+                                "`evidence_kind='cross_check'` 的免责声明必须写在独立的 `disclaimer` 栏，"
+                                "写进 `text` 里不算 —— T1 实测在这里连拒 7 次"),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string", "description": "断言原文（读者看到的那句话）"},
+                        # 刻意不写 `minItems`：那会让通用参数校验先报
+                        # 「claims.[0].citations 至少 1 项」—— 它丢掉了"是哪一条断言"，
+                        # 而 G 自己的闸门（`claimanatomy.scan_claim`）会报出带 claim_id 的那句。
+                        # 要求写在描述里（模型看得见），强制留在能给出可读回执的那一层。
+                        "citations": {"type": "array", "items": {"type": "string"},
+                                      "description": ("必须非空（FC-02）：`lit:<id>` / `stmt:<id>` / "
+                                                      "`doc:<id>#<claim>` 这类可回查的引用。"
+                                                      "没有引用的断言不许进稿件")},
+                        "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS),
+                                          "description": ("证据等级：proof / cross_check / heuristic。"
+                                                          "注意没有 'own_result' 这个取值 —— "
+                                                          "那是 `origin`（来源）的词表，不是这一栏的")},
+                        "disclaimer": {"type": "string",
+                                       "description": ("`evidence_kind='cross_check'` **必需**：逐字写"
+                                                       "「数值交叉验证，不构成证明」。"
+                                                       "它是这条断言的独立一栏，不写在 `text` 里")},
+                        "section": {"type": "string", "description": "这条断言落在稿件的哪一节"},
+                        "claim_id": {"type": "string", "description": "不给时按 text+citations 自动生成"},
+                    },
+                },
+            },
             "sections": {"type": "array", "items": {"type": "object"}},
             "open_problems": {"type": "array", "items": {"type": "string"}},
             "out_path": {"type": "string"},

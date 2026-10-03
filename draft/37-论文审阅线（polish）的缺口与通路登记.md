@@ -6924,3 +6924,98 @@ diff 逐字就是这一轮改动的**广告面净变化**：
    并把 diff 当证据留在这一节里，而不是手改快照让它变绿。
 3. **条件性参数要写明条件**：`name`/`imports` 只对 formal 有效，而它们此前是无描述的裸声明 ——
    模型给 `exhaustive_search` 传了两次、被拒两次，而"为什么"要它自己撞出来。
+
+---
+
+## §86 T1 缺陷根除第二批：收工门的「实质产出」一格 + `build_document` 的 claims 形状
+
+§85 做完了 D1 的 E 那一族。这一节做 §84 剩下的两条：**D2（收工门空洞）**与
+**D1-3（claims 形状只能猜）**—— 后者是 T1 里最贵的一处（连拒 7 次、约 40 步）。
+
+### 一、D2：给收工门加第六条「实质产出」
+
+**T1 的形态**：退出码 0、报告九节齐全、锚一致、没有矛盾、没有待答问题
+⇒ 前五格全过、`can_close=true`、报告写「可交付」；而台账是
+`documents=0 / statements=0 / relations=0 / experiments=0 / review_findings=0`。
+原因不是判据写错，而是**没有一格问"产出了什么"**：`report_shape` 只看节名，
+`anchor`/`contradictions`/`load_bearing` 在空台账上**天然为空**（真空成立）。
+
+**改法**（`src/agentflow/closing.py`）：
+
+- `DEFAULT_CHECKS` 加第六格 `substance`；
+- 新增 `SUBSTANCE_TABLES = (documents, relations, experiments, review_findings, statements)`
+  与 `_check_substance`：五张表**全 0** ⇒ `fail`（码 `no_substantive_output`，读数逐张列出）；
+  有非空 ⇒ `pass`（`readings` 里留逐张计数）；**有表读不到 ⇒ `unknown`**（问不出来不是没问题）；
+- `tasks` / `usage_ledger` 刻意不算：它们记的是"派过活、花过钱"，而这两件事**恰好可以在
+  什么都没产出时也非空**（T1 就是 30 行 tasks、0 行产出）；
+- 顺带把 `can_close` / `summary()` / 模块 docstring 里写死的"五条"改成按 `DEFAULT_CHECKS`
+  派生（`summary()` 现在打「6 条全过 ⇒ 可交付」）。
+
+**判据**：`tests/test_closing_gate.py` 新增 `test_the_substance_check_goes_red_alone`
+（空台账 ⇒ 只有这一格红、码是 `no_substantive_output`，而 `contradictions`/`report_shape`
+仍 pass）；另外把五条负控里写死的"其余四条"补集断言改成
+`{name: "pass" for name in CL.DEFAULT_CHECKS if name != X}` —— 下一次加格子不会再连带五处。
+
+### 二、D1-3：claims 的字段各有其位（T1 连拒 7 次的那一处）
+
+**根因精确到字段**：免责声明检查读的是 `claims[i]` 的**独立字段 `disclaimer`**
+（`claimanatomy.py:1198` 的 `_value_of(norm, "disclaimer")`），而模型把那句话写进了 `text`
+—— 而 `claims` 的形状**从未广告**（`{"type": "array", "items": {"type": "object"}}`）。
+模型每一次的写法都"看起来对"，于是拒 7 次、烧掉 60 步里的三分之二。
+
+**改法**：
+
+1. `tools/doc_tools.py` 的 `doc.build_document` 把 claims 的字段广告出来：
+   `text` / `citations`（**必须非空**，FC-02）/ `evidence_kind`（受控词表，
+   并写明"没有 `own_result` 这个取值 —— 那是 `origin` 的词表"）/ **`disclaimer`**
+   （"`cross_check` 必需：逐字写「数值交叉验证，不构成证明」；它是**独立一栏**，不写在 `text` 里"）
+   / `section` / `claim_id`；
+2. `claimanatomy.py` 的拒绝文案说清"在哪一栏找什么"：加
+   "找的是这条断言对象的**独立一栏** `disclaimer`（写进 `text` 不算，写在别的断言里也不算）"
+   + 该断言的 `text` 前 60 字；
+3. **刻意不写 `minItems: 1`**（citations）：那会让通用参数校验先报
+   「claims.[0].citations 至少 1 项」—— 它丢掉了"是哪一条断言"，而 G 自己的闸门会报出
+   带 claim_id 的那一句（判据 `test_agent_g.py::test_schema_and_the_g_gate_both_reject_an_unsupported_claim`
+   正是钉这件事：错误里必须能读出是哪一条）。要求写在**描述**里（模型看得见），强制留在
+   **能给出可读回执**的那一层。
+
+### 三、连带（都是判据在替我们守门）
+
+- **两份冻结快照**又红了一次（工具 schema 的 claims 描述变了）⇒ 按官方 `--write` 重新冻结，
+  diff 就是"广告面多了 claims 的字段说明"；
+- `tests/test_session_context_wiring.py` 的**裸工作区**在新增 `substance` 之后正确地红了
+  ⇒ 那一组判据读的是**会话身份**两格，夹具本来就没有产出，所以把断言改成
+  「两个入口的 `failed` 相等，且除 `substance` 外没有别的红」并写明理由
+  （比"整份门恰好没有别的红"更诚实）；
+- 行数登记税：`claimanatomy.py` 1668 → **1671**（读图 §3）。
+
+### 四、读数（2026-10-03）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 收工门那一组 | `pytest tests/test_closing_gate.py tests/test_review_acceptance.py -q` | **26 passed**（含新的 substance 负控） |
+| 文档/claims/快照那几面 | `pytest tests/test_claimanatomy.py tests/test_agent_g.py tests/test_session_context_wiring.py tests/test_tool_surface_snapshot.py tests/test_agent_surface_snapshot.py tests/test_action_surface_matches_acceptance.py -q` | **26 passed** + **22 passed**（分两次跑的对应文件） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:cacheprovider` | **3463 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（1324.35s，退出码 **0**） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32`（含已提交的 §82/§85 命中） | `requires_human`：`scripts/lint_rules.py`、`specs/e.py`、`tools/verify_tools.py` 三处等 2 名 reviewer 签字 |
+
+### 五、下一轮：重跑 T1（这是这一批修复的验收）
+
+判"通过"的标准仍是 §83 第六节那张表：
+
+1. **引文腿**：台账里出现 `relations` 行且带 `quote` / `page_range` / `quote_verified`；
+   报告第五节给出"真 / 假 / 未查"三个数；
+2. **形式化腿**：出现 `experiments` 的 formal 行（`evidence_kind=proof`）或 `check_formal`
+   的真实结论；报告第四节如实写；
+3. **审校腿**：`H.review` 被派、`review_findings` 非空；
+4. **实质产出**：`closing` 的 `substance` 格 pass（这一轮新加的）；
+5. 预算 5 美元以内；任务原文仍是那 58 个字，不加任何分工暗示。
+
+### 六、教训
+
+1. **"报告形状对"与"真的做了事"是两件事**：五格全过 + 台账全空，是本项目最忌的形态的
+   翻版（"没查"读成"没问题"）。补法不是加一句提醒，而是把它变成一格判据。
+2. **广告一条规则时，别把"哪一条出错"这个信息丢掉**：`minItems` 让错误更早、但更难懂
+   —— 要求放描述里、强制留在能给可读回执的那一层，两者都要。
+3. **判据里写死的"其余 N 条"会连带**：改成从 `DEFAULT_CHECKS` 派生之后，下一次加格子
+   只需要改一处（这一轮有五处是这么连带红的）。

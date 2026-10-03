@@ -1203,6 +1203,9 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                     message=(
                         f"断言 {cid} 的 `evidence_kind='cross_check'` 却没有 disclaimer。"
                         f"数值交叉验证必须显式写明「{_cross_check_disclaimer()}」"
+                        f"—— 找的是这条断言对象的**独立一栏** `disclaimer`"
+                        f"（写进 `text` 不算，写在别的断言里也不算）；"
+                        f"这条断言的 text 前 60 字：{statement_text[:60]!r}"
                     ),
                     evidence=(
                         f"evidence_kind={ek_norm!r} 且 disclaimer="

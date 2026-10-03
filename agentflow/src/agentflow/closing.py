@@ -8,7 +8,7 @@
 "已证明"、报告缺了三节、还有一个问题在等用户回答 —— 这些每一条都能被机器判，
 而它们混在一段总结里就只剩一句"基本完成"。
 
-## 五条（`DEFAULT_CHECKS`）+ 三态
+## 各条（`DEFAULT_CHECKS`）+ 三态
 
 | 检查 | 判什么 |
 |---|---|
@@ -18,14 +18,15 @@
 | `load_bearing` | 承重结论（正文里 `evidence_kind="proof"` 的断言）必须有 T3（形式化）或已降档 |
 | `report_shape` | 报告九节齐全（§14.4）+ "我们补的/原文的"分栏 + 附件三件套 |
 | `user_pending` | 没有还在等用户回答的问题（有 ⇒ 必须停在"等待用户"，不许续跑） |
+| `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算 —— 派过活、花过钱可以在什么都没产出时也非空） |
 
 三态纪律：每条给出 `pass` / `fail` / `unknown`，`unknown` 不是通过
-（"没查成"与"查过了没问题"必须分得开）。`can_close` 只在五条全 `pass` 时为真。
+（"没查成"与"查过了没问题"必须分得开）。`can_close` 只在每一条都 `pass` 时为真。
 
 ## 每一条都能单独造红
 
-判据见 `tests/test_closing_gate.py`：五条各自一条负控（把这一条弄坏 ⇒ 它单独红、
-其余四条仍然绿），外加一条反真空（好数据必须五条全绿）。
+判据见 `tests/test_closing_gate.py`：每条各一条负控（把这一条弄坏 ⇒ 它单独红、
+其余各条仍然绿），外加一条反真空（好数据必须全绿）。
 """
 from __future__ import annotations
 
@@ -36,10 +37,25 @@ from typing import Any, Mapping
 from . import renderanchor as RA
 from . import userio as U
 
-#: 五条检查的名字（顺序就是报告里的顺序）。
+#: 检查的名字（顺序就是报告里的顺序）。
+#:
+#: 2026-10-03（`draft/37` §86）加了第六条 `substance`：T1 实测里
+#: `documents`/`statements`/`relations`/`experiments`/`review_findings` 全是 0，
+#: 而前五条全过、`can_close=true`、报告写着「可交付」—— 五格里没有一格问
+#:「这一趟到底产出了什么」。这不是新判据，是把已有的三态纪律补到它该管的地方：
+#: 「没做」不许读成「没问题」。
 DEFAULT_CHECKS: tuple[str, ...] = (
-    "anchor", "contradictions", "load_bearing", "report_shape", "user_pending",
+    "anchor", "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
 )
+
+#: 「实质产出」那一格认的表：至少一张非空 ⇒ 这一趟真的产出了东西。
+#:
+#: 为什么是这五张：它们分别对应「稿件 / 概念关系 / 实验证据 / 审校发现 / 命题台账」——
+#: 一份 review 交付至少要在其中一格留下痕迹。`tasks` / `usage_ledger` 刻意不算：
+#: 它们记的是"派过活、花过钱"，而那两件事恰恰可以在什么都没产出时也非空
+#: （T1 就是 30 行 tasks、0 行产出）。
+SUBSTANCE_TABLES: tuple[str, ...] = ("documents", "relations", "experiments",
+                                      "review_findings", "statements")
 
 #: 「这次调用没有会话身份」——与 `sid=None`（= 读缺省会话）「刻意分开」的两个输入。
 #:
@@ -121,7 +137,7 @@ class Finding:
 
 @dataclass
 class ClosingReport:
-    """五条检查的读数。`status` 每条一个三态值；`findings` 是拦门的原因。"""
+    """各条检查的读数。`status` 每条一个三态值；`findings` 是拦门的原因。"""
 
     status: dict[str, str] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
@@ -144,7 +160,7 @@ class ClosingReport:
 
     @property
     def can_close(self) -> bool:
-        """五条全 `pass` 才为真 —— `unknown` 与 `fail` 都不算通过。"""
+        """每条都 `pass` 才为真 —— `unknown` 与 `fail` 都不算通过。"""
         return all(v == "pass" for v in self.status.values()) and not self.blockers
 
     def to_dict(self) -> dict[str, Any]:
@@ -161,7 +177,7 @@ class ClosingReport:
     def summary(self) -> str:
         """一句话读数（给 CLI 与交付说明用；不许盖过明细）。"""
         if self.can_close:
-            return "收工门：五条全过 ⇒ 可交付"
+            return f"收工门：{len(self.status)} 条全过 ⇒ 可交付"
         return (f"收工门：拦住（fail={self.failed or '无'} / unknown={self.unknowns or '无'}）"
                 f"；拦门读数 {len(self.blockers)} 条")
 
@@ -516,6 +532,57 @@ def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> Non
         rep.status["report_shape"] = "pass"
 
 
+def _check_substance(rep: ClosingReport, store: Any) -> None:
+    """实质产出：这一趟到底产出了什么（空台账不许报「可交付」）。
+
+    ## 为什么要有这一格（T1 实测，`draft/37` §84 的 D2）
+
+    那一趟退出码 0、报告九节齐全、`user_pending: pass`，而台账是
+    `documents=0 / statements=0 / relations=0 / experiments=0 / review_findings=0`
+    —— 前五格全过、`can_close=true`、报告写「可交付」。原因不是判据写错了，
+    而是没有一格问"产出了什么"：`report_shape` 只看节名，而 `anchor` /
+    `contradictions` / `load_bearing` 在空台账上天然为空（真空成立）。
+    这正是本项目最忌的同族形态：把"没做"读成"没问题"。
+
+    ## 三态
+
+    - 五张表都读得到：全 0 ⇒ `fail`（读数逐张列出）；有非空 ⇒ `pass`；
+    - 有表读不到 ⇒ `unknown`（"问不出来"不是"没问题"）。
+    """
+    if store is None:
+        rep.status["substance"] = "unknown"
+        rep.findings.append(Finding("substance", "no_store", "warning",
+                                    "没有 store ⇒ 产出了什么问不出来（不是没有产出）"))
+        return
+    counts: dict[str, int] = {}
+    problems: list[str] = []
+    for table in SUBSTANCE_TABLES:
+        try:
+            counts[table] = len(store.rows(table))
+        except Exception as e:  # noqa: BLE001 - 表读不到要如实报"问不出来"
+            problems.append(f"{table} 读不到（{type(e).__name__}: {e}）")
+    detail = "、".join(f"{t}={counts.get(t, '读不到')}" for t in SUBSTANCE_TABLES)
+    rep.readings["substance"] = dict(counts)
+    if problems:
+        rep.status["substance"] = "unknown"
+        rep.findings.append(Finding(
+            "substance", "substance_unreadable", "warning",
+            "有一张表读不到 ⇒ 这一格问不出来：" + "；".join(problems) + f"（读数：{detail}）"))
+        return
+    total = sum(counts.values())
+    if total == 0:
+        rep.status["substance"] = "fail"
+        rep.findings.append(Finding(
+            "substance", "no_substantive_output", "blocker",
+            f"这一趟没有任何实质产出（{detail}）⇒ 不许报「可交付」："
+            "报告形状对、锚一致、没有矛盾，都不等于**做了事**。"
+            "处置：把该产出的东西产出（登记命题 / 跑实验 / 落稿件 / 审校发现），"
+            "或如实写清「这一趟什么都没做成、卡在哪」，而不是交一份形式上的交付"))
+        return
+    rep.status["substance"] = "pass"
+    rep.readings["substance_total"] = total
+
+
 def _check_user_pending(rep: ClosingReport, session_root: Any,
                        *, sid: str | None = None) -> None:
     """还在等用户回答 ⇒ 必须停在"等待用户"（§14.5 第 4 件 / R26）。
@@ -590,6 +657,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
             _check_report_shape(rep, report_path, store)
         elif name == "user_pending":
             _check_user_pending(rep, root, sid=sid)
+        elif name == "substance":
+            _check_substance(rep, store)
         else:
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",

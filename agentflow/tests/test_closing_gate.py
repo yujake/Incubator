@@ -164,32 +164,31 @@ def _gate(st: Store, report: pathlib.Path | None, *, project_dir: pathlib.Path |
 
 # ============================================================ 正控
 
-def test_a_ready_workspace_passes_all_five(tmp_path: pathlib.Path):
-    """正控：五条全过 ⇒ `can_close` 为真，且没有 blocker。
+def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
+    """正控：每条都过 ⇒ `can_close` 为真，且没有 blocker。
 
     这一条本身不足以证明门有效（一条恒真的判据也能过），所以后面每一条
-    都配一条"只把它弄坏"的负控 —— 五条合起来才是这组判据的全部。
+    都配一条"只把它弄坏"的负控 —— 合起来才是这组判据的全部。
     """
     st, report = _good(tmp_path)
     rep = _gate(st, report)
     assert rep.status == {name: "pass" for name in CL.DEFAULT_CHECKS}, rep.to_dict()
     assert rep.can_close and not rep.blockers, rep.to_dict()
     assert CL.tri_state_exit_code(rep) == 0
-    assert "五条全过" in rep.summary()
+    assert f"{len(CL.DEFAULT_CHECKS)} 条全过" in rep.summary(), rep.summary()
 
 
-# ============================================================ 五条负控（各自单独红）
+# ============================================================ 各条负控（各自单独红）
 
 def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
-    """负控①（锚）：封好之后改一次正文 ⇒ 锚 `drifted`，其余四条仍然绿。"""
+    """负控①（锚）：封好之后改一次正文 ⇒ 锚 `drifted`，其余各条仍然绿。"""
     st, report = _good(tmp_path)
     (tmp_path / "out" / "paper" / "main.tex").write_text("改过了\n", encoding="utf-8")
     rep = _gate(st, report)
     assert rep.status["anchor"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["anchor_drifted"], rep.to_dict()
     assert {k: v for k, v in rep.status.items() if k != "anchor"} == {
-        "contradictions": "pass", "load_bearing": "pass",
-        "report_shape": "pass", "user_pending": "pass"}
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "anchor"}
     assert CL.tri_state_exit_code(rep) == 1
 
 
@@ -209,8 +208,7 @@ def test_the_contradiction_check_goes_red_alone(tmp_path: pathlib.Path):
     assert [f.code for f in rep.blockers] == ["contradiction_disputed_source"], \
         [f.code for f in rep.blockers]
     assert {k: v for k, v in rep.status.items() if k != "contradictions"} == {
-        "anchor": "pass", "load_bearing": "pass",
-        "report_shape": "pass", "user_pending": "pass"}
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "contradictions"}
 
 
 def test_the_load_bearing_check_goes_red_alone(tmp_path: pathlib.Path):
@@ -224,8 +222,7 @@ def test_the_load_bearing_check_goes_red_alone(tmp_path: pathlib.Path):
     assert [f.code for f in rep.blockers] == ["load_bearing_without_t3"]
     assert rep.readings["load_bearing"]["claims_without_t3"] == 1
     assert {k: v for k, v in rep.status.items() if k != "load_bearing"} == {
-        "anchor": "pass", "contradictions": "pass",
-        "report_shape": "pass", "user_pending": "pass"}
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "load_bearing"}
 
 
 def test_a_downgraded_claim_does_not_fail_the_gate(tmp_path: pathlib.Path):
@@ -254,8 +251,7 @@ def test_the_report_shape_check_goes_red_alone(tmp_path: pathlib.Path):
     assert any("我们做的补救" in m for m in rd["missing_sections"]), rd
     assert rd["missing_split_markers"] == ["我们补的", "原文的"], rd
     assert {k: v for k, v in rep.status.items() if k != "report_shape"} == {
-        "anchor": "pass", "contradictions": "pass",
-        "load_bearing": "pass", "user_pending": "pass"}
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "report_shape"}
 
 
 def test_the_user_pending_check_goes_red_alone(tmp_path: pathlib.Path):
@@ -274,8 +270,7 @@ def test_the_user_pending_check_goes_red_alone(tmp_path: pathlib.Path):
     assert rep.readings["user_pending"]["answered"] == 0
     assert "等待用户" in rep.blockers[0].detail
     assert {k: v for k, v in rep.status.items() if k != "user_pending"} == {
-        "anchor": "pass", "contradictions": "pass",
-        "load_bearing": "pass", "report_shape": "pass"}
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "user_pending"}
 
     # 用户回答之后：三段读数变成 1/1/0，门放行
     assert U.answer_question(st.root, qid=outcome.qid, answer="审") == ""
@@ -339,4 +334,22 @@ def test_the_wrong_directory_gets_an_actionable_message(tmp_path: pathlib.Path):
     doubled = str(pathlib.Path("out") / "paper" / "out" / "paper")
     assert doubled in msg, msg
     assert "项目根" in msg and "out/paper" in msg, msg
+
+
+def test_the_substance_check_goes_red_alone(tmp_path: pathlib.Path):
+    """负控⑥（实质产出，`draft/37` §86）：台账全空 ⇒ 只有这一条红。
+
+    这一条挡的正是 T1 那一趟的形态：退出码 0、报告九节齐全、锚一致、没有矛盾、
+    没有待答问题 —— 而 `documents`/`statements`/`relations`/`experiments`/
+    `review_findings` 全是 0，报告写着"可交付"。
+    """
+    report = _write_report(tmp_path)
+    st = _project(tmp_path)          # 不写任何台账行（seed 不给）
+    rep = _gate(st, report)
+    assert rep.status["substance"] == "fail", rep.to_dict()
+    assert [f.code for f in rep.blockers] == ["no_substantive_output"], rep.to_dict()
+    assert "实质产出" in rep.findings[0].detail, rep.findings[0].detail
+    # 其余各条不被这一条带红（除了锚：没有台账就没有渲染锚 ⇒ 那是另一条自己的红）
+    assert rep.status["contradictions"] == "pass", rep.to_dict()
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
 
