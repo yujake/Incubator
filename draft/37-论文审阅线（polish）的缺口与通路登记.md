@@ -5424,3 +5424,85 @@ passed = False
   有证据再加 —— 不预先放宽判据）；
 - 报告的**正文**里写"我改了三处正文"这类不可机械核对的话，这一条判据管不了
   （它只查带前缀的台账引用）。真要管得靠逐字锚点比对，那是另一刀。
+
+---
+
+## §71 第十五趟：**在收紧后的判据下拿到一个真正的 6/6**（这条线又一次跑通了）
+
+用户裁定"跑第十五趟（推荐）"。花费 **0.304153** 美元（31 步），
+四趟真机合计 **1.258813** 美元。
+
+### 读数（`projects/p5-run15`，`--sid real15`）
+
+```text
+停止理由：final（31 步）          用量：31 次调用 / 1088015 + 9446 tokens / 0.304153 USD
+账本：40 行 = 0.304153           == 会话 31 条 llm_call 合计 == spend.usd   （§64）
+```
+
+**收工门与审稿验收（操作员答掉 `q0001` 之后）**：
+
+```text
+closing.check_closing.can_close = True
+  status = {anchor: pass, contradictions: pass, load_bearing: pass, report_shape: pass, user_pending: pass}
+reviewaccept.check_review.passed = True   failed = []   unknown = []
+  report_sections_have_readings          pass
+  statements_have_assumptions_and_source pass
+  triage_branch_recorded                 pass
+  within_cost_cap                        pass   {usd 0.304153, session_usd 0.304153, unpriced_calls 0}
+  hops_have_readable_prompts             pass
+  attachment_is_honest                   pass   dangling_refs = []      ← §70 那一格
+```
+
+**§63 见证**：运行内第 26、29 步两次 `conductor.closing` 与"回答之前"的外部读数逐格相等
+（`can_close=False / failed=['user_pending'] / 其余四格 pass`）。
+
+**这一趟与第十四趟的差别（§70 那一格）**：报告里点到的每一行台账都真的存在 ——
+`dangling_refs = []`，而第十四趟同一格是 `["statements 0001","statements 0002","statements 0003"]`。
+模型自己也在第 24 步做了这件事（`conductor.ledger(view="tree")`，理由逐字写着
+"收工前核对台账：确认 statements 5 条、documents 0000、review_findings 0 条、
+paper_package 已落，**报告里引用的行号都能查到**"）。
+
+**做了什么（台账 t-0001…t-0015，ok 9 / refused 6）**：
+
+- `A.ingest_local` → `literature 0000`（`source/main.pdf`，355,253 B，7 页，sha256 72c5edb5…）；
+- `B.register_statement ×5` → `statements 0000–0004`，全部 `origin=external_lit`，
+  全部带真页码（`page_range.start` = 1 / 3 / 2 / 4 / 5）—— 一次空页码都没有；
+- `G.build_document ×2` → `documents 0000`（6 条 claims）；
+- 两处 `fs.edit` 改正文（`out/paper/main.tex` 8c5c431b… → 855da14d…；`source/` 逐字节未改）；
+- `H.review` → `review_findings` 0 条（老读数：H 的语义缝没接线）；
+- `G.paper_package` → `verdict=consistent`（锚三维度一致）；
+- `ask_user` → `q0001`（模型自己写的是"停在「等待用户回答 q0001」"）；
+- 报告 `out/review/REPORT.md` 7,612 字节、九节齐全、分栏与附件三件套在。
+
+**六次 refused 是判据在干活，不是运行出了问题**：五次
+`B.register_statement 的参数不合法：page_range. 必须是对象，收到 string`
+（模型把 `"1-2"` 当页码传，被动作表的 `_OBJ` 校验当场拒），一次
+`G.build_document ... kind 必须是 [...] 之一，收到 'revision'`。
+模型每次都改对之后重派 —— 这正是 §65/§68 那两条"参数错交回工具层"的修法要的效果：
+拒绝进台账、模型看得见、然后改对，而不是整趟作废。
+
+### 四趟真机的完整账（`draft/37` §68/§70/§71 的合计）
+
+| 趟 | 工作区 | 步数 | 停止理由 | 花费 | 六条判据（答完问题之后） |
+|---|---|---:|---|---:|---|
+| 12 | p5-run12 | 14 | `bad_json_limit` | 0.109207 | —（死在形状漂移） |
+| 13 | p5-run13 | 36 | `final` | 0.359098 | 5/6（`statements` 缺页码） |
+| 14 | p5-run14 | 43 | `final` | 0.486355 | 6/6 —— 但报告引用了三条不存在的行（§70 的新判据判它 fail） |
+| 15 | p5-run15 | 31 | `final` | 0.304153 | **6/6，且 `dangling_refs=[]`** |
+
+### 纪律读数
+
+这一趟**没有改任何源码或判据**（`git status` 对 `agentflow/src`、`agentflow/tests`、
+`agentflow/docs`、`agentflow/scripts` 全空），所以全量 pytest 的读数沿用上一棵树的
+**3409 passed / 0 failed**（提交 `4616090`），lint 沿用 `error 0 / warning 9 / info 50`
+（strict `0/56/49`），FC-27 门沿用 `clean`。这里如实说明：不是"又跑了一遍全量"，
+而是"这一趟没动树"。
+
+### 残留（登记，仍然挂着）
+
+- FC-27 七条路径 `reviewers=0`（用户裁定"暂不签"）；
+- 历史工作区（`p5-run5`…`p5-run14`）的账本多数是零（§64 的残留：
+  旧会话不会被追溯修复），第十四趟的报告按 §70 的新判据是 fail；
+- `experiments` / `review_findings` / `tasks` 的报告引用今天不查（§70 里写明理由）；
+- 报告正文里"我改了两处"这类不可机械核对的叙述，§70 的判据管不了；
+- H 的语义缝没接线 ⇒ `review_findings = 0` 是"没查"而不是"干净"（三轮都没变）。
