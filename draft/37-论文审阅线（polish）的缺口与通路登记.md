@@ -7357,3 +7357,118 @@ A 的动作与参数：
    `A.ingest_local` + B 的关系抽取，框架不给暗示；
 3. `statements` / `experiments` / `documents` 的计数（确认第 3 趟的读数可复现，
    不是一次偶然）。
+
+---
+
+## §90 T1 第 4 趟裁定：§89 的修法被模型读到并用上了；两条腿各自卡在不同的真实原因上
+
+第 4 趟真机（2026-10-04，工作区 `projects/p5-review-t4`，58 字任务原文不变，
+`source/main.tex` 的 sha256 与前三趟逐字相同；夹具新增 P7/P8 两行）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 65 / 24（`by_role` G11 / H6 / E6 / **A1**） |
+| 花销 | **$0.798848**（预算 $5 内） |
+| 退出 | 0（`final`） |
+| `tasks` 结局 | `ok` 17 / `refused` 7（`invalid_params`） |
+| 产出表 | `literature` **1**、`documents` 1（`draft`，5 claims）、`experiments` 1（numeric）、`search_requests` 1；`statements` 0、`relations` 0、`review_findings` 0 |
+| 收工门 | 六格全过（`can_close=true`，锚 `consistent`） |
+| 报告 | `out/review/REPORT.md` 10021 字节；`reports/0000-review.md` 17087 字节 |
+| 裁定 | **仍不合格**（引文腿、形式化腿），但这一趟把两条腿的**真实卡点**分清了三层 |
+
+### 一、§89 的修法：模型读到了，也照着改了（这是本节最硬的读数）
+
+- 步 37 的自述逐字：「`E.check_formal` 两次都因 `import Mathlib` 不可用而没查成
+  （`import_unavailable`，不是证否）。**我传的 source 里写了 `import Mathlib.Tactic` ——
+  这是我自己造成的。正确做法：传一个完全不 import 任何库的自足 Lean 文件**」。
+  步 39 就照这个改了。⇒ `TOOLCHAIN_FACTS` 那一段不只是"被放进提示词"，
+  它改变了模型的下一步动作。
+- 步 47 的自述逐字：「本轮真正缺的是 **P2**（正文实质改动）与 **P7**（引文逐条核验）」
+  ⇒ 夹具补的 P7/P8 两行进了它的规划。
+- `A.ingest_local` **第一次被召唤**（`literature` 1 行、`search_requests` 1 行）——
+  前三趟一次都没有。
+
+### 二、形式化腿：框架这一侧已经诚实且正确，剩下的是模型能力 + 机器环境
+
+5 次 `check_formal` 的结局逐条：
+
+| t-id | 结局 | 这一条读数说明什么 |
+|---|---|---|
+| t-0002 | `unexpected token '..'`（语法错） | 模型写错 Lean 语法 |
+| t-0004 | **源码里有 1 处 sorry/admit ⇒ 这不是证明** | 框架**抓到了**"用 sorry 假装证明" —— 这一档工作正常 |
+| t-0013 / t-0015 | `unknown package 'Mathlib'` | 又有两次没看读数就写 `import Mathlib` |
+| t-0017 | 自足文件 + `decide` ⇒ `failed to synthesize` | 模型换对了路线，但不会写这条证明 |
+
+结论：**框架没有堵这条路**（离线探针证明自足文件在本机真的能验过），
+挡住它的是两件与框架无关的事 —— Lean 4.7 没装 Mathlib（`decide`/`omega`/`linarith`
+这些 tactic 拿不到），以及模型在没有 tactic 的情况下写不出可编译的证明。
+第 3 趟那 6 次浪费（全撞 Mathlib）在第 4 趟降成 2 次，**这就是 §89 的收益**。
+
+### 三、引文腿：主控把这件事派给了 H，而 H 没有"逐字比对引文"这条动作
+
+`by_role` 里 **B 一次都没被召唤**（第 3 趟 B 被召唤 16 次，全用来 `register_statement`）。
+步 47 的自述逐字：「**P7 需要逐字比对 `source/LIT.md` 里的引文与论文正文 ——
+这属于 H 的审阅职责**」。而 H 的动作表是
+`review` / `verify_fixes` / `list_findings` / `review_report` —— 没有一条会产出
+`relations` 行（带 `quote` / `page_range` / `quote_verified`）。
+
+也就是说：**框架里"引文逐字回验"的证据落点是 B 的 `relations`**（`quoteverify.check_quote`
+是判据、B 的消化是产出面），而主控按语义把它归给了"审阅"。主控的提示词里
+「结构而不是请求」那一节确实写着「引文是否逐字可达：`quoteverify.check_quote` 逐字回验，
+不通过就标出来」，但**没写这条证据落在哪张表**。
+
+### 四、主控自己报的那条未决问题：离线复算 ⇒ 没有缺陷
+
+报告 §八.4 逐字：「`review_findings` 计数 0，`H.review_report` 跑了 5 次全部 `outcome=ok`，
+但 findings 没进 `review_findings` 表。**补法：查 H 的返回体**，确认它是否只在对话里给了 findings」。
+
+按它的补法做了（`temp/_t1d_review_report_probe.py`，离线复算，不花模型钱）：
+
+```
+跑之前 review_findings 行数： 0
+verdict = unverified   gates_total = 15
+pass_count = 9   fail_count = 0   unknown_count = 3   not_applicable_count = 3
+own_error_count = 0   own_errors_registered = False
+unknown_gates = ['G11', 'G8', 'G9']
+跑之后 review_findings 行数： 0
+```
+
+裁定：**没有缺陷，也没有静默丢弃**。`fail_count=0` 且 `own_error_count=0` ⇒ 本来就没有
+finding 可落；真正"没查成"的是 3 道 `unknown` 门（G8/G9/G11），它们以
+`unknown_gates` + `reports/0000-review.md` + 交付报告 §八 三种形态可见，裁决是 `unverified`
+（不是"没问题"）。这一条印证了 §83 那张验收表里审校腿的口径要改：
+看的是"**H 的裁决与逐门读数落盘可查**"，不是"`review_findings` 行数非零"。
+
+### 五、这一趟暴露的真问题：**夹具不具备"核引文"的对象**
+
+p5 这篇的 7 条 `\bibitem` 分两类：
+
+- `Companion`（= 同系列的各卷）与 `N1`：**原文就在盘上**
+  （`C:\Users\ysc20\Desktop\投影度量论\research_papers\` 下有 `p1a_distance_chamber`、
+  `p2_random_walk_chamber`、`p4_identity_of_periodic_graphs`、`p6_quotient_lattice_torus`、
+  `p7_permutation_ports`、`n1_spectrum_not_identity`、`n2_odd_girth_cl` …）；
+- Kuchment / Terras / Baez / GR / delaHarpe：外部书与论文，盘上没有。
+
+而夹具只把 p5 自己的 `source/` 拷进工作区，**没有把"被引的那几卷"放进来** ⇒
+`A.ingest_local` 只能登记论文自己（`literature` 1 行 = `source/main.pdf`），
+B 也没有第二份文本可以逐字比对。主控在报告 §八.1 写的那句是对的：
+「缺的是论文正文引用对象的逐字文本」。
+
+⇒ **结论：这一条腿不是"系统不会做"，而是"这一趟没有可核的对象"**。
+处置（第 5 趟）：夹具把被引的同系列各卷的 `main.tex` 拷进工作区（`cited/`），
+让"逐条核验引文是否与原文一致"真的有对象；任务原文一个字不改。
+
+### 六、读数
+
+本轮**没有代码改动**（只有登记册与进度表），所以 §89 那一次全量读数仍然有效：
+`3481 passed / 0 failed`、lint `0/9/49` 与 `0/56/48`、FC-27 门 `requires_human`。
+新增的只是两个离线裁定探针（`temp/_t1d_review_report_probe.py`、
+`temp/_t1d_findings.py`）与夹具改动（`temp/_p53_new_ws.py`）。
+
+### 七、下一轮：T1 第 5 趟（夹具补齐被引各卷）
+
+1. `temp/_p53_new_ws.py` 增一步：把 `research_papers/` 里被 p5 引用的那几卷的 `main.tex`
+   拷到工作区 `cited/<卷名>.tex`（并在 `README-PROVENANCE.md` 里写明这是**只读**被引原文）；
+2. 重跑同一 58 字任务原文（`--sid t1e`、`--budget-usd 5 --max-steps 150`）；
+3. 要看的信号：`relations` 是否非零（引文腿）、`check_formal` 里 `import Mathlib` 是否归零
+   （§89 的持续收益）、`statements` / `documents` 是否落行。
