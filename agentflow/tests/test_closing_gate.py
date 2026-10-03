@@ -180,6 +180,133 @@ def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
 
 # ============================================================ 各条负控（各自单独红）
 
+def _acceptance_checks(root: pathlib.Path, rows: list[dict], *, st: Store | None = None) -> pathlib.Path:
+    """把机器可判的验收行写进项目（`out/paper/ACCEPTANCE-CHECKS.json`）。
+
+    给了 `st` 就顺手重封一次锚：这一格的文件落在 `out/paper` 里，而锚的 `files` 维度
+    覆盖那个目录 ⇒ 封锚之后再写它，锚会报 `drifted`（真机上这份文件是建工作区时
+    就写好的，所以那个顺序不是问题；判据里要显式重封，免得把锚的红当成这一格的红）。
+    """
+    path = root / "out" / "paper" / CL.ACCEPTANCE_CHECKS_NAME.split("/", 2)[-1]
+    path.write_text(json.dumps({"checks": rows}, ensure_ascii=False), encoding="utf-8")
+    if st is not None:
+        _seal(root, st)
+    return path
+
+
+def test_the_acceptance_cell_goes_red_alone_when_a_named_leg_has_no_ledger_row(
+        tmp_path: pathlib.Path):
+    """负控（`draft/37` §94 的真机读数）：任务点名的腿在台账里没凭据 ⇒ 这一格单独红。
+
+    T1 第 7、8 趟：逐字核验引文与形式化验证都没落台账（`statements`/`literature` 0 行），
+    而收工门六格全过、`can_close=true` —— `substance` 只问"五张表里有没有非空的"，
+    于是"缺了两条腿"被读成"可交付"。这一条判据就是那次假绿的反面。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P7", "name": "引文逐条核过", "kind": "quote_verified_rows", "min": 1},
+        {"id": "P8", "name": "形式化", "kind": "proof_experiment_rows", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    assert [f.code for f in rep.blockers] == ["acceptance_unmet"], rep.to_dict()
+    assert rep.status["anchor"] == "pass" and rep.status["substance"] == "pass", rep.to_dict()
+    detail = rep.blockers[0].detail
+    # 夹具里本来就有一条 formal+proof 实验（`_t3_experiment`）⇒ P8 满足、只有 P7 缺。
+    # 这一格必须逐行判（不许一票通吃），所以缺的那一行要点名、满足的那一行不进 detail。
+    assert "P7" in detail and "P8" not in detail, detail
+    rows = rep.readings["acceptance"]["rows"]
+    assert [r["id"] for r in rows] == ["P7", "P8"], rows
+    assert [r["ok"] for r in rows] == [False, True], rows
+    assert rows[0]["got"] == 0 and rows[1]["got"] >= 1, rows
+
+
+def test_the_acceptance_cell_passes_once_each_leg_has_a_ledger_row(tmp_path: pathlib.Path):
+    """正控（反真空）：把凭据真的落进台账 ⇒ 这一格转 `pass`。
+
+    三条腿各造一条：`quote_verified` 非 null 的命题、`method=formal` + `evidence_kind=proof`
+    的实验、`review_rounds >= 1` 的稿件。判据不是"文件在不在"，而是台账里真的有没有。
+    """
+    def seed(s: Store) -> None:
+        _t3_experiment(s, "0002", method="formal", evidence_kind="proof")
+        _paper_with_claim(s, doc_id="0002")
+        with s.tx("documents", actor="test") as tx:
+            row = dict(tx.rows("documents")[0])
+            row["review_rounds"] = 1
+            tx.upsert("documents", row)
+        with s.tx("statements", actor="test") as tx:
+            tx.upsert("statements", {
+                "stmt_id": "0000", "origin": "external_lit", "kind": "theorem",
+                "statement_full": "设 G 是任意有限群；则 c(G) ≤ 1。",
+                "proof_text": "Proof. 见第 3 节（逐字摘录）。",
+                "source_lit_id": "0000", "page_range": {"start": 1, "end": 2},
+                "quote_verified": True, "quote_reason": "逐字比对通过（第 1 页）",
+                "evidence_kind": "cross_check", "status": "active",
+                "created_at": TS, "created_by": "test"})
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P7", "name": "引文逐条核过", "kind": "quote_verified_rows", "min": 1},
+        {"id": "P8", "name": "形式化", "kind": "proof_experiment_rows", "min": 1},
+        {"id": "P9", "name": "审校", "kind": "reviewed_documents", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    assert all(r["ok"] for r in rep.readings["acceptance"]["rows"]), rep.readings["acceptance"]
+
+
+def test_the_acceptance_cell_only_excuses_the_row_that_is_really_met(tmp_path: pathlib.Path):
+    """负控（阈值逐行、不许一票通吃）：只满足 P7/P8 时，缺的 P9 必须被点名。"""
+    def seed(s: Store) -> None:
+        _t3_experiment(s, "0003", method="formal", evidence_kind="proof")
+        with s.tx("statements", actor="test") as tx:
+            tx.upsert("statements", {
+                "stmt_id": "0000", "origin": "external_lit", "kind": "theorem",
+                "statement_full": "设 G 是任意有限群；则 c(G) ≤ 1。",
+                "proof_text": "Proof. 见第 3 节（逐字摘录）。",
+                "source_lit_id": "0000", "page_range": {"start": 1, "end": 2},
+                "quote_verified": True, "quote_reason": "逐字比对通过（第 1 页）",
+                "evidence_kind": "cross_check", "status": "active",
+                "created_at": TS, "created_by": "test"})
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P7", "name": "引文逐条核过", "kind": "quote_verified_rows", "min": 1},
+        {"id": "P8", "name": "形式化", "kind": "proof_experiment_rows", "min": 1},
+        {"id": "P9", "name": "审校", "kind": "reviewed_documents", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    rows = rep.readings["acceptance"]["rows"]
+    assert [r["id"] for r in rows if r["ok"]] == ["P7", "P8"], rows
+    assert [r["id"] for r in rows if not r["ok"]] == ["P9"], rows
+
+
+def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
+    """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
+
+    "这个项目没有机器可判的验收行"与"有、但我没查成"必须分得开 ——
+    把后者读成 `pass` 就是本项目最忌的形态（把"没查"折成"没问题"）。
+    """
+    st, report = _good(tmp_path)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    assert "没有" in rep.readings["acceptance"]["note"], rep.readings["acceptance"]
+
+    (tmp_path / "out" / "paper" / "ACCEPTANCE-CHECKS.json").write_text("{坏 JSON", encoding="utf-8")
+    bad = _gate(st, report)
+    assert bad.status["acceptance"] == "unknown", bad.to_dict()
+    assert [f.code for f in bad.findings if f.check == "acceptance"] == ["acceptance_unreadable"]
+
+    _acceptance_checks(tmp_path, [{"id": "P7", "kind": "no_such_leg_kind", "min": 1}])
+    unknown = _gate(st, report)
+    assert unknown.status["acceptance"] == "unknown", unknown.to_dict()
+    assert [f.code for f in unknown.findings
+            if f.check == "acceptance"] == ["acceptance_unknown_kind"]
+
+
 def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
     """负控①（锚）：封好之后改一次正文 ⇒ 锚 `drifted`，其余各条仍然绿。"""
     st, report = _good(tmp_path)
@@ -293,11 +420,12 @@ def test_missing_readings_are_unknown_and_unknown_is_not_a_pass(tmp_path: pathli
     assert rep.status["anchor"] == "unknown", rep.to_dict()
     assert rep.status["report_shape"] == "unknown", rep.to_dict()
     assert not rep.can_close, "没查成却报告可交付 —— 这正是这门要防的形态"
-    assert rep.unknowns == ["anchor", "report_shape"], rep.unknowns
+    # 三格都要项目根：锚 / 报告形状 / 验收表的机器可判行（加了第七格之后）
+    assert rep.unknowns == ["acceptance", "anchor", "report_shape"], rep.unknowns
     assert rep.failed == []
     assert CL.tri_state_exit_code(rep) == 2, "两格没查成 ⇒ 退出码 2（不是 1，也不是 0）"
     codes = sorted(f.code for f in rep.findings)
-    assert codes == ["anchor_not_checked", "report_path_missing"], codes
+    assert codes == ["acceptance_not_checked", "anchor_not_checked", "report_path_missing"], codes
 
 
 def test_a_missing_report_file_is_unknown_not_a_failure(tmp_path: pathlib.Path):

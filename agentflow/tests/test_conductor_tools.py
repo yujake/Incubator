@@ -79,6 +79,23 @@ def test_acceptance_without_a_table_reports_no_table_instead_of_crashing(tmp_pat
     assert "没查成" in str(res.error or ""), res.error
 
 
+def test_the_closing_tool_advertises_every_gate_cell(tmp_path: Path):
+    """判据（`draft/37` §94）：`conductor.closing` 的描述必须点名收工门的每一格。
+
+    为什么单列：§86 加 `substance`、§94 加 `acceptance` 时，描述里那句"五条"都成了
+    陈旧读数 —— 而模型是照描述决定"跑这个工具能不能告诉我缺什么"的。
+    判据直接对着 `closing.DEFAULT_CHECKS` 比：加一格却忘了改描述，这条当场红。
+    """
+    from agentflow import closing as CL
+
+    reg = _wired(tmp_path)[2]
+    spec = next(s for s in reg.for_role("M") if s.name == "conductor.closing")
+    text = str(spec.summary) + str(spec.returns)
+    missing = [name for name in CL.DEFAULT_CHECKS if name not in text]
+    assert not missing, f"收工门有这些格，而工具描述里没点名：{missing}"
+    assert "五条" not in text, "描述里还写着旧条数（五条）—— 条数一变它就是假的"
+
+
 def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
     """M 拿到的正好是 `M_TOOL_FACE`（编排面 11 + 文件面白名单 6）；只读角色拿不到编排面工具。
 

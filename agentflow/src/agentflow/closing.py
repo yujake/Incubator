@@ -30,6 +30,7 @@
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -46,6 +47,7 @@ from . import userio as U
 #: 「没做」不许读成「没问题」。
 DEFAULT_CHECKS: tuple[str, ...] = (
     "anchor", "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
+    "acceptance",
 )
 
 #: 「实质产出」那一格认的表：至少一张非空 ⇒ 这一趟真的产出了东西。
@@ -56,6 +58,132 @@ DEFAULT_CHECKS: tuple[str, ...] = (
 #: （T1 就是 30 行 tasks、0 行产出）。
 SUBSTANCE_TABLES: tuple[str, ...] = ("documents", "relations", "experiments",
                                       "review_findings", "statements")
+
+#: 「这一趟的验收表里，机器可判的那几行」落在哪张文件上（项目根相对）。
+#:
+#: ## 为什么需要这一格（`draft/37` §94 的真机读数）
+#:
+#: T1 第 7、8 趟：任务原文点名的那两条腿（逐字核验引文、形式化验证）那一趟都没落台账，
+#: 而收工门六格全过、`can_close=true` —— `substance` 只问"五张表里有没有非空的"，
+#: 而那一趟 `statements`/`literature` 是 0、`documents` 与 `experiments` 非空，
+#: 于是"缺了两条腿"被读成了"可交付"。验收表（人给的那张）才是任务口径的来源，
+#: 但它此前只被 `conductor.acceptance` 读、从来没有被判。
+#:
+#: 判据的形式：验收表是人写的散文（"这一行怎么算数"散在读数栏里），散文没法复算；
+#: 所以人给的机器可判行另落一份声明文件（JSON），每行一个受控的 `kind` + 阈值。
+#: 这一格就是把这些行从台账现算一遍：不满足 ⇒ `fail`（并逐行给出读数）。
+ACCEPTANCE_CHECKS_NAME = "out/paper/ACCEPTANCE-CHECKS.json"
+
+#: 机器可判的验收行只有这几档（受控词表）。加一档 = 加一条能被复算的验收口径，
+#: 所以它必须在这里逐档实现，不许写成"任意表达式"（那等于让验收表能执行代码）。
+LEG_CHECK_KINDS: dict[str, str] = {
+    "quote_verified_rows": "台账里带逐字比对记录的命题行数（`statements` 或 `relations` "
+                           "里 `quote_verified` 非 null 的行）",
+    "proof_experiment_rows": "台账里的 proof 级形式化实验行数（`experiments` 里 "
+                             "`method=formal` 且 `evidence_kind=proof` 的行）",
+    "reviewed_documents": "被审过的我方稿件行数（`documents` 里 `review_rounds >= 1` 的行）",
+}
+
+
+def _leg_reading(store: Any, kind: str) -> tuple[int, dict[str, Any]]:
+    """按受控档位从台账现算一行验收读数 ⇒ `(条数, 明细)`。
+
+    台账读不到时抛出去，由调用方落成 `unknown`（"问不出来"不许读成"没有"）。
+    """
+    if kind == "quote_verified_rows":
+        st = store.rows("statements")
+        rel = store.rows("relations")
+        s_rows = [r for r in st if r.get("quote_verified") is not None]
+        r_rows = [r for r in rel if r.get("quote_verified") is not None]
+        return len(s_rows) + len(r_rows), {
+            "statements": len(s_rows), "relations": len(r_rows),
+            "true": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is True),
+            "false": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is False),
+            "unchecked": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is None),
+        }
+    if kind == "proof_experiment_rows":
+        rows = [r for r in store.rows("experiments")
+                if str(r.get("method") or "") == "formal"
+                and str(r.get("evidence_kind") or "") == "proof"]
+        return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
+    if kind == "reviewed_documents":
+        rows = [r for r in store.rows("documents") if int(r.get("review_rounds") or 0) >= 1]
+        return len(rows), {"documents": [str(r.get("doc_id") or "") for r in rows[:8]]}
+    raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
+
+
+def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
+    """验收表的机器可判行（`draft/37` §94）：逐行现算，任一不满足 ⇒ `fail`。
+
+    三态：文件不在 ⇒ `pass` 并在读数里写明"这个项目没有机器可判的验收行"
+    （那是"没有这一栏"，不是"没查成"）；文件在但读不懂/有未知档位/台账读不到 ⇒ `unknown`
+    （"没查成"）；逐行都满足 ⇒ `pass`。
+    """
+    if not str(project_dir or "").strip():
+        rep.status["acceptance"] = "unknown"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_not_checked", "warning",
+            "没给项目根 ⇒ 验收表的机器可判行没查成（不是「没有这一条」）",
+        ))
+        return
+    path = Path(resolve_under_workspace(store, project_dir)) / ACCEPTANCE_CHECKS_NAME
+    if not path.is_file():
+        rep.status["acceptance"] = "pass"
+        rep.readings["acceptance"] = {"checks_file": str(path), "rows": [],
+                                      "note": f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}"}
+        return
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        rows = raw["checks"] if isinstance(raw, dict) else raw
+        if not isinstance(rows, list):
+            raise ValueError("顶层必须是数组，或 {'checks': [...]}")
+    except Exception as exc:  # noqa: BLE001 —— 读不懂就说读不懂（unknown 不是 pass）
+        rep.status["acceptance"] = "unknown"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_unreadable", "warning",
+            f"机器可判的验收行读不出来（{path}：{type(exc).__name__}: {exc}）⇒ 没查成",
+        ))
+        return
+
+    out: list[dict[str, Any]] = []
+    unmet: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            rep.status["acceptance"] = "unknown"
+            rep.findings.append(Finding(
+                "acceptance", "acceptance_unreadable", "warning",
+                f"验收行必须是对象，收到了 {type(row).__name__} ⇒ 没查成"))
+            return
+        cid = str(row.get("id") or "")
+        kind = str(row.get("kind") or "")
+        name = str(row.get("name") or "")
+        note = str(row.get("note") or "")
+        want_min = int(row.get("min") or 1)
+        if kind not in LEG_CHECK_KINDS:
+            rep.status["acceptance"] = "unknown"
+            rep.findings.append(Finding(
+                "acceptance", "acceptance_unknown_kind", "warning",
+                f"验收行 {cid} 的 kind={kind!r} 不在受控词表 {tuple(LEG_CHECK_KINDS)} 里 "
+                "⇒ 这一行没查成（不是「满足了」）"))
+            return
+        got, detail = _leg_reading(store, kind)
+        out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "got": got,
+                    "ok": got >= want_min, "detail": detail})
+        if got < want_min:
+            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：台账里 {got} 条，"
+                         f"要求 ≥ {want_min} 条 —— 读数 {detail}"
+                         + (f"；{note}" if note else ""))
+
+    rep.readings["acceptance"] = {"checks_file": str(path), "rows": out}
+    if unmet:
+        rep.status["acceptance"] = "fail"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_unmet", "blocker",
+            "验收表里机器可判的这几行**没满足**（这一趟的交付缺了任务点名的凭据）："
+            + "；".join(unmet)
+            + "。台账是唯一能复算的地方 —— 把凭据落进台账（不是只写进报告）再收工"))
+    else:
+        rep.status["acceptance"] = "pass"
 
 #: 「这次调用没有会话身份」——与 `sid=None`（= 读缺省会话）「刻意分开」的两个输入。
 #:
@@ -659,6 +787,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
             _check_user_pending(rep, root, sid=sid)
         elif name == "substance":
             _check_substance(rep, store)
+        elif name == "acceptance":
+            _check_acceptance(rep, store, project_dir)
         else:
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",

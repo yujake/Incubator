@@ -761,9 +761,12 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（`draft/37` §16 P3 的五条）—— 锚 consistent / 无未裁决矛盾 / "
-    "承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。"
-    "**每条各自一个三态读数，unknown 不是通过**；`can_close` 只在五条全过时为真。",
+    "只读：跑收工门（`draft/37` §16 P3 的七格）—— 锚 consistent / 无未裁决矛盾 / "
+    "承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / "
+    "**实质产出**（`documents`/`relations`/`experiments`/`review_findings`/`statements` "
+    "至少一张非空）/ **验收表的机器可判行**（项目里若有一份 `out/paper/ACCEPTANCE-CHECKS.json`，"
+    "逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）。"
+    "每条各自一个三态读数，unknown 不是通过；`can_close` 只在七格全过时为真。",
     {
         "type": "object",
         "properties": {
@@ -780,8 +783,10 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
     side_effect="read",
     roles=("M",),
     returns=("{'can_close','status','failed','unknowns','findings','readings','summary'}；"
-             "status 的键是五条检查（anchor/contradictions/load_bearing/report_shape/"
-             "user_pending），值是三态之一（通过 / 拦住 / 没查成）；"
+             "status 的键是七格检查（anchor/contradictions/load_bearing/report_shape/"
+             "user_pending/substance/acceptance），值是三态之一（通过 / 拦住 / 没查成）；"
+             "acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、"
+             "台账现算值、是否满足（不满足的那几行同时进 findings）；"
              "findings[] 每项是 {'check','code','level','detail'}"),
 )
 def conductor_closing(store, session=None, project_dir: str = "", report_path: str = "") -> ToolResult:

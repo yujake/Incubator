@@ -7745,3 +7745,95 @@ literature 表里没有 lit_id='0000' ⇒ 这条命题的出处不存在，整�
 **下一轮的第一要务**：让"任务点名的每一条腿都要有落台账的凭据"变成机器可判 ——
 第 8 趟已经把 P7/P8 的读数写成可数口径，接着要做的是让 `closing` 复算那几行
 （哪几行机器可判、怎么复算，见第三节第 2 条）。在那之前，重跑更多趟只是抽签。
+
+---
+
+## §94 收工门第七格：**任务点名的每一条腿都要有落台账的凭据**
+
+### 一、病灶：六格全过，而任务点名的两条腿一条都没落台账
+
+第 7、8 趟真机：`statements` 0 行、`literature` 0 行（逐字核验引文这条腿在台账上什么都没留下），
+形式化那一侧 `experiments` 里的 formal 行全是 `evidence_kind=heuristic`（没有一条 proof），
+而**收工门六格全过、`can_close=true`、报告写着"本轮交付完成"**。
+
+病因不是哪一格判错，是**没有一格问"任务点名的那几条腿，台账里有没有凭据"**：
+
+- `substance`（§86）只问"五张表里有没有非空的" —— 那一趟 `documents`/`experiments` 非空，
+  于是"缺了两条腿"被读成了"有实质产出"；
+- 验收表（`out/paper/ACCEPTANCE.md`，人给的那张）才是任务口径的来源，
+  但它此前只被 `conductor.acceptance` 读、**从来没有被判**。
+
+### 二、修法：第七格 `acceptance`（数据驱动 + 受控档位 + 三态）
+
+人写的验收表是散文（"这一行怎么算数"散在读数栏里），散文没法复算 ⇒
+把人给的**机器可判行**另落一份声明文件，每行一个受控档位 + 阈值：
+
+```
+out/paper/ACCEPTANCE-CHECKS.json
+{"checks": [{"id": "P7", "name": "引文逐条核过", "kind": "quote_verified_rows", "min": 1, "note": "…"}]}
+```
+
+`closing.py` 新增：
+
+- `ACCEPTANCE_CHECKS_NAME = "out/paper/ACCEPTANCE-CHECKS.json"`；
+- `LEG_CHECK_KINDS`（受控词表，**只有三档**，逐档实现，不许写成"任意表达式"——
+  那等于让验收表能执行代码）：
+  `quote_verified_rows`（`statements`/`relations` 里 `quote_verified` 非 null 的行数）、
+  `proof_experiment_rows`（`experiments` 里 `method=formal` 且 `evidence_kind=proof` 的行数）、
+  `reviewed_documents`（`documents` 里 `review_rounds>=1` 的行数）；
+- `_leg_reading(store, kind)`：现算那三档，并把明细（`true`/`false`/`unchecked`、行号）一起给出；
+- `_check_acceptance(rep, store, project_dir)`：
+  - 项目根没给 ⇒ `unknown`（"没查成"不是"没有这一条"）；
+  - 文件不在 ⇒ `pass` + 读数写明"这个项目没有机器可判的验收行"（那是"没有这一栏"）；
+  - 文件读不懂 / 有未知档位 / 台账读不到 ⇒ `unknown`（**不是 pass**，P16 的老账）；
+  - 逐行现算，任一 `got < min` ⇒ `fail`，码 `acceptance_unmet`，detail 逐行点名
+    （"台账里 0 条，要求 ≥ 1 条 —— 读数 {…}"）；
+- `DEFAULT_CHECKS` 加 `acceptance` ⇒ `can_close` 要求**七格**全过；`summary()` 早就是按它派生的。
+
+### 三、广告面同步（旧文案写着"五条"，加了格它就成了假话）
+
+`conductor.closing` 的摘要与 `returns` 改成七格，并把 `acceptance` 那一格给出来的读数说清。
+判据 `tests/test_conductor_tools.py::test_the_closing_tool_advertises_every_gate_cell`
+**对着 `closing.DEFAULT_CHECKS` 逐名比**：加一格却忘了改描述，这条当场红；
+另外断言描述里不再出现"五条"这个陈旧数字。
+
+### 四、夹具：P9 与那份声明文件
+
+`temp/_p53_new_ws.py` 造的验收表补 P9（我方稿件被审过：`documents` 里 `review_rounds>=1`），
+并写出 `ACCEPTANCE-CHECKS.json`（P7/P8/P9，min 各 1）。
+它落在 `out/paper/` 里 ⇒ 必须在**建工作区时**写好（锚的 `files` 维度覆盖那个目录；
+判据里也显式重封一次锚，免得把"锚漂了"当成"这一格红了"）。
+
+### 五、判据
+
+`tests/test_closing_gate.py` 新增四条：
+
+1. `test_the_acceptance_cell_goes_red_alone_when_a_named_leg_has_no_ledger_row`
+   —— 夹具里 P8（那条 T3 实验）已满足、P7 缺 ⇒ 只有 `acceptance` 红、码是
+   `acceptance_unmet`、detail 点名 P7 而不点 P8、`readings` 逐行给出 `ok`（**逐行判，不许一票通吃**）；
+2. `test_the_acceptance_cell_passes_once_each_leg_has_a_ledger_row`
+   —— 三条腿各造一条凭据 ⇒ `pass`；
+3. `test_the_acceptance_cell_only_excuses_the_row_that_is_really_met`
+   —— 只满足 P7/P8 时，缺的 P9 必须被点名；
+4. `test_the_acceptance_cell_separates_no_rows_from_not_checked`
+   —— 没有这一栏 ⇒ `pass` 且读数里写明"没有"；坏 JSON ⇒ `unknown`；
+   未知档位 ⇒ `unknown`（三态各自的出口都要有判据）。
+
+连带：`test_missing_readings_are_unknown_and_unknown_is_not_a_pass` 里写死的 unknowns 列表
+补上 `acceptance`（这一格也要项目根），与 §86 那次同一条纪律 —— 断言跟着判据表派生。
+
+### 六、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 收工门那一组 | `pytest tests/test_closing_gate.py -q` | **15 passed**（含新增四条） |
+| 编排面工具 | `pytest tests/test_conductor_tools.py -q` | **23 passed**（含"描述要点名每一格"） |
+| 声明对账 / 快照 | `pytest tests/test_tools_returns_declaration.py tests/test_{tool,agent}_surface_snapshot.py -q` | **全部通过**；两份快照按 `--write` 重冻（diff = `conductor.closing` 的描述与 `returns`） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3490 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1467.28s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 9 趟**（夹具已带 P7/P8/P9 的机器可判行）。
+要看的信号：主控跑 `conductor.closing` 时会不会看到 `acceptance: fail` 并回去补落台账
+（第 2 趟它在 `substance` 红了之后就是这么做的），以及最终 `can_close` 的那一趟
+是不是三条腿都有凭据。
