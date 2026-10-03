@@ -173,7 +173,7 @@ LIVE-READINGS:END
 
 | # | 命令 | 实测输出 | 退出码 |
 |---:|---|---|---:|
-| 1 | `python -m agentflow.cli tools` | `工具总数：75（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 24, 'B': 19, 'C': 19, 'D': 38, 'E': 22, 'F': 33, 'G': 38, 'H': 25, 'M': 16}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。⚠️ **两个口径的装配点都是 `agentflow/src/agentflow/tools/__init__.py::build_registry`**。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-10-02（该行最前面的三个读数就是当次的；`M` 由 11 → **16** 是 `draft/37` §38/§39 的裁定：给主控补了文件面白名单 `fs.list`/`read`/`search`/`stat`/`write` 5 件 —— 真机读数显示那趟 23 步里 15 步在猜「盘上有没有论文」，M 缺的是眼睛与笔而不是判断力）：三个口径分别是 `build_registry(store=None)` ⇒ **62**；`build_registry(store=None, workspace_root='.')` ⇒ **70**；`cli tools`（含 store）⇒ **75**。此前观测 2026-09-30 是 `60 / 67 / 72`（那时 `M` 是 11），更早记的 `63 / 43 / 50 / 55` 已过期。⚠️ **`store=None` 单独给不出 70** —— 70 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 25**（观测 2026-09-30 实测值；B3 收官那一轮它曾是 22：`verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离，此后 H 的只读面又长回来了） | **0** |
+| 1 | `python -m agentflow.cli tools` | `工具总数：75（已装模块 12：table_tools, fs_tools, search_tools, ocr_tools, graph_tools, trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools, conductor_tools）`；`各角色工具数：{'A': 24, 'B': 19, 'C': 19, 'D': 38, 'E': 22, 'F': 33, 'G': 38, 'H': 25, 'M': 17}`；`只读角色写工具泄漏：{'C': [], 'H': []}（空 = 正常）`。⚠️ **这是"含 store 的完整装配"口径**，与 `build_registry(store=None)` 的口径是**两个口径**，不许互换（见 §1.5 与 `docs/ROLE-SPECS.md` §0.3）。⚠️ **两个口径的装配点都是 `agentflow/src/agentflow/tools/__init__.py::build_registry`**。**三个数都由命令当次产出 ⇒ 本行不写定值**（观测 2026-10-02（该行最前面的三个读数就是当次的；`M` 由 11 → **16** 是 `draft/37` §38/§39 的裁定：给主控补了文件面白名单 `fs.list`/`read`/`search`/`stat`/`write` 5 件 —— 真机读数显示那趟 23 步里 15 步在猜「盘上有没有论文」，M 缺的是眼睛与笔而不是判断力）：三个口径分别是 `build_registry(store=None)` ⇒ **62**；`build_registry(store=None, workspace_root='.')` ⇒ **70**；`cli tools`（含 store）⇒ **75**。此前观测 2026-09-30 是 `60 / 67 / 72`（那时 `M` 是 11），更早记的 `63 / 43 / 50 / 55` 已过期。⚠️ **`store=None` 单独给不出 70** —— 70 必须**同时给 `workspace_root`**（缺它时 fs 组不装配）；早前版本那句"`store=None` 口径是 50"**量法不完整**，已改。**`H` 是 25**（观测 2026-09-30 实测值；B3 收官那一轮它曾是 22：`verify.check_formal` 声明 `external="exec"`，被 `for_role` 从只读角色手里结构性剥离，此后 H 的只读面又长回来了） | **0** |
 | 2 | `python -m agentflow.cli tools --role E` | 正常列出 E 的工具面（S1 时这里报 `invalid choice: 'E' (choose from 'A','B','C','D')` —— **已修**：`choices=list(S.ROLES)`） | **0** |
 | 3 | `python -m agentflow.cli tools --role C` | 列出 `trace.concept` / `trace.literature` / `trace.relation` 等，**全部 `[read]`** | **0** |
 | 4 | `python -m agentflow.cli verify` | `校验完成：通过  错误 0 / 警告 0` | **0** |
@@ -191,7 +191,7 @@ LIVE-READINGS:END
 **工具面 census（`cli tools` 实测）**：
 
 ```
-工具总数 75 / 已装模块 12 / 各角色 {'A':24,'B':19,'C':19,'D':38,'E':22,'F':33,'G':38,'H':25,'M':16}
+工具总数 75 / 已装模块 12 / 各角色 {'A':24,'B':19,'C':19,'D':38,'E':22,'F':33,'G':38,'H':25,'M':17}
 只读角色写工具泄漏 {'C': [], 'H': []}（空 = 正常）
 # 三个数都由 `python -m agentflow.cli tools` 当次产出（观测 2026-10-02；M 拿到 16 件 =
 # 编排面 11（conductor.summon/ledger/stop/resume_brief/cancel/ensure_project/state/role_spec/
@@ -253,7 +253,7 @@ LIVE-READINGS:END
 | 数字 | 住在哪 | 数的是什么 | 谁在守 | 复跑 |
 |---|---|---|---|---|
 | 工具总数 **75** | `docs/ROLE-SPECS.md` §R0 标题 / §R0.1 / §R0.2 | `build_registry()` 装配出的 `ToolSpec` 条数 | **有判据**：`tests/test_role_specs_complete.py`（§R0 标题 vs 实时装配）、发布门 `tools/verify_role_specs.py` | `python -m agentflow.cli tools` |
-| 逐角色工具数 `{'A':24,…,'M':16}` | `docs/ROLE-SPECS.md` §R0 / 各角色节标题；`DEVELOPMENT.md` §1.5 | 每个角色的工具面条数（含公共工具） | **有判据**：`tools/verify_role_specs.py`（逐角色条数 vs 现场装配）、`tests/test_role_specs_complete.py` | 同上 |
+| 逐角色工具数 `{'A':24,…,'M':17}` | `docs/ROLE-SPECS.md` §R0 / 各角色节标题；`DEVELOPMENT.md` §1.5 | 每个角色的工具面条数（含公共工具） | **有判据**：`tools/verify_role_specs.py`（逐角色条数 vs 现场装配）、`tests/test_role_specs_complete.py` | 同上 |
 | 动作总数 **53** | `docs/ROLE-SPECS.md` §0.7 标题 | `capabilities.CAPABILITIES` 的动作条数 | **有判据**（`draft/36` T-3 新增）：`tests/test_role_specs_action_table.py` | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
 | 可召唤动作数 **51** | `docs/ROLE-SPECS.md` §M.4.1 标题 | 按 `ALLOWED_EDGES["M"]` 覆盖的角色的动作之和 | **有判据**（T-3 新增）：同上 `test_the_summonable_table_total_matches_the_edge_table` | 同上 |
 | 逐角色**动作名** | `docs/ROLE-SPECS.md` §0.7 与 §M.4.1 **两处**（同一份数据两个落点） | 每角色有哪些动作 | **有判据**（T-3 新增）：同上（两处都扫，含两条负控：删一行、加动作不改表） | `python -m agentflow.cli tools --role <X>`（工具面）／上面的 `capabilities` 一行（动作面） |

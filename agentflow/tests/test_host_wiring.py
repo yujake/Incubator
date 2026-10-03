@@ -311,34 +311,42 @@ def test_a_factory_is_omitted_entirely_without_providers(tmp_path: Path):
 
 
 def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
-    """接了线的工具层：M 的面 = 编排面 11 件 + 文件面白名单 5 件，一件领域工具都没有。
+    """接了线的工具层：M 的面 = 编排面 11 件 + 文件面白名单 6 件，一件领域工具都没有。
 
-    ## 这条判据 2026-10-02 被收窄过（原文是"M 的工具名全部以 `conductor.` 开头"）
+    ## 这条判据改过两次，每次都是真机读数逼出来的
 
-    用户裁定（`draft/37` §38）：给 M 只读四件 + `fs.write`。理由是实测出来的 ——
-    §37 那一趟真机 23 步里 15 步在猜"盘上到底有没有论文"，最后交不出报告：
+ 2026-10-02（`draft/37` §38，用户裁定）：给 M 只读四件 + `fs.write`。
+    §37 那一趟 23 步里 15 步在猜"盘上到底有没有论文"，最后交不出报告 ——
     M 缺的不是判断力，是眼睛与笔（它当时一件 `fs.*` 都没有）。
 
-    红线没有作废，只是换了口径：从"M 不碰盘"收窄成
-    「M 有眼睛和笔，但不碰知识表、不做检索、不删东西」。所以这条判据现在守三件事：
+ 2026-10-03（`draft/37` §57，用户追加）：再给一件 `fs.edit`。
+    §56 第八趟真机：主控知道该改哪三处、也找准了逐字文本，然后试图用 `fs.write`
+    把整份 26 KB 的 `main.tex` 重写一遍 —— 回复被输出额度（8192 token）截断在字符串中间
+    （步 27/30 的 `text_len` 是 26110 / 26134），连续三次坏 JSON ⇒ `bad_json_limit`。
+    也就是说：`fs.write` 单独不足以改大文件，而"整文件覆盖"本来也是更危险的那条路。
+    `fs.edit`（锚定替换，一次一处、不命中就拒）输出量与改动量成正比，
+    因此比 `fs.write` 更安全 —— "不可逆"那条理由对它不适用。
 
-    1. 白名单五件必须在（`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write`）；
-    2. `fs.edit` / `fs.delete` / `fs.move` 一件都不许有（前两件不可逆，
-       第三件属于"改论文"——那是 G 的活，且与"M 不产出领域对象"正面冲突）；
+    红线仍然在，只是又换了口径：从"M 不碰盘"→「M 有眼睛和笔」→
+    「M 有眼睛、有笔、能改该改的那一处，但不碰知识表、不做检索、不删东西、不挪东西」。
+    所以这条判据现在守三件事：
+
+    1. 白名单六件必须在（`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit`）；
+    2. `fs.delete` / `fs.move` 两件都不许有（一个真删、一个换位置，都是不可逆的）；
     3. `table.*` / `prov.*` / `search.*` 一件都不许有（知识表与检索仍然是 M 的禁区）。
     """
     st = _store(tmp_path)
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    assert len(m_tools) == 16, m_tools
+    assert len(m_tools) == 17, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
     assert "conductor.closing" in m_tools, m_tools
-    # ① 文件面白名单五件（`draft/37` §38 的裁定）
-    for name in ("fs.list", "fs.read", "fs.search", "fs.stat", "fs.write"):
+    # ① 文件面白名单六件（§38 + §57 两次裁定）
+    for name in ("fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit"):
         assert name in m_tools, (name, m_tools)
-    # ② 不可逆的三件一件都不许有
-    for name in ("fs.edit", "fs.delete", "fs.move"):
+    # ② 不可逆的两件一件都不许有
+    for name in ("fs.delete", "fs.move"):
         assert name not in m_tools, (name, m_tools)
     # ③ 知识表与检索仍是禁区
     assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools

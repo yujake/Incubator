@@ -4470,3 +4470,69 @@ literature = 1（论文本体）statements = 3  documents = 1  review_findings =
 （要"问过 + 被回答" —— 没人值守时主控会停在 `user_no_answer`，
 按 `_c_triage` 的口径那属于 `pending` ⇒ 那一格会读成"应停在等待用户"；
 **要么下一次由人回答那个问题再 resume，要么把这条判据在无人值守场景下的口径写清**）。
+
+---
+
+## §57 给 M 加 `fs.edit`（用户裁定）：`fs.write` 单独改不了大文件
+
+第八趟真机（`draft/37` §56 之后那一趟）撞出一个**结构性的墙**，而它值得单独一节：
+
+### 57.1 病因（第八趟的逐字读数）
+
+主控**知道**该改哪三处、也逐字定位到了文本，然后试图用 `fs.write` 把整份
+26 KB 的 `out/paper/main.tex` 重写一遍：
+
+```text
+step 27: invalid ⇒ judge_bad_json   text_len=26110  tokens_out=8192
+step 30: invalid ⇒ judge_bad_json   text_len=26134  tokens_out=8192
+        raw_reply 以 {"tool": "fs.write", …, "content": "\\documentclass… 开头
+⇒ 连续 3 次坏形状 ⇒ bad_json_limit，整趟作废（31 步 / usd 0.305369）
+```
+
+`tokens_out = 8192` 是这个模型的输出上限 ⇒ **回复被截断在字符串中间**。
+结论一句话：**`fs.write` 单独不足以改大文件** —— 它的输出量与**文件大小**成正比，
+而模型的输出额度是一个常数。而 §38 当时截掉的 `fs.edit`（锚定替换）正是为这件事设计的：
+**输出量与改动量成正比**。
+
+### 57.2 裁定与落地（用户 2026-10-03：「给 M 加 fs.edit」）
+
+- `tools/fs_tools.py`：`CONDUCTOR_FS_TOOLS` 加一件 ⇒
+  `("fs.list","fs.read","fs.search","fs.stat","fs.write","fs.edit")`，
+  注释里写清两次裁定的读数（§38 的眼睛与笔、§57 的大文件），
+  并说明**为什么"不可逆"那条理由对 `fs.edit` 不适用**：它做的是锚定替换
+  （一次一处、不命中就拒、可要求前置 sha256 一致），比"整文件覆盖"更安全；
+  仍然不给的是 `fs.delete`（真删）与 `fs.move`（换位置）。
+- 判据改写（不是删）：
+  - `test_host_wiring` 的红线改成"白名单六件在 / `fs.delete`·`fs.move` 不在 /
+    `table.*`·`prov.*`·`search.*` 不在 / 编排面 11 件"，docstring 记下两次裁定；
+  - `test_conductor_tools::M_TOOL_FACE` 加 `fs.edit`（相等断言 ⇒ 多一件就红），
+    反向真空扩到"只读角色也拿不到 `fs.edit`"；"手"那一行从「可改 6 件」改成「可改 7 件」。
+- 提示词（`p29 → p30`）：M 的政策那一条改成"用 `fs.edit` 落正文改动，
+  **不要**用 `fs.write` 重写整份大文件（真机实测会被截断 ⇒ 整趟作废）"，
+  `agent_prompts` 与 `specs/m.py` 两处逐字同步。
+- 文档税：`ROLE-SPECS` §M.4 标题 16 → **17**、白名单 5 → **6**（并说明两次裁定的读数）、
+  §R0 第 18 行（`fs.edit`）的 roles 列加 **M**；`DEVELOPMENT.md` 三处 `M: 16 → 17`。
+
+### 57.3 读数
+
+- 两份 golden：`tool_surface_snapshot.json` **3 处**（`declarations.fs.edit.roles` +M、
+  `roles.M` 16→17、CLI 行里 `M:17`）；`agent_surface_snapshot.json` **11 处**
+  （9 份提示词的长度 + M 的 `tools`/`write_tools`/`prompt`；A–F 那几份只差版本行）。
+- 判据：`test_host_wiring + test_conductor_tools + test_agent_prompts +
+  test_agent_spec_reconciliation + test_review_line_prompts + test_paper_pack +
+  test_role_specs_complete` ⇒ **84 + 76 passed**（两批，含第一次跑出来的两条文档税后重跑）；
+  `test_tool_surface_snapshot + test_agent_surface_snapshot + test_tools_returns_declaration +
+  test_tools_fs_edit + test_host_wiring` ⇒ **47 passed**。
+- lint：`error 0 / warning 9 / info 50`（中间 `error 2`，`_r009_fix.py` + `_r009_verify.py` 清掉，2/2）。
+- **FC-27 门**：`specs/m.py` 命中（auth-audit）⇒ `requires_human` / 退出码 1 /
+  `required_approvals=2`；已 `--baseline` 登记（`reviewers=0`，登记 ≠ 批准），
+  两名 reviewer 的逐行走查**仍然欠着**。`tools/fs_tools.py` 不在清单里（§38 那一刀同样如此）。
+
+### 57.4 下一趟（第九趟）要看的
+
+`fs.edit` 到手之后，那一趟应该能把三处改动真的落进主稿（P2），
+然后把九节报告写出来（P6），最后跑收工门。仍然悬着的两格不变：
+`anchor`（要有人重渲染重编译 —— 主控手上没有 `doc.paper_*`）与
+`triage_branch_recorded`（要"问过 + 被回答"；没人值守时它会停在 `user_no_answer`，
+按 `_c_triage` 的口径那一格读成"应停在等待用户"——
+**下一次我可以在它提问之后当那个回答者，走 resume 那条路**，这也正好验一验那条路）。

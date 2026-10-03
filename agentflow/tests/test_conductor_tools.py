@@ -24,18 +24,19 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import conductor_tools as CT
 
-#: M 的完整工具面（`draft/37` §38 的用户裁定）：
-#: 编排面 11 件 + 文件面白名单 5 件（只读四件 + `fs.write`）。
+#: M 的完整工具面（`draft/37` §38 的用户裁定 + §57 追加 `fs.edit`）：
+#: 编排面 11 件 + 文件面白名单 6 件（只读四件 + `fs.write` + `fs.edit`）。
 #:
 #: 这份集合被判据用来断言"相等"（而不是"包含"）是刻意的：M 的面是权限面，
-#: 多一件少一件都要有人看见 —— 而 `fs.edit` / `fs.delete` / `fs.move` 故意不在里面
-#: （前两件不可逆，第三件是 G 的活）。
+#: 多一件少一件都要有人看见 —— 而 `fs.delete` / `fs.move` 故意不在里面
+#: （一个真删、一个换位置，都是不可逆的）。`fs.edit` 是 2026-10-03 按真机读数补进来的：
+#: `fs.write` 单独改不了 26 KB 的稿子（整文件重写会被输出额度截断在字符串中间）。
 M_TOOL_FACE = {
     "conductor.summon", "conductor.summon_many", "conductor.ledger", "conductor.stop",
     "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
     "conductor.state", "conductor.role_spec", "conductor.acceptance",
     "conductor.closing",
-    "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write",
+    "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 11 件）；留给"编排面本身"的判据用。
 ORCHESTRATION_TOOLS = {n for n in M_TOOL_FACE if n.startswith("conductor.")}
@@ -79,21 +80,23 @@ def test_acceptance_without_a_table_reports_no_table_instead_of_crashing(tmp_pat
 
 
 def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
-    """M 拿到的正好是 `M_TOOL_FACE`（编排面 11 + 文件面白名单 5）；只读角色拿不到编排面工具。
+    """M 拿到的正好是 `M_TOOL_FACE`（编排面 11 + 文件面白名单 6）；只读角色拿不到编排面工具。
 
-    这条判据 2026-10-02 按用户裁定（`draft/37` §38）扩过一次：从"只有 `conductor.*`"
-    变成"`conductor.*` + 文件面白名单五件"。扩的不是权限的边界，而是边界的口径——
-    `fs.edit` / `fs.delete` / `fs.move` 仍然一件不给（`M_TOOL_FACE` 里没有它们，
-    而这里的断言是相等，所以多一件就会红）。
+    这条判据改过两次：2026-10-02 按用户裁定（`draft/37` §38）从"只有 `conductor.*`"
+    变成"`conductor.*` + 文件面白名单五件"；2026-10-03 按 §57 的裁定再加一件 `fs.edit`
+    （真机读数：`fs.write` 单独改不了 26 KB 的稿子）。两次扩的都不是"能不能碰盘"这条
+    边界，而是边界的口径 —— `fs.delete` / `fs.move` 仍然一件不给（`M_TOOL_FACE` 里
+    没有它们，而这里的断言是相等，所以多一件就会红）。
     """
     _store, _c, reg = _wired(tmp_path)
     assert {s.name for s in reg.for_role("M")} == M_TOOL_FACE
     # 只读角色拿不到编排面工具（原来守的就是这一条）
     for read_only in ("C", "H"):
         assert not ({s.name for s in reg.for_role(read_only)} & ORCHESTRATION_TOOLS)
-    # 反真空：只读角色也拿不到 `fs.write`（它们是只读角色，结构性剥离）
+    # 反真空：只读角色也拿不到写类文件工具（它们是只读角色，结构性剥离）
     for read_only in ("C", "H"):
-        assert "fs.write" not in {s.name for s in reg.for_role(read_only)}, read_only
+        got = {s.name for s in reg.for_role(read_only)}
+        assert "fs.write" not in got and "fs.edit" not in got, read_only
 
 
 def test_summon_runs_the_role_and_lands_a_ledger_row(tmp_path: Path):
@@ -458,12 +461,12 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
     text = AP.faculties_text("M", reg)
     hand_line = next((ln for ln in text.splitlines() if "手＝" in ln), "")
     assert hand_line, f"次要官能那一行里没有'手'：{text[-300:]}"
-    for name in ("conductor.summon", "conductor.summon_many", "fs.write"):
+    for name in ("conductor.summon", "conductor.summon_many", "fs.write", "fs.edit"):
         assert name in hand_line, (name, hand_line)
-    for name in ("table.create", "table.update", "doc.build_document", "fs.edit",
+    for name in ("table.create", "table.update", "doc.build_document",
                  "fs.delete", "fs.move"):
         assert name not in hand_line, (name, hand_line)
-    assert "可改 6 件" in hand_line, hand_line
+    assert "可改 7 件" in hand_line, hand_line
 
 
 def test_state_and_role_spec_are_read_only_views(tmp_path: Path):

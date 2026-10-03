@@ -247,7 +247,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 15 | `doc.paper_render` | 跑项目里的渲染脚本（默认 `code/make_paper.py`）：从库里的行重出主稿/四张表/六件配套并写渲染锚 | `write_local` | **是** | G | **project**；script, timeout_sec | 同 `doc.paper_compile` 的外层键；`result` 是脚本那行 `REPRO_RESULT` | `test_paperbuild.py` | **本轮新增**（§188）；结论行里**没有** `ok` 键（成功与否看退出码）—— 这一点是真机读数逼出来的 |
 | 16 | `doc.paper_state` | 只读核对论文包：**进程内**算渲染锚三维（源表 / 渲染出的源文件 / 编译回执）并给三态结论 | `read` | 否 | G H | **project** | `{verdict,dimensions,drift,problems,why,anchor_path,anchor_present,receipt_path,receipt_present,rendered_at,compiled_at,checked}` | `tests/test_renderanchor.py` | **本轮新增**（`draft/28` §191）：判据是纯函数，不起子进程 ⇒ 只读角色 H 也能自己核这份包 |
 | 17 | `fs.delete` | 删除文件；删目录必须显式 `recursive=true`（且不允许删工作区根） | `write_local` | **是** | A B D E F G | **path**；recursive | `data`=是否真的删掉；`meta.found` 区分本来就没有 | `test_tools_table_fs.py` | — |
-| 18 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
+| 18 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G **M**（§57：大文件只能靠它改） | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
 | 19 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H **M**（§38） | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
 | 20 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖） | `write_local` | **是** | A B D E F G | **src**,**dst** | `{src,dst}` | `test_tools_table_fs.py` | — |
 | 21 | `fs.read` | 读文本文件；二进制与超限会如实说明（二进制直接拒绝，超限返回截断内容并标注） | `read` | 否 | A B C D E F G H **M**（§38） | **path**；max_bytes | `data`=文本；`meta` 给 `encoding`/`bytes_read`/`total_bytes`/`truncated`/`had_errors` | `test_tools_table_fs.py` | — |
@@ -1982,13 +1982,18 @@ SELF-CHECK DONE（agent_h）
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（**16 个**，实测）= 编排面 11 个 + 文件面白名单 5 个（`draft/37` §38 的用户裁定）
+### M.4 "工具面"（**17 个**，实测）= 编排面 11 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit`）
 
 > **编排面 11 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件批量派活）。
-> **文件面白名单 5 件**：`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` ——
-> 只读四件加一支笔，**没有** `fs.edit` / `fs.delete` / `fs.move`（前两件不可逆，
-> 第三件是 G 的活）。理由是真机读数：那一趟 23 步里 15 步在猜「盘上有没有论文」，
-> 最后交不出报告 —— M 缺的不是判断力，是**眼睛与笔**。
+> **文件面白名单 6 件**：`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit` ——
+> 只读四件加一支笔，再加一把手（锚定替换）；**没有** `fs.delete` / `fs.move`
+> （一个真删、一个换位置，都不可逆）。
+> - 前五件的理由是真机读数（`draft/37` §37）：那一趟 23 步里 15 步在猜「盘上有没有论文」，
+>   最后交不出报告 —— M 缺的不是判断力，是**眼睛与笔**。
+> - `fs.edit` 是 2026-10-03 补的（§57）：第八趟真机里主控**知道**该改哪三处，却试图用
+>   `fs.write` 重写整份 26 KB 的主稿 —— 回复被输出额度截断在字符串中间，连续三次坏 JSON
+>   整趟作废。`fs.edit` 的输出量与**改动量**成正比（不是与文件大小成正比），
+>   而且比整文件覆盖更安全 ——"不可逆"那条理由对它不适用。
 
 #### M.4.1 M 能召唤的 8 个角色 × 它们的动作（53 个可召唤动作）
 
