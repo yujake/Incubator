@@ -7660,3 +7660,88 @@ B 也没有第二份文本可以逐字比对。主控在报告 §八.1 写的那
 下一轮：**T1 第 7 趟**，同一夹具、同一 58 字任务原文。
 要看的信号：`experiments` 是否出现 **formal/proof 行**（形式化腿的第②步）、
 `documents` 是否建成、**H 是否被召唤**（审校腿）。
+
+---
+
+## §93 T1 第 7–8 趟：三条腿各自都做到过，但没有一趟三条齐 —— 方差与一处空转
+
+第 7、8 趟都用同一夹具（6 份被引原文 + P7/P8）与同一个 58 字任务原文。
+第 7 趟的夹具里 P7/P8 的"读数"栏还只是"0 条被核"；第 8 趟把它改成**台账可数的口径**
+（"台账里带逐字比对记录的命题 0 条（`statements` 的 `quote_verified` 为 true/false，
+或 `relations` 带 `quote`+`quote_verified`）"、"`experiments` 的 proof 行 0 条"）——
+验收表定义"这一条怎么算数"是它的本职，不是分工暗示。
+
+| 读数 | 第 7 趟（`t1g`） | 第 8 趟（`t1h`） |
+|---|---|---|
+| 退出 / 步数 / 花销 | 0 / 72 / $0.952291 | 0 / 74 / $0.943423 |
+| 召唤 | 22（B3 E9 G9 H1） | 36（**B20** E8 G7 H1） |
+| 结局 | ok 13 / refused 9 | ok 11 / **refused 25** |
+| `literature` | **0** | **0** |
+| `statements` | 0 | 0 |
+| `experiments` | 3（全 `method=formal`，`heuristic`/`inconclusive`） | 6（同形状） |
+| `documents` | **1**（`accepted`，3 claims） | **1**（`revised`，5 claims） |
+| H | `review` ×1 ⇒ 0 findings | `review` ×1 ⇒ 0 findings |
+| 正文改动 | 1 处（sha→`8bc27092`） | 3 处（sha→`4aed32ae`，26155→26336 B） |
+| 收工门 | 六格全过 | 六格全过 |
+
+### 一、结论：能力都在，**合取不稳定**
+
+把八趟摊开看，三条腿各自都被真机证明过：
+
+| 腿 | 做到过的趟 | 证据 |
+|---|---|---|
+| 引文腿（逐字比对落台账） | **第 6 趟** | `literature` 5 行、`statements` 10 行（1 条 `quote_verified=true`、9 条"未查"+理由） |
+| 形式化腿（检查器真的验证过） | **第 6 趟** | `check_formal` 两条 `verified`（`exactness_core` / `fekete_core`） |
+| 形式化腿（proof 行落库这条链） | **第 6/7/8 趟** | `experiments` 里 `method=formal` 的行（第 6 到第 8 趟分别是 0→3→6 条） |
+| 审校腿（我方稿件被 H 审过） | **第 7/8 趟** | `documents` 1 行 + `H.review` 跑过、`reports/0000-review.md` 落盘 |
+
+**没有任何一趟三条齐**，而且波动很大：第 6 趟有引文+形式化、没有 `documents`/H；
+第 7、8 趟有 `documents`/H 与 formal 行，却**没有 `literature`/`statements`**（`A` 一次没被召唤）。
+这不是"某一条腿坏了"，是**主控的规划每趟不一样**：先登记文献这一步做了与否，决定了后面
+引文腿能不能落台账。
+
+### 二、第 8 趟的新形态：20 次 `register_statement` 全被拒，而拒绝里没有它需要的事实
+
+第 8 趟 25 条拒绝里 **20 条**是 `B.register_statement` —— 因为 `literature` 表 0 行
+（那一趟没人派 `A.ingest_local`），每一条 `external_lit` 命题都撞在同一堵墙上：
+
+```
+literature 表里没有 lit_id='0000' ⇒ 这条命题的出处不存在，整笔不写库
+```
+
+而"表是空的"与"号写错了"这两件事的处置完全不同，拒绝里当时**一个字都没说**。
+模型于是换着号继续猜（`0000`、`0001`、`0003`…），20 次全废。
+
+**修法**（`agent_b/register_statement.py`）：拒绝时带上状态读数 ——
+"表里现有 N 行，lit_id：[…]（或"一个都没有 —— 表是空的"）"，并把
+`literature_rows` / `available_lit_ids` 放进拒绝载荷。
+口径与 `draft/28` §196（`conductor.acceptance` 连 `documents` 行一起返回，
+免得主控从标题里猜一个号）完全一致：**这不是分工暗示，是这次调用失败所需要的那个事实**。
+
+判据：`tests/test_intake_actions.py::test_an_unknown_lit_id_refusal_carries_the_literature_state`
+—— 空表时断言"表是空的"、有行时断言真号被列出（正控），读数两格都要在。
+
+### 三、还登记着两处缺口（都不是这一轮该硬塞的）
+
+1. **报告里的数字 vs 台账没有判据**（§92 第五节）：第 6 趟报告称 4 条 `quote_verified=true`、
+   台账只 1 条。可行的做法是先设计"可复算的读数栏位"口径，再由 `closing` / `reviewaccept` 复算。
+2. **合取不稳定**：八趟的读数说明这是**规划方差**，而框架目前没有任何一格判据要求
+   "这次的交付里，任务点名的每一条腿都要有落台账的凭据"。最接近它的工具是验收表
+   （P1–P8）与 `conductor.acceptance`，但两者都只读不判；`closing` 的 `substance` 格
+   只问"五张表里有没有非空的"。要治本得让验收表的**机器可判行**进 `closing`
+   （第 8 趟已经把 P7/P8 的读数写成可数口径，是这条路的第一步），但那是新的一格判据
+   （要设计"哪些行机器可判、怎么复算"），不在这一轮硬塞。
+
+### 四、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 入库动作那一组 | `pytest tests/test_intake_actions.py -q` | **11 passed**（含新的状态读数判据） |
+| 拒绝形态 / 广告面 | `pytest tests/test_refusals.py tests/test_action_surface_matches_acceptance.py -q` | **13 passed** |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3485 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1381.25s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+**下一轮的第一要务**：让"任务点名的每一条腿都要有落台账的凭据"变成机器可判 ——
+第 8 趟已经把 P7/P8 的读数写成可数口径，接着要做的是让 `closing` 复算那几行
+（哪几行机器可判、怎么复算，见第三节第 2 条）。在那之前，重跑更多趟只是抽签。

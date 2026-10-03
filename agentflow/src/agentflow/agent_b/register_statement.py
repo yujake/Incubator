@@ -157,10 +157,24 @@ class _RegisterStatement:
         with self.store.tx("literature", "statements", actor=self.actor,
                            note="register_statement") as tx:
             if lit_id and tx.find("literature", lit_id=lit_id) is None:
-                # 坏引用不许进库（与 `doc.build_document` 的 check_citations 同一条纪律）
+                # 坏引用不许进库（与 `doc.build_document` 的 check_citations 同一条纪律）。
+                #
+                # 附带状态读数（`draft/37` §93 的真机读数）：T1 第 8 趟里这一条被拒了
+                # 20 次 —— `literature` 表 0 行（那一趟没人派 `A.ingest_local`），
+                # 于是每一条 `external_lit` 命题都撞在同一堵墙上，而拒绝只说"没有这个 lit_id"，
+                # 模型无从知道"表本身是空的"还是"号写错了"。这两件事的处置完全不同。
+                # 读数里给出"表现在有几行、现有哪些 lit_id"，是为了让它拿一个真的号
+                # （或者知道得先去登记），而不是换着号继续猜 —— 这不是分工暗示，
+                # 它是这次调用失败所需要的那个事实（与 `draft/28` §196 给 documents 行同一口径）。
+                lit_rows = tx.rows("literature")
+                ids = [str(r.get("lit_id") or "") for r in lit_rows[:8]]
+                more = "（只列前 8 个）" if len(lit_rows) > 8 else ""
                 return _refuse("unknown_lit_id",
                                f"literature 表里没有 lit_id={lit_id!r} ⇒ 这条命题的出处不存在，"
-                               "整笔不写库", source_lit_id=lit_id)
+                               f"整笔不写库。表里现有 {len(lit_rows)} 行，lit_id："
+                               f"{ids or '（一个都没有 —— 表是空的）'}{more}",
+                               source_lit_id=lit_id, literature_rows=len(lit_rows),
+                               available_lit_ids=ids)
 
             stmt_id = tx.alloc_id("stmt")
             row = S.Statement(

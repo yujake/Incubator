@@ -205,6 +205,33 @@ def test_b_register_statement_refuses_bad_input_without_writing(tmp_path: Path):
     assert not st.rows("statements"), "被拒的命题不许留下半行"
 
 
+def test_an_unknown_lit_id_refusal_carries_the_literature_state(tmp_path: Path):
+    """判据（`draft/37` §93）：`unknown_lit_id` 的拒绝必须带状态读数（几行、有哪些号）。
+
+    真机读数（T1 第 8 趟）：这一条被拒了 20 次 —— 那一趟 `literature` 表 0 行
+    （没人派 `A.ingest_local`），每一条 `external_lit` 命题都撞在同一堵墙上，
+    而拒绝只说"没有这个 lit_id"，模型分不清"表是空的"与"号写错了"（处置完全不同），
+    于是它换着号继续猜，20 次全废。读数里带上"表现在有几行、现有哪些 lit_id"，
+    是这次调用失败所需要的那个事实（与 `draft/28` §196 给 documents 行同一口径）。
+    """
+    st = _store(tmp_path)  # 空 literature
+    b = AgentB(st, extractor=None, extract_text=None)
+    empty = b.register_statement(statement_full="设 G 是有限群。", origin="external_lit",
+                                 source_lit_id="0000", page_range={"label": "全文未分页"},
+                                 proof_text="Proof. 摘录。", quote_reason="还没查")
+    assert empty["kind"] == "unknown_lit_id", empty
+    assert empty["literature_rows"] == 0 and empty["available_lit_ids"] == [], empty
+    assert "表是空的" in empty["error"], empty["error"]
+
+    # 正控（有行时把真号列出来）：拿一个真的号就不会再撞这一堵墙
+    lit_id = _lit(st, tmp_path)
+    hit = b.register_statement(statement_full="设 G 是有限群。", origin="external_lit",
+                               source_lit_id="9999", page_range={"label": "全文未分页"},
+                               proof_text="Proof. 摘录。", quote_reason="还没查")
+    assert hit["kind"] == "unknown_lit_id", hit
+    assert hit["literature_rows"] == 1 and lit_id in hit["available_lit_ids"], hit
+
+
 def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
     """负控（§68 的真机形状）：`page_range` 在场但内容是空的 ⇒ 拒，且零写入。
 
