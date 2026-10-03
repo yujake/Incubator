@@ -53,13 +53,12 @@ _ROLES = ("E", "F", "G", "H")
 #: 两道一起上 —— 只靠其中一道都会在后续维护里被绕过。
 _ROLES_WRITE = ("E", "F", "G")
 
-#: 形式化检查器的候选可执行文件。**逐个探测，不猜**。
-#: 猜"环境里应该有 lean"会让 `checked` 字段变成谎话。
-_VERIFIER_CANDIDATES = (
-    ("lean", "lean --version"),
-    ("coqc", "coqc --version"),
-    ("isabelle", "isabelle version"),
-)
+#: 形式化检查器的候选与查找口径**只有一处定义**：`agentflow.toolchain`
+#: （`CHECKERS` 名单 + `VERSION_COMMANDS` + 查找顺序：显式配置 → `AGENTFLOW_PROVER_PATH` → PATH）。
+#: 本模块此前自己维护一份候选表并只 `shutil.which`，而 `formalgw.find_lean` 又自己看一遍 PATH
+#: —— 两处口径独立 ⇒ "探测说没有、调用却能跑"是可能的，而且形式化那一条腿会**静默降级**成
+#: cross_check（2026-10-03 实测：Lean 就装在机器上，`available` 却是空的）。
+#: 现在探测只是转发（与 `check_formal` 转发到 `formalgw.check_lean` 同一条纪律）。
 
 #: 证据力排序（弱 → 强）。用于 `best_evidence_kind`。
 #:
@@ -95,68 +94,31 @@ def code_hash(path: str | Path) -> str:
 
 
 def detect_verifier() -> dict:
-    """探测环境里有哪些证明检查器。
+    """探测环境里有哪些证明检查器 —— **转发**到 `agentflow.toolchain.probe_checkers`。
 
     返回 ``{"available": [...], "available_names": [...], "checked": True/False,
-    "reason": str, "probe_errors": [...]}``。
+    "reason": str, "probe_errors": [...]}``（外加给人读的 ``looked_in`` / ``sources``）。
 
     **`checked=False` 只表示"探测本身没做成"**（例如 PATH 不可读、`shutil.which`
-    抛异常、二进制在但版本探测起不来），`available=[]` 才是"探测了，确实没有"。
-    两者不能合并 —— 合并会把"我们不知道环境里有没有 Lean"读成
-    "环境里确定没有 Lean"，而后者会让一条本该走形式化核验的命题
-    悄悄停在 cross_check 上。
+    抛异常、二进制在但版本探测起不来、或者显式配置指了一个不存在的路径），
+    `available=[]` 才是"探测了，确实没有"。两者不能合并 —— 合并会把
+    "我们不知道环境里有没有 Lean"读成"环境里确定没有 Lean"，而后者会让一条本该走
+    形式化核验的命题悄悄停在 cross_check 上。
 
-    ⚠️ 本函数曾经把 `checked` **硬编码成 True**（docstring 承诺了一个
-    任何代码路径都返回不了的状态），且工具声明 ``side_effect="none"`` ——
-    而它实际上会 `shutil.which` + `subprocess.run` 起外部二进制。
-    现在的口径：探测有任何一步失败 ⇒ `checked=False` 并把失败逐条列进
-    `probe_errors`；副作用等级由调用方声明为 ``read``（执行本地只读命令，
-    `verify.detect_verifier` 的 ToolSpec 见文件末尾）。
+    为什么探测不再在本文件里实现（2026-10-03）：本模块只认 PATH 上的名字，
+    而"机器上装了、只是没进 PATH"是常态（Isabelle 在 Windows 上尤其如此）。
+    那天实测 Lean 就装在机器上、`available` 却是空的 ⇒ 形式化那一条腿静默降级，
+    而报告里只剩一句"没核到"。现在查找口径、三态、以及"找过哪些地方"都在
+    `agentflow.toolchain` 一处定义，探测与调用（`formalgw.find_lean`）共用同一个答案。
+
+    ⚠️ 本函数曾经把 `checked` 硬编码成 True（docstring 承诺了一个任何代码路径都返回不了
+    的状态），也曾经声明 ``side_effect="none"`` 而实际起外部二进制 —— 现在的口径：
+    探测有任何一步失败 ⇒ `checked=False` 并把失败逐条列进 `probe_errors`；
+    副作用等级由调用方声明为 ``read``（执行本地只读命令，见文件末尾的 ToolSpec）。
     """
-    import shutil
-    import subprocess
+    from .. import toolchain as TC
 
-    out: list[dict] = []
-    probe_errors: list[str] = []
-    for name, cmd in _VERIFIER_CANDIDATES:
-        try:
-            exe = shutil.which(name)
-        except Exception as exc:  # noqa: BLE001 - PATH 不可读等
-            probe_errors.append(f"{name}：which 失败（{type(exc).__name__}: {exc}）")
-            continue
-        if not exe:
-            continue
-        ver = ""
-        try:
-            r = subprocess.run(cmd.split(), capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=10)
-            ver = (r.stdout or r.stderr or "").strip().splitlines()[0] if (r.stdout or r.stderr) else ""
-        except Exception as e:  # noqa: BLE001
-            ver = f"(版本探测失败：{type(e).__name__}: {e})"
-            # "二进制在 PATH 上"这个事实成立（仍记入 available），
-            # 但"探测完成"不成立 ⇒ checked=False。两者的区别必须保留：
-            # 前者让调用方知道有这个检查器，后者让它知道版本号不可信。
-            probe_errors.append(f"{name}：版本探测失败（{type(e).__name__}: {e}）")
-        out.append({"name": name, "path": exe, "version": ver})
-    checked = not probe_errors
-    return {
-        "checked": checked,
-        "available": out,
-        "available_names": [x["name"] for x in out],
-        "probe_errors": probe_errors,
-        "reason": (
-            (
-                f"探测到 {len(out)} 个证明检查器：{'、'.join(x['name'] for x in out)}"
-                if out
-                else "探测完成：环境里**没有**任何受支持的证明检查器 ⇒ 本环境无法产出 proof 级证据"
-            )
-            if checked
-            else f"探测**没做成**（{len(probe_errors)} 处失败）：{'；'.join(probe_errors)}"
-            + (
-                f"；已探到的检查器：{'、'.join(x['name'] for x in out)}" if out else ""
-            )
-        ),
-    }
+    return TC.probe_checkers()
 
 
 def check_formal(

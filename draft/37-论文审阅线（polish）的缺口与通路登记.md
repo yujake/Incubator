@@ -6422,3 +6422,142 @@ $env:PATH = "D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;" + $env:PATH
    要么把它们挪到一个稳定的位置 —— 这一条要用户裁决。
 3. **归因题要给出可复算的三段**：角色/动作（有没有）→ 实现（坏没坏）→ 环境（看得见吗）。
    把这三段分开查，才不会像我第一轮那样把"PATH 看不见"直接写成"本机没有"。
+
+---
+
+## §82 治本：把「这台机器能不能做形式化核验」变成一处定义 + 可读三态 + 跑之前的体检
+
+用户 2026-10-03 的两条授权：
+
+> "允许你放手加强，并用key实测直到通过。"
+> "实在要动，允许动禁改区。"
+
+§81 只做了**归因**（不是 E 缺动作、不是实现失败，是检查器没进 PATH）。这一节是**治本**：
+不让"能不能做形式化"继续取决于 PATH 上碰巧有什么、或者 `temp/` 里碰巧还留着什么。
+
+### 一、根因是什么（为什么"设个 PATH 就行"不算治本）
+
+三个根因，缺一条都还会再坏：
+
+1. **两处独立地看 PATH**：`tools/verify_tools.detect_verifier`（探测）与
+   `formalgw.find_lean`（调用）各写一份 `shutil.which("lean")` ⇒
+   "探测说没有、调用却能跑"是可能的，而**没有任何判据会发现这种自相矛盾**；
+2. **能力静默降级**：探测说"没有检查器" ⇒ 形式化那条腿改成 `cross_check`，
+   报告里只剩一句"没核到"，**没有任何地方会说"这台机器其实能做"**（用户的"这是坏的"）；
+3. **工具链是隐性依赖**：Lean 与 Mathlib 都在 `D:\Incubator\temp\` 里 ——
+   不在交付物里、没有声明、没有判据；它一旦被清掉，能力就无声消失。
+
+### 二、改了什么（四处，按层分）
+
+| 层 | 文件 | 改了什么 |
+|---|---|---|
+| **新：一处定义** | `src/agentflow/toolchain.py`（新增，约 230 行） | 「这台机器上的证明工具链」的唯一落点：三档查找（显式配置 `AGENTFLOW_LEAN_BIN`/`AGENTFLOW_COQ_BIN`/`AGENTFLOW_ISABELLE_BIN`（文件**或**目录）→ `AGENTFLOW_PROVER_PATH`（目录列表）→ PATH）、三态探测、**"找过哪些地方"**、`source`（是从哪一档找到的）、Mathlib 那一轴（根 / revision 与钉住的是否一致 / umbrella `.olean` 在不在） |
+| 禁改区（**已获授权**） | `src/agentflow/tools/verify_tools.py` | `detect_verifier` 改成**转发** `toolchain.probe_checkers()`；候选表 `_VERIFIER_CANDIDATES` 换成指向新落点的注释。**只动这两处**（25 插入 / 63 删除），逐行走查清单见第四节 |
+| 调用侧 | `src/agentflow/formalgw.py` | `find_lean` 改走同一个答案（`toolchain.resolve_checker("lean")`），PATH 降级为第三档；`which=` 注入那条路保留（离线判据靠它） |
+| 入口 | `src/agentflow/cli.py` | 新增子命令 **`agentflow doctor`**：跑之前先看"这台机器能做哪些事"（模型 key 配没配 / 检查器在不在、从哪找到的 / Mathlib 对不对得上 / 结论），**不发起任何模型调用**；三态退出码 0 齐 / 1 有缺 / 2 没查成；`--json` 给机器读 |
+
+**治本的关键不是"多认一个环境变量"，而是第 1 与第 2 条根因被消掉**：
+现在探测与调用**共用同一个答案**（有判据钉住，见第三节第 3 条），
+而"找不到"这件事会**说清楚找过哪里**（`looked_in`），"配了却找不到"算**配置问题**
+（`checked=False`，fail-closed），不再冒充"环境里没有"。
+
+### 三、判据（`tests/test_toolchain_paths.py`，9 条：正控 + 负控 + 反真空）
+
+| 判据 | 正控 | 负控 / 反真空 |
+|---|---|---|
+| 三档查找 | 显式指**文件**、显式指**目录**、`AGENTFLOW_PROVER_PATH` 指目录 —— 三档各一条，且 `source` 如实 | **不配置时，一个不在 PATH 上的桩必须看不见**（否则"配置能让它可见"不构成判据） |
+| fail-closed | —— | 配了**不存在**的路径 ⇒ `checked=False` + `probe_errors` 写出"不存在"，且**不许**报成"有检查器" |
+| 一处定义 | 同一环境下"探测说有 lean" ⟺ `find_lean()` 给得出路径 | 同一个环境下两者**不许**不一致（旧形态正是各看一遍 PATH） |
+| 覆盖面要写出来 | `reason` 与 `looked_in` 必须写清查过哪里 | —— |
+| Mathlib 那一轴 | 根在、umbrella `.olean` 不在 ⇒ 如实说"不可用"；补上 `.olean` ⇒ "可用" | 没配 ⇒ 报没配 |
+| doctor 三态 | 齐 ⇒ 0；查过有缺 ⇒ 1；`checked=False` ⇒ 2 | 输出里**绝不出现 key 的值** |
+
+判据造的是**桩**（Windows `.bat` / POSIX shell 脚本），所以任何机器上可复跑，
+也不会因为"这台机器恰好有 Lean"而变真空。**刻意不断言"桩能让检查通过"** ——
+让一个桩自称 `verified` 就是制造假证据，那正是禁改区那条规则要防的事。
+
+### 四、禁改区（`tools/verify_tools.py`）的逐行走查清单
+
+改动只有两处，`git diff --stat` 是 `1 file changed, 25 insertions(+), 63 deletions(-)`：
+
+1. **删** `_VERIFIER_CANDIDATES = (("lean", "lean --version"), ("coqc", …), ("isabelle", …))`，
+   **换成**一段注释指向 `agentflow.toolchain` 的 `CHECKERS` / `VERSION_COMMANDS` 与三档顺序；
+2. **`detect_verifier` 的函数体**（原来 60 行：`shutil.which` 逐个探、跑版本命令、拼 `reason`）
+   **换成** `from .. import toolchain as TC` + `return TC.probe_checkers()`；
+   docstring 保留原有契约（`checked=False` 的语义、与 `available=[]` 的区别、历史教训），
+   补上"为什么不再在本文件实现"与"查找口径现在在哪一处定义"。
+
+第二份（`scripts/lint_rules.py`，`auth-audit`）—— 全量跑出来才发现的**连环两处**：
+
+3. `_R010_ALLOWED_SITES` 里唯一那条 `verify.detect_verifier` 例外**删掉**
+   （改成 `dict[str, str] = {}` + 一段带日期的说明）。为什么必须删：本仓自己有一条判据
+   `tests/test_lint_rules.py::test_r010_allowed_sites_still_exist` 要求**例外清单里每一条
+   都必须在真实树上命中** —— 探测不再自己起子进程之后它命中不了 ⇒
+   「留着一条永不生效的豁免」正是那条判据要防的形态；
+4. R010 的 docstring 里那段"`subprocess` 标记串味"的说明同步改写（注明这一条已在 §82 消失）。
+
+复跑两份 diff 的命令：
+
+```powershell
+git -C D:\Incubator diff -- agentflow/src/agentflow/tools/verify_tools.py agentflow/scripts/lint_rules.py
+```
+
+（另有第三处连带**不在禁改区**：`tests/test_r5_orchestration_cost.py` 的
+`_REF_KNOWN_MENTION_TOKENS` 登记了历史名字 `_VERIFIER_CANDIDATES` —— 判据自己的口径是
+"历史名字就逐条登记，别把它写没"，因为 `docs/PROPOSAL-side-effect-axes.md` 讲当年那处
+exec 定义冲突时仍引它。）
+
+**按 `AGENTS.md` 的规则，这一处仍需要「人逐行走查 + 2 名 reviewer 批准」**：
+用户 2026-10-03 的"允许动禁改区"是**授权动**，不是**代签**。
+我没有、也不会伪造任何 reviewer 签名 —— `python scripts/noai_gate.py --git` 会照实报
+`requires_human`（见下面读数），直到人真的签出那两条。
+
+### 五、连带读数变化（如实登记，不藏）
+
+- **R010 少了一条 info**（50 → **49**，严格档 49 → **48**）：`verify.detect_verifier`
+  此前命中 `subprocess` 标记 ⇒ 被登记为"字面假阳性"并打印一条 info；现在它只是转发，
+  不再自己起子进程 ⇒ 那条**假阳性**消失。**减少的是假阳性，不是判据**。
+  `DEVELOPMENT.md` 的 `LIVE-READINGS` 块与两个常量行已按"改数字，别改判据"更新，
+  并把这次变化写进了那一行的观测史。
+- 登记税：新模块要进 `tests/test_release_all.py` 的顶层模块表（写了理由）、
+  读图第 0 层加一行、`cli.py` 行数 2228 → 2281、子命令数 23 → **24**（README 两处 + 读图一处）。
+
+### 六、实测（用本机那份真 Lean，**完全不改 PATH**）
+
+只设两个环境变量：
+
+```powershell
+$env:AGENTFLOW_LEAN_BIN = "D:\Incubator\temp\lean470\lean-4.7.0-windows\bin\lean.exe"
+$env:AGENTFLOW_MATHLIB_ROOT = "D:\Incubator\temp\mathlib-pinned\mathlib4-4.7.0"
+```
+
+| 步骤 | 结果 |
+|---|---|
+| `toolchain.probe_checkers()` | `available_names=['lean']`，`sources={'lean': 'explicit'}`，`checked=True` |
+| `formalgw.find_lean()` | `D:\…\bin\lean.exe`（**与探测同一个答案**） |
+| `verify_tools.check_formal(claim="1+1=2", source="theorem t : 1 + 1 = 2 := rfl")` | `checked=True, verified=True, reason='verified'` |
+| `reg.call("verify.run_experiment", role="E", method="formal", …)` | `ok=True`，**`evidence_kind=proof`** |
+| `toolchain.toolchain_report()` | `can_do_formal=True`、`key_present=False`（我的会话里没有模型 key）、`mathlib.pinned_match=True` |
+| `agentflow doctor`（不配时） | 照实打"一个都没找到。找过 —— lean: AGENTFLOW_LEAN_BIN、AGENTFLOW_PROVER_PATH、PATH"，退出码 1 |
+
+### 七、读数（2026-10-03）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 新增判据 | `pytest tests/test_toolchain_paths.py -q` | **9 passed** |
+| 受影响的一批 | 同上（12 个文件） | **246 passed / 1 skipped**（630.76s，退出码 0） |
+| lint 日常 | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 49`（见第五节：少的那条是 R010 的假阳性） |
+| lint 严格 | `python -B scripts/lint_rules.py --strict` | `error 0 / warning 56 / info 48` |
+| FC-27 门 | `python -B scripts/noai_gate.py --git` | **[requires_human] required_approvals=2**，2 条改动落在禁 AI 区（`auth-audit`、`prover-bridge`）：`scripts/lint_rules.py`、`src/agentflow/tools/verify_tools.py`，退出码 **1**（这是设计形态，不是失败） |
+| 全量 pytest | `python -B -m pytest -q -p no:cacheprovider` | **3452 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（1407.29s，退出码 **0**） |
+
+### 八、还差什么（如实说）
+
+- **"用 key 实测直到通过"这一步我做不了**：这个会话里 `AGENTFLOW_MODEL_API_KEY`
+  没设（用户级/机器级都没有，也没有 `.env` 或配置目录），所以**发不出真机请求**。
+  需要用户给 key（或告诉我它在哪）。拿到之后要做的那一趟是：
+  真实模型驱动 E 走形式化那条腿，落一条 `evidence_kind=proof` 的实验 ——
+  §81 已经证明"框架这一侧通"，还差"模型自己会不会派"。
+- **Mathlib 那一档**：umbrella 的 `.olean` 不在缓存里 ⇒ `import Mathlib` 仍会
+  `import_unavailable`。核 Mathlib 量级的定理要先把 Mathlib 编全（机器级重活，待裁）。
+- **`verify_tools.py` 那两个 reviewer 签名**：门会红成 `requires_human`，等用户签。

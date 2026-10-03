@@ -382,11 +382,22 @@ def _same_commit(a: str, b: str) -> bool:
 
 
 def find_lean(*, which: Callable[[str], str | None] | None = None) -> str:
-    """在 PATH 里找 `lean` 可执行文件；找不到返回空串。
+    """找 `lean` 可执行文件；找不到返回空串。
 
-    单列成一个函数是为了让版本检查可离线测试：注入一个假的 `which`
-    就能构造出"装了但版本不符"这个本机拿不到的状态（本机只有 4.7.0）。
+    「查找口径只有一处」（:mod:`agentflow.toolchain`）：显式配置
+    （`AGENTFLOW_LEAN_BIN`，文件或目录）→ `AGENTFLOW_PROVER_PATH` → PATH。
+    为什么不再自己 `shutil.which` 一次：探测（`tools/verify_tools.detect_verifier`）
+    与调用（本函数）此前各看一遍 PATH，于是"探测说没有、调用却能跑"是可能的 ——
+    2026-10-03 实测到的形态是：Lean 就装在机器上（仓库临时区里），探测报 `available=[]`，
+    形式化那一条腿静默降级成 cross_check。
+
+    `which` 注入那条路保留：离线判据靠它构造"装了但版本不符"这类本机拿不到的状态。
     """
+    from . import toolchain as TC
+
+    found = TC.resolve_checker("lean")
+    if found["path"]:
+        return str(found["path"])
     fn = which if which is not None else shutil.which
     return str(fn("lean") or "")
 

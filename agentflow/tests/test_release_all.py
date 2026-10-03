@@ -2175,6 +2175,11 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",
+    "toolchain.py": "这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ "
+                    "`AGENTFLOW_PROVER_PATH` → PATH 三档查找 + 三态探测 + Mathlib 那一轴；"
+                    "探测（`tools/verify_tools.detect_verifier`，禁改区）与调用（`formalgw.find_lean`）"
+                    "**共用这一个答案** —— 此前两处各看一遍 PATH，于是「探测说没有、调用却能跑」"
+                    "是可能的，而形式化那一条腿会静默降级成 cross_check（`draft/37` §82）",
     "verify.py": "全局不变量校验",
     # `draft/37` §72–§74（2026-10-03）：用户端。两者都是「新增」，不是对拍副本；
     # 登记它们的理由是"包目录里凭空多出一个模块"必须有人解释（`R6-AN-1` 的原始形态）。

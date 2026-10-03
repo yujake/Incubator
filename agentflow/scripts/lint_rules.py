@@ -795,14 +795,13 @@ _R010_NETWORK_MARKERS: tuple[tuple[str, str], ...] = (
 #: `tests/test_lint_rules.py::test_r010_allowed_sites_still_exist` 会断言
 #: 每个键都真的指向一个"确实起进程、且确实没声明 exec"的工具 ——
 #: 否则例外清单会静默腐烂成一张"永不生效的豁免"。
-_R010_ALLOWED_SITES: dict[str, str] = {
-    "verify.detect_verifier": (
-        "按定义不是 exec：它跑的命令是工具自己写死的 `_VERIFIER_CANDIDATES`"
-        "（`lean --version` / `coqc --version` / `isabelle version`），"
-        "调用方决定不了跑什么（P-13 §10 第 1 条逐字登记了这处歧义）。"
-        "它仍是 `subprocess.run` ⇒ 字面判据命中，所以在此登记而不是改声明。"
-    ),
-}
+_R010_ALLOWED_SITES: dict[str, str] = {}
+#: 2026-10-03（`draft/37` §82）删掉了这里唯一的一条：`verify.detect_verifier`。
+#: 它此前"按定义不是 exec、却仍被 `subprocess` 标记命中"，所以登记为例外；
+#: 探测现在只是转发 `agentflow.toolchain.probe_checkers`（查找口径与三态都搬到那一处定义），
+#: 本工具不再自己起子进程 ⇒ 例外不再命中，而本文件末尾的判据
+#: （`tests/test_lint_rules.py::test_r010_allowed_sites_still_exist`）要求
+#: 例外清单里的每一条都必须在真实树上命中 —— 所以是删掉它，而不是留着一条永不生效的豁免。
 
 #: R010-a 的已知漏检（这条规则看不见、但按定义/按事实确实会起进程的工具）。
 #:
@@ -1091,8 +1090,9 @@ def rule_R010_external_axis_mismatch(root: Path) -> list[Finding]:
     - `search` / `download` 是按**末段相等**匹配的（它们要认的是 `prov.search` /
       `downloader.download` 这两个入口）⇒ `re.search` / `rx.search` 这种正则方法会被命中；
     - `subprocess` 在 R006 的口径里算"网络/子进程/模型调用"三类共用的一张表 ⇒
-      只起进程、不出网的工具也会被命中（`verify.detect_verifier` 就是这一条，
-      它已按 R010-a 逐条登记在 `_R010_ALLOWED_SITES` 里）。
+      只起进程、不出网的工具也会被命中。（2026-10-03，`draft/37` §82：此前命中的
+      唯一一个是 `verify.detect_verifier`，它已随"探测搬到 `agentflow.toolchain`"而不再
+      自己起子进程 —— 那条例外登记也已从 `_R010_ALLOWED_SITES` 删掉。）
 
     为什么登记而不是改标记表或加 `noqa`：`search` / `download` 那两条是 R010-b 也要用的
     （同一张表管两个方向），动它就是动既有判据；而静默豁免是本项目最忌的形态。

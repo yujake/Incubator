@@ -1182,6 +1182,8 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_target_text",               # 负控叙述里被删掉的字段名
     "_diag",                      # 举例用的"谁都不认识的键"
     "_plan",                      # 早期散文写法（今天真名是 `_plan_mode`）
+    "_VERIFIER_CANDIDATES",       # 已删的候选表（`draft/37` §82：探测搬到 `agentflow.toolchain`；
+                                  # `docs/PROPOSAL-side-effect-axes.md` 在讲当年的 exec 定义冲突时仍引它）
     "_mismatch",                  # 旧词表里那种"`quote` 加后缀"的取值名（词表已改写法）
     "_BASE_",                     # 别名前缀（不是完整标识符）
     "_impl",                      # 被转发的名字（`lint_rules.py` 的解释）

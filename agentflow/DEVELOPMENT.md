@@ -102,9 +102,11 @@
 > `agent_loop`）的 46 条判据；§176 那批是 R-57/R-32 16 条 + `tests/test_sessions.py` 7 条；
 > 这个数**每加一条用例就变**，所以只当"当次读数"引用、不要往别处抄），
 > 第 2 行的 `error 0 / warning 2 / info 15`（S2 当次：9 条规则）
-> 今天是 **`error 0 / warning 9 / info 50`（12 条规则，R004/R006 已退休、R011/R012 在册；
+> 今天是 **`error 0 / warning 9 / info 49`（12 条规则，R004/R006 已退休、R011/R012 在册；
 > `info` 从 25 → 30（T1 登记 5 条 R011 预留取值）→ 37（`draft/28` §168 拓宽取词表面 + 登记 7 条"由数据产出"的预留）
-> → **47**（§173 把 R-64 那 10 条也逐条登记为预留）；`error` 一度到 11（R-64 那 10 条无人认领时），
+> → **47**（§173 把 R-64 那 10 条也逐条登记为预留）→ 50（`draft/37` §21 的 `literature.matched` 词表名改后缀）
+> → **49**（`draft/37` §82：探测搬出工具处理器，R010 那条已登记的假阳性跟着消失 —— 少一条假阳性，
+> 不是少一条判据）；`error` 一度到 11（R-64 那 10 条无人认领时），
 > 逐条登记之后回到 6，再在 §176 里**归零** —— 那 6 条全部是 R009 的注释装饰，
 > 已按"只改注释与文档串、一个字符的代码都不动"的写法清掉（改动集与反证见 `draft/28` §176）。
 > 两处当次数见 §0.3 的 `LIVE-READINGS` 块）**，
@@ -159,9 +161,9 @@ LIVE-READINGS:BEGIN
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来。
 lint_rules_rules   = 12   # `len(RULES)`；复跑 `python scripts/lint_rules.py` 摘要行的"规则 N 条"；观测 2026-09-27（G3 复测）
 lint_rules_warning = 9    # `python scripts/lint_rules.py`（日常档）末行的 warning 栏；观测 2026-09-29（`draft/28` §172/§173：本目标全程这一位没动过，9 条与 R-37 那批之前完全一致）
-lint_rules_info    = 50   # 同一档的 info 栏。`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-10-02（`draft/37` §21：49 → **50** —— P2 加 `literature.matched` 时把词表名从 `LIT_MATCH_STATES` 改成 `LIT_MATCH_STATUSES`，于是它进了 R011 的扫描面，`exact` 立刻现形 ⇒ 登记为预留，栏一多打印 1 条。**这一改本身就是一条读数**：名字不以 `VOCAB_SUFFIXES` 那五个后缀结尾的词表整个在扫描面之外 —— `LIT_MATCH_STATES` 之前对它一声不响）。此前：观测 2026-10-02（§20：47 → 49，`statements` 的两条预留）；观测 2026-09-29（`draft/28` §173：30 → 37（§168 拓宽取词面 + 登记 7 条"由数据产出"的预留）→ **47**（§173 又把 R-64 那 10 条登记为预留））。现在这 20 条 info 全部是 R011"栏一：已登记为预留"的逐条打印（`tools/vocab_census.py::RESERVED_VALUES`）——按该表 doctrine，预留项**必须**照样打印含理由，所以它们是设计后果而不是噪音。同一批一度让 R011 的**栏二**多出 10 条无人认领（`error 6 → 11`），那 10 条已在 §173 逐条登记为预留 ⇒ `error` 回到 6，再在 §176 里归零（那 6 条是 R009 的注释装饰，已按"只改注释与文档串"清掉）
+lint_rules_info    = 49   # 同一档的 info 栏。观测 2026-10-03（`draft/37` §82：50 → **49** —— 探测搬出了工具处理器：`verify.detect_verifier` 不再自己 `subprocess.run`，改转发 `agentflow.toolchain.probe_checkers` ⇒ R010 那条**已登记的假阳性**（`subprocess` 标记在 `detect_verifier` 上）跟着消失。这一位**减少**是好事：少一条假阳性，不是少一条判据）。此前：`error` 那一位刻意不在这里钉：它由发布门第 5 项按"必须为 0"强制，而且是并行施工期最先变的一位。观测 2026-10-02（`draft/37` §21：49 → **50** —— P2 加 `literature.matched` 时把词表名从 `LIT_MATCH_STATES` 改成 `LIT_MATCH_STATUSES`，于是它进了 R011 的扫描面，`exact` 立刻现形 ⇒ 登记为预留，栏一多打印 1 条。**这一改本身就是一条读数**：名字不以 `VOCAB_SUFFIXES` 那五个后缀结尾的词表整个在扫描面之外 —— `LIT_MATCH_STATES` 之前对它一声不响）。此前：观测 2026-10-02（§20：47 → 49，`statements` 的两条预留）；观测 2026-09-29（`draft/28` §173：30 → 37（§168 拓宽取词面 + 登记 7 条"由数据产出"的预留）→ **47**（§173 又把 R-64 那 10 条登记为预留））。现在这 20 条 info 全部是 R011"栏一：已登记为预留"的逐条打印（`tools/vocab_census.py::RESERVED_VALUES`）——按该表 doctrine，预留项**必须**照样打印含理由，所以它们是设计后果而不是噪音。同一批一度让 R011 的**栏二**多出 10 条无人认领（`error 6 → 11`），那 10 条已在 §173 逐条登记为预留 ⇒ `error` 回到 6，再在 §176 里归零（那 6 条是 R009 的注释装饰，已按"只改注释与文档串"清掉）
 lint_rules_strict_warning = 56 # `python scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 `info` 在这一档拆成逐模块 warning）；观测 2026-10-01（`goal-7f5116c1` M6/M7：把 6 个角色模块拆成包 ⇒ 逐模块的 R007 行跟着变多，51 → **56**；此前 39）
-lint_rules_strict_info    = 49 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-10-02（`draft/37` §21：48 → **49**，同 `lint_rules_info` 那 1 条预留）；此前观测 2026-10-02（§20：46 → 48）；观测 2026-09-29（`draft/28` §173）
+lint_rules_strict_info    = 48 # 同一档的 info 栏（比日常档少 1：R007 那条 info 变成了很多条 warning）；观测 2026-10-03（`draft/37` §82：49 → **48**，同 `lint_rules_info` 那 1 条（R010 假阳性消失））；观测 2026-10-02（`draft/37` §21：48 → **49**，同 `lint_rules_info` 那 1 条预留）；此前观测 2026-10-02（§20：46 → 48）；观测 2026-09-29（`draft/28` §173）
 noai_paths_glob = 38   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`；观测 2026-09-27 15:02（决策页题 3 落地、把 `src/agentflow/capabilities.py` 纳入清单之后；此前 26，再前 21/19）
 noai_paths_unique = 35   # 上述条目行按第一栏去重后的路径数（27 行去重 ⇒ 24）；观测 2026-09-27 15:02
 noai_paths_categories = 7 # `.noai-paths` 里 `[category: …]` 的分组数；观测 2026-09-27（G3 复测）

@@ -1839,6 +1839,53 @@ def cmd_answer(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    """体检：这台机器现在能做哪些事（「不发起任何模型调用」，不花钱）。
+
+    为什么要有它（2026-10-03 的现场）：形式化那一条腿能不能跑，取决于两件外部事实 ——
+    有没有检查器、它是不是被找得到 —— 而这两件事此前「只能通过跑一趟真机」才知道，
+    并且查不出来的形态是"报告里只剩一句没核到"（用户的原话：这是坏的）。
+    这一条命令把那些事实变成跑之前就能读到的三态读数。
+
+    退出码三态：`0` 都齐（能跑，且形式化也能做）；`1` 查过了、有缺（例如没有模型 key、
+    或者没找到证明检查器 —— 缺什么就少做什么，不是"跑不成"）；`2` 没查成
+    （探测本身不成立：`checked=False`，例如显式配置指了一个不存在的路径）。
+    """
+    from . import toolchain as TC
+
+    rep = TC.toolchain_report()
+    if args.json:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+    else:
+        prov = rep["provers"]
+        print(tty.paint("这台机器的体检", "bold"))
+        print(tty.bullet(("模型 key：已配置" if rep["model"]["key_present"]
+                          else "模型 key：**没配**（设 AGENTFLOW_MODEL_API_KEY）")
+                         + f"；base={rep['model']['base_url']}；model={rep['model']['model']}"))
+        if prov["available"]:
+            for row in prov["available"]:
+                print(tty.bullet(f"证明检查器：{row['name']}（{row['source']}）"
+                                 f" ⇒ {row['path']}；{row['version'] or '（版本读不到）'}"))
+        else:
+            print(tty.bullet(f"证明检查器：一个都没找到。找过 —— {'；'.join(prov['looked_in'])}"))
+            print(tty.bullet("缺了它，形式化那一条腿只能如实报「没核到」；"
+                             "要真做，就把它指出来："
+                             "`AGENTFLOW_LEAN_BIN=<lean.exe 或它所在的目录>`"))
+        if prov["probe_errors"]:
+            print(tty.paint("探测没做成：" + "；".join(prov["probe_errors"]), "yellow"))
+        ml = rep["mathlib"]
+        print(tty.bullet("Mathlib：" + (f"{ml.get('root')}"
+                                       f"（{'与钉住的一致' if ml.get('pinned_match') else '与钉住的不一致'}）"
+                                       f" ⇒ import Mathlib {ml.get('import_mathlib')}"
+                                       if ml.get("root") else str(ml.get("reason")))))
+        print(tty.bullet("结论：" + ("这一趟能做形式化核验（proof 级证据可达）"
+                                     if rep["can_do_formal"] else
+                                     "这一趟做不了形式化核验（会如实报没核到）")))
+    if not rep["provers"]["checked"]:
+        return 2
+    return 0 if (rep["model"]["key_present"] and rep["can_do_formal"]) else 1
+
+
 def cmd_web(args) -> int:
     """起用户端网页（本地小服务）。退出码 0 = 正常停止（Ctrl-C），2 = 没查成。
 
@@ -2190,6 +2237,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--token", default="",
                     help="访问口令（也可用环境变量 AGENTFLOW_WEB_TOKEN；给了就必须带上）")
     sp.set_defaults(func=cmd_web)
+
+    # 体检：跑之前先知道这台机器能做哪些事（有没有 key / 有没有证明检查器 / Mathlib 对不对得上）。
+    # 它不发起任何模型调用 —— 于是"形式化能不能做"这件事在花钱之前就有一个可读的三态读数。
+    sp = sub.add_parser("doctor", help="体检：这台机器能做哪些事（不花钱；0 齐 / 1 有缺 / 2 没查成）")
+    sp.add_argument("--json", action="store_true", help="把体检结果打成 JSON")
+    sp.set_defaults(func=cmd_doctor)
     return p
 
 
