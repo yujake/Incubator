@@ -6309,3 +6309,116 @@ Select-String -Path docs\USER-TEST-TASK-NAIVE.txt -Pattern "run_|check_formal|fs
    这一节把两份任务并列留着，就是为了让这笔欠债**可量**（天真版那四条判据）。
 3. **"做不到"要有定义**：没有那四条，跑完只能凭感觉说"好像不太行"；
    有了那四条，卡在哪一条、当时的召唤序列是什么，都能落到台账上。
+
+---
+
+## §81 用户问「形式化检验没能自己完成」：查到底是 E 没有工具，还是实现失败 —— 两者都不是
+
+用户 2026-10-03 的原话：
+
+> "这是坏的，说明形式化检验没能自己完成，看看是负责这项任务的角色没有相关工具或动作，
+> 还是相关工具或动作的实现失败。"
+
+这是一个**归因**要求：不许含糊地说"环境不支持"，要落到"角色/动作"还是"实现"上。
+查下来的答案是**第三个**：E 有动作、实现也没坏 —— 是**检查器没进 PATH**，
+而那两份 Lean 4.7.0 **就在这个仓库的临时区里**。这一节把证据逐条摆出来。
+
+### 一、先否掉前两种可能（各一条实证）
+
+| 假设 | 实证 | 结论 |
+|---|---|---|
+| E 没有相关工具/动作？ | `specs.action_table()` 里 E 有 5 个动作：`run_experiment`（`method` 枚举含 `formal`）、`check_formal`、`evidence_for`、`list_experiments`、`run_script_experiment`；再走**注册表**按角色 E 调一次：`reg.call("verify.check_formal", role="E", claim=…)` ⇒ `ok=True` | **有**，而且接线（广告面 → 角色许可 → 分发）是通的 |
+| 实现失败？ | `detect_verifier()` ⇒ `checked=True, available=[], probe_errors=[]`（"探测了，确实没有"）；`check_formal(...)` ⇒ `ok=True, checked=False, verified=None, reason='no_backend'`，note 写着"未验证：环境无证明检查器。这不等于验证失败" | **没坏**：它按设计返回三态，不崩、也不谎报 |
+
+`detect_verifier` 只做一件事：对 `_VERIFIER_CANDIDATES = (("lean","lean --version"),
+("coqc","coqc --version"), ("isabelle","isabelle version"))` 逐个 `shutil.which(name)`。
+`formalgw.find_lean` 同样只认 PATH（docstring 自己写着"在 PATH 里找 `lean`"）。
+**所以"没检查器"这个结论的覆盖面只有 PATH。**
+
+### 二、真因：检查器在盘上，但不在 PATH（而且就在 `temp\` 里）
+
+在 PATH 之外找（含隐藏目录与仓库内）：
+
+```text
+D:\Incubator\temp\lean470\lean-4.7.0-windows\bin\lean.exe   Lean (version 4.7.0, x86_64-w64-windows-gnu, commit 6fce8f7d5cd1, Release)
+D:\Incubator\temp\lean470\lean-4.7.0-windows\bin\lake.exe
+D:\Incubator\temp\elantool\home\bin\lean.exe                （elan 壳：报 "could not create home directory: C:\Users\ysc20\.elan 拒绝访问"）
+```
+
+`commit 6fce8f7d5cd1` **正是** `formalgw.PINNED_LEAN_COMMIT = "6fce8f7d5cd18a4419bca7fd51780c71c9b1cc5a"` 的前缀
+⇒ 这不是"随便一个 Lean"，是**框架钉住的那个版本**。这也解释了 `formalgw` docstring 里
+那句"本机只有 4.7.0"：当时确实有，只是它在临时区、从来没进过 PATH。
+
+### 三、把它加进 PATH 之后：那条链**真的通了**（三次实测，全免费）
+
+```powershell
+$env:PATH = "D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;" + $env:PATH
+```
+
+| 调用 | 结果 |
+|---|---|
+| `detect_verifier()` | `available=[{name: lean, version: 'Lean (version 4.7.0, …, commit 6fce8f7d5cd1, Release)'}]`，`checked=True` |
+| `check_formal(claim="1+1=2", source="theorem t : 1 + 1 = 2 := rfl")` | `checked=True, verified=True, reason='verified'`，detail："检查器退出码 0、无 sorry、公理 无 在允许集内、且声明 't' 真的被检查到（用时 0.36 秒）" |
+| `reg.call("verify.run_experiment", role="E", …, method="formal")`（`.lean` 产物） | `ok=True`，**`evidence_kind = proof`**，说明："formal 实验支持该命题，证据等级 proof（有形式化检查器输出）；检查器状态 'verified'" ⇒ `experiments 0000` |
+
+**所以"形式化检验没能自己完成"的准确表述是**：不是 E 缺动作，也不是实现失败，
+而是**这一趟的进程看不到那个二进制**（探测只认 PATH，且 `lean` 没有任何
+环境变量/显式路径的覆盖口）。加一行 PATH 就能真验 —— 这一格**今天就能出 proof 级证据**。
+
+### 四、Mathlib 那一档：今天确实不行（与上面是两件事，别混）
+
+- `find_mathlib_root()`（认 `AGENTFLOW_MATHLIB_ROOT`）⇒ `D:\Incubator\temp\mathlib-pinned\mathlib4-4.7.0`；
+  `mathlib_revision()` ⇒ commit `a45ae63747140c1b2cbad9d46f518015c047047a` / tag `v4.7.0`（source=stamp），
+  与 `PINNED_MATHLIB_COMMIT = a45ae6374714…` / `PINNED_MATHLIB_TAG = v4.7.0` **一致**。
+- 但 `check_lean(source="import Mathlib\n…", imports=["Mathlib"])` ⇒
+  `status='import_unavailable'`，理由："检查器说找不到这些包：['Mathlib'] ⇒ 这次检查根本没发生
+  （编译没开始）… 处置是装库或换 import 列表，不是改证明"。这是**三态做对了**的形态。
+- 原因查清了：缓存只有 **342 个 `.olean`**（`…\.lake\build\lib\Mathlib\…`，如 `Units` / `NeZero` / `Basic`），
+  而 **umbrella `Mathlib.olean` 不在缓存里**（`…\lib\lean\Mathlib.olean` 与 `…\lib\Mathlib.olean` 都不存在）。
+
+⇒ 这一趟的引理**要挑能用核 Lean 写出来的**（或只 import 缓存里有的具体模块）；
+要核 Mathlib 量级的定理，得先把 Mathlib 编全（那是另一件大活）。
+
+### 五、要"加强"的两处（用户问的正是这个），以及 FC-27 的界线
+
+| 待加强 | 具体形态 | 为什么我没动 |
+|---|---|---|
+| ① **探测面太窄**：`tools/verify_tools.py::detect_verifier` 与 `formalgw.find_lean` 只认 PATH 上的三个名字，没有"显式路径/环境变量"的覆盖口（Mathlib 根有 `AGENTFLOW_MATHLIB_ROOT`，lean 二进制却没有对应的） | 加一个 `AGENTFLOW_LEAN_BIN`（或让它认 `AGENTFLOW_MATHLIB_ROOT` 同级的 `bin/`）；顺带把 `isabelle` 这种"通常不进 PATH"的检查器也留一个显式口 | **`src/agentflow/tools/verify_tools.py` 是 FC-27 禁改区**（`[category: prover-bridge]`）⇒ 必须**人写或人逐行走查 + 2 名 reviewer**；我不擅自改（`formalgw.py` 不在清单里，但它是同一条桥的另一半，改它也该一并人审） |
+| ② **Mathlib 那一轴**：缓存不全（umbrella 缺）⇒ `import_unavailable` | 编全 Mathlib，或把已编好的 `.lake/build/lib` 接进 `LEAN_PATH`；判据 `tests/test_formalgw_toolchain.py` 已经在管"revision stamp / import 三态"这一面 | 编 Mathlib 是机器级重活（小时级 + GB 级），且要决定装在哪、钉哪个 commit —— 这是用户的裁决面 |
+| ③ **顺带一条读数**：形式化那条链的判据用的是**注入的假检查器**（`find_lean` 的 docstring 自己写着"注入一个假的 `which` 就能构造出…"），所以"真检查器 → 真输出 → 受控词表"这一段在本机**从没被真跑过** | 今天 §81 第三节那三次调用是**第一次**把它真跑通（核 Lean 级） | 不必改代码；把这次读数记下来即可 —— 它证明实现是真的能用，不只是"看起来对" |
+
+### 六、文档更正（原来那两处结论是错的）
+
+§79/§80 的文档里写着"本机**没有**任何受支持的证明检查器 ⇒ 允许的结论是没核到 + 理由"。
+按本节的实测，这句只有"没加 PATH 时"才成立，**作为事实陈述是错的**，已改：
+
+| 文件 | 改成了 |
+|---|---|
+| `docs/USER-TEST-TASK-QUOTE-FORMAL.txt`（第 (B) 段） | 检查器**在盘上但不在 PATH**（给出那个 bin 与 commit），启动前加进 PATH 就能真验；Mathlib 那档今天不行，引理优先挑能用核 Lean 写出来的 |
+| `docs/USER-TEST.md` §3 | 命令块里加了那行 `$env:PATH = …`；结论段改成"取决于这行 PATH"，并写明加与不加各会看到什么、以及 Mathlib 的现状 |
+| `docs/INDEX.md` 的 `USER-TEST-TASK-QUOTE-FORMAL.txt` 行 | 同上口径 |
+| `docs/USER-TEST-TASK-NAIVE.txt`（天真版） | **不改** —— 它写的是"验不了就直说验不了"，两种情况都成立，而且它本来就该是"什么都不懂的用户"的口吻 |
+
+### 七、读数（2026-10-03）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 探测（无 PATH 覆盖） | `verify_tools.detect_verifier()` | `checked=True, available=[]`（"探测了，确实没有"—— 只在 PATH 上成立） |
+| 探测（加了 PATH） | 同上 | `available=['lean']`，版本 `4.7.0 / commit 6fce8f7d5cd1` |
+| 真检查（核 Lean） | `check_formal(claim=…, source="theorem t : 1+1=2 := rfl")` | `verified=True`（0.36 秒） |
+| 走注册表落 proof | `reg.call("verify.run_experiment", role="E", method="formal", …)` | `evidence_kind=proof`，`experiments 0000` |
+| Mathlib 轴 | `check_lean(source="import Mathlib…")` | `import_unavailable`（umbrella `.olean` 缺失；缓存 342 个模块） |
+| 会读文档的那几条判据 | `pytest tests/test_release_all.py tests/test_reading_map.py tests/test_user_quickstart.py -q` | **75 passed**（641.62s，退出码 0） |
+| lint 日常 | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 50`（与基线逐字相同） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git` | `[clean] required_approvals=0`，**678** 条改动路径均未命中（清单 38 条），退出码 **0** |
+
+### 八、教训
+
+1. **"环境没有"这个结论只在探测的覆盖面内成立**。这次的覆盖面是"PATH 上的三个名字"，
+   而真因是"二进制在仓库临时区里"。凡是写"本机没有 X"的地方，都要写清**是怎么找的** ——
+   否则下一个读的人（包括我自己）会把它当成事实去改设计。
+2. **临时区里的工具链是一个隐藏依赖**：`temp\lean470` 与 `temp\mathlib-pinned` 都不是交付物的一部分，
+   但形式化那一条腿靠它们。要么把路径写成显式的环境变量（禁改区里的改动，要人审），
+   要么把它们挪到一个稳定的位置 —— 这一条要用户裁决。
+3. **归因题要给出可复算的三段**：角色/动作（有没有）→ 实现（坏没坏）→ 环境（看得见吗）。
+   把这三段分开查，才不会像我第一轮那样把"PATH 看不见"直接写成"本机没有"。

@@ -2,7 +2,7 @@
 
 这一趟**必须真做两件事**，并把读数写清楚 —— 它们各占报告的一整节：
 (A) **引文逐字回验**：每一条引用都要有出处与逐字比对结论（三态：真 / 假 / 还没查）；
-(B) **形式化验证**：把论文里可形式化的那条引理交给检查器**真跑一次**。本机**没有**任何受支持的证明检查器（实测 detect_verifier：available 为空），所以这一格**允许**的结论是「没核到 + 理由」；**不许**为了好看写成通过。
+(B) **形式化验证**：把论文里可形式化的那条引理交给检查器**真跑一次**。**检查器在盘上，但不在 PATH**：Lean 4.7.0 在 `D:\Incubator\temp\lean470\lean-4.7.0-windows\bin`（commit 6fce8f7d5cd1 = 框架钉住的那一个）。启动这一趟**之前**把那个 bin 加进 PATH，它就能真验（实测 `check_formal` 出 verified、`run_experiment(method="formal")` 落 `evidence_kind=proof`）；没加进 PATH 时，这一格允许的结论只有「没核到 + 理由」。**不许**为了好看写成通过。另外：**Mathlib 那一档今天不行**（`import Mathlib` 报 `import_unavailable` —— umbrella 的 `.olean` 不在缓存里，缓存只有 342 个模块），所以挑引理时优先挑**能用核 Lean 写出来**的那条。
 
 按这个顺序做，每一步都要有读数：
 

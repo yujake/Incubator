@@ -135,14 +135,20 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 >
 > ```powershell
 > cd D:\Incubator\agentflow
+> # 形式化那一格：检查器在盘上但不在 PATH —— 这一行决定它能不能真验（见下）
+> $env:PATH = "D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;" + $env:PATH
 > $task = Get-Content -Raw docs\USER-TEST-TASK-NAIVE.txt      # 或换上一行的详细版
 > python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
 >     --budget-usd 10 --wall-clock-sec 14400 --sid real16 --max-steps 150
 > ```
 >
-> 两件先说清的事：①**形式化那一格的允许结论是"没核到 + 理由"** —— 本机实测
-> `detect_verifier` 里 `available` 是空的（没装 Lean / Coq / Isabelle），预算再大也变不出
-> proof 级证据；两份任务里都写明了"不许写成通过"。②按 15 号那趟的均价（0.304153 美元 / 31 次调用），
+> 两件先说清的事：①**形式化那一格取决于上面那行 PATH** —— Lean 4.7.0 在盘上
+> （`D:\Incubator\temp\lean470\lean-4.7.0-windows\bin`，commit 与框架钉住的相同），
+> 但**没进 PATH**；加进去实测能真验（`check_formal` ⇒ `verified`、
+> `run_experiment(method="formal")` ⇒ `evidence_kind=proof`），不加就只能如实报
+> "没核到 + 理由"（两份任务里都写明了"不许写成通过"）。**Mathlib 那一档今天不行**
+> （`import Mathlib` ⇒ `import_unavailable`：umbrella 的 `.olean` 不在缓存里），
+> 所以引理优先挑能用核 Lean 写出来的。②按 15 号那趟的均价（0.304153 美元 / 31 次调用），
 > 10 美元约合**上千次调用** ⇒ 真正卡住这一步的**不是钱，是步数与结构**（所以 `--max-steps` 要给足）。
 > 天真版更容易在中途停下来问你（"这些引文要不要都逐条核"这类），所以 §4 那两条答问的路先看一遍。
 
