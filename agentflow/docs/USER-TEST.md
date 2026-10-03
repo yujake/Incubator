@@ -90,8 +90,7 @@ python -B -m agentflow.cli --root projects\user-test-1 web --port 0 --json
 > 全新工作区实测是 `sessions=[] runs=[] pending_questions=[] problems=[]`、
 > `last_run=null`、台账那格写着"台账还没有（合法初态）" —— 空工作区不该报红。
 >
-> `--token <口令>`（或环境变量 `AGENTFLOW_WEB_TOKEN`）可给网页加一道口令；
-> `--host 0.0.0.0` 才允许别的机器访问（默认只听本机）。
+> `--token <口令>`（或环境变量 `AGENTFLOW_WEB_TOKEN`）可给网页加一道口令；> `--host 0.0.0.0` 才允许别的机器访问（默认只听本机）。
 
 ## §3 跑一趟真机 —— 它会**停在等你回答**
 
@@ -125,6 +124,27 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 >
 > 想让它"问了就交还控制权、根本不等"：加 `--user-wait-sec 0`（默认是不限时地等，
 > 也就是**真的阻塞**在你面前）。无人值守则加 `--no-ask`（见 §7）。
+
+> **要跑"点名要求引文查询与形式化验证"的那一版**：换任务文件，并把预算与步数给足。
+> **两份任务原文是同一件事的两种问法，用途不同**：
+>
+> | 任务文件 | 它长什么样 | 拿它量什么 |
+> |---|---|---|
+> | `docs\USER-TEST-TASK-QUOTE-FORMAL.txt` | 13 条，**把该怎么派活全写明了**（动作名、参数、报告九节都在里面） | **对照基线**：15 号那趟就是这种"手把手"问法跑通的 |
+> | `docs\USER-TEST-TASK-NAIVE.txt` | 5 段，**一个动作名/工具名/步骤都不给** —— 只说"我要什么"、两件不放心的事、预算、"哪些没查成要说清"、"拿不准来问我" | **主控自己分析并派发**这件事：能不能不靠手把手的步骤把活派对。派不动，就是要加强的地方 |
+>
+> ```powershell
+> cd D:\Incubator\agentflow
+> $task = Get-Content -Raw docs\USER-TEST-TASK-NAIVE.txt      # 或换上一行的详细版
+> python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
+>     --budget-usd 10 --wall-clock-sec 14400 --sid real16 --max-steps 150
+> ```
+>
+> 两件先说清的事：①**形式化那一格的允许结论是"没核到 + 理由"** —— 本机实测
+> `detect_verifier` 里 `available` 是空的（没装 Lean / Coq / Isabelle），预算再大也变不出
+> proof 级证据；两份任务里都写明了"不许写成通过"。②按 15 号那趟的均价（0.304153 美元 / 31 次调用），
+> 10 美元约合**上千次调用** ⇒ 真正卡住这一步的**不是钱，是步数与结构**（所以 `--max-steps` 要给足）。
+> 天真版更容易在中途停下来问你（"这些引文要不要都逐条核"这类），所以 §4 那两条答问的路先看一遍。
 
 ## §4 你回答 —— 两条路任选（也可以都试）
 

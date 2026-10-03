@@ -1,0 +1,33 @@
+审阅并 polish 这篇论文包。它是**外部论文**（别人写的，未发表）：out/paper/main.tex 是你可以改的主稿，source/ 是只读基线（一个字节都不许改）。
+
+这一趟**必须真做两件事**，并把读数写清楚 —— 它们各占报告的一整节：
+(A) **引文逐字回验**：每一条引用都要有出处与逐字比对结论（三态：真 / 假 / 还没查）；
+(B) **形式化验证**：把论文里可形式化的那条引理交给检查器**真跑一次**。本机**没有**任何受支持的证明检查器（实测 detect_verifier：available 为空），所以这一格**允许**的结论是「没核到 + 理由」；**不许**为了好看写成通过。
+
+按这个顺序做，每一步都要有读数：
+
+1. 先看清盘上有什么（fs.list / fs.stat / fs.read 是你自己的眼睛）：out/paper/、source/、code/ 三处都要看；main.tex 约 26 KB / 475 行，分段读进来（fs.read 支持 start_line / max_lines）。
+2. **派活之前先看对方的动作表**（conductor.role_spec(role_name="A") 等）——按动作表里真实存在的名字派，不要凭印象写动作名；报告里要写出你用的动作名与关键参数。
+3. 登记这一步分两件，**两件都有明确的指向**：
+   （a）把 **source/ 里那份论文本体**（source/main.pdf）登记成 literature 行 —— `pattern` 指到它本身（`*.pdf`），不要用通配把整个目录扫进来。
+   （b）把论文里的定理与证明登记进命题台账（B 的 register_statement）：`source_lit_id` 必须是**论文那一行**的 lit_id；`page_range` 给**真页码**（不许编）；**还没逐字比对的命题不要传 `quote_verified`**（三态：不传 = 还没查），并在 `quote_reason` 里写清为什么还没查。
+4. **（A）引文逐字回验 —— 这一趟的重点之一**：
+   （a）派 B 走 `run_once` 抽取这篇论文的概念与关系；每条关系都要带 `quote`（逐字引文）、`page_range`（真页码）、`quote_verified`（true 逐字通过 / false 比对不一致 / 不传 = 还没查）。
+   （b）对论文里每一条定理/引理走 `register_statement`：**不是 true 就必须写 `quote_reason`** —— 写清哪里不一致、或者为什么还没查。逐字比对必须真的做过：拿 source/ 里的原文与引文一个字一个字对上，页码以论文里的实际页为准。
+   （c）收尾时给出**三个数**：`quote_verified=true` 几条、`false` 几条、还没查几条；用只读动作从台账里读（动作名以当次动作表为准），把动作名与参数写进报告第五节。
+5. **（B）形式化验证 —— 这一趟的重点之二**：
+   （a）挑论文里一条**真的可以形式化**的引理，把它写成工作区里的 `.lean` 文件（`method="formal"` 只接受 `.lean` 产物，别的东西会被当场拒）。
+   （b）派 E 走 `check_formal(claim=<那条引理>)`，或 `run_experiment(method="formal", script_path=<那个 .lean 文件>, claim=..., claim_key=...)`。
+   （c）**如实回报**：没有检查器 ⇒ 结果会是 `checked=False` + 一个受控理由（例如 `no_backend`），检查器原样报的状态另在 `verifier_status` 里。报告第四节必须写「未核到 + 理由」，**不许**写成通过，**不许**把 `evidence_kind` 写成 `proof` —— E 的计算类方法**永远**拿不到 proof 级证据（这是硬约束，不是本机缺工具的问题）。
+   （d）另外派 E 走一条**本机能真跑**的计算类实验作旁证：`run_experiment(method="exhaustive_search"` 或 `"numeric")`；`evidence_kind` 按动作表的枚举**如实**登记（`cross_check` / `heuristic`），不许写成 `proof`。
+6. 派 G 用 `build_document` 另起一行「我方修订稿」（claims 的 citations 引论文那一行的 lit:）。**注意**：`evidence_kind='cross_check'` 的断言必须自带那句逐字常量「数值交叉验证，不构成证明」（拿不准就用 `heuristic`，别在这上面反复试）。
+7. **把正文真正改掉**（这是 P2）：逐字定位要改的几处，**用 `fs.edit`**（`path` + `old_string` + `new_string`，一次一处、不命中就拒）。**不要**用 `fs.write` 重写整份大文件（真机实测会被输出额度截断、整趟作废）。
+8. 派 H 审我方稿件（doc_id 用**我方稿件**的 id）；H 落了发现就派 G 修。H 采信一条命题只有两条路：正文与 B 的台账**逐字一致**（`quote_verified` 为 true 且文本可比对），或 E 给过 **proof 级**背书 —— 两条都不在，它只能说「这条我采信不了」，不许自己读一遍证明就判它对。
+9. **让论文包跟上台账**：派 G 走 **`G.paper_package`** —— 它一次做完「重渲染 → 重编译 → 核锚」并回报 verdict 与漂移条数（`project` 给项目根 `"."`）。**不要**指望 `G.revise` / `G.render` / `G.refresh_markdown`：它们动的是稿件 markdown，不是论文包。
+10. **关键取舍用 ask_user 问一次，然后停下等回答**：把当前状态与「卡在哪」写进报告，不要在没有回答时当成默许继续 —— 框架里会有人回答你（人可能从网页或终端答），回答回来之后可以续跑。
+11. 你自己把交付说明写到 out/review/REPORT.md（fs.write；重写要 overwrite=true）。**它必须是九节**：一、任务与范围 / 二、逐条读数 / 三、定理与引理清单 / 四、形式化覆盖 / 五、引文核验 / 六、体例与表述 / 七、我们做的补救 / 八、未决问题 / 九、诚实边界；**每一节都要有读数**（数字或台账行号）—— 没有内容的节也要写清依据（例如「本轮未做形式化核验：formal 级实验 0 条」），**空标题不算交了这一节**；并**分栏**写「我们补的」与「原文的」，报告里要出现 `origin=own_result`、`依据`、`sha`。
+   第四、第五两节是这一趟的重点：第四节要写清**哪条引理被形式化、检查器在不在、结果是 checked / reason / verifier_status 各是什么**；第五节要写清**逐字回验的三个数**（真 / 假 / 未查）与每一处不一致的**页码**。
+12. 收工前用 `conductor.closing` 自检：`project_dir` 给 `"."`（项目根），`report_path` 给 out/review/REPORT.md。它会把缺的节名逐个报出来 —— **按它改到 report_shape 过为止**，再把 can_close / failed / unknowns 原样写进交付说明。
+13. 留出最后几步做第 11–12 步：报告没写出来等于没交。
+
+不许把没做的事写成做了；拿不到读数就写「未核到」并说明卡在哪一条。目标变更（例如把「审这篇论文」改成「研究一个新问题」）必须先 ask_user。
