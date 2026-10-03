@@ -6694,3 +6694,119 @@ relations: 0 行  ← 引文逐字回验的产物面是空的
 3. **台账比报告可信。** 这一节的根因是从 `tasks` / `literature` / `relations` 三张表的原始行
    读出来的（`B.run_once` 0 次、`relations` 0 行），而不是从报告的文字推断。
 4. **判据要封闭**：环境里有 key 就会让"没 key ⇒ 规则档"随机变红 —— 判据自己得先把环境钉住。
+
+---
+
+## §84 T1 实测裁定：**不合格** —— 两条要求的腿都没做成，根因是「广告面 ≠ 接受面」+ 收工门的空洞
+
+T1 任务原文（58 字，不含任何角色/动作/分工暗示）：
+
+```text
+审阅并完善这个论文包：改掉正文里的问题，逐条核验引文是否与原文一致，能机器验证的定理做形式化验证，交付修订稿与说明。
+```
+
+跑法：`run-agent M --budget-usd 5 --wall-clock-sec 14400 --sid t1 --max-steps 150`，
+工作区 `projects/p5-review-t1`（新造），环境里注入 `AGENTFLOW_MODEL_API_KEY` 与 `AGENTFLOW_LEAN_BIN`。
+结果：**退出码 0（final）**，60 步 / 61 次调用 / **0.651977 美元**（预算的 13%）。
+
+### 一、它做成了什么（先说清的，不做成也不算）
+
+- `A.ingest_local` 把 `source/main.pdf` 登记为 literature 0000（7 页，sha 72c5edb5…）；
+- **两处正文实质修订**（`fs.edit`，逐字锚定）：§numeric 里的脚本路径 `code/verify_all.py` → `source/code/verify_all.py`；§numeric 补 D 节（zeta 半径与 Möbius）；
+- `G.paper_package` **成功**：`verdict=consistent`、三维（tables/files/receipt）全 consistent、`drift=[]`；
+- 写了 `out/review/REPORT.md` 九节，`conductor.closing` 自检**五格全过**（`can_close=true`）。
+
+### 二、它没做成的（用户点名要求的两条腿，一条都没落地）
+
+| 要求的腿 | 台账事实 | 判定 |
+|---|---|---|
+| **引文逐字核验** | `relations: 0`、`concepts: 0`、`statements: 0`；召唤序列 `['G','G','B','A','G','G','G','G','G','G','G']` —— **`B.run_once` 一次都没被派** | **未做** |
+| **形式化验证** | `experiments: 0`；`E.check_formal` 被调 3 次（`outcome=ok`，但都是**没给源码**那一档）；`E.run_experiment` 被拒 9 次、失败 3 次；盘上**没有任何 `.lean` 文件** | **未做成**（报告里如实记了"未核到"） |
+| 审校（H） | `review_findings: 0`；召唤序列里**没有 H** | **未做**（"审阅"由 M 自己用 `fs.edit` 代办了） |
+
+### 三、缺陷清单（每条都带台账原文，按"根除"排序）
+
+**D1（最重要，系统性）：广告给模型的形状 ≠ 实现接受的形状。** 三个实例：
+
+1. **未广告的必需参数**：`E.run_experiment(method="exhaustive_search")` 不带 `certificate`
+   ⇒ 三次 `failed`，报
+   `ValueError: method='exhaustive_search'（穷举/枚举类）必须给出 certificate ——「在 B 内没有反例」的说服力全部来自「B 是什么、怎么搜的」`。
+   而 `certificate` **根本不在动作 schema 的 properties 里**（实测 `specs/e.py` 的 `run_experiment`：
+   `claim/claim_key/script_path/params/method/for_question_id/timeout/name/imports/sleep`）——
+   **模型不可能知道，于是每一次尝试都注定失败**。
+2. **条件性参数被无条件广告**：`name` / `imports` 只对 `method='formal'` 有效，却出现在
+   properties 里 ⇒ 模型给 `exhaustive_search` 传了它们，被拒三次：
+   `E.run_experiment 拒绝了这次调用：name / imports 只对 method='formal' 有效…`。
+3. **自由形态参数只能猜**：`G.build_document` 的 claims 里 `evidence_kind='own_result'`
+   被拒：`'own_result' 不在受控词表 ('proof','cross_check','heuristic')`；
+   另一条 `cross_check` 缺 disclaimer 被拒（模型把常量写进了别处），**连拒 7 次**，
+   烧掉约 40 步（60 步里的三分之二）。
+
+**D2：收工门有空洞 —— 台账全空也能报"可交付"。** `documents/statements/relations/experiments/
+review_findings` **全是 0**，而 `conductor.closing` 五格全过、`can_close=true`、报告写"可交付"。
+五格里没有一格问"这一趟到底产出了什么"——`report_shape` 只看节名，
+`load_bearing`/`contradictions`/`anchor` 在空台账上**天然为空**（真空成立）。
+这与本项目最忌的形态同族（"没查"读成"查过了没问题"）。
+
+**D3：M 的调度没有覆盖任务点名的两条腿。** 任务原文说的是"逐条核验引文"与"形式化验证"，
+而 M 的 60 步里：`G.build_document` ×7（全被拒）、`E.run_experiment` ×12（9 拒 3 败）、
+`E.check_formal` ×3、`G.paper_package` ×1、`A.ingest_local` ×1、`B.register_statement` ×1，
+**没有 `B.run_once`、没有 `H.review`**。D1 修好之前，"模型试了几次就放弃"是可预期的：
+它撞了 12 次参数墙之后转向了它还能做的那件事（改正文 + 重渲染）。
+
+**D4：`E.check_formal` 的"没给源码"那一档不可用。** 三次调用都返回 `ok`，但都没带源码/脚本
+⇒ 落进 `no_script`（"有后端 + 调用方没给源码"）。模型显然想核，但动作的**摘要**没告诉它
+"必须给 `source` 或 `script_path`"，schema 里这两个也是可选的。"可选"在这里是错的：
+不给就什么都核不了。
+
+**D5：形式化的产物链缺一环。** 即使模型想形式化，它得先**写出 `.lean` 文件**（`fs.write`），
+而盘上零 `.lean`。任务的"能机器验证的定理做形式化验证"在动作表里没有对应的**入口指引**
+（`E.check_formal` 的参数说明里没写"先准备 `.lean` 源码"）。
+
+### 四、根除计划（下一轮批量做，做完只跑一次全量，然后重跑 T1）
+
+1. **把"广告面 = 接受面"变成机器判据**（不是逐个人工核对）：
+   新增判据：对**每个**动作，用它的 schema 生成"合法最小调用"，与实现的参数校验对齐；
+   凡实现会因"缺参数/多参数/条件性参数"拒绝的，schema 必须能表达。
+   这是本项目"两层参数类型对账"（`capabilities` 导入期那条）**该有而没覆盖到**的那一半：
+   它现在对账的是首层类型，没对账"条件性/互斥/必需"。
+2. **D1-1（`certificate`）**：把 `certificate` 加进 `run_experiment` 的 schema（并在 method 的说明里
+   写清哪些 method 需要它）；或把"必须给 certificate"改成**由动作返回 unknown 而不是抛 ValueError**
+   —— 二者取一，但必须让模型看得见要求。倾向后者（三态）：**缺证书不是异常，是"没查成"**。
+3. **D1-2（条件性参数）**：schema 里给 `name`/`imports` 写明"仅 `method='formal'`"，
+   并由判据守住"广告的说明与实现的拒绝理由指向同一件事"。
+4. **D1-3（`build_document` 的 claims）**：把 claims 的字段形状（受控词表 + disclaimer 的**精确规则**）
+   广告出来；disclaimer 的机械检查要给出"我到底在找什么串、在哪一栏找"的可读回执
+   （现在那句拒绝理由说了要写，但没说清写在哪一栏 ⇒ 模型只能试 7 次）。
+5. **D2（收工门的空洞）**：给 `closing` 加一格"**实质产出**"（至少一条：`documents>0` 或
+   `relations>0` 或 `experiments>0` 或 `review_findings>0`；与任务要求对齐时更强）。
+   空台账 + "五条全过 ⇒ 可交付"必须变成不可能。**这一处动的是判据（`closing.py`），按根除办。**
+6. **D3（调度）**：D1 修好之后再重跑 T1 —— 若那时 M 仍不派 `B.run_once`/`H.review`，
+   这才算**调度缺陷**，届时按动作表的自描述与提示词入口去修（不许改任务原文来暗示）。
+7. **D4/D5**：`check_formal` 的 `source`/`script_path` 改成"二者必居其一"（缺了就是
+   `no_script`，且摘要里写明要准备 `.lean`）；`run_experiment(method="formal")` 同理。
+
+### 五、这一轮的读数（T1 那一趟）
+
+```text
+退出码 0（final）；60 步 / 61 次调用 / 0.651977 美元（预算 5 的 13%）
+tokens_in 2320234 / tokens_out 23194
+tasks 30 行：G.build_document×8（7 拒）、E.run_experiment×12（9 拒 3 败）、E.check_formal×3、
+             G.paper_package×1、A.ingest_local×1、B.register_statement×1
+表：literature 1 / concepts 0 / relations 0 / statements 0 / experiments 0 / documents 0 /
+    review_findings 0
+意外收获（正面）：正文真改了两处；G.paper_package verdict=consistent、drift=[]；
+    报告九节齐全、closing 五格全过（这恰恰暴露了 D2）
+```
+
+### 六、教训
+
+1. **"广告面 = 接受面"必须是一条判据，不能靠人工核对。** 这一趟 12 次 `run_experiment`
+   里有 9 次被参数校验拒、3 次因**未广告的必需参数**失败 —— 而模型的行为是**合理**的：
+   它按自己看得见的形状调用。错在框架。
+2. **"可选"当必需用会骗人**：`check_formal` 的 `source`/`script_path` 在 schema 里可选，
+   实际"不给就什么都核不了"—— 这类"沉默的必需"要广告出来。
+3. **收工门必须问"产出了什么"**：五格全过 + 台账全空 = 一次"形式上的交付"。
+   用户要的是"完美完成"，不是"报告形状对"。
+4. **模型的转向是信号**：撞墙 12 次后它转向能做的事（改正文、重渲染），并把"未核到"如实写进报告
+   —— 这是**诚实**的，但它同时说明：**参数墙会直接吃掉任务的实质要求**。
