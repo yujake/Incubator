@@ -19,7 +19,7 @@
 > | 节 | 状态 |
 > |---|---|
 > | §0 造工作区 / §1 零成本自检 / §2 起网页 / §4 的报错档 / §6 两道门 | **我在这台机器上逐字跑过**，下面"该看到"是实测输出 |
-> | §3 / §5 / §7 的**付费整趟**（一趟 ≈ **0.30–0.49 美元**） | **你跑**。其中"停在等用户 ⇒ 你答 ⇒ 同一趟接着跑"的语义我在 12–15 号真机上验过，并且由 §1 那 30 条判据守着（不依赖模型这次问不问） |
+> | §3 / §5 / §7 的**付费整趟**（一趟 ≈ **0.30–0.49 美元**） | **你跑**。其中"停在等用户 ⇒ 你答 ⇒ 同一趟接着跑"的语义我在 12–15 号真机上验过，并且由 §1 那 32 条判据守着（不依赖模型这次问不问） |
 >
 > 四档退出码先记住：**0** 收工 / **1** 失败 / **2** 没查成 / **3** 停在等你回答。
 > 第 3 档是本轮新加的"成功的中断"——既不是完成也不是失败。
@@ -52,7 +52,7 @@ cd D:\Incubator\agentflow
 python -B -m pytest tests\test_user_channel_stop_and_resume.py tests\test_webui.py -q -p no:cacheprovider
 ```
 
-**该看到**（实测）：`30 passed`（13 + 17 条判据）。
+**该看到**（实测）：`32 passed`（15 + 17 条判据）。
 
 这一节是**先量好尺子再量东西**：这两条文件守的正是本轮的三件语义 ——
 ①停下就真的停（不再发模型请求）；②没人回答就不许当成默许（`--resume` 也只回到"还在等"）；
@@ -106,9 +106,13 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 
 ```
 停在等待用户：q0001 <问题前 80 字>；下一步：
-`agentflow inbox --root …\user-test-1 --sid user1` /
-`agentflow answer q0001 "<回答>" --root …\user-test-1 --sid user1` / …
+`agentflow --root …\user-test-1 inbox --sid user1` /
+`agentflow --root …\user-test-1 answer q0001 "<回答>" --sid user1` / …
 ```
+
+> 注意提示里 `--root` 一律写在**动词之前**：`--root` 是顶层参数，写成
+> `agentflow inbox --root …` 会被 argparse 判成 `unrecognized arguments` 并退出码 2
+> （看着像命令不存在）。这一条有判据：它把提示里打出来的命令**逐条真跑一遍**。
 
 **退出码是 3**（`$LASTEXITCODE`）。**关键读数**：停下之后**不再有任何模型调用**
 （`llm_call` 事件数停在原地，不烧钱）；网页面板里出现那条问题；

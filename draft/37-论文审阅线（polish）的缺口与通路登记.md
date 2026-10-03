@@ -5912,3 +5912,154 @@ docstring 确认范围是"注释与 docstring"，不扫字面量）。
 3. **交付给人照着敲的清单，免费的那些命令必须真跑一遍**。这一次真跑撞出两个路径陷阱
    （`PYTHONPATH` 相对、`--project-dir` 解析基准）与一处**不成立的自我声明**
    （"每一步都跑过"），三件都是"看着对、敲下去就错"的形态 —— 它们比功能缺陷更容易消耗人的信任。
+
+---
+
+## §77 把「人照着敲的那条命令」本身变成判据 —— 它当场抓出三处照抄就废的提示
+
+§72–§76 把用户端做完了，但目标 ③ 里那句"我自己的模拟测试必须老老实实走完提问→人答→续跑"
+还差一格：**完整人机环在 CLI 那一层没有判据**。`tests/test_user_channel_stop_and_resume.py`
+原先把同一批语义拆成 13 条判据，绝大多数走的是库层（`AL.run_role`），只有两条碰 CLI，
+而且都不是"连着走"。这一节记的是补上这一格之后**当场抓到的三处缺陷** ——
+它们都属于同一族：**打给人照抄的东西，自己没被跑过**。
+
+### 一、补的两条判据（都带反真空）
+
+| 判据 | 它走的路 | 反真空（负控） |
+|---|---|---|
+| `test_the_whole_human_loop_runs_through_the_cli_argv` | 四条**真 argv**：`run-agent`（退 3）→ `inbox`（不带 `--sid`）→ `answer`（`--custom`）→ `run-agent --resume`（退 0 到 `final`）；每步都数一次 `llm_call` | 停着之后调用数必须**不动**（inbox 看一眼、answer 写一条都不许产生模型调用）；续跑那一段必须**另造**一个替身且它的 `systems[0]` 里有人那句话 |
+| `test_the_commands_printed_in_the_hint_actually_run` | 把"停在等待用户"那一刻打出来的命令**逐条摘出来真跑**（占位符换成真回答） | ①旧写法 `inbox --root …` 必须被 argparse 拒（退 2）；②光秃秃的 `--sid` 同样必须被拒 —— 没有这两条，"提示对不对"就只是"我读过一遍" |
+
+为什么这两条值得单钉：**提示里的命令是人在那一刻唯一的下一步，而它不像别的东西会被评审看见**
+—— 没有人会把提示里的命令抄进终端再跑一遍。而它们一旦写错，错的形态恰好是"看着像命令不存在"
+（argparse 的 `unrecognized arguments`）或更坏的"在别的地方安静地查了一遍"。
+
+### 二、抓到第一处：`--root` 写在动词之后（三条提示全是这样）
+
+`cli.py` 自己第 580 行就写着这条规则（"顶层参数 `--root` 必须写在子命令之前（argparse
+的位置规则）"），而它**打给人看的三处提示全部违反**：
+
+```text
+1428: f"`agentflow inbox --root {root} --sid {sid or ''}` / "
+1429: f"`agentflow answer {qid} \"<回答>\" --root {root} --sid {sid or ''}` / "
+1566: f"用 `agentflow inbox --root {root} --sid {args.sid or ''}` 看，"
+```
+
+实测照抄的后果（这一条是真机跑出来的，不是推的）：
+
+```text
+agentflow: error: unrecognized arguments: --root projects\user-test-1
+退出码 2
+```
+
+改成 `--root` 在动词之前的三条；`docs/USER-TEST.md` 里那段"该看到"的样例同步改掉
+（它原来是照旧输出抄的）。
+
+### 三、抓到第二处：循环自己的结论文本**根本不带根** —— 而且它不报错
+
+`agent_loop.py` 停在等用户时那行结论原本是：
+
+```text
+用 `agentflow inbox` 看、`agentflow answer q0001 "<回答>"` 答、`agentflow run-agent --resume … --sid u1` 续跑
+```
+
+命令行里那句"用户 2026-10-03 裁定"要求的就是**照着它敲**。而不带 `--root` 时，这几条命令
+打的是**默认工作区**（`cli.DEFAULT_ROOT` = 仓库里的 `agentflow/`）——人敲下去**不报错**，
+只是在看另一个工作区，然后得出"没有问题在等我"这个结论。这比第一处更坏：第一处至少会红。
+
+同一族还有两处：`run_role` 的"还在等 qid"那条结论、以及 `cmd_answer` 里"下一步"那条。
+
+**处置**：用户频道里打出来的命令，一律「带根 + 根在动词之前」。新增一个
+`cli._sid_suffix()` 收口 `--sid`：空 sid 时**整段不出现** —— 旧写法 `--sid {sid or ''}`
+在没给 sid 时会打印出一个光秃秃的 `--sid`，照抄同样退 2（这条也进了负控）。
+
+### 四、抓到第三处：结论被截断在半个命令上（路径一长就必然发生）
+
+判据第一次跑出来的是这一串（`capsys` 里的原文）：
+
+```text
+`agentflow --root C:\Users\ysc20\AppData\Lo
+  唤起：[]；留言：[]；用量：{'calls': 1, ...
+```
+
+`cli.py` 那行 `print(f"  结论：{run.final[:400]}")` 把路径切在中间 ——
+`pytest` 的临时目录名一长（真实工作区路径只会更长）就必然发生，而人拿到的是一条**残缺的命令**。
+修法：**停在等用户那一档不截断**（其余各档照旧 400 字），理由是这一档的结论里装的就是命令。
+
+### 五、顺带修掉一条"假判据"
+
+既有判据 `test_zero_wait_through_the_cli_stops_before_the_next_round` 里原本断言
+`"agentflow answer" in out` —— 这条**被坏形态满足**（不带根的 `agentflow answer q0001 …`
+正是它）。改成断言 `f"agentflow --root {root} answer" in out`。
+教训：**只查前缀的断言看不见参数写错**，而"提示给人照抄"这件事恰恰只有参数会错。
+
+### 六、读数（2026-10-03，最终这棵树上）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 两条新判据 | `pytest tests/test_user_channel_stop_and_resume.py -q -k "whole_human_loop or printed_in_the_hint"` | **2 passed** |
+| 用户频道 + 网页 + CLI + 续跑 + 交互 + 原生调用 | `pytest tests/test_user_channel_stop_and_resume.py tests/test_webui.py tests/test_agent_cli.py tests/test_resume_after_answer.py tests/test_resume_runs_and_consumes_answer.py tests/test_interaction.py tests/test_native_tool_calls.py -q` | **77 passed** |
+| 循环 / 自主多轮 / 悬空引用那几面 | `pytest tests/test_agent_loop.py tests/test_autonomy.py tests/test_r5_orchestration_cost.py tests/test_user_channel_stop_and_resume.py -q` | **88 passed** |
+| 我自己的独立核对装置 | `python -B D:\Incubator\temp\_user_end_verify.py` | **69 条全过 / 不符 0** |
+| lint 日常 | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 50`（与基线逐字相同） |
+| lint 严格 | `python -B scripts/lint_rules.py --strict` | `error 0 / warning 56 / info 49`（与基线逐字相同） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git` | `[clean] required_approvals=0`，**682** 条改动路径均未命中（清单 38 条），退出码 **0** |
+| 全量 pytest（机器安静后） | `python -B -m pytest -q -p no:cacheprovider` | **3443 passed / 0 failed / 3 skipped / 8 deselected / 1 xfailed**（1407.48s，退出码 **0**） |
+
+（这一轮改的都是**非**禁改区文件：`cli.py` / `agent_loop.py` 的提示文本与一处截断，
+加上判据文件与两份文档。）
+
+### 七、这一轮的全量里唯一那条红也是登记税
+
+第一次全量：**1 failed / 3442 passed**，红的是
+`tests/test_reading_map.py::test_the_line_counts_in_the_big_file_table_are_current`
+—— `docs/READING-MAP.md` §3 那张表写着 `cli.py` 2200 行，盘上 **2225** 行（这一轮它在提示
+文本上长了 25 行）。判据自己的话是"改数字，别改判据"，所以改数字（2200 → 2225），
+单跑该文件 **6 passed**，再重跑全量 ⇒ 见上表。
+
+顺带记一条口径：**行数变化本身不是"通过"**（目标里明说不许拿"行数增加"当通过）——
+它是**登记税**：图上写着读数，读数漂了就必须有人去改那个数字。这一次是它逮住我，
+不是我拿它当成绩。
+
+### 八、第二次全量红在一条"计时边缘"的判据上 —— 而真正的原因是我自己的孤儿进程
+
+第二次全量：**1 failed / 3442 passed**，红的是
+`tests/test_release_all.py::test_every_only_example_in_the_docstring_is_a_real_step_key`，
+报的是 `subprocess.TimeoutExpired`（它 `subprocess.run(..., timeout=600)` 去跑
+`tools/release_all.py --only role-specs,coverage -q`）。隔离再跑一次，**同样红，耗时 600.02s**。
+
+按"先怀疑工具/环境"的顺序查，三个读数：
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 那一步到底要多久 | `Measure-Command { python -B tools\release_all.py --only role-specs,coverage -q }` | **570.3 秒**（对 600 秒上限只有 5% 余量） |
+| 这台机器上还有谁在跑 | `Get-Process python \| CPU 二次采样` | **12 个 python**，其中两个在**满核烧 CPU**（PID 34204/8868：6 秒内各 +6.0 秒 CPU），起于 19:33/19:34 |
+| 那两个是什么 | 起跑时刻对得上我刚才那两次"隔离复跑" | `subprocess.run(timeout=600)` 超时后只杀了**直接子进程**（`release_all.py`），它的**孙子进程**（coverage 那一步的 python）**活了下来继续跑** |
+
+也就是说：**第二次、第三次全量其实是跟自己的孤儿进程抢 CPU**。杀掉那两个之后，
+剩下的 10 个 python 都是**阻塞态**（8 秒内 CPU +0.0s，无害，留着没动），机器安静了。
+**全量随即转绿**（`3443 passed / 0 failed`，见上面读数表）—— 这条前后对照就是本节最硬的证据：
+同一个树、同一条判据，机器安静时 570 秒跑完，机器被自己的孤儿占着时 600 秒超时。
+
+两条处置：
+
+1. **不改判据**。那条 600 秒是"挂死保护"，不是这条判据要测的东西（它测的是
+   "docstring 里的 `--only` 示例是不是真的步骤键"）；而 5% 的余量确实太小 ——
+   这一步实测 570 秒，本身就是一条值得知道的事实（`coverage` 那一步按 AST 扫全 `src/`）。
+   要不要把这道保护抬到 1200 秒、或者把 docstring 里的示例换成更快的键对，
+   **留给用户裁决**（`tools/release_all.py` 是 FC-27 禁改区，它的 docstring 我不动）。
+2. **孤儿进程本身就是一条工程教训，写进这里**：被强杀的父进程不会带走孙子进程。
+   以后凡是"杀掉一个长跑任务再看读数"的场合，都要先采样一次 CPU 确认没有残留在跑的
+   —— 否则后面的每一个计时读数都是脏的（这一轮我差点把"计时边缘"当成代码缺陷去改）。
+
+
+### 七、教训
+
+1. **"打给人照抄的东西"要有一条判据把它跑一遍**。这一轮三处缺陷全部落在提示文本上，
+   而它们此前每一处都"看起来对"、且被别的判据（库层、退出码、状态机）间接覆盖着。
+2. **只查子串的断言等于没查参数**。`"agentflow answer" in out` 被坏形态满足；
+   要钉的是**完整那一条命令**（含根、含顺序）。
+3. **反真空要具体到"错的那一版必须红"**。这条判据的反真空是两条真实的历史写法
+   （`inbox --root …`、光秃秃的 `--sid`）—— 它们跑不通是判据非恒真的证据。
+4. **截断也是一种"提示坏了"**：`[:400]` 那种上限在短路径的测试里永远看不出问题，
+   一放到真实路径上就切在半个命令上。判据用真实的 `tmp_path`（长路径）刚好把它逼出来。

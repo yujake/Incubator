@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 from argparse import Namespace
 from typing import Any
 
@@ -204,8 +205,12 @@ def test_zero_wait_through_the_cli_stops_before_the_next_round(tmp_path: pathlib
     rc = cli.cmd_run_agent(_args(tmp_path, role="D", task="把口径定下来"))
     out = capsys.readouterr().out
     assert rc == 3, out
-    assert "停在等待用户" in out and "agentflow answer" in out, out
     root = tmp_path / "ws"
+    # 提示里给的那条命令必须是「带根、且根写在动词之前」的那一版：
+    # 此前这里是 `"agentflow answer" in out`（不带根也能满足），而正是那个写法
+    # 让人照抄就报 `unrecognized arguments: --root`（§77 修的三处之一）。
+    assert "停在等待用户" in out, out
+    assert f"agentflow --root {root} answer" in out, out
     assert _llm_calls(root) == 1, "退出码 3 那一趟不该有第二次模型调用"
     assert len(U.pending_questions(root, sid="t")) == 1
     # `--json` 那一档：退出码同样 3，而 stdout 必须仍然是一份可解析的 JSON
@@ -458,6 +463,182 @@ def test_the_checkpoint_round_trips_and_names_the_waiting_question(tmp_path: pat
     # 负控（读不到就说读不到）：别的 sid 读不到这一趟的检查点
     assert AL.load_run_checkpoint(root, "D", "另一个会话") is None
     assert AL.load_run_checkpoint(root, "E", "t") is None
+
+
+# ============================================================ 四、完整人机环（走 CLI 的 argv）
+
+def _cli_factory(made: list[ScriptedGateway], *rounds: dict[str, list[str]]):
+    """造一个"把每个替身也留一份"的模型缝工厂（签名与 `cli._agent_seam_factory` 逐字一致）。
+
+    与 `fake_seam_factory` 的两点区别：
+
+    - `made` 里留下造出来的替身，这样判据才能在「续跑那一段」上读 `systems` ——
+      人答的那句话进的是系统提示那一格，不在 transcript 里（既有接线；
+      `test_interaction` 里那条迟到回答的判据同源）；
+    - 剧本按「第几个替身」给：`--resume` 那一段是一个「新」的替身（新进程 / 新一趟），
+      它拿到的剧本是下一个 `rounds` —— 拿同一份剧本会让续跑那一段又把同一个问题问一遍
+      （那正是本判据第一次跑出来的形态：退了 3 而不是 0）。
+    """
+    def factory(role: str, *, root: pathlib.Path, sid: str | None,
+                usd_budget: float | None, store: Any = None):
+        idx = min(len(made), len(rounds) - 1)
+        gw = ScriptedGateway(rounds[idx].get(role, [FINISH]))
+        made.append(gw)
+        return LlmSeam(role=role, session_root=root, gateway=gw, price=(0.0, 0.0), sid=sid,
+                       usd_budget=usd_budget,
+                       meter=(TokenMeter(store) if store is not None else None))
+    return factory
+
+
+def _hint_commands(hint: str) -> list[str]:
+    """把提示里反引号包起来的 `agentflow …` 命令摘出来（人照着敲的就是它们）。"""
+    return [c for c in re.findall(r"`([^`]+)`", hint) if c.startswith("agentflow ")]
+
+
+def _argv_of(cmd: str) -> list[str]:
+    """把一条 `agentflow …` 命令切回 argv。
+
+    刻意不用 `shlex.split`：Windows 路径里有反斜杠，posix 规则会把 `\\I` 当转义吃掉，
+    切出来的 root 就不是原来那一个了（"判据自己把路径改坏"是最难查的形态之一）。
+    """
+    parts = re.findall(r'"[^"]*"|\S+', cmd)[1:]        # 去掉开头的 `agentflow`
+    return [p[1:-1] if p.startswith('"') and p.endswith('"') else p for p in parts]
+
+
+def test_the_whole_human_loop_runs_through_the_cli_argv(tmp_path: pathlib.Path,
+                                                        monkeypatch, capsys):
+    """正控（完整人机环，走 CLI 的 argv）：提问 → 停 → inbox 看到 → answer → --resume → final。
+
+    为什么必须有一条"整环"的判据，而不是四条各自为政的：`draft/37` §73 起这一组的
+    其余判据大多在库层（`AL.run_role`）验同一批语义，而人用的是命令行。分成四段之后，
+    "每一段都对、连起来走不通"这种缺陷没有任何一条判据看得见 —— 例如提示里给的命令
+    带了一个 argparse 不认的写法（`--root` 写在动词之后），四段判据全绿，而人照抄就报错。
+
+    这一条把四步串起来跑，并在每一步都数一次模型调用：
+    停着的时候不许烧钱（①之后是 1 条），inbox 看一眼不许烧钱，answer 那一下也不许烧钱。
+    """
+    task = "把口径定下来"
+    ws = tmp_path / "ws"
+    made: list[ScriptedGateway] = []
+    monkeypatch.setattr(cli, "_agent_seam_factory",
+                        _cli_factory(made, {"D": [ask("口径用哪个？", options=["n<=5", "全体"]),
+                                                   FINISH]},
+                                     {"D": [FINISH]}))
+    reset_cache()
+    head = ["--plain", "--root", str(ws)]
+
+    # ① 提问 ⇒ 停：退出码 3，且只调过一次模型
+    rc1 = cli.main(head + ["run-agent", "D", "--task", task, "--sid", "u1",
+                           "--user-wait-sec", "0", "--max-steps", "4"])
+    out1 = capsys.readouterr().out
+    assert rc1 == 3, out1
+    assert "停在等待用户" in out1, out1
+    end1 = [e for e in _events(ws, "u1") if e.get("kind") == "agent_run_end"][-1]
+    qid = end1["waiting_for"]
+    assert end1["stop_reason"] == "waiting_for_user" and qid, end1
+    stopped_calls = _llm_calls(ws, "u1")
+    assert stopped_calls == 1, f"停下时已经有 {stopped_calls} 次模型调用"
+    assert len(made) == 1 and len(made[0].prompts) == 1, "停了之后又发过模型请求"
+
+    # ② inbox（刻意不带 --sid）：跨会话也看得到，且把选项打出来给人照抄
+    rc2 = cli.main(head + ["inbox"])
+    out2 = capsys.readouterr().out
+    assert rc2 == 0, out2
+    assert qid in out2 and "u1" in out2, out2
+    assert "n<=5" in out2, f"inbox 没把选项打出来，人就无从照抄 --select：{out2}"
+    assert _llm_calls(ws, "u1") == stopped_calls, "看一眼 inbox 竟然又调了模型"
+
+    # ③ answer：写进一条回答，同样不花模型调用
+    rc3 = cli.main(head + ["answer", qid, "--sid", "u1", "--custom", "三处都保留"])
+    cap3 = capsys.readouterr()
+    assert rc3 == 0, (cap3.out, cap3.err)
+    replies = U.read_replies(ws, role="D", sid="u1")
+    assert [r["qid"] for r in replies] == [qid], replies
+    assert replies[0]["answer"] == "三处都保留" and replies[0]["selected"] == (), replies
+    assert _llm_calls(ws, "u1") == stopped_calls, "回答这一下不该产生模型调用"
+    assert U.pending_questions(ws, sid="u1") == []
+
+    # ④ --resume：接着那一步跑到 final，退出码 0，人那句话进上下文
+    rc4 = cli.main(head + ["run-agent", "D", "--task", task, "--sid", "u1",
+                           "--user-wait-sec", "0", "--max-steps", "4", "--resume"])
+    out4 = capsys.readouterr().out
+    assert rc4 == 0, out4
+    end4 = [e for e in _events(ws, "u1") if e.get("kind") == "agent_run_end"][-1]
+    assert end4["stop_reason"] == "final", end4
+    starts = [e for e in _events(ws, "u1") if e.get("kind") == "agent_run_start"]
+    assert any("resumed_from" in e for e in starts), starts
+    assert len(made) == 2, "续跑那一段没有另造一个替身？"
+    assert "三处都保留" in made[1].systems[0], "人答的那句话没进续跑那一段的上下文"
+    assert len(made[1].prompts) == 1, "续跑应当只问一次（接着那一步之后）"
+
+
+def test_the_commands_printed_in_the_hint_actually_run(tmp_path: pathlib.Path,
+                                                       monkeypatch, capsys):
+    """正控（提示里的命令必须真能跑）+ 负控（旧写法必须被 argparse 拒）。
+
+    为什么值得单钉一条：`_waiting_notice` 打出来的三条命令是「人此刻唯一的下一步」，
+    而它们不像别的东西那样会被评审看见 —— 没人会把提示里的命令抄进终端再跑一遍
+    （实测：2026-10-03 才发现 `--root` 被写在动词后面，照抄得到
+    `error: unrecognized arguments: --root …`、退出码 2，看着像命令不存在）。
+
+    做法：把那一刻打出来的命令「逐条摘出来真跑」，再断言旧写法确实会被拒 ——
+    后半条是这条判据的反真空：没有它，"提示对不对"就只是"我读过一遍"。
+    """
+    task = "把口径定下来"
+    ws = tmp_path / "ws"
+    made: list[ScriptedGateway] = []
+    monkeypatch.setattr(cli, "_agent_seam_factory",
+                        _cli_factory(made, {"D": [ask("口径用哪个？", options=["甲", "乙"]),
+                                                   FINISH]}))
+    reset_cache()
+    rc = cli.main(["--plain", "--root", str(ws), "run-agent", "D", "--task", task,
+                   "--sid", "u1", "--user-wait-sec", "0", "--max-steps", "4"])
+    hint = capsys.readouterr().out
+    assert rc == 3 and "停在等待用户" in hint, hint
+
+    cmds = _hint_commands(hint)
+    assert len(cmds) >= 3, f"提示里的命令少了（至少要 inbox / answer / run-agent 三条）：{hint}"
+    # 同一个提示有两处（循环的 `结论：` 那一行 + CLI 的「停在等待用户」那一行），
+    # 两边给的应当是同一批命令 ⇒ 按 argv 去重之后应当正好三条。
+    unique: list[list[str]] = []
+    for cmd in cmds:
+        argv = _argv_of(cmd)
+        if argv not in unique:
+            unique.append(argv)
+    # 规则一：每一条都要「自己带 --root」，而且写在动词之前。
+    # 不带 --root 的那种会打到「默认工作区」上 —— 人敲下去不报错，只是在看别的地方；
+    # 写在动词之后的那种直接被 argparse 拒（`unrecognized arguments`，退出码 2）。
+    assert all(argv[0] == "--root" for argv in unique), (
+        f"有命令没把 `--root` 写在动词之前："
+        f"{[c for c in cmds if _argv_of(c)[0] != '--root']}")
+    # 规则二：根就是这一趟的工作区（打印一个别处的根，等于把人送到别的工作区去）
+    bad_root = [argv for argv in unique if argv[1] != str(ws)]
+    assert not bad_root, (f"这几条命令的根不是这一趟的工作区：{bad_root!r}\n"
+                          f"抓到的原文（前 1500 字）：{hint[:1500]!r}")
+    assert len(unique) == 3, f"去重后应当正好三条（inbox / answer / run-agent）：{unique}"
+
+    # 能直接跑的两条：把 `<回答>` 这个占位符换成真回答；`--resume …` 那条带省略号，跳过但要数出来
+    runnable = [[p.replace("<回答>", "三处都保留") for p in argv]
+                for argv in unique if not any("…" in p for p in argv)]
+    skipped = [argv for argv in unique if any("…" in p for p in argv)]
+    assert len(runnable) == 2 and len(skipped) == 1, (unique, runnable, skipped)
+
+    for argv in runnable:
+        code = cli.main(argv)
+        cap = capsys.readouterr()
+        assert code == 0, f"提示里的命令跑不通：{argv} ⇒ 退出码 {code}；{cap.out}{cap.err}"
+    # 这两条命令真的把事办了（不是"退出码 0 但什么也没做"）
+    assert U.pending_questions(ws, sid="u1") == [], "提示里的 answer 没把那条问题答掉"
+    assert [r["answer"] for r in U.read_replies(ws, role="D", sid="u1")] == ["三处都保留"]
+
+    # 负控（反真空）：旧写法必须被拒 —— 否则上面那条"命令真能跑"根本不构成判据
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["--plain", "inbox", "--root", str(ws)])
+    assert caught.value.code == 2, caught.value
+    # 负控之二：光秃秃的 `--sid`（空 sid 时旧写法会打印成这样）同样跑不通
+    with pytest.raises(SystemExit) as caught2:
+        cli.main(["--plain", "--root", str(ws), "inbox", "--sid"])
+    assert caught2.value.code == 2, caught2.value
 
 
 if __name__ == "__main__":  # pragma: no cover - 手动跑这一组时的入口

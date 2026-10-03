@@ -1410,11 +1410,28 @@ def _run_agent_exit_code(run) -> int:
     return 1
 
 
+def _sid_suffix(sid: str | None) -> str:
+    """`--sid <号>` 那一段（空 sid 就整段不出现）。
+
+    为什么不写成 `--sid {sid or ''}`：没给 sid 时那样会打印出一个光秃秃的 `--sid`，
+    人照抄会被 argparse 判成"缺少参数"（退出码 2）—— 与 `--root` 写错位置同族。
+    打印给人敲的命令，必须是「照抄就能跑」的那一版。
+    """
+    return f" --sid {sid}" if sid else ""
+
+
 def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
     """停在等用户时那一行醒目提示：停在谁身上、下一步该敲什么。
 
     三件事逐条给出来（问题号 + 问题原文前 80 字 + 三条命令），因为这一刻的读者
     手里只有终端：只给"waiting_for_user"这个词，她还得自己去翻待答清单。
+
+    三条命令一律把 `--root` 写在子命令「之前」：`--root` 是顶层参数，argparse 不许它
+    出现在动词后面。此前这三条写在后面，实测照抄会得到
+    `error: unrecognized arguments: --root …` 且退出码 2（看着像命令不存在）。
+    判据 `tests/test_user_channel_stop_and_resume.py::
+    test_the_commands_printed_in_the_hint_actually_run` 会把这里打出来的命令
+    逐条真跑一遍，所以这条顺序不许再漂。
     """
     from . import userio as U
 
@@ -1424,10 +1441,11 @@ def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
         if q.qid == qid:
             text = q.text[:80]
             break
+    sid_arg = _sid_suffix(sid)
     return (f"停在等待用户：{qid} {text}；下一步："
-            f"`agentflow inbox --root {root} --sid {sid or ''}` / "
-            f"`agentflow answer {qid} \"<回答>\" --root {root} --sid {sid or ''}` / "
-            f"`agentflow run-agent --resume … --sid {sid or ''}`")
+            f"`agentflow --root {root} inbox{sid_arg}` / "
+            f"`agentflow --root {root} answer {qid} \"<回答>\"{sid_arg}` / "
+            f"`agentflow --root {root} run-agent --resume …{sid_arg}`")
 
 
 def cmd_run_agent(args) -> int:
@@ -1563,7 +1581,7 @@ def cmd_run_agent(args) -> int:
             print(tty.paint(
                 f"[run-agent] 停在等待用户：第 {pending} 轮问了人、还停在等回答 —— "
                 "后续轮次**没有**再开（不许替人把取舍定了）。"
-                f"用 `agentflow inbox --root {root} --sid {args.sid or ''}` 看，"
+                f"用 `agentflow --root {root} inbox{_sid_suffix(args.sid)}` 看，"
                 f"答完再用 `--resume` 接着跑。", "bold"))
             return 3
         return 0 if auto.stop_reason in ("rounds", "stop_file", "user_stop", "resumed_done") else 1
@@ -1588,7 +1606,11 @@ def cmd_run_agent(args) -> int:
               + (f"：{json.dumps(step.payload, ensure_ascii=False)[:160]}" if step.payload else "")
               + (f"  ⇒ {step.problem}" if step.problem else ""))
     if run.final:
-        print(f"  结论：{run.final[:400]}")
+        # 停在等用户那一档不截断：这条结论里带的是「下一步该敲什么」，
+        # 而工作区路径一长，400 字就会把它切在半个命令上（实测：切在
+        # `…\AppData\Lo`）—— 而人恰恰要照抄这几条命令。其余各档照旧截断。
+        text = run.final if run.stop_reason == "waiting_for_user" else run.final[:400]
+        print(f"  结论：{text}")
     print(f"  唤起：{run.summons}；留言：{run.messages_sent}；用量：{run.spend}")
     if code == 3:
         print(tty.paint(_waiting_notice(run, root=root, sid=args.sid), "bold"))
@@ -1744,7 +1766,8 @@ def cmd_inbox(args) -> int:
                             "、".join(_option_text(o) for o in q.options) or "—")
                            for s, q in rows]):
         print(line)
-    print(tty.bullet(f"用 `agentflow answer <问题号> \"<回答>\"`（选选项用 `--select`，"
+    print(tty.bullet(f"用 `agentflow --root {root} answer <问题号> \"<回答>\"`"
+                     f"（选选项用 `--select`，"
                      f"写正文用 `--custom`）回答；共 {len(rows)} 条"))
     print(tty.bullet(_latest_run_stop(root, sids=sids)))
     return 0
@@ -1780,7 +1803,8 @@ def cmd_answer(args) -> int:
             return 2
         print(f"[answer] 没查成：没有 {args.qid} 这个问题"
               f"（当前待答：{sorted(pend) or '现在是空的'}）。"
-              "若它落在别的会话里，用 `agentflow inbox` 看会话号，再用 `--sid` 指名",
+              f"若它落在别的会话里，用 `agentflow --root {root} inbox` 看会话号，"
+              "再用 `--sid` 指名",
               file=sys.stderr)
         return 2
     selected = [str(x) for x in (getattr(args, "select", None) or [])]
@@ -1805,8 +1829,9 @@ def cmd_answer(args) -> int:
         print(tty.paint(f"  注意：{unknown} 不在这个问题的选项里"
                         f"（选项：{'、'.join(question.option_labels) or '（没有选项）'}）—— "
                         "已照写，但模型可能读不懂这个 label", "yellow"))
-    print(tty.bullet(f"下一步：`agentflow run-agent --role {question.role} "
-                     f"--task \"<原任务原文>\" --resume --sid {sid or ''}`"
+    print(tty.bullet(f"下一步：`agentflow --root {root} run-agent "
+                     f"--role {question.role} "
+                     f"--task \"<原任务原文>\" --resume{_sid_suffix(sid)}`"
                      "（它走的是自主多轮就再加 `--rounds N`）"))
     return 0
 

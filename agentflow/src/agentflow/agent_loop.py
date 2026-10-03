@@ -986,10 +986,13 @@ class AgentLoop:
                 if result.get("state") == "pending":
                     run.stop_reason = "waiting_for_user"
                     run.waiting_for = qid
+                    sid_arg = f" --sid {self.sid}" if self.sid else ""
                     run.final = (f"停在等 {qid} 的回答：{question}；"
-                                 f"用 `agentflow inbox` 看、"
-                                 f"`agentflow answer {qid} \"<回答>\"` 答、"
-                                 f"`agentflow run-agent --resume … --sid {self.sid or ''}` 续跑")
+                                 f"用 `agentflow --root {self.session_root} inbox{sid_arg}` 看、"
+                                 f"`agentflow --root {self.session_root} answer {qid} "
+                                 f"\"<回答>\"{sid_arg}` 答、"
+                                 f"`agentflow --root {self.session_root} run-agent --resume …"
+                                 f"{sid_arg}` 续跑")
                 else:
                     run.stop_reason = "ask_cancelled"
                     run.final = (f"第 {step + 1} 步问用户时被取消（{qid}）：这一趟停在这里。"
@@ -1755,7 +1758,9 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                                waiting_for=waiting,
                                final=(f"还在等 {waiting} 的回答：没有人答就不接着跑"
                                       "（不许把「没答」当成默许，也不许从没答的地方重跑）。"
-                                      f"用 `agentflow answer {waiting} \"<回答>\"` 答完再 --resume。"))
+                                      f"用 `agentflow --root {root} answer {waiting} \"<回答>\"{f' --sid {sid}' if sid else ''}` 答完，再用 "
+                                       f"`agentflow --root {root} run-agent --resume …"
+                                       f"{f' --sid {sid}' if sid else ''}` 续跑。"))
         rebuilt, step0 = resume_transcript(root, role, sid, task=task)
         if step0 <= 0:
             _note_resume_refusal(root, role, task, sid, "resume_no_transcript",
