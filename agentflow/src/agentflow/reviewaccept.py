@@ -136,10 +136,22 @@ def _c_report(acc: ReviewAcceptance, report_path: str, store: Any) -> None:
 
 
 def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
-    """② 定理台账每条都有完整假设与出处（含页码）。
+    """② 定理台账每条都有完整假设与出处 —— 而"出处"按来源分档（§68 人裁的甲档）。
 
     只查 `active` 的那些：`disputed`/`refuted`/`superseded` 本来就不许当依据，
     对它们提"必须有假设与出处"是把处置方向搞反（§17.3 问的是交付里的定理）。
+
+    ## 两种来源要的"出处"不是同一件东西
+
+    - `external_lit`（从文献里摘的）：`source_lit_id` 必须有，且 `page_range`
+      的 `start` 或 `label` 至少一个非空 —— 缺页码的摘录无法复核；
+    - `own_result`（我们自己得的）：出处是「我们自己的产物」，要的是
+      `doc_id` 或 `line_range`（`line_range` 的 `start`/`label` 至少一个非空）；
+      对它提 `page_range` 是把"文献第几页"套到"我们自己证的"上来。
+
+    为什么必须与写入口说同一件事：判据要求而写入口放行的字段，会在台账里
+    长期躺着"看着有、其实没有"的行（第十三趟那六条空 `page_range` 就是这么进去的）。
+    `agent_b/register_statement.py` 的预检与这里逐条对齐（§68）。
     """
     if store is None:
         acc.criteria["statements_have_assumptions_and_source"] = "unknown"
@@ -149,13 +161,25 @@ def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
     bad: list[str] = []
     for r in rows:
         sid = str(r.get("stmt_id"))
+        origin = str(r.get("origin") or "")
         if not str(r.get("statement_full") or "").strip():
             bad.append(f"{sid} 缺 statement_full（完整假设）")
-        if not str(r.get("source_lit_id") or "").strip():
-            bad.append(f"{sid} 缺 source_lit_id（出处）")
         page = r.get("page_range") or {}
-        if not (page.get("start") or page.get("label")):
-            bad.append(f"{sid} 缺 page_range（页码）")
+        line = r.get("line_range") or {}
+        if origin == "own_result":
+            if not (str(r.get("doc_id") or "").strip()
+                    or line.get("start") or str(line.get("label") or "").strip()):
+                bad.append(f"{sid} 缺 own_result 的出处（doc_id 或 line_range）")
+        elif origin == "external_lit":
+            if not str(r.get("source_lit_id") or "").strip():
+                bad.append(f"{sid} 缺 source_lit_id（出处）")
+            if not (page.get("start") or str(page.get("label") or "").strip()):
+                bad.append(f"{sid} 缺 page_range（页码）")
+        else:
+            # 词表外的来源：这一行的"出处该是哪一栏"没有定义 ⇒ 按缺字段记（fail），
+            # 而不是拿 external_lit 的规则蒙一个结论。
+            bad.append(f"{sid} 的 origin={origin!r} 不在 STATEMENT_ORIGINS 里 ⇒ "
+                       "说不出它的出处该填哪一栏")
     acc.readings["active_statements"] = len(rows)
     acc.readings["statements_missing_fields"] = bad
     if not rows:
@@ -355,16 +379,61 @@ def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
         acc.criteria["hops_have_readable_prompts"] = "pass"
 
 
-def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
-    """⑥ 附件诚实（R25）：两份都要过 —— 来源不造假、不过度声称。
+def _dangling_report_refs(text: str, store: Any) -> tuple[list[str], str]:
+    """报告里点名的台账行是否真的存在；返回 `(不存在的那些, 没查成的原因)`（`draft/37` §70）。
 
-    两条负控（`draft/37` §16 P3 的报告行逐字要求）：
+    ## 为什么要这一条
+
+    第十四趟真机：`reviewaccept` 六条「全过」、`closing.can_close=True`，
+    而交付说明里写着"4 条登记进 `statements`（0000/0001/0002/0003）"、
+    表格里逐行给 `statements 0001 / 0002 / 0003` —— 「台账里只有 0000 一条」。
+    那三行是模型在两次被拒之后（第一次 `page_range` 传成了字符串）自己"补"出来的：
+    它把打算做的事写成了已经做完的事，而「没有任何判据看这件事」
+    （`_c_report` 只问"每节有没有读数"，不问"读数是不是真的"）。
+
+    判据的形状刻意保守：只认「带前缀的 4 位号」（`statements 0001` / `statements:0001` /
+    `lit:0000` / `documents 0000` / `doc:0000`），不认裸的 4 位数
+    （报告里有大量页码、行号、年份，裸数字会把判据变成噪音）。
+
+    ## 为什么返回一个"没查成的原因"而不是空表
+
+    没有 store 时返回空表，会把「没查」折成「都查到了」—— lint R002 点的就是这个形态，
+    它在本文件上真的红了一次（`if store is None: return []`）。三态纪律：
+    查过了没问题 / 查过了有问题 / 没查成，三者必须分得开。
+
+    为什么它属于"附件诚实"这条：引用一个不存在的行，与"把别人的东西写成我们的"
+    是同一类错 —— 都是「说的与盘上的不是一回事」，处置方向也一样（去把事做了）。
+    """
+    import re
+
+    if store is None:
+        return [], "没有 store ⇒ 报告里的台账引用没查成（不是「都查到了」）"
+    kinds = (("statements", "stmt_id", r"\bstatements?[:：]?\s*(\d{4})"),
+             ("literature", "lit_id", r"\b(?:lit|literature)[:：]?\s*(\d{4})"),
+             ("documents", "doc_id", r"\b(?:doc|documents?)[:：]?\s*(\d{4})"))
+    dangling: list[str] = []
+    for table, id_field, pattern in kinds:
+        wanted = {m for m in re.findall(pattern, text, flags=re.IGNORECASE)}
+        have = {str(r.get(id_field) or "") for r in store.rows(table)}
+        for rid in sorted(wanted - have):
+            dangling.append(f"{table} {rid}")
+    return dangling, ""
+
+
+def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
+    """⑥ 附件诚实（R25）：三份都要过 —— 来源不造假、不过度声称、引用的台账行真的存在。
+
+    三条负控（`draft/37` §16 P3 的报告行逐字要求 + §70 的真机读数）：
 
     1. 来源造假：把"我们补的手稿"写成文献里的东西（`FORGERY_MARKERS`）。
        处置方向是改正来源标注，不是补证据 —— 所以它与下面那条必须分开报；
     2. 没过 T3 写"已解决"：报告里出现 `RESOLVED_MARKERS`，而收工门的
        `load_bearing` 仍然判定"承重结论缺 T3"（同一个工作区里跑一次 `closing` 就知道）。
-       处置方向是降档或补 T3。
+       处置方向是降档或补 T3；
+    3. 「引用的台账行不存在」（`draft/37` §70 的第十四趟真机读数）：报告里逐条写着
+       `statements 0001/0002/0003`，而台账里只有 `0000` —— 六条判据全绿、
+       `closing.can_close=True`，交付说明却在引用不存在的行。
+       处置方向是「去把它真的登记上」（或把没做成的写成没做成），不是改判据。
 
     附件三件套（`origin=own_result` + 依据读数 + 版本 sha）由 `report_shape` 那条管；
     这一条只管诚实：说的是不是实话。
@@ -389,10 +458,17 @@ def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
     text = Path(report_path).read_text(encoding="utf-8")
     forged = [m for m in FORGERY_MARKERS if m in text]
     overclaim = [m for m in RESOLVED_MARKERS if m in text]
-    acc.readings["attachment"] = {"forgery_markers": forged, "resolved_markers": overclaim}
+    dangling, refs_why = _dangling_report_refs(text, store)
+    acc.readings["attachment"] = {"forgery_markers": forged, "resolved_markers": overclaim,
+                                  "dangling_refs": dangling,
+                                  "refs_check": refs_why or "checked"}
     problems: list[str] = []
     if forged:
         problems.append(f"来源造假：报告里出现 {forged} —— 我们补的东西不许写成文献里的")
+    if dangling:
+        problems.append(
+            "引用的台账行不存在：" + "、".join(dangling[:6])
+            + " —— 报告点了盘上没有的行（真机实测：说登记了 4 条 statements、台账里只有 1 条）")
     if overclaim:
         # "已解决"本身不违规 —— 只有当收工门仍在说"承重结论缺 T3"时它才是过度声称。
         # 这正是"两条判据互相咬"的形态：措辞的诚实由证据状态裁定，不由措辞自己裁定。
@@ -409,6 +485,11 @@ def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
     if problems:
         acc.criteria["attachment_is_honest"] = "fail"
         acc.details["attachment_is_honest"] = "；".join(problems)
+    elif refs_why:
+        # 查过了没问题的那些已经过了，但"引用悬空"这一格没查成 ⇒ 这一条记 unknown
+        # （不是 pass）：三态纪律，没查成不许折成通过。
+        acc.criteria["attachment_is_honest"] = "unknown"
+        acc.details["attachment_is_honest"] = refs_why
     else:
         acc.criteria["attachment_is_honest"] = "pass"
 

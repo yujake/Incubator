@@ -53,7 +53,9 @@ def _report(root: pathlib.Path, *, empty_section: str = "") -> pathlib.Path:
         if num == empty_section:
             lines.append("（本节待补）")
         else:
-            lines.append(f"读数：{i} 条，见 statements:000{i} 与 page_range pp. 7-8。")
+            # 每一节都要有读数；引用一个「真的存在」的台账行（`draft/37` §70 之后，
+            # 报告里的引用会被核 —— 夹具引用不存在的行，红的就是夹具体例而不是被测代码）。
+            lines.append(f"读数：{i} 条，见 statements:0001 与 page_range pp. 7-8。")
         lines.append("")
     p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
     return p
@@ -228,6 +230,52 @@ def test_a_hop_without_an_input_key_fails(tmp_path):
     acc = _check(st, report)
     assert acc.criteria["hops_have_readable_prompts"] == "fail", acc.to_dict()
     assert acc.readings["hops"]["without_input_key"] == ["t-0002"], acc.readings["hops"]
+
+
+def test_a_report_citing_a_row_that_does_not_exist_fails(tmp_path):
+    """负控⑥（`draft/37` §70 的真机形态）：报告点名一条盘上没有的台账行 ⇒ 红。
+
+    第十四趟真机：六条判据全绿、`closing.can_close=True`，而交付说明里写着
+    "4 条登记进 `statements`（0000–0003）"、表格里逐行给 `statements 0001/0002/0003`
+    —— 台账里只有 0000。这一条钉住"引用悬空"这一格。
+    """
+    st, report = _good(tmp_path)
+    with report.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n| Theorem 1.2 | 三个族的 exactness | 第 107–131 行 | statements 0042 |\n")
+    acc = _check(st, report)
+    assert acc.criteria["attachment_is_honest"] == "fail", acc.to_dict()
+    assert acc.readings["attachment"]["dangling_refs"] == ["statements 0042"], acc.readings
+    assert "引用的台账行不存在" in acc.details["attachment_is_honest"], acc.details
+    assert not acc.passed
+
+
+def test_dangling_reference_check_does_not_fire_on_page_numbers(tmp_path):
+    """负控（不许变成噪音）：页码、行号区间、年份这些「裸数字」不许被当成台账引用。
+
+    报告里到处都是 "第 88–105 行"、"pp. 7-8"、"P1–P6"、"split 2026" 这样的数字；
+    判据只认「带前缀」的 4 位号（`statements 0001` / `lit:0000` / `doc 0000`），
+    否则它每天都会红，而红成常态的判据等于没有判据。
+    """
+    st, report = _good(tmp_path)
+    with report.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n第 88–105 行、pp. 7-8、P1–P6、split 2026、0007 与 9999 都是裸数字。\n")
+    acc = _check(st, report)
+    assert acc.readings["attachment"]["dangling_refs"] == [], acc.readings["attachment"]
+    assert acc.criteria["attachment_is_honest"] != "fail", acc.details
+
+
+def test_a_report_citing_existing_rows_is_not_flagged(tmp_path):
+    """正控：引用真的存在的行（含 `lit:0000` 写法）⇒ 不报悬空。
+
+    注意上面那句"documents 0000 未建"「不能」写成 `documents 0000` —— 这一格对
+    `documents` 一样生效（夹具里没有 documents 行，写了就会被判悬空；
+    第一版这条判据就是这么红了一次，红得对）。
+    """
+    st, report = _good(tmp_path)
+    with report.open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n来源：lit:0000 第 7–8 页（statements 0001；我方稿件本轮没建 documents 行）。\n")
+    acc = _check(st, report)
+    assert acc.readings["attachment"]["dangling_refs"] == [], acc.readings["attachment"]
 
 
 # ============================================================ 最重要的反真空

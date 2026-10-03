@@ -89,6 +89,11 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
     # 否则下一趟的主控只会看到一格红读数，然后去猜是不是自己问错了。
     for fact in ("无人值守", "停在等待用户", "--resume", "甲/乙/丙"):
         assert fact in text, f"论文包段里没有 {fact!r}"
+    # 第十节（报告里的台账引用必须真的存在，`draft/37` §70）：第十四趟真机六条判据全绿、
+    # 收工门 can_close=true，而交付说明点了三条不存在的 statements 行 ——
+    # 口径必须写在模型看得到的地方，否则它只会又一次把"打算做的"写成"做完的"。
+    for fact in ("必须真的在盘上", "不许写成已登记", "outcome=refused", "回查台账"):
+        assert fact in text, f"论文包段里没有 {fact!r}"
 
 
 def test_the_paper_pack_section_is_versioned(store: Store):

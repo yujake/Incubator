@@ -227,11 +227,54 @@ def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
     assert labeled["ok"] is True, labeled
     assert len(st.rows("statements")) == 1
 
-    # 边界（刻意的）：`own_result` 不要求页码 —— 它的出处是 doc_id/line_range，
-    # 那两栏的口径是册子里的待裁项（§69）。这一条把"不对称"写成可读的事实。
-    own = b.register_statement(**{**STATEMENT, "origin": "own_result",
-                                  "source_lit_id": "", "page_range": None})
+    # 边界（§68 甲档）：`own_result` 要的是「我们自己的」出处 —— 页码不算，
+    # `doc_id` / `line_range` 才算；两者都没有就拒（否则它会编一个页码）。
+    own_bare = b.register_statement(**{**STATEMENT, "origin": "own_result",
+                                       "source_lit_id": "", "page_range": None})
+    assert own_bare["ok"] is False and own_bare["kind"] == "missing_own_source", own_bare
+    own = b.register_statement(**{**STATEMENT, "origin": "own_result", "source_lit_id": "",
+                                  "page_range": None, "doc_id": "0000"})
     assert own["ok"] is True, own
+    rows = st.rows("statements")
+    assert len(rows) == 2, rows
+    assert {r["origin"] for r in rows} == {"external_lit", "own_result"}, rows
+
+
+def test_own_result_and_external_lit_want_different_source_fields(tmp_path: Path):
+    """判据（甲档的两半）：`_c_statements` 按来源分档，两半各一条负控。
+
+    为什么要分：从文献里摘的命题才有"第几页"；自有结果的出处是 `doc_id`/`line_range`。
+    判据与写入口必须同档 —— 只改一处就会回到"台账看着有、判据说没有"（§68）。
+    """
+    from agentflow import reviewaccept as RA
+
+    st = _store(tmp_path)
+    b = AgentB(st, extractor=None, extract_text=None)
+
+    def _crit() -> str:
+        acc = RA.ReviewAcceptance()
+        RA._c_statements(acc, st)
+        return acc.criteria["statements_have_assumptions_and_source"]
+
+    # 正控：自有结果给 doc_id ⇒ 通过（页空缺不扣分）
+    b.register_statement(**{**STATEMENT, "origin": "own_result", "source_lit_id": "",
+                            "page_range": None, "doc_id": "0000"})
+    assert _crit() == "pass", st.rows("statements")
+
+    # 负控：自有结果什么都不给 ⇒ fail（判据与写入口同一条规则）
+    (tmp_path / "ws2").mkdir()
+    st2 = _store(tmp_path / "ws2")
+    with st2.tx("statements", actor="test") as tx:
+        tx.upsert("statements", S.Statement(
+            stmt_id="0000", origin="own_result", kind="theorem",
+            statement_full="我们自己的结论", status="active",
+            created_at="2026-01-01T00:00:00", source_lit_id=None,
+            proof_text="证明：由定义直接推出（自产的，逐字证明见我方稿件）。",
+            quote_verified=False, quote_reason="自有结果：没有可逐字比对的外部引文").to_dict())
+    acc2 = RA.ReviewAcceptance()
+    RA._c_statements(acc2, st2)
+    assert acc2.criteria["statements_have_assumptions_and_source"] == "fail", acc2.details
+    assert "own_result" in acc2.details["statements_have_assumptions_and_source"], acc2.details
 
 
 def test_the_writer_and_the_reviewer_agree_on_page_range(tmp_path: Path):
