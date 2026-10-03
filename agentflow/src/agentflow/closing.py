@@ -41,6 +41,17 @@ DEFAULT_CHECKS: tuple[str, ...] = (
     "anchor", "contradictions", "load_bearing", "report_shape", "user_pending",
 )
 
+#: 「这次调用没有会话身份」——与 `sid=None`（= 读缺省会话）「刻意分开」的两个输入。
+#:
+#: 为什么必须分开（`draft/37` §63 的真机读数，修法 B）：运行内 `conductor.closing`
+#: 报 `user_pending: pass`，而同一次运行外部带 sid 的读数报 `fail` —— 假绿的病因
+#: 是工具体按 `sid=None` 走到了 `sessions/<今天>.jsonl`，而那一趟的提问落在
+#: `sessions/real11.jsonl` 里。"读缺省会话"是一个「具体且合法」的问题
+#: （运维会问："这个工作区今天那段会话在等什么？"），所以 `sid=None` 的语义不改；
+#: 缺的是第三个输入："调用方「没有」会话身份，这一格问不出来"。
+#: 把它折进 `sid=None` 就会重演同一个假绿 —— 而这次连"读错了文件"都不会有人发现。
+NO_SESSION = ""
+
 #: 报告的九节（逐字照 `draft/37` §14.4 的清单）。
 REPORT_SECTIONS: tuple[tuple[str, str], ...] = (
     ("一", "任务与范围"),
@@ -507,11 +518,28 @@ def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> Non
 
 def _check_user_pending(rep: ClosingReport, session_root: Any,
                        *, sid: str | None = None) -> None:
-    """还在等用户回答 ⇒ 必须停在"等待用户"（§14.5 第 4 件 / R26）。"""
+    """还在等用户回答 ⇒ 必须停在"等待用户"（§14.5 第 4 件 / R26）。
+
+    `sid` 的三态（`draft/37` §63）：一个具体会话号 = 读那一段；
+    `None` = 读缺省会话（`sessions/<今天>.jsonl`，运维口径，合法）；
+    `NO_SESSION` = 「调用方没有会话身份」 ⇒ 这一格是 `unknown`。
+    第三个输入是修法 B 加的：装配期没把 sid 注入进来时，按缺省会话读会得出
+    "没问过用户"——而真机每一趟都有自己的 sid（实测 `real11`：
+    运行内报 pass、外部带 sid 报 fail）。「不许」用缺省值冒充"查过了"。
+    """
     if session_root is None:
         rep.status["user_pending"] = "unknown"
         rep.findings.append(Finding("user_pending", "no_session_root", "warning",
                                     "没有会话记录根 ⇒ 待答问题没查成"))
+        return
+    if sid == NO_SESSION:
+        rep.status["user_pending"] = "unknown"
+        rep.findings.append(Finding(
+            "user_pending", "no_session_identity", "warning",
+            "这次调用没有会话身份（装配期没注入 sid，`tools.build_registry(sid=...)`）"
+            "⇒ 待答问题**没查成**。不许按缺省会话读：真机每一趟都有自己的 sid，"
+            "按缺省读会把「问了还没答」读成「没问过」（`draft/37` §63 的假绿）",
+        ))
         return
     # `sid` 必须跟着运行走（`draft/37` §58）：不带它时按默认会话读，
     # 而真机每一趟都有自己的 sid ⇒ 待答问题会被读成「没问过」。
@@ -546,6 +574,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     两处分开写迟早会出现"审计记录落在别处"的静默错位）。
     `project_dir` / `report_path` 不给 ⇒ 对应的那一两格是 `unknown`（不是 pass）：
     门宁可说"我没查成"，也不许在缺少读数时说"可以交"。
+    `sid` 三态见 :data:`NO_SESSION`：具体会话号 / `None`（缺省会话）/
+    `NO_SESSION`（没有会话身份 ⇒ `user_pending` 那格 `unknown`）。
     """
     rep = ClosingReport()
     root = session_root if session_root is not None else getattr(store, "root", None)

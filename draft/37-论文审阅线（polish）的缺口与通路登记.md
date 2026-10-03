@@ -4886,3 +4886,322 @@ closing：**can_close = True**（五条全 pass，failed=[]，unknowns=[]）
 2. 运行内 `closing` 的 sid（62.3）；
 3. `reviewaccept` 的 `triage_branch_recorded` 在**无人值守**场景下的口径
    （现在必须有人回答；要么明确写进文档，要么给它一个"记了决策"的第三态）。
+
+---
+
+## §63 修法 B：会话身份做成**装配期的显式输入**（用户裁定"用 B 的修法"）
+
+### 那一处假绿（第十一趟留下的最后一个洞）
+
+第十一趟运行内（`projects/p5-run11/sessions/real11.jsonl`，第 28 步）主控调
+`conductor.closing`，拿回来的是：
+
+```text
+can_close: true, failed: [], unknowns: ["anchor", "report_shape"]
+```
+
+而同一次运行、外部带 `sid=real11` 的读数（`temp/_run_judge.py` 跑的那一份）报的是：
+
+```text
+failed: ['user_pending']
+```
+
+**两个入口，两个结论**，而且假的那个只出现在运行内 —— 外面怎么看都是对的。
+病因不在判据上：工具体此前按 `sid=None` 走 `sessions.session_path(root, None)`
+= `sessions/<今天>.jsonl`（`sessions.py:53` 的缺省值），而那一趟的提问落在
+`sessions/real11.jsonl`。于是"问了还没答"被读成"没问过"。
+
+### 修法本身
+
+| 落点 | 改动 |
+|---|---|
+| `tools/__init__.py::build_registry`（FC-27） | 新增 `session_root=` / `sid=` 两个装配参数，放进 `deps["session"] = {"root": …, "sid": …}` |
+| `tools/conductor_tools.py` | `register(..., session=None)`；`_TOOL_FUNCTIONS` 里 `conductor.closing` 的依赖从 `('store',)` 改成 `('store', 'session')`；`conductor_closing(store, session, …)` 把 sid 传进 `check_closing` |
+| `closing.py` | 新增 `NO_SESSION = ""` —— **第三个输入**："这次调用没有会话身份" |
+| `reviewaccept.py` | `_c_triage` 认同一个 `NO_SESSION`（同一套三态） |
+| `cli.py::cmd_run_agent` | 会话身份在装配前定下：`args.sid = args.sid or SS.session_id()` |
+| `host.py::wired_llm_conductor` | `eff_sid = sid or SS.session_id()`，同时交给模型缝、`LlmBackend`、工具层；返回值多一栏 `"sid"` |
+| `host.py::wired_tool_registry` | `session_root=` / `sid=` 显式透传（不靠 `**build_kw` 顺手带过去） |
+
+### 为什么是三个输入而不是两个
+
+`sid=None`（= 读缺省会话）是**合法且具体**的问题 —— 运维会问"这个工作区今天那段会话在等什么？"
+把它跟"调用方**没有**会话身份"折叠起来，就是这次假绿的形状；而折叠之后连
+"读错了文件"都不会有人发现（第二次假绿会比第一次更难查）。所以：
+
+- 具体 sid ⇒ 读那一段；
+- `None` ⇒ 读缺省会话（运维口径，行为一字未改，`test_closing_gate.py` 那一批照旧绿）；
+- `NO_SESSION` ⇒ `user_pending` 记 `unknown`，并写明"装配期没注入 sid"。
+
+`conductor.closing` 永远走第一或第三条：装配期有身份就给身份，没有就报"没查成"，
+**不回落到"今天那个文件"**。
+
+### 判据（`tests/test_session_context_wiring.py`，8 条）
+
+| 判据 | 形态 |
+|---|---|
+| `test_in_run_reading_equals_the_outside_reading` | **核心**：运行内读数与外部 `check_closing(sid=…)` 逐格相等（`status`/`failed`/`unknowns`/`can_close`），末尾反真空断言那一格真是 `fail` |
+| `test_both_readings_flip_together_after_the_user_answers` | 用户答完之后两个入口一起翻 `pass` |
+| `test_without_session_identity_the_cell_is_unknown` | 负控：没给 sid ⇒ `unknown`；**同一份工作区**外部带缺省 sid 读却是 `fail`（证明文件里真有提问，不是"没东西"） |
+| `test_the_judge_itself_has_the_third_input` | `sid=NO_SESSION` 与 `sid=None` 是两个不同输入；`NO_SESSION == ""` 被钉住（防止有人改成别的值后 `session_path` 的缺省回落重新生效） |
+| `test_a_question_in_another_session_does_not_count` | 负控：别的 sid 的提问不算这一趟的 |
+| `test_host_wiring_threads_the_session_identity` | 产品路径（`wired_llm_conductor`）必须把身份带到工具体里 |
+| `test_host_wiring_resolves_the_default_session_id` | 老跑法（没有 `--sid`）不许漏判：解析成缺省会话号，缺省会话里的提问看得见 |
+| `test_the_closing_tool_declares_the_session_dependency` | 装配清单必须声明 `session`（漏了 `_call_register` 会当场抛，不许静默降级） |
+
+### 读数（本轮实跑）
+
+- `python -B -m pytest tests -q` ⇒ **3391 passed / 1 failed**（唯一那条是读图 §3 的行数，
+  已付：`schema.py 2714→2720`、`cli.py 1929→1956`）；
+- `python -B scripts/lint_rules.py` ⇒ `error 0 / warning 9 / info 50`（与钉住的读数一致）；
+  `--strict` ⇒ `error 0 / warning 56 / info 49`；
+- FC-27 门：`--paths src/agentflow/tools/__init__.py` ⇒ `requires_human`（auth-audit），
+  已 `--baseline` 登记本版（`reviewers=0`，**登记 ≠ 批准**）⇒ 欠 2 名 reviewer。
+
+### 顺带修掉的一个残留
+
+`run-agent` 此前把 `sid=None` 一路传下去，于是缺省会话号是**写入那一刻**算的
+（`sessions.append` 内部），一趟跨零点的运行会被劈成两个会话文件（缺省 sid 按天，
+而一趟可以有 3600 秒墙钟）。现在在一处解析、之后整趟带着走，这个劈裂不会再出现。
+**残留（登记）**：其他入口（`run_role` 直接被别处调用、`autonomy` 自主多轮）仍按
+写入时刻解析缺省 sid —— 它们的判据不读会话身份，所以今天没有假绿，但口径不统一。
+
+---
+
+## §64 账本盲区（§50.5 的 ⑤）：`run-agent` 这条路**一次调用都没有记账**
+
+### 取证（只读调查，逐条带出处）
+
+`usage_ledger` 全仓只有两个写入口，都在 `tokenmeter.py`：`TokenMeter.charge`（`:317`）
+与 `charge_once`（`:362`）。上游只有两条路：
+
+- `modelcost.charge_reply` ← `modelclient.py:142` 与 `runflow.py:1300`；
+- `conductor._charge_and_settle` ← 召唤级结算。
+
+**`LlmSeam` 根本没有 meter 字段**（字段表 `llmseam.py:128-140`），
+`cli._agent_seam_factory` 与 `host._default_seam` 也都没传过 store ——
+于是 `run-agent` 这条路上，钱只活在两个地方：`SeamSpend`（内存，随进程消失）
+与会话事件的 `llm_call.usd`。实测第十一趟：
+
+```text
+ledger rows=9  usd=0.000000
+llm_call  n=30 usd=0.289069  tokens=1020869+12212
+spend_after.usd=0.289069
+```
+
+9 行全是召唤级结算写的**零**（`LlmBackend.call` 的返回 dict 里没有 `tokens`/`usd`，
+`conductor._end` 取到 0 ⇒ `Charge(scope="summon", usd=0.0)`）。而
+`reviewaccept.within_cost_cap` 读的正是账本：`cap=0.10` 时它报 **pass**
+（真花销是上限的 2.9 倍）。第七趟到第十一趟全部同形（0.218731 / 0.379968 /
+0.444976 / 0.305369 / 0.470263 / 0.361725 全部记成 0.000000）。
+
+正控那一侧也在：`runflow` 那条路记账是对的 —— `tests/golden/run_topic_snapshot.json`
+里 `reconciled_with_usage_ledger: true`、`usage_ledger.usd = 0.00411`。
+所以这不是"价表坏了"，是"这一条路没人记账"。
+
+### 修法
+
+| 落点 | 改动 |
+|---|---|
+| `llmseam.py` | 新增字段 `meter`（`None` = 没接账本）与 `ledger_calls`（幂等键的 `call_index`，与 `spend.calls` 分开：两条早退路上后者不涨，复用会撞键） |
+| `llmseam.py::_charge_ledger` | 落账的唯一实现：造 `Charge` → `meter.charge_once`，返回"记成哪一行" |
+| `llmseam.py::_land` | **先记账、再写会话事件**（宁可留"账上有钱、事件没有"，不要反过来），事件里多一栏 `ledger`（`charged`/`usage_id`/`reason`），于是"账本与事件对不上"可以逐笔追 |
+| `cli._agent_seam_factory` | 新增 `store=` 参数 ⇒ `TokenMeter(store)`；`cmd_run_agent` / `cmd_gate` 把手上那个 store 传进去 |
+| `host._default_seam` / `h_llm` | 同样接 `TokenMeter(store)` |
+| `reviewaccept._c_cost` | 两头看：账本 + **会话事件**（见下） |
+| `schema.py`（FC-27） | `USAGE_SCOPE_PRODUCERS["reason"]` 的说明补上第二个产出点（`llmseam.LlmSeam._charge_ledger`） |
+
+### 四个必须说清楚的口径
+
+1. **为什么不用 `modelcost.charge_reply`**：它是为 `ModelReply` 写的，会自己拿 `reply`
+   重算 `usd_for(...)` —— 价与**重试次数**都从 `reply` 上取。而这里手上是 `SeamCall`，
+   它没有 `attempts` 字段，重算会让"网关重试过的调用"在账本上只按一次计价，
+   而事件里的 `usd`（`_usd_of` 用真 `reply` 算的）比它大：**同一笔钱两处两个数**。
+   所以直接造 `Charge(usd=call.usd, attempts=1)` —— `_row_for` 的
+   `round(usd × attempts, 6)` 与事件里的 `usd` 逐位相等（判据钉的就是这个相等）。
+   顺带避开另一个小谎：`charge_reply` 的 note 开头固定写 `modelgw`，而这条是 llmseam。
+2. **没发请求的两次早退不记账**（`judge_not_wired` / `judge_over_budget`）：
+   没有钱要记；但会话事件照旧留一条（"试过、没接线"是事实）。
+3. **算不出价钱**（价表不可用）⇒ 记一行 `usd=0` 且 `note` 写明"本行的 0 是算不出来"，
+   token 数照记；判据那一侧把这一格判成 `unknown`。
+   **不给 `usage_ledger.usd` 加 `None` 档**（那要动 FC-27 的 `schema.py`）：
+   今天每一个读者都写着 `float(r.get("usd") or 0.0)` —— 加一个 `None`
+   只会多出一条**新的**静默零路径，而不是消掉旧的。
+4. **幂等键的命名空间含角色**（`f"{sid}:{role}"`）：只用 sid 的话，两个角色各自的
+   第 0 次调用会撞同一个键，后到的那笔被静默判 `duplicate` —— 一笔真实花销凭空消失
+   （`modelcost.idempotency_key` 的用法说明逐字警告过这件事）。
+
+### 判据改成"两头看"（`reviewaccept._c_cost`）
+
+原判据只读 `usage_ledger`，所以**任何一条忘了记账的路**都能骗过它 —— 这正是
+七趟运行同形假绿的根因。现在三条口径：
+
+1. 上限判据用 `max(账本合计, 会话事件合计)` —— 保守，绝不按小的那个放行；
+2. 会话里花得比账本多 ⇒ **fail**（"账本没跟上这一趟：账本 X < 会话 Y"），
+   处置是修记账那条路，不是改上限；
+3. 会话里有算不出价钱的调用 ⇒ **unknown**（说不清花了多少，不是通过）。
+
+读数里逐项给出 `usd` / `session_usd` / `session_calls` / `unpriced_calls`，
+`blind_spot` 那句照旧留着（它描述的那一档今天仍然存在）。
+
+### 判据（`tests/test_ledger_charging.py`，8 条）
+
+- 正控：接了账本 ⇒ 一次调用落一行真账，且**账本的数 == 事件里的数**
+  （`usd`/`tokens`/`attempts=1`/`task_id=None`/`scope="reason"`/`note` 带 `llmseam`）；
+- 负控：没接账本 ⇒ 账本**没有行**，事件里如实写 `no_meter`；
+- 反真空：两次调用两行两个幂等键，`meter.spent()` 等于两次之和；
+- 负控：发过请求但失败（超时）⇒ 照样留一行（`outcome=judge_timeout`，`usd=0`）；
+- 负控：两次**没发请求**的早退 ⇒ 不入账（`reason=no_request`）；
+- **核心负控**：把第十一趟的形态搬进来（会话一条 `llm_call` = 0.289069、账本零行）
+  ⇒ `within_cost_cap` 必须 `fail`；把账本补齐 ⇒ 同一份会话必须变 `pass`（证明判据不是恒红）；
+- 三态：算不出价钱的调用 ⇒ `unknown`（账本那行 `note` 里写明"算不出来"）；
+- 接线正控：`cli._agent_seam_factory` 必须把 meter 接到**同一个 store 实例**上
+  （另建一个 `Store(root)` 也能"看起来记了账"，但两个实例各持一份内存副本，
+  后写的会把先写的行覆盖掉）；`host.wired_llm_conductor` 的默认缝也必须带 meter。
+
+### 残留（登记，不在本轮）
+
+- **历史工作区不会被追溯修复**：`p5-run5` … `p5-run11` 的账本仍然是 0，钱的唯一副本
+  在 `sessions/*.jsonl` 的 `llm_call.usd` 里。按新判据它们会报
+  "账本没跟上这一趟"（**fail**）—— 这是诚实的读数（那几趟确实没记账），
+  要追溯得另加一个"从会话事件重建花销"的读取口，属另一刀。
+- **顶层 M 的模型调用不挂台账号**（`task_id=None`）：M 的循环不是一次召唤
+  （`cli.py` 直接 `run_role`，`my_task_id=""`），所以它那 30 次调用在
+  `tasks.tokens` 上没有归口；召唤链里被 LLM 循环驱动的子角色则带真台账号。
+  `verify` 的 `usage_task_total_mismatch` 因此仍然是"一致的 0"，
+  这一格要变成有信息量的读数，需要给顶层 M 也发一个台账号（另一刀）。
+- **召唤级结算在 LLM 循环那条路上仍是零行**：`LlmBackend.call` 的返回 dict 里没有
+  `tokens`/`usd`（它手里有 `run.spend` 但丢掉了）⇒ `conductor._charge_and_settle`
+  继续写零。上 `run.spend` 那条修法会与新的逐调用记账**双记**，
+  要么一起改（结算降级成只补零值兜底），要么不动 —— 本轮选"不动"，登记在此。
+
+---
+
+## §65 欠账：`judge_bad_args` 不再计进 `bad_json`（§50.5 的第一条）
+
+### 欠的是什么
+
+§49/§50 走原生工具调用那条路之后，多了一类失败：**工具名已经拿到、参数不是合法 JSON**
+（`llmseam.ToolFace.to_shape` 的 `judge_bad_args`）。DSH 的 `parseArguments` /
+`ToolArgsError` 口径是"参数错**交回工具层**"—— 它是一次可纠正的往返，
+不是"模型没按协议说话"。而框架把它折进同一个 `run.bad_json`，
+于是 `max_bad_json=2` 之下第三次参数写坏就把整趟运行判成 `bad_json_limit` 收场。
+两件事的处置方向本来就不同：形状漂移要收紧协议（提示词/骨架），参数写坏只要把
+"哪个函数的参数坏在哪"交回去让它重说一次。
+
+### 修法
+
+| 落点 | 改动 |
+|---|---|
+| `agent_loop.LoopRun` | 新增 `bad_args` 计数（与 `bad_json` 分开），`to_dict()` 一并给出 |
+| `agent_loop.AgentLoop` | 新增 `max_bad_args: int = 3`（比 `max_bad_json` 宽：参数错是可纠正的，但仍然有上限 —— 不设上限等于允许无限重说同一句） |
+| `AgentLoop.run` | `data is None` 那一支先看 `call.problem == "judge_bad_args"`：走 `bad_args` 计数与 `bad_args_limit` 停止理由，反馈消息点名"工具名我收到了，坏的是那个参数"（`call.detail` 里带着函数名与原文前 200 字） |
+
+模块 docstring 与 `_shape_of` 的注释同步登记这条分界（形状坏 vs 参数坏）。
+
+### 判据（`tests/test_bad_args_counter.py`，3 条）
+
+| 判据 | 形态 |
+|---|---|
+| `test_bad_arguments_have_their_own_stop_reason` | 正控：连着三次参数坏 ⇒ `bad_args_limit`，`bad_args>=3`、`bad_json==0`；纠正消息里出现工具名与"参数"；那几步不许被当成有效动作 |
+| `test_shape_drift_still_stops_the_loop` | 负控：连着回非 JSON 文本 ⇒ 仍然是 `bad_json_limit`，`bad_args==0`（拆计数不许把老那条纪律放宽） |
+| `test_one_bad_argument_batch_is_handed_back_and_the_run_continues` | 反真空：坏一次、下一次改对 ⇒ 继续跑到 `final`（`steps` 形状序列是 `invalid/tool/final`） |
+
+### 残留
+
+真机上还没有撞到过 `bad_args_limit`（第十一趟的两次 `invalid` 是别的形状漂移），
+所以这条判据的**正控是离线造的**（脚本化网关回原生 `tool_calls`）。
+下一趟真机如果出现参数类失败，`run.bad_args` 会给出第一次真实读数。
+
+---
+
+## §66 无人值守的 `triage_branch_recorded`：三档登记，采用**乙**（并写进提示词）
+
+### 问题
+
+§62 那一趟是"通过"的，但它是在**操作员回答了一个问题之后**才通过的
+（`q0001` 落盘 → 人答 → `--resume`）。那么一次**完全无人值守**的运行呢？
+只要主控按纪律问了、而没人回答，`reviewaccept.triage_branch_recorded` 就是
+`fail`（"还有 N 个问题没被回答 ⇒ 正确的分支是停在等待用户"），
+`closing.user_pending` 也拦着。于是"问过没答"这一档在无人值守下**注定拿不到通过**。
+
+这是不是缺陷？不是 —— 它是"必须停在等待用户"这条纪律的读数。
+但"注定红"与"红得对"必须分得开，所以三档都写下来，并明确今天采用哪一档：
+
+| 档 | 口径 | 代价 |
+|---|---|---|
+| 甲 | 把"正确地停下来等"判成 `pass` | 要先能区分"停在等"与"做完了"。今天的数据面上判不了：交付说明里没有"我停在等什么"这一栏的机械位置，硬判会把"没做完就收工"也放行 |
+| **乙（采用）** | 保持 `fail` —— 它准确定位了"这一趟不能交付" | 无人值守的读数是红；要靠人答一次再续跑才翻绿 |
+| 丙 | 给这一格加第四态（"停在等用户"） | 要动 `CRITERIA` 的三态口径（`pass/fail/unknown` 是全项目共用的读数口径，改它等于改所有判据的读法） |
+
+甲/丙都要改口径本身（丙还要碰 `reviewaccept.CRITERIA` 与 `closing` 的三态），
+所以留给人裁；**乙这一档今天是有判据的**，不是"就这么算了"。
+
+### 乙档写在哪（可判定）
+
+1. 提示词（`agent_prompts.PAPER_PACK`，**`PROMPT_VERSION` p32 → p33**）：
+   新增一段写给 M/G/H —— 无人值守那一趟注定拿不到这一格；`fail` 不是缺陷，
+   也不许靠"不问"绕开（不问只会从 `fail` 变成 `unknown`，两档都不算通过）；
+   正确动作是问出去、停下、写清"停在等什么"，用户答完
+   （`agentflow answer <qid> "<回答>"`）再 `--resume`；
+2. 判据层（`reviewaccept._c_triage` 的 docstring）：三档 + 采用的档 + 为什么；
+3. 内容判据（`tests/test_paper_pack.py`）：论文包段里必须出现
+   `无人值守` / `停在「等待用户」` / `--resume` / `甲/乙/丙` 四个事实
+   （少了任何一个 ⇒ 这一段的口径又只剩在一份文档里）；
+4. 行为判据（已在册，未改）：`tests/test_review_acceptance.py` 的
+   `test_an_unanswered_question_blocks_the_triage_branch`（问了没答 ⇒ `fail`）
+   与 `test_never_asking_is_unknown_not_pass`（一次没问 ⇒ `unknown`）。
+
+### 读数
+
+提示词 diff（`temp/_prompt_diff.py`，比的是冻结快照与当前文本）：
+
+```text
+[A] 只变 1 行：提示词版本 p32 → p33
+[M] +8 行 / [G] +8 行 / [H] +8 行：§66 那一段（PAPER_PACK 由三个角色共享）
+```
+
+随后按纪律重生成 `tests/golden/agent_surface_snapshot.json`
+（`python -B tests/test_agent_surface_snapshot.py --write`，9 个角色的提示词逐字入档），
+diff 只含上面那两类改动（其余角色长度不变）。
+
+---
+
+## §67 最后一笔欠账的读数（`RESULT_CHARS` 之后的重读复核）：**不用调**
+
+### 要回答的问题
+
+§56 把 `RESULT_CHARS` 从 3000 提到 6000，理由是实测"主稿 26 KB / 475 行按 160 行一段读
+（约 9 KB）装不进 3000 字，于是它把窗口缩到 60–100 行反复重读、最后报告没写出来"。
+提上去之后还有没有这个问题？→ **拿第十一趟（通过的那一趟）量一次**。
+
+### 读数（`projects/p5-run11/sessions/real11.jsonl`，只读统计）
+
+```text
+actor 步数 29：tool 19 / summon 5 / invalid 2 / summon_many 2 / ask_user 1
+工具分布：fs.read 7、fs.edit 3、conductor.role_spec 3、fs.list 1、fs.stat 1、
+          fs.write 1、conductor.ledger 1、conductor.acceptance 1、conductor.closing 1
+读类调用 9 次 / distinct 4 处；重复的只有 fs.read:out/paper/main.tex × 6
+```
+
+那 6 次读分成两段，都是结构上必要的，不是"缩窗口反复重读"：
+
+- 第 2–4 步：`max_lines=160` 从 1 读到 475（**一遍读完**，窗口是它自己给的）；
+- 第 14–16 步：`max_lines=90/80/70` 从 240 读到 475（**改稿前回看将被改的区域**）。
+
+而且它**自己把窗口调小了**（160 → 90 → 80 → 70）—— 这正是"它能看见上一轮给的量
+有多大"的表现（`meta.note` 每步都告诉它"本次给第 X–Y 行（共 475 行）；续读 start_line=Z"）。
+**没有一步的结果被 `RESULT_CHARS` 截断**（19 个工具结果里 0 个带"已截断"标记，
+`meta.truncated` 也全是 false；FC-17 的上下文预算同样一次没触发）。
+
+结论：§56 那一次调的 6000 **够用**，第十一趟的 30 步里没有"重读病"。
+**本轮不动这个数** —— 登记这条读数是为了让下一个人不必再量一遍，
+也是为了让"要调大"这种主张必须先给出比上面这组更硬的证据。
+
+### 顺带纠正一处会让人读错的量法（已写进源码注释）
+
+量的时候我先按会话记录里的 `data` 长度算，得到"每次都是 2016 字"，看起来像
+"窗口被切到 2 KB"。**那是错的**：`RECORD_CHARS = 2000`（`agent_loop.py`）
+只在**落档**时截，模型看到的是 `_clip_fields`/`RESULT_CHARS` 那一份观测。
+`agent_loop.RECORD_CHARS` 的注释现在写明这一点：记录里的 `data` 是审计副本，
+不许拿它当"模型看到了多少"的证据。这次差一点得出反向结论（"6000 太小"）。

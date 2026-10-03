@@ -25,6 +25,8 @@
 
 - 没接线（没有 key）：整个循环不发起任何请求，`stop_reason="not_wired"`，并落一条记录；
 - 模型返回坏 JSON：计数，超过上限就停（`stop_reason="bad_json_limit"`），不静默当空；
+- 工具参数不是合法 JSON（`judge_bad_args`）：「另计一个数」（`run.bad_args`），
+  超过上限停成 `bad_args_limit`（§65）—— 它交回工具层就能改对，不是"形状漂移"；
 - 工具被拒 / 召唤被拒：结果里带原因码，并且原样回给模型（那是一次纠正，不是失败）；
 - 步数或预算耗尽：停，并把 `stop_reason` 如实写进运行记录。
 
@@ -133,6 +135,11 @@ def _clip(value: Any, limit: int = RESULT_CHARS) -> str:
 FIELD_CHARS_MIN = 120
 #: 落进"审计记录/台账"的字符串上限。观测层给模型看的是预算内的视图，
 #: 而记录要的是"他当时到底拿到了什么" —— 这个上限只防"一屏数据把会话文件撑爆"。
+#:
+#: 别拿会话记录量"模型看到的窗口有多大"（2026-10-03 我在这上面差点读错，
+#: 见 `draft/37` §67）：记录里的 `data` 是「审计副本」，它被这一档切到 2000 字
+#: （标记是"落档截断"），而模型看到的观测是 `RESULT_CHARS`/`_clip_fields` 那一份。
+#: 两者的数不一样，量错了就会得出"RESULT_CHARS 太小"这种反向结论。
 RECORD_CHARS = 2000
 
 
@@ -263,6 +270,14 @@ class LoopRun:
     prompt_audit: dict[str, Any] = field(default_factory=dict)
     spend: dict[str, Any] = field(default_factory=dict)
     bad_json: int = 0
+    #: 参数坏（`judge_bad_args`）的次数 —— 与 `bad_json` 「分开计」（`draft/37` §65）。
+    #:
+    #: 为什么分开：DSH 的 `ToolArgsError` 口径是"参数错交回工具层"，
+    #: 不是"模型没给出可解析的形状"。折叠成一个计数会让两件处置方向不同的事
+    #: 共用一个停止理由：形状漂移要收紧协议（改提示词/骨架构型），
+    #: 参数写坏只要把错误交回去让它重说一次 —— 真机里两次 `judge_bad_args`
+    #: 就把一趟运行判成 `bad_json_limit` 收场，而它离"改对参数"只差一步。
+    bad_args: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
 
@@ -283,6 +298,7 @@ class LoopRun:
             "steps": [s.to_dict() for s in self.steps],
             "final": self.final, "evidence": list(self.evidence),
             "stop_reason": self.stop_reason, "bad_json": self.bad_json,
+            "bad_args": self.bad_args,
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
             "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
@@ -401,6 +417,8 @@ def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
     真机读数（第八、十趟）：模型有时把工具调用写成 `{"name": "fs.read", "args": {…}}`
     —— 没有 `tool` 这个键。它此前被判"认不出的形状（键：['args','name']）"，
     与真·坏形状一起计进 `bad_json`，第 3 次就 `bad_json_limit` 收场（第十趟的步 8/12/35）。
+    （注意这与 §65 的 `judge_bad_args` 是两件事：这里坏的是「形状」，那里坏的是
+    已被认出的那次调用的「参数」。）
 
     收下它的理由：这个形状没有第二种含义 —— 循环协议里只有工具调用用 `name`+`args`
     （`summon` 用 `role`/`action`，`message` 用 `to`/`body`）。而"名字"这一层本来就有歧义
@@ -536,6 +554,12 @@ class AgentLoop:
     #: 步数是"能做完一件事"的最低门槛，不是省钱的旋钮：省钱靠 `usd_budget` 与墙钟。
     max_steps: int = 30
     max_bad_json: int = 2
+    #: 参数坏多少次才停（`judge_bad_args`，独立的停止理由 `bad_args_limit`）。
+    #:
+    #: 为什么比 `max_bad_json` 宽：形状漂移是"它没按协议说"，参数写坏是"它说对了
+    #: 要调谁、只是那个 JSON 没写对" —— 后者交回工具层就能改对（DSH 的口径），
+    #: 所以给它多一次机会，同时仍然保留上限（不设上限等于允许无限重说同一句）。
+    max_bad_args: int = 3
     #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
     #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
     #: 8,192 是 `deepseek-chat` 一档的输出上限；要改就改这里，别在各处传不同的数。
@@ -675,7 +699,11 @@ class AgentLoop:
                                             max_tokens=self.max_output_tokens,
                                             face=face)
             if data is None:
-                run.bad_json += 1
+                args_error = call.problem == "judge_bad_args"
+                if args_error:
+                    run.bad_args += 1
+                else:
+                    run.bad_json += 1
                 # 把模型实际说了什么留在这一步里（2026-09-30）：只有 `problem`
                 # 时，"它为什么解析不出来"这个问题在台账上是不可回答的 ——
                 # 真机里 M 连着三次 `judge_bad_json`，我只能靠猜（"是不是我新加的
@@ -696,6 +724,19 @@ class AgentLoop:
                     run.final = ("没有接模型（judge_not_wired）：这次运行没有产生任何判断，"
                                  "也没有写任何数据")
                     break
+                if args_error:
+                    # 参数坏：「交回工具层」（`draft/37` §65，DSH 的 `ToolArgsError` 口径）。
+                    # 反馈里点名"是哪个函数的参数坏了"（`call.detail` 带着工具名与原文），
+                    # 这类错误是可纠正的，不该按"形状漂移"处置。
+                    if run.bad_args > self.max_bad_args:
+                        run.stop_reason = "bad_args_limit"
+                        run.final = (f"连续 {run.bad_args} 次把工具参数写成不合法 JSON"
+                                     f"（最后一次：{call.detail}），停止")
+                        break
+                    transcript += (f"\n\n[第 {step + 1} 步] 框架：{call.detail}。"
+                                   "工具名我收到了，坏的是那个参数 —— 把参数写成一个合法"
+                                   " JSON 对象再调用一次（别改调别的工具，也别写解释）。")
+                    continue
                 if run.bad_json > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
                     run.final = (f"连续 {run.bad_json} 次没有给出可解析的 JSON"

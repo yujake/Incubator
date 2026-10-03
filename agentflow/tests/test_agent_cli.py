@@ -25,6 +25,7 @@ from agentflow.agent_loop import LlmBackend
 from agentflow.host import DEFAULT_LLM_LOOPS, wired_llm_conductor
 from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
+from agentflow.tokenmeter import TokenMeter
 from agentflow.tools.conductor_tools import reset_cache
 
 
@@ -48,11 +49,18 @@ class ScriptedGateway:
 SCRIPTS: dict[str, list[str]] = {}
 
 
-def fake_seam_factory(role: str, *, root: pathlib.Path, sid: str | None, usd_budget: float | None):
-    """替身模型工厂：按角色取剧本（测试用它替换 `cli._agent_seam_factory`）。"""
+def fake_seam_factory(role: str, *, root: pathlib.Path, sid: str | None, usd_budget: float | None,
+                      store: Any = None):
+    """替身模型工厂：按角色取剧本（测试用它替换 `cli._agent_seam_factory`）。
+
+    `store` 是 `draft/37` §64 加进来的：真工厂用它给缝接上账本（`meter=`）。
+    替身「不」记账（剧本里的价是 0.0），但签名必须与真工厂一致 ——
+    否则"调用方多传一个参数"这件事会在测试里变成 TypeError，
+    而真机上它是"记账悄悄没接上"（本判据要防的那一类）。
+    """
     gw = ScriptedGateway(SCRIPTS.get(role, ['{"final": "（没有剧本）", "evidence": []}']))
     return LlmSeam(role=role, session_root=root, gateway=gw, price=(0.0, 0.0), sid=sid,
-                   usd_budget=usd_budget)
+                   usd_budget=usd_budget, meter=(TokenMeter(store) if store is not None else None))
 
 
 def _args(tmp_path: pathlib.Path, **kw: Any) -> Namespace:

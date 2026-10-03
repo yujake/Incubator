@@ -1364,11 +1364,21 @@ def _exit_badge(code: Any) -> str:
 
 #: 产品路径上造模型缝的唯一入口。测试可以 monkeypatch 它来注入替身模型
 #: （这样"CLI 这条路"能在离线单测里被真跑一遍，而不是只测库层）。
-def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: float | None):
-    """按角色造一个模型缝（key 与端点一律来自环境变量）。"""
-    from .llmseam import LlmSeam
+def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: float | None,
+                        store: Any = None):
+    """按角色造一个模型缝（key 与端点一律来自环境变量）。
 
-    return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget)
+    `store` 给定时，缝同时把每次调用记进 `usage_ledger`（`draft/37` §64）：
+    `run-agent` 这条路此前「没有任何地方记账」，钱只活在内存与会话事件里 ——
+    于是账本对一次真花了 0.289069 美元的运行报"0.000000"，而按账本判上限的
+    `reviewaccept.within_cost_cap` 据此报"没超上限"（假绿）。
+    不给 `store` ⇒ `meter=None` ⇒ 如实报"没有入账"（不是记一笔零）。
+    """
+    from .llmseam import LlmSeam
+    from .tokenmeter import TokenMeter
+
+    meter = TokenMeter(store, budget_usd=usd_budget) if store is not None else None
+    return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget, meter=meter)
 
 
 def _parse_drive(items) -> tuple[dict, str]:
@@ -1419,9 +1429,25 @@ def cmd_run_agent(args) -> int:
     st = make_store(root)
     st.init()
 
+    # ---- 会话身份在这一刻定下，之后整趟不再漂移（`draft/37` §63，修法 B）
+    #
+    # 为什么要在装配之前解析出来：`sessions.append(..., sid=None)` 的缺省值是
+    # 「写入那一刻」的 `session_id()`（环境变量优先，否则当天日期）。此前 `run-agent`
+    # 把 `sid=None` 一路传下去，于是"这一趟是哪一段会话"谁都没说清 ——
+    # 运行内 `conductor.closing` 按缺省读，读到的可能不是这一趟写的那一段：
+    # 实测第 11 趟（`--sid real11`）运行内报 `can_close: true`，而外部带 sid 的
+    # 读数报 `failed: ['user_pending']` —— 假绿，且只在运行内出现。
+    # 解析一次、之后原样带下去，工具面与写入面读的就是同一个文件；
+    # 顺带把"跨零点的一趟会被劈成两个会话文件"这件事也去掉了
+    # （缺省 sid 按天，而一趟可以有 3600 秒墙钟）。
+    from . import sessions as SS
+
+    if not getattr(args, "sid", None):
+        args.sid = SS.session_id()
+
     def seam_for(role_name: str):
         return _agent_seam_factory(role_name, root=root, sid=args.sid,
-                                   usd_budget=args.budget_usd)
+                                   usd_budget=args.budget_usd, store=st)
 
     seam = seam_for(args.role)
     if not seam.wired:
@@ -1521,11 +1547,12 @@ def cmd_gate(args) -> int:
     except OSError as e:
         print(f"[gate] 没查成：读不到 {artifact}（{type(e).__name__}: {e}）", file=sys.stderr)
         return 2
-    seam = _agent_seam_factory("H", root=root, sid=args.sid, usd_budget=args.budget_usd)
+    seam = _agent_seam_factory("H", root=root, sid=args.sid, usd_budget=args.budget_usd, store=st)
     wiring = H.wired_llm_conductor(st, loops={}, session_root=root, sid=args.sid,
                                    workspace_root=str(root),
                                    seam_factory=lambda role: _agent_seam_factory(
-                                       role, root=root, sid=args.sid, usd_budget=args.budget_usd))
+                                       role, root=root, sid=args.sid,
+                                       usd_budget=args.budget_usd, store=st))
     pairs = [tuple(x.split(",")) for x in (args.pair or [])]
     res = D.gate(args.name, text, session_root=root, seam=seam,
                  criteria=args.criterion or (), store=st, claimed_pairs=pairs,

@@ -138,6 +138,22 @@ class LlmSeam:
     sid: str | None = None
     price: tuple[float, float] | None = None
     spend: SeamSpend = field(default_factory=SeamSpend)
+    #: 账本（`tokenmeter.TokenMeter`）。「不给就是没接账本」，而不是"记一笔零"。
+    #:
+    #: 为什么它是本类的一个字段（`draft/37` §64 的真机读数）：`run-agent` 这条路
+    #: 从第一天起就没有任何地方把花销写进 `usage_ledger` —— 钱只活在
+    #: `spend`（内存）与会话事件的 `llm_call.usd` 里。实测第 11 趟：会话里
+    #: 30 次调用合计 0.289069 美元，而同一次运行的账本 9 行「全是 0.000000」，
+    #: 于是 `reviewaccept.within_cost_cap` 拿着一份"花了 0"的账本判"没超上限"
+    #: —— 假绿。缝是模型调用的唯一入口，所以记账必须挂在它身上。
+    meter: Any = None
+    #: 这个缝已经「试过」往账本里记第几次（幂等键的 `call_index`）。
+    #:
+    #: 为什么不复用 `spend.calls`：那两个数在两条早退路上不增长
+    #: （`judge_not_wired` / `judge_over_budget` 在发请求之前就返回，
+    #: 见 `ask` 的前两个分支），复用会让两次早退撞同一个幂等键，
+    #: 而后到的那一笔被静默判成 `duplicate` —— 一笔真实记录凭空消失。
+    ledger_calls: int = 0
 
     # -------------------------------------------------------------- 构造
     @classmethod
@@ -186,13 +202,17 @@ class LlmSeam:
                             detail="没有配置模型（AGENTFLOW_MODEL_API_KEY 为空）"
                                    "：这是没查成，不是没有问题",
                             elapsed_sec=time.monotonic() - t0, **base)
-            return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note)
+            # `charged=False`：这一次「没有发请求」，所以没有钱要记。
+            # 会话事件照旧留一条（"试过、没接线"是事实），账本不入账。
+            return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
+                              charged=False)
         if self.usd_budget is not None and self.spend.usd >= self.usd_budget:
             call = SeamCall(ok=False, problem="judge_over_budget",
                             detail=f"花销预算已耗尽（已用 {self.spend.usd:.6f} / 上限 "
                                    f"{self.usd_budget:.6f}）—— 这一次没有发起请求",
                             elapsed_sec=time.monotonic() - t0, **base)
-            return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note)
+            return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
+                              charged=False)
 
         try:
             reply = self.gateway.complete(prompt, scope=self.scope,
@@ -254,9 +274,79 @@ class LlmSeam:
         except Exception as exc:  # 价格表缺失/格式不对：这不影响结论，但必须留痕
             return None, f"花销未能折算（{type(exc).__name__}: {exc}）"
 
-    # -------------------------------------------------------------- 落档
+    # -------------------------------------------------------------- 落账
+    def _charge_ledger(self, call: SeamCall, *, task_id: str) -> dict[str, Any]:
+        """把这次调用的花销写进 `usage_ledger`；返回"记成哪一行"的可读读数。
+
+        ## 为什么不用 `modelcost.charge_reply`
+
+        `charge_reply` 是为 `modelgw.ModelReply` 写的：它自己拿 `reply` 重算
+        `usd_for(...)`（价与「重试次数」都从 `reply` 上取）。而这里手上是
+        `SeamCall`，它没有 `attempts` 字段 —— 走 `charge_reply` 会让
+        "网关重试过的调用"在账本上只按一次计价，而会话事件里那个 `usd`
+        （`_usd_of` 用真 `reply` 算的，含重试）比它大：「同一笔钱两处两个数」。
+        所以这里直接造 `Charge`：`usd=call.usd`、`attempts=1`
+        —— `_row_for` 的 `usd_total = round(usd × attempts, 6)` 于是与事件里的
+        `usd` 逐位相等（判据 `tests/test_ledger_charging.py` 钉的就是这个相等）。
+        入账本身仍走同一条实现（`TokenMeter.charge_once` → `_row_for`）。
+
+        ## 四条口径
+
+        1. `meter=None` ⇒ 「不入账」，且如实报 `no_meter`（不是"记了一笔零"，
+           更不是"免费"）；
+        2. `call.usd is None`（价表不可用）⇒ 记一行 `usd=0` 且 `note` 里写明
+           "这一行的 0 是「算不出来」" —— 账本今天表达不了这一档
+           （`UsageEntry.usd` 是 float 且是 FC-27 字段），所以用 `note` 留痕，
+           由 `reviewaccept._c_cost` 的交叉判据把这一格判成 `unknown`；
+        3. 上游没回 usage（tokens 全 0）⇒ 零值也记，`note` 写明"不是真花了零"
+           （账本设计②：`没记账` 与 `花了零` 必须分得开）；
+        4. 失败也记（`ok=False` 但发过请求）：钱可能已经花了，而且"这次尝试"
+           本身就是要被看见的事实。
+        """
+        from . import tokenmeter as TM
+
+        if self.meter is None:
+            return {"charged": False, "usage_id": "", "reason": "no_meter",
+                    "note": "这个缝没有接账本（meter=None）⇒ 本次没有入账（不是记了一笔零）"}
+        idx = self.ledger_calls
+        self.ledger_calls += 1
+        tid = str(task_id or "").strip() or None   # `""` 会被 schema 拒；None = 不挂任务
+        outcome = "ok" if call.ok else (call.problem or "failed")
+        note = f"source=llmseam;role={self.role};call_index={idx};outcome={outcome}"
+        tokens_in = int(call.tokens_in or 0)
+        tokens_out = int(call.tokens_out or 0)
+        if call.usd is None:
+            note += ("；花销未能折算（价格表不可用）⇒ 本行的 0 是「算不出来」，不是零花销")
+        elif not tokens_in and not tokens_out:
+            note += "；上游未回 usage ⇒ 本次只能按零记（不是真花了零）"
+        charge = TM.Charge(
+            role=self.role, scope=self.scope,
+            tokens_in=tokens_in, tokens_out=tokens_out,
+            usd=float(call.usd or 0.0), attempts=1, task_id=tid, note=note,
+        )
+        # 幂等键的命名空间必须含角色（`modelcost.idempotency_key` 的用法说明）：
+        # 只用 sid 的话，两个角色各自的第 0 次调用会撞同一个键，
+        # 后到的那一笔被静默判成 `duplicate` —— 一笔真实花销凭空消失。
+        key = MC.idempotency_key(f"{self.sid or ''}:{self.role}", idx)
+        try:
+            logged = self.meter.charge_once(charge, idem_key=key)
+        except Exception as exc:  # 记账失败必须看得见（它是审计面，不是可选项）
+            return {"charged": False, "usage_id": "", "reason": "charge_failed",
+                    "note": f"入账失败：{type(exc).__name__}: {exc}"}
+        return {
+            "charged": bool(logged.get("recorded")),
+            "usage_id": str(logged.get("usage_id") or ""),
+            "reason": "charged" if logged.get("recorded") else "duplicate",
+            "idem_key": key,
+        }
+
     def _land(self, call: SeamCall, *, prompt: str, system: str, task_id: str,
-              note: str) -> SeamCall:
+              note: str, charged: bool = True) -> SeamCall:
+        # 先记账、再写会话事件：万一中间崩了，宁可留一条"账上有钱、事件没有"
+        # （钱记下了），也不要"事件有钱、账上没有"（那正是本次要修的漏记方向）。
+        ledger = (self._charge_ledger(call, task_id=task_id) if charged
+                  else {"charged": False, "usage_id": "", "reason": "no_request",
+                        "note": "这次没有发请求（没接线 / 预算已尽）⇒ 没有钱要记"})
         event = {
             "kind": "llm_call",
             "role": self.role,
@@ -265,6 +355,9 @@ class LlmSeam:
             "prompt_chars": len(prompt),
             **call.to_dict(),
             "spend_after": self.spend.to_dict(),
+            # 「这次调用的钱记进账本了吗、记成哪一行」——会话事件自己给出答案，
+            # 于是"账本与事件对不上"可以逐笔追，而不是靠两个汇总数猜。
+            "ledger": ledger,
         }
         try:
             _path, problem = SS.append(self.session_root, event, sid=self.sid)

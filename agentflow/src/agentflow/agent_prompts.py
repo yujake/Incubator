@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p32"
+PROMPT_VERSION = "p33"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -483,7 +483,15 @@ PAPER_PACK = """\
   给了 `out/paper` 它会把 `out/paper` 再拼一次），`report_path` 给 `out/review/REPORT.md`。
 - 关键取舍**要问用户**（`ask_user` 那条形状）：问过的问题会落盘；在没人值守的运行里，
   提问会停在"等待用户"，等回答回来再继续。这不是麻烦，是这道门的一条读数
-  （`triage_branch_recorded`：一次都没问过 ⇒ 那一格只能记"没查成"）。"""
+  （`triage_branch_recorded`：一次都没问过 ⇒ 那一格只能记"没查成"）。
+- **无人值守的那一趟注定拿不到 `triage_branch_recorded`**（`draft/37` §66 的口径，
+  这一条是写给你与用户的，不是给你绕过的）：只要你按纪律问了、而用户还没答，
+  那一格就是 `fail`（"还有 N 个问题没被回答 ⇒ 正确的分支是停在等待用户"）。
+  它**不是**缺陷，也**不许**靠"不问"绕开（不问只会从 `fail` 变成 `unknown`，两档都不算通过）。
+  正确的动作是：把问题问出去、停下、把"停在等什么"写进交付说明；用户答完
+  （`agentflow answer <qid> "<回答>"`）再 `--resume` 续跑 —— 续跑那一趟才会看到回答、
+  这一格才会翻成 `pass`。框架侧对无人值守这一档的处置见 `draft/37` §66 的三档登记
+  （甲/乙/丙），当前采用**乙**：判据保持 `fail`，口径写在提示词与文档里。"""
 
 
 @dataclass(frozen=True)

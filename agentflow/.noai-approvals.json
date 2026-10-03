@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-03T11:17:54+08:00",
+  "generated_at": "2026-10-03T13:35:06+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -350,11 +350,11 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "287d597385dea99031fcde618d8e05419b4391a2a7f18695c9d510ced8f6a77f",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "draft/37 16 P2（round 5）：审阅线六条提示词口径。schema.py 加 literature.matched（LIT_MATCH_STATES = exact/partial/mismatch，空串=还没核，见 §2 R1b），verify.py 加两条：mismatch_literature_processed(error)/partial_match_processed(warning)。specs/a,b,c,d,h,m.py 是 ROLE_BRIEFS 的逐字镜像（用 temp/_p2_sync_spec_brief.py 整份 brief 重渲染，区间外零改动），六条口径本身在 agent_prompts.py。判据：tests/test_review_line_prompts.py（23 条，含反真空）+ tests/test_literature_match.py（8 条，含反真空）+ test_agent_spec_reconciliation.py。",
-      "changed_this_session": null,
+      "sha256": "1900c73c5e0980a21f9dd754ccc5a8207416f056d302c4ca5d530bb28f46834b",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "draft/37 §64：USAGE_SCOPE_PRODUCERS['reason'] 的登记补上第二个产出点（llmseam.LlmSeam._charge_ledger）；SCHEMA_VERSION/TABLES/EVAL_REQUIRED_FIELDS 一个字未动",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": [
@@ -512,11 +512,11 @@
       "path": "src/agentflow/tools/__init__.py",
       "glob": "src/agentflow/tools/__init__.py",
       "category": "auth-audit",
-      "sha256": "2694b23640ba52e322ca4a6afc71860256607c17c39bffad27fb3d4f37e3beae",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 f823d4d97033 变为 2694b23640ba，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
-      "changed_this_session": null,
+      "sha256": "e6aef25f5eeca9068ebb1136863de99bddb3a97a165167307d0a27394223133d",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "draft/37 §63 修法 B：build_registry 收 session_root/sid 放进 deps['session']；ROLES/READ_ONLY_ROLES/SIDE_EFFECTS_WRITE 三条判据一个字未动（本轮另有一处 R009 注释装饰清理）",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []

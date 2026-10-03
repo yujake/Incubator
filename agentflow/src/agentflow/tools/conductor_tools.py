@@ -26,6 +26,9 @@
 | `conductor.ensure_project` | write_local | 冷启动 / 热启动由 M 决定（四态如实给） |
 | `conductor.state` | read | 只读状态视图（给 M 判断用） |
 | `conductor.role_spec` | read | 某角色的动作与工具面（派给谁、怎么写 brief） |
+| `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
+| `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
+| `conductor.closing` | read | 跑收工门五条（三态读数；`can_close` 只在五条全过时为真） |
 
 ## 为什么 M 的写面变了不等于"主控开始产出知识"
 
@@ -761,19 +764,36 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
              "user_pending），值是三态之一（通过 / 拦住 / 没查成）；"
              "findings[] 每项是 {'check','code','level','detail'}"),
 )
-def conductor_closing(store, project_dir: str = "", report_path: str = "") -> ToolResult:
+def conductor_closing(store, session=None, project_dir: str = "", report_path: str = "") -> ToolResult:
     """工具体：把收工门包成一次只读调用（判据在 `agentflow.closing`，这里不另写一份）。
 
     为什么主控需要它：交付说明里"能不能交"这句话必须有可查的读数撑腰。
     真机读数里最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件事 ——
     包是旧的、依赖还挂着争议、承重结论只有数值支持。这些每一条都能被机器判，
     混在一段总结里就只剩一句"基本完成"。
+
+    ## `session` 是装配期注入的「会话身份」（`draft/37` §63，修法 B）
+
+    `session` = `{"root": <会话记录根>, "sid": <这一趟的会话号>}`，由
+    `tools.build_registry(session_root=..., sid=...)` 放进装配依赖里。
+    为什么不让工具体自己"猜"一个 sid：真机实测（第 11 趟 `real11`）主控在
+    第 28 步调 `conductor.closing` 拿到 `can_close: true, failed: []`，
+    而同一次运行外部带 `sid=real11` 的读数报 `failed: ['user_pending']` ——
+    工具体此前按 `sid=None` 走到了缺省会话文件 `sessions/<今天>.jsonl`，
+    而那一趟的提问落在 `sessions/real11.jsonl`。「假绿」。
+    修法不是"让工具按调用时的日期猜得准一点"，而是把身份做成装配期的显式输入：
+    装配时知道这一趟是谁，就一路带到判据里。
+    没注入时按 `closing.NO_SESSION` 传下去 ⇒ 那一格记 `unknown`（不是 pass，
+    也不是"读今天那份"——三态纪律）。
     """
     if store is None:
         return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store", can_close=False)
     from .. import closing as CL
 
-    rep = CL.check_closing(store, project_dir=project_dir, report_path=report_path)
+    sess = session if isinstance(session, Mapping) else {}
+    rep = CL.check_closing(store, project_dir=project_dir, report_path=report_path,
+                           session_root=(str(sess.get("root") or "") or None),
+                           sid=str(sess.get("sid") or CL.NO_SESSION))
     data = rep.to_dict()
     kind = "" if rep.can_close else ("closing_unknown" if CL.tri_state_exit_code(rep) == 2
                                      else "closing_blocked")
@@ -797,12 +817,15 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_state, ('_conductor',)),
     (conductor_role_spec, ('store',)),
     (conductor_acceptance, ('store',)),
-    (conductor_closing, ('store',)),
+    # `session` 是装配期注入的会话身份（§63 修法 B）：`conductor.closing` 靠它
+    # 读这一趟自己的会话文件，而不是回落到"今天那个文件"（那是一次实测假绿）。
+    (conductor_closing, ('store', 'session')),
 )
 
 
 def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None,
              role_registry: Any = None, policy: Any = None,
+             session: Any = None,
              backend: Any = "local") -> list[str]:
     """把主控工具注册进 `registry`，返回注册的工具名列表。
 
@@ -816,6 +839,10 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
     role_registry : Mapping | None
         `LocalBackend` 的角色接线（role -> 实例/工厂）；不给我方仍可派活，
         但被派的角色会以 `refused/not_wired` 如实落台账。
+    session : Mapping | None
+        这一趟的会话身份 `{"root": ..., "sid": ...}`，由
+        `tools.build_registry(session_root=, sid=)` 注入；不给 ⇒
+        `conductor.closing` 的 `user_pending` 那一格记 `unknown`（§63 修法 B）。
     """
     def _conductor() -> Conductor:
         if conductor is not None:
@@ -832,6 +859,7 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
     _bound: dict[str, Any] = {}
     _bound['_conductor'] = _conductor
     _bound['store'] = store
+    _bound['session'] = session
     names: list[str] = []
     for _fn, _deps in _TOOL_FUNCTIONS:
         names.append(registry.register(replace(

@@ -248,7 +248,7 @@ def _check_param_seams_are_registered(
     为什么落点在导入期而不是等 `ToolRegistry.register`：`register` 只知道
     "某个工具注册了"，看不见"接缝表里有没有指着空气的键"（工具模块是
     `build_registry` 惰性 import 的，导入本模块时树上一个 `ToolSpec` 都还没有）。
-    参数**面**的判据在注册期（`base.check_param_seams`），接缝**表**的判据在这里。
+    参数「面」的判据在注册期（`base.check_param_seams`），接缝「表」的判据在这里。
 
     两个形参只为让判据能被单独喂表（负控与单元测试用）；真正跑的那一次
     在下面用默认值调用，读的就是真表。
@@ -372,6 +372,8 @@ def build_registry(
     config: Any = None,
     conductor: Any = None,
     role_registry: Any = None,
+    session_root: str | Path | None = None,
+    sid: str | None = None,
 ) -> RegistryBuild:
     """组装工具层。
 
@@ -385,6 +387,15 @@ def build_registry(
         C 的图对象；为 None 时 `graph_tools` 的只读查询类工具仍可注册（它们可自行构建）。
     strict : bool
         为 True 时，任何模块跳过都抛异常 —— 供验收脚本使用，防止"少了一半工具还以为装好了"。
+    session_root, sid : 会话身份（`draft/37` §63，修法 B）
+        这一趟运行「是谁」：会话记录的根与这一趟的会话号。装配期注入，工具层不替它猜。
+        为什么必须是装配期输入：真机实测第 11 趟（`sessions/real11.jsonl`）主控在运行内
+        调 `conductor.closing` 得到 `can_close: true`，而同一次运行外部带 `sid=real11`
+        的读数报 `failed: ['user_pending']` —— 工具体当时按 `sid=None` 读到了缺省会话
+        `sessions/<今天>.jsonl`，于是"问了还没答"被读成"没问过"。「假绿」，
+        且它只在运行内出现，外面怎么看都是对的。
+        `sid` 不给 ⇒ 传下去的是 `closing.NO_SESSION` ⇒ 那一格记 `unknown`
+        （不是 pass，也不回落成"读今天那份"：三态纪律）。
     """
     reg = ToolRegistry(name=name)
 
@@ -423,6 +434,12 @@ def build_registry(
         # 由调用方注入，工具层不替它猜（猜错的形态是派出去的活没人接，而台账照样绿）。
         "conductor": conductor,
         "role_registry": role_registry,
+        # 会话身份（`draft/37` §63，修法 B）：同样是装配期注入，工具层不替它猜。
+        # `sid` 为空 ⇒ 这一趟「没有」会话身份，`conductor.closing` 的 `user_pending`
+        # 记 `unknown`。刻意不在这里回落到 `sessions.session_id()`：
+        # 那个缺省值是"今天那段会话"，与"这一趟是哪一段"是两件事，
+        # 而把它俩折叠起来正是第 11 趟那次运行内假绿的病因。
+        "session": {"root": str(session_root or root or ""), "sid": str(sid or "")},
     }
 
     loaded: list[str] = []
@@ -479,18 +496,18 @@ def build_registry(
     # （负控见 `tests/test_tools_base.py`）。判据从"装配期查表"前移成
     # "构造期拒绝"：更强的形态，且少了一张必须与真实树同步维护的表。
 
-    # ---- `N-5`（工具侧）：参数接缝表的**整体**判据（逐条工具那条在 `register` 里）
+    # ---- `N-5`（工具侧）：参数接缝表的「整体」判据（逐条工具那条在 `register` 里）
     #
     # `register` 里的 `check_param_seams` 是逐工具 fail-closed 的；它看不见
     # 两种"整体"事实，而这两种都只能在这里核（装配完才知道树上有哪些工具）：
     #   ① 接缝表里有指向不存在工具的键（拼错 / 工具改名后留下的孤儿）；
-    #   ② 接缝表里的条目现在**已经不需要了**（handler 开始收得下它了）——
+    #   ② 接缝表里的条目现在「已经不需要了」（handler 开始收得下它了）——
     #      只增不减的登记表会烂成噪音，噪音里的真违约就没人看了。
     # 覆盖率（`params_checked`）单独计数：判据的结论是"零违反"，而
     # "零违反"与"一个工具都没核到"在输出上一模一样（P16）。
     #
     # 处置口径与上面那条 `roles` 判据逐字一致：非严格档记进 `skipped`（可见），
-    # 严格档直接抛。**不改**成无条件抛：`build_registry` 允许部分模块缺席
+    # 严格档直接抛。「不改」成无条件抛：`build_registry` 允许部分模块缺席
     # （那是它的既定契约），在这里无条件抛会把"某个并行开发的模块还没落地"
     # 升级成"整个工具层不可用"。
     params_checked = sum(1 for _ in reg._specs.values())

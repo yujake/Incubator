@@ -2020,7 +2020,13 @@ USAGE_SCOPE_PRODUCERS: dict[str, tuple[str, str] | None] = {
     "extract": ("modelclient.ModelClient.complete",
                 "模型读本地文献那一步：charge_reply(scope='extract')"),
     "review": None,
-    "reason": ("runflow.SCOPE_ANSWER", "runflow 的作答调用点：charge_reply(scope=SCOPE_ANSWER)"),
+    # `reason` 有两个产出点：`runflow` 的作答调用点，以及 `run-agent` 那条路的模型缝
+    # （`llmseam.LlmSeam._charge_ledger`，2026-10-03 接上，`draft/37` §64）。
+    # 这里原先只写了前者 —— 于是"谁产出这一档"这句声明在缝接上账本之后就成了一句
+    # 半真的话（`G-6` 要防的正是"声明与产出脱节"）。
+    "reason": ("runflow.SCOPE_ANSWER + llmseam.LlmSeam._charge_ledger",
+               "两条路的 charge_reply/Charge 都归口 scope='reason'："
+               "runflow 的作答调用点，与 run-agent 的模型缝（每次 LLM 调用一行）"),
 }
 
 

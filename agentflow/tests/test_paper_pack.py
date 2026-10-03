@@ -84,6 +84,11 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
     for fact in ("九节形状", "六、体例与表述", "九、诚实边界", "分栏", "我们补的",
                  "origin=own_result", "project_dir", "ask_user"):
         assert fact in text, f"论文包段里没有 {fact!r}"
+    # 第九节（无人值守那一档的口径，`draft/37` §66）：判据在这一档上是 fail，
+    # 而"fail 不是缺陷、也不许靠不问绕开"这件事必须写在模型看得到的地方 ——
+    # 否则下一趟的主控只会看到一格红读数，然后去猜是不是自己问错了。
+    for fact in ("无人值守", "停在等待用户", "--resume", "甲/乙/丙"):
+        assert fact in text, f"论文包段里没有 {fact!r}"
 
 
 def test_the_paper_pack_section_is_versioned(store: Store):

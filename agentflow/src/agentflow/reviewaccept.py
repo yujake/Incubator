@@ -182,10 +182,35 @@ def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any,
 
     `sid` 必须跟着运行走（见 `check_review` 的说明）：不带它时按默认会话读，
     而真机跑的每一趟都有自己的 sid ⇒ 提问会被读成"没问过"。
+    `sid=closing.NO_SESSION`（调用方没有会话身份）⇒ 这一格 `unknown`：
+    与 `closing.user_pending` 同一套三态，理由见那边的 `NO_SESSION`。
+
+    ## 无人值守的那一趟（`draft/37` §66 的三档，当前采用乙）
+
+    一次没人值守的运行里，"问了而用户没答"这一格注定是 `fail`。这不是判据的缺陷，
+    而是"必须停在等待用户"这条纪律的读数。三档登记（供人改口径）：
+
+    - 甲：把"正确地停下来等"判成 `pass`（要能区分"停在等"与"做完了"，
+      今天的数据面上判不了：交付说明里没有"我停在等什么"这一栏的机械位置）；
+    - 乙（「当前」）：保持 `fail` —— 它准确定位了"这一趟不能交付"；
+      口径写进 PAPER_PACK（"无人值守那一趟拿不到这一格，答完再 `--resume`"）
+      与本节，并由 `tests/test_paper_pack.py` 的内容判据钉住；
+    - 丙：给这一格加第四态（"停在等用户"），要动 `CRITERIA` 的三态口径
+      （`pass/fail/unknown` 是全项目共用的读数口径）。
+
+    甲/丙都要改口径本身，所以留给人裁；乙这一档今天是「有判据」的。
     """
     if session_root is None:
         acc.criteria["triage_branch_recorded"] = "unknown"
         acc.details["triage_branch_recorded"] = "没有会话记录根 ⇒ 没查成"
+        return
+    from .closing import NO_SESSION
+
+    if sid == NO_SESSION:
+        acc.criteria["triage_branch_recorded"] = "unknown"
+        acc.details["triage_branch_recorded"] = (
+            "这次审阅没有会话身份（装配期没注入 sid）⇒ 「该问的问了」这条**没查成**"
+            "（按缺省会话读会把别的会话的提问算进来，或把本会话的提问读丢）")
         return
     from . import userio as U
 
@@ -208,16 +233,61 @@ def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any,
         acc.criteria["triage_branch_recorded"] = "pass"
 
 
-def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None) -> None:
-    """④ 成本上限：`usage_ledger` 的合计不超过上限。
+def _session_spend_usd(session_root: Any, sid: str | None) -> tuple[float | None, int, int]:
+    """会话事件里这一趟的花销：返回 `(合计 usd, 算不出价钱的调用数, llm_call 条数)`。
 
- 这一条今天有一个盲区，写在读数里（不是藏起来）：
+    `None` 的合计 = 「没查成」（没有会话根 / 没有 sid / 读不出来），不是"花了零"。
+
+    ## 为什么本判据需要第二个数源（`draft/37` §64 的真机读数）
+
+    `within_cost_cap` 原先只读 `usage_ledger`。而 `run-agent` 这条路
+    「一次调用都没往账本里记过」：第 11 趟会话里 30 次调用合计 0.289069 美元，
+    账本 9 行全是 0.000000 —— 于是这一格报"没超上限"，而真花销是上限的三倍
+    （cap=0.10 时实测 `pass`）。钱一直都在会话事件的 `llm_call.usd` 里，
+    所以判据必须两头都看：账本说多少、这一趟实际花了多少。
+    """
+    if session_root is None or sid is None:
+        return None, 0, 0
+    from . import sessions as SS
+
+    events, _problems = SS.read_session(session_root, sid=sid)
+    calls = [e for e in events if str(e.get("kind") or "") == "llm_call"]
+    total = 0.0
+    unknown = 0
+    for e in calls:
+        usd = e.get("usd")
+        if usd is None:
+            unknown += 1
+        else:
+            total += float(usd or 0.0)
+    return round(total, 6), unknown, len(calls)
+
+
+def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None, *,
+            session_root: Any = None, sid: str | None = None) -> None:
+    """④ 成本上限：账本合计与会话事件两头看，取「看得见的最大花销」判上限。
+
+ 这一条此前有一个盲区（写在读数里，不是藏起来）：
     `tokenmeter._row_for` 永远写 `round(c.usd_total, 6)`（一个 float），
     而"这次调用算不出花销"这件事记在 spend 的 `unknown_usd_calls` 里、
     不进账本行 ⇒ 一次算不出价钱的调用在账本上看起来就是零元。
     所以本判据只能说"账本上的合计没超上限"，说不出"这一轮没有漏记的花销"。
     补法：把 `unknown_usd_calls` 也落进账本（或给它一列），或者让 `usage_ledger`
     允许 `usd=None` 这一档 —— 两者都要动 `schema.py`/`tokenmeter.py`，留给人裁。
+
+  §64 的处置（人已授权这一轮动禁改区，但「没有」动 `schema.py`，理由如下）：
+    真正被撞破的不是"算不出价钱"这一档，而是「账本整条路没记账」
+    （`LlmSeam` 根本没有 meter ⇒ 30 次调用 0 行）。修法是把缝接上账本
+    （`llmseam.LlmSeam.meter`），于是账本对新运行不再说谎；
+    而为了让"任何一条忘了记账的路"都能被抓住，这里加上第三个读数：
+    会话事件里的花销。三条口径：
+      ① 上限判据用 `max(账本, 会话)` —— 保守，绝不按小的那个放行；
+      ② 会话里花得比账本多 ⇒ 「fail」（"账本没跟上这一趟"，处置是修记账，不是改上限）；
+      ③ 会话里有算不出价钱的调用 ⇒ 「unknown」（说不清花了多少，不是通过）。
+    为什么不给 `usage_ledger.usd` 加 `None` 档：今天每一个读者都写着
+    `float(r.get("usd") or 0.0)` —— 加一个 `None` 只会多出一条「新的」静默零路径，
+    而不是消掉旧的。所以"算不出来"留在 `note` 里（写入方如实写），
+    由这条判据判成 `unknown`。这一条要动 `schema.py`（FC-27），本轮不动。
     """
     if store is None:
         acc.criteria["within_cost_cap"] = "unknown"
@@ -225,16 +295,34 @@ def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None) -> None:
         return
     rows = store.rows("usage_ledger")
     total = sum(float(r.get("usd") or 0.0) for r in rows)
+    seen, unpriced, calls = _session_spend_usd(session_root, sid)
     acc.readings["cost"] = {"rows": len(rows), "usd": round(total, 6), "cap_usd": cap_usd,
+                            "session_usd": seen, "session_calls": calls,
+                            "unpriced_calls": unpriced,
                             "blind_spot": "账本行永远是 float（`usd_total`）⇒ "
                                           "「这次调用算不出花销」在账本上看不见"
                                           "（它在 spend 的 unknown_usd_calls 里）"}
     if cap_usd is None:
         acc.criteria["within_cost_cap"] = "unknown"
         acc.details["within_cost_cap"] = "没给成本上限 ⇒ 这一条没查成（不是通过）"
-    elif total > float(cap_usd):
+        return
+    spent = max(total, float(seen or 0.0))
+    if spent > float(cap_usd):
         acc.criteria["within_cost_cap"] = "fail"
-        acc.details["within_cost_cap"] = f"花了 {total:.6f} > 上限 {float(cap_usd):.6f}"
+        acc.details["within_cost_cap"] = (
+            f"花了 {spent:.6f} > 上限 {float(cap_usd):.6f}"
+            f"（账本 {total:.6f} / 会话事件 {seen if seen is not None else '没查成'}）")
+    elif unpriced:
+        acc.criteria["within_cost_cap"] = "unknown"
+        acc.details["within_cost_cap"] = (
+            f"会话里有 {unpriced} 次调用算不出价钱（价格表不可用）⇒ "
+            f"「花了多少」说不清，这一格不是通过（账本合计 {total:.6f}）")
+    elif seen is not None and float(seen) > total + 1e-9:
+        acc.criteria["within_cost_cap"] = "fail"
+        acc.details["within_cost_cap"] = (
+            f"账本没跟上这一趟：账本合计 {total:.6f} < 会话事件里的花销 {float(seen):.6f}"
+            f"（{calls} 次调用）⇒ 有调用没记账。处置是修记账那条路"
+            "（`llmseam.LlmSeam.meter` / 调用点的 meter 接线），不是改成本上限")
     else:
         acc.criteria["within_cost_cap"] = "pass"
 
@@ -366,7 +454,7 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
     _c_report(acc, report_path, store)
     _c_statements(acc, store)
     _c_triage(acc, store, root, sid=sid)
-    _c_cost(acc, store, cost_cap_usd)
+    _c_cost(acc, store, cost_cap_usd, session_root=root, sid=sid)
     _c_hops(acc, store)
     _c_attachment(acc, store, report_path)
     _auxiliary(acc, store, project_dir)

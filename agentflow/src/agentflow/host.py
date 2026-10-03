@@ -309,10 +309,16 @@ def wired_tool_registry(store: Any, *, policy: Any = None, llm: Any = None,
                         providers: Any = None, extractor: Any = None,
                         config: Mapping[str, Any] | None = None,
                         workspace_root: str | Path | None = None,
+                        session_root: str | Path | None = None, sid: str | None = None,
                         **build_kw: Any) -> Any:
     """组装接了线的工具层（主控与角色接线都注入进去）。
 
     返回 `tools.build_registry` 的原返回值（`RegistryBuild`，含 `.registry`）。
+
+    `session_root` / `sid` 显式往后传（`draft/37` §63）：会话身份是装配期输入，
+    不给 ⇒ `conductor.closing` 的 `user_pending` 记 `unknown`（不是 pass）。
+    这里显式列出而不是靠 `**build_kw` 顺手带过去：靠 `**build_kw` 时，
+    一个拼错的键会被静默吞进 `deps` 之外、工具照旧按缺省会话读 —— 那正是假绿的形态。
     """
     from .tools import build_registry
 
@@ -322,7 +328,8 @@ def wired_tool_registry(store: Any, *, policy: Any = None, llm: Any = None,
                                 extractor=extractor, config=config,
                                 workspace_root=workspace_root)
     return build_registry(store=store, conductor=conductor, role_registry=reg,
-                          workspace_root=workspace_root, config=config, **build_kw)
+                          workspace_root=workspace_root, config=config,
+                          session_root=session_root, sid=sid, **build_kw)
 
 
 #: 默认的"模型驱动"接线表。刻意是空的：装配期不许因为"环境里有 key"就改变行为。
@@ -358,11 +365,22 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     from .agent_loop import LlmBackend
     from .conductor import LocalBackend
     from .llmseam import LlmSeam
+    from .tokenmeter import TokenMeter
     from .tools import build_registry
     from .tools.conductor_tools import conductor_for
+    from . import sessions as SS
 
     root = Path(session_root or getattr(store, "root", ".")).resolve()
     ws = str(workspace_root or getattr(store, "root", "") or "")
+    # ---- 会话身份在装配期定下（`draft/37` §63，修法 B）
+    #
+    # `sid=None` 的缺省值是"写入那一刻"的 `sessions.session_id()`（当天日期）。
+    # 运行内 `conductor.closing` 拿到的必须是「这一趟」的会话号，而不是"今天那段" ——
+    # 实测第 11 趟运行内报 `can_close: true`、外部带 sid 报 `failed: ['user_pending']`。
+    # 所以这里解析一次，把它同时交给：模型缝（写 `llm_call` 事件）、
+    # `LlmBackend`（写 `agent_*` 事件）、以及工具层（读会话文件）——
+    # 三处读写的必须是同一个文件。
+    eff_sid = sid or SS.session_id()
     # H 的语义判据（`draft/28` §196）：默认 False —— 环境里有 key 也不改变确定性行为
     # （与 `DEFAULT_LLM_LOOPS` 同一条纪律）。打开时 H 拿一个按角色造的模型缝，
     # `claims_semantically_judged` 才会从 0 变成真读数。
@@ -370,8 +388,10 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     if semantic_review:
         from .llmseam import LlmSeam as _Seam
 
-        h_llm = (seam_factory or (lambda role: _Seam.for_role(role, session_root=root, sid=sid,
-                                                             usd_budget=usd_budget)))("H")
+        h_llm = (seam_factory or (lambda role: _Seam.for_role(role, session_root=root, sid=eff_sid,
+                                                             usd_budget=usd_budget,
+                                                             meter=TokenMeter(
+                                                                 store, budget_usd=usd_budget))))("H")
     role_reg = build_role_registry(store, providers=providers, extractor=extractor,
                                    config=config, workspace_root=workspace_root,
                                    llm_by_role=({"H": h_llm} if h_llm is not None else None))
@@ -390,22 +410,28 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         inner.store = store
 
     def _default_seam(role: str) -> LlmSeam:
-        return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget)
+        # `meter=` 见 `draft/37` §64：缝是模型调用的唯一入口，记账挂在它身上 ——
+        # 不挂的话，`run-agent` 这条路一次调用都不会进 `usage_ledger`。
+        return LlmSeam.for_role(role, session_root=root, sid=eff_sid, usd_budget=usd_budget,
+                                meter=TokenMeter(store, budget_usd=usd_budget))
 
     backend = LlmBackend(inner=inner, loops=table, session_root=root,
                          seam_factory=seam_factory or _default_seam, store=store,
-                         max_steps=max_steps, workspace_root=ws, sid=sid)
+                         max_steps=max_steps, workspace_root=ws, sid=eff_sid)
     if not isinstance(conductor.backend, LlmBackend):
         conductor.backend = backend
         conductor.backend_note = ("backend 被换成 LlmBackend（conductor_for 的缓存忽略后传的 "
                                   "backend，不换就会静默跑确定性实现）")
     built = build_registry(store=store, conductor=conductor, role_registry=role_reg,
-                           workspace_root=workspace_root, config=config)
+                           workspace_root=workspace_root, config=config,
+                           session_root=root, sid=eff_sid)
     backend.registry = built.registry
     backend.conductor = conductor
     backend.store = store
     return {"conductor": conductor, "backend": backend, "registry": built.registry,
-            "loops": table, "session_root": root}
+            "loops": table, "session_root": root,
+            # 这一趟定下的会话号（§63）：调用方与运维据此核对"工具面读的是哪一段"。
+            "sid": eff_sid}
 
 
 def selftest() -> int:
