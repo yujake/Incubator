@@ -396,13 +396,13 @@ def _sha(text: str) -> str:
 def _shape_of(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
     """把模型的一句输出判成一个形状。判不出来时返回 `("", {}, 原因)`。
 
-    ## `{"name": …, "args": …}` 是 `{"tool": …}` 的**别名**（2026-10-03，§61）
+    ## `{"name": …, "args": …}` 是 `{"tool": …}` 的别名（2026-10-03，§61）
 
     真机读数（第八、十趟）：模型有时把工具调用写成 `{"name": "fs.read", "args": {…}}`
-    —— **没有 `tool` 这个键**。它此前被判"认不出的形状（键：['args','name']）"，
+    —— 没有 `tool` 这个键。它此前被判"认不出的形状（键：['args','name']）"，
     与真·坏形状一起计进 `bad_json`，第 3 次就 `bad_json_limit` 收场（第十趟的步 8/12/35）。
 
-    收下它的理由：**这个形状没有第二种含义** —— 循环协议里只有工具调用用 `name`+`args`
+    收下它的理由：这个形状没有第二种含义 —— 循环协议里只有工具调用用 `name`+`args`
     （`summon` 用 `role`/`action`，`message` 用 `to`/`body`）。而"名字"这一层本来就有歧义
     空间（带点的真名 vs 广告名，见 `_do_tool`），多认一个写法比让整趟作废便宜得多。
     留痕照旧：payload 里带 `shape_alias="name"`，所以"这一趟用了别名"在台账上看得见

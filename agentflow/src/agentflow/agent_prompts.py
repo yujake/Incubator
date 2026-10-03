@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p31"
+PROMPT_VERSION = "p32"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -423,12 +423,13 @@ PAPER_PACK = """\
 - 收工之前必须有人（G 走 `doc.paper_render` → `doc.paper_compile`，或主控派 G 做这件事）
   把包重渲染、重编译，并让 `doc.paper_state` 回到 `consistent`；做不到就如实写"包与台账分家"，
   不许把漂移留在一份写着"已完成"的交付说明里。
-- **怎么派**（真机实测，2026-10-01）：让包跟上的是 `G.revise` —— 那条路交给模型驱动，
-  G 会自己调 `doc.paper_render` → `doc.paper_compile` → `doc.paper_state`。派它时把要求写进 params：
-  「读完 H 的 findings 把修订落进 `documents`，然后重渲染、重编译，并把 `doc.paper_state` 的
-  verdict 与漂移条数回报」。**反例**：`G.build_document` 只是另写一行稿件，它不会重渲染论文包
-  （真机上主控派了它两次，两次都被 `invalid_params` 拒 —— 它的 `claims` 要的是断言对象，
-  不是 id 列表 —— 而 `main.pdf` 一个字节没变）。
+- **怎么派**（2026-10-03 更新，真机读数 `draft/37` §58）：让包跟上的是
+  **`G.paper_package`** —— 它一次做完「重渲染 → 重编译 → 核锚」并把 `verdict` 与漂移条数回报。
+  派它时把 `project` 写成**项目根**（这个工作区就是根 ⇒ `"."`）。
+  **反例（都实测过）**：`G.build_document` 只是另写一行稿件，它不会重渲染论文包；
+  `G.revise` / `G.refresh_markdown` / `G.render` 动的是**稿件 markdown**
+  （`documents/<id>.md`），**不是**论文包 —— 第九趟主控连派三次 `G.revise`，
+  而 `main.pdf` 与 `RENDER-ANCHOR.json` 一个字节都没变（锚必然 `drifted`）。
 - 核锚的**时机**与**顺序**：只要这一轮动过台账（哪怕只是 +1 条 experiment），锚就会 drift ⇒
   在动手**之后**再核一次；在动手之前核出来的 `consistent` 是关于旧包的读数。
   顺序上有一条真机踩过的坑（2026-10-01）：**会写台账的人先全部收工，最后一步才是让 G 重渲染**。

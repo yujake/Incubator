@@ -114,8 +114,12 @@ def test_the_paper_pack_section_is_versioned(store: Store):
 #: ⇒ 段里必须同时写"会写台账的动作排在最后一次重渲染之前"。
 #: 第三次实测（`projects/p3-review-20261001-221654`）锚一致了，但 `main.tex` 一个字节没变
 #: ⇒ 段里必须点名"核验证明的主路径是 E 的形式化核验"（H 的机械门 + G 重渲染不会让稿子变好）。
-PACK_FOLLOW_FACTS = ("`G.revise`", "build_document", "doc.paper_render", "doc.paper_state",
-                     "invalid_params", "verify_fixes", "最后一次写台账之后",
+#: 第四次（2026-10-03，`draft/37` §58/§59）：第九趟主控连派三次 `G.revise` 都没能让包跟上
+#: （`revise` / `refresh_markdown` / `render` 动的是稿件 markdown），而"重渲染 + 重编译 + 核锚"
+#: 是三个工具、没有动作能召唤 ⇒ 于是加了 `G.paper_package`（一次做完三件事并回报 verdict）。
+#: 段里现在必须点名它；`G.revise` 从"那条路"降级成"反例之一"。
+PACK_FOLLOW_FACTS = ("`G.paper_package`", "build_document", "G.revise", "doc.paper_render",
+                     "doc.paper_state", "verify_fixes", "最后一次写台账之后",
                      "E.check_formal", "不注入任何库")
 
 
@@ -138,10 +142,15 @@ def test_the_paper_pack_names_the_action_that_makes_the_package_follow(store: St
 
 
 def test_the_pack_follow_judge_catches_a_section_without_the_action() -> None:
-    """负控：把动作名从段里拿掉 ⇒ 同一个检查函数必须报出来（否则那条判据是装饰）。"""
+    """负控：把主路径那个动作名从段里拿掉 ⇒ 同一个检查函数必须报出来（否则那条判据是装饰）。
+
+    "主路径"在 2026-10-03 之后是 `G.paper_package`（§59 加的动作）——负控要拿掉的是它，
+    而不是仍然作为反例留在段里的 `G.revise`（拿掉反例不改变"路在哪"这个事实，
+    判据不该因此报错：这两件事是分开的）。
+    """
     good = AP.PAPER_PACK
     assert pack_follow_problems(good) == [], "正控输入下必须干净"
-    assert pack_follow_problems(good.replace("`G.revise`", "某个动作")), "动作名被拿掉却没报"
+    assert pack_follow_problems(good.replace("`G.paper_package`", "某个动作")), "主路径动作名被拿掉却没报"
     assert pack_follow_problems(good.replace("build_document", "另一个动作")), "反例没报"
     assert pack_follow_problems("论文包要重渲染、重编译。"), "空话连篇的段没报"
 
