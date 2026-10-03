@@ -7552,3 +7552,111 @@ B 也没有第二份文本可以逐字比对。主控在报告 §八.1 写的那
 下一趟（第 6 趟）用同一套夹具与同一个 58 字任务原文重跑即可，
 第一个要看的信号是：`G.build_document(out_path="out/paper/main.tex")` **被拒**
 （而不是把主稿换掉）。
+
+---
+
+## §92 T1 第 6 趟：两条腿真的做成了 —— 剩下的是「裁决没落库」这一步
+
+第 6 趟真机（2026-10-04，工作区 `projects/p5-review-t6`，58 字任务原文不变；
+夹具 = §90 补的 6 份被引原文 + P7/P8；§91 的覆盖守卫已在位）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 88 / 26（`by_role` B13 / E7 / G5 / A1） |
+| 花销 | **$1.206146**（预算 $5 内） |
+| 退出 | 0（`final`） |
+| `tasks` 结局 | `ok` 20 / `refused` 6（`invalid_params`） |
+| 产出表 | **`literature` 5**、**`statements` 10**、`search_requests` 5；`documents` **0**、`experiments` **0**、`relations` 0、`review_findings` 0 |
+| 主稿 | **完好**：26,155 → 26,672 字节（3 处实质改动，sha `8c5c431b…` → `246802f3…`）—— §91 的守卫没有挡住正当改动，而"覆盖主稿"那件事**没有发生** |
+| 收工门 | 六格全过（`can_close=true`） |
+| 报告 | `out/review/REPORT.md` 10,653 字节 |
+
+### 一、形式化腿：**真的验过了**（这是 §89 那一行事实的直接收益）
+
+6 次 `check_formal` 的结局逐条：
+
+| t-id | 结局 |
+|---|---|
+| t-0012 | **`verified`**：退出码 0、无 sorry、公理 `[propext, Classical.choice, Quot.sound]` 在允许集内、声明 `exactness_core` 被检查到（0.438 s） |
+| t-0014 | **`verified`**：退出码 0、无 sorry、公理 无、声明 `fekete_core` 被检查到（0.343 s） |
+| t-0009 / t-0010 / t-0011 | 源码里有 `sorry` ⇒ 框架判"这不是证明"（模型自己的错，报告里如实认了） |
+| t-0013 | 编译失败（`unknown identifier 'Finset.univ.sum'`，自足文件没 import `Finset`） |
+
+两条**不带 Mathlib 的自足 Lean 证明真的通过检查器**：exactness criterion 与 Fekete 次可加性 ——
+论文 §3 的两条核心引理。⇒ 用户点名的"能机器验证的定理做形式化验证"这一条腿，
+**在本机是可达的，而且这一趟做到了**。
+
+### 二、引文腿：逐字比对真的发生了
+
+- `literature` **5 行**：`A.ingest_local` 把 `cited/` 下 5 份 companion 文档登记进来
+  （夹具补齐被引原文的直接收益 —— 第 4 趟这一栏是 1 行、第 3 趟是 0 行）；
+- `statements` **10 行**，全部 `origin=external_lit` 且带 `source_lit_id`（指到那 5 行文献）：
+  - `quote_verified=true` **1 条**（`0009`：`quote_reason` = 「逐字比对：proof_text 在
+    companion-11-04 正文中逐字出现」）；
+  - `quote_verified` 不传（= 还没查）**9 条**，每条 `quote_reason` 写明「待逐字比对」——
+    这正是三态纪律要的形状（"没查"是一个明确的值，不是一个空格）。
+
+**一处必须记下的报告过报**：报告 §五写「`quote_verified=true`：4 条（t-0023–t-0026）」，
+而台账只有 **1** 条。查了会话记录：整趟只发出过**一次** `quote_verified=True`
+（步 79，落在 `0009`）⇒ 框架**没有丢参数**，是主控把"打算核四条"写成了"核了四条"。
+这是"报告里的数字与台账不符"的形态，框架目前没有一格判据盯它（`substance` 只看表非空、
+`reviewaccept` 只看报告有没有读数）—— 登记为缺口，见第五节。
+
+### 三、§91 的守卫：既没误伤，也挡住了那次事故
+
+主稿被**正当修改**（`fs.edit` 3 处、+517 字节），而"把主稿当 `out_path` 交给
+`G.build_document`"这件事这一趟没有发生；即便发生，写入口会在渲染之前拒。
+
+### 四、剩下的唯一硬缺口：**裁决没落库**（主控自己在报告里写成了"关键缺口"）
+
+报告 §四逐字：
+
+> 关键缺口：`E.list_experiments`（t-0017）返回 `total=0` ⇒ `check_formal` 的 verified 结果
+> **不落 `experiments` 表**，因此 `G.build_document` 的 proof 级断言拿不到 `exp:` 引用
+> （FC-22），我方稿件行未能建成。
+
+台账侧的四条读数把因果链接得很紧：
+
+1. `G.build_document` 被拒 4 次，最后一次（t-0008）逐字是
+   「稿件里有 **10 条** proof 级断言的证据不成立……[claim-1] 声称 `evidence_kind='proof'`，
+   却一条 `exp:` 引用都没有……没有 `proof_location`」；
+2. `experiments` 0 行（`check_formal` 不写行，而 `run_experiment(method='formal')` 才是写行的那条路）；
+3. `documents` 因此 0 行 ⇒ 没有 `doc_id` ⇒ **H 一次都没被召唤**（`by_role` 里没有 H）；
+4. 于是审校腿也落空 —— 而这是由第 1 条连锁造成的，不是三个独立缺口。
+
+**根因是一句与实现不符的提示词**（`agent_prompts.PAPER_PACK` 原文）：
+「派 `E.check_formal` 逐条核……它给出的 `verified=True` 是**证据升级**（台账里那条断言的证据
+跟着变，表与稿件跟着变）」——`check_formal` 从不写台账，那句话是假的。
+模型照这句话走，于是做完第一步就没有第二步了。
+
+### 五、修法（这一轮）
+
+1. `agent_prompts.py` 的 PAPER_PACK 那一段改成**两步**，并把第 6 趟的真机读数写进去：
+   ① `E.check_formal` **只给裁决、不落台账**；② 要升到 `proof` 级必须派
+   `E.run_experiment(method='formal', …)`（它把带 `proof_location` 与检查器原话的 proof 行
+   写进 `experiments`，`documents` 才引得到 `exp:<id>`）。
+   放在 PAPER_PACK（模块常量）而不是 `ROLE_BRIEFS` —— 后者与 `specs/e.py` 有逐字对账判据，
+   改它要连带 FC-27 的 `specs/e.py`；这一处只影响论文包那几个角色。
+2. 判据 `tests/test_agent_prompts.py::test_the_formal_verification_path_says_verdict_then_ledger_row`：
+   ①提示词里必须有 `run_experiment(method='formal'` 这条落库路径；②必须写明
+   `check_formal` 只给裁决、不落台账；③**事实那一侧**（负控）：真跑一次 `check_formal`，
+   断言 `experiments` 行数不变 —— 万一有人把它改成会写行，这条判据会红，提醒同步改提示词。
+3. 登记（不进本轮代码）：**"报告里的数字 vs 台账"没有判据**。第 6 趟的"4 条 vs 1 条"是第一个
+   实证。可行的做法是让报告里的每一处台账读数都带一次**可复算的机器核对**
+   （例如报告里写"statements 里 quote_verified=true 有 N 条"时，把 N 也写进一个可解析的栏位，
+   由 `closing` 或 `reviewaccept` 复算）—— 这需要先设计口径，不在这一轮硬塞。
+
+### 六、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 提示词那一组 | `pytest tests/test_agent_prompts.py -q` | **24 passed**（含新的"两步"判据 + 事实负控） |
+| 角色循环那一组 | `pytest tests/test_agent_loop.py -q` | **35 passed** |
+| 冻结快照 | `python tests/test_agent_surface_snapshot.py --write` + `pytest` | **5 passed**；diff = PAPER_PACK 那一段 |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3484 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1418.72s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 7 趟**，同一夹具、同一 58 字任务原文。
+要看的信号：`experiments` 是否出现 **formal/proof 行**（形式化腿的第②步）、
+`documents` 是否建成、**H 是否被召唤**（审校腿）。

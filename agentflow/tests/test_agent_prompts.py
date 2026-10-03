@@ -145,6 +145,46 @@ def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
     AP2.toolchain_facts_text.cache_clear()
 
 
+def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
+    """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
+
+    真机读数（第 6 趟）：主控照提示词派了 6 次 `E.check_formal`，其中两条真的
+    `verified=true`（`exactness_core` / `fekete_core`），而 `experiments` 表是 0 行 ——
+    因为 `check_formal` 只给裁决、不落台账。于是它随后的 10 条 proof 级断言一条都建不进
+    `documents`（FC-22 要 `exp:` 引用），`documents` 与 H 那两跳全落空；
+    而旧提示词写的是「`check_formal` 给出的 `verified=True` 是证据升级（台账里那条断言的
+    证据跟着变）」——那句话与实现不符。
+
+    判据的形状：①提示词里必须有 `run_experiment` 与 `method='formal'` 这条落库路径；
+    ②必须写明 `check_formal` 不落台账；③负控（事实那一侧）：`check_formal` 跑完之后
+    `experiments` 行数不变 —— 万一有人把它改成会写行，这条判据会红，提醒改提示词。
+    """
+    paper_pack_roles = [r for r in ALL_ROLES if r in AP.PAPER_PACK_ROLES]
+    assert paper_pack_roles, "没有角色拿到论文包那一段 ⇒ 这条判据失去对象"
+    for role in paper_pack_roles:
+        text = _prompt(role, registry)
+        assert "run_experiment(method='formal'" in text, f"{role} 的提示词没给落库那一步"
+        assert "只给裁决、不落台账" in text, f"{role} 的提示词没说清 check_formal 不落台账"
+
+    # ---- 事实那一侧（负控）：`check_formal` 真的不写 `experiments`
+    import tempfile
+    from pathlib import Path as _P
+
+    from agentflow.agent_e import AgentE
+    from agentflow.store import Store
+
+    ws = _P(tempfile.mkdtemp(prefix="formal-path-judge-"))
+    st = Store(ws)
+    st.init()
+    e = AgentE(st)
+    before = len(st.rows("experiments"))
+    (ws / "t.lean").write_text("theorem judge_trivial : (1 : Nat) + 1 = 2 := rfl\n",
+                               encoding="utf-8")
+    e.check_formal(claim="判据：1+1=2", script_path="t.lean")
+    assert len(st.rows("experiments")) == before, (
+        "`check_formal` 现在会写 experiments 了？那提示词里那两句（裁决/落库分开）必须跟着改")
+
+
 def test_every_role_prompt_is_rendered_without_template_leftovers(registry: ToolRegistry):
     """每个角色的提示词非空、没有没被插值的模板组，并且写着它自己的职责。
     若这条破了：角色会拿到一份通用或半插值的提示词（比如任务框里留着 `{{task}}`），

@@ -443,11 +443,18 @@ PAPER_PACK = """\
 - 修订要落到**稿件**上，不是只落到台账上：H 报出来的 fail 门（例如 G1 自含性 / G5 结论强度 /
   G7 台账完整）是可操作的修订点 —— 把证据不足以支撑强结论的句子改弱或补证据，改完再重渲染。
   真的没有可操作项时才写"包无需修订"，并给出读数（哪几道门 pass、哪几条 finding 被逐条查过）。
-- **"核验证明"的主路径是 E 的形式化核验**，不是 H 的机械门：派 `E.check_formal` 逐条核工作区里
-  已有的 Lean 源码（声明名可自动认名：恰好一条具名声明时不用给 `checker_name`；
-  `imports` 默认不注入任何库，要用 Mathlib 才显式传；而这台机器上 Mathlib 能不能用，
-  看上面 TOOLCHAIN_FACTS 那一段的现算读数 —— 见 E 那一岗的说明），
-  它给出的 `verified=True` 是**证据升级**（台账里那条断言的证据跟着变，表与稿件跟着变）。
+- **"核验证明"分两步，两步都要走**（`draft/37` §92 的真机读数，别只走第一步）：
+  1. **裁决**：`E.check_formal` 逐条核工作区里已有的 Lean 源码（声明名可自动认名：恰好一条
+     具名声明时不用给 `checker_name`；`imports` 默认不注入任何库，要用 Mathlib 才显式传；
+     而这台机器上 Mathlib 能不能用，看上面 TOOLCHAIN_FACTS 那一段的现算读数）。
+     它**只给裁决、不落台账** —— `verified=True` 是"这一次查过了"，不是"台账里多了一条证据"。
+  2. **落库**：要让一条断言真的升到 `proof` 级（`documents` 的 claims 与 H 的复核都只认这一档），
+     必须派 `E.run_experiment(method='formal', source=…/script_path=…, name=…)` ——
+     它把 `experiments` 的 proof 行写进去（带 `proof_location` 与检查器原话），
+     `documents` 的断言才引用得到 `exp:<id>`（FC-22 的硬要求）。
+     第 6 趟真机：主控用 `check_formal` 真的核过了两条（`exactness_core` / `fekete_core`，
+     都是 `verified=true`），但 `experiments` 是 **0 行** ⇒ 10 条 proof 级断言一条都建不进稿件，
+     `documents` / H 那两跳全部落空。它自己在报告里把这条写成"关键缺口"。
   只让 H 走机械门 + 让 G 重渲染，包的文字不会变 —— 那不是"更优质的论文包"，只是"包刷新了一遍"。
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
 
