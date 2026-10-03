@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import importlib.util
 import io
@@ -2136,7 +2137,6 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "locallib.py": "本地书架：把目录里的 PDF 登记进项目库，并作为 `run_topic` 的检索/取全文接缝",
     "paperbuild.py": "论文包的构建/编译/锚核对：受限地起项目脚本、读回 `REPRO_RESULT` 契约、把三态翻成工具层结论（`draft/28` §188）",
     "renderanchor.py": "渲染锚与编译回执的判据本体（纯函数）：源表/源文件/回执三维 + 三态；只读角色也能调它核包（`draft/28` §191）",
-    "renderanchor.py": "渲染锚与编译回执的判据本体（纯函数）：源表/源文件/回执三维 + 三态；只读角色也能调它核包（`draft/28` §191）",
     "modelclient.py": "把模型网关适配成抽取层要的 `.complete()`（带 scope='extract' 记账）",
     "modelcost.py": "模型花销入账适配器（`ModelReply` → `usage_ledger` 的一笔账）",
     "projects.py": "项目工作区：一个项目一个文件夹、默认命名 project1..N、冷启动/热启动判定",
@@ -2146,6 +2146,12 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "policy.py": "策略层：允许哪些召唤，以及四类上限",
     "providers.py": "文献检索 provider 层：`SearchProvider` 协议与各数据源实现",
     "quoteverify.py": "引文校验：把\"关系描述需完全引用参考文献\"变成一道可执行的质量门",
+    # `draft/37` §88（2026-10-04）：角色动作的「拒绝」只有一个形态。
+    # 它不是对拍副本：`agent_a/ingest_local.py`、`agent_a/search_literature.py`、
+    # `agent_b/register_statement.py` 都转发到它的 `refuse()`。
+    "refusals.py": "角色动作的「拒绝」形态（一处定义）：`refuse(kind, error, **extra)` ⇒ "
+                   "`ok=False` + 受控 `refusal_reason`。终态映射据此把拒绝落成 `refused` 而不是 `ok`"
+                   "（T1 第 2 趟真机：8 次 `ok=False` 被记成 `outcome=ok`，而 `statements` 是 0 行）",
     "runflow.py": "端到端一条命令：一个主题 + 一个美元上限 → 一份可复核的运行记录",
     "scheduler.py": "调度：按写集互斥分波并发",
     "schema.py": "数据模型与校验",
@@ -2246,6 +2252,45 @@ def test_agentflow_top_level_modules_match_the_registry():
     assert len(on_disk) == len(_AGENTFLOW_TOP_LEVEL_MODULES), (
         f"盘上 {len(on_disk)} 个顶层模块、清单 {len(_AGENTFLOW_TOP_LEVEL_MODULES)} 条 —— "
         "两者必须一样多（少了会被上面的'登记了但不存在'分支点名）")
+
+
+def _duplicate_inventory_keys() -> list[str]:
+    """登记清单源码里重复的键（空 = 没有）。
+
+    为什么要这条判据：Python 的字典字面量会静默丢弃重复键 ——
+    清单里写两遍同一个模块名，读起来像"两条登记"，实际只有一条，
+    而 `len(_AGENTFLOW_TOP_LEVEL_MODULES)` 与盘上集合的比对照样能对上
+    （两条重复键只占一个名额）。2026-10-04 实测：`renderanchor.py` 那一行
+    在这张表里出现了两次，谁也没发现 —— 这正是"看起来有人看过了"的形态。
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        # 带注解的赋值（`X: dict[str, str] = {...}`）是 `AnnAssign`，不带注解的是
+        # `Assign` —— 两种都要认：只认一种时这条判据会以"失去对象"失败，
+        # 而那是查不成，不是"没有重复"（三态纪律）。
+        if isinstance(node, ast.AnnAssign):
+            targets = [node.target.id] if isinstance(node.target, ast.Name) else []
+        else:
+            targets = [t.id for t in getattr(node, "targets", []) if isinstance(t, ast.Name)]
+        if not (isinstance(node, (ast.Assign, ast.AnnAssign))
+                and "_AGENTFLOW_TOP_LEVEL_MODULES" in targets):
+            continue
+        keys = [k.value for k in node.value.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+        seen: set[str] = set()
+        dups: list[str] = []
+        for k in keys:
+            if k in seen and k not in dups:
+                dups.append(k)
+            seen.add(k)
+        assert len(keys) >= 40, f"只读到 {len(keys)} 个键 ⇒ 扫描器接错了（不是'没有重复'）"
+        return dups
+    raise AssertionError("没找到 `_AGENTFLOW_TOP_LEVEL_MODULES` 的赋值 ⇒ 判据失去对象")
+
+
+def test_the_registry_has_no_duplicate_keys():
+    """负控（静默丢弃）：登记清单里不许有重复键 —— 重复的那一条等于没写。"""
+    assert _duplicate_inventory_keys() == []
 
 
 def test_the_agentflow_module_registry_criterion_is_not_vacuous():

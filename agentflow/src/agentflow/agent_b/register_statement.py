@@ -35,10 +35,35 @@ B 的边界里本来就写着"命题台账三件套缺一不可"（完整假设�
 只要不是 `True` 就必须给 `quote_reason`（包括"还没查"），这条由 `Statement.validate()`
 与这里的预检双保险 —— 预检存在的理由是把 `kind` 说清楚（调用方要能分辨"参数不对"
 与"还没查"）。
+
+## 第五、第六个必填：逐字证明与 ID 形态（`draft/37` §87）
+
+上面那句"双保险"原先只保了一半：`origin="own_result"` 缺 `proof_text`、以及
+`doc_id`/`source_lit_id` 形态不对（写成 `"doc:0000"`），都只由 `Statement.validate()`
+抛 `ValueError` —— 而它抛在事务里，调用方拿到的是一个异常，不是一条带 `kind` 的
+拒绝。T1 第 2 趟真机读数：这一动作被召唤 14 次，6 次落"执行中异常"（就是这一路），
+另外 8 次返回了 `ok=False` 却被台账记成 `outcome=ok` —— 两种形态都不像"拒绝"。
+
+于是这里补齐两级预检：`missing_proof_text` 与 `bad_id`。
+纪律与其余几级相同：要求写进模型看得见的形状（`specs/b.py`），也在写入口拦下并命名。
+`Statement.validate()` 仍然是第二道保险（它保的是"绕开本动作的写库路径"）。
+
+## 第七件：拒绝要自报"这是一次拒绝"（`draft/37` §88 的根因）
+
+返回 `ok=False` 还不够。主控的终态映射原先只看"handler 有没有返回 dict"，
+于是这一动作的 10 种拒绝全被记成 `outcome=ok` —— T1 第 2 趟真机：8 次拒绝
+在台账上长得像 8 次成功，而 `statements` 是 0 行，整条链在这里静默停住。
+
+所以下面每条拒绝都走 :func:`agentflow.refusals.refuse`：它带上受控的 `refusal_reason`
+（`invalid_params` —— 词表的定义正是"参数/前置条件不满足：这次调用本身不成立"）。
+不这么写的话，终态只能落 `failed`（"执行了、没成功"），那会把
+"我参数给错了"与"代码崩了"重新混成一件事。
 """
 from __future__ import annotations
 
 from ._support import S
+from ..refusals import refuse as _refuse
+
 
 class _RegisterStatement:
     def register_statement(
@@ -62,27 +87,27 @@ class _RegisterStatement:
         """登记一条命题，返回 `{"ok": True, "stmt_id": ..., "row": {...}}`；不合规就零写入。"""
         full = str(statement_full or "").strip()
         if not full:
-            return {"ok": False, "kind": "bad_statement",
-                    "error": "statement_full 不能为空 —— 只有短版（statement_text）不算数："
-                             "省掉假设的命题会被下游当成无条件成立"}
+            return _refuse("bad_statement",
+                           "statement_full 不能为空 —— 只有短版（statement_text）不算数："
+                           "省掉假设的命题会被下游当成无条件成立")
         origin = str(origin or "external_lit")
         if origin not in S.STATEMENT_ORIGINS:
-            return {"ok": False, "kind": "bad_origin",
-                    "error": f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}"}
+            return _refuse("bad_origin",
+                           f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}")
         evidence_kind = str(evidence_kind or "heuristic")
         if evidence_kind not in S.EVIDENCE_KINDS:
-            return {"ok": False, "kind": "bad_evidence_kind",
-                    "error": f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
-                             "（它是证据**强度**，不是来源；来源走 source_lit_id）"}
+            return _refuse("bad_evidence_kind",
+                           f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
+                           "（它是证据**强度**，不是来源；来源走 source_lit_id）")
         lit_id = str(source_lit_id or "").strip()
         if origin == "external_lit" and not lit_id:
-            return {"ok": False, "kind": "missing_source",
-                    "error": "origin='external_lit' 时必须给 source_lit_id —— "
-                             "从文献摘的命题必须有出处（没有出处的摘录就是二手结论）"}
+            return _refuse("missing_source",
+                           "origin='external_lit' 时必须给 source_lit_id —— "
+                           "从文献摘的命题必须有出处（没有出处的摘录就是二手结论）")
         if quote_verified is not True and not str(quote_reason or "").strip():
-            return {"ok": False, "kind": "missing_quote_reason",
-                    "error": "quote_verified 不是 True 时必须给 quote_reason —— "
-                             "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）"}
+            return _refuse("missing_quote_reason",
+                           "quote_verified 不是 True 时必须给 quote_reason —— "
+                           "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）")
         # 出处：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数），
         # 而"出处是哪一栏"按来源分档（§68 人裁的甲档，与审稿判据逐条对齐）。
         #
@@ -95,29 +120,47 @@ class _RegisterStatement:
         if origin == "external_lit":
             page = dict(page_range or {})
             if not (page.get("start") or str(page.get("label") or "").strip()):
-                return {"ok": False, "kind": "missing_page_range",
-                        "error": "origin='external_lit' 时必须给出处页码："
-                                 "`page_range` 要么给 start（可带 end），要么给 label"
-                                 "（例如「全文未分页」「附录 A」）—— 只传 "
-                                 "`{\"start\": null, \"end\": null}` 等于没给，"
-                                 "审稿判据会判这一行缺出处页码"}
+                return _refuse("missing_page_range",
+                               "origin='external_lit' 时必须给出处页码："
+                               "`page_range` 要么给 start（可带 end），要么给 label"
+                               "（例如「全文未分页」「附录 A」）—— 只传 "
+                               "`{\"start\": null, \"end\": null}` 等于没给，"
+                               "审稿判据会判这一行缺出处页码")
         elif origin == "own_result":
             line = dict(line_range or {})
             if not (str(doc_id or "").strip()
                     or line.get("start") or str(line.get("label") or "").strip()):
-                return {"ok": False, "kind": "missing_own_source",
-                        "error": "origin='own_result' 时必须给我们自己的出处："
-                                 "`doc_id`（我方稿件那一行的 id）或 `line_range`"
-                                 "（start / label 至少一个）—— 自有结果的出处不是"
-                                 "「文献第几页」，那一栏要它等于让它编一个数字"}
+                return _refuse("missing_own_source",
+                               "origin='own_result' 时必须给我们自己的出处："
+                               "`doc_id`（我方稿件那一行的 id）或 `line_range`"
+                               "（start / label 至少一个）—— 自有结果的出处不是"
+                               "「文献第几页」，那一栏要它等于让它编一个数字")
+            # 第五级（§87）：自产命题的证明 —— 与上面四级同一条纪律，
+            # 由预检命名、而不是让 `Statement.validate()` 从事务里抛出去。
+            if not str(proof_text or "").strip():
+                return _refuse("missing_proof_text",
+                               "origin='own_result' 时必须给 proof_text（逐字证明摘录）—— "
+                               "自产的命题没有证明就入库，等于把我们自己的猜测抬成事实；"
+                               "还没做完的证明要写成缺口，不要当命题登记")
+
+        # 第六级（§87）：ID 形态。`source_lit_id`/`doc_id` 的形态由 `schema.require_id`
+        # 定义（4 位十进制），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
+        # "写成 doc:0000" 于是是一条可读的拒绝，而不是事务里抛出的 `ValueError`。
+        for _what, _value in (("source_lit_id", lit_id),
+                              ("doc_id", str(doc_id or "").strip())):
+            if _value and not S.is_valid_id(_value):
+                return _refuse("bad_id",
+                               f"{_what} 必须是 4 位十进制字符串（如 \"0000\"），"
+                               f"收到 {_value!r} —— 形态由 schema.require_id 定义，"
+                               "本动作在写库前用同一个谓词核，整笔不写")
 
         with self.store.tx("literature", "statements", actor=self.actor,
                            note="register_statement") as tx:
             if lit_id and tx.find("literature", lit_id=lit_id) is None:
                 # 坏引用不许进库（与 `doc.build_document` 的 check_citations 同一条纪律）
-                return {"ok": False, "kind": "unknown_lit_id", "source_lit_id": lit_id,
-                        "error": f"literature 表里没有 lit_id={lit_id!r} ⇒ 这条命题的出处不存在，"
-                                 "整笔不写库"}
+                return _refuse("unknown_lit_id",
+                               f"literature 表里没有 lit_id={lit_id!r} ⇒ 这条命题的出处不存在，"
+                               "整笔不写库", source_lit_id=lit_id)
 
             stmt_id = tx.alloc_id("stmt")
             row = S.Statement(

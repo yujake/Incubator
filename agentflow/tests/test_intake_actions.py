@@ -354,3 +354,31 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
                                            "build_document", "review"]
     assert all(h["status"] == "done" for h in hops), hops
     assert len(st.rows("tasks")) == 4, st.rows("tasks")
+
+
+def test_a_refused_register_statement_reaches_the_ledger_as_refused(tmp_path: Path):
+    """负控（`draft/37` §88 的端到端）：B 拒绝一次登记，台账不许说这次成了。
+
+    T1 第 2 趟真机就是这么掉下去的：8 次 `ok=False` 在 `tasks` 里全是 `outcome=ok`
+    （detail："handler 未声明 outcome，按有产出处理"），而 `statements` 是 0 行 ——
+    主控据此以为登记好了，于是不再改参数。这一条把"拒绝要一路走到台账上"钉住：
+    终态是 `refused` + 受控理由，细一档的 `kind` 留在 detail 里，
+    而 `statements` 一行都不许多。
+    """
+    st = _store(tmp_path)
+    c = Conductor(st, registry=_agents(st))
+    reg = build_registry(store=st, conductor=c).registry
+
+    own = {**STATEMENT, "origin": "own_result", "source_lit_id": "",
+           "page_range": None, "doc_id": "0000"}
+    own.pop("proof_text")  # 自产命题没有证明 ⇒ 第五级拒绝
+    res = reg.call("conductor.summon", role="M", target_role="B", action="register_statement",
+                   params=own, input_key="refuse-proof-text")
+    assert res.ok, res.error  # 工具调用本身成功（"主控问了一次"这件事成功了）
+    assert res.data["outcome"] == "refused", res.data
+    assert res.data["refusal_reason"] == "invalid_params", res.data
+    assert "missing_proof_text" in str(res.data["detail"]), res.data["detail"]
+
+    row = st.rows("tasks")[0]
+    assert row["outcome"] == "refused" and row["refusal_reason"] == "invalid_params", row
+    assert st.rows("statements") == [], "被拒的那次登记不许留下半行"

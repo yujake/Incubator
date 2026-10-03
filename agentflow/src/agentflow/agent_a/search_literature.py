@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import S
+from ..refusals import refuse
 
 class _SearchLiterature:
     def search_literature(self, *, topic: str, mode: str = "precise",
@@ -51,20 +52,24 @@ class _SearchLiterature:
         - 这一问发不出去（题面里抽不出英文关键词）：入队之前就返回
           `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`，
           零写入 —— 不许留一条注定查不动的请求在队列里（那会让调用方读成"检索失败"）。
+
+        三处"这次调用本身不成立"（空主题 / 模式不认识 / 一个后端都没接）走
+        :func:`agentflow.refusals.refuse`（`draft/37` §88）：带上受控的
+        `refusal_reason`，主控的台账才会把它们记成 `refused` 而不是 `ok`。
+        这一条是被真机咬出来的 —— 见 :mod:`agentflow.refusals` 的模块说明。
         """
         topic = str(topic or "").strip()
         if not topic:
-            return {"ok": False, "kind": "bad_topic",
-                    "error": "topic 不能为空（空主题让检索无从构造）"}
+            return refuse("bad_topic", "topic 不能为空（空主题让检索无从构造）")
         mode = str(mode or "topical")
         if mode not in S.SEARCH_MODES:
-            return {"ok": False, "kind": "bad_mode",
-                    "error": f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}"}
+            return refuse("bad_mode", f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}")
         if not self.providers:
             # 「没接线」必须与「查了但没命中」分开：这一档零写入，
             # 调用方据此知道要先去配检索后端，而不是以为这个主题没有文献。
-            return {"ok": False, "kind": "no_provider", "topic": topic, "mode": mode,
-                    "error": "A 没有接任何检索后端（providers 为空）⇒ 这次检索没查成"}
+            return refuse("no_provider",
+                          "A 没有接任何检索后端（providers 为空）⇒ 这次检索没查成",
+                          topic=topic, mode=mode)
 
         desc = str(description or "").strip()
         if mode == "precise" and not desc:

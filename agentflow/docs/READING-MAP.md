@@ -67,6 +67,7 @@
 | `interactions.py` | 跨智能体交互的冻结契约（I1–I7）（禁改区） |
 | `verify.py` | 全局不变量校验（表与表之间的一致性；禁改区） |
 | `gates.py` | H 的 G1–G15 门引擎 —— 15 道独立、有名字、可单独查询的检查器 |
+| `refusals.py` | 角色动作的「拒绝」只有一个形态（`draft/37` §88）：`refuse(kind, error, **extra)` 造出 `ok=False` + 受控 `refusal_reason` 的那一笔。为什么要它：终态映射原先只看"handler 有没有返回 dict"，于是 `ok=False` 被记成 `outcome=ok`（T1 第 2 趟真机：8 次拒绝在台账上像 8 次成功，而 `statements` 是 0 行）—— 现在声明了受控理由的落 `refused`，没声明的落 `failed`，两者不再同形 |
 
 ### 第 3 层 · 工具面（角色手上的"手与眼"）
 

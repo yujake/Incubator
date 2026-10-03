@@ -97,27 +97,52 @@ ACTIONS: tuple[ActionSpec, ...] = (
     #     由调用方（或 H 的复核）负责，本动作只登记与预检。
     ActionSpec(
         "B", "register_statement",
-        "把一条命题登记进命题台账（完整假设 + 逐字证明摘录 + 出处；写库前核出处存在）",
+        "把一条命题登记进命题台账（完整假设 + 逐字证明摘录 + 出处；写库前核出处存在）。"
+        "契约（写库前逐条硬校验，缺一条就整笔不写）：`origin` 决定其余必填项 —— "
+        "external_lit ⇒ `source_lit_id`（真实存在的 lit_id）+ `page_range`（start 或 label）；"
+        "own_result ⇒ `doc_id`（**4 位十进制字符串，如 \"0000\"**）或 `line_range`"
+        "（start/label 至少一个），**并且** `proof_text`（自产命题没有证明不许入库）。"
+        "`quote_verified` 是三态（true / false / 不传=还没查）：**不是 true 时必须给 `quote_reason`**",
         _obj(
             {
                 "statement_full": {**_S, "minLength": 1},
-                "source_lit_id": _S,
-                "proof_text": _S,
+                # `draft/37` §87：这几格的**条件性必需**此前完全没被广告，而实现在写库前逐条硬校验
+                # —— T1 第 2 趟实测：`origin='own_result'` 先撞 `doc_id`/`line_range`（8 次），
+                # 改对之后再撞 `proof_text`（6 次），14 次召唤全废、`statements` 始终 0 行。
+                # 与 §85 的 certificate 同一条纪律：**要求必须写进模型看得见的形状**。
+                "source_lit_id": {**_S, "description":
+                                  "origin='external_lit' 必需：论文那一行的 lit_id"
+                                  "（必须是 literature 表里真实存在的行，写库前会核）"},
+                "proof_text": {**_S, "description":
+                               "origin='own_result' 必需：逐字证明摘录 —— "
+                               "自产的命题没有证明就入库，等于把猜测抬成事实"},
                 "kind": _S,
                 "label": _S,
                 "statement_text": _S,
-                "origin": {"type": "string", "enum": list(S.STATEMENT_ORIGINS)},
-                "page_range": _OBJ,
+                "origin": {"type": "string", "enum": list(S.STATEMENT_ORIGINS),
+                           "description":
+                           "来源。**它决定还要给哪些字段**（写库前逐条硬校验）："
+                           "external_lit（论文里的）⇒ 必须给 source_lit_id + page_range；"
+                           "own_result（我们自己的）⇒ 必须给 doc_id 或 line_range 之一，"
+                           "**并且**给 proof_text"},
+                "page_range": {**_OBJ, "description":
+                               "origin='external_lit' 必需：出处页码（start，或 label —— "
+                               "如「全文未分页」；只给空的 start/end 等于没给）"},
                 "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS)},
                 # 三态那一栏：`true`/`false` 直接给；**"还没查"（None）靠不传这个参数**表达
                 # —— 工具层的极简 schema 子集不支持联合类型（`["boolean","null"]`
                 # 会在校验期抛 `unhashable type: 'list'`，实测撞过）。不传 = None = 还没查，
                 # 而那时 `quote_reason` 必填（动作里预检）。
                 "quote_verified": {**_B, "description": "逐字比对是否通过；不传 = 还没查（None）"},
-                "quote_reason": _S,
+                "quote_reason": {**_S, "description":
+                                 "quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查"},
                 "derived_from": _ARR_S,
-                "doc_id": _S,
-                "line_range": _OBJ,
+                "doc_id": {**_S, "description":
+                           "origin='own_result' 时与 line_range **二者必居其一**：我方稿件那一行的 id。"
+                           "**格式：4 位十进制字符串（如 \"0000\"）** —— 写成 \"doc:0000\" 会被拒"},
+                "line_range": {**_OBJ, "description":
+                               "origin='own_result' 时与 doc_id **二者必居其一**："
+                               "start 或 label 至少一个"},
             },
             required=("statement_full",),
         ),

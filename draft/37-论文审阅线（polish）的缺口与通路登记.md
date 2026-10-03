@@ -7019,3 +7019,208 @@ diff 逐字就是这一轮改动的**广告面净变化**：
    —— 要求放描述里、强制留在能给可读回执的那一层，两者都要。
 3. **判据里写死的"其余 N 条"会连带**：改成从 `DEFAULT_CHECKS` 派生之后，下一次加格子
    只需要改一处（这一轮有五处是这么连带红的）。
+
+---
+
+## §87 第 2 趟之后的第一批：把 `register_statement` 的条件阶梯广告出去
+
+这一节记的是**第 2 趟跑完之后、§88 那轮调查之前**做的一批改动（所以它排在 §88 前面）。
+它解决的是 §84 D1 那一族的最后一个实例：**"要求写进了实现、没写进模型看得见的形状"**。
+
+### 一、病灶：`register_statement` 的条件阶梯只活在代码里
+
+第 2 趟真机里这条动作被召唤 14 次、落库 0 行。逐条读 `data/events.jsonl` 的失败原因，
+模型的每一次调用都是"按它看得见的形状"写的，而它看得见的形状是：
+
+| 它看得见的 | 实现（`row.validate()` 与预检）真正要求的 |
+|---|---|
+| `summary` 只有一句话（"写库前核出处存在"） | 四级条件：`external_lit ⇒ source_lit_id + page_range`；`own_result ⇒ doc_id 或 line_range`；`quote_verified` 不是 true ⇒ `quote_reason`；ID 是 4 位十进制字符串 |
+| 每个字段的 `description` 几乎是空的（只有 `quote_verified` 有一句） | `proof_text` 对 `own_result` 是**必需**的；`doc_id` 写成 `"doc:0000"` 会被拒 |
+
+于是它先撞 `doc_id`/`line_range`（8 次），改对之后再撞 `proof_text`（6 次）。
+
+### 二、改法：`specs/b.py` 里逐条写清
+
+`ActionSpec` 的 `summary` 把四级条件一次说全（`external_lit` / `own_result` 各自要什么、
+`quote_verified` 的三态、ID 的格式），`source_lit_id` / `page_range` / `proof_text` /
+`origin` / `doc_id` / `line_range` / `quote_reason` 各自的 `description` 写清"什么时候必需"。
+`doc_id` 的描述里逐字写出格式与反例（`**格式：4 位十进制字符串（如 "0000"）** ——
+写成 `"doc:0000"` 会被拒`）。
+
+### 三、为什么这是 §84 D1 而不是"模型没看懂"
+
+因为 D1 的判据是**一句话**：模型看不见的东西，它不可能做对。
+第 1 趟的 `certificate`（§85）与 claims 形状（§86）、这一节的四级条件，是同一个病的三个实例 ——
+判据也随之统一成"广告面 = 接受面"那一族（`tests/test_action_surface_matches_acceptance.py`）。
+**这一节只做了广告**；把最后两级从"schema 抛异常"变成"具名拒绝"是 §88 那一轮的事
+（见 §88 第三节）。
+
+---
+
+## §88 T1 第 2 趟裁定与根因：**「拒绝被记成通过」**（8 次 `ok=False` 在台账上是 8 次 `ok`）
+
+第 2 趟真机（2026-10-04，工作区 `projects/p5-review-t2`，58 字任务原文不变）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 调用数 | 82 / 83 |
+| 花销 | **$1.191154**（预算 $5 内） |
+| 退出 | 0；报告九节齐全；`G.paper_package` ×2 都 `verdict=consistent, drift=[]` |
+| `tasks` 行 | 26（B 14 / G 8 / E 4） |
+| 产出表 | `literature` / `documents` / `relations` / `statements` / `experiments` / `review_findings` **全 0** |
+| 裁定 | **不合格**（§83 第六节那张表：三条腿一条都没成） |
+
+结论与第 1 趟相同，但**根因完全不同**：第 1 趟是"广告面 ≠ 接受面"（§85/§86/§87 已修），
+这一趟是三处框架侧的读数在骗人，而模型侧的诊断是对的。
+
+### 一、根因一（最贵的一处）：终态映射把 handler 的 `ok=False` 折叠成 `outcome=ok`
+
+`data/tasks.json` 里 B 的 14 次 `register_statement`：
+
+| 结局 | 次数 | detail |
+|---|---|---|
+| `outcome=ok` | **8** | 「执行完成（handler 未声明 outcome，按有产出处理）」 |
+| `outcome=failed` | 6 | 「B.register_statement 执行中异常」 |
+
+而那 8 次的返回值逐字是 `{"ok": False, "kind": "missing_quote_reason" / "missing_page_range" …}`。
+也就是说：**handler 明确说了"这次没做成"，台账记的是"成了"**，而 `statements` 是 0 行。
+
+病因在 `conductor._end_from_payload`：它按"handler 有没有返回 Mapping"分档 ——
+返回 Mapping 但没写 `outcome` 的一律 `outcome="ok"`。`ok` 这个键**根本没被读**。
+
+讽刺的是这一档本来就设计好了：`schema.REFUSAL_REASONS` 里 `invalid_params` 的注释逐字写着
+「同一件事在 handler 内部发生时更糟：那里落的是 `failed / 执行中异常`（"业务拒绝"与"代码崩了"同形）。
+补这一档之后，两处都应当落到同一个诚实的位置」——**那是词表白纸黑字写下的意图，而终态映射那一半从来没接上**。
+
+代价（会话记录逐步可查）：主控在步 21、22、26、64 四次回查 `statements` 行数，
+发现"报 ok 却 0 行"，于是去读 `data/events.jsonl`，**自己**找到 seq137 那条
+`origin='own_result' 时必须给 doc_id`、按正确参数重派（步 69），然后又撞上
+"6 次全部 failed（执行中异常）"、再读 events 找原因（步 70–75）。
+它花了大约 20 步在**替框架做误差追踪**，而它拿到的信号本该是"拒绝 + 缺什么"。
+
+### 二、修法一：`ok=False` 不许变成 `ok`，拒绝自报受控理由
+
+三处改动，一处一个判据：
+
+1. **`conductor._end_from_payload`**（`draft/37` §88）：Mapping 里 `ok is False` 时不再走
+   "按有产出处理"那一支。分档是：
+   - handler 声明了受控的 `refusal_reason` ⇒ `outcome=refused`（`status=done` ——
+     `Task.validate` 逐字写着"拒绝是一次成功执行（框架正确地说不）"）；
+   - 只 `ok=False` 而没分类 ⇒ `status=failed` + `outcome=failed` + 合成非空的 `error`
+     （`status=failed` 要求 error 非空，否则**修法自己会造出崩溃**）；
+   - 自相矛盾（`ok=False` 却声明 `outcome="ok"`）⇒ 也按没做成分档，并在 detail 上写明这一句
+     （否则"声明优先"的阶梯可以被一句话绕过）。
+   细一档的 `kind` 一律留在 detail 上（`[handler_ok=False kind=missing_proof_text]`）。
+2. **`src/agentflow/refusals.py`（新）**：角色动作的「拒绝」只有一个形态 ——
+   `refuse(kind, error, **extra)` ⇒ `ok=False` + `kind` + `error` + 受控 `refusal_reason`。
+   模块导入期断言 `PRECONDITION_REASON in S.REFUSAL_REASONS`（不在 ⇒ 每次拒绝都会在写台账时抛，
+   而错误信息指向词表、离病根很远）。
+3. **三个动作模块**改成走它：`agent_a/ingest_local.py`（3 处）、
+   `agent_a/search_literature.py`（3 处）、`agent_b/register_statement.py`（10 处）。
+   `G.paper_package` 的 3 处与 `D.poll` 的 1 处**刻意不改**：它们是真失败
+   （渲染/编译/读盘/工具调用失败），落 `failed` 才对 —— 登记在判据的豁免表里，
+   连"理由"一起（豁免腐烂会被同一判据抓住）。
+
+**判据**：
+
+- `tests/test_conductor_payload_outcomes.py` 新增四条：`ok=False` 不许记 `ok`（落 failed 且
+  `kind` 在 detail 上、`error` 非空）、带受控理由落 `refused`、自相矛盾不许洗白、
+  只有 `{"ok": False}` 时也写出**合法行**（`Task.validate` 复验）；
+- `tests/test_refusals.py`（新）：`refuse` 的四件套与词表接点；一个 **AST 扫描**盯住
+  `agent_?/**/*.py` 里手写的 `{"ok": False, ...}`，与登记表**双向**比对
+  （少一条 = 新写的动作漏用了 `refuse`；多一条 = 豁免腐烂）；端到端把
+  `ingest_local` 的两档与 `search_literature` 的 `no_provider` 真调一次，断言零写入且带受控理由；
+- `tests/test_intake_actions.py`：`conductor.summon` 端到端 ——
+  一次缺 `proof_text` 的登记在台账上是 `refused / invalid_params`、`kind` 在 detail 上、
+  `statements` 一行都不多。
+
+### 三、根因二：`register_statement` 的最后两级只由 schema 抛异常
+
+第 2 趟的 6 次 `failed` 全是同一路：`origin="own_result"` 缺 `proof_text`（或 `doc_id` 形态不对），
+而这两条**没有预检** —— 只有 `Statement.validate()` 在事务里抛 `ValueError`。
+于是"缺一个我要的字段"在调用方眼里是"执行中异常"，与代码崩了同形。
+
+修法（§87 的续）：补两级具名预检 `missing_proof_text` / `bad_id`（用 `schema.is_valid_id`
+同一个谓词核 ID 形态，含 `source_lit_id` 那一半），并把整条条件阶梯
+（`external_lit ⇒ source_lit_id + page_range`；`own_result ⇒ doc_id 或 line_range，**并且** `proof_text`；
+`quote_verified` 不是 true ⇒ `quote_reason`；`doc_id` 是 4 位十进制字符串）
+**逐条广告在 `specs/b.py` 的动作表里**（§87 已做，这一轮补判据）。
+
+判据：`tests/test_action_surface_matches_acceptance.py` 新增两条 ——
+`test_the_conditional_ladder_of_register_statement_is_advertised`（六格描述逐格钉住）
+与 `test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused`
+（正控 + **五级负控**，每一级都断言"不落行"）。冻结快照按官方 `--write` 重冻，
+diff 就是"B 的那条动作多出了条件说明"。
+
+### 四、根因三：验收表路径的**第三个落点**（同一个病因，前两处修了、这一处漏了）
+
+T1 第 2 趟主控的步 2 / 步 3 连报两次「验收表不在盘上：`D:\Incubator\agentflow\out\paper\ACCEPTANCE.md`」，
+而那张表就在工作区 `<ws>/out/paper/ACCEPTANCE.md`。它的 `why` 逐字写着
+「conductor.acceptance 的路径解析有偏差，直接读原文拿 P1–P11 判据」—— 于是它绕道 `fs.read`。
+
+病因与 `draft/37` §60 记过的**是同一个**：`Path(given)` 按进程 cwd 解析，而契约是"相对工作区"。
+§60 的处置把 `closing.py`（`resolve_under_workspace`）与 `reviewaccept.py` 三处都改了，
+**而同一段 docstring 里点名的第三个落点 `conductor.acceptance` 没改** ——
+连"这个名字出现在那份文件的 docstring 里"都没让它被修。
+
+修法：`conductor_acceptance` 共用 `closing.resolve_under_workspace`（绝对路径原样放过），
+失败读数里把**基准**也打出来（"我指错了根"与"项目没跑验收脚本"必须分得开），
+工具描述改成「`.` 或空 = 工作区自己就是项目根」。
+
+判据：`tests/test_relative_paths_under_workspace.py` 新增两条 ——
+`test_the_acceptance_table_is_found_from_any_cwd`（夹具把 cwd 换到工作区之外；
+不给 `project_dir`、给 `.`、给绝对路径三种都要找到）与
+`test_a_really_missing_acceptance_table_is_still_not_found`（真的不在时仍报"没查成"+ 打基准）。
+
+### 五、顺带修掉的一处静默缺陷：登记清单里有重复键
+
+`tests/test_release_all.py::_AGENTFLOW_TOP_LEVEL_MODULES` 里 `renderanchor.py` 那一行
+**出现了两次** —— Python 的字典字面量静默丢弃重复键，于是"两条登记"其实只有一条，
+而"盘上集合 = 清单集合"那条判照样能对上（重复键只占一个名额）。
+这说明那条判据的结构看不见"同一行写两遍"。
+
+修法：删掉重复行 + 新增 `test_the_registry_has_no_duplicate_keys`（AST 读那份表，
+逐键查重；顺带断言读到的键 ≥ 40，避免"扫不到"被读成"没有重复"）。
+本轮的 `refusals.py` 按同一条纪律登记进那张表（新增模块必须解释"为什么它是一个顶层模块"）。
+
+### 六、诚实记录：这一趟模型做对了什么
+
+- 它发现过"报 ok 却不落库"（步 21/22/26/64 四次回查），去读 `events.jsonl`、
+  找到确切原因、按正确参数重派 —— **诊断链路完整**，缺的是框架把"拒绝"这个信号给它；
+- 它按 `conductor.role_spec` 读了 G 与 H 的动作形状（步 13/15），没有再盲试 G 的参数；
+- 它改了正文三处（摘要 min-mean 的限定、`N` 未定义、Baez 年份/体例），两处
+  `paper_package` 都是 `consistent`；
+- 它没有派 A（`A.ingest_local`）与 H（`H.review`）：引用一直用占位 `lit:companion`
+  （`literature` 表 0 行），`documents` 建不起来 ⇒ 没有 `doc_id` ⇒ 审校腿走不了。
+  这一点**不加提示**：§83 的验收表本来就是"系统能力"的判据，靠加暗示让它变绿等于自欺。
+
+### 七、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 终态映射那一组 | `pytest tests/test_conductor_payload_outcomes.py -q` | **10 passed**（新增 5 条负控/正控） |
+| 拒绝形态那一组 | `pytest tests/test_refusals.py -q` | **5 passed**（含 AST 扫描的双向比对） |
+| 端到端（summon ⇒ refused） | `pytest tests/test_intake_actions.py -q` | **10 passed**（含新增的 `refused / invalid_params` 那条） |
+| 相对路径第三个落点 | `pytest tests/test_relative_paths_under_workspace.py -q` | **7 passed**（新增 2 条：cwd 换到工作区外仍要找到 / 真的没有时仍报"没查成"+ 打基准） |
+| 广告面那一组 | `pytest tests/test_action_surface_matches_acceptance.py -q` | **9 passed**（新增条件阶梯 + 五级负控） |
+| 两份冻结快照 | `python tests/test_{agent,tool}_surface_snapshot.py --write` + `pytest` | 各 **5 passed**；diff 只有"B 的动作多了条件说明"与"`conductor.acceptance` 的 `project_dir` 描述改正" |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3479 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1431.77s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | **`requires_human`（exit 1）**：`specs/b.py`（本轮）、`specs/e.py`、`tools/verify_tools.py`、`scripts/lint_rules.py`（前几轮）共 4 处等 2 名 reviewer —— 不是 `clean`，不许当通过 |
+| 形式化腿可达性（离线探针，不花模型钱） | `python -B temp/_t1c_formal_probe.py`（`AGENTFLOW_LEAN_BIN` 指向 Lean 4.7.0） | **自足 Lean 文件真的验过**（`theorem t_one : (1:Nat)+1=2 := rfl` 与 `by decide` 两条都是"退出码 0、无 sorry、声明被检查到"）；`import Mathlib` 报 `unknown package 'Mathlib'` ⇒ **形式化腿在本机可达**，条件是模型写不 import Mathlib 的自足文件 |
+
+### 八、下一轮
+
+**T1 第 3 趟**：同一 58 字提示词、新工作区 `projects/p5-review-t3`（`source/main.tex` 的
+sha256 与第 2 趟逐字相同 `8c5c431b…` ⇒ 可比）、`--budget-usd 5 --max-steps 150 --sid t1c`，
+环境注入 `AGENTFLOW_MODEL_API_KEY` 与 `AGENTFLOW_LEAN_BIN`。验收标准仍是 §83 第六节那张表
+（引文腿 / 形式化腿 / 审校腿 / `substance` / ≤$5 / 任务原文不变、不加暗示）。
+
+这一趟要看的第一个信号是：**`tasks.json` 里 `refused` 有没有出现** ——
+它出现说明"拒绝"终于走到了台账上，`ok` 与"真的落了行"不再是两件事。
+
+**刻意不做的一件事**（记在这里，免得下一轮忘了为什么）：E 的提示词里**不**加
+"本机没装 Mathlib，请写自足文件"这句话。理由有两条：① `check_formal` 的失败读数已经
+逐字给出了处置（"换 import 列表"），模型有足够信息；② 这一趟的目的正是看它在拿到
+诚实读数后能不能自己收敛 —— 提前把答案写进提示词，测的就不是系统能力了。
+形式化腿可达性已经用离线探针证明（上表最后一行），所以重跑不是白跑。

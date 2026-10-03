@@ -650,7 +650,7 @@ def conductor_role_spec(store, role_name: str) -> ToolResult:
         "type": "object",
         "properties": {
             "project_dir": {"type": "string",
-                            "description": "项目根（相对工作区；缺省取当前工作区根）"},
+                            "description": "项目根（相对工作区；`.` 或空 = 工作区自己就是项目根）"},
             "rel_path": {"type": "string",
                          "description": "验收表相对项目根的路径（缺省 out/paper/ACCEPTANCE.md）"},
             "max_chars": {"type": "integer", "minimum": 0, "maximum": 4000,
@@ -675,15 +675,35 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
     `ids` 是给"一次读不完"准备的：真机实测（2026-09-29）十行的完整读数会被
     上下文预算剪枝，而主控手里没有读文件工具（它的面只有 `conductor.*`）⇒
     被剪掉的部分读不回来。按批读是"不靠猜"的做法（而不是让 M 猜 P5–P11 写了什么）。
+
+    ## 路径解析（`draft/37` §88：这一处是三个落点里被漏掉的那一个）
+
+    `conductor.acceptance(project_dir=".")` 原先按进程 cwd 解析 ——
+    而工具描述逐字写的是"相对工作区"。T1 第 2 趟真机（2026-10-04）：主控传
+    `{"project_dir": "."}`，工具去读 `D:\\Incubator\\agentflow\\out\\paper\\ACCEPTANCE.md`
+    （进程 cwd 所在的仓库目录），连报两次"验收表不在盘上"，而那张表就在工作区里
+    —— 主控因此始终没看到 P1–P11 判据，后面每一跳都靠猜。
+
+    同一件事 `closing.resolve_under_workspace` 的 docstring 里已经记过一次
+    （`draft/37` §60：`closing` 与 `reviewaccept` 都改成了那一个解析口），
+    本工具是那批里的第三个落点却漏改了 ⇒ 现在共用同一个解析口，不另写一份。
     """
-    base = Path(project_dir) if project_dir else (store.root if store is not None else Path("."))
+    raw_project = str(project_dir or "").strip()
+    if store is not None:
+        # 局部 import：与 `conductor_closing` 同一写法（`closing` 这一支只在真调用时才需要）
+        from .. import closing as CL
+
+        base = Path(CL.resolve_under_workspace(store, raw_project or "."))
+    else:
+        base = Path(raw_project or ".")
     rel = rel_path or "out/paper/ACCEPTANCE.md"
     path = (base / rel).resolve()
     if not path.is_file():
         return fail(
             f"验收表不在盘上：{path} ⇒ 没查成（不是「没有判据」）。"
+            f"基准＝{base}（相对工作区的路径按工作区根解析）；"
             "先让项目跑一次验收脚本，或把 rel_path 指对。",
-            kind="no_acceptance_table", path=str(path), found=False,
+            kind="no_acceptance_table", path=str(path), base=str(base), found=False,
         )
     got = _parse_acceptance(path, max_chars=max_chars)
     # 验收表背后的 documents 行（`draft/28` §196 第 2 条）：真机实测 —— M 拿验收表标题里的

@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 from ._support import Path
+from ..refusals import refuse
 
 #: 与 `tools/search_tools.py::_h_ingest_local` 逐字相同的 provenance 三件事。
 #:
@@ -65,19 +66,23 @@ class _IngestLocal:
 
         三态纪律：`ok=True` 只表示这次调用做完了；有没有东西进来要看
         `ingested` / `already_present` / `unreadable` 三个计数，不许把 `ok` 当"登记成功"。
+
+        三处拒绝走 :func:`agentflow.refusals.refuse`（`draft/37` §88）：
+        空目录名 / 目录不在 / 登记抛异常。它们都是"这次调用本身不成立"，
+        所以带受控的 `refusal_reason`；否则主控的台账会把它们记成 `ok`。
         """
         raw = str(books_dir or "").strip()
         if not raw:
             # 空目录名不是"没有书"，是这次调用没说清要读哪里 —— 零写入，如实报。
-            return {"ok": False, "kind": "bad_books_dir",
-                    "error": "books_dir 不能为空（空目录名让这次登记无从做起）"}
+            return refuse("bad_books_dir",
+                          "books_dir 不能为空（空目录名让这次登记无从做起）")
         root = Path(getattr(self.store, "root", ".")).resolve()
         base = Path(raw)
         target = base if base.is_absolute() else (root / base)
         if not target.is_dir():
-            return {"ok": False, "kind": "dir_not_found", "books_dir": raw,
-                    "resolved": str(target),
-                    "error": f"目录不在盘上：{target}（零写入 —— 这不是「目录里没有书」）"}
+            return refuse("dir_not_found",
+                          f"目录不在盘上：{target}（零写入 —— 这不是「目录里没有书」）",
+                          books_dir=raw, resolved=str(target))
 
         from ..locallib import ingest_directory
 
@@ -90,8 +95,8 @@ class _IngestLocal:
                 origin_note=INGEST_ORIGIN_NOTE,
             )
         except Exception as exc:  # noqa: BLE001 —— 登记没做成如实报，不编"登记成功"
-            return {"ok": False, "kind": "io_error", "resolved": str(target),
-                    "error": f"登记没做成：{type(exc).__name__}: {exc}"}
+            return refuse("io_error", f"登记没做成：{type(exc).__name__}: {exc}",
+                          resolved=str(target))
 
         data = report.to_dict()
         counts = dict(data.get("counts") or {})

@@ -134,3 +134,80 @@ def test_an_absolute_path_is_left_alone(tmp_path: Path):
     st.init()
     rep = CL.check_closing(st, project_dir=str(ws), report_path=str(ws / "out" / "review" / "REPORT.md"))
     assert rep.status["anchor"] == "pass" and rep.status["report_shape"] == "pass", rep.to_dict()
+
+
+# ------------------------------------------------- 第三个落点：`conductor.acceptance`
+
+def _acceptance_ws(tmp_path: Path) -> Path:
+    """一个工作区，里面有主控要读的那张验收表（`out/paper/ACCEPTANCE.md`）。"""
+    ws = _ws(tmp_path / "ws")
+    (ws / "out" / "paper" / "ACCEPTANCE.md").write_text(
+        "# 验收表（P1–P2）\n\n结论：**部分成立**（1/2）\n\n"
+        "| 判据 | 名称 | 结论 | 读数 |\n|---|---|---|---|\n"
+        "| P1 | 报告九节 | 成立 | 报告九节齐全、每栏有读数 |\n"
+        "| P2 | 形式化覆盖 | 不成立 | 形式化实验 0 条（unknown 不是通过）|\n",
+        encoding="utf-8")
+    return ws
+
+
+def test_the_acceptance_table_is_found_from_any_cwd(tmp_path: Path, monkeypatch):
+    """正控（`draft/37` §88 补的第三个落点）：`project_dir="."` 必须读到工作区里那张表。
+
+    为什么这一条此前没有：`closing` 与 `reviewaccept` 两处都按工作区根解析了，
+    而同一个病因的第三个落点 —— 主控唯一能读验收表的工具 —— 仍旧按进程 cwd 解析
+    （本文件开头那段真机读数里点名过它，却没有对应的判据）。T1 第 2 趟真机
+    （2026-10-04）就是这个后果：主控连报两次"验收表不在盘上"，于是它始终没看到
+    P1–P11 判据，后面每一跳都靠猜。夹具把 cwd 换到工作区之外 —— 实现若还按 cwd
+    解析，这条必红。
+    """
+    from agentflow.conductor import Conductor, LocalBackend
+    from agentflow.tools import build_registry
+
+    ws = _acceptance_ws(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    st = Store(ws)
+    st.init()
+    reg = build_registry(store=st, conductor=Conductor(st, backend=LocalBackend({}))).registry
+
+    res = reg.call("conductor.acceptance", role="M", project_dir=".")
+    assert res.ok, res.error
+    assert res.data["found"] is True, res.data
+    assert Path(str(res.data["path"])) == (ws / "out" / "paper" / "ACCEPTANCE.md").resolve(), res.data
+    assert {r["id"] for r in res.data["rows"]} == {"P1", "P2"}, res.data["rows"]
+    assert res.data["ok_count"] == 1 and res.data["not_ok_count"] == 1, (
+        res.data, "「不成立」不许被读成成立（这条解析口径有前科）")
+
+    # 不给 `project_dir` 时同样按工作区根（缺省不是"当前目录"）
+    res2 = reg.call("conductor.acceptance", role="M")
+    assert res2.ok and res2.data["found"] is True, res2.data
+
+    # 绝对路径原样放过（与 `closing` 同一口径，不许拼两遍）
+    res3 = reg.call("conductor.acceptance", role="M", project_dir=str(ws))
+    assert res3.ok and res3.data["found"] is True, res3.data
+
+
+def test_a_really_missing_acceptance_table_is_still_not_found(tmp_path: Path, monkeypatch):
+    """负控（解析不许把"读不到"变成 pass）：表真的不在时仍报"没查成"，并说出基准。
+
+    为什么要断言基准也打出来：这条工具失败时的读数就是主控的全部信息 ——
+    只写"不在盘上：<某个绝对路径>"时，读的人无从判断那是"我指错了根"还是
+    "项目确实没跑验收脚本"。T1 第 2 趟主控收到的正是前一种，却按后一种处理了。
+    """
+    from agentflow.conductor import Conductor, LocalBackend
+    from agentflow.tools import build_registry
+
+    ws = _ws(tmp_path / "ws")  # 没有 ACCEPTANCE.md
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    st = Store(ws)
+    st.init()
+    reg = build_registry(store=st, conductor=Conductor(st, backend=LocalBackend({}))).registry
+
+    res = reg.call("conductor.acceptance", role="M", project_dir=".")
+    assert not res.ok, res.data
+    assert res.meta.get("kind") == "no_acceptance_table", res.meta
+    assert res.meta.get("base") == str(ws.resolve()), res.meta
+    assert "不在盘上" in str(res.error), res.error

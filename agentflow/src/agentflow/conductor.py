@@ -1073,11 +1073,48 @@ class Conductor:
                 status = "done"
             outcome = raw.get("outcome")
             detail = str(raw.get("detail") or raw.get("summary") or "")
-            if status == "done" and outcome is None:
-                # 一个返回了 dict 但没声明 outcome 的 handler：按有产出处理，
-                # 但把这件事写进 detail（不许悄悄当成 ok）。
-                outcome = "ok"
-                detail = detail or "执行完成（handler 未声明 outcome，按有产出处理）"
+            error = str(raw["error"]) if raw.get("error") else None
+            refusal = str(raw["refusal_reason"]) if raw.get("refusal_reason") else None
+            if refusal is not None and refusal not in S.REFUSAL_REASONS:
+                # 自由文本当拒绝理由：不许进受控词表。原来的写法是把它透传给
+                # `Task.validate` ⇒ 那里抛 `ValueError` ⇒ 整步落 failed
+                # —— 一次"拒绝"被记成"崩溃"，理由反而看不见了。
+                detail = f"[handler_refusal_reason={refusal!r} 不在受控词表] {detail}".strip()
+                refusal = None
+            if status == "done" and (outcome is None or raw.get("ok") is False):
+                if raw.get("ok") is False:
+                    # ---- §88：handler 自己说了"这次没做成"，就不许记成 ok。
+                    #
+                    # T1 第 2 趟真机的根因：`B.register_statement` 有 8 次返回
+                    # `{"ok": False, "kind": "missing_quote_reason"…}`，而台账把它们
+                    # 全记成 `outcome=ok`（detail 还写着"按有产出处理"）⇒ 主控以为
+                    # 命题登记好了，而 `statements` 是 0 行；它因此不再改参数，
+                    # 那条链就在这一步静默停住。同一趟里另外 6 次抛异常反倒记成了
+                    # `failed` —— "拒绝"与"崩溃"同形，"成功"与"什么都没写"也同形。
+                    #
+                    # 分档：handler 声明了受控的 `refusal_reason` ⇒ `refused`
+                    # （词表的定义就是"这次调用本身不成立"）；只说 `ok=False` 而
+                    # 没分类 ⇒ `failed`（那是"执行了、没成功"，理由合成在 error 上）。
+                    # 声明的 `outcome` 无论是不是任务级词表，都不许把 `ok=False`
+                    # 洗成 ok —— 那正是下面那条"外来判定折叠成 ok"的规则会做的事，
+                    # 所以这里必须先接住（判据：自相矛盾与外来判定两条负控）。
+                    kind = str(raw.get("kind") or "")
+                    declared = str(outcome or "")
+                    stamp = f"[handler_ok=False kind={kind or '未声明'}]"
+                    if declared == "ok":
+                        stamp += "[同时声明 outcome=ok：自相矛盾，按没做成分档]"
+                    elif declared:
+                        stamp += f"[同时声明 outcome={declared}：不是任务级词表，按没做成分档]"
+                    detail = f"{stamp} {detail or error or ''}".strip()
+                    if refusal is not None:
+                        outcome = "refused"
+                    else:
+                        status = "failed"
+                        outcome = "failed"
+                        error = error or f"{stamp} handler 返回 ok=False，未声明受控的 refusal_reason"
+                elif outcome is None:
+                    outcome = "ok"
+                    detail = detail or "执行完成（handler 未声明 outcome，按有产出处理）"
             if outcome is not None and str(outcome) not in S.TASK_OUTCOMES:
                 # ---- 两套词表不许折叠（实测缺陷，2026-09-29 验收 P1）
                 #
@@ -1101,12 +1138,12 @@ class Conductor:
             return self._end(
                 tid, status=status, outcome=str(outcome) if outcome else None,
                 detail=detail or "执行完成",
-                error=str(raw["error"]) if raw.get("error") else None,
+                error=error,
                 # 角色拒绝时它的理由必须能传到行上：`Task.validate` 逐字要求
                 # `outcome=refused` 带受控的 `refusal_reason`，而这里此前没透传它
                 # ⇒ 角色一拒绝就落 `failed`（"策略说不"被记成"代码崩了"）。
                 # 实测（2026-09-29）：这正是 `test_refused_outcome_is_not_rewritten` 咬出来的。
-                refusal_reason=str(raw["refusal_reason"]) if raw.get("refusal_reason") else None,
+                refusal_reason=refusal,
                 payload=raw.get("payload", raw.get("data", raw)),
                 artifacts=list(raw.get("artifacts") or []),
                 checked=raw.get("checked", None),

@@ -154,5 +154,90 @@ def test_check_formal_says_it_needs_source_or_script_path():
     assert "source" in summary and "script_path" in summary, summary
 
 
+# ------------------------------- 三、`B.register_statement` 的条件阶梯（§87 的根因）
+
+def _b_instance(tmp_path: pathlib.Path):
+    """按装配路径造一个 B（替身抽取器就够：这一组不抽取，只登记命题）。"""
+    from agentflow import host as host_mod
+
+    ws = tmp_path / "bws"
+    ws.mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    reg = host_mod.build_role_registry(st, providers=[object()], config={},
+                                       workspace_root=str(ws))
+    return st, reg["B"][1](store=st)
+
+
+#: 一条"除了被测的那一格之外都齐"的自产命题。
+_OWN = dict(
+    statement_full="本文的引理：对周期图 K(m)，稳定范数取整数值",
+    statement_text="稳定范数取整数值",
+    origin="own_result", kind="lemma", evidence_kind="heuristic",
+    quote_reason="本轮还没做逐字比对（引文那一栏待核）",
+)
+_OWN_SOURCE = dict(doc_id="0000", proof_text="证明：由定义直接得到。")
+
+
+def test_the_conditional_ladder_of_register_statement_is_advertised():
+    """正控（§87 的根因）：那四级条件必须写在模型看得见的形状里。
+
+    T1 第 2 趟实测：`origin='own_result'` 先撞 `doc_id`/`line_range`（8 次），
+    改对之后再撞 `proof_text`（6 次），14 次召唤全废、`statements` 始终 0 行。
+    四级分别是：① 出处（`doc_id` 或 `line_range`）；② `proof_text`；
+    ③ `quote_verified` 不是 true ⇒ `quote_reason`；④ `doc_id` 的格式（4 位十进制）。
+    """
+    action = next(a for a in CAP.actions_for("B") if a.action == "register_statement")
+    props = (action.params or {}).get("properties") or {}
+    summary = str(action.summary or "")
+    assert "proof_text" in summary and "quote_reason" in summary, summary
+    assert "external_lit" in summary and "source_lit_id" in summary, summary
+    for field, needle in (("origin", "proof_text"), ("doc_id", "4 位十进制"),
+                          ("proof_text", "own_result"), ("source_lit_id", "external_lit"),
+                          ("page_range", "external_lit"), ("quote_reason", "必需")):
+        desc = str((props.get(field) or {}).get("description") or "")
+        assert needle in desc, f"{field} 的描述没写清条件（缺 {needle!r}）：{desc!r}"
+
+
+def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
+        tmp_path: pathlib.Path):
+    """正控 + 四级负控：齐了才落行；缺任何一级都不落行（不许静默写半条）。
+
+    负控逐级来，是因为模型在 T1 里正是一级一级撞上去的：每个负控都对应
+    它当时得到的那一种拒绝。
+    """
+    st, b = _b_instance(tmp_path)
+
+    # 正控：四级都齐 ⇒ 落一行
+    good = dict(_OWN)
+    good.update(_OWN_SOURCE)
+    res = b.register_statement(**good)
+    assert res.get("ok"), res
+    assert len(st.rows("statements")) == 1, st.rows("statements")
+
+    def _bump(n: str) -> dict:
+        return {**_OWN, "statement_full": _OWN["statement_full"] + f"（{n}）"}
+
+    # 负控逐级：四级都要以 `ok=False` + 具名 `kind` 拒绝，不许从事务里抛异常。
+    # 为什么这条也是判据：T1 里 8 次"被拒"与 6 次"失败"在模型看来是两种东西 ——
+    # 前者的 `kind` 直接告诉它缺什么，后者只有一个异常；而"缺哪一级"这件事
+    # 本来就不该靠异常表达（`Statement.validate()` 是兜第二道，不是第一道）。
+    r1 = b.register_statement(**_bump("①"), doc_id="0000")          # 缺 proof_text
+    assert r1.get("ok") is False and r1.get("kind") == "missing_proof_text", r1
+    r2 = b.register_statement(**_bump("②"), proof_text="证明")       # 缺 doc_id/line_range
+    assert r2.get("ok") is False and r2.get("kind") == "missing_own_source", r2
+    no_reason = {k: v for k, v in _bump("③").items() if k != "quote_reason"}
+    r3 = b.register_statement(**no_reason, **_OWN_SOURCE)            # 缺 quote_reason
+    assert r3.get("ok") is False and r3.get("kind") == "missing_quote_reason", r3
+    r4 = b.register_statement(**_bump("④"), doc_id="doc:0000", proof_text="证明")  # ID 形态
+    assert r4.get("ok") is False and r4.get("kind") == "bad_id", r4
+    # 同一级的另一半：`source_lit_id` 走的是同一个谓词（两条路都要具名，不能只保一条）
+    r5 = b.register_statement(**{**_bump("⑤"), "origin": "external_lit"},
+                              source_lit_id="lit-1", page_range={"label": "全文未分页"})
+    assert r5.get("ok") is False and r5.get("kind") == "bad_id", r5
+
+    assert len(st.rows("statements")) == 1, "被拒的那几条里有落进台账的"
+
+
 if __name__ == "__main__":  # pragma: no cover - 手动跑这一组时的入口
     raise SystemExit(pytest.main([__file__, "-q"]))

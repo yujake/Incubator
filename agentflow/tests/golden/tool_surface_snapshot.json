@@ -251,7 +251,7 @@
       "type": "integer"
      },
      "project_dir": {
-      "description": "项目根（相对工作区；缺省取当前工作区根）",
+      "description": "项目根（相对工作区；`.` 或空 = 工作区自己就是项目根）",
       "type": "string"
      },
      "rel_path": {
