@@ -40,8 +40,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 没有这两格时，**派活这条路根本传不进 formal 的参数**（实测：
               # 闸门如实拒绝 `未声明的参数 ['imports','name']`），于是
               # "E 能形式化"与"M 能派形式化"变成两件事 —— 而 P6/P10 要的是后者。
-              "name": _S,
-              "imports": {"type": "array", "items": {"type": "string"}},
+              "name": {"type": "string", "description": "仅 method='formal'：要核对的声明名"},
+              "imports": {"type": "array", "items": {"type": "string"},
+                          "description": "仅 method='formal'：这次检查要加载的库"},
               # `sleep` 不在真实 `AgentE.run_experiment` 的具名形参里，它也不收
               # `inspect.Parameter.VAR_KEYWORD`（实测 `inspect.signature`：
               # 既没有 sleep、也没有那一档）⇒ 它是本表与替身夹具之间唯一的接缝，
@@ -51,7 +52,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 会逼测试去绕过参数校验 —— 而绕过校验的测试就不再测那条链路了。
               # 导入期交叉断言（`assert_capabilities` 第 [8] 条）核这一格：
               # 声明了而实现不收、又不登记 ⇒ `import agentflow.capabilities` 直接失败。
-              "sleep": _N},
+              "sleep": _N,
+              # `draft/37` §84 的 D1：`certificate` / `search_bound` 是
+              # `schema.Experiment` 硬约束 2c/2d 要求的事实，而**此前这一层没声明它们**
+              # ⇒ 模型看不见、也就永远满足不了（实测 T1：method='exhaustive_search'
+              # 三次 failed，报「必须给出 certificate」）。方法层与工具层同轮接上。
+              "certificate": _OBJ,
+              "search_bound": _OBJ},
              ("claim", "claim_key", "script_path")),
         "dict（experiment_id / result / evidence_kind / …）",
         side_effect="write_local", handler_name="run_experiment",
@@ -65,7 +72,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "E", "check_formal",
-        "转发到形式化检查器；没有后端时如实回答『没做』",
+        "转发到形式化检查器；没有后端时如实回答『没做』。"
+        "**必须给 `source`（Lean 源码全文）或 `script_path`（工作区里的 .lean 文件）**："
+        "两者都不给 ⇒ `no_script`（这次检查根本没发生，什么都不算核过）",
         # `R2b-AN-1-C`：本表声明的参数是方法层 `AgentE.check_formal` 的真形参
         # （其中 `name` 在方法层是对的：它不经 `ToolRegistry.call`）；
         # 工具层 `verify.check_formal` 的 schema 已改用 `checker_name`
@@ -78,7 +87,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # `src/agentflow/tools/verify_tools.py` 里 `check_formal` 的 docstring
         # 那一节（标题含 `R2b-AN-1-C`）。本注释只做指向，不改取值：
         # 改 `params` 等于改权限声明。
-        _obj({"claim": _S, "script_path": _S, "source": _S, "name": _S,
+        _obj({"claim": _S,
+              "script_path": {"type": "string", "description": "工作区里的 .lean 文件（与 source 二选一）"},
+              "source": {"type": "string", "description": "Lean 源码全文（与 script_path 二选一）"},
+              "name": _S,
               "imports": _ARR_S, "timeout_sec": _N}, ("claim",)),
         "dict（checked=False + reason 表示『没法做』）",
         # 本条此前是 `side_effect="unknown"`（"我读不出它写不写"），随后

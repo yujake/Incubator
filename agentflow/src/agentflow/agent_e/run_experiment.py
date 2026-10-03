@@ -19,6 +19,8 @@ class _RunExperiment:
         timeout: int = 600,
         name: str | None = None,
         imports: Sequence[str] | None = None,
+        certificate: Mapping[str, Any] | None = None,
+        search_bound: Mapping[str, Any] | None = None,
     ) -> dict:
         """跑一个实验脚本并登记一条 `Experiment` 行。
 
@@ -69,6 +71,22 @@ class _RunExperiment:
             raise ExperimentError("claim_key 不能为空（没有它就无法回答'这条实验检验的是哪个命题'）")
         if method not in S.EXPERIMENT_METHODS:
             raise ExperimentError(f"method 必须是 {S.EXPERIMENT_METHODS} 之一，收到 {method!r}")
+        # `certificate` / `search_bound` 只对「穷举/枚举类」方法有意义：
+        # `schema.Experiment` 的硬约束 2c 说 `method="exhaustive_search"` 必须给
+        # certificate、给了 certificate 必须给 search_bound。与上面 name/imports
+        # 同一条纪律：对别的 method 传它们 = 让人以为自己指定了检查条件。
+        #
+        # 为什么这两格必须存在（2026-10-03，`draft/37` §84 的 D1）：`P-8` 只把通道接到了
+        # `_support.build_experiment`，没接到这个公开入口 ⇒ 模型无论怎么调
+        # `method="exhaustive_search"` 都必然撞硬约束 2c（实测 T1：三次 failed，
+        # 报「必须给出 certificate」而 schema 里根本没有这一格）。
+        search_like = method in ("exhaustive_search",)
+        if not search_like and (certificate is not None or search_bound is not None):
+            raise ExperimentError(
+                f"certificate / search_bound 只对穷举/枚举类方法有效（收到 method={method!r}）——"
+                "它们是「在 B 内没有反例」这类结论的证书与适用范围；别的 method 的证据等级"
+                "由 `_derive` 推导，没有任何地方会读它们"
+            )
         if method != "formal" and (name is not None or imports is not None):
             raise ExperimentError(
                 f"name / imports 只对 method='formal' 有效（收到 method={method!r}）—— "
@@ -154,6 +172,9 @@ class _RunExperiment:
                 artifact_paths=([log_rel] if log_rel else []),
                 for_question_id=for_question_id,
                 extra_notes=notes,
+                # 硬约束 2c/2d 的事实通道（P-8 的另一半）：证书与它的适用范围。
+                certificate=(dict(certificate) if isinstance(certificate, Mapping) else None),
+                search_bound=(dict(search_bound) if isinstance(search_bound, Mapping) else None),
                 created_by=self.actor,
             )
             tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")

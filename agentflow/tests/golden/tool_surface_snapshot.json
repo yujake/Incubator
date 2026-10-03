@@ -3228,6 +3228,10 @@
    "params": {
     "additionalProperties": false,
     "properties": {
+     "certificate": {
+      "description": "穷举/枚举类（method='exhaustive_search'）**必需**：结论的证书。必须含 kind（witness / unsat / enumeration_bound / counterexample）。「在 B 内没有反例」的说服力全部来自它",
+      "type": "object"
+     },
      "claim": {
       "type": "string"
      },
@@ -3263,6 +3267,10 @@
      "script_path": {
       "description": "工作区内的相对路径（formal 时必须是 .lean）",
       "type": "string"
+     },
+     "search_bound": {
+      "description": "证书的适用范围（给了 certificate 就**必须**给）：说清 B 是什么、用什么算法搜的 —— 证书脱离边界没有意义",
+      "type": "object"
      },
      "timeout": {
       "minimum": 1,
@@ -3890,7 +3898,7 @@
   "verify.detect_verifier": "()",
   "verify.evidence_for": "(claim_key=None, for_question_id=None)",
   "verify.list_experiments": "(claim_key=None, limit=None)",
-  "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, run_name=None, imports=None)"
+  "verify.run_experiment": "(claim, claim_key, script_path, params=None, method='numeric', for_question_id=None, timeout=600, run_name=None, imports=None, certificate=None, search_bound=None)"
  },
  "summary": {
   "context_budget": null,

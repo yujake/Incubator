@@ -6810,3 +6810,117 @@ tasks 30 行：G.build_document×8（7 拒）、E.run_experiment×12（9 拒 3 �
    用户要的是"完美完成"，不是"报告形状对"。
 4. **模型的转向是信号**：撞墙 12 次后它转向能做的事（改正文、重渲染），并把"未核到"如实写进报告
    —— 这是**诚实**的，但它同时说明：**参数墙会直接吃掉任务的实质要求**。
+
+---
+
+## §85 T1 缺陷根除第一批：广告面 = 接受面（E 的证书通道 + 条件性参数 + 沉默的必需）
+
+§84 的裁定说：T1 不合格的根因是 **D1「广告面 ≠ 接受面」**（12 次 `run_experiment`
+里有 9 次被拒、3 次因未广告的必需参数失败）与 **D2 收工门有空洞**。这一节做 D1 的第一批
+（E 那一族），D2 与 D1-3（`build_document` 的 claims 形状）留下一轮。
+
+### 一、根因的精确定位（比 §84 更细一层）
+
+`certificate` / `search_bound` 的**事实链是断的**，断在中间：
+
+| 环节 | 修之前 | 说明 |
+|---|---|---|
+| `schema.Experiment.validate` 硬约束 2c/2d | 要求 `exhaustive_search` 必须给 `certificate`、给了证书必须给 `search_bound` | 判据本体，没问题（FC-27，不动） |
+| `agent_e/_support.build_experiment` | **收** `certificate` / `search_bound` | `P-8` 把通道接到了这里 |
+| `AgentE.run_experiment`（公开入口） | **不收**（签名里没有） | ⇒ 通道断在这里 |
+| `specs/e.py` 的动作表 | **没声明** | ⇒ 模型看不见 |
+| `tools/verify_tools.py` 的工具 schema | **没声明** | ⇒ 模型看不见 |
+
+于是：模型无论怎么调 `exhaustive_search`，都必然撞硬约束 2c，而它**没有任何办法**满足 ——
+T1 实测三次 `failed`，报"必须给出 certificate"。`P-8` 只做了装配函数那一半。
+
+### 二、改了什么（四处，两层同步）
+
+1. `agent_e/run_experiment.py`：签名收 `certificate` / `search_bound`；转发进计算类的
+   `build_experiment`；**非穷举类方法收到它们 ⇒ 拒绝**（与 `name`/`imports` 同一条纪律：
+   不许静默忽略）；docstring 写清这是 `P-8` 的另一半。
+2. `specs/e.py`（**FC-27 / auth-audit**）：动作表声明这两格（`_OBJ`）；
+   `name`/`imports` 的描述补上"仅 method='formal'"（它们此前是光秃秃的 `_S`，
+   模型给计算类方法传了两次被拒）；`check_formal` 的摘要与属性说明写明
+   "**必须给 `source` 或 `script_path`**，都不给 ⇒ `no_script`"（T1 三次调用都落这一档）。
+3. `tools/verify_tools.py`（**FC-27 / prover-bridge**）：工具 schema 声明这两格（带
+   "必需/适用范围"的说明与 `kind` 受控词表）；`_verify_run_experiment` 与 `_run_experiment_tool`
+   两跳都转发。
+4. **两层对账自动跟着涨**：`import agentflow.capabilities` 的交叉断言从 **78 对 → 80 对**
+   （动作表 +2 格），"没比对 0 个" ⇒ 两处仍同步。这是那条导入期断言在替我们守门。
+
+### 三、端到端实测（离线、不花钱）
+
+```text
+带证书: ok=True | evidence_kind = cross_check | result = supports   ⇒ experiments 落 1 行
+不带证书: ok=False | error = run_experiment：… method='exhaustive_search'（穷举/枚举类）
+          必须给出 certificate …
+```
+
+即：**按广告的形状调用现在真的能把事做成**（这是 T1 里做不到的那件事），
+而不给证书仍然**如实拒绝**（不是静默落一行没有证书的"穷举结论"）。
+
+### 四、判据（新增 `tests/test_action_surface_matches_acceptance.py`，6 条）
+
+| 判据 | 正控 | 负控 |
+|---|---|---|
+| 带证书的 `exhaustive_search` ⇒ 真落一行（`experiments` 1 行、`certificate` 在行里） | ✓ | —— |
+| 不带证书 ⇒ 拒绝且**不落行** | —— | ✓ |
+| 非穷举类方法收到证书 ⇒ 拒绝、不落行 | —— | ✓ |
+| 两格在**动作表 + 工具 schema + 方法签名**三处都在（工具 schema 从**真注册表**读，不抄一份） | ✓ | —— |
+| `name`/`imports` 的描述必须写出"仅 formal" | ✓ | —— |
+| `check_formal` 的摘要必须写明"必须给 source 或 script_path" | ✓ | —— |
+
+### 五、连带：两份冻结快照按官方方式重新冻结
+
+`tests/test_agent_surface_snapshot.py` 与 `tests/test_tool_surface_snapshot.py` 是"广告面被改动
+⇒ 必须有人刻意重新冻结"的门（判据自己的说明写着"先看 diff 再提交"）。这一轮全量里它们红了
+—— 红得对。按官方方式重新冻结：
+
+```text
+python -B tests/test_agent_surface_snapshot.py --write
+python -B tests/test_tool_surface_snapshot.py --write
+```
+
+diff 逐字就是这一轮改动的**广告面净变化**：
+
+```text
++ "certificate": {"type": "object", "description": "穷举/枚举类（method='exhaustive_search'）必需…"}
++ "search_bound": {"type": "object", "description": "证书的适用范围（给了 certificate 就必须给）…"}
+- "verify.run_experiment": "(…, run_name=None, imports=None)"
++ "verify.run_experiment": "(…, run_name=None, imports=None, certificate=None, search_bound=None)"
+（agent 面那份是 M 的提示词快照，伙伴表里 E 的可选参数跟着多了 certificate / search_bound）
+```
+
+### 六、读数（2026-10-03）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 新增判据 | `pytest tests/test_action_surface_matches_acceptance.py -q` | **6 passed** |
+| E 那一族 + 接缝 + 参数判据 | `pytest tests/test_agent_e*.py tests/test_capability_seams.py tests/test_schema_handler_params.py tests/test_tools_returns_declaration.py tests/test_action_surface_matches_acceptance.py -q` | **100 passed / 1 skipped** |
+| 两份表面快照 | `pytest tests/test_agent_surface_snapshot.py tests/test_tool_surface_snapshot.py tests/test_action_surface_matches_acceptance.py -q` | **11 passed**（重新冻结之后） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| FC-27 门（不给基线） | `python -B scripts/noai_gate.py --git` | **requires_human**：这一轮命中 `specs/e.py`（auth-audit）与 `tools/verify_tools.py`（prover-bridge）⇒ 与 §82 一样，等 2 名 reviewer 签字 |
+| 全量 pytest（第一次） | `python -B -m pytest -q -p no:cacheprovider` | 3 failed / 3459 passed —— 三条红全是两份**冻结快照**（改动广告面的必然结果），已按官方方式重新冻结 |
+| 全量 pytest（重新冻结后） | 同上 | **3462 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（1360.59s，退出码 **0**） |
+
+### 七、下一轮（T1 重跑之前必须做完的）
+
+- **D2 收工门空洞**：给 `conductor.closing` 加一格"实质产出"（`documents>0` 或 `relations>0`
+  或 `experiments>0` 或 `review_findings>0`），空台账不许 `can_close=true`。
+- **D1-3 `build_document` 的 claims 形状**：claims 里合法字段与取值（`evidence_kind` 词表、
+  disclaimer 的**精确规则**与它在哪一栏被检查）要广告出来；拒绝理由要给出"我在哪一栏找什么串"。
+  T1 在这一处连拒 7 次、烧掉约 40 步（60 步里的三分之二）。
+- 然后**重跑 T1**：判"通过"的标准仍是 §83 第六节那张表（引文腿要有 `relations` 行与三个数；
+  形式化腿要有 `experiments` 的 formal 行或 `check_formal` 的真实结论；`H.review` 要落
+  `review_findings`；报告九节要有读数）。
+
+### 八、教训
+
+1. **"P-8 只做了一半"这种半成品最难发现**：装配函数收了新参数、判据也写了，
+   但公开入口不收、schema 不广告 ⇒ 从外面看"功能已实现"，从模型那一侧看"永远失败"。
+   这一轮把它变成了判据：**广告面 / 工具 schema / 方法签名三处都要查**。
+2. **冻结快照红是对的**：它是"广告面变了，请你看一眼"的意思 —— 我按它指定的 `--write` 重新冻结，
+   并把 diff 当证据留在这一节里，而不是手改快照让它变绿。
+3. **条件性参数要写明条件**：`name`/`imports` 只对 formal 有效，而它们此前是无描述的裸声明 ——
+   模型给 `exhaustive_search` 传了两次、被拒两次，而"为什么"要它自己撞出来。

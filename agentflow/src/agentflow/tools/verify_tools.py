@@ -840,6 +840,20 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
                 "items": {"type": "string"},
                 "description": "formal：这次检查要加载的库（不给时用检查器的默认值）",
             },
+    # `draft/37` §84 的 D1：这两格此前**不在任何 schema 里**，而
+    # `schema.Experiment` 的硬约束 2c 要求「method='exhaustive_search' 必须给
+    # certificate」⇒ 模型无论怎么调都必然失败（实测 T1：三次 failed）。现在广告出来。
+            "certificate": {
+                "type": "object",
+                "description": ("穷举/枚举类（method='exhaustive_search'）**必需**：结论的证书。"
+                                "必须含 kind（witness / unsat / enumeration_bound / counterexample）。"
+                                "「在 B 内没有反例」的说服力全部来自它"),
+            },
+            "search_bound": {
+                "type": "object",
+                "description": ("证书的适用范围（给了 certificate 就**必须**给）："
+                                "说清 B 是什么、用什么算法搜的 —— 证书脱离边界没有意义"),
+            },
            },
            "required": ["claim", "claim_key", "script_path"],
            "additionalProperties": False,
@@ -872,7 +886,7 @@ def _verify_check_formal(base, claim, script_path=None, source=None, checker_nam
     tags=("experiment", "evidence"),
     external="exec",
 )
-def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, run_name=None, imports=None):
+def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, script_path, params=None, method="numeric", for_question_id=None, timeout=600, run_name=None, imports=None, certificate=None, search_bound=None):
     """verify.run_experiment 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（_need_store, _run_experiment_tool）由装配期用 `partial` 绑定，
@@ -890,6 +904,8 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
                    timeout=timeout,
                    run_name=run_name,
                    imports=imports,
+                   certificate=certificate,
+                   search_bound=search_bound,
                )
     )
 
@@ -1089,6 +1105,9 @@ def register(
                     # 名字翻译只发生在这三行里，别在别处再抄一遍。
                     name=kw.get("run_name"),
                     imports=kw.get("imports"),
+                    # §84 D1：证书与边界（硬约束 2c/2d 的事实通道）
+                    certificate=kw.get("certificate"),
+                    search_bound=kw.get("search_bound"),
                 )
             )
         except ToolError:
