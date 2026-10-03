@@ -4784,3 +4784,49 @@ tex sha 变了）→ **锚回到 `consistent`**（`G.paper_package` 起的作用
 
 这一处修完，主控在运行内自己跑 `conductor.closing` 才会得到与外面一致的读数 ——
 在那之前，它每一次自检看到的都是"文件不在"，那会把一整类正确行为读成失败。
+
+---
+
+## §61 收下 `{"name": …, "args": …}` 这个写法：最后一处"形状漂移"不再让整趟作废
+
+§60 的通过读数里有一处必须跟进：**那一趟的停止理由是 `bad_json_limit`，不是 `final`**
+（步 8 / 12 / 35 各有一次坏形状，第 3 次触发上限）。三处里至少一处是
+`{"args": …, "name": …}` —— 一种**没有 `tool` 键**的写法，被判"认不出的形状"。
+
+### 61.1 为什么收下它（而不是继续判坏）
+
+- 这个形状**没有第二种含义**：循环协议里只有工具调用用 `name` + `args`
+  （`summon` 用 `role`/`action`，`message` 用 `to`/`body`，`note` 用 `text`）；
+- 它与 §52 那两条（`fs_list` 广告名 → 真名、原生 `tool_calls`）是同一族：
+  **"名字/键名这一层"本来就有多种合法写法，而它不该让整趟作废**；
+- 收下它的代价是零（多认一个写法），而拒它的代价在十趟里有三趟是"整趟白跑"。
+
+处置（`agent_loop._shape_of`）：`{"name": <工具名>, "args": {...}, "why": …}` ⇒
+认成 `tool` 形状，payload 里带 **`shape_alias="name"`** —— 认账，但不静默
+（与 `_do_tool` 的 `aliased_from` 同一套做法：谁在用别名，台账上看得出）。
+`args` 不是对象时**仍然判坏**（只放宽键名，不放宽类型）。
+
+### 61.2 判据
+
+`tests/test_native_tool_calls.py::test_the_name_args_shape_is_accepted_as_a_tool_call`：
+
+- 正控：`{"name","args","why"}` ⇒ `shape == "tool"`、`shape_alias == "name"`、
+  `args` 原样带过；
+- 负控两条：`args` 不是对象 ⇒ 仍是坏形状（"args 必须是一个对象"）；
+  `{"foo": 1}` ⇒ 仍是"认不出的形状"。
+
+连同既有的别名那两条（广告名→真名、编出来的名字照旧拒），这一个文件现在
+**14 条**判据，把"名字这一层"的三种写法（真名 / 广告名 / `name` 键）与它们的边界钉住。
+
+### 61.3 读数
+
+- 判据：`test_native_tool_calls + test_agent_loop` ⇒ **43 passed**；
+- lint：`error 0 / warning 9 / info 50`；
+- FC-27：本节改动路径（`agent_loop.py` / 判据）都不在禁改区 ⇒ 不新增命中。
+
+### 61.4 下一步：跑一趟**收尾干净**的（`stop_reason=final`、零非法形状）
+
+§60 的"通过"是在"运行被 `bad_json_limit` 打断、交付物状态仍合格"的情形下拿到的。
+这一刀之后，下一趟要看的是：**同样的交付质量 + 自己走到 `final`**。
+那才算"这条线真的能无人值守地跑完"（`triage_branch_recorded` 那一格仍然需要人来回答，
+那是设计的一部分，不是收尾问题）。

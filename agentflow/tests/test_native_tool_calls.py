@@ -265,3 +265,24 @@ def test_an_unknown_name_is_still_refused_even_with_a_face(tmp_path: Path):
     res = loop._do_tool({"name": "fs_rm_rf", "args": {}, "why": "编的"})
     assert res["ok"] is False and "fs_rm_rf" in str(res["error"]), res
     assert "aliased_from" not in res
+
+
+def test_the_name_args_shape_is_accepted_as_a_tool_call():
+    """正控（`draft/37` §61）：`{"name": …, "args": …}`（没有 `tool` 键）必须被认成工具调用。
+
+    第八、十趟真机各有一次这种写法，被判"认不出的形状"、计进 `bad_json`，
+    第 3 次就 `bad_json_limit` 收场。这个形状没有第二种含义（循环协议里只有工具调用
+    用 `name`+`args`），所以收下它、并留痕 `shape_alias="name"`。
+    """
+    from agentflow.agent_loop import _shape_of
+
+    shape, payload, problem = _shape_of({"name": "fs.read", "args": {"path": "a"}, "why": "看"})
+    assert (shape, problem) == ("tool", ""), (shape, problem)
+    assert payload["name"] == "fs.read" and payload["args"] == {"path": "a"}, payload
+    assert payload["shape_alias"] == "name", payload
+    # 负控：`args` 不是对象 ⇒ 仍然是坏形状（别名只放宽"键名"，不放宽类型）
+    shape2, _p2, problem2 = _shape_of({"name": "fs.read", "args": "a"})
+    assert shape2 == "" and "args 必须是一个对象" in problem2, problem2
+    # 负控：真·认不出的形状照旧拒
+    shape3, _p3, problem3 = _shape_of({"foo": 1})
+    assert shape3 == "" and "认不出的形状" in problem3, problem3
