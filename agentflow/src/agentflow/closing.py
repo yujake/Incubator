@@ -478,15 +478,18 @@ def _check_report_shape(rep: ClosingReport, report_path: str) -> None:
         rep.status["report_shape"] = "pass"
 
 
-def _check_user_pending(rep: ClosingReport, session_root: Any) -> None:
+def _check_user_pending(rep: ClosingReport, session_root: Any,
+                       *, sid: str | None = None) -> None:
     """还在等用户回答 ⇒ 必须停在"等待用户"（§14.5 第 4 件 / R26）。"""
     if session_root is None:
         rep.status["user_pending"] = "unknown"
         rep.findings.append(Finding("user_pending", "no_session_root", "warning",
                                     "没有会话记录根 ⇒ 待答问题没查成"))
         return
-    pending = U.pending_questions(session_root)
-    replies = U.read_replies(session_root)
+    # `sid` 必须跟着运行走（`draft/37` §58）：不带它时按默认会话读，
+    # 而真机每一趟都有自己的 sid ⇒ 待答问题会被读成「没问过」。
+    pending = U.pending_questions(session_root, sid=sid)
+    replies = U.read_replies(session_root, sid=sid)
     rep.readings["user_pending"] = {
         "pending": [{"qid": q.qid, "role": q.role, "text": q.text[:80]} for q in pending],
         "answered": len(replies),
@@ -508,6 +511,7 @@ def _check_user_pending(rep: ClosingReport, session_root: Any) -> None:
 
 def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   session_root: Any = None, checks: tuple[str, ...] = DEFAULT_CHECKS,
+                  sid: str | None = None,
                   ) -> ClosingReport:
     """跑收工门，返回读数（不抛业务异常 —— 没查成落成 `unknown`）。
 
@@ -528,7 +532,7 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
         elif name == "report_shape":
             _check_report_shape(rep, report_path)
         elif name == "user_pending":
-            _check_user_pending(rep, root)
+            _check_user_pending(rep, root, sid=sid)
         else:
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",

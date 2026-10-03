@@ -35,7 +35,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
 #: 而哈希另有其用（`prompt_sha256` 逐字记在每次调用上）。
-PROMPT_VERSION = "p30"
+PROMPT_VERSION = "p31"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -470,6 +470,12 @@ PAPER_PACK = """\
   收工门当场 `report_shape: fail` 并把缺的四节名字列了出来。所以：**写完先跑一次
   `conductor.closing`**，它会把缺的节名逐个报出来，按它改，再跑一次。
 - 报告里必须**分栏**写"我们补的"与"原文的"（这两句要出现）—— 混在一起写等于没分栏。
+- **每一节都要有读数**（数字，或台账行号/代号）：第九趟真机九节齐全、只差一节
+  ——「四、形式化覆盖」只有一个空标题，判据当场判 `report_sections_have_readings: fail`
+  （原话："这些节里没有任何读数（既没有数字也没有台账引用）：四、形式化覆盖 ——
+  空标题不算交了这一节"）。**没有内容的节也要给读数**：写"本轮无此项"不够，
+  要写清依据，例如「本轮未做形式化核验：`experiments` 里 formal 级 0 条、
+  E 未接线」—— 0 也是读数。
 - 附件三件套要在报告里可见：`origin=own_result`、`依据`、`sha`。
 - 报告落点只有一处：`out/review/REPORT.md`（用 `fs.write`；它默认不覆盖，重写要 `overwrite`）。
 - `conductor.closing` 的两个参数都给对：`project_dir` 是**项目根**（这个工作区就是根 ⇒ 给 `"."`；

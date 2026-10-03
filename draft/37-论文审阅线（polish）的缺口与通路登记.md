@@ -4536,3 +4536,105 @@ step 30: invalid ⇒ judge_bad_json   text_len=26134  tokens_out=8192
 `triage_branch_recorded`（要"问过 + 被回答"；没人值守时它会停在 `user_no_answer`，
 按 `_c_triage` 的口径那一格读成"应停在等待用户"——
 **下一次我可以在它提问之后当那个回答者，走 resume 那条路**，这也正好验一验那条路）。
+
+---
+
+## §58 第九趟真机：**九节报告过门了、正文四处改动落盘了** —— 只剩两格
+
+第九趟（`projects/p5-run9/`，全新干净工作区，`--max-steps 45`，`temp/TASK-57.txt`）
+是九趟里最接近"通过"的一次：**`report_shape: pass`**、四格内容判据 pass，
+`can_close` 只剩两个 blocker。而这一节还顺手抓到**判据自己的一处盲区**。
+
+### 58.1 读数（`temp/_run_judge.py projects/p5-run9 --sid real9`）
+
+```text
+步数 45 / llm_call 45 / 停止理由 final / usd 0.470263 / 非法形状 2（都在前段）
+工具面 advertised=23（多了 fs.edit）；**别名映射用过 9 次**；原生调用真用上 4 次
+literature = 1（path=main.pdf ← 论文本体）
+statements = 4（label 全空、quote_verified=None、source_lit_id=lit:0000）
+documents = 1   review_findings = 0   tasks = 13   usage_ledger = 11
+交付说明：REPORT.md 8,409 字节（这一趟写的，九节齐全）
+主稿：**sha256 8c5c431b… → 8e9c9404…**（四处表述级改动真的落盘了）
+reviewaccept（六条内容级）：
+  report_sections_have_readings   fail ← 只有「四、形式化覆盖」这一节没有读数（空标题）
+  statements_have_assumptions_and_source pass
+  triage_branch_recorded          **fail** ← 见 58.3（判据此前读错了，修正后它读成 fail）
+  within_cost_cap                 pass
+  hops_have_readable_prompts      pass
+  attachment_is_honest            pass
+closing：can_close=False；failed=['anchor','user_pending']；unknowns=[]；
+         status: anchor fail / contradictions pass / load_bearing pass /
+                 report_shape **pass** / user_pending fail
+```
+
+**这一趟做到的三件新事**：
+
+1. **`fs.edit` 真的被用上了**（四条，步 25–28）：四处**表述级**改动落进主稿
+   （限定 Theorem 1(i) 不主张唯一性、对齐摘要口径、把 Theorem 2(ii) 限定为有限采样、
+   标注数值验证不构成证明）—— 主稿 sha256 当场变了，`tex_sha256` 也跟着变。
+   这正是 §57 那一刀的验收（`fs.write` 改不了的大文件，`fs.edit` 一次一处地改完了）。
+2. **九节报告过门**（`report_shape: pass`）：`conductor.closing` 这一趟带的是
+   `project_dir="."`（§54 那一句提示词生效），报告形状一次过 —— 与第六趟"只写五节"对照。
+3. **主控自己诊断出"包没重渲染"**（步 38、41）：它读了 `RENDER-ANCHOR.json`，
+   发现 `tables` 全 0 行、`files.main.tex` 还是旧 sha，用它自己的话：
+   "G 的两次 revise 只写了 documents/0000.md，没有重渲染/重编译论文包。锚必然 drifted"
+   —— 然后它又派了第三次 `G.revise`（仍然没用）。**这条路的归属问题是下一刀**（见 58.4）。
+
+### 58.2 顺手抓好的一处判据盲区：`sid`（已修 + 判据）
+
+**现象**：判据说"这一次一次都没问过用户"（`triage_branch_recorded: unknown`），
+而那一趟**明明问了** —— `sessions/real9.jsonl` 里躺着
+`{"kind": "user_question", "qid": "q0001", "text": "本轮已把 4 处表述层面的改动落进主稿…这些改动是否要保留在主稿？", "options": [...]}`。
+
+**病因**：`reviewaccept.check_review` 与 `closing.check_closing` 都**不带 `sid`**，
+于是 `userio.pending_questions(root)` / `read_replies(root)` 按**默认会话**读；
+而真机每一趟都有自己的 sid（`real9`）⇒ 提问与回答统统看不见。
+这不是主控的错，也不是"没问"——**判据的调用姿势漏了一个参数**。
+
+**处置**（两处都改 + 三条判据）：
+
+- `reviewaccept.check_review(..., sid=None)` → `_c_triage(..., sid=sid)` →
+  `pending_questions(sid=)` / `read_replies(sid=)`；
+- `closing.check_closing(..., sid=None)` → `_check_user_pending(..., sid=sid)`（同一处病）；
+- 新判据 `tests/test_sid_scoped_questions.py`（3 条）：带 sid 的提问**答了 ⇒
+  `triage=pass` / `user_pending=pass`**；**没答 ⇒ `triage=fail`**（原话"还有 1 个问题
+  没被回答 ⇒ 正确的分支是停在「等待用户」，不是继续往下做"）；**别的 sid 的提问不算这一趟的**
+  （负控）；另加一条反真空（夹具真能被 `userio` 读出来）。
+
+修正之后第九趟的读数**变了**：`triage_branch_recorded` 从 `unknown` 变成 **`fail`** ——
+它确实问了一个**没被回答**的问题就继续做了。按本项目的三态纪律，那个 fail 是**对的**：
+"问了不等回答"与"不问"都必须留痕，而前者在 `user_pending` 那一格也该拦住
+（`closing` 现在也报 `user_pending: fail`）。
+
+### 58.3 报告那一格：只有一节缺读数（可修，已写进提示词）
+
+`reviewaccept` 的原话：「这些节里没有任何读数（既没有数字也没有台账引用）：
+**四、形式化覆盖** —— 空标题不算交了这一节」。
+也就是说九节里**八节都合格**，只有"形式化覆盖"是空标题（那篇论文没做 Lean 形式化）。
+处置：`PAPER_PACK` 第八节补一条 —— **没有内容的节也要给读数**
+（"本轮无此项"不够，要写清依据：`experiments` 里 formal 级 0 条 / E 未接线 —— **0 也是读数**），
+`p30 → p31`。
+
+### 58.4 还差的那一格：`anchor` —— 论文包的重渲染没有可召唤的动作
+
+`anchor` 要 `consistent`，而"重渲染 + 重编译 + 核锚"这三件事是
+**`doc.paper_render` / `doc.paper_compile` / `doc.paper_state` 三个工具**（G 与 H 的工具面），
+**没有任何一个动作**能召唤它们：主控派了三次 `G.revise`，而 `G.revise` 写的是它自己那份
+`documents/0000.md`（`G.render` 也只渲染稿件 markdown）。所以今天这条路上，
+**锚回到 `consistent` 在结构上做不到** —— 与 §44.4（A/B 缺登记动作）同一个形态，
+只是这次缺的是 G 那一边。
+
+**修法（要人裁，FC-27）**：给 G 加一条动作 `paper_package`（一次做完
+`render → compile → state`，并把 `verdict` 与漂移条数回报），落在 `specs/g.py`。
+这一节**不动它**，等裁定。
+
+### 58.5 读数（补丁部分）
+
+- 判据：`test_sid_scoped_questions`（3）+ `test_review_acceptance` + `test_closing_gate` +
+  `test_paper_pack` + 两份快照 ⇒ **51 + 27 passed**（两批），0 failed。
+- lint：`error 0 / warning 9 / info 50`（中间 `error 2`，`_r009_fix.py` 清掉，2/2 通过）。
+- golden：`agent_surface_snapshot.json` 重生成（G/H/M 三份多"每节都要有读数"那一条，
+  其余只差版本行）。
+- FC-27：本节改动路径（`reviewaccept.py` / `closing.py` / `agent_prompts.py` / 新判据）
+  **都不在禁改区** ⇒ 不新增命中。
+- **累计花费**（九趟）：1.173579 + 0.305369（第八趟）+ 0.470263（第九趟）= **1.949211 美元**。

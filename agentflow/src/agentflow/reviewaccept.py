@@ -170,12 +170,16 @@ def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
         acc.criteria["statements_have_assumptions_and_source"] = "pass"
 
 
-def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any) -> None:
+def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any,
+              *, sid: str | None = None) -> None:
     """③ 三态分支正确：该问用户的真问了，且问题落盘可查。
 
     判据取的是"问过的问题有没有落盘 + 有没有被回答"这两个读数，
     以及"没回答时门必须拦住"（`closing` 的 `user_pending`）。
     这一条不判"该不该问"（那是语义判断，属 P2 的提示词面）。
+
+    `sid` 必须跟着运行走（见 `check_review` 的说明）：不带它时按默认会话读，
+    而真机跑的每一趟都有自己的 sid ⇒ 提问会被读成"没问过"。
     """
     if session_root is None:
         acc.criteria["triage_branch_recorded"] = "unknown"
@@ -183,8 +187,8 @@ def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any) -> None:
         return
     from . import userio as U
 
-    pending = U.pending_questions(session_root)
-    replies = U.read_replies(session_root)
+    pending = U.pending_questions(session_root, sid=sid)
+    replies = U.read_replies(session_root, sid=sid)
     acc.readings["questions"] = {"asked": len(pending) + len(replies),
                                 "answered": len(replies),
                                 "pending": [q.qid for q in pending]}
@@ -334,17 +338,25 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
 
 def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
                  session_root: Any = None, cost_cap_usd: float | None = None,
+                 sid: str | None = None,
                  ) -> ReviewAcceptance:
     """跑一次审稿场景的内容级验收（辅助读数不参与 `passed`）。
 
     `session_root` 不给时取 `store.root`。任何一格缺少必要输入 ⇒ `unknown`
     （"没查成"），而 `unknown` 不是通过。
+
+    `sid` 必须给这一趟运行的那个 sid（`draft/37` §58 的真机读数）：
+    第九趟的提问落在 `sessions/real9.jsonl` 里，而本函数此前不带 `sid` ⇒
+    `pending_questions(root)` 按默认会话读，什么都没读到，于是
+    `triage_branch_recorded` 报"一次都没问过用户" —— 而那一趟明明问了（`q0001`）。
+    判据看不见带 sid 的提问，这一格就永远只能是 unknown，而病因在调用姿势上，
+    不在主控身上。
     """
     acc = ReviewAcceptance()
     root = session_root if session_root is not None else getattr(store, "root", None)
     _c_report(acc, report_path)
     _c_statements(acc, store)
-    _c_triage(acc, store, root)
+    _c_triage(acc, store, root, sid=sid)
     _c_cost(acc, store, cost_cap_usd)
     _c_hops(acc, store)
     _c_attachment(acc, store, report_path)
