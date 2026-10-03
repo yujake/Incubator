@@ -81,6 +81,29 @@ ACTIONS: tuple[ActionSpec, ...] = (
              ("doc_id",)),
         "dict", side_effect="write_local", handler_name="revise",
     ),
+
+    # ---- `paper_package`（2026-10-03 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
+    #
+    # 为什么必须有它（`draft/37` §58/§59 的真机读数）：第九趟主控把正文改动落盘、九节报告过门，
+    # 只剩 `anchor` 一格 —— 而"重渲染 + 重编译 + 核锚"这三件事是**工具**
+    # （`doc.paper_render` / `doc.paper_compile` / `doc.paper_state`），
+    # **没有任何动作**能召唤它们：主控连派三次 `G.revise` 都没用
+    # （`revise` / `refresh_markdown` / `render` 动的都是稿件 markdown，不是论文包）。
+    # 于是"锚回到 consistent"在编排层结构上做不到 —— 与 §44.4（A/B 缺登记动作）同形。
+    #
+    # 两根轴逐条读出：
+    #   - 效果轴 `write_local`：它真的改盘（渲染出的 `appendix.tex` / `tables/*.tex`、
+    #     重编的 `main.pdf`、重写的锚与回执）。
+    #   - 外部轴 `exec`：渲染与编译都会**起子进程**（项目脚本 / LaTeX 工具链）——
+    #     与 `verify.run_experiment` 同一档；不标 `egress`（它不出网）。
+    ActionSpec(
+        "G", "paper_package",
+        "一次做完论文包的重渲染 → 重编译 → 核锚，并回报 verdict 与漂移条数",
+        _obj({"project": _S, "timeout_sec": _N, "render_script": _S, "compile_script": _S}),
+        "dict（render / compile / verdict / dimensions / drift / problems / anchor_path）",
+        side_effect="write_local", handler_name="paper_package",
+        external="exec",
+    ),
 )
 
 

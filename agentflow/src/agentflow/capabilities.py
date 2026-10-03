@@ -383,9 +383,10 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后）：
-    53 个动作 = 18 compared + 35 unmatched + 0 ambiguous
-    （2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
+    实测（2026-10-03 加 `G.paper_package` 之后）：
+    54 个动作 = 18 compared + 36 unmatched + 0 ambiguous
+    （2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后是 53 = 18 + 35 + 0；
+    2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
     于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。
     本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。
@@ -2010,9 +2011,9 @@ def assert_capabilities(
 
     # ---- [7b] 对账面必须是一个分区（D-3）
     #
-    # 上面那条只钉 `unmatched`。实测（2026-10-02 加 `A.ingest_local` 与
-    # `B.register_statement` 之后）：53 个动作 = 18 compared + 35 unmatched + 0 ambiguous
-    # （2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
+    # 上面那条只钉 `unmatched`。实测（2026-10-03 加 `G.paper_package` 之后）：
+    # 54 个动作 = 18 compared + 36 unmatched + 0 ambiguous
+    # （2026-10-02 是 53 = 18 + 35 + 0；2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
     # 于是 `ambiguous` 那一格今天恰好是 0，
     # 而没有任何判据看着它 —— 若将来一个动作的 handler_name 在角色工具组里
     # 撞上两个工具，`declaration_divergences()` 只会多一条 info，导入照样成功，
@@ -2195,6 +2196,14 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # `table`/`row` 与本动作的 `statement_full`），那种"比上了"比诚实的"没比对"更坏。
     # 与 `A.search_literature` / `H.review_report` 两条同族。
     "B.register_statement",
+    # `G.paper_package`（2026-10-03，`draft/37` §59）：G 的**角色级**动作，不是工具调用。
+    # 它一次做三件工具的事（`doc.paper_render` / `doc.paper_compile` / `doc.paper_state`），
+    # 所以没有哪一个工具名的最后一段等于 `paper_package`（唯一性约定要求逐字同名）。
+    # 为什么不拆成三个动作：它们**必须连着做**（先渲染再编译，最后核锚才有意义 ——
+    # 核锚放在最前面会让读数关于旧包），拆开就把"顺序"这件事留在调用方的记忆里，
+    # 而真机实测主控连派三次都没能把包更新掉。与 `A.search_literature` /
+    # `B.register_statement` / `H.review_report` 三条同族：诚实地登记"这一格没比对上"。
+    "G.paper_package",
 })
 
 

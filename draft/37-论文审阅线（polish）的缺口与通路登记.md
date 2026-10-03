@@ -4638,3 +4638,77 @@ closing：can_close=False；failed=['anchor','user_pending']；unknowns=[]；
 - FC-27：本节改动路径（`reviewaccept.py` / `closing.py` / `agent_prompts.py` / 新判据）
   **都不在禁改区** ⇒ 不新增命中。
 - **累计花费**（九趟）：1.173579 + 0.305369（第八趟）+ 0.470263（第九趟）= **1.949211 美元**。
+
+---
+
+## §59 给 G 加一条动作 `paper_package`（用户裁定）：论文包的重渲染终于有人（有动作）能召唤
+
+第九趟（§58）只剩 `anchor` 一格，而那一格**在编排层结构上做不到**：
+"重渲染 + 重编译 + 核锚"是 `doc.paper_render` / `doc.paper_compile` / `doc.paper_state`
+三个**工具**，**没有任何动作**能召唤它们 —— 主控连派三次 `G.revise` 都没用
+（`revise` / `refresh_markdown` / `render` 动的都是**稿件 markdown**，不是论文包）。
+这与 §44.4（A/B 缺登记动作）同一个形态，只是这次缺的是 G 这一边。
+
+### 59.1 加的是什么
+
+`specs/g.py` 新增 `ActionSpec("G", "paper_package", ...)`，实现
+`agent_g/paper_package.py::_PaperPackage.paper_package(project=".", timeout_sec=..., render_script=..., compile_script=...)`：
+
+- 顺序 **渲染 → 编译 → 核锚**（三段都复用 `doc_tools` 里那一份实现，本文件不另写顺序）；
+- 返回 `verdict` / `dimensions` / `drift` / `problems` / `anchor_path` / `receipt_path`
+  —— 主控要的就是"锚一致不一致、漂了几条"这两个读数；
+- 两根轴：效果 `write_local`（它真的改盘）、外部 **`exec`**（渲染与编译都起子进程）；
+- 失败**分段归因**（`package_build_failed` + `stage=render|compile` / `state_failed`），
+  不折成一个含糊的 `ok: false` —— 因为处置完全不同（查脚本 / 查工具链 / 补一次打包）；
+- `drifted` **不是这个动作失败**：`ok=True`、`kind=anchor_not_consistent`、
+  `verdict="drifted"` —— 它是读数（"还有台账改动没进包"），不是"动作坏了"。
+
+`capabilities.py` 同步：登记进 `_KNOWN_UNMATCHED_ACTIONS`（它一次做三件工具的事，
+没有哪个工具名最后一段等于 `paper_package`），并把两句实测读数改成
+**54 个动作 = 18 compared + 36 unmatched + 0 ambiguous**。
+
+### 59.2 判据（4 条，`tests/test_paper_package_action.py`）
+
+| # | 判据 | 形态 |
+|---|---|---|
+| 1 | 一次调用三段都做完、`steps == [render, compile, anchor_check]`、**`verdict == consistent`**、三维全 consistent、`drift == []` | 正控（真跑一遍小论文包） |
+| 2 | `drifted` 是读数不是失败（改主稿后锚会漂，而动作的 `ok` 语义要说清） | 正控（三态语义） |
+| 3 | 项目根给错（`out/paper`）⇒ `ok=False` / `kind=package_build_failed` / `stage ∈ {render, compile}`、`verdict` 空、`drift` 空 | 负控 |
+| 4 | 声明面：动作在能力表里、两根轴是 `write_local` + `exec`、M 召唤得到 G、`specs/g.py` 里有逐字说明 | 正控（声明↔实现） |
+
+夹具照 `tests/test_paper_pack.py` 的做法造一个小论文包：
+`code/make_paper.py`（写锚，打印 `REPRO_RESULT:`）+
+`code/compile_paper.py`（写 `main.pdf` 与 **`RA.build_receipt`** 回执 —— 这一步一开始写错了：
+自造一个"像回执"的 JSON 会被判 `receipt: drifted`，因为判据比的是**回执与 PDF 的实际内容**）。
+
+### 59.3 动作税（与 §46 同一张清单，逐处都交了）
+
+- `ROLE-SPECS` §0.7 标题 53 → **54**、§M.4.1 标题 53 → **54**、两处 G 行 6 → **7**
+  （并加上 `paper_package` 这个名字）；
+- `DEVELOPMENT.md` 动作总数 **53 → 54**；
+- `capabilities.py` 两句实测读数 → **54 = 18 + 36 + 0**；
+- `test_agent_surface_snapshot` 的反真空下界 53 → **54**；
+- 两份 golden 重生成（`agent_surface`：G 的 actions / handler_signatures / 9 份提示词；
+  `tool_surface`：角色行）；
+- `tests/test_paper_package_action.py`（4 条）+ 既有动作税判据一起跑：**51 passed**。
+
+### 59.4 读数
+
+- lint：`error 0 / warning 9 / info 50`（中间 `error 2` 清掉，2/2 通过）。
+- 判据：`test_paper_package_action + test_role_specs_action_table + test_r4_roles_surface +
+  test_agent_surface_snapshot + test_tool_surface_snapshot` ⇒ **51 passed**；
+  `test_agent_split_is_one_action_one_file + test_intake_actions + test_conductor_tools +
+  test_host_wiring` ⇒ **60 passed**。
+- **FC-27 门**：`specs/g.py` 与 `capabilities.py` **两条命中** ⇒ `requires_human`、
+  退出码 1、`required_approvals=2`；已 `--baseline` 登记（`reviewers=0`，登记 ≠ 批准），
+  欠 2 名 reviewer 的逐行走查**照红记录**。
+
+### 59.5 下一趟（第十趟）要看的三件事
+
+1. **报告那一节补齐**（`PAPER_PACK` 已写"没有内容的节也要给读数"）⇒
+   `report_sections_have_readings` 该从 fail 变 pass；
+2. **锚回到 `consistent`**（主控现在能派 `G.paper_package` 了）⇒ `anchor` 该从 fail 变 pass；
+3. **问过的问题要有人回答**：第九趟它问了 `q0001` 却没人答 ⇒ `triage_branch_recorded: fail`
+   与 `user_pending: fail`。这一趟**我来当那个回答者**：它提问之后，
+   用 `agentflow answer <qid> "…"` 落一条回答，再按框架的 resume 路续跑
+   （那条路在本目标早期实现过并有判据：`tests/test_resume_after_answer.py`）。

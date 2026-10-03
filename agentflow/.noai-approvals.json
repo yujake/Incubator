@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-03T10:56:33+08:00",
+  "generated_at": "2026-10-03T11:17:54+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -184,10 +184,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "ded77d770ba78922bd470ba7d9b534005890169645478e4d106ab06bb1a7748b",
+      "sha256": "79b315fbbea660f0ca398e3651196f2dde5a4724dd61b6e1f487fb7b5dac63a2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-02 用户裁定（draft/37 §44.4/§46）：加 A.ingest_local 与 B.register_statement 两条可召唤动作，并把 statements 加进 WRITE_SETS[B]；由用户点名裁定后应用，2 名 reviewer 的逐行走查仍欠（reviewers 留 0）",
+      "change_note": "2026-10-03 用户裁定（draft/37 §59）：给 G 加 paper_package 动作（一次做完 render → compile → 核锚并回报 verdict），capabilities 同步登记 unmatched 条目与实测读数；仍欠 2 名 reviewer 逐行走查（reviewers 留 0）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -460,10 +460,10 @@
       "path": "src/agentflow/specs/g.py",
       "glob": "src/agentflow/specs/g.py",
       "category": "auth-audit",
-      "sha256": "e2e09e5183beb655dc4e84c91fc3a4bd70e23334fbd2637944a46bb0fcc76318",
+      "sha256": "c5549e73aa8a8fe3c22d1b477211df4ebf2cc8731f7a76330505f98d410078c7",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M4（draft/28 §223）：角色的构造期依赖工厂搬进各自的声明（specs/<角色>.py::_build + needs/peers），host._Builder 只剩薄壳 + 通用 _build。声明面变化 ⇒ 重新登记 sha256；reviewers 仍为 0，留给人审。",
+      "change_note": "2026-10-03 用户裁定（draft/37 §59）：给 G 加 paper_package 动作（一次做完 render → compile → 核锚并回报 verdict），capabilities 同步登记 unmatched 条目与实测读数；仍欠 2 名 reviewer 逐行走查（reviewers 留 0）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

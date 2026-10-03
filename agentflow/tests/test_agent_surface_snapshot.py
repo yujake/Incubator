@@ -144,7 +144,7 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
     动作总数这一格不再写死（原先写 `== 51`，2026-10-02 加两条动作时它就红了）：
     真正要防的"真空"是缩水，而"数字该是多少"由 `capabilities` 说话（§0.7 的标题
     是那个数字的文档落点，由 `tests/test_role_specs_action_table.py` 盯着）。所以这里：
-    ① 与现场的 `CAPABILITIES` 逐数相等（快照没漏扫）；② 不许低于加动作之前的 53（不缩水）。
+    ① 与现场的 `CAPABILITIES` 逐数相等（快照没漏扫）；② 不许低于加动作之前的 54（不缩水）。
     """
     from agentflow import capabilities as C
     from agentflow import schema as S
@@ -160,7 +160,7 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
     assert total_actions == live_actions, (
         f"快照扫到 {total_actions} 条动作，而现场 `CAPABILITIES` 是 {live_actions} 条"
         "（快照漏扫了某些角色）")
-    assert total_actions >= 53, f"动作总数缩到 {total_actions} 条（加动作之前是 53）"
+    assert total_actions >= 54, f"动作总数缩到 {total_actions} 条（加动作之前是 54）"
     assert sum(len(v["edges"]) for v in snap["roles"].values()) == 29
     for role, got in snap["roles"].items():
         assert got["tools"], f"{role} 一个工具都没有"

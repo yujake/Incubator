@@ -12,6 +12,7 @@ from .build_document import _BuildDocument
 from .render import _Render
 from .refresh_markdown import _RefreshMarkdown
 from .revise import _Revise
+from .paper_package import _PaperPackage
 
 
 class _Core:
@@ -158,7 +159,7 @@ class _Core:
             return 1
 
 
-class AgentG(_ComposeClaim, _RegisterDependency, _BuildDocument, _Render, _RefreshMarkdown, _Revise, _Core):
+class AgentG(_ComposeClaim, _RegisterDependency, _BuildDocument, _Render, _RefreshMarkdown, _Revise, _PaperPackage, _Core):
     """撰写智能体。每个方法都能被独立调用与单测（与 `AgentD` 同一种形态），
     因此"写到一半被打断"可以从任意一步接着跑。
     """
