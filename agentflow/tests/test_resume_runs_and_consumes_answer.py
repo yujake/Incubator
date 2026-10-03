@@ -65,8 +65,8 @@ def _wire(tmp_path: pathlib.Path, replies: list[str]):
 
 
 def _run(store, registry, cond, root, gw, *, rounds: int, resume: bool = False):
-    seam = LlmSeam(role="D", session_root=root, gateway=gw, price=(0.0, 0.0), sid="t")
-    return run_autonomous("D", "把这件事推进下去", store=store, registry=registry, conductor=cond,
+    seam = LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0), sid="t")
+    return run_autonomous("M", "把这件事推进下去", store=store, registry=registry, conductor=cond,
                           session_root=root, seam=seam, rounds=rounds, report_every=99,
                           max_steps=3, sid="t", from_env=False, resume=resume)
 
@@ -76,7 +76,7 @@ def test_the_answer_reaches_the_resumed_round_prompt(tmp_path):
     st, registry, cond, root, gw = _wire(tmp_path, [_ASK, _FINAL])
     first = _run(st, registry, cond, root, gw, rounds=1)
     assert first.rounds_done == 1, first.to_dict()
-    assert load_checkpoint(root, "D") is not None, "第一段必须留下检查点（否则没有'续跑'可言）"
+    assert load_checkpoint(root, "M") is not None, "第一段必须留下检查点（否则没有'续跑'可言）"
 
     # 用户回答（走的就是 CLI 的那个入口；会话号必须与循环那一侧一致 —— `sid="t"`）
     pend = U.pending_questions(root, sid="t")
@@ -129,9 +129,9 @@ def test_the_checkpoint_is_updated_by_the_resumed_run(tmp_path):
     _run(st, registry, cond, root, gw, rounds=1)
     pend = U.pending_questions(root, sid="t")
     assert U.answer_question(root, qid=pend[0].qid, answer="审", sid="t") == ""
-    first_cp = dict(load_checkpoint(root, "D") or {})
+    first_cp = dict(load_checkpoint(root, "M") or {})
     _run(st, registry, cond, root, gw, rounds=2, resume=True)
-    second_cp = dict(load_checkpoint(root, "D") or {})
+    second_cp = dict(load_checkpoint(root, "M") or {})
     assert second_cp, "续跑之后检查点不该消失"
     assert int(second_cp.get("completed_rounds") or 0) >= int(first_cp.get("completed_rounds") or 0), (
         first_cp, second_cp)

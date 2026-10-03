@@ -20,9 +20,13 @@
 - 没回答就 `--resume`：必须明确报"还在等 qid"，一步模型都不调（不许静默重跑，
   不许把"没答"当成默许）；
 - 任务指纹不符：`checkpoint_mismatch` + CLI 退出码 2 + 零模型调用；
-- 无人值守档（`ASK_POLICY="never"`）：`ask_refused`、问题「不落」待答清单、循环继续；
-- 子角色（有父任务号且 depth>1）问用户：`delegated_asker`、问题不落盘、循环继续；
-  同一个角色在顶层（`my_task_id=""`）时提问「必须」通 —— 否则"用户端"整条路不可达；
+- 无人值守档（`ASK_POLICY="unattended"`，历史别名 `"never"`）：`ask_refused`、
+  问题「不落」待答清单、循环继续；
+- 非主控角色问用户（`not_conductor`）：问题不落盘、循环继续，未决问题写进结果 ——
+  这一条是「运行时协作纪律」，出处是我们自己的 `DESIGN-CONDUCTOR.md` §1.1
+  （"它是用户唯一面对的东西"）与 `capabilities.NON_SUMMONABLE = {"M"}`。
+  被召唤的一环与"顶层但不是主控"（人工直接 `run-agent D`）都被拒；
+  只有主控能问 —— 否则"人机通道归主控"这条纪律没有判据看着；
 - 别的 sid 的回答不算这一趟的（`read_replies(sid=…)` 隔离）。
 
 ## 用的是替身模型，不联网、不花钱
@@ -106,7 +110,7 @@ def _ws(tmp_path: pathlib.Path, sid: str = "t") -> tuple[Store, Any, Conductor, 
 
 
 def _run(st: Store, registry: Any, cond: Conductor, root: pathlib.Path,
-         replies: list[str], *, role: str = "D", task: str = "把口径定下来",
+         replies: list[str], *, role: str = "M", task: str = "把口径定下来",
          max_steps: int = 4, sid: str = "t", resume: bool = False,
          user_timeout_sec: float | None = 0, direct: bool = False,
          my_task_id: str = "") -> tuple[Any, ScriptedGateway]:
@@ -200,9 +204,9 @@ def test_zero_wait_through_the_cli_stops_before_the_next_round(tmp_path: pathlib
     monkeypatch.setattr(cli, "_agent_seam_factory", fake_seam_factory)
     reset_cache()
     SCRIPTS.clear()
-    SCRIPTS.update({"D": [ask("口径用哪个？"), FINISH],
+    SCRIPTS.update({"M": [ask("口径用哪个？"), FINISH],
                     "E": [ask("另一岗也想问一句？"), FINISH]})
-    rc = cli.cmd_run_agent(_args(tmp_path, role="D", task="把口径定下来"))
+    rc = cli.cmd_run_agent(_args(tmp_path, role="M", task="把口径定下来"))
     out = capsys.readouterr().out
     assert rc == 3, out
     root = tmp_path / "ws"
@@ -214,12 +218,20 @@ def test_zero_wait_through_the_cli_stops_before_the_next_round(tmp_path: pathlib
     assert _llm_calls(root) == 1, "退出码 3 那一趟不该有第二次模型调用"
     assert len(U.pending_questions(root, sid="t")) == 1
     # `--json` 那一档：退出码同样 3，而 stdout 必须仍然是一份可解析的 JSON
-    rc_json = cli.cmd_run_agent(_args(tmp_path, role="E", task="换一个角色再问一次", json=True))
+    rc_json = cli.cmd_run_agent(_args(tmp_path, role="M", task="换一件事再问一次",
+                                      json=True, sid="t2"))
     captured = capsys.readouterr()
     assert rc_json == 3, (captured.out, captured.err)
     payload = json.loads(captured.out)
     assert payload["stop_reason"] == "waiting_for_user" and payload["waiting_for"], payload
     assert "停在等待用户" in captured.err, captured.err
+    # 负控（运行时协作纪律：人机通道归主控，`DESIGN-CONDUCTOR.md` §1.1）：换一个
+    # 非主控角色走同一条 CLI 路 —— 它不许停、也不许把问题落进待答清单，
+    # 而是把未决问题写进自己的结果，退出码 0（跑完了）。
+    rc_e = cli.cmd_run_agent(_args(tmp_path, role="E", task="非主控也想问一句", sid="t3"))
+    out_e = capsys.readouterr().out
+    assert rc_e == 0, out_e
+    assert U.pending_questions(root, sid="t3") == [], "非主控的问题不许落进待答清单"
 
 
 # ============================================================ 二、答
@@ -234,7 +246,7 @@ def test_the_custom_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, capsy
     rc = cli.cmd_answer(_args(tmp_path, qid=qid, text="审这篇论文", select=None, custom=None))
     assert rc == 0, capsys.readouterr().err
     assert any(r["qid"] == qid and r["answer"] == "审这篇论文"
-               for r in U.read_replies(root, role="D", sid="t"))
+               for r in U.read_replies(root, role="M", sid="t"))
 
     second, gw2 = _run(st, registry, cond, root, [FINISH], resume=True)
     assert second.stop_reason == "final", second.to_dict()
@@ -254,7 +266,7 @@ def test_the_selected_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, cap
     qid = first.waiting_for
     rc = cli.cmd_answer(_args(tmp_path, qid=qid, text=None, select=["n<=5"], custom=None))
     assert rc == 0, capsys.readouterr().err
-    replies = U.read_replies(root, role="D", sid="t")
+    replies = U.read_replies(root, role="M", sid="t")
     assert replies and replies[-1]["selected"] == ("n<=5",), replies
     second, gw2 = _run(st, registry, cond, root, [FINISH], resume=True)
     assert second.stop_reason == "final", second.to_dict()
@@ -263,7 +275,7 @@ def test_the_selected_answer_reaches_the_resumed_run(tmp_path: pathlib.Path, cap
     # 负控（别名那条路的反面）：`--custom` 覆盖 selected 时读出来的就是 custom
     other = tmp_path / "ws2"
     other.mkdir()
-    q = U.ask_user(other, role="D", question="口径？", options=["甲", "乙"],
+    q = U.ask_user(other, role="M", question="口径？", options=["甲", "乙"],
                    timeout_sec=0.0, sid="t")
     assert cli.cmd_answer(Namespace(root=str(other), sid="t", qid=q.qid, text=None,
                                     select=["甲"], custom="其实选乙")) == 0
@@ -280,11 +292,11 @@ def test_resume_transcript_is_byte_equal_to_the_live_transcript(tmp_path: pathli
     st, registry, cond, root = _ws(tmp_path)
     run, _gw = _run(st, registry, cond, root, [NOTE, NOTE, NOTE], max_steps=3)
     assert len(run.steps) == 3 and run.stop_reason == "max_steps", run.to_dict()
-    rebuilt, step0 = AL.resume_transcript(root, "D", "t", task="把口径定下来")
+    rebuilt, step0 = AL.resume_transcript(root, "M", "t", task="把口径定下来")
     assert step0 == 3, step0
     assert rebuilt == run.transcript, "重建的 transcript 与当时那一份不逐字相等"
     # 负控（不许张冠李戴）：任务原文不匹配 ⇒ 重建不出来，返回 ("", 0) 而不是别人的那一段
-    other, other_step = AL.resume_transcript(root, "D", "t", task="另一件事")
+    other, other_step = AL.resume_transcript(root, "M", "t", task="另一件事")
     assert (other, other_step) == ("", 0), (other[:60], other_step)
 
 
@@ -319,12 +331,12 @@ def test_a_different_task_is_refused_by_the_fingerprint(tmp_path: pathlib.Path,
     monkeypatch.setattr(cli, "_agent_seam_factory", fake_seam_factory)
     reset_cache()
     SCRIPTS.clear()
-    SCRIPTS.update({"D": [ask("口径用哪个？"), FINISH]})
-    assert cli.cmd_run_agent(_args(tmp_path, role="D", task="第一件事")) == 3
+    SCRIPTS.update({"M": [ask("口径用哪个？"), FINISH]})
+    assert cli.cmd_run_agent(_args(tmp_path, role="M", task="第一件事")) == 3
     capsys.readouterr()
     root = tmp_path / "ws"
     calls_before = _llm_calls(root)
-    rc = cli.cmd_run_agent(_args(tmp_path, role="D", task="完全不同的第二件事", resume=True))
+    rc = cli.cmd_run_agent(_args(tmp_path, role="M", task="完全不同的第二件事", resume=True))
     captured = capsys.readouterr()
     assert rc == 2, (captured.out, captured.err)
     assert "checkpoint_mismatch" in (captured.out + captured.err), (captured.out, captured.err)
@@ -334,16 +346,21 @@ def test_a_different_task_is_refused_by_the_fingerprint(tmp_path: pathlib.Path,
 
 
 def test_the_unattended_policy_refuses_and_keeps_going(tmp_path: pathlib.Path, monkeypatch):
-    """负控（无人值守档）：`ASK_POLICY="never"` ⇒ `ask_refused`、问题不落盘、循环继续。"""
-    monkeypatch.setattr(U, "ASK_POLICY", "never")
-    st, registry, cond, root = _ws(tmp_path)
-    run, gw = _run(st, registry, cond, root, [ask("这条要不要问用户？"), FINISH])
-    step = run.steps[0].result
-    assert step.get("problem") == U.ASK_REFUSED and step.get("state") == "refused", step
-    assert "本该问用户但没人可问" in str(step.get("note") or ""), step
-    assert U.pending_questions(root, sid="t") == [], "确定性拒绝却把问题落进了待答清单"
-    assert run.stop_reason == "final", "无人值守档是确定性拒绝，不是停机"
-    assert len(gw.prompts) == 2, "拒绝之后循环必须继续（要一次普通工具结果）"
+    """负控（无人值守档）：`ASK_POLICY="unattended"` ⇒ `ask_refused`、问题不落盘、循环继续。
+
+    历史别名 `"never"` 那一档也要照样拒（老配置/老调用方写得出来），
+    所以这条判据把两个取值都跑一遍 —— 别名只许等价，不许变成"问一下试试"。
+    """
+    for value in ("unattended", "never"):
+        monkeypatch.setattr(U, "ASK_POLICY", value)
+        st, registry, cond, root = _ws(tmp_path / value)
+        run, gw = _run(st, registry, cond, root, [ask("这条要不要问用户？"), FINISH])
+        step = run.steps[0].result
+        assert step.get("problem") == U.ASK_REFUSED and step.get("state") == "refused", (value, step)
+        assert "本该问用户但没人可问" in str(step.get("note") or ""), step
+        assert U.pending_questions(root, sid="t") == [], "确定性拒绝却把问题落进了待答清单"
+        assert run.stop_reason == "final", "无人值守档是确定性拒绝，不是停机"
+        assert len(gw.prompts) == 2, "拒绝之后循环必须继续（要一次普通工具结果）"
 
 
 def test_no_ask_through_the_cli_keeps_running(tmp_path: pathlib.Path, monkeypatch, capsys):
@@ -355,8 +372,8 @@ def test_no_ask_through_the_cli_keeps_running(tmp_path: pathlib.Path, monkeypatc
     monkeypatch.setattr(cli, "_agent_seam_factory", fake_seam_factory)
     reset_cache()
     SCRIPTS.clear()
-    SCRIPTS.update({"D": [ask("这条要不要问用户？"), FINISH]})
-    rc = cli.cmd_run_agent(_args(tmp_path, role="D", task="无人值守地做", no_ask=True))
+    SCRIPTS.update({"M": [ask("这条要不要问用户？"), FINISH]})
+    rc = cli.cmd_run_agent(_args(tmp_path, role="M", task="无人值守地做", no_ask=True))
     out = capsys.readouterr().out
     assert rc == 0, out
     root = tmp_path / "ws"
@@ -366,28 +383,41 @@ def test_no_ask_through_the_cli_keeps_running(tmp_path: pathlib.Path, monkeypatc
     assert U.ASK_POLICY == "ask", "CLI 的 --no-ask 不该改模块全局（会渗到同一进程的第二趟）"
 
 
-def test_a_delegated_child_may_not_ask_the_user_but_a_top_level_role_may(
-        tmp_path: pathlib.Path):
-    """负控（子角色）：有父任务号且 depth>1 ⇒ `delegated_asker`，问题不落盘，循环继续。
+def test_only_the_conductor_may_ask_the_user(tmp_path: pathlib.Path):
+    """正控 + 两条负控（运行时协作纪律）：只有主控能当面问人。
 
-    同一条判据的另一面也必须成立（否则"用户端"整条路不可达）：同一个角色在「顶层」
-    （`my_task_id=""`，本框架给非 M 角色的缺省深度就是 2）时提问必须通到待答清单。
-    这两条一起才说明判据是"我归属另一个 agent"，而不是"深度大于 1"。
+    依据是我们自己的设计，不是外来的：`DESIGN-CONDUCTOR.md` §1.1 逐字"它是用户唯一
+    面对的东西"（用户只对主控说话），而 `capabilities.NON_SUMMONABLE = {"M"}` 让它
+    在结构上成立（主控不可被召唤 ⇒ 永远是顶层入口）。
+
+    三条一起判，才说明判据是"角色是不是主控"：
+      ① 被召唤的一环（有父任务号）问 ⇒ `not_conductor`，问题不落盘，循环继续；
+      ② 顶层但不是主控（人工直接 `run-agent D` 那条路）问 ⇒ 同样被拒 ——
+         这一条是本轮改的那个口子：旧判据只看"有没有父任务号"，于是顶层 D 被当成
+         "用户通道"，与 §1.1 冲突（那条路是运维/测试路径）；
+      ③ 主控问 ⇒ 通到待答清单，并且这一趟停下来等人（否则"人机通道"不可达）。
     """
     st, registry, cond, root = _ws(tmp_path)
+    # ① 被召唤的一环
     child, gw_child = _run(st, registry, cond, root, [ask("子角色想直接问用户？"), FINISH],
-                           direct=True, my_task_id="t-0001")
+                           role="D", direct=True, my_task_id="t-0001")
     step = child.steps[0].result
-    assert step.get("problem") == "delegated_asker", step
-    assert "由主控统一问" in str(step.get("note") or ""), step
-    assert U.pending_questions(root, sid="t") == [], "子角色的提问不许落盘"
-    assert child.stop_reason == "final", "子角色那一档不许停循环"
+    assert step.get("problem") == "not_conductor", step
+    assert "交回召唤者" in str(step.get("note") or ""), step
+    assert U.pending_questions(root, sid="t") == [], "非主控的提问不许落盘"
+    assert child.stop_reason == "final", "这一档不许停循环"
     assert len(gw_child.prompts) == 2, "拒绝之后循环必须继续"
-    # 反面：同样的 depth=2，但没有父任务号（顶层运行）⇒ 走真人通道
-    top, _gw_top = _run(st, registry, cond, root, [ask("顶层问一句？"), FINISH],
-                        direct=True, my_task_id="")
-    assert top.stop_reason == "waiting_for_user", top.to_dict()
-    assert [q.qid for q in U.pending_questions(root, sid="t")] == [top.waiting_for]
+    # ② 顶层但不是主控（旧判据在这里放过）
+    top_d, _gw_d = _run(st, registry, cond, root, [ask("顶层 D 问一句？"), FINISH],
+                        role="D", direct=True, my_task_id="")
+    assert top_d.steps[0].result.get("problem") == "not_conductor", top_d.steps[0].result
+    assert U.pending_questions(root, sid="t") == [], "非主控的提问不许落盘"
+    assert top_d.stop_reason == "final", top_d.to_dict()
+    # ③ 主控
+    boss, _gw_m = _run(st, registry, cond, root, [ask("口径用哪个？"), FINISH],
+                       role="M", direct=True, my_task_id="")
+    assert boss.stop_reason == "waiting_for_user", boss.to_dict()
+    assert [q.qid for q in U.pending_questions(root, sid="t")] == [boss.waiting_for]
 
 
 def test_an_answer_from_another_session_does_not_count(tmp_path: pathlib.Path):
@@ -398,7 +428,7 @@ def test_an_answer_from_another_session_does_not_count(tmp_path: pathlib.Path):
     """
     root = tmp_path / "ws"
     root.mkdir()
-    q = U.ask_user(root, role="D", question="口径用哪个？", timeout_sec=0.0, sid="real1")
+    q = U.ask_user(root, role="M", question="口径用哪个？", timeout_sec=0.0, sid="real1")
     # 同号回答写在另一段会话里：它在两段会话里都不算数（real2 里没人问过这个号）
     assert U.answer_question(root, qid=q.qid, answer="别的会话的答案", sid="real2") == ""
     assert U.read_replies(root, sid="real1") == [], "读到了别的会话的回答"
@@ -436,7 +466,7 @@ def test_a_refused_resume_does_not_swallow_the_transcript(tmp_path: pathlib.Path
     # C：用户答了
     assert cli.cmd_answer(_args(tmp_path, qid=qid, text=None, select=None,
                                 custom="全留")) == 0
-    rebuilt, step0 = AL.resume_transcript(root, "D", "t", task="把口径定下来")
+    rebuilt, step0 = AL.resume_transcript(root, "M", "t", task="把口径定下来")
     assert step0 == 1, f"重建被那条没有步的 run_start 吞掉了：{step0}（{rebuilt[-80:]!r}）"
     # D：再续 ⇒ 必须接着第 2 步跑到 final
     final_run, gw_d = _run(st, registry, cond, root, [FINISH], resume=True)
@@ -454,14 +484,14 @@ def test_the_checkpoint_round_trips_and_names_the_waiting_question(tmp_path: pat
     """
     st, registry, cond, root = _ws(tmp_path)
     first, _gw = _run(st, registry, cond, root, [ask("口径用哪个？"), FINISH])
-    cp = AL.load_run_checkpoint(root, "D", "t")
-    assert cp is not None, f"检查点没写成：{AL.run_checkpoint_path(root, 'D', 't')}"
+    cp = AL.load_run_checkpoint(root, "M", "t")
+    assert cp is not None, f"检查点没写成：{AL.run_checkpoint_path(root, 'M', 't')}"
     assert cp["step"] == 1 and cp["stop_reason"] == "waiting_for_user", cp
     assert cp["waiting_for"] == first.waiting_for, cp
-    assert cp["fingerprint"] == AL._task_fingerprint("D", "把口径定下来"), cp
-    assert AL.run_checkpoint_path(root, "D", "t").name == "agent-D-t.json"
+    assert cp["fingerprint"] == AL._task_fingerprint("M", "把口径定下来"), cp
+    assert AL.run_checkpoint_path(root, "M", "t").name == "agent-M-t.json"
     # 负控（读不到就说读不到）：别的 sid 读不到这一趟的检查点
-    assert AL.load_run_checkpoint(root, "D", "另一个会话") is None
+    assert AL.load_run_checkpoint(root, "M", "另一个会话") is None
     assert AL.load_run_checkpoint(root, "E", "t") is None
 
 
@@ -521,14 +551,14 @@ def test_the_whole_human_loop_runs_through_the_cli_argv(tmp_path: pathlib.Path,
     ws = tmp_path / "ws"
     made: list[ScriptedGateway] = []
     monkeypatch.setattr(cli, "_agent_seam_factory",
-                        _cli_factory(made, {"D": [ask("口径用哪个？", options=["n<=5", "全体"]),
+                        _cli_factory(made, {"M": [ask("口径用哪个？", options=["n<=5", "全体"]),
                                                    FINISH]},
-                                     {"D": [FINISH]}))
+                                     {"M": [FINISH]}))
     reset_cache()
     head = ["--plain", "--root", str(ws)]
 
     # ① 提问 ⇒ 停：退出码 3，且只调过一次模型
-    rc1 = cli.main(head + ["run-agent", "D", "--task", task, "--sid", "u1",
+    rc1 = cli.main(head + ["run-agent", "M", "--task", task, "--sid", "u1",
                            "--user-wait-sec", "0", "--max-steps", "4"])
     out1 = capsys.readouterr().out
     assert rc1 == 3, out1
@@ -552,14 +582,14 @@ def test_the_whole_human_loop_runs_through_the_cli_argv(tmp_path: pathlib.Path,
     rc3 = cli.main(head + ["answer", qid, "--sid", "u1", "--custom", "三处都保留"])
     cap3 = capsys.readouterr()
     assert rc3 == 0, (cap3.out, cap3.err)
-    replies = U.read_replies(ws, role="D", sid="u1")
+    replies = U.read_replies(ws, role="M", sid="u1")
     assert [r["qid"] for r in replies] == [qid], replies
     assert replies[0]["answer"] == "三处都保留" and replies[0]["selected"] == (), replies
     assert _llm_calls(ws, "u1") == stopped_calls, "回答这一下不该产生模型调用"
     assert U.pending_questions(ws, sid="u1") == []
 
     # ④ --resume：接着那一步跑到 final，退出码 0，人那句话进上下文
-    rc4 = cli.main(head + ["run-agent", "D", "--task", task, "--sid", "u1",
+    rc4 = cli.main(head + ["run-agent", "M", "--task", task, "--sid", "u1",
                            "--user-wait-sec", "0", "--max-steps", "4", "--resume"])
     out4 = capsys.readouterr().out
     assert rc4 == 0, out4
@@ -588,10 +618,10 @@ def test_the_commands_printed_in_the_hint_actually_run(tmp_path: pathlib.Path,
     ws = tmp_path / "ws"
     made: list[ScriptedGateway] = []
     monkeypatch.setattr(cli, "_agent_seam_factory",
-                        _cli_factory(made, {"D": [ask("口径用哪个？", options=["甲", "乙"]),
+                        _cli_factory(made, {"M": [ask("口径用哪个？", options=["甲", "乙"]),
                                                    FINISH]}))
     reset_cache()
-    rc = cli.main(["--plain", "--root", str(ws), "run-agent", "D", "--task", task,
+    rc = cli.main(["--plain", "--root", str(ws), "run-agent", "M", "--task", task,
                    "--sid", "u1", "--user-wait-sec", "0", "--max-steps", "4"])
     hint = capsys.readouterr().out
     assert rc == 3 and "停在等待用户" in hint, hint
@@ -629,7 +659,7 @@ def test_the_commands_printed_in_the_hint_actually_run(tmp_path: pathlib.Path,
         assert code == 0, f"提示里的命令跑不通：{argv} ⇒ 退出码 {code}；{cap.out}{cap.err}"
     # 这两条命令真的把事办了（不是"退出码 0 但什么也没做"）
     assert U.pending_questions(ws, sid="u1") == [], "提示里的 answer 没把那条问题答掉"
-    assert [r["answer"] for r in U.read_replies(ws, role="D", sid="u1")] == ["三处都保留"]
+    assert [r["answer"] for r in U.read_replies(ws, role="M", sid="u1")] == ["三处都保留"]
 
     # 负控（反真空）：旧写法必须被拒 —— 否则上面那条"命令真能跑"根本不构成判据
     with pytest.raises(SystemExit) as caught:

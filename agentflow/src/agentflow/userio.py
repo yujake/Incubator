@@ -21,17 +21,31 @@
 模型自己把关键取舍定了，而事后从读数上分不清"它问过"与"它没问过"。
 
 用户 2026-10-03 的裁定是「就停着」—— 问了就停在那里等回答，不许超时后继续。
-这一版按 DSH（`docs/USER-END-DSH-STYLE.md` §3.1）的提问语义落地：
+下面是落地形态；其中字段形状参考 DSH 的 `dsh-tool-ask-user`（MIT），
+规则是我们自己的（出处逐条写在句子里）：
 
-- 「默认一直等」（`timeout_sec=None`）：等到有回答、或者被当前轮次的取消信号中止。
+- 「默认一直等」（`timeout_sec=None`）：等到有回答、或者被这一趟运行的取消信号中止。
   `DEFAULT_TIMEOUT_SEC` 这个常量「保留但不再是默认值」—— 留着是因为历史会话事件里
   写着 `timeout_sec` 这个字段（读老记录还要用到它），也因为它是一处显式的历史口径：
   改成"无限等"不是把 30 秒调大，而是取消"超时后继续"这件事本身。
 - 「等待期间不产生 token 开销」：等的是磁盘上的一条回答事件，不调模型。
 - 「`wait=False` 或 `timeout_sec=0` = 问了就停」：登记问题、立刻返回 `pending`，
   由调用方（`agent_loop`）停下来等人答。
-- 「没有 answerer 接受时必须失败，而不是降级」：无人值守档（`ASK_POLICY="never"`）
-  是 DSH 的 `never` 策略 —— 「确定性地拒绝」，不落问题、不提示人，返回 `refused`。
+- 「无人值守档（`ASK_POLICY="unattended"`）确定性拒绝」：不落问题、不提示人、
+  返回 `refused`。依据是运行时的三态纪律（`DESIGN-INTERACTIONS.md` §3.4
+  「所有空必须三态」：没人在场是"没查成"，不是"通过"）与用户 2026-10-03 的运行时裁定
+  （「就停着」；没问过就不许当成默许）—— 它不是"问一下试试"。
+
+## 谁可以问用户（我们的结构决定的）
+
+`DESIGN-CONDUCTOR.md` §1.1 逐字：「它是用户唯一面对的东西」—— 用户只对主控说话，
+主控召唤 A–H、再把结果汇总成人看到的东西。`capabilities.NON_SUMMONABLE = {"M"}`
+让这条结构成立（主控不可被任何人召唤 ⇒ 它永远是顶层入口）。于是：
+
+只有主控（`schema.CONDUCTOR_ROLE` = `"M"`）可以问用户。 A–H 一律不当面问人 ——
+把未决问题写进自己的结果，交回召唤者，由主控汇总。人工直接驱动单个角色
+（`agentflow run-agent D`）是「运维/测试」路径，不是用户通道：那条路上 `role != M`，
+问用户同样被拒，未决问题出现在结果里，由操作者读。
 
 ## `NO_ANSWER` 的含义变了（逐字说清）
 
@@ -41,7 +55,7 @@
 停止本身由调用方落地：`agent_loop` 见到 `state="pending"` 就把整趟运行停成
 `stop_reason="waiting_for_user"`（不再发任何模型请求），人答完再 `--resume` 续跑。
 
-## 形状（对齐 DSH，同时对旧的会话文件保持可读）
+## 形状（形态参考 DSH 的 `dsh-tool-ask-user`，MIT；同时对旧的会话文件保持可读）
 
 - 提问：`{"id"→qid, "question"→text, "header", "options":[{"label","description"}],
   "multiSelect"→multi_select}`；选项「既可以是新形状的字典，也可以是旧的裸字符串」
@@ -64,6 +78,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from . import schema as S
 from . import sessions as SS
 
 #: 事件类型（落进会话记录，append-only）。
@@ -77,11 +92,18 @@ ANSWER_KIND = "user_answer"
 #: 里那一节。名字没改是有意的：历史会话记录、`closing` / `reviewaccept` 两个判据层
 #: 与提示词里都写着这个字面量，改名字会把"同一件事"变成两处口径。
 NO_ANSWER = "user_no_answer"
-#: 无人值守档（`ASK_POLICY="never"`）的拒绝码：DSH 的 `never` 是「确定性拒绝」，
+#: 无人值守档（`ASK_POLICY="unattended"`）的拒绝码：它是「确定性拒绝」，
 #: 不是"等不到" —— 两者必须分得开，否则 CI 里的"没人可问"会被读成"问了没人答"。
 ASK_REFUSED = "ask_refused"
-#: 等待被当前轮次的取消信号中止。问题仍留在待答清单里（DSH：中止 = 撤回问题，
-#: 而我们的记录是 append-only 的审计面，撤回只体现在这一档码上）。
+#: 非主控角色当面问用户的拒绝码（「运行时」协作纪律：人机通道归主控）。
+#: 依据是 `DESIGN-CONDUCTOR.md` §1.1「它是用户唯一面对的东西」与
+#: `capabilities.NON_SUMMONABLE = {"M"}`（主控永远是顶层入口）—— 不是开发期纪律。
+#: 与 `ASK_REFUSED` 刻意分开：一个是"没人可问"，一个是"不该由你问"，
+#: 处置方向不同：前者按最保守的做法继续，后者交回召唤者。
+#: 落点在循环那一层（`agent_loop._do_ask_user`），见 `ask_user` 的 `role` 一档。
+ASK_NOT_CONDUCTOR = "not_conductor"
+#: 等待被这一趟运行的取消信号中止。问题仍留在待答清单里：我们的会话记录是
+#: append-only 的审计面，撤回只体现在这一档码上，不删已经落盘的问题。
 ASK_CANCELLED = "ask_cancelled"
 
 #: 历史默认等待上限（秒）。「不再是默认值」（见模块 docstring）：
@@ -91,15 +113,19 @@ DEFAULT_TIMEOUT_SEC = 30.0
 #: 轮询间隔（秒）。等待就是轮询磁盘上的回答事件，不产生任何 token 开销。
 DEFAULT_POLL_SEC = 0.25
 
-#: 无人值守档：`"ask"`（默认，问人）或 `"never"`（确定性地拒绝提问，不提示人）。
+#: 无人值守档：`"ask"`（默认，问人）或 `"unattended"`（确定性地拒绝提问，不提示人）。
 #:
 #: 这是模块级缺省：`ask_user(policy=...)` 没给时读它，于是"整进程无人值守"
 #: 只需要改这一处（`agentflow run-agent --no-ask` 走的是显式传参那条路，
 #: 不改全局 —— 一个进程里跑第二次调用时不该继承上一次的档位）。
 ASK_POLICY = "ask"
-#: 认得的策略取值。认不出来的一律按 `never` 处置（fail-closed）：把拼错的策略
+#: 认得的策略取值。认不出来的一律按无人值守处置（fail-closed）：把拼错的策略
 #: 当成"ask"会让无人值守的运行静默地开始等人。
-ASK_POLICIES = ("ask", "never")
+ASK_POLICIES = ("ask", "unattended")
+#: 历史取值（等价于 `"unattended"`）：只为兼容老配置与老调用方保留，不再新写。
+ASK_POLICY_LEGACY = ("never",)
+#: 判定"这一档要不要拒绝"用的小表（新值 + 历史别名）。
+ASK_POLICIES_REFUSE = ASK_POLICIES[1:] + ASK_POLICY_LEGACY
 
 #: `AskOutcome.state` 的取值（四档，不是一个能折平的布尔）。
 #:
@@ -115,7 +141,8 @@ STATE_REFUSED = "refused"
 class Option:
     """一个选项：`label` 是回答里原样带回来的那一位，`description` 是给人读的补充。
 
-    为什么不是裸字符串（DSH `dsh-tool-ask-user` 的形状）：选项常常需要一句解释
+    为什么不是裸字符串（形态参考 DSH 的 `dsh-tool-ask-user`，MIT；而"选项要能带一句
+    解释"这条要求是我们自己的接口契约）：选项常常需要一句解释
     （"选这个的代价是什么"），而裸字符串没有地方放它；更硬的一条是"推荐"这件事 ——
     推荐的做法是把选项放首位并在 label 末尾写 `(Recommended)`，那要求 label 是一个
     独立的、可比较的字符串，而不是一整句人话。
@@ -323,10 +350,11 @@ def list_questions(session_root: Path | str, *, sid: str | None = None) -> list[
 def session_ids_with_questions(session_root: Path | str) -> list[str]:
     """哪些会话里出现过提问（给界面做跨会话扫描）。
 
-    为什么要它：DSH 的待答面板是「全局」的 —— "run 请求会阻塞模型、且可能点名一个
-    当前没人在看的会话里的定义；入口若只存在于那个会话的对话流里，就会在它正阻塞
-    模型的时候恰好不可达"（`docs/USER-END-DSH-STYLE.md` §3.3）。于是人得先知道
-    "该去哪些会话里找"，而这件事只有读遍 `sessions/` 才知道。
+    为什么要它：待答的东西必须「全局可达」。这条界面纪律我们抄自 DSH 的
+    `dsh-client-ui-user-questions`（`docs/USER-END-DSH-STYLE.md` §3），而它在我们
+    自己的结构里同样成立：`DESIGN-CONDUCTOR.md` §1.1「用户只对主控说话」——
+    提问正阻塞着某一趟运行，而那一趟的会话可能不在人当前看的地方。
+    于是人得先知道"该去哪些会话里找"，而这件事只有读遍 `sessions/` 才知道。
     读不出坏行的会话照样返回（提问可能就在那些好行里）—— 由调用方按需报出坏行数。
     """
     root = Path(session_root)
@@ -424,11 +452,17 @@ def ask_user(session_root: Path | str, *, role: str, question: str,
     - `timeout_sec>0`：等到那个上限；到了上限仍然是 `pending`（「不是失败」：
       含义变了，见模块 docstring），调用方照样停。
     - `cancel_check`：每一轮轮询调一次，返回真就停止等待并落 `state="cancelled"`。
-      这是 DSH 的"只能通过当前轮次的信号取消"—— 取消的判据来自「发起的这一轮」，
-      而不是全局开关。
-    - `policy`：不给时读模块级 `ASK_POLICY`。它是 `"never"` 时「不落问题」、
-      直接返回 `state="refused"`、`problem="ask_refused"`（确定性的拒绝：CI 与
-      无人值守的姿态，学 DSH 的 fail-closed）。认不出的取值也按 `never` 处置。
+      取消的判据来自「发起的这一趟运行」自己的取消令牌，不是全局开关。
+    - `policy`：不给时读模块级 `ASK_POLICY`。它是 `"unattended"`（历史别名 `"never"`）
+      时「不落问题」、直接返回 `state="refused"`、`problem="ask_refused"`：确定性的拒绝。
+      认不出的取值也按这一档处置（fail-closed）。
+    - `role`：这一档不在本函数里拦。`ask_user` 是通道的底层原语，`role` 是
+      「回答归谁」的归属字段（`read_replies(role=...)` 按它做隔离，判据见
+      `tests/test_interaction.py::test_answers_are_scoped_to_the_role_that_asked`）。
+      「只有主控当面问人」这条纪律的落点在「循环」那一层：`agent_loop` 见到
+      `role != CONDUCTOR_ROLE` 就按 `ASK_NOT_CONDUCTOR` 挡回并让角色把未决问题
+      写进结果（见 `agent_loop._do_ask_user`）。放那里的理由是：会"停住等人"的
+      只有循环；底层原语保持按角色可用，是项目既有的能力，不因这条纪律被削掉。
     - `qid` 可以显式给：测试与"先答后问"的自动化用得上（避免睡眠与竞态）。
 
     ## 三态与返回值
@@ -442,17 +476,19 @@ def ask_user(session_root: Path | str, *, role: str, question: str,
     """
     root = Path(session_root)
     eff_policy = ASK_POLICY if policy is None else str(policy)
-    if eff_policy not in ASK_POLICIES or eff_policy == "never":
-        # fail-closed：无人值守档一律确定性拒绝，而且「不提示人」（不落问题）。
-        # 拼错的策略也走这一档：把 `"nevr"` 当成"ask"会让无人值守的运行开始等人。
-        why = ("无人值守档（ASK_POLICY=never）：问用户被确定性拒绝 —— "
-               "这是 fail-closed，不是'等不到'；按最保守的做法继续，并把"
-               "「这件事本该问用户但没人可问」写进结论。"
-               if eff_policy == "never" else
-               f"认不出的提问策略 {eff_policy!r}（只认 {ASK_POLICIES}）⇒ 按 never 处置："
-               "确定性拒绝，而不是降级成'问一下试试'。")
-        return AskOutcome(qid=str(qid or ""), state=STATE_REFUSED,
-                          problem=ASK_REFUSED, note=why)
+    if eff_policy not in ASK_POLICIES and eff_policy not in ASK_POLICY_LEGACY:
+        # fail-closed：认不出的策略按无人值守处置。把 `"nevr"` 当成"ask"
+        # 会让无人值守的运行开始等人 —— 那正是这一档要防的。
+        return AskOutcome(qid="", state=STATE_REFUSED, problem=ASK_REFUSED,
+                          note=(f"认不出的提问策略 {eff_policy!r}"
+                                f"（只认 {ASK_POLICIES + ASK_POLICY_LEGACY}）"
+                                "⇒ 按无人值守处置：确定性拒绝，而不是降级成'问一下试试'。"))
+    if eff_policy in ASK_POLICIES_REFUSE:
+        # 无人值守档：确定性拒绝，而且「不提示人」（不落问题）。
+        return AskOutcome(qid="", state=STATE_REFUSED, problem=ASK_REFUSED,
+                          note=("无人值守档（ASK_POLICY=unattended）：问用户被确定性拒绝 —— "
+                                "这是三态里的「没人在场」，不是'等不到'；按最保守的做法继续，"
+                                "并把「这件事本该问用户但没人可问」写进结论。"))
 
     opts = coerce_options(options)
     events = _events(root, sid)
@@ -583,15 +619,17 @@ def selftest() -> int:
         p.check([q.option_labels for q in list_questions(root, sid="t")
                  if q.qid == "q0900"][0] == ("老甲",), "老事件的裸字符串选项没读出来")
 
-        # 无人值守档：确定性拒绝，问题不落盘
+        # 无人值守档：确定性拒绝，问题不落盘（新值 + 历史别名都要拒）
         before = len(list_questions(root, sid="t"))
-        refused = ask_user(root, role="D", question="这条要不要问？", policy="never", sid="t")
-        p.check(refused.state == STATE_REFUSED and refused.problem == ASK_REFUSED,
-                f"无人值守档没有确定性拒绝：{refused.to_dict()}")
-        p.check(len(list_questions(root, sid="t")) == before, "拒绝的那一档却把问题落盘了")
-        p.check(not refused.answered and refused.qid == "", "拒绝档不该有 qid")
+        for value in ("unattended", "never"):
+            refused = ask_user(root, role="M", question="这条要不要问？", policy=value, sid="t")
+            p.check(refused.state == STATE_REFUSED and refused.problem == ASK_REFUSED,
+                    f"无人值守档（{value}）没有确定性拒绝：{refused.to_dict()}")
+            p.check(len(list_questions(root, sid="t")) == before,
+                    f"拒绝的那一档（{value}）却把问题落盘了")
+            p.check(not refused.answered and refused.qid == "", "拒绝档不该有 qid")
         # 认不出的策略：同样 fail-closed（不许降级成"问一下试试"）
-        weird = ask_user(root, role="D", question="x", policy="nevr", sid="t")
+        weird = ask_user(root, role="M", question="x", policy="nevr", sid="t")
         p.check(weird.state == STATE_REFUSED, f"认不出的策略没有被拒：{weird.to_dict()}")
 
         # 取消：当前轮次的信号为真 ⇒ cancelled（不是 pending，也不是 answered）

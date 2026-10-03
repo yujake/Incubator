@@ -109,8 +109,8 @@ def test_the_question_is_durable_and_the_answer_comes_back(tmp_path: pathlib.Pat
                                      ensure_ascii=False),
                           json.dumps({"final": "按用户口径继续", "evidence": []},
                                      ensure_ascii=False)])
-    run = run_role("D", "把口径定下来", store=st, registry=registry, conductor=cond,
-                   seam=LlmSeam(role="D", session_root=root, gateway=gw, price=(0.0, 0.0),
+    run = run_role("M", "把口径定下来", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", max_steps=3,
                    from_env=False)
     user.join(timeout=2.0)
@@ -145,8 +145,8 @@ def test_no_answer_is_not_permission(tmp_path: pathlib.Path):
                                      ensure_ascii=False),
                           json.dumps({"final": "按最保守的做法继续", "evidence": []},
                                      ensure_ascii=False)])
-    run = run_role("D", "问一下再决定", store=st, registry=registry, conductor=cond,
-                   seam=LlmSeam(role="D", session_root=root, gateway=gw, price=(0.0, 0.0),
+    run = run_role("M", "问一下再决定", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", max_steps=3,
                    from_env=False)
     step = run.steps[0]
@@ -164,7 +164,7 @@ def test_a_late_reply_still_reaches_the_next_run(tmp_path: pathlib.Path):
     """正控（迟到的回答不丢）：超时之后用户才答，下一次运行照样看得到。"""
     st, registry, cond, root = _ws(tmp_path)
     # 第一次运行：问、超时
-    run1, gw1, _ = _run(tmp_path, "D", [json.dumps({"ask_user": {"question": "继续吗？",
+    run1, gw1, _ = _run(tmp_path, "M", [json.dumps({"ask_user": {"question": "继续吗？",
                                                                  "timeout_sec": 0}},
                                                    ensure_ascii=False),
                                         json.dumps({"final": "先停", "evidence": []},
@@ -176,7 +176,7 @@ def test_a_late_reply_still_reaches_the_next_run(tmp_path: pathlib.Path):
     # 用户迟到了：现在才答
     assert U.answer_question(root, qid=qid, answer="继续，但只做一轮", late=True, sid="t") == ""
     # 第二次运行：这段回答必须在 prompt 里
-    run2, gw2, _ = _run(tmp_path, "D", [json.dumps({"final": "照办", "evidence": []},
+    run2, gw2, _ = _run(tmp_path, "M", [json.dumps({"final": "照办", "evidence": []},
                                                     ensure_ascii=False)],
                         registry_bundle=(st, registry, cond, root))
     assert "只做一轮" in gw2.systems[0], "迟到的回答没有进提示词"

@@ -15,21 +15,25 @@
 ## 为什么需要它（不是"CLI 不好用"）
 
 CLI 够用，但「有一趟正停在等你回答」这件事在终端里只有你恰好打开那个终端才看得见。
-`docs/USER-END-DSH-STYLE.md` §3.3 抄来的那条规则正是冲着它来的：
-待回答的东西必须是「全局可达」的，因为 run 请求会阻塞模型、且可能点名一个
-当前没人在看的会话里的定义。所以 `GET /` 的待答面板「从不按会话过滤」。
+我们在 `docs/USER-END-DSH-STYLE.md` §3 抄了 DSH 的界面纪律（状态不进组件 state、
+卡片渲染已落盘的切片、全局面板），而其中「全局可达」这一条在「我们自己的结构」里
+同样成立：`DESIGN-CONDUCTOR.md` §1.1「用户只对主控说话」⇒ 人需要一个不挑会话的
+入口，因为提问正阻塞着某一趟、而那一趟可能不在人当前看的地方。
+所以 `GET /` 的待答面板「从不按会话过滤」。
 
-## 三条纪律（都来自 DSH，逐条对应到实现）
+## 三条纪律（两条抄的是 DSH 的界面纪律，一条是本项目结构决定的）
 
-1. 「状态一律从盘上派生」（§3.3「状态不进组件 state」）：每次请求都重新读会话文件、
-   台账、报告，页面里不缓存、不做后台轮询线程。读一次快照抽成纯函数
+1. 「状态一律从盘上派生」（界面纪律，抄自 DSH：状态不进组件 state）：每次请求都重新
+   读会话文件、台账、报告，页面里不缓存、不做后台轮询线程。读一次快照抽成纯函数
    :func:`snapshot`，同一份盘上数据渲染两次得到逐字节相同的 HTML。
-2. 「每个事实行给两个独立读数」（§3.3「行里给两个独立事实」）：例如运行态行同时给
-   「盘上最后一条事件是什么」与「这一页读到了多少条事件」；读不到的东西写
-   `unknown` / `没查成`，绝不折成 0 或空。
-3. 「回答的文本两种口径都认」（与并行的 `userio` 改造兼容）：`custom` 非空取它，
-   否则 `"、".join(selected)`，否则退回旧的 `answer` 字段。读 `userio` 的返回一律用
-   `getattr(obj, "x", None)` / `dict.get`，不假设新字段一定存在。
+2. 「每个事实行给两个独立读数」（界面纪律，抄自 DSH：行里给两个独立事实）：例如运行态
+   行同时给「盘上最后一条事件是什么」与「这一页读到了多少条事件」；读不到的东西写
+   `unknown` / `没查成`（这是我们自己的三态纪律，`DESIGN-INTERACTIONS.md` §3.4），
+   绝不折成 0 或空。
+3. 「回答的文本两种口径都认」（不是抄来的：这是本项目自己的兼容要求 —— 并行的
+   `userio` 改造要与旧会话文件共存）：`custom` 非空取它，否则 `"、".join(selected)`，
+   否则退回旧的 `answer` 字段。读 `userio` 的返回一律用 `getattr(obj, "x", None)` /
+   `dict.get`，不假设新字段一定存在。
 
 ## 安全与失败姿态
 
@@ -43,7 +47,7 @@ CLI 够用，但「有一趟正停在等你回答」这件事在终端里只有�
 
 ## 设计依据与判据
 
-设计依据：`docs/USER-END-DSH-STYLE.md`（§1 抄了什么、§2 令牌体系、§3.3 界面规则、
+设计依据：`docs/USER-END-DSH-STYLE.md`（§1 抄了什么、§2 令牌体系、§3 界面纪律、
 §4 三处刻意差异）。判据：`tests/test_webui.py`（正控与负控各若干条，逐条见那里的
 docstring）。`APP_CSS` 只用 `--dsw-alias-*` / `--ds-*` 令牌这条，由
 `tests/test_webui.py::test_app_css_uses_only_tokens` 用正则机械地查。
@@ -183,7 +187,9 @@ def _usd(value: Any, default: str = "unknown") -> str:
 
 
 def _now_iso() -> str:
-    """当前本地时间（ISO，秒）。只用于页脚那一行，不参与投影判据。"""
+    """当前本地时间（ISO，秒）。渲染在页脚「最后更新」那一行 —— 它是投影的一部分，
+    所以 `tests/test_webui.py::test_rendering_is_a_projection_not_a_cache` 会把这只钟
+    钉成常量再比字节：否则两次请求跨一秒就会红（2026-10-03 的全量里真红过一次）。"""
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
@@ -234,7 +240,7 @@ def option_view(raw: Any) -> dict[str, Any]:
     """把一个选项读成 `{label, description, multi}`。
 
     `userio.Question.options` 今天是 `tuple[str, ...]`，但 DSH 的形状是
-    `{label, description}`（`docs/USER-END-DSH-STYLE.md` §3.1）。所以这里两种都认：
+    `{label, description}`（`docs/USER-END-DSH-STYLE.md` §3）。所以这里两种都认：
     裸字符串 ⇒ `label` 就是它、`description` 空；dict/对象 ⇒ 取 `label` / `description`
     （也接受 `text` / `value` / `desc` / `hint` 这几个近义名，读不到就是空）。
     """
@@ -616,7 +622,7 @@ def _question_card(state: dict[str, Any], q: dict[str, Any]) -> str:
         '<div class="actions">'
         '<button class="btn btn-primary" type="submit">提交回答</button>'
         '<button class="btn btn-ghost" type="submit" name="skip" value="1">跳过此问题</button>'
-        '<span class="readings">跳过 = 提交空的 selected（DSH 口径），'
+        '<span class="readings">跳过 = 提交空的 selected（我们的回答口径），'
         "不是「没答」</span>"
         "</div>"
         "</form>"
@@ -782,7 +788,7 @@ def render_root(state: dict[str, Any]) -> str:
 
 
 def _event_card(index: int, event: Mapping[str, Any]) -> str:
-    """把一条会话事件渲染成一张可回放的卡片（学 DSH：渲染已落盘的切片）。"""
+    """把一条会话事件渲染成一张可回放的卡片（界面纪律，抄自 DSH：渲染已落盘的切片）。"""
     kind = _text(event.get("kind")) or "（没有 kind）"
     ts = _text(event.get("ts"))
     role = _text(event.get("role"))
@@ -1026,7 +1032,7 @@ def _answer_action(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, 
     if skip:
         selected = []
         custom = ""
-    # 口径：「选项归 `selected`、自写归 `custom`」（DSH 的回答形状）。
+    # 口径：「选项归 `selected`、自写归 `custom`」（我们的回答口径；字段名与 DSH 一致）。
     # 这里曾经把两者拼成一句 `text` 再以 `answer=text` 落盘，于是"点了哪个选项"
     # 被记成"自己写的一句话"（实测：表单提交 `selected=全保留` ⇒ 事件里
     # `selected: []` / `custom: "全保留"`）—— 那会把"人选了它"与"人写了它"

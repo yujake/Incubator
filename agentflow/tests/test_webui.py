@@ -310,12 +310,18 @@ def test_answering_twice_is_409_and_does_not_duplicate(tmp_path: pathlib.Path):
 
 
 # ====================================================================== 7 负控
-def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path):
+def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypatch):
     """负控（投影而非缓存）：两次渲染逐字节相同；追加一条事件后必须变。
 
     中间那次追加用 `SS.append` 直接写盘，绕过服务：于是「页面变了」只可能来自
     「每次请求重新读盘」，不可能是别的什么东西。
+
+    为什么要把页脚那只钟钉住：页脚有一行「最后更新 <ISO 秒>」（`webui._now_iso()`），
+    而这一条判据要的是「逐字节相同」。2026-10-03 的全量里它红过一次：两次请求跨了一秒
+    （机器有负载时容易发生）⇒ 页脚那一行不同 ⇒ 逐字节比较失败。钉住那只钟之后，
+    剩下的任何字节差异都只能来自盘上的数据 —— 判据反而更紧，而不是更松。
     """
+    monkeypatch.setattr(W, "_now_iso", lambda: "2026-10-03T00:00:00+08:00")
     root = tmp_path / "ws"
     root.mkdir()
     _seed_run(root, "t")

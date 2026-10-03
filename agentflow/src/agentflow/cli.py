@@ -1591,7 +1591,7 @@ def cmd_run_agent(args) -> int:
                       workspace_root=str(root), sid=args.sid, max_steps=args.max_steps,
                       usd_budget=args.budget_usd, from_env=False,
                       user_timeout_sec=getattr(args, "user_wait_sec", None),
-                      ask_policy=("never" if bool(getattr(args, "no_ask", False)) else None),
+                      ask_policy=("unattended" if bool(getattr(args, "no_ask", False)) else None),
                       resume=bool(getattr(args, "resume", False)))
     code = _run_agent_exit_code(run)
     if args.json:
@@ -1742,9 +1742,12 @@ def _latest_run_stop(root: Path, *, sids: list[str] | None = None) -> str:
 def cmd_inbox(args) -> int:
     """列出等着用户回答的问题（只读）。
 
-    不给 `--sid` 时扫这个工作区的「所有」会话：DSH 的待答面板是全局的
-    （"入口若只存在于那个会话的对话流里，就会在它正阻塞模型的时候恰好不可达"），
-    而真机每一趟都有自己的 sid ⇒ 只看缺省会话会把"它在等什么"读成"没有待答"。
+    不给 `--sid` 时扫这个工作区的「所有」会话。为什么面板是全局的：提问正阻塞着
+    某一趟运行，而那一趟的会话可能不在人当前看的地方 —— 只在某一个会话里给入口，
+    就会在它正阻塞模型的时候恰好不可达（这条界面纪律抄自 DSH 的 `dsh-client-ui-user-questions`，
+    而它在我们自己的结构里同样成立：`DESIGN-CONDUCTOR.md` §1.1「用户只对主控说话」，
+    所以人需要一个不挑会话的入口）。而真机每一趟都有自己的 sid ⇒ 只看缺省会话
+    会把"它在等什么"读成"没有待答"。
     退出码 0 = 查过了（有待答与没有待答都算查过了）。
     """
     from . import userio as U
@@ -2128,8 +2131,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "（退出码 3）。用户裁定「问了就停」，所以不再有 30 秒那一档默认值")
     sp.add_argument("--no-ask", action="store_true",
                     help="无人值守档：问用户被确定性拒绝（不落问题、不停循环，按最保守的做法"
-                         "继续并把这件事写进结论）。学 DSH 的 never 策略：fail-closed，"
-                         "而不是降级成「问一下试试」")
+                         "继续并把这件事写进结论）。三态口径：没人在场是「没查成」，"
+                         "不是「通过」，更不许降级成「问一下试试」")
     sp.add_argument("--stop-file", default=None,
                     help="停止开关：这个文件一出现，就在下一轮开跑之前停（人可随时按停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")

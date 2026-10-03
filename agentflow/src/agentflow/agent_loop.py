@@ -728,7 +728,8 @@ class AgentLoop:
     #: 定了"这件事在读数上分不出来。语义与理由见 `userio` 的模块 docstring。
     user_timeout_sec: float | None = None
     #: 无人值守档（`userio.ASK_POLICY` 的显式覆盖）：`None` = 按模块级常量走，
-    #: `"never"` = 问用户被确定性拒绝（不落问题、不停循环）。CLI 的 `--no-ask` 走它，
+    #: `"unattended"`（历史别名 `"never"`）= 问用户被确定性拒绝（不落问题、不停循环）。
+#: CLI 的 `--no-ask` 走它，
     #: 而不是去改模块全局 —— 一个进程里跑第二趟时不该继承上一趟的档位。
     ask_policy: str | None = None
     #: 本次运行自己的台账号与深度（由 `run` 设置）。唤起下一环时必须把它当 parent 传下去，
@@ -1302,19 +1303,21 @@ class AgentLoop:
         "这个取舍只有人能定"。继续往下跑等于替人定了（真机反复撞到的形态），
         而停下来不花钱（等的是磁盘上的一条回答事件，不产生 token 开销）。
         """
-        if self.depth > 1 and self.my_task_id:
-            # 子角色不许直接问用户（DSH 的 `DELEGATED_CALLER`）：它归属另一个 agent，
-            # 未决问题必须写进它自己的最终结果，由主控统一问。
+        if self.role != S.CONDUCTOR_ROLE:
+            # 人机通道归主控 —— 这是「运行时」协作纪律，出处是我们自己的设计：
+            # `DESIGN-CONDUCTOR.md` §1.1「它是用户唯一面对的东西」（用户只对主控说话，
+            # 主控召唤 A–H、再把结果汇总成人看到的东西），而
+            # `capabilities.NON_SUMMONABLE = {"M"}` 让它在结构上成立（主控不可被召唤
+            # ⇒ 永远是顶层入口）。
             #
-            # 判据是"有父任务号且深度大于 1"，不是单独的 `depth > 1`：本框架的
-            # `run_role` 把「顶层」的非 M 角色也标成 `depth=2`（它确实是被主控派的），
-            # 于是只看深度会把 `agentflow run-agent --role D` 这条唯一的真人通道
-            # 判成子角色 —— 每次提问都被拒，而"用户端"这件事从此不可达。
-            # 有父任务号才是"我是被召唤出来的一环"（`LlmBackend._running_row` 给的就是它）。
-            return {"asked": "", "ok": False, "problem": "delegated_asker",
-                    "note": ("你是被召唤的子角色，不许直接问用户：把未决问题写进你的最终结果，"
-                             "由主控统一问（DSH 的 DELEGATED_CALLER：归属另一个 agent 的"
-                             "存活子级被拒，必须在最终结果里包含尚未解决的问题或决定）。")}
+            # 判据是「角色是不是主控」，不是「深度多大 / 有没有父任务号」：
+            # 旧写法只看"被召唤"（`depth > 1 and my_task_id`），于是人工直接驱动
+            # 单个角色（`agentflow run-agent D`，那被标成 depth=2 但没有父任务号）
+            # 被当成顶层、可以问人 —— 而那与 §1.1 冲突：那条路是运维/测试路径，
+            # 不是用户通道。未决问题出现在结果里，由操作者读。
+            return {"asked": "", "ok": False, "problem": U.ASK_NOT_CONDUCTOR,
+                    "note": ("人机通道归主控：用户只对主控说话。你不是主控 ⇒ 不许当面问用户，"
+                             "把未决问题写进你的最终结果交回召唤者，由主控汇总给人。")}
         timeout = payload.get("timeout_sec")
         outcome = U.ask_user(
             self.session_root, role=self.role,
@@ -1324,8 +1327,8 @@ class AgentLoop:
             sid=self.sid, header=str(payload.get("header") or ""),
             multi_select=bool(payload.get("multi_select")),
             policy=self.ask_policy,
-            # DSH：等待"只能通过当前轮次的信号取消"。这里的信号就是这一趟运行自己的
-            # 取消令牌（`Conductor` 在被叫停时置位它）—— 不引入第二个全局开关。
+            # 取消的判据来自「发起的这一趟运行」自己的取消令牌（`cancellation.py`
+            # 的协作式取消：谁发起、谁置位），不引入第二个全局开关。
             cancel_check=(lambda: bool(getattr(self.token, "cancelled", False))
                           if self.token is not None else False))
         if outcome.state == U.STATE_ANSWERED:

@@ -24,7 +24,7 @@
 | [`ROLE-SPECS-DRAFT-N-O-Q.md`](ROLE-SPECS-DRAFT-N-O-Q.md) · [`TOOLBOX-DRAFT-roles.md`](TOOLBOX-DRAFT-roles.md) | 角色与工具栏的草案（讨论稿） | 规格维护者 | **不构成判据** |
 | [`PROPOSAL-side-effect-axes.md`](PROPOSAL-side-effect-axes.md) | 副作用第二根轴（`external`：`egress` / `exec`）的提案与落点清单 | 要动工具声明的人 | **不构成判据**；现状见 `../src/agentflow/tools/base.py` 与 `../DEVELOPMENT.md` |
 | [`NOAI-CHANGE-LIST-management.md`](NOAI-CHANGE-LIST-management.md) · [`NOAI-SUSPENSION-2026-09-25.md`](NOAI-SUSPENSION-2026-09-25.md) · [`NOAI-SUSPENSION-2026-09-28.md`](NOAI-SUSPENSION-2026-09-28.md) | 禁改区的变更清单与两次暂停记录（历史档案） | 审计者 | 历史档案；当前值以 `.noai-approvals.json` 与 `DEVELOPMENT.md` §0.3 为准 |
-| [`USER-END-DSH-STYLE.md`](USER-END-DSH-STYLE.md) | **用户端的设计基线**：跟 DeepSeek Harness（DSH）学什么、抄什么（两层令牌 + 明暗两套、提问/审批/界面的交互规则逐条带出处）、我们刻意的三处差异 | 改用户端（人机通道 / GUI）的人、评审者 | **设计依据，不构成判据**；判据在 `../tests/test_user_channel_*.py` 与 `../tests/test_webui.py` |
+| [`USER-END-DSH-STYLE.md`](USER-END-DSH-STYLE.md) | **用户端设计依据**：抄 DSH 的**皮**（两层令牌 + 明暗两套、界面纪律三条、接口形状，逐条带出处与 MIT 声明）；**运行时协作纪律用我们自己的**（`DESIGN-CONDUCTOR` §1.1 用户只对主控说话 等，逐条带本项目出处）；DSH 的提问/审批纪律降级为**参考读物（不构成我们的规则）**；并把**开发时纪律**与**运行时协作纪律**分节划开（用户 2026-10-03 的纠正） | 改用户端（人机通道 / GUI）的人、评审者 | **设计依据，不构成判据**；判据在 `../tests/test_user_channel_*.py` 与 `../tests/test_webui.py` |
 | [`USER-TEST.md`](USER-TEST.md) | **人实测清单**：零成本自检（32 条判据）→ 造工作区 → 起网页 → 跑一趟真机（它会停在等你回答，退出码 3）→ 你答（网页或终端）→ 接着跑（同一趟继续 或 `--resume`）→ 验两道门 → 无人值守档；逐节标明"我跑过"与"要你跑"，含两个实测踩到的路径陷阱（`PYTHONPATH` 必须绝对、`--project-dir` 按当前目录解析） | 要亲手试一遍用户端的人 | **不是判据**；命令与"该看到"都是实测产物 |
 | [`USER-TEST-TASK.txt`](USER-TEST-TASK.txt) | 上面那份清单里 §3/§5/§7 喂给 `run-agent --task` 的**任务原文**（11 条，逐字副本；第 8 条要求"关键取舍用 ask_user 问一次，然后停下等回答" ⇒ 真机那一趟**应当**会问） | 要复跑同一趟真机的人 | **不是判据**；它是输入数据，改它等于换任务 |
 

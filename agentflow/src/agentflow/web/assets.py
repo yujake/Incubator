@@ -25,7 +25,7 @@
 
 ## 设计依据
 
-`docs/USER-END-DSH-STYLE.md`（§2 令牌体系、§3.3 界面规则）。要点：
+`docs/USER-END-DSH-STYLE.md`（§2 令牌体系、§3 界面纪律）。要点：
 
 1. 组件只用第二层（`--dsw-alias-*`）。三态读数
    （`pass` / `fail` / `unknown`）正好落到 `state-success-*` /

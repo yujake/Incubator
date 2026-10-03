@@ -6063,3 +6063,146 @@ agentflow: error: unrecognized arguments: --root projects\user-test-1
    （`inbox --root …`、光秃秃的 `--sid`）—— 它们跑不通是判据非恒真的证据。
 4. **截断也是一种"提示坏了"**：`[:400]` 那种上限在短路径的测试里永远看不出问题，
    一放到真实路径上就切在半个命令上。判据用真实的 `tmp_path`（长路径）刚好把它逼出来。
+
+---
+
+## §78 用户 2026-10-03 的两条纠正：协作纪律用我们自己的，且「开发时纪律 ≠ 运行时协作纪律」
+
+用户读完 §72–§77 之后的原话：
+
+> "我们的协作纪律和 DSH 是有不同的，我叫你抄 DSH 的 GUI 又没叫你全抄它的协作纪律。"
+> "你写的四是开发时候的纪律。"
+
+两条都成立，而且第二条是我自己没分清的概念错误。这一节记：**我错在哪、我们自己的纪律是什么、
+按它改了什么、以及哪些地方我刻意没动**。
+
+### 一、我错在哪（两类，分开算）
+
+**第一类：把 DSH 当成了依据。** 实现本身有些是对的（子 agent 不问用户、无人值守确定性拒绝），
+但我在**注释与文档里**把它们挂在 DSH 名下：
+
+| 我写的 | 位置 | 问题 |
+|---|---|---|
+| "DSH 的 `DELEGATED_CALLER`" | `agent_loop.py` 注释、`userio.py` docstring | 依据变成了外来的 harness，而不是我们自己的设计 |
+| "学 DSH 的 `never` 策略：fail-closed" | `cli.py` 的 `--no-ask` 帮助文本、`userio.py` | 同上；而且这个取值名也是 DSH 的 |
+| "三条纪律（都来自 DSH）" | `webui.py` | **不实** —— 那三条里至少"两种回答口径都认"是本项目自己的兼容要求 |
+| 整节 DSH 的**审批纪律**（`allowed-once`/`denied`/`cancelled`/`unavailable`、没有 allow-always、审计成对、fail-closed） | `docs/USER-END-DSH-STYLE.md` §3.2 | 我们**根本没有审批通道**，等于把一套用不上的外来制度供进了我们的设计文档 |
+| "DSH 的待答面板是全局的" | `cli.py` / `userio.py` / `webui.py` | 全局面板这条界面纪律确实抄自 DSH，但**它在我们的结构里也必然成立**（下节第 6 条），依据要写我们自己的 |
+
+**第二类：把开发时纪律混进运行时协作纪律。** 我在复述里写的「四、人的位置」把 FC-27 禁改区、
+三态退出码、提示词优先、活先落 board、目标变更先问、登记 + 提交 —— 这些是**我们改这个仓库时**
+的纪律。它们管的是"我该怎么做这个交付物"，不是"智能体之间怎么说话"。用户当场指出，成立。
+
+### 二、复述：我们的纪律，分成两张表（出处全是本项目自己的文件）
+
+**（甲）运行时协作纪律 —— 智能体之间怎么协作**
+
+1. **用户只对主控说话**：`DESIGN-CONDUCTOR.md` §1.1 逐字"它是用户唯一面对的东西"。
+2. **主控的产出只有两类**：召唤与"给用户的汇总"；它不产出知识、不写关系、不改稿件；
+   它的"正确性" = 发出的召唤序列是否满足策略与预算（同节）。
+3. **主控在策略之内、且不可被召唤**：`capabilities.NON_SUMMONABLE = {"M"}`（实测）
+   ⇒ 主控永远是顶层入口；`ALLOWED_EDGES` 实测 9 条：`M→A–H` 全部、`A→B`、`B→C`、
+   `D→{E,C,B,F,A}`、`E→{B,D}`、`F→{C,E,D,B,A}`、`G→{F,A,E,D}`、`H→{G,A,E}`。
+4. **A–H 对召唤者负责**：被动或同伴召唤，受三条约束 —— 边必须被策略允许、深度有限（默认 3）、
+   同一 `(role, action, input_key)` 不得在祖先链上重复（§1.2）。
+5. **并发是策略不是常量**；可并发的判据是"会不会写同一张表的同一批行"（§1.3）；
+   写集由 `capabilities.WRITE_SETS` 定义，只读角色（C/H）拿不到写工具（`tools/base.py`）。
+6. **人机通道归主控**：由第 1 与第 3 条推出（用户唯一面对主控 + 主控永远顶层）⇒
+   只有主控当面问人；A–H 把未决问题写进自己的结果交回召唤者，由主控汇总给人。
+7. **交互契约**（`DESIGN-INTERACTIONS.md`）：I2 矛盾闭环、I6 写入期一致性闸门、I7 检索配额；
+   闸门在事务内、签名里不许带 `store`（冻结契约）；每个新交互要有可判定的验收（§4）。
+8. **所有"空"必须三态**（§3.4）：没查 ≠ 没有 ≠ 通过。
+9. **证据等级纪律**（`DESIGN-ROLES.md` §1，FC-22）：E 的计算类方法永远拿不到 `proof`；
+   F 的子目标只有拿到 `proof` 才能 `closed`；G 的 `cross_check` 必须自带"不构成证明"。
+
+**（乙）开发时纪律 —— 我们改这个仓库时的纪律（不是协作纪律）**
+
+10. FC-27 禁改区：命中 ⇒ 停，人编写或人逐行走查 + 2 名 reviewer；门是机器执行的
+    （`noai_gate --git`，退出码 0/1/2）；三态退出码 0/1/2，`unknown` 绝不是 `clean`；
+11. 判据优先（动行为就补判据，含负控；判据红了先怀疑自己的工具）；
+12. 提示词优先（动作表尽量不动）；活先落 board；目标变更必须问用户；
+13. 每轮四读数（lint / 全量 pytest / FC-27 门）+ 登记 `draft/37` §NNN 后提交；
+14. 不许拿「sha 变了、页数、锚单项、行数增加」当通过。
+
+第 6 条落在两处代码上，这就是本轮的行为改动（见下节）。
+
+### 三、按（甲）第 6 条改了什么
+
+**行为改动（一处，且是最关键的一处）**：`ask_user` 的许可面从"顶层任意角色 + 任何被召唤的一环都不许"
+改成 **"只有主控可以，其他角色一律不许（无论顶层还是被召唤）"**。
+
+旧判据是 `if self.depth > 1 and self.my_task_id:` —— 它只看"有没有父任务号"，
+于是**人工直接驱动单个角色**（`agentflow run-agent D`，本框架给它 `depth=2` 但没有父任务号）
+被当成"顶层、可以问"，与 §1.1 冲突（那条路是运维/测试路径）。新判据是
+`if self.role != S.CONDUCTOR_ROLE:`，拒绝码从 DSH 的名字 `delegated_asker` 换成我们自己的
+`not_conductor`（常量在 `userio.ASK_NOT_CONDUCTOR`，落点在 `agent_loop._do_ask_user`）。
+
+**为什么落点在循环、而不是 `ask_user` 里**：`ask_user` 是通道的**底层原语**，它的 `role` 字段
+是"回答归谁"的归属字段（`read_replies(role=…)` 按它做隔离，判据
+`tests/test_interaction.py::test_answers_are_scoped_to_the_role_that_asked` 就测这个）。
+会"停住等人"的只有循环，所以纪律挡在循环；底层原语保持按角色可用 ——
+项目既有的能力不因这条纪律被削掉。这一条也写进了 `ask_user` 的 docstring。
+
+**词表也换回我们自己的**：无人值守档的取值 `"never"` → `"unattended"`
+（`ASK_POLICIES = ("ask", "unattended")`；历史值 `never` 作为别名继续被接受并同样拒绝，
+`ASK_POLICY_LEGACY = ("never",)`，判据把两个取值都跑一遍）。
+
+### 四、判据与替身的连带改动（都是"角色换成主控"这一件事）
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `tests/test_user_channel_stop_and_resume.py` | `_run` 缺省角色 D→M；CLI 那几处 `run-agent D`→`run-agent M`；SCRIPTS 的键、`read_replies(role=…)`、`resume_transcript` / `load_run_checkpoint` / `_task_fingerprint` / 检查点文件名同步 | 这一组判据测的是**人机通道**，而通道归主控 |
+| 同上 | 旧判据 `test_a_delegated_child_may_not_ask_the_user_but_a_top_level_role_may` → **`test_only_the_conductor_may_ask_the_user`**，三条一起判：①被召唤的一环被拒、②**顶层但不是主控**也被拒、③主控问得通并停下 | ②是本轮堵的那个口子；没有它，"只有主控能问"这条纪律没有判据看着 |
+| 同上 | `test_zero_wait_through_the_cli_stops_before_the_next_round` 的 `--json` 那一档改用主控；**新增一条 CLI 级负控**：非主控角色走同一条 CLI 路 ⇒ 退出码 0、待答清单里没有它的问题 | 纪律要在**用户手敲的那条路**上也成立 |
+| `tests/test_interaction.py`、`tests/test_resume_runs_and_consumes_answer.py` | 跑循环的角色 D→M（`run_role` / `run_autonomous` / `LlmSeam` / `load_checkpoint`） | 这三个判据测"问了要落盘、回答要回来、续跑要读到"，与角色无关，但**问的人必须是主控** |
+| `tests/test_interaction.py::test_answers_are_scoped_to_the_role_that_asked` | **刻意不动**：它用底层原语按角色提问/取回答，测的是 `read_replies(role=…)` 的隔离 | 那是通道原语的能力（见上"为什么落点在循环"） |
+| `src/agentflow/userio.py` 自检 | 无人值守那两个取值都跑一遍 | 别名等价要有人看着 |
+
+### 五、我**刻意没动**的地方（等你裁决，不擅自扩大）
+
+1. **DSH 在"模式/算法"层面的引用**：`promptkit.py`（提示词分段模型，`draft/34` §1）、
+   `modelgw.py` / `judge.py` / `agent_loop.py` 的 `ToolArgsError` 口径（`draft/37` §49/§65 的真机现场）、
+   `contextbudget.py`（尾部裁切的口径）、`tokenmeter.py`、`schema.py` 的"搜索类结果必须携带证书"、
+   `conductor.py` 的 subagent/workflow 提法。这些是**早前几轮**按 DSH 的做法落地的，
+   记在各自的 `draft` 号下，属于"借鉴了一个做法"，不是"把它的协作纪律当规则"。
+   要不要一并改成"我们的口径 + 参考 DSH"，是另一件事（改动面比这一轮大）。
+2. **`llmseam` 是否继续把 `framework_ask_user` 广告给 A–H**：现在是**继续广告**、
+   由循环挡回并告诉它"把未决问题写进结果"。改广告面就是动提示词/动作面，
+   与"提示词优先（动作表尽量不动）"这条开发时纪律冲突，所以我没动。
+3. **迟到的回答我们保留**（DSH 丢弃）：这是我们自己的差异（append-only 审计面），保留。
+
+### 六、文档与注释的重写
+
+- `docs/USER-END-DSH-STYLE.md` 重写为：§1 抄了什么（只有皮）、§2 令牌体系、§3 界面纪律、
+  **§4 我们的运行时协作纪律**（上面（甲）那张表，逐条带本项目出处）、
+  **§5 参考读物：DSH 的提问与审批纪律（不构成我们的规则）**、
+  **§6 我们的开发时纪律**（上面（乙），并写明"这不是协作纪律"）、§7 三处刻意差异。
+- `webui.py` / `web/__init__.py` / `web/assets.py` / `cli.py` / `userio.py` / `agent_loop.py` /
+  `llmseam.py` 的注释逐处换成我们的依据；`webui.py` 那句"三条纪律都来自 DSH"改成
+  "两条抄的是界面纪律、一条是本项目结构决定的"。
+- `docs/INDEX.md` 的那一行描述同步改。
+
+### 七、读数（2026-10-03，最终这棵树上）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 人机通道那一组 | `pytest tests/test_user_channel_stop_and_resume.py -q` | **15 passed**（其中新判据 `test_only_the_conductor_may_ask_the_user`） |
+| 与角色/通道相关的十面 | `pytest tests/test_user_channel_stop_and_resume.py tests/test_webui.py tests/test_agent_cli.py tests/test_interaction.py tests/test_closing_gate.py tests/test_review_acceptance.py tests/test_resume_after_answer.py tests/test_resume_runs_and_consumes_answer.py tests/test_agent_loop.py tests/test_native_tool_calls.py -q` | **133 passed** |
+| `userio` 自检 | `python -B -m agentflow.userio` | `SELF-CHECK DONE（停着等 / 问了就停 / 取消 / 无人值守拒绝 / 回答形状三态 / 迟到回答）`，退出码 0 |
+| 我自己的独立核对装置 | `python -B D:\Incubator\temp\_user_end_verify.py` | **72 条全过 / 不符 0**（delegated 腿从 3 条长到 6 条：被召唤的一环、顶层非主控、主控正控） |
+| lint 日常 | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 50`（与基线逐字相同） |
+| lint 严格 | `python -B scripts/lint_rules.py --strict` | `error 0 / warning 56 / info 49`（与基线逐字相同） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git` | `[clean] required_approvals=0`，**689** 条改动路径均未命中（清单 38 条），退出码 **0** |
+| 全量 pytest | `python -B -m pytest -q -p no:cacheprovider` | **3443 passed / 0 failed / 3 skipped / 8 deselected / 1 xfailed**（1371.66s，退出码 **0**） |
+
+### 八、教训
+
+1. **"抄它的做法"与"拿它当依据"是两件事**。前者是把一个好办法借过来，依据仍然是我们自己的
+   设计；后者是把外来的规则当成我们的规则 —— 用户要的是前者，我写成了后者。
+2. **写注释时先问"这条理由是谁的"**。凡是写"学 X 的 Y"的地方，都要能回答"我们自己的依据是哪一条"；
+   答不上来，就说明这条规则没有经过我们的裁决。
+3. **开发时纪律与运行时协作纪律要分开写**。混在一起会让人拿"我们改代码的规矩"去解释
+   "智能体该怎么说话" —— 这一轮我就是这么混的，用户当场纠正。
+4. **判据要跟着纪律走，但连带的判据改动必须说清"为什么是它"**：这一轮 6 个既有判据因为
+   "问的人必须是主控"而改角色，另 1 个（按角色隔离回答）**刻意不改** ——
+   界线是"谁在问"（纪律）与"回答归谁"（原语能力）。
