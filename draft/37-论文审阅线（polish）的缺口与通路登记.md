@@ -8930,3 +8930,82 @@ $1.777922 / 退出 0**。主控的自述（逐字摘要）：
 ```text
 specs/{b,d,e,g}.py · tools/verify_tools.py · scripts/lint_rules.py · capabilities.py
 ```
+
+---
+
+## §117 锚格的判据再修一次（「目录在」是恒真信号）＋一次**我自己造成的数据事故**
+
+### 一、预检逼出来的第二个坑：`out/paper/` 的判据恒真
+
+§115 把锚格改成「没有 `out/paper/` ⇒ 不适用」。T2 第 2 趟开跑前的**离线预检**
+（`temp/_t2b_preflight.py`，花钱之前跑）当场报：
+
+```text
+七格：{'acceptance': 'fail', 'anchor': 'unknown', ...}；can_close = False
+```
+
+空白 T2 工作区**有** `out/paper/` —— 因为人给的验收表按 `ACCEPTANCE_CHECKS_NAME`
+（`out/paper/ACCEPTANCE-CHECKS.json`，`closing.py:75`）的定义**就住在那里**。
+于是「目录在不在」对**每一个有机器可判验收行的项目**都恒真 ⇒ §115 的修法在 T2/T4/T5
+这类项目上一格都没生效，`can_close` 永远为假（门永远关不上，而这几类任务本来就不该有论文包）。
+
+**根因**：判据问错了问题。要问的是「这个项目**有没有论文包**」，不是「有没有那个目录」。
+
+### 二、改法（判据换成"论文包的实物"）
+
+新增 `closing._has_paper_package(root)`（与 `renderanchor` 的四件同一份口径，不另立名字）：
+
+```text
+out/paper/ 下有 main.tex / main.pdf / RENDER-ANCHOR.json / COMPILE-RECEIPT.json /
+BUILD-HISTORY.jsonl 之一  ⇒ 有论文包 ⇒ 走 check_package
+否则（只有验收表、说明、out/reports/*.md） ⇒ 没有论文包 ⇒ pass + 读数 not_applicable
+```
+
+三态纪律原样守住：**有正文而无锚** ⇒ 仍然是那条可操作的 `unknown`
+（§44.5 的老账：主控传错目录时白花一步）—— 不许被"不适用"吞掉。
+
+判据 `test_a_project_without_a_paper_package_has_no_anchor_to_check` 改成三段：
+① 光秃秃的工作区 ⇒ `not_applicable`；② 只有验收表 ⇒ **仍然** `not_applicable`（新）；
+③ 补上 `main.tex`、没有锚 ⇒ 回到 `unknown` 且 finding 是 `anchor_unknown`（老账不丢）。
+
+改后预检（空白 T2 工作区）：`anchor: pass`（读数 `not_applicable`）、
+`substance: fail`、`acceptance: fail`（五行 R1–R5 全 0）—— 这才是"从零"的诚实起点。
+
+### 三、事故：我的预检脚本把 attempt-1 的台账清空了（可复现、已全量恢复）
+
+第一版 `_t2b_preflight.py` 里**无条件**写 `st.init(force=True)`。对已经跑过一趟的
+`p6-research-from-zero` 复跑预检时，它把 attempt-1 的**整套台账清空**了
+（每一张表都变成 40 字节的空表）。`Store.init` 的 docstring 逐字写着这件事：
+
+> `force=True` 会覆盖已有的表 ⇒ 它是"清空这个工作区"的动作
+
+**为什么没造成不可逆损失（三件，缺一不可）**：
+
+1. `init` 只写各表与 `counters.json`，**不碰** `data/events.jsonl`（它只 `touch`）；
+2. 事件日志是追加式的，attempt-1 的 1078 条事件、495 KB 原样在盘上；
+3. `Store.rebuild()` 的口径就是"从事件日志重建"（`F-1`：完整批次才重放）。
+
+恢复读数（逐字）：
+
+```text
+applied = 746 · skipped = 0 · batches_applied = 328 · batches_incomplete = 0
+events_replayed = 1078 · corrupt_events = 0 · snapshot_rows_not_in_log = 0 · snapshot_ahead = {}
+rows: search_requests=4  experiments=6  attack_plans=1  literature=21
+      documents=1  relations=39  concepts=45  research_questions=0
+```
+
+与 §114 裁定 attempt-1 时的读数**逐项一致**（R2 4/3 ✓、R3 6/1 ✓、R5 1/1 ✓、
+R1 0/1 ✗、R4 0/1 ✗）⇒ 恢复是忠实的，不是"看起来像"。
+
+**修法**（探针侧，根因）：`data/` 已在 ⇒ 只 `init()`；`data/` 不在 ⇒ 才 `force`。
+理由写进脚本注释：**探针不许清掉别人的台账**。
+
+### 四、这一节留下的两条纪律
+
+1. **`init(force=True)` 只允许对"这一次新建的目录"用。** 交付物源码里现存 4 处
+   （`agent_a/core.py`、`agent_b/core.py`、`agent_c/__main__.py`、`tools/trace_tools.py`）
+   我逐个看过上下文：**全部在自检块里、工作区都是 `tempfile.mkdtemp` 现建的** ⇒ 不是
+   可达路径上的隐患（`paperbuild.py:387` 那处是一段"写给用户看"的文本，不执行）。
+2. **事件日志不是日志，是唯一的兜底真源。** 这一趟若没有 `events.jsonl`，
+   attempt-1 的全部证据（21 篇文献、45 概念、39 关系、6 次实验）就没了 ——
+   而它的价值恰好在"你要复核裁定"的那一刻。

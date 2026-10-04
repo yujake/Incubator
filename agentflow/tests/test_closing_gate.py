@@ -480,12 +480,16 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
 
 
 def test_a_project_without_a_paper_package_has_no_anchor_to_check(tmp_path: pathlib.Path):
-    """判据（`draft/37` §115）：没有论文包的项目里，锚这一格是「不适用」，不是「没查成」。
+    """判据（`draft/37` §115 + §117）：没有论文包的项目里，锚这一格是「不适用」，不是「没查成」。
 
-    为什么必须单列（T2 第 1 趟的真机读数）：从零研究的工作区里没有 `out/paper/`，
+    为什么必须单列（T2 第 1 趟的真机读数）：从零研究的工作区里没有论文包，
     而 `_check_anchor` 只会报 `unknown`（锚文件读不到）—— `can_close` 要求七格全 pass
     ⇒ 那类测试永远关不上门，而它们本来就不该有论文包。
-    反面的那一半也要守住：`out/paper/` 在、锚文件不在 ⇒ 仍然是 `unknown`（那是真出了问题）。
+
+    §117 把"论文包在不在"的判据从「`out/paper/` 目录在不在」改成「盘上有没有论文包的实物」：
+    人给的验收表按 `ACCEPTANCE_CHECKS_NAME` 的定义就住在 `out/paper/` 里，于是
+    "目录在"是个恒真信号（本轮预检实测：空白 T2 工作区 `anchor=unknown`、门永远关不上）。
+    反面那一半照旧守住：**有正文**而没有锚 ⇒ 仍然是 `unknown`（那是真出了问题，不许被吞掉）。
     """
     ws = tmp_path / "ws-no-paper"
     (ws / "data").mkdir(parents=True)
@@ -495,9 +499,19 @@ def test_a_project_without_a_paper_package_has_no_anchor_to_check(tmp_path: path
     assert rep.status["anchor"] == "pass", rep.to_dict()
     assert rep.readings["anchor"]["verdict"] == "not_applicable", rep.readings["anchor"]
 
-    (ws / "out" / "paper").mkdir(parents=True)   # 有论文包目录、但没有锚文件
+    # ① 只有验收表（人给的记账）⇒ 还不是论文包 ⇒ 仍然「不适用」
+    (ws / "out" / "paper").mkdir(parents=True)
+    (ws / "out" / "paper" / "ACCEPTANCE.md").write_text("验收表\n", encoding="utf-8")
     rep2 = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep2.status["anchor"] == "unknown", rep2.to_dict()
+    assert rep2.status["anchor"] == "pass", rep2.to_dict()
+    assert rep2.readings["anchor"]["verdict"] == "not_applicable", rep2.readings["anchor"]
+
+    # ② 有正文、没有锚 ⇒ 真有问题 ⇒ 回到那条可操作的 `unknown`
+    (ws / "out" / "paper" / "main.tex").write_text("\\documentclass{article}\n",
+                                                   encoding="utf-8")
+    rep3 = CL.check_closing(st, project_dir=".", report_path="")
+    assert rep3.status["anchor"] == "unknown", rep3.to_dict()
+    assert [f.code for f in rep3.findings if f.check == "anchor"] == ["anchor_unknown"]
 
 
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):

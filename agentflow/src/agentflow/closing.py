@@ -478,6 +478,29 @@ def resolve_under_workspace(store: Any, given: str) -> str:
     return str((root / path).resolve())
 
 
+def _has_paper_package(root: Path) -> bool:
+    """这个项目根下**有没有论文包的实物**（`draft/37` §117 的判据）。
+
+    为什么不是"`out/paper/` 目录在不在"：人给的验收表按 `ACCEPTANCE_CHECKS_NAME`
+    的定义就住在 `out/paper/` 里 ⇒ 任何有机器可判验收行的项目都必然有那个目录，
+    "目录在"于是成了恒真信号（本轮预检实测：空白 T2 工作区 `anchor=unknown`、
+    `can_close` 永远为假）。
+
+    认的实物（与 `renderanchor` 的四件同一份口径，不另立一套名字）：
+    正文 `main.tex` / 编译产物 `main.pdf` / 渲染锚 `RENDER-ANCHOR.json` /
+    编译回执 `COMPILE-RECEIPT.json` / 构建历史 `BUILD-HISTORY.jsonl`。
+    验收表、说明、`out/reports/*.md` **不算** —— 它们是本框架的记账，不是论文。
+
+    三态纪律：这里只回答"要不要查锚"，不回答"锚对不对"——有正文而无锚仍然走
+    `check_package` 那条**可操作的 `unknown`**，不许被这里吞掉。
+    """
+    pkg = root / "out" / "paper"
+    if not pkg.is_dir():
+        return False
+    return any((pkg / name).is_file() for name in
+               ("main.tex", "main.pdf", RA.ANCHOR_NAME, RA.RECEIPT_NAME, RA.HISTORY_NAME))
+
+
 def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
     """锚：复用 `renderanchor.check_package`（同一份实现，不另写一个判据）。
 
@@ -502,14 +525,21 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
     # 情形必须继续走下面那条可操作的 `unknown`（`draft/37` §44.5 的老账，
     # 判据 `test_the_wrong_directory_gets_an_actionable_message` 正守着它）。
     looks_like_paper_dir = root.name == "paper" or (root / "main.tex").is_file()
-    if not (root / "out" / "paper").is_dir() and not looks_like_paper_dir:
-        # `draft/37` §115：没有论文包的项目（T2 从零研究、T4 检索类测试…）里，锚这一格是
-        # 不适用，不是「没查成」—— 否则 `can_close` 永远为假（它要求七格全 pass），
-        # 而那类测试根本不该有论文包。判据：`out/paper/` 目录不存在 ⇒ pass + 读数写明
-        # "不适用"；目录在、锚文件不在 ⇒ 仍然是 unknown（那是真出了问题，白花一步的老账）。
+    if not looks_like_paper_dir and not _has_paper_package(root):
+        # `draft/37` §115 + §117：没有论文包的项目（T2 从零研究、T4 检索类测试…）里，
+        # 锚这一格是不适用，不是「没查成」—— 否则 `can_close` 永远为假（它要求七格全 pass），
+        # 而那类测试根本不该有论文包。
+        #
+        # §117 把判据从"`out/paper/` 目录在不在"改成"有没有论文包的实物"：验收表
+        # （人给的 `out/paper/ACCEPTANCE-*.json|md`）按 `ACCEPTANCE_CHECKS_NAME` 的定义
+        # **就住在 `out/paper/` 里**，于是任何有机器可判验收行的项目都必然有那个目录
+        # ——"目录在"于是成了恒真信号，T2 那类工作区永远关不上门（本轮预检实测：
+        # 空白 T2 工作区 `anchor=unknown`）。现在只有盘上有正文/锚/编译产物才算论文包：
+        # 有正文而无锚 ⇒ 仍然是那条可操作的 `unknown`（§44.5 的老账不丢）。
         rep.status["anchor"] = "pass"
         rep.readings["anchor"] = {"verdict": "not_applicable", "root": str(root),
-                                  "note": "这个项目没有论文包（没有 out/paper/）⇒ 锚不适用"}
+                                  "note": ("这个项目没有论文包（out/paper 下没有正文/锚/"
+                                           "编译产物）⇒ 锚不适用")}
         return
     got = RA.check_package(str(root), store=store)
     verdict = str(got.get("verdict") or "unknown")
