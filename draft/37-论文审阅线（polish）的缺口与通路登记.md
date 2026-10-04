@@ -8075,3 +8075,63 @@ E 的提示词里必须同时出现 `fs.write`、`code/lean/`、`script_path`、
 | FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
 
 下一轮：**T1 第 11 趟**（同夹具、同 58 字任务原文）。
+
+---
+
+## §99 T1 第 11 趟：§98 的那一句被照做了，两条腿仍卡在模型侧
+
+第 11 趟真机（2026-10-04，工作区 `projects/p5-review-t11`，58 字任务原文不变，
+夹具 = 6 份被引原文 + P2/P7/P8/P9 四行机器可判验收）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 90 / 39（`E.run_experiment` 11 · `B.register_statement` 8 · `E.check_formal` 7 · `G.build_document` 5 · `H.review` 2 · `G.paper_package` 2 · `H.review_report` 2 · `H.list_findings` 1 · `E.list_experiments` 1） |
+| 花销 | **$1.287355**（预算 $5 内） |
+| 退出 | 0（`final`） |
+| 主稿 | 改了 1 处（26,155 → 26,417 B，sha `8c5c431b…` → `39aac0b9…`）⇒ **P2 满足** |
+| `documents` | 1 行 `accepted`（`review_rounds=0`；H 审过）⇒ **P9 满足** |
+| `literature` | **0**（整趟**没有一次 A 的召唤**）⇒ **P7 不满足**（`statements` 3 条都是无出处的 `own_result`） |
+| `experiments` | 6 行**全部 `method=numeric` + `evidence_kind=heuristic`**；`check_formal` 7 次里 4 次 `verified=false`（2 次 `sorry`、2 次 `compile_error`）⇒ **P8 不满足** |
+| `code/` | **`cl32_not_exact.lean` 在盘上** —— 步 82 的 `fs.write` 把它写进了工作区 |
+
+### 一、§98 的那一句被照做了（这是本轮要看的读数）
+
+步 81–83 的序列逐字是：「先看回自己写的 Lean 文件里 g 的定义与 g_one 那几行」→
+`fs.write code/cl32_not_exact.lean (overwrite=true, content="import Init …自足文件…")` →
+再派 `E.check_formal`。也就是说 **§98 补的那一步（内联源码同时落进工作区）进了它的动作序列**，
+盘上确实出现了那个 `.lean` 文件。
+
+而失败换了地方，并且在报告里写得比上一趟更准：步 84 的自述逐字是
+「`check_formal` 第 5 次失败（`compile_error`，第 30 行 `decide` 仍判 `g 1 = 2` 为 false ——
+**Init 下 `Int` 的 `if`/比较在 `decide` 里不归约**）」。
+这是本机没有 Mathlib 的后果（`omega`/`norm_num`/`simp` 那一套拿不到），
+不是框架堵的路 —— 第 6、9 趟证明过：同一台机器上，写对了的自足文件是能 `verified` 的。
+
+### 二、两条腿的失败形态（11 趟汇总）
+
+| 腿 | 做到过的趟 | 这一趟的失败形态 |
+|---|---|---|
+| P7 引文 | 第 6 趟（3 条 `quote_verified=true`）、第 9 趟（同） | **A 一次没被派**（第 10 趟是把 `ingest_local` 派给了 B） |
+| P8 形式化 | 第 6 趟（2 次 `verified`）、第 9 趟（1 次 `verified` 且落成 proof 行） | Lean 自足文件 `decide` 不归约（无 Mathlib） |
+| P2 正文改动 | 第 3/4/6/7/8/10/11 趟 | ✓ |
+| P9 审校 | 第 3/7/8/9/10/11 趟 | ✓ |
+
+框架侧的缺口（广告面 / 拒绝形态 / 路径解析 / 覆盖守卫 / 收工门四行机器可判验收 /
+形式化两步 / 源码落盘 / 工具链事实）**这 11 趟已经逐条补完**，剩下的两条腿各自卡在：
+
+1. **A 的派活方差**（第 9 趟派了、第 10 趟派错角色、第 11 趟没派）——
+   而 `A.ingest_local` 逐字写在主控的伙伴表里（参数齐全）；框架不替它规划，
+   这一条按纪律**不加暗示**；
+2. **无 Mathlib 时的 Lean 写作能力** —— 候选杠杆是机器级的：把 Mathlib 编出来
+   （`temp/mathlib-pinned` 的工程根在、umbrella 的 `.olean` 不在；编全要数小时）。
+   这是一条**机器级决定**，此前登记为"推迟"；现在有了 4 趟的实证（第 6/9 趟成、
+   第 10/11 趟败），它是唯一能系统性抬高 P8 成功率的杠杆。
+
+### 三、下一轮
+
+1. 先做**代价小、可回退**的那一件：E 的 policy 里补"无 Mathlib 时的写法口径"
+   （`decide` 只对可判定的**有限小类型**有效；`Int` 上的 `if`/比较在 `Init` 下不归约 ⇒
+   把命题改写成 `Nat`/`Bool` 上的等式，或用 `rfl`/`decide` 能归约的形式）——
+   这是把第 11 趟的真机读数写成一条可用的口径，不是替它证明；
+2. 若第 12 趟 P8 仍不成，就把 Mathlib 编译列为**机器级决定**摆到台面上
+   （它是本机环境的改变，不是框架代码的改变）。
