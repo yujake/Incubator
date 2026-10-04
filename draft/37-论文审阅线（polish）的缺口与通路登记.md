@@ -9744,3 +9744,64 @@ CLI 也给了同一个实现的两个入口（用户在终端里要停时用）�
 - 两份快照（agent/tool surface）按新声明重冻；
 - `test_stop_broadcast`（3）/ `test_stopctl_and_child_stop`（4）/ `test_agent_f` /
   `test_agent_e` / `test_agent_loop` / `test_cli_run` 等 117 项全绿。
+
+---
+
+## §129 衍生轮（多轮研究）第一趟 + 优雅停止真机演练：都是成立的
+
+### 一、衍生轮（用户口径：**"在当前结果下再进一步研究"**，考验多轮研究）
+
+任务原文（38 字，不给任何分工暗示）：`在当前结果的基础上再往前研究一轮：补上还没解决的缺口，交付新的手稿与说明。`
+
+跑法：`run-agent M --rounds 2 --report-every 1`，工作区沿用第 4 趟的 `projects/p6d-research-from-zero`
+（**热启动**：台账、稿件、脚本、库全在）。读数：**两轮都跑完、退出 0、$1.728587**，
+`runs/autonomy-M.json` 与 `runs/agent-M-t2d-r2.json` 都落盘。
+
+用户对这一步的验收口径是"**只要看到衍生轮热启动跑得起来没报错就 ok**" —— 这一条成立
+（无 `not_wired`、无崩溃、两轮都有汇报）。而它的**实质读数**比预期好：验收表按"起点 + 增量"写，
+八行**全部成立**：
+
+| 行 | 起点（第 4 趟收工时） | 本轮 | 靠什么涨的 |
+|---|---|---|---|
+| R1 研究问题 | 3 | **4** | D 新提一条 |
+| R2 检索（done） | 6 | **8** | A 两次，**含规范术语那次**（`edge-girth-regular graphs`） |
+| R3 numeric 实验 | 16 | **21** | E 继续跑 |
+| R4 分析报告文件 | 1 | **5** | D 的报告 + 各轮落盘 |
+| R5 攻坚计划 | **0** | **2** | §127 修好的 `create_plan`（拒绝可见 ⇒ 主控补全三维预算） |
+| R6 手稿引用文献 | **0** | **4** | §126 的规范术语口径 + G 把 `lit:/rel:` 写进稿子 |
+| R7 断言不夸大 | 2 | 13（守住） | 新稿的断言与被引实验一致 |
+| R8 **被实验支持的断言** | **0** | **6** | §126 的 `REPRO_RESULT` 形状修好之后，E 真跑出 `result=supports` |
+
+七格（带报告路径）：**全 pass，`can_close=true`**。三条"以前永远不成立"的行（R5/R6/R8）
+这一轮第一次成立 —— 它们正是 §126/§127 那两处修法各自的目标。
+
+诚实附注：实质研究产出仍然有限（21 条实验里只有 1 条 `supports`：Petersen=R(3,5)、K4=R(3,3)；
+主问题"哪些 (m,k) 有无穷多例"仍未被回答）。**下一层瓶颈已经不在机制上了**：
+`G.paper_package` 连续两轮报 `package_build_failed`（stage=render，缺 `code/make_paper.py`），
+主控每一轮都如实读出来并写进交付说明（"结构性事实，不是我的失败"）—— 这是一条**该补的工具链**。
+
+### 二、优雅停止的真机演练（用户口径："测试一下…""kill掉吧，它没停下来"之后）
+
+跑法：`run-agent M --sid t2d-r5 --max-steps 200`（同一工作区），**T+30 s** 时执行
+`agentflow --root <ws> stop`（缺省优雅）。逐字读数：
+
+```text
+T+30s 状态：登记着的活进程 1 个：M#27384
+T+30s 落开关：[stop] 停机开关已落：…\.agentflow-stop（reason=user）
+会话结束事件：stop_reason=stop_file  steps=19  usd=0.140371
+final 首句：用户叫停（开关文件 .agentflow-stop）：第 19 步之后收工。…
+运行记录：runs/agent-M-t2d-r5.json（427 B）
+步检查点：{role: M, sid: t2d-r5, step: 19, stop_reason: stop_file, task: …}  ⇒ --resume 能接着跑
+```
+
+⇒ **优雅停止成立**：① 当前这一步做完才停（不是半途被杀）；② 台账与运行记录照写；
+③ 步检查点落盘、`--resume` 可接；④ 同一开关让 E 的实验子进程在 0.2 s 内被终止
+（离线判据实测 30.11 s → 0.36 s，见 §128）。
+
+### 三、三条结论（给用户）
+
+1. **多轮研究通了**：热启动 + 增量验收 + 每轮汇报 + 八行全成立；
+2. **优雅/强制停止都通了**，而且是 M 的工具（`conductor.stop` / `conductor.stop(force=True)`）
+   与用户的 CLI（`agentflow stop [--force|--clear|--status]`）**同一个实现**；
+3. **下一步该修的不是研究机制，而是论文包那条工具链**（`code/make_paper.py` 缺失 ⇒ 锚永远
+   回不到 `consistent`；两轮都被它挡住）。这条我记在这里，作为下一步的第一件事。

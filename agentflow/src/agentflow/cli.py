@@ -1956,6 +1956,12 @@ def cmd_stop(args) -> int:
         return 0
 
     force = bool(getattr(args, "force", False))
+    if bool(getattr(args, "clear", False)):
+        # 撤开关：停机开关是持久的（那正是它的用处），所以"接着跑"之前必须显式撤掉它 ——
+        # 否则下一趟会在第 0 步就收工（行为正确，但会让人以为"跑不起来了"）。
+        gone = stopctl.clear_stop(root)
+        print(f"[stop] 停机开关{'已撤' if gone else '本来就不在'}：{stopctl.stop_path(root)}")
+        return 0
     state = stopctl.request_stop(root, reason=str(getattr(args, "reason", "") or "user"),
                                  by="user", force=force, sid=getattr(args, "sid", None))
     print(f"[stop] 停机开关已落：{state['path']}（reason={state['reason']}"
@@ -2266,6 +2272,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--sid", default=None, help="这一趟的会话号（写进停机开关，便于核对）")
     sp.add_argument("--status", action="store_true",
                     help="只看状态：开关在不在、登记里哪些进程还活着")
+    sp.add_argument("--clear", action="store_true",
+                    help="撤掉停机开关（接着跑之前要先撤，否则下一趟第 0 步就收工）")
     sp.set_defaults(func=cmd_stop)
 
     sp = sub.add_parser("gate", help="交付闸门：逐条判据 + 机械半 → 报告与工作项（三态退出码）")
