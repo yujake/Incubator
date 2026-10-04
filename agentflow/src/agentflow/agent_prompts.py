@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import capabilities as C
@@ -58,7 +59,7 @@ LOOP_PROTOCOL = """\
        {"role": "<伙伴>", "action": "<动作>", "params": {…}}],
      "why": "<一句话说明为什么一次派这一批>"}}
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
-   **同一角色在一批里出现多次、又没给 `instance` 时，框架会自动补 `<角色>#N`** ——
+   同一角色在一批里出现多次、又没给 `instance` 时，框架会自动补 `<角色>#N` ——
    所以"并发三个 B"这件事可以就这么写。返回里的 `waves` 与 `concurrent_peak` 是
    "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。
 
@@ -91,7 +92,7 @@ LOOP_PROTOCOL = """\
   写错的名字会被当场拒绝，并把拒绝理由原样回给你 —— 那不是失败，是一次纠正。
 - 唤起伙伴要过能力表与策略（允许的边 / 深度 / 扇出 / 并发 / 总量 / 预算）。
   被拒绝时框架会告诉你理由码；你可以改主意，但不许换个名字重试同一次越权。
-  **`forbidden_edge` / `depth_exceeded` 这两档不是"此路不通"**：那说明"这件事该由别人替我派"。
+  `forbidden_edge` / `depth_exceeded` 这两档不是"此路不通"：那说明"这件事该由别人替我派"。
   框架会把这次被拒**自动转成一条给主控（M）的代唤申请**（留言标题固定为「请代唤」，正文里带
   要谁、什么动作、什么参数、为什么），你这一步的返回里会看到 `relay_requested`。
   于是正确做法是：**换目标为 M 说明你要谁**（或者直接等主控受理），**不要**绕着边表找同义动作、
@@ -361,7 +362,7 @@ PAPER_PACK = """\
 - **外部论文不是我方稿件**（`draft/37` §41/§43 的用户裁定，方案 A）：盘上拿到的、别人写的那份稿子，
   登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
   每条带 `source_lit_id` + `page_range` + 逐字 `proof_text`，`origin="external_lit"`），
-  **我方修订稿**才由 G 用 `doc.build_document` 另起一行 `documents`（claims 的 citations
+  我方修订稿才由 G 用 `doc.build_document` 另起一行 `documents`（claims 的 citations
   引 `lit:` / `exp:`）—— **顺序不能反**：H 的审阅发现挂在**我方稿件**那一行上
   （`ReviewFinding.doc_id` 是必填的，挂不到 `literature` 行上），所以 G 那一行先有，
   H 才谈得上审。**不要**拿外部论文的 id 去 `G.revise` / `H.review_report`：
@@ -378,7 +379,7 @@ PAPER_PACK = """\
 - 一次读不完就按批读（`ids=['P5','P6','P7']`）—— 工具结果被上下文预算剪枝时，
   剪掉的部分不会自己回来；宁可多读两次，也不要跳过某一行。
 - 你的交付说明不是另写一份总结：它必须逐条回应那十行，每条给读数（数字、路径、退出码），
-  **并且点名正文改了哪几处、每处的依据是什么**（一处都没改就要给出"为什么不必改"的读数）。
+  并且点名正文改了哪几处、每处的依据是什么（一处都没改就要给出"为什么不必改"的读数）。
   写「已完成」「符合要求」这种没有读数的句子等于没交付；没核到的行要明写「未核到」，
   不许折成「没问题」。
 
@@ -406,7 +407,7 @@ PAPER_PACK = """\
    源表 / 渲染出的源文件 / 编译回执 —— 最后一维回答"这份 PDF 是不是从磁盘上这份 tex 编的"；
    它还会给一份构建历史（渲染过几次、编译过几次、最近一次是什么时候）。
    G 在交付说明里要写出 verdict 与漂移条数；H 的核对必须独立于 G 自己做一次。
-   **主控手上没有这个工具**（`doc.paper_*` 只发给 G 与 H）⇒ 你要的那份读数只能来自
+   主控手上没有这个工具（`doc.paper_*` 只发给 G 与 H）⇒ 你要的那份读数只能来自
    "派出去的人回报"：让 G 在修订结果里写 verdict 与漂移条数，再让 H 用 `doc.paper_state`
    独立核一次；缺了这两份读数，第 1 条就只能写"未核到"，不许写"没问题"。
 2. `main.pdf` 由**本次**源码编出，页数 >= 1（看 `doc.paper_compile` 的读数，
@@ -425,9 +426,9 @@ PAPER_PACK = """\
   把包重渲染、重编译，并让 `doc.paper_state` 回到 `consistent`；做不到就如实写"包与台账分家"，
   不许把漂移留在一份写着"已完成"的交付说明里。
 - **怎么派**（2026-10-03 更新，真机读数 `draft/37` §58）：让包跟上的是
-  **`G.paper_package`** —— 它一次做完「重渲染 → 重编译 → 核锚」并把 `verdict` 与漂移条数回报。
+  `G.paper_package` —— 它一次做完「重渲染 → 重编译 → 核锚」并把 `verdict` 与漂移条数回报。
   派它时把 `project` 写成**项目根**（这个工作区就是根 ⇒ `"."`）。
-  **反例（都实测过）**：`G.build_document` 只是另写一行稿件，它不会重渲染论文包；
+  反例（都实测过）：`G.build_document` 只是另写一行稿件，它不会重渲染论文包；
   `G.revise` / `G.refresh_markdown` / `G.render` 动的是**稿件 markdown**
   （`documents/<id>.md`），**不是**论文包 —— 第九趟主控连派三次 `G.revise`，
   而 `main.pdf` 与 `RENDER-ANCHOR.json` 一个字节都没变（锚必然 `drifted`）。
@@ -463,7 +464,7 @@ PAPER_PACK = """\
 - **登记要指到论文本体**：`pattern` 指到那份稿件本身（通常是 `*.pdf` —— `.tex` 不在可抽取
   格式内，会被如实报成 `unsupported_format`），**不要**用一个通配把所有文件扫进来：
   第三趟真机用 `pattern="*"` + `limit=5`，于是 5 份配套 md 先被吃掉，
-  **论文本体一次都没进台账**，后面每一跳引的都是配套文档。通配之前先想清楚
+  论文本体一次都没进台账，后面每一跳引的都是配套文档。通配之前先想清楚
   "我要的是哪一份"，把 `pattern` 与 `limit` 一起给定。
 - **命题的 `source_lit_id` 必须指向论文那一行**：不是配套文档那一行。动作会在写库前核
   "这个 `lit_id` 存在"，但"存在"与"指对"是两件事 —— 指错了，出处的链就接到别的东西上，
@@ -476,7 +477,7 @@ PAPER_PACK = """\
 八、交付说明的**九节形状**（`draft/37` §14.4；收工门会逐节核，缺一节就是 `report_shape: fail`）
 - 一、任务与范围 · 二、逐条读数 · 三、定理与引理清单 · 四、形式化覆盖 · 五、引文核验 ·
   六、体例与表述 · 七、我们做的补救 · 八、未决问题 · 九、诚实边界。
-  **九节都要有小标题**（写"六、体例与表述"或那节的名称都认）—— 真机实测：一趟只写了五节，
+  九节都要有小标题（写"六、体例与表述"或那节的名称都认）—— 真机实测：一趟只写了五节，
   收工门当场 `report_shape: fail` 并把缺的四节名字列了出来。所以：**写完先跑一次
   `conductor.closing`**，它会把缺的节名逐个报出来，按它改，再跑一次。
 - 报告里必须**分栏**写"我们补的"与"原文的"（这两句要出现）—— 混在一起写等于没分栏。
@@ -999,6 +1000,9 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
     """
     out: list[str] = []
     outs = partners_out(role)
+    # 指路（§109）：画像已经落盘，随时可查 —— 开头注入的那一份跑到后面会被挤远。
+    out.append(f"（每个伙伴的完整画像——职责 / 交付物 / 边界 / 动作与参数——"
+               f"也落在工作区根的 `{PROFILES_FILE}` 里，随时用 fs.read 查）")
     if outs:
         out.append("你可以唤起这些伙伴（用 summon 形状），他们的职责与可调用动作如下"
                    "（参数只许用括号里列出的键）：")
@@ -1009,7 +1013,21 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
                 state = str(availability.get(other) or "unknown")
                 if state != "wired":
                     mark = f"（现在没接线：{state}）"
-            out.append(f"- {other}：{_duty_of(other)}；可调用动作：{acts or '（没有动作）'}{mark}")
+            # `draft/37` §108（用户口径"先加强描述"）：伙伴画像此前只有"它有什么动作"，
+            # 没有"它交付什么、它不许做什么"。真机代价：主控把 `ingest_local` 派给了 B
+            # （那是 A 的动作，`refused/unknown_action`），也会拿"越权请求"去撞拒绝 ——
+            # 这些在事前本来就能避免。数据来自声明层（`agentspec.AgentBrief`），现算。
+            extra = ""
+            brief = ROLE_BRIEFS.get(other)
+            if brief is not None:
+                first = next((str(x) for x in brief.boundary if str(x).strip()), "")
+                # 边界那几句是对它自己说的（第二人称），嵌进别人看到的伙伴表里
+                # 必须标明是引用，否则读起来像对当前角色说的。
+                extra = (f"；它交付：{brief.deliverable}"
+                         + (f"；它自己的边界（原话）：「{first}」"
+                            f"（它的边界共 {len(brief.boundary)} 条）" if first else ""))
+            out.append(f"- {other}：{_duty_of(other)}；可调用动作：{acts or '（没有动作）'}"
+                       f"{mark}{extra}")
         if "A" in outs:
             # `A` 的检索面是英文文献库（`providers.query_applicability` 对抽不出
             # 英文关键词的题面是 fail-closed：抛 `query_not_applicable_cjk`，
@@ -1042,8 +1060,16 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
                    "但那是广播给所有角色），**subject 固定写「请代唤」**，"
                    "body 里写清四件事：要谁、什么动作、什么参数、为什么要。"
                    "框架在你越权召唤被拒时也会自动帮你发这一条（返回里带 relay_requested），"
-                   "但你自己发能写得更清楚。"
-                   "主控受理与否由它决定，你这一步不要假装对方已经在做了。")
+                   "但你自己发能写得更清楚。")
+    # 上报规则（`draft/37` §110，用户逐字：「如果一个任务自己做不了且同伴做不了则报告主控」）：
+    # 这条此前只隐含在"找不在名单里的人 ⇒ 发给 M"里 —— 而"我自己做不了"是另一种情形，
+    # 必须明说，否则它会静默少做或把没做成的写成做成了。
+    if role != S.CONDUCTOR_ROLE:
+        out.append("做不了就上报：这件事你自己做不到、上面名单里的伙伴也做不到 ⇒ "
+                   "**报告主控 M**（`message` 的 `to` 写 \"M\"；body 写清「我做不了什么、"
+                   "缺什么、已经试过什么」）。不许静默放弃，也不许把没做成的写成做成了 —— "
+                   "主控是唯一能把缺口变成派活的人（它有全体画像，见 "
+                   f"`{PROFILES_FILE}`）。")
     return out
 
 
@@ -1112,6 +1138,69 @@ def toolchain_facts_text() -> str:
     lines.append("- 由上一条推得（推论，不是探针读数）：`check_formal` 可达的写法是"
                  "不 import Mathlib 的自足文件；把库编出来是另一条路（机器级决定）")
     return "\n".join(lines)
+
+
+#: 画像文件的名字（工作区根相对路径）。`draft/37` §109（用户口径：
+#: "M 要看到所有人的简介，其它智能体只要看到可协作的同伴的简介，这些应该落成
+#: 智能体可查阅的描述文件 —— 怕只是开头注入提示词它们后面忘了"）。
+#:
+#: 为什么必须落盘：提示词只在开头注入一次，跑到第 40 步时它已经在上下文里被挤到很远；
+#: 而一份随时能 `fs.read` 的文件把"谁能干什么、不许干什么"变成可回查的事实。
+PROFILES_FILE = "AGENT-PROFILES.md"
+
+
+def profiles_markdown(*, registry: Any = None,
+                      availability: Mapping[str, str] | None = None,
+                      roles: Sequence[str] | None = None) -> str:
+    """全体角色的画像（Markdown）：职责 / 交付物 / 边界（逐条）/ 签名错误 / 对外动作 / 接线态。
+
+    一份来源：`ROLE_BRIEFS`（声明层）与 `capabilities.actions_for`（动作表）——
+    这里只做排版，不另写一份内容（两份必然漂移）。
+    """
+    order = [str(x) for x in (roles if roles is not None else tuple(ROLE_BRIEFS))]
+    out: list[str] = ["# 智能体画像（框架现算，随时可查）", "",
+                      "这份文件由框架在**每次运行开始时**重新生成：职责、交付物、边界、"
+                      "对外动作与参数、以及现在的接线态都来自声明层与能力表，"
+                      "不是记忆。你要派活或接受派活时，以这份为准。", "",
+                      "做不了就上报：任何角色，一件事你自己做不到、你能协作的同伴也做不到 ⇒ "
+                      "报告主控 M（`message` 的 `to` 写 \"M\"），写清缺什么、试过什么；"
+                      "不许静默放弃，也不许把没做成的写成做成了。", ""]
+    for role in order:
+        brief = ROLE_BRIEFS.get(role)
+        if brief is None:
+            continue
+        state = ""
+        if availability is not None:
+            state = f"（现在的接线态：{availability.get(role, 'unknown')}）"
+        out += [f"## {role}：{brief.duty}{state}", "",
+                f"- **交付物**：{brief.deliverable}", "- **边界（不许做什么）**："]
+        out += [f"  {i}. {x}" for i, x in enumerate(brief.boundary, 1)]
+        if brief.signature_error:
+            out.append(f"- **它最容易犯的错**：{brief.signature_error}")
+        if brief.policy:
+            out.append("- **政策**：" + "；".join(str(x) for x in brief.policy))
+        acts = C.actions_for(role)
+        if acts:
+            out.append("- **对外可被调用的动作**：")
+            out += [f"  - `{a.action}`{_params_hint(a)}" for a in acts]
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def write_profiles(root: str | Path, *, registry: Any = None,
+                   availability: Mapping[str, str] | None = None) -> str:
+    """把画像文件写进工作区根，返回路径（写失败返回空串，由调用方记 note）。
+
+    刻意不写进 `out/`：那是论文包/产物的地盘，锚与判据都在看着它 ——
+    一份"给人看的说明"落在工作区根，既显眼又不干扰任何判据。
+    """
+    try:
+        path = Path(root) / PROFILES_FILE
+        path.write_text(profiles_markdown(registry=registry, availability=availability),
+                        encoding="utf-8", newline="\n")
+        return str(path)
+    except OSError:
+        return ""
 
 
 def role_prompt_registry(role: str, *, registry: Any = None,

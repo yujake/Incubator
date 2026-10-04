@@ -472,6 +472,19 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                                    llm_by_role=({"H": h_llm} if h_llm is not None else None))
     table = dict(loops or {})
     conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
+    # 画像文件（`draft/37` §109，用户口径）：M 要看到所有人的简介，其它角色看可协作的
+    # 同伴 —— 而"只在开头注入提示词"会被跑到后面忘掉，所以每次运行落一份可查的文件
+    # 到工作区根（不进 `out/`：那里是论文包的地盘，锚在看着它）。
+    try:
+        from . import agent_prompts as _AP
+
+        _prof = _AP.write_profiles(store.root if store is not None else ".",
+                                   registry=table or None,
+                                   availability=wiring_status(store) if store is not None else None)
+        notes.append(f"画像文件：{_prof}" if _prof else
+                     "画像文件没写成（工作区不可写？）—— 提示词里的那份仍然有效")
+    except Exception as exc:  # noqa: BLE001 —— 写不成不影响这次运行，但必须留痕
+        notes.append(f"画像文件没写成：{type(exc).__name__}: {exc}")
 
     # 内层 backend 必须带着 store：`LocalBackend.store` 由 `Conductor` 注入，
     # 而 `factory(role, store=None)` 会被角色工厂当场拒（"需要一个 store"）——

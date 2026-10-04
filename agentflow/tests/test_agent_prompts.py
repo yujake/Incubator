@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import re
+import pathlib
 from dataclasses import replace
 from typing import Any
 
@@ -200,6 +201,91 @@ def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolReg
     # 无 Mathlib 时的三条写法口径（第 11 趟的真机失败形态，逐条写进去）
     for needle in ("decide", "不归约", "sorry", "改一处再试", "checker_name"):
         assert needle in text, f"E 的提示词里没有提到 {needle!r}"
+
+
+def test_the_partner_table_says_what_each_partner_delivers_and_must_not_do(
+        registry: ToolRegistry):
+    """判据（`draft/37` §108，用户口径"先加强描述"）：伙伴行要带"它交付什么 + 它不许什么"。
+
+    此前那一行只有"它有哪些动作" —— 真机代价：主控把 `ingest_local` 派给了 B
+    （那是 A 的动作，`refused/unknown_action`），也拿越权请求去撞拒绝。
+    这两件事在事前本来就能避免。数据来自声明层（`agentspec.AgentBrief`），现算。
+    """
+    for role in ALL_ROLES:
+        brief = AP.ROLE_BRIEFS[role]
+        for other in AP.partners_out(role):
+            line = next((ln for ln in AP.partners_lines(role) if ln.startswith(f"- {other}：")), "")
+            assert line, f"{role} 的伙伴表里没有 {other} 那一行"
+            ob = AP.ROLE_BRIEFS[other]
+            assert str(ob.deliverable) in line, f"{role} 看到的 {other} 没写交付物：{line[:200]}"
+            first = next((str(x) for x in ob.boundary if str(x).strip()), "")
+            if first:
+                assert first in line, f"{role} 看到的 {other} 没写边界：{line[:200]}"
+        del brief
+
+
+def test_M_sees_everyone_and_others_see_only_their_partners(registry: ToolRegistry):
+    """判据（`draft/37` §109，用户口径）：M 看全体，其它角色只看可协作的同伴。
+
+    用户逐字：「M 要看到所有人的简介，其它智能体只要看到可协作的同伴的简介，
+    这些应该落成智能体可查阅的描述文件，毕竟怕只是开头注入提示词它们后面忘了」。
+    两半都要钉：①范围（M 的伙伴表覆盖 A–H 全体；非 M 角色只覆盖自己的出边）；
+    ②可查阅（提示词里要指到那份落盘的画像文件）。
+    """
+    m_line = _prompt("M", registry)
+    for role in ("A", "B", "C", "D", "E", "F", "G", "H"):
+        assert f"- {role}：" in m_line, f"M 的伙伴表里没有 {role}"
+    assert AP.PROFILES_FILE in m_line, "M 的提示词里没有指到画像文件"
+
+    for role in ("A", "B", "C", "D", "E", "F", "G", "H"):
+        text = _prompt(role, registry)
+        allowed = set(AP.partners_out(role))
+        for other in ("A", "B", "C", "D", "E", "F", "G", "H"):
+            bullet = f"- {other}：" in text
+            assert bullet == (other in allowed), (
+                f"{role} 的伙伴表与它的出边不一致：{other} 在表里={bullet}，"
+                f"在出边里={other in allowed}")
+        assert AP.PROFILES_FILE in text, f"{role} 的提示词里没有指到画像文件"
+
+
+def test_the_profiles_file_lists_every_role_with_its_full_picture(tmp_path: pathlib.Path):
+    """判据（`draft/37` §109）：画像文件必须逐角色给全（职责 / 交付物 / 边界 / 动作）。"""
+    root = tmp_path / "ws"
+    root.mkdir()
+    path = AP.write_profiles(root, availability={"A": "wired"})
+    assert path, "画像文件没写成"
+    text = pathlib.Path(path).read_text(encoding="utf-8")
+    for role in ("A", "B", "C", "D", "E", "F", "G", "H", "M"):
+        brief = AP.ROLE_BRIEFS[role]
+        assert f"## {role}：" in text, f"画像文件里没有 {role} 这一节"
+        assert brief.deliverable in text, f"{role} 的交付物没进画像文件"
+        for item in brief.boundary:
+            assert item in text, f"{role} 的一条边界没进画像文件：{item[:40]}"
+    assert "A" in text and "现在的接线态：wired" in text, "接线态那半没写进去"
+
+
+def test_every_role_knows_M_and_the_escalation_rule(registry: ToolRegistry):
+    """判据（`draft/37` §110，用户逐字）：非 M 角色要知道 M 的存在，
+    并且明说「自己做不了、同伴也做不了 ⇒ 报告主控」。
+
+    为什么单列一条：原来的文本只把 M 说成"找不在名单里的人时的中转站"
+    （`subject` 固定「请代唤」）—— 那是"替别人办事"的口径；而"我自己办不了"是另一种情形，
+    不明说就会出现"静默少做"或"把没做成的写成做成了"（第 7/8 趟都有过）。
+    """
+    for role in [r for r in ALL_ROLES if r != "M"]:
+        text = _prompt(role, registry)
+        assert "做不了就上报" in text, f"{role} 的提示词里没有上报规则"
+        assert "M" in text and "主控" in text, f"{role} 的提示词里没有主控 M"
+    assert "做不了就上报" not in _prompt("M", registry), "主控不需要向自己上报"
+
+
+def test_the_profiles_file_header_carries_the_escalation_rule(tmp_path: pathlib.Path):
+    """判据（`draft/37` §110）：画像文件（可查阅的那份）里也要写这条规则。"""
+    root = tmp_path / "ws"
+    root.mkdir()
+    path = AP.write_profiles(root)
+    text = pathlib.Path(path).read_text(encoding="utf-8")
+    assert "做不了就上报" in text and "主控 M" in text, text[:200]
 
 
 def test_every_role_prompt_is_rendered_without_template_leftovers(registry: ToolRegistry):

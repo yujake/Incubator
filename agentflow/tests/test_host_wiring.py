@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 from pathlib import Path
 
 import pytest
@@ -65,6 +67,24 @@ def _pick_action(role: str) -> str:
 
 
 # ---------------------------------------------------------------- ① 登记表与三态
+
+def test_wiring_writes_the_profiles_file_into_the_workspace(tmp_path: pathlib.Path):
+    """判据（`draft/37` §109）：每次接线都把画像文件落到工作区根（可查阅）。"""
+    from agentflow import agent_prompts as AP
+    from agentflow import host as host_mod
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    st = Store(ws)
+    st.init()
+    out = host_mod.wired_llm_conductor(st, session_root=ws, sid="t", max_steps=1,
+                                       usd_budget=1.0, workspace_root=str(ws))
+    path = ws / AP.PROFILES_FILE
+    assert path.is_file(), "画像文件没写进工作区根"
+    text = path.read_text(encoding="utf-8")
+    assert "## M：" in text and "## A：" in text, "画像文件里没有角色小节"
+    assert any("画像文件" in str(n) for n in out.get("notes", [])), out.get("notes")
+
 
 def test_registry_covers_all_roles_and_only_factories(tmp_path: Path):
     """正控：给了 providers ⇒ 恰好 A–H，且每项是 `("factory", fn)`。"""
@@ -569,7 +589,8 @@ def test_run_agent_wiring_exposes_the_extractor_notes(tmp_path: Path):
     wiring = host.wired_llm_conductor(st, session_root=st.root, sid="t", max_steps=3,
                                       workspace_root=str(st.root))
     assert "notes" in wiring, wiring.keys()
-    assert wiring["notes"] == [], "还没造过 B 就写了读数？那是装配期的谎话"
+    assert not any("B：" in n for n in wiring["notes"]), (
+        "还没造过 B 就写了它的抽取器读数？那是装配期的谎话（画像文件那条 note 不算）")
     res = wiring["conductor"].summon("B", "run_once", {}, by="M")
     assert res.status == "done", (res.status, res.outcome, res.error)
     assert any("B：" in n for n in wiring["notes"]), wiring["notes"]

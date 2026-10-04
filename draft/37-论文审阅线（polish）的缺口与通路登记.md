@@ -8549,3 +8549,91 @@ summon / summon_many / stop / cancel / ensure_project`。它的做法是：
    "我这一趟只派了 G" —— 第 14 趟的失败形态正是"分工面一片空白而它没意识到"；
 4. **"带红格交付"的口径**：要么允许（但把 `can_close=false` 写进交付说明抬头），
    要么硬拦（会耗到步数上限）。我倾向**允许 + 抬头强制写明**，这一条要定下来。
+
+---
+
+## §109 把画像落成**可查阅的文件**（M 看全体、其它角色看可协作同伴）
+
+用户逐字：「**M 要看到所有人的简介，其它智能体只要看到可协作的同伴的简介，这些应该落成
+智能体可查阅的描述文件，毕竟怕只是开头注入提示词它们后面忘了**」。
+
+### 一、这一条指出的真问题
+
+提示词是**开头注入一次**的东西：跑到第 40 步时，"谁能干什么、不许干什么"早被挤到上下文
+很远的地方 —— 第 7/8 趟的失败形态里就有"分工面一片空白而它没意识到"。所以画像不能只活在
+提示词里，要有一份**随时能 `fs.read`** 的落盘版本。
+
+### 二、做了什么
+
+1. `agent_prompts.profiles_markdown()`：全体角色的画像（Markdown）——
+   每个角色一节：**职责 / 交付物 / 边界（逐条）/ 最容易犯的错 / 政策 / 对外动作与参数
+   / 现在的接线态**，全部来自声明层（`ROLE_BRIEFS` + `capabilities.actions_for`），只做排版。
+2. `agent_prompts.write_profiles(root, ...)`：写到**工作区根**的 `AGENT-PROFILES.md`
+   （刻意不写进 `out/`：那是论文包的地盘，锚与判据都盯着它）。实测 23,958 字节 / 9 个小节。
+3. **每次运行自动重写**：接在 `host.wired_llm_conductor` 上（它知道工作区根、登记表与接线态），
+   并把路径写进 `wiring["notes"]` —— 运维与模型都能看到"这一趟的画像文件在哪"。
+   写失败不影响这次运行，但会留一条 note（不许静默）。
+4. **提示词里指路**：`partners_lines` 的第一行固定写上
+   「每个伙伴的完整画像……也落在工作区根的 `AGENT-PROFILES.md` 里，随时用 fs.read 查」。
+5. **范围**（用户的两半要求）：M 的出边本来**就是全体 A–H**（实测 `partners_out("M")` =
+   `('A','B','C','D','E','F','G','H')`）⇒ M 的提示词列全体；其它角色只列自己的出边
+   （实测 A→`('B',)`、H→`('A','E','G')`）⇒ 与用户口径一致，判据把它钉住。
+
+### 三、判据
+
+- `test_M_sees_everyone_and_others_see_only_their_partners`：M 的伙伴表覆盖 A–H 全体且指到画像文件；
+  每个非 M 角色的伙伴表**恰好**等于它的出边（多一个少一个都红），并且都指到画像文件；
+- `test_the_profiles_file_lists_every_role_with_its_full_picture`：画像文件里每个角色都有小节、
+  交付物与**每一条**边界都在，接线态那半也写了；
+- `test_wiring_writes_the_profiles_file_into_the_workspace`（`test_host_wiring.py`）：
+  `wired_llm_conductor` 之后工作区根真的有那份文件，且 notes 里记了它。
+
+### 四、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 提示词 / 接线 / 循环 | `pytest tests/test_agent_prompts.py tests/test_host_wiring.py tests/test_agent_loop.py -q` | **87 passed**（含 §109/§110 四条新判据） |
+| 画像文件实测 | `python -c "AP.write_profiles(...)"` | `AGENT-PROFILES.md`：**23,958 字节 / 9 个小节**（A–H + M），含每条的边界与动作参数 |
+| 接线时自动落盘 | `host.wired_llm_conductor(...)` | notes 里记 `画像文件：<root>/AGENT-PROFILES.md` |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3504 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1443.80s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+---
+
+## §110 其它角色要知道 M 的存在，并明确「做不了就上报主控」
+
+用户逐字：「**其它智能体也要知道主控 M 的存在，且明确如果一个任务自己做不了且同伴做不了
+则报告主控**」。
+
+### 一、现状取证（先说清哪一半已经有了）
+
+非 M 角色的伙伴表**本来就有** M 与一条通道，逐字是：
+
+```
+这些伙伴可以唤起你：D、F、G、H、M。……
+如果这件活需要的人不在上面的名单里（典型：C 想请 A 去查文献、链已到最大深度、
+或你要找的人这一轮根本没接线）：不要重试越权的边，直接把 message 发给主控 M
+（`to` 写 "M" 是私聊；写 "#public" 也收得到，但那是广播给所有角色），
+subject 固定写「请代唤」，body 里写清四件事：要谁、什么动作、什么参数、为什么要。
+```
+
+⇒ **"知道 M 存在"这一半是有的**；缺的是另一半：那条通道被写成了"**替别人办事**"
+（请代唤）的口径，而**"我自己办不了"**是另一种情形 —— 不明说就会出现"静默少做"
+或"把没做成的写成做成了"（第 7、8 趟都出现过）。
+
+### 二、补的那一句（每个非 M 角色都看得到）
+
+> **做不了就上报**：这件事你自己做不到、上面名单里的伙伴也做不到 ⇒ **报告主控 M**
+> （`message` 的 `to` 写 "M"；body 写清「我做不了什么、缺什么、已经试过什么」）。
+> 不许静默放弃，也不许把没做成的写成做成了 —— 主控是唯一能把缺口变成派活的人
+> （它有全体画像，见 `AGENT-PROFILES.md`）。
+
+同一句也写进画像文件的抬头（那份是可查阅的版本，见 §109）。
+主控自己的提示词里**不写**这一句（它没有上报对象）—— 判据把这一点也钉住。
+
+### 三、判据
+
+`test_every_role_knows_M_and_the_escalation_rule`：每个非 M 角色都要有「做不了就上报」
+且同时出现「M / 主控」；M 自己的提示词里**不许**有这条。
+`test_the_profiles_file_header_carries_the_escalation_rule`：画像文件抬头也有这一句。

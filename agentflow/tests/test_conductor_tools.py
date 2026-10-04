@@ -79,6 +79,25 @@ def test_acceptance_without_a_table_reports_no_table_instead_of_crashing(tmp_pat
     assert "没查成" in str(res.error or ""), res.error
 
 
+def test_role_spec_carries_the_brief_not_only_the_actions(tmp_path: Path):
+    """判据（`draft/37` §108）：`conductor.role_spec` 要连声明层的画像一起给。
+
+    派活错的形态是"不知道这个伙伴交付什么、不许做什么"，而它此前只返回
+    `actions` / `tools` / `summonable` —— M 于是只有半张画像（§107 第一节）。
+    """
+    from agentflow import agentspec as AS
+
+    reg = _wired(tmp_path)[2]
+    res = reg.call("conductor.role_spec", role="M", role_name="A")
+    assert res.ok, res.error
+    brief = AS.builtin_registry().get("A").brief
+    assert res.data["deliverable"] == brief.deliverable, res.data
+    assert res.data["duty"] == brief.duty, res.data
+    assert list(res.data["boundary"]) == list(brief.boundary), res.data
+    assert res.data["signature_error"] == brief.signature_error, res.data
+    assert res.data["actions"], "动作那几格不能被这次加厚挤掉"
+
+
 def test_the_closing_tool_advertises_every_gate_cell(tmp_path: Path):
     """判据（`draft/37` §94）：`conductor.closing` 的描述必须点名收工门的每一格。
 

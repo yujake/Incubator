@@ -639,8 +639,47 @@ def conductor_role_spec(store, role_name: str) -> ToolResult:
     except Exception:  # 工具面读不到就说读不到，不编空表
         tools_now = []
     data = {"role": role_name, "actions": actions, "tools": tools_now,
-            "summonable": role_name in C.ALLOWED_EDGES.get(S.CONDUCTOR_ROLE, frozenset())}
+            "summonable": role_name in C.ALLOWED_EDGES.get(S.CONDUCTOR_ROLE, frozenset()),
+            # `draft/37` §108（用户口径"先加强描述"）：这一格此前只给"它有哪些动作"，
+            # 而派活错的形态恰恰是"不知道它交付什么、不许做什么"。声明层
+            # （`agentspec.AgentBrief`）里现成，现算给出去 —— 一份来源，不另抄。
+            **{k: v for k, v in (_brief_of(role_name) or {}).items()
+                if k in _ROLE_SPEC_BRIEF_KEYS}}
     return ok(data, **data)
+
+
+#: `conductor.role_spec` 里转述声明层的那几格（`duty`/`deliverable` 是字符串，
+#: `boundary`/`policy`/`stance` 是字符串列表，`signature_error` 一句话）。
+_ROLE_SPEC_BRIEF_KEYS: tuple[str, ...] = ("duty", "deliverable", "boundary", "policy",
+                                          "stance", "signature_error")
+
+
+def _brief_of(role: str) -> dict[str, Any] | None:
+    """从声明层读一个角色的 brief；读不到返回 `None`（不是空 dict）。
+
+    为什么返回 `None` 而不是 `{}`：这几格是附加读数，读不到时调用方一格都不并——
+    空 dict 会把"我们没记录"说成"它没有边界"（三态纪律：没查 ≠ 没有）；
+    `None` 语义上没有冒充任何值，调用方也必须显式处理（`or {}`）。
+    """
+    try:
+        from .. import agentspec as AS
+
+        spec = AS.builtin_registry().get(role)
+        brief = getattr(spec, "brief", None)
+    except Exception:  # noqa: BLE001
+        # 声明层读不到 ⇒ 这几个键是附加读数（有就多给几格），缺席不等于"这个角色没有边界"：
+        # `role_spec` 的主读数（actions / tools / summonable）照旧由另一条路给出，
+        # 而"这个角色存不存在"由那条路承担（不在就 actions 空、summonable=False）。
+        return {}
+    if brief is None:
+        # 理由（R002）：声明层里没有这个角色的 brief ⇒ 附加读数缺席，返回 None；
+        # 缺的是「我们没记录」，不是「它没有」（三态纪律：没查 ≠ 没有）。
+        return None
+    return {"duty": str(brief.duty), "deliverable": str(brief.deliverable),
+            "boundary": [str(x) for x in brief.boundary],
+            "policy": [str(x) for x in brief.policy],
+            "stance": [str(x) for x in brief.stance],
+            "signature_error": str(brief.signature_error)}
 
 @tool(
     "conductor.acceptance",
