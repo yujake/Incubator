@@ -101,9 +101,12 @@ LEG_CHECK_KINDS: dict[str, str] = {
                             "C 自己的产出登记行），D 只是它的读者（`D.ingest(report)`）。"
                             "别把它当成 D 的交付物（2026-10-04 真机读数：主控为此重试 7 次、"
                             "换实例，最后只能如实记未核到 —— 因为 D 的动作面里没有写这张表的动作）",
-    "report_files": "D 写出来的报告文件数（`out/reports/*.md`）—— D 的动作 `write_report` 只写文件、"
-                    "不落表（签名 `write_report(out_path=None) -> str`）；要看它有没有真的产出，"
-                    "数这个才是数对了地方",
+    "report_files": "D 写出来的报告文件数 —— D 的动作 `write_report` 只写文件、不落表"
+                    "（签名 `write_report(out_path=None) -> str`）；要看它有没有真的产出，"
+                    "数这个才是数对了地方。落位取并集：`out/reports/` 与写者自己用的那个"
+                    "子目录（`agent_d.reports_subdir`，缺省 `reports`）—— 写者读配置，"
+                    "读数就得读同一份配置（2026-10-04 T2 第 1 趟：报告真的写出来了，"
+                    "而读数只看一个写死的目录 ⇒ 读到 0 条）",
     "attack_plan_rows": "攻坚计划行数（`attack_plans`）—— F 的交付物：子目标进展与终止原因",
     "numeric_experiment_rows": "数值/计算实验行数（`experiments` 里 `method=numeric`）—— 从零做研究时"
                                "「先算一遍」是最便宜的证据来源（`method=formal` 那一档另有 "
@@ -230,10 +233,38 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
              "status": str(r.get("status") or "")} for r in rows[:8]]}
     if kind == "report_files":
         # D 的 `write_report` 只写文件（返回路径），不落 `analysis_reports` —— 这一档就数文件。
-        out_dir = project_root / "out" / "reports"
-        files = sorted(p for p in out_dir.glob("*.md")) if out_dir.is_dir() else []
-        return len(files), {"reports_dir": str(out_dir),
-                            "files": [p.name for p in files[:8]]}
+        #
+        # 落位取并集（`draft/37` §118）：写者的缺省落位是 `<工作区>/<reports_subdir>`
+        # （`AgentD.__init__` 从 `agent_d.reports_subdir` 取，缺省 `reports`），
+        # 而主控显式传 `out_path` 时常见的落点是 `out/reports`。**写者读配置，读数就得
+        # 读同一份配置** —— 只看一个写死的目录会出现"报告写出来了、读数说 0 条"
+        # （T2 第 1 趟实际就是这么读错的，而那一趟报告确实写了 8 次）。
+        subs = ["out/reports"]
+        cfg_sub = _reports_subdir_of(project_root)
+        subs.append(cfg_sub or "reports")
+        files: list[Path] = []
+        seen: set[str] = set()
+        per_dir: dict[str, int] = {}
+        for sub in subs:
+            d = project_root / sub
+            got = sorted(d.glob("*.md")) if d.is_dir() else []
+            per_dir[sub] = len(got)
+            for p in got:
+                key = str(p.resolve())
+                if key not in seen:
+                    seen.add(key)
+                    files.append(p)
+        detail: dict[str, Any] = {
+            "dirs": per_dir,
+            "reports_subdir": cfg_sub or "reports",
+            "files": [str(p.relative_to(project_root)).replace("\\", "/") for p in files[:8]],
+        }
+        if not cfg_sub:
+            # 配置在、但读不懂 ⇒ 说清楚"这一档是按缺省落位数出来的"，
+            # 而不是让它看起来像"配置说了就是 reports"（三态纪律）。
+            detail["note"] = (f"{project_root / 'config.yaml'} 读不懂 ⇒ 按缺省落位 "
+                              "reports 数；若写者用的是别的子目录，这一档的读数会偏低")
+        return len(files), detail
     if kind == "numeric_experiment_rows":
         rows = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
@@ -476,6 +507,29 @@ def resolve_under_workspace(store: Any, given: str) -> str:
         return str(path)
     root = Path(getattr(store, "root", "."))
     return str((root / path).resolve())
+
+
+def _reports_subdir_of(project_root: Path) -> str:
+    """D 把报告写在哪个子目录（`agent_d.reports_subdir`，缺省 `reports`）。
+
+    为什么读数要读配置（`draft/37` §118）：写者（`AgentD.__init__`）就是从这个键取
+    落位的。读数若只看一个写死的目录，就会出现"报告真的写出来了、读数说 0 条" ——
+    在验收表里那会被读成"任务没做"，而实际是"读数问错了地方"。
+
+    三态：没有配置文件 ⇒ 返回缺省的 `reports`（这是"全用默认值"的正常形态）；
+    文件在、但读不懂 ⇒ 返回空串，由调用方把"没读懂"写进读数（不许静默当成默认值）。
+    """
+    p = project_root / "config.yaml"
+    if not p.is_file():
+        return "reports"
+    try:
+        import yaml
+
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        got = (doc.get("agent_d") or {}).get("reports_subdir")
+    except Exception:  # noqa: BLE001 —— 读不懂是"没查成"，由调用方落成读数里的一句话
+        return ""
+    return str(got) if got else "reports"
 
 
 def _has_paper_package(root: Path) -> bool:

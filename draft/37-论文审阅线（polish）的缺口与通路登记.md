@@ -9009,3 +9009,129 @@ R1 0/1 ✗、R4 0/1 ✗）⇒ 恢复是忠实的，不是"看起来像"。
 2. **事件日志不是日志，是唯一的兜底真源。** 这一趟若没有 `events.jsonl`，
    attempt-1 的全部证据（21 篇文献、45 概念、39 关系、6 次实验）就没了 ——
    而它的价值恰好在"你要复核裁定"的那一刻。
+
+---
+
+## §118 R4 的真根因：`D.write_report` 把相对路径按**进程当前目录**解析 ⇒ 交付物静默离开工作区
+
+§114 我写的是"`D.write_report` 只写文件、不落表"。前半句对，后半句是**我读错了地方**。
+把 attempt-1 的 `out/tasks/*.json` 逐条翻出来，真相是另一回事：
+
+```text
+t-0024: action=write_report role=D outcome=ok status=done
+        payload_preview = "\"out\\\\review\\\\D-analysis.md\""
+```
+
+主控传的 `out_path` 是**工作区内的合法落点** `out\review\D-analysis.md`。而那个文件不在
+`projects/p6-research-from-zero/out/review/` 里 —— 它在
+
+```text
+D:\Incubator\agentflow\out\review\D-analysis.md   2282 字节  2026-10-04 13:42:07
+# D 初步研究报告 / 生成时间：2026-10-04T13:42:07+08:00 / 智能体：agent-D-d8
+```
+
+**进程 cwd 下的那个目录里。** 第 1 趟的 `run-agent` 是在 `D:\Incubator\agentflow` 下起的，
+而 `write_report` 里写的是 `path = Path(out_path)` —— 相对路径于是按 cwd 解析。
+八次 `write_report` 全部 `outcome=ok`、报告里写着"执行完成"、工作区里一个字节都没有：
+**交付物静默离开工作区**，而台账说成了。
+
+这与 `conductor.acceptance(project_dir=".")`（§96 的第三个漏点）是**同一族**：
+"工具的契约是相对工作区，实现却按进程目录解析"。
+
+### 一、修法（一条规则，一处实现）
+
+- `tools/doc_tools.py`：`_resolve_out_path` → **`resolve_out_path`**（公开）。
+  它本来就是那条规则的唯一实现（相对 → 按 `root` 解析；越界 → 拒绝），
+  `D` 直接复用，不另写第二份判据；
+- `agent_d/write_report.py`：`resolve_out_path(store.root, out_path, f"{run_id}-research",
+  self.reports_subdir)`；返回值改成**绝对路径**（与"传绝对路径时的旧行为"一致，
+  `pipeline._rel_to_root` 等调用方照旧能用）；
+- 越界（绝对路径跳到工作区外、`..`）⇒ 抛 `ValueError`：工作区边界是沙箱契约，
+  这件事不许"写到外面再警告"。
+
+### 二、验收读数与写者同口径（同一根因的另一半）
+
+`report_files` 原先写死数 `out/reports/*.md`，而写者的缺省落位是
+`<工作区>/<agent_d.reports_subdir>`（`AgentD.__init__` 从配置取，缺省 `reports`）
+—— **写者读配置、读数写死目录**，于是"报告真的写出来了，读数说 0 条"。
+现在取并集：`out/reports/` ∪ 配置里的那个子目录；配置在但读不懂 ⇒ 读数里写明
+"按缺省落位数、可能偏低"（三态：不许把读不懂静默当成默认值）。
+
+### 三、判据（新文件 `tests/test_write_report_path.py`，4 条）
+
+| 判据 | 内容 |
+|---|---|
+| 正控 + 泄漏的负控 | `monkeypatch.chdir` 到别处，传相对 `out_path` ⇒ 文件在**工作区**里，且 cwd 那边不留任何东西 |
+| 缺省落位 | `write_report()` ⇒ `<工作区>/reports/0000-research.md` |
+| 越界拒绝 | 工作区外的绝对路径 ⇒ `ValueError`（含"越界"字样）且零写入 |
+| 读数同口径 | 写者缺省落位 + `out/reports/` 都算；`closing` 的 R4 行读数 2/1 成立 |
+
+另有三处**既有**判据原先用"工作区外的 `out_path`"当正控（`test_coverage_agent_d_demo.py`），
+它们与"边界不许越"冲突 ⇒ 改成工作区内的路径（它们要测的是"显式 `out_path` 被尊重 +
+父目录会建"，这两件事与边界无关），并在 docstring 里点名新判据在哪儿。
+
+### 四、这一笔的账
+
+这条缺口的代价是**一整条验收腿**（R4）在真机上永远是假，而它本可以一次就成立 ——
+更坏的是主控会因此反复重试同一条路（第 1 趟试了 8 次），把步数与预算烧在
+"我说了它写出来了、读数偏说没有"上。**"写成功"与"写在工作区里"是两件事**，
+这也正是本项目记录的第三次同族缺陷。
+
+---
+
+## §119 T2 第 2 趟的可行性论证（开跑前，用户口径要求的那一份）
+
+**任务（人给的原文，逐字）**：`研究这个问题：哪些 (m,k) 存在无限 R(m,k)-例子（m-正则、围长恰为 k、每条边至少落在两个不同的 k-圈里）？从零做出有价值的结果，交付研究手稿与说明。`
+（86 字，≤100；不含任何角色分工的字样；`TASK.md` 里就是这一行。）
+
+**工作区**：`agentflow/projects/p6b-research-from-zero`（新建；第 1 趟的
+`p6-research-from-zero` 原样留着当对照）。里面只有四件：`TASK.md`、`README.md`、
+`out/paper/ACCEPTANCE.md`（人给的 R1–R5 表）、`out/paper/ACCEPTANCE-CHECKS.json`。
+
+### 一、第 1 趟卡在两处，这一轮是否真的可做
+
+| 第 1 趟的卡点 | 现在的状态 | 证据 |
+|---|---|---|
+| R1「立起研究问题」= 0 行：**动作面缺动作** | 已补：`D.propose_question` 进了 D 的动作表 | 单元判据 4 条（含 `conductor.summon` 端到端：`outcome=ok` + 一行落库；空问题经 summon 落 `refused`） |
+| R4「分析报告落盘」= 0 文件：`out_path` 按**进程 cwd** 解析，交付物写到工作区外 | 已修：`resolve_out_path` 按工作区根解析、越界拒绝；读数按写者落位数 | 新判据 4 条（`chdir` 到别处仍是工作区里那个文件；越界零写入；`reports/` 与 `out/reports/` 都算） |
+| 锚格在"没有论文包"的工作区里是 `unknown` ⇒ 门永远关不上 | 已修两次（§115/§117）：判据换成"有没有论文包的实物"，空白 T2 工作区读数 = `not_applicable` | 预检逐格读数 |
+
+预检（离线、花钱之前）在空白工作区上的读数，逐字：
+
+```text
+七格：{'acceptance': 'fail', 'anchor': 'pass', 'contradictions': 'pass', 'load_bearing': 'pass',
+       'report_shape': 'unknown', 'substance': 'fail', 'user_pending': 'pass'}
+R1 0/1 · R2 0/3 · R3 0/1 · R4 0/1 · R5 0/1   ← 这才是"从零"的诚实起点
+```
+
+### 二、五个验收行各自的通路（逐条说清"谁做得到"）
+
+| 行 | 谁产出 | 通路是否在**可召唤**面上 |
+|---|---|---|
+| R1 `research_question_rows ≥ 1` | D | 是（`D.propose_question`，本轮新补） |
+| R2 `retrieval_attempts ≥ 3`（`done=True` 的检索请求） | A | 是（`A.search_literature`；第 1 趟实测 4 条） |
+| R3 `numeric_experiment_rows ≥ 1` | E | 是（`E.run_experiment(method="numeric")`；第 1 趟实测 6 条，前三次超时后三次 `exit_code=0`） |
+| R4 `report_files ≥ 1` | D | 是（`D.write_report`；本轮修的是"写到哪儿"） |
+| R5 `attack_plan_rows ≥ 1` | F | 是（第 1 趟实测 1 条） |
+
+⇒ **五行都有可召唤的通路，且四条在真机上已经被跑出来过**（第 1 趟 R2/R3/R5 成立、
+R1/R4 被我修掉）。这不是"应该能做"，是"只差这两处结构缺陷"。
+
+### 三、外生风险（不是系统缺陷，但要在裁定里分清）
+
+1. **网络**：A 的 provider（openalex）与下载是外网依赖。第 1 趟拿到了 21 行文献、
+   21 篇下载 ⇒ 这一环本机可用；若这一趟网络抽风，读数要按"没查成"记，不许读成"没有文献"。
+2. **Mathlib**：本轮的 T2 不需要形式化（R1–R5 里没有 formal 那一档）；环境已配好
+   （`AGENTFLOW_MATHLIB_ROOT` / `LEAN_PATH`），E 若自己选了 formal 也跑得起来。
+3. **预算**：第 1 趟 $1.78（108 步 / 上限 150）。这一轮多了一个动作、少了一处"主控
+   反复重试 write_report"的空转，预期**不高于**第 1 趟；上限仍是 $5。
+4. **"有价值的成果"这一句是人的判据，不是机器的**：R1–R5 只说"该做的动作都做了"。
+   所以裁定分两层 —— ① 验收行 + 七格（机器读数）；② 我人对产物本身的判断
+   （手稿里有没有真的结论、结论有没有证据链、有没有把"没查到"写成"不存在"）。
+   第 1 趟的产物（45 概念 / 39 关系 / 6 次数值实验 / 1 份攻坚计划）我会与这一趟并列看。
+
+### 四、结论
+
+**论证通过**：两处根因都已落成代码 + 判据，五行通路齐备，风险都有处置口径。
+按用户口径开跑真机（`--budget-usd 5 --wall-clock-sec 14400 --max-steps 150`，
+工作区 `p6b-research-from-zero`，sid `t2b`），跑完按 R1–R5 + 七格 + 产物三层裁定。

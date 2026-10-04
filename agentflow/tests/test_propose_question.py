@@ -57,3 +57,37 @@ def test_the_action_is_advertised_on_d_surface():
     props = (action.params or {}).get("properties") or {}
     assert "question" in props, props
     assert "question" in (action.params or {}).get("required", ()), action.params
+
+
+def test_the_boss_can_walk_it_through_conductor_summon(tmp_path: Path):
+    """编排层的正控（这才是 T2 的 R1 真正依赖的那条路）：主控 summon D 的那个动作。
+
+    为什么单列：`propose_question` 是**给主控用的**动作，而主控只能 `conductor.summon`。
+    直接以 D 的身份调方法只能证明"实现能落行"，证明不了"编排层通"——
+    真机掉下去的地方历来在编排层（`draft/37` §85–§89 的第三次露头）。
+    """
+    from agentflow.agent_d import AgentD
+    from agentflow.conductor import Conductor
+    from agentflow.tools import build_registry
+
+    (tmp_path / "data").mkdir(exist_ok=True)
+    st = Store(tmp_path)
+    st.init()
+    c = Conductor(st, registry={"D": ("object", AgentD(st))})
+    reg = build_registry(store=st, conductor=c).registry
+
+    res = reg.call("conductor.summon", role="M", target_role="D",
+                   action="propose_question",
+                   params={"question": "哪些 (m,k) 存在无限 R(m,k)-例子？",
+                           "kind": "gap", "priority": "high"},
+                   input_key="hop-d")
+    assert res.data["outcome"] == "ok", res.data
+    rows = st.rows("research_questions")
+    assert len(rows) == 1 and rows[0]["status"] == "open", rows
+    assert st.rows("tasks")[-1]["action"] == "propose_question", st.rows("tasks")
+
+    # 负控（端到端）：空问题经 summon 也要在台账里落成 refused，而不是 ok
+    bad = reg.call("conductor.summon", role="M", target_role="D",
+                   action="propose_question", params={"question": "  "}, input_key="hop-d2")
+    assert bad.data["outcome"] == "refused", bad.data
+    assert len(st.rows("research_questions")) == 1, "被拒的那次不许再落一行"

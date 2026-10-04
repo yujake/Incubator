@@ -17,11 +17,31 @@ class _WriteReport:
         报告末尾额外给一节审计信息（每条判据的中间值、用了真身还是降级替身、
         工具错误），因为"结论可复核"是本系统的核心诉求 —— 一份说不出自己
         依据的报告，读者只能选择全信或全不信。
+
+        ## `out_path` 相对谁解析（`draft/37` §118：T2 第 1 趟的真机读数）
+
+        缺省落点是 `<工作区>/<reports_subdir>/<qid>-research.md`（`reports_subdir`
+        来自配置，缺省 `reports`）。传进来的**相对** `out_path` 一律按**工作区根**
+        解析 —— 原先是 `Path(out_path)` 直接写，于是按进程当前目录解析：
+
+        ```text
+        T2 第 1 趟：主控传 out_path="out\\review\\D-analysis.md"（工作区内的合法落点）
+        ⇒ 文件写到 D:\\Incubator\\agentflow\\out\\review\\D-analysis.md（进程 cwd）
+        ⇒ 交付物静默离开工作区，而台账记的是 outcome=ok、报告里写着"执行完成"
+        ```
+
+        规则与工具层的写盘同一个实现（`doc_tools.resolve_out_path`）：
+        越界（绝对路径跳出去、`..`）一律拒 —— 工作区边界是沙箱契约，不是建议。
+        返回值是**绝对**路径（与传绝对路径时的旧行为一致，`pipeline._rel_to_root`
+        等调用方照旧能用）。
         """
         rows = sorted(self.store.rows("research_questions"), key=lambda r: str(r.get("question_id")))
         analyses = getattr(self, "last_research", {}) or {}
         run_id = rows[-1]["question_id"] if rows else "0000"
-        path = Path(out_path) if out_path else (self._reports_dir() / f"{run_id}-research.md")
+        from ..tools.doc_tools import resolve_out_path
+
+        _rel, path = resolve_out_path(Path(self.store.root).resolve(), out_path,
+                                      f"{run_id}-research", self.reports_subdir)
         path.parent.mkdir(parents=True, exist_ok=True)
 
         conf_count = {"high": 0, "medium": 0, "low": 0}

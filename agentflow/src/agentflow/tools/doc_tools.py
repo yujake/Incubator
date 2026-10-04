@@ -151,7 +151,7 @@ def dependencies_for_doc(drows: Iterable[Mapping[str, Any]], doc_id: str) -> lis
     return out
 
 
-def _resolve_out_path(
+def resolve_out_path(
     root: Path, out_path: Any, doc_id: str, default_subdir: str
 ) -> tuple[str, Path]:
     """把 out_path 解析成工作区内的绝对路径，并返回 (相对路径, 绝对路径)。
@@ -159,6 +159,15 @@ def _resolve_out_path(
     越界一律拒绝（而不是"写到外面再警告"）：工作区边界是沙箱契约的一部分，
     允许一次越界写就等于承认这个边界可以被绕开。用 `resolve()` 之后再
     `relative_to()` 判断，而不是靠字符串 `..` 检查 —— 后者会被符号链接绕过。
+
+    ## 为什么它是公开的（`draft/37` §118）
+
+    `D.write_report` 原先自己写 `Path(out_path)` —— 相对路径于是按**进程当前目录**
+    解析。T2 第 1 趟真机：主控传 `out_path="out\\review\\D-analysis.md"`（工作区内的
+    合法落点），文件却写到了 `D:\\Incubator\\agentflow\\out\\review\\D-analysis.md`
+    （进程 cwd），**整个交付物静默离开工作区**，而那一趟记的是 `outcome=ok`。
+    同一条规则不能有两份实现（那正是"两份判据必然漂移"），所以它在这里公开，
+    由角色方法直接复用。
     """
     raw = str(out_path) if out_path else f"{default_subdir}/{doc_id}.md"
     p = Path(raw)
@@ -1232,7 +1241,7 @@ def build_document(
                 details={"created": False, "proof_check": proofs, "problems": proofs["problems"]},
             )
         doc_id = tx.alloc_id("doc")
-        rel, absolute = _resolve_out_path(root, out_path, doc_id, default_subdir)
+        rel, absolute = resolve_out_path(root, out_path, doc_id, default_subdir)
         # ---- 覆盖守卫（`draft/37` §91 的真机读数：一次调用把交付物覆盖成生成物）
         #
         # T1 第 5 趟：主控传 `out_path="out/paper/main.tex"`（它把"生成 markdown 的落点"
@@ -1736,7 +1745,7 @@ def register(
 def _resolve_project_root(workspace: Path | None, project: str) -> tuple[Path | None, str]:
     """把 `project` 解析成工作区内一个真实目录。返回 `(路径, 问题)`。
 
-    与 `_resolve_out_path` 同一个纪律：越界（绝对路径、`..`、跳到工作区外）一律拒。
+    与 `resolve_out_path` 同一个纪律：越界（绝对路径、`..`、跳到工作区外）一律拒。
     这一层要起子进程并把它的工作目录设成这个路径 —— 放宽等于把"跑什么、在哪跑"
     交给调用方，而工具层把那个能力定义成 `exec`（需要审批）。
     """

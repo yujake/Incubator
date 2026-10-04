@@ -118,12 +118,13 @@ def test_write_report_marks_evidence_as_backfilled_only_when_research_was_not_ru
     d = AgentD(st)
     d.research("0000")
     assert "0000" in getattr(d, "last_research", {}), "research() 没登记取值结果 ⇒ 态 B 造不出来"
-    done = Path(d.write_report(out_path=tmp_path / "done.md")).read_text(encoding="utf-8")
+    done = Path(d.write_report(out_path=tmp_path / "ws" / "done.md")).read_text(encoding="utf-8")
 
     # 态 A：换一个干净的 AgentD（last_research 为空 = 没做过研究）。
     fresh = AgentD(st)
     assert not getattr(fresh, "last_research", {}), "新建的 AgentD 不该带研究记录"
-    not_done = Path(fresh.write_report(out_path=tmp_path / "not_done.md")).read_text(encoding="utf-8")
+    not_done = Path(fresh.write_report(out_path=tmp_path / "ws" / "not_done.md")
+                    ).read_text(encoding="utf-8")
 
     assert not_done != done, "两态写出了逐字相同的报告 ⇒ 没做/做了有结果被折叠了"
     assert "（报告期补取）" in not_done, (
@@ -145,7 +146,7 @@ def test_write_report_on_empty_store_still_writes_and_says_no_conclusions(tmp_pa
     """
     st = Store(tmp_path / "ws")
     st.init()
-    out = AgentD(st).write_report(out_path=tmp_path / "empty.md")
+    out = AgentD(st).write_report(out_path=(tmp_path / "ws" / "empty.md"))
     text = Path(out).read_text(encoding="utf-8")
     assert "问题总数：0" in text, text[:400]
     assert "本轮尚未形成任何结论" in text, text[:400]
@@ -157,13 +158,17 @@ def test_write_report_honours_explicit_out_path_and_creates_parent_dirs(tmp_path
     为什么是负控：默认路径依赖 `_reports_dir()`。若实现把 `out_path` 吞掉
     （例如总是写默认位置），人给的路径会被静默忽略 —— 而"调用方以为文件在 A、
     实际在 B"是典型的静默失败。深一层的父目录顺便测了 `mkdir(parents=True)`。
+
+    `out_path` 必须在**工作区内**（`draft/37` §118）：相对路径按工作区根解析，
+    跳到工作区外的绝对路径一律拒 —— 后者的判据在
+    `tests/test_write_report_path.py`（T2 第 1 趟的泄漏就是那么发生的）。
     """
     st = Store(tmp_path / "ws")
     st.init()
     _graph(st)
-    target = tmp_path / "deep" / "nested" / "r.md"
+    target = tmp_path / "ws" / "deep" / "nested" / "r.md"
     out = AgentD(st).write_report(out_path=target)
-    assert Path(out) == target
+    assert Path(out) == target.resolve()
     assert target.exists()
 
 
