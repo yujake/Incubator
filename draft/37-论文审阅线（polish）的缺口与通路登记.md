@@ -10067,3 +10067,79 @@ claim-4（is_negative=true）："The literature on regular graphs of prescribed 
    `attack_plans`）、计划必须有推进（`step`）、D↔F 必须有往来（留言）、
    形式化失败必须回流（E→D 的失败读数进下一轮）。这四条都能机器判，但会让 T2 那类
    研究任务的关口变紧 —— 同样请用户点头再落。
+
+## §134 交接手稿（用户口径：传信息就传手稿编号 + 一句简要描述）
+
+### 一、用户口径（逐字）
+
+> 各智能体在互相传递信息时可以借助手稿的方式…每个智能体要交接工作前写一份手稿…
+> 标号靠脚本拿最新的，从 0000 开始顺次标…传信息时就传手稿编号…
+> 命名就是标号 + 谁 to 谁，给所有人就是谁 to ALL…格式用 markdown
+
+> 当然就传个编号感觉有点尬，可以再附一句简要描述
+
+### 二、落地（做了什么 → 落在哪）
+
+| 做了什么 | 落在哪 |
+|---|---|
+| 手稿本体：写在 `manuscripts/`，文件名 `0007-DtoF.md` / `0007-DtoALL.md`，正文 markdown，附 `title` / `refs`（前序编号）/ `summary` | `src/agentflow/manuscripts.py`（新） |
+| 编号：**脚本分配**（从 `0000` 起顺次），模型不许自己编号 | `manuscripts.next_id` + `_scan_ids` |
+| 读 / 列：`manuscripts.read(id=…)`、`manuscripts.list(to=…)`（A–H 八个角色；主控 M 走 `fs.*`，见 §四） | `src/agentflow/tools/manuscript_tools.py`（新，2 个只读工具） |
+| "写手稿 + 把编号发出去"合成**一个循环形状** `handoff`（第 5 条形状），框架顺带把 `brief` 拼成留言 `[手稿 0007] …` | `agent_loop.SHAPES` / `_shape_of` / `_do_handoff` / `JSON_TAIL` |
+| 协议写进所有人的提示词：写给谁、编号谁分配、`refs` 必须真实存在、对方怎么读 | `agent_prompts.HANDOFF_PROTOCOL`（新一节，`SECTION_ORDERS["HANDOFF"] = 4700`） |
+
+### 三、编号与命名（"脚本拿最新的"是怎么不撞号的）
+
+- 编号从 **`manuscripts/` 下实有文件**扫出来（`_scan_ids`），**不从索引读**
+  —— 文件是真相，`index.jsonl` 只是账本（账本丢了不改变编号）。
+- 写之前拿 `manuscripts/.lock`（`FileLock`）：并发写不撞号
+  （判据 `test_concurrent_writers_do_not_collide`：多写者同时写，编号互不相同）。
+- `name_for(mid, sender, recipient)` → `0007-DtoF.md`；`parse_name` 按
+  `NAME_RE = ^(\d{4})-([A-Za-z]+)to([A-Za-z]+)\.md$` 反解，对不上就不算手稿。
+- 空正文 / 非法收件人 / 引用不存在的编号 ⇒ **拒绝且零写入**（不留"我交接了"的假证据）。
+
+### 四、为什么"写手稿"不做成工具（一处刻意的不对称）
+
+工具层注入的依赖（`store` / `root` / `graph` / `roles` / `conductor` / `session`）里
+**没有 per-call 的"调用者是谁"**，而文件名必须写 `谁 to 谁`。做成工具就只能让模型
+自己填 `from` —— 那等于把**身份**交给被审计的一方去声明，这条通道的溯源价值当场归零。
+循环自己知道 `self.role`。所以：**写 = 循环形状（身份由框架填），读/列 = 工具**。
+
+### 五、判据（6 条 + 1 条骨架同源）
+
+| 判据 | 守什么 |
+|---|---|
+| `test_ids_start_at_zero_and_names_say_who_to_whom` | `0000` 起顺次；文件名如实写"谁 to 谁" |
+| `test_concurrent_writers_do_not_collide` | 并发写不撞号 |
+| `test_empty_or_unknown_recipient_is_refused_with_zero_writes` | 非法收件人 ⇒ 拒绝 + 零写入 |
+| `test_the_handoff_shape_writes_the_manuscript_and_sends_the_brief` | 一次 `handoff` = 一份手稿 + 一条带编号的留言 |
+| `test_a_handoff_without_a_body_is_refused_as_an_invalid_step` | 空手稿不算交接 |
+| `test_every_role_can_read_and_list_but_writing_is_a_loop_shape` | 读面对 A–H 开放（M 不在其列，见 §四）、写面**不在**工具表 |
+| `test_every_documented_shape_actually_parses`（`tests/test_agent_loop.py`） | 提示词里那条 `handoff` 骨架必须能被 `_shape_of` 真解析通过（§195 的老坑：文档不许比解析器松） |
+
+### 六、还没做的（别当成已接线）
+
+1. **"手稿真被读了没有"没有判据**：现在只有"写了"这一半。验收档里没有
+   "收到 `[手稿 NNNN]` 要回执 / 要在下一份里 `refs` 引它"这一条 —— 于是一趟跑完
+   可能是"人人都写了手稿、没人读"，而台账上看不出来。
+2. **交接链的闭环读数**（我发的编号被谁引了）留给 T4：T4 的重点是 C 线
+   （A→B→C）与 C 的产出能否被下一步接上，正好靠编号串。
+
+### 七、一处改了主意的地方：主控 M 不在读面上（实测逼出来的）
+
+第一版把 `manuscripts.read` / `manuscripts.list` 也发给了 M（"八面 + 主控"）。
+全量套件当场红了三条：`tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`
+（它断言 `for_role("M") == M_TOOL_FACE`，**相等**）、`tests/test_host_wiring.py`
+的同族一条、以及工具面快照。处置不是"把那条判据改宽" —— 那条相等断言按 §38/§57
+的两次裁定守着 M 的读面边界（编排面 + `fs.*` 六件白名单），扩它属于改权限面，要裁定。
+**收窄**成 A–H 八面之后：M 依然读得到同一批文件（`fs.list` / `fs.read` / `fs.search`
+本来就在白名单里，`manuscripts/` 就在工作区里），而 M 的工具数仍是 17（一字未动）。
+
+### 八、这一批的读数
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3549 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1463.95s）—— 这一批第一遍实测是 **23 红**，全部集中在"文档对账"那一族（见 §135） |
+| lint | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 49`（与基线逐位相同） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（退出码 1）：`tools/__init__.py` 是本批新增命中（登记模块清单），其余 `specs/*`、`capabilities.py`、`lint_rules.py`、`verify_tools.py` 是既有的欠签 |
+| 文档对账 | `tests/test_release_all.py` / `tests/test_role_specs_complete.py` / `tests/test_reading_map.py` | 全绿（这一批的隐形成本：新增 1 个顶层模块 + 2 件工具 ⇒ README / DEVELOPMENT / `docs/ROLE-SPECS.md` 三处读数与 §R0 表 77 行逐条同步，见 §135） |

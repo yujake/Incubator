@@ -69,6 +69,7 @@
 | `gates.py` | H 的 G1–G15 门引擎 —— 15 道独立、有名字、可单独查询的检查器 |
 | `stopctl.py` | 停机的唯一实现（`draft/37` §128）：停机开关（`.agentflow-stop`）+ 子进程登记（`runs/<role>-<sid>.pid`）+ 优雅停止与强制停止（`taskkill /T /F` 连子孙）。为什么要它："用户叫停"这条通道此前只在多轮路径存在 —— 单趟 `run-agent` 里叫停之后它继续跑到第 123 步；而 E 的实验子进程会把 600 s 跑满（开关落盘后 0.2 s 内被终止） |
 | `refusals.py` | 角色动作的「拒绝」只有一个形态（`draft/37` §88）：`refuse(kind, error, **extra)` 造出 `ok=False` + 受控 `refusal_reason` 的那一笔。为什么要它：终态映射原先只看"handler 有没有返回 dict"，于是 `ok=False` 被记成 `outcome=ok`（T1 第 2 趟真机：8 次拒绝在台账上像 8 次成功，而 `statements` 是 0 行）—— 现在声明了受控理由的落 `refused`，没声明的落 `failed`，两者不再同形 |
+| `manuscripts.py` | **交接手稿**的唯一实现（`draft/37` §134，用户口径）：`manuscripts/` 下的 `<编号>-<谁>to<谁>.md`（给所有人写 `toALL`）、编号从 `0000` 起**由脚本扫文件分配**（不从账本读）、文件锁下的并发写、账本文件只是流水。为什么要它：交接的"派活依据"与"溯源"此前只活在对话里 —— 写了手稿之后每一跳都能被第三方从盘上复核。写走循环形状 `handoff`（文件名要写"谁"，而工具层拿不到 per-call 身份），读/列走 `tools/manuscript_tools.py`（A–H 八面，M 用 `fs.*` 白名单读同一批文件） |
 
 ### 第 3 层 · 工具面（角色手上的"手与眼"）
 

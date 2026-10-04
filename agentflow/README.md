@@ -416,9 +416,9 @@ agentflow/
 │   │                         离线演示 / 用户频道（提问与"没答"三态）/ 输出编码 / 终端呈现原语
 │   ├── cli.py / __main__.py  命令行入口（25 个子命令，`python -m agentflow.cli --help`）
 │   ├── agent_a..h.py         八个角色（每个都能 `python -m agentflow.agent_x` 自检）
-│   └── tools/                工具层（**13** 个 `*_tools.py`：table / fs / search / ocr / graph /
+│   └── tools/                工具层（**14** 个 `*_tools.py`：table / fs / search / ocr / graph /
 │                             trace / research / verify / attack / doc / review / conjecture /
-│                             conductor，外加 `base.py` 与装配点 `__init__.py`；
+│                             conductor / manuscript，外加 `base.py` 与装配点 `__init__.py`；
 │                             组装结果与逐角色条数以 `python -m agentflow.cli tools` 为准）
 ├── tests/                    pytest（162 个 `test_*.py`；离线 + 联网两套；见 §2）
 ├── tools/                    开发期工具与探针（`release_all.py` 一键发布、`coverage_zero_test.py` 覆盖门、

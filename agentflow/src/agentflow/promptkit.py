@@ -55,6 +55,7 @@ SECTION_ORDERS: dict[str, int] = {
     "THREE_STATE": 4100,
     "TASK_FRAME": 4200,              # 这一次要做的任务（提供者按调用求值）
     "PARTNERS": 4500,                # 可协作的伙伴（从 ALLOWED_EDGES 生成）
+    "HANDOFF": 4700,                 # 交接手稿协议（`draft/37` §134）：编号 + 谁给谁 + 一句描述
     "AGENT_TOOLS_SDK": 5000,
     # 环境事实分两段：工作区（结构/版本）与这台机器的工具链（现算读数）。
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——

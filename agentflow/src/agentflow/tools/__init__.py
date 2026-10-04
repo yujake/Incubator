@@ -216,6 +216,7 @@ _MODULES: tuple[str, ...] = (
     "doc_tools",
     "review_tools",
     "conductor_tools",
+    "manuscript_tools",
 )
 
 #: `_MODULES` 里每个模块产出的工具名组前缀（`verify_tools` ⇒ `verify`）。

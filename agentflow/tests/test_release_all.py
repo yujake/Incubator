@@ -2145,6 +2145,12 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "locallib.py": "本地书架：把目录里的 PDF 登记进项目库，并作为 `run_topic` 的检索/取全文接缝",
     "paperbuild.py": "论文包的构建/编译/锚核对：受限地起项目脚本、读回 `REPRO_RESULT` 契约、把三态翻成工具层结论（`draft/28` §188）",
     "renderanchor.py": "渲染锚与编译回执的判据本体（纯函数）：源表/源文件/回执三维 + 三态；只读角色也能调它核包（`draft/28` §191）",
+    # `draft/37` §134（2026-10-04，用户口径）：交接手稿——「交接工作前写一份手稿」。
+    # 它不是对拍副本：`agent_loop._do_handoff`（循环形状）与 `tools/manuscript_tools.py`
+    # 都转发到它的 `write` / `read` / `list_all`；编号分配与命名规则只有这一份实现。
+    "manuscripts.py": "交接手稿的唯一实现：`manuscripts/` 下的 `<编号>-<谁>to<谁>.md`、"
+                      "编号从 0000 顺次（拿文件扫，不拿索引）、文件锁下的并发写、`index.jsonl` 账本 —— "
+                      "「派活依据」与「溯源」此前只活在对话里（`draft/37` §134）",
     "modelclient.py": "把模型网关适配成抽取层要的 `.complete()`（带 scope='extract' 记账）",
     "modelcost.py": "模型花销入账适配器（`ModelReply` → `usage_ledger` 的一笔账）",
     "projects.py": "项目工作区：一个项目一个文件夹、默认命名 project1..N、冷启动/热启动判定",

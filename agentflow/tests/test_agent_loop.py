@@ -476,9 +476,13 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
     from agentflow.agent_loop import JSON_TAIL, _shape_of
 
     # 替换顺序要紧：`{...}` 必须先变成 `{}`，否则 `...` → `x` 会把它改成 `{x}`（非法 JSON）。
+    # 占位符表要与 `JSON_TAIL` 同源：骨架里每出现一个新的 `<...>`，这里要么补一条替换、
+    # 要么那条骨架就解析不过（§195 的原意——文档不许比解析器松）。
     fixed = (JSON_TAIL.replace("{...}", "{}").replace("<工具名>", "table.list")
              .replace("<动作名>", "review").replace("A-H", "H")
              .replace("<伙伴或 #public>", "#public").replace("<结论>", "做完了")
+             .replace("<伙伴/M/ALL>", "A").replace("<markdown 正文>", "正文")
+             .replace("<前面的编号>", "0000")
              .replace("...", "x"))
     parsed: list[str] = []
     for line in fixed.splitlines()[1:]:
@@ -486,8 +490,8 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
         shape, _payload, problem = _shape_of(data)
         assert not problem, (line, problem)
         parsed.append(shape)
-    assert sorted(parsed) == sorted(["tool", "summon", "summon_many", "message", "note",
-                                          "ask_user", "final"]), \
+    assert sorted(parsed) == sorted(["tool", "summon", "summon_many", "message", "handoff",
+                                    "note", "ask_user", "final"]), \
         parsed
 
 

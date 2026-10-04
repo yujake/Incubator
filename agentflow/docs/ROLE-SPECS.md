@@ -58,7 +58,7 @@
 
 | 事实 | 实测值 | 出处 |
 |---|---|---|
-| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 75） | **55** | 本文 §0.3（带观测时刻的实测输出） |
+| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 77） | **55** | 本文 §0.3（带观测时刻的实测输出） |
 | 全部 8 个角色**共有**的工具 | 9 个：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` | 实测（交集） |
 | 只读角色（C/H）工具面里的写工具 | **0**（`role_filter_notes = {}` ⇒ 结构性拦截一次都没触发） | 实测 |
 
@@ -221,7 +221,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（75 个，逐条）
+## R0. 全局工具总表（77 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -258,55 +258,57 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 26 | `graph.neighbors` | 返回某概念的邻居概念代号（升序）及其连接的度数信息；**邻居数有上限**，截断时如实报出 | `read` | 否 | C D | **concept_id**；max_neighbors | `{'concept_id','name','degree','total_neighbors','returned_neighbors','truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}` | `test_tools_graph_trace.py` / `test_tools_attack_graph_fixes.py` | ✅ **已修**（本轮）：原先 `neighbors` 是**不可截断的裸列表**，上下文预算的剪枝在它上面不生效（实测 300 邻居 = 27046 字符、`prune_tool_result` 后一条没少）。现在有界层在**工具层**（`max_neighbors` 默认 200），`RelationGraph.neighbors` **保持裸 list**（4 个调用点按 list 语义用它） |
 | 27 | `graph.relations_between` | 返回同时包含两个概念的全部关系（按 `quote_verified`/`status`/信息量确定性排序） | `read` | 否 | C D | **a**,**b** | `{a,b,count,relations:[{relation_id,description,status,quote_verified,lit_id,page_range}]}` | `test_tools_graph_trace.py` | — |
 | 28 | `graph.stats` | 返回当前图的统计摘要与热度前列（不重建索引；未建图时按需构建一次） | `read` | 否 | C D | top_n | `{…summary…,hot:[…]}` | `test_tools_graph_trace.py` | INVENTORY 6.4：`summary().degree_top` 取前 5 而 `hot` 用 `top_n`（**未判断是否有意**） |
-| 29 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用；探测阶段**不会**下载 easyocr 模型 | `write_local` | **是** | B | refresh | `backends[]` + `any_ocr_backend_available`/`selected_for_auto`/`verdict` | `test_tools_search_ocr.py` | ✅ **已修**：原先声明 `read`（= 不需审批）却在**工作区外 mkdir**（`~/.EasyOCR/model`）并起进程 ⇒ 改为 `write_local`（如实声明） |
-| 30 | `ocr.detect_text_layer` | 判断 PDF 有没有文本层；无文本层时说明这是「无法校验」而不是「校验失败」 | `read` | 否 | B | **path** | `has_text_layer`/`pages`/`page_count`/`pages_with_text`/`chars`/`source_kind`/`reason`/`suggested_next` | `test_tools_search_ocr.py` | INVENTORY 4.3(b)：`page_count(p)` 在 `try` 之外，异常逃逸 |
-| 31 | `ocr.run` | 对指定页（缺省全部页）做 OCR；`auto` 按 easyocr→pytesseract 选第一个可用者，都不可用时 **fail** 并给安装建议（绝不返回空文本假装成功） | `write_local` | **是** | B | **path**；backend, dpi, languages, max_pages, pages | `pages[]` + `backend`/`elapsed_s`/`warnings`/`truncated_pages`/`total_chars` | `test_tools_search_ocr.py` | ✅ **已修两次**：原先声明 `read`，实际 easyocr 首次用**下载 ~100MB 模型** ⇒ 先改为遗留取值 `network`；B3 收官把它迁到两根轴上的确定值 —— `write_local`（下模型 + mkdir 模型目录 ⇒ 写我们拥有的东西）+ `declared_external="egress"`（真的下） |
-| 32 | `research.list_gaps` | 列出研究问题台账（D 的工作台）。按 `priority`（high>medium>low）、`question_id` 稳定排序 | `read` | 否 | D | limit, status | `{questions:[…],count}`；每题带 `waiting_request_ids` | `test_agent_d.py` | — |
-| 33 | `research.poll_waiting` | 复查等待中的查询请求：每条请求是否结束？其 `result_lit_ids` 是否都已被 B 消化？ | `read` | 否 | D | （无） | `{ready,waiting,counts}` | `test_agent_d.py` | — |
-| 34 | `research.set_status` | 改研究问题的状态（按 schema 状态机校验，非法迁移与非法状态一律 fail） | `write_local` | **是** | D | **question_id**,**status**；notes | `{question_id,from,to,waiting_request_ids}` | `test_agent_d.py` | — |
-| 35 | `research.submit_gap` | 把某研究问题的知识缺口提交给 A（在 `search_requests` 建一行，并把 `request_id` 追加进该问题的等待集） | `write_local` | **是** | D | **question_id**,**topic**,**mode**；description | `{request_id,question_id,duplicated,waiting_request_ids}` | `test_agent_d.py` | INVENTORY 4.7①：与 `table_tools._next_request_id` 的 `r-NNNN` 策略不同（**max+1 且无上限保护**） |
-| 36 | `research.write_note` | 向某研究问题追加一条研究笔记（追加而非覆盖，保留研究过程） | `write_local` | **是** | D | **question_id**,**note** | `{question_id,notes_length,appended}` | `test_agent_d.py` | — |
-| 37 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含每条发现的 `evidence` | `read` | 否 | H G F D | doc_id, level, status | `{count,findings:[{finding_id,doc_id,kind,level,target,message,evidence,status}]}` | `test_agent_h.py` | INVENTORY 4.3(b)：`StoreError` 逃逸 |
-| 38 | `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现都带 `evidence` | `none` | 否 | H G F D | **doc**；dependencies | `{checked,doc_id,findings,error_count,warning_count,verdict,dep_check}` | `test_agent_h.py` | INVENTORY 4.3(a)①：**依赖闭合没查却给出 `verdict="accepted"`**（`dep_check.checked=False` 与 `verdict` 矛盾）；4.5#10 与 `doc.scan_claim` 重复且漂移 |
-| 39 | `search.dedup_check` | **不联网**：按三级硬键说明"这条会不会被判成已有的某篇"，并给出会命中的键 | `read` | 否 | A | **title**；doi, year | `would_be_duplicate`/`matched_key`/`keys`/`existing`/`near_misses` | `test_agent_a*.py` | INVENTORY 4.3(a)③：`_literature_rows` 的 `except Exception: return []` 静默报"不是重复"（**与 `store is None` 的严格 fail-closed 相反**） |
-| 40 | `search.ingest_local` | **不联网**：把一个本地目录里的书登记进书架（按 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 agent-A 登记」 | `write_local` | **是** | A | **books_dir**；pattern, limit, max_bytes, dry_run | `{root,dry_run,limit,books,count,counts,ingested,already_present,unreadable,skipped,provenance}` | `tests/test_search_offline.py` | **本轮新增**（§191）；借「人直接提供」会写出假 provenance，此工具明确写 `submitted_by=unknown` |
-| 41 | `search.download` | 把候选的 `pdf_url` 下到工作区 `downloads/`（不覆盖同名文件） | `write_local` | **是** | A | **url**；hint, max_bytes | `ok`/`bytes`/`sha256`/`path`/`rel_path`/`filename`/`http_status`/`content_warning`/`warnings` | **零提及** | B3 收官：遗留取值 `network` ⇒ `write_local`（它下到 `downloads/`，**写我们拥有的东西** —— 这正是旧词表丢掉的那个事实）+ `declared_external="egress"`。INVENTORY 4.1：离线套件零断言 |
-| 42 | `search.literature` | 按 topic/mode 检索文献候选；每条候选都带 `dedup_key` 与 `is_new`。`mode=precise` 时必须给 `description` | `read` | **是** | A | **topic**；description, limit, mode, provider | `candidates[]` + 计数与 `diagnostics` | `test_tools_search_ocr.py` | B3 收官：遗留取值 `network` ⇒ `read` + `declared_external="egress"`。INVENTORY 4.2：`providers.py` 8 个联网用例默认 deselect |
-| 43 | `search.local` | **不联网**：在本地书架的全文里按主题取**最相关的一页**与逐字摘录（带 `lit_id`/页码/`score`） | `read` | 否 | A C H | **query**；limit, max_chars, lit_id, max_books | `{query,searched,count,candidates,scanned,skipped_no_file,unreadable,no_text_layer,hits,elapsed_s,note}`（`hits[]` 每项含 `lit_id/title/path/sha256_12/page/excerpt/pages/score`） | `test_search_offline.py` | **本轮新增**（`draft/28` §187）；`skipped_no_file` / `unreadable` / `no_text_layer` 三个『这一本没查到』的理由分开报；没有跨进程正文缓存 |
-| 44 | `search.providers` | 列出可用检索源，并**真实探测**各自是否可用（`ABFLOW_SKIP_NETWORK=1` 时标为未探测而不是猜） | `read` | **是** | A | （无） | `providers[]` + `available`/`unavailable`/`unverified` 三个名单 | `test_tools_search_ocr.py` | ✅ **已修两次**：原先声明 `read`（= **不需要审批**）却**发真实 HTTP 请求** ⇒ 先改为遗留取值 `network`；B3 收官迁到两根轴上的确定值 —— `read`（不写我们的东西）+ `declared_external="egress"`（真的发出去）。审批面在当前环境下不变（沙箱未声明 ⇒ `external != "none"` 仍要签字） |
-| 45 | `search.register` | 登记一条文献（`processed=false`）：先判重，命中则复用既有 `lit_id`；未命中则 `alloc_id('lit')` 并把文件收编进 `library/<lit_id>/` | `write_local` | **是** | A | **title**,**type_code**,**summary**；doi, path, request_id, year | `created`/`lit_id`/`path`/`dedup_key`/`download` | **零提及** | INVENTORY 4.1：**副作用最大、覆盖最少**；4.3(b) `row.validate()` 未包 guard，`ValueError` 逃逸 |
-| 46 | `search.shelf` | **不联网**：列出库里全文在盘上的文献（本地书架），`origin` 分 `local_ingest`/`downloaded` 两档 | `read` | 否 | A C H | limit, lit_id | `{count,rows_total,have_path,missing_files,local_ingest,downloaded,truncated,books,note}` | `test_search_offline.py` | **本轮新增**（§187）；`pages` 对网络下载进来的行是 `null`（下载时没记页数） |
-| 47 | `table.count` | 统计行数（可用 `filter` 做等值过滤） | `read` | 否 | A B C D E F G H | **table**；filter | `data`=整数行数 | **零提及** | INVENTORY 4.1：docstring 承诺「计数不该受 `limit` 影响」，**这个不变量没被测** |
-| 48 | `table.create` | 新建一行：自动分配主键（`search_requests` 用 `r-NNNN`），校验通过才落盘，返回新 ID | `write_local` | **是** | A B D E F G | **table**,**row** | `data`=新主键**字符串**；`meta.row` 是实际落盘的整行 | `test_tools_table_fs.py` | INVENTORY 4.7①：`_next_request_id` 取**最小可用号**（与 `research_tools` 的 max+1 冲突） |
-| 49 | `table.delete` | 删除一行；被引用的 `concepts`/`literature` 会被拒绝并列出引用者 | `write_local` | **是** | A B D E F G | **table**,**id** | `data`=是否真的删掉；`meta.references` 列出引用者 | `test_tools_table_fs.py` | — |
-| 50 | `table.get` | 按主键取一行；不存在时返回 `ok=True` 且 `data=None`（用 `meta.found=False` 说明） | `read` | 否 | A B C D E F G H | **table**,**id** | `data`=行对象或 `None`；`meta.found` | `test_tools_table_fs.py` | — |
-| 51 | `table.list` | 列出某张表的行（支持等值过滤与分页），并给出过滤后的总数 | `read` | 否 | A B C D E F G H | **table**；filter, limit, offset | `{rows,total,returned,limit,offset,table}` | **零提及** | INVENTORY 4.1：`total` 是**过滤后**总数，是分页正确性的唯一依据，**没有一条断言** |
-| 52 | `table.schema` | 返回表的字段名/类型/是否必填/默认值，以及全部受控词表 | `read` | 否 | A B C D E F G H | （无） | `{tables:{表名:{fields,primary_key,vocabularies}},vocabularies}` | **零提及** | INVENTORY 4.1：反射出全部受控词表，**是 LLM 写参数的唯一依据**；4.5#9 `L3_STATUSES` 声称受控词表但无成员校验 |
-| 53 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配 | `read` | 否 | A B C D E F G H | **table**,**query**；fields, limit | `{rows,total,matched_fields:{主键:[命中的字段]}}` | **零提及** | INVENTORY 4.1：`casefold()` 承诺与 `truncated` 语义无断言 |
-| 54 | `table.update` | 部分更新一行：只覆盖 `patch` 里给出的字段，其余字段（含诊断字段）原样保留；不允许改主键 | `write_local` | **是** | A B D E F G | **table**,**id**,**patch** | `data`=主键；`meta.row` 是合并后实际落盘的整行 | `test_tools_table_fs.py` | — |
-| 55 | `trace.chain` | 把一条关系代号链的每一步表述串起来（D 写报告可直接引用），缺号如实列出 | `read` | 否 | C D | **relation_ids** | `{level:'chain',relation_ids,steps,chain_text,missing}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)④：无 store/无 graph 时**静默返回 `ok` + `step_count=0`**（唯一一个"成功"的静默空结果）；4.5#4 `returns=` 与 6 条错误分支不符 |
-| 56 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文） | `read` | 否 | C D | **concept_id**；with_relations | `{level:'L2',concept,relation_count,relations,contains_fulltext:false}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)⑤：空图回退把「没查」报成「查了、没有」 |
-| 57 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层会如实报告而不是返回空串 | `read` | 否 | C D | **lit_id**；max_chars, pages | `{level:'L3',status,file_exists,has_text_layer,pages_returned,text,truncated}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)⑥：`store=None` 时**诚实的 fail 被前置检查遮蔽**；4.5#4 六条错误分支缺 `pages_returned`/`truncated` |
-| 58 | `trace.relation` | L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并翻译概念名、附文献元数据 | `read` | 否 | C D | **relation_id** | `{level:'L1',relation_id,quote,description,statement,page_range,status,quote_verified,concepts,literature}` | `test_tools_graph_trace.py` | INVENTORY 4.5#7：`returns=` 少列 2 个实际键，且多一个写死的 `contains_fulltext: False`（**看起来像检查结论**） |
-| 59 | `verify.check_formal` | 把命题（Lean 源码/脚本）交给检查器真跑一次；只有 `verified` 给 proof 级证据，`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` 是"查了没通过"，`timeout`/`no_backend`/`tool_crashed` 是"没查成" | `read` | **是** | E F G | **claim**；script_path, source, name, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output'}`（`reason` 取 `formalgw.STATUSES` 八值词表） | `test_tools_audit_fixes.py` | **P1 本轮接线**：工具层此前给 `script_path` 时返回 `checked=False` + `reason="not_implemented"`（全文零处提到 `formalgw`），现已转发到 `src/agentflow/formalgw.py` 的 `check_lean`。三态映射：`checked` 取自 `formalgw.evidence_of` 的结论位（`verified`/`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` ⇒ True；`timeout`/`no_backend`/`tool_crashed` ⇒ False）；`verified` 只在 `status == "verified"` 时为 True，`checked=False` 时保持 `None`（未查成绝不写成 False）。`side_effect` 由 `none` 改为 `read`。**B3 收官**：新增 `declared_external="exec"`（它执行的是调用方给内容的检查器）⇒ 审批列由 `否` 变 `是`、`roles` 由 `E F G H` 变 `E F G`（H 只读，拿不到需要审批的工具）。真实正控在这台机器的 Lean 4.7.0 上跑到 `verified` + `evidence_kind="proof"`，三条负控（含 sorry / 无后端 / 声明名对不上）各自如实失败（证据脚本 `temp/w5_p1_probe.py`）。已知缺口（本轮未改）：`script_path` 不经 `_resolve`，越出工作区的路径不会被工具层拦下 —— 记录在此待人工处置 |
-| 60 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验记录的可复现性绑定 | `read` | 否 | E F G H | **path** | `{path,code_hash}` | `test_agent_e.py` | INVENTORY 4.3(b)：`open()` 的 `OSError`/`PermissionError` 逃逸 |
-| 61 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回的是事实，不是猜测 | `read` | 否 | E F G H | （无） | `{'checked','available','available_names','reason','probe_errors'}` | `test_agent_e.py` | ✅ **已修**：原先声明 `none` 却 `shutil.which` + `subprocess.run` ⇒ 改为 `read`；`checked` 不再硬编码 `True`（探测失败 ⇒ `False` + `probe_errors`）；`returns=` 补齐（**注意** `read` 与 `none` **都不需审批**，所以这次修正不影响审批面，只影响"审计口径"） |
-| 62 | `verify.evidence_for` | 查一条命题（`claim_key`）或一个研究问题（`for_question_id`）已有的实验证据。两个参数都不给 ⇒ `checked=False` | `read` | 否 | E F G H | claim_key, for_question_id | `{checked,experiments,best_evidence_kind,proved,reason}` | `test_agent_e.py` | INVENTORY 4.3(b)：`StoreError` 逃逸；4.7⑪ 排序键与 `list_experiments` 逐字重复 |
-| 63 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）：没有它就无法回答"这件事到底做过没有" | `read` | 否 | E F G H | claim_key, limit | `{checked,total,returned,truncated,experiments}` | `test_agent_e.py` | 同上 4.7⑪ |
-| 64 | `verify.run_experiment` | 在独立进程里跑一个工作区内的脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会被**降级**为 `cross_check`；崩溃一律记 `inconclusive` | `write_local` | **是** | E F G | **claim**,**claim_key**,**script_path**；for_question_id, method, params, timeout | `{experiment_id,recorded,result,evidence_kind,negation_kind,exit_code,reason}` | `test_agent_e.py` | INVENTORY 4.4：跑工作区脚本子进程，**子进程继承完整环境（可联网）**；4.3(b) `ExperimentError`/`ValueError` 全部逃逸；4.5#8 `returns=` 漏 FC-10 的 `count`/`result_counts`/`negation_counts` |
-| 65 | `conductor.summon` | 派活：召唤某角色做某动作；闸门在主控内部（允许的边 / 动作表 / 参数接缝 / 四类上限 / 预算），被拒也落台账并给 `refusal_reason` | `write_local` | **是** | M | **target_role**,**action**,params,input_key | `{task_id,role,action,status,outcome,refusal_reason,detail,error,tokens,usd,depth,elapsed_sec,children,checked}` | `tests/test_conductor_tools.py` | 形参刻意不叫 `role`/`name`：那是 `ToolRegistry.call` 自己的形参（撞名会让调用方身份被当成目标角色） |
-| 66 | `conductor.ledger` | 看台账四个视图：tree / stats / issues / verify（给主控判断用的事实，不含建议） | `read` | 否 | M | view,root_task_id | `{view,rows,stats,issues,verify,task_count}` | `tests/test_conductor_tools.py` | 无 |
-| 67 | `conductor.stop` | 优雅停止：不再新开任务 → 等在飞收尾（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落续跑简报；幂等（第二次不改第一次的理由） | `write_local` | **是** | M | reason,drain_sec | `{reason,reason_mapped_from,detail,inflight_at_stop,drained_sec,disposed,resume_brief,verify}` | `tests/test_conductor_tools.py` | `reason` 回报**首次生效**的那个（FC-20 终态先到先得） |
-| 68 | `conductor.resume_brief` | 读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）；没有简报时如实说没有，未终态行逐条报出（不自动续跑） | `read` | 否 | M | （无） | `{present,brief,unfinished_now,path}` | `tests/test_conductor_tools.py` | 简报是工作区根下的文件，不是领域表 |
-| 69 | `conductor.cancel` | 硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；与 `conductor.stop` 的区别是 stop 先尝试收尾 | `write_local` | **是** | M | reason,detail | `{reason,reason_mapped_from,detail,inflight}` | `tests/test_conductor_tools.py` | 无 |
-| 70 | `conductor.acceptance` | 只读：读某个项目的验收表（默认 `out/paper/ACCEPTANCE.md`），逐行解析出 P1–P11 的判据名 / 结论 / 读数 —— 交付说明必须逐条与它对齐 | `read` | 否 | M | project_dir, rel_path | `{found,path,title,conclusion,rows,row_count,ok_count,not_ok_count,problems}`（`rows[]` 每项 `{id,name,ok,reading}`）| `tests/test_paper_pack.py` | **本轮新增**（`draft/28` §189）；解析不出来时 `rows` 空而 `problems` 非空（空表 ≠ 解析失败） |
-| 71 | `conductor.ensure_project` | 冷启动 / 热启动由主控决定：给 start=auto / cold / warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode；cold 才建目录，warm 必须已存在且是工作区（绝不替人删、也绝不把别人的目录当工作区） | `write_local` | **是** | M | project_name,start,books_dir,books_limit | `{name,path,mode,requested,state,why,created,ingested}` | `tests/test_conductor_tools.py` | 无 |
-| 72 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
-| 73 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
-| 74 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
-| 75 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的五条）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在五条全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是五条检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
+| 29 | `manuscripts.list` | 列交接手稿（可按收件人/发件人过滤；默认最近 50 份） | `read` | 否 | A B C D E F G H | to, sender, limit | `{'count','items':[{id,sender,recipient,title,summary,path,created_at}]}` | `test_manuscript_handoff.py` | — |
+| 30 | `manuscripts.read` | 按编号读一份交接手稿的全文（编号不存在时如实说没有，而不是返回空文本） | `read` | 否 | A B C D E F G H | **id** | `{'id','path','sender','recipient','title','text','sha256','bytes'}` | `test_manuscript_handoff.py` | — |
+| 31 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用；探测阶段**不会**下载 easyocr 模型 | `write_local` | **是** | B | refresh | `backends[]` + `any_ocr_backend_available`/`selected_for_auto`/`verdict` | `test_tools_search_ocr.py` | ✅ **已修**：原先声明 `read`（= 不需审批）却在**工作区外 mkdir**（`~/.EasyOCR/model`）并起进程 ⇒ 改为 `write_local`（如实声明） |
+| 32 | `ocr.detect_text_layer` | 判断 PDF 有没有文本层；无文本层时说明这是「无法校验」而不是「校验失败」 | `read` | 否 | B | **path** | `has_text_layer`/`pages`/`page_count`/`pages_with_text`/`chars`/`source_kind`/`reason`/`suggested_next` | `test_tools_search_ocr.py` | INVENTORY 4.3(b)：`page_count(p)` 在 `try` 之外，异常逃逸 |
+| 33 | `ocr.run` | 对指定页（缺省全部页）做 OCR；`auto` 按 easyocr→pytesseract 选第一个可用者，都不可用时 **fail** 并给安装建议（绝不返回空文本假装成功） | `write_local` | **是** | B | **path**；backend, dpi, languages, max_pages, pages | `pages[]` + `backend`/`elapsed_s`/`warnings`/`truncated_pages`/`total_chars` | `test_tools_search_ocr.py` | ✅ **已修两次**：原先声明 `read`，实际 easyocr 首次用**下载 ~100MB 模型** ⇒ 先改为遗留取值 `network`；B3 收官把它迁到两根轴上的确定值 —— `write_local`（下模型 + mkdir 模型目录 ⇒ 写我们拥有的东西）+ `declared_external="egress"`（真的下） |
+| 34 | `research.list_gaps` | 列出研究问题台账（D 的工作台）。按 `priority`（high>medium>low）、`question_id` 稳定排序 | `read` | 否 | D | limit, status | `{questions:[…],count}`；每题带 `waiting_request_ids` | `test_agent_d.py` | — |
+| 35 | `research.poll_waiting` | 复查等待中的查询请求：每条请求是否结束？其 `result_lit_ids` 是否都已被 B 消化？ | `read` | 否 | D | （无） | `{ready,waiting,counts}` | `test_agent_d.py` | — |
+| 36 | `research.set_status` | 改研究问题的状态（按 schema 状态机校验，非法迁移与非法状态一律 fail） | `write_local` | **是** | D | **question_id**,**status**；notes | `{question_id,from,to,waiting_request_ids}` | `test_agent_d.py` | — |
+| 37 | `research.submit_gap` | 把某研究问题的知识缺口提交给 A（在 `search_requests` 建一行，并把 `request_id` 追加进该问题的等待集） | `write_local` | **是** | D | **question_id**,**topic**,**mode**；description | `{request_id,question_id,duplicated,waiting_request_ids}` | `test_agent_d.py` | INVENTORY 4.7①：与 `table_tools._next_request_id` 的 `r-NNNN` 策略不同（**max+1 且无上限保护**） |
+| 38 | `research.write_note` | 向某研究问题追加一条研究笔记（追加而非覆盖，保留研究过程） | `write_local` | **是** | D | **question_id**,**note** | `{question_id,notes_length,appended}` | `test_agent_d.py` | — |
+| 39 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含每条发现的 `evidence` | `read` | 否 | H G F D | doc_id, level, status | `{count,findings:[{finding_id,doc_id,kind,level,target,message,evidence,status}]}` | `test_agent_h.py` | INVENTORY 4.3(b)：`StoreError` 逃逸 |
+| 40 | `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现都带 `evidence` | `none` | 否 | H G F D | **doc**；dependencies | `{checked,doc_id,findings,error_count,warning_count,verdict,dep_check}` | `test_agent_h.py` | INVENTORY 4.3(a)①：**依赖闭合没查却给出 `verdict="accepted"`**（`dep_check.checked=False` 与 `verdict` 矛盾）；4.5#10 与 `doc.scan_claim` 重复且漂移 |
+| 41 | `search.dedup_check` | **不联网**：按三级硬键说明"这条会不会被判成已有的某篇"，并给出会命中的键 | `read` | 否 | A | **title**；doi, year | `would_be_duplicate`/`matched_key`/`keys`/`existing`/`near_misses` | `test_agent_a*.py` | INVENTORY 4.3(a)③：`_literature_rows` 的 `except Exception: return []` 静默报"不是重复"（**与 `store is None` 的严格 fail-closed 相反**） |
+| 42 | `search.ingest_local` | **不联网**：把一个本地目录里的书登记进书架（按 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 agent-A 登记」 | `write_local` | **是** | A | **books_dir**；pattern, limit, max_bytes, dry_run | `{root,dry_run,limit,books,count,counts,ingested,already_present,unreadable,skipped,provenance}` | `tests/test_search_offline.py` | **本轮新增**（§191）；借「人直接提供」会写出假 provenance，此工具明确写 `submitted_by=unknown` |
+| 43 | `search.download` | 把候选的 `pdf_url` 下到工作区 `downloads/`（不覆盖同名文件） | `write_local` | **是** | A | **url**；hint, max_bytes | `ok`/`bytes`/`sha256`/`path`/`rel_path`/`filename`/`http_status`/`content_warning`/`warnings` | **零提及** | B3 收官：遗留取值 `network` ⇒ `write_local`（它下到 `downloads/`，**写我们拥有的东西** —— 这正是旧词表丢掉的那个事实）+ `declared_external="egress"`。INVENTORY 4.1：离线套件零断言 |
+| 44 | `search.literature` | 按 topic/mode 检索文献候选；每条候选都带 `dedup_key` 与 `is_new`。`mode=precise` 时必须给 `description` | `read` | **是** | A | **topic**；description, limit, mode, provider | `candidates[]` + 计数与 `diagnostics` | `test_tools_search_ocr.py` | B3 收官：遗留取值 `network` ⇒ `read` + `declared_external="egress"`。INVENTORY 4.2：`providers.py` 8 个联网用例默认 deselect |
+| 45 | `search.local` | **不联网**：在本地书架的全文里按主题取**最相关的一页**与逐字摘录（带 `lit_id`/页码/`score`） | `read` | 否 | A C H | **query**；limit, max_chars, lit_id, max_books | `{query,searched,count,candidates,scanned,skipped_no_file,unreadable,no_text_layer,hits,elapsed_s,note}`（`hits[]` 每项含 `lit_id/title/path/sha256_12/page/excerpt/pages/score`） | `test_search_offline.py` | **本轮新增**（`draft/28` §187）；`skipped_no_file` / `unreadable` / `no_text_layer` 三个『这一本没查到』的理由分开报；没有跨进程正文缓存 |
+| 46 | `search.providers` | 列出可用检索源，并**真实探测**各自是否可用（`ABFLOW_SKIP_NETWORK=1` 时标为未探测而不是猜） | `read` | **是** | A | （无） | `providers[]` + `available`/`unavailable`/`unverified` 三个名单 | `test_tools_search_ocr.py` | ✅ **已修两次**：原先声明 `read`（= **不需要审批**）却**发真实 HTTP 请求** ⇒ 先改为遗留取值 `network`；B3 收官迁到两根轴上的确定值 —— `read`（不写我们的东西）+ `declared_external="egress"`（真的发出去）。审批面在当前环境下不变（沙箱未声明 ⇒ `external != "none"` 仍要签字） |
+| 47 | `search.register` | 登记一条文献（`processed=false`）：先判重，命中则复用既有 `lit_id`；未命中则 `alloc_id('lit')` 并把文件收编进 `library/<lit_id>/` | `write_local` | **是** | A | **title**,**type_code**,**summary**；doi, path, request_id, year | `created`/`lit_id`/`path`/`dedup_key`/`download` | **零提及** | INVENTORY 4.1：**副作用最大、覆盖最少**；4.3(b) `row.validate()` 未包 guard，`ValueError` 逃逸 |
+| 48 | `search.shelf` | **不联网**：列出库里全文在盘上的文献（本地书架），`origin` 分 `local_ingest`/`downloaded` 两档 | `read` | 否 | A C H | limit, lit_id | `{count,rows_total,have_path,missing_files,local_ingest,downloaded,truncated,books,note}` | `test_search_offline.py` | **本轮新增**（§187）；`pages` 对网络下载进来的行是 `null`（下载时没记页数） |
+| 49 | `table.count` | 统计行数（可用 `filter` 做等值过滤） | `read` | 否 | A B C D E F G H | **table**；filter | `data`=整数行数 | **零提及** | INVENTORY 4.1：docstring 承诺「计数不该受 `limit` 影响」，**这个不变量没被测** |
+| 50 | `table.create` | 新建一行：自动分配主键（`search_requests` 用 `r-NNNN`），校验通过才落盘，返回新 ID | `write_local` | **是** | A B D E F G | **table**,**row** | `data`=新主键**字符串**；`meta.row` 是实际落盘的整行 | `test_tools_table_fs.py` | INVENTORY 4.7①：`_next_request_id` 取**最小可用号**（与 `research_tools` 的 max+1 冲突） |
+| 51 | `table.delete` | 删除一行；被引用的 `concepts`/`literature` 会被拒绝并列出引用者 | `write_local` | **是** | A B D E F G | **table**,**id** | `data`=是否真的删掉；`meta.references` 列出引用者 | `test_tools_table_fs.py` | — |
+| 52 | `table.get` | 按主键取一行；不存在时返回 `ok=True` 且 `data=None`（用 `meta.found=False` 说明） | `read` | 否 | A B C D E F G H | **table**,**id** | `data`=行对象或 `None`；`meta.found` | `test_tools_table_fs.py` | — |
+| 53 | `table.list` | 列出某张表的行（支持等值过滤与分页），并给出过滤后的总数 | `read` | 否 | A B C D E F G H | **table**；filter, limit, offset | `{rows,total,returned,limit,offset,table}` | **零提及** | INVENTORY 4.1：`total` 是**过滤后**总数，是分页正确性的唯一依据，**没有一条断言** |
+| 54 | `table.schema` | 返回表的字段名/类型/是否必填/默认值，以及全部受控词表 | `read` | 否 | A B C D E F G H | （无） | `{tables:{表名:{fields,primary_key,vocabularies}},vocabularies}` | **零提及** | INVENTORY 4.1：反射出全部受控词表，**是 LLM 写参数的唯一依据**；4.5#9 `L3_STATUSES` 声称受控词表但无成员校验 |
+| 55 | `table.search` | 在指定（默认全部标量字符串）字段里做大小写不敏感的子串匹配 | `read` | 否 | A B C D E F G H | **table**,**query**；fields, limit | `{rows,total,matched_fields:{主键:[命中的字段]}}` | **零提及** | INVENTORY 4.1：`casefold()` 承诺与 `truncated` 语义无断言 |
+| 56 | `table.update` | 部分更新一行：只覆盖 `patch` 里给出的字段，其余字段（含诊断字段）原样保留；不允许改主键 | `write_local` | **是** | A B D E F G | **table**,**id**,**patch** | `data`=主键；`meta.row` 是合并后实际落盘的整行 | `test_tools_table_fs.py` | — |
+| 57 | `trace.chain` | 把一条关系代号链的每一步表述串起来（D 写报告可直接引用），缺号如实列出 | `read` | 否 | C D | **relation_ids** | `{level:'chain',relation_ids,steps,chain_text,missing}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)④：无 store/无 graph 时**静默返回 `ok` + `step_count=0`**（唯一一个"成功"的静默空结果）；4.5#4 `returns=` 与 6 条错误分支不符 |
+| 58 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文） | `read` | 否 | C D | **concept_id**；with_relations | `{level:'L2',concept,relation_count,relations,contains_fulltext:false}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)⑤：空图回退把「没查」报成「查了、没有」 |
+| 59 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层会如实报告而不是返回空串 | `read` | 否 | C D | **lit_id**；max_chars, pages | `{level:'L3',status,file_exists,has_text_layer,pages_returned,text,truncated}` | `test_tools_graph_trace.py` | INVENTORY 4.3(a)⑥：`store=None` 时**诚实的 fail 被前置检查遮蔽**；4.5#4 六条错误分支缺 `pages_returned`/`truncated` |
+| 60 | `trace.relation` | L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并翻译概念名、附文献元数据 | `read` | 否 | C D | **relation_id** | `{level:'L1',relation_id,quote,description,statement,page_range,status,quote_verified,concepts,literature}` | `test_tools_graph_trace.py` | INVENTORY 4.5#7：`returns=` 少列 2 个实际键，且多一个写死的 `contains_fulltext: False`（**看起来像检查结论**） |
+| 61 | `verify.check_formal` | 把命题（Lean 源码/脚本）交给检查器真跑一次；只有 `verified` 给 proof 级证据，`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` 是"查了没通过"，`timeout`/`no_backend`/`tool_crashed` 是"没查成" | `read` | **是** | E F G | **claim**；script_path, source, name, imports, timeout_sec | `{'checked','verified','claim','reason','detail','verifier_output'}`（`reason` 取 `formalgw.STATUSES` 八值词表） | `test_tools_audit_fixes.py` | **P1 本轮接线**：工具层此前给 `script_path` 时返回 `checked=False` + `reason="not_implemented"`（全文零处提到 `formalgw`），现已转发到 `src/agentflow/formalgw.py` 的 `check_lean`。三态映射：`checked` 取自 `formalgw.evidence_of` 的结论位（`verified`/`compile_error`/`uses_sorry`/`extra_axioms`/`decl_mismatch` ⇒ True；`timeout`/`no_backend`/`tool_crashed` ⇒ False）；`verified` 只在 `status == "verified"` 时为 True，`checked=False` 时保持 `None`（未查成绝不写成 False）。`side_effect` 由 `none` 改为 `read`。**B3 收官**：新增 `declared_external="exec"`（它执行的是调用方给内容的检查器）⇒ 审批列由 `否` 变 `是`、`roles` 由 `E F G H` 变 `E F G`（H 只读，拿不到需要审批的工具）。真实正控在这台机器的 Lean 4.7.0 上跑到 `verified` + `evidence_kind="proof"`，三条负控（含 sorry / 无后端 / 声明名对不上）各自如实失败（证据脚本 `temp/w5_p1_probe.py`）。已知缺口（本轮未改）：`script_path` 不经 `_resolve`，越出工作区的路径不会被工具层拦下 —— 记录在此待人工处置 |
+| 62 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验记录的可复现性绑定 | `read` | 否 | E F G H | **path** | `{path,code_hash}` | `test_agent_e.py` | INVENTORY 4.3(b)：`open()` 的 `OSError`/`PermissionError` 逃逸 |
+| 63 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回的是事实，不是猜测 | `read` | 否 | E F G H | （无） | `{'checked','available','available_names','reason','probe_errors'}` | `test_agent_e.py` | ✅ **已修**：原先声明 `none` 却 `shutil.which` + `subprocess.run` ⇒ 改为 `read`；`checked` 不再硬编码 `True`（探测失败 ⇒ `False` + `probe_errors`）；`returns=` 补齐（**注意** `read` 与 `none` **都不需审批**，所以这次修正不影响审批面，只影响"审计口径"） |
+| 64 | `verify.evidence_for` | 查一条命题（`claim_key`）或一个研究问题（`for_question_id`）已有的实验证据。两个参数都不给 ⇒ `checked=False` | `read` | 否 | E F G H | claim_key, for_question_id | `{checked,experiments,best_evidence_kind,proved,reason}` | `test_agent_e.py` | INVENTORY 4.3(b)：`StoreError` 逃逸；4.7⑪ 排序键与 `list_experiments` 逐字重复 |
+| 65 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）：没有它就无法回答"这件事到底做过没有" | `read` | 否 | E F G H | claim_key, limit | `{checked,total,returned,truncated,experiments}` | `test_agent_e.py` | 同上 4.7⑪ |
+| 66 | `verify.run_experiment` | 在独立进程里跑一个工作区内的脚本并登记一条 Experiment 行。脚本自报 `evidence_kind='proof'` 会被**降级**为 `cross_check`；崩溃一律记 `inconclusive` | `write_local` | **是** | E F G | **claim**,**claim_key**,**script_path**；for_question_id, method, params, timeout | `{experiment_id,recorded,result,evidence_kind,negation_kind,exit_code,reason}` | `test_agent_e.py` | INVENTORY 4.4：跑工作区脚本子进程，**子进程继承完整环境（可联网）**；4.3(b) `ExperimentError`/`ValueError` 全部逃逸；4.5#8 `returns=` 漏 FC-10 的 `count`/`result_counts`/`negation_counts` |
+| 67 | `conductor.summon` | 派活：召唤某角色做某动作；闸门在主控内部（允许的边 / 动作表 / 参数接缝 / 四类上限 / 预算），被拒也落台账并给 `refusal_reason` | `write_local` | **是** | M | **target_role**,**action**,params,input_key | `{task_id,role,action,status,outcome,refusal_reason,detail,error,tokens,usd,depth,elapsed_sec,children,checked}` | `tests/test_conductor_tools.py` | 形参刻意不叫 `role`/`name`：那是 `ToolRegistry.call` 自己的形参（撞名会让调用方身份被当成目标角色） |
+| 68 | `conductor.ledger` | 看台账四个视图：tree / stats / issues / verify（给主控判断用的事实，不含建议） | `read` | 否 | M | view,root_task_id | `{view,rows,stats,issues,verify,task_count}` | `tests/test_conductor_tools.py` | 无 |
+| 69 | `conductor.stop` | 优雅停止：不再新开任务 → 等在飞收尾（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落续跑简报；幂等（第二次不改第一次的理由） | `write_local` | **是** | M | reason,drain_sec | `{reason,reason_mapped_from,detail,inflight_at_stop,drained_sec,disposed,resume_brief,verify}` | `tests/test_conductor_tools.py` | `reason` 回报**首次生效**的那个（FC-20 终态先到先得） |
+| 70 | `conductor.resume_brief` | 读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）；没有简报时如实说没有，未终态行逐条报出（不自动续跑） | `read` | 否 | M | （无） | `{present,brief,unfinished_now,path}` | `tests/test_conductor_tools.py` | 简报是工作区根下的文件，不是领域表 |
+| 71 | `conductor.cancel` | 硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；与 `conductor.stop` 的区别是 stop 先尝试收尾 | `write_local` | **是** | M | reason,detail | `{reason,reason_mapped_from,detail,inflight}` | `tests/test_conductor_tools.py` | 无 |
+| 72 | `conductor.acceptance` | 只读：读某个项目的验收表（默认 `out/paper/ACCEPTANCE.md`），逐行解析出 P1–P11 的判据名 / 结论 / 读数 —— 交付说明必须逐条与它对齐 | `read` | 否 | M | project_dir, rel_path | `{found,path,title,conclusion,rows,row_count,ok_count,not_ok_count,problems}`（`rows[]` 每项 `{id,name,ok,reading}`）| `tests/test_paper_pack.py` | **本轮新增**（`draft/28` §189）；解析不出来时 `rows` 空而 `problems` 非空（空表 ≠ 解析失败） |
+| 73 | `conductor.ensure_project` | 冷启动 / 热启动由主控决定：给 start=auto / cold / warm，返回四态（absent/empty/workspace/not_a_project）与最终 mode；cold 才建目录，warm 必须已存在且是工作区（绝不替人删、也绝不把别人的目录当工作区） | `write_local` | **是** | M | project_name,start,books_dir,books_limit | `{name,path,mode,requested,state,why,created,ingested}` | `tests/test_conductor_tools.py` | 无 |
+| 74 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
+| 75 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
+| 76 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
+| 77 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的五条）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在五条全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是五条检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 
-### R0.1 75 个工具的公共事实（机械可验证）
+### R0.1 77 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -395,9 +397,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 决定研究问题该不该问 | A 只消费 `search_requests`；"该不该问"是研究判断 | **D**（`research.submit_gap` / `AgentD.submit_gaps`） |
 | 发起第二次检索（"我再多找几篇"） | A 的 `run_once` / `run` 只**消费**队列（`capabilities.CAPABILITIES`）；`search_literature` 也只在**被召唤方点名主题**时才查一次 —— "该不该再找、找什么"这个决定不在 A 手里 | **D**（`D → A`）/ **F**（`F → A`），或任何有到 A 的边的角色直接 `summon(A.search_literature, topic=…)` |
 
-### A.4 工具面（24 个，实测）
+### A.4 工具面（26 个，实测）
 
-`side_effect` 分布：`{'read': 13, 'write_local': 7, 'network': 2}`
+`side_effect` 分布：`{'read': 15, 'write_local': 7, 'network': 2}`
 
 | 工具名 | summary | `side_effect` | 审批 | 参数（**粗体=required**） | 返回结构 | 测试 | 已知问题 |
 |---|---|---|---|---|---|---|---|
@@ -412,10 +414,11 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `fs.write` `fs.move` `fs.delete` | 工作区写（A 用它落下载/整理文件） | `write_local` | **是** | 见 §R0 | 见 §R0 | 见 §R0 | — |
 | `table.count` `table.get` `table.list` `table.schema` `table.search` | 表只读（公共 9 个之一） | `read` | 否 | 见 §R0 | 见 §R0 | 见 §R0 | `table.list`/`table.count` 等**零提及** |
 | `table.create` `table.update` `table.delete` | 表写 | `write_local` | **是** | 见 §R0 | 见 §R0 | 见 §R0 | INVENTORY 4.7①：`r-NNNN` 分配器有三份实现 |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 > **A 拿不到**：`research.*`（那是 D 的决策）、`ocr.*`（那是 B 的解析）、
 > `graph.*`/`trace.*`（C/D）、`verify.*`（E/F/G/H）、`doc.*`/`review.*`、`attack.*`。
-> 实测：A 的 22 个工具里**没有**任何一个属于上述组。
+> 实测：A 的 26 个工具里**没有**任何一个属于上述组。
 
 ### A.5 状态机
 
@@ -575,9 +578,9 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_a
 | 发检索请求（"这里缺证据，帮我再找"） | B 的动作里没有"提交请求"；它只能**接受** `reprocess_requests` | **D**（`submit_gaps`）/ **C**（`gaps(submit_requests=True)`，由编排层调） |
 | 审校自己的抽取质量 | 自己审自己无法区分"发现"与"掩盖" | **H**（只读） |
 
-### B.4 工具面（19 个，实测）
+### B.4 工具面（21 个，实测）
 
-`side_effect` 分布：`{'read': 12, 'write_local': 6}` —— **B 没有 `network` 也没有 `none`**。
+`side_effect` 分布：`{'read': 14, 'write_local': 6}` —— **B 没有 `network` 也没有 `none`**。
 
 | 工具名 | summary | `side_effect` | 审批 | 参数（**粗体=required**） | 返回结构 | 测试 | 已知问题 |
 |---|---|---|---|---|---|---|---|
@@ -588,6 +591,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_a
 | `fs.write` `fs.move` `fs.delete` | 工作区写 | `write_local` | **是** | 见 §R0 | 见 §R0 | 见 §R0 | — |
 | `table.count` `table.get` `table.list` `table.schema` `table.search` | 表只读 | `read` | 否 | 见 §R0 | 见 §R0 | 见 §R0 | 零提及项见 §R0 |
 | `table.create` `table.update` `table.delete` | 表写 | `write_local` | **是** | 见 §R0 | 见 §R0 | 见 §R0 | — |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 > **注意**：B 的工具面里**没有** `graph.*` / `trace.*`。B 在写入期问 C 走的是
 > **`interactions.check_conflict` 纯函数**（`AgentB` 直接 import），
@@ -766,18 +770,18 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_b
 | 决定要不要把缺口变成检索请求 | 候选缺口是**产出**，不是**决定** | **D**（`submit_gaps`）/ 编排层（`gaps(submit_requests=True)`） |
 | 写报告以外的东西 | C 的写集只有 `analysis_reports` | — |
 
-### C.4 工具面（**两层**，合计 19 个 = `cli tools` 报的 `C: 19`）
+### C.4 工具面（**两层**，合计 21 个 = `cli tools` 报的 `C: 21`）
 
 ⚠️ **C 的工具面分两层，必须分开看**：
 
-> **两层合起来才是 `cli tools` 报的那个 17**（`{'C': 17}`），
+> **两层合起来才是 `cli tools` 报的那个 21**（`{'C': 21}`），
 > 所以本节的口径必须与普查对得上 —— 否则"逐个工具的契约"就无法与工具面 census 对账。
-> 第一层 17 个由 `build_registry` 给出（下 §C.4.1 的表格按**工具族**合并了同族的行，
-> 展开后是 8 个 graph/trace 工具 + 4 个 `fs.*` + 5 个 `table.*` = 17）；
+> 第一层 19 个由 `build_registry` 给出（下 §C.4.1 的表格按**工具族**合并了同族的行，
+> 展开后是 8 个 graph/trace 工具 + 4 个 `fs.*` + 5 个 `table.*` + 2 个 `manuscripts.*` = 19）；
 > 第二层 9 个由 `AgentC.register_tools` 自注册，**不进** `build_registry` 的 17，
 > 它们是 §R0.2 点名的"不经 `build_registry` 的 14 个工具"里属于 C 的那一部分。
 
-#### C.4.1 第一层：`build_registry` 给的 17 个（实测）
+#### C.4.1 第一层：`build_registry` 给的 19 个（实测）
 
 | 工具名 | summary | `side_effect` | 审批 | 参数 | 返回结构 | 测试 | 已知问题 |
 |---|---|---|---|---|---|---|---|
@@ -792,7 +796,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_b
 | `fs.list` `fs.read` `fs.search` `fs.stat` | 工作区只读 | `read` | 否 | 见 §R0 | 见 §R0 | 见 §R0 | — |
 | `table.count` `table.get` `table.list` `table.schema` `table.search` | 表只读 | `read` | 否 | 见 §R0 | 见 §R0 | 见 §R0 | 零提及项见 §R0 |
 
-**实测：17 个全部 `read`，0 个写工具，0 个需审批。**
+**实测：19 个全部 `read`，0 个写工具，0 个需审批。**
 
 #### C.4.2 第二层：`AgentC.register_tools` 自注册的 9 个（**不经 `build_registry`**）
 
@@ -807,6 +811,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_b
 | `graph.contradictions` | 矛盾检查（判据来自 `interactions.detect_contradictions`） | `read` | `("C","D")` | relation_ids, limit | `{checked,scope,scanned,contradictions[],strong_count,weak_count,truncated,method,method_note,reason}` | `test_agent_c_service.py` |
 | `graph.structural_duplicates` | 结构重复候选（I5 检测侧） | `read` | `("C","D")` | limit | `{checked,candidates[],truncation_notice,truncated,scanned_concepts,method,reason}` | `test_agent_c_service.py` |
 | `graph.check_conflict` | I6 写入期闸门（**纯函数**，全项目唯一实现） | `read` | `("C","D")` | **draft_relation**；existing_relations | `{checked,conflict,conflicts_with[],reason,method,scope,compared}` | `test_agent_c_service.py` |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 **⚠️ 已知命名冲突**（`agent_c.AgentC._handle_paths` 与 `agent_c.AgentC._resolve_concept` 与 `:2636-2645` 逐字）：
 `graph.neighbors` / `graph.relations_between` 这两个名字**已被低层图工具占用**，
@@ -980,9 +985,9 @@ SELF-CHECK DONE
 > 它是唯一一个"研究角色能改知识表"的路径。本次**未逐行核实**
 > `agent_d.AgentD.adjudicate` 处到底改了什么字段 —— **标 `（据 capabilities.py 注释，未在代码中逐行核实）`**。
 
-### D.4 工具面（38 个，实测 —— **全项目最宽**）
+### D.4 工具面（40 个，实测 —— **全项目最宽**）
 
-`side_effect` 分布：`{'read': 23, 'write_local': 9, 'none': 5}`
+`side_effect` 分布：`{'read': 25, 'write_local': 9, 'none': 5}`
 
 | 组 | 工具 | `side_effect` | 审批 |
 |---|---|---|---|
@@ -994,6 +999,7 @@ SELF-CHECK DONE
 | `trace.*`（4） | `chain` `concept` `literature` `relation` | 全 `read` | 否 |
 | `fs.*`（7） | `list` `read` `search` `stat` `write` `move` `delete` | 4 读 3 写 | 写侧**需审批** |
 | `table.*`（8） | `count` `get` `list` `schema` `search` `create` `update` `delete` | 5 读 3 写 | 写侧**需审批** |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 > **D 拿不到**：`search.*`（A）、`ocr.*`（B）、`verify.*`（E/F/G/H）、
 > `doc.build_document`/`doc.register_dependency`（G）、
@@ -1162,15 +1168,16 @@ SELF-CHECK DONE（agent_d）
 | 改关系/概念 | E 的写集只有 `{experiments}` | **B** |
 | 判断"这条实验的结论值不值得写进报告" | 价值判断在 G/H | **G** / **H** |
 
-### E.4 工具面（22 个，实测）
+### E.4 工具面（24 个，实测）
 
-`side_effect` 分布：`{'read': 13, 'write_local': 7, 'none': 1}`
+`side_effect` 分布：`{'read': 15, 'write_local': 7, 'none': 1}`
 
 | 组 | 工具 | `side_effect` | 审批 |
 |---|---|---|---|
 | `verify.*`（6） | `check_formal` `code_hash` `detect_verifier` `evidence_for` `list_experiments` `run_experiment` | read / read / none / read / read / **write_local** | 只有 `run_experiment` **需审批** |
 | `fs.*`（7） | `list` `read` `search` `stat` `write` `move` `delete` | 4 读 3 写 | 写侧**需审批** |
 | `table.*`（8） | `count` `get` `list` `schema` `search` `create` `update` `delete` | 5 读 3 写 | 写侧**需审批** |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 **逐条契约**见 §R0 的 #50–#55（`verify.*`）+ 公共项。
 
@@ -1332,9 +1339,9 @@ SELF-CHECK DONE（agent_e）：失败 0 项
 > `blocked` + `blocked_reason` 并继续（FC-21 部分落地）。**无
 > `run_best_effort` / `run_all_or_nothing` 两种显式 API**（实测 0 命中）。
 
-### F.4 工具面（33 个，实测）
+### F.4 工具面（35 个，实测）
 
-`side_effect` 分布：`{'read': 17, 'write_local': 9, 'none': 6}`
+`side_effect` 分布：`{'read': 19, 'write_local': 9, 'none': 6}`
 
 | 组 | 工具 | `side_effect` | 审批 |
 |---|---|---|---|
@@ -1344,6 +1351,7 @@ SELF-CHECK DONE（agent_e）：失败 0 项
 | `review.*` 只读侧（2） | `list_findings` `scan_document` | read / none | 否 |
 | `fs.*`（7） | 4 读 3 写 | — | 写侧**需审批** |
 | `table.*`（8） | 5 读 3 写 | — | 写侧**需审批** |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 > **`attack.create_plan` / `attack.step` 的 `roles=("F",)` —— 只有 F 能写计划**
 > （`tools.attack_tools._WRITE_ROLES` 的注释逐字："谁需要**看见**这件事与谁有权**决定**这件事
@@ -1543,9 +1551,9 @@ SELF-CHECK DONE（agent_f）：失败 0 项
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（38 个，实测）
+### G.4 工具面（40 个，实测）
 
-`side_effect` 分布：`{'read': 18, 'write_local': 12, 'none': 6}`
+`side_effect` 分布：`{'read': 20, 'write_local': 12, 'none': 6}`
 
 | 组 | 工具 | `side_effect` | 审批 |
 |---|---|---|---|
@@ -1555,6 +1563,7 @@ SELF-CHECK DONE（agent_f）：失败 0 项
 | `review.*` 只读侧（2） | `list_findings` `scan_document` | — | 否 |
 | `fs.*`（7） | 4 读 3 写 | — | 写侧**需审批** |
 | `table.*`（8） | 5 读 3 写 | — | 写侧**需审批** |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 > **G 拿不到**：`graph.*` / `trace.*` / `research.*` / `search.*` / `ocr.*`。
 > ⇒ G 想知道"图上是什么情况"必须 `G → D/F`（边表：`G → A D E F`；其中
@@ -1788,9 +1797,9 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 | 判数学对错 | H 的工具只有机械判据（引用/等级/否定/依赖闭合）；**数学正确性不在机械判据的射程内** | 形式化检查器 / 人 |
 | 自己造证据 | 每条发现必须带 `evidence`；没有证据的发现是 error | `verify.finding_without_evidence`（error） |
 
-### H.4 工具面（25 个，实测）
+### H.4 工具面（27 个，实测）
 
-`side_effect` 分布：`{'read': 17, 'none': 5}` —— **0 个 `write_local`，0 个需审批**。
+`side_effect` 分布：`{'read': 19, 'none': 5}` —— **0 个 `write_local`，0 个需审批**。
 
 > B3 收官的变化：`verify.check_formal` 从 H 的工具面里**移出**（它现在声明 `read` + `external="exec"`，
 > 于是沙箱未声明时需要人工审批，而 H 是只读角色）⇒ 工具面从 23 个变 22 个，
@@ -1807,6 +1816,7 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 | `attack.check_budget` `attack.list_plans` `attack.pick_next_subgoal` `attack.status` | 攻坚只读侧 | none/read/none/read | 否 | 见 §R0 | 见 §R0 | `test_agent_f.py` |
 | `fs.list` `fs.read` `fs.search` `fs.stat` | 工作区只读（**无 `fs.write`/`move`/`delete`**） | `read` | 否 | 见 §R0 | 见 §R0 | 见 §R0 |
 | `table.count` `table.get` `table.list` `table.schema` `table.search` | 表只读（**无 `table.create`/`update`/`delete`**） | `read` | 否 | 见 §R0 | 见 §R0 | 见 §R0 |
+| `manuscripts.read` `manuscripts.list` | 交接手稿：按编号读全文 / 列最近的手稿（编号由脚本分配，`draft/37` §134） | `read` | 否 | **id**（read）；to, sender, limit（list） | 见 §R0 | `test_manuscript_handoff.py` | — |
 
 **第二道防线（`agent_h.AgentH`）**：`AgentH.install_h_tools` 把 `build_registry`
 的 H 子集复制进新注册表，并用 `filter_readonly_h_surface` 再做一次**显式拒绝 + 留痕**

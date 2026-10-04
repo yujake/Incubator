@@ -1411,6 +1411,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                             + ("\n派活前先看这一栏：没接线的伙伴派了也会被拒（refused/not_wired），"
                                "不如改派能做的，或如实说明缺什么。"
                                if unusable else "")))
+    reg.section(Section("HANDOFF", SECTION_ORDERS["HANDOFF"], HANDOFF_PROTOCOL))
     reg.section(Section("AGENT_TOOLS_SDK", SECTION_ORDERS["AGENT_TOOLS_SDK"], LOOP_PROTOCOL))
     # 证明工具链那一轴（`draft/37` §89）：读数是机器相关的，所以由调用方传；
     # 没传就如实写"这一次没有读到读数"（不是"没有检查器"，也不是什么都不说）。
@@ -1423,6 +1424,32 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         + "、".join(S.TABLES)
                         + f"\n- 提示词版本：{{{{prompt_version}}}}"))
     return reg
+
+
+#: 交接手稿协议（`draft/37` §134，用户口径 2026-10-04 逐字）：
+#: 「各智能体在互相传递信息时可以借助手稿的方式……每个智能体要交接工作前写一份手稿放在里面，
+#: 且有标号（这个标号靠脚本拿最新的，从 0000 开始顺次标），传信息时就传手稿编号……
+#: 至于手稿的命名就是标号+谁to谁，特别地如果是给所有人就是谁toALL。手稿格式就用 markdown。」
+#: 外加用户随后的一句补充：「就传个编号感觉有点尬，可以再附一句简要描述」——
+#: 所以 `brief` 是这一形状的一部分，框架会把它拼进那条留言。
+HANDOFF_PROTOCOL = """\
+交接手稿（交接工作前的标准动作，也是"派活依据"与"溯源"落在盘上的那条通道）。
+
+- 写给谁：`to` 取 A–H 或 M；**给所有人写 `to="ALL"`**（走公共频道，文件名 `…toALL.md`）。
+- 编号：**由脚本分配**（从 `0000` 起顺次，你不需要也不许自己编号）；文件名是
+  `<编号>-<你>to<对方>.md`，落在工作区根的 `manuscripts/` 下。
+- 形状：`{"handoff": {"to": "F", "title": "...", "body": "...", "brief": "...", "refs": ["0003"]}}`
+  - `title`：一句话标题（索引里靠它认人）；
+  - `body`：**markdown 正文** —— 我做了什么、依据是什么（实验号 / 文献号 / 前序手稿号）、
+    要你做什么、我还卡在哪；
+  - `brief`：一句话简要描述（框架把它拼进发给对方的那条留言：`[手稿 0007] …`）；
+  - `refs`：引用到的前序手稿编号（必须真实存在）。
+- 框架会**同时**把留言发出去（编号 + 那句简要描述），你不需要再发一条 `message`；
+  对方用 `manuscripts.read(id="0007")` 读全文，`manuscripts.list(to="你")` 看发给你的那些。
+- 为什么值得这么做：徒手传信息时，"派活依据"只活在对话里；写了手稿之后，
+  **每一跳都能被第三方从盘上复核**（谁在什么时候把什么交给了谁、依据是哪几个编号）。
+
+"""
 
 
 def system_prompt(role: str, **kw: Any) -> str:

@@ -50,6 +50,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import schema as S
+from agentflow import manuscripts as MS
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
 from agentflow.tools import ocr_tools as OT
@@ -71,7 +72,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 75
+TOOL_COUNT = 77
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -253,6 +254,10 @@ def tool_params() -> dict[str, dict]:
         "graph.neighbors": {"concept_id": "0000"},
         "graph.relations_between": {"a": "0000", "b": "0001"},
         "graph.stats": {},
+        # `draft/37` §134：交接手稿的读面。编号 `0000` 由 `_seed` 真写一份手稿
+        # （编号由脚本从 0000 起分配 —— 夹具不自己编文件名，走的是同一条实现）。
+        "manuscripts.list": {},
+        "manuscripts.read": {"id": "0000"},
         "ocr.backends": {},
         "ocr.detect_text_layer": {"path": SOURCE_REL},
         "ocr.run": {"path": OCR_IMAGE_REL, "backend": "auto"},
@@ -315,6 +320,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "doc.paper_state",
         "fs.delete", "fs.edit", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
+        "manuscripts.list", "manuscripts.read",
         "ocr.backends", "ocr.detect_text_layer",
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
         "research.write_note",
@@ -566,6 +572,11 @@ def _seed(store: Store, root: Path) -> None:
         )
     with store.tx("documents", actor="test", note="fixture") as tx:
         tx.upsert("documents", _doc_row())
+    # 交接手稿（`draft/37` §134）：`manuscripts.read` / `manuscripts.list` 要有东西可读。
+    # 编号不写死：让 `manuscripts.write` 分配（`0000`），观测参数才与实现同源。
+    _ms = MS.write(store.root, sender="D", recipient="F", title="夹具手稿",
+                   body="铺夹具用的最小交接手稿。\n", summary="只验键集")
+    assert _ms["id"] == "0000", _ms
     with store.tx("experiments", actor="test", note="fixture") as tx:
         tx.upsert(
             "experiments",

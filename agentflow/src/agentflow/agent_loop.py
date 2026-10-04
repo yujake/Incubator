@@ -61,7 +61,7 @@ from .llmseam import LlmSeam
 #: 为什么让它进协议而不是只做一个 M 的工具：真机实测里模型自己就试过
 #: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
 #: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
-SHAPES = ("tool", "summon", "summon_many", "message", "note", "ask_user", "final")
+SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final")
 
 #: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`（`draft/37` §68）。
 #:
@@ -106,6 +106,8 @@ JSON_TAIL = (
     '{"summon_many": {"targets": [{"role": "A-H", "action": "<动作名>", "instance": "<可选>"}],'
     ' "why": "<为什么一次派这一批>"}}\n'
     '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
+    '{"handoff": {"to": "<伙伴/M/ALL>", "title": "...", "body": "<markdown 正文>",'
+    ' "brief": "<一句话描述>", "refs": ["<前序手稿编号>"]}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
     '{"final": {"final": "<结论>", "evidence": []}}'
@@ -675,6 +677,38 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
                      "body": str(value.get("body") or ""),
                      "reply_to": str(value.get("reply_to") or "")}, ""
+    if key == "handoff":
+        # 交接手稿（`draft/37` §134，用户口径）：交接工作前「写一份手稿」（编号由脚本分配），
+        # 留言只传编号 + 一句简要描述。
+        #
+        # 为什么做成一种「循环形状」而不是工具：手稿的文件名要写"谁给谁"
+        # （`0007-DtoF.md`），而工具层拿不到调用者的身份（注入的 deps 是装配期的，
+        # 不含 per-call 的 role）。循环自己知道 `self.role`，所以这条协议放在这里最自然；
+        # 读/列仍然做成工具（不需要身份）。
+        #
+        # 为什么「由框架」把留言合出来（而不是让模型自己再发一条 message）：
+        # 用户原话"就传个编号感觉有点尬，可以再附一句简要描述" —— 摘要取 `brief`
+        # （没给就取标题），于是模型只写一次，收件人既知道编号又知道一句话是什么事。
+        if not isinstance(value, Mapping):
+            return "", {}, "handoff 必须是一个对象"
+        to = str(value.get("to") or "")
+        if to != PUBLIC and to not in (*S.ROLES, S.CONDUCTOR_ROLE):
+            return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
+                            f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"）")
+        title = str(value.get("title") or "").strip()
+        body = str(value.get("body") or "").strip()
+        if not title:
+            return "", {}, "handoff 需要 title（索引里靠它认人）"
+        if not body:
+            return "", {}, ("handoff 需要 body（正文）—— 空手稿是「我交接了」的假证据，"
+                            "而这一层存在的全部意义就是可溯源")
+        refs = value.get("refs") or []
+        if not isinstance(refs, (list, tuple)):
+            return "", {}, "handoff 的 refs 必须是编号数组"
+        return key, {"to": "ALL" if to == PUBLIC else to, "title": title, "body": body,
+                     "brief": str(value.get("brief") or "").strip(),
+                     "refs": [str(x) for x in refs],
+                     "why": str(value.get("why") or "")}, ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     return key, {"final": final, "evidence": [str(x) for x in (data.get("evidence") or [])]}, ""
 
@@ -1180,6 +1214,8 @@ class AgentLoop:
             return self._do_summon_many(payload)
         if shape == "note":
             return self._do_note(payload)
+        if shape == "handoff":
+            return self._do_handoff(payload)
         if shape == "ask_user":
             return self._do_ask_user(payload)
         return self._do_message(payload)
@@ -1429,6 +1465,45 @@ class AgentLoop:
         where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
         return {"message_sent": msg_id, "to": to, "channel": where, "ok": True,
                 "note": "收件人下次运行时（或本步之后）会在收件箱里看到它"}
+
+    def _do_handoff(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
+
+        两件事一起做，是因为它们本来就是一件事的两半：手稿是「内容」，
+        留言是「通知」。让模型分两步做，就会出现"写了手稿但对方不知道"（或反过来）
+        的半截状态；而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描述"。
+
+        `to="ALL"` ⇒ 走公共频道（所有人收得到），文件名仍是 `NNNN-<From>toALL.md`。
+        """
+        from . import manuscripts as MS
+
+        to = str(payload.get("to") or "")
+        channel = PUBLIC if to == "ALL" else to
+        brief = str(payload.get("brief") or "").strip()
+        why = str(payload.get("why") or "").strip()
+        try:
+            rec = MS.write(self.session_root, sender=self.role, recipient=to,
+                           title=str(payload.get("title") or ""),
+                           body=str(payload.get("body") or ""),
+                           refs=list(payload.get("refs") or []),
+                           summary=brief, sid=self.sid or "")
+        except ValueError as exc:
+            return {"handoff": "未写成", "ok": False, "error": str(exc)}
+        summary = brief or str(rec.get("title") or "")
+        msg_id, problem = send_message(
+            self.session_root, sender=self.role, to=channel,
+            subject=f"手稿 {rec['id']}：{rec.get('title') or ''}",
+            body=(f"[手稿 {rec['id']}] {summary}"
+                  + (f"\n（为什么找你：{why}）" if why else "")
+                  + f"\n全文：`manuscripts.read(id=\"{rec['id']}\")`"
+                    f"（盘上 {rec['path']}）"),
+            sid=self.sid)
+        return {"handoff": rec["id"], "ok": not problem, "id": rec["id"],
+                "path": rec["path"], "to": channel, "brief": summary,
+                "notified": msg_id if not problem else "",
+                "error": problem,
+                "note": ("收件人下次运行时（或本步之后）会在收件箱里看到编号；"
+                         "它用 `manuscripts.read` 读全文")}
 
     def _do_ask_user(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """问用户一个问题：默认「停着」等回答，而不是"超时之后继续"。

@@ -75,6 +75,12 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由
     # `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
     "conjecture_tools.py": 1,
+    # 2026-10-04（`draft/37` §134）：交接手稿的读面。那 1 处是 `manuscripts.read` 的
+    # `ok(data, **data)` —— 键由手稿索引里的那条 record（`manuscripts.write` 落的行）
+    # 决定，静态扫描读不出来。与 `conductor_tools.py` 那一栏同族：该工具的 `returns=`
+    # 已逐字声明那 12 个键，由 `test_tools_returns_declaration.py` 的
+    # "声明必须是实跑键集的子集"钉住。
+    "manuscript_tools.py": 1,
 }
 
 #: 看得见的 `ok({...})` 调用点下界（判据不许真空：扫描器坏掉时必须先是红）。
