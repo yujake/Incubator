@@ -10239,3 +10239,72 @@ T2 第 4 趟（`projects/p6d-research-from-zero`）的会话记录里，M 有 **
   多两个字段 `dead_loop_max` / `same_call_max`），还没有一条 `closing` 档去读它。
   要不要把"这一趟有没有原地打转"做成收工门的一格，留给下一批（它涉及"什么算研究没进展"，
   而那是数学口径，不是循环口径）。
+
+## §137 研究型任务的验收表必须覆盖研究链四环节（覆盖面判据）
+
+### 一、这一条补的是哪个洞（`draft/38` 的 T2 门槛）
+
+T2 的验收表是**主控 M 自己写的**（`out/paper/ACCEPTANCE-CHECKS.json`）。四趟读下来，
+M 写的都是**最容易满足的那几行**：立了问题、检索过、跑过数值、报告更新了 ——
+而研究链上真正决定"有没有往前走"的四件事一行都没有：
+
+| T2 第 4 趟盘上读数 | 当时验收表里有没有那一行 |
+|---|---|
+| `research_questions` 有行、`search_requests` 有 done 行 | 有（R1/R2） |
+| `experiments` 里 numeric 有行 | 有（R3） |
+| `conjectures` **0 行**、`statements` **0 行** | **没有** |
+| `attack_plans` **0 行被推进**（`history` 全空） | **没有** |
+| 手稿引文献 **0 条**（35 条文献躺着没人引） | 后来才加（R6） |
+| 一条实验都没记下 `search_bound` | **没有** |
+
+于是"研究链一步没走"与"全绿可交付"在收工门上长得一模一样（§133 那张七件事的表
+就是逐条对照）。**这一条判据只做一件事：让"没看那一格"变成不可能。**
+
+### 二、判据（四环节，每环节至少一行）
+
+| 环节 | 可选的档（任一即可） |
+|---|---|
+| 立题与检索 | `research_question_rows` / `retrieval_attempts` |
+| 算并留下界 | `numeric_experiment_rows` / `search_frontier_rows` / `enumeration_optimization_rows` |
+| 想（猜想或判决性证据） | `conjecture_rows` / `statement_rows` / `counterexample_or_proof_rows` |
+| 交（文献进稿、计划推进） | `document_literature_citations` / `plan_progress_rows` / `supported_claims` |
+
+**触发条件只有一条**：这个项目里有 `research_questions` 行（= 它是"研究型"项目）。
+review 型（T1）不触发 —— 那些项目的验收表是任务书给的 P1–P11，与本判据无关
+（这条边界有独立用例守着，见下）。
+
+### 三、"覆盖面"与"阈值"是两件事（三态，别折平）
+
+- **覆盖面**：那一行**在不在**。缺一整行 ⇒ `acceptance` 判 `fail`，
+  点名缺哪个环节 + 那个环节可以写哪几档（`research_chain.missing`）。
+- **阈值**：那一行的读数够不够。`min` 缺省时按该档自己的口径（多半是 ≥ 1）——
+  所以写着 0 的一行**自己也**不成立。
+
+两者都会红，但红得不一样：**删掉一行留下的是一个空环节，写着 0 留下的是一个读数**
+（"这一轮没有提出可检验的猜想"那句话，比一个空着的环节值钱 —— 它就是 §133 那张表
+想逼出来的实话）。所以提示词里的纪律是：读数不够时**不许把那一行删掉**。
+
+### 四、落点
+
+| 改在哪 | 是什么 |
+|---|---|
+| `closing.RESEARCH_CHAIN_GROUPS` + `research_chain_gaps(store, kinds)` | 覆盖面判据的唯一实现（四环节 × 可选档） |
+| `closing._check_acceptance` 两处（缺文件那一支 / 逐行算完那一支） | 触发与报法：缺文件 ⇒ `acceptance_missing_for_research`（blocker，点名四个缺环节）；缺环节 ⇒ 并进 `acceptance_unmet`；读数进 `readings["acceptance"]["research_chain"]` |
+| `agent_prompts` M 的 policy 第 16 条（+ `specs/m.py` 逐字同步） | 把两份验收表与四环节档位名告诉主控 —— 这正是此前缺的那句话（全仓此前**没有一处**提到 `ACCEPTANCE-CHECKS.json`：收工门判一个没有任何角色被告知过的文件） |
+
+### 五、判据（`tests/test_closing_gate.py` 新增 4 条）
+
+| 判据 | 守什么 |
+|---|---|
+| `test_a_research_project_must_leave_an_acceptance_checks_file` | 研究型项目没有那份表 ⇒ `acceptance` 红（改前是 `pass` + 一句读数 —— 三态被折平） |
+| `test_a_thin_acceptance_table_is_named_by_the_missing_stage` | 只写"最容易满足的那几行" ⇒ 点名缺哪个环节（T2 四趟的形态） |
+| `test_a_full_coverage_table_still_judges_each_row_on_its_own_reading` | 覆盖面满足而读数为 0 ⇒ 红的是那些行、不是覆盖面（两者分开报） |
+| `test_a_review_project_is_not_touched_by_the_coverage_rule` | 边界：review 型项目（无 `research_questions`）行为不变 |
+
+### 六、下一步（这条判据的直接后果）
+
+它把"T2 那一类任务的收工门"从一个**可以自己写薄表**的门，变成一个**必须把研究链
+四个环节摆到台面上**的门。下一趟 T2（第 5 趟）要看的正是：M 会不会因此去要
+猜想 / 计划推进 / 文献进稿 —— 而 D/F 侧的"从读数到猜想、从猜想到攻坚"那两步
+还缺**它们自己的**纪律（§131 第 3 件事：C 的产出进链条；以及 D→F 的猜想交接）。
+那是下一批的事。

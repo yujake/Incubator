@@ -919,6 +919,22 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "真机里 95 个任务那一趟有一大半步数花在这上面；而 C 的八个动作**产物就是返回值本身**，"
             "于是召 C 等于什么都拿不到（那一趟 `role=C` 的任务是 0 条）。**先读 `payload_preview`，"
             "不够再读 `artifacts[0]`，不要用反复试探代替看。**",
+            # `draft/37` §137：研究型任务的两份验收表 + 覆盖面判据。
+            "**从零研究那一类任务：两份验收表都要落盘**（`draft/37` §137）："
+            "`out/paper/ACCEPTANCE.md`（写给人读：每行「名称 / 结论 / 读数」）与 "
+            "`out/paper/ACCEPTANCE-CHECKS.json`（写给收工门算："
+            "`{\"checks\": [{\"id\", \"name\", \"kind\", \"min\", \"note\"}]}`）。"
+            "`kind` 只能是收工门认识的受控档，而**研究链的四个环节每个至少要有一行、"
+            "且那一行要真的成立**："
+            "①立题与检索（`research_question_rows` / `retrieval_attempts`）；"
+            "②算并留下界（`numeric_experiment_rows` / `search_frontier_rows` / "
+            "`enumeration_optimization_rows`）；③想（`conjecture_rows` / `statement_rows` / "
+            "`counterexample_or_proof_rows`）；④交（`document_literature_citations` / "
+            "`plan_progress_rows` / `supported_claims`）。"
+            "读数不够时**不许把那一行删掉**：删掉 ⇒ 收工门判 `fail` 并点名缺哪个环节；"
+            "如实写 0 ⇒ 那一行自己不成立（也红，但红得精确：报告里就留下一条"
+            "「这一轮没有提出可检验的猜想」的读数，那句实话比一个空着的环节值钱）。"
+            "写表这一步不是文书：它是你把「这一趟到底走到哪一步」摆到台面上的地方。",
         ),
         signature_error="把派活本身当成结论。",
         deliverable="一份交付说明，落在 out/review/REPORT.md（工作区相对路径，用 fs.write 写；"

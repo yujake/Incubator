@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from . import renderanchor as RA
 from . import userio as U
@@ -172,6 +172,67 @@ LEG_CHECK_KINDS: dict[str, str] = {
 #: 而"轮次"只在真的改过稿时才会加。按 `review_rounds >= 1` 判会把一次
 #: 已经审过且通过的稿件读成"没审过"（判据恒红 ⇒ 谁都不会再信它）。
 REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
+
+#: 「研究链的四个环节」——从零做研究时，验收表每个环节至少要有一行（`draft/37` §137）。
+#:
+#: ## 为什么需要这一条（T2 四趟的真机读数，`draft/37` §133）
+#:
+#: 那一趟的验收表是人（主控 M）自己写的，于是它写的是最容易满足的那几行：
+#: 立了问题、检索过、跑过实验、报告更新了 —— 而研究链上真正决定"有没有往前走"的
+#: 四件事（猜想、计划推进、文献进稿、留下界）一行都没有。结果：`can_close=true`、
+#: 七格全绿，而 `conjectures`/`statements` 0 行、`attack_plans` 0 推进、手稿一条文献没引。
+#:
+#: 这份覆盖面判据只做一件事：让"没看那一格"变成不可能。它不要求那些读数是正数
+#: （0 也是读数：那一行照样要写出来）—— 它要求的是那一行存在。
+#: 一个把"猜想 0 条（没有可检验形式）"写进验收表的交付，与一个根本没提猜想的交付，
+#: 是完全不同的两件事；后者在这条判据之前没有任何读数能区分。
+#: （注意覆盖面与阈值是两件事：写着 0 的那一行仍会按它自己那一档的阈值判不成立 ——
+#: 两者都红，但前者留下读数、后者留下一个空环节。）
+#:
+#: 触发条件只有一条：这个项目里有 `research_questions` 行（= 它是个"研究型"项目）。
+#: review 型（T1）不触发 —— 那些项目的验收表是任务书给的 P1–P11，与本判据无关。
+RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("立题与检索", ("research_question_rows", "retrieval_attempts")),
+    ("算并留下界", ("numeric_experiment_rows", "search_frontier_rows",
+                    "enumeration_optimization_rows")),
+    ("想（猜想或判决性证据）", ("conjecture_rows", "statement_rows",
+                                "counterexample_or_proof_rows")),
+    ("交（文献进稿、计划推进）", ("document_literature_citations", "plan_progress_rows",
+                                  "supported_claims")),
+)
+
+
+def research_chain_gaps(store: Any, kinds: Iterable[str]) -> dict[str, Any]:
+    """研究型项目的验收表覆盖面：四个环节里哪些一行都没有。
+
+    返回 `{"researched", "rows", "groups", "missing", "note"}`：
+    `researched=False`（这个项目没有 `research_questions` 行）时 `missing` 恒为空 ——
+    这条判据对非研究型项目不说话（不是"通过"，是"不适用"）。
+    """
+    used = {str(k) for k in kinds}
+    try:
+        researched = len(list(store.rows("research_questions"))) > 0
+    except Exception as exc:  # noqa: BLE001 —— 读不到研究问题表 ⇒ 这一格判不了，由调用方落 unknown
+        raise RuntimeError(f"研究问题表读不到：{type(exc).__name__}: {exc}") from exc
+    groups: dict[str, list[str]] = {}
+    missing: list[str] = []
+    for label, members in RESEARCH_CHAIN_GROUPS:
+        hit = [k for k in members if k in used]
+        groups[label] = hit
+        if researched and not hit:
+            missing.append(f"{label}（可以写 {' / '.join(members)} 里的任意一档）")
+    return {
+        "researched": researched,
+        "rows": len(used),
+        "groups": groups,
+        "missing": missing,
+        "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链四个环节，"
+                 "每个环节至少一行。覆盖面管的是「那一行在不在」；那一行的读数够不够"
+                 "由它自己那一档判（`min` 缺省时按该档的口径，多数是 ≥ 1）—— "
+                 "所以删掉一行与写着 0 都会红，但后者留下的是读数，前者留下的是一个空环节。"
+                 "非研究型项目不受这一条约束（`researched=false`）。"),
+    }
+
 
 
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
@@ -547,9 +608,31 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         return
     path = Path(resolve_under_workspace(store, project_dir)) / ACCEPTANCE_CHECKS_NAME
     if not path.is_file():
-        rep.status["acceptance"] = "pass"
+        # 研究型项目不许"没有这一栏"：`draft/37` §137 —— 缺表时收工门无从回答
+        # "这一趟的研究链走到哪一步"，而那正是 §133 读出来的那个缺口
+        # （表是人自己写的 ⇒ 只写最容易满足的几行）。
+        try:
+            chain = research_chain_gaps(store, ())
+        except RuntimeError as exc:
+            rep.status["acceptance"] = "unknown"
+            rep.findings.append(Finding(
+                "acceptance", "acceptance_chain_unreadable", "warning",
+                f"{exc} ⇒ 研究链覆盖面这一格没查成"))
+            return
         rep.readings["acceptance"] = {"checks_file": str(path), "rows": [],
-                                      "note": f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}"}
+                                      "research_chain": chain}
+        if chain["researched"]:
+            rep.status["acceptance"] = "fail"
+            rep.findings.append(Finding(
+                "acceptance", "acceptance_missing_for_research", "blocker",
+                f"这是个研究型项目（`research_questions` 有行），却没有 "
+                f"{ACCEPTANCE_CHECKS_NAME} ⇒ 这一趟没有可复算的验收口径。"
+                f"研究链四个环节每个至少一行：{'；'.join(m for m in chain['missing'])}。"
+                "读数不够就把那一行如实写出来（写着 0 ⇒ 那一行自己不成立，但读数留下了）；"
+                "缺的是那一行，不是那个数"))
+        else:
+            rep.status["acceptance"] = "pass"
+            rep.readings["acceptance"]["note"] = f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}"
         return
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -606,6 +689,20 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                          + (f"；{note}" if note else ""))
 
     rep.readings["acceptance"] = {"checks_file": str(path), "rows": out}
+    # ---- 覆盖面（`draft/37` §137）：研究型项目的验收表要覆盖研究链四个环节。
+    # 「0 也是读数」：所以缺的是那一行，不是那个数（写 0 与删掉一行都会红，
+    # 但前者留下读数、后者留下一个空环节 —— 两者分开报）。
+    try:
+        chain = research_chain_gaps(store, [str(r.get("kind") or "") for r in out])
+    except RuntimeError as exc:
+        rep.status["acceptance"] = "unknown"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_chain_unreadable", "warning",
+            f"{exc} ⇒ 研究链覆盖面这一格没查成（不是「覆盖齐了」）"))
+        return
+    rep.readings["acceptance"]["research_chain"] = chain
+    if chain["missing"]:
+        unmet.append("研究链覆盖面：验收表里一行都没有的环节 —— " + "；".join(chain["missing"]))
     if unmet:
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(

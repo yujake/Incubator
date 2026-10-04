@@ -900,3 +900,105 @@ def test_the_substance_check_goes_red_alone(tmp_path: pathlib.Path):
     assert rep.status["contradictions"] == "pass", rep.to_dict()
     assert rep.status["report_shape"] == "pass", rep.to_dict()
 
+
+# ============================================================ 研究链覆盖面（§137）
+
+#: 研究链四环节各一行的"全覆盖表"（`min=0`：`0` 也是读数，写清为什么是 0 就合规）。
+_FULL_COVER: list[dict] = [
+    {"id": "R1", "name": "立题与检索", "kind": "research_question_rows", "min": 0,
+     "note": "本轮没立新问题：接着上一轮的问题做"},
+    {"id": "R2", "name": "算并留下界", "kind": "search_frontier_rows", "min": 0,
+     "note": "本轮一条实验都没记下界（脚本没报 bound）"},
+    {"id": "R3", "name": "想", "kind": "conjecture_rows", "min": 0,
+     "note": "读数不足以提出可检验的猜想"},
+    {"id": "R4", "name": "交", "kind": "document_literature_citations", "min": 0,
+     "note": "手稿还没引文献"},
+]
+
+
+def _as_research(st: Store, monkeypatch) -> None:
+    """把工作区伪装成"研究型项目"（`research_questions` 有一行）。"""
+    real_rows = st.rows
+    monkeypatch.setattr(st, "rows", lambda table: (
+        [{"question_id": "q-0001", "question": "为什么？", "status": "open"}]
+        if table == "research_questions" else real_rows(table)))
+
+
+def test_a_research_project_must_leave_an_acceptance_checks_file(
+        tmp_path: pathlib.Path, monkeypatch):
+    """负控（`draft/37` §137）：研究型项目没有那份机器可判的验收表 ⇒ 这一格红。
+
+    改前这里是 `pass` + 一句"这个项目没有 `ACCEPTANCE-CHECKS.json`" ——
+    于是"没写验收表"与"写了且全过"在收工门上长得一模一样（三态被折平的那种形态）。
+    """
+    st, report = _good(tmp_path)
+    _as_research(st, monkeypatch)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    codes = [f.code for f in rep.blockers]
+    assert "acceptance_missing_for_research" in codes, rep.to_dict()
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert chain["researched"] is True and len(chain["missing"]) == 4, chain
+
+
+def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
+        tmp_path: pathlib.Path, monkeypatch):
+    """负控（这一条判据的正面用例）：只写"最容易满足的那几行" ⇒ 点名缺哪个环节。
+
+    T2 四趟的验收表就是这个形态：立题、检索、数值、报告都有行，而猜想 / 计划推进 /
+    文献进稿 / 留下界一行都没有 —— 七格全绿、`can_close=true`，而研究链一步没走。
+    """
+    st, report = _good(tmp_path)
+    _as_research(st, monkeypatch)
+    _acceptance_checks(tmp_path, [
+        {"id": "R1", "name": "立起研究问题", "kind": "research_question_rows", "min": 0},
+        {"id": "R2", "name": "检索过", "kind": "retrieval_attempts", "min": 0},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert chain["groups"]["立题与检索"], chain
+    assert len(chain["missing"]) == 3, chain
+    detail = "；".join(f.detail for f in rep.blockers)
+    assert "研究链覆盖面" in detail and "想（猜想或判决性证据）" in detail, detail
+
+
+def test_a_full_coverage_table_still_judges_each_row_on_its_own_reading(
+        tmp_path: pathlib.Path, monkeypatch):
+    """三态：四环节各一行、但读数都是 0 ⇒ 覆盖面满足了，红的必须是那些行。
+
+    这一条把两件事分开（这正是本判据存在的意义）：
+    - `research_chain.missing == []` ⇒ "四个环节都看过"这件事确实做到了；
+    - `acceptance == fail` ⇒ 那四行的读数一个都没成立（0 条 < 该档阈值）。
+    两者都如实报出来：只报"红"会让 M 不知道是"表薄"还是"活没干"。
+    """
+    st, report = _good(tmp_path)
+    _as_research(st, monkeypatch)
+    _acceptance_checks(tmp_path, list(_FULL_COVER), st=st)
+    rep = _gate(st, report)
+
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert chain["missing"] == [], chain
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    detail = "；".join(f.detail for f in rep.blockers)
+    assert "研究链覆盖面" not in detail, detail
+    assert "0 条，要求 ≥ 1 条" in detail, detail
+
+
+def test_a_review_project_is_not_touched_by_the_coverage_rule(tmp_path: pathlib.Path):
+    """边界：没有 `research_questions` 行的项目（T1 那种 review）不受这一条约束。
+
+    为什么这条边界必须显式测：T1 的验收表是任务书给的 P1–P11，与"研究链四环节"
+    无关 —— 把这条判据撒到它头上会让 T1 那一线当场变红（而它已经通过了 15 趟）。
+    改前"没有验收表 ⇒ pass + 一句读数"，那一条对 review 项目保持不变。
+    """
+    st, report = _good(tmp_path)                     # 不给 research_questions、不给验收表
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    assert rep.readings["acceptance"]["research_chain"]["researched"] is False, \
+        rep.readings["acceptance"]["research_chain"]
+    assert "没有" in rep.readings["acceptance"]["note"], rep.readings["acceptance"]
+
