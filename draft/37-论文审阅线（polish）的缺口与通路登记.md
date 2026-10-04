@@ -7985,3 +7985,47 @@ H 的裁决写的是 `status`（`draft` → `accepted`/`revised`），而"轮次
 下一轮：**T1 第 10 趟**（夹具已带 P2/P7/P8/P9 四行）。
 要看的信号：`conductor.closing` 的 `acceptance` 四行能不能在**同一趟**里齐 ——
 任务原文三句话（改正文 / 核引文 / 形式化）+ 审校，第一次全部有落台账的凭据。
+
+---
+
+## §97 T1 第 10 趟：**假绿没了**（收工门把这一趟拦住了）；两条腿的失败回到模型侧
+
+第 10 趟真机（2026-10-04，工作区 `projects/p5-review-t10`，58 字任务原文不变，
+夹具带 P2/P7/P8/P9 四行机器可判验收）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 91 / 37（`ingest_local`、`register_statement`、`run_experiment`、`check_formal`、`revise`、`review`、`paper_package` … 都在被派之列） |
+| 花销 | **$1.337583**（预算 $5 内；结束时还剩约 $3.86 与 68 步） |
+| 退出 | 0（`final`，报告九节 6675 字） |
+| 主稿 | **改了 6 处**（`fs.edit` 定点替换）：26,155 → **27,413 B**，sha `8c5c431b…` → `b8702a66…` ⇒ **P2 满足** |
+| `documents` | 1 行 `revised`、`review_rounds=1`（H 审过）⇒ **P9 满足** |
+| `literature` | **0**；`statements` **0** ⇒ **P7 不满足** |
+| `experiments` | 5 行：4 行 `method=formal` 但**全部 `evidence_kind=heuristic` / `result=inconclusive`** ⇒ **P8 不满足** |
+| 收工门 | 步 89 的读数逐字：「`can_close=false`，**唯一拦门格 `acceptance=fail`（P7 quote_verified 0 条、P8 proof 行 0 条）**，其余六格全 pass」 |
+
+### 一、这一趟最重要的读数：交付被拦住了，而报告没有撒谎
+
+第 7、8 趟的形态是"六格全过 ⇒ 报告写『本轮交付完成』"；第 9 趟是"七格逐行点名、它如实写未核到"；
+这一趟是"**`can_close=false`，它把缺口写进报告才收工**"。三趟连起来看，
+§94/§95/§96 加的三档（`acceptance` 格本身 / `reviewed_documents` 的口径 / `manuscript_edited`）
+把"任务点名却没被判"这条通路补完了：假绿没有了。
+
+### 二、两条腿这一趟为什么没做成（回到模型侧，不是框架侧）
+
+- **P7（引文）**：`ingest_local` 在被派的动作之列，但 `literature` 是 0 行 ——
+  `A.ingest_local` 那一次没登记进任何东西（或落成拒绝），而模型在自述里把原因写成
+  「A 未接线 `no_provider`」（`ingest_local` 不需要检索后端，这个归因是错的，
+  与第 4 趟同一形态）。它随后没有重试，`statements` 因此是 0 行。
+- **P8（形式化）**：4 次 `run_experiment(method="formal")` 全部 `compile_error` ⇒
+  `evidence_kind=heuristic`。它自己的判断是「Lean 自足文件要真编过需要多轮试错」，
+  然后在**还剩 68 步、$3.86** 的情况下收敛到"更新报告"。
+- 也就是说：这一趟的失败**不是**框架缺通路（第 6、9 趟都证明过两条腿都能做成），
+  而是规划与试错预算的取舍 —— 而这正是接下来要看的东西（不是继续加判据）。
+
+### 三、下一轮
+
+1. **T1 第 11 趟**：同一夹具、同一任务原文。看 `acceptance` 四行能不能在同一趟齐；
+2. 若第 11 趟仍卡在"`ingest_local` 派了却没登记"或"Lean 试错过早放弃"，
+   那就说明该看**模型侧的收敛策略**（例如 E 的 policy 里是否该写明"自足文件失败时先查
+   检查器原话、再改一行重试"），而不是再往门上加格子。
