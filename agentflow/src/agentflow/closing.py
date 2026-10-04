@@ -93,6 +93,15 @@ LEG_CHECK_KINDS: dict[str, str] = {
                           "`search_literature` + `search.download` 能把引文原文查回来"
                           "（2026-10-04 实测：一次查询就登记了 9 行文献，其中就有 Kuchment 那篇、"
                           "带 DOI 10.1090/bull/1528）；先检索，取不回原文才允许写「未查」",
+    # ---- 研究类（`draft/38` 的 T2：从零做一轮研究，考察 A/B/D/E/F 与 M 的调度）----
+    "research_question_rows": "立起来的研究问题行数（`research_questions`）—— 从零做研究的第一步："
+                              "把「要研究什么」写成一行可追踪的问题，而不是散在对话里",
+    "analysis_report_rows": "分析报告行数（`analysis_reports`）—— D 的交付物：分析 / 结论 / 建议"
+                            "三层；没有它，这一轮就只是「读了点东西」",
+    "attack_plan_rows": "攻坚计划行数（`attack_plans`）—— F 的交付物：子目标进展与终止原因",
+    "numeric_experiment_rows": "数值/计算实验行数（`experiments` 里 `method=numeric`）—— 从零做研究时"
+                               "「先算一遍」是最便宜的证据来源（`method=formal` 那一档另有 "
+                               "`proof_experiment_rows` 管）",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -198,6 +207,24 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "from_provider": len(from_provider), "downloaded": len(downloaded),
             "topics": [str(r.get("topic") or "")[:60] for r in done[:8]],
         }
+    if kind == "research_question_rows":
+        rows = list(store.rows("research_questions"))
+        return len(rows), {"research_questions": [
+            {"id": str(r.get("question_id") or r.get("id") or ""),
+             "status": str(r.get("status") or "")} for r in rows[:8]]}
+    if kind == "analysis_report_rows":
+        rows = list(store.rows("analysis_reports"))
+        return len(rows), {"analysis_reports": [
+            {"id": str(r.get("report_id") or r.get("id") or ""),
+             "status": str(r.get("status") or "")} for r in rows[:8]]}
+    if kind == "attack_plan_rows":
+        rows = list(store.rows("attack_plans"))
+        return len(rows), {"attack_plans": [
+            {"id": str(r.get("plan_id") or r.get("id") or ""),
+             "status": str(r.get("status") or "")} for r in rows[:8]]}
+    if kind == "numeric_experiment_rows":
+        rows = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
+        return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 

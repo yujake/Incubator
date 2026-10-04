@@ -445,6 +445,40 @@ def test_the_retrieval_leg_requires_a_search_that_actually_ran(
     assert detail["done"] == 1 and "overview" in detail["topics"][0], detail
 
 
+def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/38` 的 T2）：研究类那四档各数自己那张表（不是互相替代）。
+
+    从零做一轮研究要看的四件事各有落点：立起问题（`research_questions`）、
+    检索取回（`search_requests`）、算一遍（`experiments` 的 numeric 行）、
+    分析报告与攻坚计划（D 与 F 的交付物）。四档要是混着数，一门绿就会掩盖另一门空。
+    """
+    st, report = _good(tmp_path)
+    fake = {
+        "research_questions": [{"question_id": "q-0001", "status": "open"}],
+        "analysis_reports": [{"report_id": "ar-0001", "status": "done"}],
+        "attack_plans": [{"plan_id": "ap-0001", "status": "active"}],
+    }
+    real_rows = st.rows
+
+    def rows(table):
+        return fake[table] if table in fake else real_rows(table)
+
+    monkeypatch.setattr(st, "rows", rows)
+    _acceptance_checks(tmp_path, [
+        {"id": "R1", "name": "立起研究问题", "kind": "research_question_rows", "min": 1},
+        {"id": "R5", "name": "分析报告", "kind": "analysis_report_rows", "min": 1},
+        {"id": "R6", "name": "攻坚计划", "kind": "attack_plan_rows", "min": 1},
+        {"id": "R3", "name": "数值实验", "kind": "numeric_experiment_rows", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    rows_read = rep.readings["acceptance"]["rows"]
+    got = {r["id"]: (r["got"], r["ok"]) for r in rows_read}
+    assert got["R1"] == (1, True) and got["R5"] == (1, True) and got["R6"] == (1, True), got
+    # 夹具里的那条 T3 实验是 formal ⇒ numeric 那一档必须是 0（各数各的表）
+    assert got["R3"] == (0, False), got
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 

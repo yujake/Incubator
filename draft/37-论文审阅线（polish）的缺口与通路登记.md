@@ -8734,3 +8734,54 @@ P7 的 9 条记录**全部是"未查 + 理由"**（`with_verdict=0`）——差�
 1. §106 **修接线态说谎**：`_availability()` 先问真身（后端登记表）⇒ M 眼里 A 第一次是"可用"的；
 2. §109/§110 **画像加厚 + 落盘可查文件 + 上报规则**（用户口径），M 知道每个伙伴交付什么、不许什么；
 3. §111 **提示词演练放行 + `topic` 要短**（长词袋会被 `precise` 的关键词过滤整批滤掉）。
+
+---
+
+## §113 T2 开跑前的准备：研究类验收档位、从零工作区、可行性论证
+
+### 一、主问题（从 `p3_R_examples/main.pdf` 提取）
+
+用框架自己的抽取层读那份 PDF（26 页），摘要与引言逐字给出：
+
+> Call a connected simple graph an **R(m, k)-example** if it is m-regular, has girth exactly k,
+> and every edge lies in at least two distinct k-cycles. We study the existence of infinite
+> R(m, k)-examples. …… for which (m, k) is there an infinite R(m, k)-example? **(1)**
+
+⇒ T2 的任务原文（**83 字**，不含任何角色/动作/分工暗示）：
+
+```
+研究这个问题：哪些 (m,k) 存在无限 R(m,k)-例子（m-正则、围长恰为 k、每条边至少落在两个不同的 k-圈里）？从零做出有价值的结果，交付研究手稿与说明。
+```
+
+### 二、从零的工作区（"把已有论文当作不存在"）
+
+`projects/p6-research-from-zero/` 里**不放**那篇论文，也不放它的任何副本：
+
+- `TASK.md`（人给的任务原文，不许改）、`README.md`（说明工作区里没有任何现成材料、要文献就检索）、
+  `out/paper/ACCEPTANCE.md`（人给的验收表 R1–R5）、`out/paper/ACCEPTANCE-CHECKS.json`（机器可判行）。
+
+### 三、研究类的机器可判档位（新增四档，进 `LEG_CHECK_KINDS`）
+
+| 档位 | 数的是 | 为什么它值得单列 |
+|---|---|---|
+| `research_question_rows` | `research_questions` 行数 | 从零做研究的第一步是**把问题立起来**（一行可追踪），不是散在对话里 |
+| `analysis_report_rows` | `analysis_reports` 行数 | **D 的交付物**（分析/结论/建议三层）—— 没有它，这一轮只是"读了点东西" |
+| `attack_plan_rows` | `attack_plans` 行数 | **F 的交付物**（子目标进展与终止原因） |
+| `numeric_experiment_rows` | `experiments` 里 `method=numeric` | 从零做研究时"先算一遍"是最便宜的证据来源（formal 那一档另有 `proof_experiment_rows`） |
+
+验收表 R1–R5（人的口径）：立问题 ≥1 / 检索 ≥3 / 数值实验 ≥1 / 分析报告 ≥1 / 攻坚计划 ≥1。
+判据 `test_the_research_kinds_count_their_own_tables`：四档**各数各的表**（夹具里那条 T3 实验是
+`formal` ⇒ numeric 那一档必须是 0），一门绿不许掩盖另一门空。
+
+### 四、跑前的可行性论证（按用户纪律：先论证，通过才跑）
+
+| 腿 | 依据（都是已实证的读数） |
+|---|---|
+| A 检索与取回 | T1 第 15 趟：11 条检索请求、`from_provider=21`、`downloaded=21` |
+| C 精确图计算 | 本题是 girth / 圈 / 正则性 —— 正是 C 的代码工具（计数、图搜索、路径枚举）的适用范围 |
+| D / F 交付面 | `research_questions` / `analysis_reports` / `attack_plans` 三张表与它们的动作齐备 |
+| E 数值 + 形式化 | T1：2 条 `method=formal` + `evidence_kind=proof` 的真裁决；Mathlib 已配好（§101） |
+| M 的调度 | T1 第 15 趟 45 次召唤覆盖 A/B/E/G/H；演练（§111）显示它会按验收行逐条派活 |
+| 预算 | T1 一趟 $1.04 ⇒ 研究一轮在 $5 内可行 |
+
+⇒ **可行，按此开跑（T2 第 1 趟）**。裁定口径：`conductor.closing` 七格 + 上面 R1–R5 五行。
