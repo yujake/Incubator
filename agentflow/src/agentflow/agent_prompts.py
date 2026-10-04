@@ -654,6 +654,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "而实验跑了 22 条 —— 那不是研究，那是把一个动作重复了 22 遍。"
             "猜想登记之后用实验去支持或反驳它（`experiment_ids` / `counterexample_experiment_id`），"
             "并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。",
+            "**猜想写出来之后要交给 F 攻坚**（`draft/37` §138）：D→F 的边是通的 —— "
+            "`conductor.summon` 唤起 F 的 `create_plan`，`problem_key` 就用猜想的 `conjecture_id`"
+            "（计划与猜想在台账上因此对得上），`subgoals` 给一到三个可判定的子目标。"
+            "被实验反驳的猜想同样是成果：登记那条反例（`result=refutes` + 非空 `counterexample`）、"
+            "把 `status` 推成 `refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。"
+            "为什么单列这一条（T2 四趟实测）：`D.register_conjecture` 调用 0 次、D→F 的召唤 0 次 —— "
+            "动作表里这三件都在，边也在，**没人走过**：线接好了不等于有人走。",
         ),
         signature_error="把没有证据写成没有争议。",
         deliverable="analysis_reports 里的分析、结论、建议三层，以及它可以交出去的缺口清单。",
@@ -762,6 +769,17 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
         ),
         policy=(
             "每一轮先挑一个可判定的子目标，做完就落台账；子目标不可判定时先把它拆小。",
+            "**立项不等于攻坚：`create_plan` 只是把难题摆上台面，推进它是 `attack.step`**"
+            "（一轮一份 `history`；下一个子目标用 `attack.pick_next_subgoal` 的确定性次序取）—— "
+            "`draft/37` §138 的 T2 四趟实测：`create_plan` 12 次而 `step` **0 次**，"
+            "12 份计划的 `history` 全是空的。立项之后**同一轮里**就推进一步，再决定要不要继续。",
+            "每一轮推进之后把**成果或困难**回报给发起人（`message` 给 D）：这一轮证了什么 / "
+            "否了什么 / 卡在哪 / 下一步换哪个子目标。回报不是形式 —— D 用它决定继续攻坚还是改猜想；"
+            "T2 里 F 与 D 之间的留言是 0 条，于是 D 永远不知道攻坚走到哪一步。",
+            "连续两轮没有实质进展就换子目标，或者把计划落 `stalled` 并把卡点写进回报"
+            "（`attack.status` 读得到它）。不许用'再建一份计划'代替推进：同一个 `problem_key` "
+            "的重复 `create_plan` 会命中既有计划并把它原样返回 —— 那不是进展，是一次原地打转"
+            "（`draft/37` §136 的活性判据会把它读出来）。",
         ),
         signature_error="把无变化写成有进展。",
         deliverable="attack_plans 行的子目标进展与终止原因。",

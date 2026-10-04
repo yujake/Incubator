@@ -662,3 +662,23 @@ def test_the_two_layers_are_not_the_same_set():
     assert codeish != prompted, "每一项都既代码又提示词，等于没有分层"
     assert "眼睛" in codeish and "高观点" in prompted
     assert "手" not in {f for f, (lv, _a) in AP.FACULTY_LAYERS.items() if lv == "prompt"}
+
+
+def test_the_file_the_closing_gate_judges_is_named_in_the_prompt_that_writes_it():
+    """判据与提示词同源（`draft/37` §137 补的那个洞）：门判的那份文件必须有人被告知过。
+
+    实测（2026-10-04）：`closing` 按 `out/paper/ACCEPTANCE-CHECKS.json` 逐行算验收，
+    而全仓此前没有一处（提示词、文档都没有）提到过这个文件名 ——
+    于是"没写那份表"与"写了且全过"在收工门上长得一样，而写表的人根本不知道要写它。
+    这条判据把"门与提示词同源"钉住：文件名换一处、另一处没跟，这里就红。
+    """
+    from agentflow import closing as CL
+
+    name = CL.ACCEPTANCE_CHECKS_NAME.split("/")[-1]          # ACCEPTANCE-CHECKS.json
+    brief = AP.ROLE_BRIEFS["M"]
+    text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
+    assert name in text, f"M 的提示词里没有点名 {name}（而收工门按它判验收）"
+    # 反面：这份文件不是给所有人的（G/H 的那条线由 PAPER_PACK 管），别顺手撒到每个角色
+    others = [r for r, b in AP.ROLE_BRIEFS.items()
+              if r != "M" and name in "\n".join([b.duty, b.deliverable, *b.policy])]
+    assert others == [], f"这份文件只该在主控的brief里点名，却出现在：{others}"

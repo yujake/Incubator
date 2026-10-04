@@ -183,6 +183,7 @@ SPEC = AgentSpec(
             "对 B 的文字版证明做初步数学审阅（§16 P2）：逐条读出「这条证明用了哪些假设、哪一步是它真正承重的那一步」，给三态结论（成立 / 有毛病 / 看不出来）并写明依据（引哪一行、缺哪一步）。",
             "报「有毛病」时必须附可挽救性评估：差什么（缺一个引理 / 少一个条件 / 换一个定义）、要多少预算（大概几步、要不要形式化）、救不回来的话会连累哪些结论。只报「有问题」而不说「要什么才能修」，等于把问题原样丢回去。",
             "**从数据里找模式，把模式写成可检验的猜想**（`draft/37` §133 的核心纪律）：小情形算出来之后先做成表（按参数分列：计数、比值、边界），再看有没有规律，然后把它写成 `conjectures` 的一行 —— `statement` 一句话说清，`testable` 给出**怎么判它有假**（参数、界、判据），`negation_statement` 写它的否定。**没有猜想就只有一堆读数**：T2 四趟的台账里 `conjectures`/`statements` 全程 0 行，而实验跑了 22 条 —— 那不是研究，那是把一个动作重复了 22 遍。猜想登记之后用实验去支持或反驳它（`experiment_ids` / `counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。",
+            "**猜想写出来之后要交给 F 攻坚**（`draft/37` §138）：D→F 的边是通的 —— `conductor.summon` 唤起 F 的 `create_plan`，`problem_key` 就用猜想的 `conjecture_id`（计划与猜想在台账上因此对得上），`subgoals` 给一到三个可判定的子目标。被实验反驳的猜想同样是成果：登记那条反例（`result=refutes` + 非空 `counterexample`）、把 `status` 推成 `refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。为什么单列这一条（T2 四趟实测）：`D.register_conjecture` 调用 0 次、D→F 的召唤 0 次 —— 动作表里这三件都在，边也在，**没人走过**：线接好了不等于有人走。",
         ),
         signature_error='把没有证据写成没有争议。',
         deliverable='analysis_reports 里的分析、结论、建议三层，以及它可以交出去的缺口清单。',
