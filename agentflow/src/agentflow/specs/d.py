@@ -112,6 +112,18 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ),
 
     ActionSpec(
+        "D", "propose_question",
+        "把一句话研究问题立成 research_questions 一行（从零做研究的第一步）。"
+        "为什么单列：D 的其余动作（submit_gaps / research / consider / assess / "
+        "adjudicate / trace_question / probe_c）**都要求 qid 已存在**，run_round 要一份 C 的"
+        "分析报告 —— 从零工作区里没有任何可召唤的动作能立起第一行（T2 第 1 趟真机：R1 永远 0 行）",
+        _obj({"question": _S, "kind": _S, "priority": _S, "gap_reason": _S, "notes": _S},
+             ("question",)),
+        "dict（ok / question_id / row）", side_effect="write_local",
+        handler_name="propose_question",
+    ),
+
+    ActionSpec(
         "D", "write_report",
         "把研究结果渲染成 markdown 报告",
         _obj({"out_path": _S}),

@@ -8877,3 +8877,56 @@ $1.777922 / 退出 0**。主控的自述（逐字摘要）：
 不另写一份），并放进 `specs/d.py` 的 `ACTIONS`（⚑ FC-27，与其余禁改区改动一并等 2 名人审）。
 判据：正控（一行问题落库、`qid` 可读）+ 负控（空问题被拒、零写入）+ 广告面（动作进了 D 的动作表）。
 做完再跑 **T2 第 2 趟**（R1–R5 + 七格），然后才是 T3。
+
+---
+
+## §116 D 的动作面补齐：`propose_question`（T2 第 2 趟开跑前）
+
+§115 三节留的那件事做完了：D 有了一个**可召唤的**创建动作。
+
+### 一、落成的东西（一处写入口，不另写一份）
+
+| 位置 | 内容 |
+|---|---|
+| `src/agentflow/agent_d/propose_question.py`（新） | `_ProposeQuestion.propose_question(*, question, kind="gap", priority="medium", gap_reason="", notes="") -> dict` |
+| `src/agentflow/agent_d/core.py` | `class AgentD(..., _ProposeQuestion, ...)` 混入（与既有 `adjudicate.py` 等同一形态） |
+| `src/agentflow/specs/d.py` ⚑FC-27 | `ActionSpec("D", "propose_question", …, required=("question",), side_effect="write_local", handler_name="propose_question")` |
+| `src/agentflow/capabilities.py` ⚑FC-27 | `_KNOWN_UNMATCHED_ACTIONS` 加 `"D.propose_question"`（它没有同名工具 Schema，登记后广告面判定不再是"动作没落地"） |
+| `tests/test_propose_question.py`（新） | 正控 / 负控 / 广告面三条 |
+
+行的构造走的是**与 `agent_d/adjudicate.py` 里"新建等价问题"同一条路**：
+`tx.alloc_id("question")` + `S.ResearchQuestion(...).validate()` + `tx.upsert`
+
+—— 并且带上了同族的**防重号**那段：`counters` 落后于表时 `alloc_id` 会发出已占用的号，
+而 `tx.upsert` 是按主键替换 ⇒ 会**静默覆盖已有行**（既不报重复也不报错）。
+于是加了 `while tx.find("research_questions", question_id=qid) is not None: qid = tx.alloc_id(...)`。
+
+### 二、实测（离线，不是推断）
+
+- 正控：`ok=True`、`question_id="0000"`，表里那一行是 `{kind:"gap", priority:"medium", status:"open"}`；
+- 负控：空问题 ⇒ `bad_question`、`kind="no_such_kind"` ⇒ `bad_kind`，**两次都是零写入**（表行数不变）；
+- 广告面：动作名出现在 D 的动作表里、且 `question` 在必填参数里。
+
+### 三、改完之后的两处纪律动作
+
+1. **重冻快照**：提示词/声明面一变，`tests/golden/agent_surface_snapshot.json` 与
+   `tool_surface_snapshot.json` 就必须重冻（上一轮 §111 漏冻过一次，整套测试因此红）；
+2. lint 回到日常基线 `error 0 / warning 9 / info 49`（新模块的 docstring 里我先写了成对 `**`，
+   R009 立刻报 error —— 已改成普通文字；这条自伤在本项目里出现过多次，记账）。
+
+### 四、R1 现在为什么可做（可召唤路径）
+
+主控（M）对 D 有边 ⇒ `summon("D", "propose_question", {...})` 能把一句话问题落成**第一行**，
+不再依赖 `pipeline` 的 C→D 路或 D 的内部工具。于是 T2 的 R1（`research_question_rows ≥ 1`）
+第一次在动作面上可达。
+
+### 五、FC-27 记账
+
+本轮触碰的禁改区：`specs/d.py`、`capabilities.py`（另有 §115 的 `closing.py`/`toolchain.py`/
+`formalgw.py`/`agent_prompts.py` 不在清单，属可自主改动面）。**这些改动由我写、尚未经人逐行走查**，
+`python scripts/noai_gate.py --git --since e211c32` 会以退出码 1 报 `requires_human`
+（2 名 reviewer）。**我不伪造签名**，这笔债挂在台账上：
+
+```text
+specs/{b,d,e,g}.py · tools/verify_tools.py · scripts/lint_rules.py · capabilities.py
+```

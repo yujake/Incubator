@@ -2166,6 +2166,9 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     "D.probe_c", "D.ingest", "D.ingest_detailed", "D.trace_question", "D.trace_l3",
     "D.assess", "D.submit_gaps", "D.consider", "D.poll", "D.adjudicate",
     "D.research", "D.run_round", "D.write_report",
+    # `draft/37` §115：从零做研究时"立起第一行问题"的通路 —— 它只写
+    # `research_questions` 一行，工具层没有同名工具（不是转发，也没有对应的 tool 调用）。
+    "D.propose_question",
     "E.run_script_experiment",
     "G.render", "G.refresh_markdown", "G.revise",
     "H.review",
