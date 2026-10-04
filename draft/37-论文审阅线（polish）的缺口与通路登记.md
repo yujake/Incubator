@@ -8029,3 +8029,49 @@ H 的裁决写的是 `status`（`draft` → `accepted`/`revised`），而"轮次
 2. 若第 11 趟仍卡在"`ingest_local` 派了却没登记"或"Lean 试错过早放弃"，
    那就说明该看**模型侧的收敛策略**（例如 E 的 policy 里是否该写明"自足文件失败时先查
    检查器原话、再改一行重试"），而不是再往门上加格子。
+
+---
+
+## §98 E 的 policy 补一句：**内联源码同时要落进工作区**
+
+### 一、第 10 趟的真机根因（两条腿各自卡在一步"没人告诉过它"的事上）
+
+| 腿 | 那一趟实际发生 | 根因 |
+|---|---|---|
+| P7 引文 | 模型把 `ingest_local` **派给了 B**（t-0009、t-0010，`refused/unknown_action`：「B 没有动作 'ingest_local'（它有：run_once…register_statement）」），`literature` 因此 0 行 | 主控把动作安在了错的角色上；框架的拒绝是对的（也列出了 B 的真动作），模型却在自述里写成「A 未接线 `no_provider`」 |
+| P8 形式化 | `check_formal` **两次真的 `verified`**（t-0004、t-0016：声明 `exactness_forward` 被检查到、无 sorry、公理 无）；随后 4 次 `run_experiment(method='formal')` 指着 `code/exactness_forward.lean` 等路径报「**脚本不存在**」⇒ `experiments` 里一条 proof 行都没有 | `check_formal(source=…)` 把源码写在**临时目录**里：裁决拿到了，**可复核的落点却没留在工作区** ⇒ 它既不是 `proof_location`，也交给不了 `run_experiment` |
+
+两条都不是"框架缺通路"（第 6、9 趟都做成过），而是**裁决与落库之间那一步没人说清**。
+
+### 二、修法：把这一步写进 E 的 policy（并逐字同步进 `specs/e.py`）
+
+`agent_prompts.ROLE_BRIEFS["E"].policy` 那条（`imports` / Mathlib 那一档）末尾补上：
+
+> **内联源码同时要落进工作区**（`fs.write` 到 `code/lean/<名字>.lean`）：
+> `check_formal(source=…)` 只给裁决，它把源码放在临时目录里 —— 那份文件既不是
+> `proof_location`，也没法交给 `run_experiment(method='formal', script_path=…)`。
+> 真机读数（2026-10-04 第 10 趟）：两次 `verified` 的结果全在临时目录里，随后 4 次
+> `run_experiment` 指着 `code/exactness_forward.lean` 报「脚本不存在」⇒ `experiments`
+> 里一条 proof 行都没有，`documents` 的 proof 级断言因此建不起来。
+> 裁决与落库之间只差这一步。
+
+同步方式与 §89 同一条纪律：`temp/_sync_e_policy.py` 从真相那侧读、逐字写进 `specs/e.py`
+（⚑ FC-27，与其余禁改区改动一并等 2 名 reviewer；`test_agent_spec_reconciliation` 要求两处逐字相等）。
+
+### 三、判据
+
+`tests/test_agent_prompts.py::test_e_is_told_to_write_the_lean_source_into_the_workspace`：
+E 的提示词里必须同时出现 `fs.write`、`code/lean/`、`script_path`、`proof_location`
+（少一个就说明这一步又被省掉了）。
+
+### 四、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 提示词 / 声明对账 | `pytest tests/test_agent_prompts.py tests/test_agent_spec_reconciliation.py -q` | **31 passed**（含新判据；两处 policy 逐字相等） |
+| 冻结快照 | `python tests/test_agent_surface_snapshot.py --write` + `pytest` | **3 passed**（diff = E 的 policy 那一段） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3493 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1429.73s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 11 趟**（同夹具、同 58 字任务原文）。

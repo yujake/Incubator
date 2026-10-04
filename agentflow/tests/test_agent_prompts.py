@@ -185,6 +185,20 @@ def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: Too
         "`check_formal` 现在会写 experiments 了？那提示词里那两句（裁决/落库分开）必须跟着改")
 
 
+def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolRegistry):
+    """判据（`draft/37` §98 的真机读数）：E 必须被明确告知"内联源码同时落进工作区"。
+
+    第 10 趟真机：两次 `check_formal` 真的 `verified` 了（`exactness_forward`），
+    而内联源码只落在临时目录里 ⇒ 它既不是 `proof_location`、也没法交给
+    `run_experiment(method='formal', script_path=…)`；随后 4 次 `run_experiment`
+    指着 `code/exactness_forward.lean` 报"脚本不存在"，`experiments` 里一条 proof 行都没有。
+    裁决与落库之间只差"把源码写进工作区"这一步 —— 而这一步此前没人告诉过它。
+    """
+    text = _prompt("E", registry)
+    for needle in ("fs.write", "code/lean/", "script_path", "proof_location"):
+        assert needle in text, f"E 的提示词里没有提到 {needle!r}"
+
+
 def test_every_role_prompt_is_rendered_without_template_leftovers(registry: ToolRegistry):
     """每个角色的提示词非空、没有没被插值的模板组，并且写着它自己的职责。
     若这条破了：角色会拿到一份通用或半插值的提示词（比如任务框里留着 `{{task}}`），

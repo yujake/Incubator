@@ -678,7 +678,14 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "于是「没点名」被报成 `decl_mismatch`，读起来像「查了没通过」）。"
             "真机读数（2026-10-01）：`code/lean/p2_rho_sum_zero.lean` 在旧默认（注入 Mathlib）下"
             "⇒ `import_unavailable`（`missing_imports=['Mathlib']`）；默认不注入 ⇒ `verified=True`，"
-            "检查器原话 `'rho_sum_zero' does not depend on any axioms`。",
+            "检查器原话 `'rho_sum_zero' does not depend on any axioms`。"
+            "**内联源码同时要落进工作区**（`fs.write` 到 `code/lean/<名字>.lean`）："
+            "`check_formal(source=…)` 只给裁决，它把源码放在临时目录里 —— 那份文件既不是"
+            "`proof_location`，也没法交给 `run_experiment(method='formal', script_path=…)`。"
+            "真机读数（2026-10-04 第 10 趟）：两次 `verified` 的结果全在临时目录里，"
+            "随后 4 次 `run_experiment` 指着 `code/exactness_forward.lean` 报"
+            "「脚本不存在」⇒ `experiments` 里一条 proof 行都没有，`documents` 的 proof 级断言"
+            "因此建不起来。裁决与落库之间只差这一步：**把源码写进工作区**。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",
