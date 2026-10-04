@@ -216,3 +216,119 @@ def test_the_notify_requirement_is_documented_in_the_loop_protocol():
     assert "notify" in text and "强制" in text and "不代填" in text, text
     assert "no_notify" in text, "停止理由也要写进协议（不然被停了不知道为什么）"
     assert AgentLoop.max_notify_rejections == 3, AgentLoop.max_notify_rejections
+
+
+# ============================================================ 主控派活侧（draft/39 §6.4 四.1）
+
+def _ws_rows(ws, table: str) -> list[dict]:
+    """读工作区里某张台账表的行（"派活有没有真的发生"看这张表最准）。"""
+    import pathlib as _pathlib
+
+    p = _pathlib.Path(ws) / "data" / f"{table}.json"
+    if not p.is_file():
+        return []
+    return list(json.loads(p.read_text(encoding="utf-8")).get("rows") or [])
+
+
+def test_the_conductor_must_leave_a_trail_when_it_dispatches(tmp_path):
+    """M 派活必须留痕：`summon` 带 `notify` ⇒ 账本一行、收件人是被派的那个角色。
+
+    `to` 缺省 = 被派的角色（"给谁派了活"与"手稿发给谁"不许因为要填两遍而分家）。
+    """
+    ws, run = _run(tmp_path, [
+        {"summon": {"role": "D", "action": "register_conjecture",
+                    "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
+                    "why": "把猜想立起来",
+                    "notify": {"summary": "派 D 登记这条猜想",
+                               "body": "## 派什么活\n登记猜想。\n## 依据\nlit:0000\n"}}},
+        {"final": "派完了"},
+    ], role="M")
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.notify_rejections == 0, run.to_dict()
+    assert run.handoffs == ["0000"], run.to_dict()
+    rows = MS.rows(ws)
+    assert rows[0]["to"] == "D", rows[0]
+    assert "登记这条猜想" in rows[0]["summary"], rows[0]
+    assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
+
+
+def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path):
+    """没填 `notify` 的派活：框架据派活本身派生一行留痕（派活照常发生）。
+
+    为什么这里不打回、收工侧却打回：用户要的是"派活强制留痕" —— 派生比"打回三次、
+    什么都不留"更接近那个目标；而派生行写的是框架手上已有的事实（谁派了谁做什么、参数、
+    为什么），不是替模型编它想说的话。收工侧仍然是"打回重填、不代填"（用户在那里的原话）。
+    """
+    ws, run = _run(tmp_path, [
+        {"summon": {"role": "D", "action": "register_conjecture",
+                    "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
+                    "why": "把猜想立起来"}},
+        {"final": "派完了"},
+    ], role="M")
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.notify_rejections == 0, ("派生不是打回", run.to_dict())
+    rows = MS.rows(ws)
+    assert [r["to"] for r in rows] == ["D"], rows
+    assert "框架据派活派生" in rows[0]["note"], rows[0]
+    assert "D.register_conjecture" in rows[0]["summary"], rows[0]
+    assert "n≥3 时" in rows[0]["body"] and "把猜想立起来" in rows[0]["body"], rows[0]
+    # 派活本身照常发生
+    assert len(_ws_rows(ws, "tasks")) == 1, _ws_rows(ws, "tasks")
+    assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
+
+
+def test_a_malformed_dispatch_notify_is_bounced_and_the_dispatch_does_not_happen(tmp_path):
+    """填了但填错 ⇒ 打回（那一次派活没有发生），补对之后照常派出去。"""
+    ws, run = _run(tmp_path, [
+        {"summon": {"role": "D", "action": "register_conjecture",
+                    "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
+                    "why": "把猜想立起来",
+                    "notify": {"to": "D"}}},          # 缺 summary / body
+        {"summon": {"role": "D", "action": "register_conjecture",
+                    "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
+                    "why": "把猜想立起来",
+                    "notify": {"summary": "补上留痕再派", "body": "## 派什么活\n登记猜想。\n"}}},
+        {"final": "派完了"},
+    ], role="M")
+    first = run.steps[0]
+    assert first.shape == "invalid" and "派活" in first.problem, first.to_dict()
+    assert "notify.summary" in first.problem, first.problem
+    assert "正例" in first.problem and "只改这一个字段" in first.problem, first.problem
+    assert len(_ws_rows(ws, "tasks")) == 1, _ws_rows(ws, "tasks")
+    assert MS.rows(ws)[0]["summary"] == "补上留痕再派", MS.rows(ws)
+    assert "模型填的 notify" in MS.rows(ws)[0]["note"], MS.rows(ws)
+    assert run.stop_reason == "final", run.to_dict()
+
+
+def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_path):
+    """`summon_many` 一波算一次派活、写一行；`to` 缺省 ⇒ `ALL`（多目标）。"""
+    ws, run = _run(tmp_path, [
+        {"summon_many": {"targets": [
+            {"role": "D", "action": "register_conjecture",
+             "params": {"statement": "甲", "testable": "n≤3"}, "instance": "a"},
+            {"role": "E", "action": "run_experiment",
+             "params": {"claim": "乙", "method": "numeric", "code": "print(1)"},
+             "instance": "b"}],
+            "why": "两条并行",
+            "notify": {"summary": "派两条活", "body": "## 派什么活\n甲 + 乙。\n"}}},
+        {"final": "派完了"},
+    ], role="M")
+    assert run.stop_reason == "final", run.to_dict()
+    rows = MS.rows(ws)
+    assert len(rows) == 1, rows
+    assert rows[0]["to"] == "ALL", rows[0]
+
+
+def test_a_plain_role_does_not_need_a_notify_on_its_dispatches(tmp_path):
+    """边界：非主控角色派活不要求 notify（它们只在收工那一刻留痕）。"""
+    ws, run = _run(tmp_path, [
+        {"summon": {"role": "E", "action": "run_experiment",
+                    "params": {"claim": "甲", "method": "numeric", "code": "print(1)"},
+                    "why": "算一遍"}},
+        {"final": "算完了", "notify": {"to": "M", "summary": "收工", "body": "完。"}},
+    ], role="D")
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.notify_rejections == 0, run.to_dict()
+    assert run.steps[0].shape == "summon", run.steps[0].to_dict()
+    assert "dispatch_handoff" not in run.steps[0].result, run.steps[0].result
+    assert [r["to"] for r in MS.rows(ws)] == ["M"], MS.rows(ws)

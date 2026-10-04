@@ -40,7 +40,7 @@ _PLACEHOLDER = re.compile(r"[<>{}]")
 _RUNTIME_PRODUCTS = frozenset({
     "report.md", "run-manifest.json", "claims.json", "evidence.json",
     "cost.json", "model-transcript.jsonl",
-    # 交接账本（`draft/39` §C1）：**每个工作区自己**的那个（`<工作区>/manuscripts/` 下，
+    # 交接账本（`draft/39` §C1）：每个工作区自己的那个（`<工作区>/manuscripts/` 下，
     # 第一次写手稿之后才有）—— 仓库根这一层永远没有它。
     # 两个名字都要登记：`_FILENAME_RE` 的扩展名分支把 `json` 排在 `jsonl` 前面，
     # 于是图里写的 `handoffs.jsonl` 被切成 `handoffs.json` 这个 token（判据的已知切词行为，

@@ -78,7 +78,13 @@ def ensure_dir(root: str | Path) -> Path:
 
 
 def valid_recipient(token: str) -> bool:
-    return str(token) in set(S.ROLES) | {ALL}
+    """收件人：八个角色、主控（`M`）或 `ALL`。
+
+    主控必须在列（`draft/39` §6.4）：强制 `notify` 落地后，被召唤来的角色最常见的交接对象
+    就是召唤它的主控；把 M 排除在外会让"给主控的交接"在写入期被拒 ——
+    而那种拒在真机上的表现是"手稿写不进去"（看起来像模型不会用这个工具）。
+    """
+    return str(token) in set(S.ROLES) | {S.CONDUCTOR_ROLE, ALL}
 
 
 def valid_sender(token: str) -> bool:
@@ -196,7 +202,7 @@ def path_of(root: str | Path, mid: str) -> Path | None:
 
 def _render_body(sender: str, recipient: str, summary: str, body: str, *,
                  refs: Iterable[str] = (), task_id: str = "", sid: str = "",
-                 created_at: str = "") -> str:
+                 created_at: str = "", note: str = "") -> str:
     """给 handoff 记录的 `body` 前面留一段机器可读的头部（人读 markdown、机读字段）。
 
     行里已经有一份结构化字段了，为什么正文还要带头部：`manuscripts.read` 交回给模型的
@@ -212,8 +218,12 @@ def _render_body(sender: str, recipient: str, summary: str, body: str, *,
         f"- 时间：{created_at or _now_iso()}",
         f"- 引用（前序手稿 / 台账对象）：{'、'.join(str(x) for x in refs) or '（无）'}",
         f"- 台账：{task_id or '（未记）'}" + (f" / sid {sid}" if sid else ""),
-        "",
     ]
+    if str(note or "").strip():
+        # 「这一行是怎么来的」（`draft/39` §6.4）：模型自己填的表 / 框架据派活派生 ——
+        # 读账本的人要能分清这两者，否则"留痕"会看起来都是模型写的。
+        head.append(f"- 附注：{str(note).strip()}")
+    head.append("")
     return "\n".join(head) + "\n" + str(body or "").rstrip() + "\n"
 
 
@@ -262,7 +272,7 @@ def ref_problem(root: str | Path, ref: str) -> str:
 
 def write(root: str | Path, *, sender: str, recipient: str, title: str = "", body: str,
           refs: Iterable[str] = (), summary: str = "", task_id: str = "",
-          sid: str = "", timeout: float = 30.0) -> dict[str, Any]:
+          sid: str = "", note: str = "", timeout: float = 30.0) -> dict[str, Any]:
     """追加一份交接手稿，返回它的那一行（含 `id`）。
 
     拒绝（抛 `ValueError`，「零写入」）：发件人/收件人不是合法角色、没有一句话说明、
@@ -270,6 +280,9 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
 
     `title` 是旧参数名：它现在与 `summary` 是同一件事（进留言的那一句话）。
     两者都给了就以 `summary` 为准，不给 `summary` 时把 `title` 当它 —— 旧调用点不用改。
+
+    `note` 是"这一行是怎么来的"（模型自己填的表 / 框架据派活派生，见 `draft/39` §6.4）：
+    它进正文头部，因为读账本的人要能分清这两种留痕。
     """
     sender = str(sender or "").strip()
     recipient = str(recipient or "").strip().upper()
@@ -278,8 +291,8 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
     if not valid_sender(sender):
         raise ValueError(f"发件人必须是 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE})} 之一，收到 {sender!r}")
     if not valid_recipient(recipient):
-        raise ValueError(f"收件人必须是 {sorted(set(S.ROLES) | {ALL})} 之一（给所有人写 {ALL}），"
-                         f"收到 {recipient!r}")
+        raise ValueError(f"收件人必须是 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE, ALL})} 之一"
+                         f"（给所有人写 {ALL}），收到 {recipient!r}")
     if not one_line:
         raise ValueError(
             "summary 不能为空（它就是留言里那一句 `[手稿 NNNN] <summary>`）—— "
@@ -301,12 +314,12 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
             created_at = _now_iso()
             full_body = _render_body(sender, recipient, one_line, text_body,
                                      refs=refs_list, task_id=task_id, sid=sid,
-                                     created_at=created_at)
+                                     created_at=created_at, note=note)
             blob = full_body.encode("utf-8")
             rec: dict[str, Any] = {
                 "id": mid, "sender": sender, "to": recipient, "summary": one_line,
                 "body": full_body, "refs": refs_list, "created_at": created_at,
-                "task_id": task_id, "sid": sid,
+                "task_id": task_id, "sid": sid, "note": str(note or ""),
                 "sha256": hashlib.sha256(blob).hexdigest(), "bytes": len(blob),
                 "path": f"{MANUSCRIPTS_DIR}/{HANDOFFS_NAME}#{mid}",
                 "format": "jsonl",

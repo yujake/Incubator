@@ -146,5 +146,9 @@ def test_an_allowed_summon_does_not_create_a_relay_request(tmp_path):
     st, cond, reg, gw = _world(tmp_path, gw_replies)
     run = _run_b(st, cond, reg, gw)
     assert run.stop_reason == "final", run.to_dict()
-    _heard, ids, _sent = AL.inbox_digest(st.root, "M", sid="t")
-    assert ids == [], f"允许的召唤不该产生代唤申请：{ids}"
+    # 判据是"没有**代唤申请**"（不是"主控收件箱里一条留言都没有"）：收工时的强制 `notify`
+    # 本来就会给 M 发一条 `[手稿 NNNN]` 的交接留言 —— 那是应该有的那条。
+    messages, problems = AL.read_messages(st.root, "M", sid="t")
+    assert not problems, problems
+    relays = [m for m in messages if "请代唤" in str(m.get("subject") or "")]
+    assert relays == [], f"允许的召唤不该产生代唤申请：{relays}"

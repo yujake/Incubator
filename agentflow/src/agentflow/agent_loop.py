@@ -767,8 +767,8 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         params = value.get("params") or {}
         if not isinstance(params, Mapping):
             return "", {}, "summon.params 必须是一个对象"
-        return key, {"role": role, "action": action, "params": dict(params),
-                     "why": str(value.get("why") or "")}, ""
+        return key, _with_notify({"role": role, "action": action, "params": dict(params),
+                                  "why": str(value.get("why") or "")}, value), ""
     if key == "summon_many":
         if not isinstance(value, Mapping):
             return "", {}, "summon_many 必须是一个对象（{\"targets\": [...]}）"
@@ -789,7 +789,8 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
             clean.append({"role": role, "action": action, "params": dict(params),
                           "instance": str(item.get("instance") or ""),
                           "input_key": str(item.get("input_key") or "")})
-        return key, {"targets": clean, "why": str(value.get("why") or "")}, ""
+        out: dict[str, Any] = {"targets": clean, "why": str(value.get("why") or "")}
+        return key, _with_notify(out, value), ""
     if key == "ask_user":
         if not isinstance(value, Mapping):
             return "", {}, "ask_user 必须是一个对象"
@@ -894,6 +895,18 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
 NOTIFY_FIELDS: tuple[str, ...] = ("to", "summary", "body", "refs", "why")
 
 
+def _with_notify(payload: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
+    """把派活形状里的 `notify` 原样带进 payload（没有这个键就一个字节都不加）。
+
+    为什么不总是加一个 `notify: None`：payload 是落台账的形状，多一个恒为 None 的键
+    会让"模型没填"与"框架没接住"在记录上长得一样；而且历史上按 payload 逐键比对的判据
+    会因此集体变红（那是判据在替我们守"形状不许悄悄变宽"）。
+    """
+    if raw.get("notify") is None:
+        return payload
+    return {**payload, "notify": raw.get("notify")}
+
+
 def _known_recipient(token: str) -> bool:
     """收件人写法认不认（大小写不敏感；`ALL` / `#public` 都算"给所有人"）。"""
     want = str(token or "").strip()
@@ -935,15 +948,18 @@ def clean_notify(notify: Mapping[str, Any]) -> dict[str, Any]:
             "why": str(notify.get("why") or "").strip()}
 
 
-def _notify_help(problem: str, *, attempt: int) -> str:
+def _notify_help(problem: str, *, attempt: int,
+                 what: str = "收工那一句（final）") -> str:
     """被打回时给模型看的那一段（用户点名要的"四件事" + 连续两次要反思）。
 
     四件事（`draft/39` §3.3 的裁定）：① 命中了哪个字段；② 正例；③ 反例；
     ④ "只改这一个字段再发一次"。为什么必须四件都给：只说"格式不对"时，模型下一句
     往往是把整段结论重写一遍（结论因此漂移），而这里要救的只是那一栏。
+
+    `what` 说明被拒的是哪一句（收工 / 派活）—— 两处共用同一张表与同一段话，措辞只有这一份。
     """
     lines = [
-        f"【打回重填】收工那一句（final）必须带 notify 表，而你这一份的问题是：{problem}",
+        f"【打回重填】{what}必须带 notify 表，而你这一份的问题是：{problem}",
         "① 命中字段：见上一行那句（说的就是哪一个键）。",
         "② 正例：{\"final\": \"本轮把 X 推到 Y（读数见下）\", \"notify\": {\"to\": \"D\", "
         "\"summary\": \"交给 D：X 的族构造证据\", \"body\": \"## 我做了什么\n…\n## 依据\n"
@@ -1369,22 +1385,9 @@ class AgentLoop:
                 # "M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）。
                 gate = self._notify_gate(payload)
                 if gate:
-                    run.notify_rejections += 1
-                    run.bad_args += 1
-                    run.bad_args_streak += 1
-                    help_text = _notify_help(gate, attempt=run.notify_rejections)
-                    bad_result = {"problem": help_text, "shape_recognized": "final",
-                                  "notify_rejections": run.notify_rejections,
-                                  "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
-                    run.steps.append(LoopStep(step, "invalid", payload, bad_result,
-                                              problem=help_text))
-                    SS.append(self.session_root, {
-                        "kind": "agent_step", "role": self.role, "index": step,
-                        "shape": "invalid", "payload": dict(payload),
-                        "result": dict(bad_result),
-                    }, sid=self.sid)
-                    transcript += _payload_line(step, "final", help_text)
-                    if run.notify_rejections >= self.max_notify_rejections:
+                    line, stop = self._notify_bounce(run, step, "final", payload, data, gate)
+                    transcript += line
+                    if stop:
                         # 停在"没留痕"上，而不是替它写一份：用户点名"不做框架代填"。
                         # 它自己那份结论照原样留着（`final` 就是模型写的那段话）——
                         # 打回不等于把这一趟的产出丢掉。
@@ -1410,7 +1413,32 @@ class AgentLoop:
                 run.steps.append(LoopStep(step, shape, payload, step_result))
                 run.stop_reason = "final"
                 break
+            # ---- 主控派活时的强制留痕（`draft/39` §3.3，用户 2026-10-05 裁）
+            #
+            # 摆在"派活那一刻"（`summon`/`summon_many`）而不是 M 的 final 上：
+            # M 的 final 是给用户的回复（用户明确说"向用户回复时不搞这种操作"），
+            # 而"谁给谁派了什么活"正是交接的内容。
+            dispatch_notify: dict[str, Any] | None = None
+            if shape in ("summon", "summon_many") and self.role == S.CONDUCTOR_ROLE:
+                gate, dispatch_notify = self._dispatch_notify(payload)
+                if gate:
+                    line, stop = self._notify_bounce(run, step, shape, payload, data, gate)
+                    transcript += line
+                    if stop:
+                        run.stop_reason = "no_notify"
+                        run.final = (f"（框架：主控派活要求填 notify 表，连续 "
+                                     f"{run.notify_rejections} 次没按格式填 ⇒ 派活没有留痕，"
+                                     "停在这里。请按正例把 notify 补齐再派。）")
+                        break
+                    continue
             result = self._execute(shape, payload)
+            if dispatch_notify is not None:
+                # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
+                # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
+                hand = self._do_handoff(dispatch_notify)
+                if hand.get("ok"):
+                    run.handoffs.append(str(hand.get("id") or ""))
+                result = {**result, "dispatch_handoff": hand}
             # 耳朵一直开着：这一步做完先听一次新消息，把它并进这一步的结果里
             # （并进结果而不是只并进 transcript：台账与会话记录要能看到"他当时听到了什么"）。
             heard = self._hear()
@@ -1621,6 +1649,99 @@ class AgentLoop:
                 f"要看这一趟做了什么用 `agentflow --root {self.session_root} runs`，"
                 f"要接着跑用 `agentflow --root {self.session_root} run-agent --resume "
                 f"--task \"<接着做什么>\"{sid_arg}`")
+
+    def _notify_bounce(self, run: LoopRun, step: int, shape: str,
+                       payload: Mapping[str, Any], data: Mapping[str, Any],
+                       problem: str) -> tuple[str, bool]:
+        """记录一次"notify 打回"；返回 `(写进 briefing 的那一行, 是否该就此收工)`。
+
+        打回的记录形态与"形状说对了、值写错了"那一档一致（`invalid` 步 + `shape_recognized`）：
+        它在台账上要与"说了个认不出的形状"分得开 —— 前者交回一次就能改对，后者是协议漂移。
+        """
+        run.notify_rejections += 1
+        run.bad_args += 1
+        run.bad_args_streak += 1
+        help_text = _notify_help(problem, attempt=run.notify_rejections,
+                                 what=("收工那一句（final）" if shape == "final"
+                                       else f"派活那一句（{shape}）"))
+        bad_result = {"problem": help_text, "shape_recognized": shape,
+                      "notify_rejections": run.notify_rejections,
+                      "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
+        run.steps.append(LoopStep(step, "invalid", payload, bad_result, problem=help_text))
+        SS.append(self.session_root, {
+            "kind": "agent_step", "role": self.role, "index": step,
+            "shape": "invalid", "payload": dict(payload), "result": dict(bad_result),
+        }, sid=self.sid)
+        return _payload_line(step, shape, help_text), run.notify_rejections >= self.max_notify_rejections
+
+    def _dispatch_notify(self, payload: Mapping[str, Any]) -> tuple[str, dict[str, Any] | None]:
+        """主控派活时的留痕载荷：返回 `(问题, 交给 `_do_handoff` 的载荷 或 None)`。
+
+        两种来源（`draft/39` §6.4 四.1 的裁定）：
+
+        1. 模型填了 `notify` ⇒ 用它（`note` 标成"模型填的 notify"），形状不对就打回；
+        2. 没填 ⇒ 框架据派活本身派生一份（`note` 标成"框架据派活派生"）：
+           写的是"谁派了谁做什么、参数是什么、为什么"——这些是框架手上已有的事实，
+           不是替模型编它想说的话。为什么不打回：用户要的是"派活强制留痕"，
+           派生比"打回三次、什么都不留"更接近那个目标；而 A–H 收工侧仍然是打回重填
+           （用户在那里的原话是"填错就打回充填……不做框架代填"）。
+
+        `to` 的缺省是被派的那个角色（多目标 ⇒ `ALL`）："给谁派了活"与"手稿发给谁"
+        因此不会因为要填两遍而分家。
+        """
+        notify = payload.get("notify")
+        targets = self._dispatch_targets(payload)
+        if notify is None:
+            return "", self._derived_dispatch_notify(payload, targets)
+        if not isinstance(notify, Mapping):
+            return notify_shape_problem(notify), None
+        patched = dict(notify)
+        if not str(patched.get("to") or "").strip():
+            patched["to"] = targets[0] if len(targets) == 1 else "ALL"
+        problem = notify_shape_problem(patched)
+        if problem:
+            return problem, None
+        from . import manuscripts as MS
+
+        for ref in list(patched.get("refs") or []):
+            why = MS.ref_problem(self.session_root, str(ref))
+            if why:
+                return f"notify.refs 里的 {ref!r} 立不住：{why}", None
+        clean = clean_notify(patched)
+        clean["note"] = "留痕来源：模型填的 notify"
+        return "", clean
+
+    def _derived_dispatch_notify(self, payload: Mapping[str, Any],
+                                 targets: list[str]) -> dict[str, Any]:
+        """没填 `notify` 时，从派活本身派生那一行留痕（事实是什么就写什么）。"""
+        lines = ["## 派了什么活", ""]
+        for t in (payload.get("targets") or [payload]) if "targets" in payload else [payload]:
+            if not isinstance(t, Mapping):
+                continue
+            lines.append(f"- {t.get('role')}.{t.get('action')}：参数 "
+                         f"`{json.dumps(dict(t.get('params') or {}), ensure_ascii=False)}`"
+                         + (f"（instance={t.get('instance')}）" if t.get("instance") else ""))
+        why = str(payload.get("why") or "").strip()
+        if why:
+            lines += ["", "## 为什么派它", why]
+        lines += ["", "## 这一行是怎么来的",
+                  "模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（"
+                  "谁派了谁做什么、参数、为什么），内容全部取自这一句派活。"]
+        what = ", ".join(f"{t.get('role')}.{t.get('action')}"
+                         for t in ((payload.get("targets") or []) if "targets" in payload
+                                   else [payload]) if isinstance(t, Mapping))
+        return {"to": targets[0] if len(targets) == 1 else "ALL",
+                "summary": f"派活：{what or '（没有目标）'}",
+                "body": "\n".join(lines) + "\n", "refs": [], "why": why,
+                "note": "留痕来源：框架据派活派生（模型这一句没填 notify）"}
+
+    @staticmethod
+    def _dispatch_targets(payload: Mapping[str, Any]) -> list[str]:
+        """这一句派活派给了谁（`summon` 一个、`summon_many` 一批）。"""
+        if "targets" in payload:
+            return [str(t.get("role") or "") for t in payload.get("targets") or []
+                    if isinstance(t, Mapping)]
+        return [str(payload.get("role") or "")]
 
     def _notify_gate(self, payload: Mapping[str, Any]) -> str:
         """收工那一句的 `notify` 表该不该被打回（空串 = 放行）。
@@ -1969,7 +2090,8 @@ class AgentLoop:
         try:
             rec = MS.write(self.session_root, sender=self.role, recipient=to,
                            summary=one_line, body=str(payload.get("body") or ""),
-                           refs=list(payload.get("refs") or []), sid=self.sid or "")
+                           refs=list(payload.get("refs") or []), sid=self.sid or "",
+                           note=str(payload.get("note") or ""))
         except ValueError as exc:
             return {"handoff": "未写成", "ok": False, "error": str(exc)}
         summary = str(rec.get("summary") or "")

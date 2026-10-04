@@ -103,7 +103,11 @@ def test_private_message_needs_a_collaboration_edge(tmp_path: pathlib.Path):
     assert step.shape == "message" and step.result.get("ok") is False, step.result
     assert "没有协作边" in str(step.result.get("error")), step.result
     events, _ = SS.read_session(root, sid="t")
-    assert not [e for e in events if e.get("kind") == "agent_message"], "被拒的私聊不许留下消息"
+    # 判据是"被拒的那条私聊不许留下消息"（不是"这一趟不许有任何消息"）：收工时的强制
+    # `notify` 会让框架给 M 发一条 `[手稿 NNNN]` 的留言 —— 那是应该留下的那条。
+    leaked = [e for e in events if e.get("kind") == "agent_message"
+              and "悄悄话" in str(e.get("subject") or "")]
+    assert not leaked, leaked
 
 
 def test_private_message_between_partners_is_allowed(tmp_path: pathlib.Path):
