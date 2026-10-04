@@ -145,7 +145,7 @@ def test_create_plan_refuses_incomplete_budget_without_writing(store):
 
 
 def test_the_incomplete_budget_refusal_is_visible_as_a_refusal(store):
-    """判据（`draft/37` §127 的真机读数）：这一支是**拒绝**，调用方必须看得出来。
+    """判据（`draft/37` §127 的真机读数）：这一支是「拒绝」，调用方必须看得出来。
 
     T2 第 4 趟真机：主控连续 6 次 `F.create_plan` 都只传 `{"max_rounds": 6}`，
     每一次都被拒（预算四类键缺一不可），而台账里记的全是

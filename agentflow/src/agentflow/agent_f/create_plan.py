@@ -41,13 +41,13 @@ class _CreatePlan:
         chk = AT.check_budget(dict(budget) if budget is not None else dict(default_budget))
         if not chk["complete"]:
             return {
-                # `ok: False`（`draft/37` §127 的真机读数）：这一支是**拒绝**，
+                # `ok: False`（`draft/37` §127 的真机读数）：这一支是「拒绝」，
                 # 而它此前只给 `created: false` + `reason` —— 调用方（主控）看到的
                 # `outcome` 于是是 `ok`（"执行完成（handler 未声明 outcome，按有产出处理）"），
                 # 真机里它连着 6 次以为自己立了项，而 `attack_plans` 一行都没有。
                 # 判据在 `conductor._end_from_payload`：payload 里 `ok=False` ⇒ refused。
                 # 分档规则是"声明了受控的 `refusal_reason` ⇒ refused；只说 ok=False ⇒ failed"，
-                # 而这一支是**调用方参数不完整**（改参数就能过）⇒ `invalid_params`。
+                # 而这一支是「调用方参数不完整」（改参数就能过）⇒ `invalid_params`。
                 "ok": False,
                 "refusal_reason": "invalid_params",
                 "kind": "budget_incomplete",
@@ -75,7 +75,7 @@ class _CreatePlan:
         if existing is not None:
             return {
                 # `ok: True`（幂等成功，不是拒绝）：同一 `problem_key` 已经有未终结的计划
-                # ⇒ "这件事已经立过项了"，那是一个**正常结局**（返回已有 plan_id）。
+                # ⇒ "这件事已经立过项了"，那是一个「正常结局」（返回已有 plan_id）。
                 # 显式写出来，是为了与上面那一支的 `ok: False` 分开 ——
                 # 三态纪律：`没有可做的` 与 `被拒了` 不许长得一样。
                 "ok": True,
