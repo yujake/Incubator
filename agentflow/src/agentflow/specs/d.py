@@ -125,9 +125,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "D", "write_report",
-        "把研究结果渲染成 markdown 报告",
+        "把研究结果渲染成 markdown 报告；`out_path` 缺省 <工作区>/<reports_subdir>/"
+        "<qid>-research.md（`reports_subdir` 缺省 reports），相对路径按**工作区根**解析、"
+        "跳到工作区外一律拒（`draft/37` §118：这一格曾经按进程当前目录解析，"
+        "把交付物写到了工作区外还记成 ok）",
         _obj({"out_path": _S}),
-        "写出文件的路径", side_effect="write_local", handler_name="write_report",
+        "写出文件的路径（绝对）", side_effect="write_local", handler_name="write_report",
     ),
 
     ActionSpec(

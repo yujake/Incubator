@@ -21,7 +21,7 @@ class _WriteReport:
         ## `out_path` 相对谁解析（`draft/37` §118：T2 第 1 趟的真机读数）
 
         缺省落点是 `<工作区>/<reports_subdir>/<qid>-research.md`（`reports_subdir`
-        来自配置，缺省 `reports`）。传进来的**相对** `out_path` 一律按**工作区根**
+        来自配置，缺省 `reports`）。传进来的「相对」 `out_path` 一律按「工作区根」
         解析 —— 原先是 `Path(out_path)` 直接写，于是按进程当前目录解析：
 
         ```text
@@ -32,7 +32,7 @@ class _WriteReport:
 
         规则与工具层的写盘同一个实现（`doc_tools.resolve_out_path`）：
         越界（绝对路径跳出去、`..`）一律拒 —— 工作区边界是沙箱契约，不是建议。
-        返回值是**绝对**路径（与传绝对路径时的旧行为一致，`pipeline._rel_to_root`
+        返回值是「绝对」路径（与传绝对路径时的旧行为一致，`pipeline._rel_to_root`
         等调用方照旧能用）。
         """
         rows = sorted(self.store.rows("research_questions"), key=lambda r: str(r.get("question_id")))

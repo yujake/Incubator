@@ -769,7 +769,7 @@ def test_run_pipeline_passes_c_explicitly_to_agent_d(demo_store, tmp_path, monke
 
     P.run_pipeline(
         demo_store, request=REQUEST, gap_rounds=1, agent_a=None, agent_b=None,
-        d_report_path=tmp_path / "r.md",
+        d_report_path=tmp_path / "demo" / "r.md",
     )
     assert "c" in captured, "必须**显式**传 c= 关键字（隐式兜底会让 I1 静默退化）"
     assert captured["c"] is not None, "D 拿到的 C 是 None ⇒ I1 失效"
@@ -796,7 +796,7 @@ def test_run_pipeline_builds_c_once_and_gives_that_same_instance_to_d(demo_store
     captured = _spy_on_d(monkeypatch)
     out = P.run_pipeline(
         demo_store, request=REQUEST, gap_rounds=1, agent_a=None, agent_b=None,
-        d_report_path=tmp_path / "r.md",
+        d_report_path=tmp_path / "demo" / "r.md",
     )
     assert out["mode"] == "analyze"
     assert len(built) == 1, f"C 被装配了 {len(built)} 次（应为 1 次）"
@@ -819,7 +819,7 @@ def test_run_pipeline_c_config_keys_cannot_diverge(demo_store, tmp_path, monkeyp
         config={"auto_build_c": False, "build_agent_c": True},
         agent_a=None,
         agent_b=None,
-        d_report_path=tmp_path / "r.md",
+        d_report_path=tmp_path / "demo" / "r.md",
     )
     assert out["mode"] == "analyze", "C 应当被装配并跑分析"
     assert captured["c"] is not None, "C 明明在跑，D 却拿不到它 ⇒ I1 静默退化"
@@ -832,12 +832,12 @@ def test_run_pipeline_replay_mode_still_allows_c_to_be_absent(demo_store, tmp_pa
     # 先正常跑一次，把 C 报告登记进 analysis_reports（replay 模式需要已有报告）。
     P.run_pipeline(
         demo_store, request=REQUEST, gap_rounds=1, agent_a=None, agent_b=None,
-        d_report_path=tmp_path / "r1.md",
+        d_report_path=tmp_path / "demo" / "r1.md",
     )
     captured = _spy_on_d(monkeypatch)
     out = P.run_pipeline(
         demo_store, request=REQUEST, gap_rounds=1, config={"auto_build_c": False},
-        agent_a=None, agent_b=None, d_report_path=tmp_path / "r2.md",
+        agent_a=None, agent_b=None, d_report_path=tmp_path / "demo" / "r2.md",
     )
     assert out["mode"] == "replay"
     assert captured["c"] is None

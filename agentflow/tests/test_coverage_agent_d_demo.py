@@ -159,7 +159,7 @@ def test_write_report_honours_explicit_out_path_and_creates_parent_dirs(tmp_path
     （例如总是写默认位置），人给的路径会被静默忽略 —— 而"调用方以为文件在 A、
     实际在 B"是典型的静默失败。深一层的父目录顺便测了 `mkdir(parents=True)`。
 
-    `out_path` 必须在**工作区内**（`draft/37` §118）：相对路径按工作区根解析，
+    `out_path` 必须在「工作区内」（`draft/37` §118）：相对路径按工作区根解析，
     跳到工作区外的绝对路径一律拒 —— 后者的判据在
     `tests/test_write_report_path.py`（T2 第 1 趟的泄漏就是那么发生的）。
     """

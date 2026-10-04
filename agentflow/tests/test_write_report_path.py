@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""判据（`draft/37` §118）：D 的报告落在**工作区里**，读数也去**同一个落位**数。
+"""判据（`draft/37` §118）：D 的报告落在「工作区里」，读数也去「同一个落位」数。
 
 真机读数（T2 第 1 趟）：主控 `summon("D", "write_report", {"out_path": "out\\review\\D-analysis.md"})`
-八次全部记 `outcome=ok`、报告里写着"执行完成" —— 而工作区里**一个报告文件都没有**：
-`Path(out_path)` 按**进程当前目录**解析，2282 字节的报告写到了
+八次全部记 `outcome=ok`、报告里写着"执行完成" —— 而工作区里「一个报告文件都没有」：
+`Path(out_path)` 按「进程当前目录」解析，2282 字节的报告写到了
 `D:\\Incubator\\agentflow\\out\\review\\D-analysis.md`（进程 cwd），整个交付物静默离开工作区。
 
 两条判据：① 相对 `out_path` 按工作区根解析、越界拒绝；② 验收那一档

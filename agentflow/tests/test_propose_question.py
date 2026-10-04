@@ -62,7 +62,7 @@ def test_the_action_is_advertised_on_d_surface():
 def test_the_boss_can_walk_it_through_conductor_summon(tmp_path: Path):
     """编排层的正控（这才是 T2 的 R1 真正依赖的那条路）：主控 summon D 的那个动作。
 
-    为什么单列：`propose_question` 是**给主控用的**动作，而主控只能 `conductor.summon`。
+    为什么单列：`propose_question` 是「给主控用的」动作，而主控只能 `conductor.summon`。
     直接以 D 的身份调方法只能证明"实现能落行"，证明不了"编排层通"——
     真机掉下去的地方历来在编排层（`draft/37` §85–§89 的第三次露头）。
     """

@@ -111,6 +111,14 @@ LEG_CHECK_KINDS: dict[str, str] = {
     "numeric_experiment_rows": "数值/计算实验行数（`experiments` 里 `method=numeric`）—— 从零做研究时"
                                "「先算一遍」是最便宜的证据来源（`method=formal` 那一档另有 "
                                "`proof_experiment_rows` 管）",
+    "document_literature_citations": "手稿引用的「文献来源」条数（`documents` 各行的 claims 里 "
+                                     "`citations` 提到的不同 `lit:` / `rel:` 代号）—— 研究手稿的"
+                                     "第一条要求是「知道别人做过什么」：检索回来的文献与提取出的"
+                                     "关系必须真的进到稿子里。为什么单列一档（2026-10-04 T2 第 2 趟"
+                                     "真机）：那一趟 A 取回 35 条文献、B 整理出 32 条关系，而手稿的"
+                                     "三条断言**全部只引 `exp:`**（一条文献都没引）—— 门照样全绿，"
+                                     "因为没有任何一行问过这件事。而库里就躺着直接对口的那几篇"
+                                     "（`on-edge-girth-regular-graphs-lower-bounds-and-new-families` 等）",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -236,8 +244,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #
         # 落位取并集（`draft/37` §118）：写者的缺省落位是 `<工作区>/<reports_subdir>`
         # （`AgentD.__init__` 从 `agent_d.reports_subdir` 取，缺省 `reports`），
-        # 而主控显式传 `out_path` 时常见的落点是 `out/reports`。**写者读配置，读数就得
-        # 读同一份配置** —— 只看一个写死的目录会出现"报告写出来了、读数说 0 条"
+        # 而主控显式传 `out_path` 时常见的落点是 `out/reports`。写者读配置，读数就得
+        # 读同一份配置 —— 只看一个写死的目录会出现「报告写出来了、读数说 0 条」
         # （T2 第 1 趟实际就是这么读错的，而那一趟报告确实写了 8 次）。
         subs = ["out/reports"]
         cfg_sub = _reports_subdir_of(project_root)
@@ -268,6 +276,38 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
     if kind == "numeric_experiment_rows":
         rows = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
+    if kind == "document_literature_citations":
+        # 「手稿有没有引用文献」那一档（`draft/37` §120）。口径（写清楚，免得下次又问错）：
+        # 数 `documents` 各行 claims 的 `citations` 里出现过的「不同」代号，只算
+        # `lit:<id>` 与 `rel:<id>`（`exp:` 是自家实验、不是文献；`rel:` 是 B 从文献里
+        # 逐字提取出来的关系，按定义带着文献来源）。
+        # `lit:0003#p.4` 这种带页码/锚点的写法按同一个文献算一次（取 `#` 之前）。
+        lit_ids: set[str] = set()
+        rel_ids: set[str] = set()
+        per_doc: dict[str, dict[str, Any]] = {}
+        for r in store.rows("documents"):
+            mine = {"lit": set(), "rel": set()}
+            for c in r.get("claims") or []:
+                if not isinstance(c, Mapping):
+                    continue
+                for ref in c.get("citations") or []:
+                    raw = str(ref).split("#", 1)[0].strip()
+                    if raw.startswith("lit:"):
+                        mine["lit"].add(raw)
+                    elif raw.startswith("rel:"):
+                        mine["rel"].add(raw)
+            doc_id = str(r.get("doc_id") or r.get("id") or "")
+            per_doc[doc_id] = {"lit": sorted(mine["lit"]), "rel": sorted(mine["rel"])}
+            lit_ids |= mine["lit"]
+            rel_ids |= mine["rel"]
+        return len(lit_ids) + len(rel_ids), {
+            "lit_ids": sorted(lit_ids)[:12], "rel_ids": sorted(rel_ids)[:12],
+            "lit_count": len(lit_ids), "rel_count": len(rel_ids),
+            "documents": per_doc,
+            # 三态：库里有多少可以引的东西 —— 让"引了 0 条"与"库里本来就没有"分得开。
+            "available": {"literature": len(store.rows("literature")),
+                          "relations": len(store.rows("relations"))},
+        }
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 
@@ -533,7 +573,7 @@ def _reports_subdir_of(project_root: Path) -> str:
 
 
 def _has_paper_package(root: Path) -> bool:
-    """这个项目根下**有没有论文包的实物**（`draft/37` §117 的判据）。
+    """这个项目根下「有没有论文包的实物」（`draft/37` §117 的判据）。
 
     为什么不是"`out/paper/` 目录在不在"：人给的验收表按 `ACCEPTANCE_CHECKS_NAME`
     的定义就住在 `out/paper/` 里 ⇒ 任何有机器可判验收行的项目都必然有那个目录，
@@ -543,10 +583,10 @@ def _has_paper_package(root: Path) -> bool:
     认的实物（与 `renderanchor` 的四件同一份口径，不另立一套名字）：
     正文 `main.tex` / 编译产物 `main.pdf` / 渲染锚 `RENDER-ANCHOR.json` /
     编译回执 `COMPILE-RECEIPT.json` / 构建历史 `BUILD-HISTORY.jsonl`。
-    验收表、说明、`out/reports/*.md` **不算** —— 它们是本框架的记账，不是论文。
+    验收表、说明、`out/reports/*.md` 「不算」 —— 它们是本框架的记账，不是论文。
 
     三态纪律：这里只回答"要不要查锚"，不回答"锚对不对"——有正文而无锚仍然走
-    `check_package` 那条**可操作的 `unknown`**，不许被这里吞掉。
+    `check_package` 那条「可操作的 `unknown`」，不许被这里吞掉。
     """
     pkg = root / "out" / "paper"
     if not pkg.is_dir():
@@ -586,7 +626,7 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
         #
         # §117 把判据从"`out/paper/` 目录在不在"改成"有没有论文包的实物"：验收表
         # （人给的 `out/paper/ACCEPTANCE-*.json|md`）按 `ACCEPTANCE_CHECKS_NAME` 的定义
-        # **就住在 `out/paper/` 里**，于是任何有机器可判验收行的项目都必然有那个目录
+        # 「就住在 `out/paper/` 里」，于是任何有机器可判验收行的项目都必然有那个目录
         # ——"目录在"于是成了恒真信号，T2 那类工作区永远关不上门（本轮预检实测：
         # 空白 T2 工作区 `anchor=unknown`）。现在只有盘上有正文/锚/编译产物才算论文包：
         # 有正文而无锚 ⇒ 仍然是那条可操作的 `unknown`（§44.5 的老账不丢）。

@@ -9135,3 +9135,161 @@ R1/R4 被我修掉）。这不是"应该能做"，是"只差这两处结构缺�
 **论证通过**：两处根因都已落成代码 + 判据，五行通路齐备，风险都有处置口径。
 按用户口径开跑真机（`--budget-usd 5 --wall-clock-sec 14400 --max-steps 150`，
 工作区 `p6b-research-from-zero`，sid `t2b`），跑完按 R1–R5 + 七格 + 产物三层裁定。
+
+---
+
+## §120 T2 第 2 趟裁定：**机器全绿（R1–R5 首次全成立）**，但「有价值的成果」这一条**不成立** —— 以及一个我独立复核出来的错数
+
+任务原文逐字：`研究这个问题：哪些 (m,k) 存在无限 R(m,k)-例子（m-正则、围长恰为 k、每条边至少落在两个不同的 k-圈里）？从零做出有价值的结果，交付研究手稿与说明。`
+（86 字，不含任何分工暗示）。工作区 `projects/p6b-research-from-zero`（sid `t2b`），
+真机读数：**退出 0 / 72 次模型调用 / $0.807746**（第 1 趟是 $1.777922）。
+
+### 一、机器那一层：**第一次全绿**
+
+离线复算（`temp/_t2b_preflight.py` + 带 `report_path` 的 `check_closing`），逐字：
+
+```text
+七格：{'acceptance': 'pass', 'anchor': 'pass', 'contradictions': 'pass', 'load_bearing': 'pass',
+       'report_shape': 'pass', 'substance': 'pass', 'user_pending': 'pass'}
+can_close = True | exit = 0
+R1 research_question_rows   got=1 min=1 ✓   （§116 新补的 D.propose_question）
+R2 retrieval_attempts       got=3 min=3 ✓
+R3 numeric_experiment_rows  got=4 min=1 ✓
+R4 report_files             got=4 min=1 ✓   （§118 修好落位之后）
+R5 attack_plan_rows         got=1 min=1 ✓
+```
+
+⇒ §114 认的那两处根因（R1 动作面缺动作、R4 落位错）**在真机上都被这两个修法解决了**，
+而且是"五行同时成立"的第一次。主控自己在第 71 步报 `can_close=true` —— 与外部复算一致
+（第 11 趟那次"运行内绿、外部红"的假绿没有重演）。
+
+主控这一趟的做法（从 72 步的 `use` 序列读出来的，不是它的自述）：先立问题（D）、
+连开三路检索（A）、发现 28 条文献里大量无关并**自己写下了这个判断**、
+让 B 整理、自己用 `fs.write` 把两个数值脚本落盘后交给 E 跑、两次超时后改构造法、
+让 G 建稿、H 审、D 写报告、F 立计划、最后补交付说明九节。
+
+### 二、研究那一层：**不成立**（三条，都能在产物上复核）
+
+**① 手稿一条文献都没引。** `documents/0000` 的三条断言引的全是自家实验：
+
+```text
+claim-1 citations=['exp:0003'] · claim-2 ['exp:0002'] · claim-3 ['exp:0000','exp:0001']
+```
+
+而那一趟的 `literature` **35 行**、`relations` **32 行** —— 库里就躺着直接对口的几篇：
+`on-edge-girth-regular-graphs-lower-bounds-and-new-families`（0029）、
+`edge-girth-regular-graphs-arising-from-biaffine-planes-and-s…`（0033）、
+`dataset-for-exhaustive-generation-of-edge-girth-regular-grap…`（0032）。
+我抽了 0029 的摘要逐字读：**用户问的 R(m,k) 就是文献里的
+`egr(n,k,g,λ)`（"每条边恰好落在 λ 个 g-圈里"）取 λ≥2**，而那篇的标题后半句正是
+`lower bounds and new families` —— 也就是说，"哪些 (m,k) 有无穷多个例子"这一问，
+**文献里很可能已经有答案或现成构造**，而这一趟的手稿没有读它。
+这不是"模型不干活"：动作面里 G/D 都能引 `lit:`（我离线验过 `build_document` 接受
+`lit:`/`rel:` 引用），只是**没有任何一行验收判据要求过这件事**。
+
+**② 手稿里唯一那个正面结果带一个错数（我独立复核出来的）。** 手稿 claim-1 逐字：
+
+> The Petersen graph is a 3-regular graph of girth 5 in which every edge lies in at least
+> two distinct 5-cycles (min_edge_cycles=20) …
+
+E 的脚本（`scripts/rmk_construct.py`，`k_cycle_edge_counts`）把"每条边落在多少个
+不同 k-圈里"算成了 **k 倍**：它枚举所有起点与方向后再 `//= 2`，而每个圈对每条边的
+贡献是 `2k`（k 个起点 × 2 个方向）⇒ 应当 `//= 2k`。我另写了一份不重用它代码的
+枚举（`temp/_t2b_petersen_check.py`，直接枚举 5-圈并按边集去重）复核：
+
+```text
+5-圈总数 = 12 · 每条边的 5-圈数 = 4（全图一致）· E 脚本口径的最小值 = 20
+```
+
+⇒ **数学断言是真的**（每条边确实落在 ≥2 个不同的 5-圈里），但那个括号里的 20 是
+"4 × k"，被当成"不同圈的条数"写进了稿子。三态纪律这一层系统是干净的：这条断言标的是
+`heuristic`（最弱一档），没有冒充证明。
+
+**③ 主问题没被回答。** "哪些 (m,k) 有无穷多个 R(m,k)-例子"要的是**无穷族**；
+这一趟给出的只有一个有限例子（Petersen，(3,5)）＋"另一些被试过的族里没找到"＋
+"两次穷举超时、不下结论"。作为"一轮从零研究"这是**诚实但没有价值**的收尾 ——
+按用户口径（"确实做出了点有价值的成果后……再试跑下一个任务"），**T3 不许开跑**。
+
+### 三、H 那一层：0 条审校发现（一个我要记下来的盲区）
+
+`review_findings` **0 行**，而 `documents/0000` 的状态是 `accepted`。
+H 的判据是逐断言解剖（引用是否存在、证据等级与字段是否相称）—— 三条断言的引用都真实存在、
+等级都自洽，所以 H 无话可说**是对的**；但"整篇稿子一条文献都没引"与"括号里的数是什么口径"
+这两件事，H 的判据面里根本没有对应轴。这一条我不在这一轮动（加一条审校轴要连
+`FINDING_KINDS` / `claimanatomy` 的判据一起设计，属于独立一轮的事），**登记在此**：
+`§121` 先用验收行把"必须接上文献"这条钉住，审校轴留作后续。
+
+---
+
+## §121 T2 第 3 趟前的这一批改动（一处新验收档 + 两条提示词口径 + 一处声明面）
+
+按 §120 的裁定，第 2 趟机器全绿但研究价值不成立 ⇒ **不开 T3**，先把"研究手稿要接上文献"
+这条钉进判据，再跑第 3 趟。
+
+### 一、新验收档 `document_literature_citations`（`closing.LEG_CHECK_KINDS` 第 12 档）
+
+数 `documents` 各行 claims 的 `citations` 里出现过的**不同** `lit:` / `rel:` 代号：
+
+- `exp:` **不算**（那是自家实验）——`rel:` 是 B 从文献里逐字提取的关系，按定义带文献来源；
+- `lit:0003#p.4` 按同一篇算一次（取 `#` 之前）；
+- 多份稿件取并集去重；
+- 读数里同时给出「库里有几条可引」（`available.literature/relations`）——
+  三态纪律：让「引了 0 条」与「库里本来就没有」分得开。
+
+判据 `tests/test_closing_gate.py::test_the_manuscript_must_cite_the_literature_it_retrieved`：
+正控走**真实写入口**（`doc.build_document` 接受 `lit:` 引用 —— 这一步走手拼行会被
+`content_sha256` 与 `check_citations` 当场拒，所以必须由真实路径证明"这一档够得着"）；
+`rel:` 那一半用替身 reads 把口径钉住；两种 `lit:` 写法只算一篇。
+
+### 二、提示词口径（`agent_prompts.py` 的 E + `specs/e.py` 逐字同步）
+
+第 2 趟有两条真实的浪费，都落成 E 的口径：
+
+1. **先估规模再跑**：两次穷举（n≤10、n≤12）烧掉 600 s 与 900 s 后被超时杀掉、一条读数都没有；
+   同一趟里"构造 / 随机 + 精确核验"那条路给出了唯一一个正面结果。
+2. **每个打印出来的数都要写清它是什么**：`min_edge_cycles` 那个 k 倍口径就是反例
+   （§120 第二节②）。
+
+声明面（`specs/e.py`）必须与提示词逐字一致 —— 这条由
+`tests/test_agent_spec_reconciliation.py` 判，我第一版把新段拼进了上一条字符串里
+（元素数 4≠3）当场变红；同步脚本 `temp/_sync_e_policy.py` 用真相的 repr 逐字重写那一行，
+再比对元素数与每一条字符串（我加了一个 diff 探针 `temp/_policy_diff.py`，
+逐条比到"第一处不同字符"）。
+
+### 三、`D.write_report` 的声明面补一句落位规则
+
+`specs/d.py` 的动作摘要原来只有"把研究结果渲染成 markdown 报告"，`out_path` 是裸
+`_S`（无描述）—— 与 §91 那次"主控把 `out_path` 指到 `out/paper/main.tex`"同源。
+能力层的 `_obj` 不支持逐属性描述（`agentspec._S` 就是 `{"type":"string"}`），
+所以补在动作摘要里：缺省落位、相对路径按工作区根解析、跳出工作区一律拒。
+改完重冻 `tests/golden/agent_surface_snapshot.json`（55 条动作）。
+
+### 四、R009 的 12 处自伤（又一次）
+
+我新写的注释/docstring 里又出现了成对 `**`（6 个文件、12 处），lint 当场从 `0/9/49` 变
+`6/9/49`。处置不再是逐个手改，而是写了一个**按 R009 同一口径**的处理器
+`temp/_strip_emphasis.py`：docstring 由 `ast` 认（模块/类/函数的第一条语句），
+注释由 `tokenize` 的 COMMENT 认，**只在**这两处做跨行的成对替换 ——
+字符串字面量里的 `**` 是要渲染的 markdown（`doc_tools` 的渲染模板就是那种形态），
+碰它等于改产物。
+
+顺手复核出一条纪律：`specs/e.py` 那三处**既有**的注释装饰我第一版也给它换了，
+但 R009 对 FC-27 文件**不计入判据**（报告里那句"禁改区 24 个文件里仍有 712 处装饰……
+本项不计入判据"就是它）—— 我随后把那三行**原样改回**，让禁改区的 diff 只剩"我真正要加的那一行"。
+
+### 五、这一批改完的读数
+
+- lint：`error 0 / warning 9 / info 49`（日常基线）；
+- 相关判据：`test_closing_gate` / `test_write_report_path` / `test_propose_question` /
+  `test_agent_prompts` / `test_agent_spec_reconciliation` / `test_agent_surface_snapshot` /
+  `test_role_specs_action_table` / `test_r4_roles_surface` / `test_reading_map` 全绿（122 passed）；
+- 新增/更新的文档面：`docs/ROLE-SPECS.md`（54→55 个动作、D 行 14→15、M.4.1 标题 54→55）、
+  `capabilities.py` 两处对账注释（54=18+36+0 → 55=18+37+0）、`docs/READING-MAP.md`
+  的 §3 行数（`agent_d/core.py` 1606→1608、`capabilities.py` 2264→2267）。
+
+### 六、第 3 趟的工作区
+
+`agentflow/projects/p6c-research-from-zero`（新建；第 1、2 趟的工作区原样留着当对照）：
+R1–R5 与第 2 趟同口径，**新增 R6 `document_literature_citations ≥ 3`**。
+预检（空白工作区）逐字：R1–R6 全 0、`anchor=pass(not_applicable)`、
+`substance=fail`、`acceptance=fail` —— 这才是"从零"的诚实起点。

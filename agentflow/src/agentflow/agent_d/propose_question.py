@@ -27,8 +27,14 @@ from ._support import S
 from ..refusals import refuse
 
 #: 合法的问题种类与优先级（与 `schema` 的受控词表同源，不另写一份）。
-_KINDS = tuple(getattr(S, "QUESTION_KINDS", ("gap",)))
-_PRIORITIES = tuple(getattr(S, "PRIORITIES", ("high", "medium", "low")))
+#:
+#: 名字刻意不带 `_KINDS` 后缀（`draft/37` §118 的机械判据逼出来的）：
+#: `src/agentflow/schema.py` 的注释用裸词 `_KINDS` 举"别这样起名"的例子，而
+#: `tests/test_r5_orchestration_cost.py` 的登记表逐条记着"这个 token 全仓只有文本提及、
+#: 没有真符号" —— 我在这里定义一个 `_KINDS` 会让那条登记过期（判据当场红），
+#: 而且它会让 `tools/vocab_census.py` 的 `VOCAB_SUFFIXES` 把这里当成一张受控词表。
+_KIND_VALUES = tuple(getattr(S, "QUESTION_KINDS", ("gap",)))
+_PRIORITY_VALUES = tuple(getattr(S, "PRIORITIES", ("high", "medium", "low")))
 
 
 class _ProposeQuestion:
@@ -51,11 +57,11 @@ class _ProposeQuestion:
         if not text:
             return refuse("bad_question",
                           "question 不能为空 —— 空问题立不起来任何研究（零写入）")
-        if kind not in _KINDS:
-            return refuse("bad_kind", f"kind 必须是 {_KINDS} 之一，收到 {kind!r}")
-        if priority not in _PRIORITIES:
+        if kind not in _KIND_VALUES:
+            return refuse("bad_kind", f"kind 必须是 {_KIND_VALUES} 之一，收到 {kind!r}")
+        if priority not in _PRIORITY_VALUES:
             return refuse("bad_priority",
-                          f"priority 必须是 {_PRIORITIES} 之一，收到 {priority!r}")
+                          f"priority 必须是 {_PRIORITY_VALUES} 之一，收到 {priority!r}")
 
         with self.store.tx("research_questions", actor=self.actor,
                            note="propose_question") as tx:

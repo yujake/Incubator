@@ -479,6 +479,70 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     assert rep.status["acceptance"] == "fail", rep.to_dict()
 
 
+def test_the_manuscript_must_cite_the_literature_it_retrieved(tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/37` §120）：手稿引用了多少「文献来源」（`lit:` / `rel:` 代号）。
+
+    为什么单列这一档（T2 第 2 趟真机）：那一趟 A 取回 35 条文献、B 整理出 32 条关系，
+    而手稿的三条断言「全部只引 `exp:`」 —— 一条文献都没引，门却全绿（没有一行问过它）。
+    研究手稿的第一条要求就是"知道别人做过什么"。
+
+    口径逐条钉住：只算 `lit:` / `rel:`（`exp:` 是自家实验）；`lit:0003#p.4` 按同一篇算一次；
+    多份稿件取并集去重；读数里同时给出"库里有几条可引"（让"引了 0 条"与"库里本来就没有"分得开）。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "R6", "name": "手稿引用文献", "kind": "document_literature_citations", "min": 2},
+    ], st=st)
+
+    # 先往库里放一条可引的文献（三态纪律：读数要能区分"引了 0 条"与"库里本来没有"）
+    lit = S.Literature(lit_id="0000", title="一篇外部论文", type="J",
+                       summary="外部文献的一句话摘要", path="library/0000/x.pdf")
+    lit.validate()
+    with st.tx("literature", actor="test", note="lit-cite probe") as tx:
+        tx.upsert("literature", lit.to_dict(), note="lit-cite probe")
+
+    # 夹具里那份稿件（`_good` 造的 documents 行）先看基线读数：它只引 `exp:` ⇒ 0
+    got, detail = CL._leg_reading(st, "document_literature_citations", tmp_path)
+    assert got == 0 and detail["available"]["literature"] == 1, detail
+
+    # 再放一行稿件：claims 引同一篇文献的两种写法 + 一条自家实验。
+    # 走「真实写入口」（`doc.build_document`）而不是手拼一行：手拼那一路会绕开
+    # `content_sha256`/`citations` 存在性之类的结构判据（实测被 `schema` 与
+    # `check_citations` 当场拒），而"这一档够得着"必须由真实写入路径来证明。
+    from agentflow.tools.doc_tools import build_document
+
+    build_document(
+        store=st, kind="paper", title="引用文献的稿",
+        claims=[{"claim_id": "c1", "section": "Related", "text": "甲（引自文献）",
+                 "evidence_kind": "heuristic",
+                 "citations": ["lit:0000", "lit:0000#p.4", "exp:0001"]}],
+        workspace_root=str(tmp_path), actor="test")
+    got2, detail2 = CL._leg_reading(st, "document_literature_citations", tmp_path)
+    assert detail2["lit_ids"] == ["lit:0000"], detail2       # 两种写法算一篇
+    assert got2 == got + 1, (got, got2, detail2)
+
+    # `rel:` 那一半单独判（`documents` 行里的 claim 引到关系代号）：这一档只解析
+    # 代号、不核存在性（存在性由 `build_document` 的 `check_citations` 管），
+    # 所以这里用一份替身 reads 把口径钉住，而不必先造一条完整的 relations 行。
+    real_docs = st.rows("documents")
+
+    def fake_rows(table):
+        if table != "documents":
+            return []
+        return [*real_docs, {"doc_id": "0009", "claims": [
+            {"claim_id": "c9", "citations": ["rel:0007", "rel:0007", "lit:0000"]}]}]
+
+    monkeypatch.setattr(st, "rows", fake_rows)
+    got3, detail3 = CL._leg_reading(st, "document_literature_citations", tmp_path)
+    assert detail3["rel_ids"] == ["rel:0007"], detail3
+    assert got3 == got2 + 1, (got2, got3, detail3)           # 多了一条关系、文献不重算
+    monkeypatch.undo()
+
+    rep = _gate(st, report)
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R6")
+    assert row["got"] == got2 and row["ok"] is (got2 >= 2), row
+
+
 def test_a_project_without_a_paper_package_has_no_anchor_to_check(tmp_path: pathlib.Path):
     """判据（`draft/37` §115 + §117）：没有论文包的项目里，锚这一格是「不适用」，不是「没查成」。
 
@@ -489,7 +553,7 @@ def test_a_project_without_a_paper_package_has_no_anchor_to_check(tmp_path: path
     §117 把"论文包在不在"的判据从「`out/paper/` 目录在不在」改成「盘上有没有论文包的实物」：
     人给的验收表按 `ACCEPTANCE_CHECKS_NAME` 的定义就住在 `out/paper/` 里，于是
     "目录在"是个恒真信号（本轮预检实测：空白 T2 工作区 `anchor=unknown`、门永远关不上）。
-    反面那一半照旧守住：**有正文**而没有锚 ⇒ 仍然是 `unknown`（那是真出了问题，不许被吞掉）。
+    反面那一半照旧守住：「有正文」而没有锚 ⇒ 仍然是 `unknown`（那是真出了问题，不许被吞掉）。
     """
     ws = tmp_path / "ws-no-paper"
     (ws / "data").mkdir(parents=True)

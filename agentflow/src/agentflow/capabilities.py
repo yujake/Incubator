@@ -384,7 +384,7 @@ def two_layer_reconciliation() -> dict:
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
     实测（2026-10-03 加 `G.paper_package` 之后）：
-    54 个动作 = 18 compared + 36 unmatched + 0 ambiguous
+    55 个动作 = 18 compared + 37 unmatched + 0 ambiguous
     （2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后是 53 = 18 + 35 + 0；
     2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
@@ -2012,7 +2012,7 @@ def assert_capabilities(
     # ---- [7b] 对账面必须是一个分区（D-3）
     #
     # 上面那条只钉 `unmatched`。实测（2026-10-03 加 `G.paper_package` 之后）：
-    # 54 个动作 = 18 compared + 36 unmatched + 0 ambiguous
+    # 55 个动作 = 18 compared + 37 unmatched + 0 ambiguous
     # （2026-10-02 是 53 = 18 + 35 + 0；2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
     # 于是 `ambiguous` 那一格今天恰好是 0，
     # 而没有任何判据看着它 —— 若将来一个动作的 handler_name 在角色工具组里

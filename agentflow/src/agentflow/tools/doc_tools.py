@@ -162,10 +162,10 @@ def resolve_out_path(
 
     ## 为什么它是公开的（`draft/37` §118）
 
-    `D.write_report` 原先自己写 `Path(out_path)` —— 相对路径于是按**进程当前目录**
+    `D.write_report` 原先自己写 `Path(out_path)` —— 相对路径于是按「进程当前目录」
     解析。T2 第 1 趟真机：主控传 `out_path="out\\review\\D-analysis.md"`（工作区内的
     合法落点），文件却写到了 `D:\\Incubator\\agentflow\\out\\review\\D-analysis.md`
-    （进程 cwd），**整个交付物静默离开工作区**，而那一趟记的是 `outcome=ok`。
+    （进程 cwd），「整个交付物静默离开工作区」，而那一趟记的是 `outcome=ok`。
     同一条规则不能有两份实现（那正是"两份判据必然漂移"），所以它在这里公开，
     由角色方法直接复用。
     """

@@ -200,14 +200,14 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 > 不走写集。等 P2 的提示词落地、B 的实现真的开始写它时，`specs/b.py` 的写集
 > 必须同步加上 `statements`（否则"两个并发任务同时改它"不会被判成冲突）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，54 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，55 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
 | A | 4 | `run_once` `run` `search_literature` `ingest_local` |
 | B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
-| D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` |
+| D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
 | G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `paper_package` |
@@ -1995,7 +1995,7 @@ SELF-CHECK DONE（agent_h）
 >   整趟作废。`fs.edit` 的输出量与**改动量**成正比（不是与文件大小成正比），
 >   而且比整文件覆盖更安全 ——"不可逆"那条理由对它不适用。
 
-#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（54 个可召唤动作）
+#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（55 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
@@ -2008,7 +2008,7 @@ SELF-CHECK DONE（agent_h）
 | A | 4 | `run_once` `run` `search_literature` `ingest_local` |
 | B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
 | C | 9 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` |
-| D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` |
+| D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
 | G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `paper_package` |
