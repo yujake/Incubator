@@ -8785,3 +8785,48 @@ P7 的 9 条记录**全部是"未查 + 理由"**（`with_verdict=0`）——差�
 | 预算 | T1 一趟 $1.04 ⇒ 研究一轮在 $5 内可行 |
 
 ⇒ **可行，按此开跑（T2 第 1 趟）**。裁定口径：`conductor.closing` 七格 + 上面 R1–R5 五行。
+
+---
+
+## §114 T2 第 1 趟裁定：A/B/E/F/G/H 都动了，卡在 **D 的动作面缺两个动作**
+
+第 1 趟真机（`projects/p6-research-from-zero`，83 字任务原文，从零工作区）：**108 步 /
+$1.777922 / 退出 0**。主控的自述（逐字摘要）：
+
+- A 检索 4 次（全部 ok，`literature` **21 行**）；B 整理 7 篇（`concepts` 45、`relations` 39，
+  **`quotes_verified` 39 / `quotes_failed` 0**）；E 跑 6 次数值实验（前三次超时，后三次
+  `exit_code=0`）；F 立项 `attack_plans` 1 条；G 建 `documents/0000`（5 条 cross_check 带免责声明）；
+  H.review 报 ok；交付说明落盘（九节）。
+- 第 106 步逐字：「R4 是唯一 blocker，`D.write_report` 七次报 ok 但 `analysis_reports` 仍 0 行、
+  `D.ingest` 返回 []（kind 不在 `enabled_kinds` 被跳过）——**这是 D 侧动作不落库的结构问题**，
+  我已换实例重试 7 次，不再重复。」
+
+### 一、离线复现 + 根因（两处，都是"声明与实现不符"的同族）
+
+| 我原先的验收行 | 真相（代码位置） |
+|---|---|
+| R4「分析报告（D 的交付物）」= `analysis_reports` 行数 | **这张表的写者是 `AgentC.handle`**（`capabilities.py:1131` 逐字：「`analysis_reports`（`AgentC.handle`）：它自己的产出登记行」）与 `pipeline`；D 只是**读者**（`D.ingest(report)` 收 C 的报告）。而 `D.write_report(out_path=None) -> str` **只写文件、不落表** ⇒ 主控试 7 次也不可能落行 |
+| R1「立起研究问题」= `research_questions` 行数 | D 的 `adjudicate(qid)` 会 upsert 这一表，但它**要求 qid 已存在**（`tx.find("research_questions", question_id=qid)`）；从零工作区里第一行问题由 `pipeline.py`（C→D）创建 ⇒ **没有任何可召唤的动作能创建第一行** |
+
+⇒ 两条都不是"模型不干活"，而是**动作面缺动作**：从零做研究时，D 既没有"提出问题"的动作，
+也没有"把分析落成一行"的动作。这正是 §85–§89 那条纪律在**动作面**上的第三次露头
+（前两次是 `out_path` 无描述、接线态说谎）。
+
+### 二、这一轮的处置
+
+1. **改正误标**：`analysis_report_rows` 的说明写清"写者是 `AgentC.handle`，D 只是读者"，
+   别再把它当 D 的交付物；
+2. **新增档位 `report_files`**（数 `out/reports/*.md`）：D 的 `write_report` 只写文件 ⇒ 数文件才对；
+   T2 的 R4 换成这一档（重建了 `ACCEPTANCE-CHECKS.json`，上一次的坏参数曾把它清空）；
+3. 复算 T2 第 1 趟的门（离线）：`R2 4/3 ✓`、`R3 6/1 ✓`、`R5 1/1 ✓`、**`R1 0/1 ✗`、`R4 0/1 ✗`**；
+   另发现 **`anchor` 格在"没有论文包"的研究工作区里是 `unknown`** ⇒ `can_close` 永远为假
+   （那是**格子的口径**问题：没有论文包时锚应当"不适用"，不是"没查成"）。
+
+### 三、下一轮要做的（三条，都是根因）
+
+1. **给 D 补一个动作**（例如 `propose_question`：把一句话问题落成 `research_questions` 一行），
+   并让 `write_report` 除了写文件**也落一行**（或明确它是"文件型交付"）—— 让"从零做研究"
+   的两步在动作面上真的可做；
+2. **`anchor` 格的口径**：项目里没有 `out/paper/` 时判"不适用"（读数写明），而不是 `unknown`
+   —— 否则 T2/T4/T5 这类没有论文包的测试永远关不上门；
+3. 重跑 T2（第 2 趟），按 R1–R5 + 七格判定。

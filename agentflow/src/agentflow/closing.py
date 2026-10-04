@@ -96,8 +96,14 @@ LEG_CHECK_KINDS: dict[str, str] = {
     # ---- 研究类（`draft/38` 的 T2：从零做一轮研究，考察 A/B/D/E/F 与 M 的调度）----
     "research_question_rows": "立起来的研究问题行数（`research_questions`）—— 从零做研究的第一步："
                               "把「要研究什么」写成一行可追踪的问题，而不是散在对话里",
-    "analysis_report_rows": "分析报告行数（`analysis_reports`）—— D 的交付物：分析 / 结论 / 建议"
-                            "三层；没有它，这一轮就只是「读了点东西」",
+    "analysis_report_rows": "分析报告行数（`analysis_reports`）—— 这一档的**写者是 "
+                            "`AgentC.handle`**（`capabilities.py` 逐字登记：analysis_reports 是 "
+                            "C 自己的产出登记行），D 只是它的读者（`D.ingest(report)`）。"
+                            "别把它当成 D 的交付物（2026-10-04 真机读数：主控为此重试 7 次、"
+                            "换实例，最后只能如实记未核到 —— 因为 D 的动作面里没有写这张表的动作）",
+    "report_files": "D 写出来的报告文件数（`out/reports/*.md`）—— D 的动作 `write_report` 只写文件、"
+                    "不落表（签名 `write_report(out_path=None) -> str`）；要看它有没有真的产出，"
+                    "数这个才是数对了地方",
     "attack_plan_rows": "攻坚计划行数（`attack_plans`）—— F 的交付物：子目标进展与终止原因",
     "numeric_experiment_rows": "数值/计算实验行数（`experiments` 里 `method=numeric`）—— 从零做研究时"
                                "「先算一遍」是最便宜的证据来源（`method=formal` 那一档另有 "
@@ -222,6 +228,12 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(rows), {"attack_plans": [
             {"id": str(r.get("plan_id") or r.get("id") or ""),
              "status": str(r.get("status") or "")} for r in rows[:8]]}
+    if kind == "report_files":
+        # D 的 `write_report` 只写文件（返回路径），不落 `analysis_reports` —— 这一档就数文件。
+        out_dir = project_root / "out" / "reports"
+        files = sorted(p for p in out_dir.glob("*.md")) if out_dir.is_dir() else []
+        return len(files), {"reports_dir": str(out_dir),
+                            "files": [p.name for p in files[:8]]}
     if kind == "numeric_experiment_rows":
         rows = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
