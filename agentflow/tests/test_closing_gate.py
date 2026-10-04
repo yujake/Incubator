@@ -315,6 +315,55 @@ def test_the_reviewed_documents_leg_counts_hs_verdict_not_only_revision_rounds(
     assert detail["documents"][0]["status"] == "accepted", detail
 
 
+def test_the_manuscript_edited_leg_compares_the_draft_with_the_read_only_baseline(
+        tmp_path: pathlib.Path):
+    """判据（`draft/37` §96）：任务第一句（"改掉正文里的问题"）的机器可判形式。
+
+    第 9 趟真机：三条腿的凭据全齐、收工门七格全过，而主稿一个字节都没改 ——
+    "引文核过、形式化验过"与"把正文里的问题改掉"是三件事，前两件当时有判据、第三件没有。
+
+    三条读数一起钉：主稿 = 基线 ⇒ `fail`；主稿 ≠ 基线 ⇒ `pass`；
+    基线不在盘上 ⇒ `unknown`（比不出"改没改"，不许算成"没改"）。
+    """
+    (tmp_path / "source").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "source" / "main.tex").write_text("\\date{2026-01-01}\nbody\n", encoding="utf-8")
+
+    def seed(s: Store) -> None:
+        # 这一格测的不是 substance：给它一点实质产出，免得两格一起红
+        _t3_experiment(s)
+        _paper_with_claim(s)
+
+    st = _project(tmp_path, seed=seed)           # out/paper/main.tex 与基线逐字相同
+    report = _write_report(tmp_path)
+    rows = [{"id": "P2", "name": "正文实质改动", "kind": "manuscript_edited", "min": 1}]
+
+    def _acc_finding(rep) -> str:
+        hits = [f.detail for f in rep.blockers if f.check == "acceptance"]
+        assert len(hits) == 1, [f.code for f in rep.blockers]
+        return hits[0]
+
+    _acceptance_checks(tmp_path, rows, st=st)
+    same = _gate(st, report)
+    assert same.status["acceptance"] == "fail", same.to_dict()
+    assert "P2" in _acc_finding(same), _acc_finding(same)
+    assert same.readings["acceptance"]["rows"][0]["detail"]["edited"] is False, \
+        same.readings["acceptance"]
+
+    (tmp_path / "out" / "paper" / "main.tex").write_text(
+        "\\date{2026-01-01}\nbody 改过了\n", encoding="utf-8")
+    _acceptance_checks(tmp_path, rows, st=st)    # 改主稿会让锚漂 ⇒ 重封（这一格测的不是锚）
+    changed = _gate(st, report)
+    assert changed.status["acceptance"] == "pass", changed.to_dict()
+    assert changed.readings["acceptance"]["rows"][0]["detail"]["edited"] is True, \
+        changed.readings["acceptance"]
+
+    (tmp_path / "source" / "main.tex").unlink()
+    missing = _gate(st, report)
+    assert missing.status["acceptance"] == "unknown", missing.to_dict()
+    assert [f.code for f in missing.findings
+            if f.check == "acceptance"] == ["acceptance_leg_unreadable"], missing.to_dict()
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 

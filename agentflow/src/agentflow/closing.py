@@ -83,6 +83,8 @@ LEG_CHECK_KINDS: dict[str, str] = {
                              "`method=formal` 且 `evidence_kind=proof` 的行）",
     "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里状态被推成 "
                           "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
+    "manuscript_edited": "可改的主稿有没有实质改动（`out/paper/main.tex` 与只读基线 "
+                         "`source/main.tex` 的 sha256 不同 ⇒ 1，相同 ⇒ 0）",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -94,10 +96,11 @@ LEG_CHECK_KINDS: dict[str, str] = {
 REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 
 
-def _leg_reading(store: Any, kind: str) -> tuple[int, dict[str, Any]]:
-    """按受控档位从台账现算一行验收读数 ⇒ `(条数, 明细)`。
+def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
+    """按受控档位现算一行验收读数 ⇒ `(条数, 明细)`。
 
-    台账读不到时抛出去，由调用方落成 `unknown`（"问不出来"不许读成"没有"）。
+    读不到时抛出去，由调用方落成 `unknown`（"问不出来"不许读成"没有"）。
+    `project_root` 只有"要读盘上文件"的那几档用得上（台账那几档不看它）。
     """
     if kind == "quote_verified_rows":
         st = store.rows("statements")
@@ -122,6 +125,26 @@ def _leg_reading(store: Any, kind: str) -> tuple[int, dict[str, Any]]:
         return len(rows), {"documents": [
             {"doc_id": str(r.get("doc_id") or ""), "status": str(r.get("status") or ""),
              "review_rounds": int(r.get("review_rounds") or 0)} for r in rows[:8]]}
+    if kind == "manuscript_edited":
+        # 任务原文第一句（"改掉正文里的问题"）的机器可判形式：可改的主稿与只读基线不同。
+        # 为什么必须有一档盯它（`draft/37` §96 的真机读数）：第 9 趟三条腿的凭据全齐、
+        # 收工门七格全过，而主稿一个字节都没改 —— "引文核过、形式化验过"与
+        # "把正文里的问题改掉"是三件事，前两件有判据，第三件当时没有。
+        draft = project_root / "out" / "paper" / "main.tex"
+        base = project_root / "source" / "main.tex"
+        if not draft.is_file():
+            raise ValueError(f"可改的主稿不在盘上：{draft} ⇒ 这一档没查成")
+        if not base.is_file():
+            raise ValueError(f"只读基线不在盘上：{base} ⇒ 这一档没查成（比不出'改没改'）")
+        d_sha = RA.file_digest(draft)
+        b_sha = RA.file_digest(base)
+        same = d_sha == b_sha
+        return (0 if same else 1), {
+            "manuscript": "out/paper/main.tex", "baseline": "source/main.tex",
+            "manuscript_sha256": d_sha, "baseline_sha256": b_sha,
+            "manuscript_bytes": draft.stat().st_size, "baseline_bytes": base.stat().st_size,
+            "edited": not same,
+        }
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 
@@ -179,11 +202,19 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 f"验收行 {cid} 的 kind={kind!r} 不在受控词表 {tuple(LEG_CHECK_KINDS)} 里 "
                 "⇒ 这一行没查成（不是「满足了」）"))
             return
-        got, detail = _leg_reading(store, kind)
+        try:
+            got, detail = _leg_reading(store, kind, Path(resolve_under_workspace(store, project_dir)))
+        except Exception as exc:  # noqa: BLE001 —— 读不到就落 unknown（§94 的 docstring 承诺了，这一轮才补上）
+            rep.status["acceptance"] = "unknown"
+            rep.findings.append(Finding(
+                "acceptance", "acceptance_leg_unreadable", "warning",
+                f"验收行 {cid}（{kind}）的读数算不出来（{type(exc).__name__}: {exc}）"
+                "⇒ 这一行没查成（不是「不满足」，也不是「满足」）"))
+            return
         out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "got": got,
                     "ok": got >= want_min, "detail": detail})
         if got < want_min:
-            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：台账里 {got} 条，"
+            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{got} 条，"
                          f"要求 ≥ {want_min} 条 —— 读数 {detail}"
                          + (f"；{note}" if note else ""))
 

@@ -7936,3 +7936,52 @@ H 的裁决写的是 `status`（`draft` → `accepted`/`revised`），而"轮次
 | lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
 | 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3491 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1384.13s） |
 | FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+---
+
+## §96 验收格第四档：**主稿与只读基线不同**（任务第一句的机器可判形式）
+
+### 一、为什么还差这一档（第 9 趟的读数）
+
+第 9 趟是九趟里最好的一趟：`literature` 5、`statements` 10（3 条 `quote_verified=true`）、
+`experiments` 1 行 `method=formal` + `evidence_kind=proof`（t-0024 是真的检查器裁决）、
+`documents` `accepted`（H 裁过）——**三条腿的凭据第一次同时落在同一趟台账上**。
+而任务原文的**第一句**（"改掉正文里的问题"）那一趟是空的：`out/paper/main.tex` 一个字节没改
+（报告里如实写了）。
+
+于是收工门的处境是：七格可以全过、`can_close=true`，而任务第一句没做 ——
+和 §94 修的毛病是同一个形状，只是换了一句：**任务点名的事，台账里没有判据去数它**。
+
+### 二、修法：`manuscript_edited`（第四档，唯一一档要读盘上文件）
+
+`_leg_reading(store, kind, project_root)`：
+
+- `out/paper/main.tex` 与只读基线 `source/main.tex` 的 sha256 **不同 ⇒ 1，相同 ⇒ 0**；
+- 读数里带上两份的 sha256 与字节数（"改了哪一版"可复核）；
+- **任一文件不在盘上 ⇒ 抛**，由调用方落 `unknown`（比不出"改没改"，不许算成"没改"）。
+
+同时补上 §94 docstring 里承诺、代码却没做的那一条：`_check_acceptance` 现在把
+`_leg_reading` 包在 `try` 里 —— **读数算不出来 ⇒ `unknown`**（码 `acceptance_leg_unreadable`），
+不是 `fail` 也不是 `pass`（三态纪律；当时那个 docstring 是"写了没实现"，正是本项目最忌的形态）。
+
+夹具：`ACCEPTANCE_CHECKS` 加 P2（`manuscript_edited`，min 1），
+与验收表里 P2 那一行的读数（"正文 = 基线副本，0 处改动"）同口径。
+
+### 三、判据
+
+`tests/test_closing_gate.py::test_the_manuscript_edited_leg_compares_the_draft_with_the_read_only_baseline`
+三条读数一起钉：主稿 = 基线 ⇒ `fail`（且 detail 点名 P2、`readings[0].detail.edited` 为假）；
+主稿 ≠ 基线 ⇒ `pass`；**基线不在盘上 ⇒ `unknown`**（码 `acceptance_leg_unreadable`）。
+
+### 四、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 收工门那一组 | `pytest tests/test_closing_gate.py -q` | **17 passed**（含新的 manuscript 三态判据） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3492 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1399.80s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 10 趟**（夹具已带 P2/P7/P8/P9 四行）。
+要看的信号：`conductor.closing` 的 `acceptance` 四行能不能在**同一趟**里齐 ——
+任务原文三句话（改正文 / 核引文 / 形式化）+ 审校，第一次全部有落台账的凭据。
