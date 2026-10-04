@@ -8637,3 +8637,40 @@ subject 固定写「请代唤」，body 里写清四件事：要谁、什么动�
 `test_every_role_knows_M_and_the_escalation_rule`：每个非 M 角色都要有「做不了就上报」
 且同时出现「M / 主控」；M 自己的提示词里**不许**有这条。
 `test_the_profiles_file_header_carries_the_escalation_rule`：画像文件抬头也有这一句。
+
+---
+
+## §111 提示词演练（用户闸门：先看分工是否合理，再正式测试）
+
+用户逐字：「**在重试 T1 前先尝试把提示词给主控看一下进行测试，如果主控做出了合理的任务分配，
+再正式测试**」。
+
+### 一、演练怎么做的
+
+同一夹具（新工作区 `p5-review-plan`）、同一 58 字任务原文、`--max-steps 25`（限步的**真循环**，
+不是另写一段"请你规划"的话术 —— 那样测的就不是真实提示词了）。花销 $0.21113。
+
+### 二、读数：分工**真的合理了**（这是 §106 修好接线态之后的直接收益）
+
+| 证据 | 读数 |
+|---|---|
+| 派活序列 | `A.search_literature` × **5**（全部 ok）、`E.check_formal` × 4（ok）、`E.run_experiment` × 4、`summon_many` × **5** |
+| A 那五次的意图（`description` 逐字） | `P7b: retrieve original for bibitem Kuchment / Terras / Baez / GR / delaHarpe` —— **按验收表 P7b 逐条去取原文** |
+| M 自己的手 | `conductor.state` 1、`fs.list` 3、`fs.read` 5、`conductor.role_spec` 1、`fs.write` 1（写 Lean 文件）|
+| 对照：前 14 趟 | **A 的检索一次都没被用过**（§106 的接线态说谎是主因）|
+
+⇒ 判定：**分工合理**（派 A 取原文、派 E 做形式化、批量派活），满足用户的放行条件。
+
+### 三、演练同时暴露一处检索质量缺陷（已修）
+
+5 次 A 检索里 **4 次 `no_results`**：M 把"作者 + 题名 + 一串关键词"串成长句，而 `precise` 那一档
+带 `keyword_hit` 后置过滤，**词袋越长越容易被整批滤掉**。离线对照（同一后端、同一篇文献）：
+`An overview of periodic elliptic operators` 一次命中 9 条。
+
+修法（口径，不是替它检索）：提示词里 A 那一栏补「**topic 要短**：按题名找原文就只给题名
+（必要时加年份）……找不到再换 `topical` 或换关键词重试」，`agent_a/search_literature.py` 的
+docstring 同步写上这组真机读数。
+
+### 四、下一步
+
+按用户的闸门：分工已合理 ⇒ **正式跑 T1（第 15 趟）**，验收表 P2 / P7 / P7b / P8 / P9 五行一起判。

@@ -53,6 +53,13 @@ class _SearchLiterature:
           `outcome="query_not_applicable"` + `kind="query_not_applicable_cjk"`，
           零写入 —— 不许留一条注定查不动的请求在队列里（那会让调用方读成"检索失败"）。
 
+        ## `topic` 要短（2026-10-04 演练的真机读数）
+
+        `precise` 那一档带 `keyword_hit` 后置过滤：词袋越长，候选越容易被整批滤掉。
+        实测同一篇文献：`An overview of periodic elliptic operators` 命中 9 条；
+        而把作者与关键词串成长句（`Kuchment overview of periodic elliptic operators
+        Floquet Bloch`）—— 5 次里 4 次 `no_results`。按题名找原文就给题名（可带年份）。
+
         三处"这次调用本身不成立"（空主题 / 模式不认识 / 一个后端都没接）走
         :func:`agentflow.refusals.refuse`（`draft/37` §88）：带上受控的
         `refusal_reason`，主控的台账才会把它们记成 `refused` 而不是 `ok`。

@@ -1038,6 +1038,15 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
                        "英文关键词（纯中文题面会被挡在门外，返回 `query_not_applicable`，"
                        "意思是「这一问没发出去」，不是「没有这篇文献」）；"
                        "把英文检索式写进 `description` 同样能让它适用。")
+            # `draft/37` §111 的真机读数（2026-10-04 演练）：M 按 5 条盘外引文各派了一次 A
+            # （`P7b: retrieve original for bibitem …`）—— 分工对了，但 5 次里 4 次
+            # `no_results`：它把"作者 + 题名 + 一串关键词"串成长句，而 `precise` 那一档带
+            # `keyword_hit` 后置过滤，词袋越长越容易被整批滤掉。离线对照：同一个后端，
+            # `An overview of periodic elliptic operators` 一次命中 9 条。
+            out.append("topic 要短：按题名找原文就只给题名（必要时加年份），"
+                       "不要把作者与一串关键词串成长句 —— precise 的关键词后置过滤会把长词袋"
+                       "整批滤掉（实测：同一后端，短题名一次命中 9 条，长串 5 次里 4 次 "
+                       "no_results）。找不到再换 topical 或换关键词重试。")
     else:
         out.append("你没有任何可以唤起的伙伴（你的边是空的）——这是设计，不是遗漏："
                    "你的产出由别人来收取。")
