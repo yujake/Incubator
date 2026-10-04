@@ -382,6 +382,13 @@ class LoopRun:
     waiting_for: str = ""
     #: 这一趟是从第几步接着跑的（0 = 全新开始，>0 = `--resume` 续跑的第几步）。
     resumed_from: int = 0
+    #: 这一趟是什么时候开始的（`S.now_iso()` 的形态）。
+    #:
+    #: 为什么要有它（`draft/37` §125）：`user_stop` 那条判据要的是"本次运行「开始之后」
+    #: 收到的那条回答里有没有 STOP" —— 回答是 append-only 的审计面，
+    #: 翻到一条上一次留下的 STOP 就停会把之后每一趟都判死。刻意不进 `to_dict()`：
+    #: 它是运行内判据的输入，不是交付面（`agent_run_start` 事件里已经有时间）。
+    started_at: str = ""
     #: 这一趟最终的那份简报（重建续跑时的逐字对照物）。
     #:
     #: 刻意「不进 `to_dict()`」：那份记录会写成 `runs/*.json` 的产出文件，
@@ -721,6 +728,10 @@ class AgentLoop:
     sid: str | None = None
     token: Any = None
     store: Any = None
+    #: 「用户叫停」的开关文件（`draft/37` §125）。空串 = 不在步循环里查这一条
+    #: （多轮自主跑那条路由 `autonomy._stop_before_round` 在「每轮之间」查，
+    #: 单趟 `run-agent` 没有那条路，所以由 CLI 把 `--stop-file` 接到这里）。
+    stop_file: str = ""
     #: 问用户时等多久（秒）。「缺省 `None` = 一直等」（2026-10-03 用户裁定「就停着」）。
     #: `0` = 登记问题后立刻停（`run-agent --user-wait-sec 0` 那一档）。
     #:
@@ -851,6 +862,7 @@ class AgentLoop:
         replies = AP.user_replies_digest(U.read_replies(self.session_root, role=self.role,
                                                        sid=self.sid))
         run = LoopRun(role=self.role, task=task)
+        run.started_at = S.now_iso()
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
         if fresh_ids:
             problem = mark_delivered(self.session_root, self.role, fresh_ids, sid=self.sid)
@@ -915,6 +927,21 @@ class AgentLoop:
         self._face = face          # `_prompt` 要用它决定"名字从哪来"那一句
 
         for step in range(start_step, self.max_steps):
+            stop_reason = self._user_stop_reason(run)
+            if stop_reason:
+                # 人叫停：把这一步之前做过的事「如实收尾」（不是把进程杀掉）。
+                # `draft/37` §125 的真机读数：用户在单趟 `run-agent` 里叫停，
+                # 那一趟继续跑了 60 多个任务、烧掉 $0.98，最后只能强杀 ——
+                # 强杀的结果是台账里没有 `agent_run_end`、盘上没有步检查点，
+                # "跑到哪儿了"事后无从回答。这条 break 就是补那一格。
+                run.stop_reason = stop_reason
+                run.final = run.final or self._stop_note(stop_reason, step)
+                SS.append(self.session_root, {
+                    "kind": "agent_note", "role": self.role,
+                    "note": (f"用户叫停（{stop_reason}）⇒ 第 {step} 步之后收工；"
+                             "已做过的事留在台账与会话记录里，步检查点由 run_role 落盘"),
+                }, sid=self.sid)
+                break
             if self.seam.usd_budget is not None and self.seam.spend.usd >= self.seam.usd_budget:
                 run.stop_reason = "budget"
                 run.final = run.final or "预算已耗尽，停止（没有继续调用模型）"
@@ -1064,6 +1091,51 @@ class AgentLoop:
         return run
 
     # -------------------------------------------------------------- 执行
+    def _user_stop_reason(self, run: "AgentLoop.LoopRun") -> str:
+        """人叫停了吗（`draft/37` §125）。返回停止原因（空串 = 没叫停，继续跑）。
+
+        两处来源，与 `autonomy._stop_before_round` 用的是「同一套词」：
+
+        - `stop_file`：`--stop-file`（或这里给的路径）指向的那个文件存在于盘上；
+        - `user_stop`：本次运行「开始之后」收到的那条回答里含 `autonomy.STOP_TOKEN`。
+
+        为什么两处都要在「步循环里」查：`autonomy` 那套判据只在「每轮之间」跑，
+        而单趟 `run-agent`（不 `--rounds`）根本不走那条路 —— 真机实测（2026-10-04）：
+        用户叫停后那一趟继续跑了 60 多个任务、烧掉 $0.98，最后被强杀；
+        强杀不留痕（没有 `agent_run_end`、没有步检查点），"跑到哪儿了"事后答不出来。
+
+        为什么 `user_stop` 要比时间戳：回答是 append-only 的审计面，
+        翻到一条「上一次」留下的 STOP 就停会把之后每一趟都判死。
+        """
+        if self.stop_file and Path(self.stop_file).exists():
+            return "stop_file"
+        started = str(getattr(run, "started_at", "") or "")
+        if not started:
+            return ""
+        try:
+            from . import autonomy as AU
+
+            replies = U.read_replies(self.session_root, role=self.role, sid=self.sid)
+        except Exception:  # noqa: BLE001 —— 读不到回答不是"用户叫停"，如实不停
+            return ""
+        for reply in reversed(list(replies or [])):
+            if str(reply.get("ts") or "") < started:
+                continue
+            if AU.STOP_TOKEN in str(reply.get("answer") or ""):
+                return "user_stop"
+            break                      # 只看"开始之后最近的那一条"
+        return ""
+
+    def _stop_note(self, stop_reason: str, step: int) -> str:
+        """人叫停时写进 `final` 的那句话（要能直接告诉人"停在哪儿、怎么接着跑"）。"""
+        what = {"stop_file": f"用户叫停（开关文件 {self.stop_file}）",
+                "user_stop": "用户叫停（回答里有 STOP）"}.get(stop_reason, f"用户叫停（{stop_reason}）")
+        sid_arg = f" --sid {self.sid}" if self.sid else ""
+        return (f"{what}：第 {step} 步之后收工。已经做过的事都留在台账与盘上；"
+                f"要看这一趟做了什么用 `agentflow --root {self.session_root} runs`，"
+                f"要接着跑用 `agentflow --root {self.session_root} run-agent --resume "
+                f"--task \"<接着做什么>\"{sid_arg}`")
+
     def _execute(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         if shape == "tool":
             return self._do_tool(payload)
@@ -1426,6 +1498,9 @@ class LlmBackend:
     workspace_root: str = ""
     sid: str | None = None
     store: Any = None
+    #: 用户叫停的开关文件（见 `AgentLoop.stop_file` 的同名注释）：由 CLI 在「单趟」
+    #: `run-agent` 时接上；多轮的自主跑刻意留空（那一档的停机点在每轮之间）。
+    stop_file: str = ""
     name = "llm"
 
     def known_roles(self) -> list[str]:
@@ -1447,7 +1522,7 @@ class LlmBackend:
         loop = AgentLoop(role=role, session_root=self.session_root, registry=self.registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
                          workspace_root=self.workspace_root, sid=self.sid, token=token,
-                         store=self.store)
+                         store=self.store, stop_file=self.stop_file)
         row = self._running_row(role, task_id)
         run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
                        summoned_by=str(row.get("called_by") or params.get("_summoned_by")
@@ -1729,7 +1804,8 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
              max_steps: int = 30, usd_budget: float | None = None,
              workspace_root: str = "", sid: str | None = None, token: Any = None,
              from_env: bool = True, user_timeout_sec: float | None = None,
-             ask_policy: str | None = None, resume: bool = False) -> LoopRun:
+             ask_policy: str | None = None, resume: bool = False,
+             stop_file: str = "") -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
     `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，
@@ -1760,7 +1836,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     loop = AgentLoop(role=role, session_root=root, registry=registry, seam=seam,
                      conductor=conductor, max_steps=max_steps, workspace_root=workspace_root,
                      sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec,
-                     ask_policy=ask_policy)
+                     ask_policy=ask_policy, stop_file=str(stop_file or ""))
     summoned_by = S.CONDUCTOR_ROLE if role == S.CONDUCTOR_ROLE else ""
     start_depth = 1 if role == S.CONDUCTOR_ROLE else 2
     if resume:

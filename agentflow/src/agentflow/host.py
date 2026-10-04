@@ -418,7 +418,8 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         config: Mapping[str, Any] | None = None,
                         workspace_root: str | Path | None = None,
                         seam_factory: Any = None,
-                        semantic_review: bool = False) -> dict[str, Any]:
+                        semantic_review: bool = False,
+                        stop_file: str | Path | None = None) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
 
     ## 语义（与 `LlmBackend` 的 docstring 逐字一致）
@@ -505,7 +506,11 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
     backend = LlmBackend(inner=inner, loops=table, session_root=root,
                          seam_factory=seam_factory or _default_seam, store=store,
-                         max_steps=max_steps, workspace_root=ws, sid=eff_sid)
+                         max_steps=max_steps, workspace_root=ws, sid=eff_sid,
+                         # `draft/37` §125：单趟 `run-agent` 的停机点只有一个
+                         # —— 步循环顶上看这个开关文件。多轮的自主跑不接它
+                         # （那一档的停机点在每轮之间，见 `autonomy._stop_before_round`）。
+                         stop_file=str(stop_file or ""))
     if not isinstance(conductor.backend, LlmBackend):
         conductor.backend = backend
         conductor.backend_note = ("backend 被换成 LlmBackend（conductor_for 的缓存忽略后传的 "

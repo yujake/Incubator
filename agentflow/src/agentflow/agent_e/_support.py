@@ -252,8 +252,53 @@ def _as_dict(value: Any) -> dict:
     那两个字段决定记录的语义，形状不对就没有语义可谈。
     """
     return dict(value) if isinstance(value, Mapping) else {}
+def _json_key_form(stdout: str) -> str:
+    """从「把结论当成 JSON 键」的那种打印里取出那个对象（`draft/37` §126）。
+
+    为什么要有这一条（T2 第 4 趟真机，逐字）：主控写的那份 `scripts/rmk.py` stdout 是
+
+    ```json
+    { "REPRO_RESULT": { "result": "refutes", "claim": ... } }
+    ```
+
+    —— 它「给出了结论」，只是把协议写成"一个 JSON 对象里的键"，而行首形态的判据
+    （`_extract_stdout_lines`）认不出它 ⇒ 那条实验落成 `inconclusive`，
+    稿子于是拿不到这条它自己算出来的证否。这是"协议说了、形状没钉死"的典型缺口：
+    读侧必须容错，而容错「必须留下读数」（`via=json_key`），否则"它到底怎么写的"查不到。
+
+    做法：找 `"REPRO_RESULT"`（引号可有可无）后紧跟 `:` 与 `{` 的位置，
+    再从那个 `{` 起做「字符串感知」的花括号配对（pretty-print 的对象跨多行，
+    且字符串里可能有 `}`）。配不到就不认（返回空串）—— 宁可说"没读到"，
+    不许把半截 JSON 拿去 `json.loads` 猜。
+    """
+    for match in re.finditer(r'"REPRO_RESULT"\s*:\s*\{', stdout[:_STDOUT_SCAN_LIMIT]):
+        start = stdout.index("{", match.start())
+        depth = 0
+        in_string = False
+        escaped = False
+        for i in range(start, min(len(stdout), _STDOUT_SCAN_LIMIT)):
+            ch = stdout[i]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return stdout[start:i + 1]
+    return ""
+
+
 def _extract_stdout_lines(stdout: str) -> list[str]:
-    """取出 stdout 里所有 `REPRO_RESULT:` 行。
+    """取出 stdout 里所有 `REPRO_RESULT:` 行（行首形态）。
 
     取全部而不是最后一行：最后一行会被脚本后续的无意输出悄悄覆盖，
     而"同一个脚本给了两个互相矛盾的结论"是需要被看见的事实，不是需要被平滑掉的东西。
@@ -264,6 +309,28 @@ def _extract_stdout_lines(stdout: str) -> list[str]:
         if s.startswith(REPRO_RESULT_PREFIX):
             out.append(s[len(REPRO_RESULT_PREFIX) :].strip())
     return out
+
+
+def _extract_conclusion(stdout: str) -> tuple[list[str], str]:
+    """按两种「已登记的形态」取结论，并说清用的是哪一种（`via`）。
+
+    形态一（协议正身）：行首就是 `REPRO_RESULT:`，后面跟一个 JSON 对象；
+    形态二（容错）：JSON 对象里以 `"REPRO_RESULT"` 为键（见 `_json_key_form`）。
+
+    两种同时出现 ⇒ 仍然按"多于一行 ⇒ 格式非法"拒绝（既有口径不动：
+    在互相矛盾的结论里挑一个就等于替脚本做决定）。
+    """
+    lines = _extract_stdout_lines(stdout)
+    key_form = _json_key_form(stdout)
+    if lines and key_form:
+        # 两种形态同时出现 ⇒ 按"多于一条结论"拒绝（既有口径：不许替脚本挑一个）。
+        return [*lines, key_form], "line+json_key"
+    if lines:
+        return lines, "line"
+    if key_form:
+        return [key_form], "json_key"
+    return [], ""
+
 def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str]]:
     """解析 stdout 里的结构化结论。
 
@@ -272,11 +339,16 @@ def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str]]:
     三种情况必须分开记录 —— FC-15 的纪律：不可归因的失败计数会把
     "脚本没写"和"脚本写错了"混成一个数字。
     """
-    raws = _extract_stdout_lines(stdout)
+    raws, via = _extract_conclusion(stdout)
     if not raws:
-        return None, ["脚本未给出结构化结论（stdout 里没有 REPRO_RESULT 行）"]
+        return None, ["脚本未给出结构化结论（stdout 里既没有 `REPRO_RESULT:` 行，"
+                      "也没有以 `REPRO_RESULT` 为键的 JSON 对象）"]
 
     notes: list[str] = []
+    if via == "json_key":
+        # 容错必须留痕（`draft/37` §126）：不写这一句，事后没人知道它当时是怎么打印的。
+        notes.append("结论取自 JSON 键形态（`\"REPRO_RESULT\": {…}`）而非行首形态 ⇒ "
+                     "按协议正身它应当单独打印一行 `REPRO_RESULT: {…}`（这次认了，但要记下来）")
     if len(raws) > 1:
         notes.append(
             f"脚本打印了 {len(raws)} 行 REPRO_RESULT（多于一行）⇒ 视为格式非法，"

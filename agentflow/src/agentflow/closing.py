@@ -129,6 +129,14 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                           "稿子写着「Heawood 图围长 6」，而它引的那条实验行 stdout 逐字"
                                           "是 `\"girth\": 4` 且 `result=inconclusive` —— 门照样全绿："
                                           "没有任何一行问过「断言与它引的证据说的一样吗」",
+    "supported_claims": "手稿里**被实验支持**的断言条数（`documents` 各行的 claims 中，"
+                        "至少引到一条 `result=supports` 的实验的那些）—— 与上一档是一对："
+                        "上一档问「有没有夸大」，这一档问「有没有真东西」。为什么必须有这一档"
+                        "（2026-10-04 T2 第 4 趟真机）：那一趟为了满足上一档，把**正面断言也标成**"
+                        "`is_negative`（「K4 是 3-正则、围长 3、每条边恰在两个三角形里」被标成"
+                        "「没得出结论」）—— 于是上一档过了，而稿子里一条有实验支持的断言都没有。"
+                        "这一档要求的是「本轮真的跑出了结论并写进稿子」；跑不出就得如实写缺口 "
+                        "（那正是这一档要逼出来的那句实话）",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -361,6 +369,38 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "实验却写成正面结论，就是报告里造假；把话说成「没得出结论」"
                      "（is_negative + negation_kind）或让 E 跑出一个真给出 REPRO_RESULT 的实验，"
                      "两条路都算改对了"),
+        }
+    if kind == "supported_claims":
+        # 「本轮有没有真跑出结论并写进稿子」那一档（`draft/37` §126）。与
+        # `claims_supported_by_their_evidence` 是一对：那一档罚"夸大"，这一档逼"真东西"。
+        # 口径：一条 claim 只要至少引到一条 `result=supports` 的实验就算一条；
+        # 读数里同时给出那些实验的 id（"被什么支持的"要能一眼查到）。
+        exp_by_id = {str(r.get("experiment_id") or ""): r for r in store.rows("experiments")}
+        supported: list[dict[str, Any]] = []
+        for r in store.rows("documents"):
+            doc_id = str(r.get("doc_id") or r.get("id") or "")
+            for c in r.get("claims") or []:
+                if not isinstance(c, Mapping):
+                    continue
+                backing = [str(x).split("#", 1)[0] for x in (c.get("citations") or [])
+                           if str(x).startswith("exp:")
+                           and str((exp_by_id.get(str(x).split(":", 1)[1]) or {}).get("result")
+                                   or "") == "supports"]
+                if backing:
+                    supported.append({"doc_id": doc_id,
+                                      "claim_id": str(c.get("claim_id") or ""),
+                                      "experiments": backing,
+                                      "evidence_kind": str(c.get("evidence_kind") or "")})
+        supports_rows = [str(r.get("experiment_id") or "") for r in exp_by_id.values()
+                         if str(r.get("result") or "") == "supports"]
+        return len(supported), {
+            "supported_claims": supported[:12],
+            "experiments_with_result_supports": supports_rows[:12],
+            "experiments_total": len(exp_by_id),
+            "note": ("这一档逼的是「本轮真的跑出了结论」：脚本要在 stdout 打印 "
+                     "`REPRO_RESULT: {\"result\": \"supports\", ...}`（单独一行）那条实验才落 "
+                     "`cross_check`，稿子引它才算「有实验支持的断言」。一条都没有时，"
+                     "正确的做法是如实写「这一轮没跑出支持性结论」—— 那也意味着这一档不成立"),
         }
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 

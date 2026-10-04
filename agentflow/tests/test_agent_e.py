@@ -225,6 +225,48 @@ def test_broken_json_conclusion_is_inconclusive_and_attributed(store):
     assert "未给出结构化结论" not in out["notes"], "这两种失败必须可归因分离"
 
 
+def test_a_conclusion_printed_as_a_json_key_is_read_and_recorded(store):
+    """回归夹具（`draft/37` §126）：把结论打印成 「JSON 键」的那种形状也要读出来。
+
+    真机读数（T2 第 4 趟）：主控写的那份 `scripts/rmk.py` stdout 逐字是
+
+    ```json
+    { "REPRO_RESULT": { "result": "refutes", "claim": ... } }
+    ```
+
+    —— 它「给出了结论」，只是写成"JSON 对象里的一个键"，而行首形态的判据认不出它
+    ⇒ 那条实验落成 `inconclusive`，稿子拿不到它自己算出来的证否。
+    这条判据钉两件事：① 读得出来（`result=refutes` 且带反例）；
+    ② 「留痕」（notes 里写明这次用的是 JSON 键形态，因为协议正身是单独一行）。
+    """
+    rel = write_script(store, "probes/keyform.py",
+                       "import json\n"
+                       "print(json.dumps({'REPRO_RESULT': "
+                       "{'result': 'refutes', 'counterexample': {'m': 3, 'k': 3}}}))\n")
+    out = make_e(store).run_experiment("键形态结论", "keyform", rel)
+    assert out["result"] == "refutes", out
+    assert out["negation_kind"] == "disproved", out
+    # 反例落在「实验行」上（`run_experiment` 的返回值只给结论面）
+    assert store.rows("experiments")[0]["counterexample"] == {"m": 3, "k": 3}, \
+        store.rows("experiments")[0]
+    assert "JSON 键形态" in out["notes"], out["notes"]
+
+
+def test_two_conclusion_shapes_at_once_are_refused(store):
+    """负控：行首形态与 JSON 键形态「同时」出现 ⇒ 仍然按"多于一行"拒绝。
+
+    这就是既有口径（`_extract_stdout_lines` 的"取全部、多于一行即格式非法"）在
+    加了容错之后必须保住的那一半：容错不等于允许"从两个互相矛盾的结论里挑一个"。
+    """
+    rel = write_script(store, "probes/twoshapes.py",
+                       "import json\n"
+                       "print('REPRO_RESULT: ' + json.dumps({'result': 'supports'}))\n"
+                       "print(json.dumps({'REPRO_RESULT': {'result': 'refutes'}}))\n")
+    out = make_e(store).run_experiment("两种形态", "twoshapes", rel)
+    assert out["result"] == "inconclusive", out
+    assert "多于一行" in out["notes"], out["notes"]
+
+
 def test_timeout_is_inconclusive_and_reason_is_visible(store):
     """超时（`time.sleep` + 小 timeout）⇒ `inconclusive`，且原因在 notes 里可见。"""
     rel = write_script(store, "probes/slow.py", "import time\ntime.sleep(30)\n")

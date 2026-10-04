@@ -1547,11 +1547,19 @@ def cmd_run_agent(args) -> int:
 
     wall = getattr(args, "wall_clock_sec", None)
     pol = Policy(wall_clock_sec=wall) if wall is not None else None
+    # `--stop-file` 接给谁（`draft/37` §125）：「单趟」那一档接进步循环（它此前根本
+    # 没有停机点 —— 真机实测：用户叫停后继续跑完 60 多个任务、烧掉 $0.98，最后被强杀，
+    # 台账里没有 `agent_run_end`、盘上没有步检查点）；多轮自主跑那一档照旧由
+    # `autonomy._stop_before_round` 在「每轮之间」查，两处不叠加（避免"一轮跑到一半
+    # 停下"把那一轮的汇报与检查点弄成半截）。
+    multi_round = bool(args.rounds and args.rounds > 1)
     wiring = H.wired_llm_conductor(st, loops=loops, session_root=root, sid=args.sid,
                                    max_steps=args.max_steps, usd_budget=args.budget_usd,
                                    workspace_root=str(root), seam_factory=seam_for,
                                    providers=providers, config=cfg, policy=pol,
-                                   semantic_review=bool(getattr(args, "semantic_review", False)))
+                                   semantic_review=bool(getattr(args, "semantic_review", False)),
+                                   stop_file=(None if multi_round
+                                              else getattr(args, "stop_file", None)))
     if not providers:
         # 三态：A 这条路这一轮是没接线（不是"没有文献"）。说清楚，别让人去猜。
         print(tty.paint(
@@ -1598,6 +1606,10 @@ def cmd_run_agent(args) -> int:
                       usd_budget=args.budget_usd, from_env=False,
                       user_timeout_sec=getattr(args, "user_wait_sec", None),
                       ask_policy=("unattended" if bool(getattr(args, "no_ask", False)) else None),
+                      # `draft/37` §125：单趟这一档把停止开关接进步循环（多轮那一档
+                      # 由 autonomy 在每轮之间查，两处不叠加）。
+                      stop_file=(str(getattr(args, "stop_file", "") or "")
+                                 if not multi_round else ""),
                       resume=bool(getattr(args, "resume", False)))
     code = _run_agent_exit_code(run)
     if args.json:
@@ -2187,7 +2199,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "继续并把这件事写进结论）。三态口径：没人在场是「没查成」，"
                          "不是「通过」，更不许降级成「问一下试试」")
     sp.add_argument("--stop-file", default=None,
-                    help="停止开关：这个文件一出现，就在下一轮开跑之前停（人可随时按停）")
+                    help="停止开关（人可随时按停）：这个文件一出现就停 —— 单趟运行时在"
+                         "**步与步之间**查（做完当前这一步再收工，留步检查点与运行记录）；"
+                         "`--rounds > 1` 时在**每轮之间**查（当前这一轮跑完再停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
     sp.set_defaults(func=cmd_run_agent)
 

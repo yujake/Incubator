@@ -471,7 +471,9 @@ def _attack_pick_next_subgoal(subgoals):
     # `subgoals`（个数，不是清单）。另有可选键 `missing` ——
     # 它只在"预算不完整 ⇒ 拒绝创建"那一支出现（三条分支各自的完整键集
     # 见 `tests/test_tools_returns_declaration.py` 的分支留痕）。
-    returns="{'created','plan_id','duplicate','status','budget','subgoals','reason'}",
+    # `ok` 三支都有（`draft/37` §127）：`False` = 预算不完整被拒（调用方据它落
+    # `outcome=refused`，而不是"执行完成"），`True` = 立项成功或"已经立过项了"。
+    returns="{'ok','created','plan_id','duplicate','status','budget','subgoals','reason'}",
     tags=("attack", "plan"),
 )
 def _attack_create_plan(_need_store, store, problem, problem_key, for_question_id=None, subgoals=None, budget=None, depth=0, parent_plan_id=None):

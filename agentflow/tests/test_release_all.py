@@ -698,7 +698,15 @@ def test_every_only_example_in_the_docstring_is_a_real_step_key():
         p = subprocess.run(
             [sys.executable, str(SCRIPT), "--only", keys, "-q"],
             cwd=str(REPO), capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=600,
+            errors="replace",
+            # 这个 timeout 是「防挂死」用的，不是性能判据（判据是"示例里点名的每个 key
+            # 都真的跑到了"）。600 那个值贴着实测用时：`--only role-specs,coverage`
+            # 实测 「615 s」（coverage 584 s + role-specs 4 s，`draft/37` §124 的读数），
+            # 于是每次全量套件都会在这里挂一次，看起来像"判据坏了"。
+            # coverage 那一步为什么慢（`cProfile`：3453 次 `findall` × 约 5 MB ≈ 17 GB
+            # 字符扫描）与它的修法已登记在 §124；那一步在 FC-27 禁改区，改它要人逐行走查，
+            # 所以这里先把防挂死的余量给足。
+            timeout=1800,
         )
         blob = p.stdout + p.stderr
         # 这里不能拿退出码判"用法错误"（2026-09-27 修正）：
@@ -1660,7 +1668,7 @@ _LEDGER_CLAIM_RES: tuple[tuple[str, re.Pattern[str]], ...] = (
 #: `R11C-R6-1`（`FIX13` 修过头留下的净变松）：`R11B-R6-1` 把"自称当次"那一档从块级下沉到逐行
 #: 是对的，但那一版给这一档认的"观测时刻"是裸 `HH:MM`、并把复算命令去掉了 —— 于是
 #: `docs/*.md` 里自称当次的行只要凑出一个 digit:digit（无日期、无命令、无历史记号）就算"有据"：
-#: `**回写（观测 17:20）**` 这种写法能把过期的台账派生量继续按"当前值"放行，而同一句写进当前值
+#: `「回写（观测 17:20）」` 这种写法能把过期的台账派生量继续按"当前值"放行，而同一句写进当前值
 #: 文档却是红的 ⇒ 同一形态两档判定相反，且比改前（那一版不认裸 `HH:MM`）更松。处置：这一档改用
 #: 当前值文档那一档的口径（两档合一）—— 本行的 `_LEDGER_TS_RE` 与 `_LEDGER_CMD_RE` 必须同时
 #: 成立才放行，原来那个更宽的裸时刻形态（_LEDGER_CLOCK_RE = \d{1,2}:\d{2} —— 此处刻意不加反引号：该名字已删、属历史叙述）随之删除。
@@ -1757,7 +1765,7 @@ def ledger_derived_claim_problems(docs: dict[str, str], ledger: dict[str, object
         之前就按块里的日期把整块 `continue` 掉，于是"自称当次 + 只带日期"这一档从来没被咬过）；
       * 裸 `HH:MM`（无日期、无命令）在这一档不算"有据"：它与当前值文档那一档口径一致 ——
         只认可复算的观测时刻 + 复算命令（`R11C-R6-1`：`FIX13` 曾把这一档实现成认裸 `HH:MM`，
-        于是 `**回写（观测 17:20）**` 这种写法把过期读数放行成了"当前值"）；
+        于是 `「回写（观测 17:20）」` 这种写法把过期读数放行成了"当前值"）；
       * 复算命令（`_LEDGER_CMD_RE`）在 `docs/*.md` 这一档是观测时刻的连体条件（不是独立
         通行证）：紧邻行只写命令、只写裸时刻、或块里别处写了命令，都不算数。它同时是当前值文档
         那一档的必需项（第 1 条："`YYYY-MM-DD HH:MM` + 复算命令"），也是本判据推荐的

@@ -880,3 +880,106 @@ def test_the_step_checkpoint_records_the_fingerprint_and_reports_write_failures(
                                       stop_reason="interrupted")
     assert problem2, "写入失败被静默吞掉了（返回了空串）"
     assert "Error" in problem2, problem2
+
+
+# ============================================================ 用户叫停（`draft/37` §125）
+
+class _StopAfterFirstCall(ScriptedGateway):
+    """照剧本回答，但「第一次调用之后」把停止开关放到盘上（模拟"人中途按停"）。"""
+
+    def __init__(self, replies: list[str], stop_path: pathlib.Path) -> None:
+        super().__init__(replies)
+        self.stop_path = stop_path
+        self.calls = 0
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        # 语义：「第一条回复被这一趟收下之后」人按停 ⇒ 当前这一步做完、下一步之前停
+        # （正是"优雅收工"的口径：不是半途被杀）。
+        reply = super().complete(prompt, scope=scope, system=system, **kw)
+        self.calls += 1
+        if self.calls >= 1:
+            self.stop_path.write_text("停\n", encoding="utf-8")
+        return reply
+
+
+def test_a_stop_file_stops_the_run_between_steps_and_leaves_a_checkpoint(tmp_path):
+    """用户叫停要「优雅收工」：当前这一步做完就停，并留下运行记录与步检查点。
+
+    真机读数（2026-10-04，T2 第 4 趟）：用户在单趟 `run-agent` 里叫停，那一趟继续跑了
+    60 多个任务、烧掉 $0.98，最后只能被强杀 —— 强杀的结果是会话记录里没有
+    `agent_run_end`、盘上没有步检查点（`runs/` 与检查点都是空的），"跑到哪儿了"事后无从回答。
+
+    这条判据钉四件事：① 第 1 步做完了（不是半途被杀）；② `stop_reason == "stop_file"`；
+    ③ `final` 写清停在哪儿、怎么接着跑；④ 步检查点落盘且与运行记录说不矛盾。
+    """
+    from agentflow import agent_loop as AL
+
+    step = json.dumps({"role": "E", "action": "list_experiments", "params": {},
+                       "why": "派一环"}, ensure_ascii=False)
+    stop = tmp_path / "STOP"
+    st, cond, registry, gw, root = _wired(tmp_path, {"M": [step, step, step, step]}, max_steps=6)
+    gw["M"] = _StopAfterFirstCall([step, step, step, step], stop)
+    gw["M"].spec = type("Spec", (), {"model": "scripted", "api_key": "fake"})()
+    seam = LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0), sid="test-run")
+
+    run = AL.run_role("M", "派活直到我叫停", store=st, registry=registry, conductor=cond,
+                      seam=seam, session_root=root, workspace_root=str(root), sid="test-run",
+                      max_steps=6, from_env=False, stop_file=str(stop))
+    assert run.stop_reason == "stop_file", run.to_dict()
+    assert len(run.steps) == 1, f"应当在第 1 步之后停，实际跑了 {len(run.steps)} 步"
+    assert run.steps[0].shape == "summon", run.steps[0].to_dict()
+    assert "叫停" in run.final and "resume" in run.final, run.final
+    cp = AL.load_run_checkpoint(root, "M", "test-run")
+    assert cp is not None, "收了工却没有步检查点 ⇒ 下一趟无从接着跑"
+    assert cp["stop_reason"] == "stop_file", cp
+    ends = [e for e in _events(root) if e.get("kind") == "agent_run_end"]
+    assert ends and ends[-1]["stop_reason"] == "stop_file", ends
+
+
+def test_a_stop_file_that_is_already_there_runs_zero_steps(tmp_path):
+    """负控/边界：开关一开始就在 ⇒ 一步都不跑（最保守的那一档），但照样收工而不是崩。"""
+    from agentflow import agent_loop as AL
+
+    step = json.dumps({"role": "E", "action": "list_experiments", "params": {},
+                       "why": "派一环"}, ensure_ascii=False)
+    stop = tmp_path / "STOP"
+    stop.write_text("停\n", encoding="utf-8")
+    st, cond, registry, gw, root = _wired(tmp_path, {"M": [step, step]}, max_steps=4)
+    seam = LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0), sid="test-run")
+    run = AL.run_role("M", "派活", store=st, registry=registry, conductor=cond,
+                      seam=seam, session_root=root, workspace_root=str(root), sid="test-run",
+                      max_steps=4, from_env=False, stop_file=str(stop))
+    assert run.stop_reason == "stop_file" and run.steps == [], run.to_dict()
+    assert gw["M"].prompts == [], "开关文件在盘上时不该调模型"
+
+
+def test_a_stale_stop_reply_does_not_stop_later_runs(tmp_path):
+    """负控（这条判据最容易做错的地方）：「上一次」留下的 STOP 不许把之后每一趟判死。
+
+    回答是 append-only 的审计面：`user_stop` 只看「本次运行开始之后」收到的那条回答。
+    这条负控造一条「早于」本趟开始时间的 STOP 回答，断言它不停；正控（"开始之后"的
+    那条 STOP 会停）由 `_stop_before_round` 那一组判据在 autonomy 那边守着。
+    """
+    from agentflow import agent_loop as AL
+    from agentflow import userio as U
+
+    scripts = {"M": [json.dumps({"final": "做完了", "evidence": []}, ensure_ascii=False)]}
+    st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=3)
+    # 问与答都落「会话事件」（`userio.read_replies` 的读取面就是它）：
+    # 回答必须指向一个真实存在的问题，否则按"指向不存在的问题"被丢掉。
+    SS.append(root, {"kind": "user_question", "role": "M", "qid": "q0001",
+                     "text": "旧问题", "options": [],
+                     "ts": "2000-01-01T00:00:00+08:00"}, sid="test-run")
+    SS.append(root, {"kind": "user_answer", "qid": "q0001",
+                     "selected": [], "custom": "STOP（上一趟留下的）", "by": "user",
+                     "ts": "2000-01-01T00:00:00+08:00"}, sid="test-run")
+    old = [r for r in U.read_replies(root, role="M", sid="test-run") if "STOP" in str(r)]
+    assert old, "夹具没造出来（应当有一条早于本趟的 STOP 回答）"
+
+    run = AL.run_role("M", "接着做", store=st, registry=registry, conductor=cond,
+                      seam=LlmSeam(role="M", session_root=root, gateway=gw["M"],
+                                   price=(0.0, 0.0), sid="test-run"),
+                      session_root=root, workspace_root=str(root), sid="test-run",
+                      max_steps=3, from_env=False)
+    assert run.stop_reason == "final", run.to_dict()

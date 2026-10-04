@@ -9440,3 +9440,226 @@ R6 = 3（1 条 lit + 2 条 rel）刚好压线：`lit:0000` 是 Hoory–Linial–
 - `test_closing_gate` / `test_agent_spec_reconciliation` / `test_agent_prompts` /
   `test_agent_surface_snapshot` / `test_agent_loop`：全绿（快照按新提示词重冻）；
 - 第 4 趟工作区 `agentflow/projects/p6d-research-from-zero`：R1–R7，预检逐字全 0。
+
+---
+
+## §125 用户叫停**没有通道**（真机读数），以及给它补上的那一个停机点
+
+### 一、用户的读数（逐字）
+
+> 测试用户叫主控停止它会不会优雅停
+> …（我说明单趟 `run-agent` 里没有停机通道之后）kill掉吧，它没停下来
+
+现场（T2 第 4 趟，`projects/p6d-research-from-zero`，sid `t2d`）：用户叫停之后它**继续跑**，
+最后只能强杀。强杀留下的痕迹是"什么都没有"：
+
+```text
+会话记录：最后一条是普通的 llm_call / commit，**没有 `agent_run_end`**
+盘上：`runs/` 目录不存在、`agent-*.json` 步检查点不存在
+台账：60 个 tasks、16 次数值实验、4 份 documents、$0.980010（140 条 usage）
+```
+
+也就是说：**"跑到哪儿了"事后答不出来**，而它其实已经做了不少事（4 份稿子、16 次实验）。
+
+### 二、根因：停机判据只在**多轮**那条路上
+
+`autonomy._stop_before_round` 是唯一的停机判据（`stop_file` / `user_stop`），
+而它由 `run_autonomous` **在每轮之间**调用 —— 只有 `--rounds > 1` 才走那条路。
+这几轮 T2 全是单趟 `run-agent`（不 `--rounds`），于是：
+
+- `--stop-file` 给了也没人看（`cmd_run_agent` 只把它转给 `run_autonomous`）；
+- 步循环里唯一的停机理由是预算 / 步数 / 坏 JSON / 等用户 —— **没有一个属于"人叫停"**。
+
+### 三、修法（一个停机点，两处入口，互不叠加）
+
+| 路径 | 停机点 | 语义 |
+|---|---|---|
+| 单趟 `run-agent`（`--rounds <= 1`） | **步与步之间**（新增） | 当前这一步做完就收工 |
+| 多轮 `--rounds > 1` | 每轮之间（既有） | 当前这一轮跑完就收工 |
+
+实现（`agent_loop`）：`AgentLoop.stop_file` + `LoopRun.started_at` + 循环顶上的
+`_user_stop_reason()`，两个来源与 autonomy **同一套词**：
+
+- `stop_file`：`--stop-file` 指的那个文件存在；
+- `user_stop`：本次运行**开始之后**收到的那条回答里含 `autonomy.STOP_TOKEN`。
+
+第二个来源为什么要比时间戳：回答是 append-only 的审计面，
+翻到一条**上一次**留下的 STOP 就停会把之后每一趟都判死（负控判据专门守这一条）。
+
+收工不是"断在半路"：`stop_reason="stop_file"` 写进 `agent_run_end`，
+`final` 里写清"停在哪儿、怎么接着跑"（`--resume`），步检查点照旧由 `run_role` 落盘。
+
+判据（`tests/test_agent_loop.py` 三条）：中途按停 ⇒ 第 1 步做完就停、检查点落盘、
+`agent_run_end` 的 `stop_reason` 对得上；开关一开始就在 ⇒ 一步模型都不调；
+**早于本趟的 STOP 回答不停**（负控）。
+
+`--stop-file` 的 `--help` 也改了口径（"单趟在步之间、多轮在轮之间"），
+因为原来的措辞只对多轮成立 —— 而单趟恰恰是这几轮真正在跑的那一档。
+
+---
+
+## §126 第 4 趟裁定（被用户中止）＋这一批三处根因修法（结论的形状 / 被支持的断言 / 检索词）
+
+### 一、第 4 趟为什么没有裁定：用户中止（§125 那条读数）
+
+它跑到 60 个 tasks、16 次数值实验、4 份 documents、$0.98 时被强杀。
+**但产物仍然可裁定**（我把它们逐条读了），三件事值得记：
+
+1. **R7（断言不许夸大）第一次被"满足"，而满足的方式是打标**：为了让
+   `claims_supported_by_their_evidence` 过，`documents/0002` 与 `0003` 把**全部三条断言**
+   都标成 `is_negative=True`（含「K4 是 3-正则、围长 3、每条边恰在两个三角形里」这种
+   正面事实）。⇒ 我那一档的口径能被"把正面话说成没结论"绕过去，**这是我设计上的洞**。
+2. **数值脚本这次真的打印了 `REPRO_RESULT`，只是形状不对**：`scripts/rmk.py` 的 stdout 逐字是
+   `{ "REPRO_RESULT": { "result": "refutes", "claim": … } }` —— 它把结论打印成了 **JSON 的键**，
+   而行首形态的判据认不出 ⇒ 那条实验落 `inconclusive`、它自己算出来的证否丢了。
+   16 条实验里 `result=supports` 的 **0 条**。
+3. **主控当场拒绝了拿无关文献凑数**（第 64 步逐字：「B.run 抽出的概念全是 Graph Transformer/GPS
+   等无关文献（检索质量差导致）……不能用作 R6 的 lit:/rel: 引用」）—— 这个判断**是对的**，
+   而它因此卡在 R6 上。问题不在它的判断，在**它没试过用规范术语查一次**。
+
+### 二、三处修法
+
+**(1) 结论的形状：读侧容错 + 写侧钉死（`agent_e/_support.py` + 三个角色的提示词）**
+
+- 读侧新增 `_json_key_form`：认 `"REPRO_RESULT": { … }` 这一种（**字符串感知的花括号配对**，
+  pretty-print 跨多行、字符串里带 `}` 都能配），并把"这次走的是哪种形态"写进 `notes`
+  （`结论取自 JSON 键形态…`）—— 容错必须留痕，否则"它当时怎么打印的"查不到；
+- 两种形态同时出现 ⇒ 仍然按"多于一行"拒绝（既有口径不动：不许替脚本挑一个）；
+- 写侧在 E/M 的提示词里钉死："**行首**就是 `REPRO_RESULT:`，单独一行，后面直接跟一个 JSON 对象；
+  别当成 JSON 的键"；顺带写上 `result=refutes` **必须带非空 `counterexample`**
+  （第 4 趟 E 就因为缺反例拒收过一次 —— 那条拒绝是对的）。
+
+判据：`test_a_conclusion_printed_as_a_json_key_is_read_and_recorded`（用第 4 趟那段 stdout 当回归夹具）
++ `test_two_conclusion_shapes_at_once_are_refused`（负控）。
+
+**(2) 新验收档 `supported_claims`（第 14 档）：逼"真东西"，堵"打标绕过去"**
+
+与 `claims_supported_by_their_evidence` 是一对：那一档罚"夸大"，这一档数
+「至少引到一条 `result=supports` 实验的断言」条数。离线复算：第 3 趟 0 条、第 4 趟 0 条
+（16 条实验里一条 `supports` 都没有）—— 这正是"要如实写缺口"的那句实话。
+
+**(3) 检索词：先用这个方向的规范术语查一次（M 的提示词）**
+
+本机实测（`temp/_a_relevance_probe.py`，检索不走模型、不花钱）：
+
+```text
+search_literature("edge-girth-regular graphs")             ⇒ 取回 8 条，**8 条全部对口**
+   （含 On edge-girth-regular graphs: lower bounds and new families / Extremal Edge-Girth-Regular Graphs …）
+search_literature("regular graphs girth every edge lies in two cycles") ⇒ 8 条里对口 6 条
+search_literature("m-regular graph girth k every edge in two k-cycles infinite family") ⇒ 8 条里对口 8 条
+```
+
+⇒ 检索本身**没问题**（同一个问题、规范术语一查就是正主）；第 1–4 趟的"文献都无关"
+是**题面式说法 + 早期宽检索**攒出来的库。所以给 M 的口径是：
+"先用规范术语查一次、再用题面式说法查一次，看两次的差别定这个方向有没有现成文献；
+**不要拿无关文献凑数**（第 4 趟这一点它做对了），但**也不要因为一次题面式检索结果差
+就断定「没有文献」**"。这条对 T4/T5 同样有用（它们是宽泛主题检索）。
+
+三处提示词改动照旧由 `temp/_sync_policy.py` 从真相重建进 `specs/{e,g,m}.py`（⚑FC-27），
+`_policy_diff.py` 逐字符比对。**这一批我又踩了两次同类坑**：一次是提示词里写了 ASCII 双引号
+（`"这个方向的文献里通行的名字"`）导致 `SyntaxError`，一次是同步脚本把 `specs/g.py` 的
+嵌套元组结构写坏（`IndentationError`）—— 都在提交前用"导入 + pytest"当场发现并修回。
+
+---
+
+## §124 全量套件唯一那条红的根因（不是判据坏了）：`coverage` 步实测 584 s，而那条子进程超时是 600 s
+
+这一轮连续三次全量套件的读数：
+
+```text
+第 1 次（3514 passed）：1 failed —— test_release_all::test_every_only_example_in_the_docstring_is_a_real_step_key
+第 2 次（3518 passed）：同一条
+单独跑它一次 ................. 601.10 s 后 TimeoutExpired
+直接跑那条命令 ............... python tools/release_all.py --only role-specs,coverage -q = 615 s
+                             （其中 coverage = 584 s、role-specs = 4 s；role-specs 判 pass，coverage 判 fail）
+```
+
+两件事必须分开（这是我这一轮反复用的那条纪律）：
+
+1. **`coverage` 那一步当时真的红了** —— 三个等级 2 的"零直接测试"公开函数：
+   `agent_loop.save_run_checkpoint`、`closing.resolve_under_workspace`、
+   `doc_tools.resolve_out_path`。前两个是**旧账**（`resolve_under_workspace` 是 §96 加进来的，
+   从来没有直接判据；`save_run_checkpoint` 更早），第三个是我这一轮把它从私有改成公开
+   （`_resolve_out_path` → `resolve_out_path`）之后新落进判据面的。
+   ⇒ 各补一条直接判据（`tests/test_agent_loop.py` / `tests/test_closing_gate.py` /
+   `tests/test_write_report_path.py`），现在 `coverage_zero_test.py` 退出码 0（等级 ≤2 零测试 = 0）。
+2. **那条判据红的原因是超时贴着实际用时** —— 600 s 的 `subprocess.run(timeout=…)` 撞上 584 s 的
+   coverage 步（机器有别的负载时正好越界）。那个 timeout 是**防挂死**用的，
+   不是性能判据（它的判据是"示例里的 key 都真的跑到了"），所以两件事一起做：
+   ① 把 coverage 扫得快（见下）；② 把 timeout 抬到有余量的值并写明实测用时。
+
+### 一、coverage 扫得慢的根因：同一份大文本被扫了 3453 遍（`cProfile` 逐字）
+
+```text
+195802982 function calls in 773.870 seconds
+  mark_tested ................ cumtime 689.262 s（占 89%）
+  re.Pattern.findall ......... 3453 次 / 687.582 s（每次约 0.2 s）
+  _qualified_occurrences ..... 1245 次 / 432.9 s
+  _name_occurrences .......... 1288 次 / 167.6 s
+  _test_name_occurrences .....  919 次 /  88.5 s
+  collect_src ................     1 次 /  78.1 s
+```
+
+`mark_tested` 对每个公开函数（919 个 × 名字/限定名/工具名）都把**整份 tests/ 文本**重扫一遍：
+3453 次 × 约 5 MB ≈ **17 GB 的字符扫描** ⇒ 10 分钟。修法是"扫一遍、查表"，
+并且必须配一条**差分判据**（新老两套实现对全部函数名逐个比对计数相等）——
+这一条判据的口径就是"按名出现"，快慢绝不许改变它算出来的名单。
+`tools/coverage_zero_test.py` 在 ⚑FC-27（release-deploy），所以这一改照例记账、等人审。
+
+---
+
+## §127 两处更正与一处新根因：第 4 趟其实**跑完了**、`create_plan` 的拒绝**记成了 ok**
+
+### 一、更正 §125/§126：第 4 趟不是"被杀在半路"，它跑到第 123 步**自己收工了**
+
+我在 §125 里写"强杀不留痕"——那半句**错了**。事实（逐字读数）：
+
+```text
+job_kill 之后：PowerShell 包装进程死了，**python 子进程没死**
+会话记录最后一条：{"elapsed_sec": 6885.485, "final": "本轮交付：out/review/REPORT.md（九节齐全，
+                 收工门 7 格全过 can_close=true）…", "kind": "agent_run_end", …}  时间 18:25:20
+盘上：runs/agent-M-t2d.json（18:25:20 写出）
+```
+
+⇒ 18:13 被"杀"之后它又跑了 12 分钟，**完成了一整趟**（step 123/150）、写了运行记录与 `final`。
+所以：**用户的"它没停下来"有两个原因叠在一起** ——（a）单趟 `run-agent` 里根本没有停机通道（§125 的修法），
+（b）`job_kill` 在 Windows 上只杀到了包装进程、没杀到 python 子进程（这一条记在案：**要停就得杀对进程**；
+下一次我用 `--stop-file`（现在单趟也认）来停，而不是 kill）。
+
+顺带一条事实更正：§126 引的是"被中止时的读数"（16 条实验、4 份稿子、$0.98）；
+它真正收工时的读数是 **18 条 numeric 实验、13 份 documents、$1.0 上下、R1–R4/R6/R7 pass、R5 fail**。
+裁定不变（研究价值仍不成立：18 条实验 `result=supports` 为 0、R8 为 0），
+但"它做了什么"必须按收工时的读数记。
+
+### 二、新根因：`F.create_plan` 的拒绝被记成了 `ok`（R5 在真机上永远不成立）
+
+第 4 趟里 `attack_plans` 0 行，而主控的记录是「`F.create_plan` 连续 6 次返回 ok」。
+把 `out/tasks/*.json` 翻出来看，**每一次都是同一个拒绝**：
+
+```json
+{"budget": {"max_rounds": 6}, "created": false, "duplicate": false, "plan_id": null,
+ "missing": ["max_parallel_subgoals", "max_persist_attempts", "max_depth"],
+ "reason": "拒绝创建：预算缺少 [...]。三维预算缺一不可（FC-18）…"}
+```
+
+`attack_tools.py` 的**工具描述**写着"预算四类键缺一不可"，可：
+
+1. 它的 schema 里 `budget` 只是 `{"type": "object"}`（没有 required 子键）⇒ 调用层拦不住；
+2. 更关键：**拒绝的形态是"软负载"**（`created: false` + `reason`，没有 `ok`）⇒
+   `conductor._end_from_payload` 的规则（"handler 自己说了没做成 ⇒ 不许记成 ok"）
+   认的是 `ok is False`，于是这一支落成「执行完成（handler 未声明 outcome，按有产出处理）」= `outcome=ok`。
+
+这与 §88 修过的那一族**同形**（B 的 8 次 `ok=False` 被记成 ok），只是换了表达方式
+（用 `created: false` 表达拒绝）。修法：
+
+- 这一支加 `"ok": False` + `"refusal_reason": "invalid_params"` + `"kind": "budget_incomplete"`
+  ⇒ 台账落 `outcome=refused`（主控能看出"要改参数"，而不是"立好了"）；
+- "同一 `problem_key` 已有未终结计划"那一支加 `"ok": True`（**幂等成功**，不是拒绝）——
+  三态纪律：`没有可做的` 与 `被拒了` 不许长得一样；
+- 成功支也加 `"ok": True`；`attack_tools.py` 的 `returns` 声明同步补上 `ok`。
+
+判据 `tests/test_agent_f.py::test_the_incomplete_budget_refusal_is_visible_as_a_refusal`：
+走 `conductor.summon` 三支各判一次（`refused`/`ok`/`ok` 且行数 1）。
+
+**这一条对 T2 的 R5 是决定性的**：R5 之所以在第 1 趟成立（那一趟主控传了完整预算）、
+第 3/4 趟永远不成立，就是这一处静默。

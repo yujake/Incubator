@@ -144,6 +144,48 @@ def test_create_plan_refuses_incomplete_budget_without_writing(store):
     assert (store.data / "attack_plans.json").read_bytes() == before, "拒绝创建时不得写库（一个字节都不行）"
 
 
+def test_the_incomplete_budget_refusal_is_visible_as_a_refusal(store):
+    """判据（`draft/37` §127 的真机读数）：这一支是**拒绝**，调用方必须看得出来。
+
+    T2 第 4 趟真机：主控连续 6 次 `F.create_plan` 都只传 `{"max_rounds": 6}`，
+    每一次都被拒（预算四类键缺一不可），而台账里记的全是
+    「执行完成（handler 未声明 outcome，按有产出处理）」= `outcome=ok`
+    —— 于是主控以为自己立了项，而 `attack_plans` 一行都没有，R5 卡死。
+
+    判据两半：① 这一支带 `ok=False` + 受控 `refusal_reason`（`conductor` 据此落 `refused`）；
+    ② 三个分支的 `ok` 各不相同地说清自己是哪一种（拒绝 / 成功 / 已经立过项）。
+    """
+    from agentflow.agent_f import AgentF
+    from agentflow.conductor import Conductor
+    from agentflow.tools import build_registry
+
+    c = Conductor(store, registry={"F": ("object", AgentF(store))})
+    reg = build_registry(store=store, conductor=c).registry
+
+    bad = reg.call("conductor.summon", role="M", target_role="F", action="create_plan",
+                   params={"problem": "难题丁", "problem_key": "PK-D",
+                           "budget": {"max_rounds": 6}}, input_key="plan-bad")
+    assert bad.data["outcome"] == "refused", bad.data
+    assert bad.data["refusal_reason"] == "invalid_params", bad.data
+    assert len(store.rows("attack_plans")) == 0, "被拒的那次不许留下行"
+
+    good = reg.call("conductor.summon", role="M", target_role="F", action="create_plan",
+                    params={"problem": "难题丁", "problem_key": "PK-D",
+                            "budget": {"max_rounds": 6, "max_parallel_subgoals": 2,
+                                       "max_persist_attempts": 2, "max_depth": 2}},
+                    input_key="plan-good")
+    assert good.data["outcome"] == "ok", good.data
+    assert len(store.rows("attack_plans")) == 1
+
+    again = reg.call("conductor.summon", role="M", target_role="F", action="create_plan",
+                     params={"problem": "难题丁", "problem_key": "PK-D",
+                             "budget": {"max_rounds": 6, "max_parallel_subgoals": 2,
+                                        "max_persist_attempts": 2, "max_depth": 2}},
+                     input_key="plan-again")
+    assert again.data["outcome"] == "ok", again.data
+    assert len(store.rows("attack_plans")) == 1, "幂等：已有的计划不新建"
+
+
 def test_create_plan_second_time_returns_existing_plan_id(store):
     """同一 `problem_key` 第二次 ⇒ 不新建，返回已有 `plan_id`（避免同一难题被攻两遍）。"""
     f = make_f(store)

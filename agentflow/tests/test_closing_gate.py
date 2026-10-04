@@ -479,6 +479,47 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     assert rep.status["acceptance"] == "fail", rep.to_dict()
 
 
+def test_supported_claims_needs_an_experiment_that_actually_supports(tmp_path: pathlib.Path):
+    """判据（`draft/37` §126）：手稿里有多少条断言「真被实验支持」（`result=supports`）。
+
+    为什么与"断言不许夸大"是一对：第 4 趟真机为了满足那一档，把「正面断言也标成」
+    `is_negative`（「K4 每条边恰在两个三角形里」被标成「没得出结论」）—— 那一档过了，
+    而稿子里一条有实验支持的断言都没有。这一档逼的是"本轮真的跑出了结论"。
+    """
+    from agentflow.tools.doc_tools import build_document
+
+    st, _report = _good(tmp_path)                      # 夹具里那条 T3 实验 result=supports
+    got, detail = CL._leg_reading(st, "supported_claims", tmp_path)
+    assert got == 1, detail                             # 夹具那份稿子引的正是它
+    assert detail["experiments_with_result_supports"] == ["0001"], detail
+
+    # 把那条实验改成 inconclusive ⇒ 同一条断言不再算"被支持"
+    exp = dict(st.rows("experiments")[0])
+    exp["result"] = "inconclusive"
+    exp["negation_kind"] = "no_local_evidence"
+    exp["evidence_kind"] = "heuristic"
+    with st.tx("experiments", actor="test", note="supported_claims probe") as tx:
+        tx.upsert("experiments", exp, note="supported_claims probe")
+    got2, detail2 = CL._leg_reading(st, "supported_claims", tmp_path)
+    assert got2 == 0, detail2
+    assert detail2["experiments_with_result_supports"] == [], detail2
+
+    # 再换回来 ⇒ 又算一条；另写一份引它的稿件 ⇒ 两条
+    exp["result"] = "supports"
+    exp["negation_kind"] = "not_proved"
+    exp["evidence_kind"] = "cross_check"
+    with st.tx("experiments", actor="test", note="supported_claims probe") as tx:
+        tx.upsert("experiments", exp, note="supported_claims probe")
+    build_document(store=st, kind="paper", title="有实验支持的稿",
+                   claims=[{"claim_id": "c1", "section": "§1", "text": "数值支持该断言",
+                            "evidence_kind": "cross_check",
+                            "disclaimer": "数值交叉验证，不构成证明",
+                            "citations": ["exp:0001"]}],
+                   workspace_root=str(tmp_path), actor="test")
+    got3, detail3 = CL._leg_reading(st, "supported_claims", tmp_path)
+    assert got3 == 2, detail3                           # 夹具那份 + 新写这份
+
+
 def test_a_claim_may_not_outstate_the_experiment_it_cites(tmp_path: pathlib.Path):
     """判据（`draft/37` §122）：断言与它所引实验的 `result` 必须一致。
 
