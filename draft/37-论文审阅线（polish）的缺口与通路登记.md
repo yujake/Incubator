@@ -9925,3 +9925,88 @@ D.propose_question 被拒 4 次：kind 必须是 ('gap','contradiction')，收�
 4. 顺带（验收表侧的洞）：T2 的 R1–R8 里**没有一行与 C 有关** —— 0 条 C 任务不只是
    "看不见"的问题，也是"没有任何一行要它"。下一轮加一行 `C 的分析被引用`
    （例如：`documents` 的 claims 至少引一条来自 C 的结构读数），让 C 真的进链。
+
+---
+
+## §132 T2 到底做到了那篇论文的哪一步（逐级对照，含系统实际交付物）
+
+对照物：`C:\Users\ysc20\Desktop\投影度量论\research_papers\p3_R_examples\main.pdf`
+（`Infinite graphs in which every edge lies in two shortest cycles: constructions, and the four
+exceptional grids`，Jiaqi Yu，2026-09-21，25 页，正文 83,179 字符有文本层）。
+它的路线（正统那条）逐字是：
+
+```text
+Def 1.1    R(m,k)-example：m-正则、围长恰 k、每条边至少落在两个不同的 k-圈里
+Thm 1.3（存在，正面）  1/m + 1/k ≤ 1/2  或 (m,k)=(5,3) ⇒ 有无限例
+                        (a) 正规镶嵌 {k,m} 的 1-骨架（λ≡2）—— 一段话的证明
+                        (b) (5,3)：Cay(Z × Z₂, {c,a,−a,a+c,−a−c})，λ(c)=4 —— "三行计算"
+Thm 1.4（刚性，反面）  (3,3)⇒K4；(4,3)⇒K5 或八面体；(3,4)⇒K3,3 或立方体；
+                        (3,5)⇒全有限，最小的两个是 Petersen 与十二面体
+                        方法：(3,3)/(4,3)/(3,4) 是短的局部计数； (3,5) 靠"一点邻域九型分类
+                        + 消解链 + 归约到 uniform 情形 + 曲面论证"
+"数值枚举是**检查**，不是证明的成分"（摘要逐字）
+```
+
+### 一、系统实际交付了什么（四个工作区的盘上读数）
+
+```text
+被机械核过（experiments.result=supports、cross_check 级）只有两条：
+  · Petersen 图是 R(3,5)-例子（3-正则、围长 5、每条边至少在两个不同的 5-圈里）
+  · K4 是 R(3,3)-例子（3-正则、围长 3、每条边恰在两个三角形里）
+   ——由 scripts/rmk_check.py 跑出（exp:0020/0021，runtime 0.11s / 0.125s）
+诚实的不结论（手稿里也这么写）：
+  · "Whether an infinite R(m,k)-graph exists for any (m,k) is not settled by the experiments
+     run in this round."（is_negative=true）
+其余 20 条实验 = inconclusive（其中 **8 条各跑满 600 s 超时**，scripts/r33.py / r3k.py / rmk.py）
+稿件 16 份（G 每轮都在建），内容基本是"定义 + 上面那两条 + 搜索超时"；没有一份给出无限例
+攻击计划 2 条（问题都是"哪些 (m,k) 有无穷多 R(m,k)-图"）—— 只有问题陈述，没有子目标结论
+```
+
+**还有一处必须点名的坏账**：最后那份手稿（`documents/0015`）里有一条**文献断言是假的**：
+
+```text
+claim-4（is_negative=true）："The literature on regular graphs of prescribed girth records the
+   cyclic ladder C_k x Z as a 3-regular graph of girth exactly k for every k>=3 …"
+   引的是 lit:0002 =《Self-dual configurations and regular graphs》 + rel:0000
+   ——而 rel:0000 的原文引的是《Graph Transformers alleviate limitations of sparse message passing…》
+```
+
+即：**引文与断言毫无关系**，内容本身也不对（棱柱/梯子 `C_k × K₂` 在 k≥4 时围长是 4）。
+它没被任何判据抓住，因为我这一轮加的 R7 只查"引了 `exp:` 的断言 vs 实验 result"，
+**文献类断言没有对应的诚实性判据**（B 的逐字核验管的是关系行，不是手稿里的句子）。见 §133。
+
+### 二、逐级对照：系统停在论文的哪一步
+
+| 论文的级 | 论文里是什么 | 系统做到哪 | 证据 |
+|---|---|---|---|
+| 0 定义 | Def 1.1 | ✅ 复述正确（手稿"阅读须知"与 TASK 一致） | `documents/*.md` |
+| 1 小例子（四个例外格） | K4；(4,3) K5/八面体；(3,4) K3,3/立方体；(3,5) Petersen 与十二面体（最小的两个） | ⚠️ **只做到 2/6**：K4 与 Petersen 被机械核过；K5/八面体、K3,3/立方体、十二面体**从未试过** | exp:0020/0021（`supports`）；`r33.py` 的注释里甚至写出"only K4 (finite) -> no infinite R(3,3)"，却把它记成 `construction_not_verified_numerically` 而不是断言 |
+| 2 正面：无限例 | Thm 1.3（镶嵌 {k,m}；以及 (5,3) 的 Cayley 图） | ❌ **完全没碰**：四个工作区里 `tiling`/`Cayley` 的痕迹合计 3 处，全在注释里（"we record it as an open construction problem"）；没有任何一次真的去构造 `1/m+1/k ≤ 1/2` 的镶嵌 | 脚本清单（`r33.py`/`r3k.py`/`rmk.py`/`rmk_check.py`）与关键词全库检索 |
+| 3 反面：刚性 | Thm 1.4（(3,3)/(4,3)/(3,4) 短证明；(3,5) 九型分类 + 消解链 + 曲面论证） | ❌ **没碰**：既没有局部计数引理（论文 Lem 2.1/2.2/2.4），也没有邻域分类。C 的图分析（最热概念、结构重复）与这条路线无关 | experiments 里没有一条 formal；稿件里没有一条"全有限"的断言 |
+| 4 数值枚举 | 论文明确说"是检查，不是成分" | ⚠️ **做成了主策略，而且没做完**：22 条实验 / 6722 s（占 6885 s 的 98%），8 条 600 s 超时；得到的结论只有上面那两条例子 | §130 的时间分布 |
+| 5 成文 | 25 页自足论文（含九型表、消解链） | ⚠️ 16 份薄稿；有 1 条被支持的断言链 + **1 条假文献断言**（上面那段） | `documents/0015` |
+
+**一句话**：系统做到的，是论文里**最便宜的那一格的一半**（四个例外格里两个格子的最小例子），
+外加一句诚实的"无限情形未定"；而论文里**便宜的那一半（镶嵌构造，一段话）它一步没走**，
+**难的那一半（九型分类与曲面论证）它一步没碰**，
+时间几乎全花在论文自己说"只是检查"的枚举上（而且 8 次撞满 600 s 上限）。
+
+### 三、为什么会停在这里（与 §130 的诊断对齐）
+
+1. **没读文献**：论文用的语言（cage / regular tiling / 球面格）与"哪些格已知有限"都在文献里；
+   系统的检索取回了对口的那几篇（edge-girth-regular 一族），但手稿一条都没用上
+   （p6c 的 6 条断言里 3 条文献断言引的是 expander/hash 那几篇，与本题无关）。
+2. **方法选择错位**：它把"穷举小图"当成主方法（22 条实验、8 次超时），
+   而"构造"只试了 circulant 与 Petersen；连自己代码注释里想到的 (3,3) 结论都没落成断言。
+3. **主控看不见返回值**（§130）：C 一次没派；A/B/G 的产出全靠读盘反推 —— 一个"研究"循环
+   里，判断所需的信息有一半在返回里被丢掉了。
+4. **没有时长上限**：600 s × 8 把墙钟吃光，"先估规模再跑"只写在提示词里，没有判据。
+
+### 四、下一轮该瞄准什么（把"正统路线"拆成可判的靶子）
+
+| 靶 | 具体动作 | 可判的读数 |
+|---|---|---|
+| A 正面（论文最便宜的那半） | 构造并核验 `1/m+1/k ≤ 1/2` 的镶嵌 {k,m}（例如 (4,5)、(3,7)、(5,4)），以及 (5,3) 的 Cayley 图 | 新档：`infinite_family_witness`（`experiments` 里有一条"无限族"证书：给出构造规则 + 在一段窗口上核到 λ≥2 且围长=k） |
+| B 四个例外格 | (3,3) K4；(4,3) K5/八面体；(3,4) K3,3/立方体；(3,5) Petersen 与十二面体 —— 逐个核 | 手稿里"四个格"的断言各自引一条 `supports` 实验（现有判据 R8 已经能数） |
+| C 反面 | (3,3) 的短证明（局部计数）先落地；九型分类留给人 | `proof_experiment_rows ≥ 1`（已有档） |
+| D 文献诚实性（补 §132 一 的窟窿） | 手稿里引 `lit:/rel:` 的断言，必须能追到**逐字核过的引文**（`quote_verified=true`） | 新档：`document_claims_have_verified_sources` |
