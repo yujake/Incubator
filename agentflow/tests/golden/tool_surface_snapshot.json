@@ -92,7 +92,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'created','plan_id','duplicate','status','budget','subgoals','reason'}",
+   "returns": "{'ok','created','plan_id','duplicate','status','budget','subgoals','reason'}",
    "roles": [
     "F"
    ],
@@ -490,8 +490,16 @@
     "additionalProperties": false,
     "properties": {
      "drain_sec": {
-      "description": "等收尾的上限秒数",
+      "description": "等收尾的上限秒数（force=true 时不等待）",
       "type": "number"
+     },
+     "force": {
+      "description": "直接停：不等待收尾，并杀掉登记在盘的子进程（连子孙）",
+      "type": "boolean"
+     },
+     "notify": {
+      "description": "是否在公共频道广播叫停（默认 true）",
+      "type": "boolean"
      },
      "reason": {
       "enum": [
@@ -507,13 +515,13 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'reason','reason_mapped_from','detail','inflight_at_stop','drained_sec','disposed','resume_brief','verify'}",
+   "returns": "{'reason','reason_mapped_from','detail','inflight_at_stop','drained_sec','disposed','resume_brief','verify','stop_switch','notified','killed_children'}",
    "roles": [
     "M"
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "优雅停止：不再接受新召唤 → 等在飞任务收尾（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落一份续跑简报。幂等：第二次不改第一次的理由。",
+   "summary": "停止（`draft/37` §128）：默认**优雅** —— 落停机开关 → 在公共频道广播叫停（提醒每个同伴收工，并把它们自己起的子进程停掉）→ 不再接受新召唤 → 等在飞任务收尾（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落一份续跑简报。`force=true` 是**直接停**：不等待收尾，并立刻按进程登记把子进程连子孙一起杀掉。幂等：第二次不改第一次的理由（终态先到先得）。",
    "tags": []
   },
   "conductor.summon": {
@@ -3874,7 +3882,7 @@
   "conductor.resume_brief": "() -> 'ToolResult'",
   "conductor.role_spec": "(role_name: 'str') -> 'ToolResult'",
   "conductor.state": "() -> 'ToolResult'",
-  "conductor.stop": "(reason: 'str' = 'user', drain_sec: 'float' = 30.0) -> 'ToolResult'",
+  "conductor.stop": "(reason: 'str' = 'user', drain_sec: 'float' = 30.0, force: 'bool' = False, notify: 'bool' = True) -> 'ToolResult'",
   "conductor.summon": "(target_role: 'str', action: 'str', params: 'dict | None' = None, input_key: 'str' = '') -> 'ToolResult'",
   "conductor.summon_many": "(targets: 'list', why: 'str' = '') -> 'ToolResult'",
   "doc.build_document": "(kind=None, title=None, claims=None, sections=None, open_problems=None, out_path=None)",

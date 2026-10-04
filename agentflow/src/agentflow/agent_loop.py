@@ -863,6 +863,19 @@ class AgentLoop:
                                                        sid=self.sid))
         run = LoopRun(role=self.role, task=task)
         run.started_at = S.now_iso()
+        # 登记"这一趟起的进程"（`draft/37` §128）：强制的 `agentflow stop --force`
+        # 就是按这份登记去 `taskkill /T /F` —— 只杀父进程会留下子孙继续跑
+        # （§127 的真机读数：包装进程被 kill 之后子进程又跑了 12 分钟）。
+        try:
+            from . import stopctl
+
+            stopctl.register_pid(self.session_root, self.role, self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 登记不上不影响这一趟，但必须留痕
+            SS.append(self.session_root, {
+                "kind": "agent_note", "role": self.role,
+                "note": f"进程登记没写成（{type(exc).__name__}: {exc}）⇒ "
+                        "`agentflow stop --force` 找不到这个进程",
+            }, sid=self.sid)
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
         if fresh_ids:
             problem = mark_delivered(self.session_root, self.role, fresh_ids, sid=self.sid)
@@ -1074,6 +1087,13 @@ class AgentLoop:
         run.spend = self.seam.spend.to_dict()
         run.elapsed_sec = time.monotonic() - t0
         run.transcript = transcript
+        # 正常收工就注销进程登记（被杀时它自然留在盘上，`stopctl.live_pids` 会把死 pid 滤掉）。
+        try:
+            from . import stopctl as _sc
+
+            _sc.unregister_pid(self.session_root, self.role, self.sid)
+        except Exception:  # noqa: BLE001 —— 注销失败不影响这一趟的产出
+            pass
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,
             "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
@@ -1106,9 +1126,22 @@ class AgentLoop:
 
         为什么 `user_stop` 要比时间戳：回答是 append-only 的审计面，
         翻到一条「上一次」留下的 STOP 就停会把之后每一趟都判死。
+
+        第三个来源（`draft/37` §128）：「工作区的停机开关」（`.agentflow-stop`，`stopctl`）
+        —— 它是 M 的 `conductor.stop` 与 `agentflow stop` 写下的那一份，
+        也是「唯一」能打断在飞工作的通道（广播做不到：收件箱是 `run()` 开头读一次的）。
+        开关里 `force=true` ⇒ 走 `force_stop`（"直接停"，不等待收尾）。
         """
         if self.stop_file and Path(self.stop_file).exists():
             return "stop_file"
+        try:
+            from . import stopctl
+
+            state = stopctl.read_stop(self.session_root)
+        except Exception:  # noqa: BLE001 —— 读不到开关不是"用户叫停"，如实不停
+            state = None
+        if state is not None:
+            return "force_stop" if bool(state.get("force")) else "stop_file"
         started = str(getattr(run, "started_at", "") or "")
         if not started:
             return ""
@@ -1128,8 +1161,10 @@ class AgentLoop:
 
     def _stop_note(self, stop_reason: str, step: int) -> str:
         """人叫停时写进 `final` 的那句话（要能直接告诉人"停在哪儿、怎么接着跑"）。"""
-        what = {"stop_file": f"用户叫停（开关文件 {self.stop_file}）",
-                "user_stop": "用户叫停（回答里有 STOP）"}.get(stop_reason, f"用户叫停（{stop_reason}）")
+        what = {"stop_file": f"用户叫停（开关文件 {self.stop_file or '.agentflow-stop'}）",
+                "user_stop": "用户叫停（回答里有 STOP）",
+                "force_stop": "用户强制停止（直接停，不等待收尾）"}.get(
+                    stop_reason, f"用户叫停（{stop_reason}）")
         sid_arg = f" --sid {self.sid}" if self.sid else ""
         return (f"{what}：第 {step} 步之后收工。已经做过的事都留在台账与盘上；"
                 f"要看这一趟做了什么用 `agentflow --root {self.session_root} runs`，"

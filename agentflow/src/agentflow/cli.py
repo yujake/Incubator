@@ -1924,6 +1924,58 @@ def cmd_web(args) -> int:
     return webui.run(argv)
 
 
+def cmd_stop(args) -> int:
+    """停一趟正在跑的 `run-agent`（`draft/37` §128）。退出码：0 做成了 / 2 没查成。
+
+    两种停法（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，
+    还要写个强制停止是直接杀掉"）：
+
+    - 「缺省（优雅）」：写停机开关 `<工作区>/.agentflow-stop`。正在跑的那一趟在「步与步之间」
+      看到它 ⇒ 收工（写运行记录与 `final`）；E 正在跑的实验子进程也在 0.2 s 内被终止
+      （它们每步都看这个开关）。多轮自主跑则在「每轮之间」看到它。
+    - 「`--force`（强制）」：先落开关（`force=true`，留痕"谁在什么时候强杀"），
+      再按进程登记 `<工作区>/runs/*.pid` 把那些进程「连子孙一起」 `taskkill /T /F`
+      —— 直接杀掉。为什么必须"连子孙"：Windows 上杀父进程不带子进程
+      （实测：包装进程被杀之后 python 子进程又跑了 12 分钟）。
+
+    `--status` 只读当前状态（开关在不在、登记里哪些进程还活着、开关文件坏了没有）。
+    """
+    from . import stopctl
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    if getattr(args, "status", False):
+        state = stopctl.read_stop(root)
+        live = stopctl.live_pids(root)
+        print(f"[stop] 工作区：{root}")
+        print(f"[stop] 开关：{stopctl.stop_path(root)}"
+              f"（{'在' if state is not None else '不在'}）")
+        if state is not None:
+            print(f"[stop] 开关内容：{json.dumps(state, ensure_ascii=False)}")
+        print(f"[stop] 登记着的活进程：{len(live)} 个"
+              + ("：" + "、".join(f"{p['role']}#{p['pid']}" for p in live) if live else ""))
+        return 0
+
+    force = bool(getattr(args, "force", False))
+    state = stopctl.request_stop(root, reason=str(getattr(args, "reason", "") or "user"),
+                                 by="user", force=force, sid=getattr(args, "sid", None))
+    print(f"[stop] 停机开关已落：{state['path']}（reason={state['reason']}"
+          f"{'，force' if state['force'] else ''}）")
+    if not force:
+        print("[stop] 优雅停止：正在跑的那一趟会在下一步之前收工"
+              "（E 的实验子进程也会被终止）；多轮自主跑在每轮之间收工")
+        return 0
+    killed = stopctl.kill_registered(root)
+    print(f"[stop] 强制停止：按登记杀了 {killed['killed']}/{len(killed['requested'])} 个进程"
+          + (f"（{killed['requested']}）" if killed["requested"] else "（登记里没有活进程）"))
+    for res in killed["results"]:
+        print(f"  - pid {res['pid']}：killed={res['killed']} via={res['via']} {res['detail'][:120]}")
+    if killed["requested"] and not killed["killed"]:
+        print("[stop] 注意：一个都没杀掉（受限环境常见：taskkill 被拒）——"
+              "读数里给了原话，不要把它读成「停住了」", file=sys.stderr)
+        return 2
+    return 0
+
+
 def cmd_closing(args) -> int:
     """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
@@ -2204,6 +2256,17 @@ def build_parser() -> argparse.ArgumentParser:
                          "`--rounds > 1` 时在**每轮之间**查（当前这一轮跑完再停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
     sp.set_defaults(func=cmd_run_agent)
+
+    sp = sub.add_parser("stop",
+                        help="停一趟正在跑的 run-agent（`draft/37` §128）：缺省优雅停，"
+                             "`--force` 直接杀掉（连子进程）")
+    sp.add_argument("--reason", default="user", help="停机理由码（默认 user）")
+    sp.add_argument("--force", action="store_true",
+                    help="强制停止：不等待收尾，并按进程登记把子进程连子孙一起杀掉")
+    sp.add_argument("--sid", default=None, help="这一趟的会话号（写进停机开关，便于核对）")
+    sp.add_argument("--status", action="store_true",
+                    help="只看状态：开关在不在、登记里哪些进程还活着")
+    sp.set_defaults(func=cmd_stop)
 
     sp = sub.add_parser("gate", help="交付闸门：逐条判据 + 机械半 → 报告与工作项（三态退出码）")
     sp.add_argument("name", help="这次交付的名字（报告落在 <root>/gates/<名字>.json）")

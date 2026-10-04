@@ -400,13 +400,20 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
 
 @tool(
     "conductor.stop",
-    "优雅停止：不再接受新召唤 → 等在飞任务收尾（有界）→ 给剩下的合成终态"
-    "（不留僵尸、结果记未知、不自动重试）→ 落一份续跑简报。幂等：第二次不改第一次的理由。",
+    "停止（`draft/37` §128）：默认**优雅** —— 落停机开关 → 在公共频道广播叫停"
+    "（提醒每个同伴收工，并把它们自己起的子进程停掉）→ 不再接受新召唤 → 等在飞任务收尾"
+    "（有界）→ 给剩下的合成终态（不留僵尸、结果记未知、不自动重试）→ 落一份续跑简报。"
+    "`force=true` 是**直接停**：不等待收尾，并立刻按进程登记把子进程连子孙一起杀掉。"
+    "幂等：第二次不改第一次的理由（终态先到先得）。",
     {
         "type": "object",
         "properties": {
             "reason": {"type": "string", "enum": list(CANCEL_CODES)},
-            "drain_sec": {"type": "number", "description": "等收尾的上限秒数"},
+            "drain_sec": {"type": "number", "description": "等收尾的上限秒数（force=true 时不等待）"},
+            "force": {"type": "boolean",
+                      "description": "直接停：不等待收尾，并杀掉登记在盘的子进程（连子孙）"},
+            "notify": {"type": "boolean",
+                       "description": "是否在公共频道广播叫停（默认 true）"},
         },
         "required": [],
         "additionalProperties": False,
@@ -414,16 +421,47 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
     side_effect="write_local",
     roles=("M",),
     returns=("{'reason','reason_mapped_from','detail','inflight_at_stop','drained_sec',"
-             "'disposed','resume_brief','verify'}"),
+             "'disposed','resume_brief','verify','stop_switch','notified','killed_children'}"),
 )
-def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0) -> ToolResult:
-    """工具体：优雅停止（喊停 → 有界收尾 → 合成终态 → 落续跑简报）。"""
+def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
+                   force: bool = False, notify: bool = True) -> ToolResult:
+    """工具体：停止（优雅 = 喊停 → 有界收尾 → 合成终态 → 续跑简报；强制 = 直接停）。
+
+    `draft/37` §128 加的两件（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，
+    还要写个强制停止是直接杀掉"）：
+
+    1. 「先落停机开关」（`stopctl`）—— 它是唯一能打断"在飞工作"的通道：卡在等待循环里的
+       子进程（E 的实验脚本）每 0.2 s 看一次它，于是会被立刻终止（实测 30 s → 0.36 s）；
+    2. `notify=True` 时在「公共频道广播」一条叫停（`#public`）：A–H 每个角色都收得到，
+       投递登记是真的 —— 但广播「打断不了」正在循环的同伴（收件箱是 `run()` 开头读一次的），
+       所以 body 里点明"收到广播不等于被叫停，开关才算"，免得同伴误判。
+
+    `force=True` 是"直接杀掉"：不等待收尾，并按进程登记把子进程连子孙一起杀
+    （「排除自己」：杀掉自己的进程树会让这次调用永远回不去；M 随后由步循环的停机判据收工）。
+    """
+    from .. import stopctl
+    from ..agent_loop import PUBLIC, send_message
+
     c = _conductor()
+    root = Path(str(getattr(getattr(c, "store", None), "root", "") or "."))
+    sid = str(getattr(getattr(c, "backend", None), "sid", "") or "")
     mapped_from = ""
     code = reason if reason in CANCEL_CODES else "user"
     if code != reason:
         mapped_from = reason
-    receipt = c.cancel(code, detail="优雅停止（主控 M）", by=S.CONDUCTOR_ROLE)
+    switch = stopctl.request_stop(root, reason=code, by=S.CONDUCTOR_ROLE, force=force, sid=sid)
+    notified = ""
+    if notify:
+        msg_id, problem = send_message(
+            root, sender=S.CONDUCTOR_ROLE, to=PUBLIC, subject="叫停",
+            body=("用户/主控叫停（" + code + ("，强制" if force else "") + "）：请各自收工，"
+                  "并把你已经起的子进程停掉（实验脚本、检查器进程等）。"
+                  "停机开关已落在 " + str(stopctl.stop_path(root)) + "；"
+                  "收到本条广播本身不会打断你正在跑的循环 —— 开关才会。"),
+            sid=sid or None)
+        notified = msg_id if not problem else f"未发出：{problem}"
+    receipt = c.cancel(code, detail=("强制停止（主控 M）" if force else "优雅停止（主控 M）"),
+                       by=S.CONDUCTOR_ROLE)
     # 回报首次生效的那个原因（FC-20 第 2 条：终态先到先得、reason 只许一个答案）。
     # 本次请求的 code 可能不是它 —— 那就把两个都写出来，别让"我请求了 budget"
     # 被读成"停止原因是 budget"。
@@ -431,17 +469,25 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0) ->
     if effective != code and not mapped_from:
         mapped_from = code
     code = effective
-    t0 = time.monotonic()
-    while c.cancel_inflight() and (time.monotonic() - t0) < float(drain_sec):
-        time.sleep(0.05)
-    waited = round(time.monotonic() - t0, 3)
+    waited = 0.0
+    if not force:
+        t0 = time.monotonic()
+        while c.cancel_inflight() and (time.monotonic() - t0) < float(drain_sec):
+            time.sleep(0.05)
+        waited = round(time.monotonic() - t0, 3)
     disposed = c.dispose()
+    killed = {}
+    if force:
+        # 「直接杀掉」那一半：按登记把子进程连子孙一起杀，「排除自己」
+        # （杀掉自己的进程树会让这次工具调用永远回不去）。
+        killed = stopctl.kill_registered(root, exclude_pid=os.getpid())
     brief = _write_resume_brief(c)
     data = {"reason": code, "reason_mapped_from": mapped_from,
             "detail": receipt.get("detail", ""),
             "inflight_at_stop": list(receipt.get("inflight") or ()),
             "drained_sec": waited, "disposed": disposed,
-            "resume_brief": brief, "verify": c.verify_tasks()}
+            "resume_brief": brief, "verify": c.verify_tasks(),
+            "stop_switch": switch, "notified": notified, "killed_children": killed}
     return ok(data, **data)
 
 @tool(
@@ -935,7 +981,7 @@ def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
     """把验收表（markdown）解析成结构化的行。
 
     认的是项目脚本自己的写法：一行标题（含「P1–P11」之类）、一行结论
-    （`结论：**全部成立**（10/10）`）、一张 `| 判据 | 名称 | 结论 | 读数 |` 表。
+    （`结论：「全部成立」（10/10）`）、一张 `| 判据 | 名称 | 结论 | 读数 |` 表。
 
     `max_chars` 是交付说明能不能逐条对齐的关键：真机实测（2026-09-29，只读重放）
     十行的完整读数合起来 >1400 字，工具结果被上下文预算截断，M 只看到 P1–P4，

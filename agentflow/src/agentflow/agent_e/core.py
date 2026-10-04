@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ._support import Any, DeclarationNameError, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _relpath, _result_reason, _which, build_experiment, install_e_tools, os, sole_declaration_name, subprocess, sys, time
+from ._support import Any, DeclarationNameError, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _kill_child, _relpath, _result_reason, _stop_requested, _which, build_experiment, install_e_tools, os, sole_declaration_name, subprocess, sys, time
 from .run_experiment import _RunExperiment
 from .check_formal import _CheckFormal
 from .evidence_for import _EvidenceFor
@@ -121,25 +121,20 @@ class _Core:
         env.setdefault("PYTHONUTF8", "1")
         t0 = time.monotonic()
         try:
-            proc = subprocess.run(
+            # 用 `Popen` + 轮询而不是 `subprocess.run(timeout=…)`（`draft/37` §128）：
+            # 停机开关（`.agentflow-stop`）一出现就把这条子进程杀掉，并如实记成
+            # "用户叫停"而不是"超时"。理由是真机读数：一次 600 s 的枚举实验会把
+            # 600 s 跑满 —— 用户叫停之后它照样跑完，那 10 分钟白烧。
+            proc = subprocess.Popen(
                 cmd,
                 cwd=str(self.workspace_root),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=max(1, int(timeout)),
                 env=env,
             )
-        except subprocess.TimeoutExpired as e:
-            return {
-                "exit_code": None,
-                "stdout": _decode(e.stdout),
-                "stderr": _decode(e.stderr) + f"\n[超时] 超过 timeout={timeout}s，进程已被杀掉",
-                "runtime_sec": round(time.monotonic() - t0, 4),
-                "timed_out": True,
-                "launch_error": None,
-            }
         except OSError as e:
             # 解释器不存在 / 权限不足等：这是没跑起来，不是"跑失败"。
             return {
@@ -150,10 +145,52 @@ class _Core:
                 "timed_out": False,
                 "launch_error": f"{type(e).__name__}: {e}",
             }
+        limit = max(1, int(timeout))
+        stopped = False
+        stopped_note = ""
+        while True:
+            try:
+                out, err = proc.communicate(timeout=0.2)
+                break
+            except subprocess.TimeoutExpired:
+                pass          # 0.2 s 到点而已：等的是「子进程结束」或「停机开关落盘」
+            if _stop_requested(self.workspace_root):
+                stopped = True
+                _kill_child(proc)
+                try:
+                    out, err = proc.communicate(timeout=15)
+                except subprocess.TimeoutExpired:
+                    # 杀不掉（极少数：受限环境拒绝终止）也不许把整趟挂在这里 ——
+                    # 如实落"用户叫停 + 子进程没能终止"，剩下的事交给人。
+                    out, err = "", ""
+                    stopped_note = "（子进程在 15 s 内没能终止）"
+                break
+            if time.monotonic() - t0 > limit:
+                _kill_child(proc)
+                out, err = proc.communicate()
+                return {
+                    "exit_code": None,
+                    "stdout": _decode(out),
+                    "stderr": _decode(err) + f"\n[超时] 超过 timeout={timeout}s，进程已被杀掉",
+                    "runtime_sec": round(time.monotonic() - t0, 4),
+                    "timed_out": True,
+                    "launch_error": None,
+                }
+        if stopped:
+            return {
+                "exit_code": None,
+                "stdout": _decode(out),
+                "stderr": _decode(err) + "\n[用户叫停] 停机开关已落盘 ⇒ 这条子进程被终止"
+                                         f"（这不是超时，也不是跑失败）{stopped_note}",
+                "runtime_sec": round(time.monotonic() - t0, 4),
+                "timed_out": False,
+                "stopped_by_user": True,
+                "launch_error": None,
+            }
         return {
             "exit_code": proc.returncode,
-            "stdout": proc.stdout or "",
-            "stderr": proc.stderr or "",
+            "stdout": _decode(out),
+            "stderr": _decode(err),
             "runtime_sec": round(time.monotonic() - t0, 4),
             "timed_out": False,
             "launch_error": None,

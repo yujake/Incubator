@@ -186,6 +186,43 @@ assert set(_NOT_CHECKED_REASONS) <= set(FORMAL_REASONS), (
     f"_NOT_CHECKED_REASONS={_NOT_CHECKED_REASONS} 必须全部在 FORMAL_REASONS 里 —— "
     "两处各写一份'哪些算没查成'是 FC-03 的形态"
 )
+def _stop_requested(workspace_root: Any) -> bool:
+    """停机开关落盘了吗（`draft/37` §128）。
+
+    为什么 E 的脚本等待循环要看它：E 起的实验子进程是这一族里最长的「一次阻塞」
+    （默认 600 s）。用户叫停之后若还把它跑完，那 10 分钟就是白烧 ——
+    真机读数：第 4 趟里连着两次 600 s 枚举实验都在"没人看"的情形下跑满。
+    """
+    try:
+        from .. import stopctl
+
+        return stopctl.read_stop(workspace_root) is not None
+    except Exception:  # noqa: BLE001 —— 读不到开关不是"用户叫停"，如实当成没叫停
+        return False
+
+
+def _kill_child(proc: Any) -> None:
+    """终止这条子进程（连它的子孙）。杀不掉时不抛：调用方照样要拿到读数。
+
+    顺序是「先直系、后子树」，理由是一条实测：受限环境里 `taskkill /T /F` 会被拒
+    （本机沙箱：`ERROR: Access denied`，rc=1），而 `Popen.kill()` 是对同一进程的直接操作、
+    一定生效；树杀只是补刀（把孙进程一起带走）。反过来写就会像第一版那样——
+    `taskkill` 失败之后「没有补刀」，`communicate()` 一直等到子进程自己跑完（实测 20 s）。
+    """
+    pid = int(getattr(proc, "pid", 0) or 0)
+    try:
+        proc.kill()
+    except Exception:  # noqa: BLE001 —— 进程可能已经自己退了
+        pass
+    if pid:
+        try:
+            from .. import stopctl
+
+            stopctl.kill_tree(pid, timeout=10)
+        except Exception:  # noqa: BLE001 —— 补刀失败不影响"直系已经停了"这个事实
+            pass
+
+
 def _docstring_not_checked_reasons(doc: str) -> set[str]:
     """从模块 docstring 第 3 条（"没查成"）那一段里读出 `` `x` `` 标识符集合。
 
