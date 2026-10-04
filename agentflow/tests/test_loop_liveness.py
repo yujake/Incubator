@@ -168,3 +168,29 @@ def test_the_new_stop_reason_has_a_badge(reason: str):
 
     assert reason in W._STOP_BADGES, sorted(W._STOP_BADGES)
     assert W._STOP_BADGES[reason][0] != "badge-fail", "它不是失败，是'这一趟没有往前走'"
+
+
+def test_notes_differing_only_by_a_step_prefix_still_count_as_repeats(tmp_path: pathlib.Path):
+    """正控（`draft/37` §140 补的漏洞）：正文只差"第 N 步"前缀的 note 仍算同一次调用。
+
+    真机形态（T2 第 5 趟）：M 连写 14 条近乎相同的 note（每条只是把"第 N 步"改一个号），
+    而那 3 分钟里一步没往前走 —— §136 的活性判据当时一次也没响：
+    指纹把"第 41 步"与"第 42 步"当成了两次不同的调用。自述里的时间戳不是调用内容。
+    """
+    notes = [{"note": f"第{i}步：我连续在写重复的 note，这是原地打转。"} for i in range(1, 5)]
+    run = _run(tmp_path, [_reply(n) for n in notes] + [_reply({"final": "收工"})], max_steps=8)
+
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.same_call_max >= 3, run.to_dict()
+    assert run.dead_loop_max >= 3, run.to_dict()
+    assert "框架提醒" in run.steps[2].result, run.steps[2].result
+
+
+def test_a_reworded_rationale_does_not_reset_the_repeat_counter(tmp_path: pathlib.Path):
+    """负控（另一个方向）：`why` 是自述，换个说法不该让同一次调用变成"新的"。"""
+    calls = [{"tool": "conductor.role_spec", "args": {"role_name": "C"}, "why": f"第 {i} 次复核"}
+             for i in range(1, 4)]
+    run = _run(tmp_path, [_reply(c) for c in calls] + [_reply({"final": "收工"})], max_steps=8)
+
+    assert run.same_call_max == 3, run.to_dict()
+    assert "框架提醒" in run.steps[2].result, run.steps[2].result

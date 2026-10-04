@@ -1002,3 +1002,33 @@ def test_a_review_project_is_not_touched_by_the_coverage_rule(tmp_path: pathlib.
         rep.readings["acceptance"]["research_chain"]
     assert "没有" in rep.readings["acceptance"]["note"], rep.readings["acceptance"]
 
+
+# ============================================================ 交接手稿那一档（§140）
+
+def test_the_manuscript_leg_counts_files_on_disk_not_the_index(tmp_path: pathlib.Path):
+    """判据（`draft/37` §134/§140）：`manuscript_rows` 数盘上的手稿文件。
+
+    为什么单列这一档：用户点名"传信息就传手稿编号"，而 T2 第 5 趟这一类一次也没用
+    （M 写了 26 条 `note`，只活在会话里）。判据只认文件名能被 `<编号>-<谁>to<谁>.md`
+    认出来的那些 —— 索引不算数（文件是真相，账本只是流水）。
+    """
+    from agentflow import manuscripts as MS
+
+    st, report = _good(tmp_path)
+    assert "manuscript_rows" in CL.LEG_CHECK_KINDS, sorted(CL.LEG_CHECK_KINDS)
+    _acceptance_checks(tmp_path, [{"id": "M1", "name": "交接手稿", "kind": "manuscript_rows",
+                                   "min": 2}], st=st)
+    before = _gate(st, report)
+    assert before.readings["acceptance"]["rows"][0]["got"] == 0, before.readings["acceptance"]
+
+    MS.write(tmp_path, sender="D", recipient="F", title="交给 F 的攻坚依据",
+             body="实验 0002 的族证据在 out/experiments/0002.log。\n", summary="族证据")
+    MS.write(tmp_path, sender="M", recipient="ALL", title="本轮结论", body="见报告。\n")
+    (tmp_path / "manuscripts" / "乱名字.md").write_text("不算数。\n", encoding="utf-8")
+
+    after = _gate(st, report)
+    row = after.readings["acceptance"]["rows"][0]
+    assert row["got"] == 2, row
+    assert after.status["acceptance"] == "pass", after.to_dict()
+    assert "0000-DtoF.md" in row["detail"]["files"], row["detail"]
+

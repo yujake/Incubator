@@ -67,8 +67,14 @@ def test_the_boss_calling_stop_ends_the_run_and_keeps_the_records(tmp_path: path
     assert run.steps[0].shape == "tool", run.steps[0].to_dict()
     assert "叫停" in run.final, run.final
     assert len(gw.prompts) == 1, "停完之后不许再问模型第二步"
-    state = stopctl.read_stop(ws)
-    assert state is not None and state["by"] == "M", state
+    # `draft/37` §140：开关是一次性信号 —— 停一趟、记一笔（`runs/stop-history.jsonl`）、
+    # 撤走。改前它留在盘上，于是紧接着的 `--resume` 在第 0 步又被同一把开关停掉
+    # （0 步 / 0 次模型调用），而这次停止的产物里写着"可续跑的步检查点 + 续跑简报"。
+    assert stopctl.read_stop(ws) is None, "生效过的开关必须被消费掉（否则续跑一开头就被停）"
+    history = stopctl.stop_history(ws)
+    assert history and history[-1]["by"] == "M", history
+    assert history[-1]["consumed_by_sid"] == "s", history
+    assert history[-1]["level"] == "stop_file", history
     # 收尾记录照写（强杀那种"什么都不留"才是要避免的形态）
     from agentflow import sessions as SS
 

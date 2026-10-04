@@ -102,6 +102,9 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
 
     第三态为什么要单列：一个坏掉的开关文件被读成"没人叫停"，等于「停机请求消失」 ——
     而"没查成"与"查过了没问题"必须分得开（本项目的三态纪律）。
+
+    开关的生命周期见 `consume_stop`（`draft/37` §140 修的 bug）：它是一份"信号"，
+    被一趟运行消费之后就撤走，审计留在 `runs/stop-history.jsonl` 里。
     """
     path = stop_path(root, explicit)
     if not path.is_file():
@@ -122,8 +125,76 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
     return data
 
 
+def history_path(root: str | Path) -> Path:
+    """停机历史（每一次"被消费掉的叫停"一行 JSON）——审计记录不随开关一起消失。"""
+    return Path(root) / PID_DIR_NAME / "stop-history.jsonl"
+
+
+def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop_file",
+                 explicit: str | Path | None = None) -> dict[str, Any]:
+    """消费掉这一把开关：把"谁在什么时候为什么叫停、被哪一趟用掉"记进历史，然后撤掉它。
+
+    ## 为什么必须撤（`draft/37` §140 的 bug，实测 `temp/_stop_probe.py`）
+
+    改前：`conductor.stop` 停了一趟之后开关留在盘上 ⇒ 紧接着的 `--resume` 在第 0 步
+    就被同一把开关停掉（0 步、0 次模型调用），而同一个工具的产物里写着"可续跑的步检查点 +
+    续跑简报" —— 两件事互相拆台；连带 E 的实验子进程也会一出现就被它杀掉。
+    改后：开关是一次性信号（停一趟、记一笔、撤走），下一次叫停要重新写一份
+    （`request_stop` 于是不会把"用户第二次叫停"当成幂等请求吃掉）。
+
+    ## 为什么审计不丢
+
+    历史行落在 `runs/stop-history.jsonl`（append-only）：`{…开关负载…, consumed_at,
+    consumed_by_sid, level}`；`agentflow stop --status` 在开关不在时会把它读出来。
+    """
+    path = stop_path(root, explicit)
+    state = read_stop(root, explicit=explicit)
+    if state is None:
+        # 没有开关可消费 ⇒ 空表（这不是"记了一笔空的"：什么都没发生，
+        # 调用方据此知道"没有人叫停过"；要区分的那一档是"读了但读不懂"，
+        # 那一支不返回 None 而是带 `unreadable` 的负载，照常被消费掉）。
+        return {}
+    record = dict(state)
+    record.update({"consumed_at": _now_iso(), "consumed_by_sid": str(sid or ""),
+                   "level": str(level or "stop_file")})
+    try:
+        hist = history_path(root)
+        hist.parent.mkdir(parents=True, exist_ok=True)
+        with hist.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError:
+        pass                      # 历史写不下去也不许让"停下"这件事失效
+    try:
+        path.unlink()
+    except OSError:
+        pass                      # 撤不掉（被别的进程占着）也要把"这一趟已收工"返回去
+    return record
+
+
+def stop_history(root: str | Path, *, limit: int = 5) -> list[dict[str, Any]]:
+    """读停机历史（最近 `limit` 条，按时间正序）。坏行如实跳过（读不出来不算"没有"）。"""
+    path = history_path(root)
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw.strip():
+            continue
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(obj, dict):
+            out.append(obj)
+    return out[-int(limit):] if limit else out
+
+
 def clear_stop(root: str | Path, *, explicit: str | Path | None = None) -> bool:
-    """撤掉停机开关（下一趟要接着跑时必须显式撤，否则它会一步都不跑）。"""
+    """撤掉停机开关（返回"撤掉了没有"）。
+
+    `draft/37` §140 之后不再需要为了续跑而显式撤：开关被消费（停一趟）时就撤走了。
+    这条命令仍然有用：在开关生效之前撤销这次叫停（例如刚写完发现写错了）。
+    """
     path = stop_path(root, explicit)
     if not path.is_file():
         return False
@@ -267,14 +338,30 @@ def kill_registered(root: str | Path, *, role: str = "",
     """
     victims = [v for v in live_pids(root, role=role)
                if exclude_pid is None or int(v["pid"]) != int(exclude_pid)]
-    results = [kill_tree(int(v["pid"])) for v in victims]
+    results = []
+    kept: list[int] = []
     for v in victims:
-        try:
-            Path(str(v["path"])).unlink()
-        except OSError:
-            pass          # 登记文件删不掉不影响"进程已被杀掉"这个事实：留着也会被 live_pids 滤掉
+        pid = int(v["pid"])
+        got = kill_tree(pid)
+        results.append(got)
+        # 只有"确实杀掉了"或"它本来就死了"才注销登记。
+        #
+        # `draft/37` §140 的真机读数（这条改前是反的）：受限环境里 `taskkill /T /F`
+        # 会被拒（`ERROR: Access denied`，`os.kill(SIGTERM)` 同样 `WinError 5`），
+        # 而改前照删登记 ⇒ `agentflow stop --status` 随后报"登记着的活进程：0 个"，
+        # 而那个进程还活着 —— 一个把"没杀成"折叠成"没有活进程"的假绿
+        # （三态纪律里最忌的那一类）。杀不成就把登记留着：status 会照实报它在册。
+        if bool(got.get("killed")) or not alive(pid):
+            try:
+                Path(str(v["path"])).unlink()
+            except OSError:
+                pass      # 登记文件删不掉不影响"进程已死"这个事实：live_pids 会滤掉死 pid
+        else:
+            kept.append(pid)
+    failed = [r for r in results if not bool(r.get("killed"))]
     return {"requested": [int(v["pid"]) for v in victims], "results": results,
             "killed": sum(1 for r in results if r["killed"]),
+            "kept": kept, "failed": failed,
             "excluded": int(exclude_pid) if exclude_pid is not None else None}
 
 

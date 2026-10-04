@@ -10355,3 +10355,145 @@ review 型（T1）不触发 —— 那些项目的验收表是任务书给的 P1
 一轮诚实的研究可能真的提不出可检验的猜想，那种时候正确的交付是"如实写 0"
 （§137 的覆盖面判据已经把这一格逼到台面上了）。所以这一步停在提示词，
 而"这一趟到底有没有往前走"留给读盘裁定 —— 也就是下一趟 T2 的实测。
+
+## §139 T2 第 5 趟第 1 段（用户要的那半小时）的盘上分析 + 停止动作实测
+
+工作区 `projects/p6e-research-from-zero`，sid `t2e`，任务原文与第 1–4 趟逐字相同
+（`研究这个问题：哪些 (m,k) 存在无限 R(m,k)-例子（…）？从零做出有价值的结果，交付研究手稿与说明。`）。
+第 1 段：**00:25:44 → 00:59:04，71 步，$0.9446，`stop_reason=final`**（用户定时叫停指令之后 M 自己收的工）。
+
+### 一、停止动作：M 听到了、照做了"效果"，但没做"那个动作"
+
+| 读数 | 事实 |
+|---|---|
+| 用户指令到达 | `m0002`（01:55:59+08:00 送出的"请优雅停止"）—— M 在 1.5 分钟内就在步里引用了它 |
+| M 提到 `conductor.stop` 的步 | **14 步**（全是 `note`，正文写"现在执行 conductor.stop 优雅停止"） |
+| M **真调用** `conductor.stop` | **0 次**（`shape=tool` 且 `payload.name=conductor.stop`） |
+| 停机开关 / 续跑简报 | 都没出现（`resume-brief.json` 不在盘上） |
+| 这一段的终态 | `stop_reason=final`（与"研究做完了"**共用同一个读数**） |
+| 之后的续跑 | 驱动按 `--resume` 续 ⇒ 框架以 `resume_refused=already_finished` 当场拒（这一步一段新事件都没产生） |
+
+**两条缺陷**：① 主控把"要停止"写成了 14 条 note，而没走它自己手上的停机工具；
+② 以 `final` 收工的"用户叫停"在读数上与"我干完了"不可分，且**没有可续的检查点**
+（`--resume` 认不了它）—— 第 5 趟的后续几段只能用**续作任务**新起一趟。
+（处置：驱动器改成"可续理由才 `--resume`，`final` 就换续作任务"；主控侧的纪律与
+"用户叫停要落成受控理由"留到下一批。）
+
+### 二、协作面：**动作起来了，但 74% 被参数校验挡在门口**
+
+第 1 段任务面（47 次派活）：**成功 12 / 被拒 35**。
+
+| 角色.动作 | ok | 被拒 | 典型的拒绝理由 |
+|---|---:|---:|---|
+| `A.search_literature` | 2 | 0 | —— （r-0001 用规范术语 `edge-girth-regular graphs` precise，一次登记 10 条） |
+| `B.run` | 2 | 0 | —— |
+| `D.propose_question` | 1 | 1 | `kind=existence` 不在 `['gap','contradiction']` |
+| `D.research` | 2 | 2 | 研究问题 `q-0000` 不存在（M 猜的号） |
+| `E.run_experiment` | 3 | 7 | `name/imports` 只对 `method=formal` 有效；脚本 `temp/egr_small_cases.py` 不存在 |
+| `D.register_conjecture` | 0 | **18** | ①`testable` 必须是对象、收到 string；②`statement 里出现疑问词 ['which']`（见下） |
+| `F.create_plan` | 0 | 4 | `subgoals[0]`/`budget` 形状错；`budget` 缺三键（FC-18 三维预算） |
+| `G.build_document` | 0 | 3 | `kind='research_note'` 非法；claim 校验失败**但不说为什么**（只回"断言原文：…"） |
+
+**与第 1–4 趟比，行为侧的进步是真实的**：
+- M 用 `summon_many` **20 次**（第 4 趟整趟只有 2 条留言、F 与 D 之间 0 条）——并发派活这条真在用；
+- 检索第一次**先**用规范术语（§126 的纪律生效），10 条文献一次入库；
+- E 真跑出 3 条 numeric 实验（0.38 s / 107.6 s，无 600 s 超时），其中
+  `exp:0002`（`temp/egr_families.py`，sha256 `c5b4fa4c1015d759`，41826 个候选）
+  打印出 **19 对"有族证据"的 (m,k)**，并给出显式见证：
+  `(5,3)` 一族 `Circ(6,[1,2,3]) / Circ(12,[2,4,6]) / Circ(18,[3,6,9]) …`（n=6t），
+  `m=5..12` 的 `k=3/4` 圆环族，`m=3` 的 `k=6,7,8` 广义 Petersen 族，`(4,6)`/`(6,6)` 的 Levi(PG(2,q))。
+  —— 这正是那篇论文 Thm 1.3 的形状（`1/m+1/k ≤ 1/2` 的族 **加上 (5,3) 这个例外**），
+  而这一趟是**在"论文不存在"的前提下从零扫出来的**；
+- M 自己说破了"原地打转"（第 41 步的 note：*"我连续 8 步在写重复的 note，这是原地打转。停止。"*）
+  —— §136 的点名机制**没有**触发（每条 note 文本都带"第 N 步"前缀 ⇒ 指纹各不相同，
+  这是我那一档判据的漏洞，见下）。
+
+### 三、第 2 段（续作，进行中）第一次把链走通了
+
+| 环节 | 读数 |
+|---|---|
+| 猜想 | `conjectures 0000` 落库：`statement`「For every integer m at least 5 and every k in {3,4}, there exist infinitely many m-regular graphs of girth exactly k such that every edge lies in at least two distinct k-cycles.」+ `negation_statement` + `testable`（对象：parameters/criterion/falsified_by）+ `origin=own_result` + `experiment_ids=["0002"]` + `status=proposed` |
+| 攻坚计划 | `attack_plans 0000`：`problem_key=egr-mge5-k34-infinite-families`，两个子目标（k=3 / k=4 的圆环族证明），`status=attacking` |
+| 计划推进 | **`F.step` 成功 1 次**（T2 史上第一次）：`history.round=1`，`action=no_change`，理由逐字"子目标 s1 需要 F 的推理，但本框架尚未接线自动推理 ⇒ 未推进（这一轮什么都没做，不是'做了但没结果'）" —— 诚实且可判 |
+| F→D 回报 | 仍缺（这条 `no_change` 进了计划 history，没有变成给 D 的留言） |
+| 手稿交接 | **0**：`handoff` 形状 0 步、`manuscripts/` 目录都没建、`[手稿 NNNN]` 留言 0 条 —— 用户点名要测的这一项**一次也没用上**（M 用的是 `note`） |
+
+### 四、因此要改的（下一批，逐条都有盘上证据）
+
+1. **`CONJECTURE_QUESTION_WORDS` 的子串误判**（`schema.py`，FC-27）：`statement` 里出现
+   `which`/`what`/`whether` 的**任何位置**都拒 —— 实测拒掉的是定义句
+   *"An R(m,k)-example is an m-regular graph of girth exactly k **in which** every edge …"*，
+   以及 `somewhat` 这类含 `what` 的词。这一条**直接挡住了整条研究链**（18 次尝试）。
+   修法：按"疑问句形态"判（问号、句首疑问词、`是否/吗`），不按子串。
+2. **`G.build_document` 的 claim 拒绝消息不给理由**（8 次尝试全撞在这上面）：拒绝必须点名
+   违反的是哪一条（缺引用 / 强度超证据 / 否定未分类 / 免责声明常量缺失…）。
+3. **参数形状与字段语义不一致**：`D.register_conjecture` 的 `testable` 必须是对象
+   （参数表里没把这个对象的三个键写出来）；`F.create_plan` 的 `budget` 四键同理。
+   —— 派活参数表要把**子键**写出来，否则 M 只能猜（18 次 + 4 次拒绝就是"猜"的代价）。
+4. **§136 的指纹被自述绕过**：note 里"第 N 步"前缀让每次调用都"不同"。
+   修法：指纹排除 `why` 这类自述字段，并把 note/message 正文里的"第 N 步"前缀规范化。
+5. **手稿交接没有被用**：协议在提示词里，但 M 一次也没走。修法：把它从"协议一节"
+   升级成**主控的纪律**（交接前写手稿、留言带编号），并让收工门读一次"手稿数"。
+6. **E 的结构化读数没进台账**：`exp:0002` 的 `pairs_with_family_evidence`/`distinct_n`
+   只落在 `out/experiments/0002.log`，而 `experiments.observations={}`、`search_bound={}`
+   ⇒ `search_frontier_rows=0`（"界"这一档读不到，尽管脚本报了）。
+7. **观测面**：`conductor.stop` 的返回值只有 `{ok:true}` 进了会话（真值是一个含
+   `stop_switch`/`resume_brief`/`killed_children` 的丰富载荷）—— 这一点待复核（可能与
+   原生工具面那条路的记录形态有关）。
+
+   ⚠️ **更正（同日复核）**：这一条**我说错了** —— 那 14 步全是 `note`，我按"正文里提到
+   `conductor.stop`"数的，于是把自述当成了工具调用。实测（`temp/_stop_probe.py`）：
+   `conductor.stop` 的载荷**完整落进了会话**（`reason`/`detail`/`disposed`/`resume_brief`/
+   `killed_children`/`notified` 都在），没有观测面缺陷。教训与 §136 那条一样：
+   **读数要按形状与字段取，不许按正文里的字符串取**。
+
+### 五、一处我自己的错（用户指出的）
+
+我在重启驱动器时直接 `Stop-Process`，而没有先走框架的两条正式停机通道。
+用户口径：**"还不如试试强制停"**。已实测 `agentflow stop`（优雅）/`stop --force`
+（连子进程杀，本次"按登记杀了 0/0 个进程"）/`--status`/`--clear` 四条都正常；
+而**驱动器进程不在 `stopctl` 的 pid 登记表里**（那张表只登记 run-agent 与 E 的实验子进程），
+所以框架的强制停覆盖不到它 —— 已给驱动器加**自己的控制文件通道**
+（`temp/_t2e_driver-stop`，出现即优雅退出），以后停它不再需要杀进程。
+
+## §140 优雅停止那个 bug 的根因与修法 + 四件协作改进
+
+### 一、bug：开关是"永久的"，于是"优雅停止 → 续跑"这条路根本走不通
+
+复现（`temp/_stop_probe.py`，2026-10-05）：
+
+| 趟 | 动作 | 改前读数 | 改后读数 |
+|---|---|---|---|
+| 第 1 趟 | M 调 `conductor.stop` | `stop_reason=stop_file`，开关落盘，续跑简报写了，步检查点写了（都在） | 同左，**且开关被消费**（历史留一行） |
+| 第 2 趟 | `--resume`（没人撤开关） | `stop_reason=stop_file`、**0 步、0 次模型调用** | `stop_reason=final`、`resumed_from=1`、**1 次模型调用**（真的接着跑） |
+| 第 3 趟 | 撤开关后新起一趟 | `final` | `final` |
+
+根因：`conductor.stop` 的产物里明明写着"可续跑的步检查点 + 续跑简报"，
+而它写下的那把开关**一直生效** —— `read_stop` 每次都返回它，于是同一趟的续跑、
+E 的实验子进程、以及"用户第二次叫停"三条路全被这一把旧开关卡住
+（第三次那条更隐蔽：`request_stop` 是幂等的，旧开关还在 ⇒ 第二次叫停被静默吃掉）。
+原实现的 `clear_stop` 文档把这当成"用之前必须显式撤"，那是把矛盾写在注释里，不是解决它。
+
+修法（**开关 = 一次性信号**）：判定生效的那一刻 `stopctl.consume_stop(...)` ——
+把"谁在什么时候为什么叫停、被哪一趟（sid）用掉"append 进 `runs/stop-history.jsonl`，
+然后撤走开关文件。它同时解决三件事：续跑不再被停、子进程不再一出现就被杀、
+第二次叫停会重新落一份（幂等分支不再吃掉它）。`agentflow stop --status` 现在会把
+**已被消费的叫停**逐行读出来（审计没丢）。
+
+判据：`tests/test_stop_switch_is_consumed_once.py`（9 条：正控的续跑、用户通道、
+第二次叫停、强制档、生效前撤销、空消费、坏开关三态、历史逐行）+ 原有的
+`test_stop_end_to_end.py` 改成断言"消费 + 历史"（改判据的理由逐字写在那条用例里）。
+
+### 二、协作改进（都对着 T2 第 5 趟那 35 次拒绝与 0 份手稿）
+
+| # | 改了什么 | 对着哪条读数 | 落在哪 |
+|---|---|---|---|
+| A | **被参数拒时把声明的参数表原样回给模型**（工具与派活两条路都算） | 47 次派活 35 次被拒，绝大多数是"猜形状" | `agent_loop.render_params` / `looks_like_a_param_refusal` / `_param_table` + 步结果里多一栏 `参数表` |
+| B | 把模糊声明补上子键：`testable`{parameters,criterion,falsified_by}、`budget`{四键}、`subgoals`{sid,text,owner} | `D.register_conjecture` 18 次、`F.create_plan` 4 次全撞在"不知道键名" | `specs/{d,f}.py` + `tools/{conjecture,attack}_tools.py`（只加 `description`，`type` 不动） |
+| C | **猜想校验不再按子串判疑问词** | `statement` 里出现 `which` 就被拒 ⇒ 定义句被拒、整条链停摆 18 次 | `schema.CONJECTURE_QUESTION_MARKS/_PATTERNS` + `looks_like_a_question()`；拒信改成"命中哪个形态 + 怎么改写" |
+| D | §136 指纹不再被自述绕过（`why` 不参与；正文里的"第 N 步"前缀抹平） | M 连写 14 条近乎相同的 note，活性判据一次也没响 | `agent_loop.PROSE_KEYS` / `_strip_step_prefixes` |
+| E | **交接手稿升级成主控的纪律**，并给它一档收工读数 | 手稿 0 份、`handoff` 形状 0 步、26 条 `note` 只活在会话里 | `agent_prompts` M 的第 17 条 policy（+ `specs/m.py` 同步）+ `closing.LEG_CHECK_KINDS["manuscript_rows"]` |
+
+判据：`tests/test_param_table_on_refusal.py`（4 条：工具、派活、负控、渲染器/识别器本体）
++ `tests/test_loop_liveness.py` 新增 2 条（前缀归一化、`why` 不重置连击）
++ `tests/test_closing_gate.py` 新增 1 条（`manuscript_rows` 只数盘上文件名合规的那些）。

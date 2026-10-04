@@ -145,7 +145,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "D", "register_conjecture",
         "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；状态机由 schema 判，"
         "被引用的实验/文献必须在库里",
-        _obj({"statement": _S, "origin": _S, "conjecture_id": _S, "testable": _OBJ,
+        _obj({"statement": _S, "origin": _S, "conjecture_id": _S, "testable": {"type": "object",
+                           "description": "可检验形式（三个键都要给）：{parameters, criterion, falsified_by}"},
               "form": {"type": "string", "enum": list(S.CONJECTURE_FORMS)},
               "negation_statement": _S,
               "status": {"type": "string", "enum": list(S.CONJECTURE_STATUSES)},

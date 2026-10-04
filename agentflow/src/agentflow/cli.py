@@ -1938,7 +1938,11 @@ def cmd_stop(args) -> int:
       —— 直接杀掉。为什么必须"连子孙"：Windows 上杀父进程不带子进程
       （实测：包装进程被杀之后 python 子进程又跑了 12 分钟）。
 
-    `--status` 只读当前状态（开关在不在、登记里哪些进程还活着、开关文件坏了没有）。
+    `--status` 只读当前状态（开关在不在、登记里哪些进程还活着、开关文件坏了没有、
+    最近几次已被消费的叫停）。
+
+    `draft/37` §140 之后：开关是一次性信号 —— 停一趟、记一笔（`runs/stop-history.jsonl`）、
+    撤走，所以"停完接着 `--resume`"这条路不再需要人工 `--clear`。
     """
     from . import stopctl
 
@@ -1951,14 +1955,23 @@ def cmd_stop(args) -> int:
               f"（{'在' if state is not None else '不在'}）")
         if state is not None:
             print(f"[stop] 开关内容：{json.dumps(state, ensure_ascii=False)}")
+        history = stopctl.stop_history(root, limit=5)
+        if history:
+            print(f"[stop] 已被消费的叫停（最近 {len(history)} 次）：")
+            for h in history:
+                print(f"[stop]   {h.get('at', '?')} by={h.get('by', '?')} "
+                      f"reason={h.get('reason', '?')}"
+                      f"{'，force' if h.get('force') else ''}"
+                      f" ⇒ 由 sid={h.get('consumed_by_sid') or '（无 sid）'} 在 "
+                      f"{h.get('consumed_at', '?')} 收工时用掉")
         print(f"[stop] 登记着的活进程：{len(live)} 个"
               + ("：" + "、".join(f"{p['role']}#{p['pid']}" for p in live) if live else ""))
         return 0
 
     force = bool(getattr(args, "force", False))
     if bool(getattr(args, "clear", False)):
-        # 撤开关：停机开关是持久的（那正是它的用处），所以"接着跑"之前必须显式撤掉它 ——
-        # 否则下一趟会在第 0 步就收工（行为正确，但会让人以为"跑不起来了"）。
+        # 撤开关：§140 之后"接着跑"不再需要它（开关被消费时就撤走了）；这一条留给
+        # "刚写完发现写错了"那种"在生效之前撤销"的用法。
         gone = stopctl.clear_stop(root)
         print(f"[stop] 停机开关{'已撤' if gone else '本来就不在'}：{stopctl.stop_path(root)}")
         return 0
@@ -1975,9 +1988,13 @@ def cmd_stop(args) -> int:
           + (f"（{killed['requested']}）" if killed["requested"] else "（登记里没有活进程）"))
     for res in killed["results"]:
         print(f"  - pid {res['pid']}：killed={res['killed']} via={res['via']} {res['detail'][:120]}")
+    if killed.get("kept"):
+        # `draft/37` §140：杀不成就把登记留着 —— 否则 `--status` 会报"0 个活进程"（假绿）。
+        print(f"[stop] 这些进程没杀掉，登记保留（`--status` 会照实报它们在册）：{killed['kept']}")
     if killed["requested"] and not killed["killed"]:
-        print("[stop] 注意：一个都没杀掉（受限环境常见：taskkill 被拒）——"
-              "读数里给了原话，不要把它读成「停住了」", file=sys.stderr)
+        print("[stop] 注意：一个都没杀掉（受限环境常见：taskkill 被拒、os.kill 也被拒）——"
+              "读数里给了原话，不要把它读成「停住了」。停机开关仍然有效："
+              "那一趟会在下一个步检查点收工（`stop_reason=force_stop`）", file=sys.stderr)
         return 2
     return 0
 

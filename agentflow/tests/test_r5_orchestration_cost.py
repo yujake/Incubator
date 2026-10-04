@@ -14,7 +14,7 @@
 
 | 条目 | 缺陷（改前实测） | 本文件里"改前必红"的那条 |
 |---|---|---|
-| `G-1` | `LocalBackend.call` 收下 `token` 却末行 `return fn(**given)` ⇒ 取消到不了在跑的 handler；`raise_if_cancelled` 调用点为 0；子进程（Lean）完全在取消面之外 | `test_a_running_handler_sees_the_token` / `test_cancel_kills_a_running_child_process` |
+| `G-1` | `LocalBackend.call` 收下 `token` 却末行 `return fn(given)` ⇒ 取消到不了在跑的 handler；`raise_if_cancelled` 调用点为 0；子进程（Lean）完全在取消面之外 | `test_a_running_handler_sees_the_token` / `test_cancel_kills_a_running_child_process` |
 | `G-2` | 幂等键只按主题命名 ⇒ 同一主题跑第二遍整轮被判 duplicate，账本少记一轮真实花费，而第二次的报告把第一次的钱记在自己名下 | `test_two_runs_of_the_same_topic_are_not_deduplicated` |
 | `G-3` | `run_topic` 给账本行写了 `task_id` 却从不建 `tasks` 行 ⇒ 每跑一次全库审计多两条 error 级 `dangling_usage_task` | `test_a_run_creates_the_task_row_verify_wants` |
 | `R5-AN-1` | 取号在 `store.tx` 之外 ⇒ 两个并发 `agentflow run` 撞同一个 `t-NNNN`：`tasks` 只剩 1 行、存活行 `tokens` 是两跑之和、两条 usage 都挂同一行，而 `verify_all` 的 code 集合是 `[]`（静默） | `test_two_concurrent_runs_never_share_a_task_id` |
@@ -164,7 +164,7 @@ def probe_registry(monkeypatch):
 def test_a_running_handler_sees_the_token(probe_registry) -> None:
     """负控（核心）：跑着的 handler 必须能读到 同一个 token。
 
-    改前 `LocalBackend.call` 的末行是 `return fn(**given)` ⇒ `current_token()` 是 `None`，
+    改前 `LocalBackend.call` 的末行是 `return fn(given)` ⇒ `current_token()` 是 `None`，
     取消到不了在跑的 handler。
     """
     obj = _Probe()
@@ -1112,7 +1112,7 @@ _STALE_REFS = (
 #: ## 范围为什么扩到整棵树（`F9`）
 #:
 #: 第 8 轮重审（`temp/REAUDIT8-R5.json`；那台宽扫是 `temp/reaudit8-R5-p8.py`）把同一条
-#: 口径放到整仓（`agentflow/**` 的 `.py` + `.md`；份数按命令当次读，别抄定值：
+#: 口径放到整仓（`agentflow/` 的 `.py` + `.md`；份数按命令当次读，别抄定值：
 #: 观测 2026-09-27 15:01 +08:00 ⇒ 216）上跑，又照出 10 处同类
 #: 引用，而其中 8 处落在上面那 6 个文件之外（`docs/ROLE-SPECS.md`、`src/agentflow/agent_c.py`、
 #: `docs/ROLE-SPECS.md`、`src/agentflow/agent_c.py`、`agent_d.py`、`scheduler.py`…）。
@@ -1145,7 +1145,17 @@ _STALE_REFS = (
 #: 抬不动"真符号出现次数"。所以豁免表仍然登记文件、而 `_REF_KNOWN_MENTION_TOKENS`
 #: 登记的是逐条 token（第 2 条读的就是符号面，不是文本面）。
 _REF_SCAN_SUFFIXES = (".py", ".md")
-_REF_SCAN_SKIP_DIRS = ("__pycache__", ".pytest_cache", ".git", ".mypy_cache")
+#: 不参与体检的目录。
+#:
+#: `projects` 与 `out` 是未跟踪的运行产物（`agentflow/projects/` 下是各次真机运行的
+#: 工作区：稿件、报告、手稿、笔记；`agentflow/out/` 是探针产物），它们不随仓提交、
+#: 每跑一次就变一次。2026-10-05 实测：p6e 工作区里 M 自己写的
+#: `out/review/REPORT.md` 引了两个 `temp/egr_*.py`（它打算写而没写的脚本），
+#: 于是这条判据在跑过一次真机之后变红 —— 一次运行产物把仓的判据点红，
+#: 那是假报警（判据要守的是仓里的引用，不是模型在运行期写下的每句话）。
+#: 判据的覆盖面没有变松：仓内被跟踪的内容照旧全扫（源码、docs/、draft/ 里的 `.md`）。
+_REF_SCAN_SKIP_DIRS = ("__pycache__", ".pytest_cache", ".git", ".mypy_cache",
+                       "projects", "out")
 #: 豁免记号，逐字三个汉字。`test_the_quoted_references_in_comments_all_exist` 的
 #: docstring 里必须原样出现它，且那条规定由 `..._marker_is_alive` 断言。
 _REF_EXEMPT_MARK = "非指代"
@@ -1364,7 +1374,10 @@ def _reference_scan_roots() -> tuple[pathlib.Path, pathlib.Path] | None:
 
 
 def _iter_ref_scan_files(tree: pathlib.Path) -> list[pathlib.Path]:
-    """整棵树里参与体检的文件（`.py` + `.md`），排除缓存与版本控制目录。
+    """整棵树里参与体检的文件（`.py` + `.md`），排除缓存、版本控制目录与运行产物。
+
+    运行产物（`projects/`、`out/`）为什么不扫：见 `_REF_SCAN_SKIP_DIRS` 上的那段
+    （2026-10-05 真机：模型在自己的报告里引了两个它没写的脚本 ⇒ 判据被一次运行点红）。
 
     排序只是为了让读数是确定的 —— 同一棵树两次跑给出同一份清单。
     """
@@ -1372,6 +1385,28 @@ def _iter_ref_scan_files(tree: pathlib.Path) -> list[pathlib.Path]:
            if p.is_file() and p.suffix in _REF_SCAN_SUFFIXES
            and not any(part in _REF_SCAN_SKIP_DIRS for part in p.parts)]
     return sorted(out)
+
+
+def test_the_ref_scan_skips_run_artifacts_but_not_the_repo(tmp_path: pathlib.Path):
+    """负控（`draft/39` D27）：运行产物里的悬空引用不算数，仓内的照旧要算。
+
+    没有这一条，"跳过 `projects/`/`out/`"就成了一条谁也不知道范围有多大的暗门：
+    把整个仓塞进 `projects/` 也能让它变绿。这里两个方向都钉住。
+    """
+    ws = tmp_path / "projects" / "some-run"
+    (ws / "out" / "review").mkdir(parents=True, exist_ok=True)
+    docs = tmp_path / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    # 这个悬空引用是夹具：拼出来是为了不让它自己的字面量落进判据的扫描面
+    # （判据扫的是文件字节，写死它等于在本文件里制造一条真悬空引用）。
+    body = "见 `temp/" + "never_written" + ".py`。\n"
+    (ws / "out" / "review" / "REPORT.md").write_text(body, encoding="utf-8")
+    (docs / "R.md").write_text(body, encoding="utf-8")
+
+    got = _scan_ticked_references(tmp_path, tmp_path)
+    missing = " ".join(str(x) for x in got["missing"])
+    assert "docs/R.md" in missing, f"仓内的悬空引用必须照旧报出来：{got['missing']}"
+    assert "REPORT.md" not in missing, f"运行产物不该被扫：{got['missing']}"
 
 
 def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:

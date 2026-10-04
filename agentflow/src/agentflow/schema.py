@@ -468,7 +468,48 @@ CONJECTURE_STATUSES = ("proposed", "needs_evidence", "testing", "supported_not_p
 CONJECTURE_FORMS = ("universal", "existential", "identity", "bound", "structural")
 
 #: 陈述句里出现这些词 ⇒ 它是问题而不是猜想（`Conjecture.validate` 用它拒收）。
+#:
+#: ⚠️ `draft/37` §140 修正：这一栏此前按**子串**匹配（`w in statement`），于是
+#: 普通陈述句里的 `which`/`what` 一律被拒 —— 实测（T2 第 5 趟）拒掉的是定义句
+#: *"An R(m,k)-example is an m-regular graph of girth exactly k **in which** every edge …"*，
+#: 而"猜想的可检验形式"那一步因此**一次也没落库**（`D.register_conjecture` 连撞 18 次，
+#: 整条研究链停在这里）。子串匹配还会误伤 `somewhat`（含 `what`）。
+#: 现在改成"按疑问句形态判"：见 `CONJECTURE_QUESTION_PATTERNS` 与 `looks_like_a_question()`。
 CONJECTURE_QUESTION_WORDS = ("谁", "什么", "是否", "吗", "？", "?", "which", "what", "whether")
+
+#: 疑问句的**字面标记**（出现在任何位置都算 —— 它们几乎只在问句里出现，
+#: 且不会像 `which` 那样嵌在数学术语里）。`?`/`？` 单列在这里而不是当正则，
+#: 因为它本身是正则元字符（写成 `?` 会以 `re.error` 收场 —— 实测踩过）。
+CONJECTURE_QUESTION_MARKS = ("?", "？", "是否", "吗")
+
+#: 疑问句的**形态**（正则；只认句首的疑问词/助动词，不认"出现在任何位置"）：
+#: `Which graphs …` / `What is …` / `Is there …` / `哪些 (m,k) …`。
+CONJECTURE_QUESTION_PATTERNS = (
+    r"^\s*(谁|什么|哪些|哪类|如何|怎么|为什么)",
+    r"(?i)^\s*(which|what|whether|who|whom|whose|when|where|why|how)\b",
+    r"(?i)^\s*(is|are|does|do|can|could|should|would|will|has|have)\b",
+)
+
+
+def looks_like_a_question(text: str) -> list[str]:
+    """这句话读起来是不是一个**问题**？返回命中的形态（空列表 = 是陈述句）。
+
+    判据只有一份：`Conjecture.validate` 与工具层的拒信都调它 —— 拒信里要能把
+    "你为什么被拒"说清（`draft/37` §140：M 因为一条不可操作的拒信猜了 18 次）。
+    """
+    import re as _re
+
+    hits: list[str] = []
+    body = str(text or "")
+    for mark in CONJECTURE_QUESTION_MARKS:
+        if mark in body:
+            hits.append(mark)
+    for pat in CONJECTURE_QUESTION_PATTERNS:
+        # 形态表是自己写的：写坏了要**当场炸**，不许悄悄变成"命中"（那会拒掉所有猜想）
+        # 也不许悄悄变成"没命中"（那会让问题句混进猜想台账）。
+        if _re.search(pat, body):
+            hits.append(pat)
+    return hits
 
 #: 定向重抽取（I4）的原因词表。受控词表而非自由文本，理由同 DOWNLOAD_STATUSES：
 #: B 靠这个字符串决定**该怎么重做**，拼错会静默走错分支。
@@ -721,11 +762,14 @@ class Conjecture:
         require_id(self.conjecture_id, "conjecture_id")
         if not self.statement.strip():
             raise ValueError("statement 不能为空：猜想必须是一条可判真假的陈述句")
-        bad = [w for w in CONJECTURE_QUESTION_WORDS if w in self.statement]
+        bad = looks_like_a_question(self.statement)
         if bad:
             raise ValueError(
-                f"statement 里出现疑问词 {bad} ⇒ 它是问题而不是猜想。"
-                "猜想必须是可判真假的陈述句（问题走 research_questions）"
+                f"statement 读起来是个问题（命中形态 {bad}）⇒ 它是问题而不是猜想。"
+                "猜想必须是可判真假的陈述句（问题走 research_questions）：把疑问句改写成断言 —— "
+                "例如「哪些 (m,k) 有无穷多例子？」改写为「对每个 m ≥ 5，k = 3 都有无穷多个 …」。"
+                "注意：普通陈述里的 which / what 不算问题（从句里出现它们是正常的），"
+                "判据看的是句首疑问词与问号"
             )
         if self.form not in CONJECTURE_FORMS:
             raise ValueError(f"form 必须是 {CONJECTURE_FORMS} 之一，收到 {self.form!r}")

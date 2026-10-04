@@ -163,6 +163,11 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                      "两条实验：后一条的界更大而耗时不多于前一条，或界相同而耗时"
                                      "降到 80% 以下）—— 这一档量的就是用户那句「把时间压下去」："
                                      "不是「跑得更久」，而是「同样的活更快、或更大的活同样快」",
+    "manuscript_rows": "**交接手稿**份数（`manuscripts/` 下真实存在、文件名能被 "
+                       "`<编号>-<谁>to<谁>.md` 认出来的那些）—— 用户口径「传信息就传手稿编号」"
+                       "落在盘上的那一份（`draft/37` §134）。为什么单列：T2 第 5 趟这一类"
+                       "**一次也没用**（M 写了 26 条 `note`，只活在会话里；收工之后"
+                       "「谁把什么交给了谁」在盘上查不到），而手稿是第三方可复核的那条通道",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -312,6 +317,18 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "true": sum(1 for r in verdict if r.get("quote_verified") is True),
             "false": sum(1 for r in verdict if r.get("quote_verified") is False),
         }
+    if kind == "manuscript_rows":
+        # 交接手稿那一档（`draft/37` §134/§140）：`manuscripts/` 下真实存在的
+        # `<编号>-<谁>to<谁>.md` 份数。为什么单列：用户点名要"传信息就传手稿编号"，
+        # 而 T2 第 5 趟这一类一次也没用（M 写了 26 条 `note` —— 只活在会话里）。
+        # 判据只看盘上的文件（文件名要能被 `manuscripts.NAME_RE` 认出来）：索引不算数。
+        from . import manuscripts as MS
+
+        folder = project_root / MS.MANUSCRIPTS_DIR
+        files = sorted(p.name for p in folder.glob("*.md")) if folder.is_dir() else []
+        good = [n for n in files if MS.parse_name(n)]
+        return len(good), {"dir": str(folder), "files": good[:10], "total_files": len(files),
+                           "unparsable": [n for n in files if n not in good][:5]}
     if kind == "retrieval_attempts":
         # 「盘外引文先检索」那一档（`draft/37` §105）：用户一句话点破了我的口径 ——
         # "盘上没有就 false？A 不会去查吗"。实测：`A.search_literature("An overview of

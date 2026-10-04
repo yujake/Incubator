@@ -21,6 +21,7 @@
     "additionalProperties": false,
     "properties": {
      "budget": {
+      "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}",
       "type": "object"
      },
      "depth": {
@@ -61,6 +62,7 @@
     "additionalProperties": false,
     "properties": {
      "budget": {
+      "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}",
       "type": "object"
      },
      "depth": {

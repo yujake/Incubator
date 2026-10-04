@@ -40,6 +40,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -287,20 +288,96 @@ def _canonical(value: Any) -> Any:
     return value
 
 
+#: 指纹里不算调用身份的键（`draft/37` §140）：`why` 是"我为什么这么做"的自述，
+#: 换个说法不该让同一次调用变成"新的"—— T2 第 5 趟 M 写了 14 条近乎相同的 note，
+#: 只因为正文里带"第 N 步："这个前缀，§136 的活性判据一次也没响。
+PROSE_KEYS: tuple[str, ...] = ("why",)
+#: 正文里的"第 N 步"前缀（同上：它是自述里的时间戳，不是调用内容）。
+_STEP_PREFIX_RE = re.compile(r"第\s*\d+\s*步[:：]?")
+
+
+def _strip_step_prefixes(value: Any) -> Any:
+    """把字符串里的"第 N 步"前缀抹平成 `第N步`（递归；只对正文形状用）。"""
+    if isinstance(value, str):
+        return _STEP_PREFIX_RE.sub("第N步", value)
+    if isinstance(value, Mapping):
+        return {k: _strip_step_prefixes(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_strip_step_prefixes(v) for v in value]
+    return value
+
+
 def _call_key(shape: str, payload: Mapping[str, Any]) -> str:
     """一次调用的"键"：形状 + 参数（规范化 JSON）。用于"这是不是同一次调用"。
 
     `default=str`：载荷里可能有非 JSON 值（工具层塞进去的对象），
     这一个是判据输入而不是交付面，所以只求"同样的载荷得到同样的键"。
+    自述字段（`why`）与正文里的"第 N 步"前缀不参与（见 `PROSE_KEYS` 的理由）。
     """
-    return json.dumps([shape, dict(payload or {})], ensure_ascii=False,
-                      sort_keys=True, default=str)
+    clean = {k: v for k, v in dict(payload or {}).items() if k not in PROSE_KEYS}
+    if shape in ("note", "message", "handoff"):
+        clean = _strip_step_prefixes(clean)
+    return json.dumps([shape, clean], ensure_ascii=False, sort_keys=True, default=str)
 
 
 def _call_reading(result: Mapping[str, Any]) -> str:
     """一步结果的"读数"：规范化 JSON。同样的调用 + 同样的读数 = 没有新事实。"""
     return json.dumps(_for_record(result or {}), ensure_ascii=False,
                       sort_keys=True, default=str)
+
+
+#: 参数类拒绝的标记（出现在结果里的 `kind`/`refusal_reason`/`detail` 上）——
+#: 命中的那一步要把声明的参数表原样回给模型（`draft/37` §140 的协作改进 A）。
+_PARAM_REFUSAL_MARKERS: tuple[str, ...] = (
+    "invalid_params", "param_error", "参数不合法", "validation_error", "missing_param",
+    "unknown_param", "params_invalid", "budget_incomplete", "bad_params",
+)
+
+
+def render_params(schema: Any) -> str:
+    """把一份参数 schema 渲染成一行可读的"参数表"（键 / 类型 / 必填 / 枚举 / 说明）。
+
+    为什么要它：模型被拒时唯一能自救的信息就是声明的形状。T2 第 5 趟里
+    `D.register_conjecture` 撞了 18 次参数错、`F.create_plan` 撞了 4 次 ——
+    而 `testable` / `budget` 当时的声明只有 `{"type": "object"}`（子键一个字没写）。
+    这里的渲染与那条修法是同一件事的两半：声明写清 + 被拒时原样回给模型。
+    """
+    if not isinstance(schema, Mapping):
+        return ""
+    props = schema.get("properties")
+    if not isinstance(props, Mapping):
+        return ""
+    required = {str(x) for x in (schema.get("required") or [])}
+    parts: list[str] = []
+    for key, spec in props.items():
+        if not isinstance(spec, Mapping):
+            continue
+        bits = [str(spec.get("type") or "?")]
+        if str(key) in required:
+            bits.append("必填")
+        enum = spec.get("enum")
+        if isinstance(enum, (list, tuple)) and enum:
+            bits.append("枚举 [" + "/".join(str(x) for x in list(enum)[:8]) + "]")
+        if spec.get("description"):
+            bits.append(str(spec["description"])[:110])
+        parts.append(f"{key}: " + "，".join(bits))
+    tail = "（参数表是封闭集合：多传一个键会被拒）" if schema.get("additionalProperties") is False else ""
+    return "；".join(parts) + tail
+
+
+def looks_like_a_param_refusal(result: Any, *, depth: int = 4) -> bool:
+    """这一步是不是"参数形状/取值不对"那一类拒绝（递归找标记，只找有限层）。"""
+    if depth <= 0:
+        return False
+    if isinstance(result, Mapping):
+        for key in ("kind", "refusal_reason", "detail", "error", "problem"):
+            text = str(result.get(key) or "")
+            if any(mark in text for mark in _PARAM_REFUSAL_MARKERS):
+                return True
+        return any(looks_like_a_param_refusal(v, depth=depth - 1) for v in result.values())
+    if isinstance(result, (list, tuple)):
+        return any(looks_like_a_param_refusal(v, depth=depth - 1) for v in result)
+    return False
 
 
 def _call_brief(shape: str, payload: Mapping[str, Any]) -> str:
@@ -348,6 +425,18 @@ def _step_line(step: int, payload: Mapping[str, Any], result: Mapping[str, Any])
 def _invalid_line(step: int, problem: str) -> str:
     """一个形状不合法（`_shape_of` 判不出来）的步：请它按协议重说一次。"""
     return f"\n\n[第 {step + 1} 步] 框架：{problem}。请按循环协议重说一次。"
+
+
+def _payload_line(step: int, shape: str, problem: str) -> str:
+    """形状说对了、某个值写错了的那一步（`draft/37` §140）：只改那个值，别换形状。
+
+    为什么与 `_invalid_line` 分开：这两类的处置方向相反 ——
+    "认不出形状"要请它回到协议（骨架就在提示词里），
+    "值写错了"要请它别动形状、只改那一个字段（换形状会把好不容易走对的一步弄丢）。
+    """
+    return (f"\n\n[第 {step + 1} 步] 框架：形状我认出来了（`{shape}`），坏的是那个值："
+            f"{problem}。请**只改那个字段**再发一次同样形状的一步 —— 不要换形状、"
+            f"也不要写解释。")
 
 
 def _bad_args_line(step: int, detail: str) -> str:
@@ -732,9 +821,17 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # `[5] invalid ⇒ 收件人 'M' 既不是角色也不是 #public`，下一步它改发 #public 才成。
         # 那一步的代价是"一条本来只该主控看到的申请被广播给所有人"，
         # 外加一次纠正 —— 而 `read_messages(role="M")` 本来就收 `to="M"` 的留言。
+        #
+        # `ALL` 也认（2026-10-05 真机修）：手稿那条通道的约定是"给所有人写 `to="ALL"`"
+        # （用户口径：文件名 `…toALL.md`），而这里原来只认 `#public`。实测 T2 第 5 趟：
+        # M 写了 `{"message": {"to": "ALL", …}}` ⇒ 被判形状不合法、连着三次
+        # ⇒ 那一整段以 `bad_json_limit` 收场（60 秒、一步有效的活都没干）。
+        # 同一个概念不许有两个写法：这里把 `ALL` 归一成公共频道，与 `handoff` 对齐。
+        if to.strip().upper() == "ALL":
+            to = PUBLIC
         if to != PUBLIC and to not in (*S.ROLES, S.CONDUCTOR_ROLE):
             return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                            f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}")
+                            f"{S.CONDUCTOR_ROLE}、也不是公共频道 {PUBLIC}（写 ALL 也认）")
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
                      "body": str(value.get("body") or ""),
                      "reply_to": str(value.get("reply_to") or "")}, ""
@@ -1127,9 +1224,21 @@ class AgentLoop:
                 continue
             shape, payload, problem = _shape_of(data)
             if problem:
-                run.bad_json += 1
-                run.bad_json_streak += 1
-                bad_result = {"problem": problem,
+                # 「形状认得出来、只是某个值写错了」与「形状认不出来」分开计
+                # （`draft/37` §140 的真机读数）：前者交回模型改那个值就该能救活
+                # （走 `bad_args` 那一档，与"工具参数不是合法 JSON"同一类），
+                # 后者才是"没按协议说"（`bad_json` 那一档）。
+                # 第 5 趟有一整段因为 `{"message":{"to":"ALL"}}` 被算进后者：连着三次
+                # ⇒ 60 秒整段作废，而它离"把 to 改成 #public"只差一个词。
+                recognized = (next((str(k) for k in data if str(k) in SHAPES), "")
+                              if isinstance(data, Mapping) else "")
+                if recognized:
+                    run.bad_args += 1
+                    run.bad_args_streak += 1
+                else:
+                    run.bad_json += 1
+                    run.bad_json_streak += 1
+                bad_result = {"problem": problem, "shape_recognized": recognized,
                               "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
                 run.steps.append(LoopStep(step, "invalid", payload, bad_result,
                                           problem=problem))
@@ -1137,12 +1246,18 @@ class AgentLoop:
                     "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
                     "payload": dict(payload), "result": dict(bad_result),
                 }, sid=self.sid)
-                if run.bad_json_streak > self.max_bad_json:
+                if recognized and run.bad_args_streak > self.max_bad_args:
+                    run.stop_reason = "bad_args_limit"
+                    run.final = (f"连续 {run.bad_args_streak} 次形状说对了、值写错了"
+                                 f"（形状 {recognized}；最后一次：{problem}），停止")
+                    break
+                if not recognized and run.bad_json_streak > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
                     run.final = (f"连续 {run.bad_json_streak} 次形状不合法"
                                  f"（最后一次：{problem}），停止")
                     break
-                transcript += _invalid_line(step, problem)
+                transcript += (_payload_line(step, recognized, problem) if recognized
+                               else _invalid_line(step, problem))
                 continue
             # 说对了一次 ⇒ 连击清零（`draft/37` §68）。清零的判据是"它按协议说出了一个形状"，
             # 不是"那件事办成了" —— 工具被拒、召唤被拒、参数不合法都算说对了协议，
@@ -1180,6 +1295,16 @@ class AgentLoop:
                 result = {**result, "框架提醒": _dead_loop_line(
                     streak=same_call, same_reading=dead, limit=self.max_dead_loop,
                     what=_call_brief(shape, payload))}
+            # ---- 参数类拒绝：把声明的参数表原样回给模型（`draft/37` §140 的协作改进）
+            #
+            # 为什么在这一层做（而不是每个工具各自写一段更好的拒信）：参数形状是声明面
+            # 的事实，只有装配期读得到它；被拒的模型手上没有那份声明，于是只能猜 ——
+            # T2 第 5 趟 47 次派活里 35 次被拒，绝大多数是"猜形状猜错"。
+            # 这一句把"猜"换成"读"：同一步的结果里既有拒信、也有那张表。
+            if shape in ("tool", "summon", "summon_many") and looks_like_a_param_refusal(result):
+                hint = self._param_table(shape, payload)
+                if hint:
+                    result = {**result, "参数表": hint}
             step_obj = LoopStep(step, shape, payload, _for_record(result))
             run.steps.append(step_obj)
             SS.append(self.session_root, {
@@ -1284,9 +1409,35 @@ class AgentLoop:
         —— 它是 M 的 `conductor.stop` 与 `agentflow stop` 写下的那一份，
         也是「唯一」能打断在飞工作的通道（广播做不到：收件箱是 `run()` 开头读一次的）。
         开关里 `force=true` ⇒ 走 `force_stop`（"直接停"，不等待收尾）。
+
+        ## `draft/37` §140：开关是「一次性信号」（停一趟 → 记一笔 → 撤走）
+
+        实测（`temp/_stop_probe.py`）：`conductor.stop` 停了一趟之后开关留在盘上，
+        而紧接着的 `--resume` 在第 0 步就被同一把开关停掉（0 步、0 次模型调用）——
+        同一个工具的产物里却写着"可续跑的步检查点 + 续跑简报"，两者互相拆台。
+        处置：判定生效的这一刻调 `stopctl.consume_stop(...)`（审计进
+        `runs/stop-history.jsonl`，开关撤走）。这样 E 的子进程、续跑、以及"用户第二次叫停"
+        三条路都不再被一把旧开关卡住。
         """
         if self.stop_file and Path(self.stop_file).exists():
-            return "stop_file"
+            # 显式给的路径也按同一套"停一次就消费"办（CLI 传的就是工作区那把开关）。
+            try:
+                from . import stopctl
+
+                state = stopctl.read_stop(self.session_root, explicit=self.stop_file)
+            except Exception:  # noqa: BLE001 —— 读不到开关不是"用户叫停"，如实不停
+                state = None
+            if state is not None:
+                reason = "force_stop" if bool(state.get("force")) else "stop_file"
+                try:
+                    from . import stopctl
+
+                    stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
+                                         explicit=self.stop_file)
+                except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
+                    pass
+                return reason
+            return ""
         try:
             from . import stopctl
 
@@ -1294,7 +1445,14 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 —— 读不到开关不是"用户叫停"，如实不停
             state = None
         if state is not None:
-            return "force_stop" if bool(state.get("force")) else "stop_file"
+            reason = "force_stop" if bool(state.get("force")) else "stop_file"
+            try:
+                from . import stopctl
+
+                stopctl.consume_stop(self.session_root, sid=self.sid, level=reason)
+            except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
+                pass
+            return reason
         started = str(getattr(run, "started_at", "") or "")
         if not started:
             return ""
@@ -1323,6 +1481,41 @@ class AgentLoop:
                 f"要看这一趟做了什么用 `agentflow --root {self.session_root} runs`，"
                 f"要接着跑用 `agentflow --root {self.session_root} run-agent --resume "
                 f"--task \"<接着做什么>\"{sid_arg}`")
+
+    def _param_table(self, shape: str, payload: Mapping[str, Any]) -> str:
+        """被参数拒了的那一步：把声明面里的参数表渲染出来（读不到就返回空串，不编）。"""
+        from . import capabilities as C
+
+        lines: list[str] = []
+        if shape == "tool":
+            name = str(payload.get("name") or "")
+            spec = None
+            try:
+                spec = self.registry.get(name) if self.registry is not None else None
+            except Exception:  # noqa: BLE001 —— 拿不到工具声明就不给表（不编一张）
+                spec = None
+            if spec is not None:
+                lines.append(f"{name} 的参数表：" + (render_params(spec.params) or "（声明里没有参数）"))
+        else:
+            targets = ([payload] if shape == "summon"
+                       else list(payload.get("targets") or []))
+            for t in targets:
+                if not isinstance(t, Mapping):
+                    continue
+                role = str(t.get("role") or "")
+                action = str(t.get("action") or "")
+                spec = None
+                try:
+                    spec = next((s for s in C.actions_for(role) if s.action == action), None)
+                except Exception:  # noqa: BLE001 —— 同上
+                    spec = None
+                if spec is not None:
+                    lines.append(f"{role}.{action} 的参数表："
+                                 + (render_params(spec.params) or "（声明里没有参数）"))
+        if not lines:
+            return ""
+        return ("【参数表】被拒的是参数形状/取值，不是这件事不能做。照下面这张声明表重写一次"
+                "（键名与类型都要对；表里没列的键一律不许传）：\n- " + "\n- ".join(lines))
 
     def _execute(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         if shape == "tool":
@@ -2080,10 +2273,17 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
             # 指纹不符时「不给」 `attempted_from`：那份检查点是另一个任务的，
             # 它的 `step` 数不是"这件事做到第几步"。
             _note_resume_refusal(root, role, task, sid, "checkpoint_mismatch")
+            # `draft/37` §140：拒信要把检查点里那条任务原文交回去（照抄就能续）。
+            # 实测（2026-10-05，两个工作区各撞一次）：用"原任务"去续一条以"续作任务"
+            # 起的检查点 ⇒ 被拒，而拒信里没有那句该照抄的话，于是那一段成了空段
+            # （一步都没跑，而驱动器还以为它在跑）。
+            was = str(cp.get("task") or "")
             return LoopRun(role=role, task=task, stop_reason="checkpoint_mismatch",
                            final=("检查点里的任务指纹与这次的任务不一致 ⇒ 不许续跑："
                                   "拿一个任务的进度去续另一个任务会把两件事混成一条，"
-                                  "而那条记录看起来完全正常。"))
+                                  "而那条记录看起来完全正常。要接着跑就照抄检查点里那条"
+                                  f"任务原文（`{run_checkpoint_path(root, role, sid)}` 的 "
+                                  f"`task` 字段）：\n{was}"))
         if str(cp.get("stop_reason")) == "final":
             _note_resume_refusal(root, role, task, sid, "already_finished",
                                  attempted_from=int(cp.get("step") or 0))

@@ -399,7 +399,8 @@ def _plan_error_type() -> type:
     {
            "type": "object",
            "properties": {
-            "budget": {"type": "object"},
+            "budget": {"type": "object",
+                   "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}"},
             "rounds_done": {"type": "integer", "minimum": 0},
             "depth": {"type": "integer", "minimum": 0},
            },
@@ -458,7 +459,8 @@ def _attack_pick_next_subgoal(subgoals):
             "problem_key": {"type": "string"},
             "for_question_id": {"type": "string"},
             "subgoals": {"type": "array", "items": {"type": "object"}},
-            "budget": {"type": "object"},
+            "budget": {"type": "object",
+                   "description": "三维预算，四类键缺一不可（FC-18）：{max_rounds, max_parallel_subgoals, max_persist_attempts, max_depth}"},
             "depth": {"type": "integer", "minimum": 0},
             "parent_plan_id": {"type": "string"},
            },
