@@ -8290,3 +8290,57 @@ E 的提示词里必须同时出现 `fs.write`、`code/lean/`、`script_path`、
    现在这一档只要求 ≥1，等于给了"做一条就算"的口子。
 2. **`formalgw` 自己注入 `LEAN_PATH`**（§101 第三节登记的那一步）：框架已经知道
    Mathlib 根在哪，就不该要求调用方记得配那一串环境变量。
+
+---
+
+## §103 两件收口：引文那一档收紧成「逐条」+ 检查器的 `LEAN_PATH` 由框架自己补
+
+### 一、引文那一档：`citation_records_vs_bibitems`（阈值由主稿自己定）
+
+**第 12 趟钻过去的口子**：`quote_verified_rows` 只要求"≥1 条带 `quote_verified` 的行"，
+于是它落了一条 `quote_verified=false` 就过了 —— 那是"做一条就算"，而任务原文要的是
+"**逐条**核验引文"。
+
+**这一档怎么算**：
+
+- `records` = `statements` ∪ `relations` 里「`quote_verified` 非 null」（真/假两种比对结论）
+  **或**「`quote_reason` 非空」（三态里的"未查 + 理由"—— 外部原文不在盘上时，这正是
+  诚实的结论，与验收表 P7 那一行的措辞一致）；
+- 阈值 = 主稿里 `\bibitem` 的条数（`out/paper/main.tex`，缺则退回 `source/main.tex`）；
+- 读数是 `{records, with_verdict, unchecked_with_reason, bibitems, true, false, counted_from}`。
+
+**一处框架改动**：这一档的阈值由**档位自己**给（`detail["implicit_min"]`），
+调用方不写 `min` 时用它 —— 否则"要几条"会退化成缺省的 1，那个口子会被原样留着。
+判据 `tests/test_closing_gate.py::test_the_per_citation_leg_counts_against_the_number_of_bibitems`：
+3 条 `\bibitem` 的稿子，0 条 / 1 条记录 ⇒ `fail`（`min=3`），3 条记录 ⇒ `pass`。
+
+### 二、检查器的 `LEAN_PATH`：框架自己补（只加不改）
+
+`formalgw` 新增两个函数，并在 `check_lean` 起检查器**之前**调用：
+
+- `_mathlib_lean_path()`：`find_mathlib_root()` → `toolchain.lean_path_for(root)`（按进程记忆一次）；
+- `ensure_lean_path()`：把那些段并进进程的 `LEAN_PATH`，**只加不改** ——
+  调用方自己配过的段一律保留（可能是另一份工程），只在缺的时候补；没有 Mathlib 根时是空操作。
+- `check_lean` 的返回值里多一格 `lean_path_segments`（这次真正带了几段），可被读数复核。
+
+为什么必须由框架做（`draft/37` §101 的真机读数）：起检查器的命令是裸的 `[lean, <file>]`，
+它靠进程环境找包；而"盘上有编译完整的 Mathlib"与"`import Mathlib` 能编过"是两件事 ——
+§101 之前 12 趟里 E 的每一次形式化尝试都报 `unknown package 'Mathlib'`，
+只是因为没人把那串环境变量配上。
+
+判据 `tests/test_toolchain_paths.py::test_formalgw_fills_in_lean_path_itself`：
+① 缺的段被补上；② 调用方配过的段一个都不丢、也不重复拼；③ 没有根时是空操作。
+（判据自己先踩了一个坑：按冒号拆 `LEAN_PATH` 会把 Windows 盘符切碎 —— 改成子串断言。）
+
+### 三、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 收工门那一组 | `pytest tests/test_closing_gate.py -q` | **18 passed**（含新的逐条引文判据） |
+| toolchain / formalgw | `pytest tests/test_toolchain_paths.py -q` | **10 passed**（含 `ensure_lean_path` 三条读数） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3495 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1400.66s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 13 趟**（夹具的 P7 已换成逐条口径；`LEAN_PATH` 现在
+不需要人手配 —— 但为稳妥，跑的时候仍然带着 §101 那份环境）。
