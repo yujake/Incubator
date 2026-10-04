@@ -117,7 +117,15 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "为什么单列：D 的其余动作（submit_gaps / research / consider / assess / "
         "adjudicate / trace_question / probe_c）**都要求 qid 已存在**，run_round 要一份 C 的"
         "分析报告 —— 从零工作区里没有任何可召唤的动作能立起第一行（T2 第 1 趟真机：R1 永远 0 行）",
-        _obj({"question": _S, "kind": _S, "priority": _S, "gap_reason": _S, "notes": _S},
+        # `kind` / `priority` 的取值必须**在声明里**写出来（`draft/37` §130 的真机读数）：
+        # 此前这里是裸 `_S`（只表示"是个字符串"），而 handler 按受控词表拒收 ——
+        # 真机里主控连续 4 次传 `kind='existence'` / `'main'`，每次都落 `refused/bad_kind`，
+        # 而它在自己的提示词里**看不到合法取值**（同一个坑在 `F.create_plan` 的预算上出现过：
+        # 声明不写、handler 拒收 ⇒ 主控只能猜）。枚举值从 `schema` 那一份取，不另抄字面量。
+        _obj({"question": _S,
+              "kind": {"type": "string", "enum": list(S.QUESTION_KINDS)},
+              "priority": {"type": "string", "enum": list(S.PRIORITIES)},
+              "gap_reason": _S, "notes": _S},
              ("question",)),
         "dict（ok / question_id / row）", side_effect="write_local",
         handler_name="propose_question",

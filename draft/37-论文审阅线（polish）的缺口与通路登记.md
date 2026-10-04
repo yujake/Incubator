@@ -9805,3 +9805,93 @@ final 首句：用户叫停（开关文件 .agentflow-stop）：第 19 步之后
    与用户的 CLI（`agentflow stop [--force|--clear|--status]`）**同一个实现**；
 3. **下一步该修的不是研究机制，而是论文包那条工具链**（`code/make_paper.py` 缺失 ⇒ 锚永远
    回不到 `consistent`；两轮都被它挡住）。这条我记在这里，作为下一步的第一件事。
+
+---
+
+## §130 卡壳诊断：那一趟 6885 秒里 98% 在等实验超时；而 C **不是坏了，是主控看不见它**
+
+用户口径：
+
+> 先把这些主控的工具做好，再看上次运行了那么久的测试的工作记录，调查一下卡壳原因
+> （特别是智能体 C 似乎有问题，当然不止这些），给出诊断
+
+### 一、时间去哪了（第 4 趟 `t2d`：6885 s / 123 步 / $1.91）
+
+```text
+实验总耗时 ............ 6722 s  （占 6885 s 的 98%）
+其中 600 s 整的超时 ...... 8 条（scripts/r33.py，每条跑满 timeout=600）
+模型调用总耗时 .......... 256 s（124 次；中位 1.5 s，最慢 14.5 s）
+最大的步间间隔 ........... 941 s、601 s ×4 —— 每一段都是"下一步在等实验"
+```
+
+⇒ 那一趟**几乎全部墙钟都花在等 E 的枚举脚本跑到超时**（8 × 600 s ≈ 80 分钟）。
+模型本身不慢（124 次调用合计 256 s）。这不是"模型想得慢"，是**一次实验的默认上限 600 s
+乘上"没人拦它去跑穷举"**。§126 已经把"先估规模再跑"写进 E 的口径，
+但**没有任何确定性判据**限制这件事 —— 它只靠模型自觉。
+
+### 二、智能体 C：不是坏了，是**主控看不见它的产出**
+
+实测（把 C 的八个动作在真台账上逐个唤一遍，走 `conductor.summon`）：
+
+```text
+C.hottest / cold / gaps / contradictions / structural_duplicates /
+paths / neighbors / relations_between  ⇒ 全部 outcome=ok
+但主控拿到的返回里 **没有 result**：只有 task_id/status/outcome/detail/...
+而台账的 out/tasks/t-0154.json 里躺着 C 的完整分析：
+  payload_preview = "AnalysisReport(kind='hottest', summary='最热门的 5 个概念：GPS(6次)、
+                     Wiener index(6次)、message passing(4次)、line graph(4次)、…')"
+```
+
+根因在 `tools/conductor_tools.py::_summon_dict`：它把 `SummonResult` 收成工具返回值时
+**只回任务元数据，把 `payload`（handler 的返回值）整个丢掉了**（`SummonResult.payload`
+一直是有值的，行内也写了 `out/tasks/<id>.json`）。后果按角色分两种：
+
+- C 八个动作**产物就是返回值**（只读分析）⇒ 召 C 等于什么都没拿到；
+- 其它角色的产物落在盘上（documents/experiments/…），主控于是靠 `fs.read` 反推 ——
+  六个会话 359 步里 **96 步是文件动作**（`fs.read` 66、`fs.write` 16、`fs.list` 14）。
+
+**四趟 T2 的派活分布（C 的位置）**：
+
+```text
+p6 （第 1 趟）：A4 B1 D15 E6 F2 G3 H1 —— C **0**
+p6b（第 2 趟）：A3 B1 D12 E4 F12 G4 H2 —— C **0**
+p6c（第 3 趟）：A12 B4 D6 E3 F3 G4 H4 —— C **0**
+p6d（第 4 趟）：A8 B1 D22 E26 F12 G20 H6 —— C **0**（现存那 11 条 C 任务是我这次诊断探针
+               打进去的，时间戳 20:21–20:23，那一趟 18:48 就收工了 —— 记账，免得读成"它用过 C"）
+```
+
+⇒ **C 在四趟里从未被派过活**。修法（已做）：
+
+1. `_summon_dict` 现在回 `payload_preview`（2000 字，与台账 `payload_digest` 同一口径）、
+   `payload_keys`、`payload_bytes`、`payload_truncated`、`artifacts`（完整那份的落点）；
+   工具 `returns=` 声明同步；主控的口径里加了一条"**派活之后先看返回值**，不够再读
+   `artifacts[0]`，不要用反复试探代替看"。
+2. 这也顺带解释了一个我一直没解释清楚的现象：主控反复 `fs.read data/*.json`
+   （`out/` 34 次、`data/` 19 次、`documents/` 7 次）—— 它不是"爱读盘"，是**没有别的眼睛**。
+
+### 三、第二处"声明不写、handler 拒收"（与 §127 同族）
+
+```text
+D.propose_question 被拒 4 次：kind 必须是 ('gap','contradiction')，收到 'existence' / 'main'
+```
+
+`specs/d.py` 里 `kind`/`priority` 声明成裸字符串（只有"是个字符串"），而 handler 按受控词表拒收
+—— 主控在自己的提示词里**看不到合法取值**，只能猜。修法：声明里带上
+`{"type":"string","enum": list(S.QUESTION_KINDS)}`（priority 同理，取自 `schema` 那一份）。
+
+### 四、另外两处（都已登记，非本轮修）
+
+- **`G.paper_package` 3 次 `package_build_failed`**（stage=render）：工作区里没有
+  `code/make_paper.py` ⇒ 锚永远回不到 `consistent`。主控每一轮都如实读出来并写进交付说明
+  （"结构性事实，不是我的失败"）—— 这是**下一条该补的工具链**。
+- **主控自己的重复调用**：`conductor.ledger` 9 次、`conductor.closing` 8 次、
+  `fs.write out/review/REPORT.md` 5 次、`fs.read ACCEPTANCE-CHECKS.json`/`data/experiments.json`
+  /`scripts/rmk_check.py` 各 4 次（真机里还出现过连续 6 次读同一份 `ACCEPTANCE.md`、
+  why 写"占位"）。召唤那边有活锁判据，**工具调用这边没有** —— 记在这里，见 §131 的下一步。
+
+### 五、结论（一句话）
+
+那一趟的"卡"有三层：**① 98% 的墙钟在等实验超时**（没有规模上限）；
+**② 主控看不见同伴的返回值**（C 因此从未被用，而它其实一直在算出有用的东西）；
+**③ 声明面藏着受控词表**（模型只能猜，猜错就白跑一次）。
+其中 ② 与 ③ 这一轮已经修掉并落成判据；① 与 `make_paper.py` 是下一批。

@@ -41,7 +41,7 @@ class _CreatePlan:
         default_budget = self._default_budget()
         chk = AT.check_budget(dict(budget) if budget is not None else dict(default_budget))
         if not chk["complete"]:
-            # 走**统一的拒绝形态**（`refusals.refuse`）：这一支是拒绝，而它此前只给
+            # 走「统一的拒绝形态」（`refusals.refuse`）：这一支是拒绝，而它此前只给
             # `created: false` + `reason` —— 调用方（主控）看到的 `outcome` 于是是 `ok`
             # （「执行完成（handler 未声明 outcome，按有产出处理）」），真机里它连着 6 次
             # 以为自己立了项，而 `attack_plans` 一行都没有（`draft/37` §127）。

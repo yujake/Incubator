@@ -72,14 +72,48 @@ def reset_cache() -> None:
     _CONDUCTORS.clear()
 
 
+#: `payload_preview` 的字数上限（`draft/37` §130）。
+#:
+#: 为什么要把它给主控：`SummonResult.payload` 是「动作的返回值」 —— 而此前
+#: `_summon_dict` 只回任务元数据（status/outcome/detail），返回值的「一个字都不给」。
+#: 真机后果（T2 第 4 趟，95 个任务）：主控只能靠反复 `fs.read data/*.json` 反推
+#: 每个动作到底产出了什么；而 C 的八个动作「产物就是返回值本身」（只读分析）⇒
+#: 召 C 等于什么都没拿到 ⇒ 那一趟 `role=C` 的任务是 「0 条」（不是 C 坏了，是它不可见）。
+#: 2000 字沿用 `_write_task_digest` 的 `payload_preview` 口径（同一处量法，不另立一份）；
+#: 要完整的那份就 `fs.read` `artifacts[0]`（`out/tasks/<task_id>.json`）。
+PAYLOAD_PREVIEW_CHARS = 2000
+
+
 def _summon_dict(res: SummonResult) -> dict:
-    """把一次召唤的结果收成工具返回值（键与 `returns=` 声明逐字对应）。"""
+    """把一次召唤的结果收成工具返回值（键与 `returns=` 声明逐字对应）。
+
+    `draft/37` §130：除了任务元数据，还要带上「动作返回值的预览」与「完整那份的落点」
+    —— 这是"主控能不能看见同伴产出了什么"的那条线。预览有上限（`PAYLOAD_PREVIEW_CHARS`），
+    截断与否如实写在 `payload_truncated` 里（不许静默截断）。
+    """
+    payload = getattr(res, "payload", None)
+    preview = ""
+    size = 0
+    keys: list[str] = []
+    if payload is not None:
+        try:
+            blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+        except Exception:  # noqa: BLE001 —— 编不出来就退回 `repr`（照样给出去，不吞）
+            blob = repr(payload)
+        size = len(blob.encode("utf-8"))
+        preview = blob[:PAYLOAD_PREVIEW_CHARS]
+        if isinstance(payload, Mapping):
+            keys = sorted(str(k) for k in payload)
     return {"task_id": res.task_id, "role": res.role, "action": res.action,
             "status": res.status, "outcome": res.outcome,
             "refusal_reason": res.refusal_reason, "detail": res.detail,
             "error": res.error, "tokens": res.tokens, "usd": res.usd,
             "depth": res.depth, "elapsed_sec": res.elapsed_sec,
-            "children": list(res.children or ()), "checked": res.checked}
+            "children": list(res.children or ()), "checked": res.checked,
+            "payload_preview": preview, "payload_bytes": size,
+            "payload_keys": keys,
+            "payload_truncated": size > PAYLOAD_PREVIEW_CHARS,
+            "artifacts": list(getattr(res, "artifacts", None) or ())}
 
 
 def _write_resume_brief(conductor: Conductor) -> dict:
@@ -192,7 +226,8 @@ def _relay_requests(conductor: Conductor) -> tuple[list[dict[str, Any]], str]:
     side_effect="write_local",
     roles=("M",),
     returns=("{'task_id','role','action','status','outcome','refusal_reason','detail',"
-             "'error','tokens','usd','depth','elapsed_sec','children','checked'}"),
+             "'error','tokens','usd','depth','elapsed_sec','children','checked',"
+             "'payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}"),
 )
 def conductor_summon(_conductor, target_role: str, action: str, params: dict | None = None,
                      input_key: str = "") -> ToolResult:

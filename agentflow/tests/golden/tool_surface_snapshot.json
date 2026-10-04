@@ -555,7 +555,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'task_id','role','action','status','outcome','refusal_reason','detail','error','tokens','usd','depth','elapsed_sec','children','checked'}",
+   "returns": "{'task_id','role','action','status','outcome','refusal_reason','detail','error','tokens','usd','depth','elapsed_sec','children','checked','payload_preview','payload_bytes','payload_keys','payload_truncated','artifacts'}",
    "roles": [
     "M"
    ],

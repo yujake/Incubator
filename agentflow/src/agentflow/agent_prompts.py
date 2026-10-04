@@ -881,6 +881,14 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "检查器进程）」—— 广播每个同伴都收得到，但它**打断不了**正在跑的循环"
             "（收件箱是每趟开头读一次的），真正让在飞工作停下的是那个停机开关。"
             "停之前先把**已经做出来的**写进台账与交付说明：「停在哪儿」要能事后查到。",
+            "**派活之后先看返回值**（`draft/37` §130 的真机读数）：`conductor.summon` 的返回里带 "
+            "`payload_preview`（被唤角色的**动作返回值**，最多 2000 字）、`payload_keys`、"
+            "`payload_bytes`、`payload_truncated` 与 `artifacts`（完整那份落在 "
+            "`out/tasks/<task_id>.json`，要全文就 `fs.read` 它）。为什么必须点明：此前这个返回里"
+            "**一个字都不给**，主控只能靠反复 `fs.read data/*.json` 反推同伴产出了什么 —— "
+            "真机里 95 个任务那一趟有一大半步数花在这上面；而 C 的八个动作**产物就是返回值本身**，"
+            "于是召 C 等于什么都拿不到（那一趟 `role=C` 的任务是 0 条）。**先读 `payload_preview`，"
+            "不够再读 `artifacts[0]`，不要用反复试探代替看。**",
         ),
         signature_error="把派活本身当成结论。",
         deliverable="一份交付说明，落在 out/review/REPORT.md（工作区相对路径，用 fs.write 写；"
