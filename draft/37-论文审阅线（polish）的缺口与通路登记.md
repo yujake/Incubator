@@ -8830,3 +8830,50 @@ $1.777922 / 退出 0**。主控的自述（逐字摘要）：
 2. **`anchor` 格的口径**：项目里没有 `out/paper/` 时判"不适用"（读数写明），而不是 `unknown`
    —— 否则 T2/T4/T5 这类没有论文包的测试永远关不上门；
 3. 重跑 T2（第 2 趟），按 R1–R5 + 七格判定。
+
+---
+
+## §115 「没有论文包」的锚口径 + R1 那条根因的**逐条复核**（结论：成立）
+
+### 一、修掉 `anchor` 格的口径（T2 那类测试此前永远关不上门）
+
+第 114 节复算时发现：从零研究的工作区里没有 `out/paper/`，而 `_check_anchor` 只会报
+`unknown`（锚文件读不到）—— `can_close` 要求七格全 pass ⇒ **T2/T4/T5 那类没有论文包的测试
+永远关不上门**，而它们本来就不该有论文包。
+
+改法与判据：
+
+- `out/paper/` 目录**不存在**（且这个根看起来像项目根，不是把论文包目录当根传进来的）
+  ⇒ 这一格判 **`pass` + 读数 `verdict='not_applicable'`**，写明"这个项目没有论文包 ⇒ 锚不适用"；
+- `out/paper/` 在、锚文件不在 ⇒ **仍然是 `unknown`**（那是真出了问题，§44.5 的老账）；
+- 传的是论文包目录（`out/paper`、或根下有 `main.tex`）⇒ 仍然走那条**可操作的 `unknown`**
+  —— 既有判据 `test_the_wrong_directory_gets_an_actionable_message` 正守着它（我第一版改动
+  把它弄红了，于是补上这个判别）。
+- 新判据 `test_a_project_without_a_paper_package_has_no_anchor_to_check`：没有 `out/paper/`
+  ⇒ `pass` 且读数是 `not_applicable`；补上目录但没有锚文件 ⇒ 回到 `unknown`。
+
+### 二、R1 根因的复核（我把候选动作逐个试了一遍，不靠推断）
+
+第 114 节我写过"R1 是动作面缺动作"。落代码前先复核一遍（这是纪律：先取证再改）：
+
+| D 的动作 | 签名 | 能不能立第一行问题 |
+|---|---|---|
+| `submit_gaps` | `(qid: str)` | ✗ 要 qid |
+| `research` / `consider` / `assess` / `adjudicate` / `trace_question` / `probe_c` | `(qid: str)` | ✗ 都要 qid |
+| `run_round` | `(report, *, submit=True, limit=None)` | ✗ 要一份 **C 的分析报告**（那是 `pipeline` 的 C→D 路） |
+| `write_report` | `(out_path=None) -> str` | ✗ 只写文件 |
+| `ingest` / `ingest_detailed` | `(report, ...)` | ✗ 读 C 的报告 |
+
+⇒ **结论成立**：从零工作区里，主控**没有任何可召唤的动作能创建第一行 `research_questions`**。
+创建路径只有两条，都不在 D 的可召唤动作面上：
+① `pipeline`（C 的 `analysis_reports` → D 的一轮）；② D 内部的**工具** `research.submit_gap`
+（`research_tools.py:272` 会 `upsert("research_questions", …)`）—— 而工具只能由 D 自己的模型循环
+调用，主控够不到。
+
+### 三、下一轮：给 D 补一个动作（这是 T2 唯一还缺的通路）
+
+`D.propose_question(question, *, kind="open", priority=…)`：
+把一句话问题落成 `research_questions` 一行（转发到与 `research.submit_gap` **同一份**写入口，
+不另写一份），并放进 `specs/d.py` 的 `ACTIONS`（⚑ FC-27，与其余禁改区改动一并等 2 名人审）。
+判据：正控（一行问题落库、`qid` 可读）+ 负控（空问题被拒、零写入）+ 广告面（动作进了 D 的动作表）。
+做完再跑 **T2 第 2 趟**（R1–R5 + 七格），然后才是 T3。

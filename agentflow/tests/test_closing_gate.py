@@ -479,6 +479,27 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     assert rep.status["acceptance"] == "fail", rep.to_dict()
 
 
+def test_a_project_without_a_paper_package_has_no_anchor_to_check(tmp_path: pathlib.Path):
+    """判据（`draft/37` §115）：没有论文包的项目里，锚这一格是「不适用」，不是「没查成」。
+
+    为什么必须单列（T2 第 1 趟的真机读数）：从零研究的工作区里没有 `out/paper/`，
+    而 `_check_anchor` 只会报 `unknown`（锚文件读不到）—— `can_close` 要求七格全 pass
+    ⇒ 那类测试永远关不上门，而它们本来就不该有论文包。
+    反面的那一半也要守住：`out/paper/` 在、锚文件不在 ⇒ 仍然是 `unknown`（那是真出了问题）。
+    """
+    ws = tmp_path / "ws-no-paper"
+    (ws / "data").mkdir(parents=True)
+    st = Store(ws)
+    st.init()
+    rep = CL.check_closing(st, project_dir=".", report_path="")
+    assert rep.status["anchor"] == "pass", rep.to_dict()
+    assert rep.readings["anchor"]["verdict"] == "not_applicable", rep.readings["anchor"]
+
+    (ws / "out" / "paper").mkdir(parents=True)   # 有论文包目录、但没有锚文件
+    rep2 = CL.check_closing(st, project_dir=".", report_path="")
+    assert rep2.status["anchor"] == "unknown", rep2.to_dict()
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 

@@ -497,7 +497,21 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
             "交付前必须指到**项目根**再跑一次（锚在 <项目根>/out/paper/RENDER-ANCHOR.json）",
         ))
         return
-    got = RA.check_package(resolve_under_workspace(store, project_dir), store=store)
+    root = Path(resolve_under_workspace(store, project_dir))
+    # 只有"像项目根、但确实没有论文包"才算不适用；`out/paper` 这种把论文包目录当项目根传的
+    # 情形必须继续走下面那条可操作的 `unknown`（`draft/37` §44.5 的老账，
+    # 判据 `test_the_wrong_directory_gets_an_actionable_message` 正守着它）。
+    looks_like_paper_dir = root.name == "paper" or (root / "main.tex").is_file()
+    if not (root / "out" / "paper").is_dir() and not looks_like_paper_dir:
+        # `draft/37` §115：没有论文包的项目（T2 从零研究、T4 检索类测试…）里，锚这一格是
+        # 不适用，不是「没查成」—— 否则 `can_close` 永远为假（它要求七格全 pass），
+        # 而那类测试根本不该有论文包。判据：`out/paper/` 目录不存在 ⇒ pass + 读数写明
+        # "不适用"；目录在、锚文件不在 ⇒ 仍然是 unknown（那是真出了问题，白花一步的老账）。
+        rep.status["anchor"] = "pass"
+        rep.readings["anchor"] = {"verdict": "not_applicable", "root": str(root),
+                                  "note": "这个项目没有论文包（没有 out/paper/）⇒ 锚不适用"}
+        return
+    got = RA.check_package(str(root), store=store)
     verdict = str(got.get("verdict") or "unknown")
     rep.readings["anchor"] = {"verdict": verdict, "dimensions": got.get("dimensions"),
                               "drift": list(got.get("drift") or [])[:10]}
