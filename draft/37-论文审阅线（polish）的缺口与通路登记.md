@@ -9895,3 +9895,33 @@ D.propose_question 被拒 4 次：kind 必须是 ('gap','contradiction')，收�
 **② 主控看不见同伴的返回值**（C 因此从未被用，而它其实一直在算出有用的东西）；
 **③ 声明面藏着受控词表**（模型只能猜，猜错就白跑一次）。
 其中 ② 与 ③ 这一轮已经修掉并落成判据；① 与 `make_paper.py` 是下一批。
+
+---
+
+## §131 诊断之后：这一批做完的与下一批的三件事
+
+### 一、这一批做完的（§130 的诊断 → 代码 + 判据）
+
+| 根因 | 读数 | 修法 | 判据 |
+|---|---|---|---|
+| 主控看不见同伴的返回值 | `conductor.summon` 只回任务元数据；C 的八个只读动作产物就是返回值 ⇒ 四趟 T2 里 `role=C` **0 条** | `_summon_dict` 回 `payload_preview`(2000字)/`payload_keys`/`payload_bytes`/`payload_truncated`/`artifacts`；M 的口径加"先看返回值" | `tests/test_stop_tools.py`（5 条，工具面）＋ C 的探针：现在能拿到 `AnalysisReport(...)` |
+| 声明面藏着受控词表 | `D.propose_question` 被拒 4 次（`kind='existence'/'main'`） | `specs/d.py` 的 `kind`/`priority` 带上 `enum`（取自 `schema`） | `test_capabilities_two_layer` + `test_propose_question` |
+| 停机要"按停就停" | 用户叫停之后它跑到第 123 步 | `conductor.stop`（优雅/强制）+ 步循环判据 + 子进程终止 | `test_stop_tools`(5) + `test_stop_end_to_end`(1)：**M 调一次 stop ⇒ 只调一次模型就收工** |
+
+### 二、下一批的三件事（按优先级，都是 §130 读出来的）
+
+1. **`code/make_paper.py` 这条工具链**（`G.paper_package` 3 次 `package_build_failed`）：
+   没有它，论文包永远 `drifted`/`unknown`，锚那一格在真机上永远回不到 `consistent`。
+   要做的：给工作区一个**可用**的渲染脚本（或让 `paper_package` 在缺脚本时给出可照做的
+   补救路径），并加一条判据：缺脚本时它报的是"缺什么、怎么补"，而不是只报 `render` 失败。
+2. **实验时长要有确定性的上限**（那一趟 8 × 600 s = 6722 s/6885 s）：现在只靠 E 的提示词
+   "先估规模"。要加的是**判据侧**的：`run_experiment` 的 `timeout` 有一个可配上限，
+   且"枚举类"脚本必须在开头打印规模估计（没有就按更小的上限跑）—— 具体形式下一轮定，
+   先把"没有上限"这件事记在这里。
+3. **工具调用也要有活锁判据**（召唤那边已有）：真机里 `conductor.ledger` 9 次、
+   `conductor.closing` 8 次、同一份 `ACCEPTANCE.md` 连读 6 次（`why` 写"占位"）。
+   一个候选判据：**同一 (工具, 参数) 在一趟里超过 N 次且中间没有状态变化 ⇒ 落一条
+   `agent_note` 提醒，并在第 2N 次时拒绝**（拒绝要留痕，理由写清"没有新信息"）。
+4. 顺带（验收表侧的洞）：T2 的 R1–R8 里**没有一行与 C 有关** —— 0 条 C 任务不只是
+   "看不见"的问题，也是"没有任何一行要它"。下一轮加一行 `C 的分析被引用`
+   （例如：`documents` 的 claims 至少引一条来自 C 的结构读数），让 C 真的进链。
