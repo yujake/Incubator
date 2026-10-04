@@ -137,6 +137,9 @@ __all__ = [
     "selftest",
 ]
 REPRO_RESULT_PREFIX = "REPRO_RESULT:"
+#: 进度行的前缀（`draft/37` §133）：脚本每完成一个 n 打一行 `PROGRESS: {json}`。
+#: 它让"被超时杀掉"的那次实验也留下"搜到哪儿"的读数。
+PROGRESS_PREFIX = "PROGRESS:"
 COMPUTATIONAL_METHODS = ("numeric", "symbolic", "exhaustive_search")
 assert set(COMPUTATIONAL_METHODS) | {"formal"} == set(S.EXPERIMENT_METHODS), (
     f"COMPUTATIONAL_METHODS={COMPUTATIONAL_METHODS} 与 schema.EXPERIMENT_METHODS="
@@ -434,6 +437,52 @@ def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
         )
         return "cross_check"
     return kind
+def _search_facts(stdout: str, payload: Mapping[str, Any] | None) -> dict[str, Any]:
+    """从脚本输出里取"这次搜索搜到哪儿、花了多少、用什么策略"（`draft/37` §133）。
+
+    为什么需要它（用户口径，2026-10-04）：「数值实验可以慢」 —— 那篇论文的团队也做了大量
+    数值实验；时间是靠「发现模式、优化枚举策略」压下去的，不是靠给实验设一个硬上限。
+    所以框架要做的不是"限时"，而是让每次实验都留下「可比较的三个读数」：
+
+    - `bound`：这次到底搜到哪个界（例如 `{"n": 12, "m": 3, "k": 3}`）；
+    - `scaling`：成本曲线（`[{"n": 10, "sec": 0.3, "objects": 123}, …]`）——
+      有它才能外推"下一个 n 要多久"，也才看得出优化有没有用；
+    - `strategy`：这次用的枚举策略名（`brute force` / `canonical form` / `iso rejection` /
+      `symmetry breaking` / `incremental + pruning` / `SAT` / `randomized + certificate` …）。
+
+    三个都从结构化结论里取（`REPRO_RESULT` 的 `bound`/`scaling`/`strategy` 键）；
+    取不到就看 `PROGRESS:` 行（脚本每完成一个 n 打一行）—— 这样「即使被超时杀掉」，
+    也留下"搜到哪儿"的读数，而不是只剩一个"超时"。
+    """
+    out: dict[str, Any] = {}
+    payload = payload if isinstance(payload, Mapping) else {}
+    bound = payload.get("bound")
+    if isinstance(bound, Mapping) and bound:
+        out["bound"] = dict(bound)
+    scaling = payload.get("scaling")
+    if isinstance(scaling, Sequence) and not isinstance(scaling, (str, bytes)):
+        points = [dict(p) for p in scaling if isinstance(p, Mapping)]
+        if points:
+            out["scaling"] = points[:40]
+    strategy = str(payload.get("strategy") or "").strip()
+    if strategy:
+        out["strategy"] = strategy
+    progress: list[dict[str, Any]] = []
+    for line in stdout.splitlines():
+        s = line.strip()
+        if not s.startswith(PROGRESS_PREFIX):
+            continue
+        try:
+            got = json.loads(s[len(PROGRESS_PREFIX):].strip())
+        except (ValueError, TypeError):
+            continue
+        if isinstance(got, Mapping):
+            progress.append(dict(got))
+    if progress:
+        out["progress"] = progress[-40:]
+    return out
+
+
 def _derive(
     exit_code: int | None,
     stdout: str,
@@ -450,13 +499,21 @@ def _derive(
 
     # ---- 规则 1：没跑完 ⇒ 一律 inconclusive（崩溃绝不能被写成支持）
     if exit_code is None or exit_code != 0:
+        # 超时/崩溃也要留下"搜到哪儿"的读数（§133）：它不是结论，但它是「进展」 ——
+        # 用户口径："数值实验时间长是正常的……后面逐渐发现模式、优化枚举策略才把时间压下去"，
+        # 而"压下去"要有可比较的成本读数才谈得上。
+        facts = _search_facts(stdout, None)
+        note = f"脚本以 exit_code={exit_code} 结束 ⇒ 没有正常跑完，不得记为任何正面结论"
+        if facts.get("progress"):
+            note += (f"；但脚本打过进度行，最后完成到 {facts['progress'][-1]}"
+                     "（这是进度读数，不是结论）")
         return {
             "result": "inconclusive",
             "evidence_kind": _NO_EVIDENCE_KIND,
             "negation_kind": "no_local_evidence",
-            "observations": {},
+            "observations": facts,
             "counterexample": None,
-            "notes": [f"脚本以 exit_code={exit_code} 结束 ⇒ 没有正常跑完，不得记为任何正面结论"],
+            "notes": [note],
         }
 
     # ---- 规则 2/3：解析脚本给出的结构化结论
@@ -490,18 +547,22 @@ def _derive(
             "result": "refutes",
             "evidence_kind": evidence_kind,
             "negation_kind": "disproved",
-            "observations": observations,
+            "observations": {**_search_facts(stdout, payload), **observations},
             "counterexample": dict(counterexample),
             "notes": notes,
         }
 
     # supports / inconclusive：只能是"未证明"或"没有本地证据"，不许是 disproved
     negation = "not_proved" if result == "supports" else "no_local_evidence"
+    # 搜索读数并进 observations（§133）：界 / 成本曲线 / 策略名 —— 三者都随行落库，
+    # 于是"这一轮把界推到哪儿、比上一轮快了多少"是可比较的，而不是只留一个耗时。
+    facts = _search_facts(stdout, payload)
+    merged = {**facts, **observations}
     return {
         "result": result,
         "evidence_kind": evidence_kind,
         "negation_kind": negation,
-        "observations": observations,
+        "observations": merged,
         "counterexample": None,
         "notes": notes,
     }

@@ -10010,3 +10010,60 @@ claim-4（is_negative=true）："The literature on regular graphs of prescribed 
 | B 四个例外格 | (3,3) K4；(4,3) K5/八面体；(3,4) K3,3/立方体；(3,5) Petersen 与十二面体 —— 逐个核 | 手稿里"四个格"的断言各自引一条 `supports` 实验（现有判据 R8 已经能数） |
 | C 反面 | (3,3) 的短证明（局部计数）先落地；九型分类留给人 | `proof_experiment_rows ≥ 1`（已有档） |
 | D 文献诚实性（补 §132 一 的窟窿） | 手稿里引 `lit:/rel:` 的断言，必须能追到**逐字核过的引文**（`quote_verified=true`） | 新档：`document_claims_have_verified_sources` |
+
+---
+
+## §133 逐条回答"那一趟到底做过没有"（用户给的七件事）＋ 正确的方向（不设时长上限）
+
+### 一、用户的问题（逐字）
+
+> 请问之前智能体系统在做T2时有没有做这样几件事：文献搜索、数值实验启发理论攻坚（如查看反例模式等）、
+> 理论攻坚反哺数值实验（如优化算法减少不必要枚举）、跨领域结合（似乎原来那篇论文用的不是单纯图论知识）、
+> D提出猜想并交由F进行理论攻坚、F向D报告成果或困难、整理研究手稿并派一个E进行形式化验证尝试
+
+### 二、逐条读数（T2 第 4 趟 `projects/p6d-research-from-zero`，93 个任务，盘上可核）
+
+| # | 那件事 | 做过没有 | 证据（逐字） |
+|---|---|---|---|
+| 1 | **文献搜索** | **做了（但没接上）** | `A.search_literature` **8 次**（r-0001…r-0008；每次下载 2–11 篇，`download_failed` 2–6）；`literature` 65→75 行。但**没读进产物**：手稿里那几条文献断言引的是《Self-dual configurations and regular graphs》与 Graph Transformer 的引文（`lit:0002` / `rel:0000`），与本题无关；对口的 edge-girth-regular 那几篇从未进稿（§132） |
+| 2 | **数值实验启发理论攻坚（看反例模式）** | **没有** | `conjectures` **0 行**、`statements` **0 行**；带非空 `counterexample` 的实验 **0 条**（§130 的 `counterexample_or_proof_rows = 0`）。唯一接近的一次是 `scripts/r33.py` 的**注释**（"only K4 (finite) -> no infinite R(3,3)"）—— 判断停在注释里，既没落猜想也没落断言 |
+| 3 | **理论攻坚反哺数值实验（优化枚举）** | **没有（可测量的意义上）** | `search_frontier_rows` **0**（一条实验都没记"搜到哪个界"）；`scripts/r33.py` 的 **600 s 超时重复 8 次**（22 条实验合计 6722 s / 6885 s）；脚本换过（r33 → r3k → rmk → rmk_check）但**没有成本曲线、没有策略名、没有界** —— 于是"有没有变快"在台账上不可回答 |
+| 4 | **跨领域结合** | **没有** | 产物（documents / reports / out/review）里 `tiling`/`Cayley`/`group`/`curvature`/`hyperbolic`/`镶嵌` **一处都没有**（只有 3 处"覆盖"，与题目无关）。而那篇论文的武器正是：正规镶嵌（欧氏/双曲几何 + 面积计数）、Cayley 图（群论）、cage 与局部计数、以及 (3,5) 的曲面论证。系统只用：穷举 + circulant/Petersen 验证；它自己的注释里出现过一次 "the correct construction: take the Cayley graph of …" 然后就写成 `construction_not_verified_numerically` 收场 |
+| 5 | **D 提猜想并交 F 攻坚** | **没有** | 边表里 **D→F 是通的**（D 能召唤 A/B/C/E/F），D 也有 `register_conjecture` 动作 —— 但 `conjectures` **0 行**、`D.register_conjecture` **调用 0 次**、D→F 的召唤 **0 次**。D 那一趟的动作只有：`propose_question` 8、`research` 4、`write_report` 10 |
+| 6 | **F 向 D 报告成果或困难** | **没有** | 整趟会话里的留言（`agent_message`）**只有 2 条，都是 M 发给 #public 的轮次总结**；D↔F 之间 **0 条**。F 的动作只有 `create_plan` **12 次**、`step` **0 次**（`plan_progress_rows = 0`）—— 计划建了 12 份，一轮都没推进过，"成果或困难"自然无从报告 |
+| 7 | **整理手稿并派 E 形式化验证** | **一半** | `G.build_document` **16 次**（手稿确实建了，但基本是同一份薄稿反复生成）；`E.check_formal` **4 次**，全部没落 proof 行：① "既没有给源码也没有给脚本 ⇒ 没做验证"；② "源码里没有声明 `petersen_r35` ⇒ 声称证明了的东西不在文件里"；③④ "检查器退出码 1 ⇒ 编译/精化失败"。失败之后**没有回流**（没有 D/C 参与、没有改稿、没有 H 复核） |
+
+**一句话**：七件里 **1 做了但没接上、7 试了四次全没成、2/3/4/5/6 一次都没发生** ——
+而这五件恰恰是让数学往前走的那条链：
+**文献结果 → 数值找模式 → 猜想 → F 攻坚 → 反哺枚举 → 跨领域工具 → 成稿 → 形式化**。
+边表上 D→F、F→D、D→E、G→D/E/F、H→G **都是通的**：**线接好了，没人走过。**
+
+### 三、方向修正（用户口径，逐字）
+
+> 数值实验时间长是正常的，我们团队之前做那篇论文时也做了不少数值实验，
+> 但后面逐渐发现模式优化枚举策略才把时间压下去的
+
+⇒ 我第一版的做法（默认超时 600→120、连续超时就不让跑）**方向错了，已回退**：
+慢不是问题，"没有新读数"才是问题。改成**让每次实验都留下可比较的读数**，
+并把"进展"定义成可判的东西：
+
+| 做了什么 | 落在哪 |
+|---|---|
+| 脚本在 `REPRO_RESULT` 里报 `bound`（搜到哪个界）/ `strategy`（枚举策略名）/ `scaling`（成本曲线）；每完成一个 n 打一行 `PROGRESS: {json}` | `agent_e/_support.py::_search_facts`；`bound` 同时落 `experiments.search_bound` |
+| **被超时杀掉也留下"搜到哪儿"**（不再只剩一个"超时"） | `_derive` 的规则 1；实测：2 s 超时的那条实验记下 `progress[-1] = {"n": 10}` |
+| E **逐条比给上一次看**：同 claim 的历史（界 / 耗时 / 策略 / 脚本），同形就明说"这次与上次同形，重复同一条超时脚本不算进展" | `agent_e/run_experiment.py::_progress_note`（只读、不拦、不改结论） |
+| 两条验收档：`search_frontier_rows`（有界记录的 claim 数）、`enumeration_optimization_rows`（界更大而耗时不多，或界相同而耗时降到 80% 以下 —— 就是"把时间压下去"） | `closing.LEG_CHECK_KINDS`（第 19、20 档） |
+| 四条数学档：`conjecture_rows`（带 `testable` 的猜想）、`statement_rows`、`plan_progress_rows`（`history` 非空的计划）、`counterexample_or_proof_rows`（证明或反例） | `closing.LEG_CHECK_KINDS`（第 15–18 档）；**四档在 T2 四趟的读数全是 0** |
+| 口径：E「数值实验可以慢，但要留下搜到哪儿/花了多少/用什么策略；下一次要么推界、要么压耗时、要么用成本曲线说清为什么爆炸」；D「从数据里找模式，把模式写成可检验的猜想（`statement` + `testable`）」；M「判数学有没有往前走，不判动作做没做完」 | `agent_prompts.py`（+ `specs/{d,e,m}.py` 逐字同步） |
+
+### 四、还缺的两件（需要用户裁定，因为都涉及"算不算提示"的边界）
+
+1. **通用技术清单（跨领域的那把钥匙）**：把"镶嵌/覆盖与曲率""Cayley 与群作用"
+   "双重计数""极值/边计数""转移矩阵""对称性剪枝与去同构""SAT/ILP 编码""随机构造 + 证书"
+   这类**方法**（不是本题的结论）落成可查阅的表，并让 D/F 在攻击计划里逐条记"试过哪些、
+   为什么用不上"。它是通用的数学工具箱，不写任何本题的事实 —— 但它是"提示"还是"能力"，
+   由用户定。
+2. **把这条链写进判据（而不是只写进提示词）**：猜想必须挂计划（`conjectures` ↔
+   `attack_plans`）、计划必须有推进（`step`）、D↔F 必须有往来（留言）、
+   形式化失败必须回流（E→D 的失败读数进下一轮）。这四条都能机器判，但会让 T2 那类
+   研究任务的关口变紧 —— 同样请用户点头再落。

@@ -137,6 +137,32 @@ LEG_CHECK_KINDS: dict[str, str] = {
                         "「没得出结论」）—— 于是上一档过了，而稿子里一条有实验支持的断言都没有。"
                         "这一档要求的是「本轮真的跑出了结论并写进稿子」；跑不出就得如实写缺口 "
                         "（那正是这一档要逼出来的那句实话）",
+    # ---- 数学对象的进度（`draft/37` §133：判「数学」，不判「台账厚度」）----
+    "conjecture_rows": "可检验的猜想条数（`conjectures` 里 `statement` 与 `testable` 都非空的行）"
+                       "—— 为什么单列（2026-10-04 T2 四趟的读数）：`conjectures`/`statements`/"
+                       "`dependencies` 三张数学对象表全程 0 行，而 `tasks`/`documents`/`experiments`"
+                       "这些流程表塞得满满的（95 任务 / 16 稿 / 22 实验）—— 系统把「该做的动作」"
+                       "做了一遍，数学本身一步没走。`testable` 是这一档的关键：给不出可检验形式"
+                       "就得落 `needs_evidence` 并写清为什么",
+    "statement_rows": "命题台账行数（`statements`）—— 文献里逐字核过的断言（`quote_verified` 非 null）"
+                      "与我方派生的断言都记在这张表；它此前也全程 0 行，于是「手稿里的每句话从哪来」"
+                      "在台账上没有落点",
+    "plan_progress_rows": "真的被推进过的攻坚计划数（`attack_plans` 里 `history` 非空的行）"
+                          "—— 立项 ≠ 推进：T2 里 `attack_plans` 有 2 行，`history` 一次都没长过，"
+                          "而计划的意义正是「一轮一轮逼近」（子目标进展 + 终止原因）",
+    "counterexample_or_proof_rows": "判决性证据行数：`experiments` 里 `evidence_kind=proof` 的行，"
+                                    "或 `result=refutes` 且带非空 `counterexample` 的行 —— "
+                                    "数学研究的推进只有三种：证明、反例、以及诚实的「还没有」；"
+                                    "这一档数的是前两种（没有它们时，交付里应当只有第三种）",
+    "search_frontier_rows": "**有界记录的搜索**条数（`experiments` 里 `search_bound` 非空的不同 "
+                            "`claim_key` 数）—— 为什么单列（`draft/37` §133 的用户口径："
+                            "「数值实验时间长是正常的……后面逐渐发现模式、优化枚举策略才把时间"
+                            "压下去」）：慢实验不是问题，**说不清搜到哪儿**才是问题。有了界，"
+                            "「这一轮把界往前推到哪」与「同一界有没有更快」才成为可比较的读数",
+    "enumeration_optimization_rows": "**枚举策略真的被优化过**的 claim 数（同一个 `claim_key` 上存在"
+                                     "两条实验：后一条的界更大而耗时不多于前一条，或界相同而耗时"
+                                     "降到 80% 以下）—— 这一档量的就是用户那句「把时间压下去」："
+                                     "不是「跑得更久」，而是「同样的活更快、或更大的活同样快」",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -402,6 +428,106 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "`cross_check`，稿子引它才算「有实验支持的断言」。一条都没有时，"
                      "正确的做法是如实写「这一轮没跑出支持性结论」—— 那也意味着这一档不成立"),
         }
+    if kind == "conjecture_rows":
+        rows = [r for r in store.rows("conjectures")
+                if str(r.get("statement") or "").strip()
+                and dict(r.get("testable") or {})]
+        return len(rows), {"conjectures": [
+            {"id": str(r.get("conjecture_id") or ""), "form": str(r.get("form") or ""),
+             "status": str(r.get("status") or ""),
+             "testable_keys": sorted(str(k) for k in dict(r.get("testable") or {})),
+             "known_lit_id": str(r.get("known_lit_id") or "")} for r in rows[:8]],
+            "total_conjectures": len(store.rows("conjectures")),
+            "note": ("只有 `statement` 与 `testable` 都非空的才算 —— 给不出可检验形式的猜想"
+                     "应当落 `needs_evidence`（那是诚实的「还提不出检验办法」，不是这一档的产物）")}
+    if kind == "statement_rows":
+        rows = list(store.rows("statements"))
+        verified = [r for r in rows if r.get("quote_verified") is not None]
+        derived = [r for r in rows if str(r.get("derived_from") or "").strip()]
+        return len(rows), {"statements": [
+            {"id": str(r.get("stmt_id") or ""), "kind": str(r.get("kind") or ""),
+             "status": str(r.get("status") or ""),
+             "quote_verified": r.get("quote_verified"),
+             "from_literature": bool(str(r.get("source_lit_id") or ""))} for r in rows[:8]],
+            "with_quote_verdict": len(verified), "derived": len(derived),
+            "note": "文献来的要带 `quote_verified`（真/假/未查+理由），我方派生的要在 `derived_from` 里给出处"}
+    if kind == "plan_progress_rows":
+        rows = list(store.rows("attack_plans"))
+        advanced = [r for r in rows if list(r.get("history") or [])]
+        return len(advanced), {"plans": [
+            {"id": str(r.get("plan_id") or ""), "status": str(r.get("status") or ""),
+             "rounds": int(r.get("rounds") or 0),
+             "history_len": len(list(r.get("history") or [])),
+             "subgoals": len(list(r.get("subgoals") or []))} for r in rows[:8]],
+            "total_plans": len(rows),
+            "note": "「立项」不算推进：`F.step` 每推进一轮才追加一条 `history`；"
+                    "一份从没被推进过的计划只说明问题被记下来了"}
+    if kind == "counterexample_or_proof_rows":
+        proof = [r for r in store.rows("experiments")
+                 if str(r.get("evidence_kind") or "") == "proof"]
+        refuted = [r for r in store.rows("experiments")
+                   if str(r.get("result") or "") == "refutes"
+                   and dict(r.get("counterexample") or {})]
+        return len(proof) + len(refuted), {
+            "proof_rows": [str(r.get("experiment_id") or "") for r in proof[:8]],
+            "counterexample_rows": [str(r.get("experiment_id") or "") for r in refuted[:8]],
+            "note": ("数学的推进只有三种：证明、反例、诚实的「还没有」。这一档数前两种；"
+                     "一条都没有时，交付里必须明写「本轮没有判决性结论」——"
+                     "而不是拿支持性数值当结论")}
+    if kind == "search_frontier_rows":
+        rows = [r for r in store.rows("experiments") if dict(r.get("search_bound") or {})]
+        keys = {str(r.get("claim_key") or "") for r in rows}
+        return len(keys), {"claim_keys": sorted(k for k in keys if k)[:12],
+                           "with_bound": len(rows), "experiments_total": len(store.rows("experiments")),
+                           "note": ("界从哪来：脚本在 `REPRO_RESULT` 里报 `bound`，或调用方显式给 "
+                                    "`search_bound`；被超时杀掉的那次也照样有界（`PROGRESS:` 行）")}
+    if kind == "enumeration_optimization_rows":
+        by_key: dict[str, list[dict[str, Any]]] = {}
+        for r in store.rows("experiments"):
+            bound = dict(r.get("search_bound") or {})
+            if not bound:
+                continue
+            by_key.setdefault(str(r.get("claim_key") or ""), []).append(r)
+
+        def _size(bound: Mapping[str, Any]) -> float:
+            """界的"大小"：取 `n`（最常用）或所有数值键的最大值；没有数值键时按 0 算。"""
+            vals = [float(v) for v in bound.values() if isinstance(v, (int, float))]
+            return max(vals) if vals else 0.0
+
+        optimized: list[dict[str, Any]] = []
+        for key, rows in by_key.items():
+            rows = sorted(rows, key=lambda r: str(r.get("created_at") or ""))
+            hit = None
+            for i, earlier in enumerate(rows):
+                for later in rows[i + 1:]:
+                    e_rt, l_rt = float(earlier.get("runtime_sec") or 0.0), float(later.get("runtime_sec") or 0.0)
+                    if not e_rt or not l_rt:
+                        continue
+                    if _size(dict(later["search_bound"])) > _size(dict(earlier["search_bound"])) \
+                            and l_rt <= e_rt:
+                        hit = {"claim_key": key, "kind": "bigger_in_no_more_time",
+                               "earlier": str(earlier.get("experiment_id")),
+                               "later": str(later.get("experiment_id")),
+                               "bound": [dict(earlier["search_bound"]), dict(later["search_bound"])],
+                               "sec": [e_rt, l_rt]}
+                    elif _size(dict(later["search_bound"])) == _size(dict(earlier["search_bound"])) \
+                            and l_rt <= e_rt * 0.8:
+                        hit = {"claim_key": key, "kind": "same_bound_faster",
+                               "earlier": str(earlier.get("experiment_id")),
+                               "later": str(later.get("experiment_id")),
+                               "bound": [dict(earlier["search_bound"]), dict(later["search_bound"])],
+                               "sec": [e_rt, l_rt]}
+                    if hit:
+                        break
+                if hit:
+                    break
+            if hit:
+                optimized.append(hit)
+        return len(optimized), {"optimized": optimized[:8],
+                                "claim_keys_with_bounds": len(by_key),
+                                "note": ("这一档只认「可比较的推进」：界更大而耗时不多，或界相同而耗时"
+                                         "降到 80% 以下。策略名（`observations.strategy`）与成本曲线"
+                                         "（`observations.scaling`）是给人看的证据，不进这一档的判据")}
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 

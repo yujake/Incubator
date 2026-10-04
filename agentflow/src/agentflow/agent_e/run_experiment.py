@@ -138,6 +138,14 @@ class _RunExperiment:
             # 只有在"结论不是支持"时才附 stdout 摘要：支持类结论已经有
             # 结构化 observations 可读，再贴一段原始输出只是噪声。
             notes.append(f"[stdout] {_digest(run['stdout'])}")
+        # ---- [4a] 与"同一条 claim_key 上的历史实验"比一比（§133）：
+        # 用户口径是"数值实验可以慢，靠发现模式与优化枚举策略把时间压下去"。框架据此做的
+        # 不是限时，而是「把这个事实说出来」：这次比上次推进了没有（界 / 耗时 / 策略）。
+        repeat = self._progress_note(claim_key=claim_key, code_path=_relpath(path, self.workspace_root),
+                                     runtime_sec=run["runtime_sec"], timed_out=bool(run.get("timed_out")),
+                                     derived=derived)
+        if repeat:
+            notes.append(repeat)
 
         # ---- [4b]（在事务内写日志：文件名要用实验号，见 [5]）
 
@@ -174,7 +182,12 @@ class _RunExperiment:
                 extra_notes=notes,
                 # 硬约束 2c/2d 的事实通道（P-8 的另一半）：证书与它的适用范围。
                 certificate=(dict(certificate) if isinstance(certificate, Mapping) else None),
-                search_bound=(dict(search_bound) if isinstance(search_bound, Mapping) else None),
+                # `search_bound` 的优先级（§133）：调用方显式给 > 脚本在结构化结论里自报的
+                # `bound`（落进 `observations["bound"]`）> 无。脚本自报的那份是"这次真搜到哪儿"
+                # 的读数，比调用方拍的那个数可信 —— 它让"界有没有往前推"可比较。
+                search_bound=(dict(search_bound) if isinstance(search_bound, Mapping)
+                              else (dict((derived.get("observations") or {}).get("bound") or {})
+                                    or None)),
                 created_by=self.actor,
             )
             tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
@@ -194,3 +207,59 @@ class _RunExperiment:
         self.last_run = out
         self._log(f"experiment {eid} recorded", **{k: out[k] for k in ("result", "evidence_kind", "exit_code")})
         return out
+
+        # ---- 与同一 `claim_key` 上的历史实验比一比（`draft/37` §133）
+    def _progress_note(self, *, claim_key: str, code_path: str, runtime_sec: float,
+                       timed_out: bool, derived: Mapping[str, Any]) -> str:
+        """这次比起同一条 claim 上的历史实验，「推进了什么」（没有推进也照实说）。
+
+        用户口径（2026-08-.. 实为 2026-10-04）："数值实验时间长是正常的……后面逐渐发现模式、
+        优化枚举策略才把时间压下去。" 所以框架在这里做三件「只读」的事：
+
+        ① 找出同 `claim_key` 的历史实验（最多最近 5 条），把它们的"界 / 耗时 / 策略"读出来；
+        ② 与这一次比：界推了没有、耗电压了没有、策略换了没有；
+        ③ 三者都没有推进时，明说"这次与上次同形"—— 那是读者最需要知道的一句话
+           （真机里有 8 次同脚本 600 s 超时，台账上只有 8 个"超时"，看不出它们是同一件事）。
+
+        它不拒绝、不拦、不改写结论：慢实验是研究的一部分，只有"没有新读数"才是问题。
+        """
+        # 按 `claim_key` 找历史（「不限同一个脚本」）：换脚本往往正是"换枚举策略"的形态，
+        # 只在同脚本内比较会把最有价值的那次推进藏起来（实测：换成 b.py 之后比较不出来）。
+        rows = [dict(r) for r in self.store.rows("experiments")
+                if str(r.get("claim_key")) == str(claim_key)]
+        if not rows:
+            return ""
+        prev = rows[-1]
+        prev_code = str(prev.get("code_path") or "")
+        prev_obs = dict(prev.get("observations") or {})
+        now_obs = dict(derived.get("observations") or {})
+        prev_bound = dict(prev.get("search_bound") or prev_obs.get("bound") or {})
+        now_bound = dict(now_obs.get("bound") or {})
+        prev_rt = float(prev.get("runtime_sec") or 0.0)
+        prev_strategy = str(prev_obs.get("strategy") or "")
+        now_strategy = str(now_obs.get("strategy") or "")
+        bits = [f"同 claim 历史 {len(rows)} 条（最近一条 {prev.get('experiment_id')}："
+                f"{'超时' if prev.get('exit_code') is None else 'exit=' + str(prev.get('exit_code'))}"
+                f"，{prev_rt:.1f}s，result={prev.get('result')}）"]
+        if prev_bound or now_bound:
+            bits.append(f"界：上次 {prev_bound or '(没记)'} → 这次 {now_bound or '(没记)'}")
+        if prev_rt and runtime_sec is not None:
+            bits.append(f"耗时：上次 {prev_rt:.1f}s → 这次 {float(runtime_sec):.1f}s")
+        if prev_strategy or now_strategy:
+            bits.append(f"策略：上次 {prev_strategy or '(没记)'} → 这次 {now_strategy or '(没记)'}")
+        if prev_code and prev_code != str(code_path):
+            bits.append(f"脚本换了：{prev_code} → {code_path}")
+        moved = (bool(now_bound) and now_bound != prev_bound) or \
+                (bool(now_strategy) and now_strategy != prev_strategy) or \
+                (bool(prev_code) and prev_code != str(code_path)) or \
+                (prev_rt and runtime_sec is not None and float(runtime_sec) < prev_rt * 0.8)
+        if not moved:
+            bits.append("这次与上次**同形**（界/策略/耗时都没有推进）⇒ 想要新信息就得换枚举策略"
+                        "（规范化、去同构、对称性剪枝、增量+回溯、SAT/ILP 编码、随机+证书）"
+                        "或者把界说清（`bound`）——重复同一条超时脚本不算进展")
+        else:
+            bits.append("这次与上次不同形（有推进读数）")
+        if timed_out and not now_obs.get("progress"):
+            bits.append("而且这次脚本没有打 `PROGRESS:` 行 ⇒ 被超时杀掉之后连「搜到哪儿」都没有；"
+                        "加上它（每完成一个 n 打一行）")
+        return "[progress] " + "；".join(bits)
