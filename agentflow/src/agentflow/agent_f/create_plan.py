@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import AT, Any, Mapping, PlanError, S, Sequence, TERMINAL_STATUSES
+from ..refusals import refuse
 
 class _CreatePlan:
     def create_plan(
@@ -40,27 +41,22 @@ class _CreatePlan:
         default_budget = self._default_budget()
         chk = AT.check_budget(dict(budget) if budget is not None else dict(default_budget))
         if not chk["complete"]:
-            return {
-                # `ok: False`（`draft/37` §127 的真机读数）：这一支是「拒绝」，
-                # 而它此前只给 `created: false` + `reason` —— 调用方（主控）看到的
-                # `outcome` 于是是 `ok`（"执行完成（handler 未声明 outcome，按有产出处理）"），
-                # 真机里它连着 6 次以为自己立了项，而 `attack_plans` 一行都没有。
-                # 判据在 `conductor._end_from_payload`：payload 里 `ok=False` ⇒ refused。
-                # 分档规则是"声明了受控的 `refusal_reason` ⇒ refused；只说 ok=False ⇒ failed"，
-                # 而这一支是「调用方参数不完整」（改参数就能过）⇒ `invalid_params`。
-                "ok": False,
-                "refusal_reason": "invalid_params",
-                "kind": "budget_incomplete",
-                "created": False,
-                "plan_id": None,
-                "duplicate": False,
-                "reason": (
-                    f"拒绝创建：{chk['reason']}。"
-                    "（预算不完整时不立项，而不是先用默认值把洞补上再跑）"
-                ),
-                "missing": chk["missing"],
-                "budget": dict(budget or {}),
-            }
+            # 走**统一的拒绝形态**（`refusals.refuse`）：这一支是拒绝，而它此前只给
+            # `created: false` + `reason` —— 调用方（主控）看到的 `outcome` 于是是 `ok`
+            # （「执行完成（handler 未声明 outcome，按有产出处理）」），真机里它连着 6 次
+            # 以为自己立了项，而 `attack_plans` 一行都没有（`draft/37` §127）。
+            # `conductor._end_from_payload` 据此落 `refused`（参数不完整 ⇒ `invalid_params`）。
+            return refuse(
+                "budget_incomplete",
+                f"拒绝创建：{chk['reason']}。"
+                "（预算不完整时不立项，而不是先用默认值把洞补上再跑）",
+                # `reason` 这一键既有调用方与既有判据在读：统一形态不许把它们的读数弄丢
+                # （`refuse` 的 `**extra` 就是为这件事留的）。
+                reason=(f"拒绝创建：{chk['reason']}。"
+                        "（预算不完整时不立项，而不是先用默认值把洞补上再跑）"),
+                created=False, plan_id=None, duplicate=False,
+                missing=chk["missing"], budget=dict(budget or {}),
+            )
 
         if not str(problem).strip():
             raise PlanError("problem 不能为空")

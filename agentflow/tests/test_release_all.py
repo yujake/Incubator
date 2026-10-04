@@ -2154,6 +2154,11 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "policy.py": "策略层：允许哪些召唤，以及四类上限",
     "providers.py": "文献检索 provider 层：`SearchProvider` 协议与各数据源实现",
     "quoteverify.py": "引文校验：把\"关系描述需完全引用参考文献\"变成一道可执行的质量门",
+    # `draft/37` §128（2026-10-04）：停机做成两条路 + 一个开关（优雅 / 强制），
+    # 由 M 的 `conductor.stop` 与 CLI `agentflow stop` 共用同一份实现。
+    "stopctl.py": "停机的唯一实现：停机开关（`.agentflow-stop`）+ 子进程登记（`runs/<role>-<sid>.pid`）"
+                  "＋优雅停止与强制停止（`taskkill /T /F` 连子孙）—— 「用户叫停」这条通道此前只在"
+                  "多轮路径存在：单趟 `run-agent` 里叫停之后它继续跑到第 123 步（真机读数见 §125/§127）",
     # `draft/37` §88（2026-10-04）：角色动作的「拒绝」只有一个形态。
     # 它不是对拍副本：`agent_a/ingest_local.py`、`agent_a/search_literature.py`、
     # `agent_b/register_statement.py` 都转发到它的 `refuse()`。
