@@ -290,3 +290,70 @@ def test_a_voided_row_stays_a_conjecture_even_with_a_cached_higher_grade():
     bits = EB.bits_from_row(row)
     assert bits["grade"] == "conjecture", bits
     assert bits["voided_by"]["experiment_id"] == "exp-0009", bits
+
+
+# ============================================================ 写台账之前把形状关（schema 边界）
+
+def _statement(**over):
+    """造一条能过 `Statement.validate` 的行（老约束先满足：quote_reason + proof_text）。"""
+    from agentflow import schema as S
+
+    base = dict(stmt_id="0000", origin="own_result", kind="theorem",
+                statement_full="设 G 是 m-正则图；则……",
+                proof_text="（逐步论证）", quote_verified=None,
+                quote_reason="我方自产命题，没有外部引文要比对", created_at="2026-10-05T00:00:00")
+    base.update(over)
+    return S.Statement(**base)
+
+
+def test_a_statement_with_well_formed_bits_validates():
+    """正控：形状合规的 `bits` 能进台账（反真空 —— 免得把关做成了"什么都拒"）。"""
+    row = _statement(bits={"numeric": "verified",
+                           "evidence": {"numeric": {"experiment_id": "exp-0002",
+                                                    "script": "code/scan.py", "sha": "aa11"}}})
+    row.validate()
+
+
+@pytest.mark.parametrize("bits,needle", [
+    ({"numeric": "verified", "evidence": {"numeric": {"sha": "aa11"}}}, "没有指针"),
+    ({"formal": "verified", "evidence": {"formal": {"output": "no goals"}}}, "哪个检查器"),
+    ({"numeric": "na"}, "必须写理由"),
+    ({"nueric": "verified"}, "不认识的键"),
+    ({"proof": True, "reviewed": True, "grade": "theorem",
+      "evidence": {"proof_process": "（证明）", "reviewed_by": {"round": "V-1"}}}, "不许自报"),
+])
+def test_the_bits_shape_gate_rejects_one_broken_thing_at_a_time(bits, needle):
+    """负控：每一种坏形状都要单独被点名（未知键 / 自报等级 / 缺凭据 / `na` 无理由）。
+
+    判据本体在 `evidencebits.bits_shape_problems`（唯一来源），schema 只转发 ——
+    这一组测的是"转发到位了"，所以断言的是异常文本里那句人话。
+    """
+    with pytest.raises(ValueError) as exc:
+        _statement(bits=bits).validate()
+    assert needle in str(exc.value), str(exc.value)
+
+
+def test_a_voided_statement_may_not_stay_active():
+    """作废位与 `status='active'` 不许并存：等级清零与状态降档是两件事，必须都做。"""
+    with pytest.raises(ValueError, match="不许留 status='active'"):
+        _statement(bits={"voided_by": {"kind": "numeric_counterexample",
+                                       "experiment_id": "exp-0009"}}).validate()
+    _statement(status="refuted",
+               bits={"voided_by": {"kind": "numeric_counterexample",
+                                   "experiment_id": "exp-0009"}}).validate()
+
+
+def test_a_cached_grade_in_bits_must_equal_the_live_derivation():
+    """盘上那份等级只当缓存：与现算不符 ⇒ 写入期直接拒（省得读盘的人看到两个数）。"""
+    good = {"proof": True, "reviewed": True, "grade": "pre_theorem",
+            "evidence": {"proof_process": "（逐步论证）", "reviewed_by": {"round": "V-1"}}}
+    _statement(bits=good).validate()
+    bad = dict(good, grade="theorem")
+    with pytest.raises(ValueError, match="按五位现算"):
+        _statement(bits=bad).validate()
+
+
+def test_an_empty_bits_field_stays_readable_as_all_blank():
+    """空 `bits`（旧行/还没填）是合规的：它读成"五位全空"，不是"格式错"。"""
+    _statement().validate()
+    assert EB.bits_from_row({"bits": {}}).get("grade") == "conjecture"

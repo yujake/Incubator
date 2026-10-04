@@ -533,6 +533,15 @@ class LoopRun:
     waiting_for: str = ""
     #: 这一趟是从第几步接着跑的（0 = 全新开始，>0 = `--resume` 续跑的第几步）。
     resumed_from: int = 0
+    #: 收工时被"强制 notify 表"打回的次数（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）。
+    #:
+    #: 为什么它必须是个独立读数：用户点名的口径是"打回重填、不代填"——
+    #: 于是"缺留痕"这件事在台账上的形态是"这一趟被打回了几次、最后是不是以 `no_notify` 收的"。
+    #: 只报一个 stop_reason 看不出"它试了几次"。
+    notify_rejections: int = 0
+    #: 这一趟按 notify 表真的落成的手稿编号（按发生顺序）。空列表 + `stop_reason="final"`
+    #: 只对主控成立（M 向用户回复不做这套）。
+    handoffs: list[str] = field(default_factory=list)
     #: 这一趟是什么时候开始的（`S.now_iso()` 的形态）。
     #:
     #: 为什么要有它（`draft/37` §125）：`user_stop` 那条判据要的是"本次运行「开始之后」
@@ -568,6 +577,7 @@ class LoopRun:
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
             "dead_loop_max": self.dead_loop_max, "same_call_max": self.same_call_max,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
+            "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
             "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
@@ -845,30 +855,109 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # 读/列仍然做成工具（不需要身份）。
         #
         # 为什么「由框架」把留言合出来（而不是让模型自己再发一条 message）：
-        # 用户原话"就传个编号感觉有点尬，可以再附一句简要描述" —— 摘要取 `brief`
-        # （没给就取标题），于是模型只写一次，收件人既知道编号又知道一句话是什么事。
+        # 用户原话"就传个编号感觉有点尬，可以再附一句简要描述" —— 那一句话是 `summary`
+        # （`draft/39` §C2 的正名）；旧名 `brief` / `title` 仍然接受，三者取第一个非空的。
         if not isinstance(value, Mapping):
             return "", {}, "handoff 必须是一个对象"
         to = str(value.get("to") or "")
         if to != PUBLIC and to not in (*S.ROLES, S.CONDUCTOR_ROLE):
             return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
                             f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"）")
-        title = str(value.get("title") or "").strip()
+        summary = (str(value.get("summary") or "").strip()
+                   or str(value.get("brief") or "").strip()
+                   or str(value.get("title") or "").strip())
         body = str(value.get("body") or "").strip()
-        if not title:
-            return "", {}, "handoff 需要 title（索引里靠它认人）"
+        if not summary:
+            return "", {}, ("handoff 需要 summary（一句话：它就是留言里那句 "
+                            "`[手稿 NNNN] <summary>`；旧名 title/brief 也认）")
         if not body:
             return "", {}, ("handoff 需要 body（正文）—— 空手稿是「我交接了」的假证据，"
                             "而这一层存在的全部意义就是可溯源")
         refs = value.get("refs") or []
         if not isinstance(refs, (list, tuple)):
             return "", {}, "handoff 的 refs 必须是编号数组"
-        return key, {"to": "ALL" if to == PUBLIC else to, "title": title, "body": body,
-                     "brief": str(value.get("brief") or "").strip(),
+        return key, {"to": "ALL" if to == PUBLIC else to, "summary": summary, "body": body,
                      "refs": [str(x) for x in refs],
                      "why": str(value.get("why") or "")}, ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
-    return key, {"final": final, "evidence": [str(x) for x in (data.get("evidence") or [])]}, ""
+    payload: dict[str, Any] = {"final": final,
+                               "evidence": [str(x) for x in (data.get("evidence") or [])]}
+    if data.get("notify") is not None:
+        # `notify` 原样带过：它的校验统一在 `_notify_gate` 里做（那一层才知道角色、
+        # 才知道这是连续第几次被打回 —— 而"打回"要附四件事的警告，警告的措辞只有一处）。
+        # 解码器只负责"认出了 final 这个形状"（纯函数、可单测）。
+        payload["notify"] = data.get("notify")
+    return key, payload, ""
+
+
+#: `final.notify` 的字段表（`draft/39` §3.2）：`to` / `summary` / `body` 必填，`refs` / `why` 可选。
+NOTIFY_FIELDS: tuple[str, ...] = ("to", "summary", "body", "refs", "why")
+
+
+def _known_recipient(token: str) -> bool:
+    """收件人写法认不认（大小写不敏感；`ALL` / `#public` 都算"给所有人"）。"""
+    want = str(token or "").strip()
+    return want.upper() in {r.upper() for r in (*S.ROLES, S.CONDUCTOR_ROLE, PUBLIC, "ALL")}
+
+
+def notify_shape_problem(notify: Any) -> str:
+    """`final.notify` 的形状检查（空串 = 合规）。只判形状，不判"该不该有这一栏"。"""
+    if not isinstance(notify, Mapping):
+        return f"notify 必须是一个对象（字段：{list(NOTIFY_FIELDS)}），收到 {type(notify).__name__}"
+    unknown = sorted(set(notify) - set(NOTIFY_FIELDS))
+    if unknown:
+        return (f"notify 里有不认识的字段 {unknown}：只有 {list(NOTIFY_FIELDS)} —— "
+                "拼错的字段会被静默忽略，于是它与「没填」长得一样")
+    to = str(notify.get("to") or "").strip()
+    if not to:
+        return "notify.to 没填（要交给谁：A–H 或 M，给所有人写 ALL）"
+    if not _known_recipient(to):
+        return (f"notify.to={to!r} 不是角色（{list(S.ROLES)}）、也不是主控 {S.CONDUCTOR_ROLE}、"
+                f"也不是 {PUBLIC}（给所有人写 ALL）")
+    if not str(notify.get("summary") or "").strip():
+        return "notify.summary 没填（一句话：交给对方什么 —— 它会被拼进那条留言）"
+    if not str(notify.get("body") or "").strip():
+        return ("notify.body 没填（markdown 正文：做了什么 / 依据（实验号、文献号、手稿号）/ "
+                "要对方做什么 / 我卡在哪）")
+    refs = notify.get("refs")
+    if refs is not None and not isinstance(refs, (list, tuple)):
+        return "notify.refs 必须是数组（前序手稿编号或 stmt:/exp:/lit:/rel: 这类台账引用）"
+    return ""
+
+
+def clean_notify(notify: Mapping[str, Any]) -> dict[str, Any]:
+    """把 `notify` 规范化（收件人大小写归一、`ALL`/`#public` 都写成 `ALL`、`refs` 转字符串数组）。"""
+    to = str(notify.get("to") or "").strip()
+    return {"to": "ALL" if to.upper() in (PUBLIC.upper(), "ALL") else to.upper(),
+            "summary": str(notify.get("summary") or "").strip(),
+            "body": str(notify.get("body") or ""),
+            "refs": [str(x) for x in (notify.get("refs") or [])],
+            "why": str(notify.get("why") or "").strip()}
+
+
+def _notify_help(problem: str, *, attempt: int) -> str:
+    """被打回时给模型看的那一段（用户点名要的"四件事" + 连续两次要反思）。
+
+    四件事（`draft/39` §3.3 的裁定）：① 命中了哪个字段；② 正例；③ 反例；
+    ④ "只改这一个字段再发一次"。为什么必须四件都给：只说"格式不对"时，模型下一句
+    往往是把整段结论重写一遍（结论因此漂移），而这里要救的只是那一栏。
+    """
+    lines = [
+        f"【打回重填】收工那一句（final）必须带 notify 表，而你这一份的问题是：{problem}",
+        "① 命中字段：见上一行那句（说的就是哪一个键）。",
+        "② 正例：{\"final\": \"本轮把 X 推到 Y（读数见下）\", \"notify\": {\"to\": \"D\", "
+        "\"summary\": \"交给 D：X 的族构造证据\", \"body\": \"## 我做了什么\n…\n## 依据\n"
+        "exp:0002 / lit:0004\n## 要你做什么\n…\n## 我卡在哪\n…\", \"refs\": [\"0003\"]}}",
+        "③ 反例：{\"final\": \"做完了\"}（没有 notify）；{\"notify\": {\"to\": \"D\"}}"
+        "（缺 summary 与 body）；{\"notify\": {\"to\": \"Z\", …}}（收件人不是角色）。",
+        "④ 只改这一个字段再发一次：final 的正文与你原来的结论照旧写，别整段重写 —— "
+        "被救的只是那一栏。",
+    ]
+    if attempt >= 2:
+        lines.append(
+            f"这是连续第 {attempt} 次没按格式填：请**先说明你上一次为什么没按格式填**"
+            "（一句话即可），再按上面的正例重发。")
+    return "\n".join(lines)
 
 
 def _summon_key(action: str, params: Mapping[str, Any]) -> str:
@@ -912,6 +1001,12 @@ class AgentLoop:
     #: 要调谁、只是那个 JSON 没写对" —— 后者交回工具层就能改对（DSH 的口径），
     #: 所以给它多一次机会，同时仍然保留上限（不设上限等于允许无限重说同一句）。
     max_bad_args: int = 3
+    #: 收工时的 `notify` 表最多被打回几次（`draft/39` §3.3 的裁定：打回重填、不代填）。
+    #:
+    #: 为什么是 3：与 `max_bad_args` 同一档 —— "表填错"是"说对了要收工、只是那一栏没写对"，
+    #: 交回一次就该能改对；3 次之后仍然不填，说明它不是在写错，而是不愿意留痕，
+    #: 那时停下来并如实报 `stop_reason="no_notify"` 比继续烧钱问更有信息量。
+    max_notify_rejections: int = 3
     #: 「原地打转」的两道闸（`draft/37` §131 第 2 件事 / §136 的落地）：
     #: 同一个形状、同一份参数、同样的读数连着第几次时点名（提醒），第几次时收工。
     #:
@@ -1265,9 +1360,54 @@ class AgentLoop:
             run.bad_json_streak = 0
             run.bad_args_streak = 0
             if shape == "final":
+                # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）
+                #
+                # 口径三句：① 除主控外的角色收工必须填这张表（`to`/`summary`/`body`）；
+                # ② 填错/没填 ⇒ 打回重填（不代填），附"四件事"的详细格式说明；
+                # ③ 连续打回两次，警告里再加"先说明你上一次为什么没按格式填"。
+                # 主控 M 的 `final` 是给用户的回复，不在这套里（用户原话：
+                # "M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）。
+                gate = self._notify_gate(payload)
+                if gate:
+                    run.notify_rejections += 1
+                    run.bad_args += 1
+                    run.bad_args_streak += 1
+                    help_text = _notify_help(gate, attempt=run.notify_rejections)
+                    bad_result = {"problem": help_text, "shape_recognized": "final",
+                                  "notify_rejections": run.notify_rejections,
+                                  "raw_reply": _clip(json.dumps(data, ensure_ascii=False), 600)}
+                    run.steps.append(LoopStep(step, "invalid", payload, bad_result,
+                                              problem=help_text))
+                    SS.append(self.session_root, {
+                        "kind": "agent_step", "role": self.role, "index": step,
+                        "shape": "invalid", "payload": dict(payload),
+                        "result": dict(bad_result),
+                    }, sid=self.sid)
+                    transcript += _payload_line(step, "final", help_text)
+                    if run.notify_rejections >= self.max_notify_rejections:
+                        # 停在"没留痕"上，而不是替它写一份：用户点名"不做框架代填"。
+                        # 它自己那份结论照原样留着（`final` 就是模型写的那段话）——
+                        # 打回不等于把这一趟的产出丢掉。
+                        run.stop_reason = "no_notify"
+                        run.final = (str(payload.get("final") or "").rstrip()
+                                     + f"\n\n（框架：收工要求填 notify 表，连续 "
+                                       f"{run.notify_rejections} 次没按格式填，"
+                                       "所以这一趟没有留下交接手稿 —— 结论在上面，"
+                                       "交接这一栏是空的。）")
+                        break
+                    continue
+                notify = payload.get("notify")
+                step_result: dict[str, Any] = {}
+                if notify:
+                    # 写手稿 + 转发都由脚本做（模型只填表）—— 这一条是用户口径里
+                    # "用脚本生成交接文件并代为转发"的落点。
+                    hand = self._do_handoff(clean_notify(notify))
+                    step_result = {"notify_handoff": hand}
+                    if hand.get("ok"):
+                        run.handoffs.append(str(hand.get("id") or ""))
                 run.final = str(payload.get("final") or "")
                 run.evidence = list(payload.get("evidence") or [])
-                run.steps.append(LoopStep(step, shape, payload, {}))
+                run.steps.append(LoopStep(step, shape, payload, step_result))
                 run.stop_reason = "final"
                 break
             result = self._execute(shape, payload)
@@ -1481,6 +1621,34 @@ class AgentLoop:
                 f"要看这一趟做了什么用 `agentflow --root {self.session_root} runs`，"
                 f"要接着跑用 `agentflow --root {self.session_root} run-agent --resume "
                 f"--task \"<接着做什么>\"{sid_arg}`")
+
+    def _notify_gate(self, payload: Mapping[str, Any]) -> str:
+        """收工那一句的 `notify` 表该不该被打回（空串 = 放行）。
+
+        三条判断（顺序就是"先看该不该填，再看填得对不对"）：
+
+        1. 主控 M 免填：它的 `final` 是给用户的回复（用户 2026-10-05 原话：
+           "M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）；
+        2. 没填 / 填错形状 ⇒ 打回（形状判据只有一份：`notify_shape_problem`）；
+        3. 填了但 refs 悬空 ⇒ 也打回（`manuscripts.ref_problem` 是写入期同一份判据：
+           让它在"填表"这一步就被指出来，而不是写手稿时才炸）。
+        """
+        if self.role == S.CONDUCTOR_ROLE:
+            return ""
+        notify = payload.get("notify")
+        if notify is None:
+            return (f"没有 notify 表（`final` 要给一个 notify 对象，字段：{list(NOTIFY_FIELDS)}）"
+                    "—— 除主控外每个角色收工都要留一份交接手稿，这是用户点名的强制项")
+        problem = notify_shape_problem(notify)
+        if problem:
+            return problem
+        from . import manuscripts as MS
+
+        for ref in list(notify.get("refs") or []):
+            why = MS.ref_problem(self.session_root, str(ref))
+            if why:
+                return f"notify.refs 里的 {ref!r} 立不住：{why}"
+        return ""
 
     def _param_table(self, shape: str, payload: Mapping[str, Any]) -> str:
         """被参数拒了的那一步：把声明面里的参数表渲染出来（读不到就返回空串，不编）。"""
@@ -1785,26 +1953,29 @@ class AgentLoop:
         留言是「通知」。让模型分两步做，就会出现"写了手稿但对方不知道"（或反过来）
         的半截状态；而且用户点过名："就传个编号感觉有点尬，可以再附一句简要描述"。
 
-        `to="ALL"` ⇒ 走公共频道（所有人收得到），文件名仍是 `NNNN-<From>toALL.md`。
+        `to="ALL"` ⇒ 走公共频道（所有人收得到）；存储是追加式账本
+        `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
         """
         from . import manuscripts as MS
 
         to = str(payload.get("to") or "")
         channel = PUBLIC if to == "ALL" else to
-        brief = str(payload.get("brief") or "").strip()
+        # `summary` 是这一形状的正名（它就是进留言的那一句话）；`brief` / `title` 是旧名，
+        # 仍然接受 —— 旧调用点、旧提示词与模型的历史习惯都不至于因此写不进去。
+        one_line = (str(payload.get("summary") or "").strip()
+                    or str(payload.get("brief") or "").strip()
+                    or str(payload.get("title") or "").strip())
         why = str(payload.get("why") or "").strip()
         try:
             rec = MS.write(self.session_root, sender=self.role, recipient=to,
-                           title=str(payload.get("title") or ""),
-                           body=str(payload.get("body") or ""),
-                           refs=list(payload.get("refs") or []),
-                           summary=brief, sid=self.sid or "")
+                           summary=one_line, body=str(payload.get("body") or ""),
+                           refs=list(payload.get("refs") or []), sid=self.sid or "")
         except ValueError as exc:
             return {"handoff": "未写成", "ok": False, "error": str(exc)}
-        summary = brief or str(rec.get("title") or "")
+        summary = str(rec.get("summary") or "")
         msg_id, problem = send_message(
             self.session_root, sender=self.role, to=channel,
-            subject=f"手稿 {rec['id']}：{rec.get('title') or ''}",
+            subject=f"手稿 {rec['id']}：{summary}",
             body=(f"[手稿 {rec['id']}] {summary}"
                   + (f"\n（为什么找你：{why}）" if why else "")
                   + f"\n全文：`manuscripts.read(id=\"{rec['id']}\")`"

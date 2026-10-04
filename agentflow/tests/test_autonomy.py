@@ -72,8 +72,14 @@ def _ws(tmp_path: pathlib.Path) -> tuple[Store, Any, pathlib.Path]:
 
 
 def _finals(*texts: str) -> list[str]:
-    """把若干句结论包成 `final` 形状的替身回复（省得每处都写一遍 json.dumps）。"""
-    return [json.dumps({"final": t, "evidence": []}, ensure_ascii=False) for t in texts]
+    """把若干句结论包成 `final` 形状的替身回复（省得每处都写一遍 json.dumps）。
+
+    `notify` 是协议的一部分（`draft/39` §3.2：除主控外收工必须留一份交接手稿）——
+    替身回复也要按协议说，否则被测的就不是"这一轮做完了"，而是"被强制 notify 打回"。
+    """
+    return [json.dumps({"final": t, "evidence": [],
+                        "notify": {"to": "M", "summary": t, "body": f"## 结论\n{t}\n"}},
+                       ensure_ascii=False) for t in texts]
 
 
 def _events(root: pathlib.Path, sid: str) -> list[dict[str, Any]]:

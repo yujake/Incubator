@@ -85,7 +85,7 @@ def test_a_writes_the_match_verdict_through_its_own_tool_face(tmp_path):
                     "args": {"table": "literature", "id": "0000", "patch": {"matched": "exact"}},
                     "why": "定位到 Theorem 1.5：题名/年份对得上，正文第 7 页有它"},
                    ensure_ascii=False),
-        json.dumps({"final": "已确认：exact（pp. 7-8）", "evidence": ["lit:0000"]},
+        json.dumps({"final": "已确认：exact（pp. 7-8）", "evidence": ["lit:0000"], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}},
                    ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
@@ -101,7 +101,7 @@ def test_a_bogus_verdict_cannot_be_written(tmp_path):
                     "args": {"table": "literature", "id": "0000",
                              "patch": {"matched": "missing"}},
                     "why": "（故意拼一个词表里没有的值）"}, ensure_ascii=False),
-        json.dumps({"final": "写不进去就如实说", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "写不进去就如实说", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     _run_a(st, cond, reg, gw)
@@ -118,7 +118,7 @@ def test_the_handoff_message_carries_the_verdict_and_the_page(tmp_path):
                                 "body": "matched=exact；出处 lit:0000，页码 pp. 7-8；"
                                         "Theorem 1.5 的原文与证明已可交给 B 消化。"}},
                    ensure_ascii=False),
-        json.dumps({"final": "已通知 D", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "已通知 D", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     run = _run_a(st, cond, reg, gw)
@@ -145,7 +145,7 @@ def test_a_mismatch_is_not_reported_as_a_confirmed_theorem(tmp_path):
                                 "body": "matched=mismatch：检索回来的不是派活点名的那一篇；"
                                         "**不许**交给 B，先重取。"}},
                    ensure_ascii=False),
-        json.dumps({"final": "已如实通知 D", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "已如实通知 D", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     _run_a(st, cond, reg, gw)
@@ -173,7 +173,7 @@ def test_a_hands_the_confirmed_text_to_b(tmp_path):
                                         "请把 Theorem 1.5 的完整假设与证明逐字摘进 statements，"
                                         "quote_verified 三态要写清。"}},
                    ensure_ascii=False),
-        json.dumps({"final": "已交给 B", "evidence": ["lit:0000"]}, ensure_ascii=False),
+        json.dumps({"final": "已交给 B", "evidence": ["lit:0000"], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     run = _run_a(st, cond, reg, gw)
@@ -199,7 +199,7 @@ def test_a_mismatch_is_not_handed_to_b(tmp_path):
         json.dumps({"message": {"to": "D", "subject": "命中校验失败",
                                 "body": "matched=mismatch：**不许交给 B**，先重取。"}},
                    ensure_ascii=False),
-        json.dumps({"final": "未交给 B", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "未交给 B", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     _run_a(st, cond, reg, gw)

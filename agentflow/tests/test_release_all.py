@@ -2131,7 +2131,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "dedup.py": "判重：文献 / 概念 / 关系",
     "demo.py": "离线端到端演示（不访问网络，把 A→B→校验整条链路真跑一遍）",
     "evidence.py": "证据层：先检索、再逐字回验（每条结论都落在某段真实原文上）",
-    # `draft/39` §3.14（2026-10-05，用户裁定）：命题的**五元证据位**与派生等级。
+    # `draft/39` §3.14（2026-10-05，用户裁定）：命题的「五元证据位」与派生等级。
     # 它不是对拍副本：位的词表/四态、派生等级、引用命题那条读法、作废四条只有这一份实现；
     # 收工门的 `reviewed_proof_rows` 与（批⑥）状态报告都调 `bits_from_row`。
     "evidencebits.py": "命题的五元证据位与派生等级（哪位角色欠哪一位 / 四态 / 等级机械派生 / "
@@ -2153,9 +2153,10 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # `draft/37` §134（2026-10-04，用户口径）：交接手稿——「交接工作前写一份手稿」。
     # 它不是对拍副本：`agent_loop._do_handoff`（循环形状）与 `tools/manuscript_tools.py`
     # 都转发到它的 `write` / `read` / `list_all`；编号分配与命名规则只有这一份实现。
-    "manuscripts.py": "交接手稿的唯一实现：`manuscripts/` 下的 `<编号>-<谁>to<谁>.md`、"
-                      "编号从 0000 顺次（拿文件扫，不拿索引）、文件锁下的并发写、`index.jsonl` 账本 —— "
-                      "「派活依据」与「溯源」此前只活在对话里（`draft/37` §134）",
+    "manuscripts.py": "交接手稿的唯一实现：`manuscripts/handoffs.jsonl` 追加式账本（一行一份交接，"
+                      "`to`/`summary`/`body` 必填）、编号在锁内从 0000 顺次分配、旧格式 "
+                      "`<编号>-<谁>to<谁>.md` 仍读得回来 —— 「派活依据」与「溯源」此前只活在对话里"
+                      "（`draft/37` §134；存储改追加式见 `draft/39` §C1）",
     "modelclient.py": "把模型网关适配成抽取层要的 `.complete()`（带 scope='extract' 记账）",
     "modelcost.py": "模型花销入账适配器（`ModelReply` → `usage_ledger` 的一笔账）",
     "projects.py": "项目工作区：一个项目一个文件夹、默认命名 project1..N、冷启动/热启动判定",

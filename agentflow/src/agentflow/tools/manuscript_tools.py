@@ -7,7 +7,8 @@
 > 每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿最新的，从 0000 开始顺次标），
 > 传信息时就传手稿编号。这样的话派活也有依据，溯源也很清晰。
 
-实现本体只有一份：`agentflow.manuscripts`（编号分配 + 命名 + 索引 + 读回）。
+实现本体只有一份：`agentflow.manuscripts`（编号分配 + 追加式账本 + 读回）。存储是
+`manuscripts/handoffs.jsonl`（一行一份交接，`draft/39` §C1 起；旧格式 `.md` 仍读得回来）。
 这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，
 与 `notes/<角色>.md` 同族）都能用。
 
@@ -49,7 +50,7 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
      "required": ["id"], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
-    returns="{'id','path','sender','recipient','title','text','sha256','bytes'}",
+    returns="{'id','path','sender','to','summary','text','sha256','bytes'}",
 )
 def manuscripts_read(store, id: str) -> ToolResult:
     """工具体：按编号读全文。"""
@@ -76,7 +77,7 @@ def manuscripts_read(store, id: str) -> ToolResult:
      "required": [], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
-    returns="{'count','items':[{id,sender,recipient,title,summary,path,created_at}]}",
+    returns="{'count','items':[{id,sender,to,summary,path,created_at}]}",
 )
 def manuscripts_list(store, to: str = "", sender: str = "", limit: int = 50) -> ToolResult:
     """工具体：列手稿。"""

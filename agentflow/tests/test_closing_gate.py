@@ -1005,12 +1005,13 @@ def test_a_review_project_is_not_touched_by_the_coverage_rule(tmp_path: pathlib.
 
 # ============================================================ 交接手稿那一档（§140）
 
-def test_the_manuscript_leg_counts_files_on_disk_not_the_index(tmp_path: pathlib.Path):
-    """判据（`draft/37` §134/§140）：`manuscript_rows` 数盘上的手稿文件。
+def test_the_manuscript_leg_counts_rows_in_the_ledger_not_files(tmp_path: pathlib.Path):
+    """判据（`draft/39` §C1）：`manuscript_rows` 数账本行（一行一份交接）。
 
     为什么单列这一档：用户点名"传信息就传手稿编号"，而 T2 第 5 趟这一类一次也没用
-    （M 写了 26 条 `note`，只活在会话里）。判据只认文件名能被 `<编号>-<谁>to<谁>.md`
-    认出来的那些 —— 索引不算数（文件是真相，账本只是流水）。
+    （M 写了 26 条 `note`，只活在会话里）。为什么从"数文件"改成"数行"（用户 2026-10-05 裁）：
+    旧口径要求文件名能被 `<编号>-<谁>to<谁>.md` 认出来 ⇒ 改个名、少个字段就读成 0，
+    读数被文件名的形状绑住。旧格式文件不计入，但在明细里另列一栏（不假装没有）。
     """
     from agentflow import manuscripts as MS
 
@@ -1021,16 +1022,61 @@ def test_the_manuscript_leg_counts_files_on_disk_not_the_index(tmp_path: pathlib
     before = _gate(st, report)
     assert before.readings["acceptance"]["rows"][0]["got"] == 0, before.readings["acceptance"]
 
-    MS.write(tmp_path, sender="D", recipient="F", title="交给 F 的攻坚依据",
-             body="实验 0002 的族证据在 out/experiments/0002.log。\n", summary="族证据")
-    MS.write(tmp_path, sender="M", recipient="ALL", title="本轮结论", body="见报告。\n")
-    (tmp_path / "manuscripts" / "乱名字.md").write_text("不算数。\n", encoding="utf-8")
+    MS.write(tmp_path, sender="D", recipient="F", summary="族证据",
+             body="实验 0002 的族证据在 out/experiments/0002.log。\n")
+    MS.write(tmp_path, sender="M", recipient="ALL", summary="本轮结论", body="见报告。\n")
+    # 旧格式文件：读得回来，但不计入这一档（明细里点名）
+    (tmp_path / "manuscripts" / "0009-DtoF.md").write_text(
+        "# 0009｜D → F\n\n- 标题：旧的\n\n## 正文\n\n旧格式。\n", encoding="utf-8")
 
     after = _gate(st, report)
     row = after.readings["acceptance"]["rows"][0]
     assert row["got"] == 2, row
     assert after.status["acceptance"] == "pass", after.to_dict()
-    assert "0000-DtoF.md" in row["detail"]["files"], row["detail"]
+    assert row["detail"]["complete_rows"] == ["0000", "0001"], row["detail"]
+    assert row["detail"]["legacy_md_files"] == ["0009"], row["detail"]
+    assert "不计入" in str(row["detail"].get("note") or ""), row["detail"]
+
+
+def test_a_row_missing_a_required_field_does_not_count(tmp_path: pathlib.Path):
+    """负控（三态）：账本里有一行、但缺 `summary`（那一句话要进留言）⇒ 不算数并点名。"""
+    import json as _json
+
+    from agentflow import manuscripts as MS
+
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [{"id": "M1", "name": "交接手稿", "kind": "manuscript_rows",
+                                   "min": 1}], st=st)
+    MS.write(tmp_path, sender="D", recipient="F", summary="完整的一份", body="正文。\n")
+    # 手工追加一行"缺字段"的（模拟旧账本 / 手改过的账本）
+    with MS.handoffs_path(tmp_path).open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write(_json.dumps({"id": "0001", "sender": "D", "to": "F", "body": "没有一句话"},
+                             ensure_ascii=False) + "\n")
+
+    rep = _gate(st, report)
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["got"] == 1 and row["ok"] is True, row
+    assert row["detail"]["rows"] == 2, row["detail"]
+    assert row["detail"]["rows_missing_fields"] == [{"id": "0001", "missing": ["summary"]}], \
+        row["detail"]
+
+
+def test_a_broken_ledger_line_makes_the_reading_low_and_says_so(tmp_path: pathlib.Path):
+    """负控（三态）：账本里有读不出来的行 ⇒ 读数偏低且明细里报出来（读不出不等于没有）。"""
+    from agentflow import manuscripts as MS
+
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [{"id": "M1", "name": "交接手稿", "kind": "manuscript_rows",
+                                   "min": 1}], st=st)
+    MS.write(tmp_path, sender="D", recipient="F", summary="好的一份", body="正文。\n")
+    with MS.handoffs_path(tmp_path).open("a", encoding="utf-8", newline="\n") as fh:
+        fh.write("{这行不是 JSON\n")
+
+    rep = _gate(st, report)
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["got"] == 1, row
+    assert row["detail"]["unparsable_lines"], row["detail"]
+    assert "读不出" in str(row["detail"].get("note") or ""), row["detail"]
 
 
 # ============================================================ 「算或造」那一档（draft/39 §3.17）

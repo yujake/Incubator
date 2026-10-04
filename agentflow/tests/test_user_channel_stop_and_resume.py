@@ -95,7 +95,9 @@ def ask(text: str = "口径用哪个？", *, timeout: float | None = 0,
     return json.dumps({"ask_user": body}, ensure_ascii=False)
 
 
-FINISH = json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)
+FINISH = json.dumps({"final": "收工", "evidence": [],
+                     "notify": {"to": "M", "summary": "收工：见 final",
+                                "body": "## 结论\n收工。\n"}}, ensure_ascii=False)
 NOTE = json.dumps({"note": "我先记一句"}, ensure_ascii=False)
 
 

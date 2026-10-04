@@ -1569,7 +1569,7 @@ class Statement:
     - `origin`（`external_lit` / `own_result`）：报告的"我们补的"与"原文的"要分栏
       （§16 P3），而这一栏靠 `source_lit_id` 推不出来（自产的证明也会引文献）。
     - `kind`（theorem / lemma / …）：**刻意不是受控词表**。理由：它不参与任何判据分支
-      （分支只看 `origin` / `status` / `evidence_kind`），而论文里的命题种类比
+      （分支只看 `origin` / `status` / `evidence_kind` / `bits`），而论文里的命题种类比
       `DEP_KINDS` 宽（还有 corollary / claim / remark / conjecture），给它一份词表
       会立刻产生五六个没有产出点的死取值（R011 的债），换不来任何判据。它有非空要求。
 
@@ -1602,7 +1602,15 @@ class Statement:
     #: 不是 True 时必填：为什么没通过、或者为什么还没查。
     quote_reason: str = ""
     #: 证据等级（复用 `EVIDENCE_KINDS`）：proof / cross_check / heuristic。
+    #: `draft/39` §3.14 起它是**派生只读视图**：真正判等级的是 `bits`（五元证据位）。
     evidence_kind: str = "heuristic"
+    #: 五元证据位（`draft/39` §3.14）：`numeric` / `proof` / `reviewed` / `formal` / `audited`。
+    #:
+    #: 空对象 = 这一行还没有任何位记录（旧行）⇒ 一律按"五位全空"读（等级 = 猜想）。
+    #: 形状与四态纪律的**唯一判据来源**是 `evidencebits`（这里只转发它的 `bit_problems`，
+    #: 不抄第二份口径）；等级**不落盘**，由 `evidencebits.derive_grade` 现算
+    #: （盘上存一份缓存就等于给出"自报等级"的口子，而那正是这套位要堵的洞）。
+    bits: dict = field(default_factory=dict)
     #: 见 `STATEMENT_STATUSES` / `STATEMENT_UNUSABLE_STATUSES`。
     status: str = "active"
     #: 这条命题**用到了哪些别的命题**（本表内的 `stmt_id`，升序去重）。
@@ -1667,6 +1675,25 @@ class Statement:
             require_id(dep, "derived_from[]")
         if self.stmt_id in self.derived_from:
             raise ValueError("derived_from 不能包含自身（自环会让'承重链'永远闭合）")
+        # ---- 五元证据位（`draft/39` §3.14）：形状与"四态纪律"在这里把一次关。
+        #
+        # 判据本体在 `evidencebits`（唯一来源）：这里**只转发**，不抄第二份口径 ——
+        # 两份口径一旦分家，"没做过"与"做过没通过"就会在某一处被压平，而门照样亮绿。
+        # 为什么必须在数据面把这一关：盘上写进一个形状不对的 `bits`，下游（收工门、
+        # 状态报告）读到的就是一条半成品读数，而**没有任何一处会响**。
+        if self.bits:
+            from . import evidencebits as _EB
+
+            problems = _EB.bits_shape_problems(self.bits)
+            if problems:
+                raise ValueError("bits 不合规：" + "；".join(problems))
+            row = {"stmt_id": self.stmt_id, "origin": self.origin, "bits": self.bits,
+                   "source_lit_id": self.source_lit_id, "quote_verified": self.quote_verified}
+            if _EB.bits_from_row(row).get("voided_by") and self.status == "active":
+                raise ValueError(
+                    "作废的命题不许留 status='active'：作废要把状态推成 refuted 或 superseded "
+                    "（等级清零与状态降档是两件事，只做一件会让'已作废'在别的读数里复活）"
+                )
 
     def to_dict(self) -> dict:
         d = asdict(self)

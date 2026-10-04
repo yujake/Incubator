@@ -95,7 +95,7 @@ def test_private_message_needs_a_collaboration_edge(tmp_path: pathlib.Path):
     st, registry, cond, root = _ws(tmp_path)
     gw = ScriptedGateway([json.dumps({"message": {"to": "H", "subject": "悄悄话",
                                                   "body": "私下说"}}, ensure_ascii=False),
-                          json.dumps({"final": "知道了", "evidence": []}, ensure_ascii=False)])
+                          json.dumps({"final": "知道了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])
     run = run_role("C", "试着私聊 H", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="C", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", from_env=False)
@@ -113,7 +113,7 @@ def test_private_message_between_partners_is_allowed(tmp_path: pathlib.Path):
     gw = ScriptedGateway([json.dumps({"message": {"to": "E", "subject": "约束",
                                                   "body": "只在 n<=5 时成立"}},
                                      ensure_ascii=False),
-                          json.dumps({"final": "发好了", "evidence": []}, ensure_ascii=False)])
+                          json.dumps({"final": "发好了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])
     run = run_role("D", "把约束告诉 E", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="D", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", from_env=False)
@@ -133,7 +133,7 @@ def test_a_message_arriving_mid_run_is_heard_in_the_next_step(tmp_path: pathlib.
 
     gw = ScriptedGateway([json.dumps({"tool": "table.list", "args": {"table": "tasks"}},
                                      ensure_ascii=False),
-                          json.dumps({"final": "收到反例，改口径", "evidence": []},
+                          json.dumps({"final": "收到反例，改口径", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}},
                                      ensure_ascii=False)], on_call=on_call)
     run = run_role("D", "被反驳后改做法", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="D", session_root=root, gateway=gw, price=(0.0, 0.0),
@@ -152,7 +152,7 @@ def test_the_notebook_works_even_for_read_only_roles(tmp_path: pathlib.Path):
     st, registry, cond, root = _ws(tmp_path)
     gw = ScriptedGateway([json.dumps({"note": "我怀疑'度数'的定义与 C 的口径不一致"},
                                      ensure_ascii=False),
-                          json.dumps({"final": "先记下", "evidence": []}, ensure_ascii=False)])
+                          json.dumps({"final": "先记下", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])
     run = run_role("C", "想清楚再说", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="C", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", from_env=False)
@@ -171,7 +171,7 @@ def test_a_read_only_role_still_cannot_write_the_data_plane(tmp_path: pathlib.Pa
     gw = ScriptedGateway([json.dumps({"tool": "table.delete",
                                       "args": {"table": "relations", "id": "0000"}},
                                      ensure_ascii=False),
-                          json.dumps({"final": "被拒了", "evidence": []}, ensure_ascii=False)])
+                          json.dumps({"final": "被拒了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])
     run = run_role("C", "试着删一行", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="C", session_root=root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", from_env=False)
@@ -201,7 +201,7 @@ def test_a_child_run_leaves_its_full_output_on_disk_for_the_parent_to_read(tmp_p
     """
     st, _registry, _cond, root = _ws(tmp_path)
     child_gw = ScriptedGateway([json.dumps({"final": "结论正文：这三条断言证据最弱",
-                                            "evidence": ["k-0001"]}, ensure_ascii=False)])
+                                            "evidence": ["k-0001"], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])
     backend = LlmBackend(inner=LocalBackend({}), loops=LOOPS, session_root=root,
                          seam_factory=lambda role: LlmSeam(role=role, session_root=root,
                                                            gateway=child_gw, price=(0.0, 0.0),
@@ -214,7 +214,7 @@ def test_a_child_run_leaves_its_full_output_on_disk_for_the_parent_to_read(tmp_p
     m_gw = ScriptedGateway([json.dumps({"summon": {"role": "D", "action": "consider",
                                                     "params": {"qid": "q-1"}}},
                                        ensure_ascii=False),
-                            json.dumps({"final": "读到了", "evidence": []}, ensure_ascii=False)])
+                            json.dumps({"final": "读到了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False)])
     run = run_role("M", "派 D 并读它的全文", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="M", session_root=root, gateway=m_gw, price=(0.0, 0.0),
                                 sid="t"), workspace_root=str(root), sid="t", from_env=False)

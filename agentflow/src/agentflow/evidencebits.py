@@ -124,7 +124,21 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     if not raw:
         return bits_of(origin=origin, source_lit_id=str(row.get("source_lit_id") or ""),
                        quote_verified=row.get("quote_verified"))
-    ev = dict(raw.get("evidence") or {})
+    return normalize_raw(raw, origin=origin,
+                         voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
+
+
+#: `bits` 这一栏里位本身之外允许出现的键（写台账时要经过 `bits_shape_problems`）。
+BIT_META_KEYS: tuple[str, ...] = ("evidence", "voided_by", "origin", "grade", "audited_badge")
+
+
+def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
+                  voided_by: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """盘上那一栏 `bits` ⇒ 规范化的五位（布尔/四态都归一，等级现算）。
+
+    读与写共用这一份：`bits_from_row`（读）与 `bits_shape_problems`（写之前把形状关）
+    若各归一一次，就会出现"写进去判合规、读出来是另一个意思"的分家。
+    """
     bits: dict[str, Any] = {
         "numeric": _state(raw.get("numeric")),
         "proof": bool(raw.get("proof")),
@@ -132,12 +146,41 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "formal": _state(raw.get("formal")),
         "audited": bool(raw.get("audited")),
         "origin": origin,
-        "evidence": ev,
-        "voided_by": dict(raw.get("voided_by") or row.get("refuted_by") or {}),
+        "evidence": dict(raw.get("evidence") or {}),
+        "voided_by": dict(voided_by if voided_by is not None else (raw.get("voided_by") or {})),
     }
     bits["grade"] = derive_grade(bits)
     bits["audited_badge"] = bool(bits["audited"]) and bits["grade"] != "conjecture"
     return bits
+
+
+def bits_shape_problems(raw: Mapping[str, Any] | None) -> list[str]:
+    """写台账之前把 `bits` 那一栏的形状关（未知键 / 自报等级与现算不一致 / 位自身不合规）。
+
+    为什么连"自报的等级"也要管：判据从不读盘上那个等级（`bits_from_row` 永远现算），
+    于是存一个与现算不符的等级不会改变任何结论 —— 它只会让读盘的人（包括模型自己）
+    看到两个数。这种"看起来是读数、其实谁都不读"的字段正是本仓最忌的形态，所以在写入期
+    直接拒掉：等级可以留着当缓存，但必须与现算逐字相同。
+    """
+    if not raw:
+        return []
+    if not isinstance(raw, Mapping):
+        return ["bits 必须是对象（五位：numeric/proof/reviewed/formal/audited）"]
+    problems: list[str] = []
+    unknown = sorted(set(raw) - set(BIT_NAMES) - set(BIT_META_KEYS))
+    if unknown:
+        problems.append(
+            f"bits 里有不认识的键 {unknown}：位的名字只有 {list(BIT_NAMES)}"
+            f"（另加 {'/'.join(BIT_META_KEYS)}）—— 拼错的键会被静默忽略，"
+            "于是它与「这一位还没填」长得一模一样")
+    bits = normalize_raw(raw, origin=str(raw.get("origin") or "own_result"))
+    claimed = raw.get("grade")
+    if claimed is not None and str(claimed) != bits["grade"]:
+        problems.append(
+            f"bits.grade 写的是 {claimed!r}，按五位现算是 {bits['grade']!r} —— "
+            "等级不许自报（判据永远现算）：要么删掉这个键，要么让它等于现算值")
+    problems.extend(bit_problems(bits))
+    return problems
 
 
 def derive_grade(bits: Mapping[str, Any]) -> str:
@@ -164,7 +207,15 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     """五元位自身的完备性问题（空列表 = 合规）。
 
     三态纪律：`na`（不适用）与 `failed`（做了没通过）都必须写理由/原文；
-    `verified` 必须带凭据（脚本 + sha 或检查器输出）。
+    `verified` 必须带能复跑的凭据，而且凭据要指名道姓：
+
+    - 第 1 位（数值验证）⇒ 要写清是哪条实验/哪个脚本测的（`experiments` 或 `script`）；
+    - 第 4 位（形式化通过）⇒ 要写清是哪个检查器（`checker`）。
+
+    为什么凭据要写到这么细（E3 迁移重放挖出来的，`draft/39` §6.2 五）：p6e 那一趟真的跑过
+    两条 `method=formal` 实验，而没有任何命题指向它们 ⇒ "形式化做过"在位上是不可见的。
+    位的凭据里若不写"是哪一次实验/哪一个检查器"，同一件事会以"看起来做过"与"查不出来"
+    两种形态并存，而这两种在报告里长得一样。
     """
     problems: list[str] = []
     ev = dict(bits.get("evidence") or {})
@@ -177,6 +228,18 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
             problems.append(f"{name}=failed 必须带原文（脚本/检查器输出）")
         if state == "verified" and not ev.get(key):
             problems.append(f"{name}=verified 必须带凭据（脚本 + sha，或检查器输出）")
+    if _state(bits.get("numeric")) == "verified":
+        num = dict(ev.get("numeric") or {})
+        # 只在"有凭据但凭据没指针"时报这一条：凭据为空时上面那条已经点过名了，
+        # 同一件事报两次会让"改哪里"变得不清楚（一条缺陷只留一条可行动的话）。
+        if num and not (num.get("experiments") or num.get("experiment_id")
+                        or num.get("script") or num.get("scripts")):
+            problems.append("numeric=verified 必须写明是哪条实验/哪个脚本测的"
+                            "（experiments / experiment_id / script）—— 没有指针的凭据复跑不了")
+    if _state(bits.get("formal")) == "verified":
+        formal = dict(ev.get("formal") or {})
+        if formal and not str(formal.get("checker") or "").strip():
+            problems.append("formal=verified 必须写明是哪个检查器（checker：lean4 / coq / isabelle…）")
     if (bits.get("proof") and not str(ev.get("proof_process") or "").strip()
             and ev.get("proof_source") != "citation"):
         problems.append("proof=true 必须带证明过程（逐步论证）")

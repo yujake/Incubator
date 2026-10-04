@@ -65,7 +65,11 @@ def _world(tmp_path: pathlib.Path):
         json.dumps({"tool": "table.create",
                     "args": {"table": "statements", "row": dict(_ROW)},
                     "why": "把刚消化的那条命题登记进台账"}, ensure_ascii=False),
-        json.dumps({"final": "已登记 Theorem 1.5", "evidence": ["statements:0001"]},
+        json.dumps({"final": "已登记 Theorem 1.5", "evidence": ["statements:0001"],
+                    "notify": {"to": "D", "summary": "已登记 Theorem 1.5",
+                               "body": "## 我做了什么\n把 Theorem 1.5 登记进 statements。\n"
+                                       "## 依据\nlit:0000（逐字核过）\n## 要你做什么\n审它。\n"
+                                       "## 我卡在哪\n不卡。\n", "refs": []}},
                    ensure_ascii=False),
     ])
     inner = LocalBackend({})

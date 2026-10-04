@@ -92,7 +92,7 @@ def test_a_forbidden_summon_becomes_a_relay_request_to_the_conductor(tmp_path):
                                "params": {"claim": "定理 1.5 的形式化", "claim_key": "thm:1.5",
                                           "script_path": "code/lean/thm.lean"},
                                "why": "要一条 proof 级背书"}}, ensure_ascii=False),
-        json.dumps({"final": "已请主控代为召唤 E", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "已请主控代为召唤 E", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, gw_replies)
     run = _run_b(st, cond, reg, gw)
@@ -117,7 +117,7 @@ def test_the_conductor_can_then_actually_send_e(tmp_path):
     gw_replies = [
         json.dumps({"summon": {"role": "E", "action": "list_experiments", "params": {},
                                "why": "先看一眼实验台账"}}, ensure_ascii=False),
-        json.dumps({"final": "已请主控代唤", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "已请主控代唤", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, gw_replies)
     _run_b(st, cond, reg, gw)
@@ -141,7 +141,7 @@ def test_an_allowed_summon_does_not_create_a_relay_request(tmp_path):
         json.dumps({"summon": {"role": "C", "action": "hottest",
                                "params": {"top_n": 1}, "why": "问一下图里的枢纽"}},
                    ensure_ascii=False),
-        json.dumps({"final": "问过 C 了", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "问过 C 了", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, gw_replies)
     run = _run_b(st, cond, reg, gw)

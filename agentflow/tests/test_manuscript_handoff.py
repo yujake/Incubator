@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""判据（`draft/37` §134）：交接手稿 —— 编号由脚本给、命名谁给谁、留言带编号 + 一句描述。
+"""判据（`draft/37` §134 + `draft/39` §C1–C4）：交接手稿 —— 编号由脚本给、一行一份交接、
+留言带编号 + 一句描述。
 
 用户口径（逐字）：
 
@@ -9,13 +10,17 @@
 > 至于手稿的命名就是标号+谁to谁，特别地如果是给所有人就是谁toALL。手稿格式就用 LLM 最擅长的 markdown。
 > 当然就传个编号感觉有点尬，可以再附一句简要描述
 
-这一组钉六件事：
+2026-10-05 用户裁定：存储从「一份一个 `.md` 文件」改成追加式 JSONL
+（`manuscripts/handoffs.jsonl`，一行一份交接），收工门那一档改成数行。
+
+这一组钉七件事：
 1. 编号从 `0000` 起顺次、「由脚本分配」（不靠模型记），并发写不撞号；
-2. 文件名 `<编号>-<From>to<To>.md`，给所有人是 `toALL`；
-3. 索引（`manuscripts/index.jsonl`）逐份一行，读得回来（正文 + 记录）；
+2. 一份交接 = 账本里一行，必填 `to` / `summary` / `body`；
+3. 读得回来（正文 + 那一行）；按收件人/发件人过滤（`to=ALL` 是广播）；
 4. `handoff` 这一循环形状：写手稿 「并」发出那条带编号 + 简要描述的留言；空手稿被拒（零写入）；
-5. 坏收件人/不存在的 refs 被拒（溯源链不许断）；
-6. 工具面：`manuscripts.read` / `.list` 对每个角色都可用。
+5. 坏收件人 / 不存在的 refs 被拒（溯源链不许断）；缺 `summary` 也被拒（它要进留言）；
+6. 旧格式 `.md` 仍然读得回来（`format=md_legacy`），但不算作账本行；
+7. 工具面：`manuscripts.read` / `.list` 对每个角色都可用（写不在工具面上）。
 """
 from __future__ import annotations
 
@@ -33,22 +38,25 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 
 
-def test_ids_start_at_zero_and_names_say_who_to_whom(tmp_path: pathlib.Path):
-    """编号 `0000` 起顺次；命名 `<编号>-<From>to<To>.md`；给所有人写 `toALL`。"""
+def test_ids_start_at_zero_and_every_handoff_is_one_row(tmp_path: pathlib.Path):
+    """编号 `0000` 起顺次；一份交接一行；读得回来；`to=ALL` 是广播。"""
     root = tmp_path / "ws"
     root.mkdir()
-    a = MS.write(root, sender="D", recipient="F", title="把猜想交给你", body="证明它。")
-    b = MS.write(root, sender="F", recipient=MS.ALL, title="进展汇报", body="卡在第 3 步。")
+    a = MS.write(root, sender="D", recipient="F", summary="把猜想交给你", body="证明它。")
+    b = MS.write(root, sender="F", recipient=MS.ALL, summary="进展汇报", body="卡在第 3 步。")
     assert a["id"] == "0000" and b["id"] == "0001", (a, b)
-    assert pathlib.Path(a["path"]).name == "0000-DtoF.md", a["path"]
-    assert pathlib.Path(b["path"]).name == "0001-FtoALL.md", b["path"]
-    # 索引逐份一行，且与读回一致
-    idx = MS.read_index(root)
-    assert [r["id"] for r in idx] == ["0000", "0001"], idx
+    # 一行一份（追加式账本）：两行、编号各一、没有第三个文件
+    assert [r["id"] for r in MS.rows(root)] == ["0000", "0001"]
+    assert MS.handoffs_path(root).is_file(), MS.handoffs_path(root)
+    assert list((root / MS.MANUSCRIPTS_DIR).glob("*.md")) == [], "新格式不再产生 .md 文件"
     got = MS.read(root, "0001")
-    assert got and "卡在第 3 步" in got["text"] and got["record"]["recipient"] == "ALL", got
+    assert got and "卡在第 3 步" in got["text"] and got["record"]["to"] == "ALL", got
     # 广播那份，G 也收得到
     assert [r["id"] for r in MS.list_all(root, to="G")] == ["0001"]
+    # 那一行必须能回答"谁在什么时候把什么交给了谁"
+    row = MS.row_of(root, "0001") or {}
+    assert row["sender"] == "F" and row["summary"] == "进展汇报" and row["created_at"], row
+    assert row["sha256"] and row["bytes"], row
 
 
 def test_concurrent_writers_do_not_collide(tmp_path: pathlib.Path):
@@ -59,7 +67,7 @@ def test_concurrent_writers_do_not_collide(tmp_path: pathlib.Path):
     lock = threading.Lock()
 
     def one(i: int) -> None:
-        rec = MS.write(root, sender="C", recipient="D", title=f"第 {i} 份", body=f"内容 {i}")
+        rec = MS.write(root, sender="C", recipient="D", summary=f"第 {i} 份", body=f"内容 {i}")
         with lock:
             got.append(rec["id"])
 
@@ -70,25 +78,85 @@ def test_concurrent_writers_do_not_collide(tmp_path: pathlib.Path):
         t.join()
     assert len(set(got)) == 8, f"撞号了：{sorted(got)}"
     assert sorted(got) == [f"{i:04d}" for i in range(8)], sorted(got)
-    assert len(list((root / MS.MANUSCRIPTS_DIR).glob("*.md"))) == 8
+    # 8 份 = 8 行（不是 8 个文件）：追加写不会互相覆盖
+    assert len(MS.rows(root)) == 8, MS.rows(root)
+    assert len({str(r.get("id")) for r in MS.rows(root)}) == 8
 
 
 def test_empty_or_unknown_recipient_is_refused_with_zero_writes(tmp_path: pathlib.Path):
-    """负控：空正文 / 坏收件人 / 不存在的 refs ⇒ 拒绝，且一份都不写。"""
+    """负控：空正文 / 缺一句话 / 坏收件人 / 悬空 refs ⇒ 拒绝，且一行都不写。"""
     root = tmp_path / "ws"
     root.mkdir()
     for kwargs, why in (
-        (dict(sender="D", recipient="F", title="空", body="   "), "空正文"),
-        (dict(sender="D", recipient="Z", title="坏收件人", body="x"), "坏收件人"),
-        (dict(sender="D", recipient="F", title="引不存在的", body="x", refs=["0099"]), "悬空 refs"),
-        (dict(sender="Q", recipient="F", title="坏发件人", body="x"), "坏发件人"),
+        (dict(sender="D", recipient="F", summary="空", body="   "), "空正文"),
+        (dict(sender="D", recipient="F", body="有正文但没那一句话"), "缺 summary"),
+        (dict(sender="D", recipient="Z", summary="坏收件人", body="x"), "坏收件人"),
+        (dict(sender="D", recipient="F", summary="引不存在的", body="x", refs=["0099"]),
+         "悬空 refs"),
+        (dict(sender="Q", recipient="F", summary="坏发件人", body="x"), "坏发件人"),
     ):
         try:
             MS.write(root, **kwargs)
             raise AssertionError(f"{why} 没有被拒")
         except ValueError:
             pass
-    assert list((root / MS.MANUSCRIPTS_DIR).glob("*.md")) == [], "被拒的那几次不许留下手稿"
+    assert MS.rows(root) == [], "被拒的那几次不许留下行"
+
+
+def test_legacy_md_manuscripts_are_still_readable_but_not_counted_as_rows(tmp_path: pathlib.Path):
+    """旧格式（`<编号>-<From>to<To>.md`）读得回来，带 `format=md_legacy` —— 但不算账本行。
+
+    为什么必须显式测（三态纪律）：迁移期两种格式同时在盘上是真实情形；
+    "旧文件还算数"会让迁移永远做不完，而"旧文件读不出来"会让历史交接当场消失。
+    这条钉的是中间那条路：读得到、标得清、不计入新口径。
+    """
+    root = tmp_path / "ws"
+    d = root / MS.MANUSCRIPTS_DIR
+    d.mkdir(parents=True)
+    (d / MS.name_for("0000", "D", "F")).write_text(
+        "# 0000｜D → F\n\n- 标题：旧的交接\n\n## 正文\n\n旧格式的正文。\n", encoding="utf-8")
+
+    got = MS.read(root, "0000")
+    assert got and got["record"]["format"] == "md_legacy", got
+    assert got["record"]["sender"] == "D" and got["record"]["to"] == "F", got
+    assert got["record"]["summary"] == "旧的交接", got
+    assert "旧格式的正文" in got["text"], got
+    # 列为手稿时两种格式都出来
+    assert [r["id"] for r in MS.list_all(root)] == ["0000"]
+    # 但账本行是空 —— 新口径数的是行
+    assert MS.rows(root) == []
+    # 新写的一份接在旧编号之后（不撞号：编号扫的是"行 + 旧文件"的并集）
+    rec = MS.write(root, sender="F", recipient="D", summary="新的交接", body="x")
+    assert rec["id"] == "0001", rec
+
+
+def test_query_filters_by_id_recipient_sender_time_and_refs(tmp_path: pathlib.Path):
+    """`query` 是脚本那一层的唯一实现：六个过滤器各自单独有用（判据逐档钉）。"""
+    root = tmp_path / "ws"
+    root.mkdir()
+    MS.write(root, sender="D", recipient="F", summary="第一份", body="x")
+    MS.write(root, sender="F", recipient="ALL", summary="第二份", body="y", refs=["0000"])
+    MS.write(root, sender="F", recipient="D", summary="第三份", body="z")
+
+    assert [r["id"] for r in MS.query(root, mid="0001")[0]] == ["0001"]
+    # `to=F` 含广播给所有人的那份（与 `list_all` 同一口径）；`to=ALL` 只给广播
+    assert [r["id"] for r in MS.query(root, to="F")[0]] == ["0000", "0001"]
+    assert [r["id"] for r in MS.query(root, to="ALL")[0]] == ["0001"]
+    # `to=G` 能收到广播那份（与 list_all 同一口径）
+    assert [r["id"] for r in MS.query(root, to="G")[0]] == ["0001"]
+    assert [r["id"] for r in MS.query(root, sender="F")[0]] == ["0001", "0002"]
+    assert [r["id"] for r in MS.query(root, refs="0000")[0]] == ["0001"]
+    assert MS.query(root, limit=1)[0][-1]["id"] == "0002"
+    # `since` 用 ISO 前缀比：未来时间 ⇒ 空（"没有"不等于"查不成"）
+    assert MS.query(root, since="2999-01-01")[0] == []
+    assert MS.query(root, since="2000-01-01")[0][-1]["id"] == "0002"
+
+
+def test_missing_fields_names_what_a_row_lacks():
+    """必填字段的判据是"缺哪一个"，不是"合不合格"（收工门读明细时要能点名）。"""
+    assert MS.missing_fields({"to": "F", "summary": "一句话", "body": "正文"}) == []
+    assert MS.missing_fields({"to": "F", "summary": "", "body": "正文"}) == ["summary"]
+    assert MS.missing_fields({}) == ["to", "summary", "body"]
 
 
 class _Scripted:
@@ -130,8 +198,7 @@ def _run_loop(tmp_path: pathlib.Path, replies: list[dict[str, Any]], *, role: st
 def test_the_handoff_shape_writes_the_manuscript_and_sends_the_brief(tmp_path: pathlib.Path):
     """`handoff` 形状：写手稿 + 一条带「编号 + 简要描述」的留言（用户点名的"别只传编号"）。"""
     ws, run, _reg = _run_loop(tmp_path, [
-        {"handoff": {"to": "F", "title": "猜想 0000 交给你攻坚",
-                     "brief": "请判定它在 n≤12 上是否成立",
+        {"handoff": {"to": "F", "summary": "猜想 0000 交给你攻坚",
                      "body": "## 我做了什么\n立了三行问题。\n## 要你做什么\n攻它。",
                      "refs": [], "why": "你负责攻坚"}},
         {"final": "交接完了", "evidence": []},
@@ -139,24 +206,45 @@ def test_the_handoff_shape_writes_the_manuscript_and_sends_the_brief(tmp_path: p
     step = next(s for s in run.steps if s.shape == "handoff")
     res = step.result
     assert res.get("ok") is True, res
-    assert res["id"] == "0000" and pathlib.Path(res["path"]).name == "0000-DtoF.md", res
+    assert res["id"] == "0000", res
+    # 盘上就一行（账本就是"哪一份"的真相），正文与摘要都在那一行里
+    rows = MS.rows(ws)
+    assert [r["id"] for r in rows] == ["0000"], rows
+    assert rows[0]["summary"] == "猜想 0000 交给你攻坚", rows[0]
+    assert "攻它" in rows[0]["body"], rows[0]
     msgs, problems = read_messages(ws, "F", sid="h1")
     assert not problems, problems
     mine = [m for m in msgs if "手稿 0000" in str(m.get("body"))]
     assert mine, msgs
-    assert "请判定它在 n≤12 上是否成立" in str(mine[0]["body"]), mine[0]
+    assert "猜想 0000 交给你攻坚" in str(mine[0]["body"]), mine[0]
     assert "manuscripts.read" in str(mine[0]["body"]), mine[0]
+
+
+def test_the_old_brief_and_title_names_still_work_in_the_loop_shape(tmp_path: pathlib.Path):
+    """旧名（`title` / `brief`）仍然接受：都当 `summary` 用 —— 迁移期两种写法都写得进去。
+
+    为什么留着：提示词改了，模型的历史习惯与旧工作区的会话记录里全是 `title`/`brief`；
+    一律拒掉会让"手稿写不进去"以"这一步 invalid"的形态出现（而那看起来像模型不会用工具）。
+    """
+    ws, run, _reg = _run_loop(tmp_path, [
+        {"handoff": {"to": "F", "title": "旧名标题", "brief": "旧名的一句话",
+                     "body": "正文。", "refs": []}},
+        {"final": "完", "evidence": []},
+    ])
+    step = next(s for s in run.steps if s.shape == "handoff")
+    assert step.result.get("ok") is True, step.result
+    assert MS.rows(ws)[0]["summary"] == "旧名的一句话", MS.rows(ws)
 
 
 def test_a_handoff_without_a_body_is_refused_as_an_invalid_step(tmp_path: pathlib.Path):
     """负控：空正文的 handoff 判 `invalid`（不是"写了一份空手稿"）。"""
     ws, run, _reg = _run_loop(tmp_path, [
-        {"handoff": {"to": "F", "title": "空的", "body": "   "}},
+        {"handoff": {"to": "F", "summary": "空的", "body": "   "}},
         {"final": "改了", "evidence": []},
     ])
     bad = run.steps[0]
     assert bad.shape == "invalid" and "空手稿" in str(bad.result.get("problem", "")), bad.to_dict()
-    assert list((ws / MS.MANUSCRIPTS_DIR).glob("*.md")) == []
+    assert MS.rows(ws) == []
 
 
 def test_every_role_can_read_and_list_but_writing_is_a_loop_shape(tmp_path: pathlib.Path):

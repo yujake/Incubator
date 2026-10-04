@@ -1729,7 +1729,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'count','items':[{id,sender,recipient,title,summary,path,created_at}]}",
+   "returns": "{'count','items':[{id,sender,to,summary,path,created_at}]}",
    "roles": [
     "A",
     "B",
@@ -1763,7 +1763,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'id','path','sender','recipient','title','text','sha256','bytes'}",
+   "returns": "{'id','path','sender','to','summary','text','sha256','bytes'}",
    "roles": [
     "A",
     "B",

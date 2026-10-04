@@ -167,11 +167,14 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                      "两条实验：后一条的界更大而耗时不多于前一条，或界相同而耗时"
                                      "降到 80% 以下）—— 这一档量的就是用户那句「把时间压下去」："
                                      "不是「跑得更久」，而是「同样的活更快、或更大的活同样快」",
-    "manuscript_rows": "**交接手稿**份数（`manuscripts/` 下真实存在、文件名能被 "
-                       "`<编号>-<谁>to<谁>.md` 认出来的那些）—— 用户口径「传信息就传手稿编号」"
+    "manuscript_rows": "**交接手稿**份数（`manuscripts/handoffs.jsonl` 的**行数**，"
+                       "每行要求 `to`/`summary`/`body` 齐全）—— 用户口径「传信息就传手稿编号」"
                        "落在盘上的那一份（`draft/37` §134）。为什么单列：T2 第 5 趟这一类"
                        "**一次也没用**（M 写了 26 条 `note`，只活在会话里；收工之后"
-                       "「谁把什么交给了谁」在盘上查不到），而手稿是第三方可复核的那条通道",
+                       "「谁把什么交给了谁」在盘上查不到）。为什么从「数文件」改成「数行」"
+                       "（`draft/39` §C1，用户 2026-10-05 裁）：旧口径要文件名能被 "
+                       "`<编号>-<谁>to<谁>.md` 认出来 ⇒ 改个名就读成 0（读数被文件名的形状绑住），"
+                       "而账本是追加写的、撞号与覆盖在结构上不可能发生",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -328,17 +331,37 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "false": sum(1 for r in verdict if r.get("quote_verified") is False),
         }
     if kind == "manuscript_rows":
-        # 交接手稿那一档（`draft/37` §134/§140）：`manuscripts/` 下真实存在的
-        # `<编号>-<谁>to<谁>.md` 份数。为什么单列：用户点名要"传信息就传手稿编号"，
-        # 而 T2 第 5 趟这一类一次也没用（M 写了 26 条 `note` —— 只活在会话里）。
-        # 判据只看盘上的文件（文件名要能被 `manuscripts.NAME_RE` 认出来）：索引不算数。
+        # 交接手稿那一档（`draft/37` §134/§140；`draft/39` §C1 起存储改成追加式 JSONL）：
+        # 数 `manuscripts/handoffs.jsonl` 的行数（一份交接一行）。为什么从"数文件"改成
+        # "数行"（用户 2026-10-05 裁）：旧口径要求文件名能被 `<编号>-<谁>to<谁>.md` 认出来，
+        # 于是改个名或少个字段就读成 0 —— 读数被文件名的形状绑住；而账本是追加写的，
+        # 撞号与覆盖在结构上不可能发生（这正是 D16/D17 的终结判据）。
+        # 旧格式（`.md` 文件）不计入这一档，但在明细里另列一栏：既不假装没有，
+        # 也不让它冒充新格式。
         from . import manuscripts as MS
 
+        all_rows, bad_lines = MS.read_rows(project_root)
+        good = [r for r in all_rows if not MS.missing_fields(r)]
         folder = project_root / MS.MANUSCRIPTS_DIR
-        files = sorted(p.name for p in folder.glob("*.md")) if folder.is_dir() else []
-        good = [n for n in files if MS.parse_name(n)]
-        return len(good), {"dir": str(folder), "files": good[:10], "total_files": len(files),
-                           "unparsable": [n for n in files if n not in good][:5]}
+        legacy = [str(got.get("id") or "")
+                  for got in [MS.parse_name(p) or {} for p in
+                              (sorted(folder.glob("*.md")) if folder.is_dir() else [])] if got]
+        detail: dict[str, Any] = {
+            "ledger": f"{MS.MANUSCRIPTS_DIR}/{MS.HANDOFFS_NAME}",
+            "rows": len(all_rows),
+            "complete_rows": [str(r.get("id") or "") for r in good[:10]],
+            "unparsable_lines": bad_lines[:5],
+            "legacy_md_files": legacy[:10],
+            "rows_missing_fields": [{"id": str(r.get("id") or ""), "missing": MS.missing_fields(r)}
+                                    for r in all_rows if MS.missing_fields(r)][:5],
+        }
+        if legacy:
+            detail["note"] = (f"另有 {len(legacy)} 份旧格式 `.md` 手稿（不计入这一档）："
+                              "新口径数的是账本行；旧文件仍在 `manuscripts.list` 里可见")
+        if bad_lines:
+            detail["note"] = ("账本里有读不出来的行 ⇒ 这一档的读数偏低，按 `unparsable_lines` "
+                              "逐条去查（读不出不等于没有）")
+        return len(good), detail
     if kind == "retrieval_attempts":
         # 「盘外引文先检索」那一档（`draft/37` §105）：用户一句话点破了我的口径 ——
         # "盘上没有就 false？A 不会去查吗"。实测：`A.search_literature("An overview of

@@ -99,7 +99,7 @@ def test_e_endorsement_turns_the_gate_green(tmp_path):
         json.dumps({"tool": "table.create",
                     "args": {"table": "experiments", "row": dict(_T3_ROW)},
                     "why": "检查器原话在这里，作为 proof 级背书"}, ensure_ascii=False),
-        json.dumps({"final": "已给出 T3 背书", "evidence": ["exp:0000"]}, ensure_ascii=False),
+        json.dumps({"final": "已给出 T3 背书", "evidence": ["exp:0000"], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     assert _gate(st) == "fail"
@@ -130,7 +130,7 @@ def test_an_endorsement_without_the_checker_output_is_refused(tmp_path):
         json.dumps({"tool": "table.create",
                     "args": {"table": "experiments", "row": bad},
                     "why": "（故意不写检查器原话）"}, ensure_ascii=False),
-        json.dumps({"final": "写不进去就如实说", "evidence": []}, ensure_ascii=False),
+        json.dumps({"final": "写不进去就如实说", "evidence": [], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     run_role("E", "给定理 1.5 的形式化做背书", store=st, registry=reg, conductor=cond,
