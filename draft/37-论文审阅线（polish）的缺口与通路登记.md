@@ -8239,3 +8239,54 @@ E 的提示词里必须同时出现 `fs.write`、`code/lean/`、`script_path`、
 
 下一轮：**T1 第 12 趟**，跑之前先按 `temp/_run_env_mathlib.ps1` 把
 `AGENTFLOW_MATHLIB_ROOT` / `LEAN_PATH` / `PATH` 配好（"先配置好，别让智能体难办"）。
+
+---
+
+## §102 T1 第 12 趟：**四行机器可判验收第一次同时满足，收工门七格全过**（配好 Mathlib 之后）
+
+第 12 趟真机（2026-10-04，工作区 `projects/p5-review-t12`，58 字任务原文不变；
+跑之前按 `temp/_run_env_mathlib.ps1` 配好 `AGENTFLOW_MATHLIB_ROOT` / `LEAN_PATH` / `PATH`）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 118 / 20（G6 · E4 · B3 · H2 · …） |
+| 花销 | **$2.001942**（预算 $5 内） |
+| 退出 | 0（`final`），自述逐字：「论文包审阅与修订完成，**收工门七格全过（can_close=true）**」 |
+| P2 正文实质改动 | **满足**：主稿 26,155 → 27,350 B，sha `8c5c431b…` → `34f2b8cc…`（2 处：§1.3 补 Formal coverage 与 Quotation check 两段） |
+| P7 引文逐条核过 | **满足（但很薄，见下）**：`statements` 0001 带 `quote_verified=false` + `quote_reason`「逐字比对已做：主稿里那句是对 companion volumes 的英文转述，而盘上 companion 原文是中文」 |
+| P8 形式化 | **满足**：`experiments` 0000 = `method=formal` + `evidence_kind=proof` + `result=supports`，`verifier_output` 逐字 `'stable_norm_existence' does not depend on any axioms` |
+| P9 稿件被审过 | **满足**：`documents` 0000 `accepted`（H `review` + `verify_fixes`） |
+| 收工门 | `acceptance` 四行全 pass ⇒ 七格全过、`can_close=true` |
+
+**这是 12 趟里第一次**：正文改了、引文比对结论落了台账、形式化落了 **proof 行**、
+稿件被审过 —— 而且假绿早已被 §94–§96 那三档堵住（这一次是**真过**，不是"没有判据所以过"）。
+
+### 一、Mathlib 配好之后的直接效果（§101）
+
+`experiments` 里第一次出现 `evidence_kind=proof` 的行，检查器原话是
+`'stable_norm_existence' does not depend on any axioms` —— 这是 §101 之前
+（10、11 趟）**做不到**的事：那时每一次形式化尝试都停在 `unknown package 'Mathlib'`。
+
+### 二、诚实标注：P7 这一行的凭据很薄，T1 还不能算"干净通过"
+
+三条读数让这一行**机器可判为满足、实质上却不够**：
+
+1. `literature` **0 行** —— 模型是直接 `fs.read` 读 `cited/` 的文件做比对，
+   被引原文没有登记成台账行；
+2. 那条 `statements` 的 `source_lit_id=None`（`origin` 不是 `external_lit`）——
+   也就是说"比的是哪一份原文"没有钉在台账上；
+3. 主稿新增的那段文字自己写着「引文逐字核验未做」——与"逐条核验"（用户原话）
+   还有距离；一比一对的是"英文转述 vs 中文原文 ⇒ 不一致"，**这个结论是诚实的**，
+   但只有**一条**。
+
+⇒ 判定：**按我写下的机器可判验收（≥1 条带 `quote_verified` 的行、proof 行 ≥1、
+稿件被审过、正文有改动），这一趟通过**；按用户原话里"**逐条**核验引文"，还差"逐条"。
+
+### 三、下一轮要做的两件事（都不是"再加提示"）
+
+1. **把 P7 的口径收紧成"逐条"**（这是判据侧的活，不是模型侧）：
+   验收行改成两条 —— ① 带 `quote_verified` 的行数 ≥ 主稿 `\bibitem` 条数（7），
+   或 ② 每条未核的都要有一条带 `quote_reason` 的记录（三态里"未查"也是一个明确的结论）。
+   现在这一档只要求 ≥1，等于给了"做一条就算"的口子。
+2. **`formalgw` 自己注入 `LEAN_PATH`**（§101 第三节登记的那一步）：框架已经知道
+   Mathlib 根在哪，就不该要求调用方记得配那一串环境变量。
