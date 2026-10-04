@@ -419,6 +419,37 @@ def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathli
         gw["E"].systems[0][-400:])
 
 
+def test_the_availability_column_does_not_call_a_wired_role_unwired(tmp_path: pathlib.Path,
+                                                                  monkeypatch):
+    """判据（`draft/37` §106）：接线态那一栏不许把真的接了线的角色报成没接线。
+
+    真机读数（T1 第 14 趟）：`cli.cmd_run_agent` 按 `--provider` → 配置 → `openalex`
+    建了 providers，而循环里的 `_availability()` 又用不带 providers 的
+    `host.wiring_status` 重算了一遍 ⇒ M 的提示词里写着「接线态（这一栏是事实）：
+    A -> no_provider」。它在第 22 步据此写下「A 未接线 ⇒ 盘外引文放弃检索」，
+    整趟没派过一次 A —— 而 A 的检索是通的（离线探针一次查询登记 9 行文献）。
+
+    判据：`host.wiring_status` 说 `no_provider`，而后端登记表里有 A ⇒ 必须报 `wired`；
+    后端里没有的角色（这里用 Z）仍然照抄主机读数（不许把这一栏变成永远 wired）。
+    """
+    from agentflow import host as host_mod
+    from agentflow.agent_loop import AgentLoop
+
+    st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=1)
+    monkeypatch.setattr(host_mod, "wiring_status",
+                        lambda *a, **k: {"A": "no_provider", "Z": "no_provider"})
+    # 真身读数：这一趟的后端登记表里 A 在（这就是"接了线"的定义）
+    import types
+    monkeypatch.setattr(cond, "backend",
+                        types.SimpleNamespace(known_roles=lambda: ["A", "B"]), raising=False)
+    loop = AgentLoop(role="M", session_root=root, registry=registry, conductor=cond,
+                     seam=None, max_steps=1, workspace_root=str(root), sid="t", store=st)
+    avail = loop._availability()
+    assert avail is not None, "拿不到接线态 ⇒ 这一栏会变成「没有读数」，判据失去对象"
+    assert avail.get("A") == "wired", avail
+    assert avail.get("Z") == "no_provider", avail
+
+
 def test_a_bad_reply_gets_a_sharper_repair_message(tmp_path: pathlib.Path):
     """负控（修法要真的递出去）：坏 JSON 之后那条纠正消息里要点名"不要写分析"并给骨架。"""
     from agentflow.agent_loop import JSON_TAIL, AgentLoop

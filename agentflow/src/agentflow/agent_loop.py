@@ -754,23 +754,60 @@ class AgentLoop:
         face_note = ""
         if getattr(self, "_face", None) is not None:
             face_note = ("（本岗同时开了原生工具调用：你可以直接走函数调用接口；"
-                         "若仍回一行 JSON，`tool` 字段要写**真名**（工具清册里那个，"
+                         "若仍回一行 JSON，`tool` 字段要写真名（工具清册里那个，"
                          "例如 `fs.read`），不是函数名里的下划线写法。两种都可以。）\n")
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（最多 {self.max_steps} 步）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"{face_note}"
                 f"{JSON_TAIL}")
 
-    def _availability(self) -> dict[str, str] | None:
-        """现在的接线态（哪个伙伴真的能被唤起）。拿不到就返回 None 并留一条 note。"""
-        if self.store is None:
-            return None
-        try:
-            from .host import wiring_status
+    def _wired_roles(self) -> list[str]:
+        """后端登记表里真的能接活儿的角色（真身读数）。
 
-            return dict(wiring_status(self.store, workspace_root=self.workspace_root))
-        except Exception as exc:
-            return None
+        为什么不用 `host.wiring_status` 当唯一来源：那个函数在不给 providers 时会
+        重新算一遍接线（`A` 需要 providers，不给就报 `no_provider`），而这一趟真正的
+        接线是 `cli.cmd_run_agent` 建的（`--provider` → 配置 → `openalex`）。
+        两边问的是同一个问题、答案却不同 —— 而模型只看得见后者（`draft/37` §106）。
+        """
+        backend = getattr(self.conductor, "backend", None)
+        for cand in (backend, getattr(backend, "inner", None)):
+            fn = getattr(cand, "known_roles", None)
+            if not callable(fn):
+                continue
+            try:
+                roles = [str(r) for r in fn()]
+            except Exception:  # noqa: BLE001 —— 问不出来就当没这一路读数
+                continue
+            if roles:
+                return sorted(set(roles))
+        return []
+
+    def _availability(self) -> dict[str, str] | None:
+        """现在的接线态（哪个伙伴真的能被唤起）。拿不到就返回 None 并留一条 note。
+
+        ## 2026-10-04 修正（`draft/37` §106）：这一栏此前会说谎，代价是整条检索路
+
+        它原先只调 `host.wiring_status(store, ...)`。那个读数不带 providers，
+        于是 A 被报成 `no_provider` —— 哪怕这一趟明明接了 openalex。
+        真机后果（T1 第 14 趟）：M 的提示词里那栏写着"接线态（这一栏是事实）"
+        `A -> no_provider`，它在第 22 步据此写下「A 未接线（no_provider）
+        ⇒ 盘外引文放弃检索」，整趟没派过一次 A（而 A 的检索是通的：
+        离线探针一次查询就登记了 9 行文献、含 Kuchment 那篇 DOI）。
+
+        修法：先问真身（后端登记表里有哪些角色 ⇒ 它们真的能被唤起），
+        再用主机读数补上其余角色（没接线的仍然如实报 —— 不是把这一栏变成永远"wired"）。
+        """
+        reg: dict[str, str] = {}
+        if self.store is not None:
+            try:
+                from .host import wiring_status
+
+                reg = dict(wiring_status(self.store, workspace_root=self.workspace_root))
+            except Exception:  # noqa: BLE001 —— 主机读数拿不到就只给真身那一半
+                reg = {}
+        for role in self._wired_roles():
+            reg[role] = "wired"
+        return reg or None
 
     def _hear(self) -> list[dict[str, Any]]:
         """听一次新消息：把这次运行期间新到的消息取出来并登记投递。"""

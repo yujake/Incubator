@@ -8415,3 +8415,62 @@ proof 行 / 稿件被审过。
 | FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
 
 下一轮：**T1 第 14 趟**（夹具含 P7b：≥5 次真的检索；取不回原文才允许"未查"）。
+
+---
+
+## §106 「A 未接线」是一句**假的接线态读数** —— 修它，这是检索路的开关
+
+### 一、第 14 趟为什么一次都没派 A（M 自己的笔记，逐字）
+
+> 「第22步：library/ 空。literature 表 0 行的根因是 B.run/run_once 没有真的登记……
+> 关键判断：本轮预算与步数有限，且 **A 未接线（no_provider）** ⇒ 盘外引文（Kuc…」
+
+它不是在偷懒：**它读到的"事实"栏说 A 没接线**。而 M 的提示词里那一栏的标题逐字是
+「现在的接线态（**这一栏是事实，不是建议**）」。
+
+### 二、两处读数为什么对不上（离线复算）
+
+| 来源 | A 的状态 |
+|---|---|
+| 这一趟**真正的接线**（`cli.cmd_run_agent`，按 `--provider` → 配置 → `openalex` 建 providers，`cli.py:1540-1543`） | **接了 openalex** |
+| 循环里 `_availability()` 报给 M 的（`agent_loop` → `host.wiring_status(store, workspace_root=…)`，**不带 providers**） | **`no_provider`** |
+
+`host.wiring_status` 在拿不到 providers 时会重算一遍接线（`A` 需要 providers，不给就报
+`no_provider`）—— 于是同一个问题有两个答案，而模型只看得见后面那个。
+**代价**：14 趟里 A 的检索一次都没被用过；第 14 趟它连 A 都没派过
+（`唤起：['G','G','G','G','G']`），收工门报 `acceptance=fail`（P7 0/7、P7b 0/5、P8 0/1）。
+
+### 三、修法：先问真身，再用主机读数补其余
+
+`AgentLoop._availability()` 现在：
+
+1. **先问真身** —— 新增 `_wired_roles()`：后端登记表（`backend.known_roles()`，
+   回退到 `backend.inner.known_roles()`）里有哪些角色 ⇒ 它们**真的**能被唤起 ⇒ 一律 `wired`；
+2. 再用 `host.wiring_status` 的结果补上其余角色（没接线的仍然如实报 ——
+   **不是**把这一栏变成永远"wired"；真身读数拿不到时才只剩主机读数）。
+
+### 四、判据
+
+`tests/test_agent_loop.py::test_the_availability_column_does_not_call_a_wired_role_unwired`：
+把 `host.wiring_status` 换成"说谎"的替身（`{"A": "no_provider", "Z": "no_provider"}`），
+同时让后端登记表里有 A ⇒ 这一栏**必须报 `wired`**；后端里没有的 `Z` 仍然照抄主机读数
+（负控：不许把这一栏做成永远绿）。
+
+### 五、这一条与用户那句话的关系
+
+用户上一轮点的是「**A 不会去查吗**」。查下去发现：不是 A 不会查，是**我们告诉它 A 没接线** ——
+`A.search_literature("An overview of periodic elliptic operators")` 一次查询就登记了 9 行文献
+（含 Kuchment 那篇的 DOI），路一直是通的，只是那一栏读数把它遮住了。
+这是 §85–§89 那条纪律（**模型看得见的事实必须是真的**）在"接线面"上的同一条：
+一处读数说谎，整条能力就没人用。
+
+### 六、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 循环 / 提示词 / 接线那一组 | `pytest tests/test_agent_loop.py tests/test_agent_prompts.py tests/test_host_wiring.py -q` | **81 passed**（含新的"接线态不许说谎"判据） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3497 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1423.86s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 15 趟**（接线态修好之后，A 的检索在 M 眼里才真的可用）。下一轮：**T1 第 15 趟**（这一栏修好之后，A 的检索在 M 眼里才真的可用）。
