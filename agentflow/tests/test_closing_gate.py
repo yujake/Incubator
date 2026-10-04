@@ -416,6 +416,35 @@ def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pa
     assert full.status["acceptance"] == "pass", full.to_dict()   # 3 条记录 ≥ 3 条 bibitem
 
 
+def test_the_retrieval_leg_requires_a_search_that_actually_ran(
+        tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/37` §105）：「盘外引文先检索」这一档要的是"真的查过"。
+
+    用户一句话点破了此前口径的漏洞："盘上没有就 false？A 不会去查吗"。
+    实测（离线探针）：`A.search_literature("An overview of periodic elliptic operators")`
+    一次就登记了 9 行文献、含 Kuchment 那篇（DOI `10.1090/bull/1528`），
+    而 A 的工具面里还有 `search.download` —— 所以"原文不在工作区"只是"还没去取"。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P7b", "name": "盘外引文先检索", "kind": "retrieval_attempts", "min": 1},
+    ], st=st)
+    none = _gate(st, report)
+    assert none.status["acceptance"] == "fail", none.to_dict()
+    assert none.readings["acceptance"]["rows"][0]["got"] == 0, none.readings["acceptance"]
+
+    # 用替身喂一行"查过的检索请求"：这一档判的是读法（真跑过的检索请求数），
+    # 不必为它造一行过 schema 的完整行（那会把判据变成 schema 的复制品）。
+    real_rows = st.rows
+    monkeypatch.setattr(st, "rows", lambda table: (
+        [{"request_id": "r-0001", "topic": "An overview of periodic operators",
+          "done": True, "outcome": "ok"}] if table == "search_requests" else real_rows(table)))
+    some = _gate(st, report)
+    assert some.status["acceptance"] == "pass", some.to_dict()
+    detail = some.readings["acceptance"]["rows"][0]["detail"]
+    assert detail["done"] == 1 and "overview" in detail["topics"][0], detail
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 

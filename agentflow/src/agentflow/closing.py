@@ -88,6 +88,11 @@ LEG_CHECK_KINDS: dict[str, str] = {
     "citation_records_vs_bibitems": "逐条核验引文：带比对记录的行数（`statements`/`relations` 里 "
                                     "`quote_verified` 非 null，或 `quote_reason` 非空 —— 后者是"
                                     "三态里的「未查+理由」）要不少于主稿里 `bibitem` 的条数",
+    "retrieval_attempts": "盘外引文先检索：真的跑过的检索请求数（`search_requests` 里 `done=True` "
+                          "的行）。为什么单列一档：「盘上没有原文」不是终点 —— A 的 "
+                          "`search_literature` + `search.download` 能把引文原文查回来"
+                          "（2026-10-04 实测：一次查询就登记了 9 行文献，其中就有 Kuchment 那篇、"
+                          "带 DOI 10.1090/bull/1528）；先检索，取不回原文才允许写「未查」",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -175,6 +180,23 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "counted_from": "out/paper/main.tex" if src is draft else "source/main.tex",
             "true": sum(1 for r in verdict if r.get("quote_verified") is True),
             "false": sum(1 for r in verdict if r.get("quote_verified") is False),
+        }
+    if kind == "retrieval_attempts":
+        # 「盘外引文先检索」那一档（`draft/37` §105）：用户一句话点破了我的口径 ——
+        # "盘上没有就 false？A 不会去查吗"。实测：`A.search_literature("An overview of
+        # periodic elliptic operators")` 一次就登记了 9 行文献、含 Kuchment 那篇（带 DOI），
+        # 而 A 的工具面里还有 `search.download`。所以"原文不在工作区"不是结论，
+        # 它只是"还没去取" —— 这一档就是要求"真的查过"。
+        reqs = store.rows("search_requests")
+        done = [r for r in reqs if r.get("done") is True]
+        lit = store.rows("literature")
+        from_provider = [r for r in lit if list(r.get("source_request_ids") or [])]
+        downloaded = [r for r in lit
+                      if str(r.get("download") or "").strip() not in ("", "{}", "None")]
+        return len(done), {
+            "search_requests": len(reqs), "done": len(done),
+            "from_provider": len(from_provider), "downloaded": len(downloaded),
+            "topics": [str(r.get("topic") or "")[:60] for r in done[:8]],
         }
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 

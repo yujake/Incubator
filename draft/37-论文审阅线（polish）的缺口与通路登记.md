@@ -8344,3 +8344,74 @@ E 的提示词里必须同时出现 `fs.write`、`code/lean/`、`script_path`、
 
 下一轮：**T1 第 13 趟**（夹具的 P7 已换成逐条口径；`LEAN_PATH` 现在
 不需要人手配 —— 但为稳妥，跑的时候仍然带着 §101 那份环境）。
+
+---
+
+## §105 用户一句话点破的漏洞：**「盘上没有就未查/false」不是终点 —— A 会去查**
+
+### 一、用户的原话与它指出的问题
+
+> 「什么叫盘上没有就 false？A 不会去查吗」
+
+§104 我写下 T1「通过」时，附了一条自我安慰式的边界：
+
+> P7 的 7 条记录里 `with_verdict=0`、`unchecked_with_reason=7` …… 理由本身是有内容的：
+> 「companion 材料在盘上但主稿引用的具体断言未逐字命中，**外部文献工作区内无原文**」
+
+用户一句话把这条边界戳穿了：**"工作区内无原文"只是"还没去取"**。
+A 这个角色的职责就是检索文献 —— 它有 `search_literature`（动作）与
+`search.download`（工具），网络也是通的。于是"盘上没有 ⇒ 未查"不是诚实的结论，
+而是**没做那一步**。
+
+### 二、离线探针（不花模型钱）：A 确实能把这些引文查回来
+
+用 p5 的 `\bibitem` 里三条有题名的引文各查一次（`AgentA.search_literature`，provider = OpenAlex）：
+
+| 查询 | 读数 |
+|---|---|
+| `An overview of periodic elliptic operators` | `ok=true`、`done=true`、`result_lit_ids` **9 行**，其中 `lit_id 0000` 就是 **Kuchment, 2016, DOI `10.1090/bull/1528`** —— 正是主稿引的那一篇 |
+| `Topological crystals` | `ok=true`、`done=true` |
+| `Spectral multiplicity functions of adjacency operators of graphs` | `ok=true`、`done=true` |
+
+A 的工具面（实测）：`search.providers / search.literature / search.download / search.register /
+search.ingest_local / search.dedup_check / search.local / search.shelf / …`。
+⇒ **"查回来 + 取全文 + 登记 + 逐字比对"这条路是通的**，而 13 趟里没有一趟走过它。
+
+### 三、口径修正（这一轮做的代码改动）
+
+**新增一档机器可判验收：`retrieval_attempts`** ——
+"盘外引文先检索"：数的是**真的跑过的检索请求数**（`search_requests` 里 `done=True` 的行），
+读数里带上 `from_provider`（有 `source_request_ids` 的文献行）、`downloaded`（文档里有下载痕迹的行）
+与跑过的 `topics`。
+
+夹具同步加两行（表 + 声明文件各一处）：
+
+```
+| P7b | 盘外引文先检索：先取原文再判「一致/不一致/未查」（取不回才允许写未查并写明检索过程） | 不成立 | 本轮开始：检索请求 0 次（盘外引文 5 条） |
+{"id": "P7b", "kind": "retrieval_attempts", "min": 5, ...}
+```
+
+判据 `tests/test_closing_gate.py::test_the_retrieval_leg_requires_a_search_that_actually_ran`：
+0 次 ⇒ `fail`；1 次"跑过的检索请求"（替身喂行）⇒ `pass` 且读数里能看到 topic。
+（判据里刻意不造一行过 schema 的 `search_requests`：那会把判据变成 schema 的复制品；
+这一档判的是**读法**。）
+
+### 四、这对 T1 的裁定意味着什么（诚实修正）
+
+§104 写的"T1 通过"是**在旧口径下**的通过 —— 那个口径允许"逐条写未查+理由"就算完。
+按用户点破的口径，T1 的第 13 趟**不算完整通过**：它没有走过"检索取回原文"这一步
+（`search_requests` 0 行）。⇒ **T1 要用加了 P7b 的夹具重跑一趟（第 14 趟）**，
+那一趟要同时满足：正文改动 / 7 条引文逐条有记录 / **≥5 次真的检索**（取不回才允许"未查"）/
+proof 行 / 稿件被审过。
+
+### 五、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| A 的检索路（离线探针，不花模型钱） | `python temp/_a_search_probe.py` | 三条真引文各查一次：全部 `ok=true` / `done=true`；Kuchment 那条一次登记 **9 行文献**（含 DOI `10.1090/bull/1528`） |
+| 收工门那一组 | `pytest tests/test_closing_gate.py -q` | **19 passed**（含新的 `retrieval_attempts` 判据） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3496 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1415.31s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 14 趟**（夹具含 P7b：≥5 次真的检索；取不回原文才允许"未查"）。
