@@ -1032,3 +1032,115 @@ def test_the_manuscript_leg_counts_files_on_disk_not_the_index(tmp_path: pathlib
     assert after.status["acceptance"] == "pass", after.to_dict()
     assert "0000-DtoF.md" in row["detail"]["files"], row["detail"]
 
+
+# ============================================================ 「算或造」那一档（draft/39 §3.17）
+
+def _statement(store: Store, stmt_id: str, **kw) -> None:
+    """往 `statements` 里写一行（`bits` 是五元位记录，见 `draft/39` §3.14）。"""
+    row = {"stmt_id": stmt_id, "origin": "own_result", "kind": "theorem",
+           "statement_full": "设 G 是 m-正则图；则……", "created_at": TS, "created_by": "test",
+           # `quote_verified=None` 时必须写 `quote_reason`（`Statement.validate` 的硬约束：
+           # "没查"也要说清为什么还没查）—— 我方自产命题就是"没有外部引文要比对"。
+           "quote_reason": "我方自产命题，没有外部引文要比对",
+           # `origin=own_result` 必须有 `proof_text`（`Statement.validate`：自产命题没证明就入库
+           # 等于把猜测抬成事实）—— 注意：它只是"这一行写了证明文字"这条老约束，
+           # 五位里的第 2 位不看它（看 `bits.proof` + 证明过程的凭据）。
+           "proof_text": "（逐步论证）"}
+    row.update(kw)
+    with store.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
+    sync_counters(store)
+
+
+def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
+        tmp_path: pathlib.Path):
+    """`reviewed_proof_rows`：五位派生出「预备定理级 / 正式定理」的我方命题才算。
+
+    非数值方向（分析/拓扑）的项目永远不会有数值实验那一行，`draft/39` §3.17 A5 把
+    第二环节从「算并留下界」扩成「算或造」—— 这一档就是"造"那条腿的读数。
+    """
+    def seed(s: Store) -> None:
+        # ① 只有证明过程、没审过 ⇒ 还是"猜想"（第 2 位真、第 3 位空）
+        _statement(s, "0000", proof_text="（逐步论证）",
+                   bits={"proof": True, "evidence": {"proof_source": "own",
+                                                     "proof_process": "（逐步论证）"}})
+        # ② 有证明过程 + 审过 ⇒ 预备定理级 ⇒ 算一档
+        _statement(s, "0001", bits={"proof": True, "reviewed": True,
+                                    "evidence": {"proof_source": "own",
+                                                 "proof_process": "（逐步论证）",
+                                                 "reviewed_by": {"round": "V-0001",
+                                                                 "verdict": "no_defect"}}})
+        # ③ 引用命题：凭文献代号进第 2+3 位 ⇒ 等级一样是预备定理级，但不算我方产出
+        _statement(s, "0002", origin="external_lit", source_lit_id="0042",
+                   quote_verified=True)
+        # ④ 只有老字段（`evidence_kind=proof` + `proof_text`，schema 本来就逼着 `own_result`
+        #    写证明文字），没有位记录 ⇒ 按五位全空算（自报不算凭据）—— 这正是这个模型
+        #    要防的那一类假绿
+        _statement(s, "0003", evidence_kind="proof")
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [{"id": "B2", "name": "造判决性证据",
+                                   "kind": "reviewed_proof_rows", "min": 1}], st=st)
+    rep = _gate(st, report)
+
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["got"] == 1, row
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    assert row["detail"]["counted"][0]["stmt_id"] == "0001", row["detail"]
+    assert row["detail"]["cited_skipped"] == 1, row["detail"]
+    # 0000（只有证明过程、没审过）与 0003（只有老字段）都停在"猜想"；
+    # 0001（我方，算一档）与 0002（引用，`cited_skipped`）都是"预备定理级"。
+    assert row["detail"]["grades"] == {"conjecture": 2, "pre_theorem": 2}, row["detail"]
+
+
+def test_the_reviewed_proof_leg_goes_red_on_self_declared_proofs_alone(tmp_path: pathlib.Path):
+    """负控：只有老字段（`evidence_kind=proof` + `proof_text`）而五位全空 ⇒ 这一档 0 条。
+
+    没有这一条，`reviewed_proof_rows` 就退化成"台账里有没有写着 `evidence_kind=proof` 的行" ——
+    而历史上正是那些老字段把"数值支持"读成了"已证明"。
+    """
+    def seed(s: Store) -> None:
+        _statement(s, "0000", evidence_kind="proof")
+        _statement(s, "0001", evidence_kind="cross_check")
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [{"id": "B2", "name": "造判决性证据",
+                                   "kind": "reviewed_proof_rows", "min": 1}], st=st)
+    rep = _gate(st, report)
+
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["got"] == 0 and row["ok"] is False, row
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    assert "自报" in row["detail"]["note"], row["detail"]
+
+
+def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
+        tmp_path: pathlib.Path, monkeypatch):
+    """覆盖面：只写 `reviewed_proof_rows` 一行 ⇒ 「算或造」这一环节满足（非数值方向不被卡死）。
+
+    改前那一组的成员只有数值/界三档 ⇒ 分析方向的项目那一格结构性恒空，
+    无论做得多好都收不了工 —— 那是拿数值口径去卡一个不该用数值的方向（`draft/39` §3.17）。
+    """
+    def seed(s: Store) -> None:
+        _statement(s, "0000", bits={"proof": True, "reviewed": True,
+                                    "evidence": {"proof_source": "own",
+                                                 "proof_process": "（逐步论证）",
+                                                 "reviewed_by": {"round": "V-0001"}}})
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _as_research(st, monkeypatch)
+    _acceptance_checks(tmp_path, [
+        {"id": "R1", "name": "立题与检索", "kind": "research_question_rows", "min": 0},
+        {"id": "R2", "name": "算或造", "kind": "reviewed_proof_rows", "min": 1},
+        {"id": "R3", "name": "想", "kind": "conjecture_rows", "min": 0},
+        {"id": "R4", "name": "交", "kind": "document_literature_citations", "min": 0},
+    ], st=st)
+    rep = _gate(st, report)
+
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert chain["groups"]["算或造"] == ["reviewed_proof_rows"], chain
+    assert chain["missing"] == [], chain
+

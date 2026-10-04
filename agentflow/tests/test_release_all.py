@@ -2131,6 +2131,11 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "dedup.py": "判重：文献 / 概念 / 关系",
     "demo.py": "离线端到端演示（不访问网络，把 A→B→校验整条链路真跑一遍）",
     "evidence.py": "证据层：先检索、再逐字回验（每条结论都落在某段真实原文上）",
+    # `draft/39` §3.14（2026-10-05，用户裁定）：命题的**五元证据位**与派生等级。
+    # 它不是对拍副本：位的词表/四态、派生等级、引用命题那条读法、作废四条只有这一份实现；
+    # 收工门的 `reviewed_proof_rows` 与（批⑥）状态报告都调 `bits_from_row`。
+    "evidencebits.py": "命题的五元证据位与派生等级（哪位角色欠哪一位 / 四态 / 等级机械派生 / "
+                       "引用命题凭文献代号 / 作废四条）；纯函数层，读入口 `bits_from_row`",
     "extract.py": "文本抽取层 `extract_text` 及其 PDF 后端",
     "fetch.py": "下载层：流式下载、原子落盘、限速重试、镜像回退",
     "formalgw.py": "Lean 形式化验证后端（`evidence_kind=\"proof\"` 这句话的落点）",

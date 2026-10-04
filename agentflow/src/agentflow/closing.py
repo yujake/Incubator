@@ -81,6 +81,10 @@ LEG_CHECK_KINDS: dict[str, str] = {
                            "里 `quote_verified` 非 null 的行）",
     "proof_experiment_rows": "台账里的 proof 级形式化实验行数（`experiments` 里 "
                              "`method=formal` 且 `evidence_kind=proof` 的行）",
+    "reviewed_proof_rows": "**我方**走完「有证明过程 + 审过」的命题行数（`statements` 里"
+                           "五元位派生出 `预备定理级` / `正式定理` 的行，且 `origin != external_lit`）"
+                           "—— 引用命题不算：它的第 2 位凭据是文献代号，不是我们造的东西"
+                           "（`draft/39` §3.17 A5：非数值方向的项目靠这一档满足「算或造」）",
     "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里状态被推成 "
                           "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
     "manuscript_edited": "可改的主稿有没有实质改动（`out/paper/main.tex` 与只读基线 "
@@ -198,8 +202,14 @@ REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 #: review 型（T1）不触发 —— 那些项目的验收表是任务书给的 P1–P11，与本判据无关。
 RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("立题与检索", ("research_question_rows", "retrieval_attempts")),
-    ("算并留下界", ("numeric_experiment_rows", "search_frontier_rows",
-                    "enumeration_optimization_rows")),
+    # 第二环节从「算并留下界」扩成「算或造」（`draft/39` §3.17 A5，用户 2026-10-05 裁）：
+    # 分析/拓扑方向的项目永远不会有"数值实验"这一行，按旧口径那一格结构性恒空 ——
+    # 那是拿数值口径去卡一个不该用数值的方向。扩成"算（数值/界）或造（有证明过程 + 审过、
+    # 或构造性反例/族构造）"之后，两条腿各算数；用非数值那条腿时，项目要在验收表里写清
+    # "为什么不用数值"（那就是五位里第 1 位 `na` 的理由，`acceptance` 那一格读它）。
+    ("算或造", ("numeric_experiment_rows", "search_frontier_rows",
+                "enumeration_optimization_rows", "reviewed_proof_rows",
+                "counterexample_or_proof_rows")),
     ("想（猜想或判决性证据）", ("conjecture_rows", "statement_rows",
                                 "counterexample_or_proof_rows")),
     ("交（文献进稿、计划推进）", ("document_literature_citations", "plan_progress_rows",
@@ -395,6 +405,36 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             detail["note"] = (f"{project_root / 'config.yaml'} 读不懂 ⇒ 按缺省落位 "
                               "reports 数；若写者用的是别的子目录，这一档的读数会偏低")
         return len(files), detail
+    if kind == "reviewed_proof_rows":
+        # 「造判决性证据」那一档（`draft/39` §3.17 A5 + §3.14 五元位）：我方命题里
+        # 五元位派生出「预备定理级」（有证明过程 + 审过）或「正式定理」（有证明过程 +
+        # 形式化通过）的行数。等级一律现算（`evidencebits.bits_from_row` ⇒
+        # `derive_grade`），不读盘上存的等级 —— 自报的等级不算数。
+        # 引用命题（`origin=external_lit`）不算：它的第 2 位凭据是文献代号，
+        # 混进来就等于"引一篇别人的定理"满足了"我们自己造了判决性证据"。
+        from . import evidencebits as EB
+
+        rows = list(store.rows("statements"))
+        counted: list[dict[str, Any]] = []
+        grades: dict[str, int] = {}
+        cited_skipped = 0
+        for r in rows:
+            bits = EB.bits_from_row(r)
+            grade = str(bits.get("grade") or "")
+            grades[grade] = grades.get(grade, 0) + 1
+            if grade in ("pre_theorem", "theorem"):
+                if str(bits.get("origin") or "") == "external_lit":
+                    cited_skipped += 1
+                    continue
+                counted.append({"stmt_id": str(r.get("stmt_id") or r.get("id") or ""),
+                                "grade": grade, "label": str(r.get("label") or "")[:60]})
+        detail: dict[str, Any] = {"statements": len(rows), "counted": counted[:8],
+                                  "grades": grades, "cited_skipped": cited_skipped}
+        if rows and not counted:
+            detail["note"] = ("台账里有命题行，但一条都没走到「预备定理级」—— "
+                              "要么没有证明过程，要么没审过（五位里第 2/3 位为空）；"
+                              "自报的 `status=proved` / `evidence_kind=proof` 不算凭据")
+        return len(counted), detail
     if kind == "numeric_experiment_rows":
         rows = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
