@@ -7837,3 +7837,102 @@ out/paper/ACCEPTANCE-CHECKS.json
 要看的信号：主控跑 `conductor.closing` 时会不会看到 `acceptance: fail` 并回去补落台账
 （第 2 趟它在 `substance` 红了之后就是这么做的），以及最终 `can_close` 的那一趟
 是不是三条腿都有凭据。
+
+---
+
+## §95 T1 第 9 趟：**新判据动了**（主控为它连跑 5 次收工门、补派 H 三次），也因此抓出它自己的一处读错
+
+第 9 趟真机（2026-10-04，工作区 `projects/p5-review-t9`，58 字任务原文不变；
+夹具 = 6 份被引原文 + P7/P8/P9 的机器可判行 + `out/paper/ACCEPTANCE-CHECKS.json`）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 81 / 20（A2 · B3 · E5 · G4 · **H5**） |
+| 花销 | **$1.09279**（预算 $5 内） |
+| 退出 | 0（`final`） |
+| 报告 | `out/review/REPORT.md` 九节；结尾逐字写着「本轮交付完成（**P9 一格未核到，如实记录**）」 |
+| 主控自述 | `A.ingest_local` ×2（`cited/` 5 份进 literature）、`B.register_statement` ×10（**3 行 `quote_verified=true`**、7 行"还没查"+理由）、`E.check_formal` ×5 + `run_experiment` ×1（自足 Lean 文件）、`G.paper_package`、`H.review` ×2 + `verify_fixes` + `review_report` ×2 |
+
+### 一、第七格确实在起作用（这是本轮最想要的读数）
+
+第 65–79 步它**连着跑了五次 `conductor.closing`**，每一次的 `why` 都指着 P9：
+
+- 步 65：「H.review 第 2 轮已跑，确认 P9（review_rounds>=1）是否翻绿，再写交付说明」；
+- 步 66：「P9 仍报 documents 里 review_rounds>=1 为 0，需看 H.review 两轮到底落了什么行……」；
+- 步 68：**补派 `H.verify_fixes`**（想让 P9 翻绿）；步 69：再跑收工门；
+- 步 70：直接读 `data/documents.json` 看那一行的实际字段；
+- 步 74：**再派 `H.review_report`（round 3）**；
+- 步 79：最后一次核七格，然后把"P9 一格未核到"**如实写进交付说明**才收工。
+
+对比第 7、8 趟（同一类缺陷、收工门六格全过 ⇒ 直接报"交付完成"）：
+这一格把"缺凭据"从**报告里不会出现的句子**变成了**它必须处理的红灯**。
+
+### 二、同一趟抓出这一格自己的读错：`review_rounds` 不是"审过"的凭据
+
+主控的自述逐字：「P9 读数：documents/0000 的 review_rounds=0（H.review 两轮 + verify_fixes
+都没把它写上去，status 已 accepted）。**这是 H 侧动作不更新该字段，不是我没派活。**」
+
+它是对的。台账实测（四个工作区）：
+
+| 工作区 | `documents.status` | `review_rounds` |
+|---|---|---|
+| 第 3 趟 | `accepted` | **0** |
+| 第 7 趟 | `accepted` | **0** |
+| 第 8 趟 | `revised` | 1 |
+| 第 9 趟 | `accepted` | **0** |
+
+H 的裁决写的是 `status`（`draft` → `accepted`/`revised`），而"轮次"只在真的改过稿时才加。
+⇒ 我那一档按 `review_rounds >= 1` 判，会把**已经审过且通过**的稿件读成"没审过"：
+判据恒红，于是**没人再信它** —— 这比没有判据更坏（本项目 R001/R006 都栽在噪音上）。
+
+**修法**：`REVIEWED_DOC_STATUSES = ("accepted", "revised")`，
+`reviewed_documents` 这一档改成「状态被推成 accepted/revised **或** `review_rounds >= 1`」，
+读数里逐行给出 `{doc_id, status, review_rounds}`；夹具的 P9 读数栏与 `note` 同步改口径。
+判据 `test_the_reviewed_documents_leg_counts_hs_verdict_not_only_revision_rounds`：
+造一份 `status=accepted`、`review_rounds=0` 的稿件（真机第 9 趟的形状）⇒ 这一档必须算"审过"。
+
+> 记账：这一处读错是我加的判据自己带的，**新判据跑第一趟真机就被真机纠正** ——
+> 这正是"判据要拿真机读数校准"的意思（判据写错时，最坏的结果是它变成一条恒红的噪音，
+> 而噪音会让所有判据一起贬值）。
+
+### 三、这一趟把三条腿都铺到了（但合取仍未完成）
+
+- **引文腿**：`A.ingest_local` 把 `cited/` 5 份同伴文献登记进 `literature`；
+  `B.register_statement` 10 行里 **3 行 `quote_verified=true`**（逐字比对通过）、
+  7 行"还没查"+`quote_reason` ⇒ **P7 的凭据在台账里**；
+- **形式化腿**：`E.check_formal` ×5 + `E.run_experiment` ×1（自足 Lean 文件，不 import Mathlib）；
+  写没写成 proof 行要看台账（见下一趟的读数）；
+- **审校腿**：`H.review` ×2 + `verify_fixes` + `review_report` ×2 ⇒ `status` 被推成 `accepted`，
+  `reports/0000-review.md` 落盘 ⇒ 修法之后 **P9 也算数**；
+- 而它**没有改正文**（报告里如实写），所以 P2（正文实质改动）这一趟是空的 —— 三条腿齐了、
+  另一条又空了：**规划方差仍在**，但现在的红灯是**逐行点名**的，主控能看见缺哪一条。
+
+### 四、第 9 趟台账逐表读数（这是九趟里最好的一趟）
+
+| 表 | 行数 | 关键细节 |
+|---|---|---|
+| `literature` | **5** | `A.ingest_local` ×2 把 `cited/` 5 份同伴文献登记进来（`lit_id` 0000–0004） |
+| `statements` | **10** | **3 条 `quote_verified=true`**（逐字比对通过）+ 7 条 `quote_verified` 不传 + `quote_reason`（"还没查"）⇒ **P7 有凭据** |
+| `experiments` | **1** | `method=formal` + **`evidence_kind=proof`** + `result=supports`；对应的检查器裁决 t-0024 逐字是「退出码 0、无 sorry、公理 无 在允许集内、且声明 `K_m_distance_witness` 真的被检查到（0.39 s）」⇒ **P8 有凭据** |
+| `documents` | 1 | `status=accepted`（H 的裁决）、`reports/0000-review.md` 落盘 ⇒ 修法之后 **P9 也算数** |
+| `relations` | 0 | 逐字比对走的是 `statements` 那一栏（框架里"逐字回验"有两个落点，这一趟用的是命题台账那个） |
+| `review_findings` | 0 | H 报 `new_findings=[]`（0 fail ⇒ 没有 finding 可落，§90 已裁定过这种形态） |
+
+⇒ **三条腿的凭据第一次同时落在同一趟的台账上**（P7/P8/P9 三行都该翻绿）。
+唯一没做的是任务原文的**第一句**（"改掉正文里的问题"）—— 这一趟 `out/paper/main.tex` 没被改，
+报告里如实写了。也就是说：**引文腿与形式化腿（用户点名的两条）这一趟是真做成了**，
+而"正文实质改动"那一条在**同一趟**里空着，恰恰是收工门现在**没有**一格去数的东西
+（P2 的读数栏虽然写着"正文 = 基线副本，0 处改动"，但它不在 `ACCEPTANCE-CHECKS.json` 里）。
+
+**下一轮（§96）要做的最后一块**：给 `_leg_reading` 加第四档 ——
+"主稿与只读基线的 sha256 不同"（`manuscript_edited`），并把 P2 写进那份声明文件。
+它是任务原文第一句的机器可判形式，也是收工门最后一处"任务点名却没被判"的口径。
+
+### 五、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| 收工门那一组 | `pytest tests/test_closing_gate.py -q` | **16 passed**（含 P9 口径那一条） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest | `python -B -m pytest -q -p no:randomly` | **3491 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1384.13s） |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |

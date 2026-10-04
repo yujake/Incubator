@@ -284,6 +284,37 @@ def test_the_acceptance_cell_only_excuses_the_row_that_is_really_met(tmp_path: p
     assert [r["id"] for r in rows if not r["ok"]] == ["P9"], rows
 
 
+def test_the_reviewed_documents_leg_counts_hs_verdict_not_only_revision_rounds(
+        tmp_path: pathlib.Path):
+    """判据（`draft/37` §95 的真机读数）：`status=accepted` 而 `review_rounds=0` 必须算"审过"。
+
+    第 9 趟实测：`documents/0000` 是 `status=accepted`、`review_rounds=0`（H 审过并给了裁决，
+    而"轮次"只在真的改过稿时才加）。按 `review_rounds >= 1` 判会把它读成"没审过" ——
+    判据恒红，于是没人再信它（这比没有判据更坏）。所以这一档要认 H 的裁决本身。
+    """
+    def seed(s: Store) -> None:
+        _paper_with_claim(s, doc_id="0009")
+        with s.tx("documents", actor="test") as tx:
+            row = dict(tx.rows("documents")[0])
+            row["status"] = "accepted"          # H 的裁决
+            row["review_rounds"] = 0            # 没有改过稿 ⇒ 轮次是 0
+            # 审批必须钉住"审的是哪一版"（`schema.Document.validate` 的结构强制）
+            from agentflow import signatures as SIG
+
+            row["content_sha256"] = SIG.content_sha256_of(row)
+            tx.upsert("documents", row)
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P9", "name": "我方稿件被审过", "kind": "reviewed_documents", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    detail = rep.readings["acceptance"]["rows"][0]["detail"]
+    assert detail["documents"][0]["status"] == "accepted", detail
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 

@@ -81,8 +81,17 @@ LEG_CHECK_KINDS: dict[str, str] = {
                            "里 `quote_verified` 非 null 的行）",
     "proof_experiment_rows": "台账里的 proof 级形式化实验行数（`experiments` 里 "
                              "`method=formal` 且 `evidence_kind=proof` 的行）",
-    "reviewed_documents": "被审过的我方稿件行数（`documents` 里 `review_rounds >= 1` 的行）",
+    "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里状态被推成 "
+                          "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
 }
+
+#: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
+#:
+#: 为什么不能只看 `review_rounds`（`draft/37` §95 的真机读数）：T1 第 9 趟里
+#: `documents/0000` 是 `status=accepted`、`review_rounds=0` —— H 审过并给了裁决，
+#: 而"轮次"只在真的改过稿时才会加。按 `review_rounds >= 1` 判会把一次
+#: 已经审过且通过的稿件读成"没审过"（判据恒红 ⇒ 谁都不会再信它）。
+REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 
 
 def _leg_reading(store: Any, kind: str) -> tuple[int, dict[str, Any]]:
@@ -107,8 +116,12 @@ def _leg_reading(store: Any, kind: str) -> tuple[int, dict[str, Any]]:
                 and str(r.get("evidence_kind") or "") == "proof"]
         return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
     if kind == "reviewed_documents":
-        rows = [r for r in store.rows("documents") if int(r.get("review_rounds") or 0) >= 1]
-        return len(rows), {"documents": [str(r.get("doc_id") or "") for r in rows[:8]]}
+        rows = [r for r in store.rows("documents")
+                if str(r.get("status") or "") in REVIEWED_DOC_STATUSES
+                or int(r.get("review_rounds") or 0) >= 1]
+        return len(rows), {"documents": [
+            {"doc_id": str(r.get("doc_id") or ""), "status": str(r.get("status") or ""),
+             "review_rounds": int(r.get("review_rounds") or 0)} for r in rows[:8]]}
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 
