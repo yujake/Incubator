@@ -28,6 +28,40 @@ def _ws(tmp_path: pathlib.Path) -> tuple[pathlib.Path, Store]:
     return ws, st
 
 
+def test_the_out_path_rule_itself_is_pinned(tmp_path, monkeypatch):
+    """直接判那条规则本体（`doc_tools.resolve_out_path`）：四条口径各一条断言。
+
+    为什么直接判它（`tools/coverage_zero_test.py` 的等级 2 判据）：它是「相对路径按谁
+    解析、越界怎么办」的「唯一实现」——工具层与 `D.write_report` 都走它，而一条规则
+    没被直接测过，就等于「它哪天被改宽了也没有一处会响」。
+
+    四条：① 相对 → 拼在工作区根下；② 绝对且在工作区内 → 原样（相对化）；
+    ③ 缺省落位也按工作区根拼（不是按进程 cwd）；④ 越界 → 拒（含「越界」字样）。
+    """
+    from agentflow.tools.doc_tools import resolve_out_path
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)          # 进程 cwd 故意不是工作区
+
+    rel, absolute = resolve_out_path(root, "out/reports/x.md", "0000", "reports")
+    assert rel == "out/reports/x.md", (rel, absolute)
+    assert absolute == (root / "out" / "reports" / "x.md").resolve(), absolute
+
+    rel2, absolute2 = resolve_out_path(root, str(root / "a.md"), "0000", "reports")
+    assert rel2 == "a.md" and absolute2 == (root / "a.md").resolve(), (rel2, absolute2)
+
+    rel3, absolute3 = resolve_out_path(root, None, "0007", "reports")
+    assert rel3 == "reports/0007.md", (rel3, absolute3)
+    assert absolute3 == (root / "reports" / "0007.md").resolve(), absolute3
+
+    with pytest.raises(ValueError) as exc:
+        resolve_out_path(root, str(elsewhere / "x.md"), "0000", "reports")
+    assert "越界" in str(exc.value), exc.value
+
+
 def test_a_relative_out_path_lands_under_the_workspace_not_the_cwd(tmp_path, monkeypatch):
     """正控 + 那次泄漏的负控：换个 cwd 跑，文件仍然必须落在工作区里。"""
     ws, st = _ws(tmp_path)

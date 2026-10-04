@@ -665,6 +665,14 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
         ),
         policy=(
             "形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。",
+            "**脚本要会说结论**（`REPRO_RESULT:` 协议，`draft/37` §122）：数值脚本必须在 stdout 打印一行 "
+            "`REPRO_RESULT: {\"result\": \"supports\"|\"refutes\"|\"inconclusive\", ...}` —— "
+            "有这一行且 `result=supports`，那条实验才落 `cross_check`；没有这一行（或格式非法）一律落 "
+            "`heuristic/inconclusive`（这是框架的诚实规定，不是惩罚）。"
+            "真机读数（T2 第 2/3 趟）：主控自己写的那几个核验脚本**一次都没打印过这一行** ⇒ "
+            "三次数值实验全部是 `inconclusive`，稿子于是只能用 `heuristic` 级的断言说话。"
+            "脚本不是你写的时（主控或 G 写的），先 `fs.read` 看完再跑：缺这一行就退回作者补，"
+            "或按协议自己改写它，别默认跑一遍就算核过了。",
             "跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。"
             "被拒不是「做不了」——用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，"
             "并把「这一版脚本查的是什么」写进实验结论。",
@@ -748,6 +756,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "真机实测（2026-09-30）：只把修订写进 documents、没重渲染，锚立刻报 `drifted`，"
             "而交付定义第 1 条要求 0 漂移 ⇒ 那样的修订等于没交付。"
             "渲染与编译都要看工具给的读数（标记是否齐全、receipt 是否本次），不看编译器退出码。",
+            "**断言只能声称它所引实验的 `result` 支持的东西**（`draft/37` §122 的真机读数）："
+            "引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）的实验时，"
+            "这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），"
+            "或者先去让 E 跑出一个真给出 `REPRO_RESULT:` 的实验。"
+            "反例（第 3 趟真机）：稿子写着「Heawood 图围长 6，每条边至少落在两个 6-圈里」，"
+            "而它引的那条实验行的 stdout 逐字是 `\"girth\": 4` 且 `result=inconclusive` —— "
+            "**引用一个与断言相反的证据行，比没有引用更坏**：读者会以为它被核过。",
         ),
         stance=(
             "你的品味体现在取舍上：能删掉的冗余、能统一的记号、能给出的一般性，都要说得出为什么。",
@@ -830,6 +845,12 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "（真机实测建出过一个空项目 project11），所以框架会以 already_a_project 拒你。"
             "接着做下去用 conductor.resume_brief / conductor.state / conductor.ledger，"
             "要派活就用 conductor.summon。",
+            "**你写的那份核验脚本要会说结论**（`REPRO_RESULT:` 协议，`draft/37` §122）："
+            "数值脚本必须在 stdout 打印一行 "
+            "`REPRO_RESULT: {\"result\": \"supports\"|\"refutes\"|\"inconclusive\", ...}`。"
+            "真机读数（T2 第 2/3 趟）：那几份核验脚本全是你用 fs.write 写的，一行都没打印过它 ⇒ "
+            "三次实验全落 `inconclusive`、稿子只能用 `heuristic` 级的话说话 —— "
+            "**实验白跑了，而且看起来像跑过了**。脚本里把判据与结论一起打印出来，再交给 E。",
         ),
         signature_error="把派活本身当成结论。",
         deliverable="一份交付说明，落在 out/review/REPORT.md（工作区相对路径，用 fs.write 写；"

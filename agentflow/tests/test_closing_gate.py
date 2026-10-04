@@ -479,6 +479,90 @@ def test_the_research_kinds_count_their_own_tables(tmp_path: pathlib.Path, monke
     assert rep.status["acceptance"] == "fail", rep.to_dict()
 
 
+def test_a_claim_may_not_outstate_the_experiment_it_cites(tmp_path: pathlib.Path):
+    """判据（`draft/37` §122）：断言与它所引实验的 `result` 必须一致。
+
+    真机读数（T2 第 3 趟）：稿子写着「Heawood 图围长 6」，而它引的那条实验行 stdout 逐字是
+    `"girth": 4` 且 `result=inconclusive` —— 三条断言全是这种形态，门却全绿。
+
+    三态都钉住：① 引 `supports` 的实验 ⇒ 这份稿子算「有据」；② 引 `inconclusive` 的实验、
+    但断言本身标成「没得出结论」（`is_negative` + `negation_kind`）⇒ 也算有据（那是诚实的形态）；
+    ③ 引 `inconclusive` 却写成正面结论 ⇒ 这份稿子「不算」，读数里点名是哪条断言、哪个实验、什么 result。
+    """
+    st, report = _good(tmp_path)                      # 夹具里有一条 supports 的 T3 实验 exp:0001
+    _acceptance_checks(tmp_path, [
+        {"id": "R7", "name": "断言与证据一致", "kind": "claims_supported_by_their_evidence", "min": 1},
+    ], st=st)
+
+    exp = st.rows("experiments")[0]
+    assert exp["result"] == "supports", exp          # 前提：夹具那条实验是支持的
+    got, detail = CL._leg_reading(st, "claims_supported_by_their_evidence", tmp_path)
+    assert got == 1, detail                          # 夹具那份稿子引的正是它 ⇒ 有据
+
+    # ② 换一条 inconclusive 的实验 + 一条标成「没得出结论」的断言 ⇒ 仍然有据
+    incon = S.Experiment(experiment_id="0002", claim_key="rmk", claim="Heawood 图的逐边圈数核验",
+                         method="numeric", evidence_kind="heuristic", result="inconclusive",
+                         negation_kind="no_local_evidence", code_path="scripts/heawood_check.py",
+                         code_hash="deadbeefdeadbeef", exit_code=0, created_at=TS)
+    incon.validate()
+    with st.tx("experiments", actor="test", note="overstate probe") as tx:
+        tx.upsert("experiments", incon.to_dict(), note="overstate probe")
+    sync_counters(st)
+    lit = st.rows("documents")
+    assert lit, "夹具里应当有稿件"
+    with st.tx("documents", actor="test", note="overstate probe") as tx:
+        row = dict(lit[0])
+        row["claims"] = [{"claim_id": "c9", "section": "§1", "text": "没得出结论：搜索超时",
+                          "citations": ["exp:0002"], "evidence_kind": "heuristic",
+                          "is_negative": True, "negation_kind": "no_local_evidence"}]
+        tx.upsert("documents", row, note="overstate probe")
+    got2, detail2 = CL._leg_reading(st, "claims_supported_by_their_evidence", tmp_path)
+    assert got2 == 1, detail2                        # 诚实标注 ⇒ 仍然算有据
+
+    # ③ 同一份稿子改成正面语气（去掉 is_negative）⇒ 掉出「有据」
+    with st.tx("documents", actor="test", note="overstate probe") as tx:
+        row = dict(lit[0])
+        row["claims"] = [{"claim_id": "c9", "section": "§1", "text": "搜索表明不存在这样的图",
+                          "citations": ["exp:0002"], "evidence_kind": "heuristic"}]
+        tx.upsert("documents", row, note="overstate probe")
+    got3, detail3 = CL._leg_reading(st, "claims_supported_by_their_evidence", tmp_path)
+    assert got3 == 0, detail3
+    bad = detail3["documents_with_overstated_claims"]
+    assert "0001" in bad and bad["0001"][0]["experiment"] == "exp:0002", bad
+    assert bad["0001"][0]["result"] == "inconclusive", bad
+
+    rep = _gate(st, report)
+    row7 = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R7")
+    assert row7["got"] == 0 and row7["ok"] is False, row7
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+
+
+def test_the_workspace_relative_resolution_rule_is_pinned(tmp_path: pathlib.Path, monkeypatch):
+    """直接判 `closing.resolve_under_workspace`（工具层的「相对谁解析」那条规则）。
+
+    为什么单列（`tools/coverage_zero_test.py` 的等级 2 判据 + 它的来历）：这条规则是
+    `draft/37` §96 那次真机读数的修法 —— 主控报「报告不在盘上」「锚文件读不到」，
+    而两个文件都在盘上，病因是 `Path(given)` 按进程当前目录解析、工具的契约却是
+    「相对工作区」。三个口径：① 相对 → 按 `store.root` 解析成绝对；② 绝对 → 原样放过
+    （调用方给的是绝对路径就不再改它）；③ 空串/纯空白 → 空串（「没给」不许被解析成
+    工作区根，那会让「没查成」看起来像「查了、目录就在那儿」）。
+    """
+    ws = tmp_path / "ws"
+    (ws / "data").mkdir(parents=True)
+    st = Store(ws)
+    st.init()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)          # 进程 cwd 故意不是工作区
+
+    assert CL.resolve_under_workspace(st, "out/review/REPORT.md") == \
+        str((ws / "out" / "review" / "REPORT.md").resolve())
+    ab = str(elsewhere / "abs.md")
+    assert CL.resolve_under_workspace(st, ab) == ab
+    assert CL.resolve_under_workspace(st, "") == ""
+    assert CL.resolve_under_workspace(st, "   ") == ""
+
+
 def test_the_manuscript_must_cite_the_literature_it_retrieved(tmp_path: pathlib.Path, monkeypatch):
     """判据（`draft/37` §120）：手稿引用了多少「文献来源」（`lit:` / `rel:` 代号）。
 

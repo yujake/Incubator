@@ -119,6 +119,16 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                      "三条断言**全部只引 `exp:`**（一条文献都没引）—— 门照样全绿，"
                                      "因为没有任何一行问过这件事。而库里就躺着直接对口的那几篇"
                                      "（`on-edge-girth-regular-graphs-lower-bounds-and-new-families` 等）",
+    "claims_supported_by_their_evidence": "手稿的断言与它所引实验的结论**一致**的稿件份数"
+                                          "（`documents` 里每一条 claim 都「有据」的稿件算一份）—— "
+                                          "「有据」的定义逐条写死：引了 `exp:` 的断言，必须每条被引实验"
+                                          "的 `result` 都是 `supports`；或者这条断言本身就是"
+                                          "「没得出结论」那一档（`is_negative` 且给了 `negation_kind`）；"
+                                          "没引 `exp:` 的断言不参与这一档（文献类断言的诚实性由 B 的"
+                                          "逐字核验与 H 判）。为什么单列（2026-10-04 T2 第 3 趟真机）："
+                                          "稿子写着「Heawood 图围长 6」，而它引的那条实验行 stdout 逐字"
+                                          "是 `\"girth\": 4` 且 `result=inconclusive` —— 门照样全绿："
+                                          "没有任何一行问过「断言与它引的证据说的一样吗」",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -307,6 +317,50 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             # 三态：库里有多少可以引的东西 —— 让"引了 0 条"与"库里本来就没有"分得开。
             "available": {"literature": len(store.rows("literature")),
                           "relations": len(store.rows("relations"))},
+        }
+    if kind == "claims_supported_by_their_evidence":
+        # 「断言与它引的实验说的一样吗」那一档（`draft/37` §122）。判据逐条写死：
+        #   - 引了 `exp:` 的断言 ⇒ 每条被引实验的 `result` 都必须是 `supports`；
+        #   - 或者这条断言本身是「没得出结论」那一档（`is_negative` 且 `negation_kind` 非空）
+        #     —— 那是「诚实」的形态：它与一条 `inconclusive` 的实验是一致的；
+        #   - 没引 `exp:` 的断言（纯文献类）不参与这一档。
+        # 计数单位是「稿件份数」（每一条 claim 都「有据」的稿件算一份），因为
+        # 「有一句话被夸大了」不是「这份稿子大体没问题」能折过去的。
+        exp_by_id = {str(r.get("experiment_id") or ""): r for r in store.rows("experiments")}
+        ok_docs: list[str] = []
+        per_doc_bad: dict[str, list[dict[str, Any]]] = {}
+        for r in store.rows("documents"):
+            doc_id = str(r.get("doc_id") or r.get("id") or "")
+            bad: list[dict[str, Any]] = []
+            for c in r.get("claims") or []:
+                if not isinstance(c, Mapping):
+                    continue
+                exps = [str(x).split("#", 1)[0].strip() for x in (c.get("citations") or [])
+                        if str(x).startswith("exp:")]
+                if not exps:
+                    continue
+                if bool(c.get("is_negative")) and str(c.get("negation_kind") or "").strip():
+                    continue                      # 已标成「没得出结论」⇒ 与 inconclusive 一致
+                for cid in exps:
+                    row = exp_by_id.get(cid.split(":", 1)[1])
+                    result = str((row or {}).get("result") or "missing")
+                    if result != "supports":
+                        bad.append({"claim_id": str(c.get("claim_id") or ""),
+                                    "experiment": cid, "result": result,
+                                    "claim_evidence_kind": str(c.get("evidence_kind") or ""),
+                                    "why": ("被引实验不存在" if row is None else
+                                            f"被引实验的 result={result}，而这条断言不是在说「没得出结论」")})
+            if bad:
+                per_doc_bad[doc_id] = bad
+            else:
+                ok_docs.append(doc_id)
+        return len(ok_docs), {
+            "documents_ok": sorted(ok_docs),
+            "documents_with_overstated_claims": per_doc_bad,
+            "note": ("这一档问的是「断言与它引的证据说的一样吗」：引了 inconclusive/refutes 的"
+                     "实验却写成正面结论，就是报告里造假；把话说成「没得出结论」"
+                     "（is_negative + negation_kind）或让 E 跑出一个真给出 REPRO_RESULT 的实验，"
+                     "两条路都算改对了"),
         }
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 

@@ -838,3 +838,45 @@ def test_every_role_prompt_mentions_its_declared_collaborators(role: str):
         if other in C.ALLOWED_EDGES.get(role, frozenset()):
             continue
         assert f"- {other}：" not in text, f"{role} 的提示词里多出了不在边表里的 {other}"
+
+
+# ============================================================ 步检查点（步进续跑的那份）
+
+def test_the_step_checkpoint_records_the_fingerprint_and_reports_write_failures(tmp_path):
+    """直接判 `agent_loop.save_run_checkpoint` / `load_run_checkpoint`。
+
+    为什么单列（`tools/coverage_zero_test.py` 的等级 2 判据）：这一对函数是
+    「跑长活被打断后从第几步接着跑」的落点 —— 它写的是「任务指纹 + 步号 + 停止原因」，
+    而拿 A 任务的检查点续 B 任务会把两件事的进度混成一条（看起来还完全正常）。
+    两条口径：① 写成的检查点必须带 `autonomy.task_fingerprint` 的同一个指纹（不另立一份）；
+    ② 写入失败「不许静默」（返回问题串，而不是当成功），读不到才是 `None`。
+    """
+    from agentflow import agent_loop as AL
+    from agentflow import autonomy as AU
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    problem = AL.save_run_checkpoint(root, "M", "sid-1", task="研究 X", step=7,
+                                     stop_reason="final", spend={"usd": 0.5})
+    assert problem == "", problem
+    path = AL.run_checkpoint_path(root, "M", "sid-1")
+    assert path.is_file(), path
+    cp = AL.load_run_checkpoint(root, "M", "sid-1")
+    assert cp is not None
+    assert (cp["role"], cp["step"], cp["stop_reason"]) == ("M", 7, "final"), cp
+    assert cp["fingerprint"] == AU.task_fingerprint("M", "研究 X"), cp
+    assert cp["spend"] == {"usd": 0.5}, cp
+
+    # 读不到 ⇒ None（三态：「没查成」不许被读成「没有这一步」）
+    assert AL.load_run_checkpoint(root, "M", "no-such-sid") is None
+
+    # 写入失败不许静默：把落点占成一个目录 ⇒ 返回问题串（不是空串）
+    bad_root = tmp_path / "ws2"
+    bad_root.mkdir()
+    bad = AL.run_checkpoint_path(bad_root, "M", "sid-2")
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.mkdir()
+    problem2 = AL.save_run_checkpoint(bad_root, "M", "sid-2", task="研究 Y", step=1,
+                                      stop_reason="interrupted")
+    assert problem2, "写入失败被静默吞掉了（返回了空串）"
+    assert "Error" in problem2, problem2

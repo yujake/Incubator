@@ -139,12 +139,8 @@ SPEC = AgentSpec(
             ),
         ),
         policy=(
-            (
-                '改完稿要让**包**跟上，不是只让台账跟上：修订落进 `documents` 之后，调 `doc.paper_render` 重渲染、'
-                '`doc.paper_compile` 重编译，再用 `doc.paper_state` 读一次锚 —— 真机实测（2026-09-30）'
-                '：只把修订写进 documents、没重渲染，锚立刻报 `drifted`，而交付定义第 1 条要求 0 漂移 ⇒ 那样的修订等于没交付。'
-                '渲染与编译都要看工具给的读数（标记是否齐全、receipt 是否本次），不看编译器退出码。'
-            ),
+            "改完稿要让**包**跟上，不是只让台账跟上：修订落进 `documents` 之后，调 `doc.paper_render` 重渲染、`doc.paper_compile` 重编译，再用 `doc.paper_state` 读一次锚 —— 真机实测（2026-09-30）：只把修订写进 documents、没重渲染，锚立刻报 `drifted`，而交付定义第 1 条要求 0 漂移 ⇒ 那样的修订等于没交付。渲染与编译都要看工具给的读数（标记是否齐全、receipt 是否本次），不看编译器退出码。",
+            "**断言只能声称它所引实验的 `result` 支持的东西**（`draft/37` §122 的真机读数）：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先去让 E 跑出一个真给出 `REPRO_RESULT:` 的实验。反例（第 3 趟真机）：稿子写着「Heawood 图围长 6，每条边至少落在两个 6-圈里」，而它引的那条实验行的 stdout 逐字是 `\"girth\": 4` 且 `result=inconclusive` —— **引用一个与断言相反的证据行，比没有引用更坏**：读者会以为它被核过。",
         ),
         signature_error='',
         deliverable='documents 里的稿件与每条断言的来路字段。',

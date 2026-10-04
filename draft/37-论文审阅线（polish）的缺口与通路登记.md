@@ -9293,3 +9293,150 @@ H 的判据是逐断言解剖（引用是否存在、证据等级与字段是否
 R1–R5 与第 2 趟同口径，**新增 R6 `document_literature_citations ≥ 3`**。
 预检（空白工作区）逐字：R1–R6 全 0、`anchor=pass(not_applicable)`、
 `substance=fail`、`acceptance=fail` —— 这才是"从零"的诚实起点。
+
+---
+
+## §122 T2 第 3 趟裁定：**R1–R6 首次全成立、七格全过**，但手稿**引了一条与断言相反的证据行** —— 再修一处，跑第 4 趟
+
+工作区 `projects/p6c-research-from-zero`（sid `t2c`，R1–R6；R6 是本轮新加的"手稿必须接上文献"）。
+真机读数：**退出 0 / 78 次模型调用 / $1.11746**。
+
+### 一、机器那一层：六行全过
+
+```text
+七格：{'acceptance': 'pass', 'anchor': 'pass', 'contradictions': 'pass', 'load_bearing': 'pass',
+       'report_shape': 'pass', 'substance': 'pass', 'user_pending': 'pass'}
+can_close = True | exit = 0
+R1 research_question_rows          got=1  min=1 ✓
+R2 retrieval_attempts              got=12 min=3 ✓
+R3 numeric_experiment_rows         got=3  min=1 ✓
+R4 report_files                    got=2  min=1 ✓
+R5 attack_plan_rows                got=1  min=1 ✓
+R6 document_literature_citations   got=3  min=3 ✓（1 条 lit: + 2 条 rel:）
+```
+
+§121 新钉的 R6 真的起作用了：主控在第 45–54 步读 `data/documents.json`、逐个挑 `rel:` 代号、
+再用 `G.revise` 把文献引用补进稿件 —— 这是"手稿要接上文献"第一次变成**动作**。
+
+### 二、但研究那一层出了两件更重的事（都在产物上可复核）
+
+**① 稿子引了一条与它自己相反的实验行。** 手稿 claim-2 逐字：
+
+> The Heawood graph is 3-regular, has girth 6, and every edge lies in at least two distinct
+> 6-cycles; hence (m,k)=(3,6) admits an R(3,6)-example.
+
+而它引的 `exp:0000` 那一行，`result=inconclusive`，stdout 逐字：
+
+```json
+{ "n": 14, "m": 3, "girth": 4, "num_edges": 21, ... }
+```
+
+**`girth: 4`** —— 与断言里的 6 相反。（Heawood 图的围长确实是 6；出问题的是主控自己写的那份
+`scripts/heawood_check.py`：它构造的图不是 Heawood，或者说它算错了。）主控在第 25 步的笔记里
+**自己注意到了这一点**（逐字：「0000=Heawood 图（脚本报 girth=4 而非 6，与 claim 不符…）」），
+却仍把 claim-2 留在了稿子里，而收工门照样全绿 —— 因为**没有任何一行问过"断言与它引的证据说的是不是同一件事"**。
+
+**② 三次数值实验全部没有"结构化结论"。** 三个实验行都是 `result=inconclusive`、
+`evidence_kind=heuristic`，`notes` 逐字：「脚本未给出结构化结论（stdout 里没有 REPRO_RESULT 行）」。
+根因不是模型偷懒，而是**没人告诉过它这条协议**：
+
+```text
+REPRO_RESULT: 在 agent_prompts.py 出现 0 次 · specs/m.py 0 次 · specs/e.py 0 次
+              只在 agent_e/_support.py 的实现 docstring 里（模型看不到）
+```
+
+主控在 T2 第 2、3 两趟里都是**自己用 `fs.write` 写核验脚本**再交给 E 跑的，而它不知道
+"脚本要在 stdout 打印一行 `REPRO_RESULT: {json}` 才能落 `cross_check`" ⇒ 它的实验永远是
+`heuristic/inconclusive`，稿子于是只能用最弱的一档说话，然后**把 inconclusive 说成了正面事实**。
+
+⇒ 这两件事是同一个缺口的两面：**证据链在"实验行 → 断言"这一步没有任何机械判据**。
+
+### 三、文献那一层仍不理想（但已不是"没做"）
+
+R6 = 3（1 条 lit + 2 条 rel）刚好压线：`lit:0000` 是 Hoory–Linial–Wigderson 的 expander 综述，
+`rel:0009/0010` 出自同一篇"从 expander 图造哈希函数"的论文。而这一问真正对口的
+**edge-girth-regular 那一族文献**（第 2 趟的库里就有三篇）这一趟没被取回 ——
+主控在第 25 步也写了「B 整理出的关系全是 QAOA/量子优化主题，与 R(m,k) 无关」。
+所以 R6 这一档**达到了字面要求、没达到它的用意**（这一点我记在案：口径的强度由"引了 3 条"
+给出，管不住"引的是不是对口的"—— 要不要再加一档"引用必须至少包含一条与问题同族的文献"
+是个判断题，见 §124）。
+
+### 四、这一轮的处置（§123 落代码）与第 4 趟
+
+1. 新验收档 `claims_supported_by_their_evidence`（R7）：引了 `exp:` 的断言，每条被引实验的
+   `result` 都必须是 `supports`，或者这条断言自己标成「没得出结论」（`is_negative` + `negation_kind`）。
+   离线复算第 3 趟的稿子：**got=0**（三条断言全部"言过其实"，读数逐条点名是哪个实验、什么 result）。
+2. 把 `REPRO_RESULT:` 协议写进**模型看得见的地方**：E 的 brief（怎么判）、M 的 brief
+   （它自己写脚本时要打印）、G 的 brief（不许把 inconclusive 说成正面事实）。
+3. 第 4 趟工作区 `projects/p6d-research-from-zero`（R1–R7），预检逐字全 0。
+
+**H 的审校发现仍是 0 行**（三轮 `review_report`、verdict=unverified、9 pass/0 fail/3 unknown），
+这**不是**缺陷：H 的判据面里没有"断言 vs 证据行"这条轴，它按自己的轴查确实没得报。
+我要的那条轴现在由 R7 顶上（机器可判、每轮现算）；要不要把它同时做成 H 的一条审校轴，
+留作 §124 的判断题（加轴要连 `FINDING_KINDS`/`claimanatomy` 一起设计）。
+
+---
+
+## §123 第 4 趟前的这一批：第 13 档验收（断言 vs 证据）＋ `REPRO_RESULT` 协议进了三个角色的提示词
+
+### 一、新验收档 `claims_supported_by_their_evidence`（`closing.LEG_CHECK_KINDS` 第 13 档）
+
+口径逐条写死（不留给解释）：
+
+```text
+对 documents 每一行的每一条 claim：
+  · 引了 exp: ⇒ 每条被引实验的 result 都必须是 supports
+  · 或者这条 claim 自己就是「没得出结论」那一档（is_negative=true 且 negation_kind 非空）
+  · 没引 exp: 的 claim（纯文献类）不参与这一档
+计数 = 「每一条 claim 都有据」的**稿件份数**（不是断言条数）
+读数里逐条给出：哪条断言、引的哪个实验、那条实验的 result 是什么
+```
+
+为什么按**稿件份数**而不是断言条数：有一句话被夸大了，不是"这份稿子大体没问题"能折过去的。
+为什么允许"没得出结论"那一档：它与一条 `inconclusive` 的实验**是一致的** —— 判据要罚的是
+"把 inconclusive 说成正面事实"，不是"跑了没跑出来"。
+
+判据 `tests/test_closing_gate.py::test_a_claim_may_not_outstate_the_experiment_it_cites`，
+三段都造了红/绿：引 `supports` ⇒ 有据；引 `inconclusive` 但标成"没得出结论" ⇒ 仍有据；
+引 `inconclusive` 写成正面结论 ⇒ 掉出有据、读数点名。
+
+第 3 趟的真实工作区上离线复算：**got=0**，三条断言全部被点名
+（`claim-1→exp:0001`、`claim-2→exp:0000`、`claim-3→exp:0002`，三条的 result 都是 `inconclusive`）。
+
+### 二、`REPRO_RESULT:` 协议进提示词（E / M / G 三处 + 声明面逐字同步）
+
+真机读数：这条协议在 `agent_prompts.py`、`specs/m.py`、`specs/e.py` 里出现 **0 次**，
+只在 `agent_e/_support.py` 的实现 docstring 里 —— 而**写脚本的人是主控**
+（第 2、3 趟都是 M 用 `fs.write` 写核验脚本再交给 E），它不知道这条协议的存在。
+后果是可复核的：第 2、3 趟的五个数值实验行**全部** `result=inconclusive`，
+`notes` 逐字「脚本未给出结构化结论（stdout 里没有 REPRO_RESULT 行）」。
+
+三处新增（都是"判据接上模型看得见的地方"那一族，与 §100/§106 同形）：
+
+| 角色 | 新增的那句话在讲什么 |
+|---|---|
+| E | 协议本体：`REPRO_RESULT: {"result": "supports"\|"refutes"\|"inconclusive", ...}`；没有这一行只能落 `heuristic/inconclusive`；脚本不是你写的就先读一遍、缺这行退回作者 |
+| M | 你自己写的那份脚本要会打印这一行 —— 否则"实验白跑了，而且看起来像跑过了" |
+| G | 断言只能声称所引实验的 `result` 支持的东西；引到 inconclusive 就得写成"没得出结论"或去要一个真给出结论的实验 |
+
+声明面（`specs/{e,g,m}.py`，⚑FC-27）由 `temp/_sync_policy.py` **从真相重建**（逐条 `json.dumps`，
+保证转义逐字正确），再跑 `temp/_policy_diff.py` 逐字符比对。
+第一版我手写同步时把新段拼进了上一条字符串（元素数 4≠5）当场变红 —— 这一族错误本轮出现两次，
+所以这一批改用生成而不是手抄。
+
+### 三、两处我自己造成的破坏（都当场发现并修回）
+
+1. `specs/g.py` 的 `policy` 元组元素原本是**嵌套的单元素元组**，我的重建脚本按"平铺"写，
+   留下一个多余的 `            ),` ⇒ `IndentationError`。修法：把那两行手工改成平铺的两元素
+   （`AgentBrief` 本来就展平，值与真相逐字相同由 `test_agent_spec_reconciliation` 判）。
+2. 我在 `agent_prompts.py` 里插新条目时，两次 `edit` 的 `old_string` 选错了行（都是"某个 bullet 的
+   第一行"），把相邻 bullet 的首句**替换掉**了（一次是 E 的"跑实验前脚本必须先在盘上"、
+   一次插入了一句自己都没打算写的话）。两次都靠 `git diff -U1` 逐行核对发现并原样改回 ——
+   **改提示词这种"长字符串相邻拼接"的文件，必须用 diff 逐行核对，不能只看测试绿**。
+
+### 四、改完的读数与第 4 趟
+
+- lint：`error 0 / warning 9 / info 49`（本轮 R009 自伤 5 处，用同一口径的处理器清掉）；
+- `test_closing_gate` / `test_agent_spec_reconciliation` / `test_agent_prompts` /
+  `test_agent_surface_snapshot` / `test_agent_loop`：全绿（快照按新提示词重冻）；
+- 第 4 趟工作区 `agentflow/projects/p6d-research-from-zero`：R1–R7，预检逐字全 0。
