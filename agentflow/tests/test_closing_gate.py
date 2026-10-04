@@ -364,6 +364,58 @@ def test_the_manuscript_edited_leg_compares_the_draft_with_the_read_only_baselin
             if f.check == "acceptance"] == ["acceptance_leg_unreadable"], missing.to_dict()
 
 
+def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pathlib.Path):
+    """判据（`draft/37` §103）：引文那一档要"每条 `\\bibitem` 一条记录"，阈值由主稿自己定。
+
+    第 12 趟钻过去的口子：那一档当时只要求"≥1 条带 `quote_verified` 的行"，
+    于是做一条就算（它落了一条 `quote_verified=false` 就过了），而任务原文要的是"逐条"。
+    这一档现在按主稿里 `\\bibitem` 的条数当阈值（调用方不写 `min` 时用它自己算的那个）。
+    """
+    def seed(s: Store) -> None:
+        _t3_experiment(s)
+        _paper_with_claim(s)
+
+    ws = tmp_path / "ws-bib"
+    ws.mkdir()
+    st = _project(ws, seed=seed)
+    report = _write_report(ws)
+    (ws / "out" / "paper" / "main.tex").write_text(
+        "\\documentclass{article}\n" + "".join(f"\\bibitem{{K{i}}}\nX\n" for i in range(3)),
+        encoding="utf-8")
+    (ws / "out" / "paper" / "ACCEPTANCE-CHECKS.json").write_text(
+        json.dumps({"checks": [{"id": "P7", "name": "引文逐条核过",
+                                "kind": "citation_records_vs_bibitems"}]}, ensure_ascii=False),
+        encoding="utf-8")
+    _seal(ws, st)
+
+    empty = _gate(st, report)
+    row = empty.readings["acceptance"]["rows"][0]
+    assert empty.status["acceptance"] == "fail" and row["min"] == 3, row
+
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", {
+            "stmt_id": "0000", "origin": "own_result", "kind": "claim",
+            "statement_full": "一句被核过的断言。", "proof_text": "证明：略。",
+            "doc_id": "0000", "quote_verified": False,
+            "quote_reason": "与原文不一致（英文转述 vs 中文原文）",
+            "evidence_kind": "cross_check", "status": "active",
+            "created_at": TS, "created_by": "test"})
+    one = _gate(st, report)
+    assert one.status["acceptance"] == "fail", one.to_dict()   # 3 条 bibitem、只有 1 条记录
+    assert one.readings["acceptance"]["rows"][0]["got"] == 1, one.readings["acceptance"]
+
+    for i in (1, 2):
+        with st.tx("statements", actor="test") as tx:
+            tx.upsert("statements", {
+                "stmt_id": f"{i:04d}", "origin": "own_result", "kind": "claim",
+                "statement_full": f"第 {i} 条。", "proof_text": "证明：略。",
+                "doc_id": "0000", "quote_reason": "原文不在盘上 ⇒ 未查",
+                "evidence_kind": "cross_check", "status": "active",
+                "created_at": TS, "created_by": "test"})
+    full = _gate(st, report)
+    assert full.status["acceptance"] == "pass", full.to_dict()   # 3 条记录 ≥ 3 条 bibitem
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 

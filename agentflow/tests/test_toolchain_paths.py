@@ -182,6 +182,37 @@ def test_mathlib_state_reads_the_root_and_says_whether_import_works(tmp_path: pa
     assert TC.mathlib_state()["root"] == TC.mathlib_state().get("root", ""), "没配就报没配"
 
 
+def test_formalgw_fills_in_lean_path_itself(tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/37` §103）：检查器要跑之前，框架自己把 Mathlib 的 `LEAN_PATH` 补上。
+
+    第 12 趟之前的形态：盘上有编译完整的 Mathlib，而 E 的每一次形式化尝试都报
+    `unknown package 'Mathlib'` —— 因为起检查器的命令是裸的 `[lean, <file>]`，
+    靠进程环境里的 `LEAN_PATH` 找包，而谁都没配那一串（要靠人记得 export）。
+    这条判据钉两件事：① 缺的段被补上；② 调用方自己配的段一个都不丢（只加不改）。
+    """
+    root = tmp_path / "mathlib4"
+    (root / ".lake" / "build" / "lib").mkdir(parents=True)
+    (root / "lean-toolchain").write_text("leanprover/lean4:v4.7.0\n", encoding="utf-8")
+    (root / "lakefile.lean").write_text("-- lakefile\n", encoding="utf-8")
+    monkeypatch.setenv("AGENTFLOW_MATHLIB_ROOT", str(root))
+    monkeypatch.setenv("LEAN_PATH", str(tmp_path / "somewhere-else"))
+    FG._mathlib_lean_path.cache_clear()
+    got = FG.ensure_lean_path()
+    # 别自己按冒号拆：Windows 的盘符里就有冒号，拆了会把路径切碎（判据自己先踩了这个坑）
+    assert str(tmp_path / "somewhere-else") in got, got
+    lib = str(root / ".lake" / "build" / "lib")
+    assert lib in got, got
+    assert got.count(lib) == 1, "重复拼了同一段"
+    FG._mathlib_lean_path.cache_clear()
+
+    # 没有根时是空操作（不许把已有的 LEAN_PATH 抹掉）
+    monkeypatch.delenv("AGENTFLOW_MATHLIB_ROOT")
+    monkeypatch.delenv("LEAN_PATH")
+    FG._mathlib_lean_path.cache_clear()
+    assert FG.ensure_lean_path() == ""
+    FG._mathlib_lean_path.cache_clear()
+
+
 def test_doctor_exit_codes_are_three_state(monkeypatch, capsys):
     """正控（三态退出码）：齐 ⇒ 0；查过了有缺 ⇒ 1；没查成（checked=False）⇒ 2。
 

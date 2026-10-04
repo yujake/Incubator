@@ -85,6 +85,9 @@ LEG_CHECK_KINDS: dict[str, str] = {
                           "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
     "manuscript_edited": "可改的主稿有没有实质改动（`out/paper/main.tex` 与只读基线 "
                          "`source/main.tex` 的 sha256 不同 ⇒ 1，相同 ⇒ 0）",
+    "citation_records_vs_bibitems": "逐条核验引文：带比对记录的行数（`statements`/`relations` 里 "
+                                    "`quote_verified` 非 null，或 `quote_reason` 非空 —— 后者是"
+                                    "三态里的「未查+理由」）要不少于主稿里 `bibitem` 的条数",
 }
 
 #: 「被审过」这一档认的稿件状态：H 的裁决把 `draft` 推成这几个之一。
@@ -145,6 +148,34 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "manuscript_bytes": draft.stat().st_size, "baseline_bytes": base.stat().st_size,
             "edited": not same,
         }
+    if kind == "citation_records_vs_bibitems":
+        # 「逐条」的那一档（`draft/37` §103）：把"有没有做过比对"换成"每条 `\bibitem` 都有记录"。
+        # 为什么必须按条数比：§102 的第 12 趟只落了一条 `quote_verified=false` 就算满足了 ——
+        # 那是"做一条就算"的口子，而任务原文要的是"逐条核验"。
+        # 记录认两种：`quote_verified` 非 null（真/假两种比对结论），或 `quote_reason` 非空
+        # （三态里的"未查 + 理由" —— 外部原文不在盘上时，这正是诚实的结论）。
+        draft = project_root / "out" / "paper" / "main.tex"
+        base = project_root / "source" / "main.tex"
+        src = draft if draft.is_file() else base
+        if not src.is_file():
+            raise ValueError(f"主稿与基线都不在盘上（{draft} / {base}）⇒ 数不出 bibitem 条数")
+        text = src.read_text(encoding="utf-8", errors="replace")
+        bibitems = text.count("\\bibitem")
+        rows = list(store.rows("statements")) + list(store.rows("relations"))
+        verdict = [r for r in rows if r.get("quote_verified") is not None]
+        reasoned = [r for r in rows
+                    if r.get("quote_verified") is None and str(r.get("quote_reason") or "").strip()]
+        return len(verdict) + len(reasoned), {
+            "records": len(verdict) + len(reasoned), "with_verdict": len(verdict),
+            "unchecked_with_reason": len(reasoned), "bibitems": bibitems,
+            # 这一档的阈值由主稿自己定：每条 `\bibitem` 一条记录。调用方给了 `min`
+            # 就用它的（显式优先），没给就按这个 —— 否则"要几条"会退化成缺省的 1，
+            # 于是"做一条就算"（那正是 §102 第 12 趟钻过去的那个口子）。
+            "implicit_min": bibitems,
+            "counted_from": "out/paper/main.tex" if src is draft else "source/main.tex",
+            "true": sum(1 for r in verdict if r.get("quote_verified") is True),
+            "false": sum(1 for r in verdict if r.get("quote_verified") is False),
+        }
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 
@@ -194,7 +225,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         kind = str(row.get("kind") or "")
         name = str(row.get("name") or "")
         note = str(row.get("note") or "")
-        want_min = int(row.get("min") or 1)
+        want_min = int(row.get("min") or 0)     # 0 = 让这一档自己定阈值（见下面的 implicit_min）
         if kind not in LEG_CHECK_KINDS:
             rep.status["acceptance"] = "unknown"
             rep.findings.append(Finding(
@@ -211,6 +242,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 f"验收行 {cid}（{kind}）的读数算不出来（{type(exc).__name__}: {exc}）"
                 "⇒ 这一行没查成（不是「不满足」，也不是「满足」）"))
             return
+        if not want_min:
+            # 调用方没写 `min` ⇒ 用这一档自己算出来的阈值（`citation_records_vs_bibitems`
+            # 就是"每条 `\bibitem` 一条记录"）；连它都没有时才是缺省的 1。
+            want_min = int(detail.get("implicit_min") or 1)
         out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "got": got,
                     "ok": got >= want_min, "detail": detail})
         if got < want_min:

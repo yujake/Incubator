@@ -70,6 +70,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import os
+from functools import lru_cache
 import re
 import shutil
 import sys
@@ -936,6 +937,40 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+@lru_cache(maxsize=1)
+def _mathlib_lean_path() -> str:
+    """解析一次 Mathlib 的 `LEAN_PATH` 段（`draft/37` §103）。
+
+    为什么必须由框架做：`check_lean` 起检查器的命令是裸的 `[lean, <file>]` —— 它靠
+    进程环境里的 `LEAN_PATH` 找包。框架已经知道 Mathlib 根在哪（`find_mathlib_root`），
+    就不该要求调用方记得把那一串环境变量配好。真机读数（2026-10-04）：盘上有一份
+    编译完整的 Mathlib（`temp/mathlib-pinned2/…`），而 E 的每一次形式化尝试都报
+    `unknown package 'Mathlib'` —— 直到跑之前手工把 `LEAN_PATH` 配上才通。
+    按进程记忆一次（根不会在进程中途换）。
+    """
+    from . import toolchain as TC
+
+    root = find_mathlib_root()
+    return TC.lean_path_for(root) if root else ""
+
+
+def ensure_lean_path() -> str:
+    """把 Mathlib 的段并进进程的 `LEAN_PATH`（只加不改），返回最终那一串。
+
+    只加不改：调用方自己配过的段一律保留（可能是另一份工程），我们只在缺的时候补上。
+    没有 Mathlib 根时是空操作 —— 那时"没装 Mathlib"由 `check_formal` 的读数如实说出来。
+    """
+    segs = _mathlib_lean_path()
+    have = [s for s in str(os.environ.get("LEAN_PATH") or "").split(os.pathsep) if s]
+    if not segs:
+        return os.pathsep.join(have)
+    for seg in segs.split(os.pathsep):
+        if seg and seg not in have:
+            have.append(seg)
+    os.environ["LEAN_PATH"] = os.pathsep.join(have)
+    return os.environ["LEAN_PATH"]
+
+
 def _default_run(cmd: Sequence[str], *, cwd: str, timeout_sec: float) -> dict:
     """生产路径：真起检查器进程。
 
@@ -1322,6 +1357,11 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
     result["checked_source"] = text
     path, tmp = _materialize(text, nm, workdir)
     result["path"] = str(path)
+    # `draft/37` §103：起检查器之前把 Mathlib 的 `LEAN_PATH` 补上（只加不改）。
+    # 这一步是"框架已经知道的事实不该让调用方记得"的同一条纪律 ——
+    # 源码里 `import Mathlib` 能不能编过，取决于这一串在不在，而不是取决于谁记得配它。
+    result["lean_path_segments"] = len(
+        [s for s in ensure_lean_path().split(os.pathsep) if s])
     t0 = time.monotonic()
     try:
         raw = (run_fn if run_fn is not None else _default_run)(
