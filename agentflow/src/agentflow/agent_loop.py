@@ -287,6 +287,58 @@ def _canonical(value: Any) -> Any:
     return value
 
 
+def _call_key(shape: str, payload: Mapping[str, Any]) -> str:
+    """一次调用的"键"：形状 + 参数（规范化 JSON）。用于"这是不是同一次调用"。
+
+    `default=str`：载荷里可能有非 JSON 值（工具层塞进去的对象），
+    这一个是判据输入而不是交付面，所以只求"同样的载荷得到同样的键"。
+    """
+    return json.dumps([shape, dict(payload or {})], ensure_ascii=False,
+                      sort_keys=True, default=str)
+
+
+def _call_reading(result: Mapping[str, Any]) -> str:
+    """一步结果的"读数"：规范化 JSON。同样的调用 + 同样的读数 = 没有新事实。"""
+    return json.dumps(_for_record(result or {}), ensure_ascii=False,
+                      sort_keys=True, default=str)
+
+
+def _call_brief(shape: str, payload: Mapping[str, Any]) -> str:
+    """一句话说清"这一次调用是什么"（给「原地打转」的提醒与收工语用）。"""
+    if shape == "tool":
+        return f"工具 {payload.get('name')}"
+    if shape == "summon":
+        return f"唤起 {payload.get('role')}.{payload.get('action')}"
+    if shape == "summon_many":
+        return f"一批唤起（{len(payload.get('targets') or [])} 项）"
+    if shape in ("note", "message", "handoff"):
+        return f"一条 {shape}"
+    return shape
+
+
+def _dead_loop_line(*, streak: int, same_reading: int, limit: int, what: str) -> str:
+    """「原地打转」那一步的提醒：同调用 + 同读数 ⇒ 这一步没有新事实。
+
+    为什么它必须能从句结果重建（`draft/37` §136 的实现约束）：transcript 有两条产路
+    —— 循环里当场 `+=`，以及 `resume_transcript` 从会话记录重建。这段话由
+    `_step_line` 渲染（它读的就是那一步的 `result`），所以两条产路逐字同一份；
+    写成"循环里另加一句"的形态会在续跑时丢掉这一句，而没有任何判据看得见那个漂移。
+
+    两种措辞分开（`same_reading == streak` 才算"没有新事实"）：读数在变的重问
+    （轮询、等状态）是正当的 —— 它不该被说成"原地打转"，但也值得被问一句
+    "它还会给你新东西吗"（那是三态纪律：把"没变"与"在变"写清楚，别折成一档）。
+    """
+    if same_reading >= streak:
+        return (f"【没有新事实】同一个形状、同一份参数、同样的读数，这是连续第 {streak} 次"
+                f"（{what}）。重复同一次调用不会产生新读数：换参数、换脚本、换子目标，"
+                f"或者把「卡在哪」写进 final 收工。连续 {limit} 次这一趟会以 "
+                f"`no_progress_limit` 收工 —— 那不是失败，是「这一趟没有往前走」。")
+    return (f"【同一个调用】同一个形状、同一份参数连着第 {streak} 次（同一读数连着 "
+            f"{same_reading} 次，{what}）—— 读数还在变，所以这不是原地打转。"
+            f"但连着问同一件事三次之后，先问自己一句：它还会给你新东西吗？"
+            f"不会再给就换做法，或者把「卡在哪」写进 final 收工。")
+
+
 def _step_line(step: int, payload: Mapping[str, Any], result: Mapping[str, Any]) -> str:
     """一个有效步的简报行：模型说了什么 + 框架执行结果（键序见 `_canonical`）。"""
     return (f"\n\n[第 {step + 1} 步] 你说了：{_clip(_canonical(payload), ECHO_CHARS)}\n"
@@ -374,6 +426,14 @@ class LoopRun:
     #: 就把一趟运行判成 `bad_json_limit` 收场，而它离"改对参数"只差一步。
     bad_args: int = 0
     bad_args_streak: int = 0
+    #: 「原地打转」的读数（`draft/37` §136）：这一趟最长的一次
+    #: 「同调用 + 同读数」连击（`dead_loop_max`）与"同调用"连击（`same_call_max`）。
+    #:
+    #: 为什么两个都要：`dead_loop` 是"没有新事实"（判停的判据），
+    #: `same_call` 是"一直在问同一件事"（读数不是判据）—— 轮询是正当的
+    #: （读数每次都在变），但"同一件事问了 9 遍"这件事应该看得见。
+    dead_loop_max: int = 0
+    same_call_max: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 这一趟停在等哪个问题（`stop_reason="waiting_for_user"` 时非空）。
@@ -417,6 +477,7 @@ class LoopRun:
             "stop_reason": self.stop_reason, "bad_json": self.bad_json,
             "bad_json_streak": self.bad_json_streak,
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
+            "dead_loop_max": self.dead_loop_max, "same_call_max": self.same_call_max,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
@@ -754,6 +815,20 @@ class AgentLoop:
     #: 要调谁、只是那个 JSON 没写对" —— 后者交回工具层就能改对（DSH 的口径），
     #: 所以给它多一次机会，同时仍然保留上限（不设上限等于允许无限重说同一句）。
     max_bad_args: int = 3
+    #: 「原地打转」的两道闸（`draft/37` §131 第 2 件事 / §136 的落地）：
+    #: 同一个形状、同一份参数、同样的读数连着第几次时点名（提醒），第几次时收工。
+    #:
+    #: 为什么需要它：T2 第 4 趟真机（`projects/p6d-research-from-zero`）里，
+    #: M 连着 9 次调 `conductor.ledger`、8 次调 `conductor.closing`、
+    #: 6 次写同一份 `ACCEPTANCE.md`，全是"同调用同读数" —— 那 23 步一次也没有产生
+    #: 新事实，而框架当时唯一的闸门是"步数/预算用尽"。步数与预算不是活性判据：
+    #: 它们能把一趟跑完，但不能说"你在原地打转"。
+    #:
+    #: 为什么提醒在 3、收工在 6：3 是"已经重复到不像在办事了"的最低门槛（2 次可能是
+    #: 读一遍再读一遍），而 6 给模型留三次改主意的机会。两个数都要能被 `AgentLoop`
+    #: 覆盖（`run_role` 不收这两个旋钮 —— 它们是安全阀，不是常规调参面）。
+    dead_loop_nudge: int = 3
+    max_dead_loop: int = 6
     #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
     #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
     #: 8,192 是 `deepseek-chat` 一档的输出上限；要改就改这里，别在各处传不同的数。
@@ -973,6 +1048,12 @@ class AgentLoop:
         }, sid=self.sid)
         self._face = face          # `_prompt` 要用它决定"名字从哪来"那一句
 
+        # 活性读数的游标（`draft/37` §136）：上一步的"调用键"与"读数"，以及连击数。
+        # `same_call` = 连续同调用；`dead` = 连续同调用 + 同读数（后者才是"没有新事实"）。
+        prev_key = ""
+        prev_reading = ""
+        same_call = 0
+
         for step in range(start_step, self.max_steps):
             stop_reason = self._user_stop_reason(run)
             if stop_reason:
@@ -1080,6 +1161,25 @@ class AgentLoop:
             heard = self._hear()
             if heard:
                 result = {**result, "新消息": heard}
+            # ---- 活性读数（`draft/37` §136）：同形状 + 同参数 + 同读数 = 这一步没有新事实
+            #
+            # 为什么要"同读数"这一半：轮询是正当的（同一件事每隔一步问一次，读数在变），
+            # 只有"同一件事问了又问、答案一个字都没变"才是原地打转。两个连击都记下来
+            # （`same_call` 是读数，`dead` 是判据），因为"同一件事问了 9 遍"这件事
+            # 本身也该被看见，而它不一定构成停下来的理由。
+            key = _call_key(shape, payload)
+            reading = _call_reading(result)
+            same_call = same_call + 1 if key == prev_key else 1
+            dead = same_call if (key == prev_key and reading == prev_reading) else 1
+            prev_key, prev_reading = key, reading
+            run.same_call_max = max(run.same_call_max, same_call)
+            run.dead_loop_max = max(run.dead_loop_max, dead)
+            if same_call == self.dead_loop_nudge:
+                # 点名（不改结论、不停循环）：提醒写进这一步的结果里 ——
+                # `_step_line` 读的就是它，于是"当时那一份"与"续跑重建那一份"逐字一致。
+                result = {**result, "框架提醒": _dead_loop_line(
+                    streak=same_call, same_reading=dead, limit=self.max_dead_loop,
+                    what=_call_brief(shape, payload))}
             step_obj = LoopStep(step, shape, payload, _for_record(result))
             run.steps.append(step_obj)
             SS.append(self.session_root, {
@@ -1087,6 +1187,25 @@ class AgentLoop:
                 "payload": dict(payload), "result": dict(step_obj.result),
             }, sid=self.sid)
             transcript += _step_line(step, payload, result)
+            # ---- 原地打转：同调用 + 同读数连着到上限 ⇒ 这一趟收在这里（不再是"步数用尽"）
+            #
+            # 为什么停下来是"如实"而不是"失败"：这一步确实做了（台账与会话记录里都有），
+            # 只是它没有产生新事实 —— `no_progress_limit` 这个名字说的就是这件事。
+            # 为什么不继续问模型：前面已经在第 `dead_loop_nudge` 次点过名，
+            # 它连着又重复了 `max_dead_loop - dead_loop_nudge` 次同样的调用 ——
+            # 剩下的步数买不到新读数，只会买更多同样的调用。
+            if dead >= self.max_dead_loop:
+                run.stop_reason = "no_progress_limit"
+                run.final = (f"原地打转收工：{_call_brief(shape, payload)}——"
+                             f"同一份参数、同样的读数连着 {dead} 次。"
+                             f"没有新事实，所以停在这里（不是失败，是这一趟没有往前走）。"
+                             f"要说的话在 final 里说清：卡在哪、下一步该换什么做法。")
+                SS.append(self.session_root, {
+                    "kind": "agent_note", "role": self.role,
+                    "note": (f"原地打转：{_call_brief(shape, payload)} 连续 {dead} 次同参数同读数 "
+                             f"⇒ 第 {step} 步之后以 no_progress_limit 收工"),
+                }, sid=self.sid)
+                break
             # ---- 问了用户、还停在等 ⇒ 这一趟停在这里，一步模型请求都不再发
             #
             # 为什么这个 break 写在"拼完简报"之后：`agent_step` 事件已经落了这一步，

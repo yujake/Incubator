@@ -10143,3 +10143,99 @@ claim-4（is_negative=true）："The literature on regular graphs of prescribed 
 | lint | `python -B scripts/lint_rules.py` | `error 0 / warning 9 / info 49`（与基线逐位相同） |
 | FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（退出码 1）：`tools/__init__.py` 是本批新增命中（登记模块清单），其余 `specs/*`、`capabilities.py`、`lint_rules.py`、`verify_tools.py` 是既有的欠签 |
 | 文档对账 | `tests/test_release_all.py` / `tests/test_role_specs_complete.py` / `tests/test_reading_map.py` | 全绿（这一批的隐形成本：新增 1 个顶层模块 + 2 件工具 ⇒ README / DEVELOPMENT / `docs/ROLE-SPECS.md` 三处读数与 §R0 表 77 行逐条同步，见 §135） |
+
+## §135 这一批的隐形成本：新增"一个模块 + 两件工具"要动多少处（第一遍 23 红逐条）
+
+### 一、为什么值得单独记一节
+
+`draft/37` §131 把"下一批三件事"列为 `make_paper.py` / 循环活性 / C 的验收档；
+手稿层本来不在那张单子上，是用户中途给的。它的**功能面**只有 3 个新文件 +
+1 条循环形状，可它在**判据面**上是一次"工具面 + 模块面"的变更 ——
+而这两张面在本仓有 **10 条以上**独立判据守着（这是设计意图：权限面与工具面不许悄悄变）。
+第一遍全量套件的读数：**23 failed / 3526 passed**（观测 2026-10-04），逐族如下。
+
+### 二、23 条逐族与处置
+
+| 族 | 红了几条 | 根因 | 处置 |
+|---|---|---|---|
+| M 的工具面（`test_conductor_tools` / `test_host_wiring`） | 3 | 第一版把 `manuscripts.read` / `list` 发给了 M，而 `for_role("M") == M_TOOL_FACE` 是**相等**断言 | **收窄**成 A–H（M 用 `fs.*` 读同一批文件）—— 见 §134 §七 |
+| 工具面/声明面（`test_tools_returns_declaration` ×3、`test_tools_branch_key_sets`、快照） | 5 | 工具总数 75→77；两件新工具要进探针参数、`EXECUTED_KEY_SOURCE`、`INVISIBLE_OK_SITES`；`side_effect` 从 `none` 改 `read` | 逐条登记进那三张表（**新增的不可见 `ok(...)` 点如实记账**，不豁免）；两处快照重冻 |
+| `docs/ROLE-SPECS.md`（`test_role_specs_complete` ×8） | 8 | §R0 表 75→77 行、各角色标题工具数 +2、C 那节"两层 17/19"的内部数 | 脚本按"插两行 + `#` 列重编"同步（手改 47 行必错）；C 节的内部数一并对齐 |
+| 顶层模块登记与读图（`test_release_all` ×2、`test_reading_map`） | 3 | 新模块 `manuscripts.py` 没在 `_AGENTFLOW_TOP_LEVEL_MODULES` 与 `docs/READING-MAP.md` 里 | 两处各加一行（带"为什么它必须是一个顶层模块"的理由） |
+| DEVELOPMENT / README 读数（`test_release_all` ×2） | 2 | `LIVE-READINGS` 的 `tools_star_tools_py`、`lint_rules_strict_warning` 变了；README 文件树同一读数 | 改数 + 在两行里写明这一次是**为什么**变（`manuscripts.py` / `manuscript_tools.py`） |
+| 发布门两条（`test_release_all::test_cli_skip_*`） | 2 | 级联：`role-specs` 那一步红 ⇒ 整条 `release_all` 的读数跟着红 | 上面修完即绿（**没有改发布门**） |
+| 引文/强调（`test_r5_orchestration_cost`、`test_agent_e` 注释） | 1+ | 我在 `agent_e/core.py` 的注释里引了一个不存在的私有符号 `_repeat_note`（真名 `run_experiment._progress_note`） | 改成真名 |
+| 骨架同源（`test_agent_loop`） | 1 | 新 `handoff` 骨架的占位符没进那条替换表 | 补两条替换 + 期望形状表加一条 |
+
+### 三、两处"夹具过期"的自我修复（判据没改，夹具改成从当次普查读数）
+
+`tests/test_role_specs_complete.py` 有 4 条**负控**把文档里的工具条数写死成字面量
+（`25 个` / `23 个`）。这一批 +2 之后，它们红的原因是"夹具过期"而不是"判据不咬人"——
+这正好是本仓反复登记的那个形态（夹具写死 ⇒ 判据的牙被夹具的过期掩盖）。处置：
+四条一律改成 `G.live_tool_counts(root=REPO)` 当次读出来再构造"改错的那一版"。
+（这不是放宽：它问的仍然是"改了数字门会不会红"，而且现在工具面再变也不会先红在夹具上。）
+
+### 四、一句话
+
+**工具面 + 模块面的每次变更，代价不在实现（这一批 3 个新文件、约 400 行），而在
+"十几个落点的读数同步"。** 这份代价是设计要的（权限面不许悄悄变），
+但它必须被算进"这一批做多大"的决策里 —— 下次再往工具面上加东西之前，先读这一节。
+
+## §136 循环活性：同调用 + 同读数 ⇒ 第 3 次点名、第 6 次收工（`no_progress_limit`）
+
+### 一、真机读数（这条判据是从哪里长出来的）
+
+T2 第 4 趟（`projects/p6d-research-from-zero`）的会话记录里，M 有 **23 步**是"同一个形状、
+同一份参数、同样的读数"：`conductor.ledger` 连着 **9 次**、`conductor.closing` 连着 **8 次**、
+同一份 `ACCEPTANCE.md` 连着写 **6 次**。那 23 步一步也没产生新事实 ——
+而框架当时只有两道闸：`max_steps`（步数用尽）与 `budget`（预算用尽）。
+两道闸都能把一趟**跑完**，但它们说不出"你在原地打转"：收工语写的是"步数用尽"，
+读的人会以为"它尽力了"，而不是"它卡住了"（§131 第 2 件事）。
+
+### 二、判据（两条连击，分开记）
+
+| 读数 | 定义 | 用途 |
+|---|---|---|
+| `same_call` | 连续"同一个形状 + 同一份参数"（`_call_key` 的规范化 JSON） | 读数：`same_call_max` 记进运行记录 —— "同一件事问了 9 遍"这件事本身该看得见 |
+| `dead` | 在 `same_call` 之上再要求"同样的读数"（`_call_reading`） | 判据：`dead` 到 3 点名、到 6 以 `no_progress_limit` 收工 |
+
+**为什么"同读数"这半边不能省**：轮询是正当的（等同伴改盘、等状态翻转）——
+真机里 M 读台账时别的角色正在往台账里写。把它判成打转，等于把
+"没查到"与"查过了没有"折成一档（本项目反复踩的那个坑的反面）。
+所以两种情形写两句**不同的话**（`_dead_loop_line`）：
+
+- `dead >= same_call` ⇒ 「【没有新事实】……连续 N 次这一趟会以 `no_progress_limit` 收工」；
+- 读数在变 ⇒ 「【同一个调用】……读数还在变，所以这不是原地打转。但连着问同一件事三次之后，
+  先问自己一句：它还会给你新东西吗？」
+
+**为什么点名在 3、收工在 6**：3 是"重复到不像在办事了"的最低门槛（2 次可能只是读一遍再核对一遍），
+3→6 之间给模型三次改主意的机会。两个数都在 `AgentLoop` 上（`dead_loop_nudge` / `max_dead_loop`），
+刻意不做成 `run_role` 的旋钮：它们是安全阀，不是调参面。
+
+### 三、落点（四处，都不在禁改区）
+
+| 改在哪 | 是什么 |
+|---|---|
+| `agent_loop._call_key` / `_call_reading` / `_call_brief` / `_dead_loop_line` | 判据与文案的唯一实现 |
+| `agent_loop` 循环体：`result = {**result, "框架提醒": …}` | 点名写进**那一步的结果**里 —— 于是 `_step_line` 渲染它、`resume_transcript` 也能逐字重建（续跑不丢这一句） |
+| `agent_prompts.LOOP_PROTOCOL` 一条 | 把"第 3 次点名 / 第 6 次收工"提前告诉模型（不知道规则的纠正等于事后算账） |
+| `webui._STOP_BADGES` + `README` §0 的"卡住时先看这张表" | 新停止理由的界面/文档面：徽标是 `badge-unknown`「原地打转」——它**不是** `badge-fail`（不是出错，是这一趟没有往前走） |
+
+### 四、判据（`tests/test_loop_liveness.py`，7 条，夹具与 `test_agent_loop` 同源）
+
+| 判据 | 守什么 |
+|---|---|
+| `test_a_static_reading_is_identical_across_identical_calls` | 判据的**前提**由判据自己测出来（"这个工具的读数在同样参数下逐字不变"），不是我以为的 |
+| `test_three_identical_readings_are_named_but_do_not_stop` | 第 3 次点名【没有新事实】、循环继续、`dead_loop_max == 3` |
+| `test_six_identical_readings_stop_the_run_as_no_progress` | 第 6 次以 `no_progress_limit` 收工（不是 `max_steps`）、收工语写清"没有新事实"与"下一趟换什么"、点名只发生一次 |
+| `test_two_identical_readings_are_not_enough` | 负控（门槛）：重复两次不算打转 |
+| `test_a_changing_reading_is_named_differently_and_never_stops` | 三态：读数在变 ⇒ 另一句提醒、`dead_loop_max < 3`、**从不停这一趟**（用"每次回答前改一次盘上那个文件"的替身模型造出并发改盘） |
+| `test_different_arguments_reset_the_streak` | 负控（另一个方向）：换了参数就不是同一次调用 |
+| `test_the_new_stop_reason_has_a_badge` | 新停止理由必须在界面词汇表里，且不是"失败"那一档 |
+
+### 五、还没做的
+
+- **这一档还没进验收表**：现在它是"循环自己的读数"（`runs/<role>-<sid>.json` 与运行记录里
+  多两个字段 `dead_loop_max` / `same_call_max`），还没有一条 `closing` 档去读它。
+  要不要把"这一趟有没有原地打转"做成收工门的一格，留给下一批（它涉及"什么算研究没进展"，
+  而那是数学口径，不是循环口径）。

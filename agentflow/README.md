@@ -127,6 +127,7 @@ python -m agentflow.cli run-agent M --task "…" --subagents                    
 | `project run` 退出码 2，`report.md` 里写 `检索状态：not_configured` | 同上：检索一次都没发起 | 同上；不带 `--topic` 时只登记书、本来就不调模型 |
 | 汇总框里 `Lean 开启=否；proof 级证据 0 条` | 没装 Lean（或没加 `--lean`） | 装 Lean 后加 `--lean`；否则请把这一格读成"**没形式化核过**"，不是"核过没问题" |
 | 模型连着几步不回 JSON ⇒ 结论写 `bad_json_limit` | 模型没按循环协议回一行 JSON（框架会纠正两次，第三次停） | 重跑；或把 `--max-steps` 调大，让纠正消息有机会生效。**它是如实停，不是崩** |
+| 结论写 `no_progress_limit`（界面上是「原地打转」） | 同一个形状 + 同一份参数 + 同样的读数连着 6 次：那几步一步也没产生新事实（第 3 次时框架已在结果里点名过） | 这是读数不是崩溃：看那一步的【没有新事实】提醒，换参数/换脚本/换子目标再跑；真机样本见 `draft/37` §136（T2 第 4 趟里 M 连调 9 次 `conductor.ledger`、6 次写同一份验收表） |
 | 满屏 `得到 HTTP 429` | 上游限流（AMS 的直链最常见） | 等一会儿重跑；或改用手里的本地书架 |
 | `concepts` 一条没有，`last_mine_error=no_llm_extractor` | 没给 B 抽取器时它**拒绝抽**（离线基线产出的概念名大多是垃圾，所以宁可空着） | 给 key，或在 `project run` 上加 `--extract`；这是设计，不是坏 |
 | `python -m agentflow.cli run-a` 很慢（实测 62s / 15 条） | 默认 `topical` 模式会联网、会下载、会重试 | 只想验证链路就用 `--provider fixture`（**完全离线**，实测 0.4s：3 候选 → 登记 2、判重 1） |

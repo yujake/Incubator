@@ -91,6 +91,9 @@ _STOP_BADGES = {
     "not_wired": ("badge-fail", "没接线"),
     "bad_json_limit": ("badge-fail", "坏 JSON 连击"),
     "bad_args_limit": ("badge-fail", "坏参数连击"),
+    # `draft/37` §136：同调用 + 同读数连着到上限 ⇒ 这一趟停在"没有新事实"。
+    # 刻意不是 `badge-fail`：那不是出错，是"这一趟没有往前走"（一档读数）。
+    "no_progress_limit": ("badge-unknown", "原地打转"),
     "waiting_for_user": ("badge-pending", "停在等用户"),
 }
 
