@@ -8674,3 +8674,63 @@ docstring 同步写上这组真机读数。
 ### 四、下一步
 
 按用户的闸门：分工已合理 ⇒ **正式跑 T1（第 15 趟）**，验收表 P2 / P7 / P7b / P8 / P9 五行一起判。
+
+---
+
+## §112 **T1 通过**（第 15 趟，加强描述 + 修接线态 + 检索口径之后）：A 真的把原文取回来了
+
+第 15 趟真机（工作区 `projects/p5-review-t15`，58 字任务原文不变，夹具 P2/P7/P7b/P8/P9 五档；
+跑前按 §101 配好 Mathlib）：
+
+| 读数 | 值 |
+|---|---|
+| 步数 / 召唤数 | 77 步 / 45 次召唤 |
+| 花销 | **$1.044974**（预算 $5 内） |
+| 退出 | 0（`final`），自述：「本轮交付完成，收工门 conductor.closing 七格全过（can_close=true）」 |
+| **离线复算**（`temp/_t15_verdict.py`，不花模型钱） | `anchor/contradictions/load_bearing/report_shape/user_pending/substance/acceptance` **七格全 pass**、`can_close=True`、退出码 **0** |
+
+五档机器可判验收（复算读数）：
+
+| 行 | got / min | 明细 |
+|---|---|---|
+| P2 正文实质改动 | **1 / 1** | 主稿 sha `8c5c431b…` → `2745b744…` |
+| P7 引文逐条核过 | **9 / 7** | 9 条记录（`with_verdict=0`、`unchecked_with_reason=9`），阈值 = 主稿 `bibitem` 条数 |
+| **P7b 盘外引文先检索** | **11 / 5** | `search_requests=11`、`done=11`、**`from_provider=21`、`downloaded=21`** |
+| P8 形式化 proof 行 | **2 / 1** | `experiments` 0000、0001 都是 `method=formal` + `evidence_kind=proof` |
+| P9 稿件被审过 | **1 / 1** | `documents` 0000 `accepted`（H 派了 `review` + `review_report`） |
+
+### 一、A 的检索：从"一次都没用过"到"取回 21 行文献"
+
+11 条检索请求逐条（`search_requests`）：
+
+| 请求 | 题目 | 结果 |
+|---|---|---|
+| r-0001…r-0005 | 盘上 5 份 companion 卷（`ingest_local`） | 各 1 行 |
+| **r-0006** | `An overview of periodic elliptic operators`（Kuchment） | **ok，6 行** |
+| **r-0007** | `Algebraic Graph Theory Godsil Royle` | **ok，1 行** |
+| **r-0008** | `Zeta Functions of Graphs: A Stroll through the Garden`（Terras） | **ok，7 行** |
+| r-0009 / r-0011 | `Topological crystals`（Baez） | `no_results` ×2（取不回 ⇒ 如实"未查"） |
+| **r-0010** | `Spectral multiplicity functions of adjacency operators…`（delaHarpe） | **ok，2 行** |
+
+⇒ 5 条盘外引文里 **4 条真的把原文检索回来并下载入库**（`from_provider=21`、`downloaded=21`），
+第 5 条（Baez）两次 `no_results` ⇒ 按验收表的措辞如实写"未查"。这正是用户那句话要的东西：
+**"盘上没有就 false？A 不会去查吗"** —— 现在 A 去查了，而且查回来落进了台账。
+
+### 二、队伍是**整支被调动**的（对照第 14 趟只派 G ×5）
+
+`A.search_literature` ×6 · `A.ingest_local` ×2 · `B.register_statement` ×13 ·
+`E.check_formal` ×5 · `E.run_experiment` ×4 · `G.build_document` ×8 · `G.compose_claim` ×4 ·
+`G.paper_package` ×3 · `H.review` ×1 · `H.review_report` ×1。
+
+### 三、诚实标注
+
+P7 的 9 条记录**全部是"未查 + 理由"**（`with_verdict=0`）——差别在于：这一趟的"未查"是在
+**真的检索过 11 次、取回 21 行、下载 21 份之后**写下的（Baez 那条两次 `no_results`），
+而不是"盘上没有所以不查"。也就是说：**通过的是"逐条核过 + 先检索取回 + 如实报告"**，
+不是"逐条都逐字对上了"（这一篇的引文多是对 companion 卷的转述，逐字命中本来就少）。
+
+### 四、13→15 趟之间改的三件事（都是这一趟能过的直接原因）
+
+1. §106 **修接线态说谎**：`_availability()` 先问真身（后端登记表）⇒ M 眼里 A 第一次是"可用"的；
+2. §109/§110 **画像加厚 + 落盘可查文件 + 上报规则**（用户口径），M 知道每个伙伴交付什么、不许什么；
+3. §111 **提示词演练放行 + `topic` 要短**（长词袋会被 `precise` 的关键词过滤整批滤掉）。
