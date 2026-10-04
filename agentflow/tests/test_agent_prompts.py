@@ -197,6 +197,9 @@ def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolReg
     text = _prompt("E", registry)
     for needle in ("fs.write", "code/lean/", "script_path", "proof_location"):
         assert needle in text, f"E 的提示词里没有提到 {needle!r}"
+    # 无 Mathlib 时的三条写法口径（第 11 趟的真机失败形态，逐条写进去）
+    for needle in ("decide", "不归约", "sorry", "改一处再试", "checker_name"):
+        assert needle in text, f"E 的提示词里没有提到 {needle!r}"
 
 
 def test_every_role_prompt_is_rendered_without_template_leftovers(registry: ToolRegistry):

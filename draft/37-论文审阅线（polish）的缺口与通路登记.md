@@ -8135,3 +8135,107 @@ E 的提示词里必须同时出现 `fs.write`、`code/lean/`、`script_path`、
    这是把第 11 趟的真机读数写成一条可用的口径，不是替它证明；
 2. 若第 12 趟 P8 仍不成，就把 Mathlib 编译列为**机器级决定**摆到台面上
    （它是本机环境的改变，不是框架代码的改变）。
+
+---
+
+## §100 把「无 Mathlib 时的写法口径」写进 E 的 policy（第 11 趟的真机失败形态）
+
+### 一、为什么写这几条
+
+第 11 趟 `check_formal` 7 次里 4 次 `verified=false`，失败形态**只有两种**，而且都是
+"框架已经把读数给出来了、模型却没据此改写法"：
+
+| 形态 | 次数 | 检查器/框架的原话 |
+|---|---|---|
+| `compile_error`（`decide` 不归约） | 2 | 步 84 自述：「第 30 行 `decide` 仍判 `g 1 = 2` 为 false —— **`Init` 下 `Int` 的 `if`/比较在 `decide` 里不归约**」 |
+| `uses_sorry` | 2 | 「源码里有 1 处 `sorry`/`admit` ⇒ 这不是证明。注意：含 `sorry` 的文件在 Lean 里会正常编译通过（退出码 0），所以退出码不能当证明的判据」 |
+
+再加两条第 10/11 趟共同暴露的：整篇重写后仍失败（应该读错行、改一处再试）、
+以及多条具名声明时要显式给 `checker_name`（不给报「取不到唯一那条」）。
+
+### 二、写进哪里、怎么写
+
+`agent_prompts.ROLE_BRIEFS["E"].policy` 那条（`imports`/Mathlib 一档）末尾，按 §98 的同一位置追加：
+
+> **本机没有 Mathlib 时的写法口径**（都是真机读数，不是风格建议）：
+> ① `decide` 只对**归约得动**的命题有效 —— `Int` 上的 `if`/比较在 `Init` 下不归约，
+> `decide` 会把真命题判成 `false` ⇒ 把命题改写成 `Nat`/`Bool` 上的等式或有限枚举形态再 `decide`；
+> ② **不要用 `sorry`/`admit` 占位**（含 sorry 的文件会正常编译通过，退出码 0，而框架逐字判
+> 「这不是证明」）；
+> ③ 失败时读检查器原话的那一行错、**改一处再试**；
+> ④ 源码里多于一条具名声明时要显式给 `checker_name`。
+
+同步方式仍是 `temp/_sync_e_policy.py`（真题那侧读、逐字写进 `specs/e.py`；⚑ FC-27）。
+
+### 三、判据
+
+`tests/test_agent_prompts.py::test_e_is_told_to_write_the_lean_source_into_the_workspace`
+扩成七条 needle：`fs.write` / `code/lean/` / `script_path` / `proof_location`（§98）
++ `decide` / `不归约` / `sorry` / `改一处再试` / `checker_name`（本节）。
+
+### 四、读数
+
+（见文末读数表。）下一轮：**T1 第 12 趟**；若 P8 仍不成，就把 Mathlib 编译摆成机器级决定。
+
+---
+
+## §101 把 Mathlib **配起来**：盘上那份编译好的它一直在，是我们在错的地方找
+
+用户指示（2026-10-04 逐字）：「要什么东西如果没有的话你先下载配置好，别让智能体难办」。
+这一节就是照这句话做的 —— 而查下去发现**不需要下载**：它已经在盘上。
+
+### 一、真相
+
+| 事实 | 实测 |
+|---|---|
+| Lean 4.7.0（commit `6fce8f7d5cd1`） | `temp/lean470/lean-4.7.0-windows/bin`（含 `lake.exe`，Lake 5.0.0） |
+| 一份**编译完整**的 Mathlib | `temp/mathlib-pinned2/mathlib4-4.7.0`：umbrella `.lake/build/lib/Mathlib.olean` 在，`build/lib/Mathlib` 下 **4095 个 olean**，`.lake/packages/{aesop,std,Qq,proofwidgets,importGraph,…}` 全在 |
+| 另一份**没编**的 | `temp/mathlib-pinned/mathlib4-4.7.0`：`build/lib/Mathlib` 只有 342 个 olean、**两种布局都没有 umbrella** ⇒ 这一份才是"没装" |
+| 修订号 | `a45ae63747140c1b2cbad9d46f518015c047047a` = `PINNED_MATHLIB_COMMIT` ✅（tag v4.7.0） |
+
+**而框架（和此前每一趟 T1）报的是 `unknown package 'Mathlib'`。** 两处原因：
+
+1. `toolchain.mathlib_state()` 只在 `<root>/.lake/build/lib/lean/Mathlib.olean` 找 umbrella ——
+   那是 Lean **4.9+** 的布局；**4.7.0 是 `.lake/build/lib/Mathlib.olean`**。
+   ⇒ 盘上这份编译完整的 Mathlib 被判成"没装 Mathlib"，`import_mathlib` 那句话又把模型
+   引向"换 import 列表"，而不是"把 `LEAN_PATH` 配上"。
+2. `formalgw.check_lean` 起检查器的命令是**裸的** `[lean, <file>]` —— 它靠**进程环境**里的
+   `LEAN_PATH` 找包。谁都没配这一串。
+
+### 二、这一轮做的（配置 + 根因修正）
+
+1. **验证可用**（离线探针，不花模型钱）：
+   - `lean probe.lean`（`import Mathlib` + `by norm_num`）：配好 `LEAN_PATH` 后**退出码 0**；
+   - 端到端 `E.check_formal(imports=['Mathlib'])` + `by omega` 证明：
+     **「检查器退出码 0、无 sorry、公理在允许集内、且声明真的被检查到（27.7 s）」**
+     ⇒ 这台机器上"带 Mathlib 的形式化"是**真的能用**的（此前 11 趟里 E 从没拿到过它）。
+2. **`toolchain.lean_path_for(root)`（新增）**：工程根 → `LEAN_PATH`
+   （`<root>/.lake/build/lib` + `<root>/.lake/build/lib/lean` + 每个依赖包的同样两种，
+   **只取存在的**）。`mathlib_state()` 两种布局都认，并给出 `lean_path` / `lean_path_segments`。
+3. **判据**：`tests/test_toolchain_paths.py::test_mathlib_state_reads_the_root_and_says_whether_import_works`
+   扩成两截 —— 4.9+ 布局（`build/lib/lean/`）**与** 4.7.0 布局（`build/lib/`）
+   各造一次，两种都必须读成"可用"（这正是这一轮修掉的那处读错）。
+4. **运行环境**：跑 T1 第 12 趟时导出
+   `AGENTFLOW_MATHLIB_ROOT=temp/mathlib-pinned2/mathlib4-4.7.0`、
+   `LEAN_PATH=<lean_path_for(root)>`、`PATH` 加上 lean 的 bin —— 这就是"先配置好"。
+
+### 三、还欠的一步（登记，不掩盖）
+
+`formalgw` 目前**不自己注入** `LEAN_PATH`：它读进程环境。这一轮靠"跑之前把环境配好"
+解决（用户的口径允许），但更彻底的做法是让检查器子进程的环境由 `mathlib_state()['lean_path']`
+**自动拼出来**（框架已经知道根在哪，就不该要求调用方记得这一串）。
+下一轮若 `check_formal` 的 `import` 仍失败，就先做这一步。
+
+### 四、读数（2026-10-04）
+
+| 读数 | 命令 | 结果 |
+|---|---|---|
+| Mathlib 可用性（离线探针） | `python temp/_mathlib_probe2.py` | 手工拼 `LEAN_PATH` 后 `import Mathlib` **退出码 0**（`lake env` 那条路在 Windows 上不可用：`printenv` 不是命令） |
+| 端到端（E 的形式化） | `python temp/_mathlib_e2e.py` | `check_formal(imports=['Mathlib'])` + `by omega` ⇒ **「退出码 0、无 sorry、公理在允许集内、声明被检查到（27.7 s）」** |
+| toolchain 那一组 | `pytest tests/test_toolchain_paths.py -q` | **9 passed**（含两种 umbrella 布局） |
+| lint 日常 / 严格 | `python -B scripts/lint_rules.py [--strict]` | `error 0 / warning 9 / info 49`；严格 `0 / 56 / 48` |
+| 全量 pytest（含 §100 的 policy 改动） | `python -B -m pytest -q -p no:randomly` | **3493 passed / 0 failed** / 3 skipped / 8 deselected / 1 xfailed（exit 0，1460.89s）—— 期间有一次是在我边改边跑时跑的，那次的 `test_release_all.py::test_every_only_example_in_the_docstring_is_a_real_step_key` 红是假红（该判据会**真跑** `release_all --only …`，被我并发做的 Mathlib 探针拖到超时），安静重跑即绿 |
+| FC-27 门 | `python -B scripts/noai_gate.py --git --since e211c32` | `requires_human`（`specs/b.py`、`specs/e.py`、`specs/g.py`、`tools/verify_tools.py`、`scripts/lint_rules.py` 等 2 名 reviewer）—— 不是 `clean` |
+
+下一轮：**T1 第 12 趟**，跑之前先按 `temp/_run_env_mathlib.ps1` 把
+`AGENTFLOW_MATHLIB_ROOT` / `LEAN_PATH` / `PATH` 配好（"先配置好，别让智能体难办"）。

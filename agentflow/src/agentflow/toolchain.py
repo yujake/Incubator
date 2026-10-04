@@ -179,12 +179,49 @@ def probe_checkers(env: Mapping[str, str] | None = None) -> dict[str, Any]:
             "looked_in": looked_in, "sources": {r["name"]: r["source"] for r in out}}
 
 
+def lean_path_for(root: str | Path) -> str:
+    """Mathlib 工程根 → 编译 `import Mathlib` 需要的 `LEAN_PATH`。
+
+    ## 为什么要由框架来拼（`draft/37` §101 的真机读数）
+
+    `formalgw.check_lean` 起检查器的命令是裸的 `[lean, <file>]` —— 它靠进程环境里的
+    `LEAN_PATH` 找包。于是"Mathlib 装好了"与"`import Mathlib` 能不能编过"是两件事：
+    2026-10-04 实测，盘上有一份编译完整的 Mathlib（`temp/mathlib-pinned2/…`，
+    umbrella `Mathlib.olean` 在、4095 个 olean 在），而 E 的每一次形式化尝试都报
+    `unknown package 'Mathlib'` —— 差的就是这一串 `LEAN_PATH`。
+
+    ## 布局只认两处（4.7.0 与 4.9+ 各一种）
+
+    `<root>/.lake/build/lib`（Lean 4.7 时代）与 `<root>/.lake/build/lib/lean`（4.9+），
+    外加每个依赖包（`<root>/.lake/packages/*`）的同样两种。只取存在的：
+    拼进一个不存在的目录不会报错，只会让"路径拼错了"和"包没编"长得一样。
+    """
+    base = Path(str(root))
+    parts: list[Path] = []
+    for sub in (Path(".lake") / "build" / "lib", Path(".lake") / "build" / "lib" / "lean"):
+        parts.append(base / sub)
+    pkgs = base / ".lake" / "packages"
+    if pkgs.is_dir():
+        for pkg in sorted(pkgs.iterdir()):
+            for sub in (Path(".lake") / "build" / "lib", Path(".lake") / "build" / "lib" / "lean"):
+                parts.append(pkg / sub)
+    return os.pathsep.join(str(p) for p in parts if p.is_dir())
+
+
 def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
-    """Mathlib 那一轴的状态（三态）：工程根在不在、revision 与钉住的是否一致。
+    """Mathlib 那一轴的状态（三态）：工程根在不在、revision 与钉住的是否一致、能不能 import。
 
     为什么要单列：`import Mathlib` 能不能用，取决于「工程根 + 那一份编好的缓存」，
     与"有没有 lean 这个二进制"是两件事。实测 2026-10-03：根在、revision 与钉住的一致，
     但 umbrella 的 `.olean` 不在缓存里 ⇒ `import Mathlib` 报 `import_unavailable`。
+
+    ## 2026-10-04 的一处修正：umbrella 有两种布局，早先只认了一种
+
+    早先这里按 `.lake/build/lib/lean/Mathlib.olean` 找 —— 那是 Lean 4.9+ 的布局；
+    4.7.0 的布局是 `.lake/build/lib/Mathlib.olean`。于是盘上那份编译完整的 Mathlib
+    被判成"没装 Mathlib"（`import_unavailable`），而后面的 `import_mathlib` 那句话
+    就把模型引向了"换 import 列表"，而不是"把 LEAN_PATH 配上"。
+    现在两种布局都认，并把该配的 `lean_path` 一起给出来。
     """
     from . import formalgw as FG
 
@@ -198,13 +235,18 @@ def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     got_commit = str(rev.get("commit") or "")
     same = bool(got_commit) and (got_commit == pinned_commit
                                  or got_commit.startswith(pinned_commit[:12]))
-    umbrella = Path(root) / ".lake" / "build" / "lib" / "lean" / "Mathlib.olean"
+    candidates = (Path(root) / ".lake" / "build" / "lib" / "Mathlib.olean",
+                  Path(root) / ".lake" / "build" / "lib" / "lean" / "Mathlib.olean")
+    umbrella = next((p for p in candidates if p.is_file()), None)
+    lp = lean_path_for(root)
     return {"checked": True, "root": root, "commit": got_commit, "tag": str(rev.get("tag") or ""),
             "source": str(rev.get("source") or ""), "reason": str(rev.get("reason") or ""),
             "pinned_commit": pinned_commit, "pinned_tag": pinned_tag, "pinned_match": same,
-            "umbrella_olean": str(umbrella) if umbrella.is_file() else "",
-            "import_mathlib": ("可用" if umbrella.is_file() else
-                               "不可用（umbrella 的 .olean 不在缓存里 ⇒ import Mathlib 会报 "
+            "umbrella_olean": str(umbrella) if umbrella else "",
+            "lean_path": lp, "lean_path_segments": len(lp.split(os.pathsep)) if lp else 0,
+            "import_mathlib": ("可用（umbrella 的 .olean 在；`LEAN_PATH` 用 lean_path 这一串，"
+                               "检查器起子进程时要带上它）" if umbrella else
+                               "不可用（两种布局都没找到 umbrella 的 .olean ⇒ import Mathlib 会报 "
                                "import_unavailable；处置是编全 Mathlib 或只 import 缓存里有的模块）")}
 
 

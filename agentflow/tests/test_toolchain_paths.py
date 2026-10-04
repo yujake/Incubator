@@ -166,7 +166,18 @@ def test_mathlib_state_reads_the_root_and_says_whether_import_works(tmp_path: pa
     assert "不可用" in st["import_mathlib"], st          # umbrella 的 .olean 还没编
     (root / ".lake" / "build" / "lib" / "lean").mkdir(parents=True)
     (root / ".lake" / "build" / "lib" / "lean" / "Mathlib.olean").write_bytes(b"x")
-    assert TC.mathlib_state()["import_mathlib"] == "可用"
+    ok = TC.mathlib_state()
+    assert "可用" in ok["import_mathlib"], ok
+    assert ok["umbrella_olean"].endswith("lean\\Mathlib.olean") or \
+        ok["umbrella_olean"].endswith("lean/Mathlib.olean"), ok
+    # 2026-10-04 的布局修正（`draft/37` §101）：4.7.0 的 umbrella 在 `.lake/build/lib/`
+    # 而不是 `.lake/build/lib/lean/` —— 盘上那份编译完整的 Mathlib 正是这种布局，
+    # 早先只认后者 ⇒ 把"装了"读成"没装"，把模型引向"换 import 列表"而不是"配 LEAN_PATH"。
+    (root / ".lake" / "build" / "lib" / "lean" / "Mathlib.olean").unlink()
+    (root / ".lake" / "build" / "lib" / "Mathlib.olean").write_bytes(b"x")
+    legacy = TC.mathlib_state()
+    assert "可用" in legacy["import_mathlib"], legacy
+    assert legacy["lean_path_segments"] >= 1, legacy
     monkeypatch.delenv("AGENTFLOW_MATHLIB_ROOT")
     assert TC.mathlib_state()["root"] == TC.mathlib_state().get("root", ""), "没配就报没配"
 

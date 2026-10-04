@@ -685,7 +685,15 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "真机读数（2026-10-04 第 10 趟）：两次 `verified` 的结果全在临时目录里，"
             "随后 4 次 `run_experiment` 指着 `code/exactness_forward.lean` 报"
             "「脚本不存在」⇒ `experiments` 里一条 proof 行都没有，`documents` 的 proof 级断言"
-            "因此建不起来。裁决与落库之间只差这一步：**把源码写进工作区**。",
+            "因此建不起来。裁决与落库之间只差这一步：**把源码写进工作区**。"
+            "本机没有 Mathlib 时的写法口径（都是真机读数，不是风格建议）："
+            "① `decide` 只对归约得动的命题有效 —— 第 11 趟实测：`Int` 上的 `if`/比较"
+            "在 `Init` 下不归约，`decide` 会把真命题判成 false（`compile_error`）⇒"
+            "把命题改写成 `Nat`/`Bool` 上的等式或有限枚举形态再 `decide`；"
+            "② 不要用 sorry/admit 占位：含 sorry 的文件在 Lean 里会正常编译通过（退出码 0），"
+            "而框架会逐字判「这不是证明」（第 11 趟 4 次 `verified=false` 里有 2 次是这一档）；"
+            "③ 失败时读检查器原话的那一行错、改一处再试（第 10/11 趟都是整篇重写后仍失败）；"
+            "④ 源码里多于一条具名声明时要显式给 `checker_name`（不给会报「取不到唯一那条」）。",
         ),
         signature_error="把跑不过的代码块当成通过。",
         deliverable="experiments 行与它们的证据字段（数值、检查器输出、复现命令）。",
