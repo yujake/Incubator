@@ -270,6 +270,21 @@ def ref_problem(root: str | Path, ref: str) -> str:
     return ""
 
 
+def rows_for_task(root: str | Path, task_id: str, *, sender: str = "") -> list[dict[str, Any]]:
+    """这一条任务（`tasks.task_id`）已经留下了哪些行（可按发件人过滤）。
+
+    用途（`draft/39` §6.6 F1）：动作驱动的一趟结束时要由框架代写一份"我干完了、交给谁"，
+    而循环驱动的一趟已经由该角色自己的 `notify` 写了 —— 两种形态都要留痕、不许写两份。
+    判据就是"这一条任务号下已经有行了吗"。
+    """
+    want = str(task_id or "").strip()
+    if not want:
+        return []
+    return [r for r in rows(root)
+            if str(r.get("task_id") or "") == want
+            and (not sender or str(r.get("sender") or "") == str(sender))]
+
+
 def write(root: str | Path, *, sender: str, recipient: str, title: str = "", body: str,
           refs: Iterable[str] = (), summary: str = "", task_id: str = "",
           sid: str = "", note: str = "", timeout: float = 30.0) -> dict[str, Any]:

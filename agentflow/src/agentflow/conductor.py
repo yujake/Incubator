@@ -236,7 +236,7 @@ class LocalBackend:
 
         ## `G-1`：token 不再"收下就扔"
 
-        旧版末行是 `return fn(**given)` —— `token` 收了，然后一个字都没往下传，
+        旧版末行是 `return fn(given)` —— `token` 收了，然后一个字都没往下传，
         于是"取消"只覆盖待启动的任务：已经在跑的 handler 照样跑完，
         以 `done/ok` 结束（实测 `temp/auditG-probe1.txt`）。
 
@@ -636,7 +636,7 @@ class Conductor:
         2. 本次调用的预算 —— 调用方给的 `budget={"max_tokens": …}`。
 
         为什么两条都要：`summon(..., budget=...)` 的语义是"这一单最多准花多少"，
-        它不是把全局预算换掉。若只判后者，一个调用方就能用 `budget={"max_tokens": 10**9}`
+        它不是把全局预算换掉。若只判后者，一个调用方就能用 `budget={"max_tokens": 109}`
         绕过全局上限 —— 那正是"只有一类上限时另几类都可被绕过"（FC-18）的同族形态。
 
         实现方式：只有当本次调用给了预算时才派生一个 meter（读同一张
@@ -1216,6 +1216,59 @@ class Conductor:
             return ""
         return rel
 
+    def _write_completion_manuscript(self, row: Mapping[str, Any], *, task_id: str, status: str,
+                                     outcome: str | None, detail: str, error: str | None,
+                                     payload: Any) -> None:
+        """动作驱动的一趟结束时，按已发生的事实代写一份交接手稿（`draft/39` §6.6 F1）。
+
+        写什么：任务号 / 角色.动作 / 状态与结论 / 详情 / 产物路径 / 参数摘要；
+        `to` = 召唤者（`called_by`），`note` 明写"框架据动作结果派生"。
+        纪律三条：
+        ① 不重复：同一 `task_id` 下已经有该角色的行（循环驱动那一趟自己填的 `notify`）⇒ 跳过；
+        ② 不带走向：留痕失败只进日志，绝不改变任务的终态（与会话记录/产物登记同一条纪律）；
+        ③ `cancelled` 不写：没干完的活不是"交接"（这一条由调用方保证）。
+        """
+        root = getattr(self.store, "root", ".")
+        role = str(row.get("role") or "")
+        caller = str(row.get("called_by") or "")
+        if not role or not caller:
+            return
+        from . import manuscripts as _MS
+
+        try:
+            if _MS.rows_for_task(root, task_id, sender=role):
+                return
+            action = str(row.get("action") or "")
+            verdict = str(outcome or status or "")
+            one_line = f"{action}：{verdict}" + (f"（{detail[:60]}）" if detail else "")
+            lines = [f"## 这一趟干了什么", "",
+                     f"- 任务号：`{task_id}`", f"- 角色.动作：{role}.{action}",
+                     f"- 状态：`{status}` / 结论：`{verdict}`"]
+            if detail:
+                lines.append(f"- 详情：{detail[:400]}")
+            if row.get("refusal_reason"):
+                lines.append(f"- 拒绝理由：`{row['refusal_reason']}`")
+            if error:
+                lines.append(f"- 错误：{str(error)[:300]}")
+            arts = list(row.get("artifacts") or [])
+            if arts:
+                lines += ["", "## 产物", ""] + [f"- `{a}`" for a in arts[:10]]
+            params = dict(row.get("params") or {})
+            if params:
+                lines += ["", "## 参数摘要",
+                          f"```json\n{json.dumps(params, ensure_ascii=False)[:600]}\n```"]
+            if payload is not None:
+                lines += ["", "## 返回值摘要",
+                          f"```json\n{json.dumps(payload, ensure_ascii=False, default=str)[:600]}\n```"]
+            lines += ["", "## 这一行是怎么来的",
+                      "这一趟是**动作驱动**（框架代跑 Python 技能），没有模型收工那一刻，"
+                      "所以框架按动作结果派生这一行：内容全部取自 `tasks` 那一行与它的返回值。"]
+            _MS.write(root, sender=role, recipient=caller, summary=one_line,
+                      body="\n".join(lines) + "\n", task_id=task_id,
+                      note="留痕来源：框架据动作结果派生（动作驱动的一趟没有 final 可填）")
+        except Exception as e:  # noqa: BLE001 - 留痕不是判据本身，绝不许带走终态
+            self._log(f"交接留痕没写成：{type(e).__name__}: {e}", task_id=task_id)
+
     def finish(
         self,
         task_id: str,
@@ -1334,6 +1387,19 @@ class Conductor:
                             task_id=task_id, note=f"outcome={outcome}")
             except Exception as e:  # noqa: BLE001 - 登记不是判据本身，不许带走终态
                 self._log(f"产物归属没登记成：{type(e).__name__}: {e}", task_id=task_id)
+        # ---- 交接留痕：动作驱动的一趟结束（`draft/39` §3.2 表格的第二行 + §6.6 F1）。
+        #
+        # 为什么必须在这里写：E5 真机读数（`p6g-notify-live`）显示，被派的 A–H 是当动作跑的
+        # （107 步里只有 M 一个 `agent_run_start`），它们没有 `final` 那一步 ⇒
+        # 收工侧那张强制 `notify` 表在这条路上永远不会触发，于是 30 行留痕全是 M 的派活、
+        # 一条"我干完了、交给了谁"都没有。用户口径的第一句恰恰是"每个除主控外的 Agent
+        # 干完活后……要通知给谁"—— 动作驱动形态下能写这份留痕的只有框架（没有模型收工那一刻）。
+        # 这不是"代填"：用户裁的"不代填"是模型自己要说的话（那张 notify 表）；
+        # 这里写的是已经发生的事实（谁做了什么、结果如何、产物在哪），并逐行注明来源。
+        # 与循环驱动不重复：那一路角色自己的 `notify` 已经写下了同一 `task_id` 的行 ⇒ 跳过。
+        if str(row.get("role") or "") != S.CONDUCTOR_ROLE and status != "cancelled":
+            self._write_completion_manuscript(row, task_id=task_id, status=status, outcome=outcome,
+                                              detail=detail, error=error, payload=payload)
         return SummonResult(
             task_id=task_id, role=str(row.get("role") or ""), action=str(row.get("action") or ""),
             status=status, outcome=outcome, refusal_reason=row.get("refusal_reason"),

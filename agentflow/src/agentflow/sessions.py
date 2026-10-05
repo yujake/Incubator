@@ -28,13 +28,21 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
+
+from filelock import FileLock
 
 from .jsonlfile import read_jsonl
 
 SESSIONS_DIR_NAME = "sessions"
 ENV_SESSION = "AGENTFLOW_SESSION"
+
+
+def _file_lock(path: str) -> FileLock:
+    """跨进程写锁（同一工作区上 CLI 与驱动器可能同时在写同一份会话）。"""
+    return FileLock(path, timeout=30.0)
 
 
 def sessions_dir(root: Any) -> pathlib.Path:
@@ -54,15 +62,45 @@ def session_path(root: Any, sid: str | None = None) -> pathlib.Path:
     return sessions_dir(root) / f"{sid or session_id()}.jsonl"
 
 
+#: 每个会话文件一把进程内写锁（并发写者的交错就在这里被挡住）。
+#:
+#: 为什么必须锁（E5 之后的全量套件实测，2026-10-05）：`LlmBackend` 会在一波里并发跑
+#: 同一角色的多个实例（线程），它们各自往同一个 `sessions/<sid>.jsonl` 追加事件。
+#: 没有锁时两次 `write` 会在一个多字节字符中间交错 ⇒ 文件里出现非法 UTF-8 字节
+#: （实测报错：`UnicodeDecodeError: byte 0xa8 in position 9472`），于是
+#: "读会话记录"整条路直接炸 —— 而会话记录是本框架唯一的叙事审计面。
+#: 表现形态也记在这里：它不总是红，只在真正并发时才红（所以它此前被当成"偶发 flaky"）。
+_APPEND_LOCKS: dict[str, Any] = {}
+_APPEND_LOCKS_GUARD = threading.Lock()
+
+
+def _append_lock(path: pathlib.Path) -> Any:
+    key = str(path).lower()
+    with _APPEND_LOCKS_GUARD:
+        lock = _APPEND_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _APPEND_LOCKS[key] = lock
+        return lock
+
+
 def append(root: Any, event: Mapping[str, Any], *, sid: str | None = None) -> tuple[pathlib.Path | None, str]:
-    """追加一条事件；返回 `(路径, 问题)`，问题为空串才算写成。"""
+    """追加一条事件；返回 `(路径, 问题)`，问题为空串才算写成。
+
+    两种写者都要挡住：线程（同波并发跑的几个实例，用 `_append_lock`）与
+    进程（CLI 与驱动器同时跑在同一个工作区上，用 `filelock`）。锁只包住"把这一行
+    写完"这一段：拿锁之前先把整行序列化好，临界区里只有一次 `write`。
+    """
     path = session_path(root, sid)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         row = dict(event)
         row.setdefault("ts", datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"))
-        with path.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+        line = json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n"
+        with _append_lock(path):
+            with _file_lock(str(path) + ".lock"):
+                with path.open("a", encoding="utf-8", newline="\n") as fh:
+                    fh.write(line)
     except (OSError, TypeError, ValueError) as e:  # noqa: BLE001 - 见模块 docstring
         return None, f"{type(e).__name__}: {e}"
     return path, ""

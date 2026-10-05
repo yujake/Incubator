@@ -1553,6 +1553,10 @@ class AgentLoop:
             "final": run.final, "final_sha256": _sha(run.final)[:16],
             "final_chars": len(run.final), "spend": dict(run.spend),
             "elapsed_sec": round(run.elapsed_sec, 3),
+            # 交接留痕的两个读数（`draft/39` §6.6 F3）：设计里写的是"这一趟的
+            # `agent_run_end` 里落 `handoff_id`"，而 E5 真机读数时发现这两个字段
+            # 没进事件 ⇒ 只能自己扫账本，批⑥ 的状态报告同理。
+            "handoffs": list(run.handoffs), "notify_rejections": run.notify_rejections,
         }, sid=self.sid)
         return run
 

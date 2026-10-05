@@ -332,3 +332,129 @@ def test_a_plain_role_does_not_need_a_notify_on_its_dispatches(tmp_path):
     assert run.steps[0].shape == "summon", run.steps[0].to_dict()
     assert "dispatch_handoff" not in run.steps[0].result, run.steps[0].result
     assert [r["to"] for r in MS.rows(ws)] == ["M"], MS.rows(ws)
+
+
+# ============================================================ 动作驱动的一趟也留痕（§6.6 F1）
+
+class _Stub:
+    """一个最小的角色替身：只实现被测的那个读动作。"""
+
+    def list_experiments(self, **_kw: Any) -> dict[str, Any]:
+        return {"ok": True, "experiments": [], "note": "（替身）"}
+
+
+def _action_ws(tmp_path):
+    """造一个工作区 + 只接了 E 的 conductor（够跑一条动作驱动的召唤）。"""
+    ws = tmp_path / "ws"
+    (ws / "data").mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    cond = Conductor(st, backend=LocalBackend({"E": ("object", _Stub())}))
+    return ws, st, cond
+
+
+def _seed_task(cond, task_id: str, *, role: str = "E", status: str = "running") -> None:
+    with cond.store.tx("tasks", actor="test") as tx:
+        tx.upsert("tasks", {"task_id": task_id, "role": role, "action": "list_experiments",
+                            "params": {}, "status": status, "outcome": None,
+                            "called_by": "M", "depth": 1, "input_key": "k",
+                            "started_at": "2026-10-05T00:00:00+08:00", "artifacts": []})
+
+
+def test_a_finished_action_leaves_a_completion_manuscript_to_its_caller(tmp_path):
+    """E5 的 F1：被派的角色当动作跑（没有 `final`）⇒ 框架按动作结果代写一份交接。
+
+    这一条是 E5 真机读数逼出来的：那一趟 107 步里只有 M 一个 `agent_run_start`，
+    30 行留痕全是 M 的派活，没有一条"我干完了、交给了谁"。用户口径的第一句
+    （"每个除主控外的 Agent 干完活后……要通知给谁"）在动作驱动形态下只能由框架来落。
+    """
+    ws, _st, cond = _action_ws(tmp_path)
+    res = cond.summon("E", "list_experiments", {}, by="M")
+    assert res.outcome == "ok", (res.status, res.outcome, res.error)
+    rows = MS.rows(ws)
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert row["sender"] == "E" and row["to"] == "M", row
+    assert row["task_id"] == res.task_id, row
+    assert "list_experiments" in row["summary"] and "ok" in row["summary"], row
+    assert "框架据动作结果派生" in row["note"], row
+    assert res.task_id in row["body"], row
+
+
+def test_an_action_that_refuses_after_starting_still_leaves_a_row(tmp_path):
+    """跑起来之后被拒的动作也留一行（"谁试过什么、为什么没成"正是留痕要带的东西）。"""
+    from agentflow.tools import ToolError
+
+    class _Refuser(_Stub):
+        def list_experiments(self, **_kw: Any) -> dict[str, Any]:
+            raise ToolError("台账读不到（替身故意拒一次）")
+
+    ws = tmp_path / "ws"
+    (ws / "data").mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    cond = Conductor(st, backend=LocalBackend({"E": ("object", _Refuser())}))
+    res = cond.summon("E", "list_experiments", {}, by="M")
+    assert res.outcome == "refused", (res.status, res.outcome, res.refusal_reason)
+    rows = MS.rows(ws)
+    assert len(rows) == 1, rows
+    assert rows[0]["sender"] == "E" and rows[0]["to"] == "M", rows[0]
+    assert "refused" in rows[0]["summary"], rows[0]
+    assert str(res.refusal_reason) in rows[0]["body"], rows[0]
+
+
+def test_a_refusal_before_the_task_starts_leaves_no_row(tmp_path):
+    """边界（三态）：开工前就被拒的召唤（`invalid_params`）没有"干完活"这回事 ⇒ 不留行。
+
+    这一条与上一条的分界是"任务行有没有真的 `running` 过"：开工前的拒绝由 `_refuse` 直接写
+    台账（不经过 `finish`），而"我干完了/我试过了"这句话在那时无话可说 ——
+    派活侧那一行（M 的留痕）已经记下了"我派了这个活"，理由在 `tasks.refusal_reason` 上。
+    """
+    ws, _st, cond = _action_ws(tmp_path)
+    res = cond.summon("E", "run_experiment", {"claim": "缺参数"}, by="M")
+    assert res.outcome == "refused" and res.refusal_reason == "invalid_params", \
+        (res.outcome, res.refusal_reason)
+    assert MS.rows(ws) == [], MS.rows(ws)
+
+
+def test_a_cancelled_task_leaves_no_completion_manuscript(tmp_path):
+    """取消不算"干完活"：`cancelled` 的任务不许留一行"我交接了"。"""
+    ws, _st, cond = _action_ws(tmp_path)
+    _seed_task(cond, "t-9001")
+    cond.finish("t-9001", status="cancelled", outcome="cancelled", detail="人叫停了")
+    assert MS.rows(ws) == [], MS.rows(ws)
+
+
+def test_the_completion_row_is_skipped_when_the_role_already_wrote_one(tmp_path):
+    """不重复：循环驱动那一趟自己填的 `notify` 已经写了同一 `task_id` 的行 ⇒ 跳过。"""
+    ws, _st, cond = _action_ws(tmp_path)
+    MS.write(ws, sender="E", recipient="M", summary="我自己写的收工交接", body="正文。\n",
+             task_id="t-9002", note="留痕来源：模型填的 notify")
+    _seed_task(cond, "t-9002")
+    cond.finish("t-9002", status="done", outcome="ok", detail="执行完成")
+    rows = MS.rows(ws)
+    assert len(rows) == 1 and rows[0]["summary"] == "我自己写的收工交接", rows
+
+
+def test_the_conductor_itself_never_gets_a_completion_row(tmp_path):
+    """边界：主控自己的任务行不留"完成交接"（它的派活侧已经有另一套留痕）。"""
+    ws, _st, cond = _action_ws(tmp_path)
+    _seed_task(cond, "t-9003", role="M")
+    cond.finish("t-9003", status="done", outcome="ok", detail="执行完成")
+    assert MS.rows(ws) == [], MS.rows(ws)
+
+
+def test_the_run_end_event_carries_the_handoff_readings(tmp_path):
+    """E5 的 F3：`agent_run_end` 必须带 `handoffs` / `notify_rejections`（设计里点名的读数）。"""
+    from agentflow import sessions as SS
+
+    ws, run = _run(tmp_path, [
+        {"final": "收工了", "notify": {"to": "M", "summary": "交给 M", "body": "正文。"}},
+    ])
+    assert run.handoffs == ["0000"], run.to_dict()
+    events, problems = SS.read_session(ws, sid="n1")
+    assert not problems, problems
+    end = [e for e in events if e.get("kind") == "agent_run_end"]
+    assert end, [e.get("kind") for e in events]
+    assert end[-1].get("handoffs") == ["0000"], end[-1]
+    assert end[-1].get("notify_rejections") == 0, end[-1]
