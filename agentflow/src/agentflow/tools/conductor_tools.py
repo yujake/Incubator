@@ -956,6 +956,41 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
         blocker_count=len(rep.blockers), unknown_count=len(rep.unknowns))
 
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
+@tool(
+    "conductor.status_report",
+    "项目状态报告（`draft/39` §4）：**只读**收集当前情况（产出/交接/在飞卡点/被拒与插话），"
+    "落 `out/review/STATUS-<ts>.{md,json}` 并把四类读数回给你。"
+    "用户通过留言问「现在什么情况」时走它：**它不发 ask_user、不停任何人的循环**"
+    "（旁路观测）—— 这与「问 M 一句」是两条相反的路。",
+    {"type": "object",
+     "properties": {"since": {"type": "string",
+                              "description": "只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）"},
+                    "out_dir": {"type": "string", "description": "报告落哪个目录（缺省 out/review）"}},
+     "required": [], "additionalProperties": False},
+    side_effect="read",
+    roles=("M",),
+    returns=("{'ok','md','json','tables','manuscripts','in_flight','attack_rounds',"
+             "'interjections','next_steps'}"),
+)
+def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> ToolResult:
+    """工具体：只读收集 + 落盘，并把四类读数回给主控（实现只有一份：`statusreport`）。"""
+    from .. import statusreport as SR
+
+    c = _conductor()
+    root = Path(str(getattr(getattr(c, "store", None), "root", "") or "."))
+    report, md, js = SR.write_status_report(
+        getattr(c, "store", None), root, out_dir=(out_dir or None), since=since)
+    data = {
+        "ok": True, "md": str(md), "json": str(js),
+        "tables": report["tables"], "manuscripts": report["manuscripts"],
+        "in_flight": report["in_flight"], "attack_rounds": report["attack_rounds"],
+        "interjections": report["interjections"], "next_steps": report["next_steps"],
+        "note": ("这份报告是旁路观测：只读台账与手稿、零模型调用；"
+                 "报告本身落在 out/review/ 下（那是产物，不是台账）"),
+    }
+    return ok(data, **data)
+
+
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (conductor_summon, ('_conductor',)),
     (conductor_summon_many, ('_conductor',)),
@@ -970,6 +1005,9 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # `session` 是装配期注入的会话身份（§63 修法 B）：`conductor.closing` 靠它
     # 读这一趟自己的会话文件，而不是回落到"今天那个文件"（那是一次实测假绿）。
     (conductor_closing, ('store', 'session')),
+    # `draft/39` §4 的入口②：M 用 `conductor.status_report` 回答"现在什么情况"
+    # （只读、零模型调用、不停任何循环）；用户侧入口①是 `agentflow status-report`。
+    (conductor_status_report, ('_conductor',)),
 )
 
 

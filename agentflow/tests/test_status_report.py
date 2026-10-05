@@ -222,6 +222,29 @@ def test_e15_3_the_probe_does_not_write_into_the_store(tmp_path):
 
 # ============================================================ CLI 入口
 
+def test_the_conductor_tool_writes_the_same_report(tmp_path):
+    """入口②（`draft/39` §4）：M 的 `conductor.status_report` 与用户侧 CLI **共用一份实现**。
+
+    这一条钉两件事：① 工具真的落盘（md/json 都在 `out/review/` 下）并把四类读数回给 M；
+    ② 它**只读**（跑完之后 `data/` 下每个文件的字节不变）—— "旁路观测"不是措辞。
+    """
+    ws, st, _ = _ws(tmp_path)
+    _seed(st)
+    before = {p.name: p.read_bytes() for p in sorted((ws / "data").glob("*.json"))}
+    reg = build_registry(store=st, conductor=Conductor(st, backend=LocalBackend({})),
+                         workspace_root=str(ws)).registry
+    res = reg.call("conductor.status_report", role="M")
+    assert res.ok, res.error
+    data = res.data or {}
+    assert data.get("md") and data.get("json"), data
+    assert {"tables", "manuscripts", "in_flight", "attack_rounds", "interjections",
+            "next_steps"} <= set(data), sorted(data)
+    assert "旁路观测" in str(data.get("note") or ""), data.get("note")
+    assert list((ws / "out" / "review").glob("STATUS-*.md")), "工具没落盘"
+    for name, blob in before.items():
+        assert (ws / "data" / name).read_bytes() == blob, f"{name} 被这个工具改过（它必须是只读的）"
+
+
 def test_the_cli_entry_lands_a_report_and_says_what_is_next(tmp_path, capsys):
     """入口（`agentflow --root <ws> status-report`）：落盘 + 打印四类读数 + 退出码 0。"""
     ws, st, _ = _ws(tmp_path)

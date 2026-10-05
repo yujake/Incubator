@@ -221,7 +221,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（77 个，逐条）
+## R0. 全局工具总表（78 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -307,8 +307,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 75 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
 | 76 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
 | 77 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的五条）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在五条全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是五条检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
+| 78 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
 
-### R0.1 77 个工具的公共事实（机械可验证）
+### R0.1 78 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -1992,9 +1993,9 @@ SELF-CHECK DONE（agent_h）
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（**17 个**，实测）= 编排面 11 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit`）
+### M.4 "工具面"（**18 个**，实测）= 编排面 12 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit`）
 
-> **编排面 11 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件批量派活）。
+> **编排面 12 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件只读的**状态报告** + 1 件批量派活）。
 > **文件面白名单 6 件**：`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit` ——
 > 只读四件加一支笔，再加一把手（锚定替换）；**没有** `fs.delete` / `fs.move`
 > （一个真删、一个换位置，都不可逆）。

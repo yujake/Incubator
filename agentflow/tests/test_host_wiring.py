@@ -371,7 +371,7 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    assert len(m_tools) == 17, m_tools
+    assert len(m_tools) == 18, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
     assert "conductor.closing" in m_tools, m_tools
     # ① 文件面白名单六件（§38 + §57 两次裁定）
@@ -383,7 +383,7 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     # ③ 知识表与检索仍是禁区
     assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools
     # 编排面那 11 件照旧（这条判据原本守的就是它）
-    assert len([n for n in m_tools if n.startswith("conductor.")]) == 11, m_tools
+    assert len([n for n in m_tools if n.startswith("conductor.")]) == 12, m_tools
 
 
 # ---------------------------------------------------------------- ⑥ A 的文献检索真的通

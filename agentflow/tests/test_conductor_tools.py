@@ -35,7 +35,7 @@ M_TOOL_FACE = {
     "conductor.summon", "conductor.summon_many", "conductor.ledger", "conductor.stop",
     "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
     "conductor.state", "conductor.role_spec", "conductor.acceptance",
-    "conductor.closing",
+    "conductor.closing", "conductor.status_report",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 11 件）；留给"编排面本身"的判据用。

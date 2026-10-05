@@ -69,7 +69,7 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 2026-10-01 按调用点去重后是 9（见上）。
     # 该函数的载荷是运行时算出来的，见它自己的注释；`returns=` 仍逐字声明键集，
     # 由 `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
-    "conductor_tools.py": 9,
+    "conductor_tools.py": 10,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由
