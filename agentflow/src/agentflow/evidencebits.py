@@ -27,7 +27,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 #: 第 1/4 位的四态（顺序就是"从没做到做到了"的强弱）。
 BIT_STATES: tuple[str, ...] = ("pending", "na", "failed", "verified")
@@ -248,6 +248,135 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     if bits.get("audited") and not ev.get("audited_by"):
         problems.append("audited=true 必须带 H 的审校轮次与结论")
     return problems
+
+
+def clean_statement_ids(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """I4（`draft/39` §3.21 二）：哪些命题算"干净"的引用对象（引用它不必重验）。
+
+    两类进干净集合，各有明确凭据：
+
+    1. 我方命题：五位派生出「预备定理级」或「正式定理」（第 2 位 + 第 3/4 位）——
+       它的证明过程与被审记录都在册，引用它只需如实呈现，不重验；
+    2. 引用命题（`origin=external_lit` 且 `quote_verified is True`）：凭据是文献代号 +
+       逐字核过的那一份原文 —— 这正是 I4 说的"来源已验证过的，如实呈现、不重验"。
+
+    返回 `{"clean": [...], "reasons": {id: 理由}}`：理由逐条留下（"为什么它能被信"可复核），
+    而不在集合里的就是"引用它要小心"的（还在猜想 / 已作废 / 没逐字核过）。
+    """
+    clean: list[str] = []
+    reasons: dict[str, str] = {}
+    for row in rows:
+        sid = str(row.get("stmt_id") or row.get("id") or "")
+        if not sid:
+            continue
+        bits = bits_from_row(row)
+        if bits.get("voided_by"):
+            reasons[sid] = "已作废（不能作为依据）"
+            continue
+        if str(bits.get("origin") or "") == "external_lit":
+            if row.get("quote_verified") is True:
+                clean.append(sid)
+                reasons[sid] = f"引用命题：逐字核过（凭据 lit:{row.get('source_lit_id')}）"
+            else:
+                reasons[sid] = "引用命题但没逐字核过 ⇒ 不许当依据（I4 的边界）"
+            continue
+        if str(bits.get("grade") or "") in ("pre_theorem", "theorem"):
+            clean.append(sid)
+            reasons[sid] = (f"我方命题：{GRADE_LABELS.get(str(bits.get('grade')))}"
+                            "（第 2 位 + 第 3/4 位）")
+        else:
+            reasons[sid] = (f"等级只有「{GRADE_LABELS.get(str(bits.get('grade')))}」"
+                            "⇒ 引用它要小心")
+    return {"clean": clean, "reasons": reasons}
+
+
+def cascade_void(rows: Iterable[Mapping[str, Any]], *, root: str,
+                 reason: str = "") -> dict[str, Any]:
+    """I1（级联作废）：一条命题作废 ⇒ 依赖它的那些证明的五位读数一并失效。
+
+    依赖边取自 `derived_from`（本表内的 `stmt_id` 列表：这条命题用到了哪些别的命题）。
+    闭包按"谁引用了作废者"逐层扩（A 作废 ⇒ 引 A 的 B 作废 ⇒ 引 B 的 C 作废…），
+    每一行的 `voided_by` 里记着 `kind="cascade"` 与根（是谁引起的），
+    于是"这一条为什么作废"永远能追到那个数值反例或构造。
+
+    三态与边界：
+
+    - 环（A 引 B、B 引 A）不许把判据卡死：已访问集合挡住，环本身记进 `cycles` 读数；
+    - 找不到的引用（引了一条不在册的 id）记进 `missing`，不影响闭包继续
+      （悬空引用是另一个缺陷，由别处报）；
+    - 根自己那条由调用方按 §3.18 的四条判据先作废（这里不重复判）。
+
+    返回 `{"dependents": [...], "voided_by": {id: 载荷}, "cycles": [...], "missing": [...]}`。
+    """
+    root_id = str(root or "").strip()
+    by_id: dict[str, Mapping[str, Any]] = {}
+    for row in rows:
+        sid = str(row.get("stmt_id") or row.get("id") or "")
+        if sid:
+            by_id[sid] = row
+    if root_id not in by_id:
+        return {"dependents": [], "voided_by": {}, "cycles": [], "missing": [root_id],
+                "note": "根命题不在这一批行里 ⇒ 级联判不了（没查成，不是「没有依赖」）"}
+    importers: dict[str, list[str]] = {}
+    missing: list[str] = []
+    for sid, row in by_id.items():
+        for dep in (row.get("derived_from") or []):
+            dep_id = str(dep)
+            if dep_id not in by_id:
+                missing.append(f"{sid}→{dep_id}")
+                continue
+            importers.setdefault(dep_id, []).append(sid)
+    dependents: list[str] = []
+    voided_by: dict[str, Any] = {}
+    cycles: list[str] = []
+    seen = {root_id}
+
+    def walk(node: str, path: tuple[str, ...], *, depth: int) -> None:
+        """按"谁引用了它"往下走；只有回到当前路径上的祖先才算环。
+
+        为什么用路径而不是"已访问"判环（第一版就错在这里）：菱形依赖
+        （A←B、A←C、B←D、C←D）里 D 会被访问两次，而它不是环 ——
+        用"已访问"会把菱形误报成环。真环的判据是"这条边指回当前这条路径上的某个节点"。
+        """
+        if depth > 200:                                    # pragma: no cover - 防御性上限
+            return
+        for imp in importers.get(node, []):
+            if imp in path:
+                cycles.append(f"{imp}↔{node}")
+                continue
+            if imp in seen:
+                continue
+            seen.add(imp)
+            dependents.append(imp)
+            voided_by[imp] = {"kind": "cascade", "root": root_id, "via": node,
+                              "reason": str(reason or
+                                            f"依赖的 {node} 已作废 ⇒ 五位一并失效")}
+            walk(imp, path + (imp,), depth=depth + 1)
+
+    walk(root_id, (root_id,), depth=0)
+    return {"dependents": dependents, "voided_by": voided_by,
+            "cycles": sorted(set(cycles)), "missing": sorted(set(missing))}
+
+
+def apply_cascade(rows: Iterable[Mapping[str, Any]], *, root: str,
+                  reason: str = "") -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """按 `cascade_void` 的结果把行改好（返回 `(改后的行, 读数)`）—— 调用方负责落库。
+
+    只改 `bits.voided_by`（等级由 `derive_grade` 现算 ⇒ 自动回到"猜想"），
+    其余字段一个字不动：作废是"读数失效"，不是"把条目删掉或改写内容"。
+    """
+    got = cascade_void(rows, root=root, reason=reason)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        row = dict(row)
+        sid = str(row.get("stmt_id") or row.get("id") or "")
+        mark = got["voided_by"].get(sid)
+        if mark:
+            bits = dict(row.get("bits") or {})
+            bits["voided_by"] = mark
+            row["bits"] = bits
+        out.append(row)
+    return out, got
 
 
 #: 作废需要的四条（`draft/39` §3.18）：缺一条都不许作废。
