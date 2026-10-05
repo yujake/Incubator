@@ -570,9 +570,30 @@ def _bad_json_line(step: int, problem: str, detail: str) -> str:
                 "（长文本内联进 JSON 时最常见）。处置：别把长源码/长文本内联进这一步 —— "
                 "先 `fs.write` 把它落盘（一次一小段就够），召唤时用 `script_path` / `path` "
                 "引用它；确实要内联就把双引号写成反斜杠加双引号、把换行写成反斜杠加 n。"
+                "**还有一个更省事的办法：把这一步拆小** —— 一次只派一个 target、"
+                "参数里的长文本压到一两句（≤200 字），细的写进文件。"
                 "然后只回一行 JSON（不要写分析、不要写 Markdown）。骨架：\n" + JSON_TAIL)
     return (head + "**不要写分析、不要写方案、不要写 Markdown**："
             "只回一行 JSON。骨架：\n" + JSON_TAIL)
+
+
+def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str) -> str:
+    """把解析不出来的整条回复原样落盘，返回工作区相对路径。
+
+    为什么必须落盘（`draft/39` §6.28 的 D40）：`raw_reply` 被 `_clip(..., 600)` 剪过，
+    而"坏在第 1608 个字符"恰好落在剪掉的那一段里 —— T2 第 6/8/10 三趟死在同一类失败上，
+    每一次都只能靠猜（报错给了列号，证据却被剪掉了）。三态纪律在这一层的落点：
+    "没解析出来"要留下可复核的原文，而不是一条摘要。
+    """
+    safe_sid = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(sid or "run")) or "run"
+    rel = f"out/invalid/{safe_sid}-step{step}.txt"
+    try:
+        path = Path(root or ".") / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text or "", encoding="utf-8", newline="\n")
+    except OSError:
+        return ""
+    return rel
 
 
 def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str,
@@ -1545,6 +1566,10 @@ class AgentLoop:
                 # "框架怎么读的"）都在盘上。
                 bad_result = {"problem": call.problem, "detail": _clip(call.detail, 600),
                               "raw_reply": _clip(call.text, 600)}
+                # 整条原文落盘（D40）：报错给了列号，而被剪掉的那一段才是证据。
+                dump = _dump_invalid_reply(self.workspace_root, self.sid, step, call.text or "")
+                if dump:
+                    bad_result["raw_reply_path"] = dump
                 run.steps.append(LoopStep(step, "invalid", {}, bad_result,
                                           problem=call.problem))
                 SS.append(self.session_root, {

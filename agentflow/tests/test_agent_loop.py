@@ -1010,3 +1010,18 @@ def test_a_broken_string_in_the_reply_gets_its_own_correction():
     drift = _bad_json_line(3, "judge_bad_json", "Expecting value: line 1 column 1")
     assert "不是形状漂移" not in drift, drift
     assert "只回一行 JSON" in drift, drift
+
+
+def test_an_invalid_reply_is_dumped_in_full_next_to_the_clipped_copy(tmp_path: pathlib.Path):
+    """判据（D40）：解析不出来的整条回复要落盘 —— 报错给了列号，而摘要把它剪掉了。
+
+    真机读数（T2 第 6/8/10 趟）：三次都死在"坏在第 1xxx 个字符"上，而
+    `raw_reply` 只留前 600 字 ⇒ 每次只能靠猜（这一次连猜了三趟）。
+    判据同时钉住两半：①原文逐字落盘；②返回的路径放进这一步的结果里（可回查）。
+    """
+    from agentflow.agent_loop import _dump_invalid_reply
+
+    text = '{"tool": "fs.write", "args": {"content": "' + "x" * 3000 + '"}} extra'
+    rel = _dump_invalid_reply(str(tmp_path), "t2x", 26, text)
+    assert rel == "out/invalid/t2x-step26.txt", rel
+    assert (tmp_path / rel).read_text(encoding="utf-8") == text

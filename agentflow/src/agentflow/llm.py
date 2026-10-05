@@ -777,6 +777,18 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
 
     last_error: Exception | None = None
     for candidate in candidates:
+        # 第一个完整对象后面还有东西（`Extra data: line 1 column N`）：真机读数
+        # （T2 第 10 趟 `p6l` 第 26 步）里模型把两个 JSON 对象连着写了 ——
+        # 意图毫无歧义（第一个就是这一步），而"丢掉整步"的代价是整条链停摆。
+        # 用标准库的 `raw_decode`：它只认第一个完整对象，剩下的不管。
+        head = candidate.lstrip()
+        if head.startswith("{"):
+            try:
+                obj, _end = json.JSONDecoder().raw_decode(head)
+            except ValueError:
+                obj = None
+            if isinstance(obj, dict):
+                return obj
         reps = [candidate, re.sub(r",\s*([}\]])", r"\1", candidate)]
         # 末尾多一个 `}`（最常见的坏 JSON）：只在"只差这一个字符"时才算数 ——
         # 去掉后必须能解析，否则不做任何修补。

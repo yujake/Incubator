@@ -1098,3 +1098,18 @@ def test_parse_llm_json_tolerates_an_unescaped_quote_inside_a_string():
     # 结构真的坏了仍然拒绝（这条修补不是"什么都能救"）
     with pytest.raises(ExtractionError):
         parse_llm_json('{"a": "x" "b": 2')
+
+
+def test_parse_llm_json_takes_the_first_complete_object_when_more_follows():
+    """真机撞到的第四种：第一个完整对象后面还跟着东西（`draft/39` §6.28 的 D40）。
+
+    真机读数（T2 第 10 趟 `p6l` 第 26 步）：报错是 `Extra data: line 1 column 2894`
+    —— 模型把两个 JSON 对象连着写了。意图毫无歧义（第一个就是这一步），
+    而"丢掉整步"的代价是整条链停摆：那一趟后 33 步全废、以 `bad_json_limit` 收工。
+    """
+    assert parse_llm_json('{"a": 1} {"b": 2}') == {"a": 1}
+    assert parse_llm_json('{"a": 1} 后面还有一句散文') == {"a": 1}
+    assert parse_llm_json('{"tool": {"name": "fs.read"}}  \n') == {"tool": {"name": "fs.read"}}
+    # 第一个对象自己就坏了时不许拿它糊弄（仍然拒绝）
+    with pytest.raises(ExtractionError):
+        parse_llm_json('{"a": } {"b": 2}')
