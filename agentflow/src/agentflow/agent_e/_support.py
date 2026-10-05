@@ -539,9 +539,22 @@ def _derive(
             # 不在这里兜底。脚本声称"证否"却给不出反例，说明它的输出与
             # 框架的证否语义不一致 —— 让 Experiment.validate() 抛出来。
             # 若在这里悄悄改成 inconclusive，这条不一致就永远不会被发现。
+            #
+            # `draft/39` §6.18（真机读数，p6g 那一趟 5 次）：这条拒信此前只说"不许"，
+            # 没说下一步怎么做 —— 而它是那一趟最常撞的一条（21 次被拒里 5 次）。
+            # 现在把"怎么改脚本"逐字写进拒信（含一条可直接抄的正例）：
+            # 拒信要能让人/模型当场改对，否则它只是一句"你错了"。
             raise ExperimentError(
                 "脚本给出 result='refutes' 却没有给出非空的 counterexample ⇒ "
-                "证否必须可复核（本题的证否不可复核，拒绝登记）"
+                "证否必须可复核（本题的证否不可复核，拒绝登记）。\n"
+                "改法（两条选一条）：\n"
+                "① 要证否就**把反例写出来** —— REPRO_RESULT 那一行里补上 counterexample 对象，"
+                "例如：\n"
+                '   REPRO_RESULT {"result": "refutes", "evidence_kind": "cross_check", '
+                '"observations": {"n": 14}, "counterexample": {"n": 14, "why": "该族在 n=14 不存在"}, '
+                '"negation_kind": "disproved"}\n'
+                "② 只是**没找到**（不是证否）⇒ 把 result 改成 \"inconclusive\"，"
+                "并把已经搜到哪写成 observations（那不是证否，也不许写成证否）"
             )
         return {
             "result": "refutes",
