@@ -355,3 +355,24 @@ def test_an_interjection_nobody_read_drives_a_next_step(tmp_path):
     send_interjection(ws, sender="用户", subject="叫停", body="正文", sid="t")
     report = SR.collect(st, ws)
     assert any("一次都没被读到" in s for s in report["next_steps"]), report["next_steps"]
+
+
+def test_the_role_that_has_the_tool_is_told_about_it():
+    """广告面判据：发到谁手里的动作，谁的 brief 里就要有它的用法。
+
+    真机读数（2026-10-05 T1 第 16 趟，89 步 / $1.528）：这个工具在第 78 个工具位上、
+    M 的门面里调得到，而提示词里一个字都没提 ⇒ 整趟一次都没被用过 ——
+    "工具在门面上、却不在广告面上，等于没有"是本项目反复踩的坑（`draft/39` §6.22）。
+
+    负控那一半同样重要：这个工具只发给 M（`roles=("M",)`），别把它的用法撒给别的角色
+    —— 撒出去就变成"人人都去写状态报告"，而那正是 §4 要避免的第二种毛病。
+    """
+    from agentflow import agent_prompts as AP
+
+    def _text(role: str) -> str:
+        brief = AP.ROLE_BRIEFS[role]
+        return "\n".join([brief.duty, brief.deliverable, *brief.policy])
+
+    assert "conductor.status_report" in _text("M"), _text("M")
+    others = [r for r in AP.ROLE_BRIEFS if r != "M" and "conductor.status_report" in _text(r)]
+    assert not others, f"这个工具只发给 M，不该出现在别的角色的 brief 里：{others}"

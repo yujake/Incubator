@@ -146,6 +146,43 @@ def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
     AP2.toolchain_facts_text.cache_clear()
 
 
+def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """判据：Mathlib 可用时，那一行必须说"显式传 `['Mathlib']`"，而不是叫你去写自足文件。
+
+    真机读数（2026-10-05 T1 第 16 趟）：这一行在 Mathlib 可用时仍然写死
+    "`check_formal` 可达的写法是不 import Mathlib 的自足文件" —— 它与上面一行的现算读数
+    直接打架，而模型信了它：`experiments` 里 8 次 formal 全是
+    `imports=（默认：不注入任何库）`、全部 `compile_error`（检查器原话
+    `failed to synthesize instance`），一条 proof 行都没落成。
+    负控：读数说没装时，"自足文件"那句必须还在 —— 那一支的处置本来就该是它。
+    """
+    from agentflow import agent_prompts as AP2
+    from agentflow import toolchain as TC
+
+    probe = {"checked": True, "available": [{"name": "lean", "version": "4.7.0"}],
+             "available_names": ["lean"], "probe_errors": [], "reason": "探测到 1 个",
+             "looked_in": [], "sources": {"lean": "explicit_dir"}}
+    monkeypatch.setattr(TC, "probe_checkers", lambda **kw: probe)
+    monkeypatch.setattr(TC, "mathlib_state",
+                        lambda *a, **k: {"checked": True, "root": "R",
+                                         "umbrella_olean": "R/Mathlib.olean",
+                                         "import_mathlib": "可用"})
+    AP2.toolchain_facts_text.cache_clear()
+    text = AP2.toolchain_facts_text()
+    assert "'Mathlib'" in text and "imports" in text and "failed to synthesize instance" in text, text
+    assert "不 import Mathlib 的自足文件" not in text, text
+
+    monkeypatch.setattr(TC, "mathlib_state",
+                        lambda *a, **k: {"checked": True, "root": "",
+                                         "reason": "没找到 Mathlib 工程根"})
+    AP2.toolchain_facts_text.cache_clear()
+    text = AP2.toolchain_facts_text()
+    assert "不 import Mathlib 的自足文件" in text, text
+    AP2.toolchain_facts_text.cache_clear()
+
+
 def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
     """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
 

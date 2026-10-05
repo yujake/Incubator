@@ -731,7 +731,11 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "要用 Mathlib 得显式传 `imports: ['Mathlib']`、或把它写进源码，"
             "别指望工具替你加一行（那会让「被检查的源码」与盘上那份不是同一份）；"
             "而**这台机器上 Mathlib 到底能不能用看上面 TOOLCHAIN_FACTS 那一段的现算读数** —— "
-            "读数说没装就别在源码里 import 它（那会落 `import_unavailable`，是「没查成」），"
+            "读数说**可用**就把 `'Mathlib'` 传进去（真机读数 2026-10-05 T1 第 16 趟：没传 ⇒ 4 次 "
+            "formal 全部编译失败，检查器原话 `failed to synthesize instance` / "
+            "`omega did not find a contradiction`，一条 proof 行都没落成 —— 那是**缺库**，"
+            "不是「命题不成立」，别据它改结论）；读数说没装就别在源码里 import 它"
+            "（那会落 `import_unavailable`，是「没查成」），"
             "改写不依赖 Mathlib 的自足文件。"
             "声明名会自动认：源码里恰好一条具名声明就用它；0 条或多条要显式给 `checker_name`"
             "（不给就报「取不到唯一那条」并列出候选名 —— 以前是拿文件名词干顶替，"
@@ -910,6 +914,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "截断在字符串中间，连续三次坏 JSON 就整趟作废（`bad_json_limit`）。"
             "逐字定位、只改该改的，并在交付说明里写清「改了哪几处、每处的依据」。"
             "**不许**借这把手重写整篇论文。",
+            "**用户问「现在什么情况」时用 `conductor.status_report`**（`draft/39` §4 的入口②）："
+            "它只读收集当前情况（产出 / 交接 / 在飞卡点 / 被拒与插话），把报告落到 "
+            "`out/review/STATUS-<时刻>.{md,json}`，四类读数原样回给你；"
+            "它**不发 ask_user、不停任何人的循环** —— 与「派人去问一遍」是两条相反的路，"
+            "所以别拿反复侦察代替它。真机读数（2026-10-05 T1 第 16 趟）：这个工具在第 78 个"
+            "工具位上，而**提示词里一个字都没提** ⇒ 89 步里它一次都没被用过 —— "
+            "工具在门面上、却不在广告面上，等于没有。",
             "步数预算有限，**留出最后几步**给交付说明与收工门自检：真机实测有一趟把 30 步"
             "全花在正文上，报告一个字都没写出来，于是机器判据里的报告形状与诚实性两格"
             "只能是 unknown —— 那不是「没过」，是「没交」。",
@@ -1316,8 +1327,22 @@ def toolchain_facts_text() -> str:
     else:
         lines.append(f"- Mathlib：工程根 {mathlib['root']}；`import Mathlib` "
                      f"{mathlib.get('import_mathlib')}")
-    lines.append("- 由上一条推得（推论，不是探针读数）：`check_formal` 可达的写法是"
-                 "不 import Mathlib 的自足文件；把库编出来是另一条路（机器级决定）")
+    if mathlib.get("umbrella_olean"):
+        # 这一支是 2026-10-05 补的（T1 第 16 趟的真机读数）：此前无论是哪一支，
+        # 最后一行都写死"可达的写法是不 import Mathlib 的自足文件" —— 在 Mathlib
+        # 可用的机器上，这句话与上面一行的现算读数互相打架，而模型信了它：
+        # 8 次 formal 全部 `imports=（默认：不注入任何库）`，检查器的原话是
+        # `failed to synthesize instance` / `omega did not find a contradiction`
+        # （缺库的两种典型原话），一条 proof 行都没落成。
+        lines.append("- 由上一条推得（推论，不是探针读数）：要用 Mathlib 就在这次检查的 "
+                     "`imports` 里**显式传** `['Mathlib']`（或让源码自己 "
+                     "`import Mathlib`）—— 不传时检查器只有 Lean 核心，库里的实例与引理"
+                     "都不在，真机读数是 `failed to synthesize instance` 或"
+                     " `omega did not find a contradiction` 这类原话（**那是写法缺库，"
+                     "不是命题不成立**；据它改结论就是把「没查成」读成了「不成立」）")
+    else:
+        lines.append("- 由上一条推得（推论，不是探针读数）：`check_formal` 可达的写法是"
+                     "不 import Mathlib 的自足文件；把库编出来是另一条路（机器级决定）")
     return "\n".join(lines)
 
 

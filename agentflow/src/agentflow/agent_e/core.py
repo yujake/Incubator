@@ -13,6 +13,45 @@ from .list_experiments import _ListExperiments
 from .run_script_experiment import _RunScriptExperiment
 
 
+def _mathlib_remedy_note(status: str, imports: "Sequence[str] | None", path: Path) -> str:
+    """这一次 formal 失败能不能被「忘了传 Mathlib」解释？能就明说（现算，不猜）。
+
+    真机读数（2026-10-05 T1 第 16 趟）：4 次 formal 全部
+    `imports=（默认：不注入任何库）`，检查器原话 `failed to synthesize instance` /
+    `omega did not find a contradiction` ⇒ 全是 `compile_error`，一条 proof 行都没落成（`P8`）。
+    提示词那一侧同批改成"读数说可用就把它传进去"，但读数这一侧也要说：
+    一句话能省掉的 4 次重复尝试，不该指望模型记得住第 30 步之前读过的政策。
+
+    只在三个条件同时成立时说（否则就是替检查器编一个原因）：
+    ① 检查器状态是 `compile_error`（`uses_sorry` / `decl_mismatch` / 超时都与缺库无关）；
+    ② 本机 Mathlib 现算可用；
+    ③ 这一次确实没有要它（`imports` 里没有、源码里也没有 `import Mathlib`）。
+    """
+    if status != "compile_error":
+        return ""
+    if imports and any(str(x).strip().lower() == "mathlib" for x in imports):
+        return ""
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        source = ""
+    if "import mathlib" in source.lower():
+        return ""
+    try:
+        from ..toolchain import mathlib_state
+
+        state = mathlib_state()
+    except Exception:  # noqa: BLE001 —— 读数读不到就什么都不说，不替检查器编原因
+        return ""
+    if not state.get("umbrella_olean"):
+        return ""
+    return ("[formal] 处置读数（框架现算，不是猜）：本机 Mathlib **可用**，而这一次没有把它"
+            "传进去（`imports` 里没有 `Mathlib`，源码里也没有 `import Mathlib`）—— "
+            "缺库时库里的实例与引理都不在，`failed to synthesize instance` / "
+            "`omega did not find a contradiction` 这类原话就是这么来的。"
+            "**把 `['Mathlib']` 传进 `imports` 再试一次**，不要拿这一次的失败改结论。")
+
+
 class _Core:
     def __init__(
         self,
@@ -336,6 +375,9 @@ class _Core:
             )
             if output:
                 notes.append(f"[formal] 检查器原始输出：{_digest(output, 400)}")
+            remedy = _mathlib_remedy_note(status, imports, path)
+            if remedy:
+                notes.append(remedy)
 
         derived: dict[str, Any] = {
             "result": "supports" if verified else "inconclusive",

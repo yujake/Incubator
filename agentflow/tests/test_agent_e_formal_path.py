@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import formalgw as FG
+from agentflow import toolchain as TC
 from agentflow.agent_e import AgentE, ExperimentError
 from agentflow.store import Store
 from agentflow.tools import verify_tools as VT
@@ -261,6 +262,61 @@ def test_a_failed_check_is_never_registered_as_proof(
     assert row["observations"]["verifier_status"] == status, "检查器原样报的状态必须可读"
     ev = make_e(store).evidence_for(f"k-{status}")
     assert ev["proved"] is False
+
+
+def test_a_compile_error_without_mathlib_says_the_one_thing_to_change(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """正控：本机 Mathlib 可用而这一次没传 ⇒ 读数里必须给出那一步（只改一处就能重试）。
+
+    真机读数（2026-10-05 T1 第 16 趟）：4 次 formal 全是
+    `imports=（默认：不注入任何库）` + `compile_error`，检查器原话
+    `failed to synthesize instance` / `omega did not find a contradiction`；
+    当时提示词那一侧还有一句写死的错话（"可达的写法是不 import Mathlib 的自足文件"），
+    于是模型连试 4 次、每次都换一种"不依赖库"的写法，`experiments` 里一条 proof 行都没落成。
+    这一条守的是读数侧：框架知道库在、也知道这一次没传，就该把那一句话说出来。
+    """
+    monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
+    monkeypatch.setattr(FG, "check_lean",
+                        _checker_stub(status="compile_error",
+                                      stderr="failed to synthesize instance"))
+    monkeypatch.setattr(TC, "mathlib_state",
+                        lambda *a, **k: {"checked": True, "root": "R",
+                                         "umbrella_olean": "R/Mathlib.olean",
+                                         "import_mathlib": "可用"})
+    write_lean(store, "proofs/needs_lib.lean")
+    out = make_e(store).run_experiment("缺库的命题", "k-needs-lib", "proofs/needs_lib.lean",
+                                       method="formal")
+    assert out["evidence_kind"] == "heuristic", out
+    assert "把 `['Mathlib']` 传进 `imports` 再试一次" in out["notes"], out["notes"]
+
+
+@pytest.mark.parametrize("case", ["already_asked", "source_imports_it", "no_mathlib",
+                                  "not_a_compile_error"])
+def test_no_remedy_note_when_mathlib_is_not_the_missing_piece(
+    store: Store, monkeypatch: pytest.MonkeyPatch, case: str
+):
+    """负控：四种"不是缺库"的形态下，读数不许出现那条处置建议。
+
+    编一个原因比不说话更坏：`uses_sorry` / `decl_mismatch` 与库无关，
+    已经传了 `Mathlib` 的、源码自己 import 了的、以及这台机器根本没装库的，
+    都不该收到"把 Mathlib 传进去再试一次"这句话。
+    """
+    monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
+    status = "uses_sorry" if case == "not_a_compile_error" else "compile_error"
+    monkeypatch.setattr(FG, "check_lean", _checker_stub(status=status, stderr="boom"))
+    body = ("import Mathlib\ntheorem t : True := trivial\n"
+            if case == "source_imports_it" else _LEAN_SRC)
+    write_lean(store, "proofs/maybe.lean", body)
+    state = ({"checked": True, "root": "", "reason": "没找到 Mathlib 工程根"}
+             if case == "no_mathlib" else
+             {"checked": True, "root": "R", "umbrella_olean": "R/Mathlib.olean",
+              "import_mathlib": "可用"})
+    monkeypatch.setattr(TC, "mathlib_state", lambda *a, **k: state)
+    imports = ("Mathlib",) if case == "already_asked" else None
+    out = make_e(store).run_experiment("别的失败", f"k-{case}", "proofs/maybe.lean",
+                                       method="formal", imports=imports)
+    assert "把 `['Mathlib']` 传进 `imports` 再试一次" not in out["notes"], out["notes"]
 
 
 @pytest.mark.parametrize("status", ["timeout", "import_unavailable", "no_backend", "tool_crashed"])
