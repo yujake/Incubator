@@ -349,8 +349,48 @@ def kill_tree(pid: int, *, timeout: float = 60) -> dict[str, Any]:
             "detail": (done.stdout or done.stderr or "").strip()[:300]}
 
 
+def _kill_via_job(pid: int) -> dict[str, Any]:
+    """把这条登记进程放进一个临时作业对象、宽限一小会儿、然后收掉整棵树。
+
+    为什么能对"已经跑起来的进程"用：作业对象允许事后 `AssignProcessToJobObject`
+    （只要它还没在别的作业里）。于是 `agentflow stop --force` 不必知道进程是怎么起的
+    —— 它只需要 pid，剩下交给 OS。
+
+    返回与 `kill_tree` 同形的读数（`killed`/`via`/`detail`）；用不了作业对象时
+    `killed=False` + `via=""`（调用方照旧退回 `taskkill`）。
+    """
+    from . import jobobject as JB
+
+    if not JB.available():
+        return {"pid": int(pid), "killed": False, "via": "",
+                "detail": f"作业对象用不了：{JB.unavailable_reason()}"}
+    try:
+        job = JB.create_job(f"agentflow-stop-{int(pid)}")
+    except JB.JobObjectUnavailable as exc:
+        return {"pid": int(pid), "killed": False, "via": "", "detail": str(exc)}
+    try:
+        # 作业归属不向前追溯（E14 实测）：只 assign 根，不会把它此前已经生出来的
+        # 子进程带进来 ⇒ 必须把现有后代逐个也放进去（新生的才自动继承）。
+        placed = JB.assign_tree(job, int(pid))
+        if not placed.get("assigned"):
+            return {"pid": int(pid), "killed": False, "via": "job",
+                    "detail": "AssignProcessToJobObject 失败（可能它已在别的作业里）"}
+        got = JB.grace_then_kill(job, grace_sec=1.5, poll_sec=0.2)
+        return {"pid": int(pid), "killed": bool(got.get("killed")) or not alive(int(pid)),
+                "via": "job",
+                "detail": (f"作业对象：{got.get('note')}；放进作业的 {placed['assigned']}"
+                           + (f"（没放进去的 {placed['failed']}）" if placed.get("failed") else "")
+                           + f"；宽限结束时还挂着 {got.get('stragglers')}；"
+                             f"收尾后 left={got.get('left')}")}
+    finally:
+        try:
+            JB.close(job)
+        except Exception:  # noqa: BLE001 —— 关句柄失败不该带走调用方
+            pass
+
+
 def kill_registered(root: str | Path, *, role: str = "",
-                    exclude_pid: int | None = None) -> dict[str, Any]:
+                    exclude_pid: int | None = None, prefer_job: bool = True) -> dict[str, Any]:
     """把登记在盘上、还活着的进程「连子孙一起」杀掉，并清掉登记文件。
 
     `exclude_pid`：M 在「自己这一趟里」调强制停止时要把自己排除掉 ——
@@ -358,6 +398,11 @@ def kill_registered(root: str | Path, *, role: str = "",
     调用方（M 自己）随后由步循环的停机判据收工（停机开关里 `force=true` ⇒
     `stop_reason="force_stop"`）；「外部」的 `agentflow stop --force` 不给 `exclude_pid`，
     于是连父进程一起杀 —— 那正是"直接杀掉"的语义。
+
+    `prefer_job=True`（缺省）时优先走作业对象（`draft/39` §3.21 五 I13）：受限环境里
+    `taskkill /T /F` 会被拒（实测 `Access denied`），而"把进程放进作业对象再关句柄"
+    由 OS 收掉整棵传递树 —— 不依赖那条命令能不能成功。作业对象这条路不通时照旧
+    退回 `taskkill`（并在结果里记 `via`），所以这条改动只增不减。
     """
     victims = [v for v in live_pids(root, role=role)
                if exclude_pid is None or int(v["pid"]) != int(exclude_pid)]
@@ -365,7 +410,20 @@ def kill_registered(root: str | Path, *, role: str = "",
     kept: list[int] = []
     for v in victims:
         pid = int(v["pid"])
-        got = kill_tree(pid)
+        # 自己的 pid 不走作业对象那一路（`draft/39` §6.12 的实测教训）：
+        # 把**自己**放进作业再关句柄，会把调用者连同它的返回值、台账、续跑简报一起收掉
+        # —— 而"要不要把自己排除"本来就是调用方的显式决定（`exclude_pid`）。
+        # 于是 pid == 本进程时只用 `taskkill` 那条退路（成败照实报，登记该留就留）。
+        use_job = prefer_job and pid != os.getpid()
+        got = _kill_via_job(pid) if use_job else {"pid": pid, "killed": False, "via": ""}
+        if not bool(got.get("killed")):
+            fallback = kill_tree(pid)
+            if got.get("via"):
+                # 作业对象那条路没成：把两条路的结果都留下（"为什么没杀掉"要能复核）
+                fallback = dict(fallback)
+                fallback["job_attempt"] = got
+                fallback["via"] = str(fallback.get("via") or "")
+            got = fallback
         results.append(got)
         # 只有"确实杀掉了"或"它本来就死了"才注销登记。
         #

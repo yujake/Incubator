@@ -2204,6 +2204,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                       "`counterexample_request`/`dead_end`，**没有 `no_change`**）、策略工具箱（9 招）、\n"
                       "#5 的两条合法出口、I9 花钱前闸门、I11 缺陷继承、I16 超预算 `too_large`"
                       "（`draft/39` §3.16/§3.19）",
+    # `draft/39` §3.21 五 I13（2026-10-05）：进程树治理 —— D03 的根因修法。
+    # 它不是对拍副本：作业对象的建/放/收（KILL_ON_JOB_CLOSE）、后代枚举（Toolhelp 快照）、
+    # 宽限后强杀只有这一份实现；`stopctl` 的强制停止优先走它。
+    "jobobject.py": "进程树治理：Windows 作业对象（`KILL_ON_JOB_CLOSE`）—— assign/assign_tree/\n"
+                     "grace_then_kill/reap/close；后代枚举走 Toolhelp 快照（不依赖 `wmic`）。\n"
+                     "为什么需要它：受限环境里 `taskkill /T /F` 与 `os.kill` 都会被拒，\n"
+                     "而\"最后一个句柄一关，OS 收掉整棵传递树\"不依赖任何外部命令",
     "sessions.py": "按项目存放的会话记录：`<项目根>/sessions/<会话号>.jsonl`（学 harness 的按工作区存放；`draft/28` §155）",
     "artifacts.py": "产物归属登记：`<工作区根>/ARTIFACTS.jsonl`，回答\"谁在哪个路径产出了什么\"（`R-52` 余；`draft/28` §166）",
     "canonical.py": "规范 JSON 字节串的唯一实现：稿件内容哈希与回执哈希共用的那一份口径（`R-33`；`draft/28` §169/§172）",
