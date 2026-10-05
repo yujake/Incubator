@@ -110,6 +110,7 @@
 > `python -m agentflow.agent_a` 的自检入口在同目录的 `agent_a/__main__.py`。
 | `agents` 的公共零件：`claimanatomy.py` | 断言解剖学 —— `documents.claims` 每个元素的唯一判据来源 |
 | `claims.py` | 原子断言拆分（把一段答复切成可逐条回验的断言） |
+| `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |
 | `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句） |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据 |
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
