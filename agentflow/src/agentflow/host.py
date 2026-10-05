@@ -419,6 +419,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                         workspace_root: str | Path | None = None,
                         seam_factory: Any = None,
                         semantic_review: bool = False,
+                        attack_reasoning: bool = False,
                         stop_file: str | Path | None = None) -> dict[str, Any]:
     """建一个"模型驱动"的主控，返回 `{conductor, backend, registry, loops}`。
 
@@ -466,11 +467,35 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                                                              usd_budget=usd_budget,
                                                              meter=TokenMeter(
                                                                  store, budget_usd=usd_budget))))("H")
-    notes: list[str] = []
+    # F 的攻坚推理（`draft/39` §6.32 的 D42b）：与 H 的语义判据同一条纪律 ——
+    # 默认关，环境里有 key 也不改变确定性行为；打开时 F 才拿得到一个按角色造的缝。
+    #
+    # 为什么必须显式打开：真机读数（T2 第 12 趟 `p6n`）里 `attack_plans.history` 那一条
+    # 逐字写着"本框架尚未接线自动推理" —— 因为这条真机路径上 `llm_by_role` 只登记了 H，
+    # F 的 `llm` 是 None（`specs/f.py::_build` 把 `d.llm` 原样传下去，而 d.llm 就是 None）。
+    # D42 把"有缝就推理"那一支修好了，但缝从来没到过 F 手上；这一处才是真机那一句的根因。
+    f_llm = None
+    if attack_reasoning:
+        from .llmseam import LlmSeam as _SeamF
+
+        f_llm = (seam_factory or (lambda role: _SeamF.for_role(role, session_root=root, sid=eff_sid,
+                                                              usd_budget=usd_budget,
+                                                              meter=TokenMeter(
+                                                                  store, budget_usd=usd_budget))))("F")
+        notes_attack = "F 的攻坚推理：接线（`--attack-reasoning`）"
+    else:
+        notes_attack = ("F 的攻坚推理：未接线（默认确定性）⇒ `attack.step` 只会落 "
+                        "`dead_end(缺工具)`；要真推一轮就加 `--attack-reasoning`")
+    notes: list[str] = [notes_attack]
+    role_llm: dict[str, Any] = {}
+    if h_llm is not None:
+        role_llm["H"] = h_llm
+    if f_llm is not None:
+        role_llm["F"] = f_llm
     role_reg = build_role_registry(store, providers=providers, extractor=extractor,
                                    notes=notes,
                                    config=config, workspace_root=workspace_root,
-                                   llm_by_role=({"H": h_llm} if h_llm is not None else None))
+                                   llm_by_role=(role_llm or None))
     table = dict(loops or {})
     conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
     # 画像文件（`draft/37` §109，用户口径）：M 要看到所有人的简介，其它角色看可协作的

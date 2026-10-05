@@ -200,6 +200,37 @@ def test_default_llm_is_none_and_build_time_never_calls_it(tmp_path: Path):
     assert type(b_none.extractor).__name__ == "RuleExtractor"
 
 
+def test_attack_reasoning_is_opt_in_and_the_default_stays_deterministic(tmp_path: Path):
+    """判据（`draft/39` §6.32 的 D42b）：F 的攻坚推理是显式接线，默认仍确定性。
+
+    真机读数（T2 第 12 趟 `projects/p6n-research-from-zero`）：D42 把"有缝就推理"那一支
+    修好了，可 `attack_plans.history` 那一条依旧逐字写着"本框架尚未接线自动推理" ——
+    因为这条路径上 `llm_by_role` 只登记了 H，`specs/f.py::_build` 拿到的 `d.llm` 是 None。
+    缝从来没到过 F 手上，那才是真机那一句的根因。
+
+    两半都要钉：打开时 F 拿得到缝（否则能力还是够不着）；关着时 F 仍是 None 且装配读数
+    如实说"未接线"（不能为了让它能跑，就把"默认确定性"这条纪律悄悄改掉）。
+    """
+    st = _store(tmp_path)
+    seam = _FakeLLM()
+
+    off = host.wired_llm_conductor(st, session_root=tmp_path, sid="t-off", max_steps=1,
+                                   workspace_root=tmp_path, attack_reasoning=False)
+    notes_off = " ".join(str(x) for x in off["notes"])
+    assert "F 的攻坚推理：未接线" in notes_off, notes_off
+    reg_off = host.build_role_registry(st, providers=[object()])
+    assert reg_off["F"][1](store=st).llm is None, "默认档下 F 不该拿到缝"
+
+    on = host.wired_llm_conductor(st, session_root=tmp_path, sid="t-on", max_steps=1,
+                                  workspace_root=tmp_path, attack_reasoning=True,
+                                  seam_factory=lambda role: seam)
+    notes_on = " ".join(str(x) for x in on["notes"])
+    assert "F 的攻坚推理：接线" in notes_on, notes_on
+    reg_on = host.build_role_registry(st, providers=[object()], llm_by_role={"F": seam})
+    f = reg_on["F"][1](store=st)
+    assert f.llm is seam, "打开 --attack-reasoning 之后 F 必须真的拿到那个缝"
+
+
 def test_factory_uses_the_store_it_is_given(tmp_path: Path):
     """负控（注入）：工厂必须用传进来的 store —— 捕获外层 store 会静默写错库。"""
     st1 = _store(tmp_path, "one")

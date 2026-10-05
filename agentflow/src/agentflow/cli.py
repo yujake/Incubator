@@ -1558,6 +1558,7 @@ def cmd_run_agent(args) -> int:
                                    workspace_root=str(root), seam_factory=seam_for,
                                    providers=providers, config=cfg, policy=pol,
                                    semantic_review=bool(getattr(args, "semantic_review", False)),
+                                   attack_reasoning=bool(getattr(args, "attack_reasoning", False)),
                                    stop_file=(None if multi_round
                                               else getattr(args, "stop_file", None)))
     if not providers:
@@ -2315,6 +2316,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "改用「确定性动作 + 同角色多实例并发」（`conductor.summon_many`）")
     sp.add_argument("--semantic-review", action="store_true",
                     help="给 H 接上语义判据（「结论是否强于引文」）；不写则那一格如实报「没查」")
+    sp.add_argument("--attack-reasoning", action="store_true",
+                    help="给 F 接上攻坚推理（`attack.step` 真的推一轮：归约/论证/实验请求/死路）；"
+                         "不写则 F 的 step 只会落 `dead_end(缺工具)` 并如实说「未接线」"
+                         "（与 `--semantic-review` 同一条纪律：默认确定性，环境里有 key 也不改行为）")
     sp.add_argument("--provider", default=None,
                     help="A 的检索后端，逗号分隔（openalex/crossref/doaj/europepmc/fixture）；"
                          "缺省按配置 `agent_a.providers`，再缺省 openalex —— 与 `run-a` 同口径。"
