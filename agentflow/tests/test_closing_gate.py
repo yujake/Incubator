@@ -1190,3 +1190,42 @@ def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
     assert chain["groups"]["算或造"] == ["reviewed_proof_rows"], chain
     assert chain["missing"] == [], chain
 
+
+def test_an_unreadable_leg_leaves_a_reason_in_the_reading_not_a_null(tmp_path: pathlib.Path):
+    """判据（`draft/39` §6.25 的 D35）：一档读不出来时，读数里必须带上"为什么"。
+
+    真机读数（T2 第 7 趟 `projects/p6i-research-from-zero`）：验收表 P1 用了
+    `manuscript_edited`，而从零工作区没有只读基线 `source/` ⇒ 那一行的读数算不出来
+    ⇒ 整格 `unknown`；而这一格当时只 push 了一条 `Finding`，`readings["acceptance"]`
+    留在 `None` 上 —— 交付面（报告、离线复算脚本、状态报告）看到的就是一个没有理由的空格。
+    三态纪律要的是"没查成"本身可读：哪一行、哪一档、为什么、该换什么。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "正文改动", "kind": "manuscript_edited", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    reading = rep.readings["acceptance"]
+    assert isinstance(reading, dict), reading
+    assert reading["code"] == "acceptance_leg_unreadable", reading
+    assert reading["detail"], reading
+    assert "source" in reading["detail"], reading
+    assert [f.code for f in rep.findings if f.code.startswith("acceptance")] == \
+        ["acceptance_leg_unreadable"], rep.to_dict()
+
+
+def test_a_self_invented_kind_says_it_takes_the_whole_table_down(tmp_path: pathlib.Path):
+    """判据（D35 的另一半）：自造 `kind` 不只废那一行 —— 读数要说清"整张表都没查成"。"""
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "我编的档", "kind": "render_anchor_consistent", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    reading = rep.readings["acceptance"]
+    assert reading["code"] == "acceptance_unknown_kind", reading
+    assert "整张表" in reading["detail"], reading
+

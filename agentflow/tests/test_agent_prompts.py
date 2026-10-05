@@ -183,6 +183,40 @@ def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
     AP2.toolchain_facts_text.cache_clear()
 
 
+def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind():
+    """广告面判据（D35）：写表的人必须拿到受控词表的逐字清单。
+
+    真机读数（T2 第 7 趟 `projects/p6i-research-from-zero`）：M 的验收表 P1 用了
+    `manuscript_edited`，而那个从零工作区没有只读基线 `source/` ⇒ 那一行的读数算不出来
+    ⇒ 整张表判没查成、`can_close=false`（七格里唯一红的那格其实是 `anchor`，而
+    `acceptance` 连读数都没留下）。词表不在 brief 里时，写表就是猜；猜错一个名字废掉的是
+    整张表，不是那一行 —— 所以这一条按"词表里每一档都要在 brief 里出现"来守。
+    """
+    from agentflow import agent_prompts as AP
+    from agentflow import closing as CL
+
+    brief = AP.ROLE_BRIEFS["M"]
+    text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
+    missing = [k for k in CL.LEG_CHECK_KINDS if k not in text]
+    assert not missing, f"这些受控档没进写表那个角色的 brief：{missing}"
+
+
+def test_the_research_brief_sends_conjectures_to_the_attack_role():
+    """广告面判据（D33）：研究型任务里"猜想交给 F 攻坚"必须明说。
+
+    真机读数（T2 第 7 趟）：7 条可检验猜想、5 条实验、1 份稿件，而 `attack_plans` 0 行
+    —— M 的 brief 此前一个字都没提 F / 攻坚 / attack，于是"提了猜想没人攻"；
+    而 F 那一侧 §138 加的纪律全在，问题只在没人派它。
+    """
+    from agentflow import agent_prompts as AP
+
+    brief = AP.ROLE_BRIEFS["M"]
+    text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
+    assert "F.create_plan" in text and "attack_plans" in text, text
+    assert "plan_progress_rows" in text, text
+    assert "不是论文包" in text, "研究型任务的交付物口径也要写清（D34）"
+
+
 def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
     """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
 

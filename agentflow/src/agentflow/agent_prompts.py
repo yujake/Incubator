@@ -1012,6 +1012,31 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "如实写 0 ⇒ 那一行自己不成立（也红，但红得精确：报告里就留下一条"
             "「这一轮没有提出可检验的猜想」的读数，那句实话比一个空着的环节值钱）。"
             "写表这一步不是文书：它是你把「这一趟到底走到哪一步」摆到台面上的地方。",
+            "**受控档位逐字列在这里**（`kind` 只能从这一串里挑；**自造名字或用一个不认识的档"
+            "⇒ 整张表判「没查成」，不是只废那一行**）：`quote_verified_rows` / "
+            "`proof_experiment_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
+            "`manuscript_edited` / `citation_records_vs_bibitems` / `retrieval_attempts` / "
+            "`research_question_rows` / `analysis_report_rows` / `report_files` / "
+            "`attack_plan_rows` / `numeric_experiment_rows` / `document_literature_citations` / "
+            "`claims_supported_by_their_evidence` / `supported_claims` / `conjecture_rows` / "
+            "`statement_rows` / `plan_progress_rows` / `counterexample_or_proof_rows` / "
+            "`search_frontier_rows` / `enumeration_optimization_rows` / `manuscript_rows`。"
+            "其中 `manuscript_edited` 与 `citation_records_vs_bibitems` 要**只读基线 `source/`**"
+            "（那是有论文包的审阅型工作区才有的东西）—— 从零研究的工作区里用它们 ⇒ 那一行"
+            "算不出来 ⇒ 整张表没查成（真机读数 2026-10-05 T2 第 7 趟：P1 用了 "
+            "`manuscript_edited`，而工作区里没有 `source/` ⇒ 整格丢成 unknown）。",
+            "**猜想要交给 F 攻坚**（研究型任务的「价值」就在这一跳）：`D.register_conjecture` 之后"
+            "要派 `F.create_plan` 与 `F.attack.step`，并把 `attack_plans` 里 `history` 非空的推进"
+            "写进验收表（`plan_progress_rows` / `attack_plan_rows` 那一档）。"
+            "验收表里「问题 + 猜想 + 实验 + 稿件」齐了、却没有 F 的推进 ⇒ 那一环还是空的："
+            "真机读数（T2 第 7 趟）：7 条可检验猜想、5 条实验、1 份稿件，而 `attack_plans` **0 行** "
+            "—— 猜想一条都没被攻过。",
+            "**研究型任务的交付物是手稿与说明，不是论文包**：写 `documents` + `out/review/REPORT.md` "
+            "就够了；不要为了让交付「像论文」去派 `G.paper_package` —— 一旦建了论文包，锚这一格"
+            "就按「有包」来判（要 0 漂移、要 `main.pdf` 由本轮源码编出），而在从零工作区里渲染/编译"
+            "脚本都要现写、`pdflatex` 也未必编得过（真机读数 T2 第 7 趟：4 次 `paper_package`、"
+            "最终 `verdict=drifted`、`exit_code=3221226505`、`no_pdf_produced` ⇒ `anchor=fail`；"
+            "**不建包时这一格是不适用，判 pass**）。论文包是「把成果整理成论文」那一类任务的活。",
             # `draft/37` §134 + §140：交接手稿——把它从"协议一节"升级成主控的纪律。
             "**交接工作前先写一份手稿**（`handoff` 形状）：给一个人写 `to=A–H`、"
             "给所有人写 `to=ALL`；编号由脚本分配（从 0000 起，你不编号），"

@@ -672,6 +672,22 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
     raise ValueError(f"没有这一档验收行：{kind!r}（受控词表：{tuple(LEG_CHECK_KINDS)}）")
 
 
+def _acceptance_unknown(rep: ClosingReport, code: str, detail: str, *,
+                        checks_file: str = "") -> None:
+    """把「验收表没查成」同时写成 finding 与读数（`draft/39` §6.25 的 D35）。
+
+    为什么读数不能缺：这一格原先只 push 一条 `Finding`，`readings["acceptance"]` 留在
+    `None` 上 —— 于是"为什么没查成"在交付面（报告 / 我的离线复算 / 状态报告）里只剩一个
+    `null`，而三态纪律要的是"没查成"本身可读。真机读数（T2 第 7 趟 `p6i`）：验收表 P1 用了
+    `manuscript_edited`，而这个从零工作区没有只读基线 `source/` ⇒ 那一行抛错 ⇒ 整格
+    `unknown` + 读数 `null`，我离线复算时看到的就是一个没有理由的空格。
+    """
+    rep.status["acceptance"] = "unknown"
+    rep.readings["acceptance"] = {"status": "unknown", "code": code, "detail": detail,
+                                  "checks_file": checks_file}
+    rep.findings.append(Finding("acceptance", code, "warning", detail))
+
+
 def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """验收表的机器可判行（`draft/37` §94）：逐行现算，任一不满足 ⇒ `fail`。
 
@@ -720,21 +736,18 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         if not isinstance(rows, list):
             raise ValueError("顶层必须是数组，或 {'checks': [...]}")
     except Exception as exc:  # noqa: BLE001 —— 读不懂就说读不懂（unknown 不是 pass）
-        rep.status["acceptance"] = "unknown"
-        rep.findings.append(Finding(
-            "acceptance", "acceptance_unreadable", "warning",
-            f"机器可判的验收行读不出来（{path}：{type(exc).__name__}: {exc}）⇒ 没查成",
-        ))
+        _acceptance_unknown(rep, "acceptance_unreadable",
+                            f"机器可判的验收行读不出来（{path}：{type(exc).__name__}: {exc}）"
+                            f"⇒ 没查成", checks_file=str(path))
         return
 
     out: list[dict[str, Any]] = []
     unmet: list[str] = []
     for row in rows:
         if not isinstance(row, dict):
-            rep.status["acceptance"] = "unknown"
-            rep.findings.append(Finding(
-                "acceptance", "acceptance_unreadable", "warning",
-                f"验收行必须是对象，收到了 {type(row).__name__} ⇒ 没查成"))
+            _acceptance_unknown(rep, "acceptance_unreadable",
+                                f"验收行必须是对象，收到了 {type(row).__name__} ⇒ 没查成",
+                                checks_file=str(path))
             return
         cid = str(row.get("id") or "")
         kind = str(row.get("kind") or "")
@@ -742,20 +755,24 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         note = str(row.get("note") or "")
         want_min = int(row.get("min") or 0)     # 0 = 让这一档自己定阈值（见下面的 implicit_min）
         if kind not in LEG_CHECK_KINDS:
-            rep.status["acceptance"] = "unknown"
-            rep.findings.append(Finding(
-                "acceptance", "acceptance_unknown_kind", "warning",
+            _acceptance_unknown(
+                rep, "acceptance_unknown_kind",
                 f"验收行 {cid} 的 kind={kind!r} 不在受控词表 {tuple(LEG_CHECK_KINDS)} 里 "
-                "⇒ 这一行没查成（不是「满足了」）"))
+                f"⇒ 这一行没查成（不是「满足了」）。**一个 kind 不认识 ⇒ 整张表都判没查成**，"
+                f"所以别自造名字：写表时从受控词表里逐字挑（那一串逐字写在主控的 brief 里）",
+                checks_file=str(path))
             return
         try:
             got, detail = _leg_reading(store, kind, Path(resolve_under_workspace(store, project_dir)))
         except Exception as exc:  # noqa: BLE001 —— 读不到就落 unknown（§94 的 docstring 承诺了，这一轮才补上）
-            rep.status["acceptance"] = "unknown"
-            rep.findings.append(Finding(
-                "acceptance", "acceptance_leg_unreadable", "warning",
+            _acceptance_unknown(
+                rep, "acceptance_leg_unreadable",
                 f"验收行 {cid}（{kind}）的读数算不出来（{type(exc).__name__}: {exc}）"
-                "⇒ 这一行没查成（不是「不满足」，也不是「满足」）"))
+                f"⇒ 这一行没查成（不是「不满足」，也不是「满足」）。"
+                f"有的档只在特定工作区里可读（例如 `manuscript_edited` / "
+                f"`citation_records_vs_bibitems` 要只读基线 `source/`）——"
+                f"那是「这一档在这个工作区用不上」，换一档写得出来的",
+                checks_file=str(path))
             return
         if not want_min:
             # 调用方没写 `min` ⇒ 用这一档自己算出来的阈值（`citation_records_vs_bibitems`
