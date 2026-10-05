@@ -205,6 +205,16 @@ class _Step:
             sg["in_flight"] = bool(deploy["in_flight"])
         sg["attempts"] = int(sg.get("attempts") or 0) + (1 if deploy.get("count_attempt") else 0)
 
+        # ---- 归约产生的新子目标挂进计划（`draft/39` §6.31 的 D42）
+        #
+        # 为什么由这里挂、而不是在 `_deploy` 里直接改 `plan["subgoals"]`：`step` 在
+        # 分派之前就把 `subgoals` 拷成了本地列表（`[dict(s) for s in …]`），
+        # 分派完还要用本地那份写回 —— 在 `_deploy` 里往 plan 里塞的东西会被这一步
+        # 覆盖掉（静默丢失，没有任何异常）。号由框架发（见 `_next_sid`），
+        # 于是同一批归约不会出现两个 `s1`（schema 对重复 sid 是硬拒）。
+        for raw_new in (deploy.get("new_subgoals") or []):
+            subgoals.append(self._normalize_subgoal(dict(raw_new), len(subgoals)))
+
         history_row = {
             "round": rounds + 1,
             "sid": sid,
@@ -222,6 +232,11 @@ class _Step:
         # 它要能机械地读出来，而不是靠人去读一段散文。
         if deploy.get("product"):
             product = dict(deploy["product"])
+            # 整份产物进 history（D42）：上面那四个扁平键是"给人扫一眼"的，
+            # 而论证的 `steps` / 实验请求的 `script_spec` / 归约的 `new_subgoals`
+            # 是这一轮真正的产出 —— 不落它们，模型这一轮想的就白想了
+            # （审计时只剩一句"它说它推了一步"）。
+            history_row["product_detail"] = product
             history_row["product"] = str(product.get("product") or "")
             history_row["strategy"] = str(product.get("strategy") or "")
             history_row["best_partial"] = list(product.get("best_partial") or [])

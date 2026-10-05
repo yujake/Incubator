@@ -12,6 +12,54 @@ from .status import _Status
 from .list_plans import _ListPlans
 
 
+def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
+                   tried: Sequence[str]) -> str:
+    """F 自己推理那一轮的提示词（D42）。
+
+    受控值从 `attackround` 现取，不在这里手抄一遍：四种产物、九招工具箱、
+    `dead_end` 的七个受控理由、`#5` 的禁用标记 —— 抄一遍就多一处会漂的地方，
+    而这一处的漂移形态恰好是"模型按提示词写、判据按常量拒"。
+
+    提示词只做两件事：把这个子目标已知的东西摆出来，把这一轮必须交什么说清。
+    它不告诉模型该怎么证（那是它的活），也不给它任何本题的构造。
+    """
+    from .. import attackround as AR
+
+    lines = [
+        "你是 F：多轮难题攻坚。这一轮只做一件事 —— 推进下面这一条子目标，"
+        "并按受控形状交出**一件产物**。",
+        "",
+        f"难题：{plan.get('problem')}",
+        f"难题键：{plan.get('problem_key')}（第 {int(plan.get('rounds') or 0) + 1} 轮，"
+        f"预算上限 {dict(plan.get('budget') or {}).get('max_rounds')} 轮）",
+        f"子目标 {sg.get('sid')}（owner={owner}）：{sg.get('text')}",
+        f"它的可检验形式：{sg.get('testable') or '（没写 —— 这一轮的空缺就是它）'}",
+        f"这条子目标已有证据：{list(sg.get('evidence_ids') or []) or '（无）'}；"
+        f"已跑实验：{list(sg.get('experiment_ids') or []) or '（无）'}；"
+        f"已试过的招：{list(tried) or '（无）'}",
+        "",
+        "产物必须是下面四档之一（`product` 字段），其余字段按那一档给全：",
+        f"1. `reduction`：把难题归约成 1–3 条新的、可检验的子目标。"
+        f"要给 `new_subgoals`（每条 {{goal, testable}}，两个都非空）、`reason`。",
+        "2. `proof`：给出逐步论证。要给 `steps`（非空数组，每步 "
+        "{{text, cites, assumption}}）—— `text` 是这一步说了什么，`cites` 是它引到的在册 id"
+        "（`exp:`/`lit:`/`rel:` 之类），确实没有依据可引时必须把这一步显式声明成前提"
+        "（`assumption: true`）：**缝是正确的事实变成错误证明的地方**，不许用措辞跳过去。",
+        "3. `counterexample_request`：给一个能判决这条命题的实验请求。要给 "
+        "`script_spec`（{{criterion, params, expected_bound}} 三项都非空）与 `why_it_decides`。",
+        f"4. `dead_end`：这一轮走不下去。要给受控 `reason`（{'、'.join(AR.DEAD_END_REASONS)} 之一）、"
+        "`evidence`（哪一步不行）、`best_partial`（已证的引理／缩小的范围／排除的法，逐条带 what/ids/why_partial）。",
+        "",
+        f"每一档都要给 `strategy`（通用工具箱里的一招：{'、'.join(AR.STRATEGIES)}）与 "
+        "`why_strategy`（这一轮为什么用这一招）。",
+        f"不许出现这些词：{'、'.join(AR.F_BANNED_MARKERS)} —— 写了会被判不成形打回。",
+        "什么都做不出来时也要交 `dead_end`（带理由与 best_partial）：`no_change` 不是产物。",
+        "",
+        "只输出一个 JSON 对象，不要写解释、不要写 Markdown 围栏。",
+    ]
+    return "\n".join(lines)
+
+
 class _Core:
     def __init__(
         self,
@@ -209,6 +257,11 @@ class _Core:
             return self._deploy_a(sg, plan=plan)
         if owner == "B":
             return self._deploy_b(sg, plan=plan)
+        if owner in UNWIRED_OWNERS and self.llm is not None:
+            # 插座接上了（`draft/39` §6.31 的 D42）：这一支此前无论有没有模型都落
+            # `dead_end(缺工具)` —— 于是真机里 `F.step` 永远回 `no_change`（T2 第 11 趟：
+            # "F 的自动推理未接线，攻坚这条路走不通"）。现在：有缝就走推理那一支。
+            return self._reason_self(sg, plan=plan, owner=owner)
         if owner in UNWIRED_OWNERS:
             # 不允许把"没做"写成"做了但没结果"。
             #
@@ -260,6 +313,182 @@ class _Core:
             f"子目标 {sid} 的 owner={owner!r} 不在 {S.SUBGOAL_OWNERS} 里。"
             "owner 是权限面的一部分，拼错会让子目标派给不存在的人"
         )
+
+    # ---------------------------------------------------------------- 自己推理那一支（D42）
+
+    @staticmethod
+    def _next_sid(existing: Sequence[Mapping[str, Any]], taken: Sequence[str] = ()) -> str:
+        """下一个可用的子目标号（`s1`、`s2`…）：归约产生的新子目标要用它。
+
+        为什么不让模型自己号：同一批归约里它会给两个 `s1`，而 schema 对重复 sid
+        是硬拒（`subgoals 出现重复 sid`）—— 号由框架发，模型只负责说清要证什么。
+        """
+        used = {str(s.get("sid") or "") for s in existing} | {str(x) for x in taken}
+        i = 1
+        while f"s{i}" in used:
+            i += 1
+        return f"s{i}"
+
+    def _reason_self(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
+                     owner: str) -> dict:
+        """owner 属于"要自己推理"的那一类、而模型缝已接线 ⇒ 真的推一轮。
+
+        `draft/39` §6.31 的 D42 修的就是这一支：此前 `self.llm` 有没有接线，
+        返回值都一样（`dead_end(缺工具)`）—— 插座插着，线没接。真机读数（T2 第 11 趟
+        `p6m`）：`F.step` 回 `no_change`，M 据此写下"F 的自动推理未接线，攻坚这条路走不通"。
+
+        三轮"先花钱之前的确定性闸门"都在这一支里落地：`pre_spend_gate`（I9）与
+        `budget_decision`（I16）在发模型调用之前判；产物一律走 `attackround`
+        的受控四档（`reduction`/`proof`/`counterexample_request`/`dead_end`），
+        不成形就如实落 `no_change` 并把原话带回给调用方。
+        """
+        import json as _json
+
+        from .. import attackround as AR
+        from .. import judge as J
+
+        goal = str(sg.get("text") or "")
+        testable = str(sg.get("testable") or "")
+        tried = [str(x) for x in (sg.get("tried_strategies") or [])]
+        gate = AR.pre_spend_gate(goal=goal, testable=testable, tried_strategies=tried,
+                                 budget_left_usd=self.cfg.get("round_budget_usd"))
+        if not gate["spend"]:
+            return self._self_dead_end(
+                sg, owner=owner,
+                reason="缺定义" if not testable.strip() else "方法不适用",
+                evidence="花钱之前的闸门没过：" + "；".join(gate["reasons"]),
+                why_strategy="I9：闸门说不许花钱时，这一轮的产物只能是 `dead_end`（说清缺什么）",
+                blocked_reason="；".join(gate["reasons"]),
+            )
+        decision = AR.budget_decision(cost_usd=float(self.cfg.get("round_cost_usd", 0.02)),
+                                      cap_usd=self.cfg.get("round_cost_cap_usd"),
+                                      spent_usd=float(self.cfg.get("spent_usd", 0.0)))
+        if decision["status"] == "too_large":
+            return self._self_dead_end(
+                sg, owner=owner, reason="超出本轮预算", evidence=str(decision["note"]),
+                why_strategy="I16：超上限的一轮要显式阻塞，不许静默截断",
+                blocked_reason=str(decision["note"]),
+            )
+
+        prompt = _attack_prompt(plan=plan, sg=sg, owner=owner, tried=tried)
+        data, problem = J.judge_json(self.llm, prompt, point="F.step")
+        if problem or not data:
+            return {
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": (f"子目标 {sg.get('sid')}（owner={owner}）的推理缝没查成："
+                           f"{J.reason_of(problem, point='F.step')} ⇒ **未推进**"
+                           "（不是'做了但没结果'，也不是'这条路死了'）"),
+                "evidence": [],
+                "status": "blocked",
+                "blocked_reason": J.reason_of(problem, point="F.step"),
+                "in_flight": True,
+                "count_attempt": False,
+            }
+        try:
+            product = AR.parse_round(_json.dumps(data, ensure_ascii=False))
+        except AR.RoundError as exc:
+            # 不成形 ≠ 没做：模型确实说了话，只是没按受控形状说 —— 原话带回去，
+            # 让调用方（M/D）能据它改提示词，而不是只看到一句"没进展"。
+            return {
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": (f"子目标 {sg.get('sid')} 的这一轮不成形（{exc}）⇒ **未推进**；"
+                           "四种产物与九招工具箱的受控值写在提示词里，按那个形状重说一次"),
+                "evidence": [],
+                "status": "blocked",
+                "blocked_reason": f"这一轮不成形：{exc}",
+                "in_flight": True,
+                "count_attempt": False,
+            }
+        return self._apply_round(product, sg, plan=plan, owner=owner)
+
+    def _self_dead_end(self, sg: Mapping[str, Any], *, owner: str, reason: str,
+                       evidence: str, why_strategy: str, blocked_reason: str) -> dict:
+        """把"这一轮走不下去"落成受控的 `dead_end` 产物（四档之一），而不是空手而归。"""
+        from .. import attackround as AR
+
+        product = AR.dead_end_row(
+            strategy="套用已知定理", reason=reason, evidence=evidence,
+            best_partial=self._unwired_partial(sg), why_strategy=why_strategy,
+        )
+        return {
+            "action": "dead_end",
+            "outcome": "no_change",
+            "product": product,
+            "detail": f"子目标 {sg.get('sid')}（owner={owner}）：{evidence}",
+            "evidence": [],
+            "status": "blocked",
+            "blocked_reason": blocked_reason,
+            "in_flight": True,
+            "count_attempt": True,
+        }
+
+    def _apply_round(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
+                     plan: Mapping[str, Any], owner: str) -> dict:
+        """把一轮成形产物落成"这一轮做了什么"（受控四档 → 动作/状态/新子目标）。
+
+        四档的落法逐条说清（`draft/39` §3.16）：
+        - `reduction`：把新子目标挂进计划（号由框架发，见 `_next_sid`）⇒ `progress`；
+        - `proof`：这一轮的论证进 `history` 的 `product_detail` ⇒ `progress`，
+          但子目标不许因此 `closed`（FC-22：关闭要有 proof 级实验）；
+        - `counterexample_request`：把 `script_spec` 变成一条 owner=E 的新子目标
+          （下一轮 `_deploy_e` 会照它去跑实验）⇒ `progress`；
+        - `dead_end`：如实 `blocked`（带受控理由）并 `in_flight`，不再自动重试它。
+        """
+        kind = str(product.get("product") or "")
+        sid = str(sg.get("sid") or "")
+        new_goals: list[dict[str, Any]] = []
+        if kind == "reduction":
+            existing = list(plan.get("subgoals") or [])
+            taken: list[str] = []
+            for item in product.get("new_subgoals") or []:
+                new_sid = self._next_sid(existing, taken)
+                taken.append(new_sid)
+                new_goals.append({"sid": new_sid, "text": str(item.get("goal") or ""),
+                                  "owner": owner, "testable": str(item.get("testable") or ""),
+                                  "status": "todo"})
+            detail = (f"归约（{product.get('strategy')}）：{product.get('why_strategy')}；"
+                      f"新子目标 {[g['sid'] for g in new_goals]}（每条都带可检验形式）")
+            evidence: list[str] = [g["sid"] for g in new_goals]
+            status = "in_progress"
+        elif kind == "proof":
+            steps = product.get("steps") or []
+            detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
+                      f"这一轮是**论证**不是机器核验 ⇒ 子目标不关闭（FC-22）")
+            evidence = []
+            status = "in_progress"
+        elif kind == "counterexample_request":
+            spec = dict(product.get("script_spec") or {})
+            new_sid = self._next_sid(list(plan.get("subgoals") or []))
+            text = (f"按判据「{spec.get('criterion')}」跑实验：参数 {spec.get('params')}，"
+                    f"期望界 {spec.get('expected_bound')} —— {product.get('why_it_decides')}")
+            new_goals.append({"sid": new_sid, "text": text, "owner": "E",
+                              "testable": str(spec.get("expected_bound") or ""),
+                              "status": "todo"})
+            detail = (f"把这一轮的实验判据交给 E（新子目标 {new_sid}）："
+                      f"{product.get('why_it_decides')}")
+            evidence = [new_sid]
+            status = "in_progress"
+        else:  # dead_end
+            reason = str(product.get("reason") or "")
+            detail = (f"这一轮走不下去（{reason}）：{product.get('evidence')}；"
+                      f"已交 best_partial {len(product.get('best_partial') or [])} 条")
+            evidence = []
+            status = "blocked"
+        return {
+            "action": kind,
+            "outcome": "no_change" if kind == "dead_end" else "progress",
+            "product": dict(product),
+            "detail": detail,
+            "evidence": evidence,
+            "status": status,
+            "blocked_reason": (str(product.get("evidence") or "") if kind == "dead_end" else ""),
+            "in_flight": kind == "dead_end",
+            "count_attempt": True,
+            "new_subgoals": new_goals,
+        }
+
     def _deploy_e(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict:
         """E 的子目标：跑实验并登记。
 
