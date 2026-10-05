@@ -155,6 +155,24 @@ class _Core:
                 "timed_out": False,
                 "launch_error": f"{type(e).__name__}: {e}",
             }
+        # ---- 进程树治理（`draft/39` §3.21 五 I13）：把这条实验子进程装进作业对象。
+        #
+        # 为什么在这里（真机读数）：实验脚本自己会起子进程（并行枚举、调用外部求解器），
+        # 而 `_kill_child(proc)` 只杀直接子进程 —— 用户叫停之后那些孙子照旧跑
+        # （历史读数：包装进程被杀之后 python 子进程又跑了 12 分钟）。
+        # 作业对象把"终止"变成"关句柄"：根与它之后生的后代一起被 OS 收掉，
+        # 且不依赖 `taskkill` 能不能成功（受限环境里实测被拒）。
+        # 拿不到作业对象（非 Windows / API 缺失）就照旧走 `_kill_child`：
+        # 这条改动只增不减，读数里记着走的是哪一路。
+        job = None
+        try:
+            from .. import jobobject as _JO
+
+            if _JO.available():
+                job = _JO.create_job(f"agentflow-e-{proc.pid}")
+                _JO.assign_tree(job, proc.pid)
+        except Exception:  # noqa: BLE001 —— 装不进作业不改变这一趟的结论，照旧走 kill_child
+            job = None
         limit = max(1, int(timeout))
         stopped = False
         stopped_note = ""
@@ -166,7 +184,10 @@ class _Core:
                 pass          # 0.2 s 到点而已：等的是「子进程结束」或「停机开关落盘」
             if _stop_requested(self.workspace_root):
                 stopped = True
-                _kill_child(proc)
+                if job is not None:
+                    _JO.grace_then_kill(job, grace_sec=1.0, poll_sec=0.2)
+                else:
+                    _kill_child(proc)
                 try:
                     out, err = proc.communicate(timeout=15)
                 except subprocess.TimeoutExpired:
@@ -176,7 +197,10 @@ class _Core:
                     stopped_note = "（子进程在 15 s 内没能终止）"
                 break
             if time.monotonic() - t0 > limit:
-                _kill_child(proc)
+                if job is not None:
+                    _JO.grace_then_kill(job, grace_sec=0.5, poll_sec=0.2)
+                else:
+                    _kill_child(proc)
                 out, err = proc.communicate()
                 return {
                     "exit_code": None,
@@ -186,6 +210,9 @@ class _Core:
                     "timed_out": True,
                     "launch_error": None,
                 }
+        if job is not None:
+            # 关句柄 = OS 收掉整棵传递树（包括实验脚本自己起的那些子进程）。
+            _JO.close(job)
         if stopped:
             return {
                 "exit_code": None,
@@ -196,6 +223,7 @@ class _Core:
                 "timed_out": False,
                 "stopped_by_user": True,
                 "launch_error": None,
+                "process_tree": "job" if job is not None else "kill_child",
             }
         return {
             "exit_code": proc.returncode,
@@ -204,6 +232,7 @@ class _Core:
             "runtime_sec": round(time.monotonic() - t0, 4),
             "timed_out": False,
             "launch_error": None,
+            "process_tree": "job" if job is not None else "kill_child",
         }
     def _record_formal(
         self,
