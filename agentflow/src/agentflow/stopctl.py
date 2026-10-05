@@ -411,7 +411,7 @@ def kill_registered(root: str | Path, *, role: str = "",
     for v in victims:
         pid = int(v["pid"])
         # 自己的 pid 不走作业对象那一路（`draft/39` §6.12 的实测教训）：
-        # 把**自己**放进作业再关句柄，会把调用者连同它的返回值、台账、续跑简报一起收掉
+        # 把自己放进作业再关句柄，会把调用者连同它的返回值、台账、续跑简报一起收掉
         # —— 而"要不要把自己排除"本来就是调用方的显式决定（`exclude_pid`）。
         # 于是 pid == 本进程时只用 `taskkill` 那条退路（成败照实报，登记该留就留）。
         use_job = prefer_job and pid != os.getpid()
