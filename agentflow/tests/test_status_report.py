@@ -242,11 +242,93 @@ def test_the_cli_entry_reports_unknown_for_a_missing_workspace(tmp_path, capsys)
 
 
 def test_the_report_is_json_serialisable_and_carries_the_four_reading_groups(tmp_path):
-    """反真空：报告的四个读数面都在（缺一面 ⇒ "报告"没有可复核的骨架）。"""
+    """反真空：报告的读数面都在（缺一面 ⇒ "报告"没有可复核的骨架）。"""
     ws, st, _ = _ws(tmp_path)
     report = SR.collect(st, ws)
     blob = json.dumps(report, ensure_ascii=False)
     assert len(blob) > 200, blob
-    for key in ("tables", "manuscripts", "five_bit", "in_flight", "refusals", "next_steps"):
+    for key in ("tables", "manuscripts", "five_bit", "in_flight", "refusals", "next_steps",
+                "attack_rounds", "interjections"):
         assert key in report, key
     assert set(report["tables"]) == set(SR.REPORT_TABLES), sorted(report["tables"])
+
+
+# ============================================================ §6.15：后几批的读数接进报告
+
+def test_the_report_reads_the_attack_round_products(tmp_path):
+    """卡点③ 的读数进了报告：`attack_plans.history` 的产物分布与"没有产物的轮次"。"""
+    ws, st, _ = _ws(tmp_path)
+    with st.tx("attack_plans", actor="test") as tx:
+        tx.upsert("attack_plans", {
+            "plan_id": "0001", "problem_key": "PK", "problem": "难题（夹具）",
+            "status": "open", "rounds": 3,
+            "subgoals": [], "budget": {"max_rounds": 3, "max_parallel_subgoals": 1,
+            "max_persist_attempts": 3, "max_depth": 2},
+            "created_at": "2026-10-05T00:00:00+08:00",
+            "history": [
+                {"round": 1, "outcome": "no_change", "product": "dead_end",
+                 "strategy": "反证", "dead_end_reason": "缺工具"},
+                {"round": 2, "outcome": "progress", "product": "reduction", "strategy": "归约"},
+                {"round": 3, "outcome": "no_change"},          # ← 旧形态：没有产物
+            ]})
+    report = SR.collect(st, ws)
+    got = report["attack_rounds"]
+    assert got["products"] == {"dead_end": 1, "reduction": 1}, got
+    assert got["strategies"] == {"反证": 1, "归约": 1}, got
+    assert got["no_product_count"] == 1, got
+    assert got["no_product_rounds"] == ["0001#3(outcome=no_change)"], got
+    # 它必须进"下一步"（不然这条读数躺在 json 里没人消费）
+    assert any("没有产物" in s for s in report["next_steps"]), report["next_steps"]
+    md = SR.render_status_markdown(report)
+    assert "攻坚轮次的产物" in md and "没有产物的轮次" in md, md
+
+
+def test_no_product_rounds_and_no_proof_round_drive_the_next_steps(tmp_path):
+    """反真空：修好之后（每轮都有产物、且有 proof）这两句应当消失。"""
+    ws, st, _ = _ws(tmp_path)
+    with st.tx("attack_plans", actor="test") as tx:
+        tx.upsert("attack_plans", {
+            "plan_id": "0001", "problem_key": "PK", "problem": "难题（夹具）",
+            "status": "open", "rounds": 2,
+            "subgoals": [], "budget": {"max_rounds": 3, "max_parallel_subgoals": 1,
+            "max_persist_attempts": 3, "max_depth": 2},
+            "created_at": "2026-10-05T00:00:00+08:00",
+            "history": [
+                {"round": 1, "outcome": "progress", "product": "proof", "strategy": "反证"},
+                {"round": 2, "outcome": "progress", "product": "counterexample_request",
+                 "strategy": "小情形搜索找模式"},
+            ]})
+    report = SR.collect(st, ws)
+    joined = "；".join(report["next_steps"])
+    assert "没有产物" not in joined, joined
+    assert "还没有一条 `proof` 产物" not in joined, joined
+
+
+def test_the_report_counts_interjections_and_whether_they_changed_anything(tmp_path):
+    """D07 的读数进了报告：发出几条、被读几次、改变做法几次。"""
+    from agentflow import sessions as SS
+    from agentflow.agent_loop import mark_interjections_seen, send_interjection
+
+    ws, st, _ = _ws(tmp_path, sid="t")
+    for subject in ("口径变了", "叫停"):
+        send_interjection(ws, sender="用户", subject=subject, body="正文", sid="t")
+    mark_interjections_seen(ws, "D", ["i-0001"], sid="t", step=3)
+    SS.append(ws, {"kind": "agent_interjection_effect", "role": "D", "ids": ["i-0002"],
+                   "step": 5, "shape": "final", "changed_action": True}, sid="t")
+    report = SR.collect(st, ws)
+    got = report["interjections"]
+    assert got["sent"] == 2 and got["seen_events"] == 1, got
+    assert got["changed_action"] == 1 and got["unchanged_action"] == 0, got
+    assert got["recent"][-1]["is_stop"] is True, got["recent"]
+    md = SR.render_status_markdown(report)
+    assert "集体插话" in md and "改变做法 1 次" in md, md
+
+
+def test_an_interjection_nobody_read_drives_a_next_step(tmp_path):
+    """反真空：发过插话却一次都没被读到 ⇒ 报告要把它说成"下一步该查的事"。"""
+    from agentflow.agent_loop import send_interjection
+
+    ws, st, _ = _ws(tmp_path, sid="t")
+    send_interjection(ws, sender="用户", subject="叫停", body="正文", sid="t")
+    report = SR.collect(st, ws)
+    assert any("一次都没被读到" in s for s in report["next_steps"]), report["next_steps"]

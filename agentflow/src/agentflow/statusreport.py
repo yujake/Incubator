@@ -153,9 +153,72 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
                                  "action": str(t.get("action") or ""),
                                  "reason": str(t.get("refusal_reason") or "")}
                                 for t in refused[-RECENT_LIMIT:]]},
+        # ---- 后几批新落的两类读数（`draft/39` §6.15）：F 的产物与集体插话。
+        # 为什么把它们放进状态报告：真机卡点②③ 要读的正是这两样（"V 有没有被 F 用起来"
+        # 与"attack_plans.history 的产物四种有没有齐备"），而 M/用户想知道"现在什么情况"时
+        # 应当直接看到它们，而不是再去翻会话。
+        "attack_rounds": _attack_rounds(_rows(store, "attack_plans")),
+        "interjections": _interjections(root),
     }
     report["next_steps"] = _next_steps(report)
     return report
+
+
+def _attack_rounds(plans: list[dict[str, Any]]) -> dict[str, Any]:
+    """`attack_plans.history` 里的产物分布（真机卡点③ 的机械读数）。
+
+    `no_product_rounds` 是这一格的关键：`draft/39` §3.16 之后每一轮都要交一件产物，
+    所以这个数应当是 0；不是 0 就把轮次列出来（哪儿还漏着，一眼可查）。
+    """
+    products: dict[str, int] = {}
+    no_product: list[str] = []
+    strategies: dict[str, int] = {}
+    for plan in plans:
+        pid = str(plan.get("plan_id") or "")
+        for i, h in enumerate(plan.get("history") or [], 1):
+            if not isinstance(h, Mapping):
+                continue
+            product = str(h.get("product") or "")
+            if product:
+                products[product] = products.get(product, 0) + 1
+                strat = str(h.get("strategy") or "")
+                if strat:
+                    strategies[strat] = strategies.get(strat, 0) + 1
+            else:
+                no_product.append(f"{pid}#{i}(outcome={h.get('outcome')})")
+    return {"products": products, "strategies": strategies,
+            "no_product_rounds": no_product[:RECENT_LIMIT],
+            "no_product_count": len(no_product),
+            "rounds": sum(products.values()) + len(no_product)}
+
+
+def _interjections(root: str | Path) -> dict[str, Any]:
+    """集体插话的读数（`draft/39` §3.11 二 D07）：发出几条、被读了几次、有没有改变做法。"""
+    from . import sessions as _SESS
+
+    sent: list[dict[str, Any]] = []
+    seen = 0
+    changed = 0
+    unchanged = 0
+    for info in _SESS.list_sessions(root):
+        events, problems = _SESS.read_session(root, str(info.get("sid") or ""))
+        if problems:
+            continue
+        for e in events:
+            if e.get("kind") == "agent_interjection":
+                sent.append({"id": str(e.get("interjection_id") or ""),
+                             "from": str(e.get("from") or ""), "to": str(e.get("to") or ""),
+                             "subject": str(e.get("subject") or ""),
+                             "is_stop": bool(e.get("is_stop"))})
+            elif e.get("kind") == "agent_interjection_seen":
+                seen += 1
+            elif e.get("kind") == "agent_interjection_effect":
+                if e.get("changed_action") is True:
+                    changed += 1
+                else:
+                    unchanged += 1
+    return {"sent": len(sent), "seen_events": seen, "changed_action": changed,
+            "unchanged_action": unchanged, "recent": sent[-RECENT_LIMIT:]}
 
 
 def _row_time(row: Mapping[str, Any]) -> str:
@@ -206,6 +269,19 @@ def _next_steps(report: Mapping[str, Any]) -> list[str]:
                    + "、".join(f"{k}×{v}" for k, v in top) + " ⇒ 参数表/口径要按它改")
     if report.get("pending_questions"):
         out.append(f"有 {report['pending_questions']} 个问题在等用户回答 ⇒ 那是唯一该「停下来」的地方")
+    # `draft/39` §6.15：把后几批新落的两个卡点读数接进"下一步"。
+    rounds = report.get("attack_rounds") or {}
+    if rounds.get("no_product_count"):
+        out.append(f"有 {rounds['no_product_count']} 轮攻坚**没有产物**"
+                   f"（{rounds['no_product_rounds']}）⇒ §3.16 要求每轮交一件"
+                   "（reduction/proof/counterexample_request/dead_end），先把形态补齐")
+    if rounds.get("rounds") and not (rounds.get("products") or {}).get("proof"):
+        out.append("攻坚轮次里**还没有一条 `proof` 产物** ⇒ 第 2 位（有证明）无从置起；"
+                   "先让 F 交一轮证明（哪怕只证一个子情形）")
+    inter = report.get("interjections") or {}
+    if inter.get("sent") and not inter.get("seen_events"):
+        out.append(f"发过 {inter['sent']} 条插话而**一次都没被读到**（`agent_interjection_seen` 0 条）"
+                   "⇒ 那位同伴要么没在跑、要么读插话那一步没走到")
     if not out:
         out.append("四类读数都没有明显空格：这一趟的下一步由 M 按当前子目标定")
     return out
@@ -263,7 +339,14 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         f"- 五元位现状：{('、'.join(f'{k} {v} 条' for k, v in (five.get('grades') or {}).items()) or '（还没有命题行）')}"
         + (f"；其中 {five.get('problems')} 条自身不合规（缺凭据/缺理由）"
            if five.get("problems") else ""),
-        "", "## 四、下一步（**从读数派生**，不是模型写的）", "",
+        f"- 攻坚轮次的产物：{('、'.join(f'{k} {v}' for k, v in (report.get('attack_rounds') or {}).get('products', {}).items()) or '（还没有轮次）')}"
+        + (f"；**没有产物的轮次 {report['attack_rounds']['no_product_count']} 条**"
+           f"（{report['attack_rounds']['no_product_rounds']}）"
+           if (report.get("attack_rounds") or {}).get("no_product_count") else ""),
+        f"- 集体插话：发出 {report['interjections']['sent']} 条、被读 {report['interjections']['seen_events']} 次；"
+        f"其中改变做法 {report['interjections']['changed_action']} 次 / 未改变 "
+        f"{report['interjections']['unchanged_action']} 次",
+        "", "## 四、下一步（从读数派生，不是模型写的）", "",
     ]
     lines += [f"- {s}" for s in (report.get("next_steps") or [])]
     return "\n".join(lines) + "\n"
@@ -299,7 +382,7 @@ def selftest() -> int:
     (root / "data").mkdir(parents=True, exist_ok=True)
     st = Store(root)
     st.init()
-    report, md, js = write_report(st, root, stamp="20260101-0000")
+    report, md, js = write_status_report(st, root, stamp="20260101-0000")
     checks: list[tuple[str, bool]] = []
     checks.append(("两个落点都在盘上", md.is_file() and js.is_file()))
     text = md.read_text(encoding="utf-8")
