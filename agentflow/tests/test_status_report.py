@@ -223,10 +223,10 @@ def test_e15_3_the_probe_does_not_write_into_the_store(tmp_path):
 # ============================================================ CLI 入口
 
 def test_the_conductor_tool_writes_the_same_report(tmp_path):
-    """入口②（`draft/39` §4）：M 的 `conductor.status_report` 与用户侧 CLI **共用一份实现**。
+    """入口②（`draft/39` §4）：M 的 `conductor.status_report` 与用户侧 CLI 共用一份实现。
 
     这一条钉两件事：① 工具真的落盘（md/json 都在 `out/review/` 下）并把四类读数回给 M；
-    ② 它**只读**（跑完之后 `data/` 下每个文件的字节不变）—— "旁路观测"不是措辞。
+    ② 它只读（跑完之后 `data/` 下每个文件的字节不变）—— "旁路观测"不是措辞。
     """
     ws, st, _ = _ws(tmp_path)
     _seed(st)
