@@ -2183,6 +2183,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "signatures.py": "稿件内容的规范哈希（唯一实现）：审批与内部引用都钉在它上面（依据 `draft/30` §T4-A）",
     # 2026-09-29 新增的三个模块（`draft/28` §163/§166/§169 那三批）。按 `R6-AN-1` 建议③
     # 逐条登记并写一行理由 —— 它们都不是"对拍副本"，是框架的真模块。
+    # `draft/39` §3.21（2026-10-05 用户定案"新增角色 V"）：证明级验证的台账与签位。
+    # 它不是对拍副本：冷启动提示词、三态结论、追加式台账、签第 3 位的条件只有这一份实现；
+    # 名字带 `verification_` 前缀是刻意的 —— R003 会把 `read`/`record`/`list_all` 这类
+    # 通用名在模块间判重（它们的语义各模块不同，同名会让人以为是同一件事）。
+    "verifications.py": "验证者 V 的证明级审校台账：`verifications/<命题号>.jsonl` 追加式一行一次审校、"
+                        "冷启动提示词（`cold_start_prompt`，签名里没有句柄）、三态结论、签五元位第 3 位"
+                        "（`signs_bit3`/`bit3_payload`）—— `draft/39` §3.21",
     "sessions.py": "按项目存放的会话记录：`<项目根>/sessions/<会话号>.jsonl`（学 harness 的按工作区存放；`draft/28` §155）",
     "artifacts.py": "产物归属登记：`<工作区根>/ARTIFACTS.jsonl`，回答\"谁在哪个路径产出了什么\"（`R-52` 余；`draft/28` §166）",
     "canonical.py": "规范 JSON 字节串的唯一实现：稿件内容哈希与回执哈希共用的那一份口径（`R-33`；`draft/28` §169/§172）",
