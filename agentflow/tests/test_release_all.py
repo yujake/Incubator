@@ -2190,6 +2190,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "verifications.py": "验证者 V 的证明级审校台账：`verifications/<命题号>.jsonl` 追加式一行一次审校、"
                         "冷启动提示词（`cold_start_prompt`，签名里没有句柄）、三态结论、签五元位第 3 位"
                         "（`signs_bit3`/`bit3_payload`）—— `draft/39` §3.21",
+    # `draft/39` §4（2026-10-05 用户口径）：M 的状态报告（旁路观测，谁都不停）。
+    # 它不是对拍副本：四类读数怎么收集、怎么渲染成四节、怎么与复算对拍只有这一份实现；
+    # 名字带 `status_report_`/`statusreport` 前缀是刻意的（R003 会把 `write_report`/
+    # `render_markdown` 这类通用名在模块间判重）。
+    "statusreport.py": "M 的状态报告：`collect`（只读四类读数：台账增量/交接链/在飞卡点/超时与拒绝）"
+                       "＋`render_status_markdown`＋`write_status_report`（落 "
+                       "`out/review/STATUS-<ts>.{md,json}`）—— `draft/39` §4",
     "sessions.py": "按项目存放的会话记录：`<项目根>/sessions/<会话号>.jsonl`（学 harness 的按工作区存放；`draft/28` §155）",
     "artifacts.py": "产物归属登记：`<工作区根>/ARTIFACTS.jsonl`，回答\"谁在哪个路径产出了什么\"（`R-52` 余；`draft/28` §166）",
     "canonical.py": "规范 JSON 字节串的唯一实现：稿件内容哈希与回执哈希共用的那一份口径（`R-33`；`draft/28` §169/§172）",

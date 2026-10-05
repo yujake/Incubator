@@ -2031,6 +2031,46 @@ def cmd_stop(args) -> int:
     return 0 if mine else 3
 
 
+def cmd_status_report(args) -> int:
+    """项目状态报告（`draft/39` §4）：只读台账与手稿，零模型调用，不打断任何循环。
+
+    退出码：`0` 报告已落盘 / `2` 没查成（工作区不在盘上、或收集时读不到）。
+
+    为什么它不是"问 M 一句"：`ask_user` 那条路是反向的（让 M 停下来等人），
+    而用户中途想知道情况时，正确的形态是旁路观测 —— 读盘 → 出报告，谁都不停。
+    """
+    from . import statusreport as SR
+    from .store import Store
+
+    root = Path(getattr(args, "root", None) or DEFAULT_ROOT).resolve()
+    if not root.is_dir():
+        print(f"[unknown] 工作区不在盘上：{root} —— 没查成，不是「没有状态」", file=sys.stderr)
+        return 2
+    try:
+        store = Store(root)
+    except Exception as exc:  # noqa: BLE001 —— 打不开工作区 ⇒ 没查成
+        print(f"[unknown] 打开工作区失败：{type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+    report, md_path, json_path = SR.write_status_report(
+        store, root, out_dir=getattr(args, "out", None),
+        since=str(getattr(args, "since", "") or ""))
+    print(f"[status-report] 报告已落盘：{md_path}")
+    print(f"[status-report] 机器可读那一份：{json_path}")
+    print("[status-report] 产出：" + "、".join(
+        f"{k} {v['count']}" for k, v in report["tables"].items() if v["count"]))
+    print(f"[status-report] 交接账本：{report['manuscripts']['rows']} 行"
+          f"（模型填 {report['manuscripts']['model_authored']} / 派生 "
+          f"{report['manuscripts']['derived']}）")
+    infl = report["in_flight"]
+    print(f"[status-report] 在飞任务：{infl['running_tasks']}；在跑的循环："
+          f"{'有' if infl['running_loops'] else '没有'}；停机开关："
+          f"{'在' if infl['stop_switch'] else '不在'}")
+    print("[status-report] 下一步（从读数派生）：")
+    for line in report["next_steps"]:
+        print(f"  - {line}")
+    return 0
+
+
 def cmd_closing(args) -> int:
     """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
@@ -2364,6 +2404,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--report", default="",
                     help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
     sp.set_defaults(func=cmd_closing)
+
+    # 项目状态报告（`draft/39` §4）：只读 + 零模型调用 —— 用户中途想知道情况时用它，
+    # 而不是去问 M 一句（那条路会让 M 停下来等人，正好与"不打断协作"相反）。
+    sp = sub.add_parser("status-report",
+                        help="项目状态报告（只读台账与手稿；落 out/review/STATUS-<ts>.{md,json}）")
+    sp.add_argument("--since", default="", help="只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）")
+    sp.add_argument("--out", default="", help="报告落哪个目录（缺省 <工作区>/out/review）")
+    sp.set_defaults(func=cmd_status_report)
 
     # 用户端网页：给人看"它在等什么、跑到哪了、上一趟干了什么"，并让人在那里回答问题。
     # 它是「只读投影」（每次请求都从盘上现读），唯一的写路径是 `POST /answer` → `userio.answer_question`。
