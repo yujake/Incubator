@@ -1009,7 +1009,13 @@ class Conductor:
             else:
                 res = self._end(tid, status="failed", outcome="failed",
                                 error=f"{type(e).__name__}: {e}",
-                                detail=f"{role}.{action} 执行中异常")
+                                # 详情里也要带原话（`draft/39` §6.29 的 D41）：真机读数
+                                # （T2 第 7 趟 `p6i` 与第 11 趟 `p6m`）里主控连着三次收到
+                                # "E.run_experiment 执行中异常"这一句，而它**修不了脚本** ——
+                                # 不知道是导入失败、语法错、还是脚本自己抛的。
+                                # 三态纪律在这一层：失败要留下**能据以改**的原话。
+                                detail=f"{role}.{action} 执行中异常"
+                                       f"（{type(e).__name__}: {e}）")
         finally:
             with self._lock:
                 self._running.discard(tid)
