@@ -113,10 +113,17 @@ def build_anchor(store: Any, package_dir: Path | str) -> dict[str, Any]:
 
 
 def build_receipt(package_dir: Path | str, *, tex_sha256: str, pages: int | None,
-                  markers_missing: list[str] | None, pdf_bytes: int,
+                  markers_missing: list[str] | None, pdf_bytes: int | None,
                   compiler_exit_codes: list[int | None] | None = None,
                   note: str = "") -> dict[str, Any]:
-    """算一份编译回执：这份 PDF 由哪个 tex 哈希编出、几页、标记缺不缺。"""
+    """算一份编译回执：这份 PDF 由哪个 tex 哈希编出、几页、标记缺不缺。
+
+    `pdf_bytes` 可以是 `None`（`draft/39` §6.36 的 D46）：**没编出 PDF 时也要能写回执**
+    —— 否则调用方拿到的是 `TypeError`，而"这一趟没编出 PDF"这件事连回执都留不下来
+    （真机读数：T3 预检里 `pdflatex` 崩在 MiKTeX 的用户目录权限上，PDF 没产出，
+    脚本当场抛 `TypeError: int() argument must be ... not 'NoneType'` ⇒ 回执缺失，
+    收工门的 `receipt` 那一维只能判 `unknown`）。`None` = "没有 PDF 可量"，不是 0 字节。
+    """
     import datetime as _dt
 
     out = Path(package_dir)
@@ -125,7 +132,7 @@ def build_receipt(package_dir: Path | str, *, tex_sha256: str, pages: int | None
         "compiled_at": _dt.datetime.now().astimezone().replace(microsecond=0).isoformat(),
         "tex_sha256": tex_sha256,
         "pdf_sha256": file_digest(pdf),
-        "pdf_bytes": int(pdf_bytes),
+        "pdf_bytes": (int(pdf_bytes) if pdf_bytes is not None else None),
         "pages": pages,
         "markers_missing": list(markers_missing or []),
         # 原始退出码一字不改：本机 MiKTeX 会写完 PDF 却以 0xC0000409 退出，
