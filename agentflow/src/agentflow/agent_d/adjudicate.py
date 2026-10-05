@@ -71,7 +71,18 @@ class _Adjudicate:
             (r for r in self.store.rows("research_questions") if str(r.get("question_id")) == str(qid)), None
         )
         if qrow is None:
-            raise EvidenceError(f"研究问题 {qid} 不存在")
+            # `draft/39` §6.21（真机读数，p6g 那一趟 3 次）：这条拒信此前只说"不存在"，
+            # 不告诉调用方库里有哪些 id —— 于是 D 只能硬猜下一个 qid（那 3 次就是这么来的）。
+            # 拒信要能让人/模型当场改对：把在册的研究问题 id 一并回给它（最多列 12 条）。
+            available = [str(r.get("question_id") or "") for r in self.store.rows("research_questions")]
+            available = [q for q in available if q]
+            raise EvidenceError(
+                f"研究问题 {qid} 不存在。"
+                + (f"在册的是：{available[:12]}" + ("…" if len(available) > 12 else "")
+                   if available else
+                   "这张表现在**一行都没有** ⇒ 先派 D.propose_question 立一个研究问题，"
+                   "再回来裁决（不许对着空表反复试 id）")
+            )
         if str(qrow.get("kind") or "gap") != "contradiction":
             return {
                 "question_id": qid,
