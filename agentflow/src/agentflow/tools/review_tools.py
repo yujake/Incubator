@@ -91,7 +91,12 @@ _H_OWN_CODES = frozenset(
         "empty_required",      # citations 空 / disclaimer 缺失 —— H 的循环里各有一条
         "bad_enum",            # evidence_kind / negation_kind 非法 —— H 的循环里各有一条
         "bad_type",            # citations 含空元素 —— H 的循环里有一条
-        "inconsistent_status", # 过度声称（措辞）—— H 的循环里有一条
+        "inconsistent_status", # 过度声称（措辞）—— H 的循环里有一条（旧 code）
+        # `draft/39` §3.8 之后，过度声称与免责声明各自独立成 code（族 6 / 族 5）：
+        # 它们仍然是 H 自己的循环里已经有的那两条检查 ⇒ 继续跳过，否则同一条缺陷报两遍
+        # （措辞还不同 —— 那不是更严格，是让审校报告变成噪音）。
+        "overclaim",
+        "missing_disclaimer",
     }
 )
 
@@ -102,6 +107,10 @@ _H_FINDING_KIND_OF_CA_CODE: dict[str, str] = {
     "undeclared_field": "scope_drift",
     "duplicate_claim_id": "inconsistent_number",
     "checker_error": "garbled",
+    # `draft/39` §3.8 的两个新 code：H 自己没有这两条检查（一个查数值证据结构、
+    # 一个查生命周期闭合）⇒ 它们要按语义落 kind，不能落 `garbled`。
+    "incomplete_numeric_evidence": "unsupported_claim",
+    "lifecycle_incomplete": "inconsistent_number",
 }
 
 

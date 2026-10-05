@@ -248,8 +248,8 @@ def test_claim_strength_flags_a_claim_stronger_than_its_evidence():
     ])
     assert got["verdict"] == "overclaimed" and got["problem_count"] == 1, got
     assert got["overclaimed"][0]["claim_id"] == "C1", got
-    assert got["overclaimed"][0]["codes"] == ["inconsistent_status"], got["overclaimed"][0]
-    assert got["criterion_source"] == "claimanatomy.inconsistent_status", got
+    assert got["overclaimed"][0]["codes"] == ["overclaim"], got["overclaimed"][0]
+    assert got["criterion_source"] == "claimanatomy.overclaim", got
 
 
 def test_the_strength_criterion_has_exactly_one_implementation():
@@ -261,7 +261,7 @@ def test_the_strength_criterion_has_exactly_one_implementation():
     from agentflow.tools.doc_tools import compose_claim
 
     text = "我们证明了该涨落服从中心极限定理"
-    with pytest.raises(ValueError, match="inconsistent_status"):
+    with pytest.raises(ValueError, match="overclaim"):
         compose_claim(text=text, citations=["lit:0001"], evidence_kind="cross_check",
                       section="§1")
     assert FC.claim_strength_findings(

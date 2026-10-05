@@ -219,6 +219,7 @@ def scan_claim(claim: Mapping[str, Any]) -> dict:
                 "message": issue.message,
                 "evidence": issue.evidence,
                 "code": issue.code,
+                "family": issue.family,
                 "field": issue.field_name,
             }
         )
@@ -274,6 +275,13 @@ _FINDING_KIND_OF_CODE: dict[str, str] = {
     "undeclared_field": "scope_drift",
     "duplicate_claim_id": "inconsistent_number",
     "checker_error": "garbled",
+    # `draft/39` §3.8 的 8 族各自独立成 code 之后（族号要能直接印在拒信里），
+    # 这四条必须在这里逐条登记 —— 未登记的 code 会显式失败（见 `_finding_kind_of`），
+    # 而那是故意的：兜底成 `garbled` 会让"新增 code 忘了登记"静默通过。
+    "overclaim": "overclaim",
+    "incomplete_numeric_evidence": "unsupported_claim",
+    "missing_disclaimer": "unsupported_claim",
+    "lifecycle_incomplete": "inconsistent_number",
 }
 
 
@@ -783,13 +791,18 @@ def compose_claim(
         claim["frozen"] = True
 
     # ---- 唯一的判据来源：claimanatomy。第一个 error 即抛（带断言原文）。
+    #
+    # 报错里必须带族号 + 该族正例（`draft/39` §3.11 四 D10，用户 2026-10-05 裁）：
+    # 旧形态只说"断言不合规：<message>"，模型下一步只能猜该改什么 —— 而 §3.8 的 8 族
+    # 本来就是判据的骨架，族号与正例是现成的（`claimanatomy.family_note`，一处派生）。
     check = CA.validate_claim(claim)
     errors = [i for i in check.issues if i.level == "error"]
     if errors:
+        by_family = "；".join(f"{i.message} ⇒ {CA.family_note(i.code)}" for i in errors)
         raise ValueError(
-            f"断言「{_one_line(text, 60)}」不合规："
-            + "；".join(i.message for i in errors)
-            + f"（判据出处：claimanatomy.CLAIM_FIELDS；issue code={[i.code for i in errors]}）"
+            f"断言「{_one_line(text, 60)}」不合规：{by_family}"
+            f"（判据出处：claimanatomy.CLAIM_FIELDS；issue code={[i.code for i in errors]}；"
+            f"族号={[i.family for i in errors]}）"
         )
     # 自检一次：构造函数若产出了自己都过不了的断言，那是本函数的 bug，不是调用方的。
     if not check.checked:  # pragma: no cover - 判据层崩了才会到这里
@@ -1108,12 +1121,38 @@ def normalize_claims(claims: Sequence[Mapping[str, Any]]) -> list[dict]:
         raise ValueError("claims 不能为空 —— 一份没有任何断言的稿件不是稿件")
     out: list[dict] = []
     seen: set[str] = set()
+    # ---- `claim_id` 由脚本分配（`draft/39` §3.11 四 D10，用户 2026-10-05 裁）
+    #
+    # 为什么把模型写的那一个丢掉：第 8 族（同一稿件里代号重复）本该是判据，
+    # 但它可以退化成"根本不可能发生"—— 只要代号不由模型发。语料里已经出现过
+    # 重复代号的形态（同一次生成里两条断言都叫 `claim-2`），而"重复代号"的后果是
+    # 审校定位失效（`proof_location` 指向两条里的一条，没人知道哪条）。
+    # 丢掉不等于丢弃信息：模型自写的代号被当作别名，本文档内对它的引用
+    # （`proof_location="claim-3:12"`）按别名表改写成本脚本分配的代号。
+    # 别名不落进行里（它是"被丢掉的那个"）：落进去会变成 claimanatomy 的
+    # `undeclared_field`（未声明字段），而那是第 1 族的告警 —— 一条本该干净的稿件
+    # 会因为"我们记下了自己丢掉的东西"而多出一堆 warning。
+    supplied_to_allocated: dict[str, str] = {}
+    for i, c in enumerate(claims, 1):
+        if isinstance(c, Mapping):
+            given = str(c.get("claim_id") or "").strip()
+            if given:
+                supplied_to_allocated.setdefault(given, f"claim-{i}")
     for i, c in enumerate(claims, 1):
         if not isinstance(c, Mapping):
             raise ValueError(f"claims[{i}] 必须是对象，收到 {type(c).__name__}")
         row = dict(c)
-        cid = str(row.get("claim_id") or "").strip() or f"claim-{i}"
+        cid = f"claim-{i}"
         row["claim_id"] = cid
+        # 本文档内的自指（`proof_location="claim-3:12"`）按别名表改写：
+        # 不改写的话，"代号由脚本发"会把模型自己写的引用全部打断（那是把一条判据
+        # 换成另一种坏法，而不是消除坏法）。
+        loc = str(row.get("proof_location") or "").strip()
+        if loc:
+            base, _, rest = loc.partition(":")
+            if base in supplied_to_allocated:
+                row["proof_location"] = (supplied_to_allocated[base]
+                                         + (f":{rest}" if rest else ""))
         row["section"] = str(row.get("section") or "")
         row["is_negative"] = row.get("is_negative") is True
         row.setdefault("negation_kind", None)
@@ -1127,12 +1166,18 @@ def normalize_claims(claims: Sequence[Mapping[str, Any]]) -> list[dict]:
         seen.add(cid)
         check = scan_claim(row)
         if check["error_count"]:
-            detail = "；".join(f["message"] for f in check["findings"] if f["level"] == "error")
+            # 逐条带上族号 + 该族正例（`draft/39` §3.11 四 D10）：这条路才是落库现场
+            # 真正会撞上的那道门（`build_document` → 这里），而被拒的写作者需要的是
+            # "改哪一栏、照什么写"，不是一句"未通过机械检查"。
+            detail = "；".join(
+                f"{f['message']} ⇒ {CA.family_note(f.get('code') or '')}"
+                for f in check["findings"] if f["level"] == "error")
+            families = [f.get("family") for f in check["findings"] if f["level"] == "error"]
             # 报错里必须带断言原文：只说 `claims[3] 不合规`，人还得回去数第 3 条是哪条。
             # 原文放前面（"就是这句话出的问题"才是现场最需要的信息）。
             raise ValueError(
                 f"断言原文：「{_one_line(row['text'], 80)}」"
-                f"（claims[{i}]／{cid}）未通过机械检查：{detail}"
+                f"（claims[{i}]／{cid}）未通过机械检查：{detail}（族号={families}）"
             )
         out.append(row)
     return out

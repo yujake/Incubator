@@ -585,6 +585,86 @@ class LoopRun:
 
 
 # ------------------------------------------------------------------ 消息
+# ------------------------------------------------------------------ 集体插话
+#: 插话里"叫停类"的那一档：只有它额外落"谁在第几步收到、有没有改变做法"的读数
+#: （`draft/39` §3.11 二 D07 第 3 条）—— 全量插话都落读数会让这一格淹掉。
+INTERJECTION_STOP_MARKERS: tuple[str, ...] = ("叫停", "停止", "停止指令")
+
+
+def send_interjection(session_root: Path, *, sender: str, subject: str, body: str,
+                      to: str = "ALL", sid: str | None = None) -> tuple[str, str]:
+    """写一条集体插话（`draft/39` §3.11 二 D07）：返回 `(编号, 问题)`。
+
+    插话与留言的区别不是措辞，是送达方式：留言躺在收件箱里等下一趟/下一步被"听"到，
+    而插话由框架在下一步开头单列一段【插话】（不混进消息列表、不打断当前步）——
+    用户 2026-10-05 的口径："广播改成集体插话发送"。
+
+    编号由脚本按会话内顺序发（`i-0001`…），与手稿/台账同一套做法：模型不许自己编号。
+    """
+    events, problems = SS.read_session(session_root, sid=sid)
+    n = sum(1 for e in events if e.get("kind") == "agent_interjection") + 1
+    iid = f"i-{n:04d}"
+    payload = {"kind": "agent_interjection", "interjection_id": iid, "from": str(sender),
+               "to": str(to or "ALL"), "subject": str(subject or ""), "body": str(body or ""),
+               # 叫停类要额外落读数（见 `INTERJECTION_STOP_MARKERS`）
+               "is_stop": any(m in str(subject or "") for m in INTERJECTION_STOP_MARKERS)}
+    path, problem = SS.append(session_root, payload, sid=sid)
+    if problem:
+        return "", problem
+    return iid, ""
+
+
+def read_interjections(session_root: Path, role: str, *, sid: str | None = None,
+                       ) -> tuple[list[dict[str, Any]], list[str]]:
+    """这个角色还没消费过的插话（发给他本人的，或发给 ALL 的）。
+
+    "消费过"由 `agent_interjection_seen` 事件记（`mark_interjections_seen`）——
+    不记在内存里：续跑时那一趟要能接着从"已经读过哪些"往下走，否则同一段插话
+    会被念第二遍（而"念第二遍"与"又来了一条"在模型眼里长得一样）。
+    """
+    events, problems = SS.read_session(session_root, sid=sid)
+    seen: set[str] = set()
+    for e in events:
+        if e.get("kind") == "agent_interjection_seen":
+            seen.update(str(x) for x in (e.get("ids") or []))
+    out: list[dict[str, Any]] = []
+    for e in events:
+        if e.get("kind") != "agent_interjection":
+            continue
+        iid = str(e.get("interjection_id") or "")
+        if not iid or iid in seen:
+            continue
+        to = str(e.get("to") or "ALL")
+        if to in ("ALL", "#public", role):
+            out.append(dict(e))
+    return out, problems
+
+
+def mark_interjections_seen(session_root: Path, role: str, ids: list[str], *,
+                            sid: str | None = None, step: int | None = None,
+                            ) -> tuple[Path | None, str]:
+    """登记"这些插话我读过了"（带步号 —— 于是"谁在第几步收到"可查）。"""
+    if not ids:
+        return None, ""
+    return SS.append(session_root, {
+        "kind": "agent_interjection_seen", "role": role, "ids": [str(x) for x in ids],
+        "step": int(step) if step is not None else None,
+    }, sid=sid)
+
+
+def _interjection_block(items: list[Mapping[str, Any]]) -> str:
+    """插话在简报里的那一段：摆在最显眼的位置，并标明优先级。"""
+    lines = ["", "=" * 60,
+             "【插话】以下是用户/主控发给你的插话，**优先于你自己的计划**（收到它不代表"
+             "当前这一步被中断：这一步照常做完，但做之前先按它调整做法）："]
+    for it in items:
+        mark = "（叫停类）" if it.get("is_stop") else ""
+        lines.append(f"- [{it.get('interjection_id')}]{mark} 来自 {it.get('from')}："
+                     f"{it.get('subject')} —— {_clip(str(it.get('body') or ''), 400)}")
+    lines.append("=" * 60)
+    return "\n".join(lines) + "\n"
+
+
 def read_messages(session_root: Path, role: str, *, sid: str | None = None,
                   ) -> tuple[list[dict[str, Any]], list[str]]:
     """读某个角色的收件箱（含未投递标记）。返回 `(消息, 问题)`。"""
@@ -1261,6 +1341,8 @@ class AgentLoop:
         prev_key = ""
         prev_reading = ""
         same_call = 0
+        #: 这一步收到的插话（叫停类要在这一步做完之后落一条"有没有改变做法"的读数）。
+        pending_interjections: dict[str, Any] | None = None
 
         for step in range(start_step, self.max_steps):
             stop_reason = self._user_stop_reason(run)
@@ -1282,6 +1364,25 @@ class AgentLoop:
                 run.stop_reason = "budget"
                 run.final = run.final or "预算已耗尽，停止（没有继续调用模型）"
                 break
+            # ---- 集体插话（`draft/39` §3.11 二 D07，用户 2026-10-05 裁）
+            #
+            # 摆在下一步开头：插话不是"再来一条消息"，而是"做这一步之前先看它"。
+            # 为什么在预算判据之后、`ask_step` 之前：预算耗尽/用户叫停时不该再被插话
+            # 拖着做事；而这一步的提示词是下一句就要发出去的，插话必须在那之前进去。
+            new_interjections, ij_problems = read_interjections(self.session_root, self.role,
+                                                                sid=self.sid)
+            run.notes.extend(f"插话读取：{p}" for p in ij_problems)
+            if new_interjections:
+                ids = [str(i.get("interjection_id") or "") for i in new_interjections]
+                transcript += _interjection_block(new_interjections)
+                _p, seen_problem = mark_interjections_seen(self.session_root, self.role, ids,
+                                                           sid=self.sid, step=step)
+                if seen_problem:
+                    run.notes.append(f"插话消费登记失败：{seen_problem}")
+                if any(i.get("is_stop") for i in new_interjections):
+                    # 叫停类：这一步做完之后要落"有没有改变做法"（下面按 key 比）
+                    pending_interjections = {"ids": ids, "step": step,
+                                             "prev_key": prev_key, "prev_reading": prev_reading}
             data, call = self.seam.ask_step(self._prompt(transcript, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",
@@ -1410,6 +1511,10 @@ class AgentLoop:
                         run.handoffs.append(str(hand.get("id") or ""))
                 run.final = str(payload.get("final") or "")
                 run.evidence = list(payload.get("evidence") or [])
+                # 收工也是对插话的一种回应（"照插话收工"是最常见的形态）⇒ 同样落读数。
+                self._record_interjection_effect(run, pending_interjections, step=step,
+                                                 shape=shape, payload=payload)
+                pending_interjections = None
                 run.steps.append(LoopStep(step, shape, payload, step_result))
                 run.stop_reason = "final"
                 break
@@ -1455,6 +1560,10 @@ class AgentLoop:
             same_call = same_call + 1 if key == prev_key else 1
             dead = same_call if (key == prev_key and reading == prev_reading) else 1
             prev_key, prev_reading = key, reading
+            # ---- 插话读数（`draft/39` §3.11 二 D07 第 3 条）：谁在第几步收到、有没有改变做法。
+            self._record_interjection_effect(run, pending_interjections, step=step,
+                                             shape=shape, payload=payload)
+            pending_interjections = None
             run.same_call_max = max(run.same_call_max, same_call)
             run.dead_loop_max = max(run.dead_loop_max, dead)
             if same_call == self.dead_loop_nudge:
@@ -2113,6 +2222,28 @@ class AgentLoop:
                 "error": problem,
                 "note": ("收件人下次运行时（或本步之后）会在收件箱里看到编号；"
                          "它用 `manuscripts.read` 读全文")}
+
+    def _record_interjection_effect(self, run: LoopRun, pending: dict[str, Any] | None,
+                                    *, step: int, shape: str, payload: Mapping[str, Any]) -> None:
+        """落"叫停类插话有没有改变这一步的做法"（`draft/39` §3.11 二 D07 第 3 条）。
+
+        "改变做法"的判据是机械的、可复核的：这一步的调用键与收到插话之前那一步不同
+        （`_call_key` 是"同形状 + 同参数"的指纹）。它不是"模型说它听了"——自述不是事实。
+        收工（`final`）也要记：那一趟最常见的回应就是"照插话收工"，而它正好是最该被看到的形态。
+        """
+        if pending is None:
+            return
+        key = _call_key(shape, payload)
+        changed = key != str(pending.get("prev_key") or "")
+        SS.append(self.session_root, {
+            "kind": "agent_interjection_effect", "role": self.role,
+            "ids": list(pending["ids"]), "step": int(step), "shape": shape,
+            "call_key": key, "changed_action": bool(changed),
+            "what_it_did": _call_brief(shape, payload),
+        }, sid=self.sid)
+        run.notes.append(
+            f"插话 {pending['ids']} 在第 {step} 步收到 ⇒ 这一步"
+            + ("换了做法" if changed else "仍然做同一件事（读数里记 changed_action=false）"))
 
     def _do_ask_user(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """问用户一个问题：默认「停着」等回答，而不是"超时之后继续"。

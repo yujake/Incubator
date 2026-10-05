@@ -62,16 +62,21 @@ def stop_path(root: str | Path, explicit: str | Path | None = None) -> Path:
     return Path(root) / STOP_FILE_NAME
 
 
-def request_stop(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
-                 force: bool = False, sid: str | None = None,
-                 explicit: str | Path | None = None) -> dict[str, Any]:
-    """写下停机开关（幂等：已经有了就原样返回，不改第一次的理由）。
+def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
+                        force: bool = False, sid: str | None = None,
+                        explicit: str | Path | None = None) -> tuple[dict[str, Any], str]:
+    """写下停机开关，并回答"这把开关是谁的"（`draft/39` §3.11 D25）。
 
-    返回开关里那份负载（`{reason, by, force, at, sid, path}`）。
-    为什么把理由与"谁说的"写进「文件内容」而不是只建一个空文件：
-    "谁在什么时候为什么叫停"是事后唯一能回答"这一趟为什么停"的东西，
-    而空文件只能回答"停过"。第一次写下的那份不许被后来的请求覆盖
-    （同一趟里 M 与用户都可能叫停，先到先得 —— 与 `conductor` 的终态口径一致）。
+    返回 `(负载, 结局)`，结局三态：
+
+    - `"created"` —— 这次调用新写了开关（调用方可以清）；
+    - `"upgraded"` —— 盘上已有一把别人写的开关，这次只追加了 `force` 升级（不许清）；
+    - `"existing"` —— 盘上已有的开关原样返回（这次什么都没改，不许清）。
+
+    为什么要把"结局"与"负载"分开返回（而不是塞进负载）：负载是写进开关文件的内容，
+    它是"谁在什么时候为什么叫停"的审计面；把调用方的结局塞进去会让下一次读它的人
+    把"上一次是谁写的"与"这一次是谁在问"混起来。驱动器按这个结局决定要不要清：
+    只有 `created` 才清（`3`/`4` 一律不动别人的痕迹）。
     """
     path = stop_path(root, explicit)
     existing = read_stop(root, explicit=explicit)
@@ -86,15 +91,33 @@ def request_stop(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "u
                              "escalated_by": str(by or "user")})
             path.write_text(json.dumps(upgraded, ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8", newline="\n")
-            return upgraded
-        return existing
+            return upgraded, "upgraded"
+        return existing, "existing"
     payload = {"reason": str(reason or DEFAULT_REASON), "by": str(by or "user"),
                "force": bool(force), "at": _now_iso(), "sid": str(sid or ""),
                "path": str(path)}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8", newline="\n")
-    return payload
+    return payload, "created"
+
+
+def request_stop(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
+                 force: bool = False, sid: str | None = None,
+                 explicit: str | Path | None = None) -> dict[str, Any]:
+    """写下停机开关（幂等：已经有了就原样返回，不改第一次的理由）。
+
+    返回开关里那份负载（`{reason, by, force, at, sid, path}`）。
+    为什么把理由与"谁说的"写进「文件内容」而不是只建一个空文件：
+    "谁在什么时候为什么叫停"是事后唯一能回答"这一趟为什么停"的东西，
+    而空文件只能回答"停过"。第一次写下的那份不许被后来的请求覆盖
+    （同一趟里 M 与用户都可能叫停，先到先得 —— 与 `conductor` 的终态口径一致）。
+
+    需要知道"这把开关是不是我写的"（退出码 `0/3/4`）时用 :func:`request_stop_detail`：
+    这里刻意保持旧签名与旧返回，免得调用方为了一个读数去改一遍。
+    """
+    return request_stop_detail(root, reason=reason, by=by, force=force, sid=sid,
+                               explicit=explicit)[0]
 
 
 def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[str, Any] | None:
@@ -366,6 +389,44 @@ def kill_registered(root: str | Path, *, role: str = "",
 
 
 # ---------------------------------------------------------------- 内部
+
+
+def running_loops(root: str | Path) -> dict[str, Any]:
+    """现在有没有在跑的循环（`draft/39` §2 D07 那一行要求 `--status` 显式回答它）。
+
+    判据两路取并集，缺一路都会把"没人消费的开关"读成"没事"：
+
+    1. 会话面：某段会话里最后一条 `agent_run_start` 之后没有对应的
+       `agent_run_end` ⇒ 那一趟还在跑（按角色报出来）。会话是叙事面，
+       强杀不留 `agent_run_end`，所以它单独用会漏；
+    2. 进程面：`live_pids` 里登记着且真的活着的进程 ⇒ 也报出来。
+       进程面单独用会漏"登记没写/被清理"的情况。
+
+    返回 `{"running": [{"role","sid","since"}], "live": [...], "answer": "有"/"没有"}`。
+    """
+    running: list[dict[str, Any]] = []
+    stale: list[str] = []
+    from . import sessions as _SESS
+
+    for info in _SESS.list_sessions(root):
+        sid = str(info.get("sid") or "")
+        events, problems = _SESS.read_session(root, sid)
+        if problems:
+            # 读不出来的会话 ⇒ 这一路判不了，如实说（"没查成"不许读成"没在跑"）
+            stale.append(sid)
+            continue
+        starts = [e for e in events if e.get("kind") == "agent_run_start"]
+        if not starts:
+            continue
+        last = starts[-1]
+        after = [e for e in events if e.get("kind") == "agent_run_end"
+                 and str(e.get("ts") or "") >= str(last.get("ts") or "")]
+        if not after:
+            running.append({"role": str(last.get("role") or ""), "sid": sid,
+                            "since": str(last.get("ts") or "")})
+    live = live_pids(root)
+    return {"running": running, "live": live, "unreadable_sessions": stale,
+            "answer": "有" if (running or live) else "没有"}
 
 
 def _now_iso() -> str:

@@ -371,7 +371,7 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
         "why": str(why or ""),
         "results": items,
     }
-    # 键表写在这里（字面量）而不是 `ok(payload, **payload)`：本模块的工具体
+    # 键表写在这里（字面量）而不是 `ok(payload, payload)`：本模块的工具体
     # 历史上都是"看不清的调用点"那一档，静态扫描读不出键；这一件刻意写成
     # 看得见的形态，于是"声明了哪些键"可以直接对着这段代码核。
     # （`test_tools_branch_key_sets` 的 `INVISIBLE_OK_SITES` 里
@@ -475,7 +475,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     （「排除自己」：杀掉自己的进程树会让这次调用永远回不去；M 随后由步循环的停机判据收工）。
     """
     from .. import stopctl
-    from ..agent_loop import PUBLIC, send_message
+    from ..agent_loop import PUBLIC, send_interjection, send_message
 
     c = _conductor()
     root = Path(str(getattr(getattr(c, "store", None), "root", "") or "."))
@@ -487,14 +487,19 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     switch = stopctl.request_stop(root, reason=code, by=S.CONDUCTOR_ROLE, force=force, sid=sid)
     notified = ""
     if notify:
-        msg_id, problem = send_message(
-            root, sender=S.CONDUCTOR_ROLE, to=PUBLIC, subject="叫停",
+        # `draft/39` §3.11 二 D07（用户 2026-10-05 裁）：叫停那条广播改成集体插话。
+        # 区别不是措辞而是送达方式：留言躺在收件箱里等下一次"听"，而插话由框架在
+        # 下一步开头单列一段【插话】（不混进消息列表）—— 旧形态的 body 还写着
+        # "收到本条广播不会打断你"，《那正是没做好的地方》。
+        ij_id, problem = send_interjection(
+            root, sender=S.CONDUCTOR_ROLE, to="ALL", subject="叫停",
             body=("用户/主控叫停（" + code + ("，强制" if force else "") + "）：请各自收工，"
                   "并把你已经起的子进程停掉（实验脚本、检查器进程等）。"
                   "停机开关已落在 " + str(stopctl.stop_path(root)) + "；"
-                  "收到本条广播本身不会打断你正在跑的循环 —— 开关才会。"),
+                  "你会在**下一步开头**看到这条插话（它不打断当前步）——"
+                  "真正让在飞工作停下的是那个开关。"),
             sid=sid or None)
-        notified = msg_id if not problem else f"未发出：{problem}"
+        notified = ij_id if not problem else f"未发出：{problem}"
     receipt = c.cancel(code, detail=("强制停止（主控 M）" if force else "优雅停止（主控 M）"),
                        by=S.CONDUCTOR_ROLE)
     # 回报首次生效的那个原因（FC-20 第 2 条：终态先到先得、reason 只许一个答案）。

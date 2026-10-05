@@ -296,11 +296,12 @@ def test_retracted_is_not_an_evidence_kind_but_a_lifecycle_state():
     assert CA.is_retracted(retracted) is True
     assert CA.is_retracted(full_claim(status="证")) is False
 
-    # 负控：作废但不说为什么 ⇒ error
+    # 负控：作废但不说为什么 ⇒ error（第 4 族「生命周期自洽」，`draft/39` §3.11 四起
+    # 它有自己的 code —— 族号要能直接印在拒信里）
     no_reason = full_claim(status="作废", errata_ids=[], freeze_reason="")
     spec2 = CA.validate_claim(no_reason)
     assert spec2.error_count >= 1
-    assert "inconsistent_status" in codes(spec2)
+    assert "lifecycle_incomplete" in codes(spec2)
 
     # 防误伤：作废 + 冻结理由（合法的另一种原因）⇒ 通过
     frozen_reason = full_claim(status="作废", errata_ids=[], freeze_reason="连败 5 次，结论作废")
@@ -384,7 +385,11 @@ def test_presence_of_separates_absent_from_empty():
         (lambda c: c.update({"counterexamples": "反例"}), "bad_type"),
         (lambda c: c.update({"numeric_evidence": [1, 2]}), "bad_type"),
         (lambda c: c.update({"errata_ids": "E-01"}), "bad_type"),
-        (lambda c: c.update({"numeric_evidence": {"script": "s.py"}}), "empty_required"),
+        # 第 7 族（数值证据四元组）在 `draft/39` §3.11 四之后有了自己的 code：
+        # 族号要能直接印在拒信里，而"缺 `numeric_evidence` 的键"与"必填字段为空"
+        # 是两族不同的判据（前者是结构不全，后者是字段在不在）。
+        (lambda c: c.update({"numeric_evidence": {"script": "s.py"}}),
+         "incomplete_numeric_evidence"),
         (lambda c: c.update({"frozen": True, "freeze_reason": ""}), "empty_required"),
         (lambda c: c.update({"citations": []}), "empty_required"),
         (lambda c: c.update({"citations": ["", "  "]}), "bad_type"),

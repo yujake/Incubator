@@ -381,7 +381,9 @@ def test_build_document_refuses_dangling_citation_and_writes_nothing(store: Stor
     assert res.meta.get("created") is False
     assert [m["citation"] for m in res.meta["missing"]] == ["lit:9999"]
     # 必须指出是哪一条断言的引用（compose_claim 会派生 claim_id，不假定它叫 claim-1）
-    assert res.meta["missing"][0]["claim_id"] == claims[0]["claim_id"]
+    # `claim_id` 由脚本按顺序发（`draft/39` §3.11 四 D10）：调用方写的那一个会被丢掉，
+    # 于是"哪条断言出的问题"按本脚本分配的代号报回来。
+    assert res.meta["missing"][0]["claim_id"] == "claim-1"
     assert res.meta["missing"][0]["claim_id"]
     assert "literature" in res.meta["missing"][0]["why"]
     # ---- 逐字节比对：一个字都没写

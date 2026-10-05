@@ -44,8 +44,8 @@ FC-27 条目，本任务不许编辑它，它逐字检查 `c.get("text")`。
 ## [契约] `status` 与 `evidence_kind` 是两个正交的轴（本模块的核心设计点）
 
 ```text
-evidence_kind ∈ {proof, cross_check, heuristic}   支撑它的证据是**哪一类**
-status        ∈ {证, 验, 待精化, 作废}             它当前处于什么**生命周期**
+evidence_kind ∈ {proof, cross_check, heuristic}   支撑它的证据是哪一类
+status        ∈ {证, 验, 待精化, 作废}             它当前处于什么生命周期
 ```
 
 `作废`（retracted）不是一种证据：它是"一条曾经存在的断言被撤销了"。
@@ -620,21 +620,27 @@ class ClaimIssue:
     （`schema.ReviewFinding.evidence` 的同类纪律：只写"看起来不对"的发现，
     会让审校变成另一种幻觉的来源）。
 
-    `code` 受控（`DEVELOPMENT.md` §6 的禁止形态之一是"隐含的判据无法被审阅"）：
+    `code` 受控（`DEVELOPMENT.md` §6 的禁止形态之一是"隐含的判据无法被审阅"）；
+    每条 code 还归入 `draft/39` §3.8 的 8 族之一（`CLAIM_FAMILY_BY_CODE`），
+    拒信按族号报错（见 `family_note`）：
 
-    ======================  ==========================================
-    code                      含义
-    ======================  ==========================================
-    `missing_field`          必填字段缺失（或为空）
-    `bad_enum`               字段存在，取值不在受控词表里
-    `bad_type`               字段存在，类型不对（如 `frozen="yes"`）
-    `empty_required`         `frozen=True` 但 `freeze_reason` 为空这类"成对字段"缺失
-    `inconsistent_status`    `status` 与 `evidence_kind` 的已知不一致组合
-    `unknown_status_axis`    判不了（缺字段 / 取值非法）—— 第三态，不是违规
-    `undeclared_field`       出现了不在 `CLAIM_FIELDS` 里的键
-    `duplicate_claim_id`     同一稿件里代号重复
-    `checker_error`          检查器自己没跑成（异常被捕获并如实登记）
-    ======================  ==========================================
+    ================================  =======  ==========================================
+    code                                族      含义
+    ================================  =======  ==========================================
+    `missing_field`                     1       必填字段缺失（或为空）
+    `empty_required`                    1       `frozen=True` 但 `freeze_reason` 为空这类"成对字段"缺失
+    `undeclared_field`                  1       出现了不在 `CLAIM_FIELDS` 里的键
+    `bad_enum`                          2       字段存在，取值不在受控词表里
+    `bad_type`                          2       字段存在，类型不对（如 `frozen="yes"`）
+    `inconsistent_status`               3       `status` 与 `evidence_kind` 的已知不一致组合
+    `unknown_status_axis`               3       判不了（缺字段 / 取值非法）—— 第三态，不是违规
+    `lifecycle_incomplete`              4       `frozen`/`is_negative`/`作废` 的生命周期不闭合
+    `missing_disclaimer`                5       `cross_check` 缺那句"不构成证明"声明
+    `overclaim`                         6       证据等级 < proof 却用了"证明/定理/必然"这类词
+    `incomplete_numeric_evidence`       7       `numeric_evidence` 四元组缺键
+    `duplicate_claim_id`                8       同一稿件里代号重复
+    `checker_error`                     0       检查器自己没跑成（异常被捕获并如实登记）
+    ================================  =======  ==========================================
     """
 
     code: str
@@ -644,15 +650,94 @@ class ClaimIssue:
     evidence: str = ""
     claim_id: str = ""
 
+    @property
+    def family(self) -> int:
+        """这一条属于 `draft/39` §3.8 的哪一族（`0` = 还没有族号，不是"第 8 族"）。
+
+        族号由 `code` 一处派生（`family_of`）：拒信要点名族号 + 该族正例，
+        而"这条判据属于哪一族"是判据自身的属性，不该由每个报错点各自记一遍。
+        """
+        return family_of(self.code)
+
     def to_dict(self) -> dict:
         return {
             "code": self.code,
+            "family": self.family,
             "field": self.field_name,
             "level": self.level,
             "message": self.message,
             "evidence": self.evidence,
             "claim_id": self.claim_id,
         }
+
+
+#: `draft/39` §3.8 的 8 族（用户裁定：拒信一律点名族号 + 违反的那一条 + 该族正例）。
+#:
+#: 每一族三项：`name`（人话名字）、`rule`（这一族判什么）、`example`（正例 ——
+#: 给模型看的"照这个写"）。为什么正例是判据的一部分：只说"你这不对"时，模型下一句
+#: 往往是整条重写（结论随之漂移），而这里要救的通常只是一栏。
+CLAIM_FAMILIES: dict[int, dict[str, str]] = {
+    1: {"name": "字段存在性",
+        "rule": "`CLAIM_FIELDS` 里的必填项要在、且非空（三态：present/empty/absent）",
+        "example": '{"claim_id": "c1", "statement": "…", "kind": "定理", "citations": ["exp:0002"]}'},
+    2: {"name": "受控词表",
+        "rule": "`kind`/`status`/`source`/`our_check`/`allowed_use` 的取值必须在各自的词表里，"
+                "且类型要对（`frozen` 是布尔、`numeric_evidence` 是对象）",
+        "example": '{"kind": "引理", "status": "证", "source": "自证", "our_check": "证明"}'},
+    3: {"name": "status × evidence_kind 交叉",
+        "rule": "`status=\"证\"` 必须 `evidence_kind=\"proof\"`；不是 proof 就不许自称「证」",
+        "example": '{"status": "证", "evidence_kind": "proof"} 或 {"status": "验", "evidence_kind": "cross_check"}'},
+    4: {"name": "生命周期自洽",
+        "rule": "`frozen` ⇒ 必须有 `freeze_reason`；`is_negative` ⇒ 必须有 `negation_kind`；"
+                "`status=\"作废\"` ⇒ 必须有 `errata_ids` 或 `freeze_reason`",
+        "example": '{"status": "作废", "errata_ids": ["e-0007"]} 或 {"frozen": true, "freeze_reason": "结论保留、不再投入"}'},
+    5: {"name": "cross_check 的免责声明",
+        "rule": "`evidence_kind=\"cross_check\"` 的断言必须自带那句「数值交叉验证，不构成证明」"
+                "（写在独立的 `disclaimer` 一栏里）",
+        "example": '{"evidence_kind": "cross_check", "disclaimer": "数值交叉验证，不构成证明"}'},
+    6: {"name": "过度声称词表",
+        "rule": "证据等级不是 proof 时，正文里不许出现「证明/定理/必然」这类词",
+        "example": '证据是 cross_check 时正文写「数值上支持（未证明）」而不是「证明了」'},
+    7: {"name": "数值证据结构",
+        "rule": f"`numeric_evidence` 要有 {NUMERIC_EVIDENCE_KEYS} 四项（缺一即不可复跑/不可判定覆盖）",
+        "example": '{"numeric_evidence": {"script": "code/scan.py", "range": "n<=12", "n_cases": 262, "n_counterexamples": 0}}'},
+    8: {"name": "稿件级（代号与逐条汇总）",
+        "rule": "同一稿件里 `claim_id` 不许重复；逐条问题要汇总成 error/warning",
+        "example": "`claim_id` 由脚本按顺序发（claim-1…claim-N），模型不要自己编号"},
+}
+
+#: 一个 `code` 属于哪一族（未登记的 code ⇒ `0` = 「还没有族号」，不是"第 8 族"）。
+#:
+#: 为什么按 code 而不是按报错点：报错点有十几处，各记一遍必然漂移；而"这一族叫什么"
+#: 只有一处。歧义的两处（同形不同义）已各自独立成 code：`missing_disclaimer`（第 5 族）、
+#: `overclaim`（第 6 族）、`incomplete_numeric_evidence`（第 7 族）、`lifecycle_incomplete`（第 4 族）。
+CLAIM_FAMILY_BY_CODE: dict[str, int] = {
+    "missing_field": 1, "empty_required": 1, "undeclared_field": 1,
+    "bad_enum": 2, "bad_type": 2,
+    "inconsistent_status": 3, "unknown_status_axis": 3,
+    "lifecycle_incomplete": 4,
+    "missing_disclaimer": 5,
+    "overclaim": 6,
+    "incomplete_numeric_evidence": 7,
+    "duplicate_claim_id": 8,
+}
+
+
+def family_of(code: str) -> int:
+    """这一条 issue 的族号（`0` = 还没登记族号 —— 三态，不是"第 8 族"）。"""
+    return int(CLAIM_FAMILY_BY_CODE.get(str(code or ""), 0))
+
+
+def family_note(code: str, *, with_example: bool = True) -> str:
+    """拒信里那一段：`族 N（名字）：判什么` ＋ `正例：…`（`draft/39` §3.11 四）。"""
+    fam = family_of(code)
+    if not fam or fam not in CLAIM_FAMILIES:
+        return f"（这一条还没有族号：code={code} —— 请按 message 里那一条改）"
+    info = CLAIM_FAMILIES[fam]
+    text = f"族 {fam}（{info['name']}）：{info['rule']}"
+    if with_example:
+        text += f"；正例：{info['example']}"
+    return text
 
 
 #: 判定"这条断言的三态轴判不判得了"时用的键。
@@ -1174,7 +1259,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
             if missing_keys:
                 issues.append(
                     ClaimIssue(
-                        code="empty_required",
+                        code="incomplete_numeric_evidence",
                         field_name=name,
                         level="error",
                         message=(
@@ -1197,7 +1282,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
         if ek_norm == "cross_check" and not str(_value_of(norm, "disclaimer") or "").strip():
             issues.append(
                 ClaimIssue(
-                    code="empty_required",
+                    code="missing_disclaimer",
                     field_name="disclaimer",
                     level="error",
                     message=(
@@ -1219,7 +1304,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
             if hit:
                 issues.append(
                     ClaimIssue(
-                        code="inconsistent_status",
+                        code="overclaim",
                         field_name="evidence_kind",
                         level="error",
                         message=(
@@ -1374,7 +1459,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
         )
         issues.append(
             ClaimIssue(
-                code="inconsistent_status",
+                code="lifecycle_incomplete",
                 field_name="errata_ids",
                 level="error",
                 message=(

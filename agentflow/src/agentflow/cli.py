@@ -1943,6 +1943,19 @@ def cmd_stop(args) -> int:
 
     `draft/37` §140 之后：开关是一次性信号 —— 停一趟、记一笔（`runs/stop-history.jsonl`）、
     撤走，所以"停完接着 `--resume`"这条路不再需要人工 `--clear`。
+
+    退出码（`draft/39` §3.11 D25，用户裁定，2026-10-05）：
+
+    | 码 | 含义 | 驱动器该怎么办 |
+    |---|---|---|
+    | `0` | 这次调用新写了开关（或 `--clear` 真的撤掉了一把） | 可以清（它是我写的） |
+    | `3` | 盘上已有一把别人写的开关（本次只可能追加 `force` 升级） | 不许清，只能追加升级 |
+    | `4` | 没有开关（`--clear` 时无可撤；无需清） | 什么都不用做 |
+    | `2` | 没做成（强制停时一个进程都没杀掉 —— 受限环境的常见形态） | 读原话，别读成"停住了" |
+
+    为什么"别人的开关一律不许清"要写成一个码：驱动器此前只看"命令成没成功"，
+    于是它会把用户刚落的开关顺手撤掉（"停完就清"），而那正是"用户叫停"这件事
+    在系统里消失的形态。
     """
     from . import stopctl
 
@@ -1966,6 +1979,19 @@ def cmd_stop(args) -> int:
                       f"{h.get('consumed_at', '?')} 收工时用掉")
         print(f"[stop] 登记着的活进程：{len(live)} 个"
               + ("：" + "、".join(f"{p['role']}#{p['pid']}" for p in live) if live else ""))
+        # D07（`draft/39` §2）：显式回答"在跑的循环：有/没有" —— 只报 pid 登记时，
+        # 登记为空会让读者把"一把没人消费的开关"读成"没事"。
+        loops = stopctl.running_loops(root)
+        detail = "、".join(f"{r['role']}（sid={r['sid']}，起于 {r['since']}）"
+                           for r in loops["running"])
+        print(f"[stop] 在跑的循环：{loops['answer']}"
+              + (f"：{detail}" if detail else "")
+              + (f"；另有 {len(loops['live'])} 个登记着的活进程"
+                 if loops["live"] and not detail else ""))
+        if loops["unreadable_sessions"]:
+            print(f"[stop] 有 {len(loops['unreadable_sessions'])} 段会话读不出来"
+                  f"（{loops['unreadable_sessions']}）⇒ 这一路没查成，别读成「没在跑」",
+                  file=sys.stderr)
         return 0
 
     force = bool(getattr(args, "force", False))
@@ -1974,15 +2000,21 @@ def cmd_stop(args) -> int:
         # "刚写完发现写错了"那种"在生效之前撤销"的用法。
         gone = stopctl.clear_stop(root)
         print(f"[stop] 停机开关{'已撤' if gone else '本来就不在'}：{stopctl.stop_path(root)}")
-        return 0
-    state = stopctl.request_stop(root, reason=str(getattr(args, "reason", "") or "user"),
-                                 by="user", force=force, sid=getattr(args, "sid", None))
-    print(f"[stop] 停机开关已落：{state['path']}（reason={state['reason']}"
-          f"{'，force' if state['force'] else ''}）")
+        return 0 if gone else 4
+    state, outcome = stopctl.request_stop_detail(
+        root, reason=str(getattr(args, "reason", "") or "user"),
+        by="user", force=force, sid=getattr(args, "sid", None))
+    mine = outcome == "created"
+    print(f"[stop] 停机开关{'已落' if mine else '已在盘上'}：{state['path']}"
+          f"（reason={state['reason']}{'，force' if state['force'] else ''}）")
+    if not mine:
+        print(f"[stop] 这把开关不是你写的（{state.get('by', '?')} 在 {state.get('at', '?')} 落的）"
+              f"⇒ 退出码 3：只追加升级、**不许清**", file=sys.stderr)
     if not force:
-        print("[stop] 优雅停止：正在跑的那一趟会在下一步之前收工"
-              "（E 的实验子进程也会被终止）；多轮自主跑在每轮之间收工")
-        return 0
+        if mine:
+            print("[stop] 优雅停止：正在跑的那一趟会在下一步之前收工"
+                  "（E 的实验子进程也会被终止）；多轮自主跑在每轮之间收工")
+        return 0 if mine else 3
     killed = stopctl.kill_registered(root)
     print(f"[stop] 强制停止：按登记杀了 {killed['killed']}/{len(killed['requested'])} 个进程"
           + (f"（{killed['requested']}）" if killed["requested"] else "（登记里没有活进程）"))
@@ -1996,7 +2028,7 @@ def cmd_stop(args) -> int:
               "读数里给了原话，不要把它读成「停住了」。停机开关仍然有效："
               "那一趟会在下一个步检查点收工（`stop_reason=force_stop`）", file=sys.stderr)
         return 2
-    return 0
+    return 0 if mine else 3
 
 
 def cmd_closing(args) -> int:

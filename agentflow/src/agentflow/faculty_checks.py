@@ -263,14 +263,18 @@ def progress_findings(before: Mapping[str, int], after: Mapping[str, int], *,
 
 
 #: 判据"结论有没有强于它挂的证据"的机械半只有一份实现：`claimanatomy.validate_claim`
-#: 的 `inconsistent_status`（`evidence_kind != proof` 而正文出现 `OVERCLAIM_MARKERS`）。
+#: 的 `overclaim`（`evidence_kind != proof` 而正文出现 `OVERCLAIM_MARKERS`）。
 #:
 #: 这一层不再另立词表 —— 第一版我写了 `STRENGTH_WORDS = ("证明","定理",…)`，
 #: 测试当场抓到两个误报（`服从中心极限定理` 是定理的名字、`不构成证明` 是明说不是证明），
 #: 而更要紧的是：`claimanatomy` 早就有这条判据（且它的词表由
 #: `doc_tools.OVERCLAIM_MARKERS` 唯一提供，还有测试钉住两边是同一个对象）。
 #: 于是这里的职责改成"把那份判据的结论翻译成 faculty 视图"，而不是再判一次。
-CLAIM_STRENGTH_CODES: tuple[str, ...] = ("inconsistent_status",)
+#:
+#: `draft/39` §3.8（2026-10-05）之后这条判据有了自己的 code（`overclaim` = 第 6 族）：
+#: 族号要能直接印在拒信里，而它此前与"status × evidence_kind 交叉"共用
+#: `inconsistent_status` ⇒ 两族在拒信里长得一样。旧 code 仍留在表里（旧行/旧调用点）。
+CLAIM_STRENGTH_CODES: tuple[str, ...] = ("overclaim", "inconsistent_status")
 
 
 def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
@@ -316,7 +320,11 @@ def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
     findings += [f"{m['claim_id']}：{m['why']}" for m in missing]
     return {"checked": True, "verdict": verdict, "total": total, "overclaimed": over,
             "missing_evidence": missing, "findings": findings,
-            "problem_count": len(findings), "criterion_source": "claimanatomy.inconsistent_status"}
+            "problem_count": len(findings),
+            # 判据出处：`draft/39` §3.8 之后这条是第 6 族（`overclaim`）。
+            # 旧名（`inconsistent_status`）仍被 `CLAIM_STRENGTH_CODES` 认，
+            # 但"出处"这一栏只写现在这一个 —— 两族共用一个名字正是这次要修的东西。
+            "criterion_source": f"claimanatomy.{CLAIM_STRENGTH_CODES[0]}"}
 
 
 def trace_findings(store: Any, pairs: Sequence[Sequence[str]], *, text: str = "",
