@@ -217,6 +217,27 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert "不是论文包" in text, "研究型任务的交付物口径也要写清（D34）"
 
 
+def test_the_research_brief_asks_for_literature_citations_and_three_search_readings():
+    """广告面判据（D37 / D38 的作者侧）：这三句话必须写在 brief 里。
+
+    真机读数（T2 第 9 趟 `p6k`）：手稿 7 条引用全是 `exp:`、`lit:` 引用 0
+    （库里有 16 条文献、8 条全对口），14 条数值实验 `search_bound` 有值的 0 条
+    —— 两件事都不是"能力缺失"，是没人要求：验收表没写文献那一行、
+    也没人告诉主控"你自己写的核验脚本要留下界/策略/成本曲线"。
+    """
+    from agentflow import agent_prompts as AP
+
+    def _brief_text(role: str) -> str:
+        brief = AP.ROLE_BRIEFS[role]
+        return "\n".join([brief.duty, brief.deliverable, *brief.policy])
+
+    m_text = _brief_text("M")
+    assert "document_literature_citations" in m_text and "文献进稿" in m_text, m_text
+    assert "bound" in m_text and "strategy" in m_text and "scaling" in m_text, m_text
+    g_text = _brief_text("G")
+    assert "lit:" in g_text and "研究型手稿" in g_text, g_text
+
+
 def test_the_formal_verification_path_says_verdict_then_ledger_row(registry: ToolRegistry):
     """判据（`draft/37` §92）：提示词必须说清"形式化核验分两步"，且第二步是落库。
 

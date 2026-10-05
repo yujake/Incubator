@@ -560,7 +560,7 @@ def _derive(
             "result": "refutes",
             "evidence_kind": evidence_kind,
             "negation_kind": "disproved",
-            "observations": {**_search_facts(stdout, payload), **observations},
+            "observations": {**_search_facts(stdout, payload), **observations, **_script_data(payload)},
             "counterexample": dict(counterexample),
             "notes": notes,
         }
@@ -570,7 +570,15 @@ def _derive(
     # 搜索读数并进 observations（§133）：界 / 成本曲线 / 策略名 —— 三者都随行落库，
     # 于是"这一轮把界推到哪儿、比上一轮快了多少"是可比较的，而不是只留一个耗时。
     facts = _search_facts(stdout, payload)
-    merged = {**facts, **observations}
+    merged = {**facts, **observations, **_script_data(payload)}
+    if result == "supports" and not any(k in merged for k in ("bound", "strategy", "scaling")):
+        # `draft/39` §6.27 的 D38：真机读数（T2 第 9 趟）14 条实验里 `search_bound` 有值的 0 条，
+        # 而脚本确实打了 `REPRO_RESULT`（它只报了 `data`）—— 政策里写着这三样，但没人核对。
+        # 这一句把"没留下界"从沉默变成一条可读的读数（不替它编一个界）。
+        notes.append(
+            "这一条只给了结论、没有留下界/策略/成本曲线（`REPRO_RESULT` 里没有 "
+            "`bound`/`strategy`/`scaling`）⇒ 「这一轮搜到哪儿、比上一轮快了多少」不可比较。"
+            "下一次给脚本补上这三样（`draft/37` §133）；不是把结论改坏，是把进展留下来")
     return {
         "result": result,
         "evidence_kind": evidence_kind,
@@ -579,6 +587,22 @@ def _derive(
         "counterexample": None,
         "notes": notes,
     }
+
+
+def _script_data(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """把脚本自报的 `data` 原样留下（`draft/39` §6.27 的 D39）。
+
+    真机读数（T2 第 9 趟 `p6k`）：脚本打的是
+    `REPRO_RESULT: {"result": "supports", "counterexample": null, "data": {…}}` ——
+    `data`（这次到底核了哪个图 / 哪组参数）不在读侧认识的键里，于是台账上
+    `observations` 是空的、`out/experiments/*.log` 里才有；而九条 claim 不同、data 逐字相同
+    的 `supports` 行就是这么攒出来的：证据面看不见"同一份读数被反复使用"。
+    这里只做一件事：原样留下它（不改写、不解释）。
+    """
+    data = payload.get("data")
+    if isinstance(data, Mapping) and data:
+        return {"data": dict(data)}
+    return {}
 def build_experiment(
     experiment_id: str,
     claim: str,

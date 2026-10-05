@@ -57,6 +57,18 @@ print("REPRO_RESULT: " + json.dumps({
 """
 
 
+#: 只报结论与 `data`、不报 `bound`/`strategy`/`scaling` 的脚本（真机 T2 第 9 趟的形态）。
+DATA_ONLY_PROBE = """
+import json
+print("REPRO_RESULT: " + json.dumps({
+    "result": "supports",
+    "evidence_kind": "cross_check",
+    "data": {"n_vertices": 30, "degrees": [3], "girth": 8},
+    "counterexample": None,
+}))
+"""
+
+
 # ============================================================ 辅助
 
 
@@ -120,6 +132,42 @@ def test_run_experiment_records_row_with_hash_and_exit_code(store):
     assert row["code_path"] == "probes/honest.py", "记录的必须是工作区内相对路径"
     assert row["observations"] == {"grid": 64, "max_err": 1e-9}
     assert row["created_by"] == "agent-E"
+
+
+def test_the_script_data_is_kept_and_a_missing_bound_is_named(store):
+    """判据（`draft/39` §6.27 的 D38）：脚本自报的 `data` 要进台账；没有界/策略/成本曲线要说出来。
+
+    真机读数（T2 第 9 趟 `p6k`）：脚本打的是
+    `REPRO_RESULT: {"result": "supports", "counterexample": null, "data": {…}}` ——
+    `data`（这次核的是哪个对象）不在读侧认识的键里 ⇒ 台账 `observations` 空、
+    `search_bound` 空（14 条实验里 0 条有界），"核的是哪个图"只留在
+    `out/experiments/*.log` 里 —— 于是"同一份读数被当成几份证据"这件事在台账上不可见。
+    """
+    rel = write_script(store, "probes/data_only.py", DATA_ONLY_PROBE)
+    out = make_e(store).run_experiment("核一个具体的图", "data-only", rel, method="numeric")
+
+    row = store.rows("experiments")[0]
+    assert row["observations"]["data"] == {"n_vertices": 30, "degrees": [3], "girth": 8}, row
+    assert "没有留下界/策略/成本曲线" in out["notes"], out["notes"]
+
+
+def test_the_same_data_supporting_another_claim_is_named(store):
+    """判据（D39）：同脚本 + 同 `data` + 另一条 claim ⇒ 行里点名"同一份证据"。
+
+    真机读数（T2 第 9 趟）：一个脚本被派 9 次、claim 分别是 W(2)/W(3)/W(4)…，
+    而 9 条 `data` 逐字相同（30 顶点 / 度 3 —— 始终是同一个图）⇒ 台账上九条 `supports`，
+    手稿把它们当九份独立证据引。负控：同一条 claim 上重跑（复现）不点这个名。
+    """
+    rel = write_script(store, "probes/data_only2.py", DATA_ONLY_PROBE)
+    e = make_e(store)
+    first = e.run_experiment("W(2) 那条断言", "gq-w2", rel, method="numeric")
+    second = e.run_experiment("W(3) 那条断言", "gq-w3", rel, method="numeric")
+    third = e.run_experiment("W(3) 那条断言（复现）", "gq-w3", rel, method="numeric")
+
+    assert "同一份证据" not in first["notes"], first["notes"]
+    assert "同一份证据" in second["notes"], second["notes"]
+    assert "exp:0000" in second["notes"], second["notes"]
+    assert "同一份证据" not in third["notes"], "同一条 claim 上的复现是正当的"
 
 
 def test_code_hash_is_reused_from_verify_tools_not_reimplemented(store):
