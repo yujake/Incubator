@@ -168,6 +168,30 @@ class _Core:
                 }
             },
         )
+    def _unwired_partial(self, sg: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """`dead_end` 的 `best_partial`（§3.19 第 8 条：部分结果必须进台账，不许只写在散文里）。
+
+        从这条子目标现有的读数里取（证据 id、实验 id、已记下的否定分类、尝试次数），
+        逐条带 id —— 于是"这一条子目标已经攒下了什么"在 `history` 里是可复核的，
+        而不是"我们试过了"这么一句。
+        """
+        out: list[dict[str, Any]] = []
+        ev = list(sg.get("evidence_ids") or [])
+        exps = list(sg.get("experiment_ids") or []) + list(sg.get("proof_experiment_ids") or [])
+        if ev:
+            out.append({"what": "这条子目标已有的证据行", "ids": [str(x) for x in ev],
+                        "why_partial": "证据不足以定论，但它已经落台账"})
+        if exps:
+            out.append({"what": "这条子目标已经跑过的实验", "ids": [str(x) for x in exps],
+                        "why_partial": "实验有读数，但还不能判定子目标"})
+        if sg.get("negation_kind") is not None:
+            out.append({"what": f"否定分类已定：{sg.get('negation_kind')}", "ids": [],
+                        "why_partial": "「没证出来」与「已证否」已经分开了"})
+        if not out:
+            out.append({"what": f"子目标原文：{str(sg.get('text') or '')[:80]}", "ids": [],
+                        "why_partial": "还没有任何证据行 —— 这一条是原文本身，不是进展"})
+        return out
+
     def _deploy(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict:
         """按 `owner` 分派一个动作。只做框架内真实存在的事。
 
@@ -187,12 +211,32 @@ class _Core:
             return self._deploy_b(sg, plan=plan)
         if owner in UNWIRED_OWNERS:
             # 不允许把"没做"写成"做了但没结果"。
+            #
+            # `draft/39` §3.16/§6.14：这一条收尾必须交一件产物 —— 它是
+            # `dead_end`（受控理由 + 证据 + `best_partial`），而不是只有一个
+            # `outcome="no_change"`（"没有新事实"是步级读数，不是产物）。
+            # 产物由 `attackround.dead_end_row` 造（同一套判据，不手搓 dict）：
+            # 于是 `attack_plans.history` 里每一轮都能回答"它到底交了什么"。
+            from .. import attackround as AR
+
+            partial = self._unwired_partial(sg)
+            product = AR.dead_end_row(
+                strategy="套用已知定理",
+                reason="缺工具",
+                evidence=(f"子目标 {sid}（{text}）的 owner={owner} 侧没有可自动调用的推理入口；"
+                          "这一轮据此判定走不下去，而不是假装推进"),
+                best_partial=partial,
+                why_strategy="没有可调用的推理入口时，唯一诚实的产物是 dead_end（换子目标/等人接线）",
+            )
             return {
                 "action": "no_change",
                 "outcome": "no_change",
+                "product": product,
                 "detail": (
                     f"子目标 {sid}（{text}）需要 {owner} 的推理，但**本框架尚未接线自动推理** "
-                    f"⇒ **未推进**（这一轮什么都没做，不是'做了但没结果'）。"
+                    f"⇒ **未推进**（这一轮什么都没做，不是'做了但没结果'）；"
+                    f"已按 §3.16 落成产物 `dead_end`（reason={product['reason']}，"
+                    f"best_partial {len(product['best_partial'])} 条）。"
                     f"要把 owner={owner} 的子目标真正推起来，需要 {owner} 侧先接上可调用的推理入口；"
                     "在此之前 F 只如实记账，绝不用空证据冒充进展"
                 ),

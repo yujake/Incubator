@@ -205,19 +205,29 @@ class _Step:
             sg["in_flight"] = bool(deploy["in_flight"])
         sg["attempts"] = int(sg.get("attempts") or 0) + (1 if deploy.get("count_attempt") else 0)
 
-        history.append(
-            {
-                "round": rounds + 1,
-                "sid": sid,
-                "action": deploy["action"],
-                # 收口到 `STEP_OUTCOMES`（`G-24②`）：词表外的取值在写入前就炸，
-                # 而不是原样落进 history（那里它会让停滞检测静默失效）。
-                "outcome": _step_outcome(deploy["outcome"]),
-                "detail": deploy["detail"],
-                "evidence": list(deploy.get("evidence") or []),
-                "at": self._stamp(),
-            }
-        )
+        history_row = {
+            "round": rounds + 1,
+            "sid": sid,
+            "action": deploy["action"],
+            # 收口到 `STEP_OUTCOMES`（`G-24②`）：词表外的取值在写入前就炸，
+            # 而不是原样落进 history（那里它会让停滞检测静默失效）。
+            "outcome": _step_outcome(deploy["outcome"]),
+            "detail": deploy["detail"],
+            "evidence": list(deploy.get("evidence") or []),
+            "at": self._stamp(),
+        }
+        # `draft/39` §3.16/§6.14：这一轮交了什么产物（四种之一）要进 history。
+        # 为什么必须在 history 里（而不是只进 detail 那句话）：活着的那条读数是
+        # "`attack_plans.history` 的产物不再是 `no_change`"（真机卡点③）——
+        # 它要能机械地读出来，而不是靠人去读一段散文。
+        if deploy.get("product"):
+            product = dict(deploy["product"])
+            history_row["product"] = str(product.get("product") or "")
+            history_row["strategy"] = str(product.get("strategy") or "")
+            history_row["best_partial"] = list(product.get("best_partial") or [])
+            if product.get("reason"):
+                history_row["dead_end_reason"] = str(product["reason"])
+        history.append(history_row)
         row["subgoals"] = subgoals
         row["history"] = history
         row["rounds"] = rounds + 1

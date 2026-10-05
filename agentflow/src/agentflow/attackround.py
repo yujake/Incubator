@@ -254,6 +254,24 @@ def pick_parallel_routes(n: int, *, tried: Sequence[str] = ()) -> list[str]:
     return (fresh or list(STRATEGIES))[:want]
 
 
+def dead_end_row(*, strategy: str, reason: str, evidence: str,
+                 best_partial: Sequence[Mapping[str, Any]],
+                 why_strategy: str = "") -> dict[str, Any]:
+    """造一条成形的 `dead_end` 产物（走同一套判据 —— 一处校验，不手搓 dict）。
+
+    为什么要有这个构造器（`draft/39` §6.14 的接线）：F 的 `step` 里有几条收尾路径
+    （没有 owner 侧的推理入口、没有可推进的子目标、预算用尽）本来就是"这一轮没有新事实"，
+    而它们此前只写一个 `outcome="no_change"` —— 没有产物。按 §3.16，那种情形必须落成
+    `dead_end`（受控理由 + 证据 + `best_partial`），于是"这一轮到底交了什么"可查。
+    """
+    payload = {"product": "dead_end", "strategy": strategy,
+               "why_strategy": (why_strategy
+                                or "这一步走不下去：没有可调用的推理入口或没有可推进的子目标"),
+               "reason": reason, "evidence": evidence,
+               "best_partial": [dict(x) for x in best_partial]}
+    return parse_round(json.dumps(payload, ensure_ascii=False))
+
+
 def selftest() -> int:
     """最小自检：四产物可解析、`no_change` 打回、#5 两条合法出口、闸门与预算阻塞。"""
     checks: list[tuple[str, bool]] = []
