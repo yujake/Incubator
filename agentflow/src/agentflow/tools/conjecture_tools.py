@@ -54,6 +54,20 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _norm_statement(text: str) -> str:
+    """判重用的规范化 `statement`（`draft/39` §3.9/§3.12 D13 的判据）。
+
+    去掉空白与标点（中英文都去）、全角转半角不做（那要一张映射表，换一个库就漂），
+    只做"同一句话换个说法就躲过判重"里最常见的那一类：空格与标点。
+    判重键取它的 sha 前 16 位（够用且可读；与 `_summon_key` 的口径一致）。
+    """
+    import hashlib
+    import re as _re
+
+    stripped = _re.sub(r"[\s，。；：、,.;:!?！？（）()\[\]【】\"'“”‘’…—-]+", "", str(text or ""))
+    return hashlib.sha256(stripped.encode("utf-8")).hexdigest()[:16]
+
+
 def register_conjecture(
     store: Any,
     *,
@@ -71,6 +85,7 @@ def register_conjecture(
     known_lit_id: str | None = None,
     withdraw_reason: str | None = None,
     notes: str | None = None,
+    force_new: bool = False,
     actor: str = "agent-D",
 ) -> dict:
     """新建或更新一条猜想。返回落库后的 `conjectures` 行。
@@ -88,6 +103,14 @@ def register_conjecture(
     `origin` 必填（防"凭空出现的猜想"，`Conjecture.validate` 逐字要求），
     它的取值就是"这条猜想是从哪来的"——本项目里是 `doc:0000#<label>`
     （被审论文的那一条定理类环境）。
+
+    ## D13：没给 `conjecture_id` 时先按规范化 `statement` 判重（`draft/39` §3.9）
+
+    真机读数（p6e 对 `D.register_conjecture` 的 25 次派活）：5 次成功落了 5 行，其中
+    `0001/0003/0004` 的规范化 `statement` sha 完全相同、`0002` 只差标点 ——
+    原因是"重试即新建" + "想更新却没带 id"。修法：没给 id 时先找同一条（规范化后相等）
+    ⇒ 命中就返回既有行并把本次给的状态/证据合并进去（结果里记 `duplicate=true` 与命中 id）；
+    真要新建必须显式 `force_new=true`（那是调用方的决定，不是默认行为）。
     """
     if not _text(statement):
         raise ConjectureError("statement 不能为空：猜想必须是一条可判真假的陈述句",
@@ -97,10 +120,20 @@ def register_conjecture(
             "origin 必填：猜想的来源必须可追（本项目里是 `doc:0000#<label>`）",
             kind="validation_error",
         )
+    key = _norm_statement(statement)
 
     with store.tx("conjectures", "experiments", "literature", "documents",
                   actor=actor, note="register_conjecture") as tx:
         cid = _text(conjecture_id)
+        dup_of = ""
+        if not cid and not force_new:
+            # D13 的判重：没给 id ⇒ 先找"同一条"（规范化后相等）的那一行。
+            for r in tx.rows("conjectures"):
+                if _norm_statement(str(r.get("statement") or "")) == key:
+                    dup_of = str(r.get("conjecture_id") or "")
+                    break
+            if dup_of:
+                cid = dup_of
         prev: dict = {}
         if cid:
             row = tx.find("conjectures", conjecture_id=cid)
@@ -170,6 +203,12 @@ def register_conjecture(
                 kind="dangling_lit", conjecture_id=cid, lit_id=row_obj.known_lit_id,
             )
         data = row_obj.to_dict()
+        # D13 的读数：这一次是"命中既有行"还是"真的新建"，以及命中的是哪一条。
+        # 为什么不只写进 detail 那句话：调用方（D/M）要能机械地看到
+        # "我这次的登记没有产生新行"，那才是"重复登记"这个病被治好的证据。
+        data["duplicate"] = bool(dup_of)
+        if dup_of:
+            data["duplicate_of"] = dup_of
         tx.upsert("conjectures", data)
     return data
 
@@ -232,6 +271,10 @@ def _guard_result(fn: Any) -> Any:
             "known_lit_id": {"type": "string"},
             "withdraw_reason": {"type": "string"},
             "notes": {"type": "string"},
+            # D13（`draft/39` §3.9）：没给 `conjecture_id` 时先按规范化 `statement` 判重；
+            # 真要新建才显式给 `force_new=true`（调用方的决定，不是默认行为）。
+            "force_new": {"type": "boolean",
+                          "description": "就算库里已有同一句话也新建一行（缺省 false ⇒ 命中既有行）"},
         },
         "required": ["statement", "origin"],
         "additionalProperties": False,
@@ -243,14 +286,14 @@ def _guard_result(fn: Any) -> Any:
         "{'conjecture_id','statement','negation_statement','form','testable','origin',"
         "'status','experiment_ids','proof_experiment_id','counterexample_experiment_id',"
         "'promoted_to','known_lit_id','withdraw_reason','notes','created_at','updated_at',"
-        "'created_by'}（落库后的 conjectures 行）"
+        "'created_by','duplicate','duplicate_of'}（落库后的 conjectures 行 + D13 的判重读数）"
     ),
     tags=("conjecture", "write"),
 )
 def _conjecture_register_conjecture(store: Any, actor: str, **kw: Any) -> Any:
     """工具体：注入的 `store` / `actor` 由装配期绑定（`partial`），签名与从前逐字相同。
 
-    `T-8` 只搬位置：这一句与原来那个 `lambda **kw: …` 逐字等价
+    `T-8` 只搬位置：这一句与原来那个 `lambda kw: …` 逐字等价
     （`store is None` ⇒ 明确"没接线"，否则走 `_guard_result`）。
     """
     return (
