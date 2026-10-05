@@ -280,9 +280,13 @@ def _root_for(root: Any, store: Any) -> Any:
 
 def _agent_for(store: Any):
     """构造一个 AgentF。惰性导入：agent_f 反向引用本模块，模块级导入会成环。"""
-    from ..agent_f import AgentF  # 惰性：避免 tools ↔ agent 的循环导入
+    # 缝从 `agent_f.default_llm()` 取（`draft/39` §6.33 的 D42c）：真机里 M 派 `F.step`
+    # 走的是这一条工具路径，而 host 那一侧接好的缝到不了这里 —— 于是 T2 第 14 趟
+    # （`--attack-reasoning` 开着）`F.step` 仍然连续 5 次 `no_change`。没登记时是 `None`：
+    # 照旧落 `dead_end(缺工具)` 并如实说未接线（默认确定性不变）。
+    from ..agent_f import AgentF, default_llm  # 惰性：避免 tools ↔ agent 的循环导入
 
-    return AgentF(store)
+    return AgentF(store, llm=default_llm())
 
 
 #: `PlanError` 在工具层映射出的 `kind`。

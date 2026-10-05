@@ -482,10 +482,21 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                                                               usd_budget=usd_budget,
                                                               meter=TokenMeter(
                                                                   store, budget_usd=usd_budget))))("F")
-        notes_attack = "F 的攻坚推理：接线（`--attack-reasoning`）"
+        # 工具层也要拿到它（`draft/39` §6.33 的 D42c）：真机里 M 派 `F.step` 走的是
+        # `attack.step` 那条工具路径（`attack_tools._agent_for` → `AgentF(store)`），
+        # 那条路径拿不到 host 的装配上下文 —— 只接角色工厂，`F.step` 仍然 `no_change`
+        # （T2 第 14 趟 `p6p` 实测：`--attack-reasoning` 开着，`F.step` 连续 5 次 no_change）。
+        from . import agent_f as _AF
+
+        _AF.set_default_llm(f_llm)
+        notes_attack = "F 的攻坚推理：接线（`--attack-reasoning`，角色工厂与工具层两条路都接）"
     else:
         notes_attack = ("F 的攻坚推理：未接线（默认确定性）⇒ `attack.step` 只会落 "
                         "`dead_end(缺工具)`；要真推一轮就加 `--attack-reasoning`")
+        # 同一进程里跑第二趟时不许继承上一趟登记的缝（`--no-ask` 那条纪律的同族问题）。
+        from . import agent_f as _AF
+
+        _AF.set_default_llm(None)
     notes: list[str] = [notes_attack]
     role_llm: dict[str, Any] = {}
     if h_llm is not None:

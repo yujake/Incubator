@@ -215,3 +215,52 @@ def test_the_pre_spend_gate_stops_the_call_before_any_money_is_spent(store: Stor
     assert rec["product"] == "dead_end" and rec["dead_end_reason"] == "缺定义", rec
     assert "可检验形式" in rec["detail"], rec["detail"]
     assert out["outcome"] == "no_change", out
+
+
+def test_the_tool_layer_path_gets_the_registered_seam(store: Store):
+    """判据（`draft/39` §6.33 的 D42c）：工具层那条路也要拿得到缝。
+
+    真机读数（T2 第 14 趟 `projects/p6p-research-from-zero`，`--attack-reasoning` 开着）：
+    `F.step` 连续 5 次 `no_change` —— 因为 M 派 `F.step` 走的是 `attack.step`
+    这条工具路径（`attack_tools._agent_for` → `AgentF(store)`），而顺手接好的那条
+    角色工厂路它不走。判据钉两半：登记了缝 ⇒ 工具层的 `attack.step` 真推一轮；
+    没登记 ⇒ 照旧 `dead_end(缺工具)`（默认确定性不许被这处改动破坏）。
+    """
+    from agentflow import agent_f as AF
+
+    llm = FakeLLM(_round(product="reduction", reason="拆成两条更小的判定",
+                         new_subgoals=[{"goal": "判定 n<=12 的小情形",
+                                        "testable": "枚举 n<=12 全部候选"}]))
+    reg = AF.install_f_tools(store)
+
+    def _plan_for(key: str) -> str:
+        return AF.AgentF(store).create_plan("难题", key, subgoals=[
+            {"sid": "s1", "text": "判定这条难题", "owner": "F",
+             "testable": "存在反例或有限界"}])["plan_id"]
+
+    build = AF.AgentF(store)
+
+    def _last_product(plan_id: str) -> dict:
+        row = build._plan_row(plan_id) or {}
+        hist = list(row.get("history") or [])
+        return dict(hist[-1]) if hist else {}
+
+    # ① 没登记 ⇒ 工具层那条路仍是"未接线"（负控）
+    pid_off = _plan_for("PK-TOOL-LAYER-OFF")
+    off = reg.call("attack.step", plan_id=pid_off)
+    assert off.ok, off
+    rec_off = _last_product(pid_off)
+    assert rec_off["product"] == "dead_end" and rec_off["dead_end_reason"] == "缺工具", rec_off
+
+    # ② 登记之后 ⇒ 同一条工具路径真的推了一轮（正控；换一条计划 —— 上一条的子目标
+    #    已经被 dead_end 标了 `in_flight`，下一轮按设计不会再选它）
+    pid_on = _plan_for("PK-TOOL-LAYER-ON")
+    AF.set_default_llm(llm)
+    try:
+        on = reg.call("attack.step", plan_id=pid_on)
+    finally:
+        AF.set_default_llm(None)
+    assert on.ok, on
+    rec_on = _last_product(pid_on)
+    assert rec_on["product"] == "reduction", rec_on
+    assert rec_on["product_detail"]["new_subgoals"], rec_on

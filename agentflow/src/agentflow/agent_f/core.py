@@ -12,6 +12,28 @@ from .status import _Status
 from .list_plans import _ListPlans
 
 
+#: 进程级的"默认模型缝"（`draft/39` §6.33 的 D42c）。
+#:
+#: 为什么需要它：真机里 M 派 `F.step` 走的是工具层（`attack.step` → 
+#: `attack_tools._agent_for(store)` → `AgentF(store)`），而不是 host 那条角色工厂 —— 
+#: 于是 host 那一侧接好的缝到不了这个对象上（T2 第 14 趟 `p6p`：`--attack-reasoning` 开着，
+#: `F.step` 仍然连续 5 次 `no_change`）。工具层拿不到 host 的装配上下文，
+#: 所以由装配方在这里登记一次；默认 None（与"默认确定性"同一条纪律：
+#: 不登记就没有缝，`attack.step` 照旧落 `dead_end(缺工具)` 并如实说未接线）。
+_DEFAULT_LLM: Any = None
+
+
+def set_default_llm(llm: Any) -> None:
+    """装配方登记"工具层构造 F 时用哪个缝"（`None` = 取消登记，回到确定性）。"""
+    global _DEFAULT_LLM
+    _DEFAULT_LLM = llm
+
+
+def default_llm() -> Any:
+    """当前登记的默认缝（没登记就是 `None`）。工具层与自检都用它，别各读一个全局。"""
+    return _DEFAULT_LLM
+
+
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
                    tried: Sequence[str]) -> str:
     """F 自己推理那一轮的提示词（D42）。

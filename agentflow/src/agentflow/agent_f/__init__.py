@@ -64,7 +64,7 @@ F 的职责是不制造这种组合（而不是"写了再靠 schema 兜"）。
 from __future__ import annotations
 
 from .core import AgentF
-from .core import (selftest,
+from .core import (default_llm, set_default_llm, selftest,
 )
 from ._support import (ACTIONS, AT, AgentBrief, AgentSpec, Any, IX, Mapping, NO_PROGRESS_NOTE, 
     Path, PlanError, S, SPEC, STEP_OUTCOMES, Sequence, Store, TERMINAL_STATUSES, ToolError, 
@@ -73,4 +73,5 @@ from ._support import (ACTIONS, AT, AgentBrief, AgentSpec, Any, IX, Mapping, NO_
 )
 from ..specs.f import SPEC
 
-__all__ = ["AgentF", "PlanError", "STEP_OUTCOMES", "install_f_tools", "selftest", "SPEC"]
+__all__ = ["AgentF", "PlanError", "STEP_OUTCOMES", "default_llm", "install_f_tools",
+           "selftest", "set_default_llm", "SPEC"]
