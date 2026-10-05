@@ -1038,6 +1038,11 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "**猜想要交给 F 攻坚**（研究型任务的「价值」就在这一跳）：`D.register_conjecture` 之后"
             "要派 `F.create_plan` 与 `F.attack.step`，并把 `attack_plans` 里 `history` 非空的推进"
             "写进验收表（`plan_progress_rows` / `attack_plan_rows` 那一档）。"
+            "**只立项不算推进**：`create_plan` 的 `history` 是空的，验收表里 `plan_progress_rows` "
+            "数的是 `history` 非空的行 —— **立项之后同一轮里就要派 `F.step`**。"
+            "真机读数（T2 第 13 趟 `p6o`）：M 派了 5 次 `create_plan`、**一次 `F.step` 都没派**，"
+            "于是 `attack_plans` 那一行 `history=0`、状态停在 `open`，攻坚那一条腿等于没走；"
+            "（F 那一侧自己也有同一条纪律：立项之后同一轮就推进一步。）"
             "验收表里「问题 + 猜想 + 实验 + 稿件」齐了、却没有 F 的推进 ⇒ 那一环还是空的："
             "真机读数（T2 第 7 趟）：7 条可检验猜想、5 条实验、1 份稿件，而 `attack_plans` **0 行** "
             "—— 猜想一条都没被攻过。",

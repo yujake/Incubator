@@ -215,6 +215,8 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
     assert "不是论文包" in text, "研究型任务的交付物口径也要写清（D34）"
+    # D44：只立项不算推进 —— 这一句不写，M 就会像 T2 第 13 趟那样只 create_plan、不 step
+    assert "F.step" in text and "只立项不算推进" in text, text
 
 
 def test_the_research_brief_asks_for_literature_citations_and_three_search_readings():
