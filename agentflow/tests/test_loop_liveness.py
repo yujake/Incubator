@@ -194,3 +194,74 @@ def test_a_reworded_rationale_does_not_reset_the_repeat_counter(tmp_path: pathli
 
     assert run.same_call_max == 3, run.to_dict()
     assert "框架提醒" in run.steps[2].result, run.steps[2].result
+
+
+# ==================================================== D31：同一条路 + 同一类读数
+
+
+def _summon(claim: str, extra: str = "") -> dict:
+    """同一个主题（`claim`）上的一次召唤，`extra` 用来造"参数改了"这一档。"""
+    params = {"claim": claim}
+    if extra:
+        params["description"] = extra
+    return {"summon": {"role": "E", "action": "check_formal", "params": params}}
+
+
+def test_the_same_road_is_named_even_when_the_arguments_change(tmp_path: pathlib.Path):
+    """正控（D31 的回归）：同一个主题 + 同一类读数，参数每次改一处也要算同一条路。
+
+    真机读数（T1 第 17 趟，`projects/p5-review-t17`）：M 连着 19 次派 `E.check_formal`，
+    每一步都改一处 Lean 源码再试，读数一路是 `reason=compile_error`
+    —— 参数每次不同 ⇒ `_call_key` 那条连击每步归零，`dead_loop_max` 全程是 1，
+    活性判据一句话都没说，那 60 步 / $1.6 花在同一类失败上。
+    """
+    calls = [_summon("trace identity for block-diagonal matrices", f"第 {i} 版源码")
+             for i in range(1, 4)]
+    run = _run(tmp_path, [_reply(c) for c in calls] + [_reply({"final": "收工"})], max_steps=8)
+
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.same_call_max == 1, "参数确实变了 ⇒ 同调用那条连击本来就该是 1"
+    assert run.stalled_max >= 3, run.to_dict()
+    remark = str(run.steps[2].result.get("框架提醒") or "")
+    assert "同一条路" in remark, remark
+
+
+def test_a_different_subject_is_not_the_same_road(tmp_path: pathlib.Path):
+    """负控：换了主题就不是同一条路 —— 连击必须从头数（不许把并行的正常派活判成卡住）。"""
+    calls = [_summon(f"第 {i} 个互不相干的命题") for i in range(1, 5)]
+    run = _run(tmp_path, [_reply(c) for c in calls] + [_reply({"final": "收工"})], max_steps=8)
+
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.stalled_max == 1, run.to_dict()
+    assert all("同一条路" not in str(s.result.get("框架提醒") or "") for s in run.steps), run.to_dict()
+
+
+def test_the_same_road_never_stops_the_run(tmp_path: pathlib.Path):
+    """边界（刻意的设计）：同一条路只提醒、不判停。
+
+    为什么不停：真机里那条路最后走通了（第 19 次拿到 proof 行，`experiments` 0004）
+    —— 在这里判停会把"走得通但走得慢"判成"没有往前走"。判停仍然只有"同调用 + 同读数"
+    那一条（`no_progress_limit`），它与这一条是两种不同的卡法。
+    """
+    calls = [_summon("同一个命题", f"第 {i} 版") for i in range(1, 8)]
+    run = _run(tmp_path, [_reply(c) for c in calls] + [_reply({"final": "收工"})], max_steps=10)
+
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.stalled_max >= 7, run.to_dict()
+    assert run.dead_loop_max == 1, run.to_dict()
+
+
+def test_the_stall_key_ignores_the_edited_part_but_not_the_verdict():
+    """判据的两半各来一条：主题与读数类都参与，参数里"改掉的那一处"不参与。"""
+    from agentflow.agent_loop import _stall_key
+
+    def key(params: dict, reason: str) -> str:
+        result = {"payload": json.dumps({"reason": reason, "verified": False})}
+        return _stall_key("summon", {"role": "E", "action": "check_formal",
+                                     "params": params}, result)
+
+    base = {"claim": "trace identity", "description": "第 1 版"}
+    edited = {"claim": "trace identity", "description": "第 2 版（只改了源码那一处）"}
+    assert key(base, "compile_error") == key(edited, "compile_error")
+    assert key(base, "compile_error") != key(base, "uses_sorry"), "读数类变了就不是同一条路"
+    assert key(base, "compile_error") != key({"claim": "另一个命题"}, "compile_error")

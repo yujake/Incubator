@@ -326,6 +326,99 @@ def _call_reading(result: Mapping[str, Any]) -> str:
                       sort_keys=True, default=str)
 
 
+#: 一次召唤里"这件事是什么"的主题字段（按优先级）：同一个主题 + 同一类读数 = 同一条路。
+#: 为什么按字段值取主题、而不是拿整份参数：参数里最先变的往往是"这次改的那一处"
+#: （Lean 源码、一行措辞），而主题字段恰恰是不该变的那一部分。
+_STALL_SUBJECT_KEYS: tuple[str, ...] = ("claim", "statement_full", "topic", "title",
+                                        "problem", "script_path", "path", "doc_id")
+
+
+def _norm_subject(value: Any) -> str:
+    """主题的规范化：压空白、去标点、转小写、截前 60 字（换一行不算换了题目）。"""
+    text = str(value or "")
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    text = re.sub(r"[^\w\u4e00-\u9fff ]+", "", text)
+    return text[:60]
+
+
+def _summon_reading_class(result: Mapping[str, Any]) -> str:
+    """召唤这一步的"读数类"：只取结论形态（`reason` / `verified` / `outcome`），不取数值。
+
+    `result["payload"]` 是工具层原样回的那份 JSON（字符串），真机里形如
+    `{"checked": true, "verified": false, "reason": "compile_error", ...}` ——
+    `reason` 正是"这一类的结论"。
+    """
+    raw = result.get("payload")
+    data: Any = {}
+    if isinstance(raw, str) and raw.strip().startswith("{"):
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = {}
+    elif isinstance(raw, Mapping):
+        data = dict(raw)
+    if not isinstance(data, Mapping):
+        data = {}
+    for key in ("reason", "status", "outcome"):
+        got = data.get(key) or result.get(key)
+        if isinstance(got, str) and got:
+            return f"{key}={got[:40]}"
+    if "verified" in data:
+        return f"verified={bool(data['verified'])}"
+    return f"outcome={result.get('outcome') or result.get('status') or 'ok'}"
+
+
+def _stall_key(shape: str, payload: Mapping[str, Any], result: Mapping[str, Any]) -> str:
+    """「同一条路」的粗键：目标 + 主题 + 读数类（`draft/39` §6.23 的 D31）。
+
+    真机读数（T1 第 17 趟）：M 连着 19 次 派 `E.check_formal`，每一步都改一处
+    Lean 源码再试，读数一路是 `reason=compile_error`（报错从 `expected token`
+    变成 `unsolved goals` / `simp made no progress`）—— 参数每次都不同，于是
+    `_call_key` 那条"同参数"的连击每步都归零，活性判据眼看着它烧掉 60 步 / $1.6、
+    一句话都没说。"改了参数"不等于"换了做法"：这一条认的是同一条路 + 同一类读数。
+
+    只对召唤（`summon` / `summon_many`）算：工具调用那条路已经由
+    `_call_key` + `_call_reading` 逐字看住了，再叠一层只会把"参数确实变了的重问"
+    误判成卡住。
+    """
+    if shape not in ("summon", "summon_many"):
+        return ""
+    if shape == "summon":
+        targets = [payload]
+    else:
+        targets = [t for t in (payload.get("targets") or []) if isinstance(t, Mapping)]
+    if not targets:
+        return ""
+    parts: list[str] = []
+    for t in targets:
+        params = t.get("params")
+        params = params if isinstance(params, Mapping) else {}
+        subject = ""
+        for key in _STALL_SUBJECT_KEYS:
+            if params.get(key) not in (None, ""):
+                subject = _norm_subject(params[key])
+                break
+        parts.append(f"{t.get('role')}.{t.get('action')}#{subject}")
+    return "|".join(sorted(parts)) + "|" + _summon_reading_class(result)
+
+
+def _stall_line(*, streak: int, alert: int, what: str) -> str:
+    """「同一条路」那一步的提醒（D31）。
+
+    与 `_dead_loop_line` 的分工：那一条认"同一个调用"，这一条认"同一件事、同一类结果"。
+    这一条不宣告任何判停（`stall_*` 不参与 `stop_reason`）：真机里那条路最后是
+    走通了的，问题不在"该不该停"，而在"没人把这件事说出来、也没人给它一个预算"。
+    """
+    if streak >= alert:
+        return (f"【同一条路】同一件事、同一类读数，这是连续第 {streak} 次（{what}）——"
+                f"参数改了但结论没变，那不是新做法。把命题改小到能一次过，"
+                f"或者把「卡在哪」写进 final 并如实记「未核到」；"
+                f"别把剩下的预算继续交给同一类失败。")
+    return (f"【同一条路】同一件事、同一类读数，这是连续第 {streak} 次（{what}）——"
+            f"再试之前先换一样东西：把命题改小、换检查条件，或者换一条路"
+            f"（数值实验 / 文献 / 论证）。")
+
+
 #: 参数类拒绝的标记（出现在结果里的 `kind`/`refusal_reason`/`detail` 上）——
 #: 命中的那一步要把声明的参数表原样回给模型（`draft/37` §140 的协作改进 A）。
 _PARAM_REFUSAL_MARKERS: tuple[str, ...] = (
@@ -523,6 +616,10 @@ class LoopRun:
     #: （读数每次都在变），但"同一件事问了 9 遍"这件事应该看得见。
     dead_loop_max: int = 0
     same_call_max: int = 0
+    #: 「同一条路 + 同一类读数」的最长连击（D31）：参数改动了但结论类没变的最长一串。
+    #: 与 `dead_loop_max` 并列报出来，因为"同一件事问了 9 遍"与"同一条路撞了 9 次
+    #: 同一类墙"是两种不同的卡法，处置也不同（前者换问法，后者换做法或改小目标）。
+    stalled_max: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 这一趟停在等哪个问题（`stop_reason="waiting_for_user"` 时非空）。
@@ -576,6 +673,7 @@ class LoopRun:
             "bad_json_streak": self.bad_json_streak,
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
             "dead_loop_max": self.dead_loop_max, "same_call_max": self.same_call_max,
+            "stalled_max": self.stalled_max,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
@@ -1117,6 +1215,17 @@ class AgentLoop:
     #: 覆盖（`run_role` 不收这两个旋钮 —— 它们是安全阀，不是常规调参面）。
     dead_loop_nudge: int = 3
     max_dead_loop: int = 6
+    #: 「同一条路 + 同一类读数」的两个档（`draft/39` §6.23 的 D31）：3 次提醒、6 次再说一遍。
+    #:
+    #: 为什么不复用 `dead_loop_nudge` / `max_dead_loop`：那一对认的是"同一个调用"
+    #: （同形状 + 同参数 + 同读数），而这一对认的是"同一件事 + 同一类结论"——
+    #: 参数改一点点（换一行 Lean、改一处措辞）不算换了做法。两条读数分开报，
+    #: 因为"同一件事问了 9 遍"与"同一条路撞了 9 次同一类墙"是两种不同的卡法。
+    #: 为什么这一对不判停：真机读数（T1 第 17 趟）里那条路最后是走通了的
+    #: （第 19 次拿到了 proof 行）—— 在这里判停会把"走得通但走得慢"判成失败。
+    #: 它要买的是"看得见 + 提醒"，收敛与否由模型自己决定（提示词里给了试错预算）。
+    stall_nudge: int = 3
+    stall_alert: int = 6
     #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
     #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
     #: 8,192 是 `deepseek-chat` 一档的输出上限；要改就改这里，别在各处传不同的数。
@@ -1341,6 +1450,9 @@ class AgentLoop:
         prev_key = ""
         prev_reading = ""
         same_call = 0
+        #: 「同一条路」的游标与连击（D31）：上一个粗键，以及它连着出现了几次。
+        prev_stall = ""
+        stalled = 0
         #: 这一步收到的插话（叫停类要在这一步做完之后落一条"有没有改变做法"的读数）。
         pending_interjections: dict[str, Any] | None = None
 
@@ -1560,18 +1672,31 @@ class AgentLoop:
             same_call = same_call + 1 if key == prev_key else 1
             dead = same_call if (key == prev_key and reading == prev_reading) else 1
             prev_key, prev_reading = key, reading
+            # 「同一条路 + 同一类读数」的连击（D31）：键里带的是"目标 + 主题 + 结论类"，
+            # 参数里改掉的那一处不参与 —— 见 `_stall_key` 的真机理由。
+            stall_key = _stall_key(shape, payload, result)
+            stalled = stalled + 1 if (stall_key and stall_key == prev_stall) else 1
+            prev_stall = stall_key
             # ---- 插话读数（`draft/39` §3.11 二 D07 第 3 条）：谁在第几步收到、有没有改变做法。
             self._record_interjection_effect(run, pending_interjections, step=step,
                                              shape=shape, payload=payload)
             pending_interjections = None
             run.same_call_max = max(run.same_call_max, same_call)
             run.dead_loop_max = max(run.dead_loop_max, dead)
+            run.stalled_max = max(run.stalled_max, stalled if stall_key else 0)
+            remarks: list[str] = []
             if same_call == self.dead_loop_nudge:
                 # 点名（不改结论、不停循环）：提醒写进这一步的结果里 ——
                 # `_step_line` 读的就是它，于是"当时那一份"与"续跑重建那一份"逐字一致。
-                result = {**result, "框架提醒": _dead_loop_line(
+                remarks.append(_dead_loop_line(
                     streak=same_call, same_reading=dead, limit=self.max_dead_loop,
-                    what=_call_brief(shape, payload))}
+                    what=_call_brief(shape, payload)))
+            if stall_key and stalled in (self.stall_nudge, self.stall_alert):
+                # 同一条路 + 同一类读数（D31）：参数改了不算换做法。这一条只提醒、不判停。
+                remarks.append(_stall_line(streak=stalled, alert=self.stall_alert,
+                                           what=_call_brief(shape, payload)))
+            if remarks:
+                result = {**result, "框架提醒": " ".join(remarks)}
             # ---- 参数类拒绝：把声明的参数表原样回给模型（`draft/37` §140 的协作改进）
             #
             # 为什么在这一层做（而不是每个工具各自写一段更好的拒信）：参数形状是声明面
