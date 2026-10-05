@@ -539,12 +539,40 @@ def _bad_args_line(step: int, detail: str) -> str:
             " JSON 对象再调用一次（别改调别的工具，也别写解释）。")
 
 
+#: 「JSON 里有一段字符串没写好」的解析报错特征（`json.JSONDecodeError.msg` 的原文）。
+#:
+#: 真机读数（2026-10-05 T2，`projects/p6h-research-from-zero`，sid `t2h`）：M 在
+#: `summon_many` 的 params 里内联一整段构造脚本/命题文本，回复只有 400–500 token
+#: （远没到 8192 的输出上限），却在同一类位置连着三次 `Expecting ',' delimiter`
+#: ⇒ `bad_json_limit`，49 步 / $0.62 全废。那不是"没按协议说"，而是"长字符串里有
+#: 没转义的引号/换行"——两种处置完全不同（前者重述协议，后者要它把长文本落盘再引用）。
+_BROKEN_STRING_MARKERS: tuple[str, ...] = (
+    "Expecting ',' delimiter", "Unterminated string", "Invalid control character",
+    "Expecting ':' delimiter", "Invalid \\escape", "Expecting property name enclosed",
+)
+
+
 def _bad_json_line(step: int, problem: str, detail: str) -> str:
-    """整条回复不是可解析 JSON 的那一步（重述输出契约，含骨架）。"""
-    return (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
-            f"（{problem}；{_clip(detail, 240)}）。"
-            f"**不要写分析、不要写方案、不要写 Markdown**："
-            f"只回一行 JSON。骨架：\n{JSON_TAIL}")
+    """整条回复不是可解析 JSON 的那一步（重述输出契约，含骨架）。
+
+    两种坏法分开说（`draft/39` §6.24 的 D32）：
+    - 字符串坏（`_BROKEN_STRING_MARKERS` 命中）：这一步的 JSON 形状其实是对的，
+      只是某段长文本里有一个没转义的引号/换行 —— 处置是"别内联长文本，先落盘再用
+      路径引用"，不是"再念一遍协议"；
+    - 其它（多半真是形状漂移）：重述协议 + 骨架。
+    为什么必须分开：真机里 M 连着三次撞的是前一种，而它每次收到的都是后一种那句话
+    （"只回一行 JSON"）—— 它照做了，然后照样坏在同一处。不可行动的纠正等于没纠正。
+    """
+    head = (f"\n\n[第 {step + 1} 步] 框架：你上一条回复不是可解析的 JSON 对象"
+            f"（{problem}；{_clip(detail, 240)}）。")
+    if any(marker in detail for marker in _BROKEN_STRING_MARKERS):
+        return (head + "**这一次不是形状漂移，是某段字符串里的引号或换行没转义**"
+                "（长文本内联进 JSON 时最常见）。处置：别把长源码/长文本内联进这一步 —— "
+                "先 `fs.write` 把它落盘（一次一小段就够），召唤时用 `script_path` / `path` "
+                "引用它；确实要内联就把双引号写成反斜杠加双引号、把换行写成反斜杠加 n。"
+                "然后只回一行 JSON（不要写分析、不要写 Markdown）。骨架：\n" + JSON_TAIL)
+    return (head + "**不要写分析、不要写方案、不要写 Markdown**："
+            "只回一行 JSON。骨架：\n" + JSON_TAIL)
 
 
 def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str,

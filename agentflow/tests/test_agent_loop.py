@@ -987,3 +987,26 @@ def test_a_stale_stop_reply_does_not_stop_later_runs(tmp_path):
                       session_root=root, workspace_root=str(root), sid="test-run",
                       max_steps=3, from_env=False)
     assert run.stop_reason == "final", run.to_dict()
+
+
+def test_a_broken_string_in_the_reply_gets_its_own_correction():
+    """判据（`draft/39` §6.24 的 D32）：两种坏 JSON 分开说，且前一种的纠正必须可行动。
+
+    真机读数（2026-10-05 T2，`projects/p6h-research-from-zero`）：M 把一整段构造脚本内联进
+    `summon_many` 的 params，回复只有 400–500 token（远低于 8192 的输出上限）却连着三次
+    `Expecting ',' delimiter` ⇒ `bad_json_limit`，49 步 / $0.62 全废；它每次收到的那句
+    "只回一行 JSON" 照做了、然后照样坏在同一处 —— 不可行动的纠正等于没纠正。
+    """
+    from agentflow.agent_loop import _bad_json_line
+
+    broken = _bad_json_line(
+        3, "judge_bad_json",
+        "ExtractionError: 无法把 LLM 返回解析为 JSON 对象: "
+        "Expecting ',' delimiter: line 1 column 1396 (char 1395)")
+    assert "不是形状漂移" in broken, broken
+    assert "fs.write" in broken and "script_path" in broken, broken
+    assert "只回一行 JSON" in broken, broken
+
+    drift = _bad_json_line(3, "judge_bad_json", "Expecting value: line 1 column 1")
+    assert "不是形状漂移" not in drift, drift
+    assert "只回一行 JSON" in drift, drift
