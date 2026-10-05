@@ -1076,3 +1076,25 @@ def test_parse_llm_json_tolerates_a_raw_control_character_in_a_string():
     # 顶层不是对象时仍然拒绝（宽容不等于接受任何东西）
     with pytest.raises(ExtractionError):
         parse_llm_json("[1, 2, 3]")
+
+
+def test_parse_llm_json_tolerates_an_unescaped_quote_inside_a_string():
+    """真机撞到的第三种：长文本里的双引号没转义（`draft/39` §6.26 的 D36）。
+
+    真机读数（2026-10-05 T2 第 6/7/8 趟）：M 把长命题 / 长 `claim` 内联进 `summon_many`，
+    回复只有几百个 token 却连着三次 `Expecting ',' delimiter` ⇒ `bad_json_limit`，
+    最短的一趟只走了 24 步就整趟作废。判据：这个双引号后面跟的不是 `,`/`:`/`}`/`]`
+    ⇒ 它是字符串内部的引号，补上转义；而真的坏了（少一个 `}`）仍然拒绝。
+    """
+    raw = ('{"summon_many": {"targets": [{"role": "D", "action": "register_conjecture", '
+           '"params": {"statement": "every edge lies in at least two "distinct" k-cycles"}}]}}')
+    got = parse_llm_json(raw)
+    target = got["summon_many"]["targets"][0]
+    assert target["params"]["statement"] == \
+        "every edge lies in at least two \"distinct\" k-cycles", got
+    # 合法的转义一个都不许动
+    legit = '{"a": "he said \\"hi\\"", "b": 1}'
+    assert parse_llm_json(legit) == {"a": 'he said "hi"', "b": 1}
+    # 结构真的坏了仍然拒绝（这条修补不是"什么都能救"）
+    with pytest.raises(ExtractionError):
+        parse_llm_json('{"a": "x" "b": 2')

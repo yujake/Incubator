@@ -698,6 +698,56 @@ def _strip_code_fence(raw: str) -> str:
     return text.strip()
 
 
+def _repair_stray_quotes(text: str) -> str | None:
+    """把字符串值里没转义的双引号补上转义（只在这一档上动手）。
+
+    真机读数（2026-10-05 T2 第 6/7/8 趟，`projects/p6h|p6i|p6j-research-from-zero`）：
+    M 把长命题 / 长 `claim` 内联进 `summon_many`，回复只有几百个 token 却连着三次
+    `Expecting ',' delimiter: line 1 column 1xxx` ⇒ `bad_json_limit`，整趟作废
+    （三次是三趟里各自都撞上，最短的一趟只走了 24 步）。那一类报错的形态是
+    "某个字符串提前结束了"：这个双引号后面跟的不是 `,` / `:` / `}` / `]`（也不是结尾）。
+
+    为什么这条修补是安全的：它只在"原样解析失败"之后才试；状态机只在已经进了一个字符串
+    之后才动手，且退出的判据是"后面紧跟结构符"——正常 JSON 里 `\\"` 与合法收尾都不受影响
+    （返回 `None` 表示一处都不用补）。修补出来的对象仍要过调用方的形状判据（信封六种形状之一），
+    所以真修坏了也只会落回"这一步没解析出来"，不会静默变成一个别的动作。
+    """
+    out: list[str] = []
+    in_string = False
+    changed = False
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if not in_string:
+            out.append(ch)
+            if ch == '"':
+                in_string = True
+            i += 1
+            continue
+        if ch == "\\" and i + 1 < n:
+            out.append(ch)
+            out.append(text[i + 1])
+            i += 2
+            continue
+        if ch == '"':
+            j = i + 1
+            while j < n and text[j] in " \t\r\n":
+                j += 1
+            nxt = text[j] if j < n else ""
+            if nxt in ",:}]" or nxt == "":
+                out.append(ch)
+                in_string = False
+            else:
+                out.append('\\"')
+                changed = True
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out) if changed else None
+
+
 def parse_llm_json(raw: str) -> dict[str, Any]:
     """宽松解析 LLM 返回的 JSON 对象。
 
@@ -706,7 +756,7 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
     数组/对象结尾的多余逗号、以及末尾多一个 ``}``（2026-09-30 加：
     真机里 M 与 G 的循环连着十几次写出 ``…"why": "…"}}``，每次都因为一个
     多余的右花括号丢掉整步；它的意图毫无歧义 —— 而"丢掉整步"的代价是
-    整条协同链停摆），以及**字符串里的裸控制字符**（同一天加：真机里
+    整条协同链停摆），以及字符串里的裸控制字符（同一天加：真机里
     ``project run --extract`` 抽一本书时模型把定义里的换行直接写了进去，
     报 ``Invalid control character at: line 80 column 168`` ⇒ 整本书的抽取作废，
     2 本里废 1 本。``strict=False`` 是标准库自带、文档化的那一档宽容：
@@ -732,6 +782,13 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
         # 去掉后必须能解析，否则不做任何修补。
         if candidate.rstrip().endswith("}"):
             reps.append(candidate.rstrip()[:-1])
+        # 字符串里没转义的双引号（`_repair_stray_quotes` 的理由与真机读数在它自己的
+        # docstring 里）：排在上一条之后 —— "少一个逗号"那类先从结构上修，
+        # 结构修不好再动字符串内部。
+        fixed = _repair_stray_quotes(candidate)
+        if fixed is not None:
+            reps.append(fixed)
+            reps.append(re.sub(r",\s*([}\]])", r"\1", fixed))
         for repaired in reps:
             # 两档严格度：先按标准 JSON，再放行"字符串里的裸控制字符"。
             for strict in (True, False):
