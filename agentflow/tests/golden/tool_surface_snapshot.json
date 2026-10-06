@@ -474,7 +474,7 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'root','tables','conjectures','tasks'}",
+   "returns": "{'root','tables','conjectures','tasks','queues'}",
    "roles": [
     "M"
    ],

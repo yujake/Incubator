@@ -903,7 +903,7 @@ def test_the_substance_check_goes_red_alone(tmp_path: pathlib.Path):
 
 # ============================================================ 研究链覆盖面（§137）
 
-#: 研究链四环节各一行的"全覆盖表"（`min=0`：`0` 也是读数，写清为什么是 0 就合规）。
+#: 研究链六环节各一行的"全覆盖表"（`min=0`：`0` 也是读数，写清为什么是 0 就合规）。
 _FULL_COVER: list[dict] = [
     {"id": "R1", "name": "立题与检索", "kind": "research_question_rows", "min": 0,
      "note": "本轮没立新问题：接着上一轮的问题做"},
@@ -916,6 +916,10 @@ _FULL_COVER: list[dict] = [
     # 「看（关系分析）」那一环节（D52）：要么跑过 C，要么如实标 na 说清为什么不用它。
     {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 0,
      "note": "本轮没派 C 的关系分析"},
+    # 「闭（请求闭环）」那一环节（`draft/39` §6.45 的 D56）：这一档的缺省判据是
+    # 上限 0（队列里没做完的请求应为 0）—— 夹具里一条请求都没有 ⇒ 0 条达标。
+    {"id": "R6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
+     "note": "本轮没有提交过检索/重抽取请求"},
 ]
 
 
@@ -942,7 +946,7 @@ def test_a_research_project_must_leave_an_acceptance_checks_file(
     codes = [f.code for f in rep.blockers]
     assert "acceptance_missing_for_research" in codes, rep.to_dict()
     chain = rep.readings["acceptance"]["research_chain"]
-    assert chain["researched"] is True and len(chain["missing"]) == 5, chain
+    assert chain["researched"] is True and len(chain["missing"]) == 6, chain
 
 
 def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
@@ -963,18 +967,18 @@ def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
     assert rep.status["acceptance"] == "fail", rep.to_dict()
     chain = rep.readings["acceptance"]["research_chain"]
     assert chain["groups"]["立题与检索"], chain
-    assert len(chain["missing"]) == 4, chain
+    assert len(chain["missing"]) == 5, chain
     detail = "；".join(f.detail for f in rep.blockers)
     assert "研究链覆盖面" in detail and "想（猜想或判决性证据）" in detail, detail
 
 
 def test_a_full_coverage_table_still_judges_each_row_on_its_own_reading(
         tmp_path: pathlib.Path, monkeypatch):
-    """三态：四环节各一行、但读数都是 0 ⇒ 覆盖面满足了，红的必须是那些行。
+    """三态：六环节各一行、但读数都是 0 ⇒ 覆盖面满足了，红的必须是那些行。
 
     这一条把两件事分开（这正是本判据存在的意义）：
-    - `research_chain.missing == []` ⇒ "四个环节都看过"这件事确实做到了；
-    - `acceptance == fail` ⇒ 那四行的读数一个都没成立（0 条 < 该档阈值）。
+    - `research_chain.missing == []` ⇒ "六个环节都看过"这件事确实做到了；
+    - `acceptance == fail` ⇒ 那几行的读数一个都没成立（0 条 < 该档阈值）。
     两者都如实报出来：只报"红"会让 M 不知道是"表薄"还是"活没干"。
     """
     st, report = _good(tmp_path)
@@ -993,7 +997,7 @@ def test_a_full_coverage_table_still_judges_each_row_on_its_own_reading(
 def test_a_review_project_is_not_touched_by_the_coverage_rule(tmp_path: pathlib.Path):
     """边界：没有 `research_questions` 行的项目（T1 那种 review）不受这一条约束。
 
-    为什么这条边界必须显式测：T1 的验收表是任务书给的 P1–P11，与"研究链四环节"
+    为什么这条边界必须显式测：T1 的验收表是任务书给的 P1–P11，与"研究链六环节"
     无关 —— 把这条判据撒到它头上会让 T1 那一线当场变红（而它已经通过了 15 趟）。
     改前"没有验收表 ⇒ pass + 一句读数"，那一条对 review 项目保持不变。
     """
@@ -1189,6 +1193,9 @@ def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
         # 「看（关系分析）」那一环（D53）：这一趟走的是"造"那条腿，明说不用关系分析。
         {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
          "na": True, "note": "这一趟用证明过程收尾，不需要关系分析"},
+        # 「闭（请求闭环）」那一环（D56）：这一趟没提交过请求 ⇒ 上限 0 达标。
+        {"id": "R6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
+         "note": "这一趟没有提交过检索请求"},
     ], st=st)
     rep = _gate(st, report)
 
@@ -1256,11 +1263,14 @@ def test_an_na_row_counts_as_marked_and_leaves_a_reading(tmp_path: pathlib.Path,
          "na": True, "note": "这是调查型任务（交付清单），没有数值/构造那一步"},
         {"id": "A3", "name": "想", "kind": "conjecture_rows", "min": 1,
          "na": True, "note": "同上：调查不产出猜想"},
-        # 「交」那一档要有真读数（覆盖面要求四环节各有其行；`na` 只用来标不适用，
+        # 「交」那一档要有真读数（覆盖面要求六环节各有其行；`na` 只用来标不适用，
         # 不许把整张表都变成 na）
         {"id": "A4", "name": "交（有证据支撑的断言）", "kind": "supported_claims", "min": 1},
         {"id": "A5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
          "na": True, "note": "这条腿用证明过程收尾，不需要关系分析"},
+        # 「闭（请求闭环）」（D56）：这一趟没提交过请求 ⇒ 上限 0 达标（真读数，不是 na）。
+        {"id": "A6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
+         "note": "这一趟没有提交过检索请求"},
     ], st=st)
     rep = _gate(st, report)
 
@@ -1329,4 +1339,250 @@ def test_the_c_analysis_kind_counts_role_c_task_rows(tmp_path: pathlib.Path, mon
     got2, detail2 = CL._leg_reading(st, "c_analysis_runs", tmp_path)
     assert got2 == 0, detail2
     assert "一次都没用过 C" in detail2["note"], detail2
+
+
+# ============================================================ 「闭（请求闭环）」那一档（D56）
+
+
+def test_the_unfinished_request_kind_counts_queued_but_undone_requests(
+        tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/39` §6.45 的 D56）：这一档数的是「提交了、没人做」的请求。
+
+    真机读数（T5 第 5 趟 `projects/p8e-fermat-shorter-proof`）：F 的攻坚子目标用
+    `submit_search_request` 提了 `r-0004`（`done=false` / `claimed_by=null` /
+    `attempts=0`），计划那一行写着「等 A 完成检索请求 r-0004」，而七格全绿、
+    `can_close=true` —— 一件被提交的活整趟没发生，收工门上一个读数都没有。
+    这一档就是那件事的读数：它数没做的（`retrieval_attempts` 数的是做过的）。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    real_rows = st.rows
+    rows = [
+        {"request_id": "r-0001", "topic": "a", "done": True, "outcome": "ok",
+         "submitted_by": "agent-A", "attempts": 1},
+        {"request_id": "r-0004", "topic": "核验 1995 年后是否有初等证明", "done": False,
+         "outcome": None, "submitted_by": "agent-F", "claimed_by": None, "attempts": 0},
+    ]
+    monkeypatch.setattr(st, "rows", lambda table: (
+        rows if table == "search_requests" else real_rows(table)))
+    got, detail = CL._leg_reading(st, "unfinished_request_rows", tmp_path)
+    assert got == 1, detail
+    assert [r["id"] for r in detail["unfinished"]] == ["r-0004"], detail
+    assert detail["unfinished"][0]["submitted_by"] == "agent-F", detail
+    # 这一档的方向是「上限」：0 才是达标，别让调用方把它读成 `got >= min`
+    assert detail["implicit_max"] == 0 and detail["implicit_min"] == 0, detail
+    # 负控：都做完了 ⇒ 0
+    rows[1]["done"] = True
+    got2, _ = CL._leg_reading(st, "unfinished_request_rows", tmp_path)
+    assert got2 == 0, "全部 done=true 时这一档必须是 0"
+
+
+def test_a_queued_request_that_nobody_did_fails_its_row(tmp_path: pathlib.Path,
+                                                        monkeypatch):
+    """负控（D56 的核心）：队列里躺着一条没人做的请求 ⇒ 第六环那一行不成立（上限 0）。
+
+    这是"请求提交了没人做"在收工门上的读数。改前它是静默的：T5 第 5 趟七格全绿。
+    """
+    st, report = _good(tmp_path)
+    real_rows = st.rows
+    rows = [{"request_id": "r-0004", "topic": "FLT 短证明文献", "done": False,
+             "submitted_by": "agent-F", "claimed_by": None, "attempts": 0}]
+    monkeypatch.setattr(st, "rows", lambda table: (
+        rows if table == "search_requests" else real_rows(table)))
+    _as_research(st, monkeypatch)
+    _acceptance_checks(tmp_path, list(_FULL_COVER), st=st)
+    rep = _gate(st, report)
+
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R6")
+    assert row["got"] == 1 and row["ok"] is False, row
+    assert row["max"] == 0 and row["min"] == 0, row
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    detail = "；".join(f.detail for f in rep.blockers)
+    assert "上限 0 条" in detail and "r-0004" in detail, detail    # 点名那条请求
+
+    # 派 A 认领跑完之后（`done=true`）这一行就成立 —— 这一档不是"永远红"
+    rows[0]["done"] = True
+    rows[0]["outcome"] = "ok"
+    rep2 = _gate(st, report)
+    row2 = next(r for r in rep2.readings["acceptance"]["rows"] if r["id"] == "R6")
+    assert row2["got"] == 0 and row2["ok"] is True, row2
+    assert "R6" not in "；".join(f.detail for f in rep2.blockers), rep2.to_dict()
+
+
+def test_an_na_row_is_the_way_to_leave_a_request_open_on_purpose(
+        tmp_path: pathlib.Path, monkeypatch):
+    """三态：确实要把某条请求留着（预算用尽 / 优先级更低）⇒ 标 `na` + 理由也算数。
+
+    与其它五环同一条口径：`na` ≠ 通过 ≠ 失败。这一档存在的意义不是"一条都不许剩"，
+    而是"剩了几条"这件事必须被看见、被写下来。
+    """
+    st, report = _good(tmp_path)
+    real_rows = st.rows
+    rows = [{"request_id": "r-0009", "topic": "低优先级的旁支检索", "done": False,
+             "submitted_by": "agent-F", "attempts": 0}]
+    monkeypatch.setattr(st, "rows", lambda table: (
+        rows if table == "search_requests" else real_rows(table)))
+    _as_research(st, monkeypatch)
+    cover = [dict(r) for r in _FULL_COVER]
+    cover[-1] = {"id": "R6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows",
+                 "na": True, "note": "预算用尽，r-0009 这条旁支检索留着不做了（如实记账）"}
+    _acceptance_checks(tmp_path, cover, st=st)
+    rep = _gate(st, report)
+
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R6")
+    assert row["na"] is True and row["got"] is None, row
+    assert "预算用尽" in row["note"], row
+    assert "R6" not in "；".join(f.detail for f in rep.blockers), rep.to_dict()
+
+
+def test_a_reprocess_request_that_is_still_pending_counts_too(tmp_path: pathlib.Path,
+                                                              monkeypatch):
+    """两条队列一起数：`reprocess_requests` 里 `status=pending` 的行也算没做完。
+
+    为什么必须一起数（`draft/39` §6.45 的 D56）：请求队列有两条 —— A 的检索与 B 的
+    重抽取；两条的"没做完"字段名还不一样（`done` 是布尔、另一张是 `status`）。
+    判据写在同一个地方，免得调用方各判一套（那正是"D 与 C 各持一套判据"的同一种病）。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    real_rows = st.rows
+    rows = [{"reprocess_id": "p-0001", "reason": "need_context", "status": "pending",
+             "submitted_by": "agent-D", "attempts": 0}]
+    monkeypatch.setattr(st, "rows", lambda table: (
+        rows if table == "reprocess_requests" else real_rows(table)))
+    got, detail = CL._leg_reading(st, "unfinished_request_rows", tmp_path)
+    assert got == 1 and detail["reprocess_unfinished"] == 1, detail
+    rows[0]["status"] = "done"
+    got2, _ = CL._leg_reading(st, "unfinished_request_rows", tmp_path)
+    assert got2 == 0, "status=done 不该还算没做完"
+
+
+# ============================================================ 「改完之后有没有再复核」（D57）
+
+
+def _sign_doc(st: Store, doc_row: dict, **patch) -> dict:
+    """给一行稿件签一条合法签名（照 `test_doc_signatures._sign` 的口径）。"""
+    from agentflow import signatures as SIG
+
+    cur = SIG.content_sha256_of(doc_row)
+    rec = {"doc_id": str(doc_row["doc_id"]), "content_sha256": cur, "name": SIG.SIGNER_NAME,
+           "at": "2026-10-06T00:00:00+08:00", "scope": "document", "verdict": "accepted",
+           "instance_id": "test", "inputs": {"doc_sha256": cur, "evidence_hashes": []},
+           "basis": {"codes_checked": [], "finding_ids": [], "rounds": 1, "dimensions": []}}
+    rec.update(patch)
+    return SIG.append_signature(st.root, rec)
+
+
+def _accepted_doc(st: Store) -> dict:
+    """把夹具里那份稿件推成"H 审过"的形态，并给它签一条钉在现行版的签名。"""
+    from agentflow import signatures as SIG
+
+    with st.tx("documents", actor="test") as tx:
+        row = dict(tx.rows("documents")[0])
+        row["status"] = "accepted"
+        row["content_sha256"] = SIG.content_sha256_of(row)
+        tx.upsert("documents", row)
+    _sign_doc(st, row)
+    return row
+
+
+def _revise_after_signoff(st: Store) -> dict:
+    """模拟 `G.revise`：追加一条断言并把状态推成 `revised` —— 签名仍钉着改之前那一版。"""
+    from agentflow import signatures as SIG
+
+    with st.tx("documents", actor="test") as tx:
+        row = dict(tx.rows("documents")[0])
+        row["claims"] = list(row.get("claims") or []) + [{
+            "claim_id": "claim-4", "text": "检索到的 7 篇文献（含 Wiles 模形式路线）构成立论依据。",
+            "citations": ["lit:0000"], "evidence_kind": "heuristic", "section": "Open routes"}]
+        row["status"] = "revised"
+        row["review_rounds"] = 1
+        row["revision"] = int(row.get("revision") or 1) + 1
+        row["content_sha256"] = SIG.content_sha256_of(row)
+        tx.upsert("documents", row)
+    return row
+
+
+def test_the_reviewed_current_kind_reads_whether_the_signature_covers_this_version(
+        tmp_path: pathlib.Path):
+    """判据（`draft/39` §6.46 的 D57）：这一档数的是"现行版有没有被审校记录钉住"。
+
+    真机读数（T5 第 5 趟 `p8e-fermat-shorter-proof`）：H 判的是三条断言的旧版
+    （签名钉 `e7346eb7…`），随后 G.revise 追加了第 4 条断言（现行版 `68bfc4c7…`）——
+    收工门读的是 `status=revised`，于是那一条断言从未被任何一次审校看过，
+    而七格全绿、`review_findings` 0 条。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    _accepted_doc(st)
+    got, detail = CL._leg_reading(st, "reviewed_current_rows", tmp_path)
+    assert got == 1, detail
+    assert detail["claimed_reviewed"] == 1 and not detail["stale_signoffs"], detail
+    assert detail["implicit_min"] == 1, detail
+
+    _revise_after_signoff(st)
+    got2, detail2 = CL._leg_reading(st, "reviewed_current_rows", tmp_path)
+    assert got2 == 0, detail2
+    assert detail2["stale_signoffs"], detail2
+    stale = detail2["stale_signoffs"][0]
+    assert stale["status"] == "revised" and stale["revision"] == 2, stale
+    assert stale["current"] != (stale["signed"] or [""])[0], stale
+
+
+def test_a_revision_after_the_signoff_turns_the_gate_red(tmp_path: pathlib.Path):
+    """负控（D57 的核心）：改完之后没复核 ⇒ 收工门红，并点名两份哈希。
+
+    改前这是静默的：状态是 `revised` ⇒ `reviewed_documents` 算"审过"、
+    `verify_all` 的签名判据只对 `accepted` 成立（`SIGNABLE_STATUS`）⇒ 两处都看不见。
+    """
+    st, report = _good(tmp_path)
+    _accepted_doc(st)
+    _revise_after_signoff(st)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "稿件有裁决", "kind": "reviewed_documents", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    detail = "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+    assert "现行版本没有被审校记录钉住的稿件" in detail, detail
+    assert "改完之后没再复核" in detail, detail
+    assert "H.verify_fixes" in detail, detail
+    # 那一行 `reviewed_documents` 自己是满的（status=revised）—— 红的是新这一档
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["id"] == "P1" and row["ok"] is True, row
+
+    # 复核之后（签名钉到现行版上）门放行
+    from agentflow import signatures as SIG
+
+    with st.tx("documents", actor="test") as tx:
+        row = dict(tx.rows("documents")[0])
+    _sign_doc(st, row, verdict="accepted_with_warnings")
+    rep2 = _gate(st, report)
+    assert rep2.status["acceptance"] == "pass", rep2.to_dict()
+
+
+def test_an_na_row_is_the_way_to_ship_a_deliberately_unreviewed_revision(
+        tmp_path: pathlib.Path):
+    """三态（D57）：确实要这样交（预算用尽，来不及复核）⇒ 写一行 `na` + 理由。
+
+    与其它档同一条口径：`na` ≠ 通过 ≠ 失败。这一档存在的意义不是"不许改稿"，
+    而是"改完之后没复核"这件事必须被看见、被写下来。
+    """
+    st, report = _good(tmp_path)
+    _accepted_doc(st)
+    _revise_after_signoff(st)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "稿件有裁决", "kind": "reviewed_documents", "min": 1},
+        {"id": "P2", "name": "现行版复核", "kind": "reviewed_current_rows",
+         "na": True, "note": "预算用尽，这一版追加的断言来不及复核 —— 如实记账，不假装审过"},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    rows = {r["id"]: r for r in rep.readings["acceptance"]["rows"]}
+    assert rows["P2"]["na"] is True and rows["P2"]["got"] is None, rows["P2"]
 

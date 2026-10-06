@@ -518,6 +518,42 @@ def test_state_and_role_spec_are_read_only_views(tmp_path: Path):
     assert len(store.rows("tasks")) == 0, "只读视图不许写台账"
 
 
+def test_state_shows_the_request_queues_backlog(tmp_path: Path):
+    """判据（`draft/39` §6.45 的 D56）：状态视图要读出「队列里还有几条没人做」。
+
+    为什么需要这一格：`tables` 只给行数 —— `search_requests: 4` 读不出"其中 1 条
+    `done=false`"。真机读数（T5 第 5 趟 `p8e-fermat-shorter-proof`）：F 的攻坚子目标
+    用 `submit_search_request` 提了一条请求，整趟没人做，计划停在「等 A 完成检索请求」，
+    而主控的眼睛（状态视图）与收工门都看不出这件事。
+    """
+    store, _c, reg = _wired(tmp_path)
+    with store.tx("search_requests", actor="agent-F", note="probe") as tx:
+        tx.upsert("search_requests", {
+            "request_id": "r-0001", "timestamp": "2026-10-06T00:00:00+08:00",
+            "topic": "a", "mode": "precise", "content_description": "probe a",
+            "done": True, "outcome": "ok", "submitted_by": "agent-A", "attempts": 1,
+            "result_lit_ids": ["0000"], "priority": "low", "submit_note": "",
+        }, note="probe")
+        tx.upsert("search_requests", {
+            "request_id": "r-0002", "timestamp": "2026-10-06T00:00:01+08:00",
+            "topic": "b", "mode": "precise", "content_description": "probe b",
+            "done": False, "submitted_by": "agent-F", "attempts": 0,
+            "result_lit_ids": [], "priority": "low", "submit_note": "",
+        }, note="probe")
+
+    st = reg.call("conductor.state", role="M")
+    queues = st.data["queues"]
+    assert queues["search_requests"]["rows"] == 2, queues
+    assert queues["search_requests"]["unfinished"] == 1, queues
+    assert queues["search_requests"]["unfinished_ids"] == ["r-0002"], queues
+    assert queues["search_requests"]["submitted_by"] == ["agent-F"], queues
+    # 两条队列都要出现在读数里（重抽取那条今天 0 条 —— 0 是读数，不是"没查成"）
+    assert queues["reprocess_requests"]["rows"] == 0, queues
+    assert queues["reprocess_requests"]["unfinished"] == 0, queues
+    assert "run_once" in queues["note"], queues
+    del store
+
+
 def test_ledger_views(tmp_path: Path):
     """台账四个视图都能出读数（tree/stats/issues/verify）。"""
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})

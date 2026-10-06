@@ -669,6 +669,47 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
             "created": created, "ingested": ingested}
     return ok(data, **data)
 
+def _queue_backlog(store_: Any) -> dict[str, Any]:
+    """两条请求队列里「还没人做」的读数（`draft/39` §6.45 的 D56）。
+
+    为什么需要这一格：`tables` 只给行数 —— `search_requests: 4` 这一行读不出
+    「其中 1 条 `done=false`、没人认领」。真机读数（T5 第 5 趟 `p8e`）：F 的攻坚子目标
+    用 `submit_search_request` 提了一条请求，整趟没人做，计划停在「等 A 完成检索请求」，
+    而 `conductor.state` 与收工门都看不出这件事。
+
+    读不出来的表记 `rows=-1` / `unfinished=-1`（与 `tables` 里 -1 的约定同一条：
+    -1 是「没查成」，不是 0）。
+    """
+    def _is_open_search(r: Mapping[str, Any]) -> bool:
+        return r.get("done") is not True
+
+    def _is_open_reprocess(r: Mapping[str, Any]) -> bool:
+        return str(r.get("status") or "pending") == "pending"
+
+    out: dict[str, Any] = {
+        "note": ("`unfinished` 是**提交了、还没人做**的条数：消费这两条队列的动作是 "
+                 "A 的 `run_once` / `run`（检索）与 B 的 `reprocess_once` / `run_reprocess`"
+                 "（重抽取）。收工前它应当是 0 —— 有的话要么派活做完，要么在交付说明里"
+                 "逐条写清为什么留着"),
+    }
+    for table, key, is_open in (("search_requests", "request_id", _is_open_search),
+                                ("reprocess_requests", "reprocess_id", _is_open_reprocess)):
+        try:
+            rows = [dict(r) for r in store_.rows(table)]
+        except Exception:  # noqa: BLE001 —— 读不到就说读不到（不编 0）
+            out[table] = {"rows": -1, "unfinished": -1, "unfinished_ids": [], "unreadable": True}
+            continue
+        open_rows = [r for r in rows if is_open(r)]
+        out[table] = {
+            "rows": len(rows),
+            "unfinished": len(open_rows),
+            "unfinished_ids": [str(r.get(key) or "") for r in open_rows[:12]],
+            "submitted_by": sorted({str(r.get("submitted_by") or "")
+                                    for r in open_rows if r.get("submitted_by")}),
+        }
+    return out
+
+
 @tool(
     "conductor.state",
     "只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模。"
@@ -676,7 +717,7 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
-    returns="{'root','tables','conjectures','tasks'}",
+    returns="{'root','tables','conjectures','tasks','queues'}",
 )
 def conductor_state(_conductor, ) -> ToolResult:
     """工具体：只读状态视图（给主控判断用，不含建议）。"""
@@ -694,7 +735,8 @@ def conductor_state(_conductor, ) -> ToolResult:
             key = str(row.get("status") or "?")
             conjectures[key] = conjectures.get(key, 0) + 1
     data = {"root": str(getattr(store_, "root", "")), "tables": tables,
-            "conjectures": conjectures, "tasks": len(c.tree())}
+            "conjectures": conjectures, "tasks": len(c.tree()),
+            "queues": _queue_backlog(store_)}
     return ok(data, **data)
 
 @tool(

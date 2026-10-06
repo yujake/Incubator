@@ -226,7 +226,13 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     # D52：调查/探索类任务要把 C 用起来，并把 c_analysis_runs 写进验收表
     assert "要把 C 用起来" in text and "c_analysis_runs" in text, text
     # D53：「看（关系分析）」是覆盖面的第五环
-    assert "研究链的五个环节" in text and "看（关系分析）" in text, text
+    assert "研究链的五个环节" not in text, text
+    assert "研究链的六个环节" in text and "看（关系分析）" in text, text
+    # D56：「闭（请求闭环）」是第六环，且消费队列的那个动作要被点名（它是个无参动作，
+    # 名字本身说不出它是干什么的 —— T5 第 5 趟 M 从头到尾没派过它）
+    assert "闭（请求闭环）" in text and "unfinished_request_rows" in text, text
+    assert "`run_once`" in text and "`unfinished_request_rows`" in text, text
+    assert "请求闭环" in text, text
     # D54：方法 → 档位的映射（做对了活、写错了档是 T5 第 3 趟的失败形态）
     assert "挑哪一档要看你实际做的是什么" in text, text
     assert "search_frontier_rows" in text and "exhaustive_search" in text, text
@@ -308,6 +314,27 @@ def test_e_is_told_to_write_the_lean_source_into_the_workspace(registry: ToolReg
     # 无 Mathlib 时的三条写法口径（第 11 趟的真机失败形态，逐条写进去）
     for needle in ("decide", "不归约", "sorry", "改一处再试", "checker_name"):
         assert needle in text, f"E 的提示词里没有提到 {needle!r}"
+
+
+def test_every_action_in_the_partner_table_says_what_it_does(
+        registry: ToolRegistry):
+    """判据（`draft/39` §6.45 的 D56）：伙伴表里每个动作都要带一句"它是干什么的"。
+
+    改前那一行只有 `动作名（参数提示）` —— 无参动作于是等于只有一个名字。
+    真机代价（T5 第 5 趟 `p8e-fermat-shorter-proof`）：F 的攻坚子目标用
+    `submit_search_request` 把请求 `r-0004` 放进检索队列，而队列的消费者是 A 的
+    `run_once`（无参）—— M 从头到尾没派过它，请求整趟没人做、计划停在
+    「等 A 完成检索请求」，七格全绿。摘要来自 `capabilities` 的动作表（唯一来源）。
+    """
+    from agentflow import agent_prompts as AP
+    from agentflow import capabilities as C
+
+    for role in ALL_ROLES:
+        for other in AP.partners_out(role):
+            line = next((ln for ln in AP.partners_lines(role) if ln.startswith(f"- {other}：")), "")
+            for a in C.actions_for(other):
+                assert str(a.summary) in line, \
+                    f"{role} 看到的 {other}.{a.action} 没有摘要（无参动作只有一个名字）：{line[:300]}"
 
 
 def test_the_partner_table_says_what_each_partner_delivers_and_must_not_do(

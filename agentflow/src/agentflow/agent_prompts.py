@@ -1007,8 +1007,9 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "**从零研究那一类任务：两份验收表都要落盘**（`draft/37` §137）："
             "`out/paper/ACCEPTANCE.md`（写给人读：每行「名称 / 结论 / 读数」）与 "
             "`out/paper/ACCEPTANCE-CHECKS.json`（写给收工门算："
-            "`{\"checks\": [{\"id\", \"name\", \"kind\", \"min\", \"note\"}]}`）。"
-            "`kind` 只能是收工门认识的受控档，而**研究链的五个环节每个至少要有一行、"
+            "`{\"checks\": [{\"id\", \"name\", \"kind\", \"min\", \"note\"}]}`；"
+            "多数档是「越多越好」用 `min`，需要「上限」的档可以写 `max`）。"
+            "`kind` 只能是收工门认识的受控档，而**研究链的六个环节每个至少要有一行、"
             "且那一行要真的成立**："
             "①立题与检索（`research_question_rows` / `retrieval_attempts`）；"
             "②**算或造**（算：`numeric_experiment_rows` / `search_frontier_rows` / "
@@ -1020,11 +1021,37 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "④**看（关系分析）**：`c_analysis_runs`（数 `tasks` 里 role=C 跑过的行）—— "
             "要么派过 C 的关系分析，要么在那一行写 `na` + 理由说清为什么不用它；"
             "⑤交（`document_literature_citations` / "
-            "`plan_progress_rows` / `supported_claims`）。"
+            "`plan_progress_rows` / `supported_claims`）；"
+            "⑥**闭（请求闭环）**：`unfinished_request_rows`（队列里还没人做的请求条数，"
+            "**上限 0**）—— 见下面那条「请求闭环」的政策。"
             "读数不够时**不许把那一行删掉**：删掉 ⇒ 收工门判 `fail` 并点名缺哪个环节；"
             "如实写 0 ⇒ 那一行自己不成立（也红，但红得精确：报告里就留下一条"
             "「这一轮没有提出可检验的猜想」的读数，那句实话比一个空着的环节值钱）。"
             "写表这一步不是文书：它是你把「这一趟到底走到哪一步」摆到台面上的地方。",
+            "**请求闭环：别人提交的检索请求要有人去做**（`draft/39` §6.45 的 D56）—— F 的攻坚"
+            "子目标、C 的缺口、D 的关系缺口都会用 `submit_search_request`（或 C 的 "
+            "`gaps(submit_requests=true)`）往 `search_requests` 队列里放一条请求；"
+            "**消费这条队列的动作是 A 的 `run_once`（无参）/ `run`**（重抽取那条队列是 B 的 "
+            "`reprocess_once` / `run_reprocess`）—— 只提交、没人认领，请求就永远躺在那里。"
+            "真机读数（T5 第 5 趟 `p8e-fermat-shorter-proof`）：F 提了 `r-0004`"
+            "（`done=false` / `claimed_by=null` / `attempts=0`），计划那一行写着"
+            "「等 A 完成检索请求 r-0004」，而七格全绿、`can_close=true` —— 一件被提交的活"
+            "整趟没发生，收工门上没有任何读数。两条纪律："
+            "①`conductor.state` 的 `queues.<表>.unfinished` 就是这件事的读数，"
+            "**收工前它应当是 0**：有未闭环的请求就 `conductor.summon` 派 A 的 `run_once` "
+            "认领（重抽取派 B），一条都做不完就在交付说明里逐条写清为什么；"
+            "②验收表第六环那一行写 `unfinished_request_rows`（**上限 0**）—— 与前五环一样，"
+            "要么有读数、要么写 `na` + 理由，不许它悄悄不发生。",
+            "**改完之后要再复核**（`draft/39` §6.46 的 D57）—— `G.revise` 会把稿子推成 "
+            "`revised`，而**签名还钉着改之前那一版**：收工门的 `reviewed_current_rows` 数的是"
+            "「现行版本被审校记录钉住的稿件份数」（缺省阈值 = 自称被审过的稿件份数），"
+            "这一档没写进验收表时门会替它报出来。真机读数（T5 第 5 趟 `p8e-fermat-shorter-proof`）："
+            "H 判的是三条断言的旧版（签名钉 `e7346eb7…`），随后 G.revise 为了满足「文献进稿」"
+            "那一行追加了第 4 条断言（现行版 `68bfc4c7…`）—— 那一条**从未被任何一次审校看过**，"
+            "而七格全绿、`review_findings` 0 条（那条追加的断言恰好把检索回来的 7 篇文献说成"
+            "覆盖了 Wiles 模形式 / Frey–Ribet / Sophie Germain 这三条路线，而那 7 篇里一篇都不是）。"
+            "处置：改完稿就派 `H.verify_fixes`（它按 `round_no` 复核这一版）或 `H.review`，"
+            "让签名钉到现行版上；改完不复核的稿子不许当成交付。",
             "**受控档位逐字列在这里**（`kind` 只能从这一串里挑；**自造名字或用一个不认识的档"
             "⇒ 整张表判「没查成」，不是只废那一行**）：`quote_verified_rows` / "
             "`proof_experiment_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
@@ -1033,7 +1060,8 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "`attack_plan_rows` / `numeric_experiment_rows` / `document_literature_citations` / "
             "`claims_supported_by_their_evidence` / `supported_claims` / `conjecture_rows` / "
             "`statement_rows` / `plan_progress_rows` / `counterexample_or_proof_rows` / "
-            "`search_frontier_rows` / `enumeration_optimization_rows` / `manuscript_rows`。"
+            "`search_frontier_rows` / `enumeration_optimization_rows` / `manuscript_rows` / "
+            "`unfinished_request_rows` / `reviewed_current_rows`。"
             "其中 `manuscript_edited` 与 `citation_records_vs_bibitems` 要**只读基线 `source/`**"
             "（那是有论文包的审阅型工作区才有的东西）—— 从零研究的工作区里用它们 ⇒ 那一行"
             "算不出来 ⇒ 整张表没查成（真机读数 2026-10-05 T2 第 7 趟：P1 用了 "
@@ -1308,7 +1336,13 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
         out.append("你可以唤起这些伙伴（用 summon 形状），他们的职责与可调用动作如下"
                    "（参数只许用括号里列出的键）：")
         for other in outs:
-            acts = "；".join(f"{a.action}{_params_hint(a)}" for a in C.actions_for(other))
+            # 每个动作带上一句摘要（`draft/39` §6.45 的 D56）：此前伙伴行里只有
+            # `动作名（参数提示）`，于是无参动作等于只有一个名字 —— 真机代价是
+            # T5 第 5 趟里 M 从头到尾没派过 `A.run_once`（它是消费检索队列的那一个），
+            # 而 F 提交的请求 `r-0004` 整趟没人做、计划停在「等 A 完成检索请求」。
+            # 摘要来自 `capabilities` 的动作表（唯一来源，这里只排版）。
+            acts = "；".join(f"{a.action}{_params_hint(a)}——{a.summary}"
+                             for a in C.actions_for(other))
             mark = ""
             if availability is not None:
                 state = str(availability.get(other) or "unknown")

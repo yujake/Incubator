@@ -87,6 +87,16 @@ LEG_CHECK_KINDS: dict[str, str] = {
                            "（`draft/39` §3.17 A5：非数值方向的项目靠这一档满足「算或造」）",
     "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里状态被推成 "
                           "accepted/revised 的行，或 `review_rounds >= 1` 的行）",
+    "reviewed_current_rows": "现行版本被审校记录钉住的稿件份数（`doc-signatures` 里该 `doc_id` 有一条"
+                             "签名的 `content_sha256` 等于稿件行现在的 `content_sha256`）—— 缺省阈值 "
+                             "= 台账里自称被审过的稿件份数（status ∈ accepted/revised 或 "
+                             "`review_rounds >= 1`）。它问的是「改完之后有没有再复核」，与 "
+                             "`reviewed_documents` 是两件事：后者只看状态，而 G.revise 把状态推成 "
+                             "`revised` 的那一刻，签名还钉着改之前那一版。为什么单列"
+                             "（`draft/39` §6.46 的 D57）：T5 第 5 趟里 H 判的是旧版的三条断言"
+                             "（签名钉 `e7346eb7…`），随后 G.revise 追加了第 4 条断言（现行版 "
+                             "`68bfc4c7…`）—— 那一条断言从未被任何一次审校看过，而收工门读的是 "
+                             "`status=revised` ⇒ 七格全绿、`review_findings` 0 条",
     "manuscript_edited": "可改的主稿有没有实质改动（`out/paper/main.tex` 与只读基线 "
                          "`source/main.tex` 的 sha256 不同 ⇒ 1，相同 ⇒ 0）",
     "citation_records_vs_bibitems": "逐条核验引文：带比对记录的行数（`statements`/`relations` 里 "
@@ -97,6 +107,16 @@ LEG_CHECK_KINDS: dict[str, str] = {
                           "`search_literature` + `search.download` 能把引文原文查回来"
                           "（2026-10-04 实测：一次查询就登记了 9 行文献，其中就有 Kuchment 那篇、"
                           "带 DOI 10.1090/bull/1528）；先检索，取不回原文才允许写「未查」",
+    "unfinished_request_rows": "队列里**没做完**的请求条数（`search_requests` 里 `done` 不为真的行 + "
+                               "`reprocess_requests` 里 `status=pending` 的行）—— 它数的是「提交了、"
+                               "没人做」。这一档的缺省判据是**上限 0**（不是「越多越好」：要么派 A 把请求"
+                               "认领跑完（`A.run_once` / `A.run`），要么在那一行写 `\"na\": true` + 理由"
+                               "说清为什么留着）；所以它红的时候说的是「队列没闭环」，不是「做得少」。"
+                               "为什么单列（`draft/39` §6.45 的 D56）：T5 第 5 趟里 F 的攻坚子目标用 "
+                               "`submit_search_request` 提交了 `r-0004`（`done=false` / `claimed_by=null` / "
+                               "`attempts=0`），计划就卡在「等 A 完成检索请求 r-0004」上，而七格全绿、"
+                               "`can_close=true`。`retrieval_attempts` 数的是**做过的**条数，这一档数的是"
+                               "**没做的那些** —— 少了它，「请求提交了没人做」在收工门上一个读数都没有",
     # ---- 研究类（`draft/38` 的 T2：从零做一轮研究，考察 A/B/D/E/F 与 M 的调度）----
     "research_question_rows": "立起来的研究问题行数（`research_questions`）—— 从零做研究的第一步："
                               "把「要研究什么」写成一行可追踪的问题，而不是散在对话里",
@@ -189,7 +209,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
 #: 已经审过且通过的稿件读成"没审过"（判据恒红 ⇒ 谁都不会再信它）。
 REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 
-#: 「研究链的四个环节」——从零做研究时，验收表每个环节至少要有一行（`draft/37` §137）。
+#: 「研究链的六个环节」——从零做研究时，验收表每个环节至少要有一行（`draft/37` §137）。
 #:
 #: ## 为什么需要这一条（T2 四趟的真机读数，`draft/37` §133）
 #:
@@ -224,6 +244,14 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # （T5 第 1/2 趟：`tasks` 里 role=C 的行是 0，七格全绿）。把它做成覆盖面的一环之后，
     # 「用没用 C」与其它四环一样要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
     ("看（关系分析）", ("c_analysis_runs",)),
+    # 第六环节「闭（请求闭环）」（`draft/39` §6.45 的 D56）：别人提交的检索请求
+    # （F 的 `submit_search_request` / C 的 `submit_requests=true` / D 的缺口）落在
+    # `search_requests` 队列里，消费它的动作是 A 的 `run_once` / `run` —— 而 M 的
+    # 伙伴表里那两个无参动作只有一个名字（没有一句说明），也没有任何一档问过
+    # 「队列里还有没有人没做的请求」。于是真机里 F 的请求可以整趟没人认领、
+    # 子目标永远停在「等 A 完成检索请求」，而收工门七格全绿（T5 第 5 趟 `p8e`）。
+    # 与其它五环同一套办法：要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
+    ("闭（请求闭环）", ("unfinished_request_rows",)),
     ("交（文献进稿、计划推进）", ("document_literature_citations", "plan_progress_rows",
                                   "supported_claims")),
 )
@@ -231,7 +259,7 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 def research_chain_gaps(store: Any, kinds: Iterable[str], *,
                         na_kinds: Iterable[str] = ()) -> dict[str, Any]:
-    """研究型项目的验收表覆盖面：四个环节里哪些一行都没有。
+    """研究型项目的验收表覆盖面：六个环节里哪些一行都没有。
 
     返回 `{"researched", "rows", "groups", "na_groups", "missing", "note"}`：
     `researched=False`（这个项目没有 `research_questions` 行）时 `missing` 恒为空 ——
@@ -263,9 +291,10 @@ def research_chain_gaps(store: Any, kinds: Iterable[str], *,
         "groups": groups,
         "na_groups": na_groups,
         "missing": missing,
-        "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链四个环节，"
+        "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链六个环节，"
                  "每个环节至少一行。覆盖面管的是「那一行在不在」；那一行的读数够不够"
-                 "由它自己那一档判（`min` 缺省时按该档的口径，多数是 ≥ 1）—— "
+                 "由它自己那一档判（`min` 缺省时按该档的口径，多数是 ≥ 1；"
+                 "`unfinished_request_rows` 那一档的方向相反 —— 它的缺省口径是 ≤ 0）—— "
                  "所以删掉一行与写着 0 都会红，但后者留下的是读数，前者留下的是一个空环节。"
                  "某一档对这个项目**天然不适用**时（例如调查型任务没有「算或造」那一步），"
                  "在那一行上写 `\"na\": true` 并在 `note` 里写明理由 —— `na` ≠ 通过 ≠ 失败。"
@@ -303,6 +332,56 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(rows), {"documents": [
             {"doc_id": str(r.get("doc_id") or ""), "status": str(r.get("status") or ""),
              "review_rounds": int(r.get("review_rounds") or 0)} for r in rows[:8]]}
+    if kind == "reviewed_current_rows":
+        # 「改完之后有没有再复核」那一档（`draft/39` §6.46 的 D57）。
+        #
+        # 三件事分开报，因为它们的原因不同：
+        # ① pinned —— 现行版被某一条签名钉住（这一档要数的就是它）；
+        # ② stale —— 自称审过、而且台账里有该稿件的签名，但没有一条钉在现行版上
+        #    ⇒ 这是「改完之后没再复核」（G.revise 追加/替换断言后忘了找 H）；
+        # ③ no_signature_record —— 自称审过却一条签名记录都没有。它与 ② 分开：
+        #    那可能是"这个工作区根本没有签名链"（真机：T3 的工作区是把上一趟的
+        #    `documents` 复制过来的，`doc-signatures/` 没跟过来），`verify_all` 的
+        #    `accepted_without_signature` 管那半边。这一档只在 ② 上放自动判据。
+        from . import signatures as SIG
+
+        docs = [dict(r) for r in store.rows("documents")]
+        recs, bad_lines = SIG.read_ledger(SIG.ledger_path(project_root))
+
+        def _records_of(doc_id: str) -> list[Mapping[str, Any]]:
+            return [r for r in recs if str(r.get("doc_id") or "") == doc_id]
+
+        claimed = [d for d in docs
+                   if str(d.get("status") or "") in REVIEWED_DOC_STATUSES
+                   or int(d.get("review_rounds") or 0) >= 1]
+        pinned = [d for d in claimed if SIG.signed_revision(d, recs) is not None]
+        stale = [d for d in claimed
+                 if SIG.signed_revision(d, recs) is None and _records_of(str(d.get("doc_id") or ""))]
+        never = [d for d in claimed
+                 if not _records_of(str(d.get("doc_id") or ""))]
+        detail: dict[str, Any] = {
+            "documents": len(docs), "claimed_reviewed": len(claimed),
+            "claimed_ids": [str(d.get("doc_id") or "") for d in claimed[:8]],
+            "pinned_to_current": [str(d.get("doc_id") or "") for d in pinned[:8]],
+            "stale_signoffs": [
+                {"doc_id": str(d.get("doc_id") or ""),
+                 "current": str(d.get("content_sha256") or "")[:12],
+                 "signed": sorted({str(r.get("content_sha256") or "")[:12]
+                                   for r in _records_of(str(d.get("doc_id") or ""))})[:4],
+                 "status": str(d.get("status") or ""), "revision": d.get("revision"),
+                 "review_rounds": d.get("review_rounds")}
+                for d in stale[:8]],
+            "no_signature_record": [str(d.get("doc_id") or "") for d in never[:8]],
+            "signature_ledger": str(SIG.ledger_path(project_root)),
+            "implicit_min": len(claimed),
+            "note": ("这一档数的是「现行版本被审校记录钉住的稿件份数」，缺省阈值 = 自称被审过的稿件"
+                     "份数。差的那几份就是「改完之后没再复核」—— 派 `H.verify_fixes` / `H.review` "
+                     "复核现行版，或者如实标 `na` + 理由（`stale_signoffs` 与 "
+                     "`no_signature_record` 分开报：前者是「改过了没复核」，后者是「没有签名链」）"),
+        }
+        if bad_lines:
+            detail["ledger_bad_lines"] = bad_lines[:3]
+        return len(pinned), detail
     if kind == "manuscript_edited":
         # 任务原文第一句（"改掉正文里的问题"）的机器可判形式：可改的主稿与只读基线不同。
         # 为什么必须有一档盯它（`draft/37` §96 的真机读数）：第 9 趟三条腿的凭据全齐、
@@ -383,6 +462,54 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             detail["note"] = ("账本里有读不出来的行 ⇒ 这一档的读数偏低，按 `unparsable_lines` "
                               "逐条去查（读不出不等于没有）")
         return len(good), detail
+    if kind == "unfinished_request_rows":
+        # 「提交了、没人做」那一档（`draft/39` §6.45 的 D56）。
+        #
+        # 两处刻意的口径：
+        # ① 两条队列一起数 —— `search_requests`（A 的：去外面找新东西）与
+        #    `reprocess_requests`（B 的：把已有的东西重看一遍）。两条队列的"没做完"
+        #    字段名不同（`done` 是布尔、另一张是 `status`），所以判据写在同一个地方，
+        #    别让调用方各判一套。
+        # ② 这一档的缺省判据是上限 0（`implicit_max`），不是 `got >= min`：
+        #    「没做完的请求」越少越好，0 才是达标。`_check_acceptance` 认这个方向
+        #    （缺省 `min` 变成 0、`max` 缺省取这一档给的上限）。
+        #
+        # 真机读数（T5 第 5 趟 `p8e-fermat-shorter-proof`）：`r-0004` 由 F 的攻坚计划
+        # 0000 子目标 s1 提交，`done=false` / `claimed_by=null` / `attempts=0`；
+        # 计划那一行写着「等 A 完成检索请求 r-0004」，而七格全绿。这档读数就是那件事。
+        search_rows = [dict(r) for r in store.rows("search_requests")]
+        try:
+            repro_rows = [dict(r) for r in store.rows("reprocess_requests")]
+        except Exception:  # noqa: BLE001 —— 这张表读不到就不假装它没有（另开一栏说明）
+            repro_rows = []
+            repro_note = "重抽取请求表读不到 ⇒ 这一档只数了检索请求（读数偏低，不是「没有」）"
+        else:
+            repro_note = ""
+        open_search = [r for r in search_rows if r.get("done") is not True]
+        open_repro = [r for r in repro_rows if str(r.get("status") or "pending") == "pending"]
+        detail = {
+            "search_requests": len(search_rows), "search_unfinished": len(open_search),
+            "reprocess_requests": len(repro_rows), "reprocess_unfinished": len(open_repro),
+            "unfinished": [
+                {"id": str(r.get("request_id") or ""), "topic": str(r.get("topic") or "")[:60],
+                 "submitted_by": str(r.get("submitted_by") or ""),
+                 "claimed_by": r.get("claimed_by"), "attempts": int(r.get("attempts") or 0)}
+                for r in open_search[:8]
+            ] + [
+                {"id": str(r.get("reprocess_id") or ""), "topic": str(r.get("reason") or "")[:60],
+                 "submitted_by": str(r.get("submitted_by") or ""),
+                 "claimed_by": r.get("claimed_by"), "attempts": int(r.get("attempts") or 0)}
+                for r in open_repro[:8]
+            ],
+            # 「上限 0」不是缺省阈值 1 的变体：这一档要的就是"一条都不剩"。
+            "implicit_min": 0, "implicit_max": 0,
+            "note": ("这一档的判据是**上限**：队列里没做完的请求应为 0。有人做了"
+                     "（派 `A.run_once` / `A.run` 认领）或如实标 `na` + 理由，两种都算数；"
+                     "「提交了没人做」不算数"),
+        }
+        if repro_note:
+            detail["table_note"] = repro_note
+        return len(open_search) + len(open_repro), detail
     if kind == "retrieval_attempts":
         # 「盘外引文先检索」那一档（`draft/37` §105）：用户一句话点破了我的口径 ——
         # "盘上没有就 false？A 不会去查吗"。实测：`A.search_literature("An overview of
@@ -796,6 +923,17 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         name = str(row.get("name") or "")
         note = str(row.get("note") or "")
         want_min = int(row.get("min") or 0)     # 0 = 让这一档自己定阈值（见下面的 implicit_min）
+        #: 上限（`draft/39` §6.45 的 D56）：`max` 缺省取这一档自己给的 `implicit_max`。
+        #:
+        #: 为什么需要"上限"这一根轴：多数档问的是「做得够不够」（`got >= min`），而
+        #: `unfinished_request_rows` 问的是「剩下多少没做」—— 它的达标线是 0，
+        #: 用 `min` 表达不出来（`min=0` 会被读成"没给阈值"）。所以受控档可以声明
+        #: `implicit_max`：那一档的行不带 `min`/`max` 时，判据就是 `got <= implicit_max`。
+        #: 这不是给验收表开一个"任意表达式"的口子：上限只能由这一档的实现给出，
+        #: 写表的人最多把它写得更松（`max`），写不出一档都不存在的方向。
+        want_max: int | None = None
+        if row.get("max") is not None:
+            want_max = int(row["max"])
         # ---- `na` 行（`draft/39` §6.39 的 D49）：这一档对这个项目天然不适用。
         #
         # 三态：`na` ≠ 通过 ≠ 失败（与五位证据模型的 `pending|na|failed|verified` 同一套口径）。
@@ -814,8 +952,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                     checks_file=str(path))
                 return
             na_rows.append(cid)
-            out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "got": None,
-                        "ok": True, "na": True, "note": note})
+            out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "max": None,
+                        "got": None, "ok": True, "na": True, "note": note})
             continue
         if kind not in LEG_CHECK_KINDS:
             _acceptance_unknown(
@@ -840,12 +978,25 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         if not want_min:
             # 调用方没写 `min` ⇒ 用这一档自己算出来的阈值（`citation_records_vs_bibitems`
             # 就是"每条 `\bibitem` 一条记录"）；连它都没有时才是缺省的 1。
-            want_min = int(detail.get("implicit_min") or 1)
-        out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "got": got,
-                    "ok": got >= want_min, "detail": detail})
-        if got < want_min:
-            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{got} 条，"
-                         f"要求 ≥ {want_min} 条 —— 读数 {detail}"
+            implicit = detail.get("implicit_min")
+            if implicit is None:
+                # 只声明了上限的档（`unfinished_request_rows`）：它的达标线是 `<= max`，
+                # 下限是 0 —— 这里若退回缺省的 1，"队列干净"反而会被读成不达标。
+                want_min = 0 if detail.get("implicit_max") is not None else 1
+            else:
+                want_min = int(implicit)
+        if want_max is None and detail.get("implicit_max") is not None:
+            want_max = int(detail["implicit_max"])
+        ok_row = got >= want_min and (want_max is None or got <= want_max)
+        out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "max": want_max,
+                    "got": got, "ok": ok_row, "detail": detail})
+        if not ok_row:
+            if got < want_min:
+                why = f"{got} 条，要求 ≥ {want_min} 条"
+            else:
+                why = (f"{got} 条，上限 {want_max} 条（这一档要的是「上限」："
+                       f"越多越不达标 —— 0 才是达标）")
+            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{why} —— 读数 {detail}"
                          + (f"；{note}" if note else ""))
 
     rep.readings["acceptance"] = {"checks_file": str(path), "rows": out}
@@ -873,6 +1024,29 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     rep.readings["acceptance"]["research_chain"] = chain
     if chain["missing"]:
         unmet.append("研究链覆盖面：验收表里一行都没有的环节 —— " + "；".join(chain["missing"]))
+    # ---- 稿子改完之后有没有再复核（`draft/39` §6.46 的 D57）：验收表里没写这一档时，
+    # 门替它报出来 —— 否则「G.revise 追加的断言从未被审过」可以整趟静默留下
+    # （T5 第 5 趟：`review_findings` 0 条、七格全绿，而现行版 `68bfc4c7…` 没有任何签名）。
+    # 这一档写进验收表时由它自己那一行判（含 `na` + 理由那条出口），门不重复说话。
+    if "reviewed_current_rows" not in {str(r.get("kind") or "") for r in out}:
+        try:
+            _got, cur_detail = _leg_reading(
+                store, "reviewed_current_rows",
+                Path(resolve_under_workspace(store, project_dir)))
+        except Exception:  # noqa: BLE001 —— 读不出来时这一档不算数（`acceptance_leg_unreadable` 管那一档）
+            cur_detail = None
+        stale = list((cur_detail or {}).get("stale_signoffs") or [])
+        if stale:
+            unmet.append(
+                "现行版本没有被审校记录钉住的稿件："
+                + "；".join(f"{s.get('doc_id')}（现行版 {s.get('current')}…，"
+                            f"签名钉的是 {'、'.join(s.get('signed') or []) or '（空）'}…，"
+                            f"status={s.get('status')} revision={s.get('revision')}）"
+                            for s in stale)
+                + " —— 改完之后没再复核（G.revise 把稿子推成 revised，而签名还钉着改之前"
+                  "那一版）⇒ 交付里会带着没审过的断言。派 `H.verify_fixes` / `H.review` 复核"
+                  "现行版；确实要这样交，就在验收表里写一行 `reviewed_current_rows` 并标 "
+                  "`\"na\": true` + 理由")
     if unmet:
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(
