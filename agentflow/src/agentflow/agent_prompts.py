@@ -1035,6 +1035,18 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "（那是有论文包的审阅型工作区才有的东西）—— 从零研究的工作区里用它们 ⇒ 那一行"
             "算不出来 ⇒ 整张表没查成（真机读数 2026-10-05 T2 第 7 趟：P1 用了 "
             "`manuscript_edited`，而工作区里没有 `source/` ⇒ 整格丢成 unknown）。",
+            "**某一档对这个项目天然不适用时，写 `\"na\": true` 并在 `note` 里写明理由**"
+            "（`na` ≠ 通过 ≠ 失败，三态里的第三态）：例如**调查型任务**（「调查…有哪些值得做的"
+            "开放问题，交付一份清单」）天然没有「算或造」那一步 —— 那一行写 `na` + 理由，"
+            "而不是写 0（写 0 会被判成「没做」；`na` 才是「这一步对这类任务不适用」）。"
+            "两条守卫：`na` 不写理由 ⇒ 整张表判没查成；**整张表全是 `na`** ⇒ 判 fail"
+            "（一张全 na 的表等于没有验收表）。",
+            "**「交付一份清单 / 综述 / 表格」这一类任务：清单本体是 `documents` 里的行**"
+            "（派 G 落 `documents`，每条带 `citations` 与 `evidence_kind`），报告只是说明 ——"
+            "真机读数（T4 第 1 趟 `t4a`）：M 把清单写进了 `out/review/REPORT.md`，"
+            "`documents` **0 行**，于是 substance 与验收都没有可数的「清单」；"
+            "验收表里对应那一行要引它（`statement_rows` / `supported_claims` / "
+            "`document_literature_citations` 任一档）。",
             "**猜想要交给 F 攻坚**（研究型任务的「价值」就在这一跳）：`D.register_conjecture` 之后"
             "要派 `F.create_plan` 与 `F.attack.step`，并把 `attack_plans` 里 `history` 非空的推进"
             "写进验收表（`plan_progress_rows` / `attack_plan_rows` 那一档）。"

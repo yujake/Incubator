@@ -1229,3 +1229,67 @@ def test_a_self_invented_kind_says_it_takes_the_whole_table_down(tmp_path: pathl
     assert reading["code"] == "acceptance_unknown_kind", reading
     assert "整张表" in reading["detail"], reading
 
+
+# ============================================================ `na` 行（D49）
+
+
+def test_an_na_row_counts_as_marked_and_leaves_a_reading(tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/39` §6.39 的 D49）：某一档对这个项目天然不适用时，`na` 要能写成读数。
+
+    真机读数（T4 第 1 趟 `projects/p7-open-questions`）：那是一趟调查任务
+    （"调查…开放问题，交付一份清单"），它天然没有"算或造"那一步 —— M 按纪律如实写了 0
+    （红得精确），可那份诚实没有出口：政策里提过 `na` 这个词，实现里只认 `got >= min`，
+    于是"这一档不适用"只能被读成"没做"。
+    三态：`na` ≠ 通过 ≠ 失败 —— 读数里要能看见这一行是 `na`、理由是什么。
+    """
+    st, report = _good(tmp_path)
+    _as_research(st, monkeypatch)
+    _acceptance_checks(tmp_path, [
+        {"id": "A1", "name": "立题与检索", "kind": "research_question_rows", "min": 1},
+        {"id": "A2", "name": "算或造", "kind": "numeric_experiment_rows", "min": 1,
+         "na": True, "note": "这是调查型任务（交付清单），没有数值/构造那一步"},
+        {"id": "A3", "name": "想", "kind": "conjecture_rows", "min": 1,
+         "na": True, "note": "同上：调查不产出猜想"},
+        # 「交」那一档要有真读数（覆盖面要求四环节各有其行；`na` 只用来标不适用，
+        # 不许把整张表都变成 na）
+        {"id": "A4", "name": "交（有证据支撑的断言）", "kind": "supported_claims", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    rows = {r["id"]: r for r in rep.readings["acceptance"]["rows"]}
+    assert rows["A2"]["na"] is True and rows["A2"]["got"] is None, rows["A2"]
+    assert "调查型任务" in rows["A2"]["note"], rows["A2"]
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert chain["na_groups"]["算或造"], chain
+    assert chain["missing"] == [], chain
+
+
+def test_an_na_row_without_a_reason_is_not_checked(tmp_path: pathlib.Path):
+    """负控：`na` 不写理由 ⇒ 没查成（`na` 不是"跳过"的快捷键）。"""
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "某档", "kind": "numeric_experiment_rows", "min": 1, "na": True},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    reading = rep.readings["acceptance"]
+    assert reading["code"] == "acceptance_na_without_reason", reading
+    assert "理由" in reading["detail"], reading
+
+
+def test_a_table_of_nothing_but_na_is_refused(tmp_path: pathlib.Path):
+    """负控：整张表全是 `na` ⇒ 红（一张全 na 的验收表等于没有验收表）。"""
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "某档", "kind": "numeric_experiment_rows", "min": 1,
+         "na": True, "note": "不适用"},
+        {"id": "P2", "name": "另一档", "kind": "conjecture_rows", "min": 1,
+         "na": True, "note": "也不适用"},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    assert [f.code for f in rep.blockers] == ["acceptance_all_na"], rep.to_dict()
+

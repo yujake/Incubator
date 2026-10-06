@@ -220,6 +220,9 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert "F.step" in text and "只立项不算推进" in text, text
     # D45：子目标要带可检验形式 —— 不写，M 派的子目标就会被 I9 闸门挡在门外（F 一次都不调）
     assert "每条子目标都要带可检验形式" in text and "testable" in text, text
+    # D48/D49：「交付清单」类任务的清单本体要落 documents；天然不适用的那一档写 na + 理由
+    assert "清单本体是 `documents` 里的行" in text, text
+    assert '"na": true' in text and "α" not in text, text
 
 
 def test_the_research_brief_asks_for_literature_citations_and_three_search_readings():

@@ -220,34 +220,46 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def research_chain_gaps(store: Any, kinds: Iterable[str]) -> dict[str, Any]:
+def research_chain_gaps(store: Any, kinds: Iterable[str], *,
+                        na_kinds: Iterable[str] = ()) -> dict[str, Any]:
     """研究型项目的验收表覆盖面：四个环节里哪些一行都没有。
 
-    返回 `{"researched", "rows", "groups", "missing", "note"}`：
+    返回 `{"researched", "rows", "groups", "na_groups", "missing", "note"}`：
     `researched=False`（这个项目没有 `research_questions` 行）时 `missing` 恒为空 ——
     这条判据对非研究型项目不说话（不是"通过"，是"不适用"）。
+
+    `na_kinds`（`draft/39` §6.39 的 D49）：标了 `na` 的行算"这一环节被如实标注过"
+    —— 调查型任务天然没有"算或造"那一步，那件事要能被写成读数，而不是只能被读成"没做"。
     """
     used = {str(k) for k in kinds}
+    na_used = {str(k) for k in na_kinds}
     try:
         researched = len(list(store.rows("research_questions"))) > 0
     except Exception as exc:  # noqa: BLE001 —— 读不到研究问题表 ⇒ 这一格判不了，由调用方落 unknown
         raise RuntimeError(f"研究问题表读不到：{type(exc).__name__}: {exc}") from exc
     groups: dict[str, list[str]] = {}
+    na_groups: dict[str, list[str]] = {}
     missing: list[str] = []
     for label, members in RESEARCH_CHAIN_GROUPS:
         hit = [k for k in members if k in used]
+        marked = [k for k in members if k in na_used]
         groups[label] = hit
-        if researched and not hit:
-            missing.append(f"{label}（可以写 {' / '.join(members)} 里的任意一档）")
+        na_groups[label] = marked
+        if researched and not hit and not marked:
+            missing.append(f"{label}（可以写 {' / '.join(members)} 里的任意一档；"
+                           f"这一档天然不适用就在那一行上写 `\"na\": true` 并写明理由）")
     return {
         "researched": researched,
         "rows": len(used),
         "groups": groups,
+        "na_groups": na_groups,
         "missing": missing,
         "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链四个环节，"
                  "每个环节至少一行。覆盖面管的是「那一行在不在」；那一行的读数够不够"
                  "由它自己那一档判（`min` 缺省时按该档的口径，多数是 ≥ 1）—— "
                  "所以删掉一行与写着 0 都会红，但后者留下的是读数，前者留下的是一个空环节。"
+                 "某一档对这个项目**天然不适用**时（例如调查型任务没有「算或造」那一步），"
+                 "在那一行上写 `\"na\": true` 并在 `note` 里写明理由 —— `na` ≠ 通过 ≠ 失败。"
                  "非研究型项目不受这一条约束（`researched=false`）。"),
     }
 
@@ -743,6 +755,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 
     out: list[dict[str, Any]] = []
     unmet: list[str] = []
+    #: 标了 `na` 的行（`draft/39` §6.39 的 D49）：它们算"这一环节被如实标注过"，
+    #: 但不参与阈值判定 —— 最后还要用它挡住"整张表全 na"。
+    na_rows: list[str] = []
     for row in rows:
         if not isinstance(row, dict):
             _acceptance_unknown(rep, "acceptance_unreadable",
@@ -754,6 +769,27 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         name = str(row.get("name") or "")
         note = str(row.get("note") or "")
         want_min = int(row.get("min") or 0)     # 0 = 让这一档自己定阈值（见下面的 implicit_min）
+        # ---- `na` 行（`draft/39` §6.39 的 D49）：这一档对这个项目天然不适用。
+        #
+        # 三态：`na` ≠ 通过 ≠ 失败（与五位证据模型的 `pending|na|failed|verified` 同一套口径）。
+        # 真机读数（T4 第 1 趟 `t4a`）：那是一趟调查任务（"交付一份清单"），它天然没有
+        # "算或造"这一环 —— M 按纪律如实写了 0（红得精确），可那份诚实没有出口：
+        # 政策里提过 `na` 这个词，实现里只认 `got >= min`。于是"这一档不适用"只能被读成
+        # "没做"。两条守卫：①`na` 必须写出理由（`note` 非空），否者等于没标注；
+        # ②不许整张表都是 `na`（一张全 na 的验收表等于没有验收表）。
+        if row.get("na") is True:
+            if not note.strip():
+                _acceptance_unknown(
+                    rep, "acceptance_na_without_reason",
+                    f"验收行 {cid} 标了 `na`，却没有写理由（`note` 为空）⇒ 没查成。"
+                    f"`na` 不是「跳过」的快捷键：要写清这一档为什么对这个项目不适用"
+                    f"（例如「这是调查型任务，没有数值/构造那一步」）",
+                    checks_file=str(path))
+                return
+            na_rows.append(cid)
+            out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "got": None,
+                        "ok": True, "na": True, "note": note})
+            continue
         if kind not in LEG_CHECK_KINDS:
             _acceptance_unknown(
                 rep, "acceptance_unknown_kind",
@@ -786,11 +822,21 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                          + (f"；{note}" if note else ""))
 
     rep.readings["acceptance"] = {"checks_file": str(path), "rows": out}
+    if out and len(na_rows) == len(out):
+        rep.status["acceptance"] = "fail"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_all_na", "blocker",
+            "验收表里**每一行都标了 `na`** ⇒ 这一趟没有任何可复算的口径。"
+            "`na` 是给「这一档对这个项目天然不适用」用的，不是给「这一趟什么都没做」用的 —— "
+            "至少要有几行是真的按台账现算的"))
+        return
     # ---- 覆盖面（`draft/37` §137）：研究型项目的验收表要覆盖研究链四个环节。
     # 「0 也是读数」：所以缺的是那一行，不是那个数（写 0 与删掉一行都会红，
     # 但前者留下读数、后者留下一个空环节 —— 两者分开报）。
     try:
-        chain = research_chain_gaps(store, [str(r.get("kind") or "") for r in out])
+        chain = research_chain_gaps(store, [str(r.get("kind") or "") for r in out],
+                                    na_kinds=[str(r.get("kind") or "") for r in out
+                                              if r.get("na") is True])
     except RuntimeError as exc:
         rep.status["acceptance"] = "unknown"
         rep.findings.append(Finding(
