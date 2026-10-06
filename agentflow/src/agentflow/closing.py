@@ -216,9 +216,14 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # "为什么不用数值"（那就是五位里第 1 位 `na` 的理由，`acceptance` 那一格读它）。
     ("算或造", ("numeric_experiment_rows", "search_frontier_rows",
                 "enumeration_optimization_rows", "reviewed_proof_rows",
-                "counterexample_or_proof_rows", "c_analysis_runs")),
+                "counterexample_or_proof_rows")),
     ("想（猜想或判决性证据）", ("conjecture_rows", "statement_rows",
                                 "counterexample_or_proof_rows")),
+    # 第五环节「看（关系分析）」（`draft/39` §6.42 的 D53）：用户点名过"重点考察 C"，
+    # 而 C 的产物是返回值本身、不落台账 ⇒ 真机里"C 一次都没被派"可以整趟静悄悄
+    # （T5 第 1/2 趟：`tasks` 里 role=C 的行是 0，七格全绿）。把它做成覆盖面的一环之后，
+    # 「用没用 C」与其它四环一样要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
+    ("看（关系分析）", ("c_analysis_runs",)),
     ("交（文献进稿、计划推进）", ("document_literature_citations", "plan_progress_rows",
                                   "supported_claims")),
 )

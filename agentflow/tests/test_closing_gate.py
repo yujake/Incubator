@@ -913,6 +913,9 @@ _FULL_COVER: list[dict] = [
      "note": "读数不足以提出可检验的猜想"},
     {"id": "R4", "name": "交", "kind": "document_literature_citations", "min": 0,
      "note": "手稿还没引文献"},
+    # 「看（关系分析）」那一环节（D52）：要么跑过 C，要么如实标 na 说清为什么不用它。
+    {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 0,
+     "note": "本轮没派 C 的关系分析"},
 ]
 
 
@@ -939,7 +942,7 @@ def test_a_research_project_must_leave_an_acceptance_checks_file(
     codes = [f.code for f in rep.blockers]
     assert "acceptance_missing_for_research" in codes, rep.to_dict()
     chain = rep.readings["acceptance"]["research_chain"]
-    assert chain["researched"] is True and len(chain["missing"]) == 4, chain
+    assert chain["researched"] is True and len(chain["missing"]) == 5, chain
 
 
 def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
@@ -960,7 +963,7 @@ def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
     assert rep.status["acceptance"] == "fail", rep.to_dict()
     chain = rep.readings["acceptance"]["research_chain"]
     assert chain["groups"]["立题与检索"], chain
-    assert len(chain["missing"]) == 3, chain
+    assert len(chain["missing"]) == 4, chain
     detail = "；".join(f.detail for f in rep.blockers)
     assert "研究链覆盖面" in detail and "想（猜想或判决性证据）" in detail, detail
 
@@ -1183,6 +1186,9 @@ def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
         {"id": "R2", "name": "算或造", "kind": "reviewed_proof_rows", "min": 1},
         {"id": "R3", "name": "想", "kind": "conjecture_rows", "min": 0},
         {"id": "R4", "name": "交", "kind": "document_literature_citations", "min": 0},
+        # 「看（关系分析）」那一环（D53）：这一趟走的是"造"那条腿，明说不用关系分析。
+        {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
+         "na": True, "note": "这一趟用证明过程收尾，不需要关系分析"},
     ], st=st)
     rep = _gate(st, report)
 
@@ -1253,6 +1259,8 @@ def test_an_na_row_counts_as_marked_and_leaves_a_reading(tmp_path: pathlib.Path,
         # 「交」那一档要有真读数（覆盖面要求四环节各有其行；`na` 只用来标不适用，
         # 不许把整张表都变成 na）
         {"id": "A4", "name": "交（有证据支撑的断言）", "kind": "supported_claims", "min": 1},
+        {"id": "A5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
+         "na": True, "note": "这条腿用证明过程收尾，不需要关系分析"},
     ], st=st)
     rep = _gate(st, report)
 
