@@ -1038,6 +1038,16 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "（那是有论文包的审阅型工作区才有的东西）—— 从零研究的工作区里用它们 ⇒ 那一行"
             "算不出来 ⇒ 整张表没查成（真机读数 2026-10-05 T2 第 7 趟：P1 用了 "
             "`manuscript_edited`，而工作区里没有 `source/` ⇒ 整格丢成 unknown）。",
+            "**挑哪一档要看你实际做的是什么**（`draft/39` §6.43 的 D54）—— "
+            "「算或造」那一环不是只有 `numeric_experiment_rows`：它**只数 `method=numeric` 的行**；"
+            "穷举/枚举类（`method=exhaustive_search`）**带 `search_bound` 的**要用 "
+            "`search_frontier_rows`；优化类用 `enumeration_optimization_rows`；"
+            "形式化要用 `proof_experiment_rows`（`method=formal` **且** `evidence_kind=proof`）—— "
+            "形式化没跑成（`compile_error`/`uses_sorry`）时这一档**没有读数**，如实写 0 或 `na`，"
+            "别拿它去顶「算」那一环。真机读数（T5 第 3 趟 `p8c`）：主控跑了 1 条 `exhaustive_search`"
+            "（带 `search_bound`、`supports`）+ 3 条 `formal`（全 `compile_error`），却把验收行写成 "
+            "`numeric_experiment_rows` 与 `reviewed_proof_rows` ⇒ 两行都读 0、`can_close=false` —— "
+            "**它做对了活，写错了档**（换 `search_frontier_rows` 那一行就是 1）。",
             "**某一档对这个项目天然不适用时，写 `\"na\": true` 并在 `note` 里写明理由**"
             "（`na` ≠ 通过 ≠ 失败，三态里的第三态）：例如**调查型任务**（「调查…有哪些值得做的"
             "开放问题，交付一份清单」）天然没有「算或造」那一步 —— 那一行写 `na` + 理由，"

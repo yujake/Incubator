@@ -225,6 +225,11 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert '"na": true' in text and "α" not in text, text
     # D52：调查/探索类任务要把 C 用起来，并把 c_analysis_runs 写进验收表
     assert "要把 C 用起来" in text and "c_analysis_runs" in text, text
+    # D53：「看（关系分析）」是覆盖面的第五环
+    assert "研究链的五个环节" in text and "看（关系分析）" in text, text
+    # D54：方法 → 档位的映射（做对了活、写错了档是 T5 第 3 趟的失败形态）
+    assert "挑哪一档要看你实际做的是什么" in text, text
+    assert "search_frontier_rows" in text and "exhaustive_search" in text, text
 
 
 def test_the_research_brief_asks_for_literature_citations_and_three_search_readings():
