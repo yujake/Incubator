@@ -118,7 +118,7 @@ def build_receipt(package_dir: Path | str, *, tex_sha256: str, pages: int | None
                   note: str = "") -> dict[str, Any]:
     """算一份编译回执：这份 PDF 由哪个 tex 哈希编出、几页、标记缺不缺。
 
-    `pdf_bytes` 可以是 `None`（`draft/39` §6.36 的 D46）：**没编出 PDF 时也要能写回执**
+    `pdf_bytes` 可以是 `None`（`draft/39` §6.36 的 D46）：没编出 PDF 时也要能写回执
     —— 否则调用方拿到的是 `TypeError`，而"这一趟没编出 PDF"这件事连回执都留不下来
     （真机读数：T3 预检里 `pdflatex` 崩在 MiKTeX 的用户目录权限上，PDF 没产出，
     脚本当场抛 `TypeError: int() argument must be ... not 'NoneType'` ⇒ 回执缺失，

@@ -214,7 +214,8 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
-    assert "不是论文包" in text, "研究型任务的交付物口径也要写清（D34）"
+    # D47：交付物按任务那句话说 —— "整理成论文"那一类必须建包（T3 第 1 趟就是漏了这一句）
+    assert "交付物按任务那句话说" in text and "必须建论文包" in text, text
     # D44：只立项不算推进 —— 这一句不写，M 就会像 T2 第 13 趟那样只 create_plan、不 step
     assert "F.step" in text and "只立项不算推进" in text, text
     # D45：子目标要带可检验形式 —— 不写，M 派的子目标就会被 I9 闸门挡在门外（F 一次都不调）
