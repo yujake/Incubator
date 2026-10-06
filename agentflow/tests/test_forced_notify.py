@@ -361,28 +361,25 @@ def _seed_task(cond, task_id: str, *, role: str = "E", status: str = "running") 
                             "started_at": "2026-10-05T00:00:00+08:00", "artifacts": []})
 
 
-def test_a_finished_action_leaves_a_completion_manuscript_to_its_caller(tmp_path):
-    """E5 的 F1：被派的角色当动作跑（没有 `final`）⇒ 框架按动作结果代写一份交接。
+def test_a_finished_action_no_longer_gets_a_derived_handoff_row(tmp_path):
+    """口径反转（`draft/39` §6.49 的 D64，用户 2026-10-06 裁）：动作驱动的一趟不代写交接。
 
-    这一条是 E5 真机读数逼出来的：那一趟 107 步里只有 M 一个 `agent_run_start`，
-    30 行留痕全是 M 的派活，没有一条"我干完了、交给了谁"。用户口径的第一句
-    （"每个除主控外的 Agent 干完活后……要通知给谁"）在动作驱动形态下只能由框架来落。
+    原来（`draft/39` §6.6 F1）框架会按动作结果派生一行，理由是"动作驱动的趟没有 final 可填"。
+    真机把那个取舍证伪了：T1–T5 五趟的账本 92 / 96 / 118 / 62 / 94 行里 100% 是这种模板，
+    `refs` 逐行全空、正文是"从/到/一句话/时间/引用"的填空 —— 用户原话
+    「handoffs 里面没有几条有效信息全在强调纪律」。
+    同样的事实已经在 `tasks` 与 `out/tasks/<id>.json` 里 ⇒ 交接账本只装模型自己写的、带编号的。
     """
     ws, _st, cond = _action_ws(tmp_path)
     res = cond.summon("E", "list_experiments", {}, by="M")
     assert res.outcome == "ok", (res.status, res.outcome, res.error)
-    rows = MS.rows(ws)
-    assert len(rows) == 1, rows
-    row = rows[0]
-    assert row["sender"] == "E" and row["to"] == "M", row
-    assert row["task_id"] == res.task_id, row
-    assert "list_experiments" in row["summary"] and "ok" in row["summary"], row
-    assert "框架据动作结果派生" in row["note"], row
-    assert res.task_id in row["body"], row
+    assert MS.rows(ws) == [], MS.rows(ws)
+    # 事实没丢：任务行与产物仍在盘上（那才是这类信息的落点）
+    assert any(a.endswith(f"{res.task_id}.json") for a in res.artifacts), res.artifacts
 
 
-def test_an_action_that_refuses_after_starting_still_leaves_a_row(tmp_path):
-    """跑起来之后被拒的动作也留一行（"谁试过什么、为什么没成"正是留痕要带的东西）。"""
+def test_an_action_that_refuses_after_starting_carries_the_reason_in_the_task_row(tmp_path):
+    """跑起来之后被拒的动作：不写交接，但"为什么没成"要落在任务行上（不静默）。"""
     from agentflow.tools import ToolError
 
     class _Refuser(_Stub):
@@ -396,11 +393,9 @@ def test_an_action_that_refuses_after_starting_still_leaves_a_row(tmp_path):
     cond = Conductor(st, backend=LocalBackend({"E": ("object", _Refuser())}))
     res = cond.summon("E", "list_experiments", {}, by="M")
     assert res.outcome == "refused", (res.status, res.outcome, res.refusal_reason)
-    rows = MS.rows(ws)
-    assert len(rows) == 1, rows
-    assert rows[0]["sender"] == "E" and rows[0]["to"] == "M", rows[0]
-    assert "refused" in rows[0]["summary"], rows[0]
-    assert str(res.refusal_reason) in rows[0]["body"], rows[0]
+    assert MS.rows(ws) == [], MS.rows(ws)
+    task = [r for r in st.rows("tasks") if str(r.get("task_id")) == res.task_id]
+    assert task and str(res.refusal_reason) in json.dumps(task[0], ensure_ascii=False), task
 
 
 def test_a_refusal_before_the_task_starts_leaves_no_row(tmp_path):
@@ -425,8 +420,8 @@ def test_a_cancelled_task_leaves_no_completion_manuscript(tmp_path):
     assert MS.rows(ws) == [], MS.rows(ws)
 
 
-def test_the_completion_row_is_skipped_when_the_role_already_wrote_one(tmp_path):
-    """不重复：循环驱动那一趟自己填的 `notify` 已经写了同一 `task_id` 的行 ⇒ 跳过。"""
+def test_the_roles_own_notify_row_is_the_only_row_now(tmp_path):
+    """模型自己填的 `notify`（收工那一句）是唯一会进账本的那种行 —— 框架不再补、也不覆盖。"""
     ws, _st, cond = _action_ws(tmp_path)
     MS.write(ws, sender="E", recipient="M", summary="我自己写的收工交接", body="正文。\n",
              task_id="t-9002", note="留痕来源：模型填的 notify")

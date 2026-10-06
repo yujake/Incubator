@@ -1393,19 +1393,16 @@ class Conductor:
                             task_id=task_id, note=f"outcome={outcome}")
             except Exception as e:  # noqa: BLE001 - 登记不是判据本身，不许带走终态
                 self._log(f"产物归属没登记成：{type(e).__name__}: {e}", task_id=task_id)
-        # ---- 交接留痕：动作驱动的一趟结束（`draft/39` §3.2 表格的第二行 + §6.6 F1）。
+        # ---- 交接留痕：动作驱动的一趟结束。
         #
-        # 为什么必须在这里写：E5 真机读数（`p6g-notify-live`）显示，被派的 A–H 是当动作跑的
-        # （107 步里只有 M 一个 `agent_run_start`），它们没有 `final` 那一步 ⇒
-        # 收工侧那张强制 `notify` 表在这条路上永远不会触发，于是 30 行留痕全是 M 的派活、
-        # 一条"我干完了、交给了谁"都没有。用户口径的第一句恰恰是"每个除主控外的 Agent
-        # 干完活后……要通知给谁"—— 动作驱动形态下能写这份留痕的只有框架（没有模型收工那一刻）。
-        # 这不是"代填"：用户裁的"不代填"是模型自己要说的话（那张 notify 表）；
-        # 这里写的是已经发生的事实（谁做了什么、结果如何、产物在哪），并逐行注明来源。
-        # 与循环驱动不重复：那一路角色自己的 `notify` 已经写下了同一 `task_id` 的行 ⇒ 跳过。
-        if str(row.get("role") or "") != S.CONDUCTOR_ROLE and status != "cancelled":
-            self._write_completion_manuscript(row, task_id=task_id, status=status, outcome=outcome,
-                                              detail=detail, error=error, payload=payload)
+        # 2026-10-06 改（`draft/39` §6.49 的 D64，用户裁定）：这里不再代写交接手稿。
+        # 原来的理由（`draft/39` §6.6 F1）是"动作驱动的趟没有 final 可填，账本会缺这一格"；
+        # 真机把它证伪了：T1–T5 五趟的 `manuscripts/handoffs.jsonl` 里 92 / 96 / 118 / 62 / 94
+        # 行全是框架派生的模板，`refs` 逐行全空、正文是"从/到/一句话/时间/引用"的填空 ——
+        # 用户的原话是「handoffs 里面没有几条有效信息全在强调纪律」。
+        # 这类行的信息与 `tasks` / `out/tasks/*.json` 逐字重复 ⇒ 它的落点是那里，不是交接账本。
+        # 账本从此只装"模型自己写的、带编号的"交接（派活时带 `notify`、收工时 `final.notify`）；
+        # 谁在什么时候把什么交给了谁，靠那些行才查得出来。
         return SummonResult(
             task_id=task_id, role=str(row.get("role") or ""), action=str(row.get("action") or ""),
             status=status, outcome=outcome, refusal_reason=row.get("refusal_reason"),

@@ -602,10 +602,20 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # 撞号与覆盖在结构上不可能发生（这正是 D16/D17 的终结判据）。
         # 旧格式（`.md` 文件）不计入这一档，但在明细里另列一栏：既不假装没有，
         # 也不让它冒充新格式。
+        #
+        # `draft/39` §6.49 的 D64（用户 2026-10-06 裁）：口径再收紧成只数自写的。
+        # 真机读数（T1–T5 五趟的账本逐行分类）：92 / 96 / 118 / 62 / 94 行里
+        # 100% 是框架派生的模板（`note` 写着「框架据动作结果派生」/「框架据派活派生」），
+        # 而且每一行的 `refs` 都是空的，正文是"从/到/一句话/时间/引用"的填空。
+        # 用户的原话：「handoffs 里面没有几条有效信息全在强调纪律」。
+        # 一个被模板灌满的读数会替噪声背书 ⇒ 这一档只数"模型自己写的"那些，
+        # 框架派生的另列一栏（不假装没有，也不让它冒充交接）。
         from . import manuscripts as MS
 
         all_rows, bad_lines = MS.read_rows(project_root)
         good = [r for r in all_rows if not MS.missing_fields(r)]
+        derived = [r for r in good if "框架据" in str(r.get("note") or "")]
+        authored = [r for r in good if r not in derived]
         folder = project_root / MS.MANUSCRIPTS_DIR
         legacy = [str(got.get("id") or "")
                   for got in [MS.parse_name(p) or {} for p in
@@ -613,7 +623,13 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         detail: dict[str, Any] = {
             "ledger": f"{MS.MANUSCRIPTS_DIR}/{MS.HANDOFFS_NAME}",
             "rows": len(all_rows),
-            "complete_rows": [str(r.get("id") or "") for r in good[:10]],
+            "authored_rows": [str(r.get("id") or "") for r in authored[:10]],
+            "derived_rows": len(derived),
+            "derived_note": ("这些行是框架替动作结果/派活自动填的模板（同样的信息在 `tasks` 与 "
+                             "`out/tasks/*.json` 里，那才是它们的落点）—— 它们不算交接，"
+                             "也不会让这一档变绿"),
+            "refs_ok": [str(r.get("id") or "") for r in authored
+                        if list(r.get("refs") or [])][:10],
             "unparsable_lines": bad_lines[:5],
             "legacy_md_files": legacy[:10],
             "rows_missing_fields": [{"id": str(r.get("id") or ""), "missing": MS.missing_fields(r)}
@@ -625,7 +641,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         if bad_lines:
             detail["note"] = ("账本里有读不出来的行 ⇒ 这一档的读数偏低，按 `unparsable_lines` "
                               "逐条去查（读不出不等于没有）")
-        return len(good), detail
+        return len(authored), detail
     if kind == "retrieval_ok_rows":
         # 「真的取回了东西」那一档（`draft/39` §6.47 的 D60）。
         #
@@ -705,17 +721,34 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         }
     if kind == "document_rows":
         # 「任务说要交的那份东西在不在」那一档（`draft/39` §6.47 的 D59）。
+        #
+        # `draft/39` §6.49 的 D65：按内容去重（`content_sha256`）。真机读数
+        # （T2 第 15 趟 `p6q`）：`documents` 4 行，而 0000/0001/0002/0003 的 claims 逐字相同
+        # —— 那是同一份内容重复登记，不是四份稿子；按行数会让"反复重建同一份"看起来像产出。
         docs = [dict(r) for r in store.rows("documents")]
-        with_claims = [d for d in docs if list(d.get("claims") or [])]
-        return len(docs), {
-            "documents": len(docs),
+        seen: dict[str, str] = {}
+        unique: list[dict[str, Any]] = []
+        duplicates: list[dict[str, Any]] = []
+        for d in docs:
+            key = str(d.get("content_sha256") or "") or f"id:{d.get('doc_id')}"
+            if key in seen:
+                duplicates.append({"doc_id": str(d.get("doc_id") or ""),
+                                   "same_as": seen[key]})
+                continue
+            seen[key] = str(d.get("doc_id") or "")
+            unique.append(d)
+        with_claims = [d for d in unique if list(d.get("claims") or [])]
+        return len(unique), {
+            "documents": len(docs), "unique_documents": len(unique),
+            "duplicate_rows": duplicates[:8],
             "with_claims": len(with_claims),
-            "kinds": sorted({str(d.get("kind") or "") for d in docs}),
-            "statuses": sorted({str(d.get("status") or "") for d in docs}),
-            "ids": [str(d.get("doc_id") or "") for d in docs[:8]],
+            "kinds": sorted({str(d.get("kind") or "") for d in unique}),
+            "statuses": sorted({str(d.get("status") or "") for d in unique}),
+            "ids": [str(d.get("doc_id") or "") for d in unique[:8]],
             "note": ("这一档就是「交付物本身在不在」：任务说交付手稿 / 清单 / 综述时，"
-                     "盘上得有 `documents` 行。0 行时这一档不成立，而 `substance` 那一格"
-                     "可能已经是绿的（它只看五张表里有没有非空的）—— 两者分开报"),
+                     "盘上得有 `documents` 行。按 `content_sha256` 去重：同一份内容重建多次"
+                     "只算一份（重复行列在 `duplicate_rows`）。0 行时这一档不成立，"
+                     "而 `substance` 那一格可能已经是绿的（它只看五张表里有没有非空的）"),
         }
     if kind == "unfinished_request_rows":
         # 「提交了、没人做」那一档（`draft/39` §6.45 的 D56）。
@@ -1339,6 +1372,24 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 + " —— 把引文改成真的支持这条断言的那一条（或改断言让它与证据相符）；"
                   "确实要这样交，就在验收表里写一行 `claim_evidence_fit_rows` 并标 "
                   "`\"na\": true` + 理由")
+    # ---- 交接账本是不是被模板灌满（`draft/39` §6.49 的 D64，用户 2026-10-06 裁）：
+    # 验收表里没写这一档时，门替它报出来 —— 五趟真机的账本里 100% 是框架派生的模板、
+    # `refs` 全空，而"手稿 N 行"这个读数一直在替噪声背书。
+    if "manuscript_rows" not in {str(r.get("kind") or "") for r in out}:
+        try:
+            _got, ms_detail = _leg_reading(
+                store, "manuscript_rows",
+                Path(resolve_under_workspace(store, project_dir)))
+        except Exception:  # noqa: BLE001 —— 读不出来时这一档不算数
+            ms_detail = None
+        if ms_detail and int(ms_detail.get("derived_rows") or 0) > 0 and _got == 0:
+            unmet.append(
+                f"交接账本里 {ms_detail['derived_rows']} 行**全是框架派生的模板**"
+                f"（`refs` 全空、正文是填空），**没有一份模型自己写的交接** —— "
+                "带信息的交接应当是：写清交给谁什么结论、依据哪几个编号（`refs` 非空）"
+                "（派活时带 `notify`，收工时的 `final.notify`）。"
+                "确实不需要交接（例如动作驱动的一趟没有可交接的结论），就在验收表里写一行 "
+                "`manuscript_rows` 并标 `\"na\": true` + 理由")
     if unmet:
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(

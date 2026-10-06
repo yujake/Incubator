@@ -1054,9 +1054,49 @@ def test_the_manuscript_leg_counts_rows_in_the_ledger_not_files(tmp_path: pathli
     row = after.readings["acceptance"]["rows"][0]
     assert row["got"] == 2, row
     assert after.status["acceptance"] == "pass", after.to_dict()
-    assert row["detail"]["complete_rows"] == ["0000", "0001"], row["detail"]
+    assert row["detail"]["authored_rows"] == ["0000", "0001"], row["detail"]
     assert row["detail"]["legacy_md_files"] == ["0009"], row["detail"]
     assert "不计入" in str(row["detail"].get("note") or ""), row["detail"]
+
+
+def test_framework_derived_template_rows_do_not_count_as_handoffs(tmp_path: pathlib.Path):
+    """判据（`draft/39` §6.49 的 D64，用户 2026-10-06 裁）：模板行不算交接。
+
+    真机读数：T1–T5 五趟的账本 92 / 96 / 118 / 62 / 94 行里 100% 是框架派生的模板
+    （`note` 写着「框架据动作结果派生」/「框架据派活派生」），`refs` 逐行全空 ——
+    用户原话「handoffs 里面没有几条有效信息全在强调纪律」。读数不许再替噪声背书：
+    自写的才计入，派生的另列一栏，而且一份自写的都没有时门要自己报。
+    """
+    from agentflow import manuscripts as MS
+
+    st, report = _good(tmp_path)
+    MS.write(tmp_path, sender="E", recipient="M", summary="list_experiments：ok",
+             body="从 E 到 M 的模板行。\n",
+             note="留痕来源：框架据动作结果派生（动作驱动的一趟没有 final 可填）")
+    MS.write(tmp_path, sender="M", recipient="F", summary="派活留痕",
+             body="从 M 到 F 的模板行。\n", note="留痕来源：框架据派活派生（模型这一句没填 notify）")
+    # ①验收表里没写这一档 ⇒ 门自己报（这是"一份自写的都没有"的兜底读数）
+    _acceptance_checks(tmp_path, [{"id": "P1", "name": "有稿件", "kind": "document_rows",
+                                   "min": 1}], st=st)
+    rep_auto = _gate(st, report)
+    auto_detail = "；".join(f.detail for f in rep_auto.blockers if f.check == "acceptance")
+    assert "全是框架派生的模板" in auto_detail and "refs" in auto_detail, auto_detail
+
+    # ②写进验收表时由它自己那一行判：0 条 ⇒ 红，明细里派生的另列一栏
+    _acceptance_checks(tmp_path, [{"id": "M1", "name": "交接手稿", "kind": "manuscript_rows",
+                                   "min": 1}], st=st)
+    rep = _gate(st, report)
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["got"] == 0 and row["ok"] is False, row
+    assert row["detail"]["derived_rows"] == 2, row["detail"]
+
+    # ③一份自写的（带编号）就够把这一档立起来
+    MS.write(tmp_path, sender="D", recipient="F", summary="族证据在 exp:0001",
+             body="实验 0001 的族证据在 out/experiments/0001.log。\n", refs=["exp:0001"])
+    rep2 = _gate(st, report)
+    row2 = rep2.readings["acceptance"]["rows"][0]
+    assert row2["got"] == 1 and row2["ok"] is True, row2
+    assert row2["detail"]["refs_ok"] == ["0002"], row2["detail"]
 
 
 def test_a_row_missing_a_required_field_does_not_count(tmp_path: pathlib.Path):
