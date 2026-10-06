@@ -1,11 +1,9 @@
 # 旧设计调查 A：LLM 管道残留与「多智能体协作面」
 
 > **题目**：把「多智能体协作时代的 LLM 管道残留」查清。
-> **口径**：只写「是什么 / 当年为什么存在 / 今天谁在用 / 有没有负面效果」，不写修改建议。
-> **不修改仓库任何文件**；本报告是本次唯一写入。
-> **取证范围**：`D:\Incubator\agentflow\projects`（58 个）+ `D:\Incubator\projects`（23 个）= 81 个工作区；
-> 140 份 `sessions/*.jsonl`、15435 条事件；4127 行 `data/tasks.json`；2067 份 `out/tasks/*.json`。
-> 未做：未跑模型、未出网、未跑全量 pytest。没有 `file:line` 或命令输出支撑的一律写「未核实」。
+> **口径**：只写「是什么 / 当年为什么存在 / 今天谁在用 / 有没有负面效果」，不写修改建议。**不修改仓库任何文件**，本报告是本次唯一写入。
+> **真机取证**：`D:\Incubator\agentflow\projects`（58 个）+ `D:\Incubator\projects`（23 个）= 81 个工作区；140 份 `sessions/*.jsonl`、15435 条事件；4127 行 `data/tasks.json`；2067 份 `out/tasks/*.json`。
+> **未做**：未跑模型、未出网、未跑全量 pytest；没有 `file:line` 或命令输出支撑的一律写「未核实」。
 
 ---
 
@@ -138,18 +136,16 @@
 - **notebook**：`note_path`（`agent_loop.py:863`）、`write_note`（`:879`，append-only 落
   `<项目根>/notes/<角色>.md`）、`notebook_digest`（`:884`，最近 6 条进下一条 prompt）、
   `_do_note`（`:2501`）。**当年为什么存在**：`draft/28:16290` 逐字：「**草稿本**：人人可写、
-  不碰数据面（这是 C/H 唯一合法的"手"）」；`:16305`：「人人都能写草稿本 `<项目根>/notes/<角色>.md`
-  （append-only，最近几条进下一次 prompt）」。**真机**：`agent_note` 1011 条
-  （M 897/G 80/E 24/H 10）；`notes/*.md` 65 份非空（M 55/E 5/H 4/G 1），**C/D/F 一份都没有**。
-  **负面效果**：「人人可写」退化成「M 一个人写」（55/65 = 85%）；`draft/28:16398` 另记
-  「`runs/` 与 `notes/` 无上限……没有保留策略，也没进 CLI 的视图」。
+  不碰数据面（这是 C/H 唯一合法的"手"）」；`:16305`：「人人都能写草稿本（append-only，最近几条进下一次 prompt）」。
+  **真机**：`agent_note` 1011 条（M 897/G 80/E 24/H 10）；`notes/*.md` 65 份非空
+  （M 55/E 5/H 4/G 1），**C/D/F 一份都没有**。**负面效果**：「人人可写」退化成「M 一个人写」
+  （55/65 = 85%）；`draft/28:16398` 另记「`runs/` 与 `notes/` 无上限……没有保留策略，也没进 CLI 的视图」。
 - **inbox**：`read_messages`（`agent_loop.py:815`）、`send_message`（`:837`）、`mark_delivered`
   （`:851`，写 `agent_inbox` 事件 `:857`）、`_do_message`（`:2340`）。**真机**：`agent_message`
   **565** 条，收件人 `#public` 402/G 76/E 57/M 18/H 9/F 3；`agent_inbox` **16**（M 15/G 1）；
   步形状 `message` **10**/5269（0.19%）。**负面效果（具体机制）**：**565:10 的落差**——
   绝大多数留言不是模型主动沟通，而是框架在派活/收工时代写的留痕（`subject` 形如
   「手稿 NNNN：派活：…」）；`mark_delivered` 只发生 16 次 ⇒「谁读过谁的留言」这个读数基本是空的。
-
 ### 3.2 集体插话——真机 0 条
 
 - **是什么**：`send_interjection`（`agent_loop.py:741`）、`read_interjections`（`:764`）、
@@ -300,16 +296,14 @@
      而 `summon_many` 的每项仍过一次 `Conductor.summon`（`agent_loop.py:2158` 那批 `TaskCall`
      由 `run_waves` 逐项调）⇒ 扇出计数理应有正读数；具体断点（`conductor.py:877-891` 的
      `Decision` 构造处与 `policy` 实际入参）**未核实**。
-
-- **`interactions.admit_*` 在途闸门（是什么 / 当年为什么存在）**：`admit_search_request`
-  （`interactions.py:1125`，I7 在途上限 `DEFAULTS["max_inflight_requests"]=20`（`:153`））、
-  `admit_reprocess_request`（`:1189`，I4）、`inflight_requests`（`:1065`）、`reprocess_counts`
-  （`:1172`）。两者都「在调用方的 tx 内执行，自己不加锁」（模块 docstring `:29-31`）。
-- **当年为什么存在**：`interactions.py:1137-1140` 逐字：「为什么要**拒绝**而不是"无限排队"：
-  队列无上限时，提交方（尤其是循环里的 D）永远不会感到压力，于是"知识不足就提问"会退化成
-  "每轮都问"，而 A 的产能是固定的 —— 结果是**所有**请求都变慢，包括最关键的那条矛盾。
-  显式拒绝会把压力**传导回提交方**」。规格 `draft/13:489-500`（I7）；`draft/12:128`
-  「全局在途 ≤20，同级 FIFO；超上限**拒绝新请求**，而不是无限排队」。
+- **`interactions.admit_*` 在途闸门**：`admit_search_request`（`interactions.py:1125`，I7 在途上限
+  `DEFAULTS["max_inflight_requests"]=20`（`:153`））、`admit_reprocess_request`（`:1189`，I4）、
+  `inflight_requests`（`:1065`）、`reprocess_counts`（`:1172`）。两者都「在调用方的 tx 内执行，
+  自己不加锁」（模块 docstring `:29-31`）。**当年为什么存在**：`interactions.py:1137-1140` 逐字：
+  「为什么要**拒绝**而不是"无限排队"：队列无上限时，提交方（尤其是循环里的 D）永远不会感到压力，
+  于是"知识不足就提问"会退化成"每轮都问"，而 A 的产能是固定的 —— 结果是**所有**请求都变慢，
+  包括最关键的那条矛盾。显式拒绝会把压力**传导回提交方**」。规格 `draft/13:489-500`（I7）；
+  `draft/12:128`「全局在途 ≤20，同级 FIFO；超上限**拒绝新请求**，而不是无限排队」。
 - **今天谁在用**：I7 → `agent_a/core.py:63`、`agent_c/core.py:662`、`agent_d/adjudicate.py:311`、
   `agent_f/core.py:673`；I4 → `agent_b/core.py:305`、`agent_f/core.py:758`。
 - **真机计数**：`search_requests` **367** 行（`submitted_by`：`agent-F` 155/`unknown` 40/
@@ -335,13 +329,10 @@
 | 机制 | 事件/字段 | 真机计数 | 判定 |
 |---|---|---|---|
 | 集体插话 | `agent_interjection` / `_seen` / `_effect` | 0 / 0 / 0 | 一次未走到 |
-| relay 申请 / relay 留言 | `agent_summon_request` / `subject="请代唤"` | 0 / 0 | 一次未走到 |
-| relay 受理 | M 查 `ledger(view="relays")` | **30 次，30 次全空** | 走了，但永远是空队列 |
-| `final.notify` 强制闸门 | `shape="final"` 的 step | 0 / 5269 | 触发点未出现 |
-| `no_notify` 收场 | `agent_run_end.stop_reason` | 0 | 未走到 |
+| relay 申请 / 留言 / 受理 | `agent_summon_request` / `subject="请代唤"` / M 查 `ledger(view="relays")` | 0 / 0 / **30 次全空** | 申请一次未走到；受理走了但永远是空队列 |
+| `final.notify` 强制闸门 + `no_notify` 收场 | `shape="final"` 的 step / `agent_run_end.stop_reason` | 0 / 5269；`no_notify` 0 | 触发点未出现 |
 | 交付闸门 + 语义判据 | `delivery_gate` 事件 / `gates/*.json` | 0 / 0 份 | 一次未走到 |
-| `LLMExtractor` / `modelclient` | `llm_call.scope == "extract"` | 0 | 一次未走到 |
-| `judge.judge_json` | src 调用点 | 0（只有词表被 import） | 一次未走到 |
+| `LLMExtractor` / `modelclient` / `judge.judge_json` | `llm_call.scope=="extract"` / src 调用点 | 0 / 0（只有词表被 import） | 一次未走到 |
 | I7 在途拒绝 | `admit_search_request` 拒绝分支 | 0 / 367 行请求 | 一次未走到 |
 | I4 重抽取配额 | `reprocess_requests` 表 | 0 行 / 81 个工作区 | 一次未走到 |
 | 深度/循环/扇出/并发/总量拒绝 | `refusal_reason` | 全 0 / 4127 行任务 | 判据结构性不可达 |
