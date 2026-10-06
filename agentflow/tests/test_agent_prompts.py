@@ -223,6 +223,8 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     # D48/D49：「交付清单」类任务的清单本体要落 documents；天然不适用的那一档写 na + 理由
     assert "清单本体是 `documents` 里的行" in text, text
     assert '"na": true' in text and "α" not in text, text
+    # D52：调查/探索类任务要把 C 用起来，并把 c_analysis_runs 写进验收表
+    assert "要把 C 用起来" in text and "c_analysis_runs" in text, text
 
 
 def test_the_research_brief_asks_for_literature_citations_and_three_search_readings():

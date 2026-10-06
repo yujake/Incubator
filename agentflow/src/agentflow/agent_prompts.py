@@ -1047,6 +1047,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "`documents` **0 行**，于是 substance 与验收都没有可数的「清单」；"
             "验收表里对应那一行要引它（`statement_rows` / `supported_claims` / "
             "`document_literature_citations` 任一档）。",
+            "**调查 / 探索 / 综述这一类任务要把 C 用起来**（用户点名过「重点考察 C」）："
+            "文献进来了不等于看过 —— 派 C 的关系分析动作（`C.hottest` 看热点概念、"
+            "`C.gaps` 看结构缺口、`C.contradictions` 看待裁的矛盾），它们**不过模型、确定性**，"
+            "结果直接进你的清单骨架。真机读数（T5 第 1 趟 `p8-fermat-shorter-proof`）："
+            "`tasks` 表里 **role=C 的行是 0**，七格全绿、无人察觉 —— 于是「重点考察 C」这件事"
+            "整趟没被测到。验收表里加一行 `c_analysis_runs`（数 `tasks` 里 role=C 跑过的行；"
+            "**C 的产物是返回值本身、不落台账**，所以只有任务行能回答「用没用它」）。",
             "**猜想要交给 F 攻坚**（研究型任务的「价值」就在这一跳）：`D.register_conjecture` 之后"
             "要派 `F.create_plan` 与 `F.attack.step`，并把 `attack_plans` 里 `history` 非空的推进"
             "写进验收表（`plan_progress_rows` / `attack_plan_rows` 那一档）。"

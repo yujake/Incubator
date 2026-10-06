@@ -29,7 +29,28 @@ class _Step:
         """
         row = self._plan_row(plan_id)
         if row is None:
-            raise PlanError(f"攻坚计划 {plan_id} 不存在")
+            # 拒信要可行动（`draft/39` §6.41 的 D51）：真机读数（T5 第 1 趟
+            # `p8-fermat-shorter-proof`）里主控把 `problem_key`（`flt-conj-1`）当 `plan_id`
+            # 传了三次，每次都只收到一句"攻坚计划 flt-conj-1 不存在" —— 而台账里明明有一行
+            # （`plan_id=0000`）。只说"没有"、不说"有哪些"，调用方只能硬猜（与 §6.21 修的
+            # D 侧 qid 那条同一族）。这里把在册的 plan_id 与它的 problem_key 一并给出。
+            try:
+                rows = [dict(r) for r in self.store.rows("attack_plans")]
+            except Exception:  # noqa: BLE001 —— 读不到就退化成原来的那句话，不编内容
+                rows = []
+            if rows:
+                listed = "；".join(
+                    f"{r.get('plan_id')}（problem_key={r.get('problem_key')}，"
+                    f"status={r.get('status')}）" for r in rows[:12])
+                raise PlanError(
+                    f"攻坚计划 {plan_id!r} 不在册 ⇒ 这一步没做。在册的攻坚计划有 "
+                    f"{len(rows)} 条：{listed}。"
+                    "step 要的是 plan_id（create_plan 返回的那个），不是 problem_key —— "
+                    "同一个 problem_key 重复立项会命中既有计划，所以号只有 create_plan 的返回里有"
+                )
+            raise PlanError(
+                f"攻坚计划 {plan_id!r} 不存在，而且台账里一条攻坚计划都没有 ⇒ "
+                "先派 F.create_plan（它返回 plan_id）再回来推进，别对着空表反复试号")
 
         status = str(row.get("status") or "open")
         budget = dict(row.get("budget") or {})

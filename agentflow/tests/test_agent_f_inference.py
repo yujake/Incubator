@@ -217,6 +217,45 @@ def test_the_pre_spend_gate_stops_the_call_before_any_money_is_spent(store: Stor
     assert out["outcome"] == "no_change", out
 
 
+def test_a_step_on_a_missing_plan_lists_the_plans_in_the_ledger(store: Store):
+    """判据（`draft/39` §6.41 的 D51）：拒信要可行动 —— 说清在册的 `plan_id` 与 `problem_key`。
+
+    真机读数（T5 第 1 趟 `p8-fermat-shorter-proof`）：主控把 `problem_key`
+    （`flt-conj-1`）当 `plan_id` 传了三次，每次都只收到一句"攻坚计划 flt-conj-1 不存在"
+    —— 而台账里明明有一行（`plan_id=0000`）。只说"没有"、不说"有哪些"，调用方只能硬猜
+    （与 §6.21 修的 D 侧 qid 那条同一族）。
+    """
+    from agentflow.agent_f import AgentF, PlanError
+
+    pid = AgentF(store).create_plan("难题", "flt-conj-1", subgoals=[
+        {"sid": "s1", "text": "判定这条难题", "owner": "F", "testable": "有限界"}])["plan_id"]
+    try:
+        _f(store).step("flt-conj-1")
+    except PlanError as exc:
+        text = str(exc)
+    else:  # pragma: no cover —— 走不到这里
+        raise AssertionError("不存在的 plan_id 竟然推了一轮")
+
+    assert pid in text, text
+    assert "problem_key=flt-conj-1" in text, text
+    assert "step 要的是 plan_id" in text, text
+
+
+def test_a_step_on_an_empty_ledger_says_to_create_a_plan_first(store: Store):
+    """负控：台账里一条计划都没有时，拒信要指向"先立项"，而不是给一张空清单。"""
+    from agentflow.agent_f import AgentF, PlanError
+
+    try:
+        AgentF(store).step("0000")
+    except PlanError as exc:
+        text = str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("空台账竟然推了一轮")
+
+    assert "一条攻坚计划都没有" in text, text
+    assert "F.create_plan" in text, text
+
+
 def test_the_tool_layer_path_gets_the_registered_seam(store: Store):
     """判据（`draft/39` §6.33 的 D42c）：工具层那条路也要拿得到缝。
 

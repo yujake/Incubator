@@ -112,6 +112,10 @@ LEG_CHECK_KINDS: dict[str, str] = {
                     "读数就得读同一份配置（2026-10-04 T2 第 1 趟：报告真的写出来了，"
                     "而读数只看一个写死的目录 ⇒ 读到 0 条）",
     "attack_plan_rows": "攻坚计划行数（`attack_plans`）—— F 的交付物：子目标进展与终止原因",
+    "c_analysis_runs": "关系分析真的跑过几次（`tasks` 里 role=C 且跑过的任务行）—— C 的产物"
+                       "是返回值本身、不落台账，所以「这一趟用没用 C」只有任务行能回答；"
+                       "0 表示一次都没用过（`draft/39` §6.41 的 D52：T5 第 1 趟用户点名"
+                       "「重点考察 C」，而 role=C 的任务行是 0、七格全绿、无人察觉）",
     "numeric_experiment_rows": "数值/计算实验行数（`experiments` 里 `method=numeric`）—— 从零做研究时"
                                "「先算一遍」是最便宜的证据来源（`method=formal` 那一档另有 "
                                "`proof_experiment_rows` 管）",
@@ -212,7 +216,7 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # "为什么不用数值"（那就是五位里第 1 位 `na` 的理由，`acceptance` 那一格读它）。
     ("算或造", ("numeric_experiment_rows", "search_frontier_rows",
                 "enumeration_optimization_rows", "reviewed_proof_rows",
-                "counterexample_or_proof_rows")),
+                "counterexample_or_proof_rows", "c_analysis_runs")),
     ("想（猜想或判决性证据）", ("conjecture_rows", "statement_rows",
                                 "counterexample_or_proof_rows")),
     ("交（文献进稿、计划推进）", ("document_literature_citations", "plan_progress_rows",
@@ -401,6 +405,24 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(rows), {"analysis_reports": [
             {"id": str(r.get("report_id") or r.get("id") or ""),
              "status": str(r.get("status") or "")} for r in rows[:8]]}
+    if kind == "c_analysis_runs":
+        # C 的关系分析跑过几次（`draft/39` §6.41 的 D52）。
+        #
+        # 为什么必须单列这一档：C 的八个动作产物就是返回值本身、不落台账
+        # （`draft/39` 记过这件事）—— 于是"这一趟到底用没用 C"在收工门上无处可读。
+        # 真机读数（T5 第 1 趟 `p8-fermat-shorter-proof`）：用户点名"重点考察 C"，
+        # 而 `tasks` 表里 role=C 的行是 0，七格全绿、无人察觉。
+        # 这一档数的是任务行（`tasks` 里 role=C 且跑过的），不是 C 的产物 ——
+        # 因为 C 的产物本来就不落盘；"它被用过没有"只有任务行能回答。
+        rows = [dict(r) for r in store.rows("tasks")
+                if str(r.get("role") or "") == "C"]
+        ran = [r for r in rows if str(r.get("status") or "") in ("done", "ok", "failed")]
+        return len(ran), {"c_tasks": [
+            {"id": str(r.get("task_id") or r.get("id") or ""),
+             "action": str(r.get("action") or ""),
+             "status": str(r.get("status") or "")} for r in rows[:8]],
+            "note": ("C 的动作产物是它的返回值、不落台账 ⇒ 这一档数的是 `tasks` 里 role=C 的任务行"
+                     "（跑过的都算）。0 表示这一趟**一次都没用过 C**")}
     if kind == "attack_plan_rows":
         rows = list(store.rows("attack_plans"))
         return len(rows), {"attack_plans": [

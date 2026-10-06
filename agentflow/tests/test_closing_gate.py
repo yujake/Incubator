@@ -1293,3 +1293,32 @@ def test_a_table_of_nothing_but_na_is_refused(tmp_path: pathlib.Path):
     assert rep.status["acceptance"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["acceptance_all_na"], rep.to_dict()
 
+
+def test_the_c_analysis_kind_counts_role_c_task_rows(tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/39` §6.41 的 D52）：`c_analysis_runs` 数的是 `tasks` 里 role=C 的任务行。
+
+    为什么单列这一档（真机读数 T5 第 1 趟 `p8-fermat-shorter-proof`）：用户点名
+    "重点考察 C"，而那一趟 `tasks` 里 role=C 的行是 0、七格全绿、无人察觉 ——
+    因为 C 的八个动作产物就是返回值本身、不落台账，没有任何一格能回答"用没用 C"。
+    这一档把那个问题变成可复算的读数（任务行是 C 唯一会留下的痕迹）。
+    """
+    from agentflow import closing as CL
+
+    st, report = _good(tmp_path)
+    real_rows = st.rows
+    tasks = [
+        {"task_id": "t-1", "role": "C", "action": "hottest", "status": "done"},
+        {"task_id": "t-2", "role": "C", "action": "gaps", "status": "failed"},
+        {"task_id": "t-3", "role": "D", "action": "propose_question", "status": "done"},
+    ]
+    monkeypatch.setattr(st, "rows", lambda table: (tasks if table == "tasks" else real_rows(table)))
+    got, detail = CL._leg_reading(st, "c_analysis_runs", tmp_path)
+    assert got == 2, detail
+    assert [t["action"] for t in detail["c_tasks"]] == ["hottest", "gaps"], detail
+
+    # 负控：一次都没派过 C ⇒ 0（这一档的读数就是"用没用它"）
+    monkeypatch.setattr(st, "rows", lambda table: ([] if table == "tasks" else real_rows(table)))
+    got2, detail2 = CL._leg_reading(st, "c_analysis_runs", tmp_path)
+    assert got2 == 0, detail2
+    assert "一次都没用过 C" in detail2["note"], detail2
+
