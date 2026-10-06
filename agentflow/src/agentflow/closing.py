@@ -107,6 +107,21 @@ LEG_CHECK_KINDS: dict[str, str] = {
                           "`search_literature` + `search.download` 能把引文原文查回来"
                           "（2026-10-04 实测：一次查询就登记了 9 行文献，其中就有 Kuchment 那篇、"
                           "带 DOI 10.1090/bull/1528）；先检索，取不回原文才允许写「未查」",
+    "retrieval_ok_rows": "**真的取回了东西**的检索次数（`search_requests` 里 `outcome=ok` 的行）"
+                         "—— 缺省阈值 = `research_questions` 的行数（每个立起来的问题至少要被一次"
+                         "成功取回服务过；这个数由台账算出来，不是我拍的）。它与 `retrieval_attempts` "
+                         "分开：「查过」与「查到了」是两件事 —— 前者把 `no_results` 也算进去。"
+                         "为什么单列（`draft/39` §6.47 的 D60）：T5 第 6 趟 `p8f` 里 4 次检索有 2 次 "
+                         "`no_results`（都是题面式说法，没按纪律换规范术语重查），`literature` 只 8 行，"
+                         "而 M 自己在报告的「未决问题」里写着「未按纪律用规范术语再查一轮」——"
+                         "纪律写在 brief 里，可**没有读数的地方纪律管不住**",
+    "document_rows": "交付的稿件份数（`documents` 的行数）—— 任务说「交付进展手稿 / 清单 / 综述」时，"
+                     "这一档就是「那份东西在不在」的读数。为什么单列（`draft/39` §6.47 的 D59）："
+                     "T5 第 6 趟 `p8f` 里 `documents` **0 行**（一次稿子都没写），而 M 把 "
+                     "`plan_progress_rows`（F 的计划推进）填进了「交」那一环 ⇒ 收工门七格全绿、"
+                     "`can_close=true`；`substance` 那一格只看五张表里有没有非空的"
+                     "（`relations` 47 行就够让它绿），所以「任务说要交的那份东西在不在」"
+                     "必须有自己的一档",
     "unfinished_request_rows": "队列里**没做完**的请求条数（`search_requests` 里 `done` 不为真的行 + "
                                "`reprocess_requests` 里 `status=pending` 的行）—— 它数的是「提交了、"
                                "没人做」。这一档的缺省判据是**上限 0**（不是「越多越好」：要么派 A 把请求"
@@ -228,7 +243,15 @@ REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 #: 触发条件只有一条：这个项目里有 `research_questions` 行（= 它是个"研究型"项目）。
 #: review 型（T1）不触发 —— 那些项目的验收表是任务书给的 P1–P11，与本判据无关。
 RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("立题与检索", ("research_question_rows", "retrieval_attempts")),
+    # 第一环节拆成两环（`draft/39` §6.47 的 D60）：此前它在验收表里的成员是
+    # 「research_question_rows 或 retrieval_attempts」——任一条成立就算这一环覆盖了。
+    # 真机读数（T5 第 6 趟 `p8f`）：M 只写了 `research_question_rows` 一条，
+    # 于是"检索"那一腿整个没有读数；那一趟 4 次检索里 2 次 `no_results`（都是题面式说法，
+    # 没有按纪律换规范术语重查），`literature` 只有 8 行 —— 而 M 自己在报告的"未决问题"里
+    # 逐字写着「未按纪律用规范术语再查一轮」。没有读数的地方纪律管不住：把"立题"与
+    # "检索"分成两环，检索那一环要有一档真的数"取回了什么"。
+    ("立题", ("research_question_rows",)),
+    ("检索（真的取回）", ("retrieval_ok_rows",)),
     # 第二环节从「算并留下界」扩成「算或造」（`draft/39` §3.17 A5，用户 2026-10-05 裁）：
     # 分析/拓扑方向的项目永远不会有"数值实验"这一行，按旧口径那一格结构性恒空 ——
     # 那是拿数值口径去卡一个不该用数值的方向。扩成"算（数值/界）或造（有证明过程 + 审过、
@@ -239,27 +262,38 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
                 "counterexample_or_proof_rows")),
     ("想（猜想或判决性证据）", ("conjecture_rows", "statement_rows",
                                 "counterexample_or_proof_rows")),
-    # 第五环节「看（关系分析）」（`draft/39` §6.42 的 D53）：用户点名过"重点考察 C"，
+    # 「看（关系分析）」（`draft/39` §6.42 的 D53）：用户点名过"重点考察 C"，
     # 而 C 的产物是返回值本身、不落台账 ⇒ 真机里"C 一次都没被派"可以整趟静悄悄
     # （T5 第 1/2 趟：`tasks` 里 role=C 的行是 0，七格全绿）。把它做成覆盖面的一环之后，
-    # 「用没用 C」与其它四环一样要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
+    # 「用没用 C」与其它几环一样要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
     ("看（关系分析）", ("c_analysis_runs",)),
-    # 第六环节「闭（请求闭环）」（`draft/39` §6.45 的 D56）：别人提交的检索请求
+    # 「攻（攻坚推进）」（`draft/39` §6.47 的 D59）：从原来的「交（文献进稿、计划推进）」
+    # 里分出来。动机是真机读数（T5 第 6 趟 `p8f`）：那一趟任务原文是"交付进展手稿与说明"，
+    # 而盘上 `documents` 0 行——一次稿子都没写；M 把 `plan_progress_rows`（F 的计划推进）
+    # 填进了"交"那一环，于是收工门七格全绿、`can_close=true`，而 M 自己在报告的
+    # "未决问题"第 5 条里逐字写着「`documents` 0 行：没有稿件」。
+    # 根因是那一环的成员里混进了与交付物无关的档：F 的推进是"攻"，不是"交"。
+    ("攻（攻坚推进）", ("attack_plan_rows", "plan_progress_rows")),
+    # 「交（手稿落盘）」（D59）：这一环现在只认"盘上真的有一份交付物"的读数 ——
+    # `document_rows`（documents 行数）或那些必须在稿件里才成立的档
+    # （引了文献的断言 / 被实验支持的断言 / 断言与证据一致的稿件）。
+    # F 的计划推进不再能顶替它：一份没有稿子的交付不算交付。
+    ("交（手稿落盘）", ("document_rows", "document_literature_citations",
+                        "supported_claims", "claims_supported_by_their_evidence")),
+    # 「闭（请求闭环）」（`draft/39` §6.45 的 D56）：别人提交的检索请求
     # （F 的 `submit_search_request` / C 的 `submit_requests=true` / D 的缺口）落在
     # `search_requests` 队列里，消费它的动作是 A 的 `run_once` / `run` —— 而 M 的
     # 伙伴表里那两个无参动作只有一个名字（没有一句说明），也没有任何一档问过
     # 「队列里还有没有人没做的请求」。于是真机里 F 的请求可以整趟没人认领、
     # 子目标永远停在「等 A 完成检索请求」，而收工门七格全绿（T5 第 5 趟 `p8e`）。
-    # 与其它五环同一套办法：要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
+    # 与其它几环同一套办法：要么有读数、要么写 `na` + 理由 —— 不许它悄悄不发生。
     ("闭（请求闭环）", ("unfinished_request_rows",)),
-    ("交（文献进稿、计划推进）", ("document_literature_citations", "plan_progress_rows",
-                                  "supported_claims")),
 )
 
 
 def research_chain_gaps(store: Any, kinds: Iterable[str], *,
                         na_kinds: Iterable[str] = ()) -> dict[str, Any]:
-    """研究型项目的验收表覆盖面：六个环节里哪些一行都没有。
+    """研究型项目的验收表覆盖面：八个环节里哪些一行都没有。
 
     返回 `{"researched", "rows", "groups", "na_groups", "missing", "note"}`：
     `researched=False`（这个项目没有 `research_questions` 行）时 `missing` 恒为空 ——
@@ -291,7 +325,7 @@ def research_chain_gaps(store: Any, kinds: Iterable[str], *,
         "groups": groups,
         "na_groups": na_groups,
         "missing": missing,
-        "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链六个环节，"
+        "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链八个环节，"
                  "每个环节至少一行。覆盖面管的是「那一行在不在」；那一行的读数够不够"
                  "由它自己那一档判（`min` 缺省时按该档的口径，多数是 ≥ 1；"
                  "`unfinished_request_rows` 那一档的方向相反 —— 它的缺省口径是 ≤ 0）—— "
@@ -462,6 +496,41 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             detail["note"] = ("账本里有读不出来的行 ⇒ 这一档的读数偏低，按 `unparsable_lines` "
                               "逐条去查（读不出不等于没有）")
         return len(good), detail
+    if kind == "retrieval_ok_rows":
+        # 「真的取回了东西」那一档（`draft/39` §6.47 的 D60）。
+        #
+        # 阈值不是拍出来的数：它等于台账里 `research_questions` 的行数 ——
+        # 「每个立起来的问题至少要被一次成功取回服务过」。问题数由台账算，
+        # 所以这条判据随项目自己长（立了 3 个问题 ⇒ 至少 3 次成功取回）。
+        reqs = [dict(r) for r in store.rows("search_requests")]
+        ok = [r for r in reqs if str(r.get("outcome") or "") == "ok"]
+        empty = [r for r in reqs if str(r.get("outcome") or "") == "no_results"]
+        questions = list(store.rows("research_questions"))
+        return len(ok), {
+            "search_requests": len(reqs), "ok": len(ok), "no_results": len(empty),
+            "research_questions": len(questions),
+            "ok_topics": [str(r.get("topic") or "")[:60] for r in ok[:8]],
+            "no_result_topics": [str(r.get("topic") or "")[:60] for r in empty[:8]],
+            "implicit_min": len(questions),
+            "note": ("这一档数的是「查到了」：`no_results` 的请求不算。缺省阈值 = 立起来的研究问题"
+                     "条数（每个问题至少要被一次成功取回服务过）。一条 `no_results` 是合法终局，"
+                     "但按纪律它要用**规范术语**再查一次（题面式说法查不到不等于这个方向没有文献）"
+                     "—— `no_result_topics` 就是用来核这件事的读数"),
+        }
+    if kind == "document_rows":
+        # 「任务说要交的那份东西在不在」那一档（`draft/39` §6.47 的 D59）。
+        docs = [dict(r) for r in store.rows("documents")]
+        with_claims = [d for d in docs if list(d.get("claims") or [])]
+        return len(docs), {
+            "documents": len(docs),
+            "with_claims": len(with_claims),
+            "kinds": sorted({str(d.get("kind") or "") for d in docs}),
+            "statuses": sorted({str(d.get("status") or "") for d in docs}),
+            "ids": [str(d.get("doc_id") or "") for d in docs[:8]],
+            "note": ("这一档就是「交付物本身在不在」：任务说交付手稿 / 清单 / 综述时，"
+                     "盘上得有 `documents` 行。0 行时这一档不成立，而 `substance` 那一格"
+                     "可能已经是绿的（它只看五张表里有没有非空的）—— 两者分开报"),
+        }
     if kind == "unfinished_request_rows":
         # 「提交了、没人做」那一档（`draft/39` §6.45 的 D56）。
         #

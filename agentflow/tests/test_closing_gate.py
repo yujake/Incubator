@@ -903,22 +903,32 @@ def test_the_substance_check_goes_red_alone(tmp_path: pathlib.Path):
 
 # ============================================================ 研究链覆盖面（§137）
 
-#: 研究链六环节各一行的"全覆盖表"（`min=0`：`0` 也是读数，写清为什么是 0 就合规）。
+#: 研究链八环节各一行的"全覆盖表"（`min=0`：`0` 也是读数，写清为什么是 0 就合规）。
 _FULL_COVER: list[dict] = [
-    {"id": "R1", "name": "立题与检索", "kind": "research_question_rows", "min": 0,
+    {"id": "R1", "name": "立题", "kind": "research_question_rows", "min": 0,
      "note": "本轮没立新问题：接着上一轮的问题做"},
-    {"id": "R2", "name": "算并留下界", "kind": "search_frontier_rows", "min": 0,
+    # 「检索（真的取回）」那一环（`draft/39` §6.47 的 D60）：这一档数的是 `outcome=ok` 的
+    # 检索条数，缺省阈值 = 研究问题条数 ⇒ 夹具里研究问题 1 行、成功检索 0 条 ⇒ 0 < 1，
+    # 这一行特意写成会红的形态（这一组用例要的正是"覆盖面齐了、读数是 0"）。
+    {"id": "R2", "name": "检索（真的取回）", "kind": "retrieval_ok_rows", "min": 0,
+     "note": "本轮一条检索都没成功取回"},
+    {"id": "R3", "name": "算并留下界", "kind": "search_frontier_rows", "min": 0,
      "note": "本轮一条实验都没记下界（脚本没报 bound）"},
-    {"id": "R3", "name": "想", "kind": "conjecture_rows", "min": 0,
+    {"id": "R4", "name": "想", "kind": "conjecture_rows", "min": 0,
      "note": "读数不足以提出可检验的猜想"},
-    {"id": "R4", "name": "交", "kind": "document_literature_citations", "min": 0,
-     "note": "手稿还没引文献"},
     # 「看（关系分析）」那一环节（D52）：要么跑过 C，要么如实标 na 说清为什么不用它。
     {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 0,
      "note": "本轮没派 C 的关系分析"},
-    # 「闭（请求闭环）」那一环节（`draft/39` §6.45 的 D56）：这一档的缺省判据是
+    # 「攻（攻坚推进）」那一环（D59）：从「交」里分出来的 F 那条腿。
+    {"id": "R6", "name": "攻（攻坚推进）", "kind": "plan_progress_rows", "min": 0,
+     "note": "本轮没有立过攻坚计划"},
+    # 「交（手稿落盘）」那一环（D59）：现在只认"盘上真的有一份交付物"的读数。
+    # 夹具里 `documents` 1 行 ⇒ 这一行成立（这一组用例要的不是它红）。
+    {"id": "R7", "name": "交（手稿落盘）", "kind": "document_rows", "min": 1,
+     "note": "本轮交付了一份稿件"},
+    # 「闭（请求闭环）」那一环节（D56）：这一档的缺省判据是
     # 上限 0（队列里没做完的请求应为 0）—— 夹具里一条请求都没有 ⇒ 0 条达标。
-    {"id": "R6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
+    {"id": "R8", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
      "note": "本轮没有提交过检索/重抽取请求"},
 ]
 
@@ -946,7 +956,7 @@ def test_a_research_project_must_leave_an_acceptance_checks_file(
     codes = [f.code for f in rep.blockers]
     assert "acceptance_missing_for_research" in codes, rep.to_dict()
     chain = rep.readings["acceptance"]["research_chain"]
-    assert chain["researched"] is True and len(chain["missing"]) == 6, chain
+    assert chain["researched"] is True and len(chain["missing"]) == 8, chain
 
 
 def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
@@ -966,8 +976,8 @@ def test_a_thin_acceptance_table_is_named_by_the_missing_stage(
 
     assert rep.status["acceptance"] == "fail", rep.to_dict()
     chain = rep.readings["acceptance"]["research_chain"]
-    assert chain["groups"]["立题与检索"], chain
-    assert len(chain["missing"]) == 5, chain
+    assert chain["groups"]["立题"], chain
+    assert len(chain["missing"]) == 7, chain
     detail = "；".join(f.detail for f in rep.blockers)
     assert "研究链覆盖面" in detail and "想（猜想或判决性证据）" in detail, detail
 
@@ -1187,14 +1197,23 @@ def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
     _as_research(st, monkeypatch)
     _acceptance_checks(tmp_path, [
         {"id": "R1", "name": "立题与检索", "kind": "research_question_rows", "min": 0},
+        # 「检索（真的取回）」那一环（D60）：这一趟的结论来自证明过程，不依赖新检索。
+        {"id": "R9", "name": "检索（真的取回）", "kind": "retrieval_ok_rows", "min": 1,
+         "na": True, "note": "这一趟的结论由证明过程给出，不依赖新检索"},
         {"id": "R2", "name": "算或造", "kind": "reviewed_proof_rows", "min": 1},
         {"id": "R3", "name": "想", "kind": "conjecture_rows", "min": 0},
         {"id": "R4", "name": "交", "kind": "document_literature_citations", "min": 0},
         # 「看（关系分析）」那一环（D53）：这一趟走的是"造"那条腿，明说不用关系分析。
         {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
          "na": True, "note": "这一趟用证明过程收尾，不需要关系分析"},
+        # 「攻（攻坚推进）」那一环（D59）：这一趟没有攻坚计划 ⇒ na + 理由。
+        {"id": "R6", "name": "攻（攻坚推进）", "kind": "plan_progress_rows", "min": 1,
+         "na": True, "note": "这一趟没有立过攻坚计划（结论由形式化给出）"},
+        # 「交（手稿落盘）」那一环（D59）：夹具里 `documents` 1 行 ⇒ 真读数。
+        {"id": "R7", "name": "交（手稿落盘）", "kind": "document_rows", "min": 1,
+         "note": "夹具里有一份稿件"},
         # 「闭（请求闭环）」那一环（D56）：这一趟没提交过请求 ⇒ 上限 0 达标。
-        {"id": "R6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
+        {"id": "R8", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
          "note": "这一趟没有提交过检索请求"},
     ], st=st)
     rep = _gate(st, report)
@@ -1263,7 +1282,12 @@ def test_an_na_row_counts_as_marked_and_leaves_a_reading(tmp_path: pathlib.Path,
          "na": True, "note": "这是调查型任务（交付清单），没有数值/构造那一步"},
         {"id": "A3", "name": "想", "kind": "conjecture_rows", "min": 1,
          "na": True, "note": "同上：调查不产出猜想"},
-        # 「交」那一档要有真读数（覆盖面要求六环节各有其行；`na` 只用来标不适用，
+        # 「检索（真的取回）」与「攻（攻坚推进）」两环（D59/D60）在这一趟不适用 ⇒ na + 理由。
+        {"id": "A7", "name": "检索（真的取回）", "kind": "retrieval_ok_rows", "min": 1,
+         "na": True, "note": "这一趟的结论由夹具给出，不依赖新检索"},
+        {"id": "A8", "name": "攻（攻坚推进）", "kind": "plan_progress_rows", "min": 1,
+         "na": True, "note": "这一趟没有立过攻坚计划"},
+        # 「交」那一档要有真读数（覆盖面要求八环节各有其行；`na` 只用来标不适用，
         # 不许把整张表都变成 na）
         {"id": "A4", "name": "交（有证据支撑的断言）", "kind": "supported_claims", "min": 1},
         {"id": "A5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
@@ -1341,9 +1365,103 @@ def test_the_c_analysis_kind_counts_role_c_task_rows(tmp_path: pathlib.Path, mon
     assert "一次都没用过 C" in detail2["note"], detail2
 
 
+# ============================================================ 交付物与检索那一腿（D59/D60）
+
+
+def test_the_document_rows_kind_counts_the_deliverable_itself(tmp_path: pathlib.Path):
+    """判据（`draft/39` §6.47 的 D59）：这一档数的是"任务说要交的那份东西在不在"。
+
+    真机读数（T5 第 6 趟 `p8f-fermat-shorter-proof`）：任务原话是「交付进展手稿与说明」，
+    而盘上 `documents` 0 行；`substance` 那一格照样绿（它只看五张表里有没有非空的，
+    `relations` 47 行就够），于是"没有稿子"这件事只有这一档能说。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    got, detail = CL._leg_reading(st, "document_rows", tmp_path)
+    assert got == 1 and detail["with_claims"] == 1, detail
+    assert detail["ids"] == ["0001"], detail
+
+    # 负控：一份稿件都没有 ⇒ 0（这一档就是"交付物本身在不在"）
+    real_rows = st.rows
+    st.rows = lambda table: ([] if table == "documents" else real_rows(table))  # type: ignore[method-assign]
+    got2, detail2 = CL._leg_reading(st, "document_rows", tmp_path)
+    assert got2 == 0, detail2
+    assert "交付物本身在不在" in detail2["note"], detail2
+
+
+def test_the_retrieval_ok_kind_needs_one_success_per_question(
+        tmp_path: pathlib.Path, monkeypatch):
+    """判据（`draft/39` §6.47 的 D60）：这一档数的是真的取回的次数，阈值由问题数算出来。
+
+    真机读数（T5 第 6 趟 `p8f`）：4 次检索 2 次 `no_results`（题面式说法、没换规范术语重查），
+    `literature` 8 行；M 自己在报告的「未决问题」第 6 条里写着「未按纪律用规范术语再查一轮」。
+    「查过」与「查到了」必须分开：`retrieval_attempts` 把 `no_results` 也算进去。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    real_rows = st.rows
+    reqs = [
+        {"request_id": "r-1", "topic": "short proof of Fermat's Last Theorem",
+         "done": True, "outcome": "no_results"},
+        {"request_id": "r-2", "topic": "Kummer regular primes Fermat", "done": True,
+         "outcome": "ok", "result_lit_ids": ["0000"]},
+    ]
+    questions = [{"question_id": f"q-{i}", "question": "why?", "status": "open"}
+                 for i in range(3)]
+    monkeypatch.setattr(st, "rows", lambda table: (
+        reqs if table == "search_requests"
+        else questions if table == "research_questions" else real_rows(table)))
+    got, detail = CL._leg_reading(st, "retrieval_ok_rows", tmp_path)
+    assert got == 1, detail
+    # 3 个问题 ⇒ 至少 3 次成功取回；`no_results` 的那条进明细、不进这一档的分子
+    assert detail["implicit_min"] == 3, detail
+    assert detail["no_results"] == 1 and detail["no_result_topics"], detail
+
+    # 负控：把问题减到 1 条 ⇒ 同一个读数就成立了（阈值随台账长，不是我拍的数）
+    monkeypatch.setattr(st, "rows", lambda table: (
+        reqs if table == "search_requests"
+        else questions[:1] if table == "research_questions" else real_rows(table)))
+    got2, detail2 = CL._leg_reading(st, "retrieval_ok_rows", tmp_path)
+    assert got2 == 1 and detail2["implicit_min"] == 1, detail2
+
+
+def test_a_stage_cannot_be_covered_by_a_reading_about_something_else(
+        tmp_path: pathlib.Path, monkeypatch):
+    """判据（D59 的核心）：用 `plan_progress_rows`（F 的计划推进）顶不了「交」那一环。
+
+    改前「交」那一环的成员里有 `plan_progress_rows` ⇒ 一份稿子都没有的交付照样"覆盖"了
+    「交」，而任务原文说的正是"交付进展手稿"。现在 F 的推进归「攻」，「交」只认
+    必须在稿件里才成立的档。
+    """
+    from agentflow import closing as CL
+
+    st, report = _good(tmp_path)
+    _as_research(st, monkeypatch)
+    _acceptance_checks(tmp_path, [
+        {"id": "R1", "name": "立题", "kind": "research_question_rows", "min": 1},
+        {"id": "R2", "name": "检索", "kind": "retrieval_ok_rows", "na": True,
+         "note": "这一趟的结论不依赖新检索（探针用夹具）"},
+        {"id": "R3", "name": "算或造", "kind": "search_frontier_rows", "min": 1},
+        {"id": "R4", "name": "想", "kind": "conjecture_rows", "na": True,
+         "note": "夹具不产出猜想"},
+        {"id": "R5", "name": "看", "kind": "c_analysis_runs", "na": True,
+         "note": "夹具不跑关系分析"},
+        # 就是这一行：M 在真机上把 F 的计划推进填进了「交」。
+        {"id": "R6", "name": "交（计划推进）", "kind": "plan_progress_rows", "min": 1},
+        {"id": "R8", "name": "闭", "kind": "unfinished_request_rows", "max": 0},
+    ], st=st)
+    rep = _gate(st, report)
+
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert any("交（手稿落盘）" in m for m in chain["missing"]), chain
+    assert chain["groups"]["攻（攻坚推进）"] == ["plan_progress_rows"], chain
+    detail = "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+    assert "交（手稿落盘）" in detail, detail
+
+
 # ============================================================ 「闭（请求闭环）」那一档（D56）
-
-
 def test_the_unfinished_request_kind_counts_queued_but_undone_requests(
         tmp_path: pathlib.Path, monkeypatch):
     """判据（`draft/39` §6.45 的 D56）：这一档数的是「提交了、没人做」的请求。
@@ -1394,7 +1512,7 @@ def test_a_queued_request_that_nobody_did_fails_its_row(tmp_path: pathlib.Path,
     _acceptance_checks(tmp_path, list(_FULL_COVER), st=st)
     rep = _gate(st, report)
 
-    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R6")
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R8")
     assert row["got"] == 1 and row["ok"] is False, row
     assert row["max"] == 0 and row["min"] == 0, row
     assert rep.status["acceptance"] == "fail", rep.to_dict()
@@ -1405,9 +1523,9 @@ def test_a_queued_request_that_nobody_did_fails_its_row(tmp_path: pathlib.Path,
     rows[0]["done"] = True
     rows[0]["outcome"] = "ok"
     rep2 = _gate(st, report)
-    row2 = next(r for r in rep2.readings["acceptance"]["rows"] if r["id"] == "R6")
+    row2 = next(r for r in rep2.readings["acceptance"]["rows"] if r["id"] == "R8")
     assert row2["got"] == 0 and row2["ok"] is True, row2
-    assert "R6" not in "；".join(f.detail for f in rep2.blockers), rep2.to_dict()
+    assert "R8" not in "；".join(f.detail for f in rep2.blockers), rep2.to_dict()
 
 
 def test_an_na_row_is_the_way_to_leave_a_request_open_on_purpose(
@@ -1425,15 +1543,15 @@ def test_an_na_row_is_the_way_to_leave_a_request_open_on_purpose(
         rows if table == "search_requests" else real_rows(table)))
     _as_research(st, monkeypatch)
     cover = [dict(r) for r in _FULL_COVER]
-    cover[-1] = {"id": "R6", "name": "闭（请求闭环）", "kind": "unfinished_request_rows",
+    cover[-1] = {"id": "R8", "name": "闭（请求闭环）", "kind": "unfinished_request_rows",
                  "na": True, "note": "预算用尽，r-0009 这条旁支检索留着不做了（如实记账）"}
     _acceptance_checks(tmp_path, cover, st=st)
     rep = _gate(st, report)
 
-    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R6")
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R8")
     assert row["na"] is True and row["got"] is None, row
     assert "预算用尽" in row["note"], row
-    assert "R6" not in "；".join(f.detail for f in rep.blockers), rep.to_dict()
+    assert "R8" not in "；".join(f.detail for f in rep.blockers), rep.to_dict()
 
 
 def test_a_reprocess_request_that_is_still_pending_counts_too(tmp_path: pathlib.Path,

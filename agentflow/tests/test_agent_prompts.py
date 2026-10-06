@@ -225,14 +225,21 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert '"na": true' in text and "α" not in text, text
     # D52：调查/探索类任务要把 C 用起来，并把 c_analysis_runs 写进验收表
     assert "要把 C 用起来" in text and "c_analysis_runs" in text, text
-    # D53：「看（关系分析）」是覆盖面的第五环
+    # D53：「看（关系分析）」是覆盖面的一环
     assert "研究链的五个环节" not in text, text
-    assert "研究链的六个环节" in text and "看（关系分析）" in text, text
-    # D56：「闭（请求闭环）」是第六环，且消费队列的那个动作要被点名（它是个无参动作，
-    # 名字本身说不出它是干什么的 —— T5 第 5 趟 M 从头到尾没派过它）
+    assert "研究链的六个环节" not in text, text
+    assert "研究链的八个环节" in text and "看（关系分析）" in text, text
+    # D56：「闭（请求闭环）」是覆盖面的最后一环，且消费队列的那个动作要被点名
+    # （它是个无参动作，名字本身说不出它是干什么的 —— T5 第 5 趟 M 从头到尾没派过它）
     assert "闭（请求闭环）" in text and "unfinished_request_rows" in text, text
     assert "`run_once`" in text and "`unfinished_request_rows`" in text, text
     assert "请求闭环" in text, text
+    # D59：「交」那一环不许被 F 的计划推进顶掉，交付物本身要有一档读数
+    assert "攻（攻坚推进）" in text and "交（手稿落盘）" in text, text
+    assert "document_rows" in text and "顶掉它" in text, text
+    # D60：检索那一腿要写"真的取回了什么"，且一条 no_results 要用规范术语重查
+    assert "检索（真的取回）" in text and "retrieval_ok_rows" in text, text
+    assert "规范术语" in text, text
     # D54：方法 → 档位的映射（做对了活、写错了档是 T5 第 3 趟的失败形态）
     assert "挑哪一档要看你实际做的是什么" in text, text
     assert "search_frontier_rows" in text and "exhaustive_search" in text, text
