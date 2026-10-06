@@ -105,15 +105,19 @@ def _t3_experiment(store: Store, eid: str = "0001", **kw) -> dict:
     return row.to_dict()
 
 
-def _numeric_experiment(store: Store, eid: str = "0001") -> dict:
+def _numeric_experiment(store: Store, eid: str = "0001", **patch) -> dict:
     """一条只有数值支持的实验行（`cross_check`）：不是 T3。
 
     这是"承重结论缺 T3"最真实的形态：数值跑出来支持，但没有任何检查器说过话。
+    `patch` 用来把这行改成"有界记录的搜索"形态（`claim` / `search_bound` 等），
+    D61 的判据要看这些特征。
     """
-    row = S.Experiment(experiment_id=eid, claim="Theorem 1.5 的数值检查", claim_key="thm:1.5",
-                       method="numeric", evidence_kind="cross_check", result="supports",
-                       negation_kind="not_proved", code_path="code/exp.py",
-                       code_hash="deadbeefdeadbeef", exit_code=0, created_at=TS)
+    base = dict(experiment_id=eid, claim="Theorem 1.5 的数值检查", claim_key="thm:1.5",
+                method="numeric", evidence_kind="cross_check", result="supports",
+                negation_kind="not_proved", code_path="code/exp.py",
+                code_hash="deadbeefdeadbeef", exit_code=0, created_at=TS)
+    base.update(patch)
+    row = S.Experiment(**base)
     row.validate()
     with store.tx("experiments", actor="test") as tx:
         tx.upsert("experiments", row.to_dict())
@@ -1363,6 +1367,136 @@ def test_the_c_analysis_kind_counts_role_c_task_rows(tmp_path: pathlib.Path, mon
     got2, detail2 = CL._leg_reading(st, "c_analysis_runs", tmp_path)
     assert got2 == 0, detail2
     assert "一次都没用过 C" in detail2["note"], detail2
+
+
+# ============================================================ 手稿成体与引文对得上（D61/D62/D63）
+
+
+def _doc_with(store: Store, *, doc_id: str, claims: list[dict],
+              sections: list[dict] | None):
+    """落一份稿件（`sections` 给了就带上；`None` = 清单型交付，不带 sections）。"""
+    row: dict = {"doc_id": doc_id, "kind": "survey", "title": "稿", "status": "draft",
+                 "claims": claims, "created_at": TS}
+    if sections is not None:
+        row["sections"] = sections
+    with store.tx("documents", actor="test") as tx:
+        tx.upsert("documents", row)
+    sync_counters(store)
+    return row
+
+
+def test_the_citation_fit_check_catches_swapped_and_irrelevant_citations(tmp_path: pathlib.Path):
+    """判据（`draft/39` §6.48 的 D61/D62）：断言与它引的证据说的是不是同一件事（确定性）。
+
+    真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）——三条断言，三处都躲过了旧读数：
+    claim-2（n=3，界 2000）引 `exp:0000`（n=4，界 1000）、claim-3（n=4，界 1000）引
+    `exp:0001`（n=3，界 2000）两条互换；claim-1（Wiles 证明的三条承重腿）引的
+    `lit:0000` 是「PRIMES is in P」（AKS 素性检验）。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    # 两条实验：exp:0000 = n=4/界 1000、exp:0001 = n=3/界 2000（与真机同形的穷举行）
+    _numeric_experiment(st, eid="0000",
+                        claim="No solution to a^4+b^4=c^4 with a,b,c <= 1000",
+                        search_bound={"exponents": [4], "n": 1000})
+    _numeric_experiment(st, eid="0001",
+                        claim="No solution to a^3+b^3=c^3 with a,b,c <= 2000",
+                        search_bound={"exponents": [3], "n": 2000})
+    with st.tx("literature", actor="test") as tx:
+        tx.upsert("literature", S.Literature(lit_id="0000", title="PRIMES is in P", type="J",
+                                             path="library/0000/a.pdf",
+                                             summary="AKS primality test.").to_dict())
+    with st.tx("literature", actor="test") as tx:
+        tx.upsert("literature", S.Literature(
+            lit_id="0001", title="Fermat's Last Theorem for regular primes", type="J",
+            path="library/0001/b.pdf",
+            summary="Kummer's approach via regular primes.").to_dict())
+    _doc_with(st, doc_id="0009", sections=None, claims=[
+        {"claim_id": "c1", "evidence_kind": "heuristic", "section": "s",
+         "text": "The Wiles-Taylor proof of Fermat's Last Theorem proceeds through the Frey "
+                 "curve construction and Ribet's level-lowering theorem.",
+         "citations": ["lit:0000"]},                    # 跑题：AKS 素性检验
+        {"claim_id": "c2", "evidence_kind": "cross_check", "section": "s",
+         "disclaimer": "数值交叉验证，不构成证明",
+         "text": "No solution to a^3+b^3=c^3 with a,b,c <= 2000.",
+         "citations": ["exp:0000"]},                    # 互换：0000 是 n=4/界 1000
+        {"claim_id": "c3", "evidence_kind": "cross_check", "section": "s",
+         "disclaimer": "数值交叉验证，不构成证明",
+         "text": "No solution to a^3+b^3=c^3 with a,b,c <= 2000.",
+         "citations": ["exp:0001"]},                    # 这一条对得上
+    ])
+
+    fit = CL.citation_fit(st)
+    verdicts = {(c["doc_id"], c["claim_id"]): c["verdict"] for c in fit["claims"]}
+    assert verdicts[("0009", "c2")] == "mismatch", fit
+    assert verdicts[("0009", "c3")] == "fit", fit
+    assert verdicts[("0009", "c1")] == "mismatch", fit
+    # 三态：判不了的那一条记 unjudged（不冒充通过）
+    got, detail = CL._leg_reading(st, "claim_evidence_fit_rows", tmp_path)
+    assert detail["implicit_min"] == fit["judged"], detail
+    assert got == fit["fit"], detail
+
+
+def test_a_hollow_manuscript_is_not_a_manuscript(tmp_path: pathlib.Path):
+    """判据（`draft/39` §6.48 的 D63）：有 sections 却每节都空的稿件是骨架，不是手稿。
+
+    真机读数（T5 第 7 趟 `p8g`）：那份 survey 的三节 body 全是空串，
+    而 `document_rows` 与 `document_literature_citations` 都绿。
+    """
+    from agentflow import closing as CL
+
+    st, report = _good(tmp_path)
+    _doc_with(st, doc_id="0009", claims=[
+        {"claim_id": "c1", "evidence_kind": "heuristic", "section": "s",
+         "text": "一份只有标题的稿子", "citations": ["exp:0001"]}],
+        sections=[{"heading": "1. Intro", "body": ""}, {"heading": "2. Open", "body": "   "}])
+    got, detail = CL._leg_reading(st, "document_body_rows", tmp_path)
+    assert got == 0, detail
+    assert detail["empty_section_docs"], detail
+    assert detail["implicit_min"] == 1, detail
+
+    # 有正文之后这一档成立
+    with st.tx("documents", actor="test") as tx:
+        row = dict(tx.rows("documents")[-1])
+        row["sections"] = [{"heading": "1. Intro", "body": "这一段是正文。"}]
+        tx.upsert("documents", row)
+    got2, _ = CL._leg_reading(st, "document_body_rows", tmp_path)
+    assert got2 == 1, "每节都有正文 ⇒ 这一档成立"
+
+    # 门在自己报：验收表里没写这一档时，空壳稿件让 acceptance 红
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "有稿件", "kind": "document_rows", "min": 1},
+    ], st=st)
+    with st.tx("documents", actor="test") as tx:
+        row = dict(tx.rows("documents")[-1])
+        row["sections"] = [{"heading": "1. Intro", "body": ""}]
+        tx.upsert("documents", row)
+    rep = _gate(st, report)
+    detail_txt = "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+    assert "只有骨架、没有正文" in detail_txt, detail_txt
+
+
+def test_the_document_claim_kind_needs_one_claim_per_question(tmp_path: pathlib.Path,
+                                                              monkeypatch):
+    """判据（D63）：手稿里带引文的断言条数不少于研究问题条数（阈值随台账走）。
+
+    `document_rows` 问"那份东西在不在"，这一档问"它有没有把立起来的问题说进去"。
+    """
+    from agentflow import closing as CL
+
+    st, _report = _good(tmp_path)
+    _as_research(st, monkeypatch)          # 1 条研究问题
+    got, detail = CL._leg_reading(st, "document_claim_rows", tmp_path)
+    assert got == 1 and detail["implicit_min"] == 1, detail
+
+    real_rows = st.rows
+    questions = [{"question_id": f"q-{i}", "question": "why?", "status": "open"}
+                 for i in range(3)]
+    monkeypatch.setattr(st, "rows", lambda table: (
+        questions if table == "research_questions" else real_rows(table)))
+    got2, detail2 = CL._leg_reading(st, "document_claim_rows", tmp_path)
+    assert got2 == 1 and detail2["implicit_min"] == 3, detail2
 
 
 # ============================================================ 交付物与检索那一腿（D59/D60）

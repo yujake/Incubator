@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -122,6 +123,32 @@ LEG_CHECK_KINDS: dict[str, str] = {
                      "`can_close=true`；`substance` 那一格只看五张表里有没有非空的"
                      "（`relations` 47 行就够让它绿），所以「任务说要交的那份东西在不在」"
                      "必须有自己的一档",
+    "document_body_rows": "**有正文**的稿件份数（`documents` 行里「至少一节、且每一节的 `body` 都非空」"
+                          "的行）—— 有 sections 却每节都空的那种稿件是**骨架**，不是手稿。"
+                          "为什么单列（`draft/39` §6.48 的 D63）：T5 第 7 趟 `p8g` 里 `documents` 一行、"
+                          "`document_rows` 与 `document_literature_citations` 都绿，而那份 survey 的"
+                          "三节 body **全是空串**（`documents/0000.md` 里只有框架生成的骨架与三条"
+                          "claim）—— 读数说「交了一份 survey」，实际交的是骨架。"
+                          "没有 sections 的稿件（清单型交付）不在这一档说话（那是另一种形态）",
+    "document_claim_rows": "手稿里**带引文的断言**条数（`documents` 各行 `claims` 之和）—— 缺省阈值 = "
+                           "`research_questions` 的行数（每个立起来的问题至少要有一条落进手稿的断言；"
+                           "这个数由台账算出来）。它与 `document_rows` 分工：后者问「那份东西在不在」，"
+                           "这一档问「它有没有把立起来的问题说进去」。真机读数（T5 第 7 趟 `p8g`）："
+                           "3 条研究问题、手稿 3 条断言 —— 恰好各对一条；而第 6 趟 `p8f` 是"
+                           "3 条问题、**0 条断言**（没有稿子）",
+    "claim_evidence_fit_rows": "**断言与它引的证据对得上**的条数（确定性判据，见 `citation_fit`）—— "
+                               "两条腿：引 `exp:` 的断言，其正文里的数字要与被引实验的 `claim` / "
+                               "`search_bound` / `params` 里的数字**有交集**；引 `lit:` 的断言，其正文"
+                               "的实词要与被引文献的题名/摘要**有交集**。任何一侧没有可判特征 ⇒ 那一条"
+                               "记「不可判」（不冒充通过）。缺省阈值 = **可判的**断言条数。"
+                               "为什么单列（`draft/39` §6.48 的 D61/D62）：T5 第 7 趟 `p8g` 的手稿里 "
+                               "claim-2（n=3，界 2000）引的是 `exp:0000`（n=4，界 1000）、claim-3"
+                               "（n=4，界 1000）引的是 `exp:0001`（n=3，界 2000）—— **两条互换**；"
+                               "claim-1（Wiles 证明的三条承重腿）引的 `lit:0000` 是「PRIMES is in P」"
+                               "（AKS 素性检验）—— 而所有机械读数全绿："
+                               "`claims_supported_by_their_evidence` 只问「引到的实验是不是 "
+                               "`result=supports`」（两条都是），`document_literature_citations` 只数"
+                               "「`lit:` 出现了几次」",
     "unfinished_request_rows": "队列里**没做完**的请求条数（`search_requests` 里 `done` 不为真的行 + "
                                "`reprocess_requests` 里 `status=pending` 的行）—— 它数的是「提交了、"
                                "没人做」。这一档的缺省判据是**上限 0**（不是「越多越好」：要么派 A 把请求"
@@ -278,7 +305,8 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # `document_rows`（documents 行数）或那些必须在稿件里才成立的档
     # （引了文献的断言 / 被实验支持的断言 / 断言与证据一致的稿件）。
     # F 的计划推进不再能顶替它：一份没有稿子的交付不算交付。
-    ("交（手稿落盘）", ("document_rows", "document_literature_citations",
+    ("交（手稿落盘）", ("document_rows", "document_body_rows", "document_claim_rows",
+                        "document_literature_citations",
                         "supported_claims", "claims_supported_by_their_evidence")),
     # 「闭（请求闭环）」（`draft/39` §6.45 的 D56）：别人提交的检索请求
     # （F 的 `submit_search_request` / C 的 `submit_requests=true` / D 的缺口）落在
@@ -335,6 +363,108 @@ def research_chain_gaps(store: Any, kinds: Iterable[str], *,
                  "非研究型项目不受这一条约束（`researched=false`）。"),
     }
 
+
+
+def _numbers_in(text: Any) -> set[int]:
+    """一段文本里的整数（判"断言与它引的实验说的是不是同一个界"用的特征）。"""
+    return {int(m) for m in re.findall(r"\d+", str(text or ""))}
+
+
+#: 判"文献引用有没有跑题"时不算实词的词（判据与读数共用这一份，不各写一套）。
+#: 只为把"the/and/证明/定理"这类词从两侧都去掉；去掉之后剩下的实词若两边一个都不共，
+#: 才判"对不上"（有意保守：宁可记「不可判」，也不要把改写过的引用判成跑题）。
+_FIT_STOPWORDS: frozenset[str] = frozenset({
+    "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "has", "have",
+    "not", "its", "our", "their", "which", "where", "when", "into", "than", "then", "there",
+    "these", "those", "such", "only", "also", "been", "being", "does", "did", "without",
+    "within", "against", "after", "before", "because", "therefore", "however", "thus",
+    "proof", "proofs", "theorem", "theorems", "lemma", "lemmas", "case", "cases", "result",
+    "results", "check", "checks", "finite", "integer", "integers", "solution", "solutions",
+    "positive", "primitive", "exponent", "exponents", "method", "methods", "using", "over",
+    "under", "between", "each", "all", "any", "some", "more", "most", "other", "standard",
+    "version", "paper", "survey", "overview", "study", "note", "notes",
+})
+
+
+def _words_in(text: Any) -> set[str]:
+    """一段文本里的英文实词（小写、长度 ≥ 4、去掉停用词）。"""
+    words = re.findall(r"[A-Za-z][A-Za-z\-]{3,}", str(text or ""))
+    return {w.lower() for w in words if w.lower() not in _FIT_STOPWORDS}
+
+
+def citation_fit(store: Any) -> dict[str, Any]:
+    """逐条断言核「它引的证据是不是说的同一件事」（确定性、可复算，D61/D62）。
+
+    判据分两条腿，都是特征交集：
+    - 引 `exp:`：断言正文的整数集合 与 被引实验的 `claim` / `claim_key` / `search_bound` /
+      `params` 里的整数集合，两边都非空时必须有交集（真机读数：一条断言说"n=3，界 2000"，
+      引的实验是"n=4，界 1000" ⇒ 交集为空 ⇒ 对不上）；
+    - 引 `lit:`：断言正文的英文实词集合 与 被引文献的题名/摘要的实词集合，两边都非空时
+      必须有交集（真机读数：讲 Wiles 三条承重腿的断言引了「PRIMES is in P」⇒ 交集为空）。
+
+    三态：两边任何一侧没有可判特征 ⇒ 那一条记 `unjudged`（"没查成"，绝不读成"对上了"）。
+    一条断言引了多条证据时，只要有一条判成"对得上"就算这一条对得上（不因为一条
+    跑题的引文把整条断言判死 —— 但也绝不放过"全都对不上"）。
+    """
+    docs = [dict(r) for r in store.rows("documents")]
+    exps = {str(r.get("experiment_id") or ""): dict(r) for r in store.rows("experiments")}
+    lits = {str(r.get("lit_id") or ""): dict(r) for r in store.rows("literature")}
+    checked: list[dict[str, Any]] = []
+    for doc in docs:
+        for claim in (doc.get("claims") or []):
+            if not isinstance(claim, Mapping):
+                continue
+            claim_nums = _numbers_in(claim.get("text"))
+            claim_words = _words_in(claim.get("text"))
+            verdict = "unjudged"
+            why: list[str] = []
+            for cite in (claim.get("citations") or []):
+                cid = str(cite)
+                if cid.startswith("exp:"):
+                    exp = exps.get(cid[4:])
+                    if exp is None:
+                        why.append(f"{cid}：实验行不在册 ⇒ 不可判")
+                        continue
+                    ev_nums = (_numbers_in(exp.get("claim")) | _numbers_in(exp.get("claim_key"))
+                               | _numbers_in(json.dumps(exp.get("search_bound") or {},
+                                                        ensure_ascii=False))
+                               | _numbers_in(json.dumps(exp.get("params") or {},
+                                                        ensure_ascii=False)))
+                    if not claim_nums or not ev_nums:
+                        why.append(f"{cid}：一侧没有数字特征 ⇒ 不可判")
+                        continue
+                    if claim_nums & ev_nums:
+                        verdict = "fit"
+                    elif verdict != "fit":
+                        verdict = "mismatch"
+                        why.append(f"{cid}：断言里的数字 {sorted(claim_nums)[:6]} 与被引实验的 "
+                                   f"{sorted(ev_nums)[:6]} 没有交集 ⇒ 说的不是同一个界/参数")
+                elif cid.startswith("lit:"):
+                    lit = lits.get(cid[4:].split("#", 1)[0])
+                    if lit is None:
+                        why.append(f"{cid}：文献行不在册 ⇒ 不可判")
+                        continue
+                    ev_words = _words_in(lit.get("title")) | _words_in(lit.get("summary"))
+                    if len(claim_words) < 2 or not ev_words:
+                        why.append(f"{cid}：一侧没有实词特征 ⇒ 不可判")
+                        continue
+                    if claim_words & ev_words:
+                        verdict = "fit"
+                    elif verdict != "fit":
+                        verdict = "mismatch"
+                        why.append(f"{cid}：断言的实词与《{str(lit.get('title') or '')[:40]}》"
+                                   f"没有交集 ⇒ 引文可能跑题")
+            checked.append({"doc_id": str(doc.get("doc_id") or ""),
+                            "claim_id": str(claim.get("claim_id") or ""),
+                            "citations": [str(c) for c in (claim.get("citations") or [])],
+                            "verdict": verdict, "why": why[:3],
+                            "numbers_in_claim": sorted(claim_nums)[:6],
+                            "words_in_claim": sorted(claim_words)[:6]})
+    fits = [c for c in checked if c["verdict"] == "fit"]
+    bad = [c for c in checked if c["verdict"] == "mismatch"]
+    unknown = [c for c in checked if c["verdict"] == "unjudged"]
+    return {"claims": checked, "fit": len(fits), "mismatch": len(bad), "unjudged": len(unknown),
+            "judged": len(fits) + len(bad), "mismatches": bad[:8], "unjudged_rows": unknown[:8]}
 
 
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
@@ -516,6 +646,62 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "条数（每个问题至少要被一次成功取回服务过）。一条 `no_results` 是合法终局，"
                      "但按纪律它要用**规范术语**再查一次（题面式说法查不到不等于这个方向没有文献）"
                      "—— `no_result_topics` 就是用来核这件事的读数"),
+        }
+    if kind == "document_body_rows":
+        # 「有正文的稿件」那一档（`draft/39` §6.48 的 D63）：有 sections 却每节都空 ⇒ 骨架，不是手稿。
+        docs = [dict(r) for r in store.rows("documents")]
+        with_body: list[dict[str, Any]] = []
+        empty_sections: list[dict[str, Any]] = []
+        for d in docs:
+            secs = [s for s in (d.get("sections") or []) if isinstance(s, Mapping)]
+            if not secs:
+                continue                        # 没有 sections 的形态（清单型交付）不在这一档说话
+            if all(str(s.get("body") or "").strip() for s in secs):
+                with_body.append(d)
+            else:
+                empty_sections.append({"doc_id": str(d.get("doc_id") or ""),
+                                       "sections": [str(s.get("heading") or "") for s in secs[:6]],
+                                       "empty": [str(s.get("heading") or "") for s in secs
+                                                 if not str(s.get("body") or "").strip()][:6]})
+        detail: dict[str, Any] = {
+            "documents": len(docs), "with_body": len(with_body),
+            "with_body_ids": [str(d.get("doc_id") or "") for d in with_body[:8]],
+            "empty_section_docs": empty_sections[:8],
+            "implicit_min": len(with_body) + len(empty_sections),
+            "note": ("这一档数的是「稿件里真的有正文」：有 sections 的行要求每一节的 body 都非空。"
+                     "有 sections 却每节都空的行是**骨架**（真机读数 T5 第 7 趟 `p8g`：那份 survey 的"
+                     "三节 body 全是空串，而 `document_rows` 与 `document_literature_citations` 都绿）；"
+                     "没有 sections 的稿件（清单型交付）不在这一档说话"),
+        }
+        return len(with_body), detail
+    if kind == "claim_evidence_fit_rows":
+        # 「断言与它引的证据对得上」那一档（`draft/39` §6.48 的 D61/D62），判据在 `citation_fit`。
+        fit = citation_fit(store)
+        detail = {
+            "claims": len(fit["claims"]), "fit": fit["fit"], "mismatch": fit["mismatch"],
+            "unjudged": fit["unjudged"],
+            "mismatches": fit["mismatches"], "unjudged_rows": fit["unjudged_rows"],
+            "implicit_min": fit["judged"],
+            "note": ("这一档数的是「断言与它引的证据说的是同一件事」：引 `exp:` 的要比数字特征、"
+                     "引 `lit:` 的要比实词特征（`citation_fit` 是唯一实现）。两边任何一侧没有可判"
+                     "特征 ⇒ 那一条记「不可判」，不冒充通过。缺省阈值 = 可判的断言条数"),
+        }
+        return fit["fit"], detail
+    if kind == "document_claim_rows":
+        # 「手稿有没有把立起来的问题说进去」那一档（`draft/39` §6.48 的 D63）：阈值随问题数走。
+        docs = [dict(r) for r in store.rows("documents")]
+        rows = [c for d in docs for c in (d.get("claims") or []) if isinstance(c, Mapping)]
+        with_cites = [c for c in rows if list(c.get("citations") or [])]
+        questions = list(store.rows("research_questions"))
+        return len(with_cites), {
+            "claims": len(rows), "with_citations": len(with_cites),
+            "research_questions": len(questions),
+            "documents": len(docs),
+            "ids": [str(c.get("claim_id") or "") for c in with_cites[:10]],
+            "implicit_min": len(questions),
+            "note": ("这一档数的是「手稿里带引文的断言」，缺省阈值 = 立起来的研究问题条数"
+                     "（每个问题至少一条断言落进手稿）。`document_rows` 问「那份东西在不在」，"
+                     "这一档问「它有没有把问题说进去」"),
         }
     if kind == "document_rows":
         # 「任务说要交的那份东西在不在」那一档（`draft/39` §6.47 的 D59）。
@@ -1115,6 +1301,43 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 + " —— 改完之后没再复核（G.revise 把稿子推成 revised，而签名还钉着改之前"
                   "那一版）⇒ 交付里会带着没审过的断言。派 `H.verify_fixes` / `H.review` 复核"
                   "现行版；确实要这样交，就在验收表里写一行 `reviewed_current_rows` 并标 "
+                  "`\"na\": true` + 理由")
+    # ---- 稿件是骨架还是手稿（`draft/39` §6.48 的 D63）：有 sections 却每节都空的行，
+    # 验收表里没写这一档时由门报出来（真机读数 T5 第 7 趟 `p8g`：三节 body 全是空串）。
+    if "document_body_rows" not in {str(r.get("kind") or "") for r in out}:
+        try:
+            _got, body_detail = _leg_reading(
+                store, "document_body_rows",
+                Path(resolve_under_workspace(store, project_dir)))
+        except Exception:  # noqa: BLE001 —— 读不出来时这一档不算数
+            body_detail = None
+        hollow = list((body_detail or {}).get("empty_section_docs") or [])
+        if hollow:
+            unmet.append(
+                "交付的稿件只有骨架、没有正文："
+                + "；".join(f"{h.get('doc_id')}（{len(h.get('empty') or [])} 节 body 为空："
+                            f"{'、'.join(h.get('empty') or [])}）" for h in hollow)
+                + " —— 有 headings 却每一节都没写正文的稿子是骨架，不是手稿。"
+                  "把每一节的正文写进去（`G.build_document` 的 `sections` 要带 `body`）；"
+                  "确实是清单型交付（没有 sections），就在验收表里写一行 `document_body_rows` "
+                  "并标 `\"na\": true` + 理由")
+    # ---- 断言与它引的证据对不对得上（`draft/39` §6.48 的 D61/D62）：验收表里没写这一档时，
+    # 门把「对不上」的那些断言逐条报出来（真机读数 T5 第 7 趟 `p8g`：两条 exp 引用互换、
+    # 一条 lit 引用跑题，而所有机械读数全绿）。
+    if "claim_evidence_fit_rows" not in {str(r.get("kind") or "") for r in out}:
+        try:
+            fit = citation_fit(store)
+        except Exception:  # noqa: BLE001 —— 读不出来时这一档不算数
+            fit = None
+        bad = list((fit or {}).get("mismatches") or [])
+        if bad:
+            unmet.append(
+                "断言与它引的证据对不上（确定性判据：数字特征/实词特征无交集）："
+                + "；".join(f"{b.get('doc_id')}/{b.get('claim_id')}"
+                            f"（引 {'、'.join(b.get('citations') or [])}："
+                            f"{'；'.join(b.get('why') or [])}）" for b in bad)
+                + " —— 把引文改成真的支持这条断言的那一条（或改断言让它与证据相符）；"
+                  "确实要这样交，就在验收表里写一行 `claim_evidence_fit_rows` 并标 "
                   "`\"na\": true` + 理由")
     if unmet:
         rep.status["acceptance"] = "fail"
