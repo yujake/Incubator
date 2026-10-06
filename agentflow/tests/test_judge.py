@@ -119,3 +119,35 @@ def test_every_vocabulary_entry_is_recognised(code: str):
     """词表里每一条都要被 `is_judge_problem` 认出来（含前缀形态）。"""
     assert J.is_judge_problem(code)
     assert J.is_judge_problem(f"{code}:detail")
+
+
+def test_the_json_asker_accepts_both_seam_shapes():
+    """判据（`draft/39` §6.44 的 D55）：`ask_json` 形状的缝（真机那个）也必须能用。
+
+    真机读数（T5 第 4 趟 `p8d`）：F 的攻坚推理两条计划都卡在
+    `judge_failed:AttributeError` —— 因为 `judge_json` 只认 `complete`，
+    而真机接进来的 `llmseam.LlmSeam` 实现的是 `ask` / `ask_json`（没有 `complete`）。
+    「要一份 JSON 判定」这件事只有这一处缝，两种形状都得收。
+    """
+    class _AskJsonSeam:
+        def __init__(self, payload: dict | None = None, problem: str = ""):
+            self.payload = payload
+            self.problem = problem
+
+        def ask_json(self, prompt: str, **kw):
+            call = type("C", (), {"problem": self.problem, "ok": not self.problem})()
+            return (dict(self.payload) if self.payload is not None else None), call
+
+    got, problem = J.judge_json(_AskJsonSeam({"product": "reduction"}), "p", point="F.step")
+    assert (got, problem) == ({"product": "reduction"}, ""), (got, problem)
+
+    # 没查成时把缝自己报的码原样带出来（坏 JSON 不许折成"没找到"）
+    got2, problem2 = J.judge_json(_AskJsonSeam(None, "judge_bad_json"), "p")
+    assert got2 is None and problem2 == "judge_bad_json", (got2, problem2)
+
+    # 旧形状（只有 `complete`）不受影响 —— 兼容按 `draft/30` §T0-8 写的替身。
+    class _CompleteOnly:
+        def complete(self, prompt: str) -> str:
+            return '{"ok": true}'
+
+    assert J.judge_json(_CompleteOnly(), "p") == ({"ok": True}, "")

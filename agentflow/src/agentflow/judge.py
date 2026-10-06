@@ -70,11 +70,38 @@ def judge_json(llm: Any, prompt: str, *, point: str = "") -> tuple[dict[str, Any
     `point` 只用于留痕（调用方把它写进审计字段：这一格是哪一条判断点），
     不参与任何分支 —— 分支只由 `llm` 是否接线与异常类型决定。
 
+    ## 两种缝的形状都收（`draft/39` §6.44 的 D55）
+
     调用约定（与 `draft/30` §T0-8 逐字一致）：`llm` 只需实现
     `complete(prompt: str) -> str`；解析走 `llm.parse_llm_json`。
+    而真机里接进来的那个缝（`llmseam.LlmSeam`）没有 `complete` —— 它实现的是
+    `ask(prompt) -> SeamCall` / `ask_json(prompt) -> (dict|None, SeamCall)`。
+    于是任何拿真缝调本函数的调用点都会得到 `judge_failed:AttributeError`
+    （真机读数 T5 第 4 趟 `p8d`：F 的攻坚推理两条计划都卡在这一句上，
+    M 只好如实记"推理缝没查成"）。两件事都修在这一处（它是"要一份 JSON 判定"的唯一缝）：
+
+    - 缝有 `ask_json` ⇒ 直接用它（它自己会把坏 JSON 归成 `judge_bad_json`，还带上解析原话）；
+    - 只有 `complete` ⇒ 走原来的路（兼容按 `draft/30` §T0-8 写的替身与旧接线）。
     """
     if llm is None:
         return None, "judge_not_wired"
+    if hasattr(llm, "ask_json"):
+        try:
+            data, call = llm.ask_json(prompt, note=point)
+        except BudgetExhausted:
+            return None, "judge_over_budget"
+        except JudgeRefused:
+            return None, "judge_refused"
+        except TimeoutError:
+            return None, "judge_timeout"
+        except Exception as exc:  # 其它异常按类型归类，绝不吞掉
+            return None, f"judge_failed:{type(exc).__name__}"
+        problem = str(getattr(call, "problem", "") or "")
+        if data is None:
+            return None, problem or "judge_bad_json"
+        if not isinstance(data, Mapping):
+            return None, "judge_bad_json"
+        return dict(data), ""
     try:
         raw = llm.complete(prompt)
     except BudgetExhausted:
