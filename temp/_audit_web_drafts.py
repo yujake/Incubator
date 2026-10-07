@@ -30,12 +30,18 @@ DRAFTS = [REPO.parent / "draft" / n for n in (
     "76-待裁选择题（Web端·全部待裁项）.md",
     "77-Web端施工台账与G2签字包.md",
     "78-Web端三条主线（零交）拆解.md",
+    "79-待裁清单（Web施工中新冒出）.md",
 )]
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
 CITE = re.compile(r"([A-Za-z0-9_./\\-]+\.py):(\d+)")
 TESTFILE = re.compile(r"(tests[/\\][A-Za-z0-9_]+\.py)")
 TESTNODE = re.compile(r"([A-Za-z0-9_]+\.py)::([A-Za-z0-9_]+)")
 PLANNED = ("新", "新增", "计划", "W0", "W1", "W2", "W3", "W4", "W5")
+# 明确说"这个文件不存在"的句子**不是**在断言它存在（如 draft/78 §7 的
+# "本仓没有 tests/test_userio.py"）。这类提法要单列一桶打给人看，不能算硬错，
+# 也不能混进"计划中的判据文件"（那桶的语义是"打算建、还没建"）。
+# 负控：把"没有"换成"见"，同一句必须落回硬错桶（temp/_audit_web_drafts.py 自测过）。
+NEGATED = ("没有", "不存在", "不是", "并未", "尚无")
 sys.stdout.reconfigure(encoding="utf-8")
 
 
@@ -60,6 +66,7 @@ def main() -> int:
     suspect: list[str] = []
     bare: list[str] = []
     planned: list[str] = []
+    negated: list[str] = []
 
     for doc in DRAFTS:
         if not doc.is_file():
@@ -90,6 +97,8 @@ def main() -> int:
             line = f"{doc.name}: 判据文件不存在 {rel_test}"
             if any(k in where for k in PLANNED):
                 planned.append(line + "（该处标了'新/计划'）")
+            elif any(k in where for k in NEGATED):
+                negated.append(line + "（该处明说它不存在 —— 不是断言）")
             else:
                 hard.append(line)
         for m in TESTNODE.finditer(text):
@@ -110,6 +119,9 @@ def main() -> int:
         print(f"   （加 --bare 看这 {len(bare)} 行；本档包括'行号对但语义错'那一种 —— 只有人看得出来）")
     print(f"③ 计划中的判据文件（尚未建，不算错）：{len(planned)}")
     for one in planned:
+        print("   " + one)
+    print(f"③b 明确说'不存在'的提法（不是在断言它有）：{len(negated)}")
+    for one in negated:
         print("   " + one)
     return 1 if hard else 0
 

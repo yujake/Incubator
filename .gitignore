@@ -297,6 +297,9 @@ desktop.ini
 !/temp/_e5_replay2.ps1
 !/temp/_ev_store_inventory.py
 !/temp/_gen_digests.py
+!/temp/_line_A_brief.md
+!/temp/_line_B_brief.md
+!/temp/_line_C_brief.md
 !/temp/_live_readings_census.py
 !/temp/_m6_verify_verbatim.py
 !/temp/_m8_probe_lean.py

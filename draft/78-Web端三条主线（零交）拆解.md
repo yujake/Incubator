@@ -127,3 +127,21 @@ python -B -m pytest -q -p no:cacheprovider -p no:randomly tests/test_webui.py   
 | W5 | **A**（旧壳清理 + 收尾门） | B/C 只需要"确认自己的模块没引用旧函数" |
 
 > **这套拆法的一个副产品**：`draft/77 §1` 的台账从"按批次"变成"按批次 × 线"两维 —— 每行记"谁在做、落在哪个 sha、读数是什么"，主控一眼能看出哪条线落后。
+
+---
+
+## §7 三条线的开工简报（交给子代理的唯一施工说明书）
+
+三份都在 `temp/`，都是**可独立执行**的：自己说清"只许碰哪些文件、每件做什么、怎么算做完、报告怎么写"，不需要读主控的对话。
+
+| 线 | 简报 | 覆盖批次 | 关键约束（简报里逐条展开） |
+|---|---|---|---|
+| **A** | `temp/_line_A_brief.md` | W0（已跑）· W1 页面 · W2 前端 SSE · W4 文档 · W5 旧壳清理 | 21 条 glob；端点契约 11 条 / 事件 kind 6 个的口径；`pnpm build` ⇒ 提交 dist |
+| **B** | `temp/_line_B_brief.md` | W1 readers/夹具 · O2 索引 · L1 收敛 · W2 后端 SSE | 8 条 glob；三态不许塌成二态；索引与事件对账两条负控 |
+| **C** | `temp/_line_C_brief.md` | W3 写面 + 审计 · W4 设置写面 + 浏览器 + G2 patch | 9 条 glob；授权矩阵四态；key 只写不读三处读数；**禁改区只出 patch** |
+
+**写简报时真撞出来的两件事**（都留了痕，不是凭空）：
+1. **`.gitignore` 不在任何一条线里，但 W0 线实际动了它** ⇒ 归属与合并办法补进 §2 边界 3 与 §5 第 5 条。
+2. **`browser` marker 与 `addopts` 不一致**（`agentflow/pyproject.toml:69` 只排 `network`，而 `draft/77 §2.2` 的 marker 描述写着"默认排除"）⇒ 挂成新待裁 **T1**，收在 `draft/79-待裁清单（Web施工中新冒出）.md`，C 线简报里写明"等裁，别自己拍"。
+
+**简报里出现过的、我核过的口径**（免得子代理拿"简报转述"当事实）：本仓**没有** `tests/test_userio.py`（userio 的相邻判据在 `tests/test_sid_scoped_questions.py` 等）；`run_index` 这个名字在 `projects.py:242` **已经**表示"项目第几趟"（配 `projects.py:309 _next_run_index` 与 `out/run-<n>`），与裁定 O2 的"会话内趟次索引"**不是一回事** —— B 线简报里专门有一条提醒，不许改名、不许混用。
