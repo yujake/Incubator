@@ -295,6 +295,24 @@ class WebHandler(BaseHTTPRequestHandler):
         del params, query
         self._json(200, snapshot(self.root))
 
+    def handle_run_index(self, params: Mapping[str, str],
+                         query: Mapping[str, Sequence[str]]) -> None:
+        """`GET /api/run-index`：趟次索引与"它与事件现算结果是否一致"的读数。
+
+        W1 新增（裁定 O2 的页面消费端）。Run 页要用它做两件事，两件都要求同一次读：
+
+        1. 索引可用 ⇒ 用它列趟次；不可用 ⇒ 如实标"这次是现算的"并回退；
+        2. `tri != "computed"`（索引读不出来，或与事件现算结果对不上）⇒ 显红。
+
+        形状是 `sessions.run_index_report(root)` 的返回值逐字，另加 `index` 那一栏
+        （`None` 表示索引没读成）。为什么不在这里拆成"先读索引、再对账"两次：两次
+        之间盘上的东西可能已经变了，于是页面拿到的索引与它旁边的对账结论不是同一份。
+        """
+        del params, query
+        from .. import sessions as SS
+
+        self._json(200, SS.run_index_report(self.root))
+
     def handle_run(self, params: Mapping[str, str],
                    query: Mapping[str, Sequence[str]]) -> None:
         """`GET /run/<sid>`：一趟的详情（事件卡片 + 交付说明）。"""

@@ -32,6 +32,8 @@
 
 A 线自有五条（`/`、`/index.html`、`/run/{sid}`、`/api/state`、`/static/{file...}`）
 ＋ C 线的一条既有写路径（`POST /answer`，W0 就由 `writes.ROUTES` 提供）。
+W1 又加了一条 A 线自有端点 `GET /api/run-index`（裁定 O2：趟次索引与它的对账结论，
+Run 页的第二个读数）。
 `draft/75 §1.1` 的 C1 表里另外那些（`/api/run/{sid}` 的 JSON 形态、`/api/evidence`、
 `/api/artifacts`、`/api/acceptance`、`/api/machine`、`/api/stop`、`/api/submit`、
 `/api/settings`、`/api/stream`）分别在 W1/W2/W3 由各自那一行落地 —— 它们不在这张表里，
@@ -95,6 +97,11 @@ _OWN: tuple[tuple[str, str, str], ...] = (
     ("GET", "/run/{sid}", "handle_run"),
     # --- 读数 JSON
     ("GET", "/api/state", "handle_state"),
+    # 趟次索引的读数（裁定 O2 的页面消费端）：Run 页要同时拿到"索引本身"与
+    # "索引与事件现算结果的对账结论"，两样必须来自同一次读（`sessions.run_index_report`
+    # 的理由逐字写在它的 docstring 里）。它是一条自有端点，不是 B 线六个面里的一个：
+    # 六个面读的是"盘上的事实"，这一条读的是"一条派生数据是否还与源一致"。
+    ("GET", "/api/run-index", "handle_run_index"),
     # --- 静态资源（前端构建产物：裁定 B1 的落点）
     ("GET", "/static/{file...}", "handle_static"),
 )

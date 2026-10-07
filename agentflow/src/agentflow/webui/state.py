@@ -525,6 +525,20 @@ _TS_ALIASES: tuple[tuple[str, str, str], ...] = (
      "交付说明那一格专用的三态（`webui/state.py` 的 `_read_report`）"),
 )
 
+#: 本模块声明、但本批没有真读数可对账的接口（`{接口名: 理由}`）。
+#: 判据 C 的两份名单都从模块自己的属性上读（`tests/test_webui_contracts.py`），
+#: 所以"这个接口为什么还没被核对"只写在这里一处。
+UNCHECKED_TYPES: dict[str, str] = {
+    "RunIndex": "趟次索引是派生数据（`sessions.compute_run_index` 现算、"
+                "`rebuild_run_index` 落盘），夹具工作区默认不建索引；判据 C 的落点是"
+                "「后端真读出来的键」，而没建索引时读出来的是 None（按设计没有键可比）"
+                "⇒ 以 `sessions.compute_run_index` 的形状为准，另由 "
+                "`tests/test_webui_pages.py` 判它真的读得出来",
+    "RunIndexSession": "同上（`RunIndex.sessions` 的表值：runs / last_end_index / digest）",
+    "RunIndexDrift": "同上（`sessions.run_index_report` 的返回值；三档 tri 由它给）",
+}
+
+
 #: 逐接口的字段表。每一项 `(TS 名字, 后端出处, ((字段, TS 类型), ...))`。
 #: 出处写的是"这个键是从哪段程序读出来的"，不是行号（行号会漂）。
 _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
@@ -590,6 +604,20 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("role", "string"), ("sid", "string"), ("task", "string"),
       ("fingerprint", "string"), ("step", "number"), ("stop_reason", "string"),
       ("waiting_for", "string[]"), ("spend", "CheckpointSpend"), ("at", "string"))),
+    ("RunIndexSession",
+     "趟次索引里的一场会话（`sessions.compute_run_index` 的 `sessions[sid]`）",
+     (("runs", "RunRow[]"), ("last_end_index", "number | null"), ("digest", "string"))),
+    ("RunIndex",
+     "`GET /api/run-index` 的 `index` 那一栏 —— 趟次索引本体（裁定 O2；"
+     "`sessions.compute_run_index` / `rebuild_run_index` 落的盘上那一份）",
+     (("version", "string"), ("generated_at", "string"),
+      ("sessions", "Record<string, RunIndexSession>"))),
+    ("RunIndexDrift",
+     "`GET /api/run-index` 的返回值 —— `sessions.run_index_report(root)` 逐字："
+     "索引可用性与它与事件现算结果的对账结论（`tri != \"computed\"` ⇒ 显红）",
+     (("usable", "boolean"), ("tri", "Tri"), ("reason", "string"),
+      ("drift", "string[]"), ("sessions", "string[]"),
+      ("index", "RunIndex | null"))),
 )
 
 

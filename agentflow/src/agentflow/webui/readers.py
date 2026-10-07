@@ -139,16 +139,10 @@ PENDING_ENDPOINTS: dict[str, str] = {}
 
 #: 本模块还欠的 TS 接口（`(名字, 缺哪个消费者)`）。生成器逐条写成 TODO 注释 ——
 #: 于是"这个类型为什么还没有"在生成物里是看得见的，而不是一份空话。
-#: 这两条不是"缺 reader"：B2 已经把 `sessions` 侧的索引函数落地了，欠的是 A 线
-#: Run 页那个消费者（页面接上之后把这两行删掉）。
-MISSING_TYPES: tuple[tuple[str, str], ...] = (
-    ("RunIndex",
-     "缺 GUI 侧的索引消费者：`sessions.rebuild_run_index` / `load_run_index` 已落地"
-     "（B2），形状见 `sessions.compute_run_index`；A 线 Run 页接上之后删掉这一行"),
-    ("RunIndexDrift",
-     "缺 GUI 侧的索引消费者：`sessions.reconcile_run_index` 已落地（B2），"
-     "返回 `{tri, drift, reason, sessions}`；A 线 Run 页接上之后删掉这一行"),
-)
+#: 这一张表现在是空的：`RunIndex` / `RunIndexDrift` 那两条欠的是"页面消费端"，
+#: 而 A 线的 Run 页在 W1 接上了（`GET /api/run-index` + `state.py` 里那三个接口）
+#: ⇒ 按这张表自己的规矩，补完就该把行删掉。
+MISSING_TYPES: tuple[tuple[str, str], ...] = ()
 
 
 

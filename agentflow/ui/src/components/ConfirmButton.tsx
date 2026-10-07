@@ -5,8 +5,8 @@
  * 调 `onConfirm`。`requireForce` 是第二道（`force` 那种"直接杀进程"的动作）：
  * 上膛之后还要勾一个框才允许点第二次。
  *
- * W0 没有任何写端点，所以这个组件还没有被页面用起来 —— 它先在这里，
- * 是为了让 W3 的写面有唯一的入口可走（不许页面自己接一个裸按钮）。
+ * `disabled` 那一档是三态纪律在按钮上的落点：端点还没上线（C 线 W3/W4）时，
+ * 页面必须**点不动**并说清"写面还没落地"，而不是按下去假装成功。
  */
 import { useState } from "preact/hooks";
 
@@ -15,6 +15,9 @@ export interface ConfirmButtonProps {
   impact: string;
   onConfirm: () => void;
   requireForce?: boolean;
+  /** 端点还没落地（或写面没开）⇒ 按钮点不动；理由写在 `note` 里。 */
+  disabled?: boolean;
+  note?: string;
 }
 
 export function ConfirmButton(props: ConfirmButtonProps) {
@@ -22,17 +25,35 @@ export function ConfirmButton(props: ConfirmButtonProps) {
   const [forced, setForced] = useState(false);
   const blocked = armed && props.requireForce === true && !forced;
 
+  if (props.disabled === true) {
+    return (
+      <span class="tri">
+        <button class="btn" type="button" disabled>
+          {props.action}
+        </button>
+        {props.note === undefined || props.note === "" ? null : (
+          <span class="tri-reason">{props.note}</span>
+        )}
+      </span>
+    );
+  }
+
   if (!armed) {
     return (
-      <button
-        class="btn"
-        type="button"
-        onClick={() => {
-          setArmed(true);
-        }}
-      >
-        {props.action}
-      </button>
+      <span class="tri">
+        <button
+          class="btn"
+          type="button"
+          onClick={() => {
+            setArmed(true);
+          }}
+        >
+          {props.action}
+        </button>
+        {props.note === undefined || props.note === "" ? null : (
+          <span class="tri-reason">{props.note}</span>
+        )}
+      </span>
     );
   }
   return (

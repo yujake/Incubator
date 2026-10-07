@@ -1,16 +1,42 @@
 /*
  * 泛型表：`columns[].key` 受 `keyof T` 约束 ⇒ 列名不可能写成不存在的键。
  * 这是"类型层对齐"的最便宜一档（对齐判据 E：`tsc --noEmit`）。
+ *
+ * 三态纪律在单元格上也成立：`null` / `undefined` / 空串一律渲染成 `unknown`
+ * （不是 `0`、不是空、不是 `false`）。"这一格没读到"与"这一格是零"在读数上
+ * 必须分得开 —— 后端把读不到的东西写成 `None`，前端不许在最后一跳把它折平。
  */
+import type { ComponentChildren } from "preact";
+
 export interface Column<T> {
   key: keyof T;
   title: string;
+  /** 自定义单元格（不给就按 `cell()` 的通用读法渲染）。 */
+  render?: (row: T) => ComponentChildren;
 }
 
 export interface TableProps<T> {
   rows: T[];
   columns: Array<Column<T>>;
+  /** 空态那句话（必须是"读到了，里面是 0 行"，不是"没查成"）。 */
   empty: string;
+}
+
+/** 一个单元格的通用读法：读不到 ⇒ `unknown`（三态，不折成 0 / 空 / false）。 */
+export function cell(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "unknown";
+  }
+  if (typeof value === "string") {
+    return value === "" ? "unknown" : value;
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0 ? "（空表）" : value.map((x) => cell(x)).join("、");
+  }
+  return String(value);
 }
 
 export function Table<T>(props: TableProps<T>) {
@@ -30,7 +56,9 @@ export function Table<T>(props: TableProps<T>) {
         {props.rows.map((row, i) => (
           <tr key={i}>
             {props.columns.map((col) => (
-              <td key={String(col.key)}>{String(row[col.key])}</td>
+              <td key={String(col.key)}>
+                {col.render === undefined ? cell(row[col.key]) : col.render(row)}
+              </td>
             ))}
           </tr>
         ))}
