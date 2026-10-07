@@ -2873,7 +2873,7 @@ class LlmBackend:
 
         子循环的 `summoned_by` / `depth` 以前读 `params["_summoned_by"]` /
         `params["_depth"]`，而全仓没有任何地方生产这两个键 ⇒ 每一次被同伴
-        唤起的角色都以为"是主控直接派的、深度 1"。实测（`temp/review-task-20260930-111332`）：
+        唤起的角色都以为"是主控直接派的、深度 1"。实测（读数摘录 `temp/t0260-evidence`）：
         台账里 `t-0260 E.run_experiment called_by=F parent=t-0259 depth=2`，
         而 E 自己的 `agent_run_start` 记的是 `summoned_by=M, depth=1` ——
         协同链在孩子自己的认知里断掉，"像主控的 subagent"这句话就不成立。

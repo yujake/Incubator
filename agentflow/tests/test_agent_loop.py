@@ -917,7 +917,7 @@ def test_a_child_loop_knows_who_summoned_it_and_how_deep_it_is(tmp_path: pathlib
 
     旧行为：`LlmBackend.call` 读 `params["_summoned_by"]` / `params["_depth"]`，
     而全仓没有任何地方生产这两个键 ⇒ 每个子循环都以为自己是主控直接派的、深度 1。
-    真机（`temp/review-task-20260930-111332`）台账是
+    真机（读数摘录 `temp/t0260-evidence`）台账是
     `t-0260 E.run_experiment called_by=F parent=t-0259 depth=2`，
     而 E 自己的 `agent_run_start` 记的是 `summoned_by=M, depth=1` ——
     "像主控的 subagent"这句话在孩子自己的认知里断掉。

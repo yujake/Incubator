@@ -200,6 +200,8 @@ desktop.ini
 # 判据与理由见该脚本的 docstring（一句话：判据把 `temp/<名>` 当盘上文件查，
 # 而全新 clone 里它们必须真的在）。
 # 维护约定：引用新增/消失后重跑那个生成器；手工加行也可以，但请连同引用一起改。
+!/temp/t0260-evidence/
+!/temp/t0260-evidence/**
 !/temp/AUDIT-A.json
 !/temp/B3-rest-evidence.md
 !/temp/B5a-evidence.md
