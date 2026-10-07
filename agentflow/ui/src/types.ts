@@ -129,28 +129,6 @@ export interface ReportReading {
   text: string;
 }
 
-/** 出处：检查点里的花销子树（`agent_loop` 写的 `runs/agent-<角色>-<sid>.json`）。 */
-export interface CheckpointSpend {
-  calls: number;
-  tokens_in: number;
-  tokens_out: number;
-  usd: number | null;
-  unknown_usd_calls: number;
-}
-
-/** 出处：一趟的检查点文件（`runs/agent-<角色>-<sid>.json`；本批没有 reader ⇒ 判据 C 不覆盖它）。 */
-export interface Checkpoint {
-  role: string;
-  sid: string;
-  task: string;
-  fingerprint: string;
-  step: number;
-  stop_reason: string;
-  waiting_for: string[];
-  spend: CheckpointSpend;
-  at: string;
-}
-
 /** 出处：趟次索引里的一场会话（`sessions.compute_run_index` 的 `sessions[sid]`）。 */
 export interface RunIndexSession {
   runs: RunRow[];

@@ -90,6 +90,33 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
   回答 `{id, selected:[…], custom:"…"}`；推荐项放首位、label 末尾写 `(Recommended)`
   ——推荐是一个**可读的事实**，不是默认选中的状态。实现见 `userio.Option` / `Question`。
 
+## §3.1 六个页面各自读什么（2026-10-07 W1 落地）
+
+六个客户端路由对应六页（`ui/src/pages/*.tsx`），**每一页每一个栏位都能指到盘上的一行真数据**。
+这张表就是那份对照（后端出处与逐栏字段的完整矩阵在 `../draft/74-前端×后端配合矩阵（按前端文件）.md` §3，
+这里给的是"读哪条端点、读哪几栏、空态与三态怎么办"）：
+
+| 路由 | 页面 | 端点（`ui/src/api.ts` 的 `ENDPOINTS`） | 读的栏位（后端键逐字） | 空态（"读到了，里面是 0"） | 三态落点 |
+|---|---|---|---|---|---|
+| `/` | `Home.tsx` | `GET /api/state` | `pending_questions`（**全局，不按会话过滤**）· `sessions`（`events_seen`/`bad_lines`/`last_kind`/`pending`/`runs`/`orphans`）· `problems` · `ledger.events`/`tables`/`tables_note` · `runs[].waiting_on` | "没有待回答的问题（合法初态，不是「没查成」）" | `problems` 非空 ⇒ 顶部横幅显红；`bad_lines > 0` ⇒ 行内徽标 |
+| `/run/:sid` | `Run.tsx` | `GET /api/run/{sid}` + `GET /api/run-index` | `runs[]`（`steps`/`llm_calls`/`usd`/`unknown_usd`/`last_shape`/`stop_reason`/`waiting_on`/`events_in_run`）· `report`（`ok`/`missing`/`unknown`）· `checkpoint.spend`（首选花销）· `drift`/`usable`/`tri`（趟次索引对账）· `orphans`/`orphan_summary` | "这一段会话里一趟都没有" + "没有轮次之外的零散事件" | 索引 `tri != computed` ⇒ 显红并说明"本页回退现算"；两个花销来源都读到才谈"是否一致"，任一边没读到 ⇒ "没查成"；交付说明走 `ReportTri` 那一套词 |
+| `/evidence` | `Evidence.tsx` | `GET /api/evidence` | `statements` · `conjectures`（含 `counterexample_experiment_id`）· `experiments` · `review_findings` · `relations.quote_verified`（真/假/未查三个数）· `verifications` · `secretary` | 每一栏各自的 `<栏>_tri == computed` 且 0 行 ⇒ "0 条（读到了，里面是空的）" | **逐栏**读 `<栏>_tri`（整面一个词会吞掉"哪一栏没读成"）；`quote_verified !== true` 必须连 `quote_reason` 一起看 |
+| `/artifacts` | `Artifacts.tsx` | `GET /api/artifacts` | `ledger` · `ledger_verify`（台账钉的 sha vs 盘上现在这一版）· `handoffs`（`body` 按 `CLIP=400` 截断）· `checks` · `style.sections` · `secretary` · `products`（六件，裁定 J2 的夹具样本）· `tasks` | 逐栏："台账 0 行（读到了，里面是空的）" | 逐栏 `<栏>_tri`；`products_tri == not_applicable` ⇒ "这一路本机还没跑过"，不是"六件都不在" |
+| `/acceptance` | `Acceptance.tsx` | `GET /api/acceptance`（`?project_dir=` `?report_path=` `?cap_usd=`） | `criteria`（5 条，值 `pass`/`fail`/`unknown`）· `details` · `auxiliary`（5 条）· `failed` · `auxiliary_note` | "一条判据都没读到"（判据名表来自 `reviewaccept.CRITERIA`，页面不另抄） | `unknown` 显成"没查成（不是通过）"；**不给 `cap_usd` ⇒「在成本上限内」那一格必为 `unknown`** |
+| `/machine` | `Machine.tsx` | `GET /api/machine` | `provers`（含 `checked` 与 `sources` —— "从哪一档找到的"）· `mathlib` · `lean_ready`/`can_do_formal` · `settings.path`/`exists`/三段 · `settings.model.configured`（**永无 key 值**） | "探测读数里一格都没有" | `provers.checked=false` ⇒ 整面 `unreadable`（探测没跑完 ≠ 一个都没找到）；`lean_ready`/`can_do_formal` 的 `null` 显 `unknown`，不折成 `false` |
+
+**两套三态词表在组件层合流、在字符串层不通用**（裁定 N1）：`types.ts` 的
+`Tri`（`computed` / `unreadable` / `not_applicable`）与 `ReportTri`（`ok` / `missing` / `unknown`）
+都投影到 `components/TriState.tsx` 的三种视觉态（`ok` / `unknown` / `na`），映射只有那一处
+（`visualOf()`）；页面里不许把一个词表的值当另一个用。
+
+**五处如实标注的缺口（页面显 `not_applicable` + 原因，不编数）**：`draft/74 §3` 的矩阵里有五栏
+写的输入在今天的后端**不存在** —— 停机状态（`GET /api/state` 的 `stop`）与检索腿
+（`search_requests` 汇总）都在 `snapshot()` 被公开面对账钉住的 10 个顶层键之外；文献库
+（`library`）不在 `ArtifactsView` 里；"与工具面同源"（`conductor.closing` 的 `review_acceptance` 子树）
+与"污染面"不在 `AcceptanceView` 里。它们要各加一条只读端点才能给读数 —— 本批没有加，
+页面把这件事写在卡片上，而不是显示一个 0。
+
 ## §4 我们的**运行时**协作纪律（与 DSH 无关，出处全是本项目）
 
 这一节才是"智能体之间怎么协作"。用户端（人机通道 + 网页）落在它的第 6 条上。

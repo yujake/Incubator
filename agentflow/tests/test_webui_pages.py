@@ -37,6 +37,7 @@ import json
 import pathlib
 import re
 import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator, Sequence
 
@@ -533,3 +534,143 @@ def test_the_run_index_endpoint_is_really_in_the_route_table() -> None:
     assert hasattr(W.WebHandler, name), "handler 不在 WebHandler 上"
     assert routes.match("GET", "/api/run/a/b") is None, "`{sid}` 只许匹配一段路径"
     assert routes.match("POST", "/api/run-index") is None, "它是 GET，不是 POST"
+
+
+# ====================================================================== 装配（裁定 1a）
+# B 线交付的是"钩子 + 广播器"（`sse.attach/detach/begin_serving/close_all`），
+# 生产路径上得有人接 —— 接的地方是 `webui/server.py` 的 `serve()` 与 `run()`。
+# 下面两条守的就是那一次装配：它既不能没接（流永远沉默），也不能接重（回调叠加）。
+
+def _stream_frames(resp: Any, *, want: int, timeout: float = 8.0) -> list[tuple[str, str]]:
+    """读 SSE 帧：返回 `[(kind, data), ...]`（读够 `want` 帧或超时收手）。
+
+    这是本文件自己的小读端（B 的 `tests/test_webui_sse.py` 里有它自己那一份）：
+    走真实 HTTP、按线上的 `event:` / `data:` 两行解析，于是"服务端真的发出去了"
+    这件事不靠猜。
+    """
+    out: list[tuple[str, str]] = []
+    buf = b""
+    resp.fp.raw._sock.settimeout(timeout)  # noqa: SLF001 - 超时收手，判据不许挂死
+    deadline = time.monotonic() + timeout
+    while len(out) < want and time.monotonic() < deadline:
+        try:
+            chunk = resp.fp.read1(4096)  # noqa: SLF001
+        except (OSError, TimeoutError):
+            break
+        if not chunk:
+            break
+        buf += chunk
+        while b"\n\n" in buf:
+            raw, buf = buf.split(b"\n\n", 1)
+            kind = ""
+            data = ""
+            for line in raw.decode("utf-8", errors="replace").splitlines():
+                if line.startswith("event: "):
+                    kind = line[len("event: "):]
+                elif line.startswith("data: "):
+                    data = line[len("data: "):]
+            if kind:
+                out.append((kind, data))
+    return out
+
+
+@contextmanager
+def _live_server(root: pathlib.Path, *, heartbeat_sec: float = 0.2) -> Iterator[str]:
+    """起一个真的在跑的 web 服务（`serve()` + 后台 `serve_forever`），返回 `host:port`。"""
+    from agentflow import webui as W
+    from agentflow.webui import sse
+
+    sse.close_all()   # 先把上一代关掉，于是下面那条"serve() 开了一代"说明得了问题
+    sse.detach()
+    srv = W.serve(root, host="127.0.0.1", port=0, heartbeat_sec=heartbeat_sec)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"{srv.server_address[0]}:{srv.server_address[1]}"
+    finally:
+        sse.close_all()          # 先关流（否则开着的流会占住请求线程）
+        srv.shutdown()
+        srv.server_close()
+        sse.detach()
+        thread.join(timeout=5.0)
+
+
+def test_serve_opens_a_broadcaster_generation_and_attaches_the_four_hooks(
+        tmp_path: pathlib.Path) -> None:
+    """正控（裁定 1a 的装配）：`serve()` 开一代广播器，并把四个写路径钩子接上。
+
+    怎么读"接上了"：`detach()` 是公开入口（`sse.__all__` 里有它），它报出撤掉了哪
+    几个槽 —— 四个槽都非空就说明 `serve()` 真的调过 `attach()`。这里不用私有名
+    （`sse._ATTACHED`）读它，免得判据钉在两个模块之间的实现细节上。
+    """
+    from agentflow import webui as W
+    from agentflow.webui import sse
+
+    root = tmp_path / "wired"
+    root.mkdir()
+    sse.close_all()
+    sse.detach()
+    assert sse.serving() is False, "前提：这一代是关着的（否则下面说明不了问题）"
+    srv = W.serve(root, host="127.0.0.1", port=0, heartbeat_sec=0.2)
+    try:
+        assert sse.serving() is True, "serve() 没有开一代广播器（心跳与流循环都靠它）"
+        assert sse.default_broadcaster().heartbeat_sec == pytest.approx(0.2), (
+            "serve(heartbeat_sec=...) 没有透传到广播器上")
+        got = sse.detach()
+        assert got["detached"] == ("answered", "append", "question", "stop"), got
+        assert sse.detach() == {"detached": ()}, "detach() 必须幂等"
+    finally:
+        sse.close_all()
+        srv.server_close()
+        sse.detach()
+
+
+def test_a_session_write_reaches_the_stream_through_serve(tmp_path: pathlib.Path) -> None:
+    """端到端（"盘上新增 ⇒ 流里出现"）：经由 `serve()` 起的服务，写一次会话就走通。
+
+    两条断言缺一不可：
+    - 正控：`SS.append(...)` 之后流里出现 `state` 帧（装配真的通了）；
+    - 负控（红前绿后）：`detach()` 之后同样写一次，流里只剩心跳、没有 `state`
+      （证明上一条不是因为别的东西在发）。
+    """
+    from agentflow import webui as W
+    from agentflow.webui import sse
+
+    del W
+    root = tmp_path / "live"
+    root.mkdir()
+    sid = "live"
+    with _live_server(root) as base:
+        conn = http.client.HTTPConnection(base, timeout=10)
+        conn.request("GET", "/api/stream")
+        resp = conn.getresponse()
+        try:
+            assert resp.status == 200, resp.status
+            assert (resp.getheader("Content-Type") or "").startswith("text/event-stream"), (
+                resp.getheader("Content-Type"))
+            SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "装配判据"},
+                      sid=sid)
+            frames = _stream_frames(resp, want=1, timeout=8.0)
+            kinds = [k for k, _d in frames]
+            assert "state" in kinds, f"写了一次会话，流里却没有 state：{kinds}"
+            payload = next(d for k, d in frames if k == "state")
+            assert "snapshot" in payload, payload[:200]
+        finally:
+            resp.close()
+            conn.close()
+
+        # 负控：撤掉钩子之后，同样的写操作不再发 state（只会有心跳）
+        sse.detach()
+        conn2 = http.client.HTTPConnection(base, timeout=10)
+        conn2.request("GET", "/api/stream")
+        resp2 = conn2.getresponse()
+        try:
+            SS.append(root, {"kind": "agent_step", "role": "M", "index": 0,
+                             "shape": "fs.write"}, sid=sid)
+            later = _stream_frames(resp2, want=1, timeout=2.0)
+            assert all(k == "heartbeat" for k, _d in later), (
+                f"detach() 之后还在发事件：{[k for k, _d in later]}")
+        finally:
+            resp2.close()
+            conn2.close()
+

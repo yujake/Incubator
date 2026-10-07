@@ -588,15 +588,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("ReportReading",
      "_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）",
      (("status", "ReportTri"), ("text", "string"))),
-    ("CheckpointSpend",
-     "检查点里的花销子树（`agent_loop` 写的 `runs/agent-<角色>-<sid>.json`）",
-     (("calls", "number"), ("tokens_in", "number"), ("tokens_out", "number"),
-      ("usd", "number | null"), ("unknown_usd_calls", "number"))),
-    ("Checkpoint",
-     "一趟的检查点文件（`runs/agent-<角色>-<sid>.json`；本批没有 reader ⇒ 判据 C 不覆盖它）",
-     (("role", "string"), ("sid", "string"), ("task", "string"),
-      ("fingerprint", "string"), ("step", "number"), ("stop_reason", "string"),
-      ("waiting_for", "string[]"), ("spend", "CheckpointSpend"), ("at", "string"))),
+    # 裁定 5a：这里曾经还有一对 `CheckpointSpend` / `Checkpoint`（W0 留的、没有
+    # reader 的两条声明）。B 线的 `readers.CheckpointView` / `CheckpointSpendView`
+    # 才是带真读数的那一对（字段出自 `agent_loop.save_run_checkpoint` 与
+    # `llmseam.SeamSpend.to_dict`），两对并存只会让读 `types.ts` 的人猜该用哪一个 ——
+    # 所以这一对删掉，检查点那一族只留 B 的那一份。
     ("RunIndexSession",
      "趟次索引里的一场会话（`sessions.compute_run_index` 的 `sessions[sid]`）",
      (("runs", "RunRow[]"), ("last_end_index", "number | null"), ("digest", "string"))),

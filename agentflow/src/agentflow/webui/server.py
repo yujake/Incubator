@@ -59,7 +59,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import routes
+from . import routes, sse
 from .state import _text, snapshot
 from .views import _not_found, _page, render_root, render_run
 from .writes import answer
@@ -71,6 +71,9 @@ __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "WebHandler", "default_static_root", 
 DEFAULT_PORT = 8788
 #: 默认监听地址（只对本机开）。
 DEFAULT_HOST = "127.0.0.1"
+#: 默认心跳周期（秒）：`GET /api/stream` 闲着时多久发一条 `heartbeat`。
+#: `serve(heartbeat_sec=...)` 可注入（判据用 0.2 秒跑，不等 15 秒）。
+DEFAULT_HEARTBEAT_SEC = 15.0
 
 #: 静态资源的落点（相对包目录）：前端构建产物（裁定 B1）。
 _STATIC_REL = ("web", "static")
@@ -406,7 +409,8 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
           token: str = "", allow_writes: bool = False, settings_write: bool = True,
           static_root: str | Path | None = None,
           csrf_token: str = "",
-          routes_table: Sequence[tuple[str, str, str]] | None = None) -> ThreadingHTTPServer:
+          routes_table: Sequence[tuple[str, str, str]] | None = None,
+          heartbeat_sec: float = DEFAULT_HEARTBEAT_SEC) -> ThreadingHTTPServer:
     """建好服务器并返回（不调 `serve_forever`）。
 
     测试用 `port=0` 起随机端口：返回后读 `srv.server_address[1]` 拿真实端口，
@@ -417,7 +421,28 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     写面要等 W3、设置写面要等 W4 —— 这一点在 `--help` 与模块 docstring 里都写明了。
     `static_root` / `csrf_token` 也是可注入的：判据要在临时目录里造一份前端外壳，
     并按需钉住令牌（缺省 = 每进程一个随机值）。
+
+    ## 起服务时顺带做的两件事（裁定 1a 的装配，B 线只提供钩子，接的是这里）
+
+    1. `sse.begin_serving(heartbeat_sec=...)` —— 换一代干净的广播器（于是上一个
+       进程/上一条判据的事件不会被新服务看见），`heartbeat_sec` 就是这一档；
+    2. `sse.attach()` —— 把 `sessions.append` / `userio.ask_user` /
+       `userio.answer_question` / `stopctl` 四个钩子接到"发对应 kind 的事件"上。
+       它幂等（第二次是替换），所以重复起服务不会把回调叠起来。
+
+    第 1 步带一个条件：**当前这一代已经开着就不再换**（`sse.serving()`）。
+    为什么不是无条件调用：判据 `tests/test_webui_sse.py` 的 `_bound_server` 是先
+    `begin_serving(heartbeat_sec=0.2)` 再 `serve()` 的；无条件重置会把那一档心跳
+    换回 15 秒，于是"心跳周期可注入"那条既有判据会以"三次心跳用了 >2s"红掉 ——
+    那是既有的、正确的判据，不许为了让接线好看去改它。
+
+    收尾（`close_all()` + `detach()`）不在这里做：`serve()` 只建服务器、不拥有
+    它的生命周期，收尾在 :func:`run` 的 `finally` 里。判据自己起的服务器要自己收
+    （`tests/test_webui_sse.py` 的 `_bound_server` 就是这么做的）。
     """
+    if not sse.serving():
+        sse.begin_serving(heartbeat_sec=heartbeat_sec)
+    sse.attach()
     handler = type("BoundWebHandler", (WebHandler,), {
         "root": Path(str(root)), "token": token,
         "static_root": Path(str(static_root)) if static_root is not None
@@ -492,6 +517,16 @@ def run(argv: Sequence[str] | None = None) -> int:
         # 让 finally 去 shutdown + close，退出码仍是 0。
         pass
     finally:
+        # 收尾顺序有讲究（裁定 1a 的那一半，B 写明了理由）：
+        # ① 先 `close_all()` 关掉所有流 —— `srv.shutdown()` 只停 accept 循环，
+        #    `ThreadingHTTPServer` 的入站请求线程不受它影响，一条开着的流会把那个
+        #    线程一直占住（`sse.py` 的 `_GENERATION` 就是为这件事设的：流循环每次
+        #    迭代读它，看到代结束就自己退出）；
+        # ② 再关服务器；
+        # ③ 最后 `detach()` 撤掉四个写路径钩子 —— 回到"没人接"的状态（缺省行为），
+        #    于是这个进程里剩下的代码不会继续往一个已经关掉的广播器发事件。
+        sse.close_all()
         srv.shutdown()
         srv.server_close()
+        sse.detach()
     return 0
