@@ -4,12 +4,13 @@
 """
 from __future__ import annotations
 
-from ._support import S
+from ._support import Iterable, S
 from ..refusals import refuse
 
 class _SearchLiterature:
     def search_literature(self, *, topic: str, mode: str = "precise",
-                          description: str = "") -> dict:
+                          description: str = "",
+                          providers: Iterable[str] | None = None) -> dict:
         """按主题现查一次：入队（过 I7 准入闸门）→ 领跑 → 把候选与来源交回召唤方。
 
         ## 为什么需要这个动作（2026-09-30；用户口径："A 的文献检索必须要通关"）
@@ -64,6 +65,28 @@ class _SearchLiterature:
         :func:`agentflow.refusals.refuse`（`draft/37` §88）：带上受控的
         `refusal_reason`，主控的台账才会把它们记成 `refused` 而不是 `ok`。
         这一条是被真机咬出来的 —— 见 :mod:`agentflow.refusals` 的模块说明。
+
+        ## `providers=[…]`：这一次问哪几个源（所有者 2026-10-07 授权补的这一格）
+
+        加这一格之前，"一次问多源"只有工具面有（`search.literature`），动作面
+        没有 —— 而主控派活读的是动作参数表，于是这个入口在编排层根本看不见。
+        它是三态，三态必须分得开：
+
+        1. 不给这一格（`None`）：按角色级接线查，今天的行为一个字不变。
+           读数上 `providers_requested=None` + `role_providers=[接线上的源名]`。
+        2. 给了合法源名：名字落进请求行（`SearchRequest.providers`），
+           领取那一侧按这一行点名的源去检索（不是只看角色级配置）；
+           逐源成败落在 `sources[]`、成本落在 `cost`，形状与工具面的同名读数一致，
+           跨源合并走检索层的 `MultiProvider`（同一份实现，不在这里另写一套）。
+        3. 给了不认识的源名：如实拒绝（`kind="unknown_provider"`）并把可用源
+           名单一起给出来，零写入。不许静默忽略：忽略会让"我要问两个源"
+           悄悄变成"只问了一个"，而调用方从读数上看不出差别。
+           `providers=[]`（显式空列表）同样拒绝（`kind="bad_providers"`）：
+           它既不是"按角色配置"也不是一个可用的源，只会让"这次到底问了谁"没法读。
+
+        可用源名单取自角色级接线上的实例名，这里不另立一张表：工具面那一格
+        带 `enum`（可用源名），动作面刻意不抄 —— 抄一份就是第二个要改的地方，
+        而它漂了不会报错。
         """
         topic = str(topic or "").strip()
         if not topic:
@@ -71,6 +94,39 @@ class _SearchLiterature:
         mode = str(mode or "topical")
         if mode not in S.SEARCH_MODES:
             return refuse("bad_mode", f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}")
+
+        # ---- `providers`：把"问哪几个源"定下来（第三态在这里分开）
+        #
+        # 归一化只做三件事：转字符串、去空白、按出现次序去重。刻意不排序 ——
+        # 次序是合并口径的一部分（先到的源先填字段），排序等于静默改口径。
+        wanted: list[str] | None = None
+        if providers is not None:
+            wanted = []
+            for raw_name in providers:
+                name = str(raw_name or "").strip()
+                if name and name not in wanted:
+                    wanted.append(name)
+            wired = self._wired_provider_names()
+            if not wanted:
+                return refuse(
+                    "bad_providers",
+                    "providers 是空列表：要么不给这个参数（按角色级接线查），"
+                    "要么至少给一个源名。给空列表既不是按角色配置、也不是一个可用源，"
+                    "只会让'这一次到底问了谁'变得没法读。",
+                    available=wired,
+                )
+            unknown = [n for n in wanted if n not in wired]
+            if unknown:
+                return refuse(
+                    "unknown_provider",
+                    f"不认识的源名 {unknown}；可用源是 {wired}。"
+                    "这一档如实拒绝而不是忽略：忽略会让'我要问这几个源'静默变成"
+                    "'只问了其中一个'，而调用方从读数上看不出差别。",
+                    available=wired,
+                    providers_requested=wanted,
+                    unknown=unknown,
+                )
+
         if not self.providers:
             # 「没接线」必须与「查了但没命中」分开：这一档零写入，
             # 调用方据此知道要先去配检索后端，而不是以为这个主题没有文献。
@@ -115,7 +171,7 @@ class _SearchLiterature:
                 ),
             }
 
-        admitted = self._enqueue_search(topic, mode, desc)
+        admitted = self._enqueue_search(topic, mode, desc, providers=wanted)
         if not admitted.get("admitted"):
             return {"ok": True, "admitted": False, "topic": topic, "mode": mode,
                     "request_id": None, "outcome": "rejected_by_gate",
@@ -136,6 +192,11 @@ class _SearchLiterature:
                 break                      # 没有可领的了（原因见 skipped_reason）
         row = self._request_row(rid) or {}
         lit_ids = [str(x) for x in (row.get("result_lit_ids") or [])]
+        # 逐源读数只取"领到自己那条请求"的那一轮：队列里有更早的请求时，
+        # 这个动作会先替它跑完（那些轮次的源不属于这一问），把几轮的读数混在
+        # 一起会读成"这一次问了所有的源"。其余轮次的读数照旧逐轮留在 `rounds[]`。
+        own_round = next((r for r in rounds if r.get("request_id") == rid), None)
+        own_sources = list((own_round or {}).get("sources") or [])
         return {
             "ok": True,
             "admitted": True,
@@ -156,6 +217,24 @@ class _SearchLiterature:
             # 实际进查询串的那份描述（非 ASCII 会被丢，见 `_query_description`）。
             # 给出来是为了"我写了描述但结果不对"这类问题能在读数上直接看出来。
             "query_description": self._query_description(topic, desc),
+            # ---- 这一次问了谁（三态读数，键名与形状照工具面的同名读数）
+            #
+            # `providers_requested` 是"这一行点名了哪些源"（第一态为 None，
+            # 不是空数组 —— 空数组会与"点名了、但一个都没接上"同形）。
+            "providers_requested": list(row.get("providers") or []) or None,
+            # 角色级接线上有哪些源：第一态靠它回答"这一次用的是哪些源"。
+            "role_providers": self._wired_provider_names(),
+            # 逐源三态（`delivered` / `refused` / 上游 `failed`）与条数。
+            "sources": own_sources,
+            # 这些读数取自哪一轮（`None` = 自己那条没被领到，`sources` 因此为空）。
+            "sources_round": (own_round or {}).get("request_id"),
+            # 成本按"这一次动作真的跑了几轮"汇总（每一轮都付了出网的钱）。
+            "cost": {
+                "provider_calls": sum(int((r.get("cost") or {}).get("provider_calls") or 0)
+                                      for r in rounds),
+                "elapsed_s": round(sum(float((r.get("cost") or {}).get("elapsed_s") or 0.0)
+                                       for r in rounds), 3),
+            },
             "registered": sum(int(r.get("registered") or 0) for r in rounds),
             "duplicated": sum(int(r.get("duplicated") or 0) for r in rounds),
             "downloaded": sum(int(r.get("downloaded") or 0) for r in rounds),
@@ -167,5 +246,8 @@ class _SearchLiterature:
             "note": (
                 "这一条已经入队并跑过；`outcome=no_results` 是有效结论（查了、没有），"
                 "`search_failed` 不是结论（这条请求还没结束，会按退避规则重试）。"
+                "`sources[]` 是这一行点名的那些源的逐源三态，取自 `sources_round` "
+                "那一轮；没点名源时它是空的（那说明这次按角色级接线查，"
+                "接线上的源名见 `role_providers`）。"
             ),
         }

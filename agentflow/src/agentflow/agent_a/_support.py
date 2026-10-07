@@ -28,7 +28,7 @@
 from __future__ import annotations
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 from .. import dedup as D
@@ -75,6 +75,24 @@ class ARunResult:
     #: 去找一个不存在的"另一个 A 实例"。
     skipped_lease_backoff: int = 0
 
+    # ---- 这一次问了谁、问得怎么样（`providers` 那一格的读数）
+    #
+    # 为什么放在 `ARunResult` 而不是只活在 `search_literature` 的返回值里：
+    # 真正去检索的是 `run_once` 这一轮，读数只有它拿得到；动作层再把它汇总
+    # （队列里有更早的请求时，一次动作会跑好几轮，逐轮读数各不相同）。
+    #: 这一轮真正去问的源名（取自请求行 `providers`）。空 = 第一态（按角色配置）。
+    #: 用空列表而不是 `None` 表示"没点名"：这一格是"这一轮问了哪些源"的清单，
+    #: "点名了但一个都没接上"由 `sources` 为空加上 `search_errors` 里的理由回答。
+    providers_requested: list[str] = field(default_factory=list)
+    #: 角色级接线上有哪些源（第一态用它说明"这一次用的是哪些源"）。
+    role_providers: list[str] = field(default_factory=list)
+    #: 逐源读数（形态照工具面 `search.literature` 的 `sources[]`）。
+    #: 只在请求行点名了源的那一态非空 —— 第一态按角色配置查，跨源合并归提交阶段，
+    #: 那里没有"逐源三态"这件事，编一份出来就是假读数。
+    sources: list[dict] = field(default_factory=list)
+    #: 成本读数（形态照工具面的 `cost`）：`provider_calls` 是这一轮向上游发了几次。
+    cost: dict = field(default_factory=dict)
+
     def to_dict(self) -> dict:
         return {
             "processed": self.processed,
@@ -93,6 +111,10 @@ class ARunResult:
             "queue_pending": self.queue_pending,
             "skipped_lease_active": self.skipped_lease_active,
             "skipped_lease_backoff": self.skipped_lease_backoff,
+            "providers_requested": list(self.providers_requested),
+            "role_providers": list(self.role_providers),
+            "sources": [dict(s) for s in self.sources],
+            "cost": dict(self.cost),
         }
 @dataclass
 class ClaimOutcome:

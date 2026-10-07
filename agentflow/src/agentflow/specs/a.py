@@ -82,15 +82,30 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 要领域全景就显式传 `broad` / `topical`。
                 "mode": {"type": "string", "enum": list(S.SEARCH_MODES)},
                 "description": _S,
-                # 题 3（2026-10-07 所有者授权补 `providers`）**暂时回退**，理由逐字如下：
-                # 补上这一格之后，导入期的 `param_seam_violations` 当场报
-                # "能力层声明了、实现不收（`AgentA.search_literature` 的签名里没有它）"。
-                # 那不是噪音：参数门（`Conductor._check_params`）读的正是这张表 ⇒ 它会放行、
-                # 写一行 running、执行期才报"不认这些参数"；而且提示词会把 `providers`
-                # 广告成一个可用参数。真正的修法要把 `providers` 带进队列
-                # （`schema.SearchRequest` 加字段 = 禁改区 [schema-migration]）+ claim/run 路径，
-                # 那是一次功能改动、不在"补一行声明面"的授权范围内 ⇒ 已作为新待裁项报给所有者。
-                # 在那之前保持原状（工具面有、动作面没有）：不完整，但没有地雷。
+                # 题 3（2026-10-07 所有者授权补 `providers`）：
+                # 这一格由所有者批准、主控代改（本文件是 FC-27 禁改区
+                # [auth-audit]，改动处逐字写明授权来源）。它补的是一条声明面缺口：
+                # 工具面 `search.literature` 早就有 `providers`（一次问多源），
+                # 而动作面没有 —— 编排层（主控按动作参数表派活）因此看不见这个入口。
+                #
+                # 只搬形状、不搬名单：工具面那一格还带 `enum`（可用源名）与
+                # `minItems` / `maxItems`，这里刻意一格都不抄。可用源的真身是
+                # 检索后端注册表（`providers.build_providers` 的名单 + 调用方注入的
+                # 实例），抄一份就等于造出第二个要同步的地方，而它漂了不会报错。
+                # 所以这里只声明 array<string>：type=array、items.type=string，
+                # 与工具面那一格同形。
+                #
+                # 这一对的形状一致没有任何导入期判据看着：两层类型对账
+                # （`capabilities.param_type_divergences_for`）按"工具名最后一段 ==
+                # handler_name"配对，而工具名最后一段是 literature、本动作是
+                # `search_literature` ⇒ 它落进 `_KNOWN_UNMATCHED_ACTIONS`，
+                # 那条对账看不见这一对。所以形状一致由新增的判据钉住
+                # （`tests/test_agent_a_search_providers.py` 里两条：声明面形状，
+                # 以及"只改声明不改实现"必须被 `param_seam_violations` 报出来）。
+                #
+                # "这个源名认不认识"由实现侧在入队之前逐个核（不认识就如实拒绝，
+                # 并把可用名单一起给出来）—— 声明面不替实现面造第二份名单。
+                "providers": _ARR_S,
             },
             required=("topic",),
         ),

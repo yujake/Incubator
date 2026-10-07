@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import time
+
 from ._support import Any, ClaimOutcome, Iterable, Path, S, Store, T, X, lease_expired, make_lease, shutil
 from .run_once import _RunOnce
 from .run import _Run
@@ -49,7 +51,8 @@ class _Core:
         # `search()` 一次最多领跑几轮（每轮一条请求）。它只影响这个新动作：
         # `run_once` / `run` 的语义一个字没动。
         self.search_max_rounds = int(self.cfg.get("search_max_rounds", 3))
-    def _enqueue_search(self, topic: str, mode: str, description: str) -> dict:
+    def _enqueue_search(self, topic: str, mode: str, description: str,
+                        providers: Iterable[str] | None = None) -> dict:
         """把一条按主题的检索请求入队（过 I7 准入闸门 + 取号 + 落行）。
 
         与 CLI `submit` 同一套口径：同一个事务、同一个取号函数
@@ -58,6 +61,11 @@ class _Core:
         （人自己知道自己在提交什么），而角色在循环里提问必须受在途上限约束 ——
         否则"知识不足就提问"会退化成"每轮都问"，把所有请求一起拖慢
         （`admit_search_request` 的 docstring 逐字写了这件事）。
+
+        `providers` 原样落进 `SearchRequest.providers`：空 = 没点名源
+        （按角色级接线查，与加这一格之前的行为一致）；非空 = 这一行只问这几个源。
+        它是请求行上的属性，不改角色级接线 —— 一条请求点名的源不许影响
+        下一条请求（那会让"谁提的"这件事在链路上丢失）。
         """
         with self.store.tx("search_requests", actor=self.actor, note="a.search") as tx:
             rows = tx.rows("search_requests")
@@ -74,6 +82,7 @@ class _Core:
                 done=False,
                 submitted_by=self.actor,
                 priority=str(gate.get("priority") or "medium"),
+                providers=[str(x) for x in (providers or [])],
             )
             row.validate()                 # 先校验后落盘（与 store 同一条纪律）
             tx.upsert("search_requests", row.to_dict(), note="a.search")
@@ -284,18 +293,157 @@ class _Core:
         not_sent = [e for e in errors if any(s in e for s in states)]
         sent_but_failed = [e for e in errors if e not in not_sent]
         return not_sent, sent_but_failed
-    def _search(self, req: dict) -> tuple[list[Any], list[str]]:
-        """并发度故意为 1（串行 provider）——避免同时打多个 API 触发限流。"""
+    def _wired_provider_names(self) -> list[str]:
+        """角色级接线上有哪些源名（按接线次序，同名只算一次）。
+
+        它是两处共用的那一份可用名单：入队之前的核名
+        （`AgentA.search_literature` 的第三态）与领取时的选源
+        （`_pick_named_providers`）。两处各自去点一遍名必然漂，
+        而漂的表现是"报错里给的可用名单不全"—— 照着它改参数还是错。
+        """
+        out: list[str] = []
+        for p in self.providers:
+            name = str(getattr(p, "name", type(p).__name__))
+            if name and name not in out:
+                out.append(name)
+        return out
+
+    def _pick_named_providers(self, named: Iterable[str]) -> tuple[list[Any], list[str]]:
+        """按名字从角色级接线里挑实例 ⇒ `(挑到的, 接线里没有的名字)`。
+
+        返回两个值而不是一个：把"没接线的名字"与"挑到的实例"折进同一个列表，
+        调用方就再也分不出"这个源没交货"与"这个源根本没接线"（三态纪律）。
+        次序保留请求行点名的次序 —— 合并时先到者优先，次序是口径的一部分。
+        """
+        pool: dict[str, Any] = {}
+        for p in self.providers:
+            pool.setdefault(str(getattr(p, "name", type(p).__name__)), p)
+        picked: list[Any] = []
+        missing: list[str] = []
+        for name in named:
+            p = pool.get(name)
+            if p is None:
+                missing.append(name)
+            elif p not in picked:
+                picked.append(p)
+        return picked, missing
+
+    @staticmethod
+    def _source_rows(stats: Any) -> list[dict]:
+        """逐源读数行（形态照工具面 `search.literature` 的 `sources[]`）。
+
+        只做格式搬运，不重新判一遍：三态（上游 `failed` / 这一问没发出去
+        `refused` / 交货了 `delivered`）由 `providers.ProviderStat` 自己的三个属性
+        回答，在这里再判一次就是第二份口径（FC-03）。次序保留问出去的次序，
+        它与请求行点名的次序一致。
+        """
+        rows: list[dict] = []
+        for name, st in (stats or {}).items():
+            rows.append({
+                "name": str(name),
+                "status": str(getattr(st, "status", "") or ""),
+                "count": int(getattr(st, "count", 0) or 0),
+                "error_kind": str(getattr(st, "error_kind", "") or ""),
+                "error": str(getattr(st, "error", "") or ""),
+                "delivered": bool(getattr(st, "delivered", False)),
+                "refused": bool(getattr(st, "refused", False)),
+            })
+        return rows
+
+    def _search(self, req: dict) -> tuple[list[Any], list[str], dict]:
+        """按这一行请求检索，并把"这一次问得怎么样"的读数一起交回。
+
+        ## `providers` 这一格是唯一的开关（三态）
+
+        - 行上没点名源（空数组）⇒ 走 `_search_along_wiring`：按角色级接线查，
+          与加这一格之前逐字相同的行为（候选只拼接，跨源判重仍归提交阶段）；
+        - 行上点名了源 ⇒ 只问点名的那些源，跨源去重与逐源三态全部交给
+          `providers.MultiProvider` —— 与工具面 `search.literature` 的多源分支
+          是同一份实现，这里不另写一套合并口径；
+        - 点名了接线里没有的源 ⇒ 如实进 `errors`（并列出可用名单），
+          不静默丢掉那个名字。
+
+        第三个返回值是读数（`providers_requested` / `role_providers` /
+        `sources` / `cost`），键名与形状照工具面的同名读数。
+
+        为什么领取侧还要再核一遍名：入队之前动作层已经核过了（第三态在那里
+        就被拒了），但队列里的行还可以由别的手写路径建出来（CLI `submit`、
+        别的角色的 gap 分支），也可能在"换了接线重启"之后才被领到 ——
+        那时名单已经变了。领取侧只认这一行写的名字，不替它改。
+        """
         mode = req["mode"]
         limit = int(self.limits.get(mode, 10))
         # 查询串里只用"含 ASCII 关键词"的那一份描述（理由见 `_query_description`）。
         # 请求行上的 `content_description` 一字不动 —— 那是审计留痕，不是查询串。
         query_desc = self._query_description(req.get("topic") or "", req.get("content_description") or "")
+        named = [str(x) for x in (req.get("providers") or [])]
+        t0 = time.monotonic()
+        if not named:
+            out, errors = self._search_along_wiring(req["topic"], mode, query_desc, limit)
+            return out, errors, {
+                # 第一态：`providers_requested=None` 才是"没点名"的读数。
+                # 写成空数组会与"点名了、但一个都没接上"同形。
+                "providers_requested": None,
+                "role_providers": self._wired_provider_names(),
+                "sources": [],
+                "cost": {"provider_calls": len(self.providers),
+                         "elapsed_s": round(time.monotonic() - t0, 3)},
+            }
+
+        picked, missing = self._pick_named_providers(named)
+        errors = [
+            f"{name}: unknown_provider: 这一行点名的源不在当前接线上"
+            f"（可用：{self._wired_provider_names()}）"
+            for name in missing
+        ]
+        if not picked:
+            return [], errors, {
+                "providers_requested": list(named),
+                "role_providers": self._wired_provider_names(),
+                "sources": [],
+                "cost": {"provider_calls": 0, "elapsed_s": round(time.monotonic() - t0, 3)},
+            }
+
+        # 惰取：不在导入期去碰 provider 层，免得凭空多一条导入边（同 `_not_sent_states`）。
+        from .. import providers as P
+
+        # 并发度仍是 1：`MultiProvider` 也是逐个问（源之间串行），
+        # 与 `_search_along_wiring` 一样不会同时打多个 API。
+        multi = P.MultiProvider(picked, name="a.request")
+        out: list[Any] = []
+        try:
+            out = list(multi.search(req["topic"], mode, query_desc, limit) or [])
+        except Exception as e:  # noqa: BLE001
+            # `MultiProvider` 默认 fail_fast=False ⇒ 单个源炸不会走到这里。
+            # 走到这里说明是它自己的合并环节炸了（例如候选不是它认的形状）——
+            # 那与"某个源失败"不是一回事，必须单独如实报出来。
+            errors.append(f"multi: {type(e).__name__}: {e}")
+        sources = self._source_rows(multi.last_stats)
+        for row in sources:
+            if row["status"] == "failed" or row["refused"]:
+                errors.append(f"{row['name']}: {row['error']}")
+        return out, errors, {
+            "providers_requested": list(named),
+            "role_providers": self._wired_provider_names(),
+            "sources": sources,
+            "cost": {"provider_calls": len(picked),
+                     "elapsed_s": round(time.monotonic() - t0, 3)},
+        }
+
+    def _search_along_wiring(self, topic: str, mode: str, query_desc: str,
+                             limit: int) -> tuple[list[Any], list[str]]:
+        """第一态（请求行没点名源）：串行问角色级接线上每一个源。
+
+        并发度故意为 1（串行 provider）——避免同时打多个 API 触发限流。
+        候选只做拼接、不在这里跨源去重：判重在提交阶段统一做
+        （`dedup.find_existing_literature` + 锁内重判），这里是加 `providers`
+        这一格之前逐字相同的那条路。
+        """
         out: list[Any] = []
         errors: list[str] = []
         for p in self.providers:
             try:
-                got = p.search(req["topic"], mode, query_desc, limit)
+                got = p.search(topic, mode, query_desc, limit)
                 out.extend(got or [])
             except Exception as e:  # provider 失败不应让整个请求失败
                 errors.append(f"{getattr(p, 'name', type(p).__name__)}: {type(e).__name__}: {e}")

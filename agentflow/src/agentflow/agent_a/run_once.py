@@ -35,7 +35,14 @@ class _RunOnce:
         result.priority_rank = X.priority_rank(req.get("priority"))
         result.submitted_by = req.get("submitted_by")
 
-        candidates, search_errors = self._search(req)
+        candidates, search_errors, readings = self._search(req)
+        # 这一轮"问了谁、问得怎么样"的读数先落进结果：它是唯一能证明
+        # "请求行点名的源真的被问了"的机器读数（三态：没点名 / 点名了 /
+        # 点名了一个不认识的源，三者在 `providers_requested` 与 `sources` 上不同形）。
+        result.providers_requested = list(readings.get("providers_requested") or [])
+        result.role_providers = list(readings.get("role_providers") or [])
+        result.sources = list(readings.get("sources") or [])
+        result.cost = dict(readings.get("cost") or {})
 
         staging = Path(tempfile.mkdtemp(prefix="agentflow-stage-", dir=str(self.store.library)))
         try:

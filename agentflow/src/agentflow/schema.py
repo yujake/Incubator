@@ -219,6 +219,26 @@ class SearchRequest:
     for_question_id: str | None = None
     #: 提交来源的自由文本说明（人可读；机器判定只看 `submitted_by`）。
     submit_note: str = ""
+    #: 这一次检索点名要问哪几个源（一次问多源）。
+    #:
+    #: [契约] 空数组是「没有点名源 ⇒ 按角色级接线查」这一态，不是缺省值；
+    #: 非空数组是「只问这几个源，次序就是问的次序」。两态必须分得开，
+    #: 所以这里不用 `None` 也不用空串。
+    #:
+    #: [为什么] 默认值必须是空数组（而不是必填）：盘上已有的行里没有这个键，
+    #: `row_from_dict` 按 `__dataclass_fields__` 过滤之后会把缺的键交给默认值
+    #: ⇒ 老行照样读得进来（向后兼容）。这也是本次改动不抬 `SCHEMA_VERSION`
+    #: 的理由：字段是追加的、默认值让两种行都合法，盘上的格式契约没有被改坏。
+    #:
+    #: [为什么] 这里刻意不校验「源名认不认识」：可用源的真身是检索后端注册表
+    #: （`providers.build_providers` 的那张名单加上调用方注入的实例），把它抄进
+    #: schema 就是造出第二个要同步的地方，而它漂了不会报错。认识的判据在动作层
+    #: （`AgentA.search_literature` 在入队之前逐个核名，不认识就如实拒绝并把
+    #: 可用名单一起给出来），本字段只做形状校验（非空字符串、元素是字符串）。
+    #:
+    #: [契约] 本次改动由所有者批准、主控代改：本文件是 FC-27 禁改区
+    #: （[schema-migration] + [eval-criteria]），这次只加这一个字段。
+    providers: list[str] = field(default_factory=list)
 
     def validate(self) -> None:
         if not self.request_id:
@@ -228,6 +248,21 @@ class SearchRequest:
         require_process_id(self.request_id, "request")
         if self.mode not in SEARCH_MODES:
             raise ValueError(f"mode 必须是 {SEARCH_MODES} 之一，收到 {self.mode!r}")
+        # `providers` 只做形状校验：是不是数组、元素是不是非空字符串。
+        # 「这个源名认不认识」不在这里判 —— 那需要读检索后端注册表，
+        # 而把它读进 schema 就是造出第二份名单（见字段上的注释）。
+        if not isinstance(self.providers, (list, tuple)):
+            raise ValueError(
+                "providers 必须是数组（这一次要点名的源名列表）；没有点名源就留空数组，"
+                f"不要用 None 或空串，收到 {type(self.providers).__name__} —— "
+                "「没点名」与「点名了一个空名字」在盘上同形之后就再也分不开了"
+            )
+        for i, name in enumerate(self.providers):
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(
+                    f"providers[{i}] 必须是非空字符串（源名），收到 {name!r}："
+                    "空名字既不是「按角色配置查」也不是一个可用的源"
+                )
         if not self.topic.strip():
             raise ValueError("topic 不能为空")
         if self.priority not in PRIORITIES:
@@ -2411,7 +2446,15 @@ class EvalResult:
 #: 为什么用"未声明即报错"而不是"默认按集合处理"：
 #: 默认值会静默把序列当集合。而"静默破坏顺序"正是 FC-05 要修的那个缺陷。
 ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
-    "search_requests": {"result_lit_ids": "set"},
+    "search_requests": {
+        "result_lit_ids": "set",
+        # `providers` 是 seq 而不是 set：A 按这一行给出的次序依次问各个源，
+        # 而跨源合并是「先到者优先」（检索层只填空缺、不覆盖已有值）
+        # ⇒ 次序变了，「同一篇文献最终采信谁的元数据」就变了。
+        # 声明成 set 会让集中检查在写盘那一刻要求升序去重，于是调用方给的次序
+        # 被静默重排 —— 那正是 FC-05 要防的形态（顺序本身携带信息）。
+        "providers": "seq",
+    },
     # 作者顺序是有意义的（第一作者 ≠ 末位作者），所以是 seq。
     "literature": {"source_request_ids": "set", "authors": "seq"},
     # 别名顺序影响展示与"主名"判断；`related_concepts` 是纯集合。

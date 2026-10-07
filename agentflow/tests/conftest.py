@@ -198,8 +198,14 @@ def add_request(
     attempts: int = 0,
     claimed_by: str | None = None,
     lease_until: str | None = None,
+    providers: list[str] | None = None,
 ) -> dict:
-    """插入一条合法的 search_requests 行（自带校验，防止测试数据本身不合法）。"""
+    """插入一条合法的 search_requests 行（自带校验，防止测试数据本身不合法）。
+
+    `providers` 是"这一行点名的检索源"（空 = 按角色级接线查，与加这一格之前
+    的行为一致）。它必须能在这里给出来：领取侧按行上的名字选源，
+    而别的入队口（CLI `submit` / 别的角色的 gap 分支）写的也是同一种行。
+    """
     row = S.SearchRequest(
         request_id=request_id,
         timestamp=TS,
@@ -212,6 +218,7 @@ def add_request(
         attempts=attempts,
         claimed_by=claimed_by,
         lease_until=lease_until,
+        providers=list(providers or []),
     )
     row.validate()
     with store.tx("search_requests", actor="test") as tx:
