@@ -43,19 +43,34 @@ from .store import MAX_ID, Store
 #: 合法的 `eval:` 引用当成非法。所以词表只留这一个来源，判据与消息都从它派生
 #: （`FC-03`：同一件事不许有两份定义）。
 #:
-#: 下面那条导入期断言把词表与"逐档的判据分支"钉在一起：判据是
-#: `elif kind == "rel" and ...` 这样逐档写的（引用形状由 `textutil.citation_ref_parts`
-#: 给，这里只关心它落在哪一档），于是"词表里有、分支里没有"（或反过来）会直接炸，
-#: 而不是让一条拒绝消息把人指向一个错的写法 —— `D10` 就是那样活了很久：
-#: 没有任何一条既有断言会因为消息写错而变红。
-CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc", "stmt")
+#: 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在 `.noai-paths` 的
+#: `[category: auth-audit]` 里（登记理由：`verify_all` 的一致性审计判据本身）。
+#: 题 18 选 A（2026-10-07 所有者裁定）：本常量此前是前缀的
+#: 第二份字面量抄件 —— 前缀的唯一声明面是 `schema.CITATION_PREFIXES`，而这里把
+#: 那几个前缀又逐字列了一遍。那时 `tests/test_stmt_citation_prefix.py` 只能把两边
+#: 钉成"集合相等"，而"集合相等"对"两处各抄一份、恰好抄得一样"是恒真的
+#: （把 `stmt` 从两处同时删掉，那条判据照样绿）。本次只改本常量的来源
+#: （搬一处，不改口径）：取值、类型、次序，以及它的两个引用点 ——
+#: 判据分支（`kind not in CITATION_KINDS`）与那条拒绝消息
+#: （`'/'.join(k + ':' for k in CITATION_KINDS)`）—— 逐字不变。
+#: 次序也因此一字未动：声明面的次序刻意沿用了本处历史上的次序
+#: （见 `schema.CITATION_PREFIXES` 的说明），所以同一条拒绝消息的字节也不变。
+CITATION_KINDS: tuple[str, ...] = tuple(S.CITATION_PREFIXES)
 #: 逐档判据分支里各写了哪些 kind。它与 `CITATION_KINDS` 必须同轮改 ——
-#: 这个常量是"分支那一侧"的声明，为的是让漂移在导入期就可见（见上面的断言）。
+#: 这个常量是"分支那一侧"的声明，为的是让漂移在导入期就可见（见下面的断言）。
+#:
+#: 它与 `CITATION_KINDS` 现在是两个面，不再是两份清单：`CITATION_KINDS` 来自
+#: 声明面（`schema.CITATION_PREFIXES`），本常量来自逐档判据分支
+#: （`elif kind == "rel" and ...` 这样逐档写的；引用形状由 `textutil.citation_ref_parts`
+#: 给，这里只关心它落在哪一档）。于是下面那条导入期断言的含义从"两份字面量互等"
+#: 升级成"声明面与实现面脱钩就炸"：往声明面加一个前缀而不加分支（或反过来）
+#: 都会在导入期红 —— 这正是 `D10` 活了很久的那个缺口
+#: （没有任何一条既有断言会因为消息写错而变红）。
 _BRANCH_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc", "stmt")
 assert set(CITATION_KINDS) == set(_BRANCH_KINDS), (
     f"CITATION_KINDS={sorted(CITATION_KINDS)} 与逐档判据分支 "
     f"{sorted(_BRANCH_KINDS)} 脱钩 —— 两边必须同轮改"
-    "（改词表就要同时加/删一条 `elif kind == ...` 分支）"
+    "（改声明面就要同时加/删一条 `elif kind == ...` 分支）"
 )
 
 

@@ -2,7 +2,7 @@
 
 所有者 2026-10-07 批准的功能改动：工具面 `search.literature` 早就有 `providers`，
 动作面没有 —— 而主控派活读的是动作参数表，于是这个入口在编排层看不见。
-这一族钉四件事，每件都带能红的负控：
+这一族钉五件事，每件都带能红的负控：
 
 1. 声明面：动作面真的声明了 `providers`，形状是 array<string>，且没有把
    可用源名单（工具面那格的 enum）抄过来 —— 抄一份就是第二个要改的地方。
@@ -12,6 +12,9 @@
    （逐源成败 + 成本可读，形状与工具面同名读数一致）/ 点名了不认识的源
    （如实拒绝 + 给可用名单 + 零写入，绝不静默忽略）。
 4. 领取侧真的按请求行点名的源检索，不是只看角色级接线。
+5. 收尾面：动作声明里 `returns` 那一格的逐键清单与实现真正返回的键逐键相同
+   （题 20 选 A，2026-10-07 所有者裁定）—— 题 11 补完"完整透传"之后实现多返回了
+   `sources` / `cost`，而声明面没跟上，主控派的活读的就是那一格。
 
 全部离线、确定性：检索源是注入的替身，不联网。
 """
@@ -570,3 +573,73 @@ def test_the_dataclass_fields_are_appended_so_positional_construction_still_work
         "submitted_by", "claimed_by", "lease_until", "attempts", "result_lit_ids",
         "last_error", "outcome", "priority",
     ], names[:14]
+
+
+# --------------------------------------------------------------------------- 6. returns 收尾面
+
+
+def _declared_return_keys(spec) -> list[str]:
+    """动作声明里 `returns` 那一格"逐键：…"列出的键名（空 = 那一格没有逐键清单）。
+
+    为什么要机器读这一格：主控派活读的是动作声明表，不是实现源码 ——
+    声明写着返回某个键而实现不返回（或反过来），调用方就会照一个不存在的读数
+    做判断，而没有任何地方会响。题 20 选 A（2026-10-07 所有者裁定）的由头就是这个：
+    实现已经多返回了 `sources` / `cost`，声明面还停在四个键上。
+    """
+    text = str(getattr(spec, "returns", "") or "")
+    if "逐键：" not in text:
+        return []
+    body = text.split("逐键：", 1)[1].split("）", 1)[0]
+    return [k.strip() for k in body.split("/") if k.strip()]
+
+
+def _returns_mismatch(declared: list[str], actual: list[str]) -> list[str]:
+    """声明清单与实现键序的差异清单（空 = 逐键一致）。纯函数，正控与负控共用。"""
+    out: list[str] = []
+    missing = [k for k in actual if k not in declared]
+    extra = [k for k in declared if k not in actual]
+    if missing:
+        out.append(f"实现返回了但声明没写：{missing}")
+    if extra:
+        out.append(f"声明写了但实现不返回：{extra}")
+    if not missing and not extra and declared != actual:
+        out.append(f"键集相同而次序不同：声明 {declared} ≠ 实现 {actual}")
+    return out
+
+
+def test_the_declared_returns_are_the_keys_the_implementation_really_returns(store):
+    """正控：`A.search_literature` 的 `returns` 清单与实现那个 return 字典逐键相同。
+
+    走真实的成功路径取键（注入替身源，不联网），所以断言的不是"源码里出现过
+    这些字符串"，而是"这一次真的返回了这些键、且一个不多一个不少"。
+    """
+    spec = _spec()
+    a = _agent(store, _StubProvider("alpha", [_cand("Alpha paper", "10.1/alpha", "alpha")]))
+    out = a.search_literature(topic="abelian group", mode="topical")
+    assert out["outcome"] == "ok", out
+
+    declared = _declared_return_keys(spec)
+    assert declared, f"returns 那一格不再有逐键清单，机器读不到声明：{spec.returns!r}"
+    assert _returns_mismatch(declared, list(out)) == [], (
+        f"声明 {declared} 与实现 {list(out)} 分家"
+        f"（差异：{_returns_mismatch(declared, list(out))}）")
+    # 题 11 的那两个新读数必须在声明里（这一格就是题 20 的落点）
+    assert "sources" in declared and "cost" in declared, declared
+    # 反真空：清单不是"什么都有" —— 逐源读数与成本之外，老键也在
+    assert {"outcome", "result_lit_ids", "providers_requested"} <= set(declared), declared
+
+
+def test_the_returns_checker_catches_a_missing_or_extra_key():
+    """负控：声明漏一个键、多一个实现没有的键、或次序不同 ⇒ 同一个比较必须报出来。
+
+    没有这一条，"逐键相同"这句话可能只是恒真（比较器没牙）。三档各来一次 ——
+    漏键正是题 20 改前的形态（`sources` / `cost` 没写进声明）。
+    """
+    actual = ["ok", "sources", "cost"]
+    assert _returns_mismatch(actual, actual) == []
+    assert _returns_mismatch(["ok", "cost"], actual), "漏键没被抓住"
+    assert _returns_mismatch(["ok", "sources", "cost", "note"], actual), "多键没被抓住"
+    assert _returns_mismatch(["cost", "sources", "ok"], actual), "次序不同没被抓住"
+    # 改前那种声明（只有四个键）必须被报出来 —— 这就是这一件要修的那一格
+    old = ["request_id", "outcome", "result_lit_ids", "literature"]
+    assert _returns_mismatch(old, actual), "改前那一格没被报出来 ⇒ 判据在这形态上没牙"

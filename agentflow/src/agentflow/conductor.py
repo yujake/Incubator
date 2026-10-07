@@ -86,6 +86,44 @@ TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
 #: 标记必须在同一事务内可读，所以它落在行上而不是内存里。
 _SETTLED_MARK = "tokenmeter:settled"
 
+#: 标记"这一行是受理过的召唤"（写进 `tasks.inputs`，与 `running` 行同一个事务写下）。
+#:
+#: 为什么需要它（题 21 选 B，2026-10-07 所有者裁定）：扇出口径是"受理数，不是尝试数"
+#: （题 15 选 B），而区分"闸门拒掉、根本没跑"与"跑过又拒"的那条判据，上一轮的最小
+#: 修法挂在了 `_SETTLED_MARK` 上 —— 那是 `_charge_and_settle` 末尾 `_set_usage`
+#: 写的东西，属于"事后的记账写回"。它能炸：`_charge_and_settle` 刻意兜住记账异常
+#: （钱已经花了、活已经干完了，不许让它翻转一次完成的召唤），兜住之后这一行就缺
+#: `tokenmeter:settled` ⇒ 被 `_occupies_fanout_slot` 当成"没跑" ⇒ 扇出少算 1。
+#: 那个少算的方向是危险的：名额被少占，扇出上限就被悄悄放宽。
+#:
+#: 所以标记必须打在"受理那一刻"、且与 `running` 行同一笔事务落盘：只有走过
+#: `summon` 第 [5] 步（"写 running 行"）的召唤才带它 —— 闸门拒绝在写 running 行
+#: 之前就 `_refuse` 返回了（`_refuse` 的行 `inputs=[]`，连调用方给的输入都不带），
+#: 它拿不到这个标记。此后无论角色自己拒、记账写回炸、还是进程崩，标记都已经在盘上。
+#:
+#: 为什么落在 `inputs` 而不是给 `schema.Task` 加字段：与 `_SETTLED_MARK` 同一条理由
+#: （见 `_set_usage` 的说明）—— `inputs` 是既有的 `set` 类数组字段，加一个元素不改变
+#: 语义（它记的是"这次召唤与哪些东西打过交道"，受理标记正是其中之一），
+#: 也不需要动 `schema.py`（禁改区）。老行（这一版之前落盘的）没有这个元素，
+#: `_occupies_fanout_slot` 对它们退回读 `_SETTLED_MARK` —— 历史读数因此不变
+#: （见那个函数）。
+_ADMITTED_MARK = "conductor:admitted"
+
+
+def _admitted_inputs(params: Mapping[str, Any]) -> list[str]:
+    """`tasks.inputs` 的初值：调用方给的输入清单 + 受理标记。
+
+    受理标记必须与 `running` 行一起、在同一笔事务里写下去（调用点在 `summon` 第 [5] 步
+    的 row dict 里）—— 写在之后（无论写在哪一段收尾代码里）都会重新长出"收尾失败
+    ⇒ 标记丢失"这个缺陷。这里顺带按值去重：`inputs` 是 `set` 类字段，
+    重复元素是坏数据，而调用方可以自己传一个同名元素进来。
+    """
+    raw = params.get("inputs")
+    items: list[Any] = list(raw) if isinstance(raw, list) else []
+    if not any(str(x) == _ADMITTED_MARK for x in items):
+        items.append(_ADMITTED_MARK)
+    return items
+
 
 @dataclass
 class SummonResult:
@@ -417,23 +455,33 @@ def _occupies_fanout_slot(row: Mapping[str, Any]) -> bool:
     （那就是自我毒化的机器形态）；本趟主控只成功派了 3 件活（A 检索 / D 立题 /
     D 登记猜想），E 的实验永远进不去 ⇒ `experiments=0`、收工门两格红。
 
-    ## 判据为什么是"结算标记"而不是"拒绝理由"
+    ## 判据为什么是"受理标记"而不是"拒绝理由"，也不是"结算标记"
 
     拒绝理由是受控词表（`schema.REFUSAL_REASONS`），闸门与角色共用它：角色
     跑完之后自己拒绝也落 `invalid_params`（真机 `t-0006` 就是这一档，
     `_business_refusal_code` 把领域错误映到这个词上）。按理由过滤会把
-    "跑过又拒了"误判成"没跑"。区分二者的是这条事实：只有跑过的召唤才走
-    `summon` 末尾的记账写回（`_set_usage` 往 `inputs` 里打 `_SETTLED_MARK`），
-    而闸门拒绝在写 running 行之前就返回了。所以：
+    "跑过又拒了"误判成"没跑"。区分二者的是这条事实：只有走完第 [5] 步
+    （写 `running` 行）的召唤才带 `_ADMITTED_MARK`，而闸门拒绝在写 running 行
+    之前就返回了。所以：
 
-    - `outcome == "refused"` 且行上没有结算标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；
+    - `outcome == "refused"` 且行上没有受理标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；
     - 其余一切（`running` / `ok` / `failed` / `cancelled`、以及跑过又拒的）
       ⇒ 占名额。"跑了但失败"确实消耗了一次派活，必须仍然计入（有负控咬着：
       `tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
+
+    为什么不继续用 `_SETTLED_MARK`（题 21 选 B 改的就是这一处）：那是"事后"的
+    记账写回打的标记，而记账能炸、炸了之后那一行就缺标记 ⇒ "跑了又拒"被当成
+    "没跑" ⇒ 扇出少算（名额被少占，上限被悄悄放宽）。受理标记在受理那一刻
+    就落盘，与后续收尾的成败无关。判据见
+    `tests/test_fanout_admission.py::test_a_failed_charge_writeback_still_occupies_the_slot`。
+
+    老行（本题之前落盘的）没有受理标记：它们退回读 `_SETTLED_MARK` ——
+    历史台账里"跑过又拒"的行仍然算占名额，读数与这一版之前一致。
     """
     if row.get("outcome") != "refused":
         return True
-    return any(str(x) == _SETTLED_MARK for x in (row.get("inputs") or []))
+    marks = {str(x) for x in (row.get("inputs") or [])}
+    return _ADMITTED_MARK in marks or _SETTLED_MARK in marks
 
 
 class Conductor:
@@ -1424,7 +1472,11 @@ class Conductor:
             "detail": spec.summary, "error": None, "started_at": started, "ended_at": None,
             "tokens": 0, "usd": 0.0,
             "artifacts": [],
-            "inputs": list(params["inputs"]) if isinstance(params.get("inputs"), list) else [],
+            # `inputs` 的初值同时打上受理标记（题 21 选 B，2026-10-07 所有者裁定）：
+            # 它与 `status="running"` 这一行同一笔事务落盘，因此扇出判据
+            # （`_occupies_fanout_slot`）不再依赖后续任何一步（角色自己的拒绝、
+            # 记账写回、甚至崩溃）是否成功。理由与负控见 `_ADMITTED_MARK`。
+            "inputs": _admitted_inputs(params),
         }
         try:
             tid = self._write_new_row(row, note=f"start:{role}.{action}")

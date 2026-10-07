@@ -22,15 +22,26 @@
 
 ## 判据的三条纪律
 
-1. 前缀的唯一声明面是 `schema.CITATION_PREFIXES`：`verify.CITATION_KINDS`
-   与 `doc_tools._CITATION_TABLES` 都必须与它一致（改前它们是三处各写一份，
-   于是 `stmt:` 在一处认、另一处不认，而没有任何读数会响）。
+1. 前缀的唯一声明面是 `schema.CITATION_PREFIXES`，别处一律从它派生：
+   `verify.CITATION_KINDS` 是算出来的，`doc_tools._CITATION_TABLES` 也是。
+   ## 这一条口径的升级（题 18 选 A，2026-10-07 所有者裁定）
+
+   改前 `verify` 侧那一份是逐字重抄的第二份字面量，于是这条判据只能把两边钉成
+   "集合相等" —— 而"集合相等"对"两处各抄一份、恰好抄得一样"是恒真的：把 `stmt`
+   从两处同时删掉，判据照样绿。升级后它问的是"只有一处来源"：`verify` 的源码里
+   除了逐档分支那一侧的实现声明（`_BRANCH_KINDS`），不许再出现任何
+   "抄了一整份前缀"的字面量容器；而 `CITATION_KINDS` 的取值必须真的引用声明面。
+   判据只加不松：原来那条集合相等仍然在里面（现在是等式，连次序都钉住）。
 2. 负控打在"目标不存在必须拒绝"与"污染面真的能顺着 claim 找到命题"上 ——
    不是"跑通了"。
 3. 反真空：新增的读数不许恒为空（把 `stmt:` 引用从夹具里去掉之后，
    同一格必须变成 0，而"扫到多少条断言"那一格不许跟着变成 0）。
 """
 from __future__ import annotations
+
+import ast
+import re
+from pathlib import Path
 
 import pytest
 
@@ -115,13 +126,100 @@ class _UnreadableStore:
 # ============================================================ 声明面：一处真身，三处一致
 
 
-def test_the_citation_prefix_registry_is_the_single_source():
-    """前缀声明面：`schema.CITATION_PREFIXES` 是唯一真身，另外两处必须与它一致。
+# ---------------------------------------------------------------- 源码形态：只有一处来源
 
-    改前这三处各写一份（`verify.CITATION_KINDS` 一张元组、`doc_tools._CITATION_TABLES`
+
+def _verify_source() -> str:
+    """`verify.py` 的源码（判据要读的是它的源码形态，不只是运行期取值）。"""
+    return Path(V.__file__).read_text(encoding="utf-8")
+
+
+def _assigned_value(tree: ast.AST, name: str) -> ast.expr | None:
+    """模块里 `name = ...` / `name: T = ...` 的右值（最后一处赋值）。"""
+    found: ast.expr | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) and node.targets[0].id == name:
+            found = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
+                and node.target.id == name:
+            found = node.value
+    return found
+
+
+def _container_strings(value: ast.expr) -> tuple[str, ...] | None:
+    """字面量容器里的全部字符串元素（不是字符串容器就返回 None）。
+
+    `dict` 按它的键读：`{"rel": ...}` 这种"前缀 -> 某物"的表也算一份清单。
+    """
+    if isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+        if not all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in value.elts):
+            return None
+        return tuple(e.value for e in value.elts)
+    if isinstance(value, ast.Dict):
+        if not all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in value.keys):
+            return None
+        return tuple(k.value for k in value.keys)
+    return None
+
+
+def _prefix_literal_collections(tree: ast.AST) -> list[tuple[str, tuple[str, ...]]]:
+    """`verify.py` 里"抄了一整份前缀"的字面量赋值（`(名字, 元素)` 列表）。
+
+    判据的形态为什么是 AST 而不是"文本里搜 rel"：逐档判据本身是
+    `elif kind == "rel" and ...` 这样一档一档写的，那些单字符串字面量是实现、
+    不是清单；要被抓住的是"一个容器里装着若干个前缀"这种第二份抄件。
+    所以这里只走赋值的右值（任何名字、任何作用域），且要求元素全部落在声明面里、
+    去重后至少两个 —— 于是"换个变量名再抄一份"也会被抓住。
+    """
+    prefixes = set(S.CITATION_PREFIXES)
+    out: list[tuple[str, tuple[str, ...]]] = []
+    for node in ast.walk(tree):
+        target: str | None = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name):
+            target = node.targets[0].id
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            target = node.target.id
+        if target is None:
+            continue
+        elems = _container_strings(node.value)
+        if elems and len(set(elems)) >= 2 and set(elems) <= prefixes:
+            out.append((target, elems))
+    return out
+
+
+def _single_source_problems(tree: ast.AST) -> list[str]:
+    """`verify.py` 是否只从声明面取前缀（空 = 是）。正控与负控走同一段逻辑。"""
+    out: list[str] = []
+    copies = sorted(name for name, _ in _prefix_literal_collections(tree))
+    if "CITATION_KINDS" in copies:
+        out.append("CITATION_KINDS 又被写成了字面量容器 ⇒ verify 里出现了第二份前缀清单")
+    if copies != ["_BRANCH_KINDS"]:
+        out.append("抄了一整份前缀的赋值应当只有 _BRANCH_KINDS（逐档分支那一侧），"
+                   f"实际是 {copies}")
+    value = _assigned_value(tree, "CITATION_KINDS")
+    if value is None:
+        out.append("找不到 CITATION_KINDS 的赋值")
+    elif "CITATION_PREFIXES" not in ast.unparse(value):
+        out.append(f"CITATION_KINDS 的取值 {ast.unparse(value)!r} 没有引用声明面 "
+                   "schema.CITATION_PREFIXES ⇒ 它可能又是一份抄件")
+    return out
+
+
+def test_the_citation_prefix_registry_is_the_single_source():
+    """前缀声明面：`schema.CITATION_PREFIXES` 是唯一真身，别处一律从它派生。
+
+    改前是几处各写一份（`verify.CITATION_KINDS` 一张元组、`doc_tools._CITATION_TABLES`
     一张 dict、`gates.gate_g2` 内联的四个前缀），于是 `stmt:` 在 `verify`/`doc_tools`
     侧已经被认（`R-03` 那次代改），而 G2 仍报"不在可解析的种类里"、`closing` 仍说
     "判不了" —— 同一个字符串四个结论，没有任何读数会响。
+
+    ## 口径（题 18 选 A 之后）：不是"两边相等"，是"只有一处来源"
+
+    只断言集合相等，对"两处各抄一份、恰好抄得一样"是恒真的。现在钉三件事：
+    `verify.CITATION_KINDS` 与声明面逐字相等（含次序）、它的取值真的引用声明面、
+    以及 `verify.py` 源码里除了逐档分支那一侧的 `_BRANCH_KINDS` 再无第二份清单。
 
     反真空：这张表必须真的指向 `TABLES` 里存在的表（否则"一致"可以靠两边都错来达成），
     且 `stmt` 那一格必须在（它是 `draft/68` 题 1 的落点）。
@@ -133,15 +231,77 @@ def test_the_citation_prefix_registry_is_the_single_source():
         assert S.TABLES[table]["id_field"], f"{table} 没有 id_field ⇒ 谁也核不了它的存在性"
         assert S.citation_prefix_table(prefix) == table, prefix
     assert S.citation_prefix_table("zzz") is None, "不认识的前缀必须是 None（不是猜一张表）"
-    # 三处一致（改一处不改另一处 ⇒ 这一条红）
-    assert set(S.CITATION_PREFIXES) == set(V.CITATION_KINDS), (
-        f"声明面 {sorted(S.CITATION_PREFIXES)} 与 verify.CITATION_KINDS "
-        f"{sorted(V.CITATION_KINDS)} 分家 ⇒ 写入期与审计期会对同一个前缀给出两个结论")
+    # 派生值：与声明面逐字相等（改前只钉集合，次序漂了看不出来）
+    assert V.CITATION_KINDS == tuple(S.CITATION_PREFIXES), (
+        f"verify.CITATION_KINDS={V.CITATION_KINDS} 不是声明面 "
+        f"{tuple(S.CITATION_PREFIXES)} 的派生值 ⇒ 写入期与审计期会对同一个前缀给出"
+        "两个结论（或同一条拒绝消息给出两种词表次序）")
+    # 只有一处来源：源码形态上不许再有第二份前缀清单
+    assert _single_source_problems(ast.parse(_verify_source())) == [], (
+        "verify.py 里出现了第二份前缀清单 ⇒ 声明面不再是唯一来源"
+        f"（源码检查结果：{_single_source_problems(ast.parse(_verify_source()))}）")
     assert dict(S.CITATION_PREFIXES) == DT._CITATION_TABLES, (
         f"声明面 {S.CITATION_PREFIXES} 与 doc_tools._CITATION_TABLES "
         f"{DT._CITATION_TABLES} 分家（前者是真身，后者是派生）")
     assert set(S.CITATION_PREFIXES) <= set(_citation_kinds_g2_uses()), (
         "G2 的可解析前缀不是从声明面派生的 ⇒ `stmt:` 会在写入期合法、在这道门上被报")
+
+
+def test_the_two_tool_facing_faces_list_every_prefix():
+    """工具面那两处面向模型的声明必须列全前缀，且两处都从声明面派生。
+
+    题 19 选 A（2026-10-07 所有者裁定）：改前工具 `doc.build_document` 的 JSON
+    schema 里 `citations` 那一格的描述只举 `lit:` / `stmt:` / `doc:`，而渲染出来的
+    "0. 阅读须知"第 1 条只举 `rel:` / `lit:` / `exp:` —— 两处各缺一半，模型照着
+    任一处去写都看不到另外几个前缀合法（`stmt:` 缺席时"引我们自己的命题"这条写法
+    在声明面上根本不可见），而没有任何读数会响。
+
+    反真空：两处都断言，且断言的是"每个前缀都在"（按名字逐个核，不是"有一处列了
+    就算"），也不许出现声明面没有的前缀（那是第三份手抄清单的形态）。
+    """
+    examples = DT.citation_prefix_examples()
+    for prefix in S.CITATION_PREFIXES:
+        assert f"`{prefix}:" in examples, (prefix, examples)
+
+    # 面①：工具 `doc.build_document` 的 JSON schema（模型调这个工具时读的声明）
+    spec = DT._doc_build_document.__tool_spec__
+    desc = spec.params["properties"]["claims"]["items"]["properties"]["citations"]["description"]
+    assert examples in desc, ("工具 JSON schema 的 citations 描述没列全前缀（题 19）", desc)
+    assert _prefixes_named_in(desc) == set(S.CITATION_PREFIXES), desc
+
+    # 面②：渲染出来的稿件"0. 阅读须知"第 1 条（读者看到的说明）
+    text = DT.render_markdown({"doc_id": "0001", "kind": "paper", "title": "t",
+                               "status": "draft", "claims": []})
+    rules = [ln for ln in text.splitlines() if "每条断言都带引用" in ln]
+    assert len(rules) == 1, ("阅读须知第 1 条不见了（题 19 的另一半落点）", rules)
+    assert examples in rules[0], ("渲染说明没列全前缀（题 19）", rules[0])
+    assert _prefixes_named_in(rules[0]) == set(S.CITATION_PREFIXES), rules[0]
+
+
+def _prefixes_named_in(text: str) -> set[str]:
+    """一段声明文字里以 `` `前缀: `` 形态点到的前缀集合。"""
+    return set(re.findall(r"`([a-z]+):", text))
+
+
+def test_the_single_source_checker_catches_a_second_literal_copy():
+    """负控：把 `CITATION_KINDS` 换回字面量抄件 ⇒ 同一个检查必须报出来。
+
+    没有这一条，"只有一处来源"这句话可能只是恒真（检查器没牙）：改前那种形态
+    （`CITATION_KINDS = ("rel", "lit", "exp", "eval", "doc", "stmt")`）必须被抓住，
+    而改后的真实源码必须干净。注入用源码替换，盘上的文件一个字节都不动。
+    """
+    src = _verify_source()
+    assert _single_source_problems(ast.parse(src)) == [], "改后的真实源码应当干净"
+    assert [n for n, _ in _prefix_literal_collections(ast.parse(src))] == ["_BRANCH_KINDS"], \
+        "逐档分支那一侧的实现声明（`_BRANCH_KINDS`）不见了 ⇒ 判据的锚点变了"
+
+    anchor = "CITATION_KINDS: tuple[str, ...] = tuple(S.CITATION_PREFIXES)"
+    assert anchor in src, "负控锚点不在源码里（那一行的写法变了）⇒ 这条负控没生效"
+    bad = src.replace(anchor, 'CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", '
+                              '"eval", "doc", "stmt")')
+    problems = _single_source_problems(ast.parse(bad))
+    assert problems, "第二份字面量抄件没被报出来 —— 上面那条判据在这个形态上没有牙"
+    assert any("CITATION_KINDS" in p for p in problems), problems
 
 
 def _citation_kinds_g2_uses() -> tuple[str, ...]:

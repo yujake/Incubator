@@ -333,6 +333,24 @@ def _finding_kind_of(issue: "CA.ClaimIssue") -> str:
 # 于是 `stmt:` 加进一处之后其余两处各自自洽 —— "写入期认、审计期不认"没有任何读数会响。
 _CITATION_TABLES: dict[str, str] = dict(S.CITATION_PREFIXES)
 
+
+def citation_prefix_examples() -> str:
+    """引用前缀的用法示例串（`rel:<id>` / `lit:<id>` / …），按声明面的次序生成。
+
+    唯一来源是 `_CITATION_TABLES`（= `schema.CITATION_PREFIXES`）：这一串出现在
+    两处面向模型与读者的声明面上 —— 工具 `doc.build_document` 的 JSON schema 里
+    `claims[].citations` 那一格的 `description`，以及渲染出来的稿件"0. 阅读须知"
+    的第 1 条。两处各写一份的后果实测过（题 19，2026-10-07 所有者裁定 A）：
+
+    - 工具面那一格只举了 `lit:` / `stmt:` / `doc:`；
+    - 渲染说明只举了 `rel:` / `lit:` / `exp:`。
+
+    一个模型照着其中任一处去写，都看不到另外几个前缀是合法的（`stmt:` 缺席时
+    "引我们自己的命题"这条写法根本不可见），而没有任何读数会响。所以两处都改成
+    从声明面派生：这里按 `_CITATION_TABLES` 的次序逐个生成，改口径只有一处可改。
+    """
+    return " / ".join(f"`{prefix}:<id>`" for prefix in _CITATION_TABLES)
+
 # `doc:` 是唯一不能只靠下面那条通用存在性检查的一档：通用检查只比 `ref`，而
 # `citation_ref_parts` 把 `#` 之后切掉了 ⇒ 那样只会核"稿件在不在"，断言与哈希
 # 都不看，于是过期哈希会被静默接受（比"错误拒收"更坏）。所以 `doc:` 单独走
@@ -1009,7 +1027,8 @@ def render_markdown(
     # ---- 0. 阅读须知
     lines.append("## 0. 阅读须知")
     lines.append("")
-    lines.append("1. **每条断言都带引用**（`citations`，形如 `rel:0007` / `lit:0003#p.4` / `exp:0002`）。")
+    lines.append("1. **每条断言都带引用**（`citations`，形如 "
+                 + citation_prefix_examples() + "）。")
     lines.append("   没有引用的断言在结构上无法进入本稿（`schema.Document.validate` 强制）。")
     lines.append("2. 证据等级只有三档，且**必须分列**：`proof`（形式化检查器核验）、")
     lines.append(f"   `cross_check`（数值/穷举交叉验证）、`heuristic`（启发式）。")
@@ -1748,8 +1767,12 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
                         # 而 G 自己的闸门（`claimanatomy.scan_claim`）会报出带 claim_id 的那句。
                         # 要求写在描述里（模型看得见），强制留在能给出可读回执的那一层。
                         "citations": {"type": "array", "items": {"type": "string"},
-                                      "description": ("必须非空（FC-02）：`lit:<id>` / `stmt:<id>` / "
-                                                      "`doc:<id>#<claim>` 这类可回查的引用。"
+                                      "description": ("必须非空（FC-02）："
+                                                      + citation_prefix_examples()
+                                                      + " 这类可回查的引用（前缀的全部"
+                                                      "取值见 `schema.CITATION_PREFIXES`；"
+                                                      "`doc:` 那一档还要带 "
+                                                      "`#<断言>@<内容哈希前 16 位>`）。"
                                                       "没有引用的断言不许进稿件")},
                         "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS),
                                           "description": ("证据等级：proof / cross_check / heuristic。"
