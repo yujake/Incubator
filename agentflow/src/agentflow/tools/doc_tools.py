@@ -347,8 +347,10 @@ _CITATION_TABLES: dict[str, str] = {
     # 注意：`doc:` 不能只靠下面那条通用存在性检查 —— 它只比 `ref`，而
     # `citation_ref_parts` 把 `#` 之后切掉了 ⇒ 那样只会核"稿件在不在"，
     # 断言与哈希都不看，于是过期哈希会被静默接受（比"错误拒收"更坏）。
-    # 所以 `doc:` 走 `_doc_citation_problem` 的三段检查（与 `verify.py:923-961` 同口径；
-    # 解析与哈希都复用 `signatures` 那一份实现，不另写一份）。
+    # 所以 `doc:` 走 `_doc_citation_problem` 的三段检查：三段判据的唯一实现是
+    # `signatures.doc_ref_verdict`（题 5/5a —— 写入期与审计期原先各有一份，
+    # 靠"与 `verify.py:923-961` 同口径"这句注释对齐；那句注释连同行号已经作废，
+    # 现在两侧调的是同一个函数，改口径只有一处可改）。
     "doc": "documents",
 }
 
@@ -400,33 +402,30 @@ def citation_ref_parts(citation: Any) -> tuple[str, str]:
 def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[str, Any]]]) -> str:
     """`doc:` 内部引用的三段检查（空串 = 通过）。
 
-    三段都要真（与 `verify.py:923-961` 同口径）：稿件在、那条断言在、
-    钉的哈希就是目标稿件当前这一版。为什么不能只核第一段：第三段是"引用钉的是哪一版"，
-    改稿之后旧引用必须失效 —— 只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，
-    而那正是 `draft/30` §T4-A 设计这三段要防的事。
+    三段都要真（稿件在、那条断言在、钉的哈希就是目标稿件当前这一版）。
+    唯一实现在 `agentflow.signatures.doc_ref_verdict`（题 5/5a 把写入期与审计期
+    原先各一份的三段逻辑合成了一份：两份各判一次时，漂了没有任何地方会报）。
 
-    解析与哈希都复用 `signatures`（`P-5` 的纪律：口径只留一处实现），本函数只做
-    "把三段结论翻成一句人话"。
+    本函数只做两件事：把"查稿件"的能力递给那一份实现，再把判定码翻成一句人话。
+    它不再自己解析、不再自己算哈希 —— 那样就等于又长出一份三段逻辑。
+    为什么不能只核第一段：第三段是"引用钉的是哪一版"，改稿之后旧引用必须失效 ——
+    只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，
+    而那正是 `draft/30` §T4-A 设计这三段要防的事。
     """
     from .. import signatures as SIG  # 惰性：与 `:1390` 同一处依赖，不新增模块级边
 
-    parts = SIG.parse_doc_ref(raw)
-    if parts is None:
+    verdict = SIG.doc_ref_verdict(raw, lambda did: next(
+        (r for r in rows_of("documents") if str(r.get("doc_id")) == str(did)), None))
+    if verdict.code == SIG.DOC_REF_BAD_SHAPE:
         return (f"内部引用形状不对：应为 "
                 f"doc:<稿件>#<断言>@<内容哈希前 {SIG.REF_HASH_LEN} 位>")
-    tdoc_id, tclaim_id, thash = parts
-    doc = next((r for r in rows_of("documents")
-                if str(r.get("doc_id")) == str(tdoc_id)), None)
-    if doc is None:
-        return f"documents 表里没有 doc_id={tdoc_id!r}"
-    claims = {str(cl.get("claim_id")) for cl in (doc.get("claims") or [])
-              if isinstance(cl, Mapping)}
-    if str(tclaim_id) not in claims:
-        return f"稿件 {tdoc_id} 里没有断言 {tclaim_id!r}"
-    cur = SIG.content_sha256_of(doc)[:SIG.REF_HASH_LEN]
-    if str(thash) != cur:
-        return (f"钉的是 {thash}，而稿件 {tdoc_id} 当前内容是 {cur} ⇒ "
-                "改稿之后旧引用失效（不许静默沿用）")
+    if verdict.code == SIG.DOC_REF_NO_DOC:
+        return f"documents 表里没有 doc_id={verdict.doc_id!r}"
+    if verdict.code == SIG.DOC_REF_NO_CLAIM:
+        return f"稿件 {verdict.doc_id} 里没有断言 {verdict.claim_id!r}"
+    if verdict.code == SIG.DOC_REF_STALE:
+        return (f"钉的是 {verdict.pinned_hash}，而稿件 {verdict.doc_id} 当前内容是 "
+                f"{verdict.current_hash} ⇒ 改稿之后旧引用失效（不许静默沿用）")
     return ""
 
 
