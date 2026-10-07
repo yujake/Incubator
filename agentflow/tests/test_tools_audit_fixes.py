@@ -400,16 +400,47 @@ def test_build_document_refuses_dangling_citation_and_writes_nothing(store: Stor
         ("lit:9999", "literature"),
         ("exp:9999", "experiments"),
         ("eval:9999", "eval_results"),
-        ("谁也不知道:1", "无法识别"),
     ],
 )
 def test_build_document_checks_every_citation_kind(store: Store, citation: str, table_word: str):
-    """四张表都要核；前缀不认识也 fail-closed（"没法核对存在性"不等于"存在"）。"""
+    """四张表都要核（"代号不存在"这一档 fail-closed）。"""
     reg = registry_for(DT, store, workspace_root=store.root)
     claims = [DT.compose_claim("x", citations=[citation], evidence_kind="heuristic", section="s")]
     res = _build(reg, claims)
     assert res.ok is False and res.meta.get("kind") == "dangling_citation"
     assert table_word in res.meta["missing"][0]["why"]
+    assert store.rows("documents") == []
+
+
+def test_an_unknown_citation_prefix_is_refused_at_construction_time(store: Store):
+    """前缀不认识这一档：拒的落点从 `check_citations` 前移到构造期（仍然是 fail-closed）。
+
+    改前这一档只有 `check_citations` 报（`missing[0]["why"]` 里写"无法识别"），
+    而 `claimanatomy` 对 citations 只查"非空 / 非空串" ⇒ H 那一侧（它不经
+    `check_citations`，因为没有 store 可读）看不见"这个前缀根本没法核"。
+    `draft/68` 题 1（2026-10-07 所有者裁定 A，本次改动由所有者授权、主控代改）
+    把前缀判据落进 `claimanatomy`（唯一入口，G 与 H 共用）⇒ `compose_claim` 当场抛。
+
+    所以这条判据的口径跟着改（改的理由就是上面这一段，不是为了让红灯变绿）：
+    从「`_build` 回 `dangling_citation`」改成「构造期就抛，且拒信点名那个前缀」。
+    要守的东西一个字没变：前缀不认识不许静默放过，且盘上什么都不许写。
+    """
+    with pytest.raises(ValueError, match="bad_citation_prefix"):
+        DT.compose_claim("x", citations=["谁也不知道:1"], evidence_kind="heuristic", section="s")
+    assert store.rows("documents") == []
+
+
+def test_a_bare_number_citation_is_refused_at_construction_time(store: Store):
+    """裸号（`0004`）同理：构造期拒，且拒信教作者写成带前缀的形态。
+
+    改前裸号由 `check_citations` 报（它刻意与"未知前缀"分开报，`R-03` 的三态），
+    现在两档都在构造期被拦，但拒信仍然要分开（未知前缀要人确认词表、
+    裸号只要写对形态），所以这里逐字钉住裸号那一句里给出的两种写法。
+    """
+    with pytest.raises(ValueError) as exc:
+        DT.compose_claim("x", citations=["0004"], evidence_kind="heuristic", section="s")
+    msg = str(exc.value)
+    assert "是裸号" in msg and "stmt:0004" in msg and "lit:0004" in msg, msg
     assert store.rows("documents") == []
 
 

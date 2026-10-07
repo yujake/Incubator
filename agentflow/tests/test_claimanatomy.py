@@ -721,11 +721,18 @@ def test_ledger_columns_do_not_soften_the_unknown_key_check():
     assert spec.error_count == 0, "未声明的键是 warning（不许升级成 error 把红灯长亮）"
 
 
-# ------------------------------------------- EE-06 与 `evidencebits` 的「单一来源」（`R3`）
+# ------------------------------------------- 六张断言词表的「单一来源」（`EE-06` / 题 2-B）
 
-#: 五张断言词表（它们各自的取值域由 `CLAIM_FIELDS[...].domain` 承载）。
+#: 六张断言语义词表（它们各自的取值域由 `CLAIM_FIELDS[...].domain` 承载）。
+#: 含 `NUMERIC_EVIDENCE_KEYS`：它不是"枚举域"而是"四元组的键名表"，但它与
+#: 其余五张一样是"真身在 `schema.py`、本模块只 import"的受控词表。
 _VOCABS = ("CLAIM_KINDS", "CLAIM_STATUSES", "ALLOWED_USE_KINDS",
-           "CLAIM_SOURCE_KINDS", "CLAIM_CHECK_KINDS")
+           "NUMERIC_EVIDENCE_KEYS", "CLAIM_SOURCE_KINDS", "CLAIM_CHECK_KINDS")
+
+#: 真身所在的模块（相对 `claimanatomy` 所在包的路径）。
+#: 2026-10-07 所有者裁定 `draft/68` 题 2 选 B（把真身搬进 `schema.py`，
+#: 本次由所有者授权、主控代改）⇒ 判据从"不许搬"改成"只许在 `schema.py` 有一处"。
+_VOCAB_HOME = "schema.py"
 
 
 def _tree_sources() -> dict[str, str]:
@@ -739,7 +746,9 @@ def _vocabulary_definitions(sources: Mapping[str, str]) -> dict[str, list[str]]:
     """每个词表名在给定源码集合里的「模块级定义处」（口径：`Assign`/`AnnAssign` 的目标名）。
 
     只数定义（模块级赋值目标名），不数引用 —— `tools/doc_tools.py` 的
-    `list(CA.CLAIM_KINDS)` 是对同一份词表的引用，它不该被算成第二处定义。
+    `list(CA.CLAIM_KINDS)` 是对同一份词表的引用，它不该被算成第二处定义；
+    `claimanatomy.py` 里的 `from .schema import CLAIM_KINDS` 是 `ImportFrom`，
+    同样不是定义（否则"搬家"与"留副本"在读法上就分不开了）。
     """
     out: dict[str, list[str]] = {name: [] for name in _VOCABS}
     for rel, text in sources.items():
@@ -772,27 +781,44 @@ def _inline_domain_problem(sources: Mapping[str, str]) -> list[str]:
     return out
 
 
-def test_the_five_claim_vocabularies_have_exactly_one_definition():
-    """`EE-06` ①：五张词表各只有一处定义，且工具侧的取值域是引用而不是副本。
+def test_the_six_claim_vocabularies_have_exactly_one_definition_in_schema():
+    """`EE-06` ①：六张词表各只有一处定义，且那一处在 `schema.py`，工具侧只引用不内联。
 
-    这条守的是 `EE-06` 的原意（"取值域校验存在、且只有一份"）：五张词表各自只在
-    `claimanatomy.py` 定义一次，而 `validate_claim` 靠 `CLAIM_FIELDS[...].domain`
-    间接强制它们 —— 所以"把词表搬进 `schema.py`"既非必要、也会造出第二份。
+    这条守的是 `EE-06` 的原意（"取值域校验存在、且只有一份"）加 2026-10-07 的裁定
+    `draft/68` 题 2 选 B（真身搬进 `schema.py`，本次由所有者授权、主控代改）：
+    判据从"不许有第二份"升级成"只有一份、且那一份在 `schema.py`" ——
+    搬回去一半（在 `claimanatomy` 里再写一份同值字面量）会同时踩两条。
 
-    负控（同一条里，两半都验）：① 往源码集合里塞一份词表副本 ⇒ 同一个读法必须报出 2 处；
-    ② 把 `doc_tools` 的 `list(CA.X)` 换成内联字面量 ⇒ `_inline_domain_problem` 必须报出来。
+    为什么"位置"也值得判：同值但不共用的两份拷贝在改名、加值、删值时会静默漂移
+    （`CAM` 那族缺陷的形态），而两侧各自自洽、没有任何东西会红。位置 + 唯一性
+    一起判，才等价于"两边读的是同一份"。
+
+    负控（同一条里，三半都验）：① 往源码集合里塞一份词表副本 ⇒ 同一个读法必须报出 2 处；
+    ② 把 `doc_tools` 的 `list(CA.X)` 换成内联字面量 ⇒ `_inline_domain_problem` 必须报出来；
+    ③ 把定义处从 `schema.py` 挪到别的文件 ⇒ `_VOCAB_HOME` 那一半必须报出来。
     """
     sources = _tree_sources()
+    # 反真空：扫描器真的读到了整棵包（读不到时下面每一格都会"恰好一处"缺席，
+    # 而不是恰好一处 —— 但把下限写出来，这条判据就不会因为"扫了个空树"而变绿）
+    assert len(sources) >= 50, f"只扫到 {len(sources)} 个源文件 ⇒ 扫描器没接上"
+    assert "schema.py" in sources and "claimanatomy.py" in sources, sorted(sources)[:5]
+
     copies = _vocabulary_definitions(sources)
     bad = {n: v for n, v in copies.items() if len(v) != 1}
-    assert not bad, f"这些词表不是「只有一处定义」（`EE-06` 要防的就是第二份）：{bad}"
+    assert not bad, f"这些词表不是「只有一处定义」（要防的就是第二份）：{bad}"
+    homeless = {n: v for n, v in copies.items() if not v[0].startswith(_VOCAB_HOME + ":")}
+    assert not homeless, (
+        f"这些词表的唯一一处定义不在 `{_VOCAB_HOME}`：{homeless}；"
+        "真身按 2026-10-07 裁定（`draft/68` 题 2 选 B）在 `schema.py`")
     problem = _inline_domain_problem(sources)
     assert not problem, "；".join(problem)
 
-    # 反负控①：造一份词表副本 ⇒ 必须红
-    doctored = dict(sources)
-    doctored["_probe_copy.py"] = "CLAIM_KINDS = ('定义', '定理')\n"
-    assert len(_vocabulary_definitions(doctored)["CLAIM_KINDS"]) == 2, "反负控失效：副本没被读出来"
+    # 反负控①：造一份词表副本 ⇒ 必须红（逐张都试，不只第一张）
+    for name in _VOCABS:
+        doctored = dict(sources)
+        doctored["_probe_copy.py"] = f"{name} = ('探针',)\n"
+        assert len(_vocabulary_definitions(doctored)[name]) == 2, (
+            f"反负控失效：{name} 的副本没被读出来")
 
     # 反负控②：把引用换成内联字面量 ⇒ 必须红
     doc = sources["tools/doc_tools.py"]
@@ -801,6 +827,51 @@ def test_the_five_claim_vocabularies_have_exactly_one_definition():
     assert inline != doc, "反负控没改到 `doc_tools` 那处引用"
     assert _inline_domain_problem({**sources, "tools/doc_tools.py": inline}), (
         "把引用换成内联字面量之后判据一声不吭 ⇒ 它是真空的")
+
+    # 反负控③：把真身挪出 `schema.py`（模拟"搬回去一半"）⇒ 位置那一半必须红
+    moved = {k: v for k, v in sources.items() if k != _VOCAB_HOME}
+    moved[_VOCAB_HOME] = "\n".join(
+        line for line in sources[_VOCAB_HOME].splitlines()
+        if not any(line.startswith(f"{n} =") or line.startswith(f"{n}: tuple")
+                   for n in _VOCABS))
+    moved["claimanatomy.py"] = sources["claimanatomy.py"] + "\nCLAIM_KINDS = ('定义',)\n"
+    back = _vocabulary_definitions(moved)
+    homeless_back = {n: v for n, v in back.items()
+                     if not v or not v[0].startswith(_VOCAB_HOME + ":")}
+    assert homeless_back, (
+        "反负控失效：把真身挪出 `schema.py`（并在 `claimanatomy` 里放回一份局部定义）之后，"
+        "位置判据一声不吭")
+
+
+def test_schema_and_claimanatomy_read_the_same_vocabulary_objects():
+    """`EE-06` ②：搬完之后两边读到的是同一份（值相等，且 `is` 同一个对象）。
+
+    为什么"相等"不够：两张同值的中文词表可以各自被改一格而另一方不知道 ——
+    `CLAIM_FIELDS[*].domain` 走 `claimanatomy`、将来的读侧可能走 `schema`，
+    两边给出不同取值域就是 FC-03 的形态，而它们"值相等"时这个风险照样存在。
+    `is` 把"同一份"变成可机械判的事实（`DEVELOPMENT.md` §3 纪律 2 的原型：
+    `tools.ROLES is schema.ROLES`）。
+
+    负控：把 `claimanatomy` 侧换成同值但新造的一个 tuple ⇒ 值那一半仍过、
+    `is` 那一半必须红（这一条就是"同值拷贝"与"同一份"的分界线）。
+    """
+    from agentflow import schema as S
+
+    assert S is not CA, "夹具前提：两者不是同一个模块"
+    for name in _VOCABS:
+        mine, theirs = getattr(CA, name), getattr(S, name)
+        assert mine == theirs, f"{name}：两边值不等（{mine!r} != {theirs!r}）"
+        assert mine is theirs, (
+            f"{name}：两边只是值相等、不是同一个对象 ⇒ 存在第二份拷贝，"
+            "改一格不会有任何东西响（`is` 是这条判据的全部要点）")
+
+    # 负控：同值拷贝 ⇒ 值那一半过、`is` 那一半红。
+    # 用 `tuple(list(...))` 造一个新元组（`tuple(元组)` 会原样返回同一个对象，
+    # 那种写法做不出"同值但不同对象"的样本）。
+    probe = tuple(list(CA.CLAIM_KINDS))
+    assert probe == S.CLAIM_KINDS and probe is not S.CLAIM_KINDS, (
+        "反负控前提不成立：同值拷贝本该是另一个对象")
+    assert not (probe is S.CLAIM_KINDS), "同值拷贝与同一份必须分得开"
 
 
 def test_the_bits_shape_judge_has_exactly_one_definition():

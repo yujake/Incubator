@@ -200,14 +200,21 @@ def test_the_pollution_scope_limit_is_stated_in_the_readings(tmp_path):
     assert "derived_from" in scope and "断言级" in scope, scope
 
 
-# ==================================================== R5-组 4：断言级判不了 + 命题层三态
+# ==================================================== R5-组 4 + `draft/68` 题 1：两层污染面
 
-#: 边界那句话必须逐字出现在读数里（改这句话 = 改口径，判据在这里守着）。
+#: 残余边界那句话必须逐字出现在读数里（改这句话 = 改口径，判据在这里守着）。
 #: 与 `closing.POLLUTION_SCOPE_BOUNDARY` 逐字一致：判据侧刻意不 import 那个常量，
 #: 否则"把常量改成空串"就能让判据跟着一起变绿。
+#:
+#: 改前这句是"断言级污染面判不了：`documents.claims[].citations` 只认
+#: `lit:`/`exp:`/`rel:`，没有引用命题的形式"。2026-10-07 所有者裁定 `draft/68`
+#: 题 1 选 A（本次改动由所有者授权、主控代改）之后，`citations` 认 `stmt:<命题号>`
+#: ⇒ 那句话不再成立，判据必须跟着改成新的（缩小后的）边界 —— 保留"判不了"
+#: 的旧句会让这条判据与实现相反，而它守的本来是"边界必须说出来"。
 POLLUTION_BOUNDARY_SENTENCE = (
-    "断言级污染面判不了：`documents.claims[].citations` 只认 `lit:`/`exp:`/`rel:`，"
-    "没有引用命题的形式")
+    "断言级污染面只覆盖显式写了 `stmt:<命题号>` 的引用："
+    "`documents.claims[].citations` 里没带 `stmt:` 前缀的引用指不到任何命题，"
+    "它对命题层不可见")
 
 
 def _boundary_missing(text: str) -> bool:
@@ -216,12 +223,13 @@ def _boundary_missing(text: str) -> bool:
 
 
 def test_the_assertion_level_boundary_is_verbatim_in_the_readings(tmp_path):
-    """B 方案：断言级污染面今天判不了 —— 这句话必须在读数里逐字出现。
+    """断言级污染面的残余边界必须逐字出现在读数里（边界缩小了，不是消失了）。
 
-    `citations` 只认 `lit:`/`exp:`/`rel:` 三种前缀，没有"引用命题"的形式，
-    所以"哪几条正文断言压在这条命题上"在数据面上无解。补法（加 `stmt:` 前缀）
-    属字段取舍、且要动 `schema.py` ⇒ 留给人裁；在此之前不许沉默，
-    也不许为了让"断言级"看起来有覆盖而去放宽前缀解析（那会把幻觉引文放进来）。
+    `citations` 现在认 `stmt:<命题号>`（`draft/68` 题 1），所以"哪几条正文断言压在
+    这条命题上"判得了；仍然判不了的是没写 `stmt:` 的引用（裸号、或别的表的
+    前缀）—— 它们指不到任何命题。这句话必须照样说出来：边界可见 ≠ 边界消失，
+    而"没写前缀的引用看不见"这件事一旦沉默，读的人会把"这一层没有断言压着"
+    读成"稿件里确实没有相关断言"。
     """
     st = _store(tmp_path)
     rep = _run(st)
@@ -236,13 +244,24 @@ def test_the_assertion_level_boundary_is_verbatim_in_the_readings(tmp_path):
     assert _boundary_missing(stripped), "边界被删掉却没被看见"
 
 
-def test_the_assertion_level_is_registered_as_not_judged_not_as_clean(tmp_path):
-    """三层三态：`not_judged`（按设计不判）与 `unreadable`（没查成）与"没问题"都不同形。"""
+def test_the_assertion_level_is_computed_not_judged(tmp_path):
+    """三层三态：`computed`（查过了）与 `unreadable`（没查成）与"没问题"都不同形。
+
+    改前这一格是 `not_judged`（"按设计不判"）：那时 `citations` 没有引用命题的写法，
+    这一层连数据形式都没有。`draft/68` 题 1 选 A 之后它是现算读数 ——
+    所以判据从「必须是 not_judged」改成「必须是 computed 且 0 是真 0（不是没查成）」；
+    这一改是这次改动可见的后果，理由逐字写在这里（不是为了让红灯变绿）。
+    """
     st = _store(tmp_path)
     rep = _run(st)
     a = rep.readings["contradictions"]["pollution_assertion_level"]
-    assert a["state"] == "not_judged", a
+    assert a["state"] == "computed", a
     assert a["readable"] is True and a["documents"] == 0, a
+    # 反真空：两格计数分开给 —— 0 / 0（没有稿件）与 0 / 40（扫了 40 条断言、一条没引命题）
+    # 不是同一件事，而只给一个 0 时它们同形。
+    assert a["claims_total"] == 0 and a["claims_citing_a_statement"] == 0, a
+    assert a["statements_cited"] == 0 and a["by_statement"] == {}, a
+    assert not _boundary_missing(str(a["reason"])), a
 
 
 def test_the_proposition_level_reading_counts_downstream_and_closure_sizes(tmp_path):
