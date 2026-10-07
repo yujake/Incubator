@@ -283,6 +283,10 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 逐页逐栏的字段、空态与三态口径见 `docs/USER-END-DSH-STYLE.md` §3.1；判据在
 `tests/test_webui_pages.py`（每页一条：真读数出现 + 空态 + 三态）。
 
+`GET /` 与 `GET /index.html` 直接吐 SPA 外壳（裁定 P1 的第一块迁移：注入本进程的 CSRF 令牌、
+`Cache-Control: no-store`）—— 浏览器地址栏因此进得了 SPA；`GET /run/{sid}` 这一批仍是服务端渲染的
+旧壳（W5 再迁），它由 `tests/test_webui.py` 的 17 条守着。前端工程自己的说明见 `ui/README-DEV.md`。
+
 **本机读数（2026-10-07，复算命令见括号）**：
 
 - 路由表 `ROUTES` **13 行**、其中 JSON 端点 **9 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`）。

@@ -136,6 +136,50 @@ def _fake_static(tmp: pathlib.Path) -> pathlib.Path:
     return static
 
 
+# ====================================================================== 根路径 = SPA 外壳
+def test_the_root_path_serves_the_spa_shell_with_the_token_injected(
+        tmp_path: pathlib.Path) -> None:
+    """正控（P1 的第一块迁移）：`GET /` 与 `GET /index.html` 吐 SPA 外壳 + 注入令牌。
+
+    这一格原来是服务端渲染的旧壳。为什么必须改：SPA 只在"未知路径"的回退分支上
+    挂得起来，而 `/` 是已知路径 ⇒ 不改这一格，浏览器地址栏就永远进不了 SPA 首页。
+
+    三样机器读数：`#app` 挂载点、盘上的 `__CSRF__` 被换成本进程的令牌、`no-store`。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    static = _fake_static(tmp_path)
+    with _server(root, static) as base:
+        for path in ("/", "/index.html"):
+            code, body, ctype, cache = _get(base, path)
+            assert code == 200, (path, code)
+            assert ctype.startswith("text/html"), (path, ctype)
+            assert '<div id="app">' in body, (path, body[:200])
+            assert "testtoken0123456789" in body, "CSRF 占位符没被注入（外壳那条路漏了）"
+            assert "__CSRF__" not in body, (path, "占位符还在（注入没发生）")
+            assert cache == "no-store", (path, cache)
+
+
+def test_the_root_path_says_so_when_the_shell_is_not_built(tmp_path: pathlib.Path) -> None:
+    """负控（P1 迁移的诚实面）：外壳不在盘上 ⇒ `/` 是 404 + 一句说清为什么。
+
+    不许静默给一支空白页：「前端还没构建」与「页面坏了」必须分得开（三态纪律）。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    empty = tmp_path / "empty-static"
+    empty.mkdir()
+    with _server(root, empty) as base:
+        code, body, ctype, _cache = _get(base, "/")
+        assert code == 404, code
+        assert ctype.startswith("text/html"), ctype
+        assert "前端外壳不在盘上" in body, body[:300]
+        # 未知路径的回退同样如此（那时走的是另一条分支）
+        code2, body2, _c2, _cache2 = _get(base, "/evidence", accept="text/html")
+        assert code2 == 404, code2
+        assert "404" in body2, body2[:200]
+
+
 # ====================================================================== 静态路由
 def test_static_route_serves_real_files_with_the_right_content_type(
         tmp_path: pathlib.Path) -> None:
