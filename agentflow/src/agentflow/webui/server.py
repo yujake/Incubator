@@ -289,12 +289,6 @@ class WebHandler(BaseHTTPRequestHandler):
         del params, query
         self._html(200, render_root(snapshot(self.root)))
 
-    def handle_state(self, params: Mapping[str, str],
-                     query: Mapping[str, Sequence[str]]) -> None:
-        """`GET /api/state`：同一批读数的 JSON（前端 Home 页读的就是它）。"""
-        del params, query
-        self._json(200, snapshot(self.root))
-
     def handle_run(self, params: Mapping[str, str],
                    query: Mapping[str, Sequence[str]]) -> None:
         """`GET /run/<sid>`：一趟的详情（事件卡片 + 交付说明）。"""
