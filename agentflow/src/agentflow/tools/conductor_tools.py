@@ -28,7 +28,7 @@
 | `conductor.role_spec` | read | 某角色的动作与工具面（派给谁、怎么写 brief） |
 | `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
 | `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
-| `conductor.closing` | read | 跑收工门八格（三态读数；`can_close` 只在八格全过时为真） |
+| `conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` 只在八格全过时为真） |
 
 ## 为什么 M 的写面变了不等于"主控开始产出知识"
 
@@ -967,13 +967,18 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
                                            "拼两次；不给 ⇒ 锚那一格是 unknown）"},
             "report_path": {"type": "string",
                             "description": "报告路径（不给 ⇒ 报告形状那一格是 unknown）"},
+            "cap_usd": {"type": "number", "minimum": 0,
+                        "description": "这一趟的成本上限（美元）—— 内容级验收的"
+                                       "「在成本上限内」那一格用它判；不给 ⇒ 那一格是"
+                                       "「没查成」而不是通过（负数会被参数校验拒成 param_error）"},
         },
         "required": [],
         "additionalProperties": False,
     },
     side_effect="read",
     roles=("M",),
-    returns=("{'can_close','status','failed','unknowns','findings','readings','summary'}；"
+    returns=("{'can_close','status','failed','unknowns','findings','readings','summary',"
+             "'review_acceptance'}；"
              "status 的键是八格检查（anchor/contradictions/load_bearing/report_shape/"
              "user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；"
              "acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、"
@@ -984,9 +989,18 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
              "它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行"
              "标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；"
              "artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；"
-             "findings[] 每项是 {'check','code','level','detail'}"),
+             "findings[] 每项是 {'check','code','level','detail'}；"
+             "review_acceptance 是那一栏内容级验收读数："
+             "{'passed','criteria','failed','auxiliary','auxiliary_note','readings','summary'}，"
+             "criteria[] 每项是 {'key','name','state','detail'}（`key`/`name` 与顺序现取自 "
+             "`reviewaccept.CRITERIA`，`state` 是三态之一），"
+             "auxiliary[] 每项是 {'key','label','value'}（标签现取自 `reviewaccept.AUXILIARY_SIGNALS`，"
+             "值只作辅助、一个都不参与 `passed`），"
+             "auxiliary_note 就是那一句『辅助读数逐字禁止拿来当通过』的来源"
+             "（`reviewaccept.ReviewAcceptance.to_dict` 的原话）"),
 )
-def conductor_closing(store, session=None, project_dir: str = "", report_path: str = "") -> ToolResult:
+def conductor_closing(store, session=None, project_dir: str = "", report_path: str = "",
+                      cap_usd: float | None = None) -> ToolResult:
     """工具体：把收工门包成一次只读调用（判据在 `agentflow.closing`，这里不另写一份）。
 
     为什么主控需要它：交付说明里"能不能交"这句话必须有可查的读数撑腰。
@@ -1007,16 +1021,43 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     装配时知道这一趟是谁，就一路带到判据里。
     没注入时按 `closing.NO_SESSION` 传下去 ⇒ 那一格记 `unknown`（不是 pass，
     也不是"读今天那份"——三态纪律）。
+
+    ## 收工那一步也要看得见内容级验收（所有者 2026-10-07 裁定「题 13 选 B」）
+
+    决定收工的人是主控，而"能不能交"有两层问法：收工门的八格问结构与凭据，
+    `reviewaccept` 问同一份交付的内容层（定理台账有没有假设与出处、三态分支、
+    成本上限、每跳的输入可读、附件诚实）。第二层此前只有 CLI 出口
+    （`agentflow closing`）能看见，运行内的主控看不见 —— 于是它做收工决定时
+    手里只有八格。这一条就是把同一份读数接到工具体上：同一次只读调用、
+    零模型调用、不写任何台账。
+
+    为什么与 CLI 出口同形：两个入口读的是同一批入参（`project_dir` /
+    `report_path` / `session_root` / `sid` / 成本上限），就该给出同一栏读数 ——
+    判据名、判据顺序、辅助读数的标签与那句禁令全部现取自 `reviewaccept`
+    （`CRITERIA` / `AUXILIARY_SIGNALS` / `to_dict`），本文件不抄第二份。
+    抄一份的下场是两个落点各自漂，而"哪一份是真的"没人说得清。
+
+    三态纪律照旧，一格都不折平：每条判据各自一个三态值；`cap_usd` 不给时
+    成本那一格是「没查成」而不是「通过」（与 CLI 那边的缺省一致）。
+    `can_close` 与工具结果的 `blocked` 仍然只由收工门那八格定 ——
+    把内容级验收并进 `can_close` 等于偷偷改门的强度，那是裁定题不是接线题。
     """
     if store is None:
         return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store", can_close=False)
     from .. import closing as CL
+    from .. import reviewaccept as RX
 
     sess = session if isinstance(session, Mapping) else {}
+    session_root = str(sess.get("root") or "") or None
+    sid = str(sess.get("sid") or CL.NO_SESSION)
     rep = CL.check_closing(store, project_dir=project_dir, report_path=report_path,
-                           session_root=(str(sess.get("root") or "") or None),
-                           sid=str(sess.get("sid") or CL.NO_SESSION))
+                           session_root=session_root, sid=sid)
     data = rep.to_dict()
+    # 内容级验收（§17.3）：同一批入参走只读入口 `reviewaccept.check_review`。
+    # 它与收工门是同一份交付的同一个问题的两层，所以并排给出、各自三态。
+    acc = RX.check_review(store, project_dir=project_dir, report_path=report_path,
+                          session_root=session_root, cost_cap_usd=cap_usd, sid=sid)
+    ra = acc.to_dict()
     kind = "" if rep.can_close else ("closing_unknown" if CL.tri_state_exit_code(rep) == 2
                                      else "closing_blocked")
     return ok({
@@ -1024,6 +1065,22 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
         "failed": data["failed"], "unknowns": data["unknowns"],
         "findings": data["findings"], "readings": data["readings"],
         "summary": rep.summary(),
+        # 判据名与顺序现取自 `RX.CRITERIA`、辅助读数的标签现取自
+        # `RX.AUXILIARY_SIGNALS`：与 CLI 出口同一处口径，本文件不写死任何一个名字。
+        "review_acceptance": {
+            "passed": ra["passed"],
+            "criteria": [{"key": key, "name": name,
+                          "state": ra["criteria"].get(key, "?"),
+                          "detail": ra["details"].get(key) or ""}
+                         for key, name in RX.CRITERIA],
+            "failed": ra["failed"],
+            "auxiliary": [{"key": key, "label": label,
+                           "value": ra["auxiliary"].get(key)}
+                          for key, label in RX.AUXILIARY_SIGNALS],
+            "auxiliary_note": ra["auxiliary_note"],
+            "readings": ra["readings"],
+            "summary": acc.summary(),
+        },
     }, kind=kind, blocked=not rep.can_close,
         blocker_count=len(rep.blockers), unknown_count=len(rep.unknowns))
 

@@ -1,28 +1,41 @@
 # -*- coding: utf-8 -*-
 """接线判据：内容级验收（`draft/37` §17.3）真的在生产路径上跑一次，读数落到人能读的地方。
 
-## 这一组守什么（题 6 选 A = 接线）
+## 这一组守什么（题 6 选 A = 接线；题 13 选 B = 再接上主控的收工工具）
 
 `reviewaccept` 此前是"判据齐、测试齐、而真机上永远没人跑它"：`src/`/`tools/`/`scripts/`
 里一条 import 都到不了它，五条测试文件各自 `import reviewaccept` 直接调 ——
 测试全绿与"这条判据在生产面上存在"是两件事，而只有前者成立时，读的人会把它读成后者。
 
+生产面今天有两个只读出口，读数同形（判据名与顺序都现取自 `reviewaccept`）：
+
+1. CLI `agentflow closing`（`cli._print_review_acceptance`，题 6 选 A）；
+2. 主控的收工工具 `conductor.closing`（`tools/conductor_tools.py`，题 13 选 B）——
+   决定收工的人是主控，它做收工决定时手里不能只有收工门那八格。
+
 所以这一组的前两条是反真空，不是对拍副本：
 
-1. `test_the_only_production_caller_is_the_readonly_closing_exit`：把生产面的调用者
-   一个个数出来（`ast` 扫 `src/`），并逐条登记它们为什么在那儿 ——
+1. `test_the_production_callers_are_exactly_the_registered_readonly_exits`：把生产面的
+   调用者一个个数出来（`ast` 扫 `src/`），并逐条登记它们为什么在那儿 ——
    零个调用者 ⇒ 红（接线没接上）；多出一个没登记的 ⇒ 红（多了一条没人解释的面）。
-   这一条不满足于"CLI 里有一行 import"：`import` 与 `真的调它"是两件事。
-2. `test_every_criterion_really_runs_through_the_cli_exit`：把六条判据的每一个
-   隐藏入口逐个换成"一调就炸"，从 CLI 出口进去 ⇒ 必须炸。
-   "没有真的跑到六条判据 ⇒ 不许算通过"就是这一条的字面实现。
+   这一条不满足于"CLI 里有一行 import"：`import` 与"真的调它"是两件事。
+   （它改名前叫 `test_the_only_production_caller_is_the_readonly_closing_exit`：
+   当时只有 CLI 那一条，题 13 选 B 之后不再"只有一条"，名字跟着口径一起改，
+   判据本身（逐条登记 + 相等）一个字没放宽。）
+2. `test_every_criterion_really_runs_through_the_cli_exit` 与
+   `test_every_criterion_really_runs_through_the_conductor_tool_exit`：把五条内容级判据
+   的每一个隐藏入口逐个换成"一调就炸"，分别从 CLI 出口与工具出口进去 ⇒ 必须炸。
+   "没有真的跑到判据 ⇒ 不许算通过"就是这两条的字面实现。
 
-后两条守"读数落到人能读到的地方"与三态不折平：
+中间几条守"读数落到人能读到的地方"与三态不折平（两个出口各一组）：
 
 3. `test_the_six_criteria_and_the_five_auxiliary_readings_reach_the_human_output`
    —— 六条判据 + 五种辅助读数的名字与值必须出现在 CLI 的原始输出里，
-   并且辅助读数带着"不构成通过"的那句话。
-4. `test_the_readings_are_recomputed_not_hand_copied` —— 改盘上的东西 ⇒
+   并且辅助读数带着"不构成通过"的那句话；
+   `test_the_tool_exit_reports_the_criteria_and_the_auxiliary_readings` ——
+   同一份读数必须出现在工具体的返回里（判据名/顺序/辅助标签逐条对上 `reviewaccept`）。
+4. `test_the_readings_are_recomputed_not_hand_copied` 与
+   `test_the_tool_readings_are_recomputed_not_hand_copied` —— 改盘上的东西 ⇒
    输出里的数跟着变（防"把六条判据的结论手抄成一句通过"）。
 
 ## 反真空那一条（辅助读数漂亮也不许通过）
@@ -34,12 +47,20 @@
 
 ## 接线不许动的东西（都在这里钉住）
 
-- 抄一遍判据：`test_the_wiring_does_not_restate_the_criteria` —— 输出里的
-  判据名与顺序必须来自 `reviewaccept.CRITERIA`，不许在 `cli.py` 里另写一份
+- 抄一遍判据：`test_the_wiring_does_not_restate_the_criteria` 与
+  `test_the_tool_wiring_does_not_restate_the_criteria` —— 两个出口上的
+  判据名、判据顺序、辅助读数标签必须来自 `reviewaccept.CRITERIA` /
+  `AUXILIARY_SIGNALS`，不许在 `cli.py` 或 `conductor_tools.py` 里另写一份
   （另写一份就等于"同一件事两个落位"，而两处会各自漂）。
-- 动退出码：`test_the_exit_code_still_comes_only_from_the_closing_gate` ——
-  摘掉接线 / 让内容级验收"没查成"都不许改退出码。把内容级验收并进退出码
+- 动退出码 / 动 `can_close`：`test_the_exit_code_still_comes_only_from_the_closing_gate`
+  与 `test_the_tool_readings_are_recomputed_not_hand_copied`（后者的下半段钉住
+  "内容级判据红了，而收工门那八格的 `can_close` 一个字都不变"）—— 摘掉接线 /
+  让内容级验收"没查成"都不许改退出码；把内容级验收并进退出码或 `can_close`
   等于偷偷改门的强度，那是裁定题不是接线题。
+- `cap_usd` 的三态：`test_cap_usd_absent_is_unknown_and_over_cap_is_fail`
+  与 `test_a_negative_cost_cap_is_a_usage_error_not_a_verdict` ——
+  不给上限 ⇒ 那一格"没查成"（绝不是通过）；负数上限是用法错（受控拒绝），
+  不许伪装成"判据红"。
 """
 from __future__ import annotations
 
@@ -105,6 +126,37 @@ def _good_and_sid(tmp_path):
     return st, report, SS.session_id()
 
 
+def _tool_closing(store, *, project_dir: str = "", report_path: str = "",
+                  cap_usd: float | None = None, sid: str | None = None,
+                  session_root=None):
+    """从工具体出口进（不是 CLI、也不直接 import `reviewaccept` 调它）。
+
+    为什么必须走 `build_registry` + `registry.call`：要证的正是"这条调用链在
+    生产面上存在"。直接调 `check_review` 只能证明判据自己是对的 —— 那件事已经
+    有五条测试在守了，而生产面此前是 0 条 import。
+
+    `cap_usd` 缺省是"不给这个参数"（不是传 `None`）：参数都不给与给了个空值
+    在读的人眼里必须是两件事，这里让它们逐字分成两条路。
+    """
+    from agentflow.tools import build_registry
+
+    built = build_registry(store=store, workspace_root=store.root,
+                           session_root=(store.root if session_root is None else session_root),
+                           sid=(SS.session_id() if sid is None else sid),
+                           roles=("M",))
+    kw: dict = {"project_dir": project_dir, "report_path": report_path}
+    if cap_usd is not None:
+        kw["cap_usd"] = cap_usd
+    return built.registry.call("conductor.closing", role="M", **kw)
+
+
+def _criterion_row(payload: dict, key: str) -> dict:
+    """取某一格判据的行；键不在 `RX.CRITERIA` 里就当场红（判据名改了要跟着改）。"""
+    keys = [k for k, _ in RX.CRITERIA]
+    assert key in keys, f"判据键 {key!r} 不在 `RX.CRITERIA` 里（{keys}）⇒ 本判据要跟着改"
+    return next(r for r in payload["criteria"] if r["key"] == key)
+
+
 def _calls_in(path: pathlib.Path) -> dict[str, list[str]]:
     """一个文件里"函数 -> 它调到的名字列表"（`ast`，不按行号断言）。"""
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -162,6 +214,16 @@ _PRODUCTION_CALLERS: dict[str, tuple[str, str]] = {
         "为什么在 `_print_review_acceptance` 而不是 `cmd_closing` 里：那个函数是"
         "「只读、只打印」这一段的唯一实现，`cmd_closing` 只负责决定跑不跑它。",
     ),
+    "tools/conductor_tools.py": (
+        "conductor_closing",
+        "主控的收工工具 `conductor.closing`（题 13 选 B）：主控是决定收工的人，"
+        "它调这个工具时手里不能只有收工门那八格 —— 同一次只读调用里把内容级验收的"
+        "读数一并给出（判据名/顺序/辅助标签现取自 `reviewaccept`）。"
+        "为什么在工具体里而不是另开一个工具：两者读的是同一批入参"
+        "（`project_dir` / `report_path` / `session_root` / `sid` / 成本上限），"
+        "而那批入参在 `conductor_closing` 里已经收齐了；开第二个面只会让"
+        "「收工」与「内容级验收」在模型眼里变成两件可以只做一件的事。",
+    ),
 }
 
 
@@ -171,8 +233,8 @@ def _print_review_acceptance_calls() -> list[str]:
     return got.get("_print_review_acceptance", [])
 
 
-def test_the_only_production_caller_is_the_readonly_closing_exit():
-    """接线判据（正控 + 逐条登记）：生产面的调用者恰好是登记的那一个。
+def test_the_production_callers_are_exactly_the_registered_readonly_exits():
+    """接线判据（正控 + 逐条登记）：生产面的调用者恰好是登记的那几个。
 
     改前必红：这一层此前在生产面上 0 个调用者（`src/`/`tools/`/`scripts/`
     都到不了它），于是"五条内容级判据"在真机上从来没跑过一次。
@@ -180,6 +242,10 @@ def test_the_only_production_caller_is_the_readonly_closing_exit():
     为什么不是"CLI 里有一行 `from . import reviewaccept`"就算接线：
     那只是声明面（import 了不等于调了）。这一条数的是调用点（`ast` 里的
     `check_review(...)`），并且要求每个调用点都在登记表里有一行理由。
+
+    为什么名字从"`the_only_production_caller`"改过来：题 13 选 B 之后
+    生产面不再是"只有 CLI 那一条"。改的是名字与口径（登记表可以有多条），
+    判据本身（盘上调用点集合 == 登记表，且登记的每个函数真的调了它）没放宽。
     """
     callers = _check_review_callers()
     assert callers, ("生产面一个 `check_review` 调用点都没有 ⇒ 接线没接上："
@@ -195,6 +261,12 @@ def test_the_only_production_caller_is_the_readonly_closing_exit():
         assert "check_review" in got[func], (
             f"登记说 {func} 调 `check_review`，而它当次调的是 "
             f"{[c for c in got[func] if 'review' in c]} ⇒ 登记已经过期")
+    # 反真空（口径）：登记表里"只读出口"这条性质必须仍然成立 ——
+    # 工具体声明成写工具的话，这条接线就不再是"只读出口"（收工那一步会改盘）。
+    from agentflow.tools import conductor_tools as CT
+
+    assert CT.conductor_closing.__tool_spec__.side_effect == "read", (
+        "`conductor.closing` 不再是只读工具 ⇒ 这条接线不再是「只读出口」")
 
 
 def test_the_wiring_runs_by_default_not_only_behind_an_optin_flag():
@@ -268,6 +340,72 @@ def test_unwiring_makes_that_control_dark(tmp_path, monkeypatch):
                                           "出现了说明它还在跑（那这条对照就失效了）")
 
 
+# ============================================================ 2b. 反真空：工具体出口那条链
+
+@pytest.mark.parametrize("impl", _CRITERION_IMPLS)
+def test_every_criterion_really_runs_through_the_conductor_tool_exit(tmp_path, monkeypatch, impl):
+    """反真空（题 13 选 B，每一个判据入口各一条）：从主控的工具体出口进去，判据必须真的被执行。
+
+    做法与 CLI 那条同形：把这个隐藏入口换成"一调就炸"，然后调
+    `conductor.closing`（走 `build_registry` + `registry.call` 这条真装配路径）。
+
+    为什么"炸"也算证据：`ToolRegistry.call` 会把异常收成
+    `ok=False / kind='unexpected'`，所以断言打在"这次调用没成功、报的是那个炸点"上 ——
+    "没有真的跑到判据"与"跑到了、判据炸了"在这里是两件分得开的事。
+
+    为什么必须从工具出口进：本条要证的是"运行内的主控手里真的拿到这份读数"。
+    直接 `import reviewaccept` 调它只能证明判据自己是对的（那有五条测试在守）。
+    """
+    from agentflow.store import Store
+
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+
+    def boom(*_a, **_kw):
+        raise AssertionError(f"判据 {impl} 被调到了（这正是要证的：工具出口那条链活着）")
+
+    monkeypatch.setattr(RX, impl, boom)
+    res = _tool_closing(st)
+    assert res.ok is False, (f"判据 {impl} 换成炸点之后工具体居然成功了 ⇒ "
+                             "内容级验收没从工具出口跑到")
+    assert str((res.meta or {}).get("kind")) == "unexpected", (res.meta, res.data)
+    assert impl in str(res.error), (res.error, res.meta)
+
+
+def test_unwiring_the_tool_control_makes_it_dark(tmp_path, monkeypatch):
+    """上面那条负控的对照：接线摘掉之后，那些隐藏入口一次都不许被工具体调到。
+
+    摘法是把 `check_review` 整个换掉（它不再逐个调判据），同时把所有判据入口
+    都换成炸点：工具体必须安静地返回，且那个替身必须被调到恰好一次 ——
+    这证明上面的"炸"确实来自「工具体 → check_review → 判据」这条链，
+    而不是某个夹具路径顺手碰了它们。
+    """
+    from agentflow.store import Store
+
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    hits: list[str] = []
+
+    def stub(*_a, **_kw):
+        hits.append("check_review")
+        return RX.ReviewAcceptance()
+
+    def boom(*_a, **_kw):
+        raise AssertionError("接线摘掉了，判据不该被调到")
+
+    monkeypatch.setattr(RX, "check_review", stub)
+    for impl in _CRITERION_IMPLS:
+        monkeypatch.setattr(RX, impl, boom)
+    res = _tool_closing(st)
+    assert res.ok is True, (res.error, res.meta)
+    assert hits == ["check_review"], ("工具体没有经由 `check_review` 读内容级验收"
+                                      f"（替身被调到 {len(hits)} 次）⇒ 上面那条负控证明不了任何事")
+
+
 # ============================================================ 3. 读数落到人能读的地方
 
 def test_the_six_criteria_and_the_five_auxiliary_readings_reach_the_human_output(tmp_path):
@@ -325,6 +463,80 @@ def test_the_readings_are_recomputed_not_hand_copied(tmp_path):
     assert f"{name}：{_MARKS['fail']}" in out2, out2
     assert "passed（只看上面这几条）＝False" in out2, out2
     assert f"没通过的：{key}" in out2, out2
+
+
+# ------------------------------------------- 3b. 同一份读数从工具体出口给主控
+
+def test_the_tool_exit_reports_the_criteria_and_the_auxiliary_readings(tmp_path):
+    """题 13 选 B：主控在收工那一步必须看得见逐条判据（三态 + detail）与五种辅助读数。
+
+    这一条读的是工具体的返回（不是 CLI 输出）：判据名、判据顺序、辅助读数的标签
+    必须与 `reviewaccept.CRITERIA` / `AUXILIARY_SIGNALS` 逐条对上 ——
+    它们只能从那个模块取，工具体里抄一份就会在这里红。
+
+    三态不折平：每一格都必须是 `pass`/`fail`/`unknown` 之一，且 `unknown` 与
+    `fail` 各有自己的字面（出口上的三种标记在 CLI 那边还各有一条判据）。
+    """
+    st, report, sid = _good_and_sid(tmp_path)
+    res = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
+                        cap_usd=1.0, sid=sid)
+    assert res.ok, (res.error, res.meta)
+    ra = res.data["review_acceptance"]
+
+    # 判据：键、名字、顺序都来自 `RX.CRITERIA`（不是这里手抄的一份）
+    assert [r["key"] for r in ra["criteria"]] == [k for k, _ in RX.CRITERIA]
+    assert [r["name"] for r in ra["criteria"]] == [n for _, n in RX.CRITERIA]
+    for row in ra["criteria"]:
+        assert row["state"] in _MARKS, f"判据 {row['key']} 的三态值不在词表里：{row['state']!r}"
+        assert isinstance(row["detail"], str), row
+    # 五条全过的工作区 ⇒ 逐条 pass，`passed` 为真，没通过的那一栏是空的
+    assert all(r["state"] == "pass" for r in ra["criteria"]), ra["criteria"]
+    assert ra["passed"] is True and ra["failed"] == [], ra
+
+    # 辅助读数：标签与顺序来自 `RX.AUXILIARY_SIGNALS`，五种都带值（值可以是空/null）
+    assert [r["key"] for r in ra["auxiliary"]] == [k for k, _ in RX.AUXILIARY_SIGNALS]
+    assert [r["label"] for r in ra["auxiliary"]] == [l for _, l in RX.AUXILIARY_SIGNALS]
+    for row in ra["auxiliary"]:
+        assert "value" in row, row
+    # 那句"逐字禁止拿来当通过"必须是模块自己的原话（不是这里另写一句近义句）
+    assert ra["auxiliary_note"] == RX.ReviewAcceptance().to_dict()["auxiliary_note"], ra
+    assert "逐字禁止" in ra["auxiliary_note"], ra
+    # 逐条读数（判据各自的原始读数）也一并给出，分栏在出口上仍然是真的
+    assert ra["readings"], "工具体没有把逐条判据读数给出来"
+    assert "内容级判据全过" in ra["summary"], ra
+
+
+def test_the_tool_readings_are_recomputed_not_hand_copied(tmp_path):
+    """反真空（防手抄，工具体这一侧）：改盘上的东西 ⇒ 返回里的数跟着变。
+
+    做法与 CLI 那条同形：同一个工作区先调一次（那一格 `pass`），
+    再把一条命题弄坏，重调 ⇒ 那一格必须变 `fail`、`passed` 跟着变假、
+    `failed` 里点名它。
+
+    同时钉住"两层不折平"：内容级判据红了，而收工门那八格的 `can_close`
+    一个字都不许跟着变（那是裁定题，不是接线题）。
+    """
+    st, report, sid = _good_and_sid(tmp_path)
+    from agentflow import schema as _S
+
+    before = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
+                           cap_usd=1.0, sid=sid)
+    assert before.ok and before.data["review_acceptance"]["passed"] is True, before.data
+    assert before.data["can_close"] is True, before.data
+
+    key, _name = RX.CRITERIA[0]
+    _stmt(st, "0002", page_range=_S.PageRange())          # 缺页码 ⇒ 这一条必须红
+    after = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
+                          cap_usd=1.0, sid=sid)
+    assert after.ok, (after.error, after.meta)
+    ra = after.data["review_acceptance"]
+    assert _criterion_row(ra, key)["state"] == "fail", ra["criteria"]
+    assert ra["passed"] is False and key in ra["failed"], ra
+    # 两层刻意不折平：内容级判据红了，收工门那八格照旧（can_close 仍由八格定）
+    assert after.data["can_close"] is True, after.data["status"]
+    assert after.data["status"] == before.data["status"], (
+        "内容级验收把收工门的读数带偏了 —— 两层的入参同源，但判定必须各管各的")
+
 
 # ============================================================ 4. 辅助读数漂亮也不许通过
 
@@ -387,6 +599,69 @@ def test_the_wiring_does_not_restate_the_criteria():
     for key, label in RX.AUXILIARY_SIGNALS:
         assert f'"{key}"' not in src, f"`cli.py` 里写死了辅助读数键 {key!r}"
         assert f'"{label}"' not in src, f"`cli.py` 里写死了辅助读数标签 {label!r}"
+
+
+def test_the_tool_wiring_does_not_restate_the_criteria():
+    """同一个口径的工具体那一半：`conductor_tools.py` 里不许抄判据名/辅助读数标签。
+
+    判法与 `cli.py` 那条逐字同形。为什么两个文件各有一条：抄一份的成本很低
+    （对着出口的输出复制粘贴），而抄出来的那份会与 `reviewaccept` 各自漂 ——
+    到时候"哪一份是真的"没人说得清。名字与顺序的唯一落点是 `RX.CRITERIA`。
+    """
+    src = (SRC / "tools" / "conductor_tools.py").read_text(encoding="utf-8")
+    for key, name in RX.CRITERIA:
+        assert f'"{key}"' not in src, (
+            f"`conductor_tools.py` 里写死了判据键 {key!r} ⇒ 判据表被抄了第二份")
+        assert f'"{name}"' not in src, (
+            f"`conductor_tools.py` 里写死了判据名（{name[:12]}…）⇒ 判据表被抄了第二份")
+    for key, label in RX.AUXILIARY_SIGNALS:
+        assert f'"{key}"' not in src, f"`conductor_tools.py` 里写死了辅助读数键 {key!r}"
+        assert f'"{label}"' not in src, f"`conductor_tools.py` 里写死了辅助读数标签 {label!r}"
+
+
+def test_cap_usd_absent_is_unknown_and_over_cap_is_fail(tmp_path):
+    """成本那一格的三态（工具体这一侧）：不给上限 ⇒ 没查成；给了且真的超 ⇒ 不通过。
+
+    为什么必须分开判：`cap_usd` 不给时把那一格写成"通过"是本项目最忌的折平
+    （"没查"读成"查过了没问题"）。所以三条一起判：
+    不给 ⇒ `unknown`（detail 里明说"没查成"）；给一个够大的 ⇒ `pass`；
+    账上真超了 ⇒ `fail`。三条都从工具出口读，不是直接调 `check_review`。
+    """
+    st, report, sid = _good_and_sid(tmp_path)
+    _usage(st, "0002", 5.0)                       # 夹具原有 0.25 + 这一笔 5.0
+
+    def state(cap: float | None) -> dict:
+        # `cap=None` 走的是"连 `cap_usd` 这个参数都不给"那条路（见 `_tool_closing`）
+        res = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
+                            cap_usd=cap, sid=sid)
+        assert res.ok, (res.error, res.meta)
+        return _criterion_row(res.data["review_acceptance"], "within_cost_cap")
+
+    row = state(None)
+    assert row["state"] == "unknown", row
+    assert "没查成" in row["detail"], row
+    assert state(10.0)["state"] == "pass"
+    over = state(1.0)
+    assert over["state"] == "fail", over
+    assert "5.25" in over["detail"], over
+
+
+def test_a_negative_cost_cap_is_a_param_error_not_a_verdict(tmp_path):
+    """兜底判据（工具体那一侧）：负数上限是受控的用法错，不许伪装成"判据红"。
+
+    与 CLI 那条同一条纪律（`FINAL-R5-06`）：负数上限要么被参数校验拒成
+    `param_error`，要么会在"花了零元"上判成超上限 —— 后者让读的人去查台账，
+    而真相是调用方把参数写错了。这里钉住前一种（`cap_usd` 的 `minimum: 0`）。
+    """
+    from agentflow.store import Store
+
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True, exist_ok=True)
+    st = Store(ws)
+    st.init()
+    res = _tool_closing(st, cap_usd=-1.0)
+    assert res.ok is False, res.data
+    assert str((res.meta or {}).get("kind")) == "param_error", (res.meta, res.error)
 
 
 def test_the_exit_code_still_comes_only_from_the_closing_gate(tmp_path):
