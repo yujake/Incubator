@@ -4,7 +4,7 @@
 ## 这一层是什么
 
 `snapshot()` 与它的内部件（`_scan` / `_orphan_summary` / `_read_ledger` /
-`_read_report` / `_opts_view` / 取值帮手）从 `webui.py` 原样搬到这里，
+`_read_report` / 取值帮手）从 `webui.py` 原样搬到这里，
 语义一字不改（`draft/73` §1.2 的 R1 拆包）。它与渲染、与 HTTP 都无关：
 给它一个工作区根，它给你一个纯数据快照。
 
@@ -18,6 +18,14 @@
 3. 「回答的文本两种口径都认」（`answer_text_of`）：`custom` 非空取它，否则
    `"、".join(selected)`，否则退回旧的 `answer` 字段。读 `userio` 的返回一律用
    `getattr(obj, "x", None)` / `dict.get`，不假设新字段一定存在。
+
+## 裁定 L1 之后的一处结构变化（本文件里唯一一处口径收敛）
+
+待答问题与选项的读法只有一处实现，在 `userio`：本模块的
+`answer_text_of` / `option_view` 变成一层转发，`_scan` 不再自己扫
+`user_question` / `user_answer`（那一栏由 `snapshot()` 从
+`userio.workspace_pending_view` 取一次、按会话号切给它）。公开名与签名一个字
+没动 —— `webui.__all__` 那八个名字与 `temp/_verify_w0.py` 对账的口径都还在。
 """
 
 from __future__ import annotations
@@ -183,44 +191,35 @@ def _age(ts: str, ref: str) -> str:
 
 
 def answer_text_of(event: Mapping[str, Any] | Any) -> str:
-    """从一条回答事件里读出「用户到底说了什么」，两种口径都认。
+    """从一条回答事件里读出「用户到底说了什么」（裁定 L1：转发到 `userio`）。
 
-    新口径（与并行的 `userio` 改造对齐）：`custom` 非空取它，
-    否则 `"、".join(selected)`；旧口径：`answer` 字段。
+    这一层曾经有一份自己的实现（`custom` 非空取它，否则 `"、".join(selected)`，
+    否则退回旧的 `answer` 字段）。裁定 L1 把它收敛到 `userio.reply_text` —— 同一件事
+    两份实现的漂移形态是"CLI 说这一句、网页说那一句"，而没有任何东西会报错。
+
+    保留这个名字的理由是契约：它在 `webui.__all__` 里、被 `writes.py` 与 `views.py`
+    读、也由 `temp/_verify_w0.py` 对着公开面对账 —— 签名与返回形状逐字不变，
+    只是实现从"第二份"变成"转发"。
     """
-    custom = _text(_get(event, "custom"))
-    if custom:
-        return custom
-    selected = _get(event, "selected")
-    if isinstance(selected, (list, tuple)):
-        picked = [_text(x).strip() for x in selected]
-        picked = [x for x in picked if x]
-        if picked:
-            return "、".join(picked)
-    return _text(_get(event, "answer", default=""))
+    from .. import userio as U
+
+    return U.reply_text(event)
 
 
 def option_view(raw: Any) -> dict[str, Any]:
-    """把一个选项读成 `{label, description, multi}`。
+    """把一个选项读成 `{label, description, multi}`（裁定 L1：转发到 `userio`）。
 
-    `userio.Question.options` 今天是 `tuple[str, ...]`，但 DSH 的形状是
-    `{label, description}`（`docs/USER-END-DSH-STYLE.md` §3）。所以这里两种都认：
-    裸字符串 ⇒ `label` 就是它、`description` 空；dict/对象 ⇒ 取 `label` / `description`
-    （也接受 `text` / `value` / `desc` / `hint` 这几个近义名，读不到就是空）。
+    形状的真身是 `userio.option_view`：裸字符串（旧会话事件、`llmseam` 的旧 schema）
+    与新形状（`Option` / 字典）都认。本函数现在只是一层转发 —— 判据
+    `tests/test_webui_readers.py` 里那条"两处 `option_view` 逐值相等"从此恒真，
+    因为两处本来就是同一个函数（这正是 L1 要的结果，不是把判据改宽）。
 
-    这也是前端 `OptionRow` 那个类型的真身（`ui/src/types.ts` 由
+    它也是前端 `OptionRow` 那个类型的真身（`ui/src/types.ts` 由
     `agentflow/web/emit_types.py` 生成）—— 契约判据 C 拿它的键集合与这里对账。
     """
-    if isinstance(raw, str):
-        return {"label": raw, "description": "", "multi": False}
-    if raw is None:
-        return {"label": "", "description": "", "multi": False}
-    label = _text(_get(raw, "label", "text", "value", "id", default=""))
-    desc = _text(_get(raw, "description", "desc", "hint", "detail", default=""))
-    multi = bool(_get(raw, "multiSelect", "multi", "multiple", default=False))
-    if not label and not desc:
-        label = _clip(raw, 200)
-    return {"label": label, "description": desc, "multi": multi}
+    from .. import userio as U
+
+    return U.option_view(raw)
 
 
 def _sid_ok(sid: str) -> bool:
@@ -230,42 +229,21 @@ def _sid_ok(sid: str) -> bool:
 
 # ====================================================================== 快照
 def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
-          problems: Sequence[str]) -> dict[str, Any]:
-    """把一个会话的事件扫成「待答问题 + 每一趟的运行态」（纯函数，不碰盘）。"""
+          problems: Sequence[str],
+          pending: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    """把一个会话的事件扫成「待答问题 + 每一趟的运行态」（纯函数，不碰盘）。
+
+    `pending` 由调用方给（裁定 L1：待答与选项的口径只有一个来源 —— `userio` 的
+    `workspace_pending_view`）。这一版之前，"哪些问题还没答"是在本函数里〔第二次〕
+    扫一遍 `user_question` / `user_answer` 事件算出来的，而 `userio` 里有同一件事的
+    另一份实现：两份漂移的形态是"CLI 说还有三条待答、网页说没有"，且没有任何东西
+    会报错。现在本函数只负责运行态（趟次与零散事件），待答那一栏是搬进来的。
+
+    `session_root` 保留在签名里（调用方与它对齐；本函数自己不用它）。
+    """
+    del session_root
     events = list(events)
-    # ---- 提问与回答的配对（同一会话内配对；跨会话的 qid 各归各的会话）
-    answers: dict[str, dict[str, Any]] = {}
-    answer_index: dict[str, int] = {}
-    for i, e in enumerate(events):
-        if str(e.get("kind") or "") == "user_answer":
-            qid = _text(e.get("qid"))
-            if qid and qid not in answers:
-                answers[qid] = dict(e)
-                answer_index[qid] = i
-    asked_qids: set[str] = set()
-    pending: list[dict[str, Any]] = []
-    for i, e in enumerate(events):
-        if str(e.get("kind") or "") != "user_question":
-            continue
-        qid = _text(e.get("qid"))
-        if not qid:
-            continue
-        asked_qids.add(qid)
-        if qid in answers:
-            continue
-        opts = [_opts_view(x) for x in (e.get("options") or [])]
-        pending.append({
-            "qid": qid,
-            "sid": sid,
-            "role": _text(e.get("role")),
-            "ts": _text(e.get("ts")),
-            "timeout_sec": e.get("timeout_sec"),
-            "text": _text(e.get("text")),
-            "options": opts,
-            "multi": bool(e.get("multiSelect") or e.get("multi")
-                          or any(o["multi"] for o in opts)),
-            "index": i,
-        })
+    pending = [dict(q) for q in pending]
     # ---- 每一趟 = 一条 `agent_run_start` 到它之后的 `agent_run_end`（或文件尾）。
     #
     # 没有开始标记的事件「不许」被折成一趟：那是「轮次之外的零散事件」（例如人刚
@@ -324,7 +302,10 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
     # ---- 把待答问题挂到「正在等它」的那一趟上
     for run in runs:
         hi = run["end_index"] if run["end_index"] is not None else len(events)
-        mine = [q["qid"] for q in pending if run["start_index"] < q["index"] <= hi]
+        # 只挂"在事件里有下标"的那几条：`userio.question_view` 的 `index` 读不到时是
+        # `None`（那是"这一条不知道落在第几行"，不是一个可以拿来比大小的 0）。
+        mine = [str(q.get("qid") or "") for q in pending
+                if isinstance(q.get("index"), int) and run["start_index"] < q["index"] <= hi]
         run["waiting_on"] = mine
         # 停止理由是空的、但确实停在一个没答的问题上 ⇒ 那一档是「停在等用户」
         if not run["stop_reason"] and mine:
@@ -357,11 +338,6 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
     }
 
 
-def _opts_view(raw: Any) -> dict[str, Any]:
-    """选项的渲染视图（见 :func:`option_view`；这个别名只为下文顺手）。"""
-    return option_view(raw)
-
-
 def snapshot(root: str | Path) -> dict[str, Any]:
     """把工作区盘上的事实读成一份快照（纯函数：只读盘，不缓存、不写任何东西）。
 
@@ -384,6 +360,23 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     pending: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
     orphans: list[dict[str, Any]] = []
+    # ---- 待答问题：唯一来源是 `userio`（裁定 L1）。
+    #
+    # 一次取全工作区（`workspace_pending_view`），再按会话号切给下面的 `_scan` ——
+    # 为什么不逐会话各取一次：那会每个会话多读一遍盘；为什么不自己扫事件：
+    # 那正是 L1 要删掉的那份第二实现（"哪些问题还没答"的口径必须只有一处）。
+    # 这一层读不出来时如实记 `problems`（"没查成"不是"没有待答"），并让待答那一栏
+    # 保持空 —— 页面据 `problems` 显示"没查成"的横幅。
+    try:
+        from .. import userio as _U
+
+        pending_all: list[dict[str, Any]] = _U.workspace_pending_view(root_p)
+    except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
+        pending_all = []
+        problems.append(f"待答清单没查成：{type(exc).__name__}: {exc}")
+    by_sid: dict[str, list[dict[str, Any]]] = {}
+    for one in pending_all:
+        by_sid.setdefault(_text(one.get("sid")), []).append(one)
     try:
         listed = SS.list_sessions(root_p)
     except Exception as exc:  # noqa: BLE001 - 读不到会话目录 = 没查成，不是「没有会话」
@@ -398,7 +391,7 @@ def snapshot(root: str | Path) -> dict[str, Any]:
             events, bad = SS.read_session(root_p, sid=sid)
         except Exception as exc:  # noqa: BLE001
             events, bad = [], [f"{type(exc).__name__}: {exc}"]
-        got = _scan(root_p, sid, events, bad)
+        got = _scan(root_p, sid, events, bad, by_sid.get(sid, ()))
         sessions.append({
             "sid": sid,
             "path": _text(item.get("path")),
