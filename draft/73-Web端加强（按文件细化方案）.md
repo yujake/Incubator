@@ -165,6 +165,15 @@ def main(argv=None) -> int:                   # python -m agentflow.web.emit_the
 | `provider_states(store) -> dict` | `store.rows("search_requests")` 的 `providers` 点名 + 每条的三态 | `Run.tsx` 的"检索"那一栏 |
 | `verifications(root) -> dict` | `verifications.list_verifications(root)`（V 的签位） | `Evidence.tsx` 的"证明级"那一栏 |
 
+> ⚠️ **更正（2026-10-07，所有者裁定 4a）**：上表**不是**"要新立这八个函数"。
+> `draft/75 §1.1` 的端点契约 C1 只有**六行**（`state` / `run` / `evidence` / `artifacts` /
+> `acceptance` / `machine`），B 线就是按那六面落地的；上表里
+> `handoffs` / `artifact_ledger` / `machine_readings` / `provider_states` / `verifications`
+> 这五样**是那六面里的栏位**（现状：交接与台账在 `artifacts_face` 的 `handoffs`/`ledger`、
+> 本机读数在 `machine_face`、验证台账在 `evidence_chain["verifications"]`、
+> 检索腿的数据并入 `run_view`），**不要**为了"名字与上表一致"再包一层只有转发的函数。
+> 上表保留原样，作为当时的设计底稿留档；读它的人以这条更正为准。
+
 **判据**（`test_webui_readers.py`，每条两半）：
 - 正控：在 `tmp_path` 造一份真数据（用 `tests/conftest.py` 的 `add_request/add_literature/…` 与 `manuscripts.record`？——**写手稿要走 `manuscripts` 的公开写入口**），断言读数出现在 JSON 与页面上；
 - 负控（**这条最重要**）：把数据源清空/置不可读 ⇒ 该面必须是 `tri="unreadable"` + `reason` 非空，**不许**渲染成 `0` 或空白（"没查成 vs 查到 0"这条线是本仓库的老纪律）。
