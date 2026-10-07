@@ -78,10 +78,11 @@
 | 文件 | 是什么 |
 |---|---|
 | `cli.py` | 命令行入口（24 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`/`doctor`…） |
-| `webui.py` | 用户端网页：全局待回答面板 + 运行态 + 一趟的事件回放（只读投影；唯一写路径是 `POST /answer` → `userio.answer_question`） |
+| `webui/` | 用户端网页（包；2026-10-07 的 W0 从单文件模块一次拆到位）：`webui/state.py` 是读模型（`snapshot()`：全局待回答面板 + 运行态 + 一趟的事件回放，只读投影）、`webui/views.py` 是服务端渲染的旧壳（逐面迁到 SPA）、`webui/writes.py` 是唯一写路径（`POST /answer` → `userio.answer_question`）、`webui/routes.py` 是路由表 `ROUTES`、`webui/server.py` 是 http.server + 静态路由 + SPA 回退；公开面由 `webui/__init__.py` 原样 re-export |
 | `settings.py` | **机器级设置的一处定义**（2026-10-07 起）：落点（默认是 `agentflow/` 下的那份，被 git 忽略；`AGENTFLOW_SETTINGS` 指到别处）、键名（`toolchain.*` / `model.*` / `workspace.projects_dir`）与**唯一口径的优先级**（环境变量 > 设置文件 > 内置默认/自动探测，唯一实现 `env_or_setting`）。为什么要有它：本机路径与模型 key 此前散在"代码里的字面量 + 环境变量"两处 —— 换一台机器就有一句假话。判据 `tests/test_settings.py`（含"源码里 0 条死地址"与三道 key 安全阀） |
 | `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ `AGENTFLOW_PROVER_PATH`（两者都是环境变量）→ **设置文件的 `toolchain.*`** → PATH 四档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看（打的是"从哪一档找到的"） |
 | `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`） |
+| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`，其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库 |
 | `__main__.py` | `python -m agentflow` 的入口 |
 | `__init__.py` | 包说明与公开面 |
 | `demo.py` | 离线端到端演示：不访问网络，把 A→B→校验整条链路真跑一遍 |
@@ -266,7 +267,7 @@
 | `schema.py` | 3041 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
 | `runflow.py` | 2039 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层 |
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 2520 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
+| `cli.py` | 2537 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1817 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
 | `agent_b/core.py` | 1250 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1250 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 1666 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |
