@@ -1546,7 +1546,8 @@ def cmd_run_agent(args) -> int:
 
     seam = seam_for(args.role)
     if not seam.wired:
-        print("[run-agent] 没查成：没有接模型（AGENTFLOW_MODEL_API_KEY 为空）—— "
+        print("[run-agent] 没查成：没有接模型（环境变量 AGENTFLOW_MODEL_API_KEY 与 "
+              "agentflow/settings.json 的 model.api_key 都没有值）—— "
               "这是没查成（退出码 2），不是「跑过了没问题」", file=sys.stderr)
         return 2
 
@@ -1850,7 +1851,8 @@ def cmd_doctor(args) -> int:
         prov = rep["provers"]
         print(tty.paint("这台机器的体检", "bold"))
         print(tty.bullet(("模型 key：已配置" if rep["model"]["key_present"]
-                          else "模型 key：**没配**（设 AGENTFLOW_MODEL_API_KEY）")
+                          else "模型 key：**没配**（设 AGENTFLOW_MODEL_API_KEY，或写进 "
+                               "agentflow/settings.json 的 model.api_key）")
                          + f"；base={rep['model']['base_url']}；model={rep['model']['model']}"))
         if prov["available"]:
             for row in prov["available"]:

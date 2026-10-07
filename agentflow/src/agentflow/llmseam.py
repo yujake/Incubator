@@ -267,7 +267,8 @@ class LlmSeam:
         )
         if not self.wired:
             call = SeamCall(ok=False, problem="judge_not_wired",
-                            detail="没有配置模型（AGENTFLOW_MODEL_API_KEY 为空）"
+                            detail="没有配置模型（环境变量 AGENTFLOW_MODEL_API_KEY 与 "
+                                   "agentflow/settings.json 的 model.api_key 都没有值）"
                                    "：这是没查成，不是没有问题",
                             elapsed_sec=time.monotonic() - t0, **base)
             # `charged=False`：这一次「没有发请求」，所以没有钱要记。
