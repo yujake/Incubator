@@ -3,7 +3,7 @@
 
 ## 这一层是什么
 
-`answer(root, form)` —— 从 `webui.py` 的 `_answer_action` 原样搬来、只改了个名字
+`answer(root, form)` —— 从 `webui.py` 的 `answer` 原样搬来、只改了个名字
 （`draft/73` §1.2 的 R1 拆包；改名是为了让"写面"这个名字在包里可见）。
 行为一字不改：落盘仍然只走 `userio.answer_question` 这一个写入口
 （事件形状由它定义，本模块不拼第二份），三态与状态码也照旧。

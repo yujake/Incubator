@@ -29,7 +29,7 @@
 - 判据 B 的后端一半（`webui/sse.py` 的 `EVENT_KINDS`）要到 W2 才落地，所以
   正控 skip 并在理由里写明；B 的比对逻辑本身由负控证明是接上的。
 - 判据 C 只核后端此刻真给得全的那些接口；`Checkpoint` / `CheckpointSpend` /
-  `WriteResult` 本批没有 reader 或没有生产者，逐条登记在 `_UNCHECKED_TYPES` 里
+  `WriteResult` 本批没有 reader 或没有生产者，逐条登记在 `_W0_UNCHECKED_TYPES` 与各模块自己的 `UNCHECKED_TYPES` 里
   （并有一条反向断言：一旦它们真能被读出来，那份登记就过期了，判据会红）。
 """
 
@@ -607,7 +607,7 @@ def test_d_the_client_routes_match_the_contract_table() -> None:
 def test_d_pages_only_use_endpoints_that_exist() -> None:
     """正控（D 的第二半）：页面用到的端点 ∈ ROUTES、kind ∈ KINDS。
 
-    例外只有一条，逐条登记在 `_ENDPOINT_ALLOWLIST` 里（SSE 流，W2 才落地）。
+    例外只有一条，逐条登记在各子表模块的 `PENDING_ENDPOINTS` 里（SSE 流，W2 才落地）。
     """
     known_kinds = _frontend_event_kinds(_ui_text(SSE_TS))
     endpoints: set[str] = set()
