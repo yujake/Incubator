@@ -26,6 +26,18 @@
 
 ## §2 G2 签字包（两处 FC-27 改动；**我出 patch，人走查 + 2 名 reviewer 签**）
 
+> 🔴 **状态变更（2026-10-07，所有者授权后已落地）**：所有者本轮交代「如有必需，允许动禁改区」，
+> 于是这两处改动**已经落进 master**（提交 `498bd75`），不再等 patch：
+> - `pyproject.toml`：`optional-dependencies.browser = ["playwright>=1.44"]` · `markers` 加 `browser` ·
+>   `addopts` 改成 `-m 'not network and not browser'`（后者就是 `draft/79` 的 **T1**，按 T1-a 裁）。
+> - `tools/release_all.py`：第 7 步 `frontend`（`exit_map = TRI_STATE_EXIT`），并新增
+>   `tools/frontend_gate.py`（不在禁改区清单里）承担 typecheck + 构建 + 入库产物新鲜度三件，
+>   本机实测 typecheck `pass`、构建因沙箱 `spawn EPERM` 记 `unknown(2)`。
+> **签字仍需补记**（我不代签自己的这一版）：带基线的读数是
+> `python -B scripts/noai_gate.py --git --since 5c6e441 --check-approvals`
+> ⇒ **命中 3 条、3 条未获批准**（`stale` 2 = `pyproject.toml` + `tools/release_all.py`；`unregistered` 1 = 那条刻意不入库的演示物）。
+> 下面 §2.1–§2.6 仍逐条有效：它们是**走查清单与签法**（改的是"这两处该不该动"，不是"有没有动"）。
+
 ### §2.1 为什么这是禁改区
 `tools/release_all.py` 与 `pyproject.toml` 都在 `.noai-paths` 的 `[category: release-deploy]` 里（"发出去就收不回来"）。按 `AGENTS.md`：**AI 可以写 patch，但必须由人逐行走查并留结论，且要 2 名 reviewer 批准**；`--approve` **只能由人跑**。
 

@@ -32,5 +32,22 @@
 
 ## 现状
 
-- 已攒：**1 题**（T1）。
+- 已攒：**1 题**（T1）—— **已裁并落地**（见下）。
 - 攒到"再攒就没法继续"或所有者喊收时，一次性提交。
+
+---
+
+## T1 已裁并落地（2026-10-07）
+
+**裁法**：所有者本轮交代「如有必需，允许动禁改区」⇒ 按 **T1-a** 落地（`addopts` 改成
+`-m 'not network and not browser'`），提交 `498bd75`。上面三选项的代价仍然有效：若你更看重
+"签字面越小越好"，改回 T1-b 是 `tests/conftest.py` 里加十行的事（那要等 B 线的文件腾出来）。
+
+**落地读数**：
+- `pyproject.toml`：`addopts = "-m 'not network and not browser'"` · `markers` 两条
+  （`network` / `browser`，后者描述里写明"未装就是 unknown（skip），不是 pass"）·
+  `optional-dependencies.browser = ["playwright>=1.44"]`（运行期依赖仍然只有 `filelock`）。
+- 复算：`python -B -c "import tomllib,pathlib;d=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'));print(d['tool']['pytest']['ini_options']['addopts'])"`。
+- FC-27 读数（**诚实读数，签字仍需补记**）：`python -B scripts/noai_gate.py --git --since 5c6e441 --check-approvals`
+  ⇒ 命中 3 条、3 条未获批准（`stale` 2 = `pyproject.toml` + `tools/release_all.py`；`unregistered` 1 = 刻意不入库的演示物）
+  ⇒ 这两条要按 `draft/77 §2.4/§2.5` 走查并签（我不代签自己的这一版）。
