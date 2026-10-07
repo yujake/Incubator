@@ -473,7 +473,8 @@ agentflow/
 │   ├── renderanchor.py        ★ 论文包的**三维锚**与回执（`RENDER-ANCHOR.json` / `COMPILE-RECEIPT.json` / 构建历史 `BUILD-HISTORY.jsonl`）
 │   ├── agent_loop.py          ★ 模型驱动的决策循环（六种形状 + 观测层 + 长产出落盘）
 │   ├── agent_prompts.py       ★ 提示词装配（`PROMPT_VERSION` / `ROLE_BRIEFS` / `SECTION_ORDERS`）
-│   ├── modelgw.py             ★ provider 无关的模型网关（**全仓唯一读 API key 的地方**）
+│   ├── modelgw.py             ★ provider 无关的模型网关（**key 的唯一入口**：环境变量 → 机器级设置文件 `settings.json` 的 `model.api_key` → 缺省；取值口径的唯一实现是 `settings.env_or_setting`）
+│   ├── settings.py            ★ 机器级设置的一处定义（本机工具链落点 / Mathlib 根 / 模型 key / `workspace.projects_dir`；优先级 环境变量 > 设置文件 > 默认或自动探测；示例 `settings.example.json`，真正那份被 git 忽略 —— 判据 `tests/test_settings.py`）
 │   ├── llmseam.py             ★ 统一的模型缝：一次调用 = 一条审计记录
 │   ├── projects.py            ★ 项目工作区（一个项目一个文件夹）
 │   ├── verify.py              ★ 全库不变量校验（`Issue.code` 的**条数按命令当次读**：AST 数 `Issue(...)` 的第 4 个实参去重；观测 2026-09-29（T1+T2）⇒ 调用点 95、字面量 94、去重 **84**（T1 加 2 个新码 + T2 加 5 个 = 77+7；`dangling_lit` 是既有码，故不是 +3）—— 再前 `G3`（2026-09-27）是 85/84/**77**，`G3` 之前这里写 71，已过期。**量法有出口**（原来是 `temp/` 里的脚本，`temp/` 不入库 ⇒ 现在把命令写进本节）：`python -c "import ast,pathlib;t=ast.parse(pathlib.Path('src/agentflow/verify.py').read_text(encoding='utf-8'));c=[n for n in ast.walk(t) if isinstance(n,ast.Call) and getattr(n.func,'id','')=='Issue'];v={n.args[3].value for n in c if len(n.args)>=4 and isinstance(n.args[3],ast.Constant)};print(f'调用点 {len(c)} / 去重 {len(v)}')"`）
@@ -481,9 +482,9 @@ agentflow/
 │   ├── cli.py                 命令行入口
 │   ├── pipeline.py            固定顺序流水线（前三阶段的编排）
 │   └── tools/                 工具层（= `*_tools.py` + `base.py` + `__init__.py`；`*_tools.py` 当次 14 个 —— **不写死份数**：`*_tools.py` 的条数由 §0.3 的 `LIVE-READINGS` 块产出，`(Get-ChildItem src/agentflow/tools -File).Count` 观测 2026-09-30 ⇒ 15）
-├── scripts/                   发布门 / 门禁 / linter（5 个 `.py`；**不是运行期依赖**）
-├── tests/                     pytest（162 个 `test_*.py`；离线套件，联网套件用 `-m network`）
-├── docs/                      规格文档（14 个 `.md`：`ROLE-SPECS.md`、`INDEX.md`、`PROPOSALS.md` 等）
+├── scripts/                   发布门 / 门禁 / linter（**6** 个 `.py`，观测 2026-10-07：`__init__.py` + 5 个脚本；**不是运行期依赖**）
+├── tests/                     pytest（**267** 个 `test_*.py`，观测 2026-10-07；**这一格老得最快**：`(Get-ChildItem tests -Filter 'test_*.py').Count` 当次复跑 —— 本节第 234 行那条"原写 65 个 / 1497 passed"的反例说的就是这一行，它在 2026-10-07 又过期过一次（162 → 267）；离线套件，联网套件用 `-m network`）
+├── docs/                      规格文档（**18** 个 `.md`，观测 2026-10-07（新增 `NOAI-GOVERNANCE.md` `READING-MAP.md` `USER-END-DSH-STYLE.md` `USER-TEST.md`）；`(Get-ChildItem docs -Filter '*.md').Count`）
 ├── tools/                     开发期工具与探针（14 个 `.py`；其中 `release_all.py`、`coverage_zero_test.py`、`run_each_test_file.py`、`verify_role_specs.py`、`vocab_census.py` 是**发布门/判据本体**，其余是一次性探针）
 └── data/ library/ demo/       运行期数据（`data/` 18 个 JSON = 17 张表的快照 + `counters.json`；⚠️ 见 §10-D6）
 ```

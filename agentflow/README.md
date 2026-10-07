@@ -80,7 +80,7 @@ python -m agentflow.cli project run --name first --books D:\books `
 ```
 
 实测（2026-09-30，2 本书 87 页 + 0.05 美元上限）：冷启动登记 2/2 本，6 次模型调用花
-**0.0032 美元**，退出码 0；产物在**项目根**（默认 `projects.DEFAULT_PROJECTS_DIR`，可用 `$env:AGENTFLOW_PROJECTS_DIR` 覆盖）下的 `<工作区>/out/run-1/` 的**六件**：
+**0.0032 美元**，退出码 0；产物在**项目根**（默认 `projects.DEFAULT_PROJECTS_DIR` —— 由本包位置推出的工作区根下的 `projects/`，可用 `--projects-dir`、`$env:AGENTFLOW_PROJECTS_DIR` 或设置文件的 `workspace.projects_dir` 覆盖）下的 `<工作区>/out/run-1/` 的**六件**：
 `run-manifest.json`（这一跑的全部读数）/ `model-transcript.jsonl`（逐次调用）/
 `evidence.json`（来源 + 全文 sha256 + 逐字回验）/ `claims.json`（拆出来的断言）/
 `cost.json`（花销账）/ `report.md`（**人读的那一份**）。同一次实测里 9 条断言
@@ -326,10 +326,12 @@ agentflow/
 ├── DESIGN.md / DESIGN-TOOLS.md / DESIGN-INTERACTIONS.md / DESIGN-ROLES.md / DESIGN-CONDUCTOR.md
 │                             设计理由（不构成判据；现状导读见 ../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md）
 ├── config.yaml               运行时可调项（注释里注明各字段落到哪个模块）
+├── settings.example.json     机器级设置的示例（本机工具链落点 / Mathlib 根 / 模型 key / projects 落点）：**复制成同目录的 `settings.json` 再改值**（那份被 git 忽略；改哪台机器就换那一份）。口径见 `src/agentflow/settings.py` 与 `docs/FORMAL-TOOLCHAIN.md` §6
 ├── .noai-paths               禁改区清单（**40** 条 glob / **37** 条唯一路径 / 7 类；**台账条目数与欠签不写定值**（每签一个字就变 —— 量法与当次值见 §6.2 那两格，别再往这一行抄数）；前两个数由 `tests/test_release_all.py::test_readme_file_tree_numbers_match_the_repo` 守着）
 ├── pyproject.toml            包元数据 + pytest 配置（**唯一**一处；不要再加 tests/pytest.ini）
 ├── docs/
 │   ├── INDEX.md              docs/ 的索引与"按角色怎么读"
+│   ├── READING-MAP.md        ★ 七层与各自的文件 + "想改什么 ⇒ 读哪几个文件"（3 跳以内）+ §3"这些文件为什么这么大"+ §4 判据在哪（**第一次读这个仓先看它**；判据 `tests/test_reading_map.py`）
 │   ├── ROLE-SPECS.md         ★ 九个角色 + 主控（M）的详细规格（每节 10 条同构结构）
 │   ├── NOAI-GOVERNANCE.md    FC-27 门的机制与人工批准流程
 │   ├── PROPOSALS.md          已裁决的缺口与提案（P / G / N 三类）
@@ -342,7 +344,9 @@ agentflow/
 │   ├── PROPOSAL-side-effect-axes.md
 │   │                         副作用第二根轴（external：egress / exec）的提案
 │   └── NOAI-CHANGE-LIST-management.md · NOAI-SUSPENSION-2026-09-25.md · NOAI-SUSPENSION-2026-09-28.md
-│                             禁改区的变更清单与两次暂停记录
+│       · USER-END-DSH-STYLE.md（用户端设计依据：抄 DSH 的皮）
+│       · USER-TEST.md（人实测清单：零成本自检 → 真机一趟 → 验收两道门）
+│                             禁改区的变更清单与两次暂停记录 · 用户端设计依据 · 人实测清单
 ├── scripts/
 │   ├── lint_rules.py         linter（**规则区间与条数以 `python scripts/lint_rules.py` 的摘要行为准**；当次 R001–R012、R004/R006 已退休；**有退出码**）
 │   ├── noai_gate.py          FC-27 门（0=clean / 1=requires_human / 2=unknown）
@@ -375,11 +379,12 @@ agentflow/
 │   ├── paperbuild.py         论文包的渲染 / 编译 / 锚核对（build = render → compile → anchor_check 三步）
 │   ├── renderanchor.py       渲染锚与编译回执的本体（RENDER-ANCHOR.json / COMPILE-RECEIPT.json / BUILD-HISTORY.jsonl）
 │   ├── promptkit.py          LLM 接入（一）：提示词装配（有序段 + 变量 + complete + 作用域遮蔽）
-│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p25）
+│   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；PROMPT_VERSION=p43，**以 `src/agentflow/agent_prompts.py` 顶部的常量与 `tests/test_agent_prompts.py` 的冻结表为准**）
 │   ├── llmseam.py            LLM 接入（三）：统一的模型缝（一次调用一条审计记录 + 三态词表 + 预算守卫）
 │   ├── agent_loop.py         LLM 接入（四）：模型驱动的循环（tool / summon / message / note / ask_user / final 六种形状）
 │   ├── modelgw.py / modelclient.py / modelcost.py / llm.py
-│   │                         模型网关（**全仓唯一读 API key 的地方**）/ 抽取层客户端 / 花销入账 / 离线抽取器
+│   │                         模型网关（**key 的唯一入口**：环境变量 → 机器级设置文件 → 缺省）/ 抽取层客户端 / 花销入账 / 离线抽取器
+│   ├── settings.py           机器级设置（**本机路径与模型 key 的一处定义**：`toolchain.*` / `model.*` / `workspace.projects_dir`；优先级 环境变量 > 设置文件 > 默认/自动探测）；配套示例 `settings.example.json`，真正那份（`settings.json`）被 git 忽略
 │   ├── providers.py / fetch.py / extract.py / quoteverify.py / evidence.py / locallib.py
 │   │                         检索 provider / 下载 / 文本抽取 / 引文回验 / 证据层 / 本地书架灌入
 │   ├── formalgw.py           Lean 形式化后端（缺工具链 ⇒ inconclusive，不是 fail）
@@ -395,7 +400,7 @@ agentflow/
 │                             trace / research / verify / attack / doc / review / conjecture /
 │                             conductor / manuscript，外加 `base.py` 与装配点 `__init__.py`；
 │                             组装结果与逐角色条数以 `python -m agentflow.cli tools` 为准）
-├── tests/                    pytest（162 个 `test_*.py`；离线 + 联网两套；见 §2）
+├── tests/                    pytest（**267** 个 `test_*.py`，观测 2026-10-07；当次用 `(Get-ChildItem tests -Filter 'test_*.py').Count` 复跑 —— 这一格老得最快，**别把它当定值**；离线 + 联网两套；见 §2）
 ├── tools/                    开发期工具与探针（`release_all.py` 一键发布、`coverage_zero_test.py` 覆盖门、
 │                             `run_each_test_file.py` 逐文件门、`verify_role_specs.py` 规格门、
 │                             `vocab_census.py` = R011 判据本体，其余是 `probe_*` 探针）

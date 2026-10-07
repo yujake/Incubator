@@ -79,7 +79,8 @@
 |---|---|
 | `cli.py` | 命令行入口（24 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`/`doctor`…） |
 | `webui.py` | 用户端网页：全局待回答面板 + 运行态 + 一趟的事件回放（只读投影；唯一写路径是 `POST /answer` → `userio.answer_question`） |
-| `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置 → `AGENTFLOW_PROVER_PATH` → PATH 三档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看 |
+| `settings.py` | **机器级设置的一处定义**（2026-10-07 起）：落点（默认是 `agentflow/` 下的那份，被 git 忽略；`AGENTFLOW_SETTINGS` 指到别处）、键名（`toolchain.*` / `model.*` / `workspace.projects_dir`）与**唯一口径的优先级**（环境变量 > 设置文件 > 内置默认/自动探测，唯一实现 `env_or_setting`）。为什么要有它：本机路径与模型 key 此前散在"代码里的字面量 + 环境变量"两处 —— 换一台机器就有一句假话。判据 `tests/test_settings.py`（含"源码里 0 条死地址"与三道 key 安全阀） |
+| `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ `AGENTFLOW_PROVER_PATH`（两者都是环境变量）→ **设置文件的 `toolchain.*`** → PATH 四档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看（打的是"从哪一档找到的"） |
 | `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`） |
 | `__main__.py` | `python -m agentflow` 的入口 |
 | `__init__.py` | 包说明与公开面 |
@@ -241,7 +242,8 @@
 | 动**主控编队 / 并发** | `conductor.py` | `scheduler.py` → `host.py` → `tools/conductor_tools.py` | `tests/test_conductor.py`、`tests/test_scheduler.py`、`tests/test_host_wiring.py` |
 | 动**角色循环**（模型自己决定） | `agent_loop.py` | `agent_prompts.py` → `host.py` → `llmseam.py` | `tests/test_agent_loop.py`、`tests/test_agent_prompts.py` |
 | 往**提示词**里加一句话 | `agent_prompts.py` | 它引用的现算来源：`capabilities.py` / `tools.build_registry` | `tests/test_agent_prompts.py`（每条都要与现算一致） |
-| 动**模型调用与花销** | `modelgw.py`（唯一读 key 的地方） | `modelclient.py` → `tokenmeter.py` → `modelcost.py` → `llmseam.py` | `tests/test_modelgw.py`、`tests/test_tokenmeter.py` |
+| 动**模型调用与花销** | `modelgw.py`（key 的**唯一入口**：环境变量 → 设置文件 → 默认，见 `settings.py`） | `modelclient.py` → `tokenmeter.py` → `modelcost.py` → `llmseam.py` | `tests/test_modelgw.py`、`tests/test_tokenmeter.py` |
+| 换一台机器 / 改**本机的工具链落点与模型 key** | 设置文件的示例 `settings.example.json`（真正那份被 git 忽略，本机键名与优先级见 `settings.py` 的模块 docstring） | `docs/FORMAL-TOOLCHAIN.md` §6（落点表 / 键名表 / 安全阀） | `tests/test_settings.py`（含"真正那份既不在索引里、也确被忽略"与"示例里没有真 key"） |
 | 动**判据 / 质量门** | `verify.py`（禁改区） | `gates.py`、`deliver.py`、`faculty_checks.py` | `tests/test_verify*.py`、`tests/test_gates.py` |
 | 动**发布门** | `tools/release_all.py`（禁改区） | `tools/coverage_zero_test.py`、`tools/run_each_test_file.py` | `tests/test_release_all.py`、`README.md` §6 |
 | 动**lint 规则** | `scripts/lint_rules.py`（禁改区） | `tools/vocab_census.py`（禁改区） | `tests/test_lint_rules*.py` |
@@ -264,7 +266,7 @@
 | `schema.py` | 3041 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
 | `runflow.py` | 2039 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层 |
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 2517 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
+| `cli.py` | 2520 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1817 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
 | `agent_b/core.py` | 1250 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1250 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 1666 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |
