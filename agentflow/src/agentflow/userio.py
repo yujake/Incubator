@@ -416,6 +416,8 @@ def answer_question(session_root: Path | str, *, qid: str, answer: str | None = 
     那句话）。为什么连 `answer` 也写：`autonomy._latest_user_answer` 直接读
     `event["answer"]`（它不看 `selected`），而"答了却读不到"与"没答"在读数上
     长得一模一样 —— 那正是三态纪律要挡的形态。
+
+    写成功之后通知 `set_answer_hook` 装上的监听器（网页端据此发 `answered`）。
     """
     custom_text = str(custom or "")
     if answer is not None:
@@ -425,6 +427,8 @@ def answer_question(session_root: Path | str, *, qid: str, answer: str | None = 
                            "custom": custom_text, "by": by, "late": bool(late)}
     row["answer"] = reply_text(row)
     _path, problem = SS.append(session_root, row, sid=sid)
+    if not problem:
+        _notify(_ANSWER_HOOK, session_root, qid, str(sid or ""))
     return problem
 
 
@@ -433,6 +437,59 @@ def _find_answer(session_root: Path, qid: str, sid: str | None) -> dict | None:
         if e.get("kind") == ANSWER_KIND and str(e.get("qid")) == qid:
             return e
     return None
+
+
+# ====================================================================== 写路径上的可选钩子
+#
+# 与 `sessions.py` 同一族、同三条纪律（见那边的说明）：缺省 `None` ⇒ 行为逐字节不变；
+# 监听器是旁路、坏了不许把写路径带坏（记进 `hook_problem()`，不静默吞）；只有
+# 真的写成才通知。`sse.attach()` 把这两个槽接到"发 `question` / `answered`"上。
+#
+#: 新问题落盘之后的监听器：`(root, question, sid) -> None`。
+_QUESTION_HOOK: "Callable[[Any, Question, str], None] | None" = None
+#: 回答落盘之后的监听器：`(root, qid, sid) -> None`。
+_ANSWER_HOOK: "Callable[[Any, str, str], None] | None" = None
+#: 上一次监听器抛出的问题（空串 = 没出过问题）。两个槽共用这一条读数 ——
+#: 它们同生同灭（`attach`/`detach` 一起装一起撤），分成两条只会让人多看一眼。
+_HOOK_PROBLEM: str = ""
+
+
+def set_question_hook(hook: "Callable[[Any, Question, str], None] | None"
+                      ) -> "Callable[[Any, Question, str], None] | None":
+    """装上/撤掉"新问题落盘之后"的监听器；返回被替换掉的那一个。"""
+    global _QUESTION_HOOK  # noqa: PLW0603 - 一个进程一个槽，与 sessions 那一族同形
+    previous, _QUESTION_HOOK = _QUESTION_HOOK, hook
+    return previous
+
+
+def set_answer_hook(hook: "Callable[[Any, str, str], None] | None"
+                    ) -> "Callable[[Any, str, str], None] | None":
+    """装上/撤掉"回答落盘之后"的监听器；返回被替换掉的那一个。"""
+    global _ANSWER_HOOK  # noqa: PLW0603 - 同上
+    previous, _ANSWER_HOOK = _ANSWER_HOOK, hook
+    return previous
+
+
+def hook_problem() -> str:
+    """两个监听器上一次抛出的问题（空串 = 没出过问题）。"""
+    return _HOOK_PROBLEM
+
+
+def _notify(hook: "Callable[..., None] | None", *args: Any) -> None:
+    """把一个刚写成的事实交给监听器（`hook` 为 `None` ⇒ 立刻返回）。
+
+    接住异常并记一条读数（同 `sessions._notify_append`）：推送坏掉不许变成
+    "回答没落盘" —— 那是两件事，且后者要严重得多。
+    """
+    global _HOOK_PROBLEM  # noqa: PLW0603 - 只记最近一条
+    if hook is None:
+        return
+    try:
+        hook(*args)
+    except Exception as exc:  # noqa: BLE001 - 旁路：见 `_notify` 的 docstring
+        _HOOK_PROBLEM = f"{type(exc).__name__}: {exc}"
+    else:
+        _HOOK_PROBLEM = ""
 
 
 # ====================================================================== 渲染视图（裁定 L1 的收敛入口）
@@ -614,6 +671,7 @@ def ask_user(session_root: Path | str, *, role: str, question: str,
     found = _find_answer(root, my_qid, sid)
     if found is None:
         problem = ""
+        written = False
         if my_qid not in {str(e.get("qid")) for e in events if e.get("kind") == ASK_KIND}:
             _p, problem = SS.append(root, {"kind": ASK_KIND, "qid": my_qid, "role": role,
                                            "text": question, "header": header,
@@ -621,11 +679,24 @@ def ask_user(session_root: Path | str, *, role: str, question: str,
                                            "multi_select": bool(multi_select),
                                            "timeout_sec": (None if timeout_sec is None
                                                            else float(timeout_sec))}, sid=sid)
+            written = not problem
         if problem:
             return AskOutcome(qid=my_qid, problem=f"问题没能落档：{problem}",
                               note=("用户频道这条通道没通（问题没能落进会话记录）⇒ "
                                     "这不是'停在等回答'：没有 qid 就没有人能答。"
                                     "按最保守的做法继续，并把这件事写进结论。"))
+        if written:
+            # 只有新写下一条问题时才通知：`my_qid` 已经在盘上时这次调用什么都没写，
+            # 再发一条 `question` 会让网页端把同一件事显示两遍。
+            # 生效的会话号是那个真的被用到的（`sid` 没给 ⇒ 默认会话号）——
+            # 事件里的 sid 必须与它落盘的那一段会话一致，否则前端按 sid 过滤会漏掉它。
+            _notify(_QUESTION_HOOK, root,
+                    Question(qid=my_qid, role=role, text=question, options=opts,
+                             ts="",
+                             timeout_sec=(None if timeout_sec is None
+                                          else float(timeout_sec)),
+                             header=header, multi_select=bool(multi_select)),
+                    str(sid or SS.session_id()))
     # ---- 等：轮询磁盘上的回答事件（不产生任何 token 开销）
     t0 = time.monotonic()
     cancelled = False
