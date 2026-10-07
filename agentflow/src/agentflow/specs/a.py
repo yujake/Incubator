@@ -109,7 +109,23 @@ ACTIONS: tuple[ActionSpec, ...] = (
             },
             required=("topic",),
         ),
-        "ASearchResult（含 request_id / outcome / result_lit_ids / literature）",
+        # 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在 `.noai-paths`
+        # 的 `[category: auth-audit]` 里。题 20 选 A（2026-10-07 所有者裁定）：
+        # 这一格此前只写"含 request_id / outcome / result_lit_ids / literature"，
+        # 而实现（`agent_a/search_literature.py`）在题 11 补完"完整透传"之后已经
+        # 返回 26 个键 —— 声明面漏掉的正是 `sources` / `cost` 这一类跨源读数，
+        # 而主控派活读的就是这一格（`capabilities.CAPABILITIES` 由本文件派生）。
+        # 本次只把键名逐字抄齐（名字与次序都取自实现末尾那个 return 字典），
+        # 不改实现、不改别处、不改任何判据。
+        (
+            "ASearchResult dict（逐键：ok / admitted / request_id / topic / mode / done / "
+            "outcome / claimed_request_ids / claimed_own / result_lit_ids / literature / "
+            "query_description / providers_requested / role_providers / sources / "
+            "sources_round / cost / registered / duplicated / downloaded / download_failed / "
+            "attempts / last_error / queue_pending / rounds / note）；"
+            "三个非成功档（`refuse(...)` / `outcome=query_not_applicable` / "
+            "`outcome=rejected_by_gate`）各自返回更短的读数，键集与上面这一档不同"
+        ),
         side_effect="write_local", handler_name="search_literature",
         external="egress",
     ),
