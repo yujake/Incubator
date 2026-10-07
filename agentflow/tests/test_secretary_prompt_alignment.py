@@ -99,6 +99,19 @@ DUTIES: dict[str, dict[str, object]] = {
 #: 就说明有人把"框架内部的事"当成对角色的承诺写进了提示词 ⇒ 红。
 PROBE_INTERNAL = ("重解读", "重新理解", "rework")
 
+#: 普查 `draft/63 §2-①` 点名的另一个接住方：错名时的并列候选。
+#: 它不在秘书里（薄转发到 `tools/base.py`），但同一条"双向对齐"纪律适用：
+#: 提示词教了「名字必须是真的 / 会被拒」，那"给候选"这件事就必须真的发生。
+OTHER_CATCHERS: dict[str, dict[str, object]] = {
+    "candidate_tool_names": {
+        "where": "tools/base.py",
+        "promise": ("名字必须是真的", "会被拒"),
+        "call": ("tools/base.py:945 的候选计算", "secretary.py:124 的薄转发"),
+        "why": "工具/动作名写错时给并列候选（`secretary.py:116` 的 docstring 逐字写着"
+               "「错名的并列候选（薄转发到 tools.base.candidate_tool_names，判据只有一份）」）",
+    },
+}
+
 #: 登记的"有产出方、今天没有生产调用点"的秘书方法（留读数，不许沉默）。
 #: 注意：这一档不是禁令，是登记制：登记了就必须写清"它今天由谁消费"。
 NO_CALL_POINT_TODAY = {
@@ -145,14 +158,35 @@ def _src_text(rel: str) -> str:
 
 
 def _called_in_production(symbol: str) -> list[str]:
-    """`symbol` 在生产面（`src/agentflow` 的 py，去掉注释行）被 `.symbol(` 调用的每一处。"""
+    """`symbol` 在生产面（`src/agentflow` 的 py）被调用的每一处。
+
+    两种调用形态都要认（第一版只认第一种，于是把 `candidate_tool_names` 误报成"死的"）：
+
+    1. 属性调用 `.symbol(` —— 例如 `self.secretary.prescreen(...)`；
+    2. 裸调用 `symbol(` —— 例如 `from .tools.base import candidate_tool_names` 之后的直接调用。
+
+    刻意排除三类"看着像调用"的行：`def symbol(`（那是定义）、`from/import` 行、
+    以及行首是注释或引号的行（本仓的 docstring 大量引用代码，不排会把"提及"当成"调用"）。
+    紧跟在反引号后的名字也排除（`` `symbol(…)` `` 是文档里的引用，不是调用）。
+
+    已知口径边界（如实写在判据里，免得下一个人把命中数当精确值）：多行字符串内部的行认不出来
+    —— 例如提示词正文里那句"写这一行的是 `self.secretary.handoff_add(...)`"会被算成一处。
+    所以调用点的条数只作"非空"判据（`assert calls`），不作精确计数；
+    要精确数就得走 `ast`（本判据刻意不引 `ast`：它要的是"生产面到底有没有人调它"这一档，
+    而这一档用行级扫描已经够，且不依赖被扫文件的语法能否解析）。
+    """
+    import re as _re
+
     root = pathlib.Path(__import__("agentflow").__file__).parent
+    attr = _re.compile(r"\." + _re.escape(symbol) + r"\s*\(")
+    bare = _re.compile(r"(?<![\w.`])" + _re.escape(symbol) + r"\s*\(")
     hits: list[str] = []
     for p in sorted(root.rglob("*.py")):
         for i, ln in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
-            if ln.lstrip().startswith("#"):
+            s = ln.lstrip()
+            if s.startswith(("#", '"', "'", "def ", "from ", "import ")):
                 continue
-            if f".{symbol}(" in ln:
+            if attr.search(ln) or bare.search(ln):
                 hits.append(f"{p.relative_to(root)}:{i}")
     return hits
 
@@ -271,6 +305,36 @@ def test_secretary_methods_without_a_call_point_are_registered() -> None:
     assert not unregistered, (
         "这些秘书方法今天在生产面**没有调用点**，却没有登记（登记表 = `NO_CALL_POINT_TODAY`）："
         f"{unregistered}\n  （登记过的：{sorted(NO_CALL_POINT_TODAY)}）")
+
+
+# --------------------------------------------------------------------------------------
+# 同一条纪律：普查点名的其它接住方（不在秘书里的那些）也要双向
+# --------------------------------------------------------------------------------------
+
+def test_other_named_catchers_are_two_way_aligned() -> None:
+    """`draft/63 §2` 的"谁接住"那一栏还点名了秘书之外的组件；同一条纪律适用。
+
+    这里只登记真正会被提示词承诺的那些（今天一条：错名的并列候选）。
+    不在秘书里不影响判定 —— 判据问的是同一件事：承诺了就得真做。
+    """
+    prompts = _roles_and_prompts()
+    reading: dict[str, object] = {}
+    problems: list[str] = []
+    for sym, spec in OTHER_CATCHERS.items():
+        promise = tuple(spec["promise"])  # type: ignore[arg-type]
+        seen = sorted(r for r, t in prompts.items() if any(p in t for p in promise))
+        reading[sym] = len(seen)
+        if not seen:
+            problems.append(f"{sym}：十角色提示词里没有任何人被告知 {promise} ⇒ 接住方没人知道它存在")
+        if sym not in _src_text(str(spec["where"])):
+            problems.append(f"{sym}：`{spec['where']}` 里找不到这个符号 ⇒ 提示词承诺了一个不存在的东西")
+        calls = _called_in_production(sym)
+        if not calls:
+            problems.append(
+                f"{sym}：提示词承诺了它（{len(seen)} 个角色），而它在生产面**一次都没被调用** ⇒ "
+                f"这个接住方今天是死的（登记线索：{spec['call']}）")
+    assert reading, "表是空的 ⇒ 这一格没查成"
+    assert not problems, ("其它接住方与提示词**没有双向对齐**：\n  - " + "\n  - ".join(problems))
 
 
 # --------------------------------------------------------------------------------------
