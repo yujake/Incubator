@@ -371,6 +371,13 @@ def _snapshot_payload(root: Any) -> dict[str, Any]:
     惰性 import `readers`：`routes.py` 导入期就 import 了 `readers`，而 `readers` 一旦
     哪天开始 import `sse`，模块级互相导入就会成环 —— 与 `routes.handler_for` 同一条
     理由（调用期导入既安全又便宜）。
+
+    已知代价（写在这里，不藏）：`append` 是热路径（一步一条事件），而这里每次都现算
+    一份全量快照（读遍会话文件 + 台账）。于是"开着网页端跑一趟"会比不打开时多花
+    O(趟内事件数 x 会话数) 次读盘。本批接受它，两条理由：`attach()` 只在网页端起服务
+    时被调用（没人看着就不付这份代价），且快照的语义必须与 `/api/state` 逐字同源。
+    要摊平它得引入节流/合并 —— 那是一个独立的选择（它会把"盘上新增 ⇒ 流里出现"
+    从"立刻"变成"最多晚 N 毫秒"），不在本批。
     """
     from .readers import state_face  # noqa: PLC0415 - 见上面那句
 
