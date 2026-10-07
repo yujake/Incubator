@@ -87,8 +87,11 @@ def _pending_endpoints() -> dict[str, str]:
 #: 判据 C 逐条登记的欠账：这些接口在 `types.ts` 里，但没有真读数可对账。
 #: 同样是"模块自己登记"：任何模块里的 `UNCHECKED_TYPES`（dict）都会并进来。
 _W0_UNCHECKED_TYPES = {
-    "Checkpoint": "检查点文件由 agent_loop 写；读它的适配器在 W1 的 readers.py",
-    "CheckpointSpend": "同上（Checkpoint 的子结构）",
+    # 2026-10-07（裁定 5a + A 线落地）：`Checkpoint` / `CheckpointSpend` 两条登记退场 ——
+    # A 线把 `webui/state.py` 的 `type_decls()` 里那对删掉了（B 线的 `CheckpointView` /
+    # `CheckpointSpendView` 才是带真读数的那对），于是它们既不在 `types.ts` 里、也不该再挂在
+    # 欠账表上。按判据自己的口径（`test_c_the_unchecked_registry_is_not_stale`）：
+    # 登记着的接口若已不在 `types.ts` 里 ⇒ 这条登记过期 ⇒ 必须删。
     "WriteResult": "写面的统一回执；生产者（/api/stop · /api/submit · /api/settings）在 W3/W4",
 }
 

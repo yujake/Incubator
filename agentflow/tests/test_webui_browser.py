@@ -124,21 +124,26 @@ def test_the_spa_shell_mounts_and_the_console_stays_clean(tmp_path: pathlib.Path
         assert [e for e in live["errors"] if "favicon" not in e] == [], live["errors"]
 
 
-def test_the_old_server_rendered_shell_is_still_the_root_page(
+def test_the_root_page_is_now_the_spa_shell(
         tmp_path: pathlib.Path) -> None:
-    """实况（P1 的迁移还没做）：`GET /` 仍由旧壳提供 —— 浏览器里 `#app` 挂不起来。
+    """正控（P1 第一块已落地）：`GET /` 现在吐 SPA 外壳，浏览器里能挂起来。
 
-    这不是缺陷、也不是判据的猜测，是盘上的形态：`ui/src/main.tsx` 的 `ROUTES` 里
-    有 `/`，但服务端的 `/` 命中 `routes._OWN` 的 `handle_root`（服务端渲染），
-    只有未知路径才回退到 `index.html`（裁定 Q1）。所以这一条把当前的形状钉住：
-    哪一天 P1 落地（`/` 改吐 SPA 外壳），这条会红，那时改它正合适。
+    这条判据的前身是"实况：`/` 仍由旧壳提供、`#app` 挂不起来"，它当时还写着
+    "哪一天 P1 落地（`/` 改吐 SPA 外壳），这条会红，那时改它正合适" —— 2026-10-07
+    A 线按 `draft/81 §6-D13` 落了 P1 的第一块（`handle_root` → 唯一一份
+    `server._serve_spa_shell()`），于是就是现在：把它改成新形状，并保留一条反向读数
+    （旧壳那条路仍活给 `GET /run/{sid}` 用，所以"旧壳没被删干净"与"根页面已迁"两件事
+    在这一条里分得开）。
     """
     with _workspace(tmp_path) as root, _live(root) as live:
         live["page"].goto(live["base"] + "/", wait_until="load")
-        assert live["page"].query_selector("#app") is None, (
-            "`/` 已经开始吐 SPA 外壳了（它有 `#app` 挂载点）—— 那是 P1 落地，"
-            "请把这条判据改掉")
+        assert live["page"].query_selector("#app") is not None, (
+            "`/` 没有 `#app` 挂载点 —— P1 的第一块（`/` 改吐 SPA 外壳）没落地，"
+            "或外壳产物不在盘上（后者会 404 + '前端外壳不在盘上'）")
         assert live["page"].query_selector("body > *") is not None, "整页是空的"
+        # 外壳里的令牌占位符必须被这一次进程的令牌替换（与 Q1 的回退路径同一条注入逻辑）
+        html = live["page"].content()
+        assert "__CSRF__" not in html, "外壳里的 CSRF 占位符没被替换"
 
 
 # ====================================================================== 2 CSRF
