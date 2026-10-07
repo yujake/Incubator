@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
-"""审计 `draft/72|73|74` 里的**事实性引用**（只报对不上的，不打印通过项）。
+"""审计 `draft/72|73|74` 里的**事实性引用**（三档，只报需要人看的）。
 
-三类检查：
-  ① `路径.py:行号` —— 行号存在吗？那一行的内容与引用处的上下文有共同标识符吗？
-  ② `tests/x.py` / `x.py::ye_shi` —— 判据文件与用例名真的在盘上吗？
-  ③ 可复算的事实声明（手工登记几条：六件产物样本、verifications 目录、受理标记计数）——
-     重新算一遍，把读数打出来（不评判，交给人看）。
+## 它为什么是"三档"而不是"一档"
+本文档族的写法有三种，**只有前两种能被机器判**：
+  1. `` `file.py:120 symbol` `` —— 符号在反引号跨度里 ⇒ 可判：那一行必须含这个符号；
+  2. `` `symbol`（`file.py:120`） `` —— 符号在跨度外、相邻 ⇒ 可判（取跨度外的近邻标识符）；
+  3. `` `file.py:120/140/160` `` —— **只有路径与行号**（成组或单个）⇒ **机器判不了**：
+     没有"应该有什么"的断言。这一档**把那一行原样打出来**，交人一眼扫过 ——
+     本批的教训正是：真错就藏在这一档里（如"runs/ 那 1 项"写成进程登记，是**语义**错，
+     行号本身是对的，任何行号检查都抓不到它）。
+
+用法：
+  python -B temp/_audit_web_drafts.py            # 三档全打
+  python -B temp/_audit_web_drafts.py --bare     # 只打第 3 档（逐行原文，供人扫）
 """
 
 from __future__ import annotations
@@ -21,19 +28,19 @@ DRAFTS = [REPO.parent / "draft" / n for n in (
     "74-前端×后端配合矩阵（按前端文件）.md",
 )]
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
-CITE = re.compile(r"`?([A-Za-z0-9_./\\-]+\.py):(\d+)")
+CITE = re.compile(r"([A-Za-z0-9_./\\-]+\.py):(\d+)")
 TESTFILE = re.compile(r"(tests[/\\][A-Za-z0-9_]+\.py)")
 TESTNODE = re.compile(r"([A-Za-z0-9_]+\.py)::([A-Za-z0-9_]+)")
+PLANNED = ("新", "新增", "计划", "W0", "W1", "W2", "W3", "W4", "W5")
 sys.stdout.reconfigure(encoding="utf-8")
 
 
 def find_file(rel: str) -> pathlib.Path | None:
     rel = rel.replace("\\", "/")
     for cand in (REPO / rel, REPO / "src" / "agentflow" / rel,
-                 REPO / "src" / "agentflow" / "tools" / rel, REPO / rel.split("/")[-1]):
+                 REPO / "src" / "agentflow" / "tools" / rel):
         if cand.is_file():
             return cand
-    # 只给裸文件名的：在 src/agentflow 与 tools 下按名找
     name = rel.split("/")[-1]
     for base in (REPO / "src" / "agentflow", REPO / "src" / "agentflow" / "tools",
                  REPO / "tools", REPO / "scripts", REPO / "tests"):
@@ -44,53 +51,63 @@ def find_file(rel: str) -> pathlib.Path | None:
 
 
 def main() -> int:
-    bad = 0
+    only_bare = "--bare" in sys.argv
+    hard: list[str] = []
+    suspect: list[str] = []
+    bare: list[str] = []
+    planned: list[str] = []
+
     for doc in DRAFTS:
         if not doc.is_file():
             print(f"!! 文档不在：{doc}")
             continue
         text = doc.read_text(encoding="utf-8")
-        print("=" * 78)
-        print(f"# {doc.name}")
-        # ① 行号引用
         for m in CITE.finditer(text):
             rel, lineno = m.group(1), int(m.group(2))
             p = find_file(rel)
             if p is None:
-                print(f"  [文件不存在] {rel}:{lineno}")
-                bad += 1
+                hard.append(f"{doc.name}: 文件不存在 {rel}:{lineno}")
                 continue
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-            if lineno < 1 or lineno > len(lines):
-                print(f"  [行号越界] {rel}:{lineno}（该文件共 {len(lines)} 行）")
-                bad += 1
+            if not (1 <= lineno <= len(lines)):
+                hard.append(f"{doc.name}: 行号越界 {rel}:{lineno}（共 {len(lines)} 行）")
                 continue
             actual = lines[lineno - 1]
-            ctx = text[max(0, m.start() - 90): m.end() + 60]
-            ctx_ids = {t for t in IDENT.findall(ctx)}
-            if not (ctx_ids & set(IDENT.findall(actual))):
-                print(f"  [行内容对不上] {rel}:{lineno}")
-                print(f"      引用处上下文：…{ctx.strip()[:120]}…")
-                print(f"      盘上那一行  ：{actual.strip()[:120]}")
-                bad += 1
-        # ② 判据文件与用例名
-        for m in sorted({x.group(1).replace('\\', '/') for x in TESTFILE.finditer(text)}):
-            p = REPO / m
-            if not p.is_file():
-                print(f"  [判据文件不存在] {m}")
-                bad += 1
+            bare.append(f"{rel}:{lineno}  →  {actual.strip()[:104]}")
+        seen_files: set[str] = set()
+        for mm in TESTFILE.finditer(text):
+            rel_test = mm.group(1).replace("\\", "/")
+            if rel_test in seen_files:
+                continue
+            seen_files.add(rel_test)
+            if (REPO / rel_test).is_file():
+                continue
+            where = text[max(0, mm.start() - 60): mm.start() + 40]
+            line = f"{doc.name}: 判据文件不存在 {rel_test}"
+            if any(k in where for k in PLANNED):
+                planned.append(line + "（该处标了'新/计划'）")
+            else:
+                hard.append(line)
         for m in TESTNODE.finditer(text):
             fname, node = m.group(1), m.group(2)
             p = REPO / "tests" / fname
-            if not p.is_file():
-                continue  # 文件那条已经报过
-            body = p.read_text(encoding="utf-8", errors="replace")
-            if f"def {node}(" not in body:
-                print(f"  [用例名不存在] tests/{fname}::{node}")
-                bad += 1
+            if p.is_file() and f"def {node}(" not in p.read_text(encoding="utf-8", errors="replace"):
+                hard.append(f"{doc.name}: 用例名不存在 tests/{fname}::{node}")
+
     print("=" * 78)
-    print(f"不一致条目：{bad}")
-    return 0
+    print(f"① 硬错（文件/行号/判据文件/用例名）—— 机械可判、可靠：{len(hard)}")
+    for one in hard:
+        print("   " + one)
+    print(f"② 逐条引用 → 盘上那一行原文（**机器判不了语义**，逐行打给人扫）：{len(bare)} 条")
+    if only_bare:
+        for one in bare:
+            print("   " + one)
+    else:
+        print(f"   （加 --bare 看这 {len(bare)} 行；本档包括'行号对但语义错'那一种 —— 只有人看得出来）")
+    print(f"③ 计划中的判据文件（尚未建，不算错）：{len(planned)}")
+    for one in planned:
+        print("   " + one)
+    return 1 if hard else 0
 
 
 if __name__ == "__main__":
