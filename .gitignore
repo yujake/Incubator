@@ -342,6 +342,7 @@ desktop.ini
 !/temp/_verify_r2.py
 !/temp/_verify_w0.py
 !/temp/_w0_public_face.json
+!/temp/_w5_legacy_census.py
 !/temp/_web_lines.json
 !/temp/_web_matrix_evidence.py
 !/temp/_web_matrix_evidence.txt

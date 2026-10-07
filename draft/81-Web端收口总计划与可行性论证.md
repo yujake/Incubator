@@ -79,8 +79,13 @@
 - 主控：**尝试**装 `playwright` + 浏览器（见 §6-D5）；装不上则浏览器判据保持 skip（记 `unknown`，不当 pass）。
 
 ### W5（旧壳清仓，最后、单独一批）
-- A：按裁定 P1「迁一面删一面」，把 `webui/views.py` 的旧 HTML 渲染与 `web/assets.py` 里被 Preact 取代的样式逐件删；每删一件先确认"没有判据在读它"（全仓 grep + 跑 17 条）。
-- 主控：删完跑一次全量门；`webui/views.py` 清空（或只剩必要的转发）；`docs/READING-MAP.md` 同步；**只有在确需重冻 golden 时才冻，且一次性 + 逐格归因 `draft/64 §8.12`**。
+- **普查已跑**（`temp/_w5_legacy_census.py`，见 §12 的表）：`views.py` 9 个顶层符号里 **5 个无任何引用**（`_top` `_option_html` `_question_card` `_run_row` `_event_card`）→ 可直接删；`_page`/`_not_found`/`render_root`/`render_run` 被 `server.py` 读，其中 `render_root`/`render_run` 还由 `__init__.py` **再导出**（public face）。
+- A：按裁定 P1「迁一面删一面」先删那 5 个无引用件；`web/assets.py` 里 `APP_CSS` 无引用可删、`STYLESHEET` 随旧壳一起退场、`THEME_CSS` 被 `emit_theme.py` 读（**那是主题的唯一来源，不许删**）。
+- **公开面收窄（这是 P1 的必然结果，我按 P1 执行、留痕）**：六页面全部迁到 SPA 之后，`render_root`/`render_run` 从 `webui.__all__` 里退场，`views.py` 清空；随之要改的三处**都是我自己的账**：
+  1. `tests/test_webui.py` 那一组（**17 条**，测的是服务端渲染的旧壳：选项渲染 / 转义 / 投影稳定 / 409 与 303）**迁移**到 SPA 面（`/api/state` 的 JSON + `POST /answer` 的状态码与三态 + 页面消费），迁移后条数不许减少；
+  2. `temp/_verify_w0.py` 的公开面基线**记一次"公开面修订"事件**（8 个公开名里去掉那两个，基线文件更新并写明理由与日期）；
+  3. `docs/READING-MAP.md` / `README.md` 同步。
+- 主控：删完跑一次全量门；**只有在确需重冻 golden 时才冻，且一次性 + 逐格归因 `draft/64 §8.12`**。
 
 ---
 
@@ -145,7 +150,7 @@
 | `temp/_r009_strip.py` | R009 清理（tokenize/ast 定位，改完 `ast.parse` 自检） | ✅ 已有（已重写） |
 | `temp/_gen_cited_ignore.py` | `.gitignore §14` 的证据物登记（被引用且在盘上的 `temp/*`） | ✅ 已有 |
 | `temp/_faces_keys_probe.py` | 六面在夹具上真读出来的键（A 补 `_backend_keys()` 的依据） | ✅ 已有 |
-| **`temp/_w5_legacy_census.py`** | **W5 用**：`webui/views.py`·`web/assets.py` 里每个公开/私有函数的"引用者清单 + 被哪条判据读" | ⬜ 待写（W5 之前） |
+| **`temp/_w5_legacy_census.py`** | **W5 用**：两个旧壳文件里每个顶层符号（函数/类/常量）的"真引用形态"清单（限定名 / 导入表 / 包级再导出 / 显式字符串），并给出"可删 / 先迁调用方 / 先改判据" | ✅ 已有（§12 是它的读数） |
 | **`temp/_web_final_readings.py`** | **收口用**：一次打印 §1 那 14 条判据的当前读数（给"做完了"一个可复算入口） | ⬜ 待写（W5 之后） |
 
 ---
@@ -162,6 +167,35 @@
 | 判据松到"看起来绿" | 判据改了却没人复核口径 | 任何放宽都要在报告里点名"这是口径改变 + 为什么"，并在判据里留反例（如哈希正则那条：真产物 + 反例双钉） |
 | FC-27 迟迟不签 | `noai_gate --git --since` 一直 `requires_human` | 不阻塞施工；阻塞 push（裁定 8a）。`draft/67 §3b` 已备好一页走查清单 |
 | 三条线同时写盘导致门读数不可复现 | 门跑期间有人改文件 | 门只在我冻结时起跑；起跑前 `git status` 必须干净（工作树只有刻意不入库的探针） |
+
+---
+
+## §12 W5 的第一批读数（普查仪器已跑，`python -B temp/_w5_legacy_census.py`）
+
+**`webui/views.py`（484 行 / 9 个顶层符号）**
+
+| 符号 | 生产引用 | 判据引用 | 判定 |
+|---|---|---|---|
+| `_top` `_option_html` `_question_card` `_run_row` `_event_card` | 0 | 0 | **无引用 ⇒ 可直接删**（5 个） |
+| `_page` | 1（`webui/server.py:64` 的导入表） | 0 | 先迁调用方 |
+| `_not_found` | 1（同上） | 0 | 先迁调用方 |
+| `render_root` `render_run` | 2（`server.py` + `__init__.py` **再导出**） | 0 | 先迁调用方；它们是 **public face**，删 = 公开面收窄（§3 W5 已写处置） |
+
+**`web/assets.py`（629 行 / 4 个顶层定义）**
+
+| 符号 | 生产引用 | 判定 |
+|---|---|---|
+| `THEME_CSS` | `web/emit_theme.py` | **不许删**（主题令牌的唯一来源，`ui/src/theme/generated/theme.css` 由它生成，判据 G 逐字节比） |
+| `STYLESHEET` | `webui/views.py` | 随旧壳一起退场 |
+| `APP_CSS` | 0 | 可删（它正是"只用令牌"那条判据 `test_app_css_uses_only_tokens` 的被检对象 —— 删它要**同时**处理那条判据，属于"先改判据再谈删"） |
+| `__all__` | 1（`tests/test_webui_contracts.py`） | 同上：改 `__all__` 要同时看判据 |
+
+> **仪器自身的两条口径修正也记在这里**（都是"假读数"的实例，值得留痕）：
+> ① 第一版按"裸名字出现过"匹配 ⇒ 把 `tests/test_locallib.py` 的局部变量 `_page`、
+> `tests/test_secretary.py` 自己定义的 `def _run_row(...)` 算成"判据在读 views 的私有函数"（**假引用**，
+> 会让该删的不敢删）；现在只有"限定名 / 导入表 / 包级再导出"算强匹配，裸名字单列且**不参与判定**。
+> ② 第一版把 `assets.py` 的路径写成 `webui/assets.py` ⇒ 报"不在盘上"（**假读数**）；真身是
+> `web/assets.py`。另外它的文件体是常量，只列函数/类会显示"0 个顶层定义"，现在把模块级常量也列上。
 
 ---
 
