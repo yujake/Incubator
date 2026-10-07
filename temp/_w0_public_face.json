@@ -1,18 +1,133 @@
 {
   "workspace": "D:\\Incubator\\agentflow\\projects\\p9b-post-fix-replay",
+  "workspace_present": true,
   "module_files": [
     "agentflow/src/agentflow/webui.py"
   ],
   "public_names": {
-    "WebHandler": "(request, client_address, server)",
-    "answer_text_of": "(event: 'Mapping[str, Any] | Any') -> 'str'",
-    "option_view": "(raw: 'Any') -> 'dict[str, Any]'",
-    "render_root": "(state: 'dict[str, Any]') -> 'str'",
-    "render_run": "(root: 'str | Path', sid: 'str', state: 'dict[str, Any]') -> 'tuple[int, str]'",
-    "run": "(argv: 'Sequence[str] | None' = None) -> 'int'",
-    "serve": "(root: 'str | Path', *, host: 'str' = '127.0.0.1', port: 'int' = 8788, token: 'str' = '') -> 'ThreadingHTTPServer'",
-    "snapshot": "(root: 'str | Path') -> 'dict[str, Any]'"
+    "WebHandler": {
+      "params": [
+        {
+          "name": "request",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        },
+        {
+          "name": "client_address",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        },
+        {
+          "name": "server",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        }
+      ],
+      "return": "<class 'inspect._empty'>"
+    },
+    "answer_text_of": {
+      "params": [
+        {
+          "name": "event",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        }
+      ],
+      "return": "str"
+    },
+    "option_view": {
+      "params": [
+        {
+          "name": "raw",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        }
+      ],
+      "return": "dict[str, Any]"
+    },
+    "render_root": {
+      "params": [
+        {
+          "name": "state",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        }
+      ],
+      "return": "str"
+    },
+    "render_run": {
+      "params": [
+        {
+          "name": "root",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        },
+        {
+          "name": "sid",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        },
+        {
+          "name": "state",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        }
+      ],
+      "return": "tuple[int, str]"
+    },
+    "run": {
+      "params": [
+        {
+          "name": "argv",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "None"
+        }
+      ],
+      "return": "int"
+    },
+    "serve": {
+      "params": [
+        {
+          "name": "root",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        },
+        {
+          "name": "host",
+          "kind": "KEYWORD_ONLY",
+          "default": "'127.0.0.1'"
+        },
+        {
+          "name": "port",
+          "kind": "KEYWORD_ONLY",
+          "default": "8788"
+        },
+        {
+          "name": "token",
+          "kind": "KEYWORD_ONLY",
+          "default": "''"
+        }
+      ],
+      "return": "ThreadingHTTPServer"
+    },
+    "snapshot": {
+      "params": [
+        {
+          "name": "root",
+          "kind": "POSITIONAL_OR_KEYWORD",
+          "default": "<必填>"
+        }
+      ],
+      "return": "dict[str, Any]"
+    }
   },
+  "url_literals": [
+    "/",
+    "/answer",
+    "/api/state",
+    "/index.html",
+    "/run/"
+  ],
   "snapshot_top_keys": [
     "generated_at",
     "last_run",
@@ -117,13 +232,6 @@
     ],
     "problems_n": 0
   },
-  "url_literals": [
-    "/",
-    "/answer",
-    "/api/state",
-    "/index.html",
-    "/run/"
-  ],
   "render_root": {
     "classes": [
       "badge",

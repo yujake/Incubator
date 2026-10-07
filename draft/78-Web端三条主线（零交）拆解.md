@@ -65,6 +65,14 @@
 
 > 约定的代价：类型与路由的"总表"在 A 线手里，A 线的 `routes.py`/`emit_types.py` 一旦改动拼接方式，**三条线都要重跑契约判据**（这是这套拆法唯一的耦合点，写在 §5 的合并协议里）。
 
+> **实测追记（2026-10-07，主控核盘；已处置）**：W0 线**先于本文档开工**（基线 `65746a5`），所以它当时不知道这三条约定 —— 我在它的工作树里 grep 过，`READER_ROUTES`/`WRITE_ROUTES`/`type_decls` **一个都没有**（`routes.py` 当时是一张单表，`webui/readers.py` 还不存在）。这正是"设计与施工错位"的典型：**文档说 W0 落，W0 却已经在跑**。
+> 处置：已 steer W0 补这三条接缝，**且已补上（同一工作树上的复查读数，尚未提交）**：
+> `routes.py:47-48` 导入 `READER_ROUTES`/`WRITE_ROUTES`、`:81` 用 `compose(_OWN, READER_ROUTES, WRITE_ROUTES)` 拼总表；
+> `readers.py`（4209 B，空壳占位 · `:32 __all__` 含 `ROUTES`/`type_decls`、`:69 def type_decls`）与 `sse.py`（1493 B）已建；
+> `state.py:596` / `writes.py:63` 各有 `type_decls()`，`web/emit_types.py:83` 把三者拼成 `ui/src/types.ts`。
+> **待回填**：合并进 master 后再核一次这三条（工作树读数不算落地），以及"往 `readers.ROUTES` 塞一条 `api.ts` 没有的路径 ⇒ 契约 A 必红"的那条负控。
+> **退路（若最终没落）**：把 §2 的"零交"改成"按序合并 + `routes.py`/`emit_types.py` 由主控统一落"，并同步改 `temp/_check_line_ownership.py` 的读数口径 —— **不许**留一个假的"零交"说法在文档里。
+
 ---
 
 ## §4 依赖与开工顺序
