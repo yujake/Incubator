@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """停机的唯一实现（`draft/37` §128）：优雅停止与强制停止，以及"把子进程一起停掉"。
 
 ## 为什么要有这一个模块
@@ -45,7 +45,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping
 
 #: 停机开关的文件名（在工作区根下）。
 STOP_FILE_NAME = ".agentflow-stop"
@@ -60,6 +60,55 @@ def stop_path(root: str | Path, explicit: str | Path | None = None) -> Path:
     if explicit:
         return Path(explicit)
     return Path(root) / STOP_FILE_NAME
+
+
+# ====================================================================== 写路径上的可选钩子
+#
+# 与 `sessions.py` / `userio.py` 同一族（`sse.attach()` 把三个模块的钩子接成
+# "发对应 kind 的事件"），同三条纪律：
+#
+# 1. 缺省 `None` ⇒ 既有行为逐字节不变；
+# 2. 监听器是旁路：它坏掉不许把停机路径带坏（接住异常并记进 `stop_hook_problem()`，
+#    不是静默吞掉 —— 三态纪律：不许把"没查成"折成"没发生"）；
+# 3. 只有开关真的变了才通知 —— `created`（新写）与 `upgraded`（升级成强制）算变，
+#    `existing`（盘上已有一把、这次什么都没改）与"没开关可撤"不算。
+#    理由与 `request_stop_detail` 把"结局"单独返回是同一条：把"喊了一声但什么都没变"
+#    也报成变化，读的人就分不出"谁真的叫停过"。
+#
+#: 停机开关变化后的监听器：`(root, action, payload) -> None`；
+#: `action` 是 `"created"` / `"upgraded"` / `"cleared"` 三档，`payload` 是开关里那份内容
+#: （`cleared` 时是那次撤掉之前读到的那一份，读不到就是 `{}`）。
+_STOP_HOOK: "Callable[[Any, str, Mapping[str, Any]], None] | None" = None
+#: 上一次监听器抛出的问题（空串 = 没出过问题）。
+_STOP_HOOK_PROBLEM: str = ""
+
+
+def set_stop_hook(hook: "Callable[[Any, str, Mapping[str, Any]], None] | None"
+                  ) -> "Callable[[Any, str, Mapping[str, Any]], None] | None":
+    """装上/撤掉"停机开关变化之后"的监听器；返回被替换掉的那一个。"""
+    global _STOP_HOOK  # noqa: PLW0603 - 一个进程一个槽，与 sessions 那一族同形
+    previous, _STOP_HOOK = _STOP_HOOK, hook
+    return previous
+
+
+def stop_hook_problem() -> str:
+    """监听器上一次抛出的问题（空串 = 没出过问题）。"""
+    return _STOP_HOOK_PROBLEM
+
+
+def _notify_stop(root: str | Path, action: str,
+                 payload: Mapping[str, Any]) -> None:
+    """把"开关变了"交给监听器（没装 ⇒ 立刻返回）；接住异常并记一条读数。"""
+    global _STOP_HOOK_PROBLEM  # noqa: PLW0603 - 只记最近一条
+    hook = _STOP_HOOK
+    if hook is None:
+        return
+    try:
+        hook(root, action, payload)
+    except Exception as exc:  # noqa: BLE001 - 旁路：见上面那一节的第 2 条
+        _STOP_HOOK_PROBLEM = f"{type(exc).__name__}: {exc}"
+    else:
+        _STOP_HOOK_PROBLEM = ""
 
 
 def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
@@ -91,6 +140,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
                              "escalated_by": str(by or "user")})
             path.write_text(json.dumps(upgraded, ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8", newline="\n")
+            _notify_stop(root, "upgraded", upgraded)
             return upgraded, "upgraded"
         return existing, "existing"
     payload = {"reason": str(reason or DEFAULT_REASON), "by": str(by or "user"),
@@ -99,6 +149,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8", newline="\n")
+    _notify_stop(root, "created", payload)
     return payload, "created"
 
 
@@ -217,11 +268,16 @@ def clear_stop(root: str | Path, *, explicit: str | Path | None = None) -> bool:
 
     `draft/37` §140 之后不再需要为了续跑而显式撤：开关被消费（停一趟）时就撤走了。
     这条命令仍然有用：在开关生效之前撤销这次叫停（例如刚写完发现写错了）。
+
+    真的撤掉了才通知 `set_stop_hook` 装上的监听器（action=`"cleared"`）：
+    "本来就没有开关可撤"什么都没变，不该报成一次变化。
     """
     path = stop_path(root, explicit)
     if not path.is_file():
         return False
+    before = read_stop(root, explicit=explicit) or {}
     path.unlink()
+    _notify_stop(root, "cleared", before)
     return True
 
 

@@ -1,9 +1,30 @@
 # draft/80 待裁选择题（Web 端施工·合并 W0/B 线之后）—— **一次裁干净**
 
+## 裁定栏（所有者 2026-10-07 逐题回复）
+
+```text
+1a  2b  3a  4a  5a  6a  7a  8a
+```
+
+| 题 | 裁定 | 与我建议 | 施工含义（谁做、落在哪） |
+|---|---|---|---|
+| 1 | **1a** | 一致 | SSE 发送点用"写路径上的可选回调钩子"：B 线在 `sessions.append`/`userio.ask_user`/`answer_question` 加缺省 `None` 的钩子，`stopctl.py` **本次划给 B**（只加同样一个钩子）；`sse.attach()/detach()` 做装配（幂等）；A 线在 `serve()` 里加一行 `sse.attach()`。检查点那个 `checkpoint` 事件**本批不做**（需要 watch/poll 点，与"状态一律从盘上派生、不做后台轮询"的纪律冲突），写进报告 |
+| 2 | **2b** | ⚠️ **与我建议不同**（我建议保持 A 自有） | `/api/state` 的**路由迁到 `readers.ROUTES`**：B 在 `readers.py` 加表项 + `HANDLERS["handle_state"]`（返回 `state_face` 里那张 `snapshot`）；A 从 `routes._OWN` 删那一行、并把 `server.handle_state` 删掉（不留同名方法——留着会挡住子表实现）。**公开面对账不许变**（`temp/_verify_w0.py` 的 10 键与页面形状逐项一致） |
+| 3 | **3a** | 一致 | L1 收敛交 **A 线**：`state.py` 那两段改调 `userio`，`state.option_view` 变一层转发，签名与返回形状逐字不变（它在 `webui.__all__` 里）；目标是 `lint` 的 R003 那条 warn 消失（17→16） |
+| 4 | **4a** | 一致 | 保持"五个名字是六面里的栏位、不是五个独立函数"：**只改 `draft/73 §2.3` 那一句**（已改），不新立函数、不加判据 |
+| 5 | **5a** | 一致 | 保留 B 的 `CheckpointView`/`CheckpointSpendView`；**删掉 `state.type_decls()` 里 W0 那对 `Checkpoint`/`CheckpointSpend`** 并重跑生成器；`test_webui_contracts.py` 的 `_W0_UNCHECKED_TYPES` 两条登记由**主控**在合并后删（避免两边同时改同一文件） |
+| 6 | **6a** | 一致 | 所有者按 `draft/77 §2.4` 四条走查、按 §2.5 签两名 reviewer。签之前的带基线读数：`python -B scripts/noai_gate.py --git --since 5c6e441 --check-approvals` ⇒ 命中 3 条、**3 条未获批准**（`stale` 2 = `pyproject.toml` + `tools/release_all.py`；`unregistered` 1 = 刻意不入库的演示物）。**我不代签** |
+| 7 | **7a** | 一致 | 接受"前端步在本沙箱记 `unknown`"（`spawn EPERM`）：这是三态纪律的正确行为；dist 已入库且与一次真实构建**逐字节相同**（`git hash-object` == `HEAD:<path>`）。要真判它就在不受沙箱约束的环境跑 |
+| 8 | **8a** | 一致 | **等题 6 签完再 push**。签完那一版就是"审计闭环"的版本 |
+
+> 本页其余部分（8 题的盘上事实、选项与代价）**保留原样**，作为这 8 个裁定的依据留档。
+
+---
+
 > **怎么用**：每题给你的都是「盘上事实 → 选项 → 每个选项的代价 → 我的建议 → 不裁会怎样」。
 > 你只要回一串字母（例如 `1a 2a 3a 4a 5a 6a 7a 8a`，或直接说"全按你建议的"）。**我按你的裁定派活，不再回来问**。
 > 事实都带 `file:line` 或可复算命令；不确定的地方我写"我没验"，不编。
-> 前情：W0（骨架/拆包/dist）与 B 线（只读面/索引/SSE/夹具）**已合并进 master**；C 线（写面）与 A 线的六页面**尚未开工**，等你裁完就派。
+> 前情：W0（骨架/拆包/dist）与 B 线（只读面/索引/SSE/夹具）**已合并进 master**；C 线（写面）与 A 线的六页面**已按本页裁定前的边界开工**（与这 8 题都不冲突），裁定后追加的任务已发给两条线。
 
 ---
 

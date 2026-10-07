@@ -53,6 +53,8 @@
 2. `docs/*` 与 `README.md` 归 **A** ⇒ B/C 需要文档改动时**写进自己的报告**，由 A 线或主控统一落（否则三条线会在同一份文档上撞车）。
 3. **`.gitignore` 归主控、不在任何一条线里**（这张表只列"线内产出物"；`.gitignore` 与 `temp/` 下的探针是主控的账）。**实测教训**：W0 线在自己的工作树里也动了 `.gitignore`（加 `node_modules/`）—— 说明"没写进表"的文件照样会被碰，所以合并时这条由主控**整份取 master 版**再重跑生成器，不逐行合（见 §5 冲突预案）。
 4. **有一处"表主是 B/C、但 W0 先建空壳"**：`webui/readers.py`/`webui/sse.py`（B 的）与 `webui/writes.py`（C 的）是 §3 那三条接缝的**导入目标** —— W0 必须先把它们建成"只有 `ROUTES`/`EVENT_KINDS`/`type_decls()` 的空壳"，`routes.py` 才导入得动。所以本表的口径是**"W0 之后谁改"**：空壳由 A 建、**之后只有 B/C 各自改自己那个**。这条也是"零交能成立"的一部分，写在 §3 的追记里有两边的读数。
+5. **裁定 2b 之后的一处归属转移（所有者 2026-10-07）**：`GET /api/state` 的**路由**从 A 的 `routes._OWN` 迁到 **B 的 `readers.ROUTES`**（`HANDLERS["handle_state"]` 返回 `state_face` 里那张 `snapshot`），A 的 `server.handle_state` 删掉。口径不变（**公开面**仍以 `state.snapshot` 的 10 个顶层键为准，由 `temp/_verify_w0.py` 对账），变的只是"哪条线上的模块声明这条路由"。
+6. **裁定 1a 之后 `stopctl.py` 的临时归属**：为了把 `stop` 事件接上，`stopctl.py` 在 B6 这一批**划给 B 线**，且**只许加一个可选回调钩子**（`request_stop`/`clear_stop` 之后回调）；除这一处不许动该文件。这条是临时扩展，B6 合并后它的归属回到"主控账上"。
 
 ---
 

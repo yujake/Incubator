@@ -67,7 +67,7 @@ __all__ = [
     "CHECKED_TYPES", "HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
     "RUN_ROW_KEYS", "UNCHECKED_TYPES", "acceptance_face", "artifacts_face",
     "evidence_chain", "handle_acceptance", "handle_artifacts", "handle_evidence",
-    "handle_machine", "handle_run_view", "handle_state_face", "machine_face",
+    "handle_machine", "handle_run_view", "handle_state", "machine_face",
     "run_products", "run_view", "state_face", "ts_fields", "type_decls",
 ]
 
@@ -77,8 +77,8 @@ TRI_COMPUTED = "computed"
 TRI_UNREADABLE = "unreadable"
 TRI_NOT_APPLICABLE = "not_applicable"
 
-#: 六个面（外加 `/api/stream`）挂到总路由表上的端点。第三个元素是B 线里那个
-#: 处理器的名字（`routes.handler_for` 会去 `HANDLERS` 里按这个名字取它）。
+#: 六个面（外加 `/api/state` 与 `/api/stream`）挂到总路由表上的端点。第三个元素是 B 线里
+#: 那个处理器的名字（`routes.handler_for` 会去 `HANDLERS` 里按这个名字取它）。
 #:
 #: `/api/stream` 那一条的处理器真身在 `webui/sse.py`（`handle_stream`）—— 它登记在
 #: 这张表里的理由是一条硬事实：`routes.py` 的总表是 `自有 + READER_ROUTES +
@@ -86,7 +86,13 @@ TRI_NOT_APPLICABLE = "not_applicable"
 #: 把表项写进 sse.py 会得到一个"声明了却永远进不了总表"的端点。所以 B 线对外只有
 #: 一张子表，它住在 `readers.py` 里：表项按"哪个端点"列，处理器按"它住在哪个
 #: 模块"实现（两张 `HANDLERS` 字典由 `routes.handler_for` 一起查）。
+#:
+#: `/api/state` 那一条是裁定 2b 从 A 线的 `_OWN` 迁过来的（A 同时删掉自己那一行、
+#: 并把 `WebHandler.handle_state` 退成转发）。迁的是路由的归属，不是公开面：
+#: `handle_state` 回的还是 `snapshot()` 那张裸快照，与迁之前逐键同值 ——
+#: 所以交接那一刻（两边都还在表里）跑起来的 HTTP 行为逐字节相同。
 ROUTES: tuple[tuple[str, str, str], ...] = (
+    ("GET", "/api/state", "handle_state"),
     ("GET", "/api/run/{sid}", "handle_run_view"),
     ("GET", "/api/evidence", "handle_evidence"),
     ("GET", "/api/artifacts", "handle_artifacts"),
@@ -833,11 +839,20 @@ def _json_of(handler: Any, obj: Any) -> None:
     handler._json(200, obj)  # noqa: SLF001 - 处理器与 handler 是同一族的约定接口
 
 
-def handle_state_face(handler: Any, params: Mapping[str, str],
-                      query: Mapping[str, Sequence[str]]) -> None:
-    """`GET /api/state`：快照的三态读模型（A 线的 `handle_state` 之外的 JSON 形态）。"""
+def handle_state(handler: Any, params: Mapping[str, str],
+                 query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/state`：快照那份 JSON（裁定 2b 之后这条端点的归属在这里）。
+
+    回的是 :func:`state_face` 里那张 `snapshot` —— 也就是 `webui.state.snapshot(root)`
+    的返回值本身，不是外面那层三态包装：`/api/state` 是既有公开面，
+    `temp/_verify_w0.py` 对账的顶层 10 键与页面形状都是按它量的（迁路由不许动它）。
+
+    `handle_state_face`（回 `{tri, snapshot, reason}`）那个三态形态刻意没有留下：
+    同一个端点上摆两个形状只差一个字的处理器，早晚有人把错的那个登记进表里。
+    要三态读数的地方读 `readers.state_face` 这个函数（它是读模型，不是端点）。
+    """
     del params, query
-    _json_of(handler, state_face(handler.root))
+    _json_of(handler, state_face(handler.root)["snapshot"])
 
 
 def handle_run_view(handler: Any, params: Mapping[str, str],
@@ -1129,6 +1144,7 @@ def type_decls() -> str:
 # `HANDLERS` 在文件头声明为空的字典（那个位置放的是"这一层有哪些约定"），实体在
 # 这里登记：函数得先存在。`routes.handler_for(name)` 会按 `ROUTES` 第三元素来取。
 HANDLERS.update({
+    "handle_state": handle_state,
     "handle_run_view": handle_run_view,
     "handle_evidence": handle_evidence,
     "handle_artifacts": handle_artifacts,
