@@ -316,6 +316,11 @@
    "params": {
     "additionalProperties": false,
     "properties": {
+     "cap_usd": {
+      "description": "这一趟的成本上限（美元）—— 内容级验收的「在成本上限内」那一格用它判；不给 ⇒ 那一格是「没查成」而不是通过（负数会被参数校验拒成 param_error）",
+      "minimum": 0,
+      "type": "number"
+     },
      "project_dir": {
       "description": "项目根（相对工作区；渲染锚在 <它>/out/paper/RENDER-ANCHOR.json —— 传论文包目录会把 out/paper 拼两次；不给 ⇒ 锚那一格是 unknown）",
       "type": "string"
@@ -328,13 +333,13 @@
     "required": [],
     "type": "object"
    },
-   "returns": "{'can_close','status','failed','unknowns','findings','readings','summary'}；status 的键是八格检查（anchor/contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、台账现算值、是否满足（不满足的那几行同时进 findings）；**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / `na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 `unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；findings[] 每项是 {'check','code','level','detail'}",
+   "returns": "{'can_close','status','failed','unknowns','findings','readings','summary','review_acceptance'}；status 的键是八格检查（anchor/contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、台账现算值、是否满足（不满足的那几行同时进 findings）；**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / `na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 `unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；findings[] 每项是 {'check','code','level','detail'}；review_acceptance 是那一栏内容级验收读数：{'passed','criteria','failed','auxiliary','auxiliary_note','readings','summary'}，criteria[] 每项是 {'key','name','state','detail'}（`key`/`name` 与顺序现取自 `reviewaccept.CRITERIA`，`state` 是三态之一），auxiliary[] 每项是 {'key','label','value'}（标签现取自 `reviewaccept.AUXILIARY_SIGNALS`，值只作辅助、一个都不参与 `passed`），auxiliary_note 就是那一句『辅助读数逐字禁止拿来当通过』的来源（`reviewaccept.ReviewAcceptance.to_dict` 的原话）",
    "roles": [
     "M"
    ],
    "sandbox_required": false,
    "side_effect": "read",
-   "summary": "只读：跑收工门（八格）—— 锚 consistent / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告体例兑现（R9 之后门不自带节名清单，逐节核的是 M 自己声明的体例） / 没有还在等用户回答的问题 / **实质产出**（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ **验收表的机器可判行**（项目里若有一份 `out/paper/ACCEPTANCE-CHECKS.json`，逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）/ **产物台账与盘上一致**（`ARTIFACTS.jsonl` 逐条重算：行里的 sha 与盘上那份对不对得上）。每条各自一个三态读数，unknown 不是通过；`can_close` 只在八格全过时为真。",
+   "summary": "只读：跑收工门（八格）—— 锚 consistent / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告体例兑现（R9 之后门不自带节名清单，逐节核的是 M 自己声明的体例） / 没有还在等用户回答的问题 / **实质产出**（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ **验收表的机器可判行**（项目里若有一份 `out/paper/ACCEPTANCE-CHECKS.json`，逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）/ **产物台账与盘上一致**（`ARTIFACTS.jsonl` 逐条重算：行里的 sha 与盘上那份对不对得上）。每条各自一个三态读数，unknown 不是通过；`can_close` 只在八格全过时为真。同一次调用还会回一栏 `review_acceptance`：内容级验收的五条判据各自三态 + 五种辅助读数（辅助读数逐字不许当通过）；给可选参数 `cap_usd` 才能判「在成本上限内完成」，不给那一格记 unknown。",
    "tags": []
   },
   "conductor.ensure_project": {
@@ -4178,7 +4183,7 @@
   "attack.step": "(plan_id)",
   "conductor.acceptance": "(project_dir: 'str' = '', rel_path: 'str' = '', max_chars: 'int' = 60, ids: 'list | None' = None) -> 'ToolResult'",
   "conductor.cancel": "(reason: 'str' = 'user', detail: 'str' = '') -> 'ToolResult'",
-  "conductor.closing": "(project_dir: 'str' = '', report_path: 'str' = '') -> 'ToolResult'",
+  "conductor.closing": "(project_dir: 'str' = '', report_path: 'str' = '', cap_usd: 'float | None' = None) -> 'ToolResult'",
   "conductor.ensure_project": "(project_name: 'str' = '', start: 'str' = 'auto', books_dir: 'str' = '', books_limit: 'int | None' = None, projects_dir: 'str' = '') -> 'ToolResult'",
   "conductor.ledger": "(view: 'str' = 'tree', root_task_id: 'str' = '') -> 'ToolResult'",
   "conductor.resume_brief": "() -> 'ToolResult'",
