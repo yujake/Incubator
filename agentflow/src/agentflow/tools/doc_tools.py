@@ -405,7 +405,7 @@ def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[st
     只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，
     而那正是 `draft/30` §T4-A 设计这三段要防的事。
 
-    写入期只判这三段，刻意**不判**"目标稿件必须 `accepted`"（`draft/68` 题 12 选 A：
+    写入期只判这三段，刻意不判"目标稿件必须 `accepted`"（`draft/68` 题 12 选 A：
     两侧保持不对称）—— 写稿阶段要能引一份还在审的稿子（否则"边写边审"会被挡住）；
     那一条是审计期独有的内容政策（`draft/29` §8.5 第 1 条）。两侧共用前三段
     （`signatures.doc_ref_verdict`），调用方档不在那三段里 —— 见那个函数的 docstring。
