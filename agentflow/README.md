@@ -69,10 +69,12 @@ python -m agentflow.cli verify   # 不给 --root ⇒ 用代码里的缺省根（
 （2026-09-30 实测撞到过一次：`project run --extract` 的花销挂在 `first-extract` 这个
 不存在的任务号上 ⇒ `verify` 报两条 error 加一条 warning；修法见 `draft/28` §200）。
 
-**一步真活：拿你柜子里的 PDF 跑一条研究流水线**（要模型 key；key 只从环境变量来，命令行不许传）：
+**一步真活：拿你柜子里的 PDF 跑一条研究流水线**（要模型 key；key 从环境变量
+`AGENTFLOW_MODEL_API_KEY` 或机器级设置文件 `agentflow/settings.json` 的 `model.api_key` 来，
+命令行不许传 —— 命令行参数会进 shell 历史与进程列表）：
 
 ```powershell
-$env:AGENTFLOW_MODEL_API_KEY = "..."       # DeepSeek 的 key
+$env:AGENTFLOW_MODEL_API_KEY = "..."       # DeepSeek 的 key（或写进 agentflow/settings.json）
 python -m agentflow.cli project run --name first --books D:\books `
     --topic "分支布朗运动的极值过程" --budget-usd 0.05 --max-calls 6
 ```
@@ -123,7 +125,7 @@ python -m agentflow.cli run-agent M --task "…" --subagents                    
 
 | 症状 | 是什么意思 | 怎么办 |
 |---|---|---|
-| `[run-agent] 没查成：没有接模型…`，退出码 **2** | 没有 key（不是"跑过了没问题"） | 设 `AGENTFLOW_MODEL_API_KEY` |
+| `[run-agent] 没查成：没有接模型…`，退出码 **2** | 没有 key（不是"跑过了没问题"） | 设 `AGENTFLOW_MODEL_API_KEY`，或写进 `agentflow/settings.json` 的 `model.api_key`（那份文件被 git 忽略，见 `.gitignore` 第 13 节） |
 | `project run` 退出码 2，`report.md` 里写 `检索状态：not_configured` | 同上：检索一次都没发起 | 同上；不带 `--topic` 时只登记书、本来就不调模型 |
 | 汇总框里 `Lean 开启=否；proof 级证据 0 条` | 没装 Lean（或没加 `--lean`） | 装 Lean 后加 `--lean`；否则请把这一格读成"**没形式化核过**"，不是"核过没问题" |
 | 模型连着几步不回 JSON ⇒ 结论写 `bad_json_limit` | 模型没按循环协议回一行 JSON（框架会纠正两次，第三次停） | 重跑；或把 `--max-steps` 调大，让纠正消息有机会生效。**它是如实停，不是崩** |

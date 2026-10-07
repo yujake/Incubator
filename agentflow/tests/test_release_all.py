@@ -2478,6 +2478,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "runflow.py": "端到端一条命令：一个主题 + 一个美元上限 → 一份可复核的运行记录",
     "scheduler.py": "调度：按写集互斥分波并发",
     "schema.py": "数据模型与校验",
+    # 2026-10-07（所有者裁定"把工具链路径与模型 key 合并进一个机器级设置文件"）：
+    # 它不是对拍副本：落点/键名/优先级（环境变量 > 设置文件 > 内置默认）与
+    # "解析失败报真正的那个错误"只有这一份实现；判据在 `tests/test_settings.py`
+    # （三条优先级各有正控与负控、示例文件与 .gitignore 的安全阀、死地址判据）。
+    "settings.py": "机器级设置文件 `agentflow/settings.json`：`load_settings` + "
+                   "`toolchain_settings` / `model_settings` + `env_or_setting`（取值口径"
+                   "「环境变量 > 设置文件 > 内置默认/自动探测」的唯一实现；`draft/28` 体例）",
     "signatures.py": "稿件内容的规范哈希（唯一实现）：审批与内部引用都钉在它上面（依据 `draft/30` §T4-A）",
     # 2026-09-29 新增的三个模块（`draft/28` §163/§166/§169 那三批）。按 `R6-AN-1` 建议③
     # 逐条登记并写一行理由 —— 它们都不是"对拍副本"，是框架的真模块。

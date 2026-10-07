@@ -171,7 +171,8 @@ PINNED_MATHLIB_TAG = "v4.7.0"
 #:    而"没有 git 元数据"不等于"不知道版本" —— 装的人应当在装完时写下这一行；
 #: 2. `.git/HEAD` —— 正常 clone 的树（可能是 `ref: refs/heads/x`，那就要再读一层）。
 MATHLIB_REV_STAMP = ".lake/agentflow-mathlib-rev"
-#: Mathlib 工程根从哪个环境变量读（没有它就在候选目录里找，见 `find_mathlib_root`）。
+#: Mathlib 工程根从哪读：环境变量第一档（没有它才看设置文件与候选目录，
+#: 逐字口径见 `find_mathlib_root`）。
 ENV_MATHLIB_ROOT = "AGENTFLOW_MATHLIB_ROOT"
 
 #: 版本检查的受控词表。三态不许折叠成"能用/不能用"：
@@ -420,6 +421,20 @@ def find_mathlib_root(env: Mapping[str, str] | None = None,
     判据见 `_is_mathlib_root`。为什么还要认 `lean-toolchain`：Mathlib 的可用性
     由它写的 Lean 版本决定，而只有 `lakefile.lean` 的目录可能是一个普通的 Lean 包
     —— 把一个不是 Mathlib 的工程报成"Mathlib 装了"，比报"没装"更坏。
+
+    ## 四档（每一档都能被读出来；优先级口径见 `agentflow.settings`）
+
+    优先级逐字：环境变量 > 设置文件 > 内置默认/自动探测。
+
+    1. `AGENTFLOW_MATHLIB_ROOT`（环境变量，最高）；
+    2. `LEAN_PATH` 里各段回推到工程根（也是环境变量：`…/mathlib4-<tag>/.lake/build/lib`
+       ⇒ 往上四级；调用方自己配过的那一串同样是"显式给我的"）；
+    3. 设置文件 `settings.json` 的 `toolchain.mathlib_root`（2026-10-07 起；
+       相对路径相对工作区根解析，见 `settings.resolve_setting_path`）；
+    4. `candidates`（调用方显式给的那一份）—— 最后那一档自动探测。
+
+    本机路径写在设置文件里，代码与文档里不再写某台机器的绝对路径
+    （见 `agentflow/settings.example.json`）。
     """
     src = dict(os.environ if env is None else env)
     roots: list[str | Path] = []
@@ -433,6 +448,11 @@ def find_mathlib_root(env: Mapping[str, str] | None = None,
             continue
         for up in (p, p.parent, p.parent.parent, p.parent.parent.parent):
             roots.append(up)
+    from . import settings as SET
+
+    setting_root = SET.toolchain_settings(env=env).get("mathlib_root", "")
+    if setting_root:
+        roots.append(SET.resolve_setting_path(setting_root))
     roots.extend(candidates)
     for r in roots:
         if not str(r).strip():
@@ -944,9 +964,9 @@ def _mathlib_lean_path() -> str:
     为什么必须由框架做：`check_lean` 起检查器的命令是裸的 `[lean, <file>]` —— 它靠
     进程环境里的 `LEAN_PATH` 找包。框架已经知道 Mathlib 根在哪（`find_mathlib_root`），
     就不该要求调用方记得把那一串环境变量配好。真机读数（2026-10-04）：盘上有一份
-    编译完整的 Mathlib（`temp/mathlib-pinned2/…`），而 E 的每一次形式化尝试都报
-    `unknown package 'Mathlib'` —— 直到跑之前手工把 `LEAN_PATH` 配上才通。
-    按进程记忆一次（根不会在进程中途换）。
+    编译完整的 Mathlib（工程根由设置文件或 `AGENTFLOW_MATHLIB_ROOT` 给出来），
+    而 E 的每一次形式化尝试都报 `unknown package 'Mathlib'` —— 直到跑之前
+    手工把 `LEAN_PATH` 配上才通。按进程记忆一次（根不会在进程中途换）。
     """
     from . import toolchain as TC
 

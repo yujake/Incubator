@@ -7,8 +7,8 @@
 —— 两处独立地"看 PATH"。这带来两个后果，那天都实测到了：
 
 1. 「同一台机器上"探测说没有、调用却真能跑"是可能的」（两处的口径各写一份，本可以漂）。
-   实测：Lean 4.7.0 就装在 `D:\\Incubator\\temp\\lean470\\lean-4.7.0-windows\\bin`，
-   而 `detect_verifier()` 报 `available=[]`（PATH 上没有它）。
+   实测：Lean 4.7.0 就装在这台机器的一个目录里（不在 PATH 上），
+   而 `detect_verifier()` 报 `available=[]`。
 2. 「能力静默降级」：探测说"没有检查器" ⇒ 形式化那一条腿改成 `cross_check`，
    报告里只剩一句"没核到"，而「没有任何地方会说"这台机器其实能做"」。
    用户的原话是"这是坏的" —— 坏的正是这种"看不出来"。
@@ -16,12 +16,29 @@
 所以本层的职责只有一件事：把「这台机器能做形式化核验吗」变成一个「可读、可判据、三态」的读数，
 并让「探测与调用共用同一个答案」（谁都不许再自己 `which` 一次）。
 
+## 本机路径写在哪（代码与文档里都不再写某台机器的绝对路径）
+
+这台机器的 Lean / Coq / Isabelle 装在哪，写在 `settings.json` 的
+`toolchain.lean_bin` / `toolchain.coq_bin` / `toolchain.isabelle_bin`，
+Mathlib 工程根写在 `toolchain.mathlib_root`（见 `agentflow/settings.example.json`
+与 :mod:`agentflow.settings`；2026-10-07 起）。改前这里是逐字写着一台机器的
+绝对路径的 —— 那是"机器相关的事实落在代码里"，换一台机器就变成一句假话。
+
 ## 查找顺序（每一档都留下"是从哪找到的"）
 
-1. 「显式配置」：`AGENTFLOW_LEAN_BIN` / `AGENTFLOW_COQ_BIN` / `AGENTFLOW_ISABELLE_BIN`
-   —— 取值可以是「可执行文件」本身，也可以是「它所在的目录」（"指向安装目录"是人最自然的写法）；
-2. 「`AGENTFLOW_PROVER_PATH`」：一个或多个目录（Windows 用 `;`、POSIX 用 `:` 分隔）；
-3. 「PATH」（`shutil.which`）。
+优先级（逐字，唯一口径）：环境变量 > 设置文件 > 内置默认/自动探测。
+环境变量压在最上面，是为了 CI 与既有脚本不被这次改动弄坏（逐条理由见
+:mod:`agentflow.settings` 的模块 docstring）。
+
+1. 「显式配置（环境变量）」：`AGENTFLOW_LEAN_BIN` / `AGENTFLOW_COQ_BIN` /
+   `AGENTFLOW_ISABELLE_BIN` —— 取值可以是「可执行文件」本身，也可以是
+   「它所在的目录」（"指向安装目录"是人最自然的写法）；
+2. 「`AGENTFLOW_PROVER_PATH`」（也是环境变量）：一个或多个目录
+   （Windows 用 `;`、POSIX 用 `:` 分隔）；
+3. 「设置文件」：`settings.json` 的 `toolchain.lean_bin` / `toolchain.coq_bin` /
+   `toolchain.isabelle_bin`（同一套"文件或目录"的写法；相对路径相对工作区根解析，
+   见 `settings.resolve_setting_path`）；
+4. 「PATH」（`shutil.which`）—— 最后那一档自动探测。
 
 「配了但找不到 ⇒ 记成配置问题（fail-closed）」，不当作"环境里没有"：把配置错读成
 "没有检查器"，正是上面第 2 条那个静默降级。三态也照旧：探测本身没做成
@@ -41,6 +58,8 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+from . import settings as SET
 
 __all__ = [
     "CHECKERS", "ENV_LEAN_BIN", "ENV_COQ_BIN", "ENV_ISABELLE_BIN", "ENV_PROVER_PATH",
@@ -67,11 +86,34 @@ ENV_PROVER_PATH = "AGENTFLOW_PROVER_PATH"
 ENV_VERIFIER_BINS: Mapping[str, str] = {
     "lean": ENV_LEAN_BIN, "coqc": ENV_COQ_BIN, "isabelle": ENV_ISABELLE_BIN,
 }
+#: 检查器名 → `settings.json` 的 `toolchain` 段里那个键（第三档）。
+#: 与 `ENV_VERIFIER_BINS` 逐名对齐：两张表的键集合由 `CHECKERS` 决定，漏一个
+#: 会让"这个检查器永远读不到设置文件"，而症状只是"设置不生效"（静默）。
+SETTING_KEYS: Mapping[str, str] = {
+    "lean": "lean_bin", "coqc": "coq_bin", "isabelle": "isabelle_bin",
+}
 
 
 def _env(env: Mapping[str, str] | None) -> dict[str, str]:
     """读环境变量（给了 `env` 就用它，否则读 `os.environ`）—— 便于判据注入。"""
     return dict(os.environ if env is None else env)
+
+
+def _probe_one_path(name: str, raw: str) -> tuple[str, str, str]:
+    """一档"文件或目录"的取值 → `(路径, source, problem)`（三处共用，免得各写一份）。
+
+    `raw` 是用户写的原样文本（可能是相对路径）：解析规则只有一处，
+    见 `settings.resolve_setting_path`（相对工作区根，不相对进程 cwd）。
+    """
+    p = SET.resolve_setting_path(raw)
+    if p.is_file():
+        return str(p), "file", ""
+    if p.is_dir():
+        found = shutil.which(name, path=str(p))
+        if found:
+            return str(found), "dir", ""
+        return "", "", f"{raw} 是目录，但里面没有 {name}（解析成 {p}）"
+    return "", "", f"{raw} 不存在（解析成 {p}）"
 
 
 def resolve_checker(name: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
@@ -80,11 +122,18 @@ def resolve_checker(name: str, env: Mapping[str, str] | None = None) -> dict[str
     返回 `{"name", "path", "source", "problem", "looked"}`：
 
     - `path` 找到时的绝对路径，找不到是空串；
-    - `source` 取值 `"explicit"`（显式变量指到文件）/ `"explicit_dir"`（指到目录）/
+    - `source` 取值 `"explicit"`（环境变量指到文件）/ `"explicit_dir"`（指到目录）/
+      `"settings"`（设置文件指到文件）/ `"settings_dir"`（设置文件指到目录）/
       `"prover_path"`（`AGENTFLOW_PROVER_PATH`）/ `"path"`（PATH）/ `""`（没找到）；
-    - `problem` 非空表示「这一档配了却不能用」（例如路径不存在）—— 它与"没配"是两件事；
+      "是从哪一档找到的"必须能被读出来 —— 只回一个路径的话，
+      "机器上恰好装着"与"有人显式配过"在下游无法区分；
+    - `problem` 非空表示「这一档配了却不能用」（例如路径不存在）—— 它与"没配"是两件事
+      （fail-closed：配置错不许被读成"环境里没有检查器"）；
     - `looked` 是"找过哪些地方"的人话，给 `reason` 用（"环境没有 X"只在覆盖面内成立，
       所以必须写清楚覆盖面）。
+
+    取值顺序 = 唯一口径（:mod:`agentflow.settings` 逐字写着）：
+    环境变量 > 设置文件 > 内置默认/自动探测。
     """
     src = _env(env)
     var = ENV_VERIFIER_BINS.get(name, "")
@@ -94,18 +143,24 @@ def resolve_checker(name: str, env: Mapping[str, str] | None = None) -> dict[str
         looked.append(var)
         raw = (src.get(var) or "").strip()
         if raw:
-            p = Path(raw)
-            if p.is_file():
-                return {"name": name, "path": str(p), "source": "explicit",
+            found, kind, why = _probe_one_path(name, raw)
+            if found:
+                return {"name": name, "path": found,
+                        "source": "explicit" if kind == "file" else "explicit_dir",
                         "problem": "", "looked": "、".join(looked)}
-            if p.is_dir():
-                found = shutil.which(name, path=str(p))
-                if found:
-                    return {"name": name, "path": str(found), "source": "explicit_dir",
-                            "problem": "", "looked": "、".join(looked)}
-                problem = f"{var}={raw} 是目录，但里面没有 {name}"
-            else:
-                problem = f"{var}={raw} 不存在"
+            problem = f"{var}={why}"
+    setting_key = SETTING_KEYS.get(name, "")
+    if setting_key:
+        setting_raw = SET.toolchain_settings(env=env).get(setting_key, "")
+        looked.append(f"{SET.DEFAULT_SETTINGS_REL}:toolchain.{setting_key}")
+        if setting_raw:
+            found, kind, why = _probe_one_path(name, setting_raw)
+            if found:
+                return {"name": name, "path": found,
+                        "source": "settings" if kind == "file" else "settings_dir",
+                        "problem": "", "looked": "、".join(looked)}
+            if not problem:
+                problem = f"设置文件 {SET.DEFAULT_SETTINGS_REL} 的 toolchain.{setting_key}={why}"
     looked.append(ENV_PROVER_PATH)
     for one in (src.get(ENV_PROVER_PATH) or "").split(os.pathsep):
         one = one.strip()
@@ -186,9 +241,10 @@ def lean_path_for(root: str | Path) -> str:
 
     `formalgw.check_lean` 起检查器的命令是裸的 `[lean, <file>]` —— 它靠进程环境里的
     `LEAN_PATH` 找包。于是"Mathlib 装好了"与"`import Mathlib` 能不能编过"是两件事：
-    2026-10-04 实测，盘上有一份编译完整的 Mathlib（`temp/mathlib-pinned2/…`，
-    umbrella `Mathlib.olean` 在、4095 个 olean 在），而 E 的每一次形式化尝试都报
-    `unknown package 'Mathlib'` —— 差的就是这一串 `LEAN_PATH`。
+    2026-10-04 实测，盘上有一份编译完整的 Mathlib（工程根由设置文件或
+    `AGENTFLOW_MATHLIB_ROOT` 给出来，umbrella `Mathlib.olean` 在、4095 个 olean 在），
+    而 E 的每一次形式化尝试都报 `unknown package 'Mathlib'` —— 差的就是这一串
+    `LEAN_PATH`。
 
     ## 布局只认两处（4.7.0 与 4.9+ 各一种）
 
@@ -250,20 +306,37 @@ def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
                                "import_unavailable；处置是编全 Mathlib 或只 import 缓存里有的模块）")}
 
 
+def _model_spec(env: Mapping[str, str] | None = None) -> Any:
+    """模型那一格的读数（取值口仍是 `modelgw.spec_from_env`，口径只有一处）。
+
+    为什么不在这里重写一遍那几个环境变量名：key 的取值口径只能有一处
+    （`modelgw`），两处各写一份的话，"doctor 说有 key、网关说没有"是可能的，
+    而那种漂移没有任何一条判据看得见。
+
+    设置文件坏了不在这里吞掉：解析错就是解析错（`json.JSONDecodeError`
+    带着文件路径与行列号抛出来）—— 把"文件坏了"折成"没配 key"，
+    正是本项目最忌的那种静默折叠。
+    """
+    from . import modelgw as MG
+
+    return MG.spec_from_env(env)
+
+
 def toolchain_report(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     """跑一趟形式化核验之前该看的那几个事实（给 `agentflow doctor` 用）。
 
     只回答"这台机器能做什么"，「不发起任何模型调用」（它不花钱）。
-    `model_key` 那一格只看「有没有配」，绝不打印值。
+    `model_key` 那一格只看「有没有配」，绝不打印值 —— 而且"配没配"要看
+    环境变量与设置文件两档（2026-10-07 起 key 也可以落在 `settings.json` 里，
+    那么这一格只读 key 的环境变量就会报"没配"，与真实情况相反）。
     """
-    src = _env(env)
-    key = (src.get("AGENTFLOW_MODEL_API_KEY") or "").strip()
+    spec = _model_spec(env)
     probe = probe_checkers(env)
     lean = next((r for r in probe["available"] if r["name"] == "lean"), None)
     return {
-        "model": {"key_present": bool(key),
-                  "base_url": src.get("AGENTFLOW_MODEL_BASE_URL") or "（缺省）",
-                  "model": src.get("AGENTFLOW_MODEL_NAME") or "（缺省）"},
+        "model": {"key_present": bool(spec.api_key),
+                  "base_url": spec.base_url,
+                  "model": spec.model},
         "provers": probe,
         "lean_ready": bool(lean),
         "lean_path": (lean or {}).get("path", ""),

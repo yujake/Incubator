@@ -36,6 +36,7 @@ import pytest
 
 from agentflow import cli
 from agentflow import formalgw as FG
+from agentflow import settings as SET
 from agentflow import toolchain as TC
 from agentflow.tools import verify_tools as VT
 
@@ -61,6 +62,13 @@ def _clean_env(monkeypatch):
     for var in (TC.ENV_LEAN_BIN, TC.ENV_COQ_BIN, TC.ENV_ISABELLE_BIN,
                 TC.ENV_PROVER_PATH, "AGENTFLOW_MATHLIB_ROOT"):
         monkeypatch.delenv(var, raising=False)
+    # 2026-10-07：机器级设置文件（`settings.json`）成了第二档来源 —— 一台机器上
+    # 真有那份文件时，上面那句"什么都没配"就不再成立（`resolve_checker` 会从
+    # 设置文件里读到本机的 lean_bin，于是"不配置就看不见"那条负控会被本机配置
+    # 打红）。所以这里再把 `AGENTFLOW_SETTINGS` 指到一个确定不存在的路径：
+    # 这一组判据要的是"环境里什么都没有"，那是一个状态，不是"恰好本机没写设置"。
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(pathlib.Path(__file__).resolve().with_name(
+        "_no_settings_for_this_test.json")))
 
 
 # ---------------------------------------------------------------- 一、三档查找

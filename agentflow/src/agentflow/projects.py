@@ -599,7 +599,8 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     spec = spec_from_env()
     if not spec.configured:
         notes.append(
-            "环境里没有模型 key（AGENTFLOW_MODEL_API_KEY）⇒ 这一次会以退出码 2（没查成）结束，"
+            "环境里没有模型 key（AGENTFLOW_MODEL_API_KEY 与 agentflow/settings.json 的 "
+            "model.api_key 都没有值）⇒ 这一次会以退出码 2（没查成）结束，"
             "六件产物照写，检索会被跳过（材料没有消费者）。"
         )
 

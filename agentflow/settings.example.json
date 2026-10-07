@@ -1,0 +1,20 @@
+{
+  "_README": "机器级设置文件的示例。用法：把它复制成同目录下的 settings.json（那份被 git 忽略），再按本机情况改值。文件不存在时框架全用内置默认值（那是正常形态，不是错误）。也可以把它放在别处，再用环境变量 AGENTFLOW_SETTINGS=<路径> 指过去。",
+  "_PRIORITY": "取值优先级（唯一口径，逐字）：环境变量 > 设置文件 > 内置默认/自动探测。环境变量压在最上面，是为了 CI 与既有脚本不被这次改动弄坏。",
+  "_TOOLCHAIN_VALUE_FORM": "工具链的四个键都接受两种写法：可执行文件的路径，或者它所在的目录（指向安装目录是人最自然的写法）。相对路径相对工作区根（agentflow/ 的上一级）解析；本机环境的建议落点是工作区根下的 _env/。",
+  "_TOOLCHAIN_LEAN_EXAMPLE": "工作区根相对写法：_env/lean470/lean-4.7.0-windows/bin（目录）或 _env/lean470/lean-4.7.0-windows/bin/lean.exe（文件）",
+  "_TOOLCHAIN_MATHLIB_EXAMPLE": "工作区根相对写法：_env/mathlib-pinned2/mathlib4-4.7.0（必须同时含 lakefile.lean 与 lean-toolchain）",
+  "_MODEL_WARNING": "api_key 落盘是有代价的：密钥一旦落盘就会进备份与误提交。三道安全阀：settings.json 被 git 忽略；入库的只有这个示例且 api_key 是空串；任何打印/读数都不回显 key（只出现 *** 或『配没配』这一格）。",
+  "_MODEL_KEYS": "model 段的三个键：api_key / base_url / name。base_url 与 name 留空则各用内置默认值（https://api.deepseek.com/v1 与 deepseek-chat）。",
+  "toolchain": {
+    "lean_bin": "",
+    "mathlib_root": "",
+    "coq_bin": "",
+    "isabelle_bin": ""
+  },
+  "model": {
+    "api_key": "",
+    "base_url": "",
+    "name": ""
+  }
+}

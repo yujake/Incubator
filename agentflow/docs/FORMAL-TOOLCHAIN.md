@@ -4,6 +4,9 @@
 > [`../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md`](../../draft/35-框架现状：正式版%20agentflow%20的分层结构（逐项带工作区相对路径）.md)。
 > 本文只作现状导读、**不构成判据**；判据在 `agentflow/DEVELOPMENT.md` §6 与各门的实现里。
 > 本文出现的路径一律**相对工作区根**（`D:\Incubator`）。
+> **本机的工具链装在哪，不写在本文里，也不写在代码里**：它写在机器级设置文件
+> `agentflow/settings.json` 的 `toolchain.lean_bin` / `toolchain.mathlib_root`
+> （2026-10-07 起；形制见 `agentflow/settings.example.json`，§6 有全文口径）。
 
 > 这份文档只回答三个问题：**装哪个**、**怎么装**、**装完怎么验**。
 > "什么算证明"不在本文的范围里 —— 那是 `formalgw` 模块 docstring 的内容。
@@ -34,9 +37,13 @@
 ### 2.1 Lean
 
 1. 取 Lean `v4.7.0` 的官方发行包（Windows 是
-   `lean-4.7.0-windows.zip`），解压到任意目录，把 `bin/` 放进 `PATH`。
-2. 本机现有的那一份在 `temp/lean470/lean-4.7.0-windows/bin`（工作区根相对路径；
-   绝对即 `D:\Incubator\temp\lean470\lean-4.7.0-windows\bin`，里面有 `lean.exe`）。
+   `lean-4.7.0-windows.zip`），解压到任意目录。
+2. **装完把落点写进 `settings.json`，不要改代码、也不要在本文里记某台机器的路径**：
+   在 `agentflow/settings.json` 的 `toolchain.lean_bin` 里填它 ——
+   值可以是可执行文件本身，也可以是它所在的目录（"指向安装目录"是人最自然的写法）。
+   本机环境的工作区根相对落点是 `_env/lean470/lean-4.7.0-windows/bin`
+   （里面有 `lean.exe`；`_env/` 是 2026-10-07 起的新落点，环境整体搬到了那里）。
+   临时一试也可以用环境变量 `AGENTFLOW_LEAN_BIN`（它的优先级高于设置文件，见 §6）。
 
 ### 2.2 Mathlib
 
@@ -56,13 +63,15 @@ commit、并把它的 olean 缓存解出来，`import Mathlib` 才成立。
    a45ae63747140c1b2cbad9d46f518015c047047a
    ```
 
-   为什么这一步不能省：缓存解包出来的树**没有 `.git`**（本机实测的
-   `temp/mathlib-pinned2/mathlib4-4.7.0` 就是这种形态），而"没有 git 元数据"不等于
+   为什么这一步不能省：缓存解包出来的树**没有 `.git`**（本机 `_env/` 下那棵
+   解包出来的 Mathlib 就是这种形态），而"没有 git 元数据"不等于
    "不知道版本"。不写这一行，版本检查会报 `check_failed`（**未核实**）——
    它既不是"没装"也不是"版本不符"，是一个必须由人补上的事实。
 
-   本机已有的两棵树（`temp/mathlib-pinned/mathlib4-4.7.0`、
-   `temp/mathlib-pinned2/mathlib4-4.7.0`）已按上面这一条写好戳文件。
+   装完还要把工程根写进 `settings.json` 的 `toolchain.mathlib_root`（§6）。
+   本机环境的落点是 `_env/mathlib-pinned2/mathlib4-4.7.0`（另有早先一份
+   `_env/mathlib-pinned/mathlib4-4.7.0`，它的 umbrella 没编全，只作对照）；
+   两份都已按上面这一条写好戳文件。
 
 ### 2.3 让检查器找得到它
 
@@ -80,8 +89,10 @@ commit、并把它的 olean 缓存解出来，`import Mathlib` 才成立。
 ```powershell
 $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
 cd D:\Incubator\agentflow
-$env:PATH="D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;$env:PATH"
-$env:AGENTFLOW_MATHLIB_ROOT="D:\Incubator\temp\mathlib-pinned2\mathlib4-4.7.0"
+# 本机路径写在 agentflow/settings.json（见 settings.example.json 与 §6）。
+# 没写设置文件、只想临时指一次时，用环境变量（优先级高于设置文件）：
+#   $env:AGENTFLOW_LEAN_BIN="<lean 可执行文件或它所在的目录>"
+#   $env:AGENTFLOW_MATHLIB_ROOT="<Mathlib 工程根>"
 
 python -m agentflow.formalgw --toolchain                  # 版本三态（秒级）
 python -m agentflow.formalgw --toolchain --import-check    # 额外真跑一次 import Mathlib（约 1 分钟）
@@ -109,22 +120,57 @@ python -m agentflow.formalgw --toolchain --import-check    # 额外真跑一次 
 
 ## 5. 本机现状（观测，不是要求）
 
+> 下表里的"落在哪"一列，值来自**这台机器的 `settings.json`**（工作区根相对写法的
+> 相对路径）；换一台机器就换一份设置文件，本文一个字都不用改。
+
 | 事实 | 值 | 怎么核的 |
 |---|---|---|
 | Lean | `4.7.0` / commit `6fce8f7d5cd1` / x86_64-w64-windows-gnu | `lean --version`、`lean --githash` |
-| Lean 落在哪 | `temp/lean470/lean-4.7.0-windows/bin`（工作区根相对；**部署选择**，不是仓内可复现的钉法，见 `draft/35-…md` §9.2） | `Test-Path temp/lean470/lean-4.7.0-windows/bin` ⇒ `True` |
-| Mathlib | 装了（`temp/mathlib-pinned2/mathlib4-4.7.0`，4100 个 olean，`Mathlib.olean` 在） | `check_toolchain` ⇒ `mathlib: installed_ok` |
-| Mathlib commit | `a45ae63747140c1b2cbad9d46f518015c047047a` | 该树的 `.lake/agentflow-mathlib-rev` 戳（§2.2 第 4 步写入）；原始来源见 `temp/mathlib-pinned2/EVIDENCE.md` |
+| Lean 落在哪 | `_env/lean470/lean-4.7.0-windows/bin`（工作区根相对；写在本机 `settings.json` 的 `toolchain.lean_bin` 里。**部署选择**，不是仓内可复现的钉法，见 `draft/35-…md` §9.2） | `agentflow doctor` 的「证明检查器」那一行（它打出找到的路径与 source） |
+| Mathlib | 装了（`_env/mathlib-pinned2/mathlib4-4.7.0`，4100 个 olean，`Mathlib.olean` 在；写在本机 `settings.json` 的 `toolchain.mathlib_root` 里） | `check_toolchain` ⇒ `mathlib: installed_ok` |
+| Mathlib commit | `a45ae63747140c1b2cbad9d46f518015c047047a` | 该树的 `.lake/agentflow-mathlib-rev` 戳（§2.2 第 4 步写入）；原始来源见 `_env/mathlib-pinned2/EVIDENCE.md` |
 
 **复跑命令**（本文所有路径都相对工作区根 `D:\Incubator`）：
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
-$env:PATH="D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;$env:PATH"
-$env:AGENTFLOW_MATHLIB_ROOT="D:\Incubator\temp\mathlib-pinned2\mathlib4-4.7.0"
 cd D:\Incubator\agentflow
 python -m agentflow.formalgw --toolchain
 ```
 
 （上表的 `check_toolchain ⇒ mathlib: installed_ok` 就是这么读出来的；本文件不重抄判定逻辑，
-判据唯一实现仍在 `agentflow/src/agentflow/formalgw.py` 的 `check_toolchain()`。）
+判据唯一实现仍在 `agentflow/src/agentflow/formalgw.py` 的 `check_toolchain()`。
+复跑时不设任何环境变量也能读到——本机路径在 `settings.json` 里，见 §6。）
+
+## 6. 本机路径与 key 写在哪：`settings.json`（2026-10-07 起）
+
+工具链落在哪、模型 API key 是什么，都不写在代码里，也不写进本文档：它们写在
+**机器级设置文件** `settings.json` 里。落点与口径逐字如下（判据实现是
+`agentflow/src/agentflow/settings.py`，判据用例是 `agentflow/tests/test_settings.py`）：
+
+| 项 | 值 |
+|---|---|
+| 默认落点 | `agentflow/settings.json`（工作区根相对；即 `src/` 的上一级） |
+| 指到别处 | 环境变量 `AGENTFLOW_SETTINGS=<路径>` |
+| 文件不存在 | 空设置 = 全用内置默认值（正常形态，不是错误） |
+| 解析失败 | 报真正的那个错误（JSON 语法错带行列号；"合法 JSON 但不是对象"是另一种错） |
+| 示例 | `agentflow/settings.example.json`（`api_key` 是空串，示例里没有任何真 key） |
+
+键（全部可选，缺哪个哪个走默认）：
+
+| 段落 | 键 | 含义 |
+|---|---|---|
+| `toolchain` | `lean_bin` | Lean 可执行文件**或它所在的目录** |
+| `toolchain` | `mathlib_root` | Mathlib 工程根（同时含 `lakefile.lean` 与 `lean-toolchain`） |
+| `toolchain` | `coq_bin` / `isabelle_bin` | Coq / Isabelle 的同类落点 |
+| `model` | `api_key` | 模型 API key |
+| `model` | `base_url` / `name` | 端点与模型名（留空则用内置默认） |
+
+**优先级（逐字，唯一口径）：环境变量 > 设置文件 > 内置默认/自动探测。**
+环境变量压在最上面，是为了 CI 与既有脚本不被这次改动弄坏；设置文件里写的是
+"这台机器"的事实，内置默认是兜底，不是配置。
+
+**安全阀（`api_key` 落盘的代价）**：① 真正的 `agentflow/settings.json`
+**被 git 忽略**（`.gitignore` 第 13 节逐字写着理由）；② 入库的只是示例，
+其中 `api_key` 是空串；③ 任何打印/读数都不回显 key（照 `ModelSpec.redacted`
+的先例，台面上只出现 `***` 或"配没配"这一格）。

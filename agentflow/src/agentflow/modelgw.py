@@ -13,6 +13,28 @@
 网关是最该保持这个性质的地方 —— 它必须能在客户的离线或受限网络里跑。
 于是 HTTP 用 `urllib.request`，JSON 用标准库，超时与重试自己实现。
 
+## key 从哪来（2026-10-07 所有者的新裁定）
+
+改前的口径逐字是一句反问："为什么不从配置文件读：密钥一旦落盘就会进版本库与备份"。
+所有者 2026-10-07 裁定改这条：填 key 与"工具链在哪"合并进同一个机器级设置文件
+`settings.json`（见 :mod:`agentflow.settings`）——理由是"机器相关的事实不该散在
+两个地方，且每次跑之前都靠人 export 一遍环境变量，是这台机器上最容易做错的一步"。
+
+取值顺序（唯一口径，逐字写在 :mod:`agentflow.settings` 里）：
+
+    环境变量 > 设置文件 > 内置默认
+
+落盘的代价由三道新安全阀一起承担（改这条时必须一起读）：
+
+1. 真正的 `agentflow/settings.json` 「被 git 忽略」（`.gitignore` 里逐字写着理由）；
+2. 入库的是示例 `agentflow/settings.example.json`，其中 `api_key` 是空串
+   （示例里不许有任何真 key）；
+3. 「任何打印/读数都不回显 key」：台面上只出现 `ModelSpec.redacted()` 给的
+   `"***"`，或"配没配"这一个布尔位。`spec_from_env` 是 key 的唯一入口，
+   它自己不打印任何东西；下游要写日志就写 `redacted()`。
+
+三条各配正控与负控，判据在 `tests/test_settings.py`。
+
 ## 三态纪律（本文件的核心）
 
 一次调用有三种结局，绝不许折叠：
@@ -51,6 +73,11 @@ from typing import Any, Callable, Mapping, Sequence
 #: 不另写一份。两处各写一份的话，"哪些归口合法"会有两个答案，
 #: 而漂移的症状是"网关接受了一个账本层会拒的值"（或反过来）—— 两边都不报错。
 from .schema import USAGE_SCOPES
+
+#: 机器级设置文件：key / base_url / name 的第二档（`settings.json`）。
+#: 取值口径只有一处（`settings.env_or_setting`），理由见模块 docstring 的
+#: 「key 从哪来」那一节。
+from . import settings as SET
 
 #: 失败与"没查成"的受控词表（唯一来源；下游只许判这些值）。
 MODEL_ERROR_KINDS: tuple[str, ...] = (
@@ -136,16 +163,41 @@ class ModelSpec:
 
 
 def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
-    """从环境变量读配置。
+    """读模型配置：环境变量 > 设置文件 > 内置默认（逐字口径见模块 docstring）。
 
-    为什么不从配置文件读：密钥一旦落盘就会进版本库与备份。
-    环境变量是客户环境里最容易轮换、最容易被密钥管理系统注入的形态。
+    名字里的 `from_env` 保留（调用点有十几处，改名只会制造噪声），
+    但它现在读的是两档：环境变量优先，缺席时读 `settings.json` 的 `model` 段。
+
+    ## 为什么改了旧口径（2026-10-07 所有者裁定，逐字登记）
+
+    改前的 docstring 逐字写着："为什么不从配置文件读：密钥一旦落盘就会进版本库与备份。
+    环境变量是客户环境里最容易轮换、最容易被密钥管理系统注入的形态。"
+    所有者 2026-10-07 裁定把"填 key"与"工具链在哪"合并进同一个机器级设置文件，
+    理由是「机器相关的事实只该有一个落点」，且"每次跑之前先 export 一遍"
+    在实践中是最常做错的一步（做错的症状是 `no_key`，而它长得像"模型不行"）。
+
+    环境变量仍然压在最上面：CI 与既有脚本不许被这次改动弄坏。
+
+    ## 新安全阀（落盘的代价这么堵）
+
+    1. `agentflow/settings.json` 被 git 忽略（`.gitignore` 里逐字写理由）；
+    2. 入库的是示例 `agentflow/settings.example.json`，`api_key` 是空串；
+    3. 本函数不打印任何东西，下游要记日志就记 `ModelSpec.redacted()`
+       （`api_key` 只以 `"***"` 出现）。key 的唯一入口就是这里，所以
+       "有没有哪条路把它打出去了"只需审这一处 + 各打印点。
+
+    设置文件坏了不吞：解析错原样抛出（带路径与行列号），
+    不许折成"没配 key" —— 那会把一个要改文件的问题伪装成"模型不可用"。
     """
     src = dict(os.environ if env is None else env)
+    ms = SET.model_settings(env=env)
+    base_url, _ = SET.env_or_setting(ENV_BASE, ms.get("base_url", ""), env=src)
+    name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
+    api_key, _ = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
     return ModelSpec(
-        base_url=str(src.get(ENV_BASE) or DEFAULT_BASE_URL).rstrip("/"),
-        model=str(src.get(ENV_NAME) or DEFAULT_MODEL),
-        api_key=str(src.get(ENV_KEY) or "").strip(),
+        base_url=(base_url or DEFAULT_BASE_URL).rstrip("/"),
+        model=name or DEFAULT_MODEL,
+        api_key=api_key,
         timeout_sec=_float_env(src, ENV_TIMEOUT, 60.0),
         max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
     )
@@ -426,7 +478,8 @@ class ModelGateway:
         if not self.spec.configured:
             return _reply_failure(
                 "no_key",
-                f"环境变量 {ENV_KEY} 未设置 ⇒ 本次**没有调用模型**（这是没查成，不是失败）",
+                f"环境变量 {ENV_KEY} 与设置文件 {SET.DEFAULT_SETTINGS_REL} 的 model.api_key "
+                "都没有值 ⇒ 本次**没有调用模型**（这是没查成，不是失败）",
                 scope=scope,
             )
         if not str(prompt or "").strip():
