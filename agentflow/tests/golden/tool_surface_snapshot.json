@@ -677,7 +677,7 @@
       "items": {
        "properties": {
         "citations": {
-         "description": "必须非空（FC-02）：`lit:<id>` / `stmt:<id>` / `doc:<id>#<claim>` 这类可回查的引用。没有引用的断言不许进稿件",
+         "description": "必须非空（FC-02）：`rel:<id>` / `lit:<id>` / `exp:<id>` / `eval:<id>` / `doc:<id>` / `stmt:<id>` 这类可回查的引用（前缀的全部取值见 `schema.CITATION_PREFIXES`；`doc:` 那一档还要带 `#<断言>@<内容哈希前 16 位>`）。没有引用的断言不许进稿件",
          "items": {
           "type": "string"
          },
