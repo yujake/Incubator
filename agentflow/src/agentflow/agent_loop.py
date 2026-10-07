@@ -63,6 +63,15 @@ from .llmseam import LlmSeam
 #: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
 #: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final")
+#: 出站门：哪些形状由秘书接管（所有者的裁定逐字"如果有些形状涉及到结构化交互，
+#: 则需要秘书接管"）。判据是"这个形状是不是跨智能体的结构化交互"——
+#: `summon` / `summon_many`（委托）· `handoff`（手稿通道）· `message`（私聊/公共频道，
+#: 带 `to`/`subject`/`body`/`reply_to` 四个字段与一条协作边准入）。
+#: 不在门里的四个（`tool` = 代码的硬闸与参数表；`note` = 写自己的台账；
+#: `ask_user` = 直接问用户；`final` = 终态字段闸 `notify_reading`）各有各的接住者，
+#: 登记在 `tests/test_secretary.py::STRUCTURED_INTERACTION` / `NOT_STRUCTURED` 那张表里
+#: （形状表与登记表等额：新增一个形状不登记就红）。
+SECRETARY_OUTBOUND_SHAPES: tuple[str, ...] = ("summon", "summon_many", "handoff", "message")
 
 #: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`（`draft/37` §68）。
 #:
@@ -1128,7 +1137,7 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
     payload: dict[str, Any] = {"final": final,
                                "evidence": [str(x) for x in (data.get("evidence") or [])]}
     if data.get("notify") is not None:
-        # `notify` 原样带过：它的校验统一在 `_notify_gate` 里做（那一层才知道角色、
+        # `notify` 原样带过：它的校验统一在 `notify_reading` 里做（那一层才知道角色、
         # 才知道这是连续第几次被打回 —— 而"打回"要附四件事的警告，警告的措辞只有一处）。
         # 解码器只负责"认出了 final 这个形状"（纯函数、可单测）。
         payload["notify"] = data.get("notify")
@@ -1169,6 +1178,27 @@ def _known_recipient(token: Any) -> bool:
     want = str(token or "").strip()
     return _is_all_recipient(want) or want.upper() in {r.upper() for r in (*S.ROLES,
                                                                           S.CONDUCTOR_ROLE)}
+
+
+def message_admission(role: str, to: str, reply_to: str = "") -> str:
+    """私聊的准入判据（唯一一份实现）：通过返回空串，不通过返回那句理由。
+
+    为什么抽成模块级函数（而不是留在 `_do_message` 里、让秘书自己再抄一份）：
+    `message` 是结构化交互 ⇒ 秘书要接管它（所有者的裁定），而秘书住在 `secretary.py`。
+    它若自己写一遍"`to in partners_out(role)`"，两份判据漂了没有任何东西会红 ——
+    这正是本仓反复登记的形态（同一件事两份实现）。所以秘书那一侧靠依赖注入
+    拿这个函数（`Secretary.optimize_outbound(..., admission=message_admission)`），
+    它的文件里不出现 `partners_out`（判据：`tests/test_secretary.py` 用 AST 扫）。
+
+    `reply_to` 非空 ⇒ 放行：那是"回一条已经存在的对话"，协作边早在对方开口时成立过。
+    """
+    if to == PUBLIC:
+        return ""
+    allowed = (to in AP.partners_out(role) or role in AP.partners_out(to) or bool(reply_to))
+    if allowed:
+        return ""
+    return (f"{role} 与 {to} 之间没有协作边（{role} 能叫的是 {sorted(AP.partners_out(role))}）"
+            f"⇒ 私聊不成立；要么发到公共频道（to={PUBLIC}），要么先公开开口。")
 
 
 def _recipient_for_channel(token: Any, *, all_as: str = PUBLIC) -> str:
@@ -1720,7 +1750,7 @@ class AgentLoop:
                 #     而"为什么没有"如实落进这一步的读数（`notify_problem`）。
                 # 于是它从"闸门"变成"读数"：留痕与否仍然是可见的事实，但不再拿它
                 # 卡住一次已经做完的活（阻塞一条委托比放行更贵 —— 那就是 #1）。
-                notify_problem = self._notify_gate(payload)
+                notify_problem = self.notify_reading(payload)
                 notify = payload.get("notify")
                 step_result: dict[str, Any] = {}
                 if notify_problem:
@@ -2105,16 +2135,23 @@ class AgentLoop:
                     if isinstance(t, Mapping)]
         return [str(payload.get("role") or "")]
 
-    def _notify_gate(self, payload: Mapping[str, Any]) -> str:
-        """收工那一句的 `notify` 表该不该被打回（空串 = 放行）。
+    def notify_reading(self, payload: Mapping[str, Any]) -> str:
+        """收工那一句的 `notify` 表读得成不成（空串 = 读成了；非空 = 那句话就是读数理由）。
+
+        名字已按主控 2026-10-07 的裁定改掉：`_notify_gate` → `notify_reading`（旧名在说谎 ——
+        它不打回；本仓的顶级教训之一是"名字在说一件事、断言在说另一件"）。
+        改名时全树一共 8 处引用，其中 `tests/test_agent_prompts.py` 里还有 2 处注释提到旧名，
+        刻意留到那条线（正在改该文件）收工后再改，以免两个写者撞车 —— 已登记在主控记录里。
 
         三条判断（顺序就是"先看该不该填，再看填得对不对"）：
 
         1. 主控 M 免填：它的 `final` 是给用户的回复（用户 2026-10-05 原话：
            "M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）；
-        2. 没填 / 填错形状 ⇒ 打回（形状判据只有一份：`notify_shape_problem`）；
-        3. 填了但 refs 悬空 ⇒ 也打回（`manuscripts.ref_problem` 是写入期同一份判据：
-           让它在"填表"这一步就被指出来，而不是写手稿时才炸）。
+        2. 没填 / 填错形状 ⇒ 这一格没有可用读数（形状判据只有一份：`notify_shape_problem`）；
+        3. 填了但 refs 悬空 ⇒ 同一格也没有可用读数（`manuscripts.ref_problem` 是写入期
+           同一份判据：让它在"填表"这一步就被指出来，而不是写手稿时才炸）。
+
+        返回空串只有一个含义：读成了、可以照着写手稿。
         """
         if self.role == S.CONDUCTOR_ROLE:
             return ""
@@ -2411,14 +2448,10 @@ class AgentLoop:
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         to = str(payload.get("to"))
         reply_to = str(payload.get("reply_to") or "")
-        if to != PUBLIC:
-            allowed = (to in AP.partners_out(self.role) or self.role in AP.partners_out(to)
-                       or bool(reply_to))
-            if not allowed:
-                return {"message": "未发出", "to": to, "ok": False,
-                        "error": f"{self.role} 与 {to} 之间没有协作边（{self.role} 能叫的是 "
-                                 f"{sorted(AP.partners_out(self.role))}）⇒ 私聊不成立；"
-                                 f"要么发到公共频道（to={PUBLIC}），要么先公开开口。"}
+        # 准入判据只有一份（模块级 `message_admission`）：这里与秘书那一侧都调它。
+        not_allowed = message_admission(self.role, to, reply_to)
+        if not_allowed:
+            return {"message": "未发出", "to": to, "ok": False, "error": not_allowed}
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to,
                                        subject=str(payload.get("subject") or ""),
                                        body=str(payload.get("body") or ""),
@@ -2441,11 +2474,14 @@ class AgentLoop:
         阻塞一条委托比放行更贵 —— 那正是 #1。所以任何异常都变成结果里的一格，
         绝不中断这一次循环。
         """
-        if self.secretary is None or shape not in ("summon", "summon_many", "handoff"):
+        if self.secretary is None or shape not in SECRETARY_OUTBOUND_SHAPES:
             return {}
         out: dict[str, Any] = {}
         try:
-            got = self.secretary.optimize_outbound(shape, dict(payload))
+            # `admission` 是依赖注入：秘书要判 `message` 的协作边，判据本体在
+            # 本模块（`message_admission`）—— 传进去而不是让 `secretary.py` 自己抄一份。
+            got = self.secretary.optimize_outbound(shape, dict(payload),
+                                                   admission=message_admission)
             out["alarms"] = list(got.get("alarms") or [])
             out["fail_open"] = bool(got.get("fail_open"))
             if got.get("problem"):

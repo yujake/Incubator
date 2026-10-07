@@ -1124,3 +1124,188 @@ def test_declarations_candidates_is_one_shared_judgement_used_by_prescreen(tmp_p
     out = loop._outbound_hook("summon", {"to": "F", "action": "", "params": {},
                                          "name": "table.creat"})
     assert f"并列候选：{want}" in json.dumps(out, ensure_ascii=False), out
+# ------------------- R8：结构化交互的收发交秘书接管（出站门 + `message` 分支）
+#
+# 所有者裁定逐字："如果有些形状涉及到结构化交互，则需要秘书接管。"
+# 判据是"这个形状是不是跨智能体的结构化交互" —— 是 ⇒ 必须在出站门里；
+# 不是 ⇒ 登记它"谁接住"（不登记就是漏项，形状表与登记表等额）。
+
+STRUCTURED_INTERACTION = {
+    "summon": "跨智能体的结构化交互：委托（to/action/params）",
+    "summon_many": "同上（一批委托）",
+    "handoff": "跨智能体的结构化交互：手稿通道（to/summary/body/revises）",
+    "message": "跨智能体的结构化交互：私聊/公共频道（to/subject/body/reply_to + 协作边准入）",
+}
+NOT_STRUCTURED = {
+    "tool": "不是交互：工具面有代码的硬闸（参数表被拒后注入，draft/63 §4-2 的已决定现状）",
+    "note": "不是交互：写自己的台账/笔记，代码接住",
+    "ask_user": "不是交互（对象是用户，不是智能体）：直接问用户（userio）",
+    "final": "不是交互：终态字段闸 `notify_reading`",
+}
+
+
+def _gate_problems(gate) -> list[str]:
+    """门元组 ⇒ 问题清单（空 = 与登记表等额）。写成函数才能拿合成输入做负控。"""
+    want, got = set(STRUCTURED_INTERACTION), set(gate)
+    problems: list[str] = []
+    if got - want:
+        problems.append(f"门里多了不属于结构化交互的形状：{sorted(got - want)}")
+    if want - got:
+        problems.append(f"门里少了属于结构化交互的形状：{sorted(want - got)}")
+    return problems
+
+
+def test_the_secretary_outbound_gate_covers_exactly_the_structured_interactions():
+    from agentflow import agent_loop as AL
+
+    both = set(STRUCTURED_INTERACTION) | set(NOT_STRUCTURED)
+    assert set(AL.SHAPES) == both, (
+        f"形状表与登记表不等额 ⇒ 新增/改名了没登记：{sorted(set(AL.SHAPES) ^ both)}")
+    assert _gate_problems(AL.SECRETARY_OUTBOUND_SHAPES) == []
+    assert set(AL.SECRETARY_OUTBOUND_SHAPES) <= set(AL.SHAPES)
+
+
+def test_negative_control_the_gate_judge_sees_both_directions():
+    """负控：① 把 `message` 从门里去掉 ⇒ 判据必须报"少了"；② 把 `tool` 加进去 ⇒ 必须报"多了"。"""
+    without_message = tuple(k for k in STRUCTURED_INTERACTION if k != "message")
+    assert any("少了" in p and "message" in p for p in _gate_problems(without_message)), \
+        "把 message 从门里去掉都判不出来 ⇒ 这条判据是真空的"
+    with_tool = tuple(STRUCTURED_INTERACTION) + ("tool",)
+    assert any("多了" in p and "tool" in p for p in _gate_problems(with_tool)), \
+        "把 tool 加进门里都判不出来 ⇒ 这条判据是真空的"
+
+
+def _message_payload(**over) -> dict:
+    row = {"to": "#public", "subject": "主题", "body": "正文"}
+    row.update(over)
+    return row
+
+
+def test_message_goes_through_the_secretary_gate_and_leaves_a_duty_1_row(tmp_path):
+    st, sec, loop = _loop_with_secretary(tmp_path, role="D")
+    out = loop._outbound_hook("message", _message_payload())
+
+    assert "alarms" in out, f"message 没进门 ⇒ 秘书没被调用（出站门元组）：{out}"
+    assert out["alarms"] == [] and out["fail_open"] is False, out
+    assert sec.decisions()[-1]["duty"] == 1, sec.decisions()[-1]
+    # 门不是"所有形状都过"：不属于结构化交互的形状不进秘书（反真空）
+    assert loop._outbound_hook("tool", _message_payload()) == {}
+    assert loop._outbound_hook("note", _message_payload()) == {}
+
+
+def test_message_without_a_collaboration_edge_is_alarmed_and_refused_by_the_hard_gate(tmp_path):
+    from agentflow import agent_loop as AL
+    from agentflow import agent_prompts as AP
+
+    role = "D"
+    fresh = next(t for t in S.ROLES
+                 if t != role and t not in AP.partners_out(role) and role not in AP.partners_out(t))
+    st, sec, loop = _loop_with_secretary(tmp_path, role=role)
+    payload = _message_payload(to=fresh)
+
+    out = loop._outbound_hook("message", payload)
+    assert any("没有协作边" in a for a in out["alarms"]), out
+    assert payload == _message_payload(to=fresh), "秘书不许改载荷"
+    assert sec.decisions()[-1]["duty"] == 1, sec.decisions()[-1]
+    # 硬闸照旧（秘书那一层是"建议 + 台账"，不是替代硬闸）
+    res = loop._do_message(payload)
+    assert res["ok"] is False and "没有协作边" in res["error"], res
+    # 单一来源：秘书报的那句与硬闸那句逐字相同（两处调的是同一个函数）
+    assert out["alarms"][0] == res["error"], (out["alarms"][0], res["error"])
+    assert AL.message_admission(role, fresh) == res["error"]
+
+
+def test_a_broken_secretary_cannot_stop_a_message(tmp_path, monkeypatch):
+    """反负控：秘书自己抛异常 ⇒ 消息照发 + 台账 `fail_open=True`（不许让秘书挡住发信）。"""
+    st, sec, loop = _loop_with_secretary(tmp_path, role="D")
+
+    def boom(*a, **kw):
+        raise RuntimeError("秘书炸了")
+
+    # 断在 `message` 那一支自己的预筛上（对 `message` 不再跑 `prescreen` —— 见
+    # `optimize_outbound` 里那段"为什么不跑委派预筛"）：这样 fail-open 那条路与
+    # 台账行都真的被走到。
+    monkeypatch.setattr(sec, "_message_alarms", boom)
+    out = loop._outbound_hook("message", _message_payload())
+    assert out.get("fail_open") is True, out
+    assert sec.decisions()[-1]["duty"] == 1 and sec.decisions()[-1]["fail_open"] is True, \
+        sec.decisions()[-1]
+    res = loop._do_message(_message_payload())
+    assert res["ok"] is True and res["message_sent"], res
+
+
+def test_message_format_problems_are_alarms_not_blocks(tmp_path):
+    """追加要求（所有者）：智能体侧的交互工具不刻意拦格式 —— 缺 `subject` 只报警。
+
+    硬闸只留权限级那一条（协作边 / `#public` / `reply_to`，且走共用判据）；
+    格式（`subject`/`body` 空、措辞不好、`to` 不像角色名）一律不许退回或阻断发信。
+    """
+    st, sec, loop = _loop_with_secretary(tmp_path, role="D")
+    payload = _message_payload(subject="")
+
+    out = loop._outbound_hook("message", payload)
+    assert any("subject" in a for a in out["alarms"]), out
+    assert any("不替它编内容" in a for a in out["alarms"]), out
+    assert payload == _message_payload(subject=""), "秘书不许改载荷"
+    # 格式缺了照样发得出去（权限级准入没被触发）
+    res = loop._do_message(payload)
+    assert res["ok"] is True and res["message_sent"], res
+
+
+def _admission_source_problems(loop_src: str, sec_src: str) -> list[str]:
+    """"协作边准入只有一处实现"的判据：扫调用，不扫措辞（docstring 里提一嘴不算）。"""
+    import ast as _ast
+
+    def calls(tree) -> int:
+        n = 0
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Attribute) and node.attr == "partners_out":
+                n += 1
+            elif isinstance(node, _ast.Name) and node.id == "partners_out":
+                n += 1
+        return n
+
+    problems: list[str] = []
+    if "def message_admission(" not in loop_src:
+        problems.append("`agent_loop.py` 里没有 `message_admission` 的定义 ⇒ 唯一那份判据不见了")
+    if calls(_ast.parse(loop_src)) < 1:
+        problems.append("`agent_loop.py` 里没有协作边查询 ⇒ 判据被搬走了")
+    if calls(_ast.parse(sec_src)) != 0:
+        problems.append("`secretary.py` 里出现了协作边查询 ⇒ 第二份准入判据（漂了没有任何东西会红）")
+    return problems
+
+
+def test_the_collaboration_edge_judgement_has_exactly_one_implementation():
+    root = pathlib.Path(__file__).resolve().parent.parent
+    loop_src = (root / "src/agentflow/agent_loop.py").read_text(encoding="utf-8")
+    sec_src = (root / "src/agentflow/secretary.py").read_text(encoding="utf-8")
+
+    assert _admission_source_problems(loop_src, sec_src) == []
+    assert "partners_out" not in sec_src, "秘书那一侧连措辞里都不该出现它（免得下次有人照着抄）"
+
+
+def test_negative_control_a_copied_admission_judgement_is_caught():
+    root = pathlib.Path(__file__).resolve().parent.parent
+    loop_src = (root / "src/agentflow/agent_loop.py").read_text(encoding="utf-8")
+    copied = "def _admission(role, to):\n    return to in AP.partners_out(role)\n"
+    assert _admission_source_problems(loop_src, copied), "把内联那份抄回秘书都判不出来 ⇒ 判据是真空的"
+
+
+def test_the_inbound_hook_reworks_everything_it_hears(tmp_path, monkeypatch):
+    """入站半边（本来就有）：收到的每一条都过 `rework_inbound`，摘要那两档三态齐全。"""
+    st, sec, loop = _loop_with_secretary(tmp_path, role="D")
+    heard = [{"sender": "M", "body": "在吗"}]
+
+    out = loop._inbound_hook(heard)
+    assert isinstance(out.get("reworked"), list) and out["reworked"], out
+    assert out["reworked"][0]["item"] == heard[0], "收件加工不许改原文"
+    assert out["reworked"][0]["addendum"], out["reworked"][0]
+    assert "handoffs_digest" in out and "handoffs_digest_problem" not in out, out
+
+    def boom():
+        raise RuntimeError("读不到")
+
+    monkeypatch.setattr(sec, "handoffs_digest", boom)
+    bad = loop._inbound_hook(heard)
+    assert "handoffs_digest_problem" in bad and "handoffs_digest" not in bad, bad
+    assert loop._inbound_hook([]) == {}, "没有新消息时钩子是 no-op"

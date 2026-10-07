@@ -208,7 +208,7 @@ def test_a_dangling_ref_is_named_and_no_half_written_row_lands(tmp_path):
 
 
 def test_the_shape_decoder_passes_notify_through_and_the_gate_validates_it():
-    """解码层只认形状（`final` 认出来了就把 notify 原样带过）；校验在 `_notify_gate` 一处。
+    """解码层只认形状（`final` 认出来了就把 notify 原样带过）；校验在 `notify_reading` 一处。
 
     为什么校验不放解码层：打回要附"四件事"的警告，而警告只在"被打回"这个上下文里生成
     （它需要角色与"连续第几次"）。两份措辞必然分家 —— 分家之后模型看到的警告就取决于

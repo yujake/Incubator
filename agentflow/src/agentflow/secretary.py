@@ -589,7 +589,40 @@ class Secretary:
 
     # ------------------------------------------------------------ 职责 1 / 2（发件侧）
 
-    def optimize_outbound(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    def _message_alarms(self, payload: Mapping[str, Any], *, admission: Any = None) -> list[str]:
+        """`message`（跨智能体的结构化交互）的预筛：准入判据 + 两个必填字段。
+
+        三态纪律：判据没接上时如实报"这一格判不了（没查成不是没问题）"，
+        绝不因为拿不到判据就当它通过。
+
+        为什么不自己判协作边：判据本体只有一份（`agent_loop.message_admission`），
+        由 `AgentLoop._outbound_hook` 通过 `admission=` 注入进来。本文件里再查一次
+        协作边（`agent_prompts` 那一支）就是长出了第二份实现，而两份漂了没有任何东西会红
+        （判据：`tests/test_secretary.py` 里那条 AST 扫描 —— 它扫的是调用，不是措辞）。
+
+        缺 `subject`/`body` 只报警、不替它编内容（职责 1 的既有纪律：秘书给建议，
+        不改实质、不代笔）。
+        """
+        out: list[str] = []
+        to = str(payload.get("to") or "")
+        reply_to = str(payload.get("reply_to") or "")
+        if admission is None:
+            out.append("message 的协作边准入判据没接上 ⇒ 这一格判不了（没查成不是没问题）")
+        else:
+            try:
+                reason = str(admission(self.role, to, reply_to) or "")
+            except Exception as exc:  # noqa: BLE001 - 判据自己坏了也是"判不了"
+                reason = f"message 的准入判据自己出错了（{type(exc).__name__}: {exc}）⇒ 这一格判不了"
+            if reason:
+                out.append(reason)
+        for field in ("subject", "body"):
+            value = payload.get(field)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"message 的 `{field}` 要是非空字符串（缺了不替它编内容）")
+        return out
+
+    def optimize_outbound(self, shape: str, payload: Mapping[str, Any], *,
+                          admission: Any = None) -> dict[str, Any]:
         """职责 1：格式与内容优化（发件前）。
 
         不改变实质主张：不替本体承诺、不改结论、不加证据（`draft/53` §2 的
@@ -614,7 +647,18 @@ class Secretary:
             action = str(payload.get("action") or "")
             params = payload.get("params") if isinstance(payload.get("params"), Mapping) else {}
             tool = str(payload.get("name") or payload.get("tool") or "")
-            alarms = self.prescreen(to=to, action=action, params=params or {}, tool=tool)
+            if shape == "message":
+                # `R8`：`message` 是跨智能体的结构化交互 ⇒ 秘书接管（所有者裁定逐字
+                # "如果有些形状涉及到结构化交互，则需要秘书接管"）。接管 = 预筛报警 +
+                # 建议 + 台账（不替代 `_do_message` 的硬闸，也不改载荷）。
+                #
+                # 为什么这一支不跑上面那条委派预筛：`message` 没有 `action`/`params`/`tool`
+                # 三件，而预筛会把 `to` 当角色名去查能力表 —— 对 `to=#public` 会报出两条
+                # "读不到 #public 的角色定位"的假警（频道名不是角色）。它的整个预筛面
+                # 就是下面这两格：共用准入判据 + 两个必填字段。
+                alarms = self._message_alarms(payload, admission=admission)
+            else:
+                alarms = self.prescreen(to=to, action=action, params=params or {}, tool=tool)
             # 预筛报警不是"判决"：它只说"照声明看不合规"，改法（映到哪个名字、
             # 补哪个字段）是判断 ⇒ 只有该介入时才叫模型。
             judged: dict[str, Any] = {"checked": False, "reason": "预筛没有报警 ⇒ 不必判断"}
