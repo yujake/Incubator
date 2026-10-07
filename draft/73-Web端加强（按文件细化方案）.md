@@ -1,5 +1,8 @@
 # draft/73 Web 端加强 · 按文件细化方案
 
+> ✅ **裁定已落地（2026-10-07）**：`A2 B1 C2 D2 E1 F1 G2 H1 | I1 J2 K2 L1 M2 N1 O2 | P1 Q1 R1 S1 T1` —— 逐题施工含义见 `draft/76` 顶部。
+> 与本文件初版不同的四处（都标了 ⚠️）：**M2** `ui/src/types.ts` 改为**由 `agentflow/web/emit_types.py` 生成**（不是手写）；**J2 / K2** 六件产物与 V 的验证台账改为**用 `tests/` 夹具造样本**（页面要标明「夹具样本」）；**O2** 趟次改为**后端补索引**（不再每次从事件现切）。
+
 > **这份文档是什么**：`draft/72`（详细设计）的**按文件落地版** —— 每个文件写清"现状 / 目标 / 要加的函数与签名 / 读什么写什么 / 判据怎么先在改前红 / 风险"。
 > **默认口径**：`draft/72 §3` 那八道题**你还没点**，所以本文按我建议的那一列展开（题 A=`Preact+Vite` · B=`dist 入库` · C=`默认只读、写面显式开` · D=`独立网页操作台账` · E=`key 只写不读` · F=`Playwright opt-in` · G=`加发布门步（要你签）` · H=`停下来问`）。
 > **若你改选**，受影响的行我在 §4 逐题点名（不用重写全文）。
@@ -30,6 +33,7 @@
 | `ui/tsconfig.json` | W0 | TS 严格档（`strict`/`noUncheckedIndexedAccess`） | 否 |
 | `ui/index.html` | W0 | 单入口壳（含 `<meta name="csrf-token">`） | 否 |
 | `ui/src/main.tsx` | W0 | 挂载 + 客户端路由（六条页面） | 否 |
+| `ui/src/types.ts` | W0 | **由 `agentflow/web/emit_types.py` 生成**（裁定 M2；手改必红） | 否 |
 | `ui/src/api.ts` | W0/W1 | 全部 `/api/*` 的类型化封装 + CSRF + 错误三态 | 否 |
 | `ui/src/sse.ts` | W2 | SSE 订阅 + `Last-Event-ID` 续传 + 降级轮询 | 否 |
 | `ui/src/pages/Home.tsx` | W1 | 待回答面板（今天 `/` 的等价物） | 否 |

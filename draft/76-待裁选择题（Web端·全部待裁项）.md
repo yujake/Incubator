@@ -1,9 +1,45 @@
 # draft/76 待裁选择题（Web 端 · **全部待裁项** · 二十题）
 
-> **怎么用**：每题给 A/B/C，**写一行字即可**，例如 `A B C D E A A A | I1 J2 K2 L1 M2 | P1 Q1 R1 S1 T1`。
-> **这二十题一题都不卡当前交付**（排期 R0–R8 与所有者两条指示都已收口；门绿、文书齐）。它们只在**Web 端加强开工前**需要答案。
-> **来源**：`draft/72 §3` 的八道（§1，原样搬来）＋ 写 `draft/74/75` 过程中**新冒出来的十一项**（§2/§3，每条都附证据）。
-> **依赖关系**（决定答题顺序）：`A/B/C` 定 W0 的形状 · `G` 要你**签**（FC-27）· `H/I` 决定 W3 的规模 · 其余都可后置。
+## ✅ 裁定栏（所有者 2026-10-07 逐题点选 —— **已裁完**）
+
+```
+A2  B1  C2  D2  E1  F1  G2  H1  |  I1  J2  K2  L1  M2  N1  O2  |  P1  Q1  R1  S1  T1
+```
+
+**落地说明（按你的裁定，不是我的建议；与我建议不同的四处用 ⚠️ 标出）**
+
+| 题 | 裁定 | 施工含义 |
+|---|---|---|
+| A2 | Preact + Vite | `ui/package.json` 装 `preact` + `@preact/preset-vite`；页面后缀 `.tsx` |
+| B1 | 构建产物**入库** | `ui/vite.config.ts` 的 `outDir = ../src/agentflow/web/static`；**改前端 ⇒ 重建 → 提交产物 → 再跑门**；判据"dist 与 src 一致"（没装 node ⇒ `unknown`） |
+| C2 | 默认只读、写面显式开 | `agentflow web --allow-writes`；网页里"启用控制"一次确认；`force` 停再确认 |
+| D2 | 独立网页操作台账 | `<工作区>/web-actions.jsonl`（新文件；运行产物 ⇒ 按 `.gitignore` §9/§10 家族说明"不入库"） |
+| E1 | key 只写不读 | `settings.write_settings()` 返回里 `model.api_key` 恒 `***`；表单 `type=password` 且永不回填 |
+| F1 | Playwright（opt-in） | `-m browser`；浏览器装在仓外；`pyproject.toml` 记依赖 ⇒ **与题 G2 同一个签字点** |
+| **G2** | 发布门加前端步 + 依赖入库 | ⚠️ **走回 FC-27**：`tools/release_all.py` 与 `pyproject.toml` **要 2 名 reviewer 签** ⇒ 我按 `draft/67` 的规矩**只报备、不代签**；两份 patch 在 W4 前单独交你 |
+| H1 | 没有既有闸门时**停下来报你** | W3 若触发，我停下，把"要不要新开一条闸门"做成选择题（不自己开路） |
+| **I1** | `/api/task` **这批不做** | W3 缩为三件：`/answer`（既有）· `/api/stop` · `/api/submit`；"用户→M 留言"留给 CLI |
+| **J2** | 六件产物**用夹具造样本** | ⚠️ 与我建议不同：W1 先用 `tests/` 夹具在临时工作区造一份 `out/run-N/` 六件（`run-manifest.json`/`model-transcript.jsonl`/`evidence.json`/`claims.json`/`cost.json`/`report.md`）作为判据输入；**页面上标明"夹具样本"** |
+| **K2** | V 的验证台账**用夹具造样本** | ⚠️ 同上：夹具在 `verifications/<4 位命题号>.jsonl` 造一行（含 `proof_sha`/`verdict`），字段引 `verifications.py:73/124/169/208`；页面同样标明 |
+| L1 | 待答/选项**收敛到 `userio`** | 删 `webui._scan` 里那两段与 `option_view/_opts_view`，GUI 改调 `userio.pending_questions:319` / `list_questions:339` / `coerce_option:159` |
+| **M2** | `types.ts` **由脚本生成** | ⚠️ 与我建议不同：新增 `agentflow/web/emit_types.py`（从 Python 侧生成 `ui/src/types.ts`）+ "生成物与源一致"的新鲜度判据；**手改生成物必红** |
+| N1 | 两套三态词表 + 组件层映射 | `TriState` 各自映射；**不许互相顶替**（`ReportReading.status` 用 `ok/missing/unknown`，其余用 `computed/unreadable/not_applicable`） |
+| **O2** | 后端补"趟次索引" | ⚠️ 与我建议不同：在 `store` 或 `sessions` 侧落一份**趟次索引**（`run_start`→`run_end` 的派生表），GUI 读它而非每次现切；**新增派生数据 ⇒ 要有"索引与事件对账"的判据**（改前红 + 负控） |
+| P1 | 迁一面删一面 | `webui/views.py` 的旧函数随页面迁移逐个删除；W5 时该文件应清空 |
+| Q1 | SPA 回退：`/api/*` 记 JSON 404、其余吐 `index.html` | 判据要钉"`/api/*` 不吐 HTML" |
+| R1 | `webui.py` **W0 一次拆到位** | `webui/` 包 + 公开面 re-export；同步 `tests/test_release_all.py` 顶层模块登记（`"webui.py"` → `"webui/"`）与 `docs/READING-MAP.md`（`webui.py` 这个名字将不存在 ⇒ 那条判据会红） |
+| S1 | 契约判据收在 `tests/test_webui_contracts.py`（W0 新建） | 四条：端点对齐 / 事件对齐 / 类型字段对齐 / 路由对齐 |
+| T1 | CLI 只加两个开关 | `--allow-writes`（题 C2）与 `--no-settings-write`（题 E1） |
+
+**前提已验**：本机 `node v24.16.0` · `npm 12.0.2` · `pnpm 11.21.0` **齐**（B1/M2/F1 的构建链可用）；Python 侧 `playwright` 未装（W4 才需要）。
+
+**施工顺序**：`A2/B1/C2/R1/S1` 定 W0 ⇒ 先做 W0；`G2` 的两份禁改区 patch 在 W4 前交你签；`I1/H1` 让 W3 收敛为三件写面。
+
+---
+
+> **怎么用**：每题给 A/B/C，**写一行字即可**（例如 `A1 B1 C2 …`）。
+> **来源**：`draft/72 §3` 的八道（§1）＋ 写 `draft/74/75` 时新冒出来的十二项（§2/§3，每条附证据）。
+> **依赖关系**：`A/B/C` 定 W0 的形状 · `G` 要你**签** · `H/I` 定 W3 规模 · 其余可后置。
 
 ```
 裁定栏：A__ B__ C__ D__ E__ F__ G__ H__ | I__ J__ K__ L__ M__ N__ O__ | P__ Q__ R__ S__ T__

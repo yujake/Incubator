@@ -92,8 +92,9 @@
 
 ## §2 逐前端文件伪代码
 
-### §2.1 `ui/src/types.ts`（**唯一类型来源**）
+### §2.1 `ui/src/types.ts`（**唯一类型来源；裁定 M2：由 `agentflow/web/emit_types.py` 生成，不许手改**）
 ```ts
+// ⚠️ 本文件是生成物（`python -m agentflow.web.emit_types`）；下面就是生成器的输出形状
 export type Tri = "computed" | "unreadable" | "not_applicable";
 export type ReportTri = "ok" | "missing" | "unknown";
 // 其余类型逐字对应 §1.3 的每一行；**不许在这里改名、不许 optional 掉后端一定会给的键**
