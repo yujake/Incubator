@@ -62,6 +62,21 @@ env/
 ENV/
 
 # -----------------------------------------------------------------------------
+# 4b. 前端依赖安装结果（2026-10-07 补，为 Web 端 W0 拆包做准备）
+#     为什么：Web 端要引入 Vite + Preact（`agentflow/ui/package.json`），
+#     `pnpm install` 会在 `agentflow/ui/` 下生成 node_modules（数千文件、数十 MB），
+#     并在仓库根生成 pnpm 的内容寻址仓库 `.pnpm-store/`（pnpm 在 Windows 上按盘符
+#     选 store 位置，本仓库在 D: 盘，于是落成了 `D:\Incubator\.pnpm-store`）。
+#     两者都是**由 package.json/lock 决定的可重装产物**：装什么由清单决定，
+#     不该进版本库，更不该进这次要 push 的快照。
+#     **刻意不排除 `agentflow/ui/dist/`**：B1 裁定"dist 提交进仓"（前端产物是
+#     交付物的一部分，判据要在全新 clone 里直接读得到），所以 dist 必须留在跟踪面内。
+#     生成物新鲜度由 A 线的契约判据把关（dist 与源码不一致就红），不靠 .gitignore。
+# -----------------------------------------------------------------------------
+node_modules/
+.pnpm-store/
+
+# -----------------------------------------------------------------------------
 # 5. OCR 模型权重与下载尝试
 #    为什么：test/test1/.ocr-models/ 93.7 MB（craft_mlt_25k.pth 79 MB、
 #    english_g2.pth 14 MB）、test/test1/.ocr-attempt/ 87.2 MB（两个 .zip 下载物）。

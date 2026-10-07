@@ -25,9 +25,28 @@
 
 | 线 | glob（逐条） |
 |---|---|
-| **A** | `agentflow/ui/**` · `webui/__init__.py` · `webui/server.py` · `webui/routes.py` · `webui/state.py` · `webui/views.py` · `web/assets.py` · `web/emit_theme.py` · `web/emit_types.py` · `web/static/**` · `cli.py` · `tests/test_webui.py` · `tests/test_webui_contracts.py` · `tests/test_webui_static.py` · `tests/test_webui_pages.py` · `tests/test_release_all.py` · `docs/READING-MAP.md` · `docs/USER-END-DSH-STYLE.md` · `README.md` · `docs/INDEX.md` · `ui/README-DEV.md` |
-| **B** | `webui/readers.py` · `webui/sse.py` · `sessions.py` · `userio.py` · `tests/test_webui_readers.py` · `tests/test_webui_sse.py` · `tests/test_run_index.py` · `tests/conftest.py` |
-| **C** | `webui/writes.py` · `webui/audit.py` · `settings.py` · `tests/test_webui_writes.py` · `tests/test_webui_settings_write.py` · `tests/test_webui_browser.py` · `pyproject.toml` · `tools/release_all.py` · `src/agentflow/web-actions.example.jsonl` |
+| **A** | `agentflow/ui/**` · `webui/__init__.py` · `webui/server.py` · `webui/routes.py` · `webui/state.py` · `webui/views.py` · `web/assets.py` · `web/emit_theme.py` · `web/emit_types.py` · `web/static/**` · `cli.py` · `tests/test_webui.py`（既有）· `tests/test_release_all.py`（既有）· `docs/READING-MAP.md` · `docs/USER-END-DSH-STYLE.md` · `README.md` · `docs/INDEX.md` · `ui/README-DEV.md` ＋ §2.1 的 A 线 3 条新判据 |
+| **B** | `webui/readers.py` · `webui/sse.py` · `sessions.py` · `userio.py` · `tests/conftest.py`（既有 · J2/K2 夹具落点）＋ §2.1 的 B 线 3 条新判据 |
+| **C** | `webui/writes.py` · `webui/audit.py` · `settings.py` · `pyproject.toml` · `tools/release_all.py` · `src/agentflow/web-actions.example.jsonl` ＋ §2.1 的 C 线 3 条新判据 |
+
+### §2.1 本表里**尚未建**的判据文件（9 条，逐条一行；归哪条线就由哪条线建）
+
+> 单列一节的用处：所有权表里不再把"盘上有的"和"计划要建"混在一行 —— 上表每一行剩下的 `tests/` 条目都是**盘上真有的文件**（`tests/test_webui.py` 17 条用例、`tests/test_release_all.py`、`tests/conftest.py`），下面这 9 条是**计划新增**、当前盘上不存在。判据的描述照抄 `draft/73 §3` 与 `draft/75 §3` 的表，不另起说法。
+
+**A 线（骨架与前端）**
+- 计划新增 `tests/test_webui_contracts.py` —— 判据 **A 端点对齐 / B 事件对齐 / C 类型对齐 / D 路由对齐 / G 生成物新鲜度**，每条带负控（删一个端点、加一个 `EVENT_KINDS`、后端多一个键、页面用一个 C1 没有的端点、手改生成物 ⇒ 必红）；W0 新建
+- 计划新增 `tests/test_webui_static.py` —— 静态路由 + content-type + 哈希缓存 + **dist 新鲜度**（node 缺 ⇒ 记 `unknown`，三态不许记 pass）；W0 新建
+- 计划新增 `tests/test_webui_pages.py` —— 每页一条：该面的真读数出现 + 空态 + 三态；W1 新建
+
+**B 线（只读面与索引）**
+- 计划新增 `tests/test_webui_readers.py` —— 六个适配器各一条正控（造数据 ⇒ 读到）+ 一条负控（空工作区 ⇒ `unknown`，不是 `0`）；W1 新建
+- 计划新增 `tests/test_webui_sse.py` —— SSE 五条（含端到端"盘上新增 ⇒ 流里出现"）；W2 新建
+- 计划新增 `tests/test_run_index.py` —— 判据 **F 索引对账**：手改索引一个字节 ⇒ 必红；删一场会话而索引还在 ⇒ 报 `drift`；W1 新建
+
+**C 线（写面与设置写面）**
+- 计划新增 `tests/test_webui_writes.py` —— 授权矩阵 + 审计 + **不许绕闸门**的负控；W3 新建
+- 计划新增 `tests/test_webui_settings_write.py` —— key 只写不读 / 原子写 / 权限 / 不回显（含扩展的 `_key_echo_problems`）；W4 新建
+- 计划新增 `tests/test_webui_browser.py` —— Playwright opt-in（`-m browser`）；W4 新建
 
 **两条边界要说清**（免得读成"随手划的"）：
 1. `tests/conftest.py` 归 **B**（J2/K2 两份夹具住在那里）⇒ **A/C 不许改它**；A/C 要造夹具就造在自己文件的局部 fixture 里。
