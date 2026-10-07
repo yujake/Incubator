@@ -276,6 +276,7 @@ desktop.ini
 !/temp/_audit_coverage.py
 !/temp/_audit_web_drafts.py
 !/temp/_b5a_p4_before.txt
+!/temp/_check_line_ownership.py
 !/temp/_clean_deco.py
 !/temp/_d2_config_probe.py
 !/temp/_e5_replay2.ps1
@@ -312,6 +313,7 @@ desktop.ini
 !/temp/_t7_verify.py
 !/temp/_user_end_verify.py
 !/temp/_verify_r2.py
+!/temp/_web_lines.json
 !/temp/_web_matrix_evidence.py
 !/temp/_web_matrix_evidence.txt
 !/temp/_who_writes.py
