@@ -230,3 +230,39 @@
 4. `noai_gate --git --since <起点> --check-approvals`：两条 G2 改动应为 `approved`（`reviewers` ≥ 2），其余如实。
 5. 全量门一趟（§8 `0 failed`）+ `draft/71 §2` 填好。
 6. `.gitignore` 的 `_env/`（约 5 GB）· `_archive/`（约 3.3 GB）· `node_modules/` · `agentflow/settings.json` 仍在忽略面内。
+
+---
+
+## §13 三线合并后的实况（2026-10-07，主控自记；对应 §1 的 14 条）
+
+| §1 的条目 | 现在 | 读数（复算命令见 §1） |
+|---|---|---|
+| 1 六页面 | ✅ | `test_webui_pages.py` 16 条（每页"真读数 + 空态 + 三态"），5 条真机负控红前绿后 |
+| 2 契约 A–D | ✅ | `test_webui_contracts.py` 27 passed（含接缝那条真 HTTP 判据） |
+| 3 六面/SSE/索引 | ✅ | 31 + 29 passed |
+| 4 静态/回退/产物 | ✅ | 12 passed / 1 skipped（"与一次真实构建逐字节比"在本沙箱记 `unknown`） |
+| 5 写面 | ✅ | 24 passed（授权矩阵四态真 HTTP + 每次写留审计 + 绕闸门负控） |
+| 6 设置写面 | ✅ | 13 passed（key 只写不读三处读数；Windows 权限口径见 D12） |
+| 7 浏览器 opt-in | 🟡 | 判据 10 条在盘上，本机未装 playwright ⇒ 整模块 skip 记 `unknown`（不是 pass） |
+| 8 快照不重冻 | ✅ | `5 passed`，`tests/golden/*.json` 一个字节没动 |
+| 9 lint | ✅ | `error 0 / warning 15 / info 49` |
+| 10 全量门 | 🔄 | 三线全合这一轮的门正在跑（`temp/_merge_gate_report.md`） |
+| 11 旧壳清仓 | 🟡 | **P1 第一块已落**（`/` 改吐 SPA 外壳）；`views.py` 仍 484 行，`/run/{sid}` 那一路还在用它 ⇒ W5 清 |
+| 12 文档一致 | ✅ | `test_reading_map.py` + `test_release_all.py` 全绿（含 `DEVELOPMENT.md` 的实时读数判据） |
+| 13 FC-27 签字 | ⬜ | 带基线读数：命中 **4** 条、4 条未批准（`draft/67 §3b` 的 W1/W2/W3 + 那条演示物假阳性） |
+| 14 可 push | ⬜ | 等 13；`draft/81 §11` 的普查清单已就绪 |
+
+**主控自决事项的落地情况**：D1（合并顺序 A→B→C）✅ 已按序执行 · D2（`api.ts` 三行）✅ 在合并 C 那一轮补
+（第一版误加 `/api/run-index`，被判据当场挡下）· D3（`_W0_UNCHECKED_TYPES`）✅ 合并 A 那一轮删 ·
+D4（零交证明重跑）✅ · D5（playwright）⬜ W4 收尾时试装 · D6（`checkpoint` 不做）✅ 已写进 `sse.py` 与本节未做项 ·
+D7（golden 不重冻）✅ · D8（W5 普查）✅ 仪器已跑（§12）· D9（三态映射）✅ · D10（子代理不碰禁改区）✅ ·
+D11（豁免表 + 上限）✅ 已登记待签 · D12（Windows 权限口径）✅ 已记 · D13（`/` 先迁 SPA）✅ 落地并改了 C 的那条判据。
+
+**未做项（都有出处，不是遗漏）**
+1. `checkpoint` 事件：正解是 `agent_loop.save_run_checkpoint` 加同形钩子（驱动线的文件），不占本批（D6）。
+2. 五处页面缺口（停机状态 / 检索腿 / 文献库 / "与工具面同源" / 污染面）：`draft/74` 指的键在
+   `snapshot()` 的 10 键之外或各 View 里都没有 ⇒ 页面显 `not_applicable` + 写明原因，**没有编数**。
+   要不要为它们各加一条只读端点 = 动 C1 契约面 ⇒ 留到 W5 收口时一并判（A 线已按此处置）。
+3. 浏览器端到端本体没跑过（本机无 playwright）⇒ `unknown`。
+4. Windows 上的 ACL 级权限收紧（D12）。
+5. W5 旧壳清仓（§3 W5、§12 的清单已备好）。
