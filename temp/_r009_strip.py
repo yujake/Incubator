@@ -61,34 +61,45 @@ def _in_a_docstring(row: int, col: int, spans: list[tuple[int, int, int, int]]) 
 def strip_file(path: pathlib.Path, *, write: bool) -> tuple[int, list[str]]:
     source = path.read_text(encoding="utf-8")
     spans = _docstring_spans(source)
-    lines = source.splitlines(keepends=True)
     editable: list[tuple[int, int, int, int]] = []
     for tok in tokenize.generate_tokens(io.StringIO(source).readline):
         if tok.type == tokenize.COMMENT:
             editable.append((tok.start[0], tok.start[1], tok.end[0], tok.end[1]))
         elif tok.type == tokenize.STRING and _in_a_docstring(tok.start[0], tok.start[1], spans):
             editable.append((tok.start[0], tok.start[1], tok.end[0], tok.end[1]))
+
+    # 行列 → 绝对偏移（2026-10-07 修：上一版按"逐行"改，**多行 docstring 被整段跳过**，
+    # 于是 `tests/test_webui_browser.py` 里那条跨行 docstring 的成对星号清不掉
+    # —— lint 随后照样报它。现在按 token 的绝对区间替换，跨行也管。）
+    line_starts: list[int] = [0]
+    for line in source.splitlines(keepends=True):
+        line_starts.append(line_starts[-1] + len(line))
+
+    def _off(row: int, col: int) -> int:
+        idx = min(max(row, 1), len(line_starts)) - 1
+        return line_starts[idx] + col
+
     changes: list[str] = []
-    for row, start_col, end_row, end_col in editable:
-        if row != end_row:
-            continue  # 多行字符串逐行处理会错位；本仓的强调标记都在单行里
-        line = lines[row - 1]
-        segment = line[start_col:end_col]
+    # 从后往前替换：前面的偏移不受后面改动影响
+    for srow, scol, erow, ecol in sorted(editable, reverse=True):
+        start, end = _off(srow, scol), _off(erow, ecol)
+        segment = source[start:end]
         if not PAIR.search(segment):
             continue
         new_segment = PAIR.sub(lambda m: m.group(1), segment)
-        new_line = line[:start_col] + new_segment + line[end_col:]
-        changes.append(f"{path.name}:{row}\n  - {line.rstrip()}\n  + {new_line.rstrip()}")
-        lines[row - 1] = new_line
+        first_line = source.splitlines()[srow - 1] if srow - 1 < len(source.splitlines()) else ""
+        changes.append(f"{path.name}:{srow}（区间 {srow}:{scol}–{erow}:{ecol}）\n"
+                       f"  - {first_line.strip()[:120]}\n"
+                       f"  + {new_segment.splitlines()[0].strip()[:120]}")
+        source = source[:start] + new_segment + source[end:]
     if not changes:
         return 0, []
-    new_source = "".join(lines)
     try:
-        ast.parse(new_source)
+        ast.parse(source)
     except SyntaxError as exc:
         raise SystemExit(f"{path}: 替换后语法坏了（{exc}）—— 不写回，请人工看")
     if write:
-        path.write_text(new_source, encoding="utf-8", newline="")
+        path.write_text(source, encoding="utf-8", newline="")
     return len(changes), changes
 
 
