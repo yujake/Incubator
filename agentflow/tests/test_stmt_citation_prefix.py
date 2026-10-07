@@ -40,6 +40,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -244,6 +245,42 @@ def test_the_citation_prefix_registry_is_the_single_source():
         f"{DT._CITATION_TABLES} 分家（前者是真身，后者是派生）")
     assert set(S.CITATION_PREFIXES) <= set(_citation_kinds_g2_uses()), (
         "G2 的可解析前缀不是从声明面派生的 ⇒ `stmt:` 会在写入期合法、在这道门上被报")
+
+
+def test_the_two_tool_facing_faces_list_every_prefix():
+    """工具面那两处面向模型的声明必须列全前缀，且两处都从声明面派生。
+
+    题 19 选 A（2026-10-07 所有者裁定）：改前工具 `doc.build_document` 的 JSON
+    schema 里 `citations` 那一格的描述只举 `lit:` / `stmt:` / `doc:`，而渲染出来的
+    "0. 阅读须知"第 1 条只举 `rel:` / `lit:` / `exp:` —— 两处各缺一半，模型照着
+    任一处去写都看不到另外几个前缀合法（`stmt:` 缺席时"引我们自己的命题"这条写法
+    在声明面上根本不可见），而没有任何读数会响。
+
+    反真空：两处都断言，且断言的是"每个前缀都在"（按名字逐个核，不是"有一处列了
+    就算"），也不许出现声明面没有的前缀（那是第三份手抄清单的形态）。
+    """
+    examples = DT.citation_prefix_examples()
+    for prefix in S.CITATION_PREFIXES:
+        assert f"`{prefix}:" in examples, (prefix, examples)
+
+    # 面①：工具 `doc.build_document` 的 JSON schema（模型调这个工具时读的声明）
+    spec = DT._doc_build_document.__tool_spec__
+    desc = spec.params["properties"]["claims"]["items"]["properties"]["citations"]["description"]
+    assert examples in desc, ("工具 JSON schema 的 citations 描述没列全前缀（题 19）", desc)
+    assert _prefixes_named_in(desc) == set(S.CITATION_PREFIXES), desc
+
+    # 面②：渲染出来的稿件"0. 阅读须知"第 1 条（读者看到的说明）
+    text = DT.render_markdown({"doc_id": "0001", "kind": "paper", "title": "t",
+                               "status": "draft", "claims": []})
+    rules = [ln for ln in text.splitlines() if "每条断言都带引用" in ln]
+    assert len(rules) == 1, ("阅读须知第 1 条不见了（题 19 的另一半落点）", rules)
+    assert examples in rules[0], ("渲染说明没列全前缀（题 19）", rules[0])
+    assert _prefixes_named_in(rules[0]) == set(S.CITATION_PREFIXES), rules[0]
+
+
+def _prefixes_named_in(text: str) -> set[str]:
+    """一段声明文字里以 `` `前缀: `` 形态点到的前缀集合。"""
+    return set(re.findall(r"`([a-z]+):", text))
 
 
 def test_the_single_source_checker_catches_a_second_literal_copy():
