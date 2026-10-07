@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """按项目存放的会话记录（学 harness 的"按工作区存放"）。
 
 ## 为什么要这一层
@@ -41,7 +41,7 @@ SESSIONS_DIR_NAME = "sessions"
 #: 趟次索引的落点目录名（工作区根下）。
 #:
 #: 为什么另起一个目录而不塞进 `runs/`：`runs/` 是 `agent_loop` 写检查点
-#: `runs/agent-<角色>-<会话号>.json` 的地方，它的读者用 `agent-*.json` 这个形状认文件。
+#: `runs/agent-<角色>-<会话号>.json` 的地方，它的读者用 `agent-.json` 这个形状认文件。
 #: 索引是另一族派生数据（不是检查点），混进同一个目录会让那些形状匹配多看见一个文件 ——
 #: 改一个目录名的代价，比让每个既有读者都学会"跳过索引那份"小得多。
 RUN_INDEX_DIR_NAME = "index"
@@ -52,7 +52,7 @@ RUN_INDEX_VERSION = 1
 ENV_SESSION = "AGENTFLOW_SESSION"
 
 #: 提问 / 回答那两种事件的 kind。字面量与 `userio.ASK_KIND` / `userio.ANSWER_KIND`
-#: 逐字相同（`userio.py:85`），但**不**从那里导入：`userio` 是 `sessions` 的下游
+#: 逐字相同（`userio.py:85`），但不从那里导入：`userio` 是 `sessions` 的下游
 #: （`userio` 导入本模块），反向导入会成环。判据 `tests/test_run_index.py` 有一条
 #: 断言这里两处字面量与 `userio` 的常量相等 —— 于是"抄了一份"这件事有机器读数守着。
 QUESTION_EVENT_KIND = "user_question"
@@ -158,7 +158,7 @@ def list_sessions(root: Any) -> list[dict]:
 #
 # 名字的边界（不许混用，见 `draft/78 §7` 的提醒）：这里的「趟次」是「一个会话文件里
 # 的第几趟运行」（一条 `agent_run_start` 到它之后的 `agent_run_end` 或文件尾）。
-# `projects.py` 的 `run_index: int` 是**另一个概念**（这个项目第几趟，配 `out/run-<n>`），
+# `projects.py` 的 `run_index: int` 是另一个概念（这个项目第几趟，配 `out/run-<n>`），
 # 两者不同模块、不同语义，本模块不去碰那一个、也不把这张表塞进 `projects.py`。
 #
 # 为什么要有索引：`webui.state._scan` 每次请求都对每个会话文件现切一遍。索引是同一批
@@ -176,7 +176,7 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     """把一段会话的事件扫成「每一趟的运行读数」（纯函数，不碰盘）。
 
     一趟 = 一条 `agent_run_start` 到它之后的 `agent_run_end`（或文件尾）。没有开始
-    标记的事件**不算一趟**：那是「轮次之外的零散事件」，折成"一趟 0 步的运行"会让
+    标记的事件不算一趟：那是「轮次之外的零散事件」，折成"一趟 0 步的运行"会让
     「最近一趟」被一个空壳顶掉（`webui/state.py` 的 `_scan` 把这条纪律写在同一处）。
 
     键与 `webui.state._scan` 逐字相同（20 个）—— `draft/75 §1.3` 的 `RunRow`：
@@ -252,7 +252,7 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
 def compute_run_index(root: Any) -> dict:
     """从 `sessions/*.jsonl` 现算整份索引（不改盘；坏行不影响其余会话）。
 
-    读不到某一场会话时它按"这一场一趟都没有"收下 —— 但这**不是**抹掉三态：
+    读不到某一场会话时它按"这一场一趟都没有"收下 —— 但这不是抹掉三态：
     `reconcile_run_index` 会把"盘上读到的东西与索引不一致"报成 `drift`，
     而"整条会话目录读不到"由 :func:`list_sessions` 的既有口径（空目录 = 合法初态）承担。
     """
@@ -339,7 +339,7 @@ def rebuild_run_index(root: Any) -> dict:
     """现算一份索引并原子落盘；返回那份索引。
 
     原子写（先写临时文件再 `replace`）：索引是派生数据，读的人不该看见半份 JSON。
-    写失败**不**吞掉 —— 调用方要知道"这次没落成"（没落成时返回值仍然可用，它是算出来的）。
+    写失败不吞掉 —— 调用方要知道"这次没落成"（没落成时返回值仍然可用，它是算出来的）。
     """
     index = compute_run_index(root)
     path = run_index_path(root)
@@ -358,7 +358,7 @@ def reconcile_run_index(root: Any) -> dict:
     `tri` 三档（与 `reviewaccept` 同一套词表）：
     - `computed`：索引在、读得出、且与现算结果逐趟一致（`drift` 为空）；
     - `unreadable`：索引不在盘上或读不出来（`reason` 说清是哪一档）——
-      **不是** `computed`，也**不是**"零处不一致"；
+      不是 `computed`，也不是"零处不一致"；
     - `not_applicable`：这个工作区一场会话都没有 ⇒ 没有可对账的东西
       （不是"对上了"，是没有源）。
 

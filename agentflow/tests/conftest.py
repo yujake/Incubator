@@ -413,14 +413,14 @@ def add_relation(
 
 # --------------------------------------------------------------------------- J2/K2 夹具
 #
-# 裁定 J2 / K2：六件产物与 V 的验证台账**真机没有样本**（`draft/74 §0.3` 实测：
+# 裁定 J2 / K2：六件产物与 V 的验证台账真机没有样本（`draft/74 §0.3` 实测：
 # 全树 `**/run-manifest.json` 搜到 0 个、`verifications/` 目录 0 个），所以它们的
 # 判据输入由夹具造，并在页面上标明"夹具样本"。造在这里（`tests/conftest.py`）的理由
 # 是 `draft/78 §2` 的边界：这个文件归 B 线独有，A/C 要造夹具就造在自己文件的局部
 # fixture 里 —— 一份共享样本只有一个落点，改了不会只改一半。
 #
 # 形状逐个有出处，不是编的：
-# - 六件产物的**名字**：`runflow.ARTIFACTS`（六个名字）；
+# - 六件产物的名字：`runflow.ARTIFACTS`（六个名字）；
 # - 台账行的 9 个键：`artifacts.FIELDS`；
 # - 交接行的键：`manuscripts.write` 写的那个 dict；
 # - 秘书决策行的键：`secretary.Secretary.note_decision`；
@@ -495,7 +495,7 @@ def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
     | `out/paper/ACCEPTANCE-CHECKS.json` | `checks` |
     | `out/review/REPORT-STYLE.json` + `REPORT.md` | `style` / `RunView.report` |
     | `out/secretary/M.jsonl`（`Secretary.note_decision`） | `secretary` |
-    | `out/experiments/*.log` + `out/tasks/t-*.json` | 产物面的"M 那一路真机产物" |
+    | `out/experiments/*.log` + `out/tasks/t-.json` | 产物面的"M 那一路真机产物" |
     | `runs/agent-<角色>-<sid>.json`（`save_run_checkpoint`） | `readers.run_view` 的检查点 |
     | `data/tasks.json` 一行（`S.Task`） | 产物面的 `tasks` |
     | 一场会话（提问 + 一趟） | 证据面的 `triage_branch_recorded` |

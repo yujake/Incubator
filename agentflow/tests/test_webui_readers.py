@@ -1,24 +1,24 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """六个只读面的判据（`draft/78 §2.1` 的 B 线判据；`draft/73` §2.3）。
 
 ## 每一面两半（`draft/73` §2.3 的判据口径）
 
-- **正控**：夹具造出真数据（`tests/conftest.py` 的 `make_artifacts_sample`，
-  裁定 J2/K2 的样本）⇒ 读数出现在结果里，且**字段名逐字对得上**；
-- **负控（这一组最重要）**：数据源不可读 ⇒ 该面 `tri="unreadable"` + `reason` 非空；
-  空工作区 ⇒ `tri="not_applicable"` + 一句"还没写过"。**不许**折成 `0` / `[]` / `false`
+- 正控：夹具造出真数据（`tests/conftest.py` 的 `make_artifacts_sample`，
+  裁定 J2/K2 的样本）⇒ 读数出现在结果里，且字段名逐字对得上；
+- 负控（这一组最重要）：数据源不可读 ⇒ 该面 `tri="unreadable"` + `reason` 非空；
+  空工作区 ⇒ `tri="not_applicable"` + 一句"还没写过"。不许折成 `0` / `[]` / `false`
   （"没查成 vs 查到 0"这条线是本仓库最贵的纪律）。
 
 ## 三态词表
 
 `computed` / `unreadable` / `not_applicable`（裁定 N1：与「交付说明」那一格的
-`ok`/`missing`/`unknown` **不许互相顶替**）。本文件同时钉住"哪一栏用哪一套"。
+`ok`/`missing`/`unknown` 不许互相顶替）。本文件同时钉住"哪一栏用哪一套"。
 
 ## 注册表
 
 `readers.CHECKED_TYPES` / `UNCHECKED_TYPES` 是契约判据 C 的两份登记，它们必须与
 `type_decls()` 自洽：一个接口要么在受核对名单里、要么在欠账名单里（且欠账那一边
-**不许**真读出键来）。这一半在本文件里自己先核一遍，别等 A 线的判据来报。
+不许真读出键来）。这一半在本文件里自己先核一遍，别等 A 线的判据来报。
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def test_the_state_face_reports_unreadable_when_it_could_not_read(
         tmp_path: pathlib.Path) -> None:
     """负控（三态）：会话文件读不出来 ⇒ `unreadable`（不是"没有会话"）。
 
-    做法：把这个会话文件换成一个**同名的目录**（`read_session` 会以 `OSError` 一族
+    做法：把这个会话文件换成一个同名的目录（`read_session` 会以 `OSError` 一族
     报出"读不出来"）⇒ 快照把它收进 `problems`，这一面必须跟着变红。
     """
     root = tmp_path / "ws"
@@ -170,7 +170,7 @@ def test_evidence_chain_reads_every_column(artifacts_ws: pathlib.Path) -> None:
 
 def test_evidence_chain_reports_unreadable_when_a_table_is_broken(
         artifacts_ws: pathlib.Path) -> None:
-    """负控（三态）：一张表读不出来 ⇒ 整面 `unreadable`，且**那一栏**也标红。
+    """负控（三态）：一张表读不出来 ⇒ 整面 `unreadable`，且那一栏也标红。
 
     "少了一栏"与"那一栏是空的"在界面上必须分得开：所以整面变红之外，那一栏自己的
     `<栏>_tri` 也要是 `unreadable`。
@@ -245,7 +245,7 @@ def test_the_ledger_verify_notices_a_changed_file(artifacts_ws: pathlib.Path) ->
 
 def test_artifacts_face_on_an_empty_workspace_is_not_applicable(
         tmp_path: pathlib.Path) -> None:
-    """负控（三态）：空工作区 ⇒ `not_applicable`，七栏各带自己的 `tri`，**不是 0**。"""
+    """负控（三态）：空工作区 ⇒ `not_applicable`，七栏各带自己的 `tri`，不是 0。"""
     root = tmp_path / "ws"
     root.mkdir()
     got = R.artifacts_face(root)
@@ -277,7 +277,7 @@ def test_artifacts_face_on_a_broken_ledger_is_unreadable(
 def test_run_products_marks_a_missing_product_not_zero(
         artifacts_ws: pathlib.Path) -> None:
     """负控（六件产物）：少一件 ⇒ 那一件 `exists=false` + `tri=not_applicable`，
-    `bytes`/`lines` 是 `None`（**不是** 0 —— 那是"没读到"，不是"读到了 0 字节"）。"""
+    `bytes`/`lines` 是 `None`（不是 0 —— 那是"没读到"，不是"读到了 0 字节"）。"""
     (artifacts_ws / "out" / "run-1" / "claims.json").unlink()
     got = R.run_products(artifacts_ws)
     claims = next(p for p in got["products"] if p["name"] == "claims.json")
@@ -311,7 +311,7 @@ def test_acceptance_face_leaves_the_cost_gate_unknown_without_a_cap(
     """负控（三态）：不给我 `cap_usd` ⇒「在成本上限内」那一格是 `unknown`。
 
     这一档是 `draft/75 §2.10` 第③行点名要的：没给上限时那一格是"没查成"，
-    **不是**"在预算内"。判据同时要求 `reason` 把它点名。
+    不是"在预算内"。判据同时要求 `reason` 把它点名。
     """
     got = R.acceptance_face(artifacts_ws, project_dir=str(artifacts_ws), cap_usd=None)
     assert got["criteria"]["within_cost_cap"] == "unknown", got["criteria"]
@@ -343,7 +343,7 @@ def test_machine_face_keeps_the_toolchain_keys_and_never_shows_a_key(
         tmp_path: pathlib.Path) -> None:
     """正控（本机）：工具链那些键逐字保留；设置里的 key 只给"配没配"与掩码。
 
-    判据逐字符断言一个真 key **不在**读数里（裁定 E1：key 只写不读）。
+    判据逐字符断言一个真 key 不在读数里（裁定 E1：key 只写不读）。
     """
     secret = "sk-真key-绝不许出现在读数里-0123456789"
     settings_file = tmp_path / "settings-real.json"
@@ -373,7 +373,7 @@ def test_machine_face_without_a_settings_file_says_not_applicable(
         artifacts_ws: pathlib.Path) -> None:
     """负控（三态）：设置文件不在盘上 ⇒ 那一段 `not_applicable` + 理由。
 
-    注意它**不**让整面变红：工具链读得出来就是读得出来；"一部分没配"不等于"整面没查成"。
+    注意它不让整面变红：工具链读得出来就是读得出来；"一部分没配"不等于"整面没查成"。
     """
     got = R.machine_face(artifacts_ws)
     assert got["settings_tri"] == R.TRI_NOT_APPLICABLE, got

@@ -437,12 +437,12 @@ def _find_answer(session_root: Path, qid: str, sid: str | None) -> dict | None:
 
 # ====================================================================== 渲染视图（裁定 L1 的收敛入口）
 #
-# 裁定 L1：待答与选项的**读取**收敛到本模块。理由不是"整齐"，而是它们此前有两份
+# 裁定 L1：待答与选项的读取收敛到本模块。理由不是"整齐"，而是它们此前有两份
 # 独立实现：`webui/state.py` 的 `_scan` 与 `option_view` 各自扫一遍 `user_question`
 # 事件、各自认一遍选项的两种形状（裸串 / `{label, description}`）。两份实现漂移的
 # 表现是"同一份会话文件，CLI 说还有三条待答、网页说没有"——而没有任何东西会报错。
 #
-# 这里给出的三个函数是**给读者用的**（不是给写者）：它们把 `Question` / 回答事件
+# 这里给出的三个函数是给读者用的（不是给写者）：它们把 `Question` / 回答事件
 # 读成 JSON 安全的字典（前端 `PendingQuestion` / `OptionRow` 那一族形状）。
 # `webui/state.py` 的 `option_view` 与 `answer_text_of` 是这两个视图的同义旧名
 # （它们的行为必须逐字相同 —— 判据 `tests/test_webui_readers.py` 里有一条断言两边
@@ -454,7 +454,7 @@ def option_view(raw: Any) -> dict[str, Any]:
 
     裸字符串（旧会话事件、`llmseam` 的旧 schema）与新形状（`Option` / 字典）都认 ——
     兼容读法在这一层的硬要求，理由与 `coerce_option` 的 docstring 同一条。
-    `multi` 是**选项自己的**多选标记（问题级的多选在 `Question.multi_select` 上）；
+    `multi` 是选项自己的多选标记（问题级的多选在 `Question.multi_select` 上）；
     读不到就是 `False`（那是"这个选项没说"），与"问题不是多选"不是同一个问题。
     """
     if isinstance(raw, str):
@@ -490,7 +490,7 @@ def question_view(question: Question, *, sid: str = "", index: int | None = None
     """把一条问题读成前端那个 `PendingQuestion` 的形状。
 
     `index` 是"这条问题在会话事件里的第几条"（`None` = 没给，如实留空而不是编一个 0）。
-    `options` 是 :func:`option_view` 的对象族（**不是**裸字符串数组）—— 这一点
+    `options` 是 :func:`option_view` 的对象族（不是裸字符串数组）—— 这一点
     `draft/75 §1.3` 原先写错了，实测以盘上为准，W0 已经把类型改成 `OptionRow[]`。
     """
     return {
@@ -536,10 +536,10 @@ def pending_view(session_root: Path | str, *, sid: str | None = None) -> list[di
 
 
 def workspace_pending_view(session_root: Path | str) -> list[dict[str, Any]]:
-    """**全部会话**里还没被回答的问题（"待答必须全局可达"那条界面纪律的落点）。
+    """全部会话里还没被回答的问题（"待答必须全局可达"那条界面纪律的落点）。
 
     为什么它不是 `pending_view(root)` 能顶替的：不给 `sid` 时 `read_session` 读的是
-    **默认会话**（`session_id()`），而界面上要的恰恰是"不挑会话"的那一份 —— 提问
+    默认会话（`session_id()`），而界面上要的恰恰是"不挑会话"的那一份 —— 提问
     正阻塞着某一趟，而那一趟可能不在人当前看的地方（`DESIGN-CONDUCTOR.md` §1.1）。
     排序按 `(sid, index)`，于是两次调用的顺序稳定（判据按顺序比）。
     """

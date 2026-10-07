@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """SSE 后端（`webui/sse.py`）的判据：`draft/73` §2.4 的五条 + 三态。
 
 | 用例 | 判什么 |
@@ -18,7 +18,7 @@
 `webui/server.py`（B 线不许碰）。所以本模块把处理器写成模块级函数，由 A 线在
 `webui/__init__.py` 里调一次 `sse.bind_handlers(WebHandler)`（一行）接上。
 绑定前 `/api/stream` 是 404（`routes.handler_names()` 里有它、类上没有它），
-绑定后是这条流 —— 本文件的 `_bound_server()` 就是这个绑定的**最小演示**，
+绑定后是这条流 —— 本文件的 `_bound_server()` 就是这个绑定的最小演示，
 它同时也是"A 线只差这一行"的机器读数。
 """
 
@@ -149,7 +149,7 @@ def test_the_kind_vocabulary_matches_the_frontend() -> None:
 
 # ====================================================================== 负控
 def test_an_unknown_kind_is_refused_not_sent() -> None:
-    """负控（词表）：kind 不在 `EVENT_KINDS` 里 ⇒ 抛异常，**不许**发出去。
+    """负控（词表）：kind 不在 `EVENT_KINDS` 里 ⇒ 抛异常，不许发出去。
 
     发了会怎样：前端没注册那个 kind，`EventSource` 会静默丢掉它 —— 一条"发出去了
     但没人收"的事件，在两端都看不出问题。所以发布口就要拦。
@@ -163,7 +163,7 @@ def test_an_unknown_kind_is_refused_not_sent() -> None:
 
 
 def test_replay_says_so_when_the_buffer_cannot_reach_back() -> None:
-    """负控（三态）：缓冲补不齐时要**说**补不齐，不许静默少发（那是假补发）。"""
+    """负控（三态）：缓冲补不齐时要说补不齐，不许静默少发（那是假补发）。"""
     bc = sse.Broadcaster(replay_limit=3)
     for i in range(5):
         bc.publish("state", {"n": i})
@@ -257,8 +257,8 @@ def test_since_replays_only_the_events_after_it(tmp_path: pathlib.Path) -> None:
 def test_a_new_event_on_disk_shows_up_in_the_stream(tmp_path: pathlib.Path) -> None:
     """判据⑤（端到端）：盘上新增 ⇒ 流里出现对应 kind。
 
-    这一条走的是真链路：`sessions.append` / `userio.ask_user` 之后，**由这个进程里
-    的写者**把事件发给广播器（真实运行时那个写者就是 `sessions.append` 的调用方，
+    这一条走的是真链路：`sessions.append` / `userio.ask_user` 之后，由这个进程里的
+    写者把事件发给广播器（真实运行时那个写者就是 `sessions.append` 的调用方，
     接缝见报告）；流端从订阅队列里读出来。所以它同时证明了"订阅者真的收到了
     别处发的事件"，而不只是"自己发自己收"。
     """

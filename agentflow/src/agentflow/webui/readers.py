@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """只读面的读模型（`draft/73` §2.3 的本体；属于 B 线那一批）。
 
 ## 这一层是什么
 
-六个面的适配器，一个面一个函数：**只读**、**三态**、**不吞异常**。
+六个面的适配器，一个面一个函数：只读、三态、不吞异常。
 
 | 面 | 函数 | 端点（`draft/75 §1.1` 的 C1 第 1–6 行） | 读什么（既有实现，不另写一份） |
 |---|---|---|---|
@@ -18,11 +18,11 @@
 
 每一面都带 `tri` 与 `reason`，取值是 `computed` / `unreadable` / `not_applicable`
 （`reviewaccept` 那一套词表；「交付说明」那一格用 `ok`/`missing`/`unknown`，两套
-**不许互相顶替**）：
+不许互相顶替）：
 
-- 数据源**不可读**（无效 JSON、无权限、把目录当文件读）⇒ `tri="unreadable"` + `reason`；
-- 数据源**不在盘上**（还没写过）⇒ 计数栏写 `None`、`tri="not_applicable"`
-  + 一句"还没写过"的 `reason`。**绝不**把它折成 `0` 或空数组或 `false`；
+- 数据源不可读（无效 JSON、无权限、把目录当文件读）⇒ `tri="unreadable"` + `reason`；
+- 数据源不在盘上（还没写过）⇒ 计数栏写 `None`、`tri="not_applicable"`
+  + 一句"还没写过"的 `reason`。绝不把它折成 `0` 或空数组或 `false`；
 - 读到了 ⇒ `tri="computed"`，计数栏是真数字（可能是 0，那是"读到了，里面是 0 行"）。
 
 为什么 `not_applicable` 不写成 `unknown`：`Tri` 的三个词里没有 `unknown`，
@@ -46,7 +46,7 @@
   `agentflow/web/emit_types.py` 拼进 `ui/src/types.ts`。
 - :data:`MISSING_TYPES` —— 本模块还欠的接口与理由。补完一个就删掉它那一行。
 
-**处理器的落点**（A 线已落地的那条接缝）：`routes.py` 的第三格是处理器**名字**，
+处理器的落点（A 线已落地的那条接缝）：`routes.py` 的第三格是处理器名字，
 而 `WebHandler` 住在 A 线的 `webui/server.py` 里（B 线不许碰）。所以六个面的 HTTP
 外壳写成模块级函数（签名 `(handler, params, query)`，`handler` 是 `WebHandler` 实例），
 在文件末登记进 :data:`HANDLERS`（`{名字: 可调用对象}`）—— `routes.handler_for(name)`
@@ -77,14 +77,14 @@ TRI_COMPUTED = "computed"
 TRI_UNREADABLE = "unreadable"
 TRI_NOT_APPLICABLE = "not_applicable"
 
-#: 六个面（外加 `/api/stream`）挂到总路由表上的端点。第三个元素是**B 线**里那个
+#: 六个面（外加 `/api/stream`）挂到总路由表上的端点。第三个元素是B 线里那个
 #: 处理器的名字（`routes.handler_for` 会去 `HANDLERS` 里按这个名字取它）。
 #:
 #: `/api/stream` 那一条的处理器真身在 `webui/sse.py`（`handle_stream`）—— 它登记在
 #: 这张表里的理由是一条硬事实：`routes.py` 的总表是 `自有 + READER_ROUTES +
-#: WRITE_ROUTES` 三个子表拼出来的，而 `sse.py` **不是**其中任何一个子表的主人；
+#: WRITE_ROUTES` 三个子表拼出来的，而 `sse.py` 不是其中任何一个子表的主人；
 #: 把表项写进 sse.py 会得到一个"声明了却永远进不了总表"的端点。所以 B 线对外只有
-#: **一张**子表，它住在 `readers.py` 里：表项按"哪个端点"列，处理器按"它住在哪个
+#: 一张子表，它住在 `readers.py` 里：表项按"哪个端点"列，处理器按"它住在哪个
 #: 模块"实现（两张 `HANDLERS` 字典由 `routes.handler_for` 一起查）。
 ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/run/{sid}", "handle_run_view"),
@@ -189,7 +189,7 @@ def _read_state(path: Path) -> tuple[list[dict], str, str]:
     """读一个 JSONL 文件：返回 `(记录, 四态, 说明)`。
 
     四态是 `jsonlfile` 的 `absent` / `empty` / `ok` / `unreadable`；本模块再把它们
-    映射成三态。**这一层不许把 `unreadable` 折成空表**：折了之后"读不出来"与
+    映射成三态。这一层不许把 `unreadable` 折成空表：折了之后"读不出来"与
     "读到了 0 行"在读数上一模一样，而那正是本项目最贵的一类缺陷。
     """
     records, problems, state = read_jsonl_state(path)
@@ -251,7 +251,7 @@ def _all_computed(*faces: Mapping[str, Any]) -> dict[str, Any]:
 def state_face(root: str | Path) -> dict[str, Any]:
     """`GET /api/state` 的读模型：`{tri, snapshot, reason}`。
 
-    `snapshot` 就是 `webui.state.snapshot()` 的返回值**逐字**（键集合与拆包前一致，
+    `snapshot` 就是 `webui.state.snapshot()` 的返回值逐字（键集合与拆包前一致，
     主控用 `temp/_verify_w0.py` 对账过）；本函数只在外层加三态头，不重排、不改名。
     为什么要外挂一层而不是改 `snapshot()`：`snapshot()` 的键是既有判据与旧壳渲染
     共用的公开面（`tests/test_webui.py` 逐条读它），签名稳定比"少一层包装"重要。
@@ -277,7 +277,7 @@ _CHECKPOINT_DIR = "runs"
 def _checkpoint_of(root: Path, sid: str) -> dict[str, Any]:
     """这一趟的检查点读成 `{tri, reason, checkpoint}`（`checkpoint` 读不到就是 `None`）。
 
-    文件名按 `runs/agent-<角色>-<sid>.json` 找：**角色**是文件名中间那一段，
+    文件名按 `runs/agent-<角色>-<sid>.json` 找：角色是文件名中间那一段，
     同一个会话可能有多个角色的检查点，所以这里取"最后被写改过的那一个"
     （`stat().st_mtime` 最大的），并在 `reason` 里说清是哪一份。
     """
@@ -360,7 +360,7 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     """`GET /api/evidence` 的读模型：证据链七栏 + 三态。
 
     `statements` / `conjectures` / `experiments` / `review_findings` / `relations`
-    逐行来自 `store.rows(...)`（**不另写一份读法**）；`verifications` 来自
+    逐行来自 `store.rows(...)`（不另写一份读法）；`verifications` 来自
     `verifications.list_verifications`（一命题一份 `verifications/<4 位>.jsonl`）；
     `secretary` 来自 `out/secretary/<角色>.jsonl`。
 
@@ -464,9 +464,9 @@ def run_products(root: str | Path, run_dir: str | Path | None = None) -> dict[st
     显式给（相对工作区或绝对路径都行）；不给时取 `out/` 下编号最大的 `run-N`
     （与 `projects._next_run_index` 的命名对齐 —— 但这里只读，不分配新编号）。
 
-    三态：`out/` 下没有一个 `run-N/`（本机真机读数就是这样：六件产物**没有真机样本**）
+    三态：`out/` 下没有一个 `run-N/`（本机真机读数就是这样：六件产物没有真机样本）
     ⇒ 整面 `not_applicable` + 理由里明说"这一路（run/project run）本机还没跑过"，
-    而**不是**把六件都写成 `exists=false` 让人以为"跑过但文件丢了"。
+    而不是把六件都写成 `exists=false` 让人以为"跑过但文件丢了"。
     """
     from ..artifacts import sha256_of
     from ..runflow import ARTIFACTS
@@ -596,7 +596,7 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     - `products`：六件产物（见 :func:`run_products`）；
     - `tasks`：`store.rows("tasks")`。
 
-    三态是**逐栏**的（`ledger_tri` / `handoffs_tri` / ...）：一整面里有一栏读不出来时，
+    三态是逐栏的（`ledger_tri` / `handoffs_tri` / ...）：一整面里有一栏读不出来时，
     整面 `unreadable` 并把这些栏点名，而读得出来的那些栏照常给行 —— 少给一栏会让
     "这一栏没读成"变成"这一栏是空的"，那两者在界面上必须分得开。
     """
@@ -695,7 +695,7 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
     形状照 `draft/75 §1.3`：`criteria`（5 条，键名逐字来自 `reviewaccept.CRITERIA`）
     与 `auxiliary`（5 条，键名逐字来自 `AUXILIARY_SIGNALS`）。值都收成字符串：
     `criteria[k]` 是 `pass`/`fail`/`unknown`，`auxiliary[k]` 是人看的读数
-    （读不出来就写 `""`，**不是** `0`）。
+    （读不出来就写 `""`，不是 `0`）。
 
     四档输入各自的三态（与 `reviewaccept` 同一口径，这里只做搬运与说明）：
 
@@ -746,12 +746,12 @@ def _as_text(value: Any) -> str:
 def _settings_reading() -> tuple[dict[str, Any], str, str]:
     """设置文件的三段读数（`settings.load_settings` + `settings.settings_path`）。
 
-    **设置是机器级的，不是工作区级的**：落点由 `settings.settings_path()` 决定
+    设置是机器级的，不是工作区级的：落点由 `settings.settings_path()` 决定
     （`--path` → 环境变量 `AGENTFLOW_SETTINGS` → 包根下的 `settings.json`），
     与工作区根无关。所以本函数不吃 `root` 参数 —— 这一点写在这里免得读的人
     以为"设置读的是工作区里的那一份"。
 
-    返回 `(读数, tri, reason)`。**key 永远不出现在这里**：`model.api_key` 只写
+    返回 `(读数, tri, reason)`。key 永远不出现在这里：`model.api_key` 只写
     "配没配"（`configured`）与掩码后的 `redacted()`（`modelgw.ModelSpec.redacted`
     在 key 非空时给 `***`）。判据 `tests/test_webui_readers.py` 有一条逐字符断言
     真 key 不在读数里。
@@ -801,7 +801,7 @@ def machine_face(root: str | Path = "", *, env: Mapping[str, str] | None = None)
     （见 :func:`_settings_reading`）与 `tri` / `reason`。
 
     三态：`provers.checked is False` ⇒ 探测没跑完 ⇒ 整面 `unreadable` + `reason`
-    （**不是** `available=[]` —— 那是"探测过了，一个都没找到"，两者必须分得开）；
+    （不是 `available=[]` —— 那是"探测过了，一个都没找到"，两者必须分得开）；
     设置文件不在盘上 ⇒ 那一栏 `not_applicable`，而整面在工具链读得出来时仍是
     `computed`（一部分没配不等于整面没查成）。
     """

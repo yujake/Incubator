@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
+# -- coding: utf-8 --
 """服务端推送（SSE）的事件词表、广播器与 `GET /api/stream`（`draft/73` §2.4）。
 
 ## 这一层是什么
 
 前端 `ui/src/sse.ts` 逐个注册事件 kind；后端在这里定义那些 kind（:data:`EVENT_KINDS`）
-并把事件推出去。两侧靠契约判据 **B（事件对齐）** 钉死：`sse.ts` 的 `KINDS` 集合与
+并把事件推出去。两侧靠契约判据 B（事件对齐） 钉死：`sse.ts` 的 `KINDS` 集合与
 :data:`EVENT_KINDS` 不相等就红（`tests/test_webui_contracts.py` 的 `test_b_*`）。
-所以**词表只有这一份**，加一个 kind 必须同时改 `sse.ts` —— 那不是"顺手"，那正是它。
+所以词表只有这一份，加一个 kind 必须同时改 `sse.ts` —— 那不是"顺手"，那正是它。
 
 ## 六个 kind（`draft/75 §1.2` 的 C2 表）
 
@@ -21,16 +21,16 @@
 
 ## 续传（`?since=N`）与心跳（可注入）
 
-- `?since=N`：把 id **大于** N 的事件按顺序补发（client 断线重连时用）。
+- `?since=N`：把 id 大于 N 的事件按顺序补发（client 断线重连时用）。
   补发来自 :class:`Broadcaster` 的环形缓冲（只留最近 :data:`REPLAY_LIMIT` 条）——
-  "补不出来"时**不编**：缓冲里最早那条的 id 大于 `since+1` 就在流里发一条
+  "补不出来"时不编：缓冲里最早那条的 id 大于 `since+1` 就在流里发一条
   `state` 的全量快照（读模型永远是现算的，所以补不到旧事件也不会让页面停在旧状态）。
 - 心跳周期可注入（`Broadcaster(heartbeat_sec=...)` 与 `serve` 的开关），
   于是判据可以用 0.2 秒跑它，而不是等 15 秒。
 
 ## 三态
 
-`EVENT_KINDS` 是常量，不存在"读不出来"。这里的三态落在**补发**上：`since` 给了
+`EVENT_KINDS` 是常量，不存在"读不出来"。这里的三态落在补发上：`since` 给了
 但缓冲里已经补不齐 ⇒ 事件里带 `reason` 说清（而不是静默少发几条）。
 """
 
@@ -64,7 +64,7 @@ REPLAY_LIMIT = 128
 #: `dropped`——丢了多少是可读的，不是静默的）。
 QUEUE_LIMIT = 256
 
-#: `GET /api/stream` 那一条**表项**住在 `webui/readers.py` 的 `ROUTES` 里 —— 理由
+#: `GET /api/stream` 那一条表项住在 `webui/readers.py` 的 `ROUTES` 里 —— 理由
 #: 是硬的：`routes.py` 的总表是 `自有 + READER_ROUTES + WRITE_ROUTES` 三个子表拼出来
 #: 的，`sse.py` 不是其中任何一个子表的主人，写在这里的端点永远进不了总表。
 #: 本模块只提供处理器真身（:func:`handle_stream`）：`routes.handler_for("handle_stream")`
@@ -72,7 +72,7 @@ QUEUE_LIMIT = 256
 HANDLERS: dict[str, Any] = {"handle_stream": None}   # 真身在文件末登记（函数要先存在）
 
 #: 契约判据 D 的例外面：声明了、但后端还没落地的端点（`{端点: 理由}`）。
-#: `/api/stream` 在 W2（本批）落地了 ⇒ 这一张表**必须是空的**；判据有一条反向断言
+#: `/api/stream` 在 W2（本批）落地了 ⇒ 这一张表必须是空的；判据有一条反向断言
 #: 专门抓"永不生效的豁免"（登记了却已经在总表里 ⇒ 红）。
 PENDING_ENDPOINTS: dict[str, str] = {}
 
@@ -81,7 +81,7 @@ _DEFAULT: "Broadcaster | None" = None
 _DEFAULT_LOCK = threading.Lock()
 
 #: 起停计数：`begin_serving()` 打开一个"代"，`close_all()` 关掉当前这一代。
-#: 流处理循环每次迭代都读它，于是一个**开着流**的服务也能被 `serve()` 收尾关掉。
+#: 流处理循环每次迭代都读它，于是一个开着流的服务也能被 `serve()` 收尾关掉。
 #: 为什么不用 `srv.shutdown()` 就完事：`shutdown()` 只停 accept 循环，
 #: `ThreadingHTTPServer` 的入站请求线程不受影响 —— 一条开着的流会把那个线程
 #: 一直占住（判据与 `serve()` 的 finally 都会因此卡住）。
@@ -145,12 +145,16 @@ class Subscription:
             try:
                 self.queue.get_nowait()
             except queue.Empty:
+                # 队列在同一步被读端清空 ⇒ "丢最旧的一帧"这件事已经由读端做了，
+                # 这里什么都不用丢；它不影响下面那一投，也不该被当成错误。
                 pass
             self.dropped += 1
             try:
                 self.queue.put_nowait((event_id, frame))
-            except queue.Full:  # pragma: no cover - 只有并发关闭时才会到这里
-                pass
+            except queue.Full:
+                # 并发关闭（读端刚把队列填满哨兵）⇒ 这一帧丢给已关闭的订阅者是可接受的：
+                # 订阅者已经不再读了，把它记进 dropped 就够了，不该让发布者在这里炸。
+                self.dropped += 1
 
     def close(self) -> None:
         """标记关闭并放一个哨兵，让读端退出（读端不阻塞在空队列上）。"""
@@ -158,6 +162,8 @@ class Subscription:
         try:
             self.queue.put_nowait((-1, b""))
         except queue.Full:
+            # 队列满 ⇒ 里面还有真事件，读端下一轮会先把它们读完；`closed=True` 已经
+            # 足以让读端在读完那一批之后退出（哨兵只是"立刻退出"的快路径）。
             pass
 
     def drain(self, *, timeout: float) -> list[tuple[int, bytes]]:
@@ -237,7 +243,7 @@ class Broadcaster:
 
     # ------------------------------------------------------------ 写
     def publish(self, kind: str, data: Mapping[str, Any]) -> int:
-        """发一条事件：返回它的 id。**kind 必须在 :data:`EVENT_KINDS` 里**（否则抛）。"""
+        """发一条事件：返回它的 id。kind 必须在 :data:`EVENT_KINDS` 里（否则抛）。"""
         if kind not in EVENT_KINDS:
             raise ValueError(f"不认识的事件 kind：{kind!r}（只认 {EVENT_KINDS}）")
         payload = dict(data)
@@ -311,7 +317,7 @@ def reset_default_broadcaster(*, heartbeat_sec: float = 15.0) -> Broadcaster:
 def close_all() -> None:
     """收尾当前这一代：关掉所有订阅者，并把 `serving()` 置回假。
 
-    `serve()` 的 finally 调它 —— 于是**开着流**退出时，那些流循环会在下一次
+    `serve()` 的 finally 调它 —— 于是开着流退出时，那些流循环会在下一次
     迭代（最长一个心跳周期）看到代已结束并自己退出，不会把线程占住。
     """
     global _GENERATION  # noqa: PLW0603 - 同上
@@ -407,7 +413,7 @@ def handlers() -> dict[str, Any]:
 def bind_handlers(cls: Any) -> tuple[str, ...]:
     """把本模块的处理器绑到一个类上；返回绑上去的名字（排序）。
 
-    这条**不是**接缝的正路（A 线已经改用 `routes.handler_for` 按子表取处理器了），
+    这条不是接缝的正路（A 线已经改用 `routes.handler_for` 按子表取处理器了），
     留着它是给判据与 `WebHandler` 一起做实验用的：绑上之后同一个端点在"类方法"那条
     查找路径上也找得到。生产路径不依赖它。
     """
