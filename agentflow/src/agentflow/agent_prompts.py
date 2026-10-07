@@ -68,7 +68,11 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 论文包那段（H/M 共享）的"claims 的 citations 引 `lit:` / `exp:`"补上 `stmt:`。
 #: 判据（段与版本一起动）在 `tests/test_agent_prompts.py` 的
 #: `test_the_prompt_version_moves_with_the_sections`。
-PROMPT_VERSION = "p41"
+#:
+#: `p42`（同日，`draft/68` 题 17 选 B，所有者授权）：`conductor.closing` 的工具摘要里广告了
+#: 同一次调用会回的 `review_acceptance` 那一栏与可选参数 `cap_usd` —— 摘要进 M 的工具面
+#: ⇒ 十格摘要里只有 M 换值（其余九个角色的工具面里没有这件工具）。
+PROMPT_VERSION = "p42"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

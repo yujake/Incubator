@@ -957,7 +957,10 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
     "至少一张非空）/ **验收表的机器可判行**（项目里若有一份 `out/paper/ACCEPTANCE-CHECKS.json`，"
     "逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）/ "
     "**产物台账与盘上一致**（`ARTIFACTS.jsonl` 逐条重算：行里的 sha 与盘上那份对不对得上）。"
-    "每条各自一个三态读数，unknown 不是通过；`can_close` 只在八格全过时为真。",
+    "每条各自一个三态读数，unknown 不是通过；`can_close` 只在八格全过时为真。"
+    "同一次调用还会回一栏 `review_acceptance`：内容级验收的五条判据各自三态 + 五种辅助读数"
+    "（辅助读数逐字不许当通过）；给可选参数 `cap_usd` 才能判「在成本上限内完成」，"
+    "不给那一格记 unknown。",
     {
         "type": "object",
         "properties": {

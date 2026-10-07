@@ -1330,7 +1330,12 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 十格摘要在合并后的树上按同一口径与算法重算（生成器 `temp/_gen_digests.py`）。
 #: 题 1 的提示词那一半：G 的 brief 新增"引我们自己的命题要用 `stmt:<命题号>`"，
 #: 论文包那段（H 与 M 共享）的 `lit:` / `exp:` 补上 `stmt:`。
-_FROZEN_PROMPT_VERSION = "p41"
+#:
+#: `p42`（同日，`draft/68` 题 17 选 B，所有者授权）：`conductor.closing` 的工具摘要里广告了
+#: `review_acceptance` 那一栏与可选参数 `cap_usd` —— 摘要只进 M 的工具面 ⇒ 只有 M 那一格换值
+#: （实测：其余九格逐字不变，这本身是"摘要只落 M"的佐证）。同时它把题 16 的那一段
+#: 补进了 `specs/g.py` 的镜像（那是声明面镜像、不是段，所以不进这张表）。
+_FROZEN_PROMPT_VERSION = "p42"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "98f12bedad709008abe59dd8acd3ca74f64afa6af40b49172bdc5e7c804e1213",
     "B": "bfe145bdb3ad14853816c16ff6eea2c07f0511501ab30fdd3284ef9c3926f257",
@@ -1341,7 +1346,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "88cb2075a32d29128ddef5e4c27e20d69595f9a24d5b7894d74cf5a7fdb06d98",
     "H": "b55aa1fc7b3f70ef1703633ede186254950bb6d8ddb9196fa6c40bb289cdcc04",
     "V": "b377653fa09a2a149d16873cb42c56c4ae7f33b95296383aebf06667d3c1336d",
-    "M": "b17532a678add44a6828e09d68aac609868a1eddefca06beb4c277e266b62569",
+    "M": "62632b0be19e78afcd574b1ff39f4c418f5b29e98d284153186713975e439d68",
 }
 
 
