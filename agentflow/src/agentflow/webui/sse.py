@@ -355,10 +355,10 @@ def subscribe(sid: str | None = None) -> Subscription:
 # 3. 可撤：`detach()` 把四个槽清零，回到"没人接"的状态 —— 判据用它保证
 #    一条用例装的钩子不会污染下一条。
 #
-# `_checkpoint`（检查点文件被改写 ⇒ 发 `checkpoint`）本批刻意不做：那需要一个
+# `checkpoint` 这个 kind（检查点文件被改写 ⇒ 发事件）本批刻意不做：那需要一个
 # 轮询/watch 点，而"状态一律从盘上派生、不做后台轮询线程"是本服务的既有纪律
 # （`webui/__init__.py` 的纪律 1）。真要做，正确的位置是"写检查点的那一处"
-# （`agent_loop.save_run_checkpoint`）加一个与这里同形的钩子 —— 那属于 A/驱动线的
+# （`agent_loop.save_run_checkpoint`）加一个与这里同形的钩子 —— 那属于驱动线的
 # 文件，不在本线。这条写在报告里，不偷偷起线程。
 
 #: `attach()` 装上的四个闭包（`detach()` 与"幂等替换"的识别靠它）。
