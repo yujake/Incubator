@@ -470,3 +470,110 @@ tool 面（**10 格 = 9 个 `cli.--role A–H,V` 各 +1 字符 + `declarations.t
 | `tests/golden/tool_surface_snapshot.json` | `3a593397fd61…` | **`3a593397fd61…`（未变）** |
 
 ⚠️ **人审面累计 = 第一轮 70 格 + 第二轮 7 格 + 第三轮 10 格 + 第四轮 20 格 + 本轮 17 格**，`draft/67` 要按这两个新 sha 复采。
+
+---
+
+### §8.9 **第六次重冻：题 13 与题 17 两刀之后**（2026-10-07 16:4x–17:0x）
+
+**这一次冻的是两刀**（都在同一条 M 面线上，"收工门"那件工具与它的广告）：
+
+| 刀 | 内容 | 代码落点 | 重冻落点 |
+|---|---|---|---|
+| 题 13/B | `reviewaccept` 接进 M 的面（生产面 0→1）：`conductor.closing` 收 `cap_usd`、`returns` 里多出 `review_acceptance` 子树、签名与实现同步 | `0cf40ba` | `97ae7d6` |
+| 题 17/B | 工具摘要里**广告**那一栏与那个可选参数；`PROMPT_VERSION` p41 → p42 | `cc31c25` | `97ae7d6` |
+
+**增量格：agent 10 格 · tool 4 格**。
+
+复算命令（本节的数字不是从提交信息抄的，是从**两个提交里的 golden 本体**现算的；
+工具是 `temp/_golden_between_commits.py`，只读、拿 `git show <sha>:<path>` 取两份 JSON 再逐叶比）：
+
+```powershell
+python -B temp/_golden_between_commits.py d9fa815 97ae7d6
+python -B temp/_golden_between_commits.py d9fa815 97ae7d6 agentflow/tests/golden/tool_surface_snapshot.json
+```
+
+**agent 面 10 格**（其中 9 格只差版本行那一行）：
+
+| # | 格 | 差几行 | 归因 |
+|---|---|---|---|
+| 1–8 | `roles.A…H.prompt` | 各 2 行 | **只差版本行**：`- 提示词版本：p41` → `+ 提示词版本：p42` |
+| 9 | `roles.V.prompt` | 2 行 | 同上（V 也只差版本行） |
+| 10 | `roles.M.prompt` | 4 行 | 版本行 + `conductor.closing` 那一条动作清单（摘要改了字） |
+
+**这条读数是"摘要只落 M"的正面证据**：十格里九格只差版本行 ⇒ 那件工具只出现在 M 的工具面上，
+其余九个角色连它的摘要都看不到（`draft/68` 题 17 的判据选 B 就是照这条读数定的）。
+
+**tool 面 4 格**（全在同一件工具上）：
+
+| # | 格 | 前 → 后 | 归因 |
+|---|---|---|---|
+| 1 | `declarations.conductor.closing.params.properties.cap_usd` | 缺 → `{"type":"number","minimum":0,…}` | 题 13：真的收下这个参数（负数被参数校验拒成 `param_error`） |
+| 2 | `declarations.conductor.closing.returns` | `{…,'summary'}` → `{…,'summary','review_acceptance'}` | 同上：返回值面多一栏 |
+| 3 | `declarations.conductor.closing.summary` | 改字（广告那一栏） | 题 17：摘要里写明"同一次调用会回 `review_acceptance`"与 `cap_usd` |
+| 4 | `signatures.conductor.closing` | `(project_dir='', report_path='')` → `…, cap_usd=None` | 同上：声明签名与 `@tool` 的参数表逐字对齐 |
+
+**四格都在同一件工具上**这件事本身是读数：给一件工具"加一个可选参数 + 多回一栏 + 改摘要"
+在快照面上就是这四处同时动 —— **没有第五处**（例如没有牵连到别的工具的 `returns`，
+也没有动 `ToolResult` 的形状）。
+
+**golden 的 sha 变化（登记用）**：
+
+| 文件 | 重冻前 | **重冻后** |
+|---|---|---|
+| `tests/golden/agent_surface_snapshot.json` | `acc49de91b04…`（§8.8 的产物） | **`aade76d163cc…`** |
+| `tests/golden/tool_surface_snapshot.json` | `3a593397fd61…` | **`a9ebbe82e435…`** |
+
+⚠️ **人审面累计（本节口径：agent 面格 + tool 面格合计）= 124 + 14 = 138 格**。
+
+---
+
+### §8.10 **第七次重冻：题 19 与题 20 两刀之后**（2026-10-07 17:3x）
+
+**这一次冻的是两刀**（都在"把声明/教学与实现对齐"这条线上）：
+
+| 刀 | 内容 | 代码落点 | 重冻落点 |
+|---|---|---|---|
+| 题 20/A | A 的动作声明 `search_literature.returns` 按**实现逐键**如实改写（26 键），A 提示词里两格同步 | `6afdb56` | `4f1e91a` |
+| 题 19/A | 工具面 `doc.build_document` 的 `claims[].citations.description` 把前缀**全表**教出来（取值由 `schema.CITATION_PREFIXES` 派生，不再手写三种） | `9b8dd2a` | `4f1e91a` |
+
+**增量格：agent 2 格 · tool 1 格**（复算命令同上：`python -B temp/_golden_between_commits.py 97ae7d6 4f1e91a [文件名]`）。
+
+| # | 面 | 格 | 差几行 | 归因 |
+|---|---|---|---|---|
+| 1 | agent | `roles.A.actions[3].returns` | 2 行 | 题 20：`ASearchResult（含 request_id / outcome / result_lit_ids / literature）` → 逐键列全（`ok` / `admitted` / `request_id` / `topic` / `mode` / `done` / `outcome` / … / `literature`） |
+| 2 | agent | `roles.A.prompt` | 2 行 | 同一行的提示词那一半（动作清单里 `search_literature` 的"产出"那一句） |
+| 3 | tool | `declarations.doc.build_document.params.properties.claims.items.properties.citations.description` | 2 行 | 题 19：`lit:` / `stmt:` / `doc:` 三种 → **六种全表**（`rel:` / `lit:` / `exp:` / `eval:` / `doc:` / `stmt:`），并写明"取值见 `schema.CITATION_PREFIXES`" |
+
+**为什么工具面 1 格、agent 面 2 格 —— 逐条实测，不靠推测**（我第一版这里写错了，改了）：
+
+- **两面的口径不同**：agent 快照的格是 `roles.<角色>.…`（一个角色的声明与提示词），
+  tool 快照的格是 `declarations.<工具名>.…`（**一件工具一条，不带角色轴**）。
+  所以"某件工具的 description 改了"在 tool 面**永远是 1 格**，哪怕有五个角色的工具面上都有它。
+- **那件工具是谁的**（实测命令：`build_registry().registry.for_role(角色)` 逐个角色查工具名）：
+
+  ```powershell
+  python -B -c "import sys;sys.path.insert(0,r'D:\Incubator\agentflow\src');from agentflow.tools import build_registry,ROLES;reg=build_registry().registry;print([(r,len(list(reg.for_role(r)))) for r in sorted(ROLES) if any(t.name=='doc.build_document' for t in reg.for_role(r))])"
+  ```
+
+  读数：`doc.build_document` **只在 G 的工具面上**（G 有 32 件工具；A 有 18 件、没有它）。
+  也就是说题 19 改的是**G 用的那件工具**的教学文字。
+- **agent 面那 2 格改的是 A**：题 20 动的是 `src/agentflow/specs/a.py`（A 自己的声明真身）
+  与 A 的提示词 —— 与上面那件工具无关。
+  ⇒ 两句合起来：**两刀各冻自己那一面，所以是 tool 面 1 格 + agent 面 2 格**，
+  而不是"只有 A 有那件工具"（那是我第一版写错的推测，实测把它改掉了）。
+
+**版本号的另一半（这一节要记住的坑）**：题 20 改了 A 的提示词那两格，可 `PROMPT_VERSION`
+在这两次提交里**仍写着 `p42`** —— 于是 `tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections`
+在 `4f1e91a` 之后是**红的**（"段变了而版本没动"那一支）。修它是**独立的一刀**：
+p43 + 摘要表里 A 那一格重算（实测只有 A 换值 `9be0fc70…`，其余九格逐字不变），
+落在 `26f50bd`；**第八次重冻**（只差十格提示词的版本行一行）在设置线合并后一次性做，
+归因届时写进 §8.11 —— 按纪律（`draft/66` 的"重冻不许逐条做"），它与设置线引出的任何格子变化合并成一次。
+
+**golden 的 sha 变化（登记用）**：
+
+| 文件 | 重冻前 | **重冻后** |
+|---|---|---|
+| `tests/golden/agent_surface_snapshot.json` | `aade76d163cc…` | **`e760d3770163…`** |
+| `tests/golden/tool_surface_snapshot.json` | `a9ebbe82e435…` | **`82f2d696bf2d…`** |
+
+⚠️ **人审面累计 = 138 + 3 = 141 格**。
