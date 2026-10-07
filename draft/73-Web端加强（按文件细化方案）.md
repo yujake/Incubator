@@ -184,8 +184,8 @@ class Broadcaster:
 |---|---|---|---|
 | `POST /answer` | `userio.answer_question`（现状，不动） | 409/404 语义保持 | — |
 | `POST /api/stop` | `stopctl.request_stop(...)`（优雅）/ 强制停也要经它 | `落开关了 / 没落成 + 理由` | `force` 需 `confirm=1` 二次确认（`ConfirmButton`） |
-| `POST /api/submit` | `interactions.admit_search_request`（I7 准入配额） | `admitted / refused(refusal_reason) / unknown` | — |
-| `POST /api/task` | 用户频道（落成"用户给 M 的一条输入"，走 `userio`/`inbox` 既有语义） | 落盘编号可回查 | — |
+| `POST /api/submit` | **`cli.cmd_submit` 的等价物**：`interactions.next_prefixed_id(rows,"request_id","r")` + `store.tx("search_requests")` + `row.validate()`。⚠️ **更正**：I7 准入闸门（`interactions.admit_search_request`）**不在入队这一刻**，它在 A 领跑那一刻（`specs/a.py` 的 `search_literature`）——初版写错了，逐字读数见 `draft/74 §0.2` | `入队成功（回 request_id） / 整批不写 + 原因` | — |
+| `POST /api/task` | ⚠️ **更正：没有既有后端入口**（`userio` 只有 M→user 的 `ask_user` 与 user→M 的 `answer_question`；CLI `inbox` 是"待答列表"不是信箱）⇒ 触发 `draft/72 §3` 题 H：**要么裁"新开一条用户→M 的通道"（可能落进权限面、要人审），要么这批不做** | （未定） | （未定） |
 | `POST /api/settings` | `settings.write_settings(...)`（W4 新增，见 §2.6） | `written / refused / unknown` | 要求 `confirm=1` |
 
 **授权（默认口径 C：只读默认、写面显式开）**
