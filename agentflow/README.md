@@ -289,15 +289,14 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 
 **本机读数（2026-10-07，复算命令见括号）**：
 
-- 路由表 `ROUTES` **13 行**、其中 JSON 端点 **9 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`）。
-  ⚠️ 2026-10-07 这次读数的实况是 **14 / 10** —— `/api/state` 在 `routes._OWN` 与 `readers.ROUTES` 里各有一条
-  （裁定 2b 的收口还没落），`test_the_route_table_is_the_single_source_for_dispatch` 会因此报"重复路径模式"；
-  删掉 `_OWN` 那一条之后就是 13 / 9；
+- 路由表 `ROUTES` **13 行**、其中 JSON 端点 **9 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
+  其中 `/api/state` 按裁定 2b 归 B 线的 `readers.ROUTES`、`/api/run-index` 是 A 线自有的那一条；
 - 前端源码 `ui/src/` **19 个文件、3656 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
 - `ui/src/types.ts` 是生成物：**16,003 字节 / 39 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
 - 事件词表 6 个 kind（`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`），前端 `sse.ts` 逐个注册并带 `?since=` 续传与"退避三次 ⇒ 降级轮询"；
 - 入库的构建产物 3 个文件（`web/static/index.html` + `assets/` 下的一支 `.js` 与一支 `.css`，
-  本次读数共 **41,828 字节**；文件名带内容哈希 ⇒ **每次重建都会变**，所以这里刻意不写死哈希名；
+  本次读数共 **81,491 字节** —— 六页面与 `live.tsx` 全进包之后 JS 那一支就有 60.3 KB；
+  文件名带内容哈希 ⇒ **每次重建都会变**，所以这里刻意不写死哈希名；
   复算：`Get-ChildItem -Recurse -File src/agentflow/web/static | Measure-Object Length -Sum`）。
 
 **要改前端**（`ui/`）：装依赖 → 改 `ui/src/` → **重建产物并一起提交**（裁定 B1：`src/agentflow/web/static/` 入库）

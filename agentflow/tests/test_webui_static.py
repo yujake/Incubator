@@ -395,7 +395,7 @@ def test_the_hash_pattern_does_not_match_unhashed_names() -> None:
                 "assets/app.js", "assets/index.esm.js"]
     bad = [n for n in must_not if server._HASHED.search(n)]
     assert not bad, f"这些名字不该被判成带哈希（会让它们被永久缓存）：{bad}"
-    must = ["index.Bpmfy4ek.js", "index.DQaZOKq-.css", "main.abcdef123456.js",
+    must = ["index.ss5N1tLG.js", "index.CWdXsWpc.css", "main.abcdef123456.js",
             "app.0123456789ab.css"]
     miss = [n for n in must if not server._HASHED.search(n)]
     assert not miss, f"这些名字应当被判成带哈希：{miss}"
