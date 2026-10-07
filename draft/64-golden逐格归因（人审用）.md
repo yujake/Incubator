@@ -577,3 +577,47 @@ p43 + 摘要表里 A 那一格重算（实测只有 A 换值 `9be0fc70…`，其
 | `tests/golden/tool_surface_snapshot.json` | `a9ebbe82e435…` | **`82f2d696bf2d…`** |
 
 ⚠️ **人审面累计 = 138 + 3 = 141 格**。
+
+---
+
+### §8.11 **第八次重冻：`PROMPT_VERSION` p42 → p43（那十格只差版本行）**（2026-10-07 18:0x）
+
+**这一刀不是功能改动，是补一条纪律**：题 20（`6afdb56`，17:20）改了 A 的动作面
+`returns` 与 A 提示词里的两格，**却没有同时抬 `PROMPT_VERSION`、也没重算十格摘要表** ⇒
+从那一刻起 `tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections`
+在 master 上是红的（"段变了（`['A']`）而 `PROMPT_VERSION` 还是 `'p42'`"那一支）。
+补它的是 `26f50bd`（18:02）：版本抬到 **p43** + 摘要表里 A 那一格重算
+（实测只有 A 换值 `9be0fc70…`，其余九格逐字不变）。
+
+**增量格：agent 10 格 · tool 0 格**。十格全是 `roles.<角色>.prompt`，每格只差一行：
+
+```diff
+-- 提示词版本：p42
++- 提示词版本：p43
+```
+
+复算读数（两把只读工具，都不写 golden）：
+
+```powershell
+python -B temp/_golden_prompt_lines.py          # 逐行：10 格各 6 行 diff，非版本行差异 0
+python -B temp/_golden_vs_live_cells.py --json  # 逐格：agent 10 格、tool_surface 0 格
+```
+
+**"tool 面 sha 未变"是这一刀的第二个读数**：它证明这一刀真的只碰了提示词里那一行版本号
+（工具面连一个字节都没动）—— 与"十格里九格逐字不变"互为佐证。
+
+**golden 的 sha 变化（登记用）**：
+
+| 文件 | 重冻前 | **重冻后（当前）** |
+|---|---|---|
+| `tests/golden/agent_surface_snapshot.json` | `e760d3770163…`（§8.10 的产物） | **`487eee6a3a34…`** |
+| `tests/golden/tool_surface_snapshot.json` | `82f2d696bf2d…` | **`82f2d696bf2d…`（未变）** |
+
+⚠️ **人审面累计 = 141 + 10 = 151 格**。
+
+**写给下一次的一条纪律（这次的代价）**：**改段与抬版本要尽量落在同一个提交里**。
+这次分成了两个提交（17:20 改段、18:02 抬版本），中间那 42 分钟 master 上挂着一条
+"段变了而版本没动"的红 —— 那条红是**判据按设计**报的（它守的正是这件事），
+但如果当时有第二条并行线在跑，它会看到"base 上就红"而白查一轮
+（`draft/65` 教训 32(a) 记的是同一类代价）。下次要么同提交，要么把这段窗口
+明确写成"已知红窗口 + 归因"，别让它静默挂着。
