@@ -750,6 +750,147 @@ def param_type_coverage() -> dict:
     return {"tools_read": len(schemas), "compared": compared, "unread": sorted(unread)}
 
 
+#: 实测的"工具面声明了、动作面没声明"的 property（`two_layer_param_missing_in_action`）。
+#:
+#: 为什么要有这一格（残项 ㉓；2026-10-07 所有者授权 5b"补反向 + 新计数并入读数"）：
+#: 正反两处既有判据都管不到这个方向 —— `param_type_divergences_for` 由**动作面**驱动
+#: （动作没声明的 property 它根本看不见），`param_seam_violations` 管的是"动作声明了、
+#: 实现不收" ⇒ "工具面加了参数、忘了加动作面"这条裂缝**全树没有读数会报**。
+#: 它为什么有代价：编排层（主控）按**动作参数表**派活 ⇒ 工具面新加的入口在派活侧看不见。
+#:
+#: 形态：按 (角色, 动作) 登记**确切的那几个 property** + 理由（不逐 property 登记，
+#: 也不写成"这个动作以后随便缺"）。这样三种变化都会红：
+#:   ① 出现新的一对（新动作或新匹配上的工具）· ② 已登记那对又多缺一个 property
+#:   · ③ 登记里某个 property 不再缺了（登记过期 ⇒ 必须删掉，否则这张表会烂成噪音）。
+#: 判据本体在 `tests/test_capabilities_reverse_param_gaps.py`（**刻意不放进导入期**：
+#: 所有者 5b 授权的形态是"补反向 + 新计数并入读数"，把导入期改成硬失败会超出那次授权）。
+#: 注意这张表是**可见性**登记，不是"认可"：改哪一层由人定（与 `param_type_divergences_for`
+#: 末尾那句处置口径一致）。
+_KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
+    ("B", "run"): (
+        frozenset({"backend", "dpi", "languages", "max_pages", "pages", "path"}),
+        "`B.run` 的实现是 `ocr.run`（⑫ 的接线）：工具面那六个 OCR 参数是接线时加的，"
+        "动作面当时没同步。改它是动 `specs/b.py` 的声明面（禁改区），而"
+        "「B 的动作面该不该暴露 OCR 的后端/页数/语言」是设计判断，先让它可见。",
+    ),
+    ("C", "neighbors"): (
+        frozenset({"max_neighbors"}),
+        "`graph.neighbors` 有可选上限 `max_neighbors`，动作面只声明了必填。"
+        "C 的图上动作今天只走 `neighbors`/`paths` 两个入口，上限是否要暴露给编排层未见裁定。",
+    ),
+    ("D", "register_conjecture"): (
+        frozenset({"force_new"}),
+        "`conjecture.register_conjecture` 有 `force_new`（重复登记时是否强建新行），"
+        "动作面没声明 ⇒ 主控派活时用不上这个开关。",
+    ),
+    ("E", "run_experiment"): (
+        frozenset({"run_name"}),
+        "`verify.run_experiment` 有 `run_name`，动作面没声明。",
+    ),
+    ("E", "check_formal"): (
+        frozenset({"checker_name"}),
+        "`verify.check_formal` 有 `checker_name`（指定用哪个证明检查器），动作面没声明 ⇒"
+        "编排层选不了检查器（提示词里也没有这一档）。",
+    ),
+    ("G", "compose_claim"): (
+        frozenset({"allowed_use", "counterexamples", "errata_ids", "freeze_reason", "frozen",
+                   "kind", "numeric_evidence", "proof_location", "revision_hash",
+                   "scope_caveat", "status"}),
+        "`doc.compose_claim` 是**通用写入口**（十一个可选字段覆盖冻结/勘误/数值证据等），"
+        "而 `G.compose_claim` 这个动作用的是它的一小部分契约 ⇒ 这个方向的不对称"
+        "很可能是**刻意的**（动作面就是比工具面窄）。登记它是因为"
+        "「刻意」必须被写下来才算刻意 —— 不写下来，它与前面六处的形态完全一样。",
+    ),
+    ("H", "verify_fixes"): (
+        frozenset({"max_review_rounds"}),
+        "`review.verify_fixes` 有 `max_review_rounds`，动作面没声明。",
+    ),
+}
+
+
+def param_missing_in_actions(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]] | None = None,
+) -> dict[tuple[str, str], list[str]]:
+    """判据本体（**反向**）：工具面声明了、动作面没声明的 property。
+
+    只对"唯一匹配到某个工具、且那条工具的 `params` 读得出来"的 (角色, 动作) 算 ——
+    与 `param_type_divergences_for` 同一档口径（多义与读不出来的都不猜）。
+    覆盖率读数见 `param_missing_in_action_coverage()`：**空集永远是子集**，
+    所以"没有反向缺口"这句话必须配上"比过多少对"才作数。
+    """
+    table = CAPABILITIES if capabilities is None else capabilities
+    schemas = _tool_param_schemas() if tool_params is None else tool_params
+    out: dict[tuple[str, str], list[str]] = {}
+    for role, specs in table.items():
+        for spec in specs:
+            cands = _candidates(spec, schemas)
+            if len(cands) != 1:
+                continue
+            tool_props = schemas.get(cands[0])
+            if tool_props is None:
+                continue
+            cap_props = set((spec.params or {}).get("properties") or {})
+            missing = sorted(set(tool_props) - cap_props)
+            if missing:
+                out[(role, spec.action)] = missing
+    return out
+
+
+def param_missing_in_action_coverage(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]] | None = None,
+) -> dict:
+    """反向那一格的覆盖读数：`pairs`（真的逐对比过的动作数）与 `gaps`（缺口数）。"""
+    table = CAPABILITIES if capabilities is None else capabilities
+    schemas = _tool_param_schemas() if tool_params is None else tool_params
+    pairs = 0
+    for _role, specs in table.items():
+        for spec in specs:
+            cands = _candidates(spec, schemas)
+            if len(cands) != 1 or schemas.get(cands[0]) is None:
+                continue
+            pairs += 1
+    return {"pairs": pairs, "gaps": len(param_missing_in_actions(table, schemas))}
+
+
+def unregistered_missing_in_actions(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]] | None = None,
+) -> list[str]:
+    """没登记的缺口（新的一对、或已登记那对又多缺了一个）⇒ 判据报这个。"""
+    found = param_missing_in_actions(capabilities, tool_params)
+    bad: list[str] = []
+    for key, missing in sorted(found.items()):
+        known = _KNOWN_TOOL_ONLY_PARAMS.get(key)
+        if known is None:
+            bad.append(f"{key[0]}.{key[1]}：未登记的工具面独有参数 {missing}")
+            continue
+        extra = sorted(set(missing) - set(known[0]))
+        if extra:
+            bad.append(f"{key[0]}.{key[1]}：已登记之外又多缺了 {extra}")
+    return bad
+
+
+def stale_missing_in_action_entries(
+    capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
+    tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]] | None = None,
+) -> list[str]:
+    """登记过期的条目（那个 property 不再缺了、或那一对根本不再匹配）⇒ 判据也报这个。
+
+    与 `stale_param_seams` 同一条道理：只增不减的登记表会烂成噪音，
+    而噪音里的真缺口就没人看了。
+    """
+    found = param_missing_in_actions(capabilities, tool_params)
+    stale: list[str] = []
+    for (role, action), (props, _why) in sorted(_KNOWN_TOOL_ONLY_PARAMS.items()):
+        live = set(found.get((role, action), []))
+        gone = sorted(set(props) - live)
+        if gone:
+            stale.append(f"{role}.{action}：登记里的 {gone} 已经不再缺了 ⇒ 删掉这几条登记")
+    return stale
+
+
 def _tool_axes(declared: tuple[str, str, bool]) -> tuple[str, str, bool]:
     """工具层一个声明在两根轴上的取值，以及"external 是不是精确声明"。
 
@@ -875,6 +1016,13 @@ PARAM_ASSERT_COVERAGE: dict[str, int] = {}
 #: 与 `PARAM_ASSERT_COVERAGE` 分开放：两条断言的覆盖率不是一回事
 #: （那条数 property 名与实现签名，这条数"两层都给了类型的 (动作, property) 对"）。
 PARAM_TYPE_COVERAGE: dict[str, Any] = {}
+
+#: 反向那一格（工具面有、动作面没有）的覆盖读数：与 `PARAM_TYPE_COVERAGE` 同一条理由 ——
+#: 只在失败时说话的判据，成功时与"没跑"同形。读它：
+#: `python -c "import agentflow.capabilities as c; print(c.PARAM_MISSING_IN_ACTION_COVERAGE)"`。
+#: 这里刻意**不放导入期断言**（所有者 5b 授权的形态是"补反向 + 新计数并入读数"）；
+#: 判据本体与登记表对账在 `tests/test_capabilities_reverse_param_gaps.py`。
+PARAM_MISSING_IN_ACTION_COVERAGE: dict[str, Any] = {}
 
 
 def handler_accepted(role: str, action: str) -> tuple[frozenset[str], bool]:
@@ -2153,6 +2301,12 @@ def assert_capabilities(
         "零分歧此时不构成证据"
     )
 
+    # [10] 反向那一格的读数（工具面有、动作面没有）。**只读数、不断言** —— 所有者 5b 授权的
+    # 就是这一形状；牙在那条测试里（`_KNOWN_TOOL_ONLY_PARAMS` 与实测逐条对账 + 过期检测）。
+    reverse_coverage = param_missing_in_action_coverage()
+    PARAM_MISSING_IN_ACTION_COVERAGE.clear()
+    PARAM_MISSING_IN_ACTION_COVERAGE.update(reverse_coverage)
+
 
 #: 实测的"两层没有可比对对象"的动作（`two_layer_name_unmatched`）。
 #:
@@ -2283,6 +2437,9 @@ print(_PRINT_COVERAGE, file=sys.stderr)
 _PRINT_TYPE_COVERAGE = (
     f"[capabilities] 两层参数类型对账：比较 {PARAM_TYPE_COVERAGE.get('compared', 0)} 对"
     f"（动作, property），读到 {PARAM_TYPE_COVERAGE.get('tools_read', 0)} 个工具的 schema，"
-    f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个"
+    f"没比对 {len(PARAM_TYPE_COVERAGE.get('unread', []))} 个；"
+    f"反向（工具面有/动作面没有）：比过 {PARAM_MISSING_IN_ACTION_COVERAGE.get('pairs', 0)} 个动作，"
+    f"缺口 {PARAM_MISSING_IN_ACTION_COVERAGE.get('gaps', 0)} 处"
+    f"（已登记 {len(_KNOWN_TOOL_ONLY_PARAMS)} 个动作）"
 )
 print(_PRINT_TYPE_COVERAGE, file=sys.stderr)
