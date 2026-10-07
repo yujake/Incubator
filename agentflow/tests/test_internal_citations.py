@@ -1,16 +1,19 @@
 """T4-A 的判据：内部引用（`doc:`）与稿件修订哈希（依据 `draft/30` §T4-A）。
 
-这一组回答四件事，每件都有正控 + 注入负控：
+这一组回答五件事，每件都有正控 + 注入负控：
 
 1. 规范哈希的口径：只覆盖内容五字段（改 `status` 不换哈希、改一个字节就换）；
 2. 引用要对得上：`doc:<稿件>#<断言>@<哈希前 16 位>` 三段都要真
    （稿件在 / 断言在 / 稿件已 `accepted` / 钉的哈希就是当前这一版）；
 3. 行内自洽：行里存的 `content_sha256` 必须等于重算值；
-4. 依赖的内部来源：`source_doc_id` / `source_claim_id` 必须指向真实且已审的稿件。
+4. 依赖的内部来源：`source_doc_id` / `source_claim_id` 必须指向真实且已审的稿件；
+5. 三段判据只有一份实现（题 5/5a 把写入期与审计期原先那两份合成了一份）：
+   结构级 + 行为级两条判据，各自配能红的负控。
 """
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -364,3 +367,323 @@ def test_write_side_still_accepts_stmt_and_refuses_a_bare_number(tmp_path: Path)
     assert "stmt:0004" in why, f"裸号的改法要给一个可抄的例子：{why!r}"
     unknown = DT.check_citations(rows_of, [_claim("c1", ["foo:0004"])])
     assert "前缀 'foo' 无法识别" in str(unknown["missing"][0]["why"]), unknown
+
+
+# ------------------------------- ⑤ 三段的唯一实现（题 5/5a 把两份合成一份）
+#
+# 判据两条，各自配一条能红的负控：
+# ① 只有一份实现（结构级）：三段判据用的原语只许出现在 `signatures.py`，
+#    写入期与审计期这两个调用点只许把判定码翻成文案；
+# ② 两个调用点真的走同一个函数（行为级）：给共用函数打 spy/替身，
+#    两侧都必须经过它，而且两侧的结论由它决定。
+# 反真空：每一侧都必须统计到调用 —— 一个调用点都没走过就不许算通过
+# （否则"两侧都走同一个函数"会因为"两侧都没走"而变绿）。
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_AUDIT_REL = "src/agentflow/verify.py"
+_WRITE_REL = "src/agentflow/tools/doc_tools.py"
+_SHARED_REL = "src/agentflow/signatures.py"
+_SHARED_NAME = "doc_ref_verdict"
+#: 三段判据的原语。某一支的源码里出现任何一个 ⇒ 它在自己判（= 第二份实现）。
+_SEGMENT_PRIMITIVES = ("parse_doc_ref", "content_sha256_of", "ref_hash_of")
+#: 审计期那一支里"叫共用实现"的那一行（负控要把它换成偷回来的局部实现）。
+#: 含行首缩进：这样负控换的是整行，替换体的缩进不会与原文叠在一起。
+_SHARED_CALL_LINE = "                    verdict = SIG.doc_ref_verdict(str(x), doc_by_id.get)"
+#: 负控用的注入体：改前那一份的自判三行 + 原来那一行（缩进与审计期那一支一致）。
+_LOCAL_IMPL_INJECTION = "\n".join([
+    "                    parts = SIG.parse_doc_ref(str(x))",
+    "                    tdoc = doc_by_id.get(parts[0]) if parts else None",
+    "                    if tdoc is not None and str(parts[2]) != "
+    "SIG.content_sha256_of(tdoc)[:SIG.REF_HASH_LEN]:",
+    "                        pass",
+    _SHARED_CALL_LINE,
+])
+
+
+def _read_src(rel: str) -> str:
+    """项目内某个源文件的文本。"""
+    return (_PROJECT_ROOT / rel).read_text(encoding="utf-8")
+
+
+def _dotted(node: ast.AST) -> str:
+    """`a.b.c` 形式的调用名；其余返回空串。"""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted(node.value)
+        return f"{base}.{node.attr}" if base else node.attr
+    return ""
+
+
+def _calls_under(node: ast.AST) -> set[str]:
+    """节点下出现的全部调用名（含 `a.b(...)` 形式）。"""
+    return {_dotted(sub.func) for sub in ast.walk(node) if isinstance(sub, ast.Call)}
+
+
+def _is_doc_kind_test(node: ast.AST) -> bool:
+    """`node` 是不是形如 `kind == "doc"` 的判断。
+
+    按结构比而不是按 `ast.unparse` 的文本比：unparse 的引号形态会随版本/内容变
+    （实测 `kind == 'doc'` 与 `kind == "doc"` 两种都出现过），比文本的判据会
+    因为一个引号而把"找到那一支"读成"没找到"。
+    """
+    if not isinstance(node, ast.Compare) or len(node.ops) != 1 or len(node.comparators) != 1:
+        return False
+    if not isinstance(node.ops[0], ast.Eq):
+        return False
+    left, right = node.left, node.comparators[0]
+    return (isinstance(left, ast.Name) and left.id == "kind"
+            and isinstance(right, ast.Constant) and right.value == "doc")
+
+
+def _doc_branch_segment(source: str) -> tuple[str, set[str]]:
+    """`verify.py` 里 `elif kind == "doc":` 那一支的源码段与它调到的名字。
+
+    找不到那一支 ⇒ 抛（"判据没接上"不许读成"判据通过"，三态纪律）。
+    """
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.If) and _is_doc_kind_test(node.test):
+            calls: set[str] = set()
+            for stmt in node.body:
+                calls |= _calls_under(stmt)
+            return ast.get_source_segment(source, node) or "", calls
+    raise AssertionError('verify.py 里找不到 `elif kind == "doc":` 那一支 ⇒ 本次没查成')
+
+
+def _func_segment(source: str, name: str) -> str:
+    """某个顶层函数的源码段（找不到 ⇒ 抛）。"""
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return ast.get_source_segment(source, node) or ""
+    raise AssertionError(f"找不到函数 {name} ⇒ 本次没查成")
+
+
+def _local_impl_problems(segment: str, calls: set[str]) -> list[str]:
+    """一段调用点源码里还有没有第二份三段逻辑。空列表 = 没有。"""
+    out = [f"源码里仍有三段原语 {p!r}" for p in _SEGMENT_PRIMITIVES if p in segment]
+    if not any(c.endswith(_SHARED_NAME) for c in calls):
+        out.append(f"没有调用共用实现 {_SHARED_NAME}（调用名：{sorted(calls)}）")
+    return out
+
+
+def test_only_one_doc_citation_implementation():
+    """① 结构级：三段原语只许出现在 `signatures.py`，两个调用点都不许自己判。"""
+    owners: dict[str, set[str]] = {p: set() for p in ("parse_doc_ref", "ref_hash_of")}
+    for path in sorted((_PROJECT_ROOT / "src/agentflow").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for primitive in owners:
+            if primitive in text:
+                owners[primitive].add(path.relative_to(_PROJECT_ROOT).as_posix())
+    assert owners["parse_doc_ref"] == {_SHARED_REL}, owners
+    assert owners["ref_hash_of"] == {_SHARED_REL}, owners
+
+    audit_seg, audit_calls = _doc_branch_segment(_read_src(_AUDIT_REL))
+    assert _local_impl_problems(audit_seg, audit_calls) == [], audit_seg
+
+    write_seg = _func_segment(_read_src(_WRITE_REL), "_doc_citation_problem")
+    assert _local_impl_problems(write_seg, _calls_under(ast.parse(write_seg))) == [], write_seg
+
+    # 反真空：唯一实现自己必须真的做着那三段（空壳也能让上面三条变绿）。
+    # 它用的是 `parse_doc_ref` 与 `ref_hash_of`（后者按定义就是
+    # `content_sha256_of` 的前 16 位，见本文件 ① 的第一条断言）。
+    shared_seg = _func_segment(_read_src(_SHARED_REL), _SHARED_NAME)
+    for primitive in ("parse_doc_ref", "ref_hash_of"):
+        assert primitive in shared_seg, f"唯一实现 {_SHARED_NAME} 里没有 {primitive}"
+
+
+def test_negative_control_a_local_implementation_is_caught():
+    """负控（①的牙）：把一份局部实现放回审计期那一支 ⇒ 结构判据必须红。
+
+    做法：在真源码上把"叫共用实现"那一行换成"自己 parse + 自己算哈希"的几行
+    （= 改前那一份），再让同一条判据去看它。下面那句 `mutated != source` 是这条
+    负控自己的反真空检查：锚行一旦漂了，替换会无声地什么都不做，
+    而负控会变成"没改也通过"。
+    """
+    source = _read_src(_AUDIT_REL)
+    assert _SHARED_CALL_LINE in source, "锚行漂了 ⇒ 这条负控没查成（不是通过）"
+    mutated = source.replace(_SHARED_CALL_LINE, _LOCAL_IMPL_INJECTION)
+    assert mutated != source, "变异没落在源码上 ⇒ 负控无效"
+
+    seg, calls = _doc_branch_segment(mutated)
+    problems = _local_impl_problems(seg, calls)
+    assert problems, "把局部实现放回去了而判据没红 ⇒ ① 是一条永远绿的灯"
+    assert any("parse_doc_ref" in p for p in problems), problems
+
+    # 正控：同一条判据在未变异的源码上是干净的（判据分得清两种源码）。
+    clean_seg, clean_calls = _doc_branch_segment(source)
+    assert _local_impl_problems(clean_seg, clean_calls) == []
+
+
+def _spy_shared(monkeypatch, *, verdict_code: str | None = None) -> list[str]:
+    """把共用实现换成计数替身；给了 `verdict_code` 时它一律返回那个判定码。
+
+    替身是打在「模块属性」上的：两个调用点都是运行期取 `SIG.doc_ref_verdict`
+    （`verify` 模块级 import、`doc_tools` 惰性 import 同一模块对象），所以两侧
+    都会打到同一个替身上 —— 这正是"走的是同一个函数"的行为级证据。
+    """
+    calls: list[str] = []
+    real = SIG.doc_ref_verdict
+
+    def fake(raw, doc_of):
+        calls.append(str(raw))
+        if verdict_code is None:
+            return real(raw, doc_of)
+        return SIG.DocRefVerdict(verdict_code, "0000", "c1", "deadbeefdeadbeef",
+                                 doc_of("0000"), "")
+    monkeypatch.setattr(SIG, _SHARED_NAME, fake)
+    return calls
+
+
+def test_both_call_sites_go_through_the_shared_function(tmp_path: Path, monkeypatch):
+    """② 行为级：写入期与审计期都必须经过共用实现（反真空：两侧各自统计到调用）。"""
+    st = _store(tmp_path)
+    target = _cited(st)
+    ref = SIG.doc_ref("0000", "c1", target)
+    rows_of = lambda t: st.rows(t)  # noqa: E731
+
+    calls = _spy_shared(monkeypatch)
+    n0 = len(calls)
+    DT._doc_citation_problem(ref, rows_of)
+    assert len(calls) - n0 >= 1, "写入期那一支没有经过共用实现 ⇒ 它自己又判了一遍"
+
+    n1 = len(calls)
+    V.verify_all(st)
+    assert len(calls) - n1 >= 1, "审计期那一支没有经过共用实现 ⇒ 它自己又判了一遍"
+    # 反真空：同一个替身被两侧各打到一次，且两侧递进去的是同一个字符串。
+    assert calls.count(ref) >= 2, calls
+
+
+def test_the_verdict_is_dictated_by_the_shared_function(tmp_path: Path, monkeypatch):
+    """② 的第二个方向：两侧的结论由共用实现决定（换成"形状不对" ⇒ 两侧都改口）。
+
+    若某一侧还留着自己的判据，它对一个合法引用仍会说通过 —— 这条就是那种情形的牙。
+    """
+    st = _store(tmp_path)
+    target = _cited(st)
+    ref = SIG.doc_ref("0000", "c1", target)
+    assert _codes(st, "documents") == [], "夹具本身不干净 ⇒ 下面的读数不可信"
+
+    _spy_shared(monkeypatch, verdict_code=SIG.DOC_REF_BAD_SHAPE)
+    why = DT._doc_citation_problem(ref, lambda t: st.rows(t))
+    assert "形状不对" in why, why
+    assert "dangling_doc_citation" in _codes(st, "documents")
+
+
+def test_negative_control_spy_catches_a_local_implementation(tmp_path: Path, monkeypatch):
+    """负控（②的牙）：一份自己判的局部实现必须被判成"没经过共用实现"。
+
+    同一个"经过了吗"的检查，一次喂给局部实现（必须红）、一次喂给真调用点
+    （必须绿）：只红不绿说明检查坏了，只绿不红说明它是永远绿的灯。
+    """
+    st = _store(tmp_path)
+    target = _cited(st)
+    ref = SIG.doc_ref("0000", "c1", target)
+    calls = _spy_shared(monkeypatch)
+
+    def local_impl(raw: str) -> str:
+        """改前那一份的形状：自己 parse、自己算哈希，一次都不碰共用实现。"""
+        parts = SIG.parse_doc_ref(raw)
+        if parts is None:
+            return "形状不对"
+        tdoc_id, tclaim_id, thash = parts
+        row = next((r for r in st.rows("documents")
+                    if str(r.get("doc_id")) == str(tdoc_id)), None)
+        if row is None:
+            return "稿件不在"
+        if str(thash) != SIG.content_sha256_of(row)[:SIG.REF_HASH_LEN]:
+            return f"旧引用（{tclaim_id}）"
+        return ""
+
+    n0 = len(calls)
+    local_impl(ref)
+    assert len(calls) == n0, "负控样本居然经过了共用实现 ⇒ 它不是一个局部实现"
+
+    n1 = len(calls)
+    DT._doc_citation_problem(ref, lambda t: st.rows(t))
+    assert len(calls) > n1, "真调用点没有经过共用实现 ⇒ 判据该红"
+
+
+def _case_store(root: Path, raw: str, *, target_status: str = "accepted") -> Store:
+    """一份只为一条引用准备的工作区（被引稿 0000 + 引用者 0001）。"""
+    st = _store(root)
+    _lit(st)
+    target = _doc(st, "0000", [_claim("c1", ["lit:0000"])], status=target_status,
+                  title="被引稿")
+    if target_status == "accepted":
+        _sign(st, target)
+    _doc(st, "0001", [_claim("c1", [raw])])
+    return st
+
+
+#: 拒收理由的公共口径：`(写入期报文片段, 审计期判据码)`。
+_REFUSE_EXPECT: dict[str, tuple[str, str]] = {
+    "shape": ("形状不对", "dangling_doc_citation"),
+    "doc": ("没有 doc_id", "dangling_doc_citation"),
+    "claim": ("没有断言", "dangling_doc_citation"),
+    "stale": ("改稿之后旧引用失效", "internal_citation_stale"),
+}
+
+
+def test_two_sides_agree_on_the_seven_inputs(tmp_path: Path):
+    """改后的常驻回归表：七个输入上两侧的判定与拒收理由逐条对得上。
+
+    这是差分读数（`temp/probe_doc_citation_two_sides_5a.py` 的改前/改后四格）
+    的常驻版本：那边证"搬一处没改口径"，这边守住"此后也不许分家"。
+    两侧的文案与粒度本来就不同（审计期把"稿件不存在"与"断言不存在"合成一条
+    `dangling_doc_citation`），所以比的是"拒在哪一段"。
+    """
+    probe = _case_store(tmp_path / "probe", "lit:0000")
+    target = [r for r in probe.rows("documents") if str(r.get("doc_id")) == "0000"][0]
+    cur = SIG.ref_hash_of(target)
+    cases = [
+        ("合法引用", SIG.doc_ref("0000", "c1", target), "ok"),
+        ("缺哈希", "doc:0000#c1", "stale"),
+        ("哈希长度不对", f"doc:0000#c1@{cur[:-1]}", "stale"),
+        ("形式不对", "doc:0000", "shape"),
+        ("稿件不存在", f"doc:9999#c1@{cur}", "doc"),
+        ("断言不存在", f"doc:0000#cX@{cur}", "claim"),
+    ]
+    seen: set[str] = set()
+    for i, (label, raw, kind) in enumerate(cases):
+        st = _case_store(tmp_path / f"case{i}", raw)
+        got = DT.check_citations(lambda t: st.rows(t), [_claim("c2", [raw])])
+        audit = [x for x in V.verify_all(st).issues
+                 if x.table == "documents" and str(x.row_id) == "0001"]
+        if kind == "ok":
+            assert not got["missing"], (label, got)
+            assert not audit, (label, [x.to_dict() for x in audit])
+            continue
+        seen.add(kind)
+        why_expect, code_expect = _REFUSE_EXPECT[kind]
+        assert got["missing"], (label, got)
+        assert why_expect in str(got["missing"][0]["why"]), (label, got["missing"][0])
+        assert [x.code for x in audit] == [code_expect], (label, [x.to_dict() for x in audit])
+    # 反真空：四个拒收段都真的被走到过（否则上表可能靠"一律拒"通过）。
+    assert seen == set(_REFUSE_EXPECT), seen
+
+    # 非 `doc:` 前缀：两侧都把它交给"前缀路由"那一支（不是这三段），判定同 = 都拒。
+    # 这一行的用处是让"没走三段"与"走了三段判通过"分得开。
+    st = _case_store(tmp_path / "nondoc", "lit:9999")
+    got = DT.check_citations(lambda t: st.rows(t), [_claim("c2", ["lit:9999"])])
+    assert got["missing"] and got["missing"][0]["kind"] == "lit", got
+    audit = [x for x in V.verify_all(st).issues
+             if x.table == "documents" and str(x.row_id) == "0001"]
+    assert [x.code for x in audit] == ["dangling_citation"], [x.to_dict() for x in audit]
+
+
+def test_audit_only_status_gate_is_unchanged(tmp_path: Path):
+    """审计期独有的那一档原样保留：目标稿件不是 `accepted` 时审计期拒、写入期不拒。
+
+    这条不是三段判据的一部分（三段是"稿件在 / 断言在 / 钉的哈希对得上"），
+    而是写入期与审计期刻意的口径差。题 5/5a 只搬三段，所以这里把它钉住：
+    哪天有人"顺手统一"了，这条测试必须红。
+    """
+    row = _doc_row("0000", [_claim("c1", ["lit:0000"])], status="in_review", title="被引稿")
+    ref = f"doc:0000#c1@{SIG.ref_hash_of(row)}"
+    st = _case_store(tmp_path, ref, target_status="in_review")
+
+    got = DT.check_citations(lambda t: st.rows(t), [_claim("c2", [ref])])
+    assert not got["missing"], got
+    issues = [x for x in V.verify_all(st).issues if x.code == "internal_citation_not_accepted"]
+    assert issues, [x.to_dict() for x in V.verify_all(st).issues if x.table == "documents"]
+    assert "不是 accepted" in issues[0].message, issues[0].message

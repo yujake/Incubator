@@ -930,41 +930,55 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                                             f"断言 {cid} 引用了不存在的命题 {ref}"))
                 elif kind == "doc":
                     # 内部引用（`draft/30` §T4-A）：`doc:<稿件>#<断言>@<哈希前 16 位>`。
-                    # 三段都要真：稿件在、那条断言在、且**钉的哈希就是目标稿件当前这一版**。
-                    parts = SIG.parse_doc_ref(str(x))
-                    if parts is None:
+                    # 三段判据（稿件在 / 那条断言在 / 钉的哈希就是目标稿件当前这一版）
+                    # 的唯一实现是 `signatures.doc_ref_verdict` —— 题 5/5a 把写入期
+                    # （`doc_tools._doc_citation_problem`）与这里原先各自那一份合成了一份：
+                    # 两份各对同一个字符串判一次，漂了没有任何地方会报（写入期那份的注释
+                    # 写着"与 `verify.py:923-961` 同口径"，而注释不是门，行号还会漂）。
+                    # 本支现在只做「判定码 → 审计期文案」的翻译，外加一条审计期独有的档：
+                    # 目标稿件必须 accepted（它不在三段里，写入期不查 —— 那是写入期与
+                    # 审计期刻意的口径差，本次一字未动）。
+                    #
+                    # 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在
+                    # `.noai-paths` 的 `[category: auth-audit]` 里。本次只改这一支的
+                    # 判据来源（搬一处，不改口径）：判据码、报案顺序、报文、短路时机
+                    # 逐字不变（改前/改后的差分读数在本次交付报告里；常驻判据见
+                    # `tests/test_internal_citations.py` 第 ⑤ 节：结构级 + 行为级 + 负控）。
+                    verdict = SIG.doc_ref_verdict(str(x), doc_by_id.get)
+                    if verdict.code == SIG.DOC_REF_BAD_SHAPE:
                         rep.issues.append(Issue(
                             "error", "documents", docid, "dangling_doc_citation",
                             f"断言 {cid} 的内部引用 {x!r} 形状不对："
                             "应为 doc:<稿件>#<断言>@<内容哈希前 16 位>",
                         ))
+                    elif verdict.code in (SIG.DOC_REF_NO_DOC, SIG.DOC_REF_NO_CLAIM):
+                        rep.issues.append(Issue(
+                            "error", "documents", docid, "dangling_doc_citation",
+                            f"断言 {cid} 引用了不存在内部断言 "
+                            f"{verdict.doc_id}#{verdict.claim_id}",
+                        ))
                     else:
-                        tdoc_id, tclaim_id, thash = parts
-                        tdoc = doc_by_id.get(tdoc_id)
-                        tclaims = {str(cl.get("claim_id")) for cl in (tdoc.get("claims") or [])
-                                   if isinstance(cl, dict)} if tdoc else set()
-                        if tdoc is None or tclaim_id not in tclaims:
-                            rep.issues.append(Issue(
-                                "error", "documents", docid, "dangling_doc_citation",
-                                f"断言 {cid} 引用了不存在内部断言 {tdoc_id}#{tclaim_id}",
-                            ))
-                        elif str(tdoc.get("status") or "") != "accepted":
+                        # 走到这一支 ⇒ 前两段都过了 ⇒ 目标稿件那一行一定在
+                        # （`verdict.doc` 一并带回来了）；`or {}` 只是让"万一不在"
+                        # 落进下面那条 fail-closed 的判定，而不是静默放过。
+                        tdoc = verdict.doc or {}
+                        if str(tdoc.get("status") or "") != "accepted":
                             rep.issues.append(Issue(
                                 "error", "documents", docid, "internal_citation_not_accepted",
-                                f"断言 {cid} 引用的内部断言 {tdoc_id}#{tclaim_id} 所在稿件"
+                                f"断言 {cid} 引用的内部断言 {verdict.doc_id}#{verdict.claim_id} 所在稿件"
                                 f"status={tdoc.get('status')!r}（不是 accepted）⇒ "
                                 "引文图不能把没审过的稿子当来源（`draft/29` §8.5 第 1 条）",
                             ))
-                        elif not thash or thash != SIG.content_sha256_of(tdoc)[:SIG.REF_HASH_LEN]:
-                            # 比的是**重算出来的当前内容哈希**，不是行里存的那个字段：
-                            # 内容改了而存字段没刷时，旧引用照样必须失效（存字段的问题
-                            # 另有 `content_hash_mismatch` 单独报）。改一字节即失效，
-                            # 说的就是这条。
+                        elif verdict.code == SIG.DOC_REF_STALE:
+                            # 比的是重算出来的当前内容哈希（判定里一并带回来的
+                            # `verdict.current_hash`），不是行里存的那个字段：内容改了而
+                            # 存字段没刷时，旧引用照样必须失效（存字段的问题另有
+                            # `content_hash_mismatch` 单独报）。改一字节即失效，说的就是这条。
                             rep.issues.append(Issue(
                                 "error", "documents", docid, "internal_citation_stale",
-                                f"断言 {cid} 引用 {tdoc_id}#{tclaim_id} 时钉的是 {thash or '(没钉哈希)'}，"
-                                f"而该稿件当前内容是 "
-                                f"{SIG.content_sha256_of(tdoc)[:SIG.REF_HASH_LEN]}"
+                                f"断言 {cid} 引用 {verdict.doc_id}#{verdict.claim_id} 时钉的是 "
+                                f"{verdict.pinned_hash or '(没钉哈希)'}，而该稿件当前内容是 "
+                                f"{verdict.current_hash}"
                                 " ⇒ 改稿之后旧引用失效（不许静默沿用）",
                             ))
                 elif kind not in CITATION_KINDS:

@@ -11,6 +11,8 @@
   并核对 `doc:<doc>#<claim>@<hash>` 这种引用钉的是不是当前这一版。
 
 两份实现必然漂移 —— 所以算法只在这里定义一次。
+`doc:` 内部引用的三段判据同理：它的唯一实现是本文件的 `doc_ref_verdict`
+（写入期 `doc_tools` 与审计期 `verify` 都调它，题 5/5a 把原先那两份合成了一份）。
 
 ## 口径（逐字，改它等于改"什么算同一版"）
 
@@ -29,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, NamedTuple, Sequence
 
 from . import canonical as CANONICAL
 from .jsonlfile import read_jsonl
@@ -100,6 +102,91 @@ def parse_doc_ref(ref: str) -> tuple[str, str, str] | None:
     if not doc_id or not claim_id:
         return None
     return doc_id, claim_id, rev
+
+
+# --------------------------------------------------- `doc:` 内部引用的三段判据（题 5/5a）
+#
+# 三段（稿件在 / 那条断言在 / 钉的哈希就是当前这一版）此前有两份实现：
+# 写入期 `tools/doc_tools.py` 的 `_doc_citation_problem` 与审计期 `verify.py` 里
+# `elif kind == "doc":` 那一支。两份对同一个字符串各判一次，漂了没有任何地方会报
+# —— 写入期那份自己的注释写着"与 `verify.py:923-961` 同口径"，
+# 而"口径靠注释对齐"就等于没有门（行号本身还会漂）。
+#
+# 唯一实现落在本模块，理由三条：
+# 1. 这一段用到的三件原语都已经在这里（`parse_doc_ref` 解析、`content_sha256_of`
+#    与 `ref_hash_of` 算哈希），判定与它的原语同处一文件，改口径只有一处可改；
+# 2. 两侧本来就 import 本模块（`verify` 模块级 `SIG`，`doc_tools` 惰性 `SIG`）
+#    ⇒ 不新增任何一条模块级依赖边；放进 `tools/` 会让 `verify → tools` 成环，
+#    放进 `verify.py` 会让写入期反向依赖审计期；
+# 3. 它是"数据 → 判定"的纯函数（查稿件的能力由调用方以回调传入），
+#    与本模块"算法与词表只有一个落点"的性格一致。
+#
+# 合成的只是判定，不是渲染：两侧各自保留自己的文案，审计期还多一条自己的档
+# （目标稿件必须 `accepted`）—— 那一条不在三段里，本次一字未动。
+
+#: 三段判据的判定码（空串 = 三段全过）。
+DOC_REF_OK = ""
+DOC_REF_BAD_SHAPE = "doc_ref_bad_shape"
+DOC_REF_NO_DOC = "doc_ref_no_doc"
+DOC_REF_NO_CLAIM = "doc_ref_no_claim"
+DOC_REF_STALE = "doc_ref_stale"
+
+
+class DocRefVerdict(NamedTuple):
+    """三段判据的判定，外加渲染文案要用的三段原值。
+
+    为什么把 `doc` 与 `current_hash` 一起带回来，而不是让调用方自己再解析一次、
+    再算一次哈希：那样等于在每个调用点上又长出一份三段逻辑，而那正是本次要消掉的
+    东西。调用方只翻译判定码，不重做判定。
+
+    `code` 是上表里那五个值之一；`pinned_hash` 是引用里钉的那一段（可为空串 =
+    没钉哈希）；`current_hash` 只在稿件真的找到时才有值。
+    """
+
+    code: str
+    doc_id: str = ""
+    claim_id: str = ""
+    pinned_hash: str = ""
+    doc: Mapping[str, Any] | None = None
+    current_hash: str = ""
+
+    @property
+    def ok(self) -> bool:
+        """三段是否全过。"""
+        return self.code == DOC_REF_OK
+
+
+def doc_ref_verdict(raw: str,
+                    doc_of: Callable[[str], Mapping[str, Any] | None]) -> DocRefVerdict:
+    """`doc:` 内部引用的三段检查（依据 `draft/30` §T4-A）。
+
+    三段都要真：稿件在、那条断言在、钉的哈希就是目标稿件当前这一版。
+    为什么第三段不能省：它答的是"这条引用钉的是哪一版"—— 改稿之后旧引用必须失效，
+    只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，而那正是这三段要防的事。
+
+    `doc_of(doc_id) -> 行 | None` 给的是查稿件的「能力」，不是表或库实例：
+    写入期在事务内用 `rows_of("documents")` 查（拿到一致的快照），审计期用
+    它已经读好的 `doc_by_id.get`（不再读第二遍表 ⇒ 不会看到两份快照）。
+    形状解析不出来时一次表都不读（短路与两份旧实现一致）。
+
+    判定只看这三段；"目标稿件必不必须是 `accepted`"之类的「调用方档」不在这里
+    —— 那是两侧口径可以不同、且刻意不同的地方（写入期不查、审计期查）。
+    """
+    parts = parse_doc_ref(raw)
+    if parts is None:
+        return DocRefVerdict(DOC_REF_BAD_SHAPE)
+    tdoc_id, tclaim_id, thash = parts
+    doc = doc_of(tdoc_id)
+    if doc is None:
+        return DocRefVerdict(DOC_REF_NO_DOC, tdoc_id, tclaim_id, thash)
+    claims = {str(cl.get("claim_id")) for cl in (doc.get("claims") or [])
+              if isinstance(cl, dict)}
+    if str(tclaim_id) not in claims:
+        return DocRefVerdict(DOC_REF_NO_CLAIM, tdoc_id, tclaim_id, thash, doc)
+    cur = ref_hash_of(doc)
+    if str(thash) != cur:
+        return DocRefVerdict(DOC_REF_STALE, tdoc_id, tclaim_id, thash, doc, cur)
+    return DocRefVerdict(DOC_REF_OK, tdoc_id, tclaim_id, thash, doc, cur)
 
 
 # ---------------------------------------------------------------- 签名台账（T4-B）
