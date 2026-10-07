@@ -16,10 +16,11 @@
 """
 from __future__ import annotations
 
-import re
+import hashlib
 import pathlib
+import re
 from dataclasses import replace
-from typing import Any
+from typing import Any, Mapping
 
 import pytest
 
@@ -874,7 +875,7 @@ def test_the_forced_notify_advertisement_is_gone_from_the_prompt():
                              *brief.policy, *brief.stance])
     for word in FORCED_NOTIFY_ADVERTISEMENT:
         assert word not in prompt_side, f"L-05e 之后这句义务广告还在：{word!r}"
-    # 事实口径留下（与 `agent_loop._do_handoff` / `_notify_gate` 的现状一致）
+    # 事实口径留下（与 `agent_loop._do_handoff` / `notify_reading` 的现状一致）
     assert "秘书执笔" in AP.LOOP_PROTOCOL, AP.LOOP_PROTOCOL
     assert "不打回" in AP.LOOP_PROTOCOL, AP.LOOP_PROTOCOL
     assert "notify_problem" in AP.LOOP_PROTOCOL, AP.LOOP_PROTOCOL
@@ -916,9 +917,14 @@ _SHAPE_TABLE_END = "\n规则："
 _CN_NUM = {1: "一", 2: "两", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九", 10: "十"}
 
 
-def _shape_table() -> str:
-    """切出 `LOOP_PROTOCOL` 里的形状表那一段（含表头那一行）。锚点读不到就断言失败。"""
-    text = AP.LOOP_PROTOCOL
+def _shape_table(protocol: str = "") -> str:
+    """切出一版循环协议里的形状表那一段（含表头那一行）。锚点读不到就断言失败。
+
+    `protocol` 留空 = `LOOP_PROTOCOL`（主控那一版）。`R6` §2-⑥ 之后协议按角色渲染
+    （`agent_prompts.loop_protocol_for`），所以"哪个角色的形状表"由调用方给 ——
+    默认值只服务于"协议常量本身"那一条判据。
+    """
+    text = protocol or AP.LOOP_PROTOCOL
     anchor = text.find(_SHAPE_TABLE_ANCHOR)
     assert anchor >= 0, f"形状表的起句读不到（`{_SHAPE_TABLE_ANCHOR}`）"
     start = text.rfind("\n", 0, anchor) + 1
@@ -958,13 +964,39 @@ def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistr
     """那段形状表要真的进到每个角色的提示词里（常量里写对、却没接进提示词＝没改）。
 
     负控在下面那条：把"少一种形状"的那种旧表喂进同一个读法，必须被认出来。
+
+    ## `R6` §2-⑥ 之后这一条按角色切（改过一次，逐字留痕）
+
+    改动前：循环协议是一个常量发给所有角色，所以"每个角色的提示词里都有同一段
+    形状表（八种一个不缺）"这句话成立。改动后：协议按角色渲染
+    （`agent_prompts.loop_protocol_for`）—— 主控那一版仍是 `LOOP_PROTOCOL` 本身，
+    其余九个角色那一版少掉三块只有 M 用得到的文本，其中 [c] 就是 `2b) summon_many`
+    那一段。于是成立的替换命题是：
+
+    - 每个角色的提示词里都有它那一版协议的整张形状表（逐字节等于
+      `loop_protocol_for(role)` 里那一段，切法与本文件其它地方同一套锚点）；
+    - `agent_loop.SHAPES` 里被它漏掉的形状恰好是 `summon_many`，且只有非 M 会漏。
+
+    这一个缺口不是静默放过：下面那半句把它逐字钉住（多缺一个/少缺一个都红），
+    而 `summon_many` 的形状骨架仍由 `agent_loop.JSON_TAIL` 在每一步发给所有人
+    （每一步的提示词都无条件追加它）—— 撤的只是"对 M 说的那一段说明"。
+
+    `R6` §2-⑥ 的作用域更正（2026-10-07，主控裁定）：会缺 `summon_many` 的不是
+    "所有非 M"，而是出边为空、一个伙伴都唤不动的角色（`_summon_capable_roles`
+    从 `capabilities.ALLOWED_EDGES` 现算；今天只有 C）。判据因此按那个集合算。
     """
-    seg = _shape_table()
     for role in ALL_ROLES:
         text = _prompt(role, registry)
-        assert seg in text, f"{role} 的提示词里没有形状表那一段"
+        seg = _shape_table(AP.loop_protocol_for(role))
+        assert seg in text, f"{role} 的提示词里没有它那一版协议里的形状表那一段"
         missing = [n for n in AL.SHAPES if not re.search(rf'"{re.escape(n)}"', text)]
-        assert not missing, f"{role} 的提示词里没有形状 {missing}"
+        want_missing = [] if role in _summon_capable_roles() else ["summon_many"]
+        assert missing == want_missing, (
+            f"{role} 的形状表缺的形状是 {missing}，而它那一版协议该缺的是 {want_missing} —— "
+            "这一版协议与 `agent_loop.SHAPES` 分家了（多缺一个形状等于那种形状在这一版里"
+            "不存在；少缺一个等于那段 M 专用文本又漏给了非 M）")
+        if role == S.CONDUCTOR_ROLE:
+            assert AP.LOOP_PROTOCOL in text, "主控那一版不再是 `LOOP_PROTOCOL` 常量本身"
     # 反负控：缺 `handoff`、且写着"七种"的那一版必须被同一组读法判红。
     # 这一段逐字另写（不从当前文本拼）—— 从当前文本拼出来的"旧版"会随修好一起变好，
     # 于是判据坏掉也照样绿（反负控的全部价值就在于它与被测文本无关）。
@@ -982,6 +1014,366 @@ def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistr
         "反负控失效：写着「七种」的旧表居然通过了数目对拍"
 
 
+# ------------------------------------------------- 循环协议里两组与该角色无关的文本
+#
+# `R6` §2-⑥（施工清单 `draft/63`）的结构性搬移：`LOOP_PROTOCOL` 里有两组死文本，
+# 它们的作用域不一样，所以判据必须分开断（混成一条会把"搬错了范围"读成"搬干净了"）：
+#
+#   - M 专段（[a] 主控留痕块 / [b] 主控例外句）：对任何非 M 角色都无关；
+#   - [c] `2b)` 整段：只对一个伙伴都唤不动的角色无关 —— 今天只有 C
+#     （`capabilities.ALLOWED_EDGES["C"]` 是空的）。其余八个非 M 角色各有 1–6 条出边，
+#     而 `Conductor.summon` 按 `frm=by` 过边表 ⇒ 它们发出的 `summon_many` 真的会执行，
+#     那一段对它们是能用的。（"是不是主控"曾被拿来当判据，那是错的：主控的动作表是空的，
+#     `summon_many` 走的是 conductor 工具面，按动作表算十角色全是 False。）
+#
+# 两端都要钉：只钉"无关的角色里没有"时，把这几块从常量里整个删掉也照样绿（那是"删规矩"，
+# 不是搬移，而且主控那份也跟着没了）；只钉"M 里有"时，别的角色照旧背着别人的收件人
+# 也照样绿。所以每条判据里都有"反真空"（先断言该有的地方逐字在）。
+#
+# 下面三份是判据自己的逐字副本，刻意不读 `agent_prompts._LOOP_BLOCK_*`：
+# 读被测常量的话，"常量与提示词一起改错"时判据会跟着一起变好 —— 那正是本仓反复
+# 记过的假绿形态（反负控的全部价值就在于它与被测文本无关）。
+_BLOCK_A = '''\
+   主控（M）派活时**留痕**：这一句里可以带一张 `notify` 表
+   （`{"summary": "<一句话：派了什么活>", "body": "<markdown>", "refs": [...]}`，`to` 可省略，
+   缺省就是被派的那个角色），框架会把它交给秘书写成一份交接手稿并发给对方；
+   不带或填错也**照样派活** —— 留痕退回框架据派活本身派生的那一行
+   （"谁派了谁做什么、参数、为什么"，注明"框架据派活派生"：那一行是日志，不算交接），
+   格式问题如实记进这一次运行。别的角色派活不必带。'''
+
+_BLOCK_B = '''\
+   主控（M）例外：它的 final 是**给用户的回复**，不必带 `notify`。'''
+
+_BLOCK_C = '''\
+2b) **一次唤起一批**（并发，用于"一批活分给几个人/几个实例同时干"）：
+   {"summon_many": {"targets": [
+       {"role": "<伙伴>", "action": "<动作>", "params": {…}, "instance": "<可选，同一角色要多开几个实例时各给一个不同标签>"},
+       {"role": "<伙伴>", "action": "<动作>", "params": {…}}],
+     "why": "<一句话说明为什么一次派这一批>",
+     "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
+   （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
+   框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
+   同一角色在一批里出现多次、又没给 `instance` 时，框架会自动补 `<角色>#N` ——
+   所以"并发三个 B"这件事可以就这么写。返回里的 `waves` 与 `concurrent_peak` 是
+   "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。'''
+
+#: 出边为空的角色那一版里 `2b)` 的残桩（判据自己那份逐字副本）。
+#:
+#: 为什么是残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量自己的正文
+#: （不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）。整块删掉之后，
+#: 这一档会读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住表头与 8 项枚举的自洽。
+_STUB = ("2b) 一次唤起一批（这一档你用不到：你没有任何协作边，派不出活 —— "
+         "骨架见每步的 JSON 尾巴）。")
+
+
+def _summon_capable_roles() -> list[str]:
+    """出边非空的角色（含主控）—— [c] 那一段对它们有用。
+
+    真身取自 `capabilities.ALLOWED_EDGES`（刻意不写死角色名）：边表一变，
+    该拿到 [c] 的角色集就跟着变，判据跟着真身走。
+    """
+    return [r for r in ALL_ROLES if C.ALLOWED_EDGES.get(r, ())]
+
+
+def _edgeless_roles() -> list[str]:
+    """一个伙伴都唤不动的角色（出边为空）—— [c] 对它们无从填起（今天只有 C）。"""
+    return [r for r in ALL_ROLES if not C.ALLOWED_EDGES.get(r, ())]
+
+
+def _excise(protocol: str, units: tuple[str, ...]) -> str:
+    """用判据自己那份逐字副本把 `units` 删掉（换行口径与 `loop_protocol_for` 一致）。
+
+    [a]/[b] 只吃它们自己那一行的换行；[c] 连它后面那个空行一起删 ——
+    结果是每一版里都没有多余或缺失的连续空行。
+    """
+    out = protocol
+    for unit in units:
+        assert out.count(unit) == 1, (
+            "判据自己那份逐字副本与它要删的那一版协议对不上（块被改过 / 换行口径变了 / "
+            "块出现了不止一次）—— 这一条不许因为找不到就通过")
+        out = out.replace(unit, "", 1)
+    return out
+
+
+#: 判据自己算出来的三版协议（不读被测函数的返回值）。
+#: 一版给"出边非空"的非 M 角色（减 [a]/[b]），一版给"出边为空"的角色（再把 [c] 换残桩），
+#: 外加"整块删、不留残桩"的那一版 —— 它只用来做反负控（那是作用域更正前那一版的形状）。
+_WITHOUT_CONDUCTOR_BLOCKS = _excise(AP.LOOP_PROTOCOL, (_BLOCK_A + "\n", _BLOCK_B + "\n"))
+_WITHOUT_ALL_THREE = _excise(_WITHOUT_CONDUCTOR_BLOCKS, (_BLOCK_C + "\n\n",))
+_WITH_STUB = _WITHOUT_CONDUCTOR_BLOCKS.replace(_BLOCK_C + "\n\n", _STUB + "\n\n", 1)
+
+
+def _roles_with_block(block: str, registry: ToolRegistry) -> list[str]:
+    """提示词里逐字含这一块的全部角色（含主控）。空列表 = 谁都没有（那是最坏的一种绿）。"""
+    return [r for r in ALL_ROLES if block in _prompt(r, registry)]
+
+
+def test_the_conductor_blocks_reach_only_the_conductor(
+        registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
+    """[a] 留痕块 + [b] 主控例外句：主控逐字有，其余九个角色一个都没有。
+
+    这两块为什么对任何非 M 都无关：`notify` 是派活那一刻的留痕，而框架只在
+    `role == S.CONDUCTOR_ROLE` 那一支上把它写进交接手稿（`agent_loop._do_handoff`）；
+    [a] 的末句自己就写着"别的角色派活不必带"；[b] 说的是"主控的 final 是给用户的回复"
+    —— 对非 M 角色，那句话的主语不是它。
+
+    反真空：先断言主控那一版里这两块逐字在，否则"九个角色都没有"可以被"谁都没有"骗过。
+    反负控（两端，都走真的渲染路径）：
+      ① `loop_protocol_for` 恒真（照旧给所有人）⇒ "只有主控有"那半必须红；
+      ② 恒假（删后版给所有人，主控也不例外）⇒ "主控含该段"那半必须红。
+    """
+    m = _prompt(S.CONDUCTOR_ROLE, registry)
+    for label, block in (("[a] 主控留痕块", _BLOCK_A), ("[b] 主控例外句", _BLOCK_B)):
+        assert block in m, (
+            f"反真空：主控那一版里没有 {label} ⇒ 下面那句「其余九个角色都没有」证明不了任何事")
+        assert _roles_with_block(block, registry) == [S.CONDUCTOR_ROLE], (
+            f"{label} 本该只给主控，实际还有这些角色的提示词里有它："
+            f"{[r for r in _roles_with_block(block, registry) if r != S.CONDUCTOR_ROLE]}")
+
+    # ① 恒真：照旧发给所有人 ⇒ "只有主控有"那半必须红
+    monkeypatch.setattr(AP, "loop_protocol_for", lambda role: AP.LOOP_PROTOCOL)
+    for label, block in (("[a] 主控留痕块", _BLOCK_A), ("[b] 主控例外句", _BLOCK_B)):
+        assert _roles_with_block(block, registry) == list(ALL_ROLES), (
+            f"反负控失效：`loop_protocol_for` 恒真（谁拿的都是全量协议）时，"
+            f"这一条没认出 {label} 还在九个角色的提示词里")
+    # ② 恒假：删后版给所有人 ⇒ 主控那一版里这两块也没了（"主控含该段"那半会红）
+    monkeypatch.setattr(AP, "loop_protocol_for", lambda role: _WITHOUT_ALL_THREE)
+    m_after = _prompt(S.CONDUCTOR_ROLE, registry)
+    for label, block in (("[a] 主控留痕块", _BLOCK_A), ("[b] 主控例外句", _BLOCK_B)):
+        assert block not in m_after, (
+            f"反负控失效：把删后版给所有人时，主控那一版里居然还留着 {label} —— "
+            "那说明「主控含该段」那半不是因为这段文本真的在场才绿的")
+
+
+def test_the_summon_many_block_reaches_every_role_that_can_summon(
+        registry: ToolRegistry, monkeypatch: pytest.MonkeyPatch):
+    """[c] `2b)` 那一段：出边非空的角色拿到整段说明，出边为空的角色拿到残桩。
+
+    作用域是主控 2026-10-07 更正过的那一条（见上面那段注释）：不是"所有非 M"，
+    而是"一个伙伴都唤不动的角色"——今天只有 C（`ALLOWED_EDGES["C"]` 是空的）。
+    判据按真身现算（`capabilities.ALLOWED_EDGES`），不写死角色名。
+
+    这一档为什么留残桩而不是整块删：表头「八种形状，互斥，每次只取其一：」是常量
+    自己的正文（不在任何一块里），而它是真的（`agent_loop.SHAPES` 是 8 个）。
+    整块删掉之后，这一档读到"八种"却只数得出 7 项 —— 描述与自身矛盾。残桩保住
+    表头为真、枚举仍是 8 项，而 565 字的用法说明不再进这一档的提示词。
+
+    反真空：至少有一个角色拿到整段（今天八个非 M 都有），且出边为空的那个角色
+    确实拿到的是残桩（不是整段、也不是什么都没有）。
+    反负控（四端，都走真的渲染路径）：
+      ① 恒真（谁拿的都是全量协议）⇒ "该没有的没有"那半必须红；
+      ② 恒假（[c] 换残桩那版发给所有人）⇒ "主控含整段"那半必须红；
+      ③ 旧作用域（把 [c] 当成 M 专段 —— 只有主控有）⇒ "该有的有"那半必须红；
+      ④ 整块删、不留残桩（作用域更正前那一版的形状）⇒ "出边为空的有残桩"那半必须红。
+    """
+    m = _prompt(S.CONDUCTOR_ROLE, registry)
+    assert _BLOCK_C in m, "反真空：主控那一版里没有 2b 整段 ⇒ 下面的断言证明不了任何事"
+    capable, edgeless = _summon_capable_roles(), _edgeless_roles()
+    assert capable, "反真空：没有任何角色有出边 ⇒ 这一条判据失去对象"
+    assert edgeless, "反真空：没有出边为空的角色 ⇒ 这一条判据失去对象"
+    assert set(capable) | set(edgeless) == set(ALL_ROLES), (capable, edgeless)
+    assert _roles_with_block(_BLOCK_C, registry) == capable, (
+        f"2b 整段该给这些角色：{capable}；实际给的是：{_roles_with_block(_BLOCK_C, registry)}；"
+        f"出边为空的角色（{edgeless}）不该有它")
+    assert _roles_with_block(_STUB, registry) == edgeless, (
+        f"2b 残桩该给这些角色：{edgeless}；实际给的是：{_roles_with_block(_STUB, registry)}")
+    for role in edgeless:
+        assert _STUB in _prompt(role, registry), f"{role} 那一版里没有 2b 残桩"
+
+    # ① 恒真
+    monkeypatch.setattr(AP, "loop_protocol_for", lambda role: AP.LOOP_PROTOCOL)
+    assert _roles_with_block(_BLOCK_C, registry) == list(ALL_ROLES), (
+        "反负控失效：`loop_protocol_for` 恒真时，这一条没认出 2b 整段还发给了出边为空的角色")
+    # ② 恒假（[c] 换残桩那一版发给所有人）
+    monkeypatch.setattr(AP, "loop_protocol_for", lambda role: _WITH_STUB)
+    assert _BLOCK_C not in _prompt(S.CONDUCTOR_ROLE, registry), (
+        "反负控失效：把含残桩的那一版给所有人时，主控那一版里居然还留着 2b 整段 —— "
+        "那说明「主控含整段」那半不是因为这段文本真的在场才绿的")
+    # ③ 旧作用域（这一条判据抓的就是这个错法）
+    monkeypatch.setattr(AP, "loop_protocol_for",
+                        lambda role: (AP.LOOP_PROTOCOL if role == S.CONDUCTOR_ROLE
+                                      else _WITHOUT_ALL_THREE))
+    got = _roles_with_block(_BLOCK_C, registry)
+    assert got == [S.CONDUCTOR_ROLE], (
+        "反负控失效：把 [c] 当成 M 专段（只有主控有它）时，这一条没认出"
+        f"出边非空的那八个角色少了它（实际拿到的是 {got}）")
+    # ④ 整块删、不留残桩（更正前那一版）：出边为空的角色会既没有整段、也没有残桩
+    monkeypatch.setattr(AP, "loop_protocol_for",
+                        lambda role: (AP.LOOP_PROTOCOL if role == S.CONDUCTOR_ROLE
+                                      else (_WITHOUT_CONDUCTOR_BLOCKS
+                                            if role in _summon_capable_roles()
+                                            else _WITHOUT_ALL_THREE)))
+    assert _roles_with_block(_STUB, registry) == [], (
+        "反负控失效：把 [c] 整块删掉（不留残桩）时，这一条没认出"
+        "出边为空的角色手里既没有整段、也没有残桩")
+
+
+def test_each_rendered_protocol_is_exactly_the_constant_minus_its_own_blocks(
+        registry: ToolRegistry):
+    """每一版协议逐字节等于"常量减掉它自己那一组"（少删半块、多删一段都红）。
+
+    为什么值得单列一条：`roles.<X>.prompt` 的真身是渲染出来的文本，而这一刀的风险
+    恰恰在边界上 —— 多删一个换行会把形状 2) 与 2b)/3) 粘在一起，少删一行会留下半句
+    （而主控那一版照样逐字节不变、没有任何读数会红）。这条判据把"只搬这几块"
+    这句话变成可判的：判据用它自己那三份副本算三版，两边必须逐字节相同。
+
+    三版（作用域不同）：出边非空的那八个少 319 字符（[a]+[b]）；出边为空的 C 少 832
+    （再把 567 字符的 [c] 换成 54 字符的残桩：−567+54 = −513，319+513 = 832）。
+    """
+    with_conductor = _WITHOUT_CONDUCTOR_BLOCKS
+    with_stub = _WITH_STUB
+    assert with_conductor != AP.LOOP_PROTOCOL and with_stub != with_conductor, \
+        "夹具前提：处理完还等于原样 ⇒ 这一条什么也没判"
+    for name, version, dropped in (("减 [a]/[b]", with_conductor, (_BLOCK_A, _BLOCK_B)),
+                                   ("减 [a]/[b]+[c] 换残桩", with_stub, (_BLOCK_A, _BLOCK_B, _BLOCK_C))):
+        assert "\n\n\n" not in version, f"{name}：处理完出现了多余的连续空行（换行口径错了）"
+        for block in dropped:
+            assert block not in version, f"{name}：{block[:12]}… 没删干净"
+        assert version.splitlines()[-1] == AP.LOOP_PROTOCOL.splitlines()[-1], \
+            f"{name}：这一版协议的末行变了 ⇒ 动的不只是那几块"
+    assert _STUB in with_stub and _STUB not in with_conductor, \
+        "残桩只该出现在「出边为空」那一版里"
+    assert len(AP.LOOP_PROTOCOL) - len(with_conductor) == \
+        len(_BLOCK_A) + len(_BLOCK_B) + 2, "减 [a]/[b] 的字符账不对（边界上多删或少删了）"
+    assert len(AP.LOOP_PROTOCOL) - len(with_stub) == \
+        len(_BLOCK_A) + len(_BLOCK_B) + len(_BLOCK_C) + 4 - len(_STUB) - 2, \
+        "「[c] 换残桩」的字符账不对（边界上多删或少删了）"
+    for role in ALL_ROLES:
+        if role == S.CONDUCTOR_ROLE:
+            want = AP.LOOP_PROTOCOL
+        elif role in _summon_capable_roles():
+            want = with_conductor
+        else:
+            want = with_stub
+        assert AP.loop_protocol_for(role) == want, (
+            f"{role} 那一版协议与「常量 / 减 [a][b] / 再减 [c] 换残桩」这三档对不上"
+            f"（它是出边{'非空' if role in _summon_capable_roles() else '为空'}的角色）")
+        assert want in _prompt(role, registry), f"{role} 的提示词里不是这一版协议"
+    assert AP.loop_protocol_for(S.CONDUCTOR_ROLE) is AP.LOOP_PROTOCOL, \
+        "主控那一版必须是常量对象本身（设计上不可能失败的那一条）"
+
+
+# ------------------------------------------------- 版本随段前进（`R6` 结构性搬移这一刀新增）
+#
+# 本仓此前在这一轴上只有下界那一半：`test_review_line_prompts.py` 的
+# `test_the_prompt_version_moved_with_the_sections` 只断言 `int(PROMPT_VERSION[1:]) >= 24`。
+# 它的名字与 docstring 声称守的是"段变了、版本要跟着动"，而机器判据看不见这件事 ——
+# 改段不改版本照样绿。这里补上真判据：对每个角色渲染一次提示词取摘要，与一张冻结在
+# 本文件里的"每角色 prompt 摘要"表比对，段与版本必须一起动（两个方向都判）。
+#
+# ## 维护规则（谁改段谁照它做）
+#
+# 谁改段谁在同一个 commit 里更新这张表与 `PROMPT_VERSION`。
+# 这张表是版本相关性的读数（"这一版是哪些段"的指纹），不是面的基线 ——
+# 所以它不随 `tests/golden/*` 重冻而变，也不许从 `tests/golden/*` 读
+# （golden 那份是"面"的基线，重冻它不改变"段与版本"的关系）。
+#
+# ## 摘要口径
+#
+# `hashlib.sha256`（与 `llmseam` 的 `prompt_sha256` / `agent_prompts.prompt_audit`
+# 同一个算法），取的是渲染出来的提示词，但把「提示词版本」那一行归一成
+# `<PROMPT_VERSION>`：不归一的话，"只改版本号"本身就会改掉全部十格摘要，于是
+# "版本动了而段没动"这一支永远不可达 —— 那半条反负控就成了摆设。
+# 夹具另外把「证明工具链读数」钉成一个固定串：真读数随机器变（探针扫的是本机装了什么），
+# 而这张表要守的是"段与版本一起前进"，不是"这台机器上装了什么"。
+_SURFACE_FIXTURE_TOOLCHAIN = ("这台机器上的证明工具链（现算读数，不是记忆）：\n"
+                              "- 检查器：（判据夹具，与机器无关）")
+_VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
+
+#: 冻结的版本号与十格摘要（口径见上）。更新规则：改段 ⇒ 同一个 commit 里改这张表 + 版本。
+_FROZEN_PROMPT_VERSION = "p38"
+_FROZEN_PROMPT_DIGESTS: dict[str, str] = {
+    "A": "9368c2aa285eae50ef19ee6b3c19f316d5b6ee2b621231b72e25913ccebc9581",
+    "B": "1abd8f681da5ca8d43d52574ac2ec8b9b5630b3f62554a8eb67073c58870edff",
+    "C": "41ff88e27bacb239296d49687853259e732e5dd93d386682c49f42a5d53cc9a7",
+    "D": "835957dd905108e6a677ee378b33885e749c9d29f68cfa07373be9d9ffbc1510",
+    "E": "1b67d9bc164d32994e4adb33381c7f9b11658c7e5cea22517d5d20a8b03f3889",
+    "F": "9681a2c707bce590eda474e243caa322e347a907f4a38656c3ac2d752c859e10",
+    "G": "2c4c64538edb0d67c883a817d23a735647450c950d113295d1accd4dba6dbd32",
+    "H": "d6e95abec132e4d702ec113d523c9ad72db749824db7c39855e8f70aa607de88",
+    "V": "08e1e4ebd7d894cc6adf6618138bc0cd8d941335f282af5dc45cd8a177444944",
+    "M": "2f308a97e2cc760ce557a84d0e9084c78d96399482789652349d157bede988ce",
+}
+
+
+def _surface_digest(role: str, registry: ToolRegistry) -> str:
+    """某个角色这一次渲染出来的提示词的摘要（版本那一行归一掉，见上面的口径）。"""
+    text = _prompt(role, registry, toolchain_facts=_SURFACE_FIXTURE_TOOLCHAIN)
+    normalized, hits = _VERSION_LINE.subn("- 提示词版本：<PROMPT_VERSION>", text)
+    assert hits == 1, (
+        f"{role} 的提示词里「提示词版本」那一行有 {hits} 条（应当恰好 1 条）⇒ "
+        "归一化没生效，这条判据会退化成对着版本号本身比（那它就抓不住"
+        "「只改版本不改段」了）")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _version_drift(digests: Mapping[str, str], version: str,
+                   frozen: Mapping[str, str], frozen_version: str) -> list[str]:
+    """段与版本有没有一起动（空列表 = 一致）。
+
+    纯函数（喂替身进来就能给两端做反负控）：
+      - 段变了而版本没动 ⇒ 报（事后分不清这句话是哪个版本的提示词说的）；
+      - 版本动了而段没动 ⇒ 报（版本号是"段"的名字，段没动就不该动它）。
+    """
+    changed = sorted(r for r in set(digests) | set(frozen)
+                     if digests.get(r) != frozen.get(r))
+    bad: list[str] = []
+    if changed and version == frozen_version:
+        bad.append(f"段变了（{changed}）而 PROMPT_VERSION 还是 {version!r} ⇒ "
+                   "这一次改动在审计里查不到版本，事后分不清哪句话是哪一版说的")
+    if not changed and version != frozen_version:
+        bad.append(f"PROMPT_VERSION 动了（{frozen_version!r} → {version!r}）而十格摘要一格没变 ⇒ "
+                   "这一版号在说什么：版本号是段的短名字，段没动就不该动它")
+    return bad
+
+
+def test_the_prompt_version_moves_with_the_sections(registry: ToolRegistry,
+                                                    monkeypatch: pytest.MonkeyPatch):
+    """真判据：段与版本必须一起动（两个方向都判，两端反负控都走真的渲染路径）。
+
+    为什么必须有这一条：这一轴此前只有下界那一半（`>= 24`），于是"改了段、忘了动版本"
+    在本仓没有任何读数会红 —— 而 `draft/63` 这一整批施工（含 `R6` §2-⑥ 这一刀）做的
+    恰恰就是"改段"。名字与 docstring 声称守这件事的那条判据（在
+    `test_review_line_prompts.py`）守的是下界，不是这件事。
+
+    维护规则逐字写在上面那段注释里：谁改段谁在同一个 commit 里更新这张表与
+    `PROMPT_VERSION`；这张表不随 `tests/golden/*` 重冻而变，也不许读 golden。
+    """
+    live = {role: _surface_digest(role, registry) for role in ALL_ROLES}
+
+    # 反真空：这张表真的覆盖十个角色，且十格摘要互不相同（否则"摘要没变"证明不了什么）
+    assert sorted(_FROZEN_PROMPT_DIGESTS) == sorted(ALL_ROLES), (
+        f"冻结表覆盖的角色与 ALL_ROLES 对不上：{sorted(_FROZEN_PROMPT_DIGESTS)}")
+    assert len(set(_FROZEN_PROMPT_DIGESTS.values())) == len(ALL_ROLES), \
+        "十格摘要有重复 ⇒ 摘要没有把角色区分开，这一条会退化成只比一格"
+    assert len({v for v in live.values()}) == len(ALL_ROLES), "现场十格摘要也应当互不相同"
+
+    # 正控：段与版本一起动过（改后仍一致）
+    drift = _version_drift(live, AP.PROMPT_VERSION,
+                           _FROZEN_PROMPT_DIGESTS, _FROZEN_PROMPT_VERSION)
+    assert drift == [], "段与版本没有一起动：\n" + "\n".join(drift)
+
+    # ---- 反负控 ①：只改段、不改版本 ⇒ 必须红（端到端：临时改一段真文本，再渲染一次）
+    monkeypatch.setattr(AP, "HANDOFF_PROTOCOL", AP.HANDOFF_PROTOCOL + "（判据探针：这一句是反负控）")
+    moved = {role: _surface_digest(role, registry) for role in ALL_ROLES}
+    assert moved != live, "反负控失效：改了一段真文本，摘要却没变（那这条判据什么也抓不住）"
+    assert _version_drift(moved, AP.PROMPT_VERSION,
+                          _FROZEN_PROMPT_DIGESTS, _FROZEN_PROMPT_VERSION), \
+        "反负控失效：真的改了一段而版本没动，判据却放过了"
+    monkeypatch.undo()
+
+    # ---- 反负控 ②：只改版本、不改段 ⇒ 必须红（端到端：只把版本号抬一格）
+    monkeypatch.setattr(AP, "PROMPT_VERSION", "p39")
+    bumped = {role: _surface_digest(role, registry) for role in ALL_ROLES}
+    assert bumped == live, (
+        "反负控失效：只动版本号，归一化摘要却变了 ⇒ 归一化没生效，这一端不可达"
+        "（而不可达的反负控就是摆设）")
+    assert _version_drift(bumped, "p39",
+                          _FROZEN_PROMPT_DIGESTS, _FROZEN_PROMPT_VERSION), \
+        "反负控失效：只动了版本号，判据却放过了"
+    monkeypatch.undo()
+
+
 #: 在提到 `handoff` 的行里教给模型的收件人字面量：`to=…` 与 `"to": "…"` 两种写法。
 _TAUGHT_TO_LITERAL = re.compile(r'to\s*=\s*"?([A-Za-z#][A-Za-z#]*)"?|"to"\s*:\s*"([A-Za-z#]+)"')
 
@@ -989,7 +1381,7 @@ _TAUGHT_TO_LITERAL = re.compile(r'to\s*=\s*"?([A-Za-z#][A-Za-z#]*)"?|"to"\s*:\s*
 def _taught_handoff_targets(text: str) -> list[tuple[str, str]]:
     """取「同时提到 `handoff` 的行」里教给模型的 `to` 字面量，返回 `[(字面量, 出处行)]`。
 
-    只跟 `handoff` 的行：`notify` 那一栏的 `to` 确实收 `ALL`（`_notify_gate` 认），
+    只跟 `handoff` 的行：`notify` 那一栏的 `to` 确实收 `ALL`（`notify_reading` 认），
     拿它一起判会把一处正确的写法判红 —— 两处的受控词表本来就不同。
     """
     out: list[tuple[str, str]] = []
