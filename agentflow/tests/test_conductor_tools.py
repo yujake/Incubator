@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -249,7 +250,43 @@ def test_the_closing_tool_advertises_every_gate_cell(tmp_path: Path):
     text = str(spec.summary) + str(spec.returns)
     missing = [name for name in CL.DEFAULT_CHECKS if name not in text]
     assert not missing, f"收工门有这些格，而工具描述里没点名：{missing}"
-    assert "五条" not in text, "描述里还写着旧条数（五条）—— 条数一变它就是假的"
+    # 旧口径是"描述里不许出现『五条』"—— 那是按字面堵，而这份描述里现在还会说
+    # 另一件东西的条数（内容级验收的判据数）⇒ 字面堵会把一句正确的话判红
+    # （2026-10-07 实测：`draft/68` 题 17 在描述里加了那一句之后本判据当场红）。
+    # 改成按对象比，并把新对象的条数也钉上：
+    #   ① 收工门自己的格数：描述里那句"收工门（N格）"的 N 必须等于 `len(DEFAULT_CHECKS)`；
+    #   ② 描述里若说了内容级验收的条数，那个数必须等于 `reviewaccept.CRITERIA` 的真身。
+    # 为什么①不能写成 `assert "八格" in text`：那样别的字样也能满足它 —— 我第一版就是
+    # 那么写的，把 `（八格）` 改成 `（五条）` 的负控因此没咬住（实测）。也不能用 `\d+` 抠：
+    # 描述里的格数是中文数字（"八格"），实测抠不到（第一版正则就是这么错的）。
+    _cn = "零一二三四五六七八九十"
+
+    def _as_written(n: int) -> str:
+        return _cn[n] if n <= 10 else str(n)
+
+    gate_claim = f"收工门（{_as_written(len(CL.DEFAULT_CHECKS))}格）"
+    assert gate_claim in text, (
+        f"描述里读不到 `{gate_claim}` 这一句 ⇒ 判据失去对象（改写法要同步改本条，"
+        "不许让它静默变真空）"
+    )
+    for stale in ("五条全过", "六格全过", "七格全过", "五格全过"):
+        assert stale not in text, f"描述里还写着收工门的旧条数（{stale}）"
+    from agentflow import reviewaccept as RX
+
+    # ① 的功能可见性钉子（反真空）：把那一句整段删掉不该让本条静默失去对象 ——
+    # 题 17/B 加它的理由就是"主控要在提示词里看得见这一栏"，删掉那句话这个理由就没了。
+    assert "review_acceptance" in text, (
+        "描述里不再广告 `review_acceptance` 那一栏 ⇒ `draft/68` 题 17/B 加它的理由"
+        "（主控在工具面上看得见内容级验收）没了；要撤这一栏请连同本条一起改"
+    )
+    # ② 同一条道理用在另一个对象上：描述里若说了内容级验收的条数，它必须与真身逐字同形。
+    # 这里同样不能用 `\d+` 抠 —— 描述里写的是中文数字（"五条"），实测抠不到。
+    if "内容级验收的" in text:
+        rx_claim = f"内容级验收的{_as_written(len(RX.CRITERIA))}条判据"
+        assert rx_claim in text, (
+            f"描述里说了内容级验收的条数，但真身是 `{rx_claim}`（{len(RX.CRITERIA)} 条）"
+            "—— 判据数一变这句话就是假的"
+        )
 
 
 def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
