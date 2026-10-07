@@ -5,18 +5,22 @@
 
 ---
 
-## §1 批次台账（状态随施工更新）
+## §1 批次台账（状态随施工更新；**"线"这一维见 `draft/78`**）
 
-| 批 | 范围（详 `draft/73`） | 判据（改前必须能红） | 状态（2026-10-07） | 落点 | 读数 |
-|---|---|---|---|---|---|
-| **W0** | **R1** `webui.py`→`webui/` 五文件拆包（公开面 re-export）· **Q1** 静态路由 `/static/*`（含目录穿越负控）+ SPA 回退（`/api/*` 未知 ⇒ JSON 404）· **M2** `emit_types.py`/`emit_theme.py` 两个生成器 · **A2/B1** `ui/` 骨架（Preact+Vite，dist 入库）· **S1** `tests/test_webui_contracts.py`（W0 新建）四条对齐判据 · **T1** CLI 两开关（先只解析透传） | ① 静态路由穿越负控 ② `/api/*` 未知不吐 HTML ③ 生成物新鲜度（手改必红）④ 契约 A–D（含负控）⑤ **现有 17 条 `test_webui.py` 全绿** | 🟡 **进行中**（独立线 `line-w0`，工作树 `temp/wt-w0`，基线 `65746a5`）；已落：`web/emit_theme.py`(2.9 KB) · `web/emit_types.py`(12.4 KB) · `ui/package.json` · `ui/vite.config.ts` · `ui/src/types.ts`(6.9 KB，生成物) · `ui/src/api.ts` · `ui/src/sse.ts`；**未落**：`webui/` 拆包、契约判据、dist 构建 | — | 待线回报（我按盘上产出核，不采信措辞） |
-| **W1** | `webui/readers.py`（六面读模型）· 六条页面 · **O2** `sessions.run_index`（持久索引 + 与事件对账）· **L1** 待答/选项收敛到 `userio` · **J2/K2** 夹具造六件产物与 `verifications/<id>.jsonl` · 各页的"真读数出现 + 空态 + `unknown` 不写成 0" | 每面一条正控 + 一条"数据源不可读 ⇒ `tri=unreadable`"的负控；O2 索引对账（手改索引必红、删会话必报 drift）；L1 收敛后 `test_pending_list_is_never_filtered_by_session` 仍绿 | ⬜ 未开工（等 W0） | — | — |
-| **W2** | `webui/sse.py`（`Broadcaster`/`format_event`/心跳/`since` 续传）· `ui/src/sse.ts` 的六 kind 注册 | 五条：content-type · 首个事件有界 · 心跳可注入 · `?since=` 补发 · **端到端"盘上新增 ⇒ 流里出现"** | ⬜ 未开工 | — | — |
-| **W3** | 写面**三件**（`/answer` 既有 · `/api/stop` · `/api/submit`）· **D2** `web-actions.jsonl` 审计 · **C2** `--allow-writes` | 授权矩阵（无 CSRF⇒403/跨站⇒403/未开写面⇒403/未知 sid⇒404）· **每一次写都留审计** · **绕闸门负控**（把 `stopctl.request_stop_detail` 换桩 ⇒ 审计 `result` 必须跟着变） | ⬜ 未开工（**I1 已裁：`/api/task` 不做**；若触发 H1 ⇒ 停下问） | — | — |
-| **W4** | **E1** `settings.write_settings()` + `Machine` 页写面 · **F1** Playwright `-m browser` · 文档同步（`USER-END-DSH-STYLE.md`/`README.md`/`INDEX.md`）· **G2 的两处禁改区 patch（需签）** | key 不回显（含响应/日志/事件流/构建产物四处）· 原子写 · 权限 · 浏览器五条 | ⬜ 未开工 | — | — |
-| **W5** | **P1** 旧 `views.py` 清空（迁一面删一面）· 收尾：全量门 ·（若牵动面）一次性重冻 + 逐格归因 `draft/64 §8.12` · 台账回写 | 旧壳删净后 17 条仍全绿 | ⬜ 未开工 | — | — |
+> **两维读法**：批（W0–W5）× 线（A 骨架与前端 / B 只读面与索引 / C 写面与设置写面）。三条线**文件级零交**（`draft/78 §2` + `python -B temp/_check_line_ownership.py` 的机械证明），所以"一个批次"往往由两条线各交一半：W1 = A 的六页面 + B 的 readers/索引/夹具，W2 = B 的 `sse.py` + A 的 `sse.ts`，W4 = C 的设置写面/浏览器/G2 patch + A 的文档。
+
+| 批 | 线 | 范围（详 `draft/73`） | 判据（改前必须能红） | 状态（2026-10-07） | 落点 | 读数 |
+|---|---|---|---|---|---|---|
+| **W0** | **A** | **R1** `webui.py`→`webui/` 五文件拆包（公开面 re-export）· **Q1** 静态路由 `/static/*`（含目录穿越负控）+ SPA 回退（`/api/*` 未知 ⇒ JSON 404）· **M2** `emit_types.py`/`emit_theme.py` 两个生成器 · **A2/B1** `ui/` 骨架（Preact+Vite，dist 入库）· **S1** `tests/test_webui_contracts.py`（W0 新建）四条对齐判据 · **T1** CLI 两开关（先只解析透传） | ① 静态路由穿越负控 ② `/api/*` 未知不吐 HTML ③ 生成物新鲜度（手改必红）④ 契约 A–D（含负控）⑤ **现有 17 条 `test_webui.py` 全绿** ⑥ **公开面不变**（`python -B temp/_verify_w0.py check`，基线 `temp/_w0_public_face.json`） | 🟡 **进行中**（独立线 `line-w0`，工作树 `temp/wt-w0`，基线 `65746a5`）；**盘上实况（我 `git status` 核的，未提交）**：`webui/` 包已成形 7 文件（`__init__` 4957 B · `__main__` 627 · `routes` 5092 · `server` 22459 · `state` 22235 · `views` 24743 · `writes` 7101）· `web/{emit_theme,emit_types}.py` · `tests/test_webui_contracts.py` · `ui/` 骨架（`package.json`/`pnpm-lock.yaml`/`vite.config.ts`/`tsconfig.json`/`index.html` + `src/{main,api,sse,types}.ts(x)` + 6 组件 + 6 页面 + `theme/{app,generated/theme.css}`）· `cli.py`/`test_release_all.py`/`READING-MAP.md`/`USER-END-DSH-STYLE.md` 已改；**未落**：dist 构建、W0 计划新增的 `tests/test_webui_static.py`（尚未建）、合并前的公开面对账 | — | 待线回报；**我不采信措辞，按上表逐件核** |
+| **W1** | **A**（页面）+ **B**（读模型/索引/夹具） | `webui/readers.py`（六面读模型）· 六条页面 · **O2** `sessions.run_index`（持久索引 + 与事件对账）· **L1** 待答/选项收敛到 `userio` · **J2/K2** 夹具造六件产物与 `verifications/<id>.jsonl` · 各页的"真读数出现 + 空态 + `unknown` 不写成 0" | 每面一条正控 + 一条"数据源不可读 ⇒ `tri=unreadable`"的负控；O2 索引对账（手改索引必红、删会话必报 drift）；L1 收敛后 `test_pending_list_is_never_filtered_by_session` 仍绿 | ⬜ 未开工（等 W0 合入） | — | — |
+| **W2** | **B**（后端）+ **A**（前端） | `webui/sse.py`（`Broadcaster`/`format_event`/心跳/`since` 续传）· `ui/src/sse.ts` 的六 kind 注册 | 五条：content-type · 首个事件有界 · 心跳可注入 · `?since=` 补发 · **端到端"盘上新增 ⇒ 流里出现"** | ⬜ 未开工 | — | — |
+| **W3** | **C**（+ A 的开关） | 写面**三件**（`/answer` 既有 · `/api/stop` · `/api/submit`）· **D2** `web-actions.jsonl` 审计 · **C2** `--allow-writes`（开关由 A 在 W0 已透传） | 授权矩阵（无 CSRF⇒403/跨站⇒403/未开写面⇒403/未知 sid⇒404）· **每一次写都留审计** · **绕闸门负控**（把 `stopctl.request_stop_detail` 换桩 ⇒ 审计 `result` 必须跟着变） | ⬜ 未开工（**I1 已裁：`/api/task` 不做**；若触发 H1 ⇒ 停下问） | — | — |
+| **W4** | **C**（+ A 的文档） | **E1** `settings.write_settings()` + `Machine` 页写面 · **F1** Playwright `-m browser`（**新待裁 T1**：见 `draft/79`）· 文档同步（`USER-END-DSH-STYLE.md`/`README.md`/`INDEX.md`）· **G2 的两处禁改区 patch（需签）** | key 不回显（含响应/日志/事件流/构建产物四处）· 原子写 · 权限 · 浏览器五条 | ⬜ 未开工；**T1 未裁前不许动 `addopts`** | — | — |
+| **W5** | **A** | **P1** 旧 `views.py` 清空（迁一面删一面）· 收尾：全量门 ·（若牵动面）一次性重冻 + 逐格归因 `draft/64 §8.12` · 台账回写 | 旧壳删净后 17 条仍全绿 | ⬜ 未开工 | — | — |
 
 **每批收工的固定动作**（与 R 批同一纪律）：`python -B temp/_merge_gate.py --with-pytest`（逐节读数看 `temp/_merge_gate_report.md`）· **改前端 ⇒ 重建 dist 并提交后**才跑门 · 重冻只在必要且一次性做。
+
+**合并（主控）**：A → B → C 顺序合并；每轮合并前先跑该轮的"公开面/接口"对账（A 轮用 `python -B temp/_verify_w0.py check`），合并后 `git status` 核对只有预期改动，再跑全量门。冲突预案与新待裁见 `draft/78 §5`/`draft/79`。
 
 ---
 
