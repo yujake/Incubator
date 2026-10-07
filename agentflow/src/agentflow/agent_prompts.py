@@ -55,7 +55,12 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `_LOOP_EDGELESS_STUB` 的长度）。一字未删的规矩：
 #: 这些文本没有一条是该角色自己的规矩 —— 说的是主控的留痕、主控的 final、
 #: 以及"唤不动任何人时无从填起"的那一段。
-PROMPT_VERSION = "p39"
+#: `p40`（2026-10-07，题 9/B，所有者授权、主控代改）：缩了 `specs/b.py` 与
+#: `specs/d.py` 里四条动作摘要（伙伴表与各角色自己的动作清单都跟着变），
+#: 于是十格提示词摘要里有八格（A/B/D/E/F/G/H/M）换了值 —— 按
+#: `tests/test_agent_prompts.py` 那条维护规则「改段 ⇒ 同一个 commit 里改
+#: 冻结摘要表 + 版本」，这里与那张表同轮前进。
+PROMPT_VERSION = "p40"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

@@ -70,11 +70,18 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="exec",
     ),
 
+    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要只缩末尾那半句解释
+    # （121 -> 108 字）。删掉的是「这次检查根本没发生」这句机制叙述 —— 它与紧跟的
+    # 「没查成，不算核过」说的是同一件事，而后者才是调用方要守的三态纪律。
+    # 两个参数的括注（「Lean 源码全文」/「工作区里的 .lean 文件」）是刻意留下的：
+    # `agent_loop._PARAM_REFUSAL_MARKERS` 里没有 `no_script`，所以这一档被拒时
+    # 框架不会回参数表 —— 调用方唯一的说明就在这里（判据见
+    # `tests/test_action_surface_matches_acceptance.py` 里 §87 的根因那一条）。
     ActionSpec(
         "E", "check_formal",
         "转发到形式化检查器；没有后端时如实回答『没做』。"
-        "**必须给 `source`（Lean 源码全文）或 `script_path`（工作区里的 .lean 文件）**："
-        "两者都不给 ⇒ `no_script`（这次检查根本没发生，什么都不算核过）",
+        "必须给 `source`（Lean 源码全文）或 `script_path`（工作区里的 .lean 文件）："
+        "两者都不给 ⇒ `no_script`（没查成，不算核过）",
         # `R2b-AN-1-C`：本表声明的参数是方法层 `AgentE.check_formal` 的真形参
         # （其中 `name` 在方法层是对的：它不经 `ToolRegistry.call`）；
         # 工具层 `verify.check_formal` 的 schema 已改用 `checker_name`

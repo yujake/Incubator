@@ -95,16 +95,26 @@ ACTIONS: tuple[ActionSpec, ...] = (
     #     这个动作让那句声明第一次有了实现）。
     #   - 外部轴 `none`：纯本地写库，不发 HTTP、不起子进程；`quote_verified` 的逐字比对
     #     由调用方（或 H 的复核）负责，本动作只登记与预检。
+    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要按「留下这个动作干什么 + 关键约束、
+    # 删掉参数语义的复述与设计缘由」的口径缩短（401 -> 258 字）。删掉的三类逐条记账：
+    #   ① 逐参数的语义复述（「完整假设 + 逐字证明摘录 + 出处」「真实存在的 lit_id」
+    #      「start 或 label」「start/label 至少一个」「如 "0000"」那半句）—— 这些细节在
+    #      各格 params 的 description 里已经各写了一遍，被拒时 `agent_loop._param_table`
+    #      会把整张表原样回给调用方（`render_params` 就是为这一档写的）；
+    #   ② 设计缘由（`P-06` 编号，以及「如实登记一条猜想，好过把它挡在门外」这句立意）；
+    #   ③ 内部机制（「第 2 位空 ⇒ 现算等级是「猜想」」）—— 那是 `evidencebits` 里
+    #      等级怎么算出来的实现细节；调用方要的是结果（缺则落最低等级并进待办）。
+    # 保留的是调用方在同行那句「必填 statement_full」里看不到、却会当场撞上的硬约束：
+    # `origin` 的条件阶梯（external_lit / own_result 各要哪些键）、`doc_id` 的取值形态、
+    # `quote_verified` 不是 true 时必须给理由。D56 那条红线由首句承担：它仍然说清这个
+    # 动作是把一条命题登记进命题台账（不是只留一个动作名）。
     ActionSpec(
         "B", "register_statement",
-        "把一条命题登记进命题台账（完整假设 + 逐字证明摘录 + 出处；写库前核出处存在）。"
-        "契约（写库前逐条硬校验，缺一条就整笔不写）：`origin` 决定其余必填项 —— "
-        "external_lit ⇒ `source_lit_id`（真实存在的 lit_id）+ `page_range`（start 或 label）；"
-        "own_result ⇒ `doc_id`（**4 位十进制字符串，如 \"0000\"**）或 `line_range`"
-        "（start/label 至少一个）。`proof_text` **不是**拒收条件（P-06）：不给它就落成一条"
-        "等级最低的行（第 2 位空 ⇒ 现算等级是「猜想」）并进待办 —— 如实登记一条猜想，"
-        "好过把它挡在门外。"
-        "`quote_verified` 是三态（true / false / 不传=还没查）：**不是 true 时必须给 `quote_reason`**",
+        "把一条命题登记进命题台账（`statement_full` 是含完整假设的正文；写库前逐条硬校验，"
+        "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
+        "+ `page_range`；own_result 要 `doc_id`（4 位十进制）或 `line_range`。"
+        "`proof_text` 可缺（缺则落最低等级并进待办）；`quote_verified` 是三态（不传 = 还没查），"
+        "不是 true 时必须给 `quote_reason`",
         _obj(
             {
                 "statement_full": {**_S, "minLength": 1},

@@ -111,12 +111,15 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "本轮汇总 dict", side_effect="write_local", handler_name="run_round",
     ),
 
+    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要缩短（226 -> 61 字）。删掉的
+    # 是「为什么单列」那一整段设计缘由与真机读数（T2 第 1 趟 R1 永远 0 行、run_round 要
+    # 一份 C 的分析报告、以及七个动作逐个点名）—— 那是这条动作为什么被加进来的历史，
+    # 不是调用方要拿去做判断的事实。留下的半句是调用方真正会用的那条硬事实：D 的其余
+    # 动作都要求 qid 已存在，所以从零起手只有这一步能立起第一行（派活的次序靠它决定）。
     ActionSpec(
         "D", "propose_question",
-        "把一句话研究问题立成 research_questions 一行（从零做研究的第一步）。"
-        "为什么单列：D 的其余动作（submit_gaps / research / consider / assess / "
-        "adjudicate / trace_question / probe_c）**都要求 qid 已存在**，run_round 要一份 C 的"
-        "分析报告 —— 从零工作区里没有任何可召唤的动作能立起第一行（T2 第 1 趟真机：R1 永远 0 行）",
+        "把一句话研究问题立成 research_questions 一行；D 的其余动作都要求 qid 已存在，"
+        "所以从零起手先派它",
         # `kind` / `priority` 的取值必须**在声明里**写出来（`draft/37` §130 的真机读数）：
         # 此前这里是裸 `_S`（只表示"是个字符串"），而 handler 按受控词表拒收 ——
         # 真机里主控连续 4 次传 `kind='existence'` / `'main'`，每次都落 `refused/bad_kind`，
@@ -131,20 +134,25 @@ ACTIONS: tuple[ActionSpec, ...] = (
         handler_name="propose_question",
     ),
 
+    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要缩短（180 -> 82 字）。删掉的
+    # 是 §118 那段真机事故（这一格曾按进程当前目录解析、把交付物写到工作区外还记成 ok）
+    # 与 `reports_subdir` 那半句配置细节 —— 前者是历史，后者的缺省值已经在落点里写实。
+    # 留下的是调用方必须知道的两条：默认落到哪儿、路径按工作区根解析（越界即拒）。
     ActionSpec(
         "D", "write_report",
-        "把研究结果渲染成 markdown 报告；`out_path` 缺省 <工作区>/<reports_subdir>/"
-        "<qid>-research.md（`reports_subdir` 缺省 reports），相对路径按**工作区根**解析、"
-        "跳到工作区外一律拒（`draft/37` §118：这一格曾经按进程当前目录解析，"
-        "把交付物写到了工作区外还记成 ok）",
+        "把研究结果渲染成 markdown 报告；相对路径按工作区根解析，跳到工作区外一律拒，"
+        "`out_path` 缺省 reports/<qid>-research.md",
         _obj({"out_path": _S}),
         "写出文件的路径（绝对）", side_effect="write_local", handler_name="write_report",
     ),
 
+    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要缩短（61 -> 47 字）。删掉的是
+    # 「状态机由 schema 判」那半句 —— 它复述的是代码判据（转换合法性真身在
+    # `schema.Conjecture.validate` 与 `CONJECTURE_STATUSES`），调用方拿它做不了判断；
+    # 留下的「被引用的实验/文献必须在库里」才是关键约束（不满足会被当场拒收）。
     ActionSpec(
         "D", "register_conjecture",
-        "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；状态机由 schema 判，"
-        "被引用的实验/文献必须在库里",
+        "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；被引用的实验/文献必须在库里",
         _obj({"statement": _S, "origin": _S, "conjecture_id": _S, "testable": {"type": "object",
                            "description": "可检验形式（三个键都要给）：{parameters, criterion, falsified_by}"},
               "form": {"type": "string", "enum": list(S.CONJECTURE_FORMS)},

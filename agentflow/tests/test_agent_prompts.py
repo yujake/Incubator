@@ -1319,18 +1319,23 @@ _SURFACE_FIXTURE_TOOLCHAIN = ("这台机器上的证明工具链（现算读数�
 _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 
 #: 冻结的版本号与十格摘要（口径见上）。更新规则：改段 ⇒ 同一个 commit 里改这张表 + 版本。
-_FROZEN_PROMPT_VERSION = "p39"
+#: `p40`（2026-10-07，题 9/B，所有者授权、主控代改）：`specs/b.py` 的 `register_statement`
+#: 与 `specs/d.py` 的 `propose_question` / `write_report` / `register_conjecture` 四条
+#: 动作摘要缩短（只删参数语义的复述与设计缘由，不删动作本身），八个角色的伙伴表或动作
+#: 清单因此换了字 —— 于是 A/B/D/E/F/G/H/M 八格摘要换值，C/V 两格未动（它们的提示词里
+#: 没有这四条摘要）。
+_FROZEN_PROMPT_VERSION = "p40"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "ba2331e8eb6431831c088e14280908fb2979f009d306e65b28a29c13752d8685",
-    "B": "cc1c575afaf3dc437f482ac37f0513ac8c8be62feb57db134cfb20230994c905",
+    "A": "98f12bedad709008abe59dd8acd3ca74f64afa6af40b49172bdc5e7c804e1213",
+    "B": "bfe145bdb3ad14853816c16ff6eea2c07f0511501ab30fdd3284ef9c3926f257",
     "C": "623f1c815a194f88fbb0019fd3642bbccaaa814eca3ebe2a5b2f58af47f7f32e",
-    "D": "b54ba5ffe3a79ba4faf89a647af1a52727ff157126c99ed89be3b583db04a3f7",
-    "E": "1da73c8dcc89b6690db84f1e37f3f9ebd856cdb8e01249f6af0e0263d7f29860",
-    "F": "0fdafb9c24907a12ceec690ee830893cf6ff3a06ab025e8a5fd0addc9036db93",
-    "G": "778d3181197311ed1f46a324657920ff2e64a95982bf64e0240df9db05339537",
-    "H": "6d49f880ce04132759e4b624ccea51a198abc75b1b7093d7a650345e33d5c725",
+    "D": "ef3a90d90db0f7f0b35714c951b41c219f5a40d1f334b91bf410cb2ff5141c25",
+    "E": "2da6a7225021fa6484f0a2eed4fe40889fe5b465e78d12db06e96b49c4ec671c",
+    "F": "7f5f1859f8d183d8ec8c4b5eac81bbd9f821f5483f9bc0362ceccd561bf8eaf3",
+    "G": "ada686c72a39787d2d99bacf7229e294ae9ac23bfa4158c29ff2f1a4d3d6253a",
+    "H": "240eba63a26df271b1e9b15921655834d88dc3f9c3136414bcc94b8bc9a437f2",
     "V": "b377653fa09a2a149d16873cb42c56c4ae7f33b95296383aebf06667d3c1336d",
-    "M": "3a79aece16d2299649b5357d6eb2ad3c2d7699e219fde272e1801b6a3b8c1153",
+    "M": "cc8fff4d629a782c7b16f469026aad2c19a590782d7aa55003d5c01e4cc867cf",
 }
 
 
@@ -1402,12 +1407,20 @@ def test_the_prompt_version_moves_with_the_sections(registry: ToolRegistry,
     monkeypatch.undo()
 
     # ---- 反负控 ②：只改版本、不改段 ⇒ 必须红（端到端：只把版本号抬一格）
-    monkeypatch.setattr(AP, "PROMPT_VERSION", "p40")
+    #
+    # 探针版本从冻结版本推出来（2026-10-07，题 9/B，所有者授权、主控代改）：这一格
+    # 原来写死成"下一个版本号"（冻结 p39 时写 p40）—— 那笔字面量在版本真的抬到 p40
+    # 的那一刻就与现场版本撞成同一个值，反负控于是变成空转（实测：抬版本的同一个
+    # commit 里这一条当场红）。推出来的值只要求"不等于冻结版本"，这条反负控要问的
+    # 就是"版本动了而段没动"，与它具体是不是下一个号无关。
+    _PROBE_VERSION = _FROZEN_PROMPT_VERSION + "-probe"
+    assert _PROBE_VERSION != _FROZEN_PROMPT_VERSION, "探针版本必须与冻结版本不同"
+    monkeypatch.setattr(AP, "PROMPT_VERSION", _PROBE_VERSION)
     bumped = {role: _surface_digest(role, registry) for role in ALL_ROLES}
     assert bumped == live, (
         "反负控失效：只动版本号，归一化摘要却变了 ⇒ 归一化没生效，这一端不可达"
         "（而不可达的反负控就是摆设）")
-    assert _version_drift(bumped, "p40",
+    assert _version_drift(bumped, _PROBE_VERSION,
                           _FROZEN_PROMPT_DIGESTS, _FROZEN_PROMPT_VERSION), \
         "反负控失效：只动了版本号，判据却放过了"
     monkeypatch.undo()
