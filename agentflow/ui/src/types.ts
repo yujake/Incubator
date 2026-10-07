@@ -565,5 +565,5 @@ export interface WriteResult {
 // 每一条都写明缺哪一个 reader —— 补上读数之后，把那一行从对应模块的
 // `MISSING_TYPES` 里删掉，并把接口加进那个模块的 `type_decls()`。
 // --------------------------------------------------------------------------
-// TODO RunIndex：缺 GUI 侧的索引消费者：`sessions.load_run_index` / `rebuild_run_index` 已落地（B2），但 Run 页读它那一段属于 A 线的页面；本模块只把 `RunIndexDrift` 之外的两栏留给它。索引的形状定义在 `sessions.compute_run_index`。
-// TODO RunIndexDrift：缺 GUI 侧的索引消费者：`sessions.reconcile_run_index` 已落地（B2），返回形状见它自己的 docstring；页面（A 线）接上之后把这一行删掉。
+// TODO RunIndex：缺 GUI 侧的索引消费者：`sessions.rebuild_run_index` / `load_run_index` 已落地（B2），形状见 `sessions.compute_run_index`；A 线 Run 页接上之后删掉这一行。
+// TODO RunIndexDrift：缺 GUI 侧的索引消费者：`sessions.reconcile_run_index` 已落地（B2），返回 `{tri, drift, reason, sessions}`；A 线 Run 页接上之后删掉这一行。
