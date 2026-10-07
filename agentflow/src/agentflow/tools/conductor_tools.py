@@ -625,14 +625,14 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
     ## 为什么"已经在项目里"要直接拒（2026-10-02 真机读数逼出来的守卫）
 
     `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`
-    —— 一个与工作区无关的默认落点（本机读数 `D:\\Incubator\\projects`；
+    —— 一个与工作区无关的默认落点（本机读数 `projects/`，工作区根相对；
     `projects.DEFAULT_PROJECTS_DIR` 是"由本包位置推出的工作区根 + `projects/`"，
     也可用设置文件的 `workspace.projects_dir` 覆盖）。
     于是"在一个已存在的工作区里调它"会得到一个在别处新建的空项目，
     而不是"热启动当前项目"：
 
     - 真机实测（`draft/37` §37）：那一趟 23 步里有 4 步在 `ensure_project`，
-      其中一次真的建出了 `D:\\Incubator\\projects\\project11`
+      其中一次真的建出了 `projects/project11`
       （`project.json` 的 `created_at` = 2026-10-02T20:39:47+08:00，
       与那次运行同秒级）—— 而当时的账本上没有任何一步显示"我建了个项目"。
     - 同一天，本仓库自己的普查探针（`temp/_p40_m_tool_smoke.py`）在没给
@@ -877,7 +877,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
     `conductor.acceptance(project_dir=".")` 原先按进程 cwd 解析 ——
     而工具描述逐字写的是"相对工作区"。T1 第 2 趟真机（2026-10-04）：主控传
-    `{"project_dir": "."}`，工具去读 `D:\\Incubator\\agentflow\\out\\paper\\ACCEPTANCE.md`
+    `{"project_dir": "."}`，工具去读 `agentflow/out/paper/ACCEPTANCE.md`（工作区根相对）
     （进程 cwd 所在的仓库目录），连报两次"验收表不在盘上"，而那张表就在工作区里
     —— 主控因此始终没看到 P1–P11 判据，后面每一跳都靠猜。
 

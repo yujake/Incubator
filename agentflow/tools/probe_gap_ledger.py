@@ -12,7 +12,7 @@
 16 个产物文件，把"谁在写被审对象"这件事搅浑（实测：一次窗口污染，16 个
 `gapprobe/data/*.json`）。现在照抄 `scripts/release_check.py::_artifact_path()`
 的口径：主落点仓外（`ROOT.parent / "temp"`，仓库根是 `agentflow/`，所以它落在
-`D:\\Incubator\\temp`），建不出来就退到 `tempfile.mkdtemp()`。落点会打印出来，
+工作区根下的 `temp/`），建不出来就退到 `tempfile.mkdtemp()`。落点会打印出来，
 产物在哪仍然找得到。
 
 ## 缺输入以清晰消息 + 非零退出码收场（`draft/28` 83.5 第 2 条）
@@ -42,7 +42,8 @@ from agentflow.tools.research_tools import LEDGER_FILE  # noqa: E402
 #: 本探针直接拷的三张源表（在 `--src` 指到的目录里找）。
 SEED_TABLES = ("concepts", "relations", "literature")
 
-#: 主落点：仓外（`D:\\Incubator\\temp`）。`ROOT` 是 `agentflow/`，仓库在它上一级。
+#: 主落点：仓外（工作区根下的 `temp/`，本机即 `ROOT.parent / "temp"`）——
+#: `ROOT` 是 `agentflow/`，工作区根在它上一级。
 ARTIFACT_DIR = ROOT.parent / "temp"
 
 #: 退出码：0 = 跑通；2 = 没查成（输入缺失等可预期原因）。不许把它们折叠成同一个数。
@@ -53,7 +54,7 @@ EXIT_UNKNOWN = 2
 def _artifact_path() -> tuple[pathlib.Path, str]:
     """选一个不落在仓库里的落点（`release_check._artifact_path()` 的同一条口径）。
 
-    1. 首选 `ARTIFACT_DIR / "gapprobe"`（`D:\\Incubator\\temp\\gapprobe`）；
+    1. 首选 `ARTIFACT_DIR / "gapprobe"`（工作区根相对即 `temp/` 下的 `gapprobe/` 子目录）；
     2. 它建不出来（权限 / 磁盘 / 只读文件系统，Windows 上路径带 NUL 时抛的是
        `ValueError` 而不是 `OSError`）⇒ 回退到 `tempfile.mkdtemp()`。
 

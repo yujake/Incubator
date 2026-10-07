@@ -26,7 +26,7 @@ class _WriteReport:
 
         ```text
         T2 第 1 趟：主控传 out_path="out\\review\\D-analysis.md"（工作区内的合法落点）
-        ⇒ 文件写到 D:\\Incubator\\agentflow\\out\\review\\D-analysis.md（进程 cwd）
+        ⇒ 文件写到 agentflow/out/review/D-analysis.md（工作区根相对；进程 cwd）
         ⇒ 交付物静默离开工作区，而台账记的是 outcome=ok、报告里写着"执行完成"
         ```
 

@@ -338,6 +338,8 @@ desktop.ini
 !/temp/batchR1c-pos2.py
 !/temp/batchR6ac-pristine-baseline.txt
 !/temp/batchS-agent_e.py.bak
+!/temp/diff-after-task2.json
+!/temp/diff-before-task2.json
 !/temp/eol-census.txt
 !/temp/eol-vs-before.txt
 !/temp/f7-before.txt
@@ -361,6 +363,8 @@ desktop.ini
 !/temp/network-and-key-status.md
 !/temp/network-collect.txt
 !/temp/noai-paths-format.txt
+!/temp/out_5a_after.json
+!/temp/out_5a_before.json
 !/temp/p21-probe.txt
 !/temp/post2-sha-before.json
 !/temp/probe_attack_graph.py

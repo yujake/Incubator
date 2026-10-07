@@ -4,7 +4,7 @@
 C 只读关系分析 / D 研究 / E 数值实验与形式化验证 / F 多轮难题攻坚 / G 撰写 / H 审校。
 规格见 ``docs/ROLE-SPECS.md``，规范见 ``DEVELOPMENT.md``，主控的编排在 ``conductor.py``。
 
-本包的原型在 ``D:\\Incubator\\test\\test1``（包名 ``abflow``，只有 A/B 两个角色），
+本包的原型在 ``test/test1``（工作区根相对；包名 ``abflow``，只有 A/B 两个角色），
 两者刻意分开：原型是"跑通"的证据，正式版是"可发布"的形态。
 
 ``__init__`` 刻意不 import 任何子模块（除了下面那个版本号）：

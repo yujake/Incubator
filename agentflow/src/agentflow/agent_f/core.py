@@ -1136,7 +1136,7 @@ def selftest() -> int:
 
     运行方式::
 
-        cd D:\\Incubator\\test\\test1\\src
+        cd test/test1/src        # 工作区根相对
         $env:PYTHONIOENCODING='utf-8'; python -m agentflow.agent_f
 
     覆盖的核心性质（每一条都对应一个"如果错了会很安静"的失败模式）：
