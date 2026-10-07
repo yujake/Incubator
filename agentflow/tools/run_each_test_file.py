@@ -84,10 +84,26 @@ EXEMPT_ALL_SKIPPED: dict[str, str] = {
         "不该在每一次本地/CI 跑里出网）。要跑它用 `pytest -m network`；"
         "它在 `-m network` 下实测 8 passed（见 `draft/28` §7）。"
     ),
+    "tests/test_webui_browser.py": (
+        "整文件 `pytestmark = pytest.mark.browser`，而 `pyproject.toml` 的 "
+        "`addopts = -m \"not network and not browser\"` 默认筛掉它（裁定 F1：浏览器端到端"
+        "**opt-in**）—— 与上一条同构。本机没装 playwright ⇒ 模块级 `importorskip` 再 skip 一次，"
+        "于是逐文件单跑看到的汇总行是 `no tests ran`（`classify_pytest_result` 记 `no_tests`）。"
+        "要跑它用 `pip install -e .[browser]` + `playwright install` + `pytest -m browser`；"
+        "**没装就是 unknown，不是 pass**（这一点写在 marker 描述与文件 docstring 里）。"
+    ),
 }
 
 #: 豁免名单的条数上限。见上面那段：它是"加一行就绿"的机器阻力。
-MAX_EXEMPT_ALL_SKIPPED: int = 1
+#:
+#: 2026-10-07 从 1 抬到 2：Web 端的浏览器判据（`tests/test_webui_browser.py`）与既有的
+#: `test_providers_online.py` **完全同构** —— 都是"整文件被默认筛掉 + 未装依赖即 skip"，
+#: 都不是缺陷。抬这个上限是一次**需要解释的编辑**（本条注释就是解释），并且：
+#:   · 两条豁免各自的理由都过 `audit_exemptions()` 的三道机器判据（条数/存在/实质）；
+#:   · 这条改动与 G2 那两处一样落在 FC-27 的 `[category: release-deploy]` 里
+#:     ⇒ 需要人逐行走查 + 2 名 reviewer 批准，已登记在 `draft/67 §3b` 的第 3 条待签项；
+#:   · 抬上限**不放松**判定语义：名单外的一律 `unknown`，而上限本身仍是硬约束（3 条就红）。
+MAX_EXEMPT_ALL_SKIPPED: int = 2
 #: 豁免理由的最短长度（字符）。
 MIN_EXEMPT_REASON_CHARS: int = 20
 #: 理由里必须出现的词之一（证明它说清了"为什么整文件会被筛掉"）。

@@ -27,6 +27,9 @@ export const ENDPOINTS = {
   acceptance: "/api/acceptance",
   machine: "/api/machine",
   answer: "/answer",
+  stop: "/api/stop",
+  submit: "/api/submit",
+  settings: "/api/settings",
   stream: "/api/stream",
 } as const;
 
