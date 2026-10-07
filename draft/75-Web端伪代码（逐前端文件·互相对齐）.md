@@ -62,7 +62,9 @@
 | `AcceptanceView` | `criteria: Record<string,string>`（5 条）· `auxiliary: Record<string,unknown>`（5 条） | `reviewaccept.py:71/73` + `CRITERIA:33` / `AUXILIARY_SIGNALS:51`；`to_dict():86` |
 | `MachineView` | `can_do_formal, lean_path, lean_ready, lean_version, provers{available,available_names,checked,looked_in,probe_errors,reason,sources}, mathlib{checked,commit,import_mathlib,lean_path,lean_path_segments,pinned_commit,pinned_match,pinned_tag,reason,root,source,tag}, model{base_url,key_present,model}` | 真机 `toolchain_report()` 的键（本机读数；`toolchain.py:325`） |
 | `UsageRow` | `usage_id, at, role, scope, task_id, idem_key, tokens_in, tokens_out, tokens_total, usd, attempts, note` | 真机 `p9b/data/usage_ledger.json`（37 行） |
-| `WriteResult` | `ok: boolean, tri: Tri, reason: string, id?: string, extra?: Record<string,unknown>` | 各写端点（C1 第 7–10 行） |
+| `WriteResult` | `ok: boolean, tri: Tri, reason: string, id?: string, extra?: Record<string,unknown>` | 各写端点（C1 第 7–10 行，**不含 `/api/task`：裁定 I1 不做**） |
+| `RunIndex`（**裁定 O2**） | `{ generated_at, sessions: { [sid]: { runs: RunRow[], last_end_index, digest } } }` | `sessions.py` 的 `load_run_index/rebuild_run_index`（W1 新增） |
+| `RunIndexDrift`（裁定 O2） | `{ tri: "computed"\|"unreadable"\|"not_applicable", drift: string[], reason: string }` | `sessions.reconcile_run_index`（索引与事件的差集） |
 
 > **`Tri` 的定义（三态，唯一的）**：`"computed" | "unreadable" | "not_applicable"`（`reviewaccept` 的词表）与 `"ok" | "missing" | "unknown"`（`_read_report` 的词表）**都映射到组件 `TriState` 的三种视觉态**，但**字符串不许互相顶替**：`ReportReading.status` 用后一组，其余用前一组。
 
@@ -154,7 +156,9 @@ function Home() {
 ```ts
 // 输入：api.getRun(sid) → RunView{runs[], report, checkpoint}；SSE: state/checkpoint/stop
 function Run() {
-  // ① 时间线：RunRow.events_in_run / steps / llm_calls / last_shape / stop_reason
+  // ① 时间线：**裁定 O2** —— 首选 `sessions.run_index`（持久索引；`RunIndexDrift.tri` 不是 computed 时显红），
+  //          索引缺失/落后 ⇒ 回退到 `webui._scan` 的现切，并如实标"索引不可用，这次是现算的"
+  //          RunRow.events_in_run / steps / llm_calls / last_shape / stop_reason
   // ② 花销：**首选 checkpoint.spend**（usd / calls / tokens / unknown_usd_calls）
   //          第二读数：ΣRunRow.usd + RunRow.unknown_usd（事件求和）→ 两个并排，不一致就显红
   // ③ 停机：api.getState().stop → {stop_path, requested_by, at, live_pids, running_loops}
@@ -254,6 +258,8 @@ function Acceptance() {
 | **C 类型对齐** | `types.ts` 里每个接口的键集合 == **后端在夹具工作区上真读出来的键集合**（用 `readers.py` 现算） | 后端加一个键（如 `tasks` 多一列）而 `types.ts` 没加 ⇒ 必红；反向（TS 多了后端没有的键）也红 | 同上（正控用 `tests/` 夹具造工作区） |
 | **D 路由对齐** | `main.tsx` 的路由集合 == C4 表；每条用到的端点 ∈ C1、kind ∈ C2 | 页面里写一个 C1 没有的端点 ⇒ 必红 | 同上 |
 | **E 类型检查** | `pnpm typecheck`（`tsc --noEmit`） | 组件 props 不匹配 ⇒ 编译失败 | W0 起进构建链；**node 缺失 ⇒ 记 `unknown`（三态，不许记 pass）** |
+| **F 索引对账**（裁定 O2） | `sessions.run_index` 与 `sessions/*.jsonl` 的事件现算结果**逐趟一致** | 手改索引一个字节 ⇒ 必红；删一场会话但索引还在 ⇒ 报 `drift` | `tests/test_run_index.py`（W1 新建） |
+| **G 生成物新鲜度**（裁定 M2） | `emit_types.py`/`emit_theme.py` 的输出 == 盘上的 `ui/src/types.ts` / `generated/theme.css` | 手改生成物 ⇒ 必红 | 同上（并入 `tests/test_webui_contracts.py`） |
 
 > **这五条的关系**：A/B/C/D 是**名字层**（正则级，纯 Python 可跑，进常规全量）；E 是**类型层**（需要 node，opt-in）。少了 A–D，改名就会静默漂移；少了 E，"名字对但类型不对"（如把 `string[]` 写成 `string`）会漏。
 

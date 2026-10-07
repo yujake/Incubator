@@ -60,6 +60,8 @@
 | `webui/writes.py` | W3/W4 | 写面五个端点（answer/stop/submit/task/settings），**全部走既有闸门** | 否 |
 | `webui/audit.py` | W3 | 网页操作台账 `web-actions.jsonl`（写 + 读） | 否 |
 | `web/emit_theme.py`（新） | W0 | `assets.py` 的令牌 → `ui/src/theme/generated/theme.css`（确定性生成） | 否 |
+| `web/emit_types.py`（新） | W0 | **裁定 M2**：Python 侧的读数键 → `ui/src/types.ts`（生成物；手改必红） | 否 |
+| `sessions.py`（改） | W1 | **裁定 O2**：新增趟次索引 `run_index_path/load_run_index/rebuild_run_index/reconcile_run_index`（派生表 + 与事件对账；GUI 读索引，`webui._scan` 的现切降为回退） | 否 |
 | `web/assets.py` | W0 | **令牌单一来源**（语义不变；判据扩到"生成物与它一致"） | 否 |
 | `web/static/`（新） | W0 | 构建产物落点（`index.html` + `assets/*.[hash].{js,css}`） | 否 |
 | `settings.py`（改） | W4 | 新增 `write_settings(values, path=None, *, env=None)` —— **设置文件只有一个写入口** | 否 |
@@ -256,8 +258,8 @@ def test_no_console_errors(...)
 
 | 批 | 动到的文件 | 收工判据（改前必须能红） | 门 |
 |---|---|---|---|
-| **W0** | `ui/**`（骨架 6 个文件）· `webui/{__init__,routes,server,state,views}.py` · `web/emit_theme.py` · `web/assets.py` · `tests/test_webui_static.py` · `tests/test_release_all.py`（登记） · `docs/READING-MAP.md`（改名） | 静态路由/穿越负控 · 产物自洽 · 令牌新鲜度 · **现有 17 条全绿** | 全量门 |
-| **W1** | `webui/readers.py` · `ui/src/pages/{Home,Run,Evidence,Artifacts,Machine,Acceptance}.tsx` · `ui/src/components/**` · `tests/test_webui_pages.py` · `tests/test_webui_readers.py` | 六个面各自的"真读数出现 + 空态 + `unknown` 不写成 0" | 全量门 |
+| **W0** | `ui/**`（骨架；含 `src/types.ts` 由 `emit_types.py` 生成）· `webui/{__init__,routes,server,state,views}.py` · `web/emit_theme.py` · `web/assets.py` · `tests/test_webui_static.py` · `tests/test_release_all.py`（登记） · `docs/READING-MAP.md`（改名） | 静态路由/穿越负控 · 产物自洽 · 令牌新鲜度 · **现有 17 条全绿** | 全量门 |
+| **W1** | `webui/readers.py` · `ui/src/pages/{Home,Run,Evidence,Artifacts,Machine,Acceptance}.tsx` · `ui/src/components/**` · `tests/test_webui_pages.py` · `tests/test_webui_readers.py` · `tests/test_run_index.py`（裁定 O2：索引与事件对账）· `tests/conftest.py`（裁定 J2/K2：造六件产物与 `verifications/<id>.jsonl` 的夹具） | 六个面各自的"真读数出现 + 空态 + `unknown` 不写成 0" | 全量门 |
 | **W2** | `webui/sse.py` · `ui/src/sse.ts` · `tests/test_webui_sse.py` | SSE 五条（含端到端"盘上新增 ⇒ 流里出现"） | 全量门 |
 | **W3** | `webui/writes.py` · `webui/audit.py` · `ui/src/components/ConfirmButton.tsx` · `tests/test_webui_writes.py` · `tests/conftest.py`（fixture） · `cli.py`（`--allow-writes`） | 授权矩阵 · 审计 · **绕闸门负控** | 全量门（若触发题 H=A ⇒ 停下等你裁） |
 | **W4** | `settings.py`（`write_settings`） · `ui/src/pages/Machine.tsx` · `tests/test_webui_settings_write.py` · `tests/test_webui_browser.py` · `docs/USER-END-DSH-STYLE.md` · `README.md` · `docs/INDEX.md` · （题 G=B 时）`tools/release_all.py` · `pyproject.toml` | key 不回显/原子写/权限 | 全量门 + **重冻**（若牵动面） |
