@@ -465,14 +465,16 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
 
 
 def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
-    """正控（接缝）：六个面的表项真的进了总表，且 `handler_for` 取得到处理器。
+    """正控（接缝）：六个面（加 `/api/state` 与 `/api/stream`）的表项真的进了总表，
+    且 `handler_for` 取得到处理器。
 
     绑定/猴补丁都不需要：`routes.handler_for(name)` 直接读子表模块的 `HANDLERS`
     字典（A 线落的那条接缝）。这条是"我这一半接没接上"的机器读数。
     """
     ours = {name for _m, _p, name in R.ROUTES}
-    assert ours == {"handle_run_view", "handle_evidence", "handle_artifacts",
-                    "handle_acceptance", "handle_machine", "handle_stream"}, ours
+    assert ours == {"handle_state", "handle_run_view", "handle_evidence",
+                    "handle_artifacts", "handle_acceptance", "handle_machine",
+                    "handle_stream"}, ours
     for _m, path, name in R.ROUTES:
         assert path in routes.patterns(), f"{path} 没进总表"
         assert routes.handler_for(name) is not None, f"{name} 没有实现"
@@ -585,3 +587,72 @@ def test_userio_pending_view_drops_answered_questions(tmp_path: pathlib.Path) ->
     left = U.workspace_pending_view(root)
     assert [q["qid"] for q in left] == [b.qid], left
     assert [q["sid"] for q in left] == ["s-two"], left
+
+
+# ====================================================================== 裁定 2b：/api/state 的路由
+class _FakeHandler:
+    """`WebHandler` 的最小替身：处理器真正用到的只有 `root` 与 `_json` 两样。"""
+
+    def __init__(self, root: pathlib.Path) -> None:
+        self.root = root
+        self.sent: list[tuple[int, Any]] = []
+
+    def _json(self, code: int, obj: Any) -> None:
+        self.sent.append((code, obj))
+
+
+def test_the_state_endpoint_now_belongs_to_readers(artifacts_ws: pathlib.Path) -> None:
+    """裁定 2b：`/api/state` 的路由迁到 B 线，而公开面逐键不变。
+
+    这一条在"两边都还在表里"的交接窗口里也必须是绿的（迁的是归属，不是行为）：
+    A 线删掉自己那一行之前，总表里会有两条同名表项，而 `match` 命中的名字两边相同
+    （都叫 `handle_state`），`server._invoke` 先找 `WebHandler` 的方法、找不到才落到
+    子表 —— 所以交接前后跑起来的 JSON 逐字节相同。
+
+    四条读数：① 表项进了总表；② 派发名字在总表里唯一可查（`match` 给出 `handle_state`）；
+    ③ `handler_for` 取到的是 readers 那一个（A 把自己的删掉之后就只剩它）；④ 回的 JSON
+    与 `webui.snapshot(root)` 同值 —— `temp/_verify_w0.py` 对账的顶层 10 键就是按后者量的。
+    """
+    from agentflow.webui import snapshot as W_snapshot
+
+    # ① 表项在总表里（且 B 线自己的子表里只登记一条）
+    assert ("GET", "/api/state", "handle_state") in routes.ROUTES, routes.ROUTES
+    assert [row for row in R.ROUTES if row[1] == "/api/state"] == [
+        ("GET", "/api/state", "handle_state")], R.ROUTES
+    # ② 派发名字可查（`{sid}` 一类占位符与它无关，这里没有）
+    assert routes.match("GET", "/api/state") == ("handle_state", {}), \
+        routes.match("GET", "/api/state")
+    # ③ 处理器是 readers 这一个
+    fn = routes.handler_for("handle_state")
+    assert fn is not None, "总表登记了 handle_state，但子表 HANDLERS 里没有它"
+    assert fn is R.handle_state, (fn, R.handle_state)
+    assert R.HANDLERS["handle_state"] is R.handle_state
+    # ④ 回值与 `W.snapshot` 逐键同值（`generated_at` 是那只钟，两次调用必然不同）
+    fake = _FakeHandler(artifacts_ws)
+    R.handle_state(fake, {}, {})
+    assert [code for code, _obj in fake.sent] == [200], fake.sent
+    got = fake.sent[0][1]
+    want = W_snapshot(artifacts_ws)
+    assert set(got) == set(want), (sorted(got), sorted(want))
+    for key in want:
+        if key == "generated_at":
+            continue
+        assert got[key] == want[key], key
+    # 公开面是裸快照，不是三态包装：错了这一条，前端与 `_verify_w0.py` 会一起错
+    assert "tri" not in got and "snapshot" not in got, sorted(got)
+    assert "pending_questions" in got and "sessions" in got, sorted(got)
+
+
+def test_the_state_face_is_still_the_reader_that_wraps_it(
+        artifacts_ws: pathlib.Path) -> None:
+    """正控（读模型没被端点吃掉）：`state_face` 仍是三态读模型，端点用的是它里面那张快照。
+
+    端点回裸快照、读模型回 `{tri, snapshot, reason}` —— 两者共用同一个
+    `webui.state.snapshot(root)`，所以"迁路由"不可能顺带改掉任何一栏读数。
+    """
+    from agentflow.webui import snapshot as W_snapshot
+
+    face = R.state_face(artifacts_ws)
+    assert set(face) == {"tri", "snapshot", "reason"}, sorted(face)
+    assert face["tri"] == R.TRI_COMPUTED, face
+    assert set(face["snapshot"]) == set(W_snapshot(artifacts_ws))

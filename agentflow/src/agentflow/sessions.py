@@ -31,7 +31,7 @@ import os
 import pathlib
 import threading
 from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from filelock import FileLock
 
@@ -93,6 +93,60 @@ _APPEND_LOCKS: dict[str, Any] = {}
 _APPEND_LOCKS_GUARD = threading.Lock()
 
 
+# ====================================================================== 写路径上的可选钩子
+#
+# 这一族是"网页端实时刷新"的接入点（裁定 1a）：`sse.attach()` 把监听器装到这里，
+# 于是每次会话追加成功之后会顺着它发一条 `state` 事件出去。三条纪律：
+#
+# 1. 缺省 `None` ⇒ 既有行为逐字节不变（调用点上只多一个 `is not None`）；
+# 2. 监听器是旁路：它坏掉不许把写路径带坏。写成功了就是成功了；监听器抛出的
+#    异常被接住并记进 `append_hook_problem()` —— 不是静默吞掉，是"写成了、但旁路
+#    没查成"这一档（三态纪律：不许把"没查成"折成"没发生"）；
+# 3. 只有真的写成（`problem` 为空）才通知：写失败还发事件，会让网页端显示
+#    一条盘上并不存在的事件。
+#
+#: 追加成功后的监听器：`(root, event) -> None`。`None` = 没人接。
+_APPEND_HOOK: "Callable[[Any, Mapping[str, Any]], None] | None" = None
+#: 上一次监听器抛出的问题（空串 = 没出过问题）。只留最近一条：这是"旁路坏没坏"的
+#: 读数，不是一条日志（日志归 `store` 的事件面）。
+_APPEND_HOOK_PROBLEM: str = ""
+
+
+def set_append_hook(hook: "Callable[[Any, Mapping[str, Any]], None] | None"
+                    ) -> "Callable[[Any, Mapping[str, Any]], None] | None":
+    """装上/撤掉"追加成功之后"的监听器；返回被替换掉的那一个（可能为 `None`）。
+
+    为什么把旧的返回出来：装配方（`sse.attach`）要能说清"我顶掉了谁"，而判据要能
+    在用例结束时把钩子还原成它进来时的样子（`detach` 用它，见 `webui/sse.py`）。
+    """
+    global _APPEND_HOOK  # noqa: PLW0603 - 一个进程一个槽，见上面那一节
+    previous, _APPEND_HOOK = _APPEND_HOOK, hook
+    return previous
+
+
+def append_hook_problem() -> str:
+    """监听器上一次抛出的问题（空串 = 没出过问题）。"""
+    return _APPEND_HOOK_PROBLEM
+
+
+def _notify_append(root: Any, event: Mapping[str, Any]) -> None:
+    """把"刚写成的那条事件"交给监听器（没装监听器 ⇒ 立刻返回）。
+
+    接住异常并记一条读数：监听器（网页端的推送）坏掉时，会话记录照样是完整的 ——
+    把"推送坏了"变成"审计面少一行"是本末倒置。
+    """
+    global _APPEND_HOOK_PROBLEM  # noqa: PLW0603 - 见上（只记最近一条）
+    hook = _APPEND_HOOK
+    if hook is None:
+        return
+    try:
+        hook(root, event)
+    except Exception as exc:  # noqa: BLE001 - 旁路：见 `_notify_append` 的 docstring
+        _APPEND_HOOK_PROBLEM = f"{type(exc).__name__}: {exc}"
+    else:
+        _APPEND_HOOK_PROBLEM = ""
+
+
 def _append_lock(path: pathlib.Path) -> Any:
     key = str(path).lower()
     with _APPEND_LOCKS_GUARD:
@@ -109,6 +163,10 @@ def append(root: Any, event: Mapping[str, Any], *, sid: str | None = None) -> tu
     两种写者都要挡住：线程（同波并发跑的几个实例，用 `_append_lock`）与
     进程（CLI 与驱动器同时跑在同一个工作区上，用 `filelock`）。锁只包住"把这一行
     写完"这一段：拿锁之前先把整行序列化好，临界区里只有一次 `write`。
+
+    写成功之后会通知 `set_append_hook` 装上的那个可选监听器（网页端的 SSE 用它）。
+    没有装监听器时（缺省）这条路径与加上它之前逐字节相同：多出来的只有一个
+    `is not None` 判断。
     """
     path = session_path(root, sid)
     try:
@@ -122,6 +180,7 @@ def append(root: Any, event: Mapping[str, Any], *, sid: str | None = None) -> tu
                     fh.write(line)
     except (OSError, TypeError, ValueError) as e:  # noqa: BLE001 - 见模块 docstring
         return None, f"{type(e).__name__}: {e}"
+    _notify_append(root, row)
     return path, ""
 
 

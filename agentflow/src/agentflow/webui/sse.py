@@ -43,11 +43,15 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Iterator, Mapping, Sequence
 
+from .. import sessions as SS
+from .. import stopctl as SC
+from .. import userio as U
+
 __all__ = [
     "EVENT_KINDS", "HANDLERS", "PENDING_ENDPOINTS", "REPLAY_LIMIT", "Broadcaster",
-    "Subscription", "begin_serving", "close_all", "default_broadcaster",
-    "format_event", "handle_stream", "heartbeat_event", "publish",
-    "reset_default_broadcaster", "serving", "subscribe",
+    "Subscription", "attach", "begin_serving", "close_all", "default_broadcaster",
+    "detach", "format_event", "handle_stream", "heartbeat_event", "hook_problems",
+    "publish", "reset_default_broadcaster", "serving", "subscribe",
 ]
 
 #: 后端会发的事件种类（C2 契约的后端一侧）。必须与 `ui/src/sse.ts` 的 `KINDS`
@@ -336,6 +340,146 @@ def publish(kind: str, data: Mapping[str, Any]) -> int:
 def subscribe(sid: str | None = None) -> Subscription:
     """订阅默认广播器（`/api/stream` 用这个）。"""
     return default_broadcaster().subscribe(sid)
+
+
+# ====================================================================== 写路径上的装配（裁定 1a）
+#
+# 这一节是"事件真的有来源"的那一半：`/api/stream` 只负责把事件推出去，而事件从哪来
+# 靠这里把三个写路径模块（`sessions` / `userio` / `stopctl`）各自的可选钩子接上。
+# 三条设计约束，逐条都有判据：
+#
+# 1. 不改既有行为：缺省（没调 `attach`）时那三个模块的钩子都是 `None`，
+#    调用点上只多一个 `is not None`；
+# 2. 幂等：重复 `attach()` 是替换（每次都用同一组新闭包覆盖四个槽），
+#    回调表里永远只有一份；`attach()` 把"被自己顶掉的外来钩子"报出来；
+# 3. 可撤：`detach()` 把四个槽清零，回到"没人接"的状态 —— 判据用它保证
+#    一条用例装的钩子不会污染下一条。
+#
+# `_checkpoint`（检查点文件被改写 ⇒ 发 `checkpoint`）本批刻意不做：那需要一个
+# 轮询/watch 点，而"状态一律从盘上派生、不做后台轮询线程"是本服务的既有纪律
+# （`webui/__init__.py` 的纪律 1）。真要做，正确的位置是"写检查点的那一处"
+# （`agent_loop.save_run_checkpoint`）加一个与这里同形的钩子 —— 那属于 A/驱动线的
+# 文件，不在本线。这条写在报告里，不偷偷起线程。
+
+#: `attach()` 装上的四个闭包（`detach()` 与"幂等替换"的识别靠它）。
+_ATTACHED: dict[str, Any] = {}
+
+
+def _snapshot_payload(root: Any) -> dict[str, Any]:
+    """`state` 事件的 payload：`{snapshot: StateSnapshot}`（`draft/75 §1.2` 的 C2 表）。
+
+    惰性 import `readers`：`routes.py` 导入期就 import 了 `readers`，而 `readers` 一旦
+    哪天开始 import `sse`，模块级互相导入就会成环 —— 与 `routes.handler_for` 同一条
+    理由（调用期导入既安全又便宜）。
+    """
+    from .readers import state_face  # noqa: PLC0415 - 见上面那句
+
+    return {"snapshot": state_face(root).get("snapshot")}
+
+
+def _question_payload(question: Any, sid: str) -> dict[str, Any]:
+    """`question` 事件的 payload：C2 表那 8 栏（`index` 是待答面板的排序位，不发）。"""
+    view = U.question_view(question, sid=sid)
+    view.pop("index", None)
+    return view
+
+
+def _stop_payload(root: Any, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """`stop` 事件的 payload：C2 表那 5 栏（谁叫停 + 现在还有几个活进程/活循环）。
+
+    `live_pids` / `running_loops` 是现算的（停机事件很少，一次读盘换一个如实读数
+    是划算的）。这两栏读不出来时给空表/空表 —— 那是"读到 0 个"，不是"没查成"：
+    真读不出来时 `stopctl` 那两处自己会把问题说清（本函数不替它编数字）。
+    """
+    try:
+        live = SC.live_pids(root)
+    except Exception:  # noqa: BLE001 - 读数而已：这一栏读不到就报空表
+        live = []
+    try:
+        loops = SC.running_loops(root)
+    except Exception:  # noqa: BLE001 - 同上
+        loops = {}
+    return {"stop_path": str(SC.stop_path(root)),
+            # `requested_by` 取自开关内容（`cleared` 时是撤掉之前那一份）；
+            # 读不出来就是空串 = 这一栏没读到，不拿后来的人顶上。
+            "requested_by": str(payload.get("by") or ""),
+            "at": str(payload.get("at") or _now_iso()), "live_pids": live,
+            "running_loops": loops}
+
+
+def attach(*, publish: Any = None) -> dict[str, Any]:
+    """把四个写路径钩子接到"发对应 kind 的事件"上（裁定 1a）；返回这一次装了什么。
+
+    | 槽 | 谁触发 | 发出去的 kind |
+    |---|---|---|
+    | `append` | `sessions.append` 写成功之后 | `state`（payload=全量快照） |
+    | `question` | `userio.ask_user` 真的落了一条新问题之后 | `question` |
+    | `answered` | `userio.answer_question` 写成功之后 | `answered` |
+    | `stop` | `stopctl` 的开关真的变了（created/upgraded/cleared） | `stop` |
+
+    `publish` 可注入（缺省 = `default_broadcaster().publish`）：判据用一个记账函数
+    替掉它，就能断言"发了几条、哪几条"，而不必起一条流。
+
+    返回 `{"attached": (四个槽), "replaced": (被顶掉的外来钩子), "problem": ""}`。
+    幂等 = 替换：第二次调用会先把上一次装的那四个闭包换掉（它们不会出现在
+    `replaced` 里 —— 那是自己装的），所以回调表里永远只有一份，不会叠加。
+    """
+    def emit(kind: str, payload: Mapping[str, Any]) -> None:
+        """按 `publish` 参数的注入情况选发送口（缺省 = 默认广播器）。"""
+        if publish is not None:
+            publish(kind, payload)
+        else:
+            default_broadcaster().publish(kind, payload)
+
+    wired: dict[str, Any] = {
+        "append": lambda root, event: emit("state", _snapshot_payload(root)),
+        "question": lambda root, question, sid: emit("question",
+                                                     _question_payload(question, sid)),
+        "answered": lambda root, qid, sid: emit("answered", {"qid": qid, "sid": sid}),
+        "stop": lambda root, action, payload: emit("stop",
+                                                   _stop_payload(root, payload)),
+    }
+    previous = {
+        "append": SS.set_append_hook(wired["append"]),
+        "question": U.set_question_hook(wired["question"]),
+        "answered": U.set_answer_hook(wired["answered"]),
+        "stop": SC.set_stop_hook(wired["stop"]),
+    }
+    # "被顶掉的"只算不是自己上一次装的那个：自己那一份每轮都换新闭包，
+    # 若按 `is not None` 算，第二次 `attach()` 会把自己的旧闭包报成"外来钩子"。
+    replaced = tuple(sorted(name for name, old in previous.items()
+                            if old is not None and old is not _ATTACHED.get(name)))
+    _ATTACHED.clear()
+    _ATTACHED.update(wired)
+    return {"attached": tuple(sorted(wired)), "replaced": replaced, "problem": ""}
+
+
+def detach() -> dict[str, Any]:
+    """撤掉 `attach()` 装的钩子（回到"没人接"）；返回撤掉了哪几个槽。
+
+    撤的是当前槽里的东西（不管它是不是 `attach` 装的）：这样判据能保证
+    "这条用例结束时四个槽一定是空的"，而调用方也不会留一个自己不知道的钩子在跑。
+    """
+    removed = {
+        "append": SS.set_append_hook(None),
+        "question": U.set_question_hook(None),
+        "answered": U.set_answer_hook(None),
+        "stop": SC.set_stop_hook(None),
+    }
+    _ATTACHED.clear()
+    return {"detached": tuple(sorted(name for name, old in removed.items()
+                                     if old is not None))}
+
+
+def hook_problems() -> dict[str, str]:
+    """旁路坏没坏的读数：`{模块: 那一段的问题}`（空串 = 没出过问题）。
+
+    为什么要有它：监听器抛出的异常是被接住的（写路径不许被旁路带坏），但"接住了"
+    与"没发生"必须分得开 —— 三态纪律。判据拿它断言"注入一个坏 publish 之后，
+    写路径照常成功，而这件事读得出来"。
+    """
+    return {"sessions": SS.append_hook_problem(), "userio": U.hook_problem(),
+            "stopctl": SC.stop_hook_problem()}
 
 
 # ====================================================================== HTTP 外壳
