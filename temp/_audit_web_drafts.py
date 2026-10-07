@@ -32,6 +32,7 @@ DRAFTS = [REPO.parent / "draft" / n for n in (
     "78-Web端三条主线（零交）拆解.md",
     "79-待裁清单（Web施工中新冒出）.md",
     "80-待裁选择题（Web施工·合并后）.md",
+    "81-Web端收口总计划与可行性论证.md",
 )]
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
 CITE = re.compile(r"([A-Za-z0-9_./\\-]+\.py):(\d+)")
