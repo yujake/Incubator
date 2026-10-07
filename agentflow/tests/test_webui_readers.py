@@ -546,3 +546,42 @@ def test_userio_view_shapes_are_reachable_from_readers() -> None:
     rv = reply_view({"qid": "q0001", "selected": ["甲"], "custom": ""})
     assert set(rv) == {"qid", "answer", "selected", "custom", "by", "late"}, sorted(rv)
     assert rv["answer"] == "甲"
+
+
+def test_userio_pending_views_are_the_global_panel_source(
+        artifacts_ws: pathlib.Path) -> None:
+    """正控（L1 收敛的落点）：全部会话的待答读数是"待答面板"那一份数据。
+
+    `workspace_pending_view` 是界面上"待答必须全局可达"那条纪律的机器形态：
+    它按 `(sid, index)` 排序、逐条带会话号与事件下标（`index` 是它在事件流里的位置）。
+    """
+    from agentflow import userio as U
+
+    allp = U.workspace_pending_view(artifacts_ws)
+    assert len(allp) == 1, allp
+    one = allp[0]
+    assert one["sid"] == SID and one["qid"] == "q0001"
+    assert one["role"] == "M" and one["index"] == 3, one
+    assert one["options"][0]["label"] == "保留", one["options"]
+    assert one["options"][0]["description"] == "第一档", one["options"]
+    assert set(one) == {"qid", "sid", "role", "ts", "timeout_sec", "text", "options",
+                        "multi", "index"}, sorted(one)
+    assert U.pending_view(artifacts_ws, sid=SID) == allp
+    assert U.pending_view(artifacts_ws, sid="别的会话") == []
+
+
+def test_userio_pending_view_drops_answered_questions(tmp_path: pathlib.Path) -> None:
+    """负控（L1 收敛）：答过的不再出现在待答里；两段会话各有各的 qid，互不串味。"""
+    from agentflow import userio as U
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    a = U.ask_user(root, role="M", question="甲问", timeout_sec=0, sid="s-one")
+    b = U.ask_user(root, role="A", question="乙问", timeout_sec=0, sid="s-two")
+    got = U.workspace_pending_view(root)
+    assert [(q["sid"], q["qid"]) for q in got] == [("s-one", a.qid),
+                                                   ("s-two", b.qid)], got
+    U.answer_question(root, qid=a.qid, selected=("好",), sid="s-one")
+    left = U.workspace_pending_view(root)
+    assert [q["qid"] for q in left] == [b.qid], left
+    assert [q["sid"] for q in left] == ["s-two"], left
