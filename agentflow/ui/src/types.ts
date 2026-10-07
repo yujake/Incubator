@@ -151,6 +151,406 @@ export interface Checkpoint {
   at: string;
 }
 
+/** 出处：run_products() —— 六件产物里的一件（`runflow.ARTIFACTS` 那六个名字）。 */
+export interface RunProduct {
+  name: string;
+  path: string;
+  exists: boolean;
+  bytes: number | null;
+  lines: number | null;
+  sha256: string;
+  tri: Tri;
+}
+
+/** 出处：检查点的花销子树（`llmseam.SeamSpend.to_dict()`：calls/tokens_in/tokens_out/usd/unknown_usd_calls）。 */
+export interface CheckpointSpendView {
+  calls: number;
+  tokens_in: number;
+  tokens_out: number;
+  usd: number | null;
+  unknown_usd_calls: number;
+}
+
+/** 出处：检查点文件 `runs/agent-<角色>-<sid>.json`（`agent_loop.save_run_checkpoint`）。 */
+export interface CheckpointView {
+  role: string;
+  sid: string;
+  task: string;
+  fingerprint: string;
+  step: number;
+  stop_reason: string;
+  waiting_for: string;
+  spend: CheckpointSpendView | Record<string, never>;
+  at: string;
+}
+
+/** 出处：run_view() 的 `report` —— 交付说明 `out/review/REPORT.md` 的读数。 */
+export interface ReportReadingView {
+  status: ReportTri;
+  text: string;
+}
+
+/** 出处：run_view() —— 一趟详情（`Run` + `report` + `checkpoint`）。 */
+export interface RunView {
+  tri: Tri;
+  reason: string;
+  sid: string;
+  runs: RunRow[];
+  report: ReportReadingView;
+  checkpoint: CheckpointView | null;
+  checkpoint_reason: string;
+  path: string;
+}
+
+/** 出处：evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）。 */
+export interface EvidenceView {
+  tri: Tri;
+  reason: string;
+  store_problems: string[];
+  statements: StatementRow[];
+  statements_tri: Tri;
+  conjectures: ConjectureRow[];
+  conjectures_tri: Tri;
+  experiments: ExperimentRow[];
+  experiments_tri: Tri;
+  review_findings: ReviewFindingRow[];
+  review_findings_tri: Tri;
+  relations: RelationRow[];
+  relations_tri: Tri;
+  verifications: VerificationRow[];
+  verifications_tri: Tri;
+  secretary: SecretaryDecision[];
+  secretary_tri: Tri;
+}
+
+/** 出处：artifacts_face() —— 产物面（各栏另带 `<栏>_tri`）。 */
+export interface ArtifactsView {
+  tri: Tri;
+  reason: string;
+  ledger: ArtifactRow[];
+  ledger_tri: Tri;
+  ledger_verify: LedgerVerifyRow[];
+  ledger_verify_tri: Tri;
+  handoffs: HandoffRow[];
+  handoffs_tri: Tri;
+  checks: AcceptanceCheck[];
+  checks_tri: Tri;
+  style: ReportStyle;
+  style_tri: Tri;
+  secretary: SecretaryDecision[];
+  secretary_tri: Tri;
+  products: RunProduct[];
+  products_tri: Tri;
+  run_dir: string;
+  products_reason: string;
+  tasks: TaskRow[];
+  tasks_tri: Tri;
+}
+
+/** 出处：acceptance_face() —— 内容级验收（键名逐字来自 reviewaccept.CRITERIA 与 AUXILIARY_SIGNALS）。 */
+export interface AcceptanceView {
+  tri: Tri;
+  reason: string;
+  criteria: Record<string, string>;
+  details: Record<string, string>;
+  auxiliary: Record<string, string>;
+  failed: string[];
+  auxiliary_note: string;
+}
+
+/** 出处：machine_face() 的 `settings` —— 设置文件三段（key 只给掩码后的那一份）。 */
+export interface SettingsReading {
+  path: string;
+  exists: boolean;
+  toolchain: Record<string, string>;
+  model: { api_key: string; base_url: string; name: string; configured: boolean };
+  workspace: Record<string, string>;
+  raw_keys: string[];
+}
+
+/** 出处：machine_face() —— toolchain.toolchain_report() 的键 + 设置三段。 */
+export interface MachineView {
+  tri: Tri;
+  reason: string;
+  model: Record<string, unknown>;
+  provers: Record<string, unknown>;
+  lean_ready: boolean | null;
+  lean_path: string;
+  lean_version: string;
+  mathlib: Record<string, unknown>;
+  can_do_formal: boolean | null;
+  settings: SettingsReading;
+  settings_tri: Tri;
+  settings_reason: string;
+}
+
+/** 出处：store.rows("statements")（无真机样本 ⇒ 权威来源是 `schema.Statement`）。 */
+export interface StatementRow {
+  stmt_id: string;
+  origin: string;
+  kind: string;
+  label: string;
+  statement_text: string;
+  statement_full: string;
+  proof_text: string;
+  source_lit_id: string;
+  page_range: string;
+  quote_verified: boolean | null;
+  quote_reason: string;
+  evidence_kind: string;
+  bits: number;
+  status: string;
+  derived_from: string;
+  doc_id: string;
+  line_range: string;
+  created_at: string;
+  created_by: string;
+}
+
+/** 出处：store.rows("review_findings")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）。 */
+export interface ReviewFindingRow {
+  finding_id: string;
+  doc_id: string;
+  kind: string;
+  level: string;
+  target: string;
+  evidence: string;
+  message: string;
+  round: number;
+  suggestion: string;
+  status: string;
+  resolution_note: string;
+  created_at: string;
+  created_by: string;
+  axis: string;
+  line: number | null;
+  verbatim_quote: string;
+  maths: string;
+  line_unavailable_reason: string;
+}
+
+/** 出处：store.rows("relations")（无真机样本 ⇒ 权威来源是 `schema.Relation`）。 */
+export interface RelationRow {
+  relation_id: string;
+  concept_ids: string[];
+  description: string;
+  lit_id: string;
+  page_range: string;
+  quote: string;
+  quote_normalized: string;
+  quote_verified: boolean | null;
+  statement: string;
+  concept_group_key: string;
+  dedup_key: string;
+  status: string;
+  duplicate_of: string;
+  created_at: string;
+  supporting_lit_ids: string[];
+}
+
+/** 出处：verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）。 */
+export interface VerificationRow {
+  verification_id: string;
+  statement_id: string;
+  verifier: string;
+  verdict: string;
+  defect_step: string;
+  quote: string;
+  why: string;
+  findings: Record<string, unknown>[];
+  unresolved_errors: number;
+  proof_sha256: string;
+  proof_chars: number;
+  round: number;
+  used_faces: string[];
+  submission_id: string;
+  at: string;
+}
+
+/** 出处：artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）。 */
+export interface ArtifactRow {
+  at: string;
+  path: string;
+  sha256: string;
+  bytes: number;
+  producer: string;
+  kind: string;
+  task_id: string;
+  exit_code: number | null;
+  note: string;
+}
+
+/** 出处：artifacts.verify_entries() 的行 —— 台账钉的 sha 与盘上现在这一版是不是同一版。 */
+export interface LedgerVerifyRow {
+  path: string;
+  sha256: string;
+  producer: string;
+  at: string;
+  sha256_now: string;
+  status: string;
+}
+
+/** 出处：manuscripts.read_rows() 的行（`manuscripts.write` 写的 14 个键；`revises`/`kind`/`ref_problems` 是「有就带上」的三栏）。 */
+export interface HandoffRow {
+  id: string;
+  to: string;
+  sender: string;
+  summary: string;
+  body: string;
+  refs: string[];
+  sha256: string;
+  sid: string;
+  task_id: string;
+  format: string;
+  bytes: number;
+  path: string;
+  note: string;
+  created_at: string;
+  revises?: string;
+  kind?: string;
+  ref_problems?: Record<string, string>;
+}
+
+/** 出处：out/secretary/<角色>.jsonl 的行（`secretary.Secretary.note_decision` 写的；`decision`/`reason`/`basis` 等是「有就带上」的几栏）。 */
+export interface SecretaryDecision {
+  role: string;
+  seq: number;
+  at: string;
+  kind: string;
+  duty: number;
+  from: string;
+  fail_open: boolean;
+  decision?: string;
+  judge?: Record<string, unknown>;
+  reason?: string;
+  basis?: string[];
+  before?: string;
+  target?: string;
+}
+
+/** 出处：out/paper/ACCEPTANCE-CHECKS.json 的一行（真机 8 行 C1–C8；`closing.ACCEPTANCE_CHECKS_NAME`）。 */
+export interface AcceptanceCheck {
+  id: string;
+  kind: string;
+  min: number;
+  name: string;
+  note: string;
+}
+
+/** 出处：out/review/REPORT-STYLE.json 的 `sections`（真机四节名字）。 */
+export interface ReportStyle {
+  sections: string[];
+}
+
+/** 出处：store.rows("tasks")（真机 p9b/data/tasks.json 19 键）。 */
+export interface TaskRow {
+  task_id: string;
+  role: string;
+  action: string;
+  called_by: string;
+  parent_task_id: string | null;
+  depth: number;
+  input_key: string;
+  status: string;
+  outcome: string;
+  refusal_reason: string;
+  detail: string;
+  error: string;
+  started_at: string;
+  ended_at: string | null;
+  tokens: number | null;
+  usd: number | null;
+  instance: string;
+  artifacts: string[];
+  inputs: string[];
+}
+
+/** 出处：store.rows("conjectures")（真机 p9b/data/conjectures.json；无样本时以 `schema.Conjecture` 为准）。 */
+export interface ConjectureRow {
+  conjecture_id: string;
+  statement: string;
+  status: string;
+  form: string;
+  testable: boolean | null;
+  origin: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  experiment_ids: string[];
+  counterexample_experiment_id: string | null;
+  proof_experiment_id: string | null;
+  negation_statement: string;
+  known_lit_id: string;
+  notes: string;
+  promoted_to: string;
+  withdraw_reason: string;
+  duplicate: boolean | null;
+}
+
+/** 出处：store.rows("experiments")（真机 p9b/data/experiments.json；无样本时以 `schema.Experiment` 为准）。 */
+export interface ExperimentRow {
+  experiment_id: string;
+  method: string;
+  result: string;
+  evidence_kind: string;
+  negation_kind: string;
+  claim: string;
+  claim_key: string;
+  certificate: string;
+  counterexample: string;
+  search_bound: string;
+  verifier_output: string;
+  verifier_subject_key: string;
+  code_path: string;
+  code_hash: string;
+  exit_code: number | null;
+  artifact_paths: string[];
+  observations: string;
+  params: Record<string, unknown>;
+  runtime_sec: number | null;
+  notes: string;
+  created_at: string;
+  created_by: string;
+  for_question_id: string;
+}
+
+/** 出处：store.rows("usage_ledger")（真机 p9b/data/usage_ledger.json 37 行）。 */
+export interface UsageRow {
+  usage_id: string;
+  at: string;
+  role: string;
+  scope: string;
+  task_id: string;
+  idem_key: string;
+  tokens_in: number;
+  tokens_out: number;
+  tokens_total: number;
+  usd: number | null;
+  attempts: number;
+  note: string;
+}
+
+/** 出处：store.rows("search_requests")（真机 p9b/data/search_requests.json 17 键）。 */
+export interface SearchRequestRow {
+  request_id: string;
+  topic: string;
+  mode: string;
+  content_description: string;
+  providers: string[];
+  done: boolean;
+  outcome: string;
+  priority: string;
+  submitted_by: string;
+  submit_note: string;
+  for_question_id: string;
+  claimed_by: string;
+  lease_until: string | null;
+  attempts: number;
+  last_error: string;
+  result_lit_ids: string[];
+  timestamp: string;
+}
+
 /** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
 export interface WriteResult {
   ok: boolean;
@@ -165,18 +565,5 @@ export interface WriteResult {
 // 每一条都写明缺哪一个 reader —— 补上读数之后，把那一行从对应模块的
 // `MISSING_TYPES` 里删掉，并把接口加进那个模块的 `type_decls()`。
 // --------------------------------------------------------------------------
-// TODO RunView：缺本模块的「一趟详情」适配器（W1）；本批 ROUTES 里没有 `GET /api/run/{sid}`，所以它没有生产者。
-// TODO EvidenceView：缺 `readers.evidence_chain(store)`（W1）：`store.rows("statements"/"conjectures"/"experiments"/"review_findings")` 的适配器。
-// TODO ArtifactsView：缺 `readers.artifact_ledger` / `readers.handoffs` / `readers.run_products`（W1）：`artifacts.read_ledger` · `manuscripts.rows` · 六件产物那一路。
-// TODO AcceptanceView：缺 `readers.acceptance(root, ...)`（W1）：`reviewaccept.check_review` 的逐条读数。
-// TODO MachineView：缺 `readers.machine_readings(root)`（W1）：`toolchain.toolchain_report()` 与 `settings.load_settings()`（key 走 `ModelSpec.redacted()`）。
-// TODO TaskRow：缺 `store.rows("tasks")` 的适配器（W1 的 readers 那一面）。
-// TODO SearchRequestRow：缺 `store.rows("search_requests")` 的适配器（W1）。
-// TODO ConjectureRow：缺 `store.rows("conjectures")` 的适配器（W1）。
-// TODO ExperimentRow：缺 `store.rows("experiments")` 的适配器（W1）。
-// TODO ArtifactRow：缺 `artifacts.read_ledger` 的行适配器（W1）。
-// TODO HandoffRow：缺 `manuscripts.rows` 的行适配器（W1）。
-// TODO SecretaryDecision：缺 `secretary.decisions_path` 的读法（W1）。
-// TODO AcceptanceCheck：缺 `closing.py` 的 ACCEPTANCE-CHECKS 读者（W1）。
-// TODO ReportStyle：缺 `out/review/REPORT-STYLE.json` 的读者（W1）。
-// TODO UsageRow：缺 `store.rows("usage_ledger")` 的适配器（W1）。
+// TODO RunIndex：缺 GUI 侧的索引消费者：`sessions.load_run_index` / `rebuild_run_index` 已落地（B2），但 Run 页读它那一段属于 A 线的页面；本模块只把 `RunIndexDrift` 之外的两栏留给它。索引的形状定义在 `sessions.compute_run_index`。
+// TODO RunIndexDrift：缺 GUI 侧的索引消费者：`sessions.reconcile_run_index` 已落地（B2），返回形状见它自己的 docstring；页面（A 线）接上之后把这一行删掉。

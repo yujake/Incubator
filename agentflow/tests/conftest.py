@@ -411,6 +411,192 @@ def add_relation(
     return row.to_dict()
 
 
+# --------------------------------------------------------------------------- J2/K2 夹具
+#
+# 裁定 J2 / K2：六件产物与 V 的验证台账**真机没有样本**（`draft/74 §0.3` 实测：
+# 全树 `**/run-manifest.json` 搜到 0 个、`verifications/` 目录 0 个），所以它们的
+# 判据输入由夹具造，并在页面上标明"夹具样本"。造在这里（`tests/conftest.py`）的理由
+# 是 `draft/78 §2` 的边界：这个文件归 B 线独有，A/C 要造夹具就造在自己文件的局部
+# fixture 里 —— 一份共享样本只有一个落点，改了不会只改一半。
+#
+# 形状逐个有出处，不是编的：
+# - 六件产物的**名字**：`runflow.ARTIFACTS`（六个名字）；
+# - 台账行的 9 个键：`artifacts.FIELDS`；
+# - 交接行的键：`manuscripts.write` 写的那个 dict；
+# - 秘书决策行的键：`secretary.Secretary.note_decision`；
+# - 验收表的行键 `id/kind/min/name/note`：`draft/75 §1.3` 的真机读数（8 行 C1–C8）；
+# - 体例的四节名字：`draft/74 §0.4` 的真机读数；
+# - 检查点的 9 个键：`agent_loop.save_run_checkpoint`；
+# - 验证行的键：`verifications.record_verification`。
+
+#: 六件产物的名字（`runflow.ARTIFACTS`；真机没有样本 ⇒ 裁定 J2 用夹具造）。
+RUN_PRODUCT_NAMES: tuple[str, ...] = (
+    "run-manifest.json", "model-transcript.jsonl", "evidence.json", "claims.json",
+    "cost.json", "report.md",
+)
+
+#: 验收表的机器可判行（真机 `p9b/out/paper/ACCEPTANCE-CHECKS.json` 是 8 行 C1–C8，
+#: 键 `id/kind/min/name/note`）。这里造同样的形状。
+ACCEPTANCE_CHECKS_SAMPLE: tuple[dict, ...] = (
+    {"id": "C1", "kind": "research_question_rows", "min": 1,
+     "name": "立题：研究问题已立", "note": "夹具样本"},
+    {"id": "C2", "kind": "literature_rows", "min": 1,
+     "name": "取材：文献已入库", "note": "夹具样本"},
+    {"id": "C3", "kind": "experiment_rows", "min": 1,
+     "name": "实验：至少跑过一次", "note": "夹具样本"},
+)
+
+#: 报告体例的四节名字（真机 `p9b/out/review/REPORT-STYLE.json` 逐字）。
+REPORT_STYLE_SECTIONS: tuple[str, ...] = (
+    "一、任务与范围", "二、逐条读数", "三、谁做了什么（含 input_key 与花销）",
+    "四、证据不足与未做",
+)
+
+
+def make_run_products(root: Path, *, run: str = "out/run-1") -> Path:
+    """造一份"跑过一次"的六件产物样本（裁定 J2），返回那个运行目录。
+
+    内容刻意短而确定（`report.md` 是一行可断言的中文），因为判据要按字节核对它。
+    `model-transcript.jsonl` 造两行，于是 `RunProduct.lines` 那一栏有一个非空读数
+    （其余五件是 `.json`/`.md`，`lines` 按设计是 `None` —— 三态，不是 0）。
+    """
+    d = root / run
+    (d / "assets").mkdir(parents=True, exist_ok=True)
+    (d / "run-manifest.json").write_text(
+        json.dumps({"run": run, "topic": "夹具样本：群论", "calls": 2},
+                   ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (d / "model-transcript.jsonl").write_text(
+        json.dumps({"i": 1, "role": "M", "text": "夹具样本第一轮"},
+                   ensure_ascii=False) + "\n"
+        + json.dumps({"i": 2, "role": "M", "text": "夹具样本第二轮"},
+                     ensure_ascii=False) + "\n", encoding="utf-8")
+    (d / "evidence.json").write_text(
+        json.dumps({"claims": 1, "note": "夹具样本"}, ensure_ascii=False) + "\n",
+        encoding="utf-8")
+    (d / "claims.json").write_text(
+        json.dumps([{"claim_key": "c-1", "claim": "夹具样本命题"}],
+                   ensure_ascii=False) + "\n", encoding="utf-8")
+    (d / "cost.json").write_text(
+        json.dumps({"spent_usd": 0.25}, ensure_ascii=False) + "\n", encoding="utf-8")
+    (d / "report.md").write_text("夹具样本：这一趟的交付说明。\n", encoding="utf-8")
+    return d
+
+
+def make_artifacts_sample(root: Path, *, sid: str = "fix-sid") -> Path:
+    """在临时工作区里造出六个只读面各自的样本（裁定 J2）。
+
+    造出来的东西逐项对应一个读者：
+
+    | 造的东西 | 谁读它 |
+    |---|---|
+    | `out/run-1/` 六件产物 | `readers.run_products` |
+    | `ARTIFACTS.jsonl`（`artifacts.record` 写） | `readers.artifacts_face` 的 `ledger` |
+    | `manuscripts/handoffs.jsonl`（`manuscripts.write`） | `handoffs` |
+    | `out/paper/ACCEPTANCE-CHECKS.json` | `checks` |
+    | `out/review/REPORT-STYLE.json` + `REPORT.md` | `style` / `RunView.report` |
+    | `out/secretary/M.jsonl`（`Secretary.note_decision`） | `secretary` |
+    | `out/experiments/*.log` + `out/tasks/t-*.json` | 产物面的"M 那一路真机产物" |
+    | `runs/agent-<角色>-<sid>.json`（`save_run_checkpoint`） | `readers.run_view` 的检查点 |
+    | `data/tasks.json` 一行（`S.Task`） | 产物面的 `tasks` |
+    | 一场会话（提问 + 一趟） | 证据面的 `triage_branch_recorded` |
+
+    返回工作区根。顺序有讲究：文件先落盘，`artifacts.record` 才登记得进去
+    （它拒绝登记不存在的路径 —— 那是它的核心纪律）。
+    """
+    from agentflow import agent_loop as AL
+    from agentflow import artifacts as AR
+    from agentflow import manuscripts as MS
+    from agentflow import secretary as SEC
+    from agentflow import sessions as SESS
+    from agentflow import userio as U
+    from agentflow import verifications as V
+
+    root.mkdir(parents=True, exist_ok=True)
+    st = Store(root)
+    st.init()
+
+    # ---- 六件产物 + M 那一路的真机产物（out/experiments · out/tasks · out/paper）
+    run_dir = make_run_products(root)
+    (root / "out" / "experiments").mkdir(parents=True, exist_ok=True)
+    (root / "out" / "experiments" / "e-0001.log").write_text(
+        "夹具样本：实验日志一行。\n", encoding="utf-8")
+    (root / "out" / "tasks").mkdir(parents=True, exist_ok=True)
+    (root / "out" / "tasks" / "t-0001.json").write_text(
+        json.dumps({"task_id": "t-0001", "status": "done"},
+                   ensure_ascii=False) + "\n", encoding="utf-8")
+    (root / "out" / "paper").mkdir(parents=True, exist_ok=True)
+    (root / "out" / "paper" / "ACCEPTANCE-CHECKS.json").write_text(
+        json.dumps({"checks": list(ACCEPTANCE_CHECKS_SAMPLE)},
+                   ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (root / "out" / "review").mkdir(parents=True, exist_ok=True)
+    (root / "out" / "review" / "REPORT.md").write_text(
+        "夹具样本交付说明：三条读数、两条没查成。\n", encoding="utf-8")
+    (root / "out" / "review" / "REPORT-STYLE.json").write_text(
+        json.dumps({"sections": list(REPORT_STYLE_SECTIONS)},
+                   ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    # ---- 台账（走 artifacts.record 这一个写入口，不手拼 JSON 行）
+    for rel, producer, kind in (
+        (f"{run_dir.relative_to(root).as_posix()}/run-manifest.json", "runflow", "manifest"),
+        (f"{run_dir.relative_to(root).as_posix()}/model-transcript.jsonl",
+         "runflow", "transcript"),
+        ("out/experiments/e-0001.log", "agent-e", "log"),
+        ("out/tasks/t-0001.json", "agent-m", "task"),
+        ("out/paper/ACCEPTANCE-CHECKS.json", "agent-m", "checks"),
+    ):
+        AR.record(root, path=rel, producer=producer, kind=kind, task_id="t-0001",
+                  at=TS)
+
+    # ---- 交接手稿（走 manuscripts.write；它自己校验必填的三栏）
+    MS.write(root, sender="M", recipient="E", summary="夹具样本：把口径交给 E",
+             body="夹具样本正文：这一条交接是判据输入，不是真机产物。",
+             refs=("out/run-1/report.md",), task_id="t-0001", sid=sid, note="夹具样本")
+
+    # ---- 秘书决策台账（走 Secretary.note_decision 这一个写入口）
+    sec = SEC.Secretary("M", root=root, store=st)
+    sec.note_decision(duty=1, decision="可派", reason="夹具样本：还有余量",
+                      basis=("tasks",), before="idle")
+    sec.note_decision(duty=2, decision="已提醒", reason="夹具样本：预算快到了",
+                      basis=("usage_ledger",), before="0.20")
+
+    # ---- 检查点（走 agent_loop.save_run_checkpoint）
+    AL.save_run_checkpoint(root, "M", sid, task="夹具样本：写一份交付说明",
+                           step=3, stop_reason="waiting_for_user",
+                           waiting_for="q0001",
+                           spend={"calls": 2, "tokens_in": 30, "tokens_out": 40,
+                                  "usd": 0.25, "unknown_usd_calls": 0})
+
+    # ---- 任务台账一行（走 schema + store.tx）
+    with st.tx("tasks", actor="fixture") as tx:
+        tx.upsert("tasks", S.Task(
+            task_id="t-0001", role="M", action="run", called_by="user",
+            status="done", outcome="ok", input_key="M.run", detail="夹具样本：顶趟行",
+            started_at=TS, ended_at=TS).to_dict())
+
+    # ---- 一场会话：开场 → 一步 → 收尾，外加一条没答的提问（撑起 triage 那一格）
+    SESS.append(root, {"kind": "agent_run_start", "role": "M", "task": "夹具样本",
+                       "ts": TS}, sid=sid)
+    SESS.append(root, {"kind": "agent_step", "role": "M", "index": 0,
+                       "shape": "fs.write", "ts": TS}, sid=sid)
+    SESS.append(root, {"kind": "agent_run_end", "role": "M", "stop_reason": "final",
+                       "steps": 1, "final_chars": 6, "summons": 1, "messages": 0,
+                       "elapsed_sec": 2.0, "ts": TS}, sid=sid)
+    U.ask_user(root, role="M", question="夹具样本：这四处改动要不要保留？",
+               options=({"label": "保留", "description": "第一档"},), timeout_sec=0,
+               sid=sid)
+
+    # ---- V 的验证台账（裁定 K2：造一行，含 verdict 与 proof_sha256）
+    V.record_verification(root, statement_id="0001", proof_text="夹具样本：证明正文",
+                          verdict={"verdict": "成立"}, verifier="V")
+    return root
+
+
+@pytest.fixture
+def artifacts_ws(tmp_path: Path) -> Path:
+    """六面只读模型的夹具工作区（裁定 J2/K2；见 :func:`make_artifacts_sample`）。"""
+    return make_artifacts_sample(tmp_path / "ws")
+
+
 # --------------------------------------------------------------------------- fixture
 
 
