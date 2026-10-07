@@ -962,6 +962,12 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                         # （`verdict.doc` 一并带回来了）；`or {}` 只是让"万一不在"
                         # 落进下面那条 fail-closed 的判定，而不是静默放过。
                         tdoc = verdict.doc or {}
+                        # 审计期独有的一条内容政策（`draft/68` 题 12 选 A：两侧**保持不对称**）。
+                        # 写入期刻意不查这一条 —— 写稿阶段本来就要能引一份还在审的稿子
+                        # （否则"边写边审"的正常流程会被挡住）；审计期才判"引文图能不能把
+                        # 没审过的稿子当来源"（`draft/29` §8.5 第 1 条）。
+                        # 两侧共用的是前三段（`signatures.doc_ref_verdict`），这一档是调用方档、
+                        # 不在那三段里 —— 见那个函数的 docstring。谁要"顺手统一"，先看这一句。
                         if str(tdoc.get("status") or "") != "accepted":
                             rep.issues.append(Issue(
                                 "error", "documents", docid, "internal_citation_not_accepted",

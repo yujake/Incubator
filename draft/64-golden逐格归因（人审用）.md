@@ -418,3 +418,55 @@ tool 面（**10 格 = 9 个 `cli.--role A–H,V` 各 +1 字符 + `declarations.t
 
 重冻后立刻复核：两条快照用例 **5 passed**、增量格 **agent 0 / tool 0**。
 ⚠️ **`draft/67` 的待签清单要按这两个新 sha 复采**；人审面 = 第一轮 70 格 + 第二轮 7 格 + 第三轮 10 格 + **本轮 20 格**。
+
+---
+
+### §8.8 **第五次重冻：四条并行线合并之后**（2026-10-07 16:0x–16:2x）
+
+**这一次冻的是"并行推进"的四条线一次落地**（每条线各自提交、主控按序合并；逐条复核读数见 `draft/69 §1` 的批次行）：
+
+| 线 | 内容 | 落点 |
+|---|---|---|
+| 题 3 / 题 11-A | `A.search_literature` 的 `providers` 完整透传（`SearchRequest.providers` + 实现按行点名选源 + 三态） | `5d95aed` |
+| 题 6A | `reviewaccept` 接进只读出口 `agentflow closing`（生产面 0→1） | `cfa17b2` |
+| 题 9/B | 缩 `specs/b.py` / `specs/d.py` / `specs/e.py` 的动作摘要（十角色 −2,321 字符） | 并入 `6644e8d` |
+| 5a | `doc:` 三段判据合一处（唯一实现 `signatures.doc_ref_verdict`） | 并入 `6644e8d` |
+| 题 2/B | 六张断言语义词表真身搬进 `schema.py`（单一来源） | 并入 `6562a34` |
+| 题 1/A | `citations` 加 `stmt:` 前缀 + 污染面扩到正文断言层 | 并入 `6562a34` |
+
+**增量格：agent 17 格 · tool 0 格**（`temp/r6-freeze-cells-step4-before.txt` 是原始件）。
+
+| # | 格 | 冻结版 | 现在盘上 | 归因 |
+|---|---|---|---|---|
+| 1 | `roles.A.actions[3].params.properties.providers` | 缺 | `{"type":"array","items":{"type":"string"}}` | 题 3/11：动作面补 `providers`（工具面早已有） |
+| 2 | `roles.A.handler_signatures.search_literature` | 83 字符 | 125 字符 | 同上：实现签名真的收下 `providers` |
+| 3 | `roles.A.prompt` | 14246 | 14103（−143） | 题 9/B 缩摘要（−143 净：`providers` 那一格让 A 的动作清单略长，摘要缩得更多） |
+| 4 | `roles.B.actions[1].summary` | 401 字符 | 258 字符 | 题 9/B：`register_statement` 摘要缩 |
+| 5 | `roles.B.prompt` | 13627 | 13484（−143） | 同上（伙伴表 + 自己的动作清单） |
+| 6 | `roles.C.prompt` | 11958 | 11958（**0 字符差**） | **只因版本行 p40 → p41**（C 的提示词里没有那四条摘要、也没有 `stmt:` 那段） |
+| 7 | `roles.D.actions[7].summary` | 226 | 61 | 题 9/B：`propose_question` 摘要缩 |
+| 8 | `roles.D.actions[8].summary` | 61 | 改写成一行 | 题 9/B：`register_conjecture` 摘要缩 |
+| 9 | `roles.D.actions[14].summary` | 180 | 82 | 题 9/B：`write_report` 摘要缩 |
+| 10 | `roles.D.prompt` | 19677 | 19244（−433） | 同上 |
+| 11 | `roles.E.actions[0].summary` | 121 | 108 | 题 9/B：`check_formal` 摘要缩 |
+| 12 | `roles.E.prompt` | 17906 | 17473（−433） | 同上 |
+| 13 | `roles.F.prompt` | 18601 | 18168（−433） | 题 9/B 的**伙伴表**那一半（F 自己的摘要没改，见 `draft/68` 题 9 的复核） |
+| 14 | `roles.G.prompt` | 27005 | 27100（**+95**） | 题 1：G 的 brief 新增"引我们自己的命题要用 `stmt:<命题号>`"一段 |
+| 15 | `roles.H.prompt` | 23099 | 23096（−3） | 题 9 的伙伴表 − 题 2/1 的措辞（净 −3） |
+| 16 | `roles.M.prompt` | 37751 | 37328（−423） | 题 9 的伙伴表 + 题 1 的 `stmt:` 那一句 |
+| 17 | `roles.V.prompt` | 12146 | 12146（**0 字符差**） | **只因版本行 p40 → p41**（同 C） |
+
+**三条支撑证据**：
+
+1. **tool 面 0 格**：`tool_surface_snapshot.json` 的 sha 重冻前后**完全相同**（`3a593397fd61…`）⇒ 与"工具面一个字没动"互为佐证（`doc_tools._CITATION_TABLES` 是代码不是工具摘要；`doc.build_document` 的 schema 没改 —— 见 `draft/68` 题 1 的残项：工具面的教学落点仍只举三种前缀）。
+2. **题 2（词表搬家）一格没动**：六张词表从 `claimanatomy` 搬进 `schema` 是**纯搬移** —— 106 格校验结论与改前**逐字节相同**（`diff-before-task2.json` 与 `diff-after-task2.json` 的 sha256 相同），且 golden 里没有任何格子因此变（词表不在快照面上）。**"搬一处"在读数上就是"零格变化"**，这本身就是它没改口径的证据。
+3. **版本行必须由主控统一**：题 9/B 与题 1/A 在**两条并行线**上各自把 `PROMPT_VERSION` 抬成了 `p40`（各自看都对）⇒ 合并后由主控统一成 **`p41`**，十格摘要在**合并后的树**上按同一口径重算（生成器 `temp/_gen_digests.py`）。这条冲突在合并时由我手工解掉（`tests/test_agent_prompts.py` 的两处冲突块 + `agent_prompts.py` 的版本注释），并把那条判据的反负控②从"写死下一个号"改成"当场算冻结版本 +1" —— 它此前被撞过两次（`draft/65 §3.1` 教训 29 的那条）。
+
+**golden 的 sha 变化（登记用）**：
+
+| 文件 | 重冻前 | **重冻后（当前）** |
+|---|---|---|
+| `tests/golden/agent_surface_snapshot.json` | `6403c86231ac…` | **`acc49de91b04…`** |
+| `tests/golden/tool_surface_snapshot.json` | `3a593397fd61…` | **`3a593397fd61…`（未变）** |
+
+⚠️ **人审面累计 = 第一轮 70 格 + 第二轮 7 格 + 第三轮 10 格 + 第四轮 20 格 + 本轮 17 格**，`draft/67` 要按这两个新 sha 复采。
