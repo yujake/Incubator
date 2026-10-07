@@ -295,10 +295,10 @@ def test_a_the_seam_names_are_all_in_place() -> None:
                 f"{mod.__name__} 的子表登记了 {row[2]}，但它没进总表 "
                 "（`routes.compose` 少拼了一段？）")
     assert isinstance(sse.EVENT_KINDS, tuple), sse.EVENT_KINDS
-    # 写面子表：钉"不随施工阶段变化的形状"，**不钉它当时有几行**。
+    # 写面子表：钉"不随施工阶段变化的形状"，不钉它当时有几行。
     # 我原先写的是硬相等 `writes.ROUTES == (("POST","/answer","handle_answer"),)` ——
     # 那是 W0 的空形态，C 线一动手（加 `/api/stop` / `/api/submit` / `/api/settings`）
-    # 就必然红，而且它挡的是**下游正常施工**。现在钉三件不变的事：
+    # 就必然红，而且它挡的是下游正常施工。现在钉三件不变的事：
     #   ① `/answer` 那条任何时候都必须在（它是今天就有的写路径）；
     #   ② 每条都必须是良构三元组、且名字真的进了总表（上面那个循环已查）；
     #   ③ 子表里不许出现总表之外的"孤立行"。

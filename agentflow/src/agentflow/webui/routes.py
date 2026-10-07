@@ -89,14 +89,18 @@ def handler_for(name: str):
     return None
 
 
-#: A 线（自有：页面 + 快照 + 静态资源）那一段子表。
+#: A 线（自有：页面 + 静态资源）那一段子表。
+#:
+#: 注意 `("GET", "/api/state", ...)` 不在这里：所有者裁定 2b 把那条路由迁到了
+#: `readers.ROUTES`（B 线），A 线原来的 `WebHandler.handle_state` 也一并删掉 ——
+#: 于是"哪条线上的模块声明这条路由"与"谁实现它"落在同一个文件里（`readers.py`），
+#: 而公开面不变：`readers.handle_state` 回的就是 `state.snapshot(root)` 本身。
 _OWN: tuple[tuple[str, str, str], ...] = (
     # --- 页面（服务端渲染的旧壳；裁定 P1：逐面迁到 SPA 之后删一个）
     ("GET", "/", "handle_root"),
     ("GET", "/index.html", "handle_root"),
     ("GET", "/run/{sid}", "handle_run"),
     # --- 读数 JSON
-    ("GET", "/api/state", "handle_state"),
     # 趟次索引的读数（裁定 O2 的页面消费端）：Run 页要同时拿到"索引本身"与
     # "索引与事件现算结果的对账结论"，两样必须来自同一次读（`sessions.run_index_report`
     # 的理由逐字写在它的 docstring 里）。它是一条自有端点，不是 B 线六个面里的一个：

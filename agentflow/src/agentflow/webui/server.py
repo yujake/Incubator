@@ -292,12 +292,6 @@ class WebHandler(BaseHTTPRequestHandler):
         del params, query
         self._html(200, render_root(snapshot(self.root)))
 
-    def handle_state(self, params: Mapping[str, str],
-                     query: Mapping[str, Sequence[str]]) -> None:
-        """`GET /api/state`：同一批读数的 JSON（前端 Home 页读的就是它）。"""
-        del params, query
-        self._json(200, snapshot(self.root))
-
     def handle_run_index(self, params: Mapping[str, str],
                          query: Mapping[str, Sequence[str]]) -> None:
         """`GET /api/run-index`：趟次索引与"它与事件现算结果是否一致"的读数。
