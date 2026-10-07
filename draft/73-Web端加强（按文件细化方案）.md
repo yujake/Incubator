@@ -259,7 +259,7 @@ def test_no_console_errors(...)
 | 批 | 动到的文件 | 收工判据（改前必须能红） | 门 |
 |---|---|---|---|
 | **W0** | `ui/**`（骨架；含 `src/types.ts` 由 `emit_types.py` 生成）· `webui/{__init__,routes,server,state,views}.py` · `web/emit_theme.py` · `web/assets.py` · `tests/test_webui_static.py` · `tests/test_release_all.py`（登记） · `docs/READING-MAP.md`（改名） | 静态路由/穿越负控 · 产物自洽 · 令牌新鲜度 · **现有 17 条全绿** | 全量门 |
-| **W1** | `webui/readers.py` · `ui/src/pages/{Home,Run,Evidence,Artifacts,Machine,Acceptance}.tsx` · `ui/src/components/**` · `tests/test_webui_pages.py` · `tests/test_webui_readers.py` · `tests/test_run_index.py`（裁定 O2：索引与事件对账）· `tests/conftest.py`（裁定 J2/K2：造六件产物与 `verifications/<id>.jsonl` 的夹具） | 六个面各自的"真读数出现 + 空态 + `unknown` 不写成 0" | 全量门 |
+| **W1** | `webui/readers.py` · `ui/src/pages/{Home,Run,Evidence,Artifacts,Machine,Acceptance}.tsx` · `ui/src/components/**` · `tests/test_webui_pages.py` · `tests/test_webui_readers.py` · `tests/test_run_index.py`（W1 新建，裁定 O2：索引与事件对账）· `tests/conftest.py`（裁定 J2/K2：造六件产物与 `verifications/<id>.jsonl` 的夹具） | 六个面各自的"真读数出现 + 空态 + `unknown` 不写成 0" | 全量门 |
 | **W2** | `webui/sse.py` · `ui/src/sse.ts` · `tests/test_webui_sse.py` | SSE 五条（含端到端"盘上新增 ⇒ 流里出现"） | 全量门 |
 | **W3** | `webui/writes.py` · `webui/audit.py` · `ui/src/components/ConfirmButton.tsx` · `tests/test_webui_writes.py` · `tests/conftest.py`（fixture） · `cli.py`（`--allow-writes`） | 授权矩阵 · 审计 · **绕闸门负控** | 全量门（若触发题 H=A ⇒ 停下等你裁） |
 | **W4** | `settings.py`（`write_settings`） · `ui/src/pages/Machine.tsx` · `tests/test_webui_settings_write.py` · `tests/test_webui_browser.py` · `docs/USER-END-DSH-STYLE.md` · `README.md` · `docs/INDEX.md` · （题 G=B 时）`tools/release_all.py` · `pyproject.toml` | key 不回显/原子写/权限 | 全量门 + **重冻**（若牵动面） |
