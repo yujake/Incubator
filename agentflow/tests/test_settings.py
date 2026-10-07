@@ -12,7 +12,7 @@
    —— 只写正控的话，一个"永远返回环境变量"的实现也能通过。
 3. 「死地址判据」：源码与工具链文档里不许再出现那台机器的绝对路径
    （形如 `D:\\...\\temp\\lean470\\...` / `D:\\...\\_env\\lean...`，以及
-   `temp/lean470` 这种工作区根相对写法）。判据是文本级 + AST 级的并集：
+   `_env/lean470` 这种工作区根相对写法）。判据是文本级 + AST 级的并集：
    文本级接注释，AST 级接字符串常量与 docstring。配负控：把一句这样的路径
    塞进一个文件 ⇒ 必红。
 4. 「安全阀」：`settings.json` 不在 `git ls-files` 里且被 ignore（配"被 `git add -f`
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import subprocess
 import time
@@ -60,7 +61,7 @@ ZERO_HIT_FILES = ("agentflow/docs/FORMAL-TOOLCHAIN.md", "agentflow/DEVELOPMENT.m
 _CRITERION_FILE = "agentflow/tests/test_settings.py"
 
 #: 那台机器的环境地址的形状：`<盘>:\...\{temp|_env}\{lean470|mathlib-pinned*|elantool}`，
-#: 加上工作区根相对的那种写法（`temp/lean470`）。
+#: 加上工作区根相对的那种写法（`_env/lean470`）。
 #:
 #: 分隔符写成 `[\\/]+`（一个或多个）而不是一个：Python 源码里的 docstring 与字符串
 #: 把路径写成 `D:\\Incubator\\temp\\...`，而判据扫的是「文件文本」 ——
@@ -73,9 +74,9 @@ _CRITERION_FILE = "agentflow/tests/test_settings.py"
 #: ## 为什么分隔符要用「原子组」（`(?>...)`）—— 这是一次真事故留下的形态
 #:
 #: 改前这里写的是 `(?:[^\\/\s`"'<>|]*[\\/]+)*?`：一个"可以匹配空"的内层量词套在
-#: 一个 `*?` 里。这在**连续多个反斜杠**的文本上是指数级回溯 —— 2026-10-07 实测：
+#: 一个 `*?` 里。这在连续多个反斜杠的文本上是指数级回溯 —— 2026-10-07 实测：
 #: 判据在 `temp/g5-mp3.txt`（5,161 字符、576 个反斜杠，内容是
-#: `\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上**单条判据跑 >45 s 不返回**，
+#: `\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上单条判据跑 >45 s 不返回，
 #: 而它在子代理那份干净工作树里只要 10 s（那棵树里同样有这个文件 —— 差别只在
 #: 文件是不是真的被扫到）。形态是"判据把整条全量门钉死"，不是"慢一点"。
 #:
@@ -104,17 +105,17 @@ _MACHINE_ENV_PATH = re.compile(
 #: 2. `draft/` 下的报告体：命中的是"那一天这台机器上 `lean --version` 打了什么"
 #:    这一类逐字读数（含 `lean.exe` / `lake.exe` 的真实输出）。历史报告只许加批注，
 #:    不许改原文 —— 这是本仓库对 `draft/` 的既有纪律。
-#: 3. `temp/` 下那 4 份（2026-10-07 补）：它们是**因为被引用而入库的历史证据**
+#: 3. `temp/` 下那 4 份（2026-10-07 补）：它们是因为被引用而入库的历史证据
 #:    （`B8a-evidence.md` 是 B8a 那一轮 `lean --version` / Mathlib 状态的逐字记录、
 #:    `auditE-lean-probe.json` / `run_gates.py` / `w5_p1_probe.py` 是同一批探针）。
 #:    入库之前它们不在 `git ls-files` 里（未跟踪），所以这一面看不见它们；
-#:    入库之后它们出现在这一面 —— 处置与第 2 类**完全一样**：改写它们等于改证据。
-#:    这也是一条读数：**这一面按"入库的东西"取，所以"给证据物入库"这个动作
-#:    本身会把它们带进这一面**（当时就该预料到，我没有 —— 见 `draft/65` 教训 33）。
+#:    入库之后它们出现在这一面 —— 处置与第 2 类完全一样：改写它们等于改证据。
+#:    这也是一条读数：这一面按"入库的东西"取，所以"给证据物入库"这个动作
+#:    本身会把它们带进这一面（当时就该预料到，我没有 —— 见 `draft/65` 教训 33）。
 #: 已移除的一条（`agentflow/docs/USER-TEST.md`）：它命中的是那句"启动前把
-#: `D:\Incubator\temp\lean470\...` 加进 PATH"的**操作指令**。指令不是历史记录 ——
+#: `D:\Incubator\temp\lean470\...` 加进 PATH"的操作指令。指令不是历史记录 ——
 #: 照它做会失败（环境已搬到工作区根 `_env/`，且落点改由设置文件给）。
-#: 2026-10-07 把那两句改成了设置文件口径 ⇒ 这一条随之**从登记表里减掉**
+#: 2026-10-07 把那两句改成了设置文件口径 ⇒ 这一条随之从登记表里减掉
 #: （"只许减不许增"这个方向上的减，正是这条判据想要的那种减）。
 _RESIDUE_REGISTER: dict[str, int] = {
     "agentflow/docs/INDEX.md": 1,
@@ -617,11 +618,11 @@ def test_the_machine_path_scanner_survives_a_backslash_storm() -> None:
 
     改前的正则里有一个"能匹配空的内层量词套在外层量词里"（`(?:[^\\/…]*[\\/]+)*?`）。
     形态：在 `temp/g5-mp3.txt`（5,161 字符 / 576 个反斜杠，内容是
-    `\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上，**单条判据 >45 s 不返回**
+    `\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上，单条判据 >45 s 不返回
     —— 而全量门会跑这条判据，所以那等于"把门钉死"。
 
     两件事一起钉，缺一条都会被"把正则改废"骗过去：
-      ① 一串多反斜杠必须在**有界时间内**扫完（上限写得很宽松：这不是性能基准，
+      ① 一串多反斜杠必须在有界时间内扫完（上限写得很宽松：这不是性能基准，
          它要抓的是"指数级"这一档，不是"慢 20%"）；
       ② 同一段文本里那句真路径仍然要被抓出来 —— 只钉速度的话，
          "不认了"也能让上面那条变绿。
@@ -871,6 +872,54 @@ def test_the_projects_dir_setting_is_strict_about_shapes(
     stub2 = _write(tmp_path, "rel.json", {"workspace": {"projects_dir": "somewhere/projects"}})
     monkeypatch.setenv(SET.ENV_SETTINGS, str(stub2))
     assert P.projects_dir(None) == SET.WORKSPACE_ROOT / "somewhere" / "projects"
+
+
+# --------------------------------------------------------------------------- #
+# 六、密封性：判据必须跑在"这台机器什么都没配"的环境里
+# --------------------------------------------------------------------------- #
+
+
+def test_the_suite_pins_the_machine_settings_away() -> None:
+    """守卫（2026-10-07 的全量门真事故）：判据不许读到本机那份设置文件。
+
+    事实：设置层落地之后，本机真有 `agentflow/settings.json`（里面有真的 API key 与
+    这台机器的 Lean / Mathlib 落点）。而一批判据断言的恰恰是"没配的时候"的分支
+    —— `run` 没 key ⇒ 退出码 2 且报 `no_key`、`detect_verifier` 报"没装"、
+    "build 期不碰模型" —— 它们在本机那份文件面前全部变红（实测那趟门 12 条红）。
+    另外，按老习惯 `export AGENTFLOW_MODEL_API_KEY=...` 之后再跑判据，会得到同样的红。
+
+    所以 `tests/conftest.py` 在导入期把 `AGENTFLOW_SETTINGS` 钉到一个不存在的路径、
+    并清掉本机事实类的环境变量。这条守卫钉住"那一手真的生效"，四档缺一档就退化成空转：
+
+      ① 套件级的钉真的在（`conftest.PINNED_SETTINGS_PATH` 非空）；
+      ② 本用例生效的那个落点在盘上没有文件 —— 注意本文件自己的 autouse 夹具
+         （它会把落点再指到 `PROJECT/_no_settings_for_this_test.json`），
+         所以这里断的是"生效落点不存在"，不是"等于 conftest 钉的那一个"；
+      ③ 生效落点不是本机那份 `agentflow/settings.json`，且读出来是空的；
+      ④ 反向：往生效落点写一份真设置 ⇒ 产品立刻读得到 —— 这一档证明钉的是一个
+         "真会被读的落点"，而不是"一个被忽略的字符串"。跑完自己删掉。
+    """
+    import conftest
+
+    assert conftest.PINNED_SETTINGS_PATH, \
+        "conftest 没钉设置路径（是不是设了 AGENTFLOW_NO_SETTINGS_PIN？）"
+    effective = SET.settings_path()
+    assert effective is not None, "生效落点是 None ⇒ 本次不读文件，这条守卫没落脚点"
+    assert not effective.exists(), f"生效落点上居然有文件：{effective}"
+    assert effective != PROJECT / "settings.json", "生效落点就是本机那份设置文件 — 没解耦"
+    assert SET.load_settings() == {}, "钉住之后仍读到了设置 ⇒ 与本机解耦没生效"
+    for name in ("AGENTFLOW_MODEL_API_KEY", "AGENTFLOW_LEAN_BIN",
+                 "AGENTFLOW_MATHLIB_ROOT", "AGENTFLOW_PROVER_PATH"):
+        assert not os.environ.get(name), f"{name} 还在环境里 ⇒ 判据会随本机 shell 变形"
+
+    p = Path(effective)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('{"model": {"name": "pinned-probe"}}', encoding="utf-8")
+    try:
+        assert SET.model_settings()["name"] == "pinned-probe", (
+            "往生效落点写设置却读不到 ⇒ 这一手是空转（它钉的字符串根本没进产品代码）")
+    finally:
+        p.unlink()
 
 
 if __name__ == "__main__":  # pragma: no cover - 手动跑这一组时的入口

@@ -98,6 +98,68 @@ def _pin_temp_root() -> str:
 
 PINNED_TEMP_ROOT = _pin_temp_root()
 
+# ---------------------------------------------------------------------------
+# 机器级设置与"这台机器上装了东西"类的环境变量：判据一律在"什么都没配"里跑
+# ---------------------------------------------------------------------------
+
+#: 关掉设置钉（只为负控用：让"没钉会怎样"这件事能被观察一次）。
+_NO_SETTINGS_PIN_ENV = "AGENTFLOW_NO_SETTINGS_PIN"
+
+#: 本机事实类的环境变量：判据不该受"开发者的 shell 里 export 过什么"影响。
+#: 逐条与 `agentflow/settings.py` 的档位对应（模型 key 与四档工具链查找里的前两档）。
+_MACHINE_ENV_NAMES = (
+    "AGENTFLOW_SETTINGS",
+    "AGENTFLOW_MODEL_API_KEY",
+    "AGENTFLOW_LEAN_BIN",
+    "AGENTFLOW_COQ_BIN",
+    "AGENTFLOW_ISABELLE_BIN",
+    "AGENTFLOW_PROVER_PATH",
+    "AGENTFLOW_MATHLIB_ROOT",
+    "AGENTFLOW_PROJECTS_DIR",
+)
+
+
+def _pin_settings_path() -> str:
+    """把"设置文件在哪"钉到一个不存在的路径，并清掉本机事实类的环境变量。
+
+    ## 为什么必须有这一手（2026-10-07 全量门的真事故，12 条红全是它）
+
+    机器级设置文件（`agentflow/settings.json`）落地之后，这台机器上真的有那份文件
+    （里面有真的 API key 与这台机器的 Lean / Mathlib 落点）。而判据里有一批断言的是
+    "没配的时候"的行为：`agentflow run` 没有 key ⇒ 退出码 2 且报 `no_key`、
+    `detect_verifier` 报"没装"、"build 期不碰模型"…… 它们在本机那份文件面前全部变红
+    （实测：`test_agent_cli` / `test_cli_run` / `test_cli_console_encoding` /
+    `test_host_wiring`×3 / `test_formalgw` / `test_tools_audit_fixes`×2 /
+    `test_user_quickstart` / `test_user_channel_stop_and_resume` 共 12 条）。
+
+    ## 为什么"把判据改成看环境"是错的答案
+
+    那些判据守的是代码的分支（没配 ⇒ 三态里的"没查成"），不是"这台机器上装了什么"。
+    让它们随本机配置变形，等于把"这条分支还在不在"变成一台机器上一个答案 ——
+    而 CI 上（没配）与开发机上（配了）会给出不同的结论，绿灯的含义随之漂移。
+
+    ## 所以：判据在确定性环境里跑；要测设置层的判据自己造文件
+
+    `tests/test_settings.py` 用 `monkeypatch.setenv(SET.ENV_SETTINGS, <自己造的>)` ——
+    monkeypatch 在用例结束时会把它还原成这里钉的值，两者不冲突。守卫在
+    `tests/test_settings.py::test_the_suite_pins_the_machine_settings_away`。
+    """
+    if os.environ.get(_NO_SETTINGS_PIN_ENV):
+        return ""
+    for name in _MACHINE_ENV_NAMES[1:]:
+        os.environ.pop(name, None)
+    base = Path(PINNED_TEMP_ROOT) if PINNED_TEMP_ROOT else _PROJ / ".pytest-tmp"
+    target = base / "no-settings.json"
+    try:
+        target.unlink()          # 上一趟跑剩的会被读成"配了文件" ⇒ 先清掉
+    except OSError:
+        pass
+    os.environ["AGENTFLOW_SETTINGS"] = str(target)
+    return str(target)
+
+
+PINNED_SETTINGS_PATH = _pin_settings_path()
+
 from agentflow import schema as S  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
