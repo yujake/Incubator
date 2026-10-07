@@ -328,6 +328,8 @@ desktop.ini
 !/temp/_t7_verify.py
 !/temp/_user_end_verify.py
 !/temp/_verify_r2.py
+!/temp/_verify_w0.py
+!/temp/_w0_public_face.json
 !/temp/_web_lines.json
 !/temp/_web_matrix_evidence.py
 !/temp/_web_matrix_evidence.txt

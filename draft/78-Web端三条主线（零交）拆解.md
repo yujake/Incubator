@@ -51,6 +51,7 @@
 **两条边界要说清**（免得读成"随手划的"）：
 1. `tests/conftest.py` 归 **B**（J2/K2 两份夹具住在那里）⇒ **A/C 不许改它**；A/C 要造夹具就造在自己文件的局部 fixture 里。
 2. `docs/*` 与 `README.md` 归 **A** ⇒ B/C 需要文档改动时**写进自己的报告**，由 A 线或主控统一落（否则三条线会在同一份文档上撞车）。
+3. **`.gitignore` 归主控、不在任何一条线里**（这张表只列"线内产出物"；`.gitignore` 与 `temp/` 下的探针是主控的账）。**实测教训**：W0 线在自己的工作树里也动了 `.gitignore`（加 `node_modules/`）—— 说明"没写进表"的文件照样会被碰，所以合并时这条由主控**整份取 master 版**再重跑生成器，不逐行合（见 §5 冲突预案）。
 
 ---
 
@@ -82,6 +83,16 @@ W0（A 线，已在跑：line-w0 / temp/wt-w0，基线 65746a5）
 
 **为什么 B/C 要等 W0 合入**：它们都依赖 `routes.py` 的**拼接形态**与 `emit_types.py` 的**子表协议**；W0 没落地就并行，等于三条线各自猜一个接口，合并时必然返工（那不是"零交"，是"零交但接口对不上"）。
 
+**W0 合并前先过一道"公开面不变"的对账**（主控做，不比 18 分钟门便宜但**比返工便宜**）：
+```powershell
+# 拆包前（已完成：master 65746a5 上抓到基线）
+python -B temp/_verify_w0.py capture     # → temp/_w0_public_face.json
+# 拆包后（W0 分支上，或合并进 master 后）
+python -B temp/_verify_w0.py check
+```
+它量的是**同一个真实工作区**（`agentflow/projects/p9b-post-fix-replay`）上的同一批读数：模块级公开名 + 签名（8 个）· `snapshot()` 顶层键（10 个）与各层键并集 · 源码里的 URL 字面量集合（5 条）· `render_root`/`render_run` 的**页面形状**（class 集与标签计数；**不比字节哈希** —— 页面带 `generated_at` 与"N 分钟前"，哈希必然漂移）。
+**基线（2026-10-07 实跑）**：`render_root` 29699 字节 / 17 个 class；`render_run` 97712 字节；`public_names` 8 个（`WebHandler` `answer_text_of` `option_view` `render_root` `render_run` `run` `serve` `snapshot`）。**自检**：连着跑两次 `capture`+`check` 全同 ⇒ 这把尺子本身是稳的。
+
 ---
 
 ## §5 各线收工门与合并协议
@@ -97,9 +108,10 @@ python -B -m pytest -q -p no:cacheprovider -p no:randomly tests/test_webui.py   
 
 **主控**（我）：
 1. 按 **A → B → C** 的顺序合并（A 的结构是另两条的地基；B 与 C 之间没有先后）；
-2. 每轮合并后：`git status` 核对只有预期改动 → 跑 `python -B temp/_merge_gate.py --with-pytest`（逐节读数看报告）→ 若两轮挨得近，允许"两轮一次门"，但**两次的改动面必须都在门覆盖内**；
-3. **改前端 ⇒ 先 `pnpm build` 提交 dist，再跑门**（B1）；golden 只在必要且一次性时重冻（逐格归因 `draft/64 §8.12`）；
-4. 冲突预案（真撞了怎么办）：**撞在 A 的文件上 ⇒ B/C 让 A**（A 的结构先定）；**撞在 `conftest.py` ⇒ 别人让 B**；**撞在 docs ⇒ 统一由 A 落**；任何一条"让"都要在 `draft/77 §1` 台账里留一行。
+2. **合并 A（W0）时先跑 `python -B temp/_verify_w0.py check`**：公开面硬读数变了就**不合并**（先查是谁动的），页面形状变了要把长度差打出来人判；这一关过了再进 `git status` 核对 → 全量门；
+3. 每轮合并后：`git status` 核对只有预期改动 → 跑 `python -B temp/_merge_gate.py --with-pytest`（逐节读数看报告）→ 若两轮挨得近，允许"两轮一次门"，但**两次的改动面必须都在门覆盖内**；
+4. **改前端 ⇒ 先 `pnpm build` 提交 dist，再跑门**（B1）；golden 只在必要且一次性时重冻（逐格归因 `draft/64 §8.12`）；
+5. 冲突预案（真撞了怎么办）：**撞在 A 的文件上 ⇒ B/C 让 A**（A 的结构先定）；**撞在 `conftest.py` ⇒ 别人让 B**；**撞在 docs ⇒ 统一由 A 落**；**撞在 `.gitignore` / `temp/` 探针 ⇒ 取 master 版 + 重跑 `temp/_gen_cited_ignore.py`**（不逐行合：那条生成块的整体一致比任何单行都重要）；**撞在 `draft/` ⇒ 主控自己写**（三条线只读 draft）；任何一条"让"都要在 `draft/77 §1` 台账里留一行。
 
 ---
 
