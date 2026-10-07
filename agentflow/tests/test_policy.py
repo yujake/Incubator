@@ -504,9 +504,37 @@ def test_cycle_uses_input_key_not_all_params():
 
 
 def test_fanout_exceeded():
-    r = P.check(P.Policy(max_fanout=2), _d(fanout=2))
+    """默认档（工人）的扇出上限 = `Policy.max_fanout`，在 `>=` 处拒。
+
+    为什么这里显式写 `frm="A"`（而 `_d` 的默认 frm 是 M）：上限按发起方角色取
+    （题15 选B，2026-10-07），主控那一档是 20，不写 frm 就会测到主控档上。
+    主控档自己的判据见 `test_fanout_limit_is_per_initiator_role`。
+    """
+    r = P.check(P.Policy(max_fanout=2), _d(frm="A", to="B", action="run_once", fanout=2))
     assert r is not None and r.reason == "fanout_exceeded"
-    assert P.check(P.Policy(max_fanout=2), _d(fanout=1)) is None
+    assert P.check(P.Policy(max_fanout=2),
+                   _d(frm="A", to="B", action="run_once", fanout=1)) is None
+
+
+def test_fanout_limit_is_per_initiator_role():
+    """扇出上限按发起方角色取：主控一档 = 20，默认档 = `Policy.max_fanout`。
+
+    20 这个数钉在判据里是刻意的：它是一条人裁的编排余量（题15 选B，2026-10-07），
+    改它应当先改那一处裁定，而不是顺手调一个常量。
+    """
+    p = P.Policy()
+    assert P.fanout_limit_for(p, S.CONDUCTOR_ROLE) == 20
+    assert P.fanout_limit_for(p, "A") == p.max_fanout == 5
+    # 反真空：两档都真的会拒，报文里能读出"当前几"与"上限是多少"。
+    worker = P.check(p, _d(frm="A", to="B", action="run_once", fanout=5))
+    assert worker is not None and worker.reason == "fanout_exceeded"
+    assert "已受理 5" in worker.detail and "上限 5" in worker.detail, worker.detail
+    assert P.check(p, _d(frm="M", to="A", action="run_once", fanout=6)) is None
+    boss = P.check(p, _d(frm="M", to="A", action="run_once", fanout=20))
+    assert boss is not None and boss.reason == "fanout_exceeded"
+    assert "已受理 20" in boss.detail and "上限 20" in boss.detail, boss.detail
+    # 报文要说清那个 20 是从哪来的（否则读的人会以为上限就是 policy.max_fanout）
+    assert "FANOUT_LIMIT_BY_ROLE" in boss.detail and "policy.max_fanout=5" in boss.detail
 
 
 def test_concurrency_exceeded():

@@ -195,7 +195,10 @@ H → G            # 审校发现问题 → 请 G 修订（H 不改稿）
 ### 3.2 循环与活锁
 
 - **深度**：`depth > max_depth` ⇒ `refused/depth_exceeded`。
-- **扇出**：一个任务已派生 `max_fanout` 个子任务 ⇒ `refused/fanout_exceeded`。
+- **扇出**：一个任务已受理 `max_fanout` 个子任务（口径 = 受理数：被闸门拒掉、根本没跑的
+  尝试照旧落台账但不占名额 —— 否则父任务触顶后就再也派不出活，且每次尝试再占一格＝自我毒化）
+  ⇒ `refused/fanout_exceeded`。上限按发起方角色取：默认档 = `policy.max_fanout`，
+  主控 `M` 一档 = 20（`policy.FANOUT_LIMIT_BY_ROLE`，编排者一趟要派的活天然比工人多）。
 - **判重**：`(role, action, input_key)` 若出现在**祖先链**上 ⇒ `refused/cycle_detected`。
   用 `input_key`（调用方给的输入指纹）而不是全部参数：参数里常有时间戳这类噪声，
   而"同样的问题问两遍"才是要防的事。

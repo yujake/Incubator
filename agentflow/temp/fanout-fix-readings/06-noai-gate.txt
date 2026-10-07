@@ -1,0 +1,2 @@
+[clean] required_approvals=0
+clean：7 条改动路径均未命中禁改区（清单 40 条）⇒ 无需额外人工批准。

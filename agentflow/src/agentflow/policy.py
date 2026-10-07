@@ -23,6 +23,16 @@
 （`None` = 不限），因为它们不是"防爆炸"的结构性上限，而是资源上限；
 但 `None` 在台账里必须能被读出来（`Policy.to_dict()` 里它原样是 None，
 不会被折叠成 0）。
+
+## 扇出的口径：受理数，不是尝试数（题15 选B，2026-10-07）
+
+`check()` 的第 [5] 步读 `Decision.fanout`，它的定义是"父任务受理过几个子召唤"，
+不是"台账里有几行子行"。这一条差别就是本模块最贵的那类缺陷：闸门拒绝也落台账
+（谁试过什么必须留痕），若被拒的那一次也占名额，父任务一旦触顶就再也派不出活，
+而且每次尝试还会再占一格 —— 自我毒化、不可恢复。真机读数见
+`FANOUT_LIMIT_BY_ROLE` 下面那一段。分档是刻意的："跑了但失败"（或跑了而角色
+自己拒了）的子行仍然占名额，它确实消耗了一次派活；只有"被闸门拒掉、根本没跑"
+的不占。上限本身按发起方角色取：默认档 = `Policy.max_fanout`，主控 `M` 一档 = 20。
 """
 
 from __future__ import annotations
@@ -40,7 +50,8 @@ class Policy:
 
     #: 召唤链深度上限。主控发起 = 1，因此 `max_depth=3` ⇒ `M(1) → A(2) → B(3)` 已到底。
     max_depth: int = 3
-    #: 单个任务最多派生几个子召唤。
+    #: 单个任务最多派生几个子召唤（默认档；主控那一档见 `FANOUT_LIMIT_BY_ROLE`）。
+    #: 口径是受理数，不是尝试数 —— 见模块 docstring 的"扇出的口径"一节。
     max_fanout: int = 5
     #: 全局同时运行的任务数（瞬时上限）。
     max_concurrency: int = 4
@@ -89,6 +100,39 @@ class Policy:
         """台账/日志里的形态。None 保持 None（不折叠成 0）：
         "不限"与"限 0"是两件完全不同的事，折叠它们会让事后审计读不出当时的策略。"""
         return asdict(self)
+
+
+# ---------------------------------------------------------------- 逐角色的上限覆盖
+
+
+#: 发起方角色 → 扇出上限的显式覆盖（唯一一处；不在表里的角色一律用
+#: `Policy.max_fanout`，所以默认档仍然只有那一个来源）。20 这个数只写在这里。
+#:
+#: 为什么只有主控单独一档（题15 选B，2026-10-07）：
+#:
+#: - 编排者一趟要派的活天然比工人多。工人的一次召唤是"干一件具体的事"，
+#:   主控的一次召唤是"把这一趟的编队支起来"（检索 / 立题 / 实验 / 审阅各一件），
+#:   两者合用同一个上限会让主控在正常编队下就触顶。
+#: - 真机读数（工作区 `agentflow/projects/p9-post-merge-probe`，2026-10-07 台账）：
+#:   顶趟行 `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是
+#:   `refused/fanout_exceeded`，detail 里的读数从"已派生 5 个"一路涨到"已派生 9 个"
+#:   （那就是自我毒化的机器形态）；本趟主控只成功派了 3 件活（A 检索 / D 立题 /
+#:   D 登记猜想），E 的实验永远进不去 ⇒ `experiments=0`、收工门两格红。
+#:   那一趟主控需要至少 4 次有效派活，而名额只有 5 —— 编排余量太小，所以另立一档。
+#: - 只抬主控、不抬工人：工人档维持默认值，扇出仍是"一个任务最多派生 5 个"，
+#:   这一条有反真空判据咬着（`tests/test_fanout_admission.py`）。
+FANOUT_LIMIT_BY_ROLE: dict[str, int] = {S.CONDUCTOR_ROLE: 20}
+
+
+def fanout_limit_for(policy: Policy, frm: str) -> int:
+    """发起方角色 `frm` 的扇出上限：默认档取自 `Policy.max_fanout`，主控一档见
+    `FANOUT_LIMIT_BY_ROLE`。
+
+    为什么按发起方（`Decision.frm`）取而不是按父任务的角色取：名额约束的是
+    "谁在派活"。同一棵树上一个工人派 5 件就该满，而主控派 6 件是正常编队
+    （真机那一趟主控需要至少 4 次有效派活，读数见 `FANOUT_LIMIT_BY_ROLE`）。
+    """
+    return FANOUT_LIMIT_BY_ROLE.get(frm, policy.max_fanout)
 
 
 # ---------------------------------------------------------------- 拒绝
@@ -142,7 +186,10 @@ class Decision:
     role: str = ""
     #: 本次召唤的深度（主控发起 = 1）。
     depth: int = 1
-    #: 父任务已经派生的子任务数（不含本次）。
+    #: 父任务已经受理的子任务数（不含本次）。口径是受理数，不是尝试数：
+    #: 被闸门拒掉、根本没跑的召唤不占名额（`Conductor._admitted_children_of`），
+    #: 而"跑了但失败"（或跑了而角色自己拒了）的仍然占 —— 它确实消耗了一次派活。
+    #: 按尝试数算会让父任务触顶之后再也派不出活，且每次尝试再占一格（自我毒化）。
     fanout: int = 0
     #: 当前正在运行的任务数（瞬时）。
     running: int = 0
@@ -292,11 +339,26 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
             "cycle",
         )
 
-    # ---- [5] 扇出
-    if d.fanout >= policy.max_fanout:
+    # ---- [5] 扇出（口径：受理数，不是尝试数；上限按发起方角色取）
+    #
+    # `d.fanout` 由调用方（`Conductor`）按"受理过的子行"算：被闸门拒掉、根本没跑的
+    # 那些不占名额（它们照旧落台账，见 `conductor._refuse` 与 `_admitted_children_of`）。
+    # 这条口径是判据的一部分而不是实现细节 —— 若被拒的那一次也占名额，父任务一旦
+    # 触顶就再也派不出活，而每次尝试还会再占一格（自我毒化、不可恢复；真机读数见
+    # `FANOUT_LIMIT_BY_ROLE`）。上限按发起方取：默认档 = `policy.max_fanout`，
+    # 主控一档 = `FANOUT_LIMIT_BY_ROLE`（20）。
+    limit = fanout_limit_for(policy, d.frm)
+    if d.fanout >= limit:
+        # 报文要能同时读出"当前几"与"上限是多少"，以及那个上限是从哪来的：
+        # 只说 max_fanout=5 的报文在主控那一档上会让人以为上限是 5。
+        if d.frm in FANOUT_LIMIT_BY_ROLE:
+            origin = f"FANOUT_LIMIT_BY_ROLE 里主控那一档，policy.max_fanout={policy.max_fanout}"
+        else:
+            origin = "policy.max_fanout"
         return Refusal(
             "fanout_exceeded",
-            f"该任务已派生 {d.fanout} 个子召唤，达到 max_fanout={policy.max_fanout}",
+            f"该任务已受理 {d.fanout} 个子召唤，达到发起方 {d.frm} 的扇出上限 {limit}"
+            f"（{origin}）",
             "max_fanout",
         )
 
