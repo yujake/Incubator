@@ -1,0 +1,261 @@
+{
+  "auditor": "reaudit6-R5-subagent-deepseek-flash",
+  "batch": "R5",
+  "scope": "第 6 轮 · 批次 R5（编排与成本，含批次 Q 改过的 runflow.py）。逐字审了：agentflow/src/agentflow/runflow.py（run_topic / _settle_run_task / _run_task_verdict / _spent_this_run / _complete_or_not_checked / _ledger_view / _idem_scope / selftest 的 G-20 段）、modelcost.py（charge_reply / idempotency_key / usd_for / selftest）、modelgw.py（complete / _once / urllib_transport / _reply_failure / MODEL_ERROR_KINDS / NOT_CHECKED）、tokenmeter.py（by_scope / by_role / spent / tokens_for / usd_for / charge_once / retry_overhead）、cancellation.py（CancelReason.__post_init__ / CancelToken.reason / cancel / consume_tokens / raise_if_cancelled / _register_spawned / _is_cancelled_locked / run_cancellable / detail_of）、conductor.py（LocalBackend.call / _write_new_row 的取号 / _meter_guard / summon 的 [0] 取消支与 [4a] 预算支 / _signal_stop / dispose / _charge_and_settle）、cli.py（cmd_run 的两个口径打印 / main 的 pin_utf8）、agent_a.py（_selftest 的 _FailDownloader.kind）、tools/table_tools.py（_probe_id / assert_request_id_in_space / _assert_process_id_in_space / _next_process_id / _next_request_id / _allocate_id）以及 tests/test_r5_orchestration_cost.py、test_cli_run.py、test_modelcost.py、test_modelgw.py、test_cancellation.py、test_runflow_lean.py、test_usage_scope_attribution.py。另按 COMMON §3 R5 清单核了落点不在本批冻结集的 G-11（policy.check）、G-9 的残余事实、以及 G-12/errors-1/I-5/T1/I-6/roles-5/C4 的符号在场（标注为弱证据）。",
+  "files_sha256_before": {
+    "agentflow/src/agentflow/agent_a.py": "225b7df3f5ba3d41854262e9d40de773c80c6e0f9201b339b2ccacf238d2aa7c",
+    "agentflow/src/agentflow/cancellation.py": "26cab5e13be1ea0c7444ef3235e00a96d63153ff565c4f05d1165a173a46c0b3",
+    "agentflow/src/agentflow/cli.py": "f06d166800930e748ae6674426d3a46317dd8e4ce9b30d7b13901a6c731a29e9",
+    "agentflow/src/agentflow/conductor.py": "03cb0a32316f3c2820c7099118854ce66d171d06ae27b6b6c837bc57e8ae1e83",
+    "agentflow/src/agentflow/modelcost.py": "1d0c3c6d12c4cb817b0a0069d21e24d5ade0c1881976568b4fef209e317310ad",
+    "agentflow/src/agentflow/modelgw.py": "19d3ef4ec5e00b59f33257b12b21c9c8e4d3c1ba0fa84a3da38c1cb47988abd6",
+    "agentflow/src/agentflow/runflow.py": "da2d3f016b51490d6027122e78d2fe606315db6472ab5d1fcaba6bd1a88e6251",
+    "agentflow/src/agentflow/tokenmeter.py": "7361229e6664225d24b68ec59fb54d8116fb9fd1efdb2a6826197d206e4c2b44",
+    "agentflow/src/agentflow/tools/table_tools.py": "08be146fa41e82436c2e9335f8e2cc917350133e43081f73eac2b0eab84115c4",
+    "agentflow/tests/test_cancellation.py": "d984ba9851119bb109dff12965c3360c2936704e7872aebd12b2e34732f5af91",
+    "agentflow/tests/test_cli_run.py": "cd499c4c9735b82649033eca1eff7c2acf72d54b1e7818006b9d6550be14b23f",
+    "agentflow/tests/test_modelcost.py": "2c7be9be937282c906223a42a6ef5bfeafa1c2dc97e6e3c4ae2a3f30711a018d",
+    "agentflow/tests/test_modelgw.py": "f2890eebc29682b345f0911935034df1a538c5f7af9187de1208e76fc5945ba4",
+    "agentflow/tests/test_r5_orchestration_cost.py": "8dbb4406944b59457e261638694e773796d1d5fea3cb758f86f79c6bbdbd8ded",
+    "agentflow/tests/test_runflow_lean.py": "2b2d229a22177f9fc90fae7b4c10d36dd1170b02361a328219936420de23c83d",
+    "agentflow/tests/test_usage_scope_attribution.py": "ed3878417c10ec6f672f73649a1266c693c3780c250900b863c568105a3847dc"
+  },
+  "files_sha256_after": {
+    "agentflow/src/agentflow/agent_a.py": "225b7df3f5ba3d41854262e9d40de773c80c6e0f9201b339b2ccacf238d2aa7c",
+    "agentflow/src/agentflow/cancellation.py": "26cab5e13be1ea0c7444ef3235e00a96d63153ff565c4f05d1165a173a46c0b3",
+    "agentflow/src/agentflow/cli.py": "f06d166800930e748ae6674426d3a46317dd8e4ce9b30d7b13901a6c731a29e9",
+    "agentflow/src/agentflow/conductor.py": "03cb0a32316f3c2820c7099118854ce66d171d06ae27b6b6c837bc57e8ae1e83",
+    "agentflow/src/agentflow/modelcost.py": "1d0c3c6d12c4cb817b0a0069d21e24d5ade0c1881976568b4fef209e317310ad",
+    "agentflow/src/agentflow/modelgw.py": "19d3ef4ec5e00b59f33257b12b21c9c8e4d3c1ba0fa84a3da38c1cb47988abd6",
+    "agentflow/src/agentflow/runflow.py": "da2d3f016b51490d6027122e78d2fe606315db6472ab5d1fcaba6bd1a88e6251",
+    "agentflow/src/agentflow/tokenmeter.py": "7361229e6664225d24b68ec59fb54d8116fb9fd1efdb2a6826197d206e4c2b44",
+    "agentflow/src/agentflow/tools/table_tools.py": "08be146fa41e82436c2e9335f8e2cc917350133e43081f73eac2b0eab84115c4",
+    "agentflow/tests/test_cancellation.py": "d984ba9851119bb109dff12965c3360c2936704e7872aebd12b2e34732f5af91",
+    "agentflow/tests/test_cli_run.py": "cd499c4c9735b82649033eca1eff7c2acf72d54b1e7818006b9d6550be14b23f",
+    "agentflow/tests/test_modelcost.py": "2c7be9be937282c906223a42a6ef5bfeafa1c2dc97e6e3c4ae2a3f30711a018d",
+    "agentflow/tests/test_modelgw.py": "f2890eebc29682b345f0911935034df1a538c5f7af9187de1208e76fc5945ba4",
+    "agentflow/tests/test_r5_orchestration_cost.py": "8dbb4406944b59457e261638694e773796d1d5fea3cb758f86f79c6bbdbd8ded",
+    "agentflow/tests/test_runflow_lean.py": "2b2d229a22177f9fc90fae7b4c10d36dd1170b02361a328219936420de23c83d",
+    "agentflow/tests/test_usage_scope_attribution.py": "ed3878417c10ec6f672f73649a1266c693c3780c250900b863c568105a3847dc"
+  },
+  "sha256_unchanged": true,
+  "notes": "窗口静止证明（抄自 temp/audit7-gates.txt，父代理跑的门）：『30 秒内 454 个文件逐字节未变（基线 D:\\Incubator\\temp\\audit7-sha-before.json）』+『操作者在 2026-09-27T04:57:19 显式断言：已核实无 writer 在跑』+ 凭据 temp/writers-cred-audit7.txt（9810 字节，sha256:30c5afa216e0a22c，观测 2026-09-27 04:56:34）。我自己的读数（temp/reaudit6-R5.sha-before.txt / .sha-after.txt，16 个冻结文件）：前后逐字节一致 ⇒ sha256_unchanged=true（`python temp/reaudit6-R5-sha.py compare` ⇒ `sha256_unchanged = True`）。窗口内我没有观察到 agentflow/ 下任何文件被并行写者改动；本批所有写操作都在 temp/ 里（探针、读数、以及为负控在 temp/ 下复制的整树副本 reaudit6-R5-neg-base / -neg-run / -fix-run）。我**没有**自己跑 _who_writes.py（协议不要求，且它写 temp/ 下别的落点）。协议与现实不符之处已写在报告与 retracted_suspicions 里，最要紧的一条：派单文本要求『同一秒同一主题跑两次 ⇒ 只有一笔账』，而今天生产形态（now=None）**故意**是两笔账（R5-F5），只有显式传同一个 now 才折叠成一笔。",
+  "verified_items": [
+    {
+      "id": "G-1",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p2.py（当前字节）⇒ B1/B2/B3/B4 全 PASS：B1『handler 里 current_token() is token ⇒ True』；B2『raised=True handler 进入次数=0 说明=取消[user] 先取消』；B3『elapsed=0.16s box={\"exc\": \"CancelRequested: 取消[user] 中途喊停\"}』；B4『elapsed=0.30s out={... cancelled: True} spawned=0』。子进程面在 B4b 另测：deadline=0.20s + 子进程睡 8s ⇒ elapsed=0.22s / cancelled=True / timed_out=False。",
+      "negative_control": "temp/reaudit6-R5-neg.py 的 V10-g1-token-not-passed-down：在整树副本里把 conductor.py 的『token.raise_if_cancelled() + var.set(token)』改回『var.set(None)』（G-1 改前形态）⇒ 注入后 runflow.py... conductor.py sha16 03cb0a32316f3c28 → db75a68d6acb8066、行数 1286 → 1285；探针 p2 的 B1/B2/B3 **三条同时变红**（PASS 15/19）。改前实现对照：temp/reaudit6-R5-HEAD-conductor.py 里含 'return fn(**given)' ⇒ True（证明那条末行确实存在于 HEAD 的取回件里）。",
+      "notes": "证据强度：强。"
+    },
+    {
+      "id": "G-2-a（task_id 与幂等键是两个口径：task_id 走 t-NNNN 契约）",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A4a『tasks.task_id=[t-0001, t-0002]』（两跑各一个 4 位契约号）；A4b『usage.task_id=[t-0001] tasks=[t-0001, t-0002]』；A4c『errors=[] warnings=[]』（无 dangling_usage_task）；A4d『row.idem_key=idem-a5d7e3d66846 marker(idem_scope)=idem-a5d7e3d66846 marker(task_id)=idem-92c1de73be9a』（键按运行标识算、不是按 task_id 算）。p2 的 B5a 另证取号点在同一个 tx 里：conductor.py 的 `_write_new_row` 在 tx 内取号（见 G-12 弱核对那一条的读数）。",
+      "negative_control": "V5-g3-task-id-not-t-contract：把 `task_id = next_prefixed_id(_task_rows, \"task_id\", \"t\")` 改回 HEAD 的 `task_id = \"run-\" + topic[:110]`（指纹：temp/reaudit6-R5-HEAD-runflow.py 含同一行 ⇒ True；注入后 runflow.py sha16 da2d3f016b51490d → 9a18bf4653b9b261）⇒ A4a/A4b/A4c 三条变红，读数逐字为『tasks.task_id=[]』『usage.task_id=[run-同一个主题] tasks=[]』『errors=[dangling_usage_task] warnings=[usage_task_total_mismatch]』（正是 `draft/28` §24 记的那条静默失败形态）。",
+      "notes": "证据强度：强。"
+    },
+    {
+      "id": "G-2-b（幂等键：同一秒/不同 now/不同主题 三种口径）",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A1『显式同一个 now 跑两次，账本 1 行；第二次 per_call reason=duplicate charged=False』；A2b『同一主题、now 从 TS1 换到 TS2 ⇒ 账本 2 行』；A2『主题甲/主题乙 ⇒ 2 行』；A3b『前 100 字相同的两个主题 ⇒ 2 行』；A11『now=None 且时钟钉死在同一秒 ⇒ 账本 2 行、第二次 charged=True』。",
+      "negative_control": "三个独立的注入（整树副本）：V1 把 `_idem_scope` 改回 HEAD 的 `\"run-\" + topic[:110]`（sha16 da2d3f016b51490d → ada3a792e43754bc）⇒ A2b 与 A3b 变红；V2 把 `_run_nonce` 改成空串 ⇒ A11 变红；V3 把 `_topic_digest` 改成 `topic[:100]`⇒ A3b 变红。三者的『改前实现对照』：HEAD 取回件含 `task_id = \"run-\" + topic[:110]` ⇒ True。",
+      "notes": "证据强度：强。⚠️ 这一条与派单文本的字面要求相反：派单说『同一秒同一主题跑两次 ⇒ 只有一笔账』，而当前实现里只有**显式同一个 now** 才折叠成一笔（A1），生产形态是两笔（A11，且 tests/test_r5_orchestration_cost.py::test_default_path_runs_in_the_same_second_are_not_deduped 就断言两笔）。我按当前字节把两个方向都跑了，判它成立：R5-F5 的口径是刻意的、有正反两条用例。"
+    },
+    {
+      "id": "G-3",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A4c『verify_all errors=[] warnings=[]』（不再有 dangling_usage_task / usage_task_total_mismatch）；A9c『成功分支 task_row={task_id: t-0001, written: True, error: ''}』；跑完 tasks 表有 1 行 role=M/action=run/status=done/outcome=ok（test_r5_orchestration_cost.py 的 3 条用例同形，102+37 条相关用例全过）。",
+      "negative_control": "V5（同上，把 task_id 改回 run-<主题>）⇒ tasks 表 0 行 + verify 报 dangling_usage_task（读数见 G-2-a）；另 V7-r5f6-unread-return 与 p1 的 A9a 用注入 store.tx('tasks') 抛异常的方式，验证『不写行』这一支的行为。",
+      "notes": "证据强度：强（V5 的注入同时守住了 task_id 契约与任务行写入两条）。"
+    },
+    {
+      "id": "G-4",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A5a『预置累计 1.0 美元、本次 budget=0.001 ⇒ calls=1 reason=success spent_usd_this_run=6e-06 ledger_usd=1.000006 budget_exhausted=False』；A5b『ledger=1.000006 this_run=6e-06』（两个口径都在产物里）。",
+      "negative_control": "V4-g4-cumulative-budget：把 `_spent_this_run` 的减法去掉（改回 HEAD 的 `meter.spent()[\"usd\"]`，HEAD 取回件含 `spent_before = meter.spent()[\"usd\"]` ⇒ True；sha16 da2d3f016b51490d → 5abb2dfde2d9ebb2）⇒ A5a 变红（calls=0 / budget_exhausted=true，而账本一行新账都没有 —— 正是 G-4 登记的那条）。另外 A6a 把同一处注入在**当前树的进程内**再跑一次，读数一致。",
+      "notes": "证据强度：强（同一处修法有『整树副本注入』与『进程内注入』两份负控）。"
+    },
+    {
+      "id": "G-7",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p3.py ⇒ C1『传输层抛 ValueError ⇒ ok=False kind='unknown' not_checked=True raised=''』；C1b『真 urllib 传输层 + base_url='not-a-url' ⇒ kind='unknown' not_checked=True，不抛』；C3『把 ModelGateway.complete 换成必抛的实现 ⇒ run_topic 不崩，exit=2 reason='unknown'』（runflow 的调用点兜底那一层）。",
+      "negative_control": "V8-g7-modelgw-no-fallback：在副本里把 complete 的 `except Exception` 兜底改成 no-op 分支（sha16 19d3ef4ec5e00b59 → d1ac628a8e8a22a8；改前实现对照：temp/reaudit6-R5-HEAD-modelgw.py **不含** 'except Exception as exc:  # noqa: BLE001' ⇒ True）⇒ C1 变红（异常穿出去）。",
+      "notes": "证据强度：强。口径一（modelgw 里）与口径二（runflow 调用点）两层都在，且 runflow 的 docstring 明写口径二不是『网关应该抛』的许可 —— 我核过这段话与实现一致。"
+    },
+    {
+      "id": "G-9（残余：今天没做）",
+      "fix_holds": false,
+      "positive_control": "python temp/reaudit6-R5-p2.py ⇒ B5a（AST 扫全部 `_signal_stop` 调用点）『[('conductor.py',1102,'reason'),('conductor.py',1137,'dispose'),('conductor.py',836,'deadline')] ⇒ 字面量集合=['deadline','dispose','reason']』—— 没有一处是 'budget'（`_meter_guard` 的 not-allowed 支只调 `_refuse`）。B5b『预算拒绝后 r2=done/refused/budget_exceeded，token.cancelled=False，cancelled 行=[]』。B5c『refused 行=[(t-0002, done, refused, budget_exceeded)]』。B5d/B5e/B5f：惰性预算路径的 code='budget' 只在**自由文本**里出现 —— B5e『预取消的 summon 返回 task_id=None / status=cancelled / detail=未启动：取消[budget]…，台账行数=0』；B5f『在飞任务的行 detail=被协作式取消：取消[budget]…；tasks 的字段集合里没有 code 这一列』。",
+      "negative_control": "这条是**残余**（`draft/28` §27.3 登记为『今天不落地』），没有修法可撤 ⇒ 我构造不出『撤掉修法就变红』的负控，只能把『缺口仍在』这件事钉死：① 无 'budget' 的 `_signal_stop` 调用点（B5a 的 AST 读数）；② 预算拒绝不翻取消位、不写任何 cancelled 行（B5b）；③ schema.Task 没有 code 字段（B5f 列出的字段集合），所以『code=budget 的取消行』这个形态在今天的台账里**无处可放**。",
+      "notes": "证据强度：中（事实读数强，但按协议 §2 我如实登记：这条**没有负控**）。结论：缺口确实仍在，与登记一致 —— 不是我新报的缺陷。"
+    },
+    {
+      "id": "G-10",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p5.py ⇒ D1『词表 ('user','deadline','budget','dispose','cancelled') 全部可构造=True；CancelReason(\"乱写\") ⇒ \"CancelReason.code='乱写' 不在受控词表…\"』；D2『CancelToken.cancel(\"reason-7\") ⇒ ValueError；cancelled=False reason=None』（没有半取消状态）。",
+      "negative_control": "p5 的 D3（进程内注入）：把 `CancelReason.__post_init__` 换成 no-op（指纹 = `<function main.<locals>.<lambda> at 0x…>`）⇒ `CancelReason('乱写')` 当场通过（leaked.code='乱写'）；D4 证明还原后 `__post_init__ is 原函数` ⇒ True。",
+      "notes": "证据强度：强。"
+    },
+    {
+      "id": "G-11",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p2.py ⇒ B6a『check(to=M)=('forbidden_edge','edge')；check_action(M,summon)=('unknown_action','action')；M in NON_SUMMONABLE=True』—— NON_SUMMONABLE 这一档**可达**（判据在 `check` 的 [0] 让位之后、[2] 上）。",
+      "negative_control": "B6b（进程内注入）：把 `capabilities.NON_SUMMONABLE` 清成空集 ⇒ 同一输入的判决变成 ('unknown_role','role')（判决确实会变）⇒ 证明 B6a 不是恒真。",
+      "notes": "证据强度：中（负控是『改判据的输入面』，不是跑改前实现；改前实现（`check_action` 排在前面）的形态由 policy.py 的 docstring 逐字记载，我没有在副本里重建它）。另：Refusal 的字段名是 `limit`（值 'edge'），派单文本写作 `forbidden_edge/edge`，一致。"
+    },
+    {
+      "id": "G-20 / by_scope（含 R5-F4 的 runflow 侧）",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A7a『by_scope keys=[experiment,extract,reason,review,search,summon,unclassified]』；A7b『reason entries>=1，其余五档 entries==0（零值档在场）』；A7c『per_call scopes=[reason]』；A7d『Σtokens_by_scope=14 == total=14』。p3 ⇒ C2『by_scope 存在、键集合恒等于 USAGE_SCOPES∪{unclassified}、search 档 entries=1、unclassified.raw_values=[]』。",
+      "negative_control": "V9-g20-no-by-scope：在副本里把 `def by_scope` 改名（等价于 HEAD 里没有这个方法；HEAD 取回件 temp/reaudit6-R5-HEAD-tokenmeter.py **不含** 'def by_scope' ⇒ True；sha16 7361229e6664225d → 714618e8f82dda61）⇒ C2 变红。",
+      "notes": "证据强度：强。⚠️ 见 finding R5-AN-2/R5-AN-3：重放路径上逐笔的 scope 与 calls_usd 两个字段有缺陷。"
+    },
+    {
+      "id": "R5-F1 / R5-F2（cancellation 的分段等待与三态判据）",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p2.py ⇒ B4『显式取消一个睡 30s 的子进程：elapsed=0.30s / cancelled=True / timed_out=False / spawned=0』；B4b『deadline 到点（惰性路径）+ 子进程睡 8s：elapsed=0.22s / cancelled=True / timed_out=False』；B4c『deadline 已经到点的 token ⇒ 连进程都不起：CancelRequested: 取消[deadline] 墙钟截止已到』（`_is_cancelled_locked` 三态在起进程点也生效）。",
+      "negative_control": "V11-r5f2-single-long-wait：把分段等待改回『一次长等待』（`slice_sec = timeout_sec`；sha16 26cab5e13be1ea0c → 0acbaf34d6a1ac63）⇒ B4b 变红（要等子进程自己跑完才返回）。",
+      "notes": "证据强度：强。第一次写 V11 时我改错了行（`slice_sec = _CANCEL_POLL_SEC` 那一行会被下一行覆盖 ⇒ 注入没生效、负控没变红）；改成有效的 `min(...)` 那一行后负控成立 —— 如实记下这次探针自己的错。"
+    },
+    {
+      "id": "R5-F3",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A8『tasks.artifacts=[] 且六个产物名全部出现在 detail 里（缺 0 个）』；A4c 同时给出 verify_all 的 warnings=[]（没有 unknown_artifact_kind）。",
+      "negative_control": "V6-r5f3-artifacts-file-names：把 `artifacts=[]` 改回六个文件名的 sorted_unique（sha16 da2d3f016b51490d → 251104993e379f37）⇒ A8 变红。",
+      "notes": "证据强度：强。⚠️ 同一函数 docstring 的 `artifacts` 那一条仍写着『本运行承诺的六件产物』（见 finding R5-AN-5）。"
+    },
+    {
+      "id": "R5-F4",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A10a『MODEL_ERROR_KINDS 里非 NOT_CHECKED 的三个码 auth_failed/rate_limited/bad_response 全部 = (failed, failed)；NOT_CHECKED 五个码全部落 done』（`failed` 一档可达）；A10c『run_topic 里赋给 reason 的字面量集合 == RUN_TOPIC_REASON_LITERALS』（自己写的 AST 扫描：['', budget_exhausted, no_call, no_key, retrieval_failed, retrieval_not_configured, success]）；A10d『_run_task_verdict 里没有 `if …: pass` 空块』。",
+      "negative_control": "这一条我**构造不出负控**：改前形态是『旧实现只认字面量 \"error\"』+『一段 if reason in (…): pass』，两处都在旧字节里；我没有在副本里重建那段旧实现（重建它要一起改 `RUN_TOPIC_REASON_LITERALS` 与用例，超出只读窗口的收益）。如实登记为『弱/中』，不算成强证据。可用的近似证据：A10c/A10d 是我自己重写的扫描器（不是引用测试），且我先用一个『必然失败』的输入校过探针（SELF-ASSERT）。",
+      "notes": "证据强度：中（正控强、负控缺）。"
+    },
+    {
+      "id": "R5-F5（a/b 两处）",
+      "fix_holds": true,
+      "positive_control": "见 G-2-b 的 A2b/A3b/A11 读数（正控在 p1 里）。",
+      "negative_control": "V1（改回按主题命名）⇒ A2b+A3b 变红；V2（去掉随机后缀）⇒ A11 变红；V3（digest 换回截断）⇒ A3b 变红。",
+      "notes": "证据强度：强。R5-F5 的『秒粒度』残余被这两处改动关掉；显式同一 now 仍判重放（A1 正控）。"
+    },
+    {
+      "id": "R5-F6",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p1.py ⇒ A9a『注入 store.tx(\"tasks\") 抛异常 ⇒ tasks=[] 且 run-manifest.json 的 task_row={task_id: t-0001, written: False, error: 'RuntimeError: probe 注入：tasks 写不进去'}，unknowns 里有一行含『没写成』』；A9b『exit_code 不变（0）』；A9c『成功时 task_row.written=True / error=''』。",
+      "negative_control": "V7-r5f6-unread-return：把 `task_row_written = bool(task_row.get(\"written\"))` 改成恒 `True`（sha16 → 98dacbbdd2b4385e）⇒ A9a 变红。",
+      "notes": "证据强度：强。"
+    },
+    {
+      "id": "table_tools 的取号前缀",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p2.py ⇒ B7a『search_requests 两次建行 ⇒ [r-0001, r-0002]』；B7b『reprocess_requests 两次建行 ⇒ [p-0001, p-0002]』；B7c『无交叉污染』（走的是真工具注册表 `table.create`，不是直接调私有函数）。",
+      "negative_control": "B7d（进程内注入）：把 `schema.PROCESS_ID_PREFIXES['reprocess']` 改成 'q' 后在一张**空表**上建行 ⇒ 新号 = 'q-0001'（证明前缀是从 schema 声明面读的，不是写死第二份）。第一次造这条负控时我用的是非空表，结果写入被表级校验拒掉（`reprocess_requests.rows[0] … 收到 'p-0001'`）⇒ 那次读数无效，已改成空表；如实记下。",
+      "notes": "证据强度：强。"
+    },
+    {
+      "id": "G-12 / errors-1 / I-5 / T1 / I-6 / roles-5 / C4（落点不在本批冻结集）",
+      "fix_holds": true,
+      "positive_control": "python temp/reaudit6-R5-p5.py 的符号在场核对（只核『修法还在不在』，不跑它们自己的判据）：G-12『store.py:482 tmp = path.with_name(f\"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp\")』+『_writer_lock 8 处命中』；errors-1『verify_tools.py:452 \"verified\": True if proved else (False if checked else None)』（三态在场）；I-5『test_rebuild.py 的 corrupt_events 命中』；T1/I-6『test_release_all.py:747 assert set(keys) == expected』；roles-5『tools/__init__.py 的 bad_roles』；C4『tools/__init__.py:318 def build_for_role』。",
+      "negative_control": "**构造不出**：这些条目的落点分别在 store.py / verify_tools.py / test_rebuild.py / test_release_all.py / tools/__init__.py，都不在本批冻结集（属 R2/R3/R6 的审计面）⇒ 我按协议 §2 如实登记为**弱证据**，不算成强证据，也不替它们下结论。",
+      "notes": "证据强度：弱（符号在场而已）。已如实登记。"
+    },
+    {
+      "id": "相关用例（不是全量）",
+      "fix_holds": true,
+      "positive_control": "python -m pytest tests/test_r5_orchestration_cost.py tests/test_modelcost.py tests/test_modelgw.py tests/test_cancellation.py tests/test_runflow_lean.py tests/test_usage_scope_attribution.py -q ⇒ **102 passed in 16.79s**（temp/reaudit6-R5-pytest-a.txt）；python -m pytest tests/test_cli_run.py -q ⇒ **37 passed in 10.99s**（temp/reaudit6-R5-pytest-b.txt）。合计 139 passed、0 failed。",
+      "negative_control": "不适用（这是回归读数，不是判据的正控）。我没有跑全量套件（协议禁止）。",
+      "notes": "我没有为了让它们变绿而改任何字节（冻结集前后 sha256 一致）。"
+    }
+  ],
+  "negative_control": "总述：本批的负控分三种形态，全部在 temp/ 下的**整树副本**上做（agentflow/ 一个字节没动，冻结集 sha256 前后一致）：①『把修法改回改前形态』11 个变体（temp/reaudit6-R5-neg.py，逐条打印注入后那一行、文件 sha16 与行数、以及该行在 `git show HEAD:` 取回件里存不存在这枚指纹；读数 temp/reaudit6-R5-neg.txt 与 reaudit6-R5-neg-V*.txt）；②『进程内注入』若干条（p1 的 A6 预算口径、p5 的 D3 __post_init__ no-op、p2 的 B6b NON_SUMMONABLE 清空、B7d 前缀映射改写）；③缺陷本身的复现 + 修法可行性控制（temp/reaudit6-R5-p6.py 造出 runflow 的并发撞号，temp/reaudit6-R5-fix-control.py 在副本里把取号搬进同一个 tx 后 E2/E3 翻面）。探针自己也守了：每个探针第一条都是 SELF-ASSERT（一条必假断言必须抛 AssertionError）。构造不出负控的条目已逐条如实登记（G-9、R5-F4、以及落点不在冻结集的 6 条）。",
+  "evidence": [
+    "temp/REAUDIT6-R5.sha-before.txt",
+    "temp/REAUDIT6-R5.sha-after.txt",
+    "temp/reaudit6-R5-sha.py",
+    "temp/reaudit6-R5-p1.py",
+    "temp/reaudit6-R5-p1.txt",
+    "temp/reaudit6-R5-p2.py",
+    "temp/reaudit6-R5-p2.txt",
+    "temp/reaudit6-R5-p3.py",
+    "temp/reaudit6-R5-p3.txt",
+    "temp/reaudit6-R5-p4.py",
+    "temp/reaudit6-R5-p4.txt",
+    "temp/reaudit6-R5-p5.py",
+    "temp/reaudit6-R5-p5.txt",
+    "temp/reaudit6-R5-p6.py",
+    "temp/reaudit6-R5-p6.txt",
+    "temp/reaudit6-R5-conc-worker.py",
+    "temp/reaudit6-R5-fix-control.py",
+    "temp/reaudit6-R5-fix-control.txt",
+    "temp/reaudit6-R5-fix-control-run.txt",
+    "temp/reaudit6-R5-neg.py",
+    "temp/reaudit6-R5-neg.txt",
+    "temp/reaudit6-R5-neg-summary.txt",
+    "temp/reaudit6-R5-diff-runflow.txt",
+    "temp/reaudit6-R5-diff-misc.txt",
+    "temp/reaudit6-R5-HEAD-runflow.py",
+    "temp/reaudit6-R5-HEAD-modelgw.py",
+    "temp/reaudit6-R5-HEAD-tokenmeter.py",
+    "temp/reaudit6-R5-HEAD-cancellation.py",
+    "temp/reaudit6-R5-HEAD-conductor.py",
+    "temp/reaudit6-R5-pytest-a.txt",
+    "temp/reaudit6-R5-pytest-b.txt"
+  ],
+  "findings": [
+    {
+      "id": "R5-AN-1",
+      "severity": "medium",
+      "location": "agentflow/src/agentflow/runflow.py::run_topic 的 task_id 取号（`_task_rows = store.rows(\"tasks\")` + `task_id = next_prefixed_id(_task_rows, \"task_id\", \"t\")`，在 store.tx **之外**），对照 agentflow/src/agentflow/conductor.py::Conductor._write_new_row（取号与建行在**同一个** `store.tx` 里）",
+      "what": "`run_topic` 在一个**无锁快照读**上取号，写行发生在整条 run 结束时的另一个 tx 里；于是同一个工作区里两个并发 `agentflow run` 会拿到**同一个** `t-NNNN`。实测（temp/reaudit6-R5-p6.txt，两个真进程、A 的传输层睡 3s）：A 与 B 都拿到 `t-0001`；tasks 表最后只剩 1 行（topic=并发甲），而它的 `tokens=28` = 两跑之和（14+14）；两条 usage_ledger 行都挂 `t-0001`；`verify_all` 的 code 集合是 **[]**（一条都不报）。顺序对照（同一探针 E1）拿到 t-0001 / t-0002、2 行、账目自洽。注意 runflow.py 自己的注释写『分配方式与 `conductor.py:489` 同一做法（读现有行取 max+1）』—— 取号算法同、**临界区不同**；而 conductor 那处的注释逐字说这个临界区是修掉的一个真缺陷（『分开做会让两个线程拿到同一个 task_id，后写的静默覆盖先写的』）。",
+      "impact": "台账静默丢一行 + 存活那一行的 tokens/usd 把另一次运行的花销算在自己名下（预算口径、按召唤归口、审计挂点三处同时失真），而 verify 没有任何一条会响 —— 正是本项目点名的最危险形态（静默覆盖 + error 不可见）。这条是批次 Q 把 task_id 改成 `t-NNNN`（写入从『必被拒』变成『真的落库』）之后**新变得可达**的。",
+      "fix": "把取号搬进与建行同一个 tx（conductor 的形态）：在 run 开始时开一次 `store.tx(\"tasks\")`，在 tx 内 `next_prefixed_id(tx.rows(\"tasks\"), \"task_id\", \"t\")` 并 upsert 一行 `status=\"running\"`（started_at=stamp），收工时由 `_settle_run_task` 用 `finish` 语义把它改成终态。这样既保住『usage_ledger.task_id 指得到实体行』，又让『每个 start 恰好一个 end』成立。",
+      "acceptance": "正控 = temp/reaudit6-R5-p6.py（两进程并发）：修完后 E2（撞号）与 E3（只 1 行 tasks / 存活行 tokens=两跑之和）必须**翻面**，即两个不同的 `t-NNNN`、2 行 tasks、每行 tokens=自己那一跑的 14；负控 = 把取号退回 tx 之外（当前字节）⇒ E2/E3 复现。修法可行性已实测：temp/reaudit6-R5-fix-control.py 在整树副本里套用上述修法（runflow.py sha16 da2d3f016b51490d → edd2acb413b2ac55）⇒ E2/E3 两条都翻面（读数 temp/reaudit6-R5-fix-control.txt）。"
+    },
+    {
+      "id": "R5-AN-2",
+      "severity": "low",
+      "location": "agentflow/src/agentflow/modelcost.py::charge_reply 的 duplicate 快速通道返回（`prior = _find_by_marker(...)` 那一支，约 353-360 行）；消费点 agentflow/src/agentflow/runflow.py 的 `cost.json` `per_call[].scope`",
+      "what": "`charge_reply` 的四条返回分支里，三条带 `\"scope\"`（not_wired / charged / charge_once 竞态 duplicate），只有**无锁快速通道那条 duplicate 分支**不带。实测（temp/reaudit6-R5-p1.txt 的 A1）：显式同一个 now 跑第二遍时 `cost.json` 的 `per_call` 是 `{'call_index': 0, 'usage_id': '0000', 'usd': 6e-06, 'charged': False, 'reason': 'duplicate', 'scope': ''}` —— scope 是空串。",
+      "impact": "G-20 的承诺是『逐笔看得见归口，汇总才对得上账』（runflow.py 的注释与 `selftest` 的 G-20 正控都这么写），而重放路径上逐笔的归口列静默变成空串；套件看不见它，因为唯一断言逐笔 scope 的用例（tests/test_usage_scope_attribution.py:192）跑的是一次全新运行。补一层：同一个键的返回值形状在四条分支上不一致，任何按 `d[\"scope\"]` 取值的下游都会在重放路径上 KeyError（runflow 自己用 `.get(...) or \"\"` 兜住了，别的调用方不一定）。",
+      "fix": "在那条 duplicate 返回里补 `\"scope\": str(prior.get(\"scope\") or scope)`（prior 行本来就有 scope 列）；顺手把 `charge_reply` docstring 的返回键说明补上 `scope`（它今天只列了五个键，而三个分支都返回 scope）。",
+      "acceptance": "正控 = 重放一次 run_topic（显式同一个 now），断言 `cost.json` 的每一个 `per_call[].scope` 都等于 `runflow.SCOPE_ANSWER`；负控 = 把那一行 `\"scope\"` 删掉 ⇒ 断言变红（当前字节就是负控形态，读数见 p1 的 A1）。"
+    },
+    {
+      "id": "R5-AN-3",
+      "severity": "low",
+      "location": "agentflow/src/agentflow/runflow.py::run_topic 的 `calls_usd = round(sum(r.usd for r in records), 6)` 与 `reconciled = abs(calls_usd - run_spent_usd) < 1e-9`（约 1370-1376 行），以及写进 cost.json / run-manifest.json / 返回值的 `reconciled_with_usage_ledger`",
+      "what": "重放路径上 `records` 里那一笔的 `usd` 是**继承自上一次运行**的（duplicate 分支返回 prior 行的 usd），而 `run_spent_usd` 是本次增量 0 ⇒ 一次完全正常、被刻意支持的重放被判成『账本对不上』。实测（p1 的 A1c）：`spent_usd_this_run=0.0 calls_usd=6e-06 reconciled=False spent_usd(ledger)=6e-06`。",
+      "impact": "自检位在正常操作上翻红 ⇒ 它失去区分力（本项目自己的纪律：『error 永远红就等于 error 没有区分力』）。阅读 cost.json/manifest 的人会把这次重放读成一次对账失败，而 `tests/test_cli_run.py::test_rerunning_the_same_topic_does_not_double_charge` 那条正控只断言 `spent_usd` 相等、没有断言这个位（所以套件看不见）。",
+      "fix": "让被比较的两边同口径：`calls_usd = round(sum(r.usd for r in records if r.charge.get(\"charged\")), 6)`（只累加真的入账的那些），或把继承来的 usd 单列一个 `inherited_usd` 键并在判据里排除它。两种改法都能让『重放 ⇒ 0 == 0』成立，同时保住『有一条调用没进账』这条判据对**真**漏账的分辨力。",
+      "acceptance": "正控 = 重放一次 ⇒ `reconciled_with_usage_ledger is True`；负控 = 造一次『charged=True 但账本少一行』的形态（例如把某次 charge 的返回 usd 改成 0 而账本不变）⇒ 该位必须变 False（证明它没被改成恒真）。"
+    },
+    {
+      "id": "R5-AN-4",
+      "severity": "low",
+      "location": "agentflow/src/agentflow/conductor.py:890 引用的 `verify.py:708-713`；agentflow/src/agentflow/tools/table_tools.py:198 引用的 `interactions.py:1134`、:204 与 :241 引用的 `store.py:52-53`、:206 引用的 `tests/test_agent_c_service.py:637`",
+      "what": "审计窗口内逐条解析这 5 处『文件:行号』引用（temp/reaudit6-R5-p4.py 的读数），4 处已经指到别的东西上：`verify.py:708` 是撤回语义那段的注释（真正的 `tasks.tokens` 对账在 verify.py:872-881 的 `dangling_usage_task` / `usage_task_total_mismatch`）；`interactions.py:1134` 是空行（`next_prefixed_id` 现在在 1233）；`store.py:52` 是 R3-10 的 sleep 说明（`MAX_ID = 9999` 现在在 81）；`tests/test_agent_c_service.py:637` 是 `for row in rows:`（那句 `S.is_valid_id(row[\"request_id\"][2:])` 在 639）。同期核的两处引用仍准确：runflow.py:1037 → conductor.py:489（正是取号那一行）、modelcost.py:318 → test_cli_run.py:437（正是那条用例）。",
+      "impact": "读注释的人按图索骥会落到一段毫不相干的内容上；`store.py:52-53` 那处尤其要紧 —— 它是『越界即 fail-closed』这条规则的落点说明，读者会以为规则写在 sleep 注释里。这正是本仓登记过的 D-8 同族（『过期的 `文件:行号` → 符号名』），而 `AGENTS.md` 自己的约定就是『理由里写符号名、刻意不写行号，因为行号易失』。",
+      "fix": "把这 4 处改成符号名（`verify.verify_all` 的那两条 Issue / `interactions.next_prefixed_id` / `store.MAX_ID` / `tests/test_agent_c_service.py` 里的那条 `is_valid_id` 断言），或加一条『引用行必须仍含所引符号』的机械用例。",
+      "acceptance": "正控 = 一条扫全仓 `[\\w/]+\\.py:\\d+` 的用例，要求『引用的那一行里出现该处提到的符号名』；负控 = 把任一引用改回当前这个过期行号 ⇒ 用例必须红。读数：temp/reaudit6-R5-p4.txt。"
+    },
+    {
+      "id": "R5-AN-5",
+      "severity": "low",
+      "location": "agentflow/src/agentflow/runflow.py::_settle_run_task 的 docstring 第 396 行（『`artifacts`：本运行承诺的六件产物；`inputs`：主题与预算』）与其形参 `out` / `ledger`",
+      "what": "同一个函数的实现里 `artifacts=[]`（R5-F3 的修法，附了『那六件是磁盘文件、不是表里的行，所以留空、名字进 detail』的说明），而 docstring 的『六条口径』清单仍把 `artifacts` 写成『本运行承诺的六件产物』—— 两句话在同一屏里互相矛盾。另：`out` 与 `ledger` 两个形参在整个函数体里从未被使用（AST 读数：形参=['store','task_id','topic','reason','exit_code','out','ledger','records','meter','started_at','stamp']，未用=['out','ledger']），而 docstring 把这些口径当成契约在列。",
+      "impact": "读者按 docstring 会以为 tasks 行里带着六个产物名 —— 那恰好是 R5-F3 判为缺陷、并已改掉的形态（改回去会立刻新增 6 条 `unknown_artifact_kind` warning）。未用形参进一步说明这段 docstring 描述的是旧接口，属于本仓登记的『声明与实现分家』一族。",
+      "fix": "把 docstring 那一条改成事实（『`artifacts` 留空 —— 六件产物是磁盘文件，名字写在 `detail` 里』）；删掉从未使用的 `out` / `ledger` 两个形参（或真的用起来并把用途写清）。",
+      "acceptance": "正控 = 一条用例断言 `_settle_run_task` 的 docstring 里不再出现『六件产物』与 `artifacts` 的肯定式描述，且 `inspect.signature` 里没有未使用的形参；负控 = 把那一句 docstring 改回旧文 ⇒ 用例必须红。读数：temp/reaudit6-R5-p4.txt（AST 未用形参那一段）。"
+    }
+  ],
+  "retracted_suspicions": [
+    "派单文本要求『同一秒同一主题跑两次 ⇒ 只有一笔账』。我按字面去构造时发现当前字节在生产形态（now=None）下是**两笔账**（p1 的 A11：账本 2 行；tests/test_r5_orchestration_cost.py::test_default_path_runs_in_the_same_second_are_not_deduped 明确断言两笔），只有显式传同一个 now 才折叠成一笔（A1）。核查后确认这不是缺陷：R5-F5 的两处改动（整主题 sha256 + 生产形态随机后缀）就是为『同一秒两次真运行不许被折叠』而做，且同时保留了『显式同一 now = 同一次逻辑运行』的正控。⇒ 记为『派单文本过期』，不作为 finding。",
+    "`tokenmeter.by_scope` 的 docstring 说内容恒为 `{tokens, usd, entries, attempts, roles}`，而 `unclassified` 那一档多一个 `raw_values` 键。核过：docstring 描述的是各档**共有**内容，`raw_values` 是『有人写了编外归口』这件事的显式出口，且有专门用例守着（test_usage_scope_attribution.py 的负控②），零值档 + raw_values=[] 的形态我在 p3 的 C2 里也实测了 ⇒ 不是缺陷。",
+    "`runflow._complete_or_not_checked` 与 `modelgw.complete` 的 `except Exception` 是两层同样的兜底（看起来像『同一件事两处实现』）。核过：两层守的是不同对象（网关自身 vs 调用点不让异常穿出去），且 docstring 逐字写明『口径一才是根治，本函数是网关违约时的最后一道兜底，不是网关应该抛的许可』；p3 的 C1/C1b/C3 证明两层都真的在起作用（分别注入网关内部异常与网关整体违约）⇒ 不是缺陷，是刻意的纵深防御。",
+    "生产路径的幂等键带 `uuid4` 随机后缀 ⇒ 账本键不可复现、跨进程无法靠『重跑』复现同一笔账。核过：这正是 R5-F5(b) 的修法本身（『运行标识的职责是标识这一次运行』），显式传 `now` 时不给后缀、可复现（A1/A2b 都验证了），且『同一主题跑第二遍不许静默重放』是 G-2 的核心 ⇒ 不是缺陷。",
+    "`runflow.py` 注释里 R5-F5(a) 说改前是 `topic[:100]` 截断，而 HEAD 取回件里那一行是 `\"run-\" + topic[:110]`。我起初以为是文档写错；核过后确认这是**两代**改前形态：HEAD 是更早的 `run-<主题>` 形态（110），批 Q 中间版才是 `topic[:100]` + 时间戳，R5-F5 的注释描述的是后者 ⇒ 不复现，不作为 finding（正文里写明这枚指纹用于负控对照）。",
+    "`modelgw._reply_failure` 用 `assert kind in MODEL_ERROR_KINDS` 做词表守卫（`python -O` 下会被剥掉）。核过：它只是**导出侧**的最后一道自证，写入路径上 `complete`/`_once` 的每个调用点给的都是字面量，`MODEL_ERROR_KINDS` 本身是模块常量；且 runflow 的兜底走同一个构造点（docstring 逐字说明）。⇒ 强度不足，不作为 finding。",
+    "`cli.py::main` 里 `pin_utf8()` 在 `parse_args` 之前调用，且 `pin_utf8` 的落点不在本批冻结集（`console.py` 属 R7）。核过：`from .console import pin_utf8` 可导入、`main` 在任何输出前调用它 —— 就本批范围（cli.py 的这处改动）而言没有可判定的缺陷 ⇒ 未开 finding；如 R7 认为 `pin_utf8` 本身有问题，那是那一批的事。"
+  ]
+}

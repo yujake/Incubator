@@ -1,0 +1,66 @@
+[capabilities] 导入期参数交叉断言：覆盖 188 / 声明 188 个 property，59 个动作，接缝 1 条
+[capabilities] 两层参数类型对账：比较 86 对（动作, property），读到 67 个工具的 schema，没比对 0 个
+源 PDF: D:\Incubator\projects\project5\library\扫描件.pdf | 存在: True | 字节: 6532181
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.6 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+
+If you are a user of the module, the easiest solution will be to
+downgrade to 'numpy<2' or try to upgrade the affected module.
+We expect that some modules will need time to support NumPy 2.
+
+Traceback (most recent call last):  File "D:\Incubator\temp\_r2b_ocr_probe.py", line 98, in <module>
+    raise SystemExit(main())
+  File "D:\Incubator\temp\_r2b_ocr_probe.py", line 63, in main
+    doc, why = b._load_doc_for(dict(st.rows("literature")[0]))
+  File "D:\Incubator\agentflow\src\agentflow\agent_b\core.py", line 409, in _load_doc_for
+    return self._ocr_retry(path, lid)
+  File "D:\Incubator\agentflow\src\agentflow\agent_b\core.py", line 493, in _ocr_retry
+    bk, why_bk = self._ocr_call("ocr.backends", refresh=False)
+  File "D:\Incubator\agentflow\src\agentflow\agent_b\core.py", line 433, in _ocr_call
+    res = self._ocr_registry.call(name, role="B", **params)
+  File "D:\Incubator\agentflow\src\agentflow\tools\base.py", line 1491, in call
+    out = spec.handler(**merged)
+  File "D:\Incubator\agentflow\src\agentflow\tools\ocr_tools.py", line 976, in _ocr_backends
+    return _h_backends(ctx, refresh)
+  File "D:\Incubator\agentflow\src\agentflow\tools\ocr_tools.py", line 478, in _h_backends
+    rows = _probe_rows(ctx, refresh=refresh)
+  File "D:\Incubator\agentflow\src\agentflow\tools\ocr_tools.py", line 457, in _probe_rows
+    available, reason = backend.available(refresh=refresh)
+  File "D:\Incubator\agentflow\src\agentflow\tools\ocr_tools.py", line 184, in available
+    easyocr = importlib.import_module("easyocr")
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\easyocr\__init__.py", line 1, in <module>
+    from .easyocr import Reader
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\easyocr\easyocr.py", line 3, in <module>
+    from .recognition import get_recognizer, get_text
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\easyocr\recognition.py", line 6, in <module>
+    import torchvision.transforms as transforms
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\__init__.py", line 6, in <module>
+    from torchvision import datasets, io, models, ops, transforms, utils
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\models\__init__.py", line 17, in <module>
+    from . import detection, optical_flow, quantization, segmentation, video
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\models\detection\__init__.py", line 1, in <module>
+    from .faster_rcnn import *
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\models\detection\faster_rcnn.py", line 16, in <module>
+    from .anchor_utils import AnchorGenerator
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\models\detection\anchor_utils.py", line 10, in <module>
+    class AnchorGenerator(nn.Module):
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\models\detection\anchor_utils.py", line 63, in AnchorGenerator
+    device: torch.device = torch.device("cpu"),
+C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\torchvision\models\detection\anchor_utils.py:63: UserWarning: Failed to initialize NumPy: _ARRAY_API not found (Triggered internally at ..\torch\csrc\utils\tensor_numpy.cpp:84.)
+  device: torch.device = torch.device("cpu"),
+_load_doc_for ⇒ doc is None: True
+不可用原因: 文献 0000 无文本层，且本机没有可用的 OCR 后端（unavailable）⇒ 无从逐字定位。先装后端再谈：无任何可用 OCR 后端：easyocr 与 pytesseract 都不可用（逐条原因见 backends[].reason）。此时 ocr.run 会 fail 并给出安装建议 —— 它**不会**返回空文本假装识别成功。
+原因里提到 OCR 了吗: True
+角色 B 工具面里的 ocr.* : ['ocr.backends', 'ocr.detect_text_layer', 'ocr.run']
+  ocr.backends ⇒ available: [] | any_ocr_backend_available: False | verdict: 无任何可用 OCR 后端：easyocr 与 pytesseract 都不可用（逐条原因见 backends[].reason）。此时 ocr.run 会 fail 并给出安装建议 —— 它**不会**返回空文本假装识别成功。
+      - easyocr available= False | easyocr 不可用：torch 与 numpy 不兼容（RuntimeError: Numpy is not available）：ea
+      - pytesseract available= False | pytesseract 不可用：pytesseract 已安装，但 tesseract 可执行文件不可用（TesseractNotFound
+      - none available= True | 总是可用：它表示「不做 OCR」。选它等于放弃文本获取，返回空串而不是假装识别出内容。
+  ocr.detect_text_layer ⇒ has_text_layer: False | source_kind: pdf | pages: 0 | chars: 0 | reason: **无文本层**：文件共 1 页，但每页抽出的文本去空白后都为空（疑似扫描件/纯图片页）。这**不是**「引文校验失败」，而是「无法校验」—— 按 DESIGN | suggested_next: 建议下一步：ocr.backends 看有没有可用后端，再 ocr.run 逐页识别。
+结论:改后这一行必须区分『没试过 OCR』与『试了还是没有』

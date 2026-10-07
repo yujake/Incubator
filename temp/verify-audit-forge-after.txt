@@ -1,0 +1,28 @@
+真实台账 sha256（跑之前）: 8175efc213d9b0eeef3a4180c08ae0527025c64ff9e40b2ceed77071b6adcefe
+被伪造的条目: .noai-paths  sha256=6d3c4c80a05c
+
+## ① 旧形态伪造（只有一句 evidence，没有证据锚）
+exit=2
+--- stdout ---
+[unknown] required_approvals=0
+unknown：命中禁改区，**但台账读不到或解析不了 ⇒ 本次没有查成**，不代表没问题（三态纪律：这里绝不能折叠成 clean）。原因：D:\Incubator\temp\r1-forge-copy\.noai-approvals.json 的第 1 条条目（.noai-paths）的 audits[0] 缺少非空的 `evidence_sha256` —— 审计记录的 `auditor`/`dimension`/`sha256`/`evidence`/`negative_control` 都是必需字段
+  台账（批准记录的权威副本）：D:\Incubator\temp\r1-forge-copy\.noai-approvals.json
+
+## ② 字段齐全、hash 合法格式、但证据文件不存在
+exit=2
+--- stdout ---
+[unknown] required_approvals=0
+unknown：命中 1 条路径，其中 1 条**没能查成**（audit_evidence_unverifiable 1 条）⇒ 本次检查不完整，不给结论。没查成 ≠ 没问题。台账：D:\Incubator\temp\r1-forge-copy\.noai-approvals.json
+  - .noai-paths  [unknown] audit_evidence_unverifiable：审计记录本身合规（2 名不同审计者 × 3 个维度），但**证据锚核对不上** ⇒ 没查成，不给结论：[假审计者-1/axes] 证据文件读不到：D:\Incubator\agentflow\temp\编的一句话.md（要计算 hash 的对象不是一个可读文件：D:\Incubator\agentflow\temp\编的一句话.md（不存在））；[假审计者-1/errors] 证据文件读不到：D:\Incubator\agentflow\temp\编的一句话.md（要计算 hash 的对象不是一个可读文件：D:\Incubator\agentflow\temp\编的一句话.md（不存在））；[假审计者-1/docs] 证据文件读不到：D:\Incubator\agentflow\temp\编的一句话.md（要计算 hash 的对象不是一个可读文件：D:\Incubator\agentflow\temp\编的一句话.md（不存在））；[假审计者-2/axes] 证据文件读不到：D:\Incubator\agentflow\temp\编的一句话.md（要计算 hash 的对象不是一个可读文件：D:\Incubator\agentflow\temp\编的一句话.md（不存在））；[假审计者-2/errors] 证据文件读不到：D:\Incubator\agentflow\temp\编的一句话.md（要计算 hash 的对象不是一个可读文件：D:\Incubator\agentflow\temp\编的一句话.md（不存在））；[假审计者-2/docs] 证据文件读不到：D:\Incubator\agentflow\temp\编的一句话.md（要计算 hash 的对象不是一个可读文件：D:\Incubator\agentflow\temp\编的一句话.md（不存在））。处理：确认那些证据文件还在盘上、内容没被换过；换过就重跑审计并重新 `--record-audit`（登记的是新 hash）。（署名归属为**推断**，据 mtime 与会话边界得出，非独立证据）
+  台账（批准记录的权威副本）：D:\Incubator\temp\r1-forge-copy\.noai-approvals.json
+
+## ③ 证据文件真的存在且 hash 对得上（伪造者的最强形态）
+exit=2
+--- stdout ---
+[unknown] required_approvals=0
+unknown：命中 1 条路径，其中 1 条**没能查成**（audit_receipt_chain_unverifiable 1 条）⇒ 本次检查不完整，不给结论。没查成 ≠ 没问题。台账：D:\Incubator\temp\r1-forge-copy\.noai-approvals.json
+  - .noai-paths  [unknown] audit_receipt_chain_unverifiable：审计记录与证据锚都合规，但**回执链**这一层没通过 ⇒ 没查成，不给结论：回执链不存在：D:\Incubator\agentflow\.noai-audit-receipts.jsonl。回执链是只增的追加记录（每条把前一条的 hash 写进自己参与 hash 的内容），所以『删掉一条』与『改一条』都会让它断开。处理：先弄明白链为什么少了一段，再决定是否由人重建 —— 不许由写入方在不明白原因的情况下续写。（署名归属为**推断**，据 mtime 与会话边界得出，非独立证据）
+  台账（批准记录的权威副本）：D:\Incubator\temp\r1-forge-copy\.noai-approvals.json
+
+真实台账 sha256（跑之后）: 8175efc213d9b0eeef3a4180c08ae0527025c64ff9e40b2ceed77071b6adcefe
+真实台账未被改动: True

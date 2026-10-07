@@ -1,0 +1,6 @@
+台账 generated_at = 2026-09-26T05:04:26+08:00；entries = 16 条（结构 list）
+  条目字段 = ['also_hits', 'authored', 'authored_basis', 'category', 'change_note', 'changed_this_session', 'glob', 'path', 'reviewers', 'sha256']
+  .noai-paths                台账 6d3c4c80a05caaf4  盘上 ae0dd8a06c993d26  **不一致（stale）**  reviewers=0
+  AGENTS.md                  台账 5d9c698fd423a1fe  盘上 a88b9ef1adc9006b  **不一致（stale）**  reviewers=0
+  scripts/noai_gate.py       台账里**没有条目**  盘上 sha16 = f2a512df9b547ec9
+  scripts/lint_rules.py      台账里**没有条目**  盘上 sha16 = c7a4b0e5da7bcea7

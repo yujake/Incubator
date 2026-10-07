@@ -1,0 +1,5 @@
+CONTRACT_KEYS 大小 = 8
+['checked', 'claim', 'detail', 'missing_imports', 'reason', 'verified', 'verifier_output', 'verifier_status']
+
+4 passed in 1.97s
+

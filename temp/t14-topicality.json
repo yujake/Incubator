@@ -1,0 +1,418 @@
+{
+ "produced_at": "2026-09-27T14:36:47+0800",
+ "how": "evidence.retrieve(topic, limit=5, search_fn=None) —— 与产品默认路径同一条",
+ "note": "kb_overlap 只做观测、不用来过滤；keyword_hit/keep 是产品自己的判定",
+ "rows": [
+  {
+   "topic": "同调代数中导出函子的长正合列",
+   "status": "ok",
+   "checked": true,
+   "reason": "查到 4 条可用来源（去重后；咨询 2 个源）",
+   "n_sources": 4,
+   "rejected": 0,
+   "sources_detail": [
+    {
+     "source": "openalex",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    },
+    {
+     "source": "crossref",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    }
+   ],
+   "keyword_hit_none": 4,
+   "kept": 4,
+   "kb_min": 0.0,
+   "kb_max": 0.231,
+   "kb_mean": 0.096,
+   "seconds": 4.9,
+   "sources": [
+    {
+     "source_id": "S1",
+     "year": 2008,
+     "title": "铁基高温超导体的研究进展及展望",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S2",
+     "year": 2012,
+     "title": "APTox: Assessment and Prediction on Toxicity of Chemical Mixtures",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S3",
+     "year": 2002,
+     "title": "正合Borel子代数的旗导出的强共轭作用",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.231
+    },
+    {
+     "source_id": "S4",
+     "year": 1990,
+     "title": "系数在Laurent多项式环中的微分算子代数的上同调",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.154
+    }
+   ]
+  },
+  {
+   "topic": "图论中的拉姆齐数下界",
+   "status": "ok",
+   "checked": true,
+   "reason": "查到 4 条可用来源（去重后；咨询 2 个源）",
+   "n_sources": 4,
+   "rejected": 0,
+   "sources_detail": [
+    {
+     "source": "openalex",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    },
+    {
+     "source": "crossref",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    }
+   ],
+   "keyword_hit_none": 4,
+   "kept": 4,
+   "kb_min": 0.0,
+   "kb_max": 0.111,
+   "kb_mean": 0.028,
+   "seconds": 5.5,
+   "sources": [
+    {
+     "source_id": "S1",
+     "year": 2019,
+     "title": "标题 作者 关键词 摘要 正文 全文下载次数：91 2019年第5期 DOI：10.22217/upi.2019.388 基于多源大数据的城市街道可步行性空间特征及优化策略研究 —— 以南京市中心城区为例 Research on Chara",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S2",
+     "year": 1983,
+     "title": "BIOLOGICAL EFFECT OF HETEROLOGOUS SPERM ON GYNOGENETIC OFFSPRING IN CARASSIUS AURATUS GIBELIO",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S3",
+     "year": 2026,
+     "title": "The Anti-Ramsey Number for the Union of a Matching, P &lt;sub&gt;3&lt;/sub&gt; and P&lt;sub&gt;4&lt;/sub&gt; in a Comple",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S4",
+     "year": 2025,
+     "title": "柏拉图哲学视域下《我的柏拉图式甜心》中的人物形象分析",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.111
+    }
+   ]
+  },
+  {
+   "topic": "素数分布中的筛法",
+   "status": "ok",
+   "checked": true,
+   "reason": "查到 4 条可用来源（去重后；咨询 2 个源）",
+   "n_sources": 4,
+   "rejected": 0,
+   "sources_detail": [
+    {
+     "source": "openalex",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    },
+    {
+     "source": "crossref",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    }
+   ],
+   "keyword_hit_none": 4,
+   "kept": 4,
+   "kb_min": 0.143,
+   "kb_max": 0.429,
+   "kb_mean": 0.322,
+   "seconds": 8.2,
+   "sources": [
+    {
+     "source_id": "S1",
+     "year": 2022,
+     "title": "The review of distortion-related image quality assessment",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.286
+    },
+    {
+     "source_id": "S2",
+     "year": 2023,
+     "title": "MAR20： A benchmark for military aircraft recognition in remote sensing images",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.143
+    },
+    {
+     "source_id": "S3",
+     "year": 2024,
+     "title": "素数分布规律的发现(Ⅱ)以及黎曼猜想的直接证明 ——素数分布规律的最新定理(2)",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.429
+    },
+    {
+     "source_id": "S4",
+     "year": 2000,
+     "title": "L-函数的零点分布及某些算术级数中的最小素数",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.429
+    }
+   ]
+  },
+  {
+   "topic": "紧黎曼曲面上全纯微分形式的维数",
+   "status": "ok",
+   "checked": true,
+   "reason": "查到 4 条可用来源（去重后；咨询 2 个源）",
+   "n_sources": 4,
+   "rejected": 0,
+   "sources_detail": [
+    {
+     "source": "openalex",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    },
+    {
+     "source": "crossref",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    }
+   ],
+   "keyword_hit_none": 4,
+   "kept": 4,
+   "kb_min": 0.0,
+   "kb_max": 0.143,
+   "kb_mean": 0.071,
+   "seconds": 6.7,
+   "sources": [
+    {
+     "source_id": "S1",
+     "year": 2020,
+     "title": "Review on Motion Control of Autonomous Vehicles",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S2",
+     "year": 2023,
+     "title": "Application Status and Future Prospect of Aircraft Morphing Wing",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.143
+    },
+    {
+     "source_id": "S3",
+     "year": 2025,
+     "title": "Uniqueness of Meromorphic Functions on Complete Riemann Surfaces",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.0
+    },
+    {
+     "source_id": "S4",
+     "year": 1988,
+     "title": "黎曼流形上的极小曲面",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.143
+    }
+   ]
+  },
+  {
+   "topic": "有限群表示论中的特征标正交关系",
+   "status": "ok",
+   "checked": true,
+   "reason": "查到 4 条可用来源（去重后；咨询 2 个源）",
+   "n_sources": 4,
+   "rejected": 0,
+   "sources_detail": [
+    {
+     "source": "openalex",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    },
+    {
+     "source": "crossref",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    }
+   ],
+   "keyword_hit_none": 4,
+   "kept": 4,
+   "kb_min": 0.071,
+   "kb_max": 0.286,
+   "kb_mean": 0.16,
+   "seconds": 4.0,
+   "sources": [
+    {
+     "source_id": "S1",
+     "year": 2019,
+     "title": "自尊与社交焦虑的关系：基于中国学生群体的元分析",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.071
+    },
+    {
+     "source_id": "S2",
+     "year": 2021,
+     "title": "社交媒体使用与错失焦虑的关系：一项元分析",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.071
+    },
+    {
+     "source_id": "S3",
+     "year": 2004,
+     "title": "群表示论的物理方法 (I)",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;not_filtered",
+     "kb_overlap": 0.214
+    },
+    {
+     "source_id": "S4",
+     "year": 1989,
+     "title": "对称群自旋表示的特征标",
+     "keyword_hit": null,
+     "keep": true,
+     "filter_note": "no_ascii_keywords;similarity=0.20>=0.2",
+     "kb_overlap": 0.286
+    }
+   ]
+  },
+  {
+   "topic": "long exact sequence of derived functors",
+   "status": "ok",
+   "checked": true,
+   "reason": "查到 3 条可用来源（去重后；咨询 2 个源）",
+   "n_sources": 3,
+   "rejected": 0,
+   "sources_detail": [
+    {
+     "source": "openalex",
+     "status": "ok",
+     "count": 1,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    },
+    {
+     "source": "crossref",
+     "status": "ok",
+     "count": 2,
+     "rejected": 0,
+     "reason": "查到条目",
+     "conflicts": 0
+    }
+   ],
+   "keyword_hit_none": 0,
+   "kept": 3,
+   "kb_min": null,
+   "kb_max": null,
+   "kb_mean": null,
+   "seconds": 3.7,
+   "sources": [
+    {
+     "source_id": "S1",
+     "year": 1970,
+     "title": "A spectral sequence for the homotopy of nice spaces",
+     "keyword_hit": true,
+     "keep": true,
+     "filter_note": "keyword_hit",
+     "kb_overlap": null
+    },
+    {
+     "source_id": "S2",
+     "year": 1967,
+     "title": "The Wang sequence for half-exact functors",
+     "keyword_hit": true,
+     "keep": true,
+     "filter_note": "keyword_hit",
+     "kb_overlap": null
+    },
+    {
+     "source_id": "S3",
+     "year": 1991,
+     "title": "A split exact sequence of Mackey functors",
+     "keyword_hit": true,
+     "keep": true,
+     "filter_note": "keyword_hit",
+     "kb_overlap": null
+    }
+   ]
+  }
+ ]
+}

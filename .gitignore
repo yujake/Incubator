@@ -4,7 +4,10 @@
 # 目的：**只排除「体积」与「机器产物」**，绝不排除 draft/、test/、agentflow/
 # 的源码（.py/.md/.json/.yaml/.toml）与文档（.pdf/.md）。
 #
-# 硬约束：仓库里不允许出现单个超过 5 MB 的文件，temp/ 下一个文件都不许进来。
+# 硬约束：仓库里不允许出现单个超过 5 MB 的文件，temp/ 下默认一个文件都不进来
+# （唯一的例外是文件末尾 §14 逐条登记的那批"被引用证据物"：判据在盘上查它们存不存在，
+# 不进仓就会让一份全新 clone 里的引用判据必然变红。逐条登记、最大的一个 89.4 KB，
+# 理由与生成器见 §14；本节那句"一个都不许进来"由那一条改准，不是被绕过）。
 # 这份清单为此逐条服务：建仓前实测 temp/ = 5,323 MB / 107,391 文件，
 # 另有 test/test1 下的 OCR 虚拟环境与模型权重合计约 271 MB。
 #
@@ -19,7 +22,7 @@
 #    它是**一次性scratch**，不是源码：留档价值为零，进仓库只会让 clone/回退变慢。
 #    整目录排除（前导 / 锚定到仓库根，不会误伤别处的 temp 同名目录）。
 # -----------------------------------------------------------------------------
-/temp/
+/temp/*
 
 # -----------------------------------------------------------------------------
 # 2. Python 字节码与缓存
@@ -191,3 +194,167 @@ desktop.ini
 #     源码/文档都不许放进来（放进来就会因为这一行而进不了版本库）。
 # -----------------------------------------------------------------------------
 /_env/
+
+# <<< CITED-TEMP-EVIDENCE:BEGIN >>>
+# 本节由 `temp/_gen_cited_ignore.py` 生成：把**被引用**的 temp 证据物逐条放回来。
+# 判据与理由见该脚本的 docstring（一句话：判据把 `temp/<名>` 当盘上文件查，
+# 而全新 clone 里它们必须真的在）。
+# 维护约定：引用新增/消失后重跑那个生成器；手工加行也可以，但请连同引用一起改。
+!/temp/AUDIT-A.json
+!/temp/B3-rest-evidence.md
+!/temp/B5a-evidence.md
+!/temp/B6-evidence.md
+!/temp/B6-workorder.md
+!/temp/B8a-evidence.md
+!/temp/BOUNDARY-RUNBOOK.md
+!/temp/C-T15.md
+!/temp/C-T16.md
+!/temp/C-T17.md
+!/temp/DECISION-PAGE-20260927.md
+!/temp/DRIFT-LIST.md
+!/temp/FINAL-FINDINGS.md
+!/temp/FIX11-PLAN.md
+!/temp/FIX15-WINDOW.md
+!/temp/FIX16-PLAN.md
+!/temp/FIX6-F1.md
+!/temp/FIX6-F4-before_tests_test_r4_roles_surface.py
+!/temp/FIX6-F4.md
+!/temp/FIXG4.md
+!/temp/G3-measure2.py
+!/temp/G46-evidence.md
+!/temp/HANDOVER.md
+!/temp/P21-retraction.md
+!/temp/REAUDIT-R2.json
+!/temp/REAUDIT10-R6.json
+!/temp/REAUDIT6-R3.json
+!/temp/REAUDIT6-R5.json
+!/temp/REAUDIT8-R5.json
+!/temp/T3-BENCH-B.md
+!/temp/VERIFY-B8a-G18.md
+!/temp/W1-WINDOW.md
+!/temp/_audit_coverage.py
+!/temp/_b5a_p4_before.txt
+!/temp/_clean_deco.py
+!/temp/_d2_config_probe.py
+!/temp/_e5_replay2.ps1
+!/temp/_ev_store_inventory.py
+!/temp/_gen_digests.py
+!/temp/_live_readings_census.py
+!/temp/_m6_verify_verbatim.py
+!/temp/_m8_probe_lean.py
+!/temp/_oa_probe.py
+!/temp/_p40_m_tool_smoke.py
+!/temp/_page_fix_ab.py
+!/temp/_parent_verify_E2.txt
+!/temp/_probe_agent_construction.py
+!/temp/_probe_b_claim.py
+!/temp/_probe_fc05_messages.py
+!/temp/_probe_g35_patch_target.py
+!/temp/_probe_ledger_audits.py
+!/temp/_probe_openalex_mode.py
+!/temp/_probe_precise_desc.py
+!/temp/_r009_fix.py
+!/temp/_r009_sweep.py
+!/temp/_r1a1_status_probe.py
+!/temp/_r2b_ocr_probe_after.txt
+!/temp/_r3_baseline.py
+!/temp/_r52_probe.py
+!/temp/_r61_recon.py
+!/temp/_reachability_probe.py
+!/temp/_score_prototype.py
+!/temp/_split_any.py
+!/temp/_stop_probe.py
+!/temp/_symbol_diff.py
+!/temp/_t14_topicality.py
+!/temp/_t5_split.py
+!/temp/_t7_verify.py
+!/temp/_user_end_verify.py
+!/temp/_verify_r2.py
+!/temp/_who_writes.py
+!/temp/audit-prompt-KIT.md
+!/temp/auditC-05-skip-bypass.txt
+!/temp/auditD-proof-selfreport.txt
+!/temp/auditE-lean-probe.json
+!/temp/auditE-quote-eval-probe.json
+!/temp/auditF-probe1.txt
+!/temp/auditF-probe2.txt
+!/temp/auditF-probe3.txt
+!/temp/auditF-probe4.txt
+!/temp/auditG-probe1.txt
+!/temp/auditG-probe2.txt
+!/temp/auditG-probe4.txt
+!/temp/axes-after-b3rest.json
+!/temp/axes-before-b3rest.json
+!/temp/b73-release-all.json
+!/temp/b_probe_citation_shapes.py
+!/temp/batchC-axes5-vacuous-monkeypatch.txt
+!/temp/batchE2-E-10.txt
+!/temp/batchE2-README.md.bak
+!/temp/batchG-g10.txt
+!/temp/batchL-probe.py
+!/temp/batchM-verify.py
+!/temp/batchR1c-evidence.md
+!/temp/batchR1c-pos2.py
+!/temp/batchR6ac-pristine-baseline.txt
+!/temp/batchS-agent_e.py.bak
+!/temp/eol-census.txt
+!/temp/eol-vs-before.txt
+!/temp/f7-before.txt
+!/temp/fc05-messages.txt
+!/temp/fix6_f5-after-an1.txt
+!/temp/fix6_f5-minimal.txt
+!/temp/fix6_f5-neg-R8-layouts.txt
+!/temp/fix6_f5-neg-V4-an4-line-refs.txt
+!/temp/fix6_f5-neg-V5-an5-old-doc.txt
+!/temp/fix6_f5-neg-V9-r7-dangling-refs.txt
+!/temp/fix6_f5-shape.txt
+!/temp/fix6_f5-smoke-pre.txt
+!/temp/g4-nospace.txt
+!/temp/g5-mp3.txt
+!/temp/i1-neg-after.txt
+!/temp/i1-neg-before.txt
+!/temp/ledger-audits.txt
+!/temp/ledger-stale.txt
+!/temp/live-collab-fanout-20260930-144422.txt
+!/temp/live-collab-fanout-20260930-145743.txt
+!/temp/network-and-key-status.md
+!/temp/network-collect.txt
+!/temp/noai-paths-format.txt
+!/temp/p21-probe.txt
+!/temp/post2-sha-before.json
+!/temp/probe_attack_graph.py
+!/temp/probe_g12_baseline.py
+!/temp/probe_g7_ming.py
+!/temp/pytest-network-run1.txt
+!/temp/r2-d1-probe.txt
+!/temp/r2-e6-out2.txt
+!/temp/r2-e6-out5.txt
+!/temp/r2-e6-out6.txt
+!/temp/r2-e6-out7.txt
+!/temp/r2-revise-bypass.txt
+!/temp/r58-gates.txt
+!/temp/r58-release-all.json
+!/temp/reaudit4B-d2-contract-keys.txt
+!/temp/reaudit5-R1b-attack.py
+!/temp/reaudit5-R1b-pos.py
+!/temp/reaudit5-R1b-solo.txt
+!/temp/reaudit6-R5-p4.txt
+!/temp/reaudit6-R5-p6.txt
+!/temp/reaudit7-R5-p3.py
+!/temp/reaudit8-R5-p8.py
+!/temp/reauditR3-A5-f1-probe.txt
+!/temp/release_all_final.json
+!/temp/residuals.tsv
+!/temp/run_gates.py
+!/temp/t14-topicality.json
+!/temp/t3-bench-b.jsonl
+!/temp/two-layer-count.txt
+!/temp/verify-audit-forge-after.txt
+!/temp/verify-audit-forge.txt
+!/temp/w1-noai-x9641-output.txt
+!/temp/w5_p1_probe.py
+!/temp/zone-backup-r3-src_agentflow_store.py
+!/temp/zone-backup-r4-src_agentflow_capabilities.py
+!/temp/zone-backup-r4-src_agentflow_tools_base.py
+!/temp/zone-backup-r4-src_agentflow_tools_verify_tools.py
+# <<< CITED-TEMP-EVIDENCE:END >>>

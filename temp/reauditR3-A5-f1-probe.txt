@@ -1,0 +1,34 @@
+========================================================================
+A 正常提交两批 ⇒ rebuild
+  events.jsonl 原始内容：
+    op=upsert  batch=2026-09-26T14:41:10+08:00-21940-1 table=literature seq=1
+    op=commit  batch=2026-09-26T14:41:10+08:00-21940-1 table=None seq=2
+    op=upsert  batch=2026-09-26T14:41:10+08:00-21940-2 table=literature seq=3
+    op=commit  batch=2026-09-26T14:41:10+08:00-21940-2 table=None seq=4
+  [before-rebuild] rows=['0000', '0001'] counters={}
+  [after-rebuild] rows=['0000', '0001'] counters={} rebuild={'applied': 2, 'skipped': 0, 'counters': {}, 'batches_applied': 2, 'batches_incomplete': 0, 'events_replayed': 4}
+========================================================================
+B 半批事件（没有提交标记）⇒ rebuild 必须报 batches_incomplete=1 且不重放
+  [before-rebuild] rows=['0000'] counters={}
+  [after-rebuild] rows=['0000'] counters={} rebuild={'applied': 1, 'skipped': 0, 'counters': {}, 'batches_applied': 1, 'batches_incomplete': 1, 'events_replayed': 2}
+  batches_incomplete=1 batches_applied=1 events_replayed=2
+========================================================================
+C 历史事件（没有 batch 字段）⇒ 必须当完整批次重放
+  [after-rebuild] rows=['0000'] counters={} rebuild={'applied': 1, 'skipped': 0, 'counters': {}, 'batches_applied': 0, 'batches_incomplete': 0, 'events_replayed': 1}
+========================================================================
+D 快照超前于日志（手工往 literature.json 塞一行、日志里没有任何痕迹）⇒ rebuild
+  [before-rebuild] rows=['0000', '0001'] counters={}
+  [after-rebuild] rows=['0000'] counters={} rebuild={'applied': 1, 'skipped': 0, 'counters': {}, 'batches_applied': 1, 'batches_incomplete': 0, 'events_replayed': 2}
+  batches_incomplete=0（旧顺序留下的形态，日志里没有可判的批次）
+========================================================================
+E 事件追加崩在提交标记上（日志末尾一个半行）⇒ rebuild
+  [before-rebuild] rows=['0000'] counters={}
+  [after-rebuild] rows=['0000'] counters={} rebuild={'applied': 1, 'skipped': 0, 'counters': {}, 'batches_applied': 1, 'batches_incomplete': 1, 'events_replayed': 3}
+  batches_incomplete=1（半行被 read_events 记成 corrupt ⇒ 该批没有提交标记 ⇒ 整批不重放）
+  read_events 里的 corrupt 行数 = 1；rebuild 返回里没有 corrupt 计数：['applied', 'batches_applied', 'batches_incomplete', 'counters', 'events_replayed', 'skipped']
+========================================================================
+F 写者锁被别的进程占着时提交一笔 tx（timeout=1s）⇒ 必须 fail-closed
+  StoreError: 获取写者锁超时（0.5s，提交阶段）。可能有另一个进程正在rebuild/init 这个工作区；若进程已死，锁文件是可安全删除的。…
+  提交失败后 literature.json / events.jsonl 逐字节未变：True
+  [after-failed-commit] rows=['0000'] counters={}
+  下一次 alloc/提交还能正常工作：   [recovered] rows=['0000', '0002'] counters={}

@@ -1,0 +1,44 @@
+===== 第 58 轮四道门 开始 2026-09-26T22:56:57.2974212+08:00 =====
+1) lint
+
+[linter] error 0 / warning 0 / info 21
+
+lint exit=0
+2a) 默认环境全量
+suite-default exit=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2150 passed, 3 skipped, 8 deselected, 1 xfailed, 1 warning in 433.34s (0:07:13)
+2b) Lean 进 PATH 全量
+suite-lean exit=0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2153 passed, 8 deselected, 1 xfailed, 1 warning in 420.62s (0:07:00)
+===== 全部结束 2026-09-26T23:11:23.1225704+08:00 =====
+
+===== 续：3) 逐文件两环境 + 4) release_all 开始 2026-09-26T23:14:17.6560147+08:00 =====
+3a) 逐文件（默认）
+perfile-default exit=0
+[ok  ] tests/test_verify_tolerates_bad_ids.py  3 passed in 0.87s
+[ok  ] tests/test_vocab_census.py  10 passed in 2.83s
+[per-file] 共 105 个文件：过 104 / 单独跑不过 0 / 全被配置筛掉 1 / 一个用例都没有 0 / 没查成 0 / 已豁免的整文件跳过 1（541.4s）
+3b) 逐文件（Lean 进 PATH）
+perfile-lean exit=0
+[ok  ] tests/test_verify_tolerates_bad_ids.py  3 passed in 0.84s
+[ok  ] tests/test_vocab_census.py  10 passed in 2.88s
+[per-file] 共 105 个文件：过 104 / 单独跑不过 0 / 全被配置筛掉 1 / 一个用例都没有 0 / 没查成 0 / 已豁免的整文件跳过 1（542.9s）
+4) release_all --since HEAD
+release_all exit=1
+         [ok  ] tests/test_vocab_census.py  10 passed in 2.71s
+         [per-file] 共 105 个文件：过 104 / 单独跑不过 0 / 全被配置筛掉 1 / 一个用例都没有 0 / 没查成 0 / 已豁免的整文件跳过 1（562.2s）
+==============================================================================
+  [fail   ] release-check  全量测试 + 全部自检 + verify + 工具普查 + linter + 禁 AI 区 + 契约 + 导入
+  [pass   ] acceptance     验收测试（P1–P9，正式版 target=formal）
+  [pass   ] repro          论文独立复现（5 个实验 + 7 条负控）
+  [pass   ] role-specs     角色规格结构完整性（9 节 × 8 必备子节）
+  [pass   ] coverage       零测试公开函数的**风险分档**清单（等级 1/2 应为 0）
+  [pass   ] per-file       逐文件单跑测试（把顺序依赖/跨文件状态泄漏变成可判定的门）
+一键发布检查总判定：FAIL    pass=5 fail=1 unknown=0
+⚠️ `unknown` 是**没查成**，绝不是通过。
+⚠️ 本脚本与 scripts/release_check.py 自身都在 FC-27 禁改区，仍需人逐行走查 + 2 名 reviewer 批准 —— 它全绿**不构成发布许可**。
+===== 四道门全部结束 2026-09-26T23:56:37.8390842+08:00 =====

@@ -1,0 +1,97 @@
+{
+  "auditor": "reaudit-R2",
+  "batch": "R2",
+  "scope": "E-1: agentflow/src/agentflow/formalgw.py::_axioms_of；D-1: agentflow/src/agentflow/tools/doc_tools.py::check_proofs + build_document 调用点、agentflow/src/agentflow/agent_g.py::revise 调用点；E-6: test/test2/run_acceptance.py 的三态与退出码；E-7: test/test2/repro/repro_result.py::guard、test/test2/repro/run_all.py::verdict_of/_named_failing_check；以及四个新测试文件 tests/test_formalgw_no_axioms_shortcircuit.py、tests/test_d1_proof_evidence_anchor.py、tests/test_acceptance_three_state.py、tests/test_repro_verdict_guard.py",
+  "files_sha256_before": {
+    "agentflow/src/agentflow/formalgw.py": "0471bb26a54f04b3",
+    "agentflow/src/agentflow/tools/doc_tools.py": "5681e4dcb03cba9b",
+    "agentflow/src/agentflow/agent_g.py": "9d7bd80aca675f16",
+    "test/test2/run_acceptance.py": "a6079a24f6190103",
+    "test/test2/repro/repro_result.py": "798feff07acf906b",
+    "test/test2/repro/run_all.py": "5c6d5e4d41500985",
+    "agentflow/tests/test_formalgw_no_axioms_shortcircuit.py": "a617f41c7788ec15",
+    "agentflow/tests/test_d1_proof_evidence_anchor.py": "d5a5c854f2c4fbf9",
+    "agentflow/tests/test_acceptance_three_state.py": "a6229d0f4c332d7f",
+    "agentflow/tests/test_repro_verdict_guard.py": "0cec73a14c01c617"
+  },
+  "files_sha256_after": {
+    "agentflow/src/agentflow/formalgw.py": "0471bb26a54f04b3",
+    "agentflow/src/agentflow/tools/doc_tools.py": "5681e4dcb03cba9b",
+    "agentflow/src/agentflow/agent_g.py": "9d7bd80aca675f16",
+    "test/test2/run_acceptance.py": "a6079a24f6190103",
+    "test/test2/repro/repro_result.py": "798feff07acf906b",
+    "test/test2/repro/run_all.py": "5c6d5e4d41500985",
+    "agentflow/tests/test_formalgw_no_axioms_shortcircuit.py": "a617f41c7788ec15",
+    "agentflow/tests/test_d1_proof_evidence_anchor.py": "d5a5c854f2c4fbf9",
+    "agentflow/tests/test_acceptance_three_state.py": "a6229d0f4c332d7f",
+    "agentflow/tests/test_repro_verdict_guard.py": "0cec73a14c01c617"
+  },
+  "sha256_unchanged": true,
+  "verified_items": [
+    {
+      "id": "E-1",
+      "fix_holds": true,
+      "positive_control": "`python temp\\reauditR2-e1-probe.py` ⇒ `positive_control_user_text_new=[\"propext\"]`、`test_corpus_new=[\"propext\",\"Quot.sound\"]`（temp/reauditR2-e1-probe.txt）；真 Lean 4.7.0：`python temp\\reauditR2-e1-lean.py` ⇒ 内核真命题 `good_status=\"verified\"`、`good_evidence={\"proved\":true,\"evidence_kind\":\"proof\"}`（temp/reauditR2-e1-lean.txt）；`python -m pytest tests/test_formalgw_no_axioms_shortcircuit.py -q` ⇒ `5 passed in 1.14s`（无 skip，temp/reauditR2-e1-pytest-lean.txt）",
+      "negative_control": "把 `_axioms_of` 换回改前形态（`git show HEAD:agentflow/src/agentflow/formalgw.py` → temp/reauditR2-pre-formalgw.py，其首句是 `if _NO_AXIOMS.search(text): return []`）：同一份输出返回 `[]`（新 `[\"propext\"]`）；同一份假 Lean 输出端到端 `e2e_old_status=\"verified\"`+`proved=true`+`evidence_kind=\"proof\"`，而新版 `e2e_new_status=\"extra_axioms\"`+`proved=false`。真 Lean 的 `axiom` 假证样本判 `bad_status=\"extra_axioms\"`、`bad_axioms=[\"r2_probe_ax\"]`、`proved=false`、`evidence_kind=null`（原始输出见 temp/reauditR2-e1-probe.txt 与 temp/reauditR2-e1-lean.txt）"
+    },
+    {
+      "id": "D-1",
+      "fix_holds": true,
+      "positive_control": "`$env:R2_PKG_SRC='D:\\Incubator\\agentflow\\src'; python temp\\reauditR2-d1-probe.py` ⇒ ①–④ 全部 `REJECTED` 且每档 `docs_after=0`；⑤ 证据锚齐备 `WRITTEN` doc_id=0000 且 `markdown_has_location=true`；⑥ `revise` 换进无锚 proof 断言 `REJECTED`、`review_rounds_in_store=0`、库里仍是原合规断言（temp/reauditR2-d1-real.txt）。`python -m pytest tests/test_d1_proof_evidence_anchor.py -q` ⇒ `10 passed in 2.45s`（temp/reauditR2-d1-pytest.txt）",
+      "negative_control": "① 副本 temp/reauditR2-d1-neg-build/src（doc_tools.py:1116 那次 `check_proofs` 调用被替成常量，全文件仅此一处）⇒ 四条坏形态全部 `WRITTEN`（doc_id 0000–0003，各 `docs_delta=1`，temp/reauditR2-d1-neg-build.txt）；② 副本 temp/reauditR2-d1-neg-revise/src（agent_g.py:473 那次调用被替成常量）⇒ `6_revise_bypass: ACCEPTED`、`review_rounds=1`、库里出现 `evidence_kind=\"proof\"`+`citations=[\"lit:0000\"]`+`proof_location=null`（temp/reauditR2-d1-neg-revise.txt）⇒ 两个落点各自独立地可被证明是必要的"
+    },
+    {
+      "id": "E-6",
+      "fix_holds": true,
+      "positive_control": "`python -m pytest tests/test_acceptance_three_state.py -q` ⇒ `6 passed in 0.12s`（temp/reauditR2-e6-pytest.txt）；`Select-String -Pattern '\\.ok = '` ⇒ 全文件只有 `checkpoint()`（:197）写 `True`，其余为 `False`/`None`",
+      "negative_control": "cwd=D:\\Incubator\\test\\test2、`AGENTFLOW_TARGET=formal`、`python run_acceptance.py --root D:\\Incubator\\temp\\reauditR2-e6-root --json D:\\Incubator\\temp\\reauditR2-e6-x.json --phases P9` ⇒ `[N/A ] P9`、`通过 0 / 失败 0 / 未执行 1`、`EXITCODE=2`（temp/reauditR2-e6-neg.txt）。同命令在改前副本上（HEAD 版 run_acceptance.py 放进 temp 镜像目录）⇒ `[PASS] P9`、`通过 1 / 失败 0 / 未执行 0`、`EXITCODE=0`（temp/reauditR2-e6-neg-prefix.txt）。按协议未跑全量验收、也未写 test/test2/acceptance-run/"
+    },
+    {
+      "id": "E-7",
+      "fix_holds": true,
+      "positive_control": "`python temp\\reauditR2-e7-probe.py` ⇒ `new_refutes_with_named_check=\"caught_the_injected_bug\"`、`new_caught_by=\"girths_match\"`、`new_inconclusive_exit2=\"inconclusive\"`；`python -m pytest tests/test_repro_verdict_guard.py -q` ⇒ `5 passed in 0.37s`（temp/reauditR2-e7-pytest.txt）",
+      "negative_control": "`verdict_of({returncode:1, result:{result:'refutes', observations:{}}})`：新版 `\"crashed\"`、`_named_failing_check=[]`；改前副本（HEAD 的 run_all.py/repro_result.py → temp/reauditR2-e7-prefix/）判 `\"caught_the_injected_bug\"`。改前 `guard` 遇到未捕获异常 `exit 1`+`ALL CHECKS FAIL`+`result=\"refutes\"`，改后 `exit 2`+`ALL CHECKS INCONCLUSIVE`+`result=\"inconclusive\"`；两者原始输出都在 temp/reauditR2-e7-probe.txt"
+    }
+  ],
+  "negative_control": "每条都拿「同一套判据 + 改前版本（git HEAD 导出到 temp/）或注入坏样本（在 temp/ 的 src 副本上注掉那次调用、把 `_axioms_of` 换回全局短路）」跑出红：E-1 见 temp/reauditR2-e1-probe.txt 与 temp/reauditR2-e1-lean.txt，D-1 见 temp/reauditR2-d1-neg-build.txt 与 temp/reauditR2-d1-neg-revise.txt，E-6 见 temp/reauditR2-e6-neg-prefix.txt，E-7 见 temp/reauditR2-e7-probe.txt；全部原始输出同时抄进 temp/REAUDIT-R2.md 的 §A",
+  "evidence": "temp/REAUDIT-R2.md",
+  "findings": [
+    {
+      "id": "R2-R1",
+      "severity": "medium",
+      "location": "agentflow/src/agentflow/tools/doc_tools.py::check_proofs（判定分支在 :533 `if re.match(r\"^[^:\\\\/]+:\\d+(-\\d+)?$\", rel) and not re.search(r\"[.][A-Za-z0-9]{1,6}\", rel): continue`）",
+      "what": "第四条判据（`proof_location` 必须指向真实存在的文件）在\"无扩展名的 `name:number` 形态\"上被整段跳过。实测（temp/reauditR2-d1-edge.txt，工作区根=temp\\reauditR2-d1-edge\\ws）：`proof_location=\"not-a-claim:7\"` ⇒ `check_proofs` 返回 `{\"checked\": true, \"problems\": [], \"reason\": \"已核 1 条断言里的 proof 级条目；证据锚与 proof_location 都成立\"}`，`build_document` **写库成功 doc_id=0000**；`proof_location=\"claim-9b85fc39:12\"`（该 claim_id 根本不在本文档里）同样写库成功 doc_id=0001。原始输出：`\"A_name_number_no_dot_no_file\": {\"raw_check\": {\"problems\": []}, \"outcome\": \"WRITTEN\", \"doc_id\": \"0000\", \"docs_delta\": 1}`。对照：带扩展名的 `PROOF-DOES-NOT-EXIST.lean:1` 被正确拒（§A.2 ①），差别只在有没有 `.lean` 这个后缀。",
+      "impact": "`D-1` 想关掉的那一类\"看起来有形式化背书、实际没有任何可打开的落点\"的 proof 断言，只要把 `proof_location` 写成 `任意标识符:数字`（不带扩展名）就照样写库。实测 `verify_all` 对这份库给出 **0 条**跟 proof_location 有关的 error/warning（temp/reauditR2-d1-verify.txt：5 篇稿件、proof_locations 含 `not-a-claim:7`/`../outside.lean`，errors 只有我夹具自己造成的 `counter_behind`）；`grep proof_location agentflow/src/agentflow/verify.py` 无命中 ⇒ 事后也没有第二道判据。与 `check_proofs` 自己的 docstring 表格第 4 行「`proof_location` 必须指向工作区内真实存在的文件」矛盾（同一段实现注释把该形态解释为\"本文档内交叉引用\"，但代码并不校验它是本文档里的 `claim_id`；`gates.gate_g3` 对同一形态走的是 `loc in known_ids` 与 `file:line` 正则两条，判据并不等价）。",
+      "fix": "在该 `continue` 之前先判它到底是不是本文档内的 claim_id：把 `claims` 里的 `claim_id` 集合传进来（或从 `claims` 现算 `known = {str(c.get('claim_id')) for c in claims if c.get('claim_id')}`），只有 `rel in known` 才 `continue`；否则按 `proof_location_not_found` 报 problem（kind 可新增 `proof_location_not_a_known_claim`，与 `gates.gate_g3` 的 `loc in known_ids` 用同一个集合、同一个判据来源）。",
+      "acceptance": "探针 temp/reauditR2-d1-edge.py 的 A（`not-a-claim:7`）与 B（`claim-9b85fc39:12`）两档必须变成 `REJECTED` 且 `documents` 不新增行；`check_proofs` 的 `problems[*].kind` 必须点名是\"不是本文档内 claim_id 也不是存在的文件\"。同时新增一条正控：`proof_location` 等于本文档内真实 `claim_id`（如 `claim-1`）的 proof 断言仍须写库成功，且该行为要有测试（现有 tests/test_d1_proof_evidence_anchor.py 里没有这一条）。",
+      "zone": false
+    },
+    {
+      "id": "R2-R2",
+      "severity": "low",
+      "location": "agentflow/src/agentflow/tools/doc_tools.py::check_proofs（:525 表格承诺「必须指向工作区内真实存在的文件」；:537-539 `full = candidate if candidate.is_absolute() else ((base / rel) if base else None)`，无包含性检查）",
+      "what": "第四条只判 `full.is_file()`，不判它是否落在 `workspace_root` 之内。实测（temp/reauditR2-d1-edge.txt）：`proof_location=\"../outside.lean\"`（文件在工作区**上一级**，即 temp\\reauditR2-d1-edge\\outside.lean）⇒ `check_proofs` 报 `problems: []`、`outcome: \"WRITTEN\"`、`doc_id=0002`；`proof_location=\"D:\\\\Incubator\\\\temp\\\\reauditR2-d1-abs-outside.lean\"`（工作区外的绝对路径）⇒ 同样 `WRITTEN`、`doc_id=0003`。",
+      "impact": "docstring 与错误文案（:446「本函数…」、:544「按工作区根解析成 {full}」、:525「工作区内」）承诺的\"工作区内\"没有实现：proof 断言的落点可以指向盘上任意一份 `.lean`，包括稿件工作区之外、随工作区迁移就消失的文件。可复核性因此只在\"当前这台机器\"上成立（`AgentG` 在别处都走 `_resolve_inside` 做包含性检查，run_acceptance 也把\"路径穿越\"写成最后一道闸）。它不单独产生假 proof（仍要求引一条 proof 级实验），所以是 low 而不是 medium。",
+      "fix": "`full = full.resolve()` 后要求 `base is not None and full.is_relative_to(base)`，否则报 problem（kind `proof_location_outside_workspace`，detail 里同时给出 `full` 与 `base`）；`base is None` 时保持现在的 fail-closed 行为。",
+      "acceptance": "探针 C（`../outside.lean`）与 D（工作区外绝对路径）必须变成 `REJECTED`；工作区**内**的相对路径（探针 E）与本文档内 claim_id 必须仍然写库成功。",
+      "zone": false
+    },
+    {
+      "id": "R2-R3",
+      "severity": "low",
+      "location": "test/test2/run_acceptance.py::p9_summary（:1175 `prior = [x for x in run.phases if x.key != \"P9\"]` / :1176 `if prior:` / :1177 `run.checkpoint(p, True, f\"汇总读到了 {len(prior)} 个前置阶段的结论（P9 本身无判据）\")`）",
+      "what": "注释（:1171）把判据写成\"本阶段之前是否存在**给出结论的**阶段\"，实现用的却是\"是否存在前置阶段\"。实测（temp/reauditR2-e6-p7p9.txt，空 root，`--phases P7,P9`）：P7 自己 `[N/A ]`（`ok is None`，没有给出任何结论），而 P9 仍然打印 `[OK] 汇总读到了 1 个前置阶段的结论（P9 本身无判据）` 并把 P9 记 `[PASS]`。",
+      "impact": "只影响**打印出来的那句话**与 P9 自己的那一格：整轮仍然 `通过 1 / 失败 0 / 未执行 1` ⇒ `EXITCODE=2`，不会产生假绿（三态在 `summary` + 退出码那里仍然拦住）。但验收报告是给人读的，\"读到了 1 个前置阶段的结论\"在那种情形下是一句与事实不符的断言 —— 正是本项目最忌讳的\"把没做读成做了\"的文案形态；而 P9 的 `checkpoint(True)` 也因此不是一条可判定的判据（恒真于\"有前置阶段\"）。",
+      "fix": "把条件改成与注释一致：`prior = [x for x in run.phases if x.key != \"P9\" and x.ok is not None]`，为空时保持 `ok=None` 并写\"前置阶段没有一个给出结论 ⇒ 没有可汇总的对象\"；或（若刻意选择\"存在前置阶段即可\"）把 :1171 的注释与 :1177 的文案一并改成\"前置阶段\"而不说\"结论\"。两者选一，判据与文案必须同一句话来源。",
+      "acceptance": "`python run_acceptance.py --root <temp 空目录> --json <temp>/x.json --phases P7,P9` 的输出里，P7 为 `N/A` 时：① P9 不许出现\"读到了 N 个前置阶段的结论\"；② 若判据改成\"有结论才算\"，P9 必须也记 `N/A`，整轮 `未执行 2`、`EXITCODE=2`。全量验收（`通过 10 / 失败 0 / 未执行 0`、exit 0）与 `--phases P9`（exit 2）两条必须都不变。",
+      "zone": false
+    }
+  ],
+  "retracted_suspicions": [
+    "`check_proofs`（doc_tools）与 `verify.proof_claim_rests_on_weaker_evidence`（verify.py）是同一判据的两份实现且没有交叉断言测试 —— 逐条比对两份实现（被引 exp 行不存在时都跳过；`evidence_kind != \"proof\"` 时都报 error）后未发现分歧，且 doc_tools 的 docstring 已如实登记\"③ 只引 lit 那一档事后查不出来\"。撤回，只留工程建议（补一条交叉断言）。",
+    "`agent_h._inject_raw_document` 与 `review_tools._set_doc_status` 是绕过 D-1 的生产后门 —— 实测前者只存在于自检夹具（`_SELFTEST_HARNESS` 白名单 + `tests/test_core_audit_efgh.py` 的 AST 判据），后者只改 `status` 不动 `claims`。撤回；`draft/28` §10.4 第 5 条把它写成\"边界\"是准确的。",
+    "`check_proofs` 返回的 `resolved` 字段两个调用方都不读 ⇒ 静默失败 —— 它只是一个读数，没有任何结论依赖它。撤回，不记为 finding。",
+    "`tests/test_acceptance_three_state.py::test_the_exit_code_reads_the_third_state` 是文本级断言 ⇒ 判据真空 —— 它是补充守卫，主判据（`p.ok is None`、`checkpoint` 语义、崩溃⇒异常）都在进程内真跑；文本断言恰好挡住\"把 `not_run` 那一支删掉\"这种端到端测试抓不到的退化。撤回。",
+    "`run_acceptance.py:1242` 的 `except Exception: pass` 是静默失败 —— 它在 `_digest_obj` 里，失败后仍回落到 `f\"<{type(obj).__name__}>\"`，读数不会消失。撤回。"
+  ]
+}

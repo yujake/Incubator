@@ -1,0 +1,90 @@
+# batchE2 读数 · 条目 `E-10`（裁定 (b)：删掉假承诺，不加近似匹配档）
+
+- 落点：`src/agentflow/schema.py`（`FINDING_KINDS`）与 `src/agentflow/quoteverify.py`（`check_quote` 的边界）—— **两个都在 FC-27 禁改区**
+- 手法：词表/文档/登记表的机器判据 + 真引文实跑 `check_quote` + 改前快照负控
+- 观测时刻：2026-09-27 01:47:29
+
+## 我读的是哪一版（sha256 前 16）
+
+| 文件 | 改前（本轮备份） | 改后（当前字节） |
+|---|---|---|
+| `src/agentflow/schema.py` | `c14f6c743daa9b23` | `ad549a31194f8439` |
+| `src/agentflow/quoteverify.py` | `44c073a2b90c0524` | `a914b3bb555bb7b4` |
+| `tools/vocab_census.py` | `370ec5eb3c6c2fe6` | `dc77c52df16c76ce` |
+
+## 正控（当前字节上「修好的形态」是否成立）
+
+  [PASS] (1) `FINDING_KINDS` 里已删掉那条取值（值集合 = 7 个，逐条列出）
+        实测 FINDING_KINDS=('unsupported_claim', 'dangling_dep', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled', 'inconsistent_number')
+  [PASS] (2) `grep -c` 在 `schema.py` 与 `quoteverify.py` 里都是 0（裁定要求的机器判据）
+        实测 schema.py=0 处、quoteverify.py=0 处
+  [PASS] (3) 边界写进了 `quoteverify` 的两处 docstring（模块 + `check_quote`）
+        模块 docstring 含 ['逐字', '近似匹配']；check_quote docstring 含 ['逐字', '近似匹配']
+        实测消息：kind 必须是 ('unsupported_claim', 'dangling_dep', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled', 'inconsistent_number') 之一，收到 'quote_mismatch'
+  [PASS] (8) 词表真的关门了：`ReviewFinding(kind=<已删取值>)` 的校验抛 ValueError
+        见上面的实测消息
+  真引文语料 = 12 条（每条都来自盘上真实文本）：
+    demo/run/library/0000/group.txt                substring_match A group is a set together with a binary oper
+    demo/run/library/0001/abelian_group.txt        substring_match An abelian group is a group in which the com
+    demo/run/library/0002/ring.txt                 substring_match A ring is an algebraic structure equipped wi
+    demo/run/library/0003/field.txt                substring_match A field is a ring in which every nonzero ele
+    demo/run/library/0004/abelian_group_reprint.txt substring_match An abelian group is a group in which the com
+    demo/run/data/relations.json#0000              substring_match An abelian group is a group in which the com
+    demo/run/data/relations.json#0001              substring_match A field is a ring in which every nonzero ele
+    temp/auditE-probe-quote-eval.py 夹具页            substring_match We prove Theorem 1.3 (spectrum of K(m)).
+    temp/auditE-probe-quote-eval.py 夹具页            substring_match Let m >= 3.
+    temp/auditE-probe-quote-eval.py 夹具页            substring_match Then Spec K(m) = [-m, m].
+    temp/auditE-probe-quote-eval.py 夹具页            substring_match The companion book gives Spec S~m = [-m, m] 
+    temp/auditE-probe-quote-eval.py 夹具页            substring_match Nothing else here.
+  [PASS] (4) ① 真引文**全部** `substring_match`（0 条例外）
+        全部 12 条都是 substring_match
+  篡改负控 = 3 条：
+    改一个词（give→that）          verified=False reason='not_found'  a companion book that Spec S~m = [-m, m]
+    整句编造                     verified=False reason='not_found'  We prove that Spec S~m = [-m, m] for all
+    拼接两段真话                   verified=False reason='not_found'  We prove Theorem 1.3 (spectrum of K(m)).
+  [PASS] (5) ② 3 条篡改负控全部 `not_found`（判据没有被 (b) 放宽）
+        实测 = [('改一个词（give→that）', (False, 'not_found')), ('整句编造', (False, 'not_found')), ('拼接两段真话', (False, 'not_found'))]
+  [PASS] (6) ③ 把一条真引文改**一个词** ⇒ reason 仍是 `not_found`（与『整句编造』同形，这正是裁定 (b) 要写明的边界，不是缺陷）
+        改一个词 reason='not_found'；整句编造 reason='not_found'；两者逐字相同=True
+  [PASS] (7) 普查/登记表里也没有痕迹：`RESERVED_VALUES` 无这条、census 四栏与 R011 输出里都没有它
+        census 四栏={'dead': ['unsupported_claim', 'dangling_dep', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled', 'inconsistent_number'], 'reserved': [], 'unclaimed': ['unsupported_claim', 'dangling_dep', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled', 'inconsistent_number'], 'registered_not_dead': []}；R011 输出里出现=False
+
+## 负控（把修法撤掉 ⇒ 判据必须变红；跑的是**改前版本**）
+
+[指纹] 我跑的是**改前版本**：`temp/batchE2-src__agentflow__schema.py.bak` sha16=`c14f6c743daa9b23`、`temp/batchE2-src__agentflow__quoteverify.py.bak` sha16=`44c073a2b90c0524`
+
+  [PASS] (N1) 改前 `FINDING_KINDS` 里**有**那条取值（旧词表逐字可读）⇒ 正控 (1) 必红
+        实测（改前版本）FINDING_KINDS=['unsupported_claim', 'dangling_dep', 'quote_mismatch', 'overclaim', 'missing_negation_kind', 'scope_drift', 'garbled', 'inconsistent_number']
+  [PASS] (N2) 改前 `schema.py` 的 grep 命中数 > 0 ⇒ 正控 (2) 必红
+        实测（改前版本）schema.py=2 处、quoteverify.py=0 处
+  [PASS] (N3) 用改前 schema 造临时 root + 把登记表那一条加回去 ⇒ census 的 `reserved` 栏里有它 ⇒ 正控 (7) 必红
+        实测（改前版本）reserved=['quote_mismatch']
+  [PASS] (N4) 改前 `quoteverify` 的 docstring 里没有那句边界 ⇒ 正控 (3) 必红
+        实测（改前版本）docstring 里含 ['逐字']（缺 ['近似匹配']）
+
+## 如实登记（做不到的地方 / 这条负控为什么在这个面上）
+
+- 裁定 (b) **刻意不改 `check_quote` 的行为**：目标就是『删掉一句办不到的话』。
+  所以「改一个词的引文」与「整句编造」在**改前改后**给出逐字相同的判决 ——
+  这既不是缺陷、也不是负控，而是本裁定要写明的边界。**能变红的判据只有**
+  词表 / 文档 / 登记表那几条（N1–N4）。硬造一条『行为负控』就是假证据。
+- §2 的验收判据写「现有 **24 条**真引文仍全部 substring_match」：
+  那份 24 条语料**在盘上找不到**（全仓 grep「24 条真引文」只命中这句话本身）。
+  我用的是盘上真实存在的语料（上面逐条列了来源），共 12 条 —— 不拿『凑够 24』充数。
+- 本条**没有**实跑 `agent_b` 的端到端关系写入路径（那要真 store + 真 provider）：
+  `check_quote` 是那条路径上唯一的引文判据，我直接压的就是它。
+- 禁改区**没有** `agent_b` / `verify.py`：删掉词表值不产生任何需要跟着改的引用
+  （实测：`agent_b` / `verify.py` 里 0 处引用它）。
+
+## 汇总
+
+- 断言总数 12；PASS 12；FAIL 0
+- 结论：**holds**（正控全绿 + 负控在改前版本上确实变红）
+
+## 复跑方式
+
+```
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='src'
+cd D:\Incubator\agentflow
+python ..\temp\batchE2-E-10.py
+```

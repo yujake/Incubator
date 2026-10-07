@@ -1,0 +1,14 @@
+实验表行数（应当为 0）: 0
+工作区里有没有那个 .lean 文件: False
+
+compose_claim 的结果键: ['citations', 'claim_id', 'disclaimer', 'evidence_kind', 'is_negative', 'negation_kind', 'proof_location', 'revision_hash', 'scope_caveat', 'section', 'status', 'text']
+  evidence_kind = proof  proof_location = PROOF-DOES-NOT-EXIST.lean:1  status = 证
+
+!!! build_document 成功 ⇒ 自报 proof 落库
+   doc_id = 0000
+   落库后的断言: evidence_kind = proof  proof_location = PROOF-DOES-NOT-EXIST.lean:1
+   markdown_path = documents/0000.md | 存在吗: True
+   markdown 里出现 'proof' 吗: True
+
+--- 对照：citations 指向不存在的文献 ---
+被拦：DocumentError: doc.build_document 调用失败：稿件里有 1 条引用指向**不存在**的对象，整笔不写库：[claim-465cc954] 'lit:9999'：literature 表里没有 lit_id='9999'。引用一个不存在的代号，等于把外部结论当成自己的结论（FC-02）——`scan_claim` 只看 citations 非空，查不出这一点，所以必须在这里用真实数据核。

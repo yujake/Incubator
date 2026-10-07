@@ -1,0 +1,37 @@
+==============================================================================
+对照 A：真合规 —— 3 名 auditor，3 份内容不同的证据
+==============================================================================
+  写入 R1b-A1/axes exit=0
+  写入 R1b-A2/roles exit=0
+  写入 R1b-A3/errors exit=0
+  [正控] exit=0 clean approved/approved
+        台账逐条 (auditor, dimension, evidence_sha12) =
+          'R1b-A1'             axes     06835c8a79
+          'R1b-A2'             roles    742bf164be
+          'R1b-A3'             errors   7b2b240587
+        盘上：不同 auditor 名字 = 3，不同 evidence_sha256 = 3
+        判定侧：distinct_auditors=3 distinct_dimensions=3 ['axes', 'roles', 'errors'] clean_audits=3
+
+==============================================================================
+对照 B：一名 auditor 独占 3 个维度（证据是三份只差几个空格的副本）
+==============================================================================
+  写入 R1b-SOLO/axes exit=0
+  写入 R1b-SOLO/roles exit=0
+  写入 R1b-SOLO/errors exit=0
+  -- 此时差 1 名 auditor，再补一名只交 1 条 --
+  写入 R1b-ONE/docs exit=0
+  [攻击] exit=0 clean approved/approved
+        台账逐条 (auditor, dimension, evidence_sha12) =
+          'R1b-SOLO'           axes     d5b1d9adee
+          'R1b-SOLO'           roles    8181a709b0
+          'R1b-SOLO'           errors   706fc9a3fa
+          'R1b-ONE'            docs     4e4d80154c
+        盘上：不同 auditor 名字 = 2，不同 evidence_sha256 = 4
+        判定侧：distinct_auditors=2 distinct_dimensions=4 ['axes', 'roles', 'errors', 'docs'] clean_audits=4
+
+==============================================================================
+判据：对照 A 应 approved 且 distinct_auditors=3；
+      对照 B 若 approved，就是 finding R5-R1b-1 成立。
+实测：A=approved（aud=3）  B=approved（aud=2 dim=4）
+⇒ B 放行了：finding 成立
+==============================================================================

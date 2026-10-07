@@ -1,0 +1,10 @@
+初稿：doc_id=0000，claim-1 带 proof_location='proofs/real.lean'（合规）
+待换入的断言：citations=['lit:0000']，proof_location=没有（compose_claim 不管这一层，它只判 claimanatomy 的形态判据）
+revise 被拒：DocumentError: 修订 doc:0000 被拒：2 条 proof 级断言的证据不成立，整笔不写库（documents/review_findings 都不动）：[claim-1] 声称 evidence_kind='proof'，却**一条 `exp:` 引用都没有** ⇒ 没有任何形式化实验参与过这条断言。proof 级证据必须指向一条真的跑过检查器的实验行（FC-22：断言不能强于它的依据）；[claim-1] 声称 evidence_kind='proof'，却没有 `proof_location` ⇒ 读者无法打开任何一个文件去复核。文件位置是形式化证据唯一可被外部检查的锚点（`formalgw` 的检查器输出也落在这里）。`evidence_kind='proof'` 享受最高一档的证据待遇，所以改写这条路也必须指向一条真的跑过检查器的实验行、并给出盘上真的存在的落点
+
+落库后的那条断言：
+  evidence_kind = 'proof'
+  citations     = ['exp:0000', 'lit:0000']
+  proof_location= 'proofs/real.lean'
+
+⇒ 绕过成立（库里存在一条没有证据锚的 proof 断言）：False

@@ -1,0 +1,39 @@
+工作区： C:\Users\ysc20\AppData\Local\Temp\dsh-gU9TnT\auditG4-urt64wrl
+==============================================================================
+## A 同一主题连跑两次（同一个工作区）
+==============================================================================
+--- 第 1 次：exit=0 reason='success' calls=2 spent_usd=4.8e-05
+    per_call = [{"call_index": 0, "usage_id": "0000", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}, {"call_index": 1, "usage_id": "0001", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}]
+    by_scope 非零档 = ['reason']
+    usage_ledger 总计 = {"entries": 2, "tokens": 120, "usd": 4.8e-05}
+--- 第 2 次：exit=0 reason='success' calls=2 spent_usd=4.8e-05
+    per_call = [{"call_index": 0, "usage_id": "0000", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": false, "reason": "duplicate", "scope": ""}, {"call_index": 1, "usage_id": "0001", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": false, "reason": "duplicate", "scope": ""}]
+    by_scope 非零档 = ['reason']
+    usage_ledger 总计 = {"entries": 2, "tokens": 120, "usd": 4.8e-05}
+账本行数 = 2  账本 tokens 合计 = 120
+第 2 次自己的 account 与第 1 次逐字节相同？ False
+==============================================================================
+## B 换一个主题、预算很小（0.0005 美元）：第二次跑会不会把上一次的钱算进来
+==============================================================================
+--- 第 1 次：exit=0 reason='success' calls=2 spent_usd=4.8e-05
+    per_call = [{"call_index": 0, "usage_id": "0000", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}, {"call_index": 1, "usage_id": "0001", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}]
+    by_scope 非零档 = ['reason']
+    usage_ledger 总计 = {"entries": 2, "tokens": 120, "usd": 4.8e-05}
+--- 第 2 次：exit=0 reason='success' calls=2 spent_usd=9.6e-05
+    per_call = [{"call_index": 0, "usage_id": "0002", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}, {"call_index": 1, "usage_id": "0003", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}]
+    by_scope 非零档 = ['reason']
+    usage_ledger 总计 = {"entries": 4, "tokens": 240, "usd": 9.6e-05}
+第 2 次运行自己花了多少（账本增量）= 见下
+账本总 tokens = 240
+==============================================================================
+## C 换主题、预算比上一次已花的钱还小：这一次一次没跑却被记成 budget_exhausted
+==============================================================================
+--- 第 1 次（预算 1.0）：exit=0 reason='success' calls=2 spent_usd=4.8e-05
+    per_call = [{"call_index": 0, "usage_id": "0000", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}, {"call_index": 1, "usage_id": "0001", "usd": 2.4e-05, "tokens_in": 50, "tokens_out": 10, "charged": true, "reason": "charged", "scope": "reason"}]
+    by_scope 非零档 = ['reason']
+    usage_ledger 总计 = {"entries": 2, "tokens": 120, "usd": 4.8e-05}
+--- 第 2 次（预算 0.00002，本次自己一分没花）：exit=1 reason='budget_exhausted' calls=0 spent_usd=4.8e-05
+    per_call = []
+    by_scope 非零档 = ['reason']
+    usage_ledger 总计 = {"entries": 2, "tokens": 120, "usd": 4.8e-05}
+第 2 次之前账本已花 = 4.8e-05  第 2 次之后账本 = 4.8e-05  第 2 次自己新增行数 = 0

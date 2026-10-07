@@ -1,0 +1,20 @@
+--- B3 改过的（实验组） ---
+  CRLF  crlf=713   lf=713   src/agentflow/tools/base.py
+  CRLF  crlf=313   lf=313   src/agentflow/tools/__init__.py
+  CRLF  crlf=805   lf=805   src/agentflow/tools/verify_tools.py
+  CRLF  crlf=1320  lf=1320  src/agentflow/tools/search_tools.py
+  CRLF  crlf=1195  lf=1195  src/agentflow/tools/ocr_tools.py
+  CRLF  crlf=1648  lf=1648  src/agentflow/capabilities.py
+  CRLF  crlf=1655  lf=1655  scripts/lint_rules.py
+  LF    crlf=0     lf=2185  docs/ROLE-SPECS.md
+  LF    crlf=0     lf=1211  DEVELOPMENT.md
+--- B3 没碰过的（对照组） ---
+  CRLF  crlf=837   lf=837   src/agentflow/agent_a.py
+  CRLF  crlf=667   lf=667   src/agentflow/agent_h.py
+  CRLF  crlf=545   lf=545   src/agentflow/store.py
+  CRLF  crlf=1781  lf=1781  src/agentflow/schema.py
+  CRLF  crlf=890   lf=890   src/agentflow/verify.py
+  CRLF  crlf=705   lf=705   src/agentflow/cli.py
+  CRLF  crlf=271   lf=271   tests/test_agent_a.py
+  CRLF  crlf=2023  lf=2023  scripts/noai_gate.py
+  LF    crlf=0     lf=257   README.md

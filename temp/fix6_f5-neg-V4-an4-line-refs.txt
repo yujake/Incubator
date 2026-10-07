@@ -1,0 +1,64 @@
+# F5 负控变体 V4-an4-line-refs
+副本 = D:\Incubator\temp\fix6-f5-neg-tree
+[注入] src/agentflow/tools/table_tools.py :: R5-AN-4 改前形态：table_tools 的过期行号
+        改前: `interactions.next_prefixed_id` 负责取号规则
+        改后: `interactions.next_prefixed_id`（`interactions.py:1134`）负责取号规则
+[注入] src/agentflow/tools/table_tools.py :: R5-AN-4 改前形态：store.py:52-53
+        改前: - `store.MAX_ID`：`MAX_ID = 9999`
+        改后: - `store.py:52-53`：`MAX_ID = 9999`
+[自校] src/agentflow/tools/table_tools.py sha256 617af3bf9fe2adf2 -> 26f149f7ec33c451 / 变了 = True
+[注入] src/agentflow/conductor.py :: R5-AN-4 改前形态：conductor 的 verify.py:708-713
+        改前: # `verify.verify_all` 的 `dangling_usage_task`（账本行挂不到任务行）与
+        改后: # `verify.py:708-713` 会检查 `tasks.tokens` 与 `usage_ledger` 里该 task 的
+[自校] src/agentflow/conductor.py sha256 3261e38446b9df0c -> eb8ee7f94b1f6115 / 变了 = True
+
+## 副本上跑判据（tests/test_r5_orchestration_cost.py）
+exit = 1
+        assert (src_root / "agentflow" / "runflow.py").is_file(), (
+            f"�оݵ���㲻�ԣ��Ҳ��� {src_root / 'agentflow' / 'runflow.py'}��"
+        )
+        for rel, stale in _STALE_REFS:
+            text = (src_root / rel).read_text(encoding="utf-8")
+>           assert stale not in text, (
+                f"{rel} ������ʵ��ָ����������� {stale} ���� ��ָ����в����Ǿ仰˵�Ķ�����"
+                "�ĳɷ�����֮���к�Ư�Ʋ���Ӱ������"
+            )
+E           AssertionError: agentflow/conductor.py ������ʵ��ָ����������� verify.py:708-713 ���� ��ָ����в����Ǿ仰˵�Ķ������ĳɷ�����֮���к�Ư�Ʋ���Ӱ������
+E           assert 'verify.py:708-713' not in '"""���ر�ӣ���"һ...n        ]\n'
+E             
+E             'verify.py:708-713' is contained here:
+E                      # `verify.py:708-713` ���� `tasks.tokens` �� `usage_ledger` ��� task ��
+E             ?           +++++++++++++++++
+E                       # `usage_task_total_mismatch`��`tasks.tokens` �� `usage_ledger` ��� task ��
+E                       # ���ܲ��ȣ��İ���"Ԥ���жϻᰴ��һ�ݣ�"��������鶼���������� ����
+E                       # ����Ҫ����ͬһ���£�������ͬһ���ٻ��Ļ����������ͬһ�����֡�...
+E             
+E             ...Full output truncated (395 lines hidden), use '-vv' to show
+
+tests\test_r5_orchestration_cost.py:1099: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_r5_orchestration_cost.py::test_the_stale_line_number_references_are_gone
+1 failed, 13 passed, 13 deselected in 9.51s
+
+## 副本上的引用扫描（数字读数）
+exit = 0 / [done] fix6-refs-scan-neg-V4-an4-line-refs.txt: missing_paths=0 dangling_symbols=0
+   路径缺失 0 条 / 悬空私有符号 0 条
+
+## 副本上跑两真进程探针（temp/fix6_f5_probe.py --root <副本>）
+exit = 0
+   tasks = [{"task_id": "t-0001", "status": "done", "tokens": 14, "usd": 6e-06, "started_at": "2026-03-01T00:00:02+00:00", "ended_at": "2026-03-01T00:00:02+00:00", "outcome": "ok"}, {"task_id": "t-0002", "status": "done", "tokens": 14, "usd": 6e-06, "started_at": "2026-03-01T00:00:01+00:00", "ended_at": "2026-03-01T00:00:01+00:00", "outcome": "ok"}]
+   usage = [{"usage_id": "0000", "task_id": "t-0001", "scope": "reason", "tokens_total": 14, "usd": 6e-06, "idem_key": "idem-8ff144500883"}, {"usage_id": "0001", "task_id": "t-0002", "scope": "reason", "tokens_total": 14, "usd": 6e-06, "idem_key": "idem-94348826041b"}]
+   verify_errors = []
+   verify_warnings = []
+   E1_two_distinct_task_ids = True
+   E2_two_task_rows = True
+   E3_tokens_are_per_run = True
+   E4_verify_codes_empty = True
+   E5_usage_points_at_the_two_rows = True
+   E6_every_per_call_has_scope = True
+   E7_replay_reconciled = None
+   E6b_replay_scope_nonempty = True
+   E7b_replay_reconciled = True
+   E8_concurrent_calls_usd_is_own_spend = True
+   E10_found1_spent_this_run_is_own_spend = True
+   E9_budget_basis_under_concurrency = {'A': 6e-06, 'B': 6e-06}  ������Ե� calls_usd �Աȣ���� = �� task_id ���˵Ŀھ���Ч��

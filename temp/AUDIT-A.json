@@ -1,0 +1,198 @@
+{
+  "auditor": "subagent-A",
+  "scope": "axes / roles / errors 三个维度（10 个待批禁改区文件）",
+  "negative_control": "拿同一套判据审 git show HEAD 版（temp/auditA-pre-* 十份导出）：axes 报出 5 处（SIDE_EFFECTS 里仍有 network、LEGACY_SIDE_EFFECTS 与 LEGACY_EFFECTS_BY_TOOL 与 NEEDS_APPROVAL 三处定义仍在、side_effect=network 被接受且 effect 被翻译成 none），roles 报出 3 处（ToolRegistry.call 形参只有 budget 与 spill_root 没有 role、_callable_for 不存在、不声明角色时 write_local 工具真的被执行 ok=True），errors 报出 1 处（next_prefixed_id 不引用 MAX_ID，表里已用到 r-9999 时返回 r-10000）。同一套判据在当前版上三维度 findings_hits 全为 0。原始输出见 temp/auditA-negctl-axes.txt、temp/auditA-negctl-roles.txt、temp/auditA-negctl-errors.txt；正控见 temp/auditA-posctl-axes.txt、temp/auditA-posctl-roles.txt、temp/auditA-posctl-errors.txt；判据脚本 temp/auditA_negctl.py。",
+  "evidence": "temp/AUDIT-A.md",
+  "findings": [
+    {
+      "id": "axes-1",
+      "severity": "medium",
+      "location": "src/agentflow/tools/base.py 的 EXTERNAL 词表区（docstring 里的单一来源声明）与 src/agentflow/capabilities.py 的 SIDE_EFFECTS/EFFECT/EXTERNAL 三个字面量",
+      "what": "单一来源声明与实现相反。base.py 原文逐字说 capabilities.py 不再写第二份字面量而是 import 这里，实测 capabilities.py:50/55/62 各写一份字面量，且其 43-47 与 57-61 行注释明确写了刻意不 import、只靠 assert_capabilities 交叉断言。所谓只剩一份词表，实际是两份字面量加一条导入期断言。",
+      "impact": "把单一来源读成字面量只有一处的人，会认为新增一根轴或一个取值只需改 base.py：实际上必须同时改 capabilities.py 的同名词表，只改一处会在导入期炸、两处改法不一致则两处描述的是不同的轴。更实际的后果是审计与台账会漏记 capabilities 这一落位，而 capabilities.py 不在禁改区清单里，于是放宽词表这件事可以不经过人审、只改不受保护的那一份。",
+      "fix": "两条口径，代价不同。(a) 改文档口径（推荐，不动行为）：把 base.py 的这句话改成取值清单在 capabilities 与本模块各有一份、二者由 assert_capabilities 的交叉断言钉住，并把 capabilities.py 这一落位显式写出来。(b) 改实现口径：让 capabilities.py 从 base 导入，代价是 capabilities 被承诺为更底层、要能被 verify 与 CLI 单独读，拖上工具层会改变依赖方向；且这条改动落在 capabilities.py，而该文件不在 .noai-paths 里，选 (b) 需要额外裁定是否把它登记进清单。不修的理由不成立：现有句子是事实错误，不是风格问题。",
+      "acceptance": "正控：base.py 与 capabilities.py 两边关于同一根轴的取值来源描述与代码事实一致（要么 base 的句子不再声称 import，要么 capabilities 里不再有字面量），且 python -c \"import agentflow.capabilities\" 退出码 0（交叉断言仍在）。负控：给 base.py 的 EXTERNAL 加一个取值而 capabilities.EXTERNAL 不动 ⇒ 导入期断言必红、退出码非 0；若基线改法选 (b)，则负控改为删掉 capabilities.EXTERNAL 的某个取值 ⇒ 断言必红。",
+      "zone": true
+    },
+    {
+      "id": "axes-2",
+      "severity": "low",
+      "location": "src/agentflow/tools/base.py 的 SIDE_EFFECTS 与 EFFECT 两个词表元组",
+      "what": "第一根轴的词表在同一个文件里写了两遍：SIDE_EFFECTS 与 EFFECT 内容逐字相同，ToolSpec.__post_init__ 只用 SIDE_EFFECTS 挡非法取值，EFFECT 只被 capabilities 与测试读；base.py 内没有任何 set(EFFECT)==set(SIDE_EFFECTS) 断言，两者相等目前只靠传递性维持。",
+      "impact": "构造期校验用的是 SIDE_EFFECTS，对外声明的轴值用的是 EFFECT，两者之间在本文件里没有任何判据。新增或删除一个取值只改一处时，会出现某个取值通过了构造期校验但轴比对里不存在（或反之）的分叉，而分叉本身不会红。今天是靠 capabilities 恰好也各留一份加两条断言传递性地维持相等，这种靠第三方文件碰巧存在的相等是脆的。",
+      "fix": "一条口径：让 EFFECT 成为 SIDE_EFFECTS 的别名而不是第二份字面量（EFFECT = SIDE_EFFECTS），或在 base.py 的导入期加一条 assert set(EFFECT) == set(SIDE_EFFECTS)（与 capabilities 的断言同族，成本一行）。不建议删 EFFECT：capabilities 与 tests/test_policy.py 都在 import 它，删它会动到禁改区外的文件。",
+      "acceptance": "正控：python -c \"from agentflow.tools.base import EFFECT, SIDE_EFFECTS; assert set(EFFECT)==set(SIDE_EFFECTS)\" 退出码 0，且该模块里同一根轴的字面量元组只有一处。负控：在 base.py 的 EFFECT 里加一个取值而 SIDE_EFFECTS 不动 ⇒ 上述命令（或新加的导入期断言）必红。",
+      "zone": true
+    },
+    {
+      "id": "axes-3",
+      "severity": "medium",
+      "location": "src/agentflow/tools/base.py 的 SANDBOX_AVAILABLE 常量、ToolSpec.needs_approval、ToolRegistry._role_surface 的沙箱放行分支",
+      "what": "SANDBOX_AVAILABLE=True 这一档在生产里不可达。全仓库只有定义（值恒为 None）、tools/__init__.py:30 一个从未使用的导入、以及测试里的 monkeypatch；没有任何配置或装配入口。后果是 _role_surface 的 external==exec 放行分支与 allowed_by_sandbox 留痕在生产中永不发生，needs_approval 与 sandbox_required 的沙箱可用那一档同理，而 docstring 把 None/False/True 写成有意义的三种取值。",
+      "impact": "三态里的 True 档不可达，等于该判据有一支恒假、并让下游把沙箱可用所以 exec 与 egress 被承接当成一条真实可走的路径：发布报告与审批面统计会照 docstring 读出三种情形，实际任何 external 非 none 的工具在任何环境下都要签字、for_role 也永远剥掉 exec 工具。另一个后果是读者找不到沙箱可用性由谁设置这个问题的答案，会误以为装配层设过。",
+      "fix": "两条口径。(a) 只改文档（推荐，成本最小）：把 SANDBOX_AVAILABLE 的 docstring 改成当前环境尚未提供任何设置入口、实际恒为 None、True 这一档只由测试 monkeypatch 覆盖，并在沙箱放行分支上注明生产中不可达。(b) 补齐入口：在 build_registry 或 config 里显式接受 sandbox_available，代价是模块级可变全局会让同一进程里两张注册表的审批面不同，该值应挪进 ToolRegistry 实例，改动更大。若两个都不做，至少要留下为什么现在不做的记录；现状（docstring 写成活的三种取值）是最差的形态。若选 (b) 且落在 tools/base.py，需人审加 2 名 reviewer。",
+      "acceptance": "正控：全仓库 grep SANDBOX_AVAILABLE 的每一处出现都能归入定义、显式设置入口、读取、测试注入之一；且 tests/test_tools_base.py 里已有两条测试分别 monkeypatch None/False 与 True 并断言 needs_approval 的两个结果，它可作为这一档的正控。负控：把 base.py 里 SANDBOX_AVAILABLE 的默认值改成 True（或删掉 for_role 的沙箱分支）⇒ 若测试套件仍全绿，则证明这一档没有任何判据看着它；要求至少一条测试因此变红。",
+      "zone": true
+    },
+    {
+      "id": "axes-4",
+      "severity": "medium",
+      "location": "src/agentflow/tools/verify_tools.py 的 check_formal docstring 副作用段与 verify.check_formal 的 ToolSpec 声明（declared_external/roles）",
+      "what": "check_formal 的 docstring 逐字写两者都不需要审批所以审批面没有变化，而同一个 ToolSpec 给了 declared_external=exec，在 SANDBOX_AVAILABLE 为 None 时实测 needs_approval=True；同文件 751-752 行的注释又写它从此需要审批。三处说法两个版本。",
+      "impact": "同一个文件对同一个工具要不要审批给出两个相反结论。按 docstring 读的人（包括写审批面报告、写 docs/ROLE-SPECS.md 审批列的人）会把 verify.check_formal 记成不需要审批，而实测 needs_approval=True；反向的风险更大：若有人按 docstring 去修正声明、把 exec 去掉，就把执行调用方给的程序这件事从第二根轴上抹掉，回到两根轴压成一档的老形态，而 .noai-paths 对这一条登记的理由逐字是桥接层说谎则 proof 级证据是假的。",
+      "fix": "一条口径：改 docstring，把两者都不需要审批所以审批面没有变化改成本工具声明 external=exec、在沙箱未声明可用的当前环境下 needs_approval=True，而 verify.detect_verifier 仍是 read 加 none、不需审批，与同文件 751-752 行的注释对齐。不建议改声明：exec 是对的，改它会把真实事实从轴上抹掉。落在 verify_tools.py（禁改区 prover-bridge）⇒ 需人逐行走查加 2 名 reviewer。",
+      "acceptance": "正控：对 verify.check_formal 的 spec 断言 (effect, external, needs_approval) 等于 (read, exec, True)，对 verify.detect_verifier 断言 needs_approval is False，并逐字核对 docstring 里的审批结论与这两条断言一致（或让 lint 规则禁止 docstring 直接下审批结论）。负控：把 declared_external 从 exec 改成 none ⇒ 正控里 needs_approval 的断言必红（证明它读的是声明而不是写死的表）。",
+      "zone": true
+    },
+    {
+      "id": "axes-5",
+      "severity": "low",
+      "location": "src/agentflow/tools/__init__.py 顶部从 .base 导入的 EFFECT / EXTERNAL / SANDBOX_AVAILABLE 三个名字与 __all__",
+      "what": "EFFECT / EXTERNAL / SANDBOX_AVAILABLE 三个符号被 import 进来，本文件一次都没用，也不在 __all__ 里。SANDBOX_AVAILABLE 尤其误导：它出现在只读角色权限面单一来源这个文件里，读起来像沙箱可用性在装配层设置，而事实上没有任何地方设置它。",
+      "impact": "三个死导入在读代码的人眼里是第二处词表落位：base.py 的 docstring 恰好也声称词表只有一份，于是 EXTERNAL 与 EFFECT 在这里的被导入会被读成单一来源就在本文件；SANDBOX_AVAILABLE 则让人以为装配层设置过它（与 axes-3 合并成一个错误结论）。它们同时是将来误以为改动本文件即可改词表的诱因。",
+      "fix": "一条口径：删掉这三个导入。若确实需要给人从 agentflow.tools 顶层取用的便利，则把它们加进 __all__ 并补一条测试断言它们是同一个对象（from agentflow.tools import EXTERNAL 后 assert EXTERNAL is base.EXTERNAL），让再导出成为显式契约而不是残留。推荐前者：grep 全仓库没有任何调用方从 tools 顶层取这三个名字。落在 tools/__init__.py（禁改区 auth-audit）。",
+      "acceptance": "正控：对 tools/__init__.py 跑未使用导入检查（pyflakes 或同等规则）报 0；或 __all__ 里确实列出这三个名字且有 is 断言。负控：删掉其中一个导入后 agentflow.tools 仍可导入（证明无人依赖）；反之若删掉后有调用方 ImportError，则该导入必须保留并进 __all__。",
+      "zone": true
+    },
+    {
+      "id": "roles-1",
+      "severity": "medium",
+      "location": "src/agentflow/tools/base.py 的 ToolRegistry._callable_for docstring 与其 include_registered_writers 形参、ToolRegistry.for_role",
+      "what": "_callable_for 的 docstring 逐字承诺 for_role 与 call 都走这里，实测 for_role 直接调 _role_surface、从不经过 _callable_for；全仓库唯一真调用点（1010 行）传 include_registered_writers=True，于是 902-908 行那一支是死代码。P-14 要求的同一私有谓词在 _role_surface 这一层成立，但该文档承诺不成立，死分支还会让人以为 for_role 有例外处理。",
+      "impact": "读到那句承诺的人会以为 for_role 也受 include_registered_writers 影响、以为工具面里包含已登记的落库代理例外；实际 for_role 返回的是纯工具面（例外只进可调用面），而 902-908 行那条拒绝理由从未被任何调用方看见。判据本身没有分叉（都在 _role_surface 里），失真的是文档加一条不可达路径 —— 而按文档去理解两个面的差别，正是 P-14 之后最容易搞错的地方。",
+      "fix": "两条口径。(a) 改文档（推荐）：把 _callable_for 的 docstring 改成只有 call 走这里、for_role 直接走 _role_surface 且 call_surface=False，并删掉 include_registered_writers 的 False 支（不可达，留着会让人以为有第二条判据）。(b) 改实现：让 for_role 也走 _callable_for，但它没有 spec 参数、需要改签名，且语义会从工具面变成逐 spec 判定，与 docs/ROLE-SPECS.md 的条数口径打架，不建议。落在 base.py（禁改区）。",
+      "acceptance": "正控：grep _callable_for 只有一处真调用点且传 True；docstring 不再声称 for_role 走它；形参里不再有 include_registered_writers，或存在一条传 False 的真调用用例。负控：把 call 里传的 include_registered_writers 改成 False ⇒ tests/test_tools_base.py 里 H 落库代理那几个用例必红（证明这个开关真的在管 H 的三个 review.*）。",
+      "zone": true
+    },
+    {
+      "id": "roles-2",
+      "severity": "medium",
+      "location": "src/agentflow/tools/base.py 的 READONLY_CALL_EXCEPTIONS 表与 src/agentflow/capabilities.py 的 READ_ONLY_WRITE_EXCEPTIONS 表",
+      "what": "例外表有两份且无机器判据相连：工具级 base.READONLY_CALL_EXCEPTIONS（H 到 3 个 review.*）与表级 capabilities.READ_ONLY_WRITE_EXCEPTIONS（H 到 documents 与 review_findings）。capabilities.py 全文不出现 READONLY_CALL_EXCEPTIONS（实测为 False），两者的对应关系只写在自然语言理由里，往工具级表加一个能写 claims 的工具不会触发任何断言。",
+      "impact": "只读角色能写哪些表这件事有两个互相独立、可以各自漂移的落点：往工具级例外表加一个改 claims 的工具（哪怕理由是就这一次），工具层会放行、表级例外不认，没有任何东西会红。这正是发现问题的人同时成为掩盖问题的人那条约束的破口形态，也就是 FC-27 第七类理由里的测试全绿、上线即越权。今天两表内容一致只是靠人写对了。",
+      "fix": "一条口径（落点两处，代价不同）：在 capabilities.assert_capabilities 里加一条断言，把 READONLY_CALL_EXCEPTIONS 里每个工具名解析到它的写集（可复用既有的 ActionSpec 与工具声明读取器），断言该写集是 READ_ONLY_WRITE_EXCEPTIONS[role] 的子集；或在 base.py 导入期加同义断言（需要从工具名反查表，工具层拿不到，故现实落点是 capabilities）。注意：表本身在 base.py（禁改区），而断言若只加在 capabilities.py（非禁改区），则放宽例外表这件事只会撞上非禁改区的断言、撞不上禁改区门 —— 需要人裁定是否把该断言登记进清单。",
+      "acceptance": "正控：现状下断言通过（H 的三个 review.* 只碰 review_findings 与 documents，均已在表级例外里），且断言在导入期执行。负控：往 READONLY_CALL_EXCEPTIONS 的 H 条目里加一个指向写 claims 的工具 ⇒ 新断言必红并报出工具名与越界的表名；同时 python scripts/noai_gate.py --paths src/agentflow/tools/base.py 必须报 requires_human（该文件在清单里）。",
+      "zone": true
+    },
+    {
+      "id": "roles-3",
+      "severity": "medium",
+      "location": "src/agentflow/tools/base.py 的 ToolRegistry.call 里同名参数消歧那三行（role 落在工具 schema 上的分支）",
+      "what": "call 的 role 消歧用 params.setdefault 后又 merged.update(params) 覆盖 args，会吞掉调用方在位置映射里给的 role 值：实测 call 带 args={role:X} 时工具收到 got_role=None；未绑定注册表且工具声明了 role 时，调用方明明传了 role=H，拒因却写成调用方没有声明角色。今天无工具声明 role，属潜在缺陷，但同时是数据被吞与错误信息与事实相反两种形态。",
+      "impact": "两种形态。(1) 数据被吞：调用方在位置映射里给的 role 值被 None 覆盖，工具拿到 None，属于参数静默丢失，而本项目的判据一贯是静默丢失比报错更危险。(2) 拒因与事实相反：未绑定注册表加工具声明了 role 时，调用方传了角色却被告知没有声明角色，排障者会去查角色装配而不是查工具 schema。今天没有工具声明 role（有测试钉着），但工具是 LLM 手写 JSON 的落点，新增一个声明 role 的工具不需要任何人审。",
+      "fix": "一条口径：改成位置映射里的 role 原样保留给工具、身份声明回退到 bound_role —— 不要用 setdefault 注入 None，只在 role is not None 时写进工具参数，并明确优先级为显式关键字高于位置映射高于 bound_role；同时把身份声明被让给工具这件事写进返回的 meta 留痕（例如 role_consumed_as_param=True），否则拒绝理由无法自证。落在 base.py（禁改区）。",
+      "acceptance": "正控：一个声明了 role 参数的探针工具，reg.call(\"demo.r\", args={\"role\":\"X\"}) 时工具必须收到 X；reg.call(\"demo.r\", role=\"Y\") 时工具收到 Y 且身份回退到 bound_role；两者都不得出现调用方没有声明角色这段错误文本。负控：把消歧那三行删掉 ⇒ 绑定注册表下 call(\"demo.r\", role=\"H\") 会变成身份冒充尝试（应报 role_denied 而不是把 H 当工具参数），正控里的 got_role 断言必红。",
+      "zone": true
+    },
+    {
+      "id": "roles-4",
+      "severity": "medium",
+      "location": "src/agentflow/tools/base.py 的 ToolRegistry.for_role 写 role_filter_notes 的那一段",
+      "what": "for_role 不幂等：每次调用都往注册表级 role_filter_notes 追加。实测把 SANDBOX_AVAILABLE 从 None 改成 True 再调一次后，notes['H'] 同时留着剥掉了 2 个工具含 probe.exec_read 与放行了 probe.exec_read 两条，前一条与当前状态相反。按这份留痕写报告的调用方会读到过期结论。",
+      "impact": "role_filter_notes 是声明写错的唯一留痕面，也是自检与报告读的东西。不幂等意味着同一次装配里调用两次 for_role 就会留下互相矛盾的条目（实测既说某工具被剥掉、又说它被放行）：按它写出来的报告会把当前工具面写错，而工具面本身是对的、错的是叙述，没有第二处能纠正。另外条目会随调用次数线性膨胀，报告里出现重复段落。",
+      "fix": "一条口径：把留痕从追加改成每次重算（for_role 先 pop(role) 再写当次结果），或把 notes 作为 for_role 的返回值而不落到注册表状态上。落在 base.py（禁改区）。",
+      "acceptance": "正控：连续两次 for_role(\"H\")（其间不改 SANDBOX_AVAILABLE）⇒ role_filter_notes['H'] 逐字相同（幂等）。负控：改变 SANDBOX_AVAILABLE 后重算 ⇒ notes 只保留与当前状态一致的那一条，不含任何与当前工具面矛盾的句子（实测反例已留档于 temp/AUDIT-A.md 的 roles 段原始输出）。",
+      "zone": true
+    },
+    {
+      "id": "roles-5",
+      "severity": "low-medium",
+      "location": "src/agentflow/tools/__init__.py 的 build_registry 里 bad_roles 判据块与 ToolRegistry._reject_unknown_roles",
+      "what": "bad_roles 判据不可达：register 里的 _reject_unknown_roles 已对未知角色抛 ToolError（实测），reg._specs 里不可能存在含未知角色的 spec，bad_roles 恒为空。这是同一判据的第二份实现（_reject_unknown_roles 的 docstring 自称判据只有一份），其可观测后果是把整模块被跳过当成处理方式。",
+      "impact": "这段代码是同一判据的第二份拷贝，它的存在会让人以为绕过 build_registry 的入口仍由装配期兜住（而真正的门已经在 register 里）。两个实际后果：判据分叉的风险（将来只在装配期那一处放宽、以为它才是门），以及排障时的误导 —— 未知角色现在是整模块被 skipped，报告里只看到模块名看不到是哪个工具声明错了。",
+      "fix": "一条口径：删掉 build_registry 里的 bad_roles 块（判据已在 _reject_unknown_roles 一处），把未知角色导致模块 skipped 这一后果写进 register 的 docstring；若认为整模块跳过太粗暴，则在 _call_register 里按 spec 粒度给出 skipped 明细，判据仍保持一份。落在 tools/__init__.py（禁改区 auth-audit）。",
+      "acceptance": "正控：一个 roles 里含未知角色的模块被装配时，register 抛 ToolError，且 skipped 明细里能看到工具名（而不只有模块名）。负控：把 _reject_unknown_roles 里的 raise 改成 pass ⇒ 必须有一条测试红（若两处判据都失效，未知角色会静默进入 _specs 并被 for_role 静默漏掉）。",
+      "zone": true
+    },
+    {
+      "id": "roles-6",
+      "severity": "low",
+      "location": ".noai-paths 的 auth-audit 分组的 tools/base.py 条目与 AGENTS.md 里同一份清单副本",
+      "what": "禁改区清单里 tools/base.py 的理由停留在 for_role 时代，逐字只写 for_role 的结构性过滤：只读角色一律拿不到写工具；AGENTS.md 内同一份副本同文。P-14 之后决定只读角色能调什么的还有 call / _callable_for / READONLY_CALL_EXCEPTIONS。保护范围没变小（同一文件），但读清单的人会以为这一条只管 for_role。",
+      "impact": "禁改区清单的理由是签字人判断这一条保护的是什么、以及人审要覆盖哪些符号的唯一依据。它现在只说 for_role，于是 P-14 之后新加的两条通路（call 的 role 判据、READONLY_CALL_EXCEPTIONS 例外表）在清单文字上不可见：走查的人会按 for_role 的过滤逐行走查，而放过例外表里逐条理由的审阅。失真的是理由，以及由理由决定的人审范围。",
+      "fix": "一条口径：把该条理由扩写成 for_role 的结构性过滤加 call/_callable_for 的调用期判据加 READONLY_CALL_EXCEPTIONS 例外表；按本清单自己的纪律只写符号名不写行号（符号名会被 tests/test_noai_gate.py::test_python_manifest_referenced_symbols_exist 断言真实存在，所以点名的符号必须在文件里真的有）；同时改 AGENTS.md 里的同一份副本，两处逐条一致。落在 .noai-paths 与 AGENTS.md（两个都在禁改区）。",
+      "acceptance": "正控：python scripts/noai_gate.py --check-consistency 退出码 0，且理由里点名的每个符号都被 test_python_manifest_referenced_symbols_exist 解析到。负控：只改 .noai-paths 不改 AGENTS.md ⇒ --check-consistency 必须以退出码 1 失败（不一致是查过了结论是坏了，不是没查成）。",
+      "zone": true
+    },
+    {
+      "id": "roles-7",
+      "severity": "low",
+      "location": "src/agentflow/tools/base.py 的 for_role docstring（结构性过滤那一段）与 src/agentflow/agent_h.py 的 filter_readonly_h_surface 及其注释",
+      "what": "H 只读实际由两道过滤器实现且判据不同：base._role_surface 看写副作用与 external==exec，agent_h.filter_readonly_h_surface 只看 side_effect 属于 none/read（不看 external），install_h_tools 对 for_role('H') 的结果再过滤一次；两处没有交叉断言，且 agent_h.py:83 的注释逐字说这是当前工具层的一个真实缺陷，与 base.py 这里做一件工具作者无法绕过的事互相否认。",
+      "impact": "两道判据不同、两处注释互相否认对方存在。今天没有漏洞（base 那道更严，先剥掉了 exec），但读代码的人会得出工具层没有只读过滤的结论而另行加固（制造第三份判据），或者反过来认为 agent_h 那层冗余而删掉它（会同时失去 refused_write_tools 与 raw_surface_size 两个报告字段，而它们是 H 装配面留痕的一部分）。",
+      "fix": "两条口径。(a) 改注释（推荐）：把 agent_h.py 那句这是当前工具层的一个真实缺陷改成工具层已经剥了一层、这一层是 H 自己的第二道且口径更窄（none/read），保留它是因为 refused_write_tools 要进报告；同时把 base.py 的这里做一件工具作者无法绕过的事补一句 H 的装配路径另有一道更窄的过滤。落点 agent_h.py 不在禁改区，base.py 在。(b) 删掉 agent_h 那道过滤：代价是两个报告字段与其测试断言消失，不建议。",
+      "acceptance": "正控：两处注释对有几道过滤、各自判据是什么的描述一致，且 base._role_surface 与 agent_h.filter_readonly_h_surface 的判据差异被写明。负控：把 agent_h.filter_readonly_h_surface 的判据从 none/read 放宽成含 write_local ⇒ tests 里 H 只读工具面的断言必红（证明这一层真的在管）。",
+      "zone": true
+    },
+    {
+      "id": "errors-1",
+      "severity": "medium",
+      "location": "src/agentflow/tools/verify_tools.py 的 evidence_for 没查分支（checked/proved 两个键）与其 returns 契约",
+      "what": "evidence_for 的没查分支返回 checked=False 与 proved=False，而同文件 213-215 行的三态纪律逐字要求该位在没查成时写 None、绝不写成 False（check_formal 的 verified 就是这么做的）。只读 proved 的调用方无法区分没查与查了没有 proof 级证据，今天靠同返的 checked 才可分。",
+      "impact": "只读 proved 而不同时读 checked 的调用方（FC-22 的未证明结论、evidence_for 的对外报告）会把我们没查读成查了但没有 proof 级证据，也就是把一次调用方输入缺失读成一条数学结论层面的判断。今天没有消费者这么读（agent_e 的自检同时断言 checked），所以是纪律违反而非现网误读，但同一个文件在 check_formal 上已经把这条纪律执行得很严，两处不一致本身就是下一个人写错的地方。",
+      "fix": "一条口径：把该分支的 proved 改成 None（与同一个分支里 best_evidence_kind 的处理一致），并在 returns 契约里写清 proved 的三态（True/False/None）。不建议保持 False 再加说明：那正是本文件 213-215 行禁止的形态。落在 verify_tools.py（禁改区 prover-bridge）。",
+      "acceptance": "正控：evidence_for(store) 不给参数 ⇒ checked is False 且 proved is None；给一个不存在的 claim_key ⇒ checked is True 且 proved is False；两条都要有测试逐字钉住（现在只有键集合断言，缺值断言）。负控：把 proved 的 None 改回 False ⇒ 正控第一条必红。",
+      "zone": true
+    },
+    {
+      "id": "errors-2",
+      "severity": "high",
+      "location": "scripts/release_check.py 的 main 里 for key, fn in runners 循环里 args.skip 那一支",
+      "what": "--skip 是跳过即消失：continue 在 fn() 之前，而 rep.add 在 fn() 内部，被跳过的项根本不进报告，Report.overall() 只在剩下的项上汇总，于是总判定可以是 pass。docs/PROPOSALS.md:2776 留档的实测输出正是 PASS pass=1 fail=0 unknown=0（7 项被 skip）。这与 tools/release_all.py:467-470 强制的跳过记 unknown、README.md:223-226 的三态口径正好相反；同名开关在两个门脚本里语义相反，而 release_check.py 自身在 FC-27 禁改区（.noai-paths:109）。",
+      "impact": "这道门自己可以被一条命令行开关变成全绿：被 skip 的项不进报告，overall 只看剩下的项，于是 PASS pass=0 或 pass=1 与八项都通过在退出码上完全同形（退出码 0）。CI 或人工若留下 --skip 的调试残留，发布门会以 0 退出而实际什么都没跑，而 .noai-paths 对 release_all.py 那条登记的理由逐字就是跳过的步骤记成 unknown 还是 pass 决定发布门能不能被 --skip 绕过。",
+      "fix": "一条口径：在 continue 之前把一个 verdict 为 unknown 的 Item 加进 rep（键与理由与 tools/release_all.py:467-470 逐字同形），让被跳过的项以 unknown 出现在报告与退出码里（退出码 2）。若确实需要什么都不跑也不报错的调试形态，另做显式的 unsafe-skip 开关，名字里带 unsafe 并在 --json 里留痕。落在 scripts/release_check.py（禁改区 release-deploy）⇒ 需人加 2 名 reviewer。",
+      "acceptance": "正控：python scripts/release_check.py --skip tests selftests tools verify lint contract imports --changed <改动集文件> ⇒ 总判定 unknown、退出码 2，报告里能看到 7 条 unknown 条目（而不是 pass=1 fail=0 unknown=0）。负控：把 --skip 那一支删掉或改成记 pass ⇒ 上述正控必红。对照：tools/release_all.py --skip acceptance 必须仍记 unknown（它已经如此），用来证明同名开关应当同义。复现证据：temp/_skipall_rc.txt（parent 独立复现）与 temp/AUDIT-A.md 的 errors 段。",
+      "zone": true
+    },
+    {
+      "id": "errors-3",
+      "severity": "low",
+      "location": "src/agentflow/interactions.py 的 next_prefixed_id docstring 里 4 位上限那一段与其 raise IdSpaceExhausted",
+      "what": "docstring 写所以越界时这里 raise ValueError，实现抛的是具名 IdSpaceExhausted（同段 1214-1215 的注释又正确地说类型是具名的）。按 docstring 字面读会以为这里只有裸 ValueError，也就是以为编号空间用尽会被工具层兜成 kind=unexpected。",
+      "impact": "读 docstring 的人（包括整理哪些异常算受控失败这张表的人）会把这一处归类成裸 ValueError，从而认为编号空间用尽仍然会与内部 bug 同形 —— 而实现已经抛具名异常并被 research_tools 与 table_tools 精确翻成 ToolError。失真方向是把已经修好的事读成没修，反向的风险是有人据此把实现改回裸 ValueError，把修好的东西改回去。",
+      "fix": "一条口径：把 docstring 里的 raise ValueError 改成 raise IdSpaceExhausted，并保留它是 ValueError 子类、所以非工具层既有调用方行为不变的说明，与同段 1214-1216 的注释一致。落在 interactions.py（禁改区 auth-audit）。",
+      "acceptance": "正控：该函数的 docstring 与函数体里出现的异常标识符集合一致（grep 两者，集合相同）。负控：把实现里的 IdSpaceExhausted 改回裸 ValueError ⇒ 工具层的 except IdSpaceExhausted 翻译点失效，tests 里越界必须落受控失败的断言必红（这同时证明这条判据真的在管）。",
+      "zone": true
+    },
+    {
+      "id": "errors-4",
+      "severity": "medium",
+      "location": "src/agentflow/interactions.py 的 adjudicate_contradiction 的 _pack 构造点与它对畸形记录的 raise ValueError",
+      "what": "adjudicate_contradiction 的 checked 恒真：所有返回都经 _pack，而 _pack 把 checked 写死成 True，该三态位在这个函数上只有一个取值，模块 docstring 44-48 行给出的 checked=False 三态对它不成立。同时 427 行对 relation_ids 数量不对抛裸 ValueError，按本仓库自己的口径（IdSpaceExhausted 的 docstring：裸 ValueError 到工具层会被兜成 kind=unexpected）是已知可处理与内部 bug 同形；今天未被工具 handler 直接调用，属潜在项。",
+      "impact": "checked 恒真意味着这个位不携带信息：报告里 checked=True 既可能表示刚读了图、也可能只是常量，下游若用它区分有结论与没查成，会永远得到有结论。裸 ValueError 的后果是条件性的：同一模块的 check_conflict 已经被接成工具 graph.check_conflict，一旦 adjudicate_contradiction 也接进工具层，畸形矛盾记录会被兜成 kind=unexpected，与工具内部有 bug 同形。",
+      "fix": "两条口径（可只选一条，也可与第三条正交地做）。(a) 去掉这个恒真位：从返回键里删掉 checked，并把模块 docstring 的三态承诺收窄到 check_conflict，代价是键集合变化要同步测试与调用方。(b) 给它一个真的第三态：在 rounds/max_rounds 非法或 scope_relations 拿不到时返回 checked=False 并配测试，代价是要先定义什么算没查成，属设计决定。(c) 与 (a)(b) 正交：把 427 行的裸 ValueError 换成受控类型（ParamError 或 interactions 里已有的具名异常族）。落在 interactions.py（禁改区 auth-audit）。",
+      "acceptance": "正控：要么 returns 契约里不再有 checked（选 a），要么至少有一条返回路径给出 checked is False 且被测试钉住（选 b）；若选 (c)，畸形记录必须落受控异常类型（isinstance 断言）。负控：把 _pack 里 checked 的取值颠倒（或把 (c) 的受控类型改回裸 ValueError）⇒ 必须有测试红；今天这两种改法都不会让任何测试红，这本身就是 (a)/(b)/(c) 必要性的证据。",
+      "zone": true
+    },
+    {
+      "id": "errors-5",
+      "severity": "medium",
+      "location": "src/agentflow/verify.py 的 verify_all 遍历 S.ID_COUNTERS 时 table is None 的 continue",
+      "what": "遍历 S.ID_COUNTERS 时 table is None 直接 continue，既不记 Issue 也不写 checked[...]，于是这个计数器没查成与查过没问题在报告里完全同形。对照同文件 149-150 行的另一处跳过有明确注释与推导判据。verify_all 是审计器本体（.noai-paths:120）。",
+      "impact": "verify_all 是审计器本体，.noai-paths 对这一条的理由逐字是不变量检查的判据本身被改宽则审计从此永远通过。静默 continue 让这个计数器指向的表找不到变成报告里的空白，而空白与检查过没问题在 to_dict 里不可分（checked 只记录查过的表，缺键不等于有问题）。将来若某次 schema 改名只改了 ID_COUNTERS，审计会安静地少查一项而仍然报 ok=True。",
+      "fix": "一条口径：把 continue 改成记一条 Issue（例如 code 为 counter_table_missing，级别按口径定），或至少写一个显式的未查标记（例如 checked 里记 None）并在报告里列出没查成的项。要与同文件 149-150 行那处跳过区分开：那里的跳过是判据的一部分（非 4 位空间本就不该做连续性检查），这里的跳过是失败。落在 verify.py（禁改区 auth-audit）。",
+      "acceptance": "正控：monkeypatch 造一个 ID_COUNTERS 里有、TABLES 里没有对应 id_field 的 kind ⇒ 报告里必须出现一条可判定的 Issue 或一个显式的未查标记，且这一项不得被读成通过。负控：把 Issue 那行删回 continue ⇒ 上述正控必红。",
+      "zone": true
+    },
+    {
+      "id": "errors-6",
+      "severity": "low",
+      "location": "src/agentflow/tools/base.py 的 ToolRegistry.call 里 validate_params 之后那两个 except（ParamError 与 ToolError）",
+      "what": "except ToolError 分支排在 except ParamError 之后，而 validate_params 只抛 ParamError，该分支永不执行；若将来 validate_params 抛别的 ToolError，它会把参数校验失败标成 kind=unknown_tool。受控失败的类型与 kind 之间留了一条死映射。",
+      "impact": "死分支本身无害，但它把受控失败类型到 kind 的映射表弄脏：将来 validate_params 抛出非 ParamError 的 ToolError 时，参数校验失败会被标成 kind=unknown_tool（一个与参数无关的类别），凡按 kind 分类处置的下游都会走错分支；它还会让人相信 validate_params 可能抛别的东西，从而在别处加不必要的防御。",
+      "fix": "一条口径：删掉这一支（validate_params 只抛 ParamError 有实现保证），或把它改成 kind=param_error 以消除错标的可能；若为了将来扩展而保留，至少要加一条注释说明它今天不可达、以及可达时应该标哪个 kind。落在 base.py（禁改区 auth-audit）。",
+      "acceptance": "正控：静态清点 validate_params 的所有 raise，全部是 ParamError；call 里对应的只有一个 except ParamError 分支。负控：monkeypatch 让 validate_params 抛一个非 ParamError 的 ToolError ⇒ 返回的 kind 必须是 param_error，或该分支已不存在；不允许出现 unknown_tool。",
+      "zone": true
+    },
+    {
+      "id": "errors-7",
+      "severity": "low",
+      "location": "src/agentflow/tools/base.py 的 ToolRegistry.register 里重名那一支的 ValueError 与同一方法里的 _reject_unknown_roles",
+      "what": "同一条注册路径上有两种失败类型：register 对重名抛裸 ValueError，而同一个方法里 _reject_unknown_roles 抛 ToolError。捕 ToolError 的调用方收不到工具名重复这一类失败（build_registry 捕的是 Exception，自身不受影响）。",
+      "impact": "工具层的公共契约是只捕 ToolError 一个类型；这条路径上却有一类装配失败抛的是裸 ValueError，于是按 ToolError 分类处理装配失败的调用方会静默漏掉工具名重复。今天 build_registry 捕 Exception、影响被掩盖，任何新增的按类型分类的调用方就会踩到它。",
+      "fix": "两条口径。(a) 统一成 ToolError（重名也是工具层配置失败），代价是既有按 ValueError 捕获重名的调用方与测试要跟着改（先 grep 确认）。(b) 统一成 ValueError，代价是它与 ToolError 的契约相悖，并会丢掉 role 判据那条 tool= 元信息。推荐 (a)，并在 register 的 docstring 里写清注册期的失败一律用 ToolError。落在 base.py（禁改区 auth-audit）。",
+      "acceptance": "正控：注册两个同名 spec ⇒ 抛出的异常 isinstance ToolError 且消息里含工具名；未知角色同样断言 ToolError。负控：把重名那一支的异常类型改成非 ToolError 类型 ⇒ 正控必红。",
+      "zone": true
+    }
+  ]
+}

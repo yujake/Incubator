@@ -1,0 +1,76 @@
+# 被引用方：每个 `文件:行号` 指向哪一行、那一行是什么
+
+- src/agentflow/runflow.py:1037 引用 conductor.py:489（读现有行取 max+1（取号与建行同一临界区））
+    文件行数=1286  第 489 行 = 'row["task_id"] = next_prefixed_id(tx.rows("tasks"), "task_id", "t")'
+        486|             with self.store.tx("tasks", actor="conductor", note=note) as tx:
+        487|                 from .interactions import next_prefixed_id
+        488| 
+        489|                 row["task_id"] = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
+        490|                 ordered = {"task_id": row["task_id"]}
+        491|                 ordered.update({k: v for k, v in row.items() if k != "task_id"})
+        492|                 S.Task(
+
+- src/agentflow/modelcost.py:318 引用 test_cli_run.py:437（同一次逻辑运行判 duplicate 的那条用例）
+    文件行数=1010  第 437 行 = 'def test_rerunning_the_same_topic_does_not_double_charge(store: Store, tmp_path: Path):'
+        434|     assert "sk-" not in blob, "产物里出现了形如 key 的串"
+        435| 
+        436| 
+        437| def test_rerunning_the_same_topic_does_not_double_charge(store: Store, tmp_path: Path):
+        438|     """⑤ 的同族：同一个工作区里再跑一次同一主题 ⇒ 每一笔账都认出是重放，不再重复写。
+        439| 
+        440|     这是任务 1 的幂等键在端到端上的形态：`(task_id, call_index)` 决定"是不是同一笔"，
+
+- src/agentflow/conductor.py:890 引用 verify.py:708（检查 tasks.tokens 与账本汇总相等）
+    文件行数=1059  第 708 行 = '# 却**没有一条检查**去问"引用了它的那些结论还站得住吗" ——'
+        705|     # 这一条来自对本地先例 Danus 的观摩：它有明确的**撤回（retraction）语义**，
+        706|     # 并强调"撤回会级联"、"没有 revoke 动作时要把撤回面向上暴露"。
+        707|     # 我们此前只有 `duplicate_of` / `status="rejected"` 这类**行级**状态，
+        708|     # 却**没有一条检查**去问"引用了它的那些结论还站得住吗" ——
+        709|     # 于是"关系被判重否决"与"稿件还在拿它当依据"可以长期共存而**没有任何报错**。
+        710|     # 这就是撤回不级联的形态：知识被撤回了，依赖它的结论却静默地留在那里。
+        711|     rejected_by_id: dict[str, dict] = {}
+
+- src/agentflow/tools/table_tools.py:198 引用 interactions.py:1134（next_prefixed_id 的取号规则）
+    文件行数=1333  第 1134 行 = ''
+       1131|     max_inflight: int | None = None,
+       1132| ) -> dict:
+       1133|     """I7 的**准入闸门**（在调用方的 tx 内执行，自己不加锁）。
+       1134| 
+       1135|     做两件事：定优先级 + 拒绝超额。
+       1136| 
+       1137|     为什么要**拒绝**而不是"无限排队"：队列无上限时，提交方（尤其是循环里的 D）
+
+- src/agentflow/tools/table_tools.py:204 引用 store.py:52（MAX_ID = 9999 的 fail-closed 说明）
+    文件行数=1075  第 52 行 = '#: 那一笔，于是注释说 0.62s、实测是 1.27s（`os.replace` 恒定失败时）。而这段代码'
+         49| #: 持有目标文件"的瞬间，而短到不会让一次真实的权限错误变成一次长挂起。
+         50| #:
+         51| #: `R3-10`（重审实测）：这句注释此前漏掉了"第 6 次失败之后还 sleep 了 0.64s"
+         52| #: 那一笔，于是注释说 0.62s、实测是 1.27s（`os.replace` 恒定失败时）。而这段代码
+         53| #: 正处在写者锁内：多出来的那 0.64 秒会原样叠加到持锁时长上。
+         54| #: 修法选的是"让代码与注释一致"而不是"改数字"：最后一次尝试失败之后不再 sleep
+         55| #: （反正下一句就是抛 `StoreError`，那一觉是纯等待），总等待于是真的 ≈0.62 秒。
+
+- src/agentflow/tools/table_tools.py:206 引用 tests/test_agent_c_service.py:637（断言 is_valid_id 的那一行）
+    文件行数=641  第 637 行 = 'for row in rows:'
+        634|     AgentC(kn).gaps(submit_requests=True)
+        635|     rows = kn.rows("search_requests")
+        636|     assert rows
+        637|     for row in rows:
+        638|         assert row["request_id"].startswith("r-")
+        639|         assert S.is_valid_id(row["request_id"][2:]), "search_requests 用 r-NNNN 形态（不占用 4 位 ID 空间）"
+        640|         S.SearchRequest(**{k: v for k, v in row.items() if k in S.SearchRequest.__dataclass_fields__}).validate()
+
+- src/agentflow/tools/table_tools.py:241 引用 store.py:52（同上（第二次引用））
+    文件行数=1075  第 52 行 = '#: 那一笔，于是注释说 0.62s、实测是 1.27s（`os.replace` 恒定失败时）。而这段代码'
+         49| #: 持有目标文件"的瞬间，而短到不会让一次真实的权限错误变成一次长挂起。
+         50| #:
+         51| #: `R3-10`（重审实测）：这句注释此前漏掉了"第 6 次失败之后还 sleep 了 0.64s"
+         52| #: 那一笔，于是注释说 0.62s、实测是 1.27s（`os.replace` 恒定失败时）。而这段代码
+         53| #: 正处在写者锁内：多出来的那 0.64 秒会原样叠加到持锁时长上。
+         54| #: 修法选的是"让代码与注释一致"而不是"改数字"：最后一次尝试失败之后不再 sleep
+         55| #: （反正下一句就是抛 `StoreError`，那一觉是纯等待），总等待于是真的 ≈0.62 秒。
+
+# _settle_run_task 的形参使用情况（AST）
+    形参=['store', 'task_id', 'topic', 'reason', 'exit_code', 'out', 'ledger', 'records', 'meter', 'started_at', 'stamp']
+    未被使用的形参=['out', 'ledger']
+    行数=1714 sha16=da2d3f016b51490d

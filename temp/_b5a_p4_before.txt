@@ -1,0 +1,57 @@
+{
+  "empty": {
+    "ok": true,
+    "value": "r-0001"
+  },
+  "one": {
+    "ok": true,
+    "value": "r-0002"
+  },
+  "gap": {
+    "ok": true,
+    "value": "r-0004"
+  },
+  "gap_fill_skipped": {
+    "ok": true,
+    "value": "r-0004"
+  },
+  "at_9998": {
+    "ok": true,
+    "value": "r-9999"
+  },
+  "junk_rows": {
+    "ok": true,
+    "value": "r-0008"
+  },
+  "p_prefix": {
+    "ok": true,
+    "value": "p-0043"
+  },
+  "t_prefix": {
+    "ok": true,
+    "value": "t-0006"
+  },
+  "already_5digit": {
+    "ok": true,
+    "value": "r-10001"
+  },
+  "cross_ceiling_sequence": [
+    {
+      "ok": true,
+      "value": "r-9999"
+    },
+    {
+      "ok": true,
+      "value": "r-10000"
+    },
+    {
+      "ok": true,
+      "value": "r-10001"
+    },
+    {
+      "ok": true,
+      "value": "r-10002"
+    }
+  ]
+}
+exit=0

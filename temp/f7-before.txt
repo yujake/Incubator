@@ -1,0 +1,29 @@
+{
+  "SCHEMA_VERSION": 1,
+  "旧版本用": "0.0.0-old",
+  "正控_read": {
+    "ok": true,
+    "value": "{'schema_version': 1, 'rows': []}"
+  },
+  "正控_rows": {
+    "ok": true,
+    "value": "[]"
+  },
+  "负控1_read": {
+    "ok": true,
+    "value": "{'schema_version': '0.0.0-old', 'rows': []}"
+  },
+  "负控1_rows": {
+    "ok": true,
+    "value": "[]"
+  },
+  "负控2_rebuild": {
+    "ok": true,
+    "value": "{'applied': 0, 'skipped': 1, 'counters': {}, 'batches_applied': 0, 'batches_incomplete': 0, 'events_replayed': 1}"
+  },
+  "边界_缺字段_read": {
+    "ok": true,
+    "value": "{'rows': []}"
+  }
+}
+== 结论：不成立，看上面

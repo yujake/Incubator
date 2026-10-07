@@ -1,0 +1,110 @@
+==============================================================================
+[A] 判重键：providers.dedup_key_of vs dedup.literature_keys（同一篇文献两个键？）
+==============================================================================
+  title='On the Commutativity of Abelian Groups' year=1930 doi=None
+    providers.dedup_key_of = 'title:on the commutativity of abelian groups|1930'
+    dedup.literature_keys  = ['title:on the commutativity of abelian groups|1930', 'title:on the commutativity of abelian groups|*']
+    -> providers 的键是不是 literature_keys 里的成员: True
+    T.normalize(title)      = 'on the commutativity of abelian groups'
+    P._normalize_basic(title)= 'on the commutativity of abelian groups'
+
+  title='A Survey of Ring Theory.' year=1940 doi=None
+    providers.dedup_key_of = 'title:a survey of ring theory|1940'
+    dedup.literature_keys  = ['title:a survey of ring theory|1940', 'title:a survey of ring theory|*']
+    -> providers 的键是不是 literature_keys 里的成员: True
+    T.normalize(title)      = 'a survey of ring theory'
+    P._normalize_basic(title)= 'a survey of ring theory'
+
+  title='1. Introduction' year=2001 doi=None
+    providers.dedup_key_of = 'title:1 introduction|2001'
+    dedup.literature_keys  = ['title:1 introduction|2001', 'title:1 introduction|*']
+    -> providers 的键是不是 literature_keys 里的成员: True
+    T.normalize(title)      = '1 introduction'
+    P._normalize_basic(title)= '1 introduction'
+
+  title='Hopf 代数与量子群' year=1999 doi=None
+    providers.dedup_key_of = 'title:hopf 代数与量子群|1999'
+    dedup.literature_keys  = ['title:hopf 代数与量子群|1999', 'title:hopf 代数与量子群|*']
+    -> providers 的键是不是 literature_keys 里的成员: True
+    T.normalize(title)      = 'hopf 代数与量子群'
+    P._normalize_basic(title)= 'hopf 代数与量子群'
+
+  title='On the Commutativity of Abelian Groups' year=None doi=None
+    providers.dedup_key_of = 'title:on the commutativity of abelian groups|na'
+    dedup.literature_keys  = ['title:on the commutativity of abelian groups|*']
+    -> providers 的键是不是 literature_keys 里的成员: False
+    -> find_existing_literature(title,year,doi) 命中='title:on the commutativity of abelian groups|*'
+    -> 只带 dedup_key 的行被查中='title:on the commutativity of abelian groups|*'
+    T.normalize(title)      = 'on the commutativity of abelian groups'
+    P._normalize_basic(title)= 'on the commutativity of abelian groups'
+
+  title='On the Commutativity of Abelian Groups' year=1930 doi='10.1000/ABC.'
+    providers.dedup_key_of = 'doi:10.1000/abc'
+    dedup.literature_keys  = ['doi:10.1000/abc', 'title:on the commutativity of abelian groups|1930', 'title:on the commutativity of abelian groups|*']
+    -> providers 的键是不是 literature_keys 里的成员: True
+    T.normalize(title)      = 'on the commutativity of abelian groups'
+    P._normalize_basic(title)= 'on the commutativity of abelian groups'
+
+==============================================================================
+[B] title_key() 产出的键在判重里用得到吗（同一函数两套形态）
+==============================================================================
+  title_key('A Survey of Ring Theory')      = 'title:a survey of ring theory'
+  literature_keys(...)       = ['title:a survey of ring theory|1940', 'title:a survey of ring theory|*']
+  title_key 的输出是否等于 literature_keys 的任何一项: False
+  find_existing 第3轮返回的键 = 'title:a survey of ring theory|*'
+  title_key 的输出是否等于它去 |* 之后: True
+  title_key(title) + '|*' == 第3轮的键: True
+  title_key('1. Introduction')      = 'title:1 introduction'
+  literature_keys(...)       = ['title:1 introduction|1940', 'title:1 introduction|*']
+  title_key 的输出是否等于 literature_keys 的任何一项: False
+  find_existing 第3轮返回的键 = 'title:1 introduction|*'
+  title_key 的输出是否等于它去 |* 之后: True
+  title_key(title) + '|*' == 第3轮的键: True
+
+==============================================================================
+[C] providers.dedup_key_of 的无标题兜底用的是进程随机 hash
+==============================================================================
+  'unknown:' 分支源码: return f"unknown:{abs(hash(candidate.title)):x}"
+  hash('') 两次同进程 = 0 / 0
+  两个新进程里 abs(hash(chr(0))) 的十六进制 = fe05bf94c9fe44e / 564d0c0c94914967  （相等吗: False）
+  PYTHONHASHSEED 环境变量（当前）: <未设置>
+
+==============================================================================
+[D] 4 位 ID 契约：第二条越界/重号路径
+==============================================================================
+  临时库: D:\Incubator\temp\auditF-ldhs46jd
+
+  [D1] alloc_id 不查目标表时能不能发出已占用的号
+  已写入 literature: lit_id=0000
+  counters.lit 现在 = {'lit': 1}
+  手工把 counters.lit 改回 0（模拟计数器漂移）
+  [声明了 literature] alloc_id('lit') = 0001   （期望跳过 0000 => '0001'）
+  [只声明 counters] alloc_id('lit') = 0000   （0000 已被占用！）
+  literature 标题 before=['first', 'second']
+  literature 标题 after =['OVERWRITER', 'second']   （行数 2 -> 2）
+  >>> 旧行被静默覆盖: True
+
+  [D2] 显式主键：alloc_id 的上限守卫能不能被绕过
+  S.is_valid_id('10000') = False
+  S.is_valid_id('99999') = False
+Traceback (most recent call last):
+  File "D:\Incubator\agentflow\src\agentflow\schema.py", line 1869, in validate_table
+    obj.validate()
+  File "D:\Incubator\agentflow\src\agentflow\schema.py", line 271, in validate
+    require_id(self.lit_id, "lit_id")
+  File "D:\Incubator\agentflow\src\agentflow\schema.py", line 118, in require_id
+    raise ValueError(f"{what} 必须是 4 位十进制字符串，收到 {value!r}")
+ValueError: lit_id 必须是 4 位十进制字符串，收到 '10000'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Incubator\temp\auditF-probe1.py", line 133, in <module>
+    with st.tx("literature", actor="probe") as tx:
+  File "C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\contextlib.py", line 144, in __exit__
+    next(self.gen)
+  File "D:\Incubator\agentflow\src\agentflow\store.py", line 384, in tx
+    S.validate_table(table, doc)
+  File "D:\Incubator\agentflow\src\agentflow\schema.py", line 1875, in validate_table
+    raise ValueError(f"{table}.rows[{i}] 校验失败：{e}") from e
+ValueError: literature.rows[2] 校验失败：lit_id 必须是 4 位十进制字符串，收到 '10000'

@@ -1,0 +1,104 @@
+Traceback (most recent call last):
+  File "D:\Incubator\temp\auditG_probe.py", line 321, in main
+    fn()
+  File "D:\Incubator\temp\auditG_probe.py", line 307, in p8
+    tw = [n for n in r.names() if n.startswith("table.")]
+                     ^^^^^^^
+AttributeError: 'list' object has no attribute 'names'
+工作区： C:\Users\ysc20\AppData\Local\Temp\dsh-gU9TnT\auditG-i3fq5d21
+
+==============================================================================
+## P1 取消能不能传到正在跑的 handler（LocalBackend.call 收下 token 之后做了什么）
+==============================================================================
+LocalBackend.call 的签名： (self, role: 'str', action: 'str', params: 'Mapping[str, Any]', *, token: 'CancelToken') -> 'Any'
+handler 收到 kwargs = {} ← token 在不在里面？ False
+handler 返回 = {'status': 'done', 'outcome': 'ok', 'detail': 'handler 跑完了'}
+取消后 run_waves 的结局： [('done', 'ok', 'handler 跑完了'), ('cancelled', 'cancelled', '未启动：取消[user] 人按了停止')]
+被取消的 token： {'cancelled': True, 'reason': {'code': 'user', 'detail': '人按了停止', 'outcome_known': False, 'by': 'user'}, 'tokens_used': 0, 'token_budget': None}
+全仓 raise_if_cancelled 出现处：
+    src\agentflow\cancellation.py:6: 每个 handler 要在关键点 `raise_if_cancelled()`。把它们各写一份的后果是
+    src\agentflow\cancellation.py:247: def raise_if_cancelled(self) -> None:
+形参里带 token 的 handler： （一个都没有）
+
+==============================================================================
+## P2 预算耗尽：CancelToken.token_budget 有没有被 Conductor 接上
+==============================================================================
+Conductor 自己的 token： {'cancelled': False, 'reason': None, 'tokens_used': 0, 'token_budget': None}
+Policy.token_budget = 10  TokenMeter.budget_tokens = 10
+consume_tokens(999) 之后 token.cancelled = False reason = None
+conductor.py 里 _signal_stop 的调用点： ['self._signal_stop("deadline", refusal.detail, by="deadline")', 'text = self._signal_stop(reason, detail, by=by)', 'text = self._signal_stop("dispose", "因 dispose 而终止，结果未知", by="conductor.dispose")']
+全仓构造带预算的 CancelToken 的地方： []
+src/ 里 CancelToken( 的构造点： ['agentflow\\conductor.py:283: self.token = token or CancelToken()', 'agentflow\\scheduler.py:223: token = token or getattr(conductor, "token", None) or CancelToken()']
+
+==============================================================================
+## P3 USAGE_SCOPES 七档：src/ 里到底谁真的产出了哪一档
+==============================================================================
+charge_reply/complete 调用点上的 scope 字面量：
+   scope='<Name>': ['agentflow\\runflow.py:811']
+   scope='reason': ['agentflow\\modelgw.py:414', 'agentflow\\modelgw.py:419', 'agentflow\\modelgw.py:427', 'agentflow\\modelgw.py:457']
+   scope='不是范围': ['agentflow\\modelgw.py:434']
+USAGE_SCOPES = ('summon', 'experiment', 'search', 'extract', 'review', 'reason', 'other')
+Conductor._charge_and_settle 用的 scope： summon
+runflow.SCOPE_ANSWER = ['SCOPE_ANSWER = "reason"']
+→ 七档里有生产产出点的： ['<Name>', 'reason', '不是范围']
+
+==============================================================================
+## P4 分档之和 == 总额：正常行 / 编外 scope / 空 scope / 零值行
+==============================================================================
+charge_reply #0 -> {'charged': True, 'tokens_in': 100, 'tokens_out': 20, 'reason': 'charged'}
+charge_reply #1 -> {'charged': True, 'tokens_in': 0, 'tokens_out': 0, 'reason': 'no_key'}
+charge_reply #2 -> {'charged': True, 'tokens_in': 7, 'tokens_out': 0, 'reason': 'rate_limited'}
+by_scope 键数 = 8  非零档 = ['reason']
+分档 tokens 之和 = 127  账本 tokens = 127
+分档 entries 之和 = 3  账本 entries = 3
+unclassified.raw_values = []
+重复投递同序号的结局 = duplicate  账本 entries = 3
+Conductor.stats()['budget'] = {"tokens_left": null, "usd_left": null, "token_budget": null, "usd_budget": null, "spent_tokens": 0, "spent_usd": 0.0}
+TokenMeter.spent() = {"entries": 3, "tokens": 127, "usd": 5.1e-05, "attempts": 3}
+
+==============================================================================
+## P5 CancelReason.code / by 是不是受控词表
+==============================================================================
+   code='user'         -> 被接受 user
+   code='deadline'     -> 被接受 deadline
+   code='budget'       -> 被接受 budget
+   code='dispose'      -> 被接受 dispose
+   code='cancelled'    -> 被接受 cancelled
+   code='随便写的'         -> 被接受 随便写的
+   code='reason-7'     -> 被接受 reason-7
+CANCEL_CODES = ('user', 'deadline', 'budget', 'dispose', 'cancelled')
+CANCEL_BY_VALUES = ('unknown', 'user', 'deadline', 'budget', 'conductor.dispose')
+CancelReason(code='乱写') 直接构造： {'code': '乱写', 'detail': '', 'outcome_known': False, 'by': 'unknown'}
+对照：Refusal('乱写') -> ValueError Refusal.reason='乱写' 不在受控词表 ('unknown_role', 'unknown_action', 'forbidden_edge', 
+
+==============================================================================
+## P6 modelgw.complete 的“从不抛异常”承诺
+==============================================================================
+   假传输抛 ValueError: **抛出来了** ValueError: boom
+   base_url 写错（真 urllib_transport，不发请求）: **抛出来了** ValueError: unknown url type: 'not-a-url/chat/completions'
+   假传输抛 KeyError: **抛出来了** KeyError: 'k'
+   max_retries=3 时的实际尝试次数 = 4  attempts字段 = 4  error_kind = server_error  not_checked = True
+   RETRYABLE = ['network', 'rate_limited', 'server_error', 'timeout']  NOT_CHECKED = ['network', 'no_key', 'server_error', 'timeout', 'unknown']
+
+==============================================================================
+## P7 崩溃重启后重复结算：tasks.tokens 与账本还相等吗
+==============================================================================
+第一次结算后 res.tokens = 1500  tasks行 = {'tokens': 0, 'usd': 0.0, 'inputs': ['tokenmeter:settled']}
+账本 tokens_for = 0
+第二次结算（快通道标记已被抹掉）后 res.tokens = 1500  tasks行 = {'tokens': 0, 'usd': 0.0, 'inputs': []}
+账本 tokens_for = 0  账本行数 = 1
+verify_all 的码 = []
+
+==============================================================================
+## P8 波划分的写集 vs 工具层真正允许写的表
+==============================================================================
+   A: 写工具 = ['fs.delete', 'fs.move', 'fs.write', 'search.download', 'search.register', 'table.create', 'table.delete', 'table.update']
+   B: 写工具 = ['fs.delete', 'fs.move', 'fs.write', 'ocr.backends', 'ocr.run', 'table.create', 'table.delete', 'table.update']
+   D: 写工具 = ['fs.delete', 'fs.move', 'fs.write', 'research.set_status', 'research.submit_gap', 'research.write_note', 'table.create', 'table.delete', 'table.update']
+   E: 写工具 = ['fs.delete', 'fs.move', 'fs.write', 'table.create', 'table.delete', 'table.update', 'verify.run_experiment']
+   G: 写工具 = ['doc.build_document', 'doc.register_dependency', 'fs.delete', 'fs.move', 'fs.write', 'table.create', 'table.delete', 'table.update', 'verify.run_experiment']
+   WRITE_SETS[D] = ['relations', 'research_questions', 'search_requests']
+   WRITE_SETS[E] = ['experiments']
+   waves_of([D, E]) = [[0, 1]]
+   estimate_write_conflict(D, E) = False
+!! p8 炸了：AttributeError: 'list' object has no attribute 'names'

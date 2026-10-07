@@ -1,0 +1,67 @@
+临时库根: D:\Incubator\temp\auditF-p3-fptfmo5j
+
+==============================================================================
+[I] analysis_reports 的第二个建行路径：caller 自带 report_id 时会不会覆盖既有行
+==============================================================================
+  第一条报告: report_id=0000 summary='原始摘要'
+  _persist_report 传入 report_id=0000（已被占用）
+  返回行 summary=None
+  库里 analysis_reports 行数=1  summary=['原始摘要']
+  request 字段=['原始需求']
+  >>> 既有报告行被静默覆盖: False
+  对照：table.create 对同一情况的行为——见 tools/table_tools.py:575 的 duplicate_id 拒绝
+
+==============================================================================
+[J] 引用来源核验：dedup.literature_keys 有没有用上 title_key()
+==============================================================================
+  title_key('X')       = 'title:x'
+  literature_keys(...) = ['title:x|*']
+  两者相等吗: False
+  title_key 在整个 src/ 下的调用点数量: 1 
+
+==============================================================================
+[K] 抽取：'没抽到'与'抽到了但不是这段文字'能不能分开
+==============================================================================
+  DocumentText 的字段: ['text', 'pages', 'source_kind', 'encoding']
+  有 truncated / failed_pages / checked 这类位吗: []
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+  4 页正常 PDF: pages=4 has_text_layer=True
+  _finish_pdf(['有', '空(第2页抽取失败)', '有']) ->
+    has_text_layer=True  pages=['page one text', '', 'page three text']
+    text_at(2,2) = ''   （第2页返回空串）
+    DocumentText 里有没有任何字段说'第2页是抽取失败'？ ['text', 'pages', 'source_kind', 'encoding']
+    >>> 与'第2页本来就是空白页'在返回形态上完全同形: True
+  全空 -> pages=[] has_text_layer=False（这条路径能分开，靠 pages==[]）
+  只有 <script> 的 HTML -> pages=[] text='' source_kind=html
+    >>> 与'扫描版 PDF 无文本层'同形（pages==[]），但原因完全不同（HTML 里本来就没有正文）
+
+==============================================================================
+[L] fetch：失败归因是不是受控取值；'没查成'会不会写成'查了没有'
+==============================================================================
+  FetchResult.error 是自由字符串；已知取值形态（源码逐字）:
+    dest_dir_unusable
+    not_attempted
+    read_failed
+    too_large_declared
+    write_failed
+  有没有受控词表常量（如 DOWNLOAD_ERRORS）= ['DownloadError', 'RETRYABLE_STATUS']
+
+  部分落盘（写到一半网络断）时 _download_via 的形态：
+    源码 fetch.py:675  -> FetchResult(ok=False, bytes=written, error='read_failed: ...')
+    源码 fetch.py:505  -> `if result.ok or result.bytes > 0: return result`
+    => bytes>0 的失败结果会让 download() **提前返回、不再尝试镜像**
+    => 返回的 error 是 'read_failed: ...'（硬失败），但 ok=False —— 调用方按 ok 判，还能分开
+    _consume(部分字节后断流) -> ok=False bytes=16 error='write_failed: peer reset' path=None
+    目录里留下的文件: []
+    _consume(0 字节的 200 响应) -> ok=True bytes=0 error=None path=D:\Incubator\temp\auditF-p3-fptfmo5j\dl\probe.pdf
+
+==============================================================================
+[M] 负控：把改前的 interactions.next_prefixed_id 导出来跑同一判据
+==============================================================================
+  导出改前版本 -> 见 temp/auditF-pre-interactions.py（由 git show 生成）
+  表里已有 r-0001..r-9999（9999 行）
+  改前(HEAD)     -> 'r-10000'   合法 4 位号吗: False
+  当前(工作区)      -> 抛 IdSpaceExhausted: r-NNNN 的 4 位编号空间已用尽（上限 9999）：下一个要发的号是 r-10000，它是 5 位，违反 4 位 ID 契约（`store.MAX_ID` 是这条上限的唯一定
+  >>> 判据（'取号器会不会越界产出 5 位号'）在改前版本上变红 = 负控成立
+
+临时库根: D:\Incubator\temp\auditF-p3-fptfmo5j

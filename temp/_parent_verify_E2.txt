@@ -1,0 +1,51 @@
+# 父代理对批次 E2 那 4 条的**独立复核**（不是采信它的报告）
+
+观测时刻：2026-09-27 01:35–01:37。方法：**自己读盘上的字节**（`Select-String` / `Get-Content`），
+逐条对照 E1 当初判 `refuted` 时指出的"哪几步没落地"。
+
+## D-7（`src/agentflow/gates.py`）
+
+- E1 指出的缺：(1) `_looks_like_path` 没有先 `_strip_line_suffix` 再判形态；(2) `gate_g1` 里没有 `target.exists()` 判据。
+- **我的读数**：
+  - `_looks_like_path` 的 docstring 逐字写着"切法复用 `_strip_line_suffix`（同一处切法；本仓库已经有过
+    '两处 `file:line` 切法不一致'的教训，不许再出现第三套）"，代码走那条路；
+  - `:594` `exists = target.exists()`；`:641` "（`exists()` 抛异常）⇒ 记 `unknown`，**不记 pass**（没查成 ≠ 通过）"；
+    `:891` 另有一处 `file_exists = (root / rel).exists()`。
+- **判定：修法在盘上 ⇒ `holds`。**
+
+## E-10（`src/agentflow/schema.py` + `src/agentflow/quoteverify.py`）
+
+- 我裁的是 **(b)**：删掉 `quote_mismatch`（假承诺）+ 写明边界，**不加**近似匹配档。
+- **我的读数**：
+  - `grep quote_mismatch src/agentflow/schema.py` ⇒ **0 命中**；
+    `FINDING_KINDS = ("unsupported_claim", "dangling_dep", "overclaim", "missing_negation_kind",
+    "scope_drift", "garbled", "inconsistent_number")`；
+  - `quoteverify.py:16` `## 边界：本模块只判「逐字不在」，不判「被改写/拼接」（E-10 裁定 (b)，2026-09-27）`；
+    `:23`/`:26`/`:29` 写了"需要一档近似匹配（例如 token 覆盖率高于某个阈值）"、
+    "**为什么不做那半件事**（近似匹配会把一次**编造**软化成一档更轻的…）"、
+    "逐字不在是这里能给的唯一失败判决"。
+- **判定：裁决逐字落地，且理由进了代码 ⇒ `holds`。**
+
+## G-8（`src/agentflow/conductor.py`）
+
+- E1 指出：`conductor.py:658` 的 `charge_once` → `:659-661` **早返回** `return res`，而 `_set_usage` 在 `:676`（在其之后）。
+- **我的读数**（`:655-684` 逐行）：`duplicate` 分支**不再早退**；`:664` 的注释写
+  "早退会把下面的 `tokens_for()` 抄回与 `_set_usage()` 一起跳过"，`:669` 写
+  "修法是「落到同一条路径上」：`tokens_for()` 与 `_set_usage()`…"。
+- **判定：改成同一条路径、早返回消失 ⇒ `holds`。**（端到端崩溃窗口我没有复现 —— 同 E1 的如实标注。）
+
+## D11（`README.md`）
+
+- E1 判 `regressed`：`D11` 的修法当时落地了（README 写 `R001–R011`），但批次 N 新增并**注册**了
+  活规则 `rule_R012_write_text_newline` ⇒ "区间上界 ≥ 真实最大规则号"这条不变量又红了。
+- **我的读数**：`README:148` = `lint_rules.py  linter（R001–R012；R004/R006 已退休；**有退出码**）`；
+  `README:271` = `python scripts/lint_rules.py  # R001–R012（规则 12 条；…）` ⇒ **区间已含 R012**。
+  E2 另加了机器判据 `tests/test_readme_lint_rule_range.py`（区间上界 ≥ 实际最大规则号；负控=改回 `R001–R009` ⇒ 必红）。
+- **判定：不变量恢复 ⇒ `holds`（并且这次有了机器判据，不再靠人记得改）。**
+
+## 一并记录
+
+- `lint_rules.py` 在 01:35:44 的读数是 **`error 0 / warning 0 / info 20`**（父代理自己跑的；
+  完整的"逐个清 R009"轨迹见 `draft/28` §71.1）。
+- 上述四条都不再有 `未处置` 的理由；`E2` 自己的 `batchE2-readings.json` 若之后落地，
+  按文件名顺序会**覆盖**本文件的结论（生成器如此设计）。
