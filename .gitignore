@@ -62,16 +62,20 @@ env/
 ENV/
 
 # -----------------------------------------------------------------------------
-# 4b. 前端依赖安装结果（2026-10-07 补，为 Web 端 W0 拆包做准备）
-#     为什么：Web 端要引入 Vite + Preact（`agentflow/ui/package.json`），
-#     `pnpm install` 会在 `agentflow/ui/` 下生成 node_modules（数千文件、数十 MB），
-#     并在仓库根生成 pnpm 的内容寻址仓库 `.pnpm-store/`（pnpm 在 Windows 上按盘符
-#     选 store 位置，本仓库在 D: 盘，于是落成了 `D:\Incubator\.pnpm-store`）。
-#     两者都是**由 package.json/lock 决定的可重装产物**：装什么由清单决定，
-#     不该进版本库，更不该进这次要 push 的快照。
-#     **刻意不排除 `agentflow/ui/dist/`**：B1 裁定"dist 提交进仓"（前端产物是
-#     交付物的一部分，判据要在全新 clone 里直接读得到），所以 dist 必须留在跟踪面内。
-#     生成物新鲜度由 A 线的契约判据把关（dist 与源码不一致就红），不靠 .gitignore。
+# 4b. 前端依赖安装结果（2026-10-07 补，Web 端 W0 拆包时落地）
+#     为什么：Web 端引入了 Vite + Preact（`agentflow/ui/package.json`）。
+#     `pnpm install` 之后实测 `agentflow/ui/` 下 **12,267 个未跟踪文件**
+#     （`git status --porcelain` 因此不可读），并在仓库根生成 pnpm 的内容寻址仓库
+#     `.pnpm-store/`（pnpm 在 Windows 上按盘符选 store 位置，本仓库在 D: 盘，
+#     于是落成了 `D:\Incubator\.pnpm-store`）。
+#     两者都是**由清单决定的可重装产物**：真正入库的是 `pnpm-lock.yaml`（钉版本与
+#     integrity 哈希）与 `ui/` 下的源码，不是安装结果本身。
+#     门（`python -B agentflow/scripts/noai_gate.py --git`）在加这些行**之前与之后**
+#     各量一次：12,267 条改动路径、命中都是 **0** ⇒ 这一节没有藏住任何一条禁改区改动。
+#     **刻意不排除前端构建产物**：裁定 B1 要"dist 入库"，而 `agentflow/ui/vite.config.ts`
+#     的 `outDir` 是 `../src/agentflow/web/static` ⇒ 产物落在
+#     `agentflow/src/agentflow/web/static/**`（本文件不排除它；新鲜度由 A 线的
+#     `tests/test_webui_static.py` 把关：产物与源码不一致就红，**不靠 .gitignore**）。
 # -----------------------------------------------------------------------------
 node_modules/
 .pnpm-store/
@@ -428,19 +432,3 @@ desktop.ini
 !/temp/zone-backup-r4-src_agentflow_tools_base.py
 !/temp/zone-backup-r4-src_agentflow_tools_verify_tools.py
 # <<< CITED-TEMP-EVIDENCE:END >>>
-
-# -----------------------------------------------------------------------------
-# 15. `agentflow/ui/node_modules/` —— 前端的依赖安装结果（2026-10-07 起，Web 端 W0）
-#     为什么：`ui/`（Preact + Vite）第一次 `pnpm install` 之后，实测 12,267 个未跟踪
-#     文件堆在那里，`git status --porcelain` 因此不可读；而依赖安装结果是**可重建**的
-#     —— 入库的那一份是 `pnpm-lock.yaml`（它钉住版本与 integrity 哈希）。按本文件
-#     开头的口径（"只排除体积与机器产物"）这一条正合规。
-#     ⚠️ 按 §12 的纪律，加这一行之前与之后各量了一次门（同一条命令：
-#     `python scripts/noai_gate.py --git`，根取项目根 `agentflow/`）：
-#       - 加之前 ⇒ clean，12267 条改动路径、命中 0；
-#       - 加之后 ⇒ clean，命中仍 0。
-#     ⇒ 这一行没有藏住任何一条禁改区改动（那 1.2 万个文件本来就没有一条命中）。
-#     注意：只忽略 `node_modules/`，**不忽略** `ui/` 下的源码、`pnpm-lock.yaml`
-#     与 `pnpm-workspace.yaml` —— 那些要入库（裁定 B1：前端源码与锁文件入库）。
-# -----------------------------------------------------------------------------
-node_modules/

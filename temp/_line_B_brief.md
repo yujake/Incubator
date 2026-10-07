@@ -8,6 +8,15 @@
 ## 0. 身份与边界（**越界即整线返工**）
 
 - 工作树：`temp/wt-b`（分支 `line-b`），**从 W0 合并后的 master 建**。
+- **W0 已经落地的东西（你接手时盘上就有，别重造）**：
+  - `webui/readers.py`（**空壳接缝**，B 线的文件）：`ROUTES: tuple = ()` · `type_decls() -> ""` · `MISSING_TYPES`（15 条欠账，逐条写明缺哪个 reader；`emit_types.py` 把它写成 `ui/src/types.ts` 末尾的 TODO）。
+  - `webui/sse.py`（**空壳接缝**）：`EVENT_KINDS: tuple = ()` —— W2 你填。
+  - `webui/routes.py`：`ROUTES = compose(_OWN, READER_ROUTES, WRITE_ROUTES)`（`:47-48` 导入两片子表、`:81` 拼总表）；`compose()`/`patterns()`/`api_paths()` 都是公开的。
+  - `webui/state.py:596 type_decls()`（快照/场次/趟次的 12 个接口 + `Tri`/`ReportTri`）· `webui/writes.py:63 type_decls()`。
+  - `web/emit_types.py:83`：`state.type_decls() + readers.type_decls() + writes.type_decls()` 拼成 `ui/src/types.ts`；**重新生成**用
+    `cd agentflow; python -B -m agentflow.web.emit_types`（主题那份是 `python -B -m agentflow.web.emit_theme`）。
+  - `tests/test_webui_contracts.py` **已存在**：判据 A（读拼接后的 `routes.ROUTES` 与 `ui/src/api.ts` 的路径字面量比对）、B（`sse.ts` 的 kind 集合 == `sse.py` 的 `EVENT_KINDS`；**现在是 skip**，因为 `EVENT_KINDS` 还是空元组 —— 你填上就自动生效）、C（`types.ts` 的键 == 后端真读出来的键）、D（路由对齐）、G（生成物新鲜度），外加 `test_a_the_subtables_really_reach_the_composed_route_table`（往 `readers.ROUTES` 塞 `/api/ghost` ⇒ A 必红）与 `test_a_the_seam_names_are_all_in_place`。
+  - 构建产物**已在盘上**（W0 那批的 dist 由主控补齐）：`agentflow/src/agentflow/web/static/{index.html,assets/index.*.js,assets/index.*.css}` —— 那是 A 线的面，你不要动。
 - 你**只许碰**这些路径（`draft/78 §2` 的 B 线 glob，与 A/C 零交，已由 `temp/_check_line_ownership.py` 机械核过）：
   - `agentflow/src/agentflow/webui/readers.py`（**新建**：六面只读模型 + 自己的 `ROUTES` + 自己的 `type_decls()`）
   - `agentflow/src/agentflow/webui/sse.py`（**新建**：广播器 + `EVENT_KINDS`）
@@ -22,7 +31,11 @@
 ## 1. 任务清单（按批次；每批做完就提交）
 
 ### B1 · 六面只读模型（`webui/readers.py`，新建）
-1. 六个适配器，各自对应 `draft/75 §1.1` 的 C1 第 1–6 行，返回形状照 `draft/75 §1.3` 的 C3 字段表（**字段名逐字，不许改写**）：
+0. **两处"设计 vs 盘上"的实况偏差**（W0 复核过，**以盘上为准**；主控会把 `draft/75 §1.3` 改准，你不必等）：
+   - `PendingQuestion.options` 在后端是 `option_view()` 的对象族 **`{label, description, multi}`**，**不是** `draft/75` 原先写的 `string[]` —— W0 已生成 `OptionRow` 接口，你照它读。
+   - `RunRow` 后端真给 **20** 个键（`draft/75` 原写 21）：`sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd, stop_reason, final_chars, summons, messages, elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting, events_in_run`。
+   - `Checkpoint/CheckpointSpend/WriteResult` 在夹具工作区上**读不出来** ⇒ W0 把它们登记在 `test_webui_contracts.py` 的 `_UNCHECKED_TYPES`（有一条反向断言：哪天真能读出来，登记就过期、判据会红）。你 B1 落地后若它们变得可读，按那条判据的提示处理。
+1. 六个适配器，各自对应 `draft/75 §1.1` 的 C1 第 1–6 行，返回形状照 `draft/75 §1.3` 的 C3 字段表（**字段名逐字，不许改写**；与上面 0 条冲突时以盘上为准）：
    - `state`（`GET /api/state`）：今天已有 `webui.snapshot`（`webui.py:401`）—— 你的工作是把它从"HTML 壳里的一坨"变成**签名稳定、可单测**的读模型，键集合要与 W0 之前的公开面一致（主控用 `temp/_verify_w0.py` 对账，你别改键名）。
    - `run`（`GET /api/run/{sid}`）：今天的 HTML 渲染在 `webui.py:1148`，你出 `RunView`（`Run` + `report` + `checkpoint`）。
    - `evidence`（`GET /api/evidence`）：数据源 `store.rows(...)`（逐字字段见 `draft/74 §1` 的"证据"一节）。
@@ -30,7 +43,9 @@
    - `acceptance`（`GET /api/acceptance`）：`reviewaccept.check_review`（`reviewaccept.py:534`）+ `closing` 的 `out/paper/ACCEPTANCE-CHECKS.json`（真机读数：8 行 C1–C8，键 `id/kind/min/name/note`）。
    - `machine`（`GET /api/machine`）：`toolchain.toolchain_report`（`toolchain.py:325`，顶层键 `can_do_formal/lean_path/lean_ready/lean_version/mathlib/model/provers`）+ `settings.load_settings`（`settings.py:157`）。
 2. **三态口径（裁定 N1 + `draft/74` 的证据规则）**：数据源不可读 ⇒ 记 `tri="unreadable"` 并说明原因；**不许**把"读不到"渲染成 `0`／空数组／`false`。空工作区 ⇒ `unknown`。
-3. 每面在 `readers.py` 里加自己的 `ROUTES` 表项与 `type_decls()`（返回本面接口的 TS 文本），**顺序无关**。
+3. 每面在 `readers.py` 里加自己的 `ROUTES` 表项与 `type_decls()`（返回本面接口的 TS 文本），**顺序无关**；每实现一个面，就从 `readers.MISSING_TYPES` 里**删掉**它对应的欠账行（那 15 条是"还没有 reader 的接口"的台账，`emit_types.py` 会把剩下的写成 `ui/src/types.ts` 末尾的 TODO），并重跑
+   `cd agentflow; python -B -m agentflow.web.emit_types` 让 `types.ts` 与生成器一致（判据 G 会逐字节比）。
+   **注意**：`types.ts` 是生成物 —— 不许手改；改了源表就重跑生成器。
 
 ### B2 · 趟次索引（`sessions.py`）
 4. 按裁定 O2 建"后端 run-index"：`sessions.run_index_*`（读写）+ `reconcile_run_index`（对账）。它必须与 `sessions/*.jsonl` 的事件**现算结果逐趟一致**；手改索引一个字节要能红，删一场会话而索引还在要报 `drift`。
