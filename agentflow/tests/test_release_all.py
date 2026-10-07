@@ -24,8 +24,10 @@ from __future__ import annotations
 import ast
 import contextlib
 import importlib.util
+import inspect
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -55,6 +57,48 @@ UNKNOWN_LINE_FMT = "[unknown] {key}"
 
 #: `--only` 的取值形态：逗号分隔的步骤 key。`--only=x`（等号）与 `--only x`（空格）都认。
 _ONLY_RE = re.compile(r"--only(?:=|\s+)([A-Za-z0-9_,\-]+)")
+
+#: 发布门里"会重算整片东西"的步骤 key（声明面，登记制）。
+#:
+#: 常规全量只自检判据本体，不替发布门把整步重算一遍 —— 那一步的判定权在发布门自身
+#: （`tools/release_all.py` 的 `coverage` / `per-file` / `acceptance` / `repro` 步，
+#: 收工与发布时跑）。这里逐条列出"哪些步骤属于那种重活"：
+#:
+#: * `coverage` —— 逐函数扫全仓，实测 584 s（`draft/37` §124）与 928.6 s（`draft/43-D` §0.3）；
+#: * `per-file` —— 逐文件单跑，量级与全量测试相同；
+#: * `acceptance` / `repro` —— 端到端跑验收表与论文复现。
+HEAVY_STEP_KEYS = frozenset({"coverage", "per-file", "acceptance", "repro"})
+
+#: 常规全量里被摘出的 `--only` 示例 key 及理由（键 = 步骤 key）。
+#:
+#: 为什么是登记制而不是"按耗时自动判"：自动判会让"哪些判据在常规全量里不跑"随机器
+#: 快慢浮动，而"慢的用例最后会被跳过"是本仓库踩过的坑（见
+#: `test_release_all_cli_records_skipped_steps_as_unknown` 的 docstring）。
+#: 加一条必须写清理由与被摘出后的覆盖落点。
+SLOW_E2E_KEYS: dict[str, str] = {
+    "coverage": (
+        "coverage 步实测 584 s（draft/37 §124）到 928.6 s（draft/43-D §0.3），"
+        "占旧全量约两成；摘出后的覆盖落点 = 发布门自身（收工/发布跑 release_all.py 的 "
+        "coverage 步）与该判据本体的自检（tests/test_coverage_gates.py 等）。"
+    ),
+}
+
+#: 环境变量：置 1 时连登记过的重活也真跑（临时要端到端验发布门时用）。
+_RUN_E2E_ENV = "AGENTFLOW_RUN_RELEASE_GATE_E2E"
+
+
+def _keys_to_run(keys: str, *, run_e2e: bool) -> tuple[str, list[str]]:
+    """把一段 `--only` 取值拆成（真跑的 key 串, 被摘出的 key 列表）。
+
+    纯函数：两条分支都由用例直接测（`test_the_slow_opt_in_removes_exactly_the_registered_keys`
+    的正控 + 把登记表临时清空的负控），不靠"真跑一遍端到端"来证明摘出逻辑对 ——
+    否则为了验摘出逻辑，就得先付一次被摘出的成本。
+    """
+    named = [k for k in keys.split(",") if k]
+    slow = [k for k in named if k in SLOW_E2E_KEYS]
+    if run_e2e:
+        return ",".join(named), []
+    return ",".join(k for k in named if k not in SLOW_E2E_KEYS), slow
 
 
 def only_examples(doc: str) -> list[str]:
@@ -690,22 +734,52 @@ def test_every_only_example_in_the_docstring_is_a_real_step_key():
     整体退出码是 1 —— 一条靠另一个门红了才通过的判据，`coverage` 修好后立刻暴露。
     用法错误的唯一判据是那句话本身（见
     `test_cli_unknown_step_key_is_rejected_with_exit_two`）。
+
+    常规全量与端到端的分档（2026-10-07，所有者裁定"全量不该替别的门把它自己的工作重跑"）：
+    示例点名的 key 凡落在 `HEAVY_STEP_KEYS` 里的，按 `SLOW_E2E_KEYS` 登记后常规不真跑，
+    只保留两条更便宜的判断 —— 它仍是合法步骤 key，以及"示例点名的重活恰好等于被摘出的那些"。
+    想在本套件里端到端验一次，置 `AGENTFLOW_RUN_RELEASE_GATE_E2E=1`。
+
+    摘出的代价如实写下：常规全量不再覆盖"发布门 coverage 步端到端跑得通"这一格。
+    它的覆盖落点是发布门自身（收工/发布时跑 `release_all.py` 的 coverage 步）与该判据
+    本体的自检文件。换来的是常规全量少一次 584 s 到 928.6 s 的重算（约占旧全量两成）。
     """
     doc = R.__doc__ or ""
     examples = only_examples(doc)
     assert examples, "docstring 里一个 `--only` 命令行示例都没有了？那这条判据成了真空"
+    run_e2e = os.environ.get(_RUN_E2E_ENV) == "1"
+    step_keys = {s.key for s in R.build_steps(REPO)}
     for keys in examples:
+        keys_run, slow = _keys_to_run(keys, run_e2e=run_e2e)
+        # 被摘出的 key 仍必须是合法步骤 key：示例写错键名与"这个键被摘出"是两件事，
+        # 后者是我方调度，前者是文档错误 —— 混成一条会让文档错误被静默放行。
+        for one in slow:
+            assert one in step_keys, (
+                f"docstring 的示例点名 `{one}`，但它不是步骤 key（实际：{sorted(step_keys)}）"
+                " —— 这是示例本身写错了，不是被摘出的重活"
+            )
+        # 反真空（负控 A 实测出来的口子）：若示例点名的 key 全被登记成"重活"，
+        # 这条判据就什么都验不到却照样通过 —— 那不是省时间，是判据变成真空。
+        # 必须让人显式决定（留至少一个 key 真跑，或换掉这条判据的对象），不许静默通过。
+        assert keys_run, (
+            f"docstring 的示例 `--only {keys}` 点名的 key 全在 `SLOW_E2E_KEYS` 里 ⇒ "
+            "这条判据在常规全量下什么都没验（真空）。留至少一个 key 不在登记表里，"
+            "或改掉这条判据的对象；登记表与示例的对账见 "
+            "`test_the_slow_opt_in_keys_are_exactly_the_docstring_names_the_heavy_steps`。"
+        )
         p = subprocess.run(
-            [sys.executable, str(SCRIPT), "--only", keys, "-q"],
+            [sys.executable, str(SCRIPT), "--only", keys_run, "-q"],
             cwd=str(REPO), capture_output=True, text=True, encoding="utf-8",
             errors="replace",
             # 这个 timeout 是「防挂死」用的，不是性能判据（判据是"示例里点名的每个 key
-            # 都真的跑到了"）。600 那个值贴着实测用时：`--only role-specs,coverage`
-            # 实测 「615 s」（coverage 584 s + role-specs 4 s，`draft/37` §124 的读数），
-            # 于是每次全量套件都会在这里挂一次，看起来像"判据坏了"。
-            # coverage 那一步为什么慢（`cProfile`：3453 次 `findall` × 约 5 MB ≈ 17 GB
-            # 字符扫描）与它的修法已登记在 §124；那一步在 FC-27 禁改区，改它要人逐行走查，
-            # 所以这里先把防挂死的余量给足。
+            # 都真的跑到了"）。常规全量已经不跑 `coverage` 这一档（见 `SLOW_E2E_KEYS`），
+            # 所以这段余量只在 `AGENTFLOW_RUN_RELEASE_GATE_E2E=1` 时才用得上：
+            # `--only role-specs,coverage` 实测 615 s（coverage 584 s + role-specs 4 s，
+            # `draft/37` §124），另一次实测 928.6 s（`draft/43-D` §0.3）。
+            # coverage 那一步为什么慢（`cProfile`：3453 次 `findall`，每次都把整份 tests/
+            # 文本从头走一遍 ⇒ 累计约 15 G 字符的走查；口径见 §124 与 2026-10-07 的复算）
+            # 与它的修法已登记在 §124；那一步在 FC-27 禁改区，改它要人逐行走查，
+            # 所以这里把防挂死的余量给足。
             timeout=1800,
         )
         blob = p.stdout + p.stderr
@@ -717,26 +791,97 @@ def test_every_only_example_in_the_docstring_is_a_real_step_key():
         # —— 也就是这条判据一直是靠另一个门红了才通过的（修好 `coverage` 之后它才暴露）。
         # 用法错误只能看具体那句话：
         assert "未知的步骤 key" not in blob, (
-            f"docstring 里的 `--only {keys}` 示例里有非法 key：\n{blob[-400:]}"
+            f"docstring 里的 `--only {keys_run}` 示例里有非法 key：\n{blob[-400:]}"
         )
         # 更实质的一档：被点名的每个 key 都必须真的跑到了（而不是被当成未知跳过）。
         # 形态取自格式契约常量（不是就地再写一遍字面量）。
-        for one in keys.split(","):
+        for one in keys_run.split(","):
             needle = UNKNOWN_LINE_FMT.format(key=one)
             assert needle not in blob, (
-                f"docstring 的示例 `--only {keys}` 里 `{one}` 没跑到（被判成 unknown）：\n{blob[-400:]}"
+                f"docstring 的示例 `--only {keys_run}` 里 `{one}` 没跑到（被判成 unknown）：\n{blob[-400:]}"
             )
         # 负控（反真空判据）：证明 unknown 这一档在本输出里真的会出现
         # —— 否则上一条断言可能只是「这个字符串永远不出现」的真空判据。
         # 示例是真子集（`role-specs,coverage` ⊂ 六个步骤）⇒ 未选中的步骤必然记 unknown。
         # 形态同样取自格式契约常量。
-        if len(keys.split(",")) < 6:
+        if len(keys_run.split(",")) < 6:
             empty = UNKNOWN_LINE_FMT.format(key="")
             assert re.search(re.escape(empty) + r"\S+", blob), (
                 f"示例是子集却一个 `{empty}<步骤>` 都没有 ⇒ 上一条断言成了真空判据：\n{blob[-600:]}"
             )
+        # 摘出与示例不许脱钩：docstring 点名的重活必须恰好等于本次被摘出的那些。
+        # 少了 ⇒ 有个重活其实被真跑了（全量被拖长，而登记表还宣称已摘出）；
+        # 多了 ⇒ 摘出面被悄悄扩大。这条是"摘出不许退化成删掉"的第一道守卫，
+        # 第二道在 `test_the_slow_opt_in_keys_are_exactly_the_docstring_names_the_heavy_steps`。
+        heavy_named = [k for k in keys.split(",") if k in HEAVY_STEP_KEYS]
+        if not run_e2e:
+            assert heavy_named == slow, (
+                f"docstring 示例点名的重活 {heavy_named} 与被摘出的 {slow} 不一致 —— "
+                "登记表与示例脱钩了（`SLOW_E2E_KEYS` 该加该删而未动）"
+            )
         # 示例必须真的「选到了」步骤（不是"跑了但什么都没选"）
         assert "一键发布检查总判定" in blob, blob[-400:]
+
+
+def test_the_slow_opt_in_keys_are_exactly_the_docstring_names_the_heavy_steps():
+    """守卫（2026-10-07 新增）：常规全量摘出的 key 恰好等于"docstring 点名的重活"。
+
+    两个方向都必须红，否则"摘出"会走样成另外两件事：
+
+    * 少登记 —— docstring 新增一个重活示例（如 `--only acceptance`）而没人登记它，
+      它会立刻被常规全量真跑（十几分钟），而没有任何一处会报错；
+    * 多登记 —— 把轻活（如 `role-specs`）塞进登记表也一样红：否则登记表就是
+      "允许不在全量里跑"的随手扩大面。
+
+    登记表本身的每条理由必须非空：退化成一张 key 列表之后，没人能复核"摘出是否还成立"
+    （发布门是否仍然包含那一步、那一步是否仍在收工/发布时跑）。
+    """
+    doc = R.__doc__ or ""
+    named = {k for keys in only_examples(doc) for k in keys.split(",") if k}
+    assert named, "docstring 里抽不出任何 `--only` 示例 key —— 这条守卫失去对象"
+    step_keys = {s.key for s in R.build_steps(REPO)}
+    extra = set(SLOW_E2E_KEYS) - step_keys
+    assert not extra, f"登记表里有不是步骤 key 的条目：{sorted(extra)}"
+    expected = named & HEAVY_STEP_KEYS
+    assert set(SLOW_E2E_KEYS) == expected, (
+        f"登记表 {sorted(SLOW_E2E_KEYS)} 与「docstring 点名的重活」{sorted(expected)} 不一致："
+        f"多登记 {sorted(set(SLOW_E2E_KEYS) - expected)}，"
+        f"少登记 {sorted(expected - set(SLOW_E2E_KEYS))}"
+    )
+    for key, why in SLOW_E2E_KEYS.items():
+        assert why.strip(), f"登记 `{key}` 没写理由 —— 复核者无从判断摘出是否还成立"
+
+
+def test_the_slow_opt_in_removes_exactly_the_registered_keys(monkeypatch):
+    """正控 + 负控：摘出真由登记表驱动，且"置 1 就真跑"这条路没断。
+
+    负控把登记表临时清空 —— 若"摘出"是硬编码的（或从别处推出来的），清空之后仍会摘出，
+    这条立刻红。正控另一端：`run_e2e=True` 必须原样返回全部 key，否则"想端到端验一次"
+    没有通路，摘出就成了单向的（只能跑轻活，永远验不了重的）。
+    """
+    keys = "role-specs,coverage"
+    run, slow = _keys_to_run(keys, run_e2e=False)
+    assert (run, slow) == ("role-specs", ["coverage"]), (run, slow)
+    full, none = _keys_to_run(keys, run_e2e=True)
+    assert (full, none) == (keys, []), (full, none)
+    monkeypatch.setattr(sys.modules[__name__], "SLOW_E2E_KEYS", {})
+    run2, slow2 = _keys_to_run(keys, run_e2e=False)
+    assert (run2, slow2) == (keys, []), (run2, slow2)
+
+
+def test_the_judge_actually_consults_the_opt_in_switch():
+    """接线判据：光有 `_keys_to_run(run_e2e=...)` 不够 —— 法官本人必须真的读那个环境变量。
+
+    为什么用源码级钉子而不是真跑那条分支：真跑要付 584 s 到 928.6 s，正是本轮要摘掉的东西
+    —— 于是"想端到端验一次"这条通路不能靠端到端来证明，否则它等于没被摘出。
+    钉两件事：法官函数体里读了 `_RUN_E2E_ENV`，且把结果交给了 `_keys_to_run(..., run_e2e=...)`。
+
+    代价如实写：这条只在源码文本层面成立 —— 若有人换一种写法读同一个变量而这里认不出，
+    会误红。红是安全方向（逼人看一眼），不采信"看起来应该有"。
+    """
+    src = inspect.getsource(test_every_only_example_in_the_docstring_is_a_real_step_key)
+    assert "_RUN_E2E_ENV" in src, "法官没读 opt-in 环境变量 ⇒ 端到端通路不存在"
+    assert "run_e2e=" in src, "法官没把 opt-in 的结果交给 `_keys_to_run` ⇒ 开关是死的"
 
 
 def test_step_table_count_is_stated_in_the_build_steps_docstring():
@@ -758,10 +903,20 @@ def test_step_table_count_is_stated_in_the_build_steps_docstring():
         f"docstring 说 {m.group(1)} 个步骤，`build_steps` 实际返回 {len(steps)} 个："
         f"{[s.key for s in steps]}"
     )
-    # 清单里点名的每一类都必须在步骤表里有落点
+    # 清单里点名的每一类都必须在步骤表里有落点。
+    #
+    # 这里原先只断言了最后一个 needle（`per-file`）落在步骤表里 —— 断言写在 for 循环
+    # 外面，于是另外五类"docstring 点名了、步骤表里却没有"不会被判红，判据强度只剩 1/6。
+    # 为什么本轮必须修：本轮把常规全量里的 `coverage` 端到端摘出（见 `SLOW_E2E_KEYS`），
+    # "摘出之后发布门还必须包含这一步"就全靠这条声明面判据守着 —— 它弱一格，
+    # "摘出"就有退化成"删掉"的空间。
+    step_keys = {s.key for s in steps}
     for needle in ("release-check", "acceptance", "repro", "role-specs", "coverage", "per-file"):
         assert f"`{needle}`" in doc, f"`build_steps` docstring 没有点名 {needle}"
-    assert needle in {s.key for s in steps}
+        assert needle in step_keys, (
+            f"docstring 点名了 `{needle}`，但 `build_steps` 的步骤表里没有它："
+            f"{sorted(step_keys)}"
+        )
 
 
 #: coverage 步耗时声明的下限（秒）：实测 928.6 s（`draft/43-D` §0.3），不是估计值。
