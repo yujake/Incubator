@@ -296,7 +296,9 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 - 前端源码 `ui/src/` **19 个文件、3656 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
 - `ui/src/types.ts` 是生成物：**16,003 字节 / 39 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
 - 事件词表 6 个 kind（`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`），前端 `sse.ts` 逐个注册并带 `?since=` 续传与"退避三次 ⇒ 降级轮询"；
-- 入库的构建产物 3 个文件：`web/static/index.html` 920 B · `assets/index.Bpmfy4ek.js` 21,611 B · `assets/index.DQaZOKq-.css` 19,297 B。
+- 入库的构建产物 3 个文件（`web/static/index.html` + `assets/` 下的一支 `.js` 与一支 `.css`，
+  约 42 KB；文件名带内容哈希 ⇒ **每次重建都会变**，所以这里刻意不写死哈希名；
+  复算：`Get-ChildItem -Recurse -File src/agentflow/web/static | Select-Object Name, Length`）。
 
 **要改前端**（`ui/`）：装依赖 → 改 `ui/src/` → **重建产物并一起提交**（裁定 B1：`src/agentflow/web/static/` 入库）
 → 跑门。三条命令：
