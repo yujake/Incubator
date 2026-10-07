@@ -34,6 +34,12 @@
 | `model` | `api_key` | 模型 API key（落盘这件事的代价与安全阀见下面「安全阀」一节） |
 | `model` | `base_url` | OpenAI 兼容端点（缺省 `https://api.deepseek.com/v1`） |
 | `model` | `name` | 模型名（缺省 `deepseek-chat`） |
+| `workspace` | `projects_dir` | `projects/` 的落点（`agentflow project` 与 M 的 `conductor.ensure_project` 的缺省落点） |
+
+（`workspace` 这一段是同一个指示的第二半：那条写死的 `D:\Incubator\projects`
+（`projects.DEFAULT_PROJECTS_DIR`）与工具链地址同族 —— 都是"机器相关的事实落在代码里"。
+改后本机默认值逐字不变，只是它现在由"本包位置推出的工作区根 + `projects/`"算出来，
+并且允许用设置文件覆盖。）
 
 文件不存在 ⇒ 空 dict（`{}`）——这是「全用默认值」的正常形态，「不是错误」。
 解析失败 ⇒ 报「真正的那个错误」：JSON 语法错就抛 `json.JSONDecodeError`
@@ -99,6 +105,7 @@ __all__ = [
     "MODEL_KEYS",
     "PROJECT_ROOT",
     "TOOLCHAIN_KEYS",
+    "WORKSPACE_KEYS",
     "WORKSPACE_ROOT",
     "env_or_setting",
     "load_settings",
@@ -106,6 +113,7 @@ __all__ = [
     "resolve_setting_path",
     "settings_path",
     "toolchain_settings",
+    "workspace_settings",
 ]
 
 #: 默认落点名（相对工程根；相对工作区根就是 `agentflow/settings.json`）。
@@ -122,6 +130,8 @@ ENV_SETTINGS = "AGENTFLOW_SETTINGS"
 TOOLCHAIN_KEYS: tuple[str, ...] = ("lean_bin", "mathlib_root", "coq_bin", "isabelle_bin")
 #: `model` 段认识的键（顺序即文档顺序）。
 MODEL_KEYS: tuple[str, ...] = ("api_key", "base_url", "name")
+#: `workspace` 段认识的键（顺序即文档顺序）。
+WORKSPACE_KEYS: tuple[str, ...] = ("projects_dir",)
 
 
 def settings_path(path: str | Path | None = None, *,
@@ -206,6 +216,19 @@ def model_settings(path: str | Path | None = None, *,
     `ModelSpec.redacted()`（见模块 docstring 的「安全阀」）。
     """
     return _section("model", MODEL_KEYS, path, env)
+
+
+def workspace_settings(path: str | Path | None = None, *,
+                       env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`workspace` 段：`projects_dir`（缺的补空串）。
+
+    为什么"数据面落点"也算设置：它与工具链地址同族 —— 都是"这台机器上东西放哪"。
+    改前 `projects.DEFAULT_PROJECTS_DIR` 里逐字写着一台机器的绝对路径，
+    换一台机器就是一句假话（症状是"项目建到了别处"，而不是一句报错）。
+    取值顺序由调用方拼（`projects.projects_dir`）：显式参数 > `AGENTFLOW_PROJECTS_DIR`
+    > 本段 > 由本包位置推出的工作区根下的 `projects/`。
+    """
+    return _section("workspace", WORKSPACE_KEYS, path, env)
 
 
 def env_or_setting(env_name: str, setting_value: Any, *,

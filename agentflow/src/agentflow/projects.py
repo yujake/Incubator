@@ -2,8 +2,10 @@
 
 ## 用户要的东西，逐条落在这里
 
-1. 每个项目一个文件夹，都是 `projects/` 下的子文件夹（默认 `D:\\Incubator\\projects`，
-   可用 `--projects-dir` 换）。
+1. 每个项目一个文件夹，都是 `projects/` 下的子文件夹（默认落点见
+   `DEFAULT_PROJECTS_DIR`：本包位置推出的工作区根下的 `projects/`，
+   也可用 `--projects-dir`、`AGENTFLOW_PROJECTS_DIR` 或设置文件的
+   `workspace.projects_dir` 换）。
 2. 默认命名 `project1` / `project2` / …：取"已有编号的最大值 + 1"，不重用已删掉的号
    （重用一个号会让两次不同的运行共用一个路径，历史就对不上了）。
 3. 每次运行可选冷启动 / 热启动，判据就是那个项目的文件夹在不在：
@@ -39,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import settings as SET
 from .locallib import (
     ingest_directory,
     local_fetch_fn,
@@ -64,7 +67,14 @@ __all__ = [
 #: 默认落点。刻意放在交付物外面（`agentflow/` 之外）：
 #: 项目里的数据是会变的运行产物，而 `agentflow/` 是四道门逐字节快照的受审树 ——
 #: 把运行数据写进受审树，等于每跑一次就让它"漂"一次。
-DEFAULT_PROJECTS_DIR = Path(r"D:\Incubator\projects")
+#:
+#: 2026-10-07 改：这里此前逐字写着一台机器的绝对路径（`D:\Incubator\projects`），
+#: 换一台机器就是一句假话，而症状是"项目建到了别处"而不是一句报错。现在它由
+#: 由本包位置推出的工作区根算出来（`settings.WORKSPACE_ROOT`，即 `src/` 的上两级），
+#: 并且允许用设置文件的 `workspace.projects_dir` 覆盖（见 `projects_dir`）。
+#: 本机读数：改前改后逐字相同（都是 `D:\Incubator\projects`）—— 判据在
+#: `tests/test_settings.py::test_the_projects_dir_default_is_derived_not_written`。
+DEFAULT_PROJECTS_DIR = SET.WORKSPACE_ROOT / "projects"
 
 #: 环境变量兜底（给不想每次敲 `--projects-dir` 的用法）。
 ENV_PROJECTS_DIR = "AGENTFLOW_PROJECTS_DIR"
@@ -82,11 +92,24 @@ CARD_VERSION = 1
 
 
 def projects_dir(explicit: str | Path | None = None) -> Path:
-    """决定 `projects/` 在哪：显式参数 > 环境变量 > 默认值。"""
+    """决定 `projects/` 在哪：显式参数 > 环境变量 > 设置文件 > 推导出的默认值。
+
+    四档的取舍与工具链那一轴同一条口径（见 `agentflow.settings` 的模块 docstring）：
+    环境变量压在最上面是为了 CI 与既有脚本不被设置文件静默改掉；
+    设置文件是本机的正常落点；最后一档是"由本包位置推出来的工作区根下的
+    `projects/`"（改前那一档是一个写死的绝对路径）。
+    """
     if explicit:
         return Path(explicit)
     env = os.environ.get(ENV_PROJECTS_DIR, "").strip()
-    return Path(env) if env else DEFAULT_PROJECTS_DIR
+    if env:
+        return Path(env)
+    from_file = SET.workspace_settings().get("projects_dir", "")
+    if from_file:
+        # 相对路径相对工作区根解析（`settings.resolve_setting_path` 的口径，
+        # 不相对进程 cwd —— 同一个设置文件在 CLI 与判据里必须是同一个落点）。
+        return SET.resolve_setting_path(from_file)
+    return DEFAULT_PROJECTS_DIR
 
 
 def _sequence_high(root: Path) -> int:

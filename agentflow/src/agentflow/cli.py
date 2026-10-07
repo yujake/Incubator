@@ -2274,8 +2274,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--name", default=None,
                     help="项目名（缺省=自动取下一个 projectN；run 时也接受已有名字=热启动）")
     sp.add_argument("--projects-dir", default=None,
-                    help="projects 落点（缺省 D:\\Incubator\\projects；"
-                         "也可用环境变量 AGENTFLOW_PROJECTS_DIR）")
+                    help="projects 落点（缺省：由本包位置推出的工作区根下的 projects/；"
+                         "也可用环境变量 AGENTFLOW_PROJECTS_DIR 或设置文件的 "
+                         "workspace.projects_dir 覆盖）")
     sp.add_argument("--start", default="auto", choices=["auto", "cold", "warm"],
                     help="auto=看文件夹在不在（缺省）；cold=必须不存在；warm=必须已存在且初始化过")
     sp.add_argument("--books", default=None,

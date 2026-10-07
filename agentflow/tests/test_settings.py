@@ -35,12 +35,14 @@ import ast
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
 from agentflow import formalgw as FG
 from agentflow import modelgw as MG
+from agentflow import projects as P
 from agentflow import settings as SET
 from agentflow import toolchain as TC
 
@@ -67,10 +69,24 @@ _CRITERION_FILE = "agentflow/tests/test_settings.py"
 #:
 #: 刻意不匹配 `_env/lean470/...`（没有盘符、前面也不是 `temp`）：那种写法正是
 #: 文档里该有的"工作区根相对落点"，它不指向任何一台具体机器。
+#:
+#: ## 为什么分隔符要用「原子组」（`(?>...)`）—— 这是一次真事故留下的形态
+#:
+#: 改前这里写的是 `(?:[^\\/\s`"'<>|]*[\\/]+)*?`：一个"可以匹配空"的内层量词套在
+#: 一个 `*?` 里。这在**连续多个反斜杠**的文本上是指数级回溯 —— 2026-10-07 实测：
+#: 判据在 `temp/g5-mp3.txt`（5,161 字符、576 个反斜杠，内容是
+#: `\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上**单条判据跑 >45 s 不返回**，
+#: 而它在子代理那份干净工作树里只要 10 s（那棵树里同样有这个文件 —— 差别只在
+#: 文件是不是真的被扫到）。形态是"判据把整条全量门钉死"，不是"慢一点"。
+#:
+#: 修法：把分隔符串做成原子组（吃进去就不回吐），并把段数上限写成 `{0,10}`。
+#: 正则引擎于是只有"有界"的回溯：每个起点最多十来步。守卫是
+#: `test_the_machine_path_scanner_survives_a_backslash_storm`（它同时钉住
+#: "变快了"与"还认得出来"两件事 —— 只钉速度的话，把正则改废也能变快）。
 _MACHINE_ENV_PATH = re.compile(
-    r"[A-Za-z]:[\\/]+(?:[^\\/\s`\"'<>|]*[\\/]+)*?(?:_env|temp)[\\/]+"
-    r"(?:lean470|mathlib-pinned\d*|elantool)"
-    r"|(?<![A-Za-z0-9_])temp[\\/]+(?:lean470|mathlib-pinned\d*|elantool)",
+    r"[A-Za-z]:(?>[\\/]+)(?:[^\\/\s`\"'<>|]+(?>[\\/]+)){0,10}?"
+    r"(?:_env|temp)(?>[\\/]+)(?:lean470|mathlib-pinned\d*|elantool)"
+    r"|(?<![A-Za-z0-9_])temp(?>[\\/]+)(?:lean470|mathlib-pinned\d*|elantool)",
     re.I)
 
 #: 允许留在历史登记/归档里的那一份残渣：(仓库根相对路径, 命中次数)。
@@ -88,12 +104,23 @@ _MACHINE_ENV_PATH = re.compile(
 #: 2. `draft/` 下的报告体：命中的是"那一天这台机器上 `lean --version` 打了什么"
 #:    这一类逐字读数（含 `lean.exe` / `lake.exe` 的真实输出）。历史报告只许加批注，
 #:    不许改原文 —— 这是本仓库对 `draft/` 的既有纪律。
+#: 3. `temp/` 下那 4 份（2026-10-07 补）：它们是**因为被引用而入库的历史证据**
+#:    （`B8a-evidence.md` 是 B8a 那一轮 `lean --version` / Mathlib 状态的逐字记录、
+#:    `auditE-lean-probe.json` / `run_gates.py` / `w5_p1_probe.py` 是同一批探针）。
+#:    入库之前它们不在 `git ls-files` 里（未跟踪），所以这一面看不见它们；
+#:    入库之后它们出现在这一面 —— 处置与第 2 类**完全一样**：改写它们等于改证据。
+#:    这也是一条读数：**这一面按"入库的东西"取，所以"给证据物入库"这个动作
+#:    本身会把它们带进这一面**（当时就该预料到，我没有 —— 见 `draft/65` 教训 33）。
+#: 已移除的一条（`agentflow/docs/USER-TEST.md`）：它命中的是那句"启动前把
+#: `D:\Incubator\temp\lean470\...` 加进 PATH"的**操作指令**。指令不是历史记录 ——
+#: 照它做会失败（环境已搬到工作区根 `_env/`，且落点改由设置文件给）。
+#: 2026-10-07 把那两句改成了设置文件口径 ⇒ 这一条随之**从登记表里减掉**
+#: （"只许减不许增"这个方向上的减，正是这条判据想要的那种减）。
 _RESIDUE_REGISTER: dict[str, int] = {
     "agentflow/docs/INDEX.md": 1,
     "agentflow/docs/NOAI-SUSPENSION-2026-09-25.md": 1,
     "agentflow/docs/PROPOSALS.md": 3,
     "agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt": 1,
-    "agentflow/docs/USER-TEST.md": 1,
     "draft/22-企业级交付与竞争力方案（200万预算）.md": 1,
     "draft/23-收官报告.md": 2,
     "draft/24-收官核验包（签字前）.md": 2,
@@ -105,6 +132,10 @@ _RESIDUE_REGISTER: dict[str, int] = {
     "draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md": 1,
     "draft/37-论文审阅线（polish）的缺口与通路登记.md": 8,
     "draft/38-下一阶段：五个系统能力测试与用户逐字指示.md": 1,
+    "temp/B8a-evidence.md": 5,
+    "temp/auditE-lean-probe.json": 1,
+    "temp/run_gates.py": 1,
+    "temp/w5_p1_probe.py": 1,
 }
 
 
@@ -581,6 +612,32 @@ def test_the_scanner_has_teeth_on_every_form_of_the_dead_path(tmp_path: Path) ->
     assert _scan_files([md]), "把一句这样的路径塞回某个文档 ⇒ 判据必须红"
 
 
+def test_the_machine_path_scanner_survives_a_backslash_storm() -> None:
+    """守卫（2026-10-07 的真事故）：连续多反斜杠不许让这条判据回溯到卡死。
+
+    改前的正则里有一个"能匹配空的内层量词套在外层量词里"（`(?:[^\\/…]*[\\/]+)*?`）。
+    形态：在 `temp/g5-mp3.txt`（5,161 字符 / 576 个反斜杠，内容是
+    `\\\\Local\\\\\\\\Temp\\\\\\\\…` 这种多反斜杠路径）上，**单条判据 >45 s 不返回**
+    —— 而全量门会跑这条判据，所以那等于"把门钉死"。
+
+    两件事一起钉，缺一条都会被"把正则改废"骗过去：
+      ① 一串多反斜杠必须在**有界时间内**扫完（上限写得很宽松：这不是性能基准，
+         它要抓的是"指数级"这一档，不是"慢 20%"）；
+      ② 同一段文本里那句真路径仍然要被抓出来 —— 只钉速度的话，
+         "不认了"也能让上面那条变绿。
+    """
+    storm = ("X:" + "\\" * 8 + "Local" + "\\" * 8 + "Temp" + "\\" * 8) * 300
+    text = storm + "\n真路径在这里：D:\\\\Incubator\\\\temp\\\\lean470\\\\bin\n"
+    t0 = time.time()
+    hits = _dead_env_path_hits(text)
+    took = time.time() - t0
+    assert took < 2.0, (
+        f"扫一串多反斜杠用了 {took:.1f}s ⇒ 正则又在指数回溯了"
+        "（分隔符串要用原子组 `(?>[\\\\/]+)`，见 `_MACHINE_ENV_PATH` 的注释）")
+    assert any("lean470" in one for one in hits), (
+        f"这场反斜杠风暴里那句真路径没被抓出来 ⇒ 正则被改窄了，不只是变快：{hits}")
+
+
 def test_the_scanned_set_is_scanned_at_all() -> None:
     """反真空：扫描面必须真的扫到了东西（否则"0 条"什么也不证明）。"""
     tracked = _tracked_files()
@@ -755,6 +812,65 @@ def test_a_key_from_the_settings_file_never_shows_up_in_the_redacted_snapshot(
     assert secret not in blob and spec.redacted()["api_key"] == "***", blob
     # 负控：不加脱敏地 dump 整份 spec 就能看见它 —— 这就是"必须走 redacted"的理由。
     assert secret in json.dumps({"api_key": spec.api_key}, ensure_ascii=False)
+
+
+# --------------------------------------------------------------------------- #
+# 五、数据面落点（`workspace.projects_dir`）走同一条口径
+# --------------------------------------------------------------------------- #
+
+
+def test_the_projects_dir_default_is_derived_not_written() -> None:
+    """正控：`projects/` 的默认落点是算出来的，不是写死的一台机器的路径。
+
+    改前这里是一句字面量（那台机器的绝对路径），换一台机器就是一句假话 ——
+    而症状不是报错，是"项目建到了别处"。改后它由本包位置推出的工作区根算出来：
+    本机读数与改前逐字相同（这一点由第一条断言钉住：它就是"工作区根 + projects/"）。
+    """
+    assert P.DEFAULT_PROJECTS_DIR == SET.WORKSPACE_ROOT / "projects", P.DEFAULT_PROJECTS_DIR
+    assert P.DEFAULT_PROJECTS_DIR.is_absolute(), P.DEFAULT_PROJECTS_DIR
+    # 它在受审树外面（`agentflow/` 之外）—— 这是 projects.py 里那条设计意图，
+    # 与"来源写在哪儿"无关，所以改来源不该把它搬进受审树。
+    assert SET.PROJECT_ROOT not in P.DEFAULT_PROJECTS_DIR.parents, P.DEFAULT_PROJECTS_DIR
+
+
+def test_the_projects_dir_follows_explicit_then_env_then_file_then_derived(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """四档顺序（显式 > 环境变量 > 设置文件 > 推导默认），正控与负控成对。"""
+    env_dir = tmp_path / "from-env"
+    file_dir = tmp_path / "from-file"
+    explicit = tmp_path / "explicit"
+    stub = _write(tmp_path, "ws.json", {"workspace": {"projects_dir": str(file_dir)}})
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(stub))
+    monkeypatch.setenv(P.ENV_PROJECTS_DIR, str(env_dir))
+
+    # 正控第一档：显式参数最硬（它在设置文件与环境变量都在时也赢）。
+    assert P.projects_dir(str(explicit)) == explicit
+    # 正控第二档：环境变量赢过设置文件。
+    assert P.projects_dir(None) == env_dir
+    # 负控第一档：把环境变量拿掉 ⇒ 落到设置文件（这一档真的被读到了）。
+    monkeypatch.delenv(P.ENV_PROJECTS_DIR)
+    assert P.projects_dir(None) == file_dir
+    # 负控第二档：把设置文件也拿走 ⇒ 落到推导出的默认值，而不是我行我素地猜。
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(tmp_path / "gone.json"))
+    assert P.projects_dir(None) == P.DEFAULT_PROJECTS_DIR
+
+
+def test_the_projects_dir_setting_is_strict_about_shapes(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """形状纪律：非字符串（数字/列表）当"没配"，不当路径；相对路径相对工作区根。
+
+    与 `settings._section` 的既有口径同一个理由：把一个 `123` 悄悄当路径用，
+    比"当作没配"更难查；而相对路径若相对进程 cwd 解析，同一个设置文件
+    在 CLI 与判据里会变成两个落点（那是静默的错）。
+    """
+    stub = _write(tmp_path, "shape.json", {"workspace": {"projects_dir": 123}})
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(stub))
+    monkeypatch.delenv(P.ENV_PROJECTS_DIR, raising=False)
+    assert P.projects_dir(None) == P.DEFAULT_PROJECTS_DIR, "非字符串的值被当成路径用了"
+
+    stub2 = _write(tmp_path, "rel.json", {"workspace": {"projects_dir": "somewhere/projects"}})
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(stub2))
+    assert P.projects_dir(None) == SET.WORKSPACE_ROOT / "somewhere" / "projects"
 
 
 if __name__ == "__main__":  # pragma: no cover - 手动跑这一组时的入口

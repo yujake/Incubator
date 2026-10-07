@@ -625,7 +625,9 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
     ## 为什么"已经在项目里"要直接拒（2026-10-02 真机读数逼出来的守卫）
 
     `projects_dir` 的缺省不是当前工作区，而是 `projects.projects_dir(None)`
-    —— 一个与工作区无关的默认落点（本机实测 `D:\\Incubator\\projects`）。
+    —— 一个与工作区无关的默认落点（本机读数 `D:\\Incubator\\projects`；
+    `projects.DEFAULT_PROJECTS_DIR` 是"由本包位置推出的工作区根 + `projects/`"，
+    也可用设置文件的 `workspace.projects_dir` 覆盖）。
     于是"在一个已存在的工作区里调它"会得到一个在别处新建的空项目，
     而不是"热启动当前项目"：
 
@@ -644,8 +646,14 @@ def conductor_ensure_project(store, project_name: str = "", start: str = "auto",
     冷/热启动用例正是"在一个工作区里、把项目建到另一个显式指定的目录"。
     """
     from .. import projects as P
+    from .. import settings as SET
 
-    explicit = bool(projects_dir.strip()) or bool(os.environ.get(P.ENV_PROJECTS_DIR, "").strip())
+    explicit = (bool(projects_dir.strip())
+                or bool(os.environ.get(P.ENV_PROJECTS_DIR, "").strip())
+                # 设置文件里写了落点也算"操作者说了落在哪"（与上面那两档同义）：
+                # 漏掉这一档会让"配了 settings.json 的人"收到一句"缺省落点是…"的
+                # 误导拒绝 —— 那句话在读数上就是假的。
+                or bool(SET.workspace_settings().get("projects_dir", "")))
     inside = store is not None and P.classify(Path(store.root))[0] == "workspace"
     if inside and not explicit:
         default_root = P.projects_dir(None)
