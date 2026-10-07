@@ -312,7 +312,8 @@ def _resolve_changed(since: str | None, changed_file: str, root: Path) -> Path |
 
 def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file: Path | None = None,
                 sub_json_dir: Path | None = None) -> list[Step]:
-    """步骤表：2 个承接用户点名清单的步骤 + 1 个论文复现步骤 + 3 个结构性门 = 6。
+    """步骤表：2 个承接用户点名清单的步骤 + 1 个论文复现步骤 + 3 个结构性门 = 7
+    （其中第七个是前端步 `frontend`，裁定 G2；逐条理由见下）。
 
     `D4` 的实测（改前）：这里原写"用户点名的六项 + 三个结构性门（角色规格、
     coverage 分档、逐文件单跑）"，按它自己的分解 —— 六项落在 2 个步骤里
@@ -334,6 +335,13 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
     - `coverage`：零直接测试的公开函数分档（等级 1/2 必须为 0）；
     - `per-file`：逐文件单跑 —— 全量绿会掩盖单文件红（顺序依赖/跨文件状态泄漏），
       这一步正是把"排序给的那部分绿灯"收回去。它很慢，但 `--skip` 会记成 `unknown`。
+
+    第七个步骤 `frontend`（裁定 G2）守的是"入库的前端产物与源码脱节"：
+    前端构建产物 `src/agentflow/web/static/` 是**入库**的（裁定 B1），于是"改了
+    `ui/src/` 忘了重建"在全量测试里没有任何判据看得见 —— 那正是这一步。
+    它自带三态（`tools/frontend_gate.py`：`0=pass / 1=fail / 2=unknown`）：
+    没装 node/pnpm、或构建环境起不来（例如本沙箱不允许 Node 用管道 stdio 起
+    esbuild ⇒ `spawn EPERM`）⇒ 记 `unknown`，**绝不是** `pass`。
     """
     acc = acceptance_root or (root.parent / "test" / "test2")
     # `D-2.3`：让 release-check 把它的逐项结构写成 JSON，编排层再读回来嵌进自己的 JSON。
@@ -414,6 +422,21 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             # 会被记成 `unknown`（不是 pass），跳过了就得逐条解释。
             cwd=root, env=_env(), expect_seconds=1200,
             exit_map=TRI_STATE_EXIT,
+        ),
+        Step(
+            "frontend", "前端步（裁定 G2）：typecheck + 构建 + 入库产物新鲜度"
+                        "（`src/agentflow/web/static/` 与刚构建的结果逐字节比）",
+            [sys.executable, str(root / "tools" / "frontend_gate.py")],
+            cwd=root, env=_env(), expect_seconds=180,
+            # `tools/frontend_gate.py` 自带三态（`0/1/2`）⇒ **必须**用 `TRI_STATE_EXIT`。
+            # 为什么这条不能省：默认码表只认 `0=pass`，于是"本机没装 node"（它返回 2）
+            # 会被判成 `fail` —— 把"没查成"读成"发现问题"，正是本项目三态纪律要挡的事。
+            # 反方向的错更要命：若这里写成 `{0: "pass", 1: "pass", 2: "pass"}` 之类的
+            # 宽码表，"前端产物脱节"就永远不会让发布门变红（闸门被改宽而门照样亮绿）。
+            exit_map=TRI_STATE_EXIT,
+            notes=("本步的 `unknown` 有两种真因，都不等于通过：① 本机没有 node/pnpm；"
+                   "② 构建环境起不来（沙箱里 Node 用管道 stdio 起 esbuild ⇒ `spawn EPERM`）。"
+                   "读数在 `tools/frontend_gate.py` 的输出里逐条写明。"),
         ),
     ]
 

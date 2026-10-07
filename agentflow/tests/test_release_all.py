@@ -278,6 +278,10 @@ def test_real_steps_declare_an_exit_map_matching_their_tool():
     assert steps["coverage"].exit_map == R.TRI_STATE_EXIT
     assert steps["acceptance"].exit_map == R.PLAIN_EXIT
     assert steps["repro"].exit_map == R.PLAIN_EXIT
+    # 前端步（裁定 G2）自带三态（`0=pass / 1=fail / 2=unknown`）⇒ 必须显式声明码表。
+    # 漏了它，"本机没装 node"会被判成 `fail`（把没查成读成发现问题）；反过来写成宽码表
+    # 则会让"前端产物与源码脱节"永远无法让门变红。两个方向都靠这一行挡住。
+    assert steps["frontend"].exit_map == R.TRI_STATE_EXIT
 
 
 # ============================================================ overall：优先级
@@ -911,7 +915,8 @@ def test_step_table_count_is_stated_in_the_build_steps_docstring():
     # "摘出之后发布门还必须包含这一步"就全靠这条声明面判据守着 —— 它弱一格，
     # "摘出"就有退化成"删掉"的空间。
     step_keys = {s.key for s in steps}
-    for needle in ("release-check", "acceptance", "repro", "role-specs", "coverage", "per-file"):
+    for needle in ("release-check", "acceptance", "repro", "role-specs", "coverage",
+                   "per-file", "frontend"):
         assert f"`{needle}`" in doc, f"`build_steps` docstring 没有点名 {needle}"
         assert needle in step_keys, (
             f"docstring 点名了 `{needle}`，但 `build_steps` 的步骤表里没有它："
@@ -1143,11 +1148,14 @@ def test_step_table_covers_exactly_the_six_named_checks():
     而用例名说的是 `exactly` —— 往 `build_steps` 里加任意一个步骤，它完全无感。
     现在两处都收紧：核心五项 + 三个结构性门（`role-specs` / `coverage` / `per-file`）
     必须恰好是这八个；多一个少一个都红（`repro` 是论文独立复现，也在表里）。
+    之后又加了第九个 `frontend`（裁定 G2：前端产物新鲜度）—— 同样"恰好"，
+    所以往表里加步骤必须同步这一行（否则"加一步"变成静默行为）。
     """
     steps = R.build_steps(REPO)
     keys = [s.key for s in steps]
     assert len(keys) == len(set(keys)), f"步骤 key 有重复：{keys}"
-    expected = {"release-check", "acceptance", "repro", "role-specs", "coverage", "per-file"}
+    expected = {"release-check", "acceptance", "repro", "role-specs", "coverage",
+                "per-file", "frontend"}
     assert set(keys) == expected, (
         f"步骤表与期望不符：多出 {sorted(set(keys) - expected)}，"
         f"缺少 {sorted(expected - set(keys))}"

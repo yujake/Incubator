@@ -46,6 +46,14 @@ pdf = [
 ocr = [
     "easyocr",
 ]
+# 前端端到端判据的驱动（裁定 F1：Playwright，**opt-in**）。
+#
+# 为什么进 optional 而不是 dependencies：运行期依赖必须保持极小（见上），
+# 而浏览器驱动只在跑 `tests/test_webui_browser.py` 时才需要。装了它之后仍要
+# `-m browser` 才跑（见下面的 marker 与 `addopts`）。
+browser = [
+    "playwright>=1.44",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -64,9 +72,16 @@ where = ["src"]
 # （`X-2`：导入期把 `PYTEST_DEBUG_TEMPROOT` 钉到系统临时目录，跑测试不再往仓内写临时目录）。
 testpaths = ["tests"]
 # 需要联网的用例默认排除 —— 日常套件必须离线、确定性、可重复。
-#   python -m pytest -q            # 离线
-#   python -m pytest -q -m network # 额外联网
-addopts = "-m 'not network'"
+#   python -m pytest -q                    # 离线
+#   python -m pytest -q -m network         # 额外联网
+# 浏览器端到端（裁定 F1：Playwright，opt-in）也默认排除。为什么这一条必须写在这里：
+# 那段 marker 描述写着"默认排除"，但真正决定"默认跑什么"的**只有这一行** ——
+# 没有 `and not browser`，装了 playwright 的人跑 `pytest` 时那四个浏览器用例会被真跑
+# （起服务、开浏览器、慢且不稳），而 marker 描述会继续声称它被排除了（一句做不到的话）。
+# 这不是可选项：`draft/79` 的 T1 记的就是这条不一致，所有者已授权直接改禁改区落地。
+#   python -m pytest -q -m browser         # 显式跑浏览器判据
+addopts = "-m 'not network and not browser'"
 markers = [
     "network: 需要真实网络访问；默认排除，用 -m network 显式运行",
+    "browser: 需要 Playwright 与浏览器（`pip install -e .[browser]` 加 `playwright install`）；默认排除，用 -m browser 显式运行。未装就是 unknown（skip），不是 pass",
 ]
