@@ -110,6 +110,13 @@ OTHER_CATCHERS: dict[str, dict[str, object]] = {
         "why": "工具/动作名写错时给并列候选（`secretary.py:116` 的 docstring 逐字写着"
                "「错名的并列候选（薄转发到 tools.base.candidate_tool_names，判据只有一份）」）",
     },
+    "_notify_gate": {
+        "where": "agent_loop.py",
+        "promise": ("notify", "summary", "body", "refs"),
+        "call": ("agent_loop.py:1723 的 notify_problem = self._notify_gate(payload)",),
+        "why": "`draft/63 §2-⑤` 的接住方：`notify` 表的形状与必填由这一层判（它才知道角色），"
+               "字段表 = `NOTIFY_FIELDS`（`agent_loop.py:1139` 逐字列了 to/summary/body/refs/why）",
+    },
 }
 
 #: 登记的"有产出方、今天没有生产调用点"的秘书方法（留读数，不许沉默）。
