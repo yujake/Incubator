@@ -20,7 +20,7 @@
 |---|---|---|
 | `src/agentflow/web/assets.py` 的令牌层 | `dsh-client-ui-theme/lib/client.js` 内联的 `design-platform.css.mjs` + `base.css.mjs` + `scrollbar.css.mjs` | 令牌**整份照搬**（两层色板 + 明暗两套 + 运动/字体），只把选择器 `body` / `body[data-ds-dark-theme]` 改成 `:root` / `:root[data-ds-dark-theme]` |
 | `src/agentflow/web/assets.py` 的组件层 | 同上，外加 `dsh-client-ui-user-questions` / `dsh-client-ui-approval` 的取值习惯 | 我们自己的组件（卡片/行/徽标/按钮）**只用令牌**写，不写死颜色 |
-| `webui.py` 的界面纪律 | `dsh-client-ui-cordis` / `dsh-client-ui-user-questions` 的 README | 三条：状态不进组件 state、待答面板全局可达、卡片渲染已落盘的 call/result 切片（§3） |
+| `src/agentflow/webui/` 的界面纪律（2026-10-07 拆包前是 `webui.py`，见 `draft/73` §1.2） | `dsh-client-ui-cordis` / `dsh-client-ui-user-questions` 的 README | 三条：状态不进组件 state、待答面板全局可达、卡片渲染已落盘的 call/result 切片（§3） |
 
 `assets.py` 里逐字保留 DSH 的令牌名（`--dsw-*` / `--ds-*`）**是有意的**：
 名字一改，将来 DSH 更新令牌时我们就得靠肉眼比对；名字保留，升级就只是替换文件。

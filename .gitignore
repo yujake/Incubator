@@ -406,3 +406,19 @@ desktop.ini
 !/temp/zone-backup-r4-src_agentflow_tools_base.py
 !/temp/zone-backup-r4-src_agentflow_tools_verify_tools.py
 # <<< CITED-TEMP-EVIDENCE:END >>>
+
+# -----------------------------------------------------------------------------
+# 15. `agentflow/ui/node_modules/` —— 前端的依赖安装结果（2026-10-07 起，Web 端 W0）
+#     为什么：`ui/`（Preact + Vite）第一次 `pnpm install` 之后，实测 12,267 个未跟踪
+#     文件堆在那里，`git status --porcelain` 因此不可读；而依赖安装结果是**可重建**的
+#     —— 入库的那一份是 `pnpm-lock.yaml`（它钉住版本与 integrity 哈希）。按本文件
+#     开头的口径（"只排除体积与机器产物"）这一条正合规。
+#     ⚠️ 按 §12 的纪律，加这一行之前与之后各量了一次门（同一条命令：
+#     `python scripts/noai_gate.py --git`，根取项目根 `agentflow/`）：
+#       - 加之前 ⇒ clean，12267 条改动路径、命中 0；
+#       - 加之后 ⇒ clean，命中仍 0。
+#     ⇒ 这一行没有藏住任何一条禁改区改动（那 1.2 万个文件本来就没有一条命中）。
+#     注意：只忽略 `node_modules/`，**不忽略** `ui/` 下的源码、`pnpm-lock.yaml`
+#     与 `pnpm-workspace.yaml` —— 那些要入库（裁定 B1：前端源码与锁文件入库）。
+# -----------------------------------------------------------------------------
+node_modules/

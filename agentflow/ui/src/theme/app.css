@@ -1,0 +1,186 @@
+/*
+ * SPA 的组件样式。
+ *
+ * 纪律（与 `tests/test_webui.py::test_app_css_uses_only_tokens` 同一条，扩展到前端）：
+ * 颜色一律走 `var(--dsw-alias-*)`，一个色值都不写死；令牌本体来自
+ * `theme/generated/theme.css`（生成物，源是 `web/assets.py`）。
+ * 写死一个 `#RRGGBB` 就等于在令牌体系之外偷偷开了一层皮 —— 下次换皮时它不动。
+ */
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font-family: var(--dsw-font-family);
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+}
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 20px 96px;
+}
+
+.top {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.brand {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.muted {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.mono {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.card {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.card-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.caption {
+  font-size: 12px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.readings {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.badge-pass,
+.badge-ok {
+  color: var(--dsw-alias-state-success-primary);
+  border-color: var(--dsw-alias-state-success-primary);
+}
+
+.badge-fail {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.badge-unknown,
+.badge-pending {
+  color: var(--dsw-alias-state-warn-primary);
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+
+.badge-na {
+  color: var(--dsw-alias-label-tertiary);
+  border-style: dashed;
+}
+
+.tri {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.tri-reason {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.problem {
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+
+.btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  transition: background var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.btn-armed {
+  border-color: var(--dsw-alias-state-warn-primary);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.question {
+  margin: 6px 0;
+  font-size: 15px;
+}
+
+.opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.opt {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.opt .desc {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.grid th,
+table.grid td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+table.grid th {
+  font-size: 12px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.empty {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+a {
+  color: var(--dsw-alias-link);
+}
