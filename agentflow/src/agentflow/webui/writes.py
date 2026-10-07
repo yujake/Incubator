@@ -463,10 +463,11 @@ def answer(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, str, str
         params = {"qid": one("qid"), "sid": one("sid"),
                   "selected": [_text(x) for x in (form.get("selected") or [])],
                   "custom": one("custom"), "skip": one("skip")}
-        _row, problem = audit.record_action(root, endpoint="/answer", source="",
-                                     params=params, result=f"http {code}",
-                                     tri=TRI_COMPUTED if code == 303 else TRI_NOT_APPLICABLE,
-                                     ok=code == 303, http=code)
+        _row, problem = audit.record_action(
+            root, endpoint="/answer", source="", params=params,
+            result=f"http {code}",
+            tri=TRI_COMPUTED if code == 303 else TRI_NOT_APPLICABLE,
+            ok=code == 303, http=code)
         if problem:
             # 审计落不下这件事必须说出口（三态纪律），但这个函数的返回契约不许改
             # ⇒ 唯一的出口是 stderr（服务端日志）。
