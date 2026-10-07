@@ -721,6 +721,33 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
         parsed
 
 
+def test_the_skeleton_teaches_the_preferred_handoff_field_names():
+    """骨架教的名字必须是协议的首选名 `summary`，不许教旧名 `title`/`brief`。
+
+    为什么这是缺陷而不是措辞洁癖：`HANDOFF_PROTOCOL` 逐字写着"旧名 `title` / `brief` 仍然接受…
+    但新写的一律用 `summary`"，而 `JSON_TAIL` 是每一步都发给模型的那份骨架、模型照抄它 ——
+    改前实测（2026-10-07）：骨架写的是 `title` + `brief`，与协议口径相反。
+    因为解码器三个名字都收（都归一成 `summary`），两边都"能跑"，于是没有任何地方会报错，
+    真机里跑出来的形态就是"提示词一直在教你用旧名"。
+
+    两端都判：骨架必须用首选名；而协议承诺的"旧名仍然接受"也必须是真的 ——
+    否则"教首选名"这件事本身就失去意义（兼容性成了空话）。
+    """
+    from agentflow.agent_loop import JSON_TAIL, _decode_shape
+
+    handoff_line = next(ln for ln in JSON_TAIL.splitlines() if '"handoff"' in ln)
+    assert '"summary"' in handoff_line, handoff_line
+    for legacy in ('"title"', '"brief"'):
+        assert legacy not in handoff_line, (
+            f"骨架又教回了旧字段名 {legacy}（协议的首选名是 `summary`）：{handoff_line}"
+        )
+    for payload in ({"to": "M", "title": "t", "body": "b"},
+                    {"to": "M", "brief": "x", "body": "b"}):
+        shape, normalized, problem = _decode_shape({"handoff": payload})
+        assert shape == "handoff" and not problem, (payload, shape, problem)
+        assert normalized.get("summary"), (payload, normalized)
+
+
 def test_no_key_means_not_wired_and_no_request_is_made(tmp_path: pathlib.Path):
     """负控（没接线）：没有 gateway 时一次请求都不发，读数写成 judge_not_wired。"""
     st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]})

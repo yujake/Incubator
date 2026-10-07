@@ -116,8 +116,13 @@ JSON_TAIL = (
     '{"summon_many": {"targets": [{"role": "A-H", "action": "<动作名>", "instance": "<可选>"}],'
     ' "why": "<为什么一次派这一批>"}}\n'
     '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
-    '{"handoff": {"to": "<伙伴/M/ALL>", "title": "...", "body": "<markdown 正文>",'
-    ' "brief": "<一句话描述>", "refs": ["<前序手稿编号>"], "revises": "<要订正的手稿号，可不填>"}}\n'
+    # 骨架里的字段名用协议的首选名（2026-10-07 修）：这里原写 `"title"` + `"brief"`，
+    # 而 `HANDOFF_PROTOCOL` 逐字写着"旧名仍然接受，但新写的一律用 `summary`" —— 骨架是
+    # 每一步都发的那份文档、模型照抄它，两边口径相反却因为解码器三个名字都收而没有任何
+    # 地方会报错。判据：`tests/test_agent_loop.py::test_the_skeleton_teaches_the_preferred_handoff_field_names`
+    # （骨架必须用 `summary`；且"旧名仍然接受"这半句兼容性也当场真调验证）。
+    '{"handoff": {"to": "<伙伴/M/ALL>", "summary": "<一句话描述>", "body": "<markdown 正文>",'
+    ' "refs": ["<前序手稿编号>"], "revises": "<要订正的手稿号，可不填>"}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
     '{"final": {"final": "<结论>", "evidence": []}}'
