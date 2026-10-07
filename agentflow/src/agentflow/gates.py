@@ -809,8 +809,9 @@ def _check_citation_resolution(
 ) -> tuple[list[dict], dict[str, Any], str]:
     """G2/G3 共用的引用解析实现（§8.4 明确允许合并，但门号必须齐全）。
 
-    `citations` 的元素形如 `rel:0007` / `lit:0003#p.4` / `exp:0002`。
+    `citations` 的元素形如 `rel:0007` / `lit:0003#p.4` / `exp:0002` / `stmt:0004`。
     `kind` 决定了它属于"文献引用"（G2）还是"内部/上游交叉引用"（G3）。
+    认得的 `kind` 由调用方给（G2 给的是 `schema.CITATION_PREFIXES` 的键 —— 唯一声明面）。
 
     这里不做存在性核对 —— 那是 `doc_tools.check_citations` 的活
     （它需要读表）。本函数做的是语法级解析：前缀可识别吗？代号非空吗？
@@ -873,6 +874,12 @@ def gate_g2(ctx: GateContext) -> GateResult:
     "裸文件名"这一档在本项目不存在（写裸文件名进 citations 是写入期就拒的），
     所以这里只报 warning 并逐条留痕（§8.4 的"假阳性须逐条留痕"）。
 
+    可解析前缀的唯一声明面是 `schema.CITATION_PREFIXES`（2026-10-07 所有者裁定
+    `draft/68` 题 1 选 A，本次改动由所有者授权、主控代改）。改前本门内联了四个前缀
+    `("lit","rel","exp","eval")`，于是它与写入期（`doc_tools._CITATION_TABLES`）
+    对同一个字符串给出两个结论：`stmt:0004` 在写入期是合法引用、在本门是
+    "不在可解析的种类里"。现在两边都从声明面派生 ⇒ 不可能再分家。
+
     `criterion_revision` 的唯一来源是 `GATE_CRITERIA_REVISION[gate_id]`
     （声明表）；上面那段适配说明只是"为什么要适配"的论证，不构成第二份声明（FC-03）。
     """
@@ -882,7 +889,7 @@ def gate_g2(ctx: GateContext) -> GateResult:
     if ctx.doc is None:
         return _no_doc(gate_id, axis, criterion)
     findings, counts, proc = _check_citation_resolution(
-        ctx, kinds=("lit", "rel", "exp", "eval"), strict_missing=True
+        ctx, kinds=tuple(S.CITATION_PREFIXES), strict_missing=True
     )
     for f in findings:
         f["gate"] = gate_id

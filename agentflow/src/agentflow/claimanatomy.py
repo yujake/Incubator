@@ -85,6 +85,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -137,12 +138,29 @@ __all__ = [
 # 反而需要一份同值兜底（那就是第二份字面量）。`schema` 不 import 本模块，无环。
 from .schema import (  # noqa: E402 - 见上：位置放在词表这一节，不搬到文件顶部
     ALLOWED_USE_KINDS,
+    CITATION_PREFIXES,
     CLAIM_CHECK_KINDS,
     CLAIM_KINDS,
     CLAIM_SOURCE_KINDS,
     CLAIM_STATUSES,
     NUMERIC_EVIDENCE_KEYS,
 )
+from . import textutil as T  # noqa: E402 - 引用前缀的唯一解析实现（`P-5`）
+
+#: 认得的引用前缀（`schema.CITATION_PREFIXES` 的键，顺序照声明面）。
+#: 唯一来源是 `schema`：本模块只做"认不认得"这一格形态判定。
+_CITATION_PREFIXES: tuple[str, ...] = tuple(CITATION_PREFIXES)
+
+#: 裸号（4 位十进制、不带前缀）的形态 —— 只用于把拒信写得可操作
+#: （"写成 `stmt:0004` 或 `lit:0004`"）。判据本身不认裸号：`citations` 是
+#: 混合列表，元素自己不说属于哪张表，按顺序试会静默错配。
+_BARE_NUMBER = re.compile(r"^\d{4}$")
+
+
+def _is_bare_number(raw: object) -> bool:
+    """这条引用是不是裸号（没有前缀的四位号）。"""
+    return bool(_BARE_NUMBER.match(str(raw).strip()))
+
 
 #: `evidence_kind` 的受控词表另一处在 `schema.EVIDENCE_KINDS`。
 #: 这里不复制一份字面量 —— 见 `_evidence_kinds()`（惰性转发，理由是 FC-03）。
@@ -1386,6 +1404,59 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                         claim_id=cid,
                     )
                 )
+            # ---- 2d-2 每条引用的形态：前缀必须是认得的真前缀、代号非空
+            #
+            # 为什么这一条现在才有（2026-10-07 所有者裁定 `draft/68` 题 1 选 A，
+            # 本次改动由所有者授权、主控代改）：`stmt:<命题号>` 加进词表之后，
+            # 前缀这一格才有"真前缀 / 不是真前缀"的可判定口径 —— 否则
+            # `zzz:0004` 这类谁也核不了的写法在这里一路放行，直到写入期
+            # `doc_tools.check_citations` 才被拒（那时判据层的结论与写入期相反）。
+            #
+            # 三态在这里的位置：本函数只判形态（认得 / 不认得），不判"目标在不在" ——
+            # 那需要读表，是 `doc_tools.check_citations`（写入期）与 `verify`
+            # （审计期）的活，它们给出的是三态：读不到台账（没查成）/ 目标不存在 /
+            # 合法。把存在性折叠进本函数会让纯判据层开始读盘（见模块 docstring）。
+            for item in cites_norm:
+                if not isinstance(item, str) or not item.strip():
+                    continue            # 上面那条 `bad_type` 已经报过，不重复报
+                kind, ref = T.citation_ref_parts(item)
+                if kind not in _CITATION_PREFIXES:
+                    hint = ""
+                    if kind and _is_bare_number(item):
+                        hint = (f"；`{item.strip()}` 是裸号 ⇒ 写成带前缀的形态，例如 "
+                                f"`stmt:{item.strip()}`（引我们自己的命题）或 "
+                                f"`lit:{item.strip()}`（引一篇文献）")
+                    issues.append(
+                        ClaimIssue(
+                            code="bad_citation_prefix",
+                            field_name="citations",
+                            level="error",
+                            message=(
+                                f"断言 {cid} 的引用 {item!r} 前缀不可解析（前缀 {kind!r} 不在 "
+                                f"受控前缀表 {_CITATION_PREFIXES} 里）{hint}"
+                            ),
+                            evidence=(
+                                f"citation={item!r}；拆出的前缀={kind!r}、代号={ref!r}；"
+                                "唯一来源 schema.CITATION_PREFIXES"
+                            ),
+                            claim_id=cid,
+                        )
+                    )
+                elif not ref.strip():
+                    issues.append(
+                        ClaimIssue(
+                            code="bad_citation_prefix",
+                            field_name="citations",
+                            level="error",
+                            message=(
+                                f"断言 {cid} 的引用 {item!r} 只有前缀没有代号 ⇒ "
+                                "它指不到任何东西（`lit:` / `exp:` / `rel:` / "
+                                "`eval:` / `doc:` / `stmt:` 后面都要跟台账里的号）"
+                            ),
+                            evidence=f"citation={item!r}；拆出的前缀={kind!r}、代号={ref!r}",
+                            claim_id=cid,
+                        )
+                    )
 
     # ---- 3. 成对字段：`frozen=True` ⇒ `freeze_reason` 必填
     if _value_of(norm, "frozen") is True and not str(_value_of(norm, "freeze_reason") or "").strip():

@@ -1459,7 +1459,11 @@ class Document:
     #: 断言列表。每个元素：
     #: ``{"claim_id","section","text","evidence_kind","citations":[...],
     #:    "is_negative","negation_kind","disclaimer"}``
-    #: 其中 `citations` 的元素形如 ``"rel:0007"`` / ``"lit:0003#p.4"`` / ``"exp:0002"``。
+    #: 其中 `citations` 的元素形如 ``"rel:0007"`` / ``"lit:0003#p.4"`` / ``"exp:0002"``
+    #: / ``"eval:0005"`` / ``"doc:0002#claim-1@<内容哈希前 16 位>"`` /
+    #: ``"stmt:0004"``（引我们自己的命题 —— `draft/68` 题 1，2026-10-07 所有者裁定 A：
+    #: 有了它，`closing` 才判得了"哪几条正文断言压在这条命题上"）。
+    #: 认哪些前缀、各指向哪张表：唯一声明面是 `CITATION_PREFIXES`（见那里的说明）。
     #: 反例字段有两个来源，语义互不替代（`P-10` 候选 A，2026-09-27 所有者裁定）：
     #: `counterexamples` = 人 / 文献已知的清单；`numeric_evidence.n_counterexamples`
     #: = 那一次数值运行机器扫到的条数。两者不等时 `scope_caveat` 必填
@@ -2686,6 +2690,80 @@ PROCESS_ID_PREFIXES: dict[str, str] = {
 }
 
 
+# ---------------------------------------------------------------- 引用前缀（`draft/68` 题 1）
+
+#: 引用前缀 -> 它指向哪张表（`documents.claims[].citations` 的受控前缀表）。
+#:
+#: `citations` 的元素是 `前缀:代号`（`lit:0003#p.4` 这种带页码/锚点的写法按同一个
+#: 代号算，见 `textutil.citation_ref_parts`）。"这个前缀认不认、指向哪张表"必须有
+#: 一处真身 —— 它此前散在三个落位：`verify.CITATION_KINDS`（一张元组）、
+#: `tools/doc_tools._CITATION_TABLES`（一张 dict）、`gates.gate_g2` 内联的四个前缀。
+#: 三处各自自洽，于是同一个字符串"写入期认、审计期不认"不会有任何东西会红。
+#:
+#: 本表与 `PROCESS_ID_PREFIXES` 同一个范式：声明面（本表）+ 从 `TABLES` 派生的
+#: 对账（`assert_citation_prefix_contract()`，导入期自动跑一次）。
+#:
+#: `stmt` 是 2026-10-07 所有者裁定 `draft/68` 题 1 选 A 的落点（本次改动由所有者
+#: 授权、主控代改）：正文断言可以引命题 ⇒ `closing` 的污染面从"命题之间"扩到
+#: "哪几条正文断言压在这条命题上"。此前 `stmt` 在 `verify` / `doc_tools` 侧已被
+#: 认（`E1/R-03` 那次代改），而 `gates.gate_g2` 的解析种类表与 `closing` 的读数
+#: 仍把它当"不可解析/判不了" ⇒ 同一个前缀两个结论。本表把这一格补齐。
+#:
+#: 顺序刻意沿用历史上第一个落位的顺序（`verify.CITATION_KINDS`），
+#: 于是"两边只是同一个集合的不同排列"在 diff 里一眼可见。
+CITATION_PREFIXES: dict[str, str] = {
+    "rel": "relations",
+    "lit": "literature",
+    "exp": "experiments",
+    "eval": "eval_results",
+    "doc": "documents",
+    "stmt": "statements",
+}
+
+
+def citation_prefix_table(prefix: Any) -> str | None:
+    """`前缀:代号` 的前缀指向哪张表（`None` = 这个前缀不认）。
+
+    唯一实现：`tools.doc_tools._CITATION_TABLES` 与 `gates.gate_g2` 的可解析前缀
+    都从本表派生（改口径只改这里）。提示词与 `docs/` 里写的用法不是判据。
+    """
+    return CITATION_PREFIXES.get(str(prefix))
+
+
+def assert_citation_prefix_contract() -> None:
+    """引用前缀声明面与 `TABLES` 的对账。导入期自动跑一次（同 `P-17` 的写法）。
+
+    判据三条：
+
+    1. 每个前缀指向的表名真的在 `TABLES` 里 —— 否则那是个"谁也核不了"的前缀，
+       症状是写入期与审计期对同一个字符串给出不同结论；
+    2. `stmt` 必须在表里、且指向 `statements` —— 这是 `draft/68` 题 1 选 A 的落点：
+       这条写法一旦被摘掉，"哪几条正文断言压在这条命题上"就重新变成判不了，
+       而 `closing` 那一格只会退回一句边界文字，没有任何东西会红（本函数让它红）；
+    3. 前缀形态：首字符是字母、其余是小写 ASCII 字母或数字。`citations` 按第一个
+       冒号切前缀、代号里的 `#` 之后按锚点处理，所以前缀里出现冒号或大写就有歧义。
+
+    写成函数再在导入期调用，而不是把断言摊在模块级：函数可被测试再次调用，
+    于是"往本表里塞一个指向不存在表的前缀 ⇒ 必须红"这条负控才是可写的。
+    """
+    unknown = sorted(t for t in CITATION_PREFIXES.values() if t not in TABLES)
+    assert not unknown, (
+        f"CITATION_PREFIXES 指向了 TABLES 里没有的表：{unknown} ⇒ "
+        "这些前缀没有任何读取面能核它的存在性（写入期与审计期会分家）"
+    )
+    assert CITATION_PREFIXES.get("stmt") == "statements", (
+        "`stmt:` 前缀没了或指错了表 ⇒ 正文断言引用命题这条写法失效，"
+        "`closing` 的断言级污染面会退回『判不了』而没有任何东西会红"
+        "（`draft/68` 题 1，2026-10-07 所有者裁定 A）"
+    )
+    for prefix in CITATION_PREFIXES:
+        shaped = (bool(prefix) and prefix[:1].isalpha() and prefix.isascii()
+                  and prefix == prefix.lower() and prefix.isalnum())
+        assert shaped, (
+            f"引用前缀 {prefix!r} 的形态不对：首字符是字母、其余是小写 ASCII 字母或数字"
+        )
+
+
 def process_id_kinds() -> frozenset[str]:
     """不占 4 位编号空间的 ID 类别（`P-17`）。
 
@@ -2858,6 +2936,7 @@ def assert_id_space_contract() -> None:
 
 assert_id_space_contract()
 assert_process_id_contract()
+assert_citation_prefix_contract()
 
 
 def empty_table() -> dict:

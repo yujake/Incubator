@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from . import renderanchor as RA
+from . import textutil as T
 from . import userio as U
 
 #: 检查的名字（顺序就是报告里的顺序）。
@@ -2080,14 +2081,23 @@ def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
         ))
 
 
-#: 污染面的已知边界（R5-组 4 的 B 方案）：正文断言那一层今天判不了。
-#: 逐字写进 `readings["contradictions"]["pollution_scope"]` 与
-#: `pollution_assertion_level.reason`；判据在 `tests/test_contradiction_fixtures.py` 的
-#: `test_the_assertion_level_boundary_is_verbatim_in_the_readings`（判据侧不 import 本常量，
-#: 否则把常量改成空串就能让判据跟着一起变绿）。
+#: 污染面的残余边界（改前那句已作废，逐字理由见下）。
+#:
+#: 改前（`R5-组 4` 的 B 方案）这里写的是"断言级污染面判不了：
+#: `documents.claims[].citations` 只认 `lit:`/`exp:`/`rel:`，没有引用命题的形式"。
+#: 2026-10-07 所有者裁定 `draft/68` 题 1 选 A（本次改动由所有者授权、主控代改）：
+#: `citations` 现在认 `stmt:<命题号>` ⇒ "哪几条正文断言压在这条命题上"判得了。
+#: 于是这句话从"判不了"改成"判得了，但只覆盖显式写了 `stmt:` 的那些引用" ——
+#: 边界没有消失，只是缩小了：没带 `stmt:` 前缀的引用（裸号、或别的表的前缀）
+#: 指不到任何一条命题，它对命题层不可见。这句话仍然逐字进读数。
+#:
+#: 判据在 `tests/test_contradiction_fixtures.py` 的
+#: `test_the_assertion_level_boundary_is_verbatim_in_the_readings`
+#: （判据侧不 import 本常量，否则把常量改成空串就能让判据跟着一起变绿）。
 POLLUTION_SCOPE_BOUNDARY = (
-    "断言级污染面判不了：`documents.claims[].citations` 只认 `lit:`/`exp:`/`rel:`，"
-    "没有引用命题的形式")
+    "断言级污染面只覆盖显式写了 `stmt:<命题号>` 的引用："
+    "`documents.claims[].citations` 里没带 `stmt:` 前缀的引用指不到任何命题，"
+    "它对命题层不可见")
 
 #: 命题层闭包分布的规模上限：超过就只给"有/没有下游"，闭包分布如实记成没算
 #: （宁可说"这一格没算"，也不许让读数在两万条命题上跑成分钟级、更不许拿 0 冒充）。
@@ -2095,10 +2105,14 @@ POLLUTION_CLOSURE_MAX_NODES = 2000
 
 
 def pollution_scope_text() -> str:
-    """`pollution_scope` 那一格的整段文字：边界 + 今天判到哪一层 + 补法归谁裁。"""
+    """`pollution_scope` 那一格的整段文字：残余边界 + 今天判到哪两层。"""
     return (POLLUTION_SCOPE_BOUNDARY
-            + "；今天只判命题层（`statements.derived_from` 上的传递闭包）；"
-              "补法是给 citations 加一种 `stmt:` 前缀（属字段取舍，留给人裁）")
+            + "；今天判两层：命题层（`statements.derived_from` 上的传递闭包）"
+              "+ 正文断言层（`documents.claims[].citations` 里的 `stmt:<命题号>`，"
+              "读数见 `pollution_assertion_level`）；"
+              "`stmt:` 是 `schema.CITATION_PREFIXES` 登记的前缀，"
+              "前缀由 `claimanatomy` 判、目标存在性由写入期 `doc_tools.check_citations` "
+              "与审计期 `verify` 判（三态：没查到 / 不存在 / 合法）")
 
 
 def _pollution_closure(rows: Mapping[str, Any], stmt_id: str) -> list[str]:
@@ -2131,24 +2145,166 @@ def _statement_rows(store: Any) -> tuple[dict[str, Any] | None, str]:
         return None, f"`statements` 读不到（{type(exc).__name__}）⇒ 没查成"
 
 
+def _document_rows(store: Any) -> tuple[list[Any] | None, str]:
+    """读 `documents`：返回 (rows, 失败原因)；`None` = 没查成（同 `_statement_rows` 的三态）。
+
+    与 `_statement_rows` 分开的理由：这两张表各自可能单独读不到（权限、半截文件），
+    而"命题账本读不到"与"稿件读不到"是两条不同的处置路径。
+    """
+    if store is None:
+        return None, "没有 store ⇒ 没查成（不是「没有正文断言压着」）"
+    try:
+        return list(store.rows("documents")), ""
+    except Exception as exc:  # noqa: BLE001
+        return None, f"`documents` 读不到（{type(exc).__name__}）⇒ 没查成"
+
+
+def _statement_citations(rows: Iterable[Any]) -> list[dict[str, str]]:
+    """扫稿件取出全部 `stmt:<命题号>` 引用（纯函数，不读盘）。
+
+    解析走 `textutil.citation_ref_parts`（`P-5` 的唯一实现）：`stmt:0003#p.4`
+    这类带锚点的写法按同一个命题算一次 —— 与 `verify` 的 `dangling_citation`
+    同口径，否则"写入期算成一条、审计期算成两条"。
+    """
+    out: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        doc_id = str(row.get("doc_id") or row.get("id") or "")
+        for c in row.get("claims") or []:
+            if not isinstance(c, Mapping):
+                continue
+            claim_id = str(c.get("claim_id") or "")
+            for raw in c.get("citations") or []:
+                kind, ref = T.citation_ref_parts(raw)
+                if kind == "stmt":
+                    out.append({"doc_id": doc_id, "claim_id": claim_id,
+                                "citation": str(raw), "stmt_id": ref})
+    return out
+
+
+def statements_cited_by_claims(store: Any) -> dict[str, Any]:
+    """正文断言引了哪些命题（按命题号归拢）+ 其中悬空的那几条。
+
+    口径只有一句：`documents.claims[].citations` 里带 `stmt:` 前缀的引用，
+    就是"这条正文断言压在那条命题上"这条边（`draft/68` 题 1，2026-10-07 所有者裁定 A；
+    本次改动由所有者授权、主控代改）。
+
+    三态（这是本函数的核心，不是细节）：
+
+    ====================  ==================================================================
+    state                 含义
+    ====================  ==================================================================
+    `computed`            查过了：`by_statement` / `dangling` 都是算出来的读数
+    `unreadable`          `documents` 或 `statements` 读不到 ⇒ 没查成（不是"没有断言压着"）
+    ====================  ==================================================================
+
+    `dangling` 单独一栏是"目标不存在"那一态的载体：`stmt:9999` 这种引用的目标不在
+    命题账本里，它既不许被静默算成"压在 9999 上"，也不许被静默丢掉 ——
+    它是悬空引用，写入期（`doc_tools.check_citations`）与审计期（`verify`）各自报 error。
+    """
+    rows, why = _document_rows(store)
+    if rows is None:
+        return {"state": "unreadable", "reason": why, "documents": None,
+                "claims_total": None, "citations": None, "claims": None,
+                "by_statement": None, "dangling": None}
+    claims_total = sum(len(r.get("claims") or []) for r in rows if isinstance(r, Mapping))
+    cites = _statement_citations(rows)
+    claims = {(x["doc_id"], x["claim_id"]) for x in cites}
+    srows, swhy = _statement_rows(store)
+    if srows is None:
+        return {"state": "unreadable", "reason": swhy, "documents": len(rows),
+                "claims_total": claims_total, "citations": len(cites),
+                "claims": len(claims), "by_statement": None, "dangling": None}
+    by: dict[str, list[dict[str, str]]] = {}
+    dangling: list[dict[str, str]] = []
+    for x in cites:
+        if x["stmt_id"] in srows:
+            by.setdefault(x["stmt_id"], []).append(x)
+        else:
+            dangling.append(x)
+    return {
+        "state": "computed",
+        "reason": (f"查过了：{len(cites)} 条 `stmt:` 引用（{len(claims)} 条正文断言）"
+                   + (f"，其中 {len(dangling)} 条指向不存在的命题（悬空引用）" if dangling
+                      else "，全部指向存在的命题")),
+        "documents": len(rows), "claims_total": claims_total,
+        "citations": len(cites), "claims": len(claims),
+        "by_statement": by, "dangling": dangling,
+    }
+
+
+def assertions_pressing_on(store: Any, stmt_id: str) -> dict[str, Any]:
+    """哪几条正文断言压在这条命题上（`stmt:<命题号>` 引用）。三态。
+
+    为什么单独一个函数而不是把这一格塞进 `pollution_set` 的返回值：`pollution_set`
+    回的是命题号列表，而这里是"稿件行 + 断言号"的二元组 —— 两种东西混进同一个列表，
+    读的人再也分不清"跟着倒的命题"与"压在上面的正文断言"（而它们的处置不同：
+    前者要撤结论，后者要改稿）。所以两者分开给，但同处一个三态读数里。
+
+    ====================  ==========================================================
+    state                 含义
+    ====================  ==========================================================
+    `computed`            查过了（`assertions` 可能为空 = 确实没有断言引它）
+    `no_such_statement`   命题账本里没有这条命题 ⇒ 判不了（不是"没有断言引它"）
+    `unreadable`          这一趟没查成（`documents` 或 `statements` 读不到）
+    ====================  ==========================================================
+    """
+    cites = statements_cited_by_claims(store)
+    if cites["state"] != "computed":
+        return {"state": "unreadable", "assertions": None, "dangling": None,
+                "reason": cites["reason"]}
+    srows, _ = _statement_rows(store)
+    if srows is None or str(stmt_id) not in srows:
+        return {"state": "no_such_statement", "assertions": None, "dangling": None,
+                "reason": (f"`statements` 里没有 {stmt_id} ⇒ "
+                           "判不了有没有正文断言压着它（不是「没有」）")}
+    hits = list(cites["by_statement"].get(str(stmt_id), []))
+    return {
+        "state": "computed", "assertions": hits, "dangling": list(cites["dangling"]),
+        "reason": ("查过了：这条命题确实没有被任何正文断言引用" if not hits
+                   else f"查过了：{len(hits)} 条正文断言压在它上面"),
+    }
+
+
 def pollution_reading(store: Any, stmt_id: str) -> dict[str, Any]:
-    """一条命题的污染面 —— 带 `state` 的三态版本。
+    """一条命题的污染面 —— 带 `state` 的三态版本，两层（命题层 + 正文断言层）。
 
     为什么必须有它：`pollution_set` 只回一个列表，于是"这条命题确实没有任何下游"
     与"这一趟没查成"都表现成 `[]`。三态纪律里"没查成 ≠ 没有"，而且两者的处置
     完全不同：前者什么都不用做，后者要有人去修台账 / 补 store。
+
+    两层各自的读数：
+      - `downstream`：`statements.derived_from` 上的传递闭包（命题层）；
+      - `assertions`：`documents.claims[].citations` 里写了 `stmt:<这条命题>` 的
+        那些正文断言（`draft/68` 题 1 选 A 之后才判得了）。`None` = 这一层没查成。
     """
     rows, why = _statement_rows(store)
+    pressed = statements_cited_by_claims(store)
+    if pressed["state"] == "computed":
+        hits: list[dict[str, str]] | None = list(
+            pressed["by_statement"].get(str(stmt_id), []))
+        a_reason = ("查过了：确实没有正文断言引这条命题" if not hits
+                    else f"查过了：{len(hits)} 条正文断言引它")
+        a_state = "computed"
+    else:
+        hits, a_reason, a_state = None, pressed["reason"], "unreadable"
     if rows is None:
-        return {"state": "unreadable", "downstream": [], "reason": why}
+        return {"state": "unreadable", "downstream": [], "reason": why,
+                "assertions": None, "assertion_state": a_state,
+                "assertions_reason": a_reason}
     if stmt_id not in rows:
         return {"state": "no_such_statement", "downstream": [],
                 "reason": f"`statements` 里没有 {stmt_id} ⇒ 判不了它有没有下游"
-                          "（不是「没有下游」）"}
+                          "（不是「没有下游」）",
+                "assertions": None, "assertion_state": a_state,
+                "assertions_reason": a_reason}
     downstream = _pollution_closure(rows, stmt_id)
     reason = ("查过了：这条命题确实没有任何下游" if not downstream
               else f"查过了：下游闭包 {len(downstream)} 条")
-    return {"state": "computed", "downstream": downstream, "reason": reason}
+    return {"state": "computed", "downstream": downstream, "reason": reason,
+            "assertions": hits, "assertion_state": a_state,
+            "assertions_reason": a_reason}
 
 
 def pollution_set(store: Any, stmt_id: str) -> list[str]:
@@ -2159,12 +2315,13 @@ def pollution_set(store: Any, stmt_id: str) -> list[str]:
     `draft/37` 的用词是"如果错的是文献，那么压在它上面的结论就不能再算数"，
     而"压在它上面"在数据面上就是这张有向图。
 
-    已知边界（写成读数而不是假装完整）：今天的污染面只覆盖命题之间的
-    `derived_from`。正文断言（`documents.claims[].citations`）今天只认 `lit:` / `exp:` /
-    `rel:` 三种前缀，没有引用命题的形式 ⇒ "哪几条正文断言压在这条命题上"判不了。
-    补法是给 citations 加一种 `stmt:` 前缀（属字段取舍，留给人裁）——
-    在补上之前，本函数只对命题层给读数，并把这条边界写进 `readings`
-    （边界那句话的真身是 `POLLUTION_SCOPE_BOUNDARY`）。
+    第二层（正文断言层）：`documents.claims[].citations` 里的 `stmt:<命题号>`
+    引用也是"压在它上面"，但那一条边连着的是稿件里的断言，不是命题 ——
+    所以它不进本函数的返回值（把两种东西混进一个列表就再也分不清了），
+    而是走 :func:`assertions_pressing_on` 与 `pollution_reading` 的 `assertions` 格。
+    2026-10-07 所有者裁定 `draft/68` 题 1 选 A 之前，这一层没有数据形式可判
+    （`citations` 只认 `lit:`/`exp:`/`rel:`），现在有 `stmt:` 前缀了，
+    于是"哪几条正文断言压在这条命题上"从一个边界文字变成一条真读数。
 
     三态：本函数只回闭包本身，`[]` 既可能是"没有下游"也可能是"没查成"——
     要分清就读 :func:`pollution_reading`（它多回一个 `state`）。
@@ -2210,23 +2367,43 @@ def proposition_level_pollution(store: Any) -> dict[str, Any]:
 
 
 def assertion_level_pollution(store: Any) -> dict[str, Any]:
-    """正文断言层的污染面：今天判不了（边界），但"读得到读不到"要分开记。
+    """正文断言层的污染面：多少条正文断言引了命题 + 每条命题被几条断言压着。
 
-    两种 state：`not_judged`（按设计不判 —— 缺的是数据形式，不是这一次读盘失败）
-    与 `unreadable`（这一趟连 `documents` 都没读到）。两者都不是"没问题"。
+    改前这一格按设计是 `not_judged`（缺的是数据形式：`citations` 没有引用命题的
+    写法）。2026-10-07 所有者裁定 `draft/68` 题 1 选 A（本次改动由所有者授权、
+    主控代改）之后它变成一条现算读数 —— 判据跟着改的地方与理由写在
+    `tests/test_contradiction_fixtures.py` 对应用例的 docstring 里。
+
+    三态：
+
+    ====================  ==========================================================
+    state                 含义
+    ====================  ==========================================================
+    `computed`            查过了（下面每一格都是算出来的读数，`0` 是真 0）
+    `unreadable`          `documents` 或 `statements` 读不到 ⇒ 没查成
+    ====================  ==========================================================
+
+    为什么 `claims_total` 与 `claims_citing_a_statement` 必须分开给：
+    "这一批稿件里没有一条断言引命题"（0 / 40）与"这一趟一条断言都没扫到"（0 / 0）
+    是两件事 —— 只给一个 0，读的人分不清"这一层干净"与"这一层根本没数据"。
     """
-    if store is None:
-        return {"state": "unreadable", "readable": False, "documents": None,
-                "reason": POLLUTION_SCOPE_BOUNDARY
-                          + "；这一趟连 `documents` 都没读到（没有 store）"}
-    try:
-        docs = list(store.rows("documents"))
-    except Exception as exc:  # noqa: BLE001
-        return {"state": "unreadable", "readable": False, "documents": None,
-                "reason": POLLUTION_SCOPE_BOUNDARY
-                          + f"；而且 `documents` 这一趟也没读到（{type(exc).__name__}）"}
-    return {"state": "not_judged", "readable": True, "documents": len(docs),
-            "reason": POLLUTION_SCOPE_BOUNDARY}
+    cites = statements_cited_by_claims(store)
+    if cites["state"] != "computed":
+        return {"state": "unreadable", "readable": False,
+                "documents": cites["documents"], "claims_total": None,
+                "claims_citing_a_statement": None, "statements_cited": None,
+                "by_statement": None, "dangling": None, "reason": cites["reason"]}
+    if not cites["citations"]:
+        reason = ("查过了：这一批稿件的正文断言里没有任何 `stmt:<命题号>` 引用 ⇒ "
+                  "这一层读数是 0（不是没查成）。" + POLLUTION_SCOPE_BOUNDARY)
+    else:
+        reason = cites["reason"]
+    return {"state": "computed", "readable": True, "documents": cites["documents"],
+            "claims_total": cites["claims_total"],
+            "claims_citing_a_statement": cites["claims"],
+            "statements_cited": len(cites["by_statement"]),
+            "by_statement": cites["by_statement"], "dangling": cites["dangling"],
+            "reason": reason}
 
 
 def _check_contradictions(rep: ClosingReport, store: Any) -> None:
@@ -2255,6 +2432,9 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             "pollution_scope": pollution_scope_text(),
             "pollution_proposition_level": proposition_level_pollution(None),
             "pollution_assertion_level": assertion_level_pollution(None),
+            # 没查成的那两格给 `None`（不是 `{}`）：空字典会被读成"查过了、没有"。
+            "pollution_assertions": None,
+            "pollution_dangling_statements": None,
         }
         rep.findings.append(Finding("contradictions", "no_store", "warning",
                                     "没有 store ⇒ 矛盾没查成（不是没有矛盾）"))
@@ -2272,6 +2452,20 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
     #: 与 `own_hole` 分开：`own_hole` 说的是"我们的 proof 级证明压在不可用的命题上"，
     #: 而这一条不管压在上面的那几条是什么证据等级 —— 只要有人用，就必须处置。
     pollution_items: list[str] = []
+    #: 正文断言层的逐条读数：`{命题号: [{doc_id, claim_id, citation}]}`。
+    #: `draft/68` 题 1 选 A 之前这一格不存在（数据形式都没有）；现在它是
+    #: "哪几条正文断言压在这条命题上"的机器读数（`_check_contradictions` 用它
+    #: 决定 §9 的级联要不要覆盖稿件）。
+    pollution_assertions: dict[str, list[dict[str, str]]] = {}
+    #: 这一趟扫到的全部 `stmt:<命题号>` 引用里，目标命题不存在的那几条（悬空引用）。
+    #: 它们不许被静默算成"压在某条命题上"，也不许被静默丢掉 —— 单独一栏报出来。
+    dangling_statement_citations: list[dict[str, str]] = []
+    cited_by_claims = statements_cited_by_claims(store)
+    if cited_by_claims["state"] == "computed":
+        dangling_statement_citations = list(cited_by_claims["dangling"])
+    else:
+        pollution_unreadable.append(
+            "正文断言层的 `stmt:` 引用没查成：" + str(cited_by_claims["reason"]))
 
     # ---- ① 我们读错了文献：命中校验 mismatch 且已经被消化（P2 的那一栏）
     for row in store.rows("literature"):
@@ -2310,8 +2504,20 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
                     pollution_unreadable.append(f"命题 {sid}：{reading['reason']}")
                 downstream = list(reading["downstream"])
                 pollution[sid] = downstream
-                if downstream:
-                    pollution_items.append(f"命题 {sid} 被证否 ⇒ {downstream} 跟着倒")
+                # 正文断言层（`draft/68` 题 1 选 A）：谁在稿件里引了这条被证否的命题。
+                # 它单独一栏，不并进 `downstream`：两者处置不同 —— 命题要撤结论，
+                # 稿件要 G 改稿（删断言或换依据）。
+                pressed = list(reading["assertions"] or [])
+                pollution_assertions[sid] = pressed
+                if downstream or pressed:
+                    why_parts: list[str] = []
+                    if downstream:
+                        why_parts.append(f"命题 {downstream} 跟着倒")
+                    if pressed:
+                        where = "、".join(f"{x['doc_id']}#{x['claim_id']}"
+                                          for x in pressed[:6])
+                        why_parts.append(f"正文断言 {where} 压在它上面（共 {len(pressed)} 条）")
+                    pollution_items.append(f"命题 {sid} 被证否 ⇒ " + "；".join(why_parts))
 
     for row in store.rows("documents"):
         if str(row.get("status") or "") == "unresolved_review":
@@ -2326,10 +2532,15 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
         "pollution_states": pollution_states,
         "pollution_unreadable": pollution_unreadable,
         "pollution_scope": pollution_scope_text(),
-        # 命题层：现算（多少命题有下游 + 闭包大小分布）—— 这一格是"今天判得到的那一层"。
+        # 命题层：现算（多少命题有下游 + 闭包大小分布）。
         "pollution_proposition_level": proposition_level_pollution(store),
-        # 断言层：`not_judged`（缺数据形式，按设计不判）或 `unreadable`（没读到盘）。
+        # 正文断言层：现算（多少条正文断言引了命题 + 每条命题被几条压着）。
+        # 改前这一格是 `not_judged`（缺数据形式），现在是 `computed`/`unreadable`。
         "pollution_assertion_level": assertion_level_pollution(store),
+        # 逐条命题的正文断言：`{命题号: [{doc_id, claim_id, citation}]}`。
+        "pollution_assertions": pollution_assertions,
+        # 悬空引用：引了 `stmt:<不存在的命题>` 的那些（单独一栏，不许折进上面两格）。
+        "pollution_dangling_statements": dangling_statement_citations,
     }
     causes: tuple[tuple[str, str, str, list[str]], ...] = (
         ("contradiction_wrong_paper", "blocker", "我们读错了文献（下成了另一篇）", wrong_paper),
@@ -2357,7 +2568,9 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             extra = "。处置：G 修订 / H 复审（§14.4 的未决问题那一节）"
         elif code == "contradiction_pollution":
             extra = ("。处置：要么把被证否那条的来源换掉（重取 / 换一篇），"
-                     "要么把压在上面的结论一起降档或撤回")
+                     "要么把压在上面的结论一起降档或撤回。"
+                     "压在它上面的**正文断言**（`pollution_assertions` 那一格）"
+                     "由 G 改稿：删掉那条断言，或换成引一条还站得住的命题")
         pollution_note = ""
         if code == "contradiction_disputed_source" and pollution:
             pollution_note = ("；**污染面**（被证否的那些，谁跟着倒）："

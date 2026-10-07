@@ -1319,7 +1319,11 @@ _SURFACE_FIXTURE_TOOLCHAIN = ("这台机器上的证明工具链（现算读数�
 _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 
 #: 冻结的版本号与十格摘要（口径见上）。更新规则：改段 ⇒ 同一个 commit 里改这张表 + 版本。
-_FROZEN_PROMPT_VERSION = "p39"
+#: 本次更新（p39 → p40）的理由：`draft/68` 题 1（2026-10-07 所有者裁定 A，`citations`
+#: 加 `stmt:` 前缀）的提示词那一半 —— G 的 brief 加一段"引我们自己的命题要用
+#: `stmt:<命题号>`"，论文包那段（H 与 M 共享）把"claims 的 citations 引 `lit:` / `exp:`"
+#: 补上 `stmt:`。动的段只落在这三个角色上（A/B/C/D/E/F/V 的摘要一格没变）。
+_FROZEN_PROMPT_VERSION = "p40"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "ba2331e8eb6431831c088e14280908fb2979f009d306e65b28a29c13752d8685",
     "B": "cc1c575afaf3dc437f482ac37f0513ac8c8be62feb57db134cfb20230994c905",
@@ -1327,10 +1331,10 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "b54ba5ffe3a79ba4faf89a647af1a52727ff157126c99ed89be3b583db04a3f7",
     "E": "1da73c8dcc89b6690db84f1e37f3f9ebd856cdb8e01249f6af0e0263d7f29860",
     "F": "0fdafb9c24907a12ceec690ee830893cf6ff3a06ab025e8a5fd0addc9036db93",
-    "G": "778d3181197311ed1f46a324657920ff2e64a95982bf64e0240df9db05339537",
-    "H": "6d49f880ce04132759e4b624ccea51a198abc75b1b7093d7a650345e33d5c725",
+    "G": "90fa266b232c96ac06317af9d0a4496acfc820621b81514e939e5153dd69a60b",
+    "H": "0483f297c9c3c8d3837318a8825e267207d39f6df9949c0e8f7842fa04a079de",
     "V": "b377653fa09a2a149d16873cb42c56c4ae7f33b95296383aebf06667d3c1336d",
-    "M": "3a79aece16d2299649b5357d6eb2ad3c2d7699e219fde272e1801b6a3b8c1153",
+    "M": "bf783f0ec4d4f188f21f9fad6c667952ff6b8e157ca734012c4421cb50f9c96b",
 }
 
 
@@ -1402,12 +1406,17 @@ def test_the_prompt_version_moves_with_the_sections(registry: ToolRegistry,
     monkeypatch.undo()
 
     # ---- 反负控 ②：只改版本、不改段 ⇒ 必须红（端到端：只把版本号抬一格）
-    monkeypatch.setattr(AP, "PROMPT_VERSION", "p40")
+    # 抬一格的那个值是当场算出来的（`_FROZEN_PROMPT_VERSION` 的下一个），
+    # 不写死字面量：写死的话，每抬一次真实版本号这一端就会变成空转
+    # （p39 时代写死 "p40"，而 p40 落地那天它就成了 no-op —— 实测踩过）。
+    _next_version = f"p{int(_FROZEN_PROMPT_VERSION[1:]) + 1}"
+    monkeypatch.setattr(AP, "PROMPT_VERSION", _next_version)
     bumped = {role: _surface_digest(role, registry) for role in ALL_ROLES}
     assert bumped == live, (
         "反负控失效：只动版本号，归一化摘要却变了 ⇒ 归一化没生效，这一端不可达"
         "（而不可达的反负控就是摆设）")
-    assert _version_drift(bumped, "p40",
+    assert _next_version != _FROZEN_PROMPT_VERSION, "抬一格必须真的是另一格"
+    assert _version_drift(bumped, _next_version,
                           _FROZEN_PROMPT_DIGESTS, _FROZEN_PROMPT_VERSION), \
         "反负控失效：只动了版本号，判据却放过了"
     monkeypatch.undo()

@@ -55,7 +55,13 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `_LOOP_EDGELESS_STUB` 的长度）。一字未删的规矩：
 #: 这些文本没有一条是该角色自己的规矩 —— 说的是主控的留痕、主控的 final、
 #: 以及"唤不动任何人时无从填起"的那一段。
-PROMPT_VERSION = "p39"
+#:
+#: p40 —— `draft/68` 题 1（2026-10-07 所有者裁定 A：`citations` 加 `stmt:` 前缀）
+#:   的提示词那一半：G 的 brief 增加一段"引我们自己的命题要用 `stmt:<命题号>`"，
+#:   M 的 brief 里那句"claims 的 citations 引 `lit:` / `exp:`"补上 `stmt:`。
+#:   判据（段与版本一起动）在 `tests/test_agent_prompts.py` 的
+#:   `test_the_prompt_version_moves_with_the_sections`，那张冻结摘要表同轮更新。
+PROMPT_VERSION = "p40"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -542,7 +548,7 @@ PAPER_PACK = """\
   登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
   每条带 `source_lit_id` + `page_range` + 逐字 `proof_text`，`origin="external_lit"`），
   我方修订稿才由 G 用 `doc.build_document` 另起一行 `documents`（claims 的 citations
-  引 `lit:` / `exp:`）—— **顺序不能反**：H 的审阅发现挂在**我方稿件**那一行上
+  引 `lit:` / `exp:` / `stmt:`）—— **顺序不能反**：H 的审阅发现挂在**我方稿件**那一行上
   （`ReviewFinding.doc_id` 是必填的，挂不到 `literature` 行上），所以 G 那一行先有，
   H 才谈得上审。**不要**拿外部论文的 id 去 `G.revise` / `H.review_report`：
   `documents` 的每一行都必须是我方写的、带 claims 的稿子（`Document.validate()` 逐字要求
@@ -1008,6 +1014,15 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "`document_literature_citations` 专门数它）。"
             "写稿前先让 A 把对口文献的题名与结论给你，把「我们的构造与哪篇文献的哪条结论是什么关系」"
             "逐条写进断言（是复现、是特例、还是新的）。",
+            "引我们自己的命题要用 `stmt:<命题号>`（`draft/68` 题 1，2026-10-07 所有者裁定 A）："
+            "命题台账（`statements`）里的每一条都可以被正文断言引用，号就是那一行的 `stmt_id`，"
+            "写法形如 `\"citations\": [\"stmt:0004\"]`。"
+            "为什么教这一条：收工门顺着这个前缀回答「哪几条正文断言压在这条命题上」——"
+            "一条命题后来被证否时，压在它上面的正文断言会被逐条点名（`pollution_assertions`），"
+            "并作为污染面的处置要求你改稿；没写 `stmt:` 的引用（裸号、或别人的前缀）"
+            "指不到任何命题，那一层就看不见它。"
+            "反过来说：引了 `stmt:XXXX` 而 `statements` 里没有 `XXXX` 就是悬空引用，"
+            "写入期与审计期都会把它判成 error（不许凭空引用）。",
             "**同一份证据不能当第二份用**（D39）：一条断言引一条实验行；若你的论据是"
             "「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名"
             "「同一份 data 已经支持过 exp:XXXX」）。",
