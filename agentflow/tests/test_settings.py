@@ -52,6 +52,11 @@ REPO = PROJECT.parent
 #: 也该被判据看见（它恰恰是最可能顺手带上一句绝对路径的地方）。
 ZERO_HIT_FILES = ("agentflow/docs/FORMAL-TOOLCHAIN.md", "agentflow/DEVELOPMENT.md")
 
+#: 判据文件自己（仓库根相对）。它必须写出那种路径才能当负控夹具，
+#: 所以它被明确排除在残渣统计之外 —— 排除是有意的、写在明面上的，
+#: 且由 `test_the_criterion_file_still_needs_its_fixtures` 守着"这一条还有用"。
+_CRITERION_FILE = "agentflow/tests/test_settings.py"
+
 #: 那台机器的环境地址的形状：`<盘>:\...\{temp|_env}\{lean470|mathlib-pinned*|elantool}`，
 #: 加上工作区根相对的那种写法（`temp/lean470`）。
 #:
@@ -203,10 +208,17 @@ def _residue_hits() -> dict[str, int]:
 
     这一面按 `git ls-files` 取（只认入库的文档）：历史登记/归档是入库的东西，
     而工作树上的临时物（`temp/`、`out/`）不在"文档"的范围里。
+
+    本文件自己排除在外（`_CRITERION_FILE`）—— 有意的、写在明面上的排除，
+    不是漏掉：判据要能证明"注入一句这样的路径必红"，就得先写出那样一句。
+    它的另一半在下面 `test_the_criterion_file_still_needs_its_fixtures` 里：
+    排除一旦不再需要（夹具没了）就会被判红，免得它腐烂成"一张永不生效的豁免"。
     """
     scanned = {p.resolve() for p in _scan_set()}
     out: dict[str, int] = {}
     for rel in _tracked_files():
+        if rel == _CRITERION_FILE:
+            continue
         p = REPO / rel
         if not p.is_file() or p.resolve() in scanned:
             continue
@@ -605,6 +617,19 @@ def test_the_remaining_occurrences_are_registered_and_cannot_grow() -> None:
         "确实是历史记录：请更新本文件的 `_RESIDUE_REGISTER` 并写清理由。\n"
         f"实际：{json.dumps(_residue_hits(), ensure_ascii=False, indent=2)}"
     )
+
+
+def test_the_criterion_file_still_needs_its_fixtures() -> None:
+    """本文件被排除在残渣统计之外，是因为它「必须」写出那种路径当负控夹具。
+
+    这一条守着那个排除还有用：夹具被删掉之后，排除就该一起删
+    （一张永不生效的豁免表会腐烂成"看起来还在挡着什么" —— R010 的同一句纪律）。
+    """
+    src = (REPO / _CRITERION_FILE).read_text(encoding="utf-8")
+    hits = _dead_env_path_hits(src)
+    assert hits, ("本文件的负控夹具不见了 ⇒ 上面那条排除已经没用了，请把它一起删掉"
+                  f"（并把 `_RESIDUE_REGISTER` 里的说明同步）")
+    assert len(hits) >= 2, f"夹具只剩一条 {hits} ⇒ 覆盖面可能已经被删窄了"
 
 
 # --------------------------------------------------------------------------- #
