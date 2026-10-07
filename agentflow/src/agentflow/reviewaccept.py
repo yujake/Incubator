@@ -540,12 +540,32 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
     `session_root` 不给时取 `store.root`。任何一格缺少必要输入 ⇒ `unknown`
     （"没查成"），而 `unknown` 不是通过。
 
+    ## 生产出口（`agentflow closing`）
+
+    这一层此前在生产面上一条 import 都没有（`tests/test_release_acceptance_wiring.py`
+    改前必红的那条读数）：判据齐、测试齐、而真机上永远没人跑它。现在它的唯一生产
+    调用者是只读出口 CLI `agentflow closing`（`cli.cmd_closing`），读数分栏打在
+    收工门读数之后 —— 为什么挑那个出口：收工门问的正是"这份交付能不能交"，
+    而本模块问的是同一份交付的同一个问题，只是判据在内容层；两者的入参
+    （`project_dir` / `report_path` / `session_root` / `sid`）本来就是同一批，
+    而那批入参在 `cmd_closing` 里已经收齐了 ⇒ 不需要新开一条面。
+
+    接线只加"谁调用它、读数落到哪"：六条判据、三态口径、`passed` 的算法
+    （辅助读数一个都不参与）一个字都没动，`cmd_closing` 的退出码也仍然只由
+    收工门定 —— 接线不改变任何判定强度。出口缺省就跑，`--no-review-acceptance`
+    是显式关掉它（关掉时那一段读数说明自己是"没查成"，不许读成"内容级验收通过了"）。
+
     `sid` 必须给这一趟运行的那个 sid（`draft/37` §58 的真机读数）：
     第九趟的提问落在 `sessions/real9.jsonl` 里，而本函数此前不带 `sid` ⇒
     `pending_questions(root)` 按默认会话读，什么都没读到，于是
     `triage_branch_recorded` 报"一次都没问过用户" —— 而那一趟明明问了（`q0001`）。
     判据看不见带 sid 的提问，这一格就永远只能是 unknown，而病因在调用姿势上，
     不在主控身上。
+
+    `sid=closing.NO_SESSION` 是第三个输入（与 `sid=None` 刻意分开，口径见
+    `closing.NO_SESSION`）：它说的是"调用方没有会话身份"，那一格记 `unknown`。
+    CLI 出口拿不到运行内那个 sid，所以它传 `NO_SESSION` 而不是 `None`
+    —— 折进 `None` 会按缺省会话读，而那正是 §58/§63 记过两次的假绿形态。
     """
     acc = ReviewAcceptance()
     root = session_root if session_root is not None else getattr(store, "root", None)

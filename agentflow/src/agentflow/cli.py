@@ -41,6 +41,19 @@ def _non_negative_int(raw: str) -> int:
     return value
 
 
+def _non_negative_float(raw: str) -> float:
+    """argparse 的 `type=`：负数上限在用法错阶段就被拒（与本文件的 `_non_negative_int` 同一个理由）。
+
+    为什么上限不许是负数：`reviewaccept` 把上限与花销做 `>` 比较，负上限会让
+    "花了零元"也判成超上限 —— 那是一个看着像"判据红"的用法错。
+    用法错退 2（"没查成"），不许让它伪装成 1（"查过了、有问题"）。
+    """
+    value = float(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"必须 >= 0（收到 {raw}）")
+    return value
+
+
 # ---------------------------------------------------------------- 配置装载
 
 
@@ -2036,6 +2049,28 @@ def cmd_closing(args) -> int:
     三态（与 `noai_gate` 同一套口径）：`unknown` 那一档绝不是通过 ——
     "没查成"（没给项目根、报告还没写）与"查过了有问题"必须给不同的退出码，
     否则 CI 会把两者读成同一件事。
+
+    ## 收工门之后再接一段内容级验收（`draft/37` §17.3，题 6 选 A = 接线）
+
+    这一层此前在生产面上一次都没被调用过（判据齐、测试齐、真机上没人跑它）；
+    现在它的唯一生产调用者是这里 —— 只读、零模型调用、不落任何台账。
+
+    为什么挑这个出口而不是新开一条面：收工门问的正是"这份交付能不能交"，
+    而 `reviewaccept` 问的是同一份交付的同一个问题，只是判据在内容层；
+    两者的入参（`project_dir` / `report_path` / `session_root` / `sid`）本来就是同一批，
+    而那批入参在这里已经收齐了 ⇒ 不新开面、不新开子命令（子命令数被
+    `test_user_quickstart` / `test_doc_code_consistency` 逐字钉着）。
+
+    两件事刻意分开、读数分栏打：
+
+    - 退出码仍然只由收工门定（`tri_state_exit_code`）。把内容级验收并进退出码，
+      等于偷偷把门的强度改了 —— 那是裁定题，不是接线题；
+    - `unknown` 不折平：六条各自打"通过/不通过/没查成"，辅助读数照原样打出，
+      并逐字说明"它们不构成通过"。
+
+    `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），
+    于是「三态分支」那一格是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，
+    那正是 §58/§63 记过两次的假绿形态。
     """
     from . import closing as CL
     from .store import Store
@@ -2053,7 +2088,59 @@ def cmd_closing(args) -> int:
     for f in rep.findings:
         print(f"  [{f.level}] {f.code}：{f.detail}")
     print(rep.summary())
+    if getattr(args, "no_review_acceptance", False):
+        # 关掉是显式的：它让"零调用的那段历史"仍可复现，也方便对拍接线前后的读数。
+        print("[review-acceptance] 这一次没跑（`--no-review-acceptance`）—— "
+              "这一格是「没查成」，不是「内容级验收通过了」")
+        return CL.tri_state_exit_code(rep)
+    _print_review_acceptance(st, project=project, report=report,
+                             cap_usd=getattr(args, "cap_usd", None),
+                             sid=(getattr(args, "acceptance_sid", None)
+                                  or CL.NO_SESSION))
     return CL.tri_state_exit_code(rep)
+
+
+def _print_review_acceptance(store, *, project: str, report: str,
+                             cap_usd: float | None, sid: str) -> None:
+    """把内容级验收（`draft/37` §17.3 的六条）打到人能读的地方（只读）。
+
+    `reviewaccept` 读的是同一批入参：`project_dir` / `report_path` / `session_root`
+    （不给就用 `store.root`，与 `check_closing` 同一条口径）/ `sid`。
+
+    为什么六条要逐条打而不是只打一个 `passed`：这一层的三态纪律就写在判据本身里
+    （"没查成"与"查过了没问题"必须分得开，`unknown` 会挡住 `passed`）。
+    只打一个布尔值，等于把这条纪律在出口上又折平了一次。
+
+    为什么辅助读数也要逐条打出来（哪怕它们一个都不参与判定）：§17.3 逐字禁止
+    拿它们当通过 —— 而"禁止"要能被读的人看见才有意义。它们与判据分栏给出，
+    末尾再写一句它们不构成通过。
+
+    这一段只读盘：`check_review` 走 `store.rows` / `sessions.read_session` /
+    `userio` 的读口 / `renderanchor.check_package`，一处都不写。
+    """
+    from . import reviewaccept as RX
+
+    acc = RX.check_review(store, project_dir=project, report_path=report,
+                          cost_cap_usd=cap_usd, sid=sid)
+    readings = acc.to_dict()
+    mark = {"pass": "通过", "fail": "不通过", "unknown": "没查成"}
+    print("")
+    print(tty.paint("[review-acceptance] 内容级验收（§17.3；只读，零模型调用）", "bold"))
+    for key, name in RX.CRITERIA:
+        state = readings["criteria"].get(key, "?")
+        print(tty.bullet(f"{name}：{mark.get(state, state)}"))
+        note = readings["details"].get(key) or ""
+        if note:
+            print(f"    {note}")
+    print(f"  passed（只看上面这几条）＝{readings['passed']}")
+    if readings["failed"]:
+        print(f"  没通过的：{'、'.join(readings['failed'])}")
+    print("  ── 辅助读数（§17.3 逐字禁止拿来当通过：它们都很容易变，证明不了内容）")
+    for key, label in RX.AUXILIARY_SIGNALS:
+        print(f"    {label}＝{readings['auxiliary'].get(key)}")
+    for key, value in readings["readings"].items():
+        print(f"    （判据读数）{key}＝{value}")
+    print(f"  {acc.summary()}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2353,6 +2440,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是「没查成」）")
     sp.add_argument("--report", default="",
                     help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
+    # 内容级验收（`draft/37` §17.3）那一段的入参：只影响那一段的读数，
+    # 不影响退出码（退出码仍然只由收工门定）。三个都给缺省值 ——
+    # 缺省时那几格记「没查成」，不折成通过。
+    sp.add_argument("--cap-usd", type=_non_negative_float, default=None,
+                    help="这一趟的成本上限（美元）—— 内容级验收的「在成本上限内」用；"
+                         "不给 ⇒ 那一格是「没查成」")
+    sp.add_argument("--acceptance-sid", default=None,
+                    help="这一趟的会话号（内容级验收的「三态分支」那一格用；"
+                         "不给 ⇒ 那一格是「没查成」，不按缺省会话读）")
+    sp.add_argument("--no-review-acceptance", action="store_true",
+                    help="不跑收工门之后的那个内容级验收读数（缺省就跑）")
     sp.set_defaults(func=cmd_closing)
 
     # 项目状态报告（`draft/39` §4）：只读 + 零模型调用 —— 用户中途想知道情况时用它，
