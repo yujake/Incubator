@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """真跑一次接线后的生产路径（题 6 选 A = 接线）：从 CLI 出口进去，不 import reviewaccept。
 
-产出：`temp/wire_run_out.txt`（人读的原始输出）。这个脚本只是"开车"，
+产出：`agentflow/temp/wire_run_out.txt`（人读的原始输出）。这个脚本只是"开车"，
 判据在 `tests/test_release_acceptance_wiring.py` 里。
 """
 from __future__ import annotations

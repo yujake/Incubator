@@ -627,7 +627,7 @@ _REFUSE_EXPECT: dict[str, tuple[str, str]] = {
 def test_two_sides_agree_on_the_seven_inputs(tmp_path: Path):
     """改后的常驻回归表：七个输入上两侧的判定与拒收理由逐条对得上。
 
-    这是差分读数（`temp/probe_doc_citation_two_sides_5a.py` 的改前/改后四格）
+    这是差分读数（`agentflow/temp/probe_doc_citation_two_sides_5a.py` 的改前/改后四格）
     的常驻版本：那边证"搬一处没改口径"，这边守住"此后也不许分家"。
     两侧的文案与粒度本来就不同（审计期把"稿件不存在"与"断言不存在"合成一条
     `dangling_doc_citation`），所以比的是"拒在哪一段"。
