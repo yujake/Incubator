@@ -435,6 +435,123 @@ def _find_answer(session_root: Path, qid: str, sid: str | None) -> dict | None:
     return None
 
 
+# ====================================================================== 渲染视图（裁定 L1 的收敛入口）
+#
+# 裁定 L1：待答与选项的读取收敛到本模块。理由不是"整齐"，而是它们此前有两份
+# 独立实现：`webui/state.py` 的 `_scan` 与 `option_view` 各自扫一遍 `user_question`
+# 事件、各自认一遍选项的两种形状（裸串 / `{label, description}`）。两份实现漂移的
+# 表现是"同一份会话文件，CLI 说还有三条待答、网页说没有"——而没有任何东西会报错。
+#
+# 这里给出的三个函数是给读者用的（不是给写者）：它们把 `Question` / 回答事件
+# 读成 JSON 安全的字典（前端 `PendingQuestion` / `OptionRow` 那一族形状）。
+# `webui/state.py` 的 `option_view` 与 `answer_text_of` 是这两个视图的同义旧名
+# （它们的行为必须逐字相同 —— 判据 `tests/test_webui_readers.py` 里有一条断言两边
+# 给出的键与值都一样）。收敛的下一步是 `_scan` 改调本模块，那一处在 A 线的文件里。
+
+
+def option_view(raw: Any) -> dict[str, Any]:
+    """把一个选项读成 `{label, description, multi}`（前端 `OptionRow` 的形状）。
+
+    裸字符串（旧会话事件、`llmseam` 的旧 schema）与新形状（`Option` / 字典）都认 ——
+    兼容读法在这一层的硬要求，理由与 `coerce_option` 的 docstring 同一条。
+    `multi` 是选项自己的多选标记（问题级的多选在 `Question.multi_select` 上）；
+    读不到就是 `False`（那是"这个选项没说"），与"问题不是多选"不是同一个问题。
+    """
+    if isinstance(raw, str):
+        return {"label": raw, "description": "", "multi": False}
+    if isinstance(raw, Option):
+        return {"label": raw.label, "description": raw.description, "multi": False}
+    label = ""
+    desc = ""
+    multi = False
+    if isinstance(raw, Mapping):
+        label = str(raw.get("label") or raw.get("text") or raw.get("value") or "")
+        desc = str(raw.get("description") or raw.get("desc") or raw.get("hint") or "")
+        multi = bool(raw.get("multiSelect") or raw.get("multi") or raw.get("multiple"))
+    else:
+        for name in ("label", "text", "value"):
+            got = getattr(raw, name, None)
+            if got is not None:
+                label = str(got)
+                break
+        for name in ("description", "desc", "hint"):
+            got = getattr(raw, name, None)
+            if got is not None:
+                desc = str(got)
+                break
+        multi = bool(getattr(raw, "multiSelect", False) or getattr(raw, "multi", False))
+    if not label and not desc:
+        label = str(raw) if raw is not None else ""
+    return {"label": label, "description": desc, "multi": multi}
+
+
+def question_view(question: Question, *, sid: str = "", index: int | None = None
+                  ) -> dict[str, Any]:
+    """把一条问题读成前端那个 `PendingQuestion` 的形状。
+
+    `index` 是"这条问题在会话事件里的第几条"（`None` = 没给，如实留空而不是编一个 0）。
+    `options` 是 :func:`option_view` 的对象族（不是裸字符串数组）—— 这一点
+    `draft/75 §1.3` 原先写错了，实测以盘上为准，W0 已经把类型改成 `OptionRow[]`。
+    """
+    return {
+        "qid": question.qid,
+        "sid": str(sid),
+        "role": question.role,
+        "ts": question.ts,
+        "timeout_sec": question.timeout_sec,
+        "text": question.text,
+        "options": [option_view(o) for o in question.options],
+        "multi": bool(question.multi_select),
+        "index": index,
+    }
+
+
+def reply_view(event: Mapping[str, Any]) -> dict[str, Any]:
+    """把一条回答事件读成前端那一族的形状（`answer` 是读出来的那句话）。"""
+    selected = tuple(str(x) for x in (event.get("selected") or []))
+    return {"qid": str(event.get("qid") or ""), "answer": reply_text(event),
+            "selected": list(selected), "custom": str(event.get("custom") or ""),
+            "by": str(event.get("by") or "user"), "late": bool(event.get("late"))}
+
+
+def pending_view(session_root: Path | str, *, sid: str | None = None) -> list[dict[str, Any]]:
+    """一个会话里"还没被回答"的问题，逐条读成 `question_view` 的形状。
+
+    与 `pending_questions` 的分工：那个给 Python 调用方（`Question` 对象），
+    这个给读者/前端（JSON 安全的字典，带 `sid` 与事件下标）。两者都在本模块，
+    于是"待答"这条口径只有一个来源。
+    """
+    root = Path(session_root)
+    events = _events(root, sid)
+    index_of: dict[str, int] = {}
+    for i, e in enumerate(events):
+        if e.get("kind") == ASK_KIND:
+            qid = str(e.get("qid") or "")
+            index_of.setdefault(qid, i)
+    out: list[dict[str, Any]] = []
+    for q in pending_questions(root, sid=sid):
+        out.append(question_view(q, sid=str(sid or ""),
+                                 index=index_of.get(q.qid)))
+    return out
+
+
+def workspace_pending_view(session_root: Path | str) -> list[dict[str, Any]]:
+    """全部会话里还没被回答的问题（"待答必须全局可达"那条界面纪律的落点）。
+
+    为什么它不是 `pending_view(root)` 能顶替的：不给 `sid` 时 `read_session` 读的是
+    默认会话（`session_id()`），而界面上要的恰恰是"不挑会话"的那一份 —— 提问
+    正阻塞着某一趟，而那一趟可能不在人当前看的地方（`DESIGN-CONDUCTOR.md` §1.1）。
+    排序按 `(sid, index)`，于是两次调用的顺序稳定（判据按顺序比）。
+    """
+    root = Path(session_root)
+    out: list[dict[str, Any]] = []
+    for sid in session_ids_with_questions(root):
+        out.extend(pending_view(root, sid=sid))
+    out.sort(key=lambda q: (str(q.get("sid") or ""),
+                            q.get("index") if isinstance(q.get("index"), int) else -1))
+    return out
+
+
 def ask_user(session_root: Path | str, *, role: str, question: str,
              options: Any = (), timeout_sec: float | None = None, wait: bool = True,
              sid: str | None = None, qid: str | None = None,
