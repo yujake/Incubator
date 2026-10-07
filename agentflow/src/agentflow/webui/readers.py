@@ -29,12 +29,29 @@
 
 from __future__ import annotations
 
-__all__ = ["MISSING_TYPES", "ROUTES", "type_decls"]
+__all__ = ["CHECKED_TYPES", "HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS",
+           "ROUTES", "UNCHECKED_TYPES", "type_decls"]
 
-#: 本模块要挂到总路由表上的只读端点：`(method, path 模式, WebHandler 的方法名)`。
+#: 本模块要挂到总路由表上的只读端点：`(method, path 模式, 处理器名字)`。
 #: W0 是空子表 —— 快照与一趟详情是 A 线自有的两条（`/api/state`、`/run/{sid}`），
 #: W1 的六个面（`/api/evidence` 等）从这一行开始加。
 ROUTES: tuple[tuple[str, str, str], ...] = ()
+
+#: 处理器的落点（`draft/78 §3` 的接缝之一）：键 = `ROUTES` 第三元素，
+#: 值 = `(handler, params, query)` 签名的函数，`handler` 是 `WebHandler` 实例。
+#: 有了它，B 线加端点只改这个文件，不必碰 A 线的 `server.py`（也不用往
+#: `WebHandler` 上猴补丁）。`webui/routes.py:handler_for()` 会来读它。
+HANDLERS: dict[str, object] = {}
+
+#: 契约判据 C 的两份登记：本模块声明、而且在夹具上真读得出来的接口写进
+#: `CHECKED_TYPES`（判据会逐键比对）；声明了但还没有读数的写进 `UNCHECKED_TYPES`
+#: （`{接口名: 理由}`）。两份都住在本模块里 ⇒ B 线补一个接口时只删自己文件里的一行。
+CHECKED_TYPES: tuple[str, ...] = ()
+UNCHECKED_TYPES: dict[str, str] = {}
+
+#: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
+#: 落地之后必须删掉这一行 —— 判据有一条反向断言专门抓"永不生效的豁免"。
+PENDING_ENDPOINTS: dict[str, str] = {}
 
 #: 本模块还欠的 TS 接口（`(名字, 缺哪个 reader)`）。生成器逐条写成 TODO 注释 ——
 #: 于是"这个类型为什么还没有"在生成物里是看得见的，而不是一份空话。

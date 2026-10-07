@@ -47,7 +47,7 @@ from typing import Sequence
 from .readers import ROUTES as READER_ROUTES
 from .writes import ROUTES as WRITE_ROUTES
 
-__all__ = ["ROUTES", "compose", "match"]
+__all__ = ["ROUTES", "compose", "handler_for", "match"]
 
 
 def compose(own: Sequence[tuple[str, str, str]],
@@ -60,6 +60,31 @@ def compose(own: Sequence[tuple[str, str, str]],
     子表"给同一条公式，看 A 条是否当场红。
     """
     return tuple(own) + tuple(reader) + tuple(write)
+
+
+#: 子表模块放 handler 的约定名字：`HANDLERS: dict[str, Callable]`，键 = 路由表第三元素。
+#: 为什么要有这条接缝：`routes.py` 的第三元素是"`WebHandler` 上的方法名"，而 B/C 两条线
+#: 不许改 A 线的 `server.py` —— 没有这条约定，它们就只能往 `WebHandler` 上猴补丁
+#: （`setattr(WebHandler, ...)`），那会让"谁实现了哪个端点"从源码里看不出来。
+#: 有了它：B/C 在自己的模块里写 `HANDLERS = {"handle_evidence": _handle_evidence}`，
+#: 签名 `(handler, params, query)`，`handler` 就是那个 `WebHandler` 实例。
+_SUBTABLE_MODULES = ("readers", "sse", "writes")
+
+
+def handler_for(name: str):
+    """按名字找子表模块里的 handler（A 线自己的方法由 `server.py` 先用 `getattr` 找）。
+
+    刻意在这里才 import 那三个模块：它们导入期就要 `from .routes import ...`，
+    模块级互相导入会成环；调用期导入既安全又便宜（模块已缓存）。
+    """
+    from . import readers, sse, writes  # noqa: PLC0415 - 见上：避免导入期成环
+
+    for mod in (readers, sse, writes):
+        table = getattr(mod, "HANDLERS", None) or {}
+        fn = table.get(name)
+        if fn is not None:
+            return fn
+    return None
 
 
 #: A 线（自有：页面 + 快照 + 静态资源）那一段子表。
@@ -108,9 +133,17 @@ _COMPILED: tuple[tuple[str, str, re.Pattern[str], str], ...] = tuple(
 )
 
 
-def match(method: str, path: str) -> tuple[str, dict[str, str]] | None:
-    """按 `(method, path)` 查表：命中返回 `(处理器方法名, 占位符取值)`，否则 `None`。"""
-    for m, _pattern, rx, handler in _COMPILED:
+def match(method: str, path: str, *,
+          table: Sequence[tuple[str, str, str]] | None = None) -> tuple[str, dict[str, str]] | None:
+    """按 `(method, path)` 查表：命中返回 `(处理器方法名, 占位符取值)`，否则 `None`。
+
+    `table=None` = 真表（用导入期编译好的 `_COMPILED`，快路径）；
+    给了表就现场编译（判据与 `serve(routes_table=...)` 的可注入点要用它 ——
+    这样"多一条端点的总表"能在不污染模块全局的前提下走一遍真实请求）。
+    """
+    rows = _COMPILED if table is None else tuple(
+        (m, p, _compile(p), h) for m, p, h in table)
+    for m, _pattern, rx, handler in rows:
         if m != method:
             continue
         hit = rx.match(path)

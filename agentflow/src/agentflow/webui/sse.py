@@ -22,8 +22,25 @@ B 线接手时改的是自己这个文件，而不是去改 `routes.py` 或前�
 
 from __future__ import annotations
 
-__all__ = ["EVENT_KINDS"]
+__all__ = ["EVENT_KINDS", "HANDLERS", "PENDING_ENDPOINTS", "ROUTES"]
 
 #: 后端会发的事件种类（C2 契约的后端一侧）。W0 是空的：广播器在 W2。
 #: 填它的时候必须与 `ui/src/sse.ts` 的 `KINDS` 逐字相同，否则 B 条当场红。
 EVENT_KINDS: tuple[str, ...] = ()
+
+#: `GET /api/stream` 的落点（B 线在 W2 填）。`routes.compose` 只拼
+#: `readers.ROUTES + writes.ROUTES` 两段子表 —— 所以 SSE 这条要么进
+#: `readers.ROUTES`（同一个 B 线文件），要么由 A 线主控把它拼进总表；
+#: 这里留 `ROUTES` 是给"SSE 自己一段子表"这个选项用的（见下条）。
+ROUTES: tuple[tuple[str, str, str], ...] = ()
+
+#: 处理器的落点（与 `readers.py`/`writes.py` 同一条约定）：键 = 处理器名字，
+#: 值 = `(handler, params, query)` 签名的函数。`routes.handler_for()` 会来读它。
+HANDLERS: dict[str, object] = {}
+
+#: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
+#: `/api/stream` 现在挂在这里：前端 `api.ts` 已经声明它，后端要等 W2 ——
+#: B 线落地 `GET /api/stream` 时，请把这一行删掉（判据有反向断言抓"永不生效的豁免"）。
+PENDING_ENDPOINTS: dict[str, str] = {
+    "/api/stream": "SSE 流端点在 W2 落地（`sse.ts` 先把订阅侧写好，判据 B 管词表对齐）",
+}

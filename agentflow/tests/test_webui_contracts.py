@@ -35,9 +35,14 @@
 
 from __future__ import annotations
 
+import http.client
 import pathlib
 import re
-from typing import Any
+import shutil
+import tempfile
+import threading
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 import pytest
 
@@ -63,22 +68,57 @@ THEME_CSS = UI / "src" / "theme" / "generated" / "theme.css"
 #: 契约表 C4 的出处（`draft/75 §1.4`）—— 判据 D 直接读那张表，不另抄一份。
 DRAFT_75 = REPO.parent / "draft" / "75-Web端伪代码（逐前端文件·互相对齐）.md"
 
-#: 判据 D 允许的例外：页面里出现、而后端 W0 还没有的端点。
-#: 每一条都要写理由；反向断言（`test_d_the_endpoint_allowlist_is_not_stale`）要求
-#: 后端一旦落地同名路由，就把这条登记删掉 —— 一张永不生效的豁免表会腐烂。
-_ENDPOINT_ALLOWLIST = {
-    "/api/stream": "SSE 流端点在 W2 才落地（sse.ts 先把订阅侧写好，判据 B 管它）",
-}
+#: 判据 D 允许的例外：页面里出现、而后端还没有的端点。
+#: 来源是各子表模块自己的 `PENDING_ENDPOINTS`（B/C 线在自己的文件里登记与撤销），
+#: 主控只在这里读它 —— 这样"撤销一条豁免"不需要改 A 线的判据（`draft/78 §3` 的零交口径）。
+#: 反向断言（`test_d_the_endpoint_allowlist_is_not_stale`）要求：后端一旦落地同名路由，
+#: 那条登记就必须删掉 —— 一张永不生效的豁免表会腐烂。
+def _pending_endpoints() -> dict[str, str]:
+    """把三个子表模块登记的"还没落地的端点"合起来（缺失/写错形状都算空）。"""
+    out: dict[str, str] = {}
+    for name in ("readers", "sse", "writes"):
+        mod = getattr(__import__("agentflow.webui", fromlist=[name]), name, None)
+        table = getattr(mod, "PENDING_ENDPOINTS", None)
+        if isinstance(table, dict):
+            out.update({str(k): str(v) for k, v in table.items()})
+    return out
 
-#: 判据 C 逐条登记的欠账：这些接口在 `types.ts` 里，但本批没有真读数可对账。
-_UNCHECKED_TYPES = {
+
+#: 判据 C 逐条登记的欠账：这些接口在 `types.ts` 里，但没有真读数可对账。
+#: 同样是"模块自己登记"：任何模块里的 `UNCHECKED_TYPES`（dict）都会并进来。
+_W0_UNCHECKED_TYPES = {
     "Checkpoint": "检查点文件由 agent_loop 写；读它的适配器在 W1 的 readers.py",
     "CheckpointSpend": "同上（Checkpoint 的子结构）",
     "WriteResult": "写面的统一回执；生产者（/api/stop · /api/submit · /api/settings）在 W3/W4",
 }
 
-#: 判据 C 受核对的接口（顺序即报错信息的顺序）。
-_CHECKED_TYPES = (
+
+def _unchecked_types() -> dict[str, str]:
+    """判据 C 的欠账名单 = W0 那份 + 三个模块各自的 `UNCHECKED_TYPES`。"""
+    out = dict(_W0_UNCHECKED_TYPES)
+    for name in ("state", "readers", "writes"):
+        mod = getattr(__import__("agentflow.webui", fromlist=[name]), name, None)
+        table = getattr(mod, "UNCHECKED_TYPES", None)
+        if isinstance(table, dict):
+            out.update({str(k): str(v) for k, v in table.items()})
+    return out
+
+
+def _checked_types() -> tuple[str, ...]:
+    """判据 C 受核对的接口 = W0 那 10 个 + 三个模块各自登记的 `CHECKED_TYPES`。"""
+    out = list(_W0_CHECKED_TYPES)
+    for name in ("state", "readers", "writes"):
+        mod = getattr(__import__("agentflow.webui", fromlist=[name]), name, None)
+        out += [str(x) for x in (getattr(mod, "CHECKED_TYPES", ()) or ())]
+    seen: list[str] = []
+    for one in out:
+        if one not in seen:
+            seen.append(one)
+    return tuple(seen)
+
+
+#: 判据 C 受核对的接口（W0 那批；顺序即报错信息的顺序）。
+_W0_CHECKED_TYPES = (
     "OptionRow", "OrphanGroup", "OrphanSummary", "StateSnapshot", "SessionRow",
     "PendingQuestion", "RunRow", "OrphanRow", "LedgerReading", "ReportReading",
 )
@@ -231,16 +271,29 @@ def test_a_the_subtables_really_reach_the_composed_route_table(
 
 
 def test_a_the_seam_names_are_all_in_place() -> None:
-    """正控（接缝）：`draft/78 §3` 点名的三个名字都在各自的模块上。
+    """正控（接缝）：`draft/78 §3` 点名的接缝名字都在各自的模块上，且形状对。
 
-    空元组也算"在"：接缝的用途是让 B/C 线改自己的文件 —— 少一个名字，
-    那两条线就只能回来改 A 的文件。
+    为什么不再断言"`readers.ROUTES` 是空元组 / `readers.type_decls()` 是空串"：
+    那是 W0 当时的形态，而 B/C 线的交付恰恰是往那两个名字里加东西 ——
+    把"还没填"写成断言，等于让下游一动手就红（这条我实测撞过：B 线一落地就必然红）。
+    现在钉的是不随施工阶段变化的形状：子表是三元组、每个名字都真的进了总表、
+    欠账台账不许与已声明的东西自相矛盾。
     """
     from agentflow.webui import readers, sse, state, writes
 
     for mod in (readers, writes, state):
         assert isinstance(getattr(mod, "type_decls")(), str), mod.__name__
-    assert isinstance(readers.ROUTES, tuple) and readers.ROUTES == (), readers.ROUTES
+    for mod in (readers, writes, sse):
+        table = getattr(mod, "ROUTES", None)
+        if table is None:
+            continue
+        assert isinstance(table, tuple), mod.__name__
+        for row in table:
+            assert isinstance(row, tuple) and len(row) == 3, (mod.__name__, row)
+            assert row[0] in ("GET", "POST"), (mod.__name__, row)
+            assert row[2] in routes.handler_names(), (
+                f"{mod.__name__} 的子表登记了 {row[2]}，但它没进总表 "
+                "（`routes.compose` 少拼了一段？）")
     assert isinstance(sse.EVENT_KINDS, tuple), sse.EVENT_KINDS
     assert writes.ROUTES == (("POST", "/answer", "handle_answer"),), writes.ROUTES
     assert writes.ROUTES[0] in routes.ROUTES, "写面子表必须真的进了总表"
@@ -251,10 +304,13 @@ def test_a_the_seam_names_are_all_in_place() -> None:
                                             readers.type_decls(),
                                             writes.type_decls())
     assert state.type_decls().strip(), "state 那一份不该是空的（快照家族的接口在它那）"
-    assert readers.type_decls() == "", "readers 那一份在 W0 是空串占位"
     assert "WriteResult" in writes.type_decls()
-    # 欠账清单住在模块里，不住在生成器里
-    assert readers.MISSING_TYPES and all(len(row) == 2 for row in readers.MISSING_TYPES)
+    # 欠账清单住在模块里，不住在生成器里；而且不许与已声明的东西自相矛盾：
+    # 一个接口若已经出现在本模块的 type_decls() 里，就不该还挂在欠账表上（那是腐烂的登记）。
+    assert all(len(row) == 2 for row in readers.MISSING_TYPES), readers.MISSING_TYPES
+    declared_by_readers = readers.type_decls()
+    stale = [name for name, _why in readers.MISSING_TYPES if f"interface {name}" in declared_by_readers]
+    assert not stale, f"这些接口已经由 readers 声明了，却还挂在 MISSING_TYPES 上：{stale}"
     todo = emit_types._missing_text()
     for name, _why in readers.MISSING_TYPES:
         assert f"// TODO {name}：" in todo, name
@@ -356,7 +412,7 @@ def _type_alignment_problems(interfaces: dict[str, set[str]],
                              backend: dict[str, set[str]]) -> list[str]:
     """`types.ts` 的键集合 vs 后端真读出来的键集合（含两份名单的反向断言）。"""
     problems: list[str] = []
-    for name in _CHECKED_TYPES:
+    for name in _checked_types():
         if name not in interfaces:
             problems.append(f"types.ts 里没有接口 {name}（C3 契约要求它）")
             continue
@@ -370,10 +426,10 @@ def _type_alignment_problems(interfaces: dict[str, set[str]],
         if missing:
             problems.append(f"{name}：后端有而 types.ts 没有的键 {missing}")
     for name in sorted(interfaces):
-        if name not in _CHECKED_TYPES and name not in _UNCHECKED_TYPES:
+        if name not in _checked_types() and name not in _unchecked_types():
             problems.append(f"{name}：既不在受核对名单、也不在欠账名单 —— "
                             "前端凭空多了一个没人核的接口")
-    for name in sorted(_UNCHECKED_TYPES):
+    for name in sorted(_unchecked_types()):
         if name in backend:
             problems.append(f"{name}：它登记为「本批无读数」，而夹具上竟读出了它的键 ⇒ "
                             "登记过期，请把它挪进受核对名单")
@@ -443,7 +499,7 @@ def test_c_the_generated_types_match_what_the_backend_really_reads(
     assert len(interfaces) >= 10, f"只解析出 {len(interfaces)} 个接口 ⇒ 解析器可能失配"
     root = _fixture_workspace(tmp_path)
     backend = _backend_keys(root)
-    missing_readings = [n for n in _CHECKED_TYPES if n not in backend]
+    missing_readings = [n for n in _checked_types() if n not in backend]
     assert not missing_readings, f"夹具没造出这些读数：{missing_readings}"
     assert _type_alignment_problems(interfaces, backend) == [], (
         _type_alignment_problems(interfaces, backend))
@@ -482,7 +538,7 @@ def test_c_the_unchecked_registry_is_not_stale(tmp_path: pathlib.Path) -> None:
     """
     interfaces = _parse_interfaces(_ui_text(TYPES_TS))
     backend = _backend_keys(_fixture_workspace(tmp_path))
-    for name in _UNCHECKED_TYPES:
+    for name in _unchecked_types():
         assert name not in backend, (
             f"{name} 登记为「本批无读数」，但夹具上读出了它的键 ⇒ 请把它挪进受核对名单")
         assert name in interfaces, f"{name} 在欠账名单里，却不在 types.ts 里"
@@ -523,7 +579,7 @@ def _route_alignment_problems(routes_in_main: set[str], table: set[str],
         problems.append(f"C4 表里有而 main.tsx 没接的路由：{missing}")
     unknown_endpoints = sorted(e for e in endpoints_used
                                if e not in set(routes.api_paths())
-                               and e not in _ENDPOINT_ALLOWLIST)
+                               and e not in _pending_endpoints())
     if unknown_endpoints:
         problems.append(f"页面用到了后端没有的端点：{unknown_endpoints}")
     unknown_kinds = sorted(kinds_used - known_kinds)
@@ -587,11 +643,12 @@ def test_d_negative_control_catches_an_unknown_endpoint_and_route() -> None:
 def test_d_the_endpoint_allowlist_is_not_stale() -> None:
     """反向断言（D 的例外表）：登记的例外一旦在后端落地，就必须从表里删掉。"""
     back = set(routes.api_paths())
-    stale = sorted(p for p in _ENDPOINT_ALLOWLIST if p in back)
+    allow = _pending_endpoints()
+    stale = sorted(p for p in allow if p in back)
     assert not stale, (
         "这些端点已被 ROUTES 实现，却还挂在 D 的例外表里（一张永不生效的豁免表会腐烂）："
         + "、".join(stale))
-    for path, why in _ENDPOINT_ALLOWLIST.items():
+    for path, why in _pending_endpoints().items():
         assert why.strip(), f"{path} 的例外没有写理由"
 
 
@@ -674,15 +731,93 @@ def test_the_public_face_survived_the_split() -> None:
 
 
 def test_the_route_table_handlers_all_exist() -> None:
-    """正控（路由表）：`ROUTES` 每一条登记的处理方法真的在 `WebHandler` 上。
+    """正控（路由表）：`ROUTES` 每一条登记的处理器真的存在。
 
-    表驱动的好处就在这里：写错一个方法名，这条判据当场说清是哪一条，
-    而不是等某次请求 500。
+    表驱动的好处就在这里：写错一个名字，这条判据当场说清是哪一条，而不是等某次请求 500。
+    两种落点都算存在（`draft/78 §3` 的接缝）：A 线自己的在 `WebHandler` 上，
+    B/C 线的在各自子表模块的 `HANDLERS` 里 —— 后者让那两条线不必改 `server.py`。
     """
-    missing = [h for h in routes.handler_names() if not hasattr(W.WebHandler, h)]
-    assert not missing, f"ROUTES 登记了 WebHandler 上没有的方法：{missing}"
+    missing = [h for h in routes.handler_names()
+               if not hasattr(W.WebHandler, h) and routes.handler_for(h) is None]
+    assert not missing, f"ROUTES 登记了既不在 WebHandler 上、也没在子表 HANDLERS 里的处理器：{missing}"
     assert set(routes.methods()) <= {"GET", "POST"}, routes.methods()
     assert any(m == "POST" for m in routes.methods()), "表里一条 POST 都没有 ⇒ 表结构变了"
+
+
+def test_a_subtable_handler_placed_in_its_own_module_is_actually_called() -> None:
+    """正控（接缝真接通）：往子表模块的 `HANDLERS` 里放一个处理器 ⇒ 请求真的进它。
+
+    为什么要有这条：`HANDLERS` 只是约定名字；若 `server._invoke` 没去读它，那条约定
+    就是假的 —— B/C 线会以为"放进去就行"，而请求会 500。所以这里用真实 HTTP 走一遍：
+    ① 没登记时同一条路径是 404（反例，证明下面的 200 说明得了问题）；
+    ② 登记进 `sse.HANDLERS` 并把它那条路由喂进总表 ⇒ 200 且 JSON 里带着路径参数。
+    表通过 `serve(routes_table=...)` 注入，不改模块全局 —— 改全局的判据会污染别的用例
+    （这一点我写第一版时踩过，留在这里当注脚）。
+    """
+    from agentflow.webui import sse
+
+    seen: list[tuple[str, str]] = []
+    original = dict(getattr(sse, "HANDLERS", {}) or {})
+
+    def _probe(handler, params, query):  # noqa: ANN001 - 与子表 handler 签名一致
+        seen.append((params.get("sid", ""), handler.root.name))
+        handler._json(200, {"ok": True, "tri": "computed", "reason": "probe",
+                            "id": params.get("sid", "")})
+
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="webui-seam-"))
+    with _sub_server(tmp) as base:
+        code, _body, _ctype, _cache = _sub_get(base, "/api/seam-probe/xyz")
+        assert code == 404, (code, "该路径本来就不存在 —— 否则下面的 200 说明不了什么")
+
+    try:
+        sse.HANDLERS = dict(original, **{"handle_probe_seam": _probe})
+        table = routes.compose(tuple(routes.ROUTES),
+                               (("GET", "/api/seam-probe/{sid}", "handle_probe_seam"),), ())
+        with _sub_server(tmp, routes_table=table) as base:
+            code, body, ctype, _cache = _sub_get(base, "/api/seam-probe/xyz")
+            assert code == 200, (code, body)
+            assert ctype.startswith("application/json"), ctype
+            assert '"xyz"' in body, body
+            assert seen == [("xyz", tmp.name)], seen
+        # 路由表登记了名字、但子表没登记 handler ⇒ 500 且名字出现在正文里
+        # （表与实现的漂移必须吵，不许静默 404）
+        sse.HANDLERS = original
+        with _sub_server(tmp, routes_table=table) as base:
+            code, body, _ctype, _cache = _sub_get(base, "/api/seam-probe/xyz")
+            assert code == 500, (code, body)
+            assert "handle_probe_seam" in body, body
+    finally:
+        sse.HANDLERS = original
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+@contextmanager
+def _sub_server(root: pathlib.Path,
+                routes_table: tuple[tuple[str, str, str], ...] | None = None) -> Iterator[str]:
+    """在临时端口上起一个服务（接缝判据专用；`routes_table` 可注入）。"""
+    srv = W.serve(root, host="127.0.0.1", port=0, csrf_token="seamtoken0123456789",
+                  routes_table=routes_table)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"{srv.server_address[0]}:{srv.server_address[1]}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=5.0)
+
+
+def _sub_get(base: str, path: str) -> tuple[int, str, str, str]:
+    """一次 GET：返回 `(状态码, 正文, content-type, cache-control)`。"""
+    conn = http.client.HTTPConnection(base, timeout=10)
+    try:
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        return (resp.status, resp.read().decode("utf-8", errors="replace"),
+                resp.getheader("Content-Type") or "",
+                resp.getheader("Cache-Control") or "")
+    finally:
+        conn.close()
 
 
 def test_the_two_cli_switches_exist_and_say_they_do_nothing_yet() -> None:

@@ -35,7 +35,20 @@ from .. import sessions as SS
 from .. import userio as U
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
-__all__ = ["ROUTES", "answer", "type_decls"]
+__all__ = ["HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
+           "UNCHECKED_TYPES", "answer", "type_decls"]
+
+#: 处理器的落点（与 `readers.py`/`sse.py` 同一条约定）：键 = `ROUTES` 第三元素，
+#: 值 = `(handler, params, query)` 签名的函数、`handler` 是 `WebHandler` 实例。
+#: `/answer` 今天由 `WebHandler` 自己的方法实现（W0 从单文件搬过来的那一支），
+#: C 线新加的写端点把 handler 放这里 —— 于是不必去改 A 线的 `server.py`。
+HANDLERS: dict[str, object] = {}
+
+#: 契约判据 C 的欠账登记（`{接口名: 理由}`）：本模块声明、但夹具上还读不出键的接口。
+UNCHECKED_TYPES: dict[str, str] = {}
+
+#: 契约判据 D 的例外面（`{端点: 理由}`）：声明了但后端还没落地的写端点。落地后删掉。
+PENDING_ENDPOINTS: dict[str, str] = {}
 
 #: 本模块挂到总路由表上的写端点：`(method, path 模式, WebHandler 的方法名)`。
 #: 总表是 `webui/routes.py` 拼出来的（`自有 + READER_ROUTES + WRITE_ROUTES`），

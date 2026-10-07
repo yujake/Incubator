@@ -48,6 +48,7 @@ from typing import Iterator
 import pytest
 
 from agentflow import webui as W
+from agentflow.webui import server
 
 #: 交付包根（`agentflow/`）。
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -311,9 +312,49 @@ def test_the_built_assets_are_self_consistent_if_they_are_on_disk() -> None:
     assert refs, "产物里的 index.html 没有引用任何 /static/ 资源 ⇒ 判据没接上"
     missing = [r for r in refs if not (STATIC / r[len("/static/"):]).is_file()]
     assert not missing, f"index.html 引用了不存在的资源：{missing}"
-    # 带哈希的产物名：名字里要有内容哈希，否则 immutable 缓存是错的
-    hashed = [r for r in refs if re.search(r"\.[0-9a-fA-F]{8,}\.", r)]
-    assert hashed, f"产物里没有一个带哈希的资源名：{refs}"
+    # 带哈希的产物名：名字里要有内容哈希，否则 immutable 缓存是错的。
+    # 字母表与服务端同一个正则（`server._HASHED`），不在这里另写一份 ——
+    # 曾经这里写的是十六进制、而 Vite 5 的 `[hash]` 是 base64url，于是"判据绿、
+    # 产品把带哈希的资源发成 no-store"（2026-10-07 用真产物抓到的真缺陷）。
+    hashed = [r for r in refs if server._HASHED.search(r)]
+    assert hashed, f"产物里没有一个带哈希的资源名（服务端正则也认不出）：{refs}"
+    # 而且服务端必须真的会给它们 immutable：拿真实文件名问一次缓存策略
+    with _server(REPO, STATIC) as base:
+        for ref in hashed:
+            code, _body, _ctype, cache = _get(base, ref)
+            assert code == 200, (ref, code)
+            assert "immutable" in cache, f"真实产物 {ref} 没拿到 immutable，而是 {cache!r}"
+
+
+def test_the_hash_pattern_matches_the_real_built_asset_names() -> None:
+    """正控（正则与产品对齐）：服务端认哈希的那条正则，对盘上真产物成立。
+
+    这条是把"产品"与"判据"钉在一起的钉子：任何一边换了命名形态（Vite 的 hash 长度 /
+    字母表），这里就会红，而不是像 2026-10-07 那样两边各自亮绿、真实缓存策略悄悄失效。
+    """
+    files = sorted(p.name for p in STATIC.rglob("*") if p.is_file()) if STATIC.is_dir() else []
+    if not files:
+        pytest.skip("构建产物不在盘上 —— 这条判据在产物入库后自动生效")
+    assets = [n for n in files if n != "index.html"]
+    assert assets, f"产物里只有外壳、没有资源文件：{files}"
+    unmatched = [n for n in assets if not server._HASHED.search(n)]
+    assert not unmatched, f"这些真实产物名没被哈希正则认出（immutable 会失效）：{unmatched}"
+
+
+def test_the_hash_pattern_does_not_match_unhashed_names() -> None:
+    """负控（反例）：不带内容哈希的名字不许被认成带哈希。
+
+    为什么必须有这条：把字母表放宽就能把上一条变绿 —— 那样"改名即失效"的前提就没了，
+    任何 `app.vendor.js` 都会被 immutable 缓存一年。四条反例逐条钉住：
+    """
+    must_not = ["index.html", "main.js", "app.min.js", "theme.dark.css", "index.module.css",
+                "assets/app.js", "assets/index.esm.js"]
+    bad = [n for n in must_not if server._HASHED.search(n)]
+    assert not bad, f"这些名字不该被判成带哈希（会让它们被永久缓存）：{bad}"
+    must = ["index.Bpmfy4ek.js", "index.DQaZOKq-.css", "main.abcdef123456.js",
+            "app.0123456789ab.css"]
+    miss = [n for n in must if not server._HASHED.search(n)]
+    assert not miss, f"这些名字应当被判成带哈希：{miss}"
 
 
 def test_the_package_static_dir_is_what_the_static_route_serves() -> None:

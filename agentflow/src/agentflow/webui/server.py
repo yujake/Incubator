@@ -98,8 +98,14 @@ _CONTENT_TYPES = {
 }
 
 #: 带内容哈希的文件名（`assets/main.<hash>.js`）⇒ 可以 immutable 缓存。
-#: 判据是"文件名里有一段 8 位以上的十六进制"，与 vite 的 `[hash]` 输出形态对齐。
-_HASHED = re.compile(r"\.[0-9a-fA-F]{8,}\.")
+#: 判据是"点号之间夹着一段 8 位以上的哈希"，字母表按 Vite 5 的 `[hash]` 实测形态取
+#: —— 它是 base64url（`assets/index.Bpmfy4ek.js`），不是十六进制。原先这里写的是
+#: `[0-9a-fA-F]{8,}` 并声称"与 vite 的 `[hash]` 对齐"，那句话与盘上产物不符：真实产物
+#: 一个都匹配不上 ⇒ 带哈希的资源全被发成 `no-store`，immutable 这条设计静默失效，
+#: 而当时的判据用的是自造的十六进制夹具名，所以照样亮绿（测试与产品各说各话）。
+#: 现在同时认两种字母表，并由 `tests/test_webui_static.py` 用盘上真产物钉住
+#: （`test_the_hash_pattern_matches_the_real_built_asset_names` + 反例负控）。
+_HASHED = re.compile(r"\.[A-Za-z0-9_-]{8,}\.")
 
 
 def default_static_root() -> Path:
@@ -125,6 +131,10 @@ class WebHandler(BaseHTTPRequestHandler):
     #: 两个开关（裁定 C2 / E1）：W0 只解析并透传，W3/W4 才真正判它们。
     allow_writes: bool = False
     settings_write: bool = True
+    #: 路由表可注入（`serve(routes_table=...)`）：空元组 = 用 `routes.ROUTES`（缺省）。
+    #: 为什么要有这个注入点：判据要拿"多了一条子表的表"走一遍真实请求，证明接缝真的接通；
+    #: 有了它就不必去改模块全局（改全局的判据会污染别的用例）。
+    routes_table: tuple = ()
 
     #: 本次请求解出来的路径（`_parse` 填；未知路由那一条要用它说清"是什么没找到"）。
     _path: str = ""
@@ -211,12 +221,12 @@ class WebHandler(BaseHTTPRequestHandler):
                             "<p>口令不对或没给（<code>?token=</code> 或 "
                             "<code>Authorization: Bearer</code>）。</p></body></html>")
             return
-        hit = routes.match("GET", path)
+        hit = routes.match("GET", path, table=self.routes_table or None)
         if hit is None:
             self.handle_unknown({}, query)
             return
         name, params = hit
-        getattr(self, name)(params, query)
+        self._invoke(name, params, query)
 
     # ------------------------------------------------------------ POST
     def do_POST(self) -> None:  # noqa: N802 - 基类签名
@@ -226,7 +236,7 @@ class WebHandler(BaseHTTPRequestHandler):
             self._html(401, "<!DOCTYPE html><html><body><h1>401</h1>"
                             "<p>口令不对或没给。</p></body></html>")
             return
-        hit = routes.match("POST", path)
+        hit = routes.match("POST", path, table=self.routes_table or None)
         if hit is None:
             if path.startswith("/api/"):
                 # 与 GET 同一条口径（裁定 Q1）：`/api/*` 未知一律 JSON 404，
@@ -239,7 +249,28 @@ class WebHandler(BaseHTTPRequestHandler):
                                   _not_found(state, f"POST 没有路由：{path}")))
             return
         name, params = hit
-        getattr(self, name)(params, query)
+        self._invoke(name, params, query)
+
+    def _invoke(self, name: str, params: Mapping[str, str],
+                query: Mapping[str, Sequence[str]]) -> None:
+        """把一条路由交给它的 handler 执行。
+
+        两种落点（`draft/78 §3` 的接缝）：
+        - A 线自己的：`WebHandler` 上的方法（`getattr` 找得到）；
+        - B/C 线的：各子表模块里的 `HANDLERS[name]`（签名 `(handler, params, query)`，
+          第一个参数就是这个句柄）—— 于是那两条线加端点只改自己的模块，不必碰本文件。
+        两边都没有 ⇒ 那是路由表与实现的漂移，回 500 并把名字说清（表驱动不该静默 404）。
+        """
+        local = getattr(self, name, None)
+        if callable(local):
+            local(params, query)
+            return
+        sub = routes.handler_for(name)
+        if sub is not None:
+            sub(self, params, query)
+            return
+        self._send(500, f"500 路由表登记了没有实现的处理器：{name}\n".encode("utf-8"),
+                   "text/plain; charset=utf-8")
 
     def do_HEAD(self) -> None:  # noqa: N802 - 基类签名
         """HEAD 按 GET 处理（`_send` 不写正文），方便探活。"""
@@ -356,7 +387,8 @@ class WebHandler(BaseHTTPRequestHandler):
 def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
           token: str = "", allow_writes: bool = False, settings_write: bool = True,
           static_root: str | Path | None = None,
-          csrf_token: str = "") -> ThreadingHTTPServer:
+          csrf_token: str = "",
+          routes_table: Sequence[tuple[str, str, str]] | None = None) -> ThreadingHTTPServer:
     """建好服务器并返回（不调 `serve_forever`）。
 
     测试用 `port=0` 起随机端口：返回后读 `srv.server_address[1]` 拿真实端口，
@@ -374,6 +406,7 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
         else default_static_root(),
         "csrf_token": csrf_token or secrets.token_hex(16),
         "allow_writes": bool(allow_writes), "settings_write": bool(settings_write),
+        "routes_table": tuple(routes_table) if routes_table is not None else (),
     })
     srv = ThreadingHTTPServer((host, port), handler)
     srv.daemon_threads = True
