@@ -1216,7 +1216,11 @@ _REF_EXEMPTED_EXPECTED_FILES = (
 #: 每条后面的括注是它属于哪一类，不是逐处行号（行号易失）。
 _REF_KNOWN_MENTION_TOKENS = (
     # —— 字符串形式的字典/诊断字段键：代码里以字符串字面量出现，符号面不存在 ——
-    "_keys",                      # 事件行诊断键（`agent_a` 写入，多处注释在解释它）
+    # —— 2026-10-07 Web 批：`_keys` 从本表退出（同一条等额纪律）——
+    # 它原登记为"事件行诊断键（`agent_a` 写入，多处注释在解释它）"。本轮读数：
+    # 它已不满足"真符号出现 ≤ 1 次"（`temp/_mention_diff.py` 按判据自己的公式算出的
+    # `mentioned_only` 30 条与本表 31 条的差集恰好只有它）⇒ 按"表里过期的条目要删掉"删掉。
+    # 判据本体一个字没动：仍是"仓里只有文本提及的 token 必须与这张表逐条相等"。
     "_quote_check",               # 每行诊断字段（同上：留痕叙述）
     "_lease_expired",             # 行内键（`interactions.py` 用 r.get("_lease_expired") 读）
     "_conflict_check",            # "没检查"相关字段名（同族叙述）

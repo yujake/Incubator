@@ -307,6 +307,7 @@ desktop.ini
 !/temp/_live_readings_census.py
 !/temp/_m6_verify_verbatim.py
 !/temp/_m8_probe_lean.py
+!/temp/_mention_diff.py
 !/temp/_migrate_webui_cites.py
 !/temp/_migrate_webui_cites_manual.py
 !/temp/_negctl_hash.py
