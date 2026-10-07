@@ -22,13 +22,21 @@
   （裁定 Q1：`/api/*` 未知 ⇒ JSON 404；其余未知 ⇒ 有 `index.html` 就吐它，
   否则沿用今天的 404 页），`POST` 未知 ⇒ 404。
 
+## 这张表由三段拼起来（`draft/78 §3` 的接缝）
+
+:data:`ROUTES` 是 `_OWN`（A 线自有）＋ `readers.ROUTES`（B 线的只读面）＋
+`writes.ROUTES`（C 线的写面）。三条零交线各自往自己的子表里加端点，本文件不必被
+别人碰 —— 反过来，本文件里也不许再出现"别人的端点"。
+
 ## 本批（W0）的表
 
-后端今天就有的四个端点 + 一个静态前缀。`draft/75 §1.1` 的 C1 表里另外七个
-（`/api/run/{sid}` 的 JSON 形态、`/api/evidence`、`/api/artifacts`、`/api/acceptance`、
-`/api/machine`、`/api/stop`、`/api/submit`、`/api/settings`、`/api/stream`）分别在
-W1/W2/W3 落地 —— 它们不在这张表里，因为"前端声明了而后端没有"正是 A 条要抓的
-漂移（反过来也一样：这一张表里有的，`api.ts` 就必须有）。
+A 线自有五条（`/`、`/index.html`、`/run/{sid}`、`/api/state`、`/static/{file...}`）
+＋ C 线的一条既有写路径（`POST /answer`，W0 就由 `writes.ROUTES` 提供）。
+`draft/75 §1.1` 的 C1 表里另外那些（`/api/run/{sid}` 的 JSON 形态、`/api/evidence`、
+`/api/artifacts`、`/api/acceptance`、`/api/machine`、`/api/stop`、`/api/submit`、
+`/api/settings`、`/api/stream`）分别在 W1/W2/W3 由各自那一行落地 —— 它们不在这张表里，
+因为"前端声明了而后端没有"正是 A 条要抓的漂移（反过来也一样：这一张表里有的，
+`api.ts` 就必须有）。
 """
 
 from __future__ import annotations
@@ -36,10 +44,26 @@ from __future__ import annotations
 import re
 from typing import Sequence
 
-__all__ = ["ROUTES", "match"]
+from .readers import ROUTES as READER_ROUTES
+from .writes import ROUTES as WRITE_ROUTES
 
-#: 路由表本体：`(method, path 模式, WebHandler 上的方法名)`。
-ROUTES: tuple[tuple[str, str, str], ...] = (
+__all__ = ["ROUTES", "compose", "match"]
+
+
+def compose(own: Sequence[tuple[str, str, str]],
+            reader: Sequence[tuple[str, str, str]],
+            write: Sequence[tuple[str, str, str]]) -> tuple[tuple[str, str, str], ...]:
+    """把三段子表拼成总表（与导入期用的同一条公式）。
+
+    为什么把它写成一个函数：判据要证明"子表真的被拼进去了"，而不是只在导入的那一刻
+    拼过一次、之后谁把子表换掉都没人知道。有了它，判据可以喂一份"多了一条端点的
+    子表"给同一条公式，看 A 条是否当场红。
+    """
+    return tuple(own) + tuple(reader) + tuple(write)
+
+
+#: A 线（自有：页面 + 快照 + 静态资源）那一段子表。
+_OWN: tuple[tuple[str, str, str], ...] = (
     # --- 页面（服务端渲染的旧壳；裁定 P1：逐面迁到 SPA 之后删一个）
     ("GET", "/", "handle_root"),
     ("GET", "/index.html", "handle_root"),
@@ -48,9 +72,13 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/state", "handle_state"),
     # --- 静态资源（前端构建产物：裁定 B1 的落点）
     ("GET", "/static/{file...}", "handle_static"),
-    # --- 写面（今天只有一个既有入口：POST /answer）
-    ("POST", "/answer", "handle_answer"),
 )
+
+#: 总表 = 自有 + 只读面（B 线的 `readers.ROUTES`）+ 写面（C 线的 `writes.ROUTES`）。
+#: 这条接缝是 `draft/78 §3` 的三条之一：三条零交线各自往自己的子表里加端点，
+#: 于是"加一条路由"永远不会变成"两条线改同一个文件"。
+#: 拼接发生在导入期，所以子表必须在导入期就存在（空元组也算存在）。
+ROUTES: tuple[tuple[str, str, str], ...] = compose(_OWN, READER_ROUTES, WRITE_ROUTES)
 
 #: `{name}` 与末尾的 `{name...}`（后者吃掉剩余路径，可含 `/`）。
 _SEGMENT = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -91,20 +119,26 @@ def match(method: str, path: str) -> tuple[str, dict[str, str]] | None:
     return None
 
 
-def patterns(method: str | None = None) -> tuple[str, ...]:
-    """表里的路径模式（给判据用；`method=None` 表示全部）。"""
-    return tuple(p for m, p, _h in ROUTES if method is None or m == method)
+def patterns(method: str | None = None,
+             table: Sequence[tuple[str, str, str]] | None = None) -> tuple[str, ...]:
+    """表里的路径模式（给判据用；`method=None` 表示全部，`table=None` 表示真表）。"""
+    rows = ROUTES if table is None else tuple(table)
+    return tuple(p for m, p, _h in rows if method is None or m == method)
 
 
-def api_paths() -> tuple[str, ...]:
+def api_paths(table: Sequence[tuple[str, str, str]] | None = None) -> tuple[str, ...]:
     """契约判据 A 比对的那一栏：`/api/*` 与 `/answer` 的路径模式。
 
     为什么把 `/`、`/run/{sid}`、`/static/{file...}` 排除在外：C1 那张端点表里
     只有 JSON 端点与写端点（`/api/*` 与 `/answer`），页面与静态前缀不是"端点"，
     它们是路由契约（C4）与静态路由那两条判据的地盘。这里是显式登记的口径，
     不是"找不到就算了"。
+
+    `table` 可换（缺省 = 真表）：接缝那条负控要拿"多了一条子表的总表"喂给同一条
+    比对逻辑，看它是否当场红。
     """
-    return tuple(p for p in patterns() if p.startswith("/api/") or p == "/answer")
+    return tuple(p for p in patterns(table=table)
+                 if p.startswith("/api/") or p == "/answer")
 
 
 def methods() -> tuple[str, ...]:

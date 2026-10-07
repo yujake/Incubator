@@ -35,7 +35,43 @@ from .. import sessions as SS
 from .. import userio as U
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
-__all__ = ["answer"]
+__all__ = ["ROUTES", "answer", "type_decls"]
+
+#: 本模块挂到总路由表上的写端点：`(method, path 模式, WebHandler 的方法名)`。
+#: 总表是 `webui/routes.py` 拼出来的（`自有 + READER_ROUTES + WRITE_ROUTES`），
+#: 所以 C 线在 W3 加 `/api/stop` / `/api/submit`、W4 加 `/api/settings` 时，
+#: 改的是这一行，不用去碰 A 线的文件（`draft/78 §3` 的接缝）。
+ROUTES: tuple[tuple[str, str, str], ...] = (
+    ("POST", "/answer", "handle_answer"),
+)
+
+#: 本模块还欠的 TS 接口（`(名字, 为什么还没有)`）。写面的三态回执在 W3/W4 才有
+#: 生产者，所以本批不生成它的接口 —— 生成器把这一行写成 `types.ts` 里的 TODO。
+MISSING_TYPES: tuple[tuple[str, str], ...] = ()
+
+#: 写面统一回执的字段表（`(TS 名字, 后端出处, ((字段, TS 类型), ...))`）。
+#: `id` / `extra` 是"有就带上"的两栏，所以写成可选。
+_TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
+    ("WriteResult",
+     "写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是"
+     "「有就带上」的两栏，所以写成可选）",
+     (("ok", "boolean"), ("tri", "Tri"), ("reason", "string"),
+      ("id?", "string"), ("extra?", "Record<string, unknown>"))),
+)
+
+
+def type_decls() -> str:
+    """本模块（写面）那一段 TS 声明文本。
+
+    形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
+    各自的 `type_decls()` 拼成 `ui/src/types.ts`。C 线加写端点时，回执接口加在这里。
+    """
+    parts: list[str] = []
+    for name, source, fields in _TS_TYPES:
+        lines = [f"/** 出处：{source}。 */", f"export interface {name} {{"]
+        lines += [f"  {field}: {ts};" for field, ts in fields]
+        parts.append("\n".join(lines + ["}"]) + "\n")
+    return "\n".join(parts)
 
 
 def answer(root: Path, form: Mapping[str, Sequence[str]]) -> tuple[int, str, str]:

@@ -18,8 +18,8 @@
 
 ## 为什么负控要单独写成一条
 
-"改前能红"不是一句形容词：每条判据都必须有一个输入，让它在**不变更盘上任何
-文件**的前提下报出问题。做法与 `tests/test_reading_map.py` 的负控同族 ——
+"改前能红"不是一句形容词：每条判据都必须有一个输入，让它在不变更盘上任何
+文件的前提下报出问题。做法与 `tests/test_reading_map.py` 的负控同族 ——
 把检查逻辑抽成纯函数（`_endpoint_alignment_problems` 等），正控喂真文件、
 负控喂改坏的字符串。少了负控，正则哪天失配（比如表格换了写法）判据会以
 "一条都没解析到"的形态静默变绿。
@@ -35,13 +35,9 @@
 
 from __future__ import annotations
 
-import http.client
-import json
 import pathlib
 import re
-import threading
-from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 import pytest
 
@@ -206,17 +202,79 @@ def test_a_comment_mentions_are_not_counted_as_endpoints() -> None:
     assert _endpoint_literals(doc) == {"/answer"}, _endpoint_literals(doc)
 
 
+def test_a_the_subtables_really_reach_the_composed_route_table(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """负控（接缝）：往 `readers.ROUTES` 里塞一个 api.ts 没有的路径 ⇒ 必红。
+
+    `draft/78 §3` 的三条接缝要求总表是 `自有 + READER_ROUTES + WRITE_ROUTES` 拼出来的。
+    这条负控证明拼接是真的（子表的改动会进总表、A 条会当场点出来），而不是只在导入
+    那一刻拼过一次就再没人管 —— 也证明 B/C 线加端点时改的是自己的文件。
+    """
+    from agentflow.webui import readers, writes
+
+    front = _endpoint_literals(_ui_text(API_TS))
+    assert _endpoint_alignment_problems(front, set(routes.api_paths())) == []
+
+    ghost = (("GET", "/api/ghost", "handle_ghost"),)
+    composed = routes.compose(routes._OWN, tuple(readers.ROUTES) + ghost,
+                              tuple(writes.ROUTES))
+    problems = _endpoint_alignment_problems(front, set(routes.api_paths(composed)))
+    assert problems and "ghost" in problems[0], problems
+
+    # 同一条公式把真表也拼得出来（否则上面那条负控实验的不是真公式）
+    assert routes.compose(routes._OWN, tuple(readers.ROUTES),
+                          tuple(writes.ROUTES)) == routes.ROUTES
+    # 真表不受影响：`/api/ghost` 只在实验里存在
+    assert "/api/ghost" not in routes.patterns()
+    monkeypatch.setattr(routes, "ROUTES", composed)
+    assert "/api/ghost" in routes.patterns(), "换掉总表之后表里就该有它"
+
+
+def test_a_the_seam_names_are_all_in_place() -> None:
+    """正控（接缝）：`draft/78 §3` 点名的三个名字都在各自的模块上。
+
+    空元组也算"在"：接缝的用途是让 B/C 线改自己的文件 —— 少一个名字，
+    那两条线就只能回来改 A 的文件。
+    """
+    from agentflow.webui import readers, sse, state, writes
+
+    for mod in (readers, writes, state):
+        assert isinstance(getattr(mod, "type_decls")(), str), mod.__name__
+    assert isinstance(readers.ROUTES, tuple) and readers.ROUTES == (), readers.ROUTES
+    assert isinstance(sse.EVENT_KINDS, tuple), sse.EVENT_KINDS
+    assert writes.ROUTES == (("POST", "/answer", "handle_answer"),), writes.ROUTES
+    assert writes.ROUTES[0] in routes.ROUTES, "写面子表必须真的进了总表"
+    # 生成物确实由三张子表拼出来（而不是谁在生成器里另写了一份清单）
+    from agentflow.web import emit_types
+
+    assert emit_types._subtable_texts() == (state.type_decls(),
+                                            readers.type_decls(),
+                                            writes.type_decls())
+    assert state.type_decls().strip(), "state 那一份不该是空的（快照家族的接口在它那）"
+    assert readers.type_decls() == "", "readers 那一份在 W0 是空串占位"
+    assert "WriteResult" in writes.type_decls()
+    # 欠账清单住在模块里，不住在生成器里
+    assert readers.MISSING_TYPES and all(len(row) == 2 for row in readers.MISSING_TYPES)
+    todo = emit_types._missing_text()
+    for name, _why in readers.MISSING_TYPES:
+        assert f"// TODO {name}：" in todo, name
+
+
 # ====================================================================== B 事件对齐
 def _backend_event_kinds() -> tuple[str, ...] | None:
-    """后端的事件词表（W2 落在 `webui/sse.py`；本批还没有这个模块 ⇒ None）。"""
+    """后端的事件词表（`webui/sse.py` 的 `EVENT_KINDS`）。
+
+    W0 的实况：那个模块在（接缝先落地），但词表还是空的 —— W2 才填广播器与词表。
+    "模块不在"与"词表还是空的"都返回 None，由调用方 skip；区别只写在 skip 理由里。
+    """
     import importlib
 
     try:
         mod = importlib.import_module("agentflow.webui.sse")
     except ImportError:
         return None
-    kinds = getattr(mod, "EVENT_KINDS", None)
-    return tuple(kinds) if kinds else None
+    kinds = tuple(getattr(mod, "EVENT_KINDS", ()) or ())
+    return kinds or None
 
 
 def _frontend_event_kinds(text: str) -> set[str]:
@@ -242,15 +300,16 @@ def _event_alignment_problems(front: set[str], back: tuple[str, ...]) -> list[st
 def test_b_the_frontend_registers_exactly_the_backend_event_kinds() -> None:
     """正控（B 事件对齐）：`sse.ts` 的 kind 集合 == 后端 `EVENT_KINDS`。
 
-    W0 的实况：后端那一半（`webui/sse.py`）要到 W2 才落地 ⇒ 这条 skip，
+    W0 的实况：后端那一半（`webui/sse.py` 的词表与广播器）要到 W2 才填 ⇒ 这条 skip，
     理由写在这里而不是静默算过。
     """
     front = _frontend_event_kinds(_ui_text(SSE_TS))
     assert front, "sse.ts 里 KINDS 一个取值都没解析到 ⇒ 判据没接上"
     back = _backend_event_kinds()
     if back is None:
-        pytest.skip("后端 webui/sse.py 的 EVENT_KINDS 尚未落地（W2）—— "
-                    "前端已注册 KINDS，后端一到这条自动生效（B 的比对逻辑由负控证明是接上的）")
+        pytest.skip("后端 webui/sse.py 在，但 EVENT_KINDS 还是空的（W0 只留接缝，"
+                    "词表与广播器在 W2）—— 前端已注册 KINDS，后端一填这条自动生效"
+                    "（B 的比对逻辑由负控证明是接上的）")
     assert _event_alignment_problems(front, back) == [], (
         f"前端 {sorted(front)} vs 后端 {sorted(back)}")
 
@@ -536,201 +595,10 @@ def test_d_the_endpoint_allowlist_is_not_stale() -> None:
         assert why.strip(), f"{path} 的例外没有写理由"
 
 
-# ====================================================================== 静态路由与回退
-@contextmanager
-def _server(root: pathlib.Path, static_root: pathlib.Path) -> Iterator[str]:
-    """在临时端口上起一个服务（`static_root` 指到临时目录：判据不碰真产物）。"""
-    srv = W.serve(root, host="127.0.0.1", port=0, static_root=static_root,
-                  csrf_token="testtoken0123456789")
-    thread = threading.Thread(target=srv.serve_forever, daemon=True)
-    thread.start()
-    host, port = srv.server_address[0], srv.server_address[1]
-    try:
-        yield f"{host}:{port}"
-    finally:
-        srv.shutdown()
-        srv.server_close()
-        thread.join(timeout=5.0)
-
-
-def _get(base: str, path: str, *, accept: str = "") -> tuple[int, str, str]:
-    conn = http.client.HTTPConnection(base, timeout=10)
-    try:
-        headers = {"Accept": accept} if accept else {}
-        conn.request("GET", path, headers=headers)
-        resp = conn.getresponse()
-        return (resp.status, resp.read().decode("utf-8", errors="replace"),
-                resp.getheader("Content-Type") or "")
-    finally:
-        conn.close()
-
-
-def _fake_static(tmp: pathlib.Path) -> pathlib.Path:
-    """一份假的前端产物（外壳 + 一个带哈希的 js + 一个真 token 陷阱）。"""
-    static = tmp / "static"
-    (static / "assets").mkdir(parents=True)
-    (static / "index.html").write_text(
-        '<!DOCTYPE html><html><body><div id="app">壳</div>'
-        '<meta name="csrf-token" content="__CSRF__"></body></html>\n', encoding="utf-8")
-    (static / "assets" / "main.abcdef123456.js").write_text(
-        'console.log("壳");\n', encoding="utf-8")
-    (tmp / "secret.txt").write_text("TOP-SECRET\n", encoding="utf-8")
-    return static
-
-
-def test_static_route_serves_real_files_and_rejects_traversal(
-        tmp_path: pathlib.Path) -> None:
-    """正控与负控（静态路由）：真实文件服务得出来；目录穿越一律拒。
-
-    负控按 `draft/73` §2.7 的要求造：`..%2f` 一类解出来落到根外 ⇒ 必须 404，
-    而且正文里不许出现根外那个文件的内容（"拒"要拒得干净）。
-    """
-    root = tmp_path / "ws"
-    root.mkdir()
-    static = _fake_static(tmp_path)
-    with _server(root, static) as base:
-        code, body, ctype = _get(base, "/static/assets/main.abcdef123456.js")
-        assert code == 200, (code, body[:200])
-        assert ctype.startswith("text/javascript"), ctype
-        assert 'console.log("壳");' in body
-        # 带哈希 ⇒ 可以长缓存（不带哈希的不许，见下面 index.html 那一支）
-        conn = http.client.HTTPConnection(base, timeout=10)
-        conn.request("GET", "/static/assets/main.abcdef123456.js")
-        cache = conn.getresponse().getheader("Cache-Control") or ""
-        conn.close()
-        assert "immutable" in cache, cache
-
-        # 外壳：令牌占位符必须被换成这次进程的令牌（文件里不许有真令牌）
-        code2, shell, ctype2 = _get(base, "/static/index.html")
-        assert code2 == 200 and ctype2.startswith("text/html"), (code2, ctype2)
-        assert "testtoken0123456789" in shell, shell[:200]
-        assert "__CSRF__" not in shell, "盘上的占位符没有被替换"
-
-        # 负控：目录穿越（编码与不编码两种写法）都必须 404，且不许泄漏根外内容
-        for path in ("/static/..%2fsecret.txt", "/static/../secret.txt",
-                     "/static/%2e%2e%2fsecret.txt", "/static/assets/../../secret.txt"):
-            code3, body3, _c = _get(base, path)
-            assert code3 == 404, (path, code3)
-            assert "TOP-SECRET" not in body3, (path, body3[:200])
-
-        # 负控：静态资源未命中不许回落到外壳（一个不存在的 .js 回一支 HTML 200
-        # 会让浏览器把它当脚本解析 —— 静默全白）
-        code4, body4, ctype4 = _get(base, "/static/assets/nope.js",
-                                   accept="text/html,application/xhtml+xml")
-        assert code4 == 404, (code4, body4[:200])
-        assert "id=\"app\"" not in body4, body4[:200]
-        assert not ctype4.startswith("text/javascript"), ctype4
-
-
-def test_unknown_api_paths_never_return_html(tmp_path: pathlib.Path) -> None:
-    """负控（裁定 Q1）：`/api/*` 未知 ⇒ JSON 404，哪怕客户端明说要 HTML。"""
-    root = tmp_path / "ws"
-    root.mkdir()
-    static = _fake_static(tmp_path)
-    with _server(root, static) as base:
-        code, body, ctype = _get(base, "/api/nope", accept="text/html")
-        assert code == 404, code
-        assert ctype.startswith("application/json"), ctype
-        parsed = json.loads(body)
-        assert parsed["ok"] is False and parsed["tri"] == "not_applicable", parsed
-        assert "<html" not in body.lower(), body[:200]
-        # POST 也一样（写面没有 SPA 回退这回事）
-        conn = http.client.HTTPConnection(base, timeout=10)
-        try:
-            conn.request("POST", "/api/nope", body=b"", headers={"Content-Length": "0"})
-            resp = conn.getresponse()
-            code2 = resp.status
-            ctype2 = resp.getheader("Content-Type") or ""
-            body2 = resp.read().decode("utf-8", errors="replace")
-        finally:
-            conn.close()
-        assert code2 == 404 and ctype2.startswith("application/json"), (code2, ctype2)
-        assert "<html" not in body2.lower()
-
-
-def test_spa_fallback_only_answers_clients_that_want_html(tmp_path: pathlib.Path) -> None:
-    """正控（裁定 Q1 的收窄）：要 HTML 的客户端拿到外壳；其余拿到诚实的 404。
-
-    为什么要有这条收窄：Q1 说"其余未知路径吐 index.html"，而既有判据
-    `tests/test_webui.py::test_unknown_paths_and_methods` 要求 `GET /nope` 是 404。
-    两条同时成立的唯一做法就是按 `Accept` 分流（浏览器地址栏一定带 `text/html`）。
-    """
-    root = tmp_path / "ws"
-    root.mkdir()
-    static = _fake_static(tmp_path)
-    with _server(root, static) as base:
-        # 浏览器导航：拿到外壳（前端路由接）
-        code, body, ctype = _get(base, "/evidence", accept="text/html,application/xhtml+xml")
-        assert code == 200 and ctype.startswith("text/html"), (code, ctype)
-        assert 'id="app"' in body and "testtoken0123456789" in body
-        # 工具/JSON 客户端：404（不是"把 HTML 当 JSON 塞给调用方"）
-        assert _get(base, "/nope")[0] == 404
-        assert _get(base, "/nope", accept="application/json")[0] == 404
-
-    # 没有 index.html 时（例如前端还没构建）：退回今天的 404 页
-    empty = tmp_path / "empty-static"
-    empty.mkdir()
-    with _server(root, empty) as base2:
-        code3, body3, _c3 = _get(base2, "/evidence", accept="text/html")
-        assert code3 == 404, code3
-        assert "404" in body3, body3[:200]
-
-
-def test_the_index_html_source_has_no_real_token() -> None:
-    """正控（令牌不从盘上来）：`ui/index.html` 里只有占位符，没有真令牌。
-
-    裁定 B1 把构建产物入库 ⇒ 写死一个令牌等于把它连同产物一起发布出去。
-    产物里的 `index.html` 同样只许有占位符（服务端在吐它时替换）。
-    """
-    src = _ui_text(INDEX_HTML)
-    assert "__CSRF__" in src, "index.html 里没有 CSRF 占位符"
-    tokens = re.findall(r'name="csrf-token"\s+content="([^"]*)"', src)
-    assert tokens == ["__CSRF__"], tokens
-    if (REPO / "src" / "agentflow" / "web" / "static" / "index.html").is_file():
-        built = (REPO / "src" / "agentflow" / "web" / "static" / "index.html")
-        text = built.read_text(encoding="utf-8")
-        assert "__CSRF__" in text, "产物里的 index.html 没有占位符（服务端就无处替换）"
-
-
-def test_the_built_assets_are_self_consistent_if_they_are_on_disk() -> None:
-    """正控（产物自洽）：产物里 `index.html` 引用的每个本地资源都真的存在。
-
-    本批的实况：构建产物可能不在盘上（`pnpm build` 需要 esbuild 起子进程，
-    而沙箱不允许管道 stdio）⇒ 那时这条 skip，理由写明"构建产物不在盘上"，
-    绝不把"没查成"折成"查过了没问题"。
-    """
-    static = REPO / "src" / "agentflow" / "web" / "static"
-    index = static / "index.html"
-    if not index.is_file():
-        pytest.skip("构建产物不在盘上（web/static/index.html 不存在）—— "
-                    "B1 的产物要么还没构建，要么构建被环境挡住；这条判据在产物入库后自动生效")
-    text = index.read_text(encoding="utf-8")
-    refs = re.findall(r'(?:href|src)="(/static/[^"]+)"', text)
-    assert refs, "产物里的 index.html 没有引用任何 /static/ 资源 ⇒ 判据没接上"
-    missing = [r for r in refs if not (static / r[len("/static/"):]).is_file()]
-    assert not missing, f"index.html 引用了不存在的资源：{missing}"
-
-
-def test_the_web_index_html_of_the_package_is_what_static_route_serves() -> None:
-    """正控（真产物那一支）：包内 `web/static/` 的文件能按 `/static/<file>` 取到。
-
-    产物不在盘上时 skip（同上：不把"没查成"折成"查过了没问题"）。
-    """
-    static = REPO / "src" / "agentflow" / "web" / "static"
-    files = sorted(p for p in static.rglob("*") if p.is_file()) if static.is_dir() else []
-    if not files:
-        pytest.skip("构建产物不在盘上（web/static/ 下没有文件）")
-    with _server(REPO, static) as base:
-        for path in files:
-            rel = path.relative_to(static).as_posix()
-            code, body, _ctype = _get(base, f"/static/{rel}")
-            assert code == 200, (rel, code)
-            text = path.read_text(encoding="utf-8", errors="replace")
-            if path.name == "index.html":
-                # 外壳里的 CSRF 占位符会被服务端换成这一次进程的令牌
-                text = text.replace("__CSRF__", "testtoken0123456789")
-            assert body == text, rel
-
+# ====================================================================== 见别处
+# 静态路由 / SPA 回退 / 产物新鲜度那几条在本批搬到了 `tests/test_webui_static.py`
+# （`draft/73` §1.3 指定的 W0 落点，父代理第 3 条提醒也点了这个文件名）—— 那里同时
+# 管着 content-type、哈希缓存、目录穿越负控与「产物与一次真实构建一致」。
 
 # ====================================================================== 生成物新鲜度
 def _freshness_problem(rendered: str, on_disk: str) -> str:

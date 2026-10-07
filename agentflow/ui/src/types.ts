@@ -162,9 +162,10 @@ export interface WriteResult {
 
 // --------------------------------------------------------------------------
 // 欠账清单：这些接口本批不生成（没有真读数就没有类型）。
-// 每一条都写明缺哪一个 reader —— W1 补上读数之后，把它们搬进上面的表。
+// 每一条都写明缺哪一个 reader —— 补上读数之后，把那一行从对应模块的
+// `MISSING_TYPES` 里删掉，并把接口加进那个模块的 `type_decls()`。
 // --------------------------------------------------------------------------
-// TODO RunView：缺 `webui/readers.py` 的「一趟详情」适配器（W1）；本批 ROUTES 里没有 `GET /api/run/{sid}`，所以它没有生产者。
+// TODO RunView：缺本模块的「一趟详情」适配器（W1）；本批 ROUTES 里没有 `GET /api/run/{sid}`，所以它没有生产者。
 // TODO EvidenceView：缺 `readers.evidence_chain(store)`（W1）：`store.rows("statements"/"conjectures"/"experiments"/"review_findings")` 的适配器。
 // TODO ArtifactsView：缺 `readers.artifact_ledger` / `readers.handoffs` / `readers.run_products`（W1）：`artifacts.read_ledger` · `manuscripts.rows` · 六件产物那一路。
 // TODO AcceptanceView：缺 `readers.acceptance(root, ...)`（W1）：`reviewaccept.check_review` 的逐条读数。

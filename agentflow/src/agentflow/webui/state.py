@@ -502,3 +502,109 @@ def _read_report(root: Path) -> tuple[str, str]:
         return "ok", path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         return "unknown", f"{type(exc).__name__}: {exc}"
+
+
+# ====================================================================== 类型声明
+# 前端唯一类型来源（`ui/src/types.ts`）由 `agentflow/web/emit_types.py` 生成，而它
+# 不再写死任何接口清单：它把三条零交线各自的 `type_decls()` 拼起来（`draft/78 §3`）。
+# 本模块这一份是「快照 / 场次 / 趟次」那一家 —— 也就是 `snapshot()` 真读出来的那些
+# 键，外加趟次的检查点（`run` 那一族的读数）。
+#
+# 一条纪律：这里的字段名逐字等于后端自己的键，不许改名、不许把后端一定会给的键
+# 写成可选。对齐由 `tests/test_webui_contracts.py` 的 C 条守着（生成物键集合 vs
+# 后端在夹具工作区上真读出来的键集合）。
+
+#: 三态词表。两套并存是裁定 N1（不许互相顶替）：
+#: `computed / unreadable / not_applicable` 是 reviewaccept 那一套（其余面用），
+#: `ok / missing / unknown` 只给「交付说明」那一格用。两者在前端都映射到组件
+#: `TriState` 的三种视觉态，但字符串本身不通用。
+_TS_ALIASES: tuple[tuple[str, str, str], ...] = (
+    ("Tri", '"computed" | "unreadable" | "not_applicable"',
+     "三态（reviewaccept 词表）：算出来了 / 没查成 / 用不着"),
+    ("ReportTri", '"ok" | "missing" | "unknown"',
+     "交付说明那一格专用的三态（`webui/state.py` 的 `_read_report`）"),
+)
+
+#: 逐接口的字段表。每一项 `(TS 名字, 后端出处, ((字段, TS 类型), ...))`。
+#: 出处写的是"这个键是从哪段程序读出来的"，不是行号（行号会漂）。
+_TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
+    ("OptionRow",
+     "option_view() —— 一个选项的渲染视图（注意：快照里的 `options` 是这一族对象，"
+     "不是裸字符串；`draft/75 §1.3` 那里写的 `string[]` 与盘上读数不一致，以这里为准）",
+     (("label", "string"), ("description", "string"), ("multi", "boolean"))),
+    ("OrphanGroup",
+     "orphan_summary() 的 `groups[]` 元素 —— 按会话分组的「轮次之外的零散事件」",
+     (("sid", "string"), ("count", "number"), ("kinds", "string[]"),
+      ("first_ts", "string"), ("last_ts", "string"),
+      ("first_index", "number"), ("last_index", "number"))),
+    ("OrphanSummary",
+     "orphan_summary() —— 「轮次之外的零散事件」的汇总读数",
+     (("count", "number"), ("groups", "OrphanGroup[]"))),
+    ("StateSnapshot",
+     "snapshot() —— 工作区盘上事实的只读投影（返回键逐字见它的 docstring）",
+     (("root", "string"), ("generated_at", "string"),
+      ("sessions", "SessionRow[]"), ("pending_questions", "PendingQuestion[]"),
+      ("runs", "RunRow[]"), ("orphans", "OrphanRow[]"),
+      ("orphan_summary", "OrphanSummary"), ("last_run", "RunRow | null"),
+      ("ledger", "LedgerReading"), ("problems", "string[]"))),
+    ("SessionRow",
+     "snapshot() 的 `sessions[]` —— 一段会话的读盘读数",
+     (("sid", "string"), ("path", "string"), ("events_seen", "number"),
+      ("events_listed", "number | null"), ("bad_lines", "number"),
+      ("first_ts", "string"), ("last_ts", "string"), ("last_kind", "string"),
+      ("last_seq", "number"), ("pending", "number"), ("runs", "number"),
+      ("orphans", "number"))),
+    ("PendingQuestion",
+     "snapshot() 的 `pending_questions[]` —— 一条待答问题（全局，不按会话过滤）",
+     (("qid", "string"), ("sid", "string"), ("role", "string"), ("ts", "string"),
+      ("timeout_sec", "number | null"), ("text", "string"),
+      ("options", "OptionRow[]"), ("multi", "boolean"), ("index", "number"))),
+    ("RunRow",
+     "snapshot() 的 `runs[]` —— 一趟运行（一条 agent_run_start 到它之后的 agent_run_end）",
+     (("sid", "string"), ("role", "string"), ("task", "string"),
+      ("start_index", "number"), ("start_ts", "string"), ("steps", "number"),
+      ("llm_calls", "number"), ("usd", "number | null"), ("unknown_usd", "number"),
+      ("stop_reason", "string"), ("final_chars", "number | null"),
+      ("summons", "number | null"), ("messages", "number | null"),
+      ("elapsed_sec", "number | null"), ("last_shape", "string"),
+      ("end_index", "number | null"), ("end_ts", "string"),
+      ("waiting_on", "string[]"), ("waiting", "boolean"),
+      ("events_in_run", "number"))),
+    ("OrphanRow",
+     "snapshot() 的 `orphans[]` —— 轮次之外的一条零散事件（不许折成一趟运行）",
+     (("sid", "string"), ("index", "number"), ("kind", "string"),
+      ("ts", "string"), ("role", "string"))),
+    ("LedgerReading",
+     "snapshot() 的 `ledger` —— 台账（第二个独立读数）",
+     (("path", "string"), ("events", "number | null"), ("tables", "number | null"),
+      ("note", "string"), ("tables_note", "string"))),
+    ("ReportReading",
+     "_read_report() —— 交付说明 `out/review/REPORT.md` 的读数（二元组 status/text 的字典口径）",
+     (("status", "ReportTri"), ("text", "string"))),
+    ("CheckpointSpend",
+     "检查点里的花销子树（`agent_loop` 写的 `runs/agent-<角色>-<sid>.json`）",
+     (("calls", "number"), ("tokens_in", "number"), ("tokens_out", "number"),
+      ("usd", "number | null"), ("unknown_usd_calls", "number"))),
+    ("Checkpoint",
+     "一趟的检查点文件（`runs/agent-<角色>-<sid>.json`；本批没有 reader ⇒ 判据 C 不覆盖它）",
+     (("role", "string"), ("sid", "string"), ("task", "string"),
+      ("fingerprint", "string"), ("step", "number"), ("stop_reason", "string"),
+      ("waiting_for", "string[]"), ("spend", "CheckpointSpend"), ("at", "string"))),
+)
+
+
+def type_decls() -> str:
+    """本模块（快照 / 场次 / 趟次）那一段 TS 声明文本。
+
+    形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
+    各自的 `type_decls()` 拼成 `ui/src/types.ts`。于是加接口这件事永远发生在
+    自己那一行里 —— 本批之后生成器不必再被碰。
+    """
+    parts: list[str] = []
+    for name, ts, note in _TS_ALIASES:
+        parts.append(f"/** {note}。 */\nexport type {name} = {ts};\n")
+    for name, source, fields in _TS_TYPES:
+        lines = [f"/** 出处：{source}。 */", f"export interface {name} {{"]
+        lines += [f"  {field}: {ts};" for field, ts in fields]
+        parts.append("\n".join(lines + ["}"]) + "\n")
+    return "\n".join(parts)
