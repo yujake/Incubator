@@ -2293,7 +2293,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | `unknown_action` | 该角色没有这个动作 / 参数不合法 / 父任务不存在 |
 | `forbidden_edge` | 策略不允许这条边（如 `C → B`）；或目标是 `NON_SUMMONABLE` |
 | `depth_exceeded` | `depth > max_depth` |
-| `fanout_exceeded` | 该任务已派生 `max_fanout` 个子召唤 |
+| `fanout_exceeded` | 该任务已受理 `max_fanout` 个子召唤（口径 = 受理数：闸门拒掉、根本没跑的那些不占名额，见 `policy.fanout_limit_for`；主控那一档 = 20） |
 | `concurrency_exceeded` | `running >= max_concurrency` |
 | `budget_exceeded` | token / 花销预算耗尽 |
 | `deadline_exceeded` | 墙钟到点（**并同时协作式取消在跑的**） |
@@ -2403,7 +2403,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | 用尽 | 行为 |
 |---|---|
 | `max_depth` | 新召唤 `refused/depth_exceeded` |
-| `max_fanout` | 新召唤 `refused/fanout_exceeded` |
+| `max_fanout` | 新召唤 `refused/fanout_exceeded`（上限按发起方角色取：默认档 = `max_fanout`，主控 `M` 一档 = 20；读的是受理数，被闸门拒掉的尝试不占名额） |
 | `max_concurrency` | 新召唤 `refused/concurrency_exceeded` |
 | `max_tasks_per_run` | 新召唤 `refused/...`（`total = _started_total + _cancelled_total`） |
 | `wall_clock_sec` | 新召唤 `refused/deadline_exceeded`，**并 `_signal_stop("deadline", …)` 协作式取消在跑的** |

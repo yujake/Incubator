@@ -403,6 +403,39 @@ def _business_refusal_code(exc: BaseException) -> str | None:
     return None
 
 
+def _occupies_fanout_slot(row: Mapping[str, Any]) -> bool:
+    """这条子行占不占父任务的扇出名额（题15 选B，2026-10-07）。
+
+    ## 口径：扇出 = 受理数，不是尝试数
+
+    闸门拒掉的召唤也落台账（`_refuse`：谁试过什么必须留痕），但它根本没跑，
+    所以不占名额。若它占名额，父任务一旦触顶就再也派不出活，而每次尝试还会
+    再占一格 —— 自我毒化、不可恢复。真机读数（工作区
+    `agentflow/projects/p9-post-merge-probe` 的台账，2026-10-07）：顶趟行
+    `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是
+    `refused/fanout_exceeded`，detail 里的读数从"已派生 5 个"一路涨到"已派生 9 个"
+    （那就是自我毒化的机器形态）；本趟主控只成功派了 3 件活（A 检索 / D 立题 /
+    D 登记猜想），E 的实验永远进不去 ⇒ `experiments=0`、收工门两格红。
+
+    ## 判据为什么是"结算标记"而不是"拒绝理由"
+
+    拒绝理由是受控词表（`schema.REFUSAL_REASONS`），闸门与角色共用它：角色
+    跑完之后自己拒绝也落 `invalid_params`（真机 `t-0006` 就是这一档，
+    `_business_refusal_code` 把领域错误映到这个词上）。按理由过滤会把
+    "跑过又拒了"误判成"没跑"。区分二者的是这条事实：只有跑过的召唤才走
+    `summon` 末尾的记账写回（`_set_usage` 往 `inputs` 里打 `_SETTLED_MARK`），
+    而闸门拒绝在写 running 行之前就返回了。所以：
+
+    - `outcome == "refused"` 且行上没有结算标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；
+    - 其余一切（`running` / `ok` / `failed` / `cancelled`、以及跑过又拒的）
+      ⇒ 占名额。"跑了但失败"确实消耗了一次派活，必须仍然计入（有负控咬着：
+      `tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
+    """
+    if row.get("outcome") != "refused":
+        return True
+    return any(str(x) == _SETTLED_MARK for x in (row.get("inputs") or []))
+
+
 class Conductor:
     """主控：确定性的策略执行者（本轮不做 LLM 推理，设计 §8 待决问题 1）。
 
@@ -534,6 +567,26 @@ class Conductor:
 
     def _children_of(self, task_id: str) -> list[str]:
         return [str(r["task_id"]) for r in self._tasks() if r.get("parent_task_id") == task_id]
+
+    def _admitted_children_of(self, task_id: str) -> list[str]:
+        """`task_id` 受理过的子召唤（= 扇出判据的分子）。
+
+        ## 与 `_children_of` 的分工（刻意两个方法、两个口径）
+
+        - `_children_of` 数"台账里有几行子行"：展示面/审计面用，含被闸门拒掉的
+          那些尝试（谁试过什么必须看得见，`SummonResult.children` 由它填）；
+        - `_admitted_children_of` 数"真的派出去过几件"：扇出判据用。
+
+        为什么不就地改 `_children_of`：它不只服务扇出（`summon` 末尾的
+        `res.children` 也用它），把它的口径改窄等于顺手改坏展示面 ——
+        那一改没有任何地方会报错，只会让"谁试过什么"从台账视图里静默消失。
+        判据见 `tests/test_fanout_admission.py::test_display_face_still_lists_attempts`。
+
+        占不占名额的判据在 `_occupies_fanout_slot`（含真机读数与"为什么不是
+        按拒绝理由过滤"）。
+        """
+        return [str(r["task_id"]) for r in self._tasks()
+                if r.get("parent_task_id") == task_id and _occupies_fanout_slot(r)]
 
     def _ancestry(self, task_id: str | None) -> tuple[tuple[str, str, str], ...]:
         """重建 `(role, action, input_key)` 的祖先链（含起点自身）。
@@ -1268,7 +1321,12 @@ class Conductor:
 
         # ---- [4] 策略判定（边 / 深度 / 循环 / 扇出 / 并发 / 总量 / 预算 / 墙钟）
         chain = tuple(lineage) if lineage is not None else self._ancestry(parent_task_id)
-        fanout = len(self._children_of(parent_task_id)) if parent_task_id else 0
+        # 扇出 = 受理数，不是尝试数（题15 选B，2026-10-07）：被闸门拒掉的召唤照旧
+        # 落行（谁试过什么要留痕），但不占名额 —— 否则父任务一旦触顶就再也派不出活，
+        # 而每次尝试还会再占一格（自我毒化、不可恢复；真机读数见
+        # `_occupies_fanout_slot`，判据见 `tests/test_fanout_admission.py`）。
+        # 上限那一档按发起方角色取（`by`），默认档与主控档都在 `policy` 里。
+        fanout = len(self._admitted_children_of(parent_task_id)) if parent_task_id else 0
         # ---- B9（`draft/41-A` 的 B9）：判据与占位必须在同一个临界区里
         #
         # 旧顺序是"锁内读 `running`/`total` → 锁外判 → 写完 running 行（一次 fsync
@@ -1443,6 +1501,8 @@ class Conductor:
             # 共享取消信号也吃 token 预算：预算耗尽与取消走同一个信号，
             # 因为处置完全一样（停止派新任务 + 协作式取消在跑的）。
             self.token.consume_tokens(res.tokens)
+        # 展示面：`children` 列的是全部子行（含被闸门拒掉的尝试，谁试过什么要看得见），
+        # 与扇出判据（`_admitted_children_of`）刻意两个口径 —— 判据面不许把展示面改窄。
         res.children = self._children_of(tid)
         res.elapsed_sec = time.monotonic() - t0
         return res
