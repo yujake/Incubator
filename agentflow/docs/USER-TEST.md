@@ -135,16 +135,21 @@ python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task 
 >
 > ```powershell
 > cd D:\Incubator\agentflow
-> # 形式化那一格：检查器在盘上但不在 PATH —— 这一行决定它能不能真验（见下）
-> $env:PATH = "D:\Incubator\temp\lean470\lean-4.7.0-windows\bin;" + $env:PATH
+> # 形式化那一格：检查器在盘上但不在 PATH —— 这一行决定它能不能真验（见下）。
+> # 检查器在哪的**正常落点**是机器级设置文件（agentflow/settings.json 的
+> # toolchain.lean_bin，值可以是可执行文件或它所在的目录；见 docs/FORMAL-TOOLCHAIN.md §6）；
+> # 下面这一行是"只想临时指一次"的写法（环境变量优先级高于设置文件）：
+> $env:AGENTFLOW_LEAN_BIN = "_env\lean470\lean-4.7.0-windows\bin"
 > $task = Get-Content -Raw docs\USER-TEST-TASK-NAIVE.txt      # 或换上一行的详细版
 > python -B -m agentflow.cli --root projects\user-test-1 run-agent M --task $task `
 >     --budget-usd 10 --wall-clock-sec 14400 --sid real16 --max-steps 150
 > ```
 >
-> 两件先说清的事：①**形式化那一格取决于上面那行 PATH** —— Lean 4.7.0 在盘上
-> （`D:\Incubator\temp\lean470\lean-4.7.0-windows\bin`，commit 与框架钉住的相同），
-> 但**没进 PATH**；加进去实测能真验（`check_formal` ⇒ `verified`、
+> 两件先说清的事：①**形式化那一格取决于上面那一格配置** —— Lean 4.7.0 在盘上
+> （`_env/lean470/lean-4.7.0-windows/bin`，commit 与框架钉住的相同；2026-10-07 起
+> 环境整体从工作区 `temp/` 搬到了工作区根的 `_env/`），
+> 但**没进 PATH**；把它配进设置文件（或按上面那行临时用环境变量）实测能真验
+> （`check_formal` ⇒ `verified`、
 > `run_experiment(method="formal")` ⇒ `evidence_kind=proof`），不加就只能如实报
 > "没核到 + 理由"（两份任务里都写明了"不许写成通过"）。**Mathlib 那一档今天不行**
 > （`import Mathlib` ⇒ `import_unavailable`：umbrella 的 `.olean` 不在缓存里），
