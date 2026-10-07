@@ -167,22 +167,37 @@ def test_artifact_path_fallback_never_lands_in_the_repo(monkeypatch):
     assert artifact != REPO / ".release-lint.json"
 
 
-def test_the_old_fallback_path_really_is_tracked_by_git():
-    """负控（`c-11`）的「前提」：旧回退路径确实被 git 跟踪（否则这条缺陷不成立）。
+def test_the_old_fallback_path_is_no_longer_a_live_file_in_the_repo():
+    """负控（`c-11` / F8）的「前提」：旧回退路径已经不是一个活着的仓库文件。
 
-    这条直接问 git，不依赖源码里有没有那个字符串 —— 它证明的是"注入有判别力"：
-    如果哪天这个文件不再被跟踪，那么"不许回退到它"这条判据的对象就换了，
-    必须回来重新校准（所以这里在"不再被跟踪"时也要求看得见的结论，不是静默跳过）。
+    改前这条要的是"它确实被 git 跟踪"—— 那是为了证明"回退到它会改仓库状态"这个缺陷
+    成立。F8（`draft/52`）把那个过期产物删掉了（`rules_run` 只列到 R010、
+    `scanned` 停在 52/79、R004/R006 已退休、R009 那条 error 今天不存在 —— 自证过期四点），
+    于是这条负控的对象换了（它自己的 docstring 就要求"对象换了就回来重新校准"）：
+
+    现在要证明的是"它不再能被我方写回仓库状态"：
+
+    - 盘上那个路径必须不存在（存在就说明有人把过期产物写回来了）；
+    - git 索引里若还留着它，只可能是"删除尚未提交"（本仓库不许 AI commit）
+      ⇒ 那也要看得见，不许静默跳过。
+
+    两条都断言，不是把断言删掉。
     """
-    p = subprocess.run(
+    p = REPO / ".release-lint.json"
+    assert not p.exists(), (
+        "`agentflow/.release-lint.json` 又出现在盘上了 —— F8 的处置是**删产物**"
+        "（不接消费者：`lint_rules.py` 读它 0 处），别把它写回来"
+    )
+    run = subprocess.run(
         ["git", "ls-files", "--error-unmatch", "agentflow/.release-lint.json"],
         cwd=str(REPO.parent), capture_output=True, text=True,
     )
-    assert p.returncode == 0, (
-        "`agentflow/.release-lint.json` 不再被 git 跟踪了 —— `c-11` 的负控对象变了，"
-        f"请重新校准（git 说：{p.stdout!r}{p.stderr!r}）"
-    )
-    assert "agentflow/.release-lint.json" in p.stdout
+    if run.returncode == 0:
+        # 索引里还有 ⇒ 只可能是"删除已落在工作区、尚未提交"（上面已断言盘上不存在）
+        assert "agentflow/.release-lint.json" in run.stdout, run.stdout
+    else:
+        # 已经不再被跟踪（删除已提交）—— 那是这条判据的终点
+        assert run.returncode == 1, (run.returncode, run.stdout, run.stderr)
 
 
 def test_item_linter_artifact_is_outside_the_repo_for_the_real_run():

@@ -917,12 +917,34 @@ def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
       （`adjudicate_contradiction(` 这种）。注意 `_name_pattern` 的左边界排除 `.`，
       所以"别名限定调用"不在这一档；
     - `via:alias_direct` —— 以被点号限定的成员形态出现（`I.foo(`、`mod.foo(`）；
-    - `via:test_name` —— 出现在项目约定的测试名 `test_<名字>_...` 里。
+    - `via:test_name` —— 出现在项目约定的测试名 `test_<名字>_...` 里；
+    - `via:tool_name` —— **只在测试里出现过一次这个 `@tool` 的点号名**
+      （`conductor.stop` / `fs.move`）。`L-13`（`draft/52` F7）把它从前一档
+      （`via:direct tool:…`）**拆出来单独记**：它是四个分量里最弱的一个 ——
+      "在测试里写一次工具名"与"真的构造上下文并调用它"是两件事，而等级 1
+      （写路径，最高风险档）的零测试数**全靠它**从 7 变成 0（`draft/43-D` §2.2）。
+      拆出来只加读数、**不改判据强度**（`info.tested` 照旧为真）：收紧那一半
+      必须等 `host.py:86` 的 `host-wiring` 落地之后再做（`draft/56` §4.3 的硬序）。
 
     为什么分量必须分开记：它们的证据强度不同。`direct` 是"测试里出现了这个独立标识符"；
     `alias_direct` 是"有人用某个前缀调用了这个名字"（前缀是谁要靠人核，本判据不做别名解析）；
-    `test_name` 是"有个测试叫这个名字"（名义覆盖，可能测的是别的东西）。
-    混成一个布尔值就等于把三者当成同一件事 —— 而那正是本脚本要避免的失败形态。
+    `test_name` 是"有个测试叫这个名字"（名义覆盖，可能测的是别的东西）；
+    `tool_name` 是"测试里出现过这个工具名串"（最弱）。
+
+    ## L-13 收紧（`draft/52` F7 + J-45）：`tool_name` **单独一条不构成"有测试"**
+
+    收紧前后唯一的差别就是这一句：`info.tested` 要求至少有一条
+    `direct` / `alias_direct` / `test_name` / `exonerated` 的证据；
+    **只**在测试里写过一次点号工具名（`conductor.stop`）不算。
+
+    为什么（`draft/43-D` §2.2 逐字）：等级 1（写路径，最高风险档）的零测试数，
+    在"把工具名串算作有测试"的口径下是 **0**（发布门看到的绿灯），
+    在不算它的口径下是 **7** —— 也就是说最高风险档的绿灯是被**一个字符串**满足的。
+    J-45 的两条硬边界：① 历史那批（不可消除的）走登记基线；② 负控必须证明
+    "**新**造一个真无测试的写路径 handler 仍会被判"（红），否则收紧退化成一句口号。
+
+    三种证据分量仍**原样记进** `tested_by`（读数不许丢）：收紧改的是判据强度，
+    不是"看不见工具名串"。
     """
     blob = _test_text(root)
     for info in funcs:
@@ -938,7 +960,7 @@ def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
         if info.tool_name:
             n = _name_occurrences(blob, info.tool_name)
             if n:
-                hits.append(f"via:direct tool:{info.tool_name}×{n}")
+                hits.append(f"via:tool_name tool:{info.tool_name}×{n}")
         for needle in dict.fromkeys([info.bare]):
             n = _test_name_occurrences(blob, needle)
             if n:
@@ -946,8 +968,114 @@ def mark_tested(funcs: list[FuncInfo], root: Path) -> None:
         exo = _exoneration_for(info)
         if exo is not None:
             hits.append(f"via:exonerated {len(exo[0])} 条测试：{'、'.join(exo[0])}")
-        info.tested = bool(hits)
         info.tested_by = hits
+        # L-13 收紧：只靠 `via:tool_name` 的那一条**不算**有测试（见 docstring）。
+        info.tested = any(not h.startswith("via:tool_name") for h in hits)
+
+
+def production_caller_reading(funcs: list[FuncInfo], zero: list[FuncInfo],
+                              level: int) -> dict[str, Any]:
+    """F7 / L-13 的**读数**（`draft/52` F7；收紧已落地 ⇒ 见 `mark_tested` 的 docstring）。
+
+    ## 为什么必须有这个读数（`draft/43-D` §2.2 逐字）
+
+    "发布门看到的读数是 0，而忽略'工具名串'那一条判据后是 7（等级 1，写路径，
+    最高风险档）" —— 也就是说最高风险档上那条绿灯，是被**一个字符串**满足的。
+
+    ## 三个口径并列（不许只选一个）
+
+    1. `tightened_zero_test` —— **本工具现在的口径**（`via:tool_name` 单独一条不算）；
+    2. `loose_zero_test` —— 收紧**之前**那个更宽的口径（把工具名串也算"有测试"）；
+       `loose_gate` 就是发布门历史上看到的那个 0；
+    3. `registered_other_gauges` —— 别处登记过的两个更宽读数
+       （`41-G` 的台账口径 82、未复算的 113 / 153）。**它们是外部读数、本次未复算**。
+
+    `tool_name_only`（只靠工具名串"过关"的函数）与其按等级分布仍然报：
+    它是 ①② 两栏之差，也是"谁被这次收紧打回来"的逐条清单。
+    """
+    tool_only = [f for f in funcs
+                 if f.tested_by
+                 and all(h.startswith("via:tool_name") for h in f.tested_by)]
+    loose_zero = [f for f in funcs if not f.tested and f not in tool_only]
+    return {
+        "tightened_zero_test": len(zero),
+        "tightened_by_level_zero": {str(lv): len([f for f in zero if f.level == lv])
+                                    for lv in (1, 2, 3, 4)},
+        "tightened_gate": len([f for f in zero if f.level <= level]),
+        "loose_zero_test": len(loose_zero),
+        "loose_by_level_zero": {str(lv): len([f for f in loose_zero if f.level == lv])
+                                for lv in (1, 2, 3, 4)},
+        "loose_gate": len([f for f in loose_zero if f.level <= level]),
+        "tool_name_only": len(tool_only),
+        "tool_name_only_by_level": {str(lv): len([f for f in tool_only if f.level == lv])
+                                    for lv in (1, 2, 3, 4)},
+        "tool_name_only_names": [f.qualname for f in tool_only][:32],
+        "registered_other_gauges": {
+            "41-G 台账口径": {"value": 82, "source": "draft/43-G（登记数，本次未复算）"},
+            "未复算甲": {"value": 113, "source": "draft/52 F7 登记（本次未复算）"},
+            "未复算乙": {"value": 153, "source": "draft/52 F7 登记（本次未复算）"},
+        },
+        # 登记的"零生产调用者但不许删"（**不是豁免表**：有署名、依据、与守它的测试文件）
+        "registered_no_production_caller": registered_no_production_caller_reading(funcs),
+        # F7 的**口径自明**（主控 2026-10-06）：两档读的不是同一件事，混读会得出相反结论。
+        "gauge": {
+            "function_level": ("判据用的这一档：公开函数的**裸名/限定名**作为独立标识符"
+                               "出现在 tests/ 里 ⇒ 问的是「这个函数有没有被测试碰到」"),
+            "string_level": ("`via:tool_name`：只在测试里出现过该工具的**点号名串**"
+                             "（`conductor.stop`）⇒ 它数的是**字符串**，不是一次调用；"
+                             "`tool_name_only*` 报的就是这一筐，**不构成**「有生产调用者」"),
+            "production_caller": ("生产调用者 = 该工具的 **handler 函数**被生产路径调用"
+                                  "（**函数级**）。生产路径常常**直调工具体**而不写工具名串"
+                                  "（`agent_a/shelf_search.py` 调 `_h_shelf`/`_h_local`，"
+                                  "`agent_g/_support.py`、`paper_package.py` 同族）"
+                                  "⇒ 拿字符串级那一档读「有没有被接线」会读反"),
+            "gate_basis": "function_level（收紧后已把 string_level 从「有测试」里剔除）",
+        },
+        "note": ("三个口径并列（收紧后 / 收紧前 / 别处登记的更宽读数）—— 不许只报一个。"
+                 "`loose_*` 就是发布门历史上看到的那个 0（被一个字符串满足的绿灯）；"
+                 "`tightened_*` 是现在的判据强度。历史那批不可消除的读数见 "
+                 "`draft/52` J-45（事件重放不因改代码而消失）"),
+    }
+
+
+#: 已登记的「**零生产调用者但不许删**」的落点（`draft/48-09 §4.10` + 主控 2026-10-06 裁定）。
+#:
+#: **这不是豁免表**：它出现在读数里、带署名与依据（静默豁免是本项目最忌的形态）。
+#: 与 `_EXONERATED` 的区别：那张表管"这个函数不需要直接测试"，这张表管
+#: "这个模块被裁定保留、而它在生产面上没有调用者" —— 读者看到的是**一件事**，
+#: 不是一个被抹掉的空格。
+#:
+#: 为什么必须有它（F7 收紧的现成负控素材）：如果收紧后的判据对这些落点一声不响，
+#: 那说明收紧只数了一半 —— 而下一个读读数的人会把"零调用者"读成"可以删"。
+REGISTERED_NO_PRODUCTION_CALLER: tuple[dict[str, str], ...] = (
+    {
+        "target": "src/agentflow/deliver.py",
+        "why": ("第二套交付闸门（与收工门 `closing` 同族重叠，`draft/46-05` 并谈）—— "
+                "再接新入口会造出「两套闸门各说一套」"),
+        "status": "零生产调用者（`cli` 的 `gate` 子命令退场之后；目前唯一入口是它）",
+        "guarded_by": "tests/test_deliver.py",
+        "decision": "主控裁定：**保留 + 登记为例外**（不删；`draft/48-09 §4.10` 逐字不许删）",
+        "source": "draft/48-09 §4.10 + 主控 2026-10-06 裁定",
+    },
+)
+
+
+def registered_no_production_caller_reading(funcs: list[FuncInfo]) -> list[dict[str, Any]]:
+    """把 :data:`REGISTERED_NO_PRODUCTION_CALLER` 变成**带实测数**的读数（不是一句声明）。
+
+    每条附上该模块在本工具口径下的公开函数数与零测试数 —— 这样读者一眼能分清
+    "登记项"与"漏掉的缺陷"：登记项有署名、有依据、有守它的测试文件。
+    """
+    out: list[dict[str, Any]] = []
+    for entry in REGISTERED_NO_PRODUCTION_CALLER:
+        name = str(entry["target"]).rsplit("/", 1)[-1]
+        mine = [f for f in funcs if f.module.endswith(name)]
+        out.append({
+            **entry,
+            "module_public_functions": len(mine),
+            "module_zero_test": len([f for f in mine if not f.tested]),
+        })
+    return out
 
 
 def mark_indirect_only(funcs: list[FuncInfo]) -> int:
@@ -1299,6 +1427,7 @@ def main(argv: list[str] | None = None) -> int:
     zero_by_level = {lv: [f for f in zero if f.level == lv] for lv in (1, 2, 3, 4)}
     all_by_level = {lv: [f for f in funcs if f.level == lv] for lv in (1, 2, 3, 4)}
     gate = [f for f in zero if f.level <= args.level]
+    callers = production_caller_reading(funcs, zero, args.level)
 
     if args.json:
         print(json.dumps({
@@ -1311,6 +1440,8 @@ def main(argv: list[str] | None = None) -> int:
                 "by_level_zero": {str(lv): len(zero_by_level[lv]) for lv in (1, 2, 3, 4)},
                 "gate": len(gate),
                 "excluded_private_class_methods": len(excluded),
+                # F7：生产调用者读数（三个口径并列 + 只靠工具名串过关的那些）
+                "production_callers": callers,
             },
             "level_names": {str(k): v for k, v in _LEVEL_NAMES.items()},
             "indirect_only_total": n_indirect,
@@ -1334,6 +1465,29 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[coverage_zero_test] 已排除 {len(excluded)} 个嵌套定义（测试替身/局部闭包；"
           f"带 @tool 的嵌套 handler **不**排除），逐条见 --json 的 excluded")
     print(f"[coverage_zero_test] 阈值 --level {args.level} ⇒ 需要补测试的零测试函数 {len(gate)} 个")
+    # ---- F7 / L-13 的读数（收紧之后）：三个口径并列
+    print(f"[coverage_zero_test] 生产调用者读数（三个口径**并列**，不许只选一个）：")
+    print("  口径（两档分开，别混读）：① **函数级** = 这个 handler 函数的裸名/限定名"
+          "出现在 tests/ 里（判据与 gate 用这一档）；"
+          "② **字符串级** = 只在测试里出现过该工具的**点号名串**（`conductor.stop`）"
+          "—— 它数的是字符串，不是调用。"
+          "生产路径常**直调工具体**（`agent_a/shelf_search.py` 调 `_h_shelf`/`_h_local`）"
+          "而不写 `registry.call(\"search.shelf\")` ⇒ 拿②读「有没有被接线」会读反")
+    print(f"  ① 收紧后（本工具现在的口径，`via:tool_name` 单独一条不算）：零测试 "
+          f"{callers['tightened_zero_test']} 个，按档 {callers['tightened_by_level_zero']}"
+          f" ⇒ gate={callers['tightened_gate']}")
+    print(f"  ② 收紧前（发布门历史上看到的那个口径）：零测试 {callers['loose_zero_test']} 个，"
+          f"按档 {callers['loose_by_level_zero']} ⇒ gate={callers['loose_gate']}")
+    print(f"  ③ 别处登记的更宽读数（**外部读数、本次未复算**）："
+          + "、".join(f"{k}={v['value']}（{v['source']}）"
+                      for k, v in callers["registered_other_gauges"].items()))
+    print(f"  只靠「工具名串」过关的函数 {callers['tool_name_only']} 个，按档 "
+          f"{callers['tool_name_only_by_level']}（裁决 8 点名的 7 个写路径 handler 原本在这里；"
+          f"补了真调用测试的那些已回到 ①）")
+    for entry in callers.get("registered_no_production_caller") or []:
+        print(f"  【登记】{entry['target']}：{entry['status']}；{entry['decision']}"
+              f"（守它的测试：{entry['guarded_by']}；本工具口径下该模块公开函数 "
+              f"{entry['module_public_functions']} 个、零测试 {entry['module_zero_test']} 个）")
 
     if not args.quiet:
         for lv in range(1, args.level + 1):

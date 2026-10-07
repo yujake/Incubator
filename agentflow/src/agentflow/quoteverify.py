@@ -141,8 +141,10 @@ def check_quote(
       这一档不区分"引文被改写"与"整句编造"：本函数没有近似匹配那一档，
       所以两者在这里同形。要判"被改写"必须先有阈值标定方案 —— 那是新能力，
       不是本函数的补丁（见模块 docstring 的"边界"一节）；
-    * `None` + `no_text_layer` / `empty_quote` / `page_unreadable` /
-      `page_status_unknown` —— 没法判（"没校验"不是"校验失败"）。
+    * `None` + `no_text_layer` / `empty_quote` / `empty_page_range` /
+      `page_unreadable` / `page_status_unknown` —— 没法判（"没校验"不是"校验失败"）。
+      `empty_page_range`（`R-08` = B1 候选 C）是"声明的窗口是空的（`start > end`）"：
+      空区间里不可能有页 ⇒ "在这段里没找到"没有信息量，不许据此判 `not_found`。
     """
     pages = list(getattr(doc, "pages", []) or [])
     if not pages:
@@ -164,6 +166,19 @@ def check_quote(
 
     tried: list[str] = []
     pr = page_range or PageRange(None, None, "")
+    # ---- `R-08` = B1 候选 C（`draft/52`）：**空窗口**（`start > end`）判"没法判"。
+    #
+    # 为什么这不是"没找到"：声明的是一个**空区间** —— 它里面不可能有任何一页，
+    # 于是"在这段里没找到"这句话**没有信息量**（分母是 0）。旧实现会让 `scan`
+    # 直接返回 `None`（`lo > hi`），再靠 `widen` 把窗口撑开去数页外命中，
+    # 得出 `substring_match_outside_declared_range`（"页码错了"）—— 而那是
+    # 拿一个**编码错误**去指控引文/页码错了（`True` 会被下游读成"引文可靠"）。
+    #
+    # 守卫必须带 `pr.known`：页码未知（`start=end=None`）走的是另一档
+    # （`not_found_page_unknown`）—— 没有这个守卫会把它一起吃掉。
+    if pr.known and int(pr.start) > int(pr.end):
+        return QuoteCheck(None, reason="empty_page_range",
+                          tried=(f"empty:{pr.start}-{pr.end}",))
     if pr.known:
         label = f"declared:{pr.start}-{pr.end}"
         tried.append(label)
@@ -171,7 +186,12 @@ def check_quote(
         if hit:
             return hit
         if widen > 0:
-            label_w = f"widened:{max(1, pr.start - widen)}-{min(len(pages), pr.end + widen)}"
+            # `widened` 的标签必须与**真的扫过的窗口**一致（T / R-08 的标签修正）：
+            # 越界被收窄到空集时说 `empty`，不写出 `widened:4-3` 这种反向区间
+            # （反向标签会让人以为"从第 4 页往第 3 页扫过"）。
+            w_lo = max(1, pr.start - widen)
+            w_hi = min(len(pages), pr.end + widen)
+            label_w = f"widened:{w_lo}-{w_hi}" if w_lo <= w_hi else "widened:empty"
             tried.append(label_w)
             hit = scan(pr.start - widen, pr.end + widen, label_w)
             if hit:

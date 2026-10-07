@@ -207,6 +207,17 @@ def rule_R002_none_folds_to_empty(root: Path) -> list[Finding]:
 
     为什么结构判据比关键词更可靠：关键词列表永远列不全（中文/英文/别的字段名），
     而"有没有带回第二个东西"是写法本身，与命名无关。
+
+    ## 注释出口（`LINT-02` / `draft/52` F9：与 R001 对齐）
+
+    本规则的消息此前让用户"如果不是（例如'空输入理应得空输出'），请在紧邻的注释里
+    写明理由"——而判据里**没有注释豁免分支**，那句话是一个代码里不存在的出口
+    （`draft/43-D` §1.4④）。现在补上 `_explained` 出口（与 R001 同一套门槛：
+    ≥4 个非空白字符），让消息兑现；同时消息里点名"本规则判的是形态，
+    注释出口只对'确实不是折叠'那一类生效"。
+
+    ⇒ 这不是放宽判据：**没有解释**的折叠照旧报 warning；有解释的那些，
+    与 R001 走同一个 `_explained` 判据（一处实现，两处引用）。
     """
     out: list[Finding] = []
     pat = re.compile(r"^\s*if\s+.*\bis\s+None\s*:")
@@ -229,12 +240,15 @@ def rule_R002_none_folds_to_empty(root: Path) -> list[Finding]:
             m = re.search(r"return\s+(?:\[\]|\{\})\s*,\s*([^\n,]*)", window)
             if m and m.group(1).strip() and m.group(1).strip() != "None":
                 continue
+            # 注释出口（`LINT-02`）：与 R001 共用 `_explained`（≥4 个非空白字符）。
+            if _explained(lines, i, i + 3):
+                continue
             out.append(Finding(
                 "R002", "warning", str(p.relative_to(root)), i + 1,
                 "`is None` 之后直接返回空容器，看起来像把'没做'折叠成'没有结果'。"
                 "如果是，请返回 `checked=False` + `reason`（或 `return [], \"<为什么>\"` 这种"
-                "带回伴生原因的形态）；如果不是（例如'空输入理应得空输出'），"
-                "请在紧邻的注释里写明理由",
+                "带回伴生原因的形态）；**如果不是**（例如'空输入理应得空输出'），"
+                "请在紧邻的注释里写明理由（判据真的读它：≥4 个非空白字符，与 R001 同一个出口）",
                 raw.strip(),
             ))
     return out

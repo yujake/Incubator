@@ -200,6 +200,47 @@ def test_default_llm_is_none_and_build_time_never_calls_it(tmp_path: Path):
     assert type(b_none.extractor).__name__ == "RuleExtractor"
 
 
+def test_d_gets_a_seam_by_availability_not_by_a_role_switch(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """`R1-B-x`（裁定 3）：D 的缝由"这次运行有没有模型"决定，不由角色开关决定。
+
+    裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个
+    `--attack-reasoning` 才拿得到缝。三态与 fail-open 由 `model_json_call` 的
+    `reading.state`（`used`/`failed`/`not_wired`/`unknown_object`）负责。
+
+    两半都要钉：
+    - 有模型 ⇒ 建缝（否则 D 的精修永远 `not_wired`，"有模型却不接线"读不出来）；
+    - 没有模型 ⇒ 不建缝（无条件建会把"没接线"写成"接上了但没答"——那正是
+      本项目反复防的那种假话）。
+    """
+    st = _store(tmp_path)
+    seen: list[str] = []
+    captured: dict = {}
+    real = host.build_role_registry
+
+    def _spy(store_, **kw):
+        captured.clear()
+        captured.update(kw)
+        return real(store_, **kw)
+
+    def _factory(role: str):
+        seen.append(role)
+        return _FakeLLM()
+
+    monkeypatch.setattr(host, "build_role_registry", _spy)
+    monkeypatch.setattr(host, "_model_key_present", lambda *_a, **_k: True)
+    host.wired_llm_conductor(st, providers=[object()], seam_factory=_factory, loops={})
+    assert "D" in (captured.get("llm_by_role") or {}), (
+        f"有模型时 D 没被登记进逐角色缝表（裁定 3）：{sorted((captured.get('llm_by_role') or {}))}")
+    assert "D" in seen, f"缝工厂没被要求造 D 的缝：{seen}"
+
+    seen.clear()
+    monkeypatch.setattr(host, "_model_key_present", lambda *_a, **_k: False)
+    host.wired_llm_conductor(st, providers=[object()], seam_factory=_factory, loops={})
+    assert "D" not in (captured.get("llm_by_role") or {}), "没有模型时不许把 D 登记成接线"
+    assert "D" not in seen, f"没有模型却造了 D 的缝：{seen}"
+
+
 def test_attack_reasoning_is_opt_in_and_the_default_stays_deterministic(tmp_path: Path):
     """判据（`draft/39` §6.32 的 D42b）：F 的攻坚推理是显式接线，默认仍确定性。
 

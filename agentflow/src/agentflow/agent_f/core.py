@@ -12,26 +12,35 @@ from .status import _Status
 from .list_plans import _ListPlans
 
 
-#: 进程级的"默认模型缝"（`draft/39` §6.33 的 D42c）。
+#: 工具层那条路要用的模型缝（`draft/39` §6.33 的 D42c）。
 #:
-#: 为什么需要它：真机里 M 派 `F.step` 走的是工具层（`attack.step` → 
-#: `attack_tools._agent_for(store)` → `AgentF(store)`），而不是 host 那条角色工厂 —— 
+#: 为什么需要它：真机里 M 派 `F.step` 走的是工具层（`attack.step` →
+#: `attack_tools._agent_for(store)` → `AgentF(store)`），而不是 host 那条角色工厂 ——
 #: 于是 host 那一侧接好的缝到不了这个对象上（T2 第 14 趟 `p6p`：`--attack-reasoning` 开着，
 #: `F.step` 仍然连续 5 次 `no_change`）。工具层拿不到 host 的装配上下文，
-#: 所以由装配方在这里登记一次；默认 None（与"默认确定性"同一条纪律：
+#: 所以由装配方在装配期登记一次；默认 None（与"默认确定性"同一条纪律：
 #: 不登记就没有缝，`attack.step` 照旧落 `dead_end(缺工具)` 并如实说未接线）。
-_DEFAULT_LLM: Any = None
+#:
+#: 单一来源在 `llmseam`（按角色索引的 `set_role_seam` / `role_seam`）：
+#: V 的 `verify_proof` 工具路径需要完全相同的一件事，所以那件事只实现一份，
+#: 本文件只把角色 `"F"` 绑上去。两个下划线助手是纯粹的角色绑定（没有自己的状态），
+#: 它们用惰性 import 取单一来源 —— `llmseam` 在 import 期会拉起 `agent_prompts`
+#: → `capabilities` → 本模块，模块级 import 会成环。
+def _f_role_seam() -> Any:
+    from ..llmseam import role_seam
+
+    return role_seam("F")
 
 
-def set_default_llm(llm: Any) -> None:
-    """装配方登记"工具层构造 F 时用哪个缝"（`None` = 取消登记，回到确定性）。"""
-    global _DEFAULT_LLM
-    _DEFAULT_LLM = llm
+def _f_set_role_seam(llm: Any) -> None:
+    from ..llmseam import set_role_seam
+
+    return set_role_seam("F", llm)
 
 
-def default_llm() -> Any:
-    """当前登记的默认缝（没登记就是 `None`）。工具层与自检都用它，别各读一个全局。"""
-    return _DEFAULT_LLM
+#: `default_llm()` / `set_default_llm(llm)`：F 在工具层那条路上的缝。
+default_llm = _f_role_seam
+set_default_llm = _f_set_role_seam
 
 
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
@@ -96,11 +105,21 @@ class _Core:
         # 判定必须走 `judge.judge_json`（唯一缝协议），失败落 `judge_*` 词表，
         # 绝不许折成"没找到"。本批只插插座，接线在各条目的伪代码下进行。
         llm: Any | None = None,
+        # 预算读数的注入点（P-09 的代码那一半，`draft/44:60`）：默认 `None` =
+        # 调用方没有注入 ⇒ 这一轮读不到（三态里的"没查成"），而读不到
+        # 不据此否决花钱 —— 不把"读数缺失"变成全局停摆；钱仍由全局预算
+        # 守卫管（file:line 证据在 `attackround.BUDGET_GUARD_NOTE`）。
+        # 形状只认一种：`{"status": "known"|"unknown", "left_usd": float|None,
+        # "spent_usd": float|None, "why": str, "source": str}` —— 归一化在
+        # :meth:`budget_of_round` 里，读不到时 `why` 写全（口径 / 谁在管钱 / 缺口）。
+        # 真源为什么还没接上：`attackround.BUDGET_GAP_NOTE`（工具路径拿不到 task_id）。
+        budget_reading: Mapping[str, Any] | None = None,
     ) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = actor
         self.llm = llm
+        self.budget_reading = budget_reading
         self.log = log
 
         # ---- 阈值全部来自 config（与 A–E 的既有做法一致）
@@ -141,6 +160,76 @@ class _Core:
                 self.log(message, **extra)
             except Exception:  # noqa: BLE001 - 日志失败不该打断攻坚
                 pass
+
+    # ---- 预算读数（P-09 的代码那一半，`draft/44:60`）
+
+    def budget_of_round(self) -> dict[str, Any]:
+        """本轮"还剩多少可花 / 已经花了多少"的读数（两态：读得到 / 读不到）。
+
+        为什么要有这个注入点：这一支此前只从 `config` 的四个键
+        （`round_budget_usd` / `round_cost_usd` / `round_cost_cap_usd` / `spent_usd`）
+        取数，而那四个键在工具路径上没有赋值点（`draft/44` J-07 实测）——
+        于是"闸门读到的预算"与"账上真实的预算"是两回事，且没有任何地方会红。
+        现在读数由一个显式入口注入，读不到时如实标 `unknown`。
+
+        三态纪律：`status="unknown"`（读不到）与 `left_usd=0.0`（读到了、是零）
+        是两件事，绝不许折成同一个值 —— 前者不是事实，不许当否决面用；
+        后者是事实，仍然否决（见 :func:`attackround.pre_spend_gate`）。
+        """
+        from .. import attackround as AR
+
+        raw = self.budget_reading
+        if raw is None:
+            return self._unreadable_budget("调用方没有注入预算读数")
+        if not isinstance(raw, Mapping) or str(raw.get("status") or "") not in ("known", "unknown"):
+            shape = (dict(raw) if isinstance(raw, Mapping) else repr(raw))
+            return self._unreadable_budget(
+                f"注入的预算读数不成形（{type(raw).__name__}: {shape}）—— 只认 "
+                '{"status": "known"|"unknown", "left_usd": …, "spent_usd": …, '
+                '"why": …, "source": …} 这一种形状')
+        if str(raw.get("status")) == "known" and raw.get("left_usd") is not None:
+            return {
+                "status": "known",
+                "left_usd": float(raw["left_usd"]),
+                "spent_usd": (None if raw.get("spent_usd") is None
+                              else float(raw["spent_usd"])),
+                "source": str(raw.get("source") or "注入（未写 source）"),
+                "why": "",
+            }
+        return self._unreadable_budget(
+            str(raw.get("why") or "注入的读数自称读不到，但没写为什么"))
+
+    @staticmethod
+    def _unreadable_budget(why: str) -> dict[str, Any]:
+        """读不到时的统一读数：`why` 里必须同时写全三件事，一句都不能省。
+
+        三件事分别是：① 口径（`BUDGET_UNREADABLE_NOTE`：如实说读不到，且不据此
+        把路堵死）② 谁还在管钱（`BUDGET_GUARD_NOTE`，带 file:line）
+        ③ 缺口在哪（`BUDGET_GAP_NOTE`，带 file:line）。
+        只写①会留下一个"永远 unknown 但没人说为什么"的静默洞；
+        只写③会让读的人以为"没人管钱了"。
+        """
+        from .. import attackround as AR
+
+        return {
+            "status": "unknown",
+            "left_usd": None,
+            "spent_usd": None,
+            "source": "无（读不到）",
+            "why": (f"{why} ⇒ {AR.BUDGET_UNREADABLE_NOTE}。"
+                    f"{AR.BUDGET_GUARD_NOTE}。{AR.BUDGET_GAP_NOTE}。"),
+        }
+
+    @staticmethod
+    def _with_checks(out: dict, checks: Mapping[str, Any]) -> dict:
+        """把这一轮的预算读数放进返回值（键名固定：`budget_known` / `budget_reading`）。
+
+        为什么必须进返回值而不是只写在注释或日志里：读数是给调用方
+        （M/D 与台账）用的。产出而不被消费正是本项目记过的 P4 那一档。
+        """
+        out["checks"] = dict(checks)
+        return out
+
     def _stamp(self) -> str:
         return S.now_iso()
     @property
@@ -154,6 +243,7 @@ class _Core:
         """
         if self._e is None:
             from ..agent_e import AgentE  # 惰性：agent_e 反过来 import agent_f 的话也不成环
+            from ..llmseam import role_seam
 
             sub = self.cfg.get("agent_e")
             self._e = AgentE(
@@ -161,6 +251,14 @@ class _Core:
                 config=dict(sub) if isinstance(sub, Mapping) else {},
                 workspace_root=self.cfg.get("workspace_root"),
                 log=self.log,
+                # S-10(a)：F 建 E 的时候把 E 自己的那条缝接上 —— 只用于
+                # `author_script` 写脚本（判读一个字不改，FC-16）。
+                # 为什么由 F 来取：`role_seam` 是按角色索引的单一来源，而这里是
+                # 全仓唯一构造 AgentE 的地方；F 的缝与 E 的缝互不借用
+                # （各是各的表项，`llmseam` 的注释把这条写死了）。
+                # 没登记就是 `None` ⇒ `author_script` 如实回 `no_seam`
+                # （"没接线"必须是显式事实，不许静默降级成一份空脚本）。
+                llm=role_seam("E"),
             )
         return self._e
     def _call(self, name: str, **params: Any) -> Any:
@@ -363,6 +461,11 @@ class _Core:
         `budget_decision`（I16）在发模型调用之前判；产物一律走 `attackround`
         的受控四档（`reduction`/`proof`/`counterexample_request`/`dead_end`），
         不成形就如实落 `no_change` 并把原话带回给调用方。
+
+        预算读数（P-09）走一个显式注入点（见 :meth:`budget_of_round`）：
+        读得到就用它（`left_usd` 进 I9、`spent_usd` 进 I16），
+        读不到就如实标 `unknown` 并不据此否决 —— 每一条返回路径都带
+        `checks={"budget_known", "budget_reading"}`（键名固定，供调用方与台账读）。
         """
         import json as _json
 
@@ -372,30 +475,42 @@ class _Core:
         goal = str(sg.get("text") or "")
         testable = str(sg.get("testable") or "")
         tried = [str(x) for x in (sg.get("tried_strategies") or [])]
+        # ---- 预算读数（P-09）：有注入就用注入的，没有就如实标 `unknown` 且不据此否决。
+        reading = self.budget_of_round()
+        known = reading["status"] == "known"
+        checks = {"budget_known": known, "budget_reading": reading}
+        # 读数读不到时，框架自己写的那句 `why_strategy` 要把口径写出来（模型自己写
+        # `why_strategy` 的那几条路不动它的字 —— 那句话是它的裁量留痕）。
+        unreadable = "" if known else f"；{AR.BUDGET_UNREADABLE_NOTE}（这一轮不据此否决）"
         gate = AR.pre_spend_gate(goal=goal, testable=testable, tried_strategies=tried,
-                                 budget_left_usd=self.cfg.get("round_budget_usd"))
+                                 budget_left_usd=(reading["left_usd"] if known else None))
         if not gate["spend"]:
-            return self._self_dead_end(
+            return self._with_checks(self._self_dead_end(
                 sg, owner=owner,
                 reason="缺定义" if not testable.strip() else "方法不适用",
                 evidence="花钱之前的闸门没过：" + "；".join(gate["reasons"]),
-                why_strategy="I9：闸门说不许花钱时，这一轮的产物只能是 `dead_end`（说清缺什么）",
+                why_strategy=("I9：闸门说不许花钱时，这一轮的产物只能是 `dead_end`（说清缺什么）"
+                              + unreadable),
                 blocked_reason="；".join(gate["reasons"]),
-            )
+            ), checks)
+        # I16 的 `spent_usd`：注入的读数里有就用它（一处口径），否则照旧取 config 的
+        # 那一份 —— 默认路径与加注入点之前逐字同形。
+        spent_usd = (reading["spent_usd"] if known and reading["spent_usd"] is not None
+                     else float(self.cfg.get("spent_usd", 0.0)))
         decision = AR.budget_decision(cost_usd=float(self.cfg.get("round_cost_usd", 0.02)),
                                       cap_usd=self.cfg.get("round_cost_cap_usd"),
-                                      spent_usd=float(self.cfg.get("spent_usd", 0.0)))
+                                      spent_usd=spent_usd)
         if decision["status"] == "too_large":
-            return self._self_dead_end(
+            return self._with_checks(self._self_dead_end(
                 sg, owner=owner, reason="超出本轮预算", evidence=str(decision["note"]),
-                why_strategy="I16：超上限的一轮要显式阻塞，不许静默截断",
+                why_strategy="I16：超上限的一轮要显式阻塞，不许静默截断" + unreadable,
                 blocked_reason=str(decision["note"]),
-            )
+            ), checks)
 
         prompt = _attack_prompt(plan=plan, sg=sg, owner=owner, tried=tried)
         data, problem = J.judge_json(self.llm, prompt, point="F.step")
         if problem or not data:
-            return {
+            return self._with_checks({
                 "action": "no_change",
                 "outcome": "no_change",
                 "detail": (f"子目标 {sg.get('sid')}（owner={owner}）的推理缝没查成："
@@ -406,13 +521,13 @@ class _Core:
                 "blocked_reason": J.reason_of(problem, point="F.step"),
                 "in_flight": True,
                 "count_attempt": False,
-            }
+            }, checks)
         try:
             product = AR.parse_round(_json.dumps(data, ensure_ascii=False))
         except AR.RoundError as exc:
             # 不成形 ≠ 没做：模型确实说了话，只是没按受控形状说 —— 原话带回去，
             # 让调用方（M/D）能据它改提示词，而不是只看到一句"没进展"。
-            return {
+            return self._with_checks({
                 "action": "no_change",
                 "outcome": "no_change",
                 "detail": (f"子目标 {sg.get('sid')} 的这一轮不成形（{exc}）⇒ **未推进**；"
@@ -422,8 +537,76 @@ class _Core:
                 "blocked_reason": f"这一轮不成形：{exc}",
                 "in_flight": True,
                 "count_attempt": False,
-            }
-        return self._apply_round(product, sg, plan=plan, owner=owner)
+            }, checks)
+        # ---- R-03（`draft/44`）：伪造引用当场拒收。
+        #
+        # 真机读数（`p8f` 计划 0002）：`proof` 的一步 `cites` 写着 `lit:Frey1986/…`，而那个
+        # 工作区的 literature id 是 `0000-0007` —— 一个不存在的 id，那一轮照样记 `progress`。
+        # `attackround._clean_step` 只能要求"cites 非空"（那一层是纯判定层、拿不到 store），
+        # 存在性只有拿到台账的这一层判得了。拒收与"不成形"同一档（`count_attempt=False`）：
+        # 产物不合格 ⇒ 不记成"对这条子目标的一次尝试"。
+        foreign = self._foreign_cites(product)
+        if foreign:
+            return self._with_checks({
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": (f"子目标 {sg.get('sid')} 的这一轮**拒收**：它引了台账里不存在的 id "
+                           f"{foreign[:4]} ⇒ 未推进。伪造引用是不可逆损失（R-03）："
+                           "要么把 id 改成台账里真的那条，要么显式把它声明成前提（`assumption: true`）"),
+                "evidence": [],
+                "status": "blocked",
+                "blocked_reason": f"引用了不存在的 id：{foreign[:4]}",
+                "in_flight": True,
+                "count_attempt": False,
+            }, checks)
+        return self._with_checks(self._apply_round(product, sg, plan=plan, owner=owner), checks)
+
+    #: `cites`/`best_partial[].ids` 里的 id 分别住在哪张台账里（`(表, 主键列, 允许的前缀)`）。
+    #:
+    #: 这一层只判"这个 id 在不在台账里"（R-03 的现场：`lit:Frey1986/…` vs `0000-0007`）；
+    #: "前缀与表的严格对应"不在本层 —— 今天没有那一层，别在这里假装有
+    #: （`lit:` 指到一条实验 id 这种错配，本判据看不见）。
+    _CITE_ID_SOURCES: tuple[tuple[str, str, str], ...] = (
+        ("literature", "lit_id", "lit"),
+        ("statements", "stmt_id", "stmt"),
+        ("experiments", "experiment_id", "exp"),
+        ("relations", "rel_id", "rel"),
+        ("documents", "doc_id", "doc"),
+        ("conjectures", "conjecture_id", "conj"),
+        ("attack_plans", "plan_id", "plan"),
+        ("search_requests", "request_id", "req"),
+    )
+
+    #: 有前缀、但不在 `schema.TABLES` 里的引用（本判据查不了，如实不判）。
+    #:
+    #: `v:` —— V 的 `verifications/` 是文件账本（`verifications/*.jsonl`），不是一张表
+    #: ⇒ 拿 `store.rows` 去读会抛 `StoreError`。这里刻意跳过而不拒收：
+    #: "这一层查不了"与"这个 id 是假的"是两件事（三态纪律），不许把前者折成后者。
+    _CITE_PREFIXES_NOT_VERIFIABLE: frozenset[str] = frozenset({"v"})
+
+    def _foreign_cites(self, product: Mapping[str, Any]) -> list[str]:
+        """这一轮的产物引到的 id 里有哪几个台账里根本没有（空列表 = 都真的存在）。
+
+        读台账失败不吞（"没查成"不许折成"都合法" —— 那正是伪造引用的绿色通道）。
+        `#` 之后的部分（页码/锚点）按同一个 id 算（与 `closing` 的 `lit:0003#p.4` 同口径）。
+        """
+        cites: list[str] = []
+        for step in (product.get("steps") or []):
+            cites += [str(x) for x in (step.get("cites") or [])]
+        for item in (product.get("best_partial") or []):
+            cites += [str(x) for x in (item.get("ids") or [])]
+        cites = [c for c in cites
+                 if c.split(":", 1)[0].strip() not in self._CITE_PREFIXES_NOT_VERIFIABLE]
+        if not cites:
+            return []
+        known: set[str] = set()
+        for table, column, prefix in self._CITE_ID_SOURCES:
+            for row in self.store.rows(table):
+                rid = str(row.get(column) or row.get("id") or "").strip()
+                if rid:
+                    known.add(rid)
+                    known.add(f"{prefix}:{rid}")
+        return sorted({c for c in cites if c.split("#", 1)[0].strip() not in known})
 
     def _self_dead_end(self, sg: Mapping[str, Any], *, owner: str, reason: str,
                        evidence: str, why_strategy: str, blocked_reason: str) -> dict:
@@ -487,6 +670,9 @@ class _Core:
                     f"期望界 {spec.get('expected_bound')} —— {product.get('why_it_decides')}")
             new_goals.append({"sid": new_sid, "text": text, "owner": "E",
                               "testable": str(spec.get("expected_bound") or ""),
+                              # S-10：判据要跟着子目标走 —— 下一轮 `_deploy_e` 缺 `script_path` 时
+                              # 会把这份判据念出来（否则"缺脚本"是一句没人能执行的话）。
+                              "script_spec": spec,
                               "status": "todo"})
             detail = (f"把这一轮的实验判据交给 E（新子目标 {new_sid}）："
                       f"{product.get('why_it_decides')}")
@@ -535,9 +721,19 @@ class _Core:
             }
 
         script_path = str(sg.get("script_path") or "").strip()
-        if not script_path:
+        spec = dict(sg.get("script_spec") or {})
+        if not script_path and not spec:
             # 这不是失败，是我没法做：缺执行参数。如实记，并让子目标保持在
             # 可重试位置（下一次有人补上 script_path 就能跑）。
+            #
+            # S-10（`draft/44`）：F 的 `counterexample_request` 造出来的 E 子目标带着判据
+            # （`script_spec`：criterion/params/expected_bound），这里要把那份判据念出来 ——
+            # 否则"缺 script_path"是一句没人能执行的话（下一轮照旧缺，直到计划 stalled）。
+            #
+            # S-10(a)：带判据的那一支不再停在这里 —— 下面先让 E 按判据把脚本写出来
+            # （`author_script`）。没判据的这一支逐字不变：这既是行为上的最小改动，
+            # 也是"没判据 ⇒ 不写脚本"那条反负控的落点（凭空生成脚本会把"不知道该判什么"
+            # 伪装成"有实验在跑"）。
             return {
                 "action": "no_change",
                 "outcome": "no_change",
@@ -547,6 +743,7 @@ class _Core:
                 ),
                 "evidence": [],
                 "status": "todo",
+                "blocked_reason": "缺 `script_path`（E 要先写脚本）",
                 "count_attempt": False,
             }
 
@@ -565,6 +762,43 @@ class _Core:
                 "blocked_reason": f"E 不可用：{type(ex).__name__}: {ex}",
                 "count_attempt": False,
             }
+
+        # ---- S-10(a)：有判据、没脚本 ⇒ 让 E 按判据把脚本写出来，然后照常跑它。
+        #
+        # 为什么必须在这里写（而不是让模型自己用 `fs.write` 写）：`counterexample_request`
+        # 造出的子目标必然没有 `script_path`，而"下一轮有人补上它"从来不会发生 ——
+        # 真机里这一跳是"造出的子目标必然停住直到计划 stalled"（`draft/44` S-10）。
+        # 现在补它的就是 E 自己（`author_script`：缝只用于生成，判读一个字不改）。
+        authored: dict[str, Any] = {}
+        if not script_path:
+            authored = agent_e.author_script(spec, sid=sid)
+            if not authored.get("ok"):
+                code = str(authored.get("reason") or "")
+                # 人读的那句话两种形状都要接：走 `refusals.refuse` 的档给的是 `error`
+                # （框架统一的拒绝字段），不走它的档给的是 `note`（本方法自己的读数字段）。
+                # 少读一种，`blocked_reason` 里就会出现一个 `None` —— 而"没做成"的理由
+                # 恰恰是这条子目标最需要的那条信息。
+                note = str(authored.get("note") or authored.get("error") or "")
+                spec_line = (f"；这一条子目标带的判据是：criterion={spec.get('criterion')!r}、"
+                             f"params={spec.get('params')!r}、期望界={spec.get('expected_bound')!r} —— "
+                             "E 要先把脚本写进工作区（`script_path`）再跑")
+                return {
+                    "action": "script_not_authored",
+                    "outcome": "no_change",
+                    "detail": (
+                        f"子目标 {sid} 有判据但没有脚本，而 E 没能把它写出来"
+                        f"（{code}）⇒ **未推进**（没有脚本就没有实验可跑；"
+                        f"这不是'跑了但没结果'）。{note}{spec_line}"
+                    ),
+                    "evidence": [],
+                    "status": "todo",
+                    "blocked_reason": f"E 写不出脚本：{code}｜{note}",
+                    # `no_seam` 是环境事实（再试一次还是同一句话，要去接线）⇒ 不计尝试；
+                    # 其余（`bad_source` / `bad_spec` / `write_failed` / `judge_*`）都要计 ——
+                    # 它们是"真的试过一次"，重试要有读数。
+                    "count_attempt": code != "no_seam",
+                }
+            script_path = str(authored.get("script_path") or "")
 
         # E 执行失败必须被降级成"这一轮卡住了"，而不是让整个攻坚炸掉。
         #
@@ -605,6 +839,8 @@ class _Core:
                 "evidence": [],
                 "status": "blocked",
                 "blocked_reason": f"实验执行失败：{type(ex).__name__}: {ex}",
+                # 脚本是这一轮写的 ⇒ 即便跑失败也要留落点（复核时要看的就是它）
+                "script_path": script_path,
                 "count_attempt": True,
             }
         eid = str(res.get("experiment_id"))
@@ -624,6 +860,9 @@ class _Core:
                 "proof_experiment_ids": [eid],
                 "status": "closed",
                 "negation_kind": res.get("negation_kind"),
+                # S-10(a)：脚本是这一轮才写出来的 ⇒ 把落点写回子目标（下一轮要重跑/复核
+                # 时得知道跑的是哪一份），否则"它到底写了哪个脚本"只活在 history 的一句话里。
+                "script_path": script_path,
                 "count_attempt": True,
             }
         if result == "supports":
@@ -639,6 +878,7 @@ class _Core:
                 "experiment_ids": [eid],
                 "status": "supported_not_proved",
                 "negation_kind": res.get("negation_kind") or "not_proved",
+                "script_path": script_path,
                 "count_attempt": True,
             }
         return {
@@ -653,6 +893,7 @@ class _Core:
             "experiment_ids": [eid],
             "status": "in_progress",
             "negation_kind": res.get("negation_kind") or "no_local_evidence",
+            "script_path": script_path,
             "count_attempt": True,
         }
     def _deploy_a(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict:

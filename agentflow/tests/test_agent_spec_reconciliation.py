@@ -67,13 +67,13 @@ def test_every_spec_matches_the_six_places_that_define_it_today() -> None:
 
 
 def test_the_registry_is_not_vacuous() -> None:
-    """反真空：九个角色都在、每格都有内容、总数与今天一致。"""
+    """反真空：十个角色都在、每格都有内容、总数与今天一致。"""
     reg = builtin_registry()
     assert reg.roles() == tuple(TOOL_ROLES), reg.roles()
-    assert len(reg.roles()) == 9
-    assert reg.read_only_roles() == ("C", "H"), reg.read_only_roles()
+    assert len(reg.roles()) == 10
+    assert reg.read_only_roles() == ("C", "H", "V"), reg.read_only_roles()
     assert "M" not in reg.summonable_roles()
-    assert sum(len(v) for v in reg.edges().values()) == 29
+    assert sum(len(v) for v in reg.edges().values()) == 32
     for role in reg.roles():
         spec = reg.get(role)
         assert spec.brief.duty, f"{role} 没有职责一句"

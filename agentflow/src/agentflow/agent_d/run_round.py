@@ -1,6 +1,6 @@
 """角色 D 的动作 `run_round`（`goal-7f5116c1` M6：从 `agent_d.py` 拆出来，逐字未改）。
 
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`tests/test_agent_split_is_verbatim.py`）。
+拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。
 """
 from __future__ import annotations
 
@@ -106,6 +106,9 @@ class _RunRound:
                     "confidence": res["confidence"],
                     "criteria": res["criteria"],
                     "llm_used": res["llm_used"],
+                    # 三态读数随本轮汇总一起出去（`R1-A1`）：`llm_used=False` 的那两种
+                    # 情形（没接线 / 接了但失败）在这一格里分得开。
+                    "llm_reading": dict(res.get("llm_reading") or {}),
                 }
             )
             summary["confidence"][res["question_id"]] = res["confidence"]

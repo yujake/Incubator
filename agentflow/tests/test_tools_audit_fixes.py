@@ -835,19 +835,38 @@ def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeyp
       `agent_e.FORMAL_REASONS`/本层受控词表之后，检查器原样报的那个状态必须有
       一个透传栏（收口与透传成对存在，否则收口就是删信息）。四条路径都在，
       拒绝路径上是空串（"没有检查器状态可透传"）。
+    - `exit_code`（`E-12(a)`，`draft/44`）是第 9 个键：真机 50 条 formal 里 41 条
+      `exit_code=None`，而那一格改前同时表示"没查成"与"检查器跑完了"两件事 ——
+      检查器进程的真实退出码必须有自己的位置（上游读数是 `agent_e/core.py`
+      的 `_record_formal`，它把"跑到哪一步"与"结论是什么"分开记）。
+      四条 ok 分支都在：三条"没起检查器"的分支给 `None`（"没有退出码"是诚实的值，
+      不是 `0` —— `0` 会被读成"检查器跑完了、退出码 0"），主分支给检查器原样报的那个值。
+      口径是「契约对每一条分支都成立」（主控 2026-10-07 裁 (a)）：key 集合不随分支变，
+      所以 `set(返回) == 声明` 这条判据在每条分支上都仍然有效。同口径的另两处是
+      `tests/test_check_formal_wiring.py`（桩 + 注释键数 + `N-4` 的例外表）
+      与 agent 侧 `agent_e/core.py::_formal_refusal`（拒绝分支补 `exit_code: None`）。
     - 第 4 条 ok 分支 `tool_crashed`（`E-4`：探测本身没做成）此前没有被采样
       （`B-R7` 登记过这件事），现在补上。
 
-    这里采的是 ok 分支。三条 `return fail(...)` 分支给的是 `ok=False` + `data=None`
-    （一个键都不给），由本文件里逐条 `return` 比对声明的用例与运行期那条
+    这里采的是 ok 分支。失败那一侧是「2 个 `return fail(...)` 调用点，覆盖 3 类情形」
+    —— 本文件与 `tools/verify_tools.py` 的旧措辞都写成"三条 `return fail(...)` 分支"，
+    那是把「情形数」当成了「调用点数」（`R0-B2` 实测：AST 数出 2 个调用点）：
+    ①拿不到声明名、②声明名参数不合法 —— 这两类汇进同一个调用点
+    （`except ValueError` ⇒ `kind="param_error"`，`verify_tools.py:436-443`）；
+    ③桥接层抛异常走另一个调用点（`except Exception` ⇒ `kind="check_failed"`，
+    `:444-450`）。两个调用点给的都是 `ok=False` + `data=None`（一个键都不给），
+    由本文件里逐条 `return` 比对声明的用例与运行期那条
     `test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind` 钉住
     （`I-4`/`T3`/`C2`）。
+    上面这个数字有机械判据守着（`test_the_fail_call_site_count_in_this_docstring_is_live`）：
+    改了调用点数而没改这句话，它会红。
     """
     reg = registry_for(VT, store, root=store.root)
     spec = reg.get("verify.check_formal")
     declared = declared_keys(spec.returns)
     assert declared == {"checked", "verified", "claim", "reason", "detail",
-                        "verifier_output", "missing_imports", "verifier_status"}
+                        "verifier_output", "missing_imports", "verifier_status",
+                        "exit_code"}
     assert "真跑" in spec.summary, "summary 必须如实说明它会真的跑一次检查器"
     assert "未接线" not in spec.summary, "它已经接线了，声明里不许再写未接线"
 
@@ -911,6 +930,104 @@ def test_check_formal_return_shape_matches_its_declaration(store: Store, monkeyp
     assert d3["verifier_status"] == "source_unreadable"
     # 负控：任何分支都不许声称验证过
     assert all(b["verified"] is not True for b in (d1, d2, d3, d4))
+
+
+# ----------------------------------------------------- `R0-B2`：措辞里的调用点数要现算
+
+#: 本文件里写调用点数的那句话的形状。为什么要"可解析"：数字散在散文里时，
+#: 改代码的人没有理由去改它 —— 同族先例是 `tests/test_check_formal_wiring.py`
+#: 的 `f"{len(CONTRACT_KEYS)} 个键"`（`N-4`）。
+#: 数字位写 `\d+`，所以 docstring 里引这个形状时必须用 `N` 之类的非数字占位
+#: （否则判据会把自己举的例子也当成"写了一个数"）。
+_FAIL_CALL_SITE_CLAIM = re.compile(r"(\d+)\s*个\s*`return fail\(\.\.\.\)`\s*调用点")
+
+
+def _claim_docstring(text: str) -> str:
+    """取断言契约那个用例自己的 docstring（不是全文件的 docstring）。
+
+    为什么把落点收窄到一处（第一版是全文件扫，被自己咬了）：全文件扫时，
+    任何一段「引用」这个形状的文字都会命中它 —— 包括本判据下面那段解释
+    "坏样本长什么样"的说明。约束于是变成"谁都不许把形状写出来"，
+    而写在帮助函数里的解释恰恰最需要写出形状。
+    收窄到"那句话必须住在这个用例的 docstring 里"之后，别处的引用与解释随便写。
+    """
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.FunctionDef)
+                and node.name == "test_check_formal_return_shape_matches_its_declaration"):
+            doc = ast.get_docstring(node, clean=False)
+            assert doc, "那个断言契约的用例没有 docstring ⇒ 这句措辞没有落点"
+            return doc
+    raise AssertionError(
+        "找不到 `test_check_formal_return_shape_matches_its_declaration` "
+        "⇒ 这条判据没查成（不是「措辞没问题」）")
+
+
+def _fail_call_sites(source: str) -> list[tuple[int, str]]:
+    """AST 现算 `check_formal` 体内 `return fail(...)` 的调用点 ⇒ `[(行号, kind)]`。
+
+    只数「调用点」，不数情形：`except ValueError` 那一支同时覆盖"拿不到声明名"与
+    "声明名参数不合法"两类情形 ⇒ 情形数（3）与调用点数（2）本来就不同。
+    找不到 `check_formal` 时抛断言，而不是返回空列表 —— "没查成"不是"没有调用点"。
+    """
+    tree = ast.parse(source)
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "check_formal"), None)
+    assert fn is not None, "找不到 `check_formal` ⇒ 这条判据没查成（不是「它没有失败分支」）"
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "fail":
+            kind = next((str(k.value.value) for k in node.keywords
+                         if k.arg == "kind" and isinstance(k.value, ast.Constant)), "")
+            out.append((node.lineno, kind))
+    return sorted(out)
+
+
+def _claim_problem(doc_text: str, source: str) -> str:
+    """docstring 里写的调用点数 vs 现算调用点数（空串 = 一致）。"""
+    live = len(_fail_call_sites(source))
+    stated = sorted({int(m.group(1)) for m in _FAIL_CALL_SITE_CLAIM.finditer(doc_text)})
+    if not stated:
+        return ("本文件的 docstring 里读不到那句「N 个 `return fail(...)` 调用点」"
+                "⇒ 判据没有落脚点（这不是「一致」）")
+    if stated != [live]:
+        return (f"docstring 里写的是 {stated} 个调用点，而 AST 现算是 {live} 个"
+                f"（`R0-B2` 的原始形态正是这样：写着「三条」而实测 2 个 —— "
+                "把情形数当成了调用点数）")
+    return ""
+
+
+def test_the_fail_call_site_count_in_this_docstring_is_live() -> None:
+    """反回流：上面那句"2 个调用点"必须与 AST 现算一致，改代码忘了改话就红。
+
+    为什么值得一条用例：这句措辞已经错过一次（`B-R5` 起就写着"三条"），
+    而它不是笔误 —— 它把"3 类情形"说成了"3 个调用点"，下一个人照着它推理就会
+    以为有三个失败出口。数字能机械核，所以就让机器核。
+
+    边界（刻意不扫）：`src/agentflow/tools/verify_tools.py` 里同样的计数
+    （`:439` / `:779` / `:785` / `:787`）在 FC-27 禁改区（`prover-bridge` 类），
+    原文同样把情形数写成调用点数、且 `:785`/`:787` 那两句已被后来的用例推翻
+    （实测采样 4 条 ok 分支、且失败分支有逐分支采样用例）。那几处已登记人审队列，
+    本判据故意只看本文件 —— 否则它会因为一条我无权改的注释而长红，那是判据替人做决定。
+    """
+    source = Path(VT.__file__).read_text(encoding="utf-8")
+    docs = _claim_docstring(Path(__file__).read_text(encoding="utf-8"))
+
+    live = _fail_call_sites(source)
+    assert len(live) == 2, (
+        f"`check_formal` 的 `return fail(...)` 调用点数变了（现算 {len(live)} 个：{live}）"
+        "⇒ 先确认是不是真的加/删了失败出口，再同时改那句措辞与这里的锚")
+
+    problem = _claim_problem(docs, source)
+    assert not problem, problem
+
+    # 反负控：把那个数字改回旧值（`B-R5` 起写的"三条"）⇒ 同一读法必须报出来。
+    doctored = _FAIL_CALL_SITE_CLAIM.sub("3 个 `return fail(...)` 调用点", docs, count=1)
+    assert doctored != docs, "反负控没改到那句话 —— 这条负控自己失效了"
+    assert _claim_problem(doctored, source), (
+        "数字被改回旧值，判据却一声不吭 ⇒ 它是真空的")
+    # 反向的负控：连"没有落脚点"这一态也要报出来（删掉那句话 ⇒ 不是"一致"）
+    assert _claim_problem("这里没有任何计数句", source), "删掉那句话之后判据仍判绿 ⇒ 它没有接点"
 
 
 def test_every_fail_branch_of_check_formal_gives_no_keys_and_a_declared_kind(

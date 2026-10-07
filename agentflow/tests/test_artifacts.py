@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import pytest
@@ -156,4 +157,65 @@ def test_cmd_artifacts_list_is_read_only(tmp_path: pathlib.Path, capsys):
     capsys.readouterr()
     assert rc == 0
     assert not (tmp_path / "ARTIFACTS.jsonl").exists(), "list 不许写台账"
+
+
+# ============================================================ EE-11：producer 的写入期口径
+
+
+def test_ee11_an_unregistered_producer_is_written_and_shown_not_rejected(tmp_path: pathlib.Path):
+    """EE-11（主控裁定 2026-10-06）：写入期可见，不是写入期否决。
+
+    两条依据（成本序）：① 外部脚本（真机 2985 行 `paper-generator`）的产出不许因为
+    "框架没登记这个名字"就消失 —— 台账少一行 = 下游读不到那份产物（不可逆的信息损失）；
+    ② 但"静默长轴"也不许发生 ⇒ 用读数解决（`summarize()["unregistered"]` 点名 + 计数）。
+    判据三半：① 拼错的名字照写且读数点名（改前：静默写入、读数什么都不说）；
+    ② 反负控：登记过的 / 角色 / 主控 / `tool:<名>` ⇒ 不出现在 `unregistered` 里；
+    ③ 畸形（空 / 换行 / 超长）⇒ 仍然拒（那是坏输入，不是"未登记的外部名"）。
+    """
+    from agentflow import artifacts as A
+
+    _file(tmp_path, "out/r.md", "x")
+    known = ("G", "E", "M", "tool:fs.write", "agentflow.paperbuild",
+             "paper-generator")          # 最后一个是已登记的"已知"外部生产者
+    for good in known:
+        assert A.producer_is_known(good), good
+        A.record(tmp_path, path="out/r.md", producer=good, kind="report")
+    # ① 拼错的名字：照写（不抛）+ 读数点名
+    entry = A.record(tmp_path, path="out/r.md", producer="paper-genrator", kind="report")
+    assert entry["producer"] == "paper-genrator", "未登记的名字照写台账（不许丢行）"
+    assert not A.producer_is_known("paper-genrator")
+    summ = A.summarize(tmp_path)
+    assert summ["unregistered"] == {"paper-genrator": 1}, summ["unregistered"]
+    assert summ["by_producer"]["paper-genrator"] == 1, summ["by_producer"]
+
+    # ② 反负控：已知的那些一个都不许进 `unregistered`
+    for good in known:
+        assert good not in summ["unregistered"], (good, summ["unregistered"])
+
+    # ③ 畸形仍然拒（两档不许折成一档）
+    for bad in ("", "   ", "a\nb", "x" * (A.PRODUCER_MAX_CHARS + 1)):
+        with pytest.raises(A.ArtifactError):
+            A.record(tmp_path, path="out/r.md", producer=bad, kind="report")
+    assert A.producer_problem("") != "" and A.producer_problem("a\nb") != ""
+    assert A.producer_problem("paper-genrator") == "", "未登记不是畸形"
+
+
+def test_ee11_the_read_path_still_reads_legacy_producers(tmp_path: pathlib.Path):
+    """读路径一个字都不改：历史行里的未登记 producer 不许因为"今天没登记"就读不出来。
+
+    （`store.rebuild` 会重放同一批行；读路径上加名单 = 数据遗失。）
+    """
+    from agentflow import artifacts as A
+
+    _file(tmp_path, "out/legacy.md", "x")
+    legacy = {"at": "2026-01-01T00:00:00+00:00", "path": "out/legacy.md",
+              "sha256": A.sha256_of(tmp_path / "out" / "legacy.md"), "bytes": 1,
+              "producer": "某个早已不在仓库里的外部脚本", "kind": "report",
+              "task_id": "", "exit_code": None, "note": ""}
+    (tmp_path / "ARTIFACTS.jsonl").write_text(json.dumps(legacy, ensure_ascii=False) + "\n",
+                                              encoding="utf-8")
+    rows, bad = A.read_ledger(tmp_path)
+    assert not bad and len(rows) == 1, (rows, bad)
+    assert rows[0]["producer"] == "某个早已不在仓库里的外部脚本"
+    assert A.list_artifacts(tmp_path, producer="某个早已不在仓库里的外部脚本"), "按 producer 过滤也要读得到"
 

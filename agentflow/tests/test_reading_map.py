@@ -46,6 +46,13 @@ _RUNTIME_PRODUCTS = frozenset({
     # 于是图里写的 `handoffs.jsonl` 被切成 `handoffs.json` 这个 token（判据的已知切词行为，
     # 改切词顺序会牵动一批历史文档，不在这里动）。
     "handoffs.jsonl", "handoffs.json",
+    # 产物台账（`artifacts.py:63` 的 `LEDGER_NAME`）：落点是 `<工作区根>/ARTIFACTS.jsonl`，
+    # 同样是"跑起来才有"的运行时产物 —— 仓库里没有它。
+    # 与 `handoffs` 同一个切词行为（`ARTIFACTS.jsonl` 被切成 `ARTIFACTS.json`），
+    # 所以两个 token 都登记。为什么不是把读图里那个名字改成占位写法：那个名字是真的
+    # （`LEDGER_NAME` 逐字就是它），把它降级成 `ARTIFACTS.<ext>` 等于为了让判据好过
+    # 而让文档不再指到真名 —— 那正是这张图的用途的反面。
+    "ARTIFACTS.jsonl", "ARTIFACTS.json",
 })
 
 

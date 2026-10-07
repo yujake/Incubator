@@ -139,12 +139,30 @@ def test_an_external_statement_must_name_its_source(store):
     assert "source_lit_id" in msg, msg
 
 
-def test_an_own_result_without_a_proof_cannot_enter(store):
-    """负控：`own_result` 没有证明 ⇒ 拒（§10 的自产入库门落到数据面就是这一条）。"""
+def test_an_own_result_without_proof_text_is_recorded_and_downgraded(store):
+    """P-06（改判）：`own_result` 没有 `proof_text` 不再拒，而是落库 + 自动降级。
+
+    这一条此前叫 `test_an_own_result_without_a_proof_cannot_enter`（负控：没有证明就拒）。
+    改判的依据是实测：13 条 `own_result` 全带 `proof_text`，而现算等级 13/13 全是
+    `conjecture` —— 那条 raise 一条真猜想都没挡住，只挡住了"如实登记"。
+
+    判据两半（缺一半这条就会退化成"删了一条 raise"）：
+    ① `validate()` 不抛（schema 侧已放开）；
+    ② 等级现算降到底：第 2 位空 ⇒ `derive_grade` 给"猜想"，而有证明的那条给更高的档
+       —— 所以"降级"是结构自动发生的，不需要新字段，也不需要谁去写一个等级。
+    """
+    from agentflow import evidencebits as EB
+
     store.init()
-    msg = _reject(stmt_id="0001", origin="own_result", statement_full="我们猜……",
-                  quote_verified=None, quote_reason="自产结果不走逐字回验")
-    assert "proof_text" in msg and "自产" in msg, msg
+    S.Statement(stmt_id="0001", origin="own_result", statement_full="我们猜……",
+                quote_verified=None, quote_reason="自产结果不走逐字回验").validate()
+
+    bare = EB.bits_of(proof=None, proof_process="")
+    assert EB.derive_grade(bare) == "conjecture", bare
+    # 正控（证明"降级"不是恒真）：有证明 且 第 3 位签了 ⇒ 升到预备定理级；
+    # 只给 proof 不给 reviewed 仍是"猜想" —— 这正说明等级由五位现算、不由谁自报。
+    assert EB.derive_grade(EB.bits_of(proof=True, reviewed=True)) == "pre_theorem"
+    assert EB.derive_grade(EB.bits_of(proof=True)) == "conjecture"
 
 
 def test_the_quote_check_is_three_state_and_must_say_why(store):

@@ -61,6 +61,10 @@ ALL = "ALL"
 NAME_RE = re.compile(r"^(\d{4})-([A-Za-z]+)to([A-Za-z]+)\.md$")
 #: 一行的必填字段（缺一 ⇒ 这一行不是一份可溯源的交接）。
 REQUIRED_FIELDS: tuple[str, ...] = ("to", "summary", "body")
+#: 修订行的 `kind` 取值（`draft/53` §2.1「改」/ `draft/55` §3.1）：追加修订行、不改旧行。
+#: 为什么要有这一格：`revises` 指回被订正的那一份，"这一行是新写还是订正"必须机读得出来
+#: ——否则读账本的人会把"订正"读成"又交接了一次"（那正是 #1 的一半）。
+KIND_REVISION = "revision"
 
 
 def dir_of(root: str | Path) -> Path:
@@ -287,17 +291,32 @@ def rows_for_task(root: str | Path, task_id: str, *, sender: str = "") -> list[d
 
 def write(root: str | Path, *, sender: str, recipient: str, title: str = "", body: str,
           refs: Iterable[str] = (), summary: str = "", task_id: str = "",
-          sid: str = "", note: str = "", timeout: float = 30.0) -> dict[str, Any]:
+          sid: str = "", note: str = "", revises: str = "",
+          timeout: float = 30.0) -> dict[str, Any]:
     """追加一份交接手稿，返回它的那一行（含 `id`）。
 
     拒绝（抛 `ValueError`，「零写入」）：发件人/收件人不是合法角色、没有一句话说明、
     正文为空。"空手稿"必须被拒：它是"我交接了"的假证据，而这一层存在的全部意义就是可溯源。
+
+    `refs` 不再拒写（D10，`draft/52:103`）：立不住的引用被记进 `ref_problems`
+    并可由 :func:`ref_readings` 读出来（详见那里的说明）。形状仍然管：
+    `refs` 必须是字符串数组（形状错 ⇒ 抛 `ValueError`）。
 
     `title` 是旧参数名：它现在与 `summary` 是同一件事（进留言的那一句话）。
     两者都给了就以 `summary` 为准，不给 `summary` 时把 `title` 当它 —— 旧调用点不用改。
 
     `note` 是"这一行是怎么来的"（模型自己填的表 / 框架据派活派生，见 `draft/39` §6.4）：
     它进正文头部，因为读账本的人要能分清这两种留痕。
+
+    `revises`（`draft/53` §2.1）非空 ⇒ 这一行是一条修订行（`kind="revision"`，
+    指回被订正的那一份编号）。两条纪律：
+
+    - append-only：旧行一个字节都不改（订正靠追加，不靠改写 —— 溯源链要能复现
+      "当时写的是什么、后来改成了什么"）；
+    - 修订行自带自己的编号（编号空间是账本的行号），`revises` 是"我订正的是谁"。
+
+    只给 `revises` 时旧的交接行逐字节不变（不多一个键）—— 这一格是给
+    `revise(...)` 用的，不是给所有行加一个恒为空的字段。
     """
     sender = str(sender or "").strip()
     recipient = str(recipient or "").strip().upper()
@@ -316,10 +335,28 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
     if not text_body:
         raise ValueError("正文不能为空（空手稿是『我交接了』的假证据）")
     refs_list = [str(x).strip() for x in refs if str(x).strip()]
+    # ---- D10（`draft/52:103` 逐字："改成『建议』（不动 `REQUIRED_FIELDS` 其它项）+ 一条读数"）
+    #
+    # 以前这里对每条 ref 调 `ref_problem`，悬空就拒写。真机读数（`draft/44` D10）：
+    # `refs` 在 1542 行手稿里全空 —— 一条"要么填对、要么整份手稿写不进去"的判据，
+    # 在真机上的效果不是"引用得更好"，而是"没人敢引用"（引用一错，交接本身丢了）。
+    # 于是这条链上最该有的东西（溯源边）在账本里一个都没有。
+    #
+    # 新口径：记下来 + 读数可见，不拒写。形状仍然管（`refs` 必须是字符串数组），
+    # 而"这一条引用立不立得住"从写入期硬拦降成写入期的如实标记：
+    # 行里多一个 `ref_problems`（哪一条引用有什么问题），并由 `ref_readings` 汇总成读数。
+    ref_problems: dict[str, str] = {}
     for ref in refs_list:
         why = ref_problem(root, ref)
         if why:
-            raise ValueError(why)
+            ref_problems[ref] = why
+    revises_id = ""
+    if str(revises or "").strip():
+        revises_id = _norm_mid(revises)
+        if row_of(root, revises_id) is None:
+            raise ValueError(
+                f"要订正的手稿 {revises!r} 不在盘上 ⇒ 订正一条不存在的交接是凭空引用"
+            )
 
     d = ensure_dir(root)
     lock = FileLock(str(d / LOCK_NAME), timeout=timeout)
@@ -339,12 +376,120 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
                 "path": f"{MANUSCRIPTS_DIR}/{HANDOFFS_NAME}#{mid}",
                 "format": "jsonl",
             }
+            if revises_id:
+                # 只有修订行才多这两个键：旧的交接行逐字节不变（不许给所有行
+                # 加一个恒为空的字段 —— 那会让 `rows()` 的每一次对拍都漂）。
+                rec["revises"] = revises_id
+                rec["kind"] = KIND_REVISION
+            if ref_problems:
+                # 同一条纪律：只有真的有问题时才多这一个键。
+                rec["ref_problems"] = dict(ref_problems)
             line = json.dumps(rec, ensure_ascii=False, sort_keys=True)
             with handoffs_path(root).open("a", encoding="utf-8", newline="\n") as fh:
                 fh.write(line + "\n")
             return rec
     except Timeout as exc:  # pragma: no cover - 只有并发极端场景才会撞上
         raise ValueError(f"取手稿编号锁超时（{timeout}s）：有另一个写者卡住了，稍后重试") from exc
+
+
+def _norm_mid(mid: Any) -> str:
+    """编号归一成四位写法（`"7"` / `7` / `"0007"` ⇒ `"0007"`；不是数字就原样返回）。"""
+    text = str(mid or "").strip()
+    return f"{int(text):04d}" if text.isdigit() else text
+
+
+def revise(root: str | Path, *, mid: str, title: str = "", summary: str = "", body: str,
+           sender: str = "", recipient: str = "", refs: Iterable[str] = (),
+           task_id: str = "", sid: str = "", note: str = "", reason: str = "",
+           timeout: float = 30.0) -> dict[str, Any]:
+    """订正一份手稿：追加一条修订行，旧行一个字节都不改（`draft/53` §2.1「改」）。
+
+    为什么是追加而不是改写（`draft/39` §C1 的同一条理由）：手稿层存在的全部意义是
+    "可溯源"。改写旧行会让"当时写的是什么"永久消失，而订正本身恰恰是最需要
+    留下证据的一件事 —— 读账本的人要能同时看到原文与订正版（`draft/55` §5.1 第 3 条：
+    过程的原文与加工后必须并列留痕）。
+
+    与 `write` 的关系：这是 `write` 的一层薄封装（`revises=<旧编号>`），
+    所以"空手稿被拒 / 引用悬空被拒 / 编号在同一把锁里分配"这些判据只有一份实现。
+
+    参数
+    ----
+    mid : 要订正的手稿编号（不在盘上 ⇒ 抛 `ValueError`，零写入）。
+    sender / recipient : 不给就沿用旧行（订正的是同一份交接，收件人没有变）。
+    summary / body : 至少给一个（都不给 ⇒ 抛 `ValueError`：一条什么都没改的
+        "修订行"只会让账本多一行噪声）。
+    reason : 为什么订正（进正文头部与 `note`，这是复核时唯一能回答"为什么改"的地方）。
+    """
+    old = row_of(root, mid)
+    if old is None:
+        raise ValueError(f"要订正的手稿 {mid!r} 不在盘上 ⇒ 订正一条不存在的交接是凭空引用")
+    new_summary = str(summary or "").strip()
+    new_body = str(body or "").strip()
+    if not new_summary and not new_body:
+        raise ValueError("修订行必须至少改一处（summary 或 body 给一个）—— "
+                         "什么都没改的『修订』只会让账本多一行噪声")
+    old_id = _norm_mid(mid)
+    why = str(reason or "").strip()
+    note_text = f"手稿订正：订正 {old_id}" + (f"（为什么：{why}）" if why else "")
+    if str(note or "").strip():
+        note_text = f"{note_text}；{str(note).strip()}"
+    return write(
+        root,
+        sender=str(sender or "").strip() or str(old.get("sender") or ""),
+        recipient=str(recipient or "").strip() or str(old.get("to") or ""),
+        summary=new_summary or str(old.get("summary") or ""),
+        body=new_body or str(old.get("body") or ""),
+        refs=list(refs) or list(old.get("refs") or []),
+        task_id=str(task_id or "").strip() or str(old.get("task_id") or ""),
+        sid=str(sid or "").strip() or str(old.get("sid") or ""),
+        note=note_text,
+        revises=old_id,
+        timeout=timeout,
+    )
+
+
+def revisions_of(root: str | Path, mid: str) -> list[dict[str, Any]]:
+    """这一份手稿被订正过几次（按行序；空列表 = 一次都没有）。
+
+    它是 `revise` 的读侧："没订正过"与"订正过但读不出来"必须分得开 ——
+    后者是坏行，由 `read_rows` 报出来，绝不在这里折成空列表。
+    """
+    want = _norm_mid(mid)
+    if not want:
+        return []
+    return [r for r in rows(root) if str(r.get("revises") or "") == want]
+
+
+def ref_readings(root: str | Path) -> dict[str, Any]:
+    """D10 的那条读数：账本里哪些行的 `refs` 立不住、为什么（只读，不改任何行）。
+
+    为什么"改建议"之后必须有一条读数（`draft/52:103`）：判据从"拒写"降成"标记"之后，
+    若没有读数，"引用写错了"就变成没有任何地方会说话的一件事 —— 那正是
+    本项目最忌的形态（把"检查"换成"沉默"）。这条读数把它重新变成看得见的事实：
+
+    - `rows_with_refs`：账本里有引用的行数（D10 之前这一栏在真机上恒为 0 —— 1542 行全空）；
+    - `problems`：`[{id, sender, to, ref, why}]` 逐条列出立不住的那些引用；
+    - `checked` / `reason`：读数本身有没有做成（坏行由 `read_rows` 报，不折成"干净"）。
+    """
+    all_rows, bad_lines = read_rows(root)
+    problems: list[dict[str, Any]] = []
+    with_refs = 0
+    for rec in all_rows:
+        refs = [str(x).strip() for x in (rec.get("refs") or []) if str(x).strip()]
+        if refs:
+            with_refs += 1
+        # 写入期记下的那一条（`ref_problems`）优先——它是当时的判定；
+        # 之后再复算一次，是为了抓住"写的时候在、现在被删了"这种漂移。
+        recorded = rec.get("ref_problems") if isinstance(rec.get("ref_problems"), Mapping) else {}
+        for ref in refs:
+            why = str(recorded.get(ref) or "") or ref_problem(root, ref)
+            if why:
+                problems.append({"id": str(rec.get("id") or ""),
+                                 "sender": str(rec.get("sender") or ""),
+                                 "to": str(rec.get("to") or ""), "ref": ref, "why": why})
+    return {"checked": True, "reason": "" if not bad_lines else "；".join(bad_lines),
+            "rows": len(all_rows), "rows_with_refs": with_refs,
+            "problems": problems, "count": len(problems)}
 
 
 def read(root: str | Path, mid: str) -> dict[str, Any] | None:

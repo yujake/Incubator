@@ -454,11 +454,23 @@ def running_loops(root: str | Path) -> dict[str, Any]:
 
     判据两路取并集，缺一路都会把"没人消费的开关"读成"没事"：
 
-    1. 会话面：某段会话里最后一条 `agent_run_start` 之后没有对应的
+    1. 会话面：某段会话里某角色最后一条 `agent_run_start` 之后没有该角色对应的
        `agent_run_end` ⇒ 那一趟还在跑（按角色报出来）。会话是叙事面，
        强杀不留 `agent_run_end`，所以它单独用会漏；
     2. 进程面：`live_pids` 里登记着且真的活着的进程 ⇒ 也报出来。
        进程面单独用会漏"登记没写/被清理"的情况。
+
+    ## E-13 改掉的两处假阳性（`draft/56 §2 主线 A`）
+
+    - 按角色配平，而不是整个会话取最后一条 `agent_run_start`：一个会话里可以
+      先后跑过多个角色（主控派活、被召唤者各跑一趟）。旧口径只看"最后一条 start"，
+      于是 `M 起 → C 起 → M 收` 这种会话被判成"没人在跑"（最后一条 start 是 C，
+      而 M 的 end 在它之后）—— 真正在跑的 C 被静默吞掉。反过来，
+      `C 起 → C 收 → D 起 → D 收` 也会因为"最后一条 start 之后有任意 end"被判成没在跑。
+    - 排除被拒的续跑：`--resume` 的四条拒绝路径各写一条 `agent_run_start`
+      （带 `resume_refused`），它一步都没跑（`_note_resume_refusal` 的判据就是
+      "没有后续的 `agent_step`"）。把它算成"在跑"会让 `--status` 天天说谎，
+      而"循环还活着吗"这个读数正是用户叫停时唯一能据以判断的东西。
 
     返回 `{"running": [{"role","sid","since"}], "live": [...], "answer": "有"/"没有"}`。
     """
@@ -473,15 +485,24 @@ def running_loops(root: str | Path) -> dict[str, Any]:
             # 读不出来的会话 ⇒ 这一路判不了，如实说（"没查成"不许读成"没在跑"）
             stale.append(sid)
             continue
-        starts = [e for e in events if e.get("kind") == "agent_run_start"]
-        if not starts:
-            continue
-        last = starts[-1]
-        after = [e for e in events if e.get("kind") == "agent_run_end"
-                 and str(e.get("ts") or "") >= str(last.get("ts") or "")]
-        if not after:
-            running.append({"role": str(last.get("role") or ""), "sid": sid,
-                            "since": str(last.get("ts") or "")})
+        # 按角色各取一条链：某个角色的最后一条 start 之后有没有该角色的 end。
+        last_start: dict[str, dict[str, Any]] = {}
+        closed: set[str] = set()
+        for e in events:
+            role = str(e.get("role") or "")
+            kind = e.get("kind")
+            if kind == "agent_run_start":
+                if e.get("resume_refused"):
+                    # 被拒的续跑不是起点（它一步都没跑）：既不开启、也不关闭任何一趟
+                    continue
+                last_start[role] = e
+                closed.discard(role)
+            elif kind == "agent_run_end":
+                closed.add(role)
+        for role, start in last_start.items():
+            if role in closed:
+                continue
+            running.append({"role": role, "sid": sid, "since": str(start.get("ts") or "")})
     live = live_pids(root)
     return {"running": running, "live": live, "unreadable_sessions": stale,
             "answer": "有" if (running or live) else "没有"}

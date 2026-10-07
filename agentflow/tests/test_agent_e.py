@@ -108,6 +108,78 @@ def add_experiment(store: Store, **kw) -> dict:
     return row.to_dict()
 
 
+# ============================================================ [1a] R-01：四条硬要求前移
+
+
+#: 一个会留下脚印的脚本：跑起来就会创建 `code/ran.marker`。
+#: 判据靠它证明"子进程到底起没起"（R-01 的全部意义就在这一步上）。
+MARKER_PROBE = """
+import json, pathlib
+d = pathlib.Path("code")
+d.mkdir(parents=True, exist_ok=True)
+(d / "ran.marker").write_text("ran", encoding="utf-8")
+print("REPRO_RESULT: " + json.dumps({
+    "result": "supports", "evidence_kind": "cross_check",
+    "observations": {"n": 3}, "counterexample": None, "negation_kind": "not_proved",
+    "bound": {"n": 3}, "strategy": "brute force", "scaling": {"3": 0.1},
+}))
+"""
+
+
+def _marker(store: Store) -> Path:
+    return Path(store.root) / "code" / "ran.marker"
+
+
+def test_r01_a_bad_for_question_id_is_refused_before_the_subprocess(store):
+    """R-01：`for_question_id` 不是 4 位号 ⇒ 脚本一次都不跑（真机：52 次失败 / 110.7 分钟 / 0 行）。
+
+    旧口径下这条要等脚本跑完、`Experiment.validate()` 才拒 —— 十分钟的脚本白跑。
+    """
+    rel = write_script(store, "probes/marker.py", MARKER_PROBE)
+    assert not _marker(store).exists()
+    with pytest.raises(ExperimentError) as exc:
+        make_e(store).run_experiment("某命题", "k-1", rel, for_question_id="q-1")
+    assert "跑脚本之前" in str(exc.value), exc.value
+    assert "4 位" in str(exc.value), exc.value
+    assert not _marker(store).exists(), "子进程在参数不合格时**一次都不许起**"
+    assert store.rows("experiments") == [], "被拒的实验不许留下行"
+
+
+def test_r01_exhaustive_search_without_a_certificate_is_refused_before_the_subprocess(store):
+    """R-01：穷举类不给 `certificate` ⇒ 同样在起子进程之前拒（证书是这类结论的全部说服力）。"""
+    rel = write_script(store, "probes/marker2.py", MARKER_PROBE)
+    with pytest.raises(ExperimentError) as exc:
+        make_e(store).run_experiment("某命题", "k-2", rel, method="exhaustive_search")
+    assert "跑脚本之前" in str(exc.value) and "certificate" in str(exc.value), exc.value
+    assert not _marker(store).exists()
+
+    # 反负控：把证书与边界都补齐 ⇒ 它照常跑起来（判据不是"一律拒"）
+    out = make_e(store).run_experiment(
+        "某命题", "k-2", rel, method="exhaustive_search",
+        certificate={"kind": "enumeration_bound", "detail": "n<=3 全枚举"},
+        search_bound={"B": "n<=3"})
+    assert out["recorded"] is True, out
+    assert _marker(store).exists(), "参数合格时子进程必须真的跑（否则这条反负控是空转）"
+
+
+def test_r01_the_preflight_and_the_row_validation_are_one_judgement(store):
+    """口径只有一处：`schema.experiment_preflight_problems` 与 `Experiment.validate()` 同源。
+
+    两半：① 同一条坏参数在两处得到同一句话；② 行级 validate 仍然拦得住
+    （前移不是"把判据搬走"）。preflight 覆盖不到的那些（结果/证书内容一致性）留在行级。
+    """
+    problems = S.experiment_preflight_problems(method="exhaustive_search", certificate=None)
+    assert problems and "certificate" in problems[0], problems
+    with pytest.raises(ValueError) as exc:
+        S.Experiment(experiment_id="0000", claim="c", claim_key="k", method="exhaustive_search",
+                     result="inconclusive", evidence_kind="heuristic",
+                     negation_kind="not_searched_here", created_at=TS).validate()
+    assert problems[0] in str(exc.value), (problems[0], str(exc.value))
+    assert S.experiment_preflight_problems(method="numeric", certificate=None) == []
+    assert S.experiment_preflight_problems(method="numeric", for_question_id="q-1"), \
+        "4 位号那一条必须在 preflight 里（它与 certificate 那几条同一处口径）"
+
+
 # ============================================================ [1] 正常路径
 
 
@@ -130,7 +202,11 @@ def test_run_experiment_records_row_with_hash_and_exit_code(store):
     # 哈希必须是那个文件内容的哈希（不是随便一个非空字符串）
     assert row["code_hash"] == hashlib.sha256((Path(store.root) / rel).read_bytes()).hexdigest()[:16]
     assert row["code_path"] == "probes/honest.py", "记录的必须是工作区内相对路径"
-    assert row["observations"] == {"grid": 64, "max_err": 1e-9}
+    # E-11：`observations` 里多了一条框架自己的读数 `conclusion_source`
+    # （结论从哪来：`line` / `json_key` / `missing` / …）；脚本自报的那几个键逐字不动。
+    assert {k: v for k, v in row["observations"].items() if k != "conclusion_source"} == {
+        "grid": 64, "max_err": 1e-9}
+    assert row["observations"]["conclusion_source"] == "line", row["observations"]
     assert row["created_by"] == "agent-E"
 
 
@@ -301,10 +377,12 @@ def test_a_conclusion_printed_as_a_json_key_is_read_and_recorded(store):
 
 
 def test_two_conclusion_shapes_at_once_are_refused(store):
-    """负控：行首形态与 JSON 键形态「同时」出现 ⇒ 仍然按"多于一行"拒绝。
+    """负控（E-11 改口径后重写）：两种形态同时出现且内容不一致 ⇒ 仍然不许当结论用。
 
-    这就是既有口径（`_extract_stdout_lines` 的"取全部、多于一行即格式非法"）在
-    加了容错之后必须保住的那一半：容错不等于允许"从两个互相矛盾的结论里挑一个"。
+    旧口径是"多于一行 ⇒ 整条不认"；新口径（主控裁定）是"取最后一份但按没结论记"：
+    两端都不许 —— 既不许读成"没打印"，也不许读成"有结论"（那正是 E-11 要治的形态）。
+    判据三半：`result` 仍是 `inconclusive`；行上 `conclusion_source == "multiple"`；
+    逐字留痕里说清"内容不同 ⇒ 取最后一份"与"前几份与它不一致"。
     """
     rel = write_script(store, "probes/twoshapes.py",
                        "import json\n"
@@ -312,7 +390,44 @@ def test_two_conclusion_shapes_at_once_are_refused(store):
                        "print(json.dumps({'REPRO_RESULT': {'result': 'refutes'}}))\n")
     out = make_e(store).run_experiment("两种形态", "twoshapes", rel)
     assert out["result"] == "inconclusive", out
-    assert "多于一行" in out["notes"], out["notes"]
+    assert "内容不同" in out["notes"] and "取" in out["notes"], out["notes"]
+    obs = store.rows("experiments")[0]["observations"]
+    assert obs["conclusion_source"] == "multiple", obs
+    assert obs["last_result_seen"] == "refutes", obs
+
+
+def test_e11_multiple_identical_conclusions_are_accepted_with_a_reading(store):
+    """E-11 正控：脚本把同一份结论打印多次 ⇒ 认它，且读数里写明"有 2 份、内容一致"。"""
+    rel = write_script(store, "probes/twice.py",
+                       "import json\n"
+                       "line = 'REPRO_RESULT: ' + json.dumps({'result': 'supports'})\n"
+                       "print(line)\nprint(line)\n")
+    out = make_e(store).run_experiment("重复打印", "twice", rel)
+    assert out["result"] == "supports", out
+    assert "打印了 2 次" in out["notes"], out["notes"]
+    assert store.rows("experiments")[0]["observations"]["conclusion_source"] == "line"
+
+
+def test_e11_a_missing_protocol_line_has_its_own_reading(store):
+    """E-11：`exit=0` 却没打协议行 ⇒ "脚本没按协议打印"是独立读数，不是"实验没结论"。
+
+    反负控同时钉住三档两两不同（`missing` / `bad_json` / `line`）——
+    折回同一档就等于这条读数白加。
+    """
+    rel = write_script(store, "probes/silent.py", "print('done')\n")
+    out = make_e(store).run_experiment("没打协议行", "silent", rel)
+    assert out["result"] == "inconclusive", out
+    assert store.rows("experiments")[0]["observations"]["conclusion_source"] == "missing"
+
+    bad = write_script(store, "probes/badjson.py", "print('REPRO_RESULT: {not json')\n")
+    make_e(store).run_experiment("坏 JSON", "badjson", bad)
+    assert store.rows("experiments")[-1]["observations"]["conclusion_source"] == "bad_json"
+
+    good = write_script(store, "probes/good.py",
+                        "import json\nprint('REPRO_RESULT: ' + json.dumps({'result': 'supports'}))\n")
+    make_e(store).run_experiment("正常", "good", good)
+    seen = {str(r["observations"].get("conclusion_source")) for r in store.rows("experiments")}
+    assert seen == {"missing", "bad_json", "line"}, seen
 
 
 def test_timeout_is_inconclusive_and_reason_is_visible(store):

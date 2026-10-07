@@ -101,7 +101,13 @@ TOOL_ROLES: tuple[str, ...] = tuple(ROLES) + (CONDUCTOR_ROLE,)
 #:
 #: 实现不在这个常量本身，而在 `ToolRegistry.for_role`（结构性过滤）——
 #: 常量只是这条约束的单一来源（FC-03）。
-READ_ONLY_ROLES = ("C", "H")
+#:
+#: V（验证者）在这里的理由与 C/H 同族、但落点不同：它不写任何「表」
+#: （`capabilities.WRITE_SETS["V"]` 是空集），唯一的产物是
+#: `verifications/<命题号>.jsonl` 这个**文件**（自己的台账）。
+#: 它必须在这里：只靠"约定只读"的话，`for_role("V")` 会照旧把写工具发给它，
+#: 而"V 只改证明"这条路会在没有任何报错的情况下被打开。
+READ_ONLY_ROLES = ("C", "H", "V")
 
 #: 有写副作用的等级 —— 第一根轴词表里"写"的那一半（另一半是下面的 `_NON_WRITE_EFFECTS`）。
 #: 单列一份是为了让

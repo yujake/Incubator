@@ -110,9 +110,26 @@ MIN_PRODUCER_LINES = 50
 #:   补产出（选项 a）对 `quote_mismatch` 不是接线而是新能力 ——
 #:   实测：`quoteverify.check_quote` 的 `reason` 取值只有 `no_text_layer` / `empty_quote` /
 #:   `substring_match` / `substring_match_outside_declared_range` / `substring_match_fulltext` /
-#:   `not_found` / `not_found_page_unknown` —— 根本没有"找到了但不一样"这一档。
+#:   `not_found` / `not_found_page_unknown` / `empty_page_range`（末一档是 `R-08` = B1 候选 C
+#:   加的：声明的窗口是空的 ⇒ 判"没法判"，不许折成 `not_found`）—— 根本没有
+#:   "找到了但不一样"这一档。
 #:   所以 (a) 会正好撞上 `P-22` 自己的负控（"只写了名字、没有 code 能算出它 ⇒
 #:   审计必须仍然报死取值"）。
+#:
+#: ## 登记：`closing` 验收读数的**行级码**（`draft/52` CC-02 裁定 (a)）
+#:
+#: 它们不是词表常量，而是 `closing._check_acceptance` 里 `Finding("acceptance", <code>, …)`
+#: 的取值 —— 列在这里，是因为 CC-02 把"一行读不懂"从"整表 unknown"改成**行级**记账，
+#: 新增了两个码（旧的那些一个字没改，历史读数照旧能对）：
+#:
+#: - `acceptance_row_unreadable` —— 这一行形状/字段类型读不懂（非对象 / `na` 非布尔 /
+#:   `min`·`max` 非整数 / `id` 缺失或重复）；
+#: - `acceptance_rows_unreadable` —— 汇总读数（有几行读不懂 ⇒ 整格 `unknown`）。
+#:
+#: 与它们同族的旧码（**未改**）：`acceptance_unreadable`（结构级：顶层不是 JSON/数组）、
+#: `acceptance_leg_unreadable`（台账读不到）、`acceptance_unknown_kind`、
+#: `acceptance_na_without_reason`、`acceptance_chain_unreadable`、`acceptance_all_na`。
+#: 这些码共用一个纪律：**`unknown` 不许读成 `pass`**（见 `closing.acceptance_row_state`）。
 #:
 #: ## 一处推翻：`FINDING_KINDS.quote_mismatch` 改走 (b)（`E-10` 裁定，2026-09-27）
 #:

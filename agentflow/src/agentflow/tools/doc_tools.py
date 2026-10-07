@@ -68,6 +68,17 @@ CROSS_CHECK_DISCLAIMER = "数值交叉验证，不构成证明"
 
 #: 视为"过度声称"的措辞。`evidence_kind != "proof"` 的断言里出现这些词即报。
 #: 这份清单必须显式列出：隐含的判据无法被审阅、无法被反驳。
+#:
+#: `R4` 组 7⑤ 的未落地记录（重要，别照"并集"直接合）：曾按"与
+#: `agent_d/_support._OVERCLAIM_MARKERS` 合并成并集（9 + 7 − 1 = 15 词）落过一版，
+#: 实测打破了两条既有判据 ⇒ 已回滚：
+#:   - `tests/test_paper_pack.py::test_claim_strength_ignores_a_theorem_name_and_a_negation`
+#:     逐字要求"定理名不算过度声称"，而并集里的 `定理` 直接与它冲突；
+#:   - `tests/test_core_audit_efgh.py::test_module_selftest_exits_zero[agentflow.agent_g]`
+#:     也红了（自检夹具里的文本被新词命中）。
+#: ⇒ 两份清单不是冗余：本表判"非 proof 断言正文里的说满措辞"（点定理名在这里合法），
+#: `_support` 那份判"措辞 × confidence"（S-09，另一个消费者、另一套语境）。
+#: 要合并必须先裁"哪些词在哪一档合法"，不许盲目取并集。
 OVERCLAIM_MARKERS = (
     "已证明", "证明了", "严格证明", "定理成立", "由此得证",
     "proved", "we prove", "is proved", "rigorous proof",
@@ -321,7 +332,40 @@ _CITATION_TABLES: dict[str, str] = {
     "lit": "literature",
     "exp": "experiments",
     "eval": "eval_results",
+    # `stmt`（`R-03` / `draft/49` 裁"方案 A"）：命题台账也是可引的对象 ——
+    # 一条断言引我们自己的另一条命题（`stmt:0004`）是完全正常的引用，而加它之前
+    # 这里没有 `stmt` ⇒ 写入期把合法引用判成"前缀无法识别"（`draft/49:868` 逐字：
+    # "照现状实现会错误拒收 `stmt:0004` 这类合法引用（比不查更糟）"）。
+    # 为什么是"补齐"而不是新机制：`kind → 表`这层映射本来就是既有机制
+    # （`schema.PROCESS_ID_PREFIXES` / `id_kind` 就是按前缀定表的同一条思路）。
+    "stmt": "statements",
+    # `doc`（主控 2026-10-07 裁 2）：补它之前是「写入期拒 `doc:`、审计期认 `doc:`」
+    # （`verify.py` 有 `elif kind == "doc"` 那一档，说明 `doc:` 是有意的合法档：
+    # 内部引用 `doc:<稿件>#<断言>@<内容哈希前 16 位>`）。该文件自己的注释逐字写着
+    # "两处对同一个字符串给出不同结论则不行" ⇒ 这是"两处词表分家"的第二个实例。
+    #
+    # 注意：`doc:` 不能只靠下面那条通用存在性检查 —— 它只比 `ref`，而
+    # `citation_ref_parts` 把 `#` 之后切掉了 ⇒ 那样只会核"稿件在不在"，
+    # 断言与哈希都不看，于是过期哈希会被静默接受（比"错误拒收"更坏）。
+    # 所以 `doc:` 走 `_doc_citation_problem` 的三段检查（与 `verify.py:923-961` 同口径；
+    # 解析与哈希都复用 `signatures` 那一份实现，不另写一份）。
+    "doc": "documents",
 }
+
+#: 裸号（4 位十进制、没有前缀）在这张表里不认。
+#:
+#: 现算证据（2026-10-07，`temp/b_probe_citation_shapes.py` / `b_probe_bare_ids_where.py`）：
+#: 两个真实根下 `documents.claims[].citations` 共 593 条引用，全部带前缀
+#: （`exp` 382 / `lit` 193 / `rel` 18），裸号 0 条；F 的 `cites` 共 20 条、也全是
+#: `lit:`。真机上确实存在裸号的地方只有 4 个字段名自己就钉死了表的 id 列表：
+#: `search_requests.result_lit_ids`（→ literature）、`relations.concept_ids` 与
+#: `concepts.related_concepts`（→ concepts）、`conjectures.experiment_ids`（→ experiments）
+#: —— 那些字段不走本函数，它们的"表"由字段名决定。
+#:
+#: 所以在这条引用面上裸号没有可定的表：`citations` 是一个混合列表，
+#: 元素本身不说自己属于哪张表。让它"按顺序试"（先试 stmt 再试 lit）会静默错配
+#: —— 同一个 `0004` 在 A 项目是文献、在 B 项目是命题。宁可不认，也不猜。
+_CITATION_BARE_NUMBER = re.compile(r"^\d{4}$")
 
 
 class DocToolError(ValueError):
@@ -353,7 +397,41 @@ def citation_ref_parts(citation: Any) -> tuple[str, str]:
     return T.citation_ref_parts(citation)
 
 
-def check_citations(rows_of: Any, claims: Sequence[Mapping[str, Any]]) -> dict:
+def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[str, Any]]]) -> str:
+    """`doc:` 内部引用的三段检查（空串 = 通过）。
+
+    三段都要真（与 `verify.py:923-961` 同口径）：稿件在、那条断言在、
+    钉的哈希就是目标稿件当前这一版。为什么不能只核第一段：第三段是"引用钉的是哪一版"，
+    改稿之后旧引用必须失效 —— 只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，
+    而那正是 `draft/30` §T4-A 设计这三段要防的事。
+
+    解析与哈希都复用 `signatures`（`P-5` 的纪律：口径只留一处实现），本函数只做
+    "把三段结论翻成一句人话"。
+    """
+    from .. import signatures as SIG  # 惰性：与 `:1390` 同一处依赖，不新增模块级边
+
+    parts = SIG.parse_doc_ref(raw)
+    if parts is None:
+        return (f"内部引用形状不对：应为 "
+                f"doc:<稿件>#<断言>@<内容哈希前 {SIG.REF_HASH_LEN} 位>")
+    tdoc_id, tclaim_id, thash = parts
+    doc = next((r for r in rows_of("documents")
+                if str(r.get("doc_id")) == str(tdoc_id)), None)
+    if doc is None:
+        return f"documents 表里没有 doc_id={tdoc_id!r}"
+    claims = {str(cl.get("claim_id")) for cl in (doc.get("claims") or [])
+              if isinstance(cl, Mapping)}
+    if str(tclaim_id) not in claims:
+        return f"稿件 {tdoc_id} 里没有断言 {tclaim_id!r}"
+    cur = SIG.content_sha256_of(doc)[:SIG.REF_HASH_LEN]
+    if str(thash) != cur:
+        return (f"钉的是 {thash}，而稿件 {tdoc_id} 当前内容是 {cur} ⇒ "
+                "改稿之后旧引用失效（不许静默沿用）")
+    return ""
+
+
+def check_citations(
+    rows_of: Any, claims: Sequence[Mapping[str, Any]]) -> dict:
     """逐条核对 citations 指向的对象真的存在。
 
     三态（这是本函数的核心，不是细节）：
@@ -393,15 +471,48 @@ def check_citations(rows_of: Any, claims: Sequence[Mapping[str, Any]]) -> dict:
             if table is None:
                 # 未知前缀：`verify` 对历史数据记 warning，但新写的稿件没有
                 # 理由带一个谁也核不了的前缀 ⇒ 写入期 fail-closed。
+                #
+                # 裸号与"未知前缀"分开报（`R-03` 的三态）：`citation_ref_parts("0004")`
+                # 会把整串当 `kind`，于是它也落进这一支 —— 但处置不同：
+                # 未知前缀要人确认"这个前缀该不该加进词表"，而裸号只要写成
+                # `stmt:0004` 就立刻合法（表由前缀定，不由顺序试）。
+                # 两种情形在读数上必须分得开，否则调用方会去改一个没错的前缀词表。
+                why = (
+                    (f"{str(raw)!r} 是裸号、没有 kind ⇒ 无法定表（`citations` 是混合列表，"
+                     f"元素自己不说属于哪张表）⇒ 写成带前缀的形态，例如 `stmt:{str(raw)}`"
+                     f"（引我们自己的命题）或 `lit:{str(raw)}`（引一篇文献）；"
+                     f"可选前缀：{sorted(_CITATION_TABLES)}"
+                     f"（注意 `doc:` 是三段式：`doc:<稿件>#<断言>@<内容哈希前 16 位>`）")
+                    if _CITATION_BARE_NUMBER.match(str(raw).strip())
+                    else (f"前缀 {kind!r} 无法识别（应为 {sorted(_CITATION_TABLES)}）"
+                          "⇒ 无法核对存在性")
+                )
                 missing.append(
                     {
                         "claim_id": cid,
                         "citation": str(raw),
                         "kind": kind,
                         "ref": ref,
-                        "why": f"前缀 {kind!r} 无法识别（应为 {sorted(_CITATION_TABLES)}）⇒ 无法核对存在性",
+                        "why": why,
                     }
                 )
+                continue
+            if kind == "doc":
+                # 内部引用是三段的（稿件 / 断言 / 当前内容哈希前 16 位），
+                # 而通用检查只看得到第一段 ⇒ 单独一支（`_doc_citation_problem`）。
+                problem = _doc_citation_problem(str(raw), rows_of)
+                if problem:
+                    missing.append(
+                        {
+                            "claim_id": cid,
+                            "citation": str(raw),
+                            "kind": kind,
+                            "ref": ref,
+                            "why": problem,
+                        }
+                    )
+                else:
+                    resolved += 1
                 continue
             if table not in id_sets:
                 field = str(S.TABLES[table]["id_field"])
@@ -787,6 +898,26 @@ def compose_claim(
         if key == "freeze_reason" and not str(val).strip():
             continue
         claim[key] = val
+
+    # ---- EE-06 的产出方那一半（`status` / `allowed_use`）：只在该字段真有依据时写。
+    #
+    # 依据不是这里新造的判据，是 `claimanatomy` 早就写死的两条一致性规则：
+    #   * `evidence_kind="proof"` ⇒ `status="证"`
+    #     （`claimanatomy` 的规则表逐字："`status=证` + `evidence_kind != proof` ⇒ 不一致"，FC-22）；
+    #   * `evidence_kind="cross_check"` ⇒ `status="验"` + `allowed_use="Remark only"`
+    #     （`ALLOWED_USE_KINDS` 的 why 逐字："只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark"）；
+    #   * 其余（`heuristic` 或空）⇒ 一个都不写 —— 没有依据就是没有依据。
+    #
+    # 三态的理由（EE-06 原本的读数是 `status` 0/449、`allowed_use` 0/449 = 这两个字段
+    # 从来没有产出方）：正解是"有依据的写、没依据的不写"，不是"给每条补一个默认值"
+    # —— 后者会把"从没问过"伪造成"待精化"（`docs/SCHEMA-MIGRATION-PROPOSAL-claims.md` §3.2 逐字）。
+    # 调用方显式给了就以调用方为准（上面那个循环已经写进去了，这里不覆盖）。
+    if status is None and evidence_kind == "proof":
+        claim["status"] = "证"
+    elif status is None and evidence_kind == "cross_check":
+        claim["status"] = "验"
+    if allowed_use is None and evidence_kind == "cross_check":
+        claim["allowed_use"] = "Remark only"
     if frozen is True:
         claim["frozen"] = True
 
@@ -1073,7 +1204,7 @@ def render_markdown(
     #
     # 为什么正文里要显式承认有多少条被移出去了：只把作废断言删掉，
     # 读者会把"作者改过主意"这件事读成"这些结论从来没存在过"。
-    # 参考体例里 `❌作废` 是常规状态，它的价值恰恰在于"看得见"。
+    # 参考体例里 `作废` 是常规状态，它的价值恰恰在于"看得见"。
     lines.append("## 附录 A. 已作废的断言（不在正文主结果区）")
     lines.append("")
     if not retracted and not downgraded_open:

@@ -32,6 +32,46 @@ def _meter(store, **kw):
     return TokenMeter(store, **kw)
 
 
+# ============================================================ 代价真源（P-09 / `44 J-07`）
+
+
+def test_usd_reading_keeps_not_attached_apart_from_spent_zero(store):
+    """判据（P-09 的"代价可读"真源 + 三态）：空 `task_id` 不许返回一个像真数的 0。
+
+    改前哪一半红：`usd_for("")` 与 `usd_for("t-0001")` 在"没花过钱"时都给 `0.0`
+    —— "这笔账没有挂点（未接线）"与"挂上了、花了零"折成同一个数（本项目最贵的缺陷形态）。
+    改后：`usd_reading` 把三种情形分开报，`usd` 在"没挂点"时是 `None` 而不是 `0.0`。
+
+    粒度口径（裁定要求写清）：召唤级 —— 一笔账对应 `tasks` 的一行，
+    所以 `usd_for(task_id)` 是"这一次召唤的累计"，不是"这一轮"，也不是"这个角色"。
+    """
+    m = _meter(store)
+    # ① 没挂点（空 / None）⇒ usd 是 None，不是 0
+    for empty in ("", None, "   "):
+        got = m.usd_reading(empty)
+        assert got["attached"] is False and got["usd"] is None, got
+        assert got["entries"] == 0 and got["reason"], got
+    # ② 挂上了、账上一条都没有 ⇒ 0.0 但 attached=True（与①分得开）
+    fresh = m.usd_reading("t-0001")
+    assert fresh["attached"] is True and fresh["usd"] == 0.0 and fresh["entries"] == 0, fresh
+    assert "还没记过账" in fresh["reason"], fresh
+    # ③ 挂上了、有账 ⇒ 汇总（与 `usd_for` 同一算式，逐位相等）
+    m.charge(Charge(role="F", scope="reason", tokens_in=10, tokens_out=5,
+                    usd=0.25, task_id="t-0001", note="一轮"))
+    m.charge(Charge(role="F", scope="reason", tokens_in=1, tokens_out=1,
+                    usd=0.125, task_id="t-0001", note="再一轮"))
+    m.charge(Charge(role="F", scope="reason", tokens_in=1, tokens_out=1,
+                    usd=1.0, task_id="t-0002", note="别的召唤"))
+    got = m.usd_reading("t-0001")
+    assert got["attached"] is True and got["entries"] == 2, got
+    assert got["usd"] == 0.375 == m.usd_for("t-0001"), (got, m.usd_for("t-0001"))
+    assert got["tokens"] == 17 == m.tokens_for("t-0001"), got
+    # 逐位相等（不是"约等于"）：账本上那两行 0.25 + 0.125
+    rows = [r for r in store.rows("usage_ledger") if r["task_id"] == "t-0001"]
+    assert got["usd"] == round(sum(float(r["usd"]) for r in rows), 6), (got, rows)
+    assert m.usd_for("t-0001") != m.usd_for("t-0002"), "两个召唤的钱不许混在一起"
+
+
 # ============================================================ Charge 的计费口径
 
 

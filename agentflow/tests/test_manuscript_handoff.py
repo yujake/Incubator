@@ -84,15 +84,13 @@ def test_concurrent_writers_do_not_collide(tmp_path: pathlib.Path):
 
 
 def test_empty_or_unknown_recipient_is_refused_with_zero_writes(tmp_path: pathlib.Path):
-    """负控：空正文 / 缺一句话 / 坏收件人 / 悬空 refs ⇒ 拒绝，且一行都不写。"""
+    """负控：空正文 / 缺一句话 / 坏收件人 / 坏发件人 ⇒ 拒绝，且一行都不写。"""
     root = tmp_path / "ws"
     root.mkdir()
     for kwargs, why in (
         (dict(sender="D", recipient="F", summary="空", body="   "), "空正文"),
         (dict(sender="D", recipient="F", body="有正文但没那一句话"), "缺 summary"),
         (dict(sender="D", recipient="Z", summary="坏收件人", body="x"), "坏收件人"),
-        (dict(sender="D", recipient="F", summary="引不存在的", body="x", refs=["0099"]),
-         "悬空 refs"),
         (dict(sender="Q", recipient="F", summary="坏发件人", body="x"), "坏发件人"),
     ):
         try:
@@ -101,6 +99,42 @@ def test_empty_or_unknown_recipient_is_refused_with_zero_writes(tmp_path: pathli
         except ValueError:
             pass
     assert MS.rows(root) == [], "被拒的那几次不许留下行"
+
+
+def test_a_dangling_ref_is_recorded_and_visible_not_refused(tmp_path: pathlib.Path):
+    """D10（`draft/52:103` 逐字："改成『建议』+ 一条读数"）：悬空 `refs` 不拒写。
+
+    为什么改（真机读数）：D10 之前 `refs` 在 1542 行手稿里全空 —— "引用一错、
+    整份交接就写不进去"这条判据在真机上的效果不是"引用得更准"，而是"没人敢引用"。
+    新形态要求三件同时在位：
+
+    1. 不拒：这一笔写得进去（旧判据在这里必红）；
+    2. 记录了：行里 `ref_problems` 逐条写清哪一条引用立不住、为什么；
+    3. 读数可见：`ref_readings()` 数得到"有引用的行数"与"立不住的那些引用"
+       （D10 之前这一栏恒为 0，正是"判据从拒写降成标记之后没人说话"的形态）。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    good = MS.write(root, sender="D", recipient="F", summary="先来一份没人引的", body="x")
+    rec = MS.write(root, sender="D", recipient="F", summary="引一份在的与一份不在的",
+                   body="y", refs=[good["id"], "0099", "stmt:0007"])
+    assert rec["id"] != good["id"], rec
+    assert set(rec["ref_problems"]) == {"0099", "stmt:0007"}, rec
+    assert "悬空" in rec["ref_problems"]["0099"] or "不在盘上" in rec["ref_problems"]["0099"], rec
+    # 行真的落进账本（不是"报了错但文件里没有"）
+    assert len(MS.rows(root)) == 2, MS.rows(root)
+    got = MS.read(root, rec["id"])
+    assert got and "引一份在的与一份不在的" in got["text"], got
+    # 读数：有引用的行 1、立不住的引用 2 条
+    rd = MS.ref_readings(root)
+    assert rd["checked"] is True and rd["rows"] == 2, rd
+    assert rd["rows_with_refs"] == 1, rd
+    assert rd["count"] == 2 and {p["ref"] for p in rd["problems"]} == {"0099", "stmt:0007"}, rd
+    assert {p["id"] for p in rd["problems"]} == {rec["id"]}, rd
+    # 三态：引用都立得住时不多那个键（"没问题"与"没检查"不许长成同一个样子）
+    assert "ref_problems" not in MS.row_of(root, good["id"]), MS.row_of(root, good["id"])
+    # 读数里 `rows_with_refs` 不是 0 —— D10 之前这一栏在真机上恒为 0（1542 行全空）
+    assert rd["rows_with_refs"] > 0, rd
 
 
 def test_legacy_md_manuscripts_are_still_readable_but_not_counted_as_rows(tmp_path: pathlib.Path):

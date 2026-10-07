@@ -42,6 +42,13 @@ REPORT = """\
 """
 
 
+#: M 声明的体例（R9：体例归 M，门不自带节名清单）。
+#: 门核的是"M 声明的体例有没有兑现" —— 用相对路径给报告时，这一格也要解析对。
+STYLE = {"sections": ["一、任务与范围", "二、逐条读数", "三、定理与引理清单", "四、形式化覆盖",
+                      "五、引文核验", "六、体例与表述", "七、我们做的补救", "八、未决问题",
+                      "九、诚实边界"]}
+
+
 def _ws(tmp_path: Path) -> Path:
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     (tmp_path / "out" / "paper").mkdir(parents=True)
@@ -49,6 +56,8 @@ def _ws(tmp_path: Path) -> Path:
     (tmp_path / "out" / "paper" / "main.tex").write_text("% 主稿\n", encoding="utf-8")
     (tmp_path / "out" / "paper" / "main.pdf").write_bytes(b"%PDF-1.4 x\n")
     (tmp_path / "out" / "review" / "REPORT.md").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "out" / "review" / "REPORT-STYLE.json").write_text(
+        json.dumps(STYLE, ensure_ascii=False), encoding="utf-8")
     st = Store(tmp_path)
     st.init()
     out = tmp_path / "out" / "paper"
@@ -76,7 +85,11 @@ def test_a_relative_report_path_resolves_under_the_workspace(tmp_path: Path, mon
     rep = CL.check_closing(st, project_dir=".", report_path="out/review/REPORT.md")
     assert rep.status["report_shape"] == "pass", rep.to_dict()
     r = rep.readings["report_shape"]
-    assert r["missing_sections"] == [] and r["missing_split_markers"] == [], r
+    # R9 之后报告形状只剩两件可判的事：附件三件套判实 + M 声明的体例有没有兑现。
+    # 两件都要"报告真的按工作区根被读到了"才可能为空。
+    assert r["missing_attachment_fields"] == [], r
+    assert r["declared_sections"] == list(STYLE["sections"]), r
+    assert r["missing_declared_sections"] == [], r
     assert r["chars"] > 100, r
 
 
@@ -108,7 +121,8 @@ def test_reviewaccept_resolves_the_same_way(tmp_path: Path, monkeypatch):
     st = Store(ws)
     st.init()
     acc = RA2.check_review(st, project_dir=".", report_path="out/review/REPORT.md")
-    assert acc.criteria["report_sections_have_readings"] == "pass", acc.details
+    # R9：报告形状那条判据（`report_sections_have_readings`）已废除 ⇒ 它不该再出现在 `criteria` 里
+    assert "report_sections_have_readings" not in acc.criteria, acc.to_dict()
     assert acc.auxiliary["tex_sha256"], acc.auxiliary
     assert acc.criteria["attachment_is_honest"] != "unknown", acc.details
     assert acc.readings["attachment"]["forgery_markers"] == [], acc.readings["attachment"]

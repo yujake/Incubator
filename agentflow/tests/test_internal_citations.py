@@ -19,6 +19,7 @@ from agentflow import schema as S
 from agentflow import signatures as SIG
 from agentflow import verify as V
 from agentflow.store import Store
+from agentflow.tools import doc_tools as DT
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -285,3 +286,81 @@ def test_injection_that_changes_nothing_relevant_does_not_bite(tmp_path: Path):
     assert _codes(st, "dependencies") == []
     _deps(st, "0001", source_doc_id="0001", source_claim_id="c1", label="换了个标签")
     assert _codes(st, "dependencies") == []
+
+
+# --------------------------------------- 写入期也认 `doc:`（`R-03` 主控裁 2）
+
+
+def test_write_side_accepts_a_valid_doc_ref(tmp_path: Path):
+    """正控：写入期 `check_citations` 现在也认 `doc:`。
+
+    改前 `doc_tools._CITATION_TABLES` 里没有 `doc` ⇒ 它被判成"前缀无法识别"，
+    而审计期 `verify` 一直有 `elif kind == "doc"` 那一档认它 ⇒ 同一个字符串
+    "写入期拒、审计期认"（该文件自己的注释逐字："两处对同一个字符串给出不同结论则不行"）。
+    """
+    st = _store(tmp_path)
+    target = _doc(st, "0001", [_claim("c1", ["lit:0000"])], status="accepted")
+    ref = SIG.doc_ref("0001", "c1", target)
+    got = DT.check_citations(lambda t: st.rows(t), [_claim("c2", [ref])])
+    assert got["checked"] is True, got
+    assert not got["missing"], got
+    assert got["resolved"] == 1, got
+
+
+def test_write_side_refuses_each_broken_part_of_a_doc_ref(tmp_path: Path):
+    """负控四层：形状 / 稿件 / 断言 / 哈希 —— 坏哪一段都必须被拒。
+
+    最要紧的是哈希那一段：通用存在性检查只比 `citation_ref_parts` 切出来的
+    `ref`（`#` 之后已被切掉）⇒ 它最多只能核"稿件在不在"。只加表项而走通用检查，
+    就会让改稿之后的旧引用静默沿用 —— 那比"错误拒收"更坏，所以 `doc:` 单独一支。
+    """
+    st = _store(tmp_path)
+    target = _doc(st, "0001", [_claim("c1", ["lit:0000"])], status="accepted")
+    ref = SIG.doc_ref("0001", "c1", target)
+    rows_of = lambda t: st.rows(t)
+
+    def _why(cite: str) -> str:
+        got = DT.check_citations(rows_of, [_claim("c2", [cite])])
+        assert got["missing"], f"这一条本该被拒：{cite!r}"
+        return str(got["missing"][0]["why"])
+
+    assert "形状不对" in _why("doc:0001")                             # 缺 #断言@哈希
+    assert "没有 doc_id" in _why(f"doc:9999#c1@{SIG.ref_hash_of(target)}")
+    assert "没有断言" in _why(f"doc:0001#cX@{SIG.ref_hash_of(target)}")
+    stale = "0" * SIG.REF_HASH_LEN if SIG.ref_hash_of(target) != "0" * SIG.REF_HASH_LEN \
+        else "1" * SIG.REF_HASH_LEN
+    assert "改稿之后旧引用失效" in _why(f"doc:0001#c1@{stale}")
+    # 反真空：原样那一条仍然通过 —— 否则上面四条可能是靠"一律拒"通过的
+    assert not DT.check_citations(rows_of, [_claim("c2", [ref])])["missing"]
+
+
+def test_write_side_still_accepts_stmt_and_refuses_a_bare_number(tmp_path: Path):
+    """`R-03` 方案 A 的另一半：`stmt:` 被认（含存在性），裸号仍被拒且理由与"未知前缀"分开。
+
+    裸号白名单 = 空（主控 2026-10-07 裁 1），依据是真机上 593 条 `citations` 全带前缀、
+    0 条裸号；而 `citations` 是混合列表，给裸号猜一张表就会静默错配。
+    """
+    st = _store(tmp_path)
+    _put(st, "statements", {"stmt_id": "0004", "origin": "own_result", "kind": "lemma",
+                            "statement_full": "某命题", "statement_text": "", "proof_text": "",
+                            "doc_id": "0000", "line_range": {"start": None, "end": None, "label": None},
+                            "quote_verified": None, "quote_reason": "证明还没做完（本用例只测引用解析）",
+                            "evidence_kind": "cross_check",
+                            "status": "active", "created_at": TS, "created_by": "test",
+                            "derived_from": []})
+    rows_of = lambda t: st.rows(t)
+
+    ok_ref = DT.check_citations(rows_of, [_claim("c1", ["stmt:0004"])])
+    assert not ok_ref["missing"], ok_ref
+    missing_stmt = DT.check_citations(rows_of, [_claim("c1", ["stmt:9999"])])
+    assert "statements 表里没有 stmt_id='9999'" in str(missing_stmt["missing"][0]["why"]), missing_stmt
+
+    bare = DT.check_citations(rows_of, [_claim("c1", ["0004"])])
+    why = str(bare["missing"][0]["why"])
+    assert "是裸号" in why and "无法定表" in why, why
+    # 判别式必须与"未知前缀"那一支不同（否则调用方会去改一个没错的前缀词表）：
+    # 裸号这一支说的是"没有 kind、无法定表"，而那一支说的是"前缀无法识别"。
+    assert "无法识别" not in why, f"裸号的理由不该说成'前缀无法识别'：{why!r}"
+    assert "stmt:0004" in why, f"裸号的改法要给一个可抄的例子：{why!r}"
+    unknown = DT.check_citations(rows_of, [_claim("c1", ["foo:0004"])])
+    assert "前缀 'foo' 无法识别" in str(unknown["missing"][0]["why"]), unknown

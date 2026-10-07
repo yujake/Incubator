@@ -52,9 +52,16 @@ class TaskCall:
     调用方只能给"我的父是谁"，深度由 `Conductor` 从 `tasks` 表读出来算。
 
     `lineage`：祖先链上已出现过的 `(role, action, input_key)`（含父自己）。
-    本轮由 `Conductor` 从 `tasks` 表重建（跨进程/跨会话之后调用栈就没了，
-    台账是唯一的权威来源）。这里显式给出，是为了让 `scheduler` 在没有
-    store 的纯调度测试里也能表达"这条链上已经有过什么"。
+
+    缺省是 `None`（不是 `()`） —— `44 J-32` / `draft/56 §2 主线 A` 的第一条
+    零风险改动。`()` 与"这条链上什么都没有"长得一样，于是 `scheduler` 每一次
+    都把一个空链塞给 `Conductor`，而 `Conductor` 那边"给了 lineage 就不重建"
+    ⇒ `policy` 的 `cycle` 判据（`d.key in d.ancestry`）永远不可达：真机读数里
+    `cycle/depth/fanout/concurrency` 全 0、`parent_task_id` 全空、`depth` 全 1。
+
+    `None` 的语义是"调用方没表达过祖先链" ⇒ `Conductor` 从 `tasks` 表按
+    `parent_task_id` 重建（跨进程/跨会话之后调用栈就没了，台账是唯一的权威来源）。
+    纯调度的测试要表达"链上已经有过什么"时显式给一个非空元组。
     """
 
     role: str
@@ -66,7 +73,7 @@ class TaskCall:
     input_key: str = ""
     #: 本次召唤的 token 预算（`{"max_tokens": 5000}`）。None = 用全局预算。
     budget: Mapping[str, Any] | None = None
-    lineage: tuple[tuple[str, str, str], ...] = ()
+    lineage: tuple[tuple[str, str, str], ...] | None = None
     #: 实例标签（2026-09-30 加）：同一角色的第 N 个并发实例，例如 `"1"` / `"2"`。
     #: 空串 = "这个角色只有那一个实例"，与从前逐字同义（写集冲突照旧按角色算）。
     #: 显式给两个不同的标签 ⇒ 这两个调用允许同波并发（见 `policy.estimate_write_conflict`）。
@@ -295,7 +302,9 @@ def _guarded(
             input_key=call.input_key,
             budget=dict(call.budget) if call.budget else None,
             token=token,
-            lineage=tuple(call.lineage),
+            # `call.lineage` 原样传（`None` = 没表达过 ⇒ `Conductor` 从台账重建；
+            # 见 `TaskCall.lineage` 那段：把它折成 `()` 会让 `cycle` 判据不可达）。
+            lineage=call.lineage,
             instance=str(getattr(call, "instance", "") or ""),
         )
     finally:

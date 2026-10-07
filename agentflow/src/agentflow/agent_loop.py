@@ -14,7 +14,7 @@
 3. 工具与召唤（`ToolRegistry.call` 与 `Conductor.summon`）：模型说的每个动作都过既有的
    权限面与策略闸门，被拒的理由原样回到模型手里。
 
-## 四种形状（与提示词里的循环协议逐字对应）
+## 循环形状（正典清单与条数只在 `SHAPES` 一处定义；下面是其中最常用的四种）
 
 - `{"tool": ...}`   → 走 `ToolRegistry.call(name, role=...)`，角色面不对就 `role_denied`；
 - `{"summon": ...}` → 走 `Conductor.summon(..., by=<本角色>)`，边/深度/扇出/预算全由策略判；
@@ -99,7 +99,7 @@ RELAY_SUBJECT = "请代唤"
 JSON_TAIL = (
     "只回一行 JSON（不要解释、不要 Markdown 围栏、不要前后缀）。形状取其一"
     "（键名与嵌套层级照抄，`<...>` 是占位符）。**括号数看最后两行**："
-    "`tool` 那行只以一个 `}` 结尾；`summon` / `summon_many` / `message` / `ask_user` / "
+    "`tool` 那行只以一个 `}` 结尾；`summon` / `summon_many` / `message` / `handoff` / "
     "`final` 这几行**本来就以 `}}` 结尾**（嵌套两层）—— 照抄时别再多补一个，"
     "实测最常见的坏 JSON 就是多补一个 `}`：\n"
     '{"tool": "<工具名>", "args": {...}}\n'
@@ -108,7 +108,7 @@ JSON_TAIL = (
     ' "why": "<为什么一次派这一批>"}}\n'
     '{"message": {"to": "<伙伴或 #public>", "subject": "...", "body": "..."}}\n'
     '{"handoff": {"to": "<伙伴/M/ALL>", "title": "...", "body": "<markdown 正文>",'
-    ' "brief": "<一句话描述>", "refs": ["<前序手稿编号>"]}}\n'
+    ' "brief": "<一句话描述>", "refs": ["<前序手稿编号>"], "revises": "<要订正的手稿号，可不填>"}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
     '{"final": {"final": "<结论>", "evidence": []}}'
@@ -127,6 +127,8 @@ NOTES_DIR_NAME = "notes"
 #: 于是它只能发留言去问 D"把结论正文回传" —— 而 D 的循环早已结束，问也问不回来。
 #: 正确做法是把长产出放磁盘、把路径给上游：上游有眼睛（fs.read），自己去读全文。
 RUNS_DIR_NAME = "runs"
+#: `runs/<角色>-<时间戳>-<序号>.json` 里序号的上限（B11 的 `O_EXCL` 重试用它兜底）。
+_RUN_ARTIFACT_MAX_SEQ = 9999
 
 #: 单个工具结果回给模型时的字符上限（超了按字段截断并写明截了多少）。#:
 #: 1200 → 3000 是 2026-09-30 的真机读数逼出来的：三次运行里模型自己的抱怨逐字都是
@@ -969,8 +971,12 @@ def _unwrap_alias(data: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str]:
 
 
 def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]:
-    """规范形态的解码：七种形状（`tool` / `summon` / `summon_many` / `message` /
-    `ask_user` / `note` / `final`）取其一。别名只负责改写成这里认的形态。"""
+    """规范形态的解码：一次只说一件事，取的那个键必须是 `SHAPES` 里的一种。
+
+    清单与条数以 `SHAPES` 为唯一来源，本处不重抄第二份 —— 这里原先手抄的形状条数
+    与 `SHAPES` 不一致，漏掉的正是 `handoff`（手稿落行的唯一入口：真机 1542 行手稿里
+    967 行由框架派生、模型自写 0 行，而正典表里看不见它）。别名只负责把扁平形态
+    改写成这里认的形态。"""
     present = [k for k in SHAPES if k in data]
     if len(present) != 1:
         return "", {}, (f"一次只能说一件事：同时出现 {present}" if present
@@ -1064,10 +1070,10 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # （用户口径：文件名 `…toALL.md`），而这里原来只认 `#public`。实测 T2 第 5 趟：
         # M 写了 `{"message": {"to": "ALL", …}}` ⇒ 被判形状不合法、连着三次
         # ⇒ 那一整段以 `bad_json_limit` 收场（60 秒、一步有效的活都没干）。
-        # 同一个概念不许有两个写法：这里把 `ALL` 归一成公共频道，与 `handoff` 对齐。
-        if to.strip().upper() == "ALL":
-            to = PUBLIC
-        if to != PUBLIC and to not in (*S.ROLES, S.CONDUCTOR_ROLE):
+        # `ALL` / `#public` 的等价关系只在 `_is_all_recipient` 一处定义，三条通道
+        # （`message` / `handoff` / `notify`）都从那里取 —— 不许各写一份。
+        to = _recipient_for_channel(to)      # 留言通道的"给所有人"规范形是 `#public`
+        if not _known_recipient(to):
             return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
                             f"{S.CONDUCTOR_ROLE}、也不是公共频道 {PUBLIC}（写 ALL 也认）")
         return key, {"to": to, "subject": str(value.get("subject") or "（无标题）"),
@@ -1088,9 +1094,16 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         if not isinstance(value, Mapping):
             return "", {}, "handoff 必须是一个对象"
         to = str(value.get("to") or "")
-        if to != PUBLIC and to not in (*S.ROLES, S.CONDUCTOR_ROLE):
+        # `ALL` 与 `#public` 等价（2026-10-06 修，主控裁定 (a)）：`message` / `notify`
+        # 两条路早就两种写法都收（`_known_recipient`），只有这里只收 `#public` ——
+        # 而拒信自己教的正是 `ALL`（"给所有人写 to="ALL""），`JSON_TAIL` 里的骨架
+        # 也写 `<伙伴/M/ALL>`。于是模型照提示词写 `ALL` 会被拒，被拒后拿到的改法还是
+        # `ALL`，同一步能连撞两次（这正是"提示词教了一个框架不收的字面量"。
+        # 判据与归一都走唯一那份词表：`_known_recipient` / `_recipient_for_channel`。
+        if not _known_recipient(to):
             return "", {}, (f"收件人 {to!r} 既不是角色（{S.ROLES}）、也不是主控 "
-                            f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"）")
+                            f"{S.CONDUCTOR_ROLE}、也不是 {PUBLIC}（给所有人写 to=\"ALL\"，"
+                            "两种写法等价）")
         summary = (str(value.get("summary") or "").strip()
                    or str(value.get("brief") or "").strip()
                    or str(value.get("title") or "").strip())
@@ -1104,8 +1117,12 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         refs = value.get("refs") or []
         if not isinstance(refs, (list, tuple)):
             return "", {}, "handoff 的 refs 必须是编号数组"
-        return key, {"to": "ALL" if to == PUBLIC else to, "summary": summary, "body": body,
+        return key, {"to": _recipient_for_channel(to, all_as="ALL"), "summary": summary,
+                     "body": body,
                      "refs": [str(x) for x in refs],
+                     # `R2b-⑲`：带了这一格 ⇒ 走秘书的 `handoff_revise`（订正某一号，
+                     # 旧行保留）。它是可选键：不填就是新增（旧行为逐字不变）。
+                     "revises": str(value.get("revises") or "").strip(),
                      "why": str(value.get("why") or "")}, ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     payload: dict[str, Any] = {"final": final,
@@ -1134,10 +1151,36 @@ def _with_notify(payload: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, A
     return {**payload, "notify": raw.get("notify")}
 
 
-def _known_recipient(token: str) -> bool:
+#: 「给所有人」的两种写法（等价）。这是那条等价关系的唯一来源：
+#: `_is_all_recipient` / `_known_recipient` / `_recipient_for_channel` 三处都从这里取，
+#: `message` / `handoff` / `notify` 三条通道也都调它们 —— 不许再各写一份。
+#: 为什么会有两种：公共频道的落库形态是 `#public`（`_do_message` 按它判 `channel`），
+#: 而手稿文件名（`…toALL.md`）与 `notify` 的口径是 `ALL`。
+ALL_RECIPIENT_TOKENS: tuple[str, ...] = (PUBLIC, "ALL")
+
+
+def _is_all_recipient(token: Any) -> bool:
+    """这个写法是不是"给所有人"（`ALL` / `#public`，大小写不敏感）。"""
+    return str(token or "").strip().upper() in {x.upper() for x in ALL_RECIPIENT_TOKENS}
+
+
+def _known_recipient(token: Any) -> bool:
     """收件人写法认不认（大小写不敏感；`ALL` / `#public` 都算"给所有人"）。"""
     want = str(token or "").strip()
-    return want.upper() in {r.upper() for r in (*S.ROLES, S.CONDUCTOR_ROLE, PUBLIC, "ALL")}
+    return _is_all_recipient(want) or want.upper() in {r.upper() for r in (*S.ROLES,
+                                                                          S.CONDUCTOR_ROLE)}
+
+
+def _recipient_for_channel(token: Any, *, all_as: str = PUBLIC) -> str:
+    """收件人归一成这条通道的规范写法；角色名一律大写。
+
+    `all_as` 之所以是参数而不是写死：两条通道的消费者认的形态不同 ——
+    `_do_message` 按 `to == #public` 判 `channel`（留言通道要给 `#public`），
+    而手稿文件名与 `notify` 的口径是 `ALL`。等价关系仍在 `_is_all_recipient` 一处，
+    这里只是选一个规范写法，参数就是那处选择，并且必须在这句 docstring 里说明理由。
+    """
+    want = str(token or "").strip()
+    return str(all_as) if _is_all_recipient(want) else want.upper()
 
 
 def notify_shape_problem(notify: Any) -> str:
@@ -1166,9 +1209,13 @@ def notify_shape_problem(notify: Any) -> str:
 
 
 def clean_notify(notify: Mapping[str, Any]) -> dict[str, Any]:
-    """把 `notify` 规范化（收件人大小写归一、`ALL`/`#public` 都写成 `ALL`、`refs` 转字符串数组）。"""
+    """把 `notify` 规范化（收件人大小写归一、`ALL`/`#public` 都写成 `ALL`、`refs` 转字符串数组）。
+
+    收件人那一格调的是与 `message` / `handoff` 同一个归一函数（`_recipient_for_channel`）——
+    三条通道共用一处词表，谁也不许自己判一遍"哪些写法算给所有人"。
+    """
     to = str(notify.get("to") or "").strip()
-    return {"to": "ALL" if to.upper() in (PUBLIC.upper(), "ALL") else to.upper(),
+    return {"to": _recipient_for_channel(to, all_as="ALL"),
             "summary": str(notify.get("summary") or "").strip(),
             "body": str(notify.get("body") or ""),
             "refs": [str(x) for x in (notify.get("refs") or [])],
@@ -1244,11 +1291,14 @@ class AgentLoop:
     #: 要调谁、只是那个 JSON 没写对" —— 后者交回工具层就能改对（DSH 的口径），
     #: 所以给它多一次机会，同时仍然保留上限（不设上限等于允许无限重说同一句）。
     max_bad_args: int = 3
-    #: 收工时的 `notify` 表最多被打回几次（`draft/39` §3.3 的裁定：打回重填、不代填）。
+    #: 收工时的 `notify` 表最多被打回几次。
     #:
-    #: 为什么是 3：与 `max_bad_args` 同一档 —— "表填错"是"说对了要收工、只是那一栏没写对"，
-    #: 交回一次就该能改对；3 次之后仍然不填，说明它不是在写错，而是不愿意留痕，
-    #: 那时停下来并如实报 `stop_reason="no_notify"` 比继续烧钱问更有信息量。
+    #: L-05e 之后这个数不再是判据（`draft/52` F 组 / P-10）：强制闸门已经降级成
+    #: 读数（收工不带 `notify` ⇒ 不打回、不代填，只把"没有留痕"写进这一步的读数）。
+    #: 常量留着是因为它仍在会话记录与 `LoopRun` 的读数面上（历史读数要能解释），
+    #: 而不再有任何分支读它去决定行为 —— 这一点由
+    #: `tests/test_forced_notify.py::test_the_forced_table_is_retired_in_code_and_the_prompt_half_is_bs`
+    #: 钉住（源码里不许再出现 `_notify_bounce(` 与 `no_notify`）。
     max_notify_rejections: int = 3
     #: 「原地打转」的两道闸（`draft/37` §131 第 2 件事 / §136 的落地）：
     #: 同一个形状、同一份参数、同样的读数连着第几次时点名（提醒），第几次时收工。
@@ -1302,12 +1352,22 @@ class AgentLoop:
     #: 否则链条在台账里会断成两段互不相干的记录。
     my_task_id: str = ""
     depth: int = 1
+    #: 本角色自己的秘书（A 线：`draft/53` v3 的四职责 + 手稿通道增改查）。
+    #:
+    #: `None` = 没装配（裸 `AgentLoop(...)`；测试与旧调用点）。三种后果，都是有意的：
+    #: ① 手稿的写路径关闭 —— 循环形状 `handoff` 与 `summon` 的 `notify` 派生写
+    #:    都改由秘书执笔（智能体只保留"查"，`draft/55` §3.2），没秘书就不写；
+    #: ② 发件/收件两个钩子是 no-op（`_outbound_hook` / `_inbound_hook`）；
+    #: ③ 其余行为逐字不变（秘书的失败姿态是 fail-open，而"没装配"不该改变别的判据）。
+    #: 生产路径由 `run_role` 自动装配（每角色一个实例），所以这条默认值只影响裸构造。
+    secretary: Any = None
 
     def _prompt(self, transcript: str, *, step: int) -> str:
         last = step >= self.max_steps - 1
         tail = ("这是最后一步：不要再调用工具、不要再唤起伙伴，直接输出 "
                 '{"final": "<结论>", "evidence": [...]}。' if last else
-                "请按循环协议输出下一步（一个 JSON 对象，六种形状取其一）。")
+                "请按循环协议输出下一步（一个 JSON 对象，"
+                f"{len(SHAPES)} 种形状取其一：{' / '.join(SHAPES)}）。")
         # 输出契约重述在最后一行（`draft/28` §195 实测）：
         # 系统提示词有 6k+ token，循环协议埋在中间；真机跑 M 做"核验证明"那种长任务时，
         # 模型连着三次回了 1400–2400 字的散文（`judge_bad_json` ⇒ `bad_json_limit`），
@@ -1649,29 +1709,29 @@ class AgentLoop:
                 # ③ 连续打回两次，警告里再加"先说明你上一次为什么没按格式填"。
                 # 主控 M 的 `final` 是给用户的回复，不在这套里（用户原话：
                 # "M 向 Agent 派活时一样强制留痕，向用户回复时不搞这种操作"）。
-                gate = self._notify_gate(payload)
-                if gate:
-                    line, stop = self._notify_bounce(run, step, "final", payload, data, gate)
-                    transcript += line
-                    if stop:
-                        # 停在"没留痕"上，而不是替它写一份：用户点名"不做框架代填"。
-                        # 它自己那份结论照原样留着（`final` 就是模型写的那段话）——
-                        # 打回不等于把这一趟的产出丢掉。
-                        run.stop_reason = "no_notify"
-                        run.final = (str(payload.get("final") or "").rstrip()
-                                     + f"\n\n（框架：收工要求填 notify 表，连续 "
-                                       f"{run.notify_rejections} 次没按格式填，"
-                                       "所以这一趟没有留下交接手稿 —— 结论在上面，"
-                                       "交接这一栏是空的。）")
-                        break
-                    continue
+                # ---- L-05e（`draft/52` F 组 / P-10）：强制闸门降级成读数
+                #
+                # 旧形态：收工不带 `notify` ⇒ 打回重填，连续 3 次 ⇒ `stop_reason="no_notify"`。
+                # 真机读数把它的收益证伪了：5269 个 `agent_step` 里 shape 无 `final`、
+                # `no_notify` 收场 0 次 ⇒ 这道闸门一次都没触发过，只贡献提示词篇幅与
+                # "表格化"的负担。裁定的新口径是只留一条："要交接就写手稿" ——
+                #   · 填了 `notify`（且形状对）⇒ 秘书照旧执笔一行手稿（写权已移交）；
+                #   · 没填 / 填错 ⇒ 不打回：这一趟照常收工，只是没有手稿，
+                #     而"为什么没有"如实落进这一步的读数（`notify_problem`）。
+                # 于是它从"闸门"变成"读数"：留痕与否仍然是可见的事实，但不再拿它
+                # 卡住一次已经做完的活（阻塞一条委托比放行更贵 —— 那就是 #1）。
+                notify_problem = self._notify_gate(payload)
                 notify = payload.get("notify")
                 step_result: dict[str, Any] = {}
-                if notify:
+                if notify_problem:
+                    step_result["notify_problem"] = notify_problem
+                    run.notes.append(f"收工没有可用 notify 表（{notify_problem}）⇒ "
+                                     "这一趟没有交接手稿（不打回、不代填）")
+                if notify and not notify_problem:
                     # 写手稿 + 转发都由脚本做（模型只填表）—— 这一条是用户口径里
-                    # "用脚本生成交接文件并代为转发"的落点。
+                    # "用脚本生成交接文件并代为转发"的落点；执笔已移交本角色的秘书。
                     hand = self._do_handoff(clean_notify(notify))
-                    step_result = {"notify_handoff": hand}
+                    step_result["notify_handoff"] = hand
                     if hand.get("ok"):
                         run.handoffs.append(str(hand.get("id") or ""))
                 run.final = str(payload.get("final") or "")
@@ -1683,25 +1743,26 @@ class AgentLoop:
                 run.steps.append(LoopStep(step, shape, payload, step_result))
                 run.stop_reason = "final"
                 break
-            # ---- 主控派活时的强制留痕（`draft/39` §3.3，用户 2026-10-05 裁）
+            # ---- 主控派活时的留痕（`draft/39` §3.3；L-05e 之后同样是读数不是闸门）
             #
             # 摆在"派活那一刻"（`summon`/`summon_many`）而不是 M 的 final 上：
             # M 的 final 是给用户的回复（用户明确说"向用户回复时不搞这种操作"），
             # 而"谁给谁派了什么活"正是交接的内容。
+            #
+            # 旧形态：填错形状 ⇒ 打回、那一次派活不发生（连续 3 次 ⇒ `no_notify`）。
+            # 新形态（与收工侧同一条裁定）：派活照常发生，形状不对就把问题落进读数、
+            # 用框架派生那一份留痕（谁是派生、谁是执笔仍然分得开）—— 不许因为
+            # "一张表的格式"而让一次真的要发生的派活停下来。
             dispatch_notify: dict[str, Any] | None = None
             if shape in ("summon", "summon_many") and self.role == S.CONDUCTOR_ROLE:
                 gate, dispatch_notify = self._dispatch_notify(payload)
                 if gate:
-                    line, stop = self._notify_bounce(run, step, shape, payload, data, gate)
-                    transcript += line
-                    if stop:
-                        run.stop_reason = "no_notify"
-                        run.final = (f"（框架：主控派活要求填 notify 表，连续 "
-                                     f"{run.notify_rejections} 次没按格式填 ⇒ 派活没有留痕，"
-                                     "停在这里。请按正例把 notify 补齐再派。）")
-                        break
-                    continue
+                    run.notes.append(f"派活的 notify 表格式有问题（{gate}）⇒ "
+                                     "照常派活，留痕退回框架派生那一份")
+            secretary_note = self._outbound_hook(shape, payload)
             result = self._execute(shape, payload)
+            if secretary_note:
+                result = {**result, "秘书": secretary_note}
             if dispatch_notify is not None:
                 # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
                 # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
@@ -1714,6 +1775,9 @@ class AgentLoop:
             heard = self._hear()
             if heard:
                 result = {**result, "新消息": heard}
+                inbound_note = self._inbound_hook(heard)
+                if inbound_note:
+                    result = {**result, "秘书加工": inbound_note}
             # ---- 活性读数（`draft/37` §136）：同形状 + 同参数 + 同读数 = 这一步没有新事实
             #
             # 为什么要"同读数"这一半：轮询是正当的（同一件事每隔一步问一次，读数在变），
@@ -1968,14 +2032,18 @@ class AgentLoop:
     def _dispatch_notify(self, payload: Mapping[str, Any]) -> tuple[str, dict[str, Any] | None]:
         """主控派活时的留痕载荷：返回 `(问题, 交给 `_do_handoff` 的载荷 或 None)`。
 
-        两种来源（`draft/39` §6.4 四.1 的裁定）：
+        两种来源（`draft/39` §6.4 四.1 的裁定；L-05e 之后都不再打回）：
 
-        1. 模型填了 `notify` ⇒ 用它（`note` 标成"模型填的 notify"），形状不对就打回；
-        2. 没填 ⇒ 框架据派活本身派生一份（`note` 标成"框架据派活派生"）：
-           写的是"谁派了谁做什么、参数是什么、为什么"——这些是框架手上已有的事实，
-           不是替模型编它想说的话。为什么不打回：用户要的是"派活强制留痕"，
-           派生比"打回三次、什么都不留"更接近那个目标；而 A–H 收工侧仍然是打回重填
-           （用户在那里的原话是"填错就打回充填……不做框架代填"）。
+        1. 模型填了 `notify` ⇒ 用它（`note` 标成"模型填的 notify"）；
+        2. 没填、或填的形状不能用 ⇒ 框架据派活本身派生一份
+           （`note` 标成"框架据派活派生"）：写的是"谁派了谁做什么、参数是什么、为什么"
+           ——这些是框架手上已有的事实，不是替模型编它想说的话。
+
+        为什么形状不对也退回派生（L-05e）：旧口径是"填错就打回、那一次派活不发生"，
+        但真机 5269 个 `agent_step` 里这道闸门一次都没触发（`no_notify` 收场 0 次），
+        而"因为一张表的格式让一次真的要发生的派活停下来"正是 #1 的形态。
+        现在：派活照常发生，形状问题落进这一步的读数（`run.notes`），留痕退回派生那一份
+        —— "谁是派生、谁是执笔"两个标记仍然分得开（执笔在本角色的秘书手里）。
 
         `to` 的缺省是被派的那个角色（多目标 ⇒ `ALL`）："给谁派了活"与"手稿发给谁"
         因此不会因为要填两遍而分家。
@@ -1985,19 +2053,20 @@ class AgentLoop:
         if notify is None:
             return "", self._derived_dispatch_notify(payload, targets)
         if not isinstance(notify, Mapping):
-            return notify_shape_problem(notify), None
+            return notify_shape_problem(notify), self._derived_dispatch_notify(payload, targets)
         patched = dict(notify)
         if not str(patched.get("to") or "").strip():
             patched["to"] = targets[0] if len(targets) == 1 else "ALL"
         problem = notify_shape_problem(patched)
         if problem:
-            return problem, None
+            return problem, self._derived_dispatch_notify(payload, targets)
         from . import manuscripts as MS
 
         for ref in list(patched.get("refs") or []):
             why = MS.ref_problem(self.session_root, str(ref))
             if why:
-                return f"notify.refs 里的 {ref!r} 立不住：{why}", None
+                return (f"notify.refs 里的 {ref!r} 立不住：{why}",
+                        self._derived_dispatch_notify(payload, targets))
         clean = clean_notify(patched)
         clean["note"] = "留痕来源：模型填的 notify"
         return "", clean
@@ -2017,14 +2086,16 @@ class AgentLoop:
             lines += ["", "## 为什么派它", why]
         lines += ["", "## 这一行是怎么来的",
                   "模型这一句派活没有填 `notify` 表 ⇒ 框架据派活本身派生（"
-                  "谁派了谁做什么、参数、为什么），内容全部取自这一句派活。"]
+                  "谁派了谁做什么、参数、为什么），内容全部取自这一句派活；"
+                  "执笔的是本角色自己的秘书（智能体侧只保留『查』，`draft/55` §3.2）。"]
         what = ", ".join(f"{t.get('role')}.{t.get('action')}"
                          for t in ((payload.get("targets") or []) if "targets" in payload
                                    else [payload]) if isinstance(t, Mapping))
         return {"to": targets[0] if len(targets) == 1 else "ALL",
                 "summary": f"派活：{what or '（没有目标）'}",
                 "body": "\n".join(lines) + "\n", "refs": [], "why": why,
-                "note": "留痕来源：框架据派活派生（模型这一句没填 notify）"}
+                "note": ("留痕来源：框架据派活派生（模型这一句没填 notify）；"
+                         "执笔=本角色的秘书")}
 
     @staticmethod
     def _dispatch_targets(payload: Mapping[str, Any]) -> list[str]:
@@ -2358,6 +2429,96 @@ class AgentLoop:
         return {"message_sent": msg_id, "to": to, "channel": where, "ok": True,
                 "note": "收件人下次运行时（或本步之后）会在收件箱里看到它"}
 
+    def _outbound_hook(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """发件钩子（A 线：秘书职责 1 格式内容优化 + 2 委派评估）。
+
+        位置：委托离开本体之前（`_execute` 之前）。它是同步的（本体在等），
+        产物却是"建议 + 并列候选"而不是改写后的载荷 —— 秘书不替本体表态，
+        也不静默修实质缺陷（`draft/53` §2 的两条红线）。所以这里把读数并进结果，
+        真正发出去的仍然是模型自己那一份。
+
+        fail-open（`draft/53` §9.7）：超时/出错 ⇒ 原样放行 + 留痕。
+        阻塞一条委托比放行更贵 —— 那正是 #1。所以任何异常都变成结果里的一格，
+        绝不中断这一次循环。
+        """
+        if self.secretary is None or shape not in ("summon", "summon_many", "handoff"):
+            return {}
+        out: dict[str, Any] = {}
+        try:
+            got = self.secretary.optimize_outbound(shape, dict(payload))
+            out["alarms"] = list(got.get("alarms") or [])
+            out["fail_open"] = bool(got.get("fail_open"))
+            if got.get("problem"):
+                out["problem"] = str(got["problem"])
+        except Exception as exc:  # noqa: BLE001 - fail-open：秘书坏了不许打断本体
+            out["fail_open"] = True
+            out["problem"] = f"{type(exc).__name__}: {exc}"
+        if shape == "summon":
+            try:
+                to = str(payload.get("role") or "")
+                action = str(payload.get("action") or "")
+                key = str(payload.get("input_key") or "") or _summon_key(
+                    action, dict(payload.get("params") or {}))
+                dups: list[dict[str, Any]] = []
+                if self.conductor is not None and hasattr(self.conductor, "duplicate_candidates"):
+                    dups = self.conductor.duplicate_candidates(to, action, key)
+                out["assessment"] = self.secretary.assess_delegation(
+                    to=to, action=action, params=dict(payload.get("params") or {}),
+                    input_key=key, duplicates=dups)
+            except Exception as exc:  # noqa: BLE001 - 同上
+                out["assessment_fail_open"] = f"{type(exc).__name__}: {exc}"
+            # `R2b-⑲`：协商（职责 2 的"给出重新安排建议并协商"）—— 评估摆了同 key 的既有
+            # 终态行、或结论是"建议重排/重复"时，秘书与对方的秘书协商；同一处再犯
+            # （第二轮）⇒ `negotiate` 自己给出"上报本体"，这一格就把它摆出来（不静默）。
+            try:
+                verdict = str((out.get("assessment") or {}).get("decision") or "")
+                if dups or "重排" in verdict or "重复" in verdict:
+                    point = f"{to}.{action}（input_key={key or '无'}）"
+                    seen = getattr(self, "_negotiated_points", None)
+                    if seen is None:
+                        seen = self._negotiated_points = {}       # type: ignore[attr-defined]
+                    rounds = tuple(seen.get(point) or ())
+                    rec = self.secretary.negotiate(with_role=to, point=point, rounds=rounds)
+                    seen[point] = tuple(list(rounds) + [rec])
+                    out["negotiation"] = rec
+                    if rec.get("escalate_to_body"):
+                        out["escalate_to_body"] = {
+                            "why": "协商两轮仍未收敛 ⇒ 这一条上报本体（不许静默）",
+                            "record": rec}
+            except Exception as exc:  # noqa: BLE001 - 协商坏了不许打断派活
+                out["negotiation_fail_open"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+    def _inbound_hook(self, heard: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        """收件钩子（A 线：秘书职责 4 委托加工 + 3 闭环提醒）。
+
+        位置：委托进入本体之前（`_hear()` 拿到的新消息交给本体之前）。
+        产物是"按本角色定位补的一段上下文"（`addendum`），原文一字不动 ——
+        不加码不减码（`draft/53` §2），且原文与加工后并列留痕（`draft/55` §5.1）。
+
+        fail-open 与发件钩子同一条纪律。
+        """
+        if self.secretary is None or not heard:
+            return {}
+        reworked: list[dict[str, Any]] = []
+        for item in heard:
+            try:
+                reworked.append(dict(self.secretary.rework_inbound(dict(item))))
+            except Exception as exc:  # noqa: BLE001 - fail-open
+                reworked.append({"item": dict(item), "addendum": "",
+                                 "problem": f"{type(exc).__name__}: {exc}", "fail_open": True})
+        out: dict[str, Any] = {"reworked": reworked}
+        # `R2b-⑲`：手稿通道的"摘要"也要有生产落点 —— 收件这一刻让本体看到最近几份交接
+        # （`handoffs_digest` 只读；读不到就如实报"没读成"，不折成"没有交接"）。
+        try:
+            digest = str(self.secretary.handoffs_digest() or "")
+            out["handoffs_digest"] = digest
+            if not digest.strip():
+                out["handoffs_digest_note"] = "手稿通道读成了、最近没有交接（不是没读成）"
+        except Exception as exc:  # noqa: BLE001 - fail-open
+            out["handoffs_digest_problem"] = f"{type(exc).__name__}: {exc}（这一格没读成）"
+        return out
+
     def _do_handoff(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
 
@@ -2367,9 +2528,18 @@ class AgentLoop:
 
         `to="ALL"` ⇒ 走公共频道（所有人收得到）；存储是追加式账本
         `manuscripts/handoffs.jsonl` 的一行（`draft/39` §C1：编号与那一行在同一把锁里分配）。
-        """
-        from . import manuscripts as MS
 
+        ## A 线：执笔权已经移交给本角色的秘书（`draft/53` §2.1 / `draft/55` §3.2）
+
+        用户口径（2026-10-06）："由于所有信息交互都由秘书过一遍手，所以 handoffs 的
+        增改查能力都该给秘书，智能体只保留『查』的能力。" 落法：
+
+        - 循环形状 `handoff` 保留（本体依旧"说我要交接什么"）；
+        - 但写这一行的是 `self.secretary.handoff_add(...)`（`sender` 仍是本角色）；
+        - 没装配秘书 ⇒ 不写并如实报错（"形状保留、写路径关闭"的判据就在这一支）。
+
+        `manuscripts.read` / `manuscripts.list` 工具保留（这就是"智能体只保留查"）。
+        """
         to = str(payload.get("to") or "")
         channel = PUBLIC if to == "ALL" else to
         # `summary` 是这一形状的正名（它就是进留言的那一句话）；`brief` / `title` 是旧名，
@@ -2378,24 +2548,60 @@ class AgentLoop:
                     or str(payload.get("brief") or "").strip()
                     or str(payload.get("title") or "").strip())
         why = str(payload.get("why") or "").strip()
+        if self.secretary is None:
+            return {
+                "handoff": "未写成", "ok": False,
+                "error": ("交接手稿的执笔权已移交给本角色的秘书（智能体只保留『查』），"
+                          "而本次运行没有装配秘书 ⇒ 这一行不写。装配方式："
+                          "`AgentLoop(..., secretary=secretary.Secretary(<本角色>, root=…))`"
+                          "（`run_role` 会自动装配；裸构造不会）。"),
+            }
         try:
-            rec = MS.write(self.session_root, sender=self.role, recipient=to,
-                           summary=one_line, body=str(payload.get("body") or ""),
-                           refs=list(payload.get("refs") or []), sid=self.sid or "",
-                           note=str(payload.get("note") or ""))
-        except ValueError as exc:
-            return {"handoff": "未写成", "ok": False, "error": str(exc)}
+            # `R2b-⑲`：手稿通道的三件在生产面都要有落点 —— `add` 已接（上面那段），
+            # `revise` 走"payload 带了 `revises`"这一支（订正某一号，旧行保留）。
+            revises = str(payload.get("revises") or "").strip()
+            if revises:
+                rec = self.secretary.handoff_revise(
+                    mid=revises, summary=one_line, body=str(payload.get("body") or ""),
+                    reason=why, note=str(payload.get("note") or ""))
+            else:
+                rec = self.secretary.handoff_add(
+                    to=to, summary=one_line, body=str(payload.get("body") or ""),
+                    refs=list(payload.get("refs") or []), sid=self.sid or "",
+                    note=str(payload.get("note") or ""))
+        except Exception as exc:  # noqa: BLE001 - 执笔失败必须报错留痕，不许静默放行
+            return {"handoff": "未写成", "ok": False,
+                    "error": (f"秘书执笔失败（这一格不许静默放行，否则手稿会缺行）："
+                              f"{type(exc).__name__}: {exc}")}
         summary = str(rec.get("summary") or "")
+        # `R2b-⑲` 的"查"：先问一句"这件事是不是已经交接过"（`handoff_query` 的用途就是
+        # 判重复委派）。只摆读数、不阻断 —— 重复与否归本体与秘书判断（机器不替它裁）。
+        try:
+            same = [r for r in self.secretary.handoff_query(to=to, sender=self.role)
+                    if str(r.get("summary") or "").strip() == summary
+                    and str(r.get("id") or "") != str(rec.get("id") or "")]
+            dup_note: Any = {"count": len(same),
+                             "ids": [str(r.get("id") or "") for r in same[:5]],
+                             "note": ("同一个人、同一句话的交接已经有过 ⇒ 可能是一次重复委派"
+                                      "（要不要合并/订正由本体或秘书判断）" if same else
+                                      "查过了：没有同一句话的既有交接")}
+        except Exception as exc:  # noqa: BLE001 - 查坏了不许带走这次交接
+            dup_note = {"count": 0, "ids": [],
+                        "problem": f"{type(exc).__name__}: {exc}（这一格没查成）"}
+        shown = revises or str(rec.get("id") or "")
         msg_id, problem = send_message(
             self.session_root, sender=self.role, to=channel,
-            subject=f"手稿 {rec['id']}：{summary}",
-            body=(f"[手稿 {rec['id']}] {summary}"
+            subject=f"手稿 {shown}：{summary}",
+            body=(f"[手稿 {shown}] {summary}"
+                  + ("（订正行，旧行保留）" if revises else "")
                   + (f"\n（为什么找你：{why}）" if why else "")
-                  + f"\n全文：`manuscripts.read(id=\"{rec['id']}\")`"
-                    f"（盘上 {rec['path']}）"),
+                  + f"\n全文：`manuscripts.read(id=\"{shown}\")`"
+                    f"（盘上 {rec.get('path')}）"),
             sid=self.sid)
-        return {"handoff": rec["id"], "ok": not problem, "id": rec["id"],
-                "path": rec["path"], "to": channel, "brief": summary,
+        return {"handoff": shown, "ok": not problem, "id": shown,
+                "path": rec.get("path"), "to": channel, "brief": summary,
+                "revises": revises,
+                "existing_same_summary": dup_note,
                 "notified": msg_id if not problem else "",
                 "error": problem,
                 "note": ("收件人下次运行时（或本步之后）会在收件箱里看到编号；"
@@ -2573,15 +2779,37 @@ class LlmBackend:
         raise RuntimeError("LlmBackend 需要 seam_factory（一个按角色造模型缝的调用方）")
 
     def _write_run_artifact(self, role: str, run: LoopRun) -> str:
-        """把这次循环的完整记录写成文件，返回路径（失败就返回空串并留 note）。"""
+        """把这次循环的完整记录写成文件，返回路径（失败就返回空串并留 note）。
+
+        ## B11（`draft/41-A` 的 B11）：唯一性靠 `O_EXCL`，不靠"先数后写"
+
+        旧实现是 `n = len(list(d.glob(f"{role}-*.json"))) + 1`，然后按这个名字写 ——
+        没有锁、也不是 `O_EXCL`：同一角色同秒的两个并发循环会算出同一个 `n`，
+        后写覆盖先写，于是两个召唤返回同一个 `llm_run_path`（一份产出凭空消失，
+        而两个调用方都以为自己的产出在盘上）。`conductor._write_new_row` 为同类问题
+        专门加了 `_id_lock`；这里用更省事也更彻底的一条：`open(..., "x")`（`O_EXCL`）
+        —— 它同时挡住同进程的两个线程与两个进程（进程内的锁挡不住后者）。
+
+        失败不用"猜一个名字"兜底：撞名就 +1 重试（名字里的时间戳不变，序号递增），
+        重试到上限仍撞 ⇒ 如实留 note 并返回空串（"没写成"与"写成了"要分得开）。
+        """
         try:
             d = self.session_root / RUNS_DIR_NAME
             d.mkdir(parents=True, exist_ok=True)
-            n = len(list(d.glob(f"{role}-*.json"))) + 1
-            path = d / f"{role}-{time.strftime('%Y%m%d-%H%M%S')}-{n:03d}.json"
-            path.write_text(json.dumps(run.to_dict(), ensure_ascii=False, indent=2) + "\n",
-                            encoding="utf-8", newline="\n")
-            return str(path)
+            payload = json.dumps(run.to_dict(), ensure_ascii=False, indent=2) + "\n"
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            n = len(list(d.glob(f"{role}-{stamp}-*.json"))) + 1
+            while n <= _RUN_ARTIFACT_MAX_SEQ:
+                path = d / f"{role}-{stamp}-{n:03d}.json"
+                try:
+                    with path.open("x", encoding="utf-8", newline="\n") as fh:
+                        fh.write(payload)
+                    return str(path)
+                except FileExistsError:
+                    # 另一个写者抢到了这个名字（同秒并发或跨进程）⇒ 换下一个序号。
+                    n += 1
+            run.notes.append(f"产出落盘失败：同一秒内 {role} 的序号用尽（{stamp}）")
+            return ""
         except OSError as exc:
             run.notes.append(f"产出落盘失败：{type(exc).__name__}: {exc}")
             return ""
@@ -2826,6 +3054,30 @@ def _note_resume_refusal(root: Path, role: str, task: str, sid: str | None, why:
                      "resume_attempted_from": int(attempted_from)}, sid=sid)
 
 
+def _secretary_for(role: str, *, root: Path | str, store: Any, registry: Any,
+                   seam: Any, sid: str | None = None) -> Any:
+    """给这一趟装配本角色自己的秘书（生产路径的唯一落点）。
+
+    主控裁定 A5（2026-10-06）：打开秘书的模型判断。三个条件写在这一个函数里：
+
+    1. 同一个缝实例 —— 传进去的就是 `run_role` 为这个角色造的那一个
+       `LlmSeam`（`:2958`）。同一个实例意味着角色、`scope`、账本、预算都是同一份，
+       于是判断那一笔钱记在本体自己的账上，而不是另开一本；
+    2. `enable_model=True` —— 关着的时候三条判断在生产里等于不存在，
+       而"把该不该派的判断全写死成确定性规则"正是用户点名不要的形态；
+       花销由 `Secretary.should_engage` 绑在问题量上（干净的派活 0 次调用）；
+    3. 可归因 —— 每次判断的 `usage_id`（取不到就 `call_index`）由
+       `Secretary.last_judge_cost` 从缝自己落的 `llm_call` 事件读回来、进决定台账。
+
+    装配失败不抛（fail-open）：`run_role` 那一层兜住异常 ⇒ 不装配秘书
+    （写路径关闭、判断不发生），而这一趟照跑。
+    """
+    from . import secretary as _SEC
+
+    return _SEC.for_role(role, root=root, store=store, registry=registry,
+                         seam=seam, enable_model=True, sid=sid)
+
+
 def run_role(role: str, task: str, *, store: Any, registry: Any,
              session_root: Path | str | None = None,
              conductor: Any = None, seam: LlmSeam | None = None, gateway: Any | None = None,
@@ -2833,7 +3085,7 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
              workspace_root: str = "", sid: str | None = None, token: Any = None,
              from_env: bool = True, user_timeout_sec: float | None = None,
              ask_policy: str | None = None, resume: bool = False,
-             stop_file: str = "") -> LoopRun:
+             stop_file: str = "", secretary: Any = None) -> LoopRun:
     """跑一个角色的一次循环（真机或替身都走这一条）。
 
     `session_root` 不给时取 `store.root`：会话记录的落点就该是项目根，
@@ -2861,12 +3113,41 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     if seam is None:
         seam = LlmSeam.for_role(role, session_root=root, gateway=gateway,
                                 usd_budget=usd_budget, sid=sid, from_env=from_env)
+    if secretary is None:
+        # A 线：每个智能体自带一名秘书（同一个类，每角色一份配置）。
+        # 生产路径自动装配 —— 不给就自动造，是为了让"手稿写权移交"不需要
+        # 每个调用点都记得传一个对象（那种"靠人记得"的设计在本项目里失败过多次）。
+        # 失败姿态同秘书本身：造不出来 ⇒ 不装配（写路径关闭），但这不改变别的判据。
+        try:
+            secretary = _secretary_for(role, root=root, store=store, registry=registry,
+                                       seam=seam, sid=sid)
+            if conductor is not None and getattr(conductor, "secretary", None) is None:
+                # M 的派活路径也接同一套钩子（`draft/54 §2` 的第 3 个落点）。
+                conductor.secretary = secretary
+        except Exception:  # noqa: BLE001 - 秘书没装配不等于这一趟不能跑（fail-open）
+            secretary = None
     loop = AgentLoop(role=role, session_root=root, registry=registry, seam=seam,
                      conductor=conductor, max_steps=max_steps, workspace_root=workspace_root,
                      sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec,
-                     ask_policy=ask_policy, stop_file=str(stop_file or ""))
+                     ask_policy=ask_policy, stop_file=str(stop_file or ""),
+                     secretary=secretary)
     summoned_by = S.CONDUCTOR_ROLE if role == S.CONDUCTOR_ROLE else ""
     start_depth = 1 if role == S.CONDUCTOR_ROLE else 2
+    # ---- F1（`44 J-32` 的"往前走"半）：给这一趟开一条 tasks 行，并让它成为
+    # 这一趟每一次模型调用的 `task_id`。
+    #
+    # 改前这里是 `my_task_id=""`：`llmseam._charge_ledger` 把空串归一成 `None`，
+    # 于是这一趟花的每一笔钱在账上都读不出"属于哪一次召唤"（真机 51%~66% 的账如此）。
+    # 只填不建行是负收益（每行都会成 `dangling_usage_task` 的 error）⇒ 两件事同批。
+    # 失败姿态：开行失败不打断这一趟（留不下来的是读数，不是这一趟的活）。
+    top_tid = ""
+    if conductor is not None and hasattr(conductor, "open_top_level_run"):
+        try:
+            top_tid = conductor.open_top_level_run(role, task)
+        except Exception as exc:  # noqa: BLE001 - 开行失败不许打断顶趟（损失的是读数）
+            log = getattr(conductor, "_log", None)
+            if callable(log):
+                log(f"顶趟开行失败（这一趟的账会读不出归属）：{type(exc).__name__}: {exc}")
     if resume:
         cp = load_run_checkpoint(root, role, sid)
         if cp is None:
@@ -2924,18 +3205,38 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                            final=("要求续跑，但会话记录里重建不出这一趟的任何一步"
                                   "（同角色 + 同任务原文的 `agent_step` 一条都没有）"
                                   "⇒ 没查成：不许从第 1 步重跑。"))
-        run = loop.run(task, summoned_by=summoned_by, my_task_id="", depth=start_depth,
+        run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid, depth=start_depth,
                        resumed=(rebuilt, step0),
                        waiting_for=str(cp.get("waiting_for") or ""))
     else:
-        run = loop.run(task, summoned_by=summoned_by, my_task_id="", depth=start_depth)
+        run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid, depth=start_depth)
     completed = run.resumed_from + len(run.steps)
+    # ---- F1：顶趟也要收行（开了不收 = 台账上永远一条 `running`）
+    if top_tid:
+        try:
+            conductor.finish_top_level_run(top_tid, stop_reason=str(run.stop_reason or ""),
+                                          detail=str(run.final or "")[:200])
+        except Exception as exc:  # noqa: BLE001 - 收行失败不许带走这一趟的产出
+            log = getattr(conductor, "_log", None)
+            if callable(log):
+                log(f"顶趟收行失败（{top_tid}）：{type(exc).__name__}: {exc}")
+            run.notes.append(f"顶趟那一行没写成终态（{type(exc).__name__}: {exc}）："
+                             "台账上它会停在 running（这一趟的产出不受影响）")
     problem = save_run_checkpoint(root, role, sid, task=task, step=completed,
                                   stop_reason=run.stop_reason, waiting_for=run.waiting_for,
                                   spend=run.spend)
     if problem:
         run.notes.append(f"这一趟的步检查点没写成（{problem}）：下一趟 `--resume` 会读到"
                          "更早的一份（或读不到），于是它要么多跑几步、要么如实报'没查成'")
+    # `R2b-⑲`：M 的状态读数 —— 秘书台账里的坏行要在这一趟的读数里看得见
+    # （不是门：坏行只说明那几行读不出来，不改变任何判定；读不到与"没问题"必须分开）。
+    try:
+        bad = list(secretary.decision_problems()) if secretary is not None else []
+        if bad:
+            run.notes.append(f"秘书台账有 {len(bad)} 行读不出来（如实报，不当成'没有问题'）："
+                             f"{bad[:3]}")
+    except Exception as exc:  # noqa: BLE001 - 读数坏了不许带走这一趟
+        run.notes.append(f"秘书台账的坏行这一格没读成：{type(exc).__name__}: {exc}")
     return run
 
 
@@ -2981,7 +3282,7 @@ def selftest() -> int:
         for p in problems:
             print("  -", p)
         return 1
-    print("SELF-CHECK DONE（六种形状的形状判定 + 消息投递与隔离）")
+    print(f"SELF-CHECK DONE（{len(SHAPES)} 种形状的形状判定 + 消息投递与隔离）")
     return 0
 
 
@@ -2989,3 +3290,4 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(selftest())
+

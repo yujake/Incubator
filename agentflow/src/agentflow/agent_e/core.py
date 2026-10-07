@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._support import Any, DeclarationNameError, ExperimentError, Mapping, Path, Sequence, Store, ToolRegistry, _NOT_CHECKED_REASONS, _NO_EVIDENCE_KIND, _declared_name_note, _decode, _digest, _kill_child, _relpath, _result_reason, _stop_requested, _which, build_experiment, install_e_tools, os, sole_declaration_name, subprocess, sys, time
 from .run_experiment import _RunExperiment
+from .author_script import _AuthorScript
 from .check_formal import _CheckFormal
 from .evidence_for import _EvidenceFor
 from .list_experiments import _ListExperiments
@@ -67,8 +68,10 @@ class _Core:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = actor
-        #: 未使用（见类 docstring 末段）。保留它是为了显式说明 E 不用 LLM，
-        #: 而不是让调用方以为"没传 llm 所以功能缺了一块"。
+        #: S-10(a) 起它的用途收窄成一句话：只用来写核验脚本（`author_script`）。
+        #: 判读那一段一次都不许问模型（FC-16）—— 那条判据由
+        #: `tests/test_agent_e_author_script.py::test_the_reading_path_never_calls_the_seam`
+        #: 机械守着（把缝换成一个"一叫就记一笔"的假模型，跑一次判读，计数必须是 0）。
         self.llm = llm
         self.log = log
 
@@ -379,14 +382,47 @@ class _Core:
             if remedy:
                 notes.append(remedy)
 
+        # ---- E-12（`draft/44`）：形式化失败的三态必须恢复出来。
+        #
+        # 改前：`exit_code = 0 if verified else None`、`negation_kind` 一律
+        # `no_local_evidence`，而真机 50 条 formal 里 41 条 `exit_code=None`
+        # ⇒ "检查器跑了、判这条命题不通过（`compile_error`）"与"根本没查成
+        # （`timeout` / `import_unavailable` / `no_backend` / `tool_crashed`）"
+        # 在行上完全同形（都 None、都 inconclusive、都同一个 negation_kind）——
+        # "没查成"被读成"没通过"。
+        #
+        # 三态按 `formalgw` 自己的口径分（不另立一套）：
+        # - `verified`：检查器认了（结果见 `evidence_kind=proof`）；
+        # - `checked_failed`：检查器给了结论、结论是"不通过"（`compile_error` 等收敛档）
+        #   ⇒ `negation_kind="not_proved"`，退出码记检查器真实那个（非零）；
+        # - `not_checked`：没查成 ⇒ `negation_kind` 再分两档（跑过但没裁决 ⇒
+        #   `no_local_evidence`；本机起不了这次检查 ⇒ `not_searched_here`），退出码为 None。
+        checker_exit = data.get("exit_code")
+        if verified:
+            tri_state = "verified"
+        elif data.get("checked") is True:
+            tri_state = "checked_failed"
+        else:
+            tri_state = "not_checked"
+        if tri_state == "verified":
+            negation_kind = "not_proved"
+        elif tri_state == "checked_failed":
+            negation_kind = "not_proved"
+        elif status in ("timeout", "tool_crashed"):
+            negation_kind = "no_local_evidence"        # 跑过，但本地没拿到能判定的输出
+        else:
+            negation_kind = "not_searched_here"        # 本机起不了这次检查（缺库/无后端）
         derived: dict[str, Any] = {
             "result": "supports" if verified else "inconclusive",
             "evidence_kind": "proof" if verified else _NO_EVIDENCE_KIND,
-            "negation_kind": "not_proved" if verified else "no_local_evidence",
+            "negation_kind": negation_kind,
             "observations": {
                 "verifier_status": status,
                 "formal_reason": formal_reason,
                 "checked": data.get("checked"),
+                # E-12 的读数：`verified` / `checked_failed` / `not_checked`
+                # （"检查器判了不通过"与"没查成"从此在行上分得开）。
+                "tri_state": tri_state,
                 "missing_imports": [str(x) for x in (data.get("missing_imports") or [])],
             },
             "counterexample": None,
@@ -397,9 +433,11 @@ class _Core:
         # `verified=True` 而输出为空是不可能的（`verified` 的定义就包含"输出里
         # 看得到那条声明"）；真出现时让它按 schema 硬约束 2 抛出来，不许在这里兜。
         subject_key = claim_key if output else ""
-        # `verified` 只可能在检查器退出码 0 时到达（`formalgw.check_lean` 的
-        # 判据顺序：非零退出码全部在前面收口），所以这里记 0 不是编造。
-        exit_code = 0 if verified else None
+        # E-12：退出码记检查器真实那一个（`verified` ⇒ 0，检查器判不通过 ⇒ 它自己的
+        # 非零退出码，没查成 ⇒ None）—— 改前一律 `0 if verified else None`，
+        # 于是"跑了且失败"与"没跑成"在这一格上同形。
+        exit_code = (0 if verified else
+                     int(checker_exit) if isinstance(checker_exit, int) else None)
 
         with self.store.tx("experiments", actor=self.actor, note="e.run_experiment") as tx:
             eid = tx.alloc_id("experiment")
@@ -445,10 +483,21 @@ class _Core:
         为什么单独一个方法而不是内联一个 dict：工具层
         `verify.check_formal` 的契约字符串是
         ``{'checked','verified','claim','reason','detail','verifier_output',
-        'missing_imports','verifier_status'}``，
+        'missing_imports','verifier_status','exit_code'}``，
         而 `tests/test_tools_audit_fixes.py` 逐字核对每条分支的键集合。
         把"拒绝"的键集合收在一处，是为了让"多了/少了一个键"在结构上不可能
         只发生在某一条分支里 —— 顺便让下面 `tool_failed` 那一支也用它。
+
+        ## 为什么 `exit_code` 在拒绝分支上是 `None`（`E-12(a)` 的口径）
+
+        契约是「每一条分支都成立的键集合」（不是"成功分支才有的键"）——
+        所以这一支也给 `exit_code`，值是 `None`：这一支根本没起检查器
+        （路径被拒 / 工具层返回失败），"没有退出码"是诚实的值，与工具层
+        那三条早期分支（`verify_tools.py` 的 `"exit_code": None`）同一口径。
+        为什么不让它只在成功分支出现：那样"键集合"就随分支变，而
+        `set(返回) == 契约` 这条判据会在每条拒绝分支上失效 —— 判据一失效，
+        "某条分支少给了键"就再也读不出来（`E-12(a)` 之前正是这样：
+        工具层四条分支齐、agent 侧这条拒绝分支少一个）。
 
         `verified=None`（不是 `False`）：这次没有查。"查了、没过"是
         `checked=True, verified=False`；把两者折叠，下游会把"路径被拒"
@@ -478,10 +527,13 @@ class _Core:
             "verifier_output": "",
             "missing_imports": [],
             "verifier_status": "",
+            # `E-12(a)`：检查器进程的真实退出码。这一支没起检查器 ⇒ `None`
+            # （不是 0：0 会被读成"检查器跑完了、退出码 0"）。
+            "exit_code": None,
         }
 
 
-class AgentE(_RunExperiment, _CheckFormal, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _Core):
+class AgentE(_RunExperiment, _AuthorScript, _CheckFormal, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _Core):
     """数值实验与形式化验证智能体。
 
     每个方法都可以被独立调用与单测：

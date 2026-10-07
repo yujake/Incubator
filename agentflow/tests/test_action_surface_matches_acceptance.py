@@ -201,7 +201,15 @@ def test_the_conditional_ladder_of_register_statement_is_advertised():
 
 def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
         tmp_path: pathlib.Path):
-    """正控 + 四级负控：齐了才落行；缺任何一级都不落行（不许静默写半条）。
+    """正控 + 逐级负控：齐了才落行；缺出处/引用理由/ID 形态任何一级都不落行。
+
+    ## 第 ① 级（缺 `proof_text`）为什么是"落行 + 挂待办"而不是"拒收"
+
+    `F-05`（主控裁定，2026-10-06）改判了这一档：以前它 `_refuse`，于是"证明还没做完"
+    永远进不了库，`draft/53:181` 那个消费端永远拿不到一条待办。现在它落在库里、
+    带 `pending` 待办与 `notes` 明写，等级由 `evidencebits.derive_grade` 现算（『猜想』）。
+    所以本用例这一级断言的是两件事：①-a 它真的进去了且待办挂得住；
+    ①-b 这条改判不许蔓延 —— `external_lit` 缺 `source_lit_id` 仍然必须拒。
 
     负控逐级来，是因为模型在 T1 里正是一级一级撞上去的：每个负控都对应
     它当时得到的那一种拒绝。
@@ -222,8 +230,45 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     # 为什么这条也是判据：T1 里 8 次"被拒"与 6 次"失败"在模型看来是两种东西 ——
     # 前者的 `kind` 直接告诉它缺什么，后者只有一个异常；而"缺哪一级"这件事
     # 本来就不该靠异常表达（`Statement.validate()` 是兜第二道，不是第一道）。
+    #
+    # ---- 第 ① 级在 `F-05`（主控裁定，2026-10-06）被改判：缺 `proof_text` 不再拒收 ----
+    #
+    # 改前（本条判据原先钉的形态，逐字）：`ok is False and kind == "missing_proof_text"`。
+    # 改后：这一笔落库（`ok is True`），但绝不静默接受 —— 返回里带一条 `pending`
+    # 待办 + `note` 明写"缺 proof_text / 等级现算是『猜想』"，行里 `proof_text` 留空。
+    # 为什么改判（`register_statement.py:155-161` 逐字）：以前这里 `_refuse`，于是
+    # "证明还没做完"这一档永远进不了库，也就永远没有一条待办能被秘书消费
+    # （`draft/53:181` 的消费端要的是"摆出来"，不是"拦住"）。判据于是改成两半：
+    # ①-a 落库且挂待办（下面这段）＋ ①-b 不许蔓延（`external_lit` 缺出处仍必须拒）。
     r1 = b.register_statement(**_bump("①"), doc_id="0000")          # 缺 proof_text
-    assert r1.get("ok") is False and r1.get("kind") == "missing_proof_text", r1
+    assert r1.get("ok") is True, r1
+    pending = list(r1.get("pending") or [])
+    assert [p.get("missing") for p in pending] == ["proof_text"], r1
+    assert pending[0].get("kind") == "missing_proof" and pending[0].get("who") == "F", pending
+    assert "缺 proof_text" in str(r1.get("note") or ""), r1
+    landed_min = next(r for r in st.rows("statements") if r["stmt_id"] == r1["stmt_id"])
+    assert not str(landed_min.get("proof_text") or "").strip(), landed_min
+    assert landed_min.get("quote_verified") is None, landed_min
+
+    # ①-a 的另一半：没给 `quote_reason` 时框架替它把理由写实（那正是"待办挂得住"
+    # 的前提）—— 只留一个空字段等于把"没查"记成一笔没人能接手的账。
+    # 进得去这一支的唯一入口是 `quote_verified=True`：`quote_verified is not True`
+    # 且缺 `quote_reason` 会先被 `missing_quote_reason` 拦下（`register_statement.py:107`，
+    # 实测：先写成本例时正是被它拦的）—— 所以这里显式给 `quote_verified=True`。
+    r1b = b.register_statement(
+        **{**{k: v for k, v in _bump("①b").items() if k != "quote_reason"},
+           "quote_verified": True}, doc_id="0001")
+    assert r1b.get("ok") is True, r1b
+    landed_b = next(r for r in st.rows("statements") if r["stmt_id"] == r1b["stmt_id"])
+    assert "证明还没做完" in str(landed_b.get("quote_reason") or ""), landed_b
+
+    # ①-b 负控（新规则的边界）：改判只覆盖"自产命题的证明还没做完"这一档，
+    # 不许蔓延成"出处也可以不给" —— `external_lit` 缺 `source_lit_id` 仍然必须拒，
+    # 且 `kind` 具名。实测（`register_statement.py:103-106`）它走的是 `missing_source`。
+    r1c = b.register_statement(**{**_bump("①c"), "origin": "external_lit",
+                                  "page_range": {"label": "全文未分页"}})
+    assert r1c.get("ok") is False and r1c.get("kind") == "missing_source", r1c
+
     r2 = b.register_statement(**_bump("②"), proof_text="证明")       # 缺 doc_id/line_range
     assert r2.get("ok") is False and r2.get("kind") == "missing_own_source", r2
     no_reason = {k: v for k, v in _bump("③").items() if k != "quote_reason"}
@@ -236,7 +281,8 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
                               source_lit_id="lit-1", page_range={"label": "全文未分页"})
     assert r5.get("ok") is False and r5.get("kind") == "bad_id", r5
 
-    assert len(st.rows("statements")) == 1, "被拒的那几条里有落进台账的"
+    # 台账里只该有"齐了的那一条"与"①/①b 那两条挂待办的"，被拒的四条一条都不许落。
+    assert len(st.rows("statements")) == 3, "被拒的那几条里有落进台账的"
 
 
 if __name__ == "__main__":  # pragma: no cover - 手动跑这一组时的入口

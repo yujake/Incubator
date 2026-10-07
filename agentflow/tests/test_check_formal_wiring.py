@@ -172,10 +172,11 @@ def test_check_formal_normalizes_script_path_and_keeps_old_signature(
 
     def _spy(claim, **kw):
         seen.update(kw)
-        # 桩必须逐键模拟声明的契约（`G-18` 之后是 8 个键，本行此前写「7 个」是
+        # 桩必须逐键模拟声明的契约（`E-12(a)` 之后是 9 个键，本行此前写「8 个」是
         # 照着 `G-18` 那一句手抄的 —— 实测 `CONTRACT_KEYS` =
-        # ['checked', 'claim', 'detail', 'missing_imports', 'reason', 'verified',
-        #  'verifier_output', 'verifier_status']，读数 `temp/reaudit4B-d2-contract-keys.txt`）：
+        # ['checked', 'claim', 'detail', 'exit_code', 'missing_imports', 'reason',
+        #  'verified', 'verifier_output', 'verifier_status']，读数
+        # `temp/reaudit4B-d2-contract-keys.txt`）：
         # 桩少一个键时，被 `AgentE` 原样透传出去，`assert set(out) == CONTRACT_KEYS`
         # 会把它读成"实现违约" —— 其实是桩自己腐了。同理，桩多一个键也会红（那才是要抓的）。
         #
@@ -186,10 +187,13 @@ def test_check_formal_normalizes_script_path_and_keeps_old_signature(
         # 只是值被改写成 `status_unregistered` / 空串）。所以这两格是"桩腐了、而这条判据
         # 看不出来"的两处 —— 它们的守卫在工具层自己的键集合判据（`tests/test_tools_audit_fixes.py`
         # 逐条分支核键）与下面 `test_the_contract_stub_comment_matches_the_live_key_set` 里。
-        # 实测（本节观测 2026-09-27，逐键少给一次）：八个键里只有这两个 `set(out)` 仍等于契约。
+        # `exit_code` 不在例外里（`E-12(a)` 之后逐键少给一次实测）：`AgentE.check_formal`
+        # 从不给它赋值 ⇒ 桩少给它就真的少（`set(out) != CONTRACT_KEYS` ⇒ 红）——
+        # 这正是这一格能被抓住的原因。
+        # 实测（本节观测 2026-09-27，`E-12(a)` 后复测）：九个键里只有那两个 `set(out)` 仍等于契约。
         return VT.ok({"checked": False, "verified": None, "claim": claim,
                       "reason": "no_backend", "detail": "", "verifier_output": "",
-                      "missing_imports": []})
+                      "missing_imports": [], "exit_code": None})
 
     monkeypatch.setattr(VT, "check_formal", _spy)
     script = Path(store.root) / "lean" / "p.lean"
@@ -244,7 +248,7 @@ def test_the_contract_stub_comment_matches_the_live_key_set(store: Store,
 
     full = {"checked": False, "verified": None, "claim": "c", "reason": "no_backend",
             "detail": "", "verifier_output": "", "missing_imports": [],
-            "verifier_status": "no_backend"}
+            "verifier_status": "no_backend", "exit_code": None}
     assert set(full) == CONTRACT_KEYS, sorted(full)
 
     silently_refilled: list[str] = []

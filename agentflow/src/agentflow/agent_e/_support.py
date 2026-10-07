@@ -107,8 +107,9 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
 
 - `params` / `artifact_paths` 是信息性字段：本模块不会把它们变成命令行参数，
   也不会去读那些产物文件。记录它们是为了"这条实验当时是怎么跑的"可被复核。
-- 本模块不调用 LLM（`llm` 位置参数仅为与 A–D 的构造签名保持一致，当前未使用）：
-  数值实验的判读必须是确定性的（FC-16）。
+- 判读不走 LLM（`llm` 只用于 `author_script` 写脚本，S-10(a)）：数值实验的判读必须是
+  确定性的（FC-16）—— `run_experiment` / `_derive` / `_parse_conclusion` 一条缝调用都没有，
+  判据见 `tests/test_agent_e_author_script.py::test_the_reading_path_never_calls_the_seam`。
 """
 from __future__ import annotations
 import json
@@ -371,39 +372,55 @@ def _extract_conclusion(stdout: str) -> tuple[list[str], str]:
         return [key_form], "json_key"
     return [], ""
 
-def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str]]:
+def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str], str]:
     """解析 stdout 里的结构化结论。
 
-    返回 ``(payload, notes)``：payload 为 None 表示"没有可用的结构化结论"，
-    notes 里写明是哪一种情况（没打印 / JSON 坏了 / 字段值非法）。
-    三种情况必须分开记录 —— FC-15 的纪律：不可归因的失败计数会把
-    "脚本没写"和"脚本写错了"混成一个数字。
+    返回 ``(payload, notes, source)``：payload 为 None 表示"没有可用的结构化结论"，
+    notes 里写明是哪一种情况；`source` 是机器可读的那一档（E-11 的"缺协议独立读数"）：
+
+    ``line`` / ``json_key`` / ``multiple`` / ``missing`` / ``bad_json`` /
+    ``not_object`` / ``out_of_vocab``
+
+    改前只有 notes（人读的），于是"脚本没按协议打印"与"实验没结论"在行上同形
+    （真机 82 行 `exit=0` 却不打协议行）。现在两者各有一档可读的取值。
+
+    ## E-11（`draft/44`）：多行不再"整条不认"
+
+    改前：多于一行 ⇒ 一律拒（"挑一个就等于替脚本做决定"）。
+    现在：内容逐字相同 ⇒ 认（重复打印同一份结论不是矛盾）；内容不同 ⇒ 取最后一份
+    （脚本的终局结论通常最后打印）并逐字留痕说清"前几份与它不一致"。
+    理由：把"脚本多打了一行"折成"这一轮没有结论"太贵 —— 一次跑完的实验因为打印习惯被
+    判成没结论，而它其实给了结论。
     """
     raws, via = _extract_conclusion(stdout)
     if not raws:
         return None, ["脚本未给出结构化结论（stdout 里既没有 `REPRO_RESULT:` 行，"
-                      "也没有以 `REPRO_RESULT` 为键的 JSON 对象）"]
+                      "也没有以 `REPRO_RESULT` 为键的 JSON 对象）"], "missing"
 
     notes: list[str] = []
+    source = "json_key" if via == "json_key" else "line"
     if via == "json_key":
         # 容错必须留痕（`draft/37` §126）：不写这一句，事后没人知道它当时是怎么打印的。
         notes.append("结论取自 JSON 键形态（`\"REPRO_RESULT\": {…}`）而非行首形态 ⇒ "
                      "按协议正身它应当单独打印一行 `REPRO_RESULT: {…}`（这次认了，但要记下来）")
     if len(raws) > 1:
-        notes.append(
-            f"脚本打印了 {len(raws)} 行 REPRO_RESULT（多于一行）⇒ 视为格式非法，"
-            "拒绝在互相矛盾的结论里挑一个（挑一个就等于替脚本做决定）"
-        )
-        return None, notes
+        if len(set(raws)) == 1:
+            notes.append(f"脚本把同一份 REPRO_RESULT 打印了 {len(raws)} 次（内容逐字相同）⇒ 认这一份")
+        else:
+            notes.append(
+                f"脚本打印了 {len(raws)} 份**内容不同**的 REPRO_RESULT ⇒ 取**最后一份**"
+                "（脚本的终局结论通常最后打印）；前几份与它不一致（逐字差异见 stdout）"
+            )
+            source = "multiple"
 
     try:
-        payload = json.loads(raws[0])
+        payload = json.loads(raws[-1])
     except (ValueError, TypeError) as e:
         notes.append(f"REPRO_RESULT 行不是合法 JSON（{type(e).__name__}: {e}）⇒ 视为未给出结论")
-        return None, notes
+        return None, notes, "bad_json"
     if not isinstance(payload, Mapping):
         notes.append(f"REPRO_RESULT 的内容是 {type(payload).__name__}，不是对象 ⇒ 视为未给出结论")
-        return None, notes
+        return None, notes, "not_object"
     payload = dict(payload)
 
     res = payload.get("result")
@@ -412,8 +429,8 @@ def _parse_conclusion(stdout: str) -> tuple[dict | None, list[str]]:
             f"REPRO_RESULT.result={res!r} 不在受控词表 {S.EXPERIMENT_RESULTS} 里 ⇒ 视为格式非法，"
             "不认这条结论（不猜它想说什么）"
         )
-        return None, notes
-    return payload, notes
+        return None, notes, "out_of_vocab"
+    return payload, notes, source
 def _normalize_evidence_kind(raw: Any, *, method: str, notes: list[str]) -> str:
     """把脚本自报的证据等级规整成 schema 允许的值，并把越权记进 notes。
 
@@ -517,21 +534,43 @@ def _derive(
         }
 
     # ---- 规则 2/3：解析脚本给出的结构化结论
-    payload, parse_notes = _parse_conclusion(stdout)
+    payload, parse_notes, conclusion_source = _parse_conclusion(stdout)
     notes.extend(parse_notes)
     if payload is None:
         return {
             "result": "inconclusive",
             "evidence_kind": _NO_EVIDENCE_KIND,
             "negation_kind": "no_local_evidence",
-            "observations": {},
+            # E-11：缺协议独立读数 —— "脚本没按协议打印"（missing/bad_json/…）
+            # 从此在行上看得见，不再与"实验没结论"同形。
+            "observations": {"conclusion_source": conclusion_source},
             "counterexample": None,
             "notes": notes,
+        }
+    if conclusion_source == "multiple":
+        # E-11（主控裁定）：脚本把内容不同的两份结论都打出来了 ⇒
+        # 既不许读成"没打印"、也不许读成一次正常判定 ⇒ 这一行按没结论记。
+        # 最后一份的内容留在读数里（`last_result_seen`），供人/模型查它到底说了两种什么。
+        observations = _as_dict(payload.get("observations"))
+        observations["conclusion_source"] = "multiple"
+        observations["last_result_seen"] = str(payload.get("result") or "")
+        return {
+            "result": "inconclusive",
+            "evidence_kind": _NO_EVIDENCE_KIND,
+            "negation_kind": "no_local_evidence",
+            "observations": observations,
+            "counterexample": None,
+            "notes": notes + [
+                "⇒ 多份不一致 ⇒ 这一行按**没结论**记（改前是整条不认；现在两端都不许："
+                "既不许读成「没打印」，也不许读成「有结论」）"
+            ],
         }
 
     result = str(payload["result"])
     evidence_kind = _normalize_evidence_kind(payload.get("evidence_kind"), method=method, notes=notes)
     observations = _as_dict(payload.get("observations"))
+    # E-11：结论从哪来的机器可读读数（`line` / `json_key`）。
+    observations["conclusion_source"] = conclusion_source
 
     if result == "refutes":
         counterexample = payload.get("counterexample")

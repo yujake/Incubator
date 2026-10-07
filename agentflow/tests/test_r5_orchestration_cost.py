@@ -1156,6 +1156,29 @@ _REF_SCAN_SUFFIXES = (".py", ".md")
 #: 判据的覆盖面没有变松：仓内被跟踪的内容照旧全扫（源码、docs/、draft/ 里的 `.md`）。
 _REF_SCAN_SKIP_DIRS = ("__pycache__", ".pytest_cache", ".git", ".mypy_cache",
                        "projects", "out")
+#: 只对"真符号出现次数"那一维（口径第 2 条）排除的目录（`R7-⑮` 的窄修）。
+#:
+#: 为什么不把它并进 `_REF_SCAN_SKIP_DIRS`：那会把 temp 前缀路径的存在性那一族
+#: 连同它里面的悬空提及一起废掉 —— 而那一族是有用的（`temp/_r009_fix.py`
+#: 这类一次脚本的引用真的该存在）。本批只治一个病：未跟踪的 scratch 能抬高计数
+#: （`R0-C2` 实测：`temp/` 下一份整树副本让每个 token 的"真符号出现次数"翻倍
+#: ⇒ 一条真悬空的引用被判成不悬空 ⇒ 判据安静变绿）。
+#:
+#: 为什么按相对被扫树的第一段判，而不是用 `p.parts`：机制守卫
+#: （`_probe_tree_copy`）把整树副本落在工作区 `temp/` 下再扫那份副本 ——
+#: 用绝对路径判会把整个副本排除掉，副本读数与真树当场不同，
+#: 那条负控（"副本读数必须与真树逐字相同"）就会失效。
+#: 负控 = `test_a_scratch_copy_cannot_cure_a_dangling_reference`。
+_REF_SYMBOL_COUNT_SKIP_DIRS = ("temp",)
+
+
+def _symbol_count_skipped(p: pathlib.Path, tree: pathlib.Path) -> bool:
+    """这个文件要不要从"真符号出现次数"那一维里排除（见上一条常量）。"""
+    try:
+        rel = p.relative_to(tree)
+    except ValueError:  # 不在被扫树里（理论上不会发生）⇒ 不排除，宁可多算
+        return False
+    return bool(rel.parts) and rel.parts[0] in _REF_SYMBOL_COUNT_SKIP_DIRS
 #: 豁免记号，逐字三个汉字。`test_the_quoted_references_in_comments_all_exist` 的
 #: docstring 里必须原样出现它，且那条规定由 `..._marker_is_alive` 断言。
 _REF_EXEMPT_MARK = "非指代"
@@ -1170,7 +1193,8 @@ _REF_EXEMPTED_EXPECTED_FILES = (
 )
 #: 判据（引用读数）已知的"非符号提及"：这些反引号私有 token 在整棵树里
 #: 没有（或只有一个）真符号出现点，但那处引用是正当的 —— 它说的是
-#: 字符串形式的字典键、被删/改名之前的历史名字、或测试/命名约定的片段。
+#: 字符串形式的字典键、被删/改名之前的历史名字、测试/命名约定的片段，
+#: 或"存活但已无调用点的方法"（退场后被保留的实现；代理口径对它必然误报，登记是让它如实）。
 #:
 #: 为什么需要这张表：口径第 2 条按真符号计数（见上面那段注释块），
 #: 而 base 上有一批 token 本来就只有文本提及。不放宽它（放回去就是第 10 轮那个
@@ -1195,6 +1219,9 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_VERIFIER_CANDIDATES",       # 已删的候选表（`draft/37` §82：探测搬到 `agentflow.toolchain`；
                                   # `docs/PROPOSAL-side-effect-axes.md` 在讲当年的 exec 定义冲突时仍引它）
     "_mismatch",                  # 旧词表里那种"`quote` 加后缀"的取值名（词表已改写法）
+    "_notify_bounce",             # 存活但已无调用点的退场实现（`agent_loop.py` 的 def；`tests/test_forced_notify.py:238` 在说它不再被调用）—— 名字是真的，读的人找得到
+    "_shell_demo",                # R8-A-1 退场的入口处理函数（2026-10-07 删）：`cli.py` 的留痕注释在讲"这里原有它、为什么摘掉"；留痕按纪律必须点名被删的东西
+    "_persist_report",            # R8-A-6 退场的旧落盘函数（2026-10-07 已在全树无符号出现）：`DEVELOPMENT.md` 与 `DESIGN-TOOLS.md` 的说明在讲"为什么要删它"
     "_BASE_",                     # 别名前缀（不是完整标识符）
     "_impl",                      # 被转发的名字（`lint_rules.py` 的解释）
     "_private",                   # 判据片段（不是标识符）
@@ -1222,6 +1249,29 @@ _REF_KNOWN_MENTION_TOKENS = (
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
+#: 第三族（`R7-㉒`）：反引号里的 `test_*.py` 文件名必须在树里（或工作区 `temp/` 下）存在。
+#:
+#: 真事故 22 行：`src/agentflow/agent_c/*.py`（8 个）与 `agent_d/*.py`（14 个）的第 3 行
+#: 逐字引着一个从来不存在的名字（那 22 行点的是"逐字"那一版文件名，而真判据是
+#: `tests/test_agent_split_is_one_action_one_file.py`；"逐字"那半只是一次性证明）。
+#: 那 22 行已改真（R1 附录 2），缺的是判据：名字再写错一个字，没有任何东西会响。
+#:
+#: 为什么本族只咬 `test_*.py` 这一个形态（不是所有 `*.py`）：全树反引号里的 `.py` 提及
+#: 实测 582 个名字、其中 57 个按后缀规则解析不到 —— 绝大多数是史实与夹具
+#: （拆包前的单文件布局名、夹具里造的脚本名、讲缺陷本身的例子）。把那一整片判红、
+#: 再登记 57 条，只会把登记表烂成噪音；而真事故的形态是"点名一份测试文件"。
+_TICKED_TEST_FILE = re.compile(r"`([A-Za-z0-9_./\-]*test_[A-Za-z0-9_]*\.py)`")
+#: 本族已知的"不存在的 test_*.py 提及"（逐条登记并写类别；多一条、少一条都红）。
+_REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
+    ("tests/test_xxx.py",
+     "形态示例：`test_release_all.py` 在讲「裸名字怎么解析成 tests/<name>.py」这条规则本身"),
+    ("tests/test_extract.py",
+     "历史真值：那一行逐字写着它已不存在（讲那份清单原来对这类引用完全没牙）"),
+    ("tests/test_does_not_exist_zzz.py",
+     "负控夹具里那个「点名的文件不存在」的假名字（判据要求它被报出来）"),
+    ("tests/sub/test_x.py",
+     "形态示例：`tools/run_each_test_file.py` 在讲「子目录形态会被逐文件门判绿」"),
+)
 
 
 def _python_identifiers_in_text(p: pathlib.Path, text: str) -> list[str]:
@@ -1411,7 +1461,8 @@ def test_the_ref_scan_skips_run_artifacts_but_not_the_repo(tmp_path: pathlib.Pat
 
 def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     """扫整棵树里反引号包着的引用 ⇒ 读数（键：`files` / `tokens` / `paths` /
-    `dangling` / `missing` / `exempted` / `dangling_tokens`）。
+    `dangling` / `missing` / `exempted` / `dangling_tokens` / `symbol_counts` /
+    `symbol_count_files` / `symbol_count_skipped`）。
 
     口径见上面那一段注释块；豁免只看同一行里的 `_REF_EXEMPT_MARK`。
     每个文件只读一遍：份数按命令当次读（别抄定值，`F9` 写下的 214 已经过期；
@@ -1430,7 +1481,13 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     #: 不含字符串字面量、不含 `.md` 正文 —— 所以"在判据文件里随手写下一个 token"
     #: 抬不动它（`R5-AN-10-1` 的假绿就是靠抬 `blob` 实现的）。
     symbol_counts: dict[str, int] = {}
+    symbol_count_files = 0
     for p, text in pairs:
+        if _symbol_count_skipped(p, tree):
+            # 未跟踪的 scratch（仓的草稿目录）不是"这个名字在仓里的出处"：
+            # 它进了扫描面（悬空提及照旧要报），但不许参与计数这一维。
+            continue
+        symbol_count_files += 1
         for name in _python_identifiers_in_text(p, text):
             symbol_counts[name] = symbol_counts.get(name, 0) + 1
 
@@ -1440,6 +1497,17 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
     exempted: list[tuple[str, int, str]] = []
     tokens: set[str] = set()
     paths: set[tuple[str, str]] = set()
+    #: 第三族（`R7-㉒`）的已知面：树里/工作区 temp 下出现过的 `.py` 基名与相对路径。
+    known_names = {p.name for p, _ in pairs}
+    rel_paths = {p.relative_to(tree).as_posix() for p, _ in pairs}
+    temp_dir = ws_root / "temp"
+    if temp_dir.is_dir():
+        for p in temp_dir.glob("*.py"):
+            known_names.add(p.name)
+            rel_paths.add(f"temp/{p.name}")
+    missing_test_files: list[str] = []
+    missing_test_named: set[str] = set()
+    seen_test_refs: set[tuple[str, str]] = set()
     for p, text in pairs:
         rel = p.relative_to(tree).as_posix()
         for lineno, line in enumerate(text.splitlines(), 1):
@@ -1470,6 +1538,17 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
                         exempted.append((rel, lineno, f"`{ref}`"))
                     else:
                         missing.append(f"{rel}:{lineno}: `{ref}`")
+            # ---- 第三族（`R7-㉒`）：反引号里点名的 `test_*.py` 必须真的存在
+            for ref in sorted(set(_TICKED_TEST_FILE.findall(line))):
+                if (rel, ref) in seen_test_refs:
+                    continue
+                seen_test_refs.add((rel, ref))
+                if _test_file_exists(ref, tree=tree, ws_root=ws_root,
+                                     known_names=known_names, rel_paths=rel_paths):
+                    continue
+                missing_test_named.add(ref)
+                if not marked:
+                    missing_test_files.append(f"{rel}:{lineno}: `{ref}`")
     return {
         "files": len(pairs),
         "tokens": len(tokens),
@@ -1479,12 +1558,77 @@ def _scan_ticked_references(tree: pathlib.Path, ws_root: pathlib.Path) -> dict:
         #: 走 `_symbol_occurrences(tree, tok)` 逐个查是 O(token 数 × 整树)，
         #: 实测 329 个 token 会把这条判据从秒级拖到 38 分钟。
         "symbol_counts": {tok: symbol_counts.get(tok, 0) for tok in tokens},
+        #: 反真空：计数这一维到底看了多少文件、排除了多少（排除数恒为 0 说明
+        #: `_REF_SYMBOL_COUNT_SKIP_DIRS` 没接上 —— 那时"没被 scratch 抬高"这句话是空的）。
+        "symbol_count_files": symbol_count_files,
+        "symbol_count_skipped": len(pairs) - symbol_count_files,
         "paths": len(paths),
         "dangling": dangling,
         "dangling_tokens": dangling_tokens,
         "missing": missing,
+        "missing_test_files": missing_test_files,
+        "missing_test_named": missing_test_named,
+        "test_refs": len(seen_test_refs),
         "exempted": exempted,
     }
+
+
+def _test_file_exists(ref: str, *, tree: pathlib.Path, ws_root: pathlib.Path,
+                      known_names: set[str], rel_paths: set[str]) -> bool:
+    """反引号里点名的 `test_*.py` 在树里（或工作区 `temp/` 下）存在吗（`R7-㉒`）。
+
+    三档解析，缺一档就会把真引用判成缺：
+    ① 基名命中扫描面里出现过的 `.py` 基名（带路径的写法与裸基名写法用的是同一个名字空间）；
+    ② 相对路径的后缀命中（省略了 `src/agentflow/` 前缀的那种写法）；
+    ③ 直接在树根/工作区根下找（`tests/` 与 `temp/` 两种前缀）。
+    """
+    name = ref.rsplit("/", 1)[-1]
+    if name in known_names or any(r.endswith("/" + ref) for r in rel_paths):
+        return True
+    return (tree / ref).is_file() or (ws_root / ref).is_file()
+
+
+def test_a_scratch_copy_cannot_cure_a_dangling_reference(tmp_path: pathlib.Path):
+    """`R7-⑮` 的负控（B 方案）：草稿目录里的副本抬不动"真符号出现次数"。
+
+    改前的病（`R0-C2` 实测）：在 `temp/` 下放一份整树副本 ⇒ 每个 token 的真符号计数
+    被抬高 ⇒ 一条真悬空的引用被判成"不悬空" ⇒ 判据安静变绿，而读数里没有任何一处
+    会告诉你。修法刻意窄：`temp/` 照旧进扫描面（它里面的悬空提及照旧要报、它引的
+    一次脚本路径照旧要真存在），只是不许参与计数那一维
+    （`_REF_SYMBOL_COUNT_SKIP_DIRS`）。
+
+    三档读数（缺一档这条负控就退化成恒真）：
+    ① 裸夹具：那条引用必须是悬空（计数 1、登记表 `_REF_KNOWN_MENTION_TOKENS` 里也没有它）；
+    ② 把同名副本放进草稿目录：悬空读数逐字不变（副本抬不动计数）；
+    ③ 反真空：把同一份副本放进非草稿目录 ⇒ 那条引用必须不再悬空
+       （证明计数这一维还活着，②的"不变"不是因为计数坏了）。
+    """
+    token = "_scratch_copy_probe_dup"
+    (tmp_path / "src").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "src" / "defs.py").write_text(f"{token} = 1\n", encoding="utf-8")
+    (tmp_path / "docs" / "R.md").write_text("见 `" + token + "`。\n", encoding="utf-8")
+
+    plain = _scan_ticked_references(tmp_path, tmp_path)
+    assert [x for x in plain["dangling"] if token in x], (
+        f"夹具的悬空引用没被报出来 ⇒ 这条负控是空转：{plain['dangling']}")
+    assert plain["symbol_count_skipped"] == 0, plain
+
+    (tmp_path / "temp").mkdir()
+    (tmp_path / "temp" / "copy_of_defs.py").write_text(f"{token} = 1\n" * 5, encoding="utf-8")
+    with_scratch = _scan_ticked_references(tmp_path, tmp_path)
+    assert with_scratch["dangling"] == plain["dangling"], (
+        "草稿目录里的副本把那条悬空引用『治好』了 ⇒ 读数又被 checkout 影响了：\n"
+        f"  放副本前：{plain['dangling']}\n  放副本后：{with_scratch['dangling']}")
+    assert with_scratch["symbol_count_skipped"] == 1, with_scratch["symbol_count_skipped"]
+
+    (tmp_path / "scratch").mkdir()
+    (tmp_path / "scratch" / "copy_of_defs.py").write_text(f"{token} = 1\n" * 5,
+                                                          encoding="utf-8")
+    elsewhere = _scan_ticked_references(tmp_path, tmp_path)
+    assert not [x for x in elsewhere["dangling"] if token in x], (
+        "副本放进非草稿目录之后那条引用仍然悬空 ⇒ 计数这一维坏了，"
+        f"②的『读数不变』不是因为免疫、而是因为计数没在工作：{elsewhere['dangling']}")
 
 
 def test_the_reference_scan_root_anchor_is_not_a_temp_artifact() -> None:
@@ -1599,6 +1743,20 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
         "注释/docstring 里引用的 temp/ 路径不存在（结论可能仍是真话，但引用是坏的）："
         f"{res['missing']}"
     )
+    # ---- 第三族（`R7-㉒`）：点名的 `test_*.py` 必须真的存在，且"不存在"的那些逐条等额
+    assert res["test_refs"] > 0, (
+        "第三族一个 `test_*.py` 提及都没接上 ⇒ 扫描器坏了（不是没问题），"
+        f"读数：{res['test_refs']}")
+    assert sorted(res["missing_test_named"]) == sorted(
+        ref for ref, _ in _REF_KNOWN_MISSING_TEST_FILES
+    ), (
+        "点名的 `test_*.py` 里「不存在」的那些与登记表 `_REF_KNOWN_MISSING_TEST_FILES` 不符 —— "
+        "新出现的（有人把文件名写错、或引了一份不存在的测试）要逐条登记并写清类别，"
+        "登记过期的要删掉（多一条、少一条都算不符）："
+        f"{sorted(res['missing_test_named'])} vs "
+        f"{sorted(ref for ref, _ in _REF_KNOWN_MISSING_TEST_FILES)}；"
+        f"逐处读数：{res['missing_test_files']}"
+    )
 
     exempted_files = sorted({rel for rel, _, _ in res["exempted"]})
     assert exempted_files == sorted(_REF_EXEMPTED_EXPECTED_FILES) and (
@@ -1625,6 +1783,38 @@ def test_the_quoted_references_in_comments_all_exist() -> None:
         "留一条（并写清它属于哪一类），表里过期的条目也要删掉（多一条、少一条都算不符）："
         f"{mentioned_only} vs {sorted(_REF_KNOWN_MENTION_TOKENS)}"
     )
+
+
+def test_a_wrong_test_file_name_in_a_comment_is_caught() -> None:
+    """`R7-㉒` 的负控：把真事故那 22 行里点名的文件名写错一个字 ⇒ 第三族必须报。
+
+    真事故的样本是真字符串（不是造出来的）：`src/agentflow/agent_c/*.py` 与
+    `agent_d/*.py` 的第 3 行原来点的是"逐字"那一版文件名，而那份文件不存在；
+    真判据是 `tests/test_agent_split_is_one_action_one_file.py`。那 22 行已改真。
+
+    两档读数（缺一档这条负控就是空转）：
+    ① 现在的真名（那 22 行里逐字就是它）⇒ 不许被报成缺；
+    ② 改前的错名（把中间那段前缀去掉 —— 正是那次事故的形态）⇒ 必须被报成缺。
+    错名在这里用拼接造出来：判据扫的是原始字节，写死它等于在本文件里留一条
+    假引用（同 `test_the_ref_scan_skips_run_artifacts_but_not_the_repo` 的做法）。
+    """
+    tree, ws_root = _reference_scan_roots() or (None, None)
+    assert tree is not None, "判据在仓外 ⇒ 这条负控取不到真树（那是 unknown，不是通过）"
+    pairs = [(p, "") for p in _iter_ref_scan_files(tree)]
+    known_names = {p.name for p, _ in pairs}
+    rel_paths = {p.relative_to(tree).as_posix() for p, _ in pairs}
+
+    def _exists(ref: str) -> bool:
+        return _test_file_exists(ref, tree=tree, ws_root=ws_root,
+                                 known_names=known_names, rel_paths=rel_paths)
+
+    good = "tests/test_agent_split_is_one_action_one_file.py"
+    bad = "tests/test_agent_split_is_" + "verbatim.py"
+    assert _exists(good), f"那 22 行现在点的真名被判成缺：{good}（第三族会把真引用判红）"
+    assert not _exists(bad), (
+        f"改前的错名居然被判成存在：{bad} —— 夹具不成立（那条负控会退化）")
+    assert _TICKED_TEST_FILE.search("`" + bad + "`"), "新形态没接上那个错名（正则漏了）"
+    assert _TICKED_TEST_FILE.search("`" + good + "`"), "新形态没接上那个真名"
 
 
 def test_the_reference_exemption_marker_is_alive() -> None:

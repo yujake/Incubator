@@ -62,8 +62,17 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     "trace_tools.py": 11,
     # `verify_tools.py` 同族：5 里那 2 处是 `register` 的嵌套 helper 被重复数的，
     # 真实处数是 3。
-    "verify_tools.py": 3,
-    # T0-9（2026-09-28）：主控工具模块 8 件，工具体一律 `ok(data, **data)` ——
+    #
+    # 2026-10-06（F-02，角色 V）：3 → 6。新增的三件只读工具
+    # （`verify.verify_proof` / `verify.list_verifications` / `verify.read_proof`）
+    # 都写成 `ok(_agent_v().<方法>(…))`：键由 `AgentV` 那三个 handler 决定
+    # （它们是"三条返回路径键集合完全相同"的实现，见 `agent_v/core.py`），
+    # 静态扫描在工具层读不出来，所以如实记进本表（这是本文件允许的"次之"路径：
+    # 改数字并在说明里写清）。没有改判据的强度 ——
+    # `tests/test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"
+    # 仍然逐工具跑过这三件（探针不求模型，走 `checked=False` 那条）。
+    "verify_tools.py": 6,
+    # T0-9（2026-09-28）：主控工具模块 8 件，工具体一律 `ok(data, data)` ——
     # 键由运行时数据决定，静态扫描读不出来，所以这些处如实记在"看不清"这一栏。
     # §198（2026-09-30）：`conductor.summon_many` 加进来 ⇒ 16 → 18（旧数法）；
     # 2026-10-01 按调用点去重后是 9（见上）。
@@ -76,7 +85,7 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
     "conjecture_tools.py": 1,
     # 2026-10-04（`draft/37` §134）：交接手稿的读面。那 1 处是 `manuscripts.read` 的
-    # `ok(data, **data)` —— 键由手稿索引里的那条 record（`manuscripts.write` 落的行）
+    # `ok(data, data)` —— 键由手稿索引里的那条 record（`manuscripts.write` 落的行）
     # 决定，静态扫描读不出来。与 `conductor_tools.py` 那一栏同族：该工具的 `returns=`
     # 已逐字声明那 12 个键，由 `test_tools_returns_declaration.py` 的
     # "声明必须是实跑键集的子集"钉住。

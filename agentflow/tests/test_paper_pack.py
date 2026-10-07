@@ -43,11 +43,43 @@ def _prompt(role: str, store: Store) -> str:
 
 
 def test_the_paper_pack_section_goes_to_the_roles_that_touch_the_package(store: Store):
-    """正控：M（统筹交付）/ G（写稿与打包）/ H（审校）看得到这一段。"""
+    """正控：M（统筹交付）/ G（写稿与打包）/ H（审校）看得到这一段。
+
+    `R6`：这条判据原先钉的是旧字面量 `完成定义（五条全过才算交付`，而那个"五条"是
+    手抄计数（真身 = `closing.DEFAULT_CHECKS` 的 8 格）⇒ 改成钉新口径：
+    这一段不许写死条数（格数以 `conductor.closing` 的当次读数为准），并把这个
+    "不许写死"本身变成判据 —— 比原来那条更难满足（写了旧数量就红）。
+    """
     for role in AP.PAPER_PACK_ROLES:
         text = _prompt(role, store)
         assert "论文包的" in text or "论文包（你参与的那份交付物）" in text, role
-        assert "完成定义（五条全过才算交付" in text, role
+        assert "完成定义" in text, role
+        assert "五条全过" not in text, f"{role}：完成定义里还写着旧的手抄条数（五条全过）"
+        assert "收工门八格全过" in text, f"{role}：完成定义里没写清真身格数（八格）与「以读数给」的口径"
+
+
+def test_the_paper_pack_style_section_speaks_to_the_right_role(store: Store):
+    """`R6` 缺陷 4（收件人错）：体例那一节对 M 用第二人称、对 G/H 不许用第二人称。
+
+    事实：`PAPER_PACK` 无条件注入 M/G/H，而第八节原文是"体例由你（M）裁定" ⇒
+    G/H 读到时"你"就是它自己，会以为体例归自己定。修法是条件渲染：
+    - M：得完整那节（含"体例由你（M）裁定"）；
+    - G/H：得一句"报告体例由 M 裁定，不是你的活"，且不出现"由你（M）"。
+
+    负控（同一条里）：把条件渲染去掉（三个角色都拿完整段）⇒ G/H 那两条断言必红。
+    """
+    tex = {r: _prompt(r, store) for r in AP.PAPER_PACK_ROLES}
+    assert "体例由你（M）裁定" in tex["M"], "M 该拿到完整那节（含第二人称的体例裁定）"
+    for role in ("G", "H"):
+        assert "报告体例由 M 裁定" in tex[role], f"{role}：没拿到「体例归 M」那一句"
+        assert "体例由你（M）裁定" not in tex[role], (
+            f"{role}：提示词里还有第二人称的体例表述（由你（M））—— G/H 会把「你」读成自己")
+        # 其余各节对 G/H 仍应保留（这一改只换第八节的标题行，不截断后文）
+        assert "完成定义" in tex[role], f"{role}：换标题行时把后面的节也弄丢了"
+    # 反负控：把条件渲染换回"三个角色都给完整段" ⇒ G/H 那两条必须红
+    naive = {r: AP.PAPER_PACK for r in AP.PAPER_PACK_ROLES}
+    bad = [r for r in ("G", "H") if "体例由你（M）裁定" in naive[r]]
+    assert bad == ["G", "H"], "反负控失效：完整段喂给 G/H 时判据认不出第二人称"
 
 
 @pytest.mark.parametrize("role", ["A", "B", "C", "D", "E", "F"])
@@ -78,12 +110,17 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
     for fact in ("登记要指到论文本体", "unsupported_format", "source_lit_id",
                  "quote_verified", "不传（= 还没查）"):
         assert fact in text, f"论文包段里没有 {fact!r}"
-    # 第八节（交付说明的九节形状，`draft/37` §54）：收工门逐节核，缺一节就 fail ——
-    # 而"要哪九节"原先只住在 `closing.REPORT_SECTIONS` 里，模型看不到
-    # （真机实测：报告只写了五节，门当场把缺的四节名字列了出来）。
-    for fact in ("九节形状", "六、体例与表述", "九、诚实边界", "分栏", "我们补的",
-                 "origin=own_result", "project_dir", "ask_user"):
-        assert fact in text, f"论文包段里没有 {fact!r}"
+    # 第八节（交付说明的体例归 M，R9 / 裁决 1）：框架不再自带节名清单，
+    # 也不再逐节核（旧判据 `report_shape` 的九节那一半与 `report_sections_have_readings`
+    # 都已废）。留在提示词里的只有三条与体例无关的硬要求 + 收工门怎么跑。
+    # 这条断言跟着 R9 改：它此前要的是"九节形状 / 六、体例与表述 / 九、诚实边界 / 分栏"
+    # —— 那几句正是被废除的判据在提示词里的复述（P-02）。
+    #
+    # `R6` 缺陷 4：第八节的收件人要对 —— 这一段注入 M/G/H，而"体例由你（M）裁定"
+    # 是对 M 说的（G/H 读到会把"你"当成自己）。本用例取的是 G 的提示词 ⇒
+    # 这里断言 G 侧口径（M 侧由 `test_the_paper_pack_style_section_speaks_to_the_right_role` 覆盖）。
+    assert "报告体例由 M 裁定" in text, "G 没拿到「体例归 M」那一句"
+    assert "体例由你（M）裁定" not in text, "G 的提示词里有第二人称的体例表述 —— 它会以为体例归自己定"
     # 第九节（无人值守那一档的口径，`draft/37` §66）：判据在这一档上是 fail，
     # 而"fail 不是缺陷、也不许靠不问绕开"这件事必须写在模型看得到的地方 ——
     # 否则下一趟的主控只会看到一格红读数，然后去猜是不是自己问错了。

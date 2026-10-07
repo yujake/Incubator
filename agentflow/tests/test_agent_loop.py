@@ -104,6 +104,91 @@ def _summon_step(run: Any) -> dict:
     return next(s.result for s in run.steps if s.shape == "summon")
 
 
+def test_f1_a_top_level_run_gets_a_task_row_and_its_spend_is_attributable(tmp_path: pathlib.Path):
+    """F1 的向前走半（`44 J-32` / `draft/52` F 组）：顶趟运行建 `tasks` 行 + 新账挂得上 task_id。
+
+    两条一起钉（它们是同一件事的两半：没有行就无处可挂）：
+
+    1. 建 M 顶趟行：`run_role("M", …)` 跑完要在 `tasks` 里留下 `role="M"` 的行，
+       且它是终态（`status="done"`）—— 否则"这一趟发生过"在台账上不存在；
+    2. 新行填 `usage_ledger.task_id`：这一趟里每一次模型调用落下的账都要挂到那个行上
+       （改前 `run_role` 传的是 `my_task_id=""` ⇒ `llmseam._charge_ledger` 把
+       `""` 归一成 `None` ⇒ 账上一行都读不出"这笔钱属于哪一次召唤"）。
+       `verify.verify_all` 的 `dangling_usage_task` 于是也不该报（挂的是真行）。
+
+    历史 null 不回填：盘上存量那 66% `task_id=null` 的行是历史事件，`store.rebuild`
+    重放的是同一批 —— 改代码不改写历史。而 `None` 不进 `dangling_usage_task`
+    的判据（`verify.py` 逐字 `if tk is not None and str(tk) not in task_by_id:`）⇒
+    它是一条已知基线，不是红。
+    """
+    from agentflow import verify as V
+    from agentflow.tokenmeter import TokenMeter
+
+    st, cond, reg, gateways, root = _wired(
+        tmp_path, {"M": [json.dumps({"final": "我收工了", "evidence": []}, ensure_ascii=False)]},
+        max_steps=2)
+    # 缝必须接着账本：`meter=None` 的那一档是"没入账"（不是"记了一笔零"），
+    # 那样子测不到"账挂在哪一次召唤上"。
+    run = run_role("M", "顶趟跑一次", store=st, registry=reg, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gateways["M"],
+                                price=(0.0, 0.0), meter=TokenMeter(st), sid="test-run"),
+                   session_root=root, workspace_root=str(root), sid="test-run",
+                   max_steps=2, from_env=False)
+    assert run.stop_reason == "final", run.to_dict()
+
+    mine = [r for r in _tasks(st) if str(r.get("role")) == "M"]
+    assert mine, f"顶趟没有留下 tasks 行：{[(r.get('role'), r.get('action')) for r in _tasks(st)]}"
+    tid = str(mine[-1]["task_id"])
+    assert str(mine[-1]["status"]) in ("done", "failed"), mine[-1]
+
+    led = st.rows("usage_ledger")
+    assert led, "这一趟一次模型调用都没记账？"
+    assert [str(r.get("task_id") or "") for r in led] == [tid] * len(led), (
+        f"新账没挂到顶趟行 {tid} 上：{[(r.get('usage_id'), r.get('task_id')) for r in led]}")
+    report = V.verify_all(st)
+    assert [i for i in report.issues if i.code == "dangling_usage_task"] == [], \
+        [i.to_dict() for i in report.issues if i.code == "dangling_usage_task"]
+    # 顶趟那一行的花销必须由账本派生（否则多出一条 `usage_task_total_mismatch`）：
+    # 这条正是 F1 自己踩出来的（实测：`tasks.tokens=0` 而账本 150 ⇒ 一条 warning）。
+    assert int(mine[-1]["tokens"]) == sum(int(r.get("tokens_total") or 0) for r in led), (
+        "顶趟行的 tokens 与账本汇总不等", mine[-1]["tokens"], led)
+    assert [i for i in report.issues if i.code == "usage_task_total_mismatch"] == [], \
+        [i.to_dict() for i in report.issues if i.code == "usage_task_total_mismatch"]
+    assert report.ok, [i.to_dict() for i in report.errors]
+    # ---- 同一屏两套口径必须写明（F1 之后它们不再相等）
+    #
+    # `stats()` 的 `total`/`by_*` 是台账全量（`rows = self._tasks()` ⇒ 含顶趟行），
+    # 而 `started_total`/`peak_running` 是本实例发起的召唤数（顶趟不占配额）。
+    # 改前这一屏上两个数会各说一件事而没有任何文字说明 —— 那正是最忌的形态。
+    st_stats = cond.stats()
+    assert st_stats["calibers"], "两套口径没有写明"
+    assert st_stats["top_level_runs"] == 1, st_stats
+    assert st_stats["started_total"] == 0, "顶趟不该进'召唤数'（它不占配额）"
+    assert st_stats["total"] >= 1 and st_stats["by_role"].get("M") == 1, st_stats
+
+
+def test_f1_the_historical_null_baseline_is_not_a_dangling_error(tmp_path: pathlib.Path):
+    """F1 的反负控（历史不回填的正当性）：`task_id=None` 的历史行不进 dangling 判据。
+
+    判据本体（`verify.py` 逐字）：`if tk is not None and str(tk) not in task_by_id:` ——
+    `None` 是被显式容忍的"未接线"。⇒ 存量那 66% null 行是一条已知基线：
+    它们既不该被回填（改写历史），也不该被读成"红"。
+    """
+    from agentflow import verify as V
+    from agentflow.tokenmeter import Charge, TokenMeter
+
+    st = Store(tmp_path / "ws2")
+    st.init()
+    meter = TokenMeter(st)
+    meter.charge(Charge(role="M", scope="reason", tokens_in=3, tokens_out=1, usd=0.5,
+                        task_id=None, note="历史行（未接线）：这一行的 0 是没挂点，不是花了零"))
+    rows = st.rows("usage_ledger")
+    assert rows and rows[0].get("task_id") in (None, ""), rows
+    report = V.verify_all(st)
+    assert [i for i in report.issues if i.code == "dangling_usage_task"] == [], \
+        [i.to_dict() for i in report.issues if i.code == "dangling_usage_task"]
+
+
 def test_a_flat_summon_written_as_text_still_runs(tmp_path: pathlib.Path):
     """`draft/37` §68：模型把 `framework_summon` 的「实参」当成一句话写出来 ⇒ 照样派活。
 
@@ -155,9 +240,21 @@ def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathl
     assert run.summons == ["D"], f"M 唤起的不对：{run.summons}"
 
     rows = {str(r.get("task_id")): r for r in _tasks(st)}
-    assert len(rows) == 2, f"台账里应该正好两环：{rows}"
+    # F1 之后台账里多了一行 M 顶趟（`action="run"`）——它是这一整条链的根。
+    # 这条判据问的是"链有几环"，所以先把它摘出去再数（口径变化，不是放宽）：
+    # 多出来的那一行正是 F1 要的东西（下面顺手断言链子挂在它上面）。
+    top = [r for r in rows.values() if str(r.get("role")) == "M"
+           and str(r.get("action")) == "run"]
+    assert len(top) == 1, f"顶趟应当恰好一行：{top}"
+    hops = {k: v for k, v in rows.items() if v not in top}
+    assert len(hops) == 2, f"台账里应该正好两环：{hops}"
+    rows = hops
     m_row = next(r for r in rows.values() if str(r.get("role")) == "D")
     e_row = next(r for r in rows.values() if str(r.get("role")) == "E")
+    # F1 的收益（改前这里必然是 `None`：顶趟没有行，链条没有根）
+    assert str(m_row.get("parent_task_id")) == str(top[0].get("task_id")), (
+        "第一环的 parent_task_id 必须指向 M 的顶趟行", m_row.get("parent_task_id"),
+        top[0].get("task_id"))
     assert str(m_row.get("called_by")) == "M" and str(e_row.get("called_by")) == "D", (
         m_row.get("called_by"), e_row.get("called_by"))
     assert str(e_row.get("parent_task_id")) == str(m_row.get("task_id")), (
@@ -371,7 +468,7 @@ def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Pat
     `bad_json_limit`），那次运行对交付物零贡献。系统提示词 6k+ token，循环协议埋在中间，
     模型不是不听、是没读到 —— 所以契约要重述在它最后读到的地方。
     """
-    from agentflow.agent_loop import JSON_TAIL, AgentLoop
+    from agentflow.agent_loop import JSON_TAIL, SHAPES, AgentLoop
 
     st, cond, registry, gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=3)
     run = run_role("M", "核验证明", store=st, registry=registry, conductor=cond,
@@ -386,8 +483,96 @@ def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Pat
                      sid="test-run", store=st)
     prompt = loop._prompt("转录", step=0)
     assert prompt.rstrip().endswith(JSON_TAIL.rstrip()), prompt[-200:]
-    for shape in ("tool", "summon", "summon_many", "message", "note", "ask_user", "final"):
+    # 形状名单从 `SHAPES` 现取（原先这里手抄了七个，漏掉 `handoff`）：
+    for shape in SHAPES:
         assert f'"{shape}"' in JSON_TAIL, shape
+
+
+def _shape_count_is_hand_copied(line: str) -> bool:
+    """这一行是不是把形状条数写死了（关于循环形状的那两处口径）。
+
+    只认两处关于循环形状的说法：递给模型的那句"… 种形状取其一"与自检那句
+    "… 种形状的形状判定"。像"`ask_user` 选项两种形状都收"这种同字不同义的句子
+    不算 —— 判据对着无关的行变红，比没有判据更糟。
+    """
+    if "种形状取其一" in line or "种形状的形状判定" in line:
+        return "len(SHAPES)" not in line
+    return False
+
+
+def _shape_list_is_hand_copied(line: str, shapes) -> bool:
+    """这一行是不是手抄了一份关于形状的并列名单（点了三个以上名字却不说来源）。
+
+    只钉"并列名单"这一形态：讨论别名的子集（"`ask_user` / `note` / `message` 的
+    扁平形态今天没有证据"）不算，它并没有在声称正典表长什么样。
+    """
+    named = [s for s in shapes if f"`{s}`" in line]
+    return len(named) >= 3 and "形状" in line and "SHAPES" not in line
+
+
+def test_the_shape_table_has_exactly_one_source(tmp_path: pathlib.Path):
+    """判据：形状清单与条数只许有 `SHAPES` 一处来源，别处不许手抄第二份。
+
+    为什么这不是文字问题（2026-10-04 普查挖出的真缺陷）：`SHAPES` 是八个形状，
+    而同一文件里三处手抄的名单/条数各说各话 —— 模块 docstring 写"四种形状"、
+    `_decode_shape` 的 docstring 写"七种形状"并把 `handoff` 漏掉、
+    递给模型的提示词写"六种形状取其一"。`handoff` 是手稿落行的唯一入口
+    （真机 1542 行手稿里 967 行由框架派生、模型自写 0 行），正典表里看不见它，
+    模型就看不见它 —— 而那句提示词正好是它最后读到的一行。
+
+    四条一起判，每条都配一条活体负控（拿改前那段原文当输入，判据必须认出来）：
+    1. 提示词骨架（`JSON_TAIL`）必须逐字含上 `SHAPES` 的每一个形状；
+    2. `_decode_shape` 的 docstring 必须指向 `SHAPES`，且不再自带任何条数声明；
+    3. 全文件：凡条数声明一律由 `len(SHAPES)` 现算；凡关于形状的并列名单
+       一律要带 `SHAPES`（不许手抄第二份）；
+    4. 正控：把提示词真拼一遍，那一句里必须同时有正确条数与全部形状名
+       （否则第 3 条可以靠"把那句话删掉"骗过去）。
+    """
+    import re
+
+    from agentflow.agent_loop import JSON_TAIL, SHAPES, AgentLoop, _decode_shape
+
+    # 1
+    for shape in SHAPES:
+        assert f'"{shape}"' in JSON_TAIL, f"提示词骨架里没有 {shape} ⇒ 模型看不见它"
+
+    # 2
+    doc = _decode_shape.__doc__ or ""
+    assert "SHAPES" in doc, "这一格没说清形状清单的唯一来源"
+    assert not re.search(r"[一二三四五六七八九十\d]+\s*种形状", doc), (
+        f"docstring 又手抄了一份条数：{doc[:80]!r}")
+
+    # 3 —— 两条判据函数各先过一遍活体负控（改前的原文）
+    old_doc = ("规范形态的解码：七种形状（`tool` / `summon` / `summon_many` / `message` /\n"
+               "    `ask_user` / `note` / `final`）取其一。别名只负责改写成这里认的形态。")
+    assert _shape_list_is_hand_copied(old_doc, SHAPES), (
+        "负控失效：判据认不出改前那份残缺名单（少了 handoff）")
+    old_prompt = '                "请按循环协议输出下一步（一个 JSON 对象，六种形状取其一）。")'
+    assert _shape_count_is_hand_copied(old_prompt), (
+        "负控失效：判据认不出改前那句写死的条数（六种）")
+    src = (pathlib.Path(__file__).resolve().parents[1]
+           / "src" / "agentflow" / "agent_loop.py").read_text(encoding="utf-8")
+    claim_sites = [ln.strip() for ln in src.splitlines() if _shape_count_is_hand_copied(ln)
+                   or "种形状取其一" in ln or "种形状的形状判定" in ln]
+    assert len(claim_sites) >= 2, f"形状条数的两处现算落点少了一个：{claim_sites}"
+    for line in claim_sites:
+        assert not _shape_count_is_hand_copied(line), f"这一行手抄了形状条数：{line}"
+    for line in src.splitlines():
+        assert not _shape_list_is_hand_copied(line, SHAPES), f"这一行手抄了形状名单：{line.strip()}"
+
+    # 4
+    class _Spend:
+        usd = 0.0
+
+    class _Seam:
+        usd_budget = None
+        spend = _Spend()
+
+    loop = AgentLoop(role="M", session_root=tmp_path, registry=object(), seam=_Seam())
+    prompt = loop._prompt("转录", step=0)
+    assert f"{len(SHAPES)} 种形状取其一" in prompt, prompt[-300:]
+    for shape in SHAPES:
+        assert shape in prompt, f"拼出来的那一步提示词里没有 {shape}"
 
 
 def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathlib.Path,
@@ -417,6 +602,47 @@ def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathli
     assert gw["E"].systems, "这一次没有发出任何提示词 ⇒ 判据失去对象"
     assert "哨兵：本机没有 Mathlib，自足 Lean 文件可用" in gw["E"].systems[0], (
         gw["E"].systems[0][-400:])
+
+
+def test_handoff_accepts_all_like_message_and_notify(tmp_path: pathlib.Path):
+    """判据（主控 2026-10-06 裁定 (a)）：`handoff` 的 `to` 也收 `ALL`，三通道同一份词表。
+
+    改前红：`_decode_shape({"handoff": {"to": "ALL", …}})` 拒，而拒信自己教的
+    正是 `ALL`（"给所有人写 to="ALL""），`JSON_TAIL` 里的骨架也写 `<伙伴/M/ALL>`；
+    `message` / `notify` 两条路却两种写法都收。于是模型照提示词写 `ALL` 被拒、
+    被拒后拿到的改法还是 `ALL` —— 同一步可能连撞两次（"提示词教了一个框架不收的
+    字面量"那一形态，`tests/test_agent_prompts.py` 那条判据的 A 面就在这里）。
+
+    四条一起判：
+    1. `to="ALL"` 与 `to="#public"` 都被收，且都归一成手稿通道的规范形 `ALL`；
+    2. 反负控：`to="Z"`（真不存在的收件人）仍拒 —— 不许把"放宽"做成"什么都收"；
+    3. 三通道同一份等价关系：`_is_all_recipient` 判 `ALL`/`#public`/`all` 为真、
+       `_known_recipient` 认角色与主控，`handoff`/`message`/`notify` 都调它们；
+    4. 小写角色名归一成大写（与 `notify` 的口径一致）。
+    """
+    from agentflow.agent_loop import (_decode_shape, _is_all_recipient,  # noqa: PLC0415
+                                     _known_recipient, _recipient_for_channel, clean_notify)
+
+    # 1
+    for spelled in ("ALL", "#public", "all"):
+        key, payload, problem = _decode_shape(
+            {"handoff": {"to": spelled, "summary": "s", "body": "b"}})
+        assert not problem, f"handoff 拒了 {spelled!r}：{problem}"
+        assert key == "handoff" and payload["to"] == "ALL", payload
+    # 2
+    _, _, bad = _decode_shape({"handoff": {"to": "Z", "summary": "s", "body": "b"}})
+    assert bad and "收件人" in bad, f"不存在的收件人居然被收了：{bad!r}"
+    assert _decode_shape({"handoff": {"to": "", "summary": "s", "body": "b"}})[2], "空 to 也要拒"
+    # 3 —— 词表只有一处：三个通道的"给所有人"归一到同一个判据上
+    assert {_is_all_recipient(t) for t in ("ALL", "#public", "all")} == {True}
+    assert _is_all_recipient("Z") is False
+    assert _known_recipient("F") and _known_recipient("M") and not _known_recipient("Z")
+    assert _recipient_for_channel("ALL") == "#public"            # 留言通道的规范形
+    assert _recipient_for_channel("ALL", all_as="ALL") == "ALL"  # 手稿/notify 的规范形
+    assert clean_notify({"to": "#public", "summary": "s", "body": "b"})["to"] == "ALL"
+    assert _decode_shape({"message": {"to": "ALL", "body": "x"}})[1]["to"] == "#public"
+    # 4
+    assert _decode_shape({"handoff": {"to": "f", "summary": "s", "body": "b"}})[1]["to"] == "F"
 
 
 def test_the_availability_column_does_not_call_a_wired_role_unwired(tmp_path: pathlib.Path,

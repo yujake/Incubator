@@ -415,10 +415,17 @@ def _provider_diagnostics(prov: Any) -> dict:
     同一时刻的同一件事。产物里没有"这一跑的 stats 快照"这一档（本次没有加：
     加字段要动 `evidence` 侧的折算），所以读的时候请以 `last_*` 为准，
     `stats` 只用来看"这个对象一共发过多少请求"。
+
+    E-10（`draft/44`）：`last_topicality` 必须在这一屏里 —— 它是"返回 0 条"与
+    "这一问根本没问出去"的唯一分界（`QueryApplicability` 的第三态：`query_empty` /
+    `query_not_applicable_cjk`）。此前这一屏只捞 `stats`/`last_query_text`/…，
+    于是空 topic 那次 `return []` 在生产读数上与"问了、零命中"长得一模一样。
+    `last_query_provenance` 同理：它逐条记"这一路 query 发没发出去（`dispatched`）"。
     """
     out: dict[str, Any] = {}
     for attr in ("stats", "last_query_text", "last_filter_notes", "last_filtered_out",
-                 "last_phrase_fallbacks", "last_channel_errors"):
+                 "last_phrase_fallbacks", "last_channel_errors",
+                 "last_topicality", "last_query_provenance"):
         value = getattr(prov, attr, None)
         if value is not None:
             out[attr] = value
@@ -573,6 +580,66 @@ def _h_providers(ctx: _Ctx) -> Any:
     )
 
 
+def _multi_source_reading(mp: Any) -> dict[str, Any]:
+    """把 `MultiProvider` 的逐源台账翻成工具层读数（`R2b` ⑱ 的"逐源三态"）。
+
+    `MultiProvider.last_stats` 已经是按源的三态（`ProviderStat.status`：
+    `ok` / `failed` / `not_run` / `query_not_applicable_cjk` / `query_empty`），
+    这里只做搬运，不重新判一遍 —— 判据在 `providers.ProviderStat` 里，
+    在这里再判一次就是第二份口径（`FC-03`）。
+    """
+    stats = getattr(mp, "last_stats", None) or {}
+    rows: list[dict[str, Any]] = []
+    for name, st in stats.items():
+        rows.append({
+            "name": str(name),
+            "status": str(getattr(st, "status", "") or ""),
+            "count": int(getattr(st, "count", 0) or 0),
+            "error_kind": str(getattr(st, "error_kind", "") or ""),
+            "error": str(getattr(st, "error", "") or ""),
+            # `delivered` / `refused` 是 `ProviderStat` 自己的两个属性（它明说读者该用它们
+            # 而不是拿 `failed` 当"没结果"的含括判据）。
+            "delivered": bool(getattr(st, "delivered", False)),
+            "refused": bool(getattr(st, "refused", False)),
+        })
+    return {
+        "sources": rows,
+        "refusals": dict(getattr(mp, "last_refusals", None) or {}),
+        # 两支"没交货"的分开列：`failed` 是上游坏了，`refused` 是这一问根本没发出去。
+        # 折成一个"没结果"会让"被墙/限流"与"这问对这条通道不适用"同形。
+        "failed": sorted(r["name"] for r in rows if r["status"] == "failed"),
+        "refused": sorted(r["name"] for r in rows if r["refused"]),
+        "delivered": sorted(r["name"] for r in rows if r["delivered"]),
+    }
+
+
+def _single_source_reading(prov: Any, candidates: Iterable[Any]) -> list[dict[str, Any]]:
+    """单源那一路的逐源读数（与多源同一形状）。
+
+    为什么单源也要给：`sources[]` 是声明的一部分，而"这次问了谁、它交没交货"在单源调用上
+    同样要读得到；只给多源会让同一条声明的键随调用方式时有时无（声明就变成半个真话）。
+
+    第三态（这一问根本没发出去）复用 `providers._provider_refusal` —— 那是它的唯一实现，
+    本函数只把结论翻成同一形状的一行。用 `ProviderStat` 而不是手写 dict：它的构造器自己
+    校验不变量（`failed` 必须给 `error_kind`、第三态必须给理由、二者都不许报条数），
+    手写就等于把这些校验绕过去了。
+    """
+    name = str(getattr(prov, "name", type(prov).__name__))
+    listed = list(candidates)
+    state, why = P._provider_refusal(prov, listed)
+    stat = (P.ProviderStat(status=state, count=0, error_kind="", error=why or state)
+            if state else P.ProviderStat(status="ok", count=len(listed)))
+    return [{
+        "name": name,
+        "status": stat.status,
+        "count": stat.count,
+        "error_kind": stat.error_kind,
+        "error": stat.error,
+        "delivered": bool(getattr(stat, "delivered", False)),
+        "refused": bool(getattr(stat, "refused", False)),
+    }]
+
+
 def _h_literature(
     ctx: _Ctx,
     topic: str,
@@ -580,8 +647,24 @@ def _h_literature(
     description: str = "",
     limit: int = 10,
     provider: str = DEFAULT_PROVIDER,
+    providers: Iterable[str] | None = None,
 ) -> Any:
-    """``search.literature``：检索候选，并把判重结论一并算好。"""
+    """``search.literature``：检索候选，并把判重结论一并算好。
+
+    ## `providers=[…]`：一次问多源（`R2b` ⑱）
+
+    给了它就忽略 `provider`，走 `providers.MultiProvider` 把多个源合并（按
+    `_merge_identity_key` 去重、`raw.providers` 留住"这条来自哪些源"）。
+    三条硬要求在这里的落点：
+
+    1. 逐源三态：`sources[]` 逐源给出 `status`/`count`/`error_kind`/`error`；
+       某个源失败不影响别的源的结果（`fail_fast=False`）；
+       一个源都没交货（全 `failed` 或全 `refused`）⇒ 这一调用落 `fail`，
+       绝不折成"检索正常、零命中"——那会把"没查成"写成"查了没有"。
+    2. 去重口径只留一处：本函数不自己合并，跨源合并在 `MultiProvider` 里、
+       与文献表比对仍走 `dedup.literature_keys` / `find_existing_literature`（同一份）。
+    3. 成本可读：`cost.provider_calls`（这次向上游发了几次）+ `cost.elapsed_s`。
+    """
     description = description or ""
     # 与 schema.SearchRequest 的约束保持一致：精确模式必须给出内容描述，
     # 否则 providers 层会构造出 ``search=""`` 这种无意义查询（§1.1）。
@@ -592,21 +675,79 @@ def _h_literature(
             kind="param_constraint",
             mode=mode,
         )
-    try:
-        prov = _resolve_provider(ctx, provider)
-    except ToolError as exc:
-        return fail(str(exc), kind="unknown_provider", available=_known_names(ctx))
 
-    try:
-        candidates, elapsed = _timed(prov.search, topic, mode, description, int(limit))
-    except Exception as exc:  # noqa: BLE001 - 检索失败必须如实上报（"没做成"）
+    wanted: list[str] = []
+    for raw_name in (providers or []):
+        name = str(raw_name or "").strip()
+        if name and name not in wanted:
+            wanted.append(name)
+    if providers is not None and not wanted:
         return fail(
-            f"provider={getattr(prov, 'name', provider)!r} 检索失败：{type(exc).__name__}: {exc}",
-            kind="provider_error",
-            provider=getattr(prov, "name", provider),
-            topic=topic,
-            mode=mode,
+            "providers 是空列表：要么不给这个参数（按 provider 走单源），要么至少给一个源名。"
+            "给空列表既不是单源也不是多源，只会让'这次到底问了谁'变得没法读。",
+            kind="bad_providers",
+            available=_known_names(ctx),
         )
+
+    multi: dict[str, Any] | None = None
+    sources: tuple[str, ...] = ()
+    if wanted:
+        try:
+            provs = [_resolve_provider(ctx, name) for name in wanted]
+        except ToolError as exc:
+            return fail(str(exc), kind="unknown_provider", available=_known_names(ctx),
+                        providers_requested=wanted)
+        sources = tuple(getattr(p, "name", n) for p, n in zip(provs, wanted))
+        mp = P.MultiProvider(provs, name="multi")
+        try:
+            candidates, elapsed = _timed(mp.search, topic, mode, description, int(limit))
+        except Exception as exc:  # noqa: BLE001 - 检索失败必须如实上报（"没做成"）
+            return fail(
+                f"providers={list(wanted)!r} 检索失败：{type(exc).__name__}: {exc}",
+                kind="provider_error",
+                providers_requested=wanted,
+                topic=topic,
+                mode=mode,
+            )
+        multi = _multi_source_reading(mp)
+        if not multi["delivered"]:
+            # 三态：没有任何源交货 ⇒ 没查成。逐源理由一起带出去，
+            # 这样调用方能分清"上游坏了"（failed）与"这一问没发出去"（refused）。
+            return fail(
+                "这一次一个源都没有交货 ⇒ 没查成（不是'检索正常、零命中'）："
+                f"failed={multi['failed']}、refused={multi['refused']}；逐源读数见 sources[]",
+                kind="provider_error",
+                providers_requested=wanted,
+                sources=multi["sources"],
+                source_failures=multi["failed"],
+                source_refusals=multi["refusals"],
+                topic=topic,
+                mode=mode,
+            )
+        prov: Any = None
+    else:
+        try:
+            prov = _resolve_provider(ctx, provider)
+        except ToolError as exc:
+            return fail(str(exc), kind="unknown_provider", available=_known_names(ctx))
+
+        try:
+            candidates, elapsed = _timed(prov.search, topic, mode, description, int(limit))
+        except Exception as exc:  # noqa: BLE001 - 检索失败必须如实上报（"没做成"）
+            return fail(
+                f"provider={getattr(prov, 'name', provider)!r} 检索失败：{type(exc).__name__}: {exc}",
+                kind="provider_error",
+                provider=getattr(prov, "name", provider),
+                topic=topic,
+                mode=mode,
+            )
+    provider_label = "multi" if wanted else getattr(prov, "name", provider)
+    # 逐源读数两条路都给（同一形状）：多源来自 `MultiProvider` 的台账，
+    # 单源来自 `_single_source_reading`（同样复用 providers 层那两处判据）。
+    source_rows = (multi["sources"] if multi else
+                   _single_source_reading(prov, candidates))
+    source_failures = sorted(r["name"] for r in source_rows if r["status"] == "failed")
+    source_refusals = sorted(r["name"] for r in source_rows if r["refused"])
 
     candidates = list(candidates or [])
     rows, read_error = _literature_rows(ctx)
@@ -648,7 +789,7 @@ def _h_literature(
                 "summary": T.clip(cand.summary, P.SUMMARY_MAX_CHARS),
                 "pdf_url": cand.pdf_url,
                 "landing_url": cand.landing_url,
-                "provider": cand.provider or getattr(prov, "name", provider),
+                "provider": cand.provider or provider_label,
                 # ---- 判重（A 一眼看出哪几条是新的，不必再跑一次判重工具）
                 "dedup_key": key,
                 "dedup_keys": keys,
@@ -657,6 +798,10 @@ def _h_literature(
                 "dedup_hit_key": hit_key,
                 "batch_duplicate": batch_dup,
                 "is_new": is_new,
+                # `R2b` ⑱：这条合并结果来自哪几个源 —— "哪几条重复"的读数就在这里
+                # （`MultiProvider` 把来源写进 `raw.providers`；单源时它是那一源的名单）。
+                # 不读 `raw.sources`（那是完整原始记录，属于 providers 层内部）。
+                "sources": list((cand.raw or {}).get("providers") or []),
                 "channel": (cand.raw or {}).get("channel"),
                 "cited_by_count": (cand.raw or {}).get("cited_by_count"),
             }
@@ -666,7 +811,7 @@ def _h_literature(
     existing_count = sum(1 for i in items if i["existing"] is True)
     unknown_count = sum(1 for i in items if i["is_new"] is None)
     data: dict[str, Any] = {
-        "provider": getattr(prov, "name", provider),
+        "provider": provider_label,
         "mode": mode,
         "topic": topic,
         "description": description,
@@ -681,9 +826,30 @@ def _h_literature(
         "existing_table_size": len(rows) if store_known else None,
         "candidates": items,
         "elapsed_s": elapsed,
-        "diagnostics": _provider_diagnostics(prov),
+        "diagnostics": _provider_diagnostics(prov) if prov is not None else {},
+        # ---- `R2b` ⑱：逐源读数（两条路都给；`providers_requested` 才是"这次问没问多源"的标记）
+        "providers_requested": list(wanted) if wanted else None,
+        "sources": source_rows,
+        "source_count": len(source_rows),
+        "source_failures": source_failures,
+        "source_refusals": source_refusals,
+        # 成本：多源 = 多次出网。`provider_calls` 数的是"这次向上游发了几次"，
+        # 不是为了精确计费（检索没有 token 账），而是让"多源贵在哪"一眼可见。
+        "cost": {"provider_calls": len(source_rows), "elapsed_s": elapsed},
     }
     warnings: list[str] = []
+    if source_failures:
+        # 一个源失败不许吞掉别的源的结果，但也不许静默：候选里少了它的那几条，
+        # 而"少了"与"它没命中"是两件事 —— 所以每次点名。
+        warnings.append(
+            f"这些源这次失败了（候选里没有它们的贡献，但它们不是「没命中」）："
+            f"{source_failures}；逐源理由见 sources[]。"
+        )
+    if source_refusals:
+        warnings.append(
+            f"这些源这一问**根本没发出去**（第三态：查询对它不适用/为空，不是上游坏了）："
+            f"{source_refusals}；理由见 sources[]。这一档**不是「零命中」**。"
+        )
     if read_error is not None:
         warnings.append(
             f"{read_error} ⇒ **判重没查**（不是「都是新的」）：候选的 existing/is_new 均为 null（未知）。"
@@ -1499,12 +1665,23 @@ def register(
                     "description": {"type": "string", "maxLength": 4000},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                     "provider": {"type": "string", "enum": provider_enum},
+                    # `R2b` ⑱：一次问多源。给了它就忽略 `provider`；每个源各自的
+                    # 成败与条数落在 `sources[]`，成本落在 `cost`。
+                    "providers": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": provider_enum},
+                        "minItems": 1,
+                        "maxItems": len(provider_enum),
+                        "description": ("一次问多个源并合并（忽略 provider）："
+                                        "逐源三态见 sources[]、成本见 cost。"),
+                    },
                 },
                 "required": ["topic"],
                 "additionalProperties": False,
             },
-            handler=lambda topic, mode="topical", description="", limit=10, provider=DEFAULT_PROVIDER: _h_literature(
-                ctx, topic, mode, description, limit, provider
+            handler=lambda topic, mode="topical", description="", limit=10,
+            provider=DEFAULT_PROVIDER, providers=None: _h_literature(
+                ctx, topic, mode, description, limit, provider, providers
             ),
             side_effect="read",
             declared_external="egress",
@@ -1513,14 +1690,20 @@ def register(
             # 本轮观测到的是一次真实 429 之后的 fail，不是 ok 分支 —— 如实留痕）。
             # candidates[] 每项除下列字段外还带 authors/venue/language/
             # dedup_keys/dedup_hit_key/channel/cited_by_count。
+            # `sources`/`source_count`/`source_failures`/`source_refusals`/`cost`
+            # 与 `providers_requested` 是 `R2b` ⑱ 加的多源读数（单源调用时为 null）。
             returns=(
                 "{'provider','mode','topic','description','limit','count','new_count',"
                 "'existing_count','unknown_count','batch_duplicate_count','store_checked',"
                 "'store_read_error','existing_table_size','candidates','elapsed_s',"
-                "'diagnostics','warnings'}；"
+                "'diagnostics','warnings','providers_requested','sources','source_count',"
+                "'source_failures','source_refusals','cost'}；"
                 "candidates[] 每项是 {'title','year','doi','type_code','authors','venue','language',"
                 "'summary','pdf_url','landing_url','provider','dedup_key','dedup_keys','existing',"
-                "'existing_lit_id','dedup_hit_key','batch_duplicate','is_new','channel','cited_by_count'}"
+                "'existing_lit_id','dedup_hit_key','batch_duplicate','is_new','sources','channel',"
+                "'cited_by_count'}；"
+                "sources[] 每项是 {'name','status','count','error_kind','error','delivered','refused'}；"
+                "cost 是 {'provider_calls','elapsed_s'}"
             ),
             tags=("search", "literature"),
         ),

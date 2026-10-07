@@ -897,3 +897,39 @@ def test_positive_all_channels_failing_gets_its_own_topicality_state(
     # 它与"这一问根本没发出去"（两个拒绝态）不同轴：下游不许读成拒绝态。
     assert P._provider_refusal(provider, []) == ("", "")
 
+
+
+# ============================================================ E-10：三态接进生产入口
+
+
+def test_e10_the_production_diagnostics_carry_the_third_state(stub: _HttpStub) -> None:
+    """E-10（draft/44）：生产读数里"没问出去"必须与"问了、零命中"分得开。
+
+    现场：search.literature 的 diagnostics（_provider_diagnostics）只捞
+    stats/last_query_text/last_filter_notes/…，不捞 last_topicality ——
+    而后者是第三态的唯一载体（QueryApplicability：query_empty /
+    query_not_applicable_cjk）。于是空 topic 那次 
+eturn [] 在生产读数上与
+    "问了、零命中"长得一模一样（三态在入口处被折平）。
+    两条一起钉：① 没问出去 ⇒ 那一屏里带第三态名；② 问了零命中 ⇒ 不带。
+    """
+    from agentflow.tools import search_tools as ST
+
+    refused = _provider(stub)
+    assert refused.search("", "topical") == [], "空 topic 这一问不该发给上游"
+    got = ST._provider_diagnostics(refused)
+    assert got.get("last_topicality"), (
+        "生产读数里没有 last_topicality ⇒ '没问出去'与'零命中'又折平了：" + repr(sorted(got)))
+    text = repr(got["last_topicality"])
+    assert P.QUERY_EMPTY in text, text
+
+    empty = _provider(_HttpStub({"results": [], "meta": {"count": 0}}))
+    assert empty.search(EN_TOPIC, "topical") == [], "问了、零命中"
+    got2 = ST._provider_diagnostics(empty)
+    # 两态的分界在 `refusal_reason`（第三态名）上，不在"有没有这份读数"上 ——
+    # 问了零命中的那一跑同样会留下 `last_topicality`，只是 `refusal_reason` 为空。
+    asked_reason = str(getattr(got["last_topicality"], "refusal_reason", "") or "")
+    zero_reason = str(getattr(got2["last_topicality"], "refusal_reason", "") or "")
+    assert P.QUERY_EMPTY in asked_reason, asked_reason
+    assert zero_reason == "", (
+        "问了零命中的那一跑不该带第三态理由（否则两种情形又同形了）：" + zero_reason)

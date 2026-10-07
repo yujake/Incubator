@@ -122,6 +122,46 @@ ACTIONS: tuple[ActionSpec, ...] = (
         side_effect="write_local", handler_name="ingest_local",
         external="none",
     ),
+
+    # ---- `shelf_search`（2026-10-06 加，J-53 / 裁决 2 族 1；**本文件是 FC-27 禁改区，
+    # 本次改动已登记基线待 2 名人审**）
+    #
+    # 为什么必须有它：`search.shelf` 与 `search.local` 两件工具在 A/C/H 的工具面上，
+    # 而动作面里一个都没有 —— 主控只能 `conductor.summon` 动作，于是"在本地书架上找一找"
+    # 没有可派的入口（与上面 `ingest_local` 同一格病：工具层通、编排层不通 ⇒
+    # 盘上有全文，编排层却看不见它）。它服务的是**不联网也能推进**的那条路：
+    # 全文已经在盘上的文献本身就是可引用的来源（`#1` 那一类"无意义/重复的外出"的正解之一）。
+    #
+    # 两根轴逐条读出（不是照抄工具层）：
+    #   - 效果轴 `read`：实现（`AgentA.shelf_search`）只调 `search.shelf`（必调）与
+    #     `search.local`（给了 `query` 才调）这两件**只读**工具，自己不写任何表
+    #     —— 所以它是一条真只读的动作（与上面三条 `write_local` 不同）。
+    #   - 外部轴 `none`：两件工具都**不联网**（与 `run_once`/`run`/`search_literature`
+    #     那三条 `egress` 刻意分开）：离线场景最需要的那一件，不该被"要出网"整条划掉。
+    #
+    # 两层对账：工具名的最后一段是 `shelf` / `local`，与本动作的 `handler_name`
+    # （`shelf_search`）对不上 ⇒ 按唯一性约定它诚实地落进 `unmatched`，
+    # 已登记进 `capabilities._KNOWN_UNMATCHED_ACTIONS`（与 `search_literature` 同族）。
+    # 为什么不给它凑一个同名工具：那两件工具是**通用只读检索**（A/C/H 都能调），
+    # 而本动作是"先列书架清单、再按需取逐字摘录"的一次编排 —— 把两者配成一对
+    # 会让两层类型对账去比两件不同的事（比 `search.local` 的 `max_books` 与本动作的参数）。
+    ActionSpec(
+        "A", "shelf_search",
+        "在本地书架上找文献（不联网）：列出全文在盘的（`search.shelf`），"
+        "给了 query 再按主题取最相关的一页与逐字摘录（`search.local`）",
+        _obj(
+            {
+                "query": {**_S, "maxLength": 400},
+                "limit": {**_I, "minimum": 1, "maximum": 500},
+                "lit_id": {**_S, "maxLength": 40},
+                "local_limit": {**_I, "minimum": 1, "maximum": 20},
+                "max_chars": {**_I, "minimum": 200, "maximum": 8000},
+            },
+        ),
+        "dict（ok / kind / count / shelf / local / lit_ids / hits / excerpt_count / note）",
+        side_effect="read", handler_name="shelf_search",
+        external="none",
+    ),
 )
 
 
@@ -142,22 +182,21 @@ def _build(d: BuilderDeps) -> Any:
 SPEC = AgentSpec(
     role='A',
     brief=    AgentBrief(
-        duty='文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败',
+        duty="文献检索：把搜索请求变成已登记的文献行，并如实报告每一次失败",
         boundary=(
-            '检索口径（查询编排、精筛、候选打分）在禁改区：你只能调用它，不许绕过或改写它。',
-            '你不抽概念、不建关系（那是 B 的活）；检索完请 B 整理。',
-            '候选被你判为不相关时，只能说这一条没进结果，不许说这篇文献不存在。',
-            '下载失败必须如实写进请求行的错误字段；不许把失败当成功，也不许静默重试到超预算。',
-            '命中校验（§2 R1b）：登记一行文献之前先核题名/年份/DOI —— 与派活时点名的那一篇对不上就把该行的 matched 写成 mismatch 并说清差在哪，不许静默登记成找到。真机实测（2026-10-01）：要 Brown 1971，下回来的是 2022 年另一篇 CLT 论文 —— 登记成功、下载成功、569,776 字节的真 PDF，而没有任何地方报出来。',
-            '定位与确认（§2 R14）：把一条命题交给下游之前，必须先在抽出来的正文里定位它 —— 回报定位结论（matched ∈ exact / partial / none）+ 页码 + 片段；partial / none 要把最接近的三段一并列出来（让人能复核）。none 不许交给 B：没定位到就不算找到。注意这里有两个 matched：文献行的那个问「是不是这一篇」（第三态叫 mismatch），这个问「这条定理在不在这篇里」（第三态叫 none），别串。',
+            "检索完请 B 整理：抽概念、建关系是他的活。",
+            "候选被你判为不相关时，只能说这一条没进结果，不许说这篇文献不存在。",
+            "下载失败不许当成功，也不许静默重试到超预算。",
+            "命中校验（§2 R1b）：登记一行文献之前先核题名/年份/DOI —— 与派活时点名的那一篇对不上就把该行的 matched 写成 mismatch 并说清差在哪，不许静默登记成找到。",
+            "定位与确认（§2 R14）：把一条命题交给下游之前，必须先在抽出来的正文里定位它 —— 回报定位结论（matched ∈ exact / partial / none）+ 页码 + 片段；partial / none 要把最接近的三段一并列出来（让人能复核）。none 不许交给 B：没定位到就不算找到。注意这里有两个 matched：文献行的那个问「是不是这一篇」（第三态叫 mismatch），这个问「这条定理在不在这篇里」（第三态叫 none），别串。",
         ),
         policy=(
-            '继续搜还是收手由预算与命中率决定：预算耗尽时必须收手并在结论里写明预算读数。',
-            '确认优先于登记：没定位到就不算找到。宁可如实回报 none 并列出最接近的三段，也不要把「看起来相关」写成「找到了」。',
-            '被问「有没有人说它不成立」时做反证检索：找勘误、后续版本、独立确认；找不到就如实写 unresolved —— 不许拿「没搜到」当「不存在」。',
+            "继续搜还是收手由预算与命中率决定：预算耗尽时必须收手并在结论里写明预算读数。",
+            "确认优先于登记：宁可如实回报 none 并列出最接近的三段，也不要把「看起来相关」写成「找到了」。",
+            "被问「有没有人说它不成立」时做反证检索：找勘误、后续版本、独立确认；找不到就如实写 unresolved —— 不许拿「没搜到」当「不存在」。",
         ),
-        signature_error='把一条候选被丢掉说成这篇文献不存在。',
-        deliverable='search_requests 里每一条请求的终局（outcome）与 result_lit_ids。',
+        signature_error="把一条候选被丢掉说成这篇文献不存在。",
+        deliverable="search_requests 里每一条请求的终局（outcome）与 result_lit_ids。",
         stance=(
             "你的眼睛最先该落在'来源'上：同一篇文献在不同库里的元数据不一致时，先把差异记下来，再决定采信哪一份 —— 这正是判重口径存在的理由。",
             "检索不是把关键词丢出去：先说清'我要找的是哪一类东西、它长什么样'，再决定查什么、怎么判相关。",

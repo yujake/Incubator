@@ -337,6 +337,9 @@ def check_formal(
                     ),
                     "verifier_output": "",
                     "missing_imports": [],
+                    # E-12(a)：这一支**没跑成** ⇒ `exit_code` 必须是 None
+                    # （绝不用 0 冒充"跑过" —— 那是把"没做"写成"做了"）。
+                    "exit_code": None,
                     # 探测都没做成 ⇒ 没有任何检查器状态可透传（空串是诚实的值）。
                     "verifier_status": "",
                 },
@@ -351,6 +354,8 @@ def check_formal(
                 "detail": det["reason"],
                 "verifier_output": "",
                 "missing_imports": [],
+                # E-12(a)：环境里没有检查器 ⇒ 这一格是 None（"没跑成"）。
+                "exit_code": None,
                 # `G-24①` 的透传字段：这一支是"探测不到检查器"，
                 # 检查器一个字都没说 ⇒ 空串是诚实的值（"没有检查器状态可透传"）。
                 "verifier_status": "",
@@ -372,6 +377,8 @@ def check_formal(
                 ),
                 "verifier_output": "",
                 "missing_imports": [],
+                # E-12(a)：没有源码/脚本 ⇒ 这一次检查没发生 ⇒ None。
+                "exit_code": None,
                 "verifier_status": "",
             }
         )
@@ -474,6 +481,15 @@ def check_formal(
             # `verifier_status` 承诺"这就是检查器说的那一个值"（哪怕上游换了名字）。
             # 把多值压成一个模糊值（`N-5`）在这两栏里都是禁止的。
             "verifier_status": status,
+            # ---- E-12(a)（`draft/44`）：**检查器进程的真实退出码**。
+            #
+            # 这一格分的是退出码，`agent_e` 那边的 `observations.tri_state` 分的是三态
+            # （`verified`/`checked_failed`/`not_checked`）—— 两处都要能读。
+            # 真机 50 条 formal 里 41 条 `exit_code=None`：这一格改前同时表示
+            # "跑了且失败（`compile_error`）"与"根本没跑成（`timeout`/`no_backend`）"。
+            # 语义：跑了 ⇒ 真实退出码；`verified` ⇒ 0；没跑成 ⇒ `None`
+            # （绝不用 0 冒充"没跑" —— 那是把"没做"写成"做了"）。
+            "exit_code": raw.get("exit_code"),
         },
         # 机器可读的留痕：受控词表之外的状态一个都不许被当成通过。
         status=status,
@@ -775,8 +791,12 @@ def _verify_detect_verifier():
     #
     # `verifier_status`（`G-24①`）是第 8 个键：它是检查器原样报的那个状态
     # 的透传栏，与 `reason`（受控词表）成对存在。
+    #
+    # `exit_code`（E-12(a)，`draft/44`）是第 9 个键：**检查器进程的真实退出码**。
+    # 它分的是退出码（`agent_e` 那边的 `observations.tri_state` 分的是三态），
+    # 没跑成时是 `None`（绝不用 0 冒充"跑过"）。
     returns=(
-            "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status'}"
+            "{'checked','verified','claim','reason','detail','verifier_output','missing_imports','verifier_status','exit_code'}"
             "；失败（拿不到声明名 / 声明名参数不合法 / 桥接层抛异常）：ok=False + kind(param_error/check_failed) + data=None"
             "（一个键都不给 —— 失败分支不承诺上面那套键）"
             ),
@@ -974,6 +994,125 @@ def _verify_list_experiments(_need_store, _read_rows, store, claim_key=None, lim
                )
     )
 
+#: V 的只读工具面（`draft/54 §1.2` 步 7）：三件都加进本模块 —— 加进既有模块省掉
+#: "新模块的五个落点"（`_MODULES` / `capabilities._TOOL_MODULES` / `_TOOL_GROUP_PREFIXES` /
+#: `READING-MAP` / `test_release_all.py` 的顶层模块表）。
+#:
+#: 只声明 `"V"`：这是验证者的面。"把证明交给 V"这件事走的是召唤（`F → V` 那条边），
+#: 不是让 F 自己拿着 V 的台账工具去审自己。
+_ROLES_V = ("V",)
+
+
+@tool(
+    "verify.verify_proof",
+    (
+            "把一份证明按写成后的样子整体重读一遍（V 的唯一主动作）：三态结论 + 每条问题指到步号，"
+            "并写一行 verifications/<命题号>.jsonl。side_effect=read 是刻意的："
+            "V 不写任何表，它唯一的产物是一个文件（自己的台账）"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "statement_id": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 4,
+                "description": "命题号（4 位十进制，与 statements.stmt_id 同一套）",
+            },
+            "proof_text": {"type": "string", "description": "待审的证明全文；不给时从 statements 取"},
+    # 只读读数由调用方现取现传（`verifications.cold_start_prompt` 只收字符串）：
+    # 这是 I12 冷启动在接口上的那一半 —— 传字符串而不是传 store，
+    # "它能碰什么"就被固定在签名里，而不是靠一句"它会守规矩"。
+            "readonly_facts": {"type": "string", "description": "只读读数（命题现状 / 台账条数）"},
+           },
+           "required": ["statement_id", "proof_text"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES_V,
+    # 三条返回路径的键集合完全相同（与 verify.evidence_for 同一纪律）：
+    # `checked=False` 是"没查成"（没接线 / 结论不合法）而**不是**工具失败 ——
+    # 与 verify.check_formal 的 no_backend 同一档。少给键会让下游把"没有读数"读成"是零"。
+    returns=(
+            "{'checked','statement_id','verification_id','verdict','defect_step','findings',"
+            "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
+            "'ledger','reason','detail'}（三条返回路径键集合相同；checked=False = 没查成："
+            "reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— "
+            "此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）"
+            ),
+    tags=("verification", "proof"),
+)
+def _verify_verify_proof(_need_store, _agent_v, statement_id, proof_text=None, readonly_facts=None):
+    """verify.verify_proof 的工具体。
+
+    注入值（_need_store, _agent_v）由装配期用 `partial` 绑定，
+    所以模型看到的签名与它声明的 properties 逐字对上。
+    """
+    return (
+    _need_store("verify.verify_proof")
+               or ok(_agent_v().verify_proof(statement_id=statement_id,
+                                             proof_text=proof_text or "",
+                                             readonly_facts=readonly_facts or ""))
+    )
+
+
+@tool(
+    "verify.list_verifications",
+    "列验证台账（只读，可按命题过滤）：没有它就无法回答『这份证明到底审过没有』",
+    {
+           "type": "object",
+           "properties": {
+            "statement_id": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 0},
+           },
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES_V,
+    returns=(
+            "{'checked','total','items','problems','truncated','reason'}"
+            "（problems 是坏行说明 —— 照实列出，不静默跳过）"
+            ),
+    tags=("verification",),
+)
+def _verify_list_verifications(_agent_v, statement_id=None, limit=None):
+    """verify.list_verifications 的工具体（注入值 _agent_v 由装配期用 `partial` 绑定）。"""
+    return ok(_agent_v().list_verifications(statement_id=statement_id or "", limit=limit))
+
+
+@tool(
+    "verify.read_proof",
+    "按命题号读回被审的那份证明全文 + 它的 sha256 + 最近一次结论（只读）",
+    {
+           "type": "object",
+           "properties": {
+            "statement_id": {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 4,
+                "description": "命题号（4 位十进制）",
+            },
+           },
+           "required": ["statement_id"],
+           "additionalProperties": False,
+           },
+    side_effect="read",
+    roles=_ROLES_V,
+    returns=(
+            "{'checked','statement_id','proof_text','source','sha256','proof_chars',"
+            "'verifications','last_verdict','last_verification_id','problems','reason'}"
+            "（三条返回路径键集合相同；`source` 为空 = 台账里没有这个命题的证明全文）"
+            ),
+    tags=("verification",),
+)
+def _verify_read_proof(_need_store, _agent_v, statement_id):
+    """verify.read_proof 的工具体（注入值由装配期用 `partial` 绑定）。"""
+    return (
+    _need_store("verify.read_proof")
+               or ok(_agent_v().read_proof(statement_id=statement_id))
+    )
+
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 #: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
 _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
@@ -983,6 +1122,9 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_verify_run_experiment, ('_need_store', '_run_experiment_tool')),
     (_verify_evidence_for, ('_need_store', '_read_rows', 'store')),
     (_verify_list_experiments, ('_need_store', '_read_rows', 'store')),
+    (_verify_verify_proof, ('_need_store', '_agent_v')),
+    (_verify_list_verifications, ('_agent_v',)),
+    (_verify_read_proof, ('_need_store', '_agent_v')),
 )
 
 
@@ -1145,6 +1287,18 @@ def register(
                 kind="store_error",
             )
 
+    def _agent_v() -> Any:
+        """构造一个 AgentV（V 的三件工具都经由它落地）。
+
+        惰性导入的理由与 `_agent_for` 同族（避免 tools ↔ agent 的循环导入），
+        但还有一条 V 特有的：`agent_v` 的声明在 `specs/v.py`，而 `specs` 是
+        `capabilities` 的输入 —— 模块级导入会把"读一张声明表"拖成"import 全项目"。
+        模型缝取 `agent_v.default_llm()`（默认 None = 没接线 ⇒ 如实报 judge_not_wired）。
+        """
+        from ..agent_v import AgentV, default_llm
+
+        return AgentV(store, workspace_root=base, llm=default_llm())
+
     _bound: dict[str, Any] = {}
     _bound['_hash_of'] = _hash_of
     _bound['base'] = base
@@ -1152,6 +1306,7 @@ def register(
     _bound['_run_experiment_tool'] = _run_experiment_tool
     _bound['_read_rows'] = _read_rows
     _bound['store'] = store
+    _bound['_agent_v'] = _agent_v
     for _fn, _deps in _TOOL_FUNCTIONS:
         registry.register(replace(_fn.__tool_spec__,
                                   handler=partial(_fn, *[_bound[k] for k in _deps])))

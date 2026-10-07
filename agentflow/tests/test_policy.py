@@ -149,14 +149,16 @@ def test_allowed_edges_match_design_table():
     assert C.ALLOWED_EDGES["B"] == frozenset({"C"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D"})
-    assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E"})
+    assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E", "V"})
     assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
+    # `V`（验证者）只与 F 交互：出边只有 F（用户 2026-10-05 第七轮裁定）。
+    assert C.ALLOWED_EDGES["V"] == frozenset({"F"})
     assert C.ALLOWED_EDGES["M"] == frozenset(S.ROLES)
-    # 负控（这条改动最该守住的边界）：H 仍然是只读角色 —— 新加的两条边只让它
+    # 负控（这条改动最该守住的边界）：H 与 V 仍然是只读角色 —— 新加的两条边只让它
     # "请求"，权限面（工具层）没有跟着动。
     from agentflow.tools import READ_ONLY_ROLES as _RO
 
-    assert tuple(_RO) == ("C", "H"), _RO
+    assert tuple(_RO) == ("C", "H", "V"), _RO
 
 
 def test_unknown_edge_target_is_rejected():

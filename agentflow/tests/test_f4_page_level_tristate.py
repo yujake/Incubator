@@ -336,8 +336,7 @@ def test_a_status_length_mismatch_is_logged_instead_of_silently_inferred(caplog)
 def test_a_matching_status_length_is_not_warned_about(caplog) -> None:
     """正控（`R3-8` 别扩大化）：长度对得上时不许打那条 warning。
 
-    没有这一条，"一律 warning"也能让上面那条通过 —— 而噪音比不报更糟
-    （它会训练人忽略这一行）。
+    没有这一条，"一律 warning"也能让上面那条通过 —— 而噪音比不报更糟    （它会训练人忽略这一行）。
     """
     import logging
 
@@ -347,3 +346,79 @@ def test_a_matching_status_length_is_not_warned_about(caplog) -> None:
     assert d.failed_pages() == (2,)
     assert "R3-8" not in " ".join(r.getMessage() for r in caplog.records), \
         [r.getMessage() for r in caplog.records]
+
+
+# ============================================ `R-08`（B1 候选 C）：空窗口判"没法判"
+
+class _DuckRange:
+    """`PageRange` 的替身：能表示反向区间。
+
+    为什么要替身：`schema.PageRange.__post_init__` 显式拒绝 `start > end`
+    （`start(4) 不能大于 end(3)`）。所以"反向区间"只能从别的来源进来
+    （历史行、外部拼出来的范围对象、将来放宽校验的那一天）—— 而 `check_quote`
+    是那道桥：桥上的行为必须被钉住，不能假设上游永远不给反向区间。
+    """
+
+    def __init__(self, start: int | None, end: int | None) -> None:
+        self.start = start
+        self.end = end
+        self.label = ""
+
+    @property
+    def known(self) -> bool:
+        return self.start is not None and self.end is not None
+
+
+def test_an_empty_page_window_is_unjudgeable_not_not_found() -> None:
+    """`R-08` = B1 候选 C（`draft/52`）：空窗口（`start > end`）⇒ `None` + 新档。
+
+    改前必红（这是修正编码错误行为，`draft/52` 逐字要求同批写明）：
+    旧实现让 `scan` 因 `lo > hi` 返回 `None`，随后 `widen` 把窗口撑到 3-4 页，
+    若那句话在那几页上就返回 `True/…outside_declared_range`（"页码错了"）——
+    于是"声明的区间是空的"这个编码错误变成了一句"引文可靠"（`True`）；
+    什么都不命中时又落 `False/not_found`（"这句话不在"），同样不是这句话能有的结论。
+
+    新行为：`None` + `reason="empty_page_range"`（"没法判"）。
+    """
+    d = _doc(["第一页上有一句话", "第二页上有另一句话", "第三页上还有一句"],
+             ("ok", "ok", "ok"))
+    # 那句话真的在第 2 页上：旧实现会经由 widen 判 `True`（最贵的假绿方向）
+    out = check_quote(d, "第二页上有另一句话", _DuckRange(4, 3), widen=1)
+    assert out.verified is None, out
+    assert out.reason == "empty_page_range", out
+    assert out.window == "", out
+    assert out.tried == ("empty:4-3",), out
+    # 命不中也一样：空区间里"没找到"没有信息量，不许判 `not_found`
+    out2 = check_quote(d, "这句话哪一页都没有", _DuckRange(4, 3), widen=1)
+    assert out2.verified is None and out2.reason == "empty_page_range", out2
+
+
+def test_page_unknown_still_takes_its_own_branch() -> None:
+    """反真空（B1 的守卫）：页码未知（`start=end=None`）走的是 `not_found_page_unknown`。
+
+    没有 `pr.known` 守卫时，新分支会把它一起吃掉 —— 而"页码未知 ⇒ 全篇找过、没找到"
+    与"声明的窗口是空的"是两件完全不同的事（前者是合法结论，后者是没法判）。
+    """
+    d = _doc(["第一页上有一句话"], ("ok",))
+    out = check_quote(d, "这句话哪一页都没有", _DuckRange(None, None), widen=1)
+    assert out.verified is False and out.reason == "not_found_page_unknown", out
+
+
+def test_the_widened_label_never_shows_an_inverted_range() -> None:
+    """T（`R-08` 同批）：`widened:` 标签必须与真的扫过的窗口一致（不许反向）。
+
+    越界把窗口收窄到空集时，标签写 `widened:empty` —— 旧实现会写出
+    `widened:4-3` 这种反向区间，读的人会以为"从第 4 页往第 3 页扫过"。
+    """
+    d = _doc(["第一页上有一句话"], ("ok",))
+    out = check_quote(d, "这句话哪一页都没有", _DuckRange(2, 2), widen=0)
+    assert out.reason == "not_found", out
+    assert out.tried == ("declared:2-2",), out
+    out2 = check_quote(d, "这句话哪一页都没有", _DuckRange(4, 4), widen=2)
+    assert out2.verified is False and out2.reason == "not_found", out2
+    for t in out2.tried:
+        span = t.split(":", 1)[1]
+        if span == "empty":
+            continue
+        lo, _, hi = span.partition("-")
+        assert int(lo) <= int(hi), (t, out2.tried)

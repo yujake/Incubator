@@ -1,12 +1,16 @@
 # 角色规格（草案）—— V（验证者）
 
-> 这份草案按 `docs/ROLE-SPECS-DRAFT-N-O-Q.md` 的**草案通道**写：V 先在这里有一份可单独检查的
-> 规格（`python tools/verify_role_specs.py --roles V --doc docs/ROLE-SPECS-DRAFT-V.md`），
-> **不动默认角色集**（`test_default_role_set_is_unchanged_and_blind_to_n_o_q` 是冻结面）。
-> 依据：`draft/39` §3.21（用户 2026-10-05 定案"新增角色 V"）与 §6 批④。
-> 落地状态：**证明级验证的机制已落**（`src/agentflow/verifications.py`：冷启动提示词、
-> 三态结论、追加式台账、签第 3 位）；**进默认角色集（`specs/v.py` + 边 + 工具面注册）尚未做**，
-> 排在批⑤（F 真的会用它的那一轮）—— 那一步要动 FC-27 的三个面，按 §3.21 五的成本清单来。
+> **落地状态（2026-10-06）：V 已经进默认角色集** —— `schema.ROLES == ("A","B","C","D","E","F","G","H","V")`
+> （9 个可召唤角色 + 主控 M = **10 个角色**）、边 29 → **32**（新增 `M→V`、`F→V`、`V→F`）、
+> 动作 55 → **58**、工具 78 → **81**（`verify.verify_proof` / `verify.list_verifications` /
+> `verify.read_proof` 加进已有的 `tools/verify_tools.py`）、只读角色 C/H → **C/H/V**。
+> **因此角色的判据在 `docs/ROLE-SPECS.md` §V**（`python tools/verify_role_specs.py` 的默认角色集
+> 已经含 V，报 `10 个角色节（A B C D E F G H V M）`）；本文件只剩**过程留痕**，
+> 下面几节按落地后的实测数字同步过一遍。
+> 依据：`draft/39` §3.21（用户 2026-10-05 定案"新增角色 V"）与 §6 批④/批⑤；
+> 声明真身 `src/agentflow/specs/v.py`，实现 `src/agentflow/agent_v/`，读写在 `src/agentflow/verifications.py`。
+> 单独检查本文件：`python tools/verify_role_specs.py --roles V --doc docs/ROLE-SPECS-DRAFT-V.md`
+> —— 这一跑会同时与现场装配对账（V 的工具条数必须是 **14**）。
 
 ## V —— 验证者（Verifier）
 
@@ -27,46 +31,59 @@
 - 不写、不改证明（那是 F）；
 - 不判"这条命题值不值得做、下一步往哪儿走"（那是 D）；
 - 不做稿件级正式审查（那是 H）；
-- 不碰数据面（只读），只写自己的验证台账。
+- 不碰数据面（只读），只写自己的验证台账（一个**文件**，不是表）。
 
-### V.4 工具面（设计 3 个，**尚未注册** ⇒ 现场实测 0 个）
+### V.4 工具面（14 个，实测）
+
+`side_effect` 分布：`{'read': 14}` —— 0 个写工具、0 个需审批。**V 是只读角色**
+（`tools.READ_ONLY_ROLES == ("C","H","V")`）。
 
 | 工具 | 类型 | 作用 |
 |---|---|---|
-| `verify_proof` | write_local | 读证明全文 + 只读读数 ⇒ 三态结论 + findings（每条指到步号），写 `verifications/<命题号>.jsonl` |
-| `list_verifications` | read | 列验证台账（可按命题过滤） |
-| `read_proof` | read | 按命题号读回被审的那份证明全文 |
+| `verify.verify_proof` | `read` | 读证明全文 + 只读读数 ⇒ 三态结论 + findings（每条指到步号），写 `verifications/<4 位命题号>.jsonl` |
+| `verify.list_verifications` | `read` | 列验证台账（可按命题过滤） |
+| `verify.read_proof` | `read` | 按命题号读回被审的那份证明全文（+ sha256 + 最近一次结论） |
 
-当前实测：**0 个**（V 尚未进默认注册表 —— 这正是草案通道的意思：条数要等注册后由命令读出，
-本节不写一个查不出来的数字）。
+现场实测的 14 个：上面 3 件 + `fs.list` `fs.read` `fs.search` `fs.stat` +
+`table.count` `table.get` `table.list` `table.schema` `table.search` +
+`manuscripts.read` `manuscripts.list`（后 11 件是"每个角色都有的那几件"，
+装配器把实时角色表注入了它们）。
 
 ### V.5 状态机
 
-`收到提交 → 冷启动读整篇 → 出 findings → 给结论 → 落台账（v-NNNN）→ 交回 F`；
+`收到提交 → 冷启动读整篇 → 出 findings → 给结论（成立 / 有毛病 / 看不出来）→
+落台账一行（`v-NNNN`）→ [成立且无未解决 error ⇒ 签第 3 位] → 交回 F`；
 "有毛病"时回到 `收到提交`（同一份或改过的版本，新的一行，不覆盖）。
 
 ### V.6 预算与终止条件
 
-一轮评审只花一次模型调用（整篇一次读）；超预算 ⇒ 如实报"没查成"，**不许**降级成"看不出来"
+一轮评审只花一次模型调用（整篇一次读，I17）；超预算 / 没接线 ⇒ 如实报"没查成"
+（`checked=False` + `reason="judge_not_wired"`），**不许**降级成"看不出来"
 （那是两个不同的东西）。
 
 ### V.7 三态与失败模式
 
 - `成立` / `有毛病` / `看不出来` 是**对证明的结论**；
-- 输出不合法 / 字段缺 / 取值不在词表 ⇒ **没查成**（`VerificationError`），不写台账行；
-- `有毛病` 必须给 `defect_step`（指不到步 = 让作者猜）。
+- 输出不合法 / 字段缺 / 取值不在词表 ⇒ **没查成**（`VerificationError`，工具回报
+  `reason="unparsable"`），不写台账行；
+- `有毛病` 必须给 `defect_step`（指不到步 = 让作者猜）；
+- 没有证明全文 ⇒ `reason="no_proof_text"`；命题号不是 4 位十进制 ⇒ `reason="bad_statement_id"`。
 
 ### V.8 不变式
 
-1. 台账只追加、编号由脚本发（`v-0001…`）；
+1. 台账只追加、编号由脚本发（`v-0001…`）；文件是 `verifications/<4 位命题号>.jsonl`；
 2. 第 3 位只在 `成立` 且无 error 时被签；
-3. 冷启动：提示词里没有 F 的叙述、没有 store 句柄（由函数签名保证）。
+3. 冷启动：提示词里没有 F 的叙述、没有 store 句柄（由函数签名保证）；
+4. **V 不写任何表**：`capabilities.WRITE_SETS["V"] == frozenset()`，`schema.TABLES` 17 张不变；
+5. 边：`ALLOWED_EDGES["V"] == {"F"}`；V 只能被 M 召唤。
 
 ### V.9 接口
 
-- 输入：`statement_full`（含完整假设）、`proof_text`、`readonly_facts`（已渲染的只读读数）；
+- 输入：`statement_id`（4 位）+ `proof_text`（不给时从 `statements` 取）+ `readonly_facts`
+  （已渲染的只读读数，是**字符串**而不是 store 句柄）；
 - 输出：一行台账 + `bit3_payload()`（五元位第 3 位那份读数）。
 
 ### V.10 自检入口
 
-`python -m agentflow.verifications`（`selftest()`：冷启动提示词、三态、签位条件、追加式编号）。
+`python -m agentflow.agent_v`（`selftest()`：冷启动提示词、三态、签位条件、追加式编号、`limit=0`；
+实测 16 条 `[PASS]`、退出码 0）。

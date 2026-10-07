@@ -59,7 +59,7 @@ REQUIRED: dict[str, tuple[str, ...]] = {
 #: 本脚本是文档结构的门，它应当在包 import 不进来时也能跑（那正是最需要它的时候）。
 #: 合并进来的字母按给定顺序逐个占一个字符类，`A,H,M` 于是得到 `[AHM]` ——
 #: 与原判据逐字相同。
-EXPECTED_ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "M")
+EXPECTED_ROLES = ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M")
 
 #: `--roles` 的默认值（`None` = 用 `EXPECTED_ROLES`）。
 #: 默认行为一字不变：`^##\s+([A-HMm])…` 只认 A–H + M，正是本门登记时的判据。

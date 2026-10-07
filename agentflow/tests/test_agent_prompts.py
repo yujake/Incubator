@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 
+from agentflow import agent_loop as AL
 from agentflow import agent_prompts as AP
 from agentflow import capabilities as C
 from agentflow import judge as J
@@ -37,7 +38,7 @@ TASK = "把这条链路走一遍"
 ROOT = "D:/x"
 
 #: 伙伴条目：以角色字母开头、后接全角冒号的行。
-_PARTNER_BULLET = re.compile(r"^- ([A-HM])：")
+_PARTNER_BULLET = re.compile(r"^- ([A-HMV])：")
 #: 参数提示里"必填"那一栏（到分号或右括号为止）。
 _REQUIRED_GROUP = re.compile(r"必填 ([^；）]*)")
 
@@ -191,6 +192,15 @@ def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind()
     ⇒ 整张表判没查成、`can_close=false`（七格里唯一红的那格其实是 `anchor`，而
     `acceptance` 连读数都没留下）。词表不在 brief 里时，写表就是猜；猜错一个名字废掉的是
     整张表，不是那一行 —— 所以这一条按"词表里每一档都要在 brief 里出现"来守。
+
+    ## CC-09（list 半，2026-10-06）：从"名字出现过"升级为"清单 == 词表"
+
+    旧的判据只查"每一档的名字在 brief 里出现过"——它看不穿两件事：① 那一串平铺清单
+    漏了某一档（而那一档恰好在别处被提到 ⇒ 名字查得到 ⇒ 判据照样绿）；
+    ② 清单里混进了词表外的名字（提示词教人照清单挑 ⇒ 挑出一个框架不认识的档）。
+    实测：清单 30 项而词表 31 档（漏 `c_analysis_runs`）。
+    现在这一条把那份清单解析出来，与词表双向对拍（漏一档、多一档都红），
+    并带两条反真空（清单解析不出 20 项以上 ⇒ 红；清单里有重复项 ⇒ 红）。
     """
     from agentflow import agent_prompts as AP
     from agentflow import closing as CL
@@ -199,6 +209,18 @@ def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind()
     text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
     missing = [k for k in CL.LEG_CHECK_KINDS if k not in text]
     assert not missing, f"这些受控档没进写表那个角色的 brief：{missing}"
+
+    item = next((i for i in brief.policy if "受控档位逐字列在这里" in i), "")
+    assert item, "找不到那份「受控档位逐字列在这里」的清单（判据不许因为找不到就通过）"
+    seg = item.partition("逐字列在这里")[2].split("。")[0].replace("`", "")
+    seg = seg.rsplit("：", 1)[-1]          # 去掉列表前那段括注
+    listed = [p.strip() for p in seg.split("/") if p.strip()]
+    assert len(listed) >= 20, f"清单只解析出 {len(listed)} 项 ⇒ 解析口径变了，先修判据：{listed}"
+    assert len(set(listed)) == len(listed), f"清单里有重复项：{listed}"
+    assert not sorted(set(CL.LEG_CHECK_KINDS) - set(listed)), (
+        f"清单漏了这些受控档：{sorted(set(CL.LEG_CHECK_KINDS) - set(listed))}")
+    assert not sorted(set(listed) - set(CL.LEG_CHECK_KINDS)), (
+        f"清单里混进了词表外的名字（写表的人会照着它挑）：{sorted(set(listed) - set(CL.LEG_CHECK_KINDS))}")
 
 
 def test_the_research_brief_sends_conjectures_to_the_attack_role():
@@ -527,6 +549,10 @@ def test_availability_section_lists_states_and_marks_unwired_partners(registry: 
         "F": "wired",
         "G": "wired",
         "H": "wired",
+        # V（F-02 起）：`host.wiring_status` 是按 `schema.ROLES` 逐角色给的，
+        # 所以这份夹具也必须含 V —— 少了它，F 的伙伴条目（`F → V` 那条边）
+        # 会在这里 KeyError，而那不是"V 没接线"，是夹具没跟上角色表。
+        "V": "wired",
     }
     for role in ALL_ROLES:
         text = _prompt(role, registry, availability=availability)
@@ -823,3 +849,231 @@ def test_the_file_the_closing_gate_judges_is_named_in_the_prompt_that_writes_it(
     others = [r for r, b in AP.ROLE_BRIEFS.items()
               if r != "M" and name in "\n".join([b.duty, b.deliverable, *b.policy])]
     assert others == [], f"这份文件只该在主控的brief里点名，却出现在：{others}"
+
+
+# ---------------------------------------------------------------- L-05e：notify 的义务广告
+
+
+#: L-05e 退场的那几句（代码侧先接住：收工侧不再打回、`no_notify` 不可达；
+#: 派活侧形状不对就退回框架派生那一份、派活照常发生）。留着它们就是
+#: "提示词在要求一件代码已经不要求的事"—— 模型会为一道不存在的闸门耗步数。
+FORCED_NOTIFY_ADVERTISEMENT = ("no_notify", "打回重填", "强制留痕", "强制项", "框架不代填")
+
+
+def test_the_forced_notify_advertisement_is_gone_from_the_prompt():
+    """L-05e 的提示词半（`45 §2`：代码先接住、提示词后撤）：广告退场，只留事实口径。
+
+    撤的是"强制 / 打回 / 会因此停"那层义务广告；留的是与代码一致的事实：
+    填了且形状对 ⇒ 由这一趟的秘书执笔写成一行手稿并发给 `to`；
+    没填或填错 ⇒ 不打回、照常收工，只是没有手稿，理由如实进读数（`notify_problem`）。
+
+    反负控：把旧话术喂进同一个判据必须被认出来 —— 否则"没命中"与"判据坏了"分不开。
+    """
+    brief = AP.ROLE_BRIEFS["M"]
+    prompt_side = "\n".join([AP.LOOP_PROTOCOL, brief.duty, *brief.boundary,
+                             *brief.policy, *brief.stance])
+    for word in FORCED_NOTIFY_ADVERTISEMENT:
+        assert word not in prompt_side, f"L-05e 之后这句义务广告还在：{word!r}"
+    # 事实口径留下（与 `agent_loop._do_handoff` / `_notify_gate` 的现状一致）
+    assert "秘书执笔" in AP.LOOP_PROTOCOL, AP.LOOP_PROTOCOL
+    assert "不打回" in AP.LOOP_PROTOCOL, AP.LOOP_PROTOCOL
+    assert "notify_problem" in AP.LOOP_PROTOCOL, AP.LOOP_PROTOCOL
+    # 反负控：同一组词喂旧话术 ⇒ 必须逐个认出来
+    old = ("主控（M）派活时**强制留痕**：带了 `notify` 但填错字段会被**打回重填**；"
+           "收工不带 `notify` 的趟会以 `no_notify` 收场（`notify` 是**强制项**，"
+           "**框架不代填**）。")
+    assert [w for w in FORCED_NOTIFY_ADVERTISEMENT if w in old] == \
+        ["no_notify", "打回重填", "强制留痕", "强制项", "框架不代填"], old
+    # 代码侧的读数确实存在（提示词撤了，读数还在 —— 撤的是广告不是留痕）。
+    # 代码侧"`no_notify` 已退场"的判据在 A 线的 `tests/test_forced_notify.py`（那里按源码行扫，
+    # 不算注释）；本题只在提示词这一侧钉"广告已退场"，不重复钉代码侧。
+    import inspect
+
+    from agentflow import agent_loop as AL
+
+    assert "notify_problem" in inspect.getsource(AL), "读数没接上：广告撤了、留痕也没了"
+
+
+# ------------------------------------------------- 循环协议的形状表（必须与 agent_loop.SHAPES 同源）
+#
+# 这一组守的是一条量出来的缺陷：形状表的正典（`LOOP_PROTOCOL`）写"七种形状"、逐字列了 7 个，
+# 而 `agent_loop.SHAPES` 是 8 个 —— 漏掉的正是 `handoff`。它不是"文字不齐"：
+# `handoff` 是手稿落行的唯一形状入口（`_do_handoff`），而"没人写手稿"正是量过的形态
+# （真机 1542 行里 967 行是框架派生、模型自写 0 行）。
+#
+# 为什么此前不会红：`test_prompts_are_anti_vacuous` 只按 `"tool"`/`"summon"`/`"message"`/`"final"`
+# 四个带引号的键名在整份提示词里出现过，既不覆盖 `handoff`，也不看形状表那一段，
+# 更不核数目 —— 于是"正典少一种形状"这件事在任何测试里都没有读数。
+# 所以判据钉在两处现算上：名字逐个取自 `AL.SHAPES`，数目由 `len(AL.SHAPES)` 推出来。
+
+#: 形状表那一段的锚点：起句取「每次只取其一」再往前退到行首（必须把「N种形状」那句整个包进来，
+#: 否则数目对拍读不到东西 —— 那是"没查成"，不许当成"查过了没问题"）；
+#: 收束句是「规则：」。两个锚点读不到就抛，不返回空串。
+_SHAPE_TABLE_ANCHOR = "每次只取其一"
+_SHAPE_TABLE_END = "\n规则："
+
+#: 中文数词（`len(SHAPES)` → 文本里该出现的那个字）。
+_CN_NUM = {1: "一", 2: "两", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九", 10: "十"}
+
+
+def _shape_table() -> str:
+    """切出 `LOOP_PROTOCOL` 里的形状表那一段（含表头那一行）。锚点读不到就断言失败。"""
+    text = AP.LOOP_PROTOCOL
+    anchor = text.find(_SHAPE_TABLE_ANCHOR)
+    assert anchor >= 0, f"形状表的起句读不到（`{_SHAPE_TABLE_ANCHOR}`）"
+    start = text.rfind("\n", 0, anchor) + 1
+    end = text.find(_SHAPE_TABLE_END, anchor)
+    assert end > start, f"形状表的收束句读不到（`{_SHAPE_TABLE_END}`）"
+    return text[start:end]
+
+
+def _shape_names_in(text: str) -> list[str]:
+    """文本里逐字出现的形状名。带左右边界：`summon_many` 不许把 `summon` 冒充出来。"""
+    return [n for n in AL.SHAPES
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(n)}(?![A-Za-z0-9_])", text)]
+
+
+def test_loop_protocol_shape_table_lists_every_shape_the_loop_accepts():
+    """形状表里八个形状名一个不缺，且数目与 `agent_loop.SHAPES` 现算一致。
+
+    若这条破了：正典表少列一种形状，模型可能永远不写它，而框架照旧全绿 ——
+    这一次少的是 `handoff`（手稿落行的唯一形状入口）。
+    """
+    seg = _shape_table()
+    assert len(AL.SHAPES) == 8, (
+        f"形状表本身被动过了（`agent_loop.SHAPES` 现在有 {len(AL.SHAPES)} 个）⇒ "
+        "先把这条判据与提示词一起过一遍，别让下面的数目对拍变成对着旧数目对")
+    missing = [n for n in AL.SHAPES if n not in _shape_names_in(seg)]
+    assert not missing, (
+        f"循环协议的形状表里少了 {missing}（`agent_loop.SHAPES`={tuple(AL.SHAPES)}）—— "
+        "形状表是模型看到的正典，少一种就等于那种形状在协议里不存在")
+    want = _CN_NUM[len(AL.SHAPES)]
+    counts = set(re.findall(r"([一二三四五六七八九十])种形状", seg))
+    assert counts == {want}, (
+        f"形状表里的数目是 {sorted(counts) or '（读不到中文数目）'}，而 `agent_loop.SHAPES` "
+        f"有 {len(AL.SHAPES)} 个 ⇒ 应当写「{want}种形状」")
+
+
+def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistry):
+    """那段形状表要真的进到每个角色的提示词里（常量里写对、却没接进提示词＝没改）。
+
+    负控在下面那条：把"少一种形状"的那种旧表喂进同一个读法，必须被认出来。
+    """
+    seg = _shape_table()
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        assert seg in text, f"{role} 的提示词里没有形状表那一段"
+        missing = [n for n in AL.SHAPES if not re.search(rf'"{re.escape(n)}"', text)]
+        assert not missing, f"{role} 的提示词里没有形状 {missing}"
+    # 反负控：缺 `handoff`、且写着"七种"的那一版必须被同一组读法判红。
+    # 这一段逐字另写（不从当前文本拼）—— 从当前文本拼出来的"旧版"会随修好一起变好，
+    # 于是判据坏掉也照样绿（反负控的全部价值就在于它与被测文本无关）。
+    old_seg = ("七种形状，互斥，每次只取其一：\n"
+               '1) {"tool": "<工具名>", "args": {}}\n'
+               '2) {"summon": {"role": "A-H", "action": "<动作名>"}}\n'
+               '2b) {"summon_many": {"targets": []}}\n'
+               '3) {"message": {"to": "#public", "subject": "x", "body": "y"}}\n'
+               '4) {"note": "一句话"}\n'
+               '5) {"ask_user": {"question": "?"}}\n'
+               '6) {"final": "<结论>", "evidence": []}')
+    assert _shape_names_in(old_seg) == [n for n in AL.SHAPES if n != "handoff"], \
+        f"反负控失效：旧表被读成 {_shape_names_in(old_seg)}"
+    assert set(re.findall(r"([一二三四五六七八九十])种形状", old_seg)) != {_CN_NUM[len(AL.SHAPES)]}, \
+        "反负控失效：写着「七种」的旧表居然通过了数目对拍"
+
+
+#: 在提到 `handoff` 的行里教给模型的收件人字面量：`to=…` 与 `"to": "…"` 两种写法。
+_TAUGHT_TO_LITERAL = re.compile(r'to\s*=\s*"?([A-Za-z#][A-Za-z#]*)"?|"to"\s*:\s*"([A-Za-z#]+)"')
+
+
+def _taught_handoff_targets(text: str) -> list[tuple[str, str]]:
+    """取「同时提到 `handoff` 的行」里教给模型的 `to` 字面量，返回 `[(字面量, 出处行)]`。
+
+    只跟 `handoff` 的行：`notify` 那一栏的 `to` 确实收 `ALL`（`_notify_gate` 认），
+    拿它一起判会把一处正确的写法判红 —— 两处的受控词表本来就不同。
+    """
+    out: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        if "handoff" not in line:
+            continue
+        for m in _TAUGHT_TO_LITERAL.finditer(line):
+            out.append((m.group(1) or m.group(2), line.strip()))
+    return out
+
+
+def test_prompt_never_teaches_a_handoff_target_the_decoder_rejects(registry: ToolRegistry):
+    """提到 `handoff` 的地方教给模型的 `to` 字面量，解码器必须真的收。
+
+    若这条破了：模型照提示词写 `to=ALL`，而 `_decode_shape` 只认 `#public` ——
+    手稿写不出来，回给模型的拒信自己也在教 `ALL`（那半边在 A 线的 `agent_loop.py`，已报主控）。
+    这正是"提示词教了一个框架不收的字面量"这一形态：改前 `HANDOFF_PROTOCOL` 与 M 的政策
+    各教了一遍 `to="ALL"`，而没有任何读数会因此变红。
+    """
+    for role in ALL_ROLES:
+        for lit, line in _taught_handoff_targets(_prompt(role, registry)):
+            _, _, problem = AL._decode_shape(
+                {"handoff": {"to": lit, "summary": "s", "body": "b"}})
+            assert not problem, (
+                f"{role} 的提示词教了 `handoff` 的 `to={lit}`，而解码器判它非法：{problem}\n"
+                f"出处：{line}")
+    # 反负控：改前那两句逐字喂进同一个读法，必须被认出来（与当前文本无关）。
+    old = ('**交接工作前先写一份手稿**（`handoff` 形状）：给一个人写 `to=A–H`、'
+           '给所有人写 `to=ALL`；编号由脚本分配（从 0000 起，你不编号）')
+    assert "ALL" in [lit for lit, _ in _taught_handoff_targets(old)], \
+        f"反负控失效：旧句里的 `to=ALL` 没被读出来（读到 {_taught_handoff_targets(old)}）"
+    # 判据的前提变了（这条反负控本来就是为"前提变了"设的，实测它响了）：
+    # 主控裁 (a)「教什么就得收什么」⇒ A 线把 `handoff` 的 `to` 与 `message`/`notify` 对齐，
+    # `ALL` 与 `#public` 现在都收。所以"这条判据还能红"不再能用 `ALL` 来证明 ——
+    # 改用一个仍然被拒的字面量（`Z`）来证明判据本身没坏。
+    # 权威判据在 A 线那一侧（`_decode_shape` 接受 `ALL`、仍拒 `Z`）；这里钉的是
+    # "提示词教的字面量必须被解码器收下"所依赖的那两个端点，前提一破就先在这里响。
+    assert AL._decode_shape({"handoff": {"to": "Z", "summary": "s", "body": "b"}})[2], \
+        "反负控失效：解码器居然收了 `to=Z` —— 那这条判据抓不住任何东西了"
+    assert not AL._decode_shape({"handoff": {"to": "ALL", "summary": "s", "body": "b"}})[2], \
+        "A 线裁定 (a) 的对齐没生效：`handoff` 的 `to` 应当与 message/notify 一样收 `ALL`"
+
+
+# ------------------------------------------------- 只读角色必须说出"我不许写"
+#
+# 这一组守的是一处真实发生过的删改事故（批④ 的提示词减负里）：C 与 H 的
+# 「你是只读角色：不许写/改任何数据…」整句被当成冗余删掉了。
+# 为什么没有任何读数变红：H 的 `duty` 里写着「审校（只读）」，于是
+# "提示词里出现过『只读』"这种松判据照样满足 —— 而"H 不许写数据、不许改稿"这件事
+# 在提示词里已经没有了。换句话说：判据松一格，删掉的正好是那一格。
+# 所以这里必须要求「只读 与 一个禁令词」同时出现在同一句里（标签不算数）。
+
+#: 禁令词：中文里"你不许做某事"的那几种写法。
+_PROHIBITION = ("不许", "不得", "不能", "不准", "不写", "不改", "不碰")
+
+
+def _readonly_prohibition(brief: Any) -> list[str]:
+    """这份 brief 里"你是只读角色 + 一句禁令"的那些格子（空列表 = 没说清）。"""
+    cells = (brief.duty, *brief.boundary, *brief.policy, *brief.stance)
+    return [str(s) for s in cells
+            if "只读" in str(s) and any(w in str(s) for w in _PROHIBITION)]
+
+
+def test_every_read_only_role_says_it_must_not_write():
+    """`tools.READ_ONLY_ROLES` 里的每个角色的提示词都要有一句"只读 + 禁令"。
+
+    事实真身是 `tools.READ_ONLY_ROLES`（只读面由它在结构上保证）——
+    所以判据从它现算：新加一个只读角色，它的提示词必须跟着说清"你不许写"。
+    若这条破了：只读角色读到的提示词里没有那句禁令，而"只读"这个标签还在
+    （`duty` 里的括号），于是人以为说了、机器以为查了。
+    """
+    from agentflow.tools import READ_ONLY_ROLES
+
+    assert set(READ_ONLY_ROLES) <= set(S.ROLES), \
+        f"READ_ONLY_ROLES={READ_ONLY_ROLES} 里有不在 S.ROLES 里的角色"
+    for role in READ_ONLY_ROLES:
+        assert _readonly_prohibition(AP.ROLE_BRIEFS[role]), (
+            f"{role} 是只读角色，而它的提示词里没有一句「只读 + 禁令」"
+            f"（只有『只读』这个标签不算：批④ 删掉 C/H 那句禁令时，"
+            f"duty 里的『审校（只读）』让所有松判据照样绿）")
+    # 反负控：把 H 那句禁令删掉（就是实际发生过的删法）⇒ 同一读法必须判红。
+    h = AP.ROLE_BRIEFS["H"]
+    broken = replace(h, boundary=tuple(s for s in h.boundary if "只读角色" not in s))
+    assert not _readonly_prohibition(broken), (
+        f"反负控失效：删掉 H 的禁令之后判据还是绿的（读到 {_readonly_prohibition(broken)}）"
+        "—— 那这条判据抓不住它本该抓的那种删改")
+    assert _readonly_prohibition(h), "正控失效：H 的禁令现在读不出来"

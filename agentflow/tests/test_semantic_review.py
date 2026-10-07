@@ -206,3 +206,107 @@ def test_acceptance_reports_the_backing_document_rows(store: Store, tmp_path: pa
     assert data["row_count"] == 1, data
     assert [d["doc_id"] for d in data["documents"]] == ["0000"], data["documents"]
     assert data["documents"][0]["claims"] == 1, data["documents"]
+
+
+# ============================================================ R-04：复审那一半（`draft/44` / D 族）
+
+def test_the_tool_layer_passes_the_judge_through_verify_fixes(
+        store: Store, tmp_path: pathlib.Path):
+    """R-04-a：`review.verify_fixes` 也要拿到语义判据（此前那一格恒 0）。
+
+    改前必红：`_review_verify_fixes_tool` 的注入元组只有三名
+    (`_not_wired`,`store`,`actor`)，`verify_fixes` 的复扫走
+    `scan_document(doc, dependencies=deps)` —— 不带判据 ⇒ 上一轮由语义判据
+    产生的 `overclaim` 在这一轮结构上不可能复现 ⇒ 必然落进 `resolved` ⇒ 写成
+    `status="fixed"`（真机 `p8d` 的 claim-3/claim-4 就是这样被"修好"的）。
+
+    `semantic_judge` 不进模型参数表（`@tool` 的 properties /
+    `additionalProperties: False` 一个字不改）：它只由装配期 `partial` 绑定。
+    """
+    doc_id = _doc(store, [_claim("C1", "数值上与公式一致")])
+    reg = ToolRegistry(name="h-writers")
+    reg.bound_role = "H"
+    RV.register(reg, store=store, include_writers=True, actor="agent-H",
+                semantic_judge=JG.semantic_judge_for(_seam(tmp_path / "ws", _Model())))
+    res = reg.call("review.verify_fixes", doc_id=doc_id, round_no=2)
+    assert res.ok, (res.error, res.meta)
+    assert res.data["semantic_check"]["claims_judged"] == 1, res.data["semantic_check"]
+    # 工具参数表里仍然没有 semantic_judge（装配期注入，不进模型面）
+    import inspect
+
+    params = inspect.signature(RV._review_verify_fixes_tool).parameters
+    assert "semantic_judge" in params, list(params)
+    assert params["semantic_judge"].default is None, params["semantic_judge"]
+
+
+def test_verify_fixes_does_not_call_a_semantic_finding_fixed_without_rerunning_it(
+        store: Store, tmp_path: pathlib.Path):
+    """R-04-b（三态兜底）：没重跑语义判据 ⇒ 语义那一支留在 open，verdict 不是 accepted。
+
+    改前必红：不接判据时 `resolved` 里那些语义发现被无条件写成 `fixed`
+    —— "没查"被读成"修好了"，而那正是最贵的方向。
+    """
+    doc_id = _doc(store, [_claim("C1", "我们证明了该结论")])
+    judge = JG.semantic_judge_for(_seam(tmp_path / "ws", _Model("overclaimed", "把交叉验证说成证明")))
+    first = RV.review_document(store, doc_id, semantic_judge=judge)
+    assert first["coverage"]["claims_semantically_judged"] == 1, first["coverage"]
+    rows = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
+    sem = [r for r in rows if str(r.get("kind")) == "overclaim"
+           and str(r.get("evidence") or "").startswith("语义判据（")]
+    assert sem, [(r.get("kind"), str(r.get("evidence"))[:40]) for r in rows]
+    # 把它们标成 fixed（模拟"上一轮自述修好了"）
+    for r in sem:
+        RV._apply_finding_status(store, [{"finding_id": r["finding_id"], "status": "fixed",
+                                          "resolution_note": "自述"}], actor="agent-H",
+                                 note="test")
+
+    # 这一轮不接判据复审（"没查"那一档）
+    got = RV.verify_fixes(store, doc_id, round_no=2)
+    assert got["verdict"] != "accepted", got
+    assert got["not_rechecked"], got
+    item = got["not_rechecked"][0]
+    assert item["source"] == "not_rechecked", item
+    assert "未重跑语义判据" in item["note"], item
+    assert "未重跑判据" in got["reason"] or "没查" in got["reason"], got["reason"]
+    now = [dict(r) for r in store.rows("review_findings")
+           if str(r.get("finding_id")) == sem[0]["finding_id"]]
+    assert now and str(now[0].get("status")) == "open", now
+
+    # 接上判据、且它不再报"强于证据" ⇒ 这时才允许落 fixed
+    clean = JG.semantic_judge_for(_seam(tmp_path / "ws", _Model("within_evidence")))
+    got2 = RV.verify_fixes(store, doc_id, round_no=3, semantic_judge=clean)
+    assert not got2["not_rechecked"], got2["not_rechecked"]
+    now2 = [dict(r) for r in store.rows("review_findings")
+            if str(r.get("finding_id")) == sem[0]["finding_id"]]
+    assert now2 and str(now2[0].get("status")) == "fixed", now2
+
+
+def test_verify_fixes_still_marks_a_non_semantic_finding_fixed_when_fixed(
+        store: Store, tmp_path: pathlib.Path):
+    """反真空（R-04-b 不许扩大化）：机械那一支的发现照旧按现口径判 `fixed`。
+
+    没有这条，"语义那一支不许判 fixed"会退化成"什么都不敢判 fixed"。
+    """
+    doc_id = _doc(store, [{"claim_id": "C1", "text": "我们证明了该结论",
+                           "evidence_kind": "cross_check", "citations": ["lit:0001"],
+                           "section": "§1", "disclaimer": "数值交叉验证，不构成证明"}])
+    first = RV.review_document(store, doc_id)
+    rows = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
+    # 机械那一支（措辞级 `overclaim`）：`evidence` 不是"语义判据（…" 那种形态
+    mech = [r for r in rows if str(r.get("kind")) == "overclaim"
+            and not str(r.get("evidence") or "").startswith("语义判据（")]
+    assert mech, [(r.get("kind"), str(r.get("evidence"))[:40]) for r in rows]
+    for r in mech:
+        RV._apply_finding_status(store, [{"finding_id": r["finding_id"], "status": "fixed",
+                                          "resolution_note": "自述"}], actor="agent-H",
+                                 note="test")
+    # 把措辞改干净（机械判据不再复现）⇒ 应判 fixed（R-04-b 只针对语义那一支）
+    doc = dict([r for r in store.rows("documents")][0])
+    doc["claims"] = [_claim("C1", "数值上与公式一致")]
+    with store.tx("documents", actor="agent-H") as tx:
+        tx.upsert("documents", doc)
+    got = RV.verify_fixes(store, doc_id, round_no=2)
+    assert not got["not_rechecked"], got["not_rechecked"]
+    now = [dict(r) for r in store.rows("review_findings")
+           if str(r.get("finding_id")) == mech[0]["finding_id"]]
+    assert now and str(now[0].get("status")) == "fixed", now

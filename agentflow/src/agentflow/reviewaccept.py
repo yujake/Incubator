@@ -3,8 +3,8 @@
 
 ## 为什么需要它（而不是又一套"看起来完成了"）
 
-§17.3 对第三档验收写了两半：该验的五条（报告九节且每栏有读数 / 定理台账每条有完整假设
-与出处 / 三态分支正确且落盘可查 / 成本上限内 / 每跳提示词可读），以及
+§17.3 对第三档验收写了两半：该验的五条（定理台账每条有完整假设
+与出处 / 三态分支正确且落盘可查 / 成本上限内 / 每跳提示词可读 / 附件诚实），以及
 明确不许拿来当"通过"的读数：`sha 变了`、`页数对得上`、`锚 consistent` 单项、
 `任务数增加`、`台账行数增加`。
 
@@ -23,9 +23,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-#: 六条内容级判据（顺序即交付说明里的顺序）。
+#: 五条内容级判据（顺序即交付说明里的顺序）。
+#:
+#: R9（`draft/52` 裁决 1 = C''）：原先的第六条 `report_sections_have_readings`
+#: （"报告九节齐全且每节都有读数"）已废除 —— 那是 review 线的排版规格，
+#: 被当成通用判据用。报告体例由 M 裁定，核对只核对"M 声明的体例有没有兑现"
+#: （落在 `closing._check_report_shape` 的 `REPORT-STYLE.json` 那一支）。
+#: 附件三件套（来源 / 依据 / 版本 sha）保留判实，由 `attachment_is_honest` 这一条承担。
 CRITERIA: tuple[tuple[str, str], ...] = (
-    ("report_sections_have_readings", "报告九节齐全，且**每节都有读数**（数字或台账引用）"),
     ("statements_have_assumptions_and_source", "定理台账每条都有完整假设与出处（含页码）"),
     ("triage_branch_recorded", "三态分支正确：该问用户的真问了，且问题落盘可查"),
     ("within_cost_cap", "在成本上限内完成"),
@@ -51,8 +56,12 @@ AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
     ("ledger_rows", "台账行数增加"),
 )
 
-_SECTION_RE = re.compile(r"^#{2,3}\s*([一二三四五六七八九])、(.+)$", re.M)
-_LEDGER_REF_RE = re.compile(r"[a-z_]+:\d{4}|#\w[\w-]*|\bstmt\b|台账|页")
+#: R9（`draft/52` 裁决 1 = C''）之后，本模块不再判报告形状：
+#: 旧的两条实现（节标题正则、"九节齐全且每节有读数"那条判据，以及只被后者用到的
+#: "什么算读数"正则）随 R9 一起删掉了 —— 名字刻意不再写在这里：它们已经不存在，
+#: 把删掉的符号名当引用写进注释，读的人按图索骥只会扑空（引用判据 `R5-AN-10` 的口径）。
+#: 报告体例归 M，核对只核对"M 声明的体例有没有兑现" —— 那一支在
+#: `closing._check_report_shape`（读 `REPORT-STYLE.json`）。
 
 
 @dataclass
@@ -95,45 +104,6 @@ class ReviewAcceptance:
 
 
 # ------------------------------------------------------------------ 各条判据
-
-def _c_report(acc: ReviewAcceptance, report_path: str, store: Any) -> None:
-    """① 报告九节齐全，且每节都有读数（不是空标题）。"""
-    if not str(report_path or "").strip():
-        acc.criteria["report_sections_have_readings"] = "unknown"
-        acc.details["report_sections_have_readings"] = "没给报告路径 ⇒ 没查成（不是通过）"
-        return
-    from .closing import resolve_under_workspace
-
-    path = Path(resolve_under_workspace(store, report_path))
-    if not path.is_file():
-        acc.criteria["report_sections_have_readings"] = "unknown"
-        acc.details["report_sections_have_readings"] = f"报告不在盘上：{path} ⇒ 没查成"
-        return
-    text = path.read_text(encoding="utf-8")
-    sections = _SECTION_RE.findall(text)
-    empty: list[str] = []
-    for num, name in sections:
-        # 每一节的正文 = 该标题到下一个标题之间
-        start = text.find(f"{num}、")
-        nxt = min([p for p in (text.find(f"{n}、", start + 1) for n in "一二三四五六七八九")
-                   if p > start] or [len(text)])
-        body = text[start:nxt]
-        if not re.search(r"\d", body) and not _LEDGER_REF_RE.search(body):
-            empty.append(f"{num}、{name.strip()}")
-    acc.readings["report_sections"] = [f"{n}、{t.strip()}" for n, t in sections]
-    acc.readings["report_sections_without_readings"] = empty
-    if len(sections) < 9:
-        acc.criteria["report_sections_have_readings"] = "fail"
-        acc.details["report_sections_have_readings"] = (
-            f"报告只有 {len(sections)} 节（要 9 节）⇒ 形状就不齐")
-    elif empty:
-        acc.criteria["report_sections_have_readings"] = "fail"
-        acc.details["report_sections_have_readings"] = (
-            "这些节里没有任何读数（既没有数字也没有台账引用）：" + "、".join(empty)
-            + " —— 空标题不算交了这一节")
-    else:
-        acc.criteria["report_sections_have_readings"] = "pass"
-
 
 def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
     """② 定理台账每条都有完整假设与出处 —— 而"出处"按来源分档（§68 人裁的甲档）。
@@ -351,6 +321,33 @@ def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None, *,
         acc.criteria["within_cost_cap"] = "pass"
 
 
+def _hop_rows(store: Any) -> tuple[list[Any], int]:
+    """这一趟的委托（召唤）行；返回 `(召唤行, 被排除的顶趟行数)`。
+
+    ## 为什么必须排除顶趟行（A 线 F1 的"往前走半"之后，主控 2026-10-06 裁定）
+
+    现在每一趟顶层运行会在 `tasks` 里留一条顶趟行（`role=M`、`action="run"`、
+    `called_by="user"`、`depth=1`、`input_key="top:…"`）。它是用户发起的那一趟，
+    不是一次召唤 —— 而这一格（`hops_have_readable_prompts`）数的是委托：
+    把用户自己发起的那一趟算进去，"派了几跳 / 成了几跳"会凭空 +1。
+
+    口径取 `called_by != "user"`（而不是 `action != "run"`）：判据问的是
+    "这一行是不是被召唤出来的"，`called_by` 就是那个字段（`action` 只是
+    顶趟行当前的取值，将来换名字也不会让这条判据失效）。缺 `called_by` 的历史行
+    按"不是用户发起"处理（老台账里没有这个字段，行数不该因此变化）。
+
+    排除本身必须可见：返回值第二个分量是行数，读数里如实报出来 ——
+    静默滤掉与"本来就只有这么多"在读的人眼里是同一件事，而那正是本项目最忌的形态。
+    """
+    if store is None:
+        return [], 0
+    done = [r for r in store.rows("tasks")
+            if str(r.get("status") or "") == "done"
+            and str(r.get("outcome") or "") == "ok"]
+    hops = [r for r in done if str(r.get("called_by") or "") != "user"]
+    return hops, len(done) - len(hops)
+
+
 def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
     """⑤ 每一跳都留下了可读的输入（`input_key` 非空 + 台账引用不悬空）。
 
@@ -362,12 +359,18 @@ def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
         acc.criteria["hops_have_readable_prompts"] = "unknown"
         acc.details["hops_have_readable_prompts"] = "没有 store ⇒ 没查成"
         return
-    rows = [r for r in store.rows("tasks") if str(r.get("status") or "") == "done"
-            and str(r.get("outcome") or "") == "ok"]
+    rows, top_run_rows = _hop_rows(store)
     missing = [str(r.get("task_id")) for r in rows if not str(r.get("input_key") or "").strip()]
-    acc.readings["hops"] = {"ok_tasks": len(rows), "without_input_key": missing,
-                            "note": "提示词正文在会话记录的 llm_call 事件里"
-                                    "（prompt_sha256/prompt_chars），本判据只看台账那一半"}
+    acc.readings["hops"] = {
+        "ok_tasks": len(rows),
+        # 排除本身可见：这一趟有几行是"用户发起的那一趟"（不算召唤）
+        "excluded_top_run_rows": top_run_rows,
+        "without_input_key": missing,
+        "note": "提示词正文在会话记录的 llm_call 事件里"
+                "（prompt_sha256/prompt_chars），本判据只看台账那一半；"
+                "`excluded_top_run_rows` 是本次**排除掉的顶趟行**（`called_by=\"user\"`）："
+                "那一条是用户发起的那一趟，不是一次召唤",
+    }
     if not rows:
         acc.criteria["hops_have_readable_prompts"] = "fail"
         acc.details["hops_have_readable_prompts"] = "台账里没有任何成功的召唤 ⇒ 这次审阅没跑起来"
@@ -389,7 +392,8 @@ def _dangling_report_refs(text: str, store: Any) -> tuple[list[str], str]:
     表格里逐行给 `statements 0001 / 0002 / 0003` —— 「台账里只有 0000 一条」。
     那三行是模型在两次被拒之后（第一次 `page_range` 传成了字符串）自己"补"出来的：
     它把打算做的事写成了已经做完的事，而「没有任何判据看这件事」
-    （`_c_report` 只问"每节有没有读数"，不问"读数是不是真的"）。
+    （旧的九节判据只问"每节有没有读数"，不问"读数是不是真的" —— 那条判据
+    已按 R9 废除，它的实现也随之删掉，名字不再写在这里：见本模块顶部那段注释）。
 
     判据的形状刻意保守：只认「带前缀的 4 位号」（`statements 0001` / `statements:0001` /
     `lit:0000` / `documents 0000` / `doc:0000`），不认裸的 4 位数
@@ -545,7 +549,6 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
     """
     acc = ReviewAcceptance()
     root = session_root if session_root is not None else getattr(store, "root", None)
-    _c_report(acc, report_path, store)
     _c_statements(acc, store)
     _c_triage(acc, store, root, sid=sid)
     _c_cost(acc, store, cost_cap_usd, session_root=root, sid=sid)

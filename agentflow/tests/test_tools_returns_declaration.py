@@ -72,7 +72,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 78
+TOOL_COUNT = 81
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -272,7 +272,13 @@ def tool_params() -> dict[str, dict]:
         "search.dedup_check": {"title": "Nobody wrote about this", "year": 2020},
         "search.ingest_local": {"books_dir": "books_probe", "pattern": "*.txt"},
         "search.download": {"url": "https://example.invalid/paper.pdf"},
-        "search.literature": {"topic": "群", "mode": "topical"},
+        # `R2b` ⑱：`search.literature` 的多源分支也要被这次探针见证 ——
+    # 声明里的 `sources[]` 是逐源读数的键集合，只有走 `providers=[…]` 才产生得出。
+    # 两个名字都在 `provider_enum` 里、且 `P.build_providers` 已被打桩成返回
+    # `_StubProvider()`（所以逐个都解析成桩、不联网）。单源分支的覆盖没丢：
+    # `tests/test_tools_search_ocr.py` 里那条 `test_single_provider_path_...` 守着它。
+    "search.literature": {"topic": "群", "mode": "topical",
+                          "providers": ["fixture", "openalex"]},
         "search.local": {"query": "群"},
         "search.shelf": {},
         "search.providers": {},
@@ -295,6 +301,10 @@ def tool_params() -> dict[str, dict]:
         "verify.evidence_for": {"claim_key": "k"},
         "verify.list_experiments": {},
         "verify.run_experiment": {"claim": "c", "claim_key": "k", "script_path": "probes/honest.py"},
+        # V 的三件（见 EXECUTED_KEY_SOURCE 里那一段注释）：探针不求模型，走"没查成"那条。
+        "verify.verify_proof": {"statement_id": "0007", "proof_text": "1. 由定义直接得到。"},
+        "verify.list_verifications": {"statement_id": "0007"},
+        "verify.read_proof": {"statement_id": "0007"},
     }
 
 
@@ -334,6 +344,11 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "trace.chain", "trace.concept", "trace.literature", "trace.relation",
         "verify.check_formal", "verify.code_hash", "verify.detect_verifier", "verify.evidence_for",
         "verify.list_experiments", "verify.run_experiment",
+        # V（验证者，F-02 起）的三件只读工具。它们的探针没有模型缝（默认 None）
+        # ⇒ `verify.verify_proof` 走 `checked=False, reason="judge_not_wired"` 那一条
+        # （同 `verify.check_formal` 的 no_backend：没查成不是工具失败），
+        # 而它的键集合在三条返回路径上完全相同 ⇒ 这条探针照样能验"声明 ⊆ 实现"。
+        "verify.verify_proof", "verify.list_verifications", "verify.read_proof",
         "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",        "conductor.closing", "conductor.status_report",
     }
 )

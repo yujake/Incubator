@@ -1,6 +1,6 @@
 """角色 D 的动作 `write_report`（`goal-7f5116c1` M6：从 `agent_d.py` 拆出来，逐字未改）。
 
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`tests/test_agent_split_is_verbatim.py`）。
+拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。
 """
 from __future__ import annotations
 
@@ -324,6 +324,31 @@ class _WriteReport:
 
         # ---- 审计
         lines.append("## 3. 审计信息（结论可复核性）")
+        lines.append("")
+        # 模型三态（`R1-A1`）：这一趟报告里的分析是不是模型给的、以及为什么不是
+        # —— 不折成一句 `LLM=no`（那会把"没接线"与"接了但失败"混成一件事）。
+        readings = [dict(res.get("llm_reading") or {})
+                    for res in (getattr(self, "last_research", {}) or {}).values()]
+        if readings:
+            by_state: dict[str, int] = {}
+            for r in readings:
+                state = str(r.get("state") or "unknown")
+                by_state[state] = by_state.get(state, 0) + 1
+            detail = "，".join(f"{k}={v}" for k, v in sorted(by_state.items()))
+            calls = sum(int(r.get("calls") or 0) for r in readings)
+            lines.append(f"- 模型三态（本次报告覆盖的问题）：{detail}；"
+                         f"其中这一次召唤内共 {calls} 次模型调用"
+                         "（记账粒度是召唤级，见 `tokenmeter.usd_for` / `usd_reading`）")
+            failed = [r for r in readings if str(r.get("state") or "") == "failed"]
+            for r in failed[:10]:
+                lines.append(f"  - 失败：kind={r.get('kind')} reason={_digest(r.get('reason'), 200)}")
+            unlinked = sorted({str(r.get("task_id") or "") for r in readings if not r.get("task_id")})
+            if unlinked:
+                lines.append("  - 注意：这些调用没有带上召唤号（`task_id` 为空）⇒ "
+                             "花销挂在缝的会话事件里，账本按 `task_id` 读不到这一笔")
+        else:
+            lines.append("- 模型三态：这一趟还没有任何 `research` 记录 ⇒ 没有可判的调用"
+                         "（不是「都用了」，也不是「都没接线」）")
         lines.append("")
         lines.append("- 工具调用错误 / 降级记录：")
         errs = getattr(self, "last_tool_errors", [])

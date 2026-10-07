@@ -550,15 +550,38 @@ def test_manifest_globs_point_at_real_files() -> None:
     """每条 glob（除 `src/agentflow/release_check.py` 这条刻意预登记外）都必须指向真实存在的文件。
 
     理由：写错的 glob 不会报错，它只会永远不命中 —— 那是一个静默的假阴性。
+
+    ## A11：通配行按"至少命中一个真实文件"判（2026-10-06 起）
+
+    清单此前只有逐文件的行，所以这条断言可以写成"这个路径必须是一个文件"。
+    F15 把 `tests/golden/*.json` 登记进来了（两份冻结快照的集合才是那一格的口径：
+    将来加第三份快照时不该再来改一次清单），于是这里必须能处理通配：
+    含 `*`/`?`/`[`/`` 的行按 `Path.glob` 展开，要求至少命中一个真实文件 ——
+    一个都不命中的通配与写错的逐文件行是同一种假阴性（永远不命中）。
+    逐文件的行仍按"必须是一个文件"判，一个字都没放宽。
     """
+    root = REAL_MANIFEST.parent
+    wildcard = 0
     for rule in G.load_manifest():
         if rule.glob in DELIBERATELY_ABSENT:
-            assert not (REAL_MANIFEST.parent / rule.glob).is_file(), (
+            assert not (root / rule.glob).is_file(), (
                 f"{rule.glob} 已经存在了 —— 那么它不该再留在『刻意预登记』名单里，"
                 "本条用例的豁免要摘掉（否则它永远不被检查）"
             )
             continue
-        assert (REAL_MANIFEST.parent / rule.glob).is_file(), f"{rule.glob} 在仓库里不存在"
+        if any(ch in rule.glob for ch in "*?["):
+            wildcard += 1
+            hits = [p for p in root.glob(rule.glob) if p.is_file()]
+            assert hits, (
+                f"{rule.glob} 是通配行，但在仓库里一个真实文件都没命中 —— "
+                "永远不命中的 glob 与写错的路径是同一种假阴性"
+            )
+            continue
+        assert (root / rule.glob).is_file(), f"{rule.glob} 在仓库里不存在"
+    # 反真空：通配分支必须真的被走到（否则上面那半是死代码，"至少命中一个"从没被执行过）。
+    assert wildcard >= 1, (
+        "清单里一条通配行都没有 ⇒ 上面那段通配判据是死代码（判据解析出空集会无条件通过）"
+    )
 
 
 def test_manifest_globs_are_all_hit_by_themselves() -> None:

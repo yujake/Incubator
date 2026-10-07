@@ -381,7 +381,12 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             "coverage", "零测试公开函数的风险分档清单（等级 1/2 应为 0；"
                         "注意：传递判据 `--propagate` 本步**不开**，见 `FINAL-R7-05`）",
             [sys.executable, str(root / "tools" / "coverage_zero_test.py")],
-            cwd=root, env=_env(), expect_seconds=60,
+            # `REL-01`（`draft/52` F11）：耗时声明必须与**实测**对得上。
+            # 旧值 60 而实测 928.6 s（`draft/43-D` §0.3：本机后台真跑完一次 `--json`），
+            # 差 15 倍 ⇒ 那是一句假声明（读发布报告的人会以为这一步几秒钟就能跑完）。
+            # 取 1000（保守取实测值的上界附近）：`--timeout` 默认 1800 仍留 1.8 倍余量，
+            # 所以**不动** `--timeout`（调小会把"慢"变成"超时 ⇒ unknown"）。
+            cwd=root, env=_env(), expect_seconds=1000,
             exit_map=TRI_STATE_EXIT,
             # `FINAL-R7-05`：`coverage_zero_test` 的传递判据（等级 1e/2c，"自身 AST 里
             # 没有写原语、只经由 callee 写盘"）默认关闭，而本步不传 `--propagate`
@@ -391,18 +396,23 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             # 属于另一件事），但把这句缺口写进步骤标题与 notes：读发布报告的人
             # 不会把这一步的绿读成"编排函数都被覆盖了"。
             notes=("传递判据（1e/2c）本次关闭 ⇒ 本步的『等级 1/2 = 0』不含"
-                   "『只经由 callee 写盘』的编排函数（`FINAL-R7-05`）",),
+                   "『只经由 callee 写盘』的编排函数（`FINAL-R7-05`）。"
+                   "F7 的补读数：`--json` 的 `totals.production_callers` 会把"
+                   "『最严（忽略工具名串）/ 本工具 / 别处登记的更宽读数』三个口径并列出来",),
         ),
         Step(
             "per-file", "逐文件单跑测试（把顺序依赖/跨文件状态泄漏变成可判定的门）",
             [sys.executable, str(root / "tools" / "run_each_test_file.py")],
-            # 这一步很慢（每个 `tests/test_*.py` 各起一个 pytest 进程，量级与全量测试相同；
-            # 文件数不写死（`G-32`）：由 `(Get-ChildItem tests -Filter 'test_*.py').Count`
-            # 当次读 —— 观测 2026-09-27 14:56:26 ⇒ 118，多一个测试文件它就会过期）——
-            # 但它守的是一件全量测试**结构上做不到**的事：全量绿掩盖单文件红。
+            # 这一步很慢（每个 `tests/test_*.py` 各起一个 pytest 进程，量级与全量测试相同）。
+            # 文件数不写死（`G-32`）：当次由 `tools/run_each_test_file.py` 自己 rglob 出来
+            # （`--list` 可复算），这里不记任何文件数定值 —— 记一个数就会随 `tests/` 长大而过期
+            # （曾记过 `⇒ 118`，2026-10-06 按 PERF-02 的纪律删掉；下限判据见 `tests/test_release_all.py`）。
+            # `expect_seconds` 是声明/估算，权威读数是当次运行输出：
+            # 同门实测（2026-09-28、128 文件）＝ 1082.0s（默认）/ 1115.7s（Lean 在 PATH 上）
+            # ⇒ 这里取 1200（与实测同量级；原先的 420 比实测小 2.6 倍，会把"预计 ~420s"印成误导读数）。
             # 慢的门会被跳过，所以这里的对策不是"不做"，而是 `--skip per-file`
             # 会被记成 `unknown`（不是 pass），跳过了就得逐条解释。
-            cwd=root, env=_env(), expect_seconds=420,
+            cwd=root, env=_env(), expect_seconds=1200,
             exit_map=TRI_STATE_EXIT,
         ),
     ]

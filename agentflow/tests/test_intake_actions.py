@@ -383,29 +383,53 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     assert len(st.rows("tasks")) == 4, st.rows("tasks")
 
 
-def test_a_refused_register_statement_reaches_the_ledger_as_refused(tmp_path: Path):
-    """负控（`draft/37` §88 的端到端）：B 拒绝一次登记，台账不许说这次成了。
+def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_path: Path):
+    """新口径（P-06 / F-05 的主控裁定）：自产命题没有证明也登记，但如实标记。
 
-    T1 第 2 趟真机就是这么掉下去的：8 次 `ok=False` 在 `tasks` 里全是 `outcome=ok`
-    （detail："handler 未声明 outcome，按有产出处理"），而 `statements` 是 0 行 ——
-    主控据此以为登记好了，于是不再改参数。这一条把"拒绝要一路走到台账上"钉住：
-    终态是 `refused` + 受控理由，细一档的 `kind` 留在 detail 里，
-    而 `statements` 一行都不许多。
+    改前口径（本条原来钉的）：这一笔被 `_refuse("missing_proof_text")` 挡住、
+    `tasks` 落 `refused/invalid_params`、`statements` 一行不许多。
+    为什么改：`draft/53:181` 的消费端要的是"把待办摆出来"，而不是"把待办挡住" ——
+    挡住了就永远没有一条待办能被秘书消费（真机后果就是"证明没做完"这件事在库里查不到）。
+    硬顺序（主控点名）：本口径必须在 B 删掉 `schema.Statement.validate` 里那条
+    `own_result` raise 之后才能落 —— 否则这一笔会在事务里抛 `ValueError`。
+
+    新口径要六件同时成立：不拒 + 行落库 + `proof_text` 空 + `quote_verified is None` +
+    `quote_reason` 非空 + 等级现算是"猜想"（不是证明级）；并且返回值里挂着
+    `pending:[{kind:"missing_proof",…}]`（"没有静默接受"）。
     """
+    from agentflow import evidencebits as EB
+
     st = _store(tmp_path)
     c = Conductor(st, registry=_agents(st))
     reg = build_registry(store=st, conductor=c).registry
 
     own = {**STATEMENT, "origin": "own_result", "source_lit_id": "",
-           "page_range": None, "doc_id": "0000"}
-    own.pop("proof_text")  # 自产命题没有证明 ⇒ 第五级拒绝
+           "page_range": None, "doc_id": "0000",
+           "quote_verified": None, "quote_reason": "证明还没做完（推到第 3 步卡住）"}
+    own.pop("proof_text")  # 自产命题、证明还没做完 ⇒ 登记 + 标记（不再拒绝）
     res = reg.call("conductor.summon", role="M", target_role="B", action="register_statement",
-                   params=own, input_key="refuse-proof-text")
-    assert res.ok, res.error  # 工具调用本身成功（"主控问了一次"这件事成功了）
-    assert res.data["outcome"] == "refused", res.data
-    assert res.data["refusal_reason"] == "invalid_params", res.data
-    assert "missing_proof_text" in str(res.data["detail"]), res.data["detail"]
+                   params=own, input_key="record-proof-text")
+    assert res.ok, res.error
+    assert res.data["outcome"] == "ok", res.data
+    assert res.data["refusal_reason"] is None, res.data
 
-    row = st.rows("tasks")[0]
-    assert row["outcome"] == "refused" and row["refusal_reason"] == "invalid_params", row
-    assert st.rows("statements") == [], "被拒的那次登记不许留下半行"
+    rows = st.rows("statements")
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert str(row.get("proof_text") or "") == "", row
+    assert row.get("quote_verified") is None and str(row.get("quote_reason") or ""), row
+    assert EB.derive_grade(row.get("bits") or {}) == "conjecture", row.get("bits")
+    pending = res.data.get("payload", {}).get("pending") if isinstance(
+        res.data.get("payload"), dict) else None
+    if pending:                       # 返回值里挂着待办（形状取决于工具层的裁剪，能判就判）
+        assert pending[0]["kind"] == "missing_proof", pending
+        assert pending[0]["who"] == "F" and pending[0]["missing"] == "proof_text", pending
+    # 真正的消费端判据（比读返回值那一格更硬）：F-05 的收件箱必须列出这一条
+    # —— 生产端"如实标记"的意义就在"有人接得住它"（`draft/53:181` 的消费端）。
+    from agentflow.secretary import Secretary
+
+    inbox = Secretary("B", root=st.root, store=st).pending_inbox(window_sec=0)
+    assert any(i["kind"] == "missing_proof" and i["id"] == row["stmt_id"]
+               for i in inbox["items"]), inbox
+    # 台账那一行也是 `ok`（它确实登记成功了）——"如实标记"落在 `pending` 与行里的三态上
+    assert st.rows("tasks")[0]["outcome"] == "ok", st.rows("tasks")[0]

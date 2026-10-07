@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ._support import Any, BClaimOutcome, D, I, Mapping, NOTE_LIMIT, REPROCESS_RESULTS, S, Sequence, Store, T, _passages, check_quote, lease_expired, make_lease
+from ._support import Any, BClaimOutcome, D, I, Mapping, NOTE_LIMIT, NO_EXTRACTOR_ERROR, REPROCESS_RESULTS, S, Sequence, Store, T, _passages, check_quote, lease_expired, make_lease
 from .run_once import _RunOnce
 from .reprocess_once import _ReprocessOnce
 from .run_reprocess import _RunReprocess
@@ -13,6 +13,35 @@ from .decide_structural_duplicate import _DecideStructuralDuplicate
 from .resolve_structural_duplicate import _ResolveStructuralDuplicate
 from .register_statement import _RegisterStatement
 from .run import _Run
+
+
+def _give_up_note(row: Mapping[str, Any], *, max_attempts: int) -> str:
+    """到达重试上限时的结论：必须分清「真抽过、失败 N 次」与「从未真抽」。
+
+    ## 为什么这不是措辞问题（`D-2` 的第四档，2026-10-02 主控裁定）
+
+    `mine_attempts` 只在 `_claim` 里累加，而「这台机器没有任何够格的抽取器」
+    （`R-56` 的拒抽，`last_mine_error == no_llm_extractor`）走的是同一条认领路径
+    ⇒ 到上限时那句原本统一写下的「超过最大抽取尝试次数」把「一次都没做」写成了
+    「做过并反复失败」。这正是本项目对第三态的全部纪律所禁止的折叠
+    （"没做" != "做了没成"；`draft/28` 的 `#3`）。
+
+    计数语义本身（让领取计数区分这两档）是设计级残余（已登记 `draft/58`），
+    本函数只负责如实说：到上限的是排队次数，不是抽取次数。
+
+    判据在 `tests/test_d2_lease_alignment.py`：
+    - 没有抽取器的那一行 ⇒ 说明里不许出现"超过最大抽取尝试次数"，且必须点出
+      "没有可用的抽取器 / 从未真抽"；
+    - 真抽过 3 次失败的那一行 ⇒ 仍是"真抽过失败"那一档（原话与 `上一次错误` 都保留）。
+    """
+    last = str(row.get("last_mine_error") or "").strip()
+    if last == NO_EXTRACTOR_ERROR:
+        return (f"从未真抽过：没有可用的抽取器（{NO_EXTRACTOR_ERROR}）⇒ 到上限的是排队次数，"
+                f"不是抽取次数，已放弃排队。（`max_attempts`={max_attempts}）")
+    if not last:
+        return (f"重试次数已用尽（`max_attempts`={max_attempts}），但没有留下任何失败原因"
+                "（认领之后、写下错误之前中断过）⇒ 已放弃。")
+    return f"超过最大抽取尝试次数 {max_attempts}，已放弃。上一次错误：{last}"
 
 
 class _Core:
@@ -51,6 +80,18 @@ class _Core:
         self.dup_review = float(self.cfg.get("dup_review", 0.72))
         self.widen_pages = int(self.cfg.get("quote_widen_pages", 1))
         self.allow_fulltext_fallback = bool(self.cfg.get("allow_fulltext_quote_fallback", False))
+        # ---- `R2b-⑫`：无文本层时的 OCR 回退
+        #: `ocr.*` 的工具面句柄。`None` ⇒ 真要用时按角色 B 现取一次（`_ocr_call`）。
+        #: 留这个口子不是图省事：`ocr.*` 要走「工具面」（谁调得到、参数怎么校验都由
+        #: 它管），而 `AgentB` 这一层此前没有工具句柄 —— 现取一个注册表比直接 import
+        #: handler 诚实，后者会绕开权限面与参数校验（`P-14` / `H-4` 的同族）；
+        #: `_ocr_surface` 是给夹具的注入口，生产路径上恒为 `None`。
+        self._ocr_surface: Any = None
+        self._ocr_registry: Any = None
+        #: OCR 尝试的读数（每次 `_ocr_retry` 追加一条）：`checked` 是"试没试"，
+        #: `via` 是"走到哪一步"，`reason` 是"没做到的原因"。单列成表是为了让
+        #: "试过 OCR 但没成"在运行后看得见 —— 只写在 `result_note` 里会被下游截断。
+        self.ocr_readings: list[dict[str, Any]] = []
         # ---- I4 定向重抽取
         #: "等价表述"的相似度下限。低于它就不认（宁可报 not_found 也不猜）：
         #: 转写与原文的 token Jaccard 在阈值以下时，"找没找到"就变成了掷骰子，
@@ -83,6 +124,13 @@ class _Core:
 
         顺序即优先级：先判租约、再判 attempts。一条正被别人跑着的文献不该由我们来
         "放弃"（各有各的 `mine_attempts` 计数），否则会把别人手上的活单方面判死。
+
+        `R3-⑩` 的计数语义：`mine_attempts` 记的是「真抽次数」（真正调用抽取器的次数），
+        领取本身不计。于是它读起来是"抽取质量"而不是"排队长度"，而"从未真抽"那一档
+        （本机没有够格的抽取器 ⇒ `run_once` 直接拒抽）在数据面上就是
+        `mine_attempts == 0` + `last_mine_error == no_llm_extractor` —— 不再需要靠
+        `_give_up_note` 的文字去分辨。旧行里的这个数记的是"领取次数"（改前的口径），
+        比真抽次数大，是上界而不是等值。
         """
         with self.store.tx("literature", actor=self.actor, note="claim") as tx:
             rows = tx.rows("literature")
@@ -92,17 +140,28 @@ class _Core:
             )
             pending = len(cands)
             skipped_lease_active = 0
+            skipped_lease_backoff = 0
             gave_up = 0
             for r in cands:
-                if r.get("claimed_by") and not lease_expired(r.get("lease_until")):
-                    skipped_lease_active += 1
-                    continue  # 别人正拿着有效租约
+                # 认租约只看租约本身是否仍在有效期内，不附加 `claimed_by` 非空这个条件
+                # （`D-2`，2026-10-02 与 `agent_a/core.py` 的同族判据对齐）。修复前这里
+                # 两个条件都要成立，而失败分支写下的退避租约正是 `claimed_by=None` +
+                # 未来的 `lease_until` ⇒ 那条租约写了等于没写：同一趟里立刻重领，
+                # `mine_attempts` 一路烧到上限并在一次调用里把这一行判死
+                # （读数见 `temp/_probe_b_claim.py`：4 次连续 `run_once` 读到 0→3 当场判死）。
+                # `claimed_by` 只决定这条被跳过的活记进哪个计数（别人 / 我们自己）。
+                if not lease_expired(r.get("lease_until")):
+                    if r.get("claimed_by"):
+                        skipped_lease_active += 1  # 别人正在做
+                    else:
+                        skipped_lease_backoff += 1  # 我们自己上次失败留下的退避
+                    continue
                 n = int(r.get("mine_attempts") or 0)
                 if n >= self.max_attempts:
                     r["processed"] = True
-                    r["last_mine_error"] = (
-                        f"超过最大抽取尝试次数 {self.max_attempts}，已放弃。上一次错误：{r.get('last_mine_error')}"
-                    )
+                    # 结论必须分清"真抽过失败"与"从未真抽"（见 `_give_up_note`）：
+                    # 没有抽取器的机器上，到上限的是排队次数，不是抽取次数。
+                    r["last_mine_error"] = _give_up_note(r, max_attempts=self.max_attempts)
                     r["claimed_by"] = None
                     r["lease_until"] = None
                     tx.upsert("literature", r, note="give_up")
@@ -110,23 +169,38 @@ class _Core:
                     continue
                 r["claimed_by"] = self.actor
                 r["lease_until"] = make_lease(self.lease_seconds)
-                r["mine_attempts"] = n + 1
+                # `R3-⑩`：领取不计一次抽取尝试 —— 这一步只说明"这条活归我们了"，
+                # 而 `mine_attempts` 问的是"我们真抽过几次"。+1 现在发生在真正调抽取器
+                # 的那一刻（`run_once` 的成功提交与 `extract_failed` 两处）。
+                #
+                # 改前这里是无条件 `+= 1`，于是"这台机器没有够格的抽取器"那一档
+                # （`run_once` 里 `extractor_is_fallback` 的拒抽）会把「排队次数」烧成
+                # 抽取次数：领满 `max_attempts` 次就判死（`processed=True`），而那一行
+                # 一次都没被真抽过 —— 与 `run_once` 那句"刻意不置 processed：接线 LLM
+                # 之后这一行还要被重新领到"当场相反。判据见
+                # `tests/test_r3_mine_counting.py`。
                 tx.upsert("literature", r, note="claimed")
                 return BClaimOutcome(
                     literature=dict(r),
                     pending=pending,
                     skipped_lease_active=skipped_lease_active,
+                    skipped_lease_backoff=skipped_lease_backoff,
                     gave_up=gave_up,
                 )
             if pending == 0:
                 reason = "no_unprocessed_literature"
             elif skipped_lease_active == pending:
                 reason = "pending_literature_all_leased"
+            elif skipped_lease_backoff == pending:
+                # 不能并进上面那一类：那句诊断说的是"别人持着"，
+                # 而这里的活全是我们自己上次失败留下的退避（`D-2` 之后这一类才可能出现）。
+                reason = "pending_literature_all_in_backoff"
             else:
                 reason = "no_claimable_literature"
             return BClaimOutcome(
                 pending=pending,
                 skipped_lease_active=skipped_lease_active,
+                skipped_lease_backoff=skipped_lease_backoff,
                 gave_up=gave_up,
                 skipped_reason=reason,
             )
@@ -258,8 +332,11 @@ class _Core:
                 key=lambda r: (r.get("timestamp") or "", r.get("reprocess_id") or ""),
             )
             for row in cands:
-                if row.get("claimed_by") and not lease_expired(row.get("lease_until")):
-                    continue  # 别人正拿着有效租约
+                # 同 D-2：租约仍在走就不可领，不附加 `claimed_by` 非空 ——
+                # 失败释放后的那条行写的是 `claimed_by=None` + 未来的租约（见
+                # `_record_reprocess_failure`），旧写法会把它当成没人管而当场重领。
+                if not lease_expired(row.get("lease_until")):
+                    continue  # 租约仍在走（别人持着，或我们自己上次失败留下的退避）
                 rid = str(row.get("reprocess_id") or "")
                 n = int(row.get("attempts") or 0)
                 if n >= self.max_attempts:
@@ -339,8 +416,131 @@ class _Core:
         except Exception as e:
             return None, f"文献 {lid} 重新抽取失败：{type(e).__name__}: {e}"
         if not list(getattr(doc, "pages", None) or []):
-            return None, f"文献 {lid} 无文本层（扫描版？）⇒ 无从逐字定位"
+            # `R2b-⑫`：这里此前是「直接放弃」，理由写作"无文本层（扫描版？）"——
+            # 而"扫描版"恰恰是 `ocr.*` 这三件工具存在的理由。文档一直在教 B 用
+            # `ocr.detect_text_layer` / `ocr.backends` / `ocr.run`（`docs/READING-MAP.md`
+            # §0.1 记的"生产面 0 次"欠账），生产代码却从不调用它们 ⇒ 689 份里那唯一
+            # 一份扫描件在报告里长得像"这份文献本来就无法逐字定位"，而事实是
+            # "我们没试过 OCR"。静默失败比崩溃更危险，这里补上试过的那一步。
+            return self._ocr_retry(path, lid)
         return doc, ""
+
+    # ---------------------------------------------------------------- `R2b-⑫`
+    def _ocr_call(self, name: str, **params: Any) -> tuple[dict[str, Any], str]:
+        """经「工具面」调一件 `ocr.*`，返回 `(payload, 不可用原因)`；原因非空 ⇒ payload 空。
+
+        为什么不直接 import handler：`ocr.*` 的"谁调得到"与参数校验都在
+        `tools/base.py` 的注册表里。绕过它去调 handler，会让"这一支到底有没有权限"
+        变成没人值守的假设 —— 而权限面被静默放宽正是本仓库反复登记的那类洞。
+        """
+        try:
+            if self._ocr_surface is not None:
+                # 夹具注入口：单测用假工具面，既不起真 OCR 也不碰真注册表。
+                res = self._ocr_surface(name, params)
+            else:
+                if self._ocr_registry is None:
+                    from ..tools import build_registry
+
+                    # 角色取字面量 `"B"` 而不是 `self.actor`：调用期判据比的是角色名
+                    # （`role or bound_role`），而 `actor` 是审计用的名字（`agent-B`），
+                    # 拿它去比会得到一次 fail-closed 的拒绝 —— 那会被下面的 `except`
+                    # 折成一句"调用失败"，看起来像工具坏了。
+                    self._ocr_registry = build_registry(store=self.store).registry
+                res = self._ocr_registry.call(name, role="B", **params)
+        except Exception as e:  # noqa: BLE001
+            # 调不动也必须是"说出来的读数"：抛出去会让 I4 的一次"没做到"变成一次
+            # 失败重试（与 `_load_doc_for` 的口径相反）。
+            return {}, f"{name} 调用失败（{type(e).__name__}: {e}）"
+        if getattr(res, "ok", False):
+            data = getattr(res, "data", None)
+            return (dict(data) if isinstance(data, Mapping) else {}), ""
+        why = getattr(res, "error", None) or "工具面没给原因（`ok=False` 且 `error` 为空）"
+        return {}, f"{name} 报告失败：{why}"
+
+    def _ocr_doc(self, got: Mapping[str, Any]) -> Any:
+        """把 `ocr.run` 的逐页文本包成与 `extract_text` 同型的文档对象。
+
+        为什么要包成 `DocumentText` 而不是自造一个：下游（`_candidate_passages` /
+        `text_at` / 引文回验）读的是 `pages` 与 `text_at` 这一对契约，同型才不会让
+        "OCR 来的文本"在下游变成另一种东西。
+
+        页号按 OCR 自己报的 `page`（1-based）落位，不按列表下标：`ocr.run` 有
+        `max_pages` 截断与逐页失败，下标当页号会把"第 5 页的内容"写成第 1 页 ——
+        那是逐字引文回验里最难查的一种错（页码错、字面全对）。
+
+        `source_kind` 仍记 `"pdf"`：来源确实是 PDF（只是文本来自栅格化后识别）。
+        `DocumentText` 的字段注释把取值定死在 `pdf | txt | md | html`，而那个文件在
+        禁改区里 —— 自造第五个取值会悄悄改掉一个受控词表，所以 OCR 这件事记在
+        `ocr_readings` 里，不塞进 `source_kind`。
+        """
+        from ..extract import DocumentText
+
+        items = [i for i in (got.get("pages") or []) if isinstance(i, Mapping)]
+        top = max((int(i.get("page") or 0) for i in items), default=len(items))
+        pages = [""] * top
+        for item in items:
+            idx = int(item.get("page") or 0)
+            if 1 <= idx <= top:
+                pages[idx - 1] = str(item.get("text") or "")
+        return DocumentText(text="\n".join(pages), pages=pages, source_kind="pdf", encoding=None)
+
+    def _ocr_retry(self, path: Any, lid: str) -> tuple[Any, str]:
+        """无文本层时的 OCR 回退：返回 `(doc, 不可用原因)`，两者互斥。
+
+        三态（不把"没查"折成"查过了没问题"）：
+        - 后端可用且识别出字符 ⇒ 返回 OCR 文本，读数记 `via=ocr`；
+        - 本机没有可用后端 ⇒ 原因是 `unavailable`，不是"无文本层"，也不是静默放弃；
+        - 后端真实执行过但产出为空 ⇒ 明说"试了还是没有"（`ran_empty`）。
+
+        为什么先问 `detect_text_layer` 再问 `backends`：探测器读的是文件本身，
+        与抽取器是两条独立的读法。它若说"有文本层"，那么"`extract_text` 抽不出字"
+        的原因在别处（例如逐页异常），此时 OCR 是错的药 —— 这一支只如实报矛盾。
+        """
+        det, why = self._ocr_call("ocr.detect_text_layer", path=str(path))
+        if why:
+            self._ocr_readings(lid, checked=False, via="detect", reason=why)
+            return None, f"文献 {lid} 无文本层；{why} ⇒ 没做成 OCR"
+        if det.get("has_text_layer"):
+            reason = (f"文献 {lid}：抽取器读到 pages=[]，但 ocr.detect_text_layer 读出 "
+                      f"has_text_layer=True（pages={det.get('pages')}，chars={det.get('chars')}）"
+                      "—— 两条读法互相矛盾，此时做 OCR 是错的药 ⇒ 不擅自 OCR，交人工看")
+            self._ocr_readings(lid, checked=True, via="detect", reason=reason)
+            return None, reason
+        bk, why_bk = self._ocr_call("ocr.backends", refresh=False)
+        if why_bk:
+            self._ocr_readings(lid, checked=False, via="backends", reason=why_bk)
+            return None, f"文献 {lid} 无文本层；{why_bk} ⇒ 没做成 OCR"
+        if not bk.get("any_ocr_backend_available"):
+            reason = (f"文献 {lid} 无文本层，且本机没有可用的 OCR 后端（unavailable）"
+                      f"⇒ 无从逐字定位。先装后端再谈：{str(bk.get('verdict') or '')[:200]}")
+            self._ocr_readings(lid, checked=True, via="backends", reason=reason, payload=bk)
+            return None, reason
+        got, why_run = self._ocr_call("ocr.run", path=str(path))
+        if why_run:
+            self._ocr_readings(lid, checked=True, via="run", reason=why_run)
+            return None, f"文献 {lid} 无文本层；试过 OCR 但没做成：{why_run}"
+        doc = self._ocr_doc(got)
+        if not list(doc.pages) or not any(p.strip() for p in doc.pages):
+            reason = (f"文献 {lid} 无文本层，试过 OCR（backend={got.get('backend')}）"
+                      f"但产出为空（ran_empty）：{str(got.get('note') or '')[:160]}"
+                      "⇒ 无从逐字定位")
+            self._ocr_readings(lid, checked=True, via="run", reason=reason, payload=got)
+            return None, reason
+        self._ocr_readings(lid, checked=True, via="ocr", reason="", payload=got)
+        return doc, ""
+
+    def _ocr_readings(self, lid: str, *, checked: bool, via: str, reason: str,
+                      payload: Mapping[str, Any] | None = None) -> None:
+        """记一条 OCR 读数。`checked` 是"试没试"，不是"成没成"。"""
+        item: dict[str, Any] = {"lit_id": lid, "checked": checked, "via": via, "reason": reason}
+        if payload is not None:
+            item["reading"] = {
+                k: payload.get(k)
+                for k in ("backend", "has_text_layer", "total_chars", "pages_processed",
+                          "pages_failed", "truncated_pages", "any_ocr_backend_available")
+                if k in payload
+            }
+        self.ocr_readings.append(item)
     def _candidate_passages(self, doc, pr, *, fulltext: bool) -> list[tuple[int, str]]:
         """候选片段 `(页号, 片段)`。先看声明页附近，需要时再看全文。"""
         pages = list(getattr(doc, "pages", None) or [])
@@ -546,17 +746,22 @@ class _Core:
             "fingerprints": fingerprints,
         }
     def _record_reprocess_failure(self, req: Mapping[str, Any], error: str) -> None:
-        """处理失败：记 `last_error` 并释放租约，状态仍为 `pending`。
+        """处理失败：记 `last_error` 并写下退避租约，状态仍为 `pending`。
 
         为什么不标 `done` + `result="not_found"`：`not_found` 的含义是
         "我看过了，原文里没有" —— 那是一个结论；这里发生的是"我压根没看成"。
         把后者写成前者，正是 DESIGN-INTERACTIONS.md §3.4 点名禁止的形态。
+
+        为什么写的是退避租约而不是把 `lease_until` 清空（`D-2`，2026-10-02）：
+        清空等于"没人持着、可以立刻再领"，于是失败会当轮重来 —— 而这一条重试的
+        合理间隔是租约长度。清空之后 `claimed_by is None` + 无租约的行在任何判据下
+        都是"可领"，`attempts` 会在同一趟里烧到上限。
         """
         with self.store.tx("reprocess_requests", actor=self.actor, note="reprocess_failed") as tx:
             row = tx.find("reprocess_requests", reprocess_id=req.get("reprocess_id")) or dict(req)
             row["last_error"] = T.clip(error, 500)
             row["claimed_by"] = None
-            row["lease_until"] = None
+            row["lease_until"] = make_lease(self.lease_seconds)
             tx.upsert("reprocess_requests", row, note="reprocess_failed")
     def _finish_reprocess(self, req: Mapping[str, Any], outcome: Mapping[str, Any]) -> dict:
         """收尾（短事务）：写入目标关系的新字段 + 请求的终局结果。

@@ -51,6 +51,19 @@ COMPILE_PRODUCTS: tuple[str, ...] = ("main.pdf", "compile.log", HISTORY_NAME)
 #: LaTeX 的中间产物：连回执也不记（每次编译都变，且没有信息量）。
 COMPILE_SUFFIXES: tuple[str, ...] = (".aux", ".log", ".out", ".toc", ".fls",
                                      ".fdb_latexmk", ".synctex.gz")
+#: 流程产物：交付时还会被改写的那几件（E-08 / `draft/52` D5 族）。
+#:
+#: 它们是流程里的可变件、不是"渲染写出来的源文件"：验收表在交付前还会被写一次
+#: （人/秘书补一行 `na` + 理由），于是"渲染锚 → 改验收表 ⇒ `anchor=drifted`"
+#: 会把一次合法的流程动作读成"包坏了"（真机 `p5-review-t17` 实测：改一次验收表，
+#: `verdict=drifted`、`dims.files=drifted`）。
+#:
+#: 过滤必须两侧对称（写入侧 `package_files` 与校验侧的 `files_was` 同时过滤）：
+#: 只过滤一侧会让 32 份老锚里的 10 份（`files` 里含 `ACCEPTANCE-CHECKS.json`）
+#: 立刻 `drifted` —— 而"重渲染"会改写 `RENDER-ANCHOR.json` 并追加
+#: `BUILD-HISTORY.jsonl`（回滚恢复不了）。按文件名匹配而不是相对路径：
+#: 老锚的键可能是 `out/paper/ACCEPTANCE-CHECKS.json` 这种带前缀的形状。
+PROCESS_PRODUCTS: tuple[str, ...] = ("ACCEPTANCE-CHECKS.json", "ACCEPTANCE.md")
 
 #: 三维的判定词表。`unknown` 只用于"这一维没判成"。
 VERDICTS: tuple[str, ...] = ("consistent", "drifted", "unknown")
@@ -82,6 +95,9 @@ def package_files(package_dir: Path) -> dict[str, str]:
         if not p.is_file() or p.name in (ANCHOR_NAME, RECEIPT_NAME):
             continue
         if p.name in COMPILE_PRODUCTS or p.suffix in COMPILE_SUFFIXES:
+            continue
+        # E-08：流程产物（验收表 / 验收说明）不进锚 —— 它们在交付时还会被改写。
+        if p.name in PROCESS_PRODUCTS:
             continue
         files[p.relative_to(package_dir).as_posix()] = file_digest(p)
     return files
@@ -275,7 +291,13 @@ def check_package(project_root: Path | str, *, store: Any = None) -> dict[str, A
     # ---- 维度 2：源文件（编译产物不在内；老锚里若还记着 PDF，跳过它）
     files_now = package_files(out)
     files_was = {k: v for k, v in (anchor.get("files") or {}).items()
-                 if k not in COMPILE_PRODUCTS and not any(k.endswith(s) for s in COMPILE_SUFFIXES)}
+                 if k not in COMPILE_PRODUCTS
+                 and not any(k.endswith(s) for s in COMPILE_SUFFIXES)
+                 # E-08：两侧对称过滤（见 `PROCESS_PRODUCTS` 的注释）——
+                 # 只过滤一侧会让 10 份含验收表的老锚立刻 drifted。
+                 and Path(k).name not in PROCESS_PRODUCTS}
+    excluded_process = sorted(k for k in (anchor.get("files") or {})
+                              if Path(k).name in PROCESS_PRODUCTS)
     files_verdict = "consistent"
     for rel, sha in sorted(files_was.items()):
         if rel not in files_now:
@@ -310,12 +332,13 @@ def check_package(project_root: Path | str, *, store: Any = None) -> dict[str, A
             receipt_verdict = "consistent"
 
     dimensions = {"tables": tables_verdict, "files": files_verdict, "receipt": receipt_verdict}
-    return _result(dimensions, drift, problems, anchor=anchor, receipt=receipt, out=out)
+    return _result(dimensions, drift, problems, anchor=anchor, receipt=receipt, out=out,
+                   excluded_process=excluded_process)
 
 
 def _result(dimensions: Mapping[str, str], drift: list[str], problems: list[str], *,
             anchor: Mapping[str, Any] | None, receipt: Mapping[str, Any] | None,
-            out: Path) -> dict[str, Any]:
+            out: Path, excluded_process: list[str] | None = None) -> dict[str, Any]:
     """把三维的结论合成总体结论（取最坏的一档），并附上读数。"""
     order = {"consistent": 0, "unknown": 1, "drifted": 2}
     verdict = "consistent"
@@ -337,6 +360,9 @@ def _result(dimensions: Mapping[str, str], drift: list[str], problems: list[str]
         "receipt": dict(receipt or {}),
         "checked": {"tables": len(ANCHOR_TABLES),
                     "files": len((anchor or {}).get("files") or {})},
+        #: E-08 的读数：锚里记着、而这一维不判的流程产物（验收表 / 验收说明）。
+        #: 它们在交付时还会被改写 ⇒ 不参与 files 这一维（两侧对称过滤）。
+        "excluded_process_products": list(excluded_process or []),
         # 历史是读数不是判据：它回答"这份包被渲染/编译过几次、最近一次是什么时候"，
         # 不参与三维判定（判定只看当前状态）。
         "history": {"present": hist["present"], "total": hist["total"],

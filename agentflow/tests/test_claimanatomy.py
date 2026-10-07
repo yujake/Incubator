@@ -16,7 +16,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
+import pathlib
+from typing import Mapping
 
 import pytest
 
@@ -564,6 +567,41 @@ def test_compose_claim_carries_the_lifecycle_fields(store: Store):
     assert claim["disclaimer"] == DT.CROSS_CHECK_DISCLAIMER
 
 
+def test_ee06_compose_claim_derives_status_and_allowed_use_from_the_evidence_kind():
+    """EE-06 产出方：`status` / `allowed_use` 从这条断言自己的证据等级派生。
+
+    改前这两个字段从来没有产出方（真机读数 `status` 0/449、`allowed_use` 0/449），
+    而消费方一直在（`gates.py` 的 G14、`claimanatomy.main_body_claims`、渲染层）。
+    依据是 `claimanatomy` 已写死的两条一致性规则，不是这里新造判据：
+    `proof` ⇒ `证`（"证"必须有 proof 级证据，FC-22）；`cross_check` ⇒ `验` + `Remark only`
+    （只有数值支撑的结论不得进摘要/主结果）。
+    """
+    proof = DT.compose_claim("存在无穷多个素数。", citations=["exp:0000"], evidence_kind="proof",
+                             section="主要结果")
+    assert proof["status"] == "证", proof
+    assert "allowed_use" not in proof, "proof 级断言不该被降级成 Remark"
+
+    cross = DT.compose_claim("谱落在区间内。", citations=["lit:0000"], evidence_kind="cross_check",
+                             section="主要结果")
+    assert cross["status"] == "验", cross
+    assert cross["allowed_use"] == "Remark only", "只有数值支撑的结论必须降为 Remark"
+
+
+def test_ee06_no_basis_means_no_value_and_explicit_input_wins():
+    """反负控（三态）：没有依据就不写，而且派生不许覆盖调用方显式给的值。
+
+    这是 EE-06 最容易做错的方向：把"从没问过"伪造成"待精化"
+    （`docs/SCHEMA-MIGRATION-PROPOSAL-claims.md` §3.2 逐字警告过）。
+    """
+    weak = DT.compose_claim("这可能是对的。", citations=["lit:0000"], evidence_kind="heuristic",
+                            section="s")
+    assert "status" not in weak and "allowed_use" not in weak, weak
+
+    explicit = DT.compose_claim("存在无穷多个素数。", citations=["exp:0000"],
+                                evidence_kind="proof", section="s", status="待精化")
+    assert explicit["status"] == "待精化", "派生不许覆盖调用方显式给的值"
+
+
 def test_compose_claim_rejects_retracted_without_a_reason():
     """负控：`status="作废"` 却不说为什么 ⇒ 构造时就抛。"""
     with pytest.raises(ValueError, match="作废"):
@@ -681,3 +719,117 @@ def test_ledger_columns_do_not_soften_the_unknown_key_check():
     spec = CA.validate_claim(ledger_claim(source_kind_typo="文献"))
     assert "undeclared_field" in codes(spec)
     assert spec.error_count == 0, "未声明的键是 warning（不许升级成 error 把红灯长亮）"
+
+
+# ------------------------------------------- EE-06 与 `evidencebits` 的「单一来源」（`R3`）
+
+#: 五张断言词表（它们各自的取值域由 `CLAIM_FIELDS[...].domain` 承载）。
+_VOCABS = ("CLAIM_KINDS", "CLAIM_STATUSES", "ALLOWED_USE_KINDS",
+           "CLAIM_SOURCE_KINDS", "CLAIM_CHECK_KINDS")
+
+
+def _tree_sources() -> dict[str, str]:
+    """整棵包的源码（口径：`claimanatomy` 所在包下所有 `.py`，排除 `__pycache__`）。"""
+    root = pathlib.Path(CA.__file__).resolve().parent
+    return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
+            for p in sorted(root.rglob("*.py")) if "__pycache__" not in p.parts}
+
+
+def _vocabulary_definitions(sources: Mapping[str, str]) -> dict[str, list[str]]:
+    """每个词表名在给定源码集合里的「模块级定义处」（口径：`Assign`/`AnnAssign` 的目标名）。
+
+    只数定义（模块级赋值目标名），不数引用 —— `tools/doc_tools.py` 的
+    `list(CA.CLAIM_KINDS)` 是对同一份词表的引用，它不该被算成第二处定义。
+    """
+    out: dict[str, list[str]] = {name: [] for name in _VOCABS}
+    for rel, text in sources.items():
+        for node in ast.parse(text).body:
+            if isinstance(node, ast.Assign):
+                targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                targets = [node.target.id]
+            else:
+                targets = []
+            for name in _VOCABS:
+                if name in targets:
+                    out[name].append(f"{rel}:{node.lineno}")
+    return out
+
+
+def _inline_domain_problem(sources: Mapping[str, str]) -> list[str]:
+    """工具侧的取值域必须是 `list(CA.<词表>)`（引用），不许内联成字面量（`EE-06` 的反面形态）。"""
+    text = sources.get("tools/doc_tools.py", "")
+    out: list[str] = []
+    for name in ("CLAIM_KINDS", "CLAIM_STATUSES", "ALLOWED_USE_KINDS"):
+        if f"list(CA.{name})" not in text:
+            out.append(f"`tools/doc_tools.py` 里读不到 `list(CA.{name})` —— 取值域要么被内联、要么丢了")
+    for name in _VOCABS:
+        members = getattr(CA, name)
+        literals = (", ".join(repr(m) for m in members))
+        for probe in (f'"enum": ({literals})', f'"enum": [{literals}]'):
+            if probe in text:
+                out.append(f"`tools/doc_tools.py` 把 {name} 内联成了字面量（{probe[:44]}…）")
+    return out
+
+
+def test_the_five_claim_vocabularies_have_exactly_one_definition():
+    """`EE-06` ①：五张词表各只有一处定义，且工具侧的取值域是引用而不是副本。
+
+    这条守的是 `EE-06` 的原意（"取值域校验存在、且只有一份"）：五张词表各自只在
+    `claimanatomy.py` 定义一次，而 `validate_claim` 靠 `CLAIM_FIELDS[...].domain`
+    间接强制它们 —— 所以"把词表搬进 `schema.py`"既非必要、也会造出第二份。
+
+    负控（同一条里，两半都验）：① 往源码集合里塞一份词表副本 ⇒ 同一个读法必须报出 2 处；
+    ② 把 `doc_tools` 的 `list(CA.X)` 换成内联字面量 ⇒ `_inline_domain_problem` 必须报出来。
+    """
+    sources = _tree_sources()
+    copies = _vocabulary_definitions(sources)
+    bad = {n: v for n, v in copies.items() if len(v) != 1}
+    assert not bad, f"这些词表不是「只有一处定义」（`EE-06` 要防的就是第二份）：{bad}"
+    problem = _inline_domain_problem(sources)
+    assert not problem, "；".join(problem)
+
+    # 反负控①：造一份词表副本 ⇒ 必须红
+    doctored = dict(sources)
+    doctored["_probe_copy.py"] = "CLAIM_KINDS = ('定义', '定理')\n"
+    assert len(_vocabulary_definitions(doctored)["CLAIM_KINDS"]) == 2, "反负控失效：副本没被读出来"
+
+    # 反负控②：把引用换成内联字面量 ⇒ 必须红
+    doc = sources["tools/doc_tools.py"]
+    inline = doc.replace('"enum": list(CA.CLAIM_KINDS)',
+                         '"enum": (' + ", ".join(repr(m) for m in CA.CLAIM_KINDS) + ')')
+    assert inline != doc, "反负控没改到 `doc_tools` 那处引用"
+    assert _inline_domain_problem({**sources, "tools/doc_tools.py": inline}), (
+        "把引用换成内联字面量之后判据一声不吭 ⇒ 它是真空的")
+
+
+def test_the_bits_shape_judge_has_exactly_one_definition():
+    """`evidencebits` 单一来源：判 `bits` 形状的两个函数各只有一处定义。
+
+    为什么只钉「定义唯一」、不钉「`schema.py` 是唯一调用点」：本判据要抓的缺陷是
+    "又有人写了一份判形状的实现"，而那种实现哪怕只有一个新调用点也照样是第二份口径；
+    反过来，钉死调用点集合会让将来任何合法的读侧消费者因为一条与缺陷无关的理由变红，
+    而"改这条判据"就变成走形式。定义唯一是可机械判的、且直接对应缺陷本身 ——
+    将来若真要在别处判形状，正确做法是调 `bit_problems`（`schema.py:1739` 就是这么做的）。
+
+    负控：在别处造第二个判形状的函数 ⇒ 同一个读法必须报出两处。
+    """
+    authors: dict[str, list[str]] = {}
+    for rel, text in _tree_sources().items():
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(node, ast.FunctionDef) and node.name in ("bits_shape_problems", "bit_problems"):
+                authors.setdefault(node.name, []).append(f"{rel}:{node.lineno}")
+    bad = {n: v for n, v in authors.items() if len(v) != 1}
+    assert not bad, f"判 `bits` 形状的函数定义不止一处（`EE-06` 要防的第二份口径）：{bad}"
+
+    # 反负控：在别处造第二个判形状的函数 ⇒ 必须红
+    doctored = dict(_tree_sources())
+    doctored["_probe_second_judge.py"] = (
+        "def bits_shape_problems(raw):\n"
+        "    return [] if isinstance(raw, dict) else ['坏']\n")
+    seen: dict[str, list[int]] = {}
+    for rel, text in doctored.items():
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(node, ast.FunctionDef) and node.name == "bits_shape_problems":
+                seen.setdefault(rel, []).append(node.lineno)
+    assert len(seen) == 2, f"反负控失效：第二份判形状的实现没被读出来（{seen}）"

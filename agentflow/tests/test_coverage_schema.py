@@ -155,3 +155,59 @@ def test_check_array_invariants_none_value_is_skipped_not_flagged():
     obj = row_cls.__new__(row_cls)
     setattr(obj, field, None)
     assert S.check_array_invariants(table, obj) == []
+
+
+def test_check_array_invariants_reports_mixed_type_elements_instead_of_raising():
+    """R-05 负控（改前必红）：混类型数组要报问题，不许让判据自己抛 `TypeError`。
+
+    改前形态（旧实现那一行表达式）在 `["0001", 2]` 上是
+    `TypeError: '<' not supported between instances of 'int' and 'str'` —— 那不是
+    "库里有一条坏数据"，而是判据炸了：`validate_table` 只接 `ValueError`，
+    `store.rebuild` 的灾难恢复链同样只接 `ValueError` ⇒ 一条混类型的行会以
+    `TypeError` 打断整次重建（重建不可逆）。
+
+    三档必须分得开：这一条走"元素不是字符串"，不许被报成"未升序去重"
+    （那会让人去查一个不存在的排序问题 —— `:110` 那条同族的理由）。
+    """
+    obj = S.Concept.__new__(S.Concept)
+    obj.related_concepts = ["0001", 2]
+    bad = S.check_array_invariants("concepts", obj)
+    assert len(bad) == 1, bad
+    assert bad[0].startswith("related_concepts"), bad
+    assert "元素不是字符串" in bad[0], bad
+    assert "未升序去重" not in bad[0], bad
+
+
+def test_check_array_invariants_mixed_type_judge_covers_every_set_field():
+    """反真空：混类型判据必须真的走遍每一个 set 字段（不是只照顾 concepts）。
+
+    只测一个字段会让"另外 8 个 set 字段仍会 `TypeError`"这一格无人管 ——
+    R-05 的根因恰恰是"7 处行级内联件 + 表级一处，任意漏一处 TypeError 仍会逃逸"。
+    """
+    checked = 0
+    for table in S.TABLES:
+        row_cls = S.TABLES[table]["row"]
+        for field, kind in S.array_kinds(table).items():
+            if kind != "set":
+                continue
+            obj = row_cls.__new__(row_cls)
+            setattr(obj, field, ["0001", 2])
+            bad = S.check_array_invariants(table, obj)
+            assert len(bad) == 1 and "元素不是字符串" in bad[0], (table, field, bad)
+            checked += 1
+    assert checked >= 9, f"只查到 {checked} 个 set 字段 —— 判据的扫描面缩水了"
+
+
+def test_validate_table_reports_a_mixed_type_row_as_value_error():
+    """R-05（表级路径）：`validate_table` 上混类型的行必须是 `ValueError`，不是 `TypeError`。
+
+    这一条走的是真正的入口（`row_from_dict` + `obj.validate()` + 集中检查），
+    而不是直接调谓词 —— 根因就在这两条路径上：任意一处先比较异类型，
+    `TypeError` 都会从 `except ValueError` 的缝里逃出去。
+    """
+    doc = {"schema_version": S.SCHEMA_VERSION,
+           "rows": [{"concept_id": "0001", "name": "X", "definition": "d",
+                     "related_concepts": ["0001", 2]}]}
+    with pytest.raises(ValueError) as exc:
+        S.validate_table("concepts", doc)
+    assert "元素不是字符串" in str(exc.value), exc.value

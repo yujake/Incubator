@@ -167,6 +167,12 @@ _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     "F": ("attack", "table", "fs"),
     "G": ("doc", "table", "fs"),
     "H": ("review", "verify", "doc", "table", "fs"),
+    # V 的落地工具只有一组：`verify_tools` 里那三件只读的验证台账工具
+    # （`verify.verify_proof` / `verify.list_verifications` / `verify.read_proof`）。
+    # 刻意**不**照抄 E 的 ("verify","table","fs")：这张表的用途是"名字消歧"，
+    # 不是授权矩阵 —— 多写组会让同名工具更容易撞上第二个候选，
+    # 而 `ambiguous` 必须为空（`assert_capabilities` 第 [7b] 条）。
+    "V": ("verify",),
     # 主控拿的是编排面工具（派活 / 台账 / 停止 / 状态 / 角色规格）：它不产出领域对象，
     # 所以这里只有 conductor 一组，且 CAPABILITIES["M"] 一个字都没变。
     "M": ("conductor",),
@@ -383,8 +389,12 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（2026-10-03 加 `G.paper_package` 之后）：
-    55 个动作 = 18 compared + 37 unmatched + 0 ambiguous
+    实测（2026-10-06 加角色 V 的三条动作之后）：
+    59 个动作 = 21 compared + 38 unmatched + 0 ambiguous
+    （V 的三条动作全部对上：`verify.verify_proof` / `verify.list_verifications` /
+    `verify.read_proof` —— 工具名最后一段就是 `handler_name`，
+    而 `_TOOL_GROUPS_BY_ROLE["V"]` 只登记了 `verify` 一组。
+    此前 2026-10-03 加 `G.paper_package` 之后是 55 = 18 + 37 + 0；
     （2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后是 53 = 18 + 35 + 0；
     2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
@@ -1190,8 +1200,11 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
 #: - `C` 的边是空的：C 一旦能发起动作，它就成了"绕过 B 引文回验"的写入路径。
 #:   C 的 `candidate_gaps` / `structural_duplicates` 是产出，由 D 或编排层
 #:   决定要不要变成请求。
-#: - `H` 只能召唤 `G`：审校者若能让别人改数据，它就同时是发现者与修正者。
-#:   这条与"H 的工具面 0 个写工具"（schema.H 的装配期断言）是同一约束的两个面。
+#: - `H` 能召唤 `A` / `E` / `G`（**不是只有 `G`**）：`H → A` 与 `H → E` 两条边
+#:   2026-09-30 由人批准加入（`draft/28` §199），用途是"引文对不上就找 A 核实原文、
+#:   断言能不能形式化就找 E"。审校者**依然不能改数据**，但那条约束的真身是
+#:   "H 的工具面 0 个写工具"（schema.H 的装配期断言），**不是**"H 没有向外的边"——
+#:   把这两件事混成一句会让人以为 `H → A`/`H → E` 不存在（本行 2026-10-06 更正）。
 #: 真身是 `src/agentflow/specs/<角色>.py`（M3 起）。这一行只做派生 —— 
 #: 也就是说改权限面要改 `specs/`，而 `specs/` 在 `.noai-paths` 里受保护。
 ALLOWED_EDGES: dict[str, frozenset[str]] = _specs.edges()
@@ -2207,6 +2220,14 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # 而真机实测主控连派三次都没能把包更新掉。与 `A.search_literature` /
     # `B.register_statement` / `H.review_report` 三条同族：诚实地登记"这一格没比对上"。
     "G.paper_package",
+    # `A.shelf_search`（2026-10-06，J-53 / 裁决 2 族 1）：A 的**角色级**动作，不是工具调用。
+    # 它调的是 `search.shelf` / `search.local`，两件工具名的最后一段是 `shelf` / `local`
+    # ⇒ 与 `handler_name`（`shelf_search`）对不上（唯一性约定要求逐字同名）。
+    # 为什么不给它凑一个同名工具：那两件是**通用只读检索**（A/C/H 都能调），而本动作是
+    # "先列书架清单、再按需取逐字摘录"的一次编排 —— 配成一对会让两层类型对账去比
+    # 两件不同的事。与 `A.search_literature` / `B.register_statement` / `G.paper_package`
+    # / `H.review_report` 五条同族：诚实地登记"这一格没比对上"。
+    "A.shelf_search",
 })
 
 

@@ -125,6 +125,74 @@ class SeamSpend:
                 "unknown_usd_calls": self.unknown_usd_calls}
 
 
+#: 逐角色登记的"默认模型缝"（装配期写入；工具层那条路从这里取）。
+#:
+#: ## 为什么需要它（两处真机断点，同一根因）
+#:
+#: `attack_tools._agent_for`（`F.step` 的工具路径）与 `verify_tools._agent_v`
+#: （V 的三件工具）都拿不到 host 的装配上下文 —— 它们只从 `register(...)`
+#: 得到 store 与工作区根。于是"模型驱动那一趟"里 H/F 有缝、而这两条路没有：
+#: 真机读数（T2 第 14 趟 `p6p`）`F.step` 连续 5 次 `no_change`，因为工具层那条路
+#: 造出来的 F 是 `AgentF(store)`（缝是 None）—— 而"没有缝"与"没有推理出东西"
+#: 在读数上长得一模一样，那正是这一处最坏的地方。
+#:
+#: ## 为什么是"按角色"的一张表，而不是每个角色自己的模块级变量
+#:
+#: 后者就是同一件事的两份独立实现（`agent_f/core.py` 一份、`agent_v/core.py` 一份）
+#: —— 两份必然分叉，而分叉是静默的（lint 的 R003 报的就是这个形态）。
+#: 一张按角色索引的表既是单一来源，也保留了"每个角色一个缝"的语义：
+#: F 的缝不该被 V 看见，V 的缝也不该被 F 看见。
+#:
+#: 默认空表 = 没接线（与 `host.DEFAULT_LLM_LOOPS` 同一条纪律：
+#: 环境里有 key 也不改变行为，要接线必须由调用方显式登记）。
+_ROLE_SEAMS: dict[str, Any] = {}
+
+
+def set_role_seam(role: str, llm: Any) -> None:
+    """登记某个角色的默认模型缝（`None` = 撤销登记，回到确定性实现）。"""
+    _ROLE_SEAMS[str(role)] = llm
+
+
+def role_seam(role: str) -> Any:
+    """取某个角色登记的默认模型缝（没登记就是 `None`，也就是没接线）。"""
+    return _ROLE_SEAMS.get(str(role))
+
+
+#: 逐 `(角色, 工作区根)` 登记的装配期配置（同一张表的旁边，不另开第二处注册表）。
+#:
+#: ## 为什么需要它
+#:
+#: `tools/attack_tools._agent_for` 与 `tools/verify_tools._agent_v` 这两条工具路径
+#: 只拿得到 `store` 与工作区根 —— host 那一侧的装配上下文（`config=`）到不了它们手里。
+#: 于是"F 的预算四键"在工具路径上永远是空 dict（`draft/44` J-07 实测：那四个键
+#: 全仓无赋值点，`tools/attack_tools._agent_for` 也不传 `config=`）。
+#:
+#: ## 为什么按 root 键，不是全局单值
+#:
+#: `conductor_for` 就是按 `store.root` 缓存的（`draft/41` 的 B8：同进程里第二次装配
+#: 会沿用第一次的设定 —— 真机每个 CLI 调用是一次进程，所以它没暴露）。
+#: 一个全局单值会把 B8 换个地方重演：把 A 工作区的配置发给 B 工作区的 F，
+#: 而读数上两边都"看起来正常"。按 root 键之后，两个工作区各自拿自己那一份。
+#:
+#: 默认空表 = 没登记 ⇒ 取到 `None` ⇒ 调用方按 `config=None` 走（`AgentF` 会把它当 `{}`，
+#: 与"不传 config"逐字同形）。
+_ROLE_CONFIGS: dict[tuple[str, str], Any] = {}
+
+
+def set_role_config(role: str, root: Any, cfg: Any) -> None:
+    """登记某个角色在某个工作区根上的装配期配置（`cfg=None` = 撤销登记）。
+
+    `root` 用 `str(...)` 归一：调用方给的可能是 `Path` 或 `str`，
+    两者指向同一个工作区时必须是同一个键（否则会静默出现"两份配置"）。
+    """
+    _ROLE_CONFIGS[(str(role), str(root))] = cfg
+
+
+def role_config(role: str, root: Any) -> Any:
+    """取某个角色在某个工作区根上的配置（没登记就是 `None`）。"""
+    return _ROLE_CONFIGS.get((str(role), str(root)))
+
+
 @dataclass
 class LlmSeam:
     """一个角色的模型缝。同一角色的所有调用共用它（于是预算与用量是一份）。"""
@@ -454,7 +522,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
     ("framework_summon", "summon", {
         "type": "object",
         "properties": {
-            "role": {"type": "string", "enum": list("ABCDEFGH")},
+            "role": {"type": "string", "enum": list("ABCDEFGHV")},
             "action": {"type": "string"},
             "params": {"type": "object"},
             "why": {"type": "string"},
@@ -467,7 +535,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             "targets": {"type": "array", "items": {
                 "type": "object",
                 "properties": {
-                    "role": {"type": "string", "enum": list("ABCDEFGH")},
+                    "role": {"type": "string", "enum": list("ABCDEFGHV")},
                     "action": {"type": "string"},
                     "params": {"type": "object"},
                     "instance": {"type": "string"},

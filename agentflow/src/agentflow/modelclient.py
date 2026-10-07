@@ -96,7 +96,12 @@ class ModelClient:
     scope: str = SCOPE_EXTRACT
     system: str | None = None
     meter: Any = None
-    task_id: str = ""
+    #: 审计挂点（`usage_ledger.task_id`）。没接线就原样留 `None`：
+    #: `verify.py` 的 `dangling_usage_task` 逐字容忍 `None`（那是"未接线"），
+    #: 只在"非 None 且不在 `tasks` 表里"时报 error。折成一个假字符串
+    #: （曾经是 `"(未接线)"`）会让每一笔未接线的花销都落成一条 dangling 行 ——
+    #: 那是三态被折平：把"没有台账号"伪装成"有一个叫 (未接线) 的台账号"。
+    task_id: str | None = None
     role: str = "B"
     max_tokens: int | None = None
     #: 逐笔记账结局（`modelcost.charge_reply` 的原样返回值）。
@@ -143,7 +148,9 @@ class ModelClient:
                 self.meter,
                 reply,
                 role=self.role,
-                task_id=self.task_id or "(未接线)",
+                # 原样透传（`""` 也归一成 `None`）：`None` 是"未接线"的合法取值，
+                # 不是"缺一个字符串"。见 `task_id` 字段那段（`dangling_usage_task` 的判据）。
+                task_id=(str(self.task_id).strip() or None),
                 scope=self.scope,
                 call_index=self.calls,
             )
@@ -185,7 +192,7 @@ class ModelClient:
 
 
 def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
-                    task_id: str = "", role: str = "B",
+                    task_id: str | None = None, role: str = "B",
                     env: Mapping[str, str] | None = None,
                     transport: Any = None,
                     max_tokens: int | None = None) -> ModelClient:
@@ -194,6 +201,10 @@ def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
     为什么不在建的时候就把"没 key"当异常抛掉：调用方通常要把"没查成"这件事
     记进产物与退出码（三态），而不是在装配阶段崩掉。装配阶段崩掉的话，
     连"为什么没跑成"都写不进清单。
+
+    `task_id=None`（缺省）表示"这次调用没有台账号可挂" ⇒ 账本那一行留空，
+    由 `verify.dangling_usage_task` 按"未接线"容忍；给了号就必须是 `tasks` 里
+    真有的那一行（否则审计会如实地报它挂不上 —— 那正是我们要它报的）。
 
     `max_tokens=None` 时用网关的缺省（4096）。抽取那条路必须显式给大一点：
     实测（2026-09-28）两本书的抽取失败在

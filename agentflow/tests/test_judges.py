@@ -268,3 +268,33 @@ def test_the_fifth_criterion_judges_primary_versus_secondary(tmp_path: pathlib.P
                   seam=_seam(tmp_path, primary))
     assert v2.ok is True, v2.to_dict()
 
+
+
+# ============================================================ D3（`draft/52`）：两个码表必须互相认识
+
+def test_the_two_code_tables_know_each_other() -> None:
+    """D3 / `L-05b-1`（`draft/52`）：`judges` 产出的每一个失败码，`judge` 的表都要认。
+
+    改前必红：`judges.judge` 自造的 `judge_bad_verdict` 与 `judge_ungrounded_findings`
+    都不在 `J.JUDGE_PROBLEMS` 里 ⇒ `is_judge_problem()` 返回 `False`，
+    而 `judges.py` 的 docstring 逐字写着"复用 `judge.JUDGE_PROBLEMS`"。
+    两个入口（`agent_f` 调 `judge_json`、`agent_h` 调 `judges.judge`）产出的码
+    必须落在同一张受控词表里 —— 否则调用方"这是没查成还是查成了"的判据会分叉。
+    """
+    import pathlib
+    import re
+
+    from agentflow import judge as J
+
+    src = pathlib.Path(JG.__file__).read_text(encoding="utf-8")
+    emitted = set(re.findall(r'problem\s*=\s*"([a-z_]+)"', src))
+    assert emitted, "一个码都没扫到 —— 扫描器坏了（别把这条判据读成通过）"
+    unknown = sorted(c for c in emitted if not J.is_judge_problem(c))
+    assert not unknown, f"`judges` 产出的这些码不在 `judge.JUDGE_PROBLEMS` 里：{unknown}"
+    # 反向：受控词表本身也要能被 `is_judge_problem` 认出（含带后缀的 judge_failed）
+    for code in J.JUDGE_PROBLEMS:
+        assert J.is_judge_problem(code), code
+        assert J.reason_of(code), code
+    assert J.is_judge_problem("judge_failed:AttributeError")
+    assert not J.is_judge_problem("judge_bad_jsonx")
+    assert not J.is_judge_problem("")

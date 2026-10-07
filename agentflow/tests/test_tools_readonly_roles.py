@@ -41,9 +41,13 @@ def _spec(name: str, side_effect: str, roles: tuple[str, ...], *, external: str 
     )
 
 
-def test_read_only_roles_are_exactly_c_and_h():
-    """只读角色的单一来源。改动这里必须同时改设计文档与 C/H 的实现。"""
-    assert READ_ONLY_ROLES == ("C", "H")
+def test_read_only_roles_are_exactly_c_h_v():
+    """只读角色的单一来源。改动这里必须同时改设计文档与 C/H/V 的实现。
+
+    V（验证者，F-02 起）在这里的理由：它不写任何表（`capabilities.WRITE_SETS["V"]`
+    是空集），唯一的产物是 `verifications/<命题号>.jsonl` 这个文件。
+    """
+    assert READ_ONLY_ROLES == ("C", "H", "V")
     assert set(READ_ONLY_ROLES) <= set(ROLES)
 
 

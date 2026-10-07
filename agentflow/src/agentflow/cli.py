@@ -190,7 +190,7 @@ def cmd_run_a(args) -> int:
     names = (args.provider.split(",") if args.provider else (cfg.get("agent_a") or {}).get("providers", ["openalex"]))
     providers = _build_providers(cfg, names, root)
     downloader = F.default_downloader(cfg.get("download") or {}) if (cfg.get("agent_a") or {}).get("download", True) else None
-    agent = AgentA(st, providers=providers, downloader=downloader, config={**(cfg.get("agent_a") or {}), **(cfg.get("lease") or {})})
+    agent = AgentA(st, providers=providers, downloader=downloader, config=dict(cfg.get("agent_a") or {}))
     out = agent.run(max_requests=args.max if args.once else None)
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 1 if _run_a_failed(out) else 0
@@ -245,7 +245,7 @@ def cmd_run_b(args) -> int:
         st,
         extractor=_H.b_extractor(st, config=cfg, notes=_notes),
         extract_text=extract_text,
-        config={**(cfg.get("agent_b") or {}), **(cfg.get("lease") or {})},
+        config=dict(cfg.get("agent_b") or {}),
     )
     for _n in _notes:
         print(f"[run-b] {_n}", file=sys.stderr)
@@ -332,6 +332,22 @@ def cmd_rebuild(args) -> int:
         return 1
     out = st.rebuild(backup=not args.no_backup)
     print(f"[rebuild] 已从事件日志重建：应用 {out['applied']} 条，跳过 {out['skipped']} 条")
+    # ---- R-06 的可见面（`46-01 §2.2(b)` STEP-3 逐字："明细没有人看得见就等于没做"）
+    #
+    # `skipped` 那个整数一直有，但没有人知道跳过了什么：重建完照样打印
+    # "已重建：应用 N 条"，而"N 条为什么没进去"一个字都不说 —— 读的人据此
+    # 以为重建是完整的（`verify` 的 `rebuild` 相关读数也只看得到那个整数）。
+    # 所以这里把 `store.rebuild` 新增的两键（`skipped_by_reason` / `skipped_details`）
+    # 打出来。三态纪律：非空才打印 —— 干净的重建不许多出噪音，
+    # 否则"有跳过"这件事会在满屏输出里贬值。
+    by_reason = dict(out.get("skipped_by_reason") or {})
+    if by_reason:
+        detail = "、".join(f"{k}={v}" for k, v in sorted(by_reason.items()))
+        print(f"[rebuild] 跳过的分类计数：{detail}")
+        for row in list(out.get("skipped_details") or [])[:5]:
+            print(f"[rebuild]   跳过明细：{row}")
+        if len(list(out.get("skipped_details") or [])) > 5:
+            print(f"[rebuild]   （另有 {len(list(out.get('skipped_details') or [])) - 5} 条明细未打印）")
     print(f"[rebuild] counters = {out['counters']}")
     return 0
 
@@ -503,20 +519,6 @@ def _resolve_concept(st, token: str) -> str | None:
     return hit["concept_id"] if hit else None
 
 
-def cmd_research(args) -> int:
-    """运行 D 的研究循环（可指定 C 报告，或用最近一份）。"""
-    from agentflow.agent_d import AgentD
-
-    root = Path(args.root or DEFAULT_ROOT).resolve()
-    cfg = load_config(root, args.config)
-    st = make_store(root)
-    st.init()
-    d = AgentD(st, config=cfg.get("agent_d") or {})
-    out = d.run_from_latest_report(report_id=args.report_id, gap_rounds=args.gap_rounds)
-    print(json.dumps(out, ensure_ascii=False, indent=2))
-    return 0
-
-
 def cmd_pipeline(args) -> int:
     """把 A→B→C→D 串起来跑（DESIGN-TOOLS.md §5）。"""
     from . import host as H
@@ -540,13 +542,13 @@ def cmd_pipeline(args) -> int:
             st,
             providers=_build_providers(cfg, names, root),
             downloader=F.default_downloader(cfg.get("download") or {}),
-            config={**(cfg.get("agent_a") or {}), **(cfg.get("lease") or {})},
+            config=dict(cfg.get("agent_a") or {}),
         )
         agent_b = AgentB(
             st,
             extractor=H.b_extractor(st, config=cfg),
             extract_text=extract_text,
-            config={**(cfg.get("agent_b") or {}), **(cfg.get("lease") or {})},
+            config=dict(cfg.get("agent_b") or {}),
         )
 
     out = run_pipeline(
@@ -1175,12 +1177,26 @@ def cmd_project(args) -> int:
 #: `ask` 是"问一行"（缺省 `input`），`out` 是"打一行"（缺省 `print`）。
 #: 之所以把两个口子显式传下去：整台菜单因此可以用脚本化的输入在测试里驱动，
 #: 不必真的占一个终端（本项目的判据一律要能离线、确定性地跑）。
+#:
+#: ---- 废案留痕（`R8`-A-1；出处 `draft/65` §2 与 `draft/65a` §A-1）----
+#: ① 原先想做什么：交互台只覆盖五件事（项目 / 主题 / 状态 / 工具面 / demo），第 5 项按 `5`
+#:    进"离线自检（不联网、不花钱）"。`draft/41-H:55` 逐字把"只覆盖五件事"写成了设计。
+#: ② 怎么做的：`MENU` 第 5 项 → `SHELL_ACTIONS["5"]` → `_shell_demo` → `main(["demo", "--keep"])`。
+#: ③ 有没有被证明 work 过（三态）：判据面查到了（`demo.py` 被 `tests/test_demo_end_to_end.py`
+#:    6 条钉住，`draft/48-09:890` 叫它"唯一不需要 key 的端到端路径"的正控）；真机面是零实例
+#:    （`draft/48-09:893` 逐字：两个根没有任何 `demo/` 运行产物，改前/改后都是 0）。
+#: ④ 为什么淘汰 + 教训：`draft/44:95`（L-04h）判它"占着 MENU 第 5 项"；`draft/48-09:878-880`
+#:    的处置逐字是"`demo.py` 不删（唯一不需要模型 key 的端到端路径）⇒ 只从 `MENU` 摘掉入口，
+#:    改为文档里说明 `python -m agentflow.cli demo`（保留可达、不再占菜单）"。坑在：新增主入口
+#:    `run-agent` 时只加了子命令、没加菜单格，而"交互台只覆盖五件事"当时被当成设计 ⇒ 少一格
+#:    主入口读起来像刻意的取舍。教训：下次新增主入口 X ⇒ 别只加子命令 ⇒ 改成同批把 X 加进
+#:    `MENU`，并写一条元判据断言 `"X" in MENU 文本`（本条的判据在
+#:    `tests/test_r8_retired_entries.py`）。
 MENU: tuple[tuple[str, str, str], ...] = (
-    ("1", "项目：列出 / 计划 / 运行（本地书架、冷启动或热启动）", "project"),
+    ("1", "项目：列出 / 计划 / 运行（冷启动或热启动）", "project"),
     ("2", "端到端跑一个主题（联网检索；需要模型 key）", "run"),
     ("3", "看数据状态 / 校验全局不变量", "status"),
     ("4", "看某个角色的工具面（只读角色看不到写工具）", "tools"),
-    ("5", "离线自检 demo（不联网、不花钱）", "demo"),
 )
 
 
@@ -1277,13 +1293,11 @@ def _shell_tools(ask, out) -> int:
     return main(["tools", "--role", role])
 
 
-def _shell_demo(ask, out) -> int:
-    out("")
-    for line in tty.rule("离线自检"):
-        out(line)
-    out(tty.paint("  它会自建素材与独立工作区，把整条链路跑一遍；不联网、不花钱。", "grey"))
-    out("")
-    return main(["demo", "--keep"])
+# `R8`-A-1 的退场点：这里原有 `def _shell_demo(ask, out) -> int:`（删于 2026-10-07）。
+# 它原先只做一件事：打三行提示，然后 `main(["demo", "--keep"])`。
+# `demo` 子命令原样保留（唯一不需要模型 key 的端到端路径，`tests/test_demo_end_to_end.py`
+# 6 条钉住；`draft/48-09:899` 逐字"不许删 `demo.py`"）⇒ 摘掉的只是交互台的入口，
+# 命令仍然可达（`python -m agentflow.cli demo`）。四块留痕见 `MENU` 上方那一段。
 
 
 #: 菜单按键 -> 处理函数。键就是 `MENU` 里那个按键。
@@ -1292,7 +1306,7 @@ SHELL_ACTIONS = {
     "2": _shell_run,
     "3": _shell_status,
     "4": _shell_tools,
-    "5": _shell_demo,
+    # `R8`-A-1：这里原有 `"5": _shell_demo,`（连同 `MENU` 第 5 项一起摘掉，见上方留痕）。
 }
 
 
@@ -1636,62 +1650,6 @@ def cmd_run_agent(args) -> int:
     if code == 2:
         print(tty.paint(f"[run-agent] 没查成：{run.final}", "yellow"), file=sys.stderr)
     return code
-
-
-def cmd_gate(args) -> int:
-    """交付闸门：跑一组判据 + 机械半，写报告与工作项；`--dispatch` 真把工作项派回去。
-
-    退出码（三态）：0 = 全过；1 = 有确定的不达标（工作项已落）；2 = 没查成（没接线/读不到）。
-    """
-    from . import deliver as D
-    from . import host as H
-    from .agent_loop import LlmSeam
-
-    root = Path(args.root or DEFAULT_ROOT).resolve()
-    st = make_store(root)
-    st.init()
-    artifact = Path(args.artifact)
-    try:
-        text = artifact.read_text(encoding="utf-8")
-    except OSError as e:
-        print(f"[gate] 没查成：读不到 {artifact}（{type(e).__name__}: {e}）", file=sys.stderr)
-        return 2
-    seam = _agent_seam_factory("H", root=root, sid=args.sid, usd_budget=args.budget_usd, store=st)
-    wiring = H.wired_llm_conductor(st, loops={}, session_root=root, sid=args.sid,
-                                   workspace_root=str(root),
-                                   seam_factory=lambda role: _agent_seam_factory(
-                                       role, root=root, sid=args.sid,
-                                       usd_budget=args.budget_usd, store=st))
-    pairs = [tuple(x.split(",")) for x in (args.pair or [])]
-    res = D.gate(args.name, text, session_root=root, seam=seam,
-                 criteria=args.criterion or (), store=st, claimed_pairs=pairs,
-                 context=args.context or "", require_disclaimer=bool(args.disclaimer),
-                 disclaimer=args.disclaimer or "")
-    if args.json:
-        print(json.dumps(res.to_dict(), ensure_ascii=False, indent=2))
-    else:
-        print(tty.paint(f"闸门 {res.name}：{res.verdict}", "bold"))
-        for c in res.criteria:
-            state = c["verdict"] or f"没判成（{c['problem']}）"
-            print(f"  判据 {c['criterion']}（{c['faculty']}）：{state}"
-                  + (f" —— {c['why'][:80]}" if c.get("why") else ""))
-        for m in res.mechanical:
-            print(f"  机械半 {m['kind']}：{m['detail'][:100]}")
-        for w in res.work_items:
-            print(f"  工作项 {w.id} → {w.who or '（未定）'}：{w.what[:100]}")
-        for note in res.notes:
-            print(f"  注：{note}")
-        print(f"  报告：{res.report_path}")
-    if args.dispatch and res.work_items:
-        results = D.dispatch_work_items({**wiring, "session_root": root}, res.work_items,
-                                        budget=None)
-        for r in results:
-            print(f"  派回：{r['id']} ⇒ {r['dispatch']}"
-                  + (f"（{r.get('why') or r.get('refusal_reason') or ''}）")
-                  if r["dispatch"] != "summoned" else f"  派回：{r['id']} ⇒ 任务 {r['task_id']}")
-    if res.verdict == "unknown":
-        return 2
-    return 0 if res.verdict == "pass" else 1
 
 
 def _ago(stamp: str) -> str:
@@ -2182,11 +2140,6 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--text", default=None, help="直接用自然语言需求，走 C.handle() 分派")
     sp.set_defaults(func=cmd_analyze)
 
-    sp = sub.add_parser("research", help="D：研究循环")
-    sp.add_argument("--report-id", default=None, help="基于哪份 C 报告（缺省用最近一份）")
-    sp.add_argument("--gap-rounds", type=int, default=2)
-    sp.set_defaults(func=cmd_research)
-
     sp = sub.add_parser("pipeline", help="编排：C→D→(A→B→D 复查) 循环")
     sp.add_argument("--request", required=True, help="自然语言分析需求")
     sp.add_argument("--gap-rounds", type=int, default=2)
@@ -2370,21 +2323,6 @@ def build_parser() -> argparse.ArgumentParser:
                     help="撤掉停机开关（接着跑之前要先撤，否则下一趟第 0 步就收工）")
     sp.set_defaults(func=cmd_stop)
 
-    sp = sub.add_parser("gate", help="交付闸门：逐条判据 + 机械半 → 报告与工作项（三态退出码）")
-    sp.add_argument("name", help="这次交付的名字（报告落在 <root>/gates/<名字>.json）")
-    sp.add_argument("--artifact", required=True, help="被审的交付物（一个文本文件）")
-    sp.add_argument("--criterion", action="append", default=[],
-                    help="只跑这条判据，可重复；不写则跑全部")
-    sp.add_argument("--pair", action="append", default=[],
-                    help="机械半核的概念对，形如 0001,0002，可重复")
-    sp.add_argument("--context", default="", help="给语义判据的额外上下文")
-    sp.add_argument("--disclaimer", default="", help="要求逐字出现的免责声明常量")
-    sp.add_argument("--dispatch", action="store_true", help="把工作项真的派回去（过能力表与策略）")
-    sp.add_argument("--budget-usd", type=float, default=None, help="美元上限")
-    sp.add_argument("--sid", default=None, help="会话号（默认当天）")
-    sp.add_argument("--json", action="store_true", help="打成 JSON")
-    sp.set_defaults(func=cmd_gate)
-
     sp = sub.add_parser("inbox", help="列出等着用户回答的问题（只读；不给 --sid 就扫全部会话）")
     sp.add_argument("--sid", default=None,
                     help="只查这一个会话；不给则扫该工作区所有会话（真机每一趟都有自己的 "
@@ -2403,7 +2341,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--sid", default=None, help="问题所在会话号（见 `agentflow inbox`）")
     sp.set_defaults(func=cmd_answer)
 
-    sp = sub.add_parser("closing", help="跑收工门（draft/37 §16 P3 的五条；退出码 0/1/2）")
+    # 格数不手抄：判据真身是 `closing.DEFAULT_CHECKS`，这里现读它的长度
+    # （`draft/63` §3 #3 的口径：这类定值随代码变，手抄一份就是给自己留一个会过期的数 ——
+    # 真机读数里它已经漂过一次：手抄"五条"而真身是 8 格）。
+    from . import closing as _CL
+
+    sp = sub.add_parser(
+        "closing",
+        help=f"跑收工门（draft/37 §16 P3 的 {len(_CL.DEFAULT_CHECKS)} 格；退出码 0/1/2）")
     sp.add_argument("--project-dir", default="",
                     help="论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是「没查成」）")
     sp.add_argument("--report", default="",

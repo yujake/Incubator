@@ -1,0 +1,358 @@
+# -*- coding: utf-8 -*-
+"""R7-⑰ 两条机械改写防线：换行风格 + 底稿与文档不许被脚本改写成"连行 + 去强调"。
+
+治的是本轮施工实测过的三次真事故（不是假想）：
+
+1. 换行风格：`Path.write_text` 的脚本把 7 个文件从 CRLF 翻成 LF
+   （`conductor.py` / `test_agent_loop.py` / `test_judges.py` / `test_agent_e_formal_path.py`
+   （HEAD 本就是 CRLF，方向相反）/ `secretary.py` / `test_secretary.py` / `draft/46-01`）；
+2. 底稿被 R009 族脚本改写：`draft/46-01` 644→550 行、`draft/46-03` 797→556 行
+   （连行 + 把强调标记换成空格），两个文件都靠 `git checkout HEAD --` 逐字节还原；
+3. 改写后行号锚点漂。
+
+这一条判据守前两条。第三条走既有的两条（`tests/test_reading_map.py` 的行数判据与
+`test_r5_orchestration_cost.py` 的 `test_the_stale_line_number_references_are_gone`）——
+本文件刻意不新造"扫全仓 `x.py:123`"的通用判据：`test_r5_orchestration_cost.py` 里
+逐字记着为什么（全仓三十余处那种引用、多数指向别处的文档，通用判据只会造一盏
+靠别人改文件才变绿的灯）。
+
+三态：`draft/` 里有一部分是未跟踪的底稿 —— 它们没有 HEAD 可对拍。那不是"没问题"，
+是"这一格覆盖不到"，所以判据把那个份数当读数报出来
+（`test_the_untracked_draft_gap_is_a_visible_state`），不许静默跳过。
+"""
+from __future__ import annotations
+
+import pathlib
+import subprocess
+
+REPO = pathlib.Path(__file__).resolve().parents[1]      # 交付树（agentflow/）
+GIT_ROOT = REPO.parent                                  # `.git` 在上一级
+
+#: 只有文本才有"换行风格"这件事；二进制（PDF、图片）不判。
+_TEXT_SUFFIXES = (".py", ".md", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".txt",
+                  ".cfg", ".ini", ".sh", ".ps1", ".rst")
+_TEXT_NAMES = (".noai-paths", ".gitattributes", ".gitignore")
+
+#: 新文件必须跟随仓约定的面（源码与教人文本）。两类刻意不判：
+#:   · `out/` 与 `projects/` 是运行产物（每跑一次就变一次，判它们只会造出假红，
+#:     同 `test_r5_orchestration_cost.py` 的 `_REF_SCAN_SKIP_DIRS` 那段理由）；
+#:   · `temp/` 是判据的工装（整树副本、负控副本、命令输出捕获）—— 实测那里有
+#:     30 个 `.txt` 输出捕获（PowerShell 重定向写出来的是 CRLF）与 1 份整树副本里的
+#:     工具文件，它们不是要入仓的文件。判工装的换行只会造出一片没人该去改的红。
+_NEW_FILE_SCOPE = ("agentflow/src", "agentflow/tests", "agentflow/docs", "agentflow/tools",
+                   "agentflow/scripts", "draft")
+
+
+def _git(*args: str, data: bytes | None = None) -> bytes:
+    """跑一条 git 命令；失败就是判据自己坏了（不许折成"没问题"）。"""
+    proc = subprocess.run(["git", "-C", str(GIT_ROOT), *args], input=data,
+                          capture_output=True)
+    assert proc.returncode == 0, (
+        f"`git {' '.join(args)}` 失败（rc={proc.returncode}）："
+        f"{proc.stderr.decode('utf-8', 'replace')[:300]} —— 读不到就是 unknown，"
+        "不许折成『换行风格没问题』（判据的落点必须在仓里）"
+    )
+    return proc.stdout
+
+
+def _paths(*args: str) -> list[str]:
+    """`git ls-files` / `git diff --name-only` 的 `-z` 输出 ⇒ 路径清单。
+
+    用 `surrogateescape` 解码：仓里有非 UTF-8 字节的路径时不许抛，也不许静默丢。
+    """
+    out = _git(*args, "-z").decode("utf-8", "surrogateescape")
+    return [x for x in out.split("\0") if x]
+
+
+def _is_text(rel: str) -> bool:
+    return rel.endswith(_TEXT_SUFFIXES) or pathlib.PurePosixPath(rel).name in _TEXT_NAMES
+
+
+def _style(data: bytes) -> str:
+    """一份字节流的换行风格：`lf` / `crlf` / `mixed` / `none`（没有换行符）。"""
+    crlf = data.count(b"\r\n")
+    lf = data.count(b"\n") - crlf
+    if crlf and lf:
+        return "mixed"
+    if crlf:
+        return "crlf"
+    return "lf" if lf else "none"
+
+
+def _counts(data: bytes) -> dict[str, int]:
+    """(行数, 字节数, 强调标记数) —— 事故形态的三个读数。"""
+    return {"lines": data.count(b"\n"), "bytes": len(data), "stars": data.count(b"**")}
+
+
+def _head_shas() -> dict[str, str]:
+    """HEAD 那棵树的全量 `路径 ⇒ blob sha`（一次 `ls-tree`，不逐文件起进程）。"""
+    out = _git("ls-tree", "-r", "-z", "HEAD")
+    got: dict[str, str] = {}
+    for rec in out.split(b"\0"):
+        if b"\t" not in rec:
+            continue
+        left, _, path = rec.partition(b"\t")
+        parts = left.split()
+        if len(parts) >= 3:
+            got[path.decode("utf-8", "surrogateescape")] = parts[2].decode()
+    assert got, "`git ls-tree -r HEAD` 一个文件都没读到 ⇒ 这一格没查成（不是没问题）"
+    return got
+
+
+def _head_blobs(rels: list[str]) -> dict[str, bytes]:
+    """这些路径在 HEAD 里的内容（走 sha 取字节，一次 `cat-file --batch`）。
+
+    为什么按 sha 而不是 `git show HEAD:<path>`：仓里有带全角冒号与中文的底稿名，
+    路径一旦进命令行就可能被编码规则改写 ⇒ 取不到内容，而"取不到"会被读成"没改动"。
+    sha 是 ASCII，稳。
+    """
+    shas = _head_shas()
+    want = {rel: shas[rel] for rel in rels if rel in shas}
+    if not want:
+        return {}
+    out = _git("cat-file", "--batch", data=("\n".join(want.values()) + "\n").encode())
+    got: dict[str, bytes] = {}
+    pos = 0
+    for rel, _sha in want.items():
+        nl = out.index(b"\n", pos)
+        size = int(out[pos:nl].split()[2])
+        start = nl + 1
+        got[rel] = out[start:start + size]
+        pos = start + size + 1
+    return got
+
+
+def eol_problem(rel: str, head: bytes | None, work: bytes | None, *,
+                convention: str) -> str | None:
+    """一个文件的换行风格问题（`None` = 没问题）。
+
+    `head is None` ⇒ 新增文件：必须跟随仓的约定（`convention`）。
+    `work is None` ⇒ 文件被删了：不判（那是删除，不是改写）。
+    """
+    if work is None:
+        return None
+    if head is None:
+        if _style(work) != convention:
+            return (f"{rel}: 新增文件的换行风格是 {_style(work)}，而仓的约定是 {convention}"
+                    "（新文件按仓的既有约定，不许各写各的）")
+        return None
+    if _style(head) != _style(work):
+        return (f"{rel}: 换行风格 HEAD={_style(head)} / 盘上={_style(work)} —— "
+                "内容有改动但换行档位与 HEAD 不同：那是脚本 `write_text` 往返的指纹"
+                "（整份文件的 diff 会因此变成全文件改写，行号锚点跟着全漂）")
+    return None
+
+
+def accident_form(before: bytes, after: bytes) -> str | None:
+    """"连行 + 去强调"形态的机械判据（两次真事故的共同指纹）。
+
+    命中条件刻意写得窄（宁可漏、不许把合法人工改写判红）：强调标记减少，
+    且（行数减少 或 强调标记腰斩）。
+
+    为什么要"强调标记减少"这一条：R009 族脚本的两次事故都是"连行 + 把强调标记换成
+    空格"，而合法的人工改写会增加内容（行数与标记一起长） ⇒ 这一条把两者分得开。
+    """
+    b, a = _counts(before), _counts(after)
+    if a["stars"] < b["stars"] and (a["lines"] < b["lines"] or a["stars"] * 2 < b["stars"]):
+        return (f"行 {b['lines']}→{a['lines']} 字节 {b['bytes']}→{a['bytes']} "
+                f"强调标记 {b['stars']}→{a['stars']}")
+    return None
+
+
+def _convention() -> str:
+    """仓对文本文件的换行约定 = 被跟踪文本文件里的多数档（现算，不写死）。"""
+    counts: dict[str, int] = {}
+    for line in _git("ls-files", "--eol").decode("utf-8", "replace").splitlines():
+        parts = line.split()
+        if len(parts) < 2 or not parts[1].startswith("w/"):
+            continue
+        style = parts[1][2:]
+        counts[style] = counts.get(style, 0) + 1
+    assert counts, "`git ls-files --eol` 一个文件都没读到 ⇒ 这一格没查成（不是没问题）"
+    return max(counts, key=lambda k: counts[k])
+
+
+def _changed_new_tracked() -> tuple[list[str], list[str], list[str]]:
+    """(相对 HEAD 有改动的被跟踪文本文件, 面上的未跟踪文本新文件, 全部被跟踪文本文件)。"""
+    changed = [r for r in _paths("diff", "--name-only", "HEAD") if _is_text(r)]
+    untracked = [r for r in _paths("ls-files", "--others", "--exclude-standard")
+                 if _is_text(r) and r.startswith(_NEW_FILE_SCOPE)]
+    tracked = [r for r in _paths("ls-files") if _is_text(r)]
+    return sorted(changed), sorted(untracked), tracked
+
+
+def _added_to_head_side() -> set[str]:
+    """被改了、但 HEAD 里没有这些路径（新增或改名进来的）。
+
+    它们没有 HEAD 可对拍 —— 那不是"取不到"，而是"这一档要按新增文件判"。
+    分开这一档是为了不误伤正常动作：把一份文件改名/新增进索引，会让
+    `git diff --name-only HEAD` 里多出一个 HEAD 里不存在的路径。
+    """
+    got: set[str] = set()
+    for line in _git("diff", "--name-status", "HEAD").decode("utf-8", "replace").splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 2 and parts[0].startswith("A"):
+            got.add(parts[-1])
+    return got
+
+
+def test_the_eol_style_of_changed_files_matches_head() -> None:
+    """防线 (a)：被跟踪文件的换行风格必须与 HEAD 一致；新增文件用仓的约定。
+
+    为什么这一条值得有：`Path.write_text` 在 Windows 上按 `os.linesep` 翻译换行，
+    于是一份"只改了三行"的文件在 git 眼里变成整文件改写 —— 行号锚点全漂、
+    review 的人看不出真改了什么。实测事故：7 个文件被这么翻过（一批 CRLF→LF、
+    一个方向相反）。
+    """
+    _assert_eol_negative_controls()
+    changed, new_files, tracked = _changed_new_tracked()
+    convention = _convention()
+    assert len(tracked) >= 500, (
+        f"被跟踪文本文件只读到 {len(tracked)} 个 ⇒ 判据的枚举面坏了（不是没问题）：{tracked[:5]}")
+
+    blobs = _head_blobs(changed)
+    # HEAD 里没有这些路径（新增 / 改名进来的）⇒ 按"新增文件"那一档判，
+    # 不当成"取不到 HEAD"（把正常动作判红是这套判据最该避免的形态）。
+    added = _added_to_head_side()
+
+    bad: list[str] = []
+    for rel in changed:
+        path = GIT_ROOT / rel
+        work = path.read_bytes() if path.is_file() else None
+        head = None if rel in added else blobs.get(rel)
+        if head is None and work is not None and rel not in added:
+            bad.append(f"{rel}: 取不到 HEAD 内容 ⇒ 这一格没查成（不是『风格一致』）")
+            continue
+        got = eol_problem(rel, head, work, convention=convention)
+        if got:
+            bad.append(got)
+    new_bad: list[str] = []
+    for rel in new_files:
+        path = GIT_ROOT / rel
+        if not path.is_file():
+            continue
+        got = eol_problem(rel, None, path.read_bytes(), convention=convention)
+        if got:
+            new_bad.append(got)
+
+    reading = {"changed_text_files": len(changed), "head_compared": len(blobs),
+               "added_to_head_side": len(added), "new_text_files": len(new_files),
+               "tracked_text_files": len(tracked), "convention": convention,
+               "mismatches": len(bad) + len(new_bad)}
+    assert not bad and not new_bad, (
+        f"被改动的文件与 HEAD 的换行档位不一致（读数 {reading}）：" + "；".join(bad + new_bad))
+
+
+def _assert_eol_negative_controls() -> None:
+    """防线 (a) 的负控：两个方向都要能红，且"没改动"与"删除"不许红。
+
+    样本用真文件：`tests/test_claimanatomy.py` 的 HEAD 是 CRLF（本轮实测被翻成 LF 过、
+    已按 HEAD 那一档还原）；`src/agentflow/closing.py` 的 HEAD 是 LF。
+    """
+    crlf_file = "agentflow/tests/test_claimanatomy.py"
+    lf_file = "agentflow/src/agentflow/closing.py"
+    blobs = _head_blobs([crlf_file, lf_file])
+    assert set(blobs) == {crlf_file, lf_file}, f"负控的样本取不到 HEAD 内容：{sorted(blobs)}"
+    crlf_head, lf_head = blobs[crlf_file], blobs[lf_file]
+    assert _style(crlf_head) == "crlf" and _style(lf_head) == "lf", (
+        f"样本的档位与登记的不符（{crlf_file}={_style(crlf_head)} / "
+        f"{lf_file}={_style(lf_head)}）⇒ 负控不再咬那个方向")
+
+    flipped = crlf_head.replace(b"\r\n", b"\n")
+    got = eol_problem(crlf_file, crlf_head, flipped, convention="lf")
+    assert got and "HEAD=crlf" in got, f"CRLF→LF 没被抓到（事故方向一）：{got}"
+    back = lf_head.replace(b"\n", b"\r\n")
+    got2 = eol_problem(lf_file, lf_head, back, convention="lf")
+    assert got2 and "HEAD=lf" in got2, f"LF→CRLF 没被抓到（事故方向二）：{got2}"
+    assert eol_problem(crlf_file, crlf_head, crlf_head, convention="lf") is None, \
+        "没改动却报了问题 ⇒ 判据会在读一遍自己的时候乱叫"
+    assert eol_problem("x.py", None, crlf_head, convention="lf"), "新文件用 CRLF 必须红"
+    assert eol_problem("x.py", None, lf_head, convention="lf") is None, "新文件用 LF 不该红"
+    assert eol_problem("x.py", lf_head, None, convention="lf") is None, "删除不该被当成改写"
+
+
+#: 真事故样本（R009 族脚本改写底稿那一次）：HEAD 的 (行数, 字节, 强调标记数)。
+_ACCIDENT_SAMPLE = "draft/46-施工级调查-01-schema与store.md"
+_ACCIDENT_HEAD = (644, 48646, 336)
+
+
+def _accident_simulation(head: bytes) -> bytes:
+    """真事故的机械形态：连掉空行 + 把强调标记换成空格。"""
+    return b"\n".join(line for line in head.replace(b"**", b" ").split(b"\n") if line.strip())
+
+
+def test_a_script_rewrite_of_a_draft_or_a_doc_is_caught() -> None:
+    """防线 (b)：`draft/` 下与一切 `.md` 都不许被脚本改写成"连行 + 去强调"。
+
+    为什么要单独一条：那种改写不是语法错误（`.md` 与底稿都不进编译），全量门照样
+    全绿、条数也不变 —— 它只把行号锚点与史实一起弄没。真事故两次
+    （`draft/46-01` 644→550、`draft/46-03` 797→556），都靠 `git checkout HEAD --` 还原。
+    """
+    _assert_accident_negative_controls()
+    changed, _new, _tracked = _changed_new_tracked()
+    watch = [r for r in changed if r.startswith("draft/") or r.endswith(".md")]
+    blobs = _head_blobs(watch)
+    hits: list[str] = []
+    skipped = 0
+    for rel in watch:
+        path = GIT_ROOT / rel
+        if rel not in blobs or not path.is_file():
+            # HEAD 里没有它（新增/改名进来的）或盘上已经删了：没有可比对象，
+            # 计进 `skipped` 当读数（不是"没问题"，也不该把正常动作判红）。
+            skipped += 1
+            continue
+        got = accident_form(blobs[rel], path.read_bytes())
+        if got:
+            hits.append(f"{rel}: {got}")
+
+    # 三态：未跟踪的底稿没有 HEAD 可对拍 —— 那是"这一格覆盖不到"，要报出来。
+    draft_tracked = _paths("ls-files", "draft")
+    draft_disk = [p for p in (GIT_ROOT / "draft").rglob("*") if p.is_file()]
+    untracked_drafts = len(draft_disk) - len(draft_tracked)
+    reading = {"draft_tracked": len(draft_tracked), "draft_disk": len(draft_disk),
+               "untracked_drafts": untracked_drafts, "watched_changed": len(watch),
+               "compared": len(blobs), "skipped_no_head": skipped,
+               "accident_hits": len(hits),
+               "untracked_drafts_reason": (
+                   f"draft/ 下 {untracked_drafts} 份未跟踪底稿没有 HEAD 可对拍 ⇒ "
+                   "本判据覆盖不到它们（不是『它们没问题』）")}
+    assert not hits, (
+        f"底稿/文档被改写成『连行 + 去强调』形态（读数 {reading}）：" + "；".join(hits))
+
+
+def _assert_accident_negative_controls() -> None:
+    """防线 (b) 的负控：真事故样本必须能红；合法改写与"没动"不许红。"""
+    head = _head_blobs([_ACCIDENT_SAMPLE]).get(_ACCIDENT_SAMPLE)
+    assert head is not None, f"真事故样本取不到 HEAD 内容：{_ACCIDENT_SAMPLE}"
+    got_counts = _counts(head)
+    assert (got_counts["lines"], got_counts["bytes"], got_counts["stars"]) == _ACCIDENT_HEAD, (
+        f"真事故样本的 HEAD 读数变了（{got_counts}）⇒ 负控的锚不再是那次事故："
+        "要么换样本、要么在报告里更新锚（不许直接把数字改成新读数了事）")
+
+    simulated = _accident_simulation(head)
+    hit = accident_form(head, simulated)
+    assert hit, "真事故的机械形态没被抓到 ⇒ 这条负控是空转"
+    assert "336→0" in hit, f"命中的读数与那次事故不符：{hit}"
+    assert accident_form(head, head) is None, "同内容不该报"
+    added = head + b"\n\n## xin-zhang\n\n**zhong-dian**\n"
+    assert accident_form(head, added) is None, (
+        "合法的人工改写（追加内容、强调标记一起长）被误判成事故形态 ⇒ 判据会把正常工作判红")
+
+
+def test_the_untracked_draft_gap_is_a_visible_state() -> None:
+    """三态：未跟踪底稿"覆盖不到"必须是一档可见状态，不许静默跳过。
+
+    这一条判的是读数本身：两份底稿计数要在同一个面上（跟踪 <= 盘上），
+    并且那个缺口必须带着"没有 HEAD 可对拍 / 覆盖不到"的说法报出来。
+    """
+    draft_tracked = _paths("ls-files", "draft")
+    draft_disk = [p for p in (GIT_ROOT / "draft").rglob("*") if p.is_file()]
+    assert draft_disk, "draft/ 下一份底稿都没有 ⇒ 判据的落点不对（不是没问题）"
+    assert draft_tracked, "draft/ 下一份被跟踪的底稿都没有 ⇒ git 那一半坏了"
+    assert len(draft_tracked) <= len(draft_disk), (
+        f"跟踪 {len(draft_tracked)} > 盘上 {len(draft_disk)} ⇒ 两个读数不是同一个面")
+    gap = len(draft_disk) - len(draft_tracked)
+    reason = (f"draft/ 下 {gap} 份未跟踪底稿没有 HEAD 可对拍 ⇒ "
+              "本判据覆盖不到它们（不是『它们没问题』）")
+    assert "没有 HEAD 可对拍" in reason and "覆盖不到" in reason, reason
+    assert isinstance(gap, int) and gap >= 0, gap

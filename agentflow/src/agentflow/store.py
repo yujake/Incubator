@@ -1266,6 +1266,15 @@ class Store:
         order: dict[str, list[str]] = {t: [] for t in S.TABLES}
         counters: dict[str, int] = {}
         applied = skipped = 0
+        #: `R-06`：`skipped` 是那个整数（既有读数与三处测试直接断言它，**不许改名/改类型**），
+        #: 这里再补两份**明细** —— 只报"跳过了 3 行"读不出下一步该做什么：
+        #: 是"这一行本来就不合法"（`schema_rejected`）、还是"事件行的形状坏了"
+        #: （`shape_broken`）、还是"这张表我根本不认识"（`unrecognized_table`）。
+        #: 为什么**不是**收窄 `except`：`row_from_dict` 对缺必填字段的行抛的是 `TypeError`
+        #: （dataclass 的形态），只接 `ValueError` 会把这类行直接炸出重建 —— 那是
+        #: 比"静默跳过"更坏的中间态（`46-01 §2.2(b)` 判"收窄不可行"）。
+        skipped_by_reason: dict[str, int] = {}
+        skipped_details: list[dict] = []
         #: `R-57`：重放里真的删掉了几行（与 `applied` 分开报 —— `applied` 的历史含义是
         #: "写下了几行"，把删除混进去会让既有读数变味）。
         deleted_replayed = 0
@@ -1294,7 +1303,20 @@ class Store:
         }
         snapshot_rows_not_in_log = sum(len(v) for v in snapshot_ahead.values())
 
-        for e in replay:
+        # `R-06`：跳过一次就要留两份明细（`skipped` 那个整数照旧 +1）。
+        def _skip(reason: str, *, table: str = "", row: Any = None,
+                  error: str = "", event_index: int | None = None) -> None:
+            """记一次"这一行没进 state"：整数、按原因计数、逐条明细三者同时更新。"""
+            nonlocal skipped
+            skipped += 1
+            skipped_by_reason[reason] = skipped_by_reason.get(reason, 0) + 1
+            rid = ""
+            if isinstance(row, Mapping) and table in S.TABLES:
+                rid = str(row.get(S.TABLES[table]["id_field"]) or "")
+            skipped_details.append({"table": table, "id": rid, "reason": reason,
+                                    "error": error, "event_index": event_index})
+
+        for event_index, e in enumerate(replay):
             op = e.get("op")
             if op == "delete":
                 # `R-57`：删除也必须重放。只按 `key` 删（**不校验 `row`**）：
@@ -1304,7 +1326,7 @@ class Store:
                 if dtable == "counters":
                     continue  # counters 没有"删一行"这回事（它的值由 alloc 事件折叠）
                 if dtable not in S.TABLES:
-                    skipped += 1
+                    _skip("unrecognized_table", table=str(dtable), event_index=event_index)
                     continue
                 dkey = e.get("key")
                 if dkey is None:
@@ -1312,7 +1334,8 @@ class Store:
                     drow = e.get("row") or {}
                     dkey = drow.get(S.TABLES[dtable]["id_field"])
                 if dkey is None:
-                    skipped += 1
+                    _skip("missing_key", table=str(dtable), row=e.get("row"),
+                          event_index=event_index)
                     continue
                 if str(dkey) in state[dtable]:
                     del state[dtable][str(dkey)]
@@ -1332,13 +1355,22 @@ class Store:
                 applied += 1
                 continue
             if table not in S.TABLES:
-                skipped += 1
+                _skip("unrecognized_table", table=str(table), row=row, event_index=event_index)
                 continue
             try:
                 obj = S.row_from_dict(table, row)
                 obj.validate()
-            except Exception:
-                skipped += 1
+            except ValueError as e:
+                # 形状对、值不合法（`validate()` 的那一族）⇒ 这一行本来就不合法。
+                _skip("schema_rejected", table=str(table), row=row,
+                      error=f"{type(e).__name__}: {e}", event_index=event_index)
+                continue
+            except Exception as e:
+                # 其余（`row_from_dict` 的缺参 `TypeError`、意外的形态坏）⇒ 事件行坏了。
+                # **不许**把它并进 `schema_rejected`：两者的处置不同（前者改数据、
+                # 后者查是谁写坏了事件），而合并之后这条读数就再也分不出来了。
+                _skip("shape_broken", table=str(table), row=row,
+                      error=f"{type(e).__name__}: {e}", event_index=event_index)
                 continue
             key = getattr(obj, S.TABLES[table]["id_field"])
             if key not in state[table]:
@@ -1377,6 +1409,13 @@ class Store:
         return {
             "applied": applied,
             "skipped": skipped,
+            # `R-06`：`skipped` 只说"跳了几行"，说不出"为什么跳"。两份明细把
+            # "重建成功"这个假的第三态拆开：`skipped_by_reason` 给分类计数、
+            # `skipped_details` 给逐条（表 / 主键 / 原因 / 原话 / 事件下标）——
+            # 没有它，"skipped=3" 与 "skipped=0" 的差别就只是三个数字，
+            # 而人拿到三个数字之后仍然不知道该去查什么。
+            "skipped_by_reason": dict(sorted(skipped_by_reason.items())),
+            "skipped_details": skipped_details,
             "counters": counters,
             # 下面三个是 `F-1` 新增的"读的人必须能看见"的计数：
             # 一个不完整的批次意味着丢掉了一次提交，那件事绝不能只体现在行数上。

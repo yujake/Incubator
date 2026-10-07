@@ -761,7 +761,136 @@ def test_step_table_count_is_stated_in_the_build_steps_docstring():
     # 清单里点名的每一类都必须在步骤表里有落点
     for needle in ("release-check", "acceptance", "repro", "role-specs", "coverage", "per-file"):
         assert f"`{needle}`" in doc, f"`build_steps` docstring 没有点名 {needle}"
-        assert needle in {s.key for s in steps}
+    assert needle in {s.key for s in steps}
+
+
+#: coverage 步耗时声明的下限（秒）：实测 928.6 s（`draft/43-D` §0.3），不是估计值。
+_COVERAGE_EXPECT_SECONDS_FLOOR = 928.6
+#: 旧值（改前的假声明）：判据必须能认出它 —— 负控拿它当输入，而不是写一句同义反复。
+_COVERAGE_EXPECT_SECONDS_OLD = 60
+
+
+def _duration_claim_ok(seconds: float, *, floor: float = _COVERAGE_EXPECT_SECONDS_FLOOR) -> bool:
+    """耗时声明合不合格。判据只有一份：正控与负控都调它（否则负控是空的）。
+
+    `floor` 按步骤给：每一步的实测/读数不同（coverage 928.6 s、per-file 1082.0 s、
+    acceptance 135.2 s）。默认值是 coverage 那一条，保持既有调用点逐字不变。
+    """
+    return float(seconds) >= floor
+
+
+def test_coverage_step_declares_the_measured_duration():
+    """判据（`REL-01` / F11 · C 线的读数 · 本文件的负控）：coverage 步的耗时声明要对得上实测。
+
+    F11 的口径（`draft/52` F 组 / `draft/43-D` §0.3）：`expect_seconds` 只用于打印、
+    不参与判定，所以把一句假声明留在表里没有任何判据会红 —— 而读发布报告的人
+    会以为这一步几秒钟就跑完（旧值 60 vs 实测 928.6 s，差 15 倍）。
+
+    这一条把那个读数钉成下限：谁把声明改回到一个"看起来很快"的数，这里必红。
+    为什么写死 928.6：它是实测值，比它小的任何一个数字都是一句与事实不符的话。
+
+    负控是活体的：同一个 `_duration_claim_ok` 拿旧值 60 必须判否 ——
+    若有人把下限放宽到 60 以下，那条负控先红。
+    """
+    steps = {s.key: s for s in R.build_steps(REPO)}
+    assert "coverage" in steps, sorted(steps)
+    got = steps["coverage"].expect_seconds
+    assert _duration_claim_ok(got), (
+        f"coverage 步声明的耗时 {got} s 低于实测下限 {_COVERAGE_EXPECT_SECONDS_FLOOR} s"
+        " ⇒ 那会把真机跑成一个假的『超时失败』（F11/REL-01）")
+    assert not _duration_claim_ok(_COVERAGE_EXPECT_SECONDS_OLD), (
+        f"负控失效：判据认不出旧的假声明（{_COVERAGE_EXPECT_SECONDS_OLD} s）—— "
+        "下限被放宽了，这条判据对『有人把声明改回去』失去反应")
+
+
+#: per-file 步耗时声明的下限（秒）：实测 1082.0 s（默认）/ 1115.7 s（Lean），128 个文件。
+#: 来源逐字：`agentflow/docs/NOAI-SUSPENSION-2026-09-28.md:139-140` 的开放期起点读数
+#: ```text
+#: 3a) 逐文件（默认） exit=0 1082.0s   共 128 个文件：过 127 / 单独跑不过 0
+#: 3b) 逐文件（Lean） exit=0 1115.7s   共 128 个文件：过 127 / 单独跑不过 0
+#: ```
+#: 那份读数是带时刻的（同文件 `:132-133`：窗口从这一版树开始，
+#: `2026-09-28T19:50:47` 起、`21:42:32` 止）⇒ 它够格当判据的下限。
+#: 下限取默认档那个数（1082.0，比 Lean 档小）：判据要挡的是"声明小于现实"，
+#: 而现实至少是默认档这个数。
+_PER_FILE_EXPECT_SECONDS_FLOOR = 1082.0
+#: 旧值（改前的声明：420 s，比实测小 2.6 倍）：负控拿它当输入，而不是写一句同义反复。
+_PER_FILE_EXPECT_SECONDS_OLD = 420
+
+
+def test_per_file_step_declares_the_measured_duration():
+    """判据（`PERF-02` / F11 同族）：per-file 步的耗时声明不得低于带时刻的实测。
+
+    为什么有这条（`PERF-02` 的纪律：不许用一个新的定值换旧的，也不许留一句假声明）：
+    `expect_seconds` 只用于打印、不参与判定，所以一句假声明留在表里没有任何门会红
+    —— 而读发布报告的人会以为这一步一两分钟就跑完。旧值 420 s 与实测 1082.0 s
+    差 2.6 倍：那不是"估算不准"，那是一句与事实不符的话。
+
+    来源（逐字，`agentflow/docs/NOAI-SUSPENSION-2026-09-28.md:139-140`，128 个文件）：
+    `3a) 逐文件（默认） exit=0 1082.0s` / `3b) 逐文件（Lean） exit=0 1115.7s`；
+    观察窗口在同一文件 `:132-133`（`2026-09-28T19:50:47` 起、`21:42:32` 止）。
+    改值由所有者授权、主控代改（1200 s，同量级；`tools/release_all.py` 在禁改区）,
+    判据这一侧由本文件补。
+
+    负控是活体的：同一个 `_duration_claim_ok` 拿旧值 420 必须判否 ——
+    若有人把下限放宽到 420 以下，那条负控先红。
+    """
+    steps = {s.key: s for s in R.build_steps(REPO)}
+    assert "per-file" in steps, sorted(steps)
+    got = steps["per-file"].expect_seconds
+    assert _duration_claim_ok(got, floor=_PER_FILE_EXPECT_SECONDS_FLOOR), (
+        f"per-file 步声明的耗时 {got} s 低于带时刻的实测下限 {_PER_FILE_EXPECT_SECONDS_FLOOR} s"
+        " ⇒ 读发布报告的人会以为这一步很快（F11/PERF-02）")
+    assert not _duration_claim_ok(_PER_FILE_EXPECT_SECONDS_OLD,
+                                  floor=_PER_FILE_EXPECT_SECONDS_FLOOR), (
+        f"负控失效：判据认不出旧的假声明（{_PER_FILE_EXPECT_SECONDS_OLD} s）—— "
+        "下限被放宽了，这条判据对『有人把声明改回去』失去反应")
+
+
+#: acceptance 步在仓库里已有的两条运行读数（秒）：135.2 s 与 132.7 s。
+#: 来源逐字：`draft/22-企业级交付与竞争力方案（200万预算）.md` §12.19.1（B1 收口那次
+#: `release_all --since 4293989`，`:1303`）与 §12.22.1（B2 检查点，`:1485`）的输出块
+#: `[pass] acceptance exit=0 135.2s 通过 10 / 失败 0 / 未执行 0`；
+#: 同一对读数也逐字引在 `agentflow/docs/PROPOSALS.md:2984/3011`。
+#: 口径（2026-10-02，主控现场更正）：这两块都没有观测时刻（不像 per-file 那份
+#: `2026-09-28T19:50:47–21:42:32`）⇒ 按"带时刻的实测"这条口径，acceptance 的声明值属
+#: 未核实：既不动它（420 s 原样保留），也不声称它有实测背书。
+#: 这条判据因此只做它能做的那一件事：钉住"声明不得低于仓库里已有的读数"。
+_ACCEPTANCE_EXPECT_SECONDS_READINGS = (135.2, 132.7)
+_ACCEPTANCE_EXPECT_SECONDS_FLOOR = max(_ACCEPTANCE_EXPECT_SECONDS_READINGS)
+#: 负控取 `Step` 的 dataclass 默认值（`tools/release_all.py:97` 的 `expect_seconds: int = 60`）
+#: —— 那是仓库里真有的一个更小的数，不是我编的。
+_ACCEPTANCE_EXPECT_SECONDS_OLD = 60
+
+
+def test_acceptance_step_declaration_is_not_below_the_known_readings():
+    """判据（F11 同族，弱档）：acceptance 的声明不得低于仓库里已有的读数。
+
+    这一条与 coverage / per-file 那两条不同档，理由必须写清（否则就是拿弱证据
+    冒充强证据）：
+
+    - per-file：有带时刻的实测（`docs/NOAI-SUSPENSION-2026-09-28.md:139-140`，窗口
+      `2026-09-28T19:50:47–21:42:32`）⇒ 那两条是强判据，且逼出了 420 → 1200 的改值；
+    - coverage：有 `draft/43-D` §0.3 的 928.6 s ⇒ 同样是强判据；
+    - acceptance：只有两条没有观测时刻的运行读数（135.2 s / 132.7 s，
+      `draft/22` §12.19.1 与 §12.22.1 的 `release_all` 输出块，同引于
+      `docs/PROPOSALS.md:2984/3011`）⇒ 按主控 2026-10-02 的口径，这一步的声明值
+      未核实：不凭感觉调大、也不调小，`420` 原样保留。
+
+    于是这条判据只断言它能断言的那一件事：声明不得低于已有的读数（谁把它改成 60
+    这种"看起来很快"的数，这里必红）。它不声称 420 有实测背书 —— 那要等一条
+    带时刻的 acceptance 实测读数落进仓库。
+    """
+    steps = {s.key: s for s in R.build_steps(REPO)}
+    assert "acceptance" in steps, sorted(steps)
+    got = steps["acceptance"].expect_seconds
+    assert _duration_claim_ok(got, floor=_ACCEPTANCE_EXPECT_SECONDS_FLOOR), (
+        f"acceptance 步声明的耗时 {got} s 低于仓库里已有的读数下限 "
+        f"{_ACCEPTANCE_EXPECT_SECONDS_FLOOR} s（{_ACCEPTANCE_EXPECT_SECONDS_READINGS}）")
+    assert not _duration_claim_ok(_ACCEPTANCE_EXPECT_SECONDS_OLD,
+                                  floor=_ACCEPTANCE_EXPECT_SECONDS_FLOOR), (
+        f"负控失效：判据认不出 `Step` 的默认值（{_ACCEPTANCE_EXPECT_SECONDS_OLD} s）—— "
+        "下限被放宽了")
 
 
 def test_step_cancelled_is_a_base_exception_carrying_a_result():
@@ -2117,6 +2246,11 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "agent_f/": "智能体 F：多轮难题攻坚（拆包：4 个动作各一个文件 + core + _support + __main__）",
     "agent_g/": "智能体 G：论文撰写（拆包：6 个动作各一个文件 + core + _support + __main__）",
     "agent_h/": "智能体 H：审校（拆包：4 个动作各一个文件 + core + _support + __main__）",
+    # B 线（F-02 / `draft/54 §1`）新建的角色 V（验证者）。登记在这里是事实登记：
+    # 盘上确实多了这个包；它该不该存在由 B 线的 13 步施工单负责（`specs/v.py` 已登记
+    # 进 `.noai-paths`）。A 线不改它的任何内容，只是不让"包目录里凭空多出一个模块"
+    # 这条判据在合并树上误报 —— 见 `R6-AN-1` 的原始形态。
+    "agent_v/": "智能体 V：验证者（F-02 接线：只读 + 写自己的 `verifications/<命题号>.jsonl`）",
     "specs/": "每个角色一份**声明真身**（`goal-7f5116c1` M3）：`ACTIONS`（动作表）与 `SPEC` —— "
               "`capabilities.py` 的四张表由它派生；它在 `.noai-paths` 里逐文件受保护",
     "agentspec.py": "一个 agent 的声明与注册表（`AgentSpec`/`AgentBrief`：职责与门面、官能轻重、只读与否、能召唤谁、写集、实现类）——`goal-7f5116c1` 的 M2，每个角色在自己模块里写一份 `SPEC`，装配面逐步改成从这里读",
@@ -2158,6 +2292,15 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                       "`<编号>-<谁>to<谁>.md` 仍读得回来 —— 「派活依据」与「溯源」此前只活在对话里"
                       "（`draft/37` §134；存储改追加式见 `draft/39` §C1）",
     "modelclient.py": "把模型网关适配成抽取层要的 `.complete()`（带 scope='extract' 记账）",
+    # A 线（`draft/53` v3 / `draft/54 §2` / `draft/55`）：每个智能体自带的秘书。
+    # 它不是对拍副本、也不是同级角色：四职责 + 手稿通道增改查 + 自己那份台账
+    # （`out/secretary/<role>.jsonl`）；手稿的写路径从 `agent_loop` 移到这里。
+    "secretary.py": "「秘书」共享模块：每智能体一名随员（四职责：格式内容优化 / 委派评估 / "
+                    "闭环提醒 / 委托加工）+ 手稿通道增改查（`manuscripts.write` / 新增的 "
+                    "`revise` / 只读查）+ 决定台账（`out/secretary/<role>.jsonl`，每角色一份）。"
+                    "工具面为空（不进 `tools` 注册表）、库表只读（写集 ∅）、fail-open"
+                    "（唯一例外：手稿执笔失败必须报错留痕）、不做任何统计"
+                    "（`draft/53` v3；接口规范见 `draft/55`）",
     "modelcost.py": "模型花销入账适配器（`ModelReply` → `usage_ledger` 的一笔账）",
     "projects.py": "项目工作区：一个项目一个文件夹、默认命名 project1..N、冷启动/热启动判定",
     "tty.py": "终端呈现层：颜色开关、ASCII 回退、显示宽度对齐（框 / 表 / 徽标）",
@@ -2223,7 +2366,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "promptkit.py": "提示词装配：有序段 + 变量 + complete + 作用域遮蔽，失败全部抛（学 DSH 的 `dsh-system-prompt`；`draft/28` §179、`draft/34`）",
     "agent_prompts.py": "A–H 与主控的前置提示词：手写判断 + 现算事实（工具面 / 伙伴边 / 动作参数 / 失败词表；`draft/28` §178/§179）",
     "llmseam.py": "统一的模型缝：一次调用一条审计记录（版本 / 哈希 / tokens / 花销）+ 三态词表 + 预算守卫（`draft/28` §179）",
-    "agent_loop.py": "LLM 驱动的角色循环：tool / summon / message / final 四种形状，唤起走 `Conductor.summon`、留言落会话记录（`draft/28` §179）",
+    "agent_loop.py": "LLM 驱动的角色循环：形状清单以 `agent_loop.SHAPES` 为唯一来源（八个，含手稿落行的唯一入口 `handoff`），唤起走 `Conductor.summon`、留言落会话记录（`draft/28` §179）",
     "userio.py": "用户频道：ask_user 把问题送进待答清单并等回答，超时是 `user_no_answer`（不是默许），迟到的回答照样捞得出来（`draft/28` §181）",
     "autonomy.py": "放手后的自主轮与阶段性汇报：轮次上限 + 每 N 轮一次公共汇报 + 文件/用户回答可打断（`draft/28` §181）",
     "judges.py": "语义判据的接入方式：判据注册表（每条带负控准入）+ 三态 + 引用落地过滤（`draft/28` §182）",
@@ -2369,3 +2512,4 @@ def test_the_agentflow_module_registry_criterion_is_not_vacuous():
 
     assert any("失去对象" in p for p in agentflow_module_inventory_problems([])), (
         "空集合必须报失去对象（P16：判据解析出空集会无条件通过）")
+

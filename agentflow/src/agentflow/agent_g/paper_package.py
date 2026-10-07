@@ -42,57 +42,81 @@ class _PaperPackage:
         与 `conductor.closing` 的 `project_dir` 同一口径（给论文包目录会把 `out/paper`
         拼两次，那是 2026-10-02 实测过的调用姿势错误）。
         """
-        from ..tools import doc_tools as DT
+        from ..tools import doc_tools as DT  # noqa: F401
 
         root = getattr(self.store, "root", None)
         sec = float(timeout_sec) if timeout_sec is not None else 300.0
         out: dict[str, Any] = {"project": project or ".", "timeout_sec": sec}
 
-        # 顺序：渲染 → 编译 → 核锚（三段各自的实现都只有一份 —— `doc_tools` 里那三条，
-        # 它们转发给 `paperbuild`）。为什么不直接调 `paperbuild.build`：它的第三段是
-        # `anchor_check`（要项目脚本支持 `--check`），而本项目论文包的
-        # `code/make_paper.py` 只写锚、不认 `--check`；核锚那条路的权威读数是
-        # `doc.paper_state`（`renderanchor` 直接读锚文件）—— 与主控手上那份读数同源。
-        rendered = DT._paper_render(root, project or ".", render_script, sec)
-        out["render"] = {"ok": bool(rendered.ok), "kind": rendered.meta.get("kind", ""),
-                         "error": rendered.error or ""}
-        if not rendered.ok:
-            out.update({"ok": False, "kind": "package_build_failed", "stage": "render",
+        # ---- `R2b-⑬`：不再手工串三件私有实现 —— 改调工具面 `doc.paper_build`
+        #
+        # 它内部就是 render → compile → anchor_check（`paperbuild.build`），顺序与这里
+        # 原来那三段逐字一致，权威读数同样来自 `renderanchor.anchor_check`。
+        # （本文件此前写"不直接调 `paperbuild.build`：它要项目脚本支持 `--check`"——
+        # 那是旧口径：`--check` 那条路是 `doc.paper_anchor`，不是 `build`。）
+        res = self.tools.call("doc.paper_build", project=project or ".",
+                              render_script=render_script, compile_script=compile_script,
+                              timeout_sec=sec)
+        self.tool_calls.append({"tool": "doc.paper_build", "ok": res.ok, "error": res.error})
+        # 成功时载荷在 `data` 里；失败时 `fail(..., **got)` 把同一份读数放进 `meta`
+        # （`tools/base.fail` 的契约）⇒ 漂移这一档的读数不会因为我们改走工具面而丢掉。
+        payload = dict(res.data) if isinstance(res.data, Mapping) else dict(res.meta or {})
+        steps = [dict(s) for s in (payload.get("steps") or [])]
+        names = [str(s.get("step") or "") for s in steps]
+        out["steps"] = [{"step": n, "ok": bool(s.get("ok"))} for n, s in zip(names, steps)]
+        for name in ("render", "compile"):
+            one = next((s for s in steps if str(s.get("step")) == name), {})
+            out[name] = {"ok": bool(one.get("ok")), "kind": str(one.get("kind") or ""),
+                         "error": str(one.get("error") or one.get("problem") or "")}
+        if not res.ok and (not names or names[-1] != "anchor_check"):
+            stage = names[-1] if names else "render"
+            out.update({"ok": False, "kind": "package_build_failed", "stage": stage,
                         "verdict": "", "drift": [],
-                        "note": "渲染没走成 ⇒ 后面两步不再做（读了旧包没有意义）"})
+                        "note": f"{stage} 没走成 ⇒ 后面两步不再做（读了旧包没有意义）"})
             return out
 
-        compiled = DT._paper_compile(root, project or ".", compile_script, sec)
-        out["compile"] = {"ok": bool(compiled.ok), "kind": compiled.meta.get("kind", ""),
-                          "error": compiled.error or ""}
-        if not compiled.ok:
-            out.update({"ok": False, "kind": "package_build_failed", "stage": "compile",
-                        "verdict": "", "drift": [],
-                        "note": "编译没走成 ⇒ 锚那一格不核（核了也是关于旧包的）"})
-            return out
-        out["steps"] = [{"step": "render", "ok": True}, {"step": "compile", "ok": True}]
+        anchor = dict(payload.get("anchor") or {})
+        verdict = str(anchor.get("verdict") or "")
+        # `doc.paper_anchor`：另一条核锚机制的读数（项目脚本 `--check` 那条）。
+        # 它不是这一格的权威（权威是上面 `renderanchor` 那一份），只作为并列读数记下来
+        # —— 这一笔同时把"声明了却从来没有生产调用者"那笔账还掉（`R2b-⑬`）。
+        try:
+            res_a = self.tools.call("doc.paper_anchor", project=project or ".",
+                                    script=render_script, timeout_sec=sec)
+            self.tool_calls.append({"tool": "doc.paper_anchor", "ok": res_a.ok,
+                                    "error": res_a.error})
+            meta_a = dict(res_a.meta or {})
+            out["anchor_script"] = {
+                "ok": bool(res_a.ok), "kind": str(meta_a.get("kind") or ""),
+                "verdict": str(meta_a.get("verdict") or ""),
+                "why": str(meta_a.get("why") or res_a.error or "")[:200],
+                "note": "另一条核锚通道（脚本 --check）；权威读数在 `verdict` 那一格"}
+        except Exception as exc:  # noqa: BLE001 - 并列读数坏了不许带走主读数
+            # `kind` 这一格不是装饰：并列读数自己炸了仍然是"执行了、没成功"（`failed`），
+            # 不是"这次调用不成立"（`refused`）—— 而这一格正是 `tests/test_refusals.py`
+            # 用来把两者分开的登记键（没有它，那一行会被扫成 `kind=""`，
+            # 于是这一条读数既没登记、又会被台账记成 ok）。
+            out["anchor_script"] = {"ok": False, "kind": "anchor_script_failed",
+                                    "problem": f"{type(exc).__name__}: {exc}"}
 
-        state = DT._paper_state(root, project or ".")
-        if not state.ok:
-            out.update({"ok": False, "kind": "state_failed", "verdict": "",
-                        "drift": [], "error": state.error or ""})
+        if not steps or not verdict:
+            out.update({"ok": False, "kind": "state_failed", "verdict": "", "drift": [],
+                        "error": str(res.error or "核锚那一步没给出读数")})
             return out
-        data = dict(state.data or {})
-        out["steps"].append({"step": "anchor_check", "ok": data.get("verdict") == "consistent"})
         out.update({
             "ok": True,
             # `verdict` 是三态：`consistent` / `drifted` / `unknown`。
             # `drifted` 不是这个动作失败 —— 它是读数（说明包与台账还不是同一时点）。
-            "kind": "" if data.get("verdict") == "consistent" else "anchor_not_consistent",
-            "verdict": data.get("verdict"),
-            "dimensions": data.get("dimensions"),
-            "drift": list(data.get("drift") or [])[:10],
-            "problems": list(data.get("problems") or [])[:5],
-            "anchor_path": data.get("anchor_path"),
-            "receipt_path": data.get("receipt_path"),
-            "rendered_at": data.get("rendered_at"),
-            "compiled_at": data.get("compiled_at"),
-            "note": ("三段都做完了：`verdict=consistent` 才能写「包与库同一时点」；"
-                     "`drifted` 要如实写进交付说明（它说明还有台账改动没进包）。"),
+            "kind": "" if verdict == "consistent" else "anchor_not_consistent",
+            "verdict": verdict,
+            "dimensions": anchor.get("dimensions"),
+            "drift": list(anchor.get("drift") or [])[:10],
+            "problems": list(anchor.get("problems") or [])[:5],
+            "anchor_path": anchor.get("anchor_path"),
+            "receipt_path": anchor.get("receipt_path"),
+            "rendered_at": anchor.get("rendered_at"),
+            "compiled_at": anchor.get("compiled_at"),
+            "note": ("三段都做完了（经 `doc.paper_build` 一次走完）：`verdict=consistent` 才能写"
+                     "「包与库同一时点」；`drifted` 要如实写进交付说明（它说明还有台账改动没进包）。"),
         })
         return out

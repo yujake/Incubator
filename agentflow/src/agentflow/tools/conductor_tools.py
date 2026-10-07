@@ -28,7 +28,7 @@
 | `conductor.role_spec` | read | 某角色的动作与工具面（派给谁、怎么写 brief） |
 | `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
 | `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
-| `conductor.closing` | read | 跑收工门五条（三态读数；`can_close` 只在五条全过时为真） |
+| `conductor.closing` | read | 跑收工门八格（三态读数；`can_close` 只在八格全过时为真） |
 
 ## 为什么 M 的写面变了不等于"主控开始产出知识"
 
@@ -382,7 +382,10 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
     "conductor.ledger",
     "看台账：tree（每行的层级与结局）/ stats（总数与分类计数）/ issues（结构问题）/ "
     "verify（不变式检查）/ relays（同伴发来的「请代唤」申请：哪些还没受理）。"
-    "给主控判断'下一步'用的事实，不含任何建议。",
+    "给主控判断'下一步'用的事实，不含任何建议。"
+    "口径（`task_count` 与 tree 的行数）：数的是 `tasks` 台账**全量**，含**顶趟行**"
+    "（`role=M` / `action=run` / `called_by=user` —— 用户发起的那一趟，**不是召唤**；"
+    "召唤数看 `view=\"stats\"` 的 `started_total`）。",
     {
         "type": "object",
         "properties": {
@@ -409,6 +412,15 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
     它把那些申请整理成一张可判定的表：每条申请后面有没有出现"要的那个
     (角色, 动作)"的任务行 ⇒ `fulfilled` / 待受理。三态纪律：查不到会话记录时
     `relay_pending` 报 `None`（没查成），不报 0（"没有申请"）。
+
+    ## 口径（F1 之后 `tasks` 里多了顶趟行，这一屏必须说清它数的是什么）
+
+    `task_count = len(c.tree())` 数的是 `tasks` 台账全量 —— 里面包含顶趟行
+    （`role=M` / `action="run"` / `called_by="user"`，由 `conductor.open_top_level_run`
+    开、`finish_top_level_run` 收）：那是用户发起的那一趟，不是一次召唤。
+    它留在读数里是刻意的（它同时是"谁在派活"的身份行），但下游不许把 `M.run`
+    当成"第 N 次召唤"；要召唤数就看 `view="stats"` 的 `started_total`
+    （那一格的口径连同 `calibers` 一起写在 `conductor.stats()` 里）。
     """
     c = _conductor()
     payload: dict[str, Any] = {"view": view, "rows": [], "stats": {}, "issues": [],
@@ -713,14 +725,24 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
 @tool(
     "conductor.state",
     "只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模。"
-    "给主控判断用的眼睛，不带任何建议。",
+    "给主控判断用的眼睛，不带任何建议。"
+    "口径（`tasks` 这一格）：`tasks` 台账**全量**，含**顶趟行**"
+    "（`role=M` / `action=run` / `called_by=user` —— 用户发起的那一趟，**不是召唤**）；"
+    "串行口径的召唤数在 `conductor.ledger(view=\"stats\")` 的 `started_total`。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
     returns="{'root','tables','conjectures','tasks','queues'}",
 )
 def conductor_state(_conductor, ) -> ToolResult:
-    """工具体：只读状态视图（给主控判断用，不含建议）。"""
+    """工具体：只读状态视图（给主控判断用，不含建议）。
+
+    口径（F1）：`tasks` 这一格是 `len(c.tree())`，即 `tasks` 台账全量 ——
+    含顶趟行（`role=M` / `action="run"` / `called_by="user"`，用户发起的那一趟，
+    不是召唤）。它与同一屏里 `tables["tasks"]`（`store.rows("tasks")` 的行数）是
+    同一个量；要"我派了几次活"就看 `conductor.ledger(view="stats")` 的
+    `started_total`（那一格不计顶趟）。
+    """
     c = _conductor()
     store_ = c.store
     tables: dict[str, int] = {}
@@ -928,12 +950,14 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（`draft/37` §16 P3 的七格）—— 锚 consistent / 无未裁决矛盾 / "
-    "承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / "
+    "只读：跑收工门（八格）—— 锚 consistent / 无未裁决矛盾 / "
+    "承重结论有 T3 或已降档 / 报告体例兑现（R9 之后门不自带节名清单，逐节核的是 M 自己声明的体例） / "
+    "没有还在等用户回答的问题 / "
     "**实质产出**（`documents`/`relations`/`experiments`/`review_findings`/`statements` "
     "至少一张非空）/ **验收表的机器可判行**（项目里若有一份 `out/paper/ACCEPTANCE-CHECKS.json`，"
-    "逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）。"
-    "每条各自一个三态读数，unknown 不是通过；`can_close` 只在七格全过时为真。",
+    "逐行从台账现算：任务点名的每一条腿都要有落台账的凭据）/ "
+    "**产物台账与盘上一致**（`ARTIFACTS.jsonl` 逐条重算：行里的 sha 与盘上那份对不对得上）。"
+    "每条各自一个三态读数，unknown 不是通过；`can_close` 只在八格全过时为真。",
     {
         "type": "object",
         "properties": {
@@ -950,10 +974,16 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
     side_effect="read",
     roles=("M",),
     returns=("{'can_close','status','failed','unknowns','findings','readings','summary'}；"
-             "status 的键是七格检查（anchor/contradictions/load_bearing/report_shape/"
-             "user_pending/substance/acceptance），值是三态之一（通过 / 拦住 / 没查成）；"
+             "status 的键是八格检查（anchor/contradictions/load_bearing/report_shape/"
+             "user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；"
              "acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、"
              "台账现算值、是否满足（不满足的那几行同时进 findings）；"
+             "**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / "
+             "`na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 "
+             "`unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，"
+             "它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行"
+             "标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；"
+             "artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；"
              "findings[] 每项是 {'check','code','level','detail'}"),
 )
 def conductor_closing(store, session=None, project_dir: str = "", report_path: str = "") -> ToolResult:
@@ -1097,19 +1127,81 @@ def register(registry: ToolRegistry, *, store: Any = None, conductor: Any = None
     return names
 
 
+#: 验收表表头第一格认得的写法 —— 这是输入归一化的匹配表，不是受控词表
+#: （别把它塞进 `tools/vocab_census` 的 reason/vocab 面：那是另一类东西；
+#:  反过来，改这张表也不等于改判据 —— 判据是"这一行读得懂读不懂"这件事本身）。
+_ACCEPTANCE_HEADER_ALIASES: tuple[str, ...] = ("判据", "编号", "id", "序号", "检查", "项")
+#: 结论格认得的写法（同上：匹配表，不是词表）。
+#:
+#: 顺序是判据的一部分："不成立"必须先于"成立"判 —— `"成立" in "不成立"` 会把
+#: 不成立读成成立（2026-09-29 实测：验收表里 P10/P11 写着「不成立」，解析出来却是 10/10 成立）。
+_ACCEPTANCE_NOT_OK_ALIASES: tuple[str, ...] = ("不成立", "未通过", "不通过", "失败",
+                                               "fail", "no", "false", "✗", "×", "否")
+_ACCEPTANCE_OK_ALIASES: tuple[str, ...] = ("成立", "通过", "pass", "ok", "yes", "true",
+                                           "✓", "√", "是")
+
+
+def _acceptance_verdict(cell: str) -> tuple[bool | None, str]:
+    """结论格 → `(ok, reason)`：读得懂时 `reason` 空；读不懂时 `ok is None`。
+
+    默认方向写死：认不出来一律当"读不懂"，永不猜成"成立" ——
+    下游拿这个结论去算"这一格算不算通过"，而猜错的方向只有一个（假绿）。
+    """
+    text = str(cell or "").strip()
+    if not text:
+        return None, "结论格是空的"
+    lowered = text.lower()
+    if any(a in text for a in _ACCEPTANCE_NOT_OK_ALIASES) or lowered in ("fail", "failed", "no",
+                                                                        "false"):
+        return False, ""
+    if any(a in text for a in _ACCEPTANCE_OK_ALIASES) or lowered in ("pass", "passed", "ok",
+                                                                    "yes", "true"):
+        return True, ""
+    return None, (f"结论格 {text!r} 认不出来"
+                  "（认得的写法写在 `_ACCEPTANCE_OK_ALIASES` / `_ACCEPTANCE_NOT_OK_ALIASES` 两处）")
+
+
+def _acceptance_header_cells(cells: list[str]) -> bool:
+    """这一行是不是验收表的表头（第一格认得出来，且至少有四栏）。"""
+    if len(cells) < 4:
+        return False
+    first = cells[0].strip().lstrip("#").strip()
+    return first in _ACCEPTANCE_HEADER_ALIASES or first.lower() in _ACCEPTANCE_HEADER_ALIASES
+
+
 def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
     """把验收表（markdown）解析成结构化的行。
 
     认的是项目脚本自己的写法：一行标题（含「P1–P11」之类）、一行结论
-    （`结论：「全部成立」（10/10）`）、一张 `| 判据 | 名称 | 结论 | 读数 |` 表。
+    （`结论：「全部成立」（10/10）`）、一张四栏表（默认表头 `| 判据 | 名称 | 结论 | 读数 |`）。
+
+    ## 表头与结论都归一化后再判（`draft/52` CC-02）
+
+    真机里 8/54 行被读成 0 行的原因就是两张逐字判据：表头只认 `cells[0] == "判据"`、
+    结论只认 `cells[2].strip() == "成立"` —— 表是人手写的，写法一换就整张表读不出来。
+    现在：表头认 `_ACCEPTANCE_HEADER_ALIASES`、结论认两张别名表（不成立先于成立判）。
+
+    ## 行状态的口径只有一处（`closing`）
+
+    每一行的 `state` 由 `closing.acceptance_row_state` 给（词表是 `closing.ROW_STATES`）：
+    本模块只做"这一行读不懂"这一个判断（空编号 / 编号重复 / 结论格认不出来），
+    不抄第二份口径 —— 同一张表两种读法正是 CC-02 要治的形态。
+    读不懂的行仍然出现在 `rows` 里（带 `state` 与 `reason`）并在 `problems` 里点名：
+    "读不出来"既不是 `0 行`、也不是 `不通过`（三态）。
 
     `max_chars` 是交付说明能不能逐条对齐的关键：真机实测（2026-09-29，只读重放）
     十行的完整读数合起来 >1400 字，工具结果被上下文预算截断，M 只看到 P1–P4，
-    于是它如实写"P5–P11 未核到"。默认截到 120 字/行 ⇒ 十行约 1.2k 字，
+    于是它如实写"P5–P11 未核到"。默认截到 60 字/行 ⇒ 十行约 0.6k 字，
     够 M 逐条引用；需要全量时把 `max_chars` 调大（读数原文仍在盘上，随时可读）。
 
     解析不出来时 `rows` 为空而 `problems` 非空 —— 空表与"解析失败"必须分得开。
     """
+    # 行状态口径的唯一来源在 `closing`（`acceptance_row_state` / `ROW_STATES` /
+    # `acceptance_kinds_with_state`）：此处只做"这一行读不懂"的判定、不抄第二份。
+    # 惰性 import：只在真解析时付这个 import 的代价（与 `_agent_for` 同一风格），
+    # 且 `closing` 不 import `tools/*` ⇒ 这条边不成环。
+    from .. import closing as CL
+
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     title = next((ln.lstrip("# ").strip() for ln in lines if ln.startswith("#")), "")
@@ -1118,34 +1210,56 @@ def _parse_acceptance(path: Path, *, max_chars: int = 60) -> dict[str, Any]:
     problems: list[str] = []
     truncated = 0
     in_table = False
+    seen_ids: set[str] = set()
     for ln in lines:
         if not ln.startswith("|"):
             in_table = False
             continue
+        if set(ln.strip()) <= set("|-: "):
+            continue
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-        if len(cells) < 4 or set(ln.strip()) <= set("|-: "):
-            continue
-        if cells[0] == "判据":
-            in_table = True
-            continue
         if not in_table:
+            if _acceptance_header_cells(cells):
+                in_table = True
             continue
-        reading = cells[3]
-        if max_chars > 0 and len(reading) > max_chars:
-            reading = reading[:max_chars] + "…"
-            truncated += 1
+        if len(cells) < 3:
+            cells = cells + [""] * (3 - len(cells))
+        rid = cells[0].strip()
         name = cells[1] if len(cells[1]) <= 30 else cells[1][:30] + "…"
-        # 「成立」与「不成立」必须分得开：`"成立" in cells[2]` 会把不成立读成成立
-        # （实测 2026-09-29：验收表里 P10/P11 写着「不成立」，解析出来却是 10/10 成立）。
-        verdict = cells[2]
-        rows.append({"id": cells[0], "name": name, "ok": verdict.strip() == "成立",
-                     "reading": reading, "reading_chars": len(cells[3])})
+        ok, reason = _acceptance_verdict(cells[2])
+        if not rid:
+            reason = "这一行没有编号（读数没法与表上那一行对上）"
+        elif rid in seen_ids:
+            reason = f"编号 {rid!r} 在同一张表里重复（读数无法归属）"
+        seen_ids.add(rid)
+        raw_reading = cells[3] if len(cells) > 3 else ""
+        reading = raw_reading
+        if max_chars > 0 and len(raw_reading) > max_chars:
+            reading = raw_reading[:max_chars] + "…"
+            truncated += 1
+        row: dict[str, Any] = {"id": rid, "name": name,
+                               "ok": (None if reason else ok),
+                               "reading": reading, "reading_chars": len(raw_reading)}
+        if reason:
+            row["state"] = "unreadable"     # 这一档的判定在本模块；词表在 `closing`
+            row["reason"] = reason
+        row["state"] = CL.acceptance_row_state(row)
+        rows.append(row)
     if not rows:
-        problems.append("验收表里一行判据都没解析出来（表头是 `| 判据 | 名称 | 结论 | 读数 |` 吗？）")
-    ok_count = sum(1 for r in rows if r["ok"])
+        problems.append("验收表里一行判据都没解析出来（表头认得「判据 / 编号 / id / 序号」吗？）"
+                        "—— 0 行**不等于**里面的判据都通过")
+    unreadable = [r for r in rows if r["state"] == "unreadable"]
+    if unreadable:
+        listed = "；".join(f"{r['id'] or '（无编号）'}：{r['reason']}" for r in unreadable[:4])
+        problems.append(f"有 {len(unreadable)} 行**读不懂**（既不是「0 行」，也不是「不通过」）：{listed}")
+        kinds = sorted(k for k in CL.acceptance_kinds_with_state(rows, "unreadable") if k)
+        if kinds:
+            problems.append(f"读不懂的行涉及的 kind：{kinds}")
+    ok_count = sum(1 for r in rows if r["ok"] is True)
+    not_ok_count = sum(1 for r in rows if r["ok"] is False)
     return {"found": True, "path": str(path), "title": title, "conclusion": conclusion,
             "rows": rows, "row_count": len(rows), "ok_count": ok_count,
-            "not_ok_count": len(rows) - ok_count, "readings_truncated": truncated,
+            "not_ok_count": not_ok_count, "readings_truncated": truncated,
             "row_ids": [r["id"] for r in rows], "problems": problems}
 
 

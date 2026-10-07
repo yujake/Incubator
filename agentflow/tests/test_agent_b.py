@@ -10,6 +10,8 @@ from agentflow.agent_b import AgentB
 from agentflow.extract import DocumentText, extract_text
 from agentflow.llm import ConceptDraft, RelationDraft
 from agentflow.schema import PageRange
+from agentflow.store import lease_expired
+from agentflow.tools.base import ToolResult, fail, ok
 
 from conftest import add_concept, add_literature, add_relation, write_library_file
 
@@ -169,7 +171,15 @@ def test_literature_without_local_file_is_marked_processed(store):
 
 
 def test_extractor_failure_does_not_mark_processed(store):
-    """抽取抛异常时不得置 processed=true（留给租约重试），但必须记 last_mine_error。"""
+    """抽取抛异常时不得置 processed=true（留给租约重试），但必须记 last_mine_error。
+
+    这一条在 2026-10-02（`D-2`）改过一次期望值，这是修正不一致，不是放宽：
+    原先断言 `lease_until is None`（理由是"必须释放租约以便重试"），可那条租约
+    从来没有被写下来过，而 `_claim` 的跳过判据当时要求 `claimed_by` 非空 ——
+    于是"释放"出来的行当轮就被重领，`mine_attempts` 在一次调用里烧到上限
+    （读数：`temp/_probe_b_claim.py` 4 次连续 `run_once` 读到 0→3 并当场判死）。
+    现在与 `agent_a` 同口径：持有者置空 + 写下未来时刻的退避租约。
+    """
     write_library_file(store, "0000/a.txt", QUOTE)
     add_literature(store, "0000", title="A", path="0000/a.txt")
     b = _agent_b(store, StubExtractor(error=RuntimeError("llm down")))
@@ -179,8 +189,18 @@ def test_extractor_failure_does_not_mark_processed(store):
     row = store.rows("literature")[0]
     assert row["processed"] is False, "抽取失败不等于处理完成"
     assert "llm down" in (row["last_mine_error"] or "")
-    assert row["claimed_by"] is None and row["lease_until"] is None, "必须释放租约以便重试"
+    assert row["claimed_by"] is None, "持有者要放开：这条活现在不属于任何实例"
+    assert row["lease_until"], "退避租约必须真的被写下来（写了才有人认它）"
+    assert not lease_expired(row["lease_until"]), "退避租约当场有效 ⇒ 本轮不许再领"
     assert row["mine_attempts"] == 1
+
+    # 同一进程立刻再跑：不许重领（这正是上面那条租约的用处）。
+    second = b.run_once()
+    assert second.failed == 0 and second.processed == 0, "退避期内不许再抽一次"
+    assert second.skipped_lease_backoff == 1, "被跳过的那条要记进'我们自己的退避'"
+    assert second.skipped_lease_active == 0, "它不是'别人持着'"
+    assert second.skipped_reason == "pending_literature_all_in_backoff"
+    assert store.rows("literature")[0]["mine_attempts"] == 1, "退避期内不许烧重试预算"
 
 
 def test_extract_text_failure_also_keeps_processed_false(store):
@@ -328,3 +348,131 @@ def test_not_found_quote_forces_suspect_status(store):
     assert rel["quote_verified"] is False
     assert rel["status"] == "suspect", "校验失败的关系必须落库并标黄，而不是丢弃"
     assert res.processed == 1
+# --------------------------------------------------------------------------- R2b-⑫
+# 无文本层 ⇒ 走 OCR 那条早就声明好、却没人调用的路（改前：直接放弃）
+#
+# 口径：`checked` 是"试没试"，不是"成没成"。三种"没成"必须分得开 ——
+# 后端不可用（unavailable）／试过但没有结果（ran_empty）／两条读法互相矛盾。
+# 负控：改前那一句 `无文本层（扫描版？）⇒ 无从逐字定位` 必须不再出现，
+# 且 `ocr.detect_text_layer` 说"有文本层"时不许去调 `ocr.run`。
+
+OLD_NO_TEXT_LAYER_REASON = "无文本层（扫描版？）⇒ 无从逐字定位"
+
+
+class FakeOcrSurface:
+    """假工具面：按工具名给预设读数，并记下调用顺序（不起真 OCR、不碰真注册表）。"""
+
+    def __init__(self, *, detect=None, backends=None, run=None):
+        self.script = {
+            "ocr.detect_text_layer": detect,
+            "ocr.backends": backends,
+            "ocr.run": run,
+        }
+        self.calls: list[str] = []
+
+    def __call__(self, name, params):
+        self.calls.append(name)
+        got = self.script.get(name)
+        if got is None:
+            return fail(f"假工具面没给 {name} 的读数", tool=name)
+        return got if isinstance(got, ToolResult) else ok(dict(got))
+
+
+class _NoTextDoc:
+    """替身抽取器的产物：`pages == []`（无文本层）。"""
+
+    pages: list[str] = []
+
+    def text_at(self, lo, hi):
+        return ""
+
+
+def _ocr_agent(store, surface, extract=lambda _p: _NoTextDoc()) -> AgentB:
+    b = _agent_b(store, StubExtractor())
+    b.extract_text = extract
+    b._ocr_surface = surface          # 夹具注入口
+    return b
+
+
+def _scan_lit(store) -> dict:
+    write_library_file(store, "0000/a.txt", "空")
+    add_literature(store, "0000", title="扫描件", path="0000/a.txt")
+    return dict(store.rows("literature")[0])
+
+
+def test_no_text_layer_tries_ocr_and_reports_unavailable(store):
+    """后端不可用必须报 `unavailable`，不是"无文本层"，也不是静默放弃。"""
+    lit = _scan_lit(store)
+    surface = FakeOcrSurface(
+        detect={"has_text_layer": False, "pages": 0, "chars": 0, "source_kind": "pdf"},
+        backends={"any_ocr_backend_available": False, "available": [],
+                  "verdict": "无任何可用 OCR 后端：easyocr 与 pytesseract 都不可用"},
+    )
+    b = _ocr_agent(store, surface)
+    doc, why = b._load_doc_for(lit)
+
+    assert doc is None
+    assert surface.calls == ["ocr.detect_text_layer", "ocr.backends"], (
+        "没有可用后端时不该去跑 ocr.run：它只会先花几十秒栅格化，再 fail 在同一个原因上"
+    )
+    assert "unavailable" in why and "OCR" in why, f"原因必须点名 OCR 与 unavailable：{why}"
+    assert OLD_NO_TEXT_LAYER_REASON not in why, "改前那一句『无文本层（扫描版？）』必须不再出现"
+    assert b.ocr_readings == [{"lit_id": "0000", "checked": True, "via": "backends",
+                               "reason": why,
+                               "reading": {"any_ocr_backend_available": False}}]
+
+
+def test_negative_control_text_layer_present_is_not_an_ocr_case(store):
+    """负控：探测器说"有文本层"⇒ 不许去调 `ocr.run`（那是错的药），只如实报矛盾。"""
+    lit = _scan_lit(store)
+    surface = FakeOcrSurface(
+        detect={"has_text_layer": True, "pages": 3, "chars": 120, "source_kind": "pdf"},
+        backends={"any_ocr_backend_available": True, "available": ["easyocr"]},
+        run={"backend": "easyocr", "total_chars": 4, "pages": [{"page": 1, "text": "识别的字"}]},
+    )
+    b = _ocr_agent(store, surface)
+    doc, why = b._load_doc_for(lit)
+
+    assert doc is None
+    assert "ocr.run" not in surface.calls, "两条读法矛盾时做 OCR 会把矛盾盖掉"
+    assert "矛盾" in why and OLD_NO_TEXT_LAYER_REASON not in why
+    assert b.ocr_readings[-1]["via"] == "detect" and b.ocr_readings[-1]["checked"] is True
+
+
+def test_ocr_text_lands_on_the_page_numbers_ocr_reports(store):
+    """OCR 出来的文本按 `ocr.run` 自己报的页号落位（不按列表下标）。"""
+    lit = _scan_lit(store)
+    surface = FakeOcrSurface(
+        detect={"has_text_layer": False, "pages": 0, "chars": 0, "source_kind": "pdf"},
+        backends={"any_ocr_backend_available": True, "available": ["easyocr"]},
+        run={"backend": "easyocr", "total_chars": 5, "pages_requested": [1, 3],
+             "pages": [{"page": 1, "text": "A"}, {"page": 3, "text": "C"}]},
+    )
+    b = _ocr_agent(store, surface)
+    doc, why = b._load_doc_for(lit)
+
+    assert why == "" and doc is not None, f"识别出字符就不该再报不可用：{why}"
+    assert doc.pages == ["A", "", "C"], (
+        "第 3 页的内容被写进了第 2 页 ⇒ 逐字引文会出现『页码错、字面全对』这种最难查的错"
+    )
+    assert doc.text_at(3, 3) == "C"
+    assert b.ocr_readings[-1]["via"] == "ocr" and b.ocr_readings[-1]["checked"] is True
+    assert b.ocr_readings[-1]["reading"]["backend"] == "easyocr"
+
+
+def test_ocr_ran_but_produced_nothing_is_not_no_text_layer(store):
+    """后端真实执行过但产出为空 ⇒ 明说"试了还是没有"，不折成"无文本层"。"""
+    lit = _scan_lit(store)
+    surface = FakeOcrSurface(
+        detect={"has_text_layer": False, "pages": 0, "chars": 0, "source_kind": "pdf"},
+        backends={"any_ocr_backend_available": True, "available": ["easyocr"]},
+        run={"backend": "easyocr", "total_chars": 0, "pages": [{"page": 1, "text": "   "}],
+             "note": "backend=easyocr 真实执行，但产出为空（做了但没结果）。"},
+    )
+    b = _ocr_agent(store, surface)
+    doc, why = b._load_doc_for(lit)
+
+    assert doc is None
+    assert "试过 OCR" in why and "ran_empty" in why, f"『试了还是没有』必须说出来：{why}"
+    assert OLD_NO_TEXT_LAYER_REASON not in why
+    assert b.ocr_readings[-1]["via"] == "run"

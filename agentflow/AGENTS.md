@@ -80,6 +80,7 @@ src/agentflow/store.py           [category: schema-migration] `LOCK_ORDER` / `re
 [category: eval-criteria] 五、评测口径的定义（一个数字是什么，由口径决定）
 
 src/agentflow/schema.py          [category: eval-criteria] `EVAL_REQUIRED_FIELDS` 与 `EvalResult`：必填口径字段与比率口径（0..1）—— 改它等于追溯性地改写历史报告里每个数字的含义
+tests/golden/*.json              [category: eval-criteria] 冻结快照（F15 入册）：`agent_surface_snapshot` 与 `tool_surface_snapshot` 这两份"面"的基线 —— 快照被随手重冻，"声明与行为没变"这句话就失去了唯一的可比对象；两份快照的 diff 是"这一改到底动了哪一格"的唯一机器读数，所以重冻必须由人逐格看过
 
 [category: release-deploy] 六、发布与部署脚本（发出去就收不回来）
 
@@ -106,6 +107,7 @@ src/agentflow/specs/f.py    [category: auth-audit] 角色 F 的声明真身（M3
 src/agentflow/specs/g.py    [category: auth-audit] 角色 G 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/h.py    [category: auth-audit] 角色 H 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/m.py    [category: auth-audit] 角色 M 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
+src/agentflow/specs/v.py    [category: auth-audit] 角色 V（验证者）的声明真身（F-02 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/agentspec.py    [category: auth-audit] 声明类型与声明词表：`ActionSpec`（动作声明的唯一类型）、`AgentSpec` / `AgentBrief`（一个 agent 的声明）、`AgentRegistry` / `builtin_registry`（装配面从这里读）、以及 `SIDE_EFFECTS` / `EFFECT` / `EXTERNAL` / `UNKNOWN_SIDE_EFFECT` 四个受控词表 —— 词表加一个取值就是放宽一整根轴（`tools/base.py` 与它是逐字对齐的两份），而 `assert_capabilities` 的交叉断言只保证'两处一致'，不保证'这次放宽该不该发生'
 src/agentflow/capabilities.py    [category: auth-audit] A–H 调用矩阵的**权威定义**：`ALLOWED_EDGES` / `CAPABILITIES` / `WRITE_SETS` / `NON_SUMMONABLE` —— interactions.py 的理由串自己承认「矩阵真身在这里」，而它此前**不在清单里** ⇒ 改「哪个角色调得到什么」不需要任何人审（P-18 / H-4 的同族）；verify.py 的一致性审计把它当真身读 ⇒ 改它等于改权限面本身
 .noai-approvals.json             [category: auth-audit] 批准台账：`sha256` 钉住「被批准的那一版」、`reviewers` 记「谁逐行走查过」—— 改它等于改审计记录本身；台账**不能批准自己**（理由码 `ledger_self_approval`），且 `--baseline` 永远不写 `reviewers`（登记 ≠ 批准）

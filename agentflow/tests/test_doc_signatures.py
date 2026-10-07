@@ -410,3 +410,62 @@ def test_axiom_audit_still_forbids_sorry():
     # 绑名形态的解析（事后审计侧用它读"这条 proof 的依据"）
     got = FG._axioms_of("'probe' depends on axioms: [propext, sorryAx]", name="probe")
     assert "sorryAx" in got, got
+
+
+# ---------------------------------------------------------------- E-07（`draft/52` D5/D7）：签名覆盖 `revised`
+
+def test_a_revised_document_with_a_stale_signature_is_red(tmp_path: Path):
+    """E-07 / D5：`status="revised"` 且签名钉着旧版 ⇒ `signature_problems` 非空。
+
+    改前必红：那时 gate 是 `status != "accepted" ⇒ return []`，`revised` 的稿子
+    在这条判据面前一份都不查（真机根 A 实测 10 份被静默跳过，其中 2 份
+    ——`p6d/0015`、`p8e/0000`—— 的签名哈希与现行版不符）。
+    """
+    st = _store(tmp_path)
+    doc = _doc(st, "0000", status="accepted")
+    _sign(st, doc)                                   # 签在"改之前"那一版上
+    # 改稿：内容变了（追加一条断言）、状态落 `revised`（`G.revise` 的真实形态）
+    revised = _doc(st, "0000", status="revised",
+                   claims=[_claim("c1"), _claim("c2")])
+    assert SIG.content_sha256_of(revised) != SIG.content_sha256_of(doc)
+
+    problems = SIG.signature_problems(st.root, revised, _records(st))
+    assert [c for c, _ in problems] == [SIG.CODE_STALE_SIGNATURE], problems
+    # 审计层也看得见（`verify_all` 的覆盖读数把 `revised` 也算进"查过的那几行"）
+    rep = V.verify_all(st)
+    assert rep.checked["accepted_documents_checked"] == 1, rep.checked
+    assert any(i.code == SIG.CODE_STALE_SIGNATURE for i in rep.issues), rep.issues
+
+
+def test_a_revised_document_pinned_to_the_current_version_is_clean(tmp_path: Path):
+    """E-07 的反真空（不许误伤）：`revised` 且签名钉现行版 ⇒ 没有问题。
+
+    `revised` 被纳入判据面不等于"改过稿就有问题"：钉住了现行版就是钉住了。
+    """
+    st = _store(tmp_path)
+    doc = _doc(st, "0000", status="revised")
+    _sign(st, doc)
+    assert SIG.signature_problems(st.root, doc, _records(st)) == []
+    assert V.verify_all(st).checked["accepted_documents_checked"] == 1
+    # 草稿仍然不判（`draft` 且没审过 ⇒ 没有签名不是缺陷）
+    draft = _doc(st, "0001", status="draft")
+    assert SIG.signature_problems(st.root, draft, _records(st)) == []
+
+
+def test_the_two_status_sets_are_one_source(tmp_path: Path):
+    """D5「两处都改」的元判据：`signatures` 与 `closing` 认同一组状态。
+
+    分叉的症状是"签名的判据说这份稿子没问题"而"`closing` 说它没被钉住" ——
+    真机 `p8e` 上两处相反（`signature_problems=[]` 而 `stale_signoffs=1`）。
+    这一条把它们钉在一起：任何一处改了状态集合，另一处必须跟着改。
+    """
+    from agentflow import closing as CL
+
+    assert tuple(CL.REVIEWED_DOC_STATUSES) == tuple(SIG.SIGNABLE_STATUSES), \
+        (CL.REVIEWED_DOC_STATUSES, SIG.SIGNABLE_STATUSES)
+    st = _store(tmp_path)
+    doc = _doc(st, "0000", status="revised")
+    _g, detail = CL._leg_reading(st, "reviewed_current_rows", tmp_path)
+    assert detail["signable_statuses"] == list(SIG.SIGNABLE_STATUSES), detail
+    assert detail["statuses_aligned"] is True, detail
+    assert doc["doc_id"] in detail["claimed_ids"], detail

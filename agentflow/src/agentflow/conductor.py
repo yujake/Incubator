@@ -44,8 +44,10 @@
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import inspect
+import itertools
 import json
 import threading
 import time
@@ -275,6 +277,11 @@ class LocalBackend:
         token.raise_if_cancelled()
         var = CX._CURRENT_TOKEN
         reset = var.set(token)
+        # `R1-A1-a`：召唤号与取消令牌同构（同一个临界区、同一个 finally 复位）——
+        # 角色的 handler 通过 `current_task_id()` 读它，于是"这一趟召唤花了多少"
+        # 有了以 `task_id` 为键的挂点（P-09 的粒度是召唤级）。
+        id_var = _CURRENT_TASK_ID
+        id_reset = id_var.set(str(task_id or ""))
         try:
             # 显式声明了 `token` / `cancel_token` 形参的 handler 直接收到它 ——
             # 这让"这个 handler 支持取消"在签名上可见（AST 扫得出来），
@@ -286,6 +293,7 @@ class LocalBackend:
             return fn(**given)
         finally:
             var.reset(reset)
+            id_var.reset(id_reset)          # 异常路径也要复位（与 token 同一处）
 
 
 class SubagentBackend:
@@ -339,6 +347,46 @@ _BUSINESS_ERROR_NAMES = frozenset({
 })
 
 
+def _closure_suffix(reading: Mapping[str, Any]) -> str:
+    """把职责 3 的收尾读数压成顶趟行 `detail` 里的一句话（谁没接手 / 谁没反馈 / 各几条）。
+
+    三种情形分开写（三态纪律）：没查成（`checked=False`）不许写成"没有未闭环"，
+    也不写成空串 —— 收尾行的读者要能从这一句里看出"这一格今天我到底查没查"。
+    没有未闭环时给一句明确的"0 条"，而不是留空（留空会被读成"没查"）。
+    """
+    if not reading:
+        return "；闭环提醒：没查（收尾读数缺）"
+    if not reading.get("checked"):
+        return f"；闭环提醒没查成（{str(reading.get('reason') or '')[:60]}）"
+    count = int(reading.get("count") or 0)
+    if count == 0:
+        return "；闭环提醒：0 条未闭环"
+    parts = "、".join(f"{k} {v} 条" for k, v in sorted((reading.get("by_state") or {}).items()))
+    return f"；闭环提醒 {count} 条（{parts}；unclaimed=没人接手，pending/running=没有终态）"
+
+
+#: "当前召唤号"（`R1-A1-a`）：与取消令牌（`cancellation._CURRENT_TOKEN`）同构 ——
+#: 同一个临界区、同一个 `try/finally`、按执行上下文传。
+#:
+#: ## 为什么不能挂实例属性（`R1-A1` 的 P-09 挂点）
+
+#: `LocalBackend.resolve(role)` 按角色缓存实例：两个并发召唤会共享同一个对象 ⇒
+#: 把号挂在实例上，A 的号会盖掉 B 的（读出来的成本挂到别人的单子上）。
+#: `conductor.py` 里那段给取消令牌写的理由逐字适用，所以这里用 ContextVar：
+#: 号跟着这一次调用走，调用结束就复位。
+_CURRENT_TASK_ID: contextvars.ContextVar[str] = contextvars.ContextVar("agentflow_task_id",
+                                                                     default="")
+
+
+def current_task_id() -> str:
+    """这一趟召唤的号（不在任何召唤里 ⇒ 空串）。
+
+    空串 = 没有挂点，不是"零号"：调用方（例如 `agent_d`）拿它去读 `usd_reading`
+    时必须把"没号"与"挂上了但没记账"分开 —— 折成一个 0 正是本仓最贵的那个缺陷形态。
+    """
+    return _CURRENT_TASK_ID.get()
+
+
 def _business_refusal_code(exc: BaseException) -> str | None:
     """这次异常算不算"角色拒绝了这次调用"？算就返回受控理由码，否则 `None`。
 
@@ -372,7 +420,14 @@ class Conductor:
         log: Callable[..., None] | None = None,
         token: CancelToken | None = None,
         specs: Any = None,
+        secretary: Any = None,
     ) -> None:
+        """`secretary`（A 线）：M 的派活路径上那一个钩子（`draft/54 §2` 的第 3 个落点）。
+
+        它是可选对象（`None` = 没装配）：给了就"同 key 的既有终态行摆出来 + 一份
+        委派评估建议"，不给也照样派活 —— 秘书的失败姿态是 fail-open，
+        而"没装配"与"装配了但没判断"在读数上是两件事（前者连台账都没有）。
+        """
         self.store = store
         self.policy = policy or P.Policy()
         #: 角色声明的注册表（`goal-7f5116c1` M5）：给了就从它读"有哪些角色、
@@ -399,6 +454,11 @@ class Conductor:
         if isinstance(be, LocalBackend):
             be.store = store
 
+        #: 主控（M）自己的秘书（A 线）。`None` = 没装配 ⇒ 只摆同 key 终态行、不做委派评估。
+        #: 秘书不写任何库表、判断不构成任何门的通过条件（`draft/55` §4）。
+        self.secretary = secretary
+        #: 最近一次派活前摆出来的"同 key 既有终态行"（读数的第二个落点：日志之外）。
+        self._last_duplicates: list[dict] = []
         #: 本次 run 的即时视图（不是账）：只回答"这次 run 还能不能再召唤"。
         #: 权威账在 `usage_ledger`（由 `self.meter` 写、读）；两处口径若不一致，
         #: 以台账为准 —— 见 `MemoryBudgetTracker` 的 docstring。
@@ -437,6 +497,8 @@ class Conductor:
         self._last_probe: Any = None
         #: 本次 run 里已经开始的任务数（用于 max_tasks_per_run 判定）。
         self._started_total = 0
+        #: B9 的预留令牌序号（`summon` 在锁内占位时用它造一个唯一令牌）。
+        self._reserve_seq = itertools.count()
         #: 被取消而没有落台账的召唤数。必须计入总量：否则"取消了就不限次"
         #: 会成为绕过 `max_tasks_per_run` 的路径（取消一次不算数 ⇒ 取消一百万次
         #: 也不算数）。它与 `_started_total` 分开记，因为
@@ -564,6 +626,289 @@ class Conductor:
                 tx.upsert("tasks", ordered, note=note)
         return str(row["task_id"])
 
+    # ---------------------------------------------------------------- 顶趟（F1）
+    def open_top_level_run(self, role: str, task: str, *, by: str = "user",
+                           input_key: str = "") -> str:
+        """给一次顶趟（不是被召唤的那些）开一条 `tasks` 行，返回它的 `task_id`。
+
+        ## 为什么必须有它（F1 / `44 J-32` 的"往前走"半）
+
+        真机读数：`usage_ledger` 里 51%~66% 的行 `task_id` 为空，而
+        `agent_loop.run_role` 给顶趟传的是 `my_task_id=""` ⇒
+        `llmseam._charge_ledger` 把空串归一成 `None` ⇒ 那些钱读不出"属于哪一次召唤"。
+
+        只填 `task_id` 而不先建行是负收益（`44 J-32` 逐字）：按 `verify.py` 的
+        `dangling_usage_task`，每一行都会变成一条 error 级读数 ⇒ 一次改动制造几千行 error。
+        所以这两件事必须同批：先建行（本方法），再让这一趟的每一次 `seam.ask` 带上它。
+
+        历史不回填：盘上存量那些 null 行是历史事件（`store.rebuild` 重放同一批），
+        改代码不改写历史；而 `None` 不进 `dangling_usage_task` 的判据
+        （`verify.py` 逐字 `if tk is not None and str(tk) not in task_by_id:`）⇒
+        那是一条已知基线，不是红。
+
+        这条行不占并发/总量配额（`max_concurrency` 约束的是"同时在跑的召唤"，
+        而顶趟是那个正在派活的人本身）；它只是让"这一趟"在台账上有一个身份。
+        """
+        started = S.now_iso()
+        key = str(input_key or "").strip() or f"top:{role}:{abs(hash(str(task))) & 0xFFFFFFFF:08x}"
+        row = {
+            "task_id": "",
+            "role": role, "action": "run", "called_by": str(by),
+            "parent_task_id": None, "depth": 1, "input_key": key,
+            "status": "running", "outcome": None, "refusal_reason": None,
+            "instance": "", "detail": str(task or "")[:200], "error": None,
+            "started_at": started, "ended_at": None, "tokens": 0, "usd": 0.0,
+            "artifacts": [], "inputs": [],
+        }
+        tid = self._write_new_row(row, note=f"top:{role}")
+        self._log(f"顶趟开行 {role} → {tid}", task_id=tid)
+        return tid
+
+    #: `consume_pending_search_requests` 的两处消费计数（"派活时 N 条 / 收尾时 M 条"）。
+    #: 它是读数：让 (乙) 形态对"即"字的折扣可度量（主控批 (乙) 的条件之一）。
+    _consume_counts: dict[str, int]
+
+    def consume_pending_search_requests(self, *, by: str = S.CONDUCTOR_ROLE,
+                                        limit: int = 1, trigger: str = "dispatch") -> list[Any]:
+        """S-03（队列认领 · 乙形态）：把还没做完的检索请求交给 A 的 `run_once`。
+
+        ## "即"字的折扣（写在明面上，不许藏）
+
+        这里的"提交即被消费"读作"下一次 M 侧派活（`run_plan`）或 M 收尾时被消费"。
+        若 M 之后不再动，请求会留着 pending —— 让它可见的两条链：
+
+        1. F-05 的消费端（`secretary.pending_inbox` / `inbox_todos`，秘书职责 3 会提醒 M）；
+        2. `closing` 的研究链缺口读数（E-04b 那一档）。
+
+        所以"不可见地挂着"这个最坏形态不成立；而"即"的折扣由下面的两处计数可度量。
+
+        为什么不是"提交那一刻"就消费（`44 J-07` 之外的设计题）：那要给 C/D 塞 `conductor`
+        ⇒ 变成处理体内的递归召唤（深度/预算/并发语义现在都按"M 是唯一派活方"设计），
+        还要动 `host.py`（FC-27）。让"提交那一刻"就消费的正确做法是改派活权的归属，
+        那是另一个设计题、要人裁 —— 按现在的设计不做。
+
+        ## 幂等（"无意义/重复的委托"那一类）
+
+        同一条 `request_id` 只唤起一次：判据是 `tasks` 里已经有
+        `input_key == "consume:<rid>"` 的行（含 running —— 已经消费过就别再来一次）。
+        `input_key` 同时是幂等键的可见形态，测试与审计都按它查。
+        """
+        out: list[Any] = []
+        try:
+            rows = list(self.store.rows("search_requests"))
+        except Exception as exc:  # noqa: BLE001 - 扫不到队就如实留痕（不当成"队是空的"）
+            self._log(f"扫队失败（{trigger}）：{type(exc).__name__}: {exc}")
+            return out
+        seen = {str(r.get("input_key") or "") for r in self._tasks()}
+        for row in rows:
+            if row.get("done"):
+                continue
+            rid = str(row.get("request_id") or "")
+            if not rid:
+                continue
+            key = f"consume:{rid}"
+            if key in seen:
+                continue                      # 幂等：这一条已经消费过（含正在跑的那一次）
+            try:
+                res = self.summon("A", "run_once", {}, by=by, input_key=key)
+            except Exception as exc:  # noqa: BLE001 - 一条消费失败不许拖住其余
+                self._log(f"队列认领失败（{trigger}，{rid}）：{type(exc).__name__}: {exc}")
+                continue
+            out.append(res)
+            seen.add(key)
+            if len(out) >= max(1, int(limit)):
+                break
+        if out:
+            counts = getattr(self, "_consume_counts", None)
+            if counts is None:
+                counts = {}
+                self._consume_counts = counts
+            counts[str(trigger)] = counts.get(str(trigger), 0) + len(out)
+            self._log(f"队列认领（{trigger}）：消费 {len(out)} 条",
+                      task_ids=[str(getattr(r, "task_id", "")) for r in out])
+        return out
+
+    def finish_top_level_run(self, task_id: str, *, stop_reason: str,
+                             detail: str = "") -> SummonResult:
+        """收一次顶趟（与 :meth:`open_top_level_run` 配对）。
+
+        三态：`stop_reason == "final"` ⇒ `ok`（它真的收了工）；其余一律 `no_result`
+        （跑完了、但没给出结论 —— 停步数/停坏 JSON 都属于这一档，不是 `failed`：
+        那是"代码崩了"，两件事的处置不同）。
+
+        ## 花销必须从账本抄回这一行（否则制造一条 `usage_task_total_mismatch`）
+
+        这一趟的账挂在这一行的 `task_id` 上（F1 的另一半），所以 `tasks.tokens/usd`
+        必须由账本派生（与 `_charge_and_settle` 同一条纪律：`tokens_for()` 抄回，
+        而不是自己累加）。实测过缺这一步的后果：库里 `tasks.tokens=0` 而账本 150
+        ⇒ `verify_all` 报一条 warning `usage_task_total_mismatch`
+        （"两处对同一次召唤的花销给出不同数字"）—— 判据见
+        `tests/test_agent_loop.py::test_f1_...`。
+        """
+        tokens_of_top = 0
+        usd_of_top = 0.0
+        try:
+            tokens_of_top = int(self.meter.tokens_for(task_id))
+            usd_of_top = float(self.meter.usd_for(task_id))
+        except Exception as exc:  # noqa: BLE001 - 抄不回来就留日志（不阻断收行）
+            self._log(f"顶趟花销没抄回来（{task_id}）：{type(exc).__name__}: {exc}")
+        done = str(stop_reason or "") == "final"
+        # S-03 的第二个消费点（主控补的）：收尾前扫一次队 —— 只挂"下一次派活"的话，
+        # 最需要它的时候（这一趟就要结束了）反而不会消费。计数分 trigger 记，
+        # 于是"即"的折扣在读数上可度量（"派活时 N 条 / 收尾时 M 条"）。
+        try:
+            self.consume_pending_search_requests(trigger="finish")
+        except Exception as exc:  # noqa: BLE001 - 扫队失败不许带走收行
+            self._log(f"收尾扫队失败：{type(exc).__name__}: {exc}")
+        # 秘书职责 3（闭环提醒）的生产调用点（`draft/53` §2；主控 2026-10-04 裁定"接上"）：
+        # 与上面那处收尾消费同址 —— 理由见 `remind_closure_at_finish` 的 docstring。
+        closure = self.remind_closure_at_finish()
+        return self._end(task_id, status="done", outcome="ok" if done else "no_result",
+                         detail=(f"顶趟收工：{stop_reason}"
+                                 + (f"；{detail[:200]}" if detail else "")
+                                 + _closure_suffix(closure)),
+                         tokens=tokens_of_top, usd=usd_of_top)
+
+    #: 职责 3（闭环提醒）最近一次的收尾读数（`stats()` 与测试读它）。
+    _closure_reading: dict[str, Any]
+
+    def remind_closure_at_finish(self) -> dict[str, Any]:
+        """秘书职责 3（闭环提醒）的生产调用点：收尾时问一次"谁没接手 / 谁没反馈"。
+
+        ## 为什么接在这里，而不是 `agent_loop` 每趟的收尾
+
+        1. 职责 3 的形态是「经 M」（`draft/53` §2）：它问的是链条级的事实 ——
+           "提交了却没人接手"、"有人接手却没有终态" —— 而顶趟收尾是唯一能看见
+           整条链的收尾点；`agent_loop` 那一层只看得到本角色这一趟。
+        2. 与 S-03 的收尾消费点同址（上面那一次
+           `consume_pending_search_requests(trigger="finish")`）：一个收尾点只做一轮扫描，
+           "认领"与"提醒"两件事落在一起 —— 读代码与读读数都是同一段。
+        3. "这一趟的读数"有现成的落点：顶趟行的 `detail`（一句话摘要）与
+           :meth:`stats` 的 `closure_reminders`（全量），每条提醒另进决定台账
+           （`secretary.remind_closure` 逐条落 duty=3）。
+
+        ## 三态与 fail-open（与其余四职责同姿态）
+
+        - 没装配秘书 ⇒ `checked=False` + 理由："没查成"不是"没有未闭环"；
+        - 秘书自己抛异常 ⇒ 记 `fail_open=True` 并照常收尾 —— 提醒绝不许打断收尾；
+        - 读成了、确实没有未闭环 ⇒ `checked=True, count=0, reminded=[]`
+          （反负控：这一格不许凭空列人）。
+
+        `by_state` 的读法：`unclaimed` = 提交了没人接手；`pending` / `running` =
+        有人接手但没有终态（没有反馈）。读数照原样给，不另造一套状态名。
+        """
+        sec = getattr(self, "secretary", None)
+        if sec is None or not callable(getattr(sec, "remind_closure", None)):
+            reading: dict[str, Any] = {
+                "checked": False, "reason": "没有装配秘书 ⇒ 这一格没查成",
+                "count": 0, "reminded": [], "by_state": {}, "by_to": {}}
+        else:
+            try:
+                reminded = [dict(x) for x in (sec.remind_closure() or [])]
+                by_state: dict[str, int] = {}
+                by_to: dict[str, int] = {}
+                for item in reminded:
+                    state = str(item.get("state") or "unknown")
+                    by_state[state] = by_state.get(state, 0) + 1
+                    to = str(item.get("to") or S.CONDUCTOR_ROLE)
+                    by_to[to] = by_to.get(to, 0) + 1
+                reading = {
+                    "checked": True, "reason": "", "count": len(reminded),
+                    "reminded": reminded, "by_state": by_state, "by_to": by_to,
+                    "note": ("只报事实（谁没接手 / 谁没有终态）与条数，不替本体做事、"
+                             "不伪造反馈；要不要真叫由调用方按 `should_engage` 走。")}
+            except Exception as exc:  # noqa: BLE001 - 秘书坏了不许打断收尾（fail-open）
+                self._log(f"秘书的闭环提醒没跑成（照常收尾）：{type(exc).__name__}: {exc}")
+                reading = {
+                    "checked": False, "fail_open": True,
+                    "reason": f"秘书的闭环提醒没跑成：{type(exc).__name__}: {exc}",
+                    "count": 0, "reminded": [], "by_state": {}, "by_to": {}}
+        self._closure_reading = reading
+        return reading
+
+    # ---------------------------------------------------------------- 委托质量（A 线）
+    def duplicate_candidates(self, role: str, action: str, input_key: str) -> list[dict]:
+        """同 `(role, action, input_key)` 的既有终态行（只读；不阻断派活）。
+
+        `draft/53` §10 的口径：派活去重归发件方秘书（职责 2 的"该不该派"含
+        "是不是重复"），机器只把同 key 的既有终态行摆出来。为什么机器不硬拦：
+
+        - "同 key"不是"同一件事"的充分条件（正当重试、参数微调后的重派都同 key），
+          硬拦会把合法重试也拦掉 —— 那正是 #1 的另一半（把该做的活拦住）；
+        - 而"摆出来"是确定性的、可复核的：调用方与秘书看到的是同一份读数。
+
+        `input_key` 为空 ⇒ 空列表（没有键就没有"同 key"，不许把"没给键"读成"重复"）。
+        """
+        want = str(input_key or "").strip()
+        if not want:
+            return []
+        out: list[dict] = []
+        for row in self._tasks():
+            if str(row.get("role") or "") != str(role):
+                continue
+            if str(row.get("action") or "") != str(action):
+                continue
+            if str(row.get("input_key") or "") != want:
+                continue
+            if str(row.get("status") or "") not in TERMINAL_STATUSES:
+                continue
+            out.append(dict(row))
+        return out
+
+    def budget_note(self, *, scope: str = "summon") -> dict[str, Any]:
+        """预算读数（F2 的"只记录"半）：记录得到，但判决不因此改变。
+
+        真机基线（`draft/44` 的 E-02）：`tasks.tokens` 4127 行只有 15 行非零、
+        `usage_ledger` 51% 的行 `task_id=null` —— "没有代价可读"与"花得少"分不开。
+
+        这一格刻意不参与任何判决：预算判据只有一处（`_meter_guard` → `guard()`），
+        这里只是把同一份读数取出来（`recorded_only=True` 是它的自证标记）——
+        多一处判决会让"一处说还能花、另一处说不能"漂移。
+        """
+        try:
+            spent = self.meter.spent()
+        except Exception as exc:  # noqa: BLE001 - 读数拿不到如实报，不折成 0
+            return {"recorded_only": True, "scope": str(scope), "checked": False,
+                    "reason": f"预算读数没取到：{type(exc).__name__}: {exc}"}
+        state = dict(P.budget_state(self.policy, spent_tokens=int(spent.get("tokens") or 0),
+                                    spent_usd=float(spent.get("usd") or 0.0)))
+        state["recorded_only"] = True
+        state["checked"] = True
+        state["scope"] = str(scope)
+        state["over_budget"] = bool(
+            (state.get("tokens_left") is not None and state["tokens_left"] <= 0)
+            or (state.get("usd_left") is not None and state["usd_left"] <= 0)
+        )
+        return state
+
+    def _note_delegation_quality(self, role: str, action: str, params: Mapping[str, Any], *,
+                                 input_key: str, by: str) -> None:
+        """派活前：摆同 key 既有终态行 + 让秘书给一份委派评估（全 fail-open）。"""
+        try:
+            dups = self.duplicate_candidates(role, action, input_key)
+            self._last_duplicates = dups
+            if dups:
+                self._log(
+                    f"{by} 要派 {role}.{action}，而同一 input_key 已有 {len(dups)} 条终态行"
+                    "（机器只摆出来、不阻断；是不是重复由发件方秘书判断）",
+                    input_key=str(input_key),
+                    existing=[str(r.get("task_id") or "") for r in dups[:5]],
+                )
+            note = self.budget_note()
+            self._log("预算读数（只记录，不阻断）", **{k: note.get(k) for k in
+                                                    ("tokens_left", "usd_left", "over_budget")})
+        except Exception as exc:  # noqa: BLE001 - 留痕/读数坏了不许带走派活
+            self._log(f"派活前的质量读数没取到（照常派活）：{type(exc).__name__}: {exc}")
+            self._last_duplicates = []
+            return
+        if self.secretary is None:
+            return
+        try:
+            self.secretary.assess_delegation(to=role, action=action, params=dict(params or {}),
+                                             input_key=str(input_key), duplicates=dups)
+        except Exception as exc:  # noqa: BLE001 - 秘书自己出错 ⇒ fail-open + 留痕
+            self._log(f"秘书的委派评估没跑成（照常派活）：{type(exc).__name__}: {exc}")
+
     # ---------------------------------------------------------------- 拒绝
     def _refuse(
         self,
@@ -621,6 +966,26 @@ class Conductor:
         # 被拒的召唤也是并发写台账的（拒绝不需要抢策略的并发配额）。
         tid = self._write_new_row(row, note=f"refused:{reason}")
         self._log(f"拒绝 {by} → {role}.{action}：{reason}", detail=detail)
+        # ---- E-03 的机器半（A 线）：拒绝也必须写 `task_end`
+        #
+        # 真机基线（`44 J-27` 复核过的数）：refused 905 行里 361 行没有 `task_end`
+        # 会话事件。后果不是"少一条日志"，而是"留痕"与"被处理"分不开：
+        # `_refuse` 走的是"还没有 running 行"的那条路（它自己在 `_write_new_row`
+        # 里建行），于是它绕开了 `finish` 里唯一的 `task_end` 落点 ——
+        # 读会话的人看到的是"这一趟从来没结束过"，而读台账的人看到的是"它 done/refused"。
+        # 三态纪律在这里：`status`/`outcome`/`refusal_reason` 三格都要在叙事里。
+        #
+        # 闭环（谁去处理这条拒绝）不在这里：那是收件方秘书的职责 3（"留痕" ≠ "被处理"）。
+        # 写失败绝不改终态（与 `finish` 同一条纪律），原因进日志。
+        from . import sessions as _SESS
+
+        _path, _problem = _SESS.append(getattr(self.store, "root", "."), {
+            "kind": "task_end", "task_id": tid, "by": by, "role": row["role"],
+            "action": action or "unknown", "status": "done", "outcome": "refused",
+            "refusal_reason": reason, "detail": detail[:200], "artifacts": [],
+        })
+        if _problem:
+            self._log(f"会话记录没写成（拒绝那一行）：{_problem}", task_id=tid)
         return SummonResult(
             task_id=tid, role=row["role"], action=action, status="done", outcome="refused",
             refusal_reason=reason, detail=detail, depth=row["depth"],  # type: ignore[arg-type]
@@ -882,6 +1247,14 @@ class Conductor:
                 instance=instance,
             )
 
+        # ---- [2b] 委托质量（A 线）：同 key 既有终态行摆到派活前 + 秘书的委派评估
+        #
+        # 位置是判据的一部分：在参数过关之后、写 running 行之前。参数不过关的召唤
+        # 已经在上一步落成 `invalid_params`，不必再摆一次重复候选（那只会让读数变吵）；
+        # 而写在 running 行之前，是为了让"这条既有终态行是我自己"这件事不可能发生
+        # （同 key 的重复候选里永远不该出现本次的 task_id）。
+        self._note_delegation_quality(role, action, params, input_key=input_key, by=by)
+
         # ---- [3] 深度链
         try:
             depth, parent_role = self._depth_of(parent_task_id)
@@ -896,9 +1269,37 @@ class Conductor:
         # ---- [4] 策略判定（边 / 深度 / 循环 / 扇出 / 并发 / 总量 / 预算 / 墙钟）
         chain = tuple(lineage) if lineage is not None else self._ancestry(parent_task_id)
         fanout = len(self._children_of(parent_task_id)) if parent_task_id else 0
+        # ---- B9（`draft/41-A` 的 B9）：判据与占位必须在同一个临界区里
+        #
+        # 旧顺序是"锁内读 `running`/`total` → 锁外判 → 写完 running 行（一次 fsync
+        # 事务）之后才 `_running.add`"。于是同一瞬间有 N 个线程都读到 `running=3` 时
+        # 会全部放行，`max_concurrency` 被超过 (N-1)；`Semaphore` 只在单次
+        # `run_waves` 内生效，跨 plan / 跨进程都不约束。
+        #
+        # 修法：把"占位"提到锁内、与读计数同一临界区（判 + 预留 + 失败回滚），
+        # I/O 仍留在锁外（"事务绝不包 handler"以及"锁内不做 I/O"两条纪律都不动）。
+        # 预留用的是一个唯一的占位令牌（不是 task_id —— 那个要 `_write_new_row`
+        # 拿到锁才分配）：于是 `len(self._running)` 的含义从"真的在跑的"扩成
+        # "已接受、还没结束的"，而这正是上限想约束的那个量。
         with self._lock:
+            # 两个数都按旧语义取：`running` 是"已经接受、还没结束"的条数
+            # （不含本次自己），`total` 是"已经发生过"的次数（不含本次）——
+            # 这样 `policy.check` 的 `>=` 边界一个字节都不动（改了语义等于偷偷收紧上限）。
+            # 与旧实现的唯一差别是：别的线程的预留也在这个集合里了 ⇒ 那个窗口没了。
             running = len(self._running)
             total = self._started_total + self._cancelled_total
+            self._started_total += 1                # 预留：与下面的令牌同进同出
+            reserve = f"__reserving__{next(self._reserve_seq)}"
+            self._running.add(reserve)
+            self.peak_running = max(self.peak_running, len(self._running))
+
+        def _release_reservation() -> None:
+            """把这次预留还回去（判据说不、或建行失败时）。幂等。"""
+            with self._lock:
+                if reserve in self._running:
+                    self._running.discard(reserve)
+                    self._started_total = max(0, self._started_total - 1)
+
         want_tokens = None
         want_usd = None
         if budget:
@@ -915,6 +1316,7 @@ class Conductor:
         # （框架正确地说"不"），不是失败。
         grant = self._meter_guard(role, budget)
         if not grant.allowed:
+            _release_reservation()
             return self._refuse(
                 role, action, reason="budget_exceeded", detail=grant.reason, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=depth,
@@ -935,6 +1337,7 @@ class Conductor:
             # （设计 §3.2："已在跑的协作式取消"）。
             if refusal.reason == "deadline_exceeded":
                 self._signal_stop("deadline", refusal.detail, by="deadline")
+            _release_reservation()
             return self._refuse(
                 role, action, reason=refusal.reason, detail=refusal.detail, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=depth,
@@ -965,11 +1368,17 @@ class Conductor:
             "artifacts": [],
             "inputs": list(params["inputs"]) if isinstance(params.get("inputs"), list) else [],
         }
-        tid = self._write_new_row(row, note=f"start:{role}.{action}")
+        try:
+            tid = self._write_new_row(row, note=f"start:{role}.{action}")
+        except BaseException:
+            # 建行失败（store 抛了什么）⇒ 预留必须还回去，否则"已接受、还没结束"的
+            # 计数会永久高一个，后续每一次召唤都被自己上次的失败挤掉配额。
+            _release_reservation()
+            raise
         with self._lock:
+            # 把占位令牌换成真 task_id：计数一个不增不减（预留已经计过了）。
+            self._running.discard(reserve)
             self._running.add(tid)
-            self._started_total += 1
-            self.peak_running = max(self.peak_running, len(self._running))
         self._log(f"召唤 {by} → {role}.{action}（{tid}, depth={depth}"
                   + (f", instance={instance}" if instance else "") + "）")
 
@@ -1212,6 +1621,19 @@ class Conductor:
                 # 预览截断到 2 KB，避免把大对象整份塞进产物。
                 "payload_keys": sorted(str(k) for k in payload) if isinstance(payload, Mapping) else [],
                 "payload_preview": blob[:2000],
+                # ---- 读数键提到顶层（`R1-A2`，真机回放抓出来的）
+                #
+                # 口径：凡 payload 里以 `_reading` 结尾的键（今天是 `llm_reading`，
+                # 角色 D 那三类三态读数都在里面）原样放在这一格，不截断。
+                # 为什么必须这样：`payload_preview` 的天花板是 2000 字，而读数的作用
+                # 就是被读到 —— 放进预览等于"有时读得到、有时读不到"（真机实测：
+                # `t-0056` 那一趟 `payload_keys` 里有 `llm_reading`，而 preview 里没有，
+                # 于是"这次到底问没问模型、问成没问成"在盘上读不出来）。
+                # 空的时候给 `{}` 而不是省略这个键：省略会让"这一步没有读数"与
+                # "这是旧格式的摘要"长得一样（三态纪律：没读到与没有要分得开）。
+                "readings": ({str(k): v for k, v in payload.items()
+                              if str(k).endswith("_reading")}
+                             if isinstance(payload, Mapping) else {}),
             }
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -1342,6 +1764,23 @@ class Conductor:
             # 读台账的人判不出这一步到底产出了什么，见 `draft/28` §154 的 S3/R-47）。
             # 摘要落 `<workspace>/out/tasks/<task_id>.json`（键集 + 规范化哈希 + 截断预览），
             # 表里只多一个 artifacts 引用 —— `tasks` 表结构不动（它在 FC-27 禁改区）。
+            #
+            # ---- B12（`draft/41-A` 的 B12）：这一处是已决定的例外
+            #
+            # 它是"锁内写盘"（持 `tasks`+`counters` 文件锁期间写 `out/tasks/<id>.json`），
+            # 而 `summon` 的注释明确写过"事务绝不包 handler"。但这一处挪不出去：
+            # 这次 I/O 的内容不是"与台账无关"的 —— 它被本事务体内的一次读-判门住
+            # （上面那两行 `if row.get("status") in TERMINAL_STATUSES: return`）：
+            # 只有抢到终态的那一次才走到这里。把写文件挪到事务之前会把这个门去掉，
+            # 于是后到的写者也能改这份摘要（同一个 task_id、两份 payload，输家覆盖赢家）。
+            # 判据：`tests/test_e13_concurrency.py::`
+            # `test_b12_the_digest_write_stays_inside_the_winner_transaction`。
+            #
+            # 规则那句话按此精确化：事务体内不做 I/O 的例外是"这次 I/O 的内容取决于
+            # 事务内的读-判结果" —— 那时把 I/O 挪出去等于换掉判据本身。
+            # 顺带核实（主控要求）：`closing` 第八格 `artifact_ledger` 只数台账行
+            # （`missing`/`unreadable`/`changed` 都相对"登记过的产物"算），
+            # 不扫盘上多出来的文件 ⇒ 本例外不会在那一格里造出 `missing`/`changed` 读数。
             digest_rel = self._write_task_digest(row, payload=payload, status=status,
                                                  outcome=str(outcome) if outcome else None,
                                                  detail=detail)
@@ -1423,6 +1862,14 @@ class Conductor:
         token = token or self.token
         P.assert_policy_complete(self.policy)
         self._log(f"run_plan：{len(plan)} 个召唤，policy={self.policy.to_dict()}")
+        # ---- S-03 的第一个消费点（队列级认领 · 乙形态）：派活时顺手把还没做完的
+        # 检索请求交给 A 的 `run_once`（幂等：同一条 request_id 只唤起一次）。
+        # 放在派活之前：这一波 plan 之后，队里那条 pending 就该有人做了。
+        # 扫队失败不许拖住这一波派活（它只是"顺手多做一件"）。
+        try:
+            self.consume_pending_search_requests(trigger="dispatch")
+        except Exception as exc:  # noqa: BLE001 - 见上
+            self._log(f"派活前扫队失败：{type(exc).__name__}: {exc}")
         return SC.run_waves(plan, conductor=self, policy=self.policy, token=token)
 
     # ---------------------------------------------------------------- 停止
@@ -1597,6 +2044,29 @@ class Conductor:
             "unknown_outcome": unknown,
             "peak_running": self.peak_running,
             "started_total": self._started_total,
+            # ---- 两套口径并存，必须写明（F1 之后它们不再相等）
+            #
+            # F1 之后 `tasks` 里多了顶趟行（`action="run"`，由 `open_top_level_run` 开、
+            # `finish_top_level_run` 收）。于是这一屏上：
+            #
+            # - `total` / `by_role` / `by_status` / `by_outcome` / `by_depth`
+            #   = 台账全量（上面 `rows = self._tasks()` ⇒ 含顶趟行）；
+            # - `started_total` / `peak_running` = 本实例发起的召唤数（只在 `summon`
+            #   里自增；顶趟不占并发/总量配额，所以它不进这两个数）。
+            #
+            # 两个数不一样不是 bug，是两件事：一个问"台账里有什么"，一个问"我派了几次活"。
+            # 但不写清就会变成"同一屏里两个读数各说一件事"——本项目最忌的形态，
+            # 所以把口径连同 `top_level_runs` 这个分类计数一起给出来（读者不必自己减）。
+            "calibers": {
+                "total / by_*": "tasks 台账全量（含顶趟行 action=run）",
+                "started_total / peak_running": "本实例发起的召唤数（顶趟不计）",
+            },
+            "top_level_runs": sum(1 for r in rows if str(r.get("action") or "") == "run"),
+            # S-03：两处消费点各消费了几条（"派活时 N / 收尾时 M"）——让"即"的折扣可度量。
+            "consume_counts": dict(getattr(self, "_consume_counts", {}) or {}),
+            # 职责 3（闭环提醒）：最近一次顶趟收尾时的读数（谁没接手 / 谁没反馈 / 各几条）。
+            # 它是一格读数，不是门（`draft/55` §4：秘书不新增机器判据）。
+            "closure_reminders": dict(getattr(self, "_closure_reading", {}) or {}),
             "budget": self.budget.state(self.policy),
             "policy": self.policy.to_dict(),
             "disposed": self._disposed,
@@ -1641,3 +2111,81 @@ class Conductor:
 from .specs.m import SPEC  # noqa: E402,F401
 
 
+
+
+# ---------------------------------------------------------------- S-02 的读数
+
+
+#: `uncalled_actions_reading` 的口径（2026-10-02 主控现场更正，逐字的意思）：
+#: 它数的是 `store.rows("tasks")` —— tasks 台账的落盘行，而不是全量召唤流水。
+#: 权威读数是 `sessions/*.jsonl` 里的 `events`（重放能重建 tasks）。实测：某个工作区的
+#: `tasks.json` 只有 2 行，而同目录的 `events.jsonl` 有 1161 行 ⇒ 两个口径的数
+#: 差得很远，谁也不是"数据缩水"。所以这条读数把自己的口径印在返回里：
+#: 凡"数召唤行数"的读数都必须自带口径，跨口径比大小是错的那种用法。
+_UNCALLED_ACTIONS_CALIBER = (
+    "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；"
+    "权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比"
+)
+
+
+def uncalled_actions_reading(store: Any) -> dict:
+    """S-02 的读数：声明了、但一条召唤行都没有的动作（只读，不加闸门）。
+
+    ## 它回答的那个问题（`44 S-02`）
+
+    D 的五个核心动作（`assess`/`submit_gaps`/`adjudicate`/`trace_question`/`trace_l3`）
+    都在声明表里、各有 handler，而真机 4127 行 `tasks` 里一次都没被召唤过。
+    "声明了但没人召唤过"这件事，今天没有任何读数在说：
+    `Conductor.stats()` 只有 `by_role`/`by_status`/`by_outcome`/`by_depth`，没有
+    `by_action` —— 于是真机 0 次调用只能在临时探针里看见。
+
+    这是一条纯读数：它服务的是 #1（无意义/重复的委托）的可见性，
+    不是判决 —— "该不该派这个动作"归秘书（`J-37`/`J-40`：切勿全写死成机器判据），
+    所以这里不接 handler、不进工具面、不加任何闸门。
+
+    ## 口径（2026-10-02 主控现场更正）
+
+    数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是
+    `sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐字写这件事 ——
+    跨口径比大小是错的用法（实测某个工作区 `tasks.json` 2 行、同目录
+    `events.jsonl` 1161 行，两者谁也不是"数据缩水"）。
+
+    ## 三态
+
+    - `checked=True`：声明表与 `tasks` 都读到了，`uncalled` 是做差的结果；
+    - `checked=False` + `reason`：读不到（`tasks` 或声明表）⇒ 不许折成"全都没被调用"。
+      （"全都没被调用"是一个很强的结论，只有真读到两边才配下。）
+
+    `called` 是"至少有一条召唤行"的那个集合（`refused` 也算 —— 它是一次真的提出过
+    的召唤，台账上留着行）；`declared_total` / `called_total` 给分母，便于看比例。
+    """
+    try:
+        rows = list(store.rows("tasks"))
+    except Exception as exc:  # noqa: BLE001 - 读不出来如实报
+        return {"checked": False, "reason": f"tasks 读不出来：{type(exc).__name__}: {exc}",
+                "uncalled": [], "declared_total": 0, "called_total": 0,
+                "caliber": _UNCALLED_ACTIONS_CALIBER}
+    try:
+        from . import capabilities as _C
+
+        table = dict(getattr(_C, "CAPABILITIES", None) or {})
+    except Exception as exc:  # noqa: BLE001 - 同上
+        return {"checked": False, "reason": f"声明表读不出来：{type(exc).__name__}: {exc}",
+                "uncalled": [], "declared_total": 0, "called_total": 0,
+                "caliber": _UNCALLED_ACTIONS_CALIBER}
+    declared = {(str(role), str(getattr(spec, "action", "") or ""))
+                for role, specs in table.items() for spec in specs}
+    declared.discard(("", ""))
+    called = {(str(r.get("role") or ""), str(r.get("action") or "")) for r in rows}
+    uncalled = sorted(p for p in declared - called if p[1])
+    return {
+        "checked": True,
+        "reason": "",
+        "caliber": _UNCALLED_ACTIONS_CALIBER,
+        "uncalled": [{"role": role, "action": action} for role, action in uncalled],
+        "count": len(uncalled),
+        "declared_total": len(declared),
+        "called_total": len(declared & called),
+        "note": ("这条读数只回答\"声明了但没被召唤过\"：为什么没人派、该不该派，"
+                 "归秘书判断（`J-37`）；本读数不构成任何门的通过条件。"),
+    }

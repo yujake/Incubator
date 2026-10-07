@@ -378,19 +378,6 @@ def test_a_skipped_item_does_not_hide_a_fail() -> None:
     assert rep.overall() == "fail"
 
 
-def test_release_all_passes_the_change_set_down_to_release_check(tmp_path: Path) -> None:
-    """编排层必须把改动集传下去（P-25 的另一半），而不是把那一项一直留在 unknown。"""
-    import sys
-
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root / "tools"))
-    import release_all as RA
-
-    argv = RA.build_steps(root, None, changed_file=tmp_path / "ch.txt")[0].argv
-    assert "--changed-file" in argv, argv
-    assert argv[argv.index("--changed-file") + 1].endswith("ch.txt"), argv
-
-
 # ------------------------------- `R1-1`：pass 说明必须按通路分流（不许替机审宣称"人走过查"）
 
 

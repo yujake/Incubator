@@ -291,14 +291,17 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
         base.detail = "没有接模型（或没有 key）：这是没判成，不是判过了没问题"
         return base
 
-    data, call = seam.ask_json(criterion.prompt(artifact, context),
-                               task_id="", note=f"judge:{criterion.id}")
-    base.model = call.model
-    base.prompt_version = call.prompt_version
-    base.prompt_sha256 = call.prompt_sha256
+    data, problem, call = J.seam_json(seam, criterion.prompt(artifact, context),
+                                      point=f"judge:{criterion.id}")
+    base.model = str(getattr(call, "model", "") or "")
+    base.prompt_version = str(getattr(call, "prompt_version", "") or "")
+    base.prompt_sha256 = str(getattr(call, "prompt_sha256", "") or "")
     if data is None:
-        base.problem = call.problem or "judge_failed"
-        base.detail = call.detail
+        # `L-05b-2/4`（`draft/52` D3）：异常→码的映射只有一处（`judge._problem_of`），
+        # 本入口不再自己 try/except（旧实现让 `BudgetExhausted` / `JudgeRefused` /
+        # `TimeoutError` 落成 `judge_failed:<类名>`，与 `judge_json` 给的码不一致）。
+        base.problem = problem or "judge_failed"
+        base.detail = str(getattr(call, "detail", "") or "") or base.problem
         return base
 
     verdict = str(data.get("verdict") or "")

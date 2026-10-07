@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import difflib
 import inspect
 import json
 from dataclasses import dataclass, field
@@ -765,6 +766,43 @@ def tool(
 # ---------------------------------------------------------------- 注册表
 
 
+def candidate_tool_names(name: str, names: Iterable[str], *, limit: int = 3) -> list[str]:
+    """错名的**并列候选**（`draft/56` §2 主线 A 的 L-05h 机器半）。
+
+    只回答"看起来像哪一个"，**绝不自动挑一个**（挑是判断，归出错方的秘书）。
+    三条判据按序取并集，去重后截到 `limit`：
+
+    1. **同尾名**：`fs.read` 与 `table.read` 的尾名都是 `read` ⇒ 给 `read` 时并列出来
+       （广告名与真名共用尾名是模型最常走的错法）；
+    2. **尾名近似**：`fs.raed` ⇒ `fs.read`（`difflib` 的近似匹配，阈值 0.6）；
+    3. **全名近似**：`review.reportt` ⇒ `review.report`。
+
+    `names` 传的是**本注册表**里的名字。`ToolRegistry.scoped_to(..., deps=...)`
+    会把 writers 子注册表里那批落库代理（`review.*`）装进同一张表，
+    于是它们与工具面上的名字一样能被命中（"含 writers 子注册表名"这一条由结构保证，
+    不是另写一份名单）。
+    """
+    pool = sorted({str(n) for n in names if str(n)})
+    want = str(name or "")
+    if not want or not pool:
+        return []
+    out: list[str] = []
+    tail = want.split(".")[-1]
+    if tail:
+        out += [n for n in pool if n.split(".")[-1] == tail]
+        tails = sorted({n.split(".")[-1] for n in pool})
+        out += [n for n in pool if n.split(".")[-1] in difflib.get_close_matches(
+            tail, tails, n=limit, cutoff=0.6)]
+    out += list(difflib.get_close_matches(want, pool, n=limit, cutoff=0.6))
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for n in out:
+        if n != want and n not in seen:
+            seen.add(n)
+            uniq.append(n)
+    return uniq[:limit]
+
+
 class ToolRegistry:
     """按角色组织的工具表。"""
 
@@ -882,11 +920,33 @@ class ToolRegistry:
 
     # ---- 查询
     def get(self, name: str) -> ToolSpec:
+        """取一个工具的声明；不认识这个名字时抛 `ToolError`。
+
+        ## 错名给的是**并列候选**，不是"一次自动纠正"（`draft/56` §2 主线 A）
+
+        原来这一格的提示是 `[n for n in self._specs if name.split(".")[-1] in n]`
+        —— 一个子串包含判据：它对 `fs.raed`（调换两个字母）给不出任何候选，
+        而对 `read` 会同时命中一批里含 `read` 的名字，读的人仍然不知道该改哪一处。
+
+        新口径（`draft/53` §10 / `draft/55` §3.2 的 L-05h）：
+
+        - 机器**只把候选并列出来**（含 writers 子注册表里的那批名字 ——
+          `scoped_to(..., deps=...)` 把 `review.*` 这类落库代理装进本表，
+          于是它们和工具面上的名字一样能被候选命中）；
+        - 机器**不自动改写**：选哪个名字是判断，归出错方的秘书（职责 1/2），
+          机器只留 fail-closed 的 `unknown_tool` 与这份候选读数。
+
+        真机读数（`draft/44` 的 L-05h）：`review`7 / `review_report`6 /
+        `review.report`5 / `doc.revise`2 次调用**全失败且无回映** —— 白烧步数。
+        """
         try:
             return self._specs[name]
         except KeyError:
-            close = [n for n in self._specs if name.split(".")[-1] in n]
-            hint = f"；相近的有 {close}" if close else ""
+            close = candidate_tool_names(name, self._specs)
+            hint = ""
+            if close:
+                hint = (f"；并列候选（{len(close)} 个）：{close} —— 机器只列候选、"
+                        "不自动改写，由你（或你的秘书）决定改哪一处")
             raise ToolError(f"没有名为 {name!r} 的工具{hint}", tool=name) from None
 
     def names(self) -> list[str]:

@@ -113,6 +113,41 @@ def test_a_bad_project_root_is_reported_as_such(paper_ws: Path):
     assert res["verdict"] == "" and res["drift"] == [], res
 
 
+#: 改前那套手工三步调的是这三个私有实现（`R2b-⑬` 的负控拿它当"改前调用集"）。
+_OLD_MANUAL_CALLS = ["doc.paper_render", "doc.paper_compile", "doc.paper_state"]
+
+
+def _calls_both_declared_tools(names: list[str]) -> bool:
+    """这条判据的判据（正控与负控都调它，别写成同义反复）。"""
+    return "doc.paper_build" in names and "doc.paper_anchor" in names
+
+
+def test_the_action_now_goes_through_the_two_declared_tools(paper_ws: Path):
+    """`R2b-⑬`：这个动作必须经工具面走 `doc.paper_build` + `doc.paper_anchor`。
+
+    改前读数（`temp/_reachability_probe.py _paper_build` / `_paper_anchor`）：这两个
+    声明过的工具各只有 1 处生产引用，而那 1 处是它们自己的工具登记 ⇒ 角色侧调用者 0
+    —— 即"声明了却从来没被任何角色调用过"。这里用运行期观察把它钉住（不是读源码文本）：
+    在真跑一次的动作上记录 `tools.call` 收到的工具名。
+    """
+    g = _g(paper_ws)
+    called: list[str] = []
+    real = g.tools.call
+
+    def spy(name, **kw):
+        called.append(str(name))
+        return real(name, **kw)
+
+    g.tools.call = spy            # type: ignore[method-assign]
+    res = g.paper_package(project=".", timeout_sec=120)
+    assert res["ok"] is True, res
+    assert _calls_both_declared_tools(called), called
+    # 并列读数也在（它是"另一条核锚通道"，权威仍是 `verdict` 那一格）
+    assert res.get("anchor_script", {}).get("note"), res.get("anchor_script")
+    # 负控：改前那套手工三步的调用集必须判否（否则这条判据抓不住"回退成手工走"）。
+    assert not _calls_both_declared_tools(_OLD_MANUAL_CALLS), _OLD_MANUAL_CALLS
+
+
 def test_the_action_is_registered_with_the_declared_two_axes(paper_ws: Path):
     """正控（声明面）：动作在能力表里、两根轴是 `write_local` + `exec`、且在 M 的召唤面上。"""
     from agentflow import capabilities as C

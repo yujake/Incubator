@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""收工门（`draft/37` §16 P3）：五条各自能造红，`unknown` 不算通过。
+"""收工门（`draft/37` §16 P3）：八格各自能造红，`unknown` 不算通过。
 
 ## 这一组守什么
 
@@ -63,22 +63,46 @@ def _project(root: pathlib.Path, *, seed=None) -> Store:
     return st
 
 
+#: M 声明的体例（R9 之后体例归 M，门不自带节名清单）。
+#:
+#: 测试里的"这一趟的 M"声明这些节，写进 `out/review/REPORT-STYLE.json`；
+#: 门只核对声明有没有兑现。它与 `closing` 无关 —— 这正是 R9 的判据：
+#: 门不再自带一份"报告该有哪几节"（那是 review 线的排版规格）。
+STYLE_SECTIONS: tuple[str, ...] = (
+    "一、任务与范围", "二、逐条读数", "三、定理与引理清单", "四、形式化覆盖",
+    "五、引文核验", "六、体例与表述", "七、我们做的补救", "八、未决问题", "九、诚实边界",
+)
+
+
 def _write_report(root: pathlib.Path, *, drop_section: str = "",
-                  drop_split: bool = False) -> pathlib.Path:
-    """写一份九节齐全的报告（可注入两处缺陷）。"""
+                  drop_attachment: bool = False,
+                  declare_style: tuple[str, ...] | None = STYLE_SECTIONS) -> pathlib.Path:
+    """按 M 声明的体例写一份报告（可注入两处缺陷：缺一节 / 缺附件三件套）。
+
+    `drop_section` 按声明的节名的首字（如 `"七"`）抽掉一节；
+    `declare_style=None` ⇒ 不落体例声明（门就不判体例，只判附件）。
+    """
     p = root / "out" / "review" / "REPORT.md"
     p.parent.mkdir(parents=True, exist_ok=True)
+    sections = STYLE_SECTIONS if declare_style is None else declare_style
     lines = ["# 审核报告", ""]
-    for num, name in CL.REPORT_SECTIONS:
+    for name in sections:
+        num = name.split("、", 1)[0]
         if num == drop_section:
             continue
-        lines.append(f"## {num}、{name}")
-        lines.append(f"{name}的读数：逐条见台账。")
+        lines.append(f"## {name}")
+        lines.append(f"{name.split('、', 1)[1]}的读数：逐条见台账。")
         lines.append("")
-    if not drop_split:
-        lines += ["分栏：以下是**我们补的**（不是**原文的**）。", ""]
-    lines += ["附件：origin=own_result；依据读数见 §四；版本 sha256=deadbeef。", ""]
+    if not drop_attachment:
+        lines += ["附件：origin=own_result；依据读数见 §四；版本 sha256=deadbeef。", ""]
     p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    style = p.parent / "REPORT-STYLE.json"
+    if declare_style is None:
+        if style.exists():
+            style.unlink()
+    else:
+        style.write_text(json.dumps({"sections": list(sections)}, ensure_ascii=False),
+                         encoding="utf-8", newline="\n")
     return p
 
 
@@ -361,19 +385,36 @@ def test_the_manuscript_edited_leg_compares_the_draft_with_the_read_only_baselin
     assert changed.readings["acceptance"]["rows"][0]["detail"]["edited"] is True, \
         changed.readings["acceptance"]
 
+    # E-05 ③：只差空白不算实质改动（旧口径比 sha ⇒ 一个字节就算改过）
+    (tmp_path / "out" / "paper" / "main.tex").write_text(
+        "\\date{2026-01-01}\nbody\n\n", encoding="utf-8")
+    _acceptance_checks(tmp_path, rows, st=st)
+    blank = _gate(st, report)
+    assert blank.status["acceptance"] == "fail", blank.to_dict()
+    blank_detail = blank.readings["acceptance"]["rows"][0]["detail"]
+    assert blank_detail["raw_changed"] is True and blank_detail["substantive"] is False, \
+        blank_detail
+    assert blank.readings["acceptance"]["rows"][0]["got"] == 0, blank.readings["acceptance"]
+
+    # CC-05：基线不在盘上 ⇒ 该行不适用（不是整格没查成、不是失败）
     (tmp_path / "source" / "main.tex").unlink()
     missing = _gate(st, report)
-    assert missing.status["acceptance"] == "unknown", missing.to_dict()
-    assert [f.code for f in missing.findings
-            if f.check == "acceptance"] == ["acceptance_leg_unreadable"], missing.to_dict()
+    assert missing.status["acceptance"] == "pass", missing.to_dict()
+    na_row = missing.readings["acceptance"]["rows"][0]
+    assert na_row["not_applicable"] is True and na_row["got"] is None, na_row
+    assert missing.readings["acceptance"]["rows_not_applicable"] == 1
+    assert [f.code for f in missing.findings if f.check == "acceptance"] == [], \
+        missing.to_dict()
 
 
-def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pathlib.Path):
-    """判据（`draft/37` §103）：引文那一档要"每条 `\\bibitem` 一条记录"，阈值由主稿自己定。
+def test_the_per_citation_leg_counts_against_the_read_only_baseline(
+        tmp_path: pathlib.Path):
+    """判据（`draft/37` §103 + E-05 ②）：引文那一档的分母取只读基线。
 
     第 12 趟钻过去的口子：那一档当时只要求"≥1 条带 `quote_verified` 的行"，
     于是做一条就算（它落了一条 `quote_verified=false` 就过了），而任务原文要的是"逐条"。
-    这一档现在按主稿里 `\\bibitem` 的条数当阈值（调用方不写 `min` 时用它自己算的那个）。
+    现在阈值 = 只读基线 `source/main.tex` 里 `\\bibitem` 的条数 —— 分母不许由
+    可改的主稿自己给（旧口径取主稿 ⇒ 删文献就能把门槛一起压低，`draft/43-C` C-05）。
     """
     def seed(s: Store) -> None:
         _t3_experiment(s)
@@ -383,9 +424,14 @@ def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pa
     ws.mkdir()
     st = _project(ws, seed=seed)
     report = _write_report(ws)
-    (ws / "out" / "paper" / "main.tex").write_text(
+    # 只读基线：3 条 `\bibitem`（分母的真源）
+    (ws / "source").mkdir(parents=True, exist_ok=True)
+    (ws / "source" / "main.tex").write_text(
         "\\documentclass{article}\n" + "".join(f"\\bibitem{{K{i}}}\nX\n" for i in range(3)),
         encoding="utf-8")
+    # 可改的主稿：只有 1 条 —— 旧口径会把它当分母（读成 1 并判过）
+    (ws / "out" / "paper" / "main.tex").write_text(
+        "\\documentclass{article}\n\\bibitem{K0}\nX\n", encoding="utf-8")
     (ws / "out" / "paper" / "ACCEPTANCE-CHECKS.json").write_text(
         json.dumps({"checks": [{"id": "P7", "name": "引文逐条核过",
                                 "kind": "citation_records_vs_bibitems"}]}, ensure_ascii=False),
@@ -395,6 +441,8 @@ def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pa
     empty = _gate(st, report)
     row = empty.readings["acceptance"]["rows"][0]
     assert empty.status["acceptance"] == "fail" and row["min"] == 3, row
+    assert row["detail"]["denominator_from"] == "source/main.tex", row["detail"]
+    assert row["detail"]["draft_bibitems"] == 1, row["detail"]
 
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", {
@@ -405,7 +453,8 @@ def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pa
             "evidence_kind": "cross_check", "status": "active",
             "created_at": TS, "created_by": "test"})
     one = _gate(st, report)
-    assert one.status["acceptance"] == "fail", one.to_dict()   # 3 条 bibitem、只有 1 条记录
+    # 3 条 bibitem 的基线，只有 1 条记录 ⇒ 不成立（旧口径会拿主稿的 1 判过）
+    assert one.status["acceptance"] == "fail", one.to_dict()
     assert one.readings["acceptance"]["rows"][0]["got"] == 1, one.readings["acceptance"]
 
     for i in (1, 2):
@@ -418,6 +467,14 @@ def test_the_per_citation_leg_counts_against_the_number_of_bibitems(tmp_path: pa
                 "created_at": TS, "created_by": "test"})
     full = _gate(st, report)
     assert full.status["acceptance"] == "pass", full.to_dict()   # 3 条记录 ≥ 3 条 bibitem
+
+    # CC-05：基线不在盘上 ⇒ 该行不适用（不再整格 unknown，也不再读主稿当分母）
+    (ws / "source" / "main.tex").unlink()
+    gone = _gate(st, report)
+    assert gone.status["acceptance"] == "pass", gone.to_dict()
+    na_row = gone.readings["acceptance"]["rows"][0]
+    assert na_row["not_applicable"] is True, na_row
+    assert "source/main.tex" in na_row["reason"].replace("\\", "/"), na_row
 
 
 def test_the_retrieval_leg_requires_a_search_that_actually_ran(
@@ -726,8 +783,11 @@ def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathli
     _acceptance_checks(tmp_path, [{"id": "P7", "kind": "no_such_leg_kind", "min": 1}])
     unknown = _gate(st, report)
     assert unknown.status["acceptance"] == "unknown", unknown.to_dict()
-    assert [f.code for f in unknown.findings
-            if f.check == "acceptance"] == ["acceptance_unknown_kind"]
+    codes = [f.code for f in unknown.findings if f.check == "acceptance"]
+    # CC-02：词表外 `kind` 只废这一行（`acceptance_unknown_kind`），
+    # 整格仍 `unknown`（绝不 `pass`），并附一条汇总 warning。
+    assert codes == ["acceptance_unknown_kind", "acceptance_rows_unreadable"], codes
+    assert unknown.readings["acceptance"]["rows_unreadable"] == 1, unknown.readings["acceptance"]
 
 
 def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
@@ -791,17 +851,52 @@ def test_a_downgraded_claim_does_not_fail_the_gate(tmp_path: pathlib.Path):
 
 
 def test_the_report_shape_check_goes_red_alone(tmp_path: pathlib.Path):
-    """负控④（报告形状）：抽掉一节与分栏标记 ⇒ 只这一条红。"""
+    """负控④（报告形状）：缺一件附件 ⇒ 只这一条红（同一个 `report_incomplete`）。
+
+    R9 之后报告形状只剩两件事：附件三件套判实（来源 / 依据 / 版本 sha）与
+    M 声明的体例有没有兑现。这里造前半：三件套缺两件。
+    """
     st, _ = _good(tmp_path)
-    bad = _write_report(tmp_path, drop_section="七", drop_split=True)
+    bad = _write_report(tmp_path, drop_attachment=True)
     rep = _gate(st, bad)
     assert rep.status["report_shape"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["report_incomplete"]
     rd = rep.readings["report_shape"]
-    assert any("我们做的补救" in m for m in rd["missing_sections"]), rd
-    assert rd["missing_split_markers"] == ["我们补的", "原文的"], rd
+    assert rd["missing_attachment_fields"] == ["origin=own_result", "依据", "sha"], rd
     assert {k: v for k, v in rep.status.items() if k != "report_shape"} == {
         name: "pass" for name in CL.DEFAULT_CHECKS if name != "report_shape"}
+
+
+def test_a_missing_declared_section_goes_red_alone(tmp_path: pathlib.Path):
+    """负控④′（体例）：M 声明了九节而报告只写了八节 ⇒ 只这一条红。
+
+    这条与上一条合起来是 R9 的完整判据：体例由 M 声明（不是门自带），
+    缺的那一节由门按"声明有没有兑现"报出来，仍然是同一个 `report_incomplete`。
+    """
+    st, _ = _good(tmp_path)
+    bad = _write_report(tmp_path, drop_section="七")
+    rep = _gate(st, bad)
+    assert rep.status["report_shape"] == "fail", rep.to_dict()
+    assert [f.code for f in rep.blockers] == ["report_incomplete"]
+    rd = rep.readings["report_shape"]
+    assert rd["missing_declared_sections"] == ["七、我们做的补救"], rd
+    assert rd["missing_attachment_fields"] == [], rd
+    assert {k: v for k, v in rep.status.items() if k != "report_shape"} == {
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "report_shape"}
+
+
+def test_no_declared_style_means_no_format_judgement(tmp_path: pathlib.Path):
+    """R9：M 没声明体例 ⇒ 门不判体例（读数 `style_source: "none"`）。
+
+    这不是"通过"，是"这一趟没有体例声明"。附件三件套照判（它不是排版）。
+    """
+    st, _ = _good(tmp_path)
+    report = _write_report(tmp_path, declare_style=None)
+    rep = _gate(st, report)
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
+    rd = rep.readings["report_shape"]
+    assert rd["style_source"] == "none" and rd["declared_sections"] == []
+    assert rd["attachment_fields"] == ["origin=own_result", "依据", "sha"], rd
 
 
 def test_the_user_pending_check_goes_red_alone(tmp_path: pathlib.Path):
@@ -843,12 +938,13 @@ def test_missing_readings_are_unknown_and_unknown_is_not_a_pass(tmp_path: pathli
     assert rep.status["anchor"] == "unknown", rep.to_dict()
     assert rep.status["report_shape"] == "unknown", rep.to_dict()
     assert not rep.can_close, "没查成却报告可交付 —— 这正是这门要防的形态"
-    # 三格都要项目根：锚 / 报告形状 / 验收表的机器可判行（加了第七格之后）
-    assert rep.unknowns == ["acceptance", "anchor", "report_shape"], rep.unknowns
+    # 要项目根的每一格都要在名单里：锚 / 报告形状 / 验收表（第七格）/ 产物台账（第八格）
+    assert rep.unknowns == ["acceptance", "anchor", "artifact_ledger", "report_shape"], rep.unknowns
     assert rep.failed == []
-    assert CL.tri_state_exit_code(rep) == 2, "两格没查成 ⇒ 退出码 2（不是 1，也不是 0）"
+    assert CL.tri_state_exit_code(rep) == 2, "没查成 ⇒ 退出码 2（不是 1，也不是 0）"
     codes = sorted(f.code for f in rep.findings)
-    assert codes == ["acceptance_not_checked", "anchor_not_checked", "report_path_missing"], codes
+    assert codes == ["acceptance_not_checked", "anchor_not_checked", "no_project_dir",
+                     "report_path_missing"], codes
 
 
 def test_a_missing_report_file_is_unknown_not_a_failure(tmp_path: pathlib.Path):
@@ -1201,6 +1297,144 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
     assert row["detail"]["grades"] == {"conjecture": 2, "pre_theorem": 2}, row["detail"]
 
 
+def test_the_grade_reading_comes_from_bits_from_row(tmp_path: pathlib.Path):
+    """R3 读侧（`draft/57` 组 9）：等级只许来自 `bits_from_row` / `derive_grade`。
+
+    判据（AST）：`closing.py` 里读 `bits.get("grade")` 的那个 `bits` 必须由
+    `EB.bits_from_row(...)`（或 `derive_grade(...)`）赋值 —— 也就是说盘上那份
+    `bits["grade"]` 只当缓存，读侧现算。今天已经如此；这条把它固化成"以后改坏会红"。
+
+    负控（两份，缺一不可）：
+    1. 「合成」：把一段"直接读盘上 dict 的 grade"的源码喂给同一个判据 ⇒ 必须报违规
+       （这段判据自己也要能被证伪，不能只对真文件恒真）；
+    2. 「真文件注入」（另做、见交付说明）：把 `closing.py` 那一行临时换成
+       `str((r.get("bits") or {}).get("grade") or "")` ⇒ 本用例红，然后还原。
+    """
+    import ast
+    import inspect
+
+    src = inspect.getsource(CL)
+
+    def _grade_reads(text: str) -> tuple[list[int], list[int]]:
+        tree = ast.parse(text)
+        ok_names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                fn = node.value.func
+                fname = (fn.attr if isinstance(fn, ast.Attribute)
+                         else (fn.id if isinstance(fn, ast.Name) else ""))
+                if fname in ("bits_from_row", "derive_grade"):
+                    for t in node.targets:
+                        if isinstance(t, ast.Name):
+                            ok_names.add(t.id)
+        good: list[int] = []
+        bad: list[int] = []
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "get" and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == "grade"):
+                recv = node.func.value
+                if isinstance(recv, ast.Name) and recv.id in ok_names:
+                    good.append(node.lineno)
+                else:
+                    bad.append(node.lineno)
+            if (isinstance(node, ast.Subscript)
+                    and isinstance(getattr(node, "slice", None), ast.Constant)
+                    and node.slice.value == "grade"):
+                bad.append(node.lineno)
+        return good, bad
+
+    good, bad = _grade_reads(src)
+    assert good, "没找到任何来自 bits_from_row 的 grade 读取 —— 判据自己接错了（不是通过）"
+    assert bad == [], (
+        f"closing.py 里有 {len(bad)} 处 grade 读取不是来自 bits_from_row/derive_grade："
+        f"第 {bad} 行 —— 盘上存的等级只当缓存，读侧必须现算"
+    )
+
+    # 负控（合成）：直接读盘上 dict 的 grade ⇒ 判据必须报违规
+    _good2, bad2 = _grade_reads(
+        'def f(r):\n    grade = str((r.get("bits") or {}).get("grade") or "")\n    return grade\n')
+    assert bad2, "判据对『直接读盘上的 grade』不报 —— 它是一条恒真判据"
+    _good3, bad3 = _grade_reads('def f(r):\n    g = r["bits"]["grade"]\n    return g\n')
+    assert bad3, "判据对下标式读 grade 不报 —— 漏了另一条入口"
+
+
+def test_the_reviewed_proof_leg_separates_never_computed_from_low_grade(
+        tmp_path: pathlib.Path):
+    """R3 三态：`没有位记录`与`算了、只到 conjecture`必须分得开（都要有读数）。
+
+    旧读数的病：两件事同形（都表现为"没被计入 `counted`"），于是"这一趟根本没算过
+    五位"会被读成"算了、就是低档"。这一条要求逐档分母并列：
+    `statements_without_bits` / `grades_with_bits` / `counted`。
+    """
+    def seed(s: Store) -> None:
+        # ① 没有任何位记录（老数据 / 产出方这一趟没走过）
+        _statement(s, "0000", bits=None)
+        # ② 有位记录，但只到 conjecture（算了、就是低档）
+        _statement(s, "0001", bits={"proof": True,
+                                    "evidence": {"proof_source": "own",
+                                                 "proof_process": "（逐步论证）"}})
+        # ③ 有位记录，且我方到预备定理级（这一档要数的）
+        _statement(s, "0002", bits={"proof": True, "reviewed": True,
+                                    "evidence": {"proof_source": "own",
+                                                 "proof_process": "（逐步论证）",
+                                                 "reviewed_by": {"round": "V-0001",
+                                                                 "verdict": "no_defect"}}})
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [{"id": "B2", "name": "造判决性证据",
+                                   "kind": "reviewed_proof_rows", "min": 1}], st=st)
+    rep = _gate(st, report)
+
+    d = rep.readings["acceptance"]["rows"][0]["detail"]
+    assert d["statements"] == 3, d
+    assert d["statements_without_bits"] == 1 and d["without_bits_ids"] == ["0000"], d
+    assert d["statements_with_bits"] == 2, d
+    # 负控：没有位记录的那一行「不许」被算进"算了之后落在哪一档"
+    assert d["grades_with_bits"] == {"conjecture": 1, "pre_theorem": 1}, d
+    # 兼容读数（全行，按"五位全空 ⇒ conjecture"）：无记录那一行确实落在 conjecture 里 ——
+    # 这正是它必须与 `grades_with_bits` 并列给出的原因
+    assert d["grades"] == {"conjecture": 2, "pre_theorem": 1}, d
+    assert d["counted"] and d["counted"][0]["stmt_id"] == "0002", d
+    note = str(d["note"])
+    assert "没有位记录" in note and "算了、不够档" in note, note
+    assert rep.readings["acceptance"]["rows"][0]["got"] == 1
+
+
+def test_the_external_lit_grade_carries_a_readable_reason(tmp_path: pathlib.Path):
+    """R3 第三条：`external_lit` 被跳过时要有「可读理由串」（不只是计数）。
+
+    口径确认：这一档数的是"我方造出的判决性证据"；引用外部文献得来的高档
+    「不算」（否则"引一篇别人的定理"就满足了"我们自己造"）。引用命题的承重
+    归 `load_bearing` 那一格 —— 理由串必须把这两件事说清。
+    """
+    def seed(s: Store) -> None:
+        _statement(s, "0000", origin="external_lit", source_lit_id="0042",
+                   quote_verified=True, proof_text="")
+        _statement(s, "0001", bits={"proof": True, "reviewed": True,
+                                    "evidence": {"proof_source": "own",
+                                                 "proof_process": "（逐步论证）",
+                                                 "reviewed_by": {"round": "V-0001",
+                                                                 "verdict": "no_defect"}}})
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, [{"id": "B2", "name": "造判决性证据",
+                                   "kind": "reviewed_proof_rows", "min": 1}], st=st)
+    rep = _gate(st, report)
+
+    d = rep.readings["acceptance"]["rows"][0]["detail"]
+    assert d["cited_skipped"] == 1, d
+    assert [r["stmt_id"] for r in d["cited_skipped_rows"]] == ["0000"], d
+    reason = str(d["cited_skipped_reason"])
+    assert "external_lit" in reason and "load_bearing" in reason, reason
+    assert "我们自己造" in reason or "我方" in reason, reason
+    # 被跳过的那一条「不许」进 `counted`（它进了 counted 就等于把别人的定理算成我们的）
+    assert [c["stmt_id"] for c in d["counted"]] == ["0001"], d
+
+
 def test_the_reviewed_proof_leg_goes_red_on_self_declared_proofs_alone(tmp_path: pathlib.Path):
     """负控：只有老字段（`evidence_kind=proof` + `proof_text`）而五位全空 ⇒ 这一档 0 条。
 
@@ -1267,33 +1501,259 @@ def test_the_non_numeric_leg_satisfies_the_calculate_or_construct_stage(
     assert chain["missing"] == [], chain
 
 
-def test_an_unreadable_leg_leaves_a_reason_in_the_reading_not_a_null(tmp_path: pathlib.Path):
-    """判据（`draft/39` §6.25 的 D35）：一档读不出来时，读数里必须带上"为什么"。
+def test_a_leg_that_needs_the_baseline_is_not_applicable_not_the_whole_cell(
+        tmp_path: pathlib.Path):
+    """CC-05（`draft/44` J-21：与 E-05 同批）：缺只读基线 ⇒ 该行不适用，不是整格没查成。
 
     真机读数（T2 第 7 趟 `projects/p6i-research-from-zero`）：验收表 P1 用了
-    `manuscript_edited`，而从零工作区没有只读基线 `source/` ⇒ 那一行的读数算不出来
-    ⇒ 整格 `unknown`；而这一格当时只 push 了一条 `Finding`，`readings["acceptance"]`
-    留在 `None` 上 —— 交付面（报告、离线复算脚本、状态报告）看到的就是一个没有理由的空格。
-    三态纪律要的是"没查成"本身可读：哪一行、哪一档、为什么、该换什么。
+    `manuscript_edited`，而从零工作区没有只读基线 `source/`。旧口径下那一行抛
+    `ValueError` ⇒ 整格 `unknown`、`rows=0` —— 表里另外 10 行本来算得出数，
+    却连读数都没留下（改前实测：`acceptance=unknown`、`code=acceptance_leg_unreadable`、
+    `rows=0`）。
+
+    现在分成两件事：
+    - 缺只读基线 ⇒ 该行 `not_applicable`（既不是通过也不是失败），其余行照常判；
+    - 台账读不到 / JSON 坏 / 词表外 ⇒ 仍然是"没查成"（整格 `unknown`，见下一条）。
     """
     st, report = _good(tmp_path)
     _acceptance_checks(tmp_path, [
         {"id": "P1", "name": "正文改动", "kind": "manuscript_edited", "min": 1},
+        {"id": "P2", "name": "交付物在不在", "kind": "document_rows", "min": 1},
     ], st=st)
     rep = _gate(st, report)
 
+    reading = rep.readings["acceptance"]
+    assert isinstance(reading, dict) and reading.get("rows"), reading
+    assert [r["id"] for r in reading["rows"]] == ["P1", "P2"], reading["rows"]
+    na_row = reading["rows"][0]
+    assert na_row["not_applicable"] is True and na_row["ok"] is None, na_row
+    assert "source/main.tex" in na_row["reason"].replace("\\", "/"), na_row
+    assert reading["rows_not_applicable"] == 1 and reading["rows_read"] == 1, reading
+    assert reading["not_applicable_rows"] == ["P1"], reading
+    # 其余行照常判 ⇒ 这一格由它们决定（不再因为一行算不出来就整格没查成）
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
+
+
+def test_a_broken_ledger_still_makes_the_whole_cell_unknown(tmp_path: pathlib.Path):
+    """三态分界（CC-05 的另一半）：读不到台账 ⇒ 整格 `unknown`（"没查成"）。
+
+    "缺基线 ⇒ 不适用"与"读不到 ⇒ 没查成"必须分得开：把后者也折成 `not_applicable`
+    等于把"我们没读到"读成"这一档用不上"（最贵的方向）。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "引文逐条核过", "kind": "citation_records_vs_bibitems", "min": 1},
+    ], st=st)
+    # 基线在盘上（走不到 not_applicable），但台账读不到：把 statements 表读坏
+    src = tmp_path / "source"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "main.tex").write_text("\\bibitem{a}\n", encoding="utf-8")
+
+    class _Boom:
+        root = st.root
+
+        def rows(self, name):
+            if name == "research_questions":       # 覆盖面那一格照常读（它不参与本条判据）
+                return []
+            raise OSError("表读不到（注入）")
+
+    rep = CL.check_closing(_Boom(), project_dir=str(tmp_path), report_path=str(report),
+                           checks=("acceptance",))
     assert rep.status["acceptance"] == "unknown", rep.to_dict()
     reading = rep.readings["acceptance"]
-    assert isinstance(reading, dict), reading
-    assert reading["code"] == "acceptance_leg_unreadable", reading
-    assert reading["detail"], reading
-    assert "source" in reading["detail"], reading
-    assert [f.code for f in rep.findings if f.code.startswith("acceptance")] == \
-        ["acceptance_leg_unreadable"], rep.to_dict()
+    # CC-02：这一行落 `unreadable`（好行的读数照留），整格仍 `unknown`
+    # （"读不到台账"不许折成 `not_applicable`，也不许折成 `pass`）。
+    assert reading["rows_unreadable"] == 1, reading
+    assert reading["unreadable_rows"][0]["code"] == "acceptance_leg_unreadable", reading
+    detail = reading["unreadable_rows"][0]["reason"]
+    assert "OSError" in detail, detail
+    codes = [f.code for f in rep.findings if f.code.startswith("acceptance")]
+    assert codes == ["acceptance_leg_unreadable", "acceptance_rows_unreadable"], codes
+    # 反真空：它不是 `not_applicable`（那是"缺只读基线"那一档）
+    assert reading["rows_not_applicable"] == 0, reading
+    assert reading["rows"][0]["state"] == "unreadable", reading["rows"][0]
+
+
+def test_the_row_state_judge_has_exactly_one_definition():
+    """CC-02：行状态判据只有一处定义，四种状态各自可判，老读数行也读得对。
+
+    为什么单列（主控裁定边界 5："一处定义、两处用，改一次两处同时正确"）：
+    行循环产出 `state`，四条自动分支的守卫（E-04a）与覆盖率消费它 ——
+    分别写两份就是"各修一半"。这条测试既钉住四种状态的语义，也把这两个入口
+    直接调一次。
+    """
+    rows = [
+        {"kind": "a", "state": "computed", "got": 1, "ok": True},
+        {"kind": "b", "na": True, "state": "na", "got": None, "ok": True},
+        {"kind": "c", "state": "unreadable", "ok": None},
+        {"kind": "d", "state": "not_applicable", "ok": None},
+        {"kind": "a", "na": True, "state": "na", "got": None, "ok": True},
+    ]
+    assert CL.acceptance_row_state(rows[0]) == "computed"
+    assert CL.acceptance_row_state(rows[1]) == "na"
+    assert CL.acceptance_row_state(rows[2]) == "unreadable"
+    assert CL.acceptance_row_state(rows[3]) == "not_applicable"
+    # 老读数行（没有 `state` 键）按旧语义推 —— 204 行历史读数与手写的行对象都读得对
+    assert CL.acceptance_row_state({"kind": "x", "got": 1, "ok": True}) == "computed"
+    assert CL.acceptance_row_state({"kind": "x", "na": True}) == "na"
+    assert CL.acceptance_row_state({"kind": "x", "not_applicable": True}) == "not_applicable"
+    # 只有 `computed` 算"这一档被算过"（`na`/`not_applicable`/`unreadable` 都不算）
+    assert CL.acceptance_kinds_with_state(rows, "computed") == {"a"}
+    assert CL.acceptance_kinds_with_state(rows, "na") == {"a", "b"}
+    assert CL.acceptance_kinds_with_state(rows, "unreadable") == {"c"}
+    assert CL.acceptance_kinds_with_state(rows, "not_applicable") == {"d"}
+    # 一处定义：定义点各只有一个（分叉会让守卫与行循环各读一套）
+    import inspect
+
+    src = inspect.getsource(CL)
+    assert src.count("def acceptance_row_state(") == 1, "行状态判据被定义了不止一处"
+    assert src.count("def acceptance_kinds_with_state(") == 1, "状态到 kind 的取值被定义了不止一处"
+
+
+def test_a_row_level_defect_does_not_take_the_whole_table_down(tmp_path: pathlib.Path):
+    """CC-02（`draft/52` 裁定 (a)）：行级读不懂只废那一行，好行的读数照留。
+
+    三种形态一起钉（都是"顶层读得出来、行里坏了"）：
+
+    - 一行不是对象；② 词表外 `kind`；③ `na` 无理由。
+    改前它们都让整格 `unknown` 且 `rows=0`（好行的读数一起丢 —— 那正是 CC-05
+    刚修掉的反向错误）。改后：好行 `state="computed"` 且 `got/ok` 真实、
+    坏行 `state="unreadable"`、整格 `unknown`（绝不 `pass`）。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+        {"id": "P2", "name": "我编的档", "kind": "render_anchor_consistent", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    acc = rep.readings["acceptance"]
+    assert [r["state"] for r in acc["rows"]] == ["computed", "unreadable"], acc["rows"]
+    good = acc["rows"][0]
+    assert good["got"] == 1 and good["ok"] is True, good
+    # 好行的读数与"表里只有它"时逐字相同（坏行不许影响它）
+    only_good = CL.check_closing(Store(tmp_path), project_dir=str(tmp_path),
+                                 checks=("acceptance",))
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+    ], st=st)
+    rep2 = _gate(st, report)
+    assert rep2.status["acceptance"] == "pass", rep2.to_dict()
+    row_only = rep2.readings["acceptance"]["rows"][0]
+    assert {k: good[k] for k in ("id", "kind", "got", "ok", "min", "max")} == \
+        {k: row_only[k] for k in ("id", "kind", "got", "ok", "min", "max")}, (good, row_only)
+    assert good["detail"] == row_only["detail"], (good["detail"], row_only["detail"])
+    assert only_good is not None
+
+
+def test_a_bad_threshold_type_does_not_crash_the_gate(tmp_path: pathlib.Path):
+    """CC-02：`min`/`max` 不是整数 ⇒ 那一行 `unreadable`，门不许崩。
+
+    改前必红（门崩）：`int(row.get("min") or 0)` 对 `"abc"` 抛 `ValueError`、
+    对 `{}` 抛 `TypeError`，异常直接穿出 `check_closing` —— 整个收工门报不出来。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+        {"id": "P2", "name": "坏阈值", "kind": "document_rows", "min": "abc"},
+    ], st=st)
+    rep = _gate(st, report)                      # 不抛就是这一条的一半
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    acc = rep.readings["acceptance"]
+    assert acc["rows_unreadable"] == 1, acc
+    assert "不是整数" in acc["unreadable_rows"][0]["reason"], acc["unreadable_rows"]
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+        {"id": "P2", "name": "坏上限", "kind": "document_rows", "min": 1, "max": {}},
+    ], st=st)
+    rep2 = _gate(st, report)
+    assert rep2.status["acceptance"] == "unknown", rep2.to_dict()
+    assert rep2.readings["acceptance"]["rows_unreadable"] == 1, rep2.readings["acceptance"]
+
+
+def test_a_non_boolean_na_is_not_silently_judged_as_a_normal_row(tmp_path: pathlib.Path):
+    """CC-02：`"na": "true"`（非布尔）⇒ 该行 `unreadable`、整格 `unknown`。
+
+    改前必红（假绿方向，最值钱的一条）：旧口径只认 `is True`，于是
+    `"na": "true"` 被当普通行判 —— `na` 的语义被静默丢掉（既不生效也不报错），
+    整格还能读成 `pass`。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+        {"id": "P2", "name": "想写 na 但写错了类型", "kind": "document_rows", "na": "true"},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    acc = rep.readings["acceptance"]
+    assert acc["rows_unreadable"] == 1, acc
+    assert "na" in acc["unreadable_rows"][0]["reason"], acc["unreadable_rows"]
+    assert "布尔" in acc["unreadable_rows"][0]["reason"], acc["unreadable_rows"]
+
+
+def test_a_missing_or_duplicate_id_is_reported(tmp_path: pathlib.Path):
+    """CC-02：`id` 缺失 / 重复 ⇒ 该行 `unreadable` + 读数 `duplicate_ids`。
+
+    为什么这条重要：`id` 是人与表对上那一行的唯一把手。改前 `id` 缺失的读数在
+    报告里显示成空串、重复 id 一个字都不报 —— 读数与人对不上，而门照样绿。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"name": "没有 id", "kind": "document_rows", "min": 1},
+        {"id": "P1", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+        {"id": "P1", "name": "重复 id", "kind": "document_rows", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    acc = rep.readings["acceptance"]
+    assert acc["rows_unreadable"] == 2, acc
+    assert acc["duplicate_ids"] == ["P1"], acc
+    assert [r["state"] for r in acc["rows"]] == ["unreadable", "computed", "unreadable"], \
+        acc["rows"]
+
+
+def test_a_leg_unreadable_row_does_not_silence_an_automatic_branch(tmp_path: pathlib.Path):
+    """CC-02 × E-04a（一处定义，两处用）：`unreadable` 行不算 `computed_kinds`。
+
+    形态：表里给 `reviewed_current_rows` 写一行坏行（非布尔 `na`），
+    而那一档的自动分支（"现行版没有被审校记录钉住"）必须照旧报出来 ——
+    如果守卫用"表里有没有这个 kind"或把 `unreadable` 也算 `computed`，
+    一行坏行就能关掉分支（那正是 E-04a 治的洞换了入口）。
+    """
+    st, report = _good(tmp_path)
+    _accepted_doc(st)
+    _revise_after_signoff(st)
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "稿件有裁决", "kind": "reviewed_documents", "min": 1},
+        {"id": "P2", "name": "坏行", "kind": "reviewed_current_rows", "na": "true"},
+    ], st=st)
+    rep = _gate(st, report)
+    acc = rep.readings["acceptance"]
+    assert acc["na_only_branch_kinds"] == [], acc
+    detail = "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+    assert "现行版本没有被审校记录钉住的稿件" in detail, detail
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+
+    # 同一份表里把坏行改成合法的 `na` + 理由 ⇒ 分支仍然报（E-04a 的语义不变）
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "稿件有裁决", "kind": "reviewed_documents", "min": 1},
+        {"id": "P2", "name": "现行版复核", "kind": "reviewed_current_rows",
+         "na": True, "note": "同事说这一版不用复核"},
+    ], st=st)
+    rep2 = _gate(st, report)
+    assert rep2.readings["acceptance"]["na_only_branch_kinds"] == ["reviewed_current_rows"], \
+        rep2.readings["acceptance"]
+    detail2 = "；".join(f.detail for f in rep2.blockers if f.check == "acceptance")
+    assert "现行版本没有被审校记录钉住的稿件" in detail2, detail2
 
 
 def test_a_self_invented_kind_says_it_takes_the_whole_table_down(tmp_path: pathlib.Path):
-    """判据（D35 的另一半）：自造 `kind` 不只废那一行 —— 读数要说清"整张表都没查成"。"""
+    """判据（D35 的另一半 + CC-02）：自造 `kind` 让整格不通过，但读数逐行留下。
+
+    口径沿革：旧措辞是"一个 kind 不认识 ⇒ 整张表都判没查成"（读数一起没了）。
+    CC-02（`draft/52` 裁定 (a)）之后：这一行 `unreadable`、其余行照常判、
+    整格 `unknown`（绝不 `pass`）—— 威慑不变（门照样过不去），连坐去掉。
+    """
     st, report = _good(tmp_path)
     _acceptance_checks(tmp_path, [
         {"id": "P1", "name": "我编的档", "kind": "render_anchor_consistent", "min": 1},
@@ -1301,9 +1761,11 @@ def test_a_self_invented_kind_says_it_takes_the_whole_table_down(tmp_path: pathl
     rep = _gate(st, report)
 
     assert rep.status["acceptance"] == "unknown", rep.to_dict()
-    reading = rep.readings["acceptance"]
-    assert reading["code"] == "acceptance_unknown_kind", reading
-    assert "整张表" in reading["detail"], reading
+    acc = rep.readings["acceptance"]
+    assert acc["rows_unreadable"] == 1, acc
+    assert "受控词表" in acc["unreadable_rows"][0]["reason"], acc["unreadable_rows"]
+    assert "整张表" not in "".join(f.detail for f in rep.findings), \
+        "读数里不该再出现『整张表都没查成』那句旧措辞（口径已改成行级）"
 
 
 # ============================================================ `na` 行（D49）
@@ -1352,17 +1814,25 @@ def test_an_na_row_counts_as_marked_and_leaves_a_reading(tmp_path: pathlib.Path,
 
 
 def test_an_na_row_without_a_reason_is_not_checked(tmp_path: pathlib.Path):
-    """负控：`na` 不写理由 ⇒ 没查成（`na` 不是"跳过"的快捷键）。"""
+    """负控：`na` 不写理由 ⇒ 这一行读不懂（`na` 不是"跳过"的快捷键）。
+
+    CC-02 之后它是行级的：该行 `unreadable`、整格 `unknown`（绝不 `pass`）。
+    """
     st, report = _good(tmp_path)
     _acceptance_checks(tmp_path, [
         {"id": "P1", "name": "某档", "kind": "numeric_experiment_rows", "min": 1, "na": True},
+        {"id": "P2", "name": "交付物在不在", "kind": "document_rows", "min": 1},
     ], st=st)
     rep = _gate(st, report)
 
     assert rep.status["acceptance"] == "unknown", rep.to_dict()
-    reading = rep.readings["acceptance"]
-    assert reading["code"] == "acceptance_na_without_reason", reading
-    assert "理由" in reading["detail"], reading
+    acc = rep.readings["acceptance"]
+    assert acc["rows_unreadable"] == 1, acc
+    row = acc["unreadable_rows"][0]
+    assert row["code"] == "acceptance_na_without_reason", row
+    assert "理由" in row["reason"], row
+    # 好行的读数照留（不是整格没读数）
+    assert [r["state"] for r in acc["rows"]] == ["unreadable", "computed"], acc["rows"]
 
 
 def test_a_table_of_nothing_but_na_is_refused(tmp_path: pathlib.Path):
@@ -1857,24 +2327,222 @@ def test_a_revision_after_the_signoff_turns_the_gate_red(tmp_path: pathlib.Path)
     assert rep2.status["acceptance"] == "pass", rep2.to_dict()
 
 
-def test_an_na_row_is_the_way_to_ship_a_deliberately_unreviewed_revision(
-        tmp_path: pathlib.Path):
-    """三态（D57）：确实要这样交（预算用尽，来不及复核）⇒ 写一行 `na` + 理由。
+def test_an_na_row_cannot_silence_an_automatic_branch(tmp_path: pathlib.Path):
+    """E-04a（`draft/44` J-17）：给那四档写一行 `na` 不许关掉门的自动分支。
 
-    与其它档同一条口径：`na` ≠ 通过 ≠ 失败。这一档存在的意义不是"不许改稿"，
-    而是"改完之后没复核"这件事必须被看见、被写下来。
+    真机形态（`draft/46-04` §2.1 的内存复算）：`p7b` +6 行、`p5-review-t17`/`p8g`
+    各 +3 行 `na` ⇒ 旧门从 `fail` 读成 `pass`。
+
+    这一条守的是"`na` 的语义边界"：`na` 是"这一行对这个项目天然不适用"（D49），
+    不是"门不许问这件事"。所以本用例给 `reviewed_current_rows` 写一行 `na`，
+    而那一档的自动分支（"现行版没有被审校记录钉住"）必须照旧报出来。
+    """
+    st, report = _good(tmp_path)
+    _accepted_doc(st)
+    _revise_after_signoff(st)          # 改完之后没复核 —— 缺陷是真的
+    _acceptance_checks(tmp_path, [
+        {"id": "P1", "name": "稿件有裁决", "kind": "reviewed_documents", "min": 1},
+        {"id": "P2", "name": "现行版复核", "kind": "reviewed_current_rows",
+         "na": True, "note": "同事说这一版不用复核"},
+    ], st=st)
+    rep = _gate(st, report)
+
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    detail = "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+    assert "现行版本没有被审校记录钉住的稿件" in detail, detail
+    assert "改完之后没再复核" in detail, detail
+    # 那一行 `na` 自己仍然是"不适用"（三态没被改），读数里也如实留痕
+    rows = {r["id"]: r for r in rep.readings["acceptance"]["rows"]}
+    assert rows["P2"]["na"] is True and rows["P2"]["got"] is None, rows["P2"]
+    assert rep.readings["acceptance"]["na_only_branch_kinds"] == ["reviewed_current_rows"], \
+        rep.readings["acceptance"]
+
+
+def test_the_four_auto_branches_read_the_ledger_not_the_table(tmp_path: pathlib.Path):
+    """E-04a（`draft/46-04` §6.2 负控二）：四条自动分支统一从台账读，键名固定。
+
+    四条分支各自认一个"键"：`stale_signoffs`（改完没复核）/ `empty_section_docs`（骨架稿）
+    / `mismatches`（引文对不上）/ `derived_rows`（账本被模板灌满）。表里不写这四档时，
+    门必须自己把它们从台账读出来（旧实现只在"表里没有该 kind"时跑，没有统一的四键）。
     """
     st, report = _good(tmp_path)
     _accepted_doc(st)
     _revise_after_signoff(st)
     _acceptance_checks(tmp_path, [
         {"id": "P1", "name": "稿件有裁决", "kind": "reviewed_documents", "min": 1},
-        {"id": "P2", "name": "现行版复核", "kind": "reviewed_current_rows",
-         "na": True, "note": "预算用尽，这一版追加的断言来不及复核 —— 如实记账，不假装审过"},
     ], st=st)
     rep = _gate(st, report)
 
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
-    rows = {r["id"]: r for r in rep.readings["acceptance"]["rows"]}
-    assert rows["P2"]["na"] is True and rows["P2"]["got"] is None, rows["P2"]
+    detail = "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+    # 门的自动分支真的从台账读到了缺陷（而不是只看"表里有没有这个 kind"）
+    got, cur = CL._leg_reading(st, "reviewed_current_rows", tmp_path)
+    assert cur["stale_signoffs"], cur
+    assert got == 0, cur
+    assert "现行版本没有被审校记录钉住的稿件" in detail, detail
+    assert rep.readings["acceptance"]["na_only_branch_kinds"] == [], rep.readings["acceptance"]
+    # 另三条分支的键由各自的档提供（同一份台账读法）：门对每一档都能说出"读到了什么"
+    _g, body = CL._leg_reading(st, "document_body_rows", tmp_path)
+    assert "empty_section_docs" in body, body
+    fit = CL.citation_fit(st)
+    assert "mismatches" in fit, fit
+    _g2, ms = CL._leg_reading(st, "manuscript_rows", tmp_path)
+    assert "derived_rows" in ms, ms
+
+
+# ============================================================ E-04b / E-05 / EE-05 / EE-10 / C6
+
+
+def test_a_group_covered_only_by_na_rows_is_reported_not_judged(tmp_path: pathlib.Path):
+    """E-04b（`draft/52` C1）：整环只有 `na` 行 ⇒ 机器如实报出来，判断归 M/秘书。
+
+    真机形态（`draft/49-03` 决策 1 逐格）：`p7b` 的 `B1`（`numeric_experiment_rows` + `na`）
+    把「算或造」整个环节撑起来了 —— 那一环的成员一行都不在别处出现。
+
+    判据有三条，缺一不可：
+    1. 这一环不在 `missing` 里（读数级，不改覆盖面算法）；
+    2. 它出现在 `na_only_groups` 里（看得见）；
+    3. 门不因此判 `unknown`/`fail`（"算不算覆盖"是语义判断，归 M/秘书）。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "R1", "name": "立题", "kind": "research_question_rows", "min": 0,
+         "note": "夹具里没有研究问题行，如实记 0"},
+        {"id": "R2", "name": "算或造", "kind": "numeric_experiment_rows", "min": 0,
+         "na": True, "note": "调查型任务，不做数值实验（如实标注）"},
+    ], st=st)
+    # 让覆盖面判据真的开火：这个项目要"是研究型"（有 research_questions 行）
+    with st.tx("research_questions", actor="test") as tx:
+        tx.upsert("research_questions", {"question_id": "0000", "question": "问题",
+                                         "status": "open", "created_at": TS,
+                                         "created_by": "test"})
+    rep = _gate(st, report)
+
+    chain = rep.readings["acceptance"]["research_chain"]
+    assert chain["researched"] is True, chain
+    assert "算或造" in chain["na_only_groups"], chain
+    assert not any("算或造" in m for m in chain["missing"]), chain
+    # 判断归 M/秘书：机器不因为"整环只有 na"就把这一格判成 unknown/fail
+    assert rep.status["acceptance"] in ("pass", "fail"), rep.to_dict()
+    assert "acceptance_chain_unreadable" not in [f.code for f in rep.findings]
+
+
+def test_a_smaller_min_cannot_lower_the_kinds_own_threshold(tmp_path: pathlib.Path):
+    """E-05 ①：阈值取大 —— 表里写 `min: 1` 而这一档自己算出来 3 ⇒ 生效的是 3。
+
+    改前是"显式优先"（`closing.py:1213` 的注释逐字 `0 = 让这一档自己定阈值`）⇒
+    写表的人可以把门槛压低（`draft/43-C` C-05）。真机 33 份表里
+    `min` 与 `implicit_min` 不一致的行 = 0 ⇒ 这一改 0 处翻转。
+    """
+    st, report = _good(tmp_path)
+    # `retrieval_ok_rows` 的缺省阈值 = `research_questions` 的行数
+    with st.tx("research_questions", actor="test") as tx:
+        for i in range(3):
+            tx.upsert("research_questions", {"question_id": f"{i:04d}", "question": f"问题{i}",
+                                             "status": "open", "created_at": TS,
+                                             "created_by": "test"})
+    with st.tx("search_requests", actor="test") as tx:
+        tx.upsert("search_requests", {"request_id": "r-0001", "topic": "q", "mode": "broad",
+                                      "timestamp": TS, "done": True,
+                                      "outcome": "ok", "attempts": 1,
+                                      "result_lit_ids": ["0000"],
+                                      "submitted_by": "test"})
+    _acceptance_checks(tmp_path, [
+        {"id": "C2", "name": "检索真的取回", "kind": "retrieval_ok_rows", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+
+    row = rep.readings["acceptance"]["rows"][0]
+    assert row["min"] == 3, row
+    assert row["ok"] is False, row
+    assert row["detail"]["min_overridden"] == {"declared": 1, "kind_min": 3, "effective": 3}, \
+        row["detail"]
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+
+
+def test_the_acceptance_readings_carry_a_reading_version(tmp_path: pathlib.Path):
+    """C6（`draft/52`）：口径必须可追溯 —— 读数里要有 `reading_version`。
+
+    为什么（`draft/46-04` §6.4 第 1 条）：33 份表 / 204 行今天读出的 `got` 是
+    旧口径下的数。每改一次口径（E-05 的分母、CC-05 的第四态、E-04a 的守卫）
+    都必须说清"从哪一趟起口径变了" —— 没有版本号，两趟读数不同时无从判断差异
+    来自"研究对象变了"还是"门的口径变了"。
+    """
+    st, report = _good(tmp_path)
+    _acceptance_checks(tmp_path, [
+        {"id": "P2", "name": "交付物在不在", "kind": "document_rows", "min": 1},
+    ], st=st)
+    rep = _gate(st, report)
+    acc = rep.readings["acceptance"]
+    assert acc["reading_version"] == CL.ACCEPTANCE_READING_VERSION, acc
+    assert acc["reading_version"], "口径版本号不许是空串"
+    assert acc["rows_read"] == 1 and acc["rows_na"] == 0 and acc["rows_not_applicable"] == 0, acc
+
+
+def test_the_two_ledgers_share_one_reader(tmp_path: pathlib.Path):
+    """EE-10（`draft/44` J-24）：两条台账只合并读法 —— `reviewed_current_rows` 如实标出它读哪一条。
+
+    两条台账钉的是不同哈希空间（真机：`ARTIFACTS.jsonl` 的 `49404e4d…` vs
+    `DOC-SIGNATURES.jsonl` 的 `dc8a062c…`）⇒ 本体不许合并；合并的是"怎么读 JSONL"
+    那一层（`jsonlfile.read_jsonl`，`draft/36` T-6）。
+    """
+    from agentflow import artifacts as A
+    from agentflow import jsonlfile as JF
+    from agentflow import signatures as SIG
+
+    assert SIG.read_jsonl is JF.read_jsonl and A.read_ledger.__module__ == "agentflow.artifacts"
+    st, report = _good(tmp_path)
+    _accepted_doc(st)
+    _g, detail = CL._leg_reading(st, "reviewed_current_rows", tmp_path)
+    assert detail["ledger_module"] == "signatures", detail
+    assert detail["signature_ledger"].endswith(SIG.LEDGER_NAME), detail
+
+
+def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
+    """EE-05 第八格（`draft/52` C4）：产物台账与盘上不一致 ⇒ 这一格说得出是哪一种不一致。
+
+    三档分开、强度不同（这是 C4 的核心，避免把正常产物读成坏）：
+
+    - `missing`（登记过、盘上没了）/ `unreadable` ⇒ `fail`；
+    - 只有 `changed`（登记之后又被正常改写）⇒ `unknown`（真机根 B 589 条 ≈18.75%）；
+    - 全 `ok` ⇒ `pass`；台账不在盘上 ⇒ `pass` + 读数 `absent: true`（"没有这一栏"）。
+    """
+    from agentflow import artifacts as A
+
+    st, report = _good(tmp_path)
+
+    def _ledger(path: str, sha: str) -> None:
+        with open(tmp_path / "ARTIFACTS.jsonl", "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps({"path": path, "sha256": sha, "producer": "test",
+                                 "at": TS}, ensure_ascii=False) + "\n")
+
+    # ① 登记一条真的产物（sha 与盘上一致）⇒ pass
+    good = tmp_path / "out" / "paper" / "main.tex"
+    _ledger("out/paper/main.tex", A.sha256_of(good))
+    rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
+                           checks=("artifact_ledger",))
+    assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
+    assert rep.readings["artifact_ledger"]["entries"] == 1, rep.readings
+
+    # ② 同一条被改写（sha 变了）⇒ changed ⇒ unknown（不是 fail）
+    good.write_text("改过了\n", encoding="utf-8")
+    rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
+                           checks=("artifact_ledger",))
+    assert rep.status["artifact_ledger"] == "unknown", rep.to_dict()
+    assert rep.readings["artifact_ledger"]["changed"] == 1, rep.readings
+    assert [f.code for f in rep.findings] == ["artifact_ledger_changed_only"], rep.to_dict()
+
+    # ③ 登记过、盘上没了 ⇒ missing ⇒ fail（同一个格，强度不同）
+    _ledger("out/paper/NOPE.tex", "deadbeef")
+    rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
+                           checks=("artifact_ledger",))
+    assert rep.status["artifact_ledger"] == "fail", rep.to_dict()
+    assert rep.readings["artifact_ledger"]["missing"] == 1, rep.readings
+    assert [f.code for f in rep.findings] == ["artifact_ledger_bad_rows"], rep.to_dict()
+
+    # ④ 台账不在盘上 ⇒ pass + 读数写明"没有这一栏"（与 acceptance 对非研究型项目同口径）
+    (tmp_path / "ARTIFACTS.jsonl").unlink()
+    rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
+                           checks=("artifact_ledger",))
+    assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
+    assert rep.readings["artifact_ledger"]["absent"] is True, rep.readings
 

@@ -48,6 +48,11 @@ from ..store import Store, StoreError, lease_expired, make_lease
 from ..agentspec import AgentBrief, AgentSpec
 REPROCESS_RESULTS = ("found", "not_found", "improved", "unchanged", "rejected_target")
 NOTE_LIMIT = 2000
+#: "这台机器没有够格的抽取器"这一档的落点（`R-56` 的拒抽）：`run_once` 把它写进
+#: `last_mine_error`。单立一个常量、而不是在两处各写一遍字面量，是因为 `_claim` 的
+#: 放弃分支要靠它分辨「真抽过、失败 N 次」与「从未真抽」（`D-2` 的第四档，2026-10-02）
+#: —— 那两档的结论文字必须完全不同，而字面量写两遍就是漂移的开始。
+NO_EXTRACTOR_ERROR = "no_llm_extractor"
 QUOTE_OUT_OF_DECLARED_RANGE = "substring_match_outside_declared_range"
 assert QUOTE_OUT_OF_DECLARED_RANGE in Path(quoteverify.__file__).read_text(
     encoding="utf-8"
@@ -110,6 +115,12 @@ class BRunResult:
     #: 它是"有活却没干"的唯一合法解释，必须能被外部看见 —— 否则运维只能看到
     #: `skipped_reason="no_unprocessed_literature"`，会把"全被别人占着"读成"队列空了"。
     skipped_lease_active: int = 0
+    #: 因"租约未过期而 `claimed_by` 为空"被跳过的条数：那是我们自己上次失败留下的退避。
+    #: 与上一格分开数（`A.ARunResult` 同口径）：两者要等的对象不同 —— 等别人 / 等自己。
+    #: 单列这一格的理由（`D-2`，2026-10-02 对齐 A 的判据）：修复前 `_claim` 只在
+    #: `claimed_by` 非空时才认租约，于是 B 自己写的退避租约写了等于没写 ——
+    #: 失败的那一行当轮就被重领，`mine_attempts` 在一次调用里烧到上限并被判死。
+    skipped_lease_backoff: int = 0
     #: 本轮当场放弃（`mine_attempts` 用尽）的条数。
     gave_up: int = 0
     # ---- I6 写入期闸门的三态计数（必须从外部可观察）
@@ -135,6 +146,7 @@ class BClaimOutcome:
 
     - ``pending == 0``                 —— 队列里确实没有未处理文献（可以停）
     - ``skipped_lease_active > 0``     —— 有活，但都在别人手里（该等，或换实例跑）
+    - ``skipped_lease_backoff > 0``    —— 有活，但都在我们自己的退避租约里（到点自然重试）
     - ``gave_up > 0``                  —— 有活，但都超了重试上限（终局，别再等）
 
     压成一个 `None` 的后果不是"少一点信息"而是误导运维：`run_once()` 原先无论
@@ -149,12 +161,18 @@ class BClaimOutcome:
     把别人手上的活一起毁掉。
     """
 
-    #: 取到的文献行（已置 claimed_by / lease_until / mine_attempts+=1）；没取到时为 `None`。
+    #: 取到的文献行（已置 claimed_by / lease_until）；没取到时为 `None`。
+    #: `R3-⑩` 起 `mine_attempts` 不在这里加：它只在真正调用抽取器的那一刻 +1
+    #: （`run_once` 的成功提交与 `extract_failed` 两处）—— 领取不等于抽取，
+    #: 否则"从未真抽"的那一档会因为排队次数用尽而被判死。
     literature: dict | None = None
     #: 定序时未处理文献的条数（不含已 processed 的）。
     pending: int = 0
     #: 因租约未过期而被跳过的条数（"别人正在做"）。
     skipped_lease_active: int = 0
+    #: 因租约未过期而被跳过的条数（"我们自己上次失败留下的退避"）。
+    #: 与上一格同源不同义：`claimed_by` 为空只说明持有者不是别人，不说明没人等。
+    skipped_lease_backoff: int = 0
     #: 本轮当场放弃（attempts 用尽）的条数。
     gave_up: int = 0
     #: 没取到文献时的原因；取到时为 `None`。

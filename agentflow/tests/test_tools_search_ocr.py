@@ -300,3 +300,151 @@ def _write_png(path: Path) -> Path:
 
     Image.new("RGB", (12, 12), "white").save(path)
     return path
+
+
+# ============================================================ `R2b` ⑱：一次问多源
+
+
+class _BrokenProvider:
+    """注入用的"上游坏了"的源（抛异常 ⇒ `MultiProvider` 记 `failed` 而不中断别的源）。"""
+
+    def __init__(self, name: str = "broken", exc: Exception | None = None) -> None:
+        self.name = name
+        self._exc = exc or RuntimeError("upstream 429")
+
+    def search(self, topic: str, mode: str = "topical", description: str = "", limit: int = 10):  # noqa: ARG002
+        raise self._exc
+
+
+class _RefusingProvider:
+    """第三态源：这一问根本没发出去（不抛，把自己标成不适用）。
+
+    `MultiProvider._provider_refusal` 从 provider 自己的台账上读这件事 ——
+    这里照它读的两个属性给出（`last_query_provenance` 之外的判据在 providers 层，
+    本桩只负责"我就是没发出去"）。
+    """
+
+    def __init__(self, name: str = "cjk", reason: str = "query_not_applicable_cjk") -> None:
+        self.name = name
+        self.last_query_provenance = None
+        self.last_refusal_state = reason
+        self.last_refusal_reason = "这一问对这条通道不适用（测试桩）"
+
+    def search(self, topic: str, mode: str = "topical", description: str = "", limit: int = 10):  # noqa: ARG002
+        return []
+
+
+def _search_reg(store, *provs, **kw) -> ToolRegistry:
+    reg = ToolRegistry(name="search")
+    reg.bound_role = "A"
+    search_tools.register(reg, store=store, providers=list(provs), workspace=store.root, **kw)
+    return reg
+
+
+def test_multi_provider_asks_every_source_and_reports_each_one(store):
+    """⑱ 正控：`providers=[…]` 一次问多源，且逐源读数都在（谁回了什么）。"""
+    s1 = _StubProvider([_cand("Paper A", doi="10.1/a")], name="s1")
+    s2 = _StubProvider([_cand("Paper B", doi="10.1/b")], name="s2")
+    reg = _search_reg(store, s1, s2)
+
+    res = reg.call("search.literature", topic="群", mode="topical", providers=["s1", "s2"])
+    assert res.ok, res.error
+    data = res.data
+    assert data["count"] == 2, data["candidates"]
+    assert data["providers_requested"] == ["s1", "s2"]
+    assert data["provider"] == "multi", "多源的结果不是某一个源的，provider 必须如实说 multi"
+    rows = {r["name"]: r for r in data["sources"]}
+    assert set(rows) == {"s1", "s2"}, rows
+    for name in ("s1", "s2"):
+        assert rows[name]["status"] == "ok", rows[name]
+        assert rows[name]["count"] == 1, rows[name]
+        assert rows[name]["delivered"] is True, rows[name]
+    # 成本可读：多源 = 多次出网
+    assert data["cost"]["provider_calls"] == 2, data["cost"]
+    assert isinstance(data["cost"]["elapsed_s"], float)
+
+
+def test_multi_provider_merges_duplicates_with_the_one_identity_key(store):
+    """⑱：跨源重复靠 `MultiProvider` 那一份判据合并 —— 本层不另写第二份去重。
+
+    两半都钉：① 行为 —— 同一篇（同 DOI）来自两个源 ⇒ 合并成一条，且 `raw.providers`
+    记着两个来源；② 结构 —— `search_tools` 里没有任何"自己算合并键"的函数。
+    """
+    import ast
+
+    s1 = _StubProvider([_cand("Same paper", doi="10.1/same")], name="s1")
+    s2 = _StubProvider([_cand("Same paper", doi="10.1/same")], name="s2")
+    reg = _search_reg(store, s1, s2)
+    data = reg.call("search.literature", topic="群", mode="topical", providers=["s1", "s2"]).data
+    assert data["count"] == 1, data["candidates"]
+    merged = data["candidates"][0]
+    # 主键仍在（判重口径没变：还是 `dedup.literature_keys` 那一个）
+    assert merged["dedup_key"] == "doi:10.1/same", merged
+    assert "doi:10.1/same" in merged["dedup_keys"], merged
+    # "哪几条重复"的读数：合并后的这一条说得出自己来自哪两个源
+    assert merged["sources"] == ["s1", "s2"], merged
+
+    tree = ast.parse(Path(search_tools.__file__).read_text(encoding="utf-8"))
+    suspects = [n.name for n in ast.walk(tree)
+                if isinstance(n, ast.FunctionDef)
+                and ("merge" in n.name or "identity_key" in n.name)]
+    assert not suspects, (
+        f"`search_tools` 里出现了自己的合并/身份键函数 {suspects} ⇒ 去重口径长出了第二份；"
+        "跨源合并只能走 `providers.MultiProvider`")
+    assert "P.MultiProvider(" in Path(search_tools.__file__).read_text(encoding="utf-8"), (
+        "多源路径没有走 `providers.MultiProvider` ⇒ 它一定是自己合并的")
+
+
+def test_multi_provider_one_failing_source_does_not_swallow_the_others(store):
+    """⑱ 硬要求①：某个源失败 ⇒ 如实报它，不许吞掉别的源的结果，也不许折成"没搜到"。"""
+    good = _StubProvider([_cand("Paper A", doi="10.1/a")], name="good")
+    bad = _BrokenProvider("bad")
+    reg = _search_reg(store, good, bad)
+
+    res = reg.call("search.literature", topic="群", mode="topical", providers=["good", "bad"])
+    assert res.ok, f"一个源坏了不该让整次调用失败：{res.error}"
+    data = res.data
+    assert data["count"] == 1, data["candidates"]
+    assert data["source_failures"] == ["bad"], data["source_failures"]
+    rows = {r["name"]: r for r in data["sources"]}
+    assert rows["bad"]["status"] == "failed" and rows["bad"]["error_kind"], rows["bad"]
+    assert rows["good"]["status"] == "ok", rows["good"]
+    assert any("bad" in w for w in data["warnings"]), data["warnings"]
+
+
+def test_multi_provider_all_sources_failing_is_not_a_zero_hit_conclusion(store):
+    """⑱ 硬要求①：一个源都没交货 ⇒ 没查成（fail），绝不折成"检索正常、零命中"。"""
+    reg = _search_reg(store, _BrokenProvider("b1"), _BrokenProvider("b2"))
+    res = reg.call("search.literature", topic="群", mode="topical", providers=["b1", "b2"])
+    assert res.ok is False, "全源失败被写成了成功"
+    assert res.meta.get("kind") == "provider_error", res.meta
+    assert set(res.meta.get("source_failures") or []) == {"b1", "b2"}, res.meta
+    assert "没查成" in res.error, res.error
+
+
+def test_single_provider_path_is_unchanged_when_providers_is_absent(store):
+    """回归护栏：不给 `providers` 时仍是单源行为（`providers_requested` 为 null 是那个标记）。
+
+    `sources[]` 在两条路上都给（同一形状）：单源时它是一行，说的是这一个源
+    "交没交货" —— 声明里的 `sources[]` 键集合于是不随调用方式时有时无。
+    """
+    stub = _StubProvider([_cand("Paper A", doi="10.1/a")], name="stub")
+    reg = _search_reg(store, stub)
+    data = reg.call("search.literature", topic="群", mode="topical", provider="stub").data
+    assert data["provider"] == "stub"
+    assert data["providers_requested"] is None, "单源调用的标记：没问多源"
+    assert data["source_count"] == 1, data["sources"]
+    row = data["sources"][0]
+    assert row["name"] == "stub" and row["status"] == "ok" and row["count"] == 1, row
+    assert row["delivered"] is True and row["refused"] is False, row
+    assert data["source_failures"] == [] and data["source_refusals"] == []
+    assert data["cost"]["provider_calls"] == 1, data["cost"]
+    assert data["count"] == 1
+
+
+def test_multi_provider_empty_list_is_refused_not_silently_single_source(store):
+    """空列表既不是单源也不是多源 ⇒ 必须拒（`providers=[]` 的"这次到底问了谁"没法读）。"""
+    reg = _search_reg(store, _StubProvider([], name="s1"))
+    res = reg.call("search.literature", topic="群", mode="topical", providers=[])
+    assert res.ok is False, res.data
+    assert "providers" in str(res.error)

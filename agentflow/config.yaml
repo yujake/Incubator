@@ -15,15 +15,18 @@ store:
   root: .            # 该值当前不被消费（见上）
 
 lease:
-  # 租约时长：超过这个时间未完成的任务会被其他实例重新领取。
-  # 设小了会重复干活，设大了会卡住任务。搜索/下载通常 < 10 分钟，故默认 900s。
-  # ⚠️ 代码读的键名是 `lease_seconds`（`agentflow/src/agentflow/agent_a.py` 与
-  # `agent_b.py` 的 `self.cfg.get("lease_seconds", 900)`），**不是本行的 `seconds`**
-  # ⇒ 本行当前不被消费（2026-09-30 更正）。生效值因此落在代码默认值 900 上，
-  # 与本行写的数值相同。**键与值原样保留，不改生效语义。**
-  seconds: 900
-  # 单条任务的最大尝试次数；超过则显式放弃并写 last_error（而不是无限重试）
-  max_attempts: 3
+  # ⚠️ 本块只剩说明，**不再承载任何生效语义**（2026-10-02，`D-2`）。
+  # 租约时长与尝试次数的生效位置是下面两段各自的 `lease_seconds` / `max_attempts`：
+  #   · `agent_a:` 段 —— 由 `AgentA.__init__`（`self.cfg.get("lease_seconds", 900)` /
+  #     `max_attempts`）读走；
+  #   · `agent_b:` 段 —— 由 `AgentB.__init__` 同形读走。
+  # 为什么必须放这两段：正式装配路径是 `host.py` 的 `_Builder._cfg_for(role)`，
+  # 它只把该角色自己那一段交给角色，**不看本块**；旧 CLI 路径里那两处
+  # `{**段, **(cfg.get("lease") or {})}` 拼接已随本次改动撤掉，所以现在
+  # 「阈值住在哪一段」只有一处答案。
+  # 本块原先写的是 `seconds: 900` —— 而代码读的键名一直是 `lease_seconds`，
+  # 于是那一行从来没被消费过：把它从 900 改成 3，A/B 读到的仍是代码默认 900
+  # （读数见 `temp/_d2_config_probe.py`）。键与值已搬到下面两段。
 
 agent_a:
   # 三种搜索模式的返回条数上限（DESIGN.md §5.1）
@@ -35,6 +38,12 @@ agent_a:
   # 单个请求最多下载几篇全文，防止一次朴素查询把磁盘塞满
   max_downloads_per_request: 25
   providers: [openalex]        # 可选：openalex, crossref, doaj, europepmc, fixture
+  # 租约时长（秒）：超过它还没跑完的请求会被其他实例重新领取；也是"检索失败后的
+  # 退避时长"。设小了会重复干活，设大了会卡住任务（搜索/下载通常 < 10 分钟）。
+  # 生效位置就在这里（`AgentA.__init__` 读本段的 `lease_seconds`，`D-2`，2026-10-02）。
+  lease_seconds: 900
+  # 单条任务的最大尝试次数；超过则显式放弃并写 last_error（而不是无限重试）
+  max_attempts: 3
 
 agent_b:
   # 关系判重阈值（DESIGN.md §3.3）
@@ -47,6 +56,11 @@ agent_b:
   # （`agentflow/src/agentflow/quoteverify.py`）：
   # 全文兜底会把"页码写错了"这个真实缺陷掩盖掉。
   allow_fulltext_quote_fallback: false
+  # 租约时长（秒）与最大尝试次数：与 `agent_a` 段同名同义，但**必须各写一份** ——
+  # 生效位置是各自那一段（`AgentB.__init__` 读本段，`D-2`，2026-10-02）。
+  # B 的租约还多一个用处：抽取失败/没有够格抽取器时写下的退避租约就取这个值。
+  lease_seconds: 900
+  max_attempts: 3
 
 download:
   connect_timeout: 20

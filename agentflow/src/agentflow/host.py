@@ -82,8 +82,19 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
     from .modelclient import SCOPE_EXTRACT, client_from_env
     from .tokenmeter import TokenMeter
 
+    # `task_id=None` 是如实说"这一笔不挂在任何一次召唤上"（F3 / C 线需求单 R-2）。
+    # 此前写的是 `task_id="host-wiring"` —— 一个编造的任务号：它不在 `tasks` 表里，
+    # 于是 `verify.verify_all` 把它报成 `dangling_usage_task`（error）。
+    # 编造一个看起来像任务号的字符串，比留空更坏：审计读到的是一个具体的号，
+    # 而那个号从来不存在（`draft/44` 的 R-06 同族：假读数比没读数更难发现）。
+    #
+    # 跨线依赖（已写进需求单，不在这里顺手改 A 线的文件）：`modelclient.ModelClient`
+    # 把它折成字符串 `self.task_id or "(未接线)"` 再写进账本，所以光改这一行还不够 ——
+    # 要让 `dangling_usage_task` 真的归零，`modelclient` 那一侧必须让 `None` 原样透传
+    # （`task_id=self.task_id or None`）。另：盘上已经写下的行不会被代码改写
+    # （`store.rebuild` 重放的是同一批事件），所以历史工作区的计数不会因为改这一行而归零。
     client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
-                             task_id="host-wiring", role="B", max_tokens=8192)
+                             task_id=None, role="B", max_tokens=8192)
     if notes is not None:
         notes.append("B：抽取器 = LLMExtractor（client 走 modelclient，作用域 extract、"
                      "max_tokens=8192、已挂 TokenMeter ⇒ 花销进 usage_ledger）")
@@ -188,6 +199,17 @@ class _Builder:
     def agent_h(self, store: Any, instance: str = "") -> Any:
         """H（构造在 `specs/h.py::build`：只要 store / config / llm）。"""
         return self._build("H", store, instance)
+
+
+    def agent_v(self, store: Any, instance: str = "") -> Any:
+        """V（构造在 `specs/v.py::build`：要工作区根；模型缝由 `agent_v` 按角色取）。
+
+        为什么 V 也要走这条通用装配（而不是自己 new 一个）：`capabilities` 第 [1]
+        条要求主控的出边恰好等于 `schema.ROLES`，而 `capabilities` 第 [2] 条要求
+        `AgentV` 上真有那三个 handler —— 两处一致才叫"接线完成"。
+        这里只多一个薄壳：真正的构造在声明里（与 A–H 同形）。
+        """
+        return self._build("V", store, instance)
 
 
     def _cfg_with_actor(self, role: str, instance: str) -> dict[str, Any]:
@@ -456,17 +478,28 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     # `LlmBackend`（写 `agent_*` 事件）、以及工具层（读会话文件）——
     # 三处读写的必须是同一个文件。
     eff_sid = sid or SS.session_id()
+
+    def _seam(role: str) -> Any:
+        """按角色造一个模型缝（唯一一处构造）。
+
+        为什么收成一处（`R1-B-x` 裁定 3）：改前 H 与 F 各内联了一份
+        `LlmSeam.for_role(...)` 的 lambda，两份逐字相同 —— 那是"同一件事两份实现"，
+        加第三个角色（D）时必然再抄第三份，而三者只要有一处参数不同
+        （`session_root` / `usd_budget` / `meter`）就会静默分家。
+        """
+        from .llmseam import LlmSeam as _S
+
+        factory = seam_factory or (lambda r: _S.for_role(
+            r, session_root=root, sid=eff_sid, usd_budget=usd_budget,
+            meter=TokenMeter(store, budget_usd=usd_budget)))
+        return factory(role)
+
     # H 的语义判据（`draft/28` §196）：默认 False —— 环境里有 key 也不改变确定性行为
     # （与 `DEFAULT_LLM_LOOPS` 同一条纪律）。打开时 H 拿一个按角色造的模型缝，
     # `claims_semantically_judged` 才会从 0 变成真读数。
     h_llm = None
     if semantic_review:
-        from .llmseam import LlmSeam as _Seam
-
-        h_llm = (seam_factory or (lambda role: _Seam.for_role(role, session_root=root, sid=eff_sid,
-                                                             usd_budget=usd_budget,
-                                                             meter=TokenMeter(
-                                                                 store, budget_usd=usd_budget))))("H")
+        h_llm = _seam("H")
     # F 的攻坚推理（`draft/39` §6.32 的 D42b）：与 H 的语义判据同一条纪律 ——
     # 默认关，环境里有 key 也不改变确定性行为；打开时 F 才拿得到一个按角色造的缝。
     #
@@ -476,12 +509,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     # D42 把"有缝就推理"那一支修好了，但缝从来没到过 F 手上；这一处才是真机那一句的根因。
     f_llm = None
     if attack_reasoning:
-        from .llmseam import LlmSeam as _SeamF
-
-        f_llm = (seam_factory or (lambda role: _SeamF.for_role(role, session_root=root, sid=eff_sid,
-                                                              usd_budget=usd_budget,
-                                                              meter=TokenMeter(
-                                                                  store, budget_usd=usd_budget))))("F")
+        f_llm = _seam("F")
         # 工具层也要拿到它（`draft/39` §6.33 的 D42c）：真机里 M 派 `F.step` 走的是
         # `attack.step` 那条工具路径（`attack_tools._agent_for` → `AgentF(store)`），
         # 那条路径拿不到 host 的装配上下文 —— 只接角色工厂，`F.step` 仍然 `no_change`
@@ -497,12 +525,36 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         from . import agent_f as _AF
 
         _AF.set_default_llm(None)
-    notes: list[str] = [notes_attack]
+    # ---- D 的模型精修（`R1-B-x` 裁定 3）：缝不由角色开关决定，由"这次运行有没有模型"决定。
+    #
+    # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 那样等一个
+    # `--attack-reasoning` 才拿得到缝。三条硬要求（裁定 3 逐字）：
+    #   ① 有模型就接上（`_model_key_present()`：环境里配了 key）；
+    #   ② 三态读数：接上之后 `_llm_refine` 的 `reading.state` 会落
+    #      `used`/`failed`/`not_wired`/`unknown_object`（`agent_d/_support.model_json_call`），
+    #      于是"这次到底问没问模型、问成没问成"是读得出来的；
+    #   ③ fail-open：这一层拿不到模型就退回确定性分析（`_llm_refine` 本来就返回
+    #      `(None, reading)`，调用方保留确定性结果），绝不因为模型不可用而中断研究。
+    # 成本靠读数看见：缝自己带 `TokenMeter`（与 H/F 同一个 `usd_budget`）。
+    #
+    # 为什么不是无条件建缝：没有 key 时建出来的缝只会在每次调用时落 `not_wired`
+    # —— 那不是"接上了"，而把"没接线"写成"接上了但没答"正是本项目反复防的那种假话。
+    # 所以没有模型 ⇒ 不建缝，并把这件事写进 notes（"为什么 D 没接缝"要读得出来）。
+    d_llm = None
+    if _model_key_present():
+        d_llm = _seam("D")
+        notes_d = "D 的模型精修：接线（这次运行有模型 ⇒ 精修可用；三态读数在 reading 里）"
+    else:
+        notes_d = ("D 的模型精修：未接线（这次运行没有模型 key）⇒ `_llm_refine` 落 `not_wired`，"
+                   "分析走确定性那一份（fail-open，不中断研究）")
+    notes: list[str] = [notes_attack, notes_d]
     role_llm: dict[str, Any] = {}
     if h_llm is not None:
         role_llm["H"] = h_llm
     if f_llm is not None:
         role_llm["F"] = f_llm
+    if d_llm is not None:
+        role_llm["D"] = d_llm
     role_reg = build_role_registry(store, providers=providers, extractor=extractor,
                                    notes=notes,
                                    config=config, workspace_root=workspace_root,

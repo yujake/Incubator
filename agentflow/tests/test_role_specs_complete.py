@@ -343,13 +343,17 @@ def test_gate_exit_codes_are_three_valued(tmp_path):
 
 
 def test_default_role_set_is_unchanged_and_blind_to_n_o_q():
-    """默认行为一字不变：不传 `--roles` 时判据仍是 A–H + M。
+    """默认行为一字不变：不传 `--roles` 时判据是 A–H（+V）+ M。
 
     这条同时是缺口本身的记录：草稿里的 N/O/Q 节在默认判据下一个都匹配不到，
     于是门报 `unknown`（"没查成"）而不是"发现三个新角色缺规格"。
     新角色登记后若没有人显式传 `--roles`，这道门就看不见它们。
+
+    2026-10-06（F-02）：`EXPECTED_ROLES` 多了 `V`（真角色，进 `schema.ROLES`）——
+    它是登记进默认集合的新角色，与 N/O/Q 那种"草稿通道里的角色"不是一回事：
+    本用例守的仍然是"默认判据看不见 N/O/Q"（下面那条 `default["sections"] == []`）。
     """
-    assert G.EXPECTED_ROLES == ("A", "B", "C", "D", "E", "F", "G", "H", "M")
+    assert G.EXPECTED_ROLES == ("A", "B", "C", "D", "E", "F", "G", "H", "V", "M")
     assert G.DEFAULT_ROLES is None
     default = G.check(DRAFT_NOQ)
     assert default["verdict"] == "unknown"
@@ -788,10 +792,13 @@ def rows_to_check(reg, rows: list[dict[str, str]]) -> list[dict[str, str]]:
         doc_says_approval = "是" in r["needs_approval"]
         if doc_says_approval != bool(spec.needs_approval):
             problems.append(f"审批 文档={r['needs_approval']!r} 实际={spec.needs_approval}")
-        # 角色字母表要含主控 `M`：工具层的角色词汇是 `TOOL_ROLES` = 可被召唤的 A–H + 主控 M
+        # 角色字母表要含主控 `M`：工具层的角色词汇是 `TOOL_ROLES` = 可被召唤的 A–H(+V) + 主控 M
         # （主控不可被召唤，但它拿编排面工具）。只认 A–H 会让主控那 8 行的 roles 列
         # 永远解析成空，于是"文档与注册表不一致"这条判据对它们永远报红（实测撞过）。
-        doc_roles = [x for x in re.findall(r"\b([A-HM])\b", r["roles"])]
+        # 2026-10-06（F-02）：`V` 也要在里面 —— 只读角色 V 拿到 11 件 `fs.*`/`table.*`/
+        # `manuscripts.*` 的读工具，那些工具的 roles 列现在含 V；解析器漏掉 V 时
+        # 这一条会报"文档少了 V"（假红）或者更糟：文档真漏了 V 也不报（假绿）。
+        doc_roles = [x for x in re.findall(r"\b([A-HMV])\b", r["roles"])]
         if sorted(doc_roles) != sorted(spec.roles):
             problems.append(f"roles 文档={sorted(doc_roles)} 实际={sorted(spec.roles)}")
         if problems:

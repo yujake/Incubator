@@ -639,3 +639,356 @@ def install_d_tools(
     return reg
 from ..specs.d import SPEC  # noqa: E402,F401
 
+
+
+# ---------------------------------------------------------------- S-07 的读数
+
+#: `report_landing_reading` 的口径（2026-10-02 主控现场更正）：数的是
+#: `store.rows("tasks")` 的落盘行，不是全量召唤流水；权威读数是 `sessions/*.jsonl`
+#: 的 `events` 重放。凡"数召唤行数"的读数都必须自带口径，跨口径比大小是错的用法。
+_REPORT_LANDING_CALIBER = (
+    "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；"
+    "权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比"
+)
+
+
+def report_landing_reading(store) -> dict:
+    """S-07 的读数：D 的 `write_report` "有调用、但台账里没有落点"（只读）。
+
+    ## 为什么只做读数（`44 J-01` 的裁定，逐字的意思）
+
+    D 的研究报告落不进 `analysis_reports`：`schema.REPORT_KINDS` 只收
+    `hottest/paths/cold/gaps` 四档（那是 C 的报告），而 `WRITE_SETS["D"]` 里也没有那张表
+    ⇒ 给 D 的报告"找个落点"要么扩 `REPORT_KINDS`、要么新开一张表，两件都是"改硬契约"
+    （前者是禁改区字段、后者要人裁）。裁定的处置因此是只加读数：
+
+    - 有调用：`tasks` 里 `role="D"` 且 `action="write_report"` 的终态行数（真的被调过几次）；
+    - 无落点：能给这份报告当落点的台账表 —— 按 `capabilities.WRITE_SETS["D"]` 与
+      `schema.REPORT_KINDS` 现算，结构性为 0（不是"这次没写"，是"没有那张表"）；
+    - 三态：`checked=False` + `reason` = 这一格没读成（表读不出来）。
+
+    "没有落点"这件事必须看得见：真机读数（`44 S-07`）是 45 次 `write_report`
+    只落磁盘、表 0 行 —— 而那在今天的读数面上没有任何地方会说（下游以为
+    "D 没产报告"）。
+
+    ## 口径（2026-10-02 主控现场更正）
+
+    数的是 `store.rows("tasks")`（台账的落盘行），不是全量召唤流水；权威读数是
+    `sessions/*.jsonl` 里的 `events` 重放。返回里的 `caliber` 逐字写这件事 ——
+    跨口径比大小是错的用法。
+    """
+    try:
+        rows = list(store.rows("tasks"))
+    except Exception as exc:  # noqa: BLE001 - 读不出来如实报，不折成"没有调用"
+        return {"checked": False, "reason": f"tasks 读不出来：{type(exc).__name__}: {exc}",
+                "calls": 0, "landed": 0, "landing_tables": [], "kind_writable": False,
+                "caliber": _REPORT_LANDING_CALIBER}
+    calls = [r for r in rows
+             if str(r.get("role") or "") == "D"
+             and str(r.get("action") or "") == "write_report"
+             and str(r.get("status") or "") in ("done", "failed", "cancelled")]
+    tables: list[str] = []
+    try:
+        from .. import capabilities as _C
+
+        tables = sorted(str(t) for t in (_C.WRITE_SETS.get("D") or ()))
+    except Exception:  # noqa: BLE001 - 声明读不到就不声称"没有落点"
+        tables = []
+    try:
+        from .. import schema as _S
+
+        kinds = tuple(getattr(_S, "REPORT_KINDS", ()) or ())
+    except Exception:  # noqa: BLE001 - 同上
+        kinds = ()
+    # 能给 D 的报告当落点的表：写集里有它、且它的 kind 词表放得下研究报告
+    landing = [t for t in tables
+               if t == "analysis_reports" and kinds and "hottest" in kinds and len(kinds) > 1]
+    return {
+        "checked": bool(tables) and bool(kinds),
+        "reason": "" if (tables and kinds) else "声明读不到（写集或 kind 词表）⇒ 这一格没读成",
+        "caliber": _REPORT_LANDING_CALIBER,
+        "calls": len(calls),
+        "landed": 0,                      # 结构性：今天没有一张表能收 D 的报告
+        "landing_tables": landing,
+        "kind_writable": False,           # `REPORT_KINDS` 四档里没有"研究报告"这一档
+        "task_ids": [str(r.get("task_id") or "") for r in calls[:10]],
+        "note": ("D 的 `write_report` 只落磁盘（`reports/` 下的文件）：`schema.REPORT_KINDS` "
+                 "四档是 C 的报告种类，`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports` "
+                 "⇒ 台账里没有它的落点（`44 J-01`：扩 kind 或新开表都属改硬契约，不裁）。 "
+                 "这份读数就是让\"有调用、无落点\"这件事**看得见**。"),
+    }
+
+
+#: S-09（非 LLM 半）用的两组词：说满了与留了余地的措辞。
+#: 它们是"文本与数字一致化"这条判据的字面面；刻意不追求覆盖全部汉语措辞
+#: （那样的表永远列不全），只钉住最容易出现的两类夸大/两类保守。
+_OVERCLAIM_MARKERS = ("证明了", "证毕", "必然", "确定成立", "定理", "已成定理", "毫无疑问")
+_HEDGE_MARKERS = ("也许", "可能", "推测", "不确定", "尚不清楚", "有待", "疑似", "大概")
+
+
+def conclusion_consistency_reading(*, conclusion: str, confidence: float | None) -> dict:
+    """S-09 的判据（非 LLM 半）：`conclusion` 的措辞与 `confidence` 数字一致吗？
+
+    ## 为什么这是一条判据而不是"让 LLM 自己注意"（`44 S-09`）
+
+    真机缺陷形态：`_llm_refine` 只夹数字、文本原样采用 ⇒ 数字 0.3 而措辞写"证明了"。
+    那是报告层面的夸大：读报告的人（与下游的引用者）看的是措辞，不是那个小数。
+    LLM 接线那一半属残余集 R1（E5 给 D 接 LLM），这一半不需要模型：
+
+    | 输出 | 什么时候 |
+    |---|---|
+    | `"overstated"` | 数字 < 0.5 而措辞里有"说满了"的词（`_OVERCLAIM_MARKERS`） |
+    | `"understated"` | 数字 >= 0.8 而措辞里有"留余地"的词（`_HEDGE_MARKERS`） |
+    | `"consistent"` | 其余（含"数字高、措辞也硬"与"数字低、措辞也软"） |
+    | `checked=False` | `confidence is None`（没给数字 ⇒ 这一格没查成，不是"一致"） |
+
+    三态纪律：`confidence=None` 不许折成 `"consistent"` —— 那会把"没有数字可比"
+    读成"比过了、一致"。
+    """
+    text = str(conclusion or "")
+    if confidence is None:
+        return {"checked": False, "verdict": "", "reason": "没有 confidence 数字 ⇒ 这一格没查成"
+                                                        "（不是「一致」）"}
+    try:
+        conf = float(confidence)
+    except (TypeError, ValueError):
+        return {"checked": False, "verdict": "",
+                "reason": f"confidence 不是数字（{confidence!r}）⇒ 这一格没查成"}
+    over = [w for w in _OVERCLAIM_MARKERS if w in text]
+    hedge = [w for w in _HEDGE_MARKERS if w in text]
+    verdict = "consistent"
+    why = ""
+    if conf < 0.5 and over:
+        verdict, why = "overstated", f"confidence={conf} 而措辞里有 {over}"
+    elif conf >= 0.8 and hedge:
+        verdict, why = "understated", f"confidence={conf} 而措辞里有 {hedge}"
+    return {"checked": True, "verdict": verdict, "reason": why,
+            "confidence": conf, "overclaim": over, "hedge": hedge,
+            "note": ("判据只钉措辞与数字的**方向**（夸大/保守），不判研究内容对不对 ——"
+                     "内容对错归 V。")
+            }
+
+
+# ---------------------------------------------------------------- 模型对象（唯一判据）
+
+#: D 认得的模型对象：两类（外加"没接线"与"认不出"）。判据只有 :func:`model_kind` 一处。
+KIND_NONE = "none"
+KIND_SEAM = "seam"
+KIND_CLIENT = "client"
+KIND_UNKNOWN = "unknown"
+
+#: 一次模型调用的三态。`llm_used=False` 分不出"没接线"与"接了但这次失败" ——
+#: 那正是本仓三态纪律要治的折叠（`draft/52` 裁决 6 的同批要求）。
+STATE_NOT_WIRED = "not_wired"
+STATE_USED = "used"
+STATE_FAILED = "failed"
+#: 对象既没有 `ask_json` 也没有 `complete`：如实报，不许再试第三种 `hasattr`。
+STATE_UNKNOWN_OBJECT = "unknown_object"
+
+
+def model_kind(llm: Any) -> str:
+    """这个对象是哪一类模型（唯一判据）。
+
+    - `seam`：标准缝（`llmseam.LlmSeam` 一族）⇒ 走它的真 API `ask_json`；
+    - `client`：裸 client（`llm.Client` 那一族）⇒ 走 `.complete` 并自行解析 JSON；
+    - `none`：没接线（`None`）；
+    - `unknown`：认不出。
+
+    ## 为什么必须收成一处
+
+    `agent_loop` / `agent_f` / `agent_d` 三条路此前各写各的 `hasattr(llm, "complete")`，
+    而 `host.py:59` 的注释自己写着"（`LlmSeam` 只有 `ask`）。此前三条路各写各的，
+    结果都一样坏"。同一个对象在三处可以判出不同结果、而"哪一处写对了"没有任何
+    判据看得见 —— 所以这里收成一处，三条路（以及新写的路）都调它。
+    """
+    if llm is None:
+        return KIND_NONE
+    if callable(getattr(llm, "ask_json", None)):
+        return KIND_SEAM
+    if callable(getattr(llm, "complete", None)):
+        return KIND_CLIENT
+    return KIND_UNKNOWN
+
+
+def _json_object(text: str) -> dict[str, Any] | None:
+    """从一段文本里取第一个 `{...}` 并解析成对象（`core._parse_json_block` 的唯一实现）。"""
+    first, last = text.find("{"), text.rfind("}")
+    if not (0 <= first < last):
+        return None
+    try:
+        obj = json.loads(text[first : last + 1])
+    except json.JSONDecodeError:
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = "",
+                    max_tokens: int | None = None
+                    ) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
+    """要一份 JSON，并同时给出三态读数。返回 `(payload, text, reading)`。
+
+    - `payload`：解析出来的 JSON 对象（拿不到就是 `None`）；
+    - `text`：模型原文（失败时一般为空，坏 JSON 那一档仍有原文）；
+    - `reading`：`{"kind", "state", "reason", "model", "calls"}` ——
+      `state ∈ {not_wired, used, failed, unknown_object}`，四档分开，不许折叠。
+
+    ## 两条路的差别写在唯一一处
+
+    缝那一路用 `ask_json`：它已经把"失败"细分成 `judge_not_wired` / `judge_over_budget` /
+    `judge_timeout` / `judge_bad_json` / `judge_failed:*`（于是"哪一种失败"在读数里可读，
+    不必自己再解析自由文本）；裸 client 那一路没有这些码，只能把异常与空回复如实记下。
+    两条路都走同一个 `_json_object` 解析口径。
+    """
+    kind = model_kind(llm)
+    reading: dict[str, Any] = {"kind": kind, "state": STATE_NOT_WIRED, "reason": "",
+                               "model": "", "calls": 0}
+    if kind == KIND_NONE:
+        reading["reason"] = "没有接线（llm is None）"
+        return None, "", reading
+    if kind == KIND_UNKNOWN:
+        reading["state"] = STATE_UNKNOWN_OBJECT
+        reading["reason"] = (f"认不出的模型对象（{type(llm).__name__}）："
+                             "既没有 ask_json 也没有 complete")
+        return None, "", reading
+    if kind == KIND_SEAM:
+        reading["model"] = str(getattr(llm, "model_name", "") or "")
+        data, call = llm.ask_json(prompt, task_id=task_id, note=note, max_tokens=max_tokens)
+        reading["calls"] = 1
+        text = str(getattr(call, "text", "") or "")
+        problem = str(getattr(call, "problem", "") or "")
+        if data is not None:
+            reading["state"] = STATE_USED
+            return dict(data), text, reading
+        # 缝这一路把"失败"细分过（`judge_not_wired` / `judge_over_budget` / `judge_timeout` /
+        # `judge_bad_json` / `judge_failed:*`）：三态读数按它的词表落，不自己再判一遍。
+        if problem == "judge_not_wired":
+            reading["state"] = STATE_NOT_WIRED
+            reading["reason"] = f"{problem}{('：' + str(getattr(call, 'detail', '') or '')) if getattr(call, 'detail', '') else ''}"
+            return None, text, reading
+        reading["state"] = STATE_FAILED
+        detail = str(getattr(call, "detail", "") or "")
+        reading["reason"] = f"{problem or 'judge_failed'}{('：' + detail) if detail else ''}"
+        return None, text, reading
+    # `client`
+    reading["model"] = str(getattr(llm, "model_name", "") or type(llm).__name__)
+    try:
+        raw = llm.complete(prompt)
+    except Exception as exc:  # noqa: BLE001 - 失败要留痕，不许打断循环
+        reading["state"] = STATE_FAILED
+        reading["reason"] = f"{type(exc).__name__}: {exc}"
+        return None, "", reading
+    reading["calls"] = 1
+    text = str(raw or "").strip()
+    if not text:
+        reading["state"] = STATE_FAILED
+        reading["reason"] = "空回复"
+        return None, text, reading
+    data = _json_object(text)
+    reading["state"] = STATE_USED
+    if data is None:
+        reading["reason"] = "judge_bad_json"
+    return data, text, reading
+
+
+#: "账台式引用"的字面形态（`rel:` / `lit:` / `exp:` / `stmt:`）—— 与工具层、
+#: `_render_claims` 用的是同一套写法。模型若引用了证据包里没有的编号，就是引入新事实。
+_REF_TOKEN_RE = re.compile(r"\b(rel|lit|exp|stmt):([A-Za-z0-9_\-]+)")
+#: 逐字引文的字面形态（`「…」`）。引文短于这个长度不算"引用了一句原文"。
+_QUOTED_RE = re.compile(r"「([^」]{12,})」")
+
+
+def invented_facts(text: str, *, known_relation_ids: Sequence[str] = (),
+                   known_lit_ids: Sequence[str] = (),
+                   known_quotes: Sequence[str] = ()) -> list[str]:
+    """模型这段文字里有哪些证据包里没有的引用（空列表 = 干净）。
+
+    两类都查，判据都来自证据包本身（不新造词表）：
+
+    1. `rel:` / `lit:` 这类台账引用，编号不在证据包里 ⇒ 列出来；
+    2. `「…」` 里 ≥12 字的"逐字引文"不是任何一条证据引文的连续子串 ⇒ 列出来
+       （`_llm_refine` 的硬规则是"只能引用给出的 quote"，转写不算逐字引用）。
+
+    为什么这条要落在代码里而不是只写在提示词里：提示词只是请求，
+    而"不得引入新事实"是这一层的存在理由 —— 与置信度那条（`_rank_min`）同一条纪律。
+    """
+    out: list[str] = []
+    rel_known = {str(x) for x in known_relation_ids}
+    lit_known = {str(x) for x in known_lit_ids}
+    for prefix, ident in _REF_TOKEN_RE.findall(str(text or "")):
+        pool = rel_known if prefix == "rel" else (lit_known if prefix == "lit" else None)
+        if pool is None:
+            continue                       # `exp:` / `stmt:` 不在 D 的证据包里，不判
+        if ident not in pool:
+            out.append(f"{prefix}:{ident}")
+    quotes = [str(q) for q in known_quotes if str(q)]
+    for span in _QUOTED_RE.findall(str(text or "")):
+        if not any(span in q for q in quotes):
+            out.append(f"「{span[:24]}…」")
+    return sorted(set(out))
+
+
+# ---------------------------------------------------------------- 召唤号与花销读数
+
+def current_summon_task_id() -> str:
+    """这一趟召唤的号（装配层挂点）。今天没有这个 ContextVar ⇒ 如实返回空串。
+
+    ## 为什么必须是 ContextVar，不是实例属性
+
+    `conductor.LocalBackend._call` 的注释（`conductor.py:247-249`）自己写了理由：
+    `resolve(role)` 按角色缓存实例，两个并发召唤会共享同一个对象 ⇒ 把号挂在实例上，
+    A 的号会被 B 覆盖（静默串味：读出来的成本挂到了别人的单子上）。
+    所以号必须按执行上下文传，与取消令牌（`cancellation._CURRENT_TOKEN`）同一条纪律。
+
+    ## 读数（`R1-A1-a` 之后）
+
+    挂点已在 `conductor.py` 落地（`current_task_id()` + 调用期 ContextVar，与取消令牌同构）
+    ⇒ 在召唤里读得到真号；不在召唤里（离线夹具、裸构造）读到的仍是空串。
+    空串不是零号：读数把它写成"没有挂点"（`spend.attached=False`），绝不当成 0 花销。
+
+    这里对两支都做兼容：`conductor.current_task_id()`（现行）优先，
+    `cancellation.current_task_id`（若将来挪到那一支）兜底，都没有就空串（不抛）。
+    """
+    try:
+        from ..conductor import current_task_id as _fn
+    except ImportError:
+        try:
+            from ..cancellation import current_task_id as _fn  # type: ignore[no-redef]
+        except ImportError:
+            return ""
+    try:
+        return str(_fn() or "")
+    except Exception:  # noqa: BLE001 - 挂点坏掉不该打断 research
+        return ""
+
+
+def spend_reading(store: Any, task_id: str) -> dict:
+    """这一趟召唤花了多少（召唤级，以 `task_id` 为键；三态不许折叠）。
+
+    读数直接取 `tokenmeter.usd_reading` 的口径（与 P-09 的粒度同一条）：
+
+    | 情形 | `attached` | `usd` |
+    |---|---|---|
+    | 没有召唤号 | `False` | `None`（"这笔钱没有挂点"，不是花了零） |
+    | 有号、账上一条都没有 | `True` | `0.0`（"挂上了但还没记过账"，也不是花了零） |
+    | 有号、有账 | `True` | 汇总（与 `usd_for` 同一算式） |
+
+    账本本身读不出来时给 `checked=False` + 理由（"没查成"不许折成"没花钱"）。
+
+    ## 时点：这一格是「调用时」读的（真机回放 `R1-A2` 的口径差）
+
+    摘要里的 `spend` 是调用时读的；账本随后还会多一条 `scope=summon` 的 settle 行
+    （`usd=0`，note 写着 `… via done/ok；settle-…`）⇒ `entries` 可能比账本行数少 1，
+    而 `usd` 不变（真机那一趟：读数 `entries=1`、账本 2 行，`usd` 两侧都是 0.000241）。
+    这不是缺陷，是"读数要带时点"：判据只钉 `usd` 逐位相等，`entries` 只用于看"记过账没有"。
+    """
+    try:
+        from ..tokenmeter import TokenMeter
+
+        got = dict(TokenMeter(store).usd_reading(task_id))
+        got["checked"] = True
+        return got
+    except Exception as exc:  # noqa: BLE001 - 读不出来如实报
+        return {"checked": False, "attached": bool(str(task_id or "").strip()), "usd": None,
+                "entries": 0, "tokens": 0,
+                "reason": f"账本读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"}
+

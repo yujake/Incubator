@@ -248,12 +248,57 @@ class TokenMeter:
         )
 
     def usd_for(self, task_id: str) -> float:
-        """`usd` 的对应读取口（与 :meth:`tokens_for` 同一口径、同一理由）。"""
+        """`usd` 的对应读取口（与 :meth:`tokens_for` 同一口径、同一理由）。
+
+        ## 粒度口径（P-09 要求先定死的那一条）
+
+        记账的粒度是召唤级：一笔账对应 `tasks` 里的一行（一次
+        `conductor.summon`），由 `Conductor._charge_and_settle` 在召唤结束时写。
+        而 E/F 的"一轮"发生在那一次召唤的内部 ⇒ 本方法给的是
+        "这一次召唤的累计花销"，既不是"这一轮"的花销，也不是"这个角色"的花销。
+        要更细的粒度（每一轮）得先把记账下沉到各 agent 的 `_call` 那一层，
+        而那一步必须同时把 `conductor` 那一笔改成"只补零值兜底"
+        （见 `_charge_and_settle` 的 docstring），否则同一笔钱会被记两次。
+
+        边界：`task_id` 为空/`None` 时本方法返回 `0.0` —— 它不区分
+        "没有挂点"与"挂上了但花了零"。要那三态就用 :meth:`usd_reading`。
+        """
         rows = self.store.rows("usage_ledger")
         return round(sum(
             float(r.get("usd") or 0.0)
             for r in rows if str(r.get("task_id")) == str(task_id)
         ), 6)
+
+    def usd_reading(self, task_id: str) -> dict:
+        """某一次召唤的花销读数（三态；空 `task_id` 不返回一个像真数的 0）。
+
+        为什么要有它（`44 J-07` + P-09）：现记账是召唤级，而"这一单还准花多少"
+        与"这一单已经花了多少"必须能当场答出来；同时"没有挂点"与"花了零"是两件事
+        —— 前者是"这笔钱根本没记到任何一次召唤上"（未接线），后者是"记了、金额是 0"。
+        把它们折成同一个 `0.0`，正是本项目最贵的那个缺陷形态。
+
+        | 情形 | `attached` | `usd` | `entries` |
+        |---|---|---|---|
+        | 没有挂点（`task_id` 为空 / `None`） | `False` | `None` | 0 |
+        | 挂上了、账上一条都没有 | `True` | `0.0` | 0 |
+        | 挂上了、有账 | `True` | 汇总（与 :meth:`usd_for` 同一算式） | n |
+
+        粒度与 :meth:`usd_for` 逐字相同：召唤级（不是"这一轮"）。
+        """
+        want = str(task_id or "").strip()
+        if not want:
+            return {"attached": False, "usd": None, "entries": 0, "tokens": 0,
+                    "reason": ("task_id 为空 / None ⇒ 这笔账没有挂点（不是「花了零」）—— "
+                               "要挂到某一次召唤上，就把那次 summon 的 task_id 传进来")}
+        rows = [r for r in self.store.rows("usage_ledger")
+                if str(r.get("task_id")) == want]
+        return {"attached": True,
+                "usd": round(sum(float(r.get("usd") or 0.0) for r in rows), 6),
+                "entries": len(rows),
+                "tokens": sum(int(r.get("tokens_total") or 0) for r in rows),
+                "reason": ("挂上了" if rows else
+                           "挂上了，但账上一条都没有 ⇒ 这一单还没记过账（不是「花了零」）")}
+
 
     # ---- 行的构造（`charge` 与 `charge_once` 共用同一份，FC-03）
 

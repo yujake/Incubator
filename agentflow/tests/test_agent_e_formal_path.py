@@ -61,7 +61,12 @@ def write_lean(store: Store, rel: str, body: str = _LEAN_SRC) -> str:
 
 
 def _checker_stub(*, status: str, stdout: str = "", stderr: str = "") -> dict:
-    """按 `formalgw` 的收口方式造一份检查结论的桩。"""
+    """按 `formalgw` 的收口方式造一份检查结论的桩。
+
+    `exit_code` 照真实检查器来：`verified` ⇒ 0；跑了但没通过（收敛档）⇒ 非零；
+    没跑成（timeout/no_backend/import_unavailable/tool_crashed）⇒ None ——
+    E-12(a) 判的就是这一格（"没跑成"绝不用 0 冒充）。
+    """
 
     def _fake(source, *, name, imports, timeout_sec, run_fn=None, workdir=None,
               source_path=None):
@@ -76,6 +81,8 @@ def _checker_stub(*, status: str, stdout: str = "", stderr: str = "") -> dict:
             "declared_in_source": True,
             "ran": True,
             "backend": {"status": "ok"},
+            "exit_code": (0 if status == FG.PROOF_STATUS
+                          else 1 if status in FG._CONCLUDED_STATUSES else None),
         }
         return FG._conclude(raw, status, raw["reason"])
 
@@ -427,3 +434,65 @@ def test_real_lean_kernel_proof_registers_a_proof_row(store: Store):
     assert "does not depend on any axioms" in row["verifier_output"], row["verifier_output"]
     assert row["code_hash"] == VT.code_hash(Path(store.root) / rel)
     assert json.dumps(row["observations"], ensure_ascii=False)
+
+
+# ============================================================ E-12：失败的三态恢复
+
+
+def test_e12_formal_failure_tri_state_is_recovered_from_the_checker(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+):
+    """E-12（draft/44）："检查器判了不通过"与"根本没查成"必须在行上分得开。
+
+    改前：
+egation_kind 一律 
+o_local_evidence（core.py 那一行），
+    而真机 50 条 formal 里 41 条 exit_code=None ⇒ compile_error（判了、不通过）
+    与 	imeout/
+o_backend（没查成）在行上完全同形 —— "没查成"被读成"没通过"。
+    现在按 ormalgw.evidence_of 自己的 checked 位分三态（不另立一套口径）：
+    checked_failed ⇒ 
+ot_proved；	imeout/	ool_crashed ⇒ 
+o_local_evidence
+    （跑过、没裁决）；
+o_backend/import_unavailable ⇒ 
+ot_searched_here（本机起不了这次检查）。
+    反负控：三个 
+egation_kind 必须两两不同（否则又折回同一个值）。
+    """
+    monkeypatch.setattr(VT, "detect_verifier", lambda: _VERIFIER)
+    rel = write_lean(store, "proofs/probe_eq.lean")
+    e = make_e(store)
+
+    def _run(tag: str, status: str) -> dict:
+        monkeypatch.setattr(FG, "check_lean", _checker_stub(status=status, stdout=""))
+        return e.run_experiment(f"命题 {tag}", f"probe-{tag}", rel, method="formal", imports=())
+
+    failed = _run("failed", "compile_error")          # 判了：不通过
+    timed = _run("timed", "timeout")                  # 跑了、没裁决
+    noback = _run("noback", "no_backend")             # 本机起不了这次检查
+
+    def _tri(tag: str) -> str:
+        """`tri_state` 是**行上**的读数（返回值里没有 `observations`）⇒ 读落库的那一行。"""
+        rows = [r for r in store.rows("experiments") if r.get("claim_key") == f"probe-{tag}"]
+        assert rows, tag
+        return str((rows[-1].get("observations") or {}).get("tri_state") or "")
+
+    for out in (failed, timed, noback):
+        assert out["result"] == "inconclusive", out
+        assert out["evidence_kind"] != "proof", out
+    assert _tri("failed") == "checked_failed", _tri("failed")
+    assert failed["negation_kind"] == "not_proved", failed
+    assert _tri("timed") == "not_checked", _tri("timed")
+    assert timed["negation_kind"] == "no_local_evidence", timed
+    assert _tri("noback") == "not_checked", _tri("noback")
+    assert noback["negation_kind"] == "not_searched_here", noback
+    kinds = {failed["negation_kind"], timed["negation_kind"], noback["negation_kind"]}
+    assert len(kinds) == 3, f"三态又折回同一个值了：{kinds}"
+
+    # ---- E-12(a)：退出码那一格也要分得开（真机 41/50 行在这里同形）
+    assert failed["exit_code"] == 1, (
+        f"检查器判了不通过 ⇒ 这一格要记**它的真实退出码**（非零），收到 {failed['exit_code']!r}")
+    assert timed["exit_code"] is None and noback["exit_code"] is None, (
+        "没跑成（timeout/no_backend）那一格必须是 None —— "
+        f"**绝不用 0 冒充'跑过'**：{timed['exit_code']!r} / {noback['exit_code']!r}")

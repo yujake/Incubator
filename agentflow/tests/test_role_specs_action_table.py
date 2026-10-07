@@ -39,7 +39,9 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "ROLE-SPECS.md"
 
 #: 表里那一行：`| A | 3 | `run_once` `run` |`
-_ROW_RE = re.compile(r"^\|\s*([A-HM])\s*\|\s*\*{0,2}(\d+)\*{0,2}\s*\|(.*)\|\s*$")
+#: 角色字符类含 `V`（F-02 起）：文档里 §0.7 与 §M.4.1 两张表都要有 V 那一行，
+#: 而解析器不认 `V` 时它会静默地少一行 —— 判据 1/2/3 全都看不见这件事。
+_ROW_RE = re.compile(r"^\|\s*([A-HMV])\s*\|\s*\*{0,2}(\d+)\*{0,2}\s*\|(.*)\|\s*$")
 #: 标题里的读数：`…，51 个动作）` / `（48 个可召唤动作）`
 _COUNT_IN_TITLE_RE = re.compile(r"(\d+)\s*个(?:可召唤)?动作")
 _BACKTICK_RE = re.compile(r"`([^`]+)`")

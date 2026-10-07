@@ -18,6 +18,7 @@ class _Run:
         while max_docs is None or n < max_docs:
             r = self.run_once()
             total.skipped_lease_active += r.skipped_lease_active
+            total.skipped_lease_backoff += r.skipped_lease_backoff
             total.gave_up += r.gave_up
             if r.skipped_reason:
                 total.skipped_reason = r.skipped_reason
@@ -35,6 +36,7 @@ class _Run:
                 "quotes_unknown",
                 "quotes_out_of_declared_range",
                 "unreadable",
+                "skipped_no_extractor",
                 "failed",
                 "conflict_checks_run",
                 "conflicts_detected",

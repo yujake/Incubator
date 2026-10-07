@@ -43,13 +43,29 @@ def _stmt(store: Store, sid: str, **kw) -> dict:
     return row.to_dict()
 
 
+#: M 声明的体例（R9 之后体例归 M，门不自带任何节名清单）。
+#:
+#: 这份清单是测试里的 M 声明的：写进 `out/review/REPORT-STYLE.json`，
+#: 由 `closing._check_report_shape` 逐节核它有没有兑现。它与 `closing` 不再有任何关系
+#: —— 这正是 R9 要的：门不许自带一份"报告该有哪几节"（那是 review 线的排版规格）。
+STYLE_SECTIONS: tuple[str, ...] = (
+    "一、任务与范围", "二、逐条读数", "三、定理与引理清单", "四、形式化覆盖",
+    "五、引文核验", "六、体例与表述", "七、我们做的补救", "八、未决问题", "九、诚实边界",
+)
+
+
 def _report(root: pathlib.Path, *, empty_section: str = "") -> pathlib.Path:
-    """九节报告：默认每节都带读数；`empty_section` 指定哪一节写成空标题。"""
+    """M 声明体例 + 照它写一份九节报告（`empty_section` 指定哪一节写成空标题）。
+
+    报告的形状只由 M 的声明决定：这里同时落下 `REPORT-STYLE.json`
+    （声明）与报告本体（兑现），门核的是两者是否一致。
+    """
     p = root / "out" / "review" / "REPORT.md"
     p.parent.mkdir(parents=True, exist_ok=True)
     lines = ["# 审核报告", ""]
-    for i, (num, name) in enumerate(RX_SECTIONS(), 1):
-        lines.append(f"## {num}、{name}")
+    for i, name in enumerate(STYLE_SECTIONS, 1):
+        num = name.split("、", 1)[0]
+        lines.append(f"## {num}、{name.split('、', 1)[1]}")
         if num == empty_section:
             lines.append("（本节待补）")
         else:
@@ -57,15 +73,14 @@ def _report(root: pathlib.Path, *, empty_section: str = "") -> pathlib.Path:
             # 报告里的引用会被核 —— 夹具引用不存在的行，红的就是夹具体例而不是被测代码）。
             lines.append(f"读数：{i} 条，见 statements:0001 与 page_range pp. 7-8。")
         lines.append("")
+    # 附件三件套（`closing.report_shape` 判实：来源 / 依据 / 版本 sha）——
+    # 它不是排版，是"这条结论是不是我们自己做的、依据在哪、文件有没有被换过"。
+    lines += ["附件：origin=own_result；依据读数见 §四；版本 sha256=deadbeef。", ""]
     p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    (p.parent / "REPORT-STYLE.json").write_text(
+        json.dumps({"sections": list(STYLE_SECTIONS)}, ensure_ascii=False),
+        encoding="utf-8", newline="\n")
     return p
-
-
-def RX_SECTIONS() -> tuple[tuple[str, str], ...]:
-    """九节（从 `closing.REPORT_SECTIONS` 取 —— 两处各写一份迟早分家）。"""
-    from agentflow import closing as CL
-
-    return CL.REPORT_SECTIONS
 
 
 def _task(store: Store, tid: str, **kw) -> dict:
@@ -138,18 +153,72 @@ def test_a_content_complete_review_passes(tmp_path):
 
 # ============================================================ 五条负控（各自单独红）
 
-def test_an_empty_report_section_fails_even_though_the_report_exists(tmp_path):
-    """负控①：报告在盘上、九节标题都在，但其中一节是空标题 ⇒ 红。
+def test_the_report_shape_criterion_lives_in_exactly_one_module(tmp_path):
+    """R9（`draft/52` 裁决 1 = C''）：报告形状判据只住一个模块，而且不再自带节名。
 
-    这一条正对着"报告文件存在"这种容易拿到的信号 —— §17.3 要的是"每栏有读数"。
+    三件事一起判（这条是 R9 的负控，改前必红）：
+
+    ① `reviewaccept` 里不许再有 `report_sections_have_readings` 这条判据
+       （它连同 `closing.REPORT_SECTIONS` / `SPLIT_MARKERS` 一起废除）；
+    ② `closing` 里不许再有自带节名清单（`REPORT_SECTIONS` / `SPLIT_MARKERS` 都没了）；
+    ③ 门对报告形状说话的落点是M 声明的体例（`REPORT-STYLE.json`）。
     """
+    import pathlib
+
+    from agentflow import closing as CL
+    from agentflow import reviewaccept as RX
+
+    assert not hasattr(CL, "REPORT_SECTIONS"), "九节清单还在 closing 里（R9 要求废除）"
+    assert not hasattr(CL, "SPLIT_MARKERS"), "分栏标记还在 closing 里（R9 要求废除）"
+    assert not hasattr(RX, "_c_report"), "九节判据的实现还在 reviewaccept 里（R9 要求连同删掉）"
+    assert "report_sections_have_readings" not in {k for k, _ in RX.CRITERIA}
+    assert "report_sections_have_readings" not in RX.ReviewAcceptance().criteria
+    assert CL.REPORT_STYLE_NAME.endswith("REPORT-STYLE.json")
+
+    # 反真空：体例声明真的被门读、且只读声明的那几节
     st, report = _good(tmp_path)
-    _report(tmp_path, empty_section="五")      # 第五节写成空标题
-    _seal(tmp_path, st)                        # 改文件后重封锚（锚只作辅助，但别让它噪音）
-    acc = _check(st, report)
-    assert acc.criteria["report_sections_have_readings"] == "fail", acc.to_dict()
-    assert acc.readings["report_sections_without_readings"] == ["五、引文核验"], acc.readings
-    assert not acc.passed
+    (report.parent / "REPORT-STYLE.json").write_text(
+        json.dumps({"sections": ["一、任务与范围", "二、逐条读数"]}, ensure_ascii=False),
+        encoding="utf-8", newline="\n")
+    rep = CL.check_closing(st, project_dir=str(st.root),
+                           report_path=str(report), checks=("report_shape",))
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
+    assert rep.readings["report_shape"]["declared_sections"] == ["一、任务与范围", "二、逐条读数"]
+    assert rep.readings["report_shape"]["missing_declared_sections"] == []
+
+
+def test_the_report_shape_is_not_judged_when_m_declares_nothing(tmp_path):
+    """R9 的另一半：M 没声明体例 ⇒ 门不判体例（读数里如实写 `none`）。
+
+    这不是"通过"，是"这一趟没有体例声明"：读数 `style_source: "none"` 说得清。
+    """
+    from agentflow import closing as CL
+
+    st, report = _good(tmp_path)
+    (report.parent / "REPORT-STYLE.json").unlink()
+    rep = CL.check_closing(st, project_dir=str(st.root),
+                           report_path=str(report), checks=("report_shape",))
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
+    rd = rep.readings["report_shape"]
+    assert rd["style_source"] == "none" and rd["declared_sections"] == []
+    # 附件三件套仍然判实（它不是排版）
+    assert rd["missing_attachment_fields"] == []
+
+
+def test_m_s_declared_style_is_judged_section_by_section(tmp_path):
+    """R9：M 声明了体例 ⇒ 逐节核它有没有兑现（缺一节就是这一条红）。"""
+    from agentflow import closing as CL
+
+    st, report = _good(tmp_path)
+    (report.parent / "REPORT-STYLE.json").write_text(
+        json.dumps({"sections": list(STYLE_SECTIONS) + ["十、M 自己加的一节"]},
+                   ensure_ascii=False),
+        encoding="utf-8", newline="\n")
+    rep = CL.check_closing(st, project_dir=str(st.root),
+                           report_path=str(report), checks=("report_shape",))
+    assert rep.status["report_shape"] == "fail", rep.to_dict()
+    assert rep.readings["report_shape"]["missing_declared_sections"] == ["十、M 自己加的一节"]
+    assert [f.code for f in rep.blockers] == ["report_incomplete"]
 
 
 def test_a_statement_without_a_page_range_fails(tmp_path):
@@ -312,8 +381,7 @@ def test_pretty_auxiliary_signals_cannot_fake_a_pass(tmp_path):
     assert acc.auxiliary["pdf_pages"] is None, acc.auxiliary
     # 而内容级判据仍然不合格 ⇒ 不许通过
     assert not acc.passed, acc.to_dict()
-    assert set(acc.failed) == {"report_sections_have_readings",
-                               "statements_have_assumptions_and_source",
+    assert set(acc.failed) == {"statements_have_assumptions_and_source",
                                "triage_branch_recorded"}, acc.failed
     assert "不构成通过" in acc.summary()
 
@@ -322,11 +390,12 @@ def test_missing_inputs_are_unknown_not_pass(tmp_path):
     """三态：没给报告路径 / 没给成本上限 ⇒ `unknown`，而 `unknown` 不算通过。"""
     st, _report_path = _good(tmp_path)
     acc = RX.check_review(st, project_dir="", report_path="", cost_cap_usd=None)
-    assert acc.criteria["report_sections_have_readings"] == "unknown", acc.to_dict()
     assert acc.criteria["within_cost_cap"] == "unknown", acc.to_dict()
     assert acc.criteria["attachment_is_honest"] == "unknown", acc.to_dict()
     assert not acc.passed
     assert acc.auxiliary["anchor_verdict"] == "", acc.auxiliary
+    # R9：报告形状这条判据已废除 ⇒ 它不该再出现在 `criteria` 里（连 `unknown` 都不许）
+    assert "report_sections_have_readings" not in acc.criteria
 
 
 # ============================================================ R25：附件诚实（两条负控）
@@ -377,3 +446,41 @@ def test_claiming_resolved_while_t3_is_missing_fails(tmp_path):
     acc2 = _check(st, report)
     assert acc2.readings["attachment"]["load_bearing"] == "pass", acc2.to_dict()
     assert acc2.criteria["attachment_is_honest"] == "pass", acc2.to_dict()
+
+
+def test_the_top_run_row_is_not_counted_as_a_hop(tmp_path):
+    """判据（A 线 F1 + 主控 2026-10-06 裁定）：顶趟行不算一次召唤。
+
+    顶趟行 = 用户发起的那一趟（`role=M` / `action="run"` / `called_by="user"` /
+    `depth=1` / `input_key="top:…"`）。`hops`/`ok_tasks` 数的是委托，
+    把它算进去会让"派了几跳 / 成了几跳"凭空 +1。
+
+    改前必红：旧判据只按 `status=="done" and outcome=="ok"` 过滤 ⇒ 造一条顶趟行
+    之后 `ok_tasks` 从 N 变 N+1。改后：`ok_tasks` 不变，且读数里留下
+    `excluded_top_run_rows == 1`（排除本身可见，不许静默滤掉）。
+    """
+    st, report = _good(tmp_path)
+    before = _check(st, report)
+    hops_before = before.readings["hops"]
+    assert hops_before["excluded_top_run_rows"] == 0, hops_before
+
+    _task(st, "t-0009", role="M", action="run", called_by="user", depth=1,
+          input_key="top:用户发起的那一趟")
+    after = _check(st, report)
+    hops_after = after.readings["hops"]
+    assert hops_after["ok_tasks"] == hops_before["ok_tasks"], (hops_before, hops_after)
+    assert hops_after["excluded_top_run_rows"] == 1, hops_after
+    assert "顶趟行" in hops_after["note"], hops_after
+    assert after.criteria["hops_have_readable_prompts"] == "pass", after.to_dict()
+
+
+def test_a_top_run_row_without_an_input_key_does_not_fail_the_hop_criterion(tmp_path):
+    """反真空：顶趟行缺 `input_key` 也不许把这一格判红（它根本不是一次召唤）。
+
+    没有这一条，"排除顶趟行"很容易写成"只在算数时减一、判据仍然看全表"。
+    """
+    st, report = _good(tmp_path)
+    _task(st, "t-0010", role="M", action="run", called_by="user", depth=1, input_key="")
+    acc = _check(st, report)
+    assert acc.criteria["hops_have_readable_prompts"] == "pass", acc.to_dict()
+    assert acc.readings["hops"]["excluded_top_run_rows"] == 1, acc.readings["hops"]

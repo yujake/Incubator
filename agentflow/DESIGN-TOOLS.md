@@ -70,7 +70,7 @@ class ToolSpec:
 **把审批判断建立在声明上，而不是靠人工记忆。** 审批只剩**一条推导规则**（`ToolSpec.needs_approval`），
 原来那张 `NEEDS_APPROVAL` 遗留表已随 B3 一起删除。
 
-### 1.1 工具清单（本轮）
+### 1.1 工具清单（**快照**：观测 2026-09-26T05:10；权威出处 = `python -m agentflow.cli tools --role <X>`）
 
 | 组 | 工具 | 角色 | 副作用（第一根轴 `effect`，**实测**） | 第二根轴 `external`（**实测**） |
 |---|---|---|---|---|
@@ -90,6 +90,10 @@ class ToolSpec:
 > `R6-AN-3` 复核（2026-09-27）修正了工具名与角色列：分组栏里的"（X 专用 / X 组为主）"
 > 只是简称，**权威的角色面是"角色"那一列的实测值** —— `graph.*` 与 `trace.*` 今天
 > 都是 `C D`，`search.*` 是 `A`、`ocr.*` 是 `B`、`research.*` 是 `D`。
+>
+> ⚠️ **角色列也只到写作时那一批**（表头逐字 `A B C D`）：`R8`-A-7 重采时今天的角色面是
+> `A`–`H` 八个 + `M` + `V`。**本文不再手抄这张名单** —— 现算
+> `python -m agentflow.cli tools --role <X>`（`docs/ROLE-SPECS.md` §0.3 是同一口径）。
 >
 > ⚠️ **本表已不完整（本机实测）**：它只列了写作时那一批。今天工具层是
 > **12 个已装模块 / 72 个工具**，另有 `conjecture.register_conjecture` 一条不在 `build_registry` 里。
@@ -341,14 +345,12 @@ L3 是**按需**的（贵）：只有 L1/L2 的表述不足以判断时才下钻
 
 ## 5. 编排：把 A→B→C→D 串起来
 
-新增一条命令：
-
-```
-python -m agentflow.cli pipeline --request "查询 群 与 域 之间的关系" --gap-rounds 2
-```
-
-流程：`C 分析 → D 提取问题 → D 溯源 → 若缺证据则提交请求 → A 跑 → B 跑 → D 复查 → 重复 gap_rounds 轮 → 写报告`。
-每轮的中间产物都落盘（报告 + 问题表），使流程**可中断、可续跑、可审计**。
+`pipeline` 子命令仍在（`python -m agentflow.cli pipeline --request "…"`；参数与落盘行为以
+`cli.py::cmd_pipeline` 为准）。**本节原先那条示例已删**（`R8`-A-6）：它当时承诺的
+`pipeline._persist_report`（把每轮中间产物落盘的实现）**已退场**，而示例里那句
+「每轮的中间产物都落盘」读起来仍像今天的保证 ⇒ 按「旧入口示例不许只写怎么跑」的教训，
+这里不再写具体命令。今天的主路径是 `run-agent`（`python -m agentflow.cli run-agent <role> --task …`），
+编排在 `conductor` 那一层。
 
 ---
 

@@ -366,3 +366,52 @@ def test_a_project_outside_the_workspace_is_refused(tmp_path: pathlib.Path, bad:
     registry, _ws = _registry(tmp_path)
     res = registry.call("doc.paper_state", project=bad)
     assert not res.ok and res.meta.get("kind") == "bad_project", (bad, res.meta)
+
+
+# ============================================================ E-08：锚与验收表解耦
+
+def test_editing_the_acceptance_table_does_not_drift_the_anchor(tmp_path: pathlib.Path):
+    """E-08（`draft/52` D5 族）：交付时改一次验收表不许把锚打红。
+
+    真机读数（`draft/46-04` §2.4）：32 份锚里 10 份的 `files` 含
+    `ACCEPTANCE-CHECKS.json`；在 `p5-review-t17` 上把验收表 sha 改掉后
+    `verdict=drifted`、`dims.files=drifted` —— 而"交付前补一行 `na` + 理由"
+    是合法的流程动作（不是包坏了）。
+
+    改前的负控是这条：改验收表 ⇒ drifted。现在两侧对称过滤流程产物（写入侧
+    `package_files` + 校验侧 `files_was`），两件事都要成立：
+
+    - 新渲染的锚里不含流程产物（写入侧过滤）；
+    - 老锚（`files` 里还记着它）改验收表之后仍 `consistent`（校验侧过滤）——
+      这一条是"10 份老锚不许集体漂移"的机器证据。
+    """
+    ws = tmp_path / "ew"
+    _sealed_project(ws)
+    out = ws / "out" / "paper"
+    checks = out / "ACCEPTANCE-CHECKS.json"
+    checks.write_text(json.dumps({"checks": []}), encoding="utf-8")
+
+    # ① 重渲染：流程产物不进锚
+    anchor = RA.build_anchor(Store(ws), out)
+    assert not any(pathlib.Path(k).name in RA.PROCESS_PRODUCTS for k in anchor["files"]), \
+        sorted(anchor["files"])
+
+    # ② 老锚（手工把它记进 files 里，模拟"改前渲染的那 10 份"）
+    anchor["files"]["ACCEPTANCE-CHECKS.json"] = RA.file_digest(checks)
+    (out / RA.ANCHOR_NAME).write_text(json.dumps(anchor), encoding="utf-8")
+    res = RA.check_package(ws)
+    assert res["verdict"] == "consistent", res["drift"]
+    assert res["excluded_process_products"] == ["ACCEPTANCE-CHECKS.json"], res
+
+    # ③ 交付时改一次验收表 ⇒ 仍然 consistent（这就是 E-08 要的那条）
+    checks.write_text(json.dumps({"checks": [{"id": "P1", "kind": "document_rows",
+                                              "na": True, "note": "交付前补的一行"}]}),
+                      encoding="utf-8")
+    res2 = RA.check_package(ws)
+    assert res2["verdict"] == "consistent", res2["drift"]
+
+    # 反真空：别的源文件被手改照旧 drifted（过滤只针对流程产物这一族）
+    (out / "main.tex").write_text("\\date{2026-01-01}\n手改了\n", encoding="utf-8")
+    res3 = RA.check_package(ws)
+    assert res3["verdict"] in ("drifted", "unknown"), res3
+    assert any("main.tex" in d for d in res3["drift"]) or res3["problems"], res3

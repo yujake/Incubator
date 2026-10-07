@@ -662,8 +662,10 @@ def item_linter(rep: Report) -> Item:
 
     正常落点 `GATE_ARTIFACT_DIR`（被 `.gitignore` 排除的 `temp/`，`X-1`）；
     连它都建不出来时回退到系统临时目录，绝不回退到仓库根 ——
-    仓库根的 `.release-lint.json` 是被 git 跟踪的文件，回退写它等于
-    "跑一次门就改一次仓库状态"，而"本次改动集"正是禁改区门的输入（自我污染）。
+    仓库根的 `.release-lint.json` 是禁改区门的输入面（`F8` 之后它已从版控删除，
+    但只要有人在仓库根写下这个名字，它就会作为**新增文件**进入"本次改动集"——
+    被跟踪与被新建在这一点上后果相同），回退写它等于
+    "跑一次门就改一次改动集"，而"本次改动集"正是禁改区门的输入（自我污染）。
     `c-11` 的机器判据：`tests/test_release_check_noai.py` 里那条"回退产物不在仓库里、
     且跑完 `git status` 不多出被跟踪文件的改动"。
     """
@@ -757,8 +759,8 @@ def _artifact_path() -> tuple[Path, str]:
         fallback = Path(tempfile.mkdtemp(prefix="agentflow-release-lint-"))
         return fallback / "release-lint.json", (
             f"temp/ 建不出来（{type(exc).__name__}: {exc}）⇒ 产物回退到系统临时目录 "
-            f"{fallback}（不回退到仓库根：那里的 `.release-lint.json` 被 git 跟踪，"
-            "写它会让『跑一次门』改一次仓库状态）"
+            f"{fallback}（不回退到仓库根：在那里写下 `.release-lint.json` 会进"
+            "『本次改动集』，而跑一次门就改一次改动集等于自我污染）"
         )
     return GATE_ARTIFACT_DIR / "release-lint.json", ""
 

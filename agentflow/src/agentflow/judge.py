@@ -43,6 +43,14 @@ JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_over_budget",
     "judge_refused",
     "judge_failed",
+    # ---- `L-05b-1`（`draft/52` D3）：`judges.judge` 自造的两个码收进同一张表。
+    #
+    # 它们此前不在本表里 ⇒ `is_judge_problem("judge_bad_verdict")` 返回 `False`，
+    # 于是"判定词表外的取值"与"凭印象的评审被降级"这两个本层产出的失败码
+    # 在调用方看来不像失败码（`judges.py` 的 docstring 却逐字写着"复用 JUDGE_PROBLEMS"）。
+    # 只加不删、只加不改名（旧码的历史读数要能原样对照，`46-05` §4.4）。
+    "judge_bad_verdict",
+    "judge_ungrounded_findings",
 )
 
 
@@ -62,6 +70,55 @@ def is_judge_problem(code: str) -> bool:
     """
     text = str(code or "")
     return any(text == p or text.startswith(p + ":") for p in JUDGE_PROBLEMS)
+
+
+def _problem_of(exc: BaseException) -> str:
+    """异常 → 失败码的唯一映射（`L-05b-3`，`draft/52` D3）。
+
+    为什么单列一个函数（而不是在各个 `except` 链里各写一遍）：
+    这套映射此前有两份（本模块的 `judge_json` 与 `judges.judge` 的裸 `ask_json`），
+    而 `judges` 那份根本没有归类（`BudgetExhausted`/`JudgeRefused`/`TimeoutError`
+    会落成 `judge_failed:<类名>`，词表外的异常也会）。两份实现必然漂移，
+    漂移的症状是同一件事在两个入口上给两个码。
+
+    只做归类不做判断：`judge_failed:<类名>` 里的类名刻意保留（`judge.py` 的
+    docstring 第 19 行解释了为什么它不是一个受控枚举）。
+    """
+    if isinstance(exc, BudgetExhausted):
+        return "judge_over_budget"
+    if isinstance(exc, JudgeRefused):
+        return "judge_refused"
+    if isinstance(exc, TimeoutError):
+        return "judge_timeout"
+    return f"judge_failed:{type(exc).__name__}"
+
+
+def seam_json(seam: Any, prompt: str, *,
+              point: str = "") -> tuple[dict[str, Any] | None, str, Any]:
+    """`ask_json` 形态的缝的共用入口：`(判定, 没查成的原因, 这次调用的审计事实)`。
+
+    为什么把共用入口放在本文件（`L-05b-4` / `46-05` §4.2）：本模块是"失败码表 +
+    异常类"的唯一定义处，把"调一次缝并把异常归成码"也放在这里最自然 ——
+    `judges.judge` 与 `judge.judge_json` 从此都转调它，两个入口名都保留
+    （`agent_f/core.py` 调 `judge_json`，`agent_h/core.py` 调 `judges.judge`）。
+
+    `seam` 没有 `ask_json`（按 `draft/30` §T0-8 写的 `complete` 形态）不归这里管：
+    那是 `judge_json` 的兼容分支，转调方自己分流。
+    """
+    if seam is None or not getattr(seam, "wired", True):
+        return None, "judge_not_wired", None
+    try:
+        data, call = seam.ask_json(prompt, note=point)
+    except BaseException as exc:  # noqa: BLE001 —— 逐类归类由 `_problem_of` 做，不吞
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return None, _problem_of(exc), None
+    problem = str(getattr(call, "problem", "") or "")
+    if data is None:
+        return None, problem or "judge_bad_json", call
+    if not isinstance(data, Mapping):
+        return None, "judge_bad_json", call
+    return dict(data), "", call
 
 
 def judge_json(llm: Any, prompt: str, *, point: str = "") -> tuple[dict[str, Any] | None, str]:
@@ -86,32 +143,15 @@ def judge_json(llm: Any, prompt: str, *, point: str = "") -> tuple[dict[str, Any
     if llm is None:
         return None, "judge_not_wired"
     if hasattr(llm, "ask_json"):
-        try:
-            data, call = llm.ask_json(prompt, note=point)
-        except BudgetExhausted:
-            return None, "judge_over_budget"
-        except JudgeRefused:
-            return None, "judge_refused"
-        except TimeoutError:
-            return None, "judge_timeout"
-        except Exception as exc:  # 其它异常按类型归类，绝不吞掉
-            return None, f"judge_failed:{type(exc).__name__}"
-        problem = str(getattr(call, "problem", "") or "")
-        if data is None:
-            return None, problem or "judge_bad_json"
-        if not isinstance(data, Mapping):
-            return None, "judge_bad_json"
-        return dict(data), ""
+        # `L-05b-4`：共用入口只有一处（异常→码的映射也只有一处）
+        data, problem, _call = seam_json(llm, prompt, point=point)
+        return data, problem
     try:
         raw = llm.complete(prompt)
-    except BudgetExhausted:
-        return None, "judge_over_budget"
-    except JudgeRefused:
-        return None, "judge_refused"
-    except TimeoutError:
-        return None, "judge_timeout"
-    except Exception as exc:  # 其它异常按类型归类，绝不吞掉
-        return None, f"judge_failed:{type(exc).__name__}"
+    except BaseException as exc:  # noqa: BLE001 —— 归类走 `_problem_of`
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return None, _problem_of(exc)
     if isinstance(raw, Mapping):
         # 已经是一份 mapping（有些接线直接给结构化结果）：接受它，但不代表它是"对"的
         return dict(raw), ""
@@ -136,4 +176,4 @@ def reason_of(problem: str, *, point: str = "") -> str:
 
 
 __all__ = ["JUDGE_PROBLEMS", "BudgetExhausted", "JudgeRefused", "is_judge_problem",
-           "judge_json", "reason_of"]
+           "judge_json", "seam_json", "reason_of"]

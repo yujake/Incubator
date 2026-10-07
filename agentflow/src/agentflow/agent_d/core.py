@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ._support import Any, C_API_MISSING_REASON, C_NO_EVIDENCE, IX, Mapping, Path, RT, S, Sequence, Store, StoreError, ToolRegistry, _C_AUTO, _digest, _rank, _rank_min, install_d_tools, json, load_trace_tools, re
+from ._support import Any, C_API_MISSING_REASON, C_NO_EVIDENCE, IX, KIND_CLIENT, KIND_NONE, Mapping, Path, RT, S, STATE_FAILED, STATE_NOT_WIRED, Sequence, Store, StoreError, ToolRegistry, _C_AUTO, _digest, _json_object, _rank, _rank_min, current_summon_task_id, install_d_tools, invented_facts, json, load_trace_tools, model_json_call, model_kind, re, spend_reading
 from .probe_c import _ProbeC
 from .ingest import _Ingest
 from .ingest_detailed import _IngestDetailed
@@ -39,6 +39,17 @@ class _Core:
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = actor
         self.llm = llm
+        #: 这一趟召唤的 `task_id`（`R1-A1` 的 P-09 口径：模型花销要挂到当次召唤上）。
+        #:
+        #: 默认空串 = 没有挂点：装配层（`host._Builder._build` → `specs/d.py::_build`）
+        #: 现在不把召唤号交给角色实例，于是缝那边 `ask(task_id="")` 记的 `llm_call` 事件
+        #: 带不出召唤号，`tokenmeter.usd_for(task_id)` 也就读不到这一笔。
+        #: 这一格是留给装配层的挂点（谁拿到了召唤号就 `d.llm_task_id = tid`），
+        #: 而现在读数会如实写 `task_id` 为空 —— 不许把"没挂点"读成"没花钱"。
+        self.llm_task_id: str = str(self.cfg.get("llm_task_id") or "")
+        #: 最近一次 `_compose` 的模型三态读数（`{kind,state,reason,model,calls,task_id}`）。
+        self.last_llm_reading: dict[str, Any] = {"kind": KIND_NONE, "state": STATE_NOT_WIRED,
+                                                 "reason": "还没调用过", "model": "", "calls": 0}
         #: 工具栏。要么外部注入，要么这里装配（含降级替身）。
         self.tools = tools if tools is not None else install_d_tools(self.store, trace_tools=trace_tools)
         # ---- 绑定角色（`P-14`）：`AgentD._call` 的每次调用都要能回答"这次是谁在调"。
@@ -1148,14 +1159,32 @@ class _Core:
         确定性回退（``llm=None``）是基线而非残次品：它逐条罗列可核实的证据
         （命中数、度数、quote_verified 分布、矛盾对），措辞朴素但每一句都能被
         回到表里核对。LLM 只被允许在这之上"写得更通顺"，且结论必须能回指证据。
+
+        ## 三态（`R1-A1`：`llm_used=False` 不许再折叠"没接线"与"接了但失败"）
+
+        这一次调用落在 :attr:`last_llm_reading` 里（`{kind, state, reason, model, calls}`，
+        `state ∈ {not_wired, used, failed, unknown_object}`）：
+        `False` 只是"这一趟的结论不是模型给的"，而为什么由这一格回答。
+        `except` 保留（LLM 失败绝不能打断循环），但它现在会把失败如实记进读数
+        而不是只丢一条 `last_tool_errors` —— 接口错（例如给了一个既没有 `ask_json`
+        也没有 `complete` 的对象）因此不再伪装成"没接线"。
         """
+        self.last_llm_reading = {"kind": KIND_NONE, "state": STATE_NOT_WIRED,
+                                 "reason": "没有接线（llm is None）", "model": "", "calls": 0}
         if self.llm is not None:
             try:
-                out = self._llm_refine(ev, verdict)
+                out, reading = self._llm_refine(ev, verdict)
+                self.last_llm_reading = reading
                 if out is not None:
                     return out["analysis"], out["conclusion"], out["suggestions"], True
             except Exception as e:  # LLM 失败绝不能打断循环
                 self.last_tool_errors.append({"tool": "llm", "error": f"{type(e).__name__}: {e}"})
+                self.last_llm_reading = {
+                    "kind": model_kind(self.llm), "state": STATE_FAILED,
+                    "reason": f"{type(e).__name__}: {e}",
+                    "model": str(getattr(self.llm, "model_name", "") or ""), "calls": 0,
+                    "note": "异常被 `_compose` 的 fail-open 兜住；这一格记的是原始异常",
+                }
         return self._deterministic_compose(ev, verdict)
     def _deterministic_compose(self, ev: dict, verdict: dict) -> tuple[str, str, list[str], bool]:
         claims = ev.get("claims") or []
@@ -1205,13 +1234,41 @@ class _Core:
         if not suggestions:
             suggestions.append("证据已初步成形，建议进入下一层验证（构造反例 / 与其它链条交叉核对）。")
         return analysis, conclusion, suggestions, False
-    def _llm_refine(self, ev: dict, verdict: dict) -> dict | None:
-        """LLM 钩子：把证据包写成更通顺的分析。
+    def _summon_task_id(self) -> str:
+        """这一趟召唤的号：显式配置 > 执行上下文（装配层挂点）> 实例属性 > 空串。
+
+        为什么不只读实例属性：`resolve(role)` 按角色缓存实例，并发召唤共享同一个对象
+        ⇒ 实例属性会被别人覆盖（`conductor.py:247-249` 已把这条理由写给取消令牌，
+        `R1-A1-a` 之后号也走同一支 ContextVar）。所以每次都现算，
+        并把"最终拿到什么号"如实留在读数里（空串 = 没号）。
+
+        第三档（实例属性 `self.llm_task_id`）保留：它是单线程夹具专用的落点
+        （离线测试与手工构造直接 `d.llm_task_id = "t-0001"`）；并发召唤里用它等于串味
+        —— 生产路径由 ContextVar 那一档答，谁都不许把它当并发下的台账号来源。
+        """
+        for cand in (self.cfg.get("llm_task_id"), current_summon_task_id(),
+                     getattr(self, "llm_task_id", "")):
+            if str(cand or "").strip():
+                return str(cand).strip()
+        return ""
+
+    def _llm_refine(self, ev: dict, verdict: dict) -> tuple[dict | None, dict]:
+        """LLM 钩子：把证据包写成更通顺的分析。返回 `(payload, reading)`。
 
         硬规则（写在提示词里、也在代码里强制）：
-        - 只能引用证据包中出现过的 ``relation_id`` / ``quote``，不得引入新事实；
+        - 只能引用证据包中出现过的 ``relation_id`` / ``quote``，不得引入新事实
+          （:func:`invented_facts` 现算，发现新事实就整份丢弃这次精修）；
         - 置信度只能等于或低于确定性算出的那一档（``_rank_min``）——
           这条在代码里兜底，不依赖模型守规矩。
+
+        ## 模型对象只认两类，判据只有一处（`R1-A1`）
+
+        走 :func:`model_json_call`（`agent_d/_support.py`）：标准缝用它的真 API
+        `ask_json`，裸 client 走 `.complete`，两条路共用同一个 JSON 解析口径与同一个
+        三态读数。这里不再有 `hasattr(llm, "complete")` 那种猜法 ——
+        改前那一行是 `self.llm.complete(prompt) if hasattr(...) else self.llm(prompt)`，
+        而 `LlmSeam` 既没有 `complete` 也不可调用 ⇒ 拿到标准缝必然抛
+        `TypeError: 'LlmSeam' object is not callable`（读数：`temp/_r1a1_status_probe.py`）。
         """
         prompt = json.dumps(
             {
@@ -1239,21 +1296,50 @@ class _Core:
             },
             ensure_ascii=False,
         )
-        raw = self.llm.complete(prompt) if hasattr(self.llm, "complete") else self.llm(prompt)
-        text = str(raw or "").strip()
-        if not text:
-            return None
-        payload = self._parse_json_block(text)
+        payload, text, reading = model_json_call(self.llm, prompt, task_id=self._summon_task_id(),
+                                                 note="D.research 的初步分析")
+        reading["task_id"] = self._summon_task_id()
+        # 花销读数（召唤级）：号在 ⇒ 用 `usd_reading(号)` 答"这一趟花了多少"；
+        # 号不在 ⇒ `attached=False`（"没挂点"，不是 0 花销）；
+        # 同一个召唤内多次调用 ⇒ 成本挂在当次召唤上，`calls` 说清"内几次调用"。
+        reading["spend"] = spend_reading(self.store, reading["task_id"])
+        text = text.strip()
         if payload is None:
-            # 解析不出来就当作"分析文字"用，但结论与置信度仍走确定性路径 ——
-            # 宁可少用一点 LLM 的产出，也不让无法解析的东西进报告。
+            if not text or reading.get("kind") != KIND_CLIENT:
+                # 两条早退，理由不同，都要 by reading 说清：
+                # - 空回复 / 调用失败：这一档由 reading 说明是哪一种（不折成"没接线"）；
+                # - 缝回了坏 JSON（`judge_bad_json`）：缝自己的词表把这一档算失败，
+                #   于是回退到确定性那一档（`llm_used=False`）——
+                #   只有裸 client 才走下面那条"把原文当分析文字用"的旧路
+                #   （它没有 `problem` 词表，历史上就是这么处理的）。
+                return None, reading
+            # 裸 client：解析不出来（回了散文）就当作"分析文字"用，
+            # 但结论与置信度仍走确定性路径 —— 宁可少用一点 LLM 的产出，
+            # 也不让无法解析的东西进报告。
+            base = self._deterministic_compose(ev, verdict)
             return {
                 "analysis": text,
-                "conclusion": self._deterministic_compose(ev, verdict)[1],
-                "suggestions": self._deterministic_compose(ev, verdict)[2],
+                "conclusion": base[1],
+                "suggestions": base[2],
                 "confidence": verdict.get("confidence"),
-            }
+            }, reading
+        invented = invented_facts(
+            "\n".join([str(payload.get("analysis") or ""), str(payload.get("conclusion") or "")]),
+            known_relation_ids=[str(c.get("relation_id") or "") for c in ev.get("claims") or []],
+            known_lit_ids=[str(c.get("lit_id") or "") for c in ev.get("claims") or []
+                           if c.get("lit_id")],
+            known_quotes=[str(c.get("quote") or "") for c in ev.get("claims") or []],
+        )
+        if invented:
+            # 引入新事实 = 整份丢弃（降级到确定性那一档），并把"引了什么"如实留在读数里。
+            self.last_tool_errors.append(
+                {"tool": "llm", "error": f"LLM 引入了证据包里没有的引用，已丢弃本次精修：{invented}"}
+            )
+            reading["state"] = STATE_FAILED
+            reading["reason"] = f"llm_invented_facts: {invented}"
+            return None, reading
         forced = _rank_min(str(payload.get("confidence") or "low"), verdict.get("confidence") or "low")
+        reading["confidence_clamped"] = bool(forced != payload.get("confidence"))
         if forced != payload.get("confidence"):
             self.last_tool_errors.append(
                 {
@@ -1266,17 +1352,11 @@ class _Core:
         payload.setdefault("conclusion", "")
         sugg = payload.get("suggestions") or []
         payload["suggestions"] = [str(s) for s in sugg] if isinstance(sugg, list) else [str(sugg)]
-        return payload
+        return payload, reading
     @staticmethod
     def _parse_json_block(text: str) -> dict | None:
-        first, last = text.find("{"), text.rfind("}")
-        if not (0 <= first < last):
-            return None
-        try:
-            obj = json.loads(text[first : last + 1])
-        except json.JSONDecodeError:
-            return None
-        return obj if isinstance(obj, dict) else None
+        """取文本里第一个 JSON 对象（实现只有一份：`_support._json_object`）。"""
+        return _json_object(text)
     def _render_claims(self, claims: Sequence[Mapping[str, Any]], *, marker: str = "",
                        numbered: bool = False) -> list[str]:
         """把一组 L1 表述渲染成报告行。
@@ -1566,9 +1646,12 @@ def _selftest() -> int:
 
     d2 = AgentD(st, config={"max_questions": 5}, actor="agent-D", tools=reg, llm=FakeLLM())
     d2.trace_question(new_ids[0])
-    got = d2._llm_refine(d2.trace_question(new_ids[0]), d2.assess(new_ids[0]))
-    print(f"    确定性置信度={base}；LLM 声称=high；强制后={got['confidence']}")
+    # `R1-A1`：`_llm_refine` 现在返回 `(payload, reading)`（三态读数与产出一起回去）
+    got, _reading = d2._llm_refine(d2.trace_question(new_ids[0]), d2.assess(new_ids[0]))
+    print(f"    确定性置信度={base}；LLM 声称=high；强制后={got['confidence']}"
+          f"；读数={_reading.get('state')}")
     assert _rank(got["confidence"]) <= _rank(base), "置信度被拔高了！"
+    assert _reading.get("confidence_clamped") is True, "读数要如实记下'夹过'"
 
     print("[11] write_report")
     out = d.write_report()

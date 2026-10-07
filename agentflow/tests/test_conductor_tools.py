@@ -79,6 +79,143 @@ def test_acceptance_without_a_table_reports_no_table_instead_of_crashing(tmp_pat
     assert "没查成" in str(res.error or ""), res.error
 
 
+# ============================================================ CC-02：验收表的解析容错
+
+
+def _acceptance_md(root: Path, body: str) -> None:
+    """把一张验收表写进工作区（`conductor.acceptance` 的缺省路径）。"""
+    d = root / "out" / "paper"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "ACCEPTANCE.md").write_text(body, encoding="utf-8", newline="\n")
+
+
+#: 一张"写法与默认不同、但语义清楚"的验收表（`编号/名称/结论/读数` + `通过/未通过`）。
+_WORDED_DIFFERENTLY = """# 验收表（措辞与默认不同）
+
+结论：「大部分成立」
+
+| 编号 | 名称 | 结论 | 读数 |
+|---|---|---|---|
+| P1 | 立题 | 通过 | 3 行 |
+| P2 | 检索 | 通过 | 8 条 |
+| P3 | 造 | 未通过 | 0 条 |
+"""
+
+#: 一张坏表：空 id、重复 id、结论格是 `？`（读不懂）。
+_BAD_TABLE = """# 验收表（坏表）
+
+| 判据 | 名称 | 结论 | 读数 |
+|---|---|---|---|
+|  | 没有编号 | 成立 | 1 |
+| P1 | 重复的编号 | 成立 | 2 |
+| P1 | 又一个重复 | 成立 | 3 |
+| P2 | 结论读不懂 | ？ | 4 |
+"""
+
+
+def test_cc02_a_differently_worded_but_clear_table_is_read_row_by_row(tmp_path: Path):
+    """CC-02①：表头/结论写法不同但语义清楚 ⇒ 必须读出真行数（旧口径读成 0 行）。
+
+    旧口径是逐字判据：表头 `cells[0] == "判据"`、结论 `cells[2].strip() == "成立"`
+    ⇒ 这张表（`编号` + `通过`/`未通过`）一行都读不出来。判据里把旧条件写出来当反真空：
+    它今天仍然为假 —— 也就是说"读出行数"这件事只能由新口径带来。
+    """
+    store, _c, reg = _wired(tmp_path)
+    _acceptance_md(tmp_path, _WORDED_DIFFERENTLY)
+    res = reg.call("conductor.acceptance", role="M")
+    assert res.ok, res.error
+    data = res.data
+    # 反真空：旧判据在这张表上必然读成 0 行
+    first_cells = [c.strip() for c in "| 编号 | 名称 | 结论 | 读数 |".strip().strip("|").split("|")]
+    assert first_cells[0] != "判据", "这张表就是为'表头不是判据'而造的"
+    assert data["row_count"] == 3, data
+    assert data["ok_count"] == 2 and data["not_ok_count"] == 1, data
+    assert data["row_ids"] == ["P1", "P2", "P3"], data
+    assert all(r["state"] == "computed" for r in data["rows"]), data["rows"]
+    assert data["problems"] == [], data["problems"]
+
+
+def test_cc02_an_unreadable_verdict_is_not_guessed_and_not_ok(tmp_path: Path):
+    """默认方向（写死）：认不出的结论一律 `unreadable`，永不猜成"成立"。
+
+    两条各一条判据：① `？` ⇒ `unreadable`（不是 ok、也不是"不成立"）；
+    ② `不成立` 绝不读成 `成立`（旧实现的坑：`"成立" in cells[2]`）。
+    """
+    store, _c, reg = _wired(tmp_path)
+    _acceptance_md(tmp_path, _BAD_TABLE)
+    res = reg.call("conductor.acceptance", role="M")
+    assert res.ok, res.error
+    rows = {r["id"]: r for r in res.data["rows"] if r["id"]}
+    assert rows["P2"]["state"] == "unreadable", rows["P2"]
+    assert rows["P2"]["ok"] is None, rows["P2"]
+    unreadable = [r for r in res.data["rows"] if r["state"] == "unreadable"]
+    assert len(unreadable) == 3, res.data["rows"]      # 空编号 / 重复编号 / 结论认不出
+    assert res.data["ok_count"] == 1, res.data         # 只有第一个 P1 那行读得懂且成立
+    assert res.data["not_ok_count"] == 0, "读不懂的行不许算进'不通过'（那是另一个结论）"
+    assert any("读不懂" in p for p in res.data["problems"]), res.data["problems"]
+
+    _acceptance_md(tmp_path, """# 表
+
+| 判据 | 名称 | 结论 | 读数 |
+|---|---|---|---|
+| P1 | 一件事 | 不成立 | 0 |
+""")
+    res2 = reg.call("conductor.acceptance", role="M")
+    assert res2.data["ok_count"] == 0 and res2.data["not_ok_count"] == 1, res2.data
+
+
+def test_cc02_zero_rows_and_unreadable_rows_are_not_folded(tmp_path: Path):
+    """CC-02③ 三态：表里 0 行（表头没认出来）与有行但读不懂必须分得开。"""
+    store, _c, reg = _wired(tmp_path)
+    _acceptance_md(tmp_path, """# 表头不认识
+
+| 甲 | 乙 | 丙 |
+|---|---|---|
+| 1 | 2 | 3 |
+""")
+    none_read = reg.call("conductor.acceptance", role="M").data
+    assert none_read["row_count"] == 0 and none_read["problems"], none_read
+
+    _acceptance_md(tmp_path, _BAD_TABLE)
+    some_unreadable = reg.call("conductor.acceptance", role="M").data
+    assert some_unreadable["row_count"] == 4, some_unreadable
+    assert some_unreadable["ok_count"] == 1, some_unreadable
+    assert any(r["state"] == "unreadable" for r in some_unreadable["rows"]), some_unreadable
+    assert "读不懂" in "；".join(some_unreadable["problems"]), some_unreadable["problems"]
+
+
+def test_cc02_the_parser_and_the_closing_reading_agree_on_unreadable(tmp_path: Path):
+    """CC-02②（这一批最重要的一条）：两边在"读不出来"这一档上结论一致。
+
+    防的是"同一张表两种读法"（CC-02 要治的形态）。做法：口径只有一处 ——
+    我的解析器产出的每个 `state` 都必须落在 `closing.ROW_STATES` 里，且
+    `unreadable` 那一档的判定与 `closing` 对等价 JSON 行给出的判定一致：
+    空 `id` / 重复 `id` / 词表外的 `kind` 两边都算"读不出来"。
+    """
+    from agentflow import closing as CL
+
+    store, _c, reg = _wired(tmp_path)
+    _acceptance_md(tmp_path, _BAD_TABLE)
+    data = reg.call("conductor.acceptance", role="M").data
+
+    # ① 词表只有一处：解析器不许自造状态名
+    assert {r["state"] for r in data["rows"]} <= set(CL.ROW_STATES), data["rows"]
+    # ② 与 `closing` 的读法一致：等价的坏形状在 C 那一侧同样是 `unreadable`
+    assert CL.acceptance_row_state({"id": "", "state": "unreadable"}) == "unreadable"
+    assert "unreadable" in CL.ROW_STATES
+    assert CL.acceptance_kinds_with_state(
+        [{"id": "P1", "kind": "k", "state": "unreadable"}], "unreadable") == {"k"}
+    # ③ 我这边的 `unreadable` 行集合 = C 那一侧按状态分出来的集合（同一处定义）
+    mine = {r["id"] for r in data["rows"] if r["state"] == "unreadable"}
+    theirs = {str(r.get("id") or "") for r in data["rows"]
+              if CL.acceptance_row_state(r) == "unreadable"}
+    assert mine and mine == theirs, (mine, theirs)
+    # ④ 反负控：把一张好表喂进去 ⇒ 一行 unreadable 都没有（判据不是永远报异常）
+    _acceptance_md(tmp_path, _WORDED_DIFFERENTLY)
+    ok = reg.call("conductor.acceptance", role="M").data
+    assert {r["state"] for r in ok["rows"]} == {"computed"}, ok["rows"]
+
+
 def test_role_spec_carries_the_brief_not_only_the_actions(tmp_path: Path):
     """判据（`draft/37` §108）：`conductor.role_spec` 要连声明层的画像一起给。
 

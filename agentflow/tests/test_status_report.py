@@ -111,8 +111,33 @@ def test_e15_2_the_next_steps_are_derived_from_readings_not_written_by_a_model(t
     assert any("被拒的动作" in s for s in after["next_steps"]), after["next_steps"]
 
 
-# ============================================================ E15③：零中断
+def test_ee04_the_report_carries_the_faculty_mechanics(tmp_path):
+    """EE-04：状态报告里必须有十项官能的机械半读数（给它一条不依赖 `gate` CLI 的调用者）。
 
+    改动前的调用链（`draft/48-09 §4.10`）：`faculty_checks` 的函数 ← `deliver.py:167/185/188`
+    ← `cli.py:1648 cmd_gate`（子命令注册 `cli.py:2370`）⇒ 那条 CLI 一退场，
+    `faculty_checks` 就成了孤儿模块。现在 `statusreport.collect` 直接调它的纯函数：
+    为什么不走 `deliver` —— 那个函数会写盘（`deliver.py:251-254` 落 `gates/<名字>.json`），
+    而状态报告是只读现场读数。
+
+    判据两半（缺一半就会退化成"加了一个键"）：
+    ① 报告对象里有 `faculty`，且两个读数来自真调用（`conjecture_hygiene` 的 verdict 在
+       它自己的词表里、`claim_strength` 有 `total/verdict` 这些由被调函数产出的键）；
+    ② 渲染出来的 `.md` 里看得见（只写 `.json` 等于"落盘了但没人看得见"）。
+    """
+    ws, st, _ = _ws(tmp_path)
+    report = SR.collect(st, ws)
+    fac = report.get("faculty") or {}
+    hygiene = fac.get("conjecture_hygiene") or {}
+    strength = fac.get("claim_strength") or {}
+    assert hygiene.get("checked") is True, hygiene
+    assert "conjectures" in hygiene and "findings" in hygiene, hygiene
+    assert "total" in strength and "verdict" in strength, strength
+    md = SR.render_status_markdown(report)
+    assert "官能机械半" in md, md[-400:]
+
+
+# ============================================================ E15③：零中断
 class _Scripted:
     spec = type("Spec", (), {"model": "scripted", "api_key": "fake"})()
 
@@ -196,6 +221,168 @@ def test_e15_3_collecting_mid_run_interrupts_nothing(tmp_path):
     assert not (ws / ".agentflow-stop").is_file()
 
 
+def test_the_top_level_run_row_is_counted_and_says_what_it_is(tmp_path):
+    """顶趟行（F1）在三处读数里的口径：保留在读数里，但必须说清"它不是召唤"。
+
+    `conductor.open_top_level_run` 给每趟顶层运行在 `tasks` 里留一行
+    （`role=M` / `action="run"` / `called_by="user"` / `parent_task_id=None`）。
+    裁定：状态报告保留它（显示 `M.run` 是真实且有用的：它同时是"谁在派活"的身份行），
+    但口径要写在读数里，免得下游把它当"第 N 次召唤"。
+
+    判据三条：① `in_flight.running_tasks` 把它算进去（不排除）；② `calibers` 与
+    `top_level_runs` 把口径与分类计数一并给出；③ 最近行的抓手逐行注明它是什么
+    —— 且普通召唤行不许被误标（反负控）。
+    """
+    ws, st, _ = _ws(tmp_path)
+    cond = Conductor(st, backend=LocalBackend({}))
+    tid = cond.open_top_level_run("M", "这一趟的任务原文")
+    with st.tx("tasks", actor="test") as tx:
+        tx.upsert("tasks", {"task_id": "t-0009", "role": "B", "action": "run_once",
+                            "status": "running", "outcome": None, "called_by": "M", "depth": 1,
+                            "input_key": "k9", "started_at": "2026-10-05T00:00:00+08:00",
+                            "ended_at": None, "detail": "", "error": None, "artifacts": []})
+
+    report = SR.collect(st, ws)
+    infl = report["in_flight"]
+    assert tid and tid != "t-0009"
+    assert infl["running_tasks"] == 2, infl
+    assert {tid, "t-0009"} <= set(infl["running_task_ids"]), infl
+    assert infl["top_level_runs"] == 1, infl
+    assert "顶趟" in infl["calibers"]["top_level_runs"], infl["calibers"]
+    assert "不是召唤" in infl["calibers"]["top_level_runs"], infl["calibers"]
+    assert "顶趟行" in infl["calibers"]["running_tasks"], infl["calibers"]
+
+    hints = {r["id"]: r["hint"] for r in report["tables"]["tasks"]["recent"]}
+    assert "顶趟" in hints[tid] and "不是召唤" in hints[tid], hints[tid]
+    assert "顶趟" not in hints["t-0009"], f"普通召唤行被误标成顶趟：{hints['t-0009']}"
+
+    md = SR.render_status_markdown(report)
+    assert "顶趟 = 用户发起的那一趟，不是召唤" in md, md[md.index("在飞任务"):][:200]
+    assert "started_total" in md, "口径要指出真正的召唤数在哪一格读"
+
+
+def test_the_top_level_caliber_is_absent_when_there_is_no_top_run(tmp_path):
+    """反负控（口径行是读数驱动的，不是模板）：没有顶趟行的工作区 ⇒ 那一句不出现。"""
+    ws, st, _ = _ws(tmp_path)
+    with st.tx("tasks", actor="test") as tx:
+        tx.upsert("tasks", {"task_id": "t-0001", "role": "B", "action": "run_once",
+                            "status": "running", "outcome": None, "called_by": "M", "depth": 1,
+                            "input_key": "k1", "started_at": "2026-10-05T00:00:00+08:00",
+                            "ended_at": None, "detail": "", "error": None, "artifacts": []})
+    report = SR.collect(st, ws)
+    assert report["in_flight"]["top_level_runs"] == 0, report["in_flight"]
+    assert "顶趟 = 用户发起的那一趟" not in SR.render_status_markdown(report)
+    hints = {r["id"]: r["hint"] for r in report["tables"]["tasks"]["recent"]}
+    assert "顶趟" not in hints["t-0001"], hints["t-0001"]
+
+
+def test_the_d_report_landing_reading_is_visible_and_red_then_green(tmp_path):
+    """S-07：D 的 `write_report` "有调用、无落点"必须在这一屏看得见（`.json` 与 `.md` 都有）。
+
+    为什么它在这条线上：真机 45 次 `write_report` 只落磁盘、台账 0 行，而这件事此前
+    没有任何读数会说（下游读成"D 没产报告"）。裁定是只做读数、不进闸门
+    （诊断不是判交付），所以它必须出现在 M/人会读的那一屏上。
+    判据：造 N 条 D/`write_report` 终态行 ⇒ `calls == N` 且 `landed == 0`（红→绿），
+    并且 `.md` 里逐字看得见（只写 `.json` 等于"落盘了但没人看得见"）。
+    """
+    ws, st, _ = _ws(tmp_path)
+    # 红之前：没有调用 ⇒ 这一格如实说 0 次，且不许报"有产物无台账"（反负控）
+    first = SR.collect(st, ws)
+    assert first["report_landing"]["calls"] == 0, first["report_landing"]
+    assert first["report_landing"]["checked"] is True, first["report_landing"]
+    assert "有产物无台账" not in SR.render_status_markdown(first)
+
+    with st.tx("tasks", actor="test") as tx:
+        for i in range(3):
+            tx.upsert("tasks", {"task_id": f"t-10{i:02d}", "role": "D",
+                                "action": "write_report", "status": "done", "outcome": "ok",
+                                "called_by": "M", "depth": 1, "input_key": f"kw{i}",
+                                "started_at": "2026-10-05T00:00:00+08:00",
+                                "ended_at": "2026-10-05T00:00:01+08:00",
+                                "detail": "写了一份研究报告（S-07 夹具）", "error": None,
+                                "artifacts": []})
+    report = SR.collect(st, ws)
+    got = report["report_landing"]
+    assert got["calls"] == 3 and got["landed"] == 0, got
+    assert got["kind_writable"] is False and got["landing_tables"] == [], got
+    assert got["task_ids"] and len(got["task_ids"]) == 3, got
+    md = SR.render_status_markdown(report)
+    assert "有产物无台账" in md and "**3** 次" in md, md[md.index("D 的报告落点"):][:200]
+    assert any("有产物无台账" in s for s in report["next_steps"]), report["next_steps"]
+
+
+def test_the_landing_reading_is_tristate_and_never_folds_into_zero(tmp_path):
+    """三态：`tasks` 读不出来 ⇒ `checked=False` + `reason`，不许折成"没有调用"。"""
+    class _Boom:
+        def rows(self, _table):
+            raise RuntimeError("tasks 表坏了")
+
+    got = SR._report_landing(_Boom())
+    assert got["checked"] is False and "tasks 表坏了" in got["reason"], got
+    ws, st, _ = _ws(tmp_path)
+    report = SR.collect(st, ws)                    # 用一份完整报告渲染（渲染函数要别的键）
+    report["report_landing"] = got
+    md = SR.render_status_markdown(report)
+    assert "没查成" in md and "有产物无台账" not in md, md[md.index("D 的报告落点"):][:160]
+    steps = SR._next_steps(report)                 # `next_steps` 要按换过的那一格重算
+    assert any("没查成" in s for s in steps), steps
+
+
+def test_the_uncalled_actions_reading_is_visible_and_red_then_green(tmp_path):
+    """S-02：声明了、但一条召唤行都没有的动作必须在这一屏看得见（`.json` 与 `.md` 都有）。
+
+    为什么它在这条线上：`Conductor.stats()` 没有 `by_action` ⇒ "声明了但没人召唤过"
+    此前没有任何读数在说（真机：D 的五个核心动作在 4127 行 `tasks` 里 0 次）。
+    裁定同样是只做读数、不进闸门（该不该派归秘书/主控判断）。
+    判据：空工作区 ⇒ 全部声明动作都在 `uncalled` 里（那是实话）；反负控：真派一条
+    ⇒ 那个动作必须从清单里消失（不然这条读数在误报）。
+    """
+    ws, st, _ = _ws(tmp_path)
+    first = SR.collect(st, ws)["uncalled_actions"]
+    assert first["checked"] is True, first
+    assert first["called_total"] == 0 and first["declared_total"] > 0, first
+    assert first["count"] == first["declared_total"], first
+    md = SR.render_status_markdown(SR.collect(st, ws))
+    assert f"**{first['count']}** 个" in md and "声明了但没被召唤过的动作" in md, \
+        md[md.index("声明了但没被召唤过"):][:160]
+
+    with st.tx("tasks", actor="test") as tx:
+        tx.upsert("tasks", {"task_id": "t-0001", "role": "D", "action": "assess",
+                            "status": "done", "outcome": "ok", "called_by": "M", "depth": 1,
+                            "input_key": "k-s02", "started_at": "2026-10-05T00:00:00+08:00",
+                            "ended_at": "2026-10-05T00:00:01+08:00",
+                            "detail": "派过一次 assess（S-02 夹具）", "error": None,
+                            "artifacts": []})
+    report = SR.collect(st, ws)
+    got = report["uncalled_actions"]
+    assert got["called_total"] == 1, got
+    assert got["count"] == got["declared_total"] - 1, got
+    pairs = {(a["role"], a["action"]) for a in got["uncalled"]}
+    assert ("D", "assess") not in pairs, "召唤过之后它还留在清单里 ⇒ 这条读数在误报"
+    line = next(ln for ln in SR.render_status_markdown(report).splitlines()
+                if "声明了但没被召唤过的动作" in ln)
+    assert f"**{got['count']}** 个" in line, line
+    assert "每个声明过的动作都至少被召唤过一次" not in line, line
+
+
+def test_the_uncalled_actions_reading_is_tristate(tmp_path):
+    """三态：读不出来 ⇒ `checked=False` + `reason`，不许折成"全都没被调用"。"""
+    class _Boom:
+        def rows(self, _table):
+            raise RuntimeError("tasks 表坏了")
+
+    got = SR._uncalled_actions(_Boom())
+    assert got["checked"] is False and "tasks 表坏了" in got["reason"], got
+    ws, st, _ = _ws(tmp_path)
+    report = SR.collect(st, ws)
+    report["uncalled_actions"] = got
+    md = SR.render_status_markdown(report)
+    assert "没查成" in md, md[md.index("声明了但没被召唤过"):][:160]
+    assert "全都没被调用" in md, "没查成时要说清它不是那个结论"
+    steps = SR._next_steps(report)
+    assert any("没查成" in s for s in steps), steps
+
+
 def test_e15_3_the_probe_does_not_write_into_the_store(tmp_path):
     """E15③ 的另一半：观测前后，`data/` 下每个文件的字节必须逐字节相同。"""
     before: dict[str, bytes] = {}
@@ -215,9 +402,43 @@ def test_e15_3_the_probe_does_not_write_into_the_store(tmp_path):
     ], probe)
     assert run.stop_reason == "final", run.to_dict()
     assert before, "探针没跑到"
-    # 这一趟自己不再写台账 ⇒ 观测那一刻记下的字节与现在一致
-    for name, blob in before.items():
-        assert (ws / "data" / name).read_bytes() == blob, f"{name} 在观测之后被改过"
+    # ---- F1 之后这里要改口径：这一趟自己在 `tasks` 里有一行
+    #
+    # `conductor.open_top_level_run` 在开跑前给它开一行（顶趟行），
+    # `finish_top_level_run` 在收工那一刻把那一行收尾 ⇒ `tasks.json` 必然在观测
+    # （第 2 步）之后变一次。那不是"观测写了盘"，是这一趟自己的生命周期。
+    # 所以判据从"每个文件逐字节相同"收窄成两半：
+    #   ① 除 `tasks.json` 外，任何文件逐字节相同（观测本身零写入）；
+    #   ② `tasks.json` 里只有这一趟自己那一行变，且只变终局字段。
+    # 改前（F1 之前）顶趟没有行 ⇒ ① 就是全部；收窄之后判据仍然能抓到"探针写了盘"。
+    changed = {name for name, blob in before.items()
+               if (ws / "data" / name).read_bytes() != blob}
+    assert changed <= {"tasks.json"}, f"观测之后这些文件被改过（观测本身不许写盘）：{sorted(changed)}"
+
+    def _rows_of(blob: bytes | str) -> dict[str, dict]:
+        doc = json.loads(blob.decode("utf-8") if isinstance(blob, bytes) else blob)
+        return {str(r.get("task_id") or ""): r for r in doc["rows"]}
+
+    was, now = _rows_of(before["tasks.json"]), _rows_of((ws / "data" / "tasks.json").read_bytes())
+    assert set(was) == set(now), (sorted(was), sorted(now))
+    # 变的必须是这一趟自己的顶趟行（`run_role` → `open_top_level_run` 开的那一行）
+    top = [k for k, r in now.items() if str(r.get("action") or "") == "run"]
+    assert len(top) == 1, f"这一趟应当恰好有一条顶趟行（action=run），实测 {top}"
+    tid = top[0]
+    assert was[tid].get("called_by") == "D" or was[tid].get("called_by"), was[tid]
+    #: 收尾时允许变的字段（其余字段一律不许动 —— 那是"这一行只被收尾，没有被改写"）
+    finish_only = {"status", "outcome", "ended_at", "detail", "error", "tokens", "usd",
+                   "refusal_reason", "artifacts", "inputs"}
+    for key, row in was.items():
+        if key == tid:
+            drift = {k for k in set(row) | set(now[key])
+                     if row.get(k) != now[key].get(k) and k not in finish_only}
+            assert not drift, f"顶趟行 {tid} 在观测之后被改的不只是终局字段：{sorted(drift)}"
+        else:
+            assert row == now[key], f"观测只该碰顶趟行，而 {key} 也变了"
+    # 反负控：这条判据真的在看内容 —— 把 before 里那一行改一个字段，它必须被发现
+    assert dict(was[tid], status="（被人改过）") != now[tid], \
+        "改坏之后仍然相等 ⇒ 上面那两条断言是真空的"
 
 
 # ============================================================ CLI 入口

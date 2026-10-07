@@ -10,7 +10,8 @@ class _Step:
     def step(self, plan_id: str) -> dict:
         """推进一轮。
 
-        返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason"}``。
+        返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason",
+        "budget_known","budget_reading"}``。
 
         `outcome` 取本模块的 :data:`STEP_OUTCOMES`
         （``no_change`` / ``progress`` / ``blocked``）：它说的是这一轮推进的结果，
@@ -56,6 +57,10 @@ class _Step:
         budget = dict(row.get("budget") or {})
         rounds = int(row.get("rounds") or 0)
         budget_left = _budget_left(budget, rounds)
+        # 预算读数（P-09）：注入点给的读数原样随返回值出去（读不到也如实出去）。
+        # 为什么每个返回路径都带它：调用方（M/D）与台账读的是这一次 `step` 的返回，
+        # 只在某一条路上给会让"有没有读数"取决于这一轮走了哪条分支。
+        reading = self.budget_of_round()
 
         # ---- 终结状态：不再推进（终态先到先得，不许被重入改写）
         if status in TERMINAL_STATUSES:
@@ -67,6 +72,8 @@ class _Step:
                 "outcome": "no_change",
                 "status": status,
                 "budget_left": budget_left,
+                "budget_known": reading["status"] == "known",
+                "budget_reading": reading,
                 "reason": (
                     f"计划已是终结状态 {status!r} ⇒ 不再推进。"
                     "**「不再推进」不是「推进了但没有进展」**：终态先到先得，"
@@ -104,6 +111,8 @@ class _Step:
                 "outcome": "no_change",
                 "status": "stalled",
                 "budget_left": _budget_left(budget, rounds),
+                "budget_known": reading["status"] == "known",
+                "budget_reading": reading,
                 "reason": (
                     f"连续 {stall_after} 轮 outcome=no_change ⇒ 提前判 stalled。"
                     "**不是失败，也不是成功**：当前最好的部分结果已写入 best_partial。"
@@ -155,6 +164,8 @@ class _Step:
                 "outcome": "no_change",
                 "status": "stalled",
                 "budget_left": _budget_left(budget, rounds),
+                "budget_known": reading["status"] == "known",
+                "budget_reading": reading,
                 "best_partial": row["best_partial"],
                 "reason": detail,
             }
@@ -198,6 +209,8 @@ class _Step:
                 "outcome": "no_change",
                 "status": row["status"],
                 "budget_left": _budget_left(budget, rounds + 1),
+                "budget_known": reading["status"] == "known",
+                "budget_reading": reading,
                 "reason": picked["reason"],
             }
 
@@ -222,6 +235,12 @@ class _Step:
             sg["status"] = deploy["status"]
         if deploy.get("blocked_reason"):
             sg["blocked_reason"] = deploy["blocked_reason"]
+        if deploy.get("script_path"):
+            # S-10(a)：脚本落点写回子目标。为什么必须在这里写：`step` 在分派前把
+            # `subgoals` 拷成了本地列表，分派后要用这份本地副本整体写回 ——
+            # 在 `_deploy_e` 里直接改 `plan["subgoals"]` 会被这一步静默覆盖
+            # （下面那段 `new_subgoals` 的注释记的就是同一条）。
+            sg["script_path"] = str(deploy["script_path"])
         if deploy.get("in_flight") is not None:
             sg["in_flight"] = bool(deploy["in_flight"])
         sg["attempts"] = int(sg.get("attempts") or 0) + (1 if deploy.get("count_attempt") else 0)
@@ -282,6 +301,8 @@ class _Step:
             "outcome": _step_outcome(deploy["outcome"]),
             "status": row["status"],
             "budget_left": _budget_left(budget, rounds + 1),
+            "budget_known": reading["status"] == "known",
+            "budget_reading": reading,
             "reason": deploy["detail"],
         }
         self.last_step = out

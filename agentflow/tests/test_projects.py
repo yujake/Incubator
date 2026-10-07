@@ -268,6 +268,63 @@ def test_a_usage_row_with_a_bogus_task_id_is_still_reported(store) -> None:
     assert "dangling_usage_task" in codes, f"这一笔应当被判为悬空花销，却报：{codes}"
 
 
+def test_extract_without_a_task_id_passes_none_not_a_label(store, monkeypatch) -> None:
+    """F3 的第二处（`projects.py`）：给不出台账号时原样传 `None`，不许折成字符串。
+
+    与 `host.b_extractor` 是同一类病、同一轮同一形态：把 `None` 折成 `"(未接线)"`
+    之后，账面看起来"有一个具体的任务号"，而它不在 `tasks` 里 ⇒ `verify_all` 报
+    `dangling_usage_task`(error)。假读数比没读数更难发现。
+
+    判据两半（缺一半都会让这条退化成"改了个字符串"）：
+    ① 传给 `client_from_env` 的 `task_id` 就是 `None`（不是 `""`、不是 `"(未接线)"`）；
+    ② 同一个值进了账本之后，`verify_all` 不报 `dangling_usage_task`，
+       而折成 `"(未接线)"` 时报（负控）—— 且 `uncharged` 计数在两种写法下逐字不变
+       （"挂不上召唤"与"没有真的入账"是两件事，不许合并成一个标签）。
+    """
+    from agentflow import verify as V
+    from agentflow.tokenmeter import Charge, TokenMeter
+
+    seen: dict = {}
+
+    class _Client:
+        def __init__(self, meter) -> None:
+            self.meter = meter
+            self.calls = 0
+            self.charges = 0
+
+        def complete(self, prompt: str, **_kw) -> str:
+            """替身：不联网，只记一笔账（`task_id` 用调用点传进来的那个）。"""
+            self.calls += 1
+            self.charges += 1
+            self.meter.charge(Charge(role="B", scope="extract", task_id=seen["task_id"],
+                                     tokens_in=11, tokens_out=3, usd=0.0))
+            return '{"concepts": [], "relations": []}'
+
+        def to_dict(self) -> dict:
+            """`projects.extract_with_model` 会把客户端读数并进返回值（`out["model"]`）。"""
+            return {"calls": self.calls, "charges": self.charges}
+
+    def _fake_client_from_env(*, scope="extract", meter=None, task_id="", **_kw):
+        seen["task_id"] = task_id
+        return _Client(meter)
+
+    monkeypatch.setattr("agentflow.modelclient.client_from_env", _fake_client_from_env)
+    P.extract_with_model(store, task_id="")
+    assert seen["task_id"] is None, (
+        f"给不出台账号时必须原样传 None，实传 {seen['task_id']!r} —— "
+        "折成字符串会让账面多一个不存在的任务号（dangling_usage_task）")
+
+    rep = V.verify_all(store).to_dict()
+    codes = [i["code"] for i in rep["errors"]]
+    assert "dangling_usage_task" not in codes, f"`None` 的账不该被判悬空，却报：{codes}"
+
+    # 负控：同一个工作区里再造一笔折成字符串的花销 ⇒ 必须报（证明上面那半不是恒真）。
+    TokenMeter(store).charge(Charge(role="B", scope="extract", task_id="(未接线)",
+                                    tokens_in=11, tokens_out=3, usd=0.0))
+    codes2 = [i["code"] for i in V.verify_all(store).to_dict()["errors"]]
+    assert "dangling_usage_task" in codes2, f"折成字符串的那一笔必须被判悬空，却报：{codes2}"
+
+
 def test_the_lean_switch_is_passed_through_to_run_topic(tmp_path: Path) -> None:
     """`--lean` 必须透传：不透传时这条主路径上永远拿不到 proof 级证据。
 

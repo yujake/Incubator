@@ -173,19 +173,54 @@ def test_e13_an_over_budget_round_is_blocked_not_truncated():
 
 
 def test_i9_the_deterministic_gate_runs_before_any_money_is_spent():
-    """已批准的第 3 条 + I9：先做便宜的证伪 —— 四种情形各自挡住，且不花一分钱。"""
+    """已批准的第 3 条 + I9：先做便宜的证伪 —— 四条事实各自挡住，且不花一分钱。
+
+    P-09（`draft/44:60`）之后这四条是全部的否决面：它们是事实（目标空 /
+    没有可检验形式 / 引到已作废的命题 / 预算耗尽），不是"该模型抉择的事"。
+    原来还有第五条"九招试完了就不许花钱"—— 那一条已改成读数（见下一条用例）。
+    """
     assert AR.pre_spend_gate(goal="", testable="x")["spend"] is False
     assert AR.pre_spend_gate(goal="证 n=3", testable="")["spend"] is False
     refuted = AR.pre_spend_gate(goal="证 n=3", testable="枚举", deps_refuted=["stmt:0007"])
     assert refuted["spend"] is False and "作废" in refuted["reasons"][0], refuted
     broke = AR.pre_spend_gate(goal="证 n=3", testable="枚举", budget_left_usd=0.0)
     assert broke["spend"] is False and "预算" in broke["reasons"][0], broke
-    all_tried = AR.pre_spend_gate(goal="证 n=3", testable="枚举",
-                                  tried_strategies=list(AR.STRATEGIES))
-    assert all_tried["spend"] is False and "dead_end" in all_tried["reasons"][0], all_tried
     ok = AR.pre_spend_gate(goal="证 n=3", testable="枚举", budget_left_usd=2.5,
                            tried_strategies=["归约"])
     assert ok["spend"] is True and ok["checks"]["budget_ok"], ok
+
+
+def test_p09_tried_strategies_is_a_reading_not_a_veto():
+    """P-09：计数不否决花钱 —— 九招试完给的是"代价可读"，裁量权回到 F 手里。
+
+    改前：`len(set(tried)) >= len(STRATEGIES)` 直接 `spend=False`（死旋钮）。
+    改后：`checks["strategies_tried"]` 如实报 `tried / remaining / exhausted` 与一句
+    代价读数，`spend` 仍为真（该不该再花一轮是 F 按代价做的判断，不是闸门替它定的）。
+    反负控（同一用例里）：上面那四条事实仍然必须否决 —— 证明这次改的是"计数否决"，
+    没有把整条 I9 闸门拆掉。
+    """
+    all_tried = AR.pre_spend_gate(goal="证 n=3", testable="枚举",
+                                  tried_strategies=list(AR.STRATEGIES))
+    assert all_tried["spend"] is True, all_tried
+    assert all_tried["reasons"] == [], all_tried
+    info = all_tried["checks"]["strategies_tried"]
+    assert info["exhausted"] is True and info["remaining"] == [], info
+    assert len(info["tried"]) == len(AR.STRATEGIES), info
+    assert "已穷尽" in info["note"] and str(len(AR.STRATEGIES)) in info["note"], info["note"]
+
+    partial = AR.pre_spend_gate(goal="证 n=3", testable="枚举",
+                                tried_strategies=[AR.STRATEGIES[0]])
+    assert partial["spend"] is True
+    assert partial["checks"]["strategies_tried"]["exhausted"] is False
+    assert AR.STRATEGIES[0] not in partial["checks"]["strategies_tried"]["remaining"]
+
+    # 反负控：四条事实一条都不许被这次改动放过。
+    assert AR.pre_spend_gate(goal="", testable="枚举")["spend"] is False
+    assert AR.pre_spend_gate(goal="证 n=3", testable="")["spend"] is False
+    assert AR.pre_spend_gate(goal="证 n=3", testable="枚举",
+                             deps_refuted=["stmt:0007"])["spend"] is False
+    assert AR.pre_spend_gate(goal="证 n=3", testable="枚举",
+                             budget_left_usd=0.0)["spend"] is False
 
 
 def test_rule_6_parallel_routes_are_distinct_strategies():

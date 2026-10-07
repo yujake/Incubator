@@ -242,52 +242,65 @@ def test_run_agent_refuses_to_resume_a_different_task(tmp_path: pathlib.Path, mo
     assert "checkpoint_mismatch" in out, out
 
 
-def test_gate_without_a_key_is_unknown_not_pass(tmp_path: pathlib.Path, monkeypatch, capsys):
-    """负控（三态，直接测 `cmd_gate`）：没接线 ⇒ 退出码 2，判据逐条落 `judge_not_wired`。
+def test_the_gate_subcommand_has_retired_and_deliver_keeps_no_cli_dependency():
+    """L-05c（`48-09 §4.10`）：`cli gate` 子命令退场，而语义判据与机械半都留着。
 
-    这一条的要点是"没判成 ≠ 通过"：报告照样落盘、工作项照样写出，
-    但结论必须是 `unknown`、退出码必须是 2 —— 折叠成 `pass` 就等于把"没查"读成"没问题"。
+    改前必红：`build_parser()` 的 choices 里有 `gate`、`cli.cmd_gate` 存在、
+    `cli.py` 里 import 着 `deliver`（`cmd_gate` 是它的唯一 CLI 入口）。
 
-    刻意「不」替换 `cli._agent_seam_factory`：走的就是"环境里没有 key"那条真路。
+    退场的依据（真机读数）：`gates/*.json` 0 份、`delivery_gate` 事件 0
+    —— 这个入口从来没人用过；而语义判据真的跑过（116 份任务产物含
+    `claims_semantically_judged`，其中 44 份 > 0）。所以"没人用的 CLI"退场、
+    "真在跑的判据"留着，两件事不许混为一谈。
+
+    这一条同时钉住没有造出孤儿模块：`faculty_checks` 的机械半现在有真生产调用者
+    （`statusreport` 那条链，B 的 EE-04）⇒ 判据断言那条链仍在。
     """
-    monkeypatch.delenv("AGENTFLOW_MODEL_API_KEY", raising=False)
-    root = tmp_path / "ws"
-    root.mkdir()
-    art = tmp_path / "稿.md"
-    art.write_text("# 稿子\n\n一句话。\n", encoding="utf-8")
-    rc = cli.cmd_gate(_args(tmp_path, name="g1", artifact=str(art), criterion=["overview.essence"],
-                           json=False, pair=[], context="", disclaimer=""))
-    out = capsys.readouterr().out
-    assert rc == 2, out
-    assert "unknown" in out and "judge_not_wired" in out, out
-    assert (root / "gates" / "g1.json").is_file(), "没判成也要留下报告（否则没人知道跑过）"
+    import pathlib as _p
+
+    parser = cli.build_parser()
+    sub = next(a for a in parser._subparsers._group_actions if a.choices)  # type: ignore[attr-defined]
+    assert "gate" not in sub.choices, f"gate 子命令还在：{sorted(sub.choices)}"
+    assert not hasattr(cli, "cmd_gate"), "cmd_gate 还在（子命令退场要一起删）"
+    src = (_p.Path(__file__).resolve().parents[1] / "src" / "agentflow" / "cli.py").read_text(
+        encoding="utf-8")
+    assert "import deliver" not in src, "cli.py 还依赖 deliver（L-05c 的第 4 条）"
+    # deliver.py / faculty_checks.py 都不许删（施工单逐字）；faculty_checks 仍有生产调用者
+    from agentflow import deliver as _D  # noqa: F401  （存在性）
+    from agentflow import statusreport as _SR
+
+    text = _p.Path(_SR.__file__).read_text(encoding="utf-8")
+    assert "faculty_checks" in text, "faculty_checks 失去了唯一的生产调用者（孤儿模块）"
+    assert "FACULTY_LAYERS" in text or True   # 锚点在 agent_prompts，下面用另一条判据守着
+    from agentflow import agent_prompts as _AP
+
+    layers = getattr(_AP, "FACULTY_LAYERS", ())
+    assert len(tuple(layers)) >= 5, f"`FACULTY_LAYERS` 锚点被动了：{layers!r}"
 
 
-def test_gate_writes_a_report_and_work_items_when_a_criterion_fails(tmp_path: pathlib.Path,
-                                                                    monkeypatch, capsys):
-    """正控（直接测 `cmd_gate`）：判据判不通过 ⇒ `needs_work`、退出码 1、工作项落盘。"""
-    monkeypatch.setattr(cli, "_agent_seam_factory", fake_seam_factory)
-    SCRIPTS.clear()
-    SCRIPTS.update({"H": ['{"verdict": "listing", "why": "只是在罗列", "findings": []}']})
-    root = tmp_path / "ws"
-    root.mkdir()
-    art = tmp_path / "稿.md"
-    art.write_text("# 稿子\n\n一句。两句。\n", encoding="utf-8")
-    rc = cli.cmd_gate(_args(tmp_path, name="g2", artifact=str(art), criterion=["overview.essence"],
-                            json=True, pair=[], context="", disclaimer=""))
-    out = capsys.readouterr().out
-    assert rc == 1, out
-    payload = json.loads(out[out.index("{"):])
-    assert payload["verdict"] == "needs_work" and payload["unknown_criteria"] == [], payload
-    assert payload["work_items"], payload
-    assert payload["work_items"][0]["who"] == "C", "高观点不达标该派给 C（FACULTY_FIXERS）"
+def test_gate_retirement_keeps_the_semantic_criteria_alive():
+    """L-05c 的另一半（`draft/44` 的警告逐字）：别把"CLI 没人用"误读成"判据没人用"。
 
+    `deliver.gate` 保留 + 登记为已决定的例外（它是第二套交付闸门，与 C 的收工门
+    同族重叠 ⇒ 再给它接一个新入口会造出"两套闸门各说一套"）。它的状态是
+    "有 `tests/test_deliver.py` 守着、零生产调用者" —— 这一条钉住"零调用者"这件事
+    是如实登记的，而不是靠编一个假入口。
+    """
+    import pathlib as _p
 
-def test_gate_on_a_missing_artifact_is_not_checked(tmp_path: pathlib.Path, capsys):
-    """负控（三态）：交付物读不到 ⇒ 退出码 2，且一条判据都没跑、报告没落。"""
-    rc = cli.cmd_gate(_args(tmp_path, name="g3", artifact=str(tmp_path / "没有这个文件.md"),
-                            criterion=[], json=False, pair=[], context="", disclaimer=""))
-    err = capsys.readouterr().err
-    assert rc == 2 and "没查成" in err, err
-    assert not (tmp_path / "ws" / "gates").exists(), "没查成却落了报告"
+    src_root = _p.Path(__file__).resolve().parents[1] / "src" / "agentflow"
+    users = []
+    for path in src_root.rglob("*.py"):
+        if path.name == "deliver.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "import deliver" in text or "deliver.gate(" in text or "deliver as" in text:
+            users.append(path.name)
+    assert users == [], (
+        "deliver 出现了新的生产调用者（那会造出第二套闸门入口）："
+        f"{users} —— 如实登记为『零生产调用者 + 有 tests/test_deliver.py 守着』")
+    # 而它的判据本体仍然在（不许删）
+    assert (src_root / "deliver.py").is_file()
+    assert (_p.Path(__file__).resolve().parents[0] / "test_deliver.py").is_file(), \
+        "deliver 的判据文件被删了（施工单：不许删 `deliver.py`）"
 

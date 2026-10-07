@@ -105,68 +105,84 @@ def test_the_conductor_is_exempt_because_its_final_goes_to_the_user(tmp_path):
     assert MS.rows(ws) == [], MS.rows(ws)
 
 
-# ============================================================ 演练 2：不带 notify ⇒ 打回重填
+# ============================================================ 演练 2：不带 notify ⇒ 只留读数
 
-def test_e4_2_a_final_without_notify_is_bounced_not_autofilled(tmp_path):
-    """打回那一步是 `invalid`（不是"框架替它写"）：警告里四件事齐全，账本一行都不许有。"""
-    ws, run = _run(tmp_path, [
-        {"final": "我做完了"},                     # ① 不带 notify ⇒ 打回
-        {"final": "我做完了",
-         "notify": {"to": "D", "summary": "交给 D", "body": "正文"}},   # ② 改对了 ⇒ 收工
-    ])
+
+def test_e4_2_a_final_without_notify_just_has_no_handoff(tmp_path):
+    """L-05e 的新口径：不带 `notify` ⇒ 不打回，这一趟照常收工、只是没有手稿。
+
+    改前必红：旧实现把这一步记成 `shape="invalid"`、打回重填（`notify_rejections=1`），
+    再把下一条回复喂进来。现在 `final` 就是收工（一步结束），没填就没有手稿，
+    而"为什么没有"如实落进这一步的读数。
+
+    裁定（`draft/52` F 组 / P-10）只留一条："要交接就写手稿"。
+    真机依据：5269 个 `agent_step` 里 shape 无 `final`、`no_notify` 收场 0 次
+    ⇒ 那道闸门一次都没触发过。
+    """
+    ws, run = _run(tmp_path, [{"final": "我做完了"}])
     assert run.stop_reason == "final", run.to_dict()
-    assert run.notify_rejections == 1, run.to_dict()
-    bad = run.steps[0]
-    assert bad.shape == "invalid" and bad.problem, bad.to_dict()
-    warn = bad.problem
-    # 四件事：① 命中字段 ② 正例 ③ 反例 ④ 只改这一个字段
-    assert "命中字段" in warn and "正例" in warn and "反例" in warn, warn
-    assert "只改这一个字段" in warn, warn
-    assert "notify" in warn, warn
-    # 打回不代填、也不丢结论：账本只有"改对那一次"写下的那一行
-    assert [r["id"] for r in MS.rows(ws)] == ["0000"], MS.rows(ws)
+    assert run.notify_rejections == 0, run.to_dict()
+    assert [s.shape for s in run.steps] == ["final"], [s.shape for s in run.steps]
+    assert run.steps[0].result.get("notify_problem"), run.steps[0].to_dict()
+    assert run.steps[0].result.get("notify_handoff") is None, run.steps[0].to_dict()
+    assert MS.rows(ws) == [], "没填就没有手稿（不代填）"
     assert "我做完了" in run.final, run.final
+    # 填了就由本角色的秘书执笔一行（写权已移交；`sender` 仍是被服务的角色）
+    ws2, run2 = _run(tmp_path / "b", [{"final": "我做完了",
+                                       "notify": {"to": "D", "summary": "交给 D",
+                                                  "body": "正文"}}])
+    assert run2.stop_reason == "final" and run2.handoffs == ["0000"], run2.to_dict()
+    assert MS.rows(ws2)[0]["sender"] == "D", MS.rows(ws2)
 
 
-def test_a_run_that_never_fills_notify_stops_with_no_notify(tmp_path):
-    """连续 3 次不填 ⇒ `stop_reason=\"no_notify\"`，不代填，但它自己的结论照原样留着。"""
-    ws, run = _run(tmp_path, [{"final": "我第一次收工"}, {"final": "我第二次收工"},
-                              {"final": "我第三次收工"}, {"final": "第四次"}])
-    assert run.stop_reason == "no_notify", run.to_dict()
-    assert run.notify_rejections == 3, run.to_dict()
+def test_a_run_that_never_fills_notify_still_finishes(tmp_path):
+    """`no_notify` 这个停止理由在 L-05e 之后不可达：第一次 `final` 就收工。
+
+    改前必红：`stop_reason == "no_notify"`、`notify_rejections == 3`、
+    `run.steps` 是 3 个 `invalid`。改后：一步收工，账本 0 行（没填就是没交接，如实），
+    结论照原样留着。
+    """
+    ws, run = _run(tmp_path, [{"final": "我第一次收工"}, {"final": "我第二次收工"}])
+    assert run.stop_reason == "final", run.to_dict()
+    assert run.notify_rejections == 0, run.to_dict()
     assert MS.rows(ws) == [], "不代填：账本里一份都不许凭空出现"
-    assert "我第一次收工" not in run.final      # 最后一次的结论才是它要给的那份
-    assert "我第三次收工" in run.final, run.final
-    assert "没有留下交接手稿" in run.final, run.final
-    assert [s.shape for s in run.steps] == ["invalid", "invalid", "invalid"], \
-        [s.shape for s in run.steps]
+    assert "我第一次收工" in run.final, run.final
+    assert [s.shape for s in run.steps] == ["final"], [s.shape for s in run.steps]
+    assert "没有留下交接手稿" not in run.final, run.final
 
 
-def test_the_bounce_is_counted_and_visible_in_the_run_record(tmp_path):
-    """读数可见：`notify_rejections` 进 `to_dict()`（"被打回几次"必须能查）。"""
-    _ws, run = _run(tmp_path, [{"final": "没填"}, {"final": "还是没填"},
-                               {"final": "改对了", "notify": {"to": "ALL", "summary": "广播",
-                                                              "body": "正文"}}])
-    assert run.notify_rejections == 2, run.to_dict()
-    assert run.to_dict()["notify_rejections"] == 2, run.to_dict()
-    assert run.to_dict()["handoffs"] == ["0000"], run.to_dict()
+def test_the_missing_notify_is_visible_in_the_run_record(tmp_path):
+    """读数可见（闸门降级成读数之后，这件事仍然要看得见）。"""
+    _ws, run = _run(tmp_path, [{"final": "没填"}])
+    assert run.notify_rejections == 0, run.to_dict()
+    assert run.to_dict()["notify_rejections"] == 0, run.to_dict()
+    assert run.steps[0].result.get("notify_problem"), run.steps[0].to_dict()
+    assert any("没有交接手稿" in n for n in run.notes), run.notes
+    assert run.handoffs == [], run.to_dict()
 
 
-# ============================================================ 演练 3：带错字段 ⇒ 点名 + 反思
+# ============================================================ 演练 3：带错字段 ⇒ 点名（读数）
 
-def test_e4_3_a_wrong_field_is_named_and_the_second_bounce_demands_reflection(tmp_path):
-    """带错字段：第一次点名那个字段；连续第二次多一句"先说明你上一次为什么没按格式填"。"""
-    _ws, run = _run(tmp_path, [
-        {"final": "做完了", "notify": {"to": "D", "body": "缺 summary"}},       # ① 缺字段
-        {"final": "做完了", "notify": {"to": "Z", "summary": "s", "body": "b"}},  # ② 坏收件人
-        {"final": "做完了", "notify": {"to": "D", "summary": "s", "body": "b"}},  # ③ 改对
-    ])
-    first, second = run.steps[0].problem, run.steps[1].problem
+
+def test_e4_3_a_wrong_field_is_named_in_the_reading(tmp_path):
+    """带错字段：点名那个字段，但不打回（`final` 照样收工，账本不留半成品）。
+
+    改前必红：两步都被记成 `invalid` 且警告里带"四件事"的模板。
+    改后：形状问题落进 `result.notify_problem`（点名 `notify.summary` / `notify.to`），
+    这一步仍是 `final`；账本 0 行（形状不对就没手稿）。
+    """
+    ws, run = _run(tmp_path, [{"final": "做完了",
+                               "notify": {"to": "D", "body": "缺 summary"}}])
+    first = run.steps[0].result.get("notify_problem") or ""
     assert "notify.summary" in first, first
-    assert "反思" not in first and "先说明你上一次" not in first, first
+    assert run.steps[0].shape == "final", run.steps[0].to_dict()
+    assert run.stop_reason == "final" and MS.rows(ws) == [], (run.to_dict(), MS.rows(ws))
+    # 坏收件人是另一条独立的读法（各跑一趟，因为 `final` 一步就结束）
+    ws2, run2 = _run(tmp_path / "b", [{"final": "做完了",
+                                       "notify": {"to": "Z", "summary": "s", "body": "b"}}])
+    second = run2.steps[0].result.get("notify_problem") or ""
     assert "notify.to" in second, second
-    assert "先说明你上一次为什么没按格式填" in second, second
-    assert run.stop_reason == "final" and len(run.steps) == 3, run.to_dict()
+    assert MS.rows(ws2) == [], MS.rows(ws2)
 
 
 def test_an_unknown_field_in_notify_is_named():
@@ -175,17 +191,20 @@ def test_an_unknown_field_in_notify_is_named():
     assert "不认识的字段" in problem and "summry" in problem, problem
 
 
-def test_a_dangling_ref_is_bounced_before_the_handoff_is_written(tmp_path):
-    """`refs` 悬空 ⇒ 打回（写入期同一份判据），账本不许留下半成品。"""
-    ws, run = _run(tmp_path, [
-        {"final": "做完了", "notify": {"to": "D", "summary": "引了 0009", "body": "b",
-                                       "refs": ["0009"]}},
-        {"final": "改成不引了", "notify": {"to": "D", "summary": "不引了", "body": "b"}},
-    ])
-    assert "0009" in run.steps[0].problem or "悬空" in run.steps[0].problem, \
-        run.steps[0].problem
-    assert [r["id"] for r in MS.rows(ws)] == ["0000"], MS.rows(ws)
-    assert MS.rows(ws)[0]["summary"] == "不引了", MS.rows(ws)
+def test_a_dangling_ref_is_named_and_no_half_written_row_lands(tmp_path):
+    """`refs` 悬空 ⇒ 点名（写入期同一份判据），账本不许留下半成品。
+
+    D10 之后 `manuscripts.write` 不再因悬空引用拒写，但这一层仍然不进账本：
+    `notify.refs` 是"这一行手稿的依据"，依据立不住时这一行由框架派生那一份顶上
+    （它只写框架手上已有的事实），而不是把一条带悬空引用的行塞进交接账本。
+    """
+    ws, run = _run(tmp_path, [{"final": "做完了",
+                               "notify": {"to": "D", "summary": "引了 0009", "body": "b",
+                                          "refs": ["0009"]}}])
+    assert any("0009" in n or "悬空" in n for n in run.notes), run.notes
+    # 收工侧的悬空 refs ⇒ 没有手稿（读数里点名），而不是把带悬空引用的行塞进账本
+    assert MS.rows(ws) == [], MS.rows(ws)
+    assert run.steps[0].result.get("notify_problem"), run.steps[0].to_dict()
 
 
 def test_the_shape_decoder_passes_notify_through_and_the_gate_validates_it():
@@ -208,14 +227,35 @@ def test_the_shape_decoder_passes_notify_through_and_the_gate_validates_it():
     assert (shape, problem) == ("final", ""), (shape, problem)  # 形状对（缺字段由闸门判）
 
 
-def test_the_notify_requirement_is_documented_in_the_loop_protocol():
-    """提示词与判据同源：`LOOP_PROTOCOL` 里必须写着 "notify" 是强制项（否则模型无从知道）。"""
-    from agentflow import agent_prompts as AP
+def test_the_forced_table_is_retired_in_code_and_the_prompt_half_is_bs():
+    """L-05e 的代码半（提示词半归 B）：判据只钉代码侧，不再钉提示词的措辞。
 
-    text = AP.LOOP_PROTOCOL
-    assert "notify" in text and "强制" in text and "不代填" in text, text
-    assert "no_notify" in text, "停止理由也要写进协议（不然被停了不知道为什么）"
-    assert AgentLoop.max_notify_rejections == 3, AgentLoop.max_notify_rejections
+    改前必红：`AgentLoop.run` 里还调着 `_notify_bounce(` 且写着 `no_notify`
+    —— 那是"收工不带 notify 就打回"的两处痕迹。
+
+    这一条钉的是退场之后的契约：
+
+    1. 收工侧的打回没了（源码里不再调 `_notify_bounce`）；
+    2. `no_notify` 这个停止理由没了（不可达的停止理由留着只会误导读的人）；
+    3. 读数还在（`notify_problem`）：退场 ≠ 沉默 —— 有没有留痕仍然看得见
+       （这是"闸门降级成读数"的全部意义）。
+
+    为什么不在这里断言 `agent_prompts.LOOP_PROTOCOL` 的文字：那是 B 的广告面，
+    而 `draft/45 §2` 的硬约束是"代码先接住、提示词后撤" —— 若继续钉提示词的
+    "强制/不代填"，B 撤广告的那一刻这里会红，而红的原因是分工不是回归。
+    """
+    import inspect
+
+    from agentflow.agent_loop import AgentLoop
+
+    src = inspect.getsource(AgentLoop.run)
+    # 只看代码行：注释里解释"为什么退了"是应该的（判据要判的是行为，
+    # 不是"这两句话能不能被提到"）。
+    code = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+    assert "_notify_bounce(" not in code, "收工侧还在打回（L-05e 的代码半没落）"
+    assert "no_notify" not in code, "`no_notify` 这个停止理由还在（退场不彻底）"
+    assert "notify_problem" in code, "读数那一格不见了（退场 ≠ 沉默）"
+    assert AgentLoop.max_notify_rejections == 3, "常量仍在（退场的是它的**用法**）"
 
 
 # ============================================================ 主控派活侧（draft/39 §6.4 四.1）
@@ -273,30 +313,32 @@ def test_a_dispatch_without_notify_still_leaves_a_framework_derived_row(tmp_path
     assert "D.register_conjecture" in rows[0]["summary"], rows[0]
     assert "n≥3 时" in rows[0]["body"] and "把猜想立起来" in rows[0]["body"], rows[0]
     # 派活本身照常发生
-    assert len(_ws_rows(ws, "tasks")) == 1, _ws_rows(ws, "tasks")
+    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("action")) != "run"]) == 1, _ws_rows(ws, "tasks")
     assert run.steps[0].result.get("dispatch_handoff", {}).get("ok") is True, run.steps[0]
 
 
-def test_a_malformed_dispatch_notify_is_bounced_and_the_dispatch_does_not_happen(tmp_path):
-    """填了但填错 ⇒ 打回（那一次派活没有发生），补对之后照常派出去。"""
+def test_a_malformed_dispatch_notify_still_dispatches_and_falls_back(tmp_path):
+    """填错 ⇒ 照常派活，留痕退回框架派生那一份（L-05e 之后不再打回）。
+
+    改前必红：这一步是 `shape="invalid"`、`tasks` 里 0 行（那一次派活没发生）、
+    `MS.rows(ws)[0]["summary"] == "补上留痕再派"`（第二次才成）。
+    改后：派活真的发生（`tasks` 1 行），手稿来自框架据派活派生（note 里写明），
+    形状问题落进 `run.notes` —— 而"谁是派生、谁是执笔"两个标记仍然分得开。
+    """
     ws, run = _run(tmp_path, [
         {"summon": {"role": "D", "action": "register_conjecture",
                     "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
                     "why": "把猜想立起来",
                     "notify": {"to": "D"}}},          # 缺 summary / body
-        {"summon": {"role": "D", "action": "register_conjecture",
-                    "params": {"statement": "n≥3 时……", "testable": "n≤12 枚举"},
-                    "why": "把猜想立起来",
-                    "notify": {"summary": "补上留痕再派", "body": "## 派什么活\n登记猜想。\n"}}},
         {"final": "派完了"},
     ], role="M")
-    first = run.steps[0]
-    assert first.shape == "invalid" and "派活" in first.problem, first.to_dict()
-    assert "notify.summary" in first.problem, first.problem
-    assert "正例" in first.problem and "只改这一个字段" in first.problem, first.problem
-    assert len(_ws_rows(ws, "tasks")) == 1, _ws_rows(ws, "tasks")
-    assert MS.rows(ws)[0]["summary"] == "补上留痕再派", MS.rows(ws)
-    assert "模型填的 notify" in MS.rows(ws)[0]["note"], MS.rows(ws)
+    assert [s.shape for s in run.steps] == ["summon", "final"], [s.shape for s in run.steps]
+    assert len([r for r in _ws_rows(ws, "tasks") if str(r.get("action")) != "run"]) == 1, _ws_rows(ws, "tasks")
+    rows = MS.rows(ws)
+    assert len(rows) == 1, rows
+    assert "框架据派活派生" in rows[0]["note"], rows[0]["note"]
+    assert "执笔" in rows[0]["note"] or "秘书" in rows[0]["note"], rows[0]["note"]
+    assert any("notify" in n for n in run.notes), run.notes
     assert run.stop_reason == "final", run.to_dict()
 
 

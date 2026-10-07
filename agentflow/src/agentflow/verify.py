@@ -48,10 +48,10 @@ from .store import MAX_ID, Store
 #: 给，这里只关心它落在哪一档），于是"词表里有、分支里没有"（或反过来）会直接炸，
 #: 而不是让一条拒绝消息把人指向一个错的写法 —— `D10` 就是那样活了很久：
 #: 没有任何一条既有断言会因为消息写错而变红。
-CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc")
+CITATION_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc", "stmt")
 #: 逐档判据分支里各写了哪些 kind。它与 `CITATION_KINDS` 必须同轮改 ——
 #: 这个常量是"分支那一侧"的声明，为的是让漂移在导入期就可见（见上面的断言）。
-_BRANCH_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc")
+_BRANCH_KINDS: tuple[str, ...] = ("rel", "lit", "exp", "eval", "doc", "stmt")
 assert set(CITATION_KINDS) == set(_BRANCH_KINDS), (
     f"CITATION_KINDS={sorted(CITATION_KINDS)} 与逐档判据分支 "
     f"{sorted(_BRANCH_KINDS)} 脱钩 —— 两边必须同轮改"
@@ -816,7 +816,8 @@ def _check_6(rep, dependencies, documents, exp_by_id, experiments):
 
 
 
-def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations):
+def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations,
+             stmt_by_id):
     """`verify_all` 的第 7 段（行 718–864）。
 
     由 `temp/_t5_split.py` 逐字搬移而来：判据一条没改，只是换了个位置。
@@ -920,6 +921,13 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                 elif kind == "eval" and ref not in eval_by_id:
                     rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
                                             f"断言 {cid} 引用了不存在的评测结果 {ref}"))
+                elif kind == "stmt" and ref not in stmt_by_id:
+                    # `E1/R-03`（`draft/49` §E1 方案 A，所有者授权主控代改）：`stmt:` 与
+                    # 其余几档**同权** —— 加进词表就必须同时有一条真检查它的分支，
+                    # 否则它变成"既不 warn 也没人查"的一类，那正是裁定时否掉方案 B 的
+                    # 理由（逐字："不校验就等于不设防"）。
+                    rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
+                                            f"断言 {cid} 引用了不存在的命题 {ref}"))
                 elif kind == "doc":
                     # 内部引用（`draft/30` §T4-A）：`doc:<稿件>#<断言>@<哈希前 16 位>`。
                     # 三段都要真：稿件在、那条断言在、且**钉的哈希就是目标稿件当前这一版**。
@@ -1026,6 +1034,16 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
                                     "稿件已被 accepted，但它还有未处置的 error 级发现"))
 
     # ---- 主控编队 / 花销 / 评测口径（`tasks` / `usage_ledger` / `eval_results`）
+    #
+    # 口径（主控 2026-10-06 自查要求）：这里是**台账全量**读，**不是委托计数** ——
+    # 下面四条判据（父任务悬空 / 深度不连续 / 缺 input_key / 离线仍 running）
+    # 与 usage 对账（`dangling_usage_task` / `usage_task_total_mismatch`）问的都是
+    # "台账自己一致吗"。所以**顶趟行**（`role=<本体>`、`action="run"`、`called_by="user"`、
+    # `depth=1`、`parent_task_id=None`、`input_key="top:…"`）在这里是一行**合法**记录：
+    # 它不触发上面任何一条（父为 None、深度无父、input_key 非空、status=done），
+    # 也不进任何 `checked[...]` 计数（本函数没有任何"tasks 行数"读数）。
+    # ⇒ **不排除、不改口径**；数"派了几跳"的地方在 `reviewaccept._c_hops`
+    # （那里已按 `called_by != "user"` 排除顶趟行，并留 `excluded_top_run_rows` 读数）。
     tasks = store.rows("tasks")
     usage = store.rows("usage_ledger")
     # ---- 幂等键的唯一性（"同一笔账被记了两次"的**唯一**自动防线）
@@ -1322,21 +1340,25 @@ def _check_11(rep, documents, store):
         rep.issues.append(Issue("error", "documents", None, SIG.CODE_LEDGER_CORRUPT,
                                 f"签名台账链断了：{broken}"))
     sig_checked = 0
-    #: 签名判据只对 `SIG.SIGNABLE_STATUS` 的稿件成立 ⇒ "查了几行"数的就是**这些**行。
-    #: 不写死 `"accepted"`：那个字面量的唯一落点现在是 `signatures.SIGNABLE_STATUS`
+    #: 签名判据只对 `SIG.SIGNABLE_STATUSES` 的稿件成立 ⇒ "查了几行"数的就是**这些**行。
+    #: 不写死 `"accepted"`：那个字面量的唯一落点现在是 `signatures.SIGNABLE_STATUSES`
     #: （两处各写一份就会分叉 —— 而分叉的症状是读数说"查了 N 行"而判据一行没查）。
+    #: E-07（`draft/52` D5）之后它是**元组**（`accepted` + `revised`）：`revised` 那份
+    #: 稿子的签名钉着改之前那一版，正是最该被看见的形态。
     sig_rows_checked = 0
-    if SIG.SIGNABLE_STATUS not in S.DOC_STATUSES:
-        # 词表分叉的**当场上报**：否则 `SIGNABLE_STATUS` 一旦拼错，签名判据会一份稿件
+    missing_statuses = [s for s in SIG.SIGNABLE_STATUSES if s not in S.DOC_STATUSES]
+    if missing_statuses:
+        # 词表分叉的**当场上报**：否则 `SIGNABLE_STATUSES` 一旦拼错，签名判据会一份稿件
         # 都不查，而 `checked` 里那个 0 看起来与"全部干净"逐字一样（P16 族的真空通过）。
         rep.issues.append(Issue(
             "error", "documents", None, "signable_status_not_in_doc_statuses",
-            f"`signatures.SIGNABLE_STATUS={SIG.SIGNABLE_STATUS!r}` 不在 `schema.DOC_STATUSES` "
+            f"`signatures.SIGNABLE_STATUSES={SIG.SIGNABLE_STATUSES!r}` 里的 "
+            f"{missing_statuses} 不在 `schema.DOC_STATUSES` "
             f"{S.DOC_STATUSES} ⇒ 签名判据会**一份稿件都不查**，而读数看起来是「零问题」。"
             "两处词表分叉必须当场吵，不许静默零查。",
         ))
     for d in documents:
-        if str(d.get("status") or "") == SIG.SIGNABLE_STATUS:
+        if str(d.get("status") or "") in SIG.SIGNABLE_STATUSES:
             sig_rows_checked += 1
         for code, msg in SIG.signature_problems(sig_root, d, sig_records):
             rep.issues.append(Issue("error", "documents", d.get("doc_id"), code, msg))
@@ -1595,7 +1617,11 @@ def verify_all(
     questions, req_ids = _check_4(rep, con_by_id, concepts, lit_by_id, rel_by_id, relations, requests, store)
     dependencies, doc_by_id, documents, eval_by_id, exp_by_id, experiments, findings = _check_5(rep, lit_by_id, questions, store)
     _check_6(rep, dependencies, documents, exp_by_id, experiments)
-    rejected_by_id = _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations)
+    # `E1/R-03`（方案 A）：`stmt:` 与其余几档同权 ⇒ 这里也要把命题表交给第 7 段，
+    # 否则 `elif kind == "stmt"` 那条分支拿到的是未定义的名字（导入期不会红、运行期才炸）。
+    stmt_by_id = {str(r.get("stmt_id")): r for r in store.rows("statements")}
+    rejected_by_id = _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit_by_id, rel_by_id, relations,
+                              stmt_by_id)
     _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store)
     _check_9(rep, documents, questions, req_ids, store)
     _check_10(rep, allow_fulltext_quote_fallback, deep, extract_text, lit_by_id, quote_widen, relations, store)

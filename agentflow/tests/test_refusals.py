@@ -45,6 +45,26 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "渲染/编译是外部工具链，它失败不等于这次调用不成立 ⇒ `failed`",
     ("agent_g/paper_package.py", "state_failed"):
         "读锚失败是读盘失败，同上 ⇒ `failed`",
+    ("agent_g/paper_package.py", "anchor_script_failed"):
+        "并列读数（第二条核锚通道 `doc.paper_anchor` 的脚本 `--check`）自己抛了异常："
+        "它是并列读数、不是这一格的权威，所以它坏了不代表这次调用不成立 ⇒ `failed`；"
+        "此时权威读数（`renderanchor` 那一份）照样给出来，坏掉的那一条只如实写 `problem`",
+    # `E.author_script`（S-10(a)）的三档：都不是"这次调用不成立"，而是
+    # "执行了、没成功" ⇒ 该落 `failed`，不许冒充 `refused`（冒充会把
+    # "模型网关炸了"记成"你参数写错了"，调用方于是去改一个没错的参数）。
+    ("agent_e/author_script.py", "judge_failed"):
+        "模型缝没答上来（网关异常 / 回了坏 JSON）：判据与参数都没问题，是这一跳没查成 "
+        "⇒ 执行失败。它同一支的另两档（`bad_source` / `write_failed`）见下面两条",
+    ("agent_e/author_script.py", "bad_source"):
+        "模型回了一份不合格的脚本（没有 `REPRO_RESULT` / 空 / 过长）：调用本身成立、"
+        "产出不能用 ⇒ 执行失败",
+    ("agent_e/author_script.py", "write_failed"):
+        "写盘失败（含落点越界）：与 `paper_package` 的 `state_failed` 同族 —— "
+        "读盘/写盘失败不等于这次调用不成立 ⇒ 执行失败",
+    # 注：同一方法里 `bad_spec` / `no_seam` 两档不在这里 —— 它们是"这次调用本身
+    # 不成立"（判据不全 / 没接缝），走 `refusals.refuse`（先例：`A.search_literature`
+    # 的 `no_provider` 与 `A.ingest_local` 的 `bad_books_dir`）。所以本表只登记
+    # 上面这三档；扫出来多一条或少一条都会红。
 }
 
 
@@ -132,8 +152,10 @@ def test_every_hand_rolled_failure_is_registered_and_the_table_is_not_stale():
     assert scanned >= 8, f"只扫到 {scanned} 个角色动作模块 ⇒ 扫描面接错了"
 
     want = Counter(dict.fromkeys(_FAILURES_NOT_REFUSALS, 1))
-    # `paper_package` 的 package_build_failed 目前有两处（渲染失败 / 编译失败）
-    want[("agent_g/paper_package.py", "package_build_failed")] = 2
+    # 注：这里原本还有一行把 `package_build_failed` 覆盖成 2（"渲染失败 / 编译失败两处"）。
+    # `R2b-⑬` 把那两个手写分支合并成了一条（阶段名走 payload 的 `stage` 那一格），
+    # 所以这一档现在只剩一处，覆盖行随之删除。这不是放宽判据：`want` 仍逐条来自登记表，
+    # 计数对不上（少一处）照样落进下面的 `stale`。
 
     missing = live - want
     stale = want - live

@@ -141,8 +141,13 @@ def test_unknown_citation_kind_message_lists_every_declared_prefix(store):
     期望词表在这里逐字写死（不从 `verify.CITATION_KINDS` 取）：判据要能回答
     "消息把人引向哪个写法"，而那个答案不该由被测对象自己提供 —— 从被测对象取
     词表会让"两边一起改错"照样绿。
+
+    `stmt`（`R-03` / `draft/49` 裁"方案 A"）是后来补进来的第六档：命题台账也是可引的
+    对象，而加它之前写入期会把 `stmt:0004` 这类合法引用判成"前缀无法识别"
+    （`draft/49:868` 逐字："比不查更糟"）。补一档就要同轮改这里的逐字清单 ——
+    它逐字写死正是为了拦住"词表变了而消息没跟上"。
     """
-    expected_kinds = ("rel", "lit", "exp", "eval", "doc")
+    expected_kinds = ("rel", "lit", "exp", "eval", "doc", "stmt")
     add_literature(store, "0000", title="某文献")
     _eval_row(store)
     _document(store, "0000", claims=[_claim_with(["lit:0000", "eval:0000", "foo:0000"])])
@@ -186,8 +191,10 @@ def test_negative_control_the_old_message_would_be_caught(store):
     missing = [k for k in CITATION_KINDS if f"{k}:" not in old_message]
     # `T4-A` 把 `doc:` 加进词表之后，这句"改前的话"还多漏一档 —— 它当然漏：
     # 那句话写下时 `doc:` 这一档根本不存在。夹具的意图是"它确实漏了东西"，
-    # 所以这里逐字列出两个漏项，而不是放宽成"漏了就都行"。
-    assert missing == ["eval", "doc"], f"夹具算错了：{missing}"
+    # 所以这里逐字列出漏项，而不是放宽成"漏了就都行"。
+    # `R-03` 补 `stmt` 之后漏项再多一个 —— 同一个道理：那句话写下时 `stmt:` 也不存在。
+    # 逐字列出（而不是 `len(missing) >= 2`）正是为了让"又补了一档"必须有人来改这一行。
+    assert missing == ["eval", "doc", "stmt"], f"夹具算错了：{missing}"
     # 改前的那句话在当前的判据下必红 —— 而当前实现给的那句话不红
     assert all(f"{k}:" in ws[0]["message"] for k in CITATION_KINDS)
     assert "eval:" not in old_message, "改前形态确实漏了 eval:（D10 的现状）"

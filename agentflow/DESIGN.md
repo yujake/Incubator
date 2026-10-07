@@ -444,13 +444,14 @@ python -m agentflow demo                       # 离线端到端（fixture provi
 > **本机实测（CLI 现状）**：原型包名是 `abflow`，`run-a` / `run-b` 是它的两个子命令 ——
 > 原型子命令实测（`test/test1/src/abflow/cli.py`）为
 > `analyze / demo / init / pipeline / rebuild / repair / research / run-a / run-b / status / submit / tools / verify`。
-> **正式版**（`agentflow/src/agentflow/cli.py`）现有 21 个子命令，实测为
-> `init`、`submit`、`run-a`、`run-b`、`status`、`verify`、`rebuild`、`repair`、`tools`、
-> `analyze`、`research`、`pipeline`、`demo`、`run`、`evidence`、`artifacts`、`project`、
-> `run-agent`、`gate`、`inbox`、`answer`（复跑：`python -m agentflow.cli --help`）；
+> **正式版**（`agentflow/src/agentflow/cli.py`）的子命令数**不在本文里写死**：写死就会漂
+> （这一格写过「21」，`R8`-A-5 现算真身是 **24**）⇒ 现算命令 `python -m agentflow.cli --help`，
+> 判据 `tests/test_user_quickstart.py`（README 那一格）与 `tests/test_doc_code_consistency.py`；
+> 逐名清单同理不抄（`cli.build_parser()` 现算）；
 > 其中 `run-a` / `run-b` 仍在（`agentflow/src/agentflow/cli.py` 的 `sub.add_parser("run-a")` / `("run-b")`），
 > 而"一次真实的多智能体运行"的入口是 `python -m agentflow.cli run-agent`
-> （`agentflow/src/agentflow/cli.py::cmd_run_agent`，带 `--role` / `--task` / `--drive` / `--max-steps`）。
+> （`agentflow/src/agentflow/cli.py::cmd_run_agent`；**`role` 是位置参数**（不是 `--role`），
+> 另有 `--task`（必填）/ `--drive` / `--subagents` / `--provider`（离线档 `fixture`）/ `--max-steps`）。
 
 ---
 

@@ -116,6 +116,15 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     tasks = _rows(store, "tasks")
     running_tasks = [str(t.get("task_id") or "") for t in tasks
                      if str(t.get("status") or "") in ("pending", "running")]
+    # ---- 顶趟行（F1）：`tasks` 里多出来的那一类行（`role=M` / `action="run"` /
+    # `called_by="user"`，由 `conductor.open_top_level_run` 开）。
+    #
+    # 口径照 `conductor.stats()` 的 `calibers` 那一段（`conductor.py:1926-1943`）：
+    # `tasks` 这一屏数的是台账全量，所以顶趟行保留在读数里（它是用户发起的那一趟，
+    # 显示它是真实且有用的 —— 它同时是那个"谁在派活"的身份行），
+    # 但它不是一次召唤，所以把它单独数出来（`top_level_runs`）+ 在读数里点名口径，
+    # 免得下游把 `M.run` 当成"第 N 次召唤"。
+    top_runs = [t for t in tasks if str(t.get("action") or "") == "run"]
     refused = [t for t in tasks if str(t.get("outcome") or "") == "refused"]
     by_reason: dict[str, int] = {}
     for t in refused:
@@ -139,6 +148,16 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         "five_bit": {"grades": grades, "problems": problems},
         "in_flight": {
             "running_tasks": len(running_tasks), "running_task_ids": running_tasks[:RECENT_LIMIT],
+            # 口径（不可省）：这两个数一个是台账全量、一个是"用户发起的那一趟"。
+            # 不写清就会变成"同一屏里两个读数各说一件事"（`conductor.stats()` 的同一条纪律）。
+            "calibers": {
+                "running_tasks":
+                    "tasks 里 status ∈ {pending, running} 的行（含顶趟行 action=run）",
+                "top_level_runs":
+                    "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；"
+                    "召唤看 conductor.stats() 的 started_total）",
+            },
+            "top_level_runs": len(top_runs),
             "live_pids": [{"role": str(p.get("role") or ""), "pid": p.get("pid")} for p in live],
             "running_loops": loops["running"], "readable_sessions": len(loops.get("running") or [])
             + 0,
@@ -159,9 +178,73 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         # 应当直接看到它们，而不是再去翻会话。
         "attack_rounds": _attack_rounds(_rows(store, "attack_plans")),
         "interjections": _interjections(root),
+        "faculty": _faculty_mechanics(store, _rows(store, "documents")),
+        # ---- S-07（`44 J-01` 的裁定：只读数、不进闸门）：D 的 `write_report`
+        # "有调用、但台账里没有落点"。不进 `closing` 的闸门是这个读数的用途决定的
+        # （诊断，不是判交付过不过；加进闸门会改变验收读数的翻转面）。
+        "report_landing": _report_landing(store),
+        # ---- S-02（`44 S-02`，同样是"只做读数、不进闸门"）：声明了、但一条召唤行
+        # 都没有的动作。`Conductor.stats()` 只有 by_role/by_status/by_outcome/by_depth，
+        # 没有 by_action ⇒ 这件事今天没有任何读数在说。
+        "uncalled_actions": _uncalled_actions(store),
+        # ---- EE-04（`draft/48-09 §4.10` 的"先接住再退场"）：让 `faculty_checks`
+        # 有一条不依赖 `gate` CLI 的生产调用者。
+        #
+        # 为什么不经 `deliver.gate`：那个函数会写盘（`deliver.py:251-254` 落
+        # `gates/<名字>.json`、`:153-155` 追加工作项），而状态报告是只读现场读数
+        # —— 把会写盘的东西并进只读路径，等于让"看一眼现在什么情况"这个动作改盘。
+        # 所以直接调 `faculty_checks` 的纯函数（它们只读 store 与文本）。
     }
     report["next_steps"] = _next_steps(report)
     return report
+
+
+def _report_landing(store: Any) -> dict[str, Any]:
+    """S-07 的读数：D 的 `write_report` "有调用、但台账里没有落点"（只读，实现在 `agent_d`）。
+
+    为什么并进这一屏（`44 S-07`）：真机 45 次 `write_report` 只落磁盘、台账 0 行，
+    而这件事在今天的读数面上没有任何地方会说（下游会读成"D 没产报告"）。
+    实现只有一份（`agent_d._support.report_landing_reading`），这里只做转发 ——
+    另写一份判据就是"同一件事两个落位"。
+    三态照原样透传：读不出来时 `checked=False` + `reason`，不许折成"没有调用"。
+    """
+    from .agent_d._support import report_landing_reading
+
+    return dict(report_landing_reading(store))
+
+
+def _uncalled_actions(store: Any) -> dict[str, Any]:
+    """S-02 的读数：声明了、但一条召唤行都没有的动作（只读，实现在 `conductor`）。
+
+    为什么并进这一屏：`Conductor.stats()` 只有 `by_role`/`by_status`/`by_outcome`/
+    `by_depth`，没有 `by_action` ⇒ "声明了但没人召唤过"今天没有任何读数在说
+    （真机：D 的五个核心动作在 4127 行 `tasks` 里 0 次）。
+    实现只有一份（`conductor.uncalled_actions_reading`），这里只转发。
+    三态照原样透传：读不出来时 `checked=False` + `reason`，不许折成"全都没被调用"
+    —— "全都没被调用"是很强的结论，只有真读到两边（声明表与 `tasks`）才配下。
+    """
+    from .conductor import uncalled_actions_reading
+
+    return dict(uncalled_actions_reading(store))
+
+
+def _faculty_mechanics(store: Any, documents: list[dict[str, Any]]) -> dict[str, Any]:
+    """十项官能的机械半（`faculty_checks` 的纯函数，只读；EE-04 的落点）。
+
+    为什么是这两项：状态报告是"现在什么情况"，而这两项能只用台账算出来 ——
+    `conjecture_hygiene` 查猜想卫生（有没有反例路径、有没有把猜想写成结论），
+    `claim_strength_findings` 逐条比"断言说了多强"与"它挂的证据等级"。
+    另三项（`overview_findings` / `style_findings` / `progress_findings`）要稿件正文
+    或前后两次计数快照，状态报告里没有那个输入 —— 不给它编一个。
+    """
+    from . import faculty_checks as FC
+
+    claims = [c for d in (documents or []) for c in (d.get("claims") or [])
+              if isinstance(c, Mapping)]
+    return {
+        "conjecture_hygiene": FC.conjecture_hygiene(store),
+        "claim_strength": FC.claim_strength_findings(claims),
+    }
 
 
 def _attack_rounds(plans: list[dict[str, Any]]) -> dict[str, Any]:
@@ -231,7 +314,13 @@ def _row_time(row: Mapping[str, Any]) -> str:
 def _hint_of(table: str, row: Mapping[str, Any]) -> str:
     """每条最近行的"一眼能看懂"的一小段（不是判据，是给人读的抓手）。"""
     if table == "tasks":
-        return f"{row.get('role')}.{row.get('action')} {row.get('status')}/{row.get('outcome')}"
+        line = f"{row.get('role')}.{row.get('action')} {row.get('status')}/{row.get('outcome')}"
+        # 顶趟行（F1）要说清它是什么：`role=M` / `action=run` 那一行是用户发起的一趟，
+        # 不是召唤 —— 不注明的话，读的人会把它当成"M 被召唤了一次"
+        # （口径与 `conductor.stats()` 的 `top_level_runs` 同源）。
+        if str(row.get("action") or "") == "run" and row.get("parent_task_id") in (None, ""):
+            line += "（顶趟：用户发起的那一趟，不是召唤）"
+        return line
     if table == "documents":
         return f"{row.get('kind')} {row.get('title')}（{row.get('status')}）"
     if table == "experiments":
@@ -269,6 +358,28 @@ def _next_steps(report: Mapping[str, Any]) -> list[str]:
                    + "、".join(f"{k}×{v}" for k, v in top) + " ⇒ 参数表/口径要按它改")
     if report.get("pending_questions"):
         out.append(f"有 {report['pending_questions']} 个问题在等用户回答 ⇒ 那是唯一该「停下来」的地方")
+    # ---- S-07：D 的报告"有调用、无落点"（诊断；判定与口径都在 `agent_d` 那份读数里）
+    landing = report.get("report_landing") or {}
+    if landing and not landing.get("checked"):
+        out.append("D 的报告落点这一格**没查成**（" + str(landing.get("reason") or "声明读不到")
+                   + "）⇒ 那是「没读成」，不是「没有调用」")
+    elif landing.get("calls") and not landing.get("landed"):
+        out.append(f"D 调用过 `write_report` {landing['calls']} 次，而台账里没有一张表收得下它"
+                   "（**有产物无台账**：`REPORT_KINDS` 四档是 C 的报告种类、"
+                   "`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports`）⇒ 要么人裁扩 kind / 新开表，"
+                   "要么把这条读数当结论读（`44 J-01` 的裁定：本轮只做读数）")
+    # ---- S-02：声明了、但一条召唤行都没有的动作（诊断；判定在 `conductor` 那份读数里）
+    uncalled = report.get("uncalled_actions") or {}
+    if uncalled and not uncalled.get("checked"):
+        out.append("「声明了但没被召唤过的动作」这一格**没查成**（"
+                   + str(uncalled.get("reason") or "读不到")
+                   + "）⇒ 那是「没读成」，不是「全都没被调用」")
+    elif int(uncalled.get("count") or 0):
+        head = "、".join(f"{a.get('role')}.{a.get('action')}"
+                        for a in (uncalled.get("uncalled") or [])[:4])
+        out.append(f"有 {uncalled['count']} 个动作声明了却一次都没被召唤过（例如 {head}）"
+                   f"⇒ 该不该派归秘书/主控判断（`44 S-02` 只做读数，不进闸门）；"
+                   "要动它们就派活，别让它们在声明表里挂着")
     # `draft/39` §6.15：把后几批新落的两个卡点读数接进"下一步"。
     rounds = report.get("attack_rounds") or {}
     if rounds.get("no_product_count"):
@@ -294,6 +405,9 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
     infl = report.get("in_flight") or {}
     five = report.get("five_bit") or {}
     ref = report.get("refusals") or {}
+    fac = report.get("faculty") or {}
+    hygiene = fac.get("conjecture_hygiene") or {}
+    strength = fac.get("claim_strength") or {}
     lines = [
         f"# 项目状态报告（{report.get('generated_at')}）", "",
         f"- 工作区：`{report.get('workspace')}`",
@@ -306,6 +420,38 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         got = tables.get(name) or {}
         recent = "；".join(f"{r.get('id')} {r.get('hint')}" for r in (got.get("recent") or [])[-3:])
         lines.append(f"| `{name}` | {got.get('count', 0)} | {recent or '（无）'} |")
+    # ---- S-07：D 的报告"有调用、无落点"（诊断读数，只在这里看得见）
+    landing = report.get("report_landing") or {}
+    if landing and not landing.get("checked"):
+        lines.append(f"- D 的报告落点：**没查成**（{landing.get('reason') or '声明读不到'}）"
+                     "—— 那是「没读成」，不是「没有调用」")
+    elif landing:
+        if landing.get("calls"):
+            tail = ("**有产物无台账**（结构性：今天没有一张表收得下 D 的报告，"
+                    "不是「这一趟没写」）" if not landing.get("landed")
+                    else f"有落点：{'、'.join(landing.get('landing_tables') or [])}")
+            lines.append(f"- D 的报告落点：`write_report` 调用 **{landing['calls']}** 次 / "
+                         f"台账落点 **{landing['landed']}** 行 ⇒ {tail}")
+        else:
+            lines.append("- D 的报告落点：这一屏没有调用过 `write_report`（0 次）")
+    # ---- S-02：声明了、但一条召唤行都没有的动作（诊断读数）
+    uncalled = report.get("uncalled_actions") or {}
+    if uncalled and not uncalled.get("checked"):
+        lines.append(f"- 声明了但没被召唤过的动作：**没查成**"
+                     f"（{uncalled.get('reason') or '读不到'}）—— 那是「没读成」，"
+                     "不是「全都没被调用」")
+    elif uncalled:
+        n = int(uncalled.get("count") or 0)
+        if n:
+            head = "、".join(f"{a.get('role')}.{a.get('action')}"
+                            for a in (uncalled.get("uncalled") or [])[:6])
+            lines.append(f"- 声明了但没被召唤过的动作：**{n}** 个"
+                         f"（声明 {uncalled.get('declared_total')} / "
+                         f"有召唤行 {uncalled.get('called_total')}；例如 {head}）"
+                         "—— 该不该派归秘书/主控判断，这条读数不构成闸门")
+        else:
+            lines.append("- 声明了但没被召唤过的动作：**0** 个"
+                         "（每个声明过的动作都至少被召唤过一次）")
     lines += [
         "", "## 二、交接（手稿账本：谁→谁，一行一份）", "",
         f"- 账本行数：**{ms.get('rows', 0)}**（模型自己填的 notify {ms.get('model_authored', 0)} 行 / "
@@ -321,7 +467,10 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
     lines += [
         "", "## 三、卡点（在飞 / 被拒 / 停机 / 待答）", "",
         f"- 在飞任务：**{infl.get('running_tasks', 0)}**"
-        + (f"（{infl.get('running_task_ids')}）" if infl.get("running_task_ids") else ""),
+        + (f"（{infl.get('running_task_ids')}）" if infl.get("running_task_ids") else "")
+        + (f"；其中顶趟行 {infl['top_level_runs']} 条 —— **顶趟 = 用户发起的那一趟，不是召唤**"
+           f"（`tasks` 这一屏数的是台账全量；召唤数看 `conductor.stats()` 的 `started_total`）"
+           if infl.get("top_level_runs") else ""),
         f"- 活进程登记：**{len(infl.get('live_pids') or [])}** 个"
         + ("：" + "、".join(f"{p['role']}#{p['pid']}" for p in infl["live_pids"])
            if infl.get("live_pids") else ""),
@@ -346,6 +495,12 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
         f"- 集体插话：发出 {report['interjections']['sent']} 条、被读 {report['interjections']['seen_events']} 次；"
         f"其中改变做法 {report['interjections']['changed_action']} 次 / 未改变 "
         f"{report['interjections']['unchanged_action']} 次",
+        # EE-04：官能机械半进报告（同一份读数既写 .json 也写 .md —— 只写一边
+        # 等于"落盘了但没人看得见"）。
+        f"- 官能机械半：猜想卫生 {hygiene.get('verdict') or '（没读数）'}"
+        f"（{len(hygiene.get('findings') or [])} 条读数）；"
+        f"断言强度对账 {len(strength.get('overclaimed') or [])} 条 overclaim / "
+        f"{len(strength.get('missing_evidence') or [])} 条判不了",
         "", "## 四、下一步（从读数派生，不是模型写的）", "",
     ]
     lines += [f"- {s}" for s in (report.get("next_steps") or [])]

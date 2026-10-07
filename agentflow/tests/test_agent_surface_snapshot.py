@@ -51,6 +51,8 @@ AGENT_CLASSES: dict[str, tuple[str, str]] = {
     "F": ("agentflow.agent_f", "AgentF"),
     "G": ("agentflow.agent_g", "AgentG"),
     "H": ("agentflow.agent_h", "AgentH"),
+    # V（F-02 起）：证明级验证（只读）。它是第 9 个角色包，2026-10-06 落地。
+    "V": ("agentflow.agent_v", "AgentV"),
     "M": ("agentflow.conductor", "Conductor"),
 }
 
@@ -153,15 +155,15 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
     with tempfile.TemporaryDirectory(prefix="agent-surface-") as td:
         snap = _snapshot(pathlib.Path(td))
 
-    assert snap["role_count"] == 9, snap["role_count"]
-    assert snap["schema_roles"] == list(S.ROLES) == list("ABCDEFGH")
+    assert snap["role_count"] == 10, snap["role_count"]
+    assert snap["schema_roles"] == list(S.ROLES) == list("ABCDEFGHV")
     total_actions = sum(len(v["actions"]) for v in snap["roles"].values())
     live_actions = sum(len(v) for v in C.CAPABILITIES.values())
     assert total_actions == live_actions, (
         f"快照扫到 {total_actions} 条动作，而现场 `CAPABILITIES` 是 {live_actions} 条"
         "（快照漏扫了某些角色）")
     assert total_actions >= 54, f"动作总数缩到 {total_actions} 条（加动作之前是 54）"
-    assert sum(len(v["edges"]) for v in snap["roles"].values()) == 29
+    assert sum(len(v["edges"]) for v in snap["roles"].values()) == 32
     for role, got in snap["roles"].items():
         assert got["tools"], f"{role} 一个工具都没有"
         assert len(got["prompt"]) > 5000, f"{role} 的提示词只有 {len(got['prompt'])} 字符"

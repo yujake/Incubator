@@ -194,6 +194,47 @@ def inherit_defects(round_row: Mapping[str, Any], *, clean_ids: Iterable[str]) -
     return out
 
 
+#: 预算读数读不到时要说的话（P-09 的代码那一半，`draft/44:60`）。
+#:
+#: 它是"一处口径"而不是"两处措辞"：代码侧（F 写进 `why_strategy` 与返回值的
+#: `budget_reading.why`）与提示词侧（`agent_prompts.ROLE_BRIEFS["E"].policy`）
+#: 引用的是这一个常量 —— 哪一处被改成别的说法，
+#: `tests/test_agent_f_inference.py::test_p09_the_framework_written_why_strategy_carries_the_same_sentence`
+#: 就会红。
+#:
+#: 为什么不能写成"那时按最保守的做法办"（本仓库此前在提示词里就是那个方向）：
+#: 读不到不等于不许花。把"读数缺失"折成"全局停摆"是相反的方向，
+#: 而且那正是本项目最贵的缺陷形态（把 null 与 0 折成同一个值）。
+BUDGET_UNREADABLE_NOTE = (
+    "代价读数读不到时如实说读不到；那是「读不到」，不是「没有代价」，"
+    "也不因此把所有的路都堵死"
+)
+
+#: 读数读不到时，钱由谁管（file:line 证据写成常量，好让"证据"本身可被引用与断言）。
+#:
+#: - `conductor.py:1063-1077`：`[4a]` FC-19 预算守卫 —— `self._meter_guard(role, budget)`
+#:   在写 `running` 行之前跑（顺序是判据的一部分：干完再拒不是同一个功能）；
+#: - `policy.py:338-343`：`Refusal("budget_exceeded", …, "usd_budget")` 那一档。
+BUDGET_GUARD_NOTE = (
+    "钱仍由全局预算守卫管：conductor.py:1063-1077 的 [4a] 开工前守卫"
+    "（guard() 在写 running 行之前跑）与 policy.py:338-343 的 usd_budget 判据"
+)
+
+#: 预算读数的真源为什么还没接上（缺口登记：不许"永远 unknown 但没人说"）。
+#:
+#: 缺的上下文是当前这一次召唤的 `task_id`：`conductor.py:1140-1144` 把它交给了后端，
+#: `agent_loop.py:2652-2656` 的循环也拿得到，但工具层拿不到 ——
+#: `tools/base.py:1304-1313` 的 `ToolRegistry.call` 没有任务上下文的形参，
+#: 于是 `tools/attack_tools.py:281-300` 的 `_agent_for(store)` 只有 `store`。
+BUDGET_GAP_NOTE = (
+    "真源还没接上：工具路径拿不到当前这一次召唤的 task_id"
+    "（缺的是这个上下文：tools/base.py:1304 的 ToolRegistry.call 没有任务上下文的形参，"
+    "tools/attack_tools.py:281-300 的 _agent_for(store) 只能拿到 store）"
+    "⇒ 注入点暂时没有值可注入；它是残余集 R1 的「P-09 粒度口径」的前置"
+    "（记账粒度是召唤级：tokenmeter.py:250-286 的 usd_for / usd_reading 都以 task_id 为键）"
+)
+
+
 def pre_spend_gate(*, goal: str, testable: str = "", deps_refuted: Sequence[str] = (),
                    tried_strategies: Sequence[str] = (), budget_left_usd: float | None = None,
                    ) -> dict[str, Any]:
@@ -216,10 +257,23 @@ def pre_spend_gate(*, goal: str, testable: str = "", deps_refuted: Sequence[str]
     if refuted:
         reasons.append(f"引到的命题里有已被作废/反驳的：{refuted} ⇒ 先把依赖换掉再花这一轮的钱")
     tried = [str(x) for x in tried_strategies]
-    checks["all_strategies_tried"] = len(set(tried)) >= len(STRATEGIES)
-    if checks["all_strategies_tried"]:
-        reasons.append(f"{len(STRATEGIES)} 招都试过了 ⇒ 这一轮应落 `dead_end`（换子目标），"
-                       "而不是再花钱试同一批招")
+    remaining = [s for s in STRATEGIES if s not in set(tried)]
+    checks["strategies_tried"] = {
+        "tried": sorted(set(tried)), "remaining": remaining, "exhausted": not remaining,
+        # 代价读数（P-09）：这句话是读数，不是否决 —— 见下面那段边界说明。
+        "note": (f"{len(STRATEGIES)} 招里试过 {len(set(tried))} 招、还剩 {len(remaining)} 招"
+                 + ("（已穷尽：再试只能是同一批招）" if not remaining else "")),
+    }
+    # ---- P-09（`draft/44:60`）：计数不否决花钱。
+    #
+    # 此前这里是 `checks["all_strategies_tried"] = len(set(tried)) >= len(STRATEGIES)`
+    # 并把它写进 `reasons` ⇒ `spend=False`。那是"该模型抉择的事被写死成一个死旋钮"：
+    # 九招试完该不该再花一轮（换子目标 vs 再试同一批招）是代价判断，不是事实。
+    # 现在它只是一条读数（`strategies_tried`：试过哪几招 / 还剩哪几招 / 是否穷尽、
+    # 以及一句代价读数），由 F 自己按代价裁量并把裁量写进 `why_strategy`（留痕）。
+    #
+    # 上面四条检查（空目标 / 没有可检验形式 / 引到已作废的命题 / 预算耗尽）照旧是事实，
+    # 仍然 `spend=False` —— 删它们会让"缺定义也去花钱"，那不是同一条裁定管的事。
     checks["budget_known"] = budget_left_usd is not None
     if budget_left_usd is not None:
         checks["budget_ok"] = float(budget_left_usd) > 0

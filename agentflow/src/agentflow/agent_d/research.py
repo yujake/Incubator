@@ -1,6 +1,6 @@
 """角色 D 的动作 `research`（`goal-7f5116c1` M6：从 `agent_d.py` 拆出来，逐字未改）。
 
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`tests/test_agent_split_is_verbatim.py`）。
+拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。
 """
 from __future__ import annotations
 
@@ -78,6 +78,11 @@ class _Research:
             "suggestions": suggestions,
             "evidence": ev,
             "llm_used": llm_used,
+            # 三态读数（`R1-A1`）：`llm_used=False` 分不出"没接线"与"接了但失败"，
+            # 这一格说清是哪一种（`{kind,state,reason,model,calls,task_id}`）。
+            # 它是这一趟的读数：既随返回值出去（落 `out/tasks/<task_id>.json`），
+            # 也是"这一次召唤内调了几次模型"的落点（P-09 的召唤级口径）。
+            "llm_reading": dict(getattr(self, "last_llm_reading", {}) or {}),
             "trace_mode": ev.get("trace_mode"),
             "c_queries": list(ev.get("c_queries") or []),
             "c_evidence": verdict.get("c_evidence") or self._c_summary(ev.get("c_queries") or []),

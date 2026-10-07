@@ -94,6 +94,21 @@ class _RunExperiment:
                 "静默忽略会让调用方以为自己指定了检查条件（说明了 imports，实际用的是默认值）"
             )
 
+        # ---- R-01（`draft/44`）：这四条不用跑脚本就能判 ⇒ 在起子进程之前判掉。
+        #
+        # 真机读数：52 次失败 / 110.7 分钟 / 0 行 —— 脚本先跑完（有的跑十分钟），
+        # 行才被 `Experiment.validate()` 拒。判据不是新写的一份：
+        # `schema.experiment_preflight_problems` 就是 `validate()` 里那一段
+        # （口径一处），这里只是把它提前叫一次。
+        preflight = S.experiment_preflight_problems(
+            method=method, certificate=certificate, search_bound=search_bound,
+            for_question_id=for_question_id)
+        if preflight:
+            raise ExperimentError(
+                "实验参数在**跑脚本之前**就不合格（R-01：一分钟都不该花）："
+                + "；".join(preflight)
+            )
+
         # ---- [1] 路径解析（越界即拒绝）
         path = self._resolve(script_path)
         if not path.is_file():

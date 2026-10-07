@@ -31,7 +31,7 @@
 # ① 不装：直接进源码目录跑（最快，本机实测可用）
 cd D:\Incubator\agentflow\src
 $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
-python -m agentflow.cli --help          # 该看到 26 个子命令
+python -m agentflow.cli --help          # 该看到 24 个子命令
 
 # ② 装成一个命令（打包元数据齐：`[project.scripts] agentflow = "agentflow.cli:main"`、
 #    包布局 `src/`、运行期依赖只有 filelock）
@@ -53,14 +53,14 @@ agentflow --help                        # 与上面是同一个入口
 
 | 命令 | 该看到什么 |
 |---|---|
-| `python -m agentflow.cli demo` | 一串 `✓` 与最后一行「演示成功」，**退出码 0** |
+| `python -m agentflow.cli demo`（**旧路径**：保留可达 —— 唯一不需要模型 key 的端到端路径；主路径是 `run-agent`） | 一串 `✓` 与最后一行「演示成功」，**退出码 0** |
 | `python -m agentflow.cli tools --role H` | H 的工具面清单（只读角色看不到写工具 —— 那是设计） |
 | `python -m agentflow.cli status` | 各表计数表（空工作区全 0 是正常的） |
 
 **跑完之后一定要自查**（这一步是把"跑完了"与"跑对了"分开的唯一手段）：
 
 ```powershell
-python -m agentflow.cli --root D:\Incubator\projects\first verify   # 该看到「错误 0 / 警告 0」
+python -m agentflow.cli verify   # 不给 --root ⇒ 用代码里的缺省根（`cli.DEFAULT_ROOT`）；该看到「错误 0 / 警告 0」
 ```
 
 `verify` 是**离线的不变量审计**（表之间对不上就报，例如"有一笔花销挂在不存在的任务上"）。
@@ -78,7 +78,7 @@ python -m agentflow.cli project run --name first --books D:\books `
 ```
 
 实测（2026-09-30，2 本书 87 页 + 0.05 美元上限）：冷启动登记 2/2 本，6 次模型调用花
-**0.0032 美元**，退出码 0；产物在 `D:\Incubator\projects\first\out\run-1\` 的**六件**：
+**0.0032 美元**，退出码 0；产物在**项目根**（默认 `projects.DEFAULT_PROJECTS_DIR`，可用 `$env:AGENTFLOW_PROJECTS_DIR` 覆盖）下的 `<工作区>/out/run-1/` 的**六件**：
 `run-manifest.json`（这一跑的全部读数）/ `model-transcript.jsonl`（逐次调用）/
 `evidence.json`（来源 + 全文 sha256 + 逐字回验）/ `claims.json`（拆出来的断言）/
 `cost.json`（花销账）/ `report.md`（**人读的那一份**）。同一次实测里 9 条断言
@@ -139,7 +139,7 @@ python -m agentflow.cli run-agent M --task "…" --subagents                    
 
 ## 1. 这是什么
 
-**一个用户控制的主控（M），按需唤起 A–H 八个角色；角色之间也可以互相唤起。**
+**一个用户控制的主控（M），按需唤起 A–H 与 V 九个角色；角色之间也可以互相唤起。**
 
 ```
                         ┌──────────── 用户 ────────────┐
@@ -161,24 +161,26 @@ python -m agentflow.cli run-agent M --task "…" --subagents                    
 
 | 角色 | 一句话职责 | 副作用面 | 它能召唤谁 |
 |---|---|---|---|
-| **M** | 召唤、策略判定、并发调度、取消、写运行台账 | 只写 `tasks` | A–H 全部 |
+| **M** | 召唤、策略判定、并发调度、取消、写运行台账 | 只写 `tasks` | A–H + V 全部 |
 | **A** | 文献检索 + 下载 + 登记 | `effect` = `read`/`write_local` × **`external=egress`**（3 件：`search.literature`/`providers`/`download`）；**不是唯一有外呼的角色**，见下 | B |
 | **B** | 抽取概念与关系（含**引文逐字回验**） | `write_local` × **`external=egress`**（`ocr.run` 首次会下 easyocr 模型） | C |
-| **C** | **只读**关系分析（最热/路径/冷门/缺口/矛盾/结构重复） | `read`（工具面 **17** 个只读工具，**零写工具**、`external` 恒 `none`） | **无**（连"请求"都不直接发） |
+| **C** | **只读**关系分析（最热/路径/冷门/缺口/矛盾/结构重复） | `read`（工具面 **21** 个只读工具，**零写工具**、`external` 恒 `none`） | **无**（连"请求"都不直接发） |
 | **D** | 研究循环：把 C 的报告变成研究问题并回答 | `write_local`；`external` **恒为 `none`**（零 `egress`、零 `exec`） | A B C E F |
 | **E** | 数值实验 + 形式化验证（**计算类拿不到 `proof`**） | `write_local` × **`external=exec`**（起 Lean/Coq/Isabelle 与实验脚本子进程） | B D |
-| **F** | 多轮难题攻坚（预算不足即拒绝立项） | `write_local` × **`external=exec`**（`verify.run_experiment` / `verify.check_formal`；`attack.step` 经 `_deploy_e` 起 E 的脚本子进程，见 P-13 §4.3 第 10 条） | A B C D E |
-| **G** | 撰写：断言 / 依赖 / 稿件 / 修订 | `write_local` × **`external=exec`**（与 F 同源） | D E F |
-| **H** | **审校**：G1–G15 门、发现落库、状态更新 | `write_local`（**只有一个被钉死的写面**）；两根轴上 `external` **恒为 `none`**（零 `egress`、零 `exec`） | **只能召唤 G** |
+| **F** | 多轮难题攻坚（预算不足即拒绝立项） | `write_local` × **`external=exec`**（`verify.run_experiment` / `verify.check_formal`；`attack.step` 经 `_deploy_e` 起 E 的脚本子进程，见 P-13 §4.3 第 10 条） | A B C D E V |
+| **G** | 撰写：断言 / 依赖 / 稿件 / 修订 | `write_local` × **`external=exec`**（与 F 同源） | A D E F |
+| **H** | **审校**：G1–G15 门、发现落库、状态更新 | `write_local`（**只有一个被钉死的写面**）；两根轴上 `external` **恒为 `none`**（零 `egress`、零 `exec`） | A E G |
+| **V** | **证明级验证**：把 F 交回来的证明按写成后的样子整体重读，给三态结论（`成立`/`有毛病`/`看不出来`）并签五元位第 3 位 | `read`（工具面 **14** 个只读工具，**零写工具**、`external` 恒 `none`；唯一的产物是 `verifications/<命题号>.jsonl` 这个**文件**，不是表） | **只能召唤 F** |
 
 > ⭐ **"副作用面"这一列在 B3 收官后是两根轴**（`effect` × `external`，`docs/PROPOSALS.md` **P-13**）。
 > **"A 是唯一联网角色"这句话今天不成立** —— 已按实测更正（观测 2026-09-26T04:44）：
 > `external != "none"` 的工具有 **6 件**（`ocr.run` / `search.download` / `search.literature` /
 > `search.providers` / `verify.check_formal` / `verify.run_experiment`），它们分布在
-> **`{'A','B','E','F','G'}`** 这五个角色上（C / D / H 一个都没有）。
+> **`{'A','B','E','F','G'}`** 这五个角色上（C / D / H / V 一个都没有）。
 > 复跑：`$env:PYTHONPATH='src'; python -m agentflow.cli tools`，再看某角色 `--role <X>`。
-> ⚠️ 工具条数有**两个口径**，不许互换：`build_registry(store=None)` ⇒ **50**；
-> 含 store 的完整装配（= `cli tools`）⇒ **55**。见 `docs/ROLE-SPECS.md` §0.3。
+> ⚠️ 工具条数有**两个口径**，不许互换：`build_registry(store=None)` ⇒ **68**；
+> 含 store 的完整装配（= `cli tools`）⇒ **81**。见 `docs/ROLE-SPECS.md` §0.3
+> （观测 2026-10-06（角色 V 落地）；V 落地前是 62 / 78）。
 
 **三层结构**（`DEVELOPMENT.md` §2.1）：
 
@@ -207,7 +209,8 @@ cd src
 python -m agentflow.cli demo
 ```
 
-`demo` 自建素材与独立工作区，把整条链路跑一遍并打印逐项判定；**退出码 0 = 全部通过**。
+`demo`（**旧路径**：保留可达 —— 它是唯一不需要模型 key 的端到端路径；主路径是 `run-agent`）
+自建素材与独立工作区，把整条链路跑一遍并打印逐项判定；**退出码 0 = 全部通过**。
 
 ### 跑测试
 
@@ -243,7 +246,7 @@ cd D:\Incubator\agentflow\src
 python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 ```
 
-它把常用的五件事列成一份菜单（项目 / 端到端主题 / 数据状态 / 角色工具面 / 离线自检），
+它把常用的四件事列成一份菜单（项目 / 端到端主题 / 数据状态 / 角色工具面），
 逐项问清参数再调对应的子命令 —— 于是"能用"这件事不必依赖记住十几个开关。
 菜单里每一步都走**同一条实现**（它只是把回答翻成子命令的 argv），
 所以手敲命令与走菜单的结果逐字一致。
@@ -277,48 +280,17 @@ python -m agentflow.cli tools --role H                 # 看某个角色的工�
 本机网络说明：`github.com` 系域名被 hosts 劫持到 `127.0.0.1`；镜像可用 `https://ghproxy.net/`、
 `https://gh-proxy.com/`。`config.yaml` 的 `download.mirrors` 用于直连失败时的前缀回退。
 
-### 3.1 项目式用法：一个项目一个文件夹 + 本地书架（2026-09-28 新增）
+### 3.1 项目式用法（本地书架）：已退场
 
-手里已经有整柜 PDF 时，不必先联网检索。`project` 这个动词把三件事绑在一起：
-**项目工作区**（一个项目一个文件夹）、**本地书架**（把目录里的 PDF 登记进项目库）、
-**冷启动 / 热启动**（判据就是那个项目的文件夹在不在）。
-
-```powershell
-cd D:\Incubator\agentflow\src
-$env:AGENTFLOW_MODEL_API_KEY = "..."          # 模型 key 只从环境变量来，命令行不许传
-
-python -m agentflow.cli project list           # 现有项目与冷/热次数
-python -m agentflow.cli project plan --books D:\books --topic "convex duality"   # 只说明会怎么跑，不写字节
-
-# 冷启动（project1 还不存在 ⇒ 建工作区 + 登记书 + 跑）
-python -m agentflow.cli project run --books D:\books --extract --extract-rounds 7 `
-    --topic "convex optimization duality and Lagrange multipliers" --budget-usd 0.5 --max-calls 1
-
-# 热启动（同一个项目文件夹已存在 ⇒ 复用工作区；已登记的书按内容 hash 跳过，不重灌）
-python -m agentflow.cli project run --name project1 --books D:\books --topic "另一个主题"
-```
-
-落点：默认 `D:\Incubator\projects\project<N>`（`--projects-dir` 或环境变量
-`AGENTFLOW_PROJECTS_DIR` 可改；缺省名字是 `project1`/`project2`/…，编号不重用）。
-每个项目文件夹里是 `data/`（表）、`library/`（书的副本）、`out/run-<n>/`（每次运行的六件产物）、
-`project.json`（项目卡：建了什么、每次是冷还是热、跑了什么）。
-
-`--extract` 那一步是模型读书：它按 `llm.LLMExtractor` 的契约抽概念与关系，
-**每条关系的引文都要在原文里逐字找到**，找不到的当场剔除并计数
-（`relations_dropped` / `drop_reasons`）。所以"模型读了这些书"不是一句话，
-而是一组可复核的数字（概念数 / 关系数 / 引文过验 / 被剔除）。
-
-```text
-实测（2026-09-28，7 本书 2418 页）：7/7 本抽出概念，174 个概念 / 110 条关系；
-主题那一跑 5 条断言全部 verified，回验级别 = fulltext（页码逐条给出）。
-两步的花销分开记：抽取那一步走 scope='extract'，主题作答走 scope='reason'；
-`--budget-usd` 只管后者（前者由轮数=本数封顶），两个数都在输出与 cost.json 里。
-```
-
-边界（不写清楚就会被读成"已经解决了"）：一本书一次只读前 6 万字符
-（`LLMExtractor.max_chars` 的缺省；大书的后半本这一跑读不到）；
-抽取要的输出上限与"最多 12 条概念 / 12 条关系"的提示词限制都在
-`llm.DEFAULT_PROMPT_TEMPLATE` 里，超了会被截断 ⇒ 整次抽取作废。
+> 这一段原先教的是「手里已经有整柜 PDF 时不必先联网检索」的旧流水线
+> （`project list` / `project plan --books …` / `project run --books … --extract`），落点写在
+> 仓库外的旧根 `D:\Incubator\projects\project<N>`。淘汰理由（`draft/44:89` 的 L-04b 与
+> `draft/48-09:720-721`）：那是**一次单机真跑被写成了能力陈述** —— `draft/43-B:221` 逐字
+> 「把一次历史真跑写成能力陈述」，而今天**没有任何判据或真机读数复现它**
+> （新根 0 张项目卡；`--books` 的 15 次运行全落在旧根）。
+> **四块留痕**（原先想做什么 / 怎么做 / 有没有被证明 work 过 / 为什么淘汰 + 教训）见
+> `draft/65a` §A-2。今天的主路径是 `run-agent`（`python -m agentflow.cli run-agent <role> --task …`），
+> 本地素材走 `search.shelf`。
 
 #### 3.1.1 四层证据各自的强度（**读产物前先看这个**）
 
@@ -352,19 +324,19 @@ agentflow/
 ├── DESIGN.md / DESIGN-TOOLS.md / DESIGN-INTERACTIONS.md / DESIGN-ROLES.md / DESIGN-CONDUCTOR.md
 │                             设计理由（不构成判据；现状导读见 ../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md）
 ├── config.yaml               运行时可调项（注释里注明各字段落到哪个模块）
-├── .noai-paths               禁改区清单（**38** 条 glob / **35** 条唯一路径 / 7 类；**台账条目数与欠签不写定值**（每签一个字就变 —— 量法与当次值见 §6.2 那两格，别再往这一行抄数）；前两个数由 `tests/test_release_all.py::test_readme_file_tree_numbers_match_the_repo` 守着）
+├── .noai-paths               禁改区清单（**40** 条 glob / **37** 条唯一路径 / 7 类；**台账条目数与欠签不写定值**（每签一个字就变 —— 量法与当次值见 §6.2 那两格，别再往这一行抄数）；前两个数由 `tests/test_release_all.py::test_readme_file_tree_numbers_match_the_repo` 守着）
 ├── pyproject.toml            包元数据 + pytest 配置（**唯一**一处；不要再加 tests/pytest.ini）
 ├── docs/
 │   ├── INDEX.md              docs/ 的索引与"按角色怎么读"
-│   ├── ROLE-SPECS.md         ★ 八个角色 + 主控（M）的详细规格（每节 10 条同构结构）
+│   ├── ROLE-SPECS.md         ★ 九个角色 + 主控（M）的详细规格（每节 10 条同构结构）
 │   ├── NOAI-GOVERNANCE.md    FC-27 门的机制与人工批准流程
 │   ├── PROPOSALS.md          已裁决的缺口与提案（P / G / N 三类）
 │   ├── FORMAL-TOOLCHAIN.md   形式化后端（Lean）的工具链口径
 │   ├── SCHEMA-DRAFT-management.md · SCHEMA-MIGRATION-PROPOSAL-claims.md
 │   │   · SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md
 │   │                         表结构与迁移提案（不是判据）
-│   ├── ROLE-SPECS-DRAFT-N-O-Q.md · TOOLBOX-DRAFT-roles.md
-│   │                         角色与工具栏的草案（不是判据）
+│   ├── ROLE-SPECS-DRAFT-N-O-Q.md · ROLE-SPECS-DRAFT-V.md · TOOLBOX-DRAFT-roles.md
+│   │                         角色与工具栏的草案（不是判据；V 那份的原任务已落地，判据在 ROLE-SPECS.md §V）
 │   ├── PROPOSAL-side-effect-axes.md
 │   │                         副作用第二根轴（external：egress / exec）的提案
 │   └── NOAI-CHANGE-LIST-management.md · NOAI-SUSPENSION-2026-09-25.md · NOAI-SUSPENSION-2026-09-28.md
@@ -415,8 +387,8 @@ agentflow/
 │   │                         项目工作区 / A→B→C→D 流水线 / 端到端一条命令 / 自主轮次与周期汇报
 │   ├── demo.py / userio.py / console.py / tty.py
 │   │                         离线演示 / 用户频道（提问与"没答"三态）/ 输出编码 / 终端呈现原语
-│   ├── cli.py / __main__.py  命令行入口（26 个子命令，`python -m agentflow.cli --help`）
-│   ├── agent_a..h.py         八个角色（每个都能 `python -m agentflow.agent_x` 自检）
+│   ├── cli.py / __main__.py  命令行入口（24 个子命令，`python -m agentflow.cli --help`）
+│   ├── agent_a..h/ · agent_v/  九个角色（每个都能 `python -m agentflow.agent_x` 自检；V 是证明级验证，只读）
 │   └── tools/                工具层（**14** 个 `*_tools.py`：table / fs / search / ocr / graph /
 │                             trace / research / verify / attack / doc / review / conjecture /
 │                             conductor / manuscript，外加 `base.py` 与装配点 `__init__.py`；
@@ -568,8 +540,8 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
 
 | 数 | 量的是什么 | 实测（观测 **2026-09-27 15:1x（`FIX11` 题 3 落地后复测）**；这个时间戳是这一格的一部分 —— 数字会变，量法不会） | 复跑方式 |
 |---|---|---:|---|
-| **清单 glob 数** | `.noai-paths` 里的**条目行**数（同一个文件可以登记两次） | 由命令当次产出：**38**（**唯一路径 35**） | `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count` |
-| **唯一路径数** | 上述 glob 去重 | 由命令当次产出：**35** | 同上再加 `ForEach-Object { ($_.Line -split '\s+')[0] } \| Select-Object -Unique` |
+| **清单 glob 数** | `.noai-paths` 里的**条目行**数（同一个文件可以登记两次） | 由命令当次产出：**40**（**唯一路径 37**） | `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count` |
+| **唯一路径数** | 上述 glob 去重 | 由命令当次产出：**37** | 同上再加 `ForEach-Object { ($_.Line -split '\s+')[0] } \| Select-Object -Unique` |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数（= 需要签字的行数） | **不写定值**（每签一个字就变）：当次由右列命令产出 | `python -c "import json;print(len(json.load(open('.noai-approvals.json', encoding='utf-8'))['entries']))"` |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** | `Select-String -Path .noai-paths -Pattern '^\[category:'` |
 | （派生）**欠签** | 台账条目 × 2 名 reviewer | **不写定值**（每签一个字就变）：由右列命令当次产出 `entries × 2 − Σ len(reviewers)`；**0 签的条目也随签字而变**（当次以 `python scripts/noai_gate.py --check-approvals` 的输出为准，这里不点名具体文件） | `python -c "import json;d=json.load(open('.noai-approvals.json',encoding='utf-8'));print(len(d['entries'])*2-sum(len(e['reviewers']) for e in d['entries']))"` |

@@ -96,7 +96,7 @@ def test_every_role_is_built_through_its_spec() -> None:
             if peer not in reg.roles():
                 bad.append(f"{role}：peers 里的 {peer!r} 不在注册表里")
     assert not bad, "角色声明与装配期契约对不上：\n  - " + "\n  - ".join(bad)
-    assert len(reg.roles()) == 9, "反真空：九个角色（A–H + M）"
+    assert len(reg.roles()) == 10, "反真空：十个角色（A–H + V + M）"
 
 
 def test_the_builder_only_delegates() -> None:

@@ -206,8 +206,19 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
 
 
 def list_verifications(root: str | Path, *, statement_id: str = "",
-             limit: int = 50) -> tuple[list[dict[str, Any]], list[str]]:
-    """列验证台账（可按命题过滤）；返回 `(行, 坏行说明)` —— 坏行照实报出，不静默跳过。"""
+             limit: int | None = 50) -> tuple[list[dict[str, Any]], list[str]]:
+    """列验证台账（可按命题过滤）；返回 `(行, 坏行说明)` —— 坏行照实报出，不静默跳过。
+
+    ## `limit=None` 与 `limit=0` 必须分开（V1，`draft/44` J-14）
+
+    实现此前写的是 `out[-limit:]`，而 `-0 == 0` ⇒ `limit=0` 恰好等于全量。
+    那是一个靠运算符巧合成立的语义：调用方写 `limit=0`（"不要行"）会拿到全部行，
+    而没有任何报错。三态纪律在分页上同样成立 —— "要零条"与"要全部"是两件事。
+
+      - `limit=None` ⇒ 全量（"我要看完整本台账"）；
+      - `limit=0`   ⇒ 零条（空表）；
+      - `limit=n>0` ⇒ 末尾 n 条（按 (命题号, 编号) 排序后取尾部）。
+    """
     base = verifications_dir(root)
     out: list[dict[str, Any]] = []
     problems: list[str] = []
@@ -218,13 +229,15 @@ def list_verifications(root: str | Path, *, statement_id: str = "",
         problems.extend(f"{p.name}: {b}" for b in bad)
         out.extend(rows)
     out.sort(key=lambda r: (str(r.get("statement_id") or ""), str(r.get("verification_id") or "")))
-    return out[-limit:], problems
+    if limit is None:
+        return out, problems
+    return out[-max(0, int(limit)):] if int(limit) > 0 else [], problems
 
 
 def read_verification(root: str | Path, verification_id: str) -> dict[str, Any] | None:
     """按编号取一行（编号在同一命题的文件内唯一；跨文件重号 ⇒ 返回第一个并带 `ambiguous`）。"""
     want = str(verification_id or "").strip()
-    rows, _problems = list_verifications(root, limit=0)
+    rows, _problems = list_verifications(root, limit=None)
     hit = [r for r in rows if str(r.get("verification_id")) == want]
     if not hit:
         return None
@@ -297,7 +310,10 @@ def selftest() -> int:
     good = parse_verdict('{"verdict": "成立", "findings": []}')
     ok_row = record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=good)
     checks.append(("成立才签第 3 位", bit3_payload(ok_row).get("reviewed") is True))
-    checks.append(("追加式（两行）", len(list_verifications(root, limit=0)[0]) == 2))
+    checks.append(("追加式（两行）", len(list_verifications(root, limit=None)[0]) == 2))
+    checks.append(("limit=0 是零条、limit=None 才是全量",
+                   list_verifications(root, limit=0)[0] == []
+                   and len(list_verifications(root, limit=None)[0]) == 2))
     try:
         parse_verdict("我不确定")
         unparsable = False

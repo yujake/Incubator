@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-03T13:35:06+08:00",
+  "generated_at": "2026-10-06T22:02:44+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -19,12 +19,31 @@
       "path": ".noai-paths",
       "glob": ".noai-paths",
       "category": "auth-audit",
-      "sha256": "87751e216f02d2e07a0b8c35204088cfde19990694a432c4d24c8656c46ad38e",
+      "sha256": "715d7b951d83c21ca65dc711165e48a203795058c0fa808f299f443ca78c2d2f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M3（§222）：清单里 specs/ 那一条由 glob 行改成十条具体文件行（tests/test_noai_gate.py::test_manifest_globs_point_at_real_files 要求每一行都指向真实文件），于是 glob 数 29→38、唯一路径 26→35。保护面本身没有放宽：specs/ 下每个角色的声明文件与 specs/__init__.py 都逐条登记。reviewers 仍为 0，留给人审。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:36+08:00",
+          "scope": "新增 tests/golden/*.json 通配行 + src/agentflow/specs/v.py 登记；与 AGENTS.md 逐条一致（--check-consistency=0）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:36+08:00",
+          "scope": "新增 tests/golden/*.json 通配行 + src/agentflow/specs/v.py 登记；与 AGENTS.md 逐条一致（--check-consistency=0）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -32,12 +51,31 @@
       "path": "AGENTS.md",
       "glob": "AGENTS.md",
       "category": "auth-audit",
-      "sha256": "8ae37cfa3baf8222c794a2ebb59c32524c402dfa02864cc4402345558c64bdc8",
+      "sha256": "d99a8d2229d264cb7f558c4d3224f00bc92dc09b0c14c9e80b90c5a4e9164bf4",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M3（§222）：清单里 specs/ 那一条由 glob 行改成十条具体文件行（tests/test_noai_gate.py::test_manifest_globs_point_at_real_files 要求每一行都指向真实文件），于是 glob 数 29→38、唯一路径 26→35。保护面本身没有放宽：specs/ 下每个角色的声明文件与 specs/__init__.py 都逐条登记。reviewers 仍为 0，留给人审。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:36+08:00",
+          "scope": "同上（本清单在 AGENTS.md 的副本，两处必须逐条一致）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:37+08:00",
+          "scope": "同上（本清单在 AGENTS.md 的副本，两处必须逐条一致）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -113,27 +151,27 @@
       "path": "scripts/lint_rules.py",
       "glob": "scripts/lint_rules.py",
       "category": "auth-audit",
-      "sha256": "1a48dd6351e1ab65a4dded0cc3ae366732bad2b971a35e729995003be12728a4",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "d30856ca8a9698e9e871b82ad07228d3f84af16d6e4abd3f016ed92c2d41b043",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:25+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
-          "verdict": "逐行走查通过",
+          "name": "Yu",
+          "at": "2026-10-06T22:02:37+08:00",
+          "scope": "rule_R002_*：补\"注释出口\"分支（复用 R001 的 _explained，>=4 字）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:39+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
-          "verdict": "逐行走查通过",
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:37+08:00",
+          "scope": "rule_R002_*：补\"注释出口\"分支（复用 R001 的 _explained，>=4 字）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -184,12 +222,31 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "79b315fbbea660f0ca398e3651196f2dde5a4724dd61b6e1f487fb7b5dac63a2",
+      "sha256": "e67b00c9af158fecf1b51c5334951913b712b09cb226219a2fd2dad2291aaad4",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-03 用户裁定（draft/37 §59）：给 G 加 paper_package 动作（一次做完 render → compile → 核锚并回报 verdict），capabilities 同步登记 unmatched 条目与实测读数；仍欠 2 名 reviewer 逐行走查（reviewers 留 0）",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:43+08:00",
+          "scope": "_TOOL_GROUPS_BY_ROLE[V]、_KNOWN_UNMATCHED_ACTIONS(+A.shelf_search)、等式 59=21+38+0；:1203 注释更正（H 能召唤 A/E/G）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:43+08:00",
+          "scope": "_TOOL_GROUPS_BY_ROLE[V]、_KNOWN_UNMATCHED_ACTIONS(+A.shelf_search)、等式 59=21+38+0；:1203 注释更正（H 能召唤 A/E/G）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -318,27 +375,27 @@
       "path": "src/agentflow/quoteverify.py",
       "glob": "src/agentflow/quoteverify.py",
       "category": "prover-bridge",
-      "sha256": "30c3c47213d3caa614ce8e1ac01c63518c4144194481962bab72b964c79ec502",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "55ddb9eaf86c99a928147c68794a946d2fc74fd12d29e4141de61da31ed307eb",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:26+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
-          "verdict": "逐行走查通过",
+          "name": "Yu",
+          "at": "2026-10-06T22:02:43+08:00",
+          "scope": "check_quote：空窗口（pr.known and start>end）=> None/empty_page_range + widened:empty 标签；不折成\"引文为假\"",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:40+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
-          "verdict": "逐行走查通过",
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:44+08:00",
+          "scope": "check_quote：空窗口（pr.known and start>end）=> None/empty_page_range + widened:empty 标签；不折成\"引文为假\"",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -382,12 +439,31 @@
       "path": "src/agentflow/specs/a.py",
       "glob": "src/agentflow/specs/a.py",
       "category": "auth-audit",
-      "sha256": "06e58bb02c47b442df7cc1c38589712e38e0b4db2fd26e6058108218043b3d27",
+      "sha256": "9105b68876a544dd7e481090fa927ddf0c3f467eee4fc69d80aa68bb2215426d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-02 用户裁定（draft/37 §44.4/§46）：加 A.ingest_local 与 B.register_statement 两条可召唤动作，并把 statements 加进 WRITE_SETS[B]；由用户点名裁定后应用，2 名 reviewer 的逐行走查仍欠（reviewers 留 0）",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:38+08:00",
+          "scope": "brief 六字段逐字镜像重建（批④：事故叙事/结构复述退场，规则句保留）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:38+08:00",
+          "scope": "brief 六字段逐字镜像重建（批④：事故叙事/结构复述退场，规则句保留）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -395,12 +471,31 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "0e69a6bd05589d9c1232f4320745cf76e4574e69331dc44b9428f79b96224a3e",
+      "sha256": "71bc099284812ef36ad5ab8ccc4205c448755338ddb864675b5482b1c45f6fe3",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-02 用户裁定（draft/37 §44.4/§46）：加 A.ingest_local 与 B.register_statement 两条可召唤动作，并把 statements 加进 WRITE_SETS[B]；由用户点名裁定后应用，2 名 reviewer 的逐行走查仍欠（reviewers 留 0）",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:38+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:39+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -408,12 +503,31 @@
       "path": "src/agentflow/specs/c.py",
       "glob": "src/agentflow/specs/c.py",
       "category": "auth-audit",
-      "sha256": "e4652c40107478093a8281c46d9d595a908aa239b7fca5bbbff27b3e2f909599",
+      "sha256": "5363ea93f614e32f07b68739ca12c8145f0c1fef9b39f28a04eeac8790051192",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 16 P2（round 5）：审阅线六条提示词口径。schema.py 加 literature.matched（LIT_MATCH_STATES = exact/partial/mismatch，空串=还没核，见 §2 R1b），verify.py 加两条：mismatch_literature_processed(error)/partial_match_processed(warning)。specs/a,b,c,d,h,m.py 是 ROLE_BRIEFS 的逐字镜像（用 temp/_p2_sync_spec_brief.py 整份 brief 重渲染，区间外零改动），六条口径本身在 agent_prompts.py。判据：tests/test_review_line_prompts.py（23 条，含反真空）+ tests/test_literature_match.py（8 条，含反真空）+ test_agent_spec_reconciliation.py。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:39+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:39+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -421,12 +535,31 @@
       "path": "src/agentflow/specs/d.py",
       "glob": "src/agentflow/specs/d.py",
       "category": "auth-audit",
-      "sha256": "b6ff408e75ec2a0430dfd8a9a872b4af3ab8de91e2dc3952b44ed7e2c7df6c9e",
+      "sha256": "41382c7651d67ec6f20c5e2925648d5f2addebb686674724699c5dccdd9afd7e",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 16 P2（round 5）：审阅线六条提示词口径。schema.py 加 literature.matched（LIT_MATCH_STATES = exact/partial/mismatch，空串=还没核，见 §2 R1b），verify.py 加两条：mismatch_literature_processed(error)/partial_match_processed(warning)。specs/a,b,c,d,h,m.py 是 ROLE_BRIEFS 的逐字镜像（用 temp/_p2_sync_spec_brief.py 整份 brief 重渲染，区间外零改动），六条口径本身在 agent_prompts.py。判据：tests/test_review_line_prompts.py（23 条，含反真空）+ tests/test_literature_match.py（8 条，含反真空）+ test_agent_spec_reconciliation.py。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:39+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:39+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -434,12 +567,31 @@
       "path": "src/agentflow/specs/e.py",
       "glob": "src/agentflow/specs/e.py",
       "category": "auth-audit",
-      "sha256": "105217ee67c5483133cac44e80b712adbdfd1aa98854d5b5f879f1814a8a83e2",
+      "sha256": "c06d5372b3e10bc11076185aeabf607d8896106bfc264a84c152a530303acc21",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M8（收尾）：角色 E 的声明 specs/e.py 的 brief.policy 增加一条 —— 把 verify.check_formal 的 imports 形参口径写进声明面（纯核心 Lean 源码必须显式传 imports: []；声明名要用 checker_name 逐字对上，不给就按文件名找 ⇒ decl_mismatch）。原因：真机实测（2026-10-01，projects/p3-review）E 因为把「默认注入 Mathlib」读成「这条路走不通」而报「没查成」；探针实测传 imports: [] ⇒ verified=True（检查器原话 does not depend on any axioms）。这一格只是把 agent_prompts.py 里同一段 policy 逐字同步到声明面（判据 tests/test_agent_spec_reconciliation.py 要求两处逐字一致，M2 只搬声明、不许出现第二种值）。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:39+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上；含与 attackround.BUDGET_UNREADABLE_NOTE 同源的那句）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:40+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上；含与 attackround.BUDGET_UNREADABLE_NOTE 同源的那句）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -447,12 +599,31 @@
       "path": "src/agentflow/specs/f.py",
       "glob": "src/agentflow/specs/f.py",
       "category": "auth-audit",
-      "sha256": "a69cb5bf77c5290e13add72181af180fbd378fcb3910f508cb61ccc1f0a0f23b",
+      "sha256": "eb065983afc7744c8205bee61fa754a098879950ef19c6d74e5f187d8f3e8652",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M4（draft/28 §223）：角色的构造期依赖工厂搬进各自的声明（specs/<角色>.py::_build + needs/peers），host._Builder 只剩薄壳 + 通用 _build。声明面变化 ⇒ 重新登记 sha256；reviewers 仍为 0，留给人审。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:40+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:40+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -460,12 +631,31 @@
       "path": "src/agentflow/specs/g.py",
       "glob": "src/agentflow/specs/g.py",
       "category": "auth-audit",
-      "sha256": "c5549e73aa8a8fe3c22d1b477211df4ebf2cc8731f7a76330505f98d410078c7",
+      "sha256": "5a804421520b23e2d83cf09994c5f6b430ffebf672877d29e91a653b7683eecc",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-03 用户裁定（draft/37 §59）：给 G 加 paper_package 动作（一次做完 render → compile → 核锚并回报 verdict），capabilities 同步登记 unmatched 条目与实测读数；仍欠 2 名 reviewer 逐行走查（reviewers 留 0）",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:40+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:40+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -473,12 +663,31 @@
       "path": "src/agentflow/specs/h.py",
       "glob": "src/agentflow/specs/h.py",
       "category": "auth-audit",
-      "sha256": "e62d965fcb1e9d10d9631d40045fc7594ea7a160656a3a33cd30de20adf14d66",
+      "sha256": "18a98de35e39cd6e1b55212a0caa4b1e217aee517eec49d0c8310d7841b1c8df",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 16 P2（round 5）：审阅线六条提示词口径。schema.py 加 literature.matched（LIT_MATCH_STATES = exact/partial/mismatch，空串=还没核，见 §2 R1b），verify.py 加两条：mismatch_literature_processed(error)/partial_match_processed(warning)。specs/a,b,c,d,h,m.py 是 ROLE_BRIEFS 的逐字镜像（用 temp/_p2_sync_spec_brief.py 整份 brief 重渲染，区间外零改动），六条口径本身在 agent_prompts.py。判据：tests/test_review_line_prompts.py（23 条，含反真空）+ tests/test_literature_match.py（8 条，含反真空）+ test_agent_spec_reconciliation.py。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:41+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:41+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -486,12 +695,63 @@
       "path": "src/agentflow/specs/m.py",
       "glob": "src/agentflow/specs/m.py",
       "category": "auth-audit",
-      "sha256": "0c04e3d0cd2991722b9092383a95bf0dd28f6009ab8858ff1740793f7690e7aa",
+      "sha256": "2280282b9ad9441f357fd3121453492a642fc04b54a4f9015c35f05c929fbfb0",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-10-03 用户裁定（draft/37 §57）：给 M 加 fs.edit（真机读数：fs.write 改不了 26 KB 的稿子，整文件重写被输出额度截断 ⇒ bad_json_limit）；提示词同步改写。仍欠 2 名 reviewer 逐行走查（reviewers 留 0）",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:41+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上；含 M 的 policy 减负与受控档清单补齐 c_analysis_runs）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:41+08:00",
+          "scope": "brief 六字段逐字镜像重建（同上；含 M 的 policy 减负与受控档清单补齐 c_analysis_runs）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/specs/v.py",
+      "glob": "src/agentflow/specs/v.py",
+      "category": "auth-audit",
+      "sha256": "809700e9bbb0acb1da90884ca10dbbe82ee8c76ac41f0c4af9fcaa283b4334d5",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:41+08:00",
+          "scope": "新建：V 的 ACTIONS 三条 + SPEC 全字段（edges=(F,)、read_only=True、write_set=frozenset()）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:42+08:00",
+          "scope": "新建：V 的 ACTIONS 三条 + SPEC 全字段（edges=(F,)、read_only=True、write_set=frozenset()）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -499,12 +759,31 @@
       "path": "src/agentflow/store.py",
       "glob": "src/agentflow/store.py",
       "category": "schema-migration",
-      "sha256": "627385bafd927e2dbac77a7d50333d12edc56f158f3964534c12a731bfaa2b0d",
+      "sha256": "af425d86999850b4a4d5ae9440bc02812abed00b89e62896913db78f48c5d08b",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 §16 P1（round 4）：LOCK_ORDER 插入 statements（位置：documents 之后、dependencies 之前；理由=命题是依赖的锚点，先锁锚点再锁依赖）。对账：schema.TABLES 17 张 = LOCK_ORDER 17 张（除 counters）。并发判据需全部重测（本批已跑全量 pytest）。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:42+08:00",
+          "scope": "rebuild() 返回只增 skipped_by_reason/skipped_details 两键；四处跳过点分四类；未收窄 except；skipped 整数未动",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:42+08:00",
+          "scope": "rebuild() 返回只增 skipped_by_reason/skipped_details 两键；四处跳过点分四类；未收窄 except；skipped 整数未动",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -512,12 +791,31 @@
       "path": "src/agentflow/tools/__init__.py",
       "glob": "src/agentflow/tools/__init__.py",
       "category": "auth-audit",
-      "sha256": "e6aef25f5eeca9068ebb1136863de99bddb3a97a165167307d0a27394223133d",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "draft/37 §63 修法 B：build_registry 收 session_root/sid 放进 deps['session']；ROLES/READ_ONLY_ROLES/SIDE_EFFECTS_WRITE 三条判据一个字未动（本轮另有一处 R009 注释装饰清理）",
-      "changed_this_session": true,
-      "reviewers": [],
+      "sha256": "2fcc7cd03beb396398aef7e4c1bd977410649aca74da3845dce4c4ca48d0bfd2",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:42+08:00",
+          "scope": "READ_ONLY_ROLES 加 \"V\"（只读角色的权限面单一来源）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:42+08:00",
+          "scope": "READ_ONLY_ROLES 加 \"V\"（只读角色的权限面单一来源）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -538,12 +836,31 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "dab900f0d537e0f4cd73106a39917c6de7a147148626f69b66f969b600e65d3b",
+      "sha256": "12215ee8b13f177b1cfdddd0fd9651f1a32c8d7856fe1ecc4aa2c8292a2d974d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-a5334ee8 ④：verify.check_formal 的两处桥接层口径（禁改区，用户本轮明确授权「允许改动禁改区」）。(1) imports 默认从 (\"Mathlib\",) 改成不注入任何库 —— 依据 temp/_m8_probe_lean.py 的实测：工作区那三份纯核心 Lean 源码在旧默认下报 import_unavailable（missing_imports=[Mathlib]），显式 imports=[] 才 verified=True（检查器原话 does not depend on any axioms）；桥接层替调用方往被检查的源码里塞一行 import，是 FC-27 要防的那类「桥接层说谎」。(2) name 为空时改成「自动认名」：源码里恰好一条具名声明就用它，0 条或多条抛 DeclarationNameError（ValueError 子类 ⇒ 工具层折成 param_error 并列出候选名）；此前是拿文件名词干当声明名，于是「调用方没点名」被报成 decl_mismatch（机器可读位是「查了、没通过」）。判据 tests/test_formalgw.py + tests/test_check_formal_wiring.py + tests/test_agent_e_formal_path.py 共 47 passed（含一条新负控：默认不注入 ⇒ checked_source 里没有 import Mathlib）。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:43+08:00",
+          "scope": "V 的三件只读工具 + 注入；detect_verifier/check_formal 的 TypeError 捕获与文案分叉",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:43+08:00",
+          "scope": "V 的三件只读工具 + 注入；detect_verifier/check_formal 的 TypeError 捕获与文案分叉",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -551,12 +868,31 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "caef29b53c50e3441bf151772567379209103f3c813265fe32a3b575bef68c97",
+      "sha256": "0b977662bacb5a58fc3ede7c0af0a4e742cdee3a1c53257e9d4e8db78d78fbdc",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 16 P2（round 5）：审阅线六条提示词口径。schema.py 加 literature.matched（LIT_MATCH_STATES = exact/partial/mismatch，空串=还没核，见 §2 R1b），verify.py 加两条：mismatch_literature_processed(error)/partial_match_processed(warning)。specs/a,b,c,d,h,m.py 是 ROLE_BRIEFS 的逐字镜像（用 temp/_p2_sync_spec_brief.py 整份 brief 重渲染，区间外零改动），六条口径本身在 agent_prompts.py。判据：tests/test_review_line_prompts.py（23 条，含反真空）+ tests/test_literature_match.py（8 条，含反真空）+ test_agent_spec_reconciliation.py。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:38+08:00",
+          "scope": "verify_all 的 D5/D7 读侧跟 signatures.SIGNABLE_STATUSES；:1028-1037 口径注释（台账全量 != 委托计数）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:38+08:00",
+          "scope": "verify_all 的 D5/D7 读侧跟 signatures.SIGNABLE_STATUSES；:1028-1037 口径注释（台账全量 != 委托计数）",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -768,12 +1104,31 @@
       "path": "tools/vocab_census.py",
       "glob": "tools/vocab_census.py",
       "category": "auth-audit",
-      "sha256": "f5a33138549fdd409db573ad1a8611108fd4838669870f23eec75548d3ee6ba1",
+      "sha256": "dff4d8e647414668bb7ac35e9fba2e6dc006a5b62abe4d830254f587dedab329",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "draft/37 §16 P1（round 4）：RESERVED_VALUES 新增两条（STATEMENT_STATUSES.superseded / STATEMENT_UNUSABLE_STATUSES.superseded —— 都是 AI 代写的登记，留还是删由 reviewer 裁定），并在注释里记下本规则判据的一个已知弱点：verify.py 里的**比较**字面量（status == active 等）会被算作产出点，于是 STATEMENT_STATUSES 的其余三档与 STATEMENT_ORIGINS 两档今天不算死取值。R011 读数：reserved 23 / unclaimed 0 / 栏一附 7。",
+      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-06T22:02:37+08:00",
+          "scope": "RESERVED_VALUES 与 reason 面登记：empty_page_range + acceptance_row_unreadable/acceptance_rows_unreadable",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-06T22:02:37+08:00",
+          "scope": "RESERVED_VALUES 与 reason 面登记：empty_page_range + acceptance_row_unreadable/acceptance_rows_unreadable",
+          "note": "",
+          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     }

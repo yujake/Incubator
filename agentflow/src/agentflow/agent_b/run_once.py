@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from ._support import BRunResult, D, I, Iterable, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote
+from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
 
 class _RunOnce:
     def run_once(self) -> BRunResult:
@@ -14,16 +14,19 @@ class _RunOnce:
 
         1. 取不到文献不等于"队列空了"：`skipped_reason` 由 `_claim()` 的三态给出
            （`no_unprocessed_literature` / `pending_literature_all_leased` /
-           `no_claimable_literature`），并同时暴露 `skipped_lease_active` / `gave_up`
-           两个计数。原先无论哪种情况都写"no_unprocessed_literature"，是误导运维。
+           `pending_literature_all_in_backoff` / `no_claimable_literature`），并同时暴露
+           `skipped_lease_active` / `skipped_lease_backoff` / `gave_up` 三个计数。
+           原先无论哪种情况都写"no_unprocessed_literature"，是误导运维。
         2. 抽取失败不等于处理完了：不置 `processed`，只留 `last_mine_error`，
-           由租约到期重试（模块 docstring 第 4 条）。
+           并写下一条退避租约（`D-2`：写了就必须有人认它 —— `_claim` 的跳过判据
+           在 2026-10-02 之前要求 `claimed_by` 非空，于是这条租约写了等于没写）。
         """
         res = BRunResult()
         claim = self._claim()
         # 取文献侧的审计信息先落进结果，再决定要不要早退 —— 否则"有活但全被别人
         # 占着"这类信息会随着 skipped_reason 一起丢掉，外部只剩一个"什么都没做"。
         res.skipped_lease_active = claim.skipped_lease_active
+        res.skipped_lease_backoff = claim.skipped_lease_backoff
         res.gave_up = claim.gave_up
         lit = claim.literature
         if lit is None:
@@ -65,13 +68,23 @@ class _RunOnce:
             with self.store.tx("literature", actor=self.actor, note="no_extractor") as tx:
                 row = tx.find("literature", lit_id=lit_id) or lit
                 row["claimed_by"] = None
-                row["lease_until"] = None
-                row["last_mine_error"] = "no_llm_extractor"
-                # 刻意不置 `processed`：接线 LLM 之后这一行还要被重新领到
+                # 刻意不置 `processed`：接线 LLM 之后这一行还要被重新领到。
+                # 但要留退避租约（`D-2`）：这一档不是"抽取出错"，而是"这台机器还没有
+                # 够格的抽取器"——不写租约的话每一轮 run 都会把它重领一次，
+                # 而 `_claim` 每次都会给它 `mine_attempts += 1` ⇒ 它会因为排队次数
+                # 用尽被判死（一次都没真抽过；所以到上限时那句结论必须如实说
+                # "从未真抽"，见 `core._give_up_note`）。
+                #
+                # `R3-⑩` 之后这一档不再烧计数：`mine_attempts` 只在真正调抽取器的
+                # 两处 +1，而这一支在调用之前就返回了 ⇒ 它的读数恒为"真抽 0 次"，
+                # 那条"用尽"的路也不再可能因为拒抽而触发。这一行只留退避租约，
+                # 让下一轮（或接线 LLM 之后）还能重新领到它。
+                row["lease_until"] = make_lease(self.lease_seconds)
+                row["last_mine_error"] = NO_EXTRACTOR_ERROR
                 tx.upsert("literature", row, note="skipped_no_extractor")
             res.skipped_no_extractor += 1
             res.details.append({"lit_id": lit_id, "stage": "extract",
-                                "skipped": "no_llm_extractor",
+                                "skipped": NO_EXTRACTOR_ERROR,
                                 "why": "规则回退抽取器会把碎片当概念/关系（R-56）"})
             return res
 
@@ -81,12 +94,17 @@ class _RunOnce:
                 doc, lit_id, self._extraction_meta(lit)
             )
         except Exception as e:
-            # 抽取失败：不置 processed，让租约过期后重试
+            # 抽取失败：不置 processed，写退避租约让到点后重试（`D-2`：修复前这里
+            # 把 `lease_until` 也清成 None，而 `_claim` 的跳过判据要求 `claimed_by`
+            # 非空 ⇒ 所谓"让租约过期后重试"其实没有任何租约存在，同一趟里立刻重领）。
             with self.store.tx("literature", actor=self.actor, note="extract_failed") as tx:
                 row = tx.find("literature", lit_id=lit_id) or lit
                 row["claimed_by"] = None
-                row["lease_until"] = None
+                row["lease_until"] = make_lease(self.lease_seconds)
                 row["last_mine_error"] = f"{type(e).__name__}: {e}"
+                # `R3-⑩`：真抽过了（抽取器被调用了、抛了）⇒ 这一格 +1。计数点在这里
+                # 而不是 `_claim`，理由见 `core._claim` 的 docstring：领取不等于抽取。
+                row["mine_attempts"] = int(row.get("mine_attempts") or 0) + 1
                 tx.upsert("literature", row, note="extract_failed")
             res.failed += 1
             res.details.append({"lit_id": lit_id, "stage": "extract", "error": f"{type(e).__name__}: {e}"})
@@ -306,6 +324,8 @@ class _RunOnce:
             lit_row["claimed_by"] = None
             lit_row["lease_until"] = None
             lit_row["last_mine_error"] = None
+            # `R3-⑩`：真抽过了（抽取器返回了结果）⇒ 这一格 +1，与失败那一支同一个计数点。
+            lit_row["mine_attempts"] = int(lit_row.get("mine_attempts") or 0) + 1
             tx.upsert("literature", lit_row, note="processed")
             res.processed = 1
 

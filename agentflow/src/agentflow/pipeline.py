@@ -84,68 +84,23 @@ def _reports_dir(store: Store) -> Path:
     return Path(store.root) / "reports"
 
 
-def _persist_report(store: Store, report: Any, *, actor: str, notes: str = "") -> dict:
-    """给 C 的报告落盘：优先用报告自己的 ``persist()``（c 的契约），否则本地实现。
+def _conductor_for_c(store: Store, agent_c: Any) -> Any:
+    """把调用方给的那个 `AgentC` 实例接到主控的召唤面上（L-03）。
 
-    为什么不直接 import agent_c 的落盘逻辑：那样 pipeline 会硬依赖
-    ``agent_c.py``，而它是并行开发的模块。契约已经约定了 ``persist()``，
-    所以"报告自己知道怎么落盘"是正解；本地实现只是让契约之外的输入
-    （例如 D 从盘上读回来的 dict 报告）也能被登记。
+    为什么必须经 `conductor.summon`（`draft/44` 的 L-03）：`pipeline` 以前直呼
+    `agent_c.handle(...)` 再自己把报告写进 `analysis_reports` —— 那条路
+    ① 不写 `role=C` 的 `tasks` 行（于是 `c_analysis_runs` 读 0），
+    ② 绕过策略/预算/台账三道闸门。现在报告只由 C 的动作（`handle`，它的写集里
+    本来就有 `analysis_reports`，见 `capabilities.WRITE_SETS["C"]`）产出，
+    pipeline 只从这一步的返回值里读 `report_id`。
+
+    `LocalBackend({"C": agent_c})` 直接绑调用方给的同一个实例
+    （`LocalBackend.resolve` 支持裸对象与 `("object", obj)` 两种写法）——
+    不新建对象，也不碰 `host`。
     """
-    persist = getattr(report, "persist", None)
-    if callable(persist):
-        try:
-            row = persist()
-        except TypeError:
-            row = persist(store)  # 有的实现把 store 放在第一个位置参数
-        except Exception as e:
-            # 报告拒绝落盘（例如 `kind="unknown"`：C 无法把需求分派到任何分析器）。
-            # 这种情况必须显式失败：继续往下走只会拿不到任何报告，
-            # 然后 D 得到一句含糊的"没有报告"，真正的原因（需求没被识别）就丢了。
-            info = _as_report_dict(report)
-            raise PipelineError(
-                f"C 的报告无法登记：{type(e).__name__}: {e}"
-                f"（kind={info.get('kind')!r}, request={info.get('request')!r}）。"
-                "若 kind=unknown，说明需求原文没有命中任何分析器的关键词（见 agent_c.handle 的分派规则）；"
-                "请把需求写成如「查询 A 与 B 之间的关系」「统计最热门的 5 个概念」。"
-            ) from e
-        if isinstance(row, Mapping):
-            return dict(row)
-        # persist 返回非 dict（例如返回 report_id 字符串）时，补齐成登记行
-        return {"report_id": row if isinstance(row, str) else None}
+    from .conductor import Conductor, LocalBackend
 
-    info = _as_report_dict(report)
-    kind = str(info.get("kind") or "")
-    payload = info.get("payload") if isinstance(info.get("payload"), dict) else {}
-    report_id = str(payload.get("report_id") or "")
-    with store.tx("analysis_reports", actor=actor, note=notes or "persist_report") as tx:
-        if S.is_valid_id(report_id):
-            existing = tx.find("analysis_reports", report_id=report_id)
-            if existing is not None:
-                return dict(existing)
-        rid = report_id if S.is_valid_id(report_id) else tx.alloc_id("report")
-        md = str(info.get("markdown") or "")
-        rel: str | None = None
-        if md:
-            md_dir = _reports_dir(store)
-            md_dir.mkdir(parents=True, exist_ok=True)
-            fname = f"{rid}-{kind or 'report'}.md"
-            (md_dir / fname).write_text(md, encoding="utf-8")
-            rel = f"reports/{fname}"
-        row = S.AnalysisReport(
-            report_id=rid,
-            kind=kind if kind in S.REPORT_KINDS else "hottest",
-            request=str(info.get("request") or ""),
-            params=dict(info.get("params") or {}),
-            summary=str(info.get("summary") or "") or "（无摘要）",
-            payload=payload,
-            markdown_path=rel,
-            created_at=S.now_iso(),
-            created_by=actor,
-        )
-        row.validate()
-        tx.upsert("analysis_reports", row.to_dict(), note="pipeline_persist")
-        return row.to_dict()
+    return Conductor(store, backend=LocalBackend({"C": agent_c}))
 
 
 def _load_agent_c(store: Store, config: Mapping[str, Any] | None) -> Any | None:
@@ -349,8 +304,18 @@ def run_pipeline(
     # （C 已在上面装配好并被同一个实例交给了 D —— 这里不再重复装配。）
     if agent_c is not None:
         summary["mode"] = "analyze"
+        # ---- L-03：经 `conductor.summon`（报告只由 C 的动作产出）
+        #
+        # 旧形态是 `_make_request_fn(agent_c)(request)` + `_persist_report(...)`：
+        # 那次分析没有 `role=C` 的 `tasks` 行、也没过策略/预算闸门 ——
+        # 真机后果就是 `c_analysis_runs` 读 0（台账上像"C 一次都没跑过"）。
+        # 现在走 `summon("C", "handle", {"request_text": request})`：C 的 `handle`
+        # 自己 `persist()`（它的写集里本来就有 `analysis_reports`），
+        # pipeline 只读回 `report_id` —— 于是"谁产出了报告"与"谁派了这活"都在台账上。
         try:
-            report = _make_request_fn(agent_c)(request)
+            cond = _conductor_for_c(store, agent_c)
+            res = cond.summon("C", "handle", {"request_text": str(request)}, by="M",
+                              input_key=f"pipeline:analyze:{str(request)[:120]}")
         except PipelineError:
             raise
         except Exception as e:
@@ -358,13 +323,30 @@ def run_pipeline(
                 f"C 分析失败（{type(e).__name__}: {e}）。"
                 "可以改用 agent_c=None 让 pipeline 从 analysis_reports 里读已登记的报告（replay 模式）。"
             ) from e
-        row = _persist_report(store, report, actor="agent-C", notes="pipeline_analyze")
-        rid = str(row.get("report_id") or "")
+        report = res.payload
+        info = _as_report_dict(report)
+        if not res.ok or str(res.outcome or "") in ("failed", "refused", "no_result"):
+            raise PipelineError(
+                f"C 的分析这一步没有产出可用报告（status={res.status!r} outcome={res.outcome!r}"
+                f" task_id={res.task_id!r} detail={str(res.detail or '')[:200]!r}）。"
+                "台账里有它的那一行；若 kind=unknown，说明需求原文没有命中任何分析器的关键词"
+                "（见 `agent_c.handle` 的分派规则）。"
+                "请把需求写成如「查询 A 与 B 之间的关系」「统计最热门的 5 个概念」。"
+            )
+        if bool(info.get("ok", True)) is False:
+            raise PipelineError(
+                f"C 的报告无法登记：这次分析没有完成"
+                f"（kind={info.get('kind')!r}, error={info.get('error')!r}）。"
+                "失败报告不落 `analysis_reports`（它不是一份分析产物）——"
+                "请把需求写成如「查询 A 与 B 之间的关系」「统计最热门的 5 个概念」。"
+            )
+        rid = str(getattr(report, "report_id", "") or "")
         summary["report_ids"] = [rid] if rid else []
         summary["c_analysis"] = {
-            "kind": _as_report_dict(report).get("kind"),
-            "summary": _as_report_dict(report).get("summary"),
+            "kind": info.get("kind"),
+            "summary": info.get("summary"),
             "report_id": rid,
+            "task_id": res.task_id,
         }
 
     # ---------- 2. 取要处理的报告（replay 模式在这里读盘）
@@ -599,7 +581,7 @@ def _build_agent_a(store: Store, cfg: Mapping[str, Any], log: dict) -> Any | Non
         log["warnings"].append("agent_a 未装配：agent_a.providers 为空")
         return None
     downloader = F.default_downloader(cfg.get("download") or {}) if acfg.get("download", True) else None
-    return AgentA(store, providers=providers, downloader=downloader, config={**acfg, **(cfg.get("lease") or {})})
+    return AgentA(store, providers=providers, downloader=downloader, config=acfg)
 
 
 def _build_agent_b(store: Store, cfg: Mapping[str, Any], log: dict) -> Any | None:
@@ -616,7 +598,7 @@ def _build_agent_b(store: Store, cfg: Mapping[str, Any], log: dict) -> Any | Non
         store,
         extractor=RuleExtractor(),
         extract_text=extract_text,
-        config={**bcfg, **(cfg.get("lease") or {})},
+        config=bcfg,
     )
 
 

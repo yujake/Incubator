@@ -45,7 +45,7 @@ from ..interactions import IdSpaceExhausted, next_prefixed_id
 from ..store import IdExhausted, Store, StoreError, Tx
 from .base import ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
 
-#: 六张表的表名（从 schema 反射，不手抄）。
+#: 各表的表名（从 schema 反射，不手抄）。
 ALL_TABLES: tuple[str, ...] = tuple(S.TABLES)
 
 #: 按 DESIGN-TOOLS.md §1.1，表与文件的 CRUD 对 A/B/C/D 全部开放。

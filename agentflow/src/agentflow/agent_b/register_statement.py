@@ -58,14 +58,73 @@ B 的边界里本来就写着"命题台账三件套缺一不可"（完整假设�
 （`invalid_params` —— 词表的定义正是"参数/前置条件不满足：这次调用本身不成立"）。
 不这么写的话，终态只能落 `failed`（"执行了、没成功"），那会把
 "我参数给错了"与"代码崩了"重新混成一件事。
+
+## 第八件：五元证据位随这一行一起落（`R3` 组 9 / EE-07）
+
+`draft/39` §3.14 起"这条命题算不算定理"由五位读数派生（`evidencebits.derive_grade`），
+而 `statements.bits` 这一栏此前从来没有过产出方：真机读数 138 行命题、带 bits 0 行。
+于是所有消费方（收工门、状态报告、`closing` 的收工读数）读到的永远是"五位全空 ⇒ 猜想"，
+而盘上那 138 行到底是"确实只是猜想"还是"没人算过"，从数据面分不出来。
+
+现在在这一动作里把位算好、与命题那一行同一次事务写进去（`bits_of` 是纯函数，
+形状判据只用 `evidencebits`，不抄第二份口径）。三态：
+
+- 算得出 ⇒ 写；等级由 `derive_grade` 现算（盘上那一份只是缓存，判据不读它）；
+- 算不出（`bits_of` 自己抛了）⇒ 拒绝并如实记 `kind="bits_compute_failed"` ——
+  不许写一个空 `bits`：空 `bits` 读出来是"五位全空"，与"我们没算"长得一模一样；
+- 形状不合规 ⇒ 拒绝并如实记 `kind="bad_bits"` + 逐条 `problems`，整笔不写。
+
+谁签哪位：B 在登记这一刻能作证的只有第 2 位（有证明）与它的来源
+（引用命题的凭据是文献代号；自产命题的凭据是证明摘录）。`numeric`/`formal`（E）、
+`reviewed`（V）、`audited`（H）都不是 B 的读数，一律按"还没做"留空 —— 替别人签
+正是这套位要堵的洞（`evidencebits.BIT_OWNERS` 是那五位的 owner 表）。
 """
 from __future__ import annotations
 
 from ._support import S
+from .. import evidencebits as _EB
 from ..refusals import refuse as _refuse
 
 
 class _RegisterStatement:
+    def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
+                        quote_verified: bool | None) -> tuple[dict, dict | None]:
+        """按 `evidencebits` 现算五元位，返回 `(bits, 拒绝)`；拒绝非空 ⇒ 整笔不写。
+
+        三态见模块 docstring 的"第八件"。这里只做两件事：「算」（`bits_of`）与
+        「关形状」（`bits_shape_problems`）。判据本体一个字都不在这里写 ——
+        两份口径一旦分家，"没做过"与"做过没通过"就会在某一处被压平，而门照样亮绿。
+
+        为什么自产命题的 `proof` 要看 `origin`：`proof_text` 那一栏对 `external_lit`
+        是"从原文摘下来的逐字摘录"，它本身不构成我方的证明过程。若不分来源就把它
+        当成第 2 位，一条引文回验没过（`quote_verified=False`）的外部命题会被记成"有证明"，等级也从
+        猜想抬到预备定理级 —— 而那正是这套位要堵的那类自报。
+        """
+        own = str(origin) == "own_result"
+        text = str(proof_text or "")
+        try:
+            bits = _EB.bits_of(
+                origin=origin,
+                source_lit_id=lit_id,
+                quote_verified=quote_verified,
+                proof=bool(text.strip()) and own,
+                proof_process=text if own else "",
+            )
+            problems = list(_EB.bits_shape_problems(bits))
+        except Exception as exc:  # noqa: BLE001 - 算不出来要如实记，不许折成空 bits
+            return {}, _refuse(
+                "bits_compute_failed",
+                f"五元位算不出来（{type(exc).__name__}: {exc}）⇒ 整笔不写。"
+                "这一档与『形状不合规』分开命名：前者是判据自己坏了（要修代码），"
+                "后者是这一行的输入拼错了（要改参数）—— 处置不同，读数就必须能分辨")
+        if problems:
+            return {}, _refuse(
+                "bad_bits",
+                "五元位形状不合规（判据取自 evidencebits.bits_shape_problems）⇒ 整笔不写："
+                + "；".join(problems),
+                problems=problems)
+        return bits, None
+
     def register_statement(
         self,
         *,
@@ -126,7 +185,22 @@ class _RegisterStatement:
                                "（例如「全文未分页」「附录 A」）—— 只传 "
                                "`{\"start\": null, \"end\": null}` 等于没给，"
                                "审稿判据会判这一行缺出处页码")
-        elif origin == "own_result":
+        #: 这一笔是不是"自产命题但证明还没做完"（F-05 的待办那一档）。
+        #: 必须在两个分支之外先给默认值：它下面要在返回值里用到，而
+        #: `external_lit` 那一支不会走到 `own_result` 那一支里 —— 第一版把赋值写在
+        #: 分支里，于是所有 `external_lit` 登记都在返回值那一行 `NameError`
+        #: （`tasks` 落 `failed`）。判据：`tests/test_intake_actions.py` 的四跳链。
+        needs_proof = (str(origin) == "own_result" and not str(proof_text or "").strip())
+        if str(origin) == "external_lit":
+            page = dict(page_range or {})
+            if not (page.get("start") or str(page.get("label") or "").strip()):
+                return _refuse("missing_page_range",
+                               "origin='external_lit' 时必须给出处页码："
+                               "`page_range` 要么给 start（可带 end），要么给 label"
+                               "（例如「全文未分页」「附录 A」）—— 只传 "
+                               "`{\"start\": null, \"end\": null}` 等于没给，"
+                               "审稿判据会判这一行缺出处页码")
+        elif str(origin) == "own_result":
             line = dict(line_range or {})
             if not (str(doc_id or "").strip()
                     or line.get("start") or str(line.get("label") or "").strip()):
@@ -135,13 +209,24 @@ class _RegisterStatement:
                                "`doc_id`（我方稿件那一行的 id）或 `line_range`"
                                "（start / label 至少一个）—— 自有结果的出处不是"
                                "「文献第几页」，那一栏要它等于让它编一个数字")
-            # 第五级（§87）：自产命题的证明 —— 与上面四级同一条纪律，
-            # 由预检命名、而不是让 `Statement.validate()` 从事务里抛出去。
-            if not str(proof_text or "").strip():
-                return _refuse("missing_proof_text",
-                               "origin='own_result' 时必须给 proof_text（逐字证明摘录）—— "
-                               "自产的命题没有证明就入库，等于把我们自己的猜测抬成事实；"
-                               "还没做完的证明要写成缺口，不要当命题登记")
+            # 第五级（§87）：自产命题的证明。
+            #
+            # F-05（主控裁定，2026-10-06）改的这一格：以前这里 `_refuse`，于是
+            # "证明还没做完"这一档永远进不了库，也就永远没有一条待办能被
+            # 秘书消费（`draft/53:181` 的消费端要的是"摆出来"，不是"拦住"）。
+            # 现在不拦：落库 + 按既有字段如实标记 ——
+            #   `proof_text` 留空（它确实没有）、`quote_verified=None` +
+            #   `quote_reason` 写明"证明还没做完"，等级由 `evidencebits.derive_grade`
+            #   现算（缺 proof 位 ⇒ "猜想"，不是证明级）。
+            #
+            # 硬顺序（主控点名）：本改动必须排在 B 删掉 `schema.Statement.validate`
+            # 里那条 `own_result` raise 之后 —— 否则这一笔会在事务里抛
+            # `ValueError`，比"写库前预检拒绝"更坏（拒绝是受控的，抛异常不是）。
+            if needs_proof and not str(quote_reason or "").strip():
+            # 三态那一栏必须自己说清"为什么还没有"：只留一个空字段等于把
+            # "没查"记成一笔没人能接手的账（与上面 `missing_quote_reason` 同一条纪律，
+                # 差别只在"这里不再拒收，而是替它把理由写实"）。
+                quote_reason = "证明还没做完 / 未核到 ⇒ 这一行按待办挂着（等级现算是『猜想』）"
 
         # 第六级（§87）：ID 形态。`source_lit_id`/`doc_id` 的形态由 `schema.require_id`
         # 定义（4 位十进制），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
@@ -176,6 +261,11 @@ class _RegisterStatement:
                                source_lit_id=lit_id, literature_rows=len(lit_rows),
                                available_lit_ids=ids)
 
+            bits, bits_bad = self._statement_bits(
+                origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
+                quote_verified=quote_verified)
+            if bits_bad is not None:
+                return bits_bad
             stmt_id = tx.alloc_id("stmt")
             row = S.Statement(
                 stmt_id=stmt_id,
@@ -194,6 +284,7 @@ class _RegisterStatement:
                 derived_from=S.sorted_unique(list(derived_from or [])),
                 doc_id=str(doc_id or "") or None,
                 line_range=S.PageRange.from_dict(line_range),
+                bits=bits,
                 created_at=S.now_iso(),
                 created_by=self.actor,
             )
@@ -203,5 +294,19 @@ class _RegisterStatement:
             return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                     "quote_verified": quote_verified, "origin": origin,
                     "evidence_kind": evidence_kind, "row": data,
+                    # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
+                    # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
+                    # 也能扫到它；这里再给一次是为了让调用方当场就知道）。
+                    "pending": ([{"kind": "missing_proof", "table": "statements",
+                                  "id": stmt_id, "missing": "proof_text", "who": "F",
+                                  "why": "自产命题没有证明 ⇒ 等级现算是『猜想』"}]
+                                if needs_proof else []),
                     "note": ("登记 ≠ 核对：quote_verified 是三态（True/False/None），"
-                             "它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。")}
+                             "它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。"
+                             "五元位已随这一行落库（现算等级 "
+                             f"{bits.get('grade')}；第 2 位来源 "
+                             f"{bits.get('evidence', {}).get('proof_source') or '（空）'}）——"
+                             "等级不许自报，判据永远现算。"
+                             + ("这一行**缺 proof_text**（自产命题没有证明）：它进去了，"
+                                "但等级现算是『猜想』，`pending` 里挂着待办。"
+                                if needs_proof else ""))}

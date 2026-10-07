@@ -1174,6 +1174,17 @@ def _sign_accepted_revision(
         return None, f"{type(e).__name__}: {e}"
 
 
+def _is_semantic_finding(item: Mapping[str, Any]) -> bool:
+    """这条 finding 是不是语义判据产出的那一支（`R-04-b` 的判据面）。
+
+    判据逐字（与 `scan_document` 里那条 finding 的写法对齐）：`kind == "overclaim"`
+    且 `evidence` 以 `语义判据（` 开头 —— 措辞级那条 `overclaim` 的 evidence
+    是别的形态，所以两者分得开（"改了词"与"结论强于引文"的处置方向不同）。
+    """
+    return (str(item.get("kind") or "") == "overclaim"
+            and str(item.get("evidence") or "").startswith("语义判据（"))
+
+
 def verify_fixes(
     store: Any,
     doc_id: str,
@@ -1182,6 +1193,7 @@ def verify_fixes(
     dependencies: Any = _UNSPECIFIED,
     max_review_rounds: int = 2,
     actor: str = "agent-H",
+    semantic_judge: SemanticJudge | None = None,
 ) -> dict:
     """复审：对上一轮的每条 finding 重跑对应检查，判定 `fixed` / 仍 `open`。
 
@@ -1201,6 +1213,20 @@ def verify_fixes(
     复现 ⇒ `open`（即使 G 已经把它标成 `fixed`，也会被重新打开）；
     不复现 ⇒ `fixed`。此外当前扫描里新出现的问题会以 `source="new_issue"`
     出现在 `still_open` 里（复审不是"只看旧账"）。
+
+    ## `R-04`（`draft/44` / `draft/52` D 族）：两半
+
+    R-04-a（语义判据的注入面）：复审复扫与 `review_document` 走同一个
+    `scan_document(..., semantic_judge=...)`。此前 `verify_fixes` 的复扫不带判据，
+    于是"上一轮由语义判据产生的 `overclaim`"在这一轮结构上不可能复现 ⇒
+    必然落进 `resolved` ⇒ 写成 `status="fixed"`（真机 `p8d` 的 claim-3/claim-4
+    就是这样被"修好"的：库里是 `fixed`，而现行版内容上它们仍被判"结论强于引文"）。
+
+    R-04-b（没查 ≠ 修好）：`resolved` 里凡是语义那一支的 finding，
+    只有"这一轮真的重跑了语义判据、且它没有复现"才允许落 `fixed`；
+    判据没接线（`semantic_judge is None`）或这一轮答不上来 / 判据报错
+    （`claims_unknown` / `checker_errors`）⇒ 留在 `open` 并标
+    `source="not_rechecked"`（返回值取值，不落表）。
     """
     doc_id = str(doc_id)
     round_no = int(round_no)
@@ -1212,8 +1238,18 @@ def verify_fixes(
 
     doc = _doc_of(store, doc_id)
     deps, dep_checked = _resolve_deps(store, doc_id, dependencies)
-    scan = scan_document(doc, dependencies=deps)
+    # R-04-a：复扫与 `review_document` 共用同一个语义判据（`semantic_judge=None`
+    # 时 `semantic_check["checked"] is False` —— 那是"没查"，不是"没问题"）。
+    scan = scan_document(doc, dependencies=deps, semantic_judge=semantic_judge)
     current = {_dedup_key(f): f for f in scan["findings"]}
+    semantic_check = dict(scan.get("semantic_check") or {})
+    #: 这一轮语义判据真的判过吗（R-04-b 的判据面）。
+    #: 没接线、或有断言答不上来 / 判据报错 ⇒ 语义那一支一律不许判 `fixed`。
+    semantic_recheck_ok = bool(
+        semantic_check.get("checked")
+        and not int(semantic_check.get("claims_unknown") or 0)
+        and not int(semantic_check.get("checker_errors") or 0)
+    )
     findings = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
     prev = [r for r in findings if int(r.get("round") or 1) < round_no]
 
@@ -1226,6 +1262,9 @@ def verify_fixes(
             "level": r.get("level"),
             "target": r.get("target"),
             "message": r.get("message"),
+            # `R-04-b` 的判据面要用它：语义那一支的 finding 靠 `evidence` 的前缀分辨
+            # （`语义判据（…）判定结论强于引文`）—— 不回填的话"没重跑判据"就认不出来。
+            "evidence": r.get("evidence"),
             "round": r.get("round"),
             "status": r.get("status"),
         }
@@ -1255,8 +1294,39 @@ def verify_fixes(
         )
 
     # ---- 落状态：resolved ⇒ fixed；复现的旧账 ⇒ 重新打开（含"谎报修好")
+    #
+    # R-04-b（没查 ≠ 修好）：`resolved` 里语义那一支的 finding 先过一道闸门 ——
+    # 只有"这一轮真的重跑了语义判据、且没复现"才允许落 `fixed`；
+    # 没接线 / 答不上来 / 判据报错 ⇒ 留在 `open`，标 `source="not_rechecked"`。
+    # 为什么必须把这一支单独拎出来：语义 finding 的去重键里带 `message`
+    # （`(kind,target,message)`），而"这一轮没跑判据"时它当然不出现在 `current` 里 ——
+    # 于是"没查"被读成"修好了"，那正是最贵的那条方向（`R-04` 的原文）。
     changes: list[dict] = []
-    for item in resolved:
+    not_rechecked: list[dict] = []
+    for item in list(resolved):
+        if _is_semantic_finding(item) and not semantic_recheck_ok:
+            resolved.remove(item)
+            item["source"] = "not_rechecked"
+            item["status"] = "open"
+            item["note"] = (
+                f"[round {round_no}] 本轮未重跑语义判据 ⇒ 不许判 fixed（没查 ≠ 修好）"
+                + (f"；semantic_check={semantic_check.get('reason') or semantic_check}"
+                   if not semantic_check.get("checked") else "")
+            )
+            still_open.append(item)
+            not_rechecked.append(item)
+            # 更要紧的是盘上也要留在 open：只改返回值而库里仍是 `fixed`，
+            # 下一轮/下一个人读到的还是"修好了"（那正是这条要堵的方向）。
+            changes.append(
+                {
+                    "finding_id": item["finding_id"],
+                    "status": "open",
+                    "resolution_note": (
+                        f"[round {round_no}] 本轮未重跑语义判据 ⇒ 不许判 fixed（没查 ≠ 修好）"
+                    ),
+                }
+            )
+            continue
         changes.append(
             {
                 "finding_id": item["finding_id"],
@@ -1293,6 +1363,12 @@ def verify_fixes(
     elif blocking and round_no >= max_review_rounds:
         verdict = "unresolved_review"
     elif blocking:
+        verdict = "revise_again"
+    elif not_rechecked:
+        # R-04-b ③：这一轮没重跑语义判据 ⇒ 不许读成 `accepted`
+        # （"没查"与"查过了没问题"必须分得开；它们也只是 warning，
+        #  所以上面那两条 `blocking` 分支接不住）。处置方向是"去把判据接上再复审"，
+        #  不是"再改一遍稿子" ⇒ 用 `revise_again` 这一档（`in_review`），不冒充终局。
         verdict = "revise_again"
     else:
         # 只剩 warning（已记录的已知边界）或已被人明确 wontfix 的项：
@@ -1334,6 +1410,14 @@ def verify_fixes(
         f"第 {round_no} 轮复审（上限 max_review_rounds={max_review_rounds}）："
         f"上一轮 {len(prev)} 条发现里 resolved={len(resolved)}、仍复现={len(still_open) - len([f for f in still_open if f.get('source') == 'new_issue'])}",
         f"error 级未解决 {len(unresolved)} 条",
+        # `R-04-b`：没重跑语义判据时，上一轮那几条语义发现留在 open
+        # （读数必须逐条说出来，否则"resolved 变多了"看起来像"修好了"）。
+        (
+            f"其中 {len(not_rechecked)} 条是**语义判据产的发现**、本轮未重跑判据 ⇒ 留在 open、"
+            f"不许判 fixed（没查 ≠ 修好）"
+            if not_rechecked
+            else ""
+        ),
     ]
     if not dep_checked:
         reason_bits.append("⚠️ 依赖闭合**没查**（dependencies=None）⇒ 本轮结论不覆盖依赖闭合这一维")
@@ -1362,6 +1446,9 @@ def verify_fixes(
         "resolved": resolved,
         "still_open": still_open,
         "unresolved_findings": unresolved,
+        # R-04-b 的读数：这一轮没重跑语义判据因而留在 open 的那些（返回值取值，不落表）。
+        "not_rechecked": not_rechecked,
+        "semantic_check": semantic_check,
         "verdict": verdict,
         "reason": "；".join(reason_bits) + "。",
         "error_count": scan["error_count"],
@@ -1647,19 +1734,25 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
-    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict'}",
+    returns="{'doc_id','round','resolved','still_open','unresolved_findings','verdict','not_rechecked'}",
     tags=("review", "write"),
 )
-def _review_verify_fixes_tool(_not_wired, store, actor, **kw):
+def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **kw):
     """review.verify_fixes 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
-    注入值（_not_wired, store, actor）由装配期用 `partial` 绑定，
-    所以模型看到的签名与搬移前逐字相同。
+    注入值（_not_wired, store, actor, semantic_judge）由装配期用 `partial` 绑定，
+    所以模型看到的签名与搬移前逐字相同：`semantic_judge` 不进模型参数表
+    （`@tool` 的 properties / `additionalProperties: False` 一个字不改），
+    它只由 `register(..., semantic_judge=...)` 在装配期绑进来（`R-04-a`）。
+
+    `semantic_judge` 缺省 `None` ⇒ `R-04-b` 的兜底生效：上一轮由语义判据产生的
+    `overclaim` 不许被判成 `fixed`（没查 ≠ 修好）。
     """
     return (
     _not_wired()
                if store is None
-               else _guard_result(lambda: verify_fixes(store, actor=actor, **kw))
+               else _guard_result(lambda: verify_fixes(store, actor=actor,
+                                                       semantic_judge=semantic_judge, **kw))
     )
 
 @tool(
@@ -1736,7 +1829,7 @@ _READ_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
 #: 不拆表的话三个写工具会绕过那句早退，H 的工具面当场多出写入口）。
 _WRITE_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_review_review_document_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
-    (_review_verify_fixes_tool, ('_not_wired', 'store', 'actor')),
+    (_review_verify_fixes_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
     (_review_report_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
 )
 

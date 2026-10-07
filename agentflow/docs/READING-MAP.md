@@ -2,9 +2,12 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 77 个文件、77,391 行，**38 个文件超过 800 行**
-> （最大 `agent_d/`（包） 4188 行）。新人打开任何一个文件都是一本小册子，
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-06（角色 V 落地），
+> 口径：`Get-ChildItem src/agentflow -Recurse -File -Include *.py` 排除 `__pycache__`）：
+> **188 个 `.py`、98,217 行**，**37 个文件超过 800 行**（最大 `agent_d/core.py`，1608 行）。
+> 新人打开任何一个文件都是一本小册子，
 > 于是"从哪读起"本身成了一道门槛 —— 这份图就是为了把这道门槛拆掉。
+> （本行原先写"77 个文件、77,391 行、38 个文件超过 800 行"，那是更早一次不同口径的读数，已过期。）
 >
 > **它自己也有判据**：`tests/test_reading_map.py` 会断言
 > ①图里提到的每个文件名都真实存在；②`src/agentflow` 的每个模块至少在这张图里出现一次
@@ -21,6 +24,47 @@
    找不到判据的改动 = 改完没人拦。
 3. **禁改区先看 `AGENTS.md`**。清单在 `AGENTS.md` 与 `.noai-paths` 两处，必须逐条一致；
    命中就要 2 名 reviewer（`scripts/noai_gate.py` 是机器判据）。
+
+---
+
+### §0.1 已知欠账（可见地记着，不许静默）
+
+- **`ocr.*` 三件（`ocr.detect_text_layer` / `ocr.backends` / `ocr.run`）—— 已接线（2026-10-07）。**
+  **接线前的欠账**（2026-10-07 02:2x）：只有角色 B 的工具面拿得到这三件，而 `agent_b/core.py` 的抽取链撞到
+  "无文本层"时直接放弃（`_load_doc_for` 里那句「无文本层（扫描版？）⇒ 无从逐字定位」），从不调它们
+  ⇒ 文档在教一个生产面没人调的工具。
+  **接线的落点**：`agent_b/core.py` 的 `_load_doc_for` ⇒ `_ocr_retry`（经**工具面**调 `ocr.backends` /
+  `ocr.detect_text_layer` / `ocr.run`）—— 无文本层 ⇒ 先试 OCR ⇒ 重新抽取 ⇒ 仍空才回原来那句原因，
+  且原因要能区分"没试 OCR"与"试了 OCR 还是没有"。
+  **接线后的真机读数**（`temp/_r2b_ocr_probe_after.txt`，2026-10-07）：真机扫描件
+  `projects/project5/library/扫描件.pdf`（6.5 MB）上 `_load_doc_for` 返回的不可用原因是
+  「文献 0000 无文本层，**且本机没有可用的 OCR 后端（unavailable）**⇒ 无从逐字定位」——
+  本机 `ocr.backends` 报 `available: []`（easyocr 因 torch/numpy 不兼容不可用、pytesseract 缺 tesseract
+  可执行文件），`ocr.detect_text_layer` 报 `has_text_layer: False | source_kind: pdf | pages: 0 | chars: 0`。
+  即：这条路径**真的被走到了**，且"没试过 OCR"与"试了、后端不可用"在原因里分得开。
+  **两版读数并列**。**口径逐字写死**（免得下一个人按"出现处数"去数、数出第三种结果）：
+  数的是**含 `ocr.` 的「行数」**（不是匹配总数 —— 同一行出现多次只算一行），
+  `src` 递归 `-Recurse`、`docs` 只算顶层 `.md`。**在 `agentflow/` 目录下跑**（本文档所在目录）：
+  ```powershell
+  (Get-ChildItem src  -Recurse -File -Filter *.py | Select-String -Pattern 'ocr\.' | Measure-Object).Count
+  (Get-ChildItem docs -File -Filter *.md          | Select-String -Pattern 'ocr\.' | Measure-Object).Count
+  ```
+  | 时刻 | `src/**/*.py` | `docs/*.md` 原始 | 本条自身 | `docs` 扣除本条 |
+  |---|---:|---:|---:|---:|
+  | 接线前（2026-10-07 02:2x） | 56 | 39 | 0（本条当时还没写） | 39 |
+  | 接线后（2026-10-07，A 落地并复核后） | 68 | **47（测于 2026-10-07 02:47）** | **8（同刻）** | **39** |
+  「原始」与「本条自身」两格是**自指**的（改这一条，它们自己就变）⇒ 它们各带**测量时刻**：
+  上面那两个数是 **2026-10-07 02:47** 测的。**净数 `39` 是可复算的稳定量**（只要 `docs/` 别的文件不动），
+  下一个读者按上面的命令数出别的数时，看时刻就知道那是本条改写前的读数。
+  docs 明细（接线后，同一口径，测于 2026-10-07 02:47）：`ROLE-SPECS.md` 18 · `PROPOSALS.md` 12 · `READING-MAP.md` 8 · `PROPOSAL-side-effect-axes.md` 7 · `TOOLBOX-DRAFT-roles.md` 2。
+  **读这张表时要知道四件事**（否则会把数读歪）：
+  ① 唯一干净的接线前后对比是 `src` 一列：**56 → 68**（+12 = 接线新增的引用；`agent_b/core.py` 里 `ocr.` 现为 14 行）；
+  ② `docs` 侧的 **+8 全部是本条目自己**（这一条本身就在讲 `ocr.`）⇒ **扣除本条后 39 → 39，无净变化** ——
+  所以 `docs` 那一列**不能当接线效果的读数**，它只证明"文档侧没有因此多出/少掉别的引用"；
+  ③ 本条目自身的 8 行是**同一口径下的行数**；它还会随这条被改写而变（**这个数只在本条定稿的那一刻成立**），
+  所以引用本表时请连口径与时刻一起引；要现值就用上面那两条命令重跑；
+  ④ 旧记的「44 → 53 处」口径不明，**本条目一律以本口径为准**；历史读数**不改成现值**
+  （按主控判例：带日期、带口径的历史读数保留原样）。
 
 ---
 
@@ -91,7 +135,7 @@
 | `tools/review_tools.py` | H 的工具：审校 |
 | `tools/conductor_tools.py` | 主控工具：给 M 配手与眼（派活 / 台账 / 停止 / 状态） |
 
-### 第 4 层 · 角色面（八个角色各自的一本账）
+### 第 4 层 · 角色面（九个角色各自的一本账）
 
 | 文件 | 是什么 |
 |---|---|
@@ -103,8 +147,9 @@
 | `agent_f/`（包） | F：多轮难题攻坚 |
 | `agent_g/`（包） | G：论文撰写 |
 | `agent_h/`（包） | H：审校（只读） |
+| `agent_v/`（包） | V：**证明级验证**（只读，`draft/39` §3.21 一/五/六）：把 F 交回来的证明按写成后的样子整体重读，给三态结论（`成立`/`有毛病`/`看不出来`）并签五元位第 3 位；`agent_v/core.py` 的 `AgentV`（三个动作：`verify_proof`/`list_verifications`/`read_proof`）+ `agent_v/__main__.py` 的自检入口（`python -m agentflow.agent_v`，16 条 `[PASS]`）。声明真身在 `specs/v.py`，读写在 `verifications.py` |
 
-> 八个角色（除主控）的包形状是一样的（`goal-7f5116c1` M6/M7）：入口 `__init__.py`、
+> 九个角色（除主控 M）的包形状是一样的（`goal-7f5116c1` M6/M7 + F-02 的 V）：入口 `__init__.py`、
 > 其余成员与 mixin 组装在 `agent_a/core.py` 这样的 core 模块里、模块级 helper 与常量在
 > `agent_a/_support.py`、一个动作一个文件（如 `agent_a/search_literature.py`）、
 > `python -m agentflow.agent_a` 的自检入口在同目录的 `agent_a/__main__.py`。
@@ -114,6 +159,7 @@
 | `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |
 | `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句） |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据 |
+| `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_rework`/`handoff_query`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态** |
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
 | `quoteverify.py` | 引文校验：引文级回验（禁改区） |
 | `dedup.py` | 判重：文献 / 概念 / 关系（禁改区） |
@@ -123,7 +169,7 @@
 | 文件 | 是什么 |
 |---|---|
 | `agent_loop.py` | LLM 驱动的角色循环：模型决定调哪个工具、唤起谁、给谁留言，框架负责执行与留痕 |
-| `agent_prompts.py` | A–H（含 M）的前置提示词：身份、边界、政策、工具、伙伴、契约、三态、循环协议 |
+| `agent_prompts.py` | A–H + V（含 M）的前置提示词：身份、边界、政策、工具、伙伴、契约、三态、循环协议 |
 | `llm.py` | 抽取层：`Extractor` 协议 + 离线基线 + 可插拔 `LLMExtractor` |
 | `llmseam.py` | 统一的模型缝：一次模型调用 = 一条可审计的记录 |
 | `judge.py` | LLM 判定的唯一缝协议 |
@@ -146,7 +192,7 @@
 | `cancellation.py` | 取消语义（四条纪律） |
 | `faculty_checks.py` | 十项官能里"可机械判的那一半" |
 | `deliver.py` | 交付前的判据闸门：逐项判据 + 机械半 → 结论、报告、派回去的工作项 |
-| `closing.py` | 收工门（`draft/37` §16 P3）：五条各自一个三态读数 —— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**工具 `conductor.closing` 与 CLI `agentflow closing` 都调 `closing.check_closing`（同一份实现、两个入口）**；`unknown` 不是通过 |
+| `closing.py` | 收工门（`draft/37` §16 P3）：**八格**各自一个三态读数（`closing.DEFAULT_CHECKS` 是权威清单）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / 实质产出（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ 验收表的机器可判行 / 产物台账与盘上一致（`ARTIFACTS.jsonl` 逐条重算）。**工具 `conductor.closing` 与 CLI `agentflow closing` 都调 `closing.check_closing`（同一份实现、两个入口）**；`unknown` 不是通过 |
 | `reviewaccept.py` | 审稿场景的**内容级**验收（`draft/37` §17.3）：报告九节且每栏有读数 / 定理台账每条有完整假设与出处页码 / 三态分支落盘可查 / 在成本上限内 / 每跳留下可读输入。**判据与辅助读数分栏** —— `sha`/页数/锚/行数那五种"容易拿到"的读数照原样给出，但**一个都不参与 `passed`** |
 
 ### 第 7 层 · 质量与产物面
@@ -191,6 +237,7 @@
 | 动 **F 的攻坚** | `agent_f/`（包） | `tools/attack_tools.py` | `tests/test_agent_f.py` |
 | 动 **G 的写作** | `agent_g/`（包） | `gates.py`、`tools/doc_tools.py`、`paperbuild.py` | `tests/test_agent_g.py`、`tests/test_paper_pack.py` |
 | 动 **H 的审校** | `agent_h/`（包） | `gates.py`、`tools/review_tools.py` | `tests/test_agent_h.py`、`tests/test_gates.py` |
+| 动 **V 的证明级验证** | `agent_v/`（包）、`specs/v.py`（禁改区：边与写集在那里） | `verifications.py`（台账 / 冷启动提示词 / 签位）、`tools/verify_tools.py`（禁改区：三件工具） | `tests/test_verifier_role.py`、`tests/test_capabilities_two_layer.py` |
 | 动**主控编队 / 并发** | `conductor.py` | `scheduler.py` → `host.py` → `tools/conductor_tools.py` | `tests/test_conductor.py`、`tests/test_scheduler.py`、`tests/test_host_wiring.py` |
 | 动**角色循环**（模型自己决定） | `agent_loop.py` | `agent_prompts.py` → `host.py` → `llmseam.py` | `tests/test_agent_loop.py`、`tests/test_agent_prompts.py` |
 | 往**提示词**里加一句话 | `agent_prompts.py` | 它引用的现算来源：`capabilities.py` / `tools.build_registry` | `tests/test_agent_prompts.py`（每条都要与现算一致） |
@@ -209,18 +256,18 @@
 
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
-| `agent_d/core.py` | 1608 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1608 行；`agent_d/_support.py` 是模块级 helper 与常量，641 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报 | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
+| `agent_d/core.py` | 1691 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1691 行；`agent_d/_support.py` 是模块级 helper 与常量，641 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报 | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
 | `agent_c/core.py` | 1134 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1134 行；`agent_c/_support.py` 是模块级 helper 与常量，325 行） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
-| `capabilities.py` | 2267 | 动作表 + 写集 + 边表 + 导入期交叉断言 | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
+| `capabilities.py` | 2288 | 动作表 + 写集 + 边表 + 导入期交叉断言 | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2880 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2745 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
-| `schema.py` | 2791 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
+| `schema.py` | 2873 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
 | `runflow.py` | 2039 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层 |
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 2474 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
+| `cli.py` | 2419 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1756 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
-| `agent_b/core.py` | 1045 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1045 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
-| `verify.py` | 1605 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |
+| `agent_b/core.py` | 1250 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1250 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
+| `verify.py` | 1631 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |
 
 ---
 

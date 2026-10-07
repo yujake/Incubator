@@ -28,6 +28,79 @@ def demo(tmp_path) -> Store:
     return Store(build_demo(tmp_path / "demo"))
 
 
+# ============================================================ L-03：报告只由 C 的动作产出
+
+
+def test_l03_the_direct_write_path_is_gone(demo, tmp_path):
+    """L-03 的负控：`pipeline` 里"自己把报告写进 `analysis_reports`"那条路不存在。
+
+    改前必红：`pipeline.py` 里有 `def _persist_report(...)` 且 `run_pipeline` 调它
+    （`report = _make_request_fn(agent_c)(request)` → `row = _persist_report(...)`），
+    那次分析不写 `role=C` 的 `tasks` 行、也不过策略/预算闸门 ⇒
+    `c_analysis_runs` 读 0（台账上像"C 一次都没跑过"）。
+
+    判据形态：源码里不许再有那个直写函数、也不许在 `run_pipeline` 里调它 ——
+    这是"退场"这件事本身的判据（行为判据在下面两条）。
+    """
+    import inspect
+
+    from agentflow import pipeline as PL
+
+    assert not hasattr(PL, "_persist_report"), "直写报告表那条路还在（L-03 没落）"
+    # 只看代码行（注释里说明"旧形态叫什么"是应该的，判据判的是行为）。
+    src = "\n".join(ln for ln in inspect.getsource(PL.run_pipeline).splitlines()
+                    if not ln.lstrip().startswith("#"))
+    assert "_persist_report(" not in src, "run_pipeline 里还在调直写"
+    assert "summon(" in src, "新路径（经 conductor.summon）不见了"
+    # 报告只由 C 的动作产出 ⇒ 写集声明与落点必须对得上（不动权限面）
+    from agentflow import capabilities as C
+
+    assert "analysis_reports" in C.WRITE_SETS["C"], "C 的写集里没有 analysis_reports"
+    assert C.find_action("C", "handle").handler_name == "handle"
+
+
+def test_l03_the_analysis_leaves_a_role_c_task_row(demo, tmp_path):
+    """L-03 的正控：这一次分析在 `tasks` 里留下 `role="C"` 的行（治 `c_analysis_runs` 读 0）。"""
+    out = run_pipeline(
+        demo, request=REQUEST, gap_rounds=1, agent_c=AgentC(demo),
+        agent_a=None, agent_b=None,
+        d_report_path=tmp_path / "demo" / "reports" / "pipeline-research.md",
+    )
+    rows = [r for r in demo.rows("tasks") if str(r.get("role")) == "C"]
+    assert rows, f"没有 role=C 的任务行：{[r.get('role') for r in demo.rows('tasks')]}"
+    assert rows[0]["action"] == "handle", rows[0]
+    assert rows[0]["called_by"] == "M", rows[0]
+    assert rows[0]["outcome"] == "ok" and rows[0]["status"] == "done", rows[0]
+    assert out["c_analysis"]["task_id"] == rows[0]["task_id"], out["c_analysis"]
+    # 报告仍是双份落盘（文件 + 登记行）——退场的是"pipeline 自己写"，不是"报告不落盘"
+    reports = demo.rows("analysis_reports")
+    assert len(reports) == 1 and reports[0]["report_id"] == out["report_ids"][0], reports
+    assert (demo.root / str(reports[0]["markdown_path"])).is_file(), reports[0]
+
+
+def test_l03_the_role_c_surface_is_still_read_only():
+    """L-03 的第 4 条负控：不许为了让 `handle` 能落盘而放宽 C 的只读工具面。
+
+    `analysis_reports` 的写权来自 `capabilities.WRITE_SETS["C"]`（声明面），
+    而 C 的工具面是另一回事：它一律拿不到写工具（`for_role` 的结构性剥离），
+    只读角色仍可调的落库代理只由 `READONLY_CALL_EXCEPTIONS` 一张表说了算。
+    """
+    from agentflow import capabilities as C
+    from agentflow.tools import READONLY_CALL_EXCEPTIONS, READ_ONLY_ROLES
+    from agentflow.tools import build_registry
+
+    assert "C" in READ_ONLY_ROLES, "C 掉出只读角色名单了"
+    allowed = {name for name, _why in READONLY_CALL_EXCEPTIONS.get("C", ())}
+    reg = build_registry().registry
+    for spec in reg.for_role("C"):
+        assert spec.side_effect == "read", f"C 的工具面上出现了写工具：{spec.name}"
+    for spec in reg.call_surface("C"):
+        if spec in allowed:
+            continue
+        assert reg.get(spec).side_effect == "read", f"C 多拿到了写工具：{spec}"
+    assert "analysis_reports" in C.WRITE_SETS["C"]   # 落盘权来自声明面，不是工具面
+
+
 def test_run_pipeline_on_demo_dataset_produces_reports_and_questions(demo, tmp_path):
     """离线跑通 C→D：产生 C 报告、D 报告、非空问题表，且全程不抛异常。"""
     out = run_pipeline(

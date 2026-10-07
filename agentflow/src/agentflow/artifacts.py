@@ -114,6 +114,69 @@ def sha256_of(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
+#: 逐条登记的已知外部生产者（EE-11 的写入期口径）。
+#:
+#: ## 它不是"允许名单"（这一条是主控裁定，2026-10-06）
+#:
+#: 未登记的名字照写台账 —— 外部脚本（真机 2985 行 `paper-generator`）的产出
+#: 不许因为"框架没登记这个名字"就消失：台账少一行 = 下游读不到那份产物，
+#: 那是不可逆的信息损失（比"多一根分面轴"贵得多）。
+#: 这张表的作用是让常见的外部生产者有名字、有理由（人读得懂"这是谁"），
+#: 而"出现了一个没登记的生产者"这件事由 `summarize()["unregistered"]` 如实报出来。
+#: 一句话：写入期可见，不是写入期否决。
+#:
+#: 真机读数（`draft/43-E` 附）：Incubator 根的 `ARTIFACTS.jsonl` 有 2985 行
+#: `producer="paper-generator"`，而这个串在 `src/`、`tools/`、`AGENTS.md`、`draft/*.md`
+#: 里零命中 ⇒ 它是外部脚本写的，不是框架角色。登记它（而不是改历史行：`store.rebuild`
+#: 会重放同一批，而"历史行不许回填"是本仓的纪律）。
+REGISTERED_EXTERNAL_PRODUCERS: dict[str, str] = {
+    "paper-generator": (
+        "外部论文打包脚本（不是框架角色）：真机 Incubator 根 2985 行 `ARTIFACTS.jsonl` "
+        "的 `producer` 全是它 ⇒ 登记成「已知的外部生产者」，人读得出这是谁"
+    ),
+}
+
+#: `producer` 的形态上限：超过它的一律当坏输入（不是"未登记的外部名"）。
+PRODUCER_MAX_CHARS = 120
+
+
+def producer_problem(producer: str) -> str:
+    """畸形输入的判据（空串 = 合格）。
+
+    这一层只拦"坏输入"：空 / 纯空白 / 含换行 / 超长（`PRODUCER_MAX_CHARS`）。
+    "未登记"不是畸形 —— 未登记的外部生产者照写台账（见
+    `REGISTERED_EXTERNAL_PRODUCERS` 的 docstring：外部产出不许因为框架没登记就消失），
+    它的可见性由 `summarize()["unregistered"]` 与 `producer_is_known()` 提供。
+    """
+    name = str(producer or "").strip()
+    if not name:
+        return "producer 不能为空：不知道是谁产的，这条登记没有归属可言"
+    if "\n" in str(producer) or "\r" in str(producer):
+        return "producer 里不能有换行：台账一行一条，换行会把一行拆成两条"
+    if len(name) > PRODUCER_MAX_CHARS:
+        return (f"producer 太长了（{len(name)} 字符 > {PRODUCER_MAX_CHARS}）—— "
+                "它应当是一个名字，不是一段说明；说明写进 `note`")
+    return ""
+
+
+def producer_is_known(producer: str) -> bool:
+    """这个名字是不是已知的生产者（角色 / 主控 / `tool:<名>` / 已登记的外部生产者）。
+
+    它是读数不是闸门：调用方据此在自己的返回里标注"这个名字没登记过"
+    （`summarize()["unregistered"]` 就是它的一份消费）。
+    """
+    from . import schema as S
+
+    name = str(producer or "").strip()
+    if not name:
+        return True                     # 空名由 `producer_problem` 拒，这里不重复判
+    if name in set(S.ROLES) or name == S.CONDUCTOR_ROLE:
+        return True
+    if name in REGISTERED_EXTERNAL_PRODUCERS:
+        return True
+    return name.startswith(("tool:", "agentflow."))
+
+
 def record(
     root: Any,
     *,
@@ -129,9 +192,16 @@ def record(
 
     先核文件再写台账：文件不存在 / 不是普通文件 ⇒ `ArtifactError`，一个字节都不写。
     （"先记账、后产出"的顺序会让台账成为一份愿望清单 —— 而它唯一的用途是核对。）
+
+    `producer` 走写入期口径 `producer_problem`（EE-11）：只拦畸形输入
+    （空 / 换行 / 超长）。未登记的合法名字照写台账 —— 外部生产者（真机 2985 行
+    `paper-generator`）的产出不许因为"框架没登记这个名字"就消失；它的可见性由
+    `producer_is_known()` / `summarize()["unregistered"]` 提供
+    （"写入期可见，不是写入期否决"）。
     """
-    if not str(producer).strip():
-        raise ArtifactError("producer 不能为空：不知道是谁产的，这条登记没有归属可言")
+    problem = producer_problem(producer)
+    if problem:
+        raise ArtifactError(problem)
     rel = rel_path(root, path)
     full = pathlib.Path(str(root)).resolve() / rel
     if full.is_dir():
@@ -247,7 +317,13 @@ def list_artifacts(root: Any, *, producer: str | None = None,
 
 
 def summarize(root: Any) -> dict:
-    """台账汇总：条数 / 生产者计数 / 类别计数 / 坏行数 / 四态计数。"""
+    """台账汇总：条数 / 生产者计数 / 未登记的生产者 / 类别计数 / 坏行数 / 四态计数。
+
+    `unregistered` 是 EE-11 的读数（不是闸门）：台账里出现过、但既不是角色/主控、
+    也不是 `tool:<名>`/`agentflow.<模块>`、也不在 `REGISTERED_EXTERNAL_PRODUCERS` 里的
+    生产者名 —— 各几条。它让"出现了一个没人登记的生产者"当场看得见
+    （改前：那种名字静默写进台账，`by_producer` 悄悄多一根分面轴，而那与"少登一行"同形）。
+    """
     records, bad = read_ledger(root)
     by_producer: dict[str, int] = {}
     by_kind: dict[str, int] = {}
@@ -257,7 +333,9 @@ def summarize(root: Any) -> dict:
     status: dict[str, int] = {}
     for v in verify_entries(root, records):
         status[v["status"]] = status.get(v["status"], 0) + 1
+    unregistered = {name: n for name, n in by_producer.items() if not producer_is_known(name)}
     return {"entries": len(records), "bad_lines": len(bad), "by_producer": by_producer,
+            "unregistered": unregistered,
             "by_kind": by_kind, "status": status, "problems": list(bad)}
 
 

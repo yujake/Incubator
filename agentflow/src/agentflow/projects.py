@@ -430,8 +430,14 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         # 而 CLI 上会打出 0.0 USD —— 那正是"自报比事实好看"的形态。
         # 实测（2026-09-28）：第一次真跑打出的就是 `0.0 USD / 3 次调用`，
         # 钱花了、账上没有。归口用 `extract`（`schema.USAGE_SCOPES` 里的一档）。
+        # `task_id=task_id or None`：给不出来就如实说"这一笔不挂在任何一次召唤上"。
+        # 此前这里与 `host.b_extractor` 是同一类病：把 `None` 折成字符串 `"(未接线)"`。
+        # 那个字符串不是 `t-NNNN` 契约里的号 ⇒ `verify.verify_all` 把它报成
+        # `dangling_usage_task`(error)，而账本看起来"有个具体的任务号"（假读数比没读数更难发现）。
+        # 透传 `None` 的语义与 `charged=False` 完全无关：前者是"这笔花销挂不上召唤"，
+        # 后者是"这笔没有真的入账"（`uncharged()` 数的是后者）—— 两件事不许合并成一个标签。
         client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
-                                task_id=task_id or "(未接线)", role="B",
+                                task_id=task_id or None, role="B",
                                 # 输出上限必须显式给大：抽取要吐一整个 JSON（概念表 +
                                 # 关系表），缺省 4096 会把长输出截在半句上 ⇒ 解析失败。
                                 # 实测（2026-09-28）：两轮抽取就这么失败的。

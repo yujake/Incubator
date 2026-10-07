@@ -81,7 +81,7 @@ def _snapshot(tmp: pathlib.Path) -> dict:
 
     cli: dict[str, str] = {}
     for label, extra in [("", []), ("--json", ["--json"])] + \
-            [(f"--role {r}", ["--role", r]) for r in "ABCDEFGH"]:
+            [(f"--role {r}", ["--role", r]) for r in "ABCDEFGHV"]:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             code = main(["--root", str(tmp / "ws"), "tools", *extra])

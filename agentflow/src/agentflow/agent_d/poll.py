@@ -1,6 +1,6 @@
 """角色 D 的动作 `poll`（`goal-7f5116c1` M6：从 `agent_d.py` 拆出来，逐字未改）。
 
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`tests/test_agent_split_is_verbatim.py`）。
+拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。
 """
 from __future__ import annotations
 
