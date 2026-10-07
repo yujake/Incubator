@@ -1090,17 +1090,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("timestamp", "string"))),
 )
 
-#: 本模块还欠的 TS 接口（`(名字, 缺哪个 reader)`）。生成器逐条写成 TODO 注释。
-#: 补完一个接口就删掉它那一行 —— 这张表住在本模块里，不住在生成器里。
-MISSING_TYPES: tuple[tuple[str, str], ...] = (
-    ("RunIndex",
-     "缺 GUI 侧的索引消费者：`sessions.load_run_index` / `rebuild_run_index` 已落地"
-     "（B2），但 Run 页读它那一段属于 A 线的页面；本模块只把 `RunIndexDrift` 之外的"
-     "两栏留给它。索引的形状定义在 `sessions.compute_run_index`"),
-    ("RunIndexDrift",
-     "缺 GUI 侧的索引消费者：`sessions.reconcile_run_index` 已落地（B2），"
-     "返回形状见它自己的 docstring；页面（A 线）接上之后把这一行删掉"),
-)
+# （`MISSING_TYPES` 在文件头声明：那是"这一层有哪些约定"的那一处，本处不再重复一份 —
+#  同一个名字两份定义会让读的人以为有两张表。）
 
 
 def ts_fields() -> dict[str, tuple[str, ...]]:
