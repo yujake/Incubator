@@ -1,0 +1,1 @@
+{"at": "2026-10-07T23:28:58+08:00", "endpoint": "/api/stop", "http": 200, "kind": "web_action", "ok": true, "params": {"confirm": true, "force": false, "reason": "user"}, "params_sha256": "02b80dd13f79659fa5577385d423063bb489fe847ed4f57435ad912f29fb3dc9", "result": "已叫停：写下停机开关（reason=user）", "source": "127.0.0.1", "tri": "computed"}

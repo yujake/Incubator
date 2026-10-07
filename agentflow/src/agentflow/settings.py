@@ -102,6 +102,7 @@ from typing import Any, Mapping
 __all__ = [
     "DEFAULT_SETTINGS_REL",
     "ENV_SETTINGS",
+    "MASKED_KEY",
     "MODEL_KEYS",
     "PROJECT_ROOT",
     "TOOLCHAIN_KEYS",
@@ -114,6 +115,7 @@ __all__ = [
     "settings_path",
     "toolchain_settings",
     "workspace_settings",
+    "write_settings",
 ]
 
 #: 默认落点名（相对工程根；相对工作区根就是 `agentflow/settings.json`）。
@@ -267,3 +269,206 @@ def resolve_setting_path(raw: str | Path) -> Path:
     """
     p = Path(raw)
     return p if p.is_absolute() else (WORKSPACE_ROOT / p)
+
+
+# ====================================================================== 写设置（W4 / 裁定 E1）
+#
+# 这是新增的一条把密钥写到磁盘的路径，所以它把代价逐条写在明面上：
+#
+# 1. 只写不读：本函数的返回里 `model.api_key` 恒为 `MASKED_KEY`（真 key 一个字
+#    都不回显，也永不回填表单）。要真值请用 `model_settings()` —— 那一口的调用方
+#    （`modelgw`）本来就该拿到真值，而"台面"这一侧不该有第二条通路。
+# 2. 原子写：先写同目录下的临时文件，再 `os.replace` 换上去。写一半失败时盘上那份
+#    逐字节不变（判据 `test_webui_settings_write.py` 有一条负控钉它）。
+# 3. 权限尽力收紧：POSIX 上 `chmod 0600` 并回读校验；Windows 上 POSIX 模式位
+#    管不到 ACL（回读会如实报告 `mode_enforced=False`）—— 返回值里给的是实测读数，
+#    不是"应该是什么"。理由与 `draft/76` 题 E 的代价栏同一条。
+# 4. 没配/没装/读不出来 ⇒ 返回 `tri="unknown"` 而不是抛异常：写设置这件事不许把
+#    "没查成"折叠成"改成功了"，也不许让一个坏掉的文件把调用方炸掉。
+
+#: `model.api_key` 在返回里恒为它（与 `ModelSpec.redacted` 的占位逐字相同）。
+MASKED_KEY = "***"
+
+
+def _write_sections() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """三段与各自认的键（顺序即文档顺序）—— 写入口与读入口共用同一批常量。"""
+    return (("toolchain", TOOLCHAIN_KEYS), ("model", MODEL_KEYS),
+            ("workspace", WORKSPACE_KEYS))
+
+
+def _clean_write_values(values: Mapping[str, Any]) -> tuple[dict[str, dict[str, str]], str]:
+    """把要写进去的东西整理成 `{段: {键: 字面值}}`；不合法 ⇒ `(空, 理由)`。
+
+    两条纪律：
+
+    - 未知段落/未知键直接拒（不悄悄写进去）：一个拼错的键被静默落盘，
+      表现是"我明明配了，怎么还是没生效" —— 而设置文件里躺着一行没人读的东西；
+    - 值统一成字符串（数字 / 列表折成空串之外的东西一律拒）：`_section()` 那一侧的
+      读法是"非字符串当未设置"，写进来一个 `123` 等于写了一条永远读不到的配置。
+
+    空串是合法的值：它是「清掉这一格」的写法（读侧把空串当未设置）。
+    """
+    known = dict(_write_sections())
+    out: dict[str, dict[str, str]] = {}
+    for raw_section, raw_seg in (values or {}).items():
+        section = str(raw_section)
+        if section not in known:
+            return {}, (f"不认这段设置：{section!r}（只认 {sorted(known)}）—— "
+                        "未知段一律拒，不悄悄写进去")
+        if not isinstance(raw_seg, Mapping):
+            return {}, f"{section} 段必须是一个对象（收到 {type(raw_seg).__name__}）"
+        seg: dict[str, str] = {}
+        for raw_key, raw_value in raw_seg.items():
+            key = str(raw_key)
+            if key not in known[section]:
+                return {}, (f"不认 {section} 段的这个键：{key!r}"
+                            f"（只认 {list(known[section])}）")
+            if raw_value is None:
+                seg[key] = ""
+            elif isinstance(raw_value, str):
+                seg[key] = raw_value.strip()
+            else:
+                return {}, (f"{section}.{key} 的值必须是字符串（收到 "
+                            f"{type(raw_value).__name__}）—— 非字符串一律拒，"
+                            "免得写进一条读侧永远读不到的配置")
+        out[section] = seg
+    return out, ""
+
+
+def _masked_section(section: str, seg: Mapping[str, Any]) -> dict[str, str]:
+    """一段的回显形态：`model.api_key` 换成 `MASKED_KEY`，其余原样。
+
+    key 只写不读那条裁定的落点就是这一个函数（判据的负控把它改成恒等函数，
+    正控必须当场红 —— 否则"不回显"这句话没有任何机器读数）。
+    """
+    out = {k: (seg.get(k) if isinstance(seg.get(k), str) else "") for k in
+           dict(_write_sections()).get(section, ())}
+    if section == "model" and out.get("api_key"):
+        out["api_key"] = MASKED_KEY
+    return out
+
+
+def _tighten(path: Path) -> dict[str, Any]:
+    """把权限收紧到"只有本用户能读写"，并如实回报实测读数。
+
+    返回 `{mode, mode_enforced, platform, note}`：
+
+    - POSIX：`chmod 0600` 之后回读 `st_mode & 0o777`，等于 `0o600` 才记
+      `mode_enforced=True`；
+    - Windows：`chmod` 只影响只读位，管不到 ACL，所以回读通常是 `0o666`
+      ⇒ 如实记 `mode_enforced=False` 并把原因写进 `note`。这里刻意不伪造一个
+      `0o600` —— "写了个 0600 的读数"与"真的是 0600"是两件事
+      （本仓库的三态纪律：没做到的要说出口）。
+    """
+    plat = os.name
+    note = ""
+    try:
+        os.chmod(path, 0o600)
+    except OSError as exc:  # noqa: BLE001 - 收紧失败不该带走这次写入
+        return {"mode": "", "mode_enforced": False, "platform": plat,
+                "note": f"chmod 失败：{type(exc).__name__}: {exc}"}
+    try:
+        mode = path.stat().st_mode & 0o777
+    except OSError as exc:  # noqa: BLE001
+        return {"mode": "", "mode_enforced": False, "platform": plat,
+                "note": f"回读权限失败：{type(exc).__name__}: {exc}"}
+    enforced = mode == 0o600
+    if not enforced and plat == "nt":
+        note = ("Windows 上 POSIX 模式位管不到 ACL：这一格是实测读数，"
+                "真正的权限面由文件所在目录继承来的 ACL 决定")
+    elif not enforced:
+        note = "chmod 0600 之后回读的不是 0600（文件系统可能不支持）"
+    return {"mode": f"0o{mode:o}", "mode_enforced": enforced, "platform": plat,
+            "note": note}
+
+
+def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> str:
+    """原子写一个 JSON 文件；返回空串表示写成，否则是问题说明。
+
+    "原子"在这里是可验证的：临时文件与目标同目录（同一次 `os.replace` 才
+    谈得上原子），先写完再替换 ⇒ 崩在中间时盘上那份逐字节不变。
+    """
+    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False) + "\n"
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
+    except OSError as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            # 临时文件删不掉可以忽略：它是个点开头的半成品，目标文件一个字节没动，
+            # 而这次调用的结局已经如实记成 unknown（下面那行返回）—— 掩盖不了什么。
+            pass
+        return f"{type(exc).__name__}: {exc}"
+    return ""
+
+
+def write_settings(values: Mapping[str, Any], path: str | Path | None = None, *,
+                   env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """合并写入机器级设置文件（`agentflow/settings.json`）；返回一份回执。
+
+    落点与读侧同一条三档口径（:func:`settings_path`）：显式 `path` →
+    `env[AGENTFLOW_SETTINGS]` → 默认落点。`AGENTFLOW_SETTINGS` 指到别处时就写别处，
+    所以判据可以在一份临时文件上跑，不碰本机的真设置。
+
+    返回形状（`draft/73` §2.6：与 `load_settings` 同族，但 key 只写不读）：
+
+        {"ok": bool, "tri": "written" | "refused" | "unknown", "reason": str,
+         "path": str, "values": {段: {键: 值}}, "permissions": {...}}
+
+    `tri` 是"写设置"这件事的词表（`draft/73` §2.5 给 `/api/settings` 定的那一套），
+    不是 `Tri`（`computed/unreadable/not_applicable`）—— 两套字符串不许互相顶替
+    （裁定 N1）。HTTP 那一层做映射：`written→computed` · `refused→not_applicable` ·
+    `unknown→unreadable`，并把本词原样带进回执的 `extra`。
+
+    `values` 是回显：`model.api_key` 恒为 `MASKED_KEY`。文件里是真值，
+    返回里是掩码 —— 这两件事必须能同时成立（判据 `test_webui_settings_write.py`
+    的正控逐字钉它，负控把 :func:`_masked_section` 改成恒等函数后必须红）。
+    """
+    target = settings_path(path, env=env)
+    if target is None:
+        # "本次没有落点"（注入环境且没给 AGENTFLOW_SETTINGS）⇒ unknown。它不是失败，
+        # 但更不是成功：什么都没写这件事必须说得出口。
+        return {"ok": False, "tri": "unknown", "path": "", "values": {},
+                "permissions": {},
+                "reason": ("这次没有设置文件的落点（给了 env 注入而里面没有 "
+                           f"{ENV_SETTINGS}）⇒ 什么都没写")}
+    clean, why = _clean_write_values(values)
+    if why:
+        masked = {name: _masked_section(name, (clean or {}).get(name, {}))
+                  for name, _keys in _write_sections()}
+        return {"ok": False, "tri": "refused", "path": str(target), "values": masked,
+                "permissions": {}, "reason": why}
+    try:
+        current = load_settings(target, env=env)
+    except (json.JSONDecodeError, ValueError) as exc:
+        # 盘上那份读不出来：不许覆盖它（那会把一个可修的文件变成不可修），
+        # 也不许崩 —— 如实记成 unknown 并把真正的那个错误原样带出去。
+        return {"ok": False, "tri": "unknown", "path": str(target), "values": {},
+                "permissions": {},
+                "reason": (f"盘上那份设置文件读不出来，本次什么都没写："
+                           f"{type(exc).__name__}: {exc}")}
+    merged: dict[str, Any] = dict(current)
+    for section, seg in clean.items():
+        base = merged.get(section)
+        base = dict(base) if isinstance(base, Mapping) else {}
+        base.update(seg)
+        merged[section] = base
+    problem = _atomic_write_json(Path(target), merged)
+    if problem:
+        return {"ok": False, "tri": "unknown", "path": str(target), "values": {},
+                "permissions": {},
+                "reason": f"写设置文件失败（盘上那份没被动过）：{problem}"}
+    perms = _tighten(Path(target))
+    # 回显按盘上合并后的那一份算（而不是按调用方给的那一份）：这样"写进去的"
+    # 与"回报的"是同一件事，漏掉一个键会当场看出来。
+    masked = {name: _masked_section(name, merged.get(name) or {})
+              for name, _keys in _write_sections()}
+    # 理由里只写"改了哪几格"的键名，绝不带值 —— 这一句是要进回执与审计的，
+    # 带上值就等于让 key 从另一条路回显出来。
+    touched = sorted(f"{section}.{key}" for section, seg in clean.items() for key in seg)
+    return {"ok": True, "tri": "written", "path": str(target), "values": masked,
+            "permissions": perms,
+            "reason": f"已写入 {target}（只改了这几格：{touched}）"}
