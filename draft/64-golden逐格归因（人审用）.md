@@ -349,3 +349,72 @@ R8 的 **A-1…A-9 全部落在文档面与一个入口**（`cli.py` 的 `MENU`/
 | `tests/golden/tool_surface_snapshot.json` | `da87baf0f80b…` | **`da87baf0f80b942d…`（未变）** |
 
 ⚠️ **`draft/67` 的待签清单要按这两个新 sha 复采**（两个 golden 仍在 `unregistered` 档）。
+
+---
+
+### §8.7 **第四次重冻：R6 剩下的两刀（§2-①②"参数提示只列必填" + §3-2 假摘要现算）**（2026-10-07 14:5x）
+
+**这一批改了两件事（都落在 `agent_prompts.py` / `table_tools.py`，都不在禁改区）：**
+
+1. **参数提示只列必填**（R6 `draft/63 §2-①②`）：`_params_hint` 原来把可选键也逐个列出来
+   （十角色合计 **10,458 字符**），现在只列必填；可用键交给"被拒时那张表"
+   （`agent_loop._param_table`，`tool`/`summon`/`summon_many` 三条形状全覆盖）。
+   LOOP 规则①同步改了口径（原话"参数只许用括号里列出的键"在括号只剩必填后会变成假话），
+   并把"封闭集合 + 被拒时给表"两句写进规则。
+2. **`table.schema` 的假摘要现算**（R6 `draft/63 §3-2`）：摘要原写死"返回 6 张表"，
+   真身 `len(ALL_TABLES)` = **17**（同文件 `:493` 早就是现算写法）。改前实测：
+   **全仓没有任何判据看着那句字面量**（`tests`/`scripts`/`tools` 里零命中）。
+
+**增量格：agent 10 格 + tool 10 格，逐格如下（`temp/r6-freeze-cells-step4-before.txt` 是原始件）。**
+
+agent 面（**10 格全是 `roles.<X>.prompt`**，与"这一批只动了提示词渲染"互为佐证）：
+
+| 格 | 改前 | 改后 | 差 | 归因 |
+|---|---|---|---|---|
+| `roles.A.prompt` | 14878 | 14246 | **−632** | 参数提示只列必填 |
+| `roles.B.prompt` | 14184 | 13627 | **−557** | 同上 |
+| `roles.C.prompt` | 12347 | 11958 | **−389** | 同上 |
+| `roles.D.prompt` | 21258 | 19677 | **−1581** | 同上（参数尾巴最大的一档） |
+| `roles.E.prompt` | 18913 | 17906 | **−1007** | 同上 |
+| `roles.F.prompt` | 20361 | 18601 | **−1760** | 同上 |
+| `roles.G.prompt` | 28768 | 27005 | **−1763** | 同上 |
+| `roles.H.prompt` | 24241 | 23099 | **−1142** | 同上 |
+| `roles.M.prompt` | 39545 | 37751 | **−1794** | 同上（主控工具面最大） |
+| `roles.V.prompt` | 12390 | 12146 | **−244** | 同上 |
+
+合计 **−10,869 字符**（比"可选枚举"的 10,458 多 411：多出来的是 LOOP 规则①改写与伙伴表表头那句）。
+
+tool 面（**10 格 = 9 个 `cli.--role A–H,V` 各 +1 字符 + `declarations.table.schema.summary`**）：
+
+| 格 | 改前 | 改后 | 差 | 归因 |
+|---|---|---|---|---|
+| `cli.--role A` … `cli.--role V`（9 格） | 2634/2112/2049/3711/2346/3295/3836/2504/1395 | 各 **+1** | **+1** | CLI 输出里嵌着工具摘要 ⇒"6 张表"→"17 张表"多一个字符 |
+| `declarations.table.schema.summary` | `返回 6 张表的字段名/…` | `返回 17 张表的字段名/…` | 文本 | §3-2 现算 |
+
+**支撑证据（逐条可复算）**：
+1. **十角色字符账两套口径一致**：`temp/_r6_prompt_baseline.py --diff-against` 的逐角色差
+   （−632/−557/−389/−1581/−1007/−1760/−1763/−1142/−244/−1794）与 golden 逐格差**逐项相同**；
+   两套渲染用的是**不同的固定工作区**（golden 用自己的夹具、探针用 `temp/r6-fixed-ws`），
+   所以绝对值在 G/M 上差 7 字符而**差量完全相同** —— 差的来源就是本批改的那两处。
+2. **改前红 / 改后绿五条**：`test_no_role_prompt_enumerates_optional_parameter_keys`（改前红：
+   列出 100+ 行带"可选"的提示行）· `test_no_tool_summary_states_a_stale_table_count`
+   （改前红：`table.schema：摘要说 6 张表，真身 17`）· `test_the_table_count_checker_actually_catches_a_stale_number`
+   （负控）· `test_the_optional_key_checker_actually_catches_an_enumeration`（负控）·
+   `test_the_closure_rule_and_its_fallback_are_both_still_stated`（封闭集合与兜底两句）。
+3. **谁接住**：改这一批时**有五条既有判据当场变红**（这正是"删除/改写是可见的"的证据）——
+   `test_every_tool_on_the_face_is_listed_with_its_parameter_keys`（钉的正是旧口径，已按新口径重写并
+   把"可选键又回来"堵死）· `test_the_prompt_version_moves_with_the_sections`（版本 p38 → **p39**
+   + 十格摘要重算）· 两个 golden 用例 · `test_the_comparison_actually_sees_a_change`
+   （它先断言"golden 必须等于 live"，重冻后自然绿）。**没有一条是"静默变绿"的。**
+4. **兜底那条路有判据**：`tests/test_param_table_on_refusal.py`（"被参数拒了却没给参数表"必红）
+   ⇒ 摘掉枚举不等于摘掉"模型学得到可用键"这件事。
+
+**golden 的 sha 变化（登记用）**：
+
+| 文件 | 重冻前 | **重冻后（当前）** |
+|---|---|---|
+| `tests/golden/agent_surface_snapshot.json` | `1e8356ea07ce…` | **`6403c86231ac…`** |
+| `tests/golden/tool_surface_snapshot.json` | `da87baf0f80b…` | **`3a593397fd61…`** |
+
+重冻后立刻复核：两条快照用例 **5 passed**、增量格 **agent 0 / tool 0**。
+⚠️ **`draft/67` 的待签清单要按这两个新 sha 复采**；人审面 = 第一轮 70 格 + 第二轮 7 格 + 第三轮 10 格 + **本轮 20 格**。

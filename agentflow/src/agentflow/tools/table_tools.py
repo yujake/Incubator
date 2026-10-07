@@ -818,7 +818,11 @@ def table_count(ctx: TableContext, *, table: str, filter: Mapping[str, Any] | No
 
 @tool(
     "table.schema",
-    "返回 6 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。",
+    # 张数必须现算（2026-10-07 修，R6 的 `draft/63 §3-2`）：这里原写死"返回 6 张表"，
+    # 而 `ALL_TABLES` 的真身是 17 —— 模型看到的摘要因此是假的，且全仓没有任何判据
+    # 看着那句话（改前实测：`grep "返回 6 张表"` 在 tests/scripts/tools 里零命中）。
+    # 现算的判据在 `tests/test_tool_summary_readings.py`（含"写死 6 必红"的负控）。
+    f"返回 {len(ALL_TABLES)} 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。",
     _obj({}),
     side_effect="read",
     roles=TOOL_ROLES,
@@ -1052,8 +1056,8 @@ def _selftest() -> int:
         register(reg, store=st, roles=("A", "B", "C", "D"))
         print(f"[环境] 临时库={tmp}；已注册工具={reg.names()}")
 
-        # ---- (1) 六张表逐张 schema / count
-        print("\n[1] 六张表 schema / count")
+        # ---- (1) 逐张 schema / count（张数现算：别再写死"六张表"）
+        print(f"\n[1] {len(ALL_TABLES)} 张表 schema / count")
         for t in ALL_TABLES:
             cr = reg.call("table.count", table=t)
             check(f"table.count {t}", cr.ok and cr.data == 0, f"count={cr.data}")

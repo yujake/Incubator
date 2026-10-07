@@ -55,7 +55,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `_LOOP_EDGELESS_STUB` 的长度）。一字未删的规矩：
 #: 这些文本没有一条是该角色自己的规矩 —— 说的是主控的留痕、主控的 final、
 #: 以及"唤不动任何人时无从填起"的那一段。
-PROMPT_VERSION = "p38"
+PROMPT_VERSION = "p39"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -128,7 +128,8 @@ LOOP_PROTOCOL = """\
 
 规则：
 
-- 参数只许用括号里列出的键：参数表是封闭集合，多传一个键就会被拒（invalid_params）。
+- 参数提示只列必填，它不是全部可用键：可用键是封闭集合（不许自己发明键），多传一个键就会被拒
+  （invalid_params）—— 被拒时框架会把该工具/动作的完整参数表回给你，照它重写一次就好。
   派活前先看伙伴表里的参数要求与接线态：**没接线的伙伴派了也会被拒**，不如改派能做的。
 - 名字必须是真的：工具名取自上面列出的工具面，角色名与动作名取自律上面列出的伙伴表。
   写错的名字会被当场拒绝，并把拒绝理由原样回给你 —— 那不是失败，是一次纠正。
@@ -1390,26 +1391,30 @@ def _props_of(spec: Any) -> tuple[str, ...]:
 
 
 def _params_hint(spec: Any) -> str:
-    """参数说明：必填哪些、还能用哪些、以及"不许自己发明键"。
+    """参数说明：只列必填。可用键交给"被拒时那张表"。
 
-    为什么要把允许的键全列出来（而不是只列必填）：真机第一次跑就出了这件事 ——
-    模型给 `A.run_once`（一个无参动作）传了 `query` 与 `max_results`，
-    拿到一次 `invalid_params`。它不是不听话，而是提示词只说了必填，
-    没说参数的键是封闭集合。
+    改前这里把可选键也逐个列出来（十角色合计 10,458 字符，每一次运行的每一步都要付这笔钱），
+    理由是第一次真机跑出过事故：模型给 `A.run_once`（一个无参动作）传了 `query` 与 `max_results`，
+    拿到一次 `invalid_params` —— "它不是不听话，而是提示词只说了必填、没说参数的键是封闭集合"。
+
+    2026-10-07（R6 `draft/63 §2-①②`）把接住方换成兜底，而不是继续在提示词里背那张表：
+
+    * 封闭集合与"被拒时会给你完整参数表"这两句写在 LOOP 规则①里（每个角色只写一次）；
+    * 兜底本体是 `agent_loop._param_table`（`tool` / `summon` / `summon_many` 三条形状全覆盖），
+      注入文本自己带"表里没列的键一律不许传"，判据在 `tests/test_param_table_on_refusal.py`；
+    * 这条捷径的守卫在 `tests/test_prompt_param_hints.py`（可选枚举回到提示词里必红，
+      且"封闭集合"与"参数表"两句丢了也必红）。
     """
     req = _required_of(spec)
     props = _props_of(spec)
-    optional = tuple(k for k in props if k not in req)
     bits = ["必填 " + ("、".join(req) if req else "无")]
-    if optional:
-        bits.append("可选 " + "、".join(optional))
     if not props:
         bits.append("不许传任何参数")
     return "（" + "；".join(bits) + "）"
 
 
 def tools_lines(role: str, registry: Any) -> list[str]:
-    """工具面逐条：名字 + 摘要 + 参数（必填与可选的键）+ 副作用。"""
+    """工具面逐条：名字 + 摘要 + 参数（只列必填，可用键见被拒时那张表）+ 副作用。"""
     out: list[str] = []
     for spec in _specs_for(role, registry):
         side = getattr(spec, "side_effect", "none")
@@ -1535,7 +1540,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
                f"也落在工作区根的 `{PROFILES_FILE}` 里，随时用 fs.read 查）")
     if outs:
         out.append("你可以唤起这些伙伴（用 summon 形状），他们的职责与可调用动作如下"
-                   "（参数只许用括号里列出的键）：")
+                   "（括号里只列必填；可用键是封闭集合，写错时框架会把完整参数表回给你）：")
         for other in outs:
             # 每个动作带上一句摘要（`draft/39` §6.45 的 D56）：此前伙伴行里只有
             # `动作名（参数提示）`，于是无参动作等于只有一个名字 —— 真机代价是

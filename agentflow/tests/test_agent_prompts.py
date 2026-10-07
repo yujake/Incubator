@@ -463,11 +463,37 @@ def test_every_role_prompt_is_rendered_without_template_leftovers(registry: Tool
         assert AP.ROLE_BRIEFS[role].duty in text, f"{role} 的职责没有进提示词"
 
 
-def test_every_tool_on_the_face_is_listed_with_its_parameter_keys(registry: ToolRegistry):
-    """工具面上的每件工具都必须在提示词里，且参数提示列出 schema 里的键、必填项标成必填。
-    若这条破了：模型会照提示词去调一个不存在的工具名（unknown_tool），
-    或者按只列了必填的提示词多传一个键（invalid_params）——
-    真机第一次跑就是这么栽的，而那一次提示词并没有说谎，只是少说了一半。"""
+def _hint_text(line: str) -> str:
+    """参数提示那一段（从"（必填"到它配对的"）"）。
+
+    为什么要单独取这一段而不是直接在整行里找键名：工具摘要的散文里可能出现与键同名的词
+    （`project` / `limit` / `to` 这类），在整行里判"可选键没出现"会误红。
+    """
+    start = line.find("（必填")
+    assert start >= 0, f"这一行没有参数提示：{line}"
+    end = line.find("）", start)
+    assert end > start, f"参数提示没有收尾括号：{line}"
+    return line[start:end + 1]
+
+
+def test_every_tool_on_the_face_is_listed_with_its_required_parameter_keys(registry: ToolRegistry):
+    """工具面上的每件工具都必须在提示词里，且参数提示列出必填键、且只列必填。
+
+    口径变更（2026-10-07，R6 `draft/63 §2-①②`）：参数提示从"必填 + 可选枚举"改成只列必填。
+    改前那条断言的依据是一次真机事故 —— 模型按只列必填的提示词多传了一个键、拿到
+    `invalid_params`（本文件这条判据的 docstring 原来逐字记着它）。那次事故现在的接住方是：
+
+    * 可用键是封闭集合、写错时框架把完整参数表回给你 —— LOOP 规则①里各写一次；
+    * 兜底本体 `agent_loop._param_table`（`tool` / `summon` / `summon_many` 三条形状全覆盖），
+      判据在 `tests/test_param_table_on_refusal.py`；
+    * 本族口径的守卫在 `tests/test_prompt_param_hints.py`（可选枚举回到提示词里必红）。
+
+    为什么要换：那串枚举是十角色合计 10,458 字符，而每一次运行的每一步都要重付这笔钱；
+    兜底那张表只在写错时付一次。
+
+    若这条破了：模型会去调一个不存在的工具名（unknown_tool），或者连必填键都不知道 ——
+    后者连兜底都救不了（被拒之前它根本凑不出一次合法调用）。
+    """
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         lines = text.splitlines()
@@ -475,11 +501,23 @@ def test_every_tool_on_the_face_is_listed_with_its_parameter_keys(registry: Tool
             line = _line_of(lines, f"- {spec.name}：")
             properties = sorted(str(key) for key in (spec.params.get("properties") or {}))
             required = {str(key) for key in (spec.params.get("required") or [])}
-            for key in properties:
-                assert key in line, f"{role} 的工具 {spec.name} 漏了参数 {key}：{line}"
+            hint = _hint_text(line)
+            for key in sorted(required):
+                assert key in hint, f"{role} 的工具 {spec.name} 漏了必填参数 {key}：{line}"
             assert _required_in_hint(line) == required, line
+            # 参数提示的精确形状（改了形状就必须改这条判据 —— 顺带把"可选键又回来了"堵死）。
+            #
+            # 为什么用精确相等而不是"可选键名不许出现"：那是子串判断，会被包含关系骗到 ——
+            # 实测（本判据第一次跑）`doc.compose_claim` 的必填里有 `evidence_kind`、可选里有
+            # `kind`，于是"kind 没出现在提示里"当场为假，报了一条假红。
+            req_list = [str(key) for key in (spec.params.get("required") or [])]
+            expected = "（必填 " + ("、".join(req_list) if req_list else "无")
             if not properties:
-                assert "不许传任何参数" in line, line
+                expected += "；不许传任何参数"
+            expected += "）"
+            assert hint == expected, (
+                f"{role} 的工具 {spec.name} 的参数提示形状变了：\n  现场 {hint}\n  应为 {expected}"
+            )
 
 
 def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
@@ -1281,18 +1319,18 @@ _SURFACE_FIXTURE_TOOLCHAIN = ("这台机器上的证明工具链（现算读数�
 _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 
 #: 冻结的版本号与十格摘要（口径见上）。更新规则：改段 ⇒ 同一个 commit 里改这张表 + 版本。
-_FROZEN_PROMPT_VERSION = "p38"
+_FROZEN_PROMPT_VERSION = "p39"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "9368c2aa285eae50ef19ee6b3c19f316d5b6ee2b621231b72e25913ccebc9581",
-    "B": "1abd8f681da5ca8d43d52574ac2ec8b9b5630b3f62554a8eb67073c58870edff",
-    "C": "41ff88e27bacb239296d49687853259e732e5dd93d386682c49f42a5d53cc9a7",
-    "D": "835957dd905108e6a677ee378b33885e749c9d29f68cfa07373be9d9ffbc1510",
-    "E": "1b67d9bc164d32994e4adb33381c7f9b11658c7e5cea22517d5d20a8b03f3889",
-    "F": "9681a2c707bce590eda474e243caa322e347a907f4a38656c3ac2d752c859e10",
-    "G": "2c4c64538edb0d67c883a817d23a735647450c950d113295d1accd4dba6dbd32",
-    "H": "d6e95abec132e4d702ec113d523c9ad72db749824db7c39855e8f70aa607de88",
-    "V": "08e1e4ebd7d894cc6adf6618138bc0cd8d941335f282af5dc45cd8a177444944",
-    "M": "2f308a97e2cc760ce557a84d0e9084c78d96399482789652349d157bede988ce",
+    "A": "ba2331e8eb6431831c088e14280908fb2979f009d306e65b28a29c13752d8685",
+    "B": "cc1c575afaf3dc437f482ac37f0513ac8c8be62feb57db134cfb20230994c905",
+    "C": "623f1c815a194f88fbb0019fd3642bbccaaa814eca3ebe2a5b2f58af47f7f32e",
+    "D": "b54ba5ffe3a79ba4faf89a647af1a52727ff157126c99ed89be3b583db04a3f7",
+    "E": "1da73c8dcc89b6690db84f1e37f3f9ebd856cdb8e01249f6af0e0263d7f29860",
+    "F": "0fdafb9c24907a12ceec690ee830893cf6ff3a06ab025e8a5fd0addc9036db93",
+    "G": "778d3181197311ed1f46a324657920ff2e64a95982bf64e0240df9db05339537",
+    "H": "6d49f880ce04132759e4b624ccea51a198abc75b1b7093d7a650345e33d5c725",
+    "V": "b377653fa09a2a149d16873cb42c56c4ae7f33b95296383aebf06667d3c1336d",
+    "M": "3a79aece16d2299649b5357d6eb2ad3c2d7699e219fde272e1801b6a3b8c1153",
 }
 
 
@@ -1332,8 +1370,9 @@ def test_the_prompt_version_moves_with_the_sections(registry: ToolRegistry,
     """真判据：段与版本必须一起动（两个方向都判，两端反负控都走真的渲染路径）。
 
     为什么必须有这一条：这一轴此前只有下界那一半（`>= 24`），于是"改了段、忘了动版本"
-    在本仓没有任何读数会红 —— 而 `draft/63` 这一整批施工（含 `R6` §2-⑥ 这一刀）做的
-    恰恰就是"改段"。名字与 docstring 声称守这件事的那条判据（在
+    在本仓没有任何读数会红 —— 而 `draft/63` 这一整批施工（含 `R6` §2-⑥ 那一刀与
+    2026-10-07 的 §2-①②"参数提示只列必填"那一刀）做的恰恰就是"改段"。
+    名字与 docstring 声称守这件事的那条判据（在
     `test_review_line_prompts.py`）守的是下界，不是这件事。
 
     维护规则逐字写在上面那段注释里：谁改段谁在同一个 commit 里更新这张表与
@@ -1363,12 +1402,12 @@ def test_the_prompt_version_moves_with_the_sections(registry: ToolRegistry,
     monkeypatch.undo()
 
     # ---- 反负控 ②：只改版本、不改段 ⇒ 必须红（端到端：只把版本号抬一格）
-    monkeypatch.setattr(AP, "PROMPT_VERSION", "p39")
+    monkeypatch.setattr(AP, "PROMPT_VERSION", "p40")
     bumped = {role: _surface_digest(role, registry) for role in ALL_ROLES}
     assert bumped == live, (
         "反负控失效：只动版本号，归一化摘要却变了 ⇒ 归一化没生效，这一端不可达"
         "（而不可达的反负控就是摆设）")
-    assert _version_drift(bumped, "p39",
+    assert _version_drift(bumped, "p40",
                           _FROZEN_PROMPT_DIGESTS, _FROZEN_PROMPT_VERSION), \
         "反负控失效：只动了版本号，判据却放过了"
     monkeypatch.undo()
