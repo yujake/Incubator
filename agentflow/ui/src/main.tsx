@@ -5,13 +5,16 @@
  * 的 D 条把这里的路由字面量集合与那张表逐字比对，并要求每条路由用到的端点 ∈
  * 后端 ROUTES、用到的 SSE kind ∈ `sse.ts` 的 `KINDS`。
  *
- * W0 只有一个页面接真数据（Home → `/api/state`）；其余五页是诚实的空壳。
- * SSE 只在这里订阅一次（不逐页各开一条流）—— 那要等 W2 的后端广播器；
- * 现在不订阅，是因为"订阅一条后端的 404"只会让页面显红。
+ * 数据流有两条，别混起来：
+ *
+ * - 全站只订阅**一次** SSE（`LiveProvider`），六页共享那份快照与连接态；
+ * - 每页另取自己那一条端点（`Live.value.version` 变了就重取），于是"盘上新增 ⇒
+ *   流里出现 ⇒ 页面出现"这条链是通的，而六个面不必挤进一条流。
  */
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
+import { ConnectionBanner, LiveProvider, useLive } from "./live";
 import { Acceptance } from "./pages/Acceptance";
 import { Artifacts } from "./pages/Artifacts";
 import { Evidence } from "./pages/Evidence";
@@ -40,7 +43,41 @@ export function matchRoute(path: string): { route: Route; sid: string } {
   return { route: hit === undefined ? "/" : hit, sid: "" };
 }
 
-function App() {
+/** 顶部导航：每一条都是 C4 表里的一个客户端路由（`/run/:sid` 由会话行进入）。 */
+const NAV: ReadonlyArray<{ path: string; label: string }> = [
+  { path: "/", label: "待回答" },
+  { path: "/evidence", label: "证据链" },
+  { path: "/artifacts", label: "产物" },
+  { path: "/acceptance", label: "验收" },
+  { path: "/machine", label: "本机" },
+];
+
+function Top() {
+  const live = useLive();
+  const root =
+    live.snapshot === null
+      ? "（工作区根还没读到）"
+      : live.snapshot.root;
+  return (
+    <header class="top">
+      <div class="brand">agentflow 用户端</div>
+      <div class="sub">
+        状态一律从盘上派生（每次请求重新读，页面里不缓存）· 工作区根{" "}
+        <span class="mono">{root}</span> · 连接{" "}
+        <span class="mono">{live.connection}</span>
+      </div>
+      <nav class="nav">
+        {NAV.map((item) => (
+          <a class="nav-link" href={item.path} key={item.path}>
+            {item.label}
+          </a>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+function Body() {
   const [where, setWhere] = useState(() => matchRoute(window.location.pathname));
 
   useEffect(() => {
@@ -53,9 +90,18 @@ function App() {
     };
   }, []);
 
-  switch (where.route) {
+  return (
+    <main class="wrap">
+      <ConnectionBanner />
+      {renderPage(where.route, where.sid)}
+    </main>
+  );
+}
+
+function renderPage(route: Route, sid: string) {
+  switch (route) {
     case "/run/:sid":
-      return <Run sid={where.sid} />;
+      return <Run sid={sid} />;
     case "/evidence":
       return <Evidence />;
     case "/artifacts":
@@ -69,27 +115,20 @@ function App() {
   }
 }
 
+function App() {
+  return (
+    <LiveProvider>
+      <Top />
+      <Body />
+    </LiveProvider>
+  );
+}
+
 function mount(): void {
   const host = document.getElementById("app");
   if (host === null) {
     throw new Error("页面里没有 #app 挂载点（index.html 被改过？）");
   }
-  const top = document.createElement("header");
-  top.className = "top";
-  const brand = document.createElement("div");
-  brand.className = "brand";
-  brand.textContent = "agentflow 用户端";
-  const sub = document.createElement("div");
-  sub.className = "sub";
-  sub.textContent = "状态一律从盘上派生（每次请求重新读，页面里不缓存）";
-  top.appendChild(brand);
-  top.appendChild(sub);
-
-  const main = document.createElement("main");
-  main.className = "wrap";
-  document.body.insertBefore(top, host);
-  document.body.insertBefore(main, host);
-  main.appendChild(host);
   render(<App />, host);
 }
 

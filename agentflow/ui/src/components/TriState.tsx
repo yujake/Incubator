@@ -5,7 +5,7 @@
  *
  * | 词表 | 取值 | 出处 |
  * |---|---|---|
- * | `Tri` | `computed` / `unreadable` / `not_applicable` | `reviewaccept` 那一族读数 |
+ * | `Tri` | `computed` / `unreadable` / `not_applicable` | `reviewaccept` 那一族读数（六个面都用它） |
  * | `ReportTri` | `ok` / `missing` / `unknown` | `webui/state.py` 的 `_read_report` |
  *
  * 两者都落到三种视觉态上，但**映射不同**，因为语义不同：
@@ -42,6 +42,16 @@ const BADGE: Record<Visual, string> = {
   na: "badge-na",
 };
 
+/** 一个词落进哪一档视觉态（页面要单独显示徽标时用它；映射只有这一处）。 */
+export function visualOf(tri: Tri | ReportTri | string): Visual {
+  return VISUAL[tri] ?? "unknown";
+}
+
+/** 这个三态词是不是"没查成"（页面的静默判定统一走它，不各写一份比较）。 */
+export function isUnreadable(tri: Tri | ReportTri | string): boolean {
+  return visualOf(tri) === "unknown";
+}
+
 export interface TriStateProps {
   tri: Tri | ReportTri;
   reason?: string;
@@ -49,7 +59,7 @@ export interface TriStateProps {
 }
 
 export function TriState(props: TriStateProps) {
-  const visual: Visual = VISUAL[props.tri] ?? "unknown";
+  const visual: Visual = visualOf(props.tri);
   const text = props.label === undefined ? WORD[visual] : `${props.label}：${WORD[visual]}`;
   return (
     <span class="tri">

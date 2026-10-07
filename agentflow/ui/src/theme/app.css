@@ -181,6 +181,73 @@ table.grid th {
   color: var(--dsw-alias-label-tertiary);
 }
 
+.nav {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.nav-link {
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  text-decoration: none;
+  transition: background var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.nav-link:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.card-right {
+  margin-left: auto;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+
+.drift {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.input {
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  min-width: 220px;
+}
+
+.pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--dsw-alias-markdown-code-block);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 480px;
+  overflow: auto;
+}
+
+.list {
+  margin: 4px 0 4px 18px;
+  padding: 0;
+  font-size: 13px;
+}
+
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
 a {
   color: var(--dsw-alias-link);
 }

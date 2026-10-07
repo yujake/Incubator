@@ -78,11 +78,11 @@
 | 文件 | 是什么 |
 |---|---|
 | `cli.py` | 命令行入口（24 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`/`doctor`…） |
-| `webui/` | 用户端网页（包；2026-10-07 的 W0 从单文件模块一次拆到位）：`webui/state.py` 是读模型（`snapshot()`：全局待回答面板 + 运行态 + 一趟的事件回放，只读投影）、`webui/views.py` 是服务端渲染的旧壳（逐面迁到 SPA）、`webui/writes.py` 是唯一写路径（`POST /answer` → `userio.answer_question`）、`webui/routes.py` 是路由表 `ROUTES`、`webui/server.py` 是 http.server + 静态路由 + SPA 回退；公开面由 `webui/__init__.py` 原样 re-export |
+| `webui/` | 用户端网页（包；2026-10-07 的 W0 从单文件模块一次拆到位）：`webui/state.py` 是**读模型**（`snapshot()`：全局待回答面板 + 运行态 + 一趟的事件回放，只读投影；待答与选项按裁定 L1 转发到 `userio`）、`webui/readers.py` 是**六个只读面**（`/api/state` · `/api/run/{sid}` · `/api/evidence` · `/api/artifacts` · `/api/acceptance` · `/api/machine`，各带三态头）、`webui/sse.py` 是 `GET /api/stream` 的广播器 + 写路径钩子（`attach`/`detach`，谁开的代谁接 —— 生产路径在 `server.serve()`）、`webui/views.py` 是服务端渲染的旧壳（裁定 P1：`/` 已迁到 SPA 外壳，`/run/{sid}` 这一批仍是它）、`webui/writes.py` 是唯一写路径（`POST /answer` → `userio.answer_question`）、`webui/routes.py` 是路由表 `ROUTES`（= `_OWN` + `readers.ROUTES` + `writes.ROUTES`）、`webui/server.py` 是 http.server + 静态路由 + `/` 的 SPA 外壳 + SPA 回退；公开面由 `webui/__init__.py` 原样 re-export |
 | `settings.py` | **机器级设置的一处定义**（2026-10-07 起）：落点（默认是 `agentflow/` 下的那份，被 git 忽略；`AGENTFLOW_SETTINGS` 指到别处）、键名（`toolchain.*` / `model.*` / `workspace.projects_dir`）与**唯一口径的优先级**（环境变量 > 设置文件 > 内置默认/自动探测，唯一实现 `env_or_setting`）。为什么要有它：本机路径与模型 key 此前散在"代码里的字面量 + 环境变量"两处 —— 换一台机器就有一句假话。判据 `tests/test_settings.py`（含"源码里 0 条死地址"与三道 key 安全阀） |
 | `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ `AGENTFLOW_PROVER_PATH`（两者都是环境变量）→ **设置文件的 `toolchain.*`** → PATH 四档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看（打的是"从哪一档找到的"） |
-| `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`） |
-| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`，其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库 |
+| `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`）；`web/assets.py` 是令牌与旧壳样式的源、`web/emit_theme.py` 把它生成到前端；`web/static/` 是**前端构建产物**（裁定 B1：入库；`index.html` + `assets/*.js|css`，`GET /` 吐的就是它） |
+| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`（六页 `pages/*.tsx` · 六组件 `components/*.tsx` · `main.tsx` 路由 · `api.ts` 端点表 · `sse.ts` 订阅 · `live.tsx` 一次订阅分发给六页 · `theme/app.css`），其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库；开发说明见 `ui/README-DEV.md` |
 | `__main__.py` | `python -m agentflow` 的入口 |
 | `__init__.py` | 包说明与公开面 |
 | `demo.py` | 离线端到端演示：不访问网络，把 A→B→校验整条链路真跑一遍 |
@@ -249,6 +249,7 @@
 | 动**发布门** | `tools/release_all.py`（禁改区） | `tools/coverage_zero_test.py`、`tools/run_each_test_file.py` | `tests/test_release_all.py`、`README.md` §6 |
 | 动**lint 规则** | `scripts/lint_rules.py`（禁改区） | `tools/vocab_census.py`（禁改区） | `tests/test_lint_rules*.py` |
 | 改**禁改区规则本身** | `AGENTS.md` + `.noai-paths`（两处必须逐条一致） | `scripts/noai_gate.py`（禁改区） | `tests/test_noai_gate.py`、`--check-consistency` |
+| 改**用户端网页**（页面 / 端点 / SSE） | `ui/src/api.ts` 的 `ENDPOINTS`（端点的唯一出口）+ `webui/routes.py`（`ROUTES`） | `ui/src/pages/*.tsx`（六页）· `ui/src/live.tsx`（一次订阅分发给六页）· `webui/readers.py`（六个只读面）· `webui/sse.py`（流与钩子）· `webui/server.py`（`/` 的外壳与静态路由） | `tests/test_webui_contracts.py`（A–D 四条名字层 + 新鲜度）、`tests/test_webui_pages.py`（每页真读数/空态/三态）、`tests/test_webui_sse.py`（流）、`tests/test_webui_static.py`（`/` 与静态）、`ui/README-DEV.md` |
 | 加一个**子命令** | `cli.py`（`build_parser`） | 对应 `cmd_*` | `tests/test_cli_run.py`、`tests/test_user_quickstart.py` |
 | 查**一次运行到底做了什么** | 产物目录 `out/run-N/`（六件） | `runflow.py`、`evidence.py` | `report.md` / `run-manifest.json` |
 | 查**谁在什么时候说了什么** | `sessions.py` 的会话记录 | `agent_loop.py`（事件种类） | `tests/test_sessions.py` |

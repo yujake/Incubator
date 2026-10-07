@@ -129,26 +129,28 @@ export interface ReportReading {
   text: string;
 }
 
-/** 出处：检查点里的花销子树（`agent_loop` 写的 `runs/agent-<角色>-<sid>.json`）。 */
-export interface CheckpointSpend {
-  calls: number;
-  tokens_in: number;
-  tokens_out: number;
-  usd: number | null;
-  unknown_usd_calls: number;
+/** 出处：趟次索引里的一场会话（`sessions.compute_run_index` 的 `sessions[sid]`）。 */
+export interface RunIndexSession {
+  runs: RunRow[];
+  last_end_index: number | null;
+  digest: string;
 }
 
-/** 出处：一趟的检查点文件（`runs/agent-<角色>-<sid>.json`；本批没有 reader ⇒ 判据 C 不覆盖它）。 */
-export interface Checkpoint {
-  role: string;
-  sid: string;
-  task: string;
-  fingerprint: string;
-  step: number;
-  stop_reason: string;
-  waiting_for: string[];
-  spend: CheckpointSpend;
-  at: string;
+/** 出处：`GET /api/run-index` 的 `index` 那一栏 —— 趟次索引本体（裁定 O2；`sessions.compute_run_index` / `rebuild_run_index` 落的盘上那一份）。 */
+export interface RunIndex {
+  version: string;
+  generated_at: string;
+  sessions: Record<string, RunIndexSession>;
+}
+
+/** 出处：`GET /api/run-index` 的返回值 —— `sessions.run_index_report(root)` 逐字：索引可用性与它与事件现算结果的对账结论（`tri != "computed"` ⇒ 显红）。 */
+export interface RunIndexDrift {
+  usable: boolean;
+  tri: Tri;
+  reason: string;
+  drift: string[];
+  sessions: string[];
+  index: RunIndex | null;
 }
 
 /** 出处：run_products() —— 六件产物里的一件（`runflow.ARTIFACTS` 那六个名字）。 */
@@ -565,5 +567,3 @@ export interface WriteResult {
 // 每一条都写明缺哪一个 reader —— 补上读数之后，把那一行从对应模块的
 // `MISSING_TYPES` 里删掉，并把接口加进那个模块的 `type_decls()`。
 // --------------------------------------------------------------------------
-// TODO RunIndex：缺 GUI 侧的索引消费者：`sessions.rebuild_run_index` / `load_run_index` 已落地（B2），形状见 `sessions.compute_run_index`；A 线 Run 页接上之后删掉这一行。
-// TODO RunIndexDrift：缺 GUI 侧的索引消费者：`sessions.reconcile_run_index` 已落地（B2），返回 `{tri, drift, reason, sessions}`；A 线 Run 页接上之后删掉这一行。

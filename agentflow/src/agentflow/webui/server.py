@@ -16,6 +16,10 @@
    `immutable` 缓存，其余（`index.html`）按 `no-store`。
 2. SPA 回退（裁定 Q1）：`/api/*` 未知 ⇒ JSON 404（绝不吐 HTML，前端要能区分）；
    其余未知路径 ⇒ 有 `web/static/index.html` 就吐它，否则沿用今天的 404 页。
+3. `GET /` 与 `GET /index.html` 直接服务 SPA 外壳（裁定 P1 的第一块迁移，
+   2026-10-07）：这一格原来是服务端渲染的旧壳。SPA 只在"未知路径"的回退分支上挂得
+   起来，而 `/` 是已知路径 ⇒ 不改这一格，浏览器地址栏就永远进不了 SPA 首页。
+   旧壳 `views.render_root` 照旧活到 W5（`/run/{sid}` 那条路径不动），只是根路径不再用它。
 
 ## 一处刻意的收窄（必须写在最显眼的地方）
 
@@ -27,6 +31,10 @@ Q1 说"其余未知路径吐 index.html"，而既有判据
 客户端不带它，于是拿到诚实的 404。同一条收窄也管着 `/static/<file>` 的未命中：
 一个不存在的 `.css` 若回一支 HTML 200，浏览器会把它当样式表解析（静默全白）——
 那比 404 坏得多，所以静态那一支永远 404，绝不回退到 `index.html`。
+
+这条收窄不管 `GET /`：根路径是一条已知路由，它对谁都吐同一支外壳（不挑 `Accept`）——
+浏览器地址栏、`curl` 与 `http.client` 拿到的都是那一支（`GET /` 的 200 与"未知路径
+回退到 404"是两件事，不要混起来）。
 
 ## 安全与失败姿态（与拆包前逐条相同）
 
@@ -59,9 +67,9 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import routes
+from . import routes, sse
 from .state import _text, snapshot
-from .views import _not_found, _page, render_root, render_run
+from .views import _not_found, _page, render_run
 from .writes import answer
 
 __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "WebHandler", "default_static_root", "serve",
@@ -71,6 +79,9 @@ __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "WebHandler", "default_static_root", 
 DEFAULT_PORT = 8788
 #: 默认监听地址（只对本机开）。
 DEFAULT_HOST = "127.0.0.1"
+#: 默认心跳周期（秒）：`GET /api/stream` 闲着时多久发一条 `heartbeat`。
+#: `serve(heartbeat_sec=...)` 可注入（判据用 0.2 秒跑，不等 15 秒）。
+DEFAULT_HEARTBEAT_SEC = 15.0
 
 #: 静态资源的落点（相对包目录）：前端构建产物（裁定 B1）。
 _STATIC_REL = ("web", "static")
@@ -285,9 +296,68 @@ class WebHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------ 处理器（表里点的名）
     def handle_root(self, params: Mapping[str, str],
                     query: Mapping[str, Sequence[str]]) -> None:
-        """`GET /` 与 `GET /index.html`：服务端渲染的旧壳（裁定 P1：逐面迁到 SPA 后删）。"""
+        """`GET /` 与 `GET /index.html`：服务 SPA 外壳（裁定 P1 的第一块迁移）。
+
+        这一格原来是服务端渲染的旧壳（`views.render_root`）。为什么必须改：SPA 只在
+        "未知路径"的回退分支上挂得起来，而 `/` 是一条已知路径 ⇒ 浏览器地址栏
+        永远进不了 SPA 首页（判据 C 那边有一条浏览器判据记录的正是这件事）。
+        P1 的口径是"迁一面删一面"：本批迁的就是 `/` 这一面 ——
+        `views.render_root` 照旧活到 W5（`GET /run/{sid}` 那条旧壳路径这一批不动），
+        只是根路径不再用它。
+
+        外壳由 :meth:`_serve_spa_shell` 吐（与静态路由、回退分支同一份实现）。
+        外壳不在盘上（前端还没构建）⇒ 今天的 404 页 + 一句说清为什么 ——
+        不静默给一个空白页（"没构建"与"页面坏了"必须分得开）。
+        """
         del params, query
-        self._html(200, render_root(snapshot(self.root)))
+        if not self._serve_spa_shell():
+            state = snapshot(self.root)
+            self._html(404, _page(state, "前端外壳不在盘上",
+                                  _not_found(state, "根路径要吐的是 SPA 外壳 "
+                                                    "web/static/index.html，而它不在盘上"
+                                                    "（前端还没构建？）")))
+
+    def _serve_spa_shell(self) -> bool:
+        """吐前端外壳 `web/static/index.html`（注入本进程的 CSRF 占位符）。
+
+        返回"吐出去了没有"：`True` = 已经回了 200；`False` = 外壳不在盘上或读不出来
+        （调用方接着走它自己的 404/500 分支）。
+
+        为什么把这一件事收成一处：`GET /`、`GET /index.html`、未知路径的 SPA
+        回退三条路都要吐同一支外壳，而"注入 CSRF"这一步漏掉一处，前端拿到的就是
+        字面量 `__CSRF__` —— 写请求会以"令牌不对"失败，而那时没人会想到是外壳
+        那条路径忘了注入。三处各写一遍是这类缺陷的温床。
+        """
+        index = Path(self.static_root) / "index.html"
+        if not index.is_file():
+            return False
+        try:
+            shell = index.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            state = snapshot(self.root)
+            self._html(500, _page(state, "前端外壳读不出来",
+                                  _not_found(state, f"{type(exc).__name__}: {exc}")))
+            return True
+        self._html(200, self._inject_csrf(shell))
+        return True
+
+    def handle_run_index(self, params: Mapping[str, str],
+                         query: Mapping[str, Sequence[str]]) -> None:
+        """`GET /api/run-index`：趟次索引与"它与事件现算结果是否一致"的读数。
+
+        W1 新增（裁定 O2 的页面消费端）。Run 页要用它做两件事，两件都要求同一次读：
+
+        1. 索引可用 ⇒ 用它列趟次；不可用 ⇒ 如实标"这次是现算的"并回退；
+        2. `tri != "computed"`（索引读不出来，或与事件现算结果对不上）⇒ 显红。
+
+        形状是 `sessions.run_index_report(root)` 的返回值逐字，另加 `index` 那一栏
+        （`None` 表示索引没读成）。为什么不在这里拆成"先读索引、再对账"两次：两次
+        之间盘上的东西可能已经变了，于是页面拿到的索引与它旁边的对账结论不是同一份。
+        """
+        del params, query
+        from .. import sessions as SS
+
+        self._json(200, SS.run_index_report(self.root))
 
     def handle_run(self, params: Mapping[str, str],
                    query: Mapping[str, Sequence[str]]) -> None:
@@ -354,14 +424,7 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         index = Path(self.static_root) / "index.html"
         if self._wants_html() and index.is_file():
-            try:
-                shell = index.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                state = snapshot(self.root)
-                self._html(500, _page(state, "前端外壳读不出来",
-                                      _not_found(state, f"{type(exc).__name__}: {exc}")))
-                return
-            self._html(200, self._inject_csrf(shell))
+            self._serve_spa_shell()
             return
         state = snapshot(self.root)
         self._html(404, _page(state, "没有这个页面", _not_found(state, f"没有路由：{path}")))
@@ -382,7 +445,8 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
           token: str = "", allow_writes: bool = False, settings_write: bool = True,
           static_root: str | Path | None = None,
           csrf_token: str = "",
-          routes_table: Sequence[tuple[str, str, str]] | None = None) -> ThreadingHTTPServer:
+          routes_table: Sequence[tuple[str, str, str]] | None = None,
+          heartbeat_sec: float = DEFAULT_HEARTBEAT_SEC) -> ThreadingHTTPServer:
     """建好服务器并返回（不调 `serve_forever`）。
 
     测试用 `port=0` 起随机端口：返回后读 `srv.server_address[1]` 拿真实端口，
@@ -393,7 +457,31 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     写面要等 W3、设置写面要等 W4 —— 这一点在 `--help` 与模块 docstring 里都写明了。
     `static_root` / `csrf_token` 也是可注入的：判据要在临时目录里造一份前端外壳，
     并按需钉住令牌（缺省 = 每进程一个随机值）。
+
+    ## 起服务时顺带做的两件事（裁定 1a 的装配，B 线只提供钩子，接的是这里）
+
+    1. `sse.begin_serving(heartbeat_sec=...)` —— 换一代干净的广播器（于是上一个
+       进程/上一条判据的事件不会被新服务看见），`heartbeat_sec` 就是这一档；
+    2. `sse.attach()` —— 把 `sessions.append` / `userio.ask_user` /
+       `userio.answer_question` / `stopctl` 四个钩子接到"发对应 kind 的事件"上。
+       它幂等（第二次是替换），所以重复起服务不会把回调叠起来。
+
+    第 1 步与第 2 步都带同一个条件：这一代是 `serve()` 自己开的才做。
+    为什么不是无条件调用：判据 `tests/test_webui_sse.py` 的 `_bound_server` 是先
+    `begin_serving(heartbeat_sec=0.2)` 再 `serve()` 的，而且那一条用例自己用
+    `sse.publish(...)` 造事件、只读一帧 —— 无条件接钩子会多出 `state`/`question`
+    两帧、把它的读数挤掉，也会把它那一档心跳换回 15 秒。那是既有的、正确的判据，
+    不许为了让接线好看去改它。口径因此写成一句话：这一代谁开的，钩子就谁接
+    （调用方先 `begin_serving` 了，说明它自己管接线）；`serve()` 自己开的那一代
+    由它接上，于是生产路径（`run()` 与任何直接调 `serve()` 的嵌入方）不缺钩子。
+
+    收尾（`close_all()` + `detach()`）不在这里做：`serve()` 只建服务器、不拥有
+    它的生命周期，收尾在 :func:`run` 的 `finally` 里。判据自己起的服务器要自己收
+    （`tests/test_webui_sse.py` 的 `_bound_server` 就是这么做的）。
     """
+    if not sse.serving():
+        sse.begin_serving(heartbeat_sec=heartbeat_sec)
+        sse.attach()
     handler = type("BoundWebHandler", (WebHandler,), {
         "root": Path(str(root)), "token": token,
         "static_root": Path(str(static_root)) if static_root is not None
@@ -468,6 +556,16 @@ def run(argv: Sequence[str] | None = None) -> int:
         # 让 finally 去 shutdown + close，退出码仍是 0。
         pass
     finally:
+        # 收尾顺序有讲究（裁定 1a 的那一半，B 写明了理由）：
+        # ① 先 `close_all()` 关掉所有流 —— `srv.shutdown()` 只停 accept 循环，
+        #    `ThreadingHTTPServer` 的入站请求线程不受它影响，一条开着的流会把那个
+        #    线程一直占住（`sse.py` 的 `_GENERATION` 就是为这件事设的：流循环每次
+        #    迭代读它，看到代结束就自己退出）；
+        # ② 再关服务器；
+        # ③ 最后 `detach()` 撤掉四个写路径钩子 —— 回到"没人接"的状态（缺省行为），
+        #    于是这个进程里剩下的代码不会继续往一个已经关掉的广播器发事件。
+        sse.close_all()
         srv.shutdown()
         srv.server_close()
+        sse.detach()
     return 0

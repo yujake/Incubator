@@ -265,6 +265,60 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 
 ---
 
+## 2.2 用户端网页（SPA）：六个页面读什么、怎么构建
+
+`agentflow web` 起的是一个小服务（默认只听 `127.0.0.1:8788`）。页面的**皮**是从 DSH 抄的
+（令牌整份照搬，来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`），**面**是六个客户端路由，
+数据一律从盘上派生（页面里不缓存）：
+
+| 路由 | 页面 | 读哪条端点 |
+|---|---|---|
+| `/` | 全局待回答面板 + 会话概览 | `GET /api/state` |
+| `/run/:sid` | 一趟详情（时间线 / 花销两个来源 / 索引对账 / 交付说明） | `GET /api/run/{sid}` + `GET /api/run-index` |
+| `/evidence` | 证据链七栏 | `GET /api/evidence` |
+| `/artifacts` | 产物（台账 / 交接 / 验收行 / 体例 / 六件产物 / 任务） | `GET /api/artifacts` |
+| `/acceptance` | 收工门内容级验收（5 判据 + 5 辅助） | `GET /api/acceptance` |
+| `/machine` | 本机（检查器 / Lean / Mathlib / 钥匙配没配） | `GET /api/machine` |
+
+逐页逐栏的字段、空态与三态口径见 `docs/USER-END-DSH-STYLE.md` §3.1；判据在
+`tests/test_webui_pages.py`（每页一条：真读数出现 + 空态 + 三态）。
+
+`GET /` 与 `GET /index.html` 直接吐 SPA 外壳（裁定 P1 的第一块迁移：注入本进程的 CSRF 令牌、
+`Cache-Control: no-store`）—— 浏览器地址栏因此进得了 SPA；`GET /run/{sid}` 这一批仍是服务端渲染的
+旧壳（W5 再迁），它由 `tests/test_webui.py` 的 17 条守着。前端工程自己的说明见 `ui/README-DEV.md`。
+
+**本机读数（2026-10-07，复算命令见括号）**：
+
+- 路由表 `ROUTES` **13 行**、其中 JSON 端点 **9 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
+  其中 `/api/state` 按裁定 2b 归 B 线的 `readers.ROUTES`、`/api/run-index` 是 A 线自有的那一条；
+- 前端源码 `ui/src/` **19 个文件、3656 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
+- `ui/src/types.ts` 是生成物：**16,003 字节 / 39 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
+- 事件词表 6 个 kind（`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`），前端 `sse.ts` 逐个注册并带 `?since=` 续传与"退避三次 ⇒ 降级轮询"；
+- 入库的构建产物 3 个文件（`web/static/index.html` + `assets/` 下的一支 `.js` 与一支 `.css`，
+  本次读数共 **81,491 字节** —— 六页面与 `live.tsx` 全进包之后 JS 那一支就有 60.3 KB；
+  文件名带内容哈希 ⇒ **每次重建都会变**，所以这里刻意不写死哈希名；
+  复算：`Get-ChildItem -Recurse -File src/agentflow/web/static | Measure-Object Length -Sum`）。
+
+**要改前端**（`ui/`）：装依赖 → 改 `ui/src/` → **重建产物并一起提交**（裁定 B1：`src/agentflow/web/static/` 入库）
+→ 跑门。三条命令：
+
+```powershell
+pnpm -C ui install          # 只跑一次（依赖：preact / vite / @preact/preset-vite / typescript）
+pnpm -C ui build            # 产物落 src/agentflow/web/static/（index.html + assets/*.js|css，带内容哈希）
+node ui/node_modules/typescript/bin/tsc --noEmit   # 类型门（= pnpm -C ui typecheck）
+```
+
+两条纪律：`ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是**生成物，手改必红**
+（生成器是 `python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`；
+新鲜度判据在 `tests/test_webui_contracts.py`）；`ui/src/api.ts` 的路径字面量必须与
+`webui/routes.py` 的 `ROUTES` 逐字相等（契约判据 A）。细节与踩过的坑见 `ui/README-DEV.md`。
+
+> 沙箱提示：在没有"用管道 stdio 起子进程"权限的环境里，`pnpm build` 会以 `spawn EPERM`
+> 失败（esbuild 的服务进程拉不起来），而那**不是** `pass` —— 发布门里这一步记 `unknown`（`draft/80` 题 7）。
+> 产物本身已在盘上并入库，`tests/test_webui_static.py` 会真跑它的自洽与新鲜度判据。
+
+---
+
 ## 3. 真实网络模式（会联网、会下载）
 ```powershell
 cd D:\Incubator\agentflow\src

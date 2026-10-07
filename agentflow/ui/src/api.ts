@@ -5,22 +5,35 @@
  *
  * 1. 路径只在 ENDPOINTS 里写一次 —— `tests/test_webui_contracts.py` 的 A 条把
  *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对。
- *    B 线已落地六个只读面，所以这里补齐对应的六条（`/api/task` 按裁定 I1 不做，
- *    因此表里没有它）：前端多写一个后端没有的端点、或后端有而前端没声明，A 条都会红。
+ *    后端有的（B 线六个只读面 + A 线的 /api/state 与 /api/run-index + C 线既有的
+ *    POST /answer）前端必须逐条声明；反过来，前端多写一个后端没有的端点也会红。
+ *    `POST /api/stop` / `POST /api/submit` / `POST /api/settings`（契约 C1 第 8–10 行）
+ *    属于 C 线 W3/W4，后端今天还没有那三条路由 —— 所以这里一条都不写：
+ *    "前端声明了而后端没有"正是 A 条要抓的漂移。
  * 2. 失败不许折成空读数：HTTP 非 2xx 与网络故障都抛 ApiError，三态走 `tri`
  *    （`unreadable` = 没查成），由页面渲染成 TriState。绝不返回空对象装作读到了。
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
  */
-import type { StateSnapshot } from "./types";
+import type {
+  AcceptanceView,
+  ArtifactsView,
+  EvidenceView,
+  MachineView,
+  RunIndexDrift,
+  RunView,
+  StateSnapshot,
+  Tri,
+} from "./types";
 
 /**
  * 后端端点表（与 `webui/routes.py` 的 `ROUTES` 逐字对齐）。
  *
- * 带 `{}` 的那几条是路由模式：`api.ts` 里用模板串拼实参，
- * 判据会把 `${sid}` 归一成 `{sid}` 再比（见 A 条的 `_literals`）。
+ * 带 `{}` 的那条是路由模式：`runPath()` 拿它拼实参（判据会把拼出来的路径归一成
+ * `{sid}` 再比，见 A 条的 `_literals`）。
  */
 export const ENDPOINTS = {
   state: "/api/state",
+  runIndex: "/api/run-index",
   run: "/api/run/{sid}",
   evidence: "/api/evidence",
   artifacts: "/api/artifacts",
@@ -35,8 +48,30 @@ export const ENDPOINTS = {
 
 export type EndpointName = keyof typeof ENDPOINTS;
 
-/** 三态：算出来了 / 没查成 / 用不着（词表本体在 `types.ts`，生成物）。 */
-import type { Tri } from "./types";
+/** 一趟详情的实参拼装（`/api/run/{sid}` 的那一个占位符）。 */
+export function runPath(sid: string): string {
+  return ENDPOINTS.run.replace("{sid}", encodeURIComponent(sid));
+}
+
+/** 收工门那条端点的查询串（三个可选输入，逐字对应后端的 `?project_dir=` 等）。 */
+export function acceptancePath(opts: {
+  projectDir?: string;
+  reportPath?: string;
+  capUsd?: number | null;
+}): string {
+  const q = new URLSearchParams();
+  if (opts.projectDir) {
+    q.set("project_dir", opts.projectDir);
+  }
+  if (opts.reportPath) {
+    q.set("report_path", opts.reportPath);
+  }
+  if (typeof opts.capUsd === "number") {
+    q.set("cap_usd", String(opts.capUsd));
+  }
+  const tail = q.toString();
+  return tail === "" ? ENDPOINTS.acceptance : `${ENDPOINTS.acceptance}?${tail}`;
+}
 
 /** 请求失败时抛的那个东西：状态码 + 三态 + 人话理由（页面据此渲染 TriState）。 */
 export class ApiError extends Error {
@@ -51,6 +86,11 @@ export class ApiError extends Error {
     this.tri = tri;
     this.reason = reason;
   }
+}
+
+/** 把任意异常读成一句人话（各页面统一用它，不各写一份文案）。 */
+export function whyOf(exc: unknown): string {
+  return exc instanceof ApiError ? exc.reason : String(exc);
 }
 
 function csrf(): string {
@@ -84,16 +124,26 @@ export async function getJSON<T>(url: string): Promise<T> {
   return await readJSON<T>(resp);
 }
 
-/** 写一个端点（表单编码 + CSRF 头）。失败抛 ApiError。 */
-export async function postJSON<T>(url: string, body: Record<string, string>): Promise<T> {
+async function postForm(
+  url: string,
+  body: Record<string, string | string[]>,
+  redirect: RequestRedirect,
+): Promise<Response> {
   const form = new URLSearchParams();
   for (const [key, value] of Object.entries(body)) {
+    if (Array.isArray(value)) {
+      // 重复键（多选就是 `selected=A&selected=B`）：表单的既有口径，不许折成一个串。
+      for (const one of value) {
+        form.append(key, one);
+      }
+      continue;
+    }
     form.append(key, value);
   }
-  let resp: Response;
   try {
-    resp = await fetch(url, {
+    return await fetch(url, {
       method: "POST",
+      redirect,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "X-CSRF-Token": csrf(),
@@ -104,19 +154,77 @@ export async function postJSON<T>(url: string, body: Record<string, string>): Pr
   } catch (exc) {
     throw new ApiError(0, "unreadable", `请求没发出去：${String(exc)}`);
   }
+}
+
+/** 写一个 JSON 端点（表单编码 + CSRF 头）。失败抛 ApiError。 */
+export async function postJSON<T>(
+  url: string,
+  body: Record<string, string | string[]>,
+): Promise<T> {
+  const resp = await postForm(url, body, "follow");
   return await readJSON<T>(resp);
 }
 
+/** 一次写动作的结局（三态；写面的统一回执 `WriteResult` 要等 C 线 W3/W4）。 */
+export interface WriteOutcome {
+  ok: boolean;
+  tri: Tri;
+  reason: string;
+}
+
 /**
- * 页面用的那几个调用。W0 只有 Home 真的调 `getState()`（"一处真数据"）。
+ * 回答一个问题（`POST /answer`，C 线今天唯一已有的写路径）。
  *
- * `postAnswer` 现在没有页面调它，而且它今天回的是 PRG（303 重定向回首页）或一段
- * HTML，不是 JSON —— 写面的三态回执（`WriteResult`）要等 W3 的写面落地。
- * 这里先留着它，是因为 A 条要的正是"前端声明的端点集合与后端路由表逐字相等"，
- * 而 `POST /answer` 是后端今天就有的那一个。
+ * 为什么不用 `postJSON`：这一批的 `/answer` 回的是 PRG（303 回首页），不是
+ * `WriteResult`。跟着重定向走会拿到一支 HTML 而 `fetch` 把它当 200，于是"写成了"
+ * 会被读成"正文不是 JSON" —— 那正是三态纪律要挡的那种错读。
+ *
+ * 所以这里 `redirect: "manual"`，按响应分档：
+ *
+ * - `opaqueredirect` ⇒ 服务端回了 303：这次回答真的落盘了（`handle_answer` 只在
+ *   `writes.answer` 成功时回 303）。`tri` 记 `not_applicable`：这一格现在没有
+ *   "算出来的读数"，如实说明回执要等 W3，而不是假装拿到了 `ok`；
+ * - 409 ⇒ 这条 qid 不待答（已答过 / 未知），按既有判据盘上零写入；
+ * - 其余非 2xx ⇒ 按状态码如实报错。
+ */
+export async function postAnswer(body: Record<string, string | string[]>): Promise<WriteOutcome> {
+  const resp = await postForm(ENDPOINTS.answer, body, "manual");
+  if (resp.type === "opaqueredirect") {
+    return {
+      ok: true,
+      tri: "not_applicable",
+      reason: "服务端回了 PRG（303 回首页）⇒ 这次回答落盘了；写面的统一回执（WriteResult）要等 W3",
+    };
+  }
+  if (resp.status === 409) {
+    return {
+      ok: false,
+      tri: "unreadable",
+      reason: "409：这条 qid 已经不待答（已答过或不存在）；按既有的 409 判据，盘上零写入",
+    };
+  }
+  if (!resp.ok) {
+    return { ok: false, tri: "unreadable", reason: `${resp.status}：写回答没有落地` };
+  }
+  return { ok: true, tri: "not_applicable", reason: `${resp.status}：服务端接受了这次回答` };
+}
+
+/**
+ * 页面用的那几个调用（每个读端点一个，返回的都是后端那一面的字典逐字）。
+ *
+ * 六页各自只调自己那一面：Home（以及每页的壳）读 `getState()`，Run 读 `getRun()`
+ * 与 `getRunIndex()`，Evidence / Artifacts / Acceptance / Machine 各读自己那一面。
  */
 export const api = {
   getState: (): Promise<StateSnapshot> => getJSON<StateSnapshot>(ENDPOINTS.state),
-  postAnswer: (qid: string, sid: string, body: Record<string, string>): Promise<unknown> =>
-    postJSON<unknown>(ENDPOINTS.answer, { qid, sid, ...body }),
+  getRunIndex: (): Promise<RunIndexDrift> => getJSON<RunIndexDrift>(ENDPOINTS.runIndex),
+  getRun: (sid: string): Promise<RunView> => getJSON<RunView>(runPath(sid)),
+  getEvidence: (): Promise<EvidenceView> => getJSON<EvidenceView>(ENDPOINTS.evidence),
+  getArtifacts: (): Promise<ArtifactsView> => getJSON<ArtifactsView>(ENDPOINTS.artifacts),
+  getAcceptance: (opts: {
+    projectDir?: string;
+    reportPath?: string;
+    capUsd?: number | null;
+  } = {}): Promise<AcceptanceView> => getJSON<AcceptanceView>(acceptancePath(opts)),
+  getMachine: (): Promise<MachineView> => getJSON<MachineView>(ENDPOINTS.machine),
 };
