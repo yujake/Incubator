@@ -27,7 +27,7 @@ B 线**没有**去改这四个既有函数体，理由写在它的报告里：�
 ## 2. `/api/state` 归谁
 
 **事实**：A 线的 `routes._OWN` 里有 `("GET", "/api/state", "handle_state")`（`webui/routes.py:97`），实现是 `state.snapshot`；
-B 线也写了 `readers.state_face`（`readers.py:251`）与 `handle_state_face`（`:842`），但**故意没有登记路由**（它的报告里点名"不去抢 A 的这条"）。
+B 线也写了 `readers.state_face`（`webui/readers.py:251`）与 `handle_state_face`（`webui/readers.py:842`），但**故意没有登记路由**（它的报告里点名"不去抢 A 的这条"）。
 公开面对账（`temp/_verify_w0.py`）钉住的 `snapshot()` 顶层 10 键由 `state.snapshot` 产出，而该对账的硬读数今天全绿。
 
 | 选项 | 代价 |
@@ -45,7 +45,7 @@ B 线只做了它那半边（`userio.py:452-538` 的 `option_view`/`question_vie
 
 | 选项 | 代价 |
 |---|---|
-| **3a（建议）** | A 线做：`state.py:240/248/256-268` 三处改成调 `userio`，`state.option_view` 变成转发 | A 线本来就要动 `state.py`（W1 的 Home 页要读它），顺路做最省 |
+| **3a（建议）** | A 线做：`webui/state.py:240`/`:248`/`:256-268` 三处改成调 `userio`，`state.option_view` 变成转发 | A 线本来就要动 `state.py`（W1 的 Home 页要读它），顺路做最省 |
 | 3b | 主控做（现在就能做） | 主控正在跑合并与门，插进去会让"A 线的改动"混在主控提交里，事后难归因 |
 | 3c | 让 B 线扩边界做 | B 已收工；再开一轮的通信成本 > 改动本身 |
 

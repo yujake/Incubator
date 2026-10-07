@@ -130,7 +130,7 @@ A2  B1  C2  D2  E1  F1  G2  H1  |  I1  J2  K2  L1  M2  N1  O2  |  P1  Q1  R1  S1
 | K3 | 真机跑一次形式化核验（本机 `import Mathlib` 可用 ⇒ 可行）产一份真样本 | 最真；花一次真实运行的钱与时间 |
 
 ### 题 L · 待答/选项的"两份实现"收敛到哪
-**证据**：`webui.py:268 _scan`（认 `user_question` 在 `:284`）与 `userio.pending_questions:319` 是同一件事的两份实现；选项归一 `webui.py:242/396` vs `userio.coerce_option:159`。
+**证据**：`webui/state.py:232 _scan`（认 `user_question` 在 `:284`）与 `userio.pending_questions:319` 是同一件事的两份实现；选项归一 `webui/state.py:203/396` vs `userio.coerce_option:159`。
 | 选 | 做什么 | 代价 / 收益 |
 |---|---|---|
 | **L1（我建议）** | **收敛到 `userio`**（GUI 改调它），删 `_scan` 里那两段 | 单一来源；判据 `test_pending_list_is_never_filtered_by_session` 可平移 |
@@ -146,7 +146,7 @@ A2  B1  C2  D2  E1  F1  G2  H1  |  I1  J2  K2  L1  M2  N1  O2  |  P1  Q1  R1  S1
 | M3 | 不钉，只靠 `tsc` | 最省；后端字段改了而 TS 没改时**不报错**（TS 只是少一个可选字段） |
 
 ### 题 N · 三态词表要不要统一
-**证据**：现在两套并存 —— `computed / unreadable / not_applicable`（`reviewaccept` 词表，`draft/74 §3.6`）与 `ok / missing / unknown`（`webui.py:527 _read_report`）。
+**证据**：现在两套并存 —— `computed / unreadable / not_applicable`（`reviewaccept` 词表，`draft/74 §3.6`）与 `ok / missing / unknown`（`webui/state.py:491 _read_report`）。
 | 选 | 做什么 | 代价 / 收益 |
 |---|---|---|
 | **N1（我建议）** | **保持两套 + 前端统一映射到 `TriState` 三态**，字符串不许互相顶替 | 0 后端改动；靠组件层同形 |
@@ -154,7 +154,7 @@ A2  B1  C2  D2  E1  F1  G2  H1  |  I1  J2  K2  L1  M2  N1  O2  |  P1  Q1  R1  S1
 | N3 | 前端各页各自判 | 最省；三个页面的"没查成"会长得不一样 |
 
 ### 题 O · 运行"趟次"的口径要不要在后端补一个索引
-**证据**：趟次是 GUI 在 `webui.py:268 _scan` 里**从事件现切**（`agent_run_start`→`agent_run_end`）；`data/events.jsonl` 没有 `kind`（`draft/74 §0.3` 第 4 条）。
+**证据**：趟次是 GUI 在 `webui/state.py:232 _scan` 里**从事件现切**（`agent_run_start`→`agent_run_end`）；`data/events.jsonl` 没有 `kind`（`draft/74 §0.3` 第 4 条）。
 | 选 | 做什么 | 代价 / 收益 |
 |---|---|---|
 | **O1（我建议）** | 保持现切（读 `sessions/*.jsonl`）+ **把检查点 `runs/agent-*.json` 当第二读数对账** | 0 新机制；两处不一致时页面显红 |

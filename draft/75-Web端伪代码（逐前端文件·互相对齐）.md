@@ -11,13 +11,13 @@
 ### §1.1 C1 端点契约（`routes.py` ↔ `api.ts`）
 | # | method + path | 请求字段（来自表单/JSON） | 响应类型 | 后端程序（出处） |
 |---|---|---|---|---|
-| 1 | `GET /api/state` | — | `StateSnapshot` | `webui.py:401 snapshot`（返回键逐字见 docstring `webui.py:404`） |
-| 2 | `GET /api/run/{sid}` | — | `RunView`（`Run` + `report` + `checkpoint`） | 今天：`webui.py:1148` 渲染 HTML；W0 抽 JSON |
+| 1 | `GET /api/state` | — | `StateSnapshot` | `webui/state.py:365 snapshot`（返回键逐字见 docstring `webui/state.py:368`） |
+| 2 | `GET /api/run/{sid}` | — | `RunView`（`Run` + `report` + `checkpoint`） | 今天：`webui/routes.py:95` 渲染 HTML；W0 抽 JSON |
 | 3 | `GET /api/evidence` | — | `EvidenceView` | W1 新增；数据源 `store.rows(...)`（见 §1.3） |
 | 4 | `GET /api/artifacts` | 可选 `run_dir` | `ArtifactsView` | W1 新增；`artifacts.read_ledger:235` · `manuscripts.rows:119` · `secretary.decisions_path:89` |
 | 5 | `GET /api/acceptance` | `project_dir` · `report_path` · `cap_usd?` | `AcceptanceView` | W1 新增；`reviewaccept.check_review:534` |
 | 6 | `GET /api/machine` | — | `MachineView` | W1 新增；`toolchain.toolchain_report:325` · `settings.load_settings:157` |
-| 7 | `POST /answer` | `qid` · `selected[]` \| `text` | `WriteResult` | `userio.answer_question:406`（经 `webui.py:974`） |
+| 7 | `POST /answer` | `qid` · `selected[]` \| `text` | `WriteResult` | `userio.answer_question:406`（经 `webui/writes.py:90`） |
 | 8 | `POST /api/stop` | `reason` · `confirm=1` · `force?` | `WriteResult` | `stopctl.request_stop_detail:65` / `kill_registered:392` |
 | 9 | `POST /api/submit` | `topic` · `mode` · `content` · `providers[]?` | `WriteResult` + `request_id?` | `interactions.next_prefixed_id:1233` + `store.tx:890` + `row.validate()` |
 | 10 | `POST /api/settings` | `toolchain.*` · `model.*` · `workspace.*` · `confirm=1` | `WriteResult`（**响应里 key 恒 `***`**） | W4 新增 `settings.write_settings(...)` |
@@ -42,13 +42,13 @@
 
 | TS 类型 | 字段（逐字） | 后端出处（真实读数） |
 |---|---|---|
-| `StateSnapshot` | `root, generated_at, sessions, pending_questions, runs, orphans, orphan_summary, last_run, ledger, problems` | `webui.py:404` docstring 逐字 |
-| `SessionRow` | `sid, path, events_seen, events_listed, bad_lines, first_ts, last_ts, last_kind, last_seq, pending, runs, orphans` | `webui.py:438–451` |
-| `PendingQuestion` | `qid, sid, role, ts, timeout_sec, text, options: string[], multi: boolean, index` | `webui.py:293–304`；事件侧样本 `projects/p5-run10/sessions/real10.jsonl`（键 `kind options qid role text timeout_sec ts`） |
-| `RunRow` | `sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd, stop_reason, final_chars, summons, messages, elapsed_sec, last_shape, end_index, end_ts, waiting_on: string[], waiting, events_in_run` | `webui.py:322–330`（基础 18 键）+ `:361–369`（后 3 键） |
-| `OrphanRow` | `sid, index, kind, ts, role` | `webui.py:335` |
-| `LedgerReading` | `path, events, tables, note, tables_note` | `webui.py:505–520` |
-| `ReportReading` | `status: "ok"\|"missing"\|"unknown"`, `text` | `webui.py:527 _read_report`（三态逐字） |
+| `StateSnapshot` | `root, generated_at, sessions, pending_questions, runs, orphans, orphan_summary, last_run, ledger, problems` | `webui/state.py:368` docstring 逐字 |
+| `SessionRow` | `sid, path, events_seen, events_listed, bad_lines, first_ts, last_ts, last_kind, last_seq, pending, runs, orphans` | `webui/state.py:402–451` |
+| `PendingQuestion` | `qid, sid, role, ts, timeout_sec, text, options: string[], multi: boolean, index` | `webui/state.py:257–304`；事件侧样本 `projects/p5-run10/sessions/real10.jsonl`（键 `kind options qid role text timeout_sec ts`） |
+| `RunRow` | `sid, role, task, start_index, start_ts, steps, llm_calls, usd, unknown_usd, stop_reason, final_chars, summons, messages, elapsed_sec, last_shape, end_index, end_ts, waiting_on: string[], waiting, events_in_run` | `webui/state.py:286–330`（基础 18 键）+ `:361–369`（后 3 键） |
+| `OrphanRow` | `sid, index, kind, ts, role` | `webui/state.py:299` |
+| `LedgerReading` | `path, events, tables, note, tables_note` | `webui/state.py:469–520` |
+| `ReportReading` | `status: "ok"\|"missing"\|"unknown"`, `text` | `webui/state.py:491 _read_report`（三态逐字） |
 | `Checkpoint` | `role, sid, task, fingerprint, step, stop_reason, waiting_for, spend{calls,tokens_in,tokens_out,usd,unknown_usd_calls}, at` | 真机 `projects/p9b-post-fix-replay/runs/agent-M-t9b.json`；出处 `agent_loop.py:2922` |
 | `TaskRow` | `task_id, role, action, called_by, parent_task_id, depth, input_key, status, outcome, refusal_reason, detail, error, started_at, ended_at, tokens, usd, instance, artifacts[], inputs[]` | 真机 `p9b/data/tasks.json`（19 键） |
 | `SearchRequestRow` | `request_id, topic, mode, content_description, providers[], done, outcome, priority, submitted_by, submit_note, for_question_id, claimed_by, lease_until, attempts, last_error, result_lit_ids[], timestamp` | 真机 `p9b/data/search_requests.json`（17 键） |

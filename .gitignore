@@ -307,6 +307,9 @@ desktop.ini
 !/temp/_live_readings_census.py
 !/temp/_m6_verify_verbatim.py
 !/temp/_m8_probe_lean.py
+!/temp/_migrate_webui_cites.py
+!/temp/_migrate_webui_cites_manual.py
+!/temp/_negctl_hash.py
 !/temp/_oa_probe.py
 !/temp/_p40_m_tool_smoke.py
 !/temp/_page_fix_ab.py
@@ -319,6 +322,8 @@ desktop.ini
 !/temp/_probe_openalex_mode.py
 !/temp/_probe_precise_desc.py
 !/temp/_r009_fix.py
+!/temp/_r009_locate.py
+!/temp/_r009_strip.py
 !/temp/_r009_sweep.py
 !/temp/_r1a1_status_probe.py
 !/temp/_r2b_ocr_probe_after.txt

@@ -17,7 +17,7 @@
    - `docs/READING-MAP.md`（判据 `test_every_filename_in_the_map_exists_on_disk`：**图里出现的每个文件名都必须真实存在**）⇒ 图里所有 `webui.py` 的写法要改成 `webui/` 或具体文件（`webui/server.py`）。
 2. **静态资源（dist）默认不进 wheel**：打包是 `[tool.setuptools] package-dir={""="src"}` + `packages.find where=["src"]`，**没有** `package-data`。
    ⇒ 开发/可编辑安装（`pip install -e .` 或 `PYTHONPATH=src`）**照常工作**；只有"发布 wheel 也要带前端"时才需要动 `pyproject.toml` —— **那是 FC-27（release-deploy）**。见 §4 题 G。
-3. **现在没有静态路由**：CSS 是 `webui.py:570` 把 `STYLESHEET` **内联**进 `<style>`；没有任何 `/static/*` 端点。W0 要新增静态路由（含 content-type、缓存、404）。
+3. **现在没有静态路由**：CSS 是 `webui/views.py:84` 把 `STYLESHEET` **内联**进 `<style>`；没有任何 `/static/*` 端点。W0 要新增静态路由（含 content-type、缓存、404）。
 
 ---
 

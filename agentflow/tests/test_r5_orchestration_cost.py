@@ -1014,7 +1014,7 @@ def test_a_model_side_failure_lands_as_a_failed_task_row(store: Store,
     # 负控（本条的装置自控）：把 error 去掉再走一次同样的写入路径，必须当场被拒
     # —— 否则"补上 error"这件事只是装饰，判据没有牙。
     with pytest.raises(ValueError):
-        S.Task(**{**row, "error": None}).validate()
+        S.Task({row, "error": None}).validate()
 
 
 def test_the_settle_success_is_also_visible(store: Store, tmp_path: pathlib.Path) -> None:
@@ -1156,9 +1156,9 @@ _REF_SCAN_SUFFIXES = (".py", ".md")
 #: 判据的覆盖面没有变松：仓内被跟踪的内容照旧全扫（源码、docs/、draft/ 里的 `.md`）。
 #:
 #: `node_modules` 是 2026-10-07 补的（Web 端 W0 引入 Vite 之后）：它是 `pnpm install`
-#: 的**依赖安装结果**（实测 1.2 万个文件、`.gitignore` §4b 明确排除，入库的是
+#: 的依赖安装结果（实测 1.2 万个文件、`.gitignore` §4b 明确排除，入库的是
 #: `ui/pnpm-lock.yaml`）。不排除它会出两个问题，且第二个比第一个严重：
-#: ① 判据要白读 1.2 万个第三方文件；② **第三方的 README 会把本判据点红** ——
+#: ① 判据要白读 1.2 万个第三方文件；② 第三方的 README 会把本判据点红 ——
 #: 实测漏出来的六条里有三条是 `vite-prerender-plugin/README.md:94` 里那个下划线开头的
 #: token（写成反引号形态就会被本判据当成"我们引用的私有符号"），
 #: 那是别人文档里的 token，与"我们仓里的引用"毫无关系（假报警会让人开始忽略这条判据）。
