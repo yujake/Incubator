@@ -1014,7 +1014,7 @@ def test_a_model_side_failure_lands_as_a_failed_task_row(store: Store,
     # 负控（本条的装置自控）：把 error 去掉再走一次同样的写入路径，必须当场被拒
     # —— 否则"补上 error"这件事只是装饰，判据没有牙。
     with pytest.raises(ValueError):
-        S.Task({row, "error": None}).validate()
+        S.Task(**{**row, "error": None}).validate()
 
 
 def test_the_settle_success_is_also_visible(store: Store, tmp_path: pathlib.Path) -> None:
