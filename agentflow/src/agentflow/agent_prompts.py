@@ -72,7 +72,13 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p42`（同日，`draft/68` 题 17 选 B，所有者授权）：`conductor.closing` 的工具摘要里广告了
 #: 同一次调用会回的 `review_acceptance` 那一栏与可选参数 `cap_usd` —— 摘要进 M 的工具面
 #: ⇒ 十格摘要里只有 M 换值（其余九个角色的工具面里没有这件工具）。
-PROMPT_VERSION = "p42"
+#:
+#: `p43`（同日，`draft/68` 题 19 与题 20，所有者授权）：题 20 同步了 A 的 `search_literature`
+#: 声明（`returns` 按实现如实改写）与提示词里 A 自己的两格（动作清单与返回值那两句）；
+#: 题 19 让工具面的 `citations` 描述把 `stmt:` 前缀一并教出来，而那件工具落在 A 的工具面上。
+#: 两刀合起来只动 A 一格：实测 A 换值（`9be0fc70…`），其余九格逐字不变 ——
+#: "只有 A 动"这件事本身就是这两刀作用域的读数。
+PROMPT_VERSION = "p43"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

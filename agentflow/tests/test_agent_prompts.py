@@ -1335,9 +1335,13 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `review_acceptance` 那一栏与可选参数 `cap_usd` —— 摘要只进 M 的工具面 ⇒ 只有 M 那一格换值
 #: （实测：其余九格逐字不变，这本身是"摘要只落 M"的佐证）。同时它把题 16 的那一段
 #: 补进了 `specs/g.py` 的镜像（那是声明面镜像、不是段，所以不进这张表）。
-_FROZEN_PROMPT_VERSION = "p42"
+#:
+#: `p43`（同日，`draft/68` 题 19 与题 20，所有者授权）：题 20 同步 A 的 `search_literature`
+#: 声明（`returns` 按实现如实改写）与 A 提示词里的两格；题 19 让工具面 `citations` 的描述
+#: 教出 `stmt:` 前缀，那件工具在 A 的工具面上。两刀合起来实测只有 A 那一格换值。
+_FROZEN_PROMPT_VERSION = "p43"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "98f12bedad709008abe59dd8acd3ca74f64afa6af40b49172bdc5e7c804e1213",
+    "A": "9be0fc70415374b11e20809f8e50939035422215346746b7c317abc57644574e",
     "B": "bfe145bdb3ad14853816c16ff6eea2c07f0511501ab30fdd3284ef9c3926f257",
     "C": "623f1c815a194f88fbb0019fd3642bbccaaa814eca3ebe2a5b2f58af47f7f32e",
     "D": "ef3a90d90db0f7f0b35714c951b41c219f5a40d1f334b91bf410cb2ff5141c25",
