@@ -395,6 +395,8 @@ def test_b_the_fallback_path_symbols_are_still_there() -> None:
 # ====================================================================== C 类型字段对齐
 _INTERFACE = re.compile(r"^export interface ([A-Za-z_][A-Za-z0-9_]*)\s*\{", re.M)
 _FIELD = re.compile(r"^\s{2}([A-Za-z_][A-Za-z0-9_]*)\??\s*:", re.M)
+#: 声明成可选的字段（`name?:`）—— 与 `_FIELD` 分开定义，用途见 `_optional_fields`。
+_OPTIONAL_FIELD = re.compile(r"^\s{2}([A-Za-z_][A-Za-z0-9_]*)\?\s*:", re.M)
 
 
 def _parse_interfaces(text: str) -> dict[str, set[str]]:
@@ -408,9 +410,34 @@ def _parse_interfaces(text: str) -> dict[str, set[str]]:
     return out
 
 
+def _optional_fields(text: str) -> dict[str, set[str]]:
+    """每个接口里声明成可选（`name?:`）的键。
+
+    为什么必须把可选键与必填键分开：C3 表里有一批字段是"有就带上"的
+    （例：`HandoffRow.revises` / `kind`、`ReviewFindingRow.line`），
+    夹具上读不出它们不是漂移。判据原来的口径是"集合必须完全相等"，
+    于是 B 线一落地就报 `HandoffRow：types.ts 多了后端没有的键 ['kind','revises']`
+    —— 那不是缺陷，是判据把"可选的没出现"读成了"多了一个键"。
+    现在的口径：`extra` 里声明了可选的键不算问题，其余照旧必红
+    （负控那三条钉的就是"凭空多一个非可选键"）。
+    """
+    out: dict[str, set[str]] = {}
+    for m in _INTERFACE.finditer(text):
+        body = text[m.end():]
+        end = body.find("\n}")
+        body = body[:end if end != -1 else len(body)]
+        out[m.group(1)] = {f.group(1) for f in _OPTIONAL_FIELD.finditer(body)}
+    return out
+
+
 def _type_alignment_problems(interfaces: dict[str, set[str]],
-                             backend: dict[str, set[str]]) -> list[str]:
-    """`types.ts` 的键集合 vs 后端真读出来的键集合（含两份名单的反向断言）。"""
+                             backend: dict[str, set[str]],
+                             optional: dict[str, set[str]] | None = None) -> list[str]:
+    """`types.ts` 的键集合 vs 后端真读出来的键集合（含两份名单的反向断言）。
+
+    `optional` 给"声明成可选、夹具上没读出来"的键留出口（见 `_optional_fields`）。
+    """
+    opt = optional or {}
     problems: list[str] = []
     for name in _checked_types():
         if name not in interfaces:
@@ -419,7 +446,7 @@ def _type_alignment_problems(interfaces: dict[str, set[str]],
         if name not in backend:
             problems.append(f"夹具工作区上没读出 {name} 的键 ⇒ 这条判据没有落脚点")
             continue
-        extra = sorted(interfaces[name] - backend[name])
+        extra = sorted(interfaces[name] - backend[name] - opt.get(name, set()))
         missing = sorted(backend[name] - interfaces[name])
         if extra:
             problems.append(f"{name}：types.ts 多了后端没有的键 {extra}")
@@ -464,69 +491,148 @@ def _fixture_workspace(tmp: pathlib.Path) -> pathlib.Path:
 
 
 def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
-    """后端在这个工作区上真读出来的键集合（一栏一个接口）。"""
+    """后端在这个工作区上真读出来的键集合（一栏一个接口）。
+
+    两个来源，缺一不可：
+    1. 快照家族（`webui.state.snapshot`，A 线自有那两条端点的产出）；
+    2. B 线六个只读面（`webui.readers` 的 `state_face` / `run_view` / `evidence_chain` /
+       `artifacts_face`），它们才是 `CHECKED_TYPES` 里那 18 个接口的真出处。
+       为什么必须补上第 2 条：B 线落地六面之后，`types.ts` 里新增的接口在这条判据看来
+       "既没有读数、也没登记欠账" ⇒ 会报"前端凭空多了一个没人核的接口"（我实测撞到过，
+       报的是 `夹具没造出这些读数：[RunProduct, CheckpointView, …]`）。判据的语义本来是
+       "TS 的键 == 后端真读出来的键"，那就得让后端那一边真的去读。
+    读不出来的接口不进结果 ⇒ 由调用方的"夹具没造出这些读数"那条断言点名。
+    """
+    from agentflow.webui import readers as RD
+
+    out: dict[str, set[str]] = {}
+
+    def _take(rows, name: str) -> None:
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            out[name] = set(rows[0])
+
     snap = W.snapshot(root)
-    out: dict[str, set[str]] = {"StateSnapshot": set(snap)}
-    if snap["sessions"]:
-        out["SessionRow"] = set(snap["sessions"][0])
+    out["StateSnapshot"] = set(snap)
+    _take(snap["sessions"], "SessionRow")
     if snap["pending_questions"]:
         q = snap["pending_questions"][0]
         out["PendingQuestion"] = set(q)
-        if q["options"]:
-            out["OptionRow"] = set(q["options"][0])
-    if snap["runs"]:
-        out["RunRow"] = set(snap["runs"][0])
-    if snap["orphans"]:
-        out["OrphanRow"] = set(snap["orphans"][0])
-    groups = (snap["orphan_summary"] or {}).get("groups") or []
-    if groups:
-        out["OrphanGroup"] = set(groups[0])
+        _take(q.get("options"), "OptionRow")
+    _take(snap["runs"], "RunRow")
+    _take(snap["orphans"], "OrphanRow")
+    _take((snap["orphan_summary"] or {}).get("groups"), "OrphanGroup")
     out["OrphanSummary"] = set(snap["orphan_summary"] or {})
     out["LedgerReading"] = set(snap["ledger"] or {})
     _read_report(root)
     out["ReportReading"] = {"status", "text"}
+
+    # ---- B 线的六面（真读，不猜形状）
+    state_face = RD.state_face(root)
+    inner = state_face.get("snapshot") if isinstance(state_face.get("snapshot"), dict) else {}
+    _take(inner.get("sessions"), "SessionRow")
+    _take(inner.get("runs"), "RunRow")
+    _take(inner.get("orphans"), "OrphanRow")
+    if inner.get("pending_questions"):
+        q = inner["pending_questions"][0]
+        out.setdefault("PendingQuestion", set(q))
+        _take(q.get("options"), "OptionRow")
+    _take((inner.get("orphan_summary") or {}).get("groups"), "OrphanGroup")
+    if inner.get("orphan_summary"):
+        out.setdefault("OrphanSummary", set(inner["orphan_summary"]))
+    if inner.get("ledger"):
+        out.setdefault("LedgerReading", set(inner["ledger"]))
+
+    sid = ""
+    if snap["runs"]:
+        sid = str(snap["runs"][0].get("sid") or "")
+    if sid:
+        view = RD.run_view(root, sid)
+        # `RunView` 这一栏就是 `run_view()` 返回的那张字典本身（B 线的生成器按它出接口）
+        out["RunView"] = set(view)
+        _take(view.get("runs"), "RunRow")
+        ck = view.get("checkpoint")
+        if isinstance(ck, dict):
+            out["CheckpointView"] = set(ck)
+            if isinstance(ck.get("spend"), dict):
+                out["CheckpointSpendView"] = set(ck["spend"])
+        if isinstance(view.get("report"), dict):
+            out["ReportReadingView"] = set(view["report"])
+
+    ev = RD.evidence_chain(root)
+    for key, name in (("statements", "StatementRow"), ("conjectures", "ConjectureRow"),
+                      ("experiments", "ExperimentRow"), ("review_findings", "ReviewFindingRow"),
+                      ("relations", "RelationRow"), ("verifications", "VerificationRow")):
+        _take(ev.get(key), name)
+    out.setdefault("EvidenceView", set(ev))
+
+    art = RD.artifacts_face(root)
+    for key, name in (("ledger", "ArtifactRow"), ("ledger_verify", "LedgerVerifyRow"),
+                      ("handoffs", "HandoffRow"), ("checks", "AcceptanceCheck"),
+                      ("products", "RunProduct"), ("tasks", "TaskRow"),
+                      ("secretary", "SecretaryDecision")):
+        _take(art.get(key), name)
+    if isinstance(art.get("style"), dict):
+        out["ReportStyle"] = set(art["style"])
+    out.setdefault("ArtifactsView", set(art))
+
+    mac = RD.machine_face(root)
+    if isinstance(mac.get("settings"), dict):
+        out["SettingsReading"] = set(mac["settings"])
+    out.setdefault("MachineView", set(mac))
+
+    acc = RD.acceptance_face(root)
+    out.setdefault("AcceptanceView", set(acc))
     return out
 
 
 def test_c_the_generated_types_match_what_the_backend_really_reads(
-        tmp_path: pathlib.Path) -> None:
+        artifacts_ws: pathlib.Path) -> None:
     """正控（C 类型字段对齐）：`types.ts` 的键集合 == 后端在夹具上真读出来的键集合。
 
     反向（TS 多了后端没有的键）与正向（后端多了一个键而 TS 没加）都要红 ——
     两个方向都是漂移，而漂移的方向决定读的人会怎么错。
+
+    夹具用 B 线那两份（`tests/conftest.py` 的 `make_artifacts_sample` / `artifacts_ws`，
+    裁定 J2/K2）：它把六件产物、台账、交接、验收表、体例、秘书决定、检查点、验证台账
+    都造出来了 —— 只有这样"后端真读出来的键"才覆盖得到 B 线那 18 个接口。
+    我原先用本文件自造的小夹具（只有会话与两条事件），B 线一落地就报
+    "夹具没造出这些读数"，那条红不是缺陷、是夹具太薄。
     """
-    interfaces = _parse_interfaces(_ui_text(TYPES_TS))
+    text = _ui_text(TYPES_TS)
+    interfaces = _parse_interfaces(text)
+    optional = _optional_fields(text)
     assert len(interfaces) >= 10, f"只解析出 {len(interfaces)} 个接口 ⇒ 解析器可能失配"
-    root = _fixture_workspace(tmp_path)
-    backend = _backend_keys(root)
+    backend = _backend_keys(artifacts_ws)
     missing_readings = [n for n in _checked_types() if n not in backend]
     assert not missing_readings, f"夹具没造出这些读数：{missing_readings}"
-    assert _type_alignment_problems(interfaces, backend) == [], (
-        _type_alignment_problems(interfaces, backend))
+    assert _type_alignment_problems(interfaces, backend, optional) == [], (
+        _type_alignment_problems(interfaces, backend, optional))
 
 
 def test_c_negative_controls_catch_both_directions(
-        tmp_path: pathlib.Path) -> None:
+        artifacts_ws: pathlib.Path) -> None:
     """负控（C）：后端多一个键 / TS 多一个键 / TS 少一个接口 ⇒ 三种都要报。"""
-    interfaces = _parse_interfaces(_ui_text(TYPES_TS))
-    backend = _backend_keys(_fixture_workspace(tmp_path))
-    assert _type_alignment_problems(interfaces, backend) == []
+    text = _ui_text(TYPES_TS)
+    interfaces = _parse_interfaces(text)
+    optional = _optional_fields(text)
+    backend = _backend_keys(artifacts_ws)
+    assert _type_alignment_problems(interfaces, backend, optional) == []
 
     # ① 后端加一个键（例如 tasks 多一列）而 types.ts 没加
     grown = {k: set(v) for k, v in backend.items()}
     grown["RunRow"].add("brand_new_column")
-    problems = _type_alignment_problems(interfaces, grown)
+    problems = _type_alignment_problems(interfaces, grown, optional)
     assert problems and "brand_new_column" in problems[0], problems
 
     # ② TS 多了后端没有的键
     doctored = {k: set(v) for k, v in interfaces.items()}
     doctored["RunRow"].add("invented_column")
-    problems2 = _type_alignment_problems(doctored, backend)
+    problems2 = _type_alignment_problems(doctored, backend, optional)
     assert problems2 and "invented_column" in problems2[0], problems2
 
     # ③ TS 少一个接口（契约表要求它）
     dropped = {k: v for k, v in interfaces.items() if k != "LedgerReading"}
-    problems3 = _type_alignment_problems(dropped, backend)
+    problems3 = _type_alignment_problems(dropped, backend, optional)
     assert problems3 and "LedgerReading" in problems3[0], problems3
 
 

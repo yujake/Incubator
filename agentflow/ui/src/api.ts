@@ -5,18 +5,29 @@
  *
  * 1. 路径只在 ENDPOINTS 里写一次 —— `tests/test_webui_contracts.py` 的 A 条把
  *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对。
- *    W0 后端真有的只有 `/api/state` 与 `/answer` 两个，所以这里也只声明两个：
- *    "前端先写一个后端还没有的端点"会当场让 A 条变红，那正是它该做的事。
+ *    B 线已落地六个只读面，所以这里补齐对应的六条（`/api/task` 按裁定 I1 不做，
+ *    因此表里没有它）：前端多写一个后端没有的端点、或后端有而前端没声明，A 条都会红。
  * 2. 失败不许折成空读数：HTTP 非 2xx 与网络故障都抛 ApiError，三态走 `tri`
  *    （`unreadable` = 没查成），由页面渲染成 TriState。绝不返回空对象装作读到了。
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
  */
 import type { StateSnapshot } from "./types";
 
-/** 后端在本批真的有的端点（W0）。 */
+/**
+ * 后端端点表（与 `webui/routes.py` 的 `ROUTES` 逐字对齐）。
+ *
+ * 带 `{}` 的那几条是路由模式：`api.ts` 里用模板串拼实参，
+ * 判据会把 `${sid}` 归一成 `{sid}` 再比（见 A 条的 `_literals`）。
+ */
 export const ENDPOINTS = {
   state: "/api/state",
+  run: "/api/run/{sid}",
+  evidence: "/api/evidence",
+  artifacts: "/api/artifacts",
+  acceptance: "/api/acceptance",
+  machine: "/api/machine",
   answer: "/answer",
+  stream: "/api/stream",
 } as const;
 
 export type EndpointName = keyof typeof ENDPOINTS;
