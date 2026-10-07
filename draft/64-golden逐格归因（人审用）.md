@@ -308,3 +308,44 @@ R8 的 **A-1…A-9 全部落在文档面与一个入口**（`cli.py` 的 `MENU`/
 **归因类**：仍归 **`§8.1b` 的 ⑬（"把提示词里的东西按改正"那一族的顺延）**？—— **不**：本次**不是**改文字，是**改收件人/作用域**，
 ⇒ 按 J-47"每一轮都要在本表的归因表里加类"的要求，**本类记为 ⑭：`§8.6` "把只有某角色用得到的共享段改成按角色渲染"**（与 ⑫ 的"框架渲染跟着声明面走"不同：本类改的是**共用的那句话发给谁**）。
 ⚠️ 若重冻时看到**超出这 10 格**（第 11 格起，尤其**工具面**格跟着动）⇒ **停下报所有者**，不许并进"预期"。
+
+### §8.6.1 **重冻执行记录**（一次性、已做、可复算）（2026-10-07 12:5x）
+
+**前提**：两条施工线**都报"停手"**（R6-⑥ 的 `agent_prompts.py` + `tests/test_agent_prompts.py` 冻结；另一条线的 `agent_loop.py`/`secretary.py` 已提交 `b2d05b3`）。
+**执行**：`pwsh -NoProfile -File D:\Incubator\temp\_refreeze_step3.ps1`（一次跑完 + 两次复核）。
+
+| 步 | 读数 |
+|---|---|
+| ① 抄增量格 | **agent 面 10 格 · tool 面 0 格** —— 十格全是 `roles.<X>.prompt`，**没有一个工具面格动**（这正是"只搬提示词里的那几块"应有的形状） |
+| ② 重冻 | `agent_surface_snapshot.py --write` ⇒ exit 0（「10 个角色，59 条动作」）· `tool_surface_snapshot.py --write` ⇒ exit 0（「81 个工具 / 10 个角色 / 11 条 CLI 输出」） |
+| ③ **立刻复跑** | `pytest tests/test_agent_surface_snapshot.py tests/test_tool_surface_snapshot.py` ⇒ **`5 passed`（7.52 s）** —— 与 R0 基线**同一个读数** |
+| ④ 增量归零复核 | `_golden_vs_live_cells.py` ⇒ **agent 0 格 · tool 0 格** |
+
+**逐格账（改前 → 改后；改后 sha12 由执行方给、字符账由我独立复算过）**：
+
+| 格 | 出边 | 改前字符 | 改后字符 | **差** | 改后 sha12 | 归因（哪一块） |
+|---|---|---|---|---|---|---|
+| `roles.A.prompt` | 1 | 15197 | 14878 | **−319** | `d20a011380c4` | [a]/[b] 两块 M 专段搬走（[c] 留着） |
+| `roles.B.prompt` | 1 | 14503 | 14184 | **−319** | `94c2cc02ab24` | 同上 |
+| **`roles.C.prompt`** | **0** | 13179 | **12347** | **−832** | `a7e76fe9baaf` | [a]/[b] 搬走 **+ [c] 整段 567 换 54 字残桩** |
+| `roles.D.prompt` | 5 | 21577 | 21258 | **−319** | `9d3bd5acf7f2` | [a]/[b] 搬走 |
+| `roles.E.prompt` | 2 | 19232 | 18913 | **−319** | `c1e8c92cbfe2` | 同上 |
+| `roles.F.prompt` | 6 | 20680 | 20361 | **−319** | `c89fc2ed1b18` | 同上 |
+| `roles.G.prompt` | 4 | 29087 | 28768 | **−319** | `1c62920a65fd` | 同上 |
+| `roles.H.prompt` | 3 | 24560 | 24241 | **−319** | `2b3c19dd8f6f` | 同上 |
+| `roles.M.prompt` | 9 | 39545 | 39545 | **0** | `19f3120a1a52` | **只有 `提示词版本：p37 → p38` 那一行**（协议正文零变化） |
+| `roles.V.prompt` | 1 | 12709 | 12390 | **−319** | `5e0fabb5c019` | [a]/[b] 搬走 |
+
+**三条支撑证据（都逐条可复算）**：
+1. **M 的协议正文零变化**：我做过**逐行 diff** —— M 的原文 **468 行 → 468 行，只差 `提示词版本：p37 → p38` 一行**；且 `loop_protocol_for("M") is loop_protocol_for.__globals__["LOOP_PROTOCOL"]` 为 True（设计上"零重新拼装"）。
+2. **"换回全量协议 + p37 后逐字节等于旧 golden"**：执行方对**十格**逐一做这个还原，**十格全 True** ⇒ 这一刀只动了那几块（+ C 的整段换残桩），**别的一个字节没动**。
+3. **工具面 sha 未变**：`tool_surface_snapshot.json` 在重冻前后 sha **完全相同**（`da87baf0f80b942d`）⇒ 与"tool 面 0 格"互为佐证。
+
+**golden 的 sha 变化（登记用）**：
+
+| 文件 | 重冻前 | **重冻后（当前）** |
+|---|---|---|
+| `tests/golden/agent_surface_snapshot.json` | `95250e3a176c…` | **`1e8356ea07cef52d…`** |
+| `tests/golden/tool_surface_snapshot.json` | `da87baf0f80b…` | **`da87baf0f80b942d…`（未变）** |
+
+⚠️ **`draft/67` 的待签清单要按这两个新 sha 复采**（两个 golden 仍在 `unregistered` 档）。

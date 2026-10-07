@@ -1222,6 +1222,7 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_notify_bounce",             # 存活但已无调用点的退场实现（`agent_loop.py` 的 def；`tests/test_forced_notify.py:238` 在说它不再被调用）—— 名字是真的，读的人找得到
     "_shell_demo",                # R8-A-1 退场的入口处理函数（2026-10-07 删）：`cli.py` 的留痕注释在讲"这里原有它、为什么摘掉"；留痕按纪律必须点名被删的东西
     "_persist_report",            # R8-A-6 退场的旧落盘函数（2026-10-07 已在全树无符号出现）：`DEVELOPMENT.md` 与 `DESIGN-TOOLS.md` 的说明在讲"为什么要删它"
+    "_notify_gate",               # 2026-10-07 改名成 `notify_reading`（旧名在说谎：它不打回）：`agent_loop.py` 里那段改名留痕必须点名旧名 —— 留痕按纪律必须点名被删/被改的东西
     "_BASE_",                     # 别名前缀（不是完整标识符）
     "_impl",                      # 被转发的名字（`lint_rules.py` 的解释）
     "_private",                   # 判据片段（不是标识符）
