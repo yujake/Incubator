@@ -82,6 +82,15 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 要领域全景就显式传 `broad` / `topical`。
                 "mode": {"type": "string", "enum": list(S.SEARCH_MODES)},
                 "description": _S,
+                # 题 3（2026-10-07 所有者授权补 `providers`）**暂时回退**，理由逐字如下：
+                # 补上这一格之后，导入期的 `param_seam_violations` 当场报
+                # "能力层声明了、实现不收（`AgentA.search_literature` 的签名里没有它）"。
+                # 那不是噪音：参数门（`Conductor._check_params`）读的正是这张表 ⇒ 它会放行、
+                # 写一行 running、执行期才报"不认这些参数"；而且提示词会把 `providers`
+                # 广告成一个可用参数。真正的修法要把 `providers` 带进队列
+                # （`schema.SearchRequest` 加字段 = 禁改区 [schema-migration]）+ claim/run 路径，
+                # 那是一次功能改动、不在"补一行声明面"的授权范围内 ⇒ 已作为新待裁项报给所有者。
+                # 在那之前保持原状（工具面有、动作面没有）：不完整，但没有地雷。
             },
             required=("topic",),
         ),
