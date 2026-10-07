@@ -72,10 +72,13 @@ status        ∈ {证, 验, 待精化, 作废}             它当前处于什�
 同一份判据。两者的硬约束（无引用 / `cross_check` 缺 disclaimer / 否定未分类）
 必须一致，`tests/test_claimanatomy.py` 有一组双向对照用例钉住这一点。
 
-`status` / `kind` / `allowed_use` 这些受控词表按 `DEVELOPMENT.md` §2.3
-本应定义在 `schema.py`（唯一来源）。它们暂时在这里，因为 `schema.py` 是 FC-27
-禁改区，本任务无权动它 —— 这件事已作为一条待办写进
-`docs/SCHEMA-MIGRATION-PROPOSAL-claims.md`，由人批准后实施。
+`status` / `kind` / `allowed_use` 这些受控词表的真身按 `DEVELOPMENT.md` §2.3
+已经是 `schema.py`（唯一来源）：2026-10-07 所有者裁定 `draft/68` 题 2 选 B，
+本次改动由所有者授权、主控代改，六张词表（`CLAIM_KINDS` / `CLAIM_STATUSES` /
+`ALLOWED_USE_KINDS` / `NUMERIC_EVIDENCE_KEYS` / `CLAIM_SOURCE_KINDS` /
+`CLAIM_CHECK_KINDS`）从本模块搬进 `schema.py`，本模块只 import。
+留在本模块的是它们的使用方式（`CLAIM_FIELDS` 与派生的别名/家族表）与判据本身 ——
+搬的是真身词表，不是判据表。两侧是同一个对象（`is`），不是两份同值拷贝。
 """
 
 from __future__ import annotations
@@ -119,40 +122,27 @@ __all__ = [
     "validate_document_claims",
 ]
 
-# ---------------------------------------------------------------- 受控词表
+# ---------------------------------------------------------------- 受控词表（真身在 schema）
 #
-# 按 `DEVELOPMENT.md` §2.3，跨模块受控词表应定义在 `schema.py`（唯一来源）。
-# 这三张表暂时在这里，理由与迁移计划见模块 docstring 末段。
-
-#: §8.3 的 `kind`：这是数学对象的类型，不是文稿的体裁。
-#: 检查脚本靠这个前缀建索引，且编号规则是"按类型内连续" ——
-#: 所以它必须来自受控词表，而不是自由文本。
-CLAIM_KINDS = ("定义", "定理", "命题", "引理", "推论", "例", "注", "反例")
-
-#: §8.3 的 `status`：生命周期轴（与 `evidence_kind` 正交）。
-#: `作废` 是"这条断言已被撤销"——它必须能表达，否则"作废的断言仍被当作有效结论引用"
-#: 这件事在数据模型里不可见。
-CLAIM_STATUSES = ("证", "验", "待精化", "作废")
-
-#: §8.3 的 `allowed_use`：论文线的硬性降级规则（RP/00_STANDARD.md:105-110）。
-#: 只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark。
-ALLOWED_USE_KINDS = ("主结果", "Remark only", "移入 open")
-
-#: §8.3 的 `numeric_evidence` 四元组。键名固定，多一个少一个都不可判定。
-NUMERIC_EVIDENCE_KEYS = ("script", "range", "n_cases", "n_counterexamples")
-
-#: `draft/31` P3 的三档来源（断言台账的「来源」列）。
-#:
-#: 三档必须分开，理由与 FC-25 的四类否定同族：「我们自己算出来的」与
-#: 「某篇文献说它是这样」在证据力上不是一回事，而「来源至今没查清」
-#: 更不是前两者中的任何一个 —— 合并之后，读表的人会把「未决」读成「已核实」。
-CLAIM_SOURCE_KINDS: tuple[str, ...] = ("自证", "文献", "未决")
-
-#: `draft/31` P3 的「我方核到什么程度」。分档判据是「我们做了什么」，
-#: 不是结论有多可信：`证明`（形式化/逐步推导，我方自己走通）·
-#: `数值`（复算 / 反例搜索）· `只读了陈述`（连数值核对都没做）。
-#: 中间那一档刻意不叫「验证」：那会把"跑过脚本"说成"验过了"。
-CLAIM_CHECK_KINDS: tuple[str, ...] = ("证明", "数值", "只读了陈述")
+# 六张角色语义词表的真身现在在 `schema.py`（`DEVELOPMENT.md` §2.3 要的落点）。
+# 2026-10-07 所有者裁定 `draft/68` 题 2 选 B，本次改动由所有者授权、主控代改。
+# 这里只 import，不再留第二份字面量 —— 于是下面这些名字与本模块的
+# `CLAIM_FIELDS[*].domain` 指向的是同一个对象（`is`，不是相等）。
+#
+# 为什么可以是模块级 import 而不是 `_evidence_kinds()` 那种惰性转发：
+# `import agentflow.claimanatomy` 一定会先执行包 `__init__`，而它 import 了
+# `interactions`（`CONTRACT_VERSION`），后者又 import `schema` 与 `store` ——
+# 实测 `import agentflow.claimanatomy` 之后 `agentflow.schema` 与
+# `agentflow.store` 都已在 `sys.modules` 里。所以"惰性"在这一层省不下任何东西，
+# 反而需要一份同值兜底（那就是第二份字面量）。`schema` 不 import 本模块，无环。
+from .schema import (  # noqa: E402 - 见上：位置放在词表这一节，不搬到文件顶部
+    ALLOWED_USE_KINDS,
+    CLAIM_CHECK_KINDS,
+    CLAIM_KINDS,
+    CLAIM_SOURCE_KINDS,
+    CLAIM_STATUSES,
+    NUMERIC_EVIDENCE_KEYS,
+)
 
 #: `evidence_kind` 的受控词表另一处在 `schema.EVIDENCE_KINDS`。
 #: 这里不复制一份字面量 —— 见 `_evidence_kinds()`（惰性转发，理由是 FC-03）。
