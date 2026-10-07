@@ -314,3 +314,36 @@ def test_an_unreadable_ledger_is_not_reported_as_no_downstream(tmp_path):
     missing = CL.pollution_reading(st, "1234")
     assert missing["state"] == "no_such_statement", missing
     assert CL.pollution_reading(st, "0009")["state"] == "computed", "有这条命题就判得了"
+
+
+def test_a_too_large_ledger_blocks_the_closure_distribution_instead_of_reporting_zero(
+        tmp_path, monkeypatch):
+    """命题数超阈值 ⇒ `state="too_large"` 显式阻塞；"没算"不许折成"没有下游"。
+
+    为什么必须有这一条（R5 组 4 的收尾复核，2026-10-07）：这一支此前没有任何判据看着 ——
+    `grep -n too_large tests/` 命中的都是 E13/`attack_round`、`locallib`、`agent_f` 那一族，
+    是另一个对象（预算超限），与污染面的"账本太大所以闭包分布不算"不是同一件事。
+    它与本文件其余用例同族：把"没查成/没算"与"查成了、结果为空"折平，读的人就会得出
+    一个错误结论（"这一层没有下游"），而实际上只是没算。
+
+    两端都控：阈值压到 3 条以下 ⇒ 必须阻塞且理由行写明；阈值抬上去 ⇒ 必须真的算出来
+    （否则上一条可能只是"永远 too_large"的真空判据）。
+    """
+    st = _store(tmp_path)
+    _stmt(st, "0001", status="refuted", quote_reason="原文条件少了正性假设")
+    _stmt(st, "0002", derived_from=["0001"])
+    _stmt(st, "0003", derived_from=["0002"])
+
+    monkeypatch.setattr(CL, "POLLUTION_CLOSURE_MAX_NODES", 2)   # 3 条 > 2 ⇒ 必须阻塞
+    blocked = CL.proposition_level_pollution(st)
+    assert blocked["state"] == "too_large", blocked
+    assert blocked["closure_sizes"] is None and blocked["max_closure"] is None, blocked
+    # 阻塞的是"闭包分布"那一格：有/没有下游那一格照样算得出来（不许一阻塞就整格作废）
+    assert blocked["statements"] == 3 and blocked["with_downstream"] == 2, blocked
+    assert blocked["without_downstream"] == 1, blocked
+    assert "没有下游" in str(blocked["reason"]), blocked
+
+    monkeypatch.setattr(CL, "POLLUTION_CLOSURE_MAX_NODES", 10)
+    ok = CL.proposition_level_pollution(st)
+    assert ok["state"] == "computed" and ok["max_closure"] == 2, ok
+    assert ok["closure_sizes"] == {"0": 1, "1": 1, "2": 1}, ok
