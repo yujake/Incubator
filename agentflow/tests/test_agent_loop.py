@@ -136,7 +136,10 @@ def test_f1_a_top_level_run_gets_a_task_row_and_its_spend_is_attributable(tmp_pa
                    max_steps=2, from_env=False)
     assert run.stop_reason == "final", run.to_dict()
 
-    mine = [r for r in _tasks(st) if str(r.get("role")) == "M"]
+    # 只看实例行（`kind` 为空）：板项也是 `tasks` 的行（业主 2026-10-08 裁 A1=甲），
+    # 而这一条问的是"顶趟那一行"—— 板项（如终态回报的 `notice`）不属于它。
+    mine = [r for r in _tasks(st) if str(r.get("role")) == "M"
+            and not str(r.get("kind") or "")]
     assert mine, f"顶趟没有留下 tasks 行：{[(r.get('role'), r.get('action')) for r in _tasks(st)]}"
     tid = str(mine[-1]["task_id"])
     assert str(mine[-1]["status"]) in ("done", "failed"), mine[-1]
@@ -246,7 +249,9 @@ def test_model_decides_the_chain_and_the_ledger_records_each_hop(tmp_path: pathl
     top = [r for r in rows.values() if str(r.get("role")) == "M"
            and str(r.get("action")) == "run"]
     assert len(top) == 1, f"顶趟应当恰好一行：{top}"
-    hops = {k: v for k, v in rows.items() if v not in top}
+    # 同一条口径：板项（`kind` 非空）不是"链上的一环"，先摘出去再数
+    hops = {k: v for k, v in rows.items()
+            if v not in top and not str(v.get("kind") or "")}
     assert len(hops) == 2, f"台账里应该正好两环：{hops}"
     rows = hops
     m_row = next(r for r in rows.values() if str(r.get("role")) == "D")

@@ -925,6 +925,28 @@ class Conductor:
         """`→ seen`（渲染：这一项被读进某一步的提示词）。"""
         return self._set_item(task_id, state="seen", by_task_id=by_task_id, step=step)
 
+    def set_item_detail(self, task_id: str, detail: str) -> tuple[str, str]:
+        """把一句人可读的说明写进板项（`detail` 位）。返回 `(落成的说明, 问题)`。
+
+        为什么正文不落这里：甲形态那七格里没有正文字段 —— 交差正文的正式落点是
+        `handoffs.jsonl`（一行一份、有编号、`manuscripts.read` 读得回全文，真机 1562 行都在那儿）。
+        板项只需要回答"有没有一条回报"以及"它说了什么 / 没留下什么"
+        （框架通报那一档的 body 是逐字那句「（它没有留下结论）」）。
+        """
+        text = str(detail or "").strip()
+        if not text:
+            return "", "说明是空的 ⇒ 什么都不写（空说明与没有说明是两件事）"
+        with self.store.tx("tasks", actor="conductor") as tx:
+            row = next((r for r in tx.rows("tasks")
+                        if str(r.get("task_id")) == str(task_id)), None)
+            if row is None:
+                return "", f"没有这一项（task_id={task_id!r}）"
+            row["detail"] = text
+            task = S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__})
+            task.validate()
+            tx.upsert("tasks", task.to_dict(), note="item:detail")
+        return text, ""
+
     def close_item(self, task_id: str, *, close: str, by_task_id: str = "") -> tuple[str, str]:
         """`→ done`（行为完成）：`close="acked"`（知道了）或 `"completed"`（做完了）。"""
         return self._set_item(task_id, state="done", close=close, by_task_id=by_task_id)
@@ -2395,8 +2417,14 @@ class Conductor:
         为什么 `unknown_outcome` 单列：它不是"失败"，是"我们不知道"
         （例：dispose 的取消）。把它并进 `cancelled` 的计数里，
         "有几件事我们其实不知道结果"这个数字就永远看不见了。
+
+        只数实例行（`kind` 为空；业主 2026-10-08 裁 A1=甲之后，板项与实例行同表）：
+        `total` / `by_role` / `by_status` 这些格问的是"派了几件活、跑成什么样"，
+        板项（终态回报的 `notice`、传话的 `message`）不属于这个问题 ——
+        混进来会让"顶趟恰好一行 M"这类读数凭空多一条（实测：加板之后
+        `tests/test_agent_loop.py` 的 F1 判据当场红过）。板自己的读数在 `board` 那一格里。
         """
-        rows = self._tasks()
+        rows = [r for r in self._tasks() if not str(r.get("kind") or "")]
         # 视图与权威账对账（以账为准）：`stats()` 是唯一读这个视图的地方，
         # 每次问都先对齐 —— 这样"本次 run 花了多少"不会因为某条路径漏推视图
         # 而与台账给出不同的数字。
@@ -2458,6 +2486,9 @@ class Conductor:
                 "started_total / peak_running": "本实例发起的召唤数（顶趟不计）",
             },
             "top_level_runs": sum(1 for r in rows if str(r.get("action") or "") == "run"),
+            # 板自己的读数（业主 2026-10-08 裁 A1=甲、T16）：既有那些格只数实例行，
+            # 板项在这里单列 —— "派了几件活"与"板上还挂着什么"是两个问题，不许混。
+            "board": self.board_readings(),
             # S-03：两处消费点各消费了几条（"派活时 N / 收尾时 M"）——让"即"的折扣可度量。
             "consume_counts": dict(getattr(self, "_consume_counts", {}) or {}),
             # 职责 3（闭环提醒）：最近一次顶趟收尾时的读数（谁没接手 / 谁没反馈 / 各几条）。

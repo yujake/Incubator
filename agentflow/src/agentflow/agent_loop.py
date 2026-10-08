@@ -2012,9 +2012,15 @@ class AgentLoop:
             _sc.unregister_pid(self.session_root, self.role, self.sid)
         except Exception:  # noqa: BLE001 —— 注销失败不影响这一趟的产出
             pass
+        # ---- 报告强制（业主 2026-10-08 T17：「A-H每个任务跑完都要往回报告的」）
+        #
+        # 放在 `agent_run_end` 之前：这样那句读数会跟着这一条事件落盘（D81 给
+        # `agent_run_end` 补的 `notes` 那一格），事后读得到"这一趟有没有补通报"。
+        settlement_note = self._emit_settlement(run)
+        if settlement_note:
+            run.notes.append(settlement_note)
         SS.append(self.session_root, {
-            "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,
-            "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
+            "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,            "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
             # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，
             # 不必去解析 `final` 那句话里的 qid。
             "waiting_for": run.waiting_for,
@@ -2658,6 +2664,50 @@ class AgentLoop:
             out["handoffs_digest_problem"] = f"{type(exc).__name__}: {exc}（这一格没读成）"
         return out
 
+    def _emit_settlement(self, run: LoopRun) -> str:
+        """终态回报：每个任务跑完都必须有一条回报（业主 2026-10-08 T17）。返回一句读数。
+
+        两层必须分开（DSH 的教训，`draft/85` §5.4）：
+
+        - 通报由框架保证：模型没写 `notify`（`run.handoffs` 为空）时，框架开一条
+          `kind="notice"` 的板项，body 逐字写「（它没有留下结论）」—— 对齐 DSH 的
+          `It left no closing message.`；
+        - 内容由模型给：模型写了就不补第二条（负控见
+          `tests/test_report_is_mandatory.py` 的"模型填了 ⇒ 恰好一条"）。
+
+        三种"没做成"都如实返回一句读数，不静默：不是终态 / 没有 conductor 句柄 /
+        开项抛异常 —— 后者在本仓是最忌的形态（"报告没写成"与"不用报告"长得一样）。
+
+        收件人按角色队列记（`role=M`）：甲形态那七格里没有收件人列，
+        这一条按 `draft/86` §13.5 的甲（按角色归队）；等那一岔口定下来再按实例精确投递。
+        """
+        if not str(run.stop_reason or "") or run.stop_reason in ("max_steps", "waiting_for_user"):
+            return ""          # 没停在终态（步数用尽/还在等用户）⇒ 它不是"跑完了"，不补通报
+        if run.handoffs:
+            return ""          # 模型自撰过 ⇒ 不补第二条（不许把模型的内容淹掉）
+        if self.conductor is None:
+            return ("终态回报没落板：这一趟没有 conductor 句柄"
+                    "（`run_role` 会自动装配；裸构造的 `AgentLoop` 不会）")
+        body = str(run.final or "").strip() or "（它没有留下结论）"
+        try:
+            item_id = self.conductor.open_item(
+                kind="notice", role=S.CONDUCTOR_ROLE, expects="ack",
+                summary=f"{self.role} 已收工（{run.stop_reason}）", called_by=self.role,
+                parent_task_id=self.my_task_id or None, depth=int(self.depth or 1) + 1,
+                input_key=f"notice@{self.role}:{self.my_task_id or '-'}",
+            )
+        except Exception as exc:  # noqa: BLE001 —— 回报没落成必须留痕，不许静默
+            return f"终态回报没落板：{type(exc).__name__}: {exc}"
+        # body 落在板上的 `detail` 位（甲形态七格里没有正文字段；正文的正式落点是
+        # `handoffs.jsonl`，板项只是"有一条回报"这件事本身）。写进 detail 是为了
+        # 读板的人能一眼看见结论或那句"它没有留下结论"。
+        self.conductor.set_item_detail(item_id, body)
+        SS.append(self.session_root, {"kind": "agent_settlement_item", "role": self.role,
+                                      "item_id": item_id, "stop_reason": run.stop_reason,
+                                      "has_conclusion": bool(str(run.final or "").strip()),
+                                      "sid": self.sid}, sid=self.sid)
+        return f"终态回报已落板：{item_id}（框架通报；模型没填 notify）"
+
     def _do_handoff(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
 
@@ -2702,11 +2752,13 @@ class AgentLoop:
             if revises:
                 rec = self.secretary.handoff_revise(
                     mid=revises, summary=one_line, body=str(payload.get("body") or ""),
+                    task_id=self.my_task_id,          # ← 一实例一秘书：每行都要能对回实例
                     reason=why, note=str(payload.get("note") or ""))
             else:
                 rec = self.secretary.handoff_add(
                     to=to, summary=one_line, body=str(payload.get("body") or ""),
                     refs=list(payload.get("refs") or []), sid=self.sid or "",
+                    task_id=self.my_task_id,          # ← 同上（真机 593 行缺这一格）
                     note=str(payload.get("note") or ""))
         except Exception as exc:  # noqa: BLE001 - 执笔失败必须报错留痕，不许静默放行
             return {"handoff": "未写成", "ok": False,

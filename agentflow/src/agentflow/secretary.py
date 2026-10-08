@@ -1080,13 +1080,18 @@ class Secretary:
         return rec
 
     def handoff_revise(self, *, mid: str, summary: str = "", body: str = "",
-                       reason: str = "", note: str = "") -> dict[str, Any]:
+                       task_id: str = "", reason: str = "", note: str = "") -> dict[str, Any]:
         """改：追加一条修订行（`manuscripts.revise`，旧行保留）。
 
         与 :meth:`handoff_add` 同一条纪律：写失败必须报错留痕。
+        `task_id`（2026-10-08 晚补）：一实例一秘书之后，每一行都要能对回实例 ——
+        真机读数（`draft/89` §3）是 1562 行里 593 行没有这一格，而它们正是走
+        `agent_loop._do_handoff` 那条路的（形参本来就在 `handoff_add` / `manuscripts.revise`
+        上，缺的是调用点不传）。
         """
         try:
             rec = MS.revise(self.root, mid=str(mid), summary=str(summary), body=str(body),
+                            task_id=str(task_id),
                             reason=str(reason), note=str(note))
         except Exception as exc:
             self.note_decision(duty=1, kind=KIND_HANDOFF, decision="已执笔",
