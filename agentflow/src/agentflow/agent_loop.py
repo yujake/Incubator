@@ -1807,6 +1807,32 @@ class AgentLoop:
         heard.extend({"板读取问题": p} for p in board_problems)
         return heard
 
+    def _retire_ready_note(self) -> dict[str, Any]:
+        """"名下哪几项可以退役了"的就绪读数（只报不动作，业主 T22 与 §1.9）。
+
+        位置：与"板项进上下文"同一处 —— `run` 开头渲染到板项时、以及 `_hear` 拿到板项的那一步。
+        为什么不在每一步都算：它要读一次台账快照（代价说明在 `retire_ready` 的 docstring 里），
+        而只有"这一步真的读到了板项"时，父才谈得上"要不要退役谁"。
+
+        框架不自动退役（业主逐字：「由父代理决定是否消边」）：这里只把读数并进结果，
+        写盘那一步在 `Secretary.retire`（S1k，父说了才做）。读不成也如实并入。
+        """
+        if self.conductor is None or not str(self.my_task_id or ""):
+            return {}
+        look = getattr(self.conductor, "retire_ready", None)
+        if not callable(look):
+            return {}
+        try:
+            got = look(self.my_task_id)
+        except Exception as exc:  # noqa: BLE001 —— 读不成也如实说
+            return {"可退役读数没读成": f"{type(exc).__name__}: {exc}"}
+        if not isinstance(got, dict) or not got.get("checked"):
+            return {"可退役读数没读成": str((got or {}).get("reason") or "读数不是对象")}
+        rows = list(got.get("ready") or [])
+        if not rows:
+            return {}
+        return {"可退役": rows}
+
     def _budget_text(self) -> str:
         if self.seam.usd_budget is None:
             return f"未设置上限（已用 {self.seam.spend.usd:.6f} 美元）"
@@ -2152,6 +2178,13 @@ class AgentLoop:
                 self._record_interjection_effect(run, pending_interjections, step=step,
                                                  shape=shape, payload=payload)
                 pending_interjections = None
+                if step == 0 and board_ids:
+                    # 开场提示词里就带了板项 ⇒ 这一步顺带报"哪几项可以退役了"
+                    # （只报不动作；写盘在 S1k）。收工这一步的结果是另一只字典
+                    # （`step_result`），所以这里单独并一次。
+                    note = self._retire_ready_note()
+                    if note:
+                        step_result = {**step_result, **note}
                 run.steps.append(LoopStep(step, shape, payload, step_result))
                 run.stop_reason = "final"
                 break
@@ -2186,6 +2219,12 @@ class AgentLoop:
             # （并进结果而不是只并进 transcript：台账与会话记录要能看到"他当时听到了什么"）。
             # `step=step`：板项标 seen 时要写"在第几步读的"（业主 A3 的判据靠它配对）。
             heard = self._hear(step=step)
+            board_this_step = any("板" == str(k) for h in heard for k in h) if heard else False
+            if board_this_step or (step == 0 and board_ids):
+                # 这一步读到了板项 ⇒ 顺带把"哪几项可以退役了"报给父（只报；写盘在 S1k）。
+                note = self._retire_ready_note()
+                if note:
+                    result = {**result, **note}
             if heard:
                 result = {**result, "新消息": heard}
                 inbound_note = self._inbound_hook(heard)

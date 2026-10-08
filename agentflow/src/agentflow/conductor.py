@@ -1222,6 +1222,74 @@ class Conductor:
         out.sort(key=lambda x: x["task_id"])
         return {"checked": True, "rows": out, "reason": ""}
 
+    def retire_ready(self, parent_task_id: str) -> dict[str, Any]:
+        """父名下那几项现在可以退役了 —— 只报不动作（业主 T22 与 §1.9 的三分支）。
+
+        `{"checked": bool, "ready": [{"task_id","role","branch","reading"}], "reason": ""}`
+
+        逐项分类（与 `draft/90` §1.9 的分支逐字对齐，一处实现）：
+
+        - `branch="active"`：这一项还在跑（`status ∈ {pending, running}`）
+          ⇒ 父该做的是"先看它最近报了什么"，不许退役；
+        - `branch="waiting_no_children"`：它不在跑，且它自己名下没有活跃子代理
+          ⇒ 可以退役（业主那一句的"无活跃子代理且自身完全停止"说的是它自己，
+          不是父 —— 见 `draft/92` §15.6 的订正）；
+        - `branch="waiting_with_children"`：它不在跑，但它自己名下还有活跃子代理
+          ⇒ 不退役，父该看的是"它还在干什么活"。
+
+        `reading` 里附一格 `items_open`（它名下未消的项有几条）—— 只报不拦
+        （业主的算法里没有这一条；主控不加隐藏的拦截条件，C2 的裁定）。
+
+        ## 为什么它只报不动作
+
+        业主逐字：「子代理宣布收工后，由父代理决定是否消边」。所以框架给的是就绪读数，
+        写盘那一步在 `Secretary.retire`（S1k，父说了才做）。本方法零写入。
+
+        ## 三态与代价
+
+        读不成 ⇒ `checked=False` + `reason`（不许折成"没有可退役的"：那会让父以为
+        "还没到时候"）。整个方法只读一次台账快照（`_tasks()`），逐项判据都在这份快照上做，
+        不嵌套调用别的读侧 —— 它每步都可能被调一次。
+
+        已经记过消边的那些（`released_edges`）直接跳过：它们不再是"可退役"的候选。
+        """
+        try:
+            rows = self._tasks()
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "ready": [], "reason": f"{type(exc).__name__}: {exc}"}
+        done = {(e["child_task_id"], e["attempt"]) for e in
+                self.released_edges(parent_task_id).get("edges", [])}
+        active_by_parent: dict[str, int] = {}
+        items_by_parent: dict[str, int] = {}
+        for r in rows:
+            pid = str(r.get("parent_task_id") or "")
+            if not pid:
+                continue
+            if str(r.get("kind") or ""):
+                if str(r.get("item_state") or "") != "done":
+                    items_by_parent[pid] = items_by_parent.get(pid, 0) + 1
+                continue
+            if str(r.get("status") or "") in ("pending", "running"):
+                active_by_parent[pid] = active_by_parent.get(pid, 0) + 1
+        ready: list[dict[str, Any]] = []
+        for r in rows:
+            if r.get("parent_task_id") != parent_task_id or str(r.get("kind") or ""):
+                continue
+            tid = str(r.get("task_id") or "")
+            if (tid, 1) in done or any(c == tid for c, _a in done):
+                continue
+            if str(r.get("status") or "") in ("pending", "running"):
+                branch = "active"
+            elif active_by_parent.get(tid, 0) > 0:
+                branch = "waiting_with_children"
+            else:
+                branch = "waiting_no_children"
+            ready.append({"task_id": tid, "role": str(r.get("role") or ""),
+                          "branch": branch,
+                          "reading": {"items_open": items_by_parent.get(tid, 0)}})
+        ready.sort(key=lambda x: x["task_id"])
+        return {"checked": True, "ready": ready, "reason": ""}
+
     def board_readings(self) -> dict[str, Any]:
         """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。"""
         try:
