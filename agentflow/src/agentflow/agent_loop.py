@@ -954,18 +954,47 @@ def notebook_digest(session_root: Path, role: str, limit: int = 6) -> str:
     return "\n".join(lines[-limit:]) if lines else "（草稿本还是空的）"
 
 
-def inbox_digest(session_root: Path, role: str, *, sid: str | None = None) -> tuple[str, list[str], list[str]]:
-    """收件箱摘要：`(文本, 未投递的 id, 读会话时的问题)`。"""
+def inbox_digest(session_root: Path, role: str, *, sid: str | None = None,
+                 window: int | None = 8) -> tuple[str, list[str], list[str]]:
+    """收件箱摘要：`(文本, 这一轮新渲染出来、且还没投递的 id, 读会话时的问题)`。
+
+    为什么第二个返回值是"渲染过的"而不是"全部未投递的"（`draft/83` §11 的 D75）：
+    旧实现渲染 `messages[-8:]`，却把全部未投递的 id 交给调用方去 `mark_delivered`
+    ⇒ 第 9 条及更早的留言既不进提示词、也不再是 fresh，于是永久静默丢失
+    （真机读数：128 个会话 579 条留言里，只有 8 条被标记读过）。
+    现在两个集合只有一个来源：这里返回什么，调用方就标什么。
+
+    未投递优先（同一处修法的另一半）：窗口先给还没投递的（按时间升序，老的先读 ——
+    否则新的不断到来会把老的永远挤在窗口外），装得下再补最近的已投递项当背景；
+    装不下时在末尾写明"还有 K 条没渲染，下一步继续"，于是"积压"是看得见的事实。
+
+    `window=None` = 不限窗口（`_hear` 那条路会把新到的一次性全并进这一步的结果，
+    所以它渲染多少就标多少）。
+    """
     messages, problems = read_messages(session_root, role, sid=sid)
-    fresh = [m for m in messages if not m.get("delivered")]
     if not messages:
         return "（没有收到留言）", [], problems
+    fresh = [m for m in messages if not m.get("delivered")]
+    delivered = [m for m in messages if m.get("delivered")]
+    if window is None:
+        pick = list(messages)
+    else:
+        n = max(1, int(window))
+        room = n - len(fresh)
+        pick = (list(fresh) + delivered[-room:]) if room > 0 else list(fresh[:n])
+        pick = pick[:n]
     lines: list[str] = []
-    for m in messages[-8:]:
+    for m in pick:
         mark = "" if m.get("delivered") else "（新）"
         lines.append(f"- {mark}[{m['msg_id']}] 来自 {m.get('from')}：{m.get('subject')} —— "
                      f"{_clip(m.get('body'), 300)}")
-    return "\n".join(lines), [str(m["msg_id"]) for m in fresh], problems
+    backlog = len(fresh) - sum(1 for m in pick if not m.get("delivered"))
+    if backlog > 0:
+        # 积压必须是可读的事实：否则"读不完"与"没有新东西"在提示词里长得一模一样。
+        lines.append(f"- （还有 {backlog} 条留言没渲染 —— 下一步继续读）")
+    # 返回这一轮新渲染出来的、且还没投递的那些：已经投递过的那些当背景渲染，
+    # 但它们已经标过了（重复标是幂等的，可把它们混进来会让"标记集合"这个读数变糊）。
+    return "\n".join(lines), [str(m["msg_id"]) for m in pick if not m.get("delivered")], problems
 
 
 # ------------------------------------------------------------------ 循环
@@ -1516,8 +1545,14 @@ class AgentLoop:
         return reg or None
 
     def _hear(self) -> list[dict[str, Any]]:
-        """听一次新消息：把这次运行期间新到的消息取出来并登记投递。"""
-        digest, fresh, problems = inbox_digest(self.session_root, self.role, sid=self.sid)
+        """听一次新消息：把这次运行期间新到的消息取出来并登记投递。
+
+        这里用 `window=None`：这一步的结果会把新到的全部并进去（`heard` 就是它们），
+        所以"渲染了多少就标多少"这条纪律在这里等价于"标全部新到的" ——
+        与跑在 `run()` 开头的那一次（有窗口、见 `inbox_digest`）口径一致，只是窗口不同。
+        """
+        digest, fresh, problems = inbox_digest(self.session_root, self.role, sid=self.sid,
+                                              window=None)
         if not fresh:
             return []
         problem = mark_delivered(self.session_root, self.role, fresh, sid=self.sid)
@@ -1552,6 +1587,9 @@ class AgentLoop:
         t0 = time.monotonic()
         self.my_task_id = my_task_id
         self.depth = depth
+        # 收件箱：`inbox` 是渲染进开场提示词的那一段，`fresh_ids` 是它渲染过的 id
+        # —— 下面 `mark_delivered` 只标这一批（D75：旧的写法渲染 8 条、却把全部未投递标掉，
+        # 于是第 9 条及更早的留言永久丢失）。
         inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid)
         notebook = notebook_digest(self.session_root, self.role)
         replies = AP.user_replies_digest(U.read_replies(self.session_root, role=self.role,

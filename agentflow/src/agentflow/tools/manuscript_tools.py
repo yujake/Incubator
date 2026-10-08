@@ -98,10 +98,10 @@ _TOOL_FUNCTIONS: tuple[tuple[Any, tuple[str, ...]], ...] = (
     (manuscripts_list, ("store",)),
 )
 
-# ---- 板的两件（`manuscripts.items` / `manuscripts.ack`）**暂不注册**（2026-10-08 晚，S1b）
+# ---- 板的两件（`manuscripts.items` / `manuscripts.ack`）暂不注册（2026-10-08 晚，S1b）
 #
 # 为什么不先挂上去：它们要判两件本层拿不到的事实 ——
-#   ① "谁在 ack"（必须知道**调用方实例**的 `task_id`，那在循环上下文里，
+#   ① "谁在 ack"（必须知道调用方实例的 `task_id`，那在循环上下文里，
 #      落点是 `conductor.current_task_id()`，要先确认装配期 `deps` 里有没有 `conductor`）；
 #   ② "这一项是不是发给我的"（按 `to` 目标实例或角色判）。
 # 本仓的纪律是"不许挂空：要么真跑，要么不注册"（`draft/44 L-06` 那一族）。

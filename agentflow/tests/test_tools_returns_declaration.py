@@ -207,7 +207,7 @@ def tool_params() -> dict[str, dict]:
         "conductor.cancel": {},
         "conductor.ensure_project": {"project_name": "probe1", "start": "cold"},
         "conductor.state": {},
-        # 工作项板（业主 2026-10-08 裁 A1=甲）：**真跑一次**，键集与 `returns=` 逐字比对。
+        # 工作项板（业主 2026-10-08 裁 A1=甲）：真跑一次，键集与 `returns=` 逐字比对。
         # 夹具工作区里板上是空的 ⇒ 走的是"读成了、板上没事"那一支（`checked=True, open_count=0`）。
         "conductor.board": {},
         "conductor.role_spec": {"role_name": "C"},

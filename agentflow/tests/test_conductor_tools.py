@@ -37,7 +37,7 @@ M_TOOL_FACE = {
     "conductor.resume_brief", "conductor.cancel", "conductor.ensure_project",
     "conductor.state", "conductor.role_spec", "conductor.acceptance",
     "conductor.closing", "conductor.status_report",
-    # 工作项板（业主 2026-10-08 裁 A1=甲）：M 的**编排面**看"还挂着什么"。
+    # 工作项板（业主 2026-10-08 裁 A1=甲）：M 的编排面看"还挂着什么"。
     # A–H 的那一半是 `manuscripts.items` / `manuscripts.ack`（领域动作面），不在这里。
     "conductor.board",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
@@ -300,7 +300,7 @@ def test_m_tool_surface_is_orchestration_only(tmp_path: Path):
     （真机读数：`fs.write` 单独改不了 26 KB 的稿子）。两次扩的都不是"能不能碰盘"这条
     边界，而是边界的口径 —— `fs.delete` / `fs.move` 仍然一件不给（`M_TOOL_FACE` 里
     没有它们，而这里的断言是相等，所以多一件就会红）。
-    2026-10-08 晚第三次：按业主裁 A1=甲/T16 加 `conductor.board`（板是**编排面**的读数；
+    2026-10-08 晚第三次：按业主裁 A1=甲/T16 加 `conductor.board`（板是编排面的读数；
     A–H 看板走 `manuscripts.items`，那一半不进 M 的面）。
     """
     _store, _c, reg = _wired(tmp_path)

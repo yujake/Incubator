@@ -1157,7 +1157,7 @@ def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> T
 def conductor_board(_conductor, limit: int = 20) -> ToolResult:
     """工具体：转发 `Conductor.board_view`（工具只做适配层，权限判定不在这一层）。
 
-    "读不成"必须显式报错而不是回一个空板：`checked=False` 说明**没查成**，
+    "读不成"必须显式报错而不是回一个空板：`checked=False` 说明没查成，
     而"板上没事"是 `checked=True` 且 `open_count==0` —— 这两件事折平就是本仓最忌的形态。
     """
     view = _conductor().board_view(limit=int(limit))
