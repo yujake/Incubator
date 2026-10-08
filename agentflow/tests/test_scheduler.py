@@ -241,13 +241,18 @@ def _mk_store(tmp_path) -> Store:
     return st
 
 
-def _conductor(store, *, policy=None, registry=None, token=None) -> CO.Conductor:
+def _conductor(store, *, policy=None, registry=None, token=None,
+               fanout_wait_sec: float = 0.0) -> CO.Conductor:
+    # `fanout_wait_sec=0`：这些用例要的是"触顶就拒"的即时读数。等（所有者 2026-10-08
+    # 的"只可等待"）由 `tools/conductor_tools.conductor_for` 在真跑批那一处显式打开，
+    # 它的判据在 `tests/test_fanout_admission.py`。
     return CO.Conductor(
         store,
         policy=policy or P.Policy(max_concurrency=4, max_fanout=5,
                                   max_tasks_per_run=100, wall_clock_sec=60),
         registry=registry or {},
         token=token,
+        fanout_wait_sec=fanout_wait_sec,
     )
 
 
@@ -529,11 +534,16 @@ def test_one_failure_does_not_stop_others(tmp_path):
 
 
 def test_fanout_limit_refuses_extra_children(tmp_path):
-    """扇出上限：一个任务派生超过 `max_fanout` ⇒ 拒（`fanout_exceeded`）。
+    """扇出上限：一个任务同时在飞的子代理超过 `max_fanout` ⇒ 拒（`fanout_exceeded`）。
 
     链用 `H → G`（`ALLOWED_EDGES["H"] == {"G"}`）—— 为什么不用 `C → H`：
     C 的边是空的，从 C 派任何子任务都会先被判 `forbidden_edge`，
     于是这条测试就测不到扇出了。
+
+    口径（所有者 2026-10-08）：扇出 = 此刻还没返回的子代理数，不是累计派过几次。
+    所以这里先把两行写成"在飞"（`status="running"` + `started_at`），第 3 件才该被拒；
+    再把其中一行标成返回 ⇒ 名额立刻腾出来（正控的下半段，与 `fanout_wait_sec=0`
+    的"不等"口径一致：等的那一半另有判据）。
     """
     store = _mk_store(tmp_path)
     rec = _Recorder()
@@ -543,13 +553,35 @@ def test_fanout_limit_refuses_extra_children(tmp_path):
     })
     parent = c.summon("H", "review", {"doc_id": "0001"})
     assert parent.outcome == "ok"
-    kids = [
-        c.summon("G", "revise", {"doc_id": f"000{i}"}, by="H",
-                 parent_task_id=parent.task_id, input_key=f"k{i}")
-        for i in range(3)
-    ]
-    assert [k.outcome for k in kids[:2]] == ["ok", "ok"]
-    assert kids[2].outcome == "refused" and kids[2].refusal_reason == "fanout_exceeded"
+
+    def _seed_in_flight(n: int) -> None:
+        with store.tx("tasks", actor="test") as tx:
+            for i in range(n):
+                tx.upsert("tasks", {
+                    "task_id": f"t-8{i:03d}", "role": "G", "action": "revise",
+                    "called_by": "H", "status": "running", "parent_task_id": parent.task_id,
+                    "input_key": f"s{i}", "started_at": "2026-01-01T00:00:00+00:00",
+                    "ended_at": None, "outcome": None, "tokens": 0, "usd": 0.0,
+                    "artifacts": [], "inputs": [],
+                })
+
+    _seed_in_flight(2)
+    over = c.summon("G", "revise", {"doc_id": "0009"}, by="H",
+                    parent_task_id=parent.task_id, input_key="k-over")
+    assert over.outcome == "refused" and over.refusal_reason == "fanout_exceeded", over
+    assert "在飞 2" in over.detail and "上限 2" in over.detail, over.detail
+
+    # 正控：一行返回 ⇒ 名额腾出，同一件活立刻派得进去（"智能体返回后腾出空间"）
+    with store.tx("tasks", actor="test") as tx:
+        row = dict(next(r for r in tx.rows("tasks")
+                        if r.get("parent_task_id") == parent.task_id
+                        and r.get("status") == "running"))
+        row.update({"status": "done", "ended_at": "2026-01-01T00:01:00+00:00",
+                    "outcome": "ok", "detail": "替身：这一件跑完了"})
+        tx.upsert("tasks", row)
+    ok = c.summon("G", "revise", {"doc_id": "0009"}, by="H",
+                  parent_task_id=parent.task_id, input_key="k-over")
+    assert ok.outcome == "ok", f"返回之后名额该腾出来，拿到 {ok.outcome}/{ok.refusal_reason}"
 
 
 def test_fanout_negative_control_under_limit(tmp_path):

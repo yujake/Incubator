@@ -477,8 +477,23 @@ def test_depth_exceeded():
 
 
 def test_depth_boundary_is_allowed():
-    """边界正控：`depth == max_depth` 必须放行 —— 否则"默认 3"会变成"实际 2"。"""
+    """边界正控：`depth == max_depth` 必须放行 —— 否则"默认值"会变成"默认值减一"。"""
     assert P.check(P.Policy(max_depth=3), _d(depth=3)) is None
+
+
+def test_the_default_depth_is_five_after_the_2026_10_08_ruling():
+    """默认深度 3 → 5（所有者 2026-10-08：「我们限制递归调用深度为5，毕竟
+    20*(5*5*5*5) 也非常可观了」）。
+
+    两件事：①默认值就是 5（链 `M(1) → A(2) → B(3) → C(4) → D(5)` 到底）；
+    ②边界精确 —— 第 5 层放行、第 6 层拒。为什么把默认值也钉住：它是"并行规模的
+    上界"里那一根轴（名额逐实例 ⇒ 沿链相乘 20×5⁴），改它要跟着改所有者那句话。
+    """
+    p = P.Policy()
+    assert p.max_depth == 5, p.to_dict()
+    assert P.check(p, _d(depth=5)) is None, "第 5 层必须放行"
+    r = P.check(p, _d(depth=6))
+    assert r is not None and r.reason == "depth_exceeded", r
 
 
 def test_cycle_detected():
@@ -520,19 +535,21 @@ def test_fanout_limit_is_per_initiator_role():
     """扇出上限按发起方角色取：主控一档 = 20，默认档 = `Policy.max_fanout`。
 
     20 这个数钉在判据里是刻意的：它是一条人裁的编排余量（题15 选B，2026-10-07），
-    改它应当先改那一处裁定，而不是顺手调一个常量。
+    改它应当先改那一处裁定，而不是顺手调一个常量。口径在 2026-10-08 被所有者
+    改成"单时刻在飞"（`fanout` = 此刻还没返回的子代理数；见 `policy` 的模块 docstring），
+    这里的 `_d(fanout=…)` 直接给的就是那个数。
     """
     p = P.Policy()
     assert P.fanout_limit_for(p, S.CONDUCTOR_ROLE) == 20
     assert P.fanout_limit_for(p, "A") == p.max_fanout == 5
-    # 反真空：两档都真的会拒，报文里能读出"当前几"与"上限是多少"。
+    # 反真空：两档都真的会拒，报文里能读出"此刻在飞几个"与"上限是多少"。
     worker = P.check(p, _d(frm="A", to="B", action="run_once", fanout=5))
     assert worker is not None and worker.reason == "fanout_exceeded"
-    assert "已受理 5" in worker.detail and "上限 5" in worker.detail, worker.detail
+    assert "在飞 5" in worker.detail and "上限 5" in worker.detail, worker.detail
     assert P.check(p, _d(frm="M", to="A", action="run_once", fanout=6)) is None
     boss = P.check(p, _d(frm="M", to="A", action="run_once", fanout=20))
     assert boss is not None and boss.reason == "fanout_exceeded"
-    assert "已受理 20" in boss.detail and "上限 20" in boss.detail, boss.detail
+    assert "在飞 20" in boss.detail and "上限 20" in boss.detail, boss.detail
     # 报文要说清那个 20 是从哪来的（否则读的人会以为上限就是 policy.max_fanout）
     assert "FANOUT_LIMIT_BY_ROLE" in boss.detail and "policy.max_fanout=5" in boss.detail
 

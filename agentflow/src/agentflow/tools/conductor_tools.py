@@ -49,7 +49,7 @@ from typing import Any, Callable, Mapping
 from .. import policy as P
 from .. import schema as S
 from ..cancellation import CANCEL_CODES
-from ..conductor import Conductor, NotWiredError, SummonResult
+from ..conductor import DEFAULT_FANOUT_WAIT_SEC, Conductor, NotWiredError, SummonResult
 from . import ToolError, ToolRegistry, ToolResult, fail, ok, tool
 
 #: 一个工作区一个主控（键 = store 根路径）。主控是会话状态：
@@ -59,11 +59,17 @@ _CONDUCTORS: dict[str, Conductor] = {}
 
 def conductor_for(store: Any, *, policy: Any = None,
                   role_registry: Any = None, backend: Any = "local") -> Conductor:
-    """取（或建）这个工作区的主控实例。同一个 `store.root` 永远拿到同一个实例。"""
+    """取（或建）这个工作区的主控实例。同一个 `store.root` 永远拿到同一个实例。
+
+    这里显式给 `fanout_wait_sec=DEFAULT_FANOUT_WAIT_SEC`（所有者 2026-10-08：
+    「当达到派活上限后，父智能体或主控只可等待子智能体返回结果」）——
+    真跑批的那一处由这里决定；`Conductor` 自己的默认值是 0（不阻塞库的其它调用方）。
+    """
     root = str(Path(getattr(store, "root", ".")).resolve())
     if root not in _CONDUCTORS:
         _CONDUCTORS[root] = Conductor(store, policy=policy, registry=role_registry,
-                                      backend=backend)
+                                      backend=backend,
+                                      fanout_wait_sec=DEFAULT_FANOUT_WAIT_SEC)
     return _CONDUCTORS[root]
 
 

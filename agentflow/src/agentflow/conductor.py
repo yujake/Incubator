@@ -88,13 +88,16 @@ _SETTLED_MARK = "tokenmeter:settled"
 
 #: 标记"这一行是受理过的召唤"（写进 `tasks.inputs`，与 `running` 行同一个事务写下）。
 #:
-#: 为什么需要它（题 21 选 B，2026-10-07 所有者裁定）：扇出口径是"受理数，不是尝试数"
-#: （题 15 选 B），而区分"闸门拒掉、根本没跑"与"跑过又拒"的那条判据，上一轮的最小
-#: 修法挂在了 `_SETTLED_MARK` 上 —— 那是 `_charge_and_settle` 末尾 `_set_usage`
-#: 写的东西，属于"事后的记账写回"。它能炸：`_charge_and_settle` 刻意兜住记账异常
-#: （钱已经花了、活已经干完了，不许让它翻转一次完成的召唤），兜住之后这一行就缺
-#: `tokenmeter:settled` ⇒ 被 `_occupies_fanout_slot` 当成"没跑" ⇒ 扇出少算 1。
-#: 那个少算的方向是危险的：名额被少占，扇出上限就被悄悄放宽。
+#: 它今天的用途是审计面（"这一趟累计派出去过几件"），不再是扇出判据 ——
+#: 所有者 2026-10-08 把扇出口径改成了"单时刻在飞"（见 `_in_flight_children_of`），
+#: 于是"跑过没跑过"这件事对上限不再有影响（返回即腾位）。
+#:
+#: 为什么还留着它（题 21 选 B，2026-10-07 所有者裁定）：区分"闸门拒掉、根本没跑"与
+#: "跑过又拒"的那条判据，上一轮的最小修法挂在了 `_SETTLED_MARK` 上 —— 那是
+#: `_charge_and_settle` 末尾 `_set_usage` 写的东西，属于"事后的记账写回"。它能炸：
+#: `_charge_and_settle` 刻意兜住记账异常（钱已经花了、活已经干完了，不许让它翻转一次
+#: 完成的召唤），兜住之后这一行就缺 `tokenmeter:settled` ⇒ 被 `_occupies_fanout_slot`
+#: 当成"没跑" ⇒ 累计读数少算 1（审计面上"这一趟用了多少派活额度"就会偏低）。
 #:
 #: 所以标记必须打在"受理那一刻"、且与 `running` 行同一笔事务落盘：只有走过
 #: `summon` 第 [5] 步（"写 running 行"）的召唤才带它 —— 闸门拒绝在写 running 行
@@ -108,6 +111,21 @@ _SETTLED_MARK = "tokenmeter:settled"
 #: `_occupies_fanout_slot` 对它们退回读 `_SETTLED_MARK` —— 历史读数因此不变
 #: （见那个函数）。
 _ADMITTED_MARK = "conductor:admitted"
+
+#: 达到"同时在飞"上限之后，父任务等多久（秒）再放弃（所有者 2026-10-08 逐字：
+#: 「当达到派活上限后，父智能体或主控只可等待子智能体返回结果」）。
+#:
+#: 为什么是"等"而不是"当场拒"：触顶的正常成因是"这一批还没回来"，而不是"这一趟
+#: 不许再派活"—— 当场拒绝会让父任务把步数花在别处（T1 第 19 趟实测：读到"到上限了"
+#: 之后 25 步全部空转），而它真正该做的是等这一批返回、腾出名额再派。
+#: 900 秒是一个"够一次 Lean 检查/一次检索回来"的量级；到点仍无人返回 ⇒ 照旧拒绝
+#: （拒绝报文里带上等了多久），绝不死等 —— wall clock 与取消信号都会打断等待。
+DEFAULT_FANOUT_WAIT_SEC = 900.0
+
+#: 等待时的轮询间隔（秒）。为什么轮询台账而不是条件变量：返回发生在别的线程
+#: 的 `summon` 里（`finally` 段把 running 行写成终态），而"谁在飞"的唯一权威是台账；
+#: 加一把跨线程条件变量等于再造一份"谁在飞"的状态，两份状态一定会漂移。
+_FANOUT_WAIT_POLL_SEC = 0.5
 
 
 def _admitted_inputs(params: Mapping[str, Any]) -> list[str]:
@@ -442,18 +460,23 @@ def _business_refusal_code(exc: BaseException) -> str | None:
 
 
 def _occupies_fanout_slot(row: Mapping[str, Any]) -> bool:
-    """这条子行占不占父任务的扇出名额（题15 选B，2026-10-07）。
+    """这条子行算不算"曾经受理过的派活"（审计面读数）。
 
-    ## 口径：扇出 = 受理数，不是尝试数
+    ## 它今天不判上限了（所有者 2026-10-08 裁定）
+
+    扇出上限的口径已改成"此刻在飞的子代理数"（`_in_flight_children_of`：
+    `status ∈ {pending, running}`；子代理返回即腾位）。这个函数保留下来只为
+    `_admitted_children_of` 那份累计读数（"这一趟总共派出去过几件"，
+    状态报告与审计要用），不再参与策略判定。
+
+    ## 口径：受理数，不是尝试数
 
     闸门拒掉的召唤也落台账（`_refuse`：谁试过什么必须留痕），但它根本没跑，
-    所以不占名额。若它占名额，父任务一旦触顶就再也派不出活，而每次尝试还会
-    再占一格 —— 自我毒化、不可恢复。真机读数（工作区
+    所以不计入"曾经受理过"。真机读数（工作区
     `agentflow/projects/p9-post-merge-probe` 的台账，2026-10-07）：顶趟行
     `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是
     `refused/fanout_exceeded`，detail 里的读数从"已派生 5 个"一路涨到"已派生 9 个"
-    （那就是自我毒化的机器形态）；本趟主控只成功派了 3 件活（A 检索 / D 立题 /
-    D 登记猜想），E 的实验永远进不去 ⇒ `experiments=0`、收工门两格红。
+    （那就是自我毒化的机器形态）。
 
     ## 判据为什么是"受理标记"而不是"拒绝理由"，也不是"结算标记"
 
@@ -502,15 +525,26 @@ class Conductor:
         token: CancelToken | None = None,
         specs: Any = None,
         secretary: Any = None,
+        fanout_wait_sec: float | None = None,
     ) -> None:
         """`secretary`（A 线）：M 的派活路径上那一个钩子（`draft/54 §2` 的第 3 个落点）。
 
         它是可选对象（`None` = 没装配）：给了就"同 key 的既有终态行摆出来 + 一份
         委派评估建议"，不给也照样派活 —— 秘书的失败姿态是 fail-open，
         而"没装配"与"装配了但没判断"在读数上是两件事（前者连台账都没有）。
+
+        `fanout_wait_sec`（所有者 2026-10-08）：「当达到派活上限后，父智能体或主控
+        只可等待子智能体返回结果」⇒ 触顶时等（等到一个返回就照常派）而不是当场拒绝。
+
+        默认是 0（不等），真跑批那一处显式传 `DEFAULT_FANOUT_WAIT_SEC`
+        （`tools/conductor_tools.conductor_for`）。为什么不把"等"做成构造函数的默认值：
+        它是一个会阻塞十几分钟的副作用，库的默认值不该藏这种东西 ——
+        任何"只是想看看会不会被拒"的调用方（测试、探针、离线复算）都会被它挂住。
         """
         self.store = store
         self.policy = policy or P.Policy()
+        self.fanout_wait_sec = (0.0 if fanout_wait_sec is None
+                                else max(0.0, float(fanout_wait_sec)))
         #: 角色声明的注册表（`goal-7f5116c1` M5）：给了就从它读"有哪些角色、
         #: 每个角色有哪些动作、谁能召唤谁"；`None` ⇒ 读内置那份（今天的行为逐字不变）。
         #: 存在的理由：新增一个角色时，闸门不该只认源码里写死的那张表。
@@ -617,13 +651,16 @@ class Conductor:
         return [str(r["task_id"]) for r in self._tasks() if r.get("parent_task_id") == task_id]
 
     def _admitted_children_of(self, task_id: str) -> list[str]:
-        """`task_id` 受理过的子召唤（= 扇出判据的分子）。
+        """`task_id` 受理过的子召唤（累计读数；审计面用，不再是扇出判据）。
 
-        ## 与 `_children_of` 的分工（刻意两个方法、两个口径）
+        ## 与 `_children_of` / `_in_flight_children_of` 的分工（刻意三个口径）
 
         - `_children_of` 数"台账里有几行子行"：展示面/审计面用，含被闸门拒掉的
           那些尝试（谁试过什么必须看得见，`SummonResult.children` 由它填）；
-        - `_admitted_children_of` 数"真的派出去过几件"：扇出判据用。
+        - `_admitted_children_of` 数"累计真的派出去过几件"：审计面（"这一趟用了多少
+          派活额度"），不再当判据 —— 所有者 2026-10-08 把扇出口径改成单时刻的
+          （见 `_in_flight_children_of`）；
+        - `_in_flight_children_of` 数"此刻还没返回的子代理"：扇出判据的分子。
 
         为什么不就地改 `_children_of`：它不只服务扇出（`summon` 末尾的
         `res.children` 也用它），把它的口径改窄等于顺手改坏展示面 ——
@@ -635,6 +672,73 @@ class Conductor:
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id and _occupies_fanout_slot(r)]
+
+    def _in_flight_children_of(self, task_id: str) -> list[str]:
+        """`task_id` 派出去、此刻还没返回的子代理（= 扇出判据的分子）。
+
+        ## 口径（所有者 2026-10-08 逐字裁定）
+
+        > 「我认为的"派活上限"不是累计的，是单时刻的，即 M 同时派出在后台运行的
+        > 子代理数不超过 20，各角色智能体允许同时向其它智能体派活数不超过 5，
+        > 智能体返回后腾出空间。」
+
+        所以分子 = 子行里 `status ∈ {"pending", "running"}` 的那些；子代理一返回
+        （`done` / `failed` / `cancelled` —— 三者都带 `ended_at`，互相不覆盖）就腾出
+        名额，与它返回得好不好无关（`schema.TASK_STATUSES` 是状态词表的唯一来源）。
+        闸门拒掉的召唤根本没跑、连 `running` 行都没有（`_refuse` 只落一行
+        `outcome="refused"` 的终态行）⇒ 天然不计 —— 上一版那条"不受自我毒化"的
+        防线在这一版里是自然成立的，不需要额外规则。
+
+        真机代价（累计口径）：T1 第 18/19 趟（`t1r` / `t1s`）在第 51–88 步就用完了
+        20 个累计名额，此后 `G.build_document` 与修好的 Lean 重派全部进不去 ——
+        `documents` 0 行、P8/P9 两行红。一趟 78–138 步的研究型跑批只许派 20 次活，
+        是结构性不够；而"同时在飞 20 个"在同一份 `Policy` 里被 `max_concurrency`
+        另管着（全局瞬时上限）。
+        """
+        return [str(r["task_id"]) for r in self._tasks()
+                if r.get("parent_task_id") == task_id
+                and str(r.get("status") or "") in ("pending", "running")]
+
+    def _await_fanout_slot(self, parent_task_id: str, limit: int, *,
+                           token: CancelToken | None) -> dict:
+        """等到这个父任务的在飞子代理少于 `limit`（所有者 2026-10-08 的"只可等待"）。
+
+        返回读数（进日志，触顶被拒时也进拒绝报文）：
+
+        - `waited=True/False`：有没有真的等过；
+        - `waited_sec`：等了多久；
+        - `in_flight_before` / `in_flight_after`；
+        - `reason`：`slot_freed`（等到了）/ `wait_timeout`（等到 `fanout_wait_sec` 仍满）
+          / `cancel_requested`（等待期间被取消）/ `wait_disabled`（`fanout_wait_sec=0`）。
+
+        三态纪律：超时与取消都不冒充"腾出了名额"—— 调用方按 `in_flight_after` 重新判，
+        于是"等到了"与"没等到"在台账上是两件事（前者继续派、后者拒并带上读数）。
+        """
+        before = len(self._in_flight_children_of(parent_task_id))
+        budget = self.fanout_wait_sec
+        out: dict[str, Any] = {"waited": False, "waited_sec": 0.0,
+                               "in_flight_before": before, "in_flight_after": before,
+                               "limit": limit, "reason": "wait_disabled"}
+        if budget <= 0:
+            return out
+        t0 = time.monotonic()
+        out["waited"] = True
+        while True:
+            if token is not None and token.cancelled:
+                out.update({"waited_sec": time.monotonic() - t0,
+                            "in_flight_after": len(self._in_flight_children_of(parent_task_id)),
+                            "reason": "cancel_requested"})
+                return out
+            now = len(self._in_flight_children_of(parent_task_id))
+            if now < limit:
+                out.update({"waited_sec": time.monotonic() - t0, "in_flight_after": now,
+                            "reason": "slot_freed"})
+                return out
+            if time.monotonic() - t0 >= budget:
+                out.update({"waited_sec": time.monotonic() - t0, "in_flight_after": now,
+                            "reason": "wait_timeout"})
+                return out
+            time.sleep(min(_FANOUT_WAIT_POLL_SEC, max(0.0, budget - (time.monotonic() - t0))))
 
     def _ancestry(self, task_id: str | None) -> tuple[tuple[str, str, str], ...]:
         """重建 `(role, action, input_key)` 的祖先链（含起点自身）。
@@ -1369,12 +1473,24 @@ class Conductor:
 
         # ---- [4] 策略判定（边 / 深度 / 循环 / 扇出 / 并发 / 总量 / 预算 / 墙钟）
         chain = tuple(lineage) if lineage is not None else self._ancestry(parent_task_id)
-        # 扇出 = 受理数，不是尝试数（题15 选B，2026-10-07）：被闸门拒掉的召唤照旧
-        # 落行（谁试过什么要留痕），但不占名额 —— 否则父任务一旦触顶就再也派不出活，
-        # 而每次尝试还会再占一格（自我毒化、不可恢复；真机读数见
-        # `_occupies_fanout_slot`，判据见 `tests/test_fanout_admission.py`）。
+        # 扇出 = 此刻在飞的子代理数（所有者 2026-10-08 裁定：单时刻，不是累计；
+        # 子代理返回即腾出名额）—— 判据见 `_in_flight_children_of`。
+        # 累计读数（`_admitted_children_of`）仍在台账/审计面，但不参与策略判定。
         # 上限那一档按发起方角色取（`by`），默认档与主控档都在 `policy` 里。
-        fanout = len(self._admitted_children_of(parent_task_id)) if parent_task_id else 0
+        fanout = len(self._in_flight_children_of(parent_task_id)) if parent_task_id else 0
+        # ---- [4-pre] 触顶就等（所有者 2026-10-08：「只可等待子智能体返回结果」）
+        #
+        # 等在这里、而不是等在第 [5] 步之后：占位令牌（`self._running`）此刻还没拿，
+        # 等的时候不会把全局并发名额攥在手里（拿在手里会让别的线程也派不动）。
+        fanout_wait: dict[str, Any] | None = None
+        fanout_limit = P.fanout_limit_for(self.policy, by)
+        if parent_task_id and fanout >= fanout_limit:
+            fanout_wait = self._await_fanout_slot(parent_task_id, fanout_limit, token=token)
+            fanout = len(self._in_flight_children_of(parent_task_id))
+            self._log(f"扇出触顶：等 {fanout_wait.get('waited_sec', 0):.1f}s"
+                      f"（在飞 {fanout_wait.get('in_flight_before')} → "
+                      f"{fanout_wait.get('in_flight_after')}，上限 {fanout_limit}，"
+                      f"{fanout_wait.get('reason')}）")
         # ---- B9（`draft/41-A` 的 B9）：判据与占位必须在同一个临界区里
         #
         # 旧顺序是"锁内读 `running`/`total` → 锁外判 → 写完 running 行（一次 fsync
@@ -1443,9 +1559,18 @@ class Conductor:
             # （设计 §3.2："已在跑的协作式取消"）。
             if refusal.reason == "deadline_exceeded":
                 self._signal_stop("deadline", refusal.detail, by="deadline")
+            refusal_detail = refusal.detail
+            if refusal.reason == "fanout_exceeded" and fanout_wait is not None:
+                # 触顶是"等过之后仍然满"—— 把等的那一段读数带上，否则读台账的人
+                # 分不清"当场就满"与"等了 900 秒都没人回来"。
+                refusal_detail += (
+                    f"（触顶后等了 {fanout_wait.get('waited_sec', 0):.1f}s：在飞 "
+                    f"{fanout_wait.get('in_flight_before')} → "
+                    f"{fanout_wait.get('in_flight_after')}，"
+                    f"{fanout_wait.get('reason')}）")
             _release_reservation()
             return self._refuse(
-                role, action, reason=refusal.reason, detail=refusal.detail, by=by,
+                role, action, reason=refusal.reason, detail=refusal_detail, by=by,
                 parent_task_id=parent_task_id, input_key=input_key, params=params, depth=depth,
                 instance=instance,
             )
@@ -1473,9 +1598,11 @@ class Conductor:
             "tokens": 0, "usd": 0.0,
             "artifacts": [],
             # `inputs` 的初值同时打上受理标记（题 21 选 B，2026-10-07 所有者裁定）：
-            # 它与 `status="running"` 这一行同一笔事务落盘，因此扇出判据
-            # （`_occupies_fanout_slot`）不再依赖后续任何一步（角色自己的拒绝、
-            # 记账写回、甚至崩溃）是否成功。理由与负控见 `_ADMITTED_MARK`。
+            # 它与 `status="running"` 这一行同一笔事务落盘，因此累计审计读数
+            # （`_occupies_fanout_slot` / `_admitted_children_of`）不再依赖后续任何一步
+            # （角色自己的拒绝、记账写回、甚至崩溃）是否成功。理由与负控见 `_ADMITTED_MARK`。
+            # 扇出上限本身（所有者 2026-10-08）只看 `status ∈ {pending,running}`，
+            # 与本标记无关。
             "inputs": _admitted_inputs(params),
         }
         try:
@@ -1554,7 +1681,8 @@ class Conductor:
             # 因为处置完全一样（停止派新任务 + 协作式取消在跑的）。
             self.token.consume_tokens(res.tokens)
         # 展示面：`children` 列的是全部子行（含被闸门拒掉的尝试，谁试过什么要看得见），
-        # 与扇出判据（`_admitted_children_of`）刻意两个口径 —— 判据面不许把展示面改窄。
+        # 与扇出判据（`_in_flight_children_of`，只看还没返回的）刻意两个口径
+        # —— 判据面不许把展示面改窄。
         res.children = self._children_of(tid)
         res.elapsed_sec = time.monotonic() - t0
         return res

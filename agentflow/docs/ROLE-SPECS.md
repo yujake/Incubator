@@ -2293,7 +2293,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | `unknown_action` | 该角色没有这个动作 / 参数不合法 / 父任务不存在 |
 | `forbidden_edge` | 策略不允许这条边（如 `C → B`）；或目标是 `NON_SUMMONABLE` |
 | `depth_exceeded` | `depth > max_depth` |
-| `fanout_exceeded` | 该任务已受理 `max_fanout` 个子召唤（口径 = 受理数：闸门拒掉、根本没跑的那些不占名额，见 `policy.fanout_limit_for`；主控那一档 = 20） |
+| `fanout_exceeded` | 该任务**此刻在飞** `max_fanout` 个子代理，且**等过之后仍然满**（口径 = 单时刻：子代理一返回就腾出名额；触顶时 `Conductor` 先等 `fanout_wait_sec`（默认 900s，所有者 2026-10-08：「只可等待子智能体返回结果」）；上限按发起方角色取，见 `policy.fanout_limit_for`；主控那一档 = 20） |
 | `concurrency_exceeded` | `running >= max_concurrency` |
 | `budget_exceeded` | token / 花销预算耗尽 |
 | `deadline_exceeded` | 墙钟到点（**并同时协作式取消在跑的**） |
@@ -2386,8 +2386,8 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 
 | 键 | 默认 | 维度 | 缺了会怎样（`policy.Policy` 逐字） |
 |---|---:|---|---|
-| `max_depth` | **3** | 深度 | "链可以**无限深**（每次只派生 1 个，但派生 10000 层）" |
-| `max_fanout` | **5** | 单点扇出 | "每一层都能**无限宽**（深度 3，每层 9999 个）" |
+| `max_depth` | **5** | 深度 | "链可以**无限深**（每次只派生 1 个，但派生 10000 层）" |
+| `max_fanout` | **5** | 单点**同时在飞**的派活数 | "每一层都能**无限宽**（深度 5，每层 9999 个）" |
 | `max_concurrency` | **4** | 瞬时并发 | "扇出可以**无限持续**：每秒 4 个，跑一天" |
 | `max_tasks_per_run` | **200** | 生命周期总量 | "**瞬时**把并发打爆：总量对了，但 200 个任务同时开跑" |
 | `wall_clock_sec` | **900.0** | 墙钟（FC-20） | `None` = 不限 |
@@ -2403,7 +2403,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | 用尽 | 行为 |
 |---|---|
 | `max_depth` | 新召唤 `refused/depth_exceeded` |
-| `max_fanout` | 新召唤 `refused/fanout_exceeded`（上限按发起方角色取：默认档 = `max_fanout`，主控 `M` 一档 = 20；读的是受理数，被闸门拒掉的尝试不占名额） |
+| `max_fanout` | 新召唤 `refused/fanout_exceeded`（上限按发起方角色取：默认档 = `max_fanout`，主控 `M` 一档 = 20；读的是**此刻在飞**的子代理数 —— 子代理返回即腾出名额） |
 | `max_concurrency` | 新召唤 `refused/concurrency_exceeded` |
 | `max_tasks_per_run` | 新召唤 `refused/...`（`total = _started_total + _cancelled_total`） |
 | `wall_clock_sec` | 新召唤 `refused/deadline_exceeded`，**并 `_signal_stop("deadline", …)` 协作式取消在跑的** |
