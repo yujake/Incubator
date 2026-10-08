@@ -148,11 +148,18 @@ def test_the_prompt_tells_a_parent_which_children_it_has(tmp_path: pathlib.Path)
     """
     st, cond, reg, ws, me, kids, other = _tree(tmp_path)
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
-    _loop(cond, reg, ws, st, gate).run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
+    loop = _loop(cond, reg, ws, st, gate)
+    # E17（S1k-2）：这一格的来源是名册 —— 先给两个孩子登记，再看渲染。
+    for n, kid in enumerate(kids, start=1):
+        got = loop.secretary.roster_add(owner=me, role="B", task_id=kid, brief=f"第 {n} 件活")
+        assert got["problem"] == "", got
+    loop.run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
     system = gate.systems[-1]
-    line = system.split("此刻你名下的子代理台账号：")[1].split("\n")[0]
-    for kid in kids:
-        assert kid in line, (line, system[-800:])
+    line = system.split("此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：")[1].split("\n")[0]
+    for kid, name in zip(kids, ("B1", "B2")):
+        assert name in line, ("名册名要出现", line)
+        assert kid not in line, ("E17：那一格是名册摘要，不许出现台账号", line, kid)
+    assert "第 1 件活" in line and "第 2 件活" in line, ("一句简介也要出现", line)
     assert other not in line, ("兄弟（同一个父、但父不是我）不许进我这一格：", line)
 
 
@@ -174,11 +181,15 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     notice = cond.open_item(kind="notice", role="D", expects="ack", summary="某个子代理已收工",
                             called_by="B", parent_task_id=me, depth=3, input_key="notice@B:1")
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
-    _loop(cond, reg, ws, st, gate).run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
-    line = gate.systems[-1].split("此刻你名下的子代理台账号：")[1].split("\n")[0]
+    loop = _loop(cond, reg, ws, st, gate)
+    for n, kid in enumerate(kids, start=1):
+        loop.secretary.roster_add(owner=me, role="B", task_id=kid, brief=f"第 {n} 件活")
+    loop.run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
+    line = gate.systems[-1].split("此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：")[1].split("\n")[0]
     assert notice not in line, ("工作项不是子代理（两轴分开）：", line, notice)
-    for kid in kids:
-        assert kid in line, (line, kids)
+    for kid, name in zip(kids, ("B1", "B2")):
+        assert name in line, (line, kids)
+        assert kid not in line, ("E17：名册摘要里不许出现台账号", line, kid)
     assert str(notice) in {str(r["task_id"]) for r in cond.open_items_of(me)}, (
         "工作项轴必须看得到它（它是要我消的项）：", cond.open_items_of(me))
     assert str(notice) not in cond._children_of(me), (
@@ -202,7 +213,7 @@ def test_no_children_is_rendered_as_a_sentence_not_an_empty_cell(tmp_path: pathl
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
     _loop(cond, reg, ws, st, gate).run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
     system = gate.systems[-1]
-    assert "此刻你名下的子代理台账号：（此刻名下没有子代理）" in system, system[-800:]
+    assert "此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：（此刻名下没有子代理）" in system, system[-800:]
 
 
 # ============================================================ 负控：删掉那一格 ⇒ 红
@@ -224,7 +235,7 @@ def test_the_two_cells_are_the_only_source_of_those_ids(tmp_path: pathlib.Path):
     for kid in kids:
         assert kid not in text, ("没喂子编号却在提示词里读到了它 ⇒ 同上的问题：", kid)
     assert "你的父代理台账号：（顶层发起：这一趟没有父代理的台账号）" in text, text[-800:]
-    assert "此刻你名下的子代理台账号：（此刻名下没有子代理）" in text, text[-800:]
+    assert "此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：（此刻名下没有子代理）" in text, text[-800:]
 
 
 def test_an_unreadable_ledger_is_not_folded_into_having_no_parent(tmp_path: pathlib.Path):

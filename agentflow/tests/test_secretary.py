@@ -1141,6 +1141,11 @@ NOT_STRUCTURED = {
     "note": "不是交互：写自己的台账/笔记，代码接住",
     "ask_user": "不是交互（对象是用户，不是智能体）：直接问用户（userio）",
     "final": "不是交互：终态字段闸 `notify_reading`",
+    # S1k-2 的两个新形状：它们动的是名册（父与它自己名下子代理的账），不是"跨智能体
+    # 结构化交互"那一类 —— 秘书就是执行者（`Secretary.retire` / `roster_view`），
+    # 不需要再过一遍"发件前优化"那道门（过门反而会把执行者当成被优化的载荷）。
+    "retire": "不是交互：退役由秘书自己执行（Secretary.retire 的三分支）",
+    "roster": "不是交互：查名册是只读视图（Secretary.roster_view）",
 }
 
 

@@ -978,13 +978,16 @@ def _shape_names_in(text: str) -> list[str]:
 
 
 def test_loop_protocol_shape_table_lists_every_shape_the_loop_accepts():
-    """形状表里八个形状名一个不缺，且数目与 `agent_loop.SHAPES` 现算一致。
+    """形状表里十个形状名一个不缺，且数目与 `agent_loop.SHAPES` 现算一致。
 
     若这条破了：正典表少列一种形状，模型可能永远不写它，而框架照旧全绿 ——
     这一次少的是 `handoff`（手稿落行的唯一形状入口）。
+
+    `== 10` 是本判据的提醒线（S1k-2 从 8 抬到 10：新增 `retire` / `roster`）：
+    形状表被动过就得把它与提示词一起过一遍，别让下面的数目对拍变成对着旧数目对。
     """
     seg = _shape_table()
-    assert len(AL.SHAPES) == 8, (
+    assert len(AL.SHAPES) == 10, (
         f"形状表本身被动过了（`agent_loop.SHAPES` 现在有 {len(AL.SHAPES)} 个）⇒ "
         "先把这条判据与提示词一起过一遍，别让下面的数目对拍变成对着旧数目对")
     missing = [n for n in AL.SHAPES if n not in _shape_names_in(seg)]
@@ -1035,21 +1038,25 @@ def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistr
             "不存在；少缺一个等于那段 M 专用文本又漏给了非 M）")
         if role == S.CONDUCTOR_ROLE:
             assert AP.LOOP_PROTOCOL in text, "主控那一版不再是 `LOOP_PROTOCOL` 常量本身"
-    # 反负控：缺 `handoff`、且写着"七种"的那一版必须被同一组读法判红。
+    # 反负控：缺 `handoff`、且写着"九种"的那一版必须被同一组读法判红。
     # 这一段逐字另写（不从当前文本拼）—— 从当前文本拼出来的"旧版"会随修好一起变好，
     # 于是判据坏掉也照样绿（反负控的全部价值就在于它与被测文本无关）。
-    old_seg = ("七种形状，互斥，每次只取其一：\n"
+    # `S1k-2` 抬到十种形状之后，这一段跟着补上 `retire` / `roster`（仍然缺 `handoff`：
+    # 反负控要守的正是"少一种就被抓出来"）。
+    old_seg = ("九种形状，互斥，每次只取其一：\n"
                '1) {"tool": "<工具名>", "args": {}}\n'
                '2) {"summon": {"role": "A-H", "action": "<动作名>"}}\n'
                '2b) {"summon_many": {"targets": []}}\n'
                '3) {"message": {"to": "#public", "subject": "x", "body": "y"}}\n'
                '4) {"note": "一句话"}\n'
                '5) {"ask_user": {"question": "?"}}\n'
-               '6) {"final": "<结论>", "evidence": []}')
+               '6) {"retire": {"name": "D1"}}\n'
+               '7) {"roster": {"of": "self"}}\n'
+               '8) {"final": "<结论>", "evidence": []}')
     assert _shape_names_in(old_seg) == [n for n in AL.SHAPES if n != "handoff"], \
         f"反负控失效：旧表被读成 {_shape_names_in(old_seg)}"
     assert set(re.findall(r"([一二三四五六七八九十])种形状", old_seg)) != {_CN_NUM[len(AL.SHAPES)]}, \
-        "反负控失效：写着「七种」的旧表居然通过了数目对拍"
+        "反负控失效：写着「九种」的旧表居然通过了数目对拍"
 
 
 # ------------------------------------------------- 循环协议里两组与该角色无关的文本
@@ -1349,18 +1356,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ⇒ 数据本来就在台账里，缺的是渲染。落在共享段 ⇒ 十格全部换值（同 p44 的读数形态）。
 #: `p46`（2026-10-08 深夜，S1i）：`TASK_FRAME`（共享段）补一格 `{{board}}` —— 挂在我名下的
 #: 工作项进上下文（业主 A3=甲 "渲染即 seen" 的渲染那一半）。同 p44/p45：共享段 ⇒ 十格全换。
-_FROZEN_PROMPT_VERSION = "p46"
+#: `p47`（2026-10-08 深夜，S1k-2）：循环协议八种形状 → 十种（新增 `retire` / `roster`），
+#: 且 `summon` 里补 `brief` / `name` / `reuse` 三格（名册口径）⇒ 十格全换。
+_FROZEN_PROMPT_VERSION = "p47"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "c286771445c411d7249548b413b504b3fa486a0d07abb9305caa8cffb0daf9ce",
-    "B": "394c4fdb02a9e0cb4556e3d97dd1f5534f4418ce009aa2af9c31a65257ee07e5",
-    "C": "f2ecdc4853742ae3673be8b075736667124bcc5b0dd4476c660883f8081df5be",
-    "D": "6cf23aeba771ba089fc4e1132a1c37e92b648b0e8f561e9d6e3fbbc8602e693b",
-    "E": "2afb39196827c350378cc9e27ca62fff3217e8cf751040e0ba1c0687e9804c33",
-    "F": "dd4f64f500557ecab41ae879ef83e853f32a20e4e0ece01a11e73ea02545640f",
-    "G": "65631c6ed5229c8233cdf38a1a50ad38b75d884abf48dfc4a155e6050864ce72",
-    "H": "77ce2f5d699dd68547c2662a182840c28590dec84622d59ec22da628936372bc",
-    "V": "f037a093b146c6edee56fa4f30f6dbbb1a778be33b6c5786cc61056a6fd76e6f",
-    "M": "61684764eb45deca1306834b5ac493bdc1eb571673dbd3308d83551ab88fa918",
+    "A": "f1377bec40d6479c1ff7103fa8d1433c26e3f5141bab25ad8617cc8591103c0c",
+    "B": "8c5be62dd1758877b2eb788b1bee29a59a24f02722457e527e3f04605181a015",
+    "C": "12a949c67b89d4aa6d4e2555d8a2fc9df4da904b6c9160ab77284fe492647387",
+    "D": "5ba427a5265f9ee533142642c2d749794fe08d120c917c5707e6b5fd4e9f6ea6",
+    "E": "6fe2decbf13b095c61b2e00ce04eee843d112533aa5bea4d197e1e0e16691463",
+    "F": "7cdd905f45f6bc4c8ea1d72dd9e1a583b6c621f27de80edf65823ae7f9c7c2e4",
+    "G": "ade70946cc7701ed10d2d5437ef1812d3eaf2e6972b47b85509cac3b2360b520",
+    "H": "1a115fd15c0ef81f7c4cd5ad6fb2a5150c0af3fe0d8a56c307bf0e880aac5d42",
+    "V": "395a7e6228b6c32439c2f0d99bdf26a04d779bda240c49c5018b52833f657a9f",
+    "M": "0fc63659ccdfb4dfc4024d6210dd136e7894c0499495100ab12c6a4e1ef5e130",
 }
 
 

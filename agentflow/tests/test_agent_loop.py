@@ -704,7 +704,7 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
     却被判"tool 必须是一个工具名字符串"，连着三次 ⇒ `bad_json_limit`。
     骨架是文档，文档必须与解析器同源；这条判据就是那个"同源"。
     """
-    from agentflow.agent_loop import JSON_TAIL, _shape_of
+    from agentflow.agent_loop import JSON_TAIL, SHAPES, _shape_of
 
     # 替换顺序要紧：`{...}` 必须先变成 `{}`，否则 `...` → `x` 会把它改成 `{x}`（非法 JSON）。
     # 占位符表要与 `JSON_TAIL` 同源：骨架里每出现一个新的 `<...>`，这里要么补一条替换、
@@ -721,9 +721,9 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
         shape, _payload, problem = _shape_of(data)
         assert not problem, (line, problem)
         parsed.append(shape)
-    assert sorted(parsed) == sorted(["tool", "summon", "summon_many", "message", "handoff",
-                                    "note", "ask_user", "final"]), \
-        parsed
+    # S1k-2：骨架多了 `retire` / `roster` 两行（名册口径的两个形状）——
+    # 这条判据问的是"骨架里每一行都能被解析器认出来"，所以清单要与 `SHAPES` 同源。
+    assert sorted(parsed) == sorted(SHAPES), parsed
 
 
 def test_the_skeleton_teaches_the_preferred_handoff_field_names():

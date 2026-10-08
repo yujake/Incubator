@@ -62,7 +62,8 @@ from .llmseam import LlmSeam
 #: 为什么让它进协议而不是只做一个 M 的工具：真机实测里模型自己就试过
 #: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
 #: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
-SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final")
+SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
+          "retire", "roster")
 #: 出站门：哪些形状由秘书接管（所有者的裁定逐字"如果有些形状涉及到结构化交互，
 #: 则需要秘书接管"）。判据是"这个形状是不是跨智能体的结构化交互"——
 #: `summon` / `summon_many`（委托）· `handoff`（手稿通道）· `message`（私聊/公共频道，
@@ -87,6 +88,10 @@ SECRETARY_OUTBOUND_SHAPES: tuple[str, ...] = ("summon", "summon_many", "handoff"
 FLAT_SHAPE_ALIASES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("summon", ("role", "action"), "role"),
     ("summon_many", ("targets",), "targets"),
+    # S1k-2 的 `retire`（业主 T22 的名册口径）：必填键表也在这里一处 ——
+    # 父拿着名册名说"A1 退役"。`roster` 不进这张表：它的 `of` 可省（缺省 = 自己），
+    # 没有"必填的扁平键"这回事（空键表会让扁平化那条路写出一个没有键的对象）。
+    ("retire", ("name",), "name"),
 )
 
 #: 这些拒绝理由 ⇒ 自动转成"请主控代唤"的申请（2026-09-30）。
@@ -125,6 +130,10 @@ JSON_TAIL = (
     ' "refs": ["<前序手稿编号>"], "revises": "<要订正的手稿号，可不填>"}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
+    # S1k-2（业主 T22 的名册口径）：两个新形状。`brief` 是"造一个子代理"时必给的一句简介；
+    # 复用已有子代理写 `reuse:"D1"`（名册名，不是台账号）—— 它不新增名册项，只多一次调用。
+    '{"retire": {"name": "A1"}}\n'
+    '{"roster": {"of": "self"}}\n'
     '{"final": {"final": "<结论>", "evidence": []}}'
 )
 
@@ -1666,22 +1675,45 @@ class AgentLoop:
         return str(self.my_task_id or ""), (prole or S.CONDUCTOR_ROLE), ""
 
     def _children_text(self) -> str:
-        """此刻我名下的直接子代理台账号（进提示词 `{{children}}` 那一格）。
+        """此刻我名下的子代理 —— 名册摘要（业主 E17：渲染的是名册，不是台账号）。
 
-        口径：`conductor._children_of(我的编号)` 是"我的子代理"的唯一实现
-        （`_admitted_children_of` / `_in_flight_children_of` 是另两个口径：累计派活 /
-        此刻在飞），所以这里刻意只读不写、也不新加一个公开别名 ——
-        多一个名字就多一个漂移点，而"我的子代理是谁"这句话只该有一个答案。
+        格式：`D1 · 把 X 的族构造证据补齐 · 活跃`（名字 · 一句简介 · 状态）；
+        名册读不成时退回 `conductor._children_of` 的代号清单并写明"（名册没读成，
+        先给代号）" —— 退回也要看得见，不许静默换成另一种东西。
 
-        四种返回值都是刻意不同的：真清单 / 空串（确实没有 ⇒ 提示词层渲染
-        「（此刻名下没有子代理）」）/ 带括号的问题串（没读成）/ 截断后的"…等 N 个"
-        （名单太长时截断，但把总数写出来，免得"20 个"被读成"正好 20 个"）。
+        四种返回值刻意不同：真清单 / 空串（确实没有 ⇒ 提示词层渲染「（此刻名下没有子代理）」）/
+        带括号的问题串（没读成）/ 截断后的"…等 N 个"（把总数写出来，免得"20 个"被读成"正好 20 个"）。
 
         它是这一趟开始那一刻的名单（提示词在 `run` 里渲染一次）：这一趟里新派的
         子代理不会自己出现在这里。不假装实时 —— 那需要每一步重渲染，见 `draft/85` §5.2。
         """
         if not str(self.my_task_id or ""):
             return "（这一趟还没落台账，读不到子代理清单）"
+        # 名册那一支（S1k-2）：有秘书就用它（名字 + 简介 + 状态）。
+        if self.secretary is not None and hasattr(self.secretary, "roster_view"):
+            try:
+                view = self.secretary.roster_view(owner=self.my_task_id)
+            except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，别退回代号冒充名册
+                return f"（名册没读成：{type(exc).__name__}: {exc}）"
+            if view.get("checked"):
+                rows = list(view.get("rows") or [])
+                if not rows:
+                    return ""
+                head = "、".join(f"{r.get('name')} · {r.get('brief')} · {r.get('state')}"
+                                 for r in rows[:20])
+                more = int(view.get("more") or 0)
+                return head if not more else f"{head} …等 {len(rows) + more} 个"
+            # 名册没读成：如实说，但也别让模型瞎猜——附上代号清单（写清这是代号）
+            codes = self._child_codes()
+            return (f"（名册没读成：{view.get('reason')}；先给台账号：{codes}）"
+                    if codes else f"（名册没读成：{view.get('reason')}）")
+        codes = self._child_codes()
+        if codes.startswith("（"):
+            return codes
+        return f"（没有名册可读，先给台账号：{codes}）" if codes else ""
+
+    def _child_codes(self) -> str:
+        """`conductor._children_of` 的代号清单（名册不可用时的退路；读不成 ⇒ 带括号的问题）。"""
         if self.conductor is None:
             return "（读不到子代理清单：这一趟没有 conductor 句柄）"
         look = getattr(self.conductor, "_children_of", None)
@@ -2675,7 +2707,53 @@ class AgentLoop:
             return self._do_handoff(payload)
         if shape == "ask_user":
             return self._do_ask_user(payload)
+        if shape == "retire":
+            return self._do_retire(payload)
+        if shape == "roster":
+            return self._do_roster(payload)
         return self._do_message(payload)
+
+    def _do_retire(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """`{"retire": {"name": "A1"}}` —— 父说"A1 退役"，判定与执行都在秘书那一侧。
+
+        这一层只做转发与留痕（`draft/92` I-11 的"一处实现"）：三分支的判定在
+        `Secretary.retire`，它自己会去读台账、读手稿、写名册/对照表/销号名单。
+        没有秘书（裸构造的 `AgentLoop`）⇒ 如实拒绝，不许当"退役成功"。
+        """
+        name = str(payload.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "action": "refused", "why": ["要退谁：`name` 是名册名，不能空"]}
+        if self.secretary is None:
+            return {"ok": False, "action": "refused",
+                    "why": ["这一趟没有秘书（裸构造的 AgentLoop）⇒ 名册不在手上，退不了"]}
+        try:
+            got = self.secretary.retire(owner=self.my_task_id, name=name,
+                                        by_task_id=self.my_task_id)
+        except Exception as exc:  # noqa: BLE001 —— 退役失败要如实报（不许当"退过了"）
+            return {"ok": False, "action": "refused",
+                    "why": [f"退役没跑成：{type(exc).__name__}: {exc}"]}
+        if not isinstance(got, dict):
+            return {"ok": False, "action": "refused", "why": ["退役读数不是对象"]}
+        got.setdefault("name", name)
+        return got
+
+    def _do_roster(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """`{"roster": {"of": "self"}}` —— 查名册（只读，业主："代理的查自己调用工具看"）。
+
+        `of` 缺省 = 自己名下的名册；给了名册名 ⇒ 先译码（我名下 → 我父名册），再查它的名册
+        （退役第②支要的那一步："A1 还在干什么活"）。可见面（`draft/92` I-13）：
+        只有这三种目标 —— 我自己的、我名下的子代理的；兄弟的看不见（越界受控拒绝）。
+        """
+        if self.secretary is None:
+            return {"checked": False, "rows": [], "reason": "这一趟没有秘书 ⇒ 名册不在手上"}
+        want = str(payload.get("of") or "self").strip()
+        if want in ("", "self", "自己"):
+            return self.secretary.roster_view(owner=self.my_task_id)
+        tid, problem = self.secretary.resolve_down(owner=self.my_task_id, name=want)
+        if problem:
+            return {"checked": False, "rows": [], "more": 0,
+                    "reason": f"{want} 不在我名下的名册里（{problem}）⇒ 越界的不许查"}
+        return self.secretary.roster_view(owner=tid)
 
     def _do_summon_many(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """一次派一批活（并发）：走 `Conductor.run_plan`，按写集分波、同波并发。
@@ -2840,6 +2918,29 @@ class AgentLoop:
             out["payload"] = _clip({k: v for k, v in payload.items() if k != "llm_run"}, 400)
         else:
             out["payload"] = _clip(payload, 800)
+        # ---- 名册登记（S1k-2；业主 T22："名册的增、删都由秘书做"）
+        #
+        # 只登记真的受理了的那一次（`refused` 不登记：它没跑）。
+        # `brief` 的口径（与 `draft/92` 的一处偏差，理由写在提交信息里）：
+        #   · 父点了名（`name` / `reuse`）却没给简介 ⇒ 受控拒绝式的读数（不打回派活）——
+        #     一句话说明"名册没写进去"；这与 L-05e 的裁定同族（"阻塞一条委托比放行更贵"）；
+        #   · 没点名也没给简介 ⇒ 照常派活，名册那一格如实报问题（不替它编）。
+        if self.secretary is not None and str(res.status or "") in ("pending", "running", "done"):
+            if str(res.outcome or "") != "refused":
+                try:
+                    reg = self.secretary.roster_add(
+                        owner=self.my_task_id, role=role, task_id=str(res.task_id or ""),
+                        brief=str(payload.get("brief") or ""),
+                        want_name=str(payload.get("name") or ""),
+                        reuse=str(payload.get("reuse") or ""))
+                    if reg.get("problem"):
+                        out["roster_problem"] = str(reg["problem"])
+                    else:
+                        out["roster_name"] = str(reg.get("name") or "")
+                except Exception as exc:  # noqa: BLE001 —— 登记失败不许带走这次派活
+                    out["roster_problem"] = f"名册登记没跑成：{type(exc).__name__}: {exc}"
+        elif self.secretary is None:
+            out["roster_problem"] = "这一趟没有秘书 ⇒ 名册不在手上（没有登记）"
         return out
 
     def _needs_relay(self, role: str, reason: str) -> bool:
@@ -2905,6 +3006,68 @@ class AgentLoop:
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         to = str(payload.get("to"))
         reply_to = str(payload.get("reply_to") or "")
+        # ---- 名册名那一支（S1k-2；业主 §1.8 的两个方向）
+        #
+        # 收件人写本地名（`D1` = 我名下的子代理；或我父名册里的名字 = 上行给父）。
+        # 译码是秘书的事（接线员），落到盘上是一条挂在收件人名下的板项（不是公共频道）：
+        # 那样"发给谁的只有谁能读"（T20 禁止代读）由板项的收件人字段天然保证。
+        if to and to != PUBLIC and to != "ALL" and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
+                                                             "user", "用户"):
+            return self._message_by_name(payload, to)
+        if to == "ALL" and self.secretary is not None and str(self.my_task_id or ""):
+            return self._message_my_children(payload)
+        return self._message_by_channel(payload, to, reply_to)
+
+    def _message_by_name(self, payload: Mapping[str, Any], name: str) -> dict[str, Any]:
+        """按名册名发一条（下行走我名下的名册，上行走我父名册）—— 落到收件人名下的板项。"""
+        if self.secretary is None or self.conductor is None:
+            return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
+                    "note": "这一趟没有秘书/conductor ⇒ 名册不在手上，译不出这个名字"}
+        tid, problem = self.secretary.resolve_down(owner=self.my_task_id, name=name)
+        direction = "下行"
+        if problem:
+            tid, problem = self.secretary.resolve_up(my_task_id=self.my_task_id, name=name)
+            direction = "上行"
+        if problem:
+            return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
+                    "note": f"名册里没有 {name!r}（下行与上行都查过）⇒ 受控拒绝并点名：{problem}"}
+        row = self.conductor._task(tid) or {}
+        role = str(row.get("role") or "")
+        subject = str(payload.get("subject") or "")
+        body = str(payload.get("body") or "")
+        item_id = self.conductor.open_item(
+            kind="message", role=role or S.CONDUCTOR_ROLE, expects="ack", action="message",
+            summary=subject or f"来自 {self.role} 的一条留言",
+            called_by=self.role, parent_task_id=tid,
+            depth=int(row.get("depth") or 1) + 1 if row else 2,
+            input_key=f"message@{self.role}:{self.my_task_id or '-'}->{name}")
+        self.conductor.set_item_detail(item_id, (subject + "\n" + body).strip()[:400])
+        return {"message": "已投递到收件人的板", "to": name, "to_task_id": tid,
+                "item_id": item_id, "direction": direction, "channel": "roster",
+                "receipt": "queued", "ok": True,
+                "note": ("这一条挂在收件人名下（板项），只有它自己会渲染到 —— "
+                         "父不许代读（T20）。若它此刻没有在跑，板项会等着它下次进循环。")}
+
+    def _message_my_children(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """`to="ALL"` ⇒ 按我名下名册逐项开板项（内容一条、行为 per-recipient）。"""
+        view = self.secretary.roster_view(owner=self.my_task_id)
+        if not view.get("checked"):
+            return {"message": "未发出", "to": "ALL", "ok": False, "receipt": "unknown",
+                    "note": f"名册没读成（{view.get('reason')}）⇒ 不许当'没有收件人'"}
+        active = [r for r in view.get("rows", []) if r.get("state") in ("活跃", "待命")]
+        if not active:
+            return {"message": "未发出", "to": "ALL", "ok": False, "receipt": "no_reader",
+                    "note": "我名下名册里没有活跃/待命的子代理 ⇒ 没有收件人"}
+        sent = [self._message_by_name(payload, str(r["name"])) for r in active]
+        return {"message": "已按名册展开", "to": "ALL", "ok": all(x.get("ok") for x in sent),
+                "receipt": "queued", "recipients": [r["name"] for r in active],
+                "items": [x.get("item_id") for x in sent],
+                "note": ("内容一条、行为 per-recipient：每项各自 ack；"
+                         "'展开成功'不等于'都读到了'（读数看板面）。")}
+
+    def _message_by_channel(self, payload: Mapping[str, Any], to: str,
+                            reply_to: str) -> dict[str, Any]:
+        """既有的那条路（角色 / `#public`）：一行未动。"""
         # 准入判据只有一份（模块级 `message_admission`）：这里与秘书那一侧都调它。
         not_allowed = message_admission(self.role, to, reply_to)
         if not_allowed:

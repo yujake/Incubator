@@ -73,6 +73,25 @@ DUTIES: dict[str, dict[str, object]] = {
         "probe": ("收件箱", "待办"),
         "why": "闭环提醒落在收件箱里；角色必须知道要去看，否则提醒等于没发",
     },
+    # S1k-2（2026-10-08 深夜）：名册那一族。提示词里承诺了三件事，这里逐条认领
+    # （`code` = 真身，`call` = 生产调用点）。
+    "roster_add": {
+        "code": "roster_add",
+        "where": "secretary.py",
+        "call": ("agent_loop.py:2846",),
+        "visibility": "prompt",
+        "probe": ("父可以自己提名", "由秘书分配", "名字一经分配"),
+        "why": "造一个子代理时登记名册（并分配/核对名字）：名字被占或已销号就受控拒绝，"
+               "不许静默改名 —— 角色必须知道这条，否则它会以为换个名字重发就能过",
+    },
+    "roster_retire": {
+        "code": "retire",
+        "where": "secretary.py",
+        "call": ("agent_loop.py:2688",),
+        "visibility": "prompt",
+        "probe": ("让一个子代理退役", "父决定"),
+        "why": "退役由父说、秘书做（三分支）：角色必须知道有这件工具，否则它只能干等",
+    },
     "duty4_rework": {
         "code": "rework_inbound",
         "where": "secretary.py",
