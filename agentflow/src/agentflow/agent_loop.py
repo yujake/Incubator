@@ -2611,6 +2611,58 @@ class AgentLoop:
         return run
 
     # -------------------------------------------------------------- 执行
+    def _stop_applies(self, state: Mapping[str, Any]) -> dict[str, Any]:
+        """盘上这把停机开关管不管我（S4，`draft/90` E7 / `draft/84` §2.2）。
+
+        返回 `{"stop","remove","why"}`：
+
+        | 开关 | 我 | 结论 |
+        |---|---|---|
+        | 全工作区（没有 `root_task_id`） | 谁 | 停；读到的第一个撤掉它（老行为逐字不变） |
+        | 子树（有 `root_task_id`） | 我在那一支里、我就是那一支的根 | 停，并且由我撤（`remove=True`） |
+        | 子树 | 我在那一支里、是成员 | 停，但不撤（`remove=False`）—— 同支别的循环还要读到它 |
+        | 子树 | 我不在那一支里 | 不停（"停 D 那一支"不许停到 E 那一支） |
+        | 子树 | 判不了（台账读不成 / 我没编号） | 不停 + 一句读数（判不了 ≠ 适用） |
+
+        为什么"不撤"这一档必须存在：一次性开关的语义（§140）是为"全工作区"设计的；
+        子树开关要一支上多个循环各自读到，谁先读到谁撤就会让后面的人静默不停
+        —— 那与 §140 那个 bug 是同一族，只是方向反过来。撤的责任落在那一支的根
+        （通常就是叫停的人自己那一趟）。
+        """
+        try:
+            from . import stopctl
+        except Exception:  # noqa: BLE001 —— 模块都导不进来 ⇒ 判不了
+            return {"stop": False, "remove": False, "why": "stopctl 没导进来 ⇒ 判不了"}
+        scope = stopctl.stop_scope(state)
+        if not scope.get("checked"):
+            return {"stop": False, "remove": False,
+                    "why": f"作用面判不了（{scope.get('reason')}）⇒ 不停（判不了 ≠ 适用）"}
+        if scope["scope"] != "subtree":
+            return {"stop": True, "remove": True, "why": ""}
+        root_tid = str(scope["root_task_id"])
+        cond = self.conductor
+        mine = str(self.my_task_id or "")
+        if cond is None or not mine:
+            return {"stop": False, "remove": False,
+                    "why": ("这一趟没有主控句柄或没有台账号 ⇒ 判不了我在不在"
+                            f"{root_tid} 那一支里（不停）")}
+        look = getattr(cond, "inside_subtree", None)
+        if not callable(look):
+            return {"stop": False, "remove": False,
+                    "why": "这个主控没有 `inside_subtree` ⇒ 判不了（不停）"}
+        try:
+            got = look(root_tid, mine)
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 在里面
+            return {"stop": False, "remove": False,
+                    "why": f"判我在不在 {root_tid} 那一支里时出错（{type(exc).__name__}）⇒ 不停"}
+        if not got.get("checked"):
+            return {"stop": False, "remove": False,
+                    "why": f"判不了我在不在 {root_tid} 那一支里（{got.get('reason')}）⇒ 不停"}
+        if not got.get("inside"):
+            return {"stop": False, "remove": False,
+                    "why": f"这把开关只管 {root_tid} 那一支，我不在那一支里"}
+        return {"stop": True, "remove": mine == root_tid, "why": ""}
+
     def _user_stop_reason(self, run: "AgentLoop.LoopRun") -> str:
         """人叫停了吗（`draft/37` §125）。返回停止原因（空串 = 没叫停，继续跑）。
 
@@ -2650,12 +2702,16 @@ class AgentLoop:
             except Exception:  # noqa: BLE001 —— 读不到开关不是"用户叫停"，如实不停
                 state = None
             if state is not None:
+                verdict = self._stop_applies(state)
+                if not verdict["stop"]:
+                    run.notes.append(f"停机开关在盘上，但{verdict['why']}")
+                    return ""
                 reason = "force_stop" if bool(state.get("force")) else "stop_file"
                 try:
                     from . import stopctl
 
                     stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
-                                         explicit=self.stop_file)
+                                         explicit=self.stop_file, remove=verdict["remove"])
                 except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
                     pass
                 return reason
@@ -2667,11 +2723,16 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 —— 读不到开关不是"用户叫停"，如实不停
             state = None
         if state is not None:
+            verdict = self._stop_applies(state)
+            if not verdict["stop"]:
+                run.notes.append(f"停机开关在盘上，但{verdict['why']}")
+                return ""
             reason = "force_stop" if bool(state.get("force")) else "stop_file"
             try:
                 from . import stopctl
 
-                stopctl.consume_stop(self.session_root, sid=self.sid, level=reason)
+                stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
+                                     remove=verdict["remove"])
             except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
                 pass
             return reason

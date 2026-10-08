@@ -1085,6 +1085,48 @@ class Conductor:
         out.sort(key=lambda x: x["task_id"])
         return {"checked": True, "rows": out, "reason": ""}
 
+    def inside_subtree(self, root_task_id: str, task_id: str) -> dict[str, Any]:
+        """`task_id` 是不是在 `root_task_id` 这一支下面（含它自己）。三态。
+
+        用途（S4，`draft/90` E7）：一把子树停机开关（`stopctl.stop_scope` =
+        `"subtree"`）只对那一支生效 —— 每个循环在决定"这把开关管不管我"时问这一格。
+
+        实现是纯粹的上行链（`parent_task_id` 逐级往上），不枚举子树
+        （枚举子树是另一件事：`descendants_of`；这一格只回答"我在不在里面"）。
+        到顶还没遇到 `root` ⇒ 不在里面。
+
+        三态：台账读不成 / 我这一行不在台账里 ⇒ `checked=False` + `reason`。
+        调用方据此不停（判不了 ≠ 适用）—— 这一条与 `draft/92` E9 同族：
+        把"没读成"折成"不在里面"会让一次子树叫停静默失效，折成"在里面"会让
+        一次局部叫停变成全停，两种都错。
+        """
+        root_tid = str(root_task_id or "")
+        me = str(task_id or "")
+        if not root_tid or not me:
+            return {"checked": False, "inside": False,
+                    "reason": ("没给子树根或没给我的编号 ⇒ 『我在不在这一支里』判不了"
+                               if not (root_tid and me) else "")}
+        try:
+            rows = {str(r.get("task_id")): r for r in self._tasks()}
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 不在里面
+            return {"checked": False, "inside": False,
+                    "reason": f"台账读不成（{type(exc).__name__}: {exc}）"}
+        if me not in rows:
+            return {"checked": False, "inside": False,
+                    "reason": f"台账里没有我这一行（{me!r}）⇒ 判不了"}
+        path: list[str] = []
+        cur = me
+        for _ in range(64):                    # 深度上限：坏链不许把这里变成死循环
+            path.append(cur)
+            if cur == root_tid:
+                return {"checked": True, "inside": True, "path": path, "reason": ""}
+            row = rows.get(cur) or {}
+            nxt = str(row.get("parent_task_id") or "")
+            if not nxt or nxt not in rows:
+                break
+            cur = nxt
+        return {"checked": True, "inside": False, "path": path, "reason": ""}
+
     def note_edge_release(self, parent_task_id: str, *, child_task_id: str,
                           attempt: int = 1) -> tuple[str, str]:
         """记一笔"这条边已经认过了"（幂等键 = `(子代号, 第几次)`）。返回 `(落痕, 问题)`。

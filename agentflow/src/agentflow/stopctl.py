@@ -113,7 +113,8 @@ def _notify_stop(root: str | Path, action: str,
 
 def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
                         force: bool = False, sid: str | None = None,
-                        explicit: str | Path | None = None) -> tuple[dict[str, Any], str]:
+                        explicit: str | Path | None = None,
+                        root_task_id: str = "") -> tuple[dict[str, Any], str]:
     """写下停机开关，并回答"这把开关是谁的"（`draft/39` §3.11 D25）。
 
     返回 `(负载, 结局)`，结局三态：
@@ -126,6 +127,16 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     它是"谁在什么时候为什么叫停"的审计面；把调用方的结局塞进去会让下一次读它的人
     把"上一次是谁写的"与"这一次是谁在问"混起来。驱动器按这个结局决定要不要清：
     只有 `created` 才清（`3`/`4` 一律不动别人的痕迹）。
+
+    ## `root_task_id`（S4，`draft/90` E7 / `draft/84` §2.2）：这把开关管哪一支
+
+    缺省（空串）= 全工作区（老行为逐字不变）；给了台账里的一个实例号 ⇒ 只对
+    那一支（它自己 + 它的子孙）生效 —— 于是"停 D 那一支"不必停掉整个工作区。
+
+    只在给了的时候写这一格（与 S6-a 的 `from_task_id` 同一条纪律：恒为空的键会让
+    "谁都没写"与"特意写了空"在记录上长得一样）。已有开关在场时先到先得
+    （与 `reason` 同一口径）：升级只加 `force`，不改作用面 —— 否则"后来的人"能悄悄
+    把一把子树开关变成全工作区开关。
     """
     path = stop_path(root, explicit)
     existing = read_stop(root, explicit=explicit)
@@ -146,6 +157,8 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     payload = {"reason": str(reason or DEFAULT_REASON), "by": str(by or "user"),
                "force": bool(force), "at": _now_iso(), "sid": str(sid or ""),
                "path": str(path)}
+    if str(root_task_id or ""):
+        payload["root_task_id"] = str(root_task_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8", newline="\n")
@@ -153,12 +166,30 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     return payload, "created"
 
 
+def stop_scope(state: Mapping[str, Any] | None) -> dict[str, Any]:
+    """这把开关的作用面：`{"checked","scope","root_task_id","reason"}`。
+
+    - `scope="all"`：全工作区（老行为；缺省那一档）；
+    - `scope="subtree"`：只管 `root_task_id` 那一支（S4）；
+    - `checked=False`：读不成（`state` 不是 Mapping）⇒ 判不了，不许折成"全工作区"
+      （那会把一把子树开关变成全停）。
+    """
+    if not isinstance(state, Mapping):
+        return {"checked": False, "scope": "", "root_task_id": "",
+                "reason": "没有开关负载 ⇒ 作用面判不了"}
+    rid = str(state.get("root_task_id") or "")
+    return {"checked": True, "scope": "subtree" if rid else "all", "root_task_id": rid,
+            "reason": ""}
+
+
 def request_stop(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
                  force: bool = False, sid: str | None = None,
-                 explicit: str | Path | None = None) -> dict[str, Any]:
+                 explicit: str | Path | None = None,
+                 root_task_id: str = "") -> dict[str, Any]:
     """写下停机开关（幂等：已经有了就原样返回，不改第一次的理由）。
 
-    返回开关里那份负载（`{reason, by, force, at, sid, path}`）。
+    返回开关里那份负载（`{reason, by, force, at, sid, path}`，给了子树根时多一格
+    `root_task_id`）。
     为什么把理由与"谁说的"写进「文件内容」而不是只建一个空文件：
     "谁在什么时候为什么叫停"是事后唯一能回答"这一趟为什么停"的东西，
     而空文件只能回答"停过"。第一次写下的那份不许被后来的请求覆盖
@@ -168,7 +199,7 @@ def request_stop(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "u
     这里刻意保持旧签名与旧返回，免得调用方为了一个读数去改一遍。
     """
     return request_stop_detail(root, reason=reason, by=by, force=force, sid=sid,
-                               explicit=explicit)[0]
+                               explicit=explicit, root_task_id=root_task_id)[0]
 
 
 def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[str, Any] | None:
@@ -205,7 +236,7 @@ def history_path(root: str | Path) -> Path:
 
 
 def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop_file",
-                 explicit: str | Path | None = None) -> dict[str, Any]:
+                 explicit: str | Path | None = None, remove: bool = True) -> dict[str, Any]:
     """消费掉这一把开关：把"谁在什么时候为什么叫停、被哪一趟用掉"记进历史，然后撤掉它。
 
     ## 为什么必须撤（`draft/37` §140 的 bug，实测 `temp/_stop_probe.py`）
@@ -216,10 +247,18 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     改后：开关是一次性信号（停一趟、记一笔、撤走），下一次叫停要重新写一份
     （`request_stop` 于是不会把"用户第二次叫停"当成幂等请求吃掉）。
 
+    ## `remove=False`（S4，子树开关）：记一笔但不撤
+
+    子树开关（`stop_scope` = `"subtree"`）要一支上多个循环各自读到，所以只有
+    那一支的根（`my_task_id == root_task_id`）撤它；别的成员只记一笔（`level` 里带
+    自己是哪一档）—— 否则"先读到的那个把开关吃掉"，后面的成员静默不停
+    （与 §140 那个 bug 同一族，只是方向反过来）。
+    撤不掉/写不进历史都不改变"这一趟已收工"这个事实（照旧返回负载）。
+
     ## 为什么审计不丢
 
     历史行落在 `runs/stop-history.jsonl`（append-only）：`{…开关负载…, consumed_at,
-    consumed_by_sid, level}`；`agentflow stop --status` 在开关不在时会把它读出来。
+    consumed_by_sid, level, removed}`；`agentflow stop --status` 在开关不在时会把它读出来。
     """
     path = stop_path(root, explicit)
     state = read_stop(root, explicit=explicit)
@@ -230,7 +269,7 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
         return {}
     record = dict(state)
     record.update({"consumed_at": _now_iso(), "consumed_by_sid": str(sid or ""),
-                   "level": str(level or "stop_file")})
+                   "level": str(level or "stop_file"), "removed": bool(remove)})
     try:
         hist = history_path(root)
         hist.parent.mkdir(parents=True, exist_ok=True)
@@ -238,10 +277,11 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError:
         pass                      # 历史写不下去也不许让"停下"这件事失效
-    try:
-        path.unlink()
-    except OSError:
-        pass                      # 撤不掉（被别的进程占着）也要把"这一趟已收工"返回去
+    if remove:
+        try:
+            path.unlink()
+        except OSError:
+            pass                  # 撤不掉（被别的进程占着）也要把"这一趟已收工"返回去
     return record
 
 

@@ -470,6 +470,9 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
                       "description": "直接停：不等待收尾，并杀掉登记在盘的子进程（连子孙）"},
             "notify": {"type": "boolean",
                        "description": "是否在公共频道广播叫停（默认 true）"},
+            "root_task_id": {"type": "string",
+                             "description": "只停这一支（S4）：给一个实例号 ⇒ 开关只对"
+                                            "它和它的子孙生效；不给 = 全工作区（老行为）"},
         },
         "required": [],
         "additionalProperties": False,
@@ -480,7 +483,8 @@ def conductor_ledger(_conductor, view: str = "tree", root_task_id: str = "") -> 
              "'disposed','resume_brief','verify','stop_switch','notified','killed_children'}"),
 )
 def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
-                   force: bool = False, notify: bool = True) -> ToolResult:
+                   force: bool = False, notify: bool = True,
+                   root_task_id: str = "") -> ToolResult:
     """工具体：停止（优雅 = 喊停 → 有界收尾 → 合成终态 → 续跑简报；强制 = 直接停）。
 
     `draft/37` §128 加的两件（用户口径："优雅停止还要提醒那些 Agent 把发起的进程一起停掉，
@@ -509,7 +513,12 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     code = reason if reason in CANCEL_CODES else "user"
     if code != reason:
         mapped_from = reason
-    switch = stopctl.request_stop(root, reason=code, by=S.CONDUCTOR_ROLE, force=force, sid=sid)
+    # S4（`draft/90` E7）：给了 `root_task_id` ⇒ 这把开关只对那一支生效
+    # （`stop_scope` = `"subtree"`）；不给 = 全工作区（老行为逐字不变）。
+    # 撤开关的责任：那一支的根自己撤（`AgentLoop._stop_applies` 里那一格），
+    # 别的成员只记一笔 —— 谁先读到谁撤会让同支后面的人静默不停（§140 的反向形态）。
+    switch = stopctl.request_stop(root, reason=code, by=S.CONDUCTOR_ROLE, force=force, sid=sid,
+                                  root_task_id=root_task_id)
     notified = ""
     if notify:
         # 2026-10-08 晚（所有者 T18）：叫停广播改回留言。D07（用户 2026-10-05）当年
