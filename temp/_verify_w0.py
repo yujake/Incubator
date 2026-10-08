@@ -46,6 +46,22 @@ SRC = REPO / "agentflow" / "src"
 WS = REPO / "agentflow" / "projects" / "p9b-post-fix-replay"
 OUT = pathlib.Path(r"D:\Incubator\temp\_w0_public_face.json")
 
+#: **已登记的公开面修订**：`{名字: 理由}`。
+#:
+#: 为什么要有这张表：这个仪器的本职是"拆包不许动公开面"，而**公开面本身会到期收窄**
+#: （裁定 P1 的旧壳清仓就是一次）。没有登记表时，"少了一个公开名"只能是硬错 —— 那会让
+#: 一次**有意的、经过裁定的**收窄看起来像事故。登记之后：名单里的消失记"软（已登记修订）"，
+#: 名单外的消失照旧硬红（**判据没有放宽，只是把'已经解释过的那两个'与'没人解释的'分开**）。
+#:
+#: 为什么不按最初设想"把基线 JSON 里那两个键删掉"：删掉就把"这里曾经有过两个公开名、
+#: 它们在某天退场了"这件事的证据一起抹了。留着基线 + 登记理由，读的人能看到**变更本身**。
+PUBLIC_FACE_REVISIONS: dict[str, str] = {
+    "render_root": "2026-10-07 W5（裁定 P1 旧壳清仓）：`/` 改吐 SPA 外壳后生产路径零调用方；"
+                   "待答面板与一趟详情改由 `GET /api/state` / `GET /api/run/{sid}` 的 JSON 提供",
+    "render_run": "2026-10-07 W5（裁定 P1 旧壳清仓）：`/run/{sid}` 也改吐 SPA 外壳；"
+                  "`webui/views.py` 整件退场（484 行 → 不在盘上）",
+}
+
 sys.path.insert(0, str(SRC))
 
 import agentflow.webui as webui  # noqa: E402
@@ -137,9 +153,6 @@ def fingerprint(with_workspace: bool) -> dict:
     runs = state.get("runs") or []
     sid = runs[0].get("sid") if runs and isinstance(runs[0], dict) else None
     run_html = None
-    if sid:
-        code, html = webui.render_run(WS, sid, state)
-        run_html = {"status": code, **_html_shape(html)}
     out["state_shape"] = {
         "sessions": {"n": len(state.get("sessions") or []), "keys": _keys_of(state.get("sessions"))},
         "runs": {"n": len(runs), "keys": _keys_of(runs)},
@@ -151,16 +164,42 @@ def fingerprint(with_workspace: bool) -> dict:
         "last_run": sorted((state.get("last_run") or {}).keys()) if state.get("last_run") else [],
         "problems_n": len(state.get("problems") or []),
     }
-    out["render_root"] = _html_shape(webui.render_root(state))
+    # `render_root` / `render_run` 在 **W5（裁定 P1 的旧壳清仓）** 里按"公开面到期收窄"
+    # 退场了 ⇒ 这里必须**分支**而不是直接调：
+    #   · 旧树（基线那一版）：两个名字都在 ⇒ 照旧量页面形状（这样基线仍然可比）；
+    #   · 新树（收窄之后）：名字不在 ⇒ 记一条 `页面形状：不适用（旧壳已退场）`，
+    #     而不是让仪器以 AttributeError 崩掉（**W5 实测过这一点**：直接调会让整条对账
+    #     变成"仪器坏了"，把真正要看的那条"公开名少两个"埋在异常里）。
+    # 这**不是**把判据放宽：公开名的增删仍由 `public_names` 那一栏硬比（少一个就红），
+    # 变的只是"没有旧壳时不再去量旧壳的 HTML 形状"。
+    if hasattr(webui, "render_root"):
+        out["render_root"] = _html_shape(webui.render_root(state))
+    else:
+        out["render_root"] = {"retired": True,
+                              "why": "render_root 已在 W5（P1 旧壳清仓）退场：`/` 与 `/run/{sid}` 都吐 SPA 外壳"}
+    if sid and hasattr(webui, "render_run"):
+        code, html = webui.render_run(WS, sid, state)
+        run_html = {"status": code, **_html_shape(html)}
+    elif sid:
+        run_html = {"retired": True,
+                    "why": "render_run 已在 W5 退役；一趟详情改由 `GET /api/run/{sid}` 的 JSON 提供"}
     out["render_run"] = run_html
     return out
 
 
 def _diff_names(base: dict, now: dict, hard: list[str], soft: list[str]) -> None:
     gone = sorted(set(base) - set(now))
+    retired = [n for n in gone if n in PUBLIC_FACE_REVISIONS]
     if gone:
-        hard.append(f"公开名消失: {gone}")
-        print(f"  硬  公开名消失: {gone}")
+        unexpected = [n for n in gone if n not in PUBLIC_FACE_REVISIONS]
+        if retired:
+            soft.append(f"公开面修订（已登记）：{retired}")
+            print(f"  软  公开面修订（已登记，见 PUBLIC_FACE_REVISIONS）: {retired}")
+            for name in retired:
+                print(f"       · {name}：{PUBLIC_FACE_REVISIONS[name]}")
+        if unexpected:
+            hard.append(f"公开名消失: {unexpected}")
+            print(f"  硬  公开名消失（**未登记**）: {unexpected}")
     fresh = sorted(set(now) - set(base))
     if fresh:
         soft.append(f"新增公开名: {fresh}")
