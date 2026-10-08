@@ -56,6 +56,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -264,6 +265,64 @@ def lean_path_for(root: str | Path) -> str:
     return os.pathsep.join(str(p) for p in parts if p.is_dir())
 
 
+#: 实测 `import Mathlib` 的那一小段源码（`draft/83` §7 的 D70）。
+#:
+#: 为什么必须是真编译而不是查文件：2026-10-08 真机读数 —— `_env/` 那一份
+#: Mathlib 的 6 个依赖包（`std` / `aesop` / `importGraph` / `proofwidgets` / `Qq`）
+#: 是指向旧 `temp/` 落点的 junction，环境整体搬到 `_env/` 之后它们全部悬空。
+#: 于是 `Mathlib.olean` 在（文件面读数是"可用"），而每一次 `import Mathlib`
+#: 都报 `unknown package 'Std'`（T1 第 18 趟：形式化一条都没成，P8 判 0）。
+#: 文件在不在与"能不能编译"是两件事 —— 这一条探针就是把这个差别测出来。
+_IMPORT_MATHLIB_PROBE_SRC = (
+    "import Mathlib\n\n"
+    "theorem agentflow_mathlib_probe : (1 : Nat) + 1 = 2 := by norm_num\n"
+)
+
+
+@lru_cache(maxsize=4)
+def _import_mathlib_probe(root: str) -> dict[str, Any]:
+    """真编译一次 `import Mathlib`（按根缓存；探测自己崩了也如实报，不折成"可用"）。"""
+    from . import formalgw as FG
+
+    try:
+        res = FG.check_lean(_IMPORT_MATHLIB_PROBE_SRC, name="agentflow_mathlib_probe",
+                            timeout_sec=180)
+    except Exception as exc:  # noqa: BLE001 —— 探测崩了是"没查成"，不是"不可用"
+        return {"checked": False, "verified": None, "status": "probe_crashed",
+                "reason": f"这条探针自己崩了（{type(exc).__name__}: {exc}）",
+                "missing_imports": [], "elapsed_sec": None}
+    ev = res.get("evidence") or {}
+    status = str(res.get("status") or "")
+    return {
+        "checked": bool(ev.get("checked")),
+        "verified": bool(ev.get("proved")),
+        "status": status,
+        "reason": str(res.get("reason") or ""),
+        "missing_imports": [str(x) for x in (res.get("missing_imports") or [])],
+        "elapsed_sec": res.get("elapsed_sec"),
+        "exit_code": res.get("exit_code"),
+    }
+
+
+def _measured_mathlib_verdict(probe: Mapping[str, Any]) -> str:
+    """把探针读数变成一句人话（三态：可用 / 不可用 / 没查成）。"""
+    if probe.get("verified"):
+        secs = probe.get("elapsed_sec")
+        return ("可用（**实测**：真的编译了一次 `import Mathlib` + `norm_num`"
+                + (f"，{float(secs):.1f}s" if isinstance(secs, (int, float)) else "")
+                + "）")
+    if probe.get("checked"):
+        missing = probe.get("missing_imports") or []
+        return ("不可用（**实测**编译失败"
+                + (f"，缺的包：{'、'.join(str(m) for m in missing)}" if missing else "")
+                + f"；结论 {probe.get('status')}）—— 这一步是环境问题，不是命题问题："
+                  "先看 `toolchain.mathlib_root` 指的那份工程里依赖包（`std` 等）的 "
+                  "`.lake/build/lib` 在不在（搬过目录的 junction 会悬空）")
+    return ("没查成（探针没做成："
+            + str(probe.get("reason") or probe.get("status") or "没给理由")
+            + "）")
+
+
 def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Mathlib 那一轴的状态（三态）：工程根在不在、revision 与钉住的是否一致、能不能 import。
 
@@ -295,15 +354,30 @@ def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
                   Path(root) / ".lake" / "build" / "lib" / "lean" / "Mathlib.olean")
     umbrella = next((p for p in candidates if p.is_file()), None)
     lp = lean_path_for(root)
+    # D70（`draft/83` §7）：文件面读数（umbrella 在不在）不再单独代表"可用"，
+    # 另给一条真编译的探针读数。两者分栏的理由与真机读数见 `_import_mathlib_probe`。
+    probe: dict[str, Any] = {
+        "checked": False, "verified": None, "status": "not_attempted",
+        "reason": "umbrella 的 `.olean` 不在 ⇒ 不试编译（文件面读数已经给了结论）",
+        "missing_imports": [], "elapsed_sec": None,
+    }
+    if umbrella:
+        probe = _import_mathlib_probe(str(root))
     return {"checked": True, "root": root, "commit": got_commit, "tag": str(rev.get("tag") or ""),
             "source": str(rev.get("source") or ""), "reason": str(rev.get("reason") or ""),
             "pinned_commit": pinned_commit, "pinned_tag": pinned_tag, "pinned_match": same,
             "umbrella_olean": str(umbrella) if umbrella else "",
             "lean_path": lp, "lean_path_segments": len(lp.split(os.pathsep)) if lp else 0,
+            #: 文件面读数（历史口径，逐字保留：既有判据与文档都读它）。
             "import_mathlib": ("可用（umbrella 的 .olean 在；`LEAN_PATH` 用 lean_path 这一串，"
                                "检查器起子进程时要带上它）" if umbrella else
                                "不可用（两种布局都没找到 umbrella 的 .olean ⇒ import Mathlib 会报 "
-                               "import_unavailable；处置是编全 Mathlib 或只 import 缓存里有的模块）")}
+                               "import_unavailable；处置是编全 Mathlib 或只 import 缓存里有的模块）"),
+            #: 实测读数（D70）：真编译一次 `import Mathlib` + `norm_num`。
+            #: 判"这台机器能不能做形式化"要看这一条，不看上面那一条。
+            "import_mathlib_probe": probe,
+            "import_mathlib_measured": _measured_mathlib_verdict(probe),
+            }
 
 
 def _model_spec(env: Mapping[str, str] | None = None) -> Any:

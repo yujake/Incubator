@@ -86,6 +86,68 @@ from .. import evidencebits as _EB
 from ..refusals import refuse as _refuse
 
 
+def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
+    """把 `page_range` / `line_range` 归一化，返回 `(归一后的字典, 拒绝理由)`。
+
+    ## 为什么必须有这一级（`draft/83` §7 的 D71，T1 第 18 趟真机读数）
+
+    真机：主控派 `B.register_statement` 登记 Kuchment 那一条时，把页码写成了
+    字符串（`{"start": "343", "end": "414"}`）。它在库里一路走到
+    `S.PageRange.from_dict(...)`，而 `PageRange.__post_init__` 直接拿两个值比大小
+    （`self.start < 1` / `self.start > self.end`）⇒ `TypeError: '<' not supported
+    between instances of 'str' and 'int'` 从动作里抛出去，
+    台账上那一行落成 `failed`（"执行了、没成功"），而不是一条能读懂的拒绝
+    —— 于是"参数类型写错了"与"代码崩了"又被混成一件事（这一条与本节其余七级预检
+    是同一条纪律：要求写进模型看得见的形状，也在写入口拦下并命名）。
+
+    口径（三态，不猜）：
+
+    - `int` / 纯数字串（`"343"`）⇒ 归一成 `int`；
+    - `None` / 空串 ⇒ 保持"不知道"（篇幅与行号的"未知"是合法状态，由 `label` 表达）；
+    - 其余（`"343-414"` / `"p.343"` / 浮点 / 列表 / 布尔）⇒ 拒绝并说明收件格式。
+      布尔刻意不收：`True` 会被 `int()` 读成 1，悄悄造出一个页码。
+    - 形状不是对象 ⇒ 拒绝（`dict("abc")` 会抛，那是同一类崩溃）。
+
+    范围本身的合法性（`>=1`、`start <= end`）在这里也先判一遍：留到 `schema` 里判
+    就是"从事务里抛 `ValueError`"，调用方拿不到可读的 `kind`。
+    """
+    if raw is None or raw == "":
+        return {}, ""
+    if not isinstance(raw, dict):
+        return {}, (f"{what} 必须是对象（例如 {{\"start\": 343, \"end\": 414}} 或 "
+                    f"{{\"label\": \"全文未分页\"}}），收到 {type(raw).__name__}：{raw!r}")
+    out: dict = {}
+    for field in ("start", "end"):
+        if field not in raw:
+            continue
+        value = raw[field]
+        if value is None or value == "":
+            out[field] = None
+            continue
+        if isinstance(value, bool):
+            return {}, (f"{what}.{field} 收到布尔 {value!r} —— 页码要的是整数或纯数字串，"
+                        f"布尔会被读成 1/0 而悄悄造出一个页码")
+        if isinstance(value, int):
+            out[field] = value
+            continue
+        text = str(value).strip()
+        if text.isdigit():
+            out[field] = int(text)
+            continue
+        return {}, (f"{what}.{field} 必须是整数或纯数字串（如 343 或 \"343\"），"
+                    f"收到 {value!r} —— 形如 \"343-414\" / \"p.343\" 的写法请拆成 start/end，"
+                    f"或者只给 {what}.label 保留原始书写形态")
+    if "label" in raw and raw.get("label"):
+        out["label"] = str(raw["label"])
+    start, end = out.get("start"), out.get("end")
+    for name, value in (("start", start), ("end", end)):
+        if isinstance(value, int) and value < 1:
+            return {}, f"{what}.{name} 页码必须 >= 1，收到 {value}"
+    if isinstance(start, int) and isinstance(end, int) and start > end:
+        return {}, f"{what}.start({start}) 不能大于 {what}.end({end})"
+    return out, ""
+
+
 class _RegisterStatement:
     def _statement_bits(self, *, origin: str, lit_id: str, proof_text: str,
                         quote_verified: bool | None) -> tuple[dict, dict | None]:
@@ -153,6 +215,15 @@ class _RegisterStatement:
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
                            f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，收到 {origin!r}")
+        # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
+        # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
+        # `PageRange.__post_init__` 的比大小，`TypeError` 从动作里抛出去。
+        page_norm, page_bad = _normalize_range(page_range, what="page_range")
+        if page_bad:
+            return _refuse("bad_page_range", page_bad)
+        line_norm, line_bad = _normalize_range(line_range, what="line_range")
+        if line_bad:
+            return _refuse("bad_line_range", line_bad)
         evidence_kind = str(evidence_kind or "heuristic")
         if evidence_kind not in S.EVIDENCE_KINDS:
             return _refuse("bad_evidence_kind",
@@ -177,7 +248,7 @@ class _RegisterStatement:
         # 写入口与判据必须说同一件事：判据要求的东西，写入口在「进库之前」就要拦
         # （否则台账里会长期躺着一批"看着有、其实没有"的行，只有走完整审稿流程的人才会发现）。
         if origin == "external_lit":
-            page = dict(page_range or {})
+            page = dict(page_norm)
             if not (page.get("start") or str(page.get("label") or "").strip()):
                 return _refuse("missing_page_range",
                                "origin='external_lit' 时必须给出处页码："
@@ -192,7 +263,7 @@ class _RegisterStatement:
         #: （`tasks` 落 `failed`）。判据：`tests/test_intake_actions.py` 的四跳链。
         needs_proof = (str(origin) == "own_result" and not str(proof_text or "").strip())
         if str(origin) == "external_lit":
-            page = dict(page_range or {})
+            page = dict(page_norm)
             if not (page.get("start") or str(page.get("label") or "").strip()):
                 return _refuse("missing_page_range",
                                "origin='external_lit' 时必须给出处页码："
@@ -201,7 +272,7 @@ class _RegisterStatement:
                                "`{\"start\": null, \"end\": null}` 等于没给，"
                                "审稿判据会判这一行缺出处页码")
         elif str(origin) == "own_result":
-            line = dict(line_range or {})
+            line = dict(line_norm)
             if not (str(doc_id or "").strip()
                     or line.get("start") or str(line.get("label") or "").strip()):
                 return _refuse("missing_own_source",
@@ -276,14 +347,14 @@ class _RegisterStatement:
                 statement_full=full,
                 proof_text=str(proof_text or ""),
                 source_lit_id=lit_id or None,
-                page_range=S.PageRange.from_dict(page_range),
+                page_range=S.PageRange.from_dict(page_norm),
                 quote_verified=quote_verified,
                 quote_reason=str(quote_reason or ""),
                 evidence_kind=evidence_kind,
                 status="active",
                 derived_from=S.sorted_unique(list(derived_from or [])),
                 doc_id=str(doc_id or "") or None,
-                line_range=S.PageRange.from_dict(line_range),
+                line_range=S.PageRange.from_dict(line_norm),
                 bits=bits,
                 created_at=S.now_iso(),
                 created_by=self.actor,

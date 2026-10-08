@@ -267,6 +267,54 @@ def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
     assert {r["origin"] for r in rows} == {"external_lit", "own_result"}, rows
 
 
+def test_b_register_statement_normalizes_string_page_numbers(tmp_path: Path):
+    """`draft/83` §7 的 D71（T1 第 18 趟真机）：页码写成字符串不许把动作炸掉。
+
+    真机形状：主控派 `B.register_statement` 时给了
+    `page_range={"start": "343", "end": "414"}` —— 它在库里一路走到
+    `S.PageRange.from_dict`，而 `PageRange.__post_init__` 直接比大小
+    ⇒ `TypeError: '<' not supported between instances of 'str' and 'int'`
+    从动作里抛出去，`tasks` 那一行落 `failed`（"执行了、没成功"）。
+    这与"参数写错了"是两件事，台账必须分得开。
+
+    三态（不猜）：纯数字串归一成 int；非数字串/布尔/形状不对 ⇒ 带 kind 的拒绝；
+    `None`/空串仍是"不知道"（合法状态）。范围本身的合法性（>=1、start<=end）
+    也在写库前判，避免"从事务里抛 ValueError"。
+    """
+    st = _store(tmp_path)
+    lit_id = _lit(st, tmp_path)
+    b = AgentB(st, extractor=None, extract_text=None)
+
+    # 正控：数字串被归一成整数（不是原样塞进 schema）
+    ok = b.register_statement(source_lit_id=lit_id,
+                              **{**STATEMENT, "page_range": {"start": "343", "end": "414"}})
+    assert ok["ok"] is True, ok
+    row = st.rows("statements")[0]
+    assert row["page_range"]["start"] == 343 and row["page_range"]["end"] == 414, row["page_range"]
+    assert isinstance(row["page_range"]["start"], int), row["page_range"]
+
+    # 负控：不是数字的那种写法 ⇒ 一条可读的拒绝（kind 带在返回值里），而不是异常
+    for bad in ({"start": "343-414"}, {"start": "p.343"}, {"start": True}, ["343"]):
+        res = b.register_statement(source_lit_id=lit_id,
+                                  **{**STATEMENT, "page_range": bad})
+        assert res["ok"] is False and res["kind"] == "bad_page_range", (bad, res)
+    assert len(st.rows("statements")) == 1, "被拒的命题不许留下半行"
+
+    # 负控（范围本身）：start > end 与 < 1 都在写库前拒
+    for bad in ({"start": 414, "end": 343}, {"start": 0, "end": 5}):
+        res = b.register_statement(source_lit_id=lit_id,
+                                  **{**STATEMENT, "page_range": bad})
+        assert res["ok"] is False and res["kind"] == "bad_page_range", (bad, res)
+
+    # 边界：`line_range` 走同一条归一（`own_result` 的出处那一栏）
+    own = b.register_statement(**{**STATEMENT, "origin": "own_result", "source_lit_id": "",
+                                  "page_range": None, "doc_id": "0000",
+                                  "line_range": {"start": "120", "end": "148"}})
+    assert own["ok"] is True, own
+    own_row = [r for r in st.rows("statements") if r["origin"] == "own_result"][0]
+    assert own_row["line_range"]["start"] == 120, own_row["line_range"]
+
+
 def test_own_result_and_external_lit_want_different_source_fields(tmp_path: Path):
     """判据（甲档的两半）：`_c_statements` 按来源分档，两半各一条负控。
 

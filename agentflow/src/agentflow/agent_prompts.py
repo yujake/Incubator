@@ -1717,6 +1717,12 @@ def toolchain_facts_text() -> str:
     else:
         lines.append(f"- Mathlib：工程根 {mathlib['root']}；`import Mathlib` "
                      f"{mathlib.get('import_mathlib')}")
+        # D70（`draft/83` §7）：文件面读数不算数 —— 真编译过一次才算。
+        # 真机读数（2026-10-08，T1 第 18 趟）：`_env/` 那份 Mathlib 的依赖包 junction
+        # 在环境搬迁后悬空 ⇒ umbrella 在、`import Mathlib` 报 `unknown package 'Std'`，
+        # 而上一行照样写"可用"，模型照着它试了 4 次形式化（全部没查成）。
+        lines.append(f"- Mathlib 实测（真编译一次 `import Mathlib`）："
+                     f"{mathlib.get('import_mathlib_measured')}")
     if mathlib.get("umbrella_olean"):
         # 这一支是 2026-10-05 补的（T1 第 16 趟的真机读数）：此前无论是哪一支，
         # 最后一行都写死"可达的写法是不 import Mathlib 的自足文件" —— 在 Mathlib

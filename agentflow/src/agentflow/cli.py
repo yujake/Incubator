@@ -1870,6 +1870,13 @@ def cmd_doctor(args) -> int:
                                        f"（{'与钉住的一致' if ml.get('pinned_match') else '与钉住的不一致'}）"
                                        f" ⇒ import Mathlib {ml.get('import_mathlib')}"
                                        if ml.get("root") else str(ml.get("reason")))))
+        if ml.get("root"):
+            # D70（`draft/83` §7）：文件面读数不算数 —— 真编译过一次才算。
+            # 真机读数（2026-10-08）：依赖包的 junction 在环境搬迁后悬空，
+            # umbrella 在、而 `import Mathlib` 报 `unknown package 'Std'`，
+            # 上面那一行照样写"可用"。
+            print(tty.bullet("Mathlib 实测（真编译一次 `import Mathlib`）："
+                             + str(ml.get("import_mathlib_measured"))))
         print(tty.bullet("结论：" + ("这一趟能做形式化核验（proof 级证据可达）"
                                      if rep["can_do_formal"] else
                                      "这一趟做不了形式化核验（会如实报没核到）")))
