@@ -1126,6 +1126,46 @@ class Conductor:
         out.sort(key=lambda x: (x["child_task_id"], x["attempt"]))
         return {"checked": True, "edges": out, "reason": ""}
 
+    def keep_alive_of(self, task_id: str) -> dict[str, Any]:
+        """这一项/这个代理声明的"做完还待命"（A6=丙）。`{"checked","keep_alive","reason"}`。
+
+        ## 声明落在派活项上，不在代理行上
+
+        `schema.Task.validate` 只允许 `kind == "delegation"` 的行带 `keep_alive`
+        （"只有派活项才谈得上待命"）。所以对代理行问这一格时，读的是
+        它名下最新的那条派活项（= 父最后一次派给它那件活时的声明）。
+
+        ## 判据用的是哪一半（`draft/92` §15.6 的订正）
+
+        主控先前把它读成"待命的父不许消边"——读错了：业主 §1.9 的三分支里
+        "在等待"正是可以退役的那一支，只要它自己名下没有活跃子代理。
+        所以这一格只回答"它是不是声明过待命"，不参与"能不能退役"的判定
+        （那一条由秘书的三分支说，S1k；"活跃 / 在等待"由 `active_children` 说）。
+
+        三态：没有那一行 / 读不成 ⇒ `checked=False`（不许折成"没声明过"）。
+        """
+        try:
+            row = self._task(task_id)
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "keep_alive": False,
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        if row is None:
+            return {"checked": False, "keep_alive": False,
+                    "reason": f"台账里没有 {task_id!r}"}
+        if str(row.get("kind") or "") == "delegation":
+            return {"checked": True, "keep_alive": bool(row.get("keep_alive")), "reason": ""}
+        try:
+            items = [r for r in self._tasks()
+                     if r.get("parent_task_id") == task_id
+                     and str(r.get("kind") or "") == "delegation"]
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "keep_alive": False,
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        if not items:
+            return {"checked": True, "keep_alive": False, "reason": ""}
+        items.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+        return {"checked": True, "keep_alive": bool(items[-1].get("keep_alive")), "reason": ""}
+
     def board_readings(self) -> dict[str, Any]:
         """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。"""
         try:
