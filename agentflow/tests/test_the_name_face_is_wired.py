@@ -226,13 +226,13 @@ def test_roster_of_a_sibling_is_refused_and_no_secretary_is_three_state(tmp_path
 # ---------------------------------------------------------------- 解码器那一段（真机抓出来的）
 
 def test_the_two_new_shapes_survive_the_decoder(tmp_path: pathlib.Path):
-    """正控（**真机抓出来的缺口**）：`retire` / `roster` 必须过得了解码器。
+    """正控（真机抓出来的缺口）：`retire` / `roster` 必须过得了解码器。
 
-    M2 的 K1 探针实测（2026-10-09）：模型**完全按提示词**写了 `{"retire": {"name": "D1"}}`，
+    M2 的 K1 探针实测（2026-10-09）：模型完全按提示词写了 `{"retire": {"name": "D1"}}`，
     而 `_decode_shape` 当时没有这两支 ⇒ 它们一路掉进 `final` 兜底 ⇒ payload 变成
     `{"final": "{\\"name\\": \\"D1\\"}"}` ⇒ `_do_retire` 读不到 `name`、连拒 6 次
     「要退谁：`name` 是名册名，不能空」、12 步用尽（`outcome=no_result`）。
-    S1k-3 的判据**直接打在 `_do_retire` / `_do_roster` 上**，所以单测全绿 ——
+    S1k-3 的判据直接打在 `_do_retire` / `_do_roster` 上，所以单测全绿 ——
     这一条补的就是"从模型的原始回复到形状"那一段路（`_shape_of` 是唯一入口）。
     """
     from agentflow.agent_loop import _shape_of

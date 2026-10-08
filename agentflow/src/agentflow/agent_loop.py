@@ -1394,7 +1394,7 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
                      "why": str(value.get("why") or "")}, ""
     if key in ("retire", "roster"):
         # 名册面的两个形状（S1k-2 加进 `SHAPES`、S1k-3 的判据直接打在 `_do_retire` /
-        # `_do_roster` 上）—— **解码器当时漏了这两支**，于是它们一路掉进下面那个
+        # `_do_roster` 上）—— 解码器当时漏了这两支，于是它们一路掉进下面那个
         # `final` 兜底：真机实测（M2 的 K1 探针，2026-10-09）模型写
         # `{"retire": {"name": "D1"}}`，落成 payload `{"final": "{\"name\": \"D1\"}"}`，
         # `_do_retire` 读不到 `name` ⇒ 连拒 6 次「要退谁：`name` 是名册名，不能空」、
@@ -1409,7 +1409,7 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
                                 "「要退谁」只能用名册名说，绝对编码不是父子之间的指称")
             return key, {"name": name}, ""
         of = str(value.get("of") or "self").strip() or "self"
-        # `of` 只做"是不是字符串"这一层：**可见面**由读侧判（`_do_roster` 对越界的名字
+        # `of` 只做"是不是字符串"这一层：可见面由读侧判（`_do_roster` 对越界的名字
         # 受控拒绝并点名"越界"）—— 解码器预判"这个名字算不算数"会把两件事混起来，
         # 而其中一件（我能不能看）只有读侧知道。
         return key, {"of": of}, ""
@@ -2677,8 +2677,13 @@ class AgentLoop:
     def _ack_stop_notice(self, item_id: str, step: int) -> str:
         """这一趟读到的停止通知：替它 ack（返回一句读数，空串 = 不是通知项/没成）。
 
-        只对 `kind="notice"` 且 `expects="ack"` 的项动手（别的板项要模型自己交付）。
-        `ack` 走 `close_item(close=f"acked@<时间>")` —— 于是"通知了"与"通知到了"
+        只对停止通知动手，判据是 `input_key` 以 `stop-notice@` 开头
+        （`Conductor.notify_children_of_stop` 开的那一种）。别的 `notice`/`expects=ack` 项
+        —— 子代理的交差通报、`message` 项 —— 不许在这里被 ack：它们是"要人处置的事"，
+        框架替它 ack 会让"父还没看"这件事实消失（实测：`test_retire_ready_is_a_reading_not_an_action`
+        与 `test_children_and_parent_are_visible` 当场变红，正是这条边界）。
+
+        `ack` 走 `close_item(close="acked")` —— 于是"通知了"与"通知到了"
         在 `stop_edge_readings` 里分得开（`acked_at` 非空才算传到）。
         """
         cond = self.conductor
@@ -2692,6 +2697,8 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 —— 读不成就不 ack（宁可不 ack，不许乱 ack）
             return ""
         if str(row.get("kind") or "") != "notice" or str(row.get("expects") or "") != "ack":
+            return ""
+        if not str(row.get("input_key") or "").startswith("stop-notice@"):
             return ""
         if str(row.get("item_state") or "") == "done":
             return ""
