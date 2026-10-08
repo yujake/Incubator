@@ -3563,6 +3563,13 @@ class LlmBackend:
     #: 用户叫停的开关文件（见 `AgentLoop.stop_file` 的同名注释）：由 CLI 在「单趟」
     #: `run-agent` 时接上；多轮的自主跑刻意留空（那一档的停机点在每轮之间）。
     stop_file: str = ""
+    #: 按实例的面造注册表（S1n-c，业主 T23）：`surface -> registry`。
+    #:
+    #: 为什么是工厂而不是"后端自己造"：`LlmBackend` 手上只有一个共用注册表，
+    #: 而装配参数（`store` / `conductor` / `providers` / …）只有调用方知道 ⇒
+    #: 调用方给一个工厂，这里只负责"这一趟该用哪一个"。
+    #: 不给工厂（或那一趟没有面）⇒ 用共用的 `registry`，老行为逐字不变。
+    registry_factory: Any = None
     name = "llm"
 
     def known_roles(self) -> list[str]:
@@ -3585,28 +3592,39 @@ class LlmBackend:
         # 秘书」自动派生（这里给了 store/registry/seam/sid，正是派生需要的四样）。
         # 别"顺手"补一个 `secretary=None` —— 那会把这条路上的秘书关掉，
         # 而真机读数正是"批量路写不出自撰交差行"（1562 行全框架派生，模型自撰 0）。
-        loop = AgentLoop(role=role, session_root=self.session_root, registry=self.registry,
-                         seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
-                         workspace_root=self.workspace_root, sid=self.sid, token=token,
-                         store=self.store, stop_file=self.stop_file)
         row = self._running_row(role, task_id)
-        # 读写面（S1n-b，业主 T23）：从父的名册里读这一行的面
-        # （`out/roster/<父代号>.jsonl` 的 `surface` 那一格）。读不到 ⇒ 不切面（老行为逐字不变）。
+        # 读写面（S1n-b/c，业主 T23）：从父的名册里读这一行的面
+        # （`out/roster/<父代号>.jsonl` 的 `surface` 那一格，两级查见 `Secretary.surface_of`）。
+        # 读不到 ⇒ 不切面（老行为逐字不变）。
         child_surface = ""
         try:
-            from .secretary import Secretary as _Sec, surface_dir as _sdir
+            from .secretary import Secretary as _Sec
 
             parent_tid = str(row.get("parent_task_id") or "")
             own_tid = str(row.get("task_id") or params.get("_task_id") or "")
             if parent_tid and own_tid:
-                roster = _Sec(role, root=self.session_root,
-                              store=self.store).roster_rows(parent_tid)[0]
-                slot = next((str(r.get("surface") or "") for r in roster
-                             if str(r.get("task_id") or "") == own_tid), "")
-                if slot:
-                    child_surface = str(_sdir(self.session_root, parent_tid, slot))
+                found = _Sec(role, root=self.session_root,
+                             store=self.store).surface_of(owner=parent_tid, task_id=own_tid)
+                child_surface = str(found.get("path") or "") if found.get("checked") else ""
         except Exception:  # noqa: BLE001 —— 面读不成不打断这一趟（但也不假装切过）
             child_surface = ""
+        # S1n-c：这一趟用哪一个注册表 —— 有面且有工厂 ⇒ 按面造一个
+        # （面就是这一趟的 `fs.*` 根，业主 T23 的"面 = 新的根"）；否则共用那个。
+        child_registry = self.registry
+        if child_surface and callable(self.registry_factory):
+            try:
+                child_registry = self.registry_factory(child_surface)
+            except Exception:  # noqa: BLE001 —— 造不出来就退回共用（并在结果里留痕）
+                child_registry = self.registry
+        loop = AgentLoop(role=role, session_root=self.session_root,
+                         registry=child_registry,
+                         seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
+                         # S1n-c：注册表按面造时，`workspace_root` 也跟着面走 ——
+                         # 否则 `_surface_refusal` 会拿工作区当基准，把面内的裸相对路径判成越界
+                         # （实测：子代理写 `笔记.md` 被拒，而它本该落在自己的面里）。
+                         workspace_root=child_surface or self.workspace_root,
+                         sid=self.sid, token=token,
+                         store=self.store, stop_file=self.stop_file)
         run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
                        summoned_by=str(row.get("called_by") or params.get("_summoned_by")
                                        or S.CONDUCTOR_ROLE),

@@ -1728,6 +1728,40 @@ class Secretary:
             return "待释放", f"池事件没写成：{why2}"
         return state, ""
 
+    def surface_of(self, *, owner: str, task_id: str) -> dict[str, Any]:
+        """某个调用行「此刻」该用的读写面：`{"checked","name","slot","path","reason"}`。
+
+        为什么必须两步查（实测踩过）：`task_id` 的当前值在对照表里（`_fold_index`
+        认 `bind`），而名册的 `add` 行记的是第一次那个调用 ⇒ 只读名册会把
+        "复用过的名字"（`draft/92` I-12）判成"这一行没有面"，于是那一趟静默不切面。
+        顺序：对照表 `task_id → name`，再名册 `name → surface`。
+
+        已退役 ⇒ `checked=False`：退役时槽位已经归还池里，可能已经分给别人了，
+        照旧读出那个槽位就等于让两个人的面重叠（跨代理写同一份文件）。
+        读不成一律 `checked=False`（调用方按"没切面"处理，不许假装切过）。
+        """
+        name, why = self.name_of(owner=owner, task_id=str(task_id))
+        if not name:
+            return {"checked": False, "name": "", "slot": "", "path": "",
+                    "reason": why or f"对照表里没有 {task_id!r}"}
+        rows, bad = self.roster_rows(owner)
+        if bad:
+            return {"checked": False, "name": name, "slot": "", "path": "",
+                    "reason": f"名册有 {len(bad)} 行读不出来：{bad[0]}"}
+        item = next((r for r in rows if str(r.get("name") or "") == name), None)
+        if item is None:
+            return {"checked": False, "name": name, "slot": "", "path": "",
+                    "reason": f"名册里没有 {name}（对照表里有 ⇒ 半份登记）"}
+        if item.get("retired"):
+            return {"checked": False, "name": name, "slot": "", "path": "",
+                    "reason": f"{name} 已退役 ⇒ 面已归还池里（不照旧读，免得与别人重叠）"}
+        slot = str(item.get("surface") or "")
+        if not slot:
+            return {"checked": False, "name": name, "slot": "", "path": "",
+                    "reason": f"{name} 名下没登记读写面（老项或补登记）"}
+        return {"checked": True, "name": name, "slot": slot,
+                "path": str(surface_dir(self.root, owner, slot)), "reason": ""}
+
     def roster_repair(self, *, owner: str) -> tuple[int, str]:
         """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。返回 `(补了几条, 问题)`。
 
