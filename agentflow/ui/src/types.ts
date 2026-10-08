@@ -442,7 +442,7 @@ export interface HandoffRow {
   ref_problems?: Record<string, string>;
 }
 
-/** 出处：out/secretary/<角色>.jsonl 的行（`secretary.Secretary.note_decision` 写的；`decision`/`reason`/`basis` 等是「有就带上」的几栏）。 */
+/** 出处：out/secretary/<角色>.jsonl（老文件）与 out/secretary/<角色>-<实例号>.jsonl（S1m 起的分片）的行（`secretary.Secretary.note_decision` 写的；`decision`/`reason`/`basis` 等是「有就带上」的几栏）。`task_id` 是 S1m 补的那一格：分片之后「这一行是哪一个实例写的」必须读得出来。 */
 export interface SecretaryDecision {
   role: string;
   seq: number;
@@ -451,6 +451,7 @@ export interface SecretaryDecision {
   duty: number;
   from: string;
   fail_open: boolean;
+  task_id?: string;
   decision?: string;
   judge?: Record<string, unknown>;
   reason?: string;
@@ -473,7 +474,7 @@ export interface ReportStyle {
   sections: string[];
 }
 
-/** 出处：store.rows("tasks")（真机 p9b/data/tasks.json 19 键）。 */
+/** 出处：store.rows("tasks")（真机 p9b/data/tasks.json 19 键 + 工作项板那 7 格；板那 7 格是 S0/S1b 扩列之后补进来的 —— 真机上它们今天全是空值（`draft/94` §4：2276 行里 `kind` 非空 0 行），但列**在**，所以类型必须跟上）。 */
 export interface TaskRow {
   task_id: string;
   role: string;
@@ -494,6 +495,13 @@ export interface TaskRow {
   instance: string;
   artifacts: string[];
   inputs: string[];
+  kind: string;
+  expects: string;
+  item_state: string;
+  item_close: string;
+  seen_by: string;
+  seen_step: number | null;
+  keep_alive: boolean;
 }
 
 /** 出处：store.rows("conjectures")（真机 p9b/data/conjectures.json；无样本时以 `schema.Conjecture` 为准）。 */

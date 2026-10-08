@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -86,15 +87,99 @@ KIND_DECISION = "secretary_decision"
 DECISIONS = ("可派", "建议重排", "建议改派", "建议不派", "已优化", "已提醒", "已执笔")
 
 
-def decisions_path(root: str | Path, role: str) -> Path:
-    """这一名秘书的决定台账路径（每角色一份，绝不混写 —— `draft/53` §5 的防错①）。
+def decisions_path(root: str | Path, role: str, task_id: str = "") -> Path:
+    """这一名秘书的决定台账路径。
+
+    - `task_id` 空 ⇒ 老文件 `out/secretary/<role>.jsonl`（每角色一份，绝不混写 ——
+      `draft/53` §5 的防错①）：历史行仍然在这里，读侧必须继续读得到；
+    - `task_id` 给了 ⇒ 分片 `out/secretary/<role>-<task_id>.jsonl`（S1m）：
+      一实例一片、一个写者一片，于是同角色的并发实例（`summon_many` 的多 `instance`）
+      不再往同一个文件里挤（D106/D107 的修法）。
 
     注意：名字刻意不叫 `ledger_path` —— 那个名字在 `artifacts.py`（产物归属台账）与
     `signatures.py`（签名台账）里各有一份独立实现，而秘书的决定台账与它们不是
     同一件事 —— 合并它们会把三件不同的事折成一个（lint R003 的口径是"同一判据
     的两份实现必须合并"，这里恰恰不是同一判据，所以正确的做法是改名字而不是合并）。
     """
-    return Path(root).joinpath(*SECRETARY_DIR, f"{role}.jsonl")
+    name = f"{role}-{task_id}.jsonl" if str(task_id or "") else f"{role}.jsonl"
+    return Path(root).joinpath(*SECRETARY_DIR, name)
+
+
+#: 同一进程里按路径复用的追加锁（与 `sessions.append` 同一做法）。
+_APPEND_LOCKS: dict[str, Any] = {}
+_APPEND_LOCKS_GUARD = threading.Lock()
+
+
+def _append_lock(path: Path) -> Any:
+    """同一路径的进程内锁（`filelock` 在同进程里不是线程安全的，两层都要）。"""
+    key = str(path)
+    with _APPEND_LOCKS_GUARD:
+        lock = _APPEND_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _APPEND_LOCKS[key] = lock
+        return lock
+
+
+def append_jsonl(path: str | Path, rec: Mapping[str, Any]) -> tuple[bool, str]:
+    """唯一的秘书台账追加口（S1m）：进程内锁 + 跨进程 `filelock`，`seq` 在锁内算。
+
+    返回 `(写成了吗, 问题)`。为什么必须集中到一处（`draft/91` §7 的 D107）：旧写法是
+    "先读全表算 `seq = max+1`、再 `path.open("a")` 追加" —— 读与写之间没有锁，
+    同角色的两个实例并发时会拿到同一个 `seq`（与 `_write_new_row` 修过的那个缺陷同族）。
+
+    `seq` 的口径是每片自增（片就是"一个实例的账"），所以两片之间 `seq` 可以重复 ——
+    合并视图（`Secretary.merged_decisions`）按 `at` 排序，不靠 `seq` 全局唯一。
+    """
+    from filelock import FileLock
+
+    target = Path(path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    line = json.dumps(dict(rec), ensure_ascii=False, sort_keys=True) + "\n"
+    with _append_lock(target):
+        try:
+            with FileLock(str(target) + ".lock", timeout=30.0):
+                seq = 1
+                if target.is_file():
+                    text = target.read_text(encoding="utf-8", errors="replace")
+                    for raw in text.splitlines():
+                        raw = raw.strip()
+                        if not raw:
+                            continue
+                        try:
+                            row = json.loads(raw)
+                        except Exception:  # noqa: BLE001 —— 坏行不参与取号
+                            continue
+                        if isinstance(row, dict):
+                            seq = max(seq, int(row.get("seq") or 0) + 1)
+                out = dict(rec)
+                out["seq"] = seq
+                line = json.dumps(out, ensure_ascii=False, sort_keys=True) + "\n"
+                with target.open("a", encoding="utf-8", newline="\n") as fh:
+                    fh.write(line)
+        except Exception as exc:  # noqa: BLE001 —— 写不成要如实报（调用方留痕）
+            return False, f"{type(exc).__name__}: {exc}"
+    return True, ""
+
+
+def _pid_alive(pid: int) -> bool:
+    """这个 pid 还活着吗 —— 复用 `stopctl.alive`（一处实现，不抄第二份）。
+
+    为什么不自己写：探活在 Windows 上有两个坑，`stopctl.alive` 的 docstring 逐字记着 ——
+    `tasklist` 在沙箱里拿不到读数（本机实测：登记了自己的 pid 也判"不活着"），
+    而 `os.kill(pid, 0)` 在 Windows 上不是探活、它会 `TerminateProcess`。
+    本模块第一版正是踩了第一个坑（自己起 `tasklist` + 管子拿输出 ⇒ 沙箱里 EPERM），
+    冒烟时就判出自己的 pid "不活着"。
+    """
+    try:
+        from . import stopctl
+
+        return bool(stopctl.alive(int(pid)))
+    except Exception:  # noqa: BLE001 —— 查不成 ⇒ "不知道"，由调用方的三态说
+        return False
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
@@ -174,6 +259,10 @@ class Secretary:
         #: 而不是"读遍本文件找不到 store.tx 所以大概没有"。
         self.writes: frozenset[str] = frozenset()
         self._negotiations: list[dict[str, Any]] = []
+        #: 这个秘书服务的实例（台账号）。由 `bind_task` 在循环开跑时绑上（S1m）：
+        #: 绑上之后台账分片到 `out/secretary/<role>-<task_id>.jsonl`，于是同角色的并发实例
+        #: 各写各的片（今天只有角色维度 ⇒ 两个 D 实例会把记录写进同一个文件，读的人分不出是谁）。
+        self.task_id: str = ""
         #: 最近一次判断的墙钟（秒）与最近一次闭环该不该介入的读数 —— 都是读数，
         #: 不是判据（fail-open 的代价要看得见，但不许拿它去卡任何一条委托）。
         self._last_judge_elapsed = 0.0
@@ -181,12 +270,116 @@ class Secretary:
 
     # ------------------------------------------------------------ 台账（E 类：记录）
 
+    def bind_task(self, task_id: str) -> None:
+        """把这一名秘书绑到它服务的实例上（S1m）。绑上之后台账分片。
+
+        为什么必须有这一步：秘书的台账先前只有角色维度
+        （`out/secretary/<role>.jsonl`），而同角色的并发实例（`summon_many` 的多 `instance`）
+        会写进同一个文件 —— 读的人分不出哪一行是哪一个代理写的（`draft/91` §7 的 D106）。
+        绑定之后每一实例一片（`<role>-<task_id>.jsonl`），一个写者一片。
+        同时写一份存活标记（`secretary_alive` 读它）——"与它同生同死"的第一半。
+        """
+        self.task_id = str(task_id or "")
+        if not self.task_id:
+            return
+        try:
+            path = self.decisions_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            alive = self.alive_path()
+            alive.write_text(json.dumps({"role": self.role, "task_id": self.task_id,
+                                         "pid": __import__("os").getpid(),
+                                         "at": _now_iso()}, ensure_ascii=False) + "\n",
+                             encoding="utf-8", newline="\n")
+        except OSError as exc:  # 留痕失败不许带走这一趟（但也不静默）
+            self._log(f"秘书存活标记没写成：{type(exc).__name__}: {exc}")
+
+    def close(self) -> dict[str, Any]:
+        """收尾：注销存活标记，返回读数（"同生同死"的第二半）。失败也如实报。"""
+        out: dict[str, Any] = {"checked": True, "closed": False, "reason": "", "task_id": self.task_id}
+        if not self.task_id:
+            out["checked"] = False
+            out["reason"] = "这一名秘书没绑定实例（没有分片、也没有存活标记）"
+            return out
+        try:
+            self.alive_path().unlink(missing_ok=True)
+            out["closed"] = True
+        except OSError as exc:  # 删不掉不影响"这一趟结束了"这个事实，但要留痕
+            out["reason"] = f"{type(exc).__name__}: {exc}"
+            self._log(f"秘书存活标记没删掉：{out['reason']}")
+        return out
+
+    def alive_path(self) -> Path:
+        """存活标记的路径（按实例分片，与台账同一命名规则）。"""
+        return Path(str(self.decisions_path()) + ".alive")
+
+    def secretary_alive(self) -> dict[str, Any]:
+        """这一名秘书"还活着吗"（三态）：`{"checked","alive","pid","at","reason"}`。
+
+        口径：标记在 = 绑过；`pid` 还活着 = 真的在跑（进程死了但标记还在 ⇒
+        `alive=False` 且 `stale=True`，"上次没善终"是看得见的事实）。读不到标记 ⇒
+        `checked=False`（"没查成"与"没绑过"分开）。
+        """
+        out: dict[str, Any] = {"checked": False, "alive": False, "pid": 0, "at": "",
+                               "stale": False, "reason": ""}
+        try:
+            raw = self.alive_path().read_text(encoding="utf-8")
+        except FileNotFoundError:
+            out["checked"] = True
+            out["reason"] = "没有存活标记（没绑过实例，或已经注销）"
+            return out
+        except OSError as exc:
+            out["reason"] = f"{type(exc).__name__}: {exc}"
+            return out
+        try:
+            got = json.loads(raw.strip().splitlines()[0])
+        except Exception as exc:  # noqa: BLE001 —— 标记坏了 = 没读成，不许折成"死"
+            out["reason"] = f"标记读不成：{type(exc).__name__}: {exc}"
+            return out
+        out["checked"] = True
+        out["pid"] = int(got.get("pid") or 0)
+        out["at"] = str(got.get("at") or "")
+        out["alive"] = _pid_alive(out["pid"])
+        out["stale"] = not out["alive"]
+        return out
+
+    def decisions_path(self, task_id: str | None = None) -> Path:
+        """这一名秘书的台账路径（S1m 起分片）：绑了实例 ⇒ 分片，没绑 ⇒ 老文件。
+
+        `task_id` 显式给了就用它；不给就用 `self.task_id`（`bind_task` 绑的那个）。
+        """
+        return decisions_path(self.root, self.role, task_id if task_id is not None else self.task_id)
+
     def decisions(self) -> list[dict[str, Any]]:
         """本角色台账里的全部行（坏行读不出来 ⇒ 如实报，不折成"没有决定"）。
 
         `read_jsonl` 把坏行单独报出来；这里只交回行，坏行由 :meth:`decision_problems` 报。
+        口径（S1m）：老文件 + 本实例分片（绑了才读第二份）—— 这是"这一名秘书"的视角；
+        整角色的合并视图是 `merged_decisions`（WebUI 直接 glob 目录，读得到全部片）。
         """
         return self._read_ledger()[0]
+
+    def merged_decisions(self) -> list[dict[str, Any]]:
+        """整角色视图：老文件 + 全部 `<role>-*.jsonl` 分片（按 `at`/`seq` 排序）。
+
+        为什么要它：分片之后"这个角色的秘书都决定过什么"需要一处读侧
+        （`knowledge()` 与 WebUI 那一面都靠它），否则读的人会以为"分片 = 记录变少了"。
+        坏行照样只报不折。
+        """
+        from . import jsonlfile as JF
+
+        rows: list[dict[str, Any]] = []
+        base = Path(self.root).joinpath(*SECRETARY_DIR)
+        paths = []
+        for name in (f"{self.role}.jsonl", *(p.name for p in
+                                            sorted(base.glob(f"{self.role}-*.jsonl")))):
+            p = base / name
+            if p.is_file() and p not in paths:
+                paths.append(p)
+        for p in paths:
+            got, _bad = JF.read_jsonl(p)
+            rows.extend(got)
+        rows.sort(key=lambda r: (str(r.get("at") or ""), int(r.get("seq") or 0)))
+        return rows
 
     def decision_problems(self) -> list[str]:
         """台账里的坏行说明（空列表 = 全都读得出来）。"""
@@ -195,7 +388,12 @@ class Secretary:
     def _read_ledger(self) -> tuple[list[dict[str, Any]], list[str]]:
         from . import jsonlfile as JF
 
-        return JF.read_jsonl(decisions_path(self.root, self.role))
+        rows, problems = JF.read_jsonl(decisions_path(self.root, self.role))
+        if self.task_id:
+            got, bad = JF.read_jsonl(self.decisions_path())
+            rows = rows + got
+            problems = problems + bad
+        return rows, problems
 
     def note_decision(self, *, duty: int, kind: str = KIND_DECISION, decision: str = "",
                       reason: str = "", basis: Sequence[str] = (), target: Any = None,
@@ -206,13 +404,14 @@ class Secretary:
 
         原文与加工后并列（`before` / `after`）：只留结论会让复核无从下手 ——
         "过程"是这一层唯一能自证的东西。
+
+        写入走 `append_jsonl`（S1m）：锁内算 `seq`、进程内 + 跨进程两层锁。
+        旧写法（先读全表算 `seq`、再裸 `open("a")`）在并发下会重号（D107）。
         """
-        rows, _problems = self._read_ledger()
-        seq = max((int(r.get("seq") or 0) for r in rows), default=0) + 1
         rec: dict[str, Any] = {
-            "seq": seq,
             "at": _now_iso(),
             "role": self.role,
+            "task_id": self.task_id,
             "duty": int(duty),
             "kind": str(kind or KIND_DECISION),
             "from": f"secretary/{self.role}",
@@ -240,16 +439,22 @@ class Secretary:
             rec["mid"] = str(mid)
         if error:
             rec["error"] = str(error)
-        path = decisions_path(self.root, self.role)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8", newline="\n") as fh:
-                fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
-        except OSError as exc:
+        path = self.decisions_path()
+        ok, problem = append_jsonl(path, rec)
+        if not ok:
             # 台账写不成不许带走秘书的判断（fail-open 的第一层：留痕是手段不是目的）。
             # 但也不静默：日志口子与返回值两条路都留下这件事。
-            self._log(f"秘书台账没写成：{type(exc).__name__}: {exc}")
-            rec["ledger_problem"] = f"{type(exc).__name__}: {exc}"
+            self._log(f"秘书台账没写成：{problem}")
+            rec["ledger_problem"] = problem
+            return rec
+        # 写成了：把锁内定的 `seq` 读回来（`append_jsonl` 返回的是"写成没写成"；
+        # 这里再读一次只为把 `seq` 放进返回值 —— 与旧行为对齐，读侧仍然只认盘上的那一行）。
+        rows, _bad = self._read_ledger()
+        for row in reversed(rows):
+            if (str(row.get("at") or "") == str(rec.get("at") or "")
+                    and str(row.get("kind") or "") == str(rec.get("kind") or "")):
+                rec["seq"] = int(row.get("seq") or 0)
+                break
         return rec
 
     # ------------------------------------------------------------ 知识面（只读，§1）
@@ -277,6 +482,11 @@ class Secretary:
             "writes": self.writes,
             "reads_narrative": False,
             "ledger": str(decisions_path(self.root, self.role)),
+            #: S1m 的两格：绑过实例 ⇒ 分片路径非空（"我这一名秘书"的账在这儿）；
+            #: `ledger_legacy` 是历史那一份（老工作区里全部决定都在它里面）。
+            #: 三格都给，是因为分片之后"这个角色的账在哪"必须读得出来（否则读侧会以为记录变少了）。
+            "ledger_instance": str(self.decisions_path()) if self.task_id else "",
+            "ledger_legacy": str(decisions_path(self.root, self.role)),
         }
 
     def may_read_narrative(self, role: str) -> bool:
@@ -1214,6 +1424,21 @@ def selftest() -> int:
     checks.append(("查得到订正", [r["id"] for r in s.handoff_query(revises=rec["id"])] == [rev["id"]]))
     checks.append(("台账分角色", decisions_path(root, "D").is_file()
                    and not decisions_path(root, "M").exists()))
+    # S1m：分片之后"台账分角色"这一条要按两种落点都认（老文件 / 实例分片），
+    # 并且保留一条"老文件仍可读"的反负控 —— 否则分片会悄悄改掉历史工作区的读侧口径。
+    shard = Secretary("E", root=root)
+    shard.bind_task("t-0007")
+    shard.note_decision(duty=1, kind=KIND_OPTIMIZED, decision="已优化", reason="自检：分片写入")
+    checks.append(("台账按实例分片", shard.decisions_path().is_file()
+                   and shard.decisions_path().name == "E-t-0007.jsonl"))
+    checks.append(("分片读得回来（且老文件仍可读）",
+                   len(shard.decisions()) == 1
+                   and str(shard.decisions()[0].get("task_id")) == "t-0007"
+                   and decisions_path(root, "E").exists() is False))
+    checks.append(("存活读数三态", shard.secretary_alive().get("checked") is True
+                   and shard.secretary_alive().get("alive") is True
+                   and shard.close().get("closed") is True
+                   and shard.secretary_alive().get("alive") is False))
     loud = False
     try:
         s.handoff_add(to="F", summary="", body="")

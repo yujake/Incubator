@@ -1244,10 +1244,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("created_at", "string"), ("revises?", "string"), ("kind?", "string"),
       ("ref_problems?", "Record<string, string>"))),
     ("SecretaryDecision",
-     "out/secretary/<角色>.jsonl 的行（`secretary.Secretary.note_decision` 写的；"
-     "`decision`/`reason`/`basis` 等是「有就带上」的几栏）",
+     "out/secretary/<角色>.jsonl（老文件）与 out/secretary/<角色>-<实例号>.jsonl（S1m 起的分片）"
+     "的行（`secretary.Secretary.note_decision` 写的；"
+     "`decision`/`reason`/`basis` 等是「有就带上」的几栏）。"
+     "`task_id` 是 S1m 补的那一格：分片之后「这一行是哪一个实例写的」必须读得出来",
      (("role", "string"), ("seq", "number"), ("at", "string"), ("kind", "string"),
       ("duty", "number"), ("from", "string"), ("fail_open", "boolean"),
+      ("task_id?", "string"),
       ("decision?", "string"), ("judge?", "Record<string, unknown>"),
       ("reason?", "string"), ("basis?", "string[]"), ("before?", "string"),
       ("target?", "string"))),
@@ -1260,14 +1263,19 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "out/review/REPORT-STYLE.json 的 `sections`（真机四节名字）",
      (("sections", "string[]"),)),
     ("TaskRow",
-     "store.rows(\"tasks\")（真机 p9b/data/tasks.json 19 键）",
+     "store.rows(\"tasks\")（真机 p9b/data/tasks.json 19 键 + 工作项板那 7 格；"
+     "板那 7 格是 S0/S1b 扩列之后补进来的 —— 真机上它们今天全是空值"
+     "（`draft/94` §4：2276 行里 `kind` 非空 0 行），但列**在**，所以类型必须跟上）",
      (("task_id", "string"), ("role", "string"), ("action", "string"),
       ("called_by", "string"), ("parent_task_id", "string | null"),
       ("depth", "number"), ("input_key", "string"), ("status", "string"),
       ("outcome", "string"), ("refusal_reason", "string"), ("detail", "string"),
       ("error", "string"), ("started_at", "string"), ("ended_at", "string | null"),
       ("tokens", "number | null"), ("usd", "number | null"),
-      ("instance", "string"), ("artifacts", "string[]"), ("inputs", "string[]"))),
+      ("instance", "string"), ("artifacts", "string[]"), ("inputs", "string[]"),
+      ("kind", "string"), ("expects", "string"), ("item_state", "string"),
+      ("item_close", "string"), ("seen_by", "string"), ("seen_step", "number | null"),
+      ("keep_alive", "boolean"))),
     ("ConjectureRow",
      "store.rows(\"conjectures\")（真机 p9b/data/conjectures.json；无样本时以 "
      "`schema.Conjecture` 为准）",

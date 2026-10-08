@@ -1858,6 +1858,14 @@ class AgentLoop:
         # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
         self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(
             parent_task_id, summoned_by)
+        # 秘书绑到这一趟的实例上（S1m）：绑上之后它的台账分片、并落一份存活标记
+        # （"一实例一秘书"从对象层面落到盘上）。失败 fail-open，但要留痕。
+        if self.secretary is not None and str(my_task_id or ""):
+            try:
+                self.secretary.bind_task(my_task_id)
+            except Exception as exc:  # noqa: BLE001 —— 绑定失败不许带走这一趟
+                self.secretary_problem = (f"秘书没绑上实例（{type(exc).__name__}: {exc}）"
+                                          "⇒ 它的台账仍写老文件（不分片）")
         # 收件箱：`inbox` 是渲染进开场提示词的那一段，`fresh_ids` 是它渲染过的 id
         # —— 下面 `mark_delivered` 只标这一批（D75：旧的写法渲染 8 条、却把全部未投递标掉，
         # 于是第 9 条及更早的留言永久丢失）。
@@ -2343,6 +2351,15 @@ class AgentLoop:
             _sc.unregister_pid(self.session_root, self.role, self.sid)
         except Exception:  # noqa: BLE001 —— 注销失败不影响这一趟的产出
             pass
+        # 秘书随这一趟一起收（S1m："与它同生同死"的第二半）：注销存活标记，读数进 notes。
+        # 失败不带走产出，但要留痕（"它还没收"与"收过了"必须分得开）。
+        if self.secretary is not None:
+            try:
+                closed = self.secretary.close()
+                if not closed.get("closed"):
+                    run.notes.append(f"秘书存活标记没注销：{closed.get('reason')}")
+            except Exception as exc:  # noqa: BLE001
+                run.notes.append(f"秘书收尾失败：{type(exc).__name__}: {exc}")
         # ---- 报告强制（业主 2026-10-08 T17：「A-H每个任务跑完都要往回报告的」）
         #
         # 放在 `agent_run_end` 之前：这样那句读数会跟着这一条事件落盘（D81 给
