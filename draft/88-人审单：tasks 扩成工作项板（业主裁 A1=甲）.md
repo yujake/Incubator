@@ -105,7 +105,10 @@ expects == "work"  ⇒ item_close ∈ {"", "completed"}   # 要交付的项，�
 
 | 地方 | 影响 | 处置 |
 |---|---|---|
-| `schema.SCHEMA_VERSION` | 加列 = 磁盘格式契约变更 | **抬一格**（人写）；不抬的话老盘新码会静默少校验 |
+| **真机老行规模（实测）** | 59 个工作区共 **2276** 行；**没有一行有 `kind`/`expects`/`item_state`**；**没有一行处于 `pending`/`running`**（`done=2196 / failed=80`） | 迁移不需要逐行判断：`kind==""` 就是判据，且**没有中间态**要接管（证据：`draft/89` §1.2） |
+| **`input_key` 不能占用（实测）** | 2276/2276 行非空，形态是 `<动作>@<12 位指纹>`（`revise@4b9122efd0dc`），而它是**循环判据的键**（`policy.check` 第 [4] 步） | 本次七格**一个都不碰 `input_key`**；`item_id` 就是 `task_id`（证据：`draft/89` §5.1） |
+| **数组字段契约** | 七格全是标量（5×`str` + 1×`int|None` + 1×`bool`） | **不动 `ARRAY_FIELD_KINDS`**；若将来加数组列必须同笔登记（`tests/test_fc05_contract.py` 钉着） |
+| `schema.SCHEMA_VERSION` | 加列 = 磁盘格式契约变更 | **抬一格**（业主已答）；夹具用的是 `S.SCHEMA_VERSION`（`tests/conftest.py:238` 等，**动态**，不会因抬版本而红），但 `tests/test_schema.py::test_validate_table_rejects_wrong_schema_version` 要同笔看 |
 | `schema.TABLES["tasks"]` 的字段清单 | 多**七格** | 人写；**同时**要改 `tests/test_schema*.py` 里钉字段清单的判据 |
 | `rebuild()` / `Task.to_dict()` 的键顺序 | 新列必须**加在末尾**（键顺序影响 `rebuild` 后逐字节一致，I-9） | 人写；判据：老行 rebuild 前后逐字节相同 |
 | `conductor.state` 的 `tasks` 格 / `tools` 的 `tasks` 计数 | 行数含义不变（板项也是行） | 不需要改；但**要在读数里分开"实例行"与"板行"**（新加一格，见 `draft/86` §2.2） |
@@ -117,6 +120,11 @@ expects == "work"  ⇒ item_close ∈ {"", "completed"}   # 要交付的项，�
 ---
 
 ## §6 判据（红/绿 + 负控）—— 由 AI 写测试、人写实现
+
+**照抄的先例**：上一次给 `tasks` 加列（`instance`，`draft/37` §16 P1）留下的模板就是
+`tests/test_task_instance.py`（逐字：「I-9：加了 `instance` 这一栏之后，`rebuild()` 重建出的
+`tasks.json` 必须逐字节不变」＋ 负控 ＋ 一条注释点明"往行字典里加键最容易踩的就是键序"）。
+**本次的判据就按它那个形状写**（见 `draft/89` §4 的证据行）。
 
 新增 `tests/test_task_board_columns.py`：
 
