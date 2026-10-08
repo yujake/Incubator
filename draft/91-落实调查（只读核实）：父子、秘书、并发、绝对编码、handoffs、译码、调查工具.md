@@ -229,7 +229,9 @@ jsonl"，不先把锁与分片定下来，S1k 一上线就会重号/串行化）
 
 - **待一句话**：① 洗格式 = 建议还是改写载荷（`draft/90` §4）；② 兄弟之间能否"盲转"
   （`draft/90` §5）；③ 名册序号是否每父每角色各一套且不回收（`draft/90` §5）。
-- **未核实**：`handoffs` 的 `to_name` / `from_name` 两格要不要**同时**写进 `REQUIRED_FIELDS`
-  （我倾向不加必填，保持老行可读）；以及秘书台账分片之后，`draft/88` 之外是否还有读
-  `decisions-<role>.jsonl` 的地方（webui / statusreport 若读它，要一起改 —— 这一条我**没查完**，
-  下次补）。
+- **未核实 → 已查清（同日晚补）**：秘书台账分片会碰到**四处读侧** —— `Secretary.decisions()`
+  （`secretary.py:184`，聚合读）、`Secretary.knowledge()`（`:279`，`ledger` 那一格）、
+  `webui/readers.py:566 _secretary_rows`（**目录 glob** `out/secretary/*.jsonl`）、
+  `secretary.selftest()`（`:1215`，"台账分角色"那一条）。分片必须与这四处同笔改；
+  名册建议另放 `out/roster/`（不同目录 ⇒ WebUI 那一面一个字节不动）。
+  落地写法见 `draft/92` §2/§3.3/§5-⑬⑭⑮。
