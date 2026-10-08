@@ -1392,6 +1392,27 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
                      # 旧行保留）。它是可选键：不填就是新增（旧行为逐字不变）。
                      "revises": str(value.get("revises") or "").strip(),
                      "why": str(value.get("why") or "")}, ""
+    if key in ("retire", "roster"):
+        # 名册面的两个形状（S1k-2 加进 `SHAPES`、S1k-3 的判据直接打在 `_do_retire` /
+        # `_do_roster` 上）—— **解码器当时漏了这两支**，于是它们一路掉进下面那个
+        # `final` 兜底：真机实测（M2 的 K1 探针，2026-10-09）模型写
+        # `{"retire": {"name": "D1"}}`，落成 payload `{"final": "{\"name\": \"D1\"}"}`，
+        # `_do_retire` 读不到 `name` ⇒ 连拒 6 次「要退谁：`name` 是名册名，不能空」、
+        # 12 步用尽。单测全绿（它们绕过了 `_shape_of`），只有真跑抓得到 ——
+        # 这正是"M2 必须含一次真机探针"这条要求的价值。
+        if not isinstance(value, Mapping):
+            return "", {}, f"{key} 必须是一个对象"
+        if key == "retire":
+            name = str(value.get("name") or "").strip()
+            if not name:
+                return "", {}, ("retire 需要 `name`（名册名，例如 \"D1\"）："
+                                "「要退谁」只能用名册名说，绝对编码不是父子之间的指称")
+            return key, {"name": name}, ""
+        of = str(value.get("of") or "self").strip() or "self"
+        # `of` 只做"是不是字符串"这一层：**可见面**由读侧判（`_do_roster` 对越界的名字
+        # 受控拒绝并点名"越界"）—— 解码器预判"这个名字算不算数"会把两件事混起来，
+        # 而其中一件（我能不能看）只有读侧知道。
+        return key, {"of": of}, ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     payload: dict[str, Any] = {"final": final,
                                "evidence": [str(x) for x in (data.get("evidence") or [])]}

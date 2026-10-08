@@ -221,3 +221,53 @@ def test_roster_of_a_sibling_is_refused_and_no_secretary_is_three_state(tmp_path
     assert retired["ok"] is False and "没有秘书" in "".join(retired["why"]), retired
     view = bare._do_roster({})                       # noqa: SLF001
     assert view["checked"] is False and "没有秘书" in view["reason"], view
+
+
+# ---------------------------------------------------------------- 解码器那一段（真机抓出来的）
+
+def test_the_two_new_shapes_survive_the_decoder(tmp_path: pathlib.Path):
+    """正控（**真机抓出来的缺口**）：`retire` / `roster` 必须过得了解码器。
+
+    M2 的 K1 探针实测（2026-10-09）：模型**完全按提示词**写了 `{"retire": {"name": "D1"}}`，
+    而 `_decode_shape` 当时没有这两支 ⇒ 它们一路掉进 `final` 兜底 ⇒ payload 变成
+    `{"final": "{\\"name\\": \\"D1\\"}"}` ⇒ `_do_retire` 读不到 `name`、连拒 6 次
+    「要退谁：`name` 是名册名，不能空」、12 步用尽（`outcome=no_result`）。
+    S1k-3 的判据**直接打在 `_do_retire` / `_do_roster` 上**，所以单测全绿 ——
+    这一条补的就是"从模型的原始回复到形状"那一段路（`_shape_of` 是唯一入口）。
+    """
+    from agentflow.agent_loop import _shape_of
+
+    for raw, shape, want in (
+        ({"retire": {"name": "D1"}}, "retire", {"name": "D1"}),
+        ({"roster": {"of": "self"}}, "roster", {"of": "self"}),
+        ({"roster": {}}, "roster", {"of": "self"}),
+    ):
+        got_shape, payload, problem = _shape_of(raw)
+        assert (got_shape, payload, problem) == (shape, want, ""), (raw, got_shape, payload, problem)
+    # 负控：没有 name ⇒ 受控拒绝（不是"退一个空名字"）；不是对象也拒
+    assert _shape_of({"retire": {}})[2], "没有 name 必须拒"
+    assert _shape_of({"retire": "D1"})[2], "不是对象必须拒"
+    assert _shape_of({"roster": {"of": "D7"}})[0] == "roster", "名册名要能带过去（越界由读侧判）"
+
+
+def test_the_decoder_path_really_retires(tmp_path: pathlib.Path):
+    """正控（端到端）：原始回复 ⇒ `loop.run()` ⇒ 退役真的落盘（走完整条路）。"""
+    import json
+
+    _st, cond, _reg, ws, me, loop, gate = _env(tmp_path)
+    child = _child(cond, me, key="s1k3@decode", status="done")
+    assert loop.secretary.roster_add(owner=me, role="D", task_id=child,
+                                     brief="可以退的那件")["name"] == "D1"
+    # 替身模型照提示词的写法回一句（这正是真机上那一句），然后收工
+    gate.replies = [{"text": json.dumps({"retire": {"name": "D1"}}, ensure_ascii=False)},
+                    {"text": json.dumps({"final": "退完了", "evidence": []}, ensure_ascii=False)}]
+    run = loop.run("把 D1 退役", summoned_by="user", my_task_id=me)
+    assert run.stop_reason == "final", run.to_dict()
+    step = run.steps[0]
+    assert step.shape == "retire", step.shape
+    assert step.payload == {"name": "D1"}, step.payload
+    assert step.result.get("action") == "retired", step.result
+
+    from agentflow.secretary import retired_path
+
+    assert "D1" in retired_path(ws, me).read_text(encoding="utf-8")
