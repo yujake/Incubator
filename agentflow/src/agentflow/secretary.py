@@ -207,6 +207,55 @@ def retired_path(root: str | Path, owner: str) -> Path:
     return Path(root).joinpath(*ROSTER_DIR, f"{owner}-retired.jsonl")
 
 
+# ---------------------------------------------------------------- 读写面与槽位池（S1n）
+#
+# 业主 T23：子代理只能读写父切割给它的面；父原则上必须把各子代理的面拆开（不重叠）；
+# 面内的新文件允许。退役之后面归还"可分配池"（名字不回收，面回收）。
+# 落点：`out/surfaces/<owner>/<slot>/`（面本体）、`out/roster/<owner>-surfaces.jsonl`（池事件）、
+# `out/surfaces/archive/<owner>-<name>/`（归还前的归档）。
+
+SURFACES_DIR: tuple[str, ...] = ("out", "surfaces")
+
+
+def surfaces_path(root: str | Path, owner: str) -> Path:
+    """池事件流（`alloc` / `release` / `archive_failed`），append-only。"""
+    return Path(root).joinpath(*ROSTER_DIR, f"{owner}-surfaces.jsonl")
+
+
+def surface_dir(root: str | Path, owner: str, slot: str) -> Path:
+    """一个槽位的面（目录）。"""
+    return Path(root).joinpath(*SURFACES_DIR, owner, str(slot))
+
+
+def archive_dir(root: str | Path, owner: str, name: str) -> Path:
+    """归还前把面里的东西归档到这里（业主口径的反面：新子代理不该看到前任的文件）。"""
+    return Path(root).joinpath(*SURFACES_DIR, "archive", f"{owner}-{name}")
+
+
+def _fold_surfaces(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把池事件流折叠成"每个槽位此刻在哪一档"（空闲 / 在用 / 待释放）。"""
+    items: dict[str, dict[str, Any]] = {}
+    for raw in rows:
+        r = dict(raw)
+        slot = str(r.get("slot") or "")
+        if not slot:
+            continue
+        item = items.setdefault(slot, {"slot": slot, "name": "", "state": "空闲"})
+        kind = str(r.get("kind") or "")
+        if kind == "alloc":
+            item["name"] = str(r.get("name") or "")
+            item["state"] = "在用"
+        elif kind == "release":
+            item["name"] = ""
+            item["state"] = "空闲"
+            item.pop("reason", None)
+        elif kind == "archive_failed":
+            item["name"] = str(r.get("name") or "")
+            item["state"] = "待释放"
+            item["reason"] = str(r.get("reason") or "")
+    return [items[k] for k in sorted(items)]
+
+
 def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """把名册事件流折叠成"当前状态"（一项一条）。
 
@@ -229,6 +278,7 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             item["brief"] = str(r.get("brief") or "")
             item["task_id"] = str(r.get("task_id") or "")
             item["first_task_id"] = str(r.get("first_task_id") or r.get("task_id") or "")
+            item["surface"] = str(r.get("surface") or "")
         elif kind == "bind":
             item["task_id"] = str(r.get("task_id") or item.get("task_id") or "")
         elif kind == "retire":
@@ -1506,8 +1556,8 @@ class Secretary:
         return f"{role}{max(used, default=0) + 1}", ""
 
     def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
-                   task_id_first: str = "", want_name: str = "",
-                   reuse: str = "") -> dict[str, Any]:
+                   task_id_first: str = "", want_name: str = "", reuse: str = "",
+                   surface: str = "") -> dict[str, Any]:
         """名册登记（增那一支）：`{"name","role","task_id","problem"}`。
 
         - `reuse` 给了名字 ⇒ 只推进对照表的当前调用，名册项不动（复用不是增）；
@@ -1553,6 +1603,12 @@ class Secretary:
             if problem:
                 return {"name": "", "role": str(role), "task_id": str(task_id),
                         "problem": problem}
+        # S1n（业主 T23 / B2）：造一个新子代理时同时预订一个读写面（父可以点名要哪个槽位）。
+        # 拿不到面 ⇒ 受控拒绝（不许先给名字后没有面：那会造出一个"能说话但不能干活"的项）。
+        got_surface = self.surface_alloc(owner=owner, want=str(surface or ""), name=name)
+        if got_surface.get("problem"):
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "problem": f"读写面没定下来：{got_surface['problem']}"}
         ok, why = append_jsonl(roster_index_path(self.root, owner),
                                {"kind": "bind", "owner": owner, "name": name,
                                 "role": str(role), "task_id": str(task_id), "at": at,
@@ -1564,11 +1620,113 @@ class Secretary:
                                  {"kind": "add", "owner": owner, "name": name,
                                   "role": str(role), "task_id": str(task_id),
                                   "first_task_id": str(task_id_first or task_id),
-                                  "brief": text, "at": at})
+                                  "brief": text, "surface": str(got_surface.get("slot") or ""),
+                                  "at": at})
         if not ok2:
             return {"name": name, "role": str(role), "task_id": str(task_id),
                     "problem": f"名册没写成（对照表那一行已经落了 ⇒ 读侧会报'半份登记'）：{why2}"}
-        return {"name": name, "role": str(role), "task_id": str(task_id), "problem": ""}
+        return {"name": name, "role": str(role), "task_id": str(task_id),
+                "surface": str(got_surface.get("slot") or ""), "problem": ""}
+
+    # ---- 读写面与槽位池（S1n）
+
+    def surface_rows(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
+        """池的折叠视图（`(槽位列表, 坏行)`）。"""
+        from . import jsonlfile as JF
+
+        rows, bad = JF.read_jsonl(surfaces_path(self.root, owner))
+        return _fold_surfaces(rows), bad
+
+    def surface_state(self, owner: str) -> dict[str, Any]:
+        """池的三态读数：`{"checked","in_use":[{slot,name}],"free":[…],"pending_release":[…],"reason"}`。
+
+        读不成 ⇒ `checked=False`（不许返回空池冒充"都空闲"）。
+        """
+        try:
+            rows, bad = self.surface_rows(owner)
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "in_use": [], "free": [], "pending_release": [],
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        if bad:
+            return {"checked": False, "in_use": [], "free": [], "pending_release": [],
+                    "reason": f"池事件有 {len(bad)} 行读不出来：{bad[0]}"}
+        return {"checked": True,
+                "in_use": [{"slot": r["slot"], "name": r["name"]} for r in rows
+                           if r["state"] == "在用"],
+                "free": [r["slot"] for r in rows if r["state"] == "空闲"],
+                "pending_release": [{"slot": r["slot"], "name": r["name"],
+                                     "reason": r.get("reason", "")} for r in rows
+                                    if r["state"] == "待释放"],
+                "reason": ""}
+
+    def surface_alloc(self, *, owner: str, want: str = "", name: str = "") -> dict[str, Any]:
+        """从池里取一个干净的槽位给 `name` 用（派活那一刻，与 `roster_add` 同一趟）。
+
+        - `want` 给了 ⇒ 要求它是空闲的（在用 / 待释放 ⇒ 受控拒绝，不静默换一个）；
+        - 没给 ⇒ 取"空闲里最小的"；池里没有空闲 ⇒ 新建一个（`S<两位数>`，序号只增不减）；
+        - 返回 `{"slot","path","problem"}`；拿不到 ⇒ `problem` 非空（调用方按受控拒绝处理）。
+        """
+        state = self.surface_state(owner)
+        if not state.get("checked"):
+            return {"slot": "", "path": "", "problem": f"池没读成（{state.get('reason')}）"}
+        in_use = {str(x["slot"]) for x in state["in_use"]}
+        pend = {str(x["slot"]) for x in state["pending_release"]}
+        if want:
+            slot = str(want)
+            if slot in in_use or slot in pend:
+                return {"slot": slot, "path": "",
+                        "problem": f"槽位 {slot} 不在空闲池里（在用或待释放）⇒ 受控拒绝"}
+        else:
+            free = sorted(state["free"])
+            if free:
+                slot = free[0]
+            else:
+                used = in_use | pend | {str(x) for x in state["free"]}
+                n = 1
+                while f"S{n:02d}" in used:
+                    n += 1
+                slot = f"S{n:02d}"
+        path = surface_dir(self.root, owner, slot)
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return {"slot": slot, "path": "", "problem": f"面建不出来：{type(exc).__name__}: {exc}"}
+        ok, why = append_jsonl(surfaces_path(self.root, owner),
+                               {"kind": "alloc", "owner": owner, "slot": slot,
+                                "name": str(name), "at": _now_iso()})
+        if not ok:
+            return {"slot": slot, "path": str(path), "problem": f"池事件没写成：{why}"}
+        return {"slot": slot, "path": str(path), "problem": ""}
+
+    def surface_release(self, *, owner: str, name: str, slot: str) -> tuple[str, str]:
+        """归还一个槽位：先归档面里的东西，再写 `release`；归档失败 ⇒ `archive_failed`
+        （槽位停在"待释放"、不入池）。返回 `(落成的状态, 问题)`。"""
+        src = surface_dir(self.root, owner, slot)
+        dst = archive_dir(self.root, owner, name)
+        state = "空闲"
+        if src.is_dir() and any(src.iterdir()):
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                if dst.exists():
+                    import shutil
+
+                    shutil.rmtree(dst)
+                import shutil
+
+                shutil.move(str(src), str(dst))
+                src.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:  # noqa: BLE001 —— 没归档干净就不许放回池
+                state, why = "待释放", f"{type(exc).__name__}: {exc}"
+                append_jsonl(surfaces_path(self.root, owner),
+                             {"kind": "archive_failed", "owner": owner, "slot": slot,
+                              "name": str(name), "reason": why, "at": _now_iso()})
+                return state, why
+        ok, why2 = append_jsonl(surfaces_path(self.root, owner),
+                                {"kind": "release", "owner": owner, "slot": slot,
+                                 "name": str(name), "at": _now_iso()})
+        if not ok:
+            return "待释放", f"池事件没写成：{why2}"
+        return state, ""
 
     def roster_repair(self, *, owner: str) -> tuple[int, str]:
         """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。返回 `(补了几条, 问题)`。
@@ -1802,9 +1960,19 @@ class Secretary:
                     "why": [f"退役没写全（名册={wrote_roster}/{why_r} 对照表={wrote_index}/{why_i} "
                             f"销号={wrote_retired}/{why_x}）"],
                     "reading": reading}
+        # S1n（业主补充）：退役 ⇒ 面归还"可分配池"（名字不回收、面回收）。
+        # 归还前先归档；归档失败 ⇒ 槽位停在"待释放"，读数里如实写（不入池）。
+        surface_note = ""
+        slot = next((str(r.get("surface") or "") for r in self.roster_rows(owner)[0]
+                     if str(r.get("name") or "") == str(name)), "")
+        if slot:
+            state, why_s = self.surface_release(owner=owner, name=str(name), slot=slot)
+            surface_note = (f"面 {slot} 已归还池里" if state == "空闲"
+                            else f"面 {slot} 停在待释放（{why_s}）")
         return {"ok": True, "action": "retired", "report": {},
-                "why": [f"{name} 退役：{branch}（子已停 + 它名下无活跃子代理）"],
-                "reading": reading}
+                "why": [f"{name} 退役：{branch}（子已停 + 它名下无活跃子代理）"]
+                       + ([surface_note] if surface_note else []),
+                "surface": slot, "reading": reading}
 
     # ---- 名册的内部小工具
 
