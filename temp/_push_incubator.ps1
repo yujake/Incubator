@@ -10,6 +10,8 @@
 #   1) 浏览器打开  https://github.com/new?name=Incubator   建一个空仓库（建议先 Private，别勾 README/.gitignore）
 #   2) 在你的 PowerShell 里跑：
 #        pwsh -NoProfile -File "D:\Incubator\temp\_push_incubator.ps1" -User <你的GitHub用户名>
+#      或者干脆把仓库地址整条粘进来（更省事，不用记用户名）：
+#        pwsh -NoProfile -File "D:\Incubator\temp\_push_incubator.ps1" -RemoteUrl "https://github.com/<用户名>/Incubator.git"
 #      只体检+探远端（**不动 remote**）：加 -ProbeOnly
 #      只检查不推送（会配好 remote）：加 -NoPush
 #      仓库不是空的时候（例如你建仓时勾了 README）：加 -Pull 先合并远端初始提交
@@ -20,8 +22,9 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$User,
+    [string]$User = "",
     [string]$Repo = "Incubator",
+    [string]$RemoteUrl = "",
     [switch]$NoPush,
     [switch]$Pull,
     [switch]$ProbeOnly
@@ -54,7 +57,14 @@ $extra = $dirty | Where-Object { $_ -and ($expect -notcontains $_) }
 if ($dirty) { Say "  未跟踪/未提交："; $dirty | ForEach-Object { Say "    $_" } }
 if ($extra) { Say "  !! 除了那 3 条刻意不入库的登记物之外还有别的改动 —— 先确认再推。" "Yellow" }
 
-$url = "https://github.com/$User/$Repo.git"
+if ($RemoteUrl) {
+    $url = $RemoteUrl.Trim()
+    if ($url -notmatch "^(https://|git@)") { throw "-RemoteUrl 看起来不是仓库地址：$url" }
+} elseif ($User) {
+    $url = "https://github.com/$User/$Repo.git"
+} else {
+    throw "要么给 -User <GitHub用户名>，要么给 -RemoteUrl <仓库地址>（例如 https://github.com/you/Incubator.git）"
+}
 Say "`n=== ② 探远端（$url）===" "Cyan"
 Say "  说明：仓库不存在或没权限时，git 会要你输用户名/密码（在**你的**终端里能看到并输入）。" "DarkGray"
 $probe = git ls-remote --heads $url 2>&1
@@ -118,7 +128,7 @@ $localHead = (git rev-parse HEAD).Trim()
 $match = $after | Where-Object { $_ -match "$localHead\s+refs/heads/$branch$" }
 if ($match) {
     Say "  ✓ 远端 refs/heads/$branch == 本地 HEAD（$localHead）"
-    Say "  仓库地址：https://github.com/$User/$Repo"
+    Say "  仓库地址：$($url -replace '\.git$','')"
 } else {
     Say "  ? 没在远端读到与本地 HEAD 相同的 sha："
     $after | Select-Object -First 5 | ForEach-Object { Say "    $_" }
