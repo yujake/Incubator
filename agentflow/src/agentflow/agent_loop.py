@@ -1182,8 +1182,14 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         params = value.get("params") or {}
         if not isinstance(params, Mapping):
             return "", {}, "summon.params 必须是一个对象"
+        # S1k-2/S1k-3（名册口径）：`brief` / `name` / `reuse` 三格要带过去 ——
+        # 这里原先返回的是写死的键集，于是提示词教了这三格、解码器却把它们丢了
+        # （S1k-3 的判据当场抓出来：`roster_problem` 永远是"没给一句任务简介"）。
+        # 只在给了的时候带上，老载荷的键集因此一个字节不变。
+        extra = {k: str(value.get(k)) for k in ("brief", "name", "reuse")
+                 if str(value.get(k) or "").strip()}
         return key, _with_notify({"role": role, "action": action, "params": dict(params),
-                                  "why": str(value.get("why") or "")}, value), ""
+                                  "why": str(value.get("why") or ""), **extra}, value), ""
     if key == "summon_many":
         if not isinstance(value, Mapping):
             return "", {}, "summon_many 必须是一个对象（{\"targets\": [...]}）"
@@ -2868,6 +2874,12 @@ class AgentLoop:
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
         action = str(payload.get("action"))
+        # 名册那三格要在这一步的载荷被结果覆盖之前取下来（S1k-3 的判据当场抓出来的坑：
+        # 下面 `payload = res.payload` 之后 `payload.get("brief")` 读的是结果，
+        # 于是每一次名册登记都变成"没给简介"）。
+        brief_arg = str(payload.get("brief") or "")
+        name_arg = str(payload.get("name") or "")
+        reuse_arg = str(payload.get("reuse") or "")
         out: dict[str, Any] = {"summoned": role, "action": action}
         if self.conductor is None:
             out.update(ok=False, error="本次运行没有接线主控（summon 不可用）")
@@ -2930,9 +2942,7 @@ class AgentLoop:
                 try:
                     reg = self.secretary.roster_add(
                         owner=self.my_task_id, role=role, task_id=str(res.task_id or ""),
-                        brief=str(payload.get("brief") or ""),
-                        want_name=str(payload.get("name") or ""),
-                        reuse=str(payload.get("reuse") or ""))
+                        brief=brief_arg, want_name=name_arg, reuse=reuse_arg)
                     if reg.get("problem"):
                         out["roster_problem"] = str(reg["problem"])
                     else:
