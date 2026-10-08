@@ -1166,6 +1166,62 @@ class Conductor:
         items.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
         return {"checked": True, "keep_alive": bool(items[-1].get("keep_alive")), "reason": ""}
 
+    def reusable_children_of(self, parent_task_id: str, *, role: str = "") -> dict[str, Any]:
+        """父名下可复用的活跃子代理（业主 "派活不一定是增"）。三态返回：
+
+        `{"checked": bool, "rows": [{"task_id","role","state"}], "reason": ""}`
+
+        ## 口径（`draft/92` §3.1 与 §7-②）
+
+        - 只数代理行（`kind == ""`）：工作项不是代理（两轴分开）；
+        - `role` 给了就只看那个角色；没给 ⇒ 全给（不替调用方猜"大概想复用谁"）；
+        - 复用资格 = 那一行此刻活跃（在跑一次调用 ⇒ 可以再派一件）或 是待命
+          （无活跃调用，且 `keep_alive_of` 说它名下最新那条派活项声明过待命，A6=丙）；
+        - 已停且没声明待命 ⇒ 不许复用（要派活就新起一个）；
+        - "已退役"这一档不在这一层判（那是名册/对照表的事，S1k）——
+          本方法只回答"台账上此刻有没有可以再接一件活的子代理"。
+
+        ## 为什么它只给候选、不给"就是它"
+
+        复用必须是父点名（`reuse:"D1"`，业主 B2），而名字到代号的译码在秘书那一侧（S1k）。
+        所以这里返回候选清单；不"挑一个最合适的" —— 猜错就是把一件活派给了别人。
+
+        ## 三态
+
+        台账读不成、或某一行 `keep_alive_of` 读不成 ⇒ `checked=False` + `reason`，
+        不许折成"没有可复用的"（那会把复用静默变成新起，而新起的代价是白烧一次钱）。
+        """
+        try:
+            rows = self._tasks()
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "rows": [], "reason": f"{type(exc).__name__}: {exc}"}
+        out: list[dict[str, str]] = []
+        for r in rows:
+            if r.get("parent_task_id") != parent_task_id or str(r.get("kind") or ""):
+                continue
+            tid = str(r.get("task_id") or "")
+            row_role = str(r.get("role") or "")
+            if role and row_role != role:
+                continue
+            if str(r.get("status") or "") in ("pending", "running"):
+                out.append({"task_id": tid, "role": row_role, "state": "活跃"})
+                continue
+            try:
+                ka = self.keep_alive_of(tid)
+            except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
+                return {"checked": False, "rows": out,
+                        "reason": f"{tid} 的待命声明没读成（{type(exc).__name__}: {exc}）"}
+            if not isinstance(ka, dict):
+                return {"checked": False, "rows": out,
+                        "reason": f"{tid} 的待命声明没读成（读数不是对象）"}
+            if not ka.get("checked"):
+                return {"checked": False, "rows": out,
+                        "reason": f"{tid} 的待命声明没读成（{ka.get('reason')}）"}
+            if ka.get("keep_alive"):
+                out.append({"task_id": tid, "role": row_role, "state": "待命"})
+        out.sort(key=lambda x: x["task_id"])
+        return {"checked": True, "rows": out, "reason": ""}
+
     def board_readings(self) -> dict[str, Any]:
         """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。"""
         try:
