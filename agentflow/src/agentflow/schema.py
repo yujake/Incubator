@@ -1261,9 +1261,9 @@ class Experiment:
         # "在 B 内没有反例"若不说清 B 是什么、用什么算法搜的，就只是一句无法复核的话 ——
         # 它看起来是结论，实际上是一个没有定义域的断言。
         #
-        # R-01（`draft/44`）：这一段与下面 `for_question_id` 那一条**不需要跑脚本就能判**
+        # R-01（`draft/44`）：这一段与下面 `for_question_id` 那一条不需要跑脚本就能判
         # ⇒ 口径搬进 `experiment_preflight_problems()`，由调用方
-        # （`agent_e.run_experiment`）在**起子进程之前**判一次；这里调同一个函数
+        # （`agent_e.run_experiment`）在起子进程之前判一次；这里调同一个函数
         # ⇒ 判据仍然只有一处。
         _pre = experiment_preflight_problems(
             method=self.method, certificate=self.certificate,
@@ -1883,7 +1883,7 @@ class ReviewFinding:
     kind: str
     level: str
     target: str  # "claim-3" / "section:2" / "dep:0004" / "rel:0007"
-    evidence: str  # **必填**：H 凭什么这么判
+    evidence: str  # 必填：H 凭什么这么判
     message: str
     round: int = 1
     suggestion: str = ""
@@ -2004,6 +2004,29 @@ CONDUCTOR_ROLE = "M"
 #: `done` 与 `failed`/`cancelled` 必须分开：前者的语义是"这个任务跑完了"，
 #: 后者的语义是"它没跑完"。三者合并成"结束"之后，就无法回答
 #: "这条结论是在一次成功完成的召唤里产出的、还是在一次崩溃里被顺手写下的"。
+# ---------------------------------------------------------------- 工作项板（`draft/85` §2.1；业主 2026-10-08 裁 A1=甲）
+#
+# 为什么这四条词表定义在 `schema.py`（业主 2026-10-08 晚对"词表落点"的答复是
+# "定义在 `manuscripts.py`、`schema.py` 引用"，但那一版实现不了，已如实回报）：
+# `manuscripts.py:50` 就 `from . import schema as S`（它要用 `S.TABLES` / `S.ROLES`）
+# ⇒ 反过来 import 会成环。而本仓既有裁定（`draft/68` 题 2 选 B，判据
+# `tests/test_claimanatomy.py::test_the_six_claim_vocabularies_have_exactly_one_definition_in_schema`）
+# 是"受控词表的真身在 `schema.py`，工具侧只引用不内联"。所以四条落在这里，
+# `manuscripts.py` 用它已经有的 `S.` 引用（与它用 `S.TABLES` 一模一样）。
+
+#: 板上一行的四种 `kind`（`draft/85` §2.1）。空串 = 老行 / 纯实例行（不进板）。
+#: 为什么"空串"也算合法取值：真机 59 个工作区共 2276 行老行（实测 `draft/89` §1.2），
+#: 加列之后它们必须天然被读成"不是板项"，不许要求逐行迁移。
+ITEM_KINDS: tuple[str, ...] = ("delegation", "message", "report", "notice")
+#: 一条工作项"要什么行为"——这一格决定"什么算做完"（业主 T16：最小行为是"确认读过"）。
+ITEM_EXPECTS: tuple[str, ...] = ("ack", "work")
+#: 工作项轴的四档（`draft/88` §3）。措辞由业主定：`claimed` = 接手（写 `running` 行那一刻）、
+#: `seen` = 渲染（被读进某一步的提示词）。它与 `status` 是两根轴，不许共用一个名字。
+ITEM_STATES: tuple[str, ...] = ("queued", "claimed", "seen", "done")
+#: `done` 的两种收口：`acked`（知道了）与 `completed`（做完了）必须分得开 ——
+#: 折平它就是把"光知道个信息"读成"交付了"。
+ITEM_CLOSES: tuple[str, ...] = ("acked", "completed")
+
 TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed")
 
 #: 召唤的终局类型（回答"这次召唤到底给出了什么"）。
@@ -2109,6 +2132,31 @@ class Task:
     #: 该次召唤读过的行（审计用；也让"这条结论的依据是哪次召唤"可回答）。
     inputs: list[str] = field(default_factory=list)
 
+    # ---- 工作项板（业主 2026-10-08 裁 A1=甲：板就在这张表上；送审单 `draft/88`）
+    #
+    # 七格都追加在末尾：`to_dict()` 是 `asdict`（键序 = 字段序），而 I-9 要求
+    # `rebuild()` 之后 `tasks.json` 逐字节一致。先例就是上一次给本表加列
+    # （`instance`，`draft/37` §16 P1）：判据在
+    # `tests/test_task_instance.py::test_...`（"加了这一栏之后 rebuild 逐字节不变"）。
+    #
+    # 为什么工作项轴不叫 `status`：`status` 说的是实例的生命周期
+    # （pending/running/done/cancelled/failed），而"这一项被读过没有"是另一根轴
+    # —— 两根轴共用一个名字，就会把"接了它"读成"读过了"（本仓反复踩的三态塌陷）。
+    #: 板上的 kind（`ITEM_KINDS`）。空串 = 老行 / 纯实例行（不进板）。
+    kind: str = ""
+    #: 什么算做完（`ITEM_EXPECTS`）；`kind` 非空时必填。
+    expects: str = ""
+    #: 工作项轴（`ITEM_STATES`）。
+    item_state: str = ""
+    #: 收口方式（`ITEM_CLOSES`）；`item_state == "done"` 时必填。
+    item_close: str = ""
+    #: 谁读的（`item_state` 走到 `seen` 那一刻、渲染它的那个实例的 `task_id`）。
+    seen_by: str = ""
+    #: 第几步读的（业主 A5 的"跨多步未读"升级档要用）。
+    seen_step: int | None = None
+    #: 派活参数（业主 A6=丙）：父声明"这个实例做完一件还待命"。只对 `kind == "delegation"` 有意义。
+    keep_alive: bool = False
+
     def validate(self) -> None:
         if not str(self.task_id or "").strip():
             raise ValueError("task_id 不能为空")
@@ -2176,6 +2224,57 @@ class Task:
         for a in self.artifacts:
             if not str(a).strip():
                 raise ValueError("artifacts 不能含空元素")
+
+        # ---- 工作项板的七条（送审单 `draft/88` §4；业主 2026-10-08 晚答"方向一致 + 补交叉校验"）
+        #
+        # 口径：`kind == ""` ⇒ 老行 / 纯实例行，其余六格与 `keep_alive` 必须全空
+        # ⇒ 加列对 59 个真机工作区的 2276 行老行零影响（实测 `draft/89` §1.2）。
+        if not self.kind:
+            if (self.expects or self.item_state or self.item_close or self.seen_by
+                    or self.seen_step is not None or self.keep_alive):
+                raise ValueError(
+                    "kind 为空（老行/纯实例行）时，工作项那六格与 keep_alive 必须全空 —— "
+                    "否则这一行既算老行又带板状态，读它的人分不清以哪一格为准"
+                )
+        else:
+            if self.kind not in ITEM_KINDS:
+                raise ValueError(f"kind 必须是 {ITEM_KINDS} 之一或空串，收到 {self.kind!r}")
+            if self.expects not in ITEM_EXPECTS:
+                raise ValueError(
+                    f"kind 非空时 expects 必须是 {ITEM_EXPECTS} 之一，收到 {self.expects!r}"
+                    "（少了它就没有'什么算做完'的口径）"
+                )
+            if self.item_state not in ITEM_STATES:
+                raise ValueError(
+                    f"kind 非空时 item_state 必须是 {ITEM_STATES} 之一，收到 {self.item_state!r}"
+                )
+            if self.item_state == "done":
+                if self.item_close not in ITEM_CLOSES:
+                    raise ValueError(
+                        f"item_state='done' 必须给 item_close ∈ {ITEM_CLOSES}，收到 {self.item_close!r}"
+                        "（'知道了'与'做完了'是两种收口，不许含糊）"
+                    )
+            elif self.item_close:
+                raise ValueError("item_close 只在 item_state='done' 时有意义")
+            # 交叉校验（业主点名的第 6 条）：两个字段各自为真、合起来是假话 —— 在这里拦。
+            if self.item_close == "acked" and self.expects != "ack":
+                raise ValueError(
+                    "用 acked 收口只允许 expects='ack' 的项 —— "
+                    "要交付的活不许靠'知道了'收掉（两个字段各自合法、合起来是假话）"
+                )
+            if self.item_close == "completed" and self.expects != "work":
+                raise ValueError(
+                    "用 completed 收口只允许 expects='work' 的项 —— "
+                    "只要'知道了'的项不许被标成'做完了'（反方向同样拦）"
+                )
+            if self.item_state == "seen" and not str(self.seen_by or "").strip():
+                raise ValueError(
+                    "item_state='seen' 必须写 seen_by（谁读的）—— 空口 ack 的判据靠它配对（业主 A3）"
+                )
+            if (self.seen_step is None) != (not str(self.seen_by or "").strip()):
+                raise ValueError("seen_by 与 seen_step 要么都在、要么都不在（半份读数比没有更糟）")
+            if self.keep_alive and self.kind != "delegation":
+                raise ValueError("keep_alive 只对 kind='delegation' 有意义（只有派活项才谈得上'待命'）")
 
     def to_dict(self) -> dict:
         return asdict(self)

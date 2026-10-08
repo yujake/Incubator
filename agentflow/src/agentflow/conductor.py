@@ -825,10 +825,20 @@ class Conductor:
                 row["task_id"] = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
                 ordered = {"task_id": row["task_id"]}
                 ordered.update({k: v for k, v in row.items() if k != "task_id"})
-                S.Task(
+                task = S.Task(
                     **{k: v for k, v in ordered.items() if k in S.Task.__dataclass_fields__}
-                ).validate()
-                tx.upsert("tasks", ordered, note=note)
+                )
+                task.validate()
+                # 落盘的行一律补齐到全字段（`Task.to_dict()` = dataclass 字段顺序）。
+                #
+                # 为什么不是"调用方给什么就写什么"（2026-10-08 加"工作项板"那七格时实测）：
+                # 调用方的行 dict 是手写的字面量，加列之后它们不会自动多出那七格，
+                # 而 `rebuild()` 用 `Task.to_dict()` 重建 —— 于是"第一次落盘 19 键、
+                # 重建后 26 键"，`tasks.json` 逐字节不一致，I-9 当场红
+                # （`tests/test_conductor.py::test_i9_tasks_snapshot_rebuilds_byte_identical`
+                # 与 `tests/test_task_instance.py` 就是抓住它的那两条）。
+                # 键集与键序只留一处口径：这里，用 dataclass 自己吐出来的那一份。
+                tx.upsert("tasks", task.to_dict(), note=note)
         return str(row["task_id"])
 
     # ---------------------------------------------------------------- 顶趟（F1）
