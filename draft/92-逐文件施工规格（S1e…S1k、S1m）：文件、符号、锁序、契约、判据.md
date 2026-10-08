@@ -242,6 +242,13 @@ def surface_alloc(self, *, owner: str, want: str = "") -> dict:
 def surface_state(self, *, owner: str) -> dict:
     """池的读数（三态）：`{"checked","in_use":[{"slot","name"}],"free":["S01",…],
     "pending_release":[{"slot","name","reason"}]}`。"""
+def surface_of(self, *, owner: str, task_id: str) -> dict:   # S1n-c 实测补：**两级查**
+    """某个调用行「此刻」该用哪个面：`{"checked","name","slot","path","reason"}`。
+    **必须两步**：`task_id → name` 在**对照表**（`_fold_index` 认 `bind`），
+    `name → surface` 在**名册**。只读名册那一份会漏掉"复用过的名字"（I-12）：
+    名册的 `add` 行记的是**第一次**那个 `task_id`，第二次派活只在对照表里
+    ⇒ 判成"这一行没有面" ⇒ 那一趟静默落回共用注册表（写进工作区根，与别人抢文件）。
+    已退役 ⇒ `checked=False`（槽位已归还池里、可能已分给别人 ⇒ 照旧读就是跨代理面重叠）。"""
 ```
 
 - **权限**：读面不变（`store.rows(<任意表>)` 含 `tasks` + 手稿 + registry）；
@@ -308,11 +315,22 @@ S1g（洗格式）——与 S1e 并行，独立
 没声明 `shared` / 面复用了但**名字仍不可复用** / 归档失败 ⇒ 槽位不入池）+ 反真空（面没登记或
 读不成 ⇒ 拒）。**排在 S1k 之后**（面的分配与审核要用名册与对照表）。
 
+> **S1n-c 分档（实测后写清，`6ec1fa6`）**：三档，逐档落地、每档一个提交。
+> - **a（槽位池）**：`surface_alloc` / `surface_state` / `surface_release` / 归档 —— `efb2ef7`。
+> - **b（强制）**：`AgentLoop.surface` + `_surface_refusal` —— 过渡语义"路径按工作区根解析、
+>   必须落在面内"，于是那一档里子代理写**裸相对路径**会被拒（面还不是根）。
+> - **c（面 = 根）**：`LlmBackend.registry_factory`（`surface -> registry`）+ 按面选注册表；
+>   `workspace_root` **跟着面走** —— 否则 `_surface_refusal` 拿工作区当基准，把面内的裸相对
+>   路径判成越界（实测就踩在这一格）。**面怎么从台账那一行找回来**：`surface_of` 必须
+>   **两级查**（对照表 `task_id → name`、名册 `name → surface`）。**未做**：工厂的装配点
+>   （`cli.py` / `webui` 谁给这个工厂）仍是空的 —— 真机上还没有任何一次"按面造注册表"。
+
 | 批 | 可以往下走的读数（硬） |
 |---|---|
 | S1e | 20 条板项不再拒派活；`test_fanout_admission` 全绿；dispose 不动板项行 |
 | S1m | 两实例并发各追加 200 行 ⇒ `seq` 无重、行数 = 400；老 `decisions-<role>.jsonl` 仍可读 |
 | S1n | 面内写**新文件**成功；面外与**别人的面**被拒；两个活跃子的面重叠且没声明 `shared` ⇒ 派活受控拒绝；面没登记 ⇒ 拒（不许当"整工作区可写"） |
+| S1n-c | 子代理写**裸相对路径** ⇒ 落在**它自己的面**里（不是工作区根）；**复用过的名字**那一趟同样落在面里；退役的名字**不**读出原槽位（`checked=False`）；工厂抛异常 ⇒ 退回共用注册表且不当"切过面" |
 | S1i | 挂在我名下的项进提示词且被标 `seen`（`seen_by`/`seen_step`）；没渲染的不许被标 |
 | S1h | 三态各一格读数；读不成 ⇒ 判据拒绝 |
 | S1j | 复用那一支 `active_children` 不变、工作项轴 +1；子已停/换发起方 ⇒ 新起 |
