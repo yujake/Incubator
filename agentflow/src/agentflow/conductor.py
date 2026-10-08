@@ -841,6 +841,139 @@ class Conductor:
                 tx.upsert("tasks", task.to_dict(), note=note)
         return str(row["task_id"])
 
+    # ---------------------------------------------------------------- 工作项板（业主 2026-10-08 裁 A1=甲）
+    #
+    # 板就在 `tasks` 表上（七格见 `schema.Task` 的末尾）：`kind` 非空的行是板项，
+    # `kind` 为空的行是"老行 / 纯实例行"。板读侧只认前者 —— 真机上还有另外两个模块
+    # 直接写本表（`projects.py` / `runflow.py`，各两处；实测见 `draft/89` §5.4），
+    # 它们不设 `kind` ⇒ 天然不进板；判据见 `tests/test_board_items.py`。
+    #
+    # "历史"在哪：状态是列（`item_state`），而"谁在第几步改的"在事件流里
+    # （每次 `tx.upsert` 都落一条事件）—— 列给当前值，事件给来路，两处都要有。
+
+    def _board_rows(self) -> list[dict]:
+        """板项（`kind` 非空的行）。读不成 ⇒ 抛（调用方折成三态，不许折成"板上没事"）。"""
+        return [r for r in self._tasks() if str(r.get("kind") or "")]
+
+    def open_item(self, *, kind: str, role: str, expects: str, action: str = "",
+                  summary: str = "", called_by: str = "", parent_task_id: str | None = None,
+                  depth: int = 1, keep_alive: bool = False, input_key: str = "") -> str:
+        """开一行工作项（`item_state="queued"`）并返回 `task_id`（它就是 `item_id`）。
+
+        为什么开项也走 `_write_new_row`：那一处是"取号 + 建行"的唯一临界区（并发下
+        "先算号、再写行"会撞号，见它的 docstring），而且它负责把落盘行补齐到全字段
+        （I-9 要求键集与键序只有一处口径）。
+
+        `action` 的约定：`kind="delegation"` 给真正的动作名；其余三种
+        （message / report / notice）没有"动作"这回事 ⇒ 用 kind 本身当哨兵值
+        （`Task.validate` 要求 `action` 非空，而空串会让这一行读起来像"一次没有动作的召唤"）。
+        """
+        row = {
+            "role": role, "action": action or kind, "called_by": called_by or S.CONDUCTOR_ROLE,
+            "parent_task_id": parent_task_id, "depth": max(1, int(depth)),
+            "input_key": input_key, "status": "pending", "outcome": None,
+            "refusal_reason": None, "instance": "",
+            "detail": summary or f"工作项（{kind}）", "error": None,
+            "started_at": "", "ended_at": None, "tokens": 0, "usd": 0.0,
+            "artifacts": [], "inputs": [],
+            "kind": kind, "expects": expects, "item_state": "queued", "item_close": "",
+            "seen_by": "", "seen_step": None, "keep_alive": bool(keep_alive),
+        }
+        return self._write_new_row(row, note=f"item:{kind}")
+
+    def _set_item(self, task_id: str, *, state: str, close: str = "",
+                  by_task_id: str = "", step: int | None = None) -> tuple[str, str]:
+        """工作项状态迁移的唯一写入点。返回 `(落成的状态, 问题)`。
+
+        三条不变量（都在这里判，判不过 ⇒ 零写入，并在返回值里说清）：
+        1. 只许往后走、不许倒退：`claimed` 这一档允许被跳过（消息/通报类项没有
+           `running` 行，`claimed` 对它们没有意义），但 `done` 之前必须已经有 `seen`；
+        2. 没 `seen` 就 `done` ⇒ 返回 `"ack_unbacked"`（空口 ack 的机器形态，业主 A5：
+           只记读数、不拒写；升级档见 `draft/88` §7）；
+        3. `seen` 必须带 `by_task_id` 与 `step`（"谁在第几步读的"是判据要的量）。
+        """
+        with self.store.tx("tasks", actor="conductor") as tx:
+            row = next((r for r in tx.rows("tasks")
+                        if str(r.get("task_id")) == str(task_id)), None)
+            if row is None:
+                return "", f"没有这一项（task_id={task_id!r}）—— 不是'已经做完'"
+            if not str(row.get("kind") or ""):
+                return "", f"{task_id} 不是板项（kind 为空）⇒ 它的状态不由状态机管"
+            cur = str(row.get("item_state") or "queued")
+            have = list(S.ITEM_STATES).index(cur) if cur in S.ITEM_STATES else 0
+            want = list(S.ITEM_STATES).index(state)
+            if state == "done" and have < list(S.ITEM_STATES).index("seen"):
+                return "ack_unbacked", (f"{task_id} 还没有 seen（没被读进任何一步）就收到 ack ⇒ "
+                                        "空口 ack：读数留着，状态不动（业主 A5）")
+            if want <= have:
+                return "", f"{task_id} 已经到过 {cur!r}（不许倒退或重复迁移）"
+            row["item_state"] = state
+            if state == "seen":
+                row["seen_by"], row["seen_step"] = str(by_task_id), int(step or 0)
+            if state == "done":
+                row["item_close"] = str(close)
+            task = S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__})
+            task.validate()
+            tx.upsert("tasks", task.to_dict(), note=f"item:{state}")
+        return state, ""
+
+    def claim_item(self, task_id: str, *, by_task_id: str = "") -> tuple[str, str]:
+        """`queued → claimed`（接手：这一项被某个实例接下了）。"""
+        return self._set_item(task_id, state="claimed", by_task_id=by_task_id)
+
+    def mark_item_seen(self, task_id: str, *, by_task_id: str, step: int) -> tuple[str, str]:
+        """`→ seen`（渲染：这一项被读进某一步的提示词）。"""
+        return self._set_item(task_id, state="seen", by_task_id=by_task_id, step=step)
+
+    def close_item(self, task_id: str, *, close: str, by_task_id: str = "") -> tuple[str, str]:
+        """`→ done`（行为完成）：`close="acked"`（知道了）或 `"completed"`（做完了）。"""
+        return self._set_item(task_id, state="done", close=close, by_task_id=by_task_id)
+
+    def in_flight_items(self, task_id: str) -> list[dict]:
+        """某条边名下未消的项 —— T2 消边谓词的第二把尺。
+
+        "这一支上还挂着没消的工作项"是"不许消边"的直接理由。
+        """
+        return [r for r in self._board_rows()
+                if str(r.get("item_state") or "") != "done"
+                and str(r.get("parent_task_id") or "") == str(task_id)]
+
+    def board_readings(self) -> dict[str, Any]:
+        """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。"""
+        try:
+            rows = self._board_rows()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，与"板上没事"两件事
+            return {"checked": False, "reason": f"{type(exc).__name__}: {exc}"}
+        by_state: dict[str, int] = {s: 0 for s in S.ITEM_STATES}
+        by_close: dict[str, int] = {c: 0 for c in S.ITEM_CLOSES}
+        for r in rows:
+            st = str(r.get("item_state") or "")
+            if st in by_state:
+                by_state[st] += 1
+            cl = str(r.get("item_close") or "")
+            if cl in by_close:
+                by_close[cl] += 1
+        return {"checked": True, "board_rows": len(rows), "by_state": by_state,
+                "by_close": by_close,
+                "old_instance_rows": len(self._tasks()) - len(rows)}
+
+    def board_view(self, *, limit: int = 20) -> dict[str, Any]:
+        """给主控/父级看的"还挂着什么"（只读，不含建议）。
+
+        口径（甲形态的一条硬约束）：`tasks` 现在有两类行 —— 板项（`kind` 非空）与老实例行
+        （`kind` 为空）。两边不许混：这个视图只数板项，"派了几件活"那一类旧读数只数后者。
+        """
+        try:
+            rows = self._board_rows()
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "reason": f"{type(exc).__name__}: {exc}",
+                    "open_items": [], "open_count": 0}
+        open_items = [r for r in rows if str(r.get("item_state") or "") != "done"]
+        open_items.sort(key=lambda r: (str(r.get("started_at") or ""),
+                                       str(r.get("task_id") or "")))
+        return {"checked": True, "open_items": open_items[:max(1, int(limit))],
+                "open_count": len(open_items), "readings": self.board_readings()}
+
     # ---------------------------------------------------------------- 顶趟（F1）
     def open_top_level_run(self, role: str, task: str, *, by: str = "user",
                            input_key: str = "") -> str:
