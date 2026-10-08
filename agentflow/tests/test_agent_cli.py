@@ -150,7 +150,10 @@ def test_run_agent_drives_a_child_action_through_the_llm_loop(tmp_path: pathlib.
     out = capsys.readouterr().out
     assert rc == 0, out
     st = Store(tmp_path / "ws")
-    rows = sorted(st.rows("tasks"), key=lambda r: str(r.get("task_id")))
+    # 只看实例行（`kind` 为空）：板项（终态回报的 `notice` 等）也是 `tasks` 的行
+    # （业主 2026-10-08 裁 A1=甲），而这一条问的是"被召唤的那一件活"。
+    rows = sorted((r for r in st.rows("tasks") if not str(r.get("kind") or "")),
+                  key=lambda r: str(r.get("task_id")))
     assert rows, "台账里没有任何任务行"
     assert str(rows[-1].get("role")) == "D" and str(rows[-1].get("called_by")) == "M", rows
     events, _ = SS.read_session(tmp_path / "ws", sid="t")

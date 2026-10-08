@@ -1469,7 +1469,48 @@ class AgentLoop:
     #: ② 发件/收件两个钩子是 no-op（`_outbound_hook` / `_inbound_hook`）；
     #: ③ 其余行为逐字不变（秘书的失败姿态是 fail-open，而"没装配"不该改变别的判据）。
     #: 生产路径由 `run_role` 自动装配（每角色一个实例），所以这条默认值只影响裸构造。
+    #: 2026-10-08 晚（业主 T14）：秘书从"可给可不给"变成"一定要" ——
+    #: 逐字「秘书是个流程上的东西，不是可要可不要的，是一定要的，每唤起一个智能体就自带一个
+    #: 秘书帮它忙前忙后」。于是不传时由 `__post_init__` 自动派生（见下面的实现），
+    #: `auto_secretary=False` 只留给单测去造"没有秘书"这一态（生产路径上它不可达）。
     secretary: Any = None
+    #: 不传秘书时要不要自动派生（`T14`）。默认 True；单测要"没有秘书"那一态时显式关掉。
+    auto_secretary: bool = True
+    #: 自动派生失败时的理由（空串 = 没事）。must not 静默：写路径关闭这件事
+    #: 必须能从盘上/返回值读到（D81 的第 ③ 条就是为它加的留痕）。
+    secretary_problem: str = ""
+
+    def __post_init__(self) -> None:
+        """T14：每唤起一个智能体就自带一个秘书（不传就派生）。
+
+        三条口径：
+        1. 给了秘书（`secretary` 非空）⇒ 用它，什么都不做；
+        2. `auto_secretary=False` ⇒ 保持 `None`（单测造"没有秘书"那一态的唯一入口）；
+        3. 否则派生 —— 失败不抛（fail-open：这一趟照跑，写路径关闭），
+           但把理由落进 `secretary_problem` 并写一条 `agent_note`（与 D81 的留痕同族）。
+        为什么"装配必定"不等于"运行脆断"：工厂抛异常是环境问题，不该让整个跑批死掉；
+        但"没有秘书"这件事必须留痕，否则"没装配"与"不用装配"在盘上长得一样。
+        """
+        if self.secretary is not None or not self.auto_secretary:
+            return
+        if self.store is None:
+            self.secretary_problem = ("秘书没装配：这一趟没有 store（`AgentLoop` 裸构造时"
+                                      "既没给秘书、也没有可派生的依赖）")
+            return
+        try:
+            self.secretary = _secretary_for(self.role, root=self.session_root,
+                                            store=self.store, registry=self.registry,
+                                            seam=self.seam, sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 工厂坏了仍 fail-open，但必须留痕
+            self.secretary = None
+            self.secretary_problem = (f"秘书装配失败（{type(exc).__name__}: {exc}）⇒ 这一趟没有"
+                                      "秘书：手稿的写路径整体关闭（`handoff` 与 `summon` 的"
+                                      "`notify` 派生都写不成，返回 `ok is False`），而这一趟照跑。")
+            try:
+                SS.append(self.session_root, {"kind": "agent_note", "role": self.role,
+                                              "note": self.secretary_problem}, sid=self.sid)
+            except Exception:  # noqa: BLE001 —— 连留痕都写不成时不许把它变成"装配成功"
+                pass
 
     def _prompt(self, transcript: str, *, step: int) -> str:
         last = step >= self.max_steps - 1
@@ -2944,6 +2985,10 @@ class LlmBackend:
             return self.inner.call(role, action, params, token=token, instance=instance,
                                    task_id=task_id)
         seam = self._seam(role)
+        # 秘书不在这里传：`AgentLoop.__post_init__` 会按业主 T14「每唤起一个智能体就自带一个
+        # 秘书」自动派生（这里给了 store/registry/seam/sid，正是派生需要的四样）。
+        # 别"顺手"补一个 `secretary=None` —— 那会把这条路上的秘书关掉，
+        # 而真机读数正是"批量路写不出自撰交差行"（1562 行全框架派生，模型自撰 0）。
         loop = AgentLoop(role=role, session_root=self.session_root, registry=self.registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
                          workspace_root=self.workspace_root, sid=self.sid, token=token,
