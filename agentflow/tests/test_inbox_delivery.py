@@ -115,6 +115,40 @@ def test_messages_stay_fresh_when_no_model_call_ever_succeeds(tmp_path: pathlib.
     assert rendered == ids, ("留言被误标成已投递 —— 这一趟一次模型调用都没成功", rendered)
 
 
+def test_the_message_id_is_max_plus_one_not_a_count(tmp_path: pathlib.Path):
+    """正控（`draft/83` D79 / `draft/86` §5）：编号取最大号 + 1，不是"数条数 + 1"。
+
+    造法：先发一条（`m0001`），再手工追加一条带大号 `m0009` 的消息（append-only 会话里
+    这等价于"中间有坏行占过号"）。"数条数 + 1" 会给出 `m0003`，"取最大 + 1" 给出 `m0010`。
+    """
+    from agentflow import sessions as SS
+
+    ws = _ws(tmp_path)
+    _send(ws, 1)
+    SS.append(ws, {"kind": "agent_message", "msg_id": "m0009", "from": "M", "to": "D",
+                   "subject": "手工占号", "body": "x", "channel": "private"}, sid=None)
+    mid, problem = AL.send_message(ws, sender="M", to="D", subject="新的一条", body="y")
+    assert not problem, problem
+    assert mid == "m0010", mid
+
+
+def test_a_message_line_without_an_id_is_a_bad_line_not_a_substitute(tmp_path: pathlib.Path):
+    """负控（同一个 D79）：缺 `msg_id` 的行报坏行，不许按事件序号编一个替身号。
+
+    替身号会与真实号重复（那个序号是"全部事件"的序号，不是消息序号），而 `delivered`
+    以 msg_id 为键 ⇒ 会把别人的"已投递"状态读到这条身上（三态塌成一态）。
+    """
+    from agentflow import sessions as SS
+
+    ws = _ws(tmp_path)
+    ids = _send(ws, 1)
+    SS.append(ws, {"kind": "agent_message", "from": "M", "to": "D",
+                   "subject": "没有号的一条", "body": "x", "channel": "private"}, sid=None)
+    msgs, problems = AL.read_messages(ws, "D", sid=None)
+    assert problems and "没有 msg_id" in problems[0], problems
+    assert [m["msg_id"] for m in msgs] == ids, ("坏行不许被编一个号混进来", msgs)
+
+
 def test_the_rendered_set_is_exactly_what_gets_marked(tmp_path: pathlib.Path):
     """正控（D75 的核心）：12 条未投递 ⇒ 开场窗口渲染 8 条，标记的恰好是这 8 条。
 

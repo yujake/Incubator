@@ -890,17 +890,31 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
             continue
         if str(event.get("from")) == role:
             continue                     # 自己说的不用再听一遍
-        msg_id = str(event.get("msg_id") or f"m{i:04d}")
+        msg_id = str(event.get("msg_id") or "")
+        if not msg_id:
+            # 坏行不给"替身号"（`draft/83` D79）：旧写法按事件序号编一个 `m{i:04d}`，
+            # 而那个 i 是全部事件的序号、不是消息序号 ⇒ 它会与真实号重复，
+            # 而 `delivered` / `consume:` 都以 msg_id 为键 ⇒ 要么误判"已投递"、
+            # 要么误判"已消费"（三态塌成一态）。身份读不出来就如实报坏行。
+            problems.append(f"第 {i} 条 agent_message 没有 msg_id ⇒ 这一条的身份读不出来")
+            continue
         out.append({**event, "msg_id": msg_id, "delivered": msg_id in delivered})
     return out, problems
 
 
 def send_message(session_root: Path, *, sender: str, to: str, subject: str, body: str,
                  reply_to: str = "", sid: str | None = None) -> tuple[str, str]:
-    """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。"""
+    """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。
+
+    编号口径：取现有最大号 + 1（`draft/83` D79）。旧写法是"数一数有多少条
+    `agent_message` 再加一"，它在正常 append-only 会话里与 max+1 恰好相等，
+    但只要有一条坏行占号、或将来做了删除/搬迁，计数口径就会撞上已用过的号 ——
+    而 `msg_id` 正是投递登记与消费判定的键（撞号 = 两条消息共享一个身份）。
+    """
     events, _problems = SS.read_session(session_root, sid=sid)
-    seq = sum(1 for e in events if e.get("kind") == "agent_message") + 1
-    msg_id = f"m{seq:04d}"
+    used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
+    nums = [int(m[1:]) for m in used if m[:1] == "m" and m[1:].isdigit()]
+    msg_id = f"m{(max(nums) + 1) if nums else 1:04d}"
     _path, problem = SS.append(session_root, {
         "kind": "agent_message", "msg_id": msg_id, "from": sender, "to": to,
         "subject": subject, "body": body, "reply_to": reply_to,
