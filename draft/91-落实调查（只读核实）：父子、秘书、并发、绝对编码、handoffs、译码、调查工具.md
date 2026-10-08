@@ -140,6 +140,11 @@ Select-String -Path src\agentflow\sessions.py -Pattern 'FileLock|_append_lock|de
   （与 `_write_new_row` 修过的那个缺陷同族，**这一处没修**）。
   ④ **没有存活/收尾读数**：`stopctl` 登记的只有"角色 + pid"（顶趟级），
   没有"哪个秘书属于哪个代理""代理死了秘书留下了什么"这一类读数 ⇒ **同死**这一条没有载体。
+- **真机读数（2026-10-08 深夜，`draft/94` §1/§2）**：61 个工作区里只有 **2 个**有
+  `out/secretary/*.jsonl`，**文件名只有 `M`**，合计 **79 行**，**重复 `seq` 0 次**。
+  ⇒ D106/D107/D108 都是**结构性风险、真机未发生**：真机上只有主控的秘书在写、
+  `secretary_negotiation` 只有 2 行。**别把"真机 0 次"读成"不会发生"** ——
+  并发是框架自己允许的（`summon_many` 的多 `instance`），S1m 的判据只能**自造并发**。
 - **建议的修法**（与既有 house pattern 对齐，不改秘书的职责面）：
   · 台账文件按**绝对编码**分片（`secretary/decisions-<role>-<task_id>.jsonl`），
     读侧提供"合并视图"（按角色/按父）；
