@@ -299,3 +299,17 @@ D11（豁免表 + 上限）✅ 已登记待签 · D12（Windows 权限口径）�
 **顺带记一条教训（进 §8 风险表）**：**门跑期间不要并行跑判据** —— 我在门还在跑时起了同一棵树的一批判据，
 出现 1 条"只在并行时失败、单独跑与重跑都绿"的用例（`test_webui_readers.py` 的键集合相等那条）。
 冻结纪律不只是"门跑期间不改文件"。
+
+### §11b 实际推送通道（2026-10-08 实测；与"计划"的差别都记在这里）
+
+| 事实 | 读数 |
+|---|---|
+| 远端 | **一个都没有**（`git remote -v` 空）—— 仓库从未 push 过 |
+| github.com 可达性 | **可达**：`git ls-remote https://github.com/git/git.git` 能取到真实 refs；`https://github.com` 与 `/new` 经本地代理回 **HTTP 200** |
+| 为什么能通 | 本机跑着 `steamcommunity_302`（进程 `steamcommunity_302.caddy` / `.cli`），它把 `github.com` 等域名写进 hosts 指到本地、再由它转发到真实 GitHub（hosts 里那些 `#S302` 注释就是它写的） |
+| `api.github.com` | **502**（本地代理不转发它）⇒ **没法用 REST API 建仓** |
+| `codeload.github.com` | 502（同上；影响不到的 clone 方式） |
+| 凭据 | `credential.helper = manager`（GCM），但**没有存过 github.com 的凭据**；且**GCM 在 AI 的受限环境里起不来**（实测 `sh.exe: couldn't create signal pipe, Win32 error 5`）⇒ `git push` 的登录环节只能由有交互会话的人完成 |
+| 结论 | 最后两步必须人做：① 浏览器建仓（`https://github.com/new?name=Incubator`，建议先 Private）② 在自己的终端跑 `temp/_push_incubator.ps1 -User <GitHub用户名>`（它体检 → 探远端 → 配 remote → push → 推完对账；`-ProbeOnly` 只体检+探远端、不动 remote） |
+| 那 3 个历史 blob | 密钥形态扫描在**历史**里命中 3 个 blob，内容是 C 线测试自述为假的哨兵串（`sk-browser-must-never-be-shown-…` 等）；工作树里已换成 `SENTINEL-…`。**决定：带着推**（重写 438 个提交会把 draft 里大量按 sha 的引用作废）；若将来要清，用 `git filter-repo` 并在这里记一次"历史重写"事件 |
+| 提交署名 | 仓库级 `user.name/email = agentflow-agent <agentflow@localhost>`（438 个提交）；全局是 `Yu Jiaqi <yujiaqi310@163.com>`。要不要把后续提交署成本人，是所有者的一句话 |

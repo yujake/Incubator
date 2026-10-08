@@ -322,6 +322,7 @@ desktop.ini
 !/temp/_probe_ledger_audits.py
 !/temp/_probe_openalex_mode.py
 !/temp/_probe_precise_desc.py
+!/temp/_push_incubator.ps1
 !/temp/_r009_fix.py
 !/temp/_r009_locate.py
 !/temp/_r009_strip.py
