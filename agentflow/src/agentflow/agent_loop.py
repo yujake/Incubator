@@ -626,6 +626,18 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
             f"召唤链深度 {depth}，台账号 {task_id or '（本次运行未拿到台账号）'}。")
 
 
+def _is_role_name(value: str) -> bool:
+    """`value` 是不是一个真角色名（`schema.ROLES` 或主控）。
+
+    为什么需要它：`tasks.called_by` 这一格对顶趟写的是 `"user"`
+    （`Conductor.open_top_level_run(by="user")`），而 `"user"` 不是角色
+    —— 把它当收件人角色传给 `open_item` 会被 `Task.validate` 拒掉
+    （实测：`role 必须是 (…) 之一，收到 'user'`，于是终态通报一条都落不成）。
+    角色名单的唯一来源是 `schema`（`ROLES` + `CONDUCTOR_ROLE`），这里照读、不抄。
+    """
+    return value in (*S.ROLES, S.CONDUCTOR_ROLE)
+
+
 @dataclass(frozen=True)
 class LoopStep:
     """循环里的一步：模型说了什么、框架做了什么、结果是什么。"""
@@ -1475,6 +1487,17 @@ class AgentLoop:
     #: 否则链条在台账里会断成两段互不相干的记录。
     my_task_id: str = ""
     depth: int = 1
+    #: 这一趟的收件人（父代理）的台账号与角色 —— 由 `run` 现算（业主 T21 附：
+    #: "知道我的父代理是谁"）。它同时是 `_emit_settlement` 挂板项的那个名字（D89）：
+    #: 板项/留言的 `parent_task_id` 口径是"收件人的编号"，不是自己的。
+    #: 空串 = 这一趟是顶层发起（没有父代理）⇒ 回报挂在这一趟自己名下（它就是这一支的根，
+    #: 与改前的行为逐字相同）。
+    parent_task_id: str = ""
+    #: 父代理的角色（我那一行的 `called_by`）。收件人按角色归队时用它。
+    parent_role: str = ""
+    #: 父是谁没读成时的理由（空串 = 读成了）。与"没有父"分得开（三态纪律）：
+    #: 读不成时 `_resolve_parent` 落到"挂在自己名下"那一档，并把这句话回给调用方。
+    parent_problem: str = ""
     #: 本角色自己的秘书（A 线：`draft/53` v3 的四职责 + 手稿通道增改查）。
     #:
     #: `None` = 没装配（裸 `AgentLoop(...)`；测试与旧调用点）。三种后果，都是有意的：
@@ -1525,6 +1548,94 @@ class AgentLoop:
                                               "note": self.secretary_problem}, sid=self.sid)
             except Exception:  # noqa: BLE001 —— 连留痕都写不成时不许把它变成"装配成功"
                 pass
+
+    # ------------------------------------------------- 父与子（业主 T21 附，S1d）
+    def _parent_of_mine(self) -> tuple[str, str, str]:
+        """我自己那一行 `tasks` 给的 `(父的台账号, 父的角色, 问题)`。
+
+        为什么从台账现读、而不是只信调用方传进来的：`LlmBackend.call` 那条路手上就有行，
+        但 `run_role` 那条顶趟路没有 —— 判据（D89）问的是"这一行的父是谁"，
+        所以台账是那个唯一口径。
+
+        三态：读成了 ⇒ 问题为空；读不成 ⇒ 问题非空（`("", "", "…")`），
+        不许把"读不成"折成"没有父" —— 两者的后果不同（前者是"回报没挂对名字"，
+        后者是"这一趟本来就是根"），而它们在盘上长得一样时没人能事后分辨。
+        """
+        if self.conductor is None:
+            return "", "", "没有 conductor 句柄 ⇒ 读不到我这一行的父是谁"
+        if not str(self.my_task_id or ""):
+            return "", "", "这一趟没有台账号（尚未落台账）⇒ 读不到父是谁"
+        look = getattr(self.conductor, "_task", None)
+        if not callable(look):
+            return "", "", "这个 conductor 没有 `_task` ⇒ 读不到我这一行的父是谁"
+        try:
+            row = look(self.my_task_id)
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 没有父
+            return "", "", f"台账读不成（{type(exc).__name__}: {exc}）"
+        if not row:
+            return "", "", f"台账里没有我这一行（task_id={self.my_task_id!r}）"
+        return (str(row.get("parent_task_id") or ""),
+                str(row.get("called_by") or ""), "")
+
+    def _resolve_parent(self, given: str, summoned_by: str) -> tuple[str, str, str]:
+        """定这一趟的收件人：`(父的台账号, 父的角色, 问题)`。三条分支，逐条都有理由。
+
+        1. 调用方给了 `given`（`LlmBackend.call` 从它那一行读出来的）⇒ 用它，
+           并把 `summoned_by`（同一个来源的 `called_by`）当父的角色；
+        2. 没给 ⇒ 从台账读（`_parent_of_mine`）—— 这是 D89 的修法：
+           子报给父，板项的 `parent_task_id` 必须是父的台账号；
+        3. 两个来源都没有 ⇒ 顶层发起：收件人 = `(我的台账号, 主控的角色)`，
+           也就是"回报挂在这一趟自己名下"。这一支与改前的行为逐字相同 ——
+           它是有意的（顶层那一趟就是这一支的根，没有别人可挂）。
+           为什么角色落回主控而不是"我自己"：顶趟那一行的 `called_by` 写的是
+           `"user"`（`open_top_level_run` 的 `by="user"`），而 `"user"` 不是角色名
+           （`schema.ROLES` 里没有它）⇒ 按角色归队时只能落到读板的那个人（主控）。
+
+        但"没读成"不是这一支：台账读不成时返回 `pid=""` 并把理由放进第三个返回值。
+        谁都不许把"读不成"当成"顶层发起" —— 前者会让提示词里那一格凭空写一个父编号
+        （拿自己的编号冒充父的编号，模型会照它去沟通），后者才是事实。
+        """
+        pid, prole, problem = str(given or ""), str(summoned_by or ""), ""
+        if not pid:
+            pid, prole, problem = self._parent_of_mine()
+        if prole and not _is_role_name(prole):
+            prole = ""
+        if pid:
+            return pid, (prole or S.CONDUCTOR_ROLE), ""
+        if problem:
+            return "", (prole or S.CONDUCTOR_ROLE), problem
+        return str(self.my_task_id or ""), (prole or S.CONDUCTOR_ROLE), ""
+
+    def _children_text(self) -> str:
+        """此刻我名下的直接子代理台账号（进提示词 `{{children}}` 那一格）。
+
+        口径：`conductor._children_of(我的编号)` 是"我的子代理"的唯一实现
+        （`_admitted_children_of` / `_in_flight_children_of` 是另两个口径：累计派活 /
+        此刻在飞），所以这里刻意只读不写、也不新加一个公开别名 ——
+        多一个名字就多一个漂移点，而"我的子代理是谁"这句话只该有一个答案。
+
+        四种返回值都是刻意不同的：真清单 / 空串（确实没有 ⇒ 提示词层渲染
+        「（此刻名下没有子代理）」）/ 带括号的问题串（没读成）/ 截断后的"…等 N 个"
+        （名单太长时截断，但把总数写出来，免得"20 个"被读成"正好 20 个"）。
+
+        它是这一趟开始那一刻的名单（提示词在 `run` 里渲染一次）：这一趟里新派的
+        子代理不会自己出现在这里。不假装实时 —— 那需要每一步重渲染，见 `draft/85` §5.2。
+        """
+        if not str(self.my_task_id or ""):
+            return "（这一趟还没落台账，读不到子代理清单）"
+        if self.conductor is None:
+            return "（读不到子代理清单：这一趟没有 conductor 句柄）"
+        look = getattr(self.conductor, "_children_of", None)
+        if not callable(look):
+            return "（读不到子代理清单：这个 conductor 没有 `_children_of`）"
+        try:
+            kids = [str(x) for x in look(self.my_task_id)]
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 没有子代理
+            return f"（子代理清单没读成：{type(exc).__name__}: {exc}）"
+        if not kids:
+            return ""
+        head = "、".join(kids[:20])
+        return head if len(kids) <= 20 else f"{head} …等 {len(kids)} 个"
 
     def _prompt(self, transcript: str, *, step: int) -> str:
         last = step >= self.max_steps - 1
@@ -1629,6 +1740,7 @@ class AgentLoop:
         return f"{left:.6f} 美元（上限 {self.seam.usd_budget:.6f}）"
 
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
+            parent_task_id: str = "",
             depth: int = 1, resumed: tuple[str, int] | None = None,
             waiting_for: str = "") -> LoopRun:
         """跑一次循环。`task` 是这次要做的事（被召唤时就是调用方给的参数）。
@@ -1642,6 +1754,10 @@ class AgentLoop:
         t0 = time.monotonic()
         self.my_task_id = my_task_id
         self.depth = depth
+        # 这一趟的收件人（父是谁）现算一次：它既是提示词里 `{{parent_task_id}}` 那一格，
+        # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
+        self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(
+            parent_task_id, summoned_by)
         # 收件箱：`inbox` 是渲染进开场提示词的那一段，`fresh_ids` 是它渲染过的 id
         # —— 下面 `mark_delivered` 只标这一批（D75：旧的写法渲染 8 条、却把全部未投递标掉，
         # 于是第 9 条及更早的留言永久丢失）。
@@ -1676,7 +1792,19 @@ class AgentLoop:
         delivered_marked = False
 
         availability = self._availability()
+        # 父与子两格（业主 T21 附）：数据在台账里，缺的一直是"渲染给模型看"。
+        # `children` 是这一趟开始那一刻的名单；`parent_problem` 非空时如实进 notes
+        # （"父是谁没读成"不许静默 —— 那会让回报挂错名字而没人知道）。
+        children_text = self._children_text()
+        if self.parent_problem:
+            run.notes.append(f"父代理没读成：{self.parent_problem} ⇒ 回报挂在这一趟自己名下")
+        # 提示词那一格：读成了 ⇒ 真编号（顶层发起时是空串 ⇒ 提示词层渲染"顶层发起"
+        # 那句缺省）；没读成 ⇒ 把理由端上去 —— 拿自己的编号冒充父的编号是最坏的
+        # 一种"看起来成功"（模型会照它去沟通）。
+        parent_fact = self.parent_task_id or (
+            f"（没读成：{self.parent_problem}）" if self.parent_problem else "")
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
+                     parent_task_id=parent_fact, children=children_text,
                      budget_left=self._budget_text(), inbox=inbox,
                      workspace_root=self.workspace_root, availability=availability,
                      notebook=notebook, user_replies=replies,
@@ -2777,8 +2905,13 @@ class AgentLoop:
         三种"没做成"都如实返回一句读数，不静默：不是终态 / 没有 conductor 句柄 /
         开项抛异常 —— 后者在本仓是最忌的形态（"报告没写成"与"不用报告"长得一样）。
 
-        收件人按角色队列记（`role=M`）：甲形态那七格里没有收件人列，
-        这一条按 `draft/86` §13.5 的甲（按角色归队）；等那一岔口定下来再按实例精确投递。
+        收件人是谁（D89，2026-10-08 深夜修）：板项的 `parent_task_id` 口径是
+        "收件人的编号"，所以子报给父时它必须是父的台账号、`role` 写父的角色。
+        改前这里写的是 `parent_task_id=self.my_task_id`（挂在自己名下、角色记成 M）——
+        后果是父的待办视图 `in_flight_items(父的编号)` 里永远看不到"哪个子向我交差了"。
+        现在用 `run` 里现算的 `parent_task_id` / `parent_role`（顶层发起时它们落回
+        "这一趟自己"，与改前逐字相同）。判据：`tests/test_report_is_mandatory.py` /
+        `tests/test_children_and_parent_are_visible.py`（负控：换成自己的编号 ⇒ 红）。
         """
         if not str(run.stop_reason or "") or run.stop_reason in ("max_steps", "waiting_for_user"):
             return ""          # 没停在终态（步数用尽/还在等用户）⇒ 它不是"跑完了"，不补通报
@@ -2788,11 +2921,20 @@ class AgentLoop:
             return ("终态回报没落板：这一趟没有 conductor 句柄"
                     "（`run_role` 会自动装配；裸构造的 `AgentLoop` 不会）")
         body = str(run.final or "").strip() or "（它没有留下结论）"
+        # 收件人：父的台账号与角色（`run` 里算好的；替身/裸对象没有这两格时落回旧行为）。
+        to_id = str(getattr(self, "parent_task_id", "") or self.my_task_id or "")
+        to_role = str(getattr(self, "parent_role", "") or S.CONDUCTOR_ROLE)
+        # 板项是收件人的子行 ⇒ 深度 = 收件人的深度 + 1（`verify` 的
+        # `task_depth_discontinuous` 判这一条，实测：写成"我的深度"会让顶层那一趟红）。
+        #   · 挂在真父名下（子这一趟）⇒ 父的深度 + 1 = 我的深度；
+        #   · 顶层那一趟挂在自己名下 ⇒ 我这一行的深度 + 1（与改前逐字相同）。
+        hangs_on_self = (not to_id) or to_id == str(self.my_task_id or "")
+        item_depth = int(self.depth or 1) + (1 if hangs_on_self else 0)
         try:
             item_id = self.conductor.open_item(
-                kind="notice", role=S.CONDUCTOR_ROLE, expects="ack",
+                kind="notice", role=to_role, expects="ack",
                 summary=f"{self.role} 已收工（{run.stop_reason}）", called_by=self.role,
-                parent_task_id=self.my_task_id or None, depth=int(self.depth or 1) + 1,
+                parent_task_id=to_id or None, depth=item_depth,
                 input_key=f"notice@{self.role}:{self.my_task_id or '-'}",
             )
         except Exception as exc:  # noqa: BLE001 —— 回报没落成必须留痕，不许静默
@@ -2803,9 +2945,15 @@ class AgentLoop:
         self.conductor.set_item_detail(item_id, body)
         SS.append(self.session_root, {"kind": "agent_settlement_item", "role": self.role,
                                       "item_id": item_id, "stop_reason": run.stop_reason,
+                                      # 收件人也进读数：事后要能回答"这条通报是挂给谁的"（D89）
+                                      "to_task_id": to_id, "to_role": to_role,
                                       "has_conclusion": bool(str(run.final or "").strip()),
                                       "sid": self.sid}, sid=self.sid)
-        return f"终态回报已落板：{item_id}（框架通报；模型没填 notify）"
+        return f"终态回报已落板：{item_id}（框架通报；模型没填 notify）" + (
+            # 父是谁没读成时这里必须接着说一句：否则读的人会以为"挂对了"
+            f"；父是谁没读成（{getattr(self, 'parent_problem', '')}）⇒ 挂在这一趟自己名下"
+            if (getattr(self, "parent_problem", "") and not str(
+                getattr(self, "parent_task_id", ""))) else "")
 
     def _do_handoff(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """写一份交接手稿 + 把"编号 + 一句简要描述"发给收件人（`draft/37` §134）。
@@ -3056,6 +3204,9 @@ class LlmBackend:
                        summoned_by=str(row.get("called_by") or params.get("_summoned_by")
                                        or S.CONDUCTOR_ROLE),
                        my_task_id=str(row.get("task_id") or params.get("_task_id") or ""),
+                       # 父的台账号从我这一行读（D89）：它同时是提示词里
+                       # `{{parent_task_id}}` 那一格与终态回报挂项的名字。
+                       parent_task_id=str(row.get("parent_task_id") or ""),
                        depth=int(row.get("depth") or params.get("_depth") or 1))
         artifact = self._write_run_artifact(role, run)
         SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,

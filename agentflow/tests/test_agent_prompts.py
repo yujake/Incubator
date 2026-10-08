@@ -1343,18 +1343,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p44`（2026-10-08 晚，所有者 T18）：插话通道收窄成"只有用户能发、只有主控 M 会收到"
 #: ⇒ 改的是共享段那段【插话】⇒ 十格全部换值（与 p42/p43"只动一格"正好对照：
 #: 换几格本身就是这次改动作用域的读数）。
-_FROZEN_PROMPT_VERSION = "p44"
+#: `p45`（2026-10-08 深夜，S1d）：`AGENT_IDENTITY`（共享段）补两格事实 ——
+#: `{{parent_task_id}}`（我父的台账号）与 `{{children}}`（此刻我名下的子代理台账号）。
+#: 业主 T21 的追问「不就应该是知道我的父代理是谁，子代理有谁，然后往它们按编号沟通吗」
+#: ⇒ 数据本来就在台账里，缺的是渲染。落在共享段 ⇒ 十格全部换值（同 p44 的读数形态）。
+_FROZEN_PROMPT_VERSION = "p45"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "60548d2df0c2df1b6b9a95bb93166e726edea56337c0346b8f087c60686b9806",
-    "B": "bdcb882ab33510a7bd4ab86fb1f1ea72f15184684578476b501d0500475e05cc",
-    "C": "d4ceda7cf03456ecba5735941cb8807da45b48f8f4a61957b4f2f8a34e91457e",
-    "D": "1022987331a869370b1d2f034671eb1a2df67174376314163fc2a372af0d433d",
-    "E": "83a720b67df9f188932768154f92bcac2c979e7edce8c23e44d618660a9eb7eb",
-    "F": "c849e85f6274c06aef36d5cfc45be0edae4f798ec228a556374a7d25b5c621ff",
-    "G": "ffd412ee072f9942f542e7d2f6737b68249a2856165c26abb99efeed024046d6",
-    "H": "1dc5b617b4a1596bdc2efc61c937f99cc18e15ccea082bcb457f6302fa469744",
-    "V": "4040a6748e0b881efa768b29d43e6c867888c9e03304f8561bb29e65a29e86d3",
-    "M": "5a8d68f17c2d7deeda160a0f2fe32c4b85d68dc5152adc13eaa0ecf85754009e",
+    "A": "87fdf5c3601d214e74dc4cc46f2a011e15aefa3053719e4ddf7d80fdd9d2eed5",
+    "B": "f3481354ddcc478257d24ad6c8543ecbd8b0d9215070273721b2dbef58fc403d",
+    "C": "6ab515cfb454d4f9d802473f27bb49b81056277fd725e127256955abe0e6930b",
+    "D": "8803734be286b2e10dcab2ae67b2fd32fbc48f7834e80fd161549a5d9c8a565e",
+    "E": "819ea6622e0269f23d42e99c4394e760d3aed2aa9a9876c153e9f34277423ea7",
+    "F": "ba607a242e3967a286a3ad5fa71ccadaf799832fe8f2ab456b1fe499a8f8f633",
+    "G": "5af99039bfd2088b273bbfca048b241daad33662e1e1c208107f9f7fea96d3a1",
+    "H": "1b7513383412404e2510c7fd1fb369ca4af89b8c7ad596e8855107e8d4e0a1e6",
+    "V": "86386dc49b3faf052c784e6e84108689f7bdf35f205b282209efe7471119dd82",
+    "M": "2315b0a3689502c19f99b6bfaaa02c2e7781a335c632006007375d29f7c040b1",
 }
 
 

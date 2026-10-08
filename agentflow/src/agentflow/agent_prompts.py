@@ -19,6 +19,9 @@
 
 - `{{task}}`：这一次的任务（由调用方给，通常是被召唤时带过来的参数或一条留言）；
 - `{{summoned_by}}` / `{{task_id}}` / `{{depth}}` / `{{budget_left}}`：这次运行的处境；
+- `{{parent_task_id}}` / `{{children}}`：我父的台账号、此刻我名下的子代理台账号（业主 T21：
+  "知道我的父代理是谁、子代理有谁"）—— 两格都由 `agent_loop.AgentLoop` 现算，
+  读不到时给的是带括号的问题串，与"确实没有"分得开；
 - `{{inbox}}`：收到的留言摘要（没有就是"没有留言"，不是空串 —— 空串会被严格插值拒掉）。
 """
 from __future__ import annotations
@@ -83,7 +86,13 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 只有主控 M 会收到"（「插话只有 M 可能受到用户的插话，处理学 dsh」）⇒ 共享那一段
 #: 【插话】改成写清这两条，并点明"同伴之间的传话走留言/交接手稿"。它落在共享段上
 #: ⇒ 十格摘要全部换值（这是"改的是共享段"的读数，与 p42/p43 只动一格正好对照）。
-PROMPT_VERSION = "p44"
+#:
+#: `p45`（2026-10-08 深夜，主控代改，S1d）：业主 T21 的追问「不就应该是知道我的父代理是谁、
+#: 子代理有谁，然后往它们按编号沟通吗」落地 —— `AGENT_IDENTITY`（共享段）补两格事实：
+#: `{{parent_task_id}}`（我父的台账号）与 `{{children}}`（此刻我名下的子代理台账号清单）。
+#: 数据本来就在台账里（我那一行的 `parent_task_id` / `conductor._children_of(我的编号)`），
+#: 缺的只是"渲染给模型看"这一半。落在共享段 ⇒ 十格摘要全部换值（同 p44）。
+PROMPT_VERSION = "p45"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1815,6 +1824,7 @@ def write_profiles(root: str | Path, *, registry: Any = None,
 def role_prompt_registry(role: str, *, registry: Any = None,
                         task: str = "", summoned_by: str = "",
                         task_id: str = "", depth: int = 1,
+                        parent_task_id: str = "", children: str = "",
                         budget_left: str = "", inbox: str = "", notebook: str = "",
                         user_replies: str = "",
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
@@ -1840,6 +1850,10 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         "task": task or "（这一次没有给出任务描述）",
         "summoned_by": summoned_by or "（顶层发起）",
         "task_id": task_id or "（尚未落台账）",
+        #: 业主 T21（2026-10-08 深夜）：父与子的编号必须渲染给模型看。
+        #: 两格的缺省都写满一句话 —— 留空与"没有"在模型眼里长得一样（T21 附逐字）。
+        "parent_task_id": parent_task_id or "（顶层发起：这一趟没有父代理的台账号）",
+        "children": children or "（此刻名下没有子代理）",
         "depth": str(depth),
         "budget_left": budget_left or "（没有设置预算上限）",
         "inbox": inbox or "（没有收到留言）",
@@ -1858,7 +1872,11 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         "你在一套多智能体协同框架里工作：你只做自己职责内的事，"
                         "其余的交给伙伴（见下面的伙伴表）。"
                         "你这次是被 {{summoned_by}} 唤起/发起的，台账号为 {{task_id}}，"
-                        "在召唤链上的深度是 {{depth}}。"))
+                        "在召唤链上的深度是 {{depth}}。\n"
+                        "你的父代理台账号：{{parent_task_id}}；"
+                        "此刻你名下的子代理台账号：{{children}}。"
+                        "（编号用来对账与回报：派活仍按角色走 `summon`，父子关系由框架"
+                        "按台账号记；要谁做事就让谁**亲自**做，传话/代读不算送达。）"))
     reg.section(Section("FACULTIES", SECTION_ORDERS["FACULTIES"], faculties_text(role, registry)))
     reg.section(Section("STANCE", SECTION_ORDERS["STANCE"],
                         ("你在这一岗上的治学姿态：\n"

@@ -443,7 +443,11 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
     built = host.wired_tool_registry(st, providers=[object()])
     reg = built.registry
     m_tools = sorted(t.name for t in reg.for_role("M"))
-    assert len(m_tools) == 18, m_tools
+    # 计数随工具面一起动：18 → 19 是 `conductor.board`（工作项板，业主 A1=甲 之后 S1b 加的；
+    # 它的 `roles=("M",)` 落在 M 的编排面上）。这一条当时漏改 —— 2026-10-08 深夜 S1d 审计时
+    # 实测 HEAD 上就有一条红（`assert 19 == 18`），补在这里并把出处写清楚。
+    assert len(m_tools) == 19, m_tools
+    assert "conductor.board" in m_tools, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
     assert "conductor.closing" in m_tools, m_tools
     # ① 文件面白名单六件（§38 + §57 两次裁定）
@@ -454,8 +458,8 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
         assert name not in m_tools, (name, m_tools)
     # ③ 知识表与检索仍是禁区
     assert not [n for n in m_tools if n.startswith(("table.", "prov.", "search."))], m_tools
-    # 编排面那 11 件照旧（这条判据原本守的就是它）
-    assert len([n for n in m_tools if n.startswith("conductor.")]) == 12, m_tools
+    # 编排面那 12 件照旧 + `conductor.board`（同上，S1b 加的）⇒ 13
+    assert len([n for n in m_tools if n.startswith("conductor.")]) == 13, m_tools
 
 
 # ---------------------------------------------------------------- ⑥ A 的文献检索真的通

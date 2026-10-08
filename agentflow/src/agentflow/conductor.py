@@ -648,7 +648,27 @@ class Conductor:
         return next((r for r in self._tasks() if r.get("task_id") == task_id), None)
 
     def _children_of(self, task_id: str) -> list[str]:
-        return [str(r["task_id"]) for r in self._tasks() if r.get("parent_task_id") == task_id]
+        """`task_id` 名下子代理的编号（展示面 / 审计面：谁试过什么都要看得见）。
+
+        ## 为什么必须排除板项（`kind` 非空）—— 2026-10-08 深夜 S1d 审计出来的
+
+        `tasks` 从业主 A1=甲 起装两类行：实例行（`kind == ""`）与工作项行
+        （`kind` 非空）。板项那一行的 `parent_task_id` 口径是"收件人的编号"
+        （`draft/84` §T21 附二 / D89），于是一条"某子代理已收工"的 `notice`
+        挂在父名下、一条"派给你的活"的 `delegation` 挂在子名下。
+        按 `parent_task_id` 数行而不看出身，会把这两种东西算成"子代理"：
+
+        - 交付面：`SummonResult.children` 与提示词里的"我名下的子代理台账号"
+          （`{{children}}`，业主 T21 附）会把工作项当成子代理报给模型；
+        - 实测（`temp/_probe_board_vs_fanout_and_dispose.py`）：父名下挂 20 条
+          `notice` 之后，`_in_flight_children_of(父)` 读数就是 20。
+
+        修法就是把两轴分开：本方法只数代理（实例行），工作项那一边的唯一读数是
+        `in_flight_items(task_id)`（"某条边名下未消的项"）。两者一起才是
+        `draft/84` §T2 的消边谓词（实例轴 + 工作项轴），不是互相代替。
+        """
+        return [str(r["task_id"]) for r in self._tasks()
+                if r.get("parent_task_id") == task_id and not str(r.get("kind") or "")]
 
     def _admitted_children_of(self, task_id: str) -> list[str]:
         """`task_id` 受理过的子召唤（累计读数；审计面用，不再是扇出判据）。
