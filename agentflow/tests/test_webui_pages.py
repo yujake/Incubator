@@ -65,8 +65,12 @@ PAGES: dict[str, tuple[str, ...]] = {
 PAGE_KEYS: dict[str, tuple[str, ...]] = {
     "Home": ("pending_questions", "sessions", "problems", "bad_lines", "last_kind",
              "ledger", "tables_note", "waiting_on"),
+    # Run 那一页后半段十条是题 T2-a 的逐条事件（`api.getRunEvents` 那一块）：
+    # 端点与类型由契约 A/C 钉，这里钉的是"页面真的读了它"。
     "Run": ("runs", "report", "checkpoint", "unknown_usd", "drift", "usable",
-            "orphans", "stop_reason", "spend", "events_in_run"),
+            "orphans", "stop_reason", "spend", "events_in_run",
+            "events", "total", "from_index", "to_index", "truncated",
+            "index", "kind", "ts", "shape", "ok", "usd"),
     "Evidence": ("statements", "conjectures", "experiments", "review_findings",
                  "relations", "verifications", "secretary", "quote_verified",
                  "counterexample_experiment_id"),
@@ -76,6 +80,11 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
     "Machine": ("provers", "mathlib", "lean_ready", "can_do_formal", "settings",
                 "configured"),
 }
+
+#: 逐条事件那一块必须写死的那句话（题 T2-a 的三态纪律：`unreadable` 不许渲染成
+#: 一张空列表）。它是这一块的负控唯一抓得住的字符串 —— 抽掉它，页面就把
+#: "没查成"与"这一趟没有事件"画成一个样子。
+EVENTS_TRI_WORD = "不是一张空列表"
 
 #: 每页必须出现的那句空态文案（"读到了，里面是 0"那一档，不是"没查成"）。
 EMPTY_WORDS: dict[str, str] = {
@@ -149,6 +158,23 @@ def _tri_state_problems(page: str, text: str) -> list[str]:
     if TRI_TOKEN not in body:
         return [f"{page} 页里没有 {TRI_TOKEN}（三态没有落点）"]
     return []
+
+
+def _events_unreadable_problems(page: str, text: str) -> list[str]:
+    """逐条事件那一块有没有把"没查成"与"一张空列表"分开（题 T2-a 的三态纪律）。
+
+    两件事一起查：那句写在三态分支里的说明（`EVENTS_TRI_WORD`）在不在，以及这一块
+    读没读 `events` 这一栏。只查前者会被"别处也写了这句话"蒙过去，只查后者会被
+    "把读数当数组直接渲染"蒙过去 —— 两条一起才说明得了问题。
+    """
+    problems: list[str] = []
+    body = _strip_js_comments(text)
+    if EVENTS_TRI_WORD not in body:
+        problems.append(f"{page} 页的逐条事件那一块没有"
+                        f"「{EVENTS_TRI_WORD}」这句（三态会被画成一档）")
+    if "events" not in _page_reads(text):
+        problems.append(f"{page} 页的逐条事件那一块没有读 events")
+    return problems
 
 
 # ====================================================================== 夹具
@@ -333,6 +359,74 @@ def test_run_negative_control_catches_a_page_without_the_index_column() -> None:
     assert _read_problems("Run", shell, PAGE_KEYS["Run"]), "少读键却没报"
     assert _read_problems("Run", shell, ("drift",)) == ["Run 页没有读 drift"]
     assert _tri_state_problems("Run", shell), "没有 TriState 却没报"
+
+
+def test_run_page_replays_the_events_one_by_one(
+        artifacts_ws: pathlib.Path, tmp_path: pathlib.Path) -> None:
+    """Run（题 T2-a）：逐条事件那一块读真数据 · 分页 · 三态。
+
+    正控三半：① 页面源码真的读了那一块的键（`PAGE_KEYS["Run"]` 后半段）；
+    ② 端点走真实 HTTP 给出四条事件与自洽的游标区间；③ 续取那一页确实接得上
+    （`since_index` 用上一页的 `to_index`）。三态那一半在下面那条负控里。
+    """
+    text = _page_text("Run")
+    assert _read_problems("Run", text, PAGE_KEYS["Run"]) == [], (
+        _read_problems("Run", text, PAGE_KEYS["Run"]))
+    assert _events_unreadable_problems("Run", text) == [], (
+        _events_unreadable_problems("Run", text))
+
+    with _server(artifacts_ws) as base:
+        code, got, _raw = _get(base, "/api/run/fix-sid/events")
+        assert code == 200, code
+        assert got["tri"] == "computed", got
+        assert got["total"] == 4 and (got["from_index"], got["to_index"]) == (0, 4), got
+        assert [e["index"] for e in got["events"]] == [0, 1, 2, 3], got["events"]
+        assert got["events"][1]["shape"] == "fs.write", got["events"][1]
+        assert got["truncated"] is False, got
+        # 续取：拿上一页的 `to_index` 当 `since_index`，区间必须接着
+        code2, page2, _raw2 = _get(
+            base, f"/api/run/fix-sid/events?since_index={got['to_index']}&limit=2")
+        assert code2 == 200, code2
+        assert page2["events"] == [] and page2["from_index"] == 4, page2
+        code3, page3, _raw3 = _get(base, "/api/run/fix-sid/events?since_index=2&limit=1")
+        assert code3 == 200, code3
+        assert [e["index"] for e in page3["events"]] == [2], page3["events"]
+        assert page3["to_index"] == 3 and page3["truncated"] is True, page3
+
+    # 空工作区：那一栏是 unreadable（sid 是调用方给的，找不到就是没查成），
+    # 而且它给的不是"读到了 0 条"—— 计数栏是 None。
+    empty = _bare_workspace(tmp_path)
+    with _server(empty) as base:
+        code_none, none_got, _raw = _get(base, "/api/run/fix-sid/events")
+        assert code_none == 200, code_none
+        assert none_got["tri"] == "unreadable" and none_got["reason"] != "", none_got
+        assert none_got["total"] is None and none_got["events"] == [], none_got
+
+
+def test_run_negative_control_catches_the_events_rendered_as_an_empty_list(
+        tmp_path: pathlib.Path) -> None:
+    """负控（Run 的逐条事件）：三态被画平 ⇒ 必须报（红前绿后）。
+
+    两半：① 把页面源码抽成"只把 `events` 当数组渲染"的样子（`shell`）⇒ 纯函数
+    必须报出"少了那句三态说明"；② 真机那一半：会话不在盘上 ⇒ 读数是
+    `unreadable` + 理由、计数栏 `None` —— 页面据此显"没查成"而不是一张空列表。
+    """
+    shell = 'const rows = ev.events;\n'
+    assert _events_unreadable_problems("Run", shell), "三态被画平却没报"
+    assert _events_unreadable_problems("Run", f"const rows = ev.events;\n// {EVENTS_TRI_WORD}\n"), (
+        "写在注释里的那句话不该算数（注释会被剥掉）")
+    assert EVENTS_TRI_WORD not in _strip_js_comments(f"// {EVENTS_TRI_WORD}\n")
+    # 反面：真页面上这两条都不报（上面那条正控已经断言过，这里再钉一次口径）
+    real = _page_text("Run")
+    assert _events_unreadable_problems("Run", real) == []
+
+    root = _bare_workspace(tmp_path)
+    with _server(root) as base:
+        code, got, _raw = _get(base, "/api/run/nope/events")
+        assert code == 200, code
+        assert got["tri"] == "unreadable", got
+        assert got["reason"] != "" and got["total"] is None, got
+        assert got["events"] == [], got
 
 
 # ====================================================================== 3 Evidence

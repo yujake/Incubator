@@ -9,10 +9,26 @@
 |---|---|---|---|
 | 快照 | :func:`state_face` | `GET /api/state` | `webui.state.snapshot()`（键集合一字不改） |
 | 一趟详情 | :func:`run_view` | `GET /api/run/{sid}` | `sessions.read_session` + `runs/agent-<角色>-<sid>.json` |
+| 逐条事件 | :func:`run_events` | `GET /api/run/{sid}/events` | `sessions.read_session`（只读；不另写第二份解析） |
 | 证据链 | :func:`evidence_chain` | `GET /api/evidence` | `store.rows(...)` 七张表 + `verifications.list_verifications` |
 | 产物 | :func:`artifacts_face` | `GET /api/artifacts` | `artifacts.read_ledger` · `manuscripts.read_rows` · `closing` 的验收行 · `secretary.decisions_path` · `runflow.ARTIFACTS` |
 | 收工门 | :func:`acceptance_face` | `GET /api/acceptance` | `reviewaccept.check_review` |
 | 本机 | :func:`machine_face` | `GET /api/machine` | `toolchain.toolchain_report` + `settings.load_settings` |
+
+## 逐条事件的编号口径（题 T2-a；`tests/test_webui_readers.py` 逐条钉着它）
+
+`run_events` 的 `EventRow.index` 与 `webui.state.snapshot()` 里 `runs[].start_index` /
+`end_index` 是同一套编号：都是"这一段会话里解析成功的事件行在
+`sessions.read_session()` 返回的那个列表里的下标，0 起"（`webui/state.py` 的 `_scan`
+与 `sessions.runs_in_session` 都是对同一个列表 `enumerate`，坏行不占位）。于是
+`start_index <= index <= end_index` 的那些行正好是那一趟的事件 —— `index` 不是文件行号，
+也不是 `EventRow` 自己的序号。
+
+`from_index` / `to_index` 是这一次返回的游标区间（左闭右开）：`from_index` 等于钳过的
+`since_index`，`to_index` 等于 `from_index + len(events)`，于是
+`to_index - from_index == len(events)`、`truncated == (to_index < total)`，
+而下一次续取的 `since_index` 直接填 `to_index` 就行。到末尾之后（`since_index >= total`）
+回一页空的（`from_index == to_index == total`、`truncated=false`），那不是错误。
 
 ## 三态纪律（裁定 N1 + `draft/74` 的证据规则）
 
@@ -64,11 +80,13 @@ from .. import sessions as SS
 from ..jsonlfile import read_jsonl_state
 
 __all__ = [
-    "CHECKED_TYPES", "HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
+    "CHECKED_TYPES", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX", "HANDLERS",
+    "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
     "RUN_ROW_KEYS", "UNCHECKED_TYPES", "acceptance_face", "artifacts_face",
     "evidence_chain", "handle_acceptance", "handle_artifacts", "handle_evidence",
-    "handle_machine", "handle_run_view", "handle_state", "machine_face",
-    "run_products", "run_view", "state_face", "ts_fields", "type_decls",
+    "handle_machine", "handle_run_events", "handle_run_view", "handle_state",
+    "machine_face", "run_events", "run_products", "run_view", "state_face",
+    "ts_fields", "type_decls",
 ]
 
 # ====================================================================== 三态词表
@@ -94,6 +112,9 @@ TRI_NOT_APPLICABLE = "not_applicable"
 ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/state", "handle_state"),
     ("GET", "/api/run/{sid}", "handle_run_view"),
+    # 题 T2-a：一趟的逐条事件（旧壳那张"逐条事件卡片"退场之后唯一能给它的只读面）。
+    # `{sid}` 只匹配一段路径，所以它与上面那条 `/api/run/{sid}` 不会互相吃掉。
+    ("GET", "/api/run/{sid}/events", "handle_run_events"),
     ("GET", "/api/evidence", "handle_evidence"),
     ("GET", "/api/artifacts", "handle_artifacts"),
     ("GET", "/api/acceptance", "handle_acceptance"),
@@ -119,7 +140,8 @@ HANDLERS: dict[str, Any] = {}
 #: 这一份是 B1 落地后的实况（夹具见 `tests/conftest.py` 的 `make_artifacts_sample`）。
 CHECKED_TYPES: tuple[str, ...] = (
     "RunProduct", "CheckpointView", "CheckpointSpendView", "ReportReadingView",
-    "RunView", "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
+    "RunView", "EventRow", "RunEventsView",
+    "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
 )
@@ -342,6 +364,120 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
         "checkpoint": ckpt["checkpoint"],
         "checkpoint_reason": str(ckpt["reason"]),
         "path": str(path),
+    }
+
+
+# ====================================================================== 2b 逐条事件
+#: `GET /api/run/{sid}/events` 的默认页大小与硬上限（题 T2-a：上限是硬边界，
+#: 超了按上限截断并在 `reason` 里说明 —— "不吐无限"这一条由判据钉着）。
+EVENTS_LIMIT_DEFAULT = 50
+EVENTS_LIMIT_MAX = 500
+
+#: `EventRow` 从事件行里挑出来的那些"有就带上"的字段（键 -> TS 类型）。
+#: 逐字对着题 T2-a 给的那一行形状；`index` / `kind` / `ts` / `role` 四个必带的键
+#: 在 :func:`_event_row` 里单列（它们不在这一张表里）。
+#:
+#: `stopped` 今天没有任何生产者（`sessions.append` 那一路的事件里搜不到这个键）：
+#: 它是"有就带上"的那一档，留着是为了与 T2-a 的字段表逐字对齐 —— 真有事件带它时
+#: 会自动出现在读数里，没有时不出现（不会伪造一个 `false`）。
+_EVENT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("shape", "string"), ("ok", "boolean"), ("usd", "number | null"),
+    ("tokens_in", "number"), ("tokens_out", "number"),
+    ("payload", "Record<string, unknown>"), ("result", "Record<string, unknown>"),
+    ("text", "string"), ("stopped", "boolean"),
+)
+
+
+def _event_row(index: int, event: Mapping[str, Any]) -> dict[str, Any]:
+    """一条事件行 → `EventRow`（`index` 由调用方给，见模块 docstring 的编号口径）。
+
+    四个必带的键读不到就写空串（前端 `Table.cell()` 把空串渲染成 `unknown`，
+    不折成 0 / false）；"有就带上"的那几个键只在原行真有它时出现 ——
+    补一个 `null`/`false` 就等于把"这一行没有这一栏"说成"这一栏读到了、是空的"。
+    """
+    row: dict[str, Any] = {
+        "index": index,
+        "kind": str(event.get("kind") or ""),
+        "ts": str(event.get("ts") or ""),
+        "role": str(event.get("role") or ""),
+    }
+    for key, _ts in _EVENT_FIELDS:
+        if key in event:
+            row[key] = event[key]
+    return row
+
+
+def run_events(root: str | Path, sid: str, *, since_index: int = 0,
+               limit: int = EVENTS_LIMIT_DEFAULT) -> dict[str, Any]:
+    """`GET /api/run/{sid}/events` 的读模型：一趟的逐条事件（游标分页）。
+
+    形状见 :data:`_TS_TYPES` 里的 `RunEventsView` 与 `EventRow`；编号口径见模块
+    docstring 的"逐条事件的编号口径"那一节（`index` 与 `snapshot()` 的
+    `start_index`/`end_index` 是同一套）。
+
+    数据来源只有一处：`sessions.read_session(root, sid=...)` —— 与
+    `webui.state.snapshot()` 读的是同一个入口、同一份解析（不新写第二份）。
+
+    三态（裁定 N1，不许折平）：
+
+    - 会话文件不在盘上 ⇒ `unreadable` + 一句点名那个路径的理由：`sid` 是调用方给的，
+      找不到就是"没查成"，不是"这一趟没有事件"（更不是 500、也不是一页空读数）；
+    - 会话文件在盘上但是空的 ⇒ `not_applicable` + "还没写过"那一档的理由；
+    - 有坏行 ⇒ `unreadable` + 坏行数，而读得出来的那些行照常给（少给行会让
+      "这一趟只有 3 条事件"变成一句假话）；
+    - 读到了 ⇒ `computed`，计数栏是真数字（`total` 可能是 0 之外的真值）。
+
+    计数栏与三态的关系（`None` 与 `0` 是两件事，`0` 只属于 `computed`）：
+
+    - 文件不在盘上 / 文件是空的 ⇒ 计数栏一律 `None`（`total` / `from_index` /
+      `to_index`）—— 按本模块的三态纪律，"还没写过"与"没查成"都不许折成 0；
+    - 有坏行 ⇒ 那一页照常给（读得出来的行是真读到的），计数栏也是真数字，而 `tri` 是
+      `unreadable`、理由里带坏行数：少给行会让"这一趟只有 3 条事件"变成一句假话，
+      而只报 `tri` 又会让"有坏行"这件事在读数里消失。
+
+    分页是有界的：`limit` 钳进 `[1, EVENTS_LIMIT_MAX]`，被钳过就在 `reason` 里点名；
+    `since_index` 钳进 `[0, total]`（越过末尾回一页空的，那不是错误）。
+    """
+    root_p = Path(str(root))
+    path = SS.session_path(root_p, sid)
+    if not path.is_file():
+        return {"tri": TRI_UNREADABLE,
+                "reason": f"会话文件不在盘上：{path}（这是「没查成」，不是「这一趟没有事件」）",
+                "sid": sid, "total": None, "from_index": None, "to_index": None,
+                "truncated": False, "events": []}
+    records, bad = SS.read_session(root_p, sid=sid)
+    total = len(records)
+    if total == 0 and not bad:
+        return {"tri": TRI_NOT_APPLICABLE,
+                "reason": f"会话文件在盘上但是空的（{path}）：还没写过事件，合法初态，"
+                          "不是没查成",
+                "sid": sid, "total": None, "from_index": None, "to_index": None,
+                "truncated": False, "events": []}
+    notes: list[str] = []
+    want_limit = int(limit)
+    if want_limit > EVENTS_LIMIT_MAX:
+        notes.append(f"limit={want_limit} 超上限 {EVENTS_LIMIT_MAX}，已按上限截断")
+        want_limit = EVENTS_LIMIT_MAX
+    if want_limit < 1:
+        notes.append(f"limit={want_limit} 小于 1，已按 1 条取")
+        want_limit = 1
+    start = max(0, min(int(since_index), total))
+    page = records[start:start + want_limit]
+    rows = [_event_row(start + i, e) for i, e in enumerate(page)]
+    to_index = start + len(rows)
+    problems: list[str] = []
+    if bad:
+        problems.append(f"会话有 {len(bad)} 条坏行（读得出来的 {total} 条照常给）："
+                        + "；".join(bad[:3]))
+    return {
+        "tri": TRI_UNREADABLE if problems else TRI_COMPUTED,
+        "reason": "；".join(problems + notes),
+        "sid": sid,
+        "total": total,
+        "from_index": start,
+        "to_index": to_index,
+        "truncated": to_index < total,
+        "events": rows,
     }
 
 
@@ -862,6 +998,67 @@ def handle_run_view(handler: Any, params: Mapping[str, str],
     _json_of(handler, run_view(handler.root, str(params.get("sid", ""))))
 
 
+def _query_text(query: Mapping[str, Sequence[str]], name: str) -> str:
+    """查询串里的一个值（缺省 = 空串；同名给多次时取第一个，与既有处理器同一条口径）。"""
+    vals = query.get(name) or []
+    return str(vals[0]) if vals else ""
+
+
+def _read_cursor(query: Mapping[str, Sequence[str]], name: str,
+                 default: int) -> tuple[int | None, str]:
+    """把 `?since_index=` / `?limit=` 读成一个非负整数；读不成返回 `(None, 理由)`。
+
+    空串与"这个参数没给"同档（用 `default`）：`?since_index=` 这种空值不该被读成 0
+    还是"非法"这件事没有必要让调用方猜。非整数、负数各给一句点名的理由 ——
+    由调用方回 400（`/api/*` 一律 JSON，裁定 Q1）。
+    """
+    raw = _query_text(query, name).strip()
+    if raw == "":
+        return default, ""
+    try:
+        value = int(raw)
+    except ValueError:
+        return None, f"{name} 必须是整数，给的是 {raw!r}"
+    if value < 0:
+        return None, f"{name} 不能是负数，给的是 {value}"
+    return value, ""
+
+
+def handle_run_events(handler: Any, params: Mapping[str, str],
+                      query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/run/{sid}/events`：一趟的逐条事件（`?since_index=` 与 `?limit=`）。
+
+    参数校验收在这一格（HTTP 那一层），读模型自己只做钳位：非法参数回 400 + JSON
+    （`/api/*` 一律 JSON，裁定 Q1）—— 今天这个服务里 400 是头一份，所以形状照
+    `handle_unknown` 那份 JSON 404 写（`ok` / `tri` / `reason`），另外把两个参数原样
+    回显：读的人一眼看得出是哪一个被拒了。
+
+    三条"非法"：
+
+    - `since_index` / `limit` 不是整数，或是负数；
+    - `limit=0`：要 0 行的话就没有一页可取，而"回一页空的"会与"会话里已经没有更多事件"
+      （合法结果）在读数上长得一样 —— 所以这一档写 400，不写"空的一页"。
+
+    `limit` 超上限不是非法：按上限截断并在 `reason` 里说明（题 T2-a 的口径）。
+    """
+    sid = str(params.get("sid", ""))
+    since, why_since = _read_cursor(query, "since_index", 0)
+    limit, why_limit = _read_cursor(query, "limit", EVENTS_LIMIT_DEFAULT)
+    problems = [w for w in (why_since, why_limit) if w]
+    if limit == 0:
+        problems.append("limit 必须 >= 1（要 0 行的话没有一页可取）")
+    if problems or since is None or limit is None:
+        handler._json(400, {  # noqa: SLF001 - 与 handler 是同一族的约定接口
+            "ok": False, "tri": TRI_NOT_APPLICABLE,
+            "reason": "；".join(problems) or "端点参数不合法",
+            "sid": sid,
+            "since_index": _query_text(query, "since_index"),
+            "limit": _query_text(query, "limit"),
+        })
+        return
+    _json_of(handler, run_events(handler.root, sid, since_index=since, limit=limit))
+
+
 def handle_evidence(handler: Any, params: Mapping[str, str],
                     query: Mapping[str, Sequence[str]]) -> None:
     """`GET /api/evidence`：证据链七栏的 JSON。"""
@@ -934,6 +1131,21 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("tri", "Tri"), ("reason", "string"), ("sid", "string"), ("runs", "RunRow[]"),
       ("report", "ReportReadingView"), ("checkpoint", "CheckpointView | null"),
       ("checkpoint_reason", "string"), ("path", "string"))),
+    ("EventRow",
+     "run_events() 的一行 —— 会话里的一条事件（`index` 与 `RunRow.start_index`/"
+     "`end_index` 同一套编号：解析成功后的事件列表下标，0 起）",
+     (("index", "number"), ("kind", "string"), ("ts", "string"), ("role", "string"),
+      ("shape?", "string"), ("ok?", "boolean"), ("usd?", "number | null"),
+      ("tokens_in?", "number"), ("tokens_out?", "number"),
+      ("payload?", "Record<string, unknown>"), ("result?", "Record<string, unknown>"),
+      ("text?", "string"), ("stopped?", "boolean"))),
+    ("RunEventsView",
+     "run_events() —— 一趟的逐条事件（游标分页：`from_index` 闭、`to_index` 开，"
+     "`to_index` 直接可当下一次的 `since_index`）",
+     (("tri", "Tri"), ("reason", "string"), ("sid", "string"),
+      ("total", "number | null"), ("from_index", "number | null"),
+      ("to_index", "number | null"), ("truncated", "boolean"),
+      ("events", "EventRow[]"))),
     ("EvidenceView",
      "evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）",
      (("tri", "Tri"), ("reason", "string"), ("store_problems", "string[]"),
@@ -1146,6 +1358,7 @@ def type_decls() -> str:
 HANDLERS.update({
     "handle_state": handle_state,
     "handle_run_view": handle_run_view,
+    "handle_run_events": handle_run_events,
     "handle_evidence": handle_evidence,
     "handle_artifacts": handle_artifacts,
     "handle_acceptance": handle_acceptance,
