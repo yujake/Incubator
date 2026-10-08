@@ -687,6 +687,23 @@ class LoopRun:
     stalled_max: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
+    #: 「收工那一步」的原始载荷（模型给的 `final` / `evidence` / `notify` 逐字一份）。
+    #:
+    #: 为什么要有这一格（2026-10-08 真机读数，三处缺口之一）：`shape == "final"` 那一支在
+    #: 步循环里 `break`（见 `run()` 里那段），而 `agent_step` 事件是在 `break` 之后的
+    #: 公共尾段落的 ⇒ 收工这一步的事件从来没落过盘（`tests/test_status_report.py` 那条
+    #: `len(steps) == 2 and len(run.steps) == 3` 把这个形态逐字钉着）。后果是模型填的
+    #: `notify`（收工手稿的输入）与 `evidence` 只活在内存里：`agent_run_end` 只留
+    #: `final` 的文本与哈希。真机现场：`projects/p5-review-t17/sessions/t1q.jsonl` 的
+    #: `agent_run_end` 里有模型 2058 字的结论，而全仓 17.3MB 会话里没有任何一条
+    #: `agent_step` payload 带 `notify`。
+    #:
+    #: 为什么不改走"给 final 补一条 `agent_step`"：那会把收工那一步塞进
+    #: `resume_transcript` 重建的简报里（它按 `agent_step` 逐条重拼），于是"重建的那一段"
+    #: 与"当时拼的那一段"不再逐字相等 —— 那是续跑正确性的判据
+    #: （`tests/test_user_channel_stop_and_resume.py::test_resume_transcript_is_byte_equal_to_the_live_transcript`），
+    #: 代价比多三个字段大得多。所以这一格与 `agent_run_end` 一起落盘。
+    final_payload: dict[str, Any] = field(default_factory=dict)
     #: 这一趟停在等哪个问题（`stop_reason="waiting_for_user"` 时非空）。
     #:
     #: 为什么它是一个独立的字段而不是塞进 `final` 的一句话：人/界面要拿它去对
@@ -744,6 +761,9 @@ class LoopRun:
             "summons": self.summons, "messages_sent": self.messages_sent,
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
             "elapsed_sec": round(self.elapsed_sec, 3), "notes": list(self.notes),
+            # 收工那一步的原始载荷（`LoopRun.final_payload`）：与 `agent_run_end` 落盘的那
+            # 一格同一份 —— "给调用方的返回"与"盘上的记录"不该各是一份。
+            "final_payload": dict(self.final_payload),
         }
 
 
@@ -1771,6 +1791,9 @@ class AgentLoop:
                         run.handoffs.append(str(hand.get("id") or ""))
                 run.final = str(payload.get("final") or "")
                 run.evidence = list(payload.get("evidence") or [])
+                # 收工那一步的原始载荷进 `LoopRun`（`run()` 末尾把它落进 `agent_run_end`）：
+                # 这是"模型填的 notify 到得了盘"的唯一通路 —— 见 `LoopRun.final_payload`。
+                run.final_payload = dict(_for_record(payload))
                 # 收工也是对插话的一种回应（"照插话收工"是最常见的形态）⇒ 同样落读数。
                 self._record_interjection_effect(run, pending_interjections, step=step,
                                                  shape=shape, payload=payload)
@@ -1943,6 +1966,18 @@ class AgentLoop:
             # `agent_run_end` 里落 `handoff_id`"，而 E5 真机读数时发现这两个字段
             # 没进事件 ⇒ 只能自己扫账本，批⑥ 的状态报告同理。
             "handoffs": list(run.handoffs), "notify_rejections": run.notify_rejections,
+            # ---- 收工那一步的留痕（2026-10-08 的三处缺口之一；见 `LoopRun.final_payload`）
+            #
+            # 这三个键一齐落，是因为它们此前只活在内存里：`final` / `final_sha256` 在
+            # 上面那两行，而 `evidence`（模型自报的证据 id）、`notes`（这一趟的框架读数，
+            # 含"收工没有可用 notify 表"那句）与收工那一步的原始载荷（含模型填的 `notify`）
+            # 在盘上一条都没有。判据：
+            # `tests/test_llm_work_reaches_the_ledger.py::test_the_closing_notify_and_conclusion_reach_the_ledger`
+            # （盘上找得到 notify 与结论）+ 同文件里"不填就没有 notify 键"的负控。
+            "evidence": list(run.evidence), "notes": list(run.notes),
+            # `_for_record` 与 `agent_step` 落档同一把尺（单字段 2000 字上限）：
+            # 两处存的是同一件事，截断口径不该有两份。
+            "final_payload": dict(run.final_payload),
         }, sid=self.sid)
         return run
 
@@ -3159,14 +3194,31 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
         # 生产路径自动装配 —— 不给就自动造，是为了让"手稿写权移交"不需要
         # 每个调用点都记得传一个对象（那种"靠人记得"的设计在本项目里失败过多次）。
         # 失败姿态同秘书本身：造不出来 ⇒ 不装配（写路径关闭），但这不改变别的判据。
+        #
+        # ---- 2026-10-08（三处缺口之一）：这一支此前是光秃秃的 `except: secretary = None`
+        #      —— 无日志、无事件。后果不是"少一个读数"，而是"写路径整体关闭而盘上无痕迹"：
+        #     之后每一次 `handoff`（含收工那一句 `notify` 派生的手稿）都返回
+        #     `{"ok": False, "error": "…没有装配秘书…"}`，而事后从会话记录里读不出
+        #     "到底是哪一步、因为什么没装配"（真机没观测到，但它是结构性的）。
+        #     改法与既有风格一致：落一条 `agent_note` 事件（`run` 里进程登记/插话消费
+        #     读不成时就是这一种）+ 在 `run.notes` 里留一条（那一格会进
+        #     `agent_run_end` 的 `notes`）。三态纪律：`except` 里不猜原因，把
+        #     `type(exc).__name__` 与原文照抄。
+        secretary_problem = ""
         try:
             secretary = _secretary_for(role, root=root, store=store, registry=registry,
                                        seam=seam, sid=sid)
             if conductor is not None and getattr(conductor, "secretary", None) is None:
                 # M 的派活路径也接同一套钩子（`draft/54 §2` 的第 3 个落点）。
                 conductor.secretary = secretary
-        except Exception:  # noqa: BLE001 - 秘书没装配不等于这一趟不能跑（fail-open）
+        except Exception as exc:  # noqa: BLE001 - 秘书没装配不等于这一趟不能跑（fail-open）
             secretary = None
+            secretary_problem = (f"秘书装配失败（{type(exc).__name__}: {exc}）⇒ 这一趟没有秘书："
+                                 "手稿的写路径整体关闭（`handoff` 与收工 `notify` 派生那一份"
+                                 "都写不成，返回 `ok is False`），而这一趟照跑。"
+                                 "装配入口：`agent_loop._secretary_for` / `Secretary.for_role`")
+            SS.append(root, {"kind": "agent_note", "role": role,
+                             "note": secretary_problem}, sid=sid)
     loop = AgentLoop(role=role, session_root=root, registry=registry, seam=seam,
                      conductor=conductor, max_steps=max_steps, workspace_root=workspace_root,
                      sid=sid, token=token, store=store, user_timeout_sec=user_timeout_sec,
@@ -3278,6 +3330,11 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                              f"{bad[:3]}")
     except Exception as exc:  # noqa: BLE001 - 读数坏了不许带走这一趟
         run.notes.append(f"秘书台账的坏行这一格没读成：{type(exc).__name__}: {exc}")
+    if secretary_problem:
+        # "没装配秘书"这一事实要能被后续读到：事件在盘上（上面那一支落的
+        # `agent_note`），而这一份跟着返回值走 —— 两条路都要有，缺一条就会有人
+        # 只看其中一处而以为"秘书没问题"。
+        run.notes.append(secretary_problem)
     return run
 
 

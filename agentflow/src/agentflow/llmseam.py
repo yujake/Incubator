@@ -511,6 +511,36 @@ class LlmSeam:
         return dict(data), SeamCall(**{**call.__dict__, "protocol": "text"})
 
 
+#: `framework_final` 的 `notify` 那一栏的 schema（`agent_prompts` §7 与
+#: `agent_loop.NOTIFY_FIELDS` 逐字同一份字段表）。
+#:
+#: 为什么必须写进广告面（2026-10-08 的三处缺口之一）：提示词要求
+#: 非主控角色收工时填这一栏，而原生工具面这一趟根本没有这一格；就算模型硬塞，
+#: `ToolFace.to_shape` 也只会重建 `final`+`evidence` ⇒ 「收工手稿」的输入在结构上到不了
+#: 秘书。广告面与接受面必须是同一份（`META_FUNCTIONS` 上面那条纪律）—— 这一格就是那
+#: 条纪律此前漏掉的地方：`agent_loop._decode_shape` 收 `notify`，而广告面没有它。
+#:
+#: `required` 刻意留空：`notify` 在 `_decode_shape` 那侧是可选键（L-05e 之后
+#: "没填/填错都不打回，只落 `notify_problem` 读数"），而主控 M 免填。把它列成
+#: 传输层必填会让上游先拒掉一次"合法的收工" —— 那正是 L-05e 撤掉的那道闸门。
+NOTIFY_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "to": {"type": "string",
+               "description": "交给谁：A–H / M / V，给所有人写 ALL"},
+        "summary": {"type": "string",
+                    "description": "一句话：交给对方什么（它会被拼进那条留言）"},
+        "body": {"type": "string",
+                 "description": ("markdown 正文：做了什么 / 依据（实验号、文献号、手稿号）/ "
+                                 "要对方做什么 / 我卡在哪")},
+        "refs": {"type": "array", "items": {"type": "string"},
+                 "description": "前序手稿编号，或 stmt:/exp:/lit:/rel: 这类台账引用"},
+        "why": {"type": "string", "description": "一句话说明为什么交这一份（可选）"},
+    },
+    "required": ["to", "summary", "body"],
+}
+
+
 #: 循环协议里那些不是工具的形状（`agent_loop.SHAPES` 减去 `tool`）：
 #: 它们与真工具一起被广告成函数。理由是我们自己的一条纪律：广告出来的形状必须
 #: 与接受得到的形状一致（判据 `tests/test_native_tool_calls.py` 逐字对账两张表），
@@ -590,6 +620,10 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "properties": {
             "final": {"type": "string"},
             "evidence": {"type": "array", "items": {"type": "string"}},
+            # `notify` 是"收工手稿"那一栏（`agent_prompts` §7）：它此前只活在提示词里，
+            # 不在广告面上 ⇒ 原生工具面下模型结构上给不出这一栏。见
+            # `NOTIFY_JSON_SCHEMA` 上面那段（含"为什么 required 里没有它"）。
+            "notify": NOTIFY_JSON_SCHEMA,
         },
         "required": ["final"],
     }),
@@ -651,7 +685,19 @@ class ToolFace:
         if target == "final":
             payload = dict(args)
             payload.setdefault("evidence", [])
-            return {"final": payload.get("final") or "", "evidence": payload.get("evidence") or []}, "", ""
+            out: dict[str, Any] = {"final": payload.get("final") or "",
+                                   "evidence": payload.get("evidence") or []}
+            # `notify` 原样透传（一个字节都不改），与文本回落那条路
+            # （`agent_loop._decode_shape` 的 `if data.get("notify") is not None`）同一口径：
+            # 校验统一在 `notify_reading` / `notify_shape_problem` 里做（那一层才知道角色、
+            # 才知道"没填"与"填错"该怎么记读数）。
+            #
+            # 缺省时不造一个空 dict：那会让"模型没填"与"框架替它填了一份空表"在
+            # 会话记录里长得一样 —— `agent_loop._with_notify` 的 docstring 记的是同一条纪律。
+            # 形状不对的 `notify` 也照带（读数是 `notify_problem`，不是在这里静默丢掉）。
+            if "notify" in args:
+                out["notify"] = args["notify"]
+            return out, "", ""
         if target == "note":
             return {"note": {"text": str(args.get("text") or "")}}, "", ""
         payload = dict(args)
