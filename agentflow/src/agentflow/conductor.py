@@ -664,7 +664,7 @@ class Conductor:
           `notice` 之后，`_in_flight_children_of(父)` 读数就是 20。
 
         修法就是把两轴分开：本方法只数代理（实例行），工作项那一边的唯一读数是
-        `in_flight_items(task_id)`（"某条边名下未消的项"）。两者一起才是
+        `open_items_of(task_id)`（"某条边名下未消的项"）。两者一起才是
         `draft/84` §T2 的消边谓词（实例轴 + 工作项轴），不是互相代替。
         """
         return [str(r["task_id"]) for r in self._tasks()
@@ -689,9 +689,16 @@ class Conductor:
 
         占不占名额的判据在 `_occupies_fanout_slot`（含真机读数与"为什么不是
         按拒绝理由过滤"）。
+
+        出身过滤（2026-10-08 深夜 S1e）：只数代理行（`kind == ""`）——
+        `tasks` 从业主 A1=甲 起装两类行，板项行（`kind` 非空）的 `parent_task_id`
+        口径是"收件人的编号"，把它们算进"派出去过几件"是两轴混算
+        （实测：父名下 20 条 `notice` ⇒ 这条读数 20，而一个代理都没有）。
         """
         return [str(r["task_id"]) for r in self._tasks()
-                if r.get("parent_task_id") == task_id and _occupies_fanout_slot(r)]
+                if r.get("parent_task_id") == task_id
+                and not str(r.get("kind") or "")
+                and _occupies_fanout_slot(r)]
 
     def _in_flight_children_of(self, task_id: str) -> list[str]:
         """`task_id` 派出去、此刻还没返回的子代理（= 扇出判据的分子）。
@@ -714,9 +721,26 @@ class Conductor:
         `documents` 0 行、P8/P9 两行红。一趟 78–138 步的研究型跑批只许派 20 次活，
         是结构性不够；而"同时在飞 20 个"在同一份 `Policy` 里被 `max_concurrency`
         另管着（全局瞬时上限）。
+
+        ## 只数代理行（2026-10-08 深夜 S1e，业主 T22 的"两轴分开"）
+
+        分子多一个出身过滤：`kind == ""`（代理行）。理由是一条实测：
+
+        - 板项行由 `open_item` 建，`status="pending"`，而板的状态机（`_set_item`）
+          只改 `item_state`、从不改 `status` ⇒ 一条已 ack 的板项永远是
+          "在飞的子代理"；
+        - 实测（`temp/_probe_board_vs_fanout_and_dispose.py`、`..._refusal_reason.py`）：
+          父名下挂 20 条"子代理已收工"的 `notice`（零代理）⇒ 本读数 = 20 ⇒
+          同一父下派活被拒 `fanout_exceeded`（detail 逐字「此刻在飞 20 个子代理，
+          达到发起方 M 的同时在飞上限 20」）；不挂板项时同一个调用走到执行（`not_wired`）。
+          T1 重跑会在累积约 20 次交差之后开始卡住 —— 那是本批（S1e）的硬前置理由。
+
+        工作项那一边归 `open_items_of(task_id)`（纯读数，不参与任何判定）。
+        判据：`tests/test_board_does_not_eat_the_fanout_quota.py`。
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id
+                and not str(r.get("kind") or "")
                 and str(r.get("status") or "") in ("pending", "running")]
 
     def _await_fanout_slot(self, parent_task_id: str, limit: int, *,
@@ -971,10 +995,21 @@ class Conductor:
         """`→ done`（行为完成）：`close="acked"`（知道了）或 `"completed"`（做完了）。"""
         return self._set_item(task_id, state="done", close=close, by_task_id=by_task_id)
 
-    def in_flight_items(self, task_id: str) -> list[dict]:
-        """某条边名下未消的项 —— T2 消边谓词的第二把尺。
+    def open_items_of(self, task_id: str) -> list[dict]:
+        """挂在 `task_id` 名下、还没消的工作项（板项轴）。
 
-        "这一支上还挂着没消的工作项"是"不许消边"的直接理由。
+        ## 它只是一个读数，不是判据（2026-10-08 深夜 S1e 改名 + 降级）
+
+        旧名字 `in_flight_items`，注释写成"T2 消边谓词的第二把尺" —— 那句话是
+        主控发明出来的，不是设计里的：`draft/84` §T2 的谓词只有 `open_children == 0`
+        （实例轴）。而且它建在"板项行 `status` 永远是 `pending`"的同一批行上，
+        拿它当判据会与 `E1` 犯同一个错（拿永不终态的读数当判据 ⇒ 判据永不成立）。
+
+        所以：名字改成"未消项"，语义降成纯读数，不参与任何判定；
+        业主 T22 的退役算法（`draft/90` §1.9）也不引用它 ——
+        "还有几条项没消"只作为 `roster_view` 回报里的一格（`items_open`）。
+        判据：`tests/test_board_does_not_eat_the_fanout_quota.py` 里那一条负控
+        （两轴分开：工作项轴看得到、代理轴数不到）。
         """
         return [r for r in self._board_rows()
                 if str(r.get("item_state") or "") != "done"
@@ -2365,26 +2400,48 @@ class Conductor:
         幂等：第二次调用时已经没有任何 `pending/running` 的行（第一次全写完了），
         于是返回 `{"disposed": ..., "closed": []}` —— 且零字节变更
         （`finish` 的幂等分支连事件都不追加）。
+
+        ## 只收代理行，不碰板项（2026-10-08 深夜 S1e）
+
+        旧实现在这里遍历所有 `pending/running` 的行，而板项行的 `status` 恰好是
+        `pending` ⇒ 一次 dispose 会把工作项也写成 `cancelled`。实测
+        （`temp/_probe_board_vs_fanout_and_dispose.py`）：那一条板项在 dispose 之后是
+        `status=cancelled / outcome=cancelled / item_state=queued / item_close=''`，
+        而板面（`board_view` / `board_readings`）只读 `item_state` ⇒
+        读的人看不见它被取消；同时"在飞"读数从 20 掉回 0（名额被"顺带"还回来了，
+        而不是因为消边）。两套状态机在同一行上互相污染，是 A1=甲 之后必须避免的形态。
+
+        所以：板项行原样留着（它的收口只由"父决定退役"那一路发生，
+        见 `draft/90` §1.9），并在读数里补一格 `board_items_left`：
+        "进程要走了，还有几条项没被谁消掉" —— 如实说，不折成"都消了"。
         """
         first = not self._disposed
         self._disposed = True
         text = self._signal_stop("dispose", "因 dispose 而终止，结果未知", by="conductor.dispose")
         closed: list[str] = []
+        board_left: list[str] = []
         for row in self._tasks():
-            if row.get("status") in ("pending", "running"):
-                tid = str(row["task_id"])
-                self.finish(
-                    tid, status="cancelled", outcome="cancelled",
-                    detail=f"{text}（dispose 时该任务仍在 {row.get('status')}，结果未知）",
-                )
-                closed.append(tid)
+            if row.get("status") not in ("pending", "running"):
+                continue
+            tid = str(row["task_id"])
+            if str(row.get("kind") or ""):
+                # 工作项：不是僵尸（它没有"一次调用"要收口），留给父决定退役那一路
+                board_left.append(tid)
+                continue
+            self.finish(
+                tid, status="cancelled", outcome="cancelled",
+                detail=f"{text}（dispose 时该任务仍在 {row.get('status')}，结果未知）",
+            )
+            closed.append(tid)
         # 在飞集合由 worker 的 `finally` 清空；dispose 不替它们清 ——
         # 清了会让一个仍在跑的 worker 在自己写终态时找不到那一行吗？不会：
         # 它写的是磁盘上的行，而这里已经把它写成终态，于是 `finish` 走幂等分支。
         with self._lock:
             still = sorted(self._running)
-        self._log(f"dispose：关闭 {len(closed)} 个未完成任务", closed=closed)
-        return {"disposed_was_first": first, "closed": closed, "still_running": still}
+        self._log(f"dispose：关闭 {len(closed)} 个未完成任务"
+                  f"（板项留 {len(board_left)} 条未消，交给退役那一路）", closed=closed)
+        return {"disposed_was_first": first, "closed": closed,
+                "board_items_left": len(board_left), "still_running": still}
 
     # ---------------------------------------------------------------- 可读视图
     def tree(self, root_task_id: str | None = None) -> list[dict]:

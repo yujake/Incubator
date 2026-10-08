@@ -383,6 +383,11 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
     # 「派活上限不是累计的，是单时刻的……智能体返回后腾出空间」。
     # 这一条与"被闸门拒掉的不占名额"相容：拒掉的召唤没跑、也没有 running 行。
     # 上限按发起方取：默认档 = `policy.max_fanout`，主控一档 = `FANOUT_LIMIT_BY_ROLE`（20）。
+    #
+    # 数的是代理，不是工作项（2026-10-08 深夜 S1e）：`_in_flight_children_of` 只看
+    # `kind == ""` 的代理行。板项行（`kind` 非空）的 `status` 永远是 `pending`
+    # （板的状态机只改 `item_state`）⇒ 把它们算进来会让"子代理已收工"的每一条通报
+    # 永久占一个名额。实测：父名下 20 条 `notice` ⇒ `fanout_exceeded`，而零代理。
     limit = fanout_limit_for(policy, d.frm)
     if d.fanout >= limit:
         # 报文要能同时读出"此刻在飞几个"与"上限是多少"，以及那个上限是从哪来的；

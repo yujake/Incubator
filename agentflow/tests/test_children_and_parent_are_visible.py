@@ -15,7 +15,7 @@
 `tests/test_agent_prompts.py`）。同一批修 D89：`_emit_settlement` 把终态通报挂在
 自己名下（`parent_task_id=self.my_task_id`、`role=M`），而板项那一格的列义是
 "收件人的编号" ⇒ 子报给父时必须写父的台账号，否则父的待办视图
-（`in_flight_items(父的编号)`）里永远看不到"哪个子向我交差了"。
+（`open_items_of(父的编号)`）里永远看不到"哪个子向我交差了"。
 
 判据在这个文件里成对给：正控（渲染出来的提示词里读得到父/子的编号）+
 负控（把那一格删掉/换成别人的编号 ⇒ 红）。所有替身都不联网。
@@ -167,7 +167,7 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     `notice` ⇒ `_in_flight_children_of(父)` = 20 ⇒ 派活被 `fanout_exceeded` 拒掉，
     而那 20 条一个代理都不是。
 
-    这一条同时钉住两轴各自的读数：工作项轴（`in_flight_items`）要看得到它，
+    这一条同时钉住两轴各自的读数：工作项轴（`open_items_of`）要看得到它，
     代理轴（`{{children}}`）不许看到它。
     """
     st, cond, reg, ws, me, kids, _other = _tree(tmp_path)
@@ -179,8 +179,8 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     assert notice not in line, ("工作项不是子代理（两轴分开）：", line, notice)
     for kid in kids:
         assert kid in line, (line, kids)
-    assert str(notice) in {str(r["task_id"]) for r in cond.in_flight_items(me)}, (
-        "工作项轴必须看得到它（它是要我消的项）：", cond.in_flight_items(me))
+    assert str(notice) in {str(r["task_id"]) for r in cond.open_items_of(me)}, (
+        "工作项轴必须看得到它（它是要我消的项）：", cond.open_items_of(me))
     assert str(notice) not in cond._children_of(me), (
         "代理轴不许看到它：", cond._children_of(me))
 
@@ -257,8 +257,8 @@ def test_the_settlement_notice_hangs_under_the_parent_not_under_itself(tmp_path:
     改前必红的形态逐字：`parent_task_id=self.my_task_id`（挂在自己名下）、
     `role=S.CONDUCTOR_ROLE`。这一条同时判三样：
     ① 收件人是父的编号（不是自己的）；② 收件人的角色是父的角色（`called_by`）；
-    ③ 父的待办视图 `in_flight_items(父的编号)` 里看得到它。
-    负控在同一处：`in_flight_items(我自己的编号)` 里没有它 —— 那正是改前那个形态。
+    ③ 父的待办视图 `open_items_of(父的编号)` 里看得到它。
+    负控在同一处：`open_items_of(我自己的编号)` 里没有它 —— 那正是改前那个形态。
     """
     st, cond, reg, ws, me, _kids, _other = _tree(tmp_path)
     parent = str(cond._task(me)["parent_task_id"])
@@ -275,7 +275,7 @@ def test_the_settlement_notice_hangs_under_the_parent_not_under_itself(tmp_path:
     assert it["role"] == parent_role, it
     assert it["called_by"] == "D", ("这一项是我发出的 ⇒ 发信人是我的角色：", it)
     assert it["depth"] == 2, ("板项是父的子行 ⇒ 深度 = 父的深度 + 1 = 我的深度：", it)
-    assert str(it["task_id"]) in {str(r["task_id"]) for r in cond.in_flight_items(parent)}, (
-        "父的待办视图里必须看得到「哪个子向我交差了」：", cond.in_flight_items(parent))
-    assert str(it["task_id"]) not in {str(r["task_id"]) for r in cond.in_flight_items(me)}, (
-        "挂在**自己**名下就是改前那个形态（负控）：", cond.in_flight_items(me))
+    assert str(it["task_id"]) in {str(r["task_id"]) for r in cond.open_items_of(parent)}, (
+        "父的待办视图里必须看得到「哪个子向我交差了」：", cond.open_items_of(parent))
+    assert str(it["task_id"]) not in {str(r["task_id"]) for r in cond.open_items_of(me)}, (
+        "挂在**自己**名下就是改前那个形态（负控）：", cond.open_items_of(me))

@@ -2908,7 +2908,7 @@ class AgentLoop:
         收件人是谁（D89，2026-10-08 深夜修）：板项的 `parent_task_id` 口径是
         "收件人的编号"，所以子报给父时它必须是父的台账号、`role` 写父的角色。
         改前这里写的是 `parent_task_id=self.my_task_id`（挂在自己名下、角色记成 M）——
-        后果是父的待办视图 `in_flight_items(父的编号)` 里永远看不到"哪个子向我交差了"。
+        后果是父的待办视图 `open_items_of(父的编号)` 里永远看不到"哪个子向我交差了"。
         现在用 `run` 里现算的 `parent_task_id` / `parent_role`（顶层发起时它们落回
         "这一趟自己"，与改前逐字相同）。判据：`tests/test_report_is_mandatory.py` /
         `tests/test_children_and_parent_are_visible.py`（负控：换成自己的编号 ⇒ 红）。
