@@ -2860,7 +2860,17 @@ class Conductor:
             # 事务内的读-判结果" —— 那时把 I/O 挪出去等于换掉判据本身。
             # 顺带核实（主控要求）：`closing` 第八格 `artifact_ledger` 只数台账行
             # （`missing`/`unreadable`/`changed` 都相对"登记过的产物"算），
-            # 不扫盘上多出来的文件 ⇒ 本例外不会在那一格里造出 `missing`/`changed` 读数。
+            # 不扫盘上多出来的文件。
+            #
+            # 这句话的后半段在第 21 趟真机上被证伪了（2026-10-09，T1 `t1u`）：
+            # 它原写"本例外不会在那一格里造出 `missing`/`changed` 读数"，而实测是
+            # 23 条 `changed`，全是 `out/tasks/*.json` —— 同一条边第二次 `finish`
+            # （幂等路径）会重写同一份摘要，而台账是 append-only（每一次登记一行）
+            # ⇒ 历史行的 sha 与盘上当前版必然不等 ⇒ 第八格记 `unknown` ⇒
+            # `can_close` 永远为假（那一格自己的注释却写着"改写在研究流程里是常态"）。
+            # 处置：不改门的强度，把这一处口径作为选择题提交（`draft/83` §8 的 T1c）。
+            # 这一行留在这里是为了让"曾被当成已核实、后来被真机推翻"这件事看得见 ——
+            # 而不是把注释改得更含糊。
             digest_rel = self._write_task_digest(row, payload=payload, status=status,
                                                  outcome=str(outcome) if outcome else None,
                                                  detail=detail)
