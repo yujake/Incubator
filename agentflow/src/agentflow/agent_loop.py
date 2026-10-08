@@ -3048,7 +3048,13 @@ class AgentLoop:
                 out["aliased_from"] = aliased_from
             return out
         try:
-            res = self.registry.call(name, role=self.role, **args)
+            # S6-b：工具调用也带上"我是谁"（`conductor.broadcast` 的收件人是
+            # "我名下的直接子代理"，而工具的形状里没有这一格）。用 `calling_as`
+            # 而不是给 conductor 塞属性：同一角色的两个并发实例共享对象。
+            from .conductor import calling_as
+
+            with calling_as(str(self.my_task_id or ""), self.role):
+                res = self.registry.call(name, role=self.role, **args)
         except Exception as exc:  # 工具层抛错也要变成"模型看得见的结果"
             return {"tool": name, "ok": False, "error": f"{type(exc).__name__}: {exc}",
                     **({"aliased_from": aliased_from} if aliased_from else {})}

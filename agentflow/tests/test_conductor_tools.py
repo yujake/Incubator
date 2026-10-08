@@ -40,6 +40,9 @@ M_TOOL_FACE = {
     # 工作项板（业主 2026-10-08 裁 A1=甲）：M 的编排面看"还挂着什么"。
     # A–H 的那一半是 `manuscripts.items` / `manuscripts.ack`（领域动作面），不在这里。
     "conductor.board",
+    # 广播（S6-b，业主 T20/T21）：一件能力、所有角色同一个做法；M 也一样
+    # （「M 要广播全树就逐层向下调用即可」）。只读角色不在它的 `roles` 里。
+    "conductor.broadcast",
     "fs.list", "fs.read", "fs.search", "fs.stat", "fs.write", "fs.edit",
 }
 #: 旧的别名（只守编排面那 11 件）；留给"编排面本身"的判据用。
@@ -681,7 +684,9 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
     for name in ("table.create", "table.update", "doc.build_document",
                  "fs.delete", "fs.move"):
         assert name not in hand_line, (name, hand_line)
-    assert "可改 7 件" in hand_line, hand_line
+    # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单 ⇒ 计数从 7 涨到 8。
+    assert "conductor.broadcast" in hand_line, hand_line
+    assert "可改 8 件" in hand_line, hand_line
 
 
 def test_state_and_role_spec_are_read_only_views(tmp_path: Path):

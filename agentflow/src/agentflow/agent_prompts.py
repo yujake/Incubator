@@ -103,7 +103,10 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: —— 提示词里那一句"所有角色都会在自己的收件箱里看到它"是改前的事实，
 #: 留着就是教模型按错的语义广播；手稿 `ALL` 那一句、叫停那一句、角色定位"能互动"那一句同批改。
 #: 改的仍是共享的循环协议与共享段 ⇒ 十格全部换值。
-PROMPT_VERSION = "p48"
+#: `p49`（2026-10-09，S6-b）：新增工具 `conductor.broadcast` ⇒ 八个角色（A/B/D/E/F/G/H 里的
+#: 七个 + M）的工具清单那一格变了（提示词里的工具体清单是按角色现算的）；
+#: C/H/V（只读）不在它的 `roles` 里 ⇒ 那三格逐字不动。
+PROMPT_VERSION = "p49"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

@@ -51,6 +51,7 @@ import pytest
 
 from agentflow import schema as S
 from agentflow import manuscripts as MS
+from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
 from agentflow.tools import ocr_tools as OT
@@ -72,7 +73,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 82
+TOOL_COUNT = 83
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -216,6 +217,10 @@ def tool_params() -> dict[str, dict]:
         # 而 unknown 不是失败）—— 这条走的就是那个成功支，`can_close` 为假不算工具失败。
         "conductor.closing": {},
         "conductor.status_report": {"since": "2026-10-05", "out_dir": "out/review"},
+        # 广播（S6-b）：探针工作区里"M 名下的子代理"一个都没有 ⇒ 走的是
+        # "读成了、没有收件人"那一支（`recipients=[]` + `note` 说清，不是失败）。
+        # "我是谁"由 `observations` 夹具的 `calling_as` 提供（工具形状里没有这一格）。
+        "conductor.broadcast": {"subject": "探针：广播一次", "body": "只验键集，不派活"},
 
         "attack.check_budget": {"budget": BUDGET},
         # 用另一个 problem_key：夹具里已经立过 "pk"，同一个 key 再来一次走的是
@@ -353,6 +358,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # 而它的键集合在三条返回路径上完全相同 ⇒ 这条探针照样能验"声明 ⊆ 实现"。
         "verify.verify_proof", "verify.list_verifications", "verify.read_proof",
         "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",        "conductor.closing", "conductor.status_report", "conductor.board",
+        # 广播（S6-b）：探针走"读成了、没有收件人"那一支（工作区里没有子代理），
+        # 键集合与有收件人那一支逐字相同 ⇒ 这条探针验得了"声明 ⊆ 实现"。
+        "conductor.broadcast",
     }
 )
 
@@ -384,6 +392,7 @@ MUTATING_LAST: frozenset[str] = frozenset(
         "conductor.stop",
         "conductor.cancel",
         "conductor.ensure_project",
+        "conductor.broadcast",
         "fs.move",
         "fs.delete",
         "fs.write",
@@ -756,12 +765,17 @@ def observations(registry: ToolRegistry) -> dict[str, Observation]:
     # `conductor.ensure_project` 会写盘：给它一个临时落点，探针绝不碰真实数据面
     # （`D:\Incubator\projects` 是运行数据面，245 MB，已在 .gitignore 里排除）。
     tmp_projects = Path(tempfile.mkdtemp(prefix="probe-projects-"))
-    for name in order:
-        kw = dict(params.get(name, {}))
-        if name == "conductor.ensure_project":
-            kw["projects_dir"] = str(tmp_projects)
-        res = registry.call(name, **kw)
-        out[name] = Observation(name, res.ok, res.meta.get("kind"), res.error, res.data, dict(res.meta))
+    # S6-b：工具调用也带"我是谁"（生产路径里是 `AgentLoop._do_tool` 的 `calling_as`）。
+    # 探针这一层照做 —— 否则 `conductor.broadcast` 会走"不知道我是谁"那条受控拒绝，
+    # 而它不是工具失败（判据会把"没查成"与"查过了"分开，这条探针必须打在成功支上）。
+    with calling_as("t-probe", "M"):
+        for name in order:
+            kw = dict(params.get(name, {}))
+            if name == "conductor.ensure_project":
+                kw["projects_dir"] = str(tmp_projects)
+            res = registry.call(name, **kw)
+            out[name] = Observation(name, res.ok, res.meta.get("kind"), res.error, res.data,
+                                    dict(res.meta))
     return out
 
 

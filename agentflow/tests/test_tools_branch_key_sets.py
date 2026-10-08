@@ -83,7 +83,12 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # `Conductor.board_view` 的返回值决定，静态扫描读不出来）。该工具的 `returns=`
     # 逐字声明 `{'checked','open_items','open_count','readings'}` 并已通过
     # `test_tools_returns_declaration.py` 的实跑核（真跑一次 `board_view`）。
-    "conductor_tools.py": 11,
+    # 2026-10-09（S6-b 加 `conductor.broadcast` 时欠下的一格，同批归位）：11 → 12 ——
+    # `conductor_broadcast` 写的是 `ok(got, **got)`，与上面那些同族（键由
+    # `Conductor.broadcast` 的返回值决定，静态扫描读不出来）。该工具的 `returns=`
+    # 逐字声明八个键，并由 `test_tools_returns_declaration.py` 的实跑核钉住
+    # （探针在 `calling_as` 里跑，走"没有收件人"那一支）。
+    "conductor_tools.py": 12,
     # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
     # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
     # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由

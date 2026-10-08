@@ -15,7 +15,7 @@
 > 例如 `network: 2` 在 B3 之后是 **0**），**少改表格 = 少一处漂移面**；第二根轴的权威展示由
 > `cli tools` 承担（它能直接从注册表打，不必手工维护）。
 > - 工具面：`build_registry(store=Store(tempfile.mkdtemp()), workspace_root=<同目录>, roles=schema.ROLES)`
->   一次装配后的**实测**结果（**82** 个工具、13 个模块 loaded、0 skipped；观测 2026-10-09（S1b 的
+>   一次装配后的**实测**结果（**83** 个工具、13 个模块 loaded、0 skipped；观测 2026-10-09（S1b 的
 >   `conductor.board` 落地后由 H-1a 归位），与 §R0 标题及 `cli tools` 当次输出一致。
 >   本行原先写 81，再前写 75/73，都已过期）。
 >   命令与输出见 `DEVELOPMENT.md` §9 附录与本文 §0.3。
@@ -51,7 +51,7 @@
 ### 0.2 工具面的三条公共事实（实测）
 
 > ⚠️ **本表的"55"是 2026-09-26 那次装配的读数（历史快照）**，不是今天的读数。
-> 今天 `build_registry` 的条数是 **82**（见 §R0.1 的标题，由
+> 今天 `build_registry` 的条数是 **83**（见 §R0.1 的标题，由
 > `tests/test_role_specs_complete.py` 与发布门的 `tools/verify_role_specs.py` 逐条对账）。
 > 本节这两处的口径可能不同（本节记的是当时那次装配的输出，§R0.1 记的是今天的装配条数），
 > 而**没有一条判据盯着 §0.2 这一格** —— 所以：**引用工具总数请以 §R0.1 为准**。
@@ -59,7 +59,7 @@
 
 | 事实 | 实测值 | 出处 |
 |---|---|---|
-| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 82） | **55** | 本文 §0.3（带观测时刻的实测输出） |
+| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 83） | **55** | 本文 §0.3（带观测时刻的实测输出） |
 | 全部 8 个角色**共有**的工具 | 9 个：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` | 实测（交集） |
 | 只读角色（C/H/V）工具面里的写工具 | **0**（`role_filter_notes = {}` ⇒ 结构性拦截一次都没触发） | 实测 |
 
@@ -228,7 +228,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（82 个，逐条）
+## R0. 全局工具总表（83 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -319,8 +319,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 80 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的八格）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在八格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是八格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 | 81 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
 | 82 | `conductor.board` | 只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，`expects=work` 的项要交付才算完。不含建议，也不替你决定要不要重派 | `read` | 否 | M | limit | `{checked,open_items,open_count,readings}`（**读不成 ⇒ 报错**，不回一个空板：`checked=False` 是"没查成"、`open_count==0` 才是"板上没事"，折平就是本仓最忌的形态） | `tests/test_board_items.py`、`tests/test_conductor_tools.py` | **本轮新增**（业主 2026-10-08 裁 A1=甲、T16）：A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）—— M 不进 `manuscripts.*` 是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`） |
+| 83 | `conductor.broadcast` | 给我名下的**直接子代理**广播一条通告（每个收件人一条 `expects=ack` 的板项）：级联由收件人自己决定（框架不代转）—— 要覆盖全树就逐层向下调用；我名下没有子代理时如实报"没有收件人"（**不假装发出去了**）；不知道我是谁（没有台账号、也没有调用上下文）⇒ 受控拒绝 | `write_local` | **是** | A B D E F G M | subject, body | `{checked,ok,broadcast,recipients,items,cascade,readings,note}`（`readings` 把"开了几条 / seen 几条 / acked 几条"分开报：展开了 ≠ 读到了） | `tests/test_broadcast_reaches_my_children.py` | **本轮新增**（业主 T20/T21 附二 乙）：一件能力、所有角色同一个做法（T21 作废了"只有 M 有全树档"那一版）；只读角色（C/H/V）不在它的 `roles` 声明里（声明了再剥掉会被 `cli tools` 报成"声明本身应改"）；"我是谁"由 `AgentLoop._do_tool` 的 `calling_as` 挂进调用上下文 |
 
-### R0.1 82 个工具的公共事实（机械可验证）
+### R0.1 83 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -416,7 +417,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 决定研究问题该不该问 | A 只消费 `search_requests`；"该不该问"是研究判断 | **D**（`research.submit_gap` / `AgentD.submit_gaps`） |
 | 发起第二次检索（"我再多找几篇"） | A 的 `run_once` / `run` 只**消费**队列（`capabilities.CAPABILITIES`）；`search_literature` 也只在**被召唤方点名主题**时才查一次 —— "该不该再找、找什么"这个决定不在 A 手里 | **D**（`D → A`）/ **F**（`F → A`），或任何有到 A 的边的角色直接 `summon(A.search_literature, topic=…)` |
 
-### A.4 工具面（26 个，实测）
+### A.4 工具面（27 个，实测）
 
 `side_effect` 分布：`{'read': 15, 'write_local': 7, 'network': 2}`
 
@@ -600,7 +601,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_a
 | 发检索请求（"这里缺证据，帮我再找"） | B 的动作里没有"提交请求"；它只能**接受** `reprocess_requests` | **D**（`submit_gaps`）/ **C**（`gaps(submit_requests=True)`，由编排层调） |
 | 审校自己的抽取质量 | 自己审自己无法区分"发现"与"掩盖" | **H**（只读） |
 
-### B.4 工具面（21 个，实测）
+### B.4 工具面（22 个，实测）
 
 `side_effect` 分布：`{'read': 14, 'write_local': 6}` —— **B 没有 `network` 也没有 `none`**。
 
@@ -1007,7 +1008,7 @@ SELF-CHECK DONE
 > 它是唯一一个"研究角色能改知识表"的路径。本次**未逐行核实**
 > `agent_d.AgentD.adjudicate` 处到底改了什么字段 —— **标 `（据 capabilities.py 注释，未在代码中逐行核实）`**。
 
-### D.4 工具面（40 个，实测 —— **全项目最宽**）
+### D.4 工具面（41 个，实测 —— **全项目最宽**）
 
 `side_effect` 分布：`{'read': 25, 'write_local': 9, 'none': 5}`
 
@@ -1190,7 +1191,7 @@ SELF-CHECK DONE（agent_d）
 | 改关系/概念 | E 的写集只有 `{experiments}` | **B** |
 | 判断"这条实验的结论值不值得写进报告" | 价值判断在 G/H | **G** / **H** |
 
-### E.4 工具面（24 个，实测）
+### E.4 工具面（25 个，实测）
 
 `side_effect` 分布：`{'read': 15, 'write_local': 7, 'none': 1}`
 
@@ -1361,7 +1362,7 @@ SELF-CHECK DONE（agent_e）：失败 0 项
 > `blocked` + `blocked_reason` 并继续（FC-21 部分落地）。**无
 > `run_best_effort` / `run_all_or_nothing` 两种显式 API**（实测 0 命中）。
 
-### F.4 工具面（35 个，实测）
+### F.4 工具面（36 个，实测）
 
 `side_effect` 分布：`{'read': 19, 'write_local': 9, 'none': 6}`
 
@@ -1573,7 +1574,7 @@ SELF-CHECK DONE（agent_f）：失败 0 项
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（40 个，实测）
+### G.4 工具面（41 个，实测）
 
 `side_effect` 分布：`{'read': 20, 'write_local': 12, 'none': 6}`
 
@@ -2236,11 +2237,13 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（**19 个**，实测）= 编排面 13 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit` + 2026-10-08 追加 `conductor.board`）
+### M.4 "工具面"（**20 个**，实测）= 编排面 14 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit` + 2026-10-08 追加 `conductor.board`）
 
-> **编排面 13 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件只读的**状态报告** + 1 件批量派活）
+> **编排面 14 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件只读的**状态报告** + 1 件批量派活）
 > + **工作项板的读面 `conductor.board`**（业主 2026-10-08 裁 A1=甲、T16：M 得看得见"还挂着什么"；
-> 它只读，返回 `{'checked','open_items','open_count','readings'}` —— 板读不成时**报错**而不是回空板）。
+> 它只读，返回 `{'checked','open_items','open_count','readings'}` —— 板读不成时**报错**而不是回空板）
+> + **广播 `conductor.broadcast`**（S6-b，业主 T20/T21：一件能力、所有角色同一做法；M 要全树就
+> 逐层向下调用。它是我名下子代理的 ack 板项，不是"全树广播"那道特权）。
 > **文件面白名单 6 件**：`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit` ——
 > 只读四件加一支笔，再加一把手（锚定替换）；**没有** `fs.delete` / `fs.move`
 > （一个真删、一个换位置，都不可逆）。

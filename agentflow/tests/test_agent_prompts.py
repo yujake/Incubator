@@ -1361,18 +1361,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p48`（2026-10-09，S6-a）：公共频道的可见面收窄成"发信人的直接子代理"（业主 T20/T21）——
 #: 循环协议里"所有角色都会在自己的收件箱里看到它"、手稿 `ALL`、叫停那句、角色定位
 #: "能互动"那一句同批改（留旧句子就是教模型按错的语义广播）⇒ 十格全换。
-_FROZEN_PROMPT_VERSION = "p48"
+#: `p49`（2026-10-09，S6-b）：新增 `conductor.broadcast` ⇒ 七个角色 + M 的工具体清单
+#: 那一格变了；C/H/V 只读、不在它的 `roles` 里 ⇒ 那三格逐字不动。
+_FROZEN_PROMPT_VERSION = "p49"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "6a2afba53269fba6994fc9e57f641a843d99771fb1493e72226051c66a405678",
-    "B": "17de788bffa7e614efeb9f7eb460c0928cddc34019681538314daaf98f581c96",
+    "A": "44b768e448e5f8edc3d211769d3987f34cc6733a4df863d501e01591c4cb1334",
+    "B": "e938f786acc0709e27ecf617ba116ba103ce0541cb4bea724eb79431f071521e",
     "C": "18afcebc23cf06911c9e12a04cf7bd18eb2dc12577b1980c8566c1fbfe7d1100",
-    "D": "1023b5b1d4acbc24b00fb176e48ab3860261f3071c5e36e4bbad1e6bf25c7ed4",
-    "E": "50f4ad626cb67dfbf35fb8d032d9d13785cc91a8e35c359f8b511083417589bc",
-    "F": "6f27755cfa501b926cc51338526d66034e9adef69e4c2345497325045d1b9a1b",
-    "G": "37fedfd82b14017e5415918f009b1879f79d4b74c4331995d352c2e532d2ec1b",
+    "D": "daf8983f23868f75b4ae427cf22eafb1f1abad6d818e47011ad7a4508cf60f44",
+    "E": "c8032cc2ba5bd8a521d01088357ef4ce4f1e50711865753322f202925e9434b8",
+    "F": "2b0d3de98c96424ea2047fe21b4d440ae14e4e54265783d73f8d9d62d930b0db",
+    "G": "66dfbc8fdb78666e6f770b5e1229bca9772cee82d2a2a7661369623e4c2241b4",
     "H": "cfa71fb664d93df663f784dea3eb37b7b55d6bd036193c50a0332b58fbc76af9",
     "V": "1a06d77c92d63f656d91cf08af0714c5bd9bfb82610c118f4865eb47cec1da3f",
-    "M": "7271155e92c6136673c9f2983e5c9b360c0896227bdb46db7748de2939898edc",
+    "M": "60b8580e247fdf124e4e0206ec46b1435ebc434c270cc56650b3683ed9e9885f",
 }
 
 

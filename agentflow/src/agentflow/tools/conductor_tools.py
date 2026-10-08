@@ -29,6 +29,8 @@
 | `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
 | `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
 | `conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` 只在八格全过时为真） |
+| `conductor.board` | read | 板上还挂着什么（工作项 + 走到哪一档 + 谁读的） |
+| `conductor.broadcast` | write_local | 给我名下的直接子代理广播一条通告（每人一条 ack 板项；级联由它们自己决定） |
 
 ## 为什么 M 的写面变了不等于"主控开始产出知识"
 
@@ -49,8 +51,9 @@ from typing import Any, Callable, Mapping
 from .. import policy as P
 from .. import schema as S
 from ..cancellation import CANCEL_CODES
-from ..conductor import DEFAULT_FANOUT_WAIT_SEC, Conductor, NotWiredError, SummonResult
-from . import ToolError, ToolRegistry, ToolResult, fail, ok, tool
+from ..conductor import (DEFAULT_FANOUT_WAIT_SEC, Conductor, NotWiredError, SummonResult,
+                         current_caller_role, current_task_id)
+from . import READ_ONLY_ROLES, ToolError, ToolRegistry, ToolResult, fail, ok, tool
 
 #: 一个工作区一个主控（键 = store 根路径）。主控是会话状态：
 #: 预算、台账、取消信号必须跨多次工具调用连续，否则每次派活都是一个新主控。
@@ -1172,7 +1175,41 @@ def conductor_board(_conductor, limit: int = 20) -> ToolResult:
     return ok(view, **view)
 
 
-_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (    (conductor_summon, ('_conductor',)),
+@tool(
+    "conductor.broadcast",
+    "给我名下的**直接子代理**广播一条通告（每个收件人一条 ack 板项）。它们各自决定要不要"
+    "再向下转（级联是收件人的动作，框架不代转）—— 要覆盖全树就逐层向下调用；"
+    "没有子代理时如实报『没有收件人』，不假装发出去了。",
+    {"type": "object",
+     "properties": {"subject": {"type": "string", "description": "一句话标题"},
+                    "body": {"type": "string", "description": "正文（进板项的 detail）"}},
+     "required": ["subject"], "additionalProperties": False},
+    side_effect="write_local",
+    # 所有角色 + 主控：T21 逐字「这个子代理广播对 M 也是完全一样的做法」
+    # （`S.ROLES` 不含主控 ⇒ 单独并上它）。
+    # 只读角色（C/H/V）不声明 —— 比"声明了再让 `for_role` 剥掉"更干净：
+    # 后者会被 `cli tools` 报成"声明错误"（`role_filter_notes` 非空），
+    # 而那份说明里逐字写着"行为上已被拦下，但声明本身应改"。
+    roles=tuple(r for r in S.ROLES if r not in READ_ONLY_ROLES) + (S.CONDUCTOR_ROLE,),
+    returns="{'checked','ok','broadcast','recipients','items','cascade','readings','note'}",
+)
+def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolResult:
+    """工具体：转发 `Conductor.broadcast`。
+
+    "我是谁"从调用上下文里读（`current_task_id()` / `current_caller_role()`）——
+    工具的形状里没有这一格，而只有循环知道它（`AgentLoop._do_tool` 用 `calling_as` 挂上）。
+    挂不上 ⇒ `broadcast` 自己会受控拒绝（三态：不许猜一个父号），这里不替它猜。
+    """
+    got = _conductor().broadcast(subject=subject, body=body,
+                                 by=current_caller_role() or S.CONDUCTOR_ROLE,
+                                 parent_task_id=current_task_id())
+    if got.get("ok") is False:
+        raise ToolError(str(got.get("error") or "广播没成"))
+    return ok(got, **got)
+
+
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
+    (conductor_summon, ('_conductor',)),
     (conductor_summon_many, ('_conductor',)),
     (conductor_ledger, ('_conductor',)),
     (conductor_stop, ('_conductor',)),
@@ -1192,6 +1229,11 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (    (
     # A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）——
     # M 不进 `manuscripts.*` 的面是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`）。
     (conductor_board, ('_conductor',)),
+    # 广播（S6-b，业主 T20/T21）：一件能力、所有角色同一个做法（没有 tree 特权档）。
+    # 收件人是"我名下的直接子代理"，而"我是谁"从调用上下文读（`AgentLoop._do_tool`
+    # 用 `calling_as` 挂上）—— 拿不到就不广播（受控拒绝，不猜父号）。
+    # 只读角色（C/H/V）由 `write_local` 在 `for_role` 里结构性剥离。
+    (conductor_broadcast, ('_conductor',)),
 )
 
 

@@ -44,6 +44,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
 import hashlib
 import inspect
@@ -53,7 +54,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from . import capabilities as C
 from . import cancellation as CX
@@ -450,6 +451,37 @@ def current_task_id() -> str:
     时必须把"没号"与"挂上了但没记账"分开 —— 折成一个 0 正是本仓最贵的那个缺陷形态。
     """
     return _CURRENT_TASK_ID.get()
+
+
+#: 这一趟调用是哪个角色发起的（与 `_CURRENT_TASK_ID` 同族、同一个挂点）。
+#: 工具层读它（`current_caller_role()`）：工具的形状里没有"我是谁"这一格，
+#: 而广播这类"发给我名下子代理"的能力必须知道发起人。
+_CURRENT_ROLE: contextvars.ContextVar[str] = contextvars.ContextVar("agentflow_caller_role",
+                                                                   default="")
+
+
+def current_caller_role() -> str:
+    """这一趟调用是哪个角色发起的（不在任何调用里 ⇒ 空串 = 没挂点，不是"没有角色"）。"""
+    return _CURRENT_ROLE.get()
+
+
+@contextlib.contextmanager
+def calling_as(task_id: str, role: str = "") -> Iterator[None]:
+    """这一小段代码以某个实例的身份跑（工具调用用）。
+
+    为什么工具调用也要带身份（S6-b）：`conductor.broadcast` 的收件人是"我名下的直接
+    子代理"，而工具的形状里没有"我是谁"这一格 —— 只有循环知道（`self.my_task_id`
+    与 `self.role`）。挂点与 `summon` 那一处同一个（`ContextVar`，不是实例属性：
+    同一角色的两个并发实例共享对象，挂在实例上会互相盖掉，见 `_CURRENT_TASK_ID` 的理由）。
+    退出时复位（异常也复位）—— 于是这一小段之后谁都不知道上一个是谁。
+    """
+    reset = _CURRENT_TASK_ID.set(str(task_id or ""))
+    reset_role = _CURRENT_ROLE.set(str(role or ""))
+    try:
+        yield
+    finally:
+        _CURRENT_TASK_ID.reset(reset)
+        _CURRENT_ROLE.reset(reset_role)
 
 
 def _business_refusal_code(exc: BaseException) -> str | None:
@@ -1325,6 +1357,84 @@ class Conductor:
                                        str(r.get("task_id") or "")))
         return {"checked": True, "open_items": open_items[:max(1, int(limit))],
                 "open_count": len(open_items), "readings": self.board_readings()}
+
+    def item_readings(self, item_ids: Sequence[str]) -> dict[str, Any]:
+        """这一批板项"开了几条 / seen 几条 / acked 几条"（三态；开了 ≠ 读到了）。
+
+        为什么必须分开报（`draft/96` 的功能 15）：广播最容易撒的谎是"展开成功 = 都收到了"，
+        而"板项开出来了"只说明框架写下了这件事，收件人有没有读进任何一步是另一回事
+        （`item_state` 自己就是一串状态）。
+        读不成 ⇒ `checked=False`（不许把"没读成"报成 0 条已读）。
+        """
+        want = {str(x) for x in item_ids}
+        try:
+            rows = [r for r in self._board_rows() if str(r.get("task_id")) in want]
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 都没读
+            return {"checked": False, "opened": len(want), "seen": 0, "acked": 0,
+                    "reason": f"板读不成（{type(exc).__name__}: {exc}）⇒ seen/acked 判不了"}
+        return {"checked": True, "opened": len(rows),
+                "seen": sum(1 for r in rows
+                            if str(r.get("item_state") or "") in ("seen", "claimed", "done")),
+                "acked": sum(1 for r in rows if str(r.get("item_state") or "") == "done"),
+                "note": ("opened = 开出来的板项数；seen/acked = 此刻真的到了那两档的条数"
+                         "（展开了不等于读到了）")}
+
+    def broadcast(self, *, subject: str, body: str = "", by: str = "",
+                  parent_task_id: str = "") -> dict[str, Any]:
+        """一件广播能力：把一条通告投给我名下的直接子代理（业主 T20/T21）。
+
+        口径（`draft/86` §14.1b，T21 之后的统一形态）：
+
+        1. 收件人 = `_children_of(我)`（实例轴，`kind == ""`）—— 没有 `scope="tree"`
+           特权档：M 与其他角色完全一样，要全树就逐层向下（级联是收件人的动作，
+           框架不代任何一层转发 ⇒ `cascade` 恒为 `children_decide`）；
+        2. 每个收件人一条板项：`kind="message"`、`expects="ack"`、
+           `parent_task_id = 收件人的编号`（"这一项挂在谁名下"）、`role = 收件人的角色`；
+           正文进 `detail`（"每句话都要有行为"：内容是 detail、行为是 ack）；
+        3. 不知道我是谁（没给编号、调用上下文里也没有）⇒ 不广播（三态：不许猜一个父号）；
+        4. 我名下没有子代理 ⇒ 如实 `recipients=[]` + `note` 说清（不是"发出去了"）；
+        5. `readings` 把"开了几条 / seen 几条 / acked 几条"分开报（展开了 ≠ 读到了）。
+
+        返回 `{"checked","ok","broadcast","recipients","items","cascade","readings","note"}`。
+        """
+        mine = str(parent_task_id or "") or current_task_id()
+        if not mine:
+            return {"checked": True, "ok": False, "broadcast": "未发出", "recipients": [],
+                    "items": [], "cascade": "children_decide",
+                    "readings": {"checked": True, "opened": 0, "seen": 0, "acked": 0},
+                    "error": ("不知道我是谁（没给父账号，调用上下文里也没有）⇒ 不广播："
+                              "『我名下的子代理』枚举不出来（三态：不许猜一个父号）")}
+        try:
+            kids = [str(x) for x in self._children_of(mine)]
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 没有子代理
+            return {"checked": False, "ok": False, "broadcast": "未发出", "recipients": [],
+                    "items": [], "cascade": "children_decide",
+                    "readings": {"checked": False, "opened": 0, "seen": 0, "acked": 0},
+                    "error": (f"台账读不成（{type(exc).__name__}: {exc}）⇒ 不广播："
+                              "『没读成』不是『我名下没有子代理』")}
+        if not kids:
+            return {"checked": True, "ok": True, "broadcast": "没有收件人", "recipients": [],
+                    "items": [], "cascade": "children_decide",
+                    "readings": {"checked": True, "opened": 0, "seen": 0, "acked": 0},
+                    "note": ("我名下没有直接子代理 ⇒ 这一条没有收件人（不是『发出去了』）；"
+                             "要覆盖全树得逐层向下转发")}
+        who = str(by or "") or current_caller_role() or S.CONDUCTOR_ROLE
+        stamp = hashlib.sha1(str(subject or "").encode("utf-8")).hexdigest()[:8]
+        items: list[str] = []
+        for tid in kids:
+            row = self._task(tid) or {}
+            item = self.open_item(
+                kind="message", role=str(row.get("role") or ""), expects="ack",
+                action="message", summary=str(subject or "")[:200], called_by=who,
+                parent_task_id=tid, depth=int(row.get("depth") or 1) + 1,
+                input_key=f"broadcast@{who}:{tid}:{stamp}")
+            self.set_item_detail(item, (str(subject or "") + "\n" + str(body or "")).strip()[:400])
+            items.append(item)
+        return {"checked": True, "ok": True, "broadcast": "已投递到名下子代理",
+                "recipients": kids, "items": items, "cascade": "children_decide",
+                "readings": self.item_readings(items),
+                "note": ("每人一条 ack 板项（它们下次进循环时会渲染到）；"
+                         "级联由它们各自决定 —— 框架不代转，要全树就逐层向下")}
 
     # ---------------------------------------------------------------- 顶趟（F1）
     def open_top_level_run(self, role: str, task: str, *, by: str = "user",
