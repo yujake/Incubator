@@ -112,6 +112,15 @@ _SETTLED_MARK = "tokenmeter:settled"
 #: （见那个函数）。
 _ADMITTED_MARK = "conductor:admitted"
 
+#: 消边标记的前缀（S1h）。形态：`edge-released:<子代号>#<第几次>`。
+#:
+#: 为什么也放 `inputs`：与 `_ADMITTED_MARK` / `_SETTLED_MARK` 同一族 —— 它是"这条边
+#: 与什么打过交道"的一格，加一个元素不改变语义，也不需要动 `schema.py`（禁改区）。
+#: 谁来决定消边不在这里：决定与判定在秘书那一侧（`draft/90` §1.9 的三分支，
+#: S1k 落地），这里只提供幂等的那一笔写入与读侧（`edge` 的说法见 `draft/92` I-12：
+#: 边是派生的读数，这一笔是"父已经认过这条边了"的落痕）。
+_EDGE_RELEASED_PREFIX = "edge-released:"
+
 #: 达到"同时在飞"上限之后，父任务等多久（秒）再放弃（所有者 2026-10-08 逐字：
 #: 「当达到派活上限后，父智能体或主控只可等待子智能体返回结果」）。
 #:
@@ -1014,6 +1023,108 @@ class Conductor:
         return [r for r in self._board_rows()
                 if str(r.get("item_state") or "") != "done"
                 and str(r.get("parent_task_id") or "") == str(task_id)]
+
+    # ---------------------------------------------------------------- 三态与幂等（S1h）
+    def active_children(self, task_id: str) -> dict[str, Any]:
+        """`task_id` 名下代理行的两态快照（三态返回）。业主 T22 的"活跃 / 在等待"。
+
+        `{"checked": bool, "rows": [{"task_id","role","state"}], "reason": ""}`
+
+        - `state == "活跃"`：那一行 `status ∈ {pending, running}`（此刻在跑一次调用）；
+        - `state == "在等待"`：那一行已是终态但还挂在这个父名下（退役与否由名册层说，
+          见 `draft/90` §1.9 —— conductor 这一层不知道 `keep_alive` 与名字）。
+
+        只数代理行（`kind == ""`）：工作项（板项）走 `open_items_of`。
+        读不成 ⇒ `checked=False` + `reason`，不许折成 `rows=[]`
+        （那会让调用方把"没查成"当成"名下没有子代理"从而误退役，`draft/90` E9）。
+        """
+        try:
+            rows = self._tasks()
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+            return {"checked": False, "rows": [], "reason": f"{type(exc).__name__}: {exc}"}
+        out: list[dict[str, str]] = []
+        for r in rows:
+            if r.get("parent_task_id") != task_id or str(r.get("kind") or ""):
+                continue
+            state = ("活跃" if str(r.get("status") or "") in ("pending", "running")
+                     else "在等待")
+            out.append({"task_id": str(r.get("task_id") or ""),
+                        "role": str(r.get("role") or ""), "state": state})
+        out.sort(key=lambda x: x["task_id"])
+        return {"checked": True, "rows": out, "reason": ""}
+
+    def note_edge_release(self, parent_task_id: str, *, child_task_id: str,
+                          attempt: int = 1) -> tuple[str, str]:
+        """记一笔"这条边已经认过了"（幂等键 = `(子代号, 第几次)`）。返回 `(落痕, 问题)`。
+
+        ## 为什么是"标记"而不是"删一行"（`draft/92` I-12）
+
+        边是派生的读数（子行的 `parent_task_id` + 状态），没有一张可删的边表；
+        所以"删边"落到盘上是"父已经认过这条边"的落痕，写在父那一行的 `inputs`
+        （与 `_ADMITTED_MARK` / `_SETTLED_MARK` 同一族，不动 `schema.py`）。
+
+        ## 三条结构判据（判定与决定不在这里）
+
+        - 子必须真实存在、且 `parent_task_id` 就是这位父；
+        - 子必须是代理行（`kind == ""`）—— 工作项不是代理（两轴分开）；
+        - 子必须不在跑（`status ∉ {pending, running}`）—— 还在跑就记"已经消过"
+          是最坏的一种假成功（业主 §1.9 第①支：活跃 ⇒ 先把最近报告端给父，不退役）。
+
+        幂等：同一 `(子代号, 第几次)` 第二次 ⇒ 返回 `("", "已经记过")`，不写第二份。
+        谁、什么时候、依据哪几条（"工作"层面的读数）由调用方（秘书的 `retire`）写进会话事件
+        —— 这一笔只管"父侧认过"这件事本身。
+        """
+        mark = f"{_EDGE_RELEASED_PREFIX}{child_task_id}#{int(attempt)}"
+        with self.store.tx("tasks", actor="conductor", note="edge:released") as tx:
+            parent = tx.find("tasks", task_id=parent_task_id)
+            if parent is None:
+                return "", f"没有这一行（parent_task_id={parent_task_id!r}）"
+            child = tx.find("tasks", task_id=child_task_id)
+            if child is None:
+                return "", f"没有这个子（child_task_id={child_task_id!r}）"
+            if str(child.get("parent_task_id") or "") != str(parent_task_id):
+                return "", (f"{child_task_id} 不是 {parent_task_id} 的子"
+                            f"（它的父是 {child.get('parent_task_id')!r}）")
+            if str(child.get("kind") or ""):
+                return "", f"{child_task_id} 是工作项（kind={child.get('kind')!r}），不是代理"
+            if str(child.get("status") or "") in ("pending", "running"):
+                return "", (f"{child_task_id} 还在跑（status={child.get('status')!r}）"
+                            "⇒ 不许记消边（先把它的最近报告端给父）")
+            marks = [str(x) for x in (parent.get("inputs") or [])]
+            if mark in marks:
+                return "", "已经记过（幂等：不写第二份）"
+            # `inputs` 是集合类字段：schema 的不变量要求升序去重
+            # （`check_array_invariants` 会当场拒；实测：直接 append 会报
+            # "inputs 声明为集合但未升序去重"）⇒ 这里排一次序。
+            parent["inputs"] = sorted(set(marks) | {mark})
+            task = S.Task(**{k: v for k, v in parent.items()
+                             if k in S.Task.__dataclass_fields__})
+            task.validate()
+            tx.upsert("tasks", task.to_dict(), note="edge:released")
+        return mark, ""
+
+    def released_edges(self, parent_task_id: str) -> dict[str, Any]:
+        """读回父侧认过的那些边（三态）：`{"checked", "edges": [{"child_task_id","attempt"}], "reason"}`。
+
+        读不成（或没有那一行）⇒ `checked=False` + `reason`；不许返回空表冒充满足
+        （"没查成"与"一条都没认过"在本仓是两件事）。
+        """
+        try:
+            row = self._task(parent_task_id)
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "edges": [], "reason": f"{type(exc).__name__}: {exc}"}
+        if row is None:
+            return {"checked": False, "edges": [],
+                    "reason": f"台账里没有 {parent_task_id!r}"}
+        out: list[dict[str, Any]] = []
+        for raw in (row.get("inputs") or []):
+            text = str(raw)
+            if not text.startswith(_EDGE_RELEASED_PREFIX):
+                continue
+            child, _, attempt = text[len(_EDGE_RELEASED_PREFIX):].partition("#")
+            out.append({"child_task_id": child, "attempt": int(attempt or 0)})
+        out.sort(key=lambda x: (x["child_task_id"], x["attempt"]))
+        return {"checked": True, "edges": out, "reason": ""}
 
     def board_readings(self) -> dict[str, Any]:
         """板上读数（三态：读不成 ⇒ `checked=False`，不许返回一串 0）。"""
