@@ -560,12 +560,17 @@ class Secretary:
     def note_decision(self, *, duty: int, kind: str = KIND_DECISION, decision: str = "",
                       reason: str = "", basis: Sequence[str] = (), target: Any = None,
                       before: str = "", after: str = "", mid: str = "",
+                      changes: Sequence[Mapping[str, Any]] = (),
                       negotiation: Sequence[Mapping[str, Any]] = (), fail_open: bool = False,
                       error: str = "", judge: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """追加一行台账（`draft/55` §5.3 的字段表）。
 
         原文与加工后并列（`before` / `after`）：只留结论会让复核无从下手 ——
         "过程"是这一层唯一能自证的东西。
+
+        `changes`（S1g）：逐格写"洗了什么"（`[{"field","from","to","why"}]`）。
+        只留 `before`/`after` 两份全文也能 diff 出来，但"哪几格是秘书动的"必须一眼可读
+        —— 否则"模型写错了"与"秘书替它补对了"在纸上长得一样（`draft/90` §1.2）。
 
         写入走 `append_jsonl`（S1m）：锁内算 `seq`、进程内 + 跨进程两层锁。
         旧写法（先读全表算 `seq`、再裸 `open("a")`）在并发下会重号（D107）。
@@ -593,6 +598,10 @@ class Secretary:
             rec["basis"] = [str(x) for x in basis]
         if negotiation:
             rec["negotiation"] = [dict(x) for x in negotiation]
+        if changes:
+            # S1g：逐格写"秘书动了哪几格"。只留 before/after 两份全文也能 diff，
+            # 但读的人要的是"哪几格是秘书动的"（否则模型写错与秘书补对分不开）。
+            rec["changes"] = [dict(x) for x in changes]
         if judge is not None:
             # 判断类的那一格：`checked` / `decision` / `reason` 一起落台账 ——
             # 只落结论会让"没查成"与"查过了没问题"在纸上长得一样。
@@ -1015,10 +1024,37 @@ class Secretary:
         try:
             if time.monotonic() - t0 > self.deadline_sec:
                 raise TimeoutError("秘书超过单次调用上限")
-            to = str(payload.get("to") or payload.get("role") or "")
-            action = str(payload.get("action") or "")
-            params = payload.get("params") if isinstance(payload.get("params"), Mapping) else {}
-            tool = str(payload.get("name") or payload.get("tool") or "")
+            # ---- S1g：洗格式（E5 的落地）。位置：判"该不该介入"之前 ——
+            # 预筛要核的是洗过之后那一份（否则"错名"永远是错的，洗了白洗）。
+            # 内容面一个字不动（`wash_delegation` 的边界逐条写在它的 docstring 里）。
+            wash = self.wash_delegation(shape, payload)
+            if wash.get("refused"):
+                # 硬拒也要把预筛读数算出来：这一趟是死了，但"它另外还把工具名写错了、
+                # 候选是这几个"是有用的东西（真机上模型下一步就得靠它改）。
+                # 只是不判（不叫模型）：没有可发的载荷，判断没有意义。
+                r_to = str(original.get("to") or original.get("role") or "")
+                r_params = (original.get("params") if isinstance(original.get("params"),
+                                                                 Mapping) else {})
+                r_tool = str(original.get("name") or original.get("tool") or "")
+                alarms = self.prescreen(to=r_to, action=str(original.get("action") or ""),
+                                        params=r_params or {}, tool=r_tool)
+                rec = self.note_decision(
+                    duty=1, kind=KIND_OPTIMIZED, decision="洗不动 ⇒ 受控拒绝",
+                    reason="；".join([str(wash.get("reason") or ""), *alarms]).strip("；"),
+                    basis=["specs/<role>.py 的参数表", "tools.build_registry() 的真名"],
+                    target={"to": r_to, "action": str(original.get("action") or "")},
+                    before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000],
+                    changes=list(wash.get("changes") or ()), fail_open=False)
+                return {"problem": "；".join([str(wash.get("reason") or ""), *alarms]).strip("；"),
+                        "payload": original, "after": original, "wash": wash, "changes": [],
+                        "washed": False, "refused": True, "alarms": alarms,
+                        "judge": {"checked": False, "reason": "硬拒：没有可判的载荷"},
+                        "engaged": False, "fail_open": False, "seq": rec.get("seq")}
+            washed = dict(wash.get("payload") or original) if wash.get("checked") else original
+            to = str(washed.get("to") or washed.get("role") or "")
+            action = str(washed.get("action") or "")
+            params = (washed.get("params") if isinstance(washed.get("params"), Mapping) else {})
+            tool = str(washed.get("name") or washed.get("tool") or "")
             if shape == "message":
                 # `R8`：`message` 是跨智能体的结构化交互 ⇒ 秘书接管（所有者裁定逐字
                 # "如果有些形状涉及到结构化交互，则需要秘书接管"）。接管 = 预筛报警 +
@@ -1042,17 +1078,24 @@ class Secretary:
             decision = ("已优化" if not alarms else "建议重排")
             if judged.get("checked"):
                 decision = str(judged.get("decision") or decision)
+            changes = list(wash.get("changes") or ())
             rec = self.note_decision(
                 duty=1, kind=KIND_OPTIMIZED, decision=decision,
                 reason="；".join(alarms) or "没有触发预筛报警（原样放行）",
                 basis=["specs/<role>.py 的参数表", "tools.build_registry() 的真名"],
                 target={"to": to, "action": action}, judge=judged,
                 before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000],
+                # S1g：洗过的那一份与原稿并列落账（`before`/`after` + 逐格 `changes`）。
+                # 只有一份摆在那里时，"模型说错了"与"秘书替它补对了"在纸上分不开。
+                after=json.dumps(washed, ensure_ascii=False, sort_keys=True)[:2000],
+                changes=changes,
                 fail_open=False,
             )
-            return {"problem": "；".join(alarms), "payload": original, "alarms": alarms,
-                    "judge": judged, "engaged": bool(engage), "fail_open": False,
-                    "seq": rec.get("seq")}
+            return {"problem": "；".join(alarms), "payload": original, "after": washed,
+                    "wash": wash, "changes": changes,
+                    "washed": bool(wash.get("washed")), "refused": False,
+                    "alarms": alarms, "judge": judged, "engaged": bool(engage),
+                    "fail_open": False, "seq": rec.get("seq")}
         except Exception as exc:  # noqa: BLE001 - fail-open：超时/出错一律放行
             self.note_decision(duty=1, kind=KIND_OPTIMIZED, decision="已优化",
                                reason="秘书没跑成 ⇒ 原样放行", fail_open=True,
@@ -1060,7 +1103,227 @@ class Secretary:
                                before=json.dumps(original, ensure_ascii=False, sort_keys=True)[:2000])
             self._log(f"秘书优化没跑成（原样放行）：{type(exc).__name__}: {exc}")
             return {"problem": f"{type(exc).__name__}: {exc}", "payload": original,
+                    "after": original, "wash": {"checked": False, "washed": False,
+                                                "refused": "", "changes": [],
+                                                "reason": f"没跑成：{type(exc).__name__}"},
+                    "changes": [], "washed": False, "refused": False,
                     "alarms": [], "fail_open": True}
+
+    # ------------------------------------------------------------ 洗格式（S1g）
+
+    #: 洗格式只管派活这两个形状（`draft/90` §1.2 的格式面）：
+    #: `handoff` / `message` 的 `to` 是内容面（"派给谁"一个字不许动）⇒ 只报不改。
+    WASH_SHAPES: tuple[str, ...] = ("summon", "summon_many")
+
+    #: 形状自己的键（不是 `params` 的键）：顶层折叠时要跳过它们，
+    #: 否则一个恰好叫 `name` 的动作参数会把名册那一格（S1k）偷走。
+    _SHAPE_KEYS: tuple[str, ...] = ("role", "action", "params", "brief", "name", "reuse",
+                                    "input_key", "instance", "targets", "notify", "why")
+
+    def wash_delegation(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """洗一遍格式面（S1g / E5），内容面一个字不动。
+
+        返回（三态必须分得开，这是本仓最忌折平的一处）：
+
+        | 结局 | 返回 |
+        |---|---|
+        | 洗过了、本来就是受控形状 | `{"checked": True, "washed": False, "changes": []}` |
+        | 洗过了、改了格式格 | `{"checked": True, "washed": True, "changes": [...]}` |
+        | 这一格没洗成 | `{"checked": False, "reason": …}`（原样发出去，闸门照旧） |
+        | 硬拒 | `{"checked": True, "refused": "<受控理由码>"}`（调用方一行都不落） |
+
+        ## 可以洗什么（`draft/90` §1.2，逐条）
+
+        - 动作真名：`action` 不在该角色的动作表里、而 `declarations_candidates`
+          只给出唯一候选 ⇒ 映过去（候选有多条 ⇒ 不猜，留给闸门拒）；
+        - `params` 键名：声明里没有这个键、而候选唯一 ⇒ 改名（值原样跟着走）；
+        - 顶层折叠：动作声明的参数被摆在了顶层（不在 `params` 里）⇒ 收进 `params`
+          （这是真机上"出现未声明的参数"那一类的最常见成因）；
+        - `input_key` 归一：去空白 + 内部空白并成一个空格（它是环检测键，不挪作他用）；
+        - `name` / `reuse` / `instance` / `role` / `action`：去首尾空白。
+
+        ## 一个字不许动什么（内容面）
+
+        `params` 里任何值、`role`（派给谁）、`notify` 的正文与主张、证据与结论。
+        所以这里只搬键、只去空白，从不把 `None`/缺键补成默认值。
+
+        ## 硬拒只有一格（为什么这么窄）
+
+        "洗不动 ⇒ 受控拒绝，一行都不落"（`draft/90` §1.2 步骤 1）落在
+        `summon` 连"派给谁/做什么"都不全这一格：没有角色或没有动作时，
+        一次派活在语义上不成立，洗也洗不出内容来。
+        其余"洗不动"（缺必填参数、参数值不对）照旧交给 `conductor` 的闸门去拒 ——
+        那一档今天会落一行 `refused` 并且可能转成"请主控代唤"（`_needs_relay`），
+        秘书抢在它前面拒掉会把那条出路和那行证据一起弄丢。
+        `summon_many` 不用硬拒：一批是 N 次派活，整批拒掉会把好的那几项一起带走
+        （逐项 `refused` 行仍由闸门落）。
+
+        为什么 `params` 只动顶层一层、且不深拷：噪声载荷里有自引用字典
+        （`SELF_REF`）与 60 层深嵌套（`test_secretary_noise.py`），递归走一遍会当场炸掉
+        这一次派活。只搬顶层键、只去字符串空白，永远碰不到那些结构。
+        """
+        before = dict(payload or {})
+        out: dict[str, Any] = {"checked": False, "washed": False, "refused": "",
+                               "reason": "", "payload": before, "before": before,
+                               "changes": []}
+        if shape not in self.WASH_SHAPES:
+            out["reason"] = (f"{shape} 不在洗格式的面上（派活以外只报不改："
+                             "`to` 是内容面）")
+            return out
+        try:
+            if shape == "summon_many":
+                return self._wash_summon_many(before, out)
+            return self._wash_one(before, out, field="")
+        except Exception as exc:  # noqa: BLE001 —— 洗不动不许打断这一次派活
+            out.update(checked=False, washed=False, refused="", payload=before,
+                       reason=f"洗格式没跑成（{type(exc).__name__}: {exc}）⇒ 原样发出去")
+            return out
+
+    def _wash_one(self, payload: dict[str, Any], out: dict[str, Any],
+                  *, field: str, refuse: bool = True) -> dict[str, Any]:
+        """洗一次派活的格式面（`field` 给了就把这一份摆在那个字段名下，用于批量）。"""
+        where = f"{field}：" if field else ""
+        after = dict(payload)
+        changes: list[dict[str, Any]] = list(out.get("changes") or [])
+        for key in ("role", "action", "name", "reuse", "instance"):
+            got = after.get(key)
+            if isinstance(got, str):
+                stripped = got.strip()
+                if stripped != got:
+                    after[key] = stripped
+                    changes.append({"where": field, "field": key, "why": "去首尾空白"})
+        key_val = after.get("input_key")
+        if isinstance(key_val, str):
+            folded = " ".join(key_val.split())
+            if folded != key_val:
+                after["input_key"] = folded
+                changes.append({"where": field, "field": "input_key", "why": "归一（空白并一个）"})
+        # 角色那一格有两个写法（`role` 是派活形状的、`to` 是老调用方的）：
+        # `optimize_outbound` 与 `prescreen` 都认两个 ⇒ 这里也认两个，
+        # 否则一个用 `to=` 的调用方会被判成"没给角色"（真机判据当场抓出来的）。
+        role = after.get("role")
+        if not (isinstance(role, str) and role.strip()):
+            role = after.get("to") if isinstance(after.get("to"), str) else ""
+        else:
+            role = role.strip()
+        action = after.get("action") if isinstance(after.get("action"), str) else ""
+        if not role or not action:
+            missing = "角色（派给谁）" if not role else "动作（做什么）"
+            # 理由码与闸门那一侧同名（`schema.REFUSAL_REASONS`）：空动作名字在
+            # 闸门那里就是 `unknown_action`（红前读数见 S1g 的提交信息），这一档只是
+            # "不落行"、码不改 —— 换一个码会让读了半年日志的人以为另出了一类拒绝。
+            code = "unknown_role" if not role else "unknown_action"
+            if refuse:
+                out.update(payload=payload, changes=changes, checked=True, washed=False,
+                           refused=code,
+                           reason=f"{where}没给{missing} ⇒ 一次派活在语义上不成立（不落行）")
+                return out
+            out.update(payload=after, changes=changes, checked=True,
+                       washed=bool(changes), reason=f"{where}没给{missing} ⇒ 这一项洗不了")
+            return out
+        spec = self._action_spec(role, action)
+        table = self._action_table().get(role, [])
+        note = ""
+        if spec is None:
+            close = declarations_candidates(action, table) if table else []
+            if len(close) == 1:
+                after["action"] = close[0]
+                changes.append({"where": field, "field": "action",
+                                "from": action, "to": close[0], "why": "动作真名（唯一候选）"})
+                action = close[0]
+                spec = self._action_spec(role, action)
+            elif table:
+                note = (f"{where}动作表里没有 {action!r}"
+                        + (f"；并列候选 {close} ⇒ 不猜（留给闸门拒）" if close
+                           else "（没有候选 ⇒ 不猜，留给闸门拒）"))
+        # ---- `params` 键名归一 + 顶层折叠 —— 一次做完，因为它们是同一件事的两半：
+        # 值在哪一格不重要，重要的是它得落在声明的那个键下面。
+        props = self._param_props(spec)
+        raw_params = after.get("params")
+        if props and (raw_params is None or isinstance(raw_params, Mapping)):
+            fixed = dict(raw_params or {})
+            for key in list(fixed):
+                if key in props:
+                    continue
+                cand = declarations_candidates(str(key), props)
+                if len(cand) == 1 and cand[0] not in fixed:
+                    # 目标键已经在 `params` 里 ⇒ 不改（改名会覆盖一个真值：
+                    # 那是动内容面，不是洗格式）。
+                    fixed[cand[0]] = fixed.pop(key)
+                    changes.append({"where": field, "field": f"params.{key}",
+                                    "to": f"params.{cand[0]}", "why": "键名归一（唯一候选）"})
+            for key in list(after):
+                if key in fixed or key in self._SHAPE_KEYS or key == "params":
+                    continue
+                if key in props:
+                    fixed[key] = after.pop(key)
+                    changes.append({"where": field, "field": f"<顶层>.{key}",
+                                    "to": f"params.{key}", "why": "顶层折叠"})
+                    continue
+                # 顶层的错名键：候选唯一 ⇒ 改名并收进 `params`（与 `params` 里
+                # 那一支同一条口径）；候选不唯一 ⇒ 一个字节都不动，留在顶层
+                # （它照样落在步骤记录里，"没洗"看得见）。
+                cand = declarations_candidates(str(key), props)
+                if len(cand) == 1 and cand[0] not in fixed:
+                    fixed[cand[0]] = after.pop(key)
+                    changes.append({"where": field, "field": f"<顶层>.{key}",
+                                    "from": str(key), "to": f"params.{cand[0]}",
+                                    "why": "顶层折算：键名归一（唯一候选）"})
+            if fixed or raw_params is not None:
+                if fixed != dict(raw_params or {}):
+                    after["params"] = fixed
+        elif raw_params is not None and not isinstance(raw_params, Mapping):
+            note = note or f"{where}params 不是键值对 ⇒ 这一格没洗（原样发出去）"
+        # 三态：读到了声明（表非空）就是"查过了"；表读不到才是"这一格没读成"。
+        checked = bool(spec or table)
+        out.update(payload=after, changes=changes, checked=checked,
+                   washed=bool(changes), refused="",
+                   reason=note if not changes else "")
+        return out
+
+    def _wash_summon_many(self, payload: dict[str, Any], out: dict[str, Any]) -> dict[str, Any]:
+        """批量：逐项洗，不整批硬拒（一批是 N 次派活）。"""
+        targets = payload.get("targets")
+        after = dict(payload)
+        changes: list[dict[str, Any]] = []
+        bad: list[str] = []
+        if not isinstance(targets, (list, tuple)):
+            out.update(reason="targets 不是数组 ⇒ 这一格没洗（原样发出去）", payload=payload)
+            return out
+        washed: list[Any] = []
+        for i, item in enumerate(targets):
+            if not isinstance(item, Mapping):
+                washed.append(item)
+                bad.append(f"targets[{i}] 不是键值对")
+                continue
+            sub: dict[str, Any] = {"changes": [], "washed": False}
+            got = self._wash_one(dict(item), sub, field=f"targets[{i}]", refuse=False)
+            if got.get("reason") and not got.get("washed"):
+                bad.append(str(got["reason"]))
+            changes.extend(list(got.get("changes") or []))
+            washed.append(dict(got.get("payload") or {}))
+        after["targets"] = washed
+        out.update(payload=after, changes=changes, checked=True, washed=bool(changes),
+                   refused="",
+                   reason="；".join(bad[:3]) if bad else "")
+        return out
+
+    def _action_spec(self, role: str, action: str) -> Any:
+        """该角色该动作的声明（读不到 ⇒ `None`，调用方按"这一格没洗成"处理）。"""
+        try:
+            from . import capabilities as C
+
+            return C.find_action(role, action)
+        except Exception:  # noqa: BLE001 —— 声明读不到不是"没有这个动作"
+            return None
+
+    def _param_props(self, spec: Any) -> list[str]:
+        """该动作声明的参数键名（空列表 = 这一格判不了，绝不读成"没有参数"）。"""
+        try:
+            props = dict(getattr(spec, "params", None) or {}).get("properties") or {}
+        except Exception:  # noqa: BLE001
+            return []
+        return [str(k) for k in props]
 
     def assess_delegation(self, *, to: str, action: str, params: Mapping[str, Any],
                           input_key: str = "", duplicates: Sequence[Mapping[str, Any]] = (),

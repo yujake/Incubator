@@ -144,7 +144,10 @@ SHAPES = (..., "retire", "roster")          # 8 → 10；同笔更新 JSON_TAIL 
 
 def _do_summon(self, payload) -> dict:
     # 0 校验 brief（缺 ⇒ 受控拒绝 invalid_params，**不替它编**；格式面 = 单行、≤60 字，超了也拒，§7-⑱）
-    # 1 秘书洗格式（S1g）：wash_delegation → refused ⇒ 原样回绝
+    # 1 秘书洗格式（S1g）—— **落点上移了一格**（实测后的偏差，理由见下）：
+    #   洗发生在循环的 `_execute` 之前，与 `_outbound_hook`（建议/评估）**同一次调用**，
+    #   于是 `_do_summon` 收到的**已经是**洗过的那一份（它自己不再洗一遍、也不落第二行账）。
+    #   硬拒（连"派给谁/做什么"都不全）在那一层就短路了 ⇒ `_do_summon` 根本不被调用。
     # 2 reuse 给了名册名 ⇒ 译码 + conductor.reusable_child_of ⇒ **仍然走 conductor.summon**
     #   （新增一行**调用**，`inputs` 里带 `roster:D1`）—— 复用不新增名册项（I-12）
     # 3 新起 ⇒ conductor.summon（既有；闸门/建行/取号一个字不动）
@@ -154,6 +157,15 @@ def _do_summon(self, payload) -> dict:
     #   · 失败 ⇒ 读侧"未登记" + 下次 roster_repair（§3.3；**只在写路径**，I-15）
     # 5 若这次是"复用"且被复用的那个名字处于**待命**：先把它叫起来（它的循环要重新跑，
     #   见 §7-⑥：今天的"待命实例"没有常驻执行体，复用 = 用同一个名字再跑一次）
+
+# S1g 的两处接线（都在本文件）：
+def _shape_of / _decode_shape：`summon` / `summon_many` 的**声明参数被摆在顶层**时不再静默丢
+    （`_carried_top_level_params`：声明过的 + 名字写错但**唯一候选**能折算的，
+    **原名带过去** —— 改名是秘书的事，它要落账"模型写错了哪个键"）。
+    没接秘书时这几个键是惰性的（`conductor.summon` 只看 `params`）⇒ 老行为逐字不变。
+def 循环（`_execute` 之前）：`_outbound_hook` 返回里取出 `after` ⇒ **payload 换成洗过的那一份**，
+    后面所有判据（notify 留痕 / 活性读数 / 步骤记录）都看同一次真正发出去的载荷；
+    `wash.refused` ⇒ 结果落 `outcome="refused"` + 那个理由码，**不执行、不评估、不协商**。
 
 def _do_retire(self, payload) -> dict:
     # 只做转发：self.secretary.retire(owner=self.my_task_id, name=payload["name"])
@@ -202,10 +214,25 @@ def append_jsonl(path, rec) -> tuple[bool, str]:
 def note_decision(...): ...            # 改为走 append_jsonl(self.decisions_path 分片)
 def secretary_alive(self) -> dict: ... # 存活/收尾读数：{pid, task_id, role, at, checked}
 
-# ---- S1g：洗格式（**新增方法**，不动 optimize_outbound 的"只报不改"）
+# ---- S1g：洗格式（**新增方法**；`optimize_outbound` 的老键一个不动，新增 `after`/`wash`/`changes`）
 def wash_delegation(self, shape, payload) -> dict:
-    """`{"payload","before","changes","refused"}`：只洗格式面（真名/键名/必填/受控取值/
-    instance/input_key 归一）；内容面（谁/什么/值/notify 正文）一个字不许动；洗不动 ⇒ refused。"""
+    """`{"checked","washed","refused","reason","payload","before","changes"}`：
+    只洗格式面 —— 动作真名（**唯一候选**才映）、`params` 键名归一（唯一候选）、
+    顶层折叠（声明里的参数被摆在顶层 ⇒ 收进 `params`）、`input_key` 归一、
+    几个键去首尾空白；内容面（谁/什么/**值**/notify 正文）一个字不许动。
+    三态：`checked=True,washed=False` = 洗过了、本来就受控；`checked=True,washed=True` =
+    洗过、动了几格（`changes` 逐格）；`checked=False` = 这一格没读成（原样发出去）。
+    **硬拒只有一格**：`summon` 连"派给谁/做什么"都不全 ⇒ `refused=<闸门同名理由码>`、
+    调用方一行都不落（`draft/90` §1.2 步骤 1）。其余"洗不动"（缺必填参数、值不对）
+    **照旧交给 `conductor` 的闸门** —— 那一档会落 `refused` 行并可能转"请主控代唤"。
+    `summon_many` 不硬拒（一批是 N 次派活，整批拒掉会把好的那几项一起带走）。
+    只在**顶层一层**搬键、只去字符串空白：噪声里有自引用与 60 层嵌套，递归会当场炸。"""
+# 落账：`optimize_outbound` 的同一条 `duty=1` 行上并列 `before=` / `after=` / `changes=`
+#   （`note_decision` 新增 `changes` 一格）。返回**加三格**：`after`（洗过的那一份，
+#   真正要发出去的）、`wash`（三态读数）、`changes`；老键 `payload` 仍是本体那一份（逐字不动）。
+def _wash_one(self, payload, out, *, field, refuse=True) -> dict: ...   # 纯计算，不落账
+def _wash_summon_many(self, payload, out) -> dict: ...                  # 逐项洗、不整批硬拒
+def _action_spec(self, role, action) / _param_props(self, spec)         # 声明读取（读不到 ⇒ 判不了）
 
 # ---- S1k：名册 / 对照表 / 译码 / 退役 / 调查（全部只碰 secretary/ 下的 jsonl）
 def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,

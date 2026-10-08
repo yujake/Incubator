@@ -13,7 +13,9 @@
 1. 不抛异常（秘书坏了不许把一次已经做完的活带走 —— fail-open 是它全部四职责的共同姿态）；
 2. 读数要分得开（"没查成"不许与"查过了没问题"同形：要么有 `checked/fail_open/reason`，
    要么以一句可识别的报警说出来）；
-3. 不改载荷（职责 1 的纪律逐字："本体读到的仍是它自己那一份（改不改由它决定）"）；
+3. 不改载荷（职责 1 的纪律逐字："本体读到的仍是它自己那一份（改不改由它决定）"）
+   —— S1g 之后补一条并列的：秘书真正发出去的那一份（`after`）只许在格式面上
+   不同，内容值一个都不许变/丢/凭空多（`draft/90` §1.2 的五条边界）；
 4. 不刻意拦格式（所有者 2026-10-07 口径：秘书给的是"建议 + 并列候选 + 台账"，
    不许因为措辞/空格/字段名不好看就阻断一次派活或一条消息）。
 
@@ -185,6 +187,12 @@ def problems_from_outbound(sec, *, include_cycle: bool = False) -> list[str]:
             if key not in got:
                 out.append(f"optimize_outbound({shape}) 缺读数键 {key}")
         # 不改载荷：原键一个不许丢、值一个不许改（职责 1 的逐字纪律）。
+        #
+        # S1g 之后这条纪律分成两份（业主 A2=乙："格式面可以改写，内容面一个字不改"）：
+        # ① 这里核的是 `payload`（本体自己那一份）：原键原值，一个不改 ——
+        #    "改不改由它决定"这句话没有变；
+        # ② 秘书真正发出去的是 `after`（洗过的那一份），它只许在格式面上不同：
+        #    内容值一个都不许消失、也不许冒出一个原稿里没有的值（见下）。
         back = got.get("payload")
         if isinstance(back, dict):
             for k, v in payload.items():
@@ -192,7 +200,49 @@ def problems_from_outbound(sec, *, include_cycle: bool = False) -> list[str]:
                     out.append(f"optimize_outbound({shape}) 把键 {k} 弄丢了")
                 elif back[k] is not v and back[k] != v and not _selfref(v):
                     out.append(f"optimize_outbound({shape}) 改了键 {k} 的值")
+        washed = got.get("after")
+        if isinstance(washed, dict) and got.get("washed"):
+            out.extend(f"optimize_outbound({shape}) {p}" for p in _content_problems(payload, washed))
     return out
+
+
+#: 形状协议自己的键（不是内容）：洗格式时不算"内容值"，核值的时候要跳过。
+_PROTOCOL_KEYS: frozenset[str] = frozenset({
+    "role", "action", "params", "why", "notify", "brief", "name", "reuse",
+    "input_key", "instance", "targets", "shape_alias"})
+
+
+def _content_values(payload: Mapping[str, Any]) -> list[Any]:
+    """一份载荷里的内容值（`params` 里的值 + 顶层非协议的键值）。"""
+    out: list[Any] = []
+    for k, v in dict(payload or {}).items():
+        if k == "params":
+            if isinstance(v, Mapping):
+                out.extend(v.values())
+        elif k not in _PROTOCOL_KEYS:
+            out.append(v)
+    return out
+
+
+def _content_problems(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[str]:
+    """洗格式的内容面判据：值可以换键、换位置，但不许变、不许丢、不许凭空多。
+
+    这是"洗"与"替它写"的分界：错名/错位由秘书折算（格式面），
+    而值本身一个字节都不归秘书动（内容面）。
+    """
+    probs: list[str] = []
+    bv, av = _content_values(before), _content_values(after)
+
+    def same(x: Any, y: Any) -> bool:
+        return x is y or (not isinstance(x, Mapping) and x == y)
+
+    for v in bv:
+        if not any(same(v, w) for w in av):
+            probs.append("洗过之后原稿的一个值不见了（洗不许变成替它写）")
+    for v in av:
+        if not any(same(v, w) for w in bv):
+            probs.append("洗过之后多出了一个原稿里没有的值（不许静默补默认值）")
+    return probs
 
 
 def problems_from_outbound_at_the_loop(loop) -> list[str]:
@@ -303,7 +353,15 @@ def test_prescreen_survives_noise(role: str, tmp_path: pathlib.Path) -> None:
 
 
 @pytest.mark.parametrize("role", ROLES)
-def test_outbound_survives_noise_and_never_rewrites_the_payload(role: str, tmp_path: pathlib.Path) -> None:
+def test_outbound_survives_noise_and_only_the_format_face_may_be_rewritten(
+        role: str, tmp_path: pathlib.Path) -> None:
+    """口径（S1g 改写，不是删掉）：秘书可以洗格式面，内容面一个字不许动。
+
+    改写之前这条叫 `…and_never_rewrites_the_payload`：那时秘书"只报不改"，
+    所以"原键原值"是它的全部纪律。A2=乙 之后纪律分成两份 —— 本体那一份仍逐字不动，
+    真正发出去的那一份（`after`）只许在格式面上不同（值是搬了地方还是换了键名，
+    见 `_content_problems`）。
+    """
     sec, _ = _sec(role, tmp_path)
     bad = problems_from_outbound(sec)
     assert not bad, f"[{role}] 发件钩子在噪声下出问题：\n  - " + "\n  - ".join(bad[:8])

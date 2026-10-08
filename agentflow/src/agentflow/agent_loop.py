@@ -1186,8 +1186,17 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # 这里原先返回的是写死的键集，于是提示词教了这三格、解码器却把它们丢了
         # （S1k-3 的判据当场抓出来：`roster_problem` 永远是"没给一句任务简介"）。
         # 只在给了的时候带上，老载荷的键集因此一个字节不变。
-        extra = {k: str(value.get(k)) for k in ("brief", "name", "reuse")
-                 if str(value.get(k) or "").strip()}
+        extra: dict[str, Any] = {k: str(value.get(k)) for k in ("brief", "name", "reuse")
+                                 if str(value.get(k) or "").strip()}
+        # S1g：动作声明里的参数被摆在了顶层（不在 `params` 里）时，别再静默丢掉它们
+        # —— 今天这条路把它们丢在校验之前，于是模型看到的是「缺必填参数」，而那个值
+        # 明明就在它写的那一句话里。带两类：① 声明过的键；② 名字写错、但按唯一候选
+        # 能折算到某个声明键的那些（原名带过去，改名是秘书的事 —— 它要落账
+        # "模型写错了哪个键"）。顶层别的键一个都不带：payload 是会落台账的形状，
+        # 宽一格要有判据守着。真正的"收进 params"由秘书洗格式做
+        # （`secretary.wash_delegation`）：没接秘书时这几个键是惰性的
+        # （`conductor.summon` 只看 `params`），老行为逐字不变。
+        extra.update(_carried_top_level_params(role, action, value, params))
         return key, _with_notify({"role": role, "action": action, "params": dict(params),
                                   "why": str(value.get("why") or ""), **extra}, value), ""
     if key == "summon_many":
@@ -1207,13 +1216,17 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
             params = item.get("params") or {}
             if not isinstance(params, Mapping):
                 return "", {}, f"summon_many.targets[{i}].params 必须是一个对象"
+            item_extra: dict[str, Any] = {
+                # S1k-4：一批派活的目标也各带自己的名册三格（只在给了的时候带，
+                # 老载荷的键集因此不变）—— 与 `summon` 那一支同一口径。
+                k: str(item.get(k)) for k in ("brief", "name", "reuse")
+                if str(item.get(k) or "").strip()}
+            # S1g：与 `summon` 那一支同一口径（声明里的参数被摆在目标顶层 ⇒ 别静默丢）。
+            item_extra.update(_carried_top_level_params(role, action, item, params))
             clean.append({"role": role, "action": action, "params": dict(params),
                           "instance": str(item.get("instance") or ""),
                           "input_key": str(item.get("input_key") or ""),
-                          # S1k-4：一批派活的目标也各带自己的名册三格（只在给了的时候带，
-                          # 老载荷的键集因此不变）—— 与 `summon` 那一支同一口径。
-                          **{k: str(item.get(k)) for k in ("brief", "name", "reuse")
-                             if str(item.get(k) or "").strip()}})
+                          **item_extra})
         out: dict[str, Any] = {"targets": clean, "why": str(value.get("why") or "")}
         return key, _with_notify(out, value), ""
     if key == "ask_user":
@@ -1329,6 +1342,62 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
 
 #: `final.notify` 的字段表（`draft/39` §3.2）：`to` / `summary` / `body` 必填，`refs` / `why` 可选。
 NOTIFY_FIELDS: tuple[str, ...] = ("to", "summary", "body", "refs", "why")
+
+
+def _declared_params(role: str, action: str) -> list[str]:
+    """`(角色, 动作)` 声明里的参数键名（读不到 ⇒ 空列表 = 这一格判不了，不是"没有参数"）。
+
+    用途只有一处（S1g）：解码派活形状时，把被摆在顶层的声明参数带上，
+    别让它们在校验之前就消失。空列表在这里只意味着"不带任何顶层参数"，
+    也就是今天的行为 —— 读不到声明绝不等于"这些键不合法"。
+    """
+    try:
+        spec = C.find_action(str(role), str(action))
+    except Exception:  # noqa: BLE001 —— 声明读不到不是"没有这个动作"
+        return []
+    try:
+        props = dict(getattr(spec, "params", None) or {}).get("properties") or {}
+    except Exception:  # noqa: BLE001
+        return []
+    return [str(k) for k in props]
+
+
+def _carried_top_level_params(role: str, action: str, raw: Mapping[str, Any],
+                              params: Mapping[str, Any]) -> dict[str, Any]:
+    """顶层那些其实是参数的键（S1g）：声明过的 + 名字写错但唯一候选能折算的。
+
+    值原样带走、键原名带走 —— 改名与落账都归秘书（它要写清"模型写错了哪个键"）。
+    候选算法与秘书用的是同一份（`secretary.declarations_candidates` →：
+    `tools.base.candidate_tool_names`），不在这里另写一份。
+    """
+    props = _declared_params(role, action)
+    if not props:
+        return {}
+    from .secretary import declarations_candidates
+
+    taken: dict[str, Any] = {}
+    for prop in props:
+        if prop in params or prop in ("name", "params"):
+            # `name` / `params` 这两格是形状自己的（名册名 / 参数容器），
+            # 同名参数不许把它们顶掉（`E.run_experiment` 恰好声明了这两个名字）。
+            continue
+        if raw.get(prop) is not None:
+            taken[prop] = raw.get(prop)
+    for key in raw:
+        if key in taken or key in params or key in _SHAPE_PROTOCOL_KEYS:
+            continue
+        cand = declarations_candidates(str(key), props)
+        if len(cand) == 1:
+            taken[str(key)] = raw.get(key)      # 原名带着（改名是秘书的事）
+    return taken
+
+
+#: 形状协议自己的键（不是动作参数）：顶层带这些键不算"参数摆错了地方"。
+#: 与 `secretary.Secretary._SHAPE_KEYS` 是同一份口径的解码侧副本 ——
+#: 那边管"折叠时跳过谁"，这边管"压根不带谁"，两处不同名会被读成两件事。
+_SHAPE_PROTOCOL_KEYS: tuple[str, ...] = ("role", "action", "params", "brief", "name",
+                                         "reuse", "input_key", "instance", "targets",
+                                         "notify", "why", "shape_alias", "tool", "args")
 
 
 def _with_notify(payload: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -2254,23 +2323,49 @@ class AgentLoop:
             # 新形态（与收工侧同一条裁定）：派活照常发生，形状不对就把问题落进读数、
             # 用框架派生那一份留痕（谁是派生、谁是执笔仍然分得开）—— 不许因为
             # "一张表的格式"而让一次真的要发生的派活停下来。
-            dispatch_notify: dict[str, Any] | None = None
-            if shape in ("summon", "summon_many") and self.role == S.CONDUCTOR_ROLE:
-                gate, dispatch_notify = self._dispatch_notify(payload)
-                if gate:
-                    run.notes.append(f"派活的 notify 表格式有问题（{gate}）⇒ "
-                                     "照常派活，留痕退回框架派生那一份")
+            # （S1g 之后这段搬到了洗格式之后：留痕要看的是真正发出去的那一份载荷。）
             secretary_note = self._outbound_hook(shape, payload)
-            result = self._execute(shape, payload)
+            # S1g：洗格式在发出去之前（`_outbound_hook` 与建议同一次调用、一行台账）。
+            # 洗过的那一份才是真正发出去的那一份 —— 否则"秘书洗了"只是一句摆设，
+            # 而模型原稿带着错名继续撞闸门（E5 实测：`run_once({"request_id": …})`
+            # ⇒ `refused / invalid_params`「出现未声明的参数」）。
+            washed_payload = secretary_note.pop("_washed_payload", None)
+            dispatch_notify: dict[str, Any] | None = None
+            if secretary_note.get("wash", {}).get("refused"):
+                # 硬拒（只有"连派给谁/做什么都不全"这一格）：一行都不落（`draft/90` §1.2）。
+                # 其它"洗不动"（缺必填参数…）照旧交给闸门 —— 那一档还会落 `refused` 行
+                # 并可能转成"请主控代唤"，秘书抢在前面拒掉会把那条出路一起弄丢。
+                result = {"ok": False, "outcome": "refused",
+                          "refusal_reason": str(secretary_note["wash"]["refused"]),
+                          "detail": ("秘书洗格式：这一趟派活连『派给谁/做什么』都不全 ⇒ 受控拒绝"
+                                     f"（{secretary_note['wash'].get('reason') or ''}）"),
+                          "washed": False}
+            else:
+                if (isinstance(washed_payload, Mapping)
+                        and secretary_note.get("wash", {}).get("checked")):
+                    if dict(washed_payload) != dict(payload):
+                        run.notes.append("秘书洗格式：" + ("；".join(
+                            f"{c.get('field')}→{c.get('to') or c.get('why')}"
+                            for c in (secretary_note.get("changes") or ()))
+                            or "（改了格式格）"))
+                    # 洗过的那一份进入后面所有判据：notify 留痕、活性读数、步骤记录
+                    # 都看同一次真正发出去的载荷（两份载荷并存必然分叉）。
+                    payload = dict(washed_payload)
+                if shape in ("summon", "summon_many") and self.role == S.CONDUCTOR_ROLE:
+                    gate, dispatch_notify = self._dispatch_notify(payload)
+                    if gate:
+                        run.notes.append(f"派活的 notify 表格式有问题（{gate}）⇒ "
+                                         "照常派活，留痕退回框架派生那一份")
+                result = self._execute(shape, payload)
+                if dispatch_notify is not None:
+                    # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
+                    # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
+                    hand = self._do_handoff(dispatch_notify)
+                    if hand.get("ok"):
+                        run.handoffs.append(str(hand.get("id") or ""))
+                    result = {**result, "dispatch_handoff": hand}
             if secretary_note:
                 result = {**result, "秘书": secretary_note}
-            if dispatch_notify is not None:
-                # 派活照旧执行，留痕在它之后写：账本里的每一行都对应一次"真的发出去的派活"
-                # （写在前面会让"被策略拒掉的派活"也留下一行像是办成了）。
-                hand = self._do_handoff(dispatch_notify)
-                if hand.get("ok"):
-                    run.handoffs.append(str(hand.get("id") or ""))
-                result = {**result, "dispatch_handoff": hand}
             # 耳朵一直开着：这一步做完先听一次新消息与板项，把它并进这一步的结果里
             # （并进结果而不是只并进 transcript：台账与会话记录要能看到"他当时听到了什么"）。
             # `step=step`：板项标 seen 时要写"在第几步读的"（业主 A3 的判据靠它配对）。
@@ -3212,6 +3307,21 @@ class AgentLoop:
             out["fail_open"] = bool(got.get("fail_open"))
             if got.get("problem"):
                 out["problem"] = str(got["problem"])
+            # ---- S1g：洗格式的读数 + 真正要发出去的那一份。
+            #
+            # `_washed_payload` 用一个下划线打头的键承载（本模块内部用）：
+            # 它不并进这一步的结果 —— 结果里只看 `wash`（三态 + 动了几格），
+            # 全文在台账的 `before`/`after` 两格里（那份才是给人逐格看的）。
+            wash = got.get("wash") if isinstance(got.get("wash"), Mapping) else {}
+            out["wash"] = {"checked": bool(wash.get("checked")),
+                           "washed": bool(got.get("washed")),
+                           "refused": str(wash.get("refused") or ""),
+                           "reason": str(wash.get("reason") or "")}
+            out["changes"] = [dict(x) for x in (got.get("changes") or ())]
+            out["_washed_payload"] = got.get("after")
+            if wash.get("refused"):
+                # 硬拒：一次派活连"派给谁/做什么"都不全 ⇒ 不执行、不评估、不协商。
+                return out
         except Exception as exc:  # noqa: BLE001 - fail-open：秘书坏了不许打断本体
             out["fail_open"] = True
             out["problem"] = f"{type(exc).__name__}: {exc}"
