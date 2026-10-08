@@ -415,6 +415,16 @@ def test_the_per_citation_leg_counts_against_the_read_only_baseline(
     于是做一条就算（它落了一条 `quote_verified=false` 就过了），而任务原文要的是"逐条"。
     现在阈值 = 只读基线 `source/main.tex` 里 `\\bibitem` 的条数 —— 分母不许由
     可改的主稿自己给（旧口径取主稿 ⇒ 删文献就能把门槛一起压低，`draft/43-C` C-05）。
+
+    2026-10-06 的 T1 口径（`draft/39` §6.49 八 第四条）又加了一条：只读基线有
+    `\\bibitem`、而台账里 `origin="external_lit"` 的行一条 `quote_verified=True` 都没有
+    ⇒ 门自己报「逐字引文一条都没核到」（"哪几条没查到"本身不是交付）。
+    所以这份夹具的三条记录里必须留一条真的核到的（`0002`：`quote_verified=True`
+    + 逐字理由）：这三行的 `quote_reason` 写的全是文献比对的结论（"与原文不一致" /
+    "原文不在盘上 ⇒ 未查"），它们本来就是引文记录 —— 一条核到的都不留，这份夹具就
+    不再配叫"引文逐条核过"了。（本夹具按这里的既有写法把三行登记成 `own_result`，
+    T1 那条判据只看 `external_lit` ⇒ 它不看这三行；那个口径的正反两面由
+    `test_unretrieved_quotes_alone_do_not_satisfy_the_citation_leg` 单列。）
     """
     def seed(s: Store) -> None:
         _t3_experiment(s)
@@ -429,9 +439,15 @@ def test_the_per_citation_leg_counts_against_the_read_only_baseline(
     (ws / "source" / "main.tex").write_text(
         "\\documentclass{article}\n" + "".join(f"\\bibitem{{K{i}}}\nX\n" for i in range(3)),
         encoding="utf-8")
-    # 可改的主稿：只有 1 条 —— 旧口径会把它当分母（读成 1 并判过）
+    # 可改的主稿：只有 1 条 —— 旧口径会把它当分母（读成 1 并判过）。
+    #
+    # 它刻意写成"占位稿"（不带 `\documentclass`）：基线一从盘上拿掉，T3 口径
+    # （`draft/39` §6.49 八 第五条）就会把 `out/paper/main.tex` 当成"这一趟从结果写的
+    # 论文"来判（参考文献 < 2 条 / 正文没在结果章节引台账）—— 而这一段测的是引文那一档
+    # 的分母口径（基线不在 ⇒ 该行 `not_applicable`）。占位稿不触发那一档
+    # （`looks_like_article` 为假），而"1 条 `\bibitem`"这个对照读数照样在。
     (ws / "out" / "paper" / "main.tex").write_text(
-        "\\documentclass{article}\n\\bibitem{K0}\nX\n", encoding="utf-8")
+        "\\bibitem{K0}\nX\n", encoding="utf-8")
     (ws / "out" / "paper" / "ACCEPTANCE-CHECKS.json").write_text(
         json.dumps({"checks": [{"id": "P7", "name": "引文逐条核过",
                                 "kind": "citation_records_vs_bibitems"}]}, ensure_ascii=False),
@@ -458,15 +474,25 @@ def test_the_per_citation_leg_counts_against_the_read_only_baseline(
     assert one.readings["acceptance"]["rows"][0]["got"] == 1, one.readings["acceptance"]
 
     for i in (1, 2):
+        row = {
+            "stmt_id": f"{i:04d}", "origin": "own_result", "kind": "claim",
+            "statement_full": f"第 {i} 条。", "proof_text": "证明：略。",
+            "doc_id": "0000", "evidence_kind": "cross_check", "status": "active",
+            "created_at": TS, "created_by": "test",
+        }
+        if i == 2:
+            # T1 口径（`draft/39` §6.49 八 第四条）：这一条是核到了的那一条 ——
+            # 三条记录要有非空的 `true` 读数，否则这一档在 T1 那条判据下会被整格否掉。
+            row["quote_verified"] = True
+            row["quote_reason"] = "逐字比对通过（第 1 页）"
+        else:
+            row["quote_reason"] = "原文不在盘上 ⇒ 未查"
         with st.tx("statements", actor="test") as tx:
-            tx.upsert("statements", {
-                "stmt_id": f"{i:04d}", "origin": "own_result", "kind": "claim",
-                "statement_full": f"第 {i} 条。", "proof_text": "证明：略。",
-                "doc_id": "0000", "quote_reason": "原文不在盘上 ⇒ 未查",
-                "evidence_kind": "cross_check", "status": "active",
-                "created_at": TS, "created_by": "test"})
+            tx.upsert("statements", row)
     full = _gate(st, report)
     assert full.status["acceptance"] == "pass", full.to_dict()   # 3 条记录 ≥ 3 条 bibitem
+    assert full.readings["acceptance"]["rows"][0]["detail"]["true"] == 1, \
+        full.readings["acceptance"]["rows"][0]["detail"]
 
     # CC-05：基线不在盘上 ⇒ 该行不适用（不再整格 unknown，也不再读主稿当分母）
     (ws / "source" / "main.tex").unlink()
@@ -1261,18 +1287,26 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
 
     非数值方向（分析/拓扑）的项目永远不会有数值实验那一行，`draft/39` §3.17 A5 把
     第二环节从「算并留下界」扩成「算或造」—— 这一档就是"造"那条腿的读数。
+
+    声明了这一档（`reviewed_proof_rows`）之后，`draft/39` §6.49 八 第二条（D66 造半边）
+    也跟着生效：`origin="own_result"` 的行要说清派生于什么（`derived_from` /
+    `source_lit_id` 至少一个非空），否则门会报「「造」那一环没有我方派生的命题」——
+    而那会把这一条要测的读数（`counted == 1`）盖掉。所以夹具里被计入的那条
+    （`0001`）要 `derived_from=["0000"]`：`0000` 是同夹具里已登记的命题号，
+    `Statement.validate` 只要求它是合法四位号、去重、不含自身。
     """
     def seed(s: Store) -> None:
         # ① 只有证明过程、没审过 ⇒ 还是"猜想"（第 2 位真、第 3 位空）
         _statement(s, "0000", proof_text="（逐步论证）",
                    bits={"proof": True, "evidence": {"proof_source": "own",
                                                      "proof_process": "（逐步论证）"}})
-        # ② 有证明过程 + 审过 ⇒ 预备定理级 ⇒ 算一档
-        _statement(s, "0001", bits={"proof": True, "reviewed": True,
-                                    "evidence": {"proof_source": "own",
-                                                 "proof_process": "（逐步论证）",
-                                                 "reviewed_by": {"round": "V-0001",
-                                                                 "verdict": "no_defect"}}})
+        # ② 有证明过程 + 审过 ⇒ 预备定理级 ⇒ 算一档；`derived_from` 指回①
+        _statement(s, "0001", derived_from=["0000"],
+                   bits={"proof": True, "reviewed": True,
+                         "evidence": {"proof_source": "own",
+                                      "proof_process": "（逐步论证）",
+                                      "reviewed_by": {"round": "V-0001",
+                                                      "verdict": "no_defect"}}})
         # ③ 引用命题：凭文献代号进第 2+3 位 ⇒ 等级一样是预备定理级，但不算我方产出
         _statement(s, "0002", origin="external_lit", source_lit_id="0042",
                    quote_verified=True)
@@ -2545,4 +2579,405 @@ def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
                            checks=("artifact_ledger",))
     assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
     assert rep.readings["artifact_ledger"]["absent"] is True, rep.readings
+
+
+# ============================================================ 内容判据（D66 / D67 / T1 / T3）
+#
+# `draft/39` §6.49 八（用户 2026-10-06 裁「产出太保守」，行 3134-3140）之后，门多了五条
+# 内容判据（`closing.content_leg_unmet`）：①「算」那一环要结论（D66 算半边）；
+# ②「造」那一环要我方派生的命题（D66 造半边）；③ C 的产物要进交付面（D67）；
+# ④ 逐字引文一条都没核到不算交付（T1 口径）；⑤ 论文要承载本轮结果（T3 口径）。
+# 读数统一落在 `rep.readings["acceptance"]["content_branches"]`，句子落在 blocker 正文里。
+#
+# 下面六条与本文件开头那五条负控同一套纪律：每条都能单独造红，而且红绿两侧都测 ——
+# 只测一侧的判据可能是一条恒真的判据。底座见 `_research_ready`。
+
+
+def _acc_row(rep, row_id: str) -> dict:
+    """验收读数里点名的那一行（找不到 ⇒ 判据自己接错了，不是"通过"）。"""
+    return next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == row_id)
+
+
+def _acc_detail(rep) -> str:
+    """`acceptance` 那一格的 blocker 正文（五条内容判据的句子都落在这里）。"""
+    return "；".join(f.detail for f in rep.blockers if f.check == "acceptance")
+
+
+def _valid_statement(store: Store, stmt_id: str, **kw) -> dict:
+    """一条先过 `schema.Statement.validate` 再落库的命题行（内容判据的夹具用它）。
+
+    为什么单列（而不是直接用 `_statement`）：内容判据读的正是 `origin` / `derived_from` /
+    `quote_verified` 这几个字段，而"字段写在盘上"与"这一行合法"是两件事 ——
+    先 validate 再落库，夹具就不会拿一行 schema 本来就拒收的形态去测判据。
+    """
+    row = {"stmt_id": stmt_id, "origin": "own_result", "kind": "theorem",
+           "statement_full": "设 G 是 m-正则图；则……", "proof_text": "（逐步论证）",
+           # `quote_verified is not True` 时 `Statement.validate` 要求非空理由。
+           "quote_reason": "我方自产命题，没有外部引文要比对",
+           "evidence_kind": "heuristic", "status": "active",
+           "created_at": TS, "created_by": "test"}
+    row.update(kw)
+    S.Statement(**row).validate()
+    with store.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
+    sync_counters(store)
+    return row
+
+
+def _write_article(root: pathlib.Path, *, bibitems: int, cite_in: str) -> pathlib.Path:
+    """写一份"像论文"的 `out/paper/main.tex`（T3 口径的判据对象）。
+
+    `looks_like_article` 的口径是"含 `\\documentclass` 或 `\\begin{document}`"，
+    所以这里必须真的像一篇论文（不是占位稿）：
+    `cite_in="result"` ⇒ `exp:0001` 落在 `Results` 节（正控那一侧）；
+    `cite_in="check"` ⇒ 只落在 `Evidence and status` 节（真机 T5 第 7 趟 `p6r` 的形态）。
+    """
+    lines = ["\\documentclass{article}", "\\begin{document}",
+             "\\section{Introduction}", "本轮研究周期算子的谱隙与围长的关系。"]
+    if cite_in == "result":
+        lines += ["\\section{Results}", "本轮数值结果 exp:0001 给出了界 B 内的结论。"]
+    else:
+        lines += ["\\section{Evidence and status}", "核查读数：exp:0001 已登记，逐条见台账。"]
+    lines.append("\\begin{thebibliography}{9}")
+    lines += [f"\\bibitem{{K{i}}} 文献 {i}。" for i in range(bibitems)]
+    lines += ["\\end{thebibliography}", "\\end{document}"]
+    p = root / "out" / "paper" / "main.tex"
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return p
+
+
+#: 研究型项目"五条内容判据全过"的那份验收表：八环节各一行，而且读数都成立。
+#:
+#: 为什么不复用 `_FULL_COVER`：那一份是"覆盖面齐了、读数都是 0"（守的是"0 也是读数"）；
+#: 这一份要的是一片本来就合规的工作区 —— 内容判据的负控只有在"别的都过"的底座上
+#: 才能证明"红的是这一条"（与文件开头那五条负控同一条纪律）。
+_RESEARCH_COVER: list[dict] = [
+    {"id": "R1", "name": "立题", "kind": "research_question_rows", "min": 1,
+     "note": "本轮立起了一个研究问题"},
+    {"id": "R2", "name": "检索（真的取回）", "kind": "retrieval_ok_rows", "min": 1,
+     "note": "一次检索成功取回了文献"},
+    {"id": "R3", "name": "算（数值结论）", "kind": "numeric_experiment_rows", "min": 1,
+     "note": "数值实验给出了带界的结论（D66：跑出结论才算）"},
+    {"id": "R4", "name": "想", "kind": "conjecture_rows", "min": 1,
+     "note": "登记了一条可检验的猜想"},
+    {"id": "R5", "name": "看（关系分析）", "kind": "c_analysis_runs", "min": 1,
+     "note": "派过 C 的关系分析"},
+    {"id": "R6", "name": "攻（攻坚推进）", "kind": "attack_plan_rows", "min": 1,
+     "note": "立了一份攻坚计划"},
+    {"id": "R7", "name": "交（手稿落盘）", "kind": "document_rows", "min": 1,
+     "note": "交付了一份稿件"},
+    {"id": "R8", "name": "闭（请求闭环）", "kind": "unfinished_request_rows", "min": 0,
+     "note": "队列里没有没做完的请求"},
+]
+
+
+def _research_ready(root: pathlib.Path, *, cover: list[dict] | None = None,
+                    c_delivery: bool = True):
+    """研究型工作区：`draft/39` §6.49 八 的五条内容判据本来就全过的底座。
+
+    返回 `(store, report, root)`。底座里每一件东西都在回答"五条里有一条为什么需要它"
+    （逐条写在 `seed` 的注释里）。`cover` 换掉 R3 那一档（构造腿那一组用
+    `reviewed_proof_rows` 顶「算或造」）；`c_delivery=False` 抽掉 C 的产物（D67 的负控）。
+    """
+    def seed(s: Store) -> None:
+        # ---- ①②：算那一环要结论 + 造那一环的派生目标。
+        # `_t3_experiment` 是 formal + proof + 检查器原话 ⇒ `experiment_concludes` 为真
+        # （它同时是 `load_bearing` 那一格要的 T3 背书）；`0002` 是被测的数值那一档：
+        # `supports` + `search_bound` 才算"跑出结论"。
+        _t3_experiment(s)
+        _numeric_experiment(s, "0002", result="supports", search_bound={"n": 20})
+        _valid_statement(s, "0000")
+        # 交（手稿落盘）：一份带 proof 级断言的稿件，它引 exp:0001（那一条有 T3 背书）。
+        _paper_with_claim(s)
+        # ---- 研究链其余几环各一行的读数（覆盖面要八环节各一行、且每一行的读数都成立）。
+        # 这几行都按 `schema` 那一行的形状写（`store.tx` 退出时 `validate_table` 会当场校验，
+        # 写一行 schema 本来就拒收的形态是写不进去的）。
+        with s.tx("research_questions", actor="test") as tx:
+            tx.upsert("research_questions", {
+                "question_id": "0000", "question": "这一族在界 B 内有没有反例？",
+                "kind": "gap", "priority": "medium", "status": "open",
+                "created_at": TS, "created_by": "test"})
+        with s.tx("search_requests", actor="test") as tx:
+            tx.upsert("search_requests", {
+                "request_id": "r-0001", "topic": "上界族的最新进展", "mode": "broad",
+                "timestamp": TS, "done": True, "outcome": "ok", "attempts": 1,
+                "result_lit_ids": ["0000"], "submitted_by": "test"})
+        with s.tx("conjectures", actor="test") as tx:
+            tx.upsert("conjectures", {
+                "conjecture_id": "0000", "statement": "对每个 n≥3 都有 c(G) ≤ 1。",
+                "form": "universal", "testable": {"bounds": {"n": 20}},
+                "status": "proposed", "origin": "gap",
+                "created_at": TS, "created_by": "test"})
+        with s.tx("attack_plans", actor="test") as tx:
+            tx.upsert("attack_plans", {
+                "plan_id": "0000", "problem": "把界推到 n ≤ 20 需要新的构造",
+                "problem_key": "bound-n20", "status": "open",
+                "budget": {"max_rounds": 2, "max_parallel_subgoals": 2,
+                           "max_persist_attempts": 2, "max_depth": 1},
+                "subgoals": [], "history": [], "created_at": TS, "created_by": "test"})
+        # ---- ③ 看（关系分析）：C 跑过一次（`tasks` 里 role=C 且跑过的行）。
+        # 这一行同时会让 D67 那条判据生效 ⇒ 底座默认把产物也送进交付面。
+        with s.tx("tasks", actor="test") as tx:
+            tx.upsert("tasks", {
+                "task_id": "t-0001", "role": "C", "action": "hottest", "called_by": "M",
+                "status": "done", "outcome": "ok", "detail": "跑了一次最热关系分析",
+                "started_at": TS, "ended_at": TS})
+        with s.tx("relations", actor="test") as tx:
+            tx.upsert("relations", {
+                "relation_id": "0000", "concept_ids": ["0000", "0001"],
+                "description": "c(G) 与谱隙同向", "lit_id": "0000",
+                "page_range": {"start": 1, "end": 2}, "created_at": TS})
+        if c_delivery:
+            # ---- ③（续）C 的产物进交付面：手稿引一条 `rel:` 编号（D67 的两条出口之一）。
+            from agentflow import manuscripts as MS
+
+            MS.write(root, sender="M", recipient="ALL", summary="C 的关系读数进交付面",
+                     body="本轮 C 跑出 rel:0000（hottest 关系），据此交接。",
+                     refs=["rel:0000"])
+
+    st = _project(root, seed=seed)
+    _acceptance_checks(root, list(cover or _RESEARCH_COVER), st=st)
+    report = _write_report(root)
+    return st, report, root
+
+
+def test_numeric_experiment_rows_needs_a_conclusion_not_just_a_run(tmp_path: pathlib.Path):
+    """D66 算半边（`draft/39` §6.49 八 第一条）：这一档数「跑出结论」而不是「跑过」。
+
+    旧口径只数 `method="numeric"` 的行 —— 真机 T2 `p6q` 是 10 条实验全 `inconclusive`，
+    读数照样是 10 ⇒「算」那一环变绿。新口径 = `experiment_concludes`：`result` 是
+    `supports` / `refutes`，且（`search_bound` 或 `certificate` 非空；
+    形式化那一支看 `verifier_output`）。
+
+    两侧（先红后绿，改的是同一行）：
+    - 红：那条数值实验改成 `inconclusive`（跑过、没结论）⇒ 这一档 `got == 0`、该行不成立；
+    - 绿：改回 `supports` + `search_bound` ⇒ `got == 1`，整格 `pass`。
+    """
+    st, report, ws = _research_ready(tmp_path)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", green.to_dict()
+    assert _acc_row(green, "R3")["got"] == 1, _acc_row(green, "R3")
+
+    _numeric_experiment(st, "0002", result="inconclusive")   # 跑过、没结论
+    _seal(ws, st)
+    red = _gate(st, report)
+    row = _acc_row(red, "R3")
+    assert red.status["acceptance"] == "fail", red.to_dict()
+    assert row["got"] == 0 and row["ok"] is False, row
+    assert row["detail"]["numeric_rows"] == 1 and row["detail"]["conclusive"] == 0, row["detail"]
+    assert row["detail"]["inconclusive_ids"] == ["0002"], row["detail"]
+    # 这一格不是"没查成"：读数在（分母 `numeric_rows` 照留），只是结论没了
+    assert "R3" in _acc_detail(red), _acc_detail(red)
+
+    _numeric_experiment(st, "0002", result="supports", search_bound={"n": 20})
+    _seal(ws, st)
+    back = _gate(st, report)
+    assert back.status["acceptance"] == "pass", back.to_dict()
+    assert _acc_row(back, "R3")["got"] == 1, _acc_row(back, "R3")
+
+
+def test_the_calculate_stage_reports_when_no_experiment_concludes(tmp_path: pathlib.Path):
+    """D66 算半边：整环没有结论时，门自己把话说出来（不是等着人写进验收表）。
+
+    与上一条的分工：上一条测 `numeric_experiment_rows` 这一档的读数换口径；
+    这一条测 `content_leg_unmet` 的第 ① 条判据本身。触发条件三条同时成立：项目是研究型
+    （有 `research_questions` 行）+ 验收表里真的声明了「算或造」那一组的档 + `experiments`
+    有行 —— 缺任何一条都不判（调查型项目 T4 的清单不声明算/造，`na` 也关不掉它）。
+
+    两侧：
+    - 红：两条实验都改成 `inconclusive` ⇒ blocker 正文含「「算」那一环没有结论」；
+    - 绿：让其中一条带界地支持 ⇒ 那句话消失，整格回到 `pass`。
+    """
+    st, report, ws = _research_ready(tmp_path)
+    _t3_experiment(st, "0001", result="inconclusive")
+    _numeric_experiment(st, "0002", result="inconclusive")
+    _seal(ws, st)
+    red = _gate(st, report)
+
+    detail = _acc_detail(red)
+    assert red.status["acceptance"] == "fail", red.to_dict()
+    assert "「算」那一环没有结论" in detail, detail
+    leg = red.readings["acceptance"]["content_branches"]["compute_leg"]
+    assert leg["experiments"] == 2 and leg["conclusive"] == 0, leg
+    assert leg["inconclusive"] == 2 and sorted(leg["inconclusive_ids"]) == ["0001", "0002"], leg
+    assert leg["researched"] is True and leg["declared"] is True, leg
+
+    # 绿：补一条"界内的支持" ⇒ 这一环有结论（两条实验都回到 base 的形态）
+    _t3_experiment(st, "0001")
+    _numeric_experiment(st, "0002", result="supports", search_bound={"n": 20})
+    _seal(ws, st)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", green.to_dict()
+    assert "「算」那一环没有结论" not in _acc_detail(green), _acc_detail(green)
+    leg2 = green.readings["acceptance"]["content_branches"]["compute_leg"]
+    assert leg2["conclusive"] == 2 and leg2["inconclusive"] == 0, leg2
+
+
+def test_the_construct_stage_needs_an_own_derived_statement(tmp_path: pathlib.Path):
+    """D66 造半边（`draft/39` §6.49 八 第二条）：声明了「造」那一环的项目要有我方派生产物。
+
+    只在 `computed_kinds` 含 `reviewed_proof_rows` / `counterexample_or_proof_rows` 时判
+    （只走数值那一腿的项目不受这一条约束）：`statements` 里 `origin="own_result"` 的行，
+    至少要有一行写清它派生于什么（`derived_from` 或 `source_lit_id` 非空）——
+    「造」= 我方自己提出并证明的命题，而且来路要能被复核。
+
+    两侧：
+    - 红：我方命题 `0003`（有证明过程 + 审过）没有 `derived_from` ⇒ blocker 含
+      「「造」那一环没有我方派生的命题」，读数 `construct_leg.with_basis == 0`；
+      而 R3（`reviewed_proof_rows`）照样成立 ⇒ 红的是内容判据这一条，不是那一行的读数；
+    - 绿：给它 `derived_from=["0000"]`（`0000` 是同夹具里已登记的命题号）⇒ 那句话消失、
+      `with_basis == 1`，整格 `pass`。
+    """
+    cover = [dict(r) for r in _RESEARCH_COVER]
+    cover[2] = {"id": "R3", "name": "造（我方判决性证据）", "kind": "reviewed_proof_rows",
+                "min": 1, "note": "我方命题走到了预备定理级"}
+    st, report, ws = _research_ready(tmp_path, cover=cover)
+    bits = {"proof": True, "reviewed": True,
+            "evidence": {"proof_source": "own", "proof_process": "（逐步论证）",
+                         "reviewed_by": {"round": "V-0001", "verdict": "no_defect"}}}
+    _valid_statement(st, "0003", bits=bits)
+    _seal(ws, st)
+    red = _gate(st, report)
+
+    detail = _acc_detail(red)
+    assert red.status["acceptance"] == "fail", red.to_dict()
+    assert "「造」那一环没有我方派生的命题" in detail, detail
+    assert _acc_row(red, "R3")["got"] == 1, _acc_row(red, "R3")
+    leg = red.readings["acceptance"]["content_branches"]["construct_leg"]
+    assert leg["own_result"] == 2 and leg["with_basis"] == 0, leg
+
+    # 绿：把"派生于什么"写上去（`0000` 已登记）
+    _valid_statement(st, "0003", bits=bits, derived_from=["0000"])
+    _seal(ws, st)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", green.to_dict()
+    assert "「造」那一环没有我方派生的命题" not in _acc_detail(green), _acc_detail(green)
+    leg2 = green.readings["acceptance"]["content_branches"]["construct_leg"]
+    assert leg2["own_result"] == 2 and leg2["with_basis"] == 1, leg2
+
+
+def test_a_rel_ref_carries_c_analysis_into_the_delivery(tmp_path: pathlib.Path):
+    """D67（`draft/39` §6.49 八 第三条）：C 的关系分析跑过 ⇒ 产物至少要能被交付物引到。
+
+    真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行 `done`
+    （`hottest` / `contradictions` / `gaps` / `cold`）、`relations` 107 行，而
+    `analysis_reports` 0 行、手稿 `refs` 里一条 `rel:` 都没有 —— C 是那几趟里唯一产出真
+    知识的角色，产物却被扔掉了。两条出口（任一成立就算进交付面）：手稿/文档断言里引一条
+    `rel:`，或 `analysis_reports` 有行。
+
+    两侧：
+    - 红：C 跑过而交付面一条 `rel:` 都没有 ⇒ blocker 含「产物一条都没进交付面」，
+      读数 `c_delivery.c_analysis_runs == 1` / `manuscript_rel_refs == []` /
+      `analysis_reports == 0`；
+    - 绿：手稿引一条 `rel:0000`（那条关系行在册）⇒ 那句话消失，整格 `pass`。
+    """
+    st, report, ws = _research_ready(tmp_path, c_delivery=False)
+    red = _gate(st, report)
+
+    detail = _acc_detail(red)
+    assert red.status["acceptance"] == "fail", red.to_dict()
+    assert "产物一条都没进交付面" in detail, detail
+    face = red.readings["acceptance"]["content_branches"]["c_delivery"]
+    assert face["c_analysis_runs"] == 1, face
+    assert face["manuscript_rel_refs"] == [] and face["document_rel_refs"] == [], face
+    assert face["analysis_reports"] == 0, face
+
+    from agentflow import manuscripts as MS
+
+    MS.write(ws, sender="M", recipient="ALL", summary="C 的关系读数进交付面",
+             body="本轮 C 跑出 rel:0000（hottest 关系），据此交接。", refs=["rel:0000"])
+    _seal(ws, st)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", green.to_dict()
+    assert "产物一条都没进交付面" not in _acc_detail(green), _acc_detail(green)
+    face2 = green.readings["acceptance"]["content_branches"]["c_delivery"]
+    assert any(str(r).endswith(":rel:0000") for r in face2["manuscript_rel_refs"]), face2
+
+
+def test_unretrieved_quotes_alone_do_not_satisfy_the_citation_leg(tmp_path: pathlib.Path):
+    """T1 口径（`draft/39` §6.49 八 第四条）：「哪几条没查到」本身不是交付。
+
+    触发条件三条同时成立：只读基线 `source/main.tex` 存在且含 `\\bibitem`、
+    台账里 `origin="external_lit"` 的行数 > 0、而这些行里一条 `quote_verified=True`
+    都没有。只看 `external_lit`：我方自产命题（`own_result`）本来就没有外部原文可比对，
+    把它算进来会把"自己证的定理"读成"没核到的引文"。
+
+    两侧：
+    - 红：三条 `external_lit` 记录全停在"未查 / 不一致" ⇒ blocker 含「逐字引文一条都没
+      核到」，读数 `quote_verification.citation_rows == 3` / `verified == 0` /
+      `baseline_bibitems == 3`；
+    - 绿：其中一条改成 `quote_verified=True` + 逐字理由 ⇒ 那句话消失、`verified == 1`，
+      整格 `pass`。
+    """
+    st, report, ws = _research_ready(tmp_path)
+    (ws / "source").mkdir(parents=True, exist_ok=True)
+    (ws / "source" / "main.tex").write_text(
+        "\\documentclass{article}\n" + "".join(f"\\bibitem{{K{i}}}\nX\n" for i in range(3)),
+        encoding="utf-8")
+    _valid_statement(st, "0001", origin="external_lit", source_lit_id="0000",
+                     quote_verified=False,
+                     quote_reason="与原文不一致（英文转述 vs 中文原文）")
+    for i in (2, 3):
+        _valid_statement(st, f"{i:04d}", origin="external_lit", source_lit_id="0000",
+                         quote_reason="原文不在盘上 ⇒ 未查")
+    _seal(ws, st)
+    red = _gate(st, report)
+
+    detail = _acc_detail(red)
+    assert red.status["acceptance"] == "fail", red.to_dict()
+    assert "逐字引文一条都没核到" in detail, detail
+    quote = red.readings["acceptance"]["content_branches"]["quote_verification"]
+    assert quote["baseline_bibitems"] == 3, quote
+    assert quote["citation_rows"] == 3 and quote["verified"] == 0, quote
+    assert quote["unverified_ids"] == ["0001", "0002", "0003"], quote
+    # 有只读基线 ⇒ T3 口径那一条不判它（那一档只在"从结果写论文"的工作区上说话）
+    assert "paper_leg" not in red.readings["acceptance"]["content_branches"], \
+        red.readings["acceptance"]["content_branches"]
+
+    # 绿：留一条真的核到的（逐字比对通过）
+    _valid_statement(st, "0003", origin="external_lit", source_lit_id="0000",
+                     quote_verified=True, quote_reason="逐字比对通过（第 1 页）")
+    _seal(ws, st)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", green.to_dict()
+    assert "逐字引文一条都没核到" not in _acc_detail(green), _acc_detail(green)
+    quote2 = green.readings["acceptance"]["content_branches"]["quote_verification"]
+    assert quote2["verified"] == 1 and quote2["citation_rows"] == 3, quote2
+
+
+def test_the_paper_must_carry_this_rounds_results(tmp_path: pathlib.Path):
+    """T3 口径（`draft/39` §6.49 八 第五条）：论文要承载本轮结果。
+
+    只在"从结果写论文"的形态上判（没有只读基线 `source/main.tex`），且只判真的像论文的稿子
+    （`looks_like_article`：含 `\\documentclass` / `\\begin{document}`）—— T1 那一类审阅项目
+    的 `out/paper/main.tex` 是被审的稿件本身，它的参考文献与引用形态由原稿决定。
+    两条判据：① `\\bibitem` ≥ 2；② 正文里 `stmt:` / `exp:` / `rel:` 引用不能只出现在
+    核查章节里（真机 `p6r`：那一篇 5 节里 `exp:0008` 只出现在 `Evidence and status` 节）。
+
+    两侧：
+    - 红：1 条 `\\bibitem` + `exp:0001` 只写在 `Evidence and status` 节 ⇒ blocker 同时含
+      「论文的参考文献只有」与「核查章节」；
+    - 绿：2 条 `\\bibitem` + `exp:0001` 写在 `Results` 节 ⇒ 两句话都消失，整格 `pass`。
+    """
+    st, report, ws = _research_ready(tmp_path)
+    _write_article(ws, bibitems=1, cite_in="check")
+    _seal(ws, st)
+    red = _gate(st, report)
+
+    detail = _acc_detail(red)
+    assert red.status["acceptance"] == "fail", red.to_dict()
+    assert "参考文献只有" in detail and "核查章节" in detail, detail
+    paper = red.readings["acceptance"]["content_branches"]["paper_leg"]
+    assert paper["looks_like_article"] is True and paper["bibitems"] == 1, paper
+    assert paper["result_sections"] == [], paper
+    assert paper["check_citations"] == ["exp:0001"], paper
+
+    _write_article(ws, bibitems=2, cite_in="result")
+    _seal(ws, st)
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", green.to_dict()
+    detail2 = _acc_detail(green)
+    assert "参考文献只有" not in detail2 and "核查章节" not in detail2, detail2
+    paper2 = green.readings["acceptance"]["content_branches"]["paper_leg"]
+    assert paper2["bibitems"] == 2 and paper2["result_citations"] == ["exp:0001"], paper2
 

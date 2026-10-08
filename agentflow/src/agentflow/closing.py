@@ -187,9 +187,12 @@ LEG_CHECK_KINDS: dict[str, str] = {
                        "是返回值本身、不落台账，所以「这一趟用没用 C」只有任务行能回答；"
                        "0 表示一次都没用过（`draft/39` §6.41 的 D52：T5 第 1 趟用户点名"
                        "「重点考察 C」，而 role=C 的任务行是 0、七格全绿、无人察觉）",
-    "numeric_experiment_rows": "数值/计算实验行数（`experiments` 里 `method=numeric`）—— 从零做研究时"
-                               "「先算一遍」是最便宜的证据来源（`method=formal` 那一档另有 "
-                               "`proof_experiment_rows` 管）",
+    "numeric_experiment_rows": "给了结论的数值/计算实验条数（`experiments` 里 `method=numeric` "
+                               "且 `result` 是 `supports`/`refutes`、带 `search_bound` 或 "
+                               "`certificate`）—— 从零做研究时「先算一遍」是最便宜的证据来源，"
+                               "但「跑过」不是产出、「跑出结论」才是（`draft/39` §6.49 的 D66，"
+                               "用户 2026-10-06 裁：全是 `inconclusive` 的 10 条实验不该让这一环变绿；"
+                               "`method=formal` 那一档另有 `proof_experiment_rows` 管）",
     "document_literature_citations": "手稿引用的「文献来源」条数（`documents` 各行的 claims 里 "
                                      "`citations` 提到的不同 `lit:` / `rel:` 代号）—— 研究手稿的"
                                      "第一条要求是「知道别人做过什么」：检索回来的文献与提取出的"
@@ -502,6 +505,318 @@ def citation_fit(store: Any) -> dict[str, Any]:
     unknown = [c for c in checked if c["verdict"] == "unjudged"]
     return {"claims": checked, "fit": len(fits), "mismatch": len(bad), "unjudged": len(unknown),
             "judged": len(fits) + len(bad), "mismatches": bad[:8], "unjudged_rows": unknown[:8]}
+
+
+# ============================================================ 内容判据（D66 / D67 / T1 / T3 口径）
+
+#: 「算」那一环算不算有结论（`draft/39` §6.49 八 的 D66，用户 2026-10-06 裁）：
+#: 「跑过实验」不是产出，「跑出结论」才是。这两个取值就是 `EXPERIMENT_RESULTS` 里
+#: 的非 `inconclusive` 两项（见 `schema.EXPERIMENT_RESULTS`）。
+CONCLUSIVE_EXPERIMENT_RESULTS: tuple[str, ...] = ("supports", "refutes")
+
+#: 论文正文里算「本轮结果」的台账前缀（T3 口径）。元素形态与
+#: `schema.Document.claims` 的 `citations` 一致（`stmt:` / `exp:` / `rel:`）；
+#: 为什么不把 `lit:` 算进来：引文献说明的是「别人做过」，承载本轮结果的是
+#: 我们自己的命题 / 实验 / 关系（这三个前缀各有一张本工作区的表）。
+PAPER_LEDGER_PREFIXES: tuple[str, ...] = ("stmt:", "exp:", "rel:")
+
+#: 论文里「核查章节」的节名特征（T3 口径：核查章节不能替代结果章节）。
+#: 真机读数（`p6r-paper-from-results/out/paper/main.tex` 第 112 行）：那一篇 5 节里
+#: 有一节叫 `Evidence and status`，本轮结果（`exp:0008`）只出现在那一节里。
+PAPER_CHECK_SECTION_WORDS: tuple[str, ...] = (
+    "evidence", "status", "verification", "verify", "audit", "check",
+    "limitation", "disclaimer", "self-check",
+    "核查", "核验", "验证", "证据", "状态", "局限", "自检",
+)
+
+
+def experiment_concludes(row: Mapping[str, Any]) -> bool:
+    """这一条实验有没有给出结论（D66「算」半边的机械判据）。
+
+    三条同时成立才算：
+
+    1. `result` 是 `supports` / `refutes`（`inconclusive` 不是结论 —— 真机读数
+       T2 `p6q`：10 条实验全 `inconclusive`，而旧口径照样让「算」那一环变绿）；
+    2. 结论带着它的适用范围：`search_bound` 或 `certificate` 非空
+       （用户原话「supports|refutes + 界/证书」）—— 脱开边界的「在 N 以内没有反例」
+       是一句无法复核的话，`schema` 对穷举类已经强制这一条（见 `Experiment.validate`）；
+    3. 形式化那一支（`method="formal"`）走检查器输出的口子：`evidence_kind="proof"`
+       且 `verifier_output` 非空（`schema` 同样已强制）。
+    """
+    if str(row.get("result") or "") not in CONCLUSIVE_EXPERIMENT_RESULTS:
+        return False
+    if str(row.get("evidence_kind") or "") == "proof" \
+            and str(row.get("verifier_output") or "").strip():
+        return True
+    if row.get("certificate"):
+        return True
+    return bool(row.get("search_bound"))
+
+
+def _tex_sections(text: str) -> list[tuple[str, str]]:
+    """把 LaTeX 主稿按 `\\section{...}` 切成 `(标题, 正文)`。
+
+    没有 `\\section` 时整篇算一节（标题为空串）—— 「这一个工作区没有分节」是读数，
+    不是「读不出来」。
+    """
+    marks = list(re.finditer(r"\\section\*?\{([^{}]*)\}", text))
+    if not marks:
+        return [("", text)]
+    out: list[tuple[str, str]] = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        out.append((m.group(1).strip(), text[m.end():end]))
+    return out
+
+
+def _is_check_section(title: str) -> bool:
+    """这一节的标题像不像「核查 / 证据 / 状态」那一类（T3 口径）。"""
+    low = title.lower()
+    return any(w in low for w in PAPER_CHECK_SECTION_WORDS)
+
+
+def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
+    """论文有没有承载本轮结果（T3 口径，用户 2026-10-06 裁）。
+
+    三条读数（都不看自述，只看 `out/paper/main.tex` 这一份盘上的稿子）：
+
+    - `bibitems`：主稿里 `\\bibitem` 的条数（真机读数 `p6r`：1 条）；
+    - `result_sections`：正文里出现 `stmt:` / `exp:` / `rel:` 的非核查章节
+      （这一条才是「承载本轮结果」：真机 `p6r` 的 `exp:0008` 只出现在
+      `Evidence and status` 那一节里 ⇒ 结果被写进了核查章节）；
+    - `check_sections`：只出现在核查章节里的那些引用（读数，用来分开报）。
+
+    没有 `out/paper/main.tex` ⇒ `LegNotApplicable`（这个工作区没有论文，
+    这一档用不上；不是「查过了没问题」）。
+    """
+    draft = Path(project_root) / "out" / "paper" / "main.tex"
+    if not draft.is_file():
+        raise LegNotApplicable("paper_ledger_rows", f"这个工作区没有论文主稿：{draft}")
+    text = draft.read_text(encoding="utf-8", errors="replace")
+    result_sections: list[dict[str, Any]] = []
+    check_sections: list[dict[str, Any]] = []
+    for title, body in _tex_sections(text):
+        cites = sorted({f"{p}{m}" for p in PAPER_LEDGER_PREFIXES
+                        for m in re.findall(re.escape(p) + r"(\d{3,4})", body)})
+        if not cites:
+            continue
+        item = {"section": title[:60], "citations": cites[:6]}
+        (check_sections if _is_check_section(title) else result_sections).append(item)
+    return {
+        "manuscript": "out/paper/main.tex",
+        "bibitems": text.count("\\bibitem"),
+        # 这一份到底是不是一篇论文（T3 口径只在它是论文时说话）：真机上
+        # `p6r-paper-from-results/out/paper/main.tex` 是 `\documentclass{article}` 起头的
+        # 5 节稿；而测试夹具与某些工作区里那一份只是一个占位文件（`\date{}` + 一行 body），
+        # 拿"参考文献 ≥ 2"去要求占位文件是判错了对象。
+        "looks_like_article": ("\\documentclass" in text or "\\begin{document}" in text),
+        "sections": [t[:60] for t, _ in _tex_sections(text)],
+        "result_sections": result_sections,
+        "check_sections": check_sections,
+        "result_citations": sorted({c for s in result_sections
+                                   for c in s["citations"]})[:8],
+        "check_citations": sorted({c for s in check_sections
+                                  for c in s["citations"]})[:8],
+    }
+
+
+def c_products_in_delivery(store: Any, project_root: Path) -> dict[str, Any]:
+    """C 的分析产物有没有进交付面（`draft/39` §6.49 八 的 D67）。
+
+    真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行
+    `done`（`hottest` / `contradictions` / `gaps` / `cold`）、`relations` 107 行，
+    而 `analysis_reports` 0 行、手稿 `refs` 里一条 `rel:` 都没有 ——
+    C 是这几趟里唯一产出真知识的角色，产物却被扔掉了。
+
+    两条出口（任一成立就算进了交付面）：
+
+    - `rel:` 引用出现在手稿账本的 `refs` 里，或出现在 `documents` 的断言
+      `citations` 里（`manuscripts.OBJECT_REFS` 已经认这个前缀并逐条校验指向的
+      关系行在不在册）；
+    - 或 `analysis_reports` 有行（C 的报告落进了 `reports/<id>-<kind>.md`
+      与那张表）。
+    """
+    from . import manuscripts as MS
+
+    rel_refs: list[str] = []
+    try:
+        all_rows, _bad = MS.read_rows(project_root)
+    except Exception:  # noqa: BLE001 —— 账本读不出来时这一条不算数（不当成"没有"）
+        all_rows = []
+    for row in all_rows:
+        for ref in (row.get("refs") or []):
+            if str(ref).startswith("rel:"):
+                rel_refs.append(f"{row.get('id')}:{ref}")
+    doc_rel_refs: list[str] = []
+    for doc in store.rows("documents"):
+        for claim in (doc.get("claims") or []):
+            if not isinstance(claim, Mapping):
+                continue
+            for cite in (claim.get("citations") or []):
+                if str(cite).startswith("rel:"):
+                    doc_rel_refs.append(f"{doc.get('doc_id')}/{claim.get('claim_id')}:{cite}")
+    reports = [dict(r) for r in store.rows("analysis_reports")]
+    return {
+        "manuscript_rel_refs": rel_refs[:8],
+        "document_rel_refs": doc_rel_refs[:8],
+        "analysis_reports": len(reports),
+        "report_kinds": sorted({str(r.get("kind") or "") for r in reports})[:6],
+    }
+
+
+def content_leg_unmet(store: Any, project_root: Path, *,
+                      researched: bool,
+                      computed_kinds: Iterable[str]) -> tuple[list[str], dict[str, Any]]:
+    """五条内容判据（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）。
+
+    为什么要有这一批（用户逐字）：「我检查了 T1 到 T4 的产出，都是颇为保守（即根本
+    没啥实质的研究产出，功夫全用在核查上了）……看 handoffs 里面没有几条有效信息全在
+    强调纪律」。根因的第一层写在同处：门的判据只会因为「过程/诚实」问题拦人，
+    永远不会因为「这数学太平凡」拦人，而最省力的过关方式是如实记缺口
+    （`na` + 理由）⇒ 系统学到的是「少做、如实说」。
+
+    这一批把五条「过程读数」升级成「产出读数」（前四条对应 §6.49 八的四条，
+    第五条是 T5 第 7 趟暴露的「论文没承载本轮结果」）：
+
+    1. 「算」那一环要结论（D66 算半边，只对研究型项目说话）；
+    2. 「造」那一环要我方派生的命题（D66 造半边，只在表里声明了这一环时判）；
+    3. C 的分析产物要进交付面（D67）；
+    4. 逐字引文一条都没核到不算交付（T1 口径）；
+    5. 论文要承载本轮结果（T3 口径）。
+
+    三态纪律：读不出来的一律不当成「没有」（那一档各自 try 住，读数里留 `unreadable`）。
+    """
+    kinds = {str(k) for k in computed_kinds}
+    unmet: list[str] = []
+    readings: dict[str, Any] = {}
+
+    # ---- ① 「算」那一环要结论（D66 算半边）。
+    # 只在「表里真的声明了这一环」时判（`kinds` = 真算过的行）：研究链覆盖面那一格
+    # 已经管「一行都没写」，这一格管的是「写了却说不出结论」。这样既不会误伤
+    # 调查型项目（T4 的清单不声明算/造），也不会被 `na` 关掉（E-04a 的守卫口径）。
+    compute_leg_kinds = {"numeric_experiment_rows", "search_frontier_rows",
+                         "enumeration_optimization_rows", "reviewed_proof_rows",
+                         "counterexample_or_proof_rows"}
+    declared_compute_leg = bool(kinds & compute_leg_kinds)
+    exps = [dict(r) for r in store.rows("experiments")]
+    conclusive = [e for e in exps if experiment_concludes(e)]
+    inconclusive_ids = [str(e.get("experiment_id") or "") for e in exps
+                        if str(e.get("result") or "") not in CONCLUSIVE_EXPERIMENT_RESULTS]
+    readings["compute_leg"] = {
+        "experiments": len(exps), "conclusive": len(conclusive),
+        "conclusive_ids": [str(e.get("experiment_id") or "") for e in conclusive[:8]],
+        "inconclusive": len(inconclusive_ids), "inconclusive_ids": inconclusive_ids[:8],
+        "researched": bool(researched), "declared": declared_compute_leg,
+    }
+    if researched and declared_compute_leg and exps and not conclusive:
+        unmet.append(
+            f"「算」那一环没有结论：{len(exps)} 条实验里 {len(inconclusive_ids)} 条 "
+            f"`result=inconclusive`（{'、'.join(inconclusive_ids[:6])}），"
+            f"没有一条给出 `supports` / `refutes` + 界或证书 —— "
+            "「跑过实验」不是产出，「跑出结论」才是：把实验做到能下结论"
+            "（给出 `search_bound` / `certificate`，形式化那一支给出 `verifier_output`），"
+            "或者如实把结论写成「这一族在界 B 内无反例（证书 …）」")
+
+    # ---- ② 「造」那一环要我方派生的命题（D66 造半边）。
+    if kinds & {"reviewed_proof_rows", "counterexample_or_proof_rows"}:
+        stmts = [dict(r) for r in store.rows("statements")]
+        own = [s for s in stmts if str(s.get("origin") or "") == "own_result"]
+        basis = [s for s in own if list(s.get("derived_from") or [])
+                 or str(s.get("source_lit_id") or "").strip()]
+        readings["construct_leg"] = {
+            "statements": len(stmts), "own_result": len(own), "with_basis": len(basis),
+            "own_ids": [str(s.get("stmt_id") or "") for s in own[:8]],
+        }
+        if not basis:
+            unmet.append(
+                f"「造」那一环没有我方派生的命题：`statements` {len(stmts)} 行里 "
+                f"`origin=own_result` 的 {len(own)} 行，其中**没有任何一行写清它派生于什么**"
+                f"（`derived_from` 与 `source_lit_id` 都是空的）—— "
+                "「造」= 我方自己提出并证明的命题（`origin=own_result`），"
+                "而且要说清它由哪几条已登记的命题 / 哪一篇文献推出来；"
+                "把命题与它的来路一起登记（`B.register_statement` / `D.register_conjecture`）")
+
+    # ---- ③ C 的分析产物要进交付面（D67）。
+    try:
+        c_runs, _c_detail = _leg_reading(store, "c_analysis_runs", project_root)
+    except Exception:  # noqa: BLE001 —— 读不出来时这一条不算数
+        c_runs = 0
+    c_face = c_products_in_delivery(store, project_root)
+    c_face["c_analysis_runs"] = c_runs
+    readings["c_delivery"] = c_face
+    in_delivery = bool(c_face["manuscript_rel_refs"] or c_face["document_rel_refs"]
+                       or c_face["analysis_reports"])
+    if c_runs and not in_delivery:
+        unmet.append(
+            f"C 的关系分析跑了 {c_runs} 次，而**产物一条都没进交付面**"
+            f"（手稿 `refs` 里 0 条 `rel:`、文档断言里 0 条 `rel:`、"
+            f"`analysis_reports` 0 行）—— 用户点名「重点考察 C」，"
+            "而 C 的读数（`hottest` / `gaps` / `contradictions`）至少要能被交付物引到："
+            "在手稿或文档断言里引一条 `rel:` 编号（`refs: [\"rel:0007\"]`，"
+            "`manuscripts` 会校验它指向的关系行在不在册），"
+            "或让 C 的分析报告落进 `reports/<id>-<kind>.md` 与 `analysis_reports` 表")
+
+    # ---- ④ 逐字引文一条都没核到不算交付（T1 口径）。
+    # 只看 `origin="external_lit"` 的行：`quote_verified` 管的是「文献里的原文摘录有没有
+    # 逐字核过」，我方自产的命题（`own_result`）本来就没有外部原文可比对 —— 把
+    # 自产命题算进来会把「自己证的定理」当成「没核到的引文」（真机 T1 的 7 行全是
+    # `external_lit`：`projects/p5-review-t17/data/statements.json`）。
+    base = project_root / "source" / "main.tex"
+    quote_rows = [dict(r) for r in store.rows("statements")
+                  if str(r.get("origin") or "") == "external_lit"]
+    verified = [q for q in quote_rows if q.get("quote_verified") is True]
+    baseline_bibitems = (base.read_text(encoding="utf-8", errors="replace").count("\\bibitem")
+                         if base.is_file() else 0)
+    readings["quote_verification"] = {
+        "baseline": "source/main.tex", "baseline_bibitems": baseline_bibitems,
+        "citation_rows": len(quote_rows), "verified": len(verified),
+        "unverified_ids": [str(q.get("stmt_id") or "") for q in quote_rows
+                           if q.get("quote_verified") is not True][:8],
+    }
+    if baseline_bibitems and quote_rows and not verified:
+        unmet.append(
+            f"逐字引文一条都没核到：只读基线 `source/main.tex` 有 {baseline_bibitems} 条 "
+            f"`\\bibitem`，台账里 {len(quote_rows)} 条引文记录**没有一条 "
+            f"`quote_verified=True`** —— 「哪几条没查到」本身不是交付（T1 口径）："
+            "原文取不回就派检索把原文取回来、或者换成核得到的引文；"
+            "只有真的取不回才允许记「未核到」，而且要在 `quote_reason` 里写清"
+            "为什么解决不了（不是把同一句「原文未取回」抄 N 遍）")
+
+    # ---- ⑤ 论文要承载本轮结果（T3 口径）。
+    # 只在「这一趟是从结果写论文」时判：T1 那一类审阅项目的 `out/paper/main.tex`
+    # 是被审的稿件本身（只读基线 `source/main.tex` 在盘上），它的参考文献与
+    # 引用形态由原稿决定 —— 拿 T3 的口径去判它是判错了对象（同 `draft/38` §7 的
+    # 「review 项目不触发研究链那一环」）。T3 的工作区没有只读基线。
+    has_baseline = (project_root / "source" / "main.tex").is_file()
+    try:
+        paper = paper_ledger_reading(project_root) if not has_baseline else None
+    except LegNotApplicable:
+        paper = None
+    except Exception as exc:  # noqa: BLE001 —— 读不出来时留读数
+        paper = None
+        readings["paper_leg"] = {"unreadable": f"{type(exc).__name__}: {exc}"}
+    if paper is not None and not paper.get("looks_like_article"):
+        # 占位文件（不是论文）⇒ 这一档不说话，但读数留着（"为什么没判"要看得见）。
+        readings["paper_leg_note"] = ("out/paper/main.tex 不是一篇论文（没有 "
+                                      "`\\documentclass` / `\\begin{document}`）⇒ "
+                                      "T3 口径这一档不判它")
+        paper = None
+    if paper is not None:
+        readings["paper_leg"] = paper
+        if int(paper["bibitems"]) < 2:
+            unmet.append(
+                f"论文的参考文献只有 {paper['bibitems']} 条（`out/paper/main.tex` 里 "
+                f"`\\bibitem` 的条数）—— 一篇承载研究结果的论文不会只引 1 条文献："
+                "把本轮实际用到的文献（`literature` 里取回的那些）写进参考文献")
+        if not paper["result_sections"]:
+            only = ("；只出现在核查章节里：" + "、".join(paper["check_citations"])
+                    if paper["check_citations"] else "")
+            unmet.append(
+                "论文没有在**正文结果章节**里引本轮台账（`stmt:` / `exp:` / `rel:`）"
+                f"{only} —— 核查章节（节名带 evidence / status / 核查 / 证据 那一类）"
+                "不能替代结果章节：把本轮的结果（命题 / 实验 / 关系）写进结果章节并就地引用")
+
+    return unmet, readings
 
 
 def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
@@ -1093,8 +1408,23 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                                "是不是等于 `statements`：若是，说明产出方这一趟没写过位记录）")
         return len(counted), detail
     if kind == "numeric_experiment_rows":
-        rows = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
-        return len(rows), {"experiments": [str(r.get("experiment_id") or "") for r in rows[:8]]}
+        # `draft/39` §6.49 八 的 D66（用户 2026-10-06 裁「产出太保守」）：这一档从
+        # 「跑过多少次数值实验」改成「跑出过几个结论」—— 旧口径只数
+        # `method="numeric"`，于是全 `inconclusive` 也能让「算」那一环变绿
+        # （真机 T2 `p6q`：10 条实验全 `inconclusive`，读数 10 ⇒ 绿）。
+        # 判据见 `experiment_concludes`：结论 + 界/证书（形式化那一支看检查器输出）。
+        numeric = [r for r in store.rows("experiments") if str(r.get("method") or "") == "numeric"]
+        rows = [r for r in numeric if experiment_concludes(r)]
+        return len(rows), {
+            "experiments": [str(r.get("experiment_id") or "") for r in rows[:8]],
+            "numeric_rows": len(numeric),
+            "conclusive": len(rows),
+            "inconclusive_ids": [str(r.get("experiment_id") or "") for r in numeric
+                                 if not experiment_concludes(r)][:8],
+            "note": ("这一档数的是**给了结论的**数值/计算实验（`result` 是 supports/refutes "
+                     "且带 `search_bound` 或 `certificate`；形式化那一支看 `verifier_output`）"
+                     "——「跑过」不算产出（D66）"),
+        }
     if kind == "document_literature_citations":
         # 「手稿有没有引用文献」那一档（`draft/37` §120）。口径（写清楚，免得下次又问错）：
         # 数 `documents` 各行 claims 的 `citations` 里出现过的「不同」代号，只算
@@ -1691,8 +2021,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                             for s in stale)
                 + " —— 改完之后没再复核（G.revise 把稿子推成 revised，而签名还钉着改之前"
                   "那一版）⇒ 交付里会带着没审过的断言。派 `H.verify_fixes` / `H.review` 复核"
-                  "现行版；确实要这样交，就在验收表里写一行 `reviewed_current_rows` 并标 "
-                  "`\"na\": true` + 理由")
+                  "现行版。注意：写一行 `na` 关不掉这一条（它读的是签名链与现行版哈希，"
+                  "与验收表怎么写无关）")
     # ---- 稿件是骨架还是手稿（`draft/39` §6.48 的 D63）：有 sections 却每节都空的行，
     # 验收表里没写这一档时由门报出来（真机读数 T5 第 7 趟 `p8g`：三节 body 全是空串）。
     if "document_body_rows" not in computed_kinds:
@@ -1709,9 +2039,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 + "；".join(f"{h.get('doc_id')}（{len(h.get('empty') or [])} 节 body 为空："
                             f"{'、'.join(h.get('empty') or [])}）" for h in hollow)
                 + " —— 有 headings 却每一节都没写正文的稿子是骨架，不是手稿。"
-                  "把每一节的正文写进去（`G.build_document` 的 `sections` 要带 `body`）；"
-                  "确实是清单型交付（没有 sections），就在验收表里写一行 `document_body_rows` "
-                  "并标 `\"na\": true` + 理由")
+                  "把每一节的正文写进去（`G.build_document` 的 `sections` 要带 `body`）。"
+                  "注意：给这一档写一行 `na` 关不掉它 —— 这一条是从 `documents` 表**现算**的"
+                  "（E-04a 的守卫只看真算过的行）；没有 sections 的清单型交付本来就不进这一档")
     # ---- 断言与它引的证据对不对得上（`draft/39` §6.48 的 D61/D62）：验收表里没写这一档时，
     # 门把「对不上」的那些断言逐条报出来（真机读数 T5 第 7 趟 `p8g`：两条 exp 引用互换、
     # 一条 lit 引用跑题，而所有机械读数全绿）。
@@ -1727,9 +2057,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 + "；".join(f"{b.get('doc_id')}/{b.get('claim_id')}"
                             f"（引 {'、'.join(b.get('citations') or [])}："
                             f"{'；'.join(b.get('why') or [])}）" for b in bad)
-                + " —— 把引文改成真的支持这条断言的那一条（或改断言让它与证据相符）；"
-                  "确实要这样交，就在验收表里写一行 `claim_evidence_fit_rows` 并标 "
-                  "`\"na\": true` + 理由")
+                + " —— 把引文改成真的支持这条断言的那一条（或改断言让它与证据相符）。"
+                  "注意：写一行 `na` 关不掉它（这一条是从 `documents` 现算的）；"
+                  "两侧都取不到可判特征的那一类记 `unjudged`，不会进这一条")
     # ---- 交接账本是不是被模板灌满（`draft/39` §6.49 的 D64，用户 2026-10-06 裁）：
     # 验收表里没写这一档时，门替它报出来 —— 五趟真机的账本里 100% 是框架派生的模板、
     # `refs` 全空，而"手稿 N 行"这个读数一直在替噪声背书。
@@ -1746,8 +2076,22 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 f"（`refs` 全空、正文是填空），**没有一份模型自己写的交接** —— "
                 "带信息的交接应当是：写清交给谁什么结论、依据哪几个编号（`refs` 非空）"
                 "（派活时带 `notify`，收工时的 `final.notify`）。"
-                "确实不需要交接（例如动作驱动的一趟没有可交接的结论），就在验收表里写一行 "
-                "`manuscript_rows` 并标 `\"na\": true` + 理由")
+                "注意：写一行 `na` 关不掉它（这一条是从 `manuscripts/handoffs.jsonl` 现算的）；"
+                "动作驱动的一趟也能自撰交接 —— 用一次 `handoff` 把结论与编号写给下一位")
+    # ---- 五条「内容」判据（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）：
+    # D66（算要结论 / 造要我方派生命题）· D67（C 的产物要进交付）· T1 口径（一条都没核到
+    # 不算交付）· T3 口径（论文要承载本轮结果）。与上面四条同族：门替没写进表里的档说话，
+    # `na` 关不掉它们（E-04a 的守卫口径一致）；读不出来的当成「没查成」记读数，
+    # 绝不折成「通过」。
+    try:
+        content_unmet, content_readings = content_leg_unmet(
+            store, Path(resolve_under_workspace(store, project_dir)),
+            researched=bool(chain.get("researched")), computed_kinds=computed_kinds)
+    except Exception as exc:  # noqa: BLE001 —— 这一批判据自己出问题时不冒充通过
+        content_unmet = []
+        content_readings = {"unreadable": f"{type(exc).__name__}: {exc}"}
+    rep.readings["acceptance"]["content_branches"] = content_readings
+    unmet.extend(content_unmet)
     if unmet:
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(
@@ -1822,7 +2166,17 @@ ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
 #:   好行的读数不再被一起丢掉；行状态判据收进 `acceptance_row_state` 一处
 #:   （行循环与四条自动分支的守卫共用）；读数新增 `rows_unreadable` /
 #:   `unreadable_rows` / `duplicate_ids`。
-ACCEPTANCE_READING_VERSION = "2026-10-06-C2"
+#: - `"2026-10-06-C3"`（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）：
+#:   五条内容判据（`content_leg_unmet`）与一处读数换口径 ——
+#:   ①`numeric_experiment_rows` 从「跑过多少次数值实验」改成「跑出过几个结论」
+#:   （结论 + 界/证书；形式化那一支看检查器输出）；②「算」那一环在研究型项目里
+#:   全 `inconclusive` ⇒ 门自己报；③「造」那一环声明的项目要求有 `origin=own_result`
+#:   且写清来路（`derived_from` / `source_lit_id`）的命题；④C 的关系分析跑过而
+#:   产物没进交付面（手稿/文档里 0 条 `rel:`、`analysis_reports` 0 行）⇒ 门报；
+#:   ⑤只读基线有 `\bibitem` 而台账里一条 `quote_verified=True` 都没有 ⇒ 门报（T1 口径）；
+#:   ⑥有论文主稿时：`\bibitem` < 2、或本轮 `stmt:`/`exp:`/`rel:` 引用只出现在
+#:   核查章节里 ⇒ 门报（T3 口径）。读数新增 `readings["acceptance"]["content_branches"]`。
+ACCEPTANCE_READING_VERSION = "2026-10-06-C3"
 
 
 class LegNotApplicable(Exception):
