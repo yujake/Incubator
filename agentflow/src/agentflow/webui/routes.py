@@ -20,7 +20,7 @@
   因为 `assets/app.<hash>.css` 是两段；
 - 未知路径不由这里处理：`GET` 走 :func:`agentflow.webui.server.WebHandler.handle_unknown`
   （裁定 Q1：`/api/*` 未知 ⇒ JSON 404；其余未知 ⇒ 有 `index.html` 就吐它，
-  否则沿用今天的 404 页），`POST` 未知 ⇒ 404。
+  否则回一张诚实的 404 页 `server._error_page`），`POST` 未知 ⇒ 404。
 
 ## 这张表由三段拼起来（`draft/78 §3` 的接缝）
 
@@ -96,7 +96,8 @@ def handler_for(name: str):
 #: 于是"哪条线上的模块声明这条路由"与"谁实现它"落在同一个文件里（`readers.py`），
 #: 而公开面不变：`readers.handle_state` 回的就是 `state.snapshot(root)` 本身。
 _OWN: tuple[tuple[str, str, str], ...] = (
-    # --- 页面（服务端渲染的旧壳；裁定 P1：逐面迁到 SPA 之后删一个）
+    # --- 页面：两条入口都吐同一支 SPA 外壳（裁定 P1；旧壳 views.py 已在 W5 退场，
+    #     `/run/{sid}` 是最后迁的那一面 —— 会话不在盘上由 /api/run/{sid} 的三态说）
     ("GET", "/", "handle_root"),
     ("GET", "/index.html", "handle_root"),
     ("GET", "/run/{sid}", "handle_run"),

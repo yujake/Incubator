@@ -1,25 +1,33 @@
 # -*- coding: utf-8 -*-
-"""用户端的样式资产：DSH 的令牌整份照搬 + 我们自己的组件样式。
+"""用户端的样式资产：DSH 的令牌整份照搬（W5 之后只剩这一件）。
 
 ## 这是什么
 
-两份 CSS 文本，被 :mod:`agentflow.webui` 直接内联进服务端渲染的 HTML：
+一份 CSS 文本 —— :data:`THEME_CSS`，即「逐字照搬」DeepSeek Harness 的令牌层
+（两层色板 + 明暗两套 + 字体/运动 + 滚动条 + 圆角签名）。来源是 DSH 抽好的四份
+原始 CSS（本机路径 `temp/dsh-css/theme/`，即 DSH 包 `dsh-client-ui-theme` 内侧
+内联的 `design-platform.css.mjs` / `base.css.mjs` / `scrollbar.css.mjs` /
+`corner-shape.css.mjs` 的语义等价物）。DSH 是 MIT 许可
+（`AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/**/LICENSE`），
+用户 2026-10-03 明确允许「复制人家的代码微调」，本项目照此办理并在此注明来源。
 
-- :data:`THEME_CSS` —— 「逐字照搬」DeepSeek Harness 的令牌层（两层色板 + 明暗两套 +
-  字体/运动 + 滚动条 + 圆角签名）。来源是 DSH 抽好的四份原始 CSS
-  （本机路径 `temp/dsh-css/theme/`，即 DSH 包 `dsh-client-ui-theme` 内侧内联的
-  `design-platform.css.mjs` / `base.css.mjs` / `scrollbar.css.mjs` /
-  `corner-shape.css.mjs` 的语义等价物）。DSH 是 MIT 许可
-  （`AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/**/LICENSE`），
-  用户 2026-10-03 明确允许「复制人家的代码微调」，本项目照此办理并在此注明来源。
-- :data:`APP_CSS` —— 我们自己的组件（页面骨架 / 卡片 / 行 / 徽标 / 按钮 / 输入框 /
-  等宽读数）。它「只用第二层语义别名」`var(--dsw-alias-*)` 与运动/字体令牌，
-  一个色值都不写死。
+## 我们自己的组件样式搬去了哪里（W5 清仓）
 
-## 为什么是这两份、而不是一份
+这里原来还有两件：`APP_CSS`（我们自己的组件样式：骨架 / 卡片 / 行 / 徽标 / 按钮 /
+输入框 / 等宽读数）与 `STYLESHEET = THEME_CSS + APP_CSS`（旧壳把它内联进 `<style>`）。
+六页面全部迁到 SPA 之后（裁定 P1 的最后一块，`/run/{sid}` 也改吐外壳），
+`views.py` 整件退场 ⇒ 这两件都没有调用方了，于是删掉：
+
+- 组件样式今天住在前端源码 `ui/src/theme/app.css`（构建时打进 `web/static/assets/`）；
+- 「组件样式只用令牌、不写字面色值」那条判据跟着搬到那份文件上
+  （`tests/test_webui.py::test_app_css_uses_only_tokens`，强度不变）。
+
+## 为什么令牌仍然留在这里、而不是搬进前端
 
 令牌与组件分开，是「换皮只换一层」的前提：将来 DSH 更新令牌，替换
 :data:`THEME_CSS` 即可，组件不动；反过来，我们改版式也不会碰到令牌。
+而且令牌只有这一份真身：前端那份 `ui/src/theme/generated/theme.css` 是生成物
+（`python -m agentflow.web.emit_theme`），判据逐字节比它（手改生成物必红）。
 这也是为什么 :data:`THEME_CSS` 里的令牌名「一个字都没改」：改了名字，
 升级就得靠肉眼比对。
 
@@ -37,16 +45,18 @@
 
 ## 判据在哪
 
-- `tests/test_webui.py::test_app_css_uses_only_tokens` —— 【负控】用正则自查
-  `APP_CSS` 里「不许」出现 `#` 加 3/6 位十六进制、也不许出现 `rgb(` / `hsl(`，
-  并要求至少出现 8 个不同的 `--dsw-alias-` 令牌名；
+- `tests/test_webui.py::test_app_css_uses_only_tokens` —— 【负控】用同一套正则查
+  `ui/src/theme/app.css`：不许出现 `#` 加 3/6 位十六进制、也不许出现 `rgb(` /
+  `hsl(`，并要求至少出现 8 个不同的 `--dsw-alias-` 令牌名与那三档状态徽标令牌；
 - `tests/test_webui.py::test_theme_css_keeps_dsh_tokens` —— 【正控】两层令牌、
-  明暗两套、运动/字体、圆角 `@supports` 都在，且选择器只从 `body` 改成 `:root`。
+  明暗两套、运动/字体、圆角 `@supports` 都在，且选择器只从 `body` 改成 `:root`；
+- `tests/test_webui_contracts.py::test_theme_css_is_generated_not_hand_edited` ——
+  前端那份生成物与 :data:`THEME_CSS`（经 `emit_theme.render_css()`）逐字节相同。
 """
 
 from __future__ import annotations
 
-__all__ = ["THEME_CSS", "APP_CSS", "STYLESHEET"]
+__all__ = ["THEME_CSS"]
 
 #: DSH 的令牌层，逐字照搬。微调只有一处：选择器 `body` / `body[data-ds-dark-theme]`
 #: 改成 `:root` / `:root[data-ds-dark-theme]`（我们的页面没有 `body` 之外的挂载点，
@@ -434,196 +444,3 @@ THEME_CSS = '''
       }
     }
     '''
-
-#: 我们自己的组件样式。只用令牌，不写色值。
-APP_CSS = '''
-    /* ------------------------------------------------------------ 骨架 */
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      background:var(--dsw-alias-bg-base);
-      color:var(--dsw-alias-label-primary);
-      font-family:var(--dsw-font-family);
-      font-size:14px;
-      line-height:1.6;
-      transition:background var(--ds-transition-duration) var(--ds-ease-in-out),
-                 color var(--ds-transition-duration) var(--ds-ease-in-out);
-    }
-    a{color:var(--dsw-alias-link);text-decoration:none}
-    a:hover{text-decoration:underline}
-    .top{
-      position:sticky;top:0;z-index:2;
-      background:var(--dsw-alias-bg-layer-1);
-      border-bottom:1px solid var(--dsw-alias-border-l1);
-      padding:12px 20px;
-    }
-    .brand{font-weight:600}
-    .top .sub{color:var(--dsw-alias-label-secondary);font-size:12px;margin-top:2px}
-    .wrap{max-width:980px;margin:0 auto;padding:20px 16px 64px}
-    .stack{display:flex;flex-direction:column;gap:12px}
-    .cols{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
-    .col-main{flex:1 1 520px;min-width:320px}
-    .col-side{flex:0 1 320px;min-width:260px}
-    .sec-title{font-size:16px;font-weight:600;margin:22px 0 10px}
-    .muted{color:var(--dsw-alias-label-secondary)}
-    .caption{
-      color:var(--dsw-alias-label-caption);
-      font-size:12px;
-      letter-spacing:.02em;
-      text-transform:uppercase;
-    }
-    .mono{font-family:var(--ds-font-family-code);font-size:12px}
-    .note{
-      color:var(--dsw-alias-label-secondary);
-      background:var(--dsw-alias-bg-layer-2);
-      border:1px solid var(--dsw-alias-border-l1);
-      border-radius:10px;padding:8px 10px;font-size:12px;
-    }
-    .problem{
-      color:var(--dsw-alias-state-error-primary);
-      border-color:var(--dsw-alias-state-error-primary);
-      background:var(--dsw-alias-bg-layer-2);
-    }
-
-    /* ------------------------------------------------------------ 卡片 */
-    .card{
-      background:var(--dsw-alias-bg-layer-1);
-      border:1px solid var(--dsw-alias-border-l1);
-      border-radius:12px;
-      padding:14px 16px;
-      transition:background var(--ds-transition-duration) var(--ds-ease-in-out),
-                 border-color var(--ds-transition-duration) var(--ds-ease-in-out);
-    }
-    .card:hover{background:var(--dsw-alias-interactive-bg-hover)}
-    .card-ask{border-left:2px solid var(--dsw-alias-state-warn-primary)}
-    .card-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
-    .card-head .spacer{flex:1 1 auto}
-    .title{font-size:15px;font-weight:600}
-    .question{white-space:pre-wrap;margin:8px 0 10px}
-    .opts{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
-    .opt{
-      display:flex;gap:8px;align-items:flex-start;
-      border:1px solid var(--dsw-alias-border-l1);
-      border-radius:10px;padding:8px 10px;
-      transition:background var(--ds-transition-duration) var(--ds-ease-in-out);
-    }
-    .opt:hover{background:var(--dsw-alias-interactive-bg-hover)}
-    .opt .label{font-weight:600}
-    .opt .desc{color:var(--dsw-alias-label-secondary);font-size:12px}
-    .mark{font-weight:400;color:var(--dsw-alias-label-caption);font-size:12px}
-
-    /* ------------------------------------------------------------ 行 */
-    .row{
-      display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
-      padding:8px 10px;
-      border-bottom:1px solid var(--dsw-alias-border-l1);
-      transition:background var(--ds-transition-duration) var(--ds-ease-in-out);
-    }
-    .row:last-child{border-bottom:0}
-    .row:hover{background:var(--dsw-alias-interactive-bg-hover)}
-    .row .spacer{flex:1 1 auto}
-    .readings{color:var(--dsw-alias-label-caption);font-size:12px}
-    .kv{display:flex;gap:8px;flex-wrap:wrap}
-
-    /* ------------------------------------------------------------ 徽标 */
-    .badge{
-      display:inline-block;border-radius:6px;padding:1px 7px;
-      font-size:12px;line-height:1.5;white-space:nowrap;
-      border:1px solid var(--dsw-alias-border-l1);
-    }
-    .badge-pass{
-      color:var(--dsw-alias-state-success-tertiary);
-      background:var(--dsw-alias-state-success-primary);
-      border-color:var(--dsw-alias-state-success-secondary);
-    }
-    .badge-fail{
-      color:var(--dsw-alias-label-primary-foreground);
-      background:var(--dsw-alias-state-error-primary);
-      border-color:var(--dsw-alias-state-error-secondary);
-    }
-    .badge-unknown{
-      color:var(--dsw-alias-state-warn-label);
-      background:var(--dsw-alias-state-warn-primary);
-      border-color:var(--dsw-alias-state-warn-secondary);
-    }
-    .badge-pending{
-      color:var(--dsw-alias-label-tertiary);
-      background:var(--dsw-alias-bg-layer-2);
-      border-color:var(--dsw-alias-border-l2);
-    }
-    .badge-plain{
-      color:var(--dsw-alias-label-secondary);
-      background:var(--dsw-alias-bg-layer-2);
-      border-color:var(--dsw-alias-border-l1);
-    }
-
-    /* ------------------------------------------------------------ 表单 */
-    form.answer{margin:0;display:flex;flex-direction:column;gap:8px}
-    input[type=text],textarea,select{
-      width:100%;
-      background:var(--dsw-alias-bg-base);
-      color:var(--dsw-alias-label-primary);
-      border:1px solid var(--dsw-alias-border-l2);
-      border-radius:8px;
-      padding:7px 9px;
-      font-family:inherit;font-size:13px;
-    }
-    textarea{font-family:var(--ds-font-family-code);min-height:56px;resize:vertical}
-    input[type=text]:focus,textarea:focus,select:focus{
-      outline:none;border-color:var(--dsw-alias-border-l4);
-    }
-    .btn{
-      display:inline-block;cursor:pointer;
-      border-radius:999px;padding:6px 14px;
-      font-size:13px;font-family:inherit;
-      transition:background var(--ds-transition-duration) var(--ds-ease-in-out),
-                 color var(--ds-transition-duration) var(--ds-ease-in-out);
-    }
-    .btn-primary{
-      background:var(--dsw-alias-button-primary-fill);
-      color:var(--dsw-alias-label-primary-foreground);
-      border:1px solid var(--dsw-alias-button-primary-fill);
-    }
-    .btn-primary:hover{background:var(--dsw-alias-button-primary-hover)}
-    .btn-primary:disabled{
-      background:var(--dsw-alias-button-primary-dimmed);
-      border-color:var(--dsw-alias-button-primary-dimmed);
-    }
-    .btn-secondary{
-      background:var(--dsw-alias-button-elevated-fill);
-      color:var(--dsw-alias-label-primary);
-      border:1px solid var(--dsw-alias-border-l2);
-    }
-    .btn-secondary:hover{background:var(--dsw-alias-interactive-bg-hover)}
-    .btn-ghost{
-      background:var(--dsw-alias-button-ghost-active-fill);
-      color:var(--dsw-alias-label-secondary);
-      border:1px solid var(--dsw-alias-button-ghost-active-border);
-    }
-    .btn-ghost:hover{
-      background:var(--dsw-alias-button-ghost-active-hover);
-      color:var(--dsw-alias-label-primary);
-    }
-    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-
-    /* ------------------------------------------------------------ 代码 / 报告 */
-    pre{
-      font-family:var(--ds-font-family-code);font-size:12px;
-      background:var(--dsw-alias-markdown-code-block);
-      border:1px solid var(--dsw-alias-border-l1);
-      border-radius:10px;
-      padding:12px;
-      overflow:auto;max-height:70vh;
-      white-space:pre-wrap;word-break:break-word;
-      margin:0;
-    }
-    code{font-family:var(--ds-font-family-code);font-size:12px}
-    .clip{
-      color:var(--dsw-alias-label-secondary);
-      white-space:pre-wrap;word-break:break-word;
-      margin:6px 0 0;
-    }
-'''
-
-#: 两份合起来发给浏览器（一次请求，零外部依赖、零 CDN）。
-STYLESHEET = THEME_CSS + APP_CSS

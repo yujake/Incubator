@@ -1,9 +1,9 @@
 /*
  * SPA 的组件样式。
  *
- * 纪律（与 `tests/test_webui.py::test_app_css_uses_only_tokens` 同一条，扩展到前端）：
- * 颜色一律走 `var(--dsw-alias-*)`，一个色值都不写死；令牌本体来自
- * `theme/generated/theme.css`（生成物，源是 `web/assets.py`）。
+ * 纪律（`tests/test_webui.py::test_app_css_uses_only_tokens` 查的就是这一份；那条判据
+ * 2026-10-08 从旧壳内联的 `APP_CSS` 迁到这里）：颜色一律走 `var(--dsw-alias-*)`，一个
+ * 色值都不写死；令牌本体来自 `theme/generated/theme.css`（生成物，源是 `web/assets.py`）。
  * 写死一个 `#RRGGBB` 就等于在令牌体系之外偷偷开了一层皮 —— 下次换皮时它不动。
  */
 

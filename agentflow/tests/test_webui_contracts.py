@@ -836,12 +836,25 @@ def test_app_css_uses_only_tokens_in_the_theme() -> None:
 
 # ====================================================================== 拆包与开关
 def test_the_public_face_survived_the_split() -> None:
-    """正控（裁定 R1）：拆包之后公开面逐名不变（`__all__` 就是那八个）。"""
-    expected = ["snapshot", "render_root", "render_run", "serve", "run", "WebHandler",
+    """正控（公开面）：拆包时逐名不变；W5 按裁定 P1 收窄到六个。
+
+    收窄（2026-10-08，P1 的最后一块）：`render_root` 与 `render_run` 随
+    `webui/views.py` 整件退场 —— `/`（2026-10-07）与 `/run/{sid}`（W5）都改吐同一支
+    SPA 外壳之后，这两个名字在盘上没有任何调用方（生产、判据、前端都没有）。
+    去掉的是两个名字，不是两条能力：待答面板与一趟详情今天由 `GET /api/state`
+    与 `GET /api/run/{sid}` 提供，逐条读数在 `tests/test_webui.py` 里钉着。
+    收窄这件事本身也要有反向断言（下面那一段）：名字还在 `agentflow.webui` 上
+    就说明没删干净 —— 那种"以为收窄了、其实两套都活着"的形态正是这次要防的。
+    """
+    expected = ["snapshot", "serve", "run", "WebHandler",
                 "answer_text_of", "option_view"]
     assert sorted(W.__all__) == sorted(expected), W.__all__
     for name in expected:
         assert callable(getattr(W, name)), name
+    # 收窄必须是"真的没了"：旧壳的两个渲染入口不许还挂在包上
+    for gone in ("render_root", "render_run"):
+        assert not hasattr(W, gone), (
+            f"{gone} 还在 agentflow.webui 上 ⇒ 公开面没有真的收窄")
     # 既有判据直接读的三个名字（不在 `__all__` 里，但拆包不许把它们拿走）
     for name in ("REPORT_REL", "_STOP_BADGES", "_now_iso"):
         assert hasattr(W, name), name
