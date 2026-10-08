@@ -1391,6 +1391,14 @@ def build_document(
         "relations",
         "experiments",
         "eval_results",
+        # `statements` 必须在这里（2026-10-09，T1 第 20 趟实测抓出来的缺口）：
+        # `check_citations` 按 `_CITATION_TABLES`（= `schema.CITATION_PREFIXES`，六张表）
+        # 逐条核引用，而 `stmt:` 指的正是 `statements`。原先这一笔只声明了五张表 ⇒
+        # 任何引用我们自己命题的稿件（`citations: ["stmt:0001"]`，正是提示词教的那种写法）
+        # 都会在事务里读一张没声明的表 ⇒ `存储故障：事务未声明表 statements` ⇒
+        # 整笔不写库、`documents` 永远是 0 行（P9 因此红了三趟）。
+        # 教训与 S1g 那条同族：读哪些表由判据决定，声明必须与判据同源。
+        "statements",
         actor=actor,
         note="build_document",
     ) as tx:
