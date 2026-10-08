@@ -308,7 +308,7 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 - `ui/src/types.ts` 是生成物：**16,869 字节 / 41 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
 - 事件词表 6 个 kind（`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`），前端 `sse.ts` 逐个注册并带 `?since=` 续传与"退避三次 ⇒ 降级轮询"；
 - 入库的构建产物 3 个文件（`web/static/index.html` + `assets/` 下的一支 `.js` 与一支 `.css`，
-  本次读数共 **81,492 字节** —— 六页面与 `live.tsx` 全进包之后 JS 那一支就有 60.3 KB；
+  本次读数共 **85,197 字节** —— 六页面与 `live.tsx` 全进包之后 JS 那一支就有 64.0 KB（T2-a 的逐条事件时间线进来之后）；
   文件名带内容哈希 ⇒ **每次重建都会变**，所以这里刻意不写死哈希名；
   复算：`Get-ChildItem -Recurse -File src/agentflow/web/static | Measure-Object Length -Sum`）。
 

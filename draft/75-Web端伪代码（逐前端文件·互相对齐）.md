@@ -13,6 +13,7 @@
 |---|---|---|---|---|
 | 1 | `GET /api/state` | — | `StateSnapshot` | `webui/state.py:365 snapshot`（返回键逐字见 docstring `webui/state.py:368`） |
 | 2 | `GET /api/run/{sid}` | — | `RunView`（`Run` + `report` + `checkpoint`） | 今天：`webui/routes.py:95` 渲染 HTML；W0 抽 JSON |
+| **2b** | **`GET /api/run/{sid}/events`**（**裁定 T2-a 新增**，2026-10-08 落地） | `since_index?`（默认 0，**左闭**游标） · `limit?`（默认 50，**上限 500**；超限截到 500 并在 `reason` 里说明，不是 400） | `RunEventsView`（见 §1.3 的两行新类型） | `webui/readers.py:410 run_events`（HTTP 外壳 `:1027 handle_run_events`）；数据只从既有会话事件行读（不新写第二份解析）；**会话文件不在盘上 ⇒ `unreadable` + 点名路径（`total` 与两个游标一律 `None` —— 不是 0、不是空数组、不是 500）**；空会话 ⇒ `not_applicable`；参数非整数/负数/`limit=0` ⇒ **400 + JSON**（裁定 Q1：`/api/*` 一律 JSON）；`since_index>total` ⇒ 钳到 `total` 回一页空的（仍 `computed`） |
 | 3 | `GET /api/evidence` | — | `EvidenceView` | W1 新增；数据源 `store.rows(...)`（见 §1.3） |
 | 4 | `GET /api/artifacts` | 可选 `run_dir` | `ArtifactsView` | W1 新增；`artifacts.read_ledger:235` · `manuscripts.rows:119` · `secretary.decisions_path:89` |
 | 5 | `GET /api/acceptance` | `project_dir` · `report_path` · `cap_usd?` | `AcceptanceView` | W1 新增；`reviewaccept.check_review:534` |
@@ -72,6 +73,8 @@
 | `ArtifactsView` | `{ tri, reason, ledger: ArtifactRow[], handoffs: HandoffRow[], checks: AcceptanceCheck[], style: { sections: string[] }, secretary: SecretaryDecision[], products: RunProduct[], tasks: TaskRow[] }` | `artifacts.read_ledger:235` · `manuscripts.rows:119` · `closing.py:1411` · `runflow.py:40–44` |
 | `RunIndex`（**裁定 O2**） | `{ generated_at, sessions: { [sid]: { runs: RunRow[], last_end_index, digest } } }` | `sessions.py` 的 `load_run_index/rebuild_run_index`（W1 新增） |
 | `RunIndexDrift`（裁定 O2） | `{ tri: "computed"\|"unreadable"\|"not_applicable", drift: string[], reason: string }` | `sessions.reconcile_run_index`（索引与事件的差集） |
+| `EventRow`（**裁定 T2-a 新增**） | `{ index: number, kind: string, ts: string, role: string, shape?: string, ok?: boolean, usd?: number\|null, tokens_in?: number, tokens_out?: number, payload?: Record<string,unknown>, result?: Record<string,unknown>, text?: string, stopped?: boolean }` | `webui/readers.py:391 _event_row`（字段表 `:383 _EVENT_FIELDS`）。**`index` 的口径**：`sessions.read_session()` 解析成功后的事件列表下标（0 起），与 `snapshot()` 的 `runs[].start_index`/`end_index` **同一套**（都 `enumerate` 同一个列表、坏行不占位）⇒ `start_index <= index <= end_index` 那几行就是那一趟。**口径差 1 已在判据里写明**：`RunRow.events_in_run == end_index - start_index`（不数开始那行），而逐条回放给的是闭区间那 `events_in_run + 1` 行。⚠️ **`stopped` 今天没有生产者**（全 `src/` 只有 `stopped_by`）—— 它是"有就带上"的那一档，留着是为了与这张表逐字对齐；判据造了一行带它的样本证明转发得通。`payload`/`result` 同理（原行真有才带） |
+| `RunEventsView`（**裁定 T2-a 新增**） | `{ tri: Tri, reason: string, sid: string, total: number\|null, from_index: number\|null, to_index: number\|null, truncated: boolean, events: EventRow[] }` | `webui/readers.py:410 run_events`。**游标口径**：`from_index` 闭（= 钳过的 `since_index`）、`to_index` 开（= `from_index + len(events)`）⇒ `to_index - from_index == len(events)`、`truncated == (to_index < total)`，**下一次的 `since_index` 直接填 `to_index`**。三态不可读时 `total`/两个游标一律 `null`（不是 0） |
 
 > **`Tri` 的定义（三态，唯一的）**：`"computed" | "unreadable" | "not_applicable"`（`reviewaccept` 的词表）与 `"ok" | "missing" | "unknown"`（`_read_report` 的词表）**都映射到组件 `TriState` 的三种视觉态**，但**字符串不许互相顶替**：`ReportReading.status` 用后一组，其余用前一组。
 

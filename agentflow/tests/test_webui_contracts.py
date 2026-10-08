@@ -569,6 +569,16 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
         if isinstance(view.get("report"), dict):
             out["ReportReadingView"] = set(view["report"])
 
+    # 逐条事件那一面（裁定 T2-a 新增的 `GET /api/run/{sid}/events`）。
+    # 为什么必须在这里补一档：`_backend_keys()` 是手写的六面清单，新面落地后
+    # `EventRow`/`RunEventsView` 会"既不在受核对名单、也没在欠账名单" ⇒ 报
+    # "夹具没造出这些读数"。补的这三行就是"让后端那一侧真的去读这条新面"——
+    # 与前面六面同一条口径（C 条判的是"TS 的键 == 后端真读出来的键"）。
+    if sid:
+        ev_rows = RD.run_events(root, sid)
+        out["RunEventsView"] = set(ev_rows)
+        _take(ev_rows.get("events"), "EventRow")
+
     ev = RD.evidence_chain(root)
     for key, name in (("statements", "StatementRow"), ("conjectures", "ConjectureRow"),
                       ("experiments", "ExperimentRow"), ("review_findings", "ReviewFindingRow"),
