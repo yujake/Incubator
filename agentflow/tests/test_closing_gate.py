@@ -193,7 +193,15 @@ def _gate(st: Store, report: pathlib.Path | None, *, project_dir: pathlib.Path |
 # ============================================================ 正控
 
 def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
-    """正控：每条都过 ⇒ `can_close` 为真，且没有 blocker。
+    """正控：每条都过 ⇒ `machine_pass` 为真、没有 blocker；`can_close` 由 M 判。
+
+    业主 2026-10-09 的两句（逐字）：
+    「是否收工不要用机械判据，由 M 制定的目标是否达成为准」＋
+    「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令
+    给自己设计任务列表」⇒ 八格全过只说明"机器没意见"；能不能停要 M 按它自己列的
+    任务列表说一句。所以这一条现在钉两半：
+    ① 没有 M 的判据 ⇒ `can_close=false`、退出码 2（"没人判过"，不是"可以交"）；
+    ② M 交了判据（任务列表全 done + `goal_met=True`）⇒ `can_close=true`、退出码 0。
 
     这一条本身不足以证明门有效（一条恒真的判据也能过），所以后面每一条
     都配一条"只把它弄坏"的负控 —— 合起来才是这组判据的全部。
@@ -201,9 +209,21 @@ def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
     st, report = _good(tmp_path)
     rep = _gate(st, report)
     assert rep.status == {name: "pass" for name in CL.DEFAULT_CHECKS}, rep.to_dict()
-    assert rep.can_close and not rep.blockers, rep.to_dict()
-    assert CL.tri_state_exit_code(rep) == 0
-    assert f"{len(CL.DEFAULT_CHECKS)} 条全过" in rep.summary(), rep.summary()
+    assert rep.machine_pass and not rep.blockers, rep.to_dict()
+    # ① 没人判过 ⇒ 不算能交（三态：unknown 不是 pass）
+    assert not rep.can_close, rep.to_dict()
+    assert CL.tri_state_exit_code(rep) == 2, rep.to_dict()
+    assert "没有提交自己的判据" in rep.summary(), rep.summary()
+
+    # ② M 判了（它按自己列的任务列表说"活做完了"）⇒ 能停
+    judged = CL.check_closing(st, project_dir=".", report_path=str(report),
+                              goal="把论文包审完并交付修订稿",
+                              goal_met=True, basis="P2/P7/P8/P9 全绿",
+                              task_list=[{"what": "逐条核引文", "state": "done"},
+                                         {"what": "形式化核两条定理", "state": "done"}])
+    assert judged.can_close and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
+    assert judged.verdict_conflicts == [], judged.to_dict()
+    assert "任务列表 2/2 done" in judged.summary(), judged.summary()
 
 
 # ============================================================ 各条负控（各自单独红）
@@ -817,7 +837,11 @@ def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathli
 
 
 def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
-    """负控①（锚）：封好之后改一次正文 ⇒ 锚 `drifted`，其余各条仍然绿。"""
+    """负控①（锚）：封好之后改一次正文 ⇒ 锚 `drifted`，其余各条仍然绿。
+
+    按业主 2026-10-09 的口径补后半：这一格红了不阻断 M 停（判据归 M），
+    但 M 说"达成"时 `overrode` 必须逐格点名它 —— 判据归 M ≠ 机器读数可以被盖掉。
+    """
     st, report = _good(tmp_path)
     (tmp_path / "out" / "paper" / "main.tex").write_text("改过了\n", encoding="utf-8")
     rep = _gate(st, report)
@@ -825,7 +849,13 @@ def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
     assert [f.code for f in rep.blockers] == ["anchor_drifted"], rep.to_dict()
     assert {k: v for k, v in rep.status.items() if k != "anchor"} == {
         name: "pass" for name in CL.DEFAULT_CHECKS if name != "anchor"}
-    assert CL.tri_state_exit_code(rep) == 1
+    # 没有 M 的判据 ⇒ 不算能交（"没人判过"）；M 判"达成" ⇒ 能停，但那一格被点名
+    assert not rep.can_close and CL.tri_state_exit_code(rep) == 2, rep.to_dict()
+    judged = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
+                              goal="审完交付", goal_met=True,
+                              task_list=[{"what": "审完", "state": "done"}])
+    assert judged.can_close and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
+    assert [x["check"] for x in judged.overrode] == ["anchor"], judged.overrode
 
 
 def test_the_contradiction_check_goes_red_alone(tmp_path: pathlib.Path):
@@ -943,13 +973,19 @@ def test_the_user_pending_check_goes_red_alone(tmp_path: pathlib.Path):
     assert {k: v for k, v in rep.status.items() if k != "user_pending"} == {
         name: "pass" for name in CL.DEFAULT_CHECKS if name != "user_pending"}
 
-    # 用户回答之后：三段读数变成 1/1/0，门放行
+    # 用户回答之后：三段读数变成 1/1/0，机器那一格放行；
+    # 而"能不能停"仍由 M 判（业主 2026-10-09）⇒ 这里把两半分开核。
     assert U.answer_question(st.root, qid=outcome.qid, answer="审") == ""
     rep2 = _gate(st, report)
     assert rep2.status["user_pending"] == "pass", rep2.to_dict()
     assert rep2.readings["user_pending"]["answered"] == 1
     assert rep2.readings["user_pending"]["pending"] == []
-    assert rep2.can_close and CL.tri_state_exit_code(rep2) == 0
+    assert rep2.machine_pass and not rep2.can_close, rep2.to_dict()
+    assert CL.tri_state_exit_code(rep2) == 2, "没人判过 ⇒ 没查成（不是可以交）"
+    judged = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
+                              goal="审完交付", goal_met=True,
+                              task_list=[{"what": "审完", "state": "done"}])
+    assert judged.can_close and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
 
 
 # ============================================================ 三态：没查成 ≠ 通过

@@ -1131,6 +1131,83 @@ class Conductor:
     _STOP_NOTIFIED_PREFIX = "stop-notified:"
     #: 停止通知被确认的落痕前缀（同上；时间只能落在这里，见 `note_stop_ack`）
     _STOP_ACKED_PREFIX = "stop-acked:"
+    #: "这一支卡住了"的落痕前缀（父那一行的 `inputs` 里）：`blocked:<子>@<iso>|<一句为什么>`
+    _BLOCKED_PREFIX = "blocked:"
+
+    def note_blocked(self, parent_task_id: str, child_task_id: str, *,
+                     what: str = "", why: str = "") -> tuple[str, str]:
+        """子代理声明"我这趟卡住了（干不了、也派不出去）" ⇒ 在父那一行留一行落痕。
+
+        业主 2026-10-09 的第四句：「上述层层上报困难也会带来一种停机状态，即所有活跃子代理的
+        状态都是 blocked」⇒ 先要有"某个子是 blocked"这个可读的事实：
+        `blocked:<子>@<时间>|<为什么>`。落痕写在父那一行的 `inputs`（与 `stop-notified:` /
+        `edge-released:` 同一族，不动 `schema.py`）；幂等：同一条边已经有落痕 ⇒ 不写第二份。
+
+        `what`（卡在哪件事）不进落痕的键 —— 完整的"卡在哪、试过什么"由子代理自己那条
+        上行报文承载（业主第三句：上报父；M 上报用户）。它在这里只用来记一句 why。
+        """
+        mark = f"{self._BLOCKED_PREFIX}{child_task_id}@{S.now_iso()}|{str(why or '')[:120]}"
+        try:
+            with self.store.tx("tasks", actor="conductor", note="edge:blocked") as tx:
+                parent = tx.find("tasks", task_id=parent_task_id)
+                if parent is None:
+                    return "", f"没有这一行（parent_task_id={parent_task_id!r}）"
+                marks = [str(x) for x in (parent.get("inputs") or [])]
+                if any(m.startswith(f"{self._BLOCKED_PREFIX}{child_task_id}@") for m in marks):
+                    return "", "已经记过（幂等：不写第二份）"
+                parent["inputs"] = sorted(set(marks) | {mark})
+                task = S.Task(**{k: v for k, v in parent.items()
+                                 if k in S.Task.__dataclass_fields__})
+                task.validate()
+                tx.upsert("tasks", task.to_dict(), note="edge:blocked")
+        except Exception as exc:  # noqa: BLE001 —— 落痕失败不该带走这一趟
+            return "", f"{type(exc).__name__}: {exc}"
+        del what
+        return mark, ""
+
+    def subtree_blocked(self, parent_task_id: str) -> dict[str, Any]:
+        """这一支是不是整支卡住了（业主 2026-10-09 第四句）：三态读数。
+
+        「所有活跃子代理的状态都是 blocked」= 我名下还在飞的直接子代理每一个都声明过
+        "卡住"（父那一行上有 `blocked:<它>` 的落痕）。它是一个停机状态：委派这条路也堵死了
+        ⇒ 这一趟只能停，并把情况上报父（M 上报用户）。
+
+        返回 `{"checked","in_flight","blocked","all_blocked","details","reason"}`：
+
+        - 没有在飞的子 ⇒ `all_blocked=false` + `reason` 说清（"没有活跃子"既不是"整支卡住"，
+          也不是"都做完了"——后者是 `final` 说的话）；
+        - 有一个还在跑、或没声明卡住 ⇒ `all_blocked=false`（还留着一条路）；
+        - 台账读不成 ⇒ `checked=false`（"没读成"不许折成"都卡住了"，也不许折成"没卡"）。
+        """
+        mine = str(parent_task_id or "")
+        if not mine:
+            return {"checked": False, "in_flight": [], "blocked": [], "all_blocked": False,
+                    "details": [], "reason": "不知道我是谁（没有台账号）⇒ 子树卡不卡判不了"}
+        try:
+            kids = [str(x) for x in self._in_flight_children_of(mine)]
+            parent = self._task(mine) or {}
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 都卡住了
+            return {"checked": False, "in_flight": [], "blocked": [], "all_blocked": False,
+                    "details": [], "reason": f"台账读不成（{type(exc).__name__}: {exc}）"}
+        marks = [str(x) for x in (parent.get("inputs") or [])]
+        blocked: list[str] = []
+        details: list[dict[str, Any]] = []
+        for raw in marks:
+            if not raw.startswith(self._BLOCKED_PREFIX):
+                continue
+            body = raw[len(self._BLOCKED_PREFIX):]
+            child, _, rest = body.partition("@")
+            _at, _, why = rest.partition("|")
+            if child in kids:
+                blocked.append(child)
+                details.append({"child_task_id": child, "why": why})
+        all_blocked = bool(kids) and set(blocked) == set(kids)
+        reason = ""
+        if not kids:
+            reason = ("我名下此刻没有在飞的子代理 ⇒ 不是『整支卡住』"
+                      "（也不是『都做完了』：那是 `final` 说的话）")
+        return {"checked": True, "in_flight": kids, "blocked": sorted(set(blocked)),
+                "all_blocked": all_blocked, "details": details, "reason": reason}
 
     def notify_children_of_stop(self, parent_task_id: str, *, reason: str = "",
                                 by: str = "") -> dict[str, Any]:

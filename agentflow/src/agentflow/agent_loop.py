@@ -1421,6 +1421,13 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # 才知道这是连续第几次被打回 —— 而"打回"要附四件事的警告，警告的措辞只有一处）。
         # 解码器只负责"认出了 final 这个形状"（纯函数、可单测）。
         payload["notify"] = data.get("notify")
+    if data.get("blocked") is not None:
+        # 业主 2026-10-09 的第四句：层层上报困难会带来一种停机状态 ——
+        # 所有活跃子代理都是 blocked。子代理用它自己的收工那句话声明"我这趟卡住了"：
+        # `{"final": "...", "blocked": {"what": "...", "why": "..."}}`。
+        # 只在给了的时候带过（与 `notify` 同一纪律：恒为空的键会让"没声明"与"声明了空"
+        # 长得一样），校验与落痕都在 `_execute` 那一层（`note_blocked`）。
+        payload["blocked"] = data.get("blocked")
     return key, payload, ""
 
 
@@ -2403,6 +2410,13 @@ class AgentLoop:
                 # 收工那一步的原始载荷进 `LoopRun`（`run()` 末尾把它落进 `agent_run_end`）：
                 # 这是"模型填的 notify 到得了盘"的唯一通路 —— 见 `LoopRun.final_payload`。
                 run.final_payload = dict(_for_record(payload))
+                # 业主 2026-10-09 第四句：整支卡住是一种停机状态 ——
+                # 子代理用 `{"final": ..., "blocked": {"what":…, "why":…}}` 声明"我这趟卡住了"，
+                # 框架把这一笔落到父那一行（`note_blocked`），于是"我名下在飞的子全 blocked"
+                # 在盘上可读（`subtree_blocked`）。上报的正文仍由它自己那条上行报文承载。
+                blocked_note = self._note_blocked_declaration(payload)
+                if blocked_note:
+                    step_result = {**step_result, "blocked": blocked_note}
                 # 收工也是对插话的一种回应（"照插话收工"是最常见的形态）⇒ 同样落读数。
                 self._record_interjection_effect(run, pending_interjections, step=step,
                                                  shape=shape, payload=payload)
@@ -2722,6 +2736,65 @@ class AgentLoop:
                 return (f"停止通知 {item_id} 已 ack（第 {step} 步读到），"
                         f"但 ack 时刻没落痕：{type(exc).__name__}: {exc}")
         return f"停止通知 {item_id} 已 ack（第 {step} 步读到）"
+
+    def _note_blocked_declaration(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """子代理在收工那句话里声明"我在等上级指导" ⇒ 落痕到父那一行（业主 2026-10-09）。
+
+        业主对 `blocked` 的窄定义（第四句 + 第六句，逐字）：
+
+        > 「上述层层上报困难也会带来一种停机状态，即所有活跃子代理的状态都是 blocked」
+        > 「如果被委托的任务单纯是在职责之外，则应该将自己能力内的做完后上报情况就 over 了；
+        > 如果是需要请示上级指导任务实施细则，才会 block」
+
+        ⇒ 两件事必须分得开：
+
+        - 职责之外：做完自己能力内的、上报情况、正常收工（`final`）—— 这条路上不写
+          `blocked`（机器判据：那一条上报会让 `escalation_gaps` 归零，不需要 blocked）；
+        - 等上级指导实施细则：才是 `blocked` —— 载体是
+          `{"final": "...", "blocked": {"what": …, "why": …, "needs": "请上级定 X"}}`，
+          其中 `needs`（要请示什么）必填：说不出要请示什么，那多半不是 blocked，
+          而是"职责之外"那一档。
+
+        只在给了 `blocked` 的时候处理（没声明 ⇒ 什么都不做，老行为逐字不变）。
+        三态都如实报：没有父 / 没有 conductor / 落痕失败 ⇒ 一句读数，不打断收工。
+        """
+        decl = payload.get("blocked")
+        if not isinstance(decl, Mapping):
+            return {}
+        what = str(decl.get("what") or "").strip()
+        why = str(decl.get("why") or "").strip()
+        needs = str(decl.get("needs") or "").strip()
+        if not needs:
+            # 「说不出要请示什么 ⇒ 不是 blocked」（业主第六句）：只记读数、不落痕。
+            return {"declared": True, "recorded": False, "what": what, "why": why,
+                    "problem": ("blocked 少了 `needs`（要请示上级什么）：说不出要请示什么，"
+                                "多半不是『等指导』而是『职责之外』—— 那一档应当把自己能力内的"
+                                "做完、上报情况、正常收工，不写 blocked")}
+        if not why:
+            return {"declared": True, "recorded": False, "what": what, "needs": needs,
+                    "problem": "blocked 少了 `why`（被什么卡住）⇒ 不落痕（不许静默卡住）"}
+        cond = self.conductor
+        parent = str(getattr(self, "parent_task_id", "") or "")
+        mine = str(self.my_task_id or "")
+        if cond is None or not parent or not mine:
+            return {"declared": True, "recorded": False, "what": what, "why": why,
+                    "needs": needs,
+                    "problem": ("没有父/conductor ⇒ 这一笔没落到盘上"
+                                "（顶层发起的那一趟本来就该向用户请示）")}
+        look = getattr(cond, "note_blocked", None)
+        if not callable(look):
+            return {"declared": True, "recorded": False, "what": what, "why": why,
+                    "needs": needs, "problem": "这个主控没有 `note_blocked` ⇒ 没落痕"}
+        try:
+            mark, problem = look(parent, mine, what=what, why=why)
+        except Exception as exc:  # noqa: BLE001 —— 落痕失败不许带走收工
+            return {"declared": True, "recorded": False, "what": what, "why": why,
+                    "needs": needs, "problem": f"{type(exc).__name__}: {exc}"}
+        out: dict[str, Any] = {"declared": True, "recorded": bool(mark), "what": what,
+                               "why": why, "needs": needs}
+        if problem:
+            out["problem"] = problem
+        return out
 
     def _stop_applies(self, state: Mapping[str, Any]) -> dict[str, Any]:
         """盘上这把停机开关管不管我（S4，`draft/90` E7 / `draft/84` §2.2）。

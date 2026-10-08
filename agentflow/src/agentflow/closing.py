@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from . import renderanchor as RA
+from . import schema as S
 from . import textutil as T
 from . import userio as U
 
@@ -2124,6 +2125,18 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 #: 把它折进 `sid=None` 就会重演同一个假绿 —— 而这次连"读错了文件"都不会有人发现。
 NO_SESSION = ""
 
+#: 收工判据的那一句话（业主 2026-10-09 逐字）——三处（`to_dict` / 工具 / CLI）共用一份措辞，
+#: 免得"谁判收工"这件事在不同出口里被说成三件不同的事。
+VERDICT_NOTE = (
+    "收工与否由 M 判（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」"
+    "＋「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令"
+    "给自己设计任务列表」）：`can_close` = M 在 `m_verdict.met` 里说的那一句（它按自己列的"
+    "`tasks` 判『活做完了没有』）；机器八格（`status` / `machine_pass`）是读数。"
+    "两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名"
+    "—— 判据归 M，读数照旧一格不减。M 没提交判据 ⇒ `can_close=false`（『没人判过』不是"
+    "『判过能交』）。"
+)
+
 #: 报告体例由 M 裁定（R9 / `draft/52` 裁决 1 = C''）—— 门不再自带任何节名清单。
 #:
 #: ## 为什么删掉了九节（`REPORT_SECTIONS`）与分栏标记（`SPLIT_MARKERS`）
@@ -2247,11 +2260,18 @@ class Finding:
 
 @dataclass
 class ClosingReport:
-    """各条检查的读数。`status` 每条一个三态值；`findings` 是拦门的原因。"""
+    """各条检查的读数。`status` 每条一个三态值；`findings` 是拦门的原因。
+
+    `m_verdict`（业主 2026-10-09 的裁定）：M 自己的判据 ——
+    `{"goal": "我这一趟的目标", "met": True/False, "basis": "依据哪几条读数", "at": …}`。
+    `can_close` 由它决定；机器那八格（`status` / `machine_pass`）退成读数。
+    """
 
     status: dict[str, str] = field(default_factory=dict)
     findings: list[Finding] = field(default_factory=list)
     readings: dict[str, Any] = field(default_factory=dict)
+    #: M 的判据（`None` = 它没提交 ⇒ `can_close=false` + "没人判过"的读数）。
+    m_verdict: dict[str, Any] | None = None
 
     @property
     def blockers(self) -> list[Finding]:
@@ -2269,14 +2289,102 @@ class ClosingReport:
         return sorted(k for k, v in self.status.items() if v == "fail")
 
     @property
-    def can_close(self) -> bool:
-        """每条都 `pass` 才为真 —— `unknown` 与 `fail` 都不算通过。"""
+    def machine_pass(self) -> bool:
+        """机器读数：八格每条都 `pass` 且没有 blocker（老口径的机械合取）。
+
+        业主 2026-10-09 的裁定之后它只是一个读数（收工不由它定）：
+        「是否收工不要用机械判据，由 M 制定的目标是否达成为准」。
+        """
         return all(v == "pass" for v in self.status.values()) and not self.blockers
+
+    @property
+    def can_close(self) -> bool:
+        """M 判"我这一趟的目标达成了" —— 收工与否由 M 判，机器只给读数（业主 2026-10-09）。
+
+        - M 提交了 `m_verdict.met=True` ⇒ `True`（哪怕机器某几格是 fail/unknown：
+          那些格子照样进读数与 `overrode`，不是静默放行）；
+        - M 提交了 `met=False` ⇒ `False`（哪怕机器八格全 pass —— 那是"机器觉得没问题、
+          它自己知道没做到"，也必须由它说了算）；
+        - M 没提交 ⇒ `False` + `m_verdict=False` 那一档的读数（"没人判过" ≠ "判过能交"）。
+
+        旧的机械口径原样保留在 :attr:`machine_pass`，两者不一致时逐格记进 :attr:`overrode`。
+        """
+        return bool(self.m_verdict and self.m_verdict.get("met"))
+
+    @property
+    def overrode(self) -> list[dict[str, Any]]:
+        """机器读数与 M 的判断不一致的那些格（空列表 = 两者一致）。
+
+        两个方向都记（这就是"不许静默放行"的落点）：
+        - M 说达成、而某几格是 `fail`/`unknown` ⇒ 逐格点名；
+        - M 说没达成、而八格全 `pass` ⇒ 记一格 `"*"`（机器觉得没问题，它自己知道没做到）。
+        """
+        if not self.m_verdict:
+            return []
+        met = bool(self.m_verdict.get("met"))
+        bad = [{"check": k, "state": v, "why": "机器读数不是 pass，而 M 判达成"}
+               for k, v in sorted(self.status.items()) if v != "pass"]
+        if met:
+            # 拦门读数的正文也要看得见（同一格可能有既非 pass 又有 blocker 的情况 ⇒ 去重）
+            seen = {x["check"] for x in bad}
+            bad += [{"check": f.check, "state": f.level, "why": f.detail}
+                    for f in self.blockers if f.check not in seen]
+            return bad
+        if not bad and self.machine_pass:
+            return [{"check": "*", "state": "pass", "why": "机器八格全 pass，而 M 判没达成"}]
+        return []
+
+    @property
+    def verdict_conflicts(self) -> list[dict[str, Any]]:
+        """M 的自述与它自己的任务列表对不上的地方（空列表 = 自洽）。
+
+        业主 2026-10-09 的第二句：「所有智能体是否能停都是看自己被派的活有没有做完，
+        M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」⇒ 停的判据是
+        任务列表（M 自己列的），所以"说达成"与"列表里还有没做完的项"必须对得上；
+        对不上时不阻断（判据归 M），但逐项点名，让人看得见它凭什么说停。
+        """
+        if not self.m_verdict:
+            return []
+        tasks = [t for t in (self.m_verdict.get("tasks") or []) if isinstance(t, Mapping)]
+        met = bool(self.m_verdict.get("met"))
+        open_items = [{"what": str(t.get("what") or ""), "state": str(t.get("state") or ""),
+                       "why": str(t.get("why") or "")}
+                      for t in tasks if str(t.get("state") or "") != "done"]
+        if met and open_items:
+            return [{**x, "conflict": "M 说目标达成，而它自己的任务列表里这一项不是 done"}
+                    for x in open_items]
+        if not met and tasks and not open_items:
+            return [{"what": "*", "state": "done", "why": "任务列表全 done，而 M 说没达成",
+                     "conflict": "自述比列表更严"}]
+        return []
+
+    @property
+    def escalation_gaps(self) -> list[dict[str, Any]]:
+        """任务列表里"干不了/还没做完"的项，有没有上报（业主 2026-10-09 第三句）。
+
+        > 「如果某代理认为某件任务自己无法胜任且无法通过派子代理解决，则会将情况上报父智能体。
+        > 特别地，M 向用户上报。」
+
+        机器形态：这些项要在这一段会话里找得到一次上行 —— M 的上行是"问用户"
+        （`ask_user`）或已经答过的回答；子代理的上行是"给父的报文"（板项/留言，S1k 的名字面）。
+        这一格是读数（不阻断）：判据仍归 M（它说停就能停），但"闷着不说"必须看得见 ——
+        找不到上报的项逐项进 `gaps`；读不成 ⇒ `checked=False`（"没读成"不是"没上报"）。
+        """
+        got = self.readings.get("verdict_escalation") or {}
+        if not got.get("checked"):
+            return []
+        return list(got.get("gaps") or [])
 
     def to_dict(self) -> dict[str, Any]:
         """整份读数的可读视图（CLI、工具与落档共用同一个形状）。"""
         return {
             "can_close": self.can_close,
+            "machine_pass": self.machine_pass,
+            "m_verdict": dict(self.m_verdict) if self.m_verdict else None,
+            "overrode": self.overrode,
+            "verdict_conflicts": self.verdict_conflicts,
+            "escalation_gaps": self.escalation_gaps,
+            "verdict_note": VERDICT_NOTE,
             "status": dict(self.status),
             "failed": self.failed,
             "unknowns": self.unknowns,
@@ -2286,10 +2394,23 @@ class ClosingReport:
 
     def summary(self) -> str:
         """一句话读数（给 CLI 与交付说明用；不许盖过明细）。"""
-        if self.can_close:
-            return f"收工门：{len(self.status)} 条全过 ⇒ 可交付"
-        return (f"收工门：拦住（fail={self.failed or '无'} / unknown={self.unknowns or '无'}）"
-                f"；拦门读数 {len(self.blockers)} 条")
+        machine = (f"机器八格：pass {sum(1 for v in self.status.values() if v == 'pass')}/"
+                   f"{len(self.status)}"
+                   + (f"；fail={self.failed}" if self.failed else "")
+                   + (f"；unknown={self.unknowns}" if self.unknowns else ""))
+        if not self.m_verdict:
+            return (f"收工门：{machine} —— M 没有提交自己的判据（它按自己列的任务列表判"
+                    "『活做完了没有』）⇒ `can_close=false`")
+        tasks = [t for t in (self.m_verdict.get("tasks") or []) if isinstance(t, Mapping)]
+        done = sum(1 for t in tasks if str(t.get("state") or "") == "done")
+        list_note = f"；任务列表 {done}/{len(tasks)} done" if tasks else "；任务列表：没提交"
+        met = "做完了" if self.m_verdict.get("met") else "没做完"
+        tail = (f"；与列表/机器对不上的：{[x.get('what') for x in self.verdict_conflicts]}"
+                if self.verdict_conflicts else "")
+        gaps = self.escalation_gaps
+        gap_note = (f"；没上报的项：{[x.get('what') for x in gaps]}" if gaps else "")
+        return (f"收工门：M 判「我这一趟的活{met}」⇒ can_close={self.can_close}"
+                f"（{machine}{list_note}{tail}{gap_note}）")
 
 
 # ------------------------------------------------------------------ 各条实现
@@ -3294,9 +3415,82 @@ def _check_user_pending(rep: ClosingReport, session_root: Any,
 
 # ------------------------------------------------------------------ 入口
 
+def _escalation_reading(session_root: Any, sid: str | None, tasks: list[dict[str, Any]],
+                        ) -> dict[str, Any]:
+    """"干不了/没做完"的那些项，有没有在本段会话里上报（业主 2026-10-09 第三句）。
+
+    「如果某代理认为某件任务自己无法胜任且无法通过派子代理解决，则会将情况上报父智能体。
+    特别地，M 向用户上报。」⇒ 上报要有落盘的载体，本函数按两处找：
+
+    - M → 用户：`userio.pending_questions`（还没答的）+ `userio.read_replies`（答过的）
+      —— 这两处合起来就是"问过用户"的全集；
+    - 子 → 父：会话里的 `agent_message`（S1k 的名字面：给父/给名下子代理的报文，
+      `to` 是名册名或角色名）与 `agent_handoff`（交接手稿那一行也是上行）。
+
+    匹配是字面的：项里的 `what`（去掉空白）要出现在某条上报的正文/标题/问题正文里。
+    这是刻意的弱判据 —— 它只回答"这件事有没有被说出来"，不评价说得对不对
+    （那要人读）。`what` 太短（<2 字）时不做字面匹配，只认"有上报"这一档，
+    免得一个单字把任何一条报文都判成"说到了"。
+
+    三态：会话读不成 / 没有会话根 ⇒ `checked=False` + `reason`（"没读成"不是"没上报"）。
+    """
+    open_items = [{"what": str(t.get("what") or ""), "state": str(t.get("state") or ""),
+                   "why": str(t.get("why") or "")}
+                  for t in tasks if str(t.get("state") or "") != "done"]
+    if not open_items:
+        return {"checked": True, "open_items": [], "escalations": [], "gaps": [], "reason": ""}
+    if session_root is None:
+        return {"checked": False, "open_items": open_items, "escalations": [], "gaps": [],
+                "reason": "没有会话记录根 ⇒ 上报这一格没查成"}
+    from . import sessions as SS
+
+    texts: list[dict[str, Any]] = []
+    try:
+        for q in U.pending_questions(session_root, sid=sid):
+            texts.append({"kind": "question", "id": str(getattr(q, "qid", "")),
+                          "text": str(getattr(q, "text", ""))})
+        for r in U.read_replies(session_root, sid=sid):
+            texts.append({"kind": "answer", "id": str((r or {}).get("qid") or ""),
+                          "text": str((r or {}).get("answer") or "")})
+        events, problems = SS.read_session(session_root, sid=sid)
+        if problems:
+            return {"checked": False, "open_items": open_items, "escalations": [], "gaps": [],
+                    "reason": f"会话有 {len(problems)} 处读不出来：{problems[0]}"}
+        for e in events:
+            if str(e.get("kind")) in ("agent_message",):
+                texts.append({"kind": "message", "id": str(e.get("msg_id") or ""),
+                              "text": f"{e.get('subject') or ''}\n{e.get('body') or ''}"})
+            elif str(e.get("kind")) in ("agent_handoff", "handoff"):
+                texts.append({"kind": "handoff", "id": str(e.get("id") or ""),
+                              "text": f"{e.get('summary') or ''}\n{e.get('body') or ''}"})
+    except Exception as exc:  # noqa: BLE001 —— 读不成不等于没上报
+        return {"checked": False, "open_items": open_items, "escalations": [], "gaps": [],
+                "reason": f"{type(exc).__name__}: {exc}"}
+    found: list[dict[str, Any]] = []
+    gaps: list[dict[str, Any]] = []
+    for item in open_items:
+        needle = "".join(str(item["what"]).split())
+        hit = None
+        if len(needle) >= 2:
+            for t in texts:
+                if needle and needle in "".join(t["text"].split()):
+                    hit = t
+                    break
+        elif texts:
+            hit = texts[0]          # `what` 太短 ⇒ 只认"有上报"这一档（并如实记下这一档）
+        if hit:
+            found.append({**item, "via": hit["kind"], "ref": hit["id"]})
+        else:
+            gaps.append(item)
+    return {"checked": True, "open_items": open_items, "escalations": found, "gaps": gaps,
+            "reason": ""}
+
+
 def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   session_root: Any = None, checks: tuple[str, ...] = DEFAULT_CHECKS,
                   sid: str | None = None,
+                  goal: str = "", goal_met: bool | None = None, basis: str = "",
+                  task_list: Iterable[Mapping[str, Any]] = (),
                   ) -> ClosingReport:
     """跑收工门，返回读数（不抛业务异常 —— 没查成落成 `unknown`）。
 
@@ -3306,8 +3500,36 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     门宁可说"我没查成"，也不许在缺少读数时说"可以交"。
     `sid` 三态见 :data:`NO_SESSION`：具体会话号 / `None`（缺省会话）/
     `NO_SESSION`（没有会话身份 ⇒ `user_pending` 那格 `unknown`）。
+
+    ## 收工由 M 判（业主 2026-10-09）
+
+    第一句：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；
+    第二句：「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，
+    只是 M 需要根据用户指令给自己设计任务列表」⇒ 于是：
+
+    - `task_list` 是 M 自己列的任务（`[{what, state: done|not_done|cannot, why}]`）——
+      停的判据是它，不是八格；
+    - `goal_met` 是 M 的一句话结论（`None` = 它没判 ⇒ `can_close=false` + 「没人判过」）；
+    - `goal` / `basis` 是它的自述（目标是什么、依据哪几条读数）；
+    - 八格照旧逐格现算，作为读数（`status` / `machine_pass`）与 `overrode`
+      （不一致逐格点名）留在报告里；`verdict_conflicts` 再点名"自述与自己的任务列表
+      对不上"的地方 —— 判据归 M，读数的可见性不减。
     """
     rep = ClosingReport()
+    tasks = [dict(t) for t in (task_list or ()) if isinstance(t, Mapping)]
+    if goal_met is not None or tasks:
+        rep.m_verdict = {"goal": str(goal or ""),
+                         "met": bool(goal_met) if goal_met is not None else False,
+                         "basis": str(basis or ""), "tasks": tasks,
+                         "counts": {
+                             "done": sum(1 for t in tasks
+                                         if str(t.get("state") or "") == "done"),
+                             "not_done": sum(1 for t in tasks
+                                             if str(t.get("state") or "") == "not_done"),
+                             "cannot": sum(1 for t in tasks
+                                           if str(t.get("state") or "") == "cannot"),
+                             "total": len(tasks)},
+                         "at": S.now_iso()}
     root = session_root if session_root is not None else getattr(store, "root", None)
     for name in checks:
         if name == "anchor":
@@ -3330,13 +3552,23 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",
                                         f"没有这个检查：{name!r}（判据表与实现在这里分家了）"))
+    # 上报那一格（业主 2026-10-09 第三句）：它不属于八格，是 M 的判据的伴生读数 ——
+    # "干不了/没做完的项有没有说出来"。放这里是因为它要读会话，而会话根只在这个入口有。
+    if rep.m_verdict:
+        rep.readings["verdict_escalation"] = _escalation_reading(
+            root, sid, list(rep.m_verdict.get("tasks") or []))
     return rep
 
 
 def tri_state_exit_code(rep: ClosingReport) -> int:
-    """CLI 的三态退出码：0 可交付 / 1 被拦住 / 2 没查成（`unknown` 不算通过）。"""
+    """CLI 的三态退出码：0 可交付 / 1 被拦住 / 2 没查成。
+
+    口径按业主 2026-10-09 的裁定改：0 只在 M 判了"达成"时给（`can_close`）；
+    M 没判 ⇒ 2（"没人判过" = 没查成，不是"被拦住"也不是"可交付"）；
+    M 判了"没达成" ⇒ 1。机器那八格只在读数里说话（`machine_pass` / `failed` / `unknowns`）。
+    """
     if rep.can_close:
         return 0
-    if rep.unknowns and not rep.failed:
+    if not rep.m_verdict:
         return 2
     return 1

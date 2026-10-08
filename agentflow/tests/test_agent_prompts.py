@@ -1363,18 +1363,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: "能互动"那一句同批改（留旧句子就是教模型按错的语义广播）⇒ 十格全换。
 #: `p49`（2026-10-09，S6-b）：新增 `conductor.broadcast` ⇒ 七个角色 + M 的工具体清单
 #: 那一格变了；C/H/V 只读、不在它的 `roles` 里 ⇒ 那三格逐字不动。
-_FROZEN_PROMPT_VERSION = "p49"
+#: `p50`（2026-10-09，业主三句裁定）：收工由自己判（被派的活做完没有；M 自列任务列表、
+#: 收工时交 `task_list`/`goal_met`）、干不了就上报父 / M 上报用户、机器八格是读数不是判决
+#: ⇒ 共享的循环协议 ⇒ 十格全换。
+_FROZEN_PROMPT_VERSION = "p50"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "44b768e448e5f8edc3d211769d3987f34cc6733a4df863d501e01591c4cb1334",
-    "B": "e938f786acc0709e27ecf617ba116ba103ce0541cb4bea724eb79431f071521e",
-    "C": "18afcebc23cf06911c9e12a04cf7bd18eb2dc12577b1980c8566c1fbfe7d1100",
-    "D": "daf8983f23868f75b4ae427cf22eafb1f1abad6d818e47011ad7a4508cf60f44",
-    "E": "c8032cc2ba5bd8a521d01088357ef4ce4f1e50711865753322f202925e9434b8",
-    "F": "2b0d3de98c96424ea2047fe21b4d440ae14e4e54265783d73f8d9d62d930b0db",
-    "G": "66dfbc8fdb78666e6f770b5e1229bca9772cee82d2a2a7661369623e4c2241b4",
-    "H": "cfa71fb664d93df663f784dea3eb37b7b55d6bd036193c50a0332b58fbc76af9",
-    "V": "1a06d77c92d63f656d91cf08af0714c5bd9bfb82610c118f4865eb47cec1da3f",
-    "M": "60b8580e247fdf124e4e0206ec46b1435ebc434c270cc56650b3683ed9e9885f",
+    "A": "bca1d915d5c2464166edfbad81becae7ff9200d190f249a0929919ee64ef6eb7",
+    "B": "d5400b1b1f2d9f97073b94dea85051a30c3f3d90d4a04f5c2a2a7d910ed52a20",
+    "C": "7c3c18dbecb145c6f795e9310525d8f9d570ae5e421ec36c69c7486919b9f49d",
+    "D": "5331bf9389a107708b2e21b7f8f69d77821b0151b7e8aa3c510e39633ebcd472",
+    "E": "5228e52a418b9edf490dcc4c68f1a90bfcd1b85e2888ab90de9a08a4b5733825",
+    "F": "6e41290cc5dc36a01ceea1682834ef3bfb2824b679c1a6dff01484ab46a49665",
+    "G": "97cd4b44af04e1bbeee57c0c5344a9aaff0f1e17197b6fa400e5d20e8b1deec1",
+    "H": "cc19514229561e8f32caa52f4f35595f36a058cc971c67f60eeae7d4a2829ef2",
+    "V": "a96ff42483465fee8b4f23a0d86e1174373a9735cbd9045d2d8dc9ff96bb5bbf",
+    "M": "c180efd21f2a63d6dc68e6857dd772d328d29830fa8c6ce53dd99a28c6d8db97",
 }
 
 
