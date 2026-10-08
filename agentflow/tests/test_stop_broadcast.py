@@ -10,10 +10,16 @@ M 的广播是「循环形状」（不是工具）：主控输出 `{"message": {
 ⇒ `agent_loop._do_message` 落一条 `agent_message` 事件（`to="#public"`）。
 这一组判据钉三件事，三件分开报（三态纪律：通道通 / 通道没通 / 没人读过，不能折成一个布尔）：
 
-1. 「发得出去」：`#public` 落成一条 `agent_message`，带 `msg_id`；
-2. 「每个同伴都收得到」：A–H 各自的收件箱摘要里都能看到它（含"未投递"标记的初值）；
-3. 「投递登记是真的」：某个角色读过之后它那条变成已投递，「没读过的仍然显示未投递」
+1. 「发得出去」：`#public` 落成一条 `agent_message`，带 `msg_id` 与发信人的台账号；
+2. 「我名下的直接子代理收得到」：业主 T20/T21 附二 乙把公聊的可见面收窄成
+   "发信人的直接子代理" ⇒ 这条判据改成"是它的子级才收得到、不是的收不到"，
+   并按 `parent_task_id` 逐个读者核（旧口径"每个同伴都收得到"是改前的事实，已作废）；
+3. 「投递登记是真的」：某个收得到的角色读过之后它那条变成已投递，「没读过的仍然显示未投递」
    —— 这一条防的是"广播看起来发出了，其实谁都没看见"。
+
+叫停那一份有例外（安全件）：`conductor.stop(notify=True)` 发的叫停走框架档
+（`by_framework=True` ⇒ 所有角色可见）—— 工具层手上没有实例号，而"听不到叫停的子孙会
+继续烧钱跑实验"。S4 的"沿边逐层下发"落地后这一档退休（`draft/86` §14.6）。
 
 另有一条「边界」必须写下来（同一组里判）：广播「打断不了」正在循环里的同伴 ——
 每个角色的收件箱是在 `run()` 开头读一次的（`inbox_digest`），不是每步读；
@@ -77,8 +83,23 @@ def _events(root: pathlib.Path, sid: str) -> list[dict]:
     return events
 
 
+def _child_row(cond, parent: str, *, role: str, key: str) -> str:
+    """造一个"挂在 parent 名下"的子实例行（S6-a 的可见面按它判）。"""
+    return cond._write_new_row({
+        "task_id": "", "role": role, "action": "run_once", "called_by": "M",
+        "parent_task_id": parent, "depth": 2, "input_key": key, "status": "running",
+        "outcome": None, "refusal_reason": None, "instance": "", "detail": "一个子代理",
+        "error": None, "started_at": "2026-10-09T00:00:00+08:00", "ended_at": None,
+        "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
+    }, note="start:%s.run_once" % role)
+
+
 def test_the_boss_can_broadcast_a_stop_notice_on_the_public_channel(tmp_path):
-    """正控：M 用 `{"message": {"to": "#public"}}` 广播一条叫停通知 ⇒ 落到公共频道。"""
+    """正控：M 用 `{"message": {"to": "#public"}}` 广播一条叫停通知 ⇒ 落到公共频道。
+
+    S6-a 之后多钉一格：那一条带发信人的台账号（`from_task_id`）—— 公聊的
+    可见面就靠它判，没有它这一条谁也认不出来（`_do_message` 那一层会受控拒绝）。
+    """
     note = {"message": {"to": PUBLIC, "subject": "叫停",
                         "body": "用户叫停：请各自收工，并把你自己起的子进程停掉。"}}
     st, cond, registry, gw, root = _wired(tmp_path, [json.dumps(note, ensure_ascii=False),
@@ -94,10 +115,19 @@ def test_the_boss_can_broadcast_a_stop_notice_on_the_public_channel(tmp_path):
     assert len(msgs) == 1, msgs
     assert msgs[0]["to"] == PUBLIC and msgs[0]["from"] == "M", msgs[0]
     assert "子进程" in str(msgs[0]["body"]), msgs[0]
+    boss = [r for r in st.rows("tasks") if str(r.get("role")) == "M"
+            and str(r.get("action")) == "run"]
+    assert len(boss) == 1, boss
+    assert str(msgs[0].get("from_task_id") or "") == str(boss[0]["task_id"]), msgs[0]
 
 
-def test_every_partner_sees_the_broadcast_and_delivery_is_recorded(tmp_path):
-    """正控 + 三态：A–H 每个角色都收得到；读过的标已投递，「没读过的仍是未投递」。"""
+def test_only_the_senders_children_receive_the_broadcast(tmp_path):
+    """正控 + 三态（业主 T20/T21 附二 乙）：收得到的是发信人的直接子代理。
+
+    改前的口径是"每个同伴都收得到"（`#public` = 全角色）—— 那正是 T20 要治的形态：
+    任何角色随手 `to=#public` 就等于全树广播。现在：子级收得到、别的角色收不到、
+    孙级也收不到（要全树就逐层向下转发，级联是收件人的动作）。
+    """
     note = {"message": {"to": PUBLIC, "subject": "叫停", "body": "停"}}
     st, cond, registry, gw, root = _wired(tmp_path, [json.dumps(note, ensure_ascii=False),
                                                      json.dumps({"final": "已广播", "evidence": []},
@@ -105,29 +135,43 @@ def test_every_partner_sees_the_broadcast_and_delivery_is_recorded(tmp_path):
     run_role("M", "广播叫停", store=st, registry=registry, conductor=cond,
              seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0), sid="bc"),
              session_root=root, workspace_root=str(root), sid="bc", max_steps=3, from_env=False)
+    boss = next(str(r["task_id"]) for r in st.rows("tasks")
+                if str(r.get("role")) == "M" and str(r.get("action")) == "run")
+    child = _child_row(cond, boss, role="D", key="s6a@child")
+    grand = _child_row(cond, child, role="E", key="s6a@grand")
 
-    seen: dict[str, bool] = {}
-    for role in S.ROLES:
-        msgs, problems = read_messages(root, role, sid="bc")
-        assert not problems, problems
-        mine = [m for m in msgs if m.get("to") == PUBLIC]
-        assert mine, f"{role} 的收件箱里没有那条广播 ⇒ 广播没到达所有人"
-        seen[role] = bool(mine[0].get("delivered"))
-    assert not any(seen.values()), f"还没人读过，怎么会有已投递的：{seen}"
-
-    # D 读一次（`run()` 的路径是 `inbox_digest` + `mark_delivered`）⇒ 只有 D 那条变成已投递
-    _digest, fresh, problems = inbox_digest(root, "D", sid="bc")
+    # 子代理 D 按"我父是谁"读 ⇒ 收得到（可见面 = 发信人的直接子代理）
+    mine, problems = read_messages(root, "D", sid="bc", parent_task_id=boss)
     assert not problems, problems
-    assert fresh, "D 的收件箱里应当有未投递的新留言"
-    problem = mark_delivered(root, "D", fresh, sid="bc")
+    assert [m for m in mine if m.get("to") == PUBLIC], "子代理必须收得到父的广播"
+    assert mine[0].get("visibility") == "instance", mine[0]
+
+    # 不是它子级的读者收不到：孙级（父是 D）、以及不知道自己父是谁的读者
+    below, _ = read_messages(root, "E", sid="bc", parent_task_id=child)
+    assert not [m for m in below if m.get("to") == PUBLIC], "孙级不该直接收到（要逐层向下）"
+    stranger, _ = read_messages(root, "A", sid="bc", parent_task_id="")
+    assert not [m for m in stranger if m.get("to") == PUBLIC], "没有父的读者不该收到"
+
+    # 逐层向下：D 自己发一条公聊 ⇒ 只有它的子级 E 收得到，M 反过来收不到
+    from agentflow.agent_loop import send_message
+
+    _mid, problem = send_message(root, sender="D", to=PUBLIC, subject="转发", body="往下传",
+                                sid="bc", from_task_id=child)
     assert not problem, problem
-    after = {}
-    for role in S.ROLES:
-        msgs, _ = read_messages(root, role, sid="bc")
-        mine = [m for m in msgs if m.get("to") == PUBLIC]
-        after[role] = bool(mine and mine[0].get("delivered"))
-    assert after["D"] is True, after
-    assert not any(v for k, v in after.items() if k != "D"), after
+    from_child, _ = read_messages(root, "E", sid="bc", parent_task_id=child)
+    assert [m for m in from_child if str(m.get("subject")) == "转发"], from_child
+    from_boss, _ = read_messages(root, "M", sid="bc", parent_task_id="")
+    assert not [m for m in from_boss if str(m.get("subject")) == "转发"], from_boss
+
+    # 投递登记照旧认这条 id（三态：读过的与没读过的分开）
+    _digest, fresh, problems = inbox_digest(root, "D", sid="bc", parent_task_id=boss)
+    assert not problems and fresh, (fresh, problems)
+    assert not mark_delivered(root, "D", fresh, sid="bc")
+    after, _ = read_messages(root, "D", sid="bc", parent_task_id=boss)
+    assert bool([m for m in after if m.get("to") == PUBLIC][0].get("delivered"))
+    bystander, _ = read_messages(root, "A", sid="bc", parent_task_id="")
+    assert not [m for m in bystander if m.get("to") == PUBLIC], bystander
+    assert grand and S.ROLES
 
 
 def test_a_broadcast_does_not_interrupt_a_running_loop(tmp_path):

@@ -76,18 +76,37 @@ def _run(tmp_path: pathlib.Path, role: str, replies: list[str], *, on_call: Any 
                     max_steps=max_steps, from_env=False)
 
 
-def test_public_channel_reaches_everyone_except_the_speaker(tmp_path: pathlib.Path):
-    """正控：公共频道的消息，除发信人以外每个角色都收得到。"""
-    root = tmp_path / "ws"
-    root.mkdir()
+def test_public_channel_reaches_the_speakers_own_team(tmp_path: pathlib.Path):
+    """正控（S6-a 之后的口径）：公共频道 = 发给我的直接子代理（业主 T20/T21）。
+
+    改前这条的意思是"`#public` = 全角色"—— 那正是 T20 要治的形态（任何角色随手
+    `to=#public` 就等于全树广播）。现在：说话人的直接子级收得到（要造出子级），
+    不是它子级的收不到；说话人自己也不回灌。要通知全树就逐层向下转发。
+    """
+    st, _registry, cond, root = _ws(tmp_path)
+    speaker = cond.open_top_level_run("C", "定口径")
+    for role, key in (("A", "fac@a"), ("D", "fac@d")):
+        cond._write_new_row({
+            "task_id": "", "role": role, "action": "run_once", "called_by": "C",
+            "parent_task_id": speaker, "depth": 2, "input_key": key, "status": "running",
+            "outcome": None, "refusal_reason": None, "instance": "", "detail": f"{role} 这一支",
+            "error": None, "started_at": "2026-10-09T00:00:00+08:00", "ended_at": None,
+            "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": [],
+        }, note=f"start:{role}.run_once")
     msg_id, problem = send_message(root, sender="C", to=PUBLIC, subject="口径",
-                                  body="我把'度数'定义成去重后的邻居数", sid="t")
+                                  body="我把'度数'定义成去重后的邻居数", sid="t",
+                                   from_task_id=speaker)
     assert problem == "" and msg_id == "m0001"
-    for role in ("A", "D", "H", "M"):
-        msgs, problems = read_messages(root, role, sid="t")
-        assert not problems and len(msgs) == 1 and msgs[0]["channel"] == "public", (role, msgs)
-    mine, _ = read_messages(root, "C", sid="t")
-    assert mine == [], "自己说的话不该回灌到自己的收件箱"
+    for role in ("A", "D"):
+        msgs, problems = read_messages(root, role, sid="t", parent_task_id=speaker)
+        assert not problems and len(msgs) >= 1 and msgs[0]["channel"] == "public", (role, msgs)
+        assert msgs[0]["visibility"] == "instance", msgs[0]
+    for role in ("H", "M"):
+        other, _ = read_messages(root, role, sid="t", parent_task_id="")
+        assert not [m for m in other if m.get("channel") == "public"], (role, "不是它的子级 ⇒ 收不到")
+    mine, _ = read_messages(root, "C", sid="t", parent_task_id="")
+    assert not [m for m in mine if m.get("from_task_id") == speaker], "自己说的话不该回灌到自己"
+    assert st is not None
 
 
 def test_private_message_needs_a_collaboration_edge(tmp_path: pathlib.Path):
@@ -127,12 +146,17 @@ def test_private_message_between_partners_is_allowed(tmp_path: pathlib.Path):
 
 
 def test_a_message_arriving_mid_run_is_heard_in_the_next_step(tmp_path: pathlib.Path):
-    """正控（耳朵一直开着）：运行中到的消息，必须在下一步的 prompt 里出现。"""
+    """正控（耳朵一直开着）：运行中到的消息，必须在下一步的 prompt 里出现。
+
+    S6-a 之后这条改用私聊送来（`E → D`）：这一条量的是"运行中到达的消息
+    在下一步被听到"这件事，与频道无关；而公聊的可见面现在是"发信人的直接子代理"
+    （业主 T20/T21），拿一条公聊来测这个会把两件事混在一起。
+    """
     st, registry, cond, root = _ws(tmp_path)
 
     def on_call(n: int) -> None:
         if n == 1:      # 第一次调用之后，别人才把消息发进来
-            send_message(root, sender="E", to=PUBLIC, subject="反例",
+            send_message(root, sender="E", to="D", subject="反例",
                          body="n=6 时结论不成立，别写死", sid="t")
 
     gw = ScriptedGateway([json.dumps({"tool": "table.list", "args": {"table": "tasks"}},

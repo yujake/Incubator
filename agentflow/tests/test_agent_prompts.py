@@ -1358,18 +1358,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 工作项进上下文（业主 A3=甲 "渲染即 seen" 的渲染那一半）。同 p44/p45：共享段 ⇒ 十格全换。
 #: `p47`（2026-10-08 深夜，S1k-2）：循环协议八种形状 → 十种（新增 `retire` / `roster`），
 #: 且 `summon` 里补 `brief` / `name` / `reuse` 三格（名册口径）⇒ 十格全换。
-_FROZEN_PROMPT_VERSION = "p47"
+#: `p48`（2026-10-09，S6-a）：公共频道的可见面收窄成"发信人的直接子代理"（业主 T20/T21）——
+#: 循环协议里"所有角色都会在自己的收件箱里看到它"、手稿 `ALL`、叫停那句、角色定位
+#: "能互动"那一句同批改（留旧句子就是教模型按错的语义广播）⇒ 十格全换。
+_FROZEN_PROMPT_VERSION = "p48"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "f1377bec40d6479c1ff7103fa8d1433c26e3f5141bab25ad8617cc8591103c0c",
-    "B": "8c5be62dd1758877b2eb788b1bee29a59a24f02722457e527e3f04605181a015",
-    "C": "12a949c67b89d4aa6d4e2555d8a2fc9df4da904b6c9160ab77284fe492647387",
-    "D": "5ba427a5265f9ee533142642c2d749794fe08d120c917c5707e6b5fd4e9f6ea6",
-    "E": "6fe2decbf13b095c61b2e00ce04eee843d112533aa5bea4d197e1e0e16691463",
-    "F": "7cdd905f45f6bc4c8ea1d72dd9e1a583b6c621f27de80edf65823ae7f9c7c2e4",
-    "G": "ade70946cc7701ed10d2d5437ef1812d3eaf2e6972b47b85509cac3b2360b520",
-    "H": "1a115fd15c0ef81f7c4cd5ad6fb2a5150c0af3fe0d8a56c307bf0e880aac5d42",
-    "V": "395a7e6228b6c32439c2f0d99bdf26a04d779bda240c49c5018b52833f657a9f",
-    "M": "0fc63659ccdfb4dfc4024d6210dd136e7894c0499495100ab12c6a4e1ef5e130",
+    "A": "6a2afba53269fba6994fc9e57f641a843d99771fb1493e72226051c66a405678",
+    "B": "17de788bffa7e614efeb9f7eb460c0928cddc34019681538314daaf98f581c96",
+    "C": "18afcebc23cf06911c9e12a04cf7bd18eb2dc12577b1980c8566c1fbfe7d1100",
+    "D": "1023b5b1d4acbc24b00fb176e48ab3860261f3071c5e36e4bbad1e6bf25c7ed4",
+    "E": "50f4ad626cb67dfbf35fb8d032d9d13785cc91a8e35c359f8b511083417589bc",
+    "F": "6f27755cfa501b926cc51338526d66034e9adef69e4c2345497325045d1b9a1b",
+    "G": "37fedfd82b14017e5415918f009b1879f79d4b74c4331995d352c2e532d2ec1b",
+    "H": "cfa71fb664d93df663f784dea3eb37b7b55d6bd036193c50a0332b58fbc76af9",
+    "V": "1a06d77c92d63f656d91cf08af0714c5bd9bfb82610c118f4865eb47cec1da3f",
+    "M": "9f037c21fbf30f8ae71f8343b75becf8597ef6f0b77e8aa26315e233eaa188d4",
 }
 
 

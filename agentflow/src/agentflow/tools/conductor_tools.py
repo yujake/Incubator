@@ -513,7 +513,12 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
         # 把它改成集体插话，理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"——
         # 那句在今天是过期的事实（步边界的 `_hear()` 会把新留言并进这一步的结果）。
         # 而插话收窄成"只有用户 → M"之后，M 发的叫停不能再走插话：那是另一条通道。
-        # 留言还有两个插话给不了的东西：它落在公共频道（谁都能从盘上读到）、且可 ack。
+        # 留言还有两个插话给不了的东西：它落在公共频道（盘上可读）、且可 ack。
+        #
+        # S6-a：公聊的可见面收窄成"发信人的直接子代理"（业主 T21）之后，叫停这一条
+        # 走框架档（`by_framework=True` ⇒ 所有角色可见）—— 工具层手上没有实例号，
+        # 而"听不到叫停的子孙会继续烧钱跑实验"是安全件。S4 的"沿边逐层下发"落地后
+        # 这一档退休（`draft/86` §14.6 写明了这处冲突与处置）。
         ij_id, problem = send_message(
             root, sender=S.CONDUCTOR_ROLE, to=PUBLIC, subject="叫停",
             body=("用户/主控叫停（" + code + ("，强制" if force else "") + "）：请各自收工，"
@@ -521,7 +526,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
                   "停机开关已落在 " + str(stopctl.stop_path(root)) + "；"
                   "你会在**下一步开头**读到这条留言（它不打断当前步）——"
                   "真正让在飞工作停下的是那个开关。"),
-            sid=sid or None)
+            sid=sid or None, by_framework=True)
         notified = ij_id if not problem else f"未发出：{problem}"
     receipt = c.cancel(code, detail=("强制停止（主控 M）" if force else "优雅停止（主控 M）"),
                        by=S.CONDUCTOR_ROLE)

@@ -894,9 +894,48 @@ def _interjection_block(items: list[Mapping[str, Any]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def public_visibility(msg: Mapping[str, Any], *, parent_task_id: str = "",
+                      parent_role: str = "") -> tuple[bool, str]:
+    """一条公共频道留言对"我"可不可见（S6-a，业主 T20/T21 + 乙）。返回 `(可见, 读数)`。
+
+    口径（`draft/86` §14.6 乙，逐条）：
+
+    | 这一条长什么样 | 谁看得到 | 读数 |
+    |---|---|---|
+    | `by_framework=True`（叫停这类框架通报） | 所有角色 | `framework` |
+    | 带 `from_task_id`（代理自己发的） | 它的直接子级（`from_task_id == 我的父实例号`） | `instance` |
+    | 带 `from_task_id` 但我不是它的子级 | 谁也（除了它自己）看不到 | `not_my_parent` |
+    | 老消息（没有 `from_task_id`） | 按角色级回退：`from == 我父的角色` | `role_fallback` |
+    | 老消息、而我连父角色都不知道 | 看不到（不许当成"全角色可见"，也不许一律丢掉历史） | `unknown_parent` |
+
+    为什么框架那一档必须留（这是 T21 之后唯一的例外，`draft/86` §14.6 写明了理由）：
+    叫停是框架代表主控发的全树通知，而工具层手上没有实例号、全树叫停又是安全件
+    （听不到叫停的子孙会继续烧钱跑实验）。S4 的"沿边逐层下发"落地后这一档退休。
+    代理自己发的 public 必须带 `from_task_id`（`_do_message` 那一层受控拒绝）。
+    """
+    if msg.get("by_framework"):
+        return True, "framework"
+    frm_tid = str(msg.get("from_task_id") or "")
+    if frm_tid:
+        if parent_task_id and frm_tid == str(parent_task_id):
+            return True, "instance"
+        return False, "not_my_parent"
+    parent_role = str(parent_role or "")
+    if parent_role and str(msg.get("from") or "") == parent_role:
+        return True, "role_fallback"
+    return False, "unknown_parent"
+
+
 def read_messages(session_root: Path, role: str, *, sid: str | None = None,
+                  parent_task_id: str = "", parent_role: str = "",
                   ) -> tuple[list[dict[str, Any]], list[str]]:
-    """读某个角色的收件箱（含未投递标记）。返回 `(消息, 问题)`。"""
+    """读某个角色的收件箱（含未投递标记）。返回 `(消息, 问题)`。
+
+    `parent_task_id` / `parent_role` 是公共频道可见面的两格（S6-a，业主 T21 附二 乙）：
+    公聊只有"发信人是我的直接父"（实例级）或"这一条是框架通报"才进得了我的收件箱；
+    老消息（没有 `from_task_id`）按角色级回退，并在行上留 `visibility` 读数。
+    私聊逐字按老口径（`to == role`），不吃这两格。
+    """
     events, problems = SS.read_session(session_root, sid=sid)
     delivered: set[str] = set()
     for event in events:
@@ -907,8 +946,14 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
         if event.get("kind") != "agent_message":
             continue
         to = str(event.get("to"))
-        if to != role and to != PUBLIC:
-            continue
+        reading = "private"
+        if to != role:
+            if to != PUBLIC:
+                continue
+            visible, reading = public_visibility(event, parent_task_id=parent_task_id,
+                                                 parent_role=parent_role)
+            if not visible:
+                continue
         if str(event.get("from")) == role:
             continue                     # 自己说的不用再听一遍
         msg_id = str(event.get("msg_id") or "")
@@ -919,28 +964,39 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
             # 要么误判"已消费"（三态塌成一态）。身份读不出来就如实报坏行。
             problems.append(f"第 {i} 条 agent_message 没有 msg_id ⇒ 这一条的身份读不出来")
             continue
-        out.append({**event, "msg_id": msg_id, "delivered": msg_id in delivered})
+        out.append({**event, "msg_id": msg_id, "delivered": msg_id in delivered,
+                    "visibility": reading})
     return out, problems
 
 
 def send_message(session_root: Path, *, sender: str, to: str, subject: str, body: str,
-                 reply_to: str = "", sid: str | None = None) -> tuple[str, str]:
+                 reply_to: str = "", sid: str | None = None, from_task_id: str = "",
+                 by_framework: bool = False) -> tuple[str, str]:
     """发一条消息（append-only）。`to=PUBLIC` 是公共频道。返回 `(msg_id, 问题)`。
 
     编号口径：取现有最大号 + 1（`draft/83` D79）。旧写法是"数一数有多少条
     `agent_message` 再加一"，它在正常 append-only 会话里与 max+1 恰好相等，
     但只要有一条坏行占号、或将来做了删除/搬迁，计数口径就会撞上已用过的号 ——
     而 `msg_id` 正是投递登记与消费判定的键（撞号 = 两条消息共享一个身份）。
+
+    `from_task_id` / `by_framework`（S6-a）：公共频道的可见面靠这两格判（见
+    :func:`public_visibility`）。只在给了的时候写这两个键 —— 恒为假的键会让
+    "谁都没写"与"框架特意写了假"在记录上长得一样，而历史判据是按逐键比对钉的。
     """
     events, _problems = SS.read_session(session_root, sid=sid)
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
     nums = [int(m[1:]) for m in used if m[:1] == "m" and m[1:].isdigit()]
     msg_id = f"m{(max(nums) + 1) if nums else 1:04d}"
-    _path, problem = SS.append(session_root, {
+    rec: dict[str, Any] = {
         "kind": "agent_message", "msg_id": msg_id, "from": sender, "to": to,
         "subject": subject, "body": body, "reply_to": reply_to,
         "channel": "public" if to == PUBLIC else "private",
-    }, sid=sid)
+    }
+    if str(from_task_id or ""):
+        rec["from_task_id"] = str(from_task_id)
+    if by_framework:
+        rec["by_framework"] = True
+    _path, problem = SS.append(session_root, rec, sid=sid)
     return msg_id, problem
 
 
@@ -990,8 +1046,13 @@ def notebook_digest(session_root: Path, role: str, limit: int = 6) -> str:
 
 
 def inbox_digest(session_root: Path, role: str, *, sid: str | None = None,
-                 window: int | None = 8) -> tuple[str, list[str], list[str]]:
+                 window: int | None = 8, parent_task_id: str = "",
+                 parent_role: str = "") -> tuple[str, list[str], list[str]]:
     """收件箱摘要：`(文本, 这一轮新渲染出来、且还没投递的 id, 读会话时的问题)`。
+
+    `parent_task_id` / `parent_role` 转给 :func:`read_messages`（公共频道的可见面，
+    S6-a）：谁读就得以谁的身份读 —— 缺了这两格，公聊会按"老消息回退"那一档
+    要么读不到、要么读成别人的（两种都是静默错，所以调用方必须给它能给的那一份）。
 
     为什么第二个返回值是"渲染过的"而不是"全部未投递的"（`draft/83` §11 的 D75）：
     旧实现渲染 `messages[-8:]`，却把全部未投递的 id 交给调用方去 `mark_delivered`
@@ -1006,7 +1067,9 @@ def inbox_digest(session_root: Path, role: str, *, sid: str | None = None,
     `window=None` = 不限窗口（`_hear` 那条路会把新到的一次性全并进这一步的结果，
     所以它渲染多少就标多少）。
     """
-    messages, problems = read_messages(session_root, role, sid=sid)
+    messages, problems = read_messages(session_root, role, sid=sid,
+                                       parent_task_id=parent_task_id,
+                                       parent_role=parent_role)
     if not messages:
         return "（没有收到留言）", [], problems
     fresh = [m for m in messages if not m.get("delivered")]
@@ -1897,14 +1960,18 @@ class AgentLoop:
         于是"挂在父名下的交差通报"在下一步就进得了上下文，而不是等下一次运行。
         """
         digest, fresh, problems = inbox_digest(self.session_root, self.role, sid=self.sid,
-                                              window=None)
+                                              window=None,
+                                              parent_task_id=self.parent_task_id,
+                                              parent_role=self.parent_role)
         board_text, board_ids, board_problems = board_digest(
             self.conductor, my_task_id=self.my_task_id, window=None)
         if not fresh and not board_ids:
             return []
         problem = mark_delivered(self.session_root, self.role, fresh, sid=self.sid)
         heard: list[dict[str, Any]] = []
-        messages, _ = read_messages(self.session_root, self.role, sid=self.sid)
+        messages, _ = read_messages(self.session_root, self.role, sid=self.sid,
+                                    parent_task_id=self.parent_task_id,
+                                    parent_role=self.parent_role)
         for m in messages:
             if str(m.get("msg_id")) in fresh:
                 heard.append({"id": m.get("msg_id"), "from": m.get("from"),
@@ -1986,7 +2053,9 @@ class AgentLoop:
         # 收件箱：`inbox` 是渲染进开场提示词的那一段，`fresh_ids` 是它渲染过的 id
         # —— 下面 `mark_delivered` 只标这一批（D75：旧的写法渲染 8 条、却把全部未投递标掉，
         # 于是第 9 条及更早的留言永久丢失）。
-        inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid)
+        inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid,
+                                                        parent_task_id=self.parent_task_id,
+                                                        parent_role=self.parent_role)
         # 板项（业主 A3=甲 "渲染即 seen"）：与我名下的未消项同一处现读；
         # `board_ids` 会在第一次成功的模型调用之后标成 `seen`（下面与投递标记同址）。
         board, board_ids, board_problems = board_digest(self.conductor, my_task_id=my_task_id)
@@ -3237,15 +3306,28 @@ class AgentLoop:
 
     def _message_by_channel(self, payload: Mapping[str, Any], to: str,
                             reply_to: str) -> dict[str, Any]:
-        """既有的那条路（角色 / `#public`）：一行未动。"""
+        """既有的那条路（角色 / `#public`）：准入与私聊逐字不动，公聊加一格身份。
+
+        S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理
+        ⇒ 发公聊必须带发信人的实例号；没有编号就受控拒绝（不许退回
+        "全角色可见" —— 那正是 T20 要治的形态：任何角色随手 `to=#public`
+        就等于全树广播）。
+        """
         # 准入判据只有一份（模块级 `message_admission`）：这里与秘书那一侧都调它。
         not_allowed = message_admission(self.role, to, reply_to)
         if not_allowed:
             return {"message": "未发出", "to": to, "ok": False, "error": not_allowed}
+        if to == PUBLIC and not str(self.my_task_id or ""):
+            return {"message": "未发出", "to": to, "ok": False, "refused": "no_task_id",
+                    "error": ("这一趟没有台账号 ⇒ 不发公共频道：它的可见面是"
+                              "『发信人的直接子代理』，没有发信人编号就没人能判断"
+                              "该不该看见这一条（业主 T20/T21）"),
+                    "receipt": "unknown"}
         msg_id, problem = send_message(self.session_root, sender=self.role, to=to,
                                        subject=str(payload.get("subject") or ""),
                                        body=str(payload.get("body") or ""),
-                                       reply_to=reply_to, sid=self.sid)
+                                       reply_to=reply_to, sid=self.sid,
+                                       from_task_id=str(self.my_task_id or ""))
         if problem:
             return {"message": "未发出", "to": to, "ok": False, "error": problem}
         where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
@@ -3255,24 +3337,50 @@ class AgentLoop:
         # 而 12 次投递登记全部由 M 写 —— 因为生产形态下只有 M 有 LLM 循环，
         # A–H 是确定性动作 ⇒ 发给它们的留言没有任何进程会读。
         # 旧回执写的是 `ok: True` + "收件人下次运行时会看到它"，那是一句假话。
-        receipt, reader_note = self._receipt_for(to)
+        #
+        # 公聊那一档（S6-a）：读者就是我名下的直接子代理 ⇒ 一个都没有时
+        # 如实回 `no_reader`（"展开了"绝不等于"有人读到了"）。
+        receipt, reader_note = self._receipt_for(
+            to, child_count=(self._my_children_count() if to == PUBLIC else None))
         return {"message_sent": msg_id, "to": to, "channel": where,
                 "receipt": receipt, "ok": receipt != "no_reader",
                 "note": reader_note}
 
-    def _receipt_for(self, to: str) -> tuple[str, str]:
+    def _my_children_count(self) -> int | None:
+        """我名下直接子实例的个数（`None` = 这一格没读成，不许当 0）。"""
+        cond = self.conductor
+        mine = str(self.my_task_id or "")
+        if cond is None or not mine:
+            return None
+        look = getattr(cond, "_children_of", None)
+        if not callable(look):
+            return None
+        try:
+            return len(list(look(mine)))
+        except Exception:  # noqa: BLE001 —— 读不成 ⇒ None（"没读成"不是"没有子代理"）
+            return None
+
+    def _receipt_for(self, to: str, *, child_count: int | None = None) -> tuple[str, str]:
         """这条留言的收件人有没有读者。返回 `(receipt, 一句话说明)`。
 
         三态（不许折平）：
         - `"queued"`：收件人有 LLM 循环 ⇒ 它下次进循环时会读到（今天只有 M 与
-          `--drive`/`--subagents` 点过的那些）；
-        - `"no_reader"`：收件人没有循环 ⇒ 这条留言不会有任何进程读它（写进盘了，
-          但那是"存着"，不是"送达"）；
-        - `"unknown"`：看不见接线表（本实例没有 backend/conductor 句柄）⇒ 如实说不知道，
+          `--drive`/`--subagents` 点过的那些）；公聊那一档的读者是我名下的直接子代理
+          （`child_count > 0`，S6-a）；
+        - `"no_reader"`：收件人没有循环（或公聊而我名下没有子代理）⇒ 这条留言不会有
+          任何进程读它（写进盘了，但那是"存着"，不是"送达"）；
+        - `"unknown"`：看不见接线表 / 看不见我名下的子代理 ⇒ 如实说不知道，
           不许按乐观猜成 `queued`（本仓的三态纪律）。
         """
         if to == PUBLIC:
-            return "queued", "公共频道：有循环的角色下次进循环时会读到它"
+            if child_count == 0:
+                return "no_reader", ("我名下没有直接子代理 ⇒ 这条公共频道留言不会有任何"
+                                     "进程读它（业主 T21：公聊的可见面就是我的直接子代理）")
+            if child_count is None:
+                return "unknown", ("看不见我名下的直接子代理 ⇒ 这条公聊有没有读者判不了："
+                                   "『不知道』不许折成『送到了』")
+            return "queued", (f"公共频道：我名下的 {child_count} 个直接子代理下次进循环时"
+                              "会读到它 —— 要覆盖全树，得逐层向下转发（业主 T21）")
         loops = getattr(getattr(self.conductor, "backend", None), "loops", None)
         if isinstance(loops, Mapping):
             has_reader = any(str(k[0]) == to for k in loops if isinstance(k, tuple) and k)
@@ -3535,7 +3643,7 @@ class AgentLoop:
                   + (f"\n（为什么找你：{why}）" if why else "")
                   + f"\n全文：`manuscripts.read(id=\"{shown}\")`"
                     f"（盘上 {rec.get('path')}）"),
-            sid=self.sid)
+            sid=self.sid, from_task_id=str(self.my_task_id or ""))
         return {"handoff": shown, "ok": not problem, "id": shown,
                 "path": rec.get("path"), "to": channel, "brief": summary,
                 "revises": revises,
@@ -3976,7 +4084,11 @@ def resume_transcript(session_root: Path | str, role: str, sid: str | None,
     fresh_any = [i for i in role_starts if _is_fresh_run_start(events[i])]
     end = next((i for i in fresh_any if i > begin), len(events))
     head = events[begin]
-    inbox, _fresh, _problems2 = inbox_digest(root, role, sid=sid)
+    # 恢复那一趟也要按"我是谁"读公聊（S6-a）：`agent_run_start` 里写着这一趟的
+    # 父实例号与发起方，正是可见面要的那两格。
+    inbox, _fresh, _problems2 = inbox_digest(root, role, sid=sid,
+                                             parent_task_id=str(head.get("parent_task_id") or ""),
+                                             parent_role=str(head.get("summoned_by") or ""))
     parts = [_opening_transcript(task, inbox=inbox,
                                  summoned_by=str(head.get("summoned_by") or ""),
                                  task_id=str(head.get("task_id") or ""),

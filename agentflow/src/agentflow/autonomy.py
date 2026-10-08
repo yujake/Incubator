@@ -332,8 +332,12 @@ def _publish_report(session_root: Path, *, role: str, report: RoundReport, round
     """
     subject = f"[自主轮次] {role} 第 {report.index}/{rounds} 轮"
     body = _report_body(report, rounds=rounds, usd_budget=usd_budget, spent_usd=spent_usd)
+    # 框架身份（S6-a）：阶段汇报是框架代表这个角色发给操作者的通报，不是代理在
+    # 行使广播权（业主 T20 管的是后者）—— 它没有"发给我的子代理"这个语义，
+    # 所以按框架档走（全角色可见，与改前逐字相同）。代理自己发的公聊必须
+    # 带台账号；两处的区别写在 `agent_loop.public_visibility` 的 docstring 里。
     _msg_id, problem = send_message(session_root, sender=role, to=PUBLIC, subject=subject,
-                                    body=body, sid=sid)
+                                    body=body, sid=sid, by_framework=True)
     report.report_sent = problem
     notes: list[str] = []
     if problem:

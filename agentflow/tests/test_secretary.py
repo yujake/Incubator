@@ -671,6 +671,10 @@ def _loop_with_secretary(tmp_path, *, role="D", conductor=None):
     loop = AgentLoop(role=role, session_root=root, registry=reg,
                      seam=LlmSeam(role=role, session_root=root, price=(0.0, 0.0), sid="t"),
                      conductor=conductor, secretary=sec, sid="t", store=st)
+    # S6-a：公聊的可见面是"发信人的直接子代理" ⇒ 发公聊要有台账号（生产形态下
+    # `run()` 一定绑上它）。这个夹具补上它，于是"秘书的问题不阻断发信"这几条
+    # 判据量的仍然是秘书那一层，而不是"没有身份"。
+    loop.my_task_id = "t-0001"
     return st, sec, loop
 
 

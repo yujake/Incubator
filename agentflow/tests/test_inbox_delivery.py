@@ -63,7 +63,12 @@ def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
     got_d = loop._do_message({"to": "D", "subject": "s", "body": "b"})
     assert got_d["receipt"] == "queued" and got_d["ok"] is True, got_d
     got_pub = loop._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
-    assert got_pub["receipt"] == "queued", got_pub
+    # S6-a（业主 T20/T21 附二 乙）：公聊的可见面是"发信人的直接子代理" ⇒ 这一趟
+    # 没有台账号时受控拒绝（`no_task_id`），不再回一个"queue 了"的乐观回执 ——
+    # 那种回执正是"谁都能看的广播"的旧形态。有台账号时怎么判，见
+    # `tests/test_the_public_channel_is_the_senders_children.py`。
+    assert got_pub["ok"] is False and got_pub["refused"] == "no_task_id", got_pub
+    assert "可见面" in got_pub["error"], got_pub
 
 
 def test_the_receipt_is_unknown_when_the_wiring_table_is_invisible(tmp_path: pathlib.Path):
