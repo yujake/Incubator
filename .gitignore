@@ -333,6 +333,7 @@ desktop.ini
 !/temp/_r61_recon.py
 !/temp/_reachability_probe.py
 !/temp/_score_prototype.py
+!/temp/_sign_fc27_web.ps1
 !/temp/_split_any.py
 !/temp/_stop_probe.py
 !/temp/_symbol_diff.py
@@ -433,6 +434,7 @@ desktop.ini
 !/temp/verify-audit-forge-after.txt
 !/temp/verify-audit-forge.txt
 !/temp/w1-noai-x9641-output.txt
+!/temp/w5_negctl_abort.py
 !/temp/w5_p1_probe.py
 !/temp/zone-backup-r3-src_agentflow_store.py
 !/temp/zone-backup-r4-src_agentflow_capabilities.py
