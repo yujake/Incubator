@@ -109,7 +109,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p50`（2026-10-09，业主三句裁定）：收工由自己判（被派的活做完没有；M 自列任务列表，
 #: 收工时交 `task_list`/`goal_met`）、干不了就上报父 / M 上报用户、机器八格是读数不是判决。
 #: 落在共享的循环协议上 ⇒ 十格全部换值。
-PROMPT_VERSION = "p50"
+PROMPT_VERSION = "p51"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

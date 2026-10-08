@@ -1366,7 +1366,11 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p50`（2026-10-09，业主三句裁定）：收工由自己判（被派的活做完没有；M 自列任务列表、
 #: 收工时交 `task_list`/`goal_met`）、干不了就上报父 / M 上报用户、机器八格是读数不是判决
 #: ⇒ 共享的循环协议 ⇒ 十格全换。
-_FROZEN_PROMPT_VERSION = "p50"
+#: `p51`（2026-10-09，同一批的补）：`conductor.closing` 的工具说明那一句还写着旧口径
+#: （"`can_close` 只在八格全过时为真"）—— 模型读的就是那一句，与 p50 的新语义当场相反 ⇒
+#: 改那一句 + 同一张表里那一行。只有 M 有这件工具 ⇒ 只 M 那一格变（其余九格逐字不动，
+#: 这正是这条判据该有的分辨率：改一处、只动该动的那一格）。
+_FROZEN_PROMPT_VERSION = "p51"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "bca1d915d5c2464166edfbad81becae7ff9200d190f249a0929919ee64ef6eb7",
     "B": "d5400b1b1f2d9f97073b94dea85051a30c3f3d90d4a04f5c2a2a7d910ed52a20",
@@ -1377,7 +1381,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "97cd4b44af04e1bbeee57c0c5344a9aaff0f1e17197b6fa400e5d20e8b1deec1",
     "H": "cc19514229561e8f32caa52f4f35595f36a058cc971c67f60eeae7d4a2829ef2",
     "V": "a96ff42483465fee8b4f23a0d86e1174373a9735cbd9045d2d8dc9ff96bb5bbf",
-    "M": "c180efd21f2a63d6dc68e6857dd772d328d29830fa8c6ce53dd99a28c6d8db97",
+    "M": "bc2999c33b5f97934365260b19f63535e7162e7d8b6b96c968b1096c728e163e",
 }
 
 
