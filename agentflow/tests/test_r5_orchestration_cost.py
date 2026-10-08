@@ -1222,7 +1222,7 @@ _REF_KNOWN_MENTION_TOKENS = (
     # `mentioned_only` 30 条与本表 31 条的差集恰好只有它）⇒ 按"表里过期的条目要删掉"删掉。
     # 判据本体一个字没动：仍是"仓里只有文本提及的 token 必须与这张表逐条相等"。
     "_quote_check",               # 每行诊断字段（同上：留痕叙述）
-    "_washed_payload",            # S1g：`_outbound_hook` 返回里承载"洗过的那一份"的**字符串键**（不是符号；循环取完就 pop 掉，不并进结果）
+    "_washed_payload",            # S1g：`_outbound_hook` 返回里承载"洗过的那一份"的字符串键（不是符号；循环取完就 pop 掉，不并进结果）
     "_lease_expired",             # 行内键（`interactions.py` 用 r.get("_lease_expired") 读）
     "_conflict_check",            # "没检查"相关字段名（同族叙述）
     "_tables_written_by_action",  # 已删函数的残骸讨论（`capabilities.py` 的记录）

@@ -11,12 +11,13 @@
 >
 > ⚠️ **本表 `side_effect` 列是第一根轴（`effect`）；第二根轴 `external`（`egress` / `exec`）不在表内** ——
 > 见 `python -m agentflow.cli tools` 的输出与 `DEVELOPMENT.md`。
-> **本批刻意"加说明"而不是"加列"**：加一列会让 81 行的表**多一处漂移面**（而这张表的数字已经漂过：
+> **本批刻意"加说明"而不是"加列"**：加一列会让 §R0 的全表**多一处漂移面**（而这张表的数字已经漂过：
 > 例如 `network: 2` 在 B3 之后是 **0**），**少改表格 = 少一处漂移面**；第二根轴的权威展示由
 > `cli tools` 承担（它能直接从注册表打，不必手工维护）。
 > - 工具面：`build_registry(store=Store(tempfile.mkdtemp()), workspace_root=<同目录>, roles=schema.ROLES)`
->   一次装配后的**实测**结果（**81** 个工具、13 个模块 loaded、0 skipped；观测 2026-10-06（角色 V 落地），
->   与 §R0 标题及 `cli tools` 当次输出一致。本行原先写 75，再前写 73，都已过期）。
+>   一次装配后的**实测**结果（**82** 个工具、13 个模块 loaded、0 skipped；观测 2026-10-09（S1b 的
+>   `conductor.board` 落地后由 H-1a 归位），与 §R0 标题及 `cli tools` 当次输出一致。
+>   本行原先写 81，再前写 75/73，都已过期）。
 >   命令与输出见 `DEVELOPMENT.md` §9 附录与本文 §0.3。
 > - 自注册工具：读 `agent_c.register_tools` / `agent_d._fallback_trace_tools` /
 >   `tools/review_tools.register(include_writers=True)` 的源码逐个核出。
@@ -50,7 +51,7 @@
 ### 0.2 工具面的三条公共事实（实测）
 
 > ⚠️ **本表的"55"是 2026-09-26 那次装配的读数（历史快照）**，不是今天的读数。
-> 今天 `build_registry` 的条数是 **81**（见 §R0.1 的标题，由
+> 今天 `build_registry` 的条数是 **82**（见 §R0.1 的标题，由
 > `tests/test_role_specs_complete.py` 与发布门的 `tools/verify_role_specs.py` 逐条对账）。
 > 本节这两处的口径可能不同（本节记的是当时那次装配的输出，§R0.1 记的是今天的装配条数），
 > 而**没有一条判据盯着 §0.2 这一格** —— 所以：**引用工具总数请以 §R0.1 为准**。
@@ -58,7 +59,7 @@
 
 | 事实 | 实测值 | 出处 |
 |---|---|---|
-| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 81） | **55** | 本文 §0.3（带观测时刻的实测输出） |
+| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 82） | **55** | 本文 §0.3（带观测时刻的实测输出） |
 | 全部 8 个角色**共有**的工具 | 9 个：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` | 实测（交集） |
 | 只读角色（C/H/V）工具面里的写工具 | **0**（`role_filter_notes = {}` ⇒ 结构性拦截一次都没触发） | 实测 |
 
@@ -227,7 +228,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（81 个，逐条）
+## R0. 全局工具总表（82 个，逐条）
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -317,8 +318,9 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 79 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
 | 80 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的八格）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在八格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是八格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 | 81 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
+| 82 | `conductor.board` | 只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，`expects=work` 的项要交付才算完。不含建议，也不替你决定要不要重派 | `read` | 否 | M | limit | `{checked,open_items,open_count,readings}`（**读不成 ⇒ 报错**，不回一个空板：`checked=False` 是"没查成"、`open_count==0` 才是"板上没事"，折平就是本仓最忌的形态） | `tests/test_conductor_board.py` | **本轮新增**（业主 2026-10-08 裁 A1=甲、T16）：A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）—— M 不进 `manuscripts.*` 是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`） |
 
-### R0.1 81 个工具的公共事实（机械可验证）
+### R0.1 82 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -2234,9 +2236,11 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 "工具面"（**18 个**，实测）= 编排面 12 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit`）
+### M.4 "工具面"（**19 个**，实测）= 编排面 13 个 + 文件面白名单 6 个（`draft/37` §38 的裁定 + §57 追加 `fs.edit` + 2026-10-08 追加 `conductor.board`）
 
-> **编排面 12 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件只读的**状态报告** + 1 件批量派活）。
+> **编排面 13 件**：召唤能力（含 1 件只读的验收表读取 + 1 件只读的收工门 + 1 件只读的**状态报告** + 1 件批量派活）
+> + **工作项板的读面 `conductor.board`**（业主 2026-10-08 裁 A1=甲、T16：M 得看得见"还挂着什么"；
+> 它只读，返回 `{'checked','open_items','open_count','readings'}` —— 板读不成时**报错**而不是回空板）。
 > **文件面白名单 6 件**：`fs.list` / `fs.read` / `fs.search` / `fs.stat` / `fs.write` / `fs.edit` ——
 > 只读四件加一支笔，再加一把手（锚定替换）；**没有** `fs.delete` / `fs.move`
 > （一个真删、一个换位置，都不可逆）。
