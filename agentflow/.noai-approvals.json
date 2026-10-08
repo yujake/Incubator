@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-06T22:02:44+08:00",
+  "generated_at": "2026-10-08T12:24:57+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -83,65 +83,29 @@
       "path": "pyproject.toml",
       "glob": "pyproject.toml",
       "category": "release-deploy",
-      "sha256": "2ed3a37fcd06f1d279d527a61bb0823673cd4ba32676549bbea478e73604c29f",
+      "sha256": "78989cdc18501911bea0ebb30cbc8bbbd7d79f62308a43fe01df8b32fb0bca9f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（pyproject.toml.txt）",
+      "change_note": "Web 批 W1：browser 可选依赖 + marker + addopts 默认排除（draft/77 2.2 / draft/79 T1）",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:42+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
-          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+          "name": "Yu",
+          "at": "2026-10-08T12:24:56+08:00",
+          "scope": "optional-dependencies.browser / markers 的 browser 行 / addopts 三处",
+          "note": "逐行走查：三条都在 draft/77 2.2 的范围内；addopts 动既有行是 T1 裁定的直接后果",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         },
         {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:42+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
-          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:00+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
-          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:00+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
-          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:55+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
-          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:56+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：pyproject.toml.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\pyproject.toml.txt",
-          "evidence_sha256": "892511724a0219ec21f6e02d8faab211e77e41ed263c4f0cde4ca3e269c98416"
+          "name": "Jiaqi",
+          "at": "2026-10-08T12:24:57+08:00",
+          "scope": "optional-dependencies.browser / markers 的 browser 行 / addopts 三处",
+          "note": "独立复核：运行期依赖仍只有 filelock；marker 描述里'未装就是 unknown 不是 pass'仍在",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         }
       ],
       "audits": [],
@@ -968,65 +932,29 @@
       "path": "tools/release_all.py",
       "glob": "tools/release_all.py",
       "category": "release-deploy",
-      "sha256": "32f1cd3d81fbd1f3eb2cd900928ae3df7af4ad7285cc4d918171b3134d414b0d",
+      "sha256": "6007fb4bf5153b95278aaf8a059a5a07d8264a2d2637d5d8e7017a3ef1ae3770",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（tools__release_all.py.txt）",
+      "change_note": "Web 批 W2：第 7 步 frontend（exit_map=TRI_STATE_EXIT）；既有 6 步与 overall() 语义未动",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:39+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
-          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+          "name": "Yu",
+          "at": "2026-10-08T12:24:57+08:00",
+          "scope": "build_steps() 第 7 个 Step 与它的 exit_map；overall() 未改",
+          "note": "逐行走查：新步的 2 必须记 unknown 而不是 fail（漏了 exit_map 就会把没查成读成发现问题）",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         },
         {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:39+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
-          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:20:57+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
-          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:20:57+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
-          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:52+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
-          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:52+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__release_all.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__release_all.py.txt",
-          "evidence_sha256": "05421b6144efcb092f2308990f8a6a97cd776ef99ffd43d1f782a4017dc76a6b"
+          "name": "Jiaqi",
+          "at": "2026-10-08T12:24:57+08:00",
+          "scope": "build_steps() 第 7 个 Step 与它的 exit_map；overall() 未改",
+          "note": "独立复核：跳过的步骤仍记 unknown；既有 6 步一个字没动",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         }
       ],
       "audits": [],
@@ -1036,65 +964,29 @@
       "path": "tools/run_each_test_file.py",
       "glob": "tools/run_each_test_file.py",
       "category": "release-deploy",
-      "sha256": "7b2f4ec3033893c1884122d4aad6c78b7d07e693c991a9dd052a13d9d49cd69b",
+      "sha256": "329ea51b83bb3991c628e5a15051023f41ec64cb2a3b009afc429fc03f611e66",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（tools__run_each_test_file.py.txt）",
+      "change_note": "Web 批 W3：EXEMPT_ALL_SKIPPED 加 tests/test_webui_browser.py + 上限 1->2（同构于 test_providers_online.py）",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:40+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
-          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+          "name": "Yu",
+          "at": "2026-10-08T12:24:57+08:00",
+          "scope": "EXEMPT_ALL_SKIPPED 的新增条目、MAX_EXEMPT_ALL_SKIPPED、audit_exemptions() 的实现",
+          "note": "逐行走查：与 test_providers_online.py 同构（整文件被默认筛掉 + 未装依赖即 skip），audit_exemptions() 三道机器判据仍过",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         },
         {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:40+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
-          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:20:58+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
-          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:20:58+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
-          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:54+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
-          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:54+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__run_each_test_file.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__run_each_test_file.py.txt",
-          "evidence_sha256": "dabab9d560f06dd810465a79f6bc7835983954ca53b0fec8b4bc567714ccf724"
+          "name": "Jiaqi",
+          "at": "2026-10-08T12:24:57+08:00",
+          "scope": "EXEMPT_ALL_SKIPPED 的新增条目、MAX_EXEMPT_ALL_SKIPPED、audit_exemptions() 的实现",
+          "note": "独立复核：抬上限不放松判定语义 —— 名单外一律 unknown，3 条仍然红",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         }
       ],
       "audits": [],
