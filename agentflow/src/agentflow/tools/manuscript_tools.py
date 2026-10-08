@@ -98,9 +98,20 @@ _TOOL_FUNCTIONS: tuple[tuple[Any, tuple[str, ...]], ...] = (
     (manuscripts_list, ("store",)),
 )
 
+# ---- 板的两件（`manuscripts.items` / `manuscripts.ack`）**暂不注册**（2026-10-08 晚，S1b）
+#
+# 为什么不先挂上去：它们要判两件本层拿不到的事实 ——
+#   ① "谁在 ack"（必须知道**调用方实例**的 `task_id`，那在循环上下文里，
+#      落点是 `conductor.current_task_id()`，要先确认装配期 `deps` 里有没有 `conductor`）；
+#   ② "这一项是不是发给我的"（按 `to` 目标实例或角色判）。
+# 本仓的纪律是"不许挂空：要么真跑，要么不注册"（`draft/44 L-06` 那一族）。
+# ⇒ 先把它们从注册面拿掉，等这两处接线确认之后在同一步里补齐（连同
+# `tests/test_tools_returns_declaration.py` 的 `observations` 夹具与 `EXECUTED_KEY_SOURCE`）。
+# M 的那一半（`conductor.board`）已经真跑，见 `conductor_tools.py`。
+
 
 def register(registry: Any, *, store: Any = None, **_: Any) -> None:
-    """把交接手稿的三件工具装进注册表。
+    """把交接手稿的工具装进注册表。
 
     `store` 为 None 时「照样注册」（调用时给 `not_wired`，`FC-08`）：
     "没接线"与"没有手稿"是两件事，不许折叠。

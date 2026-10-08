@@ -72,7 +72,7 @@ TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 81
+TOOL_COUNT = 82
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -207,6 +207,9 @@ def tool_params() -> dict[str, dict]:
         "conductor.cancel": {},
         "conductor.ensure_project": {"project_name": "probe1", "start": "cold"},
         "conductor.state": {},
+        # 工作项板（业主 2026-10-08 裁 A1=甲）：**真跑一次**，键集与 `returns=` 逐字比对。
+        # 夹具工作区里板上是空的 ⇒ 走的是"读成了、板上没事"那一支（`checked=True, open_count=0`）。
+        "conductor.board": {},
         "conductor.role_spec": {"role_name": "C"},
         "conductor.acceptance": {},
         # 收工门（`draft/37` §16 P3）：默认两格是 unknown（工作区里没有论文包与报告，
@@ -349,7 +352,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         # （同 `verify.check_formal` 的 no_backend：没查成不是工具失败），
         # 而它的键集合在三条返回路径上完全相同 ⇒ 这条探针照样能验"声明 ⊆ 实现"。
         "verify.verify_proof", "verify.list_verifications", "verify.read_proof",
-        "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",        "conductor.closing", "conductor.status_report",
+        "conductor.summon_many",        "conductor.summon",        "conductor.ledger",        "conductor.stop",        "conductor.resume_brief",        "conductor.cancel",        "conductor.ensure_project",        "conductor.state",        "conductor.role_spec",        "conductor.acceptance",        "conductor.closing", "conductor.status_report", "conductor.board",
     }
 )
 

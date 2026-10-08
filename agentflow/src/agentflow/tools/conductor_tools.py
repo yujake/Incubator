@@ -1142,8 +1142,32 @@ def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> T
     return ok(data, **data)
 
 
-_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
-    (conductor_summon, ('_conductor',)),
+@tool(
+    "conductor.board",
+    "只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项"
+    "（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，"
+    "`expects=work` 的项要交付才算完。它不含建议，也不替你决定要不要重派。",
+    {"type": "object",
+     "properties": {"limit": {"type": "number", "description": "最多列几项（默认 20）"}},
+     "required": [], "additionalProperties": False},
+    side_effect="read",
+    roles=("M",),
+    returns="{'checked','open_items','open_count','readings'}",
+)
+def conductor_board(_conductor, limit: int = 20) -> ToolResult:
+    """工具体：转发 `Conductor.board_view`（工具只做适配层，权限判定不在这一层）。
+
+    "读不成"必须显式报错而不是回一个空板：`checked=False` 说明**没查成**，
+    而"板上没事"是 `checked=True` 且 `open_count==0` —— 这两件事折平就是本仓最忌的形态。
+    """
+    view = _conductor().board_view(limit=int(limit))
+    if not view.get("checked", False):
+        raise ToolError(f"板读不成：{view.get('reason') or '未知原因'} ⇒ 这是『没查成』，"
+                        "不是『板上没事』")
+    return ok(view, **view)
+
+
+_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (    (conductor_summon, ('_conductor',)),
     (conductor_summon_many, ('_conductor',)),
     (conductor_ledger, ('_conductor',)),
     (conductor_stop, ('_conductor',)),
@@ -1159,6 +1183,10 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # `draft/39` §4 的入口②：M 用 `conductor.status_report` 回答"现在什么情况"
     # （只读、零模型调用、不停任何循环）；用户侧入口①是 `agentflow status-report`。
     (conductor_status_report, ('_conductor',)),
+    # 工作项板（业主 2026-10-08 裁 A1=甲、T16）：M 的编排面看"还挂着什么"。
+    # A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）——
+    # M 不进 `manuscripts.*` 的面是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`）。
+    (conductor_board, ('_conductor',)),
 )
 
 
