@@ -160,3 +160,7 @@ python -B -m pytest -q -p no:cacheprovider -p no:randomly tests/test_webui.py   
 2. **`browser` marker 与 `addopts` 不一致**（`agentflow/pyproject.toml:69` 只排 `network`，而 `draft/77 §2.2` 的 marker 描述写着"默认排除"）⇒ 挂成新待裁 **T1**，收在 `draft/79-待裁清单（Web施工中新冒出）.md`，C 线简报里写明"等裁，别自己拍"。
 
 **简报里出现过的、我核过的口径**（免得子代理拿"简报转述"当事实）：本仓**没有** `tests/test_userio.py`（userio 的相邻判据在 `tests/test_sid_scoped_questions.py` 等）；`run_index` 这个名字在 `projects.py:242` **已经**表示"项目第几趟"（配 `projects.py:309 _next_run_index` 与 `out/run-<n>`），与裁定 O2 的"会话内趟次索引"**不是一回事** —— B 线简报里专门有一条提醒，不许改名、不许混用。
+
+7. **W5（2026-10-08）之后的一处退场**：`webui/views.py` **整件删除**（旧壳的两个渲染入口 `render_root`/`render_run`
+   随裁定 P1 退场，`__all__` 8→6）；`GET /` 与 `GET /run/{sid}` 都吐 SPA 外壳。`draft/78 §2` 的 glob 表里
+   `webui/views.py` 那一行自此成为历史（文件不在盘上）——它属于 A 线，退场过程与证据在 `draft/81 §14`。

@@ -44,7 +44,38 @@ PLANNED = ("新", "新增", "计划", "W0", "W1", "W2", "W3", "W4", "W5")
 # 也不能混进"计划中的判据文件"（那桶的语义是"打算建、还没建"）。
 # 负控：把"没有"换成"见"，同一句必须落回硬错桶（temp/_audit_web_drafts.py 自测过）。
 NEGATED = ("没有", "不存在", "不是", "并未", "尚无")
+
+#: **已退场的文件**：`{相对路径: (最后一版所在的提交, 为什么退场)}`。
+#:
+#: 为什么需要它：上游把一件东西**删掉**之后，draft 里按它写的 `file:line` 引用会一次报出
+#: 一串"文件不存在"。报警本身是对的（那些坐标今天确实指不到东西），但"删掉的文件"与
+#: "写错的路径"是两件事，得分开：
+#:   · 这张表里的路径 ⇒ 用 `git show <sha>:<path>` **按历史版本校验那一行的原文**，
+#:     单列一桶打给人看（可核，不算硬错）；
+#:   · 表外的路径 ⇒ 照旧硬错。
+#: 这也是 `draft/LESSONS…md` 里 FC-29 那条教训的落地：上游退场/改名之后，**不要**把引用判据
+#: 改宽，要造一个"旧坐标 → 可复核的出处"的口，并且保留"不猜"的那一档。
+RETIRED: dict[str, tuple[str, str]] = {
+    "webui/views.py": ("0cd3e31^",
+                       "2026-10-08 W5（裁定 P1 旧壳清仓）：views.py 整件删除；"
+                       "`GET /` 与 `GET /run/{sid}` 都改吐 SPA 外壳（`webui/server.py` 的 `_serve_spa_shell`）"),
+}
 sys.stdout.reconfigure(encoding="utf-8")
+
+
+def _history_line(sha: str, rel: str, lineno: int) -> str | None:
+    """从历史提交里取 `rel` 的第 `lineno` 行原文（取不到返回 None）。"""
+    import subprocess
+
+    for prefix in ("agentflow/src/agentflow/", "agentflow/", ""):
+        proc = subprocess.run(["git", "show", f"{sha}:{prefix}{rel}"], cwd=str(REPO.parent),
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if proc.returncode == 0:
+            lines = proc.stdout.splitlines()
+            if 1 <= lineno <= len(lines):
+                return lines[lineno - 1].strip()
+            return None
+    return None
 
 
 def find_file(rel: str) -> pathlib.Path | None:
@@ -69,6 +100,7 @@ def main() -> int:
     bare: list[str] = []
     planned: list[str] = []
     negated: list[str] = []
+    retired: list[str] = []
 
     for doc in DRAFTS:
         if not doc.is_file():
@@ -79,6 +111,14 @@ def main() -> int:
             rel, lineno = m.group(1), int(m.group(2))
             p = find_file(rel)
             if p is None:
+                known = next((k for k in RETIRED if rel.endswith(k)), None)
+                if known is not None:
+                    sha, why = RETIRED[known]
+                    actual = _history_line(sha, known, lineno)
+                    retired.append(f"{doc.name}: {rel}:{lineno}"
+                                   f"（已退场文件，按 {sha} 校验）→ {actual or '**那一版里也没有这一行**'}"
+                                   f"；退场理由：{why}")
+                    continue
                 hard.append(f"{doc.name}: 文件不存在 {rel}:{lineno}")
                 continue
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -124,6 +164,9 @@ def main() -> int:
         print("   " + one)
     print(f"③b 明确说'不存在'的提法（不是在断言它有）：{len(negated)}")
     for one in negated:
+        print("   " + one)
+    print(f"④ 已退场文件的坐标（按历史提交逐行校验，**可核、不算硬错**）：{len(retired)}")
+    for one in retired:
         print("   " + one)
     return 1 if hard else 0
 
