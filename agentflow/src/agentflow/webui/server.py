@@ -4,11 +4,12 @@
 ## 这一层是什么
 
 标准库 `http.server` 上的一个小服务（`ThreadingHTTPServer` + `BaseHTTPRequestHandler`），
-把 :mod:`agentflow.webui.state` 的快照交给 :mod:`agentflow.webui.views` 渲染，
-并服务前端构建产物。路由不再写成 `if path == …` 链 —— 它是
+把 :mod:`agentflow.webui.state` 的快照与六个只读面/写面的读数发成 JSON、
+把两个页面入口（`/` 与 `/run/{sid}`）发成前端构建产物那一支外壳，
+其余一切人可读的东西都由前端渲染。路由不再写成 `if path == …` 链 —— 它是
 :data:`agentflow.webui.routes.ROUTES` 那张表（`draft/73` §1.2 的 R1 拆包）。
 
-## 本批（W0）新增的两件事
+## 路由这一层做过的四件事（第 1、2 件是 W0 的，第 3 件 2026-10-07，第 4 件 W5）
 
 1. 静态路由 `GET /static/<file>`：只服务 `agentflow/src/agentflow/web/static/` 之下的
    真实文件。防线是 `Path.resolve()` 之后必须仍在根内（目录穿越一律拒：
@@ -19,7 +20,11 @@
 3. `GET /` 与 `GET /index.html` 直接服务 SPA 外壳（裁定 P1 的第一块迁移，
    2026-10-07）：这一格原来是服务端渲染的旧壳。SPA 只在"未知路径"的回退分支上挂得
    起来，而 `/` 是已知路径 ⇒ 不改这一格，浏览器地址栏就永远进不了 SPA 首页。
-   旧壳 `views.render_root` 照旧活到 W5（`/run/{sid}` 那条路径不动），只是根路径不再用它。
+4. `GET /run/{sid}` 也服务那一支外壳（P1 的最后一块迁移，W5 清仓）：它是 C4 表里的
+   一条客户端路由，SPA 的 `Run` 页按 `sid` 去读 `GET /api/run/{sid}`；会话不在盘上
+   这件事由那份读数如实报成 `unreadable`（三态），服务端不再为它渲染任何盘上数据。
+   旧壳 `webui/views.py` 随之整件退场，服务器自己还写 HTML 的地方只剩错误页
+   （见 :func:`_error_page`：外壳不在盘上 / 静态未命中 / 写失败）。
 
 ## 一处刻意的收窄（必须写在最显眼的地方）
 
@@ -40,7 +45,10 @@ Q1 说"其余未知路径吐 index.html"，而既有判据
 
 - 服务默认只听 `127.0.0.1`；`--token` 给一个共享口令（或 `AGENTFLOW_WEB_TOKEN`），
   给了就要求 `?token=` 或 `Authorization: Bearer`；
-- 用户与模型产生的一切文本都经 `html.escape` 后才进 HTML（`views` 那一层负责）；
+- 服务器自己写的最后一页是 :func:`_error_page`（只有错误页），它把理由串经
+  `html.escape` 后才写进 HTML；盘上的文本一律走 JSON —— 前端用文本节点渲染它们
+  （两条转义判据见 `tests/test_webui.py`：一条钉服务端，一条钉前端源码里没有
+  把字符串当 HTML 用的写法）；
 - 写失败不许折成 200（`writes.answer` 的三态）；
 - 每个响应都带 `X-Content-Type-Options: nosniff`。
 
@@ -68,8 +76,7 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import routes, sse
-from .state import _text, snapshot
-from .views import _not_found, _page, render_run
+from .state import _esc, _text
 from .writes import answer
 
 __all__ = ["DEFAULT_HOST", "DEFAULT_PORT", "WebHandler", "default_static_root", "serve",
@@ -117,6 +124,56 @@ _CONTENT_TYPES = {
 #: 现在同时认两种字母表，并由 `tests/test_webui_static.py` 用盘上真产物钉住
 #: （`test_the_hash_pattern_matches_the_real_built_asset_names` + 反例负控）。
 _HASHED = re.compile(r"\.[A-Za-z0-9_-]{8,}\.")
+
+
+#: 停止理由 → 徽标词汇：三态加一档「停在等待用户」。
+#:
+#: 为什么它在 HTTP 层：旧壳 `webui/views.py` 退场之后（裁定 P1 的 W5 清仓），这张表
+#: 在生产路径上已经没有读者了 —— 前端 `ui/src/pages/Run.tsx` 原样显示 `stop_reason`
+#: 的文本，没有徽标表。它留在包命名空间里，是因为 `tests/test_loop_liveness.py` 拿
+#: `W._STOP_BADGES` 当"新停止理由必须登记"的落点。这条残留与"SPA 一侧该不该照它
+#: 做一张徽标表"一起写在 W5 报告里交主控裁（改前端不在本批的写面里）。
+_STOP_BADGES = {
+    "final": ("badge-pass", "跑完"),
+    "budget": ("badge-unknown", "预算用尽"),
+    "max_steps": ("badge-unknown", "步数用尽"),
+    "not_wired": ("badge-fail", "没接线"),
+    "bad_json_limit": ("badge-fail", "坏 JSON 连击"),
+    "bad_args_limit": ("badge-fail", "坏参数连击"),
+    # `draft/37` §136：同调用 + 同读数连着到上限 ⇒ 这一趟停在"没有新事实"。
+    # 刻意不是 `badge-fail`：那不是出错，是"这一趟没有往前走"（一档读数）。
+    "no_progress_limit": ("badge-unknown", "原地打转"),
+    "waiting_for_user": ("badge-pending", "停在等用户"),
+}
+
+
+def _error_page(code: int, title: str, why: str, *, fragment: str = "") -> str:
+    """服务器自己写的最后一页：一张最小错误页（旧壳退场后只剩它这一处）。
+
+    为什么不是"一律吐 SPA 外壳"：不是每一条未命中都能给外壳 —— `/static/<未命中>`
+    与"客户端没要 HTML"那两条分支必须回诚实的错误码（裁定 Q1 的收窄，理由见模块
+    docstring）；给一个要 `.js` 的请求塞一支 HTML 200，浏览器会把它当脚本解析
+    （静默全白），那比 404 坏得多。
+
+    `fragment` 是调用方手上已经有的一段 HTML（今天只有 `writes.answer()` 的 409
+    正文，它自己已经转义过用户给的文本）；`why` 在这里转义 —— 它可能带着工作区路径
+    （路径里有 `<` 也完全合法），所以这一处不是形式主义。
+    """
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="zh-CN">\n<head>\n'
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f"<title>{_esc(title)}</title>\n"
+        "</head>\n<body>\n"
+        f"<h1>{code}</h1>\n"
+        f"<p>{_esc(title)}</p>\n"
+        f'<p class="why"><code>{_esc(why)}</code></p>\n'
+        f"{fragment}"
+        '<p>回到 <a href="/">首页</a>（首页是 SPA 外壳，读数由前端从 '
+        "<code>/api/state</code> 读）。</p>\n"
+        "</body>\n</html>\n"
+    )
 
 
 def default_static_root() -> Path:
@@ -223,6 +280,31 @@ class WebHandler(BaseHTTPRequestHandler):
         """
         return "text/html" in self.headers.get("Accept", "")
 
+    # ------------------------------------------------------------ 请求循环
+    def handle_one_request(self) -> None:
+        """一次请求：客户端中途挂了 ⇒ 安静收尾，不劳 `socketserver` 打一条回溯。
+
+        为什么覆写这一层、而不是给每个 `do_*` 加 try：对端消失可能发生在请求行/头/
+        正文的读上，也可能发生在响应的写与 flush 上（`handle_one_request` 的最后
+        一步），还可能发生在 `send_error` 那一支 —— 三处都在这一格里发生。
+        只包 `do_GET` 会漏掉另外两处（实测：SSE 的响应头写着 `Connection: keep-alive`
+        ⇒ handler 返回后本层会再读一次请求行，读到的正是那条已被掐断的套接字，
+        `ConnectionAbortedError` 就从这里冒出来，`socketserver.handle_error` 于是把
+        `Exception occurred during processing of request …` 与整段回溯打进 stderr）。
+
+        口径刻意只认三种"对端没了"的异常：`ConnectionAbortedError` /
+        `ConnectionResetError` / `BrokenPipeError`（都是 `OSError` 的子类）。
+        其余异常一律照旧冒泡给 `socketserver.handle_error` —— 顺手 catch
+        `Exception` 会让真错误从日志里消失，那比日志脏坏得多（本项目
+        "没查成与查过了没问题必须分得开"的同一条纪律）。
+        收尾方式与 `socketserver` 自己的 TimeoutError 那一支相同：置
+        `close_connection = True`，让 `handle()` 的循环正常结束。
+        """
+        try:
+            super().handle_one_request()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            self.close_connection = True
+
     # ------------------------------------------------------------ GET
     def do_GET(self) -> None:  # noqa: N802 - 基类签名
         """GET：查 `ROUTES`；未命中走 :meth:`handle_unknown`（裁定 Q1）。"""
@@ -255,9 +337,8 @@ class WebHandler(BaseHTTPRequestHandler):
                 self._json(404, {"ok": False, "tri": "not_applicable",
                                  "reason": f"没有这个端点：{path}", "path": path})
                 return
-            state = snapshot(self.root)
-            self._html(404, _page(state, "没有这个页面",
-                                  _not_found(state, f"POST 没有路由：{path}")))
+            self._html(404, _error_page(404, "没有这个页面",
+                                        f"POST 没有路由：{path}"))
             return
         name, params = hit
         self._invoke(name, params, query)
@@ -301,21 +382,22 @@ class WebHandler(BaseHTTPRequestHandler):
         这一格原来是服务端渲染的旧壳（`views.render_root`）。为什么必须改：SPA 只在
         "未知路径"的回退分支上挂得起来，而 `/` 是一条已知路径 ⇒ 浏览器地址栏
         永远进不了 SPA 首页（判据 C 那边有一条浏览器判据记录的正是这件事）。
-        P1 的口径是"迁一面删一面"：本批迁的就是 `/` 这一面 ——
-        `views.render_root` 照旧活到 W5（`GET /run/{sid}` 那条旧壳路径这一批不动），
-        只是根路径不再用它。
 
-        外壳由 :meth:`_serve_spa_shell` 吐（与静态路由、回退分支同一份实现）。
-        外壳不在盘上（前端还没构建）⇒ 今天的 404 页 + 一句说清为什么 ——
+        外壳由 :meth:`_serve_spa_shell` 吐（与静态路由、回退分支同一份实现）；
+        外壳不在盘上（前端还没构建）⇒ 404 + 一句说清为什么 ——
         不静默给一个空白页（"没构建"与"页面坏了"必须分得开）。
         """
         del params, query
-        if not self._serve_spa_shell():
-            state = snapshot(self.root)
-            self._html(404, _page(state, "前端外壳不在盘上",
-                                  _not_found(state, "根路径要吐的是 SPA 外壳 "
-                                                    "web/static/index.html，而它不在盘上"
-                                                    "（前端还没构建？）")))
+        self._serve_shell_or_404("根路径")
+
+    def _serve_shell_or_404(self, what: str) -> None:
+        """吐外壳；不在盘上 ⇒ 404 说清是哪一条入口要它（两条页面路由共用这一处）。"""
+        if self._serve_spa_shell():
+            return
+        self._html(404, _error_page(
+            404, "前端外壳不在盘上",
+            f"{what}要吐的是 SPA 外壳 web/static/index.html，而它不在盘上"
+            "（前端还没构建？）"))
 
     def _serve_spa_shell(self) -> bool:
         """吐前端外壳 `web/static/index.html`（注入本进程的 CSRF 占位符）。
@@ -334,9 +416,8 @@ class WebHandler(BaseHTTPRequestHandler):
         try:
             shell = index.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
-            state = snapshot(self.root)
-            self._html(500, _page(state, "前端外壳读不出来",
-                                  _not_found(state, f"{type(exc).__name__}: {exc}")))
+            self._html(500, _error_page(500, "前端外壳读不出来",
+                                        f"{type(exc).__name__}: {exc}"))
             return True
         self._html(200, self._inject_csrf(shell))
         return True
@@ -361,12 +442,21 @@ class WebHandler(BaseHTTPRequestHandler):
 
     def handle_run(self, params: Mapping[str, str],
                    query: Mapping[str, Sequence[str]]) -> None:
-        """`GET /run/<sid>`：一趟的详情（事件卡片 + 交付说明）。"""
-        del query
-        sid = unquote(str(params.get("sid", "")))
-        state = snapshot(self.root)
-        code, text = render_run(self.root, sid, state)
-        self._html(code, text)
+        """`GET /run/<sid>`：SPA 外壳（裁定 P1 的最后一块迁移，W5）。
+
+        这一格原来是旧壳的"一趟详情"（`views.render_run`：事件卡片 + 交付说明）。
+        为什么改成吐外壳：`/run/:sid` 是 C4 表里的一条客户端路由，SPA 的 `Run` 页
+        按 `sid` 去读 `GET /api/run/{sid}` —— 服务端再渲染一遍盘上数据，就是同一件事
+        两份实现（P1 要的清仓正是这个）。会话号不合法或会话不在盘上这件事，
+        由那份读数如实报成 `unreadable`（三态），不再是一张服务端 404 页：
+        外壳对谁都一样（它是静态页 + 一个挂载点），而"没有这一段会话"是前端按读数说的。
+
+        `sid` 仍然只匹配一段路径（`routes._SEGMENT`）：`/run/`、`/run/a/b` 与
+        `..%2f` 那一类解出来带斜杠的串根本不进这一格，它们走
+        :meth:`handle_unknown`（404）。
+        """
+        del params, query
+        self._serve_shell_or_404("`/run/{sid}` 这条路由")
 
     def handle_static(self, params: Mapping[str, str],
                       query: Mapping[str, Sequence[str]]) -> None:
@@ -384,16 +474,14 @@ class WebHandler(BaseHTTPRequestHandler):
         except (OSError, RuntimeError):
             inside, target = False, root
         if not inside or not target.is_file():
-            state = snapshot(self.root)
-            self._html(404, _page(state, "没有这个文件",
-                                  _not_found(state, f"静态资源不在盘上或越出根：{rel}")))
+            self._html(404, _error_page(404, "没有这个文件",
+                                        f"静态资源不在盘上或越出根：{rel}"))
             return
         try:
             body = target.read_bytes()
         except OSError as exc:
-            state = snapshot(self.root)
-            self._html(500, _page(state, "静态资源读不出来",
-                                  _not_found(state, f"{type(exc).__name__}: {exc}")))
+            self._html(500, _error_page(500, "静态资源读不出来",
+                                        f"{type(exc).__name__}: {exc}"))
             return
         ctype = _CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
         cache = ("public, max-age=31536000, immutable" if _HASHED.search(target.name)
@@ -404,14 +492,18 @@ class WebHandler(BaseHTTPRequestHandler):
 
     def handle_answer(self, params: Mapping[str, str],
                       query: Mapping[str, Sequence[str]]) -> None:
-        """`POST /answer`：PRG（303 回首页）；qid 不待答 409；写失败 500。"""
+        """`POST /answer`：PRG（303 回首页）；qid 不待答 409；写失败 500。
+
+        非 303 的正文由 `writes.answer()` 给（它自己转义过里面的用户文本），
+        这里只把它嵌进错误页 —— 不重新渲染、也不二次转义。
+        """
         del params, query
         code, location, body = answer(self.root, self._form())
         if code == 303:
             self._redirect(303, location)
             return
-        state = snapshot(self.root)
-        self._html(code, _page(state, f"回答没有落地（{code}）", body))
+        self._html(code, _error_page(code, f"回答没有落地（{code}）",
+                                     "写路径自己给的理由在下面这一段里", fragment=body))
 
     def handle_unknown(self, params: Mapping[str, str],
                        query: Mapping[str, Sequence[str]]) -> None:
@@ -426,8 +518,7 @@ class WebHandler(BaseHTTPRequestHandler):
         if self._wants_html() and index.is_file():
             self._serve_spa_shell()
             return
-        state = snapshot(self.root)
-        self._html(404, _page(state, "没有这个页面", _not_found(state, f"没有路由：{path}")))
+        self._html(404, _error_page(404, "没有这个页面", f"没有路由：{path}"))
 
     # ------------------------------------------------------------ CSRF 占位符
     def _inject_csrf(self, html_text: str) -> str:
@@ -506,7 +597,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(
         prog="agentflow-webui",
-        description="agentflow 用户端：全局待回答面板 + 运行态 + 一趟回放（服务端渲染）")
+        description="agentflow 用户端：SPA 外壳（六个页面）+ 六个只读面 + 一趟详情与提交回答")
     ap.add_argument("--root", default="", help="工作区根（不给就用 DEFAULT_ROOT）")
     ap.add_argument("--host", default=DEFAULT_HOST, help=f"监听地址（默认 {DEFAULT_HOST}）")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT,

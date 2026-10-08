@@ -283,13 +283,17 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 逐页逐栏的字段、空态与三态口径见 `docs/USER-END-DSH-STYLE.md` §3.1；判据在
 `tests/test_webui_pages.py`（每页一条：真读数出现 + 空态 + 三态）。
 
-`GET /` 与 `GET /index.html` 直接吐 SPA 外壳（裁定 P1 的第一块迁移：注入本进程的 CSRF 令牌、
-`Cache-Control: no-store`）—— 浏览器地址栏因此进得了 SPA；`GET /run/{sid}` 这一批仍是服务端渲染的
-旧壳（W5 再迁），它由 `tests/test_webui.py` 的 17 条守着。前端工程自己的说明见 `ui/README-DEV.md`。
+`GET /`、`GET /index.html` 与 `GET /run/{sid}` 三条路都直接吐 SPA 外壳（裁定 P1：第一块 2026-10-07、
+最后一块 W5 清仓；注入本进程的 CSRF 令牌、`Cache-Control: no-store`）—— 浏览器地址栏进得了 SPA，
+在一趟详情页上刷新也留在 SPA 里。会话不在盘上这件事由 `GET /api/run/{sid}` 的三态读数说
+（`tri=unreadable` + 理由里点名会话文件），不再是一张服务端 404 页；服务端渲染的旧壳
+（`views.py`）已整件退场，服务器自己写 HTML 的地方只剩错误页。
+判据在 `tests/test_webui.py`（18 条：外壳形状 / JSON 读数 / 写路径三态 / 转义 / 只用令牌 /
+客户端中途断开不留回溯）。前端工程自己的说明见 `ui/README-DEV.md`。
 
 **本机读数（2026-10-07，复算命令见括号）**：
 
-- 路由表 `ROUTES` **13 行**、其中 JSON 端点 **9 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
+- 路由表 `ROUTES` **16 行**、其中 JSON 端点 **12 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
   其中 `/api/state` 按裁定 2b 归 B 线的 `readers.ROUTES`、`/api/run-index` 是 A 线自有的那一条；
 - 前端源码 `ui/src/` **19 个文件、3656 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
 - `ui/src/types.ts` 是生成物：**16,003 字节 / 39 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；

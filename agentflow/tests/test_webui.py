@@ -8,16 +8,27 @@
 1. 「待回答的东西必须全局可达」：面板不按会话过滤（跨会话正控），
    每条问题要能看到会话号、问题号、谁在问、问了多久、正文、以及每个选项的
    label 与 description（选项是 `{label, description}` 而不是裸字符串）；
-2. 「状态一律从盘上派生」（状态不进组件 state）：同一份盘上数据渲染两次逐字节
-   相同（投影，不是缓存），中间往会话里追加一条事件后再渲染 ⇒ 内容必须变；
+2. 「状态一律从盘上派生」（状态不进组件 state）：同一份盘上数据读两次逐字节
+   相同（投影，不是缓存），中间往盘上追加东西后再读 ⇒ 读数必须变；
 3. 「写回答的失败不许折成 200」：qid 不在待答清单 ⇒ 409（分「已经答过了」与
    「没有这个号」两档说清），成功 ⇒ 303 PRG（刷新不重复提交）；
    跳过 = 空的 `selected`（DSH 口径），不是「没答」。
 
 另外两条是本项目的纪律，不是 DSH 的：
 
-4. 「用户与模型产生的文本一律转义」（问题正文里塞 `<script>` 必须变 `&lt;script&gt;`）；
-5. 「只用令牌」（`APP_CSS` 里不许有字面色值，且必须真的是在令牌体系里写样式）。
+4. 「服务器写进 HTML 的一切文本都转义」（写路径给的 409 正文嵌进错误页时，
+   用户给的 `qid` 必须变 `&lt;script&gt;`），外加「前端源码里不许把字符串当
+   HTML 用」—— SPA 那一面的注入面只有那一种写法；
+5. 「只用令牌」（`ui/src/theme/app.css` 里不许有字面色值，且必须真的是在令牌
+   体系里写样式）。
+
+## W5 清仓之后这一组查的是哪些面（2026-10-08，裁定 P1 的最后一块）
+
+旧壳 `webui/views.py` 已整件退场：`/` 与 `/run/{sid}` 都吐同一支 SPA 外壳，
+六个页面的读数一律走 `/api/*`。于是这一组里凡是被旧壳 HTML 影响的断言都换到了
+SPA 面（外壳形状 / JSON 读数 / 写路径的状态码），用例条数一条没减
+（旧壳还活着时的 17 条 + 新加的 `/run/{sid}` 外壳那一条）：每条迁移都在它自己的
+docstring 里逐句写明"原来断言什么、现在断言什么、为什么是同一件事"。
 
 ## 口径兼容（与并行的 `userio` 改造）
 
@@ -34,10 +45,15 @@
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import pathlib
 import re
+import socket
+import struct
+import sys
 import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 from urllib.parse import urlencode
@@ -48,6 +64,7 @@ from agentflow import sessions as SS
 from agentflow import userio as U
 from agentflow import webui as W
 from agentflow.web import assets as A
+from agentflow.webui import sse as SSE
 
 
 # ====================================================================== 夹具
@@ -115,6 +132,23 @@ def _spa_root(base: str) -> str:
     return body
 
 
+def _spa_run(base: str, sid: str) -> str:
+    """`GET /run/{sid}` 这一格的读数：它必须是同一支 SPA 外壳（P1 的最后一块）。
+
+    同样的三样机器读数（旧壳那一版在这里会全红：它吐的是"事件卡片 + 交付说明"，
+    没有 `#app`、没有 CSRF 的 meta）。会话号合法与否都不改变这一页 ——
+    "没有这一段会话"由 `/api/run/{sid}` 的三态读数说（见
+    `test_run_detail_replays_events_and_report`）。
+    """
+    code, body, headers = _get_full(base, f"/run/{sid}")
+    assert code == 200, (sid, code)
+    assert '<div id="app">' in body, f"/run/{sid} 吐的不是 SPA 外壳（P1 的最后一块）"
+    assert 'name="csrf-token"' in body, "外壳里没有 CSRF 的 meta"
+    assert "__CSRF__" not in body, "外壳里的 CSRF 占位符没被替换成这一进程的令牌"
+    assert headers.get("cache-control") == "no-store", headers
+    return body
+
+
 def _post(base: str, path: str, fields: dict[str, Any]) -> tuple[int, str, dict[str, str]]:
     body = urlencode(fields, doseq=True).encode("utf-8")
     conn = http.client.HTTPConnection(base, timeout=10)
@@ -135,6 +169,36 @@ def _request(base: str, method: str, path: str) -> int:
         return conn.getresponse().status
     finally:
         conn.close()
+
+
+def _abort_sse(base: str) -> int:
+    """开一条 SSE 流、读满两帧，然后带 RST 关掉；返回读到的数据帧数。
+
+    为什么用裸 socket 而不是 `http.client`：RST 要落在真正那条连接上
+    （`SO_LINGER` 置 0 再 close），而 `http.client` 的 `sock` 在读响应之后不一定还挂得住；
+    裸 socket 让"哪条连接、什么时候断"都是判据自己说了算。
+    为什么不是优雅 `close()`：那样服务端要等下一拍心跳写失败才知道对端没了
+    （实测 2 秒以上），判据就变成"等得够久碰上的"。
+    """
+    host, port = base.split(":")
+    sock = socket.create_connection((host, int(port)), timeout=5)
+    try:
+        sock.sendall(b"GET /api/stream HTTP/1.1\r\nHost: x\r\n\r\n")
+        sock.settimeout(3.0)
+        buf = b""
+        while buf.count(b"data: ") < 2:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        return buf.count(b"data: ")
+    finally:
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                            struct.pack("ii", 1, 0))
+        except OSError:
+            pass
+        sock.close()
 
 
 def _ask(root: pathlib.Path, *, role: str, text: str, options: list[Any] | None = None,
@@ -365,19 +429,28 @@ def test_answering_twice_is_409_and_does_not_duplicate(tmp_path: pathlib.Path):
 
 # ====================================================================== 7 负控
 def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypatch):
-    """负控（投影而非缓存）：两次渲染逐字节相同；追加一条事件后必须变。
+    """负控（投影而非缓存）：两次读逐字节相同；盘上新增 ⇒ 读数必须变。
 
-    中间那次追加用 `SS.append` 直接写盘，绕过服务：于是「页面变了」只可能来自
-    「每次请求重新读盘」，不可能是别的什么东西。
+    W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端
+    渲染页（两趟 HTML 逐字节相同 + 追加一条事件后 HTML 变）。旧壳退场后"详情面"是
+    `GET /api/run/{sid}` 的 JSON，于是同一个意思换成三处真读盘的读数 ——
+    每一处都还是"盘上变了，面就得跟着变"，而且各自比原来更具体：
 
-    为什么要把页脚那只钟钉住：页脚有一行「最后更新 <ISO 秒>」（`webui._now_iso()`），
-    而这一条判据要的是「逐字节相同」。2026-10-03 的全量里它红过一次：两次请求跨了一秒
-    （机器有负载时容易发生）⇒ 页脚那一行不同 ⇒ 逐字节比较失败。钉住那只钟之后，
-    剩下的任何字节差异都只能来自盘上的数据 —— 判据反而更紧，而不是更松。
+    1. `/api/run/t` 两次读逐字节相同（投影，不是缓存）—— 原来断言的是渲染两次的
+       HTML 相同，同一条意思；顺带钉住这份读数里那两条事件的可读内容
+       （`task` 来自 `agent_run_start`、`last_shape` 来自 `agent_step`）；
+    2. 追加一条落在轮次之外的事件（`agent_note`）⇒ `/api/state` 的 `orphans`
+       里多出它、`orphan_summary.count` +1（Run 页"轮次之外的零散事件"那一栏读的
+       就是这两栏）；而 `/api/run/t` 逐字节不动 —— 这是旧壳那条负控的加强版：
+       旧壳会把零散事件也画进详情页，今天它只进那一栏（"不许被折成一趟"由
+       `test_events_outside_a_run_never_become_a_run` 守）；
+    3. 再追加一整趟 ⇒ `/api/run/t` 变了（趟数 1 → 2，起始下标递增）——
+       原来"追加事件后页面变"那一条的等价物。
 
-    P1 迁移（2026-10-07）：`/` 那一半从"首页 HTML 也是投影"改成两件更硬的事 ——
-    ① SPA 外壳对谁都逐字节相同（它本来就不带数据）；② 面板的数据面 `/api/state`
-    是投影：两次读只差 `generated_at`（那只钟），而新问题一落盘，读数里就多一条。
+    为什么要把那只钟钉住：`/api/state` 有一栏 `generated_at`（`webui._now_iso()`），
+    而这一条要的是"逐字节相同"。2026-10-03 的全量里它红过一次：两次请求跨了一秒
+    ⇒ 逐字节比较失败。钉住那只钟之后，剩下的任何字节差异都只能来自盘上的数据 ——
+    判据反而更紧，而不是更松。
     """
     monkeypatch.setattr(W, "_now_iso", lambda: "2026-10-03T00:00:00+08:00")
     root = tmp_path / "ws"
@@ -385,53 +458,80 @@ def test_rendering_is_a_projection_not_a_cache(tmp_path: pathlib.Path, monkeypat
     _seed_run(root, "t")
     _write_report(root, "# 交付说明\n\n这一趟做完了。\n")
     with server(root) as base:
-        c1, html1 = _get(base, "/run/t")
-        c2, html2 = _get(base, "/run/t")
+        # ① 详情面是投影：两次读逐字节相同，且两条事件的可读内容都在
+        c1, run1 = _get(base, "/api/run/t")
+        c2, run2 = _get(base, "/api/run/t")
         assert (c1, c2) == (200, 200)
-        assert html1 == html2, "同一份盘上数据两次渲染居然不同"
-        assert "这一趟做完了。" in html1, "报告没渲染进详情页"
-        assert "agent_run_start" in html1 and "agent_step" in html1
+        assert run1 == run2, "同一份盘上数据两次读居然不同"
+        view = json.loads(run1)
+        assert view["tri"] == "computed", view
+        assert view["runs"][0]["task"] == "把口径定下来", view["runs"][0]
+        assert view["runs"][0]["last_shape"] == "fs.write", view["runs"][0]
+        assert view["report"]["status"] == "ok", view["report"]
+        assert "这一趟做完了。" in view["report"]["text"], view["report"]
 
-        # 往同一段会话里追加一条事件 ⇒ 详情页必须变
-        SS.append(root, {"kind": "agent_note", "role": "M", "note": "又记了一笔"}, sid="t")
-        _c3, html3 = _get(base, "/run/t")
-        assert html3 != html1, "追加了事件，页面却没变（说明缓存了）"
-        assert "又记了一笔" in html3
-
-        # 首页是 SPA 外壳：它对谁都逐字节相同（外壳里没有盘上数据）
+        # ①b 外壳是静态的：对谁都逐字节相同（外壳里没有盘上数据）
         shell1 = _spa_root(base)
         shell2 = _spa_root(base)
         assert shell1 == shell2, "同一支外壳两次读取居然不同"
 
-        # 面板的数据面（`/api/state`）是投影：两次读只差那只钟；新问题一落盘就多一条
-        def _state_now() -> dict:
-            _c, raw = _get(base, "/api/state")
-            got = json.loads(raw)
-            got.pop("generated_at", None)
-            return got
+        # ② 追加一条轮次之外的事件 ⇒ 零散事件那一栏多一条（详情面的趟次不动）
+        state1 = json.loads(_get(base, "/api/state")[1])
+        SS.append(root, {"kind": "agent_note", "role": "M", "note": "又记了一笔"}, sid="t")
+        state2 = json.loads(_get(base, "/api/state")[1])
+        assert state2 != state1, "新事件落盘了，读数却没变（说明缓存了）"
+        kinds1 = [(o["sid"], o["kind"]) for o in state1["orphans"]]
+        kinds2 = [(o["sid"], o["kind"]) for o in state2["orphans"]]
+        assert ("t", "agent_note") in kinds2, kinds2
+        assert [k for k in kinds2 if k != ("t", "agent_note")] == kinds1, (kinds1, kinds2)
+        assert state2["orphan_summary"]["count"] == (
+            state1["orphan_summary"]["count"] + 1), state2["orphan_summary"]
+        _c3, run3 = _get(base, "/api/run/t")
+        assert run3 == run1, "轮次之外的事件不许改变详情面的趟次读数"
 
-        state1 = _state_now()
-        assert state1 == _state_now(), "同一份盘上数据两次读居然不同"
+        # ③ 再追加一整趟 ⇒ 详情面变了（趟数 1 → 2）
+        _seed_run(root, "t")
+        _c4, run4 = _get(base, "/api/run/t")
+        assert run4 != run1, "又跑了一趟，详情面却没变（说明缓存了）"
+        view4 = json.loads(run4)
+        assert len(view4["runs"]) == 2, view4["runs"]
+        assert view4["runs"][1]["start_index"] > view4["runs"][0]["start_index"], (
+            view4["runs"])
+        assert view4["runs"][0]["task"] == view4["runs"][1]["task"] == "把口径定下来"
+
+        # ④ 面板的数据面（`/api/state`）也是投影：钟钉住之后两次读逐字节相同；
+        #    新问题一落盘就多一条（这一半是 A 线 P1 迁移时加的，语法一字不改地留着）
+        _c5, state_raw1 = _get(base, "/api/state")
+        _c6, state_raw2 = _get(base, "/api/state")
+        assert state_raw1 == state_raw2, "同一份盘上数据两次读居然不同"
         qid = _ask(root, role="D", text="投影负控用的新问题")
-        state2 = _state_now()
-        assert state2 != state1, "新问题落盘了，读数却没变（说明缓存了）"
-        assert qid in [q["qid"] for q in state2["pending_questions"]], state2["pending_questions"]
+        state3 = json.loads(_get(base, "/api/state")[1])
+        assert state3 != json.loads(state_raw1), "新问题落盘了，读数却没变（说明缓存了）"
+        assert qid in [q["qid"] for q in state3["pending_questions"]], (
+            state3["pending_questions"])
 
 
 # ====================================================================== 8 负控
 def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
     """负控（安全）：用户/模型产生的文本不许在页面里变成 HTML。
 
-    P1 迁移（2026-10-07）：`/` 不再是服务端渲染的面，所以"转义"这件事在两条路上各钉一次：
+    W5 迁移（2026-10-08，裁定 P1 的最后一块）：旧壳退场之后，服务器自己写 HTML 的
+    地方只剩错误页（`server._error_page`），盘上文本一律走 JSON。于是"转义"这件事
+    在三处真读数上钉 —— 它跟着「攻击面」搬，而不是跟着旧代码搬：
 
-    1. 还由服务端渲染的那一面（`/run/{sid}`，W5 之前照旧）—— 会话事件里的
-       `<script>` 必须被 `html.escape` 掉：这是原来那条断言的原样平移；
-    2. SPA 那一面 —— 数据走 JSON、由 Preact 建成文本节点，所以它的机器读数是
+    1. 用户给的串进 HTML 的那一条活路（写路径给的 409 正文，嵌在错误页里）：
+       `POST /answer` 的 `qid` 里塞 `<script>` 必须变成 `&lt;script&gt;`。
+       原来断言的是旧壳渲染问题正文时转义，这是同一件事在新落点上的形态；
+    2. 错误页的理由串也转义（静态路由那个名字是请求方给的）：`/static/<坏名字>`
+       的 404 页里不许出现原样的尖括号。这是本批新加进 HTML 的用户输入面，
+       必须一起守住（负控见下面的 `&lt;` 那一句：它证明这条断言不是恒真）；
+    3. SPA 那一面：数据走 JSON、由 Preact 建成文本节点，所以机器读数是
        "前端源码里没有任何地方把字符串当 HTML 插进去"（`innerHTML` /
-       `dangerouslySetInnerHTML` / `outerHTML` / `document.write` / `insertAdjacentHTML`
-       一个都不许出现），外加"外壳里根本没有盘上数据"。
+       `dangerouslySetInnerHTML` / `outerHTML` / `document.write` /
+       `insertAdjacentHTML` 一个都不许出现），外加"外壳里根本没有盘上数据"、
+       而"正文确实还在（在 JSON 里原样带着）"。
 
-    为什么第 2 条是等价的守卫：SPA 的注入面只有"把字符串当 HTML 用"这一种写法；
+    为什么第 3 条是等价的守卫：SPA 的注入面只有"把字符串当 HTML 用"这一种写法；
     堵掉它，用户文本就只能以文本节点进 DOM —— 那是浏览器替我们转义。
     """
     root = tmp_path / "ws"
@@ -442,13 +542,33 @@ def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
     _ask(root, role="M", text='<script>alert(1)</script> 正文',
          options=[{"label": "<b>粗体</b>选项", "description": '<img src=x onerror=1>'}])
     with server(root) as base:
-        code, body = _get(base, "/run/t")
-        assert code == 200
-        assert "<script>alert(1)</script>" not in body, "会话事件里的正文没有被转义"
-        assert "&lt;script&gt;" in body, "转义后的正文不在详情页上"
+        # ① 写路径的 409 正文（嵌进错误页）：用户给的 qid 必须被转义
+        code, body, _headers = _post(base, "/answer",
+                                     {"qid": "<script>alert(1)</script>", "sid": "t",
+                                      "selected": "x"})
+        assert code == 409, (code, body[:400])
+        assert "<script>alert(1)</script>" not in body, (
+            "错误页里出现了未转义的用户文本")
+        assert "&lt;script&gt;" in body, "转义后的文本不在错误页上"
+
+        # ② 错误页的理由串同样转义（静态路由那个名字是请求方给的）
+        code2, body2 = _get(base, "/static/%3Cscript%3Ealert(1)%3C%2Fscript%3E.js")
+        assert code2 == 404, code2
+        assert "<script>alert(1)</script>" not in body2, (
+            "404 页把请求方给的名字原样写进了 HTML")
+        assert "&lt;script&gt;" in body2, body2[:400]
+        # 负控（反恒真）：不带尖括号的名字不会出现 `&lt;` —— 否则上面那一句
+        # 可能只是"页面里到处都有 &lt;"这种恒真形态
+        _c3, plain = _get(base, "/static/nope.js")
+        assert "&lt;" not in plain, plain[:300]
+
+        # ③ SPA 那一面：外壳里没有盘上文本；源码里没有"把字符串当 HTML"的写法；
+        #    正文本身没有被丢掉（它在面板的 JSON 里原样带着，由前端当文本渲染）
         shell = _spa_root(base)
         assert "<script>alert(1)</script>" not in shell, "外壳里出现了盘上文本"
-        # 前端源码里不许有"把字符串当 HTML"的写法（SPA 的注入面只有这一种）
+        _c4, state_raw = _get(base, "/api/state")
+        assert "<script>alert(1)</script> 正文" in state_raw, (
+            "面板的 JSON 里应当原样带着问句正文（它是数据，不是 HTML）")
         for rel, text in (("pages/Home.tsx", _ui_text("pages/Home.tsx")),
                           ("pages/Run.tsx", _ui_text("pages/Run.tsx")),
                           ("live.tsx", _ui_text("live.tsx"))):
@@ -461,18 +581,33 @@ def test_model_and_user_text_is_escaped(tmp_path: pathlib.Path):
 
 # ====================================================================== 9 负控
 def test_app_css_uses_only_tokens():
-    """负控（只用令牌）：`APP_CSS` 无字面色值，且确实在令牌体系里写样式。"""
-    css = A.APP_CSS
+    """负控（只用令牌）：`ui/src/theme/app.css` 无字面色值，且确实在令牌体系里写样式。
+
+    W5 迁移（2026-10-08）：被检对象从旧壳内联的 `web/assets.py::APP_CSS` 换成 SPA 的
+    组件样式 `ui/src/theme/app.css` —— 旧壳退场后组件样式只剩这一份（`ui/index.html`
+    里 `<link>` 引的就是它，构建时打进 `web/static/assets/`）。断言逐条等价、强度不变：
+
+    - 原：`APP_CSS` 里不许有 `#rrggbb` / `rgb(` / `hsl(` ⇒ 新：同一套正则查 app.css；
+    - 原：至少 8 个不同的 `--dsw-alias-` 令牌 ⇒ 新：同一条（今天 17 个）；
+    - 原：引用的令牌必须在 `THEME_CSS` 里定义过 ⇒ 新：同一份 `THEME_CSS`
+      （它没搬走，仍是令牌的唯一真身，前端那份是它的生成物）；
+    - 原：三档状态徽标 + `--ds-font-family-code` + 运动令牌要真的用上 ⇒ 新：同一条。
+
+    另外加一条反真空断言：文件不在盘上时直接红，不许因为读成空串而静默变绿
+    （`hexes == []` 对空串是恒真的）。
+    """
+    css = _ui_text("theme/app.css")
+    assert css, "ui/src/theme/app.css 不在盘上 ⇒ 这条判据没有对象了（不许静默变绿）"
     hexes = re.findall(r"#[0-9a-fA-F]{3,8}\b", css)
-    assert hexes == [], f"APP_CSS 里有字面色值：{hexes}"
-    assert not re.search(r"\b(?:rgb|rgba|hsl|hsla)\(", css), "APP_CSS 里有 rgb()/hsl()"
+    assert hexes == [], f"app.css 里有字面色值：{hexes}"
+    assert not re.search(r"\b(?:rgb|rgba|hsl|hsla)\(", css), "app.css 里有 rgb()/hsl()"
     alias = set(re.findall(r"var\((--dsw-alias-[A-Za-z0-9-]+)\)", css))
     assert len(alias) >= 8, f"只用了 {len(alias)} 个 --dsw-alias- 令牌：{sorted(alias)}"
     # 令牌必须是 THEME_CSS 里真的定义过的名字（不然浏览器静默回退）
     defined = set(re.findall(r"(--[A-Za-z0-9-]+)\s*:", A.THEME_CSS))
     used = set(re.findall(r"var\((--[A-Za-z0-9-]+)\)", css))
     missing = sorted(used - defined)
-    assert missing == [], f"APP_CSS 引用了 THEME_CSS 里没定义的令牌：{missing}"
+    assert missing == [], f"app.css 引用了 THEME_CSS 里没定义的令牌：{missing}"
     # 三态徽标与等宽读数：这三组是「三态读数落到令牌上」的那条判据
     assert "--dsw-alias-state-success-primary" in alias
     assert "--dsw-alias-state-error-primary" in alias
@@ -489,6 +624,11 @@ def test_theme_css_keeps_dsh_tokens():
     这一条是「我们抄的是 DSH 的令牌体系，不是自己编了一套颜色」的判据：
     原始色板（`--dsw-static-*`）与语义别名（`--dsw-alias-*`）两层都在，
     `data-ds-dark-theme` 那一段在，选择器只从 `body` 改成了 `:root`。
+
+    W5 迁移（2026-10-08）：末了一条原来是 `A.STYLESHEET == A.THEME_CSS + A.APP_CSS`
+    （旧壳把两份文本合起来内联）。那两件随旧壳退场，今天两份文本都在前端工程里，
+    于是同一件事改由 `ui/index.html` 的两个 `<link>` 钉住：两份都要被引进页面
+    （少引一份 ⇒ "令牌在、组件样式不在"或反过来会被静默写进产物）。
     """
     theme = A.THEME_CSS
     assert theme.count("--dsw-static-") >= 60, "原始色板没搬全"
@@ -501,7 +641,12 @@ def test_theme_css_keeps_dsh_tokens():
     assert "corner-shape:superellipse(1.5)" in theme, "圆角签名那段没搬"
     assert "scrollbar-width:thin" in theme
     # 组件样式与令牌是两份文本，合起来才发给浏览器
-    assert A.STYLESHEET == A.THEME_CSS + A.APP_CSS
+    index_html = _ui_text("../index.html")
+    assert index_html, "ui/index.html 不在盘上 ⇒ 这一条没有对象了"
+    assert 'href="./src/theme/generated/theme.css"' in index_html, (
+        "index.html 没引令牌那一份（换皮时颜色不会变）")
+    assert 'href="./src/theme/app.css"' in index_html, (
+        "index.html 没引组件样式那一份（页面会没有骨架）")
 
 
 # ====================================================================== 11 正控
@@ -531,34 +676,96 @@ def test_pending_list_is_never_filtered_by_session(tmp_path: pathlib.Path):
 
 # ====================================================================== 12 正控
 def test_run_detail_replays_events_and_report(tmp_path: pathlib.Path):
-    """正控（一趟详情）：步骤卡片与报告都渲染；不存在的 sid ⇒ 404（不是 200 空页）。"""
+    """正控（一趟详情）：读数与交付说明都拿得到；没有这一段会话 ⇒ 如实说"没查成"。
+
+    W5 迁移（2026-10-08，裁定 P1 的最后一块）：这一条原来读 `/run/{sid}` 的服务端
+    渲染页（事件卡片里出现四个 kind、步骤的形状与下标、报告原文在一个 `<pre>` 里、
+    不存在的 sid ⇒ 404 页）。旧壳退场后同一件事分两处、逐条等价：
+
+    - 页面入口 `/run/r1` 是 SPA 外壳（`_spa_run` 的三样机器读数 + 外壳里没有盘上数据）；
+    - 详情读数是 `GET /api/run/r1` 的 JSON（`runs` / `report` / `checkpoint`）。
+      "事件被读到了"原来靠 HTML 里出现 `agent_run_start` / `agent_step` 两个 kind 来钉，
+      今天同两条事件的「可读内容」落在 `task`（来自 `agent_run_start` 的 payload）、
+      `last_shape` 与 `steps`（来自 `agent_step` / `agent_run_end`）上 ——
+      钉的还是"盘上的事件真被读成了读数"；
+      "报告原样显示在一个 `pre` 里"那一半移到 `Run.tsx` 的源码读数
+      （`v.report.text` 进 `class="mono pre"`）；
+    - "不存在的 sid ⇒ 404"换成 SPA 的口径：页面照吐外壳（前端路由对任何 sid 都要能
+      显示），否决权在数据面 —— `/api/run/nope` 的 `tri` 必须是 `unreadable`，
+      理由里点名"会话文件不在盘上"（三态：没查成，不是"这一趟 0 步"）。
+    """
     root = tmp_path / "ws"
     root.mkdir()
     _seed_run(root, "r1")
     _write_report(root, "## 九节交付说明\n\n证据不足的地方：第 3 节。\n")
     with server(root) as base:
-        code, body = _get(base, "/run/r1")
+        shell = _spa_run(base, "r1")
+        assert "九节交付说明" not in shell, "外壳里不该有盘上数据（它是一支静态页）"
+
+        code, raw = _get(base, "/api/run/r1")
         assert code == 200, code
-        for kind in ("agent_run_start", "llm_call", "agent_step", "agent_run_end"):
-            assert kind in body, f"事件卡片里没有 {kind}"
-        assert "第 0 步" in body and "fs.write" in body, "步骤卡片没有形状与索引"
-        assert "证据不足的地方：第 3 节。" in body, "报告没有原样显示"
-        assert "<pre>" in body
-        # 列表页给得出这一趟（P1 之后"列表页"是 SPA：数据面是 `/api/state`，
-        # 而"点得进 /run/<sid>"这件事由 main.tsx 的 C4 路由 + Home.tsx 的链接构成）
-        _c, raw = _get(base, "/api/state")
-        last = json.loads(raw)["last_run"]
+        view = json.loads(raw)
+        assert view["tri"] == "computed", view
+        assert len(view["runs"]) == 1, view["runs"]
+        row = view["runs"][0]
+        assert row["task"] == "把口径定下来", row         # agent_run_start 的 payload
+        assert row["last_shape"] == "fs.write", row        # agent_step 的 shape
+        assert (row["steps"], row["llm_calls"]) == (1, 1), row
+        assert row["stop_reason"] == "final", row          # agent_run_end
+        assert row["role"] == "M", row
+        assert "r1" in view["path"], view["path"]
+        # 交付说明原样可读（三态词表 ReportTri：ok / missing / unknown）
+        assert view["report"]["status"] == "ok", view["report"]
+        assert "证据不足的地方：第 3 节。" in view["report"]["text"], view["report"]
+
+        # 列表页给得出这一趟（P1 之后"列表页"是 SPA：数据面是 `/api/state`）
+        _c, raw_state = _get(base, "/api/state")
+        last = json.loads(raw_state)["last_run"]
         assert last is not None and last["sid"] == "r1", last
-        _spa_root(base)
         main_tsx = _ui_text("main.tsx")
         if main_tsx:
             assert '"/run/:sid"' in main_tsx, "SPA 没有声明 /run/:sid 这条路由"
         home_tsx = _ui_text("pages/Home.tsx")
         if home_tsx:
             assert "/run/" in home_tsx, "Home.tsx 里没有指向一趟详情的链接"
-        code404, body404 = _get(base, "/run/nope")
-        assert code404 == 404, code404
-        assert "404" in body404
+        # "报告原样显示在一块 pre 里"那一半（旧壳断言 `<pre>` 在页面上）
+        run_tsx = _ui_text("pages/Run.tsx")
+        if run_tsx:
+            assert "v.report.text" in run_tsx, "Run.tsx 没有读交付说明的原文"
+            assert 'class="mono pre"' in run_tsx, "Run.tsx 没有把原文放进 pre 里"
+
+        # 没有这一段会话：页面照吐外壳，否决权在数据面（unreadable + 说得清理由）
+        _spa_run(base, "nope")
+        _c2, raw_nope = _get(base, "/api/run/nope")
+        missing = json.loads(raw_nope)
+        assert missing["tri"] == "unreadable", missing
+        assert "会话文件不在盘上" in missing["reason"], missing["reason"]
+        assert missing["runs"] == [], missing
+
+
+# ====================================================================== 15 正控
+def test_the_run_path_serves_the_spa_shell(tmp_path: pathlib.Path):
+    """正控（P1 的最后一块迁移）：`GET /run/{sid}` 与 `/` 吐的是同一支外壳。
+
+    为什么必须有这一条：`/` 迁走之后（2026-10-07 的第一块），`/run/{sid}` 是旧壳
+    最后一面 —— 不迁它，同一个工作区里就有两套页面实现（旧壳 + SPA），
+    `views.py` 也永远清不掉。三样机器读数与 `_spa_root` 逐条相同，再加一条
+    "外壳里没有盘上数据"：会话号合法与否都不改变这一页。
+
+    反向读数（路由形状没被放宽）：`/run/` 与 `..%2f` 那一类解出来带斜杠的串仍然
+    404 —— 见 `test_unknown_paths_and_methods`（`{sid}` 只匹配一段路径）。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    _seed_run(root, "r1")
+    with server(root) as base:
+        for sid in ("r1", "nope"):
+            body = _spa_run(base, sid)
+            assert "把口径定下来" not in body, (
+                "外壳里不该有盘上数据（它是静态页 + 一个挂载点）")
+        # 两个入口吐的是同一支外壳（同一份实现，不许写第二份）
+        assert _spa_run(base, "r1") == _spa_root(base), (
+            "/ 与 /run/{sid} 吐的外壳不是同一支（有人写第二份注入实现？）")
 
 
 # ====================================================================== 13 负控
@@ -637,9 +844,13 @@ def test_events_outside_a_run_never_become_a_run(tmp_path: pathlib.Path):
         groups = {g["sid"]: g for g in got["orphan_summary"]["groups"]}
         assert groups["20261003"]["kinds"] == ["task_end"], groups
         assert groups["t"]["kinds"] == ["user_answer"], groups
-        # 详情页（还由服务端渲染的那一面）仍然给得出这一趟
-        _c2, detail = _get(base, "/run/t")
-        assert "agent_run_start" in detail and "final" in detail
+        # 详情面（P1 之后是 JSON）仍然给得出这一趟：task 来自 agent_run_start、
+        # stop_reason 来自 agent_run_end（原来读的是旧壳详情页里那两个 kind 串）
+        _c2, raw_detail = _get(base, "/api/run/t")
+        detail = json.loads(raw_detail)
+        assert detail["tri"] == "computed", detail
+        assert detail["runs"][0]["task"] == "真运行", detail["runs"][0]
+        assert detail["runs"][0]["stop_reason"] == "final", detail["runs"][0]
         _spa_root(base)
 
     # 一趟都没有的工作区 ⇒ last_run is None（SPA 的 Run 页写"一段会话里一趟都没有"，
@@ -676,6 +887,65 @@ def test_unknown_paths_and_methods(tmp_path: pathlib.Path):
 
 
 # ====================================================================== 入口接线
+
+# ====================================================================== 16 负控
+def test_a_client_that_hangs_up_leaves_no_traceback_on_stderr(
+        tmp_path: pathlib.Path, monkeypatch):
+    """负控（客户端中途挂断）：服务端不留未处理异常，也不影响后续请求。
+
+    形态出处（W5 收工门 §8 的 stderr 读数）：那里混进过两行
+    `Exception occurred during processing of request from ('127.0.0.1', …)` +
+    `ConnectionAbortedError: [WinError 10053]`。它不影响判定，但那是一条假错误
+    信号：日志里多一条"服务器出错了"，真错误就难找了，"stderr 里有没有东西"
+    这类判据也不好写。成因在 `handle_one_request`：SSE 的响应头写着
+    `Connection: keep-alive` ⇒ handler 返回后这一层会再读一次请求行，
+    读到的正是那条已被掐断的套接字。
+
+    掐断怎么造（本机五种打法都实测过：SSE 读两帧后 close、SSE 读两帧后带 RST 关闭、
+    完整 GET 后 RST、半截请求后 RST、POST 正文没收完就 RST）：这里取"SSE 读两帧后
+    带 RST 关闭"——它最接近门里那一档（同一条 keep-alive 的流、同一条 handler 返回后
+    再读请求行的路径），而且 RST 让"对端没了"当场可见（实测 0.67 秒就冒出来）；
+    优雅 close 则要等服务端下一拍写失败才知道（实测 2 秒以上，落在等待窗口之外）——
+    判据要的是确定复现，而不是"等得够久就碰上了"。
+
+    1. `GET /api/stream` 在裸 socket 上读满两帧，然后 `SO_LINGER` 置 0 再 close；
+    2. stderr 里不许出现 `ConnectionAbortedError` / `ConnectionResetError`，
+       也不许出现 `socketserver` 那句 `Exception occurred during processing of request`；
+    3. 一次断开不许影响后续请求（紧跟着 `GET /api/state` 仍然 200）——
+       只把日志弄干净、却把连接循环弄死，是另一种坏。
+
+    心跳周期在这里必须显式注入（0.2 秒）：这条判据靠"下一帧写不出去"来暴露断开，
+    用默认的 15 秒会让判据等 15 秒（同 `test_webui_sse.py` 的理由）。
+    负控：把 `WebHandler.handle_one_request` 的覆写去掉（换回基类那一份）⇒
+    上面第 2 条必须红（做法见 `temp/w5_negctl_abort.py`：只在测试进程里重新绑定，
+    不动盘上任何一个字节；实测原文见 W5 报告）。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", err)
+    SSE.begin_serving(heartbeat_sec=0.2)
+    SSE.attach()          # 与 serve() 自己开一代时做的两件事一致（理由见 server.serve）
+    with server(root) as base:
+        frames = _abort_sse(base)
+        assert frames >= 2, (
+            f"两帧都没读满（读到 {frames}）⇒ 这条判据没落到『读着读着被掐断』上")
+        # 给服务端把这次断开处理完留出时间，再读 stderr
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            if "Exception occurred during processing" in err.getvalue():
+                break
+            time.sleep(0.05)
+        time.sleep(0.2)
+        out = err.getvalue()
+        assert "ConnectionAbortedError" not in out, out
+        assert "ConnectionResetError" not in out, out
+        assert "Exception occurred during processing of request" not in out, out
+        assert "Traceback (most recent call last)" not in out, out
+        # 一次断开不许影响后续请求
+        code, _body = _get(base, "/api/state")
+        assert code == 200, code
+
 
 def test_the_cli_web_subcommand_forwards_to_the_module_entry(tmp_path: pathlib.Path,
                                                             monkeypatch):
