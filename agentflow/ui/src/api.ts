@@ -5,8 +5,8 @@
  *
  * 1. 路径只在 ENDPOINTS 里写一次 —— `tests/test_webui_contracts.py` 的 A 条把
  *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对。
- *    后端有的（B 线六个只读面 + A 线的 /api/state 与 /api/run-index + C 线既有的
- *    POST /answer）前端必须逐条声明；反过来，前端多写一个后端没有的端点也会红。
+ *    后端有的（B 线六个只读面 + A 线的 /api/run-index + C 线既有的
+ *    POST /answer + 题 T2-a 的 `/api/run/{sid}/events`）前端必须逐条声明；反过来，前端多写一个后端没有的端点也会红。
  *    `POST /api/stop` / `POST /api/submit` / `POST /api/settings`（契约 C1 第 8–10 行）
  *    属于 C 线 W3/W4，后端今天还没有那三条路由 —— 所以这里一条都不写：
  *    "前端声明了而后端没有"正是 A 条要抓的漂移。
@@ -19,6 +19,7 @@ import type {
   ArtifactsView,
   EvidenceView,
   MachineView,
+  RunEventsView,
   RunIndexDrift,
   RunView,
   StateSnapshot,
@@ -35,6 +36,7 @@ export const ENDPOINTS = {
   state: "/api/state",
   runIndex: "/api/run-index",
   run: "/api/run/{sid}",
+  runEvents: "/api/run/{sid}/events",
   evidence: "/api/evidence",
   artifacts: "/api/artifacts",
   acceptance: "/api/acceptance",
@@ -51,6 +53,29 @@ export type EndpointName = keyof typeof ENDPOINTS;
 /** 一趟详情的实参拼装（`/api/run/{sid}` 的那一个占位符）。 */
 export function runPath(sid: string): string {
   return ENDPOINTS.run.replace("{sid}", encodeURIComponent(sid));
+}
+
+/**
+ * 一趟的逐条事件（`/api/run/{sid}/events`）的实参拼装。
+ *
+ * 两个查询参数逐字对应后端 `handle_run_events` 读的那两个：`since_index` 是游标
+ * （左闭，填上一页的 `to_index` 就是续取），`limit` 是一页多少条（后端钳在
+ * `[1, 500]`，超了按上限截断并在 `reason` 里说明）。
+ */
+export function runEventsPath(
+  sid: string,
+  opts: { sinceIndex?: number; limit?: number } = {},
+): string {
+  const q = new URLSearchParams();
+  if (typeof opts.sinceIndex === "number") {
+    q.set("since_index", String(opts.sinceIndex));
+  }
+  if (typeof opts.limit === "number") {
+    q.set("limit", String(opts.limit));
+  }
+  const tail = q.toString();
+  const base = ENDPOINTS.runEvents.replace("{sid}", encodeURIComponent(sid));
+  return tail === "" ? base : `${base}?${tail}`;
 }
 
 /** 收工门那条端点的查询串（三个可选输入，逐字对应后端的 `?project_dir=` 等）。 */
@@ -219,6 +244,10 @@ export const api = {
   getState: (): Promise<StateSnapshot> => getJSON<StateSnapshot>(ENDPOINTS.state),
   getRunIndex: (): Promise<RunIndexDrift> => getJSON<RunIndexDrift>(ENDPOINTS.runIndex),
   getRun: (sid: string): Promise<RunView> => getJSON<RunView>(runPath(sid)),
+  getRunEvents: (
+    sid: string,
+    opts: { sinceIndex?: number; limit?: number } = {},
+  ): Promise<RunEventsView> => getJSON<RunEventsView>(runEventsPath(sid, opts)),
   getEvidence: (): Promise<EvidenceView> => getJSON<EvidenceView>(ENDPOINTS.evidence),
   getArtifacts: (): Promise<ArtifactsView> => getJSON<ArtifactsView>(ENDPOINTS.artifacts),
   getAcceptance: (opts: {

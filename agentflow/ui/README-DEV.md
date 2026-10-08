@@ -2,12 +2,13 @@
 
 > 这份文件写给"要改这个前端的人"。设计口径（抄 DSH 的皮、六个页面各自读什么、两套三态词表）
 > 在 `../docs/USER-END-DSH-STYLE.md`（§1 皮 · §3 界面纪律 · **§3.1 六页逐栏**）；
-> 契约表（端点 11 条 / 事件 6 个 kind / 字段 / 路由 / 组件 props）在
-> `../../draft/75-Web端伪代码（逐前端文件·互相对齐）.md` §1，**它是名字的唯一来源**。
+> 契约表（端点逐条 / 事件 6 个 kind / 字段 / 路由 / 组件 props）在
+> `../../draft/75-Web端伪代码（逐前端文件·互相对齐）.md` §1，**它是名字的唯一来源**
+> （题 T2-a 新加的那一条端点由主控落进 §1.1 的 C1 表）。
 
 ---
 
-## 1. 目录与文件清单（本机读数：19 个文件、3656 行）
+## 1. 目录与文件清单（本机读数：19 个文件、4126 行）
 
 ```text
 ui/
@@ -28,6 +29,12 @@ ui/
     theme/app.css       # 只用令牌（var(--dsw-*)），一个色值都不许写死
     theme/generated/theme.css   # 生成物，勿手改（python -m agentflow.web.emit_theme）
 ```
+
+`pages/Run.tsx` 里的 `EventTimeline` 是**一趟的逐条事件**（题 T2-a）：`api.getRunEvents(sid,
+{ sinceIndex, limit })` 取一页，"继续加载"用上一页的 `to_index` 当 `sinceIndex` 续取；
+`unreadable` / `not_applicable` 各有一句自己的话（**不许**画成一张空列表，也不许把条数写成 0
+—— 那一档后端给的计数栏是 `None`）。`index` 与「趟次」那张表的 `start_index`/`end_index`
+是同一套编号（会话里第几条事件，0 起）。
 
 ## 2. 装依赖与构建（三条命令）
 
@@ -75,7 +82,8 @@ pnpm -C ui typecheck      # = tsc --noEmit（类型门，契约 §3-E）
 | 判据 | 守什么 |
 |---|---|
 | `tests/test_webui_contracts.py` | 四条名字层：A 端点集合 == `routes.ROUTES`；B `sse.ts` 的 `KINDS` == `sse.EVENT_KINDS`；C `types.ts` 的键集合 == 后端在夹具上真读出来的键；D `main.tsx` 的路由集合 == `draft/75 §1.4` 的 C4 表；外加两份生成物的新鲜度 |
-| `tests/test_webui_pages.py` | 每页一条：真读数出现 + 空态 + 三态（读端点 + 读页面源码两头都比） |
+| `tests/test_webui_pages.py` | 每页一条：真读数出现 + 空态 + 三态（读端点 + 读页面源码两头都比；含 Run 页逐条事件那一块的正控与"不许画成空列表"的负控） |
+| `tests/test_webui_readers.py` | 各只读面的正控/负控（含逐条事件：编号口径与 `snapshot()` 同一套、`since_index`/`limit` 分页、`limit=0`/负数 ⇒ 400、超上限有界、会话不在盘上 ⇒ `unreadable`） |
 | `tests/test_webui_static.py` | `GET /` 吐 SPA 外壳（`#app` + 注入过的令牌 + `no-store`）、静态路由与目录穿越、SPA 回退的 `Accept` 收窄 |
 | `tests/test_webui_sse.py` | 后端那一条流（B 的判据；前端侧由契约 B 与 D 守着） |
 | `node node_modules/typescript/bin/tsc --noEmit` | 类型层：组件 props 不匹配、后端键改名都会在这里断 |

@@ -204,6 +204,35 @@ export interface RunView {
   path: string;
 }
 
+/** 出处：run_events() 的一行 —— 会话里的一条事件（`index` 与 `RunRow.start_index`/`end_index` 同一套编号：解析成功后的事件列表下标，0 起）。 */
+export interface EventRow {
+  index: number;
+  kind: string;
+  ts: string;
+  role: string;
+  shape?: string;
+  ok?: boolean;
+  usd?: number | null;
+  tokens_in?: number;
+  tokens_out?: number;
+  payload?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  text?: string;
+  stopped?: boolean;
+}
+
+/** 出处：run_events() —— 一趟的逐条事件（游标分页：`from_index` 闭、`to_index` 开，`to_index` 直接可当下一次的 `since_index`）。 */
+export interface RunEventsView {
+  tri: Tri;
+  reason: string;
+  sid: string;
+  total: number | null;
+  from_index: number | null;
+  to_index: number | null;
+  truncated: boolean;
+  events: EventRow[];
+}
+
 /** 出处：evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）。 */
 export interface EvidenceView {
   tri: Tri;

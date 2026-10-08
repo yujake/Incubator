@@ -23,9 +23,13 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import pathlib
 import re
+import threading
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 import conftest
 import pytest
@@ -148,6 +152,266 @@ def test_run_view_reports_a_corrupt_checkpoint_as_unreadable(
     finally:
         p.write_text(good, encoding="utf-8")
     assert R.run_view(artifacts_ws, SID)["tri"] == R.TRI_COMPUTED
+
+
+# ====================================================================== 2b 逐条事件
+# 题 T2-a：`GET /api/run/{sid}/events`。这一组除了"读得到"之外还钉两件事：
+# ① 编号口径（`index` 与 `snapshot()` 的 `start_index`/`end_index` 同一套）；
+# ② 三态不许塌（会话不在盘上 ⇒ `unreadable`，不是"这一趟 0 条事件"）。
+
+def test_run_events_reads_the_rows_with_the_snapshot_numbering(
+        artifacts_ws: pathlib.Path) -> None:
+    """正控（逐条事件）：夹具那一段会话的四条事件逐条读出来，编号与快照同一套。
+
+    夹具（`tests/conftest.py`）那一段会话是四行：`agent_run_start` / `agent_step` /
+    `agent_run_end` / `user_question`。所以 `total=4`、`index` 0..3；
+    而 `RunRow.start_index..end_index` 恰好圈住中间那三条 —— 这就是"同一套编号"的
+    机器读数（`webui.state._scan` 与 `sessions.runs_in_session` 都对同一个列表
+    `enumerate`）。
+    """
+    got = R.run_events(artifacts_ws, SID)
+    assert got["tri"] == R.TRI_COMPUTED, got
+    assert got["sid"] == SID and got["total"] == 4, got
+    assert (got["from_index"], got["to_index"], got["truncated"]) == (0, 4, False), got
+    rows = got["events"]
+    assert [e["index"] for e in rows] == [0, 1, 2, 3], rows
+    assert [e["kind"] for e in rows] == ["agent_run_start", "agent_step",
+                                         "agent_run_end", "user_question"], rows
+    assert all(e["ts"] != "" and e["role"] == "M" for e in rows), rows
+    # 自洽：区间长度 == 行数，且 to_index 就是下一次的 since_index
+    assert got["to_index"] - got["from_index"] == len(rows)
+    assert [e["index"] for e in R.run_events(artifacts_ws, SID,
+                                             since_index=got["to_index"])["events"]] == []
+    # 「有就带上」的那几栏：`agent_step` 那一行有 shape，夹具没给它 payload/result
+    # ⇒ 那一栏就不出现（补一个 null 就等于把"这一行没有"说成"读到了、是空的"）。
+    # 真的带 payload/result 的行由下一条用例造出来验。
+    step = rows[1]
+    assert step["shape"] == "fs.write", step
+    assert "payload" not in step and "result" not in step, step
+    assert "payload" not in rows[0], rows[0]
+    assert set(rows[0]) == {"index", "kind", "ts", "role"}, sorted(rows[0])
+    # 每一行都是声明过的键的子集（多一个键就是契约漂移，C 条会在 A 那边报）
+    for row in rows:
+        assert set(row) <= set(FIELDS["EventRow"]), (sorted(row), sorted(FIELDS["EventRow"]))
+    assert set(got) == set(FIELDS["RunEventsView"]), sorted(got)
+    # 与快照的趟次编号是同一套：那一趟的事件正好落在 start_index..end_index 里
+    run = R.run_view(artifacts_ws, SID)["runs"][0]
+    inside = [e["index"] for e in rows
+              if run["start_index"] <= e["index"] <= run["end_index"]]
+    assert inside == [0, 1, 2], (inside, run["start_index"], run["end_index"])
+    # `events_in_run` 是 `end_index - start_index`（不数开始那一行），逐条回放给的是
+    # 闭区间 `[start_index, end_index]` 那 3 行 —— 两者差 1 是既有口径，不是漂移。
+    assert run["events_in_run"] == 2, run["events_in_run"]
+    assert len(inside) == run["events_in_run"] + 1
+
+
+def test_run_events_pages_by_since_index_and_marks_truncation(
+        artifacts_ws: pathlib.Path) -> None:
+    """正控（游标分页）：`since_index` 是左闭游标，`limit` 截断时 `truncated=True`。
+
+    四档都摆出来：续取（游标落在第一条上）、`limit` 截断、越过末尾（合法空页）、
+    越界钳位（99 → 4）。四种情况下 `from_index`/`to_index`/`total` 都必须自洽。
+    """
+    page2 = R.run_events(artifacts_ws, SID, since_index=2)
+    assert page2["events"][0]["index"] == 2, page2["events"]
+    assert (page2["from_index"], page2["to_index"], page2["total"]) == (2, 4, 4), page2
+    assert page2["truncated"] is False, page2
+
+    tiny = R.run_events(artifacts_ws, SID, limit=2)
+    assert [e["index"] for e in tiny["events"]] == [0, 1], tiny["events"]
+    assert (tiny["from_index"], tiny["to_index"], tiny["total"]) == (0, 2, 4), tiny
+    assert tiny["truncated"] is True, tiny
+
+    one = R.run_events(artifacts_ws, SID, since_index=2, limit=1)
+    assert [e["index"] for e in one["events"]] == [2], one["events"]
+    assert (one["from_index"], one["to_index"]) == (2, 3), one
+    assert one["truncated"] is True, one
+
+    # 越过末尾：一页空的，但那是「读到了，游标在末尾」—— `tri` 仍是 computed
+    past = R.run_events(artifacts_ws, SID, since_index=4)
+    assert past["tri"] == R.TRI_COMPUTED, past
+    assert past["events"] == [] and past["from_index"] == 4 and past["to_index"] == 4, past
+    assert past["truncated"] is False, past
+    # 越界钳位：99 钳到 4，不抛、不吐无限
+    clamped = R.run_events(artifacts_ws, SID, since_index=99)
+    assert (clamped["from_index"], clamped["to_index"]) == (4, 4), clamped
+    # 上限：超了按上限截断并在 reason 里说明（读模型自己钳，handler 那一层也钳）
+    huge = R.run_events(artifacts_ws, SID, limit=10 ** 9)
+    assert len(huge["events"]) <= R.EVENTS_LIMIT_MAX, len(huge["events"])
+    assert "超上限" in huge["reason"] and str(R.EVENTS_LIMIT_MAX) in huge["reason"], huge
+    # `limit=0` / 负数：读模型这一层只钳位（不抛），HTTP 那一层才是 400（见下面那条用例）
+    zero = R.run_events(artifacts_ws, SID, limit=0)
+    assert len(zero["events"]) == 1 and "小于 1" in zero["reason"], zero
+    assert R.run_events(artifacts_ws, SID, limit=-7)["total"] == 4
+
+
+def test_run_events_carries_the_optional_columns_only_when_the_row_has_them(
+        tmp_path: pathlib.Path) -> None:
+    """正控（"有就带上"的那几栏）：行里有就原样给，没有就不出现（也不补 null/false）。
+
+    三档在一条用例里摆齐：有值的（`ok`/`usd`/`tokens_*`/`shape`/`payload`/`result`）、
+    有这一栏但算不出价钱的（`usd: null`，必须仍是 `null` 而不是被丢掉）、
+    以及"这一行根本没有这一栏"（键不出现）。`stopped` 今天没有生产者，
+    这一格至少要在"行里真有它"时转发得出去。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    SS.append(root, {"kind": "llm_call", "role": "M", "ok": True, "usd": 0.5,
+                     "tokens_in": 3, "tokens_out": 4, "shape": "llm.call"}, sid="t")
+    SS.append(root, {"kind": "agent_step", "role": "M", "usd": None,
+                     "payload": {"path": "out/x.md"}, "result": {"ok": True}}, sid="t")
+    SS.append(root, {"kind": "agent_note", "role": "M", "text": "一句摘要"}, sid="t")
+    SS.append(root, {"kind": "agent_run_end", "role": "M", "stopped": True}, sid="t")
+    rows = R.run_events(root, "t")["events"]
+    assert set(rows[0]) == {"index", "kind", "ts", "role", "shape", "ok", "usd",
+                            "tokens_in", "tokens_out"}, sorted(rows[0])
+    assert rows[0]["ok"] is True and rows[0]["tokens_in"] == 3, rows[0]
+    assert rows[1]["usd"] is None, "有这一栏但算不出价钱：必须是 null，不许被丢掉"
+    assert rows[1]["payload"] == {"path": "out/x.md"} and rows[1]["result"] == {"ok": True}
+    assert rows[2]["text"] == "一句摘要" and "payload" not in rows[2], rows[2]
+    assert rows[3]["stopped"] is True, rows[3]
+
+
+def test_run_events_says_a_missing_session_is_unreadable(
+        tmp_path: pathlib.Path) -> None:
+    """负控（三态）：会话文件不在盘上 ⇒ `unreadable` + 点名那个路径。
+
+    这一档最要紧：`unreadable` 绝不能回一页"看起来像没有事件"的空读数 ——
+    所以除了 `events == []` 之外，计数栏一律是 `None`（不是 0），理由里带路径。
+    """
+    root = tmp_path / "ws"
+    root.mkdir()
+    got = R.run_events(root, "nope")
+    assert got["tri"] == R.TRI_UNREADABLE, got
+    assert "不在盘上" in got["reason"] and "nope.jsonl" in got["reason"], got["reason"]
+    assert got["events"] == [] and got["truncated"] is False, got
+    assert got["total"] is None and got["from_index"] is None, got
+    assert got["to_index"] is None, got
+    # 逆命题：这个工作区里连 sessions/ 都没有 ⇒ 它不是"读到了 0 条"
+    assert got["total"] != 0, "「没查成」被折成了 0"
+
+
+def test_run_events_says_an_empty_session_is_not_applicable(
+        tmp_path: pathlib.Path) -> None:
+    """负控（三态）：会话文件在盘上但是空的 ⇒ `not_applicable` + "还没写过"。"""
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "sessions").mkdir()
+    (root / "sessions" / "empty.jsonl").write_text("", encoding="utf-8")
+    got = R.run_events(root, "empty")
+    assert got["tri"] == R.TRI_NOT_APPLICABLE, got
+    assert "空的" in got["reason"] and "不是没查成" in got["reason"], got["reason"]
+    assert got["total"] is None and got["from_index"] is None, got
+    assert got["events"] == [], got
+
+
+def test_run_events_reports_bad_lines_but_keeps_the_readable_rows(
+        artifacts_ws: pathlib.Path) -> None:
+    """负控（三态）：会话里有一行坏 JSON ⇒ `unreadable` + 坏行数，而读得出来的照常给。
+
+    两种错法都摆出来：只报 `tri` 会让"有坏行"消失，把行清空会让"这一趟有 4 条事件"
+    变成一句假话 —— 这一条同时钉住两头。红前绿后：把那一行撤掉 ⇒ 又变绿。
+    """
+    path = artifacts_ws / "sessions" / f"{SID}.jsonl"
+    good = path.read_text(encoding="utf-8")
+    path.write_text(good + "{ 这一行不是 JSON\n", encoding="utf-8")
+    try:
+        got = R.run_events(artifacts_ws, SID)
+        assert got["tri"] == R.TRI_UNREADABLE, got
+        assert "坏行" in got["reason"], got["reason"]
+        assert got["total"] == 4 and len(got["events"]) == 4, got
+    finally:
+        path.write_text(good, encoding="utf-8")
+    assert R.run_events(artifacts_ws, SID)["tri"] == R.TRI_COMPUTED
+
+
+# ---- 端点那一层（真实 HTTP：参数校验与"处理器缺了必须吵"）
+@contextmanager
+def _server(root: pathlib.Path) -> Iterator[str]:
+    """在临时端口上起一个真实的 web 服务（这一组的 HTTP 判据走它）。"""
+    from agentflow import webui as W
+
+    srv = W.serve(root, host="127.0.0.1", port=0, csrf_token="readerstoken0123456789")
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"{srv.server_address[0]}:{srv.server_address[1]}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=5.0)
+
+
+def _get(base: str, path: str) -> tuple[int, dict[str, Any], str]:
+    """一次 GET：返回 `(状态码, 解出来的 JSON（不是 JSON 就是空 dict）, 正文)`。"""
+    conn = http.client.HTTPConnection(base, timeout=20)
+    try:
+        conn.request("GET", path, headers={"Accept": "application/json"})
+        resp = conn.getresponse()
+        raw = resp.read().decode("utf-8", errors="replace")
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            body = {}
+        return resp.status, body if isinstance(body, dict) else {"_list": body}, raw
+    finally:
+        conn.close()
+
+
+def test_the_events_endpoint_answers_json_and_bounds_every_bad_cursor(
+        artifacts_ws: pathlib.Path) -> None:
+    """正控 + 边界（真实 HTTP）：正常取一页；非法的游标一律 400 + JSON，超上限有界。
+
+    后者是"不吐无限"那一条的机器读数：`limit` 给多大，返回的事件数都不超过上限
+    （`limit` 超上限那一档不是非法 —— 按上限截断并在 `reason` 里说明）。
+    """
+    with _server(artifacts_ws) as base:
+        code, got, raw = _get(base, f"/api/run/{SID}/events")
+        assert code == 200, (code, raw)
+        assert got["tri"] == "computed" and got["total"] == 4, got
+        assert [e["index"] for e in got["events"]] == [0, 1, 2, 3], got["events"]
+        # 三态那一档也在 HTTP 上验一次（会话不在盘上 ⇒ 200 + unreadable，不是 500）
+        code_none, none_got, _raw = _get(base, "/api/run/nope/events")
+        assert code_none == 200, code_none
+        assert none_got["tri"] == "unreadable" and none_got["reason"], none_got
+
+        # 非法游标 ⇒ 400 + JSON（`/api/*` 一律 JSON，裁定 Q1）
+        for query in ("limit=0", "limit=-1", "since_index=-5", "since_index=abc",
+                      "limit=abc", "limit=2.5"):
+            code_bad, bad, raw_bad = _get(base, f"/api/run/{SID}/events?{query}")
+            assert code_bad == 400, (query, code_bad, raw_bad)
+            assert bad.get("reason"), (query, bad)
+            assert bad.get("ok") is False, (query, bad)
+
+        # 超上限：有界 + 在读数里说明（这一档是 200，不是 400）
+        code_big, big, _raw = _get(base, f"/api/run/{SID}/events?limit=100000")
+        assert code_big == 200, code_big
+        assert len(big["events"]) <= R.EVENTS_LIMIT_MAX, len(big["events"])
+        assert "超上限" in big["reason"], big
+
+
+def test_the_events_handler_missing_makes_the_endpoint_scream(
+        artifacts_ws: pathlib.Path) -> None:
+    """负控（接缝）：把 `readers.HANDLERS` 里那个处理器摘掉 ⇒ 真实请求必须 500 且点名。
+
+    路由表与实现的漂移不许静默 404（那会让前端以为"这条端点不存在"）：
+    `server._invoke` 两边都找不到时的口径就是 500 + 把名字写进正文。
+    摘掉与装回都在这条用例里做（`try/finally`），不让它污染别的用例 ——
+    这与契约判据里那条接缝判据是同一个形态（那边用的是 `sse.HANDLERS`）。
+    """
+    original = R.HANDLERS.pop("handle_run_events")
+    try:
+        with _server(artifacts_ws) as base:
+            code, _body, raw = _get(base, f"/api/run/{SID}/events")
+            assert code == 500, (code, raw)
+            assert "handle_run_events" in raw, raw
+    finally:
+        R.HANDLERS["handle_run_events"] = original
+    # 装回去之后又绿（证明上面那条红的成因就是那一处）
+    assert R.HANDLERS["handle_run_events"] is R.handle_run_events
+    with _server(artifacts_ws) as base:
+        code_ok, got, _raw = _get(base, f"/api/run/{SID}/events")
+        assert code_ok == 200 and got["tri"] == "computed", (code_ok, got)
 
 
 # ====================================================================== 3 证据链
@@ -440,6 +704,10 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     if run["checkpoint"]:
         got["CheckpointView"] = set(run["checkpoint"])
         got["CheckpointSpendView"] = set(run["checkpoint"]["spend"])
+    ev_rows = R.run_events(artifacts_ws, SID)
+    got["RunEventsView"] = set(ev_rows)
+    assert ev_rows["events"], "夹具没造出事件行"
+    got["EventRow"] = set(ev_rows["events"][0])
     art = R.artifacts_face(artifacts_ws)
     got["ArtifactsView"] = set(art)
     for name, rows in (("ArtifactRow", art["ledger"]),
@@ -472,9 +740,9 @@ def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
     字典（A 线落的那条接缝）。这条是"我这一半接没接上"的机器读数。
     """
     ours = {name for _m, _p, name in R.ROUTES}
-    assert ours == {"handle_state", "handle_run_view", "handle_evidence",
-                    "handle_artifacts", "handle_acceptance", "handle_machine",
-                    "handle_stream"}, ours
+    assert ours == {"handle_state", "handle_run_view", "handle_run_events",
+                    "handle_evidence", "handle_artifacts", "handle_acceptance",
+                    "handle_machine", "handle_stream"}, ours
     for _m, path, name in R.ROUTES:
         assert path in routes.patterns(), f"{path} 没进总表"
         assert routes.handler_for(name) is not None, f"{name} 没有实现"
@@ -513,6 +781,7 @@ def test_every_face_carries_tri_and_reason(artifacts_ws: pathlib.Path) -> None:
     faces = {
         "state": R.state_face(artifacts_ws),
         "run": R.run_view(artifacts_ws, SID),
+        "events": R.run_events(artifacts_ws, SID),
         "evidence": R.evidence_chain(artifacts_ws),
         "artifacts": R.artifacts_face(artifacts_ws),
         "acceptance": R.acceptance_face(artifacts_ws, project_dir=str(artifacts_ws)),

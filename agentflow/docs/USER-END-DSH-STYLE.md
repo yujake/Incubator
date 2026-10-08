@@ -99,11 +99,21 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 | 路由 | 页面 | 端点（`ui/src/api.ts` 的 `ENDPOINTS`） | 读的栏位（后端键逐字） | 空态（"读到了，里面是 0"） | 三态落点 |
 |---|---|---|---|---|---|
 | `/` | `Home.tsx` | `GET /api/state` | `pending_questions`（**全局，不按会话过滤**）· `sessions`（`events_seen`/`bad_lines`/`last_kind`/`pending`/`runs`/`orphans`）· `problems` · `ledger.events`/`tables`/`tables_note` · `runs[].waiting_on` | "没有待回答的问题（合法初态，不是「没查成」）" | `problems` 非空 ⇒ 顶部横幅显红；`bad_lines > 0` ⇒ 行内徽标 |
-| `/run/:sid` | `Run.tsx` | `GET /api/run/{sid}` + `GET /api/run-index` | `runs[]`（`steps`/`llm_calls`/`usd`/`unknown_usd`/`last_shape`/`stop_reason`/`waiting_on`/`events_in_run`）· `report`（`ok`/`missing`/`unknown`）· `checkpoint.spend`（首选花销）· `drift`/`usable`/`tri`（趟次索引对账）· `orphans`/`orphan_summary` | "这一段会话里一趟都没有" + "没有轮次之外的零散事件" | 索引 `tri != computed` ⇒ 显红并说明"本页回退现算"；两个花销来源都读到才谈"是否一致"，任一边没读到 ⇒ "没查成"；交付说明走 `ReportTri` 那一套词 |
+| `/run/:sid` | `Run.tsx` | `GET /api/run/{sid}` + `GET /api/run-index` + `GET /api/run/{sid}/events`（`?since_index=` `?limit=`） | `runs[]`（`steps`/`llm_calls`/`usd`/`unknown_usd`/`last_shape`/`stop_reason`/`waiting_on`/`events_in_run`）· `report`（`ok`/`missing`/`unknown`）· `checkpoint.spend`（首选花销）· `drift`/`usable`/`tri`（趟次索引对账）· `orphans`/`orphan_summary` · 逐条事件：`total`/`from_index`/`to_index`/`truncated`/`events[]`（每条 `index`/`kind`/`ts`/`role`，另有"有就带上"的 `shape`/`ok`/`usd`/`tokens_in`/`tokens_out`/`payload`/`result`/`text`/`stopped`） | "这一段会话里一趟都没有" + "没有轮次之外的零散事件" + 逐条事件"游标已经到末尾" | 索引 `tri != computed` ⇒ 显红并说明"本页回退现算"；两个花销来源都读到才谈"是否一致"，任一边没读到 ⇒ "没查成"；交付说明走 `ReportTri` 那一套词；逐条事件 `unreadable` ⇒ 显"没查成（不是一张空列表）"、计数栏是 `unknown` 而不是 0（`not_applicable` = 会话在盘上但还没有事件） |
 | `/evidence` | `Evidence.tsx` | `GET /api/evidence` | `statements` · `conjectures`（含 `counterexample_experiment_id`）· `experiments` · `review_findings` · `relations.quote_verified`（真/假/未查三个数）· `verifications` · `secretary` | 每一栏各自的 `<栏>_tri == computed` 且 0 行 ⇒ "0 条（读到了，里面是空的）" | **逐栏**读 `<栏>_tri`（整面一个词会吞掉"哪一栏没读成"）；`quote_verified !== true` 必须连 `quote_reason` 一起看 |
 | `/artifacts` | `Artifacts.tsx` | `GET /api/artifacts` | `ledger` · `ledger_verify`（台账钉的 sha vs 盘上现在这一版）· `handoffs`（`body` 按 `CLIP=400` 截断）· `checks` · `style.sections` · `secretary` · `products`（六件，裁定 J2 的夹具样本）· `tasks` | 逐栏："台账 0 行（读到了，里面是空的）" | 逐栏 `<栏>_tri`；`products_tri == not_applicable` ⇒ "这一路本机还没跑过"，不是"六件都不在" |
 | `/acceptance` | `Acceptance.tsx` | `GET /api/acceptance`（`?project_dir=` `?report_path=` `?cap_usd=`） | `criteria`（5 条，值 `pass`/`fail`/`unknown`）· `details` · `auxiliary`（5 条）· `failed` · `auxiliary_note` | "一条判据都没读到"（判据名表来自 `reviewaccept.CRITERIA`，页面不另抄） | `unknown` 显成"没查成（不是通过）"；**不给 `cap_usd` ⇒「在成本上限内」那一格必为 `unknown`** |
 | `/machine` | `Machine.tsx` | `GET /api/machine` | `provers`（含 `checked` 与 `sources` —— "从哪一档找到的"）· `mathlib` · `lean_ready`/`can_do_formal` · `settings.path`/`exists`/三段 · `settings.model.configured`（**永无 key 值**） | "探测读数里一格都没有" | `provers.checked=false` ⇒ 整面 `unreadable`（探测没跑完 ≠ 一个都没找到）；`lean_ready`/`can_do_formal` 的 `null` 显 `unknown`，不折成 `false` |
+
+**逐条事件那一栏是补回来的（题 T2-a，所有者裁定，2026-10-08）**：旧壳 `/run/{sid}` 那张
+"逐条事件卡片"随 `views.py` 退场之后，`RunView` 只剩聚合读数（`runs[]` 的 `steps`/`llm_calls`/
+`last_shape`/`stop_reason`/`usd`），用户端**逐条复核一趟**这件事在盘上没有端点给得出。
+`GET /api/run/{sid}/events` 就是补这一层的只读面：数据源只有 `sessions.read_session` 一处，
+`index` 与 `RunView.runs[].start_index`/`end_index` **是同一套编号**（该会话里第几条事件，0 起；
+`start_index <= index <= end_index` 的那些行就是那一趟），分页用 `since_index`（左闭游标，
+填上一页的 `to_index` 即可续取）与 `limit`（默认 50、上限 500，超上限按上限截断并在理由里说明）。
+判据在 `tests/test_webui_readers.py`（正控/分页/三态/边界/接缝五条）与
+`tests/test_webui_pages.py`（Run 页那一块的正控与"不许画成空列表"的负控）。
 
 **两套三态词表在组件层合流、在字符串层不通用**（裁定 N1）：`types.ts` 的
 `Tri`（`computed` / `unreadable` / `not_applicable`）与 `ReportTri`（`ok` / `missing` / `unknown`）
@@ -125,7 +135,8 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 ⇒ 不迁这两格，浏览器地址栏进不了首页、在一趟详情页上刷新也回不到 SPA。
 迁完之后服务端渲染的旧壳 `webui/views.py` 整件退场（九个函数一个不剩），
 服务器自己写 HTML 的地方只剩错误页（外壳不在盘上 / 静态未命中 / 写失败）。
-于是上表里每一行的读数都只有一个数据面：`/api/state`、`/api/run/{sid}` 与其余四个只读面；
+于是上表里每一行的读数都只有一个数据面：`/api/state`、`/api/run/{sid}`（逐条事件那一栏是
+`/api/run/{sid}/events`）与其余四个只读面；
 "一趟详情"不再有两面。会话不在盘上由 `GET /api/run/{sid}` 报 `tri=unreadable` + 理由
 （三态：没查成，不是"这一趟 0 步"），不再折成一张服务端 404 页。
 

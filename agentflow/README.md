@@ -274,7 +274,7 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 | 路由 | 页面 | 读哪条端点 |
 |---|---|---|
 | `/` | 全局待回答面板 + 会话概览 | `GET /api/state` |
-| `/run/:sid` | 一趟详情（时间线 / 花销两个来源 / 索引对账 / 交付说明） | `GET /api/run/{sid}` + `GET /api/run-index` |
+| `/run/:sid` | 一趟详情（时间线 / 逐条事件 / 花销两个来源 / 索引对账 / 交付说明） | `GET /api/run/{sid}` + `GET /api/run-index` + `GET /api/run/{sid}/events` |
 | `/evidence` | 证据链七栏 | `GET /api/evidence` |
 | `/artifacts` | 产物（台账 / 交接 / 验收行 / 体例 / 六件产物 / 任务） | `GET /api/artifacts` |
 | `/acceptance` | 收工门内容级验收（5 判据 + 5 辅助） | `GET /api/acceptance` |
@@ -282,6 +282,14 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 
 逐页逐栏的字段、空态与三态口径见 `docs/USER-END-DSH-STYLE.md` §3.1；判据在
 `tests/test_webui_pages.py`（每页一条：真读数出现 + 空态 + 三态）。
+
+`GET /api/run/{sid}/events` 是**一趟的逐条事件**（题 T2-a 补回来的那一层：旧壳那张"逐条事件
+卡片"退场之后，聚合读数之外的逐条复核就没有端点给得出了）。它是只读端点，数据源只有
+`sessions.read_session` 一处；`index` 与 `/api/run/{sid}` 的 `runs[].start_index`/`end_index`
+**是同一套编号**（该会话里第几条事件，0 起），分页参数 `since_index`（左闭游标，填上一页的
+`to_index` 就能续取）与 `limit`（默认 50、上限 500，超上限按上限截断并在 `reason` 里说明）；
+会话文件不在盘上 ⇒ `tri=unreadable` + 理由（不是 500、也不是一页"看起来像没有事件"的空读数），
+文件在盘上但是空的 ⇒ `not_applicable`，参数非法（非整数 / 负数 / `limit=0`）⇒ 400 + JSON。
 
 `GET /`、`GET /index.html` 与 `GET /run/{sid}` 三条路都直接吐 SPA 外壳（裁定 P1：第一块 2026-10-07、
 最后一块 W5 清仓；注入本进程的 CSRF 令牌、`Cache-Control: no-store`）—— 浏览器地址栏进得了 SPA，
@@ -291,12 +299,13 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 判据在 `tests/test_webui.py`（18 条：外壳形状 / JSON 读数 / 写路径三态 / 转义 / 只用令牌 /
 客户端中途断开不留回溯）。前端工程自己的说明见 `ui/README-DEV.md`。
 
-**本机读数（2026-10-07，复算命令见括号）**：
+**本机读数（2026-10-08，复算命令见括号）**：
 
-- 路由表 `ROUTES` **16 行**、其中 JSON 端点 **12 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
-  其中 `/api/state` 按裁定 2b 归 B 线的 `readers.ROUTES`、`/api/run-index` 是 A 线自有的那一条；
-- 前端源码 `ui/src/` **19 个文件、3656 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
-- `ui/src/types.ts` 是生成物：**16,003 字节 / 39 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
+- 路由表 `ROUTES` **17 行**、其中 JSON 端点 **13 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
+  其中 `/api/state`、`/api/run/{sid}`、`/api/run/{sid}/events` 与其余四个只读面按裁定 2b 归 B 线的
+  `readers.ROUTES`、`/api/run-index` 是 A 线自有的那一条；
+- 前端源码 `ui/src/` **19 个文件、4126 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
+- `ui/src/types.ts` 是生成物：**16,869 字节 / 41 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
 - 事件词表 6 个 kind（`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`），前端 `sse.ts` 逐个注册并带 `?since=` 续传与"退避三次 ⇒ 降级轮询"；
 - 入库的构建产物 3 个文件（`web/static/index.html` + `assets/` 下的一支 `.js` 与一支 `.css`，
   本次读数共 **81,492 字节** —— 六页面与 `live.tsx` 全进包之后 JS 那一支就有 60.3 KB；

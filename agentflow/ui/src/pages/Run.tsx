@@ -1,10 +1,12 @@
 /*
  * 一趟详情 —— 运行态（`draft/74 §3.2` 逐行落）。
  *
- * 输入两条端点 + 一次共享快照：
+ * 输入三条端点 + 一次共享快照：
  *
  * - `api.getRun(sid)` → `RunView`（`runs` / `report` / `checkpoint`）；
  * - `api.getRunIndex()` → `RunIndexDrift`（裁定 O2：趟次索引与它对账的结论）；
+ * - `api.getRunEvents(sid, { sinceIndex, limit })` → `RunEventsView`（题 T2-a：一趟的
+ *   逐条事件，游标分页；旧壳那张"逐条事件卡片"退场后唯一能逐条复核的那一层）；
  * - `live.snapshot` → 台账读数（`ledger`）与「轮次之外的零散事件」（`orphans` /
  *   `orphan_summary`）。
  *
@@ -27,7 +29,7 @@
  * 的顶层键是公开面对账钉住的 10 个（`temp/_verify_w0.py`），那两个键不在其中，
  * 今天也没有别的端点给它们 —— 所以那两栏渲染成 `not_applicable` 并写明原因。
  */
-import { api } from "../api";
+import { api, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
@@ -35,11 +37,15 @@ import { Money } from "../components/Money";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
-import type { CheckpointSpendView, CheckpointView, RunRow } from "../types";
+import { useEffect, useState } from "preact/hooks";
+import type { CheckpointSpendView, CheckpointView, EventRow, RunRow } from "../types";
 
 export interface RunProps {
   sid: string;
 }
+
+/** 一页多少条逐条事件（与后端 `EVENTS_LIMIT_DEFAULT` 一致；上限是 500）。 */
+const EVENTS_PAGE = 50;
 
 /** 检查点的花销子树（类型上是联合：读不到时后端给的是空对象）。 */
 function spendOf(ck: CheckpointView | null): CheckpointSpendView | null {
@@ -65,6 +71,163 @@ function eventSum(runs: RunRow[]): { usd: number | null; unknown: number } {
 
 function text(value: string): string {
   return value === "" ? "unknown" : value;
+}
+
+/** 一行摘要：优先事件的 `text`，其次 `payload` / `result` 的 JSON，都没有就留空。 */
+function eventSummary(e: EventRow): string {
+  const body = typeof e.text === "string" ? e.text : "";
+  if (body !== "") {
+    return body.length > 200 ? `${body.slice(0, 200)}…` : body;
+  }
+  const blob = e.payload ?? e.result;
+  if (blob !== undefined) {
+    const raw = JSON.stringify(blob);
+    return raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
+  }
+  return "";
+}
+
+/**
+ * 逐条事件（一趟回放）—— 旧壳那张"逐条事件卡片"退场之后，用户端唯一能逐条复核的地方
+ * （题 T2-a 的消费端）。
+ *
+ * 三态在这一块上是"三档各有一句"：
+ *
+ * - `computed`：真读数 + 游标区间 + "继续加载"（`since_index` 续取）；
+ * - `unreadable`：这一栏**没查成**，显 TriState + 理由，**不是一张空列表**（也绝不把
+ *   条数写成 0）；
+ * - `not_applicable`：会话文件在盘上但还没有事件（合法初态），同样不是一张空列表。
+ *
+ * "继续加载"攒下来的页只在第一页的 `to_index` 没变时有效：它一变（换了会话，或盘上
+ * 又写进了事件）就把攒的那几页作废 —— 否则页面上会把两段读数接在一起而看不出来。
+ */
+function EventTimeline(props: { sid: string }) {
+  const first = useFace(() => api.getRunEvents(props.sid, { limit: EVENTS_PAGE }));
+  const [older, setOlder] = useState<EventRow[]>([]);
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [problem, setProblem] = useState("");
+  const [busy, setBusy] = useState(false);
+  const data = first.data;
+  const toIndex = data === null ? null : data.to_index;
+
+  useEffect(() => {
+    setOlder([]);
+    setCursor(toIndex);
+    setProblem("");
+  }, [toIndex, props.sid]);
+
+  const loadMore = (): void => {
+    if (cursor === null) {
+      return;
+    }
+    setBusy(true);
+    setProblem("");
+    api
+      .getRunEvents(props.sid, { sinceIndex: cursor, limit: EVENTS_PAGE })
+      .then((next) => {
+        if (next.tri !== "computed") {
+          setProblem(`续取没查成（tri=${next.tri}）：${next.reason}`);
+        } else {
+          setOlder((prev) => prev.concat(next.events));
+          setCursor(next.to_index);
+        }
+        setBusy(false);
+      })
+      .catch((exc: unknown) => {
+        setProblem(whyOf(exc));
+        setBusy(false);
+      });
+  };
+
+  if (data === null) {
+    return (
+      <Card
+        title="逐条事件（一趟回放）"
+        subtitle={`会话 ${props.sid}`}
+        tone={first.problem === "" ? "plain" : "problem"}
+        right={
+          first.problem === ""
+            ? null
+            : <TriState tri="unreadable" reason={first.problem} label="逐条事件" />
+        }
+      >
+        <span class="readings">
+          {first.problem === "" ? "正在读盘……" : `读数没拿到：${first.problem}`}
+        </span>
+      </Card>
+    );
+  }
+
+  if (data.tri !== "computed") {
+    return (
+      <Card
+        title="逐条事件（一趟回放）"
+        subtitle={`会话 ${props.sid}`}
+        tone="problem"
+        right={<TriState tri={data.tri} label="逐条事件" reason={data.reason} />}
+      >
+        <span class="empty">
+          {data.tri === "unreadable"
+            ? `这一栏没查成（不是一张空列表）：${data.reason}`
+            : `这一趟还没有事件可回放（合法初态，不是一张空列表）：${data.reason}`}
+        </span>
+        <div class="readings">
+          事件条数那一格因此是 <span class="mono">unknown</span>，不是 0：没读到就不写数。
+        </div>
+      </Card>
+    );
+  }
+
+  const rows = data.events.concat(older);
+  const more = data.total !== null && cursor !== null && cursor < data.total;
+  return (
+    <Card
+      title="逐条事件（一趟回放）"
+      subtitle={`会话 ${props.sid} · 已给 ${rows.length} 条`}
+      right={<TriState tri={data.tri} label="逐条事件" reason={data.reason} />}
+    >
+      <div class="readings">
+        事件总条数 <span class="mono">{data.total}</span> · 本页区间{" "}
+        <span class="mono">[{data.from_index}, {data.to_index})</span> · 还没给完{" "}
+        <span class="mono">{String(data.truncated)}</span>
+      </div>
+      <div class="readings">
+        <span class="mono">index</span> 与「趟次」那张表的 <span class="mono">start_index</span> /{" "}
+        <span class="mono">end_index</span> 是同一套编号（会话里第几条事件，0 起）；
+        花销那一列的 <span class="mono">—</span> = 这一行没有 <span class="mono">usd</span>{" "}
+        这一栏（不是 0），<span class="mono">unknown</span> = 有这一栏但算不出价钱。
+      </div>
+      <Table
+        rows={rows}
+        empty="这一页是空的（读到了，游标已经到末尾 —— 不是「没查成」）。"
+        columns={[
+          { key: "index", title: "#" },
+          { key: "kind", title: "kind" },
+          { key: "ts", title: "时间", render: (e) => text(e.ts) },
+          { key: "role", title: "角色", render: (e) => text(e.role) },
+          { key: "shape", title: "形态" },
+          { key: "ok", title: "成功" },
+          {
+            key: "usd",
+            title: "花销",
+            render: (e) =>
+              e.usd === undefined ? "—" : <Money usd={e.usd} unknownCalls={0} />,
+          },
+          { key: "text", title: "一行摘要 / 正文", render: (e) => eventSummary(e) },
+        ]}
+      />
+      {problem === "" ? null : (
+        <TriState tri="unreadable" label="续取" reason={problem} />
+      )}
+      {more ? (
+        <button type="button" disabled={busy} onClick={loadMore}>
+          {busy ? "正在续取……" : `继续加载（从第 ${cursor ?? 0} 条起）`}
+        </button>
+      ) : (
+        <span class="readings">已经给到末尾了（没有更多事件）。</span>
+      )}
+    </Card>
+  );
 }
 
 export function Run(props: RunProps) {
@@ -206,6 +369,8 @@ export function Run(props: RunProps) {
           />
         )}
       </Card>
+
+      <EventTimeline sid={props.sid} />
 
       <Card
         title="花销（两个来源并排）"
