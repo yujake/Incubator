@@ -1576,6 +1576,10 @@ class AgentLoop:
     #: 父是谁没读成时的理由（空串 = 读成了）。与"没有父"分得开（三态纪律）：
     #: 读不成时 `_resolve_parent` 落到"挂在自己名下"那一档，并把这句话回给调用方。
     parent_problem: str = ""
+    #: 这一趟的读写面（绝对路径；空串 = 没切面 ⇒ 老行为：`fs.*` 的沙箱根就是工作区）。
+    #: 业主 T23：子代理只能读写父切割给它的面 —— 强制在 `_do_tool`（`_surface_refusal`），
+    #: 由 `LlmBackend.call` 从父的名册里读出来传进 `run(surface=…)`（S1n-b）。
+    surface: str = ""
     #: 本角色自己的秘书（A 线：`draft/53` v3 的四职责 + 手稿通道增改查）。
     #:
     #: `None` = 没装配（裸 `AgentLoop(...)`；测试与旧调用点）。三种后果，都是有意的：
@@ -1882,7 +1886,7 @@ class AgentLoop:
         return f"{left:.6f} 美元（上限 {self.seam.usd_budget:.6f}）"
 
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
-            parent_task_id: str = "",
+            parent_task_id: str = "", surface: str = "",
             depth: int = 1, resumed: tuple[str, int] | None = None,
             waiting_for: str = "") -> LoopRun:
         """跑一次循环。`task` 是这次要做的事（被召唤时就是调用方给的参数）。
@@ -1900,6 +1904,8 @@ class AgentLoop:
         # 也是终态回报挂板项时用的名字（D89）。三条分支见 `_resolve_parent`。
         self.parent_task_id, self.parent_role, self.parent_problem = self._resolve_parent(
             parent_task_id, summoned_by)
+        # 读写面（S1n-b）：由调用方传进来（`LlmBackend.call` 从父的名册里读到它）。
+        self.surface = str(surface or "")
         # 秘书绑到这一趟的实例上（S1m）：绑上之后它的台账分片、并落一份存活标记
         # （"一实例一秘书"从对象层面落到盘上）。失败 fail-open，但要留痕。
         if self.secretary is not None and str(my_task_id or ""):
@@ -2864,6 +2870,19 @@ class AgentLoop:
                 if real in known:
                     name, aliased_from = real, raw
         args = dict(payload.get("args") or {})
+        # ---- 读写面（S1n-b，业主 T23）：子代理只能读写父切割给它的面。
+        #
+        # 判据在这一层（不是工具层）：`self.surface` 是这一趟的面（绝对路径），
+        # 由 `LlmBackend.call` 从父的名册里读出来传进来；没设 ⇒ 今天的行为一个字节不变。
+        # 拦的是 `fs.*` 的路径参数：一切都 `resolve()` 之后判"在不在面内"
+        # （与 `fs_tools._resolve` 同一条判据：不比字符串里的 `..`，只比解析结果）。
+        refusal = self._surface_refusal(name, args)
+        if refusal:
+            out = {"tool": name, "ok": False, "error": refusal,
+                   "meta": {"surface": str(self.surface)}}
+            if aliased_from:
+                out["aliased_from"] = aliased_from
+            return out
         try:
             res = self.registry.call(name, role=self.role, **args)
         except Exception as exc:  # 工具层抛错也要变成"模型看得见的结果"
@@ -2874,6 +2893,48 @@ class AgentLoop:
         if aliased_from:
             out["aliased_from"] = aliased_from
         return out
+
+    def _surface_refusal(self, name: str, args: Mapping[str, Any]) -> str:
+        """这一句工具调用越出读写面了吗？返回拒信（空串 = 放行）。
+
+        口径（业主 T23）：`fs.*` 的路径参数按工作区根解析（与 `fs_tools` 同一基准），
+        解析结果必须落在 `self.surface` 里；面内的新文件允许（判的是落在哪儿，
+        不是"文件存在不存在"）。没设面（`self.surface == ""`）⇒ 直接放行（老行为不变）。
+
+        三态：面目录不在盘上 ⇒ 拒绝（不许当"整工作区可写"）。
+
+        ## 面是工作区里的一个子目录（过渡语义，为什么）
+
+        今天 `fs.*` 的根焊死在注册表里（`build_registry(workspace_root=…)` 就定死了），
+        所以"从面里看 `x.md`"这件事得先有每实例一个注册表（`draft/92` §3.6）——
+        那是装配点的改动，另立一批。在那之前这里守的是"路径要写全、且必须落在面内"：
+        既挡住越界与别人的面，也不假装"面就是新的根"。
+        """
+        if not str(self.surface or ""):
+            return ""
+        if not name.startswith("fs."):
+            return ""
+        raw = str(args.get("path") or "")
+        if not raw:
+            return ""                     # 没有路径参数（例如 `fs.list` 的缺省根）⇒ 不拦
+        try:
+            face = Path(str(self.surface)).resolve()
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 拒（不许放行）
+            return f"读写面读不成（{type(exc).__name__}: {exc}）⇒ 这一步不许执行"
+        if not face.is_dir():
+            return (f"读写面不在盘上（{face}）⇒ 这一步不许执行："
+                    "没有面的时候不许当'整工作区可写'（业主 T23）")
+        base = Path(str(self.workspace_root or ".")).resolve()
+        try:
+            target = (Path(raw) if Path(raw).is_absolute() else (base / raw)).resolve()
+        except Exception as exc:  # noqa: BLE001
+            return f"路径解析不了（{type(exc).__name__}: {exc}）⇒ 这一步不许执行"
+        try:
+            target.relative_to(face)
+        except ValueError:
+            return (f"{raw} 越出了你这趟的读写面（{face}）—— 面外一律不做："
+                    "要别的目录就请父给你切一块（业主 T23）")
+        return ""
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
@@ -3529,6 +3590,23 @@ class LlmBackend:
                          workspace_root=self.workspace_root, sid=self.sid, token=token,
                          store=self.store, stop_file=self.stop_file)
         row = self._running_row(role, task_id)
+        # 读写面（S1n-b，业主 T23）：从父的名册里读这一行的面
+        # （`out/roster/<父代号>.jsonl` 的 `surface` 那一格）。读不到 ⇒ 不切面（老行为逐字不变）。
+        child_surface = ""
+        try:
+            from .secretary import Secretary as _Sec, surface_dir as _sdir
+
+            parent_tid = str(row.get("parent_task_id") or "")
+            own_tid = str(row.get("task_id") or params.get("_task_id") or "")
+            if parent_tid and own_tid:
+                roster = _Sec(role, root=self.session_root,
+                              store=self.store).roster_rows(parent_tid)[0]
+                slot = next((str(r.get("surface") or "") for r in roster
+                             if str(r.get("task_id") or "") == own_tid), "")
+                if slot:
+                    child_surface = str(_sdir(self.session_root, parent_tid, slot))
+        except Exception:  # noqa: BLE001 —— 面读不成不打断这一趟（但也不假装切过）
+            child_surface = ""
         run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
                        summoned_by=str(row.get("called_by") or params.get("_summoned_by")
                                        or S.CONDUCTOR_ROLE),
@@ -3536,6 +3614,7 @@ class LlmBackend:
                        # 父的台账号从我这一行读（D89）：它同时是提示词里
                        # `{{parent_task_id}}` 那一格与终态回报挂项的名字。
                        parent_task_id=str(row.get("parent_task_id") or ""),
+                       surface=child_surface,
                        depth=int(row.get("depth") or params.get("_depth") or 1))
         artifact = self._write_run_artifact(role, run)
         SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,
