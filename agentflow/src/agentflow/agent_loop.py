@@ -2183,6 +2183,12 @@ class AgentLoop:
                 # "跑到哪儿了"事后无从回答。这条 break 就是补那一格。
                 run.stop_reason = stop_reason
                 run.final = run.final or self._stop_note(stop_reason, step)
+                # S4-b（`draft/84` §2.2）：停止沿边下发 —— 给我还在飞的直接子代理
+                # 各开一条 `notice`/`ack` 板项（ack 才算传达到）。放在 break 之前：
+                # 这一趟马上就要收工，边上的通知是它最后一次能做的事。
+                out = self._notify_children_of_stop(stop_reason)
+                if out:
+                    run.notes.append(out)
                 SS.append(self.session_root, {
                     "kind": "agent_note", "role": self.role,
                     "note": (f"用户叫停（{stop_reason}）⇒ 第 {step} 步之后收工；"
@@ -2237,6 +2243,14 @@ class AgentLoop:
                         run.notes.append(f"工作项 {item_id} 没标成 seen：{why}")
                     elif state == "ack_unbacked":
                         run.notes.append(f"工作项 {item_id}：{why}")
+                    else:
+                        # S4-b：停止通知（`kind=notice`、`expects=ack`）读到就算收到
+                        # ⇒ 框架替这一趟 ack 它（"ack 才算传达到"，`draft/84` §2.2）。
+                        # 为什么框架可以代 ack：这条通知的对象是这一趟进程（收工），
+                        # 不是要模型交付的活；模型有没有"表态"不影响它已经收到这件事。
+                        ack_note = self._ack_stop_notice(item_id, step)
+                        if ack_note:
+                            run.notes.append(ack_note)
                 pending_seen = still
             if data is None:
                 args_error = call.problem == "judge_bad_args"
@@ -2611,6 +2625,76 @@ class AgentLoop:
         return run
 
     # -------------------------------------------------------------- 执行
+    def _notify_children_of_stop(self, stop_reason: str) -> str:
+        """停止沿边下发（S4-b）：把通知交给 conductor，并回报一句读数（空串 = 没话说）。
+
+        三态照旧：读不成 / 通知不成都不打断收工（这一趟已经要停了），
+        但都要留下一句人读得懂的话 —— 静默失败在这里最贵（"通知了"与"没人被通知"
+        在事后分不开，而"听不到叫停的子孙会继续烧钱跑实验"）。
+        """
+        cond = self.conductor
+        mine = str(self.my_task_id or "")
+        if cond is None or not mine:
+            return ""
+        look = getattr(cond, "notify_children_of_stop", None)
+        if not callable(look):
+            return ""
+        try:
+            got = look(mine, reason=stop_reason, by=self.role)
+        except Exception as exc:  # noqa: BLE001 —— 下发失败不许带走收工
+            return f"停止通知没下发成：{type(exc).__name__}: {exc}（这一趟照常收工）"
+        if not got.get("checked"):
+            return f"停止通知没下发成：{got.get('reason')}"
+        notified = list(got.get("notified") or [])
+        skipped = list(got.get("skipped") or [])
+        if not notified and not skipped:
+            return str(got.get("note") or "停止通知：没有边要通知")
+        return (f"停止通知沿边下发：{len(notified)} 条边"
+                + (f"（已通知过 {len(skipped)} 条）" if skipped else "")
+                + "；ack 才算传达到")
+
+    def _ack_stop_notice(self, item_id: str, step: int) -> str:
+        """这一趟读到的停止通知：替它 ack（返回一句读数，空串 = 不是通知项/没成）。
+
+        只对 `kind="notice"` 且 `expects="ack"` 的项动手（别的板项要模型自己交付）。
+        `ack` 走 `close_item(close=f"acked@<时间>")` —— 于是"通知了"与"通知到了"
+        在 `stop_edge_readings` 里分得开（`acked_at` 非空才算传到）。
+        """
+        cond = self.conductor
+        if cond is None:
+            return ""
+        look = getattr(cond, "_task", None)
+        if not callable(look):
+            return ""
+        try:
+            row = look(item_id) or {}
+        except Exception:  # noqa: BLE001 —— 读不成就不 ack（宁可不 ack，不许乱 ack）
+            return ""
+        if str(row.get("kind") or "") != "notice" or str(row.get("expects") or "") != "ack":
+            return ""
+        if str(row.get("item_state") or "") == "done":
+            return ""
+        close = getattr(cond, "close_item", None)
+        if not callable(close):
+            return ""
+        try:
+            state, why = close(item_id, close="acked",
+                               by_task_id=str(self.my_task_id or ""))
+        except Exception as exc:  # noqa: BLE001 —— ack 失败留一句话，不打断
+            return f"停止通知 {item_id} 的 ack 没记上：{type(exc).__name__}: {exc}"
+        if not state:
+            return f"停止通知 {item_id} 的 ack 没记上：{why}"
+        # ack 的时刻落在父那一行的落痕里（`item_close` 是受控词表，装不下时间戳）
+        note = getattr(cond, "note_stop_ack", None)
+        parent = str(getattr(self, "parent_task_id", "") or "")
+        if callable(note) and parent and str(self.my_task_id or ""):
+            try:
+                note(parent, str(self.my_task_id), at=S.now_iso())
+            except Exception as exc:  # noqa: BLE001 —— 落痕失败不改"ack 过了"这个事实
+                return (f"停止通知 {item_id} 已 ack（第 {step} 步读到），"
+                        f"但 ack 时刻没落痕：{type(exc).__name__}: {exc}")
+        return f"停止通知 {item_id} 已 ack（第 {step} 步读到）"
+
     def _stop_applies(self, state: Mapping[str, Any]) -> dict[str, Any]:
         """盘上这把停机开关管不管我（S4，`draft/90` E7 / `draft/84` §2.2）。
 

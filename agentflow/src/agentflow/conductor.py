@@ -1127,6 +1127,169 @@ class Conductor:
             cur = nxt
         return {"checked": True, "inside": False, "path": path, "reason": ""}
 
+    #: 停机通知的落痕前缀（父那一行的 `inputs` 里）：`stop-notified:<子>@<iso>|<通知项>`
+    _STOP_NOTIFIED_PREFIX = "stop-notified:"
+    #: 停止通知被确认的落痕前缀（同上；时间只能落在这里，见 `note_stop_ack`）
+    _STOP_ACKED_PREFIX = "stop-acked:"
+
+    def notify_children_of_stop(self, parent_task_id: str, *, reason: str = "",
+                                by: str = "") -> dict[str, Any]:
+        """停止沿边下发：给我还在飞的直接子代理各开一条 `notice`/`ack` 板项。
+
+        `draft/84` §2.2 的第 1、2.a 步：父把通知沿自己的出边传下去（不是"大家读同一个
+        文件"），每条边留一行读数和一条"要 ack"的板项 —— ack 才算传达到（T16）。
+
+        收件人 = `_in_flight_children_of(我)`（此刻还没返回的那几个）；已经收工的子代理
+        不必通知（它已经不在跑了，通知它只会在板上多一条永远不会被读的项）。
+        落痕写进父那一行的 `inputs`（与 `note_edge_release` 同一族，不动 `schema.py`）：
+        `stop-notified:<子代号>@<时间>|<通知项号>` —— 幂等：同一条边已经有通知 ⇒ 不写第二份。
+
+        返回 `{"checked","notified":[{child_task_id,item_id,at}],"skipped":[{child,why}],"reason"}`。
+        没有在飞的子 ⇒ `notified=[]` + `note` 说清（不许假装通知过）。
+        """
+        mine = str(parent_task_id or "")
+        if not mine:
+            return {"checked": False, "notified": [], "skipped": [],
+                    "reason": "不知道我是谁（没有台账号）⇒ 沿边下发判不了"}
+        try:
+            kids = [str(x) for x in self._in_flight_children_of(mine)]
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 没有在飞的子
+            return {"checked": False, "notified": [], "skipped": [],
+                    "reason": f"台账读不成（{type(exc).__name__}: {exc}）"}
+        parent = self._task(mine) or {}
+        marks = [str(x) for x in (parent.get("inputs") or [])]
+        already = {m[len(self._STOP_NOTIFIED_PREFIX):].split("@", 1)[0]
+                   for m in marks if m.startswith(self._STOP_NOTIFIED_PREFIX)}
+        notified: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        for tid in kids:
+            if tid in already:
+                skipped.append({"child_task_id": tid, "why": "这条边已经通知过（幂等）"})
+                continue
+            row = self._task(tid) or {}
+            at = S.now_iso()
+            try:
+                item = self.open_item(
+                    kind="notice", role=str(row.get("role") or ""), expects="ack",
+                    action="notice",
+                    summary=f"停止通知（{reason or 'stop'}）：请收工并停掉你起的子进程",
+                    called_by=str(by or S.CONDUCTOR_ROLE), parent_task_id=tid,
+                    depth=int(row.get("depth") or 1) + 1,
+                    input_key=f"stop-notice@{mine}->{tid}")
+                self.set_item_detail(item, f"停止通知（{reason or 'stop'}）沿边下发；"
+                                           f"收到即 ack（ack 才算传达到，`draft/84` §2.2）")
+            except Exception as exc:  # noqa: BLE001 —— 一条边开不成不许带走其它边
+                skipped.append({"child_task_id": tid,
+                                "why": f"通知项没开成：{type(exc).__name__}: {exc}"})
+                continue
+            self._mark_stop_notified(mine, tid, at, item)
+            notified.append({"child_task_id": tid, "item_id": item, "at": at})
+        out: dict[str, Any] = {"checked": True, "notified": notified, "skipped": skipped,
+                               "reason": ""}
+        if not kids:
+            out["note"] = ("我名下此刻没有在飞的直接子代理 ⇒ 这一趟没有边要通知"
+                           "（不是『通知过了』）")
+        return out
+
+    def _mark_stop_notified(self, parent_task_id: str, child_task_id: str, at: str,
+                            item_id: str) -> tuple[str, str]:
+        """把"这条边通知过了"写进父那一行的 `inputs`（幂等；失败不许带走调用方）。"""
+        mark = f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@{at}|{item_id}"
+        try:
+            with self.store.tx("tasks", actor="conductor", note="edge:stop-notified") as tx:
+                parent = tx.find("tasks", task_id=parent_task_id)
+                if parent is None:
+                    return "", f"没有这一行（parent_task_id={parent_task_id!r}）"
+                marks = [str(x) for x in (parent.get("inputs") or [])]
+                if any(m.startswith(f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")
+                       for m in marks):
+                    return "", "已经记过（幂等：不写第二份）"
+                parent["inputs"] = sorted(set(marks) | {mark})
+                task = S.Task(**{k: v for k, v in parent.items()
+                                 if k in S.Task.__dataclass_fields__})
+                task.validate()
+                tx.upsert("tasks", task.to_dict(), note="edge:stop-notified")
+        except Exception as exc:  # noqa: BLE001 —— 落痕失败不该让"通知"这件事失效
+            return "", f"{type(exc).__name__}: {exc}"
+        return mark, ""
+
+    def note_stop_ack(self, parent_task_id: str, child_task_id: str, *,
+                      at: str = "") -> tuple[str, str]:
+        """把"这条边的停止通知被确认了"写进父那一行的 `inputs`（S4-b）。
+
+        为什么时间不写在通知项上：`schema` 把 `item_close` 收成受控词表
+        （只许 `acked` / `completed`）—— "知道了"与"做完了"是两种收口，不许含糊。
+        于是 ack 的时刻落在父那一行的落痕里（与 `stop-notified:` 同一族，不动 schema）：
+        `stop-acked:<子代号>@<时间>`。幂等：同一条边已经有 ack 落痕 ⇒ 不写第二份。
+        """
+        mark = f"{self._STOP_ACKED_PREFIX}{child_task_id}@{str(at or S.now_iso())}"
+        try:
+            with self.store.tx("tasks", actor="conductor", note="edge:stop-acked") as tx:
+                parent = tx.find("tasks", task_id=parent_task_id)
+                if parent is None:
+                    return "", f"没有这一行（parent_task_id={parent_task_id!r}）"
+                marks = [str(x) for x in (parent.get("inputs") or [])]
+                if any(m.startswith(f"{self._STOP_ACKED_PREFIX}{child_task_id}@")
+                       for m in marks):
+                    return "", "已经记过（幂等：不写第二份）"
+                parent["inputs"] = sorted(set(marks) | {mark})
+                task = S.Task(**{k: v for k, v in parent.items()
+                                 if k in S.Task.__dataclass_fields__})
+                task.validate()
+                tx.upsert("tasks", task.to_dict(), note="edge:stop-acked")
+        except Exception as exc:  # noqa: BLE001 —— 落痕失败不该让 ack 这件事失效
+            return "", f"{type(exc).__name__}: {exc}"
+        return mark, ""
+
+    def stop_edge_readings(self, parent_task_id: str) -> dict[str, Any]:
+        """每条开着的边一行：`{edge, notified_at, acked_at, settled_at, timeout}`（三态）。
+
+        - `notified_at`：沿边下发那一刻（父那一行的 `inputs` 落痕里）；
+        - `acked_at`：那条通知项被 ack 的时刻（`item_close` 写成 `acked@<时间>`）；
+          空串 = 还没 ack —— 于是"通知了"与"通知到了"在读数上分得开；
+        - `settled_at`：子那一行写终态的时刻（`ended_at`）；
+        - `timeout`：通知了、但子到此刻还没写终态（有界等待到点后的那一档）。
+
+        `reported_at`（交差边）这一批不算：交差边与委派边不是一条边（`draft/84` §2.2
+        的坑②），它要看手稿行 —— 留待下一批，不在这里编一个近似值。
+        读不成 ⇒ `checked=False`（不许把"没读成"报成"没有边"）。
+        """
+        try:
+            rows = {str(r.get("task_id")): r for r in self._tasks()}
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "edges": [], "reason": f"{type(exc).__name__}: {exc}"}
+        parent = rows.get(str(parent_task_id))
+        if parent is None:
+            return {"checked": False, "edges": [],
+                    "reason": f"台账里没有 {parent_task_id!r}"}
+        item_state = {str(r.get("task_id")): r for r in rows.values()}
+        acked_marks: dict[str, str] = {}
+        for raw in (parent.get("inputs") or []):
+            text = str(raw)
+            if text.startswith(self._STOP_ACKED_PREFIX):
+                body = text[len(self._STOP_ACKED_PREFIX):]
+                child, _, at = body.partition("@")
+                acked_marks[child] = at
+        out: list[dict[str, Any]] = []
+        for raw in (parent.get("inputs") or []):
+            text = str(raw)
+            if not text.startswith(self._STOP_NOTIFIED_PREFIX):
+                continue
+            body = text[len(self._STOP_NOTIFIED_PREFIX):]
+            child, _, rest = body.partition("@")
+            at, _, item_id = rest.partition("|")
+            item = item_state.get(item_id) or {}
+            kid = item_state.get(child) or {}
+            ended = str(kid.get("ended_at") or "")
+            out.append({"edge": {"parent_task_id": str(parent_task_id),
+                                 "child_task_id": child},
+                        "notified_at": at, "acked_at": str(acked_marks.get(child) or ""),
+                        "settled_at": ended, "item_id": item_id,
+                        "item_state": str(item.get("item_state") or ""),
+                        "timeout": bool(at and not ended)})
+        out.sort(key=lambda x: str(x["edge"]["child_task_id"]))
+        return {"checked": True, "edges": out, "reason": ""}
+
     def note_edge_release(self, parent_task_id: str, *, child_task_id: str,
                           attempt: int = 1) -> tuple[str, str]:
         """记一笔"这条边已经认过了"（幂等键 = `(子代号, 第几次)`）。返回 `(落痕, 问题)`。
@@ -1164,6 +1327,23 @@ class Conductor:
             if str(child.get("status") or "") in ("pending", "running"):
                 return "", (f"{child_task_id} 还在跑（status={child.get('status')!r}）"
                             "⇒ 不许记消边（先把它的最近报告端给父）")
+            # S4-b（`draft/84` §2.2）：停止通知要 ack 才算传达到 —— 这条边如果被
+            # 沿边下发过一条 notice，而那条通知还没 ack ⇒ 不许消边（负控：抹掉 ack ⇒ 拒）。
+            # 只在"通知过"的边上要求（正常退役那些边没有通知项，照旧）。
+            marks_now = [str(x) for x in (parent.get("inputs") or [])]
+            pending = [m for m in marks_now
+                       if m.startswith(f"{self._STOP_NOTIFIED_PREFIX}{child_task_id}@")]
+            if pending:
+                item_id = pending[-1].split("|", 1)[1] if "|" in pending[-1] else ""
+                item = tx.find("tasks", task_id=item_id) if item_id else None
+                close = str((item or {}).get("item_close") or "")
+                acked_marks = {str(x)[len(self._STOP_ACKED_PREFIX):].split("@", 1)[0]
+                               for x in marks_now if str(x).startswith(self._STOP_ACKED_PREFIX)}
+                if close != "acked" or child_task_id not in acked_marks:
+                    return "", (f"{child_task_id} 的停止通知还没被确认（通知项 "
+                                f"{item_id or '未记'}：item_close={close!r}、"
+                                f"ack 落痕={'有' if child_task_id in acked_marks else '没有'}）"
+                                "⇒ 不许消边：ack 才算传达到（`draft/84` §2.2）")
             marks = [str(x) for x in (parent.get("inputs") or [])]
             if mark in marks:
                 return "", "已经记过（幂等：不写第二份）"
