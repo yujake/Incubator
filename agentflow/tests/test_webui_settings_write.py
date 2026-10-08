@@ -34,7 +34,7 @@ from agentflow.store import Store
 from agentflow.webui import audit, readers
 
 #: 判据里的"真 key"（一串只可能在判据自己手里出现的东西）。
-SECRET = "sk-c-line-must-never-be-echoed-0123456789"
+SECRET = "SENTINEL-c-line-must-never-be-echoed-0123456789"
 CSRF = "line-c-csrf-token-0123456789"
 
 

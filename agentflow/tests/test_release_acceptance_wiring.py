@@ -224,6 +224,17 @@ _PRODUCTION_CALLERS: dict[str, tuple[str, str]] = {
         "而那批入参在 `conductor_closing` 里已经收齐了；开第二个面只会让"
         "「收工」与「内容级验收」在模型眼里变成两件可以只做一件的事。",
     ),
+    "webui/readers.py": (
+        "acceptance_face",
+        "Web 端的只读面 `GET /api/acceptance`（Web 批 W1，B 线的 `readers.acceptance_face`）："
+        "`Acceptance.tsx` 那一页要的就是这五条内容级判据 + 五条辅助信号的逐条读数，"
+        "而它的唯一来源就是 `reviewaccept.check_review`。这一条是**只读出口**："
+        "`acceptance_face` 只读盘、只返回 `{tri, reason, ...}`，三态里 "
+        "`unreadable` / `not_applicable` 照实回报（页面不许把读不到渲染成 0）；"
+        "它不改盘、不起子进程、不出网。为什么值得单列一条：这是这一层第一次被"
+        "**用户端**直接消费 —— 在此之前它只有 CLI 与主控工具两个出口，"
+        "网页端要用它就得先在这里留一条可审的登记。",
+    ),
 }
 
 

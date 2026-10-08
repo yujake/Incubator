@@ -490,7 +490,7 @@ def test_the_audit_row_has_the_seven_fields_and_redacts_secrets(
     负控在同一支里：把脱敏后的那一行按原样喂给尺子 ⇒ 不许报；把值换回真 key
     ⇒ 尺子必须报（否则"脱敏"这句话没有机器读数）。
     """
-    secret = "sk-real-secret-value"
+    secret = "SENTINEL-not-a-real-key"
     root = _mk(tmp_path)
     row, problem = audit.record_action(root, endpoint="/api/settings", source="127.0.0.1",
                                 params={"model": {"api_key": secret,
@@ -597,7 +597,7 @@ def test_the_settings_endpoint_reports_the_settings_tri_and_never_the_key(
     with _server(root) as base:
         code, body, _ct = _post(base, "/api/settings",
                                 {"toolchain.lean_bin": "/opt/lean",
-                                 "model.api_key": "sk-real-secret-value",
+                                 "model.api_key": "SENTINEL-not-a-real-key",
                                  "model.base_url": "https://example.invalid/v1",
                                  "confirm": "1"})
     got = _json_of(body)
@@ -605,12 +605,12 @@ def test_the_settings_endpoint_reports_the_settings_tri_and_never_the_key(
     assert got["extra"]["settings_tri"] == "written", got["extra"]
     assert got["tri"] == "computed", got["tri"]
     assert got["extra"]["values"]["model"]["api_key"] == SET.MASKED_KEY, got["extra"]
-    assert "sk-real-secret-value" not in body, body
+    assert "SENTINEL-not-a-real-key" not in body, body
     on_disk = json.loads(target.read_text(encoding="utf-8"))
-    assert on_disk["model"]["api_key"] == "sk-real-secret-value", on_disk
+    assert on_disk["model"]["api_key"] == "SENTINEL-not-a-real-key", on_disk
     assert on_disk["toolchain"]["lean_bin"] == "/opt/lean", on_disk
     # 台账里也不许出现真 key
-    assert "sk-real-secret-value" not in json.dumps(audit.read_actions(root), ensure_ascii=False)
+    assert "SENTINEL-not-a-real-key" not in json.dumps(audit.read_actions(root), ensure_ascii=False)
 
 
 def test_the_settings_endpoint_honours_the_no_settings_write_switch(

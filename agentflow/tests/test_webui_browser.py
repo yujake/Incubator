@@ -235,7 +235,7 @@ def test_the_key_reaches_the_file_but_never_the_page_or_the_response(
     尺子。表单本身还没落地（Machine 页是 W0 空壳），所以"填进表单再提交"那一步
     由下面那条 `skip` 如实记成未查。
     """
-    secret = "sk-browser-must-never-be-shown-0123456789"
+    secret = "SENTINEL-browser-must-never-be-shown-0123456789"
     target = tmp_path / "settings.json"
     monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
     with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
