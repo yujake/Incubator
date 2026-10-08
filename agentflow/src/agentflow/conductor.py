@@ -897,6 +897,15 @@ class Conductor:
         同一条 `request_id` 只唤起一次：判据是 `tasks` 里已经有
         `input_key == "consume:<rid>"` 的行（含 running —— 已经消费过就别再来一次）。
         `input_key` 同时是幂等键的可见形态，测试与审计都按它查。
+
+        而"被拒过"不算"做过"（D80，2026-10-08）：幂等只在真的被受理过的行上成立。
+        闸门拒掉的召唤也落一行台账（`_refuse`），而那一行带着 `input_key` ——
+        改前 `seen` 收全部行，于是一趟在墙钟/预算/总量到顶那一刻扫队的跑批，
+        只要有一条 `consume:<rid>` 被拒一次，那条 `done=false` 的检索请求就永久
+        留在 `seen` 里、从此再也不会被认领（跨趟也一样：`tasks` 是追加式台账，
+        `seen` 每次都从全表重建）。判据与 `_occupies_fanout_slot` 同源：
+        只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`，
+        闸门拒绝在写 running 行之前就返回了。
         """
         out: list[Any] = []
         try:
@@ -904,7 +913,11 @@ class Conductor:
         except Exception as exc:  # noqa: BLE001 - 扫不到队就如实留痕（不当成"队是空的"）
             self._log(f"扫队失败（{trigger}）：{type(exc).__name__}: {exc}")
             return out
-        seen = {str(r.get("input_key") or "") for r in self._tasks()}
+        # 只把"真的被受理过"的行算进幂等键（D80）：见上面那一段。
+        # 复用同一个谓词而不是就地写 `outcome != "refused"` —— "跑过又拒"与
+        # "闸门拒掉、根本没跑"的分野只有一处实现（`_occupies_fanout_slot`）。
+        seen = {str(r.get("input_key") or "") for r in self._tasks()
+                if _occupies_fanout_slot(r)}
         for row in rows:
             if row.get("done"):
                 continue

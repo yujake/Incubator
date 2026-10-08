@@ -23,6 +23,7 @@ import pathlib
 
 from conftest import add_request
 
+from agentflow import schema as S
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
 
@@ -109,3 +110,64 @@ def test_s03_both_consumption_points_are_counted(tmp_path: pathlib.Path):
     assert counts.get("dispatch") == 1 and counts.get("finish") == 1, counts
     assert len(_a_rows(st)) == 2, _a_rows(st)
     assert a.calls == 2, a.calls
+
+
+# ---------------------------------------------------------------- D80（2026-10-08）
+#
+# "被拒过" != "做过"：闸门拒掉的认领也落一行带 `input_key="consume:<rid>"` 的台账行，
+# 改前它会把幂等键永久烧掉 ⇒ 那条 `done=false` 的检索请求再也不被认领。
+# 这两条用例的分野就是 `_occupies_fanout_slot` 判的那件事：那一行有没有受理标记。
+
+
+def _seed_consume_row(st: Store, *, task_id: str, rid: str, admitted: bool,
+                      reason: str = "budget_exceeded") -> None:
+    """往台账写一行"被拒掉的认领"（`inputs` 里有没有 `conductor:admitted` 是唯一变量）。
+
+    `admitted=True` 模拟"跑过又拒"（角色自己拒的），`False` 模拟"闸门拒掉、根本没跑"。
+    口径逐字对齐 `_refuse` 写的那一行 + `schema.Task.validate`。
+    """
+    inputs = ["conductor:admitted"] if admitted else []
+    row = {
+        "task_id": task_id, "role": "A", "action": "run_once", "called_by": "M",
+        "parent_task_id": None, "depth": 1, "input_key": f"consume:{rid}",
+        "status": "done", "outcome": "refused", "refusal_reason": reason,
+        "instance": "", "detail": "夹具：被拒掉的认领", "error": None,
+        "started_at": S.now_iso(), "ended_at": S.now_iso(),
+        "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": inputs,
+    }
+    S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__}).validate()
+    with st.tx("tasks", actor="test") as tx:
+        tx.upsert("tasks", row, note="fixture:refused_claim")
+
+
+def test_s03_a_gate_refused_claim_does_not_burn_the_key(tmp_path: pathlib.Path):
+    """D80 正控：闸门拒掉的那一次不算做过 ⇒ 下一次扫队仍要认领这条请求。
+
+    真机形态：一趟跑批在墙钟/预算/总量到顶那一刻扫了队，`summon` 被拒，
+    `_refuse` 照旧落一行带 `input_key` 的台账行。改前 `seen` 收全部行 ⇒
+    这条 `done=false` 的请求跨趟也永远不再被认领（`tasks` 是追加式台账）。
+    """
+    st, cond, a = _cond(tmp_path)
+    add_request(st, "r-0001", topic="被拒过，但没做过")
+    _seed_consume_row(st, task_id="t-9001", rid="r-0001", admitted=False)
+    got = cond.consume_pending_search_requests(trigger="dispatch")
+    assert len(got) == 1, [getattr(r, "task_id", None) for r in got]
+    assert a.calls == 1, "被闸门拒过的那一行把幂等键烧掉了（D80 回归）"
+    keys = [str(r.get("input_key") or "") for r in _a_rows(st)]
+    assert keys.count("consume:r-0001") == 2, keys
+
+
+def test_s03_a_claim_that_ran_and_then_refused_still_burns_the_key(tmp_path: pathlib.Path):
+    """D80 负控：真的跑过又拒的那一次仍然占住幂等键（不许"一律重试"）。
+
+    没有这一条，上面那条正控可以靠"把幂等拆掉"变绿 —— 那会把"做过一次"变成
+    "每次都再问一遍"（活锁）。分野是受理标记：跑过的那一行带着
+    `conductor:admitted`，闸门拒掉的那一行没有。
+    """
+    st, cond, a = _cond(tmp_path)
+    add_request(st, "r-0001", topic="跑过又拒了")
+    _seed_consume_row(st, task_id="t-9002", rid="r-0001", admitted=True,
+                      reason="invalid_params")
+    assert cond.consume_pending_search_requests(trigger="dispatch") == []
+    assert a.calls == 0, "跑过又拒的那一次被重试了（幂等失效）"
+    assert len(_a_rows(st)) == 1, _a_rows(st)
