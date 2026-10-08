@@ -358,7 +358,9 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
         return Refusal(
             "fanout_exceeded",
             f"该任务已受理 {d.fanout} 个子召唤，达到发起方 {d.frm} 的扇出上限 {limit}"
-            f"（{origin}）",
+            f"（{origin}）。这是**本趟的硬上限**（口径是受理数，不是尝试数），"
+            "再派也不会被受理 ⇒ 不要再把步数花在派活上：把手上已有的读数写进交付物、"
+            "把缺的缺口如实记成读数（谁没做、为什么），然后收工",
             "max_fanout",
         )
 
