@@ -776,19 +776,37 @@ INTERJECTION_STOP_MARKERS: tuple[str, ...] = ("叫停", "停止", "停止指令"
 
 def send_interjection(session_root: Path, *, sender: str, subject: str, body: str,
                       to: str = "ALL", sid: str | None = None) -> tuple[str, str]:
-    """写一条集体插话（`draft/39` §3.11 二 D07）：返回 `(编号, 问题)`。
+    """写一条插话：只有用户能发，只有主控 M 会收到（所有者 2026-10-08 裁定）。返回 `(编号, 问题)`。
 
-    插话与留言的区别不是措辞，是送达方式：留言躺在收件箱里等下一趟/下一步被"听"到，
-    而插话由框架在下一步开头单列一段【插话】（不混进消息列表、不打断当前步）——
-    用户 2026-10-05 的口径："广播改成集体插话发送"。
+    逐字：「插话只有 M 可能受到用户的插话，处理学 dsh。」⇒ 这条通道收窄成
+    用户 → M 一条：它对应的就是 DSH 里"人在中途说话、在最近步边界被 steer"那一档
+    （`draft/84` §8.3）。同伴之间的传话不走这里，走留言/交接手稿（`draft/85` §2.1 的工作项）。
+
+    权限判据落在这一层（最早的落点），拒绝时零写入并给一条可执行的说明 ——
+    这与"插话与留言的区别不是措辞，是送达方式"那段历史口径并不冲突：插话的送达方式
+    （下一步开头单列一段【插话】、不打断当前步）一个字没改，改的只是谁能发、谁收。
+
+    历史（保留，免得后人以为这条通道一直是这么窄的）：`draft/39` §3.11 二 D07，
+    用户 2026-10-05 的口径是"广播改成集体插话发送"（发给所有在册角色）。T18 收窄它
+    之后，`conductor.stop(notify=True)` 的叫停广播改回留言（见 `conductor_tools`）。
 
     编号由脚本按会话内顺序发（`i-0001`…），与手稿/台账同一套做法：模型不许自己编号。
     """
+    who = str(sender or "").strip()
+    if who != U.USER:
+        return "", (f"插话只有用户能发（所有者 2026-10-08：「插话只有 M 可能受到用户的插话」），"
+                    f"收到 sender={who!r}。角色之间的传话走留言（`message.send`）或交接手稿 —— "
+                    "那两条都有收件人可查的落点，插话没有。")
+    target = str(to or "ALL").strip()
+    if target not in (S.CONDUCTOR_ROLE, "ALL"):
+        return "", (f"插话只送给主控（{S.CONDUCTOR_ROLE}），收到 to={target!r} —— "
+                    "所有者 2026-10-08：只有 M 会收到用户的插话。要指定别的角色请用 `message.send`。")
     events, problems = SS.read_session(session_root, sid=sid)
     n = sum(1 for e in events if e.get("kind") == "agent_interjection") + 1
     iid = f"i-{n:04d}"
     payload = {"kind": "agent_interjection", "interjection_id": iid, "from": str(sender),
-               "to": str(to or "ALL"), "subject": str(subject or ""), "body": str(body or ""),
+               "to": str(S.CONDUCTOR_ROLE), "subject": str(subject or ""),
+               "body": str(body or ""),
                # 叫停类要额外落读数（见 `INTERJECTION_STOP_MARKERS`）
                "is_stop": any(m in str(subject or "") for m in INTERJECTION_STOP_MARKERS)}
     path, problem = SS.append(session_root, payload, sid=sid)
@@ -799,12 +817,19 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
 
 def read_interjections(session_root: Path, role: str, *, sid: str | None = None,
                        ) -> tuple[list[dict[str, Any]], list[str]]:
-    """这个角色还没消费过的插话（发给他本人的，或发给 ALL 的）。
+    """这个角色还没消费过的插话（只有主控 M 有；所有者 2026-10-08 裁定 T18）。
 
     "消费过"由 `agent_interjection_seen` 事件记（`mark_interjections_seen`）——
     不记在内存里：续跑时那一趟要能接着从"已经读过哪些"往下走，否则同一段插话
     会被念第二遍（而"念第二遍"与"又来了一条"在模型眼里长得一样）。
+
+    收口为什么在读取这一层（而不是只靠发送那一层挡住）：历史会话里确实有
+    `to="ALL"` 的插话（D07 那一版留下的），读侧再挡一次，才不会让"后来改了发送口
+    但老会话还在"变成一条静默通道。返回空表不是"没查成"：非主控角色本来就没有
+    这条通道（要传话请走留言）。
     """
+    if str(role) != S.CONDUCTOR_ROLE:
+        return [], []
     events, problems = SS.read_session(session_root, sid=sid)
     seen: set[str] = set()
     for e in events:

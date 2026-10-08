@@ -485,15 +485,19 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
 
     1. 「先落停机开关」（`stopctl`）—— 它是唯一能打断"在飞工作"的通道：卡在等待循环里的
        子进程（E 的实验脚本）每 0.2 s 看一次它，于是会被立刻终止（实测 30 s → 0.36 s）；
-    2. `notify=True` 时在「公共频道广播」一条叫停（`#public`）：A–H 每个角色都收得到，
-       投递登记是真的 —— 但广播「打断不了」正在循环的同伴（收件箱是 `run()` 开头读一次的），
-       所以 body 里点明"收到广播不等于被叫停，开关才算"，免得同伴误判。
+    2. `notify=True` 时在「公共频道广播」一条叫停（`#public`）：A–H 每个角色都收得到。
+       2026-10-08 晚改回留言（所有者 T18：「插话只有 M 可能受到用户的插话」）：
+       D07 当年把它改成集体插话的理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"，
+       而那句话今天已经不成立 —— 步边界的 `_hear()` 会把新留言并进这一步的结果
+       （`agent_loop._hear`，判据见 `draft/85` §5 的表），所以留言同样"下一步就看到"，
+       而且它在盘上有收件人、可 ack（`draft/85` §2.1）。body 里仍然点明"收到广播不等于被叫停，
+       开关才算"，免得同伴误判。
 
     `force=True` 是"直接杀掉"：不等待收尾，并按进程登记把子进程连子孙一起杀
     （「排除自己」：杀掉自己的进程树会让这次调用永远回不去；M 随后由步循环的停机判据收工）。
     """
     from .. import stopctl
-    from ..agent_loop import PUBLIC, send_interjection, send_message
+    from ..agent_loop import PUBLIC, send_message
 
     c = _conductor()
     root = Path(str(getattr(getattr(c, "store", None), "root", "") or "."))
@@ -505,16 +509,17 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
     switch = stopctl.request_stop(root, reason=code, by=S.CONDUCTOR_ROLE, force=force, sid=sid)
     notified = ""
     if notify:
-        # `draft/39` §3.11 二 D07（用户 2026-10-05 裁）：叫停那条广播改成集体插话。
-        # 区别不是措辞而是送达方式：留言躺在收件箱里等下一次"听"，而插话由框架在
-        # 下一步开头单列一段【插话】（不混进消息列表）—— 旧形态的 body 还写着
-        # "收到本条广播不会打断你"，《那正是没做好的地方》。
-        ij_id, problem = send_interjection(
-            root, sender=S.CONDUCTOR_ROLE, to="ALL", subject="叫停",
+        # 2026-10-08 晚（所有者 T18）：叫停广播改回留言。D07（用户 2026-10-05）当年
+        # 把它改成集体插话，理由是"留言躺在收件箱里等下一次听、打断不了在跑的同伴"——
+        # 那句在今天是过期的事实（步边界的 `_hear()` 会把新留言并进这一步的结果）。
+        # 而插话收窄成"只有用户 → M"之后，M 发的叫停不能再走插话：那是另一条通道。
+        # 留言还有两个插话给不了的东西：它落在公共频道（谁都能从盘上读到）、且可 ack。
+        ij_id, problem = send_message(
+            root, sender=S.CONDUCTOR_ROLE, to=PUBLIC, subject="叫停",
             body=("用户/主控叫停（" + code + ("，强制" if force else "") + "）：请各自收工，"
                   "并把你已经起的子进程停掉（实验脚本、检查器进程等）。"
                   "停机开关已落在 " + str(stopctl.stop_path(root)) + "；"
-                  "你会在**下一步开头**看到这条插话（它不打断当前步）——"
+                  "你会在**下一步开头**读到这条留言（它不打断当前步）——"
                   "真正让在飞工作停下的是那个开关。"),
             sid=sid or None)
         notified = ij_id if not problem else f"未发出：{problem}"

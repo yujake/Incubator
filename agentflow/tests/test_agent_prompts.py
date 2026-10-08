@@ -1339,18 +1339,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p43`（同日，`draft/68` 题 19 与题 20，所有者授权）：题 20 同步 A 的 `search_literature`
 #: 声明（`returns` 按实现如实改写）与 A 提示词里的两格；题 19 让工具面 `citations` 的描述
 #: 教出 `stmt:` 前缀，那件工具在 A 的工具面上。两刀合起来实测只有 A 那一格换值。
-_FROZEN_PROMPT_VERSION = "p43"
+#:
+#: `p44`（2026-10-08 晚，所有者 T18）：插话通道收窄成"只有用户能发、只有主控 M 会收到"
+#: ⇒ 改的是共享段那段【插话】⇒ 十格全部换值（与 p42/p43"只动一格"正好对照：
+#: 换几格本身就是这次改动作用域的读数）。
+_FROZEN_PROMPT_VERSION = "p44"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "9be0fc70415374b11e20809f8e50939035422215346746b7c317abc57644574e",
-    "B": "bfe145bdb3ad14853816c16ff6eea2c07f0511501ab30fdd3284ef9c3926f257",
-    "C": "623f1c815a194f88fbb0019fd3642bbccaaa814eca3ebe2a5b2f58af47f7f32e",
-    "D": "ef3a90d90db0f7f0b35714c951b41c219f5a40d1f334b91bf410cb2ff5141c25",
-    "E": "2da6a7225021fa6484f0a2eed4fe40889fe5b465e78d12db06e96b49c4ec671c",
-    "F": "7f5f1859f8d183d8ec8c4b5eac81bbd9f821f5483f9bc0362ceccd561bf8eaf3",
-    "G": "88cb2075a32d29128ddef5e4c27e20d69595f9a24d5b7894d74cf5a7fdb06d98",
-    "H": "b55aa1fc7b3f70ef1703633ede186254950bb6d8ddb9196fa6c40bb289cdcc04",
-    "V": "b377653fa09a2a149d16873cb42c56c4ae7f33b95296383aebf06667d3c1336d",
-    "M": "62632b0be19e78afcd574b1ff39f4c418f5b29e98d284153186713975e439d68",
+    "A": "60548d2df0c2df1b6b9a95bb93166e726edea56337c0346b8f087c60686b9806",
+    "B": "bdcb882ab33510a7bd4ab86fb1f1ea72f15184684578476b501d0500475e05cc",
+    "C": "d4ceda7cf03456ecba5735941cb8807da45b48f8f4a61957b4f2f8a34e91457e",
+    "D": "1022987331a869370b1d2f034671eb1a2df67174376314163fc2a372af0d433d",
+    "E": "83a720b67df9f188932768154f92bcac2c979e7edce8c23e44d618660a9eb7eb",
+    "F": "c849e85f6274c06aef36d5cfc45be0edae4f798ec228a556374a7d25b5c621ff",
+    "G": "ffd412ee072f9942f542e7d2f6737b68249a2856165c26abb99efeed024046d6",
+    "H": "1dc5b617b4a1596bdc2efc61c937f99cc18e15ccea082bcb457f6302fa469744",
+    "V": "4040a6748e0b881efa768b29d43e6c867888c9e03304f8561bb29e65a29e86d3",
+    "M": "5a8d68f17c2d7deeda160a0f2fe32c4b85d68dc5152adc13eaa0ecf85754009e",
 }
 
 

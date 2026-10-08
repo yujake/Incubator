@@ -51,7 +51,12 @@ def test_stop_is_a_boss_tool_with_both_modes_declared(tmp_path: pathlib.Path):
 
 
 def test_graceful_stop_writes_the_switch_and_broadcasts_the_reminder(tmp_path: pathlib.Path):
-    """优雅停止：落开关 + 广播"把你起的子进程停掉" + 落续跑简报。"""
+    """优雅停止：落开关 + 广播"把你起的子进程停掉" + 落续跑简报。
+
+    2026-10-08 晚（所有者 T18）：广播是留言（`#public` 的 `agent_message`），
+    不再是集体插话 —— 插话收窄成"只有用户 → M"。留言同样"下一步就看到"：
+    步边界的 `_hear()` 会把它并进这一步的结果。
+    """
     from agentflow.agent_loop import PUBLIC, read_interjections, read_messages
 
     ws, st, _c, reg = _wired(tmp_path)
@@ -62,19 +67,22 @@ def test_graceful_stop_writes_the_switch_and_broadcasts_the_reminder(tmp_path: p
     state = stopctl.read_stop(ws)
     assert state is not None and state["reason"] == "user" and state["force"] is False, state
     assert state["by"] == "M", state
-    # ② 叫停走的是集体插话（`draft/39` §3.11 二 D07：用户裁定"广播改成集体插话发送"）：
-    #    A–H 每个角色都读得到它，正文点名"子进程"，并且它带"叫停类"标记。
+    # ② 叫停走公共频道的留言：每个角色都读得到它，正文点名"子进程"，
+    #    并且它带"叫停类"标记（留言没有 `is_stop` 那一格 —— 标记在标题上）。
     for role in ("A", "B", "C", "D", "E", "G", "H"):
-        got, problems = read_interjections(ws, role, sid=None)
+        got, problems = read_messages(ws, role, sid=None)
         assert not problems, problems
-        mine = [i for i in got if i.get("subject") == "叫停"]
-        assert mine, f"{role} 没收到叫停插话 ⇒ 同伴不知道自己该收工"
+        mine = [m for m in got if m.get("subject") == "叫停"]
+        assert mine, f"{role} 没收到叫停广播 ⇒ 同伴不知道自己该收工"
         assert "子进程" in str(mine[0].get("body")), mine[0]
-        assert mine[0]["is_stop"] is True, mine[0]
-    assert data["notified"].startswith("i-"), data
-    # ③ 续跑简报：优雅停止与 kill 的区别就在它
+    # ③ 插话通道里没有新东西（T18：主控不能发插话）
+    for role in ("A", "D"):
+        ij, _ = read_interjections(ws, role, sid=None)
+        assert ij == [], ij
+    assert data["notified"].startswith("m"), data
+    # ④ 续跑简报：优雅停止与 kill 的区别就在它
     assert data["resume_brief"], data
-    # ④ 强制那一半这一趟没做
+    # ⑤ 强制那一半这一趟没做
     assert data["killed_children"] == {}, data
 
 
