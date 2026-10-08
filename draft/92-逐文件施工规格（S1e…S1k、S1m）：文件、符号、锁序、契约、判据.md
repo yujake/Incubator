@@ -31,6 +31,7 @@
 | I-15 | **查只读、修复只写在写路径**：`roster_view` / `roster` 形状**只报** `unregistered` 列表，**不许顺手修补**；修补只发生在 `roster_add`（派活）与 `roster_retire`（退役）这两条写路径上 | "查"与"写"混在一处会让只读视图变成隐藏的写者 |
 | I-16 | **读写面强制**（业主 T23，已裁）：每个子代理在**造它时**由父**预订**一个面（可写前缀 + 只读前缀）、秘书**审核**（不重叠、名字不在已销号列表）；`fs.*` 的 `root` = 该实例的面；**面内新文件允许**，面外一律拒；与活跃项的面重叠 ⇒ 受控拒绝，除非 `shared: true`（那时按写集冲突分波） | 业主逐字（`draft/93` §T23）；`fs_tools` 的 `resolve() + relative_to(root)` 判据现成，只换 root |
 | I-17 | **销号名单**（业主 B1，已裁）：名字一经退役**不复用**，且维护 `out/roster/<owner>-retired.jsonl`（物化索引；名册里的 retire 事件仍是真源）；`roster_add` / `name_of` 必须查它 | 防"同名换人"；后续版本的新功能要读这份名单 |
+| I-18 | **面池**（业主 T23 + 深夜补充"退役后读写面释放进可分配池"）：面是**槽位**（`S01`/`S02`…，**不编码本地名**），在 `out/surfaces/<owner>/<slot>/`；退役 ⇒ ①归档面内容到 `out/surfaces/archive/<owner>-<name>/` ②槽位入池 ③归档失败 ⇒ 槽位停在 **"待释放"**（不入池）+ 读数；**名字与面各自独立**（面可复用，名字永不） | 槽位重分配若不清干净，新子代理就会看到前任的文件 —— "别人和它抢文件"的另一种形态 |
 
 ---
 
@@ -222,10 +223,18 @@ def latest_report_of(self, *, task_id: str) -> dict:
     """退役第①支要端给父的东西（E19）：`{"checked","handoff_id","summary","at","head","reason"}`
     —— 默认给摘要 + 编号 + 正文前 300 字（**不给全文**：那是 `manuscripts.read` 的事，§7-⑲）。"""
 def active_children_of(self, *, task_id: str) -> dict: # 退役第②支：**它**名下的活跃调用（代理轴）
-def retire(self, *, owner: str, name: str, by_task_id: str) -> dict:
-    """§1.9 三分支；**执行前**按 `active_children_of` 与 `latest_report_of` 判定；
-    执行 = 写 roster 的 retire 事件 + index 标退役（当前调用行保留、名字不回收）。
-    幂等：`(owner, name)` 已有 retire 事件 ⇒ 返回 `("", "已经退过")`，不写第二份。"""
+def roster_retire(self, *, owner: str, name: str, by_task_id: str) -> dict:
+    """退役（§1.9 三分支的执行）：① 名册追加 `retire` 事件 ② 名字进**销号名单**
+    ③ **面归还池** —— 先把面内容**归档**（`out/surfaces/archive/<owner>-<name>/`）再写
+    `surface_release`；**归档失败 ⇒ 槽位停在"待释放"、不入池**（三态，留读数）。
+    幂等：`(owner, name)` 已有 retire 事件 ⇒ 返回 `("", "已经退过")`。"""
+def surface_alloc(self, *, owner: str, want: str = "") -> dict:
+    """**从池里分配面**（派活那一刻，与 `roster_reserve` 同一趟、同一片锁）：
+    `want` 给了槽位名 ⇒ 要求它是空闲的（否则受控拒绝）；没给 ⇒ 取"空闲里最小的"；
+    返回 `{"slot","path","checked","reason"}`。**只分配干净的面**（归档未完成的槽位不在池里）。"""
+def surface_state(self, *, owner: str) -> dict:
+    """池的读数（三态）：`{"checked","in_use":[{"slot","name"}],"free":["S01",…],
+    "pending_release":[{"slot","name","reason"}]}`。"""
 ```
 
 - **权限**：读面不变（`store.rows(<任意表>)` 含 `tasks` + 手稿 + registry）；
@@ -278,13 +287,16 @@ S1e（两轴分开 + dispose）──┬─▶ S1m（秘书分片 + 锁 + 存活
 S1g（洗格式）——与 S1e 并行，独立
 ```
 
-**S1n（读写面切割，业主 T23 已裁）**：名册项加 `surface`；派活时秘书 `roster_reserve` 审核
-（名字未占用、**不在已销号列表**、与父名下活跃项的面不重叠）；`host` / `LlmBackend.call`
-按面造**每实例一个**注册表（`FsContext.root` = 该实例的面，`fs_tools` 的路径判据
-`resolve() + relative_to(root)` 一个字不改，只换 root）；`out/roster/<owner>-retired.jsonl`
-作为**销号名单**（B1）。判据 = 正控（面内写新文件成功、只读前缀可读）+ 负控（面外 / 别人的面 /
-与活跃面重叠且没声明 `shared` ⇒ 拒）+ 反真空（面没登记或读不成 ⇒ 拒）。
-**排在 S1k 之后**（面的分配与审核要用名册与对照表）。
+**S1n（读写面切割，业主 T23 已裁 + 深夜补充"退役后读写面释放进可分配池"）**：名册项加
+`surface`（**槽位名** `S01`/`S02`…，路径 `out/surfaces/<owner>/<slot>/`）；派活时秘书
+`roster_reserve` 审核（名字未占用、**不在已销号列表**、与父名下活跃项的面不重叠、槽位在池里且
+**干净**）；`host` / `LlmBackend.call` 按面造**每实例一个**注册表（`FsContext.root` = 该实例的面，
+`fs_tools` 的路径判据 `resolve() + relative_to(root)` 一个字不改，只换 root）；
+`out/roster/<owner>-retired.jsonl` 是**销号名单**（B1）、`out/roster/<owner>-surfaces.jsonl` 是
+**面池事件流**（`alloc` / `release` / `archive_failed`）。判据 = 正控（面内写新文件成功、
+只读前缀可读、**退役后槽位可再分配且新面是干净的**）+ 负控（面外 / 别人的面 / 与活跃面重叠且
+没声明 `shared` / 面复用了但**名字仍不可复用** / 归档失败 ⇒ 槽位不入池）+ 反真空（面没登记或
+读不成 ⇒ 拒）。**排在 S1k 之后**（面的分配与审核要用名册与对照表）。
 
 | 批 | 可以往下走的读数（硬） |
 |---|---|
