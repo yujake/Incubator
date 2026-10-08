@@ -1651,10 +1651,15 @@ class AgentLoop:
                         "`agentflow stop --force` 找不到这个进程",
             }, sid=self.sid)
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
-        if fresh_ids:
-            problem = mark_delivered(self.session_root, self.role, fresh_ids, sid=self.sid)
-            if problem:
-                run.notes.append(f"投递登记失败：{problem}")
+        # 投递标记推迟到第一次成功模型调用之后（`draft/86` §4.1 的 D75 后半）。
+        #
+        # 为什么不能在这里就标：旧写法在任何模型调用之前落 `mark_delivered`，于是
+        # "这一趟在首次 `ask_step` 之前就死掉"（`not_wired`、步 0 撞停机开关、预算已尽）
+        # 会把消息的"新"标记永久吃掉 —— 消息还在盘上，但它再也不标"新"，
+        # 而且会被挤进 8 条窗口（真机 579 条留言、只有 8 条被标记读过，这个形态是其中一支）。
+        # 现在：先进上下文、模型真的被问过一次之后，才承认"它送达了"。
+        pending_delivery: list[str] = list(fresh_ids)
+        delivered_marked = False
 
         availability = self._availability()
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
@@ -1768,6 +1773,14 @@ class AgentLoop:
                                             note=f"{self.role}.step{step}",
                                             max_tokens=self.max_output_tokens,
                                             face=face)
+            # 第一次成功的模型调用之后才登记投递（推迟标记的落点，见上面那段注释）：
+            # "模型真的被问过一次"= 这一批消息确实进了上下文 ⇒ 承认它送达。
+            if pending_delivery and not delivered_marked and call.ok:
+                problem = mark_delivered(self.session_root, self.role, pending_delivery,
+                                         sid=self.sid)
+                if problem:
+                    run.notes.append(f"投递登记失败：{problem}")
+                pending_delivery, delivered_marked = [], True
             if data is None:
                 args_error = call.problem == "judge_bad_args"
                 if args_error:
@@ -2609,8 +2622,39 @@ class AgentLoop:
         if problem:
             return {"message": "未发出", "to": to, "ok": False, "error": problem}
         where = "公共频道" if to == PUBLIC else f"给 {to} 的私聊"
-        return {"message_sent": msg_id, "to": to, "channel": where, "ok": True,
-                "note": "收件人下次运行时（或本步之后）会在收件箱里看到它"}
+        # 回执三态（`draft/85` §5 的 D76 / `draft/86` §4.2）："写进盘了"不等于"有人读"。
+        #
+        # 真机读数（`draft/89` §2）：128 个会话 579 条留言里只有 8 条被标记读过，
+        # 而 12 次投递登记全部由 M 写 —— 因为生产形态下只有 M 有 LLM 循环，
+        # A–H 是确定性动作 ⇒ 发给它们的留言没有任何进程会读。
+        # 旧回执写的是 `ok: True` + "收件人下次运行时会看到它"，那是一句假话。
+        receipt, reader_note = self._receipt_for(to)
+        return {"message_sent": msg_id, "to": to, "channel": where,
+                "receipt": receipt, "ok": receipt != "no_reader",
+                "note": reader_note}
+
+    def _receipt_for(self, to: str) -> tuple[str, str]:
+        """这条留言的收件人有没有读者。返回 `(receipt, 一句话说明)`。
+
+        三态（不许折平）：
+        - `"queued"`：收件人有 LLM 循环 ⇒ 它下次进循环时会读到（今天只有 M 与
+          `--drive`/`--subagents` 点过的那些）；
+        - `"no_reader"`：收件人没有循环 ⇒ 这条留言不会有任何进程读它（写进盘了，
+          但那是"存着"，不是"送达"）；
+        - `"unknown"`：看不见接线表（本实例没有 backend/conductor 句柄）⇒ 如实说不知道，
+          不许按乐观猜成 `queued`（本仓的三态纪律）。
+        """
+        if to == PUBLIC:
+            return "queued", "公共频道：有循环的角色下次进循环时会读到它"
+        loops = getattr(getattr(self.conductor, "backend", None), "loops", None)
+        if isinstance(loops, Mapping):
+            has_reader = any(str(k[0]) == to for k in loops if isinstance(k, tuple) and k)
+            if has_reader:
+                return "queued", f"{to} 有 LLM 循环 ⇒ 它下次进循环时会读到"
+            return "no_reader", (f"{to} 没有 LLM 循环（确定性动作）⇒ 这条留言不会有任何进程读它；"
+                                 "要送达就交给它的父，由父在步边界转达（业主 T13）")
+        return "unknown", ("看不见接线表（本实例没有 backend 句柄）⇒ 无法判断收件人有没有读者："
+                           "『不知道』不许折成『送到了』")
 
     def _outbound_hook(self, shape: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         """发件钩子（A 线：秘书职责 1 格式内容优化 + 2 委派评估）。

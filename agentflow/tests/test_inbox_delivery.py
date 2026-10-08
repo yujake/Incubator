@@ -29,14 +29,90 @@ def _ws(tmp_path: pathlib.Path) -> pathlib.Path:
     return ws
 
 
-def _send(ws: pathlib.Path, n: int, *, prefix: str = "m") -> list[str]:
+def _send(ws: pathlib.Path, n: int, *, prefix: str = "m", sid: str | None = None) -> list[str]:
     ids: list[str] = []
     for i in range(n):
         mid, problem = AL.send_message(ws, sender="M", to="D",
-                                       subject=f"{prefix}{i:02d}", body=f"正文 {i}")
+                                       subject=f"{prefix}{i:02d}", body=f"正文 {i}", sid=sid)
         assert not problem, problem
         ids.append(mid)
     return ids
+
+
+def test_a_message_to_a_role_without_a_reader_says_so(tmp_path: pathlib.Path):
+    """正控（D76 / `draft/86` §4.2）：收件人没有 LLM 循环 ⇒ 回执是 `no_reader`，不是 `ok`。
+
+    真机读数（`draft/89` §2）：579 条留言只有 8 条被读过，12 次投递登记全由 M 写 ——
+    生产形态下只有 M 有循环。旧回执写的是 `ok: True` + "收件人下次运行时会看到它"，那是假话。
+    """
+    from agentflow.agent_loop import AgentLoop, PUBLIC
+    from agentflow.conductor import Conductor, LocalBackend
+
+    ws = _ws(tmp_path)
+    st = Store(ws)
+    # 只有 D 有循环（A 是确定性动作）—— 这正是真机的接线形态（生产里只有 M 有）
+    loops = {("D", "consider"): {"max_steps": 3}}
+    backend = type("B", (), {"loops": loops})()
+    cond = Conductor(st, backend=LocalBackend({}))
+    cond.backend = backend                     # 让 loop 看得见接线表
+    loop = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
+                     conductor=cond, store=st, sid="rcpt", auto_secretary=False)
+    got_a = loop._do_message({"to": "A", "subject": "s", "body": "b"})
+    assert got_a["receipt"] == "no_reader" and got_a["ok"] is False, got_a
+    assert "不会有任何进程读它" in got_a["note"], got_a
+    got_d = loop._do_message({"to": "D", "subject": "s", "body": "b"})
+    assert got_d["receipt"] == "queued" and got_d["ok"] is True, got_d
+    got_pub = loop._do_message({"to": PUBLIC, "subject": "s", "body": "b"})
+    assert got_pub["receipt"] == "queued", got_pub
+
+
+def test_the_receipt_is_unknown_when_the_wiring_table_is_invisible(tmp_path: pathlib.Path):
+    """负控（三态）：看不见接线表 ⇒ `unknown`，不许按乐观猜成 `queued`。"""
+    from agentflow.agent_loop import AgentLoop
+
+    ws = _ws(tmp_path)
+    st = Store(ws)
+    loop = AgentLoop(role="M", session_root=ws, registry=None, seam=None,
+                     conductor=None, store=st, sid="rcpt2", auto_secretary=False)
+    got = loop._do_message({"to": "A", "subject": "s", "body": "b"})
+    assert got["receipt"] == "unknown", got
+    assert "不许折成" in got["note"], got
+
+
+def test_messages_stay_fresh_when_no_model_call_ever_succeeds(tmp_path: pathlib.Path):
+    """负控（D75 的后半，`draft/86` §4.1 的"推迟标记"）：这一趟一次模型调用都没成功
+    ⇒ 留言仍然是 fresh（不许在首次 `ask_step` 之前就承认"送达"）。
+
+    改前必红：旧实现一进 `run()` 就 `mark_delivered`，于是"在首次模型调用前就死掉"的那一趟
+    会把消息的"新"标记永久吃掉 —— 消息还在盘上，但再也不会被念到。
+    """
+    from agentflow.agent_loop import run_role
+    from agentflow.conductor import Conductor, LocalBackend
+    from agentflow.llmseam import LlmSeam
+    from agentflow.tools import build_registry
+
+    ws = _ws(tmp_path)
+    st = Store(ws)
+    ids = _send(ws, 2, sid="dead")
+    cond = Conductor(st, backend=LocalBackend({}))
+
+    class _Dead:
+        """一个必然失败的网关：`call.ok` 永远为假（模拟 auth_failed 这类"从没问成"）。"""
+
+        spec = type("Spec", (), {"model": "dead", "api_key": "x"})()
+
+        def complete(self, prompt: str, **kw: object) -> object:
+            return type("R", (), {"ok": False, "text": "", "tool_calls": (), "tokens_in": 0,
+                                  "tokens_out": 0, "error_detail": "注入的失败",
+                                  "error_kind": "auth_failed"})()
+
+    reg = build_registry(store=st, conductor=cond).registry
+    run = run_role("D", "跑一趟", store=st, registry=reg, conductor=cond,
+                   seam=LlmSeam(role="D", session_root=ws, gateway=_Dead(), sid="dead"),
+                   session_root=ws, workspace_root=str(ws), sid="dead", from_env=False)
+    assert run.stop_reason != "final", run.to_dict()
+    _text, rendered, _problems = AL.inbox_digest(ws, "D", sid="dead")
+    assert rendered == ids, ("留言被误标成已投递 —— 这一趟一次模型调用都没成功", rendered)
 
 
 def test_the_rendered_set_is_exactly_what_gets_marked(tmp_path: pathlib.Path):
