@@ -182,6 +182,118 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+# ---------------------------------------------------------------- 名册与对照表（S1k）
+#
+# 落点：`out/roster/<owner>.jsonl`（名册）、`<owner>-index.jsonl`（电话簿）、
+# `<owner>-retired.jsonl`（销号名单）。三份都 append-only，读侧折叠。
+# 为什么不放 `out/secretary/`：`webui/readers.py` 是目录 glob（`*.jsonl`），
+# 同目录会把名册行混进"秘书决定台账"那一面（`draft/92` §2 的落点说明）。
+
+ROSTER_DIR: tuple[str, ...] = ("out", "roster")
+
+
+def roster_path(root: str | Path, owner: str) -> Path:
+    """名册（`owner` = 父的绝对编码）。"""
+    return Path(root).joinpath(*ROSTER_DIR, f"{owner}.jsonl")
+
+
+def roster_index_path(root: str | Path, owner: str) -> Path:
+    """对照表（电话簿）：本地名 → 当前调用行。"""
+    return Path(root).joinpath(*ROSTER_DIR, f"{owner}-index.jsonl")
+
+
+def retired_path(root: str | Path, owner: str) -> Path:
+    """销号名单（业主 B1：名字一经退役永久不复用；后续版本的新功能读它）。"""
+    return Path(root).joinpath(*ROSTER_DIR, f"{owner}-retired.jsonl")
+
+
+def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把名册事件流折叠成"当前状态"（一项一条）。
+
+    口径：`add` 建项（后写的同名字覆盖 `retired` 标记为 False 是不可能的 ——
+    名字不复用，所以同名字只会有一次 `add`）；`bind` 推当前调用；`retire` 标退役；
+    `keep_alive` 只记那一格。
+    """
+    items: dict[str, dict[str, Any]] = {}
+    for raw in rows:
+        r = dict(raw)
+        name = str(r.get("name") or "")
+        if not name:
+            continue
+        item = items.setdefault(name, {"name": name, "role": str(r.get("role") or ""),
+                                       "brief": "", "task_id": "", "retired": False})
+        kind = str(r.get("kind") or "")
+        if str(r.get("role") or ""):
+            item["role"] = str(r.get("role") or "")
+        if kind == "add":
+            item["brief"] = str(r.get("brief") or "")
+            item["task_id"] = str(r.get("task_id") or "")
+            item["first_task_id"] = str(r.get("first_task_id") or r.get("task_id") or "")
+        elif kind == "bind":
+            item["task_id"] = str(r.get("task_id") or item.get("task_id") or "")
+        elif kind == "retire":
+            item["retired"] = True
+            item["retired_branch"] = str(r.get("branch") or "")
+        elif kind == "keep_alive":
+            item["keep_alive"] = bool(r.get("value"))
+    return [items[k] for k in sorted(items)]
+
+
+def _fold_index(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把对照表折叠成"名字 → 当前调用（+ 第一次那个）"。
+
+    `bind` 推当前；`retire` 标退役（行保留：编码不回收，反查还要用）。
+    """
+    items: dict[str, dict[str, Any]] = {}
+    for raw in rows:
+        r = dict(raw)
+        name = str(r.get("name") or "")
+        if not name:
+            continue
+        item = items.setdefault(name, {"name": name, "role": str(r.get("role") or ""),
+                                       "task_id": "", "first_task_id": "",
+                                       "retired": False})
+        if str(r.get("role") or ""):
+            item["role"] = str(r.get("role") or "")
+        if str(r.get("kind") or "") == "retire":
+            item["retired"] = True
+            continue
+        item["task_id"] = str(r.get("task_id") or item.get("task_id") or "")
+        if r.get("first") or not item.get("first_task_id"):
+            item["first_task_id"] = str(r.get("task_id") or item.get("first_task_id") or "")
+    return [items[k] for k in sorted(items)]
+
+
+def _state_from(branch: str, retired: bool, cond: Any, task_id: str) -> str:
+    """四态折叠（`draft/92` §2）：活跃 / 待命 / 已停 / 已退役。
+
+    `branch` 来自 `conductor.retire_ready`（`active` / `waiting_with_children` /
+    `waiting_no_children`）；"待命"再看 `keep_alive_of`（那一格只回答"声明过待命没有"）。
+    两个读侧正交，折叠只在这一处做（不许让它们互相猜）。
+    """
+    if retired:
+        return "已退役"
+    if branch == "active":
+        return "活跃"
+    if not branch:
+        return "未登记"
+    try:
+        ka = cond.keep_alive_of(task_id)
+    except Exception:  # noqa: BLE001
+        ka = {"checked": False}
+    if ka.get("checked") and ka.get("keep_alive"):
+        return "待命"
+    return "已停"
+
+
+def _clip_text(text: str, limit: int) -> str:
+    """剪一段可读的正文（多余部分写清"还有多少字没进来"，不许静默截断）。"""
+    body = str(text or "").strip()
+    if len(body) <= limit:
+        return body
+    return body[:limit] + f"…（还有 {len(body) - limit} 字没进来，全文用 manuscripts.read 读）"
+
+
 def _as_mapping(value: Any) -> dict[str, Any]:
     """把一个"看起来像声明"的对象读成 dict（`RoleBrief` 是 dataclass，不是 Mapping）。
 
@@ -1334,6 +1446,384 @@ class Secretary:
     def handoffs_digest(self, *, limit: int = 5) -> str:
         """一小段读数：最近几份交接（判重复时的起点，进提示词用）。"""
         return MS.digest(self.root, limit=limit)
+
+    # ------------------------------------------------------------ 名册 / 对照表 / 退役（S1k）
+
+    def _conductor(self) -> Any:
+        """能读台账的那个句柄（`store` 造一个只读用的 `Conductor`）。
+
+        为什么不要求调用方传：秘书的读面本来就是"`store` + 手稿 + registry"
+        （`draft/91` §2），名册要读台账里的代理行 ⇒ 用同一把 `store` 现造一个即可。
+        造不出来 ⇒ 返回 `None`，调用方按三态如实报（不许当"名下没有子代理"）。
+        """
+        if self.store is None:
+            return None
+        from .conductor import Conductor, LocalBackend
+
+        try:
+            return Conductor(self.store, policy=None, backend=LocalBackend({}))
+        except Exception:  # noqa: BLE001
+            return None
+
+    def roster_rows(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
+        """名册的折叠后状态（`(项列表, 坏行)`）：一项 = 名字 / 角色 / 简介 / 状态。
+
+        事件流折叠口径：`add` 建项；`bind` 只推当前调用；`retire` 标退役；
+        `keep_alive` 只改那一格读数。只追加、不物理删（`draft/92` I-8）。
+        """
+        from . import jsonlfile as JF
+
+        rows, bad = JF.read_jsonl(roster_path(self.root, owner))
+        return _fold_roster(rows), bad
+
+    def roster_index(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
+        """对照表（电话簿）的折叠后状态：一项 = 名字 → `first_task_id` / `task_id`（当前）。"""
+        from . import jsonlfile as JF
+
+        rows, bad = JF.read_jsonl(roster_index_path(self.root, owner))
+        return _fold_index(rows), bad
+
+    def retired_names(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
+        """销号名单（业主 B1）：名字一经退役永久不复用。`(行列表, 坏行)`。"""
+        from . import jsonlfile as JF
+
+        return JF.read_jsonl(retired_path(self.root, owner))
+
+    def next_name(self, owner: str, role: str) -> tuple[str, str]:
+        """下一个可用的本地名（`<角色><序号>`；退役不回收）。返回 `(名字, 问题)`。
+
+        序号 = 该 owner 名下该角色出现过的最大序号 + 1（含已退役的项 —— 这正是
+        "不回收"的落点：`D1` 退役之后下一个是 `D2`，绝不把 `D1` 给另一个人）。
+        """
+        rows, bad = self.roster_rows(owner)
+        if bad:
+            return "", f"名册有 {len(bad)} 行读不出来 ⇒ 不猜序号（{bad[0]}）"
+        used = []
+        for r in rows:
+            name = str(r.get("name") or "")
+            if name.startswith(role) and name[len(role):].isdigit():
+                used.append(int(name[len(role):]))
+        return f"{role}{max(used, default=0) + 1}", ""
+
+    def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
+                   task_id_first: str = "", want_name: str = "",
+                   reuse: str = "") -> dict[str, Any]:
+        """名册登记（增那一支）：`{"name","role","task_id","problem"}`。
+
+        - `reuse` 给了名字 ⇒ 只推进对照表的当前调用，名册项不动（复用不是增）；
+        - 否则：`want_name` 给了就用它（已被用过的名字一律拒，含已退役的 ⇒ "已销号"），
+          没给就用 `next_name`；
+        - 名册行与对照表行一笔写：任一写失败 ⇒ 返回 problem 并不留下半份
+          （先写对照表再写名册；前者失败就不写后者。反过来会造出"有名字没电话"的项）。
+        - `brief` 为空 ⇒ 拒（内容面：那句话是退役时认人的唯一依据，秘书不替它编）。
+        """
+        text = str(brief or "").strip()
+        if not text:
+            return {"name": "", "role": str(role), "task_id": str(task_id),
+                    "problem": "没给一句任务简介（它进名册：退役时读的人靠它认人）"}
+        if len(text) > 60 or "\n" in text:
+            return {"name": "", "role": str(role), "task_id": str(task_id),
+                    "problem": "任务简介必须是单行、不超过 60 字（超长属于内容，秘书不替它删）"}
+        at = _now_iso()
+        if reuse:
+            name = str(reuse)
+            if not self._name_exists(owner, name):
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "problem": f"名册里没有 {name} ⇒ 不猜（复用必须父先看活跃名册）"}
+            if self._is_retired(owner, name):
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "problem": f"{name} 已销号（退役的名字永久不复用，业主 B1）"}
+            ok, why = append_jsonl(roster_index_path(self.root, owner),
+                                   {"kind": "bind", "owner": owner, "name": name,
+                                    "role": str(role), "task_id": str(task_id), "at": at})
+            if not ok:
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "problem": f"对照表没写成：{why}"}
+            return {"name": name, "role": str(role), "task_id": str(task_id), "problem": ""}
+
+        if want_name:
+            name = str(want_name)
+            if self._name_exists(owner, name):
+                problem = (f"{name} 已经用过（{'已销号' if self._is_retired(owner, name) else '在用'}）"
+                           "⇒ 受控拒绝：不许静默改名（业主 B2）")
+                return {"name": name, "role": str(role), "task_id": str(task_id),
+                        "problem": problem}
+        else:
+            name, problem = self.next_name(owner, role)
+            if problem:
+                return {"name": "", "role": str(role), "task_id": str(task_id),
+                        "problem": problem}
+        ok, why = append_jsonl(roster_index_path(self.root, owner),
+                               {"kind": "bind", "owner": owner, "name": name,
+                                "role": str(role), "task_id": str(task_id), "at": at,
+                                "first": True})
+        if not ok:
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "problem": f"对照表没写成：{why}"}
+        ok2, why2 = append_jsonl(roster_path(self.root, owner),
+                                 {"kind": "add", "owner": owner, "name": name,
+                                  "role": str(role), "task_id": str(task_id),
+                                  "first_task_id": str(task_id_first or task_id),
+                                  "brief": text, "at": at})
+        if not ok2:
+            return {"name": name, "role": str(role), "task_id": str(task_id),
+                    "problem": f"名册没写成（对照表那一行已经落了 ⇒ 读侧会报'半份登记'）：{why2}"}
+        return {"name": name, "role": str(role), "task_id": str(task_id), "problem": ""}
+
+    def roster_repair(self, *, owner: str) -> tuple[int, str]:
+        """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。返回 `(补了几条, 问题)`。
+
+        只在写路径被调用（`draft/92` I-15：查只报不修）。补的时候按 `task_id` 升序，
+        于是两个并发修复不会重复分配（名字在 `next_name` 里按已用最大序号推）。
+        """
+        cond = self._conductor()
+        if cond is None:
+            return 0, "没有 store ⇒ 读不到台账，补不了"
+        try:
+            rows = [r for r in cond._tasks()
+                    if r.get("parent_task_id") == owner and not str(r.get("kind") or "")]
+        except Exception as exc:  # noqa: BLE001
+            return 0, f"台账读不成（{type(exc).__name__}: {exc}）"
+        index, bad = self.roster_index(owner)
+        if bad:
+            return 0, f"对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）"
+        known = {str(r.get("task_id") or "") for r in index}
+        todo = sorted(str(r.get("task_id") or "") for r in rows
+                      if str(r.get("task_id") or "") not in known)
+        fixed = 0
+        for tid in todo:
+            row = next((r for r in rows if str(r.get("task_id") or "") == tid), {})
+            role = str(row.get("role") or "")
+            name, problem = self.next_name(owner, role)
+            if problem:
+                return fixed, problem
+            ok, why = append_jsonl(roster_index_path(self.root, owner),
+                                   {"kind": "bind", "owner": owner, "name": name, "role": role,
+                                    "task_id": tid, "at": _now_iso(), "repaired": True})
+            if not ok:
+                return fixed, f"补登记没写成：{why}"
+            ok2, why2 = append_jsonl(roster_path(self.root, owner),
+                                     {"kind": "add", "owner": owner, "name": name, "role": role,
+                                      "task_id": tid, "first_task_id": tid,
+                                      "brief": "（补登记：这一条当时没写进名册）",
+                                      "at": _now_iso(), "repaired": True})
+            if not ok2:
+                return fixed, f"名册补写没成：{why2}"
+            fixed += 1
+        return fixed, ""
+
+    def resolve_down(self, *, owner: str, name: str) -> tuple[str, str]:
+        """下行译码：我名下名册里的名字 → 当前调用行。"""
+        return self._resolve(owner, name)
+
+    def resolve_up(self, *, my_task_id: str, name: str) -> tuple[str, str]:
+        """上行译码：我父名册里的名字 → 当前调用行（父的代号从我那一行读）。"""
+        cond = self._conductor()
+        if cond is None:
+            return "", "没有 store ⇒ 读不到我那一行（不知道父是谁）"
+        try:
+            row = cond._task(str(my_task_id or ""))
+        except Exception as exc:  # noqa: BLE001
+            return "", f"台账读不成（{type(exc).__name__}: {exc}）"
+        if not row:
+            return "", f"台账里没有我这一行（{my_task_id!r}）"
+        parent = str(row.get("parent_task_id") or "")
+        if not parent:
+            return "", "我是顶层发起 ⇒ 没有父名册（上行只能发给用户/主控）"
+        return self._resolve(parent, name)
+
+    def name_of(self, *, owner: str, task_id: str) -> tuple[str, str]:
+        """反查：某个调用行属于这个名册里的哪一个名字。"""
+        index, bad = self.roster_index(owner)
+        if bad:
+            return "", f"对照表有 {len(bad)} 行读不出来"
+        for r in index:
+            if str(r.get("task_id") or "") == str(task_id):
+                return str(r.get("name") or ""), ""
+        return "", f"对照表里没有 {task_id}（未登记）"
+
+    def roster_view(self, *, owner: str) -> dict[str, Any]:
+        """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","reason"}`。
+
+        每一行：`name` / `role` / `brief` / `state`（活跃 / 待命 / 已停 / 已退役）/
+        `retirable`（按 `conductor.retire_ready` 的三分支）/ `items_open`（只报不拦）/
+        `task_id`（当前调用）。
+        规模：默认只回 20 项 + `more`（与 `inbox_digest` 的窗口同族口径）。
+        """
+        cond = self._conductor()
+        rows, bad = self.roster_rows(owner)
+        if bad:
+            return {"checked": False, "rows": [], "more": 0,
+                    "reason": f"名册有 {len(bad)} 行读不出来：{bad[0]}"}
+        if cond is None:
+            return {"checked": False, "rows": [], "more": 0,
+                    "reason": "没有 store ⇒ 读不到台账（状态判不了）"}
+        try:
+            ready = cond.retire_ready(owner)
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "rows": [], "more": 0,
+                    "reason": f"就绪读数没读成（{type(exc).__name__}: {exc}）"}
+        if not ready.get("checked"):
+            return {"checked": False, "rows": [], "more": 0,
+                    "reason": f"就绪读数没读成（{ready.get('reason')}）"}
+        by_child = {str(r["task_id"]): r for r in ready.get("ready", [])}
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            branch = str((by_child.get(tid) or {}).get("branch") or "")
+            state = _state_from(branch, bool(r.get("retired")), cond, tid)
+            out.append({"name": str(r.get("name") or ""), "role": str(r.get("role") or ""),
+                        "brief": str(r.get("brief") or ""), "state": state,
+                        "retirable": branch == "waiting_no_children",
+                        "items_open": int(((by_child.get(tid) or {}).get("reading") or {})
+                                          .get("items_open") or 0),
+                        "task_id": tid})
+        more = max(0, len(out) - 20)
+        return {"checked": True, "rows": out[:20], "more": more, "reason": ""}
+
+    def latest_report_of(self, *, task_id: str, role: str = "") -> dict[str, Any]:
+        """某个实例最近的工作报告（退役第①支要端给父的东西）。
+
+        口径：优先 `handoffs` 里 `task_id == 该实例` 的那些行；一条都没有时退回
+        "发信人是该角色"的最新一行（历史 595 行没有 `task_id`，`draft/94` §3 ——
+        这条退路要写明，否则那段历史读起来像"它从没报过"）。
+        体积：默认只给摘要 + 编号 + 正文前 300 字（全文由父自己 `manuscripts.read`）。
+        """
+        try:
+            rows, bad = MS.read_rows(self.root)
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "reason": f"手稿读不成（{type(exc).__name__}: {exc}）"}
+        mine = [r for r in rows if str(r.get("task_id") or "") == str(task_id)]
+        source = "task_id"
+        if not mine and role:
+            mine = [r for r in rows if str(r.get("sender") or "") == str(role)]
+            source = "sender"
+        if not mine:
+            return {"checked": True, "handoff_id": "", "summary": "",
+                    "head": "", "at": "", "source": "", "bad_rows": len(bad),
+                    "reason": "这个实例名下没有找到报告行"}
+        mine.sort(key=lambda r: (str(r.get("created_at") or ""), str(r.get("id") or "")))
+        last = mine[-1]
+        return {"checked": True, "handoff_id": str(last.get("id") or ""),
+                "summary": str(last.get("summary") or ""),
+                "head": _clip_text(str(last.get("body") or ""), 300),
+                "at": str(last.get("created_at") or ""), "source": source,
+                "bad_rows": len(bad), "reason": ""}
+
+    def active_children_of(self, *, task_id: str) -> dict[str, Any]:
+        """退役第②支：它自己名下的活跃子代理（代理轴，不是父的）。"""
+        cond = self._conductor()
+        if cond is None:
+            return {"checked": False, "rows": [], "reason": "没有 store ⇒ 读不到台账"}
+        try:
+            return cond.active_children(task_id)
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "rows": [],
+                    "reason": f"{type(exc).__name__}: {exc}"}
+
+    def retire(self, *, owner: str, name: str, by_task_id: str = "") -> dict[str, Any]:
+        """退役（业主 §1.9 的三分支，`draft/90` §1.9 逐字）。返回：
+
+        `{"ok","action":"retired"|"reported"|"refused","report":{…},"why":[…], "reading":{…}}`
+
+        - `active` ⇒ `reported`：把最近的工作报告端给父，不退役；
+        - `waiting_with_children` ⇒ `reported`：把那些子代理在它名册里的任务简介端给父；
+        - `waiting_no_children` ⇒ `retired`：写退役事件 + 销号名单 + 对照表标退役 +
+          `conductor.note_edge_release`（父侧那一笔幂等落痕）；
+        - 未登记 / 读不成 / 已销号 ⇒ `refused`（没读成 ≠ 可以退役）。
+        """
+        cond = self._conductor()
+        if cond is None:
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": ["没有 store ⇒ 读不到台账（没读成，不是'不在跑'）"]}
+        tid, problem = self.resolve_down(owner=owner, name=str(name))
+        if problem:
+            if self._is_retired(owner, str(name)):
+                return {"ok": False, "action": "refused", "report": {},
+                        "why": [f"{name} 已经销号过（业主 B1：名字永久不复用）"]}
+            return {"ok": False, "action": "refused", "report": {}, "why": [problem]}
+        if self._is_retired(owner, str(name)):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [f"{name} 已经销号过（业主 B1）"]}
+        try:
+            ready = cond.retire_ready(owner)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [f"就绪读数没读成（{type(exc).__name__}: {exc}）"]}
+        if not ready.get("checked"):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [f"就绪读数没读成（{ready.get('reason')}）"]}
+        row = next((r for r in ready.get("ready", []) if str(r.get("task_id")) == tid), None)
+        if row is None:
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [f"{name}（{tid}）不在就绪清单里（已经退过，或它不在这个父名下）"]}
+        branch = str(row.get("branch") or "")
+        reading = dict(row.get("reading") or {})
+        if branch == "active":
+            report = self.latest_report_of(task_id=tid, role=str(row.get("role") or ""))
+            return {"ok": False, "action": "reported", "report": report,
+                    "why": [f"{name} 还在跑 ⇒ 先看它最近报了什么，不退役"],
+                    "reading": reading}
+        if branch == "waiting_with_children":
+            kids = self.active_children_of(task_id=tid)
+            if not kids.get("checked"):
+                return {"ok": False, "action": "refused", "report": {},
+                        "why": [f"{name} 名下的活跃子代理没读成（{kids.get('reason')}）"]}
+            briefs = []
+            for k in kids.get("rows", []):
+                kid_name, _why = self.name_of(owner=tid, task_id=str(k.get("task_id") or ""))
+                child_rows, _bad = self.roster_rows(tid)
+                brief = next((str(x.get("brief") or "") for x in child_rows
+                              if str(x.get("name") or "") == kid_name), "")
+                briefs.append({"name": kid_name or "（未登记）",
+                               "role": str(k.get("role") or ""),
+                               "brief": brief, "state": str(k.get("state") or "")})
+            return {"ok": False, "action": "reported", "report": {"children": briefs},
+                    "why": [f"{name} 名下还有活跃子代理 ⇒ 不退役（它还在干什么活见 report）"],
+                    "reading": reading}
+        ok, why = cond.note_edge_release(owner, child_task_id=tid, attempt=1)
+        if not ok and "已经记过" not in why:
+            return {"ok": False, "action": "refused", "report": {}, "why": [why],
+                    "reading": reading}
+        at = _now_iso()
+        wrote_roster, why_r = append_jsonl(roster_path(self.root, owner),
+                                           {"kind": "retire", "owner": owner, "name": str(name),
+                                            "task_id": tid, "branch": branch, "by": str(by_task_id),
+                                            "reading": reading, "at": at})
+        wrote_index, why_i = append_jsonl(roster_index_path(self.root, owner),
+                                          {"kind": "retire", "owner": owner, "name": str(name),
+                                           "task_id": tid, "at": at})
+        wrote_retired, why_x = append_jsonl(retired_path(self.root, owner),
+                                            {"owner": owner, "name": str(name), "task_id": tid,
+                                             "role": str(row.get("role") or ""), "at": at,
+                                             "branch": branch})
+        if not (wrote_roster and wrote_index and wrote_retired):
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [f"退役没写全（名册={wrote_roster}/{why_r} 对照表={wrote_index}/{why_i} "
+                            f"销号={wrote_retired}/{why_x}）"],
+                    "reading": reading}
+        return {"ok": True, "action": "retired", "report": {},
+                "why": [f"{name} 退役：{branch}（子已停 + 它名下无活跃子代理）"],
+                "reading": reading}
+
+    # ---- 名册的内部小工具
+
+    def _resolve(self, owner: str, name: str) -> tuple[str, str]:
+        index, bad = self.roster_index(owner)
+        if bad:
+            return "", f"对照表有 {len(bad)} 行读不出来 ⇒ 不译（{bad[0]}）"
+        for r in index:
+            if str(r.get("name") or "") == str(name) and not r.get("retired"):
+                return str(r.get("task_id") or ""), ""
+        return "", f"对照表里没有 {name!r}（未登记或已退役）"
+
+    def _name_exists(self, owner: str, name: str) -> bool:
+        rows, _bad = self.roster_rows(owner)
+        return any(str(r.get("name") or "") == str(name) for r in rows)
+
+    def _is_retired(self, owner: str, name: str) -> bool:
+        rows, _bad = self.retired_names(owner)
+        return any(str(r.get("name") or "") == str(name) for r in rows)
 
     # ------------------------------------------------------------ 内部
 
