@@ -2555,7 +2555,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "verify.py": "全局不变量校验",
     # `draft/37` §72–§74（2026-10-03）：用户端。两者都是「新增」，不是对拍副本；
     # 登记它们的理由是"包目录里凭空多出一个模块"必须有人解释（`R6-AN-1` 的原始形态）。
-    "webui/": "用户端网页（`draft/73` §1.2 的 R1 拆包：W0 一次拆到位）：`state.py` 的 `snapshot()` 读模型 + `views.py` 的服务端渲染 + `writes.py` 的写路径 + `routes.py` 的路由表 + `server.py` 的 http.server 与静态路由；`__init__.py` 保持公开面不变（四条 GET 与 `POST /answer`，唯一写路径走 `userio.answer_question`）",
+    "webui/": "用户端网页（`draft/73` §1.2 的 R1 拆包：W0 一次拆到位）：`state.py` 的 `snapshot()` 读模型 + `views.py`（**W5 已退场**）与 `writes.py` 的写路径 + `routes.py` 的路由表 + `server.py` 的 http.server 与静态路由；`__init__.py` 保持公开面不变（四条 GET 与 `POST /answer`，唯一写路径走 `userio.answer_question`）",
     "web/": "网页的样式与令牌包：`assets.py` 把 DSH 的令牌整份照搬（MIT，来源见 `docs/USER-END-DSH-STYLE.md`），`__init__.py` 只放包说明",
 }
 

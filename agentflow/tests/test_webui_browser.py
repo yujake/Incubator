@@ -20,7 +20,7 @@
 
 ## 两条实况（写判据时量到的，决定了下面哪些格是 skip）
 
-1. `GET /` 今天仍由 A 线的旧壳 `views.render_root` 提供（裁定 P1 的逐面迁移还没做），
+1. `GET /` 现在由 SPA 外壳提供（裁定 P1 的第一块，2026-10-07 落地）；`views.py` 已整件退场，
    所以浏览器里 `#app` 那一层只在 SPA 回退路径（`/machine` 这类客户端路由，
    请求头带 `Accept: text/html`）上才挂得起来。判据一律从 `/machine` 进。
 2. Machine 页的"写设置表单"与 Run 页的"叫停按钮"今天还是 W0 空壳
@@ -132,7 +132,7 @@ def test_the_root_page_is_now_the_spa_shell(
     "哪一天 P1 落地（`/` 改吐 SPA 外壳），这条会红，那时改它正合适" —— 2026-10-07
     A 线按 `draft/81 §6-D13` 落了 P1 的第一块（`handle_root` → 唯一一份
     `server._serve_spa_shell()`），于是就是现在：把它改成新形状，并保留一条反向读数
-    （旧壳那条路仍活给 `GET /run/{sid}` 用，所以"旧壳没被删干净"与"根页面已迁"两件事
+    （`/run/{sid}` 也在 W5 里改吐同一支外壳，所以"旧壳已退场"与"根页面已迁"两件事
     在这一条里分得开）。
     """
     with _workspace(tmp_path) as root, _live(root) as live:

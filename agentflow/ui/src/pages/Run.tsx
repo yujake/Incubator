@@ -123,7 +123,7 @@ export function Run(props: RunProps) {
         right={<TriState tri={v.tri} label="这一面" reason={v.reason} />}
       >
         <div class="readings">
-          趟数 <span class="mono">{runs.length}</span> · 服务端渲染的旧壳仍可用：
+          趟数 <span class="mono">{runs.length}</span> · 这一趟的原始读数（JSON）：
           <a href={`/run/${encodeURIComponent(props.sid)}`}>/run/{props.sid}</a>
         </div>
       </Card>

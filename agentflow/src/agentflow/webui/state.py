@@ -197,7 +197,7 @@ def answer_text_of(event: Mapping[str, Any] | Any) -> str:
     否则退回旧的 `answer` 字段）。裁定 L1 把它收敛到 `userio.reply_text` —— 同一件事
     两份实现的漂移形态是"CLI 说这一句、网页说那一句"，而没有任何东西会报错。
 
-    保留这个名字的理由是契约：它在 `webui.__all__` 里、被 `writes.py` 与 `views.py`
+    保留这个名字的理由是契约：它在 `webui.__all__` 里、被 `writes.py` 与判据
     读、也由 `temp/_verify_w0.py` 对着公开面对账 —— 签名与返回形状逐字不变，
     只是实现从"第二份"变成"转发"。
     """
