@@ -1209,7 +1209,11 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
                 return "", {}, f"summon_many.targets[{i}].params 必须是一个对象"
             clean.append({"role": role, "action": action, "params": dict(params),
                           "instance": str(item.get("instance") or ""),
-                          "input_key": str(item.get("input_key") or "")})
+                          "input_key": str(item.get("input_key") or ""),
+                          # S1k-4：一批派活的目标也各带自己的名册三格（只在给了的时候带，
+                          # 老载荷的键集因此不变）—— 与 `summon` 那一支同一口径。
+                          **{k: str(item.get(k)) for k in ("brief", "name", "reuse")
+                             if str(item.get(k) or "").strip()}})
         out: dict[str, Any] = {"targets": clean, "why": str(value.get("why") or "")}
         return key, _with_notify(out, value), ""
     if key == "ask_user":

@@ -136,6 +136,47 @@ def test_a_summon_with_a_brief_registers_the_roster(tmp_path: pathlib.Path):
     assert LOOPS  # 这一条靠 `_wired` 的接线表；引用一下免得 lint 说它没用
 
 
+def test_the_native_face_advertises_the_two_new_shapes():
+    """正控（S1k-4）：原生广告面（`llmseam.META_FUNCTIONS`）与接受面同源。
+
+    "广告一份、执行另一份"是本仓记过的坑（模型按广告写、框架说不认识）⇒ 两头都断言：
+    广告面有 `framework_roster` / `framework_retire` 且必填键对得上；
+    接受面（`_decode_shape`）真收 `retire`，并真把 `summon` 的 `brief`/`name`/`reuse` 带过去。
+    """
+    from agentflow import llmseam as LL
+    from agentflow.agent_loop import _decode_shape
+
+    table = {shape: (san, schema) for san, shape, schema in LL.META_FUNCTIONS}
+    assert "retire" in table and "roster" in table, sorted(table)
+    assert table["retire"][1].get("required") == ["name"], table["retire"][1]
+    assert table["roster"][1].get("required") == [], table["roster"][1]
+    props = table["summon"][1].get("properties", {})
+    assert {"brief", "name", "reuse"} <= set(props), sorted(props)
+
+    shape, _payload, problem = _decode_shape({"retire": {"name": "D1"}})
+    assert (shape, problem) == ("retire", ""), (shape, problem)
+    shape2, payload2, problem2 = _decode_shape(
+        {"summon": {"role": "D", "action": "write_report", "params": {},
+                    "brief": "把 X 补齐", "name": "D3"}})
+    assert (shape2, problem2) == ("summon", ""), (shape2, problem2)
+    assert payload2.get("brief") == "把 X 补齐" and payload2.get("name") == "D3", payload2
+    assert "reuse" not in payload2, ("没给就不该凭空多一个键", payload2)
+
+
+def test_summon_many_targets_carry_the_roster_keys():
+    """正控（S1k-4）：一批派活的目标各带自己的 `brief` / `name` / `reuse`（没给就不带）。"""
+    from agentflow.agent_loop import _decode_shape
+
+    shape, payload, problem = _decode_shape({"summon_many": {"targets": [
+        {"role": "D", "action": "write_report", "brief": "甲"},
+        {"role": "E", "action": "run_experiment"},
+    ], "why": "一批"}})
+    assert (shape, problem) == ("summon_many", ""), (shape, problem)
+    first, second = payload["targets"]
+    assert first.get("brief") == "甲", first
+    assert "brief" not in second and "name" not in second, second
+
+
 def test_a_message_to_an_unknown_name_is_refused_without_opening_an_item(tmp_path: pathlib.Path):
     """负控：未登记的名字 ⇒ `receipt="unknown"`，且一个项都不许开。"""
     _st, cond, _reg, _ws, me, loop, _gate = _env(tmp_path)

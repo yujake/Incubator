@@ -557,6 +557,12 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             "action": {"type": "string"},
             "params": {"type": "object"},
             "why": {"type": "string"},
+            # S1k-4（名册口径）：造一个新子代理给一句简介；复用已有子代理写它的名册名；
+            # 也可以自己提名。这三格与 `agent_loop._decode_shape` 的接受面同源
+            # （广告一份、执行另一份，模型就会按广告写而框架说不认识）。
+            "brief": {"type": "string", "description": "一句任务简介（单行、≤60 字），进名册"},
+            "name": {"type": "string", "description": "可选：给这个子代理起的名册名（如 D3）"},
+            "reuse": {"type": "string", "description": "复用已有子代理时写它的名册名（如 D1）"},
         },
         "required": ["role", "action"],
     }),
@@ -571,6 +577,10 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
                     "params": {"type": "object"},
                     "instance": {"type": "string"},
                     "input_key": {"type": "string"},
+                    # S1k-4：一批派活也各带自己的简介/提名（口径同 `framework_summon`）
+                    "brief": {"type": "string"},
+                    "name": {"type": "string"},
+                    "reuse": {"type": "string"},
                 },
                 "required": ["role", "action"],
             }},
@@ -608,12 +618,32 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
     ("framework_message", "message", {
         "type": "object",
         "properties": {
-            "to": {"type": "string"},
+            "to": {"type": "string",
+                   "description": "伙伴角色名 / `#public` / `ALL`（我名下所有子代理）/ "
+                                  "名册名（如 D1：我名下的子代理，或我父的名册名）"},
             "subject": {"type": "string"},
             "body": {"type": "string"},
             "reply_to": {"type": "string"},
         },
         "required": ["to", "body"],
+    }),
+    # S1k-4（业主 T22 的名册口径）：两个新形状的原生广告面。
+    # 与 `agent_loop._do_roster` / `_do_retire` 的接受面同源：`of` 缺省 = 自己；
+    # `retire` 只要一个名册名（父决定退役，判定与执行在秘书那一侧）。
+    ("framework_roster", "roster", {
+        "type": "object",
+        "properties": {
+            "of": {"type": "string",
+                   "description": "缺省 = 自己的名册；也可写我名下某个子代理的名册名"},
+        },
+        "required": [],
+    }),
+    ("framework_retire", "retire", {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "名册名（如 D1）—— 父决定退役"},
+        },
+        "required": ["name"],
     }),
     ("framework_final", "final", {
         "type": "object",
