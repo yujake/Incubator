@@ -92,7 +92,10 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `{{parent_task_id}}`（我父的台账号）与 `{{children}}`（此刻我名下的子代理台账号清单）。
 #: 数据本来就在台账里（我那一行的 `parent_task_id` / `conductor._children_of(我的编号)`），
 #: 缺的只是"渲染给模型看"这一半。落在共享段 ⇒ 十格摘要全部换值（同 p44）。
-PROMPT_VERSION = "p45"
+#: `p46`（2026-10-08 深夜，S1i）：`TASK_FRAME`（共享段）补一格 `{{board}}` ——
+#: 挂在我名下的工作项进上下文（业主 A3=甲 "渲染即 seen" 的渲染那一半：
+#: `agent_loop.board_digest` 现算，渲染了什么就标什么 `seen`）。落在共享段 ⇒ 十格全部换值。
+PROMPT_VERSION = "p46"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1824,7 +1827,7 @@ def write_profiles(root: str | Path, *, registry: Any = None,
 def role_prompt_registry(role: str, *, registry: Any = None,
                         task: str = "", summoned_by: str = "",
                         task_id: str = "", depth: int = 1,
-                        parent_task_id: str = "", children: str = "",
+                        parent_task_id: str = "", children: str = "", board: str = "",
                         budget_left: str = "", inbox: str = "", notebook: str = "",
                         user_replies: str = "",
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
@@ -1857,6 +1860,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         "depth": str(depth),
         "budget_left": budget_left or "（没有设置预算上限）",
         "inbox": inbox or "（没有收到留言）",
+        #: 板（业主 A3=甲 "渲染即 seen"）：渲染进来的项由 `agent_loop.board_digest` 现算，
+        #: 这一格只负责把它摆进提示词；缺省写满一句话（留空与"板上没事"长得一样）。
+        "board": board or "（板上没有要你处理的事）",
         "notebook": notebook or "（草稿本还是空的）",
         "user_replies": user_replies or "（用户还没有回答过你的问题）",
         "workspace_root": workspace_root or "（未指定）",
@@ -1924,6 +1930,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     reg.section(Section("TASK_FRAME", SECTION_ORDERS["TASK_FRAME"],
                         "这一次的任务：\n{{task}}\n\n"
                         "你收到的留言（可能为空）：\n{{inbox}}\n\n"
+                        "挂在你名下的工作项（板；可能为空）：\n{{board}}\n\n"
                         "用户回答过的问题（含迟到送达的回答）：\n{{user_replies}}\n\n"
                         "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
                         "剩余预算：{{budget_left}}"))

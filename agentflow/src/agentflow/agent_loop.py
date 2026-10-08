@@ -1022,6 +1022,65 @@ def inbox_digest(session_root: Path, role: str, *, sid: str | None = None,
     # 但它们已经标过了（重复标是幂等的，可把它们混进来会让"标记集合"这个读数变糊）。
     return "\n".join(lines), [str(m["msg_id"]) for m in pick if not m.get("delivered")], problems
 
+def board_digest(conductor: Any, *, my_task_id: str,
+                 window: int | None = 8) -> tuple[str, list[str], list[str]]:
+    """板摘要（挂在我名下的工作项进上下文）：`(文本, 这一轮渲染出来的项 id, 问题)`。
+
+    ## 口径与 `inbox_digest` 同源（`draft/83` §11 的 D75 那条教训）
+
+    渲染集合 = 标记集合：这里返回什么 id，调用方就 `mark_item_seen` 什么。
+    旧写法那种"渲染 8 条、却把全部未读标掉"在这条路上同样会让第 9 项永久静默丢失，
+    所以两个集合只有一个来源。
+
+    ## 什么是"渲染即 seen"（业主 A3=甲）
+
+    板项的"已投递"标记就是它自己的状态机：`queued`/`claimed` ⇒ 还没被谁读进任何一步；
+    `seen` 由这一步写（`seen_by` = 我的台账号、`seen_step` = 第几步）。
+    所以：未 seen 的项才算"新"，渲染了就标 seen，标了才不再进下一轮的窗口。
+
+    ## 三态（不许把"没读成"折成"板上没事"）
+
+    没有 conductor / 没有台账号 / 读失败 —— 三种都返回一句带括号的问题，
+    并把自己的问题也放进第三个返回值（进 `run.notes`）。最后一种绝不返回
+    "（板上没有要你处理的事）"。
+
+    `window=None` = 不限窗口（与 `inbox_digest` 的 `_hear` 那一档同义）。
+    """
+    if conductor is None:
+        return "（读不到工作项板：这一趟没有 conductor 句柄）", [], []
+    if not str(my_task_id or ""):
+        return "（这一趟还没落台账，读不到挂在你名下的项）", [], []
+    look = getattr(conductor, "open_items_of", None)
+    if not callable(look):
+        return "（读不到工作项板：这个 conductor 没有 `open_items_of`）", [], []
+    try:
+        rows = list(look(my_task_id))
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"板上没事"
+        why = f"{type(exc).__name__}: {exc}"
+        return f"（工作项板没读成：{why}）", [], [f"工作项板没读成：{why}"]
+    if not rows:
+        return "（板上没有要你处理的事）", [], []
+    # 老的先读：按落行时间 + 编号（与 board_view 的排序同口径，免得两处读出两个顺序）
+    rows.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+    n = len(rows) if window is None else max(1, int(window))
+    pick = rows[:n]
+    lines: list[str] = []
+    for r in pick:
+        fresh = str(r.get("item_state") or "") in ("queued", "claimed")
+        mark = "（新）" if fresh else "（已读）"
+        lines.append(f"- {mark}[{r['task_id']}] {r.get('kind')}"
+                     f"·要{'一个回执' if str(r.get('expects') or '') == 'ack' else '一件活'}"
+                     f" 来自 {r.get('called_by')}：{_clip(r.get('detail'), 300)}")
+    backlog = len(rows) - len(pick)
+    if backlog > 0:
+        # 积压必须是可读的事实：否则"读不完"与"没有新东西"在提示词里长得一样。
+        lines.append(f"- （还有 {backlog} 项没渲染 —— 下一步继续读）")
+    return ("\n".join(lines),
+            [str(r["task_id"]) for r in pick
+             if str(r.get("item_state") or "") in ("queued", "claimed")],
+            [])
+
+
 
 # ------------------------------------------------------------------ 循环
 def _sha(text: str) -> str:
@@ -1710,16 +1769,23 @@ class AgentLoop:
             reg[role] = "wired"
         return reg or None
 
-    def _hear(self) -> list[dict[str, Any]]:
-        """听一次新消息：把这次运行期间新到的消息取出来并登记投递。
+
+    def _hear(self, *, step: int = 0) -> list[dict[str, Any]]:
+        """听一次新消息 + 新板项：把这次运行期间新到的取出来并登记。
 
         这里用 `window=None`：这一步的结果会把新到的全部并进去（`heard` 就是它们），
         所以"渲染了多少就标多少"这条纪律在这里等价于"标全部新到的" ——
         与跑在 `run()` 开头的那一次（有窗口、见 `inbox_digest`）口径一致，只是窗口不同。
+
+        板项那一半（S1i，业主 A3=甲"渲染即 seen"）：未 `seen` 的项与留言同一处取，
+        取到什么就标什么（`mark_item_seen`，带 `seen_by`/`seen_step`）——
+        于是"挂在父名下的交差通报"在下一步就进得了上下文，而不是等下一次运行。
         """
         digest, fresh, problems = inbox_digest(self.session_root, self.role, sid=self.sid,
                                               window=None)
-        if not fresh:
+        board_text, board_ids, board_problems = board_digest(
+            self.conductor, my_task_id=self.my_task_id, window=None)
+        if not fresh and not board_ids:
             return []
         problem = mark_delivered(self.session_root, self.role, fresh, sid=self.sid)
         heard: list[dict[str, Any]] = []
@@ -1731,6 +1797,14 @@ class AgentLoop:
                               "body": _clip(m.get("body"), 400)})
         if problem:
             heard.append({"投递登记失败": problem})
+        if board_ids:
+            heard.append({"板": _clip(board_text, 1200)})
+            for item_id in board_ids:
+                state, why = self.conductor.mark_item_seen(item_id, by_task_id=self.my_task_id,
+                                                           step=step)
+                if not state:
+                    heard.append({"板项没标成 seen": f"{item_id}：{why}"})
+        heard.extend({"板读取问题": p} for p in board_problems)
         return heard
 
     def _budget_text(self) -> str:
@@ -1762,6 +1836,9 @@ class AgentLoop:
         # —— 下面 `mark_delivered` 只标这一批（D75：旧的写法渲染 8 条、却把全部未投递标掉，
         # 于是第 9 条及更早的留言永久丢失）。
         inbox, fresh_ids, inbox_problems = inbox_digest(self.session_root, self.role, sid=self.sid)
+        # 板项（业主 A3=甲 "渲染即 seen"）：与我名下的未消项同一处现读；
+        # `board_ids` 会在第一次成功的模型调用之后标成 `seen`（下面与投递标记同址）。
+        board, board_ids, board_problems = board_digest(self.conductor, my_task_id=my_task_id)
         notebook = notebook_digest(self.session_root, self.role)
         replies = AP.user_replies_digest(U.read_replies(self.session_root, role=self.role,
                                                        sid=self.sid))
@@ -1781,6 +1858,7 @@ class AgentLoop:
                         "`agentflow stop --force` 找不到这个进程",
             }, sid=self.sid)
         run.notes.extend(f"收件箱读取：{p}" for p in inbox_problems)
+        run.notes.extend(f"工作项板读取：{p}" for p in board_problems)
         # 投递标记推迟到第一次成功模型调用之后（`draft/86` §4.1 的 D75 后半）。
         #
         # 为什么不能在这里就标：旧写法在任何模型调用之前落 `mark_delivered`，于是
@@ -1790,6 +1868,9 @@ class AgentLoop:
         # 现在：先进上下文、模型真的被问过一次之后，才承认"它送达了"。
         pending_delivery: list[str] = list(fresh_ids)
         delivered_marked = False
+        # 板项那一半：渲染过、但还没标 seen 的项（与 `pending_delivery` 同一处落定 ——
+        # "模型真的被问过一次"才算它进过上下文，业主 A3 的"渲染即 seen"落在这里）。
+        pending_seen: list[str] = list(board_ids)
 
         availability = self._availability()
         # 父与子两格（业主 T21 附）：数据在台账里，缺的一直是"渲染给模型看"。
@@ -1805,6 +1886,7 @@ class AgentLoop:
             f"（没读成：{self.parent_problem}）" if self.parent_problem else "")
         facts = dict(task=task, summoned_by=summoned_by, task_id=my_task_id, depth=depth,
                      parent_task_id=parent_fact, children=children_text,
+                     board=board,
                      budget_left=self._budget_text(), inbox=inbox,
                      workspace_root=self.workspace_root, availability=availability,
                      notebook=notebook, user_replies=replies,
@@ -1923,6 +2005,19 @@ class AgentLoop:
                 if problem:
                     run.notes.append(f"投递登记失败：{problem}")
                 pending_delivery, delivered_marked = [], True
+            if pending_seen and call.ok:
+                # 渲染即 seen（业主 A3=甲）：这一步的提示词里带了它们 ⇒ 标 seen。
+                # 只标渲染过的那些（`board_digest` 返回什么就标什么，D75 的口径）。
+                still: list[str] = []
+                for item_id in pending_seen:
+                    state, why = self.conductor.mark_item_seen(
+                        item_id, by_task_id=my_task_id, step=step)
+                    if not state:
+                        still.append(item_id)
+                        run.notes.append(f"工作项 {item_id} 没标成 seen：{why}")
+                    elif state == "ack_unbacked":
+                        run.notes.append(f"工作项 {item_id}：{why}")
+                pending_seen = still
             if data is None:
                 args_error = call.problem == "judge_bad_args"
                 if args_error:
@@ -2087,9 +2182,10 @@ class AgentLoop:
                 if hand.get("ok"):
                     run.handoffs.append(str(hand.get("id") or ""))
                 result = {**result, "dispatch_handoff": hand}
-            # 耳朵一直开着：这一步做完先听一次新消息，把它并进这一步的结果里
+            # 耳朵一直开着：这一步做完先听一次新消息与板项，把它并进这一步的结果里
             # （并进结果而不是只并进 transcript：台账与会话记录要能看到"他当时听到了什么"）。
-            heard = self._hear()
+            # `step=step`：板项标 seen 时要写"在第几步读的"（业主 A3 的判据靠它配对）。
+            heard = self._hear(step=step)
             if heard:
                 result = {**result, "新消息": heard}
                 inbound_note = self._inbound_hook(heard)

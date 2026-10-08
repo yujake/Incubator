@@ -1347,18 +1347,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `{{parent_task_id}}`（我父的台账号）与 `{{children}}`（此刻我名下的子代理台账号）。
 #: 业主 T21 的追问「不就应该是知道我的父代理是谁，子代理有谁，然后往它们按编号沟通吗」
 #: ⇒ 数据本来就在台账里，缺的是渲染。落在共享段 ⇒ 十格全部换值（同 p44 的读数形态）。
-_FROZEN_PROMPT_VERSION = "p45"
+#: `p46`（2026-10-08 深夜，S1i）：`TASK_FRAME`（共享段）补一格 `{{board}}` —— 挂在我名下的
+#: 工作项进上下文（业主 A3=甲 "渲染即 seen" 的渲染那一半）。同 p44/p45：共享段 ⇒ 十格全换。
+_FROZEN_PROMPT_VERSION = "p46"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "87fdf5c3601d214e74dc4cc46f2a011e15aefa3053719e4ddf7d80fdd9d2eed5",
-    "B": "f3481354ddcc478257d24ad6c8543ecbd8b0d9215070273721b2dbef58fc403d",
-    "C": "6ab515cfb454d4f9d802473f27bb49b81056277fd725e127256955abe0e6930b",
-    "D": "8803734be286b2e10dcab2ae67b2fd32fbc48f7834e80fd161549a5d9c8a565e",
-    "E": "819ea6622e0269f23d42e99c4394e760d3aed2aa9a9876c153e9f34277423ea7",
-    "F": "ba607a242e3967a286a3ad5fa71ccadaf799832fe8f2ab456b1fe499a8f8f633",
-    "G": "5af99039bfd2088b273bbfca048b241daad33662e1e1c208107f9f7fea96d3a1",
-    "H": "1b7513383412404e2510c7fd1fb369ca4af89b8c7ad596e8855107e8d4e0a1e6",
-    "V": "86386dc49b3faf052c784e6e84108689f7bdf35f205b282209efe7471119dd82",
-    "M": "2315b0a3689502c19f99b6bfaaa02c2e7781a335c632006007375d29f7c040b1",
+    "A": "c286771445c411d7249548b413b504b3fa486a0d07abb9305caa8cffb0daf9ce",
+    "B": "394c4fdb02a9e0cb4556e3d97dd1f5534f4418ce009aa2af9c31a65257ee07e5",
+    "C": "f2ecdc4853742ae3673be8b075736667124bcc5b0dd4476c660883f8081df5be",
+    "D": "6cf23aeba771ba089fc4e1132a1c37e92b648b0e8f561e9d6e3fbbc8602e693b",
+    "E": "2afb39196827c350378cc9e27ca62fff3217e8cf751040e0ba1c0687e9804c33",
+    "F": "dd4f64f500557ecab41ae879ef83e853f32a20e4e0ece01a11e73ea02545640f",
+    "G": "65631c6ed5229c8233cdf38a1a50ad38b75d884abf48dfc4a155e6050864ce72",
+    "H": "77ce2f5d699dd68547c2662a182840c28590dec84622d59ec22da628936372bc",
+    "V": "f037a093b146c6edee56fa4f30f6dbbb1a778be33b6c5786cc61056a6fd76e6f",
+    "M": "61684764eb45deca1306834b5ac493bdc1eb571673dbd3308d83551ab88fa918",
 }
 
 
