@@ -127,7 +127,12 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p58`（2026-10-10，T1 第 18 趟的门槛）：`specs/m.py` 给 M 加了一句"收工前也落一份
 #: 状态报告"（`conductor.status_report`）—— `draft/38` §7 第三组判据里"M 的状态报告落盘"
 #: 一直没被满足，原因是提示词只在"用户问现在什么情况"时才要求它。只换 M 那一格。
-PROMPT_VERSION = "p58"
+#: `p59`（2026-10-10，T2 第 24 趟的交付面读数）：`doc.build_document` 的 `returns=` 声明
+#: 里多了一句"`meta.citation_coverage` = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`
+#: + 库里有多少可引的"—— 那一句是工具目录的一部分，而 M 的提示词里逐条列着它名下
+#: 的工具与返回值 ⇒ 换的是 M 那一格（与 `p56` 换 G 那一格同形：改哪个角色看得见的那一段，
+#: 就换哪一格）。
+PROMPT_VERSION = "p59"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

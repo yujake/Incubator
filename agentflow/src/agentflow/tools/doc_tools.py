@@ -624,6 +624,119 @@ def check_citations(
     }
 
 
+def citation_coverage(
+    rows_of: Any,
+    claims: Sequence[Mapping[str, Any]],
+    *,
+    citing_kind: str = "",
+    suggest: int = 5,
+) -> dict:
+    """这份稿子引了哪几张表的凭据、库里还有多少可以引的东西 —— 只报数，不拦。
+
+    ## 为什么要有这一格（T2 第 24 趟 `t2s` 的真机形态）
+
+    那一趟：检索 2 条全 `ok`、17 篇文献全部消化、`relations` 73 条、C 跑了 3 次、
+    2 条实验 —— 而三份稿件的 9 条断言全引 `exp:0001`：`lit:` 0 条、`rel:` 0 条。
+    收工门那一档（`closing` 的 `document_literature_citations`）读得出这个 0，
+    但它只在 M 把那一行写进验收表时才进报告（这一趟 M 没写），而 G/M 在写稿那一刻
+    看不到任何数字：`build_document` 的返回值里只有落库后的那一行。
+
+    ## 它与 `check_citations` 是两件事，不许合并
+
+    - `check_citations` 判——引用指向的对象存不存在，fail-closed，拦下一笔写入；
+    - 本函数只报数——引了什么、库里有什么、缺哪一类。它不拦任何一笔写入，
+      也不改 `data`（那一行还要落库/算内容哈希）：读数走工具结果的 `meta`。
+
+    ## 三态（与全项目同一条纪律）
+
+    库读不到 ⇒ `readable=False` 且 `available` 全是 `-1`（"没查成"），
+    不许读成"库里没有可引的东西"；`gaps` 那几句只在 `readable=True` 时才可能非空。
+
+    返回 ``{"own", "counts", "available", "readable", "gaps", "suggest_lit",
+    "suggest_rel", "note"}``。
+    """
+    own: dict[str, list[str]] = {k: [] for k in ("lit", "rel", "exp", "stmt", "doc")}
+    for i, c in enumerate(claims, 1):
+        for raw in (c or {}).get("citations") or []:
+            kind, _ref = citation_ref_parts(raw)
+            if kind in own and str(raw) not in own[kind]:
+                own[kind].append(str(raw))
+    counts = {k: len(v) for k, v in own.items()}
+
+    def _count(table: str, key: str = "") -> int:
+        try:
+            rows = list(rows_of(table))
+        except Exception:  # noqa: BLE001 —— 读不到就是 -1（三态，不编 0）
+            return -1
+        if key:
+            rows = [r for r in rows if r.get(key) is True]
+        return len(rows)
+
+    try:
+        lit_rows = [dict(r) for r in rows_of("literature")]
+        rel_rows = [dict(r) for r in rows_of("relations")]
+    except Exception:  # noqa: BLE001
+        return {
+            "own": own, "counts": counts,
+            "available": {"literature_total": -1, "literature_processed": -1,
+                          "relations": -1, "experiments": -1, "statements": -1},
+            "readable": False,
+            "gaps": [],
+            "suggest_lit": [], "suggest_rel": [],
+            "note": ("库读不到 ⇒ 这份稿子**引了几条**给得出，"
+                     "**库里有多少可以引**给不出（'没查成' ≠ '库里没有'）"),
+        }
+
+    digested = [r for r in lit_rows if r.get("processed") is True]
+    available = {
+        "literature_total": len(lit_rows),
+        "literature_processed": len(digested),
+        "relations": len(rel_rows),
+        "experiments": _count("experiments"),
+        "statements": _count("statements"),
+    }
+    suggest_lit = [
+        {"lit_id": str(r.get("lit_id") or ""), "title": str(r.get("title") or "")[:110]}
+        for r in sorted(digested, key=lambda r: str(r.get("lit_id") or ""))[: max(0, suggest)]
+    ]
+    suggest_rel = [
+        {"relation_id": str(r.get("relation_id") or ""),
+         "description": str(r.get("description") or "")[:110]}
+        for r in sorted(rel_rows, key=lambda r: str(r.get("relation_id") or ""))[: max(0, suggest)]
+    ]
+
+    gaps: list[str] = []
+    if counts["lit"] == 0 and len(digested) > 0:
+        gaps.append(
+            f"这份稿子 0 条 `lit:` 引用，而库里已有 **{len(digested)} 篇已消化的文献**"
+            f"（例：{('、'.join(x['lit_id'] + '《' + x['title'] + '》' for x in suggest_lit[:3]))}）"
+            " —— 研究型手稿要引它据以立论的那几篇；`lit:` 只指真实论文"
+        )
+    if counts["rel"] == 0 and len(rel_rows) > 0:
+        gaps.append(
+            f"这份稿子 0 条 `rel:` 引用，而库里有 **{len(rel_rows)} 条关系**"
+            f"（例：{('、'.join(x['relation_id'] for x in suggest_rel[:3]))}）"
+            " —— C 的关系读数要能被交付物引到（用户点名过「重点考察 C」）"
+        )
+    if counts["lit"] == 0 and not digested:
+        # 反真空：库里本来就没有可引的文献时不喊（"你没引"与"没东西可引"
+        # 是两件事）—— 这件事由 `available.literature_processed == 0` 如实记着。
+        pass
+
+    return {
+        "own": own,
+        "counts": counts,
+        "available": available,
+        "readable": True,
+        "gaps": gaps,
+        "suggest_lit": suggest_lit,
+        "suggest_rel": suggest_rel,
+        "note": ("只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；"
+                 "这一格是把「引了什么 / 库里有什么」放到写稿那一刻看得见。"
+                 "`own` 里的号都是这份稿子真的写了的前缀引用（`doc:` 收在 `doc` 那一格）"),
+    }
+
+
 def _check_citations_needs_kind() -> str:
     """`check_citations` 与 `build_document` 之间那一格的口径说明（只读，给读的人）。"""
     return (
@@ -1943,6 +2056,8 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
     returns=(
             "{'doc_id','kind','title','markdown_path','claims','sections','open_problems',"
             "'status','review_rounds','created_at','updated_at','created_by'}（落库后的 documents 行）；"
+            "**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:` "
+            "+ 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；"
             "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "
             "missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
             ),
@@ -1954,23 +2069,33 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     注入值（_not_wired, store, workspace, actor）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
     """
-    return (
-    _not_wired()
-               if store is None
-               else guard_result(
-                   lambda: build_document(
-                       store,
-                       kind,
-                       title,
-                       claims=claims,
-                       sections=sections,
-                       open_problems=open_problems,
-                       out_path=out_path,
-                       workspace_root=workspace,
-                       actor=actor,
-                   )
-               )
+    if store is None:
+        return _not_wired()
+    res = guard_result(
+        lambda: build_document(
+            store,
+            kind,
+            title,
+            claims=claims,
+            sections=sections,
+            open_problems=open_problems,
+            out_path=out_path,
+            workspace_root=workspace,
+            actor=actor,
+        )
     )
+    # 「这份稿子引了几条台账凭据 / 库里还有多少可引的」放进工具结果的 meta：
+    # `agent_loop` 把 `meta` 一并给模型看（`out = {tool, ok, data, error, meta}`），
+    # 而 `data` 是落库的那一行（它要算内容哈希、要被 schema 校验）⇒ 不许往里加键。
+    if res.ok and isinstance(res.data, Mapping):
+        try:
+            res.meta["citation_coverage"] = citation_coverage(
+                store.rows, res.data.get("claims") or [], citing_kind=str(kind or "")
+            )
+        except Exception as exc:  # noqa: BLE001 —— 读数算出问题不许影响这笔写入
+            res.meta["citation_coverage"] = {"readable": False,
+                                             "reason": f"{type(exc).__name__}: {exc}"}
+    return res
 
 @tool(
     "doc.register_dependency",

@@ -1,0 +1,179 @@
+# -*- coding: utf-8 -*-
+"""写稿那一刻的读数：这份稿子引了几条台账凭据、库里还有多少可引的。
+
+## 守的是什么（T2 第 24 趟 `t2s` 的真机形态）
+
+那一趟：检索 2 条全 `ok`、17 篇文献全部消化、`relations` 73 条、C 跑了 3 次、
+2 条实验 —— 而三份稿件的 9 条断言全引 `exp:0001`：`lit:` 0 条、`rel:` 0 条，
+交付面上"文献"与"C 的产物"一条都没进（T2 的四号判据因此红）。
+收工门那一档读得出这个 0，但它只在 M 把那一行写进验收表时才进报告；
+写稿那一刻没有任何数字。这一格把读数放进 `doc.build_document` 的
+`meta.citation_coverage`（`agent_loop` 把 `meta` 一并给模型看）。
+
+## 红/绿成对 + 反真空
+
+* 正控：稿子只引 `exp:` 而库里有已消化文献 + 关系 ⇒ `gaps` 两句都非空、
+  `suggest_lit` / `suggest_rel` 点名到号，且读数在 meta 里、不在 data（落库那一行）里；
+* 负控：稿子引了 `lit:` 与 `rel:` ⇒ `gaps` 空（做对了不许再念叨）；
+* 反真空①：库里一篇已消化文献都没有 ⇒ `gaps` 里不出现"你没引文献"那一句
+  （"没东西可引"与"你没引"是两件事）；
+* 反真空②：库读不到 ⇒ `readable=False`、`available` 是 -1（三态，不编 0）；
+* 负控③：`check_citations` 拦下那笔写入时（悬空引用）⇒ 没有 `citation_coverage`
+  （失败语义一个字不变）。
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from agentflow.store import Store
+from agentflow.tools import build_registry
+
+TS = "2026-10-10T00:00:00+08:00"
+
+
+def _literature(tx, lit_id: str, title: str, *, processed: bool) -> None:
+    tx.upsert("literature", {"lit_id": lit_id, "title": title, "type": "J", "summary": "s",
+                             "path": None, "processed": processed, "added_at": TS}, note="seed")
+
+
+def _relation(tx, rel_id: str, a: str, b: str) -> None:
+    tx.upsert("relations", {"relation_id": rel_id, "concept_ids": [a, b],
+                            "description": f"{a} 与 {b} 同向", "lit_id": "0000",
+                            "page_range": {"start": 1, "end": 2}, "created_at": TS}, note="seed")
+
+
+def _seed_library(root: Path, *, processed: bool = True) -> Store:
+    store = Store(root)
+    store.init()
+    with store.tx("literature", "relations", "statements", actor="test", note="seed") as tx:
+        _literature(tx, "0000", "Edge-girth-regular graphs", processed=processed)
+        _literature(tx, "0001", "Constructions for cubic graphs with large girth", processed=processed)
+        tx.upsert("statements", {"stmt_id": "0000", "origin": "external_lit", "kind": "concept",
+                                 "label": "girth", "statement_full": "围长",
+                                 "source_lit_id": "0000",
+                                 "quote_reason": "夹具：尚未逐字校验", "created_at": TS}, note="seed")
+        tx.upsert("statements", {"stmt_id": "0001", "origin": "external_lit", "kind": "concept",
+                                 "label": "cage", "statement_full": "笼",
+                                 "source_lit_id": "0001",
+                                 "quote_reason": "夹具：尚未逐字校验", "created_at": TS}, note="seed")
+        _relation(tx, "0000", "0000", "0001")
+    with store.tx("experiments", actor="test", note="seed") as tx:
+        tx.upsert("experiments", {"experiment_id": "0000", "claim": "c", "claim_key": "c",
+                                  "method": "numeric", "evidence_kind": "cross_check",
+                                  "result": "supports", "negation_kind": "not_proved",
+                                  "created_at": TS}, note="seed")
+    return store
+
+
+def _build(root: Path, store: Store, claims: list[dict]):
+    reg = build_registry(store=store, workspace_root=root).registry
+    return reg.call("doc.build_document", role="G", kind="note", title="t", claims=claims)
+
+
+def _claim(citations: list[str], cid: str = "claim-1") -> dict:
+    """一条合规的 claim（用唯一的构造入口 `compose_claim`，不手拼必填字段）。"""
+    from agentflow.tools import doc_tools as DT
+
+    return DT.compose_claim("围长恰为 k 的图里每条边至少落在两个 k-圈里。",
+                            citations=list(citations), evidence_kind="cross_check",
+                            section="主结果", claim_id=cid)
+
+
+def test_positive_the_reading_names_what_is_missing_and_what_is_available(tmp_path: Path) -> None:
+    """正控：只引 `exp:` ⇒ 两句 `gaps` 都点名，库里可引的样例也列出来。"""
+    store = _seed_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["exp:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta.get("citation_coverage")
+    assert isinstance(cov, dict) and cov.get("readable") is True, res.meta
+    assert cov["counts"]["exp"] == 1 and cov["counts"]["lit"] == 0 and cov["counts"]["rel"] == 0
+    assert cov["available"]["literature_processed"] == 2, cov["available"]
+    assert cov["available"]["relations"] == 1, cov["available"]
+    assert len(cov["gaps"]) == 2, cov["gaps"]
+    assert "lit:" in cov["gaps"][0] and "2 篇已消化" in cov["gaps"][0], cov["gaps"][0]
+    assert "rel:" in cov["gaps"][1], cov["gaps"][1]
+    assert [x["lit_id"] for x in cov["suggest_lit"]] == ["0000", "0001"], cov["suggest_lit"]
+    assert cov["suggest_lit"][0]["title"].startswith("Edge-girth-regular"), cov["suggest_lit"]
+    assert [x["relation_id"] for x in cov["suggest_rel"]] == ["0000"], cov["suggest_rel"]
+    # 读数在 meta 里；`data`（落库的那一行）一个键都不许多 —— 它要算内容哈希。
+    assert "citation_coverage" not in res.data, sorted(res.data)
+    stored = list(store.rows("documents"))[0]
+    assert "citation_coverage" not in dict(stored), sorted(stored)
+
+
+def test_negative_no_nagging_when_the_manuscript_cites_the_library(tmp_path: Path) -> None:
+    """负控：稿子引了 `lit:` 与 `rel:` ⇒ `gaps` 空（做对了不许再念叨）。"""
+    store = _seed_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["lit:0000", "rel:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["counts"]["lit"] == 1 and cov["counts"]["rel"] == 1, cov["counts"]
+    assert cov["gaps"] == [], cov["gaps"]
+
+
+def test_anti_vacuum_empty_library_does_not_blame_the_writer(tmp_path: Path) -> None:
+    """反真空①：库里没有已消化的文献 ⇒ 不出现"你没引文献"那一句。"""
+    store = _seed_library(tmp_path, processed=False)
+
+    res = _build(tmp_path, store, [_claim(["exp:0000"])])
+
+    assert res.ok is True, res  # 悬空 `exp:` 由 `check_citations` 拦，这一次不引 exp
+    cov = res.meta["citation_coverage"]
+    assert cov["available"]["literature_processed"] == 0, cov["available"]
+    assert all("已消化的文献" not in g for g in cov["gaps"]), cov["gaps"]
+    assert cov["suggest_lit"] == [], cov["suggest_lit"]
+
+
+def test_anti_vacuum_unreadable_library_is_minus_one_not_zero() -> None:
+    """反真空②：库读不到 ⇒ -1 + `readable=False`（"没查成" ≠ "库里没有"）。"""
+    from agentflow.tools import doc_tools as DT
+
+    def _blind(table: str):
+        raise RuntimeError("表读不到")
+
+    cov = DT.citation_coverage(_blind, [_claim(["exp:0000"])])
+    assert cov["readable"] is False, cov
+    assert cov["available"]["literature_processed"] == -1, cov["available"]
+    assert cov["available"]["relations"] == -1, cov["available"]
+    # 引了几条仍然给得出（那一半只读 claims，不看库）
+    assert cov["counts"]["exp"] == 1, cov["counts"]
+    assert "没查成" in cov["note"], cov["note"]
+
+
+def test_negative_dangling_citation_still_fails_without_the_reading(tmp_path: Path) -> None:
+    """负控③：悬空引用被拦下 ⇒ 那笔写入失败，且不挂 `citation_coverage`。"""
+    store = _seed_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["lit:9999"])])
+
+    assert res.ok is False, res
+    assert res.meta.get("kind") == "dangling_citation", res.meta
+    assert "citation_coverage" not in res.meta, res.meta
+    assert len(list(store.rows("documents"))) == 0
+
+
+def test_revise_returns_the_same_reading(tmp_path: Path) -> None:
+    """`G.revise` 那条路也要给同一份读数（否则"改写"是绕开它的后门）。
+
+    与 `check_citations` / `check_proofs` 在同一条路上各被补过一次的那两处同形。
+    """
+    from agentflow.agent_g import AgentG
+
+    store = _seed_library(tmp_path)
+    g = AgentG(store, config={"docs_subdir": "documents"})
+    doc_id = g.build_document("note", "初稿", claims=[_claim(["exp:0000"])])["doc_id"]
+
+    out = g.revise(doc_id, new_claims=[_claim(["exp:0000"])])
+
+    cov = out["citation_coverage"]
+    assert cov["readable"] is True, cov
+    assert cov["counts"]["lit"] == 0 and cov["counts"]["rel"] == 0, cov["counts"]
+    assert len(cov["gaps"]) == 2, cov["gaps"]
+    assert [x["lit_id"] for x in cov["suggest_lit"]] == ["0000", "0001"], cov["suggest_lit"]
+

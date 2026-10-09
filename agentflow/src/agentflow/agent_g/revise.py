@@ -168,6 +168,17 @@ class _Revise:
                         "宁可整笔回滚，也不留下一份'库与磁盘不一致'的稿件"
                     ) from e
                 rendered = str(target)
+            # 「这份稿子引了几条台账凭据 / 库里还有多少可引的」（`doc.build_document` 的
+            # `meta.citation_coverage` 同一条读数，走同一份实现）：修订这条路也要给，
+            # 否则"改写"成了绕开那条读数的后门 —— 与 `check_citations` / `check_proofs`
+            # 在同一条路上各补过一次的那两处完全同形（本文件上面两段注释）。
+            # 它在事务内现算，看到的是这一笔修订之后的 claims。
+            try:
+                coverage = DT.citation_coverage(
+                    tx.rows, normalized, citing_kind=str(doc.get("kind") or "")
+                )
+            except Exception as exc:  # noqa: BLE001 —— 读数算不出不许影响这笔修订
+                coverage = {"readable": False, "reason": f"{type(exc).__name__}: {exc}"}
 
         self._emit(
             f"修订 doc:{doc_id} → review_rounds={payload['review_rounds']}，"
@@ -183,4 +194,7 @@ class _Revise:
             "fixed_findings": fixed_ids,
             "markdown_path": rel,
             "rendered_path": rendered,
+            # 与 `doc.build_document` 的 `meta.citation_coverage` 是同一份实现的同一份读数
+            # （那边走工具结果的 meta，这边是角色方法的返回值）。
+            "citation_coverage": coverage,
         }

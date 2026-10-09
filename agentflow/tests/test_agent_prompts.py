@@ -1395,7 +1395,9 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p58`（2026-10-10，T1 第 18 趟的门槛）：`specs/m.py` 加了一句"收工前也落一份状态报告"
 #: （`draft/38` §7 第三组判据里"M 的状态报告落盘"一直没满足，因为提示词只在用户问时才要求）
 #: ⇒ 只换 M 那一格（现算脚本 `temp/_s1r_prompt_digests.py` 逐格对照过）。
-_FROZEN_PROMPT_VERSION = "p58"
+#: `p59`（2026-10-10，T2 第 24 趟的交付面读数）：`doc.build_document` 的 `returns=` 里加了
+#: `meta.citation_coverage` 那一句 —— 工具返回值的声明是 M 提示词的一部分 ⇒ 只换 M 那一格。
+_FROZEN_PROMPT_VERSION = "p59"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "2c1d653b212480845d3d20d0df29d48d891a558cf39b151841e063c0537a7f0c",
     "B": "b047336b14c677a910e754cf140be9c5b152a8c58253a9eacc2de052cacc4b1d",
@@ -1406,7 +1408,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "5448f10719ae690a94a03a3069849542c0aeaff89cbaf81df0fb2ab22e913dbb",
     "H": "65145a398dcfb36e353f51c2b22fd6bd5de27c433eb9ccdd771b76d67e071a06",
     "V": "9f4599d46cd10a86c5fadf9573ac71872ab5373b4bd48f11da03035afc5c6f77",
-    "M": "15a0a3c5b3679b6c1008ff0f0213ceb92c32fd6cfa3ff8bf4d0f6909af7b4eef",
+    "M": "a586fbb92bf0e7baf66c297852b327210983ecd33ffd1960bbabda91f99e9a39",
 }
 
 
