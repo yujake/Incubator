@@ -762,6 +762,20 @@ backend.registry_factory = lambda face: build_registry(workspace_root=face, ...)
 > （乙：`concept_meta`，结构干净但要再动一次禁改区的 schema）。
 > **建议甲**。若你不裁，我按甲走。
 
+#### 14.4b D10 结案（业主 2026-10-09 裁定 + 真实数据核对）
+
+业主逐字：「由于秘书会查重，D10的合并概念不会发生，因为不会重复登记」
+⇒ 再加上**现算的真实数据**（`temp/_s1r_rehearsal.py` 那一轮的同一份扫描，2233 条）：
+
+| 字段 | 真实现场 | 处置 |
+|---|---|---|
+| `merged_into` / `merge_reason` | **0 条**（2233 条里一条都没有） | **不设承载点** —— 业主判断被数据证实：秘书查重 ⇒ 不会重复登记 ⇒ "登记之后才发现是同一个"这件事不再发生。判据：迁移时**若**碰到非零值 ⇒ 报读数点名，**不静默丢**（历史若是真有过，也看得见） |
+| `normalized_name` | 2233 条全有，但 **640 条与"名字 lower + 去空白"对不上** | **不存**。依据：读侧本来就是"存了就用、没存就现算"（`dedup.py:295` 与 `interactions.py:870-879` 都是 `row.get("normalized_name") or T.normalize(...)`），**唯一实现是 `textutil.normalize`**；而那 640 条的成因也查到了 —— `pipeline.py:627` 写的是 `normalized_name=name`（把**原始名字**塞进了这一格）⇒ 丢掉它反而修正了这个不一致，并把差异条数记成迁移读数 |
+| `aliases` | **888 条有别名**（约 40%，且**不可现算**：如 "Petersen graph" ↔ "Kneser graph K(5,2)"） | **必须留** ⇒ 仍需一个承载点：**甲** `quote_reason` 里的受控前缀 `concept:aliases=[...]` / **乙** `statements` 加一格 `concept_meta`。**建议甲**（这一项记作 **D10′**，若你不裁按甲走） |
+
+**⇒ 未来查重的键**：`T.normalize(label)` + 读出来的 `aliases` —— 一处口径
+（`textutil.normalize` 是唯一实现，秘书不另写一份）。
+
 ### 14.5 **概念行不参与等级**（否则被读成"猜想"）
 
 现场：等级由 `evidencebits.derive_grade` 现算，`bits={}`（概念没有证据位）时它会给出
