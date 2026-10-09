@@ -66,11 +66,9 @@ INVENTORY: dict[str, dict[str, int]] = {
     },
     "write": {
         "tests/test_the_mirror_is_complete.py": 1,  # 负控/清单引用
-        "tests/test_verify_snapshot.py": 1,
     },
     "tx_declare": {
         "tests/test_the_mirror_is_complete.py": 1,  # 负控/清单引用
-        "tests/test_verify_snapshot.py": 1,
     },
 }
 
