@@ -1468,10 +1468,11 @@ def _selftest() -> int:
         ("0003", ["0001", "0003"], "交换性条件可以推广到非交换环。", None, "suspect", "0001"),
         ("0004", ["0000", "0001"], "Abelian groups are never non-commutative rings.", False, "suspect", "0001"),
     ]
-    with st.tx("concepts", "relations", "literature", "analysis_reports", actor="seed", note="fixture") as tx:
+    with st.tx(*_CR.tables_for_concept_write("relations", "literature", "analysis_reports"),
+               actor="seed", note="fixture") as tx:
         for cid, name, definition in concepts:
-            tx.upsert(
-                "concepts",
+            _CR.upsert_legacy_shaped(
+                tx,
                 S.Concept(concept_id=cid, name=name, definition=definition,
                           normalized_name=name, created_at=S.now_iso(), updated_at=S.now_iso()).to_dict(),
                 note="seed",

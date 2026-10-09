@@ -1263,7 +1263,7 @@ def _selftest() -> int:
         # ---- 7) I5：结构重复必须有两路独立证据才合并，否则否决并给理由
         st7 = Store(Path(root) / "i5")
         st7.init()
-        with st7.tx("concepts", actor="selftest") as tx:
+        with st7.tx(*_CR.tables_for_concept_write(), actor="selftest") as tx:
             for cid, name, definition in (("0000", "群", "群的定义"), ("0001", "group", "")):
                 row = S.Concept(concept_id=cid, name=name, definition=definition, related_concepts=[],
                                 normalized_name=T.normalize(name), aliases=[],

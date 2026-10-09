@@ -36,6 +36,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
 from . import schema as S
 from .agent_d import AgentD, install_d_tools
 from .store import Store
@@ -620,10 +621,11 @@ def _seed(store: Store) -> None:
         ("0003", ["0001", "0003"], "交换性条件可以推广到非交换环。", None, "suspect", "0001"),
         ("0004", ["0000", "0001"], "Abelian groups are never non-commutative rings.", False, "suspect", "0001"),
     ]
-    with store.tx("concepts", "relations", "literature", "analysis_reports", actor="seed", note="fixture") as tx:
+    with store.tx(*CR.tables_for_concept_write("relations", "literature", "analysis_reports"),
+                   actor="seed", note="fixture") as tx:
         for cid, name, definition in concepts:
-            tx.upsert(
-                "concepts",
+            CR.upsert_legacy_shaped(
+                tx,
                 S.Concept(concept_id=cid, name=name, definition=definition, normalized_name=name,
                           created_at=S.now_iso(), updated_at=S.now_iso()).to_dict(),
                 note="seed",

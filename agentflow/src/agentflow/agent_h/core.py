@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from .. import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
 from ._support import Any, CROSS_CHECK_DISCLAIMER, Callable, Mapping, Path, RV, ReviewError, S, SIDE_EFFECTS_WRITE, Store, ToolRegistry, _H_READONLY_SIDE_EFFECTS, _H_WRITABLE_TOOLS, _inject_raw_document, _seed_document, install_h_tools
 from .review import _Review
 from .verify_fixes import _VerifyFixes
@@ -165,9 +166,10 @@ def _selftest() -> int:
     print(f"[0] 临时工作区：{root}")
 
     # ---- 知识表（用于"运行期只读"的逐字节比对）
-    with st.tx("concepts", "relations", "literature", actor="seed", note="fixture") as tx:
-        tx.upsert("concepts", S.Concept(concept_id="0000", name="谱", definition="d", created_at=S.now_iso(), updated_at=S.now_iso()).to_dict())
-        tx.upsert("concepts", S.Concept(concept_id="0001", name="区间", definition="d", created_at=S.now_iso(), updated_at=S.now_iso()).to_dict())
+    with st.tx(*CR.tables_for_concept_write("relations", "literature"),
+               actor="seed", note="fixture") as tx:
+        CR.upsert_legacy_shaped(tx, S.Concept(concept_id="0000", name="谱", definition="d", created_at=S.now_iso(), updated_at=S.now_iso()).to_dict())
+        CR.upsert_legacy_shaped(tx, S.Concept(concept_id="0001", name="区间", definition="d", created_at=S.now_iso(), updated_at=S.now_iso()).to_dict())
         tx.upsert(
             "literature",
             S.Literature(lit_id="0000", title="Spec S̃_m", type="J", summary="s", path=None, processed=True, added_at=S.now_iso()).to_dict(),

@@ -33,6 +33,11 @@ def _legacy_rows(store) -> list[dict]:
     return list(store.rows(CR.LEGACY_TABLE))
 
 
+def _rows(store, table: str) -> list[dict]:
+    """表级原始读（这一组判据要知道"写到哪张表去了"，所以不用合成视图）。"""
+    return list(store.rows(table))
+
+
 def _stmt_rows(store) -> list[dict]:
     return list(store.rows("statements"))
 
@@ -236,7 +241,57 @@ def test_a_legacy_row_without_an_id_is_not_guessed(store):
     assert store.rows("statements") == []
 
 
+# ==================================================== 七、夹具不牵连落刀（两个入口）
+
+def test_the_concept_write_tables_follow_the_transition():
+    """`tables_for_concept_write`：老表还在 ⇒ 两张都声明；调用方给的表一个不丢。"""
+    tables = CR.tables_for_concept_write("relations", "literature")
+    assert tables[0] == "statements" and "relations" in tables and "literature" in tables
+    assert CR.LEGACY_TABLE in tables, "老表还在却不声明 ⇒ 镜像那条写会以'未知表'失败"
+    assert CR.tables_for_concept_write() == ("statements", "concepts"), CR.tables_for_concept_write()
+
+
+def test_a_legacy_shaped_write_goes_through_the_entry_point(store):
+    """一条老形状的行 ⇒ 走过去入口之后两处同号（夹具的既有断言照旧成立）。"""
+    with store.tx(*CR.tables_for_concept_write("relations"), actor="test") as tx:
+        out = CR.upsert_legacy_shaped(tx, {"concept_id": "0000", "name": "群",
+                                           "definition": "带运算的集合", "aliases": ["group"],
+                                           "related_concepts": []}, actor="test")
+    assert out is not None and out["stmt_id"] == "0000", out
+    assert CR.mirror_gaps(store)["merged"] == ["0000"], CR.mirror_gaps(store)
+    assert _rows(store, CR.LEGACY_TABLE)[0]["name"] == "群", "老表那一份要照旧写全"
+
+
+def test_a_row_without_an_id_is_not_guessed(store):
+    """负控：老形状的行没有 `concept_id` ⇒ 返回 `None` 且一行不写（不猜号）。"""
+    with store.tx(*CR.tables_for_concept_write(), actor="test") as tx:
+        assert CR.upsert_legacy_shaped(tx, {"name": "没有号"}, actor="test") is None
+    assert _rows(store, "statements") == [] and _rows(store, CR.LEGACY_TABLE) == []
+
+
+def test_the_entry_point_survives_the_flip(store, monkeypatch):
+    """反真空（这就是它存在的理由）：老表从 `TABLES` 里删掉之后，夹具仍然照跑。
+
+    落刀那一笔会把 `concepts` 从 `TABLES` 里删掉。凡是"声明了老表"或"直接往老表写"的
+    夹具/测试在那一刻都会以"未知表"失败 —— 实测这样的地方去重后有 30 多处。
+    走了这两个入口之后，老表在不在由过渡层判断：声明自动少一张、写自动只写新标准。
+    判据就钉这一条。
+    """
+    monkeypatch.delitem(S.TABLES, CR.LEGACY_TABLE)      # 模拟落刀那一笔
+    tables = CR.tables_for_concept_write("relations")
+    assert CR.LEGACY_TABLE not in tables and tables == ("statements", "relations"), tables
+    with store.tx(*tables, actor="test") as tx:
+        out = CR.upsert_legacy_shaped(tx, {"concept_id": "0005", "name": "删表之后",
+                                           "definition": "d", "related_concepts": []},
+                                      actor="test")
+    assert out is not None and out["stmt_id"] == "0005", out
+    assert [r["stmt_id"] for r in _rows(store, "statements")] == ["0005"]
+    view = CR.view(store, shape="legacy")
+    assert [r["name"] for r in view["rows"]] == ["删表之后"], view["rows"]
+
+
 # ==================================================== 五、过渡投影（读侧一次只搬一件事）
+
 
 def test_the_legacy_projection_keeps_real_data_and_names(store):
     """`shape="legacy"`：老字段名映射过来，而真实数据（`related_concepts`）不许丢。"""

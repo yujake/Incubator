@@ -307,6 +307,42 @@ def push_counters(tx: Any, used_id: str) -> None:
             continue
 
 
+def tables_for_concept_write(*extra: str) -> tuple[str, ...]:
+    """写一条概念要声明哪些表：`statements` + （老表还在时）`concepts` + 调用方给的。
+
+    为什么要有这一格（它是"落刀不牵连夹具"的关键）：`Store.tx` 对未知表会拒，
+    所以凡是"声明了 `concepts`"的地方在落刀之后都会当场报错 —— 实测这样的地方有
+    29 处（`temp/_s1r_flip_inventory.py` 的 `tx_declare`：src 13 + tests 45 处里的
+    去重文件数）。让调用方改成 `store.tx(*CR.tables_for_concept_write("relations"), …)`
+    之后，老表在不在由这一处判断，夹具与测试在落刀前后都不用改一个字。
+    """
+    base = ["statements", *[str(x) for x in extra if str(x)]]
+    if LEGACY_TABLE in S.TABLES:
+        base.append(LEGACY_TABLE)
+    return tuple(dict.fromkeys(base))
+
+
+def upsert_legacy_shaped(tx: Any, row: Mapping[str, Any], *,
+                         actor: str = "agent-B", note: str = "legacy_shaped") -> dict[str, Any] | None:
+    """一条老形状的概念行 ⇒ 新标准写一份（老表还在时顺带镜像，同一个号）。
+
+    这一格是给夹具、探针与自检用的（生产的写侧有自己的秘书那一套）：
+    它们手里拿的是 `{"concept_id": …, "name": …, "definition": …}` 这种字典，
+    而落刀之后"老表"不存在了 —— 让它们走这一处，含义就变成
+    "写一条概念（哪张表由过渡层决定）"，于是它们在落笔前后行为不变。
+
+    三态：老行没有 `concept_id` ⇒ 返回 `None`（不猜号）；
+    老表还在 ⇒ 先写老表那一份（夹具的既有断言照旧成立）再同步新标准；
+    老表已退役 ⇒ 只写新标准。
+    """
+    cid = str(row.get("concept_id") or "")
+    if not cid:
+        return None
+    if LEGACY_TABLE in S.TABLES:
+        tx.upsert(LEGACY_TABLE, dict(row), note=note)
+    return sync_from_legacy(tx, row, actor=actor)
+
+
 def mirror_gaps(store: Any) -> dict[str, Any]:
     """过渡期的镜像完整性读数：哪一号只在一张表里有（三态 + 逐号点名）。
 

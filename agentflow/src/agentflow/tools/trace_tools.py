@@ -45,6 +45,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
+from .. import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
 from .base import ToolError, ToolRegistry, ToolResult, fail, ok, tool
 from .graph_tools import RelationGraph
 
@@ -690,9 +691,10 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
             "processed": False,
         },
     ]
-    with st.tx("concepts", "relations", "literature", actor="selftest", note="fixture") as tx:
+    with st.tx(*CR.tables_for_concept_write("relations", "literature"),
+               actor="selftest", note="fixture") as tx:
         for r in concepts:
-            tx.upsert("concepts", r)
+            CR.upsert_legacy_shaped(tx, r)
         for r in relations:
             tx.upsert("relations", r)
         for r in literatures:

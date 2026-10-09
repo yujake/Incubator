@@ -22,6 +22,8 @@ import re
 from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import conceptrows as CR   # 并表过渡期：探针夹具走这一处写口（老表在不在由它决定）
+
 #: 过程记录号的前缀 → 表（取自 `schema.PROCESS_ID_PREFIXES` 的语义；这里只做"可归属"这一件事）。
 PROCESS_ID_TABLES: dict[str, str] = {
     "r": "search_requests", "p": "reprocess_requests", "t": "tasks",
@@ -379,11 +381,12 @@ def selftest() -> int:
     with tempfile.TemporaryDirectory() as td:
         st = Store(PurePath(td) / "ws")
         st.init()
-        with st.tx("concepts", "relations", "conjectures", "experiments", actor="probe") as tx:
-            tx.upsert("concepts", {"concept_id": "0001", "name": "群", "definition": "d",
+        with st.tx(*CR.tables_for_concept_write("relations", "conjectures", "experiments"),
+                   actor="probe") as tx:
+            CR.upsert_legacy_shaped(tx, {"concept_id": "0001", "name": "群", "definition": "d",
                                    "created_at": "2026-01-01T00:00:00+00:00",
                                    "updated_at": "2026-01-01T00:00:00+00:00"})
-            tx.upsert("concepts", {"concept_id": "0002", "name": "阿贝尔群", "definition": "d",
+            CR.upsert_legacy_shaped(tx, {"concept_id": "0002", "name": "阿贝尔群", "definition": "d",
                                    "created_at": "2026-01-01T00:00:00+00:00",
                                    "updated_at": "2026-01-01T00:00:00+00:00"})
             tx.upsert("relations", {"relation_id": "0001", "concept_ids": ["0001", "0002"],

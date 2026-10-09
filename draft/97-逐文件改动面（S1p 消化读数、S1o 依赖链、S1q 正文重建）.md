@@ -722,6 +722,40 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 当场把它数了出来（`盘上多出 {'tests/test_the_mirror_is_complete.py': 1}`）——
 这正是那条判据要的效果：**清单不会因为"我又加了点东西"而悄悄失真**。
 
+#### 13.2j 两个入口让**夹具/测试不牵连落刀**（2026-10-09）
+
+落刀那一笔把 `concepts` 从 `TABLES` 里删掉，而 `Store.tx` 对未知表会**拒** ——
+凡是"声明了老表"或"直接往老表写"的地方在那一刻都会以"未知表"失败。登记表实测：
+`tx_declare` 触及 **29 处**（src 13 + tests 45 处里的去重文件数），`write` 触及 **19 处**。
+逐个改 40 多处既慢又容易漏（本轮就漏过一格：同一个文件在 `write` 与 `tx_declare`
+两节里都有、值相同，手删一次只动了一节）。
+
+所以给过渡层加两个入口，把"老表在不在"这个判断**收进一处**：
+
+| 入口 | 作用 |
+|---|---|
+| `tables_for_concept_write(*extra)` | 这一笔要声明哪些表：`statements` + 调用方给的 + （老表还在时）`concepts`。调用点写成 `store.tx(*CR.tables_for_concept_write("relations"), …)` |
+| `upsert_legacy_shaped(tx, row, *, actor, note)` | 一条**老形状**的行 ⇒ 老表还在时先写老表（夹具的既有断言照旧成立）再同步新标准；老表已退役 ⇒ 只写新标准。签名与 `tx.upsert("concepts", …)` 同形（多行调用不用动括号） |
+
+**判据（`tests/test_the_concept_view_during_the_merge.py` 第七节，4 条）**：
+表清单跟随过渡（老表在 ⇒ 两张都在；`extra` 一个不丢）；走过入口之后两处同号、
+老表那份照旧写全；没有 `concept_id` ⇒ `None` 且一行不写；**反真空** ——
+把 `concepts` 从 `TABLES` 里删掉（`monkeypatch.delitem`）之后，表清单自动少一张、
+`upsert_legacy_shaped` 照样把行写进新标准 ⇒ **夹具与测试在落刀前后一个字都不用改**。
+
+**本轮搬完的地方**（登记表由 12 格收缩到：`read_store 8 / read_tx 7 / write 19 / tx_declare 20`）：
+`tools/trace_tools.py`、`faculty_checks.py`、`pipeline.py`、`agent_h/core.py`、
+`agent_c/__main__.py`（4 处）、`agent_d/core.py`、`agent_b/core.py` 的自检、
+以及 `tests/conftest.py` 的 `add_concept`。六个自检/脚本逐个跑过（`python -m …` 全部 exit 0：
+`trace_tools` / `faculty_checks` / `agent_h.core` / `agent_c.__main__`（46/46 断言）/
+`agent_b.core` / `pipeline`）。
+
+**一处反例（为什么"夹具一律两处同号"是错的）**：`tests/test_store_delete_events.py`
+是**存储层**判据（它断言"删一行 ⇒ 事件流里有那一条完整行"），搬到两处同号之后
+"删一行"变成了"删两张表各一行" ⇒ 四条判据当场变红。所以它**撤回**，留到落刀时
+换一张样品表（存储层判据不该挂在正在迁移的知识表上）。**判据与夹具的分界**：
+知识语义的夹具走过渡层入口；存储层判据换表。
+
 #### 13.2i 夹具搬运：**试过、撤回、修掉了它暴露的盲区**
 
 夹具是"生产写侧"的替身（`tests/conftest.py::add_concept` 此前只写老表）⇒ 测试世界里的概念

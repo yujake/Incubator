@@ -48,7 +48,7 @@ PATTERNS: dict[str, re.Pattern[str]] = {
 #: 登记清单：`{模式: {相对路径: 处数}}`（相对 `agentflow/`，与现算逐字一致）。
 INVENTORY: dict[str, dict[str, int]] = {
     "read_store": {
-        "src/agentflow/conceptrows.py": 1,      # 过渡层自己读老表（保留到落刀）
+        "src/agentflow/conceptrows.py": 1,  # 过渡层自己（落刀后保留）
         "tests/test_agent_b.py": 3,
         "tests/test_agent_b_gates.py": 5,
         "tests/test_demo_end_to_end.py": 1,
@@ -58,25 +58,19 @@ INVENTORY: dict[str, dict[str, int]] = {
         "tests/test_tx_mark_dirty.py": 3,
     },
     "read_tx": {
-        "src/agentflow/agent_b/core.py": 3,     # `_apply_merge`：改老表原始行（落刀时改新标准）
-        "src/agentflow/agent_b/resolve_structural_duplicate.py": 1,
-        "src/agentflow/agent_b/run_once.py": 1,
-        "src/agentflow/cli.py": 1,              # `repair --related`（落刀时整体退役）
-        "src/agentflow/conceptrows.py": 2,      # 过渡层：一处代码 + 一处 docstring 里点名这一格
+        "src/agentflow/agent_b/core.py": 3,  # `_apply_merge`：事务内改老表原始行
+        "src/agentflow/agent_b/resolve_structural_duplicate.py": 1,  # 结构合并的事务
+        "src/agentflow/agent_b/run_once.py": 1,  # 概念查重（事务内）
+        "src/agentflow/cli.py": 1,  # `repair --related`（落刀时整体退役）
+        "src/agentflow/conceptrows.py": 2,  # 过渡层自己（落刀后保留）
+        "tests/test_the_mirror_is_complete.py": 1,  # 负控/清单引用
         "tests/test_tx_mark_dirty.py": 3,
-        "tests/test_the_mirror_is_complete.py": 1,   # docstring 里点名这一格（不是读点）
     },
     "write": {
-        "src/agentflow/agent_b/core.py": 4,     # 其中 1 处是自检夹具
-        "src/agentflow/agent_b/run_once.py": 3,
-        "src/agentflow/agent_c/__main__.py": 4,  # 自检夹具
-        "src/agentflow/agent_d/core.py": 1,      # 夹具
-        "src/agentflow/agent_h/core.py": 2,      # 自检夹具（H 的权限面没被破：它在 selftest 里）
-        "src/agentflow/cli.py": 1,
-        "src/agentflow/faculty_checks.py": 2,    # 官能探针夹具
-        "src/agentflow/pipeline.py": 1,          # 夹具
-        "src/agentflow/tools/trace_tools.py": 1,
-        "tests/conftest.py": 1,
+        "src/agentflow/agent_b/core.py": 4,  # `_apply_merge`：事务内改老表原始行
+        "src/agentflow/agent_b/run_once.py": 3,  # 概念查重（事务内）
+        "src/agentflow/cli.py": 1,  # `repair --related`（落刀时整体退役）
+        "tests/conftest.py": 1,  # 夹具（两处同号）
         "tests/test_agent_b_gates.py": 2,
         "tests/test_agent_c_service.py": 1,
         "tests/test_coverage_agent_b.py": 2,
@@ -89,22 +83,15 @@ INVENTORY: dict[str, dict[str, int]] = {
         "tests/test_store_concurrency.py": 7,
         "tests/test_store_counters_commit.py": 1,
         "tests/test_store_delete_events.py": 3,
+        "tests/test_the_mirror_is_complete.py": 1,  # 负控/清单引用
         "tests/test_tx_mark_dirty.py": 1,
         "tests/test_verify_snapshot.py": 1,
-        "tests/test_the_mirror_is_complete.py": 1,   # 负控：绕过镜像直接写老表
     },
     "tx_declare": {
-        "src/agentflow/agent_b/core.py": 1,
-        "src/agentflow/agent_b/resolve_structural_duplicate.py": 1,
-        "src/agentflow/agent_b/run_once.py": 1,
-        "src/agentflow/agent_c/__main__.py": 4,
-        "src/agentflow/agent_d/core.py": 1,
-        "src/agentflow/agent_h/core.py": 1,
-        "src/agentflow/cli.py": 1,
-        "src/agentflow/faculty_checks.py": 1,
-        "src/agentflow/pipeline.py": 1,
-        "src/agentflow/tools/trace_tools.py": 1,
-        "tests/conftest.py": 1,
+        "src/agentflow/agent_b/resolve_structural_duplicate.py": 1,  # 结构合并的事务
+        "src/agentflow/agent_b/run_once.py": 1,  # 概念查重（事务内）
+        "src/agentflow/cli.py": 1,  # `repair --related`（落刀时整体退役）
+        "tests/conftest.py": 1,  # 夹具（两处同号）
         "tests/test_agent_b_gates.py": 2,
         "tests/test_agent_c_service.py": 1,
         "tests/test_coverage_agent_b.py": 2,
@@ -118,9 +105,9 @@ INVENTORY: dict[str, dict[str, int]] = {
         "tests/test_store_counters_commit.py": 3,
         "tests/test_store_delete_events.py": 6,
         "tests/test_the_concept_view_during_the_merge.py": 1,
+        "tests/test_the_mirror_is_complete.py": 1,  # 负控/清单引用
         "tests/test_tx_mark_dirty.py": 5,
         "tests/test_verify_snapshot.py": 1,
-        "tests/test_the_mirror_is_complete.py": 1,   # 负控：直接写老表那一笔
     },
 }
 

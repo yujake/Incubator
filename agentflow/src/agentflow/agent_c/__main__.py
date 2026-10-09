@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pathlib
 
+from .. import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
 from ._support import D, Path, S, Store, T
 from .core import AgentC
 
@@ -137,9 +138,10 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
                     "created_at": S.now_iso(),
                 }
             )
-        with st.tx("concepts", "relations", "literature", actor="selftest", note="fixture") as tx:
+        with st.tx(*CR.tables_for_concept_write("relations", "literature"),
+                   actor="selftest", note="fixture") as tx:
             for r in concept_rows:
-                tx.upsert("concepts", r)
+                CR.upsert_legacy_shaped(tx, r)
             for r in relations:
                 tx.upsert("relations", r)
             for r in literatures:
@@ -322,13 +324,14 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
 
     print("[11] gaps 的'证据不足'路径：候选只有'引文全失败'这类依据时，否决项必须直接剔除，不许包装成'找到了'")
     st2 = make_store("nogap")
-    with st2.tx("concepts", "relations", "literature", actor="selftest", note="nogap") as tx:
+    with st2.tx(*CR.tables_for_concept_write("relations", "literature"),
+                actor="selftest", note="nogap") as tx:
         for cid, name in [
             ("0000", "这是一整句话并不是概念因为它确实太长了甲"),
             ("0001", "这是一整句话并不是概念因为它确实太长了乙"),
             ("0002", "桥"),
         ]:
-            tx.upsert("concepts", {"concept_id": cid, "name": name, "definition": "", "normalized_name": T.normalize(name), "related_concepts": []})
+            CR.upsert_legacy_shaped(tx, {"concept_id": cid, "name": name, "definition": "", "normalized_name": T.normalize(name), "related_concepts": []})
         for rid, cids in [("0000", ["0000", "0002"]), ("0001", ["0001", "0002"])]:
             tx.upsert(
                 "relations",
@@ -461,11 +464,12 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
             "status": "active", "concept_group_key": "|".join(sorted(cids)),
         }
 
-    with st4.tx("concepts", "relations", "literature", actor="selftest", note="service") as tx:
+    with st4.tx(*CR.tables_for_concept_write("relations", "literature"),
+                actor="selftest", note="service") as tx:
         for cid, name in [("0000", "群"), ("0001", "阿贝尔群"), ("0002", "环"),
                           ("0003", "环"), ("0004", "桥甲"), ("0005", "桥乙"),
                           ("0006", "孤儿甲"), ("0007", "孤儿乙")]:
-            tx.upsert("concepts", {"concept_id": cid, "name": name, "definition": "d",
+            CR.upsert_legacy_shaped(tx, {"concept_id": cid, "name": name, "definition": "d",
                                    "normalized_name": T.normalize(name), "related_concepts": []})
         for r in [
             # 人造矛盾对：同概念组，一句明确肯定、一句明确否定（才够格 strong）
@@ -520,9 +524,10 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     st5 = make_store("i3")
 
     def _i3_fixture(target: Store) -> None:
-        with target.tx("concepts", "relations", "literature", actor="selftest", note="i3") as tx:
+        with target.tx(*CR.tables_for_concept_write("relations", "literature"),
+                       actor="selftest", note="i3") as tx:
             for i in range(4):
-                tx.upsert("concepts", {"concept_id": f"{i:04d}", "name": f"概念{i}", "definition": "d",
+                CR.upsert_legacy_shaped(tx, {"concept_id": f"{i:04d}", "name": f"概念{i}", "definition": "d",
                                        "normalized_name": T.normalize(f"概念{i}"), "related_concepts": []})
             for r in [
                 _svc_rel("0000", ["0000", "0001"], "一条足够长的关系描述用于评分", "0000"),
