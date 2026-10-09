@@ -207,10 +207,17 @@ class _RegisterStatement:
     ) -> dict:
         """登记一条命题，返回 `{"ok": True, "stmt_id": ..., "row": {...}}`；不合规就零写入。"""
         full = str(statement_full or "").strip()
-        if not full:
+        if not full and str(kind or "").strip() != "concept":
+            # 命题没有"内容待补"这一档：省掉假设的命题会被下游当成无条件成立。
+            # 概念有（业主 `draft/97` §14.13 逐字：「抽不到定义的概念就让A去网上搜，
+            # 写入时定义内容留空，等A返回后写入」）⇒ 空定义的概念要落行并带待补标记，
+            # 而不是在这里被拒。这一档此前也拒，于是"定义还没抽到"这件事在 B 的动作里
+            # 根本走不通（只有直接调秘书那条路能落）—— 而 §15.4 最常见的场景
+            # （B 消化 A 查回来的论文时撞到生僻定义）走的正是这个动作。
             return _refuse("bad_statement",
                            "statement_full 不能为空 —— 只有短版（statement_text）不算数："
-                           "省掉假设的命题会被下游当成无条件成立")
+                           "省掉假设的命题会被下游当成无条件成立"
+                           "（`kind=\"concept\"` 除外：定义抽不到时留空 + 待补标记，见 draft/97 §14.13）")
         origin = str(origin or "external_lit")
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
@@ -235,9 +242,21 @@ class _RegisterStatement:
                            "origin='external_lit' 时必须给 source_lit_id —— "
                            "从文献摘的命题必须有出处（没有出处的摘录就是二手结论）")
         if quote_verified is not True and not str(quote_reason or "").strip():
-            return _refuse("missing_quote_reason",
-                           "quote_verified 不是 True 时必须给 quote_reason —— "
-                           "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）")
+            # `own_result`（我们自己证的）这一档不在这里拦：业主 `draft/97` §14.11 的
+            # 契约是"B 只交定理内容 + 证明过程"，而自产命题没有第二份文本可比 ——
+            # 它那一格的受控理由由写入代理（`Secretary.record_statement`）补，
+            # 补完在读数里给 `quote_reason_filled=True`。栏里留白的病根是"盘上写着空"，
+            # 而盘上那一格由秘书保证非空（三态纪律仍然成立）。
+            # `external_lit` 照旧在这里拦：从文献摘的命题有第二份文本可比，
+            # "还没查"必须由 B 当场说出来。
+            if origin == "own_result":
+                pass
+            else:
+                return _refuse("missing_quote_reason",
+                               "quote_verified 不是 True 时必须给 quote_reason —— "
+                               "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）"
+                               "（`own_result` 那一档不在此拦：它没有可比对的第二份文本，"
+                               "理由由秘书补受控值）")
         # 出处：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数），
         # 而"出处是哪一栏"按来源分档（§68 人裁的甲档，与审稿判据逐条对齐）。
         #
@@ -351,9 +370,23 @@ class _RegisterStatement:
                            stmt_id=str(written.get("stmt_id") or ""), **extra)
         stmt_id = str(written["stmt_id"])
         data = dict(written.get("row") or {})
+        # 定义待补那一档要看得见（`draft/97` §15.4 的补法优先级）：
+        # 抽不到定义 ⇒ ①先问直接父（它手里有原文，就地能给）→ ②A 上网搜 → ③B 自撰。
+        # 这里只把"要给谁"写进读数（载体那一步在循环那一层：它才知道自己的父是谁）。
+        pending_defs = ([{"kind": "pending_definition", "table": "statements", "id": stmt_id,
+                          "missing": "statement_full", "who": "direct_parent",
+                          "why": ("抽不到定义 ⇒ 先问直接父（最常见：父就是 A，原文在它手里）；"
+                                  "父也办不了才轮到 A 上网搜或 B 自撰基本概念")}]
+                        if (str(data.get("status") or "") == "pending_definition"
+                            or int(written.get("pending_concepts") or 0)) else [])
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 "quote_verified": quote_verified, "origin": origin,
                 "evidence_kind": evidence_kind, "row": data,
+                "deps_state": str(written.get("deps_state") or ""),
+                "deps_written": int(written.get("deps_written") or 0),
+                "deps_dangling": list(written.get("deps_dangling") or []),
+                "deps_unmappable": list(written.get("deps_unmappable") or []),
+                "pending_definitions": pending_defs,
                 # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
                 # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
                 # 也能扫到它；这里再给一次是为了让调用方当场就知道）。

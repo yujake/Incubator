@@ -2730,6 +2730,18 @@ class Secretary:
             raw = body.get(key)
             return S.PageRange.from_dict(raw) if isinstance(raw, Mapping) else S.PageRange()
 
+        def _lines(key: str) -> str:
+            """`line_range` 是字符串那一格：调用方给 `{"start":343,"end":414}` 这种
+            归一化过的区间时写成 `"343-414"`（`Statement.line_range` 的声明是"如 120-148"）。
+            直接 `str(dict)` 会落成 `"{'start': 343, 'end': 414}"` —— 与声明对不上，
+            而下游按"行范围"读的人拿到的是一个字典（判据抓不到它：`verify` 不查那一格）。
+            """
+            raw = body.get(key)
+            if isinstance(raw, Mapping):
+                start, end = raw.get("start"), raw.get("end")
+                return f"{start}-{end}" if start is not None and end is not None else ""
+            return _s(key)
+
         origin = _s("origin") or "external_lit"
         reason = _s("quote_reason")
         if not reason.strip() and body.get("quote_verified") is not True:
@@ -2755,7 +2767,7 @@ class Secretary:
             # `_rng(...)`，于是落盘那一格是一个 `{start/end/label}` 的字典（`Statement`
             # 的声明是 `str`）。判据抓不到它（`to_dict` 照抄、`verify` 不查那一格），
             # 但下游按"行范围"读它的人会拿到一个字典。
-            doc_id=_s("doc_id") or None, line_range=_s("line_range"),
+            doc_id=_s("doc_id") or None, line_range=_lines("line_range"),
             bits=dict(body.get("bits") or {}), created_at=S.now_iso(),
             created_by=f"secretary-{self.role}")
 

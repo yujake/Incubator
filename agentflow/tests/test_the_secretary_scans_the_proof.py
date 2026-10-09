@@ -75,13 +75,21 @@ def test_the_two_things_contract_gets_a_controlled_quote_reason(store):
     assert "own_result" in row["quote_reason"] and len(row["quote_reason"]) > 20, row["quote_reason"]
     assert isinstance(row["line_range"], str), (
         f"`line_range` 是 str 那一格，收到 {type(row['line_range']).__name__}: {row['line_range']!r}")
+    # 调用方给归一化过的区间（B 的动作就是这么给的）⇒ 落成 `"343-414"` 这种字符串
+    out3 = _sec(store).record_statement(_two_things(
+        store, label="T3", statement_full="定理：行范围那一格。", proof_text="证明：略。",
+        line_range={"start": 343, "end": 414, "label": ""}))
+    assert out3["checked"], out3
+    got = next(r for r in store.rows("statements") if r["stmt_id"] == out3["stmt_id"])
+    assert got["line_range"] == "343-414", got["line_range"]
     # 调用方给了理由就照用（不覆盖）
     out2 = _sec(store).record_statement(_two_things(
         store, label="T2", statement_full="定理：另一条。", proof_text="证明：略。",
         quote_reason="人工给的理由：我从 A 的抽取件里核过"))
     assert out2["checked"], out2
     assert not out2.get("quote_reason_filled"), out2
-    assert store.rows("statements")[1]["quote_reason"].startswith("人工给的理由"), store.rows("statements")[1]
+    t2 = next(r for r in store.rows("statements") if r["label"] == "T2")
+    assert t2["quote_reason"].startswith("人工给的理由"), t2["quote_reason"]
 
 
 # ==================================================== 二、负控：悬空不整笔拒、不成格的要点名
@@ -182,3 +190,48 @@ def test_the_scan_is_the_same_implementation_as_the_citation_parser(store):
         assert T.citation_ref_parts(r["raw"]) == (r["prefix"], r["code"]), r
     assert T.find_citations("") == [] and T.find_citations(None) == []
     assert T.find_citations("见 stmt:0001", prefixes=("lit",)) == [], "显式收窄前缀要生效"
+
+
+# ==================================================== 六、B 那一侧的读数（载体那一步的输入）
+
+def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
+    """B 的动作要把"依赖是扫出来的"与"哪一条定义待补、该问谁"写进返回值。
+
+    业主 `draft/97` §15.4 的补法优先级是①先问直接父 → ②A 上网搜 → ③B 自撰；
+    循环那一层才是"知道自己的父是谁"的地方，所以这一格的职责只有一个：
+    把给谁写清楚（`who="direct_parent"`），别让上面那一层去猜。
+    """
+    from agentflow.agent_b import AgentB
+
+    add_literature(store, "0003", title="群论引理", processed=True)
+    b = AgentB(store, extractor=None, extract_text=None)
+    out = b.register_statement(
+        origin="own_result", kind="theorem", label="T1",
+        statement_full="定理：对任意群 G，命题 ph 成立。",
+        proof_text="证明：由 lit:0003 的引理推出，并用 stmt:0777（还没进库）。",
+        line_range={"start": 1, "end": 9})
+    assert out["ok"] is True, out
+    assert out["deps_state"] == "from_proof" and out["deps_written"] == 2, out
+    assert [d["ref"] for d in out["deps_dangling"]] == ["stmt:0777"], out["deps_dangling"]
+    assert out["pending_definitions"] == [], "命题不缺定义 ⇒ 这一档不许凭空冒出来"
+    # `own_result` 且没给 quote_reason ⇒ 不再在 B 那一侧拦（§14.11 的两件式契约），
+    # 由秘书补受控值；自产命题的出处规则照旧（要指出它住哪一行）
+    out1b = b.register_statement(
+        origin="own_result", kind="theorem", label="T2",
+        statement_full="定理：另一条自产命题。", proof_text="证明：由定义直接得到。",
+        line_range={"start": 12, "end": 20})
+    assert out1b["ok"] is True, out1b
+    row1b = next(r for r in store.rows("statements") if r["stmt_id"] == out1b["stmt_id"])
+    assert "own_result" in row1b["quote_reason"], row1b["quote_reason"]
+    assert row1b["line_range"] == "12-20", row1b["line_range"]
+    # 概念（定义还没抽到，正是 §15.4 那个场景：B 消化 A 查回来的论文时撞到生僻定义）
+    # ⇒ 读数点名"问直接父"
+    out2 = b.register_statement(origin="external_lit", kind="concept", label="生僻概念 X",
+                                statement_full="", source_lit_id="0003",
+                                page_range={"start": 3, "end": 4},
+                                quote_reason="定义还没从原文里抽到 ⇒ 待补")
+    assert out2["ok"] is True, out2
+    defs = out2["pending_definitions"]
+    assert len(defs) == 1 and defs[0]["kind"] == "pending_definition", defs
+    assert defs[0]["who"] == "direct_parent" and defs[0]["id"] == out2["stmt_id"], defs
+    assert "直接父" in defs[0]["why"], defs
