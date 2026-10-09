@@ -26,6 +26,14 @@
   把 `requires_human(required_approvals=2)` 的读数如实记进提交信息、**不跑 `--approve`**。
 - **V2**：C 的动作加进 `ACTIONS` 之后，**哪些计数合同会跟着动**（`docs/` 的角色动作数、`role_spec` 相关快照、`tests/golden/agent_surface_snapshot`）——实测命令见 §5。
 
+> **业主复审（2026-10-09）**：「要我审的都看过了，感觉可以」—— 指本页 §1/§4 那两处禁改区
+> 改动（`specs/c.py` 与 `specs/b.py` 的**设计**）与并表设计。**如实记两条边界**：
+> ① 这句是**口头复审通过**，`.noai-approvals.json` **一个字节没动**（正式台账要 2 名
+> reviewer 的登记，是人的动作）⇒ `noai_gate` 仍会报 `requires_human`，**那不是"没通过"，
+> 是"台账没登记"**；② 复审通过的是**设计**，`specs/c.py` 的 `proof_chain` 与 `specs/b.py`
+> 的 `deps` **本页写作时尚未施工**（S1o/S1r 还没做），所以"感觉可以"不改变施工纪律：
+> 仍然一次一批、每批带读数与偏差。
+
 ## §1 `src/agentflow/specs/c.py`（**禁改区，按业主 2026-10-09 授权先改后审**）
 
 - **加一条 `ActionSpec`**（放在 `ACTIONS` 末尾，紧跟现有的 `structural_duplicates`）：
@@ -335,6 +343,31 @@ def _is_root(row, deps_of) -> tuple[bool, str]:
   `schema.py` / `store.py` / `verify.py` / `agent_b/{core,decide_structural_duplicate,
   resolve_structural_duplicate,run_once}.py` / `agent_c/__main__.py`（另有测试与 WebUI 读侧）。
   每处都要按"读 `concepts` ⇒ 改读 `statements` 且 `kind="concept"`"逐个过一遍。
+
+### 10.3b **只读预演的真实读数**（`temp/_s1r_rehearsal.py`，2026-10-09，59 个工作区全扫）
+
+| 读数 | 值 |
+|---|---|
+| 有 `concepts` 行的工作区 | **28**（`projects/` 下扫到的全部工作区） |
+| `concepts` 行总数 | **2233**（按折叠规则全部可折：`folio=2233`） |
+| `relations` 行 | 1752 |
+| `relations.concept_ids` 悬空 | **0**（关系里的号都在册 —— 这一条干净） |
+| 名字为空 | 0 |
+| **定义为空** | **94 条**（分布在 `p6c`/`p6e` 等"从零研究"工作区） |
+| **号与既有 `statements` 行冲突** | 有（`p6e`/`p6g`/`p6h` 的 `concept 0000`/`0001` …） |
+| 概念最多的 5 个工作区 | `p7b-open-questions` 294、`p6c-research-from-zero` 294、`p7-open-questions` 156、`p8b-fermat-shorter-proof` 144、`p8g-fermat-shorter-proof` 143 |
+| **边界问题合计** | **116 条** |
+
+⇒ 迁移前必须先裁**两条**（在设计里定死之前不许动 schema）：
+
+- **待裁 A（94 条空定义）**：折出来的 `statement_full` 会是空的。三条候选：
+  **(甲)** 照折、`statement_full=""`，并在行里落一个受控读数（`quote_reason` 或 `notes` 写
+  "迁移自 concepts：原定义为空"）—— 不许编定义；**(乙)** 这些行**不折**，留在 legacy 表里
+  等人工补定义；**(丙)** 折但把该工作区标成"迁移不完整"（读数里可见）。**建议甲**。
+- **待裁 B（号冲突）**：`concept_id` 与既有 `stmt_id` 撞号时 **(甲)** 迁移报错、人工处理该工作区；
+  **(乙)** 给冲突的概念**重新分配号**（于是 `relations.concept_ids` 要一起改 —— 1752 行里那几条）。
+  **建议乙**（自动化程度高），但要在迁移里把"改过哪些号"逐条落账。
+
 - **过渡期读法（S1r 未审期间的桥）**：`proof_chain` 与 S1p 的读数**同时看两处**（
   `statements` 里 `kind="concept"` 的行 + 遗留 `concepts` 表的行），按**同号**合并，
   并在读数里写明 `concept_source: "statements" | "legacy_table" | "both"` ——
