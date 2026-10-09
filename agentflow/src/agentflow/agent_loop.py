@@ -2635,6 +2635,12 @@ class AgentLoop:
         settlement_note = self._emit_settlement(run)
         if settlement_note:
             run.notes.append(settlement_note)
+        # ---- 状态报告强制（`draft/38` §7 第三组判据的那一格；模型没调就框架补落）
+        # 同样放在 `agent_run_end` 之前：那句读数要跟着这一条事件落盘，事后读得到
+        # "这一格是模型落的还是框架补的"。
+        status_note = self._ensure_status_report(run)
+        if status_note:
+            run.notes.append(status_note)
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,            "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
             # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，
@@ -3917,6 +3923,47 @@ class AgentLoop:
         except Exception as exc:  # noqa: BLE001 - fail-open
             out["handoffs_digest_problem"] = f"{type(exc).__name__}: {exc}（这一格没读成）"
         return out
+
+    def _ensure_status_report(self, run: LoopRun) -> str:
+        """M 收工前保证有一份状态报告落盘（模型没调就框架补落）。返回一句读数（空 = 不用管）。
+
+        ## 为什么必须有这一格（T1 第 18 趟实测）
+
+        `draft/38` §7 第三组判据里"M 的状态报告落盘"是一格过程判据，而并表之后重跑的
+        T1 两趟（`t1w`/`t1x`）实测：M 派了活、也收了工，却一次都没调
+        `conductor.status_report` —— 工具在它的面上（注册表 83 件含它）、提示词里也写着，
+        只是那句原先只说"用户问『现在什么情况』时用"；补一句"收工前也落一份"之后
+        仍然没调（收尾序列被 `conductor.closing` 占满，一句散文不足以让它多走一步）。
+
+        所以这一格与 `_emit_settlement` 同族：框架保证"有"，模型保证"内容"。
+
+        三态（读的人要能分辨"模型落的"与"框架补的"）：
+
+        | 结局 | 返回 |
+        |---|---|
+        | 模型这一趟调过（盘上有本趟产生的 `STATUS-*`） | `""`（一个字都不动，不覆盖） |
+        | 没调 ⇒ 框架补落一份 | 一句读数（`written_by=framework` + 两份文件名） |
+        | 补落失败 | 一句读数写清失败原因（不许当成"报告已落盘"） |
+        """
+        if self.role != S.CONDUCTOR_ROLE or self.store is None:
+            return ""
+        out_dir = Path(self.session_root) / "out" / "review"
+        started = time.time() - float(getattr(run, "elapsed_sec", 0.0) or 0.0)
+        try:
+            fresh = [p for p in out_dir.glob("STATUS-*")
+                     if p.is_file() and p.stat().st_mtime >= started - 1.0]
+        except OSError as exc:  # noqa: BLE001 —— 判不了要如实说
+            return f"状态报告这一格没查成（{type(exc).__name__}: {exc}）"
+        if fresh:
+            return ""
+        try:
+            from . import statusreport as SR
+
+            _, md, js = SR.write_status_report(self.store, self.session_root)
+        except Exception as exc:  # noqa: BLE001 —— 补落失败要留痕，不许静默
+            return f"状态报告补落失败（{type(exc).__name__}: {exc}）⇒ 这一格仍然没有落盘读数"
+        return (f"状态报告：模型这一趟没调 conductor.status_report ⇒ 框架补落 "
+                f"{md.name}/{js.name}（written_by=framework）")
 
     def _emit_settlement(self, run: LoopRun) -> str:
         """终态回报：每个任务跑完都必须有一条回报（业主 2026-10-08 T17）。返回一句读数。
