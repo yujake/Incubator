@@ -1049,12 +1049,14 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
     side_effect="read",
     roles=("M",),
     returns=("{'can_close','machine_pass','m_verdict','overrode','verdict_conflicts',"
-             "'verdict_note',"
+             "'verdict_note','verdict_written',"
              "'status','failed','unknowns','findings','readings','summary','review_acceptance'}；"
              "**can_close 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，"
              "结论写在 `goal_met`），机器八格退成读数（`status`/`machine_pass`），"
              "两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` "
              "逐项点名；M 没给判据 ⇒ `can_close=false` + 读数说明『没人判过』；"
+             "M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`"
+             "（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；"
              "status 的键是八格检查（anchor/contradictions/load_bearing/report_shape/"
              "user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；"
              "acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、"
@@ -1126,6 +1128,15 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     M 不给 `goal_met` ⇒ `can_close=false` + 「没人判过」的读数（不是「可以交」）。
     内容级验收（`review_acceptance`）照旧只是读数 —— 它从不参与 `can_close`，
     这一条从裁定题 13 起就没变过。
+
+    ## M 交判据 ⇒ 落盘（同一批的补）
+
+    判据由 M 在运行内给，而门还有运行外的出口（`agentflow closing` / 发布门）：
+    两处必须得出同一个结论（`draft/37` §63 记过一次"运行内 `can_close=true`、
+    外部 `failed=[...]`"的假绿）。所以 M 给判据的那一次调用把它落到
+    `out/review/m-verdicts.jsonl`（append-only，取最后一行）—— 运行外那一趟
+    没有显式入参时读它。门本身仍然只读：`check_closing` 不写任何东西，
+    写这一笔的是本工具（M 的动作），落盘失败如实进 `verdict_written`。
     """
     if store is None:
         return fail("没有工作区 ⇒ 收工门没查成（不是「可以交」）", kind="no_store", can_close=False)
@@ -1135,6 +1146,19 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     sess = session if isinstance(session, Mapping) else {}
     session_root = str(sess.get("root") or "") or None
     sid = str(sess.get("sid") or CL.NO_SESSION)
+    # 落盘先于读数：这一次调用给出的判据要能立刻被"运行外那一趟"读到。
+    written: dict[str, Any] = {"tried": False, "ok": False, "why": "", "path": ""}
+    if goal_met is not None or (task_list if isinstance(task_list, (list, tuple)) else None):
+        vroot = str(project_dir or session_root or getattr(store, "root", "") or "")
+        if vroot:
+            written["tried"] = True
+            written["path"] = str(CL.m_verdicts_path(vroot))
+            okw, whyw = CL.write_m_verdict(vroot, goal=goal, met=goal_met, basis=basis,
+                                           tasks=task_list or (), sid=str(sid or ""))
+            written["ok"], written["why"] = bool(okw), str(whyw)
+        else:
+            written = {"tried": False, "ok": False, "path": "",
+                       "why": "没有项目根/会话根 ⇒ 判据没落盘（运行外那一趟会读不到）"}
     rep = CL.check_closing(store, project_dir=project_dir, report_path=report_path,
                            session_root=session_root, sid=sid,
                            goal=goal, goal_met=goal_met, basis=basis,
@@ -1152,6 +1176,7 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
         "m_verdict": data["m_verdict"], "overrode": data["overrode"],
         "verdict_conflicts": data["verdict_conflicts"],
         "verdict_note": data["verdict_note"],
+        "verdict_written": written,
         "status": data["status"],
         "failed": data["failed"], "unknowns": data["unknowns"],
         "findings": data["findings"], "readings": data["readings"],

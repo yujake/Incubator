@@ -2091,6 +2091,15 @@ def cmd_closing(args) -> int:
     `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），
     于是「三态分支」那一格是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，
     那正是 §58/§63 记过两次的假绿形态。
+
+    ## 退出码由 M 的判据定（业主 2026-10-09）
+
+    「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 这条命令的退出码
+    （0 可交付 / 1 被拦住 / 2 没查成）现在跟着 M 的判据走：运行内 M 交判据那一次
+    已经把它落到 `out/review/m-verdicts.jsonl`，这里缺省读那一份；`--goal-met` /
+    `--goal-not-met` 是"人/CI 代述 M 的说法"的显式入口。没有判据 ⇒ 2
+    （"没人判过"既不是"可以交"也不是"被拦住"）。八格照旧逐格现算并打出来，
+    但它们是读数。
     """
     from . import closing as CL
     from .store import Store
@@ -2100,7 +2109,10 @@ def cmd_closing(args) -> int:
     project = args.project_dir or ""
     report = args.report or (str(Path(project) / "out" / "review" / "REPORT.md")
                              if project else "")
-    rep = CL.check_closing(st, project_dir=project, report_path=report)
+    rep = CL.check_closing(st, project_dir=project, report_path=report,
+                           goal=str(getattr(args, "goal", "") or ""),
+                           goal_met=getattr(args, "goal_met", None),
+                           basis=str(getattr(args, "basis", "") or ""))
     for name in CL.DEFAULT_CHECKS:
         state = rep.status.get(name, "?")
         mark = {"pass": "通过", "fail": "拦住", "unknown": "没查成"}.get(state, state)
@@ -2472,6 +2484,17 @@ def build_parser() -> argparse.ArgumentParser:
                          "不给 ⇒ 那一格是「没查成」，不按缺省会话读）")
     sp.add_argument("--no-review-acceptance", action="store_true",
                     help="不跑收工门之后的那个内容级验收读数（缺省就跑）")
+    # M 的判据（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）：
+    # 缺省 = 读运行内落盘的那一份（`out/review/m-verdicts.jsonl`）；显式给这里三个
+    # 开关就按命令行这一份判（人/CI 代述 M 的说法时用）。都不给又没有落盘的那一份
+    # ⇒ 退出码 2（「没人判过」），不是 0 也不是 1。
+    sp.add_argument("--goal", default="", help="（M 的判据）这一趟的目标，一句话")
+    sp.add_argument("--basis", default="", help="（M 的判据）凭什么这么判：读数/交付物路径")
+    _met = sp.add_mutually_exclusive_group()
+    _met.add_argument("--goal-met", dest="goal_met", action="store_true", default=None,
+                      help="（M 的判据）目标达成了 ⇒ 收工（退出码 0）")
+    _met.add_argument("--goal-not-met", dest="goal_met", action="store_false",
+                      help="（M 的判据）没达成 ⇒ 不退（退出码 1）")
     sp.set_defaults(func=cmd_closing)
 
     # 项目状态报告（`draft/39` §4）：只读 + 零模型调用 —— 用户中途想知道情况时用它，

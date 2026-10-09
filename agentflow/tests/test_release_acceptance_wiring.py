@@ -121,14 +121,33 @@ def _good_and_sid(tmp_path):
     """五条全过的那个工作区 + 它的会话号（夹具的提问落在"缺省会话"里）。
 
     会话号从 `sessions.session_id()` 现读，不手抄一个日期（手抄的会过期）。
+
+    另加一笔 M 的收工判据（业主 2026-10-09：「是否收工不要用机械判据，由 M
+    制定的目标是否达成为准」）：这个夹具代表"一趟好好的交付"，而按新口径，
+    "交付好"本身不再等于"可以收工" —— 还要 M 说一句达成了。判据落在
+    `out/review/m-verdicts.jsonl`（运行内 `conductor.closing` 给判据时的同一处落点），
+    于是这些用例走的正是"运行外出口读运行内落盘的那一份"这条路。
+    要改这一份（例如造"没达成"的场）就在后面再追加一行 —— 读侧取最后一行。
     """
     st, report = _good(tmp_path)
+    _m_verdict(tmp_path, met=True, basis="五条全过的交付 + 八格读数")
     return st, report, SS.session_id()
+
+
+def _m_verdict(root, *, met: bool, goal: str = "把这份交付做到能交",
+               basis: str = "", tasks=()) -> None:
+    """往 `out/review/m-verdicts.jsonl` 追加一笔 M 的判据（append-only）。"""
+    from agentflow import closing as _CL
+
+    okw, why = _CL.write_m_verdict(
+        root, goal=goal, met=met, basis=basis, sid=SS.session_id(),
+        tasks=tasks or ({"what": goal, "state": "done" if met else "not_done"},))
+    assert okw, why
 
 
 def _tool_closing(store, *, project_dir: str = "", report_path: str = "",
                   cap_usd: float | None = None, sid: str | None = None,
-                  session_root=None):
+                  session_root=None, **extra):
     """从工具体出口进（不是 CLI、也不直接 import `reviewaccept` 调它）。
 
     为什么必须走 `build_registry` + `registry.call`：要证的正是"这条调用链在
@@ -137,6 +156,9 @@ def _tool_closing(store, *, project_dir: str = "", report_path: str = "",
 
     `cap_usd` 缺省是"不给这个参数"（不是传 `None`）：参数都不给与给了个空值
     在读的人眼里必须是两件事，这里让它们逐字分成两条路。
+
+    `**extra` 原样透传给工具（M 的判据那三格 `goal` / `goal_met` / `basis` /
+    `task_list` 就是这样传的）—— 本函数不替它们编缺省值。
     """
     from agentflow.tools import build_registry
 
@@ -144,7 +166,7 @@ def _tool_closing(store, *, project_dir: str = "", report_path: str = "",
                            session_root=(store.root if session_root is None else session_root),
                            sid=(SS.session_id() if sid is None else sid),
                            roles=("M",))
-    kw: dict = {"project_dir": project_dir, "report_path": report_path}
+    kw: dict = {"project_dir": project_dir, "report_path": report_path, **extra}
     if cap_usd is not None:
         kw["cap_usd"] = cap_usd
     return built.registry.call("conductor.closing", role="M", **kw)
@@ -470,7 +492,7 @@ def test_the_readings_are_recomputed_not_hand_copied(tmp_path):
     key, name = RX.CRITERIA[0]
     _stmt(st, "0002", page_range=_S.PageRange())          # 缺页码 ⇒ 这一条必须红
     code2, out2 = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
-    assert code2 == 0, out2                                # 退出码仍由收工门定
+    assert code2 == 0, out2                                # 退出码仍由 M 的判据定
     assert f"{name}：{_MARKS['fail']}" in out2, out2
     assert "passed（只看上面这几条）＝False" in out2, out2
     assert f"没通过的：{key}" in out2, out2
@@ -543,7 +565,7 @@ def test_the_tool_readings_are_recomputed_not_hand_copied(tmp_path):
     ra = after.data["review_acceptance"]
     assert _criterion_row(ra, key)["state"] == "fail", ra["criteria"]
     assert ra["passed"] is False and key in ra["failed"], ra
-    # 两层刻意不折平：内容级判据红了，收工门那八格照旧（can_close 仍由八格定）
+    # 两层刻意不折平：内容级判据红了，收工门那八格照旧（can_close 由 M 的判据定）
     assert after.data["can_close"] is True, after.data["status"]
     assert after.data["status"] == before.data["status"], (
         "内容级验收把收工门的读数带偏了 —— 两层的入参同源，但判定必须各管各的")
@@ -572,10 +594,16 @@ def test_pretty_auxiliary_readings_cannot_print_a_pass(tmp_path):
                                          created_at="2026-01-01T00:00:00+00:00").to_dict())
     (tmp_path / "out" / "paper" / "main.tex").write_text("改过了\n", encoding="utf-8")
     _seal(tmp_path, st)                                   # 重封锚 ⇒ 锚 consistent
+    # 这一场里有一条没人回答的问题 ⇒ M 的判据是"没达成"（正确分支是停在等待用户）：
+    # 取最后一行，于是这一条把上面夹具那一笔 met=True 顶掉。
+    _m_verdict(tmp_path, met=False, basis="有一条问题还没人回答 ⇒ 停在这里等用户",
+               tasks=({"what": "把这份交付做到能交", "state": "not_done",
+                       "why": "等用户回答 q0009"},
+
+                      ))
 
     code, out = _run(st, report, "--cap-usd", "10.0", "--acceptance-sid", sid)
-    # 退出码由收工门定：这一场里有一条没答的问题，所以收工门的 `user_pending` 也红
-    # （那正是"正确的分支是停在等待用户"的读数）⇒ 1。内容级验收读数的出现与它无关。
+    # 退出码由 M 的判据定：M 判"没达成" ⇒ 1（内容级验收读数的出现与它无关）
     assert code == 1, out
     # 辅助读数确实漂亮
     assert f"{RX.AUXILIARY_SIGNALS[2][1]}＝consistent" in out, out
@@ -680,10 +708,13 @@ def test_the_exit_code_still_comes_only_from_the_closing_gate(tmp_path):
 
     三个方向各跑一次同一个工作区：
 
-    ① 接线跑着、五条全过 ⇒ 收工门 8 格全过 ⇒ 0；
+    ① 接线跑着、五条全过、M 的判据说"达成" ⇒ 0；
     ② 接线摘掉 ⇒ 必须还是 0（接线不参与退出码）；
     ③ 接线跑着、而内容级验收"没查成"（没给 `--acceptance-sid`）⇒ 必须还是 0
        —— "内容级验收没查成"绝不许把退出码从 0 变成 2 或 1。
+
+    新口径（业主 2026-10-09）只改了"谁定退出码"：由 M 的判据定（不再是"八格全过"），
+    "内容级验收不参与退出码"这一条一个字没变。
     """
     st, report, sid = _good_and_sid(tmp_path)
     code_wired, _ = _run(st, report, "--cap-usd", "1.0", "--acceptance-sid", sid)
@@ -698,6 +729,65 @@ def test_the_exit_code_still_comes_only_from_the_closing_gate(tmp_path):
     assert CL.NO_SESSION == "", (
         "`closing.NO_SESSION` 不再是空串 ⇒ 出口传下去的那个『没有会话身份』"
         "会被读成缺省会话（那正是 §58/§63 记过两次的假绿）")
+
+
+# ============================================================ 6. M 的判据：落盘 + 三态退出码
+
+def test_the_exit_code_follows_ms_verdict_three_ways(tmp_path):
+    """退出码跟着 M 的判据 走（业主 2026-10-09：「是否收工不要用机械判据，
+    由 M 制定的目标是否达成为准」）—— 三态各一条：
+
+    - 运行内落过判据、说"达成" ⇒ 0（运行外那一趟读的是运行内那一份：这条路
+      正是 `draft/37` §63 记过的"两个出口读数必须一致"）；
+    - 落过的判据说"没达成" ⇒ 1；
+    - 一行都没落 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。
+
+    为什么"没人判过"必须是 2 而不是 0：0 的含义是"M 判过、可以交"。
+    把"没判过"折成 0 就是本项目最忌的那一类折平（`draft/37` §58/§63 的假绿）。
+    """
+    from agentflow import closing as _CL
+
+    st, report = _good(tmp_path)
+    st2, report2 = _good(tmp_path / "b")
+    st3, report3 = _good(tmp_path / "c")
+    _m_verdict(tmp_path, met=True, basis="M 说达成了")
+    _m_verdict(tmp_path / "b", met=False, basis="M 说还差一件")
+    code_yes, _ = _run(st, report)
+    code_no, out_no = _run(st2, report2)
+    code_none, out_none = _run(st3, report3)
+    assert (code_yes, code_no, code_none) == (0, 1, 2), (code_yes, code_no, code_none)
+    assert "没有提交自己的判据" in out_none, out_none
+    assert "没有提交自己的判据" not in out_no, out_no
+    # 显式入口（人/CI 代述 M 的说法）压过落盘那一份
+    code_flag, _ = _run(st2, report2, "--goal-met")
+    assert code_flag == 0, code_flag
+    assert _CL.read_m_verdict(tmp_path / "b")["count"] == 1, (
+        "命令行那一次不该改写落盘的判据（它只是代述，不是运行内那一次）")
+
+
+def test_ms_verdict_survives_the_run_through_the_tool_exit(tmp_path):
+    """运行内给判据的那一次调用把它落盘 ⇒ 运行外的出口读得到同一份（两个出口一致）。
+
+    这一条钉的是"同一处口径"：判据由 M 在运行内给（`conductor.closing`），
+    落的盘由运行外那趟读（`agentflow closing` 不给显式入参时的回退）。
+    """
+    from agentflow import closing as _CL
+
+    st, report = _good(tmp_path)
+    res = _tool_closing(st, project_dir=str(st.root), report_path=str(report),
+                        cap_usd=1.0, sid="s-verdict", goal="把这份交付做到能交",
+                        goal_met=True, basis="八格与内容级读数都在",
+                        task_list=[{"what": "把交付做完", "state": "done"}])
+    assert res.ok, (res.error, res.meta)
+    assert res.data["can_close"] is True, res.data
+    assert res.data["verdict_written"]["ok"] is True, res.data["verdict_written"]
+    got = _CL.read_m_verdict(st.root)
+    assert got["checked"] and got["count"] == 1, got
+    assert got["verdict"]["met"] is True and got["verdict"]["sid"] == "s-verdict", got
+    # 运行外：不给任何判据开关 ⇒ 读到的就是上面那一份 ⇒ 退出码 0（一致）
+    code, out = _run(st, report)
+    assert code == 0, out
+    assert "M 判" in out, out
 
 
 def test_a_negative_cost_cap_is_a_usage_error_not_a_verdict(tmp_path):

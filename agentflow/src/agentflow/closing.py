@@ -3517,20 +3517,34 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
     """
     rep = ClosingReport()
     tasks = [dict(t) for t in (task_list or ()) if isinstance(t, Mapping)]
-    if goal_met is not None or tasks:
-        rep.m_verdict = {"goal": str(goal or ""),
-                         "met": bool(goal_met) if goal_met is not None else False,
-                         "basis": str(basis or ""), "tasks": tasks,
-                         "counts": {
-                             "done": sum(1 for t in tasks
-                                         if str(t.get("state") or "") == "done"),
-                             "not_done": sum(1 for t in tasks
-                                             if str(t.get("state") or "") == "not_done"),
-                             "cannot": sum(1 for t in tasks
-                                           if str(t.get("state") or "") == "cannot"),
-                             "total": len(tasks)},
-                         "at": S.now_iso()}
     root = session_root if session_root is not None else getattr(store, "root", None)
+    if goal_met is not None or tasks:
+        rep.m_verdict = _m_verdict_payload(goal=goal, met=goal_met, basis=basis,
+                                           tasks=tasks)
+        rep.readings["verdict_source"] = {"where": "这一次调用给的（M 自己在运行内交的）",
+                                          "path": "", "count": 0, "at": rep.m_verdict["at"]}
+    else:
+        # ---- 回退：读落盘的 M 判据（业主 2026-10-09 第 3 句裁定之后的"运行外出口"）
+        #
+        # 为什么必须有这一支：判据由 M 在运行内给（`conductor.closing` 那一步把它
+        # 落盘），而门还有运行外的出口（`agentflow closing`、发布门）。没有这一支，
+        # 运行外那一趟会得出"没人判过"（退出码 2），而运行内 M 明明判过
+        # —— 那正是 `draft/37` §63 记过的"运行内/外部读数不一致"。
+        #
+        # 三态：读不成 ⇒ 如实落 `verdict_source`（`checked=False`），并仍然按
+        # "没有判据"走（2）—— 绝不用一个读不到的东西冒充 M 判过。
+        vroot = Path(project_dir) if str(project_dir or "") else (
+            Path(root) if root is not None else None)
+        if vroot is not None:
+            got = read_m_verdict(vroot)
+            rep.readings["verdict_source"] = {
+                "where": "落盘的 M 判据（`out/review/m-verdicts.jsonl`）",
+                "path": str(got.get("path") or ""), "count": int(got.get("count") or 0),
+                "checked": bool(got.get("checked")),
+                "reason": str(got.get("reason") or ""),
+                "at": str((got.get("verdict") or {}).get("at") or "")}
+            if got.get("checked") and got.get("verdict"):
+                rep.m_verdict = dict(got["verdict"])
     for name in checks:
         if name == "anchor":
             _check_anchor(rep, project_dir, store)
@@ -3558,6 +3572,103 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
         rep.readings["verdict_escalation"] = _escalation_reading(
             root, sid, list(rep.m_verdict.get("tasks") or []))
     return rep
+
+
+#: M 的收工判据落盘的地方（append-only，一行一次判断）。
+#:
+#: 为什么必须有这一格（业主 2026-10-09 第 3 句裁定之后）：判据由 M 在运行内给出
+#: （`conductor.closing` 带着 `goal_met` 的那一次调用），而门还有运行外的出口
+#: （`agentflow closing` 给 CI / 发布门用）。两个出口必须得出同一个结论 ——
+#: `draft/37` §63 记过一次"运行内报 `can_close=true`、外部带 sid 报 `failed=[...]`"
+#: 的假绿，成因就是"运行内那一份判据没有落盘"。
+#:
+#: 所以：M 给判据那一次调用把它落盘（`write_m_verdict`），运行外的出口读它
+#: （`check_closing` 在没有显式入参时的回退，`read_m_verdict` 三态）。
+#: 读侧取最后一行（append-only 的历史留着，人能看到判据是怎么变的）。
+M_VERDICT_FILE: tuple[str, ...] = ("out", "review", "m-verdicts.jsonl")
+
+
+def m_verdicts_path(root: str | Path) -> Path:
+    """M 的收工判据落在哪儿（`<root>/out/review/m-verdicts.jsonl`）。"""
+    return Path(root).joinpath(*M_VERDICT_FILE)
+
+
+def _m_verdict_payload(*, goal: str, met: bool | None, basis: str,
+                       tasks: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """把 M 的自述折成一条判据（`check_closing` 与 `write_m_verdict` 共用一处形状）。"""
+    items = [dict(t) for t in (tasks or ()) if isinstance(t, Mapping)]
+    return {"goal": str(goal or ""),
+            "met": bool(met) if met is not None else False,
+            "basis": str(basis or ""), "tasks": items,
+            "counts": {"done": sum(1 for t in items
+                                   if str(t.get("state") or "") == "done"),
+                       "not_done": sum(1 for t in items
+                                       if str(t.get("state") or "") == "not_done"),
+                       "cannot": sum(1 for t in items
+                                     if str(t.get("state") or "") == "cannot"),
+                       "total": len(items)},
+            "at": S.now_iso()}
+
+
+def write_m_verdict(root: str | Path, *, goal: str = "", met: bool | None = None,
+                    basis: str = "", tasks: Iterable[Mapping[str, Any]] = (),
+                    sid: str = "", who: str = "M") -> tuple[bool, str]:
+    """把 M 这一次的收工判据追加落盘。返回 `(成不成, 为什么)`。
+
+    调用点是运行内那一次 `conductor.closing`（M 自己交判据的那一步）——
+    门本身（`check_closing`）仍然只读：它不写任何东西，只回退读这一份。
+    """
+    from .secretary import append_jsonl          # 唯一的 jsonl 追加口（带锁）
+
+    rec = {"kind": "m_verdict", "who": str(who or "M"), "sid": str(sid or ""),
+           **_m_verdict_payload(goal=goal, met=met, basis=basis, tasks=tasks)}
+    try:
+        path = m_verdicts_path(root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return append_jsonl(path, rec)
+    except Exception as exc:  # noqa: BLE001 —— 落盘失败要说出来（不许当"判过没达成"）
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def read_m_verdict(root: str | Path) -> dict[str, Any]:
+    """读回落盘的 M 判据（三态）：`{"checked","verdict","count","path","reason"}`。
+
+    - 文件没有 / 一行都没落过 ⇒ `checked=True, verdict=None`（"还没判过"，
+      不是"判过没达成"—— 这两件事在退出码上分得很开：2 与 1）；
+    - 有坏行 ⇒ `checked=False` + 理由（不猜一行出来，也不静默跳过当"没判过"）；
+    - 取最后一行（append-only：判据改过几次都留在纸上，取最新那一次）。
+    """
+    path = m_verdicts_path(root)
+    out: dict[str, Any] = {"checked": True, "verdict": None, "count": 0,
+                           "path": str(path), "reason": ""}
+    if not path.is_file():
+        out["reason"] = "还没落过 M 的收工判据（不是『判过、没达成』）"
+        return out
+    rows: list[dict[str, Any]] = []
+    bad: list[str] = []
+    try:
+        for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception as exc:  # noqa: BLE001
+                bad.append(f"第 {i} 行读不出来（{type(exc).__name__}）")
+                continue
+            if isinstance(rec, Mapping) and str(rec.get("kind") or "") == "m_verdict":
+                rows.append(dict(rec))
+    except Exception as exc:  # noqa: BLE001
+        out.update(checked=False, reason=f"判据落盘读不成（{type(exc).__name__}: {exc}）")
+        return out
+    if bad:
+        out.update(checked=False, reason="；".join(bad[:3]))
+        return out
+    out["count"] = len(rows)
+    if rows:
+        out["verdict"] = rows[-1]
+    else:
+        out["reason"] = "这一份里没有 `kind=m_verdict` 的行（不是『判过、没达成』）"
+    return out
 
 
 def tri_state_exit_code(rep: ClosingReport) -> int:
