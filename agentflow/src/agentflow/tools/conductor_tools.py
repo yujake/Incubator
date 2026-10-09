@@ -738,7 +738,9 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
         "note": ("`unfinished` 是**提交了、还没人做**的条数：消费这两条队列的动作是 "
                  "A 的 `run_once` / `run`（检索）与 B 的 `reprocess_once` / `run_reprocess`"
                  "（重抽取）。收工前它应当是 0 —— 有的话要么派活做完，要么在交付说明里"
-                 "逐条写清为什么留着"),
+                 "逐条写清为什么留着。`literature.unprocessed` 是**第三条队列**："
+                 "注册了、还没被消化的文献条数；消费它的动作是 B 的 `run_once` / `run`，"
+                 "而**一次调用只消化一篇**。"),
     }
     for table, key, is_open in (("search_requests", "request_id", _is_open_search),
                                 ("reprocess_requests", "reprocess_id", _is_open_reprocess)):
@@ -755,6 +757,28 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
             "submitted_by": sorted({str(r.get("submitted_by") or "")
                                     for r in open_rows if r.get("submitted_by")}),
         }
+    # 第三条队列（T2 第 23 趟 `t2r` 的整改）：注册了、还没消化的文献。
+    #
+    # 为什么要有这一格：`tables["literature"] = 8` 读不出"其中 7 篇 `processed` 不是 True"。
+    # 真机读数（`projects/p6t-research-from-zero`）：M 只派了 1 次 `B.run_once`
+    # （而 `run_once` 的语义是 `claim()` 领一行、处理完返回 ⇒ 一次一篇），
+    # 命中的恰好是不对口的那一篇（签名/增益图书目）——12 条 `statements` 全是它来的概念，
+    # 而对口的 `lit:0003`《Edge-girth-regular graphs》留在 `processed=False`，
+    # 于是"文献进稿"那一格（`document_literature_citations`）读成 0。
+    # 这件事当时的 `conductor.state` 与收工门都看不出来，与 `D56`（请求队列）
+    # 同一个形态：只有行数、没有"还有几条没人做"。
+    try:
+        lit_rows = [dict(r) for r in store_.rows("literature")]
+    except Exception:  # noqa: BLE001 —— 与上面两条同一条约定：-1 是"没查成"，不是 0
+        out["literature"] = {"rows": -1, "unprocessed": -1, "unprocessed_ids": [],
+                             "unreadable": True}
+    else:
+        pending = [r for r in lit_rows if r.get("processed") is not True]
+        out["literature"] = {
+            "rows": len(lit_rows),
+            "unprocessed": len(pending),
+            "unprocessed_ids": [str(r.get("lit_id") or "") for r in pending[:12]],
+        }
     return out
 
 
@@ -764,7 +788,9 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
     "给主控判断用的眼睛，不带任何建议。"
     "口径（`tasks` 这一格）：`tasks` 台账**全量**，含**顶趟行**"
     "（`role=M` / `action=run` / `called_by=user` —— 用户发起的那一趟，**不是召唤**）；"
-    "串行口径的召唤数在 `conductor.ledger(view=\"stats\")` 的 `started_total`。",
+    "串行口径的召唤数在 `conductor.ledger(view=\"stats\")` 的 `started_total`。"
+    "`queues.literature.unprocessed` 是「注册了、还没被消化的文献条数」"
+    "（消费它的是 B 的 `run_once` / `run`，**一次一篇**）。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),

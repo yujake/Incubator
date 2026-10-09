@@ -735,7 +735,57 @@ def test_state_shows_the_request_queues_backlog(tmp_path: Path):
     assert queues["reprocess_requests"]["rows"] == 0, queues
     assert queues["reprocess_requests"]["unfinished"] == 0, queues
     assert "run_once" in queues["note"], queues
+    # 第三条队列（`t2r` 那一趟的整改）也必须在同一屏里，且 0 条是读数
+    assert queues["literature"]["rows"] == 0, queues
+    assert queues["literature"]["unprocessed"] == 0, queues
+    assert "一次调用只消化一篇" in queues["note"], queues
     del store
+
+
+def test_state_shows_the_unprocessed_literature_backlog(tmp_path: Path):
+    """判据（T2 第 23 趟 `t2r` 的整改）：状态视图要读出"注册了、还没消化的文献"条数。
+
+    为什么需要这一格：`tables["literature"] = 8` 读不出"其中 7 篇 `processed` 不是 True"。
+    真机读数（`projects/p6t-research-from-zero`）：M 只派了 1 次 `B.run_once`
+    （`run_once` 是 `claim()` 领一行 ⇒ 一次一篇），命中的恰好是不对口的那一篇；
+    12 条 `statements` 全是它来的概念，而对口的 `lit:0003`《Edge-girth-regular graphs》
+    留在 `processed=False` ⇒ `document_literature_citations` 读成 0。
+    这件事当时的 `conductor.state` 与收工门都看不出来（与 `D56` 同一个形态）。
+
+    三态在这里都要有读数：有几条未消化 / 一条都没有 / 表读不到（-1，"没查成"≠0）。
+    """
+    store, _c, reg = _wired(tmp_path)
+    with store.tx("literature", actor="agent-A", note="probe") as tx:
+        for lid, processed in (("0000", True), ("0001", False), ("0002", None)):
+            row = {"lit_id": lid, "title": f"paper {lid}", "type": "J", "summary": "s",
+                   "path": None, "processed": processed, "added_at": "2026-10-10T00:00:00+08:00"}
+            if processed is None:
+                row.pop("processed")
+            tx.upsert("literature", row, note="probe")
+
+    queues = reg.call("conductor.state", role="M").data["queues"]["literature"]
+    # 正控：`processed=True` 的那一条不算未消化；缺字段与 False 都算（"没标过"就是没消化）
+    assert queues["rows"] == 3, queues
+    assert queues["unprocessed"] == 2, queues
+    assert queues["unprocessed_ids"] == ["0001", "0002"], queues
+
+    # 负控：全部标成已消化 ⇒ 未消化必须是 0（不是"没查成"）
+    with store.tx("literature", actor="agent-B", note="probe") as tx:
+        for lid in ("0001", "0002"):
+            tx.upsert("literature", {"lit_id": lid, "title": f"paper {lid}", "type": "J",
+                                     "summary": "s", "path": None, "processed": True,
+                                     "added_at": "2026-10-10T00:00:00+08:00"}, note="probe")
+    after = reg.call("conductor.state", role="M").data["queues"]["literature"]
+    assert after["unprocessed"] == 0 and after["unprocessed_ids"] == [], after
+
+    # 反真空：表读不到时是 -1 + unreadable（不许把"没查成"读成"0 条待消化"）
+    class _Blind:
+        def rows(self, table):  # noqa: ANN001 - 替身
+            raise RuntimeError("表读不到")
+
+    blind = CT._queue_backlog(_Blind())["literature"]
+    assert blind["unprocessed"] == -1 and blind["unreadable"] is True, blind
+    assert blind["rows"] == -1, blind
 
 
 def test_ledger_views(tmp_path: Path):
