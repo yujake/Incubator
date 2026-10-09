@@ -998,6 +998,12 @@ STATEMENT_ORIGINS = ("external_lit", "own_result")
 #:   disputed   —— 有争议、尚未裁决（不许当依据用，见 verify 的不变量）
 #:   refuted    —— 被证否（可能是我们证否的，也可能是文献本身错了）
 #:   superseded —— 被后来的一条取代（例如我们把它重写成了更强的形式）
+#: ⚠️ 2026-10-09 的一处待裁：业主裁定「抽不到定义的概念就让A去网上搜，写入时定义内容
+#: 留空，等A返回后写入」——"行已经写了、内容还没到"这一档今天没有 status 取值
+#: （下面那条边界注释逐字写着"为'待补'加一个 status 取值……那是人裁的事"）。
+#: 所以本批不动这一格：迁移/写入侧的"待补"先落成标记（`quote_reason` 里的
+#: `concept:pending_search` / `concept:self_authored`）+ 读数，等业主对"要不要加取值"点头
+#: 再加（题面见 `draft/93·续` D12）。取证：`src/agentflow/schema.py` 那一条边界注释。
 STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded")
 
 #: 命题台账里不许再被当作依据的状态。`verify` 的不变量读的就是这一份名单 ——
