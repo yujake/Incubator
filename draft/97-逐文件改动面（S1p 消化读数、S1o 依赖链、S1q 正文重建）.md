@@ -937,6 +937,78 @@ if any(T.normalize(a) == T.normalize(self.label) for a in self.aliases):
   名字是通用数学名词 ⇒ 迁移时落 `pending_search` 标记（**不编定义**），
   并在读数里点名 94 条待补（这 94 条正好就是 A 的第一批活）。
 
+## §15 逐文件改动面·**修订版**（把 D1/D2/D6–D10′ 与 14.11/14.13 全部并进来；§13 与本节冲突处以本节为准）
+
+### 15.0 一张总表（谁动、动什么、依据）
+
+| 文件 | 动什么 | 依据 |
+|---|---|---|
+| `schema.py`（禁改区） | `Statement` +`aliases:list[str]`；`Dependency` +`path_group:int=1` +`source_stmt_id:str=""`；两者的校验；`TABLES` 去 `concepts`；`SCHEMA_VERSION 1→2`；快照版本校验改成"接受 ≤ 当前" | §14.4d / §13.1 / §14.1，依据 E1–E4 |
+| `store.py` | `rebuild` 折 `concepts→statements`（定义待补标记、`normalized_name` 丢弃、`merged_into` 只报读数）；概念号走**同一分配器**重发；`relations.concept_ids` 同步改号 + 映射落账；**v1→v2 读兼容** | §13.2 / §14.1 / §14.4b，依据 E4/E5 |
+| `textutil.py` | **零改动**（`normalize` 是查重的唯一实现，只被引用） | §14.4c，`dedup.py:295` / `interactions.py:870-879` |
+| `tools/doc_tools.py` | `register_dependency(..., path_group=1, source_stmt_id=None)` | §13.3，依据 E6 |
+| `secretary.py` | 新 `wash_statement` / `record_statement`（B 的写入代理：洗格式/拿号/查重含别名/扫引用落边/定义待补） | §11.1 / §14.11 / §14.13，依据 E8 |
+| `agent_b/*` + `specs/b.py` | B 的输入契约 = **定理内容 + 证明过程**；工具留着但**执行点改道**给秘书（乙） | §14.11 |
+| `evidencebits.py` | `derive_grade` 对 `kind=="concept"` **短路**（概念不参与等级）；+`bit_table_map` | §14.5，依据 E7 |
+| `verify.py`（禁改区） | 新不变量：`bits` 里 `verified` 的位必须在对应表查得到（`proof` 那一档在 B 维护的表里查到） | §13.4，依据 E7 |
+| `specs/c.py` + `agent_c/proof_chain.py` + `agent_c/core.py` | 新动作 + 组语义 + **别名解析**（`matched_by`） | §12.2 / §14.4d，依据 E10 |
+| `closing.py` | D9（第八格按路径取最新登记）+ D6（上报载体四档含 `report`） | §13.6，依据 E9 |
+| `agent_loop.py` + `cli.py` + WebUI 装配 | D8：`registry_factory(face)` 接上 + 判据"检查基准 == 执行基准" | §13.6 / §14.10 |
+| **`projects.py` / `runflow.py`** | **冲突！见 §15.2（新待裁 D11）** | 硬约束 vs 并表 |
+
+### 15.1 秘书的 `record_statement`（这是本批的核心，伪代码）
+
+```python
+# secretary.py —— B 的写入代理（业主 14.11 乙：B 的写工具留着，执行点改道到这里）
+def record_statement(self, *, role: str, theorem_text: str, proof_text: str,
+                     origin: str = "own_result", source: Mapping | None = None) -> dict:
+    """B 只交两样：**定理内容** + **证明过程**。别的一概由秘书推。
+
+    四件活（每一件都有同族先例，see E8）：
+      ① 洗格式：键名归一 / 去空白 / 顶层折叠（同 `wash_delegation` 的纪律：内容一字不动）
+      ② 拿编号：`tx.alloc_id("statements")`（E5：唯一分配器 ⇒ 结构上不会撞号）
+      ③ 查重：`T.normalize(theorem_text)` 与台账里 `normalize(label)` **或任一 `normalize(aliases[i])`**
+             相同 ⇒ 报"重复"读数、**不新建行**（D10′：别名也能命中）
+      ④ 改表：一笔事务写 `statements`（+ 若是 concept：定义内容 / 待补标记）+ `dependencies`
+    """
+    # 依赖 = 证明过程里扫出的引用（业主："记录定理和证明时同样把依赖写清"）
+    refs = scan_refs(proof_text)                 # 前缀表 = schema.CITATION_PREFIXES（唯一声明面）
+    groups = split_path_groups(proof_text)       # 多段可选证明 ⇒ path_group=1,2,…；无标记 ⇒ 全归 1
+    edges = [{"used_by": f"stmt:{new_id}", "kind": kind_of(r), "ref": r,
+              "path_group": g, "status": "closed" if exists(r) else "dangling"} for g in groups for r in g]
+    # 不存在的号 ⇒ 那条边 `dangling` + 点名，**不整笔拒**（§14.11 判据）
+    # 一个引用都没有 ⇒ deps_state="none_in_proof"；扫不成 ⇒ deps_state="unknown"（严格分开）
+```
+
+### 15.2 **新待裁 D11：并表与"不动 `projects.py`/`runflow.py`"这条硬约束冲突**
+
+现场：`projects.py` 与 `runflow.py` 都提到 `concepts` 表（`projects.py` 在 16 个受影响文件里），
+而 goal 的硬约束写着"不动 `projects.py` / `runflow.py`"
+⇒ **并表之后这两个文件里的读会读一张不存在的表**。三条候选：
+
+- **甲**：放宽硬约束，改那两处读（一处口径：读 `statements` 且 `kind="concept"`）；
+- **乙（建议）**：**保留 `concepts` 作为"派生只读视图"** —— `TABLES` 里仍在，但
+  由 `statements` 现算（`store.rows("concepts")` 走一个派生层），**写入侧一律不认**
+  （写入只走 `statements`）。于是 `projects.py`/`runflow.py` **一个字不用改**，
+  而"真并进"在**写入侧**成立（唯一真相 = `statements`）；
+- **丙**：两处都做（乙的读兼容 + 甲的两处读改写），代价最大但最干净。
+
+**建议乙**：它同时满足"不动那两个文件"与"写入侧只有一个落点"；
+`SCHEMA_VERSION` 仍抬到 2（写入侧形状变了），而读侧多一层派生。
+
+### 15.3 逐文件判据（修订版，红/绿成对）
+
+| 批次 | 判据（正控 / 负控 / 反真空） |
+|---|---|
+| **S1r-schema** | 正控：`aliases` 落得进任意 kind；`path_group=1` 的历史行照过。负控：别名=自身 label / 空串 / `path_group=0` / 被依赖端两个 ⇒ 各自拒。反真空：`SCHEMA_VERSION==2`、`TABLES` 无 `concepts`（或按 D11 乙为"派生视图"）、`dependencies` 加字段后既有行逐字不变 |
+| **S1r-fold** | 正控：2233 条逐条对得上（`temp/_s1r_rehearsal.py` 复算）；概念号走同一分配器、`relations.concept_ids` 改号映射在盘上。负控：迁移行 `proof_text` 出现"证明/Proof"字样 ⇒ 红（不许编）。反真空：v1 快照在 v2 代码下读得成；定义空行必须带 `pending_search` |
+| **S1r-readers** | 正控：16 个文件的读侧逐处走通（`pytest` 全量）；负控：任一读侧还写着 `rows("concepts")` 且**没有**派生层 ⇒ 红 |
+| **S1o** | §12.3 四条 + `matched_by`（别名命中）+ 五元位映射（`bits` 里 `verified` 必须在对应表查到）+ 协作链六步载体 |
+| **S1q** | §9.5 的映射判据 + 论文里 `doc:` 一律拒 |
+| **D8** | 检查基准 == 执行基准；**每实例注册表的构造次数是读数** |
+| **D9** | 框架幂等重写 ⇒ `pass`（+warning，`changed_rows` 仍列出）；产物真被删 ⇒ 仍 `fail` |
+
+
 
 
 
