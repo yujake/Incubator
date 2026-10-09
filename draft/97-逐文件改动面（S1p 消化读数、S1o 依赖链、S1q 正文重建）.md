@@ -671,6 +671,35 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 从"改老表行"改成"改新标准行"（墓碑 `merged_into` ⇒ `status="superseded"` + 理由），
 `agentflow repair --related` 那一档则整体退役（并表之后那件事由 `relations` 表管）。
 
+#### 13.2g 落刀的**预检清单**（2026-10-09，机器可核）
+
+落刀那一笔实测会一次碰到 **25 个源文件 + 16 个测试文件**（脚本
+`temp/_s1r_flip_inventory.py`，报告 `temp/_s1r_flip_inventory.txt`；2026-10-09 现算）：
+
+| 模式 | `src/agentflow` | `tests` |
+|---|---|---|
+| `store.rows("concepts")`（无锁快照读） | 1 处 / 1 文件（过渡层自己） | 18 处 / 7 文件 |
+| `tx.rows("concepts")`（事务内读） | 7 处 / 5 文件 | 3 处 / 1 文件 |
+| `upsert("concepts", …)`（写老表） | 19 处 / 9 文件 | 32 处 / 15 文件 |
+| `.tx(… "concepts" …)`（事务声明） | 13 处 / 10 文件 | 45 处 / 16 文件 |
+
+**漏掉任何一处都不会在那一刻报错**（读老表的地方拿到受控错或经视图拿到空列表，
+写老表的地方静默失败）—— 而"我记得要改哪些"不是判据。所以把这四张表**登记**进
+`tests/test_the_flip_inventory.py`：判据用同一套正则现算并与登记逐文件逐处比对，
+任何新增/删除的读点写点都必须在**同一提交**里改这张表 ⇒ 搬运过程单调收缩、可核对。
+
+顺手澄清两处**看着像越权、其实是夹具**的写点（现算核对过，不是猜）：
+`agent_h/core.py` 的两处 `upsert("concepts")` 在 `__main__` 的**自检夹具**里
+（H 的只读权限面没被破）；`agent_c/__main__.py`（4 处）、`faculty_checks.py`（2 处）、
+`pipeline.py`、`demo.py` 同理。另外 `tests/` 里有六个文件是**拿 `concepts` 当通用被测表**
+（`test_store_alloc_guard` / `test_store_concurrency` / `test_store_counters_commit` /
+`test_store_delete_events` / `test_tx_mark_dirty` / `test_rebuild`）—— 落刀时它们要换一张表
+或改成"表已删"的负控，与"测概念语义的测试"分开处理。
+
+**落刀完成时这张表该长什么样**（目标，写在判据的 docstring 里免得只靠记忆）：
+四个模式在 `src/agentflow` 里全部为 0，例外只有 `conceptrows.py`（过渡层的
+`LEGACY_TABLE`）、`migrate_concepts.py` / `store.py`（迁移与 v1→v2 兼容）。
+
 #### 13.2c 过渡层（`conceptrows`）落地与真盘读数
 
 并表要动磁盘格式、且不可逆 ⇒ 中间加一层**唯一读写口**（`draft/97` §10.3 的"两处同号并合"），
