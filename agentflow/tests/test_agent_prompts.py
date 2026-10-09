@@ -1381,18 +1381,25 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p54`（2026-10-09，S1p）：M 的受控档位清单加 `reviewed_then_digested_rows`
 #: （实现在 `closing.py`；业主：「D 的手稿过审后是否被 B 消化或研究成果逐条入库。
 #: 前置条件具备了，C 才能在里面找依赖链」）⇒ 只有 M 那一格变。
-_FROZEN_PROMPT_VERSION = "p54"
+#: `p55`（2026-10-09，S1o 前半的补 `ec70789`）：`specs/c.py` 新增动作 `C.proof_chain`
+#: —— 那一轮只加了动作，没有同轮更新这张表与 `PROMPT_VERSION`（判据当场抓出来：
+#: "段变了（['B','C','D','F','M']）而 PROMPT_VERSION 还是 'p54'"）。这一段补上：
+#: 伙伴表里逐条列着"这个伙伴能调用的动作" ⇒ 能召唤 C 的角色那一行换字。
+#: `ALLOWED_EDGES` 里能召唤 C 的是 B / D / F / M（A→[B]、E→[B,D]、G→[A,D,E,F]、
+#: H→[A,E,G]、V→[F] 都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，
+#: 其余五格（A/E/G/H/V）逐字不动 —— 换几格本身就是"谁看得见 C"的读数。
+_FROZEN_PROMPT_VERSION = "p55"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",
-    "B": "cba03f853d8226512f36f5e9ac7257843b27f983fb65b9b27c69c57f3fe4e28a",
-    "C": "32d03fdd302eba53cc737d45a6658900ca9f86c39722ff1691c7098f79150b55",
-    "D": "486c1ca219ded6017dd098790a3a3552317394d1b36724427106dd1ace61c775",
+    "B": "ca40323d829da25b9a13b2c8322ea953d4520845343b801fedc74ac09129ab3b",
+    "C": "24695fbffce9c826a7524aaa1f557a5609e6a62f85d6e894ae80d2abbe9ead66",
+    "D": "90897ef41a8fc620d87a16e47984adfb5053ea753bcb35a5bef862556ae4ca4d",
     "E": "7df2627677772e8447b9db4a7ca94394d910c2132ae2daf441300e2b91e9e013",
-    "F": "46db3b0ad4bda86b624aec5821472080fac5ea6e7bdc37d902f14ac0164701b8",
+    "F": "a2fa23c0748825f52dfa2524113882ddd5eabf5a9e610b9fd8dc218f1a73cca8",
     "G": "b70c63c723843f5484c5ddea42f4f47be0523217ba0918c440d067fcd2b7c436",
     "H": "90bf5f20175f9bba118884e4bedcc848bc81c4ef3847e17ff16dd3c6c639f865",
     "V": "d05ce8da7181e87c981d21b116de04f1f5cc6b7b4c535803f49205fd350aa093",
-    "M": "4a495b08c91728c56384d18f79c7ae877db68ae44f1318e46c22b4aa412ec399",
+    "M": "20232fdb1e852b27a43133ec17e3679e15bb5bc7f8e2ae968426767ee2a3fe6e",
 }
 
 

@@ -389,14 +389,18 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（2026-10-06 加角色 V 的三条动作之后）：
-    59 个动作 = 21 compared + 38 unmatched + 0 ambiguous
+    实测（2026-10-09 加 `C.proof_chain` 之后，业主 2026-10-09 的"最短依赖链"那一条）：
+    60 个动作 = 21 compared + 39 unmatched + 0 ambiguous。
+    `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]`
+    里对不上工具组 ⇒ 进 `unmatched`，并逐条登记在 `_KNOWN_UNMATCHED_ACTIONS`。
+    此前各次（数字逐次可复算，每次只增不改）：
+    2026-10-06 加角色 V 的三条动作之后 59 = 21 + 38 + 0
     （V 的三条动作全部对上：`verify.verify_proof` / `verify.list_verifications` /
     `verify.read_proof` —— 工具名最后一段就是 `handler_name`，
-    而 `_TOOL_GROUPS_BY_ROLE["V"]` 只登记了 `verify` 一组。
-    此前 2026-10-03 加 `G.paper_package` 之后是 55 = 18 + 37 + 0；
-    （2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后是 53 = 18 + 35 + 0；
-    2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
+    而 `_TOOL_GROUPS_BY_ROLE["V"]` 只登记了 `verify` 一组）；
+    2026-10-03 加 `G.paper_package` 之后 55 = 18 + 37 + 0；
+    2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后 53 = 18 + 35 + 0；
+    2026-09-30 加 `A.search_literature` 之后 51 = 17 + 34 + 0。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
     于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。
     本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。

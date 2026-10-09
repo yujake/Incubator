@@ -109,7 +109,13 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p50`（2026-10-09，业主三句裁定）：收工由自己判（被派的活做完没有；M 自列任务列表，
 #: 收工时交 `task_list`/`goal_met`）、干不了就上报父 / M 上报用户、机器八格是读数不是判决。
 #: 落在共享的循环协议上 ⇒ 十格全部换值。
-PROMPT_VERSION = "p54"
+#: `p53`/`p54` 见 `tests/test_agent_prompts.py` 那张冻结表的注（都是 M 那一格）。
+#: `p55`（2026-10-09，S1o 前半的补）：`specs/c.py` 新增动作 `C.proof_chain`，而伙伴表
+#: 里逐条列着"这个伙伴能调用的动作" ⇒ 凡是能召唤 C 的角色，那一行都换了字。
+#: 能召唤 C 的是 B / D / F / M（`ALLOWED_EDGES`：A→[B]、E→[B,D]、G→[A,D,E,F]、
+#: H→[A,E,G]、V→[F] 都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，其余五格
+#: （A/E/G/H/V）逐字不动 —— 换几格本身就是"谁看得见 C"的读数。
+PROMPT_VERSION = "p55"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

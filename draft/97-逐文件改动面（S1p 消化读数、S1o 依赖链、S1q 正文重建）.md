@@ -706,6 +706,25 @@ class AgentC(..., _StructuralDuplicates, _ProofChain, _Handle, _Core): ...
 - **依据**：E10。
 - **判据**：§12.3 那四条（`best_group` / 单组环不牵连 / 跨组去重 / `path_group` 读不成 ⇒ `checked=False`）。
 
+#### 13.5b 加一条动作的连带面（收尾全量才露出来的八条红，已归位）
+
+`ec70789`（S1o 前半，加 `C.proof_chain`）那一轮只跑了目标文件 ⇒ 收尾全量一跑露出
+**8 条跨契约/文档的红**，全部是那一轮欠下的。记在这里，因为"加一条动作要连带改什么"
+是下次还会踩的地方：
+
+| 红 | 根因 | 归位 |
+|---|---|---|
+| `test_doc_code_consistency` ×2 | 动作总数是**手抄**在 `DEVELOPMENT.md`（两行）与 `docs/ROLE-SPECS.md`（§0.7 标题、§M.4.1 标题） | 59 → **60** |
+| `test_role_specs_action_table` ×3 | §0.7 与 §M.4.1 的 **C 那一行**写 9 条动作 | 9 → **10**（加 `proof_chain`） |
+| `test_r4_roles_surface` | `capabilities.py` 的对账那一段手抄"59 = 21 + 38 + 0" | **60 = 21 + 39 + 0**（`C.proof_chain` 与 C 其余八条同族：`handler_name` 对不上工具组 ⇒ `unmatched`） |
+| `test_r5_orchestration_cost` | `proof_chain.py` docstring 引用了不存在的 `_is_root` | → `_DepGraph.is_root` |
+| `test_agent_prompts`（版本随段前进） | **伙伴表**里逐条列着"这个伙伴能调用的动作" ⇒ 加 C 的动作会改**别的角色**的提示词 | `PROMPT_VERSION` p54 → **p55** + 冻结表重算 |
+
+提示词那一条的读数最有信息量：`ALLOWED_EDGES` 里能召唤 C 的只有 B / D / F / M
+⇒ 实测换值**五格**（C 自己 + 那四个），其余五格（A/E/G/H/V）逐字不动 ——
+"换几格"本身就是"谁看得见 C"的机器读数。这也说明：**声明面的改动会横穿到别人的提示词**，
+只跑目标文件看不见（`draft/95` §4 风险表里"横跨契约/文档的红会连续几批看不见"的实例）。
+
 ### 13.6 `closing.py`（D6 + D9）与 `agent_loop.py`/`cli.py`/`webui`（D8）
 
 ```python
