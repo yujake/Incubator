@@ -954,7 +954,7 @@ if any(T.normalize(a) == T.normalize(self.label) for a in self.aliases):
 | `specs/c.py` + `agent_c/proof_chain.py` + `agent_c/core.py` | 新动作 + 组语义 + **别名解析**（`matched_by`） | §12.2 / §14.4d，依据 E10 |
 | `closing.py` | D9（第八格按路径取最新登记）+ D6（上报载体四档含 `report`） | §13.6，依据 E9 |
 | `agent_loop.py` + `cli.py` + WebUI 装配 | D8：`registry_factory(face)` 接上 + 判据"检查基准 == 执行基准" | §13.6 / §14.10 |
-| **`projects.py` / `runflow.py`** | **冲突！见 §15.2（新待裁 D11）** | 硬约束 vs 并表 |
+| **`projects.py` / `runflow.py`** | **并干净（D11 结案 = 甲）**：两处 `concepts` 读改成 `statements` + `kind="concept"`，与另外 14 个文件同一处口径；**硬约束里"不动这两个文件"按业主 2026-10-09 裁定作废** | §15.2 |
 
 ### 15.1 秘书的 `record_statement`（这是本批的核心，伪代码）
 
@@ -980,21 +980,20 @@ def record_statement(self, *, role: str, theorem_text: str, proof_text: str,
     # 一个引用都没有 ⇒ deps_state="none_in_proof"；扫不成 ⇒ deps_state="unknown"（严格分开）
 ```
 
-### 15.2 **新待裁 D11：并表与"不动 `projects.py`/`runflow.py`"这条硬约束冲突**
+### 15.2 **D11 结案：并干净，`projects.py` / `runflow.py` 的读侧统一成新标准**（业主 2026-10-09）
 
-现场：`projects.py` 与 `runflow.py` 都提到 `concepts` 表（`projects.py` 在 16 个受影响文件里），
-而 goal 的硬约束写着"不动 `projects.py` / `runflow.py`"
-⇒ **并表之后这两个文件里的读会读一张不存在的表**。三条候选：
+业主逐字：「并表了就并干净，把那两个文件的口径统一成新标准」⇒ 走**甲**，**不做派生视图**：
 
-- **甲**：放宽硬约束，改那两处读（一处口径：读 `statements` 且 `kind="concept"`）；
-- **乙（建议）**：**保留 `concepts` 作为"派生只读视图"** —— `TABLES` 里仍在，但
-  由 `statements` 现算（`store.rows("concepts")` 走一个派生层），**写入侧一律不认**
-  （写入只走 `statements`）。于是 `projects.py`/`runflow.py` **一个字不用改**，
-  而"真并进"在**写入侧**成立（唯一真相 = `statements`）；
-- **丙**：两处都做（乙的读兼容 + 甲的两处读改写），代价最大但最干净。
+- `TABLES` 里**真删** `concepts`（不留兼容壳）；`store.rows("concepts")` 在 v2 下
+  如实报"没有这张表"（**受控报错**，不是静默返回空 —— 三态：`表没了` ≠ `表里没行`）；
+- `projects.py` / `runflow.py` 里那两处读改成**新标准**（读 `statements` 且 `kind="concept"`），
+  与另外 14 个文件**同一处口径**（不各写一份）；
+- **硬约束随之更新**：goal 里"不动 `projects.py` / `runflow.py`"这一条**按本轮裁定作废**
+  （这两处改动属"并表"这一笔，仍受 FC-27 的人审约束）；
+- **判据**：`grep -r '"concepts"' src/agentflow` 只剩**迁移/文档**里的提及（读侧一处不剩）；
+  `store.rows("concepts")` 报受控错；16 个文件全部走通（全量 pytest）；
+  **反真空**：`TABLES` 里既没有 `concepts`、也没有偷偷留下的"第二张表"。
 
-**建议乙**：它同时满足"不动那两个文件"与"写入侧只有一个落点"；
-`SCHEMA_VERSION` 仍抬到 2（写入侧形状变了），而读侧多一层派生。
 
 ### 15.3 逐文件判据（修订版，红/绿成对）
 
@@ -1030,7 +1029,7 @@ M 只在"父也办不了"时被惊动（这一改动并入 S1o 那批，判据�
 |---|---|
 | **S1r-schema** | 正控：`aliases` 落得进任意 kind；`path_group=1` 的历史行照过。负控：别名=自身 label / 空串 / `path_group=0` / 被依赖端两个 ⇒ 各自拒。反真空：`SCHEMA_VERSION==2`、`TABLES` 无 `concepts`（或按 D11 乙为"派生视图"）、`dependencies` 加字段后既有行逐字不变 |
 | **S1r-fold** | 正控：2233 条逐条对得上（`temp/_s1r_rehearsal.py` 复算）；概念号走同一分配器、`relations.concept_ids` 改号映射在盘上。负控：迁移行 `proof_text` 出现"证明/Proof"字样 ⇒ 红（不许编）。反真空：v1 快照在 v2 代码下读得成；定义空行必须带 `pending_search` |
-| **S1r-readers** | 正控：16 个文件的读侧逐处走通（`pytest` 全量）；负控：任一读侧还写着 `rows("concepts")` 且**没有**派生层 ⇒ 红 |
+| **S1r-readers** | 正控：16 个文件的读侧逐处走通（`pytest` 全量）；**`TABLES` 里没有 `concepts`、`store.rows("concepts")` 报受控错**（表没了 ≠ 表里没行）；`grep '"concepts"'` 只剩迁移与文档提及。负控：任一读侧还写着 `rows("concepts")`（或偷偷留第二张表）⇒ 红 |
 | **S1o** | §12.3 四条 + `matched_by`（别名命中）+ 五元位映射（`bits` 里 `verified` 必须在对应表查到）+ 协作链六步载体 |
 | **S1q** | §9.5 的映射判据 + 论文里 `doc:` 一律拒 |
 | **D8** | 检查基准 == 执行基准；**每实例注册表的构造次数是读数** |
