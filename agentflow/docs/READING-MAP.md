@@ -198,6 +198,7 @@
 | `reviewaccept.py` | 审稿场景的**内容级**验收（`draft/37` §17.3）：报告九节且每栏有读数 / 定理台账每条有完整假设与出处页码 / 三态分支落盘可查 / 在成本上限内 / 每跳留下可读输入。**判据与辅助读数分栏** —— `sha`/页数/锚/行数那五种"容易拿到"的读数照原样给出，但**一个都不参与 `passed`** |
 | `migrate_concepts.py` | `concepts` 并进 `statements` 的折叠内核与**迁移计划**（`draft/97` §10/§14/§15.2）：`plan_migration`（计划 = 折叠 + 关系改号 + 逐条落账 + 边界读数，真跑的那一笔照抄它）、`counter_alloc`（确定性发号替身，让预演与真跑的号逐条对得上）、`ledger_lines`（改号台账的行形状：`out/` 下那份 `migrate-map` 记录）、`fold_concepts` / `remap_concept_ids`（内核：概念号走同一分配器重发、定义待补标记、别名带过）。纯函数，不碰盘 |
 | `conceptrows.py` | 并表**过渡期**概念行的唯一读写口（`draft/97` §10.3）：写的时候新标准（`statements`）先写、老表（`concepts`）照旧镜像且**两处同号**；读的时候合成一个视图（新标准优先，逐行标 `via="statements"/"legacy"`）；`legacy_present` 三态（表已退役而老文件还在 ⇒ `stale_file` 点名）；四个计数分开给（`merged` / `legacy_only` / `definition_only_in_legacy` / `statements`）—— 有了它，读侧可以一个一个搬到新标准，而"两边不同步"永远看得见 |
+| `paperledger.py` | S1q **正文重建**（`draft/97` §9.5 + §16.1）：台账里的定理搬进论文正文时，逐字（①）、重写论文号（②）、带 `stmt:` 引用（③）、映射落 `dependencies`（④，字段组合照 §9.5 —— 只挂**手稿**那一端，"四选一"是硬闸），以及 `check_paper_ledger` 的五条判据（逐字 / 引用在 / 映射唯一 / **两个方向都判**：正文有而映射缺、映射有而正文没有、`\ref` 悬空 / 论文里不许引 `doc:`）。正文排版仍归人/模型 —— 这一层只判"搬进来的对不对得上台账" |
 
 ### 第 7 层 · 质量与产物面
 

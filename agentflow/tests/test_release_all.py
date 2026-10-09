@@ -2546,6 +2546,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "reviewaccept.py": "审稿场景的内容级验收（`draft/37` §17.3）：五条内容级判据（定理台账每条有完整假设与出处页码 / 三态分支落盘 / 成本上限 / 每跳可读输入 / 附件诚实）与五种**不许当通过**的辅助读数（sha/页数/锚/任务数/行数）分栏给出；`passed` 只看前者（条数口径：`len(reviewaccept.CRITERIA)==5`、`len(reviewaccept.AUXILIARY_SIGNALS)==5`，2026-10-07 现算复核；此前这一串的第一项写的是已被替换掉的『报告每栏有读数』）",
     "migrate_concepts.py": "`concepts` 并进 `statements` 的折叠内核（纯函数，S1r）：概念号走同一分配器重发、定义待补标记、别名带过、`relations.concept_ids` 改号逐条落账（`draft/97` §10/§14）",
     "conceptrows.py": "并表过渡期概念行的唯一读写口（S1r）：写的时候新标准先写、老表照旧镜像（两处同号），读的时候合成一个视图（新标准优先，逐行标 via），legacy_present 三态（表退役而文件还在 ⇒ stale_file 点名）+ 四个分开的计数（merged / legacy_only / definition_only_in_legacy）—— 让读侧可以一个一个搬，而两边不同步这件事永远看得见（draft/97 §10.3）",
+    "paperledger.py": "S1q 正文重建：定理库取原文逐字搬（①）、论文号重写（②）、`stmt:` 引用（③）、映射落 `dependencies`（④）与五条判据（逐字 / 引用在 / 映射唯一 / 两个方向都不许多余或悬空 / 论文里不许引 `doc:`）—— 检查器是唯一实现，正文排版仍归人/模型（draft/97 §9.5 + §16.1）",
     "store.py": "共享存储：锁、原子写、事务、事件日志、ID 分配、重建",
     "textutil.py": "文本规范化、相似度、slug、页码解析",
     "tokenmeter.py": "FC-19：token / 花销预算（硬约束，重试也计入）",
