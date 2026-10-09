@@ -104,6 +104,13 @@ RELAY_REFUSALS: frozenset[str] = frozenset({"forbidden_edge", "depth_exceeded"})
 #: 代唤申请的留言标题（机器可识别的那一位；改它要同时改提示词里的同一句）。
 RELAY_SUBJECT = "请代唤"
 
+#: 定义待补那件事的向上报文标题（`draft/97` §15.4 的①档：问直接父）。
+#:
+#: 为什么与 `RELAY_SUBJECT` 分开：那一条是"我要做的事被策略拒了，请父替我召唤"，
+#: 这一条是"我缺一条定义，请父就地给我"。收件人同一套（`_relay_recipient`），
+#: 但载荷与事件种类不同 —— 折成同一个标题，审计就分不出"这一次到底是哪种请求"。
+DEFINITION_ASK_SUBJECT = "定义待补：请就地给出"
+
 #: 每一步最后读到的那段输出契约（`draft/28` §195）。
 #:
 #: 为什么要在最后一行重述一遍：系统提示词有 6k+ token，循环协议埋在中间；
@@ -3308,6 +3315,17 @@ class AgentLoop:
                "error": res.error or "", "meta": dict(res.meta or {})}
         if aliased_from:
             out["aliased_from"] = aliased_from
+        # `draft/97` §15.4 的载体那一半：工具把"哪几条定义待补"报回来 ⇒ 这一步就地
+        # 向直接父发一条报文（父通常就是 A，原文在它手里）。不这样做的话，"定义待补"
+        # 只是台账上的一个状态，而 §14.13 的正控要求"A 那边真的有人被找"。
+        pending_defs = (res.data or {}).get("pending_definitions") if isinstance(res.data, dict) else None
+        if pending_defs:
+            try:
+                ask = self.ask_parent_for_definitions(pending_defs)
+            except Exception as exc:  # noqa: BLE001 —— 报文发不出去也要在读数里看得见
+                ask = {"checked": False, "reason": f"发报文时异常（{type(exc).__name__}: {exc}）"}
+            out["definition_ask"] = ask
+            out["meta"]["definition_ask"] = dict(ask)
         return out
 
     def _surface_refusal(self, name: str, args: Mapping[str, Any]) -> str:
@@ -3526,6 +3544,75 @@ class AgentLoop:
                 "problem": problem,
                 "note": (f"越权的边不会因为重试而成立 ⇒ 已向 {to_role} 申请代唤（{whose}）；"
                          "不要把这条申请当成'对方已经在做'。")}
+
+    def ask_parent_for_definitions(self, pending: Sequence[Mapping[str, Any]], *,
+                                   escalate: bool = False, stuck: str = "") -> dict[str, Any]:
+        """定义抽不到时的向上报文（`draft/97` §15.4 的载体那一半）。
+
+        业主逐字：
+
+        > 「最常见的定义不明极可能是A查论文要B消化时遇到生僻定义，这时和父代理A交流即可」
+
+        ⇒ 补法优先级定死：①问直接父（父通常就是 A，原文在它手里，就地能给）→
+        ②A 上网搜（`pending_search`）→ ③B 自撰（`self_authored`，只对基本概念）。
+        这一格做的是①，以及"父也办不了 ⇒ 才向上爬到 M，并逐级留痕"（`escalate=True`
+        + `stuck` 写明哪一级卡住、为什么）。它不替父做判断：父办不办得了由父自己说，
+        所以"爬上去"这一档必须由调用方显式传，而不是这里猜。
+
+        三态（读的人要能分辨"没问"与"问了"）：
+
+        | 结局 | 返回 |
+        |---|---|
+        | 没东西可问（`pending` 空） | `{"checked": False, "reason": "没有待补定义 ⇒ 没有发报文"}`（一条留言都不落） |
+        | 报文落了 | `{"checked": True, "to": …, "message_id": …, "ask_why": …}` |
+        | 落不成（收件人写不进去） | `checked=True` + `problem`：报文那一格没成要说出来，不许当成已发出 |
+        """
+        items = [dict(p) for p in (pending or []) if isinstance(p, Mapping)]
+        if not items:
+            return {"checked": False, "reason": "没有待补定义 ⇒ 没有发报文", "to": "",
+                    "message_id": "", "ask_why": "", "concepts": []}
+        if escalate:
+            # 爬上去那一档：收件人是主控 M，而"哪一级卡住"必须写进载荷（逐级留痕）
+            to_role, whose = S.CONDUCTOR_ROLE, (f"父那一级也办不了（{stuck or '未写明原因'}）"
+                                                "⇒ 按 §15.4 向上爬到主控 M")
+        else:
+            to_role, whose = self._relay_recipient()
+        names = "、".join(str(p.get("id") or p.get("stmt_id") or "?") for p in items[:8])
+        body_lines = [
+            f"收件人：{whose}",
+            f"要什么：就地给出下面这些概念的定义（定义内容 + 出处；没有出处的就直说没有）",
+            f"哪几条：{names}",
+        ]
+        for p in items[:8]:
+            body_lines.append(f"  - {p.get('id') or p.get('stmt_id') or '?'}："
+                              f"{p.get('why') or p.get('missing') or '定义待补'}")
+        body_lines.append("为什么找我：我这边的定义抽不到，而原文按台账在你手里 —— "
+                          "就地给比再上一趟网省（`draft/97` §15.4 的①档）。")
+        body_lines.append("顺序（定死的优先级）：① 你（直接父）就地给 → ② 你办不了才 A 上网搜 "
+                          "（落 search_requests）→ ③ 基本数学概念允许 B 自撰（记 self_authored）。")
+        body_lines.append(f"申请方：{self.role}（台账号 {self.my_task_id or '未拿到'}）")
+        msg_id, problem = send_message(self.session_root, sender=self.role, to=to_role,
+                                       subject=DEFINITION_ASK_SUBJECT, body="\n".join(body_lines),
+                                       sid=self.sid)
+        rec: dict[str, Any] = {"kind": "definition_ask", "role": self.role,
+                               "asks": to_role, "ask_why": whose,
+                               "concepts": [str(p.get("id") or p.get("stmt_id") or "") for p in items],
+                               "escalated": bool(escalate), "stuck_at": str(stuck or ""),
+                               "message_id": msg_id}
+        if problem:
+            rec["problem"] = problem
+        try:
+            SS.append(self.session_root, rec, sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 留痕失败也要在读数里看得见
+            rec["ledger_problem"] = f"{type(exc).__name__}: {exc}"
+        out: dict[str, Any] = {"checked": True, "to": to_role, "subject": DEFINITION_ASK_SUBJECT,
+                               "message_id": msg_id, "ask_why": whose, "concepts": rec["concepts"],
+                               "escalated": bool(escalate)}
+        if problem:
+            out["problem"] = problem
+        if rec.get("ledger_problem"):
+            out["ledger_problem"] = rec["ledger_problem"]
+        return out
 
     def _relay_recipient(self) -> tuple[str, str]:
         """「请代唤」该发给谁：直接父的角色（顶层 / 读不到 ⇒ 落回主控 M）。
