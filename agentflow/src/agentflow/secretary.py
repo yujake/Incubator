@@ -394,6 +394,162 @@ def declarations_candidates(name: str, names: Iterable[str], *, limit: int = 3) 
     return candidate_tool_names(name, names, limit=limit)
 
 
+#: 秘书的写集（业主 2026-10-09：B 交内容、秘书落盘）。只有这两张表，
+#: 且只经 `Secretary.record_statement` 一处 —— 声明与实现同一位。
+STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
+#: 谁可以交命题内容给这一条路径（写入侧是 B 的活，别的人交 ⇒ 受控拒绝）。
+STATEMENT_WRITER_ROLES: tuple[str, ...] = ("B",)
+#: 一条命题载荷认得的字段（正名）。别名表见 `STATEMENT_KEY_ALIASES`。
+STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
+    "statement_full", "statement_text", "kind", "label", "proof_text", "origin",
+    "source_lit_id", "doc_id", "page_range", "line_range", "evidence_kind",
+    "quote_verified", "quote_reason", "derived_from", "aliases", "bits",
+    "deps", "concepts",
+})
+#: 键名别名 ⇒ 正名（每一列的别名必须唯一，否则 `_statement_key_candidate` 返回空 =
+#: "不猜"）。写在这里而不是散在代码里，是为了让"认哪些写法"可被一条判据逐条读出来。
+STATEMENT_KEY_ALIASES: dict[str, tuple[str, ...]] = {
+    "statement_full": ("full", "statement", "theorem", "content", "claim"),
+    "statement_text": ("short", "text", "summary"),
+    "kind": ("type", "statement_kind"),
+    "label": ("name", "title"),
+    "proof_text": ("proof", "proof_process"),
+    "source_lit_id": ("lit_id", "lit"),
+    "doc_id": ("document_id",),
+    "page_range": ("pages",),
+    "line_range": ("lines",),
+    "evidence_kind": ("evidence",),
+    "derived_from": ("uses",),
+    "aliases": ("aka",),
+    "deps": ("dependencies", "dep_groups", "paths"),
+    "concepts": ("definitions",),
+}
+#: 一步依赖认得的来源键 ⇒ `(来源字段, 表, 表的 id 字段, 该给的 `kind` 缺省)`。
+#: 顺序就是"先认哪一个"：一步最多给一个来源（`Dependency.validate` 的"四选一"）。
+STEP_SOURCE_KEYS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("stmt_id", "source_stmt_id", "statements", "stmt_id", "theorem"),
+    ("experiment_id", "source_experiment_id", "experiments", "experiment_id", "experiment"),
+    ("lit_id", "source_lit_id", "literature", "lit_id", "theorem"),
+    ("doc_id", "source_doc_id", "documents", "doc_id", "theorem"),
+)
+#: 一步依赖的键名别名（与 `STATEMENT_KEY_ALIASES` 同一套纪律：不唯一就不猜）。
+STEP_KEY_ALIASES: dict[str, tuple[str, ...]] = {
+    "stmt_id": ("stmt", "statement_id", "statement"),
+    "experiment_id": ("exp", "exp_id", "experiment"),
+    "lit_id": ("lit", "literature_id"),
+    "doc_id": ("doc", "document_id"),
+    "kind": ("type",),
+    "label": ("name", "title"),
+    "quote": ("quote_text",),
+}
+
+
+def _statement_key_candidate(key: str) -> str:
+    """别名 ⇒ 正名；没有唯一候选时返回空串（不猜：两条正名都收它，就是歧义）。"""
+    hits = [canon for canon, alts in STATEMENT_KEY_ALIASES.items() if key in alts]
+    return hits[0] if len(hits) == 1 else ""
+
+
+def _wash_dep_groups(raw: Any) -> tuple[list[list[dict[str, Any]]], list[str]]:
+    """把 `deps` 洗成二维列表（外层 = 可选路径，内层 = 一条路径上的步骤）。
+
+    一维列表（一串步骤）⇒ 包成 `[一层]`：那是"只有一条路径"的写法，语义不变；
+    非列表 / 空 ⇒ `[]`（不补默认值：补一条空的路径等于替 B 编一条依赖）。
+    每一步的键名按 `STEP_KEY_ALIASES` 归一（id 本身一个字不动）。
+    """
+    changes: list[str] = []
+    if raw in (None, "", []):
+        return [], changes
+    if not isinstance(raw, (list, tuple)):
+        changes.append("deps: 不是列表 ⇒ 按'没有依赖'读（不猜）")
+        return [], changes
+    groups_raw = list(raw)
+    flat = all(isinstance(g, Mapping) for g in groups_raw)
+    if flat:
+        groups_raw = [groups_raw]
+        changes.append("deps: 一维列表 ⇒ 包成一条路径（外层 = 可选路径）")
+    groups: list[list[dict[str, Any]]] = []
+    for grp in groups_raw:
+        if not isinstance(grp, (list, tuple)):
+            if isinstance(grp, Mapping):
+                grp = [grp]
+            else:
+                changes.append("deps: 有一层不是列表（跳过这一层，不猜）")
+                continue
+        steps: list[dict[str, Any]] = []
+        for st in grp:
+            if not isinstance(st, Mapping):
+                changes.append("deps: 有一步不是对象（跳过这一步，不猜）")
+                continue
+            step: dict[str, Any] = {}
+            for k, v in dict(st).items():
+                key = str(k)
+                if key not in STEP_KEY_ALIASES and key not in (
+                        "stmt_id", "experiment_id", "lit_id", "doc_id", "kind", "label", "quote"):
+                    hits = [canon for canon, alts in STEP_KEY_ALIASES.items() if key in alts]
+                    if len(hits) != 1:
+                        step[key] = v
+                        continue
+                    changes.append(f"deps[].{key} → {hits[0]}")
+                    key = hits[0]
+                step[key] = v.strip() if isinstance(v, str) else v
+            steps.append(step)
+        groups.append(steps)
+    return groups, changes
+
+
+def _dep_label(step: Mapping[str, Any]) -> str:
+    """一步依赖没给标签时，用"来源种类:号"顶一格（`Dependency.validate` 要求非空）。
+
+    刻意不写人话标签：这一步的语义（它是哪条定理）只有 B 知道，
+    替它编一个名字等于把"没写"变成"写了"。
+    """
+    for key, prefix in (("source_stmt_id", "stmt"), ("source_experiment_id", "exp"),
+                        ("source_lit_id", "lit"), ("source_doc_id", "doc")):
+        if str(step.get(key) or "").strip():
+            return f"{prefix}:{step[key]}"
+    return "依赖"
+
+
+def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
+                       tx: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """把二维列表解析成可落盘的一步一行（只读：解析完再决定写不写）。
+
+    返回 `(steps, missing)`：`steps` 每项带 `path_group`（外层下标，从 1 起）与那一个来源字段；
+    `missing` 是"这一步落不了"的那些（给出为什么），非空 ⇒ 调用方整笔不写。
+    三态：`missing` 不是空的时候，不许退化成"少写一条边就算了" ——
+    依赖图上少一环没有任何地方会报错（这正是 `draft/97` §13.3 要堵的形态）。
+    """
+    steps: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    for gi, grp in enumerate(groups, start=1):
+        for st in grp:
+            found = [(key, field, table, idf, dkind)
+                     for key, field, table, idf, dkind in STEP_SOURCE_KEYS
+                     if str(st.get(key) or "").strip()]
+            if len(found) != 1:
+                missing.append({"path_group": gi, "step": dict(st),
+                                "why": ("一步依赖必须恰好给一个来源（stmt_id / "
+                                        "experiment_id / lit_id / doc_id 四选一）")})
+                continue
+            key, field, table, idf, dkind = found[0]
+            sid = str(st[key]).strip()
+            if tx.find(table, **{idf: sid}) is None:
+                missing.append({"path_group": gi, "step": dict(st),
+                                "why": f"{table} 表里没有 {idf}={sid!r}"})
+                continue
+            kind = str(st.get("kind") or dkind)
+            if kind not in S.DEP_KINDS:
+                missing.append({"path_group": gi, "step": dict(st),
+                                "why": f"kind 必须是 {S.DEP_KINDS} 之一，收到 {kind!r}"})
+                continue
+            step = {"path_group": gi, "kind": kind, "label": str(st.get("label") or ""),
+                    "quote": str(st.get("quote") or "")}
+            step[field] = sid
+            steps.append(step)
+    return steps, missing
+
+
 class Secretary:
     """一名智能体的秘书（`draft/53` v3 §4：一个共享类 + 每角色一个实例）。
 
@@ -410,7 +566,10 @@ class Secretary:
         生产装配把它打开是一行的事（`Secretary(..., seam=<本体的缝>, enable_model=True)`）。
     log : 可选日志口子（失败留痕的第二个落点）。
 
-    本类没有写集：它不 `store.tx(...)`、不写任何库表、不改任何受保护文件。
+    写集只有两格（业主 2026-10-09：「写入侧应该都是B的活，让B的秘书帮它洗格式、拿编号、
+    改表、查重，即B不直接用增工具，秘书实际操作增、改…查工具，B纯粹负责消化理解」）：
+    `statements` 与 `dependencies` —— 都只经 :meth:`record_statement` 一处（B 交内容、
+    秘书落盘）。它不写别的库表、不改任何受保护文件。
 
     两类产物分得很清（这是本项目最忌的那种折平）：
 
@@ -440,9 +599,11 @@ class Secretary:
         #: 生产装配由 `agent_loop._secretary_for` 打开它（主控裁定 A5）：
         #: 用本体自己的那一个缝（同一个实例 ⇒ 角色/scope/账本一致，钱记在同一条账上）。
         self.enable_model = bool(enable_model)
-        #: 写集恒为 ∅ 的声明式落点：它让"秘书有没有写集"成为一个可读的事实，
+        #: 写集的声明式落点：它让"秘书有没有写集、写哪几张表"成为一个可读的事实，
         #: 而不是"读遍本文件找不到 store.tx 所以大概没有"。
-        self.writes: frozenset[str] = frozenset()
+        #: 2026-10-09 起不是空集：B 的写入代理要落 `statements`（含概念行）与
+        #: `dependencies`（业主那两句裁定），只走 :meth:`record_statement` 一处。
+        self.writes: frozenset[str] = frozenset(STATEMENT_WRITE_TABLES)
         self._negotiations: list[dict[str, Any]] = []
         #: 这个秘书服务的实例（台账号）。由 `bind_task` 在循环开跑时绑上（S1m）：
         #: 绑上之后台账分片到 `out/secretary/<role>-<task_id>.jsonl`，于是同角色的并发实例
@@ -2072,8 +2233,304 @@ class Secretary:
         return {"checked": True, "name": name, "slot": slot,
                 "path": str(surface_dir(self.root, owner, slot)), "reason": ""}
 
-    # ------------------------------------------------------------ 面适配（S1g-2）
+    # ------------------------------------------------- 命题的写入代理（S1o）
 
+    def wash_statement(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """洗一条命题载荷的格式面（业主 2026-10-09 四件活的第一件）。
+
+        业主逐字：「写入侧应该都是B的活，让B的秘书帮它洗格式、拿编号、改表、查重，
+        即B不直接用增工具，秘书实际操作增、改（比如一个定理在两个文献中都有证明，
+        可以互相借鉴把证明写好点；如果证明路径不唯一，可增另一组依赖，实现用二维列表）、
+        查工具，B纯粹负责消化理解。」
+
+        ## 返回（三态必须分得开，与 :meth:`wash_delegation` 同族）
+
+        | 结局 | 返回 |
+        |---|---|
+        | 洗过了、本来就是受控形状 | `{"checked": True, "washed": False, "changes": []}` |
+        | 洗过了、改了格式格 | `{"checked": True, "washed": True, "changes": [...]}` |
+        | 这一格没洗成 | `{"checked": False, "reason": …}`（调用方按"洗不动"处理） |
+
+        ## 可以洗什么（只动格式面）
+
+        - 键名归一：`STATEMENT_KEY_ALIASES` 里的别名 ⇒ 正名（正名已在 ⇒ 不覆盖，
+          两条同名写法并存时原样留着，交给写入那一层去判"重复"）；
+        - 顶层折叠：`params` / `statement` / `payload` 里裹着的那一份命题字段摊上来
+          （真机上"字段被裹了一层"是最常见的形状错）；
+        - 去空白：字符串值的首尾空白（内容里面的一个字不动）；
+        - `deps` 摊平：二维列表是正形（外层 = 可选路径，内层 = 一条路径上的步骤）；
+          给的是一维列表（一串步骤）⇒ 包成 `[一层]`（"只有一条路径"）；
+        - 每一步的键名归一：`stmt`/`stmt_id`/`statement_id` ⇒ `stmt_id`，
+          `exp`/`experiment_id` ⇒ `experiment_id`，`lit`/`lit_id` ⇒ `lit_id`，
+          `doc`/`doc_id` ⇒ `doc_id`。
+
+        ## 一个字不许动什么（内容面）
+
+        `statement_full` / `proof_text` / `label` / 别名 / 每一步的 id 本身。
+        所以这里只搬键、只去空白，从不把缺键补成默认值（补默认值 = 替 B 编内容）。
+        """
+        before = dict(payload or {})
+        out: dict[str, Any] = {"checked": True, "washed": False, "changes": [],
+                               "payload": before, "before": before, "refused": "",
+                               "reason": ""}
+        try:
+            folded = self._fold_statement(before, out)
+            keyed, changes = self._normalize_statement_keys(folded, out)
+            keyed["deps"], dep_changes = _wash_dep_groups(keyed.get("deps"))
+            out["changes"].extend(dep_changes)
+            out["payload"] = keyed
+            out["washed"] = bool(out["changes"])
+            return out
+        except Exception as exc:  # noqa: BLE001 —— 洗不动不许打断这一次写入
+            out.update(checked=False, washed=False, payload=before,
+                       reason=(f"洗命题的格式没跑成（{type(exc).__name__}: {exc}）"
+                               "⇒ 这一笔不写（写入路径上'洗不动'按受控拒绝处理，"
+                               "不许拿没洗过的载荷去落盘）"))
+            return out
+
+    def _fold_statement(self, payload: dict[str, Any],
+                        out: dict[str, Any]) -> dict[str, Any]:
+        """把裹在 `params`/`statement`/`payload` 里的那一份摊到顶层（只摊认得的键）。"""
+        folded = dict(payload)
+        for wrapper in ("params", "statement", "payload", "result"):
+            inner = folded.get(wrapper)
+            if not isinstance(inner, Mapping):
+                continue
+            moved: list[str] = []
+            for key, value in dict(inner).items():
+                name = str(key)
+                if name in STATEMENT_PARAM_KEYS and name not in folded:
+                    folded[name] = value
+                    moved.append(name)
+            if moved:
+                folded.pop(wrapper, None)
+                out["changes"].append(f"{wrapper}: 顶层折叠 {sorted(moved)}")
+        return folded
+
+    def _normalize_statement_keys(self, payload: dict[str, Any],
+                                  out: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        """键名归一 + 字符串去空白（正名已在 ⇒ 不覆盖）。"""
+        keyed: dict[str, Any] = {}
+        changes: list[str] = []
+        for raw_key, value in payload.items():
+            key = str(raw_key)
+            if key not in STATEMENT_PARAM_KEYS:
+                candidate = _statement_key_candidate(key)
+                if candidate:
+                    if candidate in payload:
+                        keyed[key] = value          # 两种写法并存 ⇒ 两条都留着，让写入层去判
+                        continue
+                    changes.append(f"{key} → {candidate}")
+                    key = candidate
+            if isinstance(value, str):
+                stripped = value.strip()
+                if stripped != value:
+                    changes.append(f"{key}: 去首尾空白")
+                value = stripped
+            keyed[key] = value
+        out["changes"].extend(changes)
+        return keyed, changes
+
+    def record_statement(self, payload: Mapping[str, Any], *, role: str = "B",
+                         force_new: bool = False) -> dict[str, Any]:
+        """B 交内容 ⇒ 秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一次做完）。
+
+        业主逐字见 :meth:`wash_statement`。B 自己一次写工具都不调：
+        这里是一笔事务（`statements` + `dependencies`），B 那一侧只交内容。
+
+        ## 返回（读的人要能分辨"没写"的四种原因）
+
+        | 结局 | 返回 |
+        |---|---|
+        | 写成了 | `{"checked": True, "created": True, "stmt_id": …, "deps_written": n, "path_groups": k}` |
+        | 同内容已有一条 | `{"checked": True, "created": False, "duplicate": True, "stmt_id": <既有>}` |
+        | 受控拒绝（一行都不落） | `{"checked": False, "refused": "<理由码>", "reason": …}` |
+
+        理由码：`secretary_unavailable`（没装 store —— B 那条"自己写"的后备路不存在）、
+        `not_statement_writer`（不是 B 的活）、`wash_failed`（格式洗不动）、
+        `concept_definition_pending`（概念的定义空着，等 D12 裁定）、
+        `unresolved_dependency`（依赖指着一个不在册的 id）。
+
+        ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）
+
+        派活洗不动可以原样发出去，让下游闸门去拒（那条路有闸门，且 `refused` 行本身就是
+        证据）。写入这条路上没有下游闸门：`Statement.validate` 只查形状，
+        而"键名是别名"这种错会让内容静默落成空字段。写是不可逆的，
+        所以这里选"不写"（与 `draft/90` §1.2 对"硬拒"的取舍同一条理由：
+        拒绝是受控的，静默写坏不是）。
+
+        ## 依赖的二维列表（业主指定形状）
+
+        `deps` 外层 = 可选路径、内层 = 一条路径上的步骤 ⇒ 外层下标（从 1 起）
+        写进 `Dependency.path_group`（组内 AND / 组间 OR，见 `draft/97` §12.1）。
+        每一步的 `kind` 决定它落哪一格来源（`source_stmt_id` / `source_experiment_id` /
+        `source_lit_id` / `source_doc_id`）；指向的 id 必须在册，
+        否则整笔不写（不许留一条挂空号的依赖 —— 那正是"依赖图静默少一环"的成因）。
+        """
+        out: dict[str, Any] = {"checked": False, "created": False, "duplicate": False,
+                               "stmt_id": "", "deps_written": 0, "path_groups": 0,
+                               "tables": [], "washed": False, "changes": [],
+                               "refused": "", "reason": "", "pending": []}
+        if self.store is None:
+            out.update(refused="secretary_unavailable",
+                       reason=("这一名秘书没有 store ⇒ 写不了（B 交内容、秘书落盘是唯一"
+                               "一条路：不许退回'B 自己写'）"))
+            return out
+        if str(role) not in STATEMENT_WRITER_ROLES:
+            out.update(refused="not_statement_writer",
+                       reason=(f"命题的写入侧是 B 的活（收到 role={role!r}）——"
+                               f"只有 {STATEMENT_WRITER_ROLES} 能交内容给这一条路径"))
+            return out
+        washed = self.wash_statement(payload)
+        out["washed"] = bool(washed.get("washed"))
+        out["changes"] = list(washed.get("changes") or [])
+        if not washed.get("checked"):
+            out.update(refused="wash_failed", reason=str(washed.get("reason") or "洗格式没跑成"))
+            return out
+        body = dict(washed.get("payload") or {})
+        full = str(body.get("statement_full") or "")
+        kind = str(body.get("kind") or "theorem")
+        if not full.strip():
+            if kind == "concept":
+                from . import migrate_concepts as MC   # 惰性：待补标记的唯一出处
+
+                out.update(refused="concept_definition_pending",
+                           reason=("概念的定义空着 ⇒ 这一笔不写：待补标记是 "
+                                   f"{MC.PENDING_SEARCH}（等 A 检索或 B 自撰），而"
+                                   "'定义为空的行落哪个 status'还没裁（`draft/93·续` D12；"
+                                   "`schema.py` 里那条人裁边界写着不许自己加取值）⇒ "
+                                   "等裁定再落，先不落一条 active 的空定义行"))
+                return out
+            out.update(refused="empty_statement",
+                       reason=("statement_full 是空的 ⇒ 不写（只有短版不算数：省掉假设的"
+                               "命题会被下游当成无条件成立）"))
+            return out
+        try:
+            return self._record_statement_tx(body, full=full, kind=kind,
+                                             force_new=bool(force_new), out=out)
+        except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
+            out.update(checked=False, created=False, refused="write_failed",
+                       reason=f"落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
+            return out
+
+    def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
+                             force_new: bool, out: dict[str, Any]) -> dict[str, Any]:
+        """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。"""
+        from . import textutil as T   # 惰性：查重键的唯一实现
+
+        groups = [list(g) for g in (body.get("deps") or [])]
+        concepts = [dict(c) for c in (body.get("concepts") or []) if isinstance(c, Mapping)]
+        with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
+                           "documents", actor=f"secretary-{self.role}",
+                           note="record_statement") as tx:
+            key = T.normalize(full)
+            existing = next((r for r in tx.rows("statements")
+                             if T.normalize(str(r.get("statement_full") or "")) == key), None)
+            if existing is not None and not force_new:
+                out.update(checked=True, created=False, duplicate=True,
+                           stmt_id=str(existing.get("stmt_id") or ""),
+                           reason=("同一条 statement_full 已在册 ⇒ 重复读数，不新建行"
+                                   "（确实要另起一条，请给 force_new）"))
+                return out
+            steps, missing = _resolve_dep_steps(groups, tx)
+            if missing:
+                out.update(refused="unresolved_dependency",
+                           reason=("依赖里有一条指着不在册的 id ⇒ 整笔不写（不许留一条挂空号的"
+                                   "依赖：那正是'依赖图静默少一环'的成因）"),
+                           unresolved=missing)
+                return out
+            lit = str(body.get("source_lit_id") or "")
+            if lit and tx.find("literature", lit_id=lit) is None:
+                lit_rows = tx.rows("literature")
+                ids = [str(r.get("lit_id") or "") for r in lit_rows[:8]]
+                out.update(refused="unknown_lit_id",
+                           reason=(f"literature 表里没有 lit_id={lit!r} ⇒ 这条命题的出处不存在，"
+                                   f"整笔不写库。表里现有 {len(lit_rows)} 行，lit_id："
+                                   f"{ids or '（一个都没有 —— 表是空的）'}"),
+                           literature_rows=len(lit_rows), available_lit_ids=ids)
+                return out
+            for c in concepts:
+                if not str(c.get("definition") or "").strip():
+                    from . import migrate_concepts as MC
+
+                    out.update(refused="concept_definition_pending",
+                               reason=("概念 "
+                                       f"{str(c.get('name') or '')!r} 的定义空着 ⇒ 整笔不写：待补"
+                                       f"标记是 {MC.PENDING_SEARCH}，而'定义空行的 status'等 "
+                                       "D12 裁定（不许先落一条 active 的空定义行）"))
+                    return out
+            stmt_kind = S.TABLES["statements"]["id_kind"]
+            stmt_id = tx.alloc_id(stmt_kind)
+            row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
+            row.validate()
+            tx.upsert("statements", row.to_dict(), note="record_statement")
+            written = ["statements"]
+            for c in concepts:
+                cid = tx.alloc_id(stmt_kind)
+                crow = S.Statement(
+                    stmt_id=cid, origin="own_result", kind="concept",
+                    label=str(c.get("name") or ""), statement_text=str(c.get("definition") or ""),
+                    statement_full=str(c.get("definition") or ""),
+                    proof_text=str(c.get("proof_text") or "concept:primitive"),
+                    source_lit_id=str(c.get("source_lit_id") or "") or None,
+                    quote_verified=None,
+                    quote_reason=("概念的良定义性证明记在 proof_text（原始概念写 "
+                                  "concept:primitive）；定义来自 "
+                                  + (str(c.get("source_lit_id")) if c.get("source_lit_id")
+                                     else "B 的消化（没有外部来源）")),
+                    evidence_kind="heuristic",
+                    aliases=[str(a) for a in (c.get("aliases") or []) if str(a).strip()],
+                    status="active", doc_id=str(body.get("doc_id") or "") or None,
+                    created_at=S.now_iso(), created_by=f"secretary-{self.role}")
+                crow.validate()
+                tx.upsert("statements", crow.to_dict(), note="record_statement:concept")
+            for step in steps:
+                dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
+                dep = S.Dependency(
+                    dep_id=dep_id, used_by=f"stmt:{stmt_id}",
+                    kind=str(step.get("kind") or "theorem"),
+                    label=str(step.get("label") or "") or _dep_label(step),
+                    source_lit_id=step.get("source_lit_id"),
+                    source_experiment_id=step.get("source_experiment_id"),
+                    source_stmt_id=step.get("source_stmt_id"),
+                    source_doc_id=step.get("source_doc_id"),
+                    quote=str(step.get("quote") or ""),
+                    status="closed",
+                    page_range=S.PageRange(),
+                    path_group=int(step["path_group"]),
+                    created_at=S.now_iso(), created_by=f"secretary-{self.role}")
+                dep.validate()
+                tx.upsert("dependencies", dep.to_dict(), note="record_statement:dependency")
+            written.append("dependencies")
+        out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
+                   row=row.to_dict(), tables=written, deps_written=len(steps),
+                   path_groups=len(groups))
+        return out
+
+    def _statement_from(self, body: Mapping[str, Any], *, full: str, kind: str,
+                        stmt_id: str) -> Any:
+        """按白名单把载荷拼成 `Statement`（未知键不进库：它多半是拼错的字段名）。"""
+        def _s(key: str) -> str:
+            return str(body.get(key) or "")
+
+        def _rng(key: str) -> Any:
+            raw = body.get(key)
+            return S.PageRange.from_dict(raw) if isinstance(raw, Mapping) else S.PageRange()
+
+        return S.Statement(
+            stmt_id=stmt_id, origin=_s("origin") or "external_lit", kind=kind,
+            label=_s("label"), statement_text=_s("statement_text"), statement_full=full,
+            proof_text=_s("proof_text"), source_lit_id=_s("source_lit_id") or None,
+            page_range=_rng("page_range"), quote_verified=body.get("quote_verified"),
+            quote_reason=_s("quote_reason"),
+            evidence_kind=_s("evidence_kind") or "heuristic", status="active",
+            derived_from=S.sorted_unique([str(x) for x in (body.get("derived_from") or [])]),
+            aliases=[str(a) for a in (body.get("aliases") or []) if str(a).strip()],
+            doc_id=_s("doc_id") or None, line_range=_rng("line_range"),
+            bits=dict(body.get("bits") or {}), created_at=S.now_iso(),
+            created_by=f"secretary-{self.role}")
+
+    # ------------------------------------------------------------ 面适配（S1g-2）
     def surface_fit(self, *, action: str, params: Mapping[str, Any],
                     face: str = "", base: str = "") -> dict[str, Any]:
         """这件活落在被派人的读写面里做不做得成（三态读数，只报不改）。

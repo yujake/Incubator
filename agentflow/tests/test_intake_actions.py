@@ -259,12 +259,20 @@ def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
     own_bare = b.register_statement(**{**STATEMENT, "origin": "own_result",
                                        "source_lit_id": "", "page_range": None})
     assert own_bare["ok"] is False and own_bare["kind"] == "missing_own_source", own_bare
-    own = b.register_statement(**{**STATEMENT, "origin": "own_result", "source_lit_id": "",
+    own_stmt = {**STATEMENT, "statement_full": STATEMENT["statement_full"] + "（我们自己证的版本）"}
+    own = b.register_statement(**{**own_stmt, "origin": "own_result", "source_lit_id": "",
                                   "page_range": None, "doc_id": "0000"})
     assert own["ok"] is True, own
     rows = st.rows("statements")
     assert len(rows) == 2, rows
     assert {r["origin"] for r in rows} == {"external_lit", "own_result"}, rows
+
+    # 新口径（业主 2026-10-09：B 交内容、秘书落盘，四件活里有查重）：
+    # 同一条 `statement_full` 再交一次 ⇒ 重复读数、不新建行（此前会静默多一行）。
+    dup = b.register_statement(source_lit_id=lit_id, **STATEMENT)
+    assert dup["ok"] is False and dup["kind"] == "duplicate_statement", dup
+    assert dup["stmt_id"] == labeled["stmt_id"], dup
+    assert len(st.rows("statements")) == 2, "重复读数不许多写一行"
 
 
 def test_b_register_statement_normalizes_string_page_numbers(tmp_path: Path):
@@ -306,8 +314,11 @@ def test_b_register_statement_normalizes_string_page_numbers(tmp_path: Path):
                                   **{**STATEMENT, "page_range": bad})
         assert res["ok"] is False and res["kind"] == "bad_page_range", (bad, res)
 
-    # 边界：`line_range` 走同一条归一（`own_result` 的出处那一栏）
-    own = b.register_statement(**{**STATEMENT, "origin": "own_result", "source_lit_id": "",
+    # 边界：`line_range` 走同一条归一（`own_result` 的出处那一栏）。
+    # 内容给成另一条命题：同一 `statement_full` 再交一次是"重复读数"（秘书查重），
+    # 而这一条判的是行号归一 —— 两件事混在一起会让红的时候分不清是谁坏了。
+    own_stmt = {**STATEMENT, "statement_full": STATEMENT["statement_full"] + "（行号归一那一条）"}
+    own = b.register_statement(**{**own_stmt, "origin": "own_result", "source_lit_id": "",
                                   "page_range": None, "doc_id": "0000",
                                   "line_range": {"start": "120", "end": "148"}})
     assert own["ok"] is True, own

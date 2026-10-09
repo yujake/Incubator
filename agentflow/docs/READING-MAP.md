@@ -161,7 +161,7 @@
 | `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |
 | `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句） |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据 |
-| `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_rework`/`handoff_query`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态** |
+| `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_rework`/`handoff_query`）+ **命题写入代理**（`wash_statement`/`record_statement`，业主 2026-10-09：B 交内容、秘书落盘——洗格式 / 拿编号 / 查重 / 改表四件，写集只有 `statements` 与 `dependencies`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态** |
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。另加**位 ⇒ 台账的映射**（`BIT_LEDGERS`：哪一位去哪张表查；`bit_evidence_gaps`：位上说有、表里要查得到）——业主 2026-10-09 点名的那一条。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
 | `quoteverify.py` | 引文校验：引文级回验（禁改区） |
 | `dedup.py` | 判重：文献 / 概念 / 关系（禁改区） |
@@ -271,7 +271,7 @@
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
 | `cli.py` | 2567 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1817 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
-| `agent_b/core.py` | 1250 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1250 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
+| `agent_b/core.py` | 1282 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1282 行；`agent_b/_support.py` 是模块级 helper 与常量，168 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 1698 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层） | 40 多条不变量平铺（禁改区，见 T-5） |
 
 ---

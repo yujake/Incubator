@@ -631,6 +631,39 @@ deps = [[{"kind": "theorem", "stmt": "0003"}, {"kind": "experiment", "exp": "000
 - **依据**：E6/E8；`register_statement` 今天的"第四条必填"逐字支持 `origin=own_result` + `doc_id`/`line_range`。
 - **判据**：正控（交一条 ⇒ 三表各多一行、号来自 `tx.alloc_id`、`path_group` 按外层下标）；负控（同内容两次 ⇒ "重复"读数不新建行）；**反真空**（无秘书 ⇒ 拒，且**不落任何行**）。
 
+#### 13.3b 施工订正（落地后按盘上事实改的八处）
+
+1. **签名**：实现是 `record_statement(payload, *, role="B", force_new=False)`（草稿写
+   `(*, role, payload)`）—— 调用点读起来是"交一份内容"，role 是限定词。
+2. **洗不动 ⇒ 硬拒**（草稿没说这一格）：派活那条路可以"洗不动就原样发出去"（下游有闸门），
+   写入这条路**没有下游闸门** —— `Statement.validate` 只查形状，别名键会让内容**静默落成空字段**。
+   所以 `wash_statement` 没洗成 ⇒ `refused="wash_failed"`，一笔不写。
+3. **事务要声明"读"的表**：第一版只声明 `("statements","dependencies")`，而解析依赖要
+   `tx.find("experiments"/"literature")` ⇒ `StoreError: 事务未声明表 experiments`。
+   现在声明五张（两张写 + 三张读），并且**文献存在性这一查搬进秘书的事务**（与写同一把锁，
+   不留 TOCTOU 窗口）；拒绝码与读数（`literature_rows` / `available_lit_ids`）逐字保留 ——
+   T1 第 8 趟那 20 次拒绝给出的"表本身是空的"这条事实不许丢。
+4. **查重的口径**：同一条 `statement_full`（按 `textutil.normalize` 比）已在册 ⇒
+   `duplicate` 读数 + 既有 `stmt_id`，**不新建行**；B 那一侧映射成
+   `kind="duplicate_statement"`（`ok=False` + 既有号）。这是**业主点名的行为改变**：
+   `tests/test_intake_actions.py` 有两条用例原先靠"同内容再登记一次会多一行"来测别的性质
+   （行号归一 / 出处分档），本次给它们换成了不同内容的命题，并在其中一条里显式断言
+   "同内容 ⇒ 重复读数、不许多一行"。
+5. **`Secretary.writes` 不再是空集**：`frozenset(STATEMENT_WRITE_TABLES)`，
+   两条既有判据（`test_secretary.py` 的"写集恒为 ∅"）按新口径改写，
+   并在断言里钉住**它不是空集**（反真空：空集会让"秘书有没有写集"这句声明没有内容）。
+6. **概念行的"定义待补"**：定义空着 ⇒ `refused="concept_definition_pending"`
+   （等 `draft/93·续` **D12** 裁定"定义空行落哪个 status"）。**没有**先落一条
+   `active` 的空定义行 —— 那是 `schema.py` 那条人裁边界明令不许的。
+7. **B 的动作**：`AgentB.register_statement` 不再自己 `store.tx`；它把内容（含 `bits`）
+   交给秘书，`created_by` 因此从 `agent-B` 变成 **`secretary-B`**（落盘那一笔的留痕）。
+   `AgentB` 侧新加 `secretary` / `auto_secretary`（与 `AgentLoop` 的 T14 同一套装配口径）：
+   不传就按 B 派生，`auto_secretary=False` 是单测造"没有秘书"那一态的唯一入口
+   ⇒ 那一态是 `secretary_unavailable` + **一行不落**。
+8. **`force_new` 只在秘书那一层**：B 的动作**不**暴露它（那会给声明面加一格参数，
+   连带 `specs/b.py`（禁改区）与工具面/金标一整套）。要另起一条时，将来按
+   `draft/97` §12 的多路径写法表达，而不是让动作多一个开关。
+
 ### 13.4 `evidencebits.py` + `verify.py`（五元位的映射判据；E7）
 
 ```python

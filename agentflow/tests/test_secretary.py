@@ -185,7 +185,9 @@ def test_secretary_knowledge_is_read_only_and_open_for_all_roles(tmp_path: pathl
     k = s.knowledge()
     assert set(k["roles"]) >= {"A", "B", "C", "D", "E", "F", "G", "H", "M"}, k["roles"]
     assert "D" in k["briefs"], "连本角色的 brief 都读不到"
-    assert k["writes"] == frozenset(), "秘书的写集必须是 ∅（除手稿通道与自己的台账）"
+    assert k["writes"] == frozenset(sec.STATEMENT_WRITE_TABLES), (
+        "秘书的写集只有命题写入代理那两张表（手稿通道与自己的台账不走 store.tx）："
+        "2026-10-09 业主把'B 的写入'交给秘书之后，这一格不再是 ∅")
     # 数据面 ≤ 本体：它只读"委托事实"与硬性要求，不读研究叙事正文
     assert k["reads_narrative"] is False
 
@@ -905,7 +907,14 @@ def test_every_role_can_get_its_own_secretary(tmp_path: pathlib.Path):
     """判据（`draft/53` §5 第 3 步：批量给 A-H 装 = 配置 + 每角色一条测试）。
 
     同一个类、每角色一份配置：台账不混写、行里的 `sender` 是被服务的那名角色、
-    定位面读得到（组织图全开）、写集恒为 ∅。M 与 V 也各有一名。
+    定位面读得到（组织图全开）、写集 = 命题写入代理的两张表。
+
+    写集那一格 2026-10-09 改了口径（业主：「写入侧应该都是B的活，让B的秘书帮它洗格式、
+    拿编号、改表、查重，即B不直接用增工具，秘书实际操作增、改…查工具，B纯粹负责消化理解」）：
+    它此前断言 `writes == frozenset()`（"秘书不写任何库表"），而业主把那件事反过来了。
+    改成"写集恒等于 `STATEMENT_WRITE_TABLES`"，并在同一断言里钉住它不是空集 ——
+    空集会让"秘书有没有写集"这句声明退化成没有内容（这次改动的反真空）。
+    契约那一半（谁都可以拿秘书、台账不混写）逐字不变。
     """
     sec = _sec()
     root = tmp_path / "ws"
@@ -913,7 +922,8 @@ def test_every_role_can_get_its_own_secretary(tmp_path: pathlib.Path):
     roles = list(S.ROLES) + ["M"]
     for i, role in enumerate(roles):
         s = sec.for_role(role, root=root)
-        assert s.role == role and s.writes == frozenset(), role
+        assert s.role == role and s.writes == frozenset(sec.STATEMENT_WRITE_TABLES), role
+        assert s.writes, f"{role} 的写集是空的 ⇒ 这条声明没有内容（B 的写入代理要落两张表）"
         assert s.knowledge()["briefs"], f"{role} 的定位面读不到"
         rec = s.handoff_add(to="M" if role != "M" else "D", summary=f"{role} 的交接",
                             body=f"{role} 干完了这一步。")

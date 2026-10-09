@@ -53,10 +53,21 @@ class _Core:
         extract_text: Any,
         config: dict | None = None,
         actor: str = "agent-B",
+        secretary: Any = None,
+        auto_secretary: bool = True,
     ):
         self.store = store
         self.extractor = extractor
         self.extract_text = extract_text
+        # ---- 业主 2026-10-09：「写入侧应该都是B的活，让B的秘书帮它洗格式、拿编号、改表、
+        # 查重，即B不直接用增工具，秘书实际操作增、改、查工具，B纯粹负责消化理解。」
+        # ⇒ 命题的写盘从这里挪到秘书（`Secretary.record_statement`）。
+        # 装配口径与 `AgentLoop` 同一套（T14：「每唤起一个智能体就自带一个秘书」）：
+        # 给了就用；`auto_secretary=False` 只留给单测造"没有秘书"那一态；
+        # 否则按 B 现派生一个（不抛：派生失败 ⇒ 写路径关闭，但这件事在返回值里读得到）。
+        self.secretary = secretary
+        self.auto_secretary = bool(auto_secretary)
+        self.secretary_problem = ""
         # ---- `R-56`（`draft/28` §156）：回退抽取器必须拒抽。
         #
         # 判据刻意打在"抽取器是不是框架的规则回退"上，而不是"有没有接 LLM"：
@@ -101,6 +112,27 @@ class _Core:
         self.reprocess_context_pages = int(self.cfg.get("reprocess_context_pages", 1))
         #: 一次 `run()` 里最多处理多少条重抽取请求（有界：不许无限循环）。
         self.max_reprocess_per_run = int(self.cfg.get("max_reprocess_per_run", 10))
+    def _statement_secretary(self) -> Any:
+        """B 的秘书（命题写入代理）；`None` ⇒ 这一趟写不了（原因见 `secretary_problem`）。
+
+        为什么在 AgentB 这一层也要派生：`AgentLoop` 那条路（LLM 循环）会注入一个，
+        而 `AgentB` 也被直接调用（工具层、单测、离线脚本）—— 两条路上"B 的写入都经秘书"
+        这条口径必须是同一件事。派生失败不抛（与 `AgentLoop.__post_init__` 同一条理由：
+        工厂坏了是环境问题），但"没有秘书"这件事落在 `secretary_problem` 里，
+        于是它在返回值里读得到（`register_statement` 会把它写成受控拒绝）。
+        """
+        if self.secretary is not None or not self.auto_secretary:
+            return self.secretary
+        try:
+            from ..secretary import for_role
+
+            self.secretary = for_role("B", root=self.store.root, store=self.store)
+        except Exception as exc:  # noqa: BLE001 —— 派生失败 ⇒ 写路径关闭，但不许静默
+            self.secretary = None
+            self.secretary_problem = (f"秘书派生失败（{type(exc).__name__}: {exc}）⇒ "
+                                      "命题的写路径整体关闭")
+        return self.secretary
+
     def _conflict_scope(self, tx) -> list[dict] | None:
         """把"图里已有的关系"交给 I6 闸门 —— 从当前事务里读，不新开事务。
 

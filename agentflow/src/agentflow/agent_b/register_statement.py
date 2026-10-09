@@ -310,74 +310,65 @@ class _RegisterStatement:
                                f"收到 {_value!r} —— 形态由 schema.require_id 定义，"
                                "本动作在写库前用同一个谓词核，整笔不写")
 
-        with self.store.tx("literature", "statements", actor=self.actor,
-                           note="register_statement") as tx:
-            if lit_id and tx.find("literature", lit_id=lit_id) is None:
-                # 坏引用不许进库（与 `doc.build_document` 的 check_citations 同一条纪律）。
-                #
-                # 附带状态读数（`draft/37` §93 的真机读数）：T1 第 8 趟里这一条被拒了
-                # 20 次 —— `literature` 表 0 行（那一趟没人派 `A.ingest_local`），
-                # 于是每一条 `external_lit` 命题都撞在同一堵墙上，而拒绝只说"没有这个 lit_id"，
-                # 模型无从知道"表本身是空的"还是"号写错了"。这两件事的处置完全不同。
-                # 读数里给出"表现在有几行、现有哪些 lit_id"，是为了让它拿一个真的号
-                # （或者知道得先去登记），而不是换着号继续猜 —— 这不是分工暗示，
-                # 它是这次调用失败所需要的那个事实（与 `draft/28` §196 给 documents 行同一口径）。
-                lit_rows = tx.rows("literature")
-                ids = [str(r.get("lit_id") or "") for r in lit_rows[:8]]
-                more = "（只列前 8 个）" if len(lit_rows) > 8 else ""
-                return _refuse("unknown_lit_id",
-                               f"literature 表里没有 lit_id={lit_id!r} ⇒ 这条命题的出处不存在，"
-                               f"整笔不写库。表里现有 {len(lit_rows)} 行，lit_id："
-                               f"{ids or '（一个都没有 —— 表是空的）'}{more}",
-                               source_lit_id=lit_id, literature_rows=len(lit_rows),
-                               available_lit_ids=ids)
-
-            bits, bits_bad = self._statement_bits(
-                origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
-                quote_verified=quote_verified)
-            if bits_bad is not None:
-                return bits_bad
-            stmt_id = tx.alloc_id("stmt")
-            row = S.Statement(
-                stmt_id=stmt_id,
-                origin=origin,
-                kind=str(kind or "theorem"),
-                label=str(label or ""),
-                statement_text=str(statement_text or ""),
-                statement_full=full,
-                proof_text=str(proof_text or ""),
-                source_lit_id=lit_id or None,
-                page_range=S.PageRange.from_dict(page_norm),
-                quote_verified=quote_verified,
-                quote_reason=str(quote_reason or ""),
-                evidence_kind=evidence_kind,
-                status="active",
-                derived_from=S.sorted_unique(list(derived_from or [])),
-                doc_id=str(doc_id or "") or None,
-                line_range=S.PageRange.from_dict(line_norm),
-                bits=bits,
-                created_at=S.now_iso(),
-                created_by=self.actor,
-            )
-            row.validate()
-            data = row.to_dict()
-            tx.upsert("statements", data, note="register_statement")
-            return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
-                    "quote_verified": quote_verified, "origin": origin,
-                    "evidence_kind": evidence_kind, "row": data,
-                    # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
-                    # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
-                    # 也能扫到它；这里再给一次是为了让调用方当场就知道）。
-                    "pending": ([{"kind": "missing_proof", "table": "statements",
-                                  "id": stmt_id, "missing": "proof_text", "who": "F",
-                                  "why": "自产命题没有证明 ⇒ 等级现算是『猜想』"}]
-                                if needs_proof else []),
-                    "note": ("登记 ≠ 核对：quote_verified 是三态（True/False/None），"
-                             "它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。"
-                             "五元位已随这一行落库（现算等级 "
-                             f"{bits.get('grade')}；第 2 位来源 "
-                             f"{bits.get('evidence', {}).get('proof_source') or '（空）'}）——"
-                             "等级不许自报，判据永远现算。"
-                             + ("这一行**缺 proof_text**（自产命题没有证明）：它进去了，"
-                                "但等级现算是『猜想』，`pending` 里挂着待办。"
-                                if needs_proof else ""))}
+        # ---- 业主 2026-10-09：「B 不直接用增工具，秘书实际操作增、改、查工具，
+        # B 纯粹负责消化理解」⇒ 上面那些是内容的判据（B 的判断），写盘这一段交给秘书。
+        bits, bits_bad = self._statement_bits(
+            origin=str(origin), lit_id=lit_id, proof_text=str(proof_text or ""),
+            quote_verified=quote_verified)
+        if bits_bad is not None:
+            return bits_bad
+        sec = self._statement_secretary()
+        if sec is None:
+            return _refuse("secretary_unavailable",
+                           "这一趟没有秘书 ⇒ 命题写不了（写入侧是 B 的活，但落盘归秘书："
+                           "`Secretary.record_statement`。不许退回'B 自己写'那条后备路）"
+                           + (f"；{self.secretary_problem}" if self.secretary_problem else ""))
+        payload = {
+            "origin": origin, "kind": str(kind or "theorem"), "label": str(label or ""),
+            "statement_text": str(statement_text or ""), "statement_full": full,
+            "proof_text": str(proof_text or ""), "source_lit_id": lit_id,
+            "page_range": dict(page_norm), "quote_verified": quote_verified,
+            "quote_reason": str(quote_reason or ""), "evidence_kind": evidence_kind,
+            "derived_from": S.sorted_unique(list(derived_from or [])),
+            "doc_id": str(doc_id or ""), "line_range": dict(line_norm), "bits": bits,
+        }
+        written = sec.record_statement(payload, role="B")
+        if written.get("duplicate") and not written.get("created"):
+            # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
+            # 同一条 `statement_full`（按 `textutil.normalize` 比）已在册 ⇒ 不新建行。
+            # 对调用方来说这是"这一次没有新行"，必须说出来（`ok=False` + `kind`），
+            # 并把既有那一条的号给它 —— 否则它只会看到"没写成"而不知道东西在哪。
+            return _refuse("duplicate_statement",
+                           "同一条命题（按规范化后的 statement_full 比）已在册 ⇒ "
+                           "秘书查重后没有新建行；要引用它请用返回的 stmt_id，"
+                           "确实要另起一条才走 `force_new`（本动作不暴露它）",
+                           stmt_id=str(written.get("stmt_id") or ""))
+        if not written.get("checked") or not written.get("created"):
+            extra = {k: v for k, v in written.items()
+                     if k in ("literature_rows", "available_lit_ids", "unresolved")}
+            return _refuse(str(written.get("refused") or "write_failed"),
+                           str(written.get("reason") or "秘书没写这一笔"),
+                           stmt_id=str(written.get("stmt_id") or ""), **extra)
+        stmt_id = str(written["stmt_id"])
+        data = dict(written.get("row") or {})
+        return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
+                "quote_verified": quote_verified, "origin": origin,
+                "evidence_kind": evidence_kind, "row": data,
+                # F-05：缺证明这一档不再拒收，但绝不静默接受 ——
+                # 它在返回值里明写成一条待办（秘书的 `pending_inbox` 从既有标记
+                # 也能扫到它；这里再给一次是为了让调用方当场就知道）。
+                "pending": ([{"kind": "missing_proof", "table": "statements",
+                              "id": stmt_id, "missing": "proof_text", "who": "F",
+                              "why": "自产命题没有证明 ⇒ 等级现算是『猜想』"}]
+                            if needs_proof else []),
+                "note": ("登记 ≠ 核对：quote_verified 是三态（True/False/None），"
+                         "它不是 True 时下游必须按 `quote_reason` 读，不许当成通过。"
+                         "五元位已随这一行落库（现算等级 "
+                         f"{bits.get('grade')}；第 2 位来源 "
+                         f"{bits.get('evidence', {}).get('proof_source') or '（空）'}）——"
+                         "等级不许自报，判据永远现算。"
+                         "这一笔由秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一起做完），"
+                         f"表格 {written.get('tables')}、路径组 {written.get('path_groups')}。"
+                         + ("这一行**缺 proof_text**（自产命题没有证明）：它进去了，"
+                            "但等级现算是『猜想』，`pending` 里挂着待办。"
+                            if needs_proof else ""))}
