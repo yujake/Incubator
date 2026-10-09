@@ -43,6 +43,11 @@ import pytest
 REPO = pathlib.Path(__file__).resolve().parents[1]
 GOLDEN = pathlib.Path(__file__).resolve().parent / "golden" / "verify_all_snapshot.json"
 
+sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "tests"))
+
+from agentflow import conceptrows as CR  # noqa: E402  （并表：概念行的唯一读写口）
+
 _TS_RE = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2})?")
 
 
@@ -151,12 +156,15 @@ def _synthetic_workspaces(tmp_path: pathlib.Path) -> dict[str, pathlib.Path]:
             source_request_ids=["r-0001"], dedup_key="doi:10.1000/demo.abelian",
             doi="10.1000/demo.abelian", year=1930, authors=["A. Author"],
             added_at=S.now_iso()).to_dict())
-    with st.tx("concepts", "relations", "counters", actor="test") as tx:
+    # 概念行走过渡层的统一写口（S1r 并表之后 `concepts` 已退役，`tx("concepts")` 会以
+    # "未知表"失败）：老形状的行 ⇒ 新标准那一行（概念行住 `statements` 的
+    # `kind="concept"`），事务要声明的表由 `tables_for_concept_write` 一处决定。
+    with st.tx(*CR.tables_for_concept_write("relations", "counters"), actor="test") as tx:
         for cid, name in (("0000", "group"), ("0001", "abelian group")):
-            tx.upsert("concepts", S.Concept(
+            CR.upsert_legacy_shaped(tx, S.Concept(
                 concept_id=cid, name=name, definition=f"{name} 的定义。",
                 related_concepts=["0001"] if cid == "0000" else ["0000"],
-                created_at=S.now_iso(), updated_at=S.now_iso()).to_dict())
+                created_at=S.now_iso(), updated_at=S.now_iso()).to_dict(), actor="test")
         tx.upsert("relations", S.Relation(
             relation_id="0000", concept_ids=["0000", "0001"], description="包含",
             lit_id="0000", page_range=S.PageRange(1, 1, "pp. 1-1"),
