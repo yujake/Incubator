@@ -1187,6 +1187,9 @@ class OpenAlexProvider:
             # 它把"实际发出的请求数"与"路数 × 2"的差额解释清楚（topical 两路共享同一条短语）。
             "phrase_fallbacks_deduped": 0,
             "channel_errors": 0,
+            # `r-0002` 那一趟的整改：前两串都零召回 ⇒ 退到"只用 topic"的次数。
+            # 它必须与 `phrase_fallbacks` 分开记：前者是"降了一级"，这一条是"降了两级"。
+            "last_resort_fetches": 0,
         }
         #: 上一次 search 实际发出的检索串（按 channel）与过滤原因计数，供诊断用。
         self.last_query_text: dict[str, str] = {}
@@ -1343,6 +1346,13 @@ class OpenAlexProvider:
                 f"phrase_zero_recall_fallback[{channel}]：整串短语零召回 ⇒ 改词项检索"
                 f"（{got} 条）"
             )
+            if "last_resort" in record:
+                # 第三档也要进台账：只写"降级过"会让"降到第几档才拿到东西"读不出来
+                # （`r-0002`：前两档 0 条、第三档 10 条 —— 那两句话不是一件事）。
+                notes.append(
+                    f"last_resort_used[{channel}]：主串与词项串都零召回 ⇒ 退到只用 topic"
+                    f"（{record.get('last_resort_count')} 条）"
+                )
         for channel, err in sorted(channel_errors.items()):
             notes.append(f"channel_error[{channel}]：{err}")
         return tuple(notes)
@@ -1410,6 +1420,7 @@ class OpenAlexProvider:
         """
         primary = _stringify(plan.template.get("search"))
         alt = _stringify(plan.fallback)
+        last = _stringify(getattr(plan, "last_resort", ""))
         if primary and primary in self._zero_recall_phrases and alt and alt != primary:
             # 这一跑已经证明这条短语零召回 ⇒ 不再为第二条路重发它。
             fallback_plan = _QueryPlan(
@@ -1426,7 +1437,7 @@ class OpenAlexProvider:
                 "phrase": primary, "terms": alt, "count": len(works),
                 "deduped": True,
             }
-            return works, fallback_plan
+            return self._maybe_last_resort(plan, works, fallback_plan, last)
 
         works = self._fetch_works(plan.template, plan.limit, sort=plan.sort)
         if works or not alt or alt == primary:
@@ -1446,7 +1457,38 @@ class OpenAlexProvider:
         self.last_phrase_fallbacks[plan.channel] = {
             "phrase": primary, "terms": alt, "count": len(works),
         }
-        return works, fallback_plan
+        return self._maybe_last_resort(plan, works, fallback_plan, last)
+
+    def _maybe_last_resort(
+        self,
+        plan: _QueryPlan,
+        works: list[dict],
+        used_plan: _QueryPlan,
+        last: str,
+    ) -> tuple[list[dict], _QueryPlan]:
+        """第三档（`r-0002` 那一趟的整改）：**前两串都零召回**时退到"只用 topic"。
+
+        触发条件三条同时成立，缺一条都不发这一次请求：
+        这一路有第三档串、它不等于前两串、而且前两次真的都是 0 条。
+        发出去之后无论有没有结果，**两次读数都留在 `last_phrase_fallbacks` 里**
+        （`last_resort` / `last_resort_count`）—— "换了个串才查到"与"换了也没查到"
+        是两件事，台账上必须分得开。
+        """
+        if works or not last or last in (used_plan.template.get("search"), plan.fallback):
+            return works, used_plan
+        third = _QueryPlan(
+            channel=plan.channel,
+            template={**plan.template, "search": last},
+            limit=plan.limit,
+            sort=plan.sort,
+        )
+        got = self._fetch_works(third.template, third.limit, sort=third.sort)
+        self.stats["last_resort_fetches"] = self.stats.get("last_resort_fetches", 0) + 1
+        record = dict(self.last_phrase_fallbacks.get(plan.channel) or {})
+        record["last_resort"] = last
+        record["last_resort_count"] = len(got)
+        self.last_phrase_fallbacks[plan.channel] = record
+        return got, third
 
     def _fetch_works(
         self, template: Mapping[str, Any], want: int, *, sort: str | None
@@ -1595,6 +1637,19 @@ class _QueryPlan:
     #: 整串短语在长题面上会零召回（字面匹配），主查询空手而归时由
     #: `OpenAlexProvider._fetch_with_fallback` 拿它再抓一次。
     fallback: str = ""
+    #: 第三档（`r-0002` 那一趟的整改）：**前两串都零召回**时退到"只用 topic"的那一条。
+    #:
+    #: 为什么需要第三档：`precise` 的主串与降级串**都带着 description 的词项**
+    #: （`term_query(description) OR …`），而 OpenAlex 的长串 OR 查询会真的零召回
+    #: （不是被标题过滤掉、是上游 `meta.count=0`）。真机读数（T2 第 23 趟 `t2r`）：
+    #: topic=`edge-girth-regular graphs` + 一段 30 词的 description ⇒ 主串 0 条、
+    #: 降级串 0 条 ⇒ 台账写 `no_results`（三次）；而同一个 topic 只留短 description
+    #: 或清空 description ⇒ 10 条（含标题就是《Edge-girth-regular graphs》那一篇）。
+    #: 也就是说"查不到"的真原因是**查询串太长**，而既有降级链两次都不脱开 description。
+    #: 第三档只脱开 description、保留 topic，代价是精度下降 —— 与
+    #: `keyword_hit` docstring 里那条取舍同向（"漏掉一篇好文献比多留几篇噪音代价更大"），
+    #: 且 `precise` 还有 `_precise_keep` 的标题关键词过滤兜着。
+    last_resort: str = ""
 
 
 def _phrase_query(text: str) -> str:
@@ -1691,6 +1746,7 @@ def _plan_mode(mode: str, topic: str, description: str, limit: int) -> list[_Que
         # 长题面上它单独命中 0 条是常态（实测见 `_fetch_with_fallback`），
         # 主查询空手而归时用它再抓一次。
         fallback_parts = [p for p in (_term_query(description), _term_query(topic) or topic) if p]
+        last_resort = _term_query(topic) or topic
         return [
             _QueryPlan(
                 channel="precise",
@@ -1698,6 +1754,9 @@ def _plan_mode(mode: str, topic: str, description: str, limit: int) -> list[_Que
                 limit=precise_limit,
                 sort=None,
                 fallback=" OR ".join(fallback_parts),
+                # 第三档：前两串都零召回时只用 topic（脱开 description，见 `last_resort`）。
+                last_resort=last_resort if last_resort not in (" OR ".join(fallback_parts), search)
+                else "",
             )
         ]
 
