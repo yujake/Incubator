@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import Any, I, Mapping, Sequence
+from .. import conceptrows as _CR   # 并表过渡期：概念行读合成视图
 
 class _DecideStructuralDuplicate:
     def decide_structural_duplicate(
@@ -44,7 +45,10 @@ class _DecideStructuralDuplicate:
         返回 ``{"verdict", "reason", "survivor_id", "merged_id", "evidence"}``。
         本方法只决定不落盘；执行合并用 :meth:`resolve_structural_duplicate`。
         """
-        rows_c = list(concepts) if concepts is not None else self.store.rows("concepts")
+        # 概念行读合成视图（并表过渡期：老表 + 新标准 `kind="concept"`，同号去重）——
+        # 只读老表会让"秘书/新标准写进来的概念"在结构重复裁决里看不见（静默漏判）。
+        rows_c = (list(concepts) if concepts is not None
+                  else _CR.view(self.store, shape="legacy")["rows"])
         rows_r = list(relations) if relations is not None else self.store.rows("relations")
         cids = [str(x) for x in ((candidate or {}).get("concept_ids") or [])]
 

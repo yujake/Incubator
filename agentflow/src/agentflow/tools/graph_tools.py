@@ -75,7 +75,9 @@ from dataclasses import replace
 from functools import partial
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from .. import conceptrows as CR
 from .. import textutil as T
+from ..store import StoreError
 from .attack_tools import _guard  # 守卫只有一份实现（FC-03）：定义在 attack_tools.py
 from .base import ToolError, ToolRegistry, ToolResult, fail, tool
 
@@ -350,9 +352,20 @@ class RelationGraph:
         为什么允许无锁读：图分析是纯读，读到的是某一瞬间的一致快照即可；
         所有写路径都由 `Store.tx` 保护，图这边拿锁只会让 C 的多次查询互相排队，
         而它恰恰应该能任意多次、任意组合地查（DESIGN-TOOLS.md §1.1 的注释）。
+
+        概念行走合成视图（`conceptrows.view(shape="legacy")`，并表过渡期）：
+        这里是 C 的六件分析动作与图工具的唯一入口，所以这一个读点搬完，
+        C 那一整片就都看得到新标准写进来的概念（老表 + 新标准同号去重）。
+        视图判不了时抛（不返回空图）：空图会让"关系指向不存在的概念"变成一片假红，
+        而"读不成"与"库里没有概念"必须分得开。
         """
+        view = CR.view(store, shape="legacy")
+        if not view.get("checked"):
+            raise StoreError(
+                f"概念行的合成视图没读成（{view.get('reason')}）⇒ 不建图："
+                "空图会把'读不成'读成'库里没有概念'，那比不报更糟")
         return cls(
-            concepts=list(store.rows("concepts")),
+            concepts=list(view["rows"]),
             relations=list(store.rows("relations")),
             literatures=list(store.rows("literature")),
         )

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from ._support import Any, C_API_MISSING_REASON, C_NO_EVIDENCE, IX, KIND_CLIENT, KIND_NONE, Mapping, Path, RT, S, STATE_FAILED, STATE_NOT_WIRED, Sequence, Store, StoreError, ToolRegistry, _C_AUTO, _digest, _json_object, _rank, _rank_min, current_summon_task_id, install_d_tools, invented_facts, json, load_trace_tools, model_json_call, model_kind, re, spend_reading
+from .. import conceptrows as _CR   # 并表过渡期：概念行读合成视图（老表 + 新标准同号去重）
 from .probe_c import _ProbeC
 from .ingest import _Ingest
 from .ingest_detailed import _IngestDetailed
@@ -489,7 +490,8 @@ class _Core:
                 found.extend(self._collect_ids(item, keys, depth=depth + 1))
         return sorted(set(found))
     def _concept_name(self, cid: str) -> str:
-        for row in self.store.rows("concepts"):
+        # 合成视图（并表过渡期）：名字这一格两边都要看得到，否则报告里会出现"概念0007"
+        for row in _CR.view(self.store, shape="legacy")["rows"]:
             if row.get("concept_id") == cid:
                 return str(row.get("name") or cid)
         return f"概念{cid}"
@@ -842,7 +844,8 @@ class _Core:
         }
     def _local_concept(self, cid: str) -> dict:
         """L2 的本地兜底。"""
-        row = next((c for c in self.store.rows("concepts") if c.get("concept_id") == cid), None)
+        row = next((c for c in _CR.view(self.store, shape="legacy")["rows"]
+                    if c.get("concept_id") == cid), None)
         rels = [
             {
                 "relation_id": r.get("relation_id"),

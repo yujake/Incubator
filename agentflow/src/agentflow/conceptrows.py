@@ -193,12 +193,6 @@ def view(store: Any, *, shape: str = "statement") -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 —— 读不成要如实报（不是"没有概念"）
         out["reason"] = f"statements 读不成（{type(exc).__name__}: {exc}）"
         return out
-    by_id: dict[str, dict[str, Any]] = {}
-    for row in stmt_rows:
-        row = dict(row)
-        row["via"] = "statements"
-        by_id[str(row.get("stmt_id") or "")] = row
-    out["counts"]["statements"] = len(by_id)
 
     legacy = legacy_present(store)
     out["legacy"] = legacy
@@ -207,24 +201,72 @@ def view(store: Any, *, shape: str = "statement") -> dict[str, Any]:
         return out
     if legacy.get("stale_file"):
         out["reason"] = str(legacy.get("reason") or "")
+    legacy_rows: list[dict[str, Any]] = []
     if legacy.get("present"):
         try:
             legacy_rows = [dict(r) for r in store.rows(LEGACY_TABLE)]
         except Exception as exc:  # noqa: BLE001 —— 老表读不成 ⇒ 三态里的"没查成"
             out["reason"] = f"老表读不成（{type(exc).__name__}: {exc}）⇒ 视图不完整"
             return out
-        out["counts"]["legacy"] = len(legacy_rows)
-        for lrow in legacy_rows:
-            folded = _from_legacy(lrow)
-            key = str(folded.get("stmt_id") or "")
-            if key in by_id:
-                out["counts"]["merged"] += 1
-                if (not str(by_id[key].get("statement_full") or "").strip()
-                        and str(folded.get("statement_full") or "").strip()):
-                    out["counts"]["definition_only_in_legacy"] += 1
-                continue
-            by_id[key] = folded
-            out["counts"]["legacy_only"] += 1
+    return _merge_rows(out, stmt_rows=stmt_rows, legacy_rows=legacy_rows)
+
+
+def view_tx(tx: Any, *, shape: str = "statement") -> dict[str, Any]:
+    """`view()` 的事务内形态：读己之写（同一笔事务里刚写的概念立刻看得见）。
+
+    为什么必须与 `view()` 分开：事务里的读有"读己之写"的语义，而 `view()` 走的是
+    `store.rows`（无锁快照，读不到本事务尚未提交的行）。B 的 `_apply_merge` 正是
+    "读概念行 → 改写 → 写回"三件事在同一笔里（`tx.rows("concepts")`）——
+    换成 `store.rows` 会让它读到上一次提交的版本，于是合并/别名同步落空，
+    而盘上看起来一切正常（这一笔写完了，只是基于旧值）。
+
+    两边的口径（合并、同号去重、`via`、计数、投影）必须同一份实现 ——
+    所以这里只负责"从哪读"，合并那一段调 `_merge_rows`。
+    """
+    out: dict[str, Any] = {"checked": False, "rows": [], "legacy": {}, "reason": "",
+                           "shape": str(shape or "statement"), "in_tx": True,
+                           "counts": {"statements": 0, "legacy": 0, "merged": 0,
+                                      "legacy_only": 0, "definition_only_in_legacy": 0}}
+    try:
+        stmt_rows = [dict(r) for r in tx.rows("statements")
+                     if str(r.get("kind") or "") == "concept"]
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实报
+        out["reason"] = f"事务里的 statements 读不成（{type(exc).__name__}: {exc}）"
+        return out
+    present = LEGACY_TABLE in S.TABLES
+    out["legacy"] = {"checked": True, "present": present, "file": None, "stale_file": False,
+                     "reason": ""}
+    legacy_rows: list[dict[str, Any]] = []
+    if present:
+        try:
+            legacy_rows = [dict(r) for r in tx.rows(LEGACY_TABLE)]
+        except Exception as exc:  # noqa: BLE001 —— 老表读不成 ⇒ 三态里的"没查成"
+            out["reason"] = f"事务里的老表读不成（{type(exc).__name__}: {exc}）⇒ 视图不完整"
+            return out
+    return _merge_rows(out, stmt_rows=stmt_rows, legacy_rows=legacy_rows)
+
+
+def _merge_rows(out: dict[str, Any], *, stmt_rows: list[dict[str, Any]],
+                legacy_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """合成的唯一实现（`view` 与 `view_tx` 都走这里：两边口径分家会造两种真相）。"""
+    by_id: dict[str, dict[str, Any]] = {}
+    for row in stmt_rows:
+        row = dict(row)
+        row["via"] = "statements"
+        by_id[str(row.get("stmt_id") or "")] = row
+    out["counts"]["statements"] = len(by_id)
+    out["counts"]["legacy"] = len(legacy_rows)
+    for lrow in legacy_rows:
+        folded = _from_legacy(lrow)
+        key = str(folded.get("stmt_id") or "")
+        if key in by_id:
+            out["counts"]["merged"] += 1
+            if (not str(by_id[key].get("statement_full") or "").strip()
+                    and str(folded.get("statement_full") or "").strip()):
+                out["counts"]["definition_only_in_legacy"] += 1
+            continue
+        by_id[key] = folded
+        out["counts"]["legacy_only"] += 1
     out["checked"] = True
     rows = list(by_id.values())
     out["rows"] = [_to_legacy(r) for r in rows] if out["shape"] == "legacy" else rows

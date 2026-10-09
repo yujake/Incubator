@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 
-from conftest import TS, sync_counters
+from conftest import TS, add_literature, sync_counters
 from agentflow import conceptrows as CR
 from agentflow import schema as S
 from agentflow import secretary as SEC
@@ -308,3 +308,52 @@ def test_verify_reports_an_unreadable_view_instead_of_a_flood(store, monkeypatch
     codes = [i["code"] for i in list(d["errors"]) + list(d["warnings"])]
     assert "concept_view_unreadable" in codes, codes
     assert "dangling_related" not in codes, "读不成不许变成'每一条关系都指向不存在的概念'"
+
+
+# ==================================================== 六、读侧搬运（视图进事务 / 进图）
+
+def test_the_view_inside_a_transaction_sees_its_own_writes(store):
+    """`view_tx`：事务里刚写的概念立刻看得见（读己之写）—— `view` 做不到，这是它存在的理由。"""
+    with store.tx("concepts", "relations", "statements", actor="test") as tx:
+        data = CR.write_concept(tx, stmt_id=tx.alloc_id("concept"), label="群",
+                                definition="带运算的集合", mirror=True)
+        sid = data["stmt_id"]
+        in_tx = CR.view_tx(tx, shape="legacy")
+        assert in_tx["checked"], in_tx
+        assert [r["concept_id"] for r in in_tx["rows"]] == [sid], (
+            "事务内视图读不到本事务刚写的行 ⇒ B 的'读→改→写回'会基于上一次提交的版本")
+    # 提交之后再读：`view` 与 `view_tx` 的结果必须一致（同一个合并实现）
+    after = CR.view(store, shape="legacy")
+    assert [r["concept_id"] for r in after["rows"]] == [sid]
+
+
+def test_the_graph_sees_concepts_written_by_the_new_standard(store):
+    """C 的图入口（`RelationGraph.from_store`）看得到新标准写进来的概念。"""
+    from agentflow.tools.graph_tools import RelationGraph
+
+    out = CR.upsert(store, label="电导", definition="边上权重的倒数")   # 新标准那一档
+    sid = out["stmt_id"]
+    other = CR.upsert(store, label="电阻", definition="电导的倒数")
+    add_literature(store, "0000")
+    with store.tx("relations", actor="test") as tx:
+        tx.upsert("relations", {"relation_id": "0000", "concept_ids": [sid, other["stmt_id"]],
+                                "kind": "related", "description": "夹具",
+                                "lit_id": "0000", "created_at": TS})
+    g = RelationGraph.from_store(store)
+    assert g.name_of(sid) == "电导", g.name_of(sid)
+    assert g.degree(sid) == 1, "新标准写进来的概念没进图 ⇒ C 的六件分析一起瞎"
+
+
+def test_the_graph_refuses_to_build_on_an_unreadable_view(store, monkeypatch):
+    """反真空：视图判不了 ⇒ 图入口抛（不返回空图：空图会把"读不成"读成"没有概念"）。"""
+    from agentflow.store import StoreError
+    from agentflow.tools import graph_tools as G
+
+    monkeypatch.setattr(G.CR, "view", lambda *a, **kw: {
+        "checked": False, "rows": [], "reason": "（判据夹具）"})
+    try:
+        G.RelationGraph.from_store(store)
+    except StoreError as exc:
+        assert "合成视图" in str(exc), str(exc)
+    else:
+        raise AssertionError("视图判不了而图照样建出来 ⇒ 空图会被读成'库里没有概念'")

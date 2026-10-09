@@ -649,6 +649,28 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 因为那一格的数据是真的，只是被投影抹掉了。所以现在：老行原样带过来、新行给空并靠
 `via` 分辨。**"表里写着空"与"这一版没有这一格"是两件事，折平就造假红。**
 
+#### 13.2f 读侧搬运第二步：视图进事务、进图（2026-10-09）
+
+| 读点 | 怎么搬 |
+|---|---|
+| `RelationGraph.from_store`（**C 的六件分析 + 图工具的唯一入口**） | 概念行走 `view(shape="legacy")`；视图判不了 ⇒ **抛**（空图会把"读不成"读成"库里没有概念"，那比不报更糟） |
+| `agent_b/core.py` 的种子概念 | 走视图；视图 `checked=False` 时**再抛一次**（视图把底层失败收成三态，而"读不到"必须走 `seed_concepts_error` 那条可见的路 —— 判据 `test_agent_b_core_audit` 当场抓到了这一格） |
+| `agent_b/decide_structural_duplicate.py` | 走视图（只读老表会让新标准写进来的概念在结构重复裁决里看不见） |
+| `agent_d/core.py` 的两处（概念名 / L2 兜底） | 走视图 |
+| `cli.py` 的三处（`analyze` 的候选名、概念解析） | 走视图 |
+
+**新增 `view_tx(tx, shape=…)`**：事务内的读有"读己之写"语义，而 `view()` 走 `store.rows`
+（无锁快照）读不到本事务未提交的行 —— B 的"读→改→写回"若换成 `store.rows`，会基于
+**上一次提交**的版本操作而盘上看起来一切正常。合并那一段抽成 `_merge_rows`，
+`view` 与 `view_tx` **共用同一份实现**（两边口径分家会造两种真相）。
+
+**落刀时必须一起改的写侧遗留（本轮明确不动，记在这里免得漏）**：那几处**在事务里改老表行**
+的读（`run_once` 的概念查重、`_apply_merge` 的 `tx.rows("concepts")`、`cli repair`、
+`resolve_structural_duplicate` 的事务）——它们读的是老表**原始行**（要写回去、要带
+`updated_at`/`_merge` 那些老表专有字段），换成投影会丢字段。删表那一笔必须把它们
+从"改老表行"改成"改新标准行"（墓碑 `merged_into` ⇒ `status="superseded"` + 理由），
+`agentflow repair --related` 那一档则整体退役（并表之后那件事由 `relations` 表管）。
+
 #### 13.2c 过渡层（`conceptrows`）落地与真盘读数
 
 并表要动磁盘格式、且不可逆 ⇒ 中间加一层**唯一读写口**（`draft/97` §10.3 的"两处同号并合"），

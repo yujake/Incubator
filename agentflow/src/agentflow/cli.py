@@ -477,7 +477,8 @@ def cmd_analyze(args) -> int:
         a = _resolve_concept(st, args.a)
         b = _resolve_concept(st, args.b)
         if a is None or b is None:
-            names = [f"{r['concept_id']}={r['name']}" for r in st.rows("concepts")]
+            names = [f"{r['concept_id']}={r['name']}"
+                     for r in CR.view(st, shape="legacy")["rows"]]
             print(f"[analyze] 无法解析概念：a={args.a!r} b={args.b!r}\n  现有概念：{names}", file=sys.stderr)
             return 2
         rep = c.paths(a, b, max_paths=args.max_paths, max_len=args.max_len, request=args.request or "")
@@ -526,12 +527,18 @@ def cmd_analyze(args) -> int:
 
 
 def _resolve_concept(st, token: str) -> str | None:
-    """把用户给的东西解析成概念代号：既接受 4 位代号，也接受概念名（走 dedup 的规范化匹配）。"""
+    """把用户给的东西解析成概念代号：既接受 4 位代号，也接受概念名（走 dedup 的规范化匹配）。
+
+    概念行读合成视图（并表过渡期：老表 + 新标准 `kind="concept"`，同号去重）：
+    只读老表会让"新标准写进来的概念"在这条命令里解析不到（用户看到一个存在的概念
+    被报成"解析不了"）。
+    """
     from agentflow import dedup as D
 
-    if S.is_valid_id(token) and any(r["concept_id"] == token for r in st.rows("concepts")):
+    rows = CR.view(st, shape="legacy")["rows"]
+    if S.is_valid_id(token) and any(r["concept_id"] == token for r in rows):
         return token
-    hit = D.find_concept(st.rows("concepts"), token)
+    hit = D.find_concept(rows, token)
     return hit["concept_id"] if hit else None
 
 

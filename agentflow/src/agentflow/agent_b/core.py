@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._support import Any, BClaimOutcome, D, I, Mapping, NOTE_LIMIT, NO_EXTRACTOR_ERROR, REPROCESS_RESULTS, S, Sequence, Store, T, _passages, check_quote, lease_expired, make_lease
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
+from ..store import StoreError      # 视图判不了时"再抛一次"（种子读失败必须被看见）
 from .run_once import _RunOnce
 from .reprocess_once import _ReprocessOnce
 from .run_reprocess import _RunReprocess
@@ -286,7 +287,15 @@ class _Core:
         limit = int(self.cfg.get("seed_concept_limit", 300))
         seeds_error: str | None = None
         try:
-            known = self.store.rows("concepts")
+            # 概念行读合成视图（并表过渡期：老表 + 新标准同号去重）——
+            # 这一格是"种子概念"，读一边会让另一边的概念当不上种子（召回静默塌）。
+            _cv = _CR.view(self.store, shape="legacy")
+            if not _cv.get("checked"):
+                # 视图把底层读失败收成三态（`checked=False` + 理由），所以这里要再抛一次：
+                # 不抛的话，"读不到"就退化成了空种子，而空种子的后果正是下面注释里
+                # 那条静默塌陷链。判据：`test_agent_b_seed_read_failure_is_visible_to_the_extractor`。
+                raise StoreError(f"概念合成视图没读成：{_cv.get('reason')}")
+            known = _cv["rows"]
         except Exception as e:  # noqa: BLE001
             # 这里不许静默吞掉。概念表读不出来时，种子会退化成"只有配置里那几个"，
             # 而本函数的 docstring 自己说了：没有种子的后果是"定义句只产出一个概念名，
