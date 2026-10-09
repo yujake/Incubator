@@ -144,7 +144,7 @@ Select-String -Path docs\*.md,agentflow\docs\*.md -Pattern 'C 的[0-9]+ 个动�
 —— **依据 F2**（`used_by` 接 `stmt:`/文档号形态，`label` 本来就是"人话标签"那一格）；
 退路 `out/paper/THEOREM-MAP.json`（不动 schema）。
 
-## §7 这一页**不动**的东西（写清楚，免得施工时"顺手"）
+## §8 这一页**不动**的东西（写清楚，免得施工时"顺手"）
 
 - `schema.py` / `store.py` / `projects.py` / `runflow.py`：零改动（硬约束）；
 - `closing.PAPER_LEDGER_PREFIXES = ("stmt:", "exp:", "rel:")`：论文承载本轮结果那一维不动
