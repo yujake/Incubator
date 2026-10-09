@@ -1388,7 +1388,11 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `ALLOWED_EDGES` 里能召唤 C 的是 B / D / F / M（A→[B]、E→[B,D]、G→[A,D,E,F]、
 #: H→[A,E,G]、V→[F] 都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，
 #: 其余五格（A/E/G/H/V）逐字不动 —— 换几格本身就是"谁看得见 C"的读数。
-_FROZEN_PROMPT_VERSION = "p55"
+#: `p56`（2026-10-09，S1r 依赖的第四种来源）：`doc.register_dependency` 加
+#: `source_stmt_id` / `path_group` ⇒ 那一件工具的说明原文变了，而 G 自己的提示词里
+#: 逐工具渲染的就是说明 ⇒ 只有 G 那一格换值；H/M 的伙伴表只列"动作名 + 必填参数"
+#: （两格都是可选）⇒ 那两格逐字不动。换一格本身就是"这次改动只落在 G 自己"的读数。
+_FROZEN_PROMPT_VERSION = "p56"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",
     "B": "ca40323d829da25b9a13b2c8322ea953d4520845343b801fedc74ac09129ab3b",
@@ -1396,7 +1400,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "90897ef41a8fc620d87a16e47984adfb5053ea753bcb35a5bef862556ae4ca4d",
     "E": "7df2627677772e8447b9db4a7ca94394d910c2132ae2daf441300e2b91e9e013",
     "F": "a2fa23c0748825f52dfa2524113882ddd5eabf5a9e610b9fd8dc218f1a73cca8",
-    "G": "b70c63c723843f5484c5ddea42f4f47be0523217ba0918c440d067fcd2b7c436",
+    "G": "dea28325506398e2e1f2e7366585abb46afd6d98a23c83ced3563bca1f6f5740",
     "H": "90bf5f20175f9bba118884e4bedcc848bc81c4ef3847e17ff16dd3c6c639f865",
     "V": "d05ce8da7181e87c981d21b116de04f1f5cc6b7b4c535803f49205fd350aa093",
     "M": "20232fdb1e852b27a43133ec17e3679e15bb5bc7f8e2ae968426767ee2a3fe6e",

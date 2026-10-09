@@ -1593,6 +1593,8 @@ def register_dependency(
     *,
     source_lit_id: str | None = None,
     source_experiment_id: str | None = None,
+    source_stmt_id: str | None = None,
+    path_group: int = 1,
     page_range: Any = None,
     quote: str = "",
     status: str = "dangling",
@@ -1604,12 +1606,23 @@ def register_dependency(
     ## 为什么"closed 必须指向已入库来源"要在这里再核一遍
 
     `schema.Dependency.validate` 只能检查"`status='closed'` 时字段非空" ——
-    它看不见 `literature` / `experiments` 表，因此一个不存在的 lit_id 也能通过 schema。
-    而"这个 lit_id 真的存在"正是"依赖闭合"的全部含义。
+    它看不见 `literature` / `experiments` / `statements` 表，因此一个不存在的 lit_id
+    也能通过 schema。而"这个 lit_id 真的存在"正是"依赖闭合"的全部含义。
     所以第一道闸必须在 G 手里用真实数据核：字段非空 ≠ 来源存在。
 
     第二道闸（依赖集的可查询闭合性）由 H/verify 侧的重算负责 —— 两道闸缺一不可：
     一个查"引用长得对不对"，一个查"引用的东西在不在"。
+
+    ## 第四种来源与"多组路径"（2026-10-09，业主两句裁定）
+
+    `source_stmt_id`：被依赖的那一端是我们自己的一条命题（定理用到定理、定理用到某个
+    概念）。此前那种边无处安放（`draft/97` §15.0 的 E2：字段表里没有它），于是"承重链"
+    在数据面上断在命题之间。
+
+    `path_group`：证明路径不唯一 ⇒ 一条定理可以有多组依赖（两个文献各有证明、
+    或一条更漂亮的路径）。同一 `used_by` + 同一 `path_group` = 一条路径（组内 AND：
+    都要走通）；不同 `path_group` = 可选路径（组间 OR：任一走通即可）。
+    B 那一侧交的是二维列表，秘书按外层下标写这一列（`Secretary.record_statement`）。
     """
     if not str(used_by or "").strip():
         raise ValueError("used_by 不能为空（依赖必须挂到某个具体的使用点，如 'doc:0001#claim-3'）")
@@ -1627,17 +1640,42 @@ def register_dependency(
             "只标一个状态而不说原因，等于把问题记了一笔却没人能接手"
             + ("（external_unavailable 尤其要说清「是哪本书/哪篇、为什么拿不到」）" if status == "external_unavailable" else "")
         )
-    if status == "closed" and not (source_lit_id or source_experiment_id):
-        raise ValueError("status='closed' 必须指向一个已入库来源（source_lit_id 或 source_experiment_id）")
+    if status == "closed" and not (source_lit_id or source_experiment_id or source_stmt_id):
+        raise ValueError(
+            "status='closed' 必须指向一个已入库来源（source_lit_id / source_experiment_id / "
+            "source_stmt_id）—— 2026-10-09 起第四种来源是'我们自己的一条命题'")
     if kind == "experiment" and not source_experiment_id:
         raise ValueError("kind='experiment' 的依赖必须给 source_experiment_id")
     if source_lit_id is not None:
         S.require_id(source_lit_id, "source_lit_id")
     if source_experiment_id is not None:
         S.require_id(source_experiment_id, "source_experiment_id")
+    if source_stmt_id is not None:
+        S.require_id(source_stmt_id, "source_stmt_id")
+    # ---- 被依赖的那一端最多给一个（与 `schema.Dependency.validate` 的"四选一"同一口径）。
+    # 在这里先判一次是为了给出能行动的话（schema 那句话在事务里抛，读的人手里
+    # 只有"最多给一个"，而这里能点名是哪两个撞上了）。
+    ends = [("source_lit_id", source_lit_id), ("source_experiment_id", source_experiment_id),
+            ("source_stmt_id", source_stmt_id)]
+    given = [name for name, value in ends if value]
+    if len(given) > 1:
+        raise ValueError(
+            f"被依赖的那一端最多给一个（给了 {given}）：给两个就说不清这条边到底依赖谁 —— "
+            "要表达'两组证明路径'请用 `path_group`（同一 used_by 下组号从 1 起），"
+            "一行一条边")
+    try:
+        group = int(path_group)
+    except (TypeError, ValueError):
+        raise ValueError(f"path_group 必须是正整数（收到 {path_group!r}）："
+                         "同一 used_by + 同一组 = 一条路径（组内都要），不同组 = 可选路径") from None
+    if group < 1:
+        raise ValueError(
+            f"path_group 必须是正整数（收到 {path_group!r}）：0 或负数会让'第几组'失去意义"
+            "（同一 used_by + 同一组 = 一条路径，不同组 = 可选路径）")
 
     with store.tx(
-        "dependencies", "literature", "experiments", actor=actor, note="register_dependency"
+        "dependencies", "literature", "experiments", "statements",
+        actor=actor, note="register_dependency"
     ) as tx:
         if status == "closed":
             if source_lit_id is not None and not any(
@@ -1655,6 +1693,14 @@ def register_dependency(
                     f"status='closed' 但 experiments 表里没有 experiment_id={source_experiment_id!r}。"
                     "依赖闭合必须核到**已入库**的来源（FC-23）"
                 )
+            if source_stmt_id is not None and not any(
+                str(r.get("stmt_id")) == source_stmt_id for r in tx.rows("statements")
+            ):
+                raise ValueError(
+                    f"status='closed' 但 statements 表里没有 stmt_id={source_stmt_id!r}。"
+                    "我方命题之间的那条边同样要核到已入库的行：指一条不存在的命题，"
+                    "'这条结论靠什么站着'就答不出来（`draft/97` §15.0 的第四种来源）"
+                )
         dep_id = tx.alloc_id("dep")
         row = S.Dependency(
             dep_id=dep_id,
@@ -1664,6 +1710,8 @@ def register_dependency(
             status=status,
             source_lit_id=source_lit_id,
             source_experiment_id=source_experiment_id,
+            source_stmt_id=source_stmt_id,
+            path_group=group,
             page_range=pr,
             quote=str(quote or ""),
             status_reason=str(status_reason or ""),
@@ -1927,8 +1975,10 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
 @tool(
     "doc.register_dependency",
     (
-            "登记外部依赖（FC-23）：status='closed' 会先用真实数据核 lit_id/experiment_id 是否已入库；"
-            "dangling / external_unavailable 必须写 status_reason"
+            "登记外部依赖（FC-23）：status='closed' 会先用真实数据核 "
+            "lit_id/experiment_id/stmt_id 是否已入库；dangling / external_unavailable "
+            "必须写 status_reason。`source_stmt_id` = 被依赖的是我们自己的一条命题；"
+            "`path_group` = 第几条证明路径（同一 used_by 下组内都要、组间任一）"
             ),
     {
            "type": "object",
@@ -1938,6 +1988,10 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
             "label": {"type": "string"},
             "source_lit_id": {"type": "string"},
             "source_experiment_id": {"type": "string"},
+            "source_stmt_id": {"type": "string"},
+            "path_group": {"type": "integer",
+                           "description": "证明路径的组号（从 1 起）。同一 used_by + "
+                                          "同一组 = 一条路径（组内都要）；不同组 = 可选路径"},
             "page_range": {
                 "type": "array",
                 "items": {"type": "integer"},
@@ -1954,8 +2008,8 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     side_effect="write_local",
     roles=_WRITER_ROLES,
     # 键名从一个真实调用读出（`register_dependency`）：落库后的 dependencies 行
-    # （`S.Dependency` 全字段，12 个）。
-    returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
+    # （`S.Dependency` 全字段，2026-10-09 加 `source_stmt_id` 与 `path_group` 后 14 个）。
+    returns="{'dep_id','used_by','kind','label','source_lit_id','source_experiment_id','source_stmt_id','path_group','page_range','quote','status','status_reason','created_at','created_by'}（落库后的 dependencies 行）",
     tags=("document", "dependency", "write"),
 )
 def _doc_register_dependency(_not_wired, store, actor, **kw):

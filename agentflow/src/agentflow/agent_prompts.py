@@ -115,7 +115,11 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 能召唤 C 的是 B / D / F / M（`ALLOWED_EDGES`：A→[B]、E→[B,D]、G→[A,D,E,F]、
 #: H→[A,E,G]、V→[F] 都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，其余五格
 #: （A/E/G/H/V）逐字不动 —— 换几格本身就是"谁看得见 C"的读数。
-PROMPT_VERSION = "p55"
+#: `p56`（2026-10-09，S1r 依赖的第四种来源）：`doc.register_dependency` 加
+#: `source_stmt_id` / `path_group` 两格 ⇒ 工具说明那一句变了，而 G 自己的提示词里
+#: 逐工具渲染的就是说明原文 ⇒ 只有 G 那一格换值（H/M 的伙伴表只列"动作名 + 必填参数"，
+#: 所以它们逐字不动 —— 换一格本身就是"这次改动只落在 G 自己"的读数）。
+PROMPT_VERSION = "p56"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

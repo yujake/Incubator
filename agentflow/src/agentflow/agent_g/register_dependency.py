@@ -15,6 +15,8 @@ class _RegisterDependency:
         *,
         source_lit_id: str | None = None,
         source_experiment_id: str | None = None,
+        source_stmt_id: str | None = None,
+        path_group: int = 1,
         page_range: Any = None,
         quote: str = "",
         status: str = "dangling",
@@ -22,9 +24,13 @@ class _RegisterDependency:
     ) -> dict:
         """登记外部依赖（转发 `doc.register_dependency`，第一道闭合闸在工具层）。
 
-        `status="closed"` 时会用真实数据核 `literature`/`experiments` 表：
+        `status="closed"` 时会用真实数据核 `literature`/`experiments`/`statements` 表：
         schema 只能查"字段非空"，查不出"这个 lit_id 根本不存在"。
         引用一篇不存在的文献，就是把外部结论当成了自己的结论。
+
+        `source_stmt_id`（2026-10-09 加的第四种来源）：被依赖的是我们自己的一条命题
+        （定理用到定理 / 用到某个概念）—— 那条边此前无处安放，承重链断在命题之间。
+        `path_group`：证明路径不唯一时它是组号（同一 `used_by` 下组内都要、组间任一）。
         """
         data = self._call(
             "doc.register_dependency",
@@ -33,6 +39,8 @@ class _RegisterDependency:
             label=label,
             source_lit_id=source_lit_id,
             source_experiment_id=source_experiment_id,
+            source_stmt_id=source_stmt_id,
+            path_group=path_group,
             page_range=list(page_range) if isinstance(page_range, (list, tuple)) else page_range,
             quote=quote,
             status=status,

@@ -1068,6 +1068,20 @@ if any(T.normalize(a) == T.normalize(self.label) for a in self.aliases):
 | `store.py` | `rebuild` 折 `concepts→statements`（定义待补标记、`normalized_name` 丢弃、`merged_into` 只报读数）；概念号走**同一分配器**重发；`relations.concept_ids` 同步改号 + 映射落账；**v1→v2 读兼容** | §13.2 / §14.1 / §14.4b，依据 E4/E5 |
 | `textutil.py` | **零改动**（`normalize` 是查重的唯一实现，只被引用） | §14.4c，`dedup.py:295` / `interactions.py:870-879` |
 | `tools/doc_tools.py` | `register_dependency(..., path_group=1, source_stmt_id=None)` | §13.3，依据 E6 |
+
+**已落地（2026-10-09，S1r 依赖的第四种来源）**：三处一起改，缺一处就有静默分家 ——
+① `doc_tools.register_dependency` 加两格 + 三道新闸（`source_stmt_id` 的 id 形态、
+`path_group` 正整数、`closed` 必须核到 `statements` 表里**真的有那一行**；另外把
+"被依赖端最多给一个"从 schema 里提前到写入口，好点名是哪两个撞上了）；
+② 工具面 `@tool("doc.register_dependency", …)` 的 params 与 `returns` 同步
+（returns 里列的是落库后的 14 个键）；③ `specs/g.py` 的动作参数（**禁改区**）
+加同样两格 —— 类型按 AST 逐字比（`capabilities.param_type_divergences`），
+而**实现签名那一关**（`assert_capabilities` 第 [8] 条，`param_seam_violations`）
+读的是 `AgentG.register_dependency` ⇒ `agent_g/register_dependency.py` 也必须收这两格
+（第一版漏了它，导入期就炸：`G.register_dependency 的 ['path_group','source_stmt_id']`）。
+提示词 p55→**p56**：工具说明原文进了 G 自己的提示词 ⇒ **只有 G 那一格换值**
+（H/M 的伙伴表只列"动作名 + 必填参数"，两格都是可选 ⇒ 逐字不动）。
+判据 7 条（正控 2 / 负控 4 / 反真空 1）：`tests/test_a_dependency_may_point_at_our_own_statement.py`。
 | `secretary.py` | 新 `wash_statement` / `record_statement`（B 的写入代理：洗格式/拿号/查重含别名/扫引用落边/定义待补） | §11.1 / §14.11 / §14.13，依据 E8 |
 | `agent_b/*` + `specs/b.py` | B 的输入契约 = **定理内容 + 证明过程**；工具留着但**执行点改道**给秘书（乙） | §14.11 |
 | `evidencebits.py` | `derive_grade` 对 `kind=="concept"` **短路**（概念不参与等级）；+`bit_table_map` | §14.5，依据 E7 |

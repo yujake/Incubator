@@ -40,7 +40,17 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "G", "register_dependency",
         "登记外部依赖（`closed` 时必须核到已入库的来源，FC-23）",
         _obj({"used_by": _S, "kind": _S, "label": _S, "source_lit_id": _S,
-              "source_experiment_id": _S, "page_range": _ARR_I, "quote": _S,
+              "source_experiment_id": _S,
+              # 2026-10-09（业主：「B走乙……如果证明路径不唯一，可增另一组依赖，
+              # 实现用二维列表」+「concept表真并进statements」）：依赖的第四种来源
+              # 是"我们自己的一条命题"（定理用到定理/用到某个概念），
+              # 而"多组路径"落成 `path_group`（同一 used_by + 同一组 = 一条路径，
+              # 组内都要；不同组 = 可选路径，组间任一）。两格与工具层逐字对齐
+              # （`doc_tools.register_dependency` 的 `@tool` 声明），
+              # 对账判据：`tests/test_role_specs_action_table.py` +
+              # `capabilities.param_type_divergences()`（类型按 AST 比）。
+              "source_stmt_id": _S, "path_group": _I,
+              "page_range": _ARR_I, "quote": _S,
               "status": {"type": "string", "enum": list(S.DEP_STATUSES)},
               "status_reason": _S},
              ("used_by", "kind", "label")),
@@ -91,19 +101,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "dict", side_effect="write_local", handler_name="revise",
     ),
 
-    # ---- `paper_package`（2026-10-03 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
+    # ---- `paper_package`（2026-10-03 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
     #
     # 为什么必须有它（`draft/37` §58/§59 的真机读数）：第九趟主控把正文改动落盘、九节报告过门，
-    # 只剩 `anchor` 一格 —— 而"重渲染 + 重编译 + 核锚"这三件事是**工具**
+    # 只剩 `anchor` 一格 —— 而"重渲染 + 重编译 + 核锚"这三件事是工具
     # （`doc.paper_render` / `doc.paper_compile` / `doc.paper_state`），
-    # **没有任何动作**能召唤它们：主控连派三次 `G.revise` 都没用
+    # 没有任何动作能召唤它们：主控连派三次 `G.revise` 都没用
     # （`revise` / `refresh_markdown` / `render` 动的都是稿件 markdown，不是论文包）。
     # 于是"锚回到 consistent"在编排层结构上做不到 —— 与 §44.4（A/B 缺登记动作）同形。
     #
     # 两根轴逐条读出：
     #   - 效果轴 `write_local`：它真的改盘（渲染出的 `appendix.tex` / `tables/*.tex`、
     #     重编的 `main.pdf`、重写的锚与回执）。
-    #   - 外部轴 `exec`：渲染与编译都会**起子进程**（项目脚本 / LaTeX 工具链）——
+    #   - 外部轴 `exec`：渲染与编译都会起子进程（项目脚本 / LaTeX 工具链）——
     #     与 `verify.run_experiment` 同一档；不标 `egress`（它不出网）。
     ActionSpec(
         "G", "paper_package",
