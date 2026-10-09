@@ -790,6 +790,34 @@ def test_ms_verdict_survives_the_run_through_the_tool_exit(tmp_path):
     assert "M 判" in out, out
 
 
+def test_the_verdict_lands_in_the_workspace_not_the_process_cwd(tmp_path, monkeypatch):
+    """真机 t1v 抓到的缺陷：`project_dir="."` 时判据落到了跑批的工作目录里。
+
+    工具契约写的是"相对工作区"，而 `Path(".")` 是按进程当前目录解析的 ——
+    真机那一趟：M 在步 99 交了判据（`goal_met` 给了）、工具报落盘成功，而判据
+    实际写在 `agentflow/out/review/`（跑批的工作目录）而不是
+    `projects/p5-review-t18/out/review/`（工作区）⇒ 运行外的出口读工作区，
+    得出"没人判过"（退出码 2），而运行内 M 明明判过 —— 正是这一格要治的分家。
+
+    判据：从工具体出口给相对 `project_dir`（`"."`），判据必须落在工作区里，
+    且进程目录里不许出现 `out/`。修法是两侧共用 `resolve_under_workspace`
+    （写侧 `conductor.closing`、读侧 `check_closing` 的回退）。
+    """
+    st, report = _good(tmp_path)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)                      # 进程当前目录 ≠ 工作区（真机形状）
+    res = _tool_closing(st, project_dir=".", report_path=str(report),
+                        goal="把这份交付做到能交", goal_met=True)
+    assert res.ok, (res.error, res.meta)
+    landed = st.root / "out" / "review" / "m-verdicts.jsonl"
+    assert landed.is_file(), ("判据没落在工作区里 ⇒ 运行外的出口读不到它"
+                              f"（工具报的落点：{res.data['verdict_written']}）")
+    assert not (cwd / "out").exists(), (
+        "判据落到了进程当前目录里（`project_dir='.'` 没按工作区解析）——"
+        "这正是真机 t1v 的形态")
+
+
 def test_a_negative_cost_cap_is_a_usage_error_not_a_verdict(tmp_path):
     """兜底判据：负数上限是用法错（退出码 2），不许伪装成"判据红"（退出码 1）。
 

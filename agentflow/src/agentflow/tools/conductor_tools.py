@@ -1149,7 +1149,11 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     # 落盘先于读数：这一次调用给出的判据要能立刻被"运行外那一趟"读到。
     written: dict[str, Any] = {"tried": False, "ok": False, "why": "", "path": ""}
     if goal_met is not None or (task_list if isinstance(task_list, (list, tuple)) else None):
-        vroot = str(project_dir or session_root or getattr(store, "root", "") or "")
+        # 落点的解析必须与门读侧同一条口径（`resolve_under_workspace`）：工具契约写的
+        # 是"相对工作区"，而 `Path(".")` 是按进程当前目录解析的 —— 真机 t1v 就是
+        # 这么把判据写到跑批的工作目录里去的（M 判了达成，而外部门说"没人判过"）。
+        vroot = CL.resolve_under_workspace(store, str(project_dir or "")) or str(
+            session_root or getattr(store, "root", "") or "")
         if vroot:
             written["tried"] = True
             written["path"] = str(CL.m_verdicts_path(vroot))

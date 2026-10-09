@@ -80,3 +80,55 @@ def test_a_dangling_statement_citation_is_refused_by_design(tmp_path: pathlib.Pa
     assert "不存在" in text, text
     assert "事务未声明表" not in text, ("这条不该再以存储故障的形态出现：", text)
     assert st.rows("documents") == [], "被拒的稿件一行都不许落"
+
+
+# --------------------------------------------------------------------------------------
+# 同族的第二处（真机 t1v 抓出来的）：`revise` 的事务也漏了 `statements`
+# --------------------------------------------------------------------------------------
+
+def _agent_g(st: Store):
+    from agentflow.agent_g import AgentG
+
+    return AgentG(st, config={"docs_subdir": "documents"})
+
+
+def _revise_claims() -> list[dict]:
+    return [{"claim_id": "c1", "section": "Main", "text": "甲（改后仍引自家命题）",
+             "evidence_kind": "heuristic", "citations": ["stmt:0000"]}]
+
+
+def test_a_revision_may_cite_our_own_statement(tmp_path: pathlib.Path):
+    """正控：修订一条引用自家命题的断言也要写得进去（`revise` 的事务声明一样要含 `statements`）。
+
+    真机 t1v 的现场（`draft/94` §10）：M 派 G 去按 H 的审校发现修订稿件，G 报
+    「StoreError 事务未声明表 statements」⇒ 修订这条路整条不通，M 只能绕道
+    （重建一份新稿）。同一个缺口在 `build_document` 上已经修过一次（`a3f4c83`），
+    而 `revise` 是另一个入口 —— 一处改完、另一处没跟着改。
+    """
+    st = _store(tmp_path, with_statement=True)
+    doc = build_document(store=st, kind="paper", title="引自家命题的稿", claims=_claims(),
+                         workspace_root=str(tmp_path), actor="test")
+    g = _agent_g(st)
+    out = g.revise(str(doc["doc_id"]), new_claims=_revise_claims(), note="按 H 的意见改")
+    row = next(r for r in st.rows("documents") if str(r["doc_id"]) == str(doc["doc_id"]))
+    assert row["status"] == "revised" and int(row["review_rounds"]) == 1, row
+    # 落进去的那条断言带着自家命题的引用（`claim_id` 由 `normalize_claims` 归一，
+    # 所以这里判的是"新增或替换发生了一次"，不是那个代号字面）
+    assert out["appended_claim_ids"] or out["replaced_claim_ids"], out
+    assert any("stmt:0000" in (c.get("citations") or []) for c in row["claims"]), row["claims"]
+
+
+def test_a_revision_citing_a_missing_statement_is_refused_by_design(tmp_path: pathlib.Path):
+    """负控：修订引一条不存在的命题 ⇒ 理由必须是"引用不存在"，不是存储故障。"""
+    st = _store(tmp_path, with_statement=True)
+    doc = build_document(store=st, kind="paper", title="引自家命题的稿", claims=_claims(),
+                         workspace_root=str(tmp_path), actor="test")
+    g = _agent_g(st)
+    bad = [{"claim_id": "c1", "section": "Main", "text": "甲（引不存在的命题）",
+            "evidence_kind": "heuristic", "citations": ["stmt:9999"]}]
+    with pytest.raises(Exception) as err:
+        g.revise(str(doc["doc_id"]), new_claims=bad)
+    text = str(err.value) + str(getattr(err.value, "details", ""))
+    assert "不存在" in text and "事务未声明表" not in text, text
+    row = next(r for r in st.rows("documents") if str(r["doc_id"]) == str(doc["doc_id"]))
+    assert row["status"] != "revised" and int(row["review_rounds"] or 0) == 0, row

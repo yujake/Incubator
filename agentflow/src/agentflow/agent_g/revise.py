@@ -42,9 +42,15 @@ class _Revise:
         doc_id = str(doc_id)
         with self.store.tx(
             "documents", "dependencies", "review_findings",
-            # 下面四张表只为 `check_citations` 而声明：`Store.tx` 按 `LOCK_ORDER`
-            # 统一排序加锁，多声明几张表不会引入加锁顺序问题。
-            "literature", "relations", "experiments", "eval_results",
+            # 下面五张表只为 `check_citations` / `check_proofs` 而声明：`Store.tx` 按
+            # `LOCK_ORDER` 统一排序加锁，多声明几张表不会引入加锁顺序问题。
+            #
+            # `statements` 是真机 t1v 抓出来的（`draft/94` §10）：`check_citations`
+            # 按 `CITATION_PREFIXES`（六张表）核引用，而这里原来只声明了五张 ⇒ 任何
+            # 引用了自家命题（`stmt:`）的修订都整笔写不进去，报的是
+            # 「事务未声明表 statements」。同族的缺口在 `doc.build_document` 上
+            # （`a3f4c83` 修过一次）—— 一处改完、另一处没跟着改，两个入口就此分家。
+            "literature", "relations", "experiments", "eval_results", "statements",
             actor=self.actor, note=f"revise doc:{doc_id} {note}".strip(),
         ) as tx:
             doc = tx.find("documents", doc_id=doc_id)

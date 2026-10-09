@@ -3533,8 +3533,14 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
         #
         # 三态：读不成 ⇒ 如实落 `verdict_source`（`checked=False`），并仍然按
         # "没有判据"走（2）—— 绝不用一个读不到的东西冒充 M 判过。
-        vroot = Path(project_dir) if str(project_dir or "") else (
-            Path(root) if root is not None else None)
+        #
+        # `project_dir` 的解析必须走 `resolve_under_workspace`：工具契约写的是
+        # "相对工作区"，而 `Path(".")` 是按进程当前目录解析的 —— 真机 t1v 就是
+        # 这么把判据写到了跑批的工作目录（`agentflow/out/review/`）而不是工作区里，
+        # 于是两处读数当场分家：M 判了达成，而外部门说"没人判过"。
+        vroot_s = resolve_under_workspace(store, project_dir) if str(project_dir or "").strip() \
+            else (str(root) if root is not None else "")
+        vroot = Path(vroot_s) if vroot_s else None
         if vroot is not None:
             got = read_m_verdict(vroot)
             rep.readings["verdict_source"] = {
