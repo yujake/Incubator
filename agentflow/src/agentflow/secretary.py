@@ -552,40 +552,20 @@ def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
 
 def _concept_statement(c: Mapping[str, Any], *, stmt_id: str, doc_id: str,
                        actor: str) -> Any:
-    """一个概念 ⇒ 一条 `statements` 行（并表之后概念的落点，`draft/97` §10）。
+    """一个概念 ⇒ 一条 `statements` 行 —— 转发到唯一构造口 `conceptrows`。
 
-    两档（`D12` 甲，2026-10-09）：
-
-    - 定义在 ⇒ `status="active"`，`statement_full` 就是定义；
-    - 定义还没抽到 ⇒ `status="pending_definition"` + `quote_reason` 里写待补标记
-      （`concept:pending_search`：等 A 检索回来，或基本概念由 B 自撰）。
-      不许落成 `active` + 空定义（schema 当场拒），也不许干脆不落（那样并表之后
-      这个概念查不到 —— 业主的裁定要的是"行先落、内容后到"）。
-
-    良定义性证明那一格照旧：`proof_text`（原始概念写 `concept:primitive`）。
+    这一格此前是本文件里的第二份实现（与并表过渡层那份同口径）：留着两份，
+    "定义待补落哪一档"就会有两处可改，而它们漂了不会有任何地方红。
+    现在只有 `conceptrows.concept_statement` 一处（本函数是薄转发，保住既有调用点）。
     """
-    from . import migrate_concepts as MC   # 惰性：待补标记的唯一出处
+    from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
 
-    definition = str(c.get("definition") or "")
-    src = str(c.get("source_lit_id") or "")
-    pending = not definition.strip()
-    if pending:
-        reason = (f"概念 {str(c.get('name') or '')!r} 的定义还没抽到（D12 甲）："
-                  f"{MC.PENDING_SEARCH} —— 由直接父/A 检索回来，或基本概念由 B 自撰；"
-                  "定义到了就改回 active 并清掉这一标记。"
-                  "良定义性证明那一格照旧记 proof_text（原始概念写 concept:primitive）")
-    else:
-        reason = ("概念的良定义性证明记在 proof_text（原始概念写 concept:primitive）；定义来自 "
-                  + (src if src else "B 的消化（没有外部来源）"))
-    return S.Statement(
-        stmt_id=stmt_id, origin="own_result", kind="concept",
-        label=str(c.get("name") or ""), statement_text=definition, statement_full=definition,
-        proof_text=str(c.get("proof_text") or "concept:primitive"),
-        source_lit_id=src or None, quote_verified=None, quote_reason=reason,
-        evidence_kind="heuristic",
-        aliases=[str(a) for a in (c.get("aliases") or []) if str(a).strip()],
-        status=("pending_definition" if pending else "active"),
-        doc_id=doc_id or None, created_at=S.now_iso(), created_by=actor)
+    return CR.concept_statement(stmt_id=stmt_id, label=str(c.get("name") or ""),
+                                definition=str(c.get("definition") or ""),
+                                aliases=c.get("aliases") or (),
+                                source_lit_id=str(c.get("source_lit_id") or ""),
+                                proof_text=str(c.get("proof_text") or ""),
+                                doc_id=doc_id, actor=actor)
 
 
 class Secretary:
@@ -2457,14 +2437,17 @@ class Secretary:
         与"概念缺定义"折成同一件事（前者该拒，后者该落）。
         查重按概念标签的规范化值（同名的概念不重复建行；改名由人/秘书那一层决定）。
         """
-        from . import textutil as T   # 惰性：查重键的唯一实现
+        from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
+        from . import textutil as T       # 惰性：查重键的唯一实现
 
         name = str(body.get("label") or "")
         if not name.strip():
             out.update(refused="empty_statement",
                        reason="一条概念至少要有 label（名字）—— 没有名字的行谁也认不出它")
             return out
-        with self.store.tx(*STATEMENT_WRITE_TABLES, actor=f"secretary-{self.role}",
+        legacy = CR.legacy_present(self.store)
+        tables = list(STATEMENT_WRITE_TABLES) + ([CR.LEGACY_TABLE] if legacy.get("present") else [])
+        with self.store.tx(*tables, actor=f"secretary-{self.role}",
                            note="record_statement:concept_pending") as tx:
             key = T.normalize(name)
             dup = next((r for r in tx.rows("statements")
@@ -2477,15 +2460,15 @@ class Secretary:
                                    "定义到了去改那一行，而不是再起一条）"))
                 return out
             cid = tx.alloc_id(S.TABLES["statements"]["id_kind"])
-            row = _concept_statement(
-                {"name": name, "definition": "", "aliases": body.get("aliases") or [],
-                 "source_lit_id": body.get("source_lit_id") or ""},
-                stmt_id=cid, doc_id=str(body.get("doc_id") or ""),
-                actor=f"secretary-{self.role}")
-            row.validate()
-            tx.upsert("statements", row.to_dict(), note="record_statement:concept_pending")
-        out.update(checked=True, created=True, stmt_id=cid, row=row.to_dict(),
-                   tables=["statements"], pending_concepts=1,
+            # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号
+            data = CR.write_concept(tx, stmt_id=cid, label=name, definition="",
+                                    aliases=body.get("aliases") or [],
+                                    source_lit_id=str(body.get("source_lit_id") or ""),
+                                    doc_id=str(body.get("doc_id") or ""),
+                                    actor=f"secretary-{self.role}",
+                                    mirror=bool(legacy.get("present")))
+        out.update(checked=True, created=True, stmt_id=cid, row=data,
+                   tables=tables, mirrored=bool(legacy.get("present")), pending_concepts=1,
                    reason=("概念行已落成 pending_definition（定义待补）—— 它不是依据，"
                            "`proof_text` 那一格记的是良定义性证明"))
         return out
@@ -2493,12 +2476,16 @@ class Secretary:
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
                              force_new: bool, out: dict[str, Any]) -> dict[str, Any]:
         """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。"""
-        from . import textutil as T   # 惰性：查重键的唯一实现
+        from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
+        from . import textutil as T       # 惰性：查重键的唯一实现
 
         groups = [list(g) for g in (body.get("deps") or [])]
         concepts = [dict(c) for c in (body.get("concepts") or []) if isinstance(c, Mapping)]
+        legacy = CR.legacy_present(self.store)
         with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
-                           "documents", actor=f"secretary-{self.role}",
+                           "documents",
+                           *([CR.LEGACY_TABLE] if legacy.get("present") else ()),
+                           actor=f"secretary-{self.role}",
                            note="record_statement") as tx:
             key = T.normalize(full)
             existing = next((r for r in tx.rows("statements")
@@ -2531,16 +2518,34 @@ class Secretary:
             row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
             row.validate()
             tx.upsert("statements", row.to_dict(), note="record_statement")
+            if kind == "concept" and legacy.get("present"):
+                # 交来的就是一条概念（`kind="concept"`）⇒ 它自己那一行也要镜像：
+                # 漏掉这一支，B 用"整条交一条概念"的写法时老读侧就看不见它
+                # （而盘上看起来一切正常 —— 这正是"两处同号"最容易漏的一格）。
+                mirror = S.Concept(
+                    concept_id=stmt_id, name=str(body.get("label") or ""),
+                    definition=full, related_concepts=[],
+                    normalized_name=T.normalize(str(body.get("label") or "")),
+                    aliases=[str(a) for a in (body.get("aliases") or []) if str(a).strip()],
+                    definition_source_lit_id=str(body.get("source_lit_id") or "") or None,
+                    created_at=S.now_iso(), updated_at=S.now_iso())
+                mirror.validate()
+                tx.upsert(CR.LEGACY_TABLE, mirror.to_dict(), note="record_statement:mirror")
             written = ["statements"]
             pending_concepts = 0
             for c in concepts:
                 cid = tx.alloc_id(stmt_kind)
-                crow = _concept_statement(c, stmt_id=cid, doc_id=str(body.get("doc_id") or ""),
-                                          actor=f"secretary-{self.role}")
-                if crow.status == "pending_definition":
+                # 过渡期两处同号 + 老表镜像（`conceptrows` 的契约 1）：走同一处写口
+                crow_data = CR.write_concept(
+                    tx, stmt_id=cid, label=str(c.get("name") or ""),
+                    definition=str(c.get("definition") or ""),
+                    aliases=c.get("aliases") or (),
+                    source_lit_id=str(c.get("source_lit_id") or ""),
+                    proof_text=str(c.get("proof_text") or ""),
+                    doc_id=str(body.get("doc_id") or ""), actor=f"secretary-{self.role}",
+                    mirror=bool(legacy.get("present")))
+                if str(crow_data.get("status") or "") == "pending_definition":
                     pending_concepts += 1
-                crow.validate()
-                tx.upsert("statements", crow.to_dict(), note="record_statement:concept")
             for step in steps:
                 dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
                 dep = S.Dependency(

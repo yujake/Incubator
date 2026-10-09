@@ -627,6 +627,26 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 的 `collisions` 点名它们），以及 94 条待补定义（谁去补写在标记里）。
 完整报告：`D:\Incubator\temp\_s1r_plan_readings.txt`。
 
+#### 13.2c 过渡层（`conceptrows`）落地与真盘读数
+
+并表要动磁盘格式、且不可逆 ⇒ 中间加一层**唯一读写口**（`draft/97` §10.3 的"两处同号并合"），
+让读侧可以一个一个搬：
+
+| 面 | 口径 |
+|---|---|
+| 写 | 新标准（`statements`）先写，老表（`concepts`）照旧镜像，**两处同号**（`stmt_id == concept_id`）—— 老读侧立刻看得到新写进来的概念 |
+| 读 | `view()` 合成一个视图（同一个号两边都有 ⇒ 新标准优先，逐行标 `via`）；老写侧还没搬的行折成新形状（`via="legacy"`） |
+| 三态 | `legacy_present`：表还在 `TABLES` 里 ⇒ 过渡期（**文件还没建也要镜像** —— 拿文件判会把"还没写过概念"读成"过渡期结束"）；表已退役而老文件还在 ⇒ `stale_file` **点名**；读不成 ⇒ `checked=False` |
+| 计数 | `statements` / `legacy` / `merged` / `legacy_only` / `definition_only_in_legacy` 五个分开给（"两边都有"与"只有一边"是不同的读数） |
+
+**真盘读数（2026-10-09，脚本 `temp/_s1r_view_readings.py`，只读）**：62 个工作区、
+28 个有概念行 ⇒ **新标准 0 / 老表 2233 / merged 0 / legacy_only 2233**、
+`definition_only_in_legacy` 0、问题 0 条（`legacy` 计数与逐行 `via`+`merged` 逐工作区对得上）。
+这就是"读侧还没搬"的**起点快照**；迁移之后再跑同一脚本，这张表应当变成
+`statements=2233 / legacy_only=0` —— 两次读数放在一起才是"搬干净了"的证据。
+一处实现去重：`secretary._concept_statement` 从"本文件里的第二份构造"改成薄转发
+（唯一构造口在 `conceptrows.concept_statement`）—— 两份同口径的构造漂了不会有任何地方红。
+
 ### 13.3 `src/agentflow/tools/doc_tools.py` + `agent_b/*` + `secretary.py`（B 走秘书）
 
 ```python
