@@ -627,6 +627,28 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 的 `collisions` 点名它们），以及 94 条待补定义（谁去补写在标记里）。
 完整报告：`D:\Incubator\temp\_s1r_plan_readings.txt`。
 
+#### 13.2e 读侧搬运的第一步：过渡投影 + 三个读点（2026-10-09）
+
+读侧搬运最容易出的事是"一次改两件事"：既换读口（`store.rows("concepts")` ⇒ 视图），
+又改字段名（`concept_id` ⇒ `stmt_id`）—— 红的时候分不清是哪一类错，而两类错的处置完全不同。
+所以 `view()` 加一档 `shape="legacy"`：**同一个视图，反向投影回老字段名**
+（`LEGACY_VIEW_FIELDS`：`concept_id`/`name`/`definition`/`definition_source_lit_id`，
+`normalized_name` 现算，`related_concepts` 从老行原样带过来）。读点于是可以**先换读口**，
+字段名那一半另起一批。
+
+**这一批搬了三个读点**：
+
+| 读点 | 口径 |
+|---|---|
+| `verify.py::_check_1`（**禁改区**） | 概念行读合成视图（投影用老字段名）。另加一条不变量 `concept_view_unreadable`：视图判不了时**报出来**，不许当成"库里没有概念"（那会让每条关系都变成"指向不存在的概念"，满屏假红） |
+| `verify.py::_check_4` 的 `related_drift` | 按 `via` 分档：`related_concepts` **只有老表有**，新标准那一档没有这一格 ⇒ 拿它比派生结果会造**假红**。跳过的行数记 `checked["related_concepts_skipped_new_standard"]`（"少判了几行"必须看得见） |
+| `projects.py` 的 `store_counts` / `reviewaccept.py` 的 `ledger_rows` | 概念数读视图（老行 + 新标准同号去重）；读不成给 `None`（**不是 0**）并点名原因 |
+
+**踩到的坑**：投影第一版把 `related_concepts` 一律给 `[]`（想的是"并表之后那件事由
+`relations` 管"），结果 `verify` 的 `related_drift` 对**老行**也报了假红 ——
+因为那一格的数据是真的，只是被投影抹掉了。所以现在：老行原样带过来、新行给空并靠
+`via` 分辨。**"表里写着空"与"这一版没有这一格"是两件事，折平就造假红。**
+
 #### 13.2c 过渡层（`conceptrows`）落地与真盘读数
 
 并表要动磁盘格式、且不可逆 ⇒ 中间加一层**唯一读写口**（`draft/97` §10.3 的"两处同号并合"），

@@ -506,6 +506,7 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
     """
     import hashlib
 
+    from . import conceptrows as CR   # 并表过渡期：概念那一份走合成视图
     from . import renderanchor as RA
     from .closing import resolve_under_workspace
 
@@ -526,8 +527,13 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
     aux["anchor_verdict"] = (RA.check_package(project_dir, store=store).get("verdict")
                              if project_dir else "")
     aux["task_rows"] = len(store.rows("tasks")) if store is not None else 0
-    aux["ledger_rows"] = (len(store.rows("literature")) + len(store.rows("concepts"))
-                          + len(store.rows("relations"))) if store is not None else 0
+    # 台账行数：概念那一份读合成视图（并表过渡期：老表 + 新标准 `kind="concept"`，
+    # 同号去重）—— 它是给人看的辅助读数，读一边都会在迁移前后各错一次。
+    _ledger_concepts = (CR.view(store) if store is not None else {"checked": False, "rows": []})
+    aux["ledger_rows"] = ((len(store.rows("literature")) + len(_ledger_concepts["rows"])
+                           + len(store.rows("relations"))) if store is not None else 0)
+    if store is not None and not _ledger_concepts["checked"]:
+        aux["ledger_rows_problem"] = "概念那一份没读成（合成视图 checked=False）"
     acc.auxiliary = aux
 
 

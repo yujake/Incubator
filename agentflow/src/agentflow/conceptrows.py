@@ -89,6 +89,11 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     folded = fold_concepts([dict(row)], alloc=lambda: old_id)
     out = dict(folded["rows"][0])
     out["via"] = "legacy"
+    # `related_concepts` 是老表专有的一格（迁移内核刻意丢掉它：并表之后那件事由
+    # `relations` 表管）。但过渡期的老字段名投影要忠实（`verify` 的
+    # `related_drift` 判据与 `agentflow repair --related` 都靠它）⇒ 在这里带过来，
+    # 并记明它是"过渡期的一格"，不是新标准的一部分。
+    out["related_concepts"] = list(row.get("related_concepts") or [])
     return out
 
 
@@ -122,15 +127,65 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
         doc_id=str(doc_id or "") or None, created_at=S.now_iso(), created_by=actor)
 
 
-def view(store: Any) -> dict[str, Any]:
+#: 过渡投影认得的字段（老名字 ⇒ 新标准的哪一格）。`shape="legacy"` 用它把视图
+#: 反向投影回老字段名，好让读侧一次只搬一件事（先换读口，再逐处改字段名）。
+LEGACY_VIEW_FIELDS: dict[str, str] = {
+    "concept_id": "stmt_id",
+    "name": "label",
+    "definition": "statement_full",
+    "normalized_name": "",      # 老表里可能有、新标准里没有 ⇒ 现算（见 `_to_legacy`）
+    "related_concepts": "",     # 那件事由 `relations` 表管（并表之后更明确）
+    "definition_source_lit_id": "source_lit_id",
+    "merged_into": "",          # 新标准里用 `status="superseded"` + `quote_reason` 表达
+}
+
+
+def _to_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
+    """新标准形状的一行 ⇒ 老字段名的一行（过渡投影；只做名字映射，不改内容）。
+
+    两条边界必须显式：
+
+    - `normalized_name` 现算（`textutil.normalize(label)`）——老表那一格实测
+      640/2233 条与现算不符（`pipeline.py` 当年把原始名字写了进去），投影里跟现算走，
+      与 `migrate_concepts` 的"读侧现算、丢弃那一格"同一口径；
+    - `related_concepts` 给 `[]`（并表之后那件事由 `relations` 表管）；
+      `merged_into` 不编：新标准里用 `status="superseded"` 表达，投影把
+      `merged_into` 留空但把 `status`/`via` 原样带上，读的人能看出"这一行不是老表的原貌"。
+    """
+    out: dict[str, Any] = {}
+    for legacy_name, new_name in LEGACY_VIEW_FIELDS.items():
+        if new_name:
+            out[legacy_name] = row.get(new_name)
+    out["normalized_name"] = T.normalize(str(row.get("label") or ""))
+    # `related_concepts`：老表那一档原样带过来（它是真的数据，判据要拿它比派生结果）；
+    # 新标准那一档没有这一格 ⇒ 空列表，而判据据 `via` 分辨"表里写着空"与"这一版没这一格"
+    # （`verify._check_4` 那一档）。两件事折平会造出假红。
+    out["related_concepts"] = list(row.get("related_concepts") or [])
+    out["merged_into"] = None
+    out["aliases"] = list(row.get("aliases") or [])
+    out["status"] = row.get("status")
+    out["via"] = row.get("via")
+    return out
+
+
+def view(store: Any, *, shape: str = "statement") -> dict[str, Any]:
     """概念行的合成视图（新标准形状 + 逐行 `via` + 四个计数）。
 
     返回 `{"checked", "rows", "counts", "legacy", "reason"}`：
     `counts` = `{"statements", "legacy", "merged", "legacy_only", "definition_only_in_legacy"}`。
     最后那一个是"新标准那一行还空着定义、而老行有"的条数 —— 它不自动合并
     （新标准优先），但必须可见：那是"两边不同步"的读数，不是可以顺手抹平的差异。
+
+    `shape="legacy"`（2026-10-09 加）：把每一行反向投影回老字段名
+    （`concept_id`/`name`/`definition`…，见 `LEGACY_VIEW_FIELDS`）。它的用途只有一个 ——
+    让读侧一次只搬一件事：先换读口（`store.rows("concepts")` ⇒ `view(…)[ "rows"]`），
+    再逐处把字段名改成新标准。两件事一起做的话，红的时候分不清是"读口换错了"
+    还是"字段名换错了"，而这两类错的处置完全不同。
+    投影是单向的（老名字 ⇒ 新标准的那一格；新标准独有的 `bits`/`doc_id` 不丢，
+    它们照旧在新名字下带着），所以它不会把视图变成"第二份老表"。
     """
     out: dict[str, Any] = {"checked": False, "rows": [], "legacy": {}, "reason": "",
+                           "shape": str(shape or "statement"),
                            "counts": {"statements": 0, "legacy": 0, "merged": 0,
                                       "legacy_only": 0, "definition_only_in_legacy": 0}}
     try:
@@ -171,7 +226,8 @@ def view(store: Any) -> dict[str, Any]:
             by_id[key] = folded
             out["counts"]["legacy_only"] += 1
     out["checked"] = True
-    out["rows"] = list(by_id.values())
+    rows = list(by_id.values())
+    out["rows"] = [_to_legacy(r) for r in rows] if out["shape"] == "legacy" else rows
     return out
 
 

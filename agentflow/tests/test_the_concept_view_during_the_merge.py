@@ -234,3 +234,77 @@ def test_a_legacy_row_without_an_id_is_not_guessed(store):
     with store.tx(CR.LEGACY_TABLE, "statements", actor="test") as tx:
         assert CR.sync_from_legacy(tx, {"name": "没有号的行"}, actor="t") is None
     assert store.rows("statements") == []
+
+
+# ==================================================== 五、过渡投影（读侧一次只搬一件事）
+
+def test_the_legacy_projection_keeps_real_data_and_names(store):
+    """`shape="legacy"`：老字段名映射过来，而真实数据（`related_concepts`）不许丢。"""
+    _legacy_write(store, "0002", "谱", definition="矩阵的谱")
+    with store.tx(CR.LEGACY_TABLE, actor="test") as tx:
+        row = dict(tx.find(CR.LEGACY_TABLE, concept_id="0002"))
+        row["related_concepts"] = ["0003"]
+        tx.upsert(CR.LEGACY_TABLE, row)
+    view = CR.view(store, shape="legacy")
+    assert view["shape"] == "legacy" and view["checked"]
+    r = view["rows"][0]
+    assert r["concept_id"] == "0002" and r["name"] == "谱" and r["definition"] == "矩阵的谱"
+    assert r["related_concepts"] == ["0003"], "老表那一格是真的数据，投影不许折成空"
+    assert r["normalized_name"] == "谱" and r["via"] == "legacy"
+    # 新标准的字段名照旧带着（投影是单向的，不是"第二份老表"）
+    assert r["aliases"] == [] and r["status"] == "active"
+
+
+def test_the_projection_marks_what_the_new_standard_does_not_have(store):
+    """反真空：新标准那一档没有 `related_concepts` 这一格 ⇒ 由 `via` 分辨，不许折平。"""
+    out = CR.upsert(store, label="电导", definition="边上权重的倒数")
+    sid = out["stmt_id"]
+    r = CR.view(store, shape="legacy")["rows"][0]
+    assert r["concept_id"] == sid and r["via"] == "statements"
+    assert r["related_concepts"] == [], "新标准没有这一格 ⇒ 空列表（判据据 via 分辨）"
+    assert r["normalized_name"] == "电导", "这一格现算（老表那格实测 640/2233 与现算不符）"
+
+
+def test_verify_does_not_report_drift_for_the_new_standard(store):
+    """`verify` 不许对"新标准没有那一格"报 `related_drift`（假红比不报更糟）。"""
+    from agentflow.verify import verify_all
+
+    CR.upsert(store, label="谱", definition="矩阵的谱")
+    d = verify_all(store).to_dict()
+    codes = [i["code"] for i in list(d["errors"]) + list(d["warnings"])]
+    assert "related_drift" not in codes, codes
+    assert d["checked"]["related_concepts_skipped_new_standard"] == 1, d["checked"]
+
+
+def test_a_corrupt_legacy_file_makes_verify_fail_loudly(store, monkeypatch):
+    """三态：老文件坏了 ⇒ `verify` 大声失败（受控 StoreError），不许"照常通过"。
+
+    这一条测的是既有行为（审计读任何一张表读不成都会抛受控错），摆在这里是因为
+    它正是"并表过渡期最危险的那种沉默"的反面：老表坏了而审计照样绿。
+    另一半（`concept_view_unreadable` 那条 issue）在下面单独测 —— 它走的是
+    "视图判不了"这一支（`CR.view` 报 `checked=False`），而不是"文件坏了"。
+    """
+    from agentflow.store import StoreError
+    from agentflow.verify import verify_all
+
+    _legacy_write(store, "0005", "谱")
+    (store.data / "concepts.json").write_text("{ 这不是 JSON", encoding="utf-8")
+    try:
+        verify_all(store)
+    except StoreError as exc:
+        assert "concepts.json" in str(exc), str(exc)
+    else:
+        raise AssertionError("老表坏了而 verify 照常返回 ⇒ '读不成'被折成了'查过了没问题'")
+
+
+def test_verify_reports_an_unreadable_view_instead_of_a_flood(store, monkeypatch):
+    """视图判不了 ⇒ `verify` 报 `concept_view_unreadable`（不是满屏"指向不存在的概念"）。"""
+    from agentflow import verify as V
+
+    _legacy_write(store, "0005", "谱")
+    monkeypatch.setattr(V.CR, "view", lambda *a, **kw: {
+        "checked": False, "rows": [], "reason": "（判据夹具：老表读不成）", "counts": {}})
+    d = V.verify_all(store).to_dict()
+    codes = [i["code"] for i in list(d["errors"]) + list(d["warnings"])]
+    assert "concept_view_unreadable" in codes, codes
+    assert "dangling_related" not in codes, "读不成不许变成'每一条关系都指向不存在的概念'"

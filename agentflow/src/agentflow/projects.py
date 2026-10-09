@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import conceptrows as CR
 from . import settings as SET
 from .locallib import (
     ingest_directory,
@@ -533,11 +534,18 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
     }
     if client is not None:
         out["model"] = client.to_dict()
+    # 概念数读合成视图（并表过渡期：老表 + 新标准 `kind="concept"`，同号去重）。
+    # 读老表会在迁移之后读到 0，读新标准会在迁移之前读不到老行 —— 这个数字是给人看的
+    # 读数，两种读法都会让它说谎。读不成时给 `None`（不是 0）："没读成"与"库里没有"
+    # 必须分得开，并在同一个字典旁给一条 `store_counts_problems` 点名原因。
+    _cv = CR.view(store)
     out["store_counts"] = {
         "literature_processed": sum(1 for r in store.rows("literature") if r.get("processed")),
-        "concepts": len(store.rows("concepts")),
+        "concepts": (len(_cv["rows"]) if _cv["checked"] else None),
         "relations": len(store.rows("relations")),
     }
+    if not _cv["checked"]:
+        out["store_counts_problems"] = [f"概念数没读成：{_cv['reason']}"]
     _ = books_limit
     return out
 

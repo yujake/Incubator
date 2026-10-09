@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import conceptrows as CR
 from . import dedup as D
 from . import evidencebits as EB
 from . import schema as S
@@ -176,7 +177,21 @@ def _check_1(rep, store):
 
     requests = store.rows("search_requests")
     literature = store.rows("literature")
-    concepts = store.rows("concepts")
+    # 概念行读**合成视图**（`conceptrows`，并表过渡期）：老表（`concepts`）与新标准
+    # （`statements` 里 `kind="concept"` 的那些行）合成一个视图、同号去重。
+    # 直接读老表会在迁移之后读到 0（表已删），直接读新标准会在迁移之前读不到老行 ——
+    # 两条路都会让这份审计**静默瞎掉**，而"没报问题"与"没看见"在报告里同形。
+    # 投影用老字段名（`concept_id`/`name`/`definition`）阅读侧一次只搬一件事：
+    # 先换读口，再逐处改字段名（见 `conceptrows.view` 的 docstring）。
+    _crow_view = CR.view(store, shape="legacy")
+    concepts = list(_crow_view["rows"])
+    if not _crow_view["checked"]:
+        # 三态：读不成 ⇒ 报出来，**不许**当成"库里没有概念"（那会让下面每一条
+        # 关系都变成"指向一个不存在的概念"，满屏假红——比不报更糟）
+        rep.issues.append(Issue(
+            "error", "concepts", None, "concept_view_unreadable",
+            f"概念行的合成视图读不成（{_crow_view['reason']}）⇒ 这一段的判据没做成："
+            "概念表/命题表至少有一边读不出来，而'读不出来'与'库里没有概念'必须分得开"))
     relations = store.rows("relations")
 
     lit_by_id = {r["lit_id"]: r for r in literature}
@@ -463,8 +478,20 @@ def _check_4(rep, con_by_id, concepts, lit_by_id, rel_by_id, relations, requests
     泄漏语义（后面的段确实读到了它们）。
     """
     # ---- 概念：related_concepts 是否与关系表派生结果一致
+    #
+    # 并表过渡期（2026-10-09）：`concepts` 是**合成视图**（老表 + 新标准 `kind="concept"`）。
+    # `related_concepts` 这一格**只有老表有**（新标准里那件事由 `relations` 表管，
+    # 见 `conceptrows.LEGACY_VIEW_FIELDS`）⇒ 对 `via="statements"` 的那些行，
+    # 这一格不是"表里写着空"，而是"这一版没有这一格"。拿它去比派生结果会造出
+    # 一条**假红**（新标准 + 关系表本来就是这个样子），而假红比不报更糟 ——
+    # 它训练人忽略告警。所以这里按 `via` 分档：只有老表那一档判这一条，
+    # 跳过的行数记进 `checked` 读数（"少判了几行"必须看得见）。
+    _related_skipped = 0
     for c in concepts:
         cid = c.get("concept_id")
+        if str(c.get("via") or "") == "statements":
+            _related_skipped += 1
+            continue
         related = c.get("related_concepts") or []
         if related != sorted(set(related)):
             rep.issues.append(Issue("error", "concepts", cid, "unsorted_related", f"related_concepts 未升序去重：{related}"))
@@ -485,6 +512,7 @@ def _check_4(rep, con_by_id, concepts, lit_by_id, rel_by_id, relations, requests
                     "可用 `agentflow repair --related` 整体重算修复。",
                 )
             )
+    rep.checked["related_concepts_skipped_new_standard"] = _related_skipped
 
     # ---- C/D 新增表的代号外键（DESIGN-TOOLS.md §8.4）
     # 这两张表全靠 4 位代号互相引用（`origin`、`related_*_ids`、`waiting_request_ids`）。
