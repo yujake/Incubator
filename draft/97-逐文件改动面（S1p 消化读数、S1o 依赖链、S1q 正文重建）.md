@@ -1638,6 +1638,34 @@ M 只在"父也办不了"时被惊动（这一改动并入 S1o 那批，判据�
 （textutil / secretary / B 交内容 / 过渡层 / 落刀清单 / rebuild / r5 注引）**181 passed**；
 `lint` error 0 / warning 15 / info 49；行尾口径与 HEAD 一致。
 
+### 16.1 S1q 的施工设计（2026-10-10 补写：§7 那张表只给了判据名，口径在这里定死）
+
+§7 只写了一句"正控：搬进正文的定理有逐字片段 + `stmt:` 引用 + 一条台账号→论文号映射；
+负控①②③"，§9.5 只给了映射行的字段组合。施工前把"正文重建"这件事定死成下面四步
+（**依据全部来自已有落位**，不新造概念）：
+
+| 步 | 做什么 | 依据 |
+|---|---|---|
+| ① **取原文逐字搬** | 被搬的那条 `statements` 行的 `statement_full`（含完整假设）**逐字**进正文，一个字都不改写；片段与源行的比对用 `textutil.normalize_for_quote` | 业主 FC-23 系列口径 + `quoteverify` 的逐字纪律 |
+| ② **序号重写** | 论文自己那一套编号（`"1.5"` 这种）由**论文**给，`statements.label` 不许被改写（台账里的标签是"人话标签"，不是论文号） | §9.5 的 `label` 行 |
+| ③ **引用 `stmt:`** | 正文里那一处断言必须带 `stmt:<源号>` 的 citation（与 `closing.PAPER_LEDGER_PREFIXES` 同一位） | `closing.py:533` 的三前缀 |
+| ④ **映射落 `dependencies`** | 一条映射一行：`used_by="doc:<论文号>#<claim_id>"`、`kind`=被搬行的 `kind`、`label`=论文号、`source_doc_id`/`source_claim_id`=**被搬那条 `statements` 行的出处**、`status`=`closed`/`dangling` | §9.5 |
+
+**判据（`tests/test_the_paper_rebuilds_from_the_ledger.py`，新；红/绿成对）**：
+
+- 正控：搬 2 条定理 ⇒ 正文里两段逐字片段（原样可回验）+ 各带一条 `stmt:` 引用 +
+  `dependencies` 里**两条**映射（论文号互不相同、`used_by` 指到论文那一处断言）；
+- 负控①：正文里那一段**没有** `stmt:` 引用 ⇒ 红（"搬了但从哪来"不可复算）；
+- 负控②：`\ref` 指着一个不存在的论文号 ⇒ 红；两个不同 `stmt:` 映射到**同一个**论文号 ⇒ 红；
+- 负控③：论文里出现 `doc:` 引用 ⇒ 红（两阶段引用口径：论文不许引别的稿子，
+  手稿之间才可以 —— 本批只**用**它，不重开）；
+- 反真空：**没有被搬的**台账行不许出现在映射里（"映射比正文多"与"正文比映射多"都要红）。
+
+**落点**：`src/agentflow/paperledger.py`（新，非禁改区）：`assign_paper_numbers(...)`（②）、
+`move_theorem(...)`（①③ 的写入侧）、`map_theorem(...)`（④，写一行 `dependencies`）、
+`check_paper_ledger(...)`（上面五条判据的唯一实现，返回三态）。**不动** `schema.py`；
+`closing.PAPER_LEDGER_PREFIXES` 一字不改（本批只用它）。
+
 
 
 
