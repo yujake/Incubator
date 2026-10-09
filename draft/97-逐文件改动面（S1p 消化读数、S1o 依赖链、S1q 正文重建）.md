@@ -706,6 +706,105 @@ backend.registry_factory = lambda face: build_registry(workspace_root=face, ...)
 - **V7**：WebUI 里读 `concepts` 的落点（`webui/readers.py`；核法：grep `concepts`）；
 - **V8**：`agent_c/__main__.py` 那四处 `upsert("concepts")`（CLI 侧的探针命令）要不要跟着改。
 
+## §14 补遗：§13 漏掉的十二处（业主 2026-10-09：「还是有漏写的点，仔细写」）
+
+每条都是"按现有代码真会出事"的点，**带现场依据**。
+
+### 14.1 **v1 数据在 v2 代码下读得成吗**（最要紧的一处：漏了会砸掉 59 个工作区）
+
+现场：`schema.py` 里有一条快照校验 `f"{table} schema_version 应为 {SCHEMA_VERSION}，收到 …"`，
+而盘上 59 个工作区的快照都是 **v1**。⇒ 只把 `SCHEMA_VERSION` 改成 2、不动读侧，
+**所有老工作区会当场读不成**（不是"读出错数据"，是**报错**）。
+
+**设计（必须写进 S1r 的同一笔）**：`store.py` 的读取侧接受"**版本 ≤ 当前**"，并在
+**第一次写**时把快照升到 v2（`rebuild` 重放事件 → 写 v2 快照；旧事件保留）。
+判据：**v1 夹具工作区**在 v2 代码下 `rows("statements")` 读得成；迁移后快照写着 2；
+**不许**静默把 v1 快照当成 v2 读（要记账：读数里报"这一份是从 v1 升上来的"）。
+
+### 14.2 **迁移行必须带 `quote_reason`**（`Statement.validate` 的硬要求）
+
+现场（`Statement.validate` 正文逐行核过）：
+`if self.quote_verified is not True and not self.quote_reason.strip(): raise` ——
+即 **`quote_verified=None`（没校验）时 `quote_reason` 必须非空**。
+`concepts` 折过来的行不会有 `quote_verified=True` ⇒ **迁移行不写 `quote_reason` 会被当场拒**。
+⇒ 迁移规则补一条：`quote_verified=None` + `quote_reason="迁移自 concepts：<原样说明>"`。
+
+### 14.3 `own_result` **不强制**出处（与 B 的预检不是同一处）
+
+现场：`Statement.validate()` 对 `own_result` **不查** `doc_id`/`line_range`
+（它只查 `external_lit` 的 `source_lit_id`；注释还写明曾经那条"own_result 必须给 proof_text"
+的 `raise` **已删**）；"own_result 要给 doc_id 或 line_range" 是 **B 的预检**那条纪律。
+⇒ 迁移行（没有 `doc_id`）**过得了 validate**，但要在读数里点名"这一行没有出处"（可见性不丢）。
+
+### 14.4 **`Concept` 另外四个字段去哪**（§13 只映射了 name/definition）
+
+| 原字段 | 去处 |
+|---|---|
+| `related_concepts` | 落 `relations`（已存在的那张表，本来就是它） |
+| `merged_into` / `merge_reason` | **不许丢**（"这两个概念是一个"是审计材料）⇒ 需要承载点 |
+| `aliases` / `normalized_name` | **不许丢**（查重键）⇒ 需要承载点 |
+
+`Statement` 里**没有**承载这三样的字段 ⇒ 两条候选：**甲** 用既有的自由文本格编码
+（`quote_reason` 里写受控前缀 `concept:merged_into=<id>` / `concept:aliases=<json>`，
+零 schema 改动）；**乙** 给 `Statement` 加三格（`concept_meta`），动 schema。
+**建议甲**（并表这一笔已经动了 schema，能少动一格就少动一格；甲的代价是"要解析前缀"）。
+**这是本页新增的待裁项（记作 D10）**。
+
+### 14.5 **概念行不参与等级**（否则被读成"猜想"）
+
+现场：等级由 `evidencebits.derive_grade` 现算，`bits={}`（概念没有证据位）时它会给出
+最弱那一档。⇒ 设计：`derive_grade`（**唯一实现**）对 `kind == "concept"` **短路**：
+返回"不适用"，**不参与 `conjecture → … → theorem` 这条链**。
+判据：一条概念行现算等级**不是**"猜想"（改前必红）；报表里概念的等级那一栏写"不适用"。
+
+### 14.6 **组内有一条悬空 ⇒ 整组不可达**（§12.2 只写了"悬空边不算到根"）
+
+组内是 AND（都要）⇒ 一条 `status="dangling"` 的边让**那一组**不完整：
+该组标 `incomplete`（读数），**不算到根**；同一条命的其他组不受影响。
+`external_unavailable` 仍算到根（合法终局），但要在 `why` 里点名。
+
+### 14.7 **`k` 与"组"的关系定死**
+
+`k` = 返回的**组**数（组内不再分叉），`groups_total` = 全部组数；
+并列（长度相同）按 `group` 升序取前 `k` 组，并在 `why` 里写明"并列，取了第 n 组"。
+（§13 的伪代码里 `k` 没有定义，这处不能含糊。）
+
+### 14.8 **D6 的 `report` 档从哪读**（三态）
+
+`via="report"` 的那一档读的是**盘上的 `out/review/REPORT.md`**（不是会话）：
+报告在盘上且项名出现在正文里 ⇒ `report`；报告不在盘上 ⇒ 这一档 `checked=False`
+（"没查成"，不许当成"没上报"）；匹配仍是**字面**（项的 `what` 出现在正文里）。
+
+### 14.9 **D9 的算法与可见性**
+
+`_check_artifact_ledger` 改成：**按路径取最后一条登记行**比对（append-only 的历史逐行比
+必然把任何改写读成 `changed`）；`missing`/`unreadable` **仍 `fail`**；
+`changed ⇒ pass + warning`，且 **`changed_rows` 仍逐条列出**（可见性一格不减）。
+
+### 14.10 **D8 的契约与代价**
+
+`registry_factory(face: str) -> ToolRegistry`（`agent_loop.py` 已经在用这个名字）；
+`cli.py` 的 `run-agent` 与 WebUI 装配处**各一行**把它接上；判据：
+"`_surface_refusal` 的基准目录 == `fs` 工具实际 root"。
+**代价读数**（必须记）：每实例一个注册表 ⇒ 构造一次/实例；实现里按面**缓存**
+（同一个面复用同一个注册表），并把"构造了几次"记成读数。
+
+### 14.11 **"B 不直接用写工具"的接线机制**（§11.1 只说了"秘书来写"，没说怎么挡住 B）
+
+今天的写路径是"动作 → 注册表直接写"。两条候选：
+
+- **甲（建议）**：把 B 的写工具从 `for_role("B")` 的面里**摘掉**，只给秘书
+  （`tools/base.py` 的 `for_role` 单点过滤，与只读角色同一套机制）——**看不见就调不到**；
+- **乙**：工具还在，但在 `AgentLoop` 的执行点把 B 的写调用**改道**经过秘书
+  （`secretary.record_statement`）——多一处"改道"，且"B 手里为什么有写工具"这个问题还在。
+
+判据（甲）：`for_role("B")` 的面里**没有**写工具（正控：B 调不到）；秘书那一侧有对应动作
+（`record_statement`）；**反真空**：B 的工具面**不许为空**（摘干净了说明筛错了）。
+
+### 14.12 V5–V8 的核法照旧（见 §13.7），并新增 **V9**：`schema.py` 里那条快照版本校验的
+**调用点有几个**（核法：grep `schema_version 应为`），决定"版本 ≤ 当前"要改几处。
+
+
 
 
 
