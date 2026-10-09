@@ -94,6 +94,7 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     # `related_drift` 判据与 `agentflow repair --related` 都靠它）⇒ 在这里带过来，
     # 并记明它是"过渡期的一格"，不是新标准的一部分。
     out["related_concepts"] = list(row.get("related_concepts") or [])
+    out["legacy_related"] = True   # "这一格有权威值"（判据据此分档，见 `view` 的 docstring）
     return out
 
 
@@ -161,6 +162,7 @@ def _to_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     # 新标准那一档没有这一格 ⇒ 空列表，而判据据 `via` 分辨"表里写着空"与"这一版没这一格"
     # （`verify._check_4` 那一档）。两件事折平会造出假红。
     out["related_concepts"] = list(row.get("related_concepts") or [])
+    out["legacy_related"] = bool(row.get("legacy_related"))  # 见 `_from_legacy`
     out["merged_into"] = None
     out["aliases"] = list(row.get("aliases") or [])
     out["status"] = row.get("status")
@@ -261,6 +263,14 @@ def _merge_rows(out: dict[str, Any], *, stmt_rows: list[dict[str, Any]],
         key = str(folded.get("stmt_id") or "")
         if key in by_id:
             out["counts"]["merged"] += 1
+            # 两边都有 ⇒ 新标准优先，但老表专有的那一格要带过来：
+            # `related_concepts` 只有老表有（新标准里那件事由 `relations` 表管），
+            # 而 `verify` 的 drift 判据要拿它比派生结果 —— 不带上它，一行"两边都有"的
+            # 概念就会逃过 `related_drift`（新标准那一侧根本没有这一格）。
+            # `legacy_related=True` 是"这一格有权威值"的显式标记（判据据它分辨，
+            # 而不是据 `via`：`via` 说的是"这一行以谁为准"，不是"哪些格有值"）。
+            by_id[key]["related_concepts"] = list(folded.get("related_concepts") or [])
+            by_id[key]["legacy_related"] = True
             if (not str(by_id[key].get("statement_full") or "").strip()
                     and str(folded.get("statement_full") or "").strip()):
                 out["counts"]["definition_only_in_legacy"] += 1

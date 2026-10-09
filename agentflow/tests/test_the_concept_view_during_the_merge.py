@@ -273,7 +273,15 @@ def test_verify_does_not_report_drift_for_the_new_standard(store):
     d = verify_all(store).to_dict()
     codes = [i["code"] for i in list(d["errors"]) + list(d["warnings"])]
     assert "related_drift" not in codes, codes
-    assert d["checked"]["related_concepts_skipped_new_standard"] == 1, d["checked"]
+    # 这一行两边都有（`upsert` 会镜像）⇒ `related_concepts` 那一格有权威值 ⇒
+    # 要判（跳过的行数因此是 0）。跳过的只有"没有老表那一份"的行（下面那一格）。
+    assert d["checked"]["related_concepts_skipped_new_standard"] == 0, d["checked"]
+    # 反真空：只写新标准（绕过镜像）的行没有那一格 ⇒ 跳过它并计数
+    with store.tx("statements", actor="test") as tx:
+        tx.upsert("statements", CR.concept_statement(
+            stmt_id="0099", label="只在新标准", definition="x").to_dict())
+    d2 = verify_all(store).to_dict()
+    assert d2["checked"]["related_concepts_skipped_new_standard"] == 1, d2["checked"]
 
 
 def test_a_corrupt_legacy_file_makes_verify_fail_loudly(store, monkeypatch):

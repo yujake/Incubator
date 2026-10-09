@@ -177,16 +177,16 @@ def _check_1(rep, store):
 
     requests = store.rows("search_requests")
     literature = store.rows("literature")
-    # 概念行读**合成视图**（`conceptrows`，并表过渡期）：老表（`concepts`）与新标准
+    # 概念行读合成视图（`conceptrows`，并表过渡期）：老表（`concepts`）与新标准
     # （`statements` 里 `kind="concept"` 的那些行）合成一个视图、同号去重。
     # 直接读老表会在迁移之后读到 0（表已删），直接读新标准会在迁移之前读不到老行 ——
-    # 两条路都会让这份审计**静默瞎掉**，而"没报问题"与"没看见"在报告里同形。
+    # 两条路都会让这份审计静默瞎掉，而"没报问题"与"没看见"在报告里同形。
     # 投影用老字段名（`concept_id`/`name`/`definition`）阅读侧一次只搬一件事：
     # 先换读口，再逐处改字段名（见 `conceptrows.view` 的 docstring）。
     _crow_view = CR.view(store, shape="legacy")
     concepts = list(_crow_view["rows"])
     if not _crow_view["checked"]:
-        # 三态：读不成 ⇒ 报出来，**不许**当成"库里没有概念"（那会让下面每一条
+        # 三态：读不成 ⇒ 报出来，不许当成"库里没有概念"（那会让下面每一条
         # 关系都变成"指向一个不存在的概念"，满屏假红——比不报更糟）
         rep.issues.append(Issue(
             "error", "concepts", None, "concept_view_unreadable",
@@ -479,17 +479,22 @@ def _check_4(rep, con_by_id, concepts, lit_by_id, rel_by_id, relations, requests
     """
     # ---- 概念：related_concepts 是否与关系表派生结果一致
     #
-    # 并表过渡期（2026-10-09）：`concepts` 是**合成视图**（老表 + 新标准 `kind="concept"`）。
-    # `related_concepts` 这一格**只有老表有**（新标准里那件事由 `relations` 表管，
+    # 并表过渡期（2026-10-09）：`concepts` 是合成视图（老表 + 新标准 `kind="concept"`）。
+    # `related_concepts` 这一格只有老表有（新标准里那件事由 `relations` 表管，
     # 见 `conceptrows.LEGACY_VIEW_FIELDS`）⇒ 对 `via="statements"` 的那些行，
     # 这一格不是"表里写着空"，而是"这一版没有这一格"。拿它去比派生结果会造出
-    # 一条**假红**（新标准 + 关系表本来就是这个样子），而假红比不报更糟 ——
+    # 一条假红（新标准 + 关系表本来就是这个样子），而假红比不报更糟 ——
     # 它训练人忽略告警。所以这里按 `via` 分档：只有老表那一档判这一条，
     # 跳过的行数记进 `checked` 读数（"少判了几行"必须看得见）。
     _related_skipped = 0
     for c in concepts:
         cid = c.get("concept_id")
-        if str(c.get("via") or "") == "statements":
+        # 判据据"这一格有没有权威值"分档（`legacy_related` 由合成视图给：老表那一份
+        # 存在 ⇒ 这一格有值），不是据 `via` —— `via` 说的是"这一行以谁为准"，
+        # 而 `related_concepts` 只在老表里维护：一行"两边都有"的概念若按 `via` 跳过，
+        # 它的这一格就再也没人判了（实测：`add_concept` 夹具改成两处同号之后，
+        # `test_wrong_related_concepts_is_reported_as_related_drift` 当场变红）。
+        if not (c.get("legacy_related") or str(c.get("via") or "") == "legacy"):
             _related_skipped += 1
             continue
         related = c.get("related_concepts") or []
