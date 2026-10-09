@@ -82,7 +82,10 @@ class _Revise:
 
             # 第二道闸：引用存在性。与 `doc.build_document` 复用同一个判据，
             # 理由见本方法 docstring —— 少了它，"修订"就是绕过引用检查的后门。
-            cites = DT.check_citations(tx.rows, normalized)
+            # `citing_kind` 必须传（业主义 2026-10-09 的两阶段口径）：正式论文
+            # （`kind="paper"`）里不许直接引我方手稿，手稿内容要在正文里重建。
+            cites = DT.check_citations(tx.rows, normalized,
+                                       citing_kind=str(doc.get("kind") or ""))
             if not cites["checked"]:
                 # 理论上不可达（这里必然有 tx）。留着是为了让"没法查"这条状态
                 # 有出口，而不是在某次重构里悄悄退化成"当作查过了"。

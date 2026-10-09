@@ -132,3 +132,98 @@ def test_a_revision_citing_a_missing_statement_is_refused_by_design(tmp_path: pa
     assert "不存在" in text and "事务未声明表" not in text, text
     row = next(r for r in st.rows("documents") if str(r["doc_id"]) == str(doc["doc_id"]))
     assert row["status"] != "revised" and int(row["review_rounds"] or 0) == 0, row
+
+
+# --------------------------------------------------------------------------------------
+# 业主 2026-10-09：「手稿不是正常引文」是对的；「必须从零重搭、不以引文格式落实」是错的
+# --------------------------------------------------------------------------------------
+
+def test_a_manuscript_may_cite_our_own_manuscript(tmp_path: pathlib.Path):
+    """正控：研究手稿阶段可以互相引用我方手稿（两段式 `doc:<稿件>`）。
+
+    业主逐字（2026-10-09）：「明确：研究手稿阶段可以互相引用，正式论文阶段只能引用
+    真实论文，正式论文中手稿内容不可直接引用，必须重建」。
+
+    改前的现场（`temp/_probe_own_manuscript_cite.py` 的读数）：
+    `doc:0000` ⇒ `内部引用形状不对：应为 doc:<稿件>#<断言>@<内容哈希前 16 位>` ——
+    两段式根本不合法，「用手稿里的成果」只剩"在正文里重搭一遍"一条路。
+    """
+    from agentflow import signatures as SIG
+    from agentflow.tools.doc_tools import check_citations
+
+    st = _store(tmp_path, with_statement=True)
+    first = build_document(store=st, kind="note", title="第一份手稿", claims=_claims(),
+                           workspace_root=str(tmp_path), actor="test")
+
+    def _read(cite: str, *, kind: str = "note") -> dict:
+        return check_citations(lambda t: st.rows(t),
+                               [{"claim_id": "c9", "citations": [cite]}],
+                               citing_kind=kind)
+
+    did = str(first["doc_id"])
+    whole = _read(f"doc:{did}")
+    assert whole["missing"] == [] and whole["resolved"] == 1, whole
+    # 读数：这是"引整份手稿"且没钉版本 ⇒ 两格都要看得见（不许与"钉过了"混作一谈）
+    assert whole["doc_whole"] == [f"doc:{did}"], whole
+    assert whole["doc_unpinned"] == [f"doc:{did}"], whole
+    # 钉了版本的两段式：哈希对上 ⇒ 通过且不再是"没钉版本"；对不上 ⇒ 照旧失效
+    pinned = _read(f"doc:{did}@{SIG.ref_hash_of(st.rows('documents')[0])}")
+    assert pinned["missing"] == [] and pinned["doc_unpinned"] == [], pinned
+    bad = _read(f"doc:{did}@{'0' * SIG.REF_HASH_LEN}")
+    assert bad["missing"] and "改稿之后旧引用失效" in bad["missing"][0]["why"], bad
+    # 三段式照旧（回归护栏）——断言代号取盘上那一行归一之后的值，不手抄
+    row0 = st.rows("documents")[0]
+    three = _read(SIG.doc_ref(did, str(row0["claims"][0]["claim_id"]), row0))
+    assert three["missing"] == [], three
+    # 手稿不是文献（业主"对的"那一半一个字没动）：`lit:` 走的是 `literature` 表，
+    # 永远不会被读成"引我方手稿"这一档（这个夹具里 lit_id 与 doc_id 恰好都是
+    # `0000`，所以这里判的是"通道分得开"，不是"这个号不存在"）
+    lit_read = _read(f"lit:{did}")
+    assert lit_read["doc_whole"] == [] and lit_read["doc_unpinned"] == [], lit_read
+
+
+def test_a_formal_paper_may_not_cite_a_manuscript_directly(tmp_path: pathlib.Path):
+    """负控：正式论文（`kind="paper"`）里 `doc:` 一律拒，理由必须说"重建"。
+
+    业主逐字（2026-10-09）：「正式论文阶段只能引用真实论文，正式论文中手稿内容
+    不可直接引用，必须重建」⇒ 论文要用手稿里的成果，就得在正文里重建，
+    再以 `stmt:` / `exp:` / `rel:` 引它变成的台账行。
+    """
+    from agentflow.tools.doc_tools import check_citations
+
+    st = _store(tmp_path, with_statement=True)
+    first = build_document(store=st, kind="note", title="第一份手稿", claims=_claims(),
+                           workspace_root=str(tmp_path), actor="test")
+    did = str(first["doc_id"])
+    got = check_citations(lambda t: st.rows(t),
+                          [{"claim_id": "c9", "citations": [f"doc:{did}"]}],
+                          citing_kind="paper")
+    assert got["missing"], "论文引手稿必须被拒"
+    why = got["missing"][0]["why"]
+    assert "必须重建" in why and "lit:" in why, why
+    assert got["doc_whole"] == [] and got["resolved"] == 0, got
+    # 同一份引用在手稿阶段通过 ⇒ 这一条判的是"阶段"，不是"引谁都行"
+    ok = check_citations(lambda t: st.rows(t),
+                         [{"claim_id": "c9", "citations": [f"doc:{did}"]}],
+                         citing_kind="note")
+    assert ok["missing"] == [], ok
+    # 论文引真实论文照旧（`lit:` 那一档一个字没动）
+    with st.tx("literature", actor="test", note="lit") as tx:
+        tx.upsert("literature", S.Literature(
+            lit_id="7777", title="一篇真论文", type="J", summary="s", path=None,
+            added_at=TS).to_dict(), note="lit")
+    lit = check_citations(lambda t: st.rows(t),
+                          [{"claim_id": "c9", "citations": ["lit:7777"]}],
+                          citing_kind="paper")
+    assert lit["missing"] == [], lit
+
+
+def test_a_whole_manuscript_citation_needs_that_manuscript_to_exist(tmp_path: pathlib.Path):
+    """负控：两段式放行的是形状，不是"引谁都行"—— 没有那份手稿照样拒，且理由分开。"""
+    from agentflow.tools.doc_tools import check_citations
+
+    st = _store(tmp_path, with_statement=True)
+    got = check_citations(lambda t: st.rows(t),
+                          [{"claim_id": "c9", "citations": ["doc:9999"]}])
+    assert got["missing"] and "没有 doc_id" in got["missing"][0]["why"], got
+    assert "形状不对" not in got["missing"][0]["why"], got

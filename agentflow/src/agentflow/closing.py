@@ -3182,18 +3182,28 @@ def declared_report_sections(store: Any, report_path: str) -> tuple[list[str], s
 
 
 def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> None:
-    """报告形状：附件三件套判实 + M 声明的体例有没有兑现（R9 之后）。
+    """报告那一格：报告在不在、附件三件套齐不齐、M 声明的体例兑现没有（全是读数）。
 
     ## 为什么不再是"九节"
 
     R9（`draft/52` 裁决 1 = C''）："报告要写九节"是 review 线的交付规格，
     被当成通用判据用 ⇒ 直接废除（`REPORT_SECTIONS` / `SPLIT_MARKERS` 已删）。
-    门现在只判两件事：附件三件套（来源与完整性，保留判实）与
-    M 声明的体例（`out/review/REPORT-STYLE.json`；没声明就不判体例）。
 
-    附件问题与体例问题并入同一个 `report_incomplete` code ——
-    "报告形状不齐"是一件事，两半各自成码会让下游的码表分叉
-    （`draft/44` J-19 逐字："附件问题必须并入同一个 code，不许新增第二个"）。
+    ## 为什么现在也不卡"形式"（业主 2026-10-09）
+
+    逐字：「T1的5不是已经说过工作内容和交付形式由M决定了吗？不卡机械判据。但M需要知道
+    一些任务需要的明确的交付格式，如什么叫论文包之类的。这样M在排任务的时候自然会把这些
+    内容的生产写进任务排期。」
+
+    ⇒ 这一格只做两件事：报告在不在盘上（不在 ⇒ `unknown` + warning；读不成 ⇒
+    `unknown`）与把缺的件逐条摆出来（附件三件套、M 声明的体例，各进一条 warning）。
+    报告在盘上且读得成 ⇒ `pass`。此前它把"缺附件三件套的一件"读成 `fail` + `blocker`
+    （T1 `t1v` 与 T2 `t2a` 连续两趟就是被这一格拦下的），而裁定 3 已经定了收工由 M 判。
+
+    两个码分开（`attachment_fields_missing` / `declared_sections_missing`）：
+    它们要读的人不同 —— 前者是"这条结论的来路没写全"，后者是"M 自己声明的体例没兑现"。
+    （`draft/44` J-19 那条"并入同一个 code"针对的是拦门的码表；
+    这一格已经不拦门，两条读数各自点名比合成一句更好读。）
     """
     if not str(report_path or "").strip():
         rep.status["report_shape"] = "unknown"
@@ -3228,33 +3238,42 @@ def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> Non
         "note": ("体例由 M 裁定（R9）：门只核对 M 在 "
                  f"{REPORT_STYLE_NAME} 里声明的节名有没有在报告的标题行里兑现；"
                  "没声明就不判体例（读数 `style_source: \"none\"`）。"
-                 "附件三件套是来源与完整性，不是排版 ⇒ 一直判实"),
+                 "附件三件套与体例**都只作读数**（业主 2026-10-09：交付形式由 M 决定，"
+                 "不卡机械判据）—— 缺哪几件逐条进 `findings`（warning），"
+                 "报告在盘上这一格就 `pass`；报告不在盘上/读不成才 `unknown`。"),
     }
-    problems: list[str] = []
     if style_why:
+        # 体例文件在、读不成 ⇒ 这一格 `unknown`（"没查成"不是"通过"）。
+        # 注意这与上面那条裁定不冲突：这是"读不成"，不是"形式不合我意"。
         rep.status["report_shape"] = "unknown"
         rep.findings.append(Finding(
             "report_shape", "report_style_unreadable", "warning",
             f"{style_why}（体例这一格没查成，不是「体例没问题」）",
         ))
         return
+    # ---- 交付形式归 M（业主 2026-10-09）：「工作内容和交付形式由 M 决定……不卡机械判据」。
+    #
+    # 这一格此前把"附件三件套缺一件"与"M 声明的体例没兑现"读成 `fail` + `blocker`
+    # （T1 t1v 与 T2 t2a 连续两趟就是被这一格拦下的，而两趟的 M 都自己判过"活做完了"）。
+    # 现在这两件事逐条进读数与 warning：可见性一格不减，强度归零 ——
+    # 形式是 M 的决定，机器只负责把它摆在纸上。报告不在盘上/读不成仍 `unknown`
+    # （"没查成"不许折成"通过"）。
     if missing_attach:
-        problems.append(
-            f"缺附件三件套里的 {len(missing_attach)} 件（{'、'.join(missing_attach)}）—— "
-            "它们不是排版，是「这条结论是不是我们自己做的（`origin=own_result`）、"
-            "依据在哪（`依据`）、文件有没有被换过（`sha`）」")
-    if missing_declared:
-        problems.append(
-            f"缺 M 声明的体例里 {len(missing_declared)} 节（{'、'.join(missing_declared[:4])}）"
-            f"—— 体例由 M 自己裁定（{REPORT_STYLE_NAME}），门只核对它有没有兑现")
-    if problems:
-        rep.status["report_shape"] = "fail"
         rep.findings.append(Finding(
-            "report_shape", "report_incomplete", "blocker",
-            f"报告形状不齐：{'；'.join(problems)}",
+            "report_shape", "attachment_fields_missing", "warning",
+            f"报告里没有附件三件套的 {len(missing_attach)} 件"
+            f"（{'、'.join(missing_attach)}）—— 它们不是排版，是「这条结论是不是我们自己"
+            "做的（`origin=own_result`）、依据在哪（`依据`）、文件有没有被换过（`sha`）」；"
+            "**交付形式由 M 定**（业主 2026-10-09），这一条只作读数不拦收工",
         ))
-    else:
-        rep.status["report_shape"] = "pass"
+    if missing_declared:
+        rep.findings.append(Finding(
+            "report_shape", "declared_sections_missing", "warning",
+            f"缺 M 声明的体例里 {len(missing_declared)} 节"
+            f"（{'、'.join(missing_declared[:4])}）—— 体例由 M 自己裁定"
+            f"（{REPORT_STYLE_NAME}），这一句是「你说的和你写的不一致」的读数，不是拦门",
+        ))
+    rep.status["report_shape"] = "pass"
 
 
 def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> None:

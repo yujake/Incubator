@@ -907,36 +907,43 @@ def test_a_downgraded_claim_does_not_fail_the_gate(tmp_path: pathlib.Path):
 
 
 def test_the_report_shape_check_goes_red_alone(tmp_path: pathlib.Path):
-    """负控④（报告形状）：缺一件附件 ⇒ 只这一条红（同一个 `report_incomplete`）。
+    """负控④（报告那一格，已按裁定 9 收窄成读数）：缺附件 ⇒ 逐条进 warning，不再拦门。
 
-    R9 之后报告形状只剩两件事：附件三件套判实（来源 / 依据 / 版本 sha）与
-    M 声明的体例有没有兑现。这里造前半：三件套缺两件。
+    业主 2026-10-09：「T1的5不是已经说过工作内容和交付形式由M决定了吗？不卡机械判据」⇒
+    改前这条断言的是 `report_shape == "fail"` 且 `report_incomplete` 进 blockers；
+    现在断言的是：那一格仍 `pass`（报告在盘上、读得成）、缺的两件逐条进
+    `readings` 与 `findings`（warning 级）、而且没有 blocker。
     """
     st, _ = _good(tmp_path)
     bad = _write_report(tmp_path, drop_attachment=True)
     rep = _gate(st, bad)
-    assert rep.status["report_shape"] == "fail", rep.to_dict()
-    assert [f.code for f in rep.blockers] == ["report_incomplete"]
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
+    assert rep.blockers == [], [f.to_dict() for f in rep.blockers]
     rd = rep.readings["report_shape"]
     assert rd["missing_attachment_fields"] == ["origin=own_result", "依据", "sha"], rd
+    warns = [f for f in rep.findings if f.code == "attachment_fields_missing"]
+    assert warns and warns[0].level == "warning", [f.to_dict() for f in rep.findings]
+    # 其余各格照旧（这一格不再把别人带红）
     assert {k: v for k, v in rep.status.items() if k != "report_shape"} == {
         name: "pass" for name in CL.DEFAULT_CHECKS if name != "report_shape"}
 
 
-def test_a_missing_declared_section_goes_red_alone(tmp_path: pathlib.Path):
-    """负控④′（体例）：M 声明了九节而报告只写了八节 ⇒ 只这一条红。
+def test_a_missing_declared_section_is_a_reading_not_a_blocker(tmp_path: pathlib.Path):
+    """负控④′（体例）：M 声明了九节而报告只写了八节 ⇒ 读数点名，不拦门。
 
-    这条与上一条合起来是 R9 的完整判据：体例由 M 声明（不是门自带），
-    缺的那一节由门按"声明有没有兑现"报出来，仍然是同一个 `report_incomplete`。
+    体例本来就是 M 自己声明的（R9），而"你说的和你写的不一致"是一句话，
+    不是一条不许收工的理由（业主 2026-10-09 的裁定 9）。
     """
     st, _ = _good(tmp_path)
     bad = _write_report(tmp_path, drop_section="七")
     rep = _gate(st, bad)
-    assert rep.status["report_shape"] == "fail", rep.to_dict()
-    assert [f.code for f in rep.blockers] == ["report_incomplete"]
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
+    assert rep.blockers == [], [f.to_dict() for f in rep.blockers]
     rd = rep.readings["report_shape"]
     assert rd["missing_declared_sections"] == ["七、我们做的补救"], rd
     assert rd["missing_attachment_fields"] == [], rd
+    warns = [f for f in rep.findings if f.code == "declared_sections_missing"]
+    assert warns and warns[0].level == "warning", [f.to_dict() for f in rep.findings]
     assert {k: v for k, v in rep.status.items() if k != "report_shape"} == {
         name: "pass" for name in CL.DEFAULT_CHECKS if name != "report_shape"}
 

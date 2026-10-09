@@ -1373,6 +1373,9 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p52`（2026-10-09，S1g-2）：共享的循环协议新增一句"派活那一刻秘书还会替你看一遍
 #: 『这件活在被派人的读写面里做不做得成』"（业主 2026-10-09：「"超越职责"的一个主要可能
 #: 是无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）⇒ 共享段 ⇒ 十格全换。
+#: `p53` 撤回（2026-10-09，同一轮）：那两句本想写进 M 的提示词，而 M 那一段的真身
+#: 在 `src/agentflow/specs/m.py`（FC-27 禁改区）⇒ `test_agent_spec_reconciliation`
+#: 当场红。按禁改区纪律撤回本文件里的那一句，把"请人写进真身"登记为 H-4。
 _FROZEN_PROMPT_VERSION = "p52"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",

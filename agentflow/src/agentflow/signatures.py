@@ -91,15 +91,23 @@ def doc_ref(doc_id: str, claim_id: str, row: Mapping[str, Any]) -> str:
 def parse_doc_ref(ref: str) -> tuple[str, str, str] | None:
     """拆内部引用；不是 `doc:` 形状时返回 `None`（不抛 —— 调用方要能把它当"另一档"）。
 
-    形状：`doc:<doc_id>#<claim_id>@<hash>`；`@` 之后可缺省（缺省 = 没钉版本，
-    那种引用由调用方判成 `internal_citation_stale` 或直接拒，取决于它的口径 —— 本函数只拆）。
+    两种形状（业主 2026-10-09 的裁定把它分成两档，见 `doc_ref_verdict` 的 docstring）：
+
+    - `doc:<doc_id>#<claim_id>@<hash>` —— 引某条断言（三段式；`@hash` 可省 ⇒
+      没钉版本，见下）；
+    - `doc:<doc_id>` / `doc:<doc_id>@<hash>` —— 引我方那份手稿（整体成果）。
+
+    形状坏掉的两处仍然返回 `None`：`doc:` 后面没有稿件号；或者写了 `@` 却是空的
+    （`doc:0001@` / `doc:0001#c1@` —— 那是"钉了一个空哈希"，不是"没钉"）。
     """
     if not ref.startswith("doc:"):
         return None
     body = ref[4:]
-    head, _, rev = body.partition("@")
-    doc_id, _, claim_id = head.partition("#")
-    if not doc_id or not claim_id:
+    head, at, rev = body.partition("@")
+    if at and not rev.strip():
+        return None
+    doc_id, sep, claim_id = head.partition("#")
+    if not doc_id or (sep and not claim_id.strip()):
         return None
     return doc_id, claim_id, rev
 
@@ -155,21 +163,65 @@ class DocRefVerdict(NamedTuple):
         """三段是否全过。"""
         return self.code == DOC_REF_OK
 
+    @property
+    def whole(self) -> bool:
+        """这一条引的是整份手稿（两段式）还是某条断言（三段式）。
+
+        业主 2026-10-09：「智能体产生的手稿确实不是正常引文……错误的是所有智能体
+        产生的手稿里的成果若要使用则必须在论文正文里从零搭建，使内容自包含，
+        不以引文格式落实」⇒ 两段式是合法的一档（引我方那份手稿的整体成果），
+        这一格让"引整份手稿"与"引某条断言"在读数上分得开。
+        """
+        return not self.claim_id
+
+    @property
+    def pinned(self) -> bool:
+        """这一条钉没钉版本（没钉 = 改稿之后旧引用不会失效）。"""
+        return bool(self.pinned_hash)
+
+
+def doc_ref_reading(raw: str) -> dict[str, bool]:
+    """一条 `doc:` 引用的读数：`{"whole": 引整份手稿, "pinned": 钉了版本}`。
+
+    纯读数（判定仍在 :func:`doc_ref_verdict`）。放进本模块是为了守住"三段判据的
+    原语只许出现在这里"那条结构判据（`tests/test_internal_citations.py` ⑤）：
+    调用点自己 `parse_doc_ref` 就等于又长出一份解析。
+    形状不对 ⇒ 两格都 `False`（调用方那时已经有判定码了，不需要这里再报一次）。
+    """
+    parts = parse_doc_ref(str(raw))
+    if parts is None:
+        return {"whole": False, "pinned": False}
+    _doc_id, claim_id, rev = parts
+    return {"whole": not claim_id, "pinned": bool(str(rev))}
+
 
 def doc_ref_verdict(raw: str,
                     doc_of: Callable[[str], Mapping[str, Any] | None]) -> DocRefVerdict:
-    """`doc:` 内部引用的三段检查（依据 `draft/30` §T4-A）。
+    """`doc:` 内部引用的判定（依据 `draft/30` §T4-A，含 2026-10-09 的两档裁定）。
 
-    三段都要真：稿件在、那条断言在、钉的哈希就是目标稿件当前这一版。
-    为什么第三段不能省：它答的是"这条引用钉的是哪一版"—— 改稿之后旧引用必须失效，
-    只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，而那正是这三段要防的事。
+    ## 两档（业主 2026-10-09 的裁定）
+
+    逐字：「关于"写论文时无法写入引用智能体产生的手稿的研究成果"，这个现象是半对半错。
+    对的在于智能体产生的手稿确实不是正常引文，错误的是所有智能体产生的手稿里的成果
+    若要使用则必须在论文正文里从零搭建，使内容自包含，不以引文格式落实」
+
+    ⇒ 半边保留、半边改：
+
+    - 保留：手稿不是文献（它不在 `literature` 里，`lit:` 引不到它）—— 这一档不动；
+    - 改：`doc:<稿件>`（两段式）是合法的一档：引我方那份手稿里的成果，
+      不必在正文里从零重搭一遍。此前它被 `parse_doc_ref` 判成"形状不对"
+      （唯一写法的三段式要求 `#断言@哈希`），于是"用手稿里的成果"只剩"重搭"一条路
+      —— 真机现场与三条读数见 `tests/test_a_document_may_cite_our_own_statement.py`。
+    - 三段式（`doc:<稿件>#<断言>@<哈希>`）照旧：它比两段式更精确（钉到某条断言、
+      钉到那一版）。钉了哈希就要对上（`DOC_REF_STALE` 一字未松）；
+      两段式没钉版本这一档要看得见（`pinned=False`），不许与"钉过了"混作一谈。
 
     `doc_of(doc_id) -> 行 | None` 给的是查稿件的「能力」，不是表或库实例：
     写入期在事务内用 `rows_of("documents")` 查（拿到一致的快照），审计期用
     它已经读好的 `doc_by_id.get`（不再读第二遍表 ⇒ 不会看到两份快照）。
     形状解析不出来时一次表都不读（短路与两份旧实现一致）。
 
-    判定只看这三段；"目标稿件必不必须是 `accepted`"之类的「调用方档」不在这里
+    判定只看这几段；"目标稿件必不必须是 `accepted`"之类的「调用方档」不在这里
     —— 那是两侧口径可以不同、且刻意不同的地方（写入期不查、审计期查）。
     """
     parts = parse_doc_ref(raw)
@@ -179,11 +231,16 @@ def doc_ref_verdict(raw: str,
     doc = doc_of(tdoc_id)
     if doc is None:
         return DocRefVerdict(DOC_REF_NO_DOC, tdoc_id, tclaim_id, thash)
-    claims = {str(cl.get("claim_id")) for cl in (doc.get("claims") or [])
-              if isinstance(cl, dict)}
-    if str(tclaim_id) not in claims:
-        return DocRefVerdict(DOC_REF_NO_CLAIM, tdoc_id, tclaim_id, thash, doc)
+    if tclaim_id:
+        claims = {str(cl.get("claim_id")) for cl in (doc.get("claims") or [])
+                  if isinstance(cl, dict)}
+        if str(tclaim_id) not in claims:
+            return DocRefVerdict(DOC_REF_NO_CLAIM, tdoc_id, tclaim_id, thash, doc)
     cur = ref_hash_of(doc)
+    if not str(thash):
+        # 没钉版本（两段式，或三段式省了 `@哈希`）：通过，但读数里带着
+        # `pinned=False` —— 改稿之后这条引用不会失效，那是写稿人的选择，不是错。
+        return DocRefVerdict(DOC_REF_OK, tdoc_id, tclaim_id, "", doc, cur)
     if str(thash) != cur:
         return DocRefVerdict(DOC_REF_STALE, tdoc_id, tclaim_id, thash, doc, cur)
     return DocRefVerdict(DOC_REF_OK, tdoc_id, tclaim_id, thash, doc, cur)

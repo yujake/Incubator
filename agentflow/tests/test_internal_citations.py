@@ -109,12 +109,22 @@ def test_canonical_hash_treats_missing_list_and_empty_list_alike():
 
 
 def test_doc_ref_round_trip():
-    """正控：`doc_ref` 与 `parse_doc_ref` 自洽；非 `doc:` 形状返回 None（不抛）。"""
+    """正控：`doc_ref` 与 `parse_doc_ref` 自洽；非 `doc:` 形状返回 None（不抛）。
+
+    2026-10-09（两阶段口径）：`doc:<稿件>`（两段式，引整份手稿）与
+    `doc:<稿件>@<哈希>` 都是合法形状；坏形状只剩两种 —— `doc:` 后无号、
+    以及写了 `@` 却是空的（"钉了空哈希"与"没钉"必须分得开）。
+    """
     row = _doc_row("0001", [_claim("c1", ["lit:0000"])])
     ref = SIG.doc_ref("0001", "c1", row)
     assert SIG.parse_doc_ref(ref) == ("0001", "c1", SIG.ref_hash_of(row))
     assert SIG.parse_doc_ref("lit:0003#p.4") is None
-    assert SIG.parse_doc_ref("doc:0001") is None
+    assert SIG.parse_doc_ref("doc:0001") == ("0001", "", "")
+    assert SIG.parse_doc_ref("doc:0001@" + SIG.ref_hash_of(row)) == \
+        ("0001", "", SIG.ref_hash_of(row))
+    assert SIG.parse_doc_ref("doc:0001#") is None
+    assert SIG.parse_doc_ref("doc:0001@") is None
+    assert SIG.parse_doc_ref("doc:") is None
 
 
 # ---------------------------------------------------------------- ② 引用要对得上
@@ -204,12 +214,46 @@ def test_negative_stale_internal_citation_bites(tmp_path: Path):
     assert SIG.ref_hash_of(target) in stale[0].message, stale[0].message
 
 
-def test_negative_citation_without_hash_bites(tmp_path: Path):
-    """注入：引用没钉哈希（`doc:0001#c1`）⇒ 也算 stale（不许"没钉"被读成"对得上"）。"""
+def test_a_manuscript_stage_citation_without_hash_is_accepted(tmp_path: Path):
+    """两阶段口径（业主 2026-10-09）：手稿阶段里"没钉版本"是合法的一档。
+
+    改前这条判的是「引用没钉哈希（`doc:0001#c1`）⇒ 也算 stale」；裁定之后
+    「研究手稿阶段可以互相引用」⇒ 没钉版本的引用通过，只是读数里
+    `pinned=False`（"改稿之后旧引用不会失效"这件事看得见）。
+    钉了但钉错仍然 stale（上一条判据守着那一档）。
+    """
     st = _store(tmp_path)
     _doc(st, "0001", [_claim("c1", ["lit:0000"])], status="accepted")
     _doc(st, "0002", [_claim("c1", ["doc:0001#c1"])])
-    assert "internal_citation_stale" in _codes(st, "documents")
+    codes = _codes(st, "documents")
+    assert "internal_citation_stale" not in codes, codes
+    assert "dangling_doc_citation" not in codes, codes
+
+
+def test_a_formal_paper_citation_of_a_manuscript_is_refused(tmp_path: Path):
+    """两阶段口径的另一半：正式论文（`kind="paper"`）里引我方手稿 ⇒ 写入期就拒。
+
+    业主逐字：「正式论文阶段只能引用真实论文，正式论文中手稿内容不可直接引用，必须重建」。
+    写入期（`build_document` / `revise` 传 `citing_kind`）fail-closed ⇒ 这种行落不了库；
+    审计期那一支在 `verify.py`（FC-27 禁改区）今天还不知道 `citing_kind`，
+    登记为 H-3（要人改）—— 这一条判据判的是写入期那一半。
+    """
+    from agentflow.tools.doc_tools import build_document
+
+    st = _store(tmp_path)
+    first = _doc(st, "0001", [_claim("c1", ["lit:0000"])], status="accepted")
+    claims = [{"claim_id": "c9", "section": "Main", "text": "论文里直接引手稿",
+               "evidence_kind": "heuristic", "citations": [f"doc:{first['doc_id']}"]}]
+    with pytest.raises(Exception) as err:
+        build_document(store=st, kind="paper", title="正式论文", claims=claims,
+                       workspace_root=str(tmp_path), actor="test")
+    text = str(err.value) + str(getattr(err.value, "details", ""))
+    assert "必须重建" in text, text
+    # 同一份 claims 走手稿那一档（`kind="note"`）⇒ 写得进去（判的是阶段，不是引谁）
+    build_document(store=st, kind="note", title="研究手稿", claims=claims,
+                   workspace_root=str(tmp_path), actor="test")
+    assert any(str(r["kind"]) == "note" for r in st.rows("documents")), \
+        [(r["doc_id"], r["kind"]) for r in st.rows("documents")]
 
 
 # ---------------------------------------------------------------- ③ 行内自洽
@@ -327,7 +371,13 @@ def test_write_side_refuses_each_broken_part_of_a_doc_ref(tmp_path: Path):
         assert got["missing"], f"这一条本该被拒：{cite!r}"
         return str(got["missing"][0]["why"])
 
-    assert "形状不对" in _why("doc:0001")                             # 缺 #断言@哈希
+    assert "形状不对" in _why("doc:0001#@")                           # `#` 之后空断言
+    assert "形状不对" in _why("doc:0001@")                            # 钉了一个空哈希
+    # 正控（业主 2026-10-09 的两档裁定）：`doc:<稿件>`（两段式）是合法的一档
+    # —— 引我方那份手稿里的成果，不必在正文里从零重搭一遍。
+    # 改前这一行读的是 `_why("doc:0001")`（断言它"形状不对"），那正是被裁掉的那半边。
+    assert not DT.check_citations(rows_of, [_claim("c2", ["doc:0001"])])["missing"]
+    assert "没有 doc_id" in _why("doc:9999")
     assert "没有 doc_id" in _why(f"doc:9999#c1@{SIG.ref_hash_of(target)}")
     assert "没有断言" in _why(f"doc:0001#cX@{SIG.ref_hash_of(target)}")
     stale = "0" * SIG.REF_HASH_LEN if SIG.ref_hash_of(target) != "0" * SIG.REF_HASH_LEN \
@@ -616,6 +666,7 @@ def _case_store(root: Path, raw: str, *, target_status: str = "accepted") -> Sto
 
 
 #: 拒收理由的公共口径：`(写入期报文片段, 审计期判据码)`。
+#: 2026-10-09（两阶段口径）之后只剩三段：形状 / 稿件 / 断言 / 版本（`stale`）。
 _REFUSE_EXPECT: dict[str, tuple[str, str]] = {
     "shape": ("形状不对", "dangling_doc_citation"),
     "doc": ("没有 doc_id", "dangling_doc_citation"),
@@ -625,21 +676,27 @@ _REFUSE_EXPECT: dict[str, tuple[str, str]] = {
 
 
 def test_two_sides_agree_on_the_seven_inputs(tmp_path: Path):
-    """改后的常驻回归表：七个输入上两侧的判定与拒收理由逐条对得上。
+    """改后的常驻回归表：这些输入上两侧的判定与拒收理由逐条对得上。
 
     这是差分读数（`agentflow/temp/probe_doc_citation_two_sides_5a.py` 的改前/改后四格）
     的常驻版本：那边证"搬一处没改口径"，这边守住"此后也不许分家"。
     两侧的文案与粒度本来就不同（审计期把"稿件不存在"与"断言不存在"合成一条
     `dangling_doc_citation`），所以比的是"拒在哪一段"。
+
+    2026-10-09 两处口径改动（业主：「研究手稿阶段可以互相引用」）：
+    `doc:0000#c1`（缺哈希 = 没钉版本）与 `doc:0000`（两段式 = 引整份手稿）
+    从"拒"变成"通过"；坏形状换成真正坏的那一个（钉了空哈希）。
     """
     probe = _case_store(tmp_path / "probe", "lit:0000")
     target = [r for r in probe.rows("documents") if str(r.get("doc_id")) == "0000"][0]
     cur = SIG.ref_hash_of(target)
     cases = [
         ("合法引用", SIG.doc_ref("0000", "c1", target), "ok"),
-        ("缺哈希", "doc:0000#c1", "stale"),
+        ("缺哈希（没钉版本）", "doc:0000#c1", "ok"),
+        ("引整份手稿（两段式）", "doc:0000", "ok"),
+        ("钉了版本且对得上（两段式）", f"doc:0000@{cur}", "ok"),
         ("哈希长度不对", f"doc:0000#c1@{cur[:-1]}", "stale"),
-        ("形式不对", "doc:0000", "shape"),
+        ("钉了空哈希（坏形状）", "doc:0000#c1@", "shape"),
         ("稿件不存在", f"doc:9999#c1@{cur}", "doc"),
         ("断言不存在", f"doc:0000#cX@{cur}", "claim"),
     ]

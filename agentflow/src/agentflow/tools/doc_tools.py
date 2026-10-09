@@ -411,30 +411,37 @@ def citation_ref_parts(citation: Any) -> tuple[str, str]:
 
 
 def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[str, Any]]]) -> str:
-    """`doc:` 内部引用的三段检查（空串 = 通过）。
+    """`doc:` 内部引用的判定（空串 = 通过）。
 
-    三段都要真（稿件在、那条断言在、钉的哈希就是目标稿件当前这一版）。
+    两种形状（业主 2026-10-09 的裁定，见 `signatures.doc_ref_verdict` 的 docstring）：
+
+    - `doc:<稿件>#<断言>@<内容哈希前 16 位>` —— 引某条断言（三段式，`@哈希` 可省）；
+    - `doc:<稿件>` / `doc:<稿件>@<内容哈希前 16 位>` —— 引我方那份手稿的整体成果。
+      此前这一档被判"形状不对"⇒"用手稿里的成果"只剩"在正文里从零重搭"一条路。
+
     唯一实现在 `agentflow.signatures.doc_ref_verdict`（题 5/5a 把写入期与审计期
     原先各一份的三段逻辑合成了一份：两份各判一次时，漂了没有任何地方会报）。
 
     本函数只做两件事：把"查稿件"的能力递给那一份实现，再把判定码翻成一句人话。
     它不再自己解析、不再自己算哈希 —— 那样就等于又长出一份三段逻辑。
-    为什么不能只核第一段：第三段是"引用钉的是哪一版"，改稿之后旧引用必须失效 ——
-    只看"稿件还在"会让一份改过的稿件继续被旧哈希引着，
-    而那正是 `draft/30` §T4-A 设计这三段要防的事。
+    钉了哈希就要对上：改稿之后旧引用必须失效（只看"稿件还在"会让一份改过的
+    稿件继续被旧哈希引着，而那正是 `draft/30` §T4-A 设计这几段要防的事）；
+    而两段式没钉版本是合法的一档（读数里 `pinned=False` 看得见）。
 
-    写入期只判这三段，刻意不判"目标稿件必须 `accepted`"（`draft/68` 题 12 选 A：
+    写入期只判这几段，刻意不判"目标稿件必须 `accepted`"（`draft/68` 题 12 选 A：
     两侧保持不对称）—— 写稿阶段要能引一份还在审的稿子（否则"边写边审"会被挡住）；
-    那一条是审计期独有的内容政策（`draft/29` §8.5 第 1 条）。两侧共用前三段
-    （`signatures.doc_ref_verdict`），调用方档不在那三段里 —— 见那个函数的 docstring。
+    那一条是审计期独有的内容政策（`draft/29` §8.5 第 1 条）。两侧共用（
+    `signatures.doc_ref_verdict`），调用方档不在那里 —— 见那个函数的 docstring。
     """
     from .. import signatures as SIG  # 惰性：与 `:1390` 同一处依赖，不新增模块级边
 
     verdict = SIG.doc_ref_verdict(raw, lambda did: next(
         (r for r in rows_of("documents") if str(r.get("doc_id")) == str(did)), None))
     if verdict.code == SIG.DOC_REF_BAD_SHAPE:
-        return (f"内部引用形状不对：应为 "
-                f"doc:<稿件>#<断言>@<内容哈希前 {SIG.REF_HASH_LEN} 位>")
+        return ("内部引用形状不对：引某条断言应为 "
+                f"doc:<稿件>#<断言>@<内容哈希前 {SIG.REF_HASH_LEN} 位>；"
+                "引我方那份手稿的整体成果写 doc:<稿件>（想钉版本就写 "
+                f"doc:<稿件>@<内容哈希前 {SIG.REF_HASH_LEN} 位>）")
     if verdict.code == SIG.DOC_REF_NO_DOC:
         return f"documents 表里没有 doc_id={verdict.doc_id!r}"
     if verdict.code == SIG.DOC_REF_NO_CLAIM:
@@ -445,8 +452,16 @@ def _doc_citation_problem(raw: str, rows_of: Callable[[str], Iterable[Mapping[st
     return ""
 
 
+#: "正式论文"的那一格（`documents.kind` 的取值）。两阶段口径靠它分档
+#: （业主 2026-10-09：「研究手稿阶段可以互相引用，正式论文阶段只能引用真实论文，
+#: 正式论文中手稿内容不可直接引用，必须重建」）。词表真身是 `schema.DOC_KINDS`，
+#: 这里只写"哪一个是正式论文"——不另抄一份词表（抄了就会漂）。
+FORMAL_PAPER_KIND = "paper"
+
+
 def check_citations(
-    rows_of: Any, claims: Sequence[Mapping[str, Any]]) -> dict:
+    rows_of: Any, claims: Sequence[Mapping[str, Any]], *,
+    citing_kind: str = "") -> dict:
     """逐条核对 citations 指向的对象真的存在。
 
     三态（这是本函数的核心，不是细节）：
@@ -461,7 +476,27 @@ def check_citations(
     `rows_of(table) -> 行序列`：给的是读表能力而不是 store 实例，
     这样它既能在事务内用 `tx.rows` 跑（拿到一致的快照），也能被单测直接喂假表。
 
-    返回 ``{"checked", "reason", "missing": [{claim_id, citation, kind, ref, why}], "resolved": n}``。
+    ## `citing_kind`：两阶段口径（业主 2026-10-09 逐字）
+
+    > 「明确：研究手稿阶段可以互相引用，正式论文阶段只能引用真实论文，
+    > 正式论文中手稿内容不可直接引用，必须重建」
+
+    - 研究手稿阶段（`note` / `survey` / `reproduction_report` 等）：
+      可以互相引用我方手稿 —— `doc:<稿件>`（引整体成果）与三段式
+      `doc:<稿件>#<断言>@<哈希>` 都合法（后者更精确、能钉版本）；
+    - 正式论文（`kind="paper"`）：只许引真实论文（`lit:`）。`doc:` 一律拒，
+      理由写明"手稿里的内容要进论文必须在正文里重建"—— 重建出来的东西再以
+      `stmt:` / `exp:` / `rel:` 落台账、被论文引用（`closing.PAPER_LEDGER_PREFIXES`
+      要的正是这三种）。
+    - 没给 `citing_kind`（历史调用点/单测）⇒ 只判形状与存在性（老行为逐字不变）。
+
+    返回 ``{"checked", "reason", "missing": [{claim_id, citation, kind, ref, why}],
+    "resolved": n, "doc_whole": [...], "doc_unpinned": [...]}``。
+
+    后两格是读数（两阶段口径之后才有意义）：`doc_whole` = 引"我方那份手稿的
+    整体成果"的那些引用（两段式）；`doc_unpinned` = 其中没钉版本的那些 ——
+    没钉版本是合法的，但"改稿之后旧引用不会失效"这件事必须看得见，
+    不许与"钉过了"混作一谈。
     """
     if rows_of is None:
         return {
@@ -472,11 +507,15 @@ def check_citations(
             ),
             "missing": [],
             "resolved": 0,
+            "doc_whole": [],
+            "doc_unpinned": [],
         }
 
     # 只把用得到的表读出来，且每张表只读一次（引用多时不做 O(n²) 扫描）。
     id_sets: dict[str, set[str]] = {}
     missing: list[dict] = []
+    whole_docs: list[str] = []
+    unpinned_docs: list[str] = []
     resolved = 0
     for i, c in enumerate(claims, 1):
         cid = str((c or {}).get("claim_id") or f"claim-{i}")
@@ -513,8 +552,26 @@ def check_citations(
                 )
                 continue
             if kind == "doc":
-                # 内部引用是三段的（稿件 / 断言 / 当前内容哈希前 16 位），
-                # 而通用检查只看得到第一段 ⇒ 单独一支（`_doc_citation_problem`）。
+                # 两阶段口径（业主 2026-10-09）：正式论文里不许直接引我方手稿。
+                if str(citing_kind) == FORMAL_PAPER_KIND:
+                    missing.append(
+                        {
+                            "claim_id": cid,
+                            "citation": str(raw),
+                            "kind": kind,
+                            "ref": ref,
+                            "why": (
+                                "正式论文里不许直接引我方手稿（业主 2026-10-09："
+                                "「正式论文阶段只能引用真实论文，正式论文中手稿内容不可"
+                                "直接引用，必须重建」）⇒ 手稿里的内容要进论文，就在正文里"
+                                "重建，再以 `stmt:` / `exp:` / `rel:` 引它变成的台账行；"
+                                "要引真实论文写 `lit:`"
+                            ),
+                        }
+                    )
+                    continue
+                # 内部引用分两档：三段式引某条断言、两段式引我方那份手稿的整体成果。
+                # 通用检查只看得到第一段 ⇒ 单独一支（`_doc_citation_problem`）。
                 problem = _doc_citation_problem(str(raw), rows_of)
                 if problem:
                     missing.append(
@@ -528,6 +585,13 @@ def check_citations(
                     )
                 else:
                     resolved += 1
+                    from .. import signatures as SIG
+
+                    reading = SIG.doc_ref_reading(str(raw))
+                    if reading.get("whole"):
+                        whole_docs.append(str(raw))
+                        if not reading.get("pinned"):
+                            unpinned_docs.append(str(raw))
                 continue
             if table not in id_sets:
                 field = str(S.TABLES[table]["id_field"])
@@ -552,7 +616,21 @@ def check_citations(
         ),
         "missing": missing,
         "resolved": resolved,
+        "doc_whole": whole_docs,
+        "doc_unpinned": unpinned_docs,
     }
+
+
+def _check_citations_needs_kind() -> str:
+    """`check_citations` 与 `build_document` 之间那一格的口径说明（只读，给读的人）。"""
+    return (
+        "`citing_kind` 是**发起引用的那一份文档**的类型（`build_document` 的 `kind`、"
+        "`revise` 从被修订的那一行读）。业主 2026-10-09 的两阶段口径靠它落地："
+        "研究手稿阶段（`note` / `survey` / `reproduction_report` 等）可以互相引用我方手稿"
+        "（`doc:<稿件>`）；**正式论文**（`kind=\"paper\"`）只许引真实论文（`lit:`），"
+        "手稿里的内容要进论文必须在正文里**重建**（重建出来的东西再以 `stmt:` / `exp:` / "
+        "`rel:` 落台账、被论文引用）。没给 `citing_kind` ⇒ 只判形状与存在性（老行为）。"
+    )
 
 
 def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str, str]:
@@ -1402,7 +1480,7 @@ def build_document(
         actor=actor,
         note="build_document",
     ) as tx:
-        cites = check_citations(tx.rows, norm)
+        cites = check_citations(tx.rows, norm, citing_kind=kind)
         if not cites["checked"]:
             # 理论上不可达（store 非空就 checked=True）；留着是为了让"没法查"这条
             # 状态有出口，而不是在某次重构里悄悄退化成"当作查过了"。
