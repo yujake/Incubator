@@ -1575,6 +1575,60 @@ M 只在"父也办不了"时被惊动（这一改动并入 S1o 那批，判据�
 | **D8** | 检查基准 == 执行基准；**每实例注册表的构造次数是读数** |
 | **D9** | 框架幂等重写 ⇒ `pass`（+warning，`changed_rows` 仍列出）；产物真被删 ⇒ 仍 `fail` |
 
+### 15.5 S1o 落地（2026-10-10）：秘书从**证明文本**扫依赖 + 定义来源分档计数
+
+§15.3 那句"S1o = §12.3 四条 + `matched_by` + 五元位映射 + 协作链六步"里，
+后三件在更早的提交里已经落地并有判据（`agent_c/proof_chain.py` 的组语义与别名命中、
+`test_the_five_bits_name_their_table.py`、`test_the_shortest_dependency_chain.py`）。
+本轮补的是 §14.11（B 只交两样）与 §14.13/§15.4（定义来源）这两件，读数如下。
+
+**① 依赖从证明文本里扫出来（§14.11 乙 的"改道"那一半）**
+
+- `textutil.find_citations(text, *, prefixes=None)`：**自由文本**里的引用扫描的**唯一实现**
+  （此前只有"解析一条已经切好的 citation"的 `citation_ref_parts`，没有"从一段话里找出来"
+  的那一半）。前缀认不认由 `schema.CITATION_PREFIXES` 说了算；去重键是 `(前缀, 代号)`
+  ——`lit:0003#p.4` 与 `lit:0003` 是**同一条**。
+- `Secretary._scan_proof_deps`：只交"定理内容 + 证明过程"时，
+  依赖 = 证明文本里扫出的那些号。路径分组：给了 `proof_paths` ⇒ 每段一组
+  （`path_group` 1,2,…）；没给 ⇒ 全归第 1 组（**不猜**，不按空行或"证明一/证明二"分）。
+- **悬空不整笔拒**（业主 §14.11 的判据逐字）：不在册的号落成 `dangling` 边 + 写在
+  `deps_dangling` 里点名（拒了等于把整条定理丢掉）；在册但**没有承载格**的前缀
+  （`rel:` / `eval:`）进 `deps_unmappable` 逐条点名，不静默丢。
+- **三态** `deps_state`：`from_proof` / `none_in_proof`（文本在、一条引用也没有）/
+  `unknown`（证明过程这一格**根本没给**）——"没扫成"与"扫了、是空的"严格分开。
+- 显式给 `deps` 的那条路**不动**（指着一个不在册的号 = 整笔不写，那是 G 那一族的契约）：
+  两条路各有各的判据，`test_explicit_deps_keep_the_strict_path` 把它们钉开。
+
+**② 两件式契约暴露的两处真缺陷（都已修）**
+
+- `_statement_from` 里 `line_range` 走的是 `PageRange` 的构造口，而 `Statement` 声明它是
+  **字符串** ⇒ 落盘那一格是一个 `{start/end/label}` 字典。判据抓不到它（`to_dict` 照抄、
+  `verify` 不查那一格），下游按"行范围"读的人会拿到字典。
+- B 只交两样时 `quote_reason` 必然为空，而 `Statement.validate` 要求"不是 True 就必须写"
+  ⇒ 那份两件式契约对 `own_result` 命题在**结构上**不成立（实测整笔被拒）。
+  现由秘书补一个**受控**值（写的是"为什么这一格是空的"，不是编一个已核对的结论），
+  并在读数里给 `quote_reason_filled=True`（补了要看得见）。
+
+**③ 定义来源分档计数（§14.13 + §15.4）**
+
+`conceptrows.definition_supply(store)`：六个桶 —— 定义**到了**三档
+（`from_lit` / `ask_parent` / `self_authored`）与**还没到**三档
+（`pending_search` / `waiting_ask_parent` / `unmarked_empty`），
+`checked=False` 时六桶全 0 但带 `reason`（"没查成"不是"全是 0"）。
+`unmarked_empty` 就是历史那 94 条的病根（空定义且没有待补标记）：它在真库上恒为 0
+（`Statement.validate` 当场拒那种行），分类器上由替身喂行证明它**看得见** —— 两件事都要有判据。
+新增标记 `conceptrows.ASK_PARENT = "concept:ask_parent"`（§15.4 的①档）。
+
+**④ 还没做的那一半（下一轮）**：§15.4 的**载体** —— B 撞到生僻定义时落一条
+**向上报文/手稿**给直接父（现在只有"越权召唤"那条中继改发了父，
+`test_the_relay_goes_to_the_parent.py` 四条守着；"定义请求"这一种还没接上），
+以及由此产生的"父也办不了 ⇒ 才向上爬到 M，且逐级留痕"那两条判据。
+
+**本轮读数**：`pytest tests/test_the_secretary_scans_the_proof.py` 8 passed、
+`tests/test_the_definition_supply_is_counted.py` 4 passed；回归批次
+（textutil / secretary / B 交内容 / 过渡层 / 落刀清单 / rebuild / r5 注引）**181 passed**；
+`lint` error 0 / warning 15 / info 49；行尾口径与 HEAD 一致。
+
 
 
 

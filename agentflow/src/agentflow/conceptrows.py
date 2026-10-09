@@ -47,6 +47,69 @@ LEGACY_TABLE = "concepts"
 #: （`schema.is_valid_id` 为假 ⇒ 谁把它当号用都会当场看出不对，而不是去找一个不存在的概念）。
 SUPERSEDED_INTO = "superseded"
 
+#: `draft/97` §15.4 的①档标记：问直接父（最常见的场景里父就是 A —— 原文在它手里，
+#: 就地就能给定义，不用惊动 M、也不用真的再上网搜）。
+#:
+#: 为什么它是一个行内标记而不是一列/一张表：它与 `pending_search` / `self_authored`
+#: 是同一件事的三个取值（"这个定义最后由谁来补"），而"定义到底到了没有"由
+#: `statement_full` 是否为空单独回答 —— 两件事折平就会把"已经问了父"读成"定义有了"。
+ASK_PARENT = "concept:ask_parent"
+
+
+def definition_supply(store: Any) -> dict[str, Any]:
+    """概念行的定义来源逐档计数（`draft/97` §14.13 / §15.4：三档不许折平）。
+
+    业主 2026-10-09 的两句口径合成这一格：
+
+    > 「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入；如果概念很基础，
+    >  是数学基本概念，允许B自己写定义（我们相信LLM的智力）」
+    > 「最常见的定义不明极可能是A查论文要B消化时遇到生僻定义，这时和父代理A交流即可」
+
+    返回 `{"checked", "rows", "from_lit", "self_authored", "ask_parent",
+    "pending_search", "waiting_ask_parent", "unmarked_empty", "reason"}`：
+
+    | 桶 | 什么时候 |
+    |---|---|
+    | `from_lit` | 定义在，且有 `source_lit_id`（从某篇文献抽到） |
+    | `ask_parent` | 定义在，理由里带着"父给的"这一档 |
+    | `self_authored` | 定义在，没有外部来源（B 自撰：基本概念） |
+    | `pending_search` | 定义不在，理由里写着等 A 搜（`concept:pending_search`） |
+    | `waiting_ask_parent` | 定义不在，已经向父发出请求（`concept:ask_parent`） |
+    | `unmarked_empty` | 定义不在、也没有任何待补标记 —— 这就是历史那 94 条的病根，它必须恒为 0 |
+
+    两个半区（"定义到了"与"还没到"）分开报：把 `ask_parent` 折进"定义有了"会让
+    "已经问了父"读成"父已经给了"。`checked=False` 时每个桶都是 0，但 `reason` 说清为什么
+    （"没查成"不是"全是 0"）。
+    """
+    out: dict[str, Any] = {"checked": False, "rows": 0, "from_lit": 0, "self_authored": 0,
+                           "ask_parent": 0, "pending_search": 0, "waiting_ask_parent": 0,
+                           "unmarked_empty": 0, "reason": ""}
+    try:
+        rows = [dict(r) for r in store.rows("statements")
+                if str(r.get("kind") or "") == "concept"]
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实报
+        out["reason"] = f"statements 读不成（{type(exc).__name__}: {exc}）"
+        return out
+    out["rows"] = len(rows)
+    out["checked"] = True
+    for r in rows:
+        reason = str(r.get("quote_reason") or "")
+        defined = bool(str(r.get("statement_full") or "").strip())
+        if defined:
+            if str(r.get("source_lit_id") or "").strip():
+                out["from_lit"] += 1
+            elif ASK_PARENT in reason:
+                out["ask_parent"] += 1
+            else:
+                out["self_authored"] += 1
+        elif ASK_PARENT in reason:
+            out["waiting_ask_parent"] += 1
+        elif PENDING_SEARCH in reason:
+            out["pending_search"] += 1
+        else:
+            out["unmarked_empty"] += 1
+    return out
+
 
 def legacy_present(store: Any) -> dict[str, Any]:
     """过渡期还作不作数（`present` = 老表还在 `TABLES` 里），以及盘上还剩什么。

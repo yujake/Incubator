@@ -405,6 +405,9 @@ STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     "source_lit_id", "doc_id", "page_range", "line_range", "evidence_kind",
     "quote_verified", "quote_reason", "derived_from", "aliases", "bits",
     "deps", "concepts",
+    # 多段可选证明：B 自己分的段（每段一组 `path_group`）。不给就把
+    # "定理内容 + 证明过程"当一段 —— 秘书不按空行/字样猜 B 想分几段（`draft/97` §14.11）。
+    "proof_paths",
 })
 #: 键名别名 ⇒ 正名（每一列的别名必须唯一，否则 `_statement_key_candidate` 返回空 =
 #: "不猜"）。写在这里而不是散在代码里，是为了让"认哪些写法"可被一条判据逐条读出来。
@@ -422,6 +425,7 @@ STATEMENT_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "derived_from": ("uses",),
     "aliases": ("aka",),
     "deps": ("dependencies", "dep_groups", "paths"),
+    "proof_paths": ("proof_groups", "proof_segments"),
     "concepts": ("definitions",),
 }
 #: 一步依赖认得的来源键 ⇒ `(来源字段, 表, 表的 id 字段, 该给的 `kind` 缺省)`。
@@ -2478,6 +2482,82 @@ class Secretary:
                            "`proof_text` 那一格记的是良定义性证明"))
         return out
 
+    #: 扫出来的引用前缀 ⇒ `(STEP_SOURCE_KEYS` 里那一步的键名, `kind` 缺省)。
+    #: 键名而不是来源字段名：`_resolve_dep_steps` 读的是 `st.get(key)`
+    #: （`lit_id` / `stmt_id` / `experiment_id` / `doc_id`），来源字段名是它再翻译过去的。
+    #:
+    #: `rel` / `eval` 刻意不在表里：`Dependency` 的"四选一"（`STEP_SOURCE_KEYS`）
+    #: 里没有指向关系表/评测表的格子 ⇒ 它们进 `deps_unmappable` 读数并点名，
+    #: 不许静默丢（丢掉一条引用 = 依赖图静默少一环，而那正是 FC-23 那个病的成因）。
+    _SCAN_SOURCE: dict[str, tuple[str, str]] = {
+        "stmt": ("stmt_id", "theorem"),
+        "exp": ("experiment_id", "experiment"),
+        "lit": ("lit_id", "theorem"),
+        "doc": ("doc_id", "theorem"),
+    }
+
+    def _scan_proof_deps(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """从"定理内容 + 证明过程"里扫出依赖（业主 `draft/97` §14.11 乙：B 只交这两样）。
+
+        ## 路径分组（`Dependency.path_group`）
+
+        - 载荷给了显式的 `proof_paths`（多段可选证明，B 自己分的段）⇒ 每段一组，
+          下标从 1 起（组内 AND / 组间 OR，见 `draft/97` §12.1）；
+        - 没给 ⇒ 把 `statement_full` + `proof_text` 当一段（全归第 1 组）——
+          刻意"不猜"：不按空行、不按"证明一/证明二"这种字样去猜 B 想分几段。
+
+        ## 三态（`state`）
+
+        | 取值 | 什么时候 | 为什么必须分开 |
+        |---|---|---|
+        | `from_proof` | 扫到了至少一条在册引用 | 这是"扫到了" |
+        | `none_in_proof` | 证明过程给了（键在）、一条引用也没有 | 这是"扫了、确实是空的" |
+        | `unknown` | 证明过程这一格根本没给、也没扫到引用 | 这是"没扫成" —— 与"空"折平就等于把"B 没交证明过程"读成"这条定理不依赖任何东西" |
+
+        扫的范围是定理内容 + 证明过程两张脸（业主的口径："证明过程/定理内容里出现的
+        引用"），去重按 `(前缀, 代号)`（`lit:0003#p.4` 与 `lit:0003` 是同一条）。
+        """
+        from . import textutil as T   # 惰性：引用扫描的唯一实现
+
+        raw_paths = body.get("proof_paths")
+        if isinstance(raw_paths, (list, tuple)) and raw_paths:
+            paths = [str(p or "") for p in raw_paths]
+        else:
+            paths = [str(body.get("statement_full") or "") + "\n" + str(body.get("proof_text") or "")]
+        groups: list[list[dict[str, Any]]] = []
+        unmappable: list[dict[str, str]] = []
+        seen_unmappable: set[str] = set()
+        found = 0
+        for gi, text in enumerate(paths, 1):
+            steps: list[dict[str, Any]] = []
+            for ref in T.find_citations(text):
+                found += 1
+                mapping = self._SCAN_SOURCE.get(ref["prefix"])
+                if mapping is None:
+                    # 在册、但没有承载格（`rel:` / `eval:`）⇒ 点名，不静默丢
+                    if ref["raw"] not in seen_unmappable:
+                        seen_unmappable.add(ref["raw"])
+                        unmappable.append({
+                            "ref": ref["raw"], "table": ref["table"],
+                            "why": (f"`{ref['prefix']}:` 在册（指向 {ref['table']}），但 "
+                                    "`Dependency` 没有指向这张表的来源格 ⇒ 这条引用落不进依赖边，"
+                                    "列在这里点名（不许静默丢）")})
+                    continue
+                field, dep_kind = mapping
+                steps.append({"kind": dep_kind, "label": ref["raw"], "code": ref["code"],
+                              "table": ref["table"], field: ref["code"], "path_group": gi,
+                              "_from": "proof_scan"})
+            if steps:
+                groups.append(steps)
+        if found:
+            state = "from_proof"
+        elif "proof_text" in body:
+            state = "none_in_proof"
+        else:
+            state = "unknown"
+        return {"state": state, "groups": groups, "unmappable": unmappable,
+                "paths": len(paths), "refs": found}
+
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
                              force_new: bool, out: dict[str, Any]) -> dict[str, Any]:
         """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。"""
@@ -2485,6 +2565,18 @@ class Secretary:
         from . import textutil as T       # 惰性：查重键的唯一实现
 
         groups = [list(g) for g in (body.get("deps") or [])]
+        # 显式给了 `deps` ⇒ 走严格那一条（指着一个不在册的号 = 整笔不写：那是 G 的
+        # `register_dependency` 那一族的契约）。没给 ⇒ 从证明文本里扫（业主 §14.11：
+        # B 只交"定理内容 + 证明过程"），而扫出来的悬空引用按那一条的判据不整笔拒，
+        # 落成 `dangling` 并点名。
+        scan = {"state": "", "groups": [], "unmappable": [], "paths": 0, "refs": 0}
+        if not groups:
+            scan = self._scan_proof_deps(body)
+            groups = [list(g) for g in scan["groups"]]
+        out["deps_state"] = scan["state"]
+        out["deps_from"] = "proof" if scan["refs"] else ("explicit" if body.get("deps") else "")
+        out["deps_unmappable"] = list(scan["unmappable"])
+        out["deps_dangling"] = []
         concepts = [dict(c) for c in (body.get("concepts") or []) if isinstance(c, Mapping)]
         legacy = CR.legacy_present(self.store)
         with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
@@ -2502,12 +2594,53 @@ class Secretary:
                                    "（确实要另起一条，请给 force_new）"))
                 return out
             steps, missing = _resolve_dep_steps(groups, tx)
-            if missing:
+            if missing and body.get("deps"):
+                # 显式给的依赖指着不在册的号 ⇒ 整笔不写（G 那一族的契约）
                 out.update(refused="unresolved_dependency",
                            reason=("依赖里有一条指着不在册的 id ⇒ 整笔不写（不许留一条挂空号的"
                                    "依赖：那正是'依赖图静默少一环'的成因）"),
                            unresolved=missing)
                 return out
+            if missing:
+                # 从证明文本里扫出来的引用：业主 §14.11 的判据是"那条边落 `dangling`
+                # 并在读数里点名，不整笔拒" —— 拒了等于把整条定理丢掉，而"证明里引了
+                # 一个还不存在的号"正是最该留下痕迹的那件事。
+                #
+                # 两档必须分开（`_resolve_dep_steps` 的 `why` 把它们区分开）：
+                # "表里没有这个号" ⇒ 落一条 `dangling` 边；"这一步本身不合法"
+                # （来源不是四选一 / kind 不在词表里）⇒ 不落边，但进 `deps_unmappable`
+                # 点名 —— 把后者也写成 `dangling` 会造出一条形状就不对的依赖行，
+                # 而"写一条坏行"比"少写一条并点名"更坏。
+                kept = list(steps)
+                for m in missing:
+                    stp = dict(m.get("step") or {})
+                    why = str(m.get("why") or "")
+                    if "表里没有" in why:
+                        stp["status"] = "dangling"
+                        # 来源要从键名翻到字段名：`_resolve_dep_steps` 成功那一路
+                        # 已经翻过了（它返回的 step 带 `source_*`），而走 `missing` 这一路的
+                        # step 是输入的副本（只有 `stmt_id` 这种键名）⇒ 不翻的话
+                        # 悬空边会落成"四选一个来源都没有"的行（实测抓到：`source_stmt_id=None`）。
+                        for _key, _field, _table, _idf, _dkind in STEP_SOURCE_KEYS:
+                            if str(stp.get(_key) or "").strip():
+                                stp[_field] = str(stp[_key]).strip()
+                                break
+                        # `Dependency.validate` 的硬要求：`status="dangling"` 必须写
+                        # `status_reason`（"只标状态不说原因 = 记了一笔没人能接手"）。
+                        stp["status_reason"] = (
+                            f"证明文本里引用了 {stp.get('label') or stp.get('code')}，"
+                            f"而{why} ⇒ 这条依赖边**留着**并标 `dangling`（不整笔拒、也不丢掉它："
+                            "丢掉等于依赖图静默少一环）；等那一行进库之后由下一次核对闭合")
+                        kept.append(stp)
+                        out["deps_dangling"].append(
+                            {"ref": str(stp.get("label") or stp.get("code") or ""),
+                             "path_group": int(m.get("path_group") or 1), "why": why})
+                    else:
+                        out["deps_unmappable"].append({
+                            "ref": str(stp.get("label") or stp.get("code") or ""),
+                            "path_group": int(m.get("path_group") or 1),
+                            "why": f"扫出来的这一步落不了：{why}"})
+                steps = kept
             lit = str(body.get("source_lit_id") or "")
             if lit and tx.find("literature", lit_id=lit) is None:
                 lit_rows = tx.rows("literature")
@@ -2525,6 +2658,11 @@ class Secretary:
             stmt_id = tx.alloc_id(stmt_kind)
             row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
             row.validate()
+            if (row.origin == "own_result" and not str(body.get("quote_reason") or "").strip()
+                    and body.get("quote_verified") is not True):
+                # 读数：`quote_reason` 是秘书补的（B 只交两样，见 `_statement_from`）——
+                # 补了必须看得见，否则"这一格为什么有值"在盘上无从分辨。
+                out["quote_reason_filled"] = True
             tx.upsert("statements", row.to_dict(), note="record_statement")
             if kind == "concept" and legacy.get("present"):
                 # 交来的就是一条概念（`kind="concept"`）⇒ 它自己那一行也要镜像：
@@ -2567,7 +2705,10 @@ class Secretary:
                     source_stmt_id=step.get("source_stmt_id"),
                     source_doc_id=step.get("source_doc_id"),
                     quote=str(step.get("quote") or ""),
-                    status="closed",
+                    status=str(step.get("status") or "closed"),
+                    # `status != "closed"` 时 `Dependency.validate` 要求非空理由
+                    # （扫出来的悬空引用在 `_record_statement_tx` 里已经写好了这一格）。
+                    status_reason=str(step.get("status_reason") or ""),
                     page_range=S.PageRange(),
                     path_group=int(step["path_group"]),
                     created_at=S.now_iso(), created_by=f"secretary-{self.role}")
@@ -2589,16 +2730,32 @@ class Secretary:
             raw = body.get(key)
             return S.PageRange.from_dict(raw) if isinstance(raw, Mapping) else S.PageRange()
 
+        origin = _s("origin") or "external_lit"
+        reason = _s("quote_reason")
+        if not reason.strip() and body.get("quote_verified") is not True:
+            # 业主 `draft/97` §14.11：B 只交"定理内容 + 证明过程"，别的一概不要求它给。
+            # 而 `Statement.validate` 的硬要求是"不是 True 就必须写 quote_reason" ——
+            # 不给一个受控的默认值，那份两件式契约对自产命题（`own_result`）在结构上
+            # 就不成立（实测：整笔以 `quote_verified=None 时必须写 quote_reason` 被拒）。
+            # 这里填的是为什么这一格是空的，不是编一个"已核对"的结论：
+            # 回验要做的是拿另一份文本逐字比，而自产命题没有第二份文本可比。
+            # 调用方给了就照用（不覆盖）。
+            reason = ("own_result（我们自己证的）：逐字回验这一格不适用（没有第二份文本可比）—— "
+                      "证明过程在 proof_text 里，采信与否由审校（H）与验证（V）那一档判")
         return S.Statement(
-            stmt_id=stmt_id, origin=_s("origin") or "external_lit", kind=kind,
+            stmt_id=stmt_id, origin=origin, kind=kind,
             label=_s("label"), statement_text=_s("statement_text"), statement_full=full,
             proof_text=_s("proof_text"), source_lit_id=_s("source_lit_id") or None,
             page_range=_rng("page_range"), quote_verified=body.get("quote_verified"),
-            quote_reason=_s("quote_reason"),
+            quote_reason=reason,
             evidence_kind=_s("evidence_kind") or "heuristic", status="active",
             derived_from=S.sorted_unique([str(x) for x in (body.get("derived_from") or [])]),
             aliases=[str(a) for a in (body.get("aliases") or []) if str(a).strip()],
-            doc_id=_s("doc_id") or None, line_range=_rng("line_range"),
+            # `line_range` 是字符串（"120-148"），不是 `PageRange` —— 这里原先走的是
+            # `_rng(...)`，于是落盘那一格是一个 `{start/end/label}` 的字典（`Statement`
+            # 的声明是 `str`）。判据抓不到它（`to_dict` 照抄、`verify` 不查那一格），
+            # 但下游按"行范围"读它的人会拿到一个字典。
+            doc_id=_s("doc_id") or None, line_range=_s("line_range"),
             bits=dict(body.get("bits") or {}), created_at=S.now_iso(),
             created_by=f"secretary-{self.role}")
 

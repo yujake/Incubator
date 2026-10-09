@@ -291,3 +291,51 @@ def citation_ref_parts(citation: Any) -> tuple[str, str]:
     """
     kind, _, ref = str(citation).partition(":")
     return kind, ref.split("#")[0]
+
+
+#: 自由文本里的引用记号：`<前缀>:<代号>`（代号里允许数字、字母、`-`、`_`，允许 `#锚点`）。
+#: 前缀不在这里写死 —— 认不认由 `schema.CITATION_PREFIXES`（唯一声明面）说了算，
+#: 这条正则只负责"把长得像引用的那一小段切出来"。
+_TEXT_CITATION = re.compile(r"(?<![\w:/])([A-Za-z][A-Za-z0-9_]*):([A-Za-z0-9][A-Za-z0-9_\-]*)(#[^\s，。；、）)\]】\"']*)?")
+
+
+def find_citations(text: Any, *, prefixes: Iterable[str] | None = None) -> list[dict[str, str]]:
+    """从自由文本里扫出引用记号，按出现次序返回（同一个记号只出现一次）。
+
+    业主 2026-10-09（`draft/97` §14.11）：「B 只交定理内容 + 证明过程」，
+    而「依赖 = 证明过程里引用到的那些号」⇒ 秘书要从证明文本里逐条扫出引用。
+    这一格就是那件事的唯一实现（此前仓库里只有"解析一条已经切好的 citation"
+    的 `citation_ref_parts`，没有"从一段话里找出来"的那一半）。
+
+    返回 `[{"raw", "prefix", "code", "table"}]`：
+
+    - `raw` 是原文里那一段（含 `#锚点`，便于读数里回指）；
+    - `prefix` / `code` 由 `citation_ref_parts` 切出来（同一套口径，不在这里抄第二份）；
+    - `table` 由 `schema.CITATION_PREFIXES` 给（不认识的前缀不进结果 ——
+      "认不认"只有那一处说了算）。`prefixes` 给了就只认那几个（调用方想收窄时的显式口）。
+
+    为什么"不认识的记号"不返回、也不报错：这一格只回答"这里有哪些在册的引用"。
+    "文本里出现了不成形态的东西"是另一件事（`doc.scan_claim` / `verify` 的
+    `dangling_citation` 那一档管），两件事折平会让调用方分不清"没有引用"与"引用写坏了"。
+    """
+    from . import schema as S   # 惰性：前缀表是 schema 的声明面
+
+    wanted = None if prefixes is None else {str(p) for p in prefixes}
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for m in _TEXT_CITATION.finditer(str(text or "")):
+        raw = m.group(0)
+        prefix, code = citation_ref_parts(raw)
+        if wanted is not None and prefix not in wanted:
+            continue
+        table = S.citation_prefix_table(prefix)
+        if table is None or not code:
+            continue
+        # 去重的键是 `(前缀, 代号)` 而不是原文那一段：`lit:0003#p.4` 与 `lit:0003`
+        # 指向同一条（`citation_ref_parts` 的语义：`#` 之后是锚点，不参与身份），
+        # 于是它们必须落成一条依赖边而不是两条 —— 落两条会让"依赖面"凭空多一环。
+        if (prefix, code) in seen:
+            continue
+        seen.add((prefix, code))
+        out.append({"raw": raw, "prefix": prefix, "code": code, "table": table})
+    return out
