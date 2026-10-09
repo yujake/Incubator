@@ -1,7 +1,26 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "rows": [
     {
+      "_quote_check": {
+        "verified": true,
+        "matched_page": 1,
+        "window": "declared:1-1",
+        "reason": "substring_match",
+        "tried": []
+      },
+      "_conflict_check": {
+        "checked": true,
+        "conflict": false,
+        "strength": "none",
+        "conflicts_with": [],
+        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
+        "method": "literal",
+        "scope": "same_concept_group",
+        "compared": 0,
+        "hits": [],
+        "weak_signals": []
+      },
       "relation_id": "0000",
       "concept_ids": [
         "0000",
@@ -23,7 +42,9 @@
       "status": "active",
       "duplicate_of": null,
       "created_at": "2026-09-29T11:47:51+08:00",
-      "supporting_lit_ids": [],
+      "supporting_lit_ids": []
+    },
+    {
       "_quote_check": {
         "verified": true,
         "matched_page": 1,
@@ -42,9 +63,7 @@
         "compared": 0,
         "hits": [],
         "weak_signals": []
-      }
-    },
-    {
+      },
       "relation_id": "0001",
       "concept_ids": [
         "0002",
@@ -66,26 +85,7 @@
       "status": "active",
       "duplicate_of": null,
       "created_at": "2026-09-29T11:47:51+08:00",
-      "supporting_lit_ids": [],
-      "_quote_check": {
-        "verified": true,
-        "matched_page": 1,
-        "window": "declared:1-1",
-        "reason": "substring_match",
-        "tried": []
-      },
-      "_conflict_check": {
-        "checked": true,
-        "conflict": false,
-        "strength": "none",
-        "conflicts_with": [],
-        "reason": "在 0 条同概念组的已有关系里未发现与草稿**明确对立**的表述（注意：只做了字面判据，不代表语义上一定相容）",
-        "method": "literal",
-        "scope": "same_concept_group",
-        "compared": 0,
-        "hits": [],
-        "weak_signals": []
-      }
+      "supporting_lit_ids": []
     }
   ]
 }

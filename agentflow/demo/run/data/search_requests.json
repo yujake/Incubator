@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "rows": [
     {
       "request_id": "r-0001",
@@ -23,7 +23,8 @@
       "outcome": "ok",
       "priority": "medium",
       "for_question_id": null,
-      "submit_note": ""
+      "submit_note": "",
+      "providers": []
     },
     {
       "request_id": "r-0002",
@@ -47,7 +48,8 @@
       "outcome": "ok",
       "priority": "medium",
       "for_question_id": null,
-      "submit_note": ""
+      "submit_note": "",
+      "providers": []
     },
     {
       "request_id": "r-0003",
@@ -71,7 +73,8 @@
       "outcome": "ok",
       "priority": "medium",
       "for_question_id": null,
-      "submit_note": ""
+      "submit_note": "",
+      "providers": []
     }
   ]
 }

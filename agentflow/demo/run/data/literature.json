@@ -1,7 +1,12 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "rows": [
     {
+      "_keys": [
+        "doi:10.1000/demo.group",
+        "title:foundations of group theory|1925",
+        "title:foundations of group theory|*"
+      ],
       "lit_id": "0000",
       "title": "Foundations of group theory",
       "type": "J",
@@ -30,17 +35,18 @@
         "error": null,
         "url": "abfixture:group.txt"
       },
+      "matched": "",
       "claimed_by": null,
       "lease_until": null,
       "mine_attempts": 1,
-      "last_mine_error": null,
-      "_keys": [
-        "doi:10.1000/demo.group",
-        "title:foundations of group theory|1925",
-        "title:foundations of group theory|*"
-      ]
+      "last_mine_error": null
     },
     {
+      "_keys": [
+        "doi:10.1000/demo.abelian",
+        "title:commutativity in abelian groups|1930",
+        "title:commutativity in abelian groups|*"
+      ],
       "lit_id": "0001",
       "title": "Commutativity in abelian groups",
       "type": "J",
@@ -69,17 +75,18 @@
         "error": null,
         "url": "abfixture:abelian_group.txt"
       },
+      "matched": "",
       "claimed_by": null,
       "lease_until": null,
       "mine_attempts": 1,
-      "last_mine_error": null,
-      "_keys": [
-        "doi:10.1000/demo.abelian",
-        "title:commutativity in abelian groups|1930",
-        "title:commutativity in abelian groups|*"
-      ]
+      "last_mine_error": null
     },
     {
+      "_keys": [
+        "doi:10.1000/demo.ring",
+        "title:a survey of ring theory|1940",
+        "title:a survey of ring theory|*"
+      ],
       "lit_id": "0002",
       "title": "A survey of ring theory",
       "type": "M",
@@ -108,17 +115,18 @@
         "error": null,
         "url": "abfixture:ring.txt"
       },
+      "matched": "",
       "claimed_by": null,
       "lease_until": null,
       "mine_attempts": 1,
-      "last_mine_error": null,
-      "_keys": [
-        "doi:10.1000/demo.ring",
-        "title:a survey of ring theory|1940",
-        "title:a survey of ring theory|*"
-      ]
+      "last_mine_error": null
     },
     {
+      "_keys": [
+        "doi:10.1000/demo.field",
+        "title:inverses and fields|1950",
+        "title:inverses and fields|*"
+      ],
       "lit_id": "0003",
       "title": "Inverses and fields",
       "type": "J",
@@ -147,17 +155,18 @@
         "error": null,
         "url": "abfixture:field.txt"
       },
+      "matched": "",
       "claimed_by": null,
       "lease_until": null,
       "mine_attempts": 1,
-      "last_mine_error": null,
-      "_keys": [
-        "doi:10.1000/demo.field",
-        "title:inverses and fields|1950",
-        "title:inverses and fields|*"
-      ]
+      "last_mine_error": null
     },
     {
+      "_keys": [
+        "doi:10.1000/demo.abelian.reprint",
+        "title:a reprint note on commutativity|1931",
+        "title:a reprint note on commutativity|*"
+      ],
       "lit_id": "0004",
       "title": "A reprint note on commutativity",
       "type": "J",
@@ -186,15 +195,11 @@
         "error": null,
         "url": "abfixture:abelian_group_reprint.txt"
       },
+      "matched": "",
       "claimed_by": null,
       "lease_until": null,
       "mine_attempts": 1,
-      "last_mine_error": null,
-      "_keys": [
-        "doi:10.1000/demo.abelian.reprint",
-        "title:a reprint note on commutativity|1931",
-        "title:a reprint note on commutativity|*"
-      ]
+      "last_mine_error": null
     }
   ]
 }
