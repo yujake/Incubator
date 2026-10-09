@@ -14,6 +14,7 @@ from .neighbors import _Neighbors
 from .relations_between import _RelationsBetween
 from .contradictions import _Contradictions
 from .structural_duplicates import _StructuralDuplicates
+from .proof_chain import _ProofChain
 from .handle import _Handle
 
 
@@ -1129,6 +1130,6 @@ class _Core:
         return added
 
 
-class AgentC(_Hottest, _Paths, _Cold, _Gaps, _Neighbors, _RelationsBetween, _Contradictions, _StructuralDuplicates, _Handle, _Core):
+class AgentC(_Hottest, _Paths, _Cold, _Gaps, _Neighbors, _RelationsBetween, _Contradictions, _StructuralDuplicates, _ProofChain, _Handle, _Core):
     """关系分析智能体。构造时 `llm=None` 即完全确定性（默认，也是可测试的路径）。"""
 

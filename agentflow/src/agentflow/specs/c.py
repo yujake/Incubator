@@ -93,6 +93,18 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "AnalysisReport（kind 可能是 'unknown'，不可落库）",
         side_effect="read", handler_name="handle",
     ),
+
+    # 2026-10-09（业主：「想想C怎么找最短依赖链？总归得在记录定理和证明时同样把依赖写清，
+    # 直到找到最根上的依赖（某文献或某无前提依赖的自证定理）为止」/「B走乙。由于B这边出了
+    # 多依赖写法，C的分析需要做适配」）：只读、零模型调用 ——
+    # 读 `statements` + `dependencies`，按 `path_group` 分组（组内 AND / 组间 OR），
+    # 每组走到根（`lit:` / 无前提自证定理 / 原始概念），挑最短那组；`target` 允许给别名。
+    ActionSpec(
+        "C", "proof_chain",
+        "一条成果的最短证明依赖链（按 path_group 分组；根 = 文献 / 无前提自证定理 / 原始概念）",
+        _obj({"target": _S, "max_depth": _I, "k": _I, "weights": _OBJ}, ("target",)),
+        "AnalysisReport", side_effect="read", handler_name="proof_chain",
+    ),
 )
 
 

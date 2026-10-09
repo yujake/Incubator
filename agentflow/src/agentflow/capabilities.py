@@ -169,7 +169,7 @@ _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     "H": ("review", "verify", "doc", "table", "fs"),
     # V 的落地工具只有一组：`verify_tools` 里那三件只读的验证台账工具
     # （`verify.verify_proof` / `verify.list_verifications` / `verify.read_proof`）。
-    # 刻意**不**照抄 E 的 ("verify","table","fs")：这张表的用途是"名字消歧"，
+    # 刻意不照抄 E 的 ("verify","table","fs")：这张表的用途是"名字消歧"，
     # 不是授权矩阵 —— 多写组会让同名工具更容易撞上第二个候选，
     # 而 `ambiguous` 必须为空（`assert_capabilities` 第 [7b] 条）。
     "V": ("verify",),
@@ -517,23 +517,23 @@ def _divergences(
     return out
 
 
-# ---------------------------------------------------------------- 两层参数**类型**对账（R-36）
+# ---------------------------------------------------------------- 两层参数类型对账（R-36）
 #
-# R-36（`draft/28` §150.5）：`_divergences` 只比 property **名**与两根轴，不比**类型**。
+# R-36（`draft/28` §150.5）：`_divergences` 只比 property 名与两根轴，不比类型。
 # 于是"声明的类型与真交下去的值不是一回事"这一整类缺陷看不见 —— §150 那批里三处
 # （`H.review` / `H.verify_fixes` 的 `dependencies` 声明成 `_OBJ`、`H.review_report`
 # 声明成 `_ARR_S`，而工具层四条一直是 array-of-objects）就是它漏的：参数门照能力表
-# 判，把一条**合法**的派活判成 `dependencies. 必须是对象，收到 array`。
+# 判，把一条合法的派活判成 `dependencies. 必须是对象，收到 array`。
 #
 # 为什么不是往 `_divergences` 里加一条：那个函数的输入是 `tools: Mapping[str, tuple[str, str, bool]]`
-# （只有两根轴），要带类型就得改它的形状；而 `declaration_divergences_for` 是**公开**的
+# （只有两根轴），要带类型就得改它的形状；而 `declaration_divergences_for` 是公开的
 # 纯函数形态，`tests/test_policy.py` 用合成的两层表喂它 —— 改形状会连带改那些用例的
 # 语义。判据多一条不等于判据要长在同一个函数里：这里另起一格，两种形态都给
 # （读全局的 `param_type_divergences()` + 可喂表的 `param_type_divergences_for()`）。
 #
 # 为什么类型也要读源码（AST）而不是装配工具层：理由与 `_tool_side_effects` 逐字相同
 # （`ToolSpec(...)` 现造于 `reset()/register()` 里，装配一次会在导入期碰文件系统）。
-# 差别是这里要读的是**嵌套结构**（`properties.<名>.type` 与 `.items.type`），
+# 差别是这里要读的是嵌套结构（`properties.<名>.type` 与 `.items.type`），
 # 所以只认字符串字面量的 `type`：读不出来就记成"没有比对"（unknown），不折成通过。
 
 
@@ -555,7 +555,7 @@ def _str_value(node: ast.AST | None) -> str | None:
 def _props_of(params_node: ast.AST | None) -> dict[str, tuple[str | None, str | None]] | None:
     """`params` 字面量里的 `{property: (type, items.type)}`。
 
-    返回 `None` = **读不出来**（`params` 不是字典字面量，例如 `params=spec.params`）；
+    返回 `None` = 读不出来（`params` 不是字典字面量，例如 `params=spec.params`）；
     返回 `{}` = 读出来了、确认没有 `properties`。两者必须分开 —— 合成一态就会把
     "这条工具的 schema 我看不见"读成"它没有参数，所以没问题"（P16 族的真空通过）。
     """
@@ -599,7 +599,7 @@ def _declared_param_schemas(
       - `@tool("a.b", "...", params={...})` / `@tool("a.b", "...", {...})`；
       - `params=<模块级常量名>`（解析一层，见 `_module_constants`）。
 
-    `params` 读不出来的工具**不写进表**（调用方按"这条工具没有比对"处理），
+    `params` 读不出来的工具不写进表（调用方按"这条工具没有比对"处理），
     而不是写一条空 schema —— 后者的症状是"零分歧"，与真相无关。
     """
     consts = _module_constants(tree)
@@ -664,7 +664,7 @@ def param_type_divergences_for(
     capabilities: Mapping[str, tuple[ActionSpec, ...]],
     tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]],
 ) -> list[DeclarationDivergence]:
-    """判据本体（两张表都由调用方给）：两层对同一个 property 声明的**类型**不一致。
+    """判据本体（两张表都由调用方给）：两层对同一个 property 声明的类型不一致。
 
     只在"两层都声明了这个 property、且两层的 `type` 都是字面量"时判 ——
     其余一律不判（那是"没有比对"，不是"比对通过"；缺属性由 `param_seam_violations` 管）。
@@ -673,7 +673,7 @@ def param_type_divergences_for(
     （array<object>）的 `type` 都是 `"array"` —— 只比 `type` 的话，
     §150 那三处缺陷一个都抓不到（`review_report` 那处正是 `_ARR_S` vs array<object>）。
 
-    一处**刻意不判**（写下来免得下一个人以为漏了）：一侧给了 `items.type`、
+    一处刻意不判（写下来免得下一个人以为漏了）：一侧给了 `items.type`、
     另一侧只写了 `{"type": "array"}` ⇒ 不报。理由是 `validate_params` 对没有 `items`
     的 array 不施加形状约束，此时两层并不矛盾，只是其中一层说得更细。
     """
@@ -721,7 +721,7 @@ def param_type_divergences() -> list[DeclarationDivergence]:
 
 
 def param_type_coverage() -> dict:
-    """类型对账的覆盖率读数：判据**看进去多少**（P16：零分歧必须配上覆盖读数）。
+    """类型对账的覆盖率读数：判据看进去多少（P16：零分歧必须配上覆盖读数）。
 
     - `tools_read`：`params` schema 读出来的工具数；
     - `compared`：两层都声明了类型、真的逐对比过的 (动作, property) 对数；
@@ -753,18 +753,18 @@ def param_type_coverage() -> dict:
 #: 实测的"工具面声明了、动作面没声明"的 property（`two_layer_param_missing_in_action`）。
 #:
 #: 为什么要有这一格（残项 ㉓；2026-10-07 所有者授权 5b"补反向 + 新计数并入读数"）：
-#: 正反两处既有判据都管不到这个方向 —— `param_type_divergences_for` 由**动作面**驱动
+#: 正反两处既有判据都管不到这个方向 —— `param_type_divergences_for` 由动作面驱动
 #: （动作没声明的 property 它根本看不见），`param_seam_violations` 管的是"动作声明了、
-#: 实现不收" ⇒ "工具面加了参数、忘了加动作面"这条裂缝**全树没有读数会报**。
-#: 它为什么有代价：编排层（主控）按**动作参数表**派活 ⇒ 工具面新加的入口在派活侧看不见。
+#: 实现不收" ⇒ "工具面加了参数、忘了加动作面"这条裂缝全树没有读数会报。
+#: 它为什么有代价：编排层（主控）按动作参数表派活 ⇒ 工具面新加的入口在派活侧看不见。
 #:
-#: 形态：按 (角色, 动作) 登记**确切的那几个 property** + 理由（不逐 property 登记，
+#: 形态：按 (角色, 动作) 登记确切的那几个 property + 理由（不逐 property 登记，
 #: 也不写成"这个动作以后随便缺"）。这样三种变化都会红：
 #:   ① 出现新的一对（新动作或新匹配上的工具）· ② 已登记那对又多缺一个 property
 #:   · ③ 登记里某个 property 不再缺了（登记过期 ⇒ 必须删掉，否则这张表会烂成噪音）。
-#: 判据本体在 `tests/test_capabilities_reverse_param_gaps.py`（**刻意不放进导入期**：
+#: 判据本体在 `tests/test_capabilities_reverse_param_gaps.py`（刻意不放进导入期：
 #: 所有者 5b 授权的形态是"补反向 + 新计数并入读数"，把导入期改成硬失败会超出那次授权）。
-#: 注意这张表是**可见性**登记，不是"认可"：改哪一层由人定（与 `param_type_divergences_for`
+#: 注意这张表是可见性登记，不是"认可"：改哪一层由人定（与 `param_type_divergences_for`
 #: 末尾那句处置口径一致）。
 _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
     ("B", "run"): (
@@ -812,11 +812,11 @@ def param_missing_in_actions(
     capabilities: Mapping[str, tuple[ActionSpec, ...]] | None = None,
     tool_params: Mapping[str, Mapping[str, tuple[str | None, str | None]]] | None = None,
 ) -> dict[tuple[str, str], list[str]]:
-    """判据本体（**反向**）：工具面声明了、动作面没声明的 property。
+    """判据本体（反向）：工具面声明了、动作面没声明的 property。
 
     只对"唯一匹配到某个工具、且那条工具的 `params` 读得出来"的 (角色, 动作) 算 ——
     与 `param_type_divergences_for` 同一档口径（多义与读不出来的都不猜）。
-    覆盖率读数见 `param_missing_in_action_coverage()`：**空集永远是子集**，
+    覆盖率读数见 `param_missing_in_action_coverage()`：空集永远是子集，
     所以"没有反向缺口"这句话必须配上"比过多少对"才作数。
     """
     table = CAPABILITIES if capabilities is None else capabilities
@@ -954,7 +954,7 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = _specs.action_table()
 #
 # ## 这一段补的是哪一个洞（`D-2` / `R2-AN-1` 的 capabilities 半边）
 #
-# `ActionSpec.params` 是**声明**，handler 的 `inspect.signature` 是**实现**。
+# `ActionSpec.params` 是声明，handler 的 `inspect.signature` 是实现。
 # 两者此前没有任何机器判据相连：`Conductor._check_params` 只看声明
 # （`tools.base.validate_params(spec.params, …)`），而声明里多一个 property
 # 不会有任何地方报出来 —— 主控放行 ⇒ 写 `running` 行 ⇒ 执行期才发现这个参数
@@ -965,7 +965,7 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = _specs.action_table()
 #   ① 每个 property 要么被 handler 的签名接受（具名形参，或 handler 收
 #      `inspect.Parameter.VAR_KEYWORD` —— 后者按定义真的收得下这个键），
 #      要么逐条登记在下面这张接缝表里；
-#   ② 不满足 ⇒ **导入即失败**（`assert_capabilities` 第 [8] 条），
+#   ② 不满足 ⇒ 导入即失败（`assert_capabilities` 第 [8] 条），
 #      错误信息逐字给出 角色 / 能力 / property，并说清两条出路
 #      （改实现，或登记 + 写理由）；
 #   ③ 登记表不许烂成噪音：接缝表里"现在已经不需要了"的条目也要报出来
@@ -979,12 +979,12 @@ CAPABILITIES: dict[str, tuple[ActionSpec, ...]] = _specs.action_table()
 # 给 `AgentE.run_experiment` 加一个没人读的具名 `sleep` 或让它收
 # `inspect.Parameter.VAR_KEYWORD`（被否掉的 C 选项）是更坏的一种：
 # 它把"我传了但它没看"变成静默成功 —— 那正是 `LocalBackend.call` 的
-# docstring 逐字拒绝的形态。所以接缝留在声明这一层，并且必须**登记 + 写理由**。
+# docstring 逐字拒绝的形态。所以接缝留在声明这一层，并且必须登记 + 写理由。
 
 #: 参数接缝表：`(角色, 动作, property 名)` -> 一行理由串。
 #:
 #: 一行 = 一个"声明里有、实现侧不收"的参数。写入这张表就是承认
-#: "这一格参数门放行时实现会拒"，因此理由必须写清它**只服务谁**。
+#: "这一格参数门放行时实现会拒"，因此理由必须写清它只服务谁。
 #: 键用三元组而不是动作名：同一个 property 名在不同动作上的性质可以完全不同
 #: （`name` 在 `E.check_formal` 上是被实现接受的具名形参，在工具层却是会吞参数的
 #: 撞名 —— `verify_tools.py` 里 `R2b-AN-1-C` 那一节逐字登记过这三层）。
@@ -1011,7 +1011,7 @@ PARAM_SEAMS: dict[tuple[str, str, str], str] = {
 #: 键：`roles` / `actions` / `declared` / `checked` / `seams`。
 PARAM_ASSERT_COVERAGE: dict[str, int] = {}
 
-#: 两层参数**类型**对账上一次的覆盖计数（由 :func:`assert_capabilities` 第 [9] 条就地写）。
+#: 两层参数类型对账上一次的覆盖计数（由 :func:`assert_capabilities` 第 [9] 条就地写）。
 #: 键：`tools_read` / `compared` / `unread`（`unread` 是列表，另存一份计数时用 `len`）。
 #: 与 `PARAM_ASSERT_COVERAGE` 分开放：两条断言的覆盖率不是一回事
 #: （那条数 property 名与实现签名，这条数"两层都给了类型的 (动作, property) 对"）。
@@ -1020,13 +1020,13 @@ PARAM_TYPE_COVERAGE: dict[str, Any] = {}
 #: 反向那一格（工具面有、动作面没有）的覆盖读数：与 `PARAM_TYPE_COVERAGE` 同一条理由 ——
 #: 只在失败时说话的判据，成功时与"没跑"同形。读它：
 #: `python -c "import agentflow.capabilities as c; print(c.PARAM_MISSING_IN_ACTION_COVERAGE)"`。
-#: 这里刻意**不放导入期断言**（所有者 5b 授权的形态是"补反向 + 新计数并入读数"）；
+#: 这里刻意不放导入期断言（所有者 5b 授权的形态是"补反向 + 新计数并入读数"）；
 #: 判据本体与登记表对账在 `tests/test_capabilities_reverse_param_gaps.py`。
 PARAM_MISSING_IN_ACTION_COVERAGE: dict[str, Any] = {}
 
 
 def handler_accepted(role: str, action: str) -> tuple[frozenset[str], bool]:
-    """取 `(角色, 动作)` 的**实现侧**参数面：`(具名参数集, 是否收 VAR_KEYWORD)`。
+    """取 `(角色, 动作)` 的实现侧参数面：`(具名参数集, 是否收 VAR_KEYWORD)`。
 
     具名参数集只算 `POSITIONAL_OR_KEYWORD` / `KEYWORD_ONLY` 两类 —— 它们是"按名
     传得进去"的全部形态。`VAR_POSITIONAL`（星号那一个）与 `POSITIONAL_ONLY` 都
@@ -1164,7 +1164,7 @@ def gate_params(
     accepted: frozenset[str] | None = None,
     accepts_kw: bool | None = None,
 ) -> dict:
-    """参数门的口径：**声明 ∩ 实现签名**（`D-2` 第 3 条）。
+    """参数门的口径：声明 ∩ 实现签名（`D-2` 第 3 条）。
 
     返回一份可以交给 `tools.base.validate_params` 的 schema：
 
@@ -1179,7 +1179,7 @@ def gate_params(
     `accepts_kw`），不给时按 `spec` 的角色与动作从真实现读（`None` 与"空集"是
     两件事，所以默认值是 `None` 而不是 `frozenset()`）。
 
-    它今天**没有**被 `Conductor._check_params` 调用 —— `conductor.py` 在本窗口
+    它今天没有被 `Conductor._check_params` 调用 —— `conductor.py` 在本窗口
     禁改，而它的 `_check_params` 读的是 `spec.params`。这一格为什么可以不改，
     逐字写在 :func:`check_params` 的 docstring 里。
     """
@@ -1209,21 +1209,21 @@ def check_params(spec: ActionSpec, params: Mapping[str, Any]) -> str | None:
     """按"声明 ∩ 实现签名"校验一次调用；返回错误说明或 `None`。
 
     形态与 `Conductor._check_params` 逐字同形（同一个判据、同一句话），
-    好让那一处**一行就能改成调它**：`return C.check_params(spec, dict(params))`。
+    好让那一处一行就能改成调它：`return C.check_params(spec, dict(params))`。
 
     ## 为什么这一版没有直接接进 `Conductor._check_params`
 
     判据要能区分"产品实现"与"替身夹具"的收参数面，而那个信息只存在于
-    **调用点**（`_check_params(spec, params)` 只有这两个入参，看不到
+    调用点（`_check_params(spec, params)` 只有这两个入参，看不到
     `self.backend` / `self.registry` 里挂着的是谁）。本窗口 `conductor.py` 是禁改
     文件，所以：
 
-    - 产品路径的正确性今天由**两个已有的落点**共同保证，都不需要改 conductor：
+    - 产品路径的正确性今天由两个已有的落点共同保证，都不需要改 conductor：
       ① 本模块第 [8] 条导入期断言保证"声明里的每个 property 要么被真实现接受、
       要么逐条登记"；② `LocalBackend.call` 在调 handler 之前已经用
       `inspect.signature` 核过"实现不认这些参数"，不认就抛 `ParamError`
-      （所以接缝参数在产品路径上**不会**静默进 handler）；
-    - 参数门**提前**拒绝（把 `failed` 变成 `refused`，不写 `running` 行）需要调用点
+      （所以接缝参数在产品路径上不会静默进 handler）；
+    - 参数门提前拒绝（把 `failed` 变成 `refused`，不写 `running` 行）需要调用点
       把实现面传进来，那是一次 conductor 改动 ⇒ 已作为交接项写进交付，
       函数在这里备好（`gate_params` / `check_params`），改的时候只有一个调用点。
     """
@@ -1348,10 +1348,10 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
 #: - `C` 的边是空的：C 一旦能发起动作，它就成了"绕过 B 引文回验"的写入路径。
 #:   C 的 `candidate_gaps` / `structural_duplicates` 是产出，由 D 或编排层
 #:   决定要不要变成请求。
-#: - `H` 能召唤 `A` / `E` / `G`（**不是只有 `G`**）：`H → A` 与 `H → E` 两条边
+#: - `H` 能召唤 `A` / `E` / `G`（不是只有 `G`）：`H → A` 与 `H → E` 两条边
 #:   2026-09-30 由人批准加入（`draft/28` §199），用途是"引文对不上就找 A 核实原文、
-#:   断言能不能形式化就找 E"。审校者**依然不能改数据**，但那条约束的真身是
-#:   "H 的工具面 0 个写工具"（schema.H 的装配期断言），**不是**"H 没有向外的边"——
+#:   断言能不能形式化就找 E"。审校者依然不能改数据，但那条约束的真身是
+#:   "H 的工具面 0 个写工具"（schema.H 的装配期断言），不是"H 没有向外的边"——
 #:   把这两件事混成一句会让人以为 `H → A`/`H → E` 不存在（本行 2026-10-06 更正）。
 #: 真身是 `src/agentflow/specs/<角色>.py`（M3 起）。这一行只做派生 —— 
 #: 也就是说改权限面要改 `specs/`，而 `specs/` 在 `.noai-paths` 里受保护。
@@ -1370,7 +1370,7 @@ def registry():
 
     为什么放在 `capabilities` 而不是让每个调用方自己 `builtin_registry()`：
     这一层是"权限面的读法"——查动作、查边、查写集都从这里出发，
-    于是"临时角色能不能被闸门认出来"只取决于**有没有把注册表传下去**这一件事。
+    于是"临时角色能不能被闸门认出来"只取决于有没有把注册表传下去这一件事。
     """
     global _REGISTRY
     if _REGISTRY is None:
@@ -1741,8 +1741,8 @@ def audit_task_ledger(
 
         # ---- artifacts：两种形态都要认（`draft/28` §161 的 R-58）
         #   ① 行引用 `table:id`（本表原来的口径）；
-        #   ② **文件型产物** `file:<工作区相对路径>`，或直接给一个工作区内存在的相对路径。
-        # 第二种是 R-47/R-52 逼出来的：产出摘要落成文件后，`artifacts` 里出现的是**路径**，
+        #   ② 文件型产物 `file:<工作区相对路径>`，或直接给一个工作区内存在的相对路径。
+        # 第二种是 R-47/R-52 逼出来的：产出摘要落成文件后，`artifacts` 里出现的是路径，
         # 而这条判据原来只认表名 ⇒ 每一次有产出的召唤都报一条 `unknown_artifact_kind`
         # （实测 p2-review 上 61 条，而 `verify.py` 里那份副本改成认路径之后，
         # 这里仍在报 —— 同一判据两份实现的典型形态）。
@@ -1871,13 +1871,13 @@ def assert_capabilities(
         f"少 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE} - set(_ws))}"
     )
     assert set(ALLOWED_EDGES) >= set(S.ROLES), f"ALLOWED_EDGES 缺少角色 {sorted(set(S.ROLES) - set(ALLOWED_EDGES))}"
-    # `FINAL-R4-01`：上面那一条只核**键集**（"每个角色都有出边条目"），
-    # 不核**值**。于是把 M 的边写成 7 元字面量（漏掉 H）之后，新角色永远不会被
+    # `FINAL-R4-01`：上面那一条只核键集（"每个角色都有出边条目"），
+    # 不核值。于是把 M 的边写成 7 元字面量（漏掉 H）之后，新角色永远不会被
     # 主控召唤，而这条断言照样过 —— 今天守住它的用例在 `tests/test_policy.py`
     # （`assert C.ALLOWED_EDGES["M"] == frozenset(S.ROLES)`），落点不在能力层自家
-    # 判据里。这里补上同一条：主控的出边必须**恰好**是全部角色。
+    # 判据里。这里补上同一条：主控的出边必须恰好是全部角色。
     #
-    # 位置刻意放在下面那个逐条循环**之后**：先让"含非角色目标"那条判据对
+    # 位置刻意放在下面那个逐条循环之后：先让"含非角色目标"那条判据对
     # `{"agent-A"}` 这类拼错说话（`test_unknown_edge_target_is_rejected` 逐字匹配
     # 那句消息），本条只在"目标都是合法角色名、但漏了一个"时才承担判据。
     # 边表里的目标也必须是合法角色名：写成 "agent-A" 这类拼法会让
@@ -1885,7 +1885,7 @@ def assert_capabilities(
     for frm, tos in ALLOWED_EDGES.items():
         bad_targets = sorted(set(tos) - set(S.ROLES))
         assert not bad_targets, f"ALLOWED_EDGES[{frm!r}] 含非角色目标 {bad_targets}（拼法必须与 schema.ROLES 一致）"
-        # `FINAL-R4-05`：下面这一条在今天的 schema 下**不可达** —— `NON_SUMMONABLE`
+        # `FINAL-R4-05`：下面这一条在今天的 schema 下不可达 —— `NON_SUMMONABLE`
         # 只含 `CONDUCTOR_ROLE`，而它不在 `S.ROLES` 里，所以任何指向 M 的边都会先被
         # 上面那条"含非角色目标"命中。保留它是为了"将来 NON_SUMMONABLE 里放进一个
         # 合法角色"时仍有人守着（实测：把 NON_SUMMONABLE 换成合法角色后这条会红），
@@ -2262,17 +2262,17 @@ def assert_capabilities(
         "两条的修法完全不同，报出来要能一眼分开"
     )
 
-    # ---- [9] 两层参数**类型**对账（`R-36`）
+    # ---- [9] 两层参数类型对账（`R-36`）
     #
-    # R-36（`draft/28` §150.5）：上面的 [8] 只比 property **名**与实现签名，不比类型；
-    # [7] 只比两根轴。于是"两层对同一个参数声明的**类型**不一致"这一整类缺陷
+    # R-36（`draft/28` §150.5）：上面的 [8] 只比 property 名与实现签名，不比类型；
+    # [7] 只比两根轴。于是"两层对同一个参数声明的类型不一致"这一整类缺陷
     # 没有任何机器判据 —— §150 那三处（`H.review` / `H.verify_fixes` 的
     # `dependencies` 声明成 `_OBJ`、`H.review_report` 声明成 `_ARR_S`，工具层四条
-    # 一直是 array-of-objects）就是它漏的。当时的判据是**一条注释 + 一条单测**；
+    # 一直是 array-of-objects）就是它漏的。当时的判据是一条注释 + 一条单测；
     # 本批把它变成导入期断言，并当场咬出第四处（`G.register_dependency.page_range`）。
     #
     # 为什么类型不一致是 error 而不是 warning：参数门读能力表、工具层校验读工具表，
-    # 两层不一致的后果不是崩溃而是**判错**（合法派活被判死，或必然被拒的形状被放行），
+    # 两层不一致的后果不是崩溃而是判错（合法派活被判死，或必然被拒的形状被放行），
     # 与 [7] 的"能力层低估风险轴"同一档：错了不吵，静默地错。
     #
     # 三条断言的顺序与 [8] 逐条同形，理由也同形：先报"表里有问题"，再报"判据自己没走遍"。
@@ -2301,7 +2301,7 @@ def assert_capabilities(
         "零分歧此时不构成证据"
     )
 
-    # [10] 反向那一格的读数（工具面有、动作面没有）。**只读数、不断言** —— 所有者 5b 授权的
+    # [10] 反向那一格的读数（工具面有、动作面没有）。只读数、不断言 —— 所有者 5b 授权的
     # 就是这一形状；牙在那条测试里（`_KNOWN_TOOL_ONLY_PARAMS` 与实测逐条对账 + 过期检测）。
     reverse_coverage = param_missing_in_action_coverage()
     PARAM_MISSING_IN_ACTION_COVERAGE.clear()
@@ -2330,6 +2330,10 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     "B.decide_structural_duplicate", "B.resolve_structural_duplicate",
     "C.hottest", "C.paths", "C.cold", "C.gaps", "C.contradictions",
     "C.structural_duplicates", "C.handle",
+    # 2026-10-09（业主：「想想C怎么找最短依赖链？……B走乙。由于B这边出了多依赖写法，
+    # C的分析需要做适配」）：`proof_chain` 是角色级只读方法（读 `statements` +
+    # `dependencies` 现算，零模型调用、不落库），工具层没有同名工具 ⇒ 两层无可比对。
+    "C.proof_chain",
     "D.probe_c", "D.ingest", "D.ingest_detailed", "D.trace_question", "D.trace_l3",
     "D.assess", "D.submit_gaps", "D.consider", "D.poll", "D.adjudicate",
     "D.research", "D.run_round", "D.write_report",
@@ -2346,7 +2350,7 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # 改工具名会同时动 `READONLY_CALL_EXCEPTIONS` / `TOOL_WRITE_SETS` /
     # `agent_h` 的 writer 名单，而那是权限面的改动。
     "H.review_report",
-    # `A.search_literature`（2026-09-30）：A 的**角色级**动作，不是工具调用。工具组里
+    # `A.search_literature`（2026-09-30）：A 的角色级动作，不是工具调用。工具组里
     # A 的那几条名字是 `search.providers` / `search.literature` / `search.download` /
     # `search.dedup_check` / `search.ingest_local` / `search.register` ——
     # 没有一条的最后一段是 `search_literature`，所以按唯一性约定它诚实地落进 `unmatched`。
@@ -2357,27 +2361,27 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # 把两者配成一对会让两层类型对账去比两件不同的事（比 `search.literature` 的
     # `limit` 与本动作的参数），那种"比上了"比诚实的"没比对"更坏。
     "A.search_literature",
-    # `B.register_statement`（2026-10-02，`draft/37` §46）：B 的**角色级**动作，
+    # `B.register_statement`（2026-10-02，`draft/37` §46）：B 的角色级动作，
     # 不是工具调用。它写的是通用表工具 `table.create(table="statements")` ——
     # 工具名的最后一段是 `create`，与 `handler_name` 对不上（唯一性约定要求逐字同名）。
-    # 为什么不给它凑一个同名工具：`table.create` 是**通用**表操作（A–D 都能调、
+    # 为什么不给它凑一个同名工具：`table.create` 是通用表操作（A–D 都能调、
     # 任何表都能建），而本动作是"命题台账那一行的三件套预检 + 出处核验 + 取号"——
     # 把两者配成一对会让两层类型对账去比两件不同的事（比 `table.create` 的
     # `table`/`row` 与本动作的 `statement_full`），那种"比上了"比诚实的"没比对"更坏。
     # 与 `A.search_literature` / `H.review_report` 两条同族。
     "B.register_statement",
-    # `G.paper_package`（2026-10-03，`draft/37` §59）：G 的**角色级**动作，不是工具调用。
+    # `G.paper_package`（2026-10-03，`draft/37` §59）：G 的角色级动作，不是工具调用。
     # 它一次做三件工具的事（`doc.paper_render` / `doc.paper_compile` / `doc.paper_state`），
     # 所以没有哪一个工具名的最后一段等于 `paper_package`（唯一性约定要求逐字同名）。
-    # 为什么不拆成三个动作：它们**必须连着做**（先渲染再编译，最后核锚才有意义 ——
+    # 为什么不拆成三个动作：它们必须连着做（先渲染再编译，最后核锚才有意义 ——
     # 核锚放在最前面会让读数关于旧包），拆开就把"顺序"这件事留在调用方的记忆里，
     # 而真机实测主控连派三次都没能把包更新掉。与 `A.search_literature` /
     # `B.register_statement` / `H.review_report` 三条同族：诚实地登记"这一格没比对上"。
     "G.paper_package",
-    # `A.shelf_search`（2026-10-06，J-53 / 裁决 2 族 1）：A 的**角色级**动作，不是工具调用。
+    # `A.shelf_search`（2026-10-06，J-53 / 裁决 2 族 1）：A 的角色级动作，不是工具调用。
     # 它调的是 `search.shelf` / `search.local`，两件工具名的最后一段是 `shelf` / `local`
     # ⇒ 与 `handler_name`（`shelf_search`）对不上（唯一性约定要求逐字同名）。
-    # 为什么不给它凑一个同名工具：那两件是**通用只读检索**（A/C/H 都能调），而本动作是
+    # 为什么不给它凑一个同名工具：那两件是通用只读检索（A/C/H 都能调），而本动作是
     # "先列书架清单、再按需取逐字摘录"的一次编排 —— 配成一对会让两层类型对账去比
     # 两件不同的事。与 `A.search_literature` / `B.register_statement` / `G.paper_package`
     # / `H.review_report` 五条同族：诚实地登记"这一格没比对上"。
