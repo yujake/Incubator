@@ -151,3 +151,122 @@ Select-String -Path docs\*.md,agentflow\docs\*.md -Pattern 'C 的[0-9]+ 个动�
   （新档 `reviewed_then_digested_rows` 是**验收表**的受控档，不是这一维）；
 - `tests/golden/*`：由人重冻；
 - 两阶段引用的口径（`doc:` 在论文里拒、手稿里可互引）：本批只**用**它，不重开。
+
+## §9 口径细化：上一版里那些"模糊的地方"逐条定死（业主 2026-10-09：draft 有诸多缺陷与模糊）
+
+上一版有十处是"说到了但没定死"。这一节逐条给出**可施工的定义**；凡是**我还没核到**的，
+写"待核"并给出**核法**，不含糊过去。
+
+### 9.1 concept 融进 statement（业主逐字裁定）
+
+> 「concept融进statement，只是它的证明过程栏直接写concept」
+
+**定死**：一条**新概念/定义**就是一个 `statements` 行，三格取值固定：
+
+| 字段 | 取值 | 依据/说明 |
+|---|---|---|
+| `kind` | `"concept"`（英文小写；稿件侧 `CLAIM_KINDS` 的"定义"是**文档断言**的分类，不是这里的取值） | `Statement.kind` 刻意不是受控词表（依据见 §5），所以这是合法取值 |
+| `proof_text` | **逐字 `"concept"`** | 业主指定的写法：概念没有证明过程，这一格直接写 concept（**不写空、不写"（定义，无需证明）"**） |
+| `evidence_kind` | `"heuristic"`（缺省） | 待核 **V4**：`EVIDENCE_KINDS = (proof, cross_check, heuristic)` 里只有这三个；concept 既不是 proof 也不是 cross_check ⇒ 只能 `heuristic`。**核法**：读 `Statement.validate()` 看 `kind="concept"` 时 `evidence_kind`/`quote_verified` 有没有硬要求；若有，按人裁的缺省写法落，并把读数记进提交信息 |
+| `origin` | `"own_result"`（我方引入的概念） | 与 B 的"第四条必填"一致：`own_result` 要 `doc_id` 或 `line_range` 作出处 |
+| `derived_from` / `deps` | 它建立在上游哪些概念/定义/文献上（没有上游=原始概念） | §5 的那条 |
+
+**两张图的关系（这一条把上一版的"待裁缺口"解掉）**：`concepts` 表是**关系图**的节点
+（C 的 `hottest`/`gaps`/`contradictions` 在它和 `relations` 上跑），`statements` 里
+`kind="concept"` 的行是**依赖图**的节点。**同一个概念在两边的号对齐**：
+`Concept.concept_id` 与 `Statement.stmt_id` **取同一个值**（B 登记 concept 时先分配
+`stmt_id`，再用它作 `concept_id`）——这样**不用加字段、不用动 schema**，
+两张图靠**号**就能对上（比"按名字对"硬得多）。
+`Concept.name` / `Concept.definition` 与 `Statement.label` / `Statement.statement_full`
+是同一件事的两个视图：名字对名字、定义对定义。**判据**：B 登记一条 concept 之后，
+`concepts` 与 `statements` 各有一行、**两个号相等**、`proof_text == "concept"`。
+
+**要不要把 `concepts` 表整个并掉（真正"融进"）**：那是**迁移**（`schema.py` 在 FC-27 的
+`schema-migration` 档，且盘上有 59 个工作区的历史数据）⇒ **本页不擅自做**，
+作为待裁题交上去：**(甲)** 保留两张表、用同号对齐（本页实现的那条，零迁移）；
+**(乙)** 把 `concepts` 并进 `statements`（要人写迁移 + 人审）。两条的**读数面一样**，
+差别只在"历史数据要不要搬"。
+
+### 9.2 `proof_chain` 的输入输出逐格定死
+
+```python
+proof_chain(target: str, *, max_depth: int = 4, k: int = 1,
+            weights: Mapping[str, float] | None = None) -> dict
+```
+
+- **`target` 的合法形态**（不合法 ⇒ `checked=False` + 说清，不当"没有这条"）：
+  `stmt:<4位>`（含 `kind="concept"` 的行）/ `exp:<4位>` / `doc:<稿件>#<断言>@<哈希>`
+  （先译成它登记的那条 `stmt:`；译不出来 ⇒ 报 `target_not_registered`）。
+- **节点集合**：`statements` 全部行（定理/定义/concept/引理…）+ `experiments` + `literature`。
+- **边**：`dependencies` 行，方向 `used_by`（使用点）→ `source_*`（被依赖项）。
+  只走 `status ∈ {closed, external_unavailable}`；`dangling` 记读数不算到根；
+  `refuted` / `disputed` 记读数且**照走**（它们仍是"要重建的环节"，只是要在 `why` 里点名）。
+- **边的权重（缺省表，可被 `weights` 覆盖）**：`lit` 0、`definition`/`concept` 1、
+  `theorem`/`lemma`/`proposition` 1、`experiment` 3、`dataset` 2、`prior_art` 2。
+  （理由：重建时"重跑一个实验"最贵、引用一篇真论文最便宜。）
+- **"最短"的定义**：`weights` 为空按**跳数**（BFS）；给了按**权重和**（Dijkstra）。
+  **并列时**（同长度）按 `hops` 里节点号的字典序，取前 `k` 条；并列的条数报在
+  `chains_total`（不只给 k 条就假装只有 k 条）。
+- **`hops` 的元素形态**：`{"node": "stmt:0003", "via_dep_id": "0007", "kind": "theorem",
+  "status": "closed", "why": ""}` —— 每一跳都带**它是哪条依赖边**（`via_dep_id`），
+  于是"这条链凭什么"可逐跳复算。
+- **`max_depth`**：**从 target 出发的边数**（含到根的那一跳）；`max_depth=4` ⇒ 最多 4 条边。
+  超了就 `truncated=True`（并且 `chains` 里给出**已走到的前缀**，不返回空）。
+- **`preconditions` 三态怎么算**（逐键给判据，不许含糊）：
+
+  | 键 | `yes` | `no` | `unknown` |
+  |---|---|---|---|
+  | `results_registered` | 目标那条成果在 `statements` 里有行（`own_result`） | 手稿在册、但它的 claims 一条也没对回 `statements` | 手稿/台账读不成 |
+  | `document_reviewed` | 那条 `documents` 行 `status ∈ {accepted, revised}` 且签名钉着现行版（`reviewed_current_rows` 同一判据） | 手稿存在但没审/签名过期 | 签名台账读不成 |
+  | `dependency_edges` | 目标行至少有 1 条 `dependencies` 边，或它按 §9.3 是"根" | 一条边都没有、又不是根 | `dependencies` 读不成 |
+
+### 9.3 "根"的判定（把 §5 那条按 kind 分档写死）
+
+```python
+def _is_root(stmt_row, deps_of) -> tuple[bool, str]:
+    if stmt_row["kind"] == "concept":                 return True,  "原始概念（无前提）"
+    if not deps_of(stmt_row["stmt_id"]):              # 一条边都没有
+        if stmt_row["evidence_kind"] == "proof" and _verified(stmt_row):
+            return True, "无前提自证定理"
+        return False, "依赖没写（没有边，也没有 proof 证据）"   # ⇒ unknown，不是根
+    return False, ""
+```
+
+（`lit:` 行的根不用这个函数：`literature` 表里在册即根。）
+
+### 9.4 `reviewed_then_digested_rows` 的确切算法（S1p）
+
+- **分子**：`status ∈ {accepted, revised}` 的 `documents` 行中，满足"**它的断言至少有一条
+  对回了 `kind != "concept"` 的 `own_result` `statements` 行**"的份数；
+- **分母/阈值**：受控档按"**越多越好**、缺省阈值 = 1"（与 `reviewed_current_rows` 同族）；
+- **`detail` 里必须分列**：`{"theorems": N, "concepts": M, "docs_reviewed": D,
+  "docs_digested": X}` —— "定义也入库"这件事要能从读数里看出来（§5）；
+- **未消化时给出路**（这一档红的时候的文案）："手稿 X 过了审，但它的成果没有逐条登记
+  ⇒ 先派 B（`register_statement`，`deps` 要一起给）"。
+
+### 9.5 S1q 的映射落 `dependencies`：字段组合定死
+
+一条被搬进论文的定理 = 一行 `dependencies`：
+
+| 字段 | 值 |
+|---|---|
+| `dep_id` | 由 `store.alloc_id` 分配（**不许手写**） |
+| `used_by` | **论文里那一处断言**：`doc:<论文 document 号>#<claim_id>`（S1q 的"论文"也是 `documents` 行） |
+| `kind` | 被搬那条的 `kind`（`theorem`/`lemma`/…；`concept` 也照写） |
+| `label` | **论文号**：`"1.5"`（人话标签那一格，与 `\ref` 的自定义编号一致） |
+| `source_doc_id` / `source_claim_id` | 被搬那条 `statements` 行的出处（`doc_id` / `claim_id`）—— 于是"从哪份手稿的哪条断言来的"可复算 |
+| `status` | `closed`（搬成功了）/ `dangling`（被搬那条找不到了） |
+
+**判据（改前必红）**：搬一条定理进正文但**不落这一行** ⇒ `\ref` 与映射对不上；
+落两行指向同一个 `label` ⇒ 红（两个不同定理不许共用一个论文号）。
+
+### 9.6 上一版其余几处模糊的收口
+
+| 上一版的模糊处 | 定死 |
+|---|---|
+| `specs/c.py` 里 `weights` 的参数形态只写 `_OBJ` | `{"type":"object","additionalProperties":{"type":"number"}}`，键 = `DEP_KINDS` 的取值 + `"lit"`（多一个键 ⇒ `param_error`，不许静默忽略） |
+| S1p 的判据文件里"审过未消化 ⇒ 0" | 见 §9.4 的分子/分母/出路三段 |
+| §2 说"与 `hottest` 同形" | 具体到：文件 `agent_c/proof_chain.py`、类 `_ProofChain`、方法名 `proof_chain`、返回 `AnalysisReport`（C 其余动作的同一形）——`capabilities.unmapped_actions()` 是它的接线判据 |
+| §6 的 V2 只说"哪些计数会动" | 改前/改后各跑一次并把两次数记进提交信息；**已知会动**：`capabilities` 的导入期读数（动作数 +1）；**待测**：`docs/` 角色动作数、`tests/golden/agent_surface_snapshot`（金标由人重冻） |
+| §5 的"待核 V3" | 收窄成 V4（见 §9.1 表的 `evidence_kind` 那一行）：核 `Statement.validate()` 对 `kind="concept"` 的要求，并把缺省写法定下来 |
+
