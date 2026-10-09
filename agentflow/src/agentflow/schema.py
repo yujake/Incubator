@@ -1615,6 +1615,16 @@ class Dependency:
     #: 内部来源：该稿件里的哪一条断言（`documents.*.claims[].claim_id`）。
     #: 给了它就必须给 `source_doc_id`（断言脱离稿件没有意义）。
     source_claim_id: str | None = None
+    #: 这条边属于哪一条证明路径（业主 2026-10-09：「B走乙」+「证明路径不唯一，
+    #: 可增另一组依赖，实现用二维列表」）。同一 `used_by` + 同一 `path_group` 的行 =
+    #: 一条路径（组内 AND：都要）；不同 `path_group` = 可选路径（组间 OR：任一）。
+    #: 缺省 1 ⇒ 历史行（与"只有一条路径"的写法）语义一个字不变。
+    path_group: int = 1
+    #: 被依赖的那一端是本表的一条命题（"定理 A 用到定理 B / 用到某个概念"）。
+    #: 与 `source_lit_id` / `source_experiment_id` / `source_doc_id` 并列的第四种来源；
+    #: `schema.Dependency` 的注释早就写着"`used_by` → 本表的 `stmt_id` 是自然延伸"，
+    #: 而这一格此前不存在（现场核实：字段表里没有它）⇒ 那种边无处安放。
+    source_stmt_id: str | None = None
     created_by: str = "agent-G"
 
     def validate(self) -> None:
@@ -1639,10 +1649,13 @@ class Dependency:
                 "（`draft/30` §T4-A 的内部来源）"
             )
         if self.status == "closed" and not (
-                self.source_lit_id or self.source_experiment_id or self.source_doc_id):
+                self.source_lit_id or self.source_experiment_id or self.source_doc_id
+                or self.source_stmt_id):
             raise ValueError(
                 "status='closed' 必须指向一个已入库的来源（source_lit_id / source_experiment_id / "
-                "source_doc_id）。否则'闭合'只是声称，verify 的依赖闭合检查会立刻发现这是空头支票"
+                "source_doc_id / source_stmt_id）。否则'闭合'只是声称，verify 的依赖闭合检查会"
+                "立刻发现这是空头支票（`source_stmt_id` 是 2026-10-09 加的第四种来源："
+                "「定理 A 用到定理 B / 用到某个概念」那条边此前无处安放）"
             )
         if self.status in ("dangling", "external_unavailable") and not self.status_reason.strip():
             raise ValueError(
@@ -1660,6 +1673,24 @@ class Dependency:
             )
         if self.kind == "experiment" and self.source_experiment_id is None:
             raise ValueError("kind='experiment' 的依赖必须给 source_experiment_id")
+        # ---- 2026-10-09（业主：B 走乙 / 证明路径可多组）：
+        if int(self.path_group) < 1:
+            raise ValueError(
+                f"path_group 必须是正整数（收到 {self.path_group!r}）：同一 used_by + 同一组 = "
+                "一条路径（组内都要），不同组 = 可选路径（组间任一）；0 或负数会让'第几组'失去意义"
+            )
+        ends = [bool(self.source_lit_id), bool(self.source_experiment_id),
+                bool(self.source_stmt_id), bool(self.source_doc_id)]
+        if sum(ends) > 1:
+            raise ValueError(
+                "被依赖的那一端最多给一个（lit / experiment / stmt / doc 四选一）：给两个就说不清"
+                "这条边到底依赖谁"
+            )
+        # 注意：不要求"非 dangling 就必须给一端" —— `external_unavailable`（引了但拿不到）
+        # 恰恰是"知道有这么一个来源、而它不在我们库里"那一档，它天然没有 `source_*`；
+        # `closed` 那一档由上面既有的规则管（必须指向一个已入库的来源）。
+        if self.source_stmt_id is not None:
+            require_id(self.source_stmt_id, "source_stmt_id")
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -1743,6 +1774,11 @@ class Statement:
     #: 这条命题用到了哪些别的命题（本表内的 `stmt_id`，升序去重）。
     #: 它是"承重结论"可追踪的落点：§16 P3 的收工门问的就是"承重的那些有没有 T3 或已降档"。
     derived_from: list[str] = field(default_factory=list)
+    #: 同一个东西的别的写法（业主 2026-10-09：「别名按乙，毕竟定理也可能有别名」）。
+    #: 与 `concepts.aliases` 同一件事，并表之后住在这里 —— 任何 kind 都能有
+    #: （定理/定义/引理/命题/概念），秘书查重时按 `textutil.normalize` 比它。
+    #: 形状与顺序纪律由 `ARRAY_FIELD_KINDS['statements']['aliases']`（`seq`）统一守。
+    aliases: list[str] = field(default_factory=list)
     #: 自产结果落在哪份稿子里（`documents.doc_id`）。
     doc_id: str | None = None
     #: 自产结果在稿子里的行范围（如 "120-148"）。可空。
@@ -1812,6 +1848,22 @@ class Statement:
             require_id(dep, "derived_from[]")
         if self.stmt_id in self.derived_from:
             raise ValueError("derived_from 不能包含自身（自环会让'承重链'永远闭合）")
+        # ---- 别名（业主 2026-10-09：「别名按乙，毕竟定理也可能有别名」）
+        #
+        # 只在数据面把两件明显不合规的事挡住（形状与顺序纪律由
+        # `ARRAY_FIELD_KINDS['statements']['aliases'] = 'seq'` 那一处统一守，不在这里抄第二份）：
+        #   ① 别名与自己的 `label` 相同 —— 那是"没有别名"，不是"有一条别名"；
+        #   ② 空别名 —— 它会让查重按空白命中一切（比"漏登记"更坏）。
+        for a in self.aliases or []:
+            if not str(a).strip():
+                raise ValueError("aliases 里不能有空串（空别名会让查重按空白命中一切）")
+            from . import textutil as _T   # 惰性：与 `evidencebits` 同一处风格，不新增模块级依赖边
+
+            if _T.normalize(str(a)) == _T.normalize(str(self.label or "")):
+                raise ValueError(
+                    f"aliases 里有与自身 label 相同的写法（{a!r}）⇒ 那是'没有别名'，"
+                    "不是'有一条别名'（查重时会把自己当成自己的别名）"
+                )
         # ---- 五元证据位（`draft/39` §3.14）：形状与"四态纪律"在这里把一次关。
         #
         # 判据本体在 `evidencebits`（唯一来源）：这里只转发，不抄第二份口径 ——
@@ -2639,7 +2691,7 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     "dependencies": {},
     # 命题台账的 `derived_from` 是集合：一条命题用到哪几条别的命题，
     # 顺序没有数学含义（去重才有：重复引用会让"承重面"计数虚高）。
-    "statements": {"derived_from": "set"},
+    "statements": {"derived_from": "set", "aliases": "seq"},
     "review_findings": {},
     "tasks": {"artifacts": "set", "inputs": "set"},
     "usage_ledger": {},
