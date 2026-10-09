@@ -297,6 +297,51 @@ def push_counters(tx: Any, used_id: str) -> None:
             continue
 
 
+def mirror_gaps(store: Any) -> dict[str, Any]:
+    """过渡期的镜像完整性读数：哪一号只在一张表里有（三态 + 逐号点名）。
+
+    为什么必须有这一格：过渡期的"读侧走视图"能成立，靠的是两面都在 ——
+    B 的 pipeline 里那几处 `tx.rows("concepts")`（查重、别名合并、related 重算）
+    读的仍是老表；只要"新标准写进来的概念都被镜像了"，那些读就仍然看得全。
+    反过来说：任何一处写侧忘了镜像，那一批概念就会在 pipeline 的查重里消失
+    （静默漏判、可能重复建概念），而盘上看起来一切正常（两边行数都"有增长"）。
+
+    这正是"写侧那几处 `tx.rows` 可以留到落刀那一笔再改"的前提 ——
+    所以它是一个判据，不是一句注释：`statements_only` 非空 ⇒ 要么补镜像，
+    要么把那一处写侧搬过来。
+
+    返回 `{"checked", "statements_only", "legacy_only", "merged", "reason"}`。
+
+    注意这里读的是两张表的原始行（不是合并视图）：合并视图里"两边都有"的那一行
+    只带 `via="statements"`，从它看不出老表那一份在不在 —— 而这一格问的正是
+    "老表那一份在不在"。
+    """
+    out: dict[str, Any] = {"checked": False, "statements_only": [], "legacy_only": [],
+                           "merged": [], "reason": ""}
+    try:
+        stmt_ids = {str(r.get("stmt_id") or "") for r in store.rows("statements")
+                    if str(r.get("kind") or "") == "concept"}
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实报
+        out["reason"] = f"statements 读不成（{type(exc).__name__}: {exc}）"
+        return out
+    state = legacy_present(store)
+    if not state.get("checked"):
+        out["reason"] = str(state.get("reason") or "老表在不在判不了 ⇒ 镜像完整性判不了")
+        return out
+    legacy_ids: set[str] = set()
+    if state.get("present"):
+        try:
+            legacy_ids = {str(r.get("concept_id") or "") for r in store.rows(LEGACY_TABLE)}
+        except Exception as exc:  # noqa: BLE001
+            out["reason"] = f"老表读不成（{type(exc).__name__}: {exc}）⇒ 镜像完整性判不了"
+            return out
+    out["statements_only"] = sorted(stmt_ids - legacy_ids)
+    out["legacy_only"] = sorted(legacy_ids - stmt_ids)
+    out["merged"] = sorted(stmt_ids & legacy_ids)
+    out["checked"] = True
+    return out
+
+
 def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
                   aliases: Iterable[str] = (), source_lit_id: str = "", proof_text: str = "",
                   doc_id: str = "", actor: str = "agent-B", mirror: bool = False) -> dict[str, Any]:

@@ -62,8 +62,9 @@ INVENTORY: dict[str, dict[str, int]] = {
         "src/agentflow/agent_b/resolve_structural_duplicate.py": 1,
         "src/agentflow/agent_b/run_once.py": 1,
         "src/agentflow/cli.py": 1,              # `repair --related`（落刀时整体退役）
-        "src/agentflow/conceptrows.py": 1,      # 过渡层
+        "src/agentflow/conceptrows.py": 2,      # 过渡层：一处代码 + 一处 docstring 里点名这一格
         "tests/test_tx_mark_dirty.py": 3,
+        "tests/test_the_mirror_is_complete.py": 1,   # docstring 里点名这一格（不是读点）
     },
     "write": {
         "src/agentflow/agent_b/core.py": 4,     # 其中 1 处是自检夹具
@@ -90,6 +91,7 @@ INVENTORY: dict[str, dict[str, int]] = {
         "tests/test_store_delete_events.py": 3,
         "tests/test_tx_mark_dirty.py": 1,
         "tests/test_verify_snapshot.py": 1,
+        "tests/test_the_mirror_is_complete.py": 1,   # 负控：绕过镜像直接写老表
     },
     "tx_declare": {
         "src/agentflow/agent_b/core.py": 1,
@@ -118,6 +120,7 @@ INVENTORY: dict[str, dict[str, int]] = {
         "tests/test_the_concept_view_during_the_merge.py": 1,
         "tests/test_tx_mark_dirty.py": 5,
         "tests/test_verify_snapshot.py": 1,
+        "tests/test_the_mirror_is_complete.py": 1,   # 负控：直接写老表那一笔
     },
 }
 

@@ -700,6 +700,28 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 四个模式在 `src/agentflow` 里全部为 0，例外只有 `conceptrows.py`（过渡层的
 `LEGACY_TABLE`）、`migrate_concepts.py` / `store.py`（迁移与 v1→v2 兼容）。
 
+#### 13.2h 为什么"写侧那几处 `tx.rows`"能留到落刀那一笔（**有成对判据守着**）
+
+上一轮把写侧能搬的都搬了，剩下四处**事务内改老表原始行**的读（`run_once` 的概念查重、
+`_apply_merge`、`cli repair`、`resolve_structural_duplicate`）。它们之所以能留到落刀，
+唯一的前提是：**写侧每一处都把新标准那一行镜像进老表**（于是老表仍然是"全体概念"的
+超集，那几处读仍然看得全）。这不是一句注释，而是一条判据 ——
+`conceptrows.mirror_gaps(store)`：读两张表的**原始行**（不是合并视图：两边都有的那一行
+只带 `via="statements"`，从它看不出老表那一份在不在），给
+`statements_only` / `legacy_only` / `merged` 三个集合。判据
+（`tests/test_the_mirror_is_complete.py`）：B 的 pipeline 跑一趟 ⇒
+`statements_only` **为空**；绕过镜像直接写新标准 ⇒ 那一号被点名；老表读不成 ⇒
+`checked=False` + 理由（判不了不等于"没有缺口"）。
+
+**真盘读数（`temp/_s1r_mirror_readings.py`，只读）**：62 个工作区全部判成 ⇒
+`statements_only = 0`、`legacy_only = 2233`、`merged = 0`、问题 0 条 ——
+这就是落刀前的干净基线（没有任何"新标准写了却没镜像"的行）。
+落刀之后同一脚本应当给出三个 0（老表那份不再存在，视图只剩新标准）。
+
+**落刀的预检清单在扩容**：新加的判据文件自己也会写老表（负控），`test_the_flip_inventory`
+当场把它数了出来（`盘上多出 {'tests/test_the_mirror_is_complete.py': 1}`）——
+这正是那条判据要的效果：**清单不会因为"我又加了点东西"而悄悄失真**。
+
 #### 13.2c 过渡层（`conceptrows`）落地与真盘读数
 
 并表要动磁盘格式、且不可逆 ⇒ 中间加一层**唯一读写口**（`draft/97` §10.3 的"两处同号并合"），
