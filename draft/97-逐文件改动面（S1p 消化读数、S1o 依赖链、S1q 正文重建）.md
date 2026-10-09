@@ -804,6 +804,43 @@ C 的图上同一个概念会变成两个节点。
 
 **不裁的后果**：按甲走 —— 别名以受控前缀落在文本格里，秘书查重时先读它再比主名字。
 
+#### 14.4d **D10′ 结案：走乙，而且别名是 `Statement` 的通用一格**（业主 2026-10-09）
+
+业主逐字：「别名按乙，毕竟定理也可能有别名」⇒ 两点：
+
+1. **走乙**（加一列），**并且这一列不是"概念的私产"**：定理、定义、引理、命题**都可能有别名**
+   （例：同一条定理在文献里叫 "(k, g)-cage bound"，在另一篇里叫 "Moore bound"；
+   同一个构造叫 "the (k,g)-cage" 与 "the cage graph"）。所以列加在**并表之后的 `statements`** 上；
+2. 列名取 **`aliases`**（不是 `concept_meta`）：语义单一（别名表），谁都能用，
+   与"概念专属元数据"那种含糊的袋子分开。
+
+**落地（并入 `SCHEMA_VERSION 1→2` 的同一笔）**：
+
+```python
+# schema.py：Statement 加一格（集合字段照 FC-05：升序去重，由 check_array_invariants 集中检查）
+aliases: list[str] = field(default_factory=list)     # 同一个东西的别的写法（定理/定义/概念都可以有）
+
+# 校验：别名不能等于自己的 label（那是"没有别名"而不是"别名"）；
+#      集合字段升序去重（既有 FC-05 那条判据自动覆盖新字段）
+if any(T.normalize(a) == T.normalize(self.label) for a in self.aliases):
+    raise ValueError("aliases 里出现了与自身 label 相同的写法（那是没有别名，不是别名）")
+```
+
+**查重（秘书那一侧，唯一实现 `textutil.normalize`）**：新登记的名字（`label` 或它本身就是
+某条的别名）与台账里 **`normalize(label)` 或任一 `normalize(aliases[i])`** 相同 ⇒ **同一条**，
+报"重复"读数、**不新建行**（业主：秘书会查重 ⇒ 不会重复登记）。
+**C 的适配**：`proof_chain(target)` 的 `target` **允许给别名** ⇒ 命中的是那一条，
+读数里写明 `matched_by: "label" | "alias"`（不许把"按别名命中"读成"按号命中"）。
+
+**判据（S1r + S1o 各一条）**：
+- 正控①（S1r）：迁移 888 条别名 ⇒ 落进新列；一条 theorem/lemma 带别名也落得进去
+  （**不是只有 concept 能用**）；集合升序去重那一条判据对新列生效；
+- 正控②（S1o）：第二次登记用**别名**写法 ⇒ 报"重复"、**表里仍只有一行**；
+- 负控：`aliases` 里放一条与自身 `label` 相同的写法 ⇒ 拒；`aliases` 里放**空串** ⇒ 拒；
+- 反真空：一条**没有任何别名**的行 ⇒ `aliases == []`（"没有别名"是**空列表**，
+  不是 `unknown`；与"这一格读不成"严格分开）。
+
+
 ### 14.5 **概念行不参与等级**（否则被读成"猜想"）
 
 现场：等级由 `evidencebits.derive_grade` 现算，`bits={}`（概念没有证据位）时它会给出
