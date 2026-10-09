@@ -246,7 +246,10 @@ def _selftest() -> int:
         print(f"      ✗ {r['name']}（{r['side_effect']}）")
 
     print("[4] 干净稿件：防误伤（好数据必须过）+ 运行期只读的可核对形式")
-    before = {n: (st.data / n).read_bytes() for n in ("concepts.json", "relations.json", "literature.json")}
+    # 逐字节比对的取样面按当前 schema 取：S1r 并表之后概念行住 `statements.json`
+    # （`concepts.json` 已退役、盘上不再有那个文件 ⇒ 写死它会当场 FileNotFoundError）。
+    before = {n: (st.data / n).read_bytes()
+              for n in ("statements.json", "relations.json", "literature.json")}
     docs_before = json.loads((st.data / "documents.json").read_text(encoding="utf-8"))
     r0 = h.review("0000", dependencies=[])
     docs_after = json.loads((st.data / "documents.json").read_text(encoding="utf-8"))

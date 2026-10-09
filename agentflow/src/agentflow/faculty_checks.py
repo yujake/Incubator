@@ -52,10 +52,45 @@ def _rows(store: Any, table: str) -> list[dict]:
 
 
 def _table_names() -> set[str]:
-    """`schema.TABLES` 里的表名（现取，不另写名单）。"""
+    """可归属的表名（现取，不另写名单）：`schema.TABLES` + 已并走的老表名。
+
+    S1r 并表之后 `concepts` 不再是 `TABLES` 里的一张表，但文本里的
+    `concepts/0001` 这种引用仍然在（稿件、报告、旧日志里到处是）⇒
+    它必须被认出来并落到新家（`store._MOVED_TABLES` 是"并走"这件事的唯一
+    定义点，名单不在这里抄第二份）。不认识它等于让这条引用从"引用落地"
+    这道门里整段消失 —— 静默失效，而这一门正是"编造引用"的唯一机械防线。
+    """
+    from . import schema as S
+    from .store import _MOVED_TABLES
+
+    return set(S.TABLES) | set(_MOVED_TABLES)
+
+
+def _home_table(table: str) -> tuple[str, str]:
+    """`表名 -> (它现在住哪张表, 必须匹配的 kind 或空串)`。
+
+    并走的表返回新家；没并走的原样返回。读侧一律用这一处换算，
+    于是"老名字能读、报告里也照旧写老名字"两件事同时成立。
+    """
+    from .store import _MOVED_TABLES
+
+    meta = _MOVED_TABLES.get(table)
+    if not meta:
+        return table, ""
+    return str(meta.get("into") or table), str(meta.get("kind") or "")
+
+
+def _home_rows(store: Any, table: str) -> tuple[list[dict], str]:
+    """按表名读行（并走的表走新家 + `kind` 过滤），返回 `(行, 读它的 id 字段所在的表)`。"""
     from . import schema as S
 
-    return set(S.TABLES)
+    home, kind = _home_table(table)
+    if home not in S.TABLES:
+        return [], home
+    rows = _rows(store, home)
+    if kind:
+        rows = [r for r in rows if str(r.get("kind") or "") == kind]
+    return rows, home
 
 
 def ids_in(text: str) -> list[tuple[str, str, str]]:
@@ -86,8 +121,9 @@ def unknown_ids(store: Any, text: str) -> dict[str, list[str]]:
     cache: dict[str, set[str]] = {}
     for token, table, _form in ids_in(text):
         if table not in cache:
-            field = S.TABLES[table]["id_field"]
-            cache[table] = {str(r.get(field)) for r in _rows(store, table)}
+            rows, home = _home_rows(store, table)
+            field = S.TABLES[home]["id_field"] if home in S.TABLES else ""
+            cache[table] = ({str(r.get(field)) for r in rows} if field else set())
         if token not in cache[table]:
             bad.setdefault(table, [])
             if token not in bad[table]:
@@ -226,8 +262,11 @@ BLOCKER_WORDS: tuple[str, ...] = ("缺", "未接线", "没接线", "预算", "�
                                   "卡点", "需要补", "待补", "尚无", "尚未")
 
 #: 数据面表（判定"库变了没有"时只看这些；台账与用量账不算产出）。
+#: S1r 并表之后 `concepts` 那一格换成 `statements`（概念行住它里面）：
+#: 老名字留在名单里会让 `snapshot_counts` 把"并走"读成"这张表没有产出"，
+#: 而 `statements` 不进名单则"写了命题/概念"这件事在推进判据里看不见。
 DATA_TABLES: tuple[str, ...] = (
-    "search_requests", "literature", "concepts", "relations", "research_questions",
+    "search_requests", "literature", "statements", "relations", "research_questions",
     "conjectures", "analysis_reports", "reprocess_requests", "experiments",
     "attack_plans", "documents", "dependencies", "review_findings",
 )
@@ -347,11 +386,12 @@ def trace_findings(store: Any, pairs: Sequence[Sequence[str]], *, text: str = ""
             dangling.append("（形态不合法：" + "、".join(map(str, pair)) + "）")
             continue
         table, ident = str(pair[0]), str(pair[1])
-        if table not in S.TABLES:
+        rows, home = _home_rows(store, table)
+        if home not in S.TABLES:
             dangling.append(f"{table}/{ident}（没有这张表）")
             continue
-        field = S.TABLES[table]["id_field"]
-        if ident not in {str(r.get(field)) for r in _rows(store, table)}:
+        field = S.TABLES[home]["id_field"]
+        if ident not in {str(r.get(field)) for r in rows}:
             dangling.append(f"{table}/{ident}")
     named = [f"{t_}/{i}" for t_, i in ((str(p[0]), str(p[1])) for p in pairs if len(p) >= 2)
              if str(i) in (text or "")]
@@ -443,7 +483,7 @@ def selftest() -> int:
 
         # 脑子：推进 / 明说卡点 / 只核对
         base = snapshot_counts(st)
-        adv = progress_findings(base, {**base, "concepts": base["concepts"] + 1},
+        adv = progress_findings(base, {**base, "statements": base["statements"] + 1},
                                 final="写了两个概念", steps=2)
         if adv["verdict"] != "advanced":
             problems.append(f"写了行却没判 advanced：{adv}")

@@ -60,7 +60,7 @@
 | `agentflow/scripts/` | `__init__.py` `lint_rules.py` `manuscripts_query.py` `noai_gate.py` `release_check.py` `usage_ledger_audit.py`（观测 2026-10-05：共 **6** 个 `.py`；复算 `(Get-ChildItem scripts/*.py).Count`；`manuscripts_query.py` 是交接手稿的检索面 + 五元位快照，`draft/39` §C4） |
 | `agentflow/docs/` | `INDEX.md` `ROLE-SPECS.md` `PROPOSALS.md` `NOAI-GOVERNANCE.md` `FORMAL-TOOLCHAIN.md` `NOAI-CHANGE-LIST-management.md` `NOAI-SUSPENSION-2026-09-25.md` `NOAI-SUSPENSION-2026-09-28.md` `PROPOSAL-side-effect-axes.md` `ROLE-SPECS-DRAFT-N-O-Q.md` `SCHEMA-DRAFT-management.md` `SCHEMA-MIGRATION-PROPOSAL-claims.md` `SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md` `TOOLBOX-DRAFT-roles.md`（观测 2026-09-30：共 **14** 个文件，且这一层没有非 `.md` 的文件；复算 `(Get-ChildItem docs -File).Count`） |
 | `agentflow/tests/` | `test_*.py` 的**份数按命令当次读**（`(Get-ChildItem tests -Filter 'test_*.py').Count`；观测 2026-09-30 ⇒ 162）+ `conftest.py` + `demo_dataset_helper.py`；**全量实测是"区间 + 观测时刻"**：`python -m pytest -q -p no:cacheprovider` 的读数随并行施工变化，所以本节只记观测快照，**权威读数取发布门当次的报告**（`python tools/release_all.py`）。本批观测（**据 `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` §12 转记，不是本文作者当次实跑**）：**`3071 passed, 1 failed, 3 skipped, 1 xfailed`（观测 2026-09-30 23:52）**——唯一那条失败是 `tests/test_release_all.py` 里那条起子进程跑 `release_all --only role-specs,coverage` 的用例（600s 上限；单跑 510s 通过，整轮并发下超时）。⚠️ **有并发写时实测过失败**（`G-27` 族的顺序依赖/并发态，见 `README.md` §6.1） |
-| 运行期数据 | `agentflow/data/`（**份数按命令当次读**：`(Get-ChildItem data -Filter '*.json').Count`；观测 2026-10-02 ⇒ 18 个 JSON = 17 张表的快照 + `counters.json`）、`agentflow/library/`、`agentflow/demo/`（注：**`D:\Incubator\agentflow` 自己不是 git 仓库**；`.git` 在**上一级** `D:\Incubator`。所以 `noai_gate --git` 现在**不再是 `unknown`**，它看的是伞仓库的改动集 —— 见 §7.2 与 `README.md` §7 第 8 条） |
+| 运行期数据 | `agentflow/data/`（**份数按命令当次读**：`(Get-ChildItem data -Filter '*.json').Count`；观测 2026-10-02 ⇒ 18 个 JSON = 17 张表的快照 + `counters.json`；S1r 并表后 2026-10-10 ⇒ **16 张表 ⇒ 17 个 JSON**，`concepts.json` 已随表退役）、`agentflow/library/`、`agentflow/demo/`（注：**`D:\Incubator\agentflow` 自己不是 git 仓库**；`.git` 在**上一级** `D:\Incubator`。所以 `noai_gate --git` 现在**不再是 `unknown`**，它看的是伞仓库的改动集 —— 见 §7.2 与 `README.md` §7 第 8 条） |
 
 > **"预留并如实标注"清单**（这是要求里点名要预留的六 + 三项）：
 >
@@ -168,7 +168,7 @@ noai_paths_glob = 40   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[ca
 noai_paths_unique = 37   # 上述条目行按第一栏去重后的路径数（观测 2026-10-06（角色 V 落地）：35 → **37**；此前观测 2026-09-27 15:02 是 27 行去重 ⇒ 24）
 noai_paths_categories = 7 # `.noai-paths` 里 `[category: …]` 的分组数；观测 2026-09-27（G3 复测）（本次未变：角色 V 落地只加条目、不新开分组）
 tools_star_tools_py   = 14 # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`（+conductor_tools）（外加 `base.py` 与装配点 `__init__.py`）；观测 2026-10-04（`draft/37` §134：加 `manuscript_tools.py`（交接手稿的读面，2 件只读工具）13 → **14**；同时改 `README.md` 文件树那一行的同一读数）；此前观测 2026-09-29（T3-P3 加 `conjecture_tools.py`：12 → 13 —— 猜想台账的产出面，T1 只落了数据面与判据；两者由 `tests/test_release_all.py` 的两条用例分别对账）
-schema_tables      = 17   # `len(schema.TABLES)`；复跑 `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`；观测 2026-10-02（`draft/37` §20 的 P1 加 `statements` 表：16 → 17；表加一行的**触点不止一处**，见 `docs/ROLE-SPECS.md` 与 `draft/30` §T1 的十处清单（9 处代码 + `tests/conftest.DATA_FILES` 这一处判据清单 + 旧工作区补表文件那一处）；`SCHEMA_VERSION` 刻意不动）。此前观测 2026-09-29（T1 加 `conjectures` 表：15 → 16）
+schema_tables      = 16   # `len(schema.TABLES)`；复跑 `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`；观测 2026-10-10（S1r 并表：`concepts` 从 `TABLES` 退役、概念行以 `kind="concept"` 住进 `statements` ⇒ 17 → 16，**同一笔**把 `SCHEMA_VERSION` 1 → 2）。此前观测 2026-10-02（`draft/37` §20 的 P1 加 `statements` 表：16 → 17；表加一行的**触点不止一处**，见 `docs/ROLE-SPECS.md` 与 `draft/30` §T1 的十处清单（9 处代码 + `tests/conftest.DATA_FILES` 这一处判据清单 + 旧工作区补表文件那一处））。此前观测 2026-09-29（T1 加 `conjectures` 表：15 → 16）
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`（观测 2026-09-28 15:4x：随最后一次集中审查的修复（`F-R1d-01` 的退化基线判据 + `F-R1d-04` 的证据锚正控/负控）121 → **124**；再前阶段 B `W1` 的三条新用例 116 → 119、F8-R11 随 F10 那条新用例 115 → 116；量法是"只收集、不真跑"，与该文件 `N passed` 相等的前提是同一行写着的 `0 skipped` + 无 deselect 到 0 + 无失败；本文写这个数的地方见 §9.1 的 FC-27/FC-09 两行）
 LIVE-READINGS:END
 ```
@@ -486,7 +486,7 @@ agentflow/
 ├── tests/                     pytest（**267** 个 `test_*.py`，观测 2026-10-07；**这一格老得最快**：`(Get-ChildItem tests -Filter 'test_*.py').Count` 当次复跑 —— 本节第 234 行那条"原写 65 个 / 1497 passed"的反例说的就是这一行，它在 2026-10-07 又过期过一次（162 → 267）；离线套件，联网套件用 `-m network`）
 ├── docs/                      规格文档（**18** 个 `.md`，观测 2026-10-07（新增 `NOAI-GOVERNANCE.md` `READING-MAP.md` `USER-END-DSH-STYLE.md` `USER-TEST.md`）；`(Get-ChildItem docs -Filter '*.md').Count`）
 ├── tools/                     开发期工具与探针（14 个 `.py`；其中 `release_all.py`、`coverage_zero_test.py`、`run_each_test_file.py`、`verify_role_specs.py`、`vocab_census.py` 是**发布门/判据本体**，其余是一次性探针）
-└── data/ library/ demo/       运行期数据（`data/` 18 个 JSON = 17 张表的快照 + `counters.json`；⚠️ 见 §10-D6）
+└── data/ library/ demo/       运行期数据（`data/` 17 个 JSON = 16 张表的快照 + `counters.json`；S1r 并表后 2026-10-10；⚠️ 见 §10-D6）
 ```
 
 ### 2.2 模块职责边界（**一句话判据**）

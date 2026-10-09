@@ -15,6 +15,22 @@
 （docstring 逐字：由 `validate_table` 调用）。所以这里的断言必须打在
 判据上：哪个字段、因为什么原因（类型不是数组 vs 没升序去重）被判违规，
 而不是"返回了一个非空列表"。
+
+## S1r 并表（`SCHEMA_VERSION=2`）之后的改动（两条用例改写，判据不变）
+
+并表把 `concepts` 表从 `schema.TABLES` / `ARRAY_FIELD_KINDS` 里真删
+（概念行住 `statements`）⇒ 这两条挂在它上面的用例失去对象：
+
+- `test_check_array_invariants_reports_mixed_type_elements_instead_of_raising`
+  原先拿 `concepts.related_concepts` 当混类型标本 ⇒ 换成 `relations.concept_ids`
+  （另一张仍在的表上声明为 `set` 的字段；`related_concepts` 这个名字随表退役）。
+  保护意图逐字不变：混类型数组要报"元素不是字符串"，不许让判据自己抛
+  `TypeError`（R-05），且不许被报成"未升序去重"。
+- `test_validate_table_reports_a_mixed_type_row_as_value_error`
+  原先走 `validate_table("concepts", …)` 这条真正的入口 ⇒ 换成
+  `validate_table("statements", …)` + `derived_from`（同一张表上声明为 `set`
+  的字段）。入口与判据都不变：`row_from_dict` + `obj.validate()` + 集中检查
+  这条链上任一处先比较异类型，`TypeError` 都会从 `except ValueError` 的缝里逃出去。
 """
 
 from __future__ import annotations
@@ -168,12 +184,15 @@ def test_check_array_invariants_reports_mixed_type_elements_instead_of_raising()
 
     三档必须分得开：这一条走"元素不是字符串"，不许被报成"未升序去重"
     （那会让人去查一个不存在的排序问题 —— `:110` 那条同族的理由）。
+
+    并表之后标本是 `relations.concept_ids`（`related_concepts` 随 `concepts`
+    表退役；本条判据本来就与该字段的名字无关，只要求它是"声明为 set 的字段"）。
     """
-    obj = S.Concept.__new__(S.Concept)
-    obj.related_concepts = ["0001", 2]
-    bad = S.check_array_invariants("concepts", obj)
+    obj = S.Relation.__new__(S.Relation)
+    obj.concept_ids = ["0001", 2]
+    bad = S.check_array_invariants("relations", obj)
     assert len(bad) == 1, bad
-    assert bad[0].startswith("related_concepts"), bad
+    assert bad[0].startswith("concept_ids"), bad
     assert "元素不是字符串" in bad[0], bad
     assert "未升序去重" not in bad[0], bad
 
@@ -204,10 +223,14 @@ def test_validate_table_reports_a_mixed_type_row_as_value_error():
     这一条走的是真正的入口（`row_from_dict` + `obj.validate()` + 集中检查），
     而不是直接调谓词 —— 根因就在这两条路径上：任意一处先比较异类型，
     `TypeError` 都会从 `except ValueError` 的缝里逃出去。
+
+    并表之后标本是 `statements.derived_from`（`concepts` 表已删）。
     """
     doc = {"schema_version": S.SCHEMA_VERSION,
-           "rows": [{"concept_id": "0001", "name": "X", "definition": "d",
-                     "related_concepts": ["0001", 2]}]}
+           "rows": [{"stmt_id": "0001", "origin": "own_result", "kind": "theorem",
+                     "statement_full": "命题正文（夹具）",
+                     "quote_verified": None, "quote_reason": "自产结果（测试夹具）",
+                     "derived_from": ["0001", 2]}]}
     with pytest.raises(ValueError) as exc:
-        S.validate_table("concepts", doc)
+        S.validate_table("statements", doc)
     assert "元素不是字符串" in str(exc.value), exc.value

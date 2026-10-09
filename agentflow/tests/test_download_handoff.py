@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from agentflow import conceptrows as CR
 from agentflow.agent_a import AgentA
 from agentflow.agent_b import AgentB
 from agentflow.fetch import FetchResult
@@ -152,7 +153,8 @@ def test_agent_b_skips_content_mismatch_literature(store):
     lit = store.rows("literature")[0]
     assert lit["processed"] is True, "必须标为已处理，否则永远堵住队列"
     assert "content_type_mismatch" in (lit["last_mine_error"] or "")
-    assert store.rows("concepts") == [] and store.rows("relations") == []
+    # 概念行并表之后住 `statements`（`kind="concept"`）⇒ 读口走过渡层（老字段名投影）。
+    assert CR.view(store, shape="legacy")["rows"] == [] and store.rows("relations") == []
 
 
 def test_agent_b_still_processes_normal_downloads(store):
@@ -178,7 +180,9 @@ def test_agent_b_still_processes_normal_downloads(store):
     assert res.processed == 1
     assert res.unreadable == 0
     assert store.rows("literature")[0]["processed"] is True
-    assert any(c["name"] == "abelian group" for c in store.rows("concepts")), "正常路径仍应抽到概念"
+    # 概念行住 `statements`（`kind="concept"`），老字段名走过渡层的投影读口。
+    assert any(c["name"] == "abelian group" for c in CR.view(store, shape="legacy")["rows"]), \
+        "正常路径仍应抽到概念"
 
 
 # --------------------------------------------------------------------------- 受控词表

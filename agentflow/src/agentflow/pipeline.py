@@ -798,7 +798,7 @@ def _selftest() -> int:
     st.init()
     _seed(st)
     print(f"[0] 临时工作区：{root}")
-    print(f"    概念 {len(st.rows('concepts'))} / 关系 {len(st.rows('relations'))} / "
+    print(f"    概念 {len(CR.view(st, shape='legacy')['rows'])} / 关系 {len(st.rows('relations'))} / "
           f"文献 {len(st.rows('literature'))} / 已登记 C 报告 {len(st.rows('analysis_reports'))}")
 
     out = run_pipeline(

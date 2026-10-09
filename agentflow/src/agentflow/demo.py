@@ -19,6 +19,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from . import conceptrows as _CR
+from . import dedup as D
 from . import schema as S
 from .agent_a import AgentA
 from .agent_b import AgentB
@@ -287,13 +289,16 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     # ---------------- 5. 统计与校验 ----------------
     log("\n[5] 各表统计")
     stats = st.stats()
-    for t in ("search_requests", "literature", "concepts", "relations"):
+    # 表名从 `schema.TABLES` 取（`stats()` 的键就是它生成的）——
+    # 写死一张名单在这里正是"并表之后 `stats["concepts"]` 当场 KeyError"的成因。
+    for t in [*S.TABLES, "events"]:
         info = stats[t]
         extra = " ".join(f"{k}={v}" for k, v in info.items() if k != "count")
-        log(f"    {t:16} 行数={info['count']:<4} {extra}")
+        log(f"    {t:16} 行数={info.get('count', info.get('appended', 0)):<4} {extra}")
 
-    log("\n[6] 概念表")
-    for c in st.rows("concepts"):
+    log("\n[6] 概念表（老字段名投影：并表之后它们住 `statements`，`kind='concept'`）")
+    _concepts = _CR.view(st, shape="legacy")["rows"]
+    for c in _concepts:
         log(f"    {c['concept_id']}  {c['name']:<22} related={c.get('related_concepts')}")
 
     log("\n[7] 关系表")
@@ -313,16 +318,20 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
         "请求全部完成": all(r["done"] for r in st.rows("search_requests")),
         "文献已去重（6 候选 → 5 行）": len(st.rows("literature")) == 5,
         "全部文献已处理": all(r["processed"] for r in st.rows("literature")),
-        "概念已建立": len(st.rows("concepts")) >= 4,
+        "概念已建立": len(_concepts) >= 4,
         "关系已建立（阿贝尔群↔群、域↔环）": len([r for r in st.rows("relations")
                                                   if r["status"] == "active"]) >= 2,
         "重复关系被拒绝（同一引文二次出现）": out_b.get("relations_duplicate", 0) >= 1,
         "引文全部通过逐字校验": out_b.get("quotes_verified", 0) >= 3 and out_b.get("quotes_failed", 0) == 0,
-        "related_concepts 已由关系表派生": any(c.get("related_concepts") for c in st.rows("concepts")),
-        "related_concepts 升序且不含自身": all(
-            c.get("related_concepts") == sorted(set(c.get("related_concepts") or []))
-            and c["concept_id"] not in (c.get("related_concepts") or [])
-            for c in st.rows("concepts")
+        "related_concepts 由关系表派生且形状合法": all(
+            _want == sorted(set(_want)) and c["concept_id"] not in _want
+            for c in _concepts
+            for _want in [D.derive_related_concepts(c["concept_id"], st.rows("relations"),
+                                                    include_suspect=True)]
+        ),
+        "每个概念都在关系图里出现过（图不是一堆孤立点）": all(
+            any(c["concept_id"] in (r.get("concept_ids") or []) for r in st.rows("relations"))
+            for c in _concepts
         ),
         "校验无错误": rep.ok,
     }

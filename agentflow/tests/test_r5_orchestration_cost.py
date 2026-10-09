@@ -1222,6 +1222,7 @@ _REF_KNOWN_MENTION_TOKENS = (
     # `mentioned_only` 30 条与本表 31 条的差集恰好只有它）⇒ 按"表里过期的条目要删掉"删掉。
     # 判据本体一个字没动：仍是"仓里只有文本提及的 token 必须与这张表逐条相等"。
     "_quote_check",               # 每行诊断字段（同上：留痕叙述）
+    "_merge_note",                # I5 合并改写留痕的字符串键（`agent_b/core.py` 用 `row["_merge_note"]` 写；符号面 0 次）。引用处是 `tests/test_agent_b_gates.py` 的 docstring（并表那一笔把"改写清单"的读物从老表改成 `relations` 表时写的）
     "_washed_payload",            # S1g：`_outbound_hook` 返回里承载"洗过的那一份"的字符串键（不是符号；循环取完就 pop 掉，不并进结果）
     "_lease_expired",             # 行内键（`interactions.py` 用 r.get("_lease_expired") 读）
     "_conflict_check",            # "没检查"相关字段名（同族叙述）

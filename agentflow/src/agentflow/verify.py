@@ -187,11 +187,22 @@ def _check_1(rep, store):
     concepts = list(_crow_view["rows"])
     if not _crow_view["checked"]:
         # 三态：读不成 ⇒ 报出来，不许当成"库里没有概念"（那会让下面每一条
-        # 关系都变成"指向一个不存在的概念"，满屏假红——比不报更糟）
+        # 关系都变成"指向一个不存在的概念"，满屏假红——比不报更糟）。
+        # `rep.checked["concept_view"] = None` 是**三态里的"没查成"那一档**：
+        # `_check_3` 据此把 `dangling_concept` 那一段整段跳过（并记下跳过了几条），
+        # 而不是让它拿一个空的概念表去逐条关系报红。
+        # 这一格原先只写在注释里、没有实现（`test_the_concept_view_during_the_merge.py`
+        # 那一轮实测抓到：1 条关系 ⇒ `concept_view_unreadable` + 两条 `dangling_concept`）。
+        rep.checked["concept_view"] = None
         rep.issues.append(Issue(
             "error", "concepts", None, "concept_view_unreadable",
-            f"概念行的合成视图读不成（{_crow_view['reason']}）⇒ 这一段的判据没做成："
-            "概念表/命题表至少有一边读不出来，而'读不出来'与'库里没有概念'必须分得开"))
+            f"概念行的合成视图读不成（{_crow_view['reason']}）⇒ 这一段的两条判据都没做成："
+            "概念表/命题表至少有一边读不出来，而'读不出来'与'库里没有概念'必须分得开；"
+            "`relations` 那一段的 `dangling_concept` 也随之整段跳过（跳过的条数记在 "
+            "`checked.dangling_concept_skipped_relations`）—— 拿一个空的概念表逐条关系报红"
+            "只会造出满屏假红，把真问题淹掉"))
+    else:
+        rep.checked["concept_view"] = len(concepts)
     relations = store.rows("relations")
 
     lit_by_id = {r["lit_id"]: r for r in literature}
@@ -401,6 +412,13 @@ def _check_3(rep, con_by_id, lit_by_id, rel_by_id, relations):
     泄漏语义（后面的段确实读到了它们）。
     """
     # ---- 关系
+    #
+    # `dangling_concept` 只在概念视图**查成了**的时候判：视图读不成时 `con_by_id`
+    # 是空的，逐条关系报"引用了不存在的概念"会把真问题淹掉（`_check_1` 已经报过
+    # `concept_view_unreadable`，那一条才是要读的东西）。跳过要**计数**，不许静默
+    # （三态纪律）：`checked.dangling_concept_skipped_relations` 是这一段的"没查成"读数。
+    concept_view_ok = rep.checked.get("concept_view", 0) is not None
+    dangling_skipped = 0
     for r in relations:
         rid = r.get("relation_id")
         cids = r.get("concept_ids") or []
@@ -408,9 +426,12 @@ def _check_3(rep, con_by_id, lit_by_id, rel_by_id, relations):
             rep.issues.append(Issue("error", "relations", rid, "too_few_concepts", f"概念组只有 {len(cids)} 个"))
         if cids != sorted(set(cids)):
             rep.issues.append(Issue("error", "relations", rid, "unsorted_concepts", f"concept_ids 未升序去重：{cids}"))
-        for c in cids:
-            if c not in con_by_id:
-                rep.issues.append(Issue("error", "relations", rid, "dangling_concept", f"引用了不存在的概念 {c}"))
+        if not concept_view_ok:
+            dangling_skipped += 1
+        else:
+            for c in cids:
+                if c not in con_by_id:
+                    rep.issues.append(Issue("error", "relations", rid, "dangling_concept", f"引用了不存在的概念 {c}"))
         if r.get("concept_group_key") != T.concept_group_key(cids):
             rep.issues.append(
                 Issue("error", "relations", rid, "stale_group_key",
@@ -435,6 +456,9 @@ def _check_3(rep, con_by_id, lit_by_id, rel_by_id, relations):
             rep.issues.append(Issue("error", "relations", rid, "bad_page_range", f"页码 start>end：{pr}"))
 
     # ---- 关系去重自检：同一概念组内不应存在两条 quote_normalized 相同的 active 关系
+    if not concept_view_ok:
+        # "没查成"的那一档必须落在报告里（不是静默跳过，也不是假装查过）。
+        rep.checked["dangling_concept_skipped_relations"] = dangling_skipped
     by_group: dict[str, list[dict]] = {}
     for r in relations:
         if r.get("status") == "rejected":

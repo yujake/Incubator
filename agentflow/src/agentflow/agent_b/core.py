@@ -957,26 +957,34 @@ class _Core:
             tx.upsert("relations", row, note=f"structural_merge:{merged_id}->{survivor_id}")
 
         # ---- 受影响概念的 related_concepts 整体重算（派生而非增量，漏更新会自愈）
+        #
+        # 这一格是老表专有的（新标准里"哪些概念相关"由 `relations` 表本身回答，
+        # 读侧现算）⇒ 落刀之后整段不跑，否则每一笔合并都会把派生结果又抄一份回
+        # 老字段名上（写出来的值与原值等价，但那是"并干净"没做完的形态）。
         final_rels = tx.rows("relations")
         changed = set(rewritten) | set(rejected)
         affected = {survivor_id, merged_id}
         for r in final_rels:
             if str(r.get("relation_id")) in changed:
                 affected.update(str(x) for x in (r.get("concept_ids") or []))
-        for cid in sorted(affected):
-            row = next((c for c in tx.rows("concepts") if str(c.get("concept_id")) == cid), None)
+        for cid in sorted(affected) if _CR.legacy_present(self.store).get("present") else []:
+            row = next((c for c in _CR.view_tx(tx, shape="legacy")["rows"]
+                        if str(c.get("concept_id")) == cid), None)
             if row is None:
                 continue
             want = D.derive_related_concepts(cid, final_rels, include_suspect=True)
             if row.get("related_concepts") != want:
                 row["related_concepts"] = want
                 row["updated_at"] = S.now_iso()
-                tx.upsert("concepts", row, note="related_recomputed")
-                _CR.sync_from_legacy(tx, row, actor=self.actor)   # 同号同步（过渡期）
+                _CR.upsert_legacy_shaped(tx, row, actor=self.actor,
+                                         note="related_recomputed")
 
         # ---- 概念行：survivor 收别名（含被合并方的名字），被合并方立墓碑
-        survivor = next(c for c in tx.rows("concepts") if str(c.get("concept_id")) == survivor_id)
-        merged = next(c for c in tx.rows("concepts") if str(c.get("concept_id")) == merged_id)
+        # 读与写都走过渡层：`tx.rows("concepts")` 在落刀之后是受控错，
+        # 而"写老表那份 + 同步新标准"两件事合成 `upsert_legacy_shaped` 一处。
+        live_concepts = _CR.view_tx(tx, shape="legacy")["rows"]
+        survivor = next(c for c in live_concepts if str(c.get("concept_id")) == survivor_id)
+        merged = next(c for c in live_concepts if str(c.get("concept_id")) == merged_id)
         own = survivor.get("normalized_name") or T.normalize(str(survivor.get("name") or ""))
         aliases = S.sorted_unique(
             list(survivor.get("aliases") or []) + [str(merged.get("name") or "")] + list(merged.get("aliases") or [])
@@ -985,8 +993,7 @@ class _Core:
         if aliases != (survivor.get("aliases") or []):
             survivor["aliases"] = aliases
         survivor["updated_at"] = S.now_iso()
-        tx.upsert("concepts", survivor, note="alias_merge")
-        _CR.sync_from_legacy(tx, survivor, actor=self.actor)   # 别名也要落到新标准那一行
+        _CR.upsert_legacy_shaped(tx, survivor, actor=self.actor, note="alias_merge")
 
         reason = str(decision.get("reason") or "")
         reason += (
@@ -1009,10 +1016,10 @@ class _Core:
             "skipped_relation_ids": sorted(skipped),
             "evidence": dict(decision.get("evidence") or {}),
         }
-        tx.upsert("concepts", merged, note="merged")
         # 墓碑（`merged_into`）在新标准里映射成 `superseded` + 理由（`sync_from_legacy` 里那一支）：
         # 不映射的话，一次真的合并在新标准那一边完全看不见，下游会继续把被合并的那条当可用命题。
-        _CR.sync_from_legacy(tx, merged, actor=self.actor)
+        # 老表还在时也要写那一份（`upsert_legacy_shaped` 一处办两件事）。
+        _CR.upsert_legacy_shaped(tx, merged, actor=self.actor, note="merged")
         return {
             "applied": True,
             "survivor_id": survivor_id,
@@ -1166,10 +1173,17 @@ def _selftest() -> int:
               and st.rows("relations")[0].get("quote_verified") is True)
         check("processed 语义：处理完成后置 True 并释放租约",
               _lit(st, "0000")["processed"] is True and _lit(st, "0000")["claimed_by"] is None)
-        check("related_concepts 由关系表**派生**（各自指向对方，不留空）",
-              all(sorted(c["related_concepts"]) == sorted(
-                  x["concept_id"] for x in st.rows("concepts") if x["concept_id"] != c["concept_id"])
-                  for c in st.rows("concepts")))
+        # 并表之后"哪些概念相关"没有可写的列：真相在 `relations` 表里，读侧现算
+        # （`dedup.derive_related_concepts` 是唯一实现，`verify` 的 drift 判据也用它）。
+        # 这一格原先断言"老表的 `related_concepts` 等于别号的全集" —— 那一列已随表退役，
+        # 断言它只会变成"`[] == 别号全集"，即一条恒假的假红。
+        _concepts_now = _CR.view(st, shape="legacy")["rows"]
+        _rels_now = st.rows("relations")
+        check("概念之间的关联由关系表**派生**（从 relations 现算，各自指向对方、不留空）",
+              all(sorted(D.derive_related_concepts(c["concept_id"], _rels_now, include_suspect=True))
+                  == sorted(x["concept_id"] for x in _concepts_now
+                            if x["concept_id"] != c["concept_id"])
+                  for c in _concepts_now))
 
         # ---- 2) 概念复用而不是重复建：同名概念走 find_concept，只在歧义时建新的
         _write_lit(st, "0001", "selftest")
@@ -1178,10 +1192,11 @@ def _selftest() -> int:
         b2 = AgentB(st, extractor=ext2, extract_text=_extract, config={"lease_seconds": 900, "max_attempts": 3})
         res2 = b2.run_once()
         check("概念名复用：'group' 走既有代号、'交换群' 以别名并入 'abelian group'，都不新建概念",
-              res2.concepts_created == 0 and res2.concepts_reused == 2 and len(st.rows("concepts")) == 2,
+              res2.concepts_created == 0 and res2.concepts_reused == 2
+              and len(_CR.view(st, shape="legacy")["rows"]) == 2,
               f"created={res2.concepts_created} reused={res2.concepts_reused}")
         check("别名合并写回概念行（否则后续同义名会各自建一份概念）",
-              any("交换群" in (c.get("aliases") or []) for c in st.rows("concepts")))
+              any("交换群" in (c.get("aliases") or []) for c in _CR.view(st, shape="legacy")["rows"]))
         check("抽取器拿到了概念表种子，且没有 seed_concepts_error（种子只影响召回率，不是权威）",
               bool(ext2.seen_meta[0].get("seed_concepts")) and "seed_concepts_error" not in ext2.seen_meta[0])
 
@@ -1269,7 +1284,7 @@ def _selftest() -> int:
                                 normalized_name=T.normalize(name), aliases=[],
                                 created_at=S.now_iso(), updated_at=S.now_iso())
                 row.validate()
-                tx.upsert("concepts", row.to_dict(), note="selftest")
+                _CR.upsert_legacy_shaped(tx, row.to_dict(), actor="selftest", note="selftest")
         b7 = AgentB(st7, extractor=_Extractor(), extract_text=_extract, config={"lease_seconds": 900, "max_attempts": 3})
         no_ev = b7.decide_structural_duplicate(
             {"concept_ids": ["0000", "0001"], "name_evidence": "none", "neighbors": []}
@@ -1277,8 +1292,10 @@ def _selftest() -> int:
         check("名字侧无证据 ⇒ reject（'结构等价 ≠ 同义'，只有一路证据不得合并）",
               no_ev["verdict"] == "reject" and no_ev["survivor_id"] is None)
         row = b7.resolve_structural_duplicate({"concept_ids": ["0000", "0001"], "name_evidence": "none"})
-        check("reject 时**一行数据都不写**（applied=False，两张表逐字节不变）",
-              row["applied"] is False and all(c.get("merged_into") is None for c in st7.rows("concepts")))
+        check("reject 时**一行数据都不写**（applied=False，概念行一个墓碑都没有）",
+              row["applied"] is False
+              and all(c.get("status") != "superseded"
+                      for c in _CR.view(st7, shape="legacy")["rows"]))
     except Exception as e:  # noqa: BLE001
         # 自检自己炸了也必须报 FAIL（理由同 `agent_a._selftest`）：检查器"没跑成"
         # 不是"通过"，而 traceback 会让失败项清单为空、看不出挂在哪一条。

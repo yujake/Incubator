@@ -16,7 +16,12 @@ import 它们会形成循环依赖并让 `python -c "import agentflow.providers"
 from __future__ import annotations
 
 __version__ = "1.0.0"
-__schema_version__ = 1  # 与 data/*.json 的 schema_version 对应（见 `schema.SCHEMA_VERSION`）
+#: 与 `data/*.json` 的 `schema_version` 对应（见 `schema.SCHEMA_VERSION`）。
+#: 两处必须同时升：`tests/test_fc05_contract.py` 断言它们相等，而发布门的
+#: `item_contract` 也会判 `schema_version_pkg != schema_version_mod` ⇒ fail。
+#: S1r 并表那一笔（2026-10-10）把 `SCHEMA_VERSION` 升到 2，这一格当时漏改，
+#: 结果是"公开版本号与磁盘格式契约互相矛盾"而其余判据全绿。
+__schema_version__ = 2
 
 #: 跨智能体契约的版本。
 #:

@@ -39,7 +39,8 @@ from agentflow.agent_c import AgentC
 from agentflow.store import Store, StoreError
 from agentflow.tools.base import ToolRegistry
 
-from conftest import add_concept, add_literature, add_relation, add_request, write_library_file
+from conftest import (add_concept, add_literature, add_relation, add_request, read_data_bytes,
+                      write_library_file)
 
 _REPO = Path(__file__).resolve().parents[1]
 _SRC = _REPO / "src"
@@ -276,8 +277,14 @@ def test_cli_submit_negative_control_valid_precise_request_succeeds(tmp_path: Pa
 # =========================================================================== cli：repair
 
 
-def _drifted_store(tmp_path: Path) -> Store:
-    """造一个 `related_concepts` 被改坏（仍升序）的自洽库 —— verify 报 related_drift。"""
+def _concept_store(tmp_path: Path) -> Store:
+    """造一份自洽的库（概念行住在 `statements` 里，`kind="concept"`）。
+
+    并表之前这一格造的是"`related_concepts` 被改坏（仍升序）"⇒ verify 报
+    `related_drift`。那一列随并表退役（新标准里"哪个概念与哪个相关"由 `relations`
+    表现算）⇒ 这条 warning 不再可能产生，这个夹具因此回到"就是一份有数据的库"。
+    需要 warning 的用例（`cli verify --strict` 那一条）自己另造一条真的。
+    """
     st = _ws(tmp_path)
     write_library_file(st, "0000/source.txt", "text")
     add_request(st, "r-0001", done=True, result_lit_ids=["0000"])
@@ -294,26 +301,38 @@ def test_cli_repair_refuses_to_act_without_the_explicit_flag(tmp_path: Path, cap
     """`--related` 原先是个被忽略的开关：不带它也会重写 concepts 表。
 
     一个"声明了却不起作用"的选项比没有更危险 —— 调用方以为在做只读检查，实际已经
-    改了知识表。这里断言 fail-closed：退出码 2、stderr 说明、表的字节一个都没动。
+    改了知识表。这里断言 fail-closed：退出码 2、stderr 说明、`data/` 下的字节一个都没动。
     """
-    st = _drifted_store(tmp_path)
-    before = (st.data / "concepts.json").read_bytes()
+    st = _concept_store(tmp_path)
+    before = read_data_bytes(st)
 
     rc = cli.main(["--root", str(st.root), "repair"])
     err = capsys.readouterr().err
     assert rc == 2 and "--related" in err, err
-    assert (st.data / "concepts.json").read_bytes() == before, "没给开关就不许写知识表"
+    assert read_data_bytes(st) == before, "没给开关就不许写知识表"
 
 
-def test_cli_repair_related_recomputes_the_derived_field(tmp_path: Path, capsys) -> None:
-    """负控（也是正向）：显式给 `--related` 时必须真的把派生态修好。"""
-    st = _drifted_store(tmp_path)
+def test_cli_repair_related_exits_2_with_a_pointer_and_writes_nothing(tmp_path: Path, capsys) -> None:
+    """负控（也是正向）：显式给 `--related` 时受控退出 + 指路，且一个字节都不写。
+
+    并表之后 `related_concepts` 不再是任何一张表的列（派生真相在 `relations` 里，
+    由 `dedup.derive_related_concepts` 现算）⇒ 没有可重算的落点。命令因此以退出码 2
+    加指路结束，而不是让 `tx("concepts")` 抛一句读不出下一步的"未知表"。
+
+    保护意图与改前那条（"退出码 0、且真的把派生态修好了"）一致：这个开关必须
+    说明自己退役了并指出新入口，而且绝不许在没有可做之事时改写知识表。
+    """
+    st = _concept_store(tmp_path)
+    before = read_data_bytes(st)
+
     rc = cli.main(["--root", str(st.root), "repair", "--related"])
-    capsys.readouterr()
-    rows = {r["concept_id"]: r for r in st.rows("concepts")}
-    assert rc == 0
-    assert rows["0000"]["related_concepts"] == ["0001"]
-    assert rows["0001"]["related_concepts"] == ["0000"]
+    err = capsys.readouterr().err
+    assert rc == 2, err
+    assert "并表退役" in err and "relations" in err, err
+    # 指路必须指到真能回答"图与关系偏没偏"的入口（派生真相由 `relations` 回答）
+    assert "agentflow verify" in err and "related_drift" in err, err
+    assert "agentflow rebuild" in err, err
+    assert read_data_bytes(st) == before, "受控退出却改了知识表：一个字节都不许动"
 
 
 # =========================================================================== cli：verify 退出码
@@ -325,7 +344,7 @@ def test_cli_verify_exit_code_is_nonzero_when_errors_exist(tmp_path: Path, capsy
     原先只有 `--strict` 才返回非零 ⇒ `agentflow verify` 在库确实有 error 时
     退出码仍是 0，"未报错"被读成"无问题"（`draft/17` §6.3 的教训）。
     """
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     _mutate(st, "relations", lambda rows: rows[0].__setitem__("lit_id", "0009"))  # dangling_lit
 
     rc = cli.main(["--root", str(st.root), "verify"])
@@ -338,7 +357,8 @@ def test_cli_verify_negative_control_clean_data_exits_zero(clean_store: Store, c
     """负控：自洽数据必须退出码 0（否则上面那条只是"永远返回 1"）。
 
     用 `clean_store`（conftest 里那份 verify 零错误零警告的数据集）——本文件其他
-    用例用的 `_drifted_store` 故意带 `related_drift` 警告，不能拿来当"干净"的负控。
+    用例用的 `_concept_store` 有没有 warning 与本条无关：`cli repair` 那两条只比
+    字节，而 `--strict` 那一条自己另造一条 warning（`id_gap`）。
     """
     assert cli.main(["--root", str(clean_store.root), "verify"]) == 0
     assert cli.main(["--root", str(clean_store.root), "verify", "--strict"]) == 0
@@ -349,8 +369,14 @@ def test_cli_verify_strict_promotes_warnings_and_default_does_not(tmp_path: Path
     """三态：`error` 一律失败；`warning` 只在 `--strict` 下算失败。
 
     这条把"0 通过 / 1 发现问题"里的两级分开，避免"退出码非 0"被含糊地当成一种失败。
+
+    warning 的造法：并表之前这一格由 `related_drift` 提供（`concepts.related_concepts`
+    与关系表派生结果不一致）；那一列随并表退役（派生真相由 `relations` 现算）⇒ verify
+    不可能再报它。这里改用另一条同样真实的 warning：`statements` 缺号
+    （库里是 0000/0001/0005 ⇒ `id_gap`）—— 级别仍是 warning，且与要验的东西无关。
     """
-    st = _drifted_store(tmp_path)  # concepts.related_concepts=[] ⇒ related_drift（warning）
+    st = _concept_store(tmp_path)
+    add_concept(st, "0005", "域")           # 4 位号缺 0002–0004 ⇒ id_gap（warning）
 
     assert cli.main(["--root", str(st.root), "verify"]) == 0
     out = capsys.readouterr().out
@@ -427,7 +453,7 @@ def test_cli_analyze_exits_1_when_no_conclusion_was_reached(tmp_path: Path, caps
 
 def test_cli_analyze_negative_control_success_registers_a_report(tmp_path: Path, capsys) -> None:
     """负控：有数据的正常分析必须退出码 0 并且登记一行报告（失败与成功都要能区分）。"""
-    st = _drifted_store(tmp_path)  # 1 条关系 ⇒ hottest 有可统计对象
+    st = _concept_store(tmp_path)  # 1 条关系 ⇒ hottest 有可统计对象
     rc = cli.main(["--root", str(st.root), "analyze", "--kind", "hottest"])
     out = capsys.readouterr().out
     assert rc == 0, out
@@ -601,6 +627,10 @@ def test_agent_b_seed_read_failure_is_visible_to_the_extractor(store: Store, mon
     后果链条（模块自己的 docstring 写的）：没有种子 ⇒ 定义句只产出一个概念名 ⇒
     关系因 `len(concept_ids) < 2` 全部被丢弃 ⇒ 症状是"文献处理完了却一条关系都没新增"，
     而且没有任何报错。种子内容只是提示，但"读不到"这件事必须被看见。
+
+    并表之后概念行住 `statements`（`kind="concept"`），种子走的是合成视图
+    （`conceptrows.view`），所以"读不到"这一档要在它真正读的那张表上制造 ——
+    名字从 `concepts` 改成 `statements` 只跟着数据搬家走，判据本身一个字没变。
     """
     write_library_file(store, "0000/a.txt", "An abelian group is a group.")
     add_literature(store, "0000", path="0000/a.txt")
@@ -608,7 +638,7 @@ def test_agent_b_seed_read_failure_is_visible_to_the_extractor(store: Store, mon
     real_rows = store.rows
 
     def fake_rows(table: str):
-        if table == "concepts":
+        if table == "statements":
             raise StoreError("selftest：概念表读不出来")
         return real_rows(table)
 
@@ -659,7 +689,7 @@ def test_analyzer_ok_is_false_when_there_is_no_relation_data(tmp_path: Path, kin
 @pytest.mark.parametrize("kind", ["hottest", "cold", "gaps"])
 def test_analyzer_ok_negative_control_true_when_data_exists(tmp_path: Path, kind: str) -> None:
     """负控：有数据时 `ok` 必须为 True（否则上面那条只是"永远 False"）。"""
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     c = AgentC(st)
     rep = {"hottest": c.hottest, "cold": c.cold, "gaps": c.gaps}[kind]()
     assert rep.ok is True, f"{kind} 在有关系数据时应当给出结论"
@@ -671,7 +701,7 @@ def test_service_limit_rejects_a_non_integer_instead_of_silently_capping(tmp_pat
     静默的后果：返回的 `meta["limit"]` 是上限值，调用方以为"我限了 3 条"，
     实际拿到的是"能取多少取多少" —— 一个读不懂的参数被读成另一个值。
     """
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     with pytest.raises(ValueError) as ei:
         AgentC(st).contradictions(limit="三")
     assert "limit" in str(ei.value)
@@ -683,7 +713,7 @@ def test_service_limit_negative_control_valid_and_none_are_honored(tmp_path: Pat
     """负控（三态）：`limit=1` 生效；`limit=None` 用上限；两者都不抛。"""
     from agentflow.agent_c import SERVICE_MAX_CONTRADICTIONS
 
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     c = AgentC(st)
     assert c.contradictions(limit=1)["limit"] == 1
     assert c.contradictions(limit=None)["limit"] == SERVICE_MAX_CONTRADICTIONS
@@ -692,7 +722,7 @@ def test_service_limit_negative_control_valid_and_none_are_honored(tmp_path: Pat
 
 def test_service_depth_rejects_a_non_integer_and_honors_valid_values(tmp_path: Path) -> None:
     """`neighbors` 的 `depth` / `max_nodes` 同一口径：读不懂就抛，合法就照用。"""
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     c = AgentC(st)
     with pytest.raises(ValueError):
         c.neighbors("0000", depth="深")
@@ -709,7 +739,7 @@ def test_score_weights_typo_fails_closed_and_valid_override_applies(tmp_path: Pa
     权重是评分判据本身：静默退回默认值 ⇒ 报告照常产出、口径已悄悄变掉、
     没有任何地方会暴露这件事。
     """
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     with pytest.raises(ValueError) as ei:
         AgentC(st, config={"score_weights": {"hop": "high"}})
     assert "score_weights" in str(ei.value)
@@ -727,7 +757,7 @@ def test_service_ceiling_config_typo_fails_closed_and_missing_key_uses_default(t
     """
     from agentflow.agent_c import SERVICE_MAX_NODES
 
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     c_bad = AgentC(st, config={"service_max_nodes": "很多"})
     with pytest.raises(ValueError) as ei:
         c_bad.neighbors("0000")
@@ -748,7 +778,7 @@ def test_service_tool_names_resolve_the_documented_collision(tmp_path: Path) -> 
     """
     from agentflow.tools.graph_tools import register as register_graph_tools
 
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     reg = ToolRegistry(name="audit-collision")
     # `P-14`：这张表要调 `graph.*`，绑定只读角色 C（`graph.*` 的声明角色是 C/D）。
     reg.bound_role = "C"
@@ -769,16 +799,18 @@ def test_service_tool_names_resolve_the_documented_collision(tmp_path: Path) -> 
 
 
 def test_agent_c_writes_only_analysis_reports_and_never_the_knowledge_tables(tmp_path: Path) -> None:
-    """只读角色的写入面：跑四个分析器 + persist 之后，三张知识表逐字节不变。
+    """只读角色的写入面：跑四个分析器 + persist 之后，知识表逐字节不变。
 
     这是 C 的硬规则（DESIGN §2）：一旦 C 能写知识表，它就成了绕过 B 引文逐字回验的
     写入路径。顺带钉住另一个边界：`gaps()` 默认 `submit_requests=False` 时
     `search_requests` 也不许动（I3 的写入口只在编排层显式开启）。
     """
-    st = _drifted_store(tmp_path)
+    st = _concept_store(tmp_path)
     c = AgentC(st)
+    # 概念行并表之后住 `statements` ⇒ 这一格盯新家（盯老表名会当场 KeyError，
+    # 而"读不到表"绝不能被读成"没被改"）。
     before = {t: (st.data / S.TABLES[t]["file"]).read_bytes()
-              for t in ("literature", "concepts", "relations", "search_requests")}
+              for t in ("literature", "statements", "relations", "search_requests")}
 
     c.hottest(top_n=3).persist()
     c.cold(top_n=3).persist()
@@ -797,12 +829,12 @@ def test_agent_c_writes_only_analysis_reports_and_never_the_knowledge_tables(tmp
 
 
 def test_cli_never_writes_the_knowledge_tables_for_readonly_subcommands(tmp_path: Path, capsys) -> None:
-    """`status` / `tools` / `verify` 是只读子命令：跑完三张知识表必须逐字节不变。
+    """`status` / `tools` / `verify` 是只读子命令：跑完知识表必须逐字节不变。
 
     一个"顺手初始化/顺手修一下"的入口会让"看一眼"变成一次写入 —— 而它不会报错。
     """
-    st = _drifted_store(tmp_path)
-    before = {t: (st.data / S.TABLES[t]["file"]).read_bytes() for t in ("concepts", "relations")}
+    st = _concept_store(tmp_path)
+    before = {t: (st.data / S.TABLES[t]["file"]).read_bytes() for t in ("statements", "relations")}
 
     assert cli.main(["--root", str(st.root), "status"]) == 0
     assert cli.main(["--root", str(st.root), "verify"]) in (0, 1)

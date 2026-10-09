@@ -31,6 +31,7 @@ import threading
 
 import pytest
 
+from agentflow import conceptrows as CR
 from agentflow import dedup as D
 from agentflow import interactions as I
 from agentflow import schema as S
@@ -98,6 +99,11 @@ def _concept(store, cid, name, *, definition="", aliases=(), related=(), **extra
 
     conftest 的 `add_concept` 把 `normalized_name` 直接设成原始名字，因此造不出
     "同一个规范化名字的两个节点"（I5 要复现的正是这种历史脏数据）。
+
+    写入走并表过渡层的入口（`CR.upsert_legacy_shaped` + `CR.tables_for_concept_write`）：
+    它手里的还是老字段名的一行，而"落哪张表"由过渡层决定 —— 老表还在时先写老表
+    那一份再同步新标准（同一个号），并表落刀之后只写新标准。夹具因此前后一个字不用改，
+    而它也不再是"只写老表"的半个替身（见 `conftest.add_concept` 的同一处口径）。
     """
     row = S.Concept(
         concept_id=cid,
@@ -111,9 +117,10 @@ def _concept(store, cid, name, *, definition="", aliases=(), related=(), **extra
         **extra,
     )
     row.validate()
-    with store.tx("concepts", actor="test") as tx:
-        tx.upsert("concepts", row.to_dict())
-    return row.to_dict()
+    data = row.to_dict()
+    with store.tx(*CR.tables_for_concept_write(), actor="test") as tx:
+        CR.upsert_legacy_shaped(tx, data, actor="test")
+    return data
 
 
 def _reprocess(store, pid, relation_ids, *, reason="quote_unverifiable", status="pending",
@@ -499,7 +506,11 @@ def test_reprocess_quote_touches_only_the_target_relation_and_keeps_processed(st
     after_files = read_data_bytes(store)
     assert _lit(store, "0000")["processed"] is True
     assert after_files["literature.json"] == before_files["literature.json"]
-    assert after_files["concepts.json"] == before_files["concepts.json"]
+    # 概念行并表之后住 `statements`（`kind="concept"`）⇒ 逐字节比对必须打在新家那个文件上。
+    # 老写法比的是 `concepts.json`：并表之后它两边都是 `<absent>`（`read_data_bytes` 对
+    # 不存在的文件给同一个占位），于是"I4 没碰概念行"这条判据退化成恒真 —— 而它本来守的是
+    # "只动该动的"（这条判据的一半）。换到新家之后它照旧能失败（真碰了就逐字节不等）。
+    assert after_files["statements.json"] == before_files["statements.json"], "I4 不许碰概念行（并表后住 statements）"
 
     # ① 请求的终局结果 + "真正被改动的关系"
     req = _request(store, "p-0001")
@@ -716,17 +727,47 @@ def _i5_store(store) -> None:
 
 
 def _i5_candidate(store, ids) -> dict:
-    cands = I.structural_duplicate_pairs(store.rows("concepts"), store.rows("relations"))
+    # 候选由 C 的检测器提；它的输入是概念行 —— 读口走过渡层（老表 + 新标准同号合成，
+    # 老字段名投影），于是"概念住哪张表"这件事不在这条判据里。
+    cands = I.structural_duplicate_pairs(CR.view(store, shape="legacy")["rows"],
+                                         store.rows("relations"))
     cand = next((c for c in cands if c.get("concept_ids") == list(ids)), None)
     assert cand is not None, f"C 应当提出候选 {ids}，实际只提出 {[c.get('concept_ids') for c in cands]}"
     return cand
+
+
+def _tombs_and_relations(store) -> tuple[dict, dict]:
+    """合并之后的两份读物：新标准里的墓碑（`stmt_id -> 行`）与关系表（`relation_id -> 行`）。
+
+    为什么必须分两个形状读：并表之后墓碑只有一个表达 —— `status="superseded"`
+    + `quote_reason` 里写明并入了谁、为什么（老表的 `merged_into` / `merge_reason` /
+    `merged_at` 在新标准里都没有承载点，`view(shape="legacy")` 把 `merged_into`
+    一律投影成 `None`）。所以"墓碑立住了没有、理由是什么"只能在新标准那一侧断言；
+    而"哪几条边被改写/被标 rejected"读关系表本身（见下面两处调用点）。
+    """
+    tombs = {c["stmt_id"]: c for c in CR.view(store)["rows"] if c.get("status") == "superseded"}
+    rels = {r["relation_id"]: r for r in store.rows("relations")}
+    return tombs, rels
 
 
 # =========================================================================== I5
 
 
 def test_i5_synonymous_pair_is_merged_with_reason_and_rewritten_relations(store):
-    """I5 正向：同义对 → C 提出、B 合并；墓碑有理由，边被改写，重复关系走既有判重。"""
+    """I5 正向：同义对 → C 提出、B 合并；墓碑有理由，边被改写，重复关系走既有判重。
+
+    并表之后墓碑的读法改了一处（判据本身没放宽）：老表的 `merged_into` /
+    `merge_reason` / `merged_at` 在新标准里都没有承载点，`_to_legacy` 把
+    `merged_into` 一律投影成 `None`（拿它断言是恒真的）⇒ 改成读新标准那一行的
+    `status="superseded"` + `quote_reason`：后者必须写明并入了谁、以及那条可被人
+    反驳的理由（"结构等价" + "名字侧证据"两路）。
+
+    两处随老表退役、这里刻意不留断言（写下来是为了让下一个人知道它们去哪了，
+    而不是让它们悄悄消失）：
+    - `merge_reason`：内容保住了（就是上面断的 `quote_reason`），但字段名换了；
+    - `merged_at`：新标准没有这一列，事件日志里也没有时刻字段 ⇒ 这次合并发生的
+      时间在盘上已经没有任何机器可读的落点（本任务的报告里已单独点名）。
+    """
     _i5_store(store)
     cand = _i5_candidate(store, ["0000", "0001"])
     assert cand["proposal"] == "merge"
@@ -737,18 +778,30 @@ def test_i5_synonymous_pair_is_merged_with_reason_and_rewritten_relations(store)
     assert out["verdict"] == "merge" and out["applied"] is True
     assert out["survivor_id"] == "0000" and out["merged_id"] == "0001"
 
-    concepts = {c["concept_id"]: c for c in store.rows("concepts")}
-    tomb = concepts["0001"]
-    assert tomb["merged_into"] == "0000"
-    assert tomb["merge_reason"].strip(), "合并必须留下理由（可被人反驳的理由）"
-    assert "结构等价" in tomb["merge_reason"] and "名字侧证据" in tomb["merge_reason"]
-    assert tomb["merged_at"]
-    assert tomb["related_concepts"] == [], "被吸收的节点的边已经全部改写到 survivor 上"
+    # `out["merge_reason"]` 是这次合并的完整理由（返回值那一份，不是盘上的）——
+    # 它必须与墓碑上留下的理由同源，否则"可被人反驳"这句话只在返回值里成立。
+    assert "结构等价" in out["merge_reason"] and "名字侧证据" in out["merge_reason"]
 
-    survivor = concepts["0000"]
+    tombs, rels = _tombs_and_relations(store)
+    assert set(tombs) == {"0001"}, "被吸收的一方必须恰好在场一个墓碑"
+    tomb = tombs["0001"]
+    assert tomb["status"] == "superseded", "墓碑在新标准里的唯一表达是 status=superseded"
+    assert "已并入 0000" in tomb["quote_reason"], "墓碑必须写明并入了谁"
+    assert "结构等价" in tomb["quote_reason"] and "名字侧证据" in tomb["quote_reason"], (
+        "合并必须留下理由（可被人反驳的理由）：新标准里那一格是 quote_reason"
+    )
+
+    # "被吸收的节点的边已经全部改写到 survivor 上"：并表之后这件事的真相在 `relations` 表
+    # （老表那一格 `related_concepts` 不再有任何权威值）⇒ 从关系表现算，两侧都断：
+    # 墓碑的邻域必须为空，survivor 的邻域必须非空（否则"派生"这条判据可以靠恒空通过）。
+    assert D.derive_related_concepts("0001", list(rels.values()), include_suspect=True) == [], (
+        "被吸收的节点的边已经全部改写到 survivor 上"
+    )
+    assert D.derive_related_concepts("0000", list(rels.values()), include_suspect=True) != []
+
+    survivor = {c["concept_id"]: c for c in CR.view(store, shape="legacy")["rows"]}["0000"]
     assert "交换群" in survivor["aliases"], "被合并方的别名要并入 survivor"
 
-    rels = {r["relation_id"]: r for r in store.rows("relations")}
     assert all("0001" not in r["concept_ids"] for r in rels.values()), "不该再有边指向墓碑"
     for r in rels.values():
         assert r["concept_group_key"] == T.concept_group_key(r["concept_ids"]), (
@@ -782,7 +835,12 @@ def test_i5_rejects_structural_equivalence_without_name_evidence(store):
     assert "结构等价" in out["reason"] and "同义" in out["reason"]
     assert out["reason"].strip(), "否决同样必须给理由（可被人反驳）"
     assert read_data_bytes(store) == before, "否决分支不许落盘任何数据"
-    assert all(c.get("merged_into") is None for c in store.rows("concepts"))
+    # 原判据是 `all(c["merged_into"] is None ...)` —— 并表之后 `merged_into` 在老字段名
+    # 投影里恒为 `None`（新标准没有这一列）⇒ 那条断言恒真。墓碑的活判据是
+    # `status="superseded"`（与 `agent_b._selftest` 读同一个格），它能失败。
+    assert all(c.get("status") != "superseded" for c in CR.view(store, shape="legacy")["rows"]), (
+        "否决分支不许留下任何墓碑"
+    )
 
 
 def test_i5_rejects_when_the_pair_is_already_related(store):
@@ -849,14 +907,29 @@ def test_find_concept_does_not_match_merged_nodes(store):
 
 
 def test_i5_merged_name_resolves_to_the_survivor_end_to_end(store):
-    """合并后，被吸收的名字必须解析到 survivor（否则下一个同名概念又会新建一个节点）。"""
+    """合并后，被吸收的名字必须解析到 survivor（否则下一个同名概念又会新建一个节点）。
+
+    并表之后这件事的机制换了一处：老表靠"墓碑不参与匹配"（`find_concept` 读
+    `merged_into`），而新标准里墓碑是 `status="superseded"` —— 于是真正让被吸收的
+    名字解析到 survivor 的是"survivor 收下了被合并方的名字与别名"（外加 `relations`
+    的边全部改指 survivor）。所以这里除了正向（两个名字都解析到 0000），还补了两条
+    能失败的反向控制：① 墓碑确实在场且是 superseded（不是"那一行被删了"）；
+    ② 别的名字照旧解析到别人（不是"解析器把什么都答成 survivor"）。
+    """
     _i5_store(store)
     cand = _i5_candidate(store, ["0000", "0001"])
     _agent_b(store, StubExtractor()).resolve_structural_duplicate(cand)
 
-    rows = store.rows("concepts")
+    rows = CR.view(store, shape="legacy")["rows"]
     assert D.find_concept(rows, "abelian group")["concept_id"] == "0000"
     assert D.find_concept(rows, "交换群")["concept_id"] == "0000", "被合并方的别名也要落到 survivor"
+
+    # ① 墓碑在场（否则上面两条可能只是因为 0001 那一行被删掉了）
+    tombs = {c["stmt_id"] for c in CR.view(store)["rows"] if c.get("status") == "superseded"}
+    assert tombs == {"0001"}, "被吸收的一方必须仍在场（只是不可用），不是被删除"
+    assert "已并入 0000" in {c["stmt_id"]: c for c in CR.view(store)["rows"]}["0001"]["quote_reason"]
+    # ② 负控：别人的名字不许被答成 survivor
+    assert D.find_concept(rows, "subgroup")["concept_id"] == "0002"
 
 
 def test_i5_merge_decision_is_deterministic(store):
@@ -869,24 +942,55 @@ def test_i5_merge_decision_is_deterministic(store):
     assert first["survivor_id"] == second["survivor_id"] == "0000"
     assert first["merged_id"] == second["merged_id"] == "0001"
 
-    # 同长时退化为 ID 较小者：把两边的定义改成一样长再判一次
-    with store.tx("concepts", actor="test") as tx:
+    # 同长时退化为 ID 较小者：把两边的定义改成一样长再判一次。
+    # 读己之写走 `CR.view_tx`（老字段名投影），写走过渡层的通用入口 —— 并表之后
+    # `tx.rows("concepts")` 是受控错，而这一笔的语义是"改一条概念行"，不是"改老表"。
+    with store.tx(*CR.tables_for_concept_write(), actor="test") as tx:
+        live = {c["concept_id"]: c for c in CR.view_tx(tx, shape="legacy")["rows"]}
         for cid in ("0000", "0001"):
-            row = tx.find("concepts", concept_id=cid)
+            row = live[cid]
             row["definition"] = "同样长的定义文本"
-            tx.upsert("concepts", row, note="test:same_len")
+            CR.upsert_legacy_shaped(tx, row, note="test:same_len")
     third = b.decide_structural_duplicate(cand)
     assert third["survivor_id"] == "0000", "同长时必须退化为 concept_id 较小者"
 
 
 def test_i5_merge_evidence_survives_rebuild(store):
-    """合并决定（墓碑 + 理由 + 关系改写清单）必须能从事件日志重建 —— 可审计性的一部分。"""
+    """合并决定（墓碑 + 理由 + 关系改写清单）必须能从事件日志重建 —— 可审计性的一部分。
+
+    并表之后"改写清单"的落点变了（判据没放宽，只是换了读物）：老表那一份有一格
+    `_merge = {rejected_relation_ids: [...], ...}`，而新标准里没有同名的承载点
+    （`row_from_dict` 丢弃未知字段）⇒ 改成从 `relations` 表自己把这份清单读出来：
+    被 I5 改写过的行都带 `_merge_note`，其中塌缩成既有关系的那几条被标
+    `rejected` + `duplicate_of`。于是"哪几条关系被这次合并动过"照旧是机器可读的，
+    而重建之后必须读回同一份（否则可审计性只维持到下一次 rebuild）。
+    """
     _i5_store(store)
     cand = _i5_candidate(store, ["0000", "0001"])
     _agent_b(store, StubExtractor()).resolve_structural_duplicate(cand)
+
+    def evidence() -> dict:
+        tombs, rels = _tombs_and_relations(store)
+        return {
+            "tomb": sorted(tombs),
+            "reason": tombs.get("0001", {}).get("quote_reason", ""),
+            "rewritten": sorted(rid for rid, r in rels.items()
+                                if "I5 合并改写" in str(r.get("_merge_note") or "")),
+            "rejected": sorted(rid for rid, r in rels.items()
+                               if str(r.get("status")) == "rejected"
+                               and "I5 合并改写" in str(r.get("_merge_note") or "")),
+        }
+
+    before = evidence()
+    assert before["tomb"] == ["0001"]
+    assert before["reason"].strip()
+    assert before["rejected"] == ["0001"], "改写后塌缩成既有的那条必须被记下来"
+    assert before["rewritten"] == ["0001", "0003"], "改指 survivor 的边要能逐条读出来"
+
     store.rebuild(backup=False)
 
-    tomb = {c["concept_id"]: c for c in store.rows("concepts")}["0001"]
-    assert tomb["merged_into"] == "0000"
-    assert tomb["merge_reason"].strip()
-    assert tomb["_merge"]["rejected_relation_ids"] == ["0001"]
+    after = evidence()
+    assert after["tomb"] == ["0001"], "墓碑必须能从事件日志重建"
+    assert after["reason"] == before["reason"] and after["reason"].strip(), "理由必须重建得回来"
+    assert after["rejected"] == ["0001"], "关系改写的清单必须能从事件日志重建"
+    assert after["rewritten"] == before["rewritten"]

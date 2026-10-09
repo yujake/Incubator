@@ -21,6 +21,7 @@ import json
 
 import pytest
 
+from agentflow import conceptrows as CR
 from agentflow import schema as S
 from agentflow.agent_c import SUBMITTER, AgentC, check_conflict
 from agentflow.store import Store
@@ -403,12 +404,15 @@ def test_structural_duplicates_negative_control_isolated_concepts_are_not_candid
     add_concept(st, "0004", "孤儿甲", definition="d", sync=False)
     add_concept(st, "0005", "孤儿乙", definition="d", sync=False)
     # 给它们相同的规范化名字，把"名字证据"这条路也堵死 —— 连名字一样都不该合并孤立节点
-    with st.tx("concepts", actor="test") as tx:
+    # （概念行的读/写都走并表过渡层：`tx.rows("concepts")` 在新 schema 下是受控错，
+    # "改一条概念行"这件事由 `upsert_legacy_shaped` 一处落盘 —— 老表还在时两处同号。）
+    with st.tx(*CR.tables_for_concept_write(), actor="test") as tx:
+        live = {c["concept_id"]: c for c in CR.view_tx(tx, shape="legacy")["rows"]}
         for cid in ("0004", "0005"):
-            row = tx.find("concepts", concept_id=cid)
+            row = live[cid]
             row["name"] = "孤儿"
             row["normalized_name"] = "孤儿"
-            tx.upsert("concepts", row)
+            CR.upsert_legacy_shaped(tx, row, note="test:same_orphan_name")
     sync_counters(st)
     res = AgentC(st).structural_duplicates()
 
@@ -467,7 +471,10 @@ def test_the_four_service_methods_do_not_touch_a_single_byte(demo):
     check_conflict({"concept_ids": ["0000", "0001"], "statement": "群不是阿贝尔群"}, existing_relations=[])
     after = read_data_bytes(demo)
 
-    for name in ("concepts.json", "relations.json", "literature.json"):
+    # 概念行并表之后住 statements（kind="concept"）⇒ 只读性必须打在 statements.json 上。
+    # 老写法列的是 concepts.json：那个文件在新 schema 下不存在，`read_data_bytes`
+    # 对它前后都给同一个占位 ⇒ "概念表没被碰过"这条判据会退化成恒真。
+    for name in ("statements.json", "relations.json", "literature.json"):
         assert before[name] == after[name], f"{name} 被服务调用改动了（C 必须只读）"
     # 顺带：连事件日志都不该多一行（事件是写入的证据）
     assert before["events.jsonl"] == after["events.jsonl"]

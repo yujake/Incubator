@@ -19,6 +19,7 @@ import json
 
 import pytest
 
+from agentflow import conceptrows as CR
 from agentflow import schema as S
 from agentflow.agent_c import AgentC
 from agentflow.agent_d import AgentD, analyze_gaps, detect_contradictions, evidence_confidence, install_d_tools
@@ -112,7 +113,9 @@ def test_ingest_questions_carry_origin_and_real_ids(tmp_path):
     rows = st.rows("research_questions")
     assert len(rows) == len(created) == len(set(created))
     real_relations = {r["relation_id"] for r in st.rows("relations")}
-    real_concepts = {r["concept_id"] for r in st.rows("concepts")}
+    # 概念行读口走并表过渡层（老字段名投影）：概念住哪张表由那一处决定，
+    # 这条判据只关心"问题引用的概念代号真的存在"。
+    real_concepts = {r["concept_id"] for r in CR.view(st, shape="legacy")["rows"]}
     expected_chains = {
         "->".join(p["relation_chain"]) for p in report.payload["paths"] if p["level"] in ("high", "medium")
     }

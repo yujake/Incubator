@@ -385,17 +385,29 @@ def cmd_repair(args) -> int:
         return 2
 
     st = make_store(args.root)
-    with st.tx("concepts", "relations", "statements", actor="repair", note="related") as tx:
+    # 并表落刀之后这一格随老表退役：`related_concepts` 是老表专有的一列，
+    # 新标准里"哪些概念相关"由 `relations` 表本身回答（读侧用同一个
+    # `derive_related_concepts` 现算）⇒ 没有可重算的落点。这里受控退出 + 指路，
+    # 而不是让 `tx("concepts")` 抛一句"未知表"（读的人拿到那句话不知道下一步做什么）。
+    if not CR.legacy_present(st).get("present"):
+        print(
+            "[repair] `--related` 随并表退役（S1r）：`related_concepts` 是老表专有的一列，"
+            "新标准里那件事由 `relations` 表管，读侧现算，没有可重算的落点。"
+            "处置：要核对图与关系的偏离，用 `agentflow verify`（`related_drift` 那一档）；"
+            "要重放老库，用 `agentflow rebuild`（它会折叠并逐条落 `out/migrate-map.jsonl`）。",
+            file=sys.stderr,
+        )
+        return 2
+    with st.tx(*CR.tables_for_concept_write("relations"), actor="repair", note="related") as tx:
         rels = tx.rows("relations")
         changed = 0
-        for c in tx.rows("concepts"):
+        for c in CR.view_tx(tx, shape="legacy")["rows"]:
             want = D.derive_related_concepts(c["concept_id"], rels, include_suspect=True)
             if c.get("related_concepts") != want:
                 c["related_concepts"] = want
                 c["updated_at"] = S.now_iso()
-                tx.upsert("concepts", c, note="related_recomputed")
-                # 并表过渡期：老表那份改动同步到新标准（同号）—— 见 `conceptrows` 的 docstring
-                CR.sync_from_legacy(tx, c, actor="repair")
+                # 一处调用办两件事（老表那份 + 新标准那份，同号）—— 见 `conceptrows`
+                CR.upsert_legacy_shaped(tx, c, actor="repair", note="related_recomputed")
                 changed += 1
     print(f"[repair] related_concepts 重算了 {changed} 行")
     return 0

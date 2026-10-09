@@ -96,6 +96,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
+from .. import conceptrows as CR
 from .. import interactions as IX
 from .. import schema as S
 from ..store import Store, StoreError
@@ -445,7 +446,11 @@ def _fallback_trace_tools(store: Any) -> list[Any]:
         tags=("trace", "fallback"),
     )
     def trace_concept(concept_id: str):
-        row = next((c for c in _table("concepts") if c.get("concept_id") == concept_id), None)
+        # 概念行走过渡层（老字段名投影）：并表之后它们住 `statements` 的
+        # `kind="concept"` 那一档，`store.rows("concepts")` 已经是受控错。
+        # 走 `conceptrows` 之后落刀前后这一格的行为不变（这是"统一入口"的用处）。
+        concept_rows = CR.view(store, shape="legacy")["rows"]
+        row = next((c for c in concept_rows if c.get("concept_id") == concept_id), None)
         rels = [
             {
                 "relation_id": r.get("relation_id"),

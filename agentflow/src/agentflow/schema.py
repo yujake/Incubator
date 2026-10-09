@@ -15,7 +15,16 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable, Literal
 
-SCHEMA_VERSION = 1
+#: 磁盘格式契约的版本号（`F-7`：读期 fail-closed，版本不符一律拒读）。
+#:
+#: `2`（S1r 并表那一笔，业主 2026-10-09「concept表真并进statements」+「并干净」）：
+#: `concepts` 表从 `TABLES` / `LOCK_ORDER` / `ARRAY_FIELD_KINDS` 里**真删**，
+#: 概念行以 `kind="concept"` 住进 `statements`（号由同一个分配器重发）。
+#: 老盘（v1）不靠读期兼容 —— 读期照旧拒（`F-7` 人裁不变），唯一的兼容点是
+#: `store.rebuild`：它接受**上一版**的事件（`known_old`），把 `concepts` 那一段
+#: 折进 `statements` 再写快照（折叠内核在 `migrate_concepts`，改号逐条落
+#: `out/migrate-map.jsonl`）。
+SCHEMA_VERSION = 2
 
 # ---------------------------------------------------------------- 枚举 / 受控词表
 
@@ -2704,7 +2713,8 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     # 作者顺序是有意义的（第一作者 ≠ 末位作者），所以是 seq。
     "literature": {"source_request_ids": "set", "authors": "seq"},
     # 别名顺序影响展示与"主名"判断；`related_concepts` 是纯集合。
-    "concepts": {"related_concepts": "set", "aliases": "seq"},
+    # `concepts` 那一行随并表退役（S1r）：概念的别名落在
+    # `statements.aliases`（同表已声明 "seq"），`related_concepts` 由 `relations` 表管。
     "relations": {"concept_ids": "set", "supporting_lit_ids": "set"},
     "reprocess_requests": {"relation_ids": "set", "touched_relation_ids": "set"},
     "research_questions": {
@@ -2810,7 +2820,9 @@ def check_array_invariants(table: str, obj: Any) -> list[str]:
 TABLES: dict[str, dict] = {
     "search_requests": {"file": "search_requests.json", "row": SearchRequest, "id_field": "request_id", "id_kind": "request"},
     "literature": {"file": "literature.json", "row": Literature, "id_field": "lit_id", "id_kind": "lit"},
-    "concepts": {"file": "concepts.json", "row": Concept, "id_field": "concept_id", "id_kind": "concept"},
+    # `concepts` 在这里**真删**（S1r 并表那一笔，`SCHEMA_VERSION=2`）：概念行以
+    # `kind="concept"` 住进下面的 `statements`。删掉之后 `store.rows("concepts")`
+    # 走 `store._MOVED_TABLES` 那条受控错 + 指路，不是"未知表"这种读不出下一步的错。
     "relations": {"file": "relations.json", "row": Relation, "id_field": "relation_id", "id_kind": "relation"},
     "research_questions": {"file": "research_questions.json", "row": ResearchQuestion, "id_field": "question_id", "id_kind": "question"},
     # 猜想（`draft/29` §7.4 Shape C）：独立对象，不是问题的一个 kind —— 理由见类的 docstring。
@@ -2834,7 +2846,10 @@ TABLES: dict[str, dict] = {
 #: 都不占用 4 位编号空间 —— 它们是过程记录，而 4 位空间留给知识实体）。
 ID_COUNTERS = {
     "lit": "lit_id",
-    "concept": "concept_id",
+    # `concept` 那一档随并表退役（S1r）：表没了而类别还在的话，`verify` 的
+    # `verify._check_1` 的计数器那一段会反查不到表，每次审计都报一条 `counter_table_missing` ——
+    # 那是"已经不存在的表"，不是缺陷。`counters.json` 里那份残留值**无害**
+    # （`verify` 只遍历这张表，未知类别根本不看）。
     "relation": "relation_id",
     "question": "question_id",
     "conjecture": "conjecture_id",

@@ -60,7 +60,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "B", "resolve_structural_duplicate",
-        "执行合并判定（写 concepts 的 merged_into + relations 的 status）",
+        "执行合并判定（写 statements 的 status=superseded + relations 的 status；"
+        "S1r 并表前那一格是 concepts 的 merged_into）",
         _obj({"candidate": _OBJ}, ("candidate",)),
         "合并结果 dict", side_effect="write_local", handler_name="resolve_structural_duplicate",
     ),
@@ -80,10 +81,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `register_statement`（2026-10-02 加；**本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审**）
+    # ---- `register_statement`（2026-10-02 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
     #
-    # 为什么必须有它（`draft/37` §44.4 的真机读数）：主控只能 `conductor.summon` **动作**，
-    # 而"把论文里的定理登记成 `statements` 行"原先只有**工具**（`table.create`）——
+    # 为什么必须有它（`draft/37` §44.4 的真机读数）：主控只能 `conductor.summon` 动作，
+    # 而"把论文里的定理登记成 `statements` 行"原先只有工具（`table.create`）——
     # 于是即使文献登记好了，命题台账仍然建不起来（`agent_b/` 里 `statements` 一个字都没有），
     # G 就没有可引的依据、H 也没有可审的对象。B 的边界里本来就写着"命题台账三件套
     # 缺一不可"（完整假设的正文 / 逐字证明摘录 / 出处），这个动作就是那句话的执行面。
@@ -91,7 +92,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     # 两根轴逐条读出（不是照抄工具层）：
     #   - 效果轴 `write_local`：实现（`AgentB.register_statement`）在一个事务里写 `statements`
     #     一行，并在写库前核 `literature`（坏引用不许进库）⇒ 写集里必须有这两张表，
-    #     而 `statements` 原先**不在** `WRITE_SETS["B"]` 里（本轮一并补上 ——
+    #     而 `statements` 原先不在 `WRITE_SETS["B"]` 里（本轮一并补上 ——
     #     这个动作让那句声明第一次有了实现）。
     #   - 外部轴 `none`：纯本地写库，不发 HTTP、不起子进程；`quote_verified` 的逐字比对
     #     由调用方（或 H 的复核）负责，本动作只登记与预检。
@@ -118,10 +119,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         _obj(
             {
                 "statement_full": {**_S, "minLength": 1},
-                # `draft/37` §87：这几格的**条件性必需**此前完全没被广告，而实现在写库前逐条硬校验
+                # `draft/37` §87：这几格的条件性必需此前完全没被广告，而实现在写库前逐条硬校验
                 # —— T1 第 2 趟实测：`origin='own_result'` 先撞 `doc_id`/`line_range`（8 次），
                 # 改对之后再撞 `proof_text`（6 次），14 次召唤全废、`statements` 始终 0 行。
-                # 与 §85 的 certificate 同一条纪律：**要求必须写进模型看得见的形状**。
+                # 与 §85 的 certificate 同一条纪律：要求必须写进模型看得见的形状。
                 "source_lit_id": {**_S, "description":
                                   "origin='external_lit' 必需：论文那一行的 lit_id"
                                   "（必须是 literature 表里真实存在的行，写库前会核）"},
@@ -143,7 +144,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                "origin='external_lit' 必需：出处页码（start，或 label —— "
                                "如「全文未分页」；只给空的 start/end 等于没给）"},
                 "evidence_kind": {"type": "string", "enum": list(S.EVIDENCE_KINDS)},
-                # 三态那一栏：`true`/`false` 直接给；**"还没查"（None）靠不传这个参数**表达
+                # 三态那一栏：`true`/`false` 直接给；"还没查"（None）靠不传这个参数表达
                 # —— 工具层的极简 schema 子集不支持联合类型（`["boolean","null"]`
                 # 会在校验期抛 `unhashable type: 'list'`，实测撞过）。不传 = None = 还没查，
                 # 而那时 `quote_reason` 必填（动作里预检）。
@@ -228,7 +229,9 @@ SPEC = AgentSpec(
     summonable=True,
     edges=('C',),
     write_set=frozenset((
-                     'concepts',
+                     # S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役 ⇒ 从写集里摘掉。
+                     # 概念行现在住 `statements`（`kind="concept"`，已经在这一格里），
+                     # 留着老表名等于声明"B 可以写一张不存在的表"——权限面上的假声明。
                      'literature',
                      'relations',
                      'reprocess_requests',

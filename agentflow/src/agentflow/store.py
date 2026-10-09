@@ -47,6 +47,7 @@ from typing import Any, Iterator, Mapping
 
 from filelock import FileLock, Timeout
 
+from . import migrate_concepts as MC
 from . import schema as S
 
 #: `_atomic_write` 的 `os.replace` 重试次数与退避基数（`F-3`）。
@@ -66,7 +67,10 @@ _REPLACE_BACKOFF_S = 0.02
 LOCK_ORDER: tuple[str, ...] = (
     "search_requests",
     "literature",
-    "concepts",
+    # `concepts` 那一格随并表退役（S1r / `SCHEMA_VERSION=2`）：概念行住 `statements`，
+    # 于是它的锁就是 `statements` 的锁。留着一个"表已经不在 schema 里、锁还在"
+    # 的格会让"老表"以半退役的形态活着（`tx("concepts")` 过了未知表这一关、
+    # 拿了一把没人再争的锁，然后才在读行时报错）—— 那不是"并干净"。
     "relations",
     "analysis_reports",
     "research_questions",
@@ -91,6 +95,33 @@ LOCK_ORDER: tuple[str, ...] = (
 
 #: 4 位 ID 的上限。用满即 fail-closed（DESIGN.md §0.1 C4）。
 MAX_ID = 9999
+
+#: **已经并走的表**：名字 -> (新家, 怎么读它)。S1r 并表那一笔（`SCHEMA_VERSION=2`）
+#: 把 `concepts` 从 `schema.TABLES` 里真删了，于是 `_load("concepts")` 会走到
+#: "未知表"那一支。那一支与"这张表从来不存在"在结构上分不开，而两者的处置完全不同：
+#: 前者要去读新家（`statements` 里 `kind="concept"` 的那些行，统一入口
+#: `conceptrows.view(store, shape="legacy")`），后者要查是谁写错了表名。
+#: 所以并走的表在这里**显式留名**，报一条带指路的受控错（`StoreError`），
+#: 而不是让它落进笼统的"未知表"里。
+#: 这张表只影响**报错措辞与指路**，不影响任何读写路径 —— 老表的行由
+#: `rebuild` 折进新家（见 `_rebuild_locked` 的 `_fold_moved_tables`）。
+_MOVED_TABLES: dict[str, dict[str, str]] = {
+    "concepts": {
+        "into": "statements",
+        "id_field": "concept_id",
+        "file": "concepts.json",
+        #: 它在 `counters.json` 里的类别名（并表之后这一档要摘掉）。
+        "counter_kind": "concept",
+        #: 老表名在文本里被引用时（`concepts/0001` 这种），新家那一侧必须是
+        #: **这一档 kind** 的行才算数 —— 不筛的话，一个已被别的行占用的号
+        #: 会被读成"这条引用落地了"（那是假的落地）。
+        "kind": "concept",
+        "how": "读 `statements` 里 `kind=\"concept\"` 的行；统一入口是 "
+               "`conceptrows.view(store, shape=\"legacy\")`（老字段名）或 "
+               "`conceptrows.view(store)`（新标准形状）",
+        "why": "S1r 并表：`SCHEMA_VERSION=2` 起概念行住 `statements`（号由同一分配器重发）",
+    },
+}
 
 
 class StoreError(RuntimeError):
@@ -916,6 +947,17 @@ class Store:
             return doc
         spec = S.TABLES.get(table)
         if spec is None:
+            moved = _MOVED_TABLES.get(table)
+            if moved is not None:
+                # 受控错 + 指路：这张表**并走了**，不是"表名写错了"。
+                # 两件事都必须能分辨，否则读的人拿到一句"未知表：concepts"
+                # 之后不知道下一步该改代码还是该查笔误。
+                raise StoreError(
+                    f"表 {table!r} 已经并走（{moved['why']}）⇒ 它不在当前 schema 里。"
+                    f"新家是 {moved['into']!r}：{moved['how']}。"
+                    "处置：读侧改走那个统一入口；老工作区跑一次 `agentflow rebuild`，"
+                    "它会把 v1 事件里的老表折进新家（改号逐条落 `out/migrate-map.jsonl`）。"
+                )
             raise StoreError(f"未知表：{table}")
         p = self.data / spec["file"]
         if not p.exists():
@@ -1245,6 +1287,142 @@ class Store:
                           if isinstance(r, dict) and r.get(idf) is not None}
         return out
 
+    @property
+    def migration_ledger_path(self) -> Path:
+        """逐条改号账（append-only，一行一件事）：`out/migrate-map.jsonl`。
+
+        为什么放在 `out/` 而不是 `data/`：它是一份**报告**（"这次迁移把哪个号改成了
+        哪个号、为什么"），不是数据库的一部分 —— 放进 `data/` 会让"哪些文件是表"
+        这件事多出一个例外，而 `verify` / `rebuild` / 备份三处都要认得那个例外。
+        """
+        return self.root / "out" / "migrate-map.jsonl"
+
+    def _write_migration_ledger(self, lines: list[dict]) -> None:
+        """把改号账逐行 append 到 `out/migrate-map.jsonl`（`migrate_concepts.ledger_lines`）。"""
+        if not lines:
+            return
+        p = self.migration_ledger_path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8") as f:
+            for rec in lines:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    def _fold_moved_tables(self, *, state: dict, order: dict, counters: dict,
+                           moved_rows: Mapping[str, dict], moved_order: list[str]) -> dict:
+        """把并走的表折进新家（S1r 并表那一笔的执行点）。
+
+        口径（全部由 `migrate_concepts` 一处决定，这里只做"接上"）：
+
+        - **号由同一分配器重发**：从 `stmt` 计数器续着发、跳过既有命题号
+          （`counter_alloc(start, taken=既有 stmt_id)`）—— 业主 D2「同表同分配器
+          不可能撞号」；真盘实测有 22 条概念号与既有命题号撞上，不重发就会静默顶掉那些行；
+        - **关系改号**：`relations.concept_ids` 里的旧号换成新号，逐条落账；
+        - **计数器续着走**：折完之后 `stmt` 计数器必须 ≥ 新用到的号 + 1，否则
+          `verify` 的 `counter_behind` 会报"继续分配会撞号"；
+        - `counters` 里那份 `concept` 残留**删掉**（表已退役，留着就是一个没有表的
+          类别 —— 无害，但不是"并干净"）。
+
+        返回读数（全部进 `rebuild` 的返回值，读的人必须看得见这次折了什么）。
+        """
+        rows = [moved_rows[k] for k in dict.fromkeys(moved_order) if k in moved_rows]
+        taken = {str(k) for k in state["statements"]}
+        start = int(counters.get("stmt", 0) or 0)
+        for key in taken:
+            if str(key).isdigit():
+                start = max(start, int(key) + 1)
+        plan = MC.plan_migration(rows, list(state["relations"].values()),
+                                 existing_stmt_ids=taken,
+                                 alloc=MC.counter_alloc(start, taken=taken))
+        for row in plan["statements"]:
+            sid = str(row.get("stmt_id") or "")
+            if not sid:
+                continue
+            if sid not in state["statements"]:
+                order["statements"].append(sid)
+            state["statements"][sid] = row
+        rel_idf = S.TABLES["relations"]["id_field"]
+        for rel in plan["relations"]:
+            rid = str(rel.get(rel_idf) or "")
+            cur = state["relations"].get(rid)
+            if cur is None:
+                continue
+            # 改号要**连带**把派生字段搬过来（`concept_group_key` / `dedup_key`）：
+            # 只搬 `concept_ids` 的话，`verify` 的 `stale_group_key`（错误级，
+            # 判的是 `concept_group_key == textutil.concept_group_key(concept_ids)`）
+            # 会当场报出来 —— 迁移出来的库自己带着一条"判重会失效"。
+            # 这两个键由 `migrate_concepts.remap_concept_ids` 按唯一实现重算。
+            for key in ("concept_ids", "concept_group_key", "dedup_key"):
+                if key in rel and rel.get(key) != cur.get(key):
+                    cur[key] = rel.get(key)
+        newest = int(counters.get("stmt", 0) or 0)
+        for row in plan["statements"]:
+            sid = str(row.get("stmt_id") or "")
+            if sid.isdigit():
+                newest = max(newest, int(sid) + 1)
+        counters["stmt"] = newest
+        counters.pop("concept", None)
+        lines = MC.ledger_lines(plan)
+        return {"concepts": len(plan["statements"]),
+                "relations_renumbered": len(plan["changed"]),
+                "pending_search": int(plan["counts"].get("pending_search", 0) or 0),
+                "ledger_lines": len(lines), "ledger_lines_data": lines,
+                "notes": list(plan["notes"])}
+
+    def _moved_snapshot_ids(self, table: str) -> set[str]:
+        """并走的那张表在老**快照**（`data/concepts.json`）里的主键集合。
+
+        为什么必须在删老文件之前读它：`rebuild` 的唯一输入是事件日志（`F-9` 的边界），
+        于是"快照里有、日志里从来没有过"的行**不会**被折进去。对普通表，这件事由
+        `snapshot_ahead` 如实报出、数据留在原文件里；而对**并走的表**，老文件紧接着
+        会被删掉 —— 如果不先把这份差集算出来，那些行就是"报都没报就没了"。
+        读不出来（文件不在、坏了、版本不符）⇒ 返回空集，但要与"读到了、里面是空的"
+        分得开：调用方据 `file` 那一路读数判断（见 `_remove_stale_moved_files`）。
+        """
+        meta = _MOVED_TABLES.get(table) or {}
+        path = self.data / str(meta.get("file") or f"{table}.json")
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return set()
+        rows = doc.get("rows")
+        if not isinstance(rows, list):
+            return set()
+        field = str(meta.get("id_field") or "")
+        return {str(r.get(field)) for r in rows
+                if isinstance(r, Mapping) and r.get(field) is not None}
+
+    def _remove_stale_moved_files(self, *, allow: bool,
+                                  snapshot_ahead: Iterable[str] = ()) -> dict[str, list[str]]:
+        """删掉并走的表留下的老文件（`data/concepts.json`），返回 `{removed, kept}`。
+
+        `allow=False`（`rebuild(backup=False)`）时**不删** —— 那一支没有备份，
+        删掉就是不可逆的数据销毁；此时如实报 `kept`（"老文件还在，它装着迁移前
+        的旧值"），而不是假装干净。
+
+        `snapshot_ahead` 非空时同样**不删**：那些行只存在于老快照里、事件日志里
+        从来没有过（`F-9` 的已知边界）⇒ 删掉它们等于把"日志漏掉的那一段"的唯一
+        副本销毁。宁可留一个"看起来还是数据库"的文件（它会被
+        `conceptrows.legacy_present` 点名成 `stale_file`），也不做不可逆的事。
+        """
+        out: dict[str, list[str]] = {"removed": [], "kept": []}
+        ahead = {str(x) for x in snapshot_ahead}
+        for name, meta in _MOVED_TABLES.items():
+            p = self.data / str(meta.get("file") or f"{name}.json")
+            try:
+                if not p.is_file():
+                    continue
+            except OSError:
+                continue
+            if not allow or ahead:
+                out["kept"].append(p.name)
+                continue
+            try:
+                p.unlink()
+                out["removed"].append(p.name)
+            except OSError:
+                out["kept"].append(p.name)
+        return out
+
     def _rebuild_locked(self, *, backup: bool = True) -> dict:
         # `R3-3`（重审实测）：快照必须与日志比对，不能只看 `op=commit` 标记。
         #
@@ -1263,6 +1441,12 @@ class Store:
                 src = self.data / spec["file"]
                 if src.exists():
                     shutil.copy2(src, bdir / spec["file"])
+            # 并走的表的**老文件**也必须进备份：下一步（折完之后）它会被删掉，
+            # 而"删一个不在 TABLES 里的文件"如果没进备份就是不可逆的数据销毁。
+            for meta in _MOVED_TABLES.values():
+                src = self.data / str(meta.get("file") or "")
+                if src.name and src.exists():
+                    shutil.copy2(src, bdir / src.name)
             if (self.data / "counters.json").exists():
                 shutil.copy2(self.data / "counters.json", bdir / "counters.json")
 
@@ -1279,13 +1463,28 @@ class Store:
                                if "schema_version" in e
                                and e.get("schema_version") != S.SCHEMA_VERSION
                                and e.get("op") != "corrupt"})
+        # S1r 并表那一笔（`SCHEMA_VERSION=2`）：**上一版**的事件不再算"版本不符"。
+        # 口径与理由：v1 与 v2 的差别只有一处（`concepts` 折进 `statements`），
+        # 而折叠规则是确定性的纯函数（`migrate_concepts`）⇒ 拿 v1 事件重放再折一次
+        # 得到的快照与"当年就用 v2 写"应当一致。把它也拒掉的话，63 个真实工作区
+        # 的灾难恢复手段（`rebuild` 是唯一的那个）会在一夜之间对历史库完全不可用 ——
+        # 那是比"迁移"更坏的形态。**读期仍然 fail-closed**（`F-7` 人裁不变）：
+        # 兼容只存在于这一条路径上，且它必须把"折了多少"报出来（`migrated_v1_events`）。
+        known_old = (S.SCHEMA_VERSION - 1,)
+        bad_versions = [v for v in bad_versions
+                        if v not in {repr(x) for x in known_old}]
         if bad_versions:
             raise StoreError(
                 "events.jsonl 的 schema_version 与当前不符（盘上出现 "
-                f"{bad_versions}，期望 {S.SCHEMA_VERSION!r}）⇒ **拒绝重建**（`F-7`）："
+                f"{bad_versions}，期望 {S.SCHEMA_VERSION!r}；"
+                f"已知旧版 {list(known_old)!r} 会被折叠，不算不符）⇒ **拒绝重建**（`F-7`）："
                 "拿旧语义的事件重放会静默改写快照。处置：确认以哪一版为准 ⇒ "
                 "必要时先做一次显式迁移，再 rebuild。"
             )
+        # S1r：这一批事件里有多少条是**上一版**写的（它们要被折叠，必须报出来）。
+        migrated_v1_events = sum(1 for e in events
+                                 if e.get("op") != "corrupt"
+                                 and e.get("schema_version") in known_old)
         legacy_no_version = sum(1 for e in events
                                 if "schema_version" not in e and e.get("op") != "corrupt")
         # `I-5`（登记在 `draft/28`）：坏行**必须被计数**，不能只是"没抛异常"。
@@ -1332,6 +1531,14 @@ class Store:
         #: 认不出的 `op`（既不重放、也不在已知的非重放集合里）。它**必须出现在返回值里**：
         #: 静默忽略一个不认识的 op = "日志里有我读不懂的东西"这件事没有任何人看得见。
         unknown_ops: set[str] = set()
+        #: S1r：并走的表（`_MOVED_TABLES`）在 v1 事件里的原始行。它们**不在** `state` 里
+        #: （`state` 只按当前 `TABLES` 建），所以单独收一份：这一批事件重放完之后
+        #: 由 `_fold_moved_tables` 折进新家。不单独收的话，那些行会落进
+        #: `unrecognized_table` 的 `skipped` —— 于是"旧库里的概念"以"跳过了 N 行"
+        #: 的形式被静默丢掉，而返回值看起来完全正常。
+        moved_rows: dict[str, dict[str, dict[str, Any]]] = {t: {} for t in _MOVED_TABLES}
+        moved_order: dict[str, list[str]] = {t: [] for t in _MOVED_TABLES}
+        moved_deleted: dict[str, int] = {t: 0 for t in _MOVED_TABLES}
 
         # `R3-3`：这次重放真的写下了哪些主键（逐表）。用它去减快照里已有的键，
         # 差集就是"快照里有、日志里没有"的行 —— 那是这次重建会静默丢掉的数据。
@@ -1376,6 +1583,16 @@ class Store:
                 dtable = e.get("table")
                 if dtable == "counters":
                     continue  # counters 没有"删一行"这回事（它的值由 alloc 事件折叠）
+                if dtable in _MOVED_TABLES:
+                    # 并走的表：删那一行也要算数（否则"删了又被折回来"）
+                    mrow = e.get("row") or {}
+                    mkey = e.get("key")
+                    if mkey is None:
+                        mkey = mrow.get(_MOVED_TABLES[dtable]["id_field"])
+                    if mkey is not None:
+                        moved_rows[dtable].pop(str(mkey), None)
+                        moved_deleted[dtable] += 1
+                    continue
                 if dtable not in S.TABLES:
                     _skip("unrecognized_table", table=str(dtable), event_index=event_index)
                     continue
@@ -1403,6 +1620,21 @@ class Store:
                 alloc = row.get("allocated")
                 if kind and alloc is not None:
                     counters[kind] = max(counters.get(kind, 0), int(alloc) + 1)
+                applied += 1
+                continue
+            if table in _MOVED_TABLES:
+                # 并走的表在 v1 事件里的 upsert：收进 `moved_rows`，**不**在这里校验
+                # （老行的 schema 与当前不再是同一套 —— 它要按 `migrate_concepts`
+                # 的折叠口径变形成新行，拿新 schema 去校验它是本末倒置：
+                # 一条老概念行里没有 `kind`/`stmt_id`，校验必然失败，
+                # 于是"旧库里的概念"会被读成"坏行"）。
+                mkey = str(row.get(_MOVED_TABLES[table]["id_field"]) or "")
+                if not mkey:
+                    _skip("missing_key", table=str(table), row=row, event_index=event_index)
+                    continue
+                if mkey not in moved_rows[table]:
+                    moved_order[table].append(mkey)
+                moved_rows[table][mkey] = dict(row)
                 applied += 1
                 continue
             if table not in S.TABLES:
@@ -1443,6 +1675,57 @@ class Store:
             state[table][key] = merged
             applied += 1
 
+        # ---- S1r：把并走的表折进新家（`_MOVED_TABLES`）
+        #
+        # 这一步就是"并干净"的执行点：v1 事件里的概念行在 `moved_rows` 里等着，
+        # 这里按 `migrate_concepts` 那一套确定的折叠口径把它们变成 `statements` 的行，
+        # **号由同一分配器重发**（从 `stmt` 计数器续着发、撞既有命题号往后跳），
+        # 关系表里挂着的旧概念号同步改写，逐条改号账落到 `out/migrate-map.jsonl`。
+        #
+        # 为什么折叠内核在 `migrate_concepts` 而不是这里：`rebuild` 是 FC-27 禁改区
+        # 的写入路径，而折叠规则本身是纯数据变换 —— 把它单独放一处，判据可以直接喂
+        # 夹具（不需要真工作区、不需要跑一次迁移），这里只留"读事件 → 折 → 写快照"。
+        # 真盘预演（`temp/_s1r_plan_readings.py`）与这里共用同一套内核 ⇒
+        # "预演说会改成什么"与"真跑改成了什么"不可能分家。
+        folded: dict[str, Any] = {"concepts": 0, "relations_renumbered": 0,
+                                  "pending_search": 0, "ledger_lines": 0,
+                                  "notes": []}
+        moved_table = "concepts" if moved_rows.get("concepts") else ""
+        if moved_table:
+            folded = self._fold_moved_tables(state=state, order=order, counters=counters,
+                                             moved_rows=moved_rows[moved_table],
+                                             moved_order=moved_order[moved_table])
+            self._write_migration_ledger(folded.get("ledger_lines_data") or [])
+        #: 老**快照**里、而事件日志里从来没有过的概念号（`F-9` 的边界落在并走的表上）。
+        #: 这一份必须在删老文件之前算出来 —— 见 `_moved_snapshot_ids` 的 docstring。
+        moved_snapshot_ahead: dict[str, list[str]] = {}
+        for _old in _MOVED_TABLES:
+            snap = self._moved_snapshot_ids(_old)
+            if not snap:
+                continue
+            ahead = sorted(snap - set(moved_rows.get(_old, {})))
+            if ahead:
+                moved_snapshot_ahead[_old] = ahead
+        #: 老文件（`data/concepts.json`）在并走之后必须**消失**：留着一个"看起来还是
+        #: 数据库"的老文件，下一次有人直接读它就会拿到迁移前的旧值，而这件事没有任何
+        #: 自动判据看得见（`conceptrows.legacy_present` 只在读的时候点名 `stale_file`）。
+        #: 备份已经在上面那一支里做过了（`_MOVED_TABLES` 的文件也进备份目录）；
+        #: `backup=False` 那一支没有备份 ⇒ **不删**，如实报 `kept`；
+        #: 事件日志里没有的那些行（`moved_snapshot_ahead`）⇒ 同样**不删**（不可逆）。
+        stale = self._remove_stale_moved_files(
+            allow=bool(backup),
+            snapshot_ahead=[x for v in moved_snapshot_ahead.values() for x in v])
+        folded["stale_files_removed"] = list(stale["removed"])
+        folded["stale_files_kept"] = list(stale["kept"])
+        # 并走的那些**类别**也从计数器里摘掉（`_fold_moved_tables` 里摘过一次，这里再兜一次：
+        # 事件流里一条概念 upsert 都没有、而 `counters.json` 里还留着 `concept: N` 的库
+        # 也应当并干净）。表没了而类别还在不会让 `verify` 报错（它只遍历 `ID_COUNTERS`），
+        # 但那是一份"指向不存在的表"的残留 —— 留着它，下一次有人按 counters 反推表结构
+        # 就会推出一张不存在的表。
+        for _old in _MOVED_TABLES:
+            counters.pop(str(_old), None)
+            counters.pop(str(_MOVED_TABLES[_old].get("counter_kind") or ""), None)
+
         for table in S.TABLES:
             # `R-57`：`order` 里可能留着被删掉的键（删除只从 `state` 里摘）⇒
             # 这里过滤一次，而不是在删除时对列表做手术（保持"首次插入顺序"稳定，
@@ -1476,6 +1759,29 @@ class Store:
             # `F-7`：这一批事件里有多少条**没有版本号**（加版本号之前写下的）。
             # 它们照常重放，但读报告的人必须知道"这次重放里有 N 条是老格式"。
             "legacy_events_without_version": legacy_no_version,
+            # S1r：这一批事件里有多少条是**上一版**（`SCHEMA_VERSION-1`）写的。
+            # 它们被折叠而不是被拒 —— "折叠了多少"必须看得见，否则"重建成功"
+            # 与"重建成功但折了一堆行"在返回值里同形。
+            "migrated_v1_events": migrated_v1_events,
+            # S1r：这次折叠的读数（并走的表 → 新家）。
+            # `migrated_concepts` 是折出来的新行数；`migrated_relations_renumbered`
+            # 是改号的关系条数；`migrated_pending_search` 是定义待补的条数；
+            # `migration_ledger_lines` 是逐条改号账的行数（写在 `out/migrate-map.jsonl`）；
+            # `migrated_notes` 是"合并痕迹 / 空定义 / 丢弃 normalized_name"这些点名。
+            "migrated_concepts": int(folded.get("concepts", 0) or 0),
+            "migrated_relations_renumbered": int(folded.get("relations_renumbered", 0) or 0),
+            "migrated_pending_search": int(folded.get("pending_search", 0) or 0),
+            "migration_ledger_lines": int(folded.get("ledger_lines", 0) or 0),
+            "migrated_notes": list(folded.get("notes") or []),
+            # 并走之后老文件的下场：`removed` 是删掉的（`backup=True`），
+            # `kept` 是**没删的**（`backup=False` 没有备份 ⇒ 不销毁数据）。
+            # 两个都要报：只报 removed 的话，"老文件还在"这件事看不见。
+            "moved_stale_files_removed": list(folded.get("stale_files_removed") or []),
+            "moved_stale_files_kept": list(folded.get("stale_files_kept") or []),
+            # S1r：老**快照**里、而事件日志里从来没有过的概念号（逐表列出）。
+            # 非空 ⇒ 老文件**不删**（`moved_stale_files_kept` 里会看到它）：
+            # 那些行只存在于那份快照里，删掉就是不可逆的数据销毁。
+            "moved_snapshot_ahead": {t: v for t, v in sorted(moved_snapshot_ahead.items())},
             # `I-5`：`events.jsonl` 里有几行**坏了**（半行 JSON / 不是 JSON）。
             # 旧版把这件事吞在 `read_events` 的 `corrupt` 占位里，
             # 返回值里看不见 ⇒ "没抛异常"被误读成"日志是好的"。

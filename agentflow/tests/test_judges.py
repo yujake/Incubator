@@ -120,10 +120,13 @@ def test_mechanical_half_catches_what_the_model_cannot(tmp_path: pathlib.Path):
     """正控（两半互补）：引用了不存在的 id 这件事，机械半当场判、不需要模型。"""
     st = Store(tmp_path / "ws")
     st.init()
-    with st.tx("concepts", actor="probe") as tx:
-        tx.upsert("concepts", {"concept_id": "0001", "name": "群", "definition": "d",
-                               "created_at": "2026-01-01T00:00:00+00:00",
-                               "updated_at": "2026-01-01T00:00:00+00:00"})
+    with st.tx("statements", actor="probe") as tx:
+        # 概念行并表之后住 `statements`（`kind="concept"`）—— `concepts/0001` 这个
+        # 文本引用照旧要能落地（`faculty_checks` 把老表名映射到新家 + 这一档 kind）。
+        tx.upsert("statements", {"stmt_id": "0001", "origin": "own_result", "kind": "concept",
+                                 "label": "群", "statement_full": "d",
+                                 "quote_reason": "夹具：尚未逐字校验",
+                                 "created_at": "2026-01-01T00:00:00+00:00"})
     ok = FC.overview_findings(st, "见 concepts/0001", claimed_pairs=[])
     assert ok["problem_count"] == 0, ok
     bad = FC.overview_findings(st, "见 concepts/0001 与 concepts/0002", claimed_pairs=[])
@@ -214,7 +217,8 @@ def test_progress_check_separates_advanced_blocked_and_checked_only(tmp_path: pa
     assert only["verdict"] == "checked_only", only
     assert only["findings"] and only["problem_count"] == 1, only
     # 负控：写了行却一个字结论都不给，也要被记一条
-    silent = FC.progress_findings(base, {**base, "concepts": 2}, final="")
+    # （并表之后概念行住 `statements` ⇒ 推进判据看的那一格是 `statements`）
+    silent = FC.progress_findings(base, {**base, "statements": 2}, final="")
     assert silent["verdict"] == "advanced" and silent["findings"], silent
 
 
@@ -233,11 +237,14 @@ def test_trace_check_separates_traced_untraced_and_dangling(tmp_path: pathlib.Pa
     材料存在但文内一份都没点名=untraced。"""
     st = Store(tmp_path / "ws")
     st.init()
-    with st.tx("concepts", "relations", actor="probe") as tx:
+    with st.tx("statements", "relations", actor="probe") as tx:
         for cid, name in (("0001", "群"), ("0002", "阿贝尔群")):
-            tx.upsert("concepts", {"concept_id": cid, "name": name, "definition": "d",
-                                   "created_at": "2026-01-01T00:00:00+00:00",
-                                   "updated_at": "2026-01-01T00:00:00+00:00"})
+            # 概念行并表之后住 `statements`（`kind="concept"`）：`_home_rows` 认老表名
+            # `concepts` 时正是按这一档 kind 过滤新家的行。
+            tx.upsert("statements", {"stmt_id": cid, "origin": "own_result", "kind": "concept",
+                                     "label": name, "statement_full": "d",
+                                     "quote_reason": "夹具：尚未逐字校验",
+                                     "created_at": "2026-01-01T00:00:00+00:00"})
         # 关系行的 concept_ids 必须升序去重（schema 的硬约束），所以两条概念不能写成同一个
         tx.upsert("relations", {"relation_id": "0001", "concept_ids": ["0001", "0002"],
                                 "description": "阿贝尔群是群", "lit_id": "0001", "quote": "q",

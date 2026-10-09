@@ -699,7 +699,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
             tx.upsert("relations", r)
         for r in literatures:
             tx.upsert("literature", r)
-    print(f"    落库：概念 {len(st.rows('concepts'))} 关系 {len(st.rows('relations'))} 文献 {len(st.rows('literature'))}")
+    print(f"    落库：概念 {len(CR.view(st, shape='legacy')['rows'])} 关系 {len(st.rows('relations'))} 文献 {len(st.rows('literature'))}")
 
     reg = ToolRegistry(name="trace")
     # 绑定角色（`P-14`）：`trace.*` 的声明角色是 C/D，而这张表代表的是只读的 C。

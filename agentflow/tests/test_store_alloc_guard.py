@@ -23,6 +23,12 @@
 路径在"只声明 counters"的调用形态下原样存在。实测见
 `temp/auditF-probe1.txt` 的 [D1]，回归判据见本文件的
 `test_alloc_id_without_the_target_table_declared_raises`。
+
+## S1r 并表（`SCHEMA_VERSION=2`）之后的改动
+
+本文件守的是分配器判据（跳过占用号 / 自愈 / 跳号事件 / 未声明表 fail-closed /
+空间用尽），行只是标本。并表把 `concepts` 表真删 ⇒ 标本换成 `statements`
+的一行（`kind="stmt"` / 主键 `stmt_id`），断言逐条不变。
 """
 
 from __future__ import annotations
@@ -33,63 +39,69 @@ from agentflow import schema as S
 from agentflow.store import IdExhausted, Store, StoreError
 
 
-def _mk(cid: str, name: str = "X") -> dict:
-    return S.Concept(concept_id=cid, name=name, definition="").to_dict()
+def _mk(sid: str, label: str = "X") -> dict:
+    """一条合法的 `statements` 行（形状与 `schema.Statement.validate` 对齐）。"""
+    return {"stmt_id": sid, "origin": "own_result", "kind": "theorem", "label": label,
+            "statement_full": f"{label} 的命题正文（夹具）", "quote_verified": None,
+            "quote_reason": "自产结果（测试夹具）"}
 
 
 def test_alloc_id_skips_occupied_ids_and_self_heals_counters(store):
     """正向回归：计数器为 0 而表里已有 0000–0002 ⇒ 必须发 0003，不能发 0000。"""
     store.init()
-    with store.tx("concepts", "counters", actor="t") as tx:
+    with store.tx("statements", "counters", actor="t") as tx:
         for i in range(3):
-            tx.upsert("concepts", _mk(f"000{i}"))
-    assert (store.read("counters") or {}).get("counters", {}).get("concept", 0) == 0
+            tx.upsert("statements", _mk(f"000{i}"))
+    assert (store.read("counters") or {}).get("counters", {}).get("stmt", 0) == 0
 
-    with store.tx("concepts", "counters", actor="t") as tx:
-        nid = tx.alloc_id("concept")
-        tx.upsert("concepts", _mk(nid, "D"))
+    with store.tx("statements", "counters", actor="t") as tx:
+        nid = tx.alloc_id("stmt")
+        tx.upsert("statements", _mk(nid, "D"))
 
     assert nid == "0003", f"必须跳过已占用的 0000，实际发出 {nid}"
-    assert sorted(r["concept_id"] for r in store.rows("concepts")) == ["0000", "0001", "0002", "0003"]
+    assert sorted(r["stmt_id"] for r in store.rows("statements")) == ["0000", "0001", "0002", "0003"]
     # 缓存自愈：下一次 verify 不该再报 counter_behind
-    assert (store.read("counters") or {}).get("counters", {}).get("concept") == 4
+    assert (store.read("counters") or {}).get("counters", {}).get("stmt") == 4
 
 
 def test_alloc_id_does_not_overwrite_existing_row(store):
     """负控：被占用号那一行的内容必须一字不变（真的没被覆盖）。"""
     store.init()
-    with store.tx("concepts", "counters", actor="t") as tx:
-        tx.upsert("concepts", _mk("0000", "原始概念"))
-    with store.tx("concepts", "counters", actor="t") as tx:
-        nid = tx.alloc_id("concept")
-        tx.upsert("concepts", _mk(nid, "新概念"))
-    rows = {r["concept_id"]: r for r in store.rows("concepts")}
-    assert rows["0000"]["name"] == "原始概念", "已占用的 0000 被静默覆盖了"
-    assert rows[nid]["name"] == "新概念"
+    with store.tx("statements", "counters", actor="t") as tx:
+        tx.upsert("statements", _mk("0000", "原始命题"))
+    with store.tx("statements", "counters", actor="t") as tx:
+        nid = tx.alloc_id("stmt")
+        tx.upsert("statements", _mk(nid, "新命题"))
+    rows = {r["stmt_id"]: r for r in store.rows("statements")}
+    assert rows["0000"]["label"] == "原始命题", "已占用的 0000 被静默覆盖了"
+    assert rows[nid]["label"] == "新命题"
     assert nid != "0000"
 
 
 def test_alloc_id_records_a_visible_event_when_it_jumps(store):
     """跳过号是"计数器已漂移"的直接证据 ⇒ 必须写进 `events.jsonl`，不许静默。"""
     store.init()
-    with store.tx("concepts", "counters", actor="t") as tx:
-        tx.upsert("concepts", _mk("0000"))
-    with store.tx("concepts", "counters", actor="t") as tx:
-        tx.alloc_id("concept")
+    with store.tx("statements", "counters", actor="t") as tx:
+        tx.upsert("statements", _mk("0000"))
+    with store.tx("statements", "counters", actor="t") as tx:
+        tx.alloc_id("stmt")
     evs = [e for e in store.read_events() if e.get("op") == "info"
            and e.get("message") == "alloc_id_skipped_occupied"]
     assert len(evs) == 1, "跳号事件必须被记录（否则漂移只会以'数据莫名消失'的形式暴露）"
-    assert evs[0]["kind"] == "concept" and evs[0]["jumped"] == 1
+    assert evs[0]["kind"] == "stmt" and evs[0]["jumped"] == 1
 
 
 def test_alloc_id_without_the_target_table_declared_raises(store):
-    """`F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回 `"0000"`）。
+    """`F-2` 的负控：没声明目标表就发号 ⇒ 必须抛（改前这里返回一个已被占用的号）。
 
     旧版把占用检查写成 `if table is not None and table in self.tables:`，
     于是"没声明表"这一支整段跳过检查、照样发号。实测（`temp/auditF-probe1.txt`
     的 [D1]）：把 `counters.lit` 拨回 0 后，只声明 `counters` 的事务给出 `0000`
     （已被占用），随后写回 `literature` ⇒ `['first','second']` 变成
     `['OVERWRITER','second']`，行数不变、旧行静默消失。
+
+    并表之后标本是 `stmt` / `statements`（`concept` 那一档随表退役）：
+    这里只声明 `counters`，占用检查要查的 `statements` 不在声明里 ⇒ 必须抛。
 
     所以"不能崩"这个旧口径是错的：它保住的是调用方的方便，代价是静默覆盖。
     正确的口径是"要发这个号，就必须把那张表声明进来、让我能查占用"。
@@ -100,9 +112,9 @@ def test_alloc_id_without_the_target_table_declared_raises(store):
     store.init()
     with pytest.raises(StoreError) as ei:
         with store.tx("counters", actor="t") as tx:
-            tx.alloc_id("concept")
+            tx.alloc_id("stmt")
     msg = str(ei.value)
-    assert "concepts" in msg and "声明" in msg, msg
+    assert "statements" in msg and "声明" in msg, msg
 
     # 整笔不落盘：被拒的事务不该留下 counters 的推进
     assert (store.read("counters") or {}).get("counters", {}) == {}
@@ -114,13 +126,13 @@ def test_alloc_id_with_the_target_table_declared_still_works(store):
     没有这一条，"一律抛"也能让上一条通过 —— 那就把判据做成了"谁也别想发号"。
     """
     store.init()
-    with store.tx("concepts", "counters", actor="t") as tx:
-        tx.upsert("concepts", _mk("0000", "已被占用"))
-    with store.tx("concepts", "counters", actor="t") as tx:
-        nid = tx.alloc_id("concept")
-        tx.upsert("concepts", _mk(nid, "新的"))
+    with store.tx("statements", "counters", actor="t") as tx:
+        tx.upsert("statements", _mk("0000", "已被占用"))
+    with store.tx("statements", "counters", actor="t") as tx:
+        nid = tx.alloc_id("stmt")
+        tx.upsert("statements", _mk(nid, "新的"))
     assert nid == "0001", nid
-    rows = {r["concept_id"]: r["name"] for r in store.rows("concepts")}
+    rows = {r["stmt_id"]: r["label"] for r in store.rows("statements")}
     assert rows == {"0000": "已被占用", "0001": "新的"}, rows
 
 
@@ -134,8 +146,8 @@ def test_alloc_id_raises_when_space_exhausted(store):
     store.init()
     store._atomic_write(
         store.data / "counters.json",
-        {"schema_version": S.SCHEMA_VERSION, "counters": {"concept": 10000}},
+        {"schema_version": S.SCHEMA_VERSION, "counters": {"stmt": 10000}},
     )
     with pytest.raises(IdExhausted):
-        with store.tx("concepts", "counters", actor="t") as tx:
-            tx.alloc_id("concept")
+        with store.tx("statements", "counters", actor="t") as tx:
+            tx.alloc_id("stmt")

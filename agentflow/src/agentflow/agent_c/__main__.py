@@ -151,7 +151,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     st = make_store("main")
     build_dataset(st)
     print(f"[1] 临时工作区 {st.root}")
-    print(f"    概念 {len(st.rows('concepts'))} 关系 {len(st.rows('relations'))} 文献 {len(st.rows('literature'))}")
+    print(f"    概念 {len(CR.view(st, shape='legacy')['rows'])} 关系 {len(st.rows('relations'))} 文献 {len(st.rows('literature'))}")
 
     c = AgentC(st, config={"high": 3.0, "medium": 1.5}, actor="agent-C-selftest")
     g = c.build_graph()
@@ -423,14 +423,18 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
 
     # ============================================================ I1 服务面
     print("[15] I1 服务面：neighbors / relations_between / contradictions / structural_duplicates")
-    kn_before = {n: (st.data / f"{n}.json").read_bytes() for n in ("concepts", "relations", "literature")}
+    # 知识表的磁盘字节前后不变（C 是只读角色）。并表之后概念行住 `statements`
+    # ⇒ 取样面换成"新标准里的概念行 + relations + literature"：
+    # 老表已退役，`concepts.json` 不再是这批行该在的地方。
+    _kn = ("statements", "relations", "literature")
+    kn_before = {n: (st.data / f"{n}.json").read_bytes() for n in _kn}
     nb1 = c.neighbors("0000", depth=1)
     nb2 = c.neighbors("0000", depth=2)
     nbt = c.neighbors("0000", depth=1, max_nodes=2)
     nbx = c.neighbors("9999")
     rb1 = c.relations_between("0000", "0001")
     rb0 = c.relations_between("0000", "0006")  # 0006 是孤立概念
-    kn_after = {n: (st.data / f"{n}.json").read_bytes() for n in ("concepts", "relations", "literature")}
+    kn_after = {n: (st.data / f"{n}.json").read_bytes() for n in _kn}
     print(f"    neighbors(0000,depth=1)：{[(n['concept_id'], n['distance']) for n in nb1['nodes']]}")
     print(f"    neighbors(0000,depth=2) 的 2 跳节点："
           f"{[n['concept_id'] for n in nb2['nodes'] if n['distance'] == 2]}")

@@ -557,9 +557,10 @@ def test_graph_index_queries_report_store_errors_when_they_build_the_index(tmp_p
        后面几次查询根本不碰磁盘 —— 那正是它的本意，不是缺陷。
        误以为"表坏了 ⇒ 以后每次查询都该报错"，就会把一个正确的缓存设计当成 bug 改掉
        （反面由 `test_graph_cached_index_survives_a_later_table_corruption` 钉住）。
-    2. 损坏的表是 `concepts.json`（不是 `relations.json`）：`RelationGraph.from_store`
-       读三张表，任何一张坏都会让建图失败，而 `concepts.json` 是每一张图都要建的；
-       挑它就不必在每个用例之间修盘。
+    2. 损坏的表是 `statements.json`（不是 `relations.json`）：`RelationGraph.from_store`
+       读三张表（概念行的来源是 `statements` 的 `kind="concept"` 那一档 —— S1r 并表之后
+       概念行就住那里；此前是 `concepts.json`），任何一张坏都会让建图失败，
+       而概念这一张是每一张图都要建的；挑它就不必在每个用例之间修盘。
     """
     cases = (
         ("graph.stats", {}),
@@ -571,7 +572,7 @@ def test_graph_index_queries_report_store_errors_when_they_build_the_index(tmp_p
         st.init()
         _seed_small_graph(st)
         assert registry_for(GT, st).call(name, **params).ok is True, f"{name} 在健康库上不该失败"
-        corrupt(st, "concepts.json")
+        corrupt(st, "statements.json")
         _assert_store_error(registry_for(GT, st).call(name, **params), name)
 
 

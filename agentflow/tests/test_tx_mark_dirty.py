@@ -11,26 +11,34 @@ dict。这种改动不会经过 `upsert`，所以没有任何东西把表标成�
 而 §176 之后产品路径上的删除走 `Tx.delete`（`op="delete"` 进事件流、可被重放，
 见 `tests/test_store_delete_events.py`）—— 就地改列表仍然是被允许的写法，
 但它不再是删除的产品用法，只是这个契约本身覆盖的形态之一。
+
+## S1r 并表（`SCHEMA_VERSION=2`）之后的改动
+
+本文件守的是就地改列表的标脏契约，行只是标本。并表把 `concepts` 表真删
+⇒ 标本换成 `statements` 的一行（`kind="stmt"` / 主键 `stmt_id`），四条断言
+（不标脏就丢 / 标脏才落盘 / 就地删行 + 标脏 / 未声明表拒标脏）逐条不变。
 """
 
 from __future__ import annotations
 
 import pytest
 
-from agentflow import schema as S
 from agentflow.store import Store, StoreError
+
+TS = "2026-01-01T00:00:00+00:00"
+
+
+def _row(sid: str, label: str) -> dict:
+    """一条合法的 `statements` 行（形状与 `schema.Statement.validate` 对齐）。"""
+    return {"stmt_id": sid, "origin": "own_result", "kind": "theorem", "label": label,
+            "statement_full": f"{label} 的命题正文（夹具）", "quote_verified": None,
+            "quote_reason": "自产结果（测试夹具）", "created_at": TS}
 
 
 def _seed(store: Store, n: int = 2) -> None:
-    with store.tx("concepts", actor="test") as tx:
+    with store.tx("statements", actor="test") as tx:
         for i in range(n):
-            tx.upsert(
-                "concepts",
-                S.Concept(
-                    concept_id=f"{i:04d}", name=f"c{i}", definition="",
-                    created_at=S.now_iso(), updated_at=S.now_iso(),
-                ).to_dict(),
-            )
+            tx.upsert("statements", _row(f"{i:04d}", f"c{i}"))
 
 
 def test_inplace_edit_without_mark_dirty_is_lost(store):
@@ -38,20 +46,20 @@ def test_inplace_edit_without_mark_dirty_is_lost(store):
     `mark_dirty` 的必要性 —— 一旦将来有人让"就地改列表"自动标脏，本用例会失败，
     那时应当把它改成正面断言（并在 store 里写明语义变更）。"""
     _seed(store)
-    with store.tx("concepts", actor="test") as tx:
-        tx.rows("concepts")[0]["name"] = "改了但没标脏"
+    with store.tx("statements", actor="test") as tx:
+        tx.rows("statements")[0]["label"] = "改了但没标脏"
 
-    assert store.rows("concepts")[0]["name"] == "c0", "未标脏的改动不该落盘（当前语义）"
+    assert store.rows("statements")[0]["label"] == "c0", "未标脏的改动不该落盘（当前语义）"
 
 
 def test_inplace_edit_with_mark_dirty_persists(store):
     """标脏 ⇒ 改动落盘。就地改列表（改字段值）时这是必须显式写上的那一步。"""
     _seed(store)
-    with store.tx("concepts", actor="test") as tx:
-        tx.rows("concepts")[0]["name"] = "标了脏"
-        tx.mark_dirty("concepts")
+    with store.tx("statements", actor="test") as tx:
+        tx.rows("statements")[0]["label"] = "标了脏"
+        tx.mark_dirty("statements")
 
-    assert store.rows("concepts")[0]["name"] == "标了脏"
+    assert store.rows("statements")[0]["label"] == "标了脏"
 
 
 def test_inplace_delete_rows_then_mark_dirty(store):
@@ -63,16 +71,16 @@ def test_inplace_delete_rows_then_mark_dirty(store):
     不是"删除应当这么写"的示范 —— 产品路径上的删除必须用 `Tx.delete`。
     """
     _seed(store, 3)
-    with store.tx("concepts", actor="test") as tx:
-        rows = tx.rows("concepts")
-        rows[:] = [r for r in rows if r["concept_id"] != "0001"]
-        tx.mark_dirty("concepts")
+    with store.tx("statements", actor="test") as tx:
+        rows = tx.rows("statements")
+        rows[:] = [r for r in rows if r["stmt_id"] != "0001"]
+        tx.mark_dirty("statements")
 
-    assert [r["concept_id"] for r in store.rows("concepts")] == ["0000", "0002"]
+    assert [r["stmt_id"] for r in store.rows("statements")] == ["0000", "0002"]
 
 
 def test_mark_dirty_rejects_undeclared_table(store):
     """对事务未声明的表标脏必须报错 —— 否则会"标记成功但实际没锁"，并发下写坏数据。"""
     with pytest.raises(StoreError, match="未声明表"):
-        with store.tx("concepts", actor="test") as tx:
+        with store.tx("statements", actor="test") as tx:
             tx.mark_dirty("relations")

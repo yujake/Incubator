@@ -37,33 +37,18 @@ TS = "2026-01-01T00:00:00+00:00"
 
 
 def sync_all_counters(st: Store) -> None:
-    """把 counters.json 对齐到"每张表 max(已用)+1"。
+    """把 counters.json 对齐到"每张表 max(已用)+1" —— 转发到 `conftest.sync_counters`。
 
-    conftest 的 `sync_counters` 只覆盖 lit/concept/relation（它当初只需要那三张表），
-    而 G/H 会用到 experiment / doc / dep / finding；`verify` 会检查 counters 与
-    已用 ID 的一致性，夹具不补这几张表就会引入与本用例无关的 `counter_behind` 噪音
-    —— 而噪音比不校验更糟：它会训练人忽略告警。
+    本函数此前在这里写死了第二份 (kind, table) 名单，而那份名单里有一行
+    `("concept", "concepts")`：S1r 并表落刀（`concepts` 从 `TABLES` 里真删）之后，
+    `S.TABLES["concepts"]` 当场 `KeyError` —— 于是 `test_agent_g.py` 里所有
+    用例在夹具阶段就 error。这正是 `conftest.sync_counters` 的 docstring 点名的
+    那种漂移（"测试代码也是代码，写死第二份名单同样会漂移"），修法与 `test_agent_h`
+    同形：转发，覆盖范围由 `S.ID_COUNTERS` 反查，一处定义、一处维护。
     """
-    counters: dict[str, int] = {}
-    for kind, table in (
-        ("lit", "literature"),
-        ("concept", "concepts"),
-        ("relation", "relations"),
-        ("question", "research_questions"),
-        ("report", "analysis_reports"),
-        ("experiment", "experiments"),
-        ("plan", "attack_plans"),
-        ("doc", "documents"),
-        ("dep", "dependencies"),
-        ("finding", "review_findings"),
-    ):
-        field = S.TABLES[table]["id_field"]
-        ids = [int(r[field]) for r in st.rows(table) if field in r]
-        counters[kind] = (max(ids) + 1) if ids else 0
-    (st.data / "counters.json").write_text(
-        json.dumps({"schema_version": S.SCHEMA_VERSION, "counters": counters}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    from conftest import sync_counters as _sync
+
+    _sync(st)
 
 
 def add_experiment(

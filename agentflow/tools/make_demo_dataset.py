@@ -27,6 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from agentflow import conceptrows as CR  # noqa: E402
 from agentflow import dedup as D  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow.store import Store  # noqa: E402
@@ -153,13 +154,19 @@ def build(dest: Path) -> Path:
         (d / fname).write_text(text + "\n", encoding="utf-8")
         doc_text[lid] = text
 
-    with st.tx("concepts", "literature", "relations", "search_requests", actor="dataset") as tx:
+    # 声明哪几张表由并表过渡层决定（`concepts` 落刀之后不在 schema 里，
+    # 声明它会以"未知表"当场失败）。写概念行走 `CR.upsert_legacy_shaped`：
+    # 老表还在时两处同号（老表那一份 + 新标准那一份），落刀之后只写新标准。
+    with st.tx(*CR.tables_for_concept_write("literature", "relations", "search_requests"),
+               actor="dataset") as tx:
         for cid, name, definition in CONCEPTS:
-            tx.upsert("concepts", S.Concept(
+            crow = S.Concept(
                 concept_id=cid, name=name, definition=definition, related_concepts=[],
                 normalized_name=name.lower(), aliases=[],
                 definition_source_lit_id="0000", created_at=S.now_iso(), updated_at=S.now_iso(),
-            ).to_dict())
+            )
+            crow.validate()
+            CR.upsert_legacy_shaped(tx, crow.to_dict(), actor="dataset", note="concept_created")
 
         for lid, title, ltype, fname, _ in LITS:
             # `dedup_key` 必须取自唯一的键族 `dedup.literature_keys`（`F-8`）。
@@ -199,13 +206,23 @@ def build(dest: Path) -> Path:
                     if other != c:
                         lid_to_rels[c].append(other)
 
-        for cid, name, _ in CONCEPTS:
-            row = tx.find("concepts", concept_id=cid)
-            row["related_concepts"] = sorted(set(lid_to_rels[cid]))
-            tx.upsert("concepts", row)
+        # 由关系派生 related_concepts，与 agent_b 的语义保持一致。
+        #
+        # 这一格是"老表专有"的：并表之后"哪些概念相关"由 relations 表本身回答
+        # （读侧现算 dedup.derive_related_concepts 仍是唯一实现），再落一份镜像只是把
+        # 派生结果抄回老字段名上。所以老表退役时整段不跑 —— 与 agent_b 写侧同一口径
+        # （run_once 的第 4 步、_apply_merge 的 related 重算段都是这个形状）。
+        if CR.legacy_present(st).get("present"):
+            live = {c["concept_id"]: c for c in CR.view_tx(tx, shape="legacy")["rows"]}
+            for cid, _name, _def in CONCEPTS:
+                row = live[cid]
+                row["related_concepts"] = sorted(set(lid_to_rels[cid]))
+                CR.upsert_legacy_shaped(tx, row, actor="dataset", note="related_recomputed")
 
-    # counters 对齐
-    counters = {"lit": len(LITS), "concept": len(CONCEPTS), "relation": len(RELATIONS),
+    # counters 对齐。概念那一档并表之后是 stmt（老表的 concept 计数器随表退役）——
+    # 这一格是 statements 里 kind="concept" 那些行共用的号空间，写错名字会让 verify 报
+    # counter_behind，而这份数据集看起来"就是照着老名单写的"。
+    counters = {"lit": len(LITS), "stmt": len(CONCEPTS), "relation": len(RELATIONS),
                 "question": 0, "report": 0}
     (st.data / "counters.json").write_text(
         json.dumps({"schema_version": S.SCHEMA_VERSION, "counters": counters}, ensure_ascii=False, indent=2) + "\n",
@@ -220,7 +237,9 @@ def main() -> int:
     st = Store(dest)
     s = st.stats()
     print(f"已构造数据集：{dest}")
-    for t in ("concepts", "literature", "relations"):
+    # 概念行并表之后住 statements（kind="concept"）⇒ 那张表的行数就是概念数
+    # （这份数据集里语句表只有概念行）。写死 "concepts" 会让这条统计 KeyError。
+    for t in ("statements", "literature", "relations"):
         print(f"  {t:12} {s[t]['count']} 行")
     # 快速体检：孤立的 degree=0 概念数、以及 a→b 的原始路径数
     print("  （用 `agentflow.cli --root <dest> verify` 做不变量体检）")

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import pytest
 
+from agentflow import conceptrows as CR
 from agentflow import schema as S
 from agentflow import textutil as T
 from agentflow.agent_b import AgentB
@@ -54,6 +55,10 @@ def _two_concepts_same_name(st: Store, *, definition_a: str = "", definition_b: 
 
     概念名与别名都从 `textutil.normalize` 走（`dedup.find_concept` 的同一套），
     不在这里另写一份小写化规则（FC-03：同一判据只有一份实现）。
+
+    写入口是并表过渡层（`upsert_legacy_shaped` + `tables_for_concept_write`）：
+    这里手里拿的还是老形状的一行，落哪张表由那一处决定 —— 老表还在时两处同号，
+    落刀之后只写新标准。夹具因此不用知道"概念住哪张表"。
     """
     add_literature(st, "0000", path="0000/s.txt")
     for cid, name, definition in (("0000", "群", definition_a), ("0001", "群", definition_b)):
@@ -61,8 +66,8 @@ def _two_concepts_same_name(st: Store, *, definition_a: str = "", definition_b: 
                         related_concepts=[], normalized_name=T.normalize(name), aliases=[],
                         created_at=TS, updated_at=TS)
         row.validate()
-        with st.tx("concepts", actor="test") as tx:
-            tx.upsert("concepts", row.to_dict())
+        with st.tx(*CR.tables_for_concept_write(), actor="test") as tx:
+            CR.upsert_legacy_shaped(tx, row.to_dict(), actor="test")
     sync_counters(st)
 
 
@@ -138,15 +143,19 @@ def test_resolve_structural_duplicate_equal_definitions_pick_smaller_id(b: Agent
 def test_resolve_structural_duplicate_rejects_without_name_evidence_and_writes_nothing(
     b: AgentB, store: Store
 ):
-    """负控（最重要的一条）：只有一路证据 ⇒ `reject`，且两张表逐字节不变。
+    """负控（最重要的一条）：只有一路证据 ⇒ `reject`，且知识表逐字节不变。
 
     这是"结构等价 ≠ 同义"这条判据的钉子。它同时证明"拒绝"与"不写盘"绑在一起 ——
     一个先写后判、判完再回滚的实现会在这里露馅（退出码相同但磁盘已变）。
+
+    并表之后"两张表"换了名字（判据没放宽）：概念行住 `statements`
+    （`kind="concept"`），所以逐字节比对打在新家上。老写法比的是 `concepts.json`，
+    而那个文件在并表之后根本不存在 ⇒ 那半边判据会以 `FileNotFoundError` 或恒真收场。
     """
     _two_concepts_same_name(store)
     add_relation(store, "0000", ["0000", "0002"], "0000", quote="q", quote_verified=True)
     sync_counters(store)
-    before_c = (store.data / "concepts.json").read_bytes()
+    before_c = (store.data / "statements.json").read_bytes()   # 概念行并表之后住这里
     before_r = (store.data / "relations.json").read_bytes()
 
     out = b.resolve_structural_duplicate(_cand("none"))
@@ -156,7 +165,7 @@ def test_resolve_structural_duplicate_rejects_without_name_evidence_and_writes_n
     assert out["rewritten_relation_ids"] == [] and out["rejected_relation_ids"] == []
     # reason 必须说清"只有一路证据"，否则人无法反驳这个拒绝。
     assert "同义" in out["reason"] or "一路" in out["reason"], out["reason"]
-    assert (store.data / "concepts.json").read_bytes() == before_c, "reject 却改了概念表"
+    assert (store.data / "statements.json").read_bytes() == before_c, "reject 却改了概念行（statements）"
     assert (store.data / "relations.json").read_bytes() == before_r, "reject 却改了关系表"
 
 
@@ -201,18 +210,26 @@ def test_resolve_structural_duplicate_rejects_tombstone_and_bad_shape(b: AgentB,
 
     三态纪律的近亲：这三种原因的 `reason` 必须互不相同，否则人拿到
     "拒绝"以后不知道该去查什么。合成一条"非空即可"的断言会丢掉这个区分。
+
+    墓碑那一条的输入变了（判据本身没变，一个字都没放宽）：并表之后新标准里
+    墓碑是 `status="superseded"`，没有 `merged_into` 这一列，而
+    `view(shape="legacy")` 把 `merged_into` 一律投影成 `None` ⇒ 从 store 里造不出
+    "投影中有墓碑"的行。`decide_structural_duplicate` 本来就收 `concepts=` 入参
+    （`resolve_structural_duplicate` 也是把行喂进去的），所以这里显式喂两行、
+    其中一行带老字段名的墓碑 —— 于是"候选里有一方是墓碑 ⇒ 拒绝且理由点名墓碑"
+    这条判据照旧可判、也会因为实现把这一支删掉而变红。
     """
     _two_concepts_same_name(store)
-    with store.tx("concepts", actor="test") as tx:
-        row = tx.find("concepts", concept_id="0001")
-        row["merged_into"] = "0000"
-        # `merge_reason` 是 schema 的必填配套字段（`Concept.validate`：
-        # "标了 merged_into 却没有 merge_reason"直接抛）。夹具必须满足它，
-        # 否则测到的是 schema 的行校验而不是本函数的墓碑分支。
-        row["merge_reason"] = "测试用墓碑"
-        tx.upsert("concepts", row)
-    tomb = b.resolve_structural_duplicate(_cand("same_normalized_name"))
+    marked = [dict(r) for r in CR.view(store, shape="legacy")["rows"]]
+    for r in marked:
+        if r["concept_id"] == "0001":
+            r["merged_into"] = "0000"
+            r["merge_reason"] = "测试用墓碑"
+    tomb = b.decide_structural_duplicate(_cand("same_normalized_name"), concepts=marked)
     assert tomb["verdict"] == "reject" and "墓碑" in tomb["reason"], tomb
+    # 正控（同一次调用）：把墓碑那一格去掉 ⇒ 同一个候选必须走到合并，而不是一律拒绝
+    clean = [dict(r) for r in CR.view(store, shape="legacy")["rows"]]
+    assert b.decide_structural_duplicate(_cand("same_normalized_name"), concepts=clean)["verdict"] == "merge"
 
     shape = b.resolve_structural_duplicate({"concept_ids": ["0000"], "name_evidence": "alias"})
     assert shape["verdict"] == "reject" and "恰好两个" in shape["reason"], shape

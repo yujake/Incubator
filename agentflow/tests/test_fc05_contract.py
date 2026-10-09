@@ -68,16 +68,23 @@ def test_set_fields_are_checked_centrally(store):
 
     为什么不在每行的 `validate()` 里手写：那是"同一判据多处实现"，
     漏写一处就静默失效（新增 `supporting_lit_ids` 时就差点漏了）。
+
+    探针字段随并表换了一格：`concepts.related_concepts` 不再是任何表里的列
+    （概念的"相关"由 `relations` 表回答），这里改用 `statements.derived_from` ——
+    它在 `ARRAY_FIELD_KINDS` 里同样声明为 `set`，判据（"未声明的数组必须报
+    `undeclared_array_field`、声明为 set 的必须升序去重"）与强度都没变。
     """
     store.init()
-    with store.tx("concepts", actor="t") as tx:
-        tx.upsert("concepts", S.Concept(concept_id="0000", name="A", definition="").to_dict())
-    # 直接往快照里塞一条 related_concepts 未排序的行
-    doc = store.read("concepts")
-    doc["rows"][0]["related_concepts"] = ["0002", "0001"]
-    store._atomic_write(store.data / "concepts.json", doc)
+    with store.tx("statements", actor="t") as tx:
+        tx.upsert("statements", S.Statement(stmt_id="0000", origin="own_result", kind="theorem",
+                                            statement_full="A",
+                                            quote_reason="尚未逐字校验").to_dict())
+    # 直接往快照里塞一条 derived_from 未排序的行
+    doc = store.read("statements")
+    doc["rows"][0]["derived_from"] = ["0002", "0001"]
+    store._atomic_write(store.data / "statements.json", doc)
     errs = _issues(store, level="error", code="schema_invalid")
-    assert errs and "related_concepts" in errs[0]["message"]
+    assert errs and "derived_from" in errs[0]["message"]
 
 
 def test_relation_chain_preserves_order_round_trip(store):

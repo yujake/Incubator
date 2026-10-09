@@ -110,7 +110,7 @@ NO_KEY_SET_EXEMPTIONS: dict[str, str] = {
     "table.delete": "data 是**布尔标量**（是否真的删掉了）；引用者清单在 meta.references 里，不是 data。",
     "table.get": (
         "data 是**行对象或 None** —— 行对象的字段由**那张表的 schema** 决定"
-        "（concepts 与 literature 的字段完全不同），本工具不承诺固定键集合；"
+        "（statements 与 literature 的字段完全不同），本工具不承诺固定键集合；"
         "『有没有』由 meta.found 表达。"
     ),
 }
@@ -291,14 +291,14 @@ def tool_params() -> dict[str, dict]:
         "search.shelf": {},
         "search.providers": {},
         "search.register": {"title": "新文献", "type_code": "J", "summary": "s"},
-        "table.count": {"table": "concepts"},
-        "table.create": {"table": "concepts", "row": {"name": "c9", "definition": "d", "related_concepts": []}},
-        "table.delete": {"table": "concepts", "id": "0002"},
-        "table.get": {"table": "concepts", "id": "0000"},
-        "table.list": {"table": "concepts"},
+        "table.count": {"table": "statements"},
+        "table.create": {"table": "statements", "row": {"origin": "own_result", "kind": "theorem", "statement_full": "c9", "quote_reason": "尚未逐字校验"}},
+        "table.delete": {"table": "statements", "id": "0002"},
+        "table.get": {"table": "statements", "id": "0000"},
+        "table.list": {"table": "statements"},
         "table.schema": {},
-        "table.search": {"table": "concepts", "query": "group"},
-        "table.update": {"table": "concepts", "id": "0000", "patch": {"definition": "d2"}},
+        "table.search": {"table": "statements", "query": "group"},
+        "table.update": {"table": "statements", "id": "0000", "patch": {"statement_text": "d2"}},
         "trace.chain": {"relation_ids": ["0000"]},
         "trace.concept": {"concept_id": "0000"},
         "trace.literature": {"lit_id": "0000", "max_chars": 200},
@@ -1035,9 +1035,9 @@ def test_negative_control_an_exempted_tool_is_still_probed_for_real(registry: To
     这条断言防止豁免清单退化成「这些工具从此不用管了」。
     """
     assert "table.get" in NO_KEY_SET_EXEMPTIONS
-    hit = registry.call("table.get", table="concepts", id="0000")
+    hit = registry.call("table.get", table="statements", id="0000")
     assert hit.ok and isinstance(hit.data, dict) and hit.meta.get("found") is True
-    miss = registry.call("table.get", table="concepts", id="9999")
+    miss = registry.call("table.get", table="statements", id="9999")
     assert miss.ok and miss.data is None and miss.meta.get("found") is False
 
 

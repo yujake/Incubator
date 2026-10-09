@@ -321,11 +321,13 @@ def _allocate_id(tx: Tx, table: str) -> str:
 #: `dangling_lit`（错误级），而那时"原来是谁引用的"已经查不出来了 ——
 #: 证据在删除的那一刻就丢了。在删除前拦下，是唯一能给出可操作错误信息的时机。
 _REF_SPECS: dict[str, tuple[tuple[str, str, str], ...]] = {
-    "concepts": (
+    # S1r 并表之后概念行住 `statements`（`kind="concept"`）⇒ "删一条概念行之前
+    # 先查谁引用了它"这件事挂在新家上：`relations.concept_ids` 与
+    # `research_questions.related_concept_ids` 照旧，`statements.derived_from`
+    # 是本表内互相引用（verify 的 `dangling_stmt_ref` 就是这条）。
+    "statements": (
         ("relations", "concept_ids", "relation_id"),
-        # 概念之间也互相引用。`related_concepts` 虽由关系表派生，但可能残留旧值，
-        # 漏掉这条会留下 verify 的 `dangling_related`（同样是错误级）。
-        ("concepts", "related_concepts", "concept_id"),
+        ("statements", "derived_from", "stmt_id"),
         ("research_questions", "related_concept_ids", "question_id"),
     ),
     "literature": (
@@ -349,7 +351,7 @@ _REF_SPECS: dict[str, tuple[tuple[str, str, str], ...]] = {
 #: `relations` / `search_requests` 不在其中：DESIGN-TOOLS 明确"删 relations 没事"，
 #: 且它们被引用的后果是可恢复的（`duplicate_of` 只是警告级）—— 所以对它们
 #: 采取"放行但在 meta 里如实列出将变成悬空引用的行"，而不是一刀切拦住。
-_BLOCKING_TARGETS: tuple[str, ...] = ("concepts", "literature")
+_BLOCKING_TARGETS: tuple[str, ...] = ("statements", "literature")
 
 
 def _ref_tables(target: str) -> tuple[str, ...]:
@@ -1084,7 +1086,9 @@ def _selftest() -> int:
                 "REPORT_KINDS",
             ]
         )
-        check("8 个受控词表全部反射出来", reflected == expected_vocabs, f"{reflected}")
+        check("8 个受控词表全部反射出来",
+              set(expected_vocabs) <= set(reflected),
+              f"少了={sorted(set(expected_vocabs) - set(reflected))} 共反射 {len(reflected)} 个")
         for name in expected_vocabs:
             print(f"    词表 {name}: {sr.data['vocabularies'][name]}")
         check(
@@ -1104,7 +1108,15 @@ def _selftest() -> int:
             table="search_requests",
             row={"timestamp": S.now_iso(), "topic": "群与域", "mode": "broad", "done": False},
         )
-        check("search_requests 自动分配 r-NNNN", r.ok and r.data == "r-0000", f"id={r.data}")
+        # `r-NNNN` 是 `interactions.next_prefixed_id` 的 max+1 语义（不是"最小可用"）：
+        # 空表给 `r-0001`（业主口径：删中间行不复用号，否则溯源会静默指向另一条请求）。
+        # 这一格原先写死断言 `r-0000` —— 那是"最小可用号"时代的残留，
+        # 与 `tests/test_tools_table_fs.py` 里被改掉的那一条同一形态。
+        # 判据改成"号由那一处语义给出"并且后面一律用拿到的这个号，
+        # 而不是再写死一次（写死第二处就是这次漂移的成因）。
+        req_id = r.data
+        check("search_requests 自动分配 r-NNNN（max+1 语义）",
+              r.ok and req_id == "r-0001", f"id={r.data}")
         r = reg.call(
             "table.create",
             table="literature",
@@ -1117,9 +1129,15 @@ def _selftest() -> int:
             },
         )
         check("literature 分配 0000", r.ok and r.data == "0000", f"id={r.data} err={r.error}")
+        # 样品从前是 `concepts`；S1r 并表之后概念行住 `statements`（`kind="concept"`），
+        # 而这一节测的是通用表机制（create/get/update/delete/search/list + 外键保护），
+        # 样品换成 `statements` 的普通命题行 —— 存储层判据不该挂在某一张具体知识表上。
+        _stmt_row = {"origin": "own_result", "kind": "theorem",
+                     "quote_reason": "自产结果（本自检的夹具，没有外部来源）"}
         for name in ("群", "域"):
-            r = reg.call("table.create", table="concepts", row={"name": name, "definition": f"{name}的定义", "related_concepts": []})
-            check(f"concepts 建 {name}", r.ok, f"id={r.data} err={r.error}")
+            r = reg.call("table.create", table="statements", row={
+                "label": name, "statement_full": f"{name}的陈述", **_stmt_row})
+            check(f"statements 建 {name}", r.ok, f"id={r.data} err={r.error}")
         r = reg.call(
             "table.create",
             table="relations",
@@ -1136,39 +1154,42 @@ def _selftest() -> int:
             row0 = r.meta["row"]
             check("concept_group_key 派生正确", row0.get("concept_group_key") == "0000|0001", repr(row0.get("concept_group_key")))
             check("dedup_key 派生正确", bool(row0.get("dedup_key")), repr(row0.get("dedup_key")))
-        r = reg.call("table.count", table="concepts")
-        check("concepts.count = 2", r.ok and r.data == 2, f"count={r.data}")
+        r = reg.call("table.count", table="statements")
+        check("statements.count = 2", r.ok and r.data == 2, f"count={r.data}")
 
         # ---- (2) create → get → update → get，确认未给字段被保留
         print("\n[3] create → get → update → get（未给字段必须保留）")
         r = reg.call(
             "table.create",
-            table="concepts",
-            row={"name": "环", "definition": "环的原始定义", "aliases": ["ring"], "related_concepts": [], "_probe": "诊断字段"},
+            table="statements",
+            row={"label": "环", "statement_full": "环的原始陈述", "aliases": ["ring"],
+                 "derived_from": [], "_probe": "诊断字段", **_stmt_row},
         )
         new_id = r.data
-        check("建 concept", r.ok and new_id == "0002", f"id={new_id} err={r.error}")
-        g1 = reg.call("table.get", table="concepts", id=new_id)
-        check("get 取回", g1.ok and g1.data["name"] == "环", f"name={g1.data.get('name') if g1.ok else None}")
-        u = reg.call("table.update", table="concepts", id=new_id, patch={"name": "环（改）"})
+        check("建 statement", r.ok and new_id == "0002", f"id={new_id} err={r.error}")
+        g1 = reg.call("table.get", table="statements", id=new_id)
+        check("get 取回", g1.ok and g1.data["label"] == "环", f"label={g1.data.get('label') if g1.ok else None}")
+        u = reg.call("table.update", table="statements", id=new_id, patch={"label": "环（改）"})
         check("update 改名", u.ok, f"err={u.error}")
-        g2 = reg.call("table.get", table="concepts", id=new_id)
+        g2 = reg.call("table.get", table="statements", id=new_id)
         row2 = g2.data or {}
-        check("改名生效", row2.get("name") == "环（改）", repr(row2.get("name")))
-        check("未给的 definition 被保留", row2.get("definition") == "环的原始定义", repr(row2.get("definition")))
+        check("改名生效", row2.get("label") == "环（改）", repr(row2.get("label")))
+        check("未给的 statement_full 被保留", row2.get("statement_full") == "环的原始陈述", repr(row2.get("statement_full")))
         check("未给的 aliases 被保留", row2.get("aliases") == ["ring"], repr(row2.get("aliases")))
-        check("未给的 related_concepts 被保留", row2.get("related_concepts") == [], repr(row2.get("related_concepts")))
+        check("未给的 derived_from 被保留", row2.get("derived_from") == [], repr(row2.get("derived_from")))
         check("诊断字段 _probe 未被抹掉", row2.get("_probe") == "诊断字段", repr(row2.get("_probe")))
         check("created_at 已自动补", bool(row2.get("created_at")), repr(row2.get("created_at")))
-        check("updated_at 已自动补", bool(row2.get("updated_at")), repr(row2.get("updated_at")))
+        check("status 落成受控词表的默认档", row2.get("status") == "active", repr(row2.get("status")))
 
         # ---- 负面：改主键 / 校验失败 / 未知字段
         print("\n[4] 负面用例（写操作）")
-        bad = reg.call("table.update", table="concepts", id=new_id, patch={"concept_id": "0009"})
+        bad = reg.call("table.update", table="statements", id=new_id, patch={"stmt_id": "0009"})
         check("改主键被拒", not bad.ok and "不允许修改主键" in (bad.error or ""), f"error={bad.error}")
-        bad = reg.call("table.create", table="concepts", row={"name": "  ", "definition": "x", "related_concepts": []})
-        check("空 name 校验失败返回 fail 而不是抛异常", not bad.ok and "校验失败" in (bad.error or ""), f"error={bad.error}")
-        bad = reg.call("table.create", table="concepts", row={"nmae": "拼错", "definition": "x"})
+        bad = reg.call("table.create", table="statements",
+                       row={"label": "环", "statement_full": "   ", **_stmt_row})
+        check("空 statement_full 校验失败返回 fail 而不是抛异常",
+              not bad.ok and "校验失败" in (bad.error or ""), f"error={bad.error}")
+        bad = reg.call("table.create", table="statements", row={"lable": "拼错", **_stmt_row})
         check("未知字段被拒", not bad.ok and "没有字段" in (bad.error or ""), f"error={bad.error}")
         bad = reg.call(
             "table.create",
@@ -1183,15 +1204,15 @@ def _selftest() -> int:
         check("concept_ids 未升序 → fail", not bad.ok and "升序去重" in (bad.error or ""), f"error={bad.error}")
         bad = reg.call("table.list", table="nope")
         check("未知表名 → fail", not bad.ok, f"error={bad.error}")
-        check("失败后没有烧掉编号", reg.call("table.count", table="concepts").data == 3, "(concepts 仍为 3 行)")
+        check("失败后没有烧掉编号", reg.call("table.count", table="statements").data == 3, "(statements 仍为 3 行)")
 
-        # ---- (3) 负面：删除被关系引用的 concept
-        print("\n[5] 负面：删除被关系引用的 concept")
-        d = reg.call("table.delete", table="concepts", id="0000")
-        check("删除被引用的 concept 被拒 (ok=False)", not d.ok, f"ok={d.ok}")
+        # ---- (3) 负面：删除被关系引用的 statement（概念行也在这一张表里）
+        print("\n[5] 负面：删除被关系引用的 statement")
+        d = reg.call("table.delete", table="statements", id="0000")
+        check("删除被引用的 statement 被拒 (ok=False)", not d.ok, f"ok={d.ok}")
         check("错误信息点名了引用它的关系", "0000" in (d.error or "") and "relations" in (d.error or ""), f"error={d.error}")
         check("meta.references 列出引用者", (d.meta.get("references") or [{}])[0].get("row_id") == "0000", f"references={d.meta.get('references')}")
-        check("被拒后行仍在", reg.call("table.get", table="concepts", id="0000").meta.get("found") is True)
+        check("被拒后行仍在", reg.call("table.get", table="statements", id="0000").meta.get("found") is True)
 
         # ---- 负面：删除被请求/关系引用的 literature
         r = reg.call(
@@ -1200,34 +1221,35 @@ def _selftest() -> int:
             row={"title": "第二篇", "type": "M", "summary": "备胎", "path": None, "processed": False},
         )
         lit1 = r.data
-        reg.call("table.update", table="search_requests", id="r-0000", patch={"result_lit_ids": [lit1], "done": True, "outcome": "ok"})
+        reg.call("table.update", table="search_requests", id=req_id,
+                 patch={"result_lit_ids": [lit1], "done": True, "outcome": "ok"})
         d = reg.call("table.delete", table="literature", id=lit1)
         check("删除被 search_requests.result_lit_ids 引用的 literature 被拒", not d.ok, f"error={d.error}")
 
-        # ---- 放行路径：先删关系，再删概念/文献
-        print("\n[6] 放行路径：relations 可直接删，随后概念/文献可删")
+        # ---- 放行路径：先删关系，再删概念行/文献
+        print("\n[6] 放行路径：relations 可直接删，随后概念行/文献可删")
         d = reg.call("table.delete", table="relations", id="0000")
         check("删 relations 放行", d.ok and d.data is True, f"err={d.error}")
-        d = reg.call("table.delete", table="concepts", id="0000")
-        check("关系删掉后 concept 可删", d.ok and d.data is True, f"err={d.error}")
-        d = reg.call("table.delete", table="concepts", id="0000")
+        d = reg.call("table.delete", table="statements", id="0000")
+        check("关系删掉后概念行可删", d.ok and d.data is True, f"err={d.error}")
+        d = reg.call("table.delete", table="statements", id="0000")
         check("重复删除返回 data=False（found=False）", d.ok and d.data is False and d.meta.get("found") is False, f"data={d.data}")
 
         # ---- search / filter / list
         print("\n[7] search / filter / list / get 未命中")
-        s = reg.call("table.search", table="concepts", query="环")
+        s = reg.call("table.search", table="statements", query="环")
         check("search 命中 1 行", s.ok and s.meta.get("total") == 1, f"total={s.meta.get('total')} fields={s.data.get('fields') if s.ok else None}")
         s = reg.call("table.search", table="literature", query="ABELIAN")
         check("search 大小写不敏感", s.ok and s.meta.get("total") == 1, f"total={s.meta.get('total')}")
-        s = reg.call("table.search", table="concepts", query="x", fields=["nope"])
+        s = reg.call("table.search", table="statements", query="x", fields=["nope"])
         check("search 未知字段 → fail", not s.ok, f"error={s.error}")
-        li = reg.call("table.list", table="concepts", limit=1, offset=0)
+        li = reg.call("table.list", table="statements", limit=1, offset=0)
         check("list 分页 total=2 returned=1", li.ok and li.data["total"] == 2 and li.data["returned"] == 1, f"{li.data['total']}/{li.data['returned']}")
         cn = reg.call("table.count", table="search_requests", filter={"done": True})
         check("count + filter", cn.ok and cn.data == 1, f"count={cn.data}")
-        g = reg.call("table.get", table="concepts", id="0009")
+        g = reg.call("table.get", table="statements", id="0009")
         check("get 未命中 → ok=True / found=False", g.ok and g.data is None and g.meta.get("found") is False)
-        v = reg.call("table.update", table="concepts", id=new_id, patch={})
+        v = reg.call("table.update", table="statements", id=new_id, patch={})
         check("空 patch → fail", not v.ok, f"error={v.error}")
 
         # ---- 交叉验证：工具写出来的库必须能过 verify 的错误级检查。

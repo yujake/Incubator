@@ -1555,17 +1555,19 @@ def test_table_list_total_is_the_filtered_total_not_the_page_size(store: Store):
     """4.1：`table.list` 的 `total` 是过滤后总数 —— 分页逻辑唯一的依据，此前零断言。"""
     reg = registry_for(TT, store)
     for i in range(5):
-        reg.call("table.create", table="concepts", row={"name": f"c{i}", "definition": "d", "related_concepts": []})
+        reg.call("table.create", table="statements",
+                 row={"origin": "own_result", "kind": "theorem", "label": f"c{i}",
+                      "statement_full": "d", "quote_reason": "尚未逐字校验"})
 
-    page1 = reg.call("table.list", table="concepts", limit=2)
+    page1 = reg.call("table.list", table="statements", limit=2)
     assert page1.ok, page1.error
     assert page1.data["total"] == 5, "total 必须是过滤后的总数，不是本页条数"
     assert page1.data["returned"] == 2 and len(page1.data["rows"]) == 2
 
-    page3 = reg.call("table.list", table="concepts", limit=2, offset=4)
+    page3 = reg.call("table.list", table="statements", limit=2, offset=4)
     assert page3.data["total"] == 5 and page3.data["returned"] == 1, "最后一页只有 1 条，但 total 仍是 5"
 
-    filtered = reg.call("table.list", table="concepts", limit=10, filter={"name": "c1"})
+    filtered = reg.call("table.list", table="statements", limit=10, filter={"label": "c1"})
     assert filtered.data["total"] == 1, "total 说的是**过滤后**的总数"
 
 
@@ -1573,13 +1575,15 @@ def test_table_count_is_not_affected_by_limit(store: Store):
     """4.1：`table.count` 的 docstring 明说"计数不该受 limit 影响" —— 这条不变量此前没被测。"""
     reg = registry_for(TT, store)
     for i in range(4):
-        reg.call("table.create", table="concepts", row={"name": f"c{i}", "definition": "d", "related_concepts": []})
-    assert reg.call("table.count", table="concepts").data == 4
+        reg.call("table.create", table="statements",
+                 row={"origin": "own_result", "kind": "theorem", "label": f"c{i}",
+                      "statement_full": "d", "quote_reason": "尚未逐字校验"})
+    assert reg.call("table.count", table="statements").data == 4
     # count 没有 limit 参数，但被列表的 limit 影响才是真正的缺陷：连开两次 list 后 count 不变
-    reg.call("table.list", table="concepts", limit=1)
-    assert reg.call("table.count", table="concepts").data == 4
+    reg.call("table.list", table="statements", limit=1)
+    assert reg.call("table.count", table="statements").data == 4
     # 负控：过滤时总数按过滤后的口径
-    assert reg.call("table.count", table="concepts", filter={"name": "c2"}).data == 1
+    assert reg.call("table.count", table="statements", filter={"label": "c2"}).data == 1
 
 
 # ---------------------------------------------------------------- 测试用 OCR 桩

@@ -119,7 +119,12 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `source_stmt_id` / `path_group` 两格 ⇒ 工具说明那一句变了，而 G 自己的提示词里
 #: 逐工具渲染的就是说明原文 ⇒ 只有 G 那一格换值（H/M 的伙伴表只列"动作名 + 必填参数"，
 #: 所以它们逐字不动 —— 换一格本身就是"这次改动只落在 G 自己"的读数）。
-PROMPT_VERSION = "p56"
+#: `p57`（2026-10-10，S1r 并表落刀）：`specs/b.py` 的写集去掉 `concepts`（表退役，
+#: 概念行住 `statements` 的 `kind="concept"` 那一档）⇒ 十格全换：伙伴表在每一个
+#: 角色的提示词里都逐条列着"这个伙伴写哪些表"，所以 B 的写集一动，看得到 B 的那些行
+#: 全换；实测十格摘要无一相同（`temp/_s1r_prompt_digests.py` 现算对照）。
+#: 换几格本身就是这一次改动的读数 —— 与 `p55`（只换能看见 C 的那五格）对照着看。
+PROMPT_VERSION = "p57"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\

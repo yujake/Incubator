@@ -168,27 +168,11 @@ from agentflow.store import Store  # noqa: E402
 #: 新增表必须加进来 —— `test_atomic_write_leaves_no_tmp_residue` 会断言
 #: data/ 下恰好只有这些文件，漏加会以"多出文件"的形式报错（这正是我们想要的：
 #: 防止初始化时悄悄多出意料之外的文件）。
-DATA_FILES = (
-    "search_requests.json",
-    "literature.json",
-    "concepts.json",
-    "relations.json",
-    "analysis_reports.json",
-    "research_questions.json",
-    "conjectures.json",
-    "reprocess_requests.json",
-    "experiments.json",
-    "attack_plans.json",
-    "documents.json",
-    "statements.json",
-    "dependencies.json",
-    "review_findings.json",
-    "tasks.json",
-    "usage_ledger.json",
-    "eval_results.json",
-    "counters.json",
-    "events.jsonl",
-)
+#: S1r 并表（2026-10-10）：改成从 `schema.TABLES` 现推，不再手抄第二份名单 ——
+#: 这份名单当年抄了一份，于是 `concepts` 从 `TABLES` 退役之后它还断言着
+#: 一个已经不存在的文件（"抄第二份名单"在本仓已经栽过一次，见 `sync_counters`
+#: 的 docstring）。顺序按 `TABLES` 的声明序，末尾两个是存储层自己的文件。
+DATA_FILES = tuple(spec["file"] for spec in S.TABLES.values()) + ("counters.json", "events.jsonl")
 
 #: 固定时间戳：不依赖当前时间，保证可复现。
 TS = "2026-01-01T00:00:00+00:00"
@@ -221,11 +205,13 @@ def sync_counters(store: Store) -> None:
     否则会引入与"本次要验证的不变量"无关的 ``counter_behind`` 噪音。
 
     覆盖范围由 `S.ID_COUNTERS` 反查，不在这里另写一张 (kind, table) 表。
-    原先这里写死了 3 个 kind，于是新增 `experiment` / `plan` / `doc` / `dep` /
-    `finding` 五类之后，用本函数同步过的库仍会报 counter_behind ——
-    而报错的内容与测试真正想验证的东西毫无关系，纯属噪音。
+    原先这里写死了 3 个 kind（lit/concept/relation），于是新增
+    `experiment` / `plan` / `doc` / `dep` / `finding` 五类之后，用本函数同步过的库
+    仍会报 counter_behind —— 而报错的内容与测试真正想验证的东西毫无关系，纯属噪音。
     这正是"跨模块约定必须只有一处定义"（FC-03）在测试代码里的形态：
     测试代码也是代码，写死第二份名单同样会漂移。
+    S1r 并表之后 `concept` 这一档随表退役（`ID_COUNTERS` 里已经没有它）⇒
+    本函数自动不再写那一格，调用方一个字都不用改（这正是"反查"的用处）。
     """
     counters: dict[str, int] = {}
     for kind, field in S.ID_COUNTERS.items():
@@ -363,12 +349,13 @@ def add_concept(
     )
     row.validate()
     _data = row.to_dict()
-    # 过渡期（2026-10-09）：夹具是"生产写侧"的替身 —— 老表照旧写全，同一笔事务里
-    # 同步一份新标准（两处同号）。只写老表的话，测试世界里的概念永远只活在老表那一侧，
-    # 于是所有"读侧走合成视图"的判据在夹具里都只测了一半。
-    with store.tx("concepts", "statements", actor="test") as tx:
-        tx.upsert("concepts", _data)
-        _CR.sync_from_legacy(tx, _data, actor="test")
+    # 夹具是"生产写侧"的替身，所以它走过渡层的入口（`upsert_legacy_shaped`）：
+    # 老表还在（并表过渡期）⇒ 老表照旧写全 + 同一笔事务里同步一份新标准（两处同号）；
+    # 老表已退役（S1r 落刀之后）⇒ 只写新标准。一处判断，夹具在落刀前后一个字都不用改。
+    # 只写老表的话，测试世界里的概念永远只活在老表那一侧，于是所有"读侧走合成视图"
+    # 的判据在夹具里都只测了一半。
+    with store.tx(*_CR.tables_for_concept_write(), actor="test") as tx:
+        _CR.upsert_legacy_shaped(tx, _data, actor="test")
     if sync:
         sync_counters(store)
     return _data

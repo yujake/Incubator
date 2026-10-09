@@ -715,7 +715,7 @@ def test_agent_h_review_changes_only_status_and_never_the_claims(tmp_path):
     这条证明"运行时真的什么都没写"。
     """
     st, doc_id = _h_fixture(tmp_path)
-    knowledge = ("concepts.json", "relations.json", "literature.json")
+    knowledge = ("statements.json", "relations.json", "literature.json")
     before_bytes = {n: (st.data / n).read_bytes() for n in knowledge}
     before_docs = json.loads((st.data / "documents.json").read_text(encoding="utf-8"))
 

@@ -56,19 +56,27 @@ def test_demo_requests_and_literature_products(demo_store: Store) -> None:
 
 def test_demo_relations_and_concepts(demo_store: Store) -> None:
     """≥2 条 active 关系、概念已建立、引文全部通过逐字校验、related_concepts 互相连通。"""
+    from agentflow import conceptrows as CR
+    from agentflow import dedup as D
+
     relations = demo_store.rows("relations")
     active = [r for r in relations if r["status"] == "active"]
     assert len(active) >= 2, "阿贝尔群↔群、域↔环两条关系应当 active"
     assert all(r["quote_verified"] is True for r in relations), "demo 素材的引文应当全部可校验"
     assert all(r["quote"] and r["dedup_key"] for r in relations)
 
-    concepts = {c["concept_id"]: c for c in demo_store.rows("concepts")}
+    # 概念行并表之后住 `statements`（`kind="concept"`）⇒ 老字段名走过渡层投影。
+    concepts = {c["concept_id"]: c for c in CR.view(demo_store, shape="legacy")["rows"]}
     assert len(concepts) >= 4
-    for cid, c in concepts.items():
-        rel = c["related_concepts"]
-        assert rel == sorted(set(rel))
-        assert cid not in rel
-    assert any(c["related_concepts"] for c in concepts.values()), "related_concepts 必须由关系派生出来"
+    # "相关"这一格并表之后没有落点：它由关系表现算（`dedup.derive_related_concepts`
+    # 是唯一实现，`demo.py` 的判定与 `verify` 都读它）。所以这条判据改成盯派生结果
+    # —— 判的仍是"概念之间真的连通了、且形状合法"，而不是某个字段非空。
+    derived = {cid: D.derive_related_concepts(cid, relations, include_suspect=True)
+               for cid in concepts}
+    for cid, rel in derived.items():
+        assert rel == sorted(set(rel)), f"{cid} 的派生相关集未升序去重：{rel}"
+        assert cid not in rel, f"{cid} 的派生相关集含自身"
+    assert any(derived.values()), "related_concepts 必须由关系派生出来"
 
 
 def test_demo_deep_verify_has_no_issues(demo_store: Store) -> None:
@@ -114,12 +122,13 @@ def test_demo_duplicate_relation_is_rejected_on_rerun(tmp_path: Path) -> None:
 def test_demo_is_idempotent_on_second_run(demo_root: Path) -> None:
     """A/B 都没有待办时重跑：不新增任何行（幂等，§2.4）。"""
     st = Store(demo_root / "demo" / "run")
+    from agentflow import conceptrows as CR
     from agentflow.agent_a import AgentA
     from agentflow.providers import FixtureProvider
 
     before_lit = len(st.rows("literature"))
     before_rel = len(st.rows("relations"))
-    before_con = len(st.rows("concepts"))
+    before_con = len(CR.view(st, shape="legacy")["rows"])   # 概念行住 `statements`
 
     agent_a = AgentA(st, providers=[FixtureProvider(demo_root / "demo" / "fixtures" / "candidates.json")], downloader=None)
     out = agent_a.run()
@@ -129,4 +138,4 @@ def test_demo_is_idempotent_on_second_run(demo_root: Path) -> None:
 
     assert len(st.rows("literature")) == before_lit
     assert len(st.rows("relations")) == before_rel
-    assert len(st.rows("concepts")) == before_con
+    assert len(CR.view(st, shape="legacy")["rows"]) == before_con

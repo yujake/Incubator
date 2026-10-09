@@ -724,6 +724,10 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 
 #### 13.2k 落刀的一次实测（2026-10-09）：**源侧一次就通，真正的大头是测试面**
 
+> ⚠️ **本节读数在 `§13.2l` 里被更正过两处**（`migrated_v1_events` 的口径、以及
+> "源侧只剩四处写侧遗留"这个判断）。正文保留原样，以免把"第一趟实测"与"落刀那一趟"
+> 混成一份——两份读数的差别正是 `§13.2l` 的正文。
+
 本轮把落刀整刀做了一遍并**在源侧验证通过**，然后**撤回**（树回到绿的 `6bd0c60`）。
 记下这次实测的边界，下一轮按这个顺序做就能一次成：
 
@@ -775,6 +779,149 @@ review_acceptance / release_acceptance_wiring / coverage_agent_b` 一批跑出
 多行调用、内嵌脚本字符串、缩进块里的 import、以及"散文里出现同一个词"这四类
 会让它改出语法错或改错地方。真要机械替换，必须**逐文件 ast.parse 校验 + 报告**，
 而且第一次跑完就要按失败清单分类，而不是继续加大替换面。
+
+#### 13.2l 落刀那一趟（2026-10-09，本轮）：**§13.2k 漏了五处源侧，读数也差一处**
+
+本轮按"先把源侧那一刀重新落上去（可原样重放），再让测试失败清单当导航"的做法推进。
+源侧那一刀比 `§13.2k` 记的多五处，读数也差一处 —— 两处都记在这里，免得下一趟再漏。
+
+**更正一：`migrated_v1_events` 的读数是 4，不是 3。**
+`schema_version` 写在 `commit` 标记上的话，它也是"上一版写下的事件"。
+合成 v1 库（2 概念 + 1 关系 + 1 commit + 1 关系）的实测：
+`applied=3 / migrated_v1_events=4 / migrated_concepts=2 / migrated_pending_search=1 /
+ledger=5 行`（2 条概念改号 + 1 条 summary + 2 条关系改号）。
+`§13.2k` 写的"ledger 3 行"对应的是"旧号与新号相同、没有关系改号"的那个夹具；
+本轮的夹具刻意用 `0007/0008` 起号 ⇒ 新号 `0000/0001` ⇒ 两条关系改号进账。
+**口径定在这里**：`migrated_v1_events` 数的是"事件流里由上一版写下的事件条数（含
+`commit` 标记）"，`migration_ledger_lines` 数的是 `migrate_concepts.ledger_lines` 的
+总行数（逐条 + summary + 关系改号）。
+
+**更正二：源侧不止那四处写侧遗留。** 读侧搬运（`§13.2e`/`§13.2f`）搬的是
+"读口"（`store.rows`/`tx.rows`/`tx.upsert`/`.tx(...)` 四种形态），而下面这五类
+**不是那四种形态**，于是当时没被登记表数出来、落刀之后才以别的方式炸：
+
+| 漏掉的地方 | 落刀之后的症状 | 处置 |
+|---|---|---|
+| `store.LOCK_ORDER` 里的 `"concepts"` | 表从 `TABLES` 删了而锁还在 ⇒ `tx("concepts")` 过了"未知表"那一关、拿了一把没人再争的锁，**然后**才在读行时报错（半退役形态） | 从 `LOCK_ORDER` 删掉那一格（并干净） |
+| `stats()` 的键（`demo.py` 里写死的 `("search_requests","literature","concepts","relations")`） | `stats["concepts"]` **KeyError**（`stats()` 是按 `TABLES` 生成的，没有那一格） | 表名从 `S.TABLES` / `stats()` 现取；概念那一段走 `CR.view(shape="legacy")` |
+| 自检脚本里的 `len(st.rows('concepts'))` 这种**打印**（`pipeline.py` / `tools/trace_tools.py` / `agent_c/__main__.py`） | 同上：受控错当场抛出，整个自检挂掉 | 走 `CR.view(shape="legacy")["rows"]` |
+| **另一份表名/字段名单**：`tools/table_tools.py` 的 `_REF_SPECS` / `_BLOCKING_TARGETS`、`faculty_checks.py` 的 `DATA_TABLES`、`agent_d/_support.py` 的 `table("concepts")` | 外键保护与"数据面变了没有"的判据挂在一张不存在的表上（表没了 ⇒ 保护静默消失，而不是报错） | 挂到 `statements`（`_REF_SPECS` 顺带补上 `statements.derived_from` 这条本表内引用） |
+| **写死的第二份计数器名单**（`tests/test_agent_g.py::sync_all_counters` 里的 `("concept","concepts")`） | `S.TABLES["concepts"]` **KeyError** ⇒ 该文件**所有**用例在夹具阶段 error（不是某一个用例红） | 转发到 `conftest.sync_counters`（与 `test_agent_h` 上一次的修法同形） |
+
+**一条能复用的判据**：凡是"表名/字段名被抄成第二份名单"的地方，落刀之后的表现
+**不是红，而是静默失效**（外键保护不再拦、数据面判据看不见产出），或者整文件
+在夹具阶段就炸。所以落刀前的预检不该只数"提到 `concepts` 的次数"，而该找
+**第二份名单**：`store.stats()` 的消费点、`_REF_SPECS` 这类引用表、`DATA_TABLES`
+这类"数据面"名单、以及测试里自己维护的计数器名单。
+
+**新增的两条实现（`§13.2k` 没写、本轮做的）**：
+
+1. `rebuild` 折完之后**删掉老文件** `data/concepts.json`（并干净），并且**先备份**：
+   备份那一支原先只拷 `S.TABLES` 里的文件 ⇒ 老文件不在备份里，删它就成了不可逆的
+   数据销毁。现在备份循环把 `_MOVED_TABLES` 的文件一并拷进 `.backup-*/`，
+   `backup=False` 那一支**不删**（如实报 `moved_stale_files_kept`）。
+   读数：`moved_stale_files_removed=['concepts.json']` / `kept=[]`（`backup=True`）。
+2. `faculty_checks` 认**老表名**：`concepts/0001` 这种文本引用仍要被认出来并落到新家
+   （`_home_table`/`_home_rows`，名单取自 `store._MOVED_TABLES`，且按 `kind="concept"`
+   过滤）。不认识它等于让"引用落地"这道门整段消失 —— 而它是"编造引用"的唯一机械防线。
+
+**折出来的库必须过 `verify`（这一步抓到了两条真缺陷）**：探针里加了一条
+"折完之后 `verify_all` 0 error"（外部标准，不是"我自己觉得对"），它当场报出
+`relations.0001: stale_group_key`（错误级）。两条根因都不是读数问题：
+
+1. **改号没有连带重算派生字段**：`remap_concept_ids` 第一版只改 `concept_ids`，
+   而 `verify._check_3` 判的是 `concept_group_key == textutil.concept_group_key(concept_ids)`
+   （现算比对）⇒ 号改了、键没改，迁移出来的库自己带着一条"判重会失效"。
+   修法：`remap_concept_ids` 里按**唯一实现**重算 `concept_group_key` 与 `dedup_key`；
+   `store._fold_moved_tables` 那一侧也要把这三个键**一起**搬进 `state`
+   （只搬 `concept_ids` 等于白算）。
+2. **账本上的关系号是空的**：`remap_concept_ids` 读的是 `r.get("rel_id")`，而
+   `Relation` 的主键叫 `relation_id` ⇒ `out/migrate-map.jsonl` 里每条
+   `relation_renumbered` 都写着"改了号"却指不出是哪一条。账本的全部意义就是
+   "逐条可复算"，所以这一条比它看起来重要。修法：正名优先、老名兼容。
+
+这条经验值得单独记：**"折完的库过 verify"必须写成探针里的一条判据**。上面两条
+都不会让 `rebuild` 抛异常、也不会让行数变化 —— 它们只在"拿外部标准复算一遍"时现形。
+
+**落刀后的测试面真实读数（本轮，2026-10-09）**：修完上面五处源侧 + 夹具入口之后，
+把**与 `concepts` 有关的 49 个测试文件**跑了一遍（`python -B -m pytest`
+那一批显式路径）：**144 failed / 648 passed / 12 errors**。
+按文件聚集：`test_agent_b_gates` 23、`test_the_concept_view_during_the_merge` 20、
+`test_core_audit_abc_cli` 8、`test_rebuild` 8、`test_store_delete_events` 7、
+`test_store_counters_commit`/`test_store_alloc_guard`/`test_coverage_agent_b` 各 6、
+`test_store_concurrency`/`test_tools_table_fs` 各 5，其余 1–4 个。
+分类与 `§13.2k` 的三类一致（样品类别 / 样品表 / 过渡期判据），外加**第四类**：
+**golden 快照**（`test_tool_surface_snapshot` / `test_agent_surface_snapshot` /
+`test_verify_snapshot`，由人重冻，本轮不动）与**读图行数账**（`test_reading_map`）。
+
+**顺带修掉的三条过期断言（与并表无关，是自检自己的残留）**：`tools/table_tools.py`的自检里 `search_requests` 取号仍断言 `r-0000`，而 `interactions.next_prefixed_id`
+的语义是 **max+1**（空表给 `r-0001`）—— 这条在 `tests/test_tools_table_fs.py` 里
+当年改过，自检里那份没跟着改；同一处还有"8 个受控词表"要求**恰好等于** 8 个
+（实际反射 53 个）。三处都按"判据该判什么"改（`set(expected) <= set(reflected)`、
+用拿到的 `req_id` 而不是再写死一次）。
+
+**真盘迁移前的只读体检（2026-10-10，`temp/_s1r_migrate_dryrun.py`）**：落刀之后
+读期 fail-closed 当场生效 —— 62 个工作区里 61 个的 `statements.json` 还是
+`schema_version=1`，于是 `store.rows("statements")` **拒读**，`conceptrows.view()`
+报 `checked=False`（这正是 `F-7` 该有的样子：树上是 v2、盘上是 v1 ⇒ 不许按当前
+语义解释旧数据）。所以"先落刀、再迁移"这一趟里，**迁移是必须的第二步**，不是可选的。
+
+体检给的读数（这条读了才敢动真盘）：
+- 62 个工作区，`statements` 快照 v1 = 61、v2 = 0；
+- **并走的表（`concepts`）快照超前 = 0 个工作区 / 0 个号**，普通表快照超前 = 0，坏行 = 0
+  ⇒ `rebuild` 折事件日志**不丢任何行**（`F-9` 的边界在这批真盘上是空的）；
+- 1 个（`user-test-1`）的 `data/` 是空目录（没有事件日志、没有快照）⇒ 没有可迁的东西。
+
+**顺带补上的一条防呆（体检时想起来的）**：`rebuild` 折的是**事件日志**，而并走的表
+紧接着会**删老文件** —— 万一某个工作区的 `concepts.json` 里有"日志里从来没有过"的行
+（`F-9` 的已知边界），那些行的唯一副本就是那个文件，删掉即不可逆。所以
+`_rebuild_locked` 现在先把这份差集算出来（`moved_snapshot_ahead`），非空就
+**不删**老文件并如实报 `moved_stale_files_kept`。判据在探针第 6 节（负控：
+往合成 v1 库的快照里塞一行日志里没有的概念 ⇒ `moved_snapshot_ahead={"concepts":["9999"]}`
+且老文件仍在）。这一批真盘上它恰好是空的，但"这批恰好没事"不能当成"不需要这道闸"。
+
+**一处如实登记的降级（不是放宽判据）**：`tests/test_store_counters_commit.py` 的负控
+第二臂跑的是冻结基线 `temp/FIX6-F3-bak/store.py.bak`（撤销"提交块"修法之前的那一版，
+sha256 指纹断言仍在）。那一版**早于 S1r 并表** —— 它里面没有 `statements` 表，
+对它 `tx("statements", …)` 是未知表（实测那一版在 `LOCK_ORDER.index` 上抛
+`ValueError`），于是子进程进不了事务体、就绪标记永不出现，症状是 **60 秒超时**
+而不是判据在说话。处置：加一条"那一版能不能开 `statements` 事务"的**真子进程前置探针**，
+不成立就如实登记并跳过那一臂（与文件里既有的"备份不在盘上就跳过"同一口径）；
+注入版负控那一臂照旧跑、照旧判红。要与那一臂继续跑，需要一个"含 `statements` 表
+且撤销了提交块修法"的冻结基线 —— 那份字节现在盘上不存在，造它属于重冻基线，
+按硬约束不由我造。
+
+**落刀后由"测试面迁移"反向抓出来的四条真缺陷（都不是测试侧假设，逐条已修 + 有判据）**：
+
+| 缺陷 | 症状（实测） | 修法与判据 |
+|---|---|---|
+| `verify._check_3` 没实现"视图判不了时不逐条报红" | 库里 1 条关系 ⇒ `['concept_view_unreadable','dangling_concept','dangling_concept']`：`_check_1` 的注释写着"不许满屏假红"，那一半没写 | `_check_1` 把 `checked["concept_view"]=None`（三态里的"没查成"），`_check_3` 据此整段跳过并按 `checked["dangling_concept_skipped_relations"]` 记数（跳过要看得见，不许静默）；判据 `test_verify_reports_an_unreadable_view_instead_of_a_flood` |
+| `conceptrows._to_legacy` 把墓碑投影成 `merged_into=None` | `dedup.find_concept` 的墓碑防护读的正是这一格的真值性 ⇒ 墓碑重新变成活节点：让被合并方在 `statements.json` 里排在前面时，`find_concept(view_rows,"abelian group")` 返回**墓碑**而不是 survivor（新知识挂到幽灵节点上，survivor 永远接不到，而盘上一切正常） | 投影给**非空哨兵** `SUPERSEDED_INTO="superseded"`（不是编一个目标号——目标号在新标准里没有机器可读落点）；`_from_legacy` 也把老表的墓碑带过来并落 `status="superseded"`；`_apply_merge_tombstone` 不把哨兵当目标号写进理由。判据三条：投影非空且不是合法 id / `find_concept` 跳过墓碑且**活节点仍命中**（反真空）/ 往返一次不改写理由 |
+| `agent_h/core.py` 的"只读自检"逐字节比对写死了 `concepts.json` | 并表后那个文件不存在 ⇒ 自检当场 `FileNotFoundError`（`test_module_selftest_exits_zero[agentflow.agent_h]` 与 `test_agent_h_review_changes_only_status…` 两条红） | 取样面换成 `statements.json`（新家），判据不变 |
+| `conceptrows.write_concept(mirror=True)` 落刀后整笔"未知表" | 低层入口把"老表在不在"的判断推给调用方，而 `upsert`/`upsert_legacy_shaped` 都自判 ⇒ 同一个库里三处口径不一致 | 入口自己判（`mirror and LEGACY_TABLE in S.TABLES`）并把这一条写进 docstring；表声明仍由调用方给（走 `tables_for_concept_write`） |
+| `agentflow/__init__.py` 的 `__schema_version__` 没跟着升 | 公开版本号与磁盘格式契约互相矛盾：`test_fc05_contract` 断言两者相等（红），发布门 `item_contract` 判 `schema_version_pkg != schema_version_mod` ⇒ **fail**（"其余判据全绿"的那种形态） | 改成 `2` 并把"两处必须同时升 + 门会拦"写进注释 |
+| `schema.py` 的并表注释引了一个**不存在的符号** `_check_counters` | `tests/test_r5_orchestration_cost.py` 的"注释里引用的私有符号必须真的存在"判据红（该名字全树 0 次；真实现是 `verify._check_1` 里那一段） | 注释改成 `verify._check_1`（真符号）；该 token 的临时登记（判据侧记的债）随之删掉 |
+| `agent_b/core.py` 自检里"related_concepts 由关系表派生"读的是**老表专有的一列** | 落刀之后那一格恒为 `[]` ⇒ 自检自己报 FAIL（`18/19`），而 `test_core_audit_abc_cli` 的两条"自检必须返回 0"当场红 | 改成从 `relations` 现算（`dedup.derive_related_concepts` 是唯一实现），判据仍是"各自指向对方、不留空"；自检 `19/19` |
+
+**另外两处"第二份名单"同族**（并表把它们从"沉默"变成"炸"）：`tests/conftest.py::DATA_FILES`
+手抄了 17 个表文件名（含 `concepts.json`）⇒ 改成从 `schema.TABLES` 现推；
+`tests/test_agent_g.py::sync_all_counters` 写死 `("concept","concepts")` ⇒ 该文件**所有**
+用例在夹具阶段 `KeyError`（不是某一个红）。两处都按"一处定义"改。
+
+**一条留给人裁的审计能力回退（不在本批处置）**：老表的 `merged_at`（这次合并发生在什么时候）
+在新标准里**没有任何承载点**（`Statement` 没有时刻列，事件日志里也没有时刻字段），
+`_merge`（rejected/rewritten/skipped 三张清单）只能从 `relations` 的 `_merge_note` 反读，
+`merge_reason` 内容保住但名字换成 `quote_reason`。要不要为 `merged_at` 补一列属于 schema 变更
+（禁改区），列在这里等业主裁。
+
+**lint（R009）这一关的读数与口径**：落刀这一趟新写的注释很多，而 R009 会把
+"注释/docstring 里的成对 `**` 强调"判成 error。实测口径（读 `rule_R009_decoration_in_comments`
+得到，不是猜的）：它**把命中按"在不在禁改区"分成两档** —— 禁改区里的只记 `info`
+（"按 FC-27 只能由人改，不计入判据"），区外的记 `error`。所以：
+`store.py` / `schema.py` 里本来就带着 39 处以内的强调而基线仍是 `error 0`（它们是信息档）；
+本轮只对**区外**文件跑了清洗 `python -B temp\_r009_strip.py --write <file>`
+（tokenize 定位、只动注释与文档串、替换后 `ast.parse` 自检），区内的禁改区文件
+**一个字都不动**（不给人添无谓的 diff）。清洗后复查 AST 全绿，`R009` 的 error 归零。
 
 #### 13.2j 两个入口让**夹具/测试不牵连落刀**（2026-10-09）
 

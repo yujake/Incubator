@@ -573,17 +573,22 @@ def test_registry_call_without_budget_returns_exactly_what_it_used_to(store):
 
     这里的期望值是改动前手抄下来的（`{"data": 0, "error": null, "meta": {...}, "ok": true}`）——
     写成"结构性断言"（只查键存在）会漏掉"多塞了一个 meta 键"这种静默变化。
+
+    并表（`SCHEMA_VERSION=2`）之后这张表换成了 `statements`：本条钉的是
+    `table.count` 的返回值逐字段不变（含 `meta.table` 回显），
+    与表名无关；`concepts` 已经不在 `schema.TABLES` 里，拿它做标本会让这条
+    变成"参数错误"的断言 —— 那是另一件事。
     """
     reg = build_registry(store=store, workspace_root=store.root).registry
     # `P-14`：完整注册表默认不绑定角色 ⇒ `call` 一律被拒。本用例测的是"不传 budget
     # 时返回值逐字段不变"，所以先绑定一个合法角色（`table.count` 的角色含 A）。
     reg.bound_role = "A"
-    res = reg.call("table.count", table="concepts")
+    res = reg.call("table.count", table="statements")
     assert res.to_dict() == {
         "ok": True,
         "data": 0,
         "error": None,
-        "meta": {"filtered": False, "table": "concepts", "total": 0},
+        "meta": {"filtered": False, "table": "statements", "total": 0},
     }
     assert "pruned" not in res.meta and "spilled" not in res.meta, "不传 budget 就不该出现剪枝痕迹"
 

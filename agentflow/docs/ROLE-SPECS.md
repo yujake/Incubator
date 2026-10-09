@@ -188,7 +188,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 角色 | 写集（表级） |
 |---|---|
 | `A` | `search_requests`, `literature` |
-| `B` | `literature`, `concepts`, `relations`, `reprocess_requests` |
+| `B` | `literature`, `statements`, `relations`, `reprocess_requests`（S1r 并表后：概念行住 `statements` 的 `kind="concept"` 那一档，`concepts` 已退役） |
 | `C` | `analysis_reports`（**只读角色的显式登记例外**） |
 | `D` | `research_questions`, `search_requests`, `relations` |
 | `E` | `experiments` |
@@ -287,7 +287,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 48 | `search.shelf` | **不联网**：列出库里全文在盘上的文献（本地书架），`origin` 分 `local_ingest`/`downloaded` 两档 | `read` | 否 | A C H | limit, lit_id | `{count,rows_total,have_path,missing_files,local_ingest,downloaded,truncated,books,note}` | `test_search_offline.py` | **本轮新增**（§187）；`pages` 对网络下载进来的行是 `null`（下载时没记页数） |
 | 49 | `table.count` | 统计行数（可用 `filter` 做等值过滤） | `read` | 否 | A B C D E F G H **V** | **table**；filter | `data`=整数行数 | **零提及** | INVENTORY 4.1：docstring 承诺「计数不该受 `limit` 影响」，**这个不变量没被测** |
 | 50 | `table.create` | 新建一行：自动分配主键（`search_requests` 用 `r-NNNN`），校验通过才落盘，返回新 ID | `write_local` | **是** | A B D E F G | **table**,**row** | `data`=新主键**字符串**；`meta.row` 是实际落盘的整行 | `test_tools_table_fs.py` | INVENTORY 4.7①：`_next_request_id` 取**最小可用号**（与 `research_tools` 的 max+1 冲突） |
-| 51 | `table.delete` | 删除一行；被引用的 `concepts`/`literature` 会被拒绝并列出引用者 | `write_local` | **是** | A B D E F G | **table**,**id** | `data`=是否真的删掉；`meta.references` 列出引用者 | `test_tools_table_fs.py` | — |
+| 51 | `table.delete` | 删除一行；被引用的 `statements`/`literature` 会被拒绝并列出引用者 | `write_local` | **是** | A B D E F G | **table**,**id** | `data`=是否真的删掉；`meta.references` 列出引用者 | `test_tools_table_fs.py` | — |
 | 52 | `table.get` | 按主键取一行；不存在时返回 `ok=True` 且 `data=None`（用 `meta.found=False` 说明） | `read` | 否 | A B C D E F G H **V** | **table**,**id** | `data`=行对象或 `None`；`meta.found` | `test_tools_table_fs.py` | — |
 | 53 | `table.list` | 列出某张表的行（支持等值过滤与分页），并给出过滤后的总数 | `read` | 否 | A B C D E F G H **V** | **table**；filter, limit, offset | `{rows,total,returned,limit,offset,table}` | **零提及** | INVENTORY 4.1：`total` 是**过滤后**总数，是分页正确性的唯一依据，**没有一条断言** |
 | 54 | `table.schema` | 返回表的字段名/类型/是否必填/默认值，以及全部受控词表 | `read` | 否 | A B C D E F G H **V** | （无） | `{tables:{表名:{fields,primary_key,vocabularies}},vocabularies}` | **零提及** | INVENTORY 4.1：反射出全部受控词表，**是 LLM 写参数的唯一依据**；4.5#9 `L3_STATUSES` 声称受控词表但无成员校验 |
@@ -411,7 +411,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 不做什么 | 为什么不由 A 做 | 该由谁做 |
 |---|---|---|
 | 抽取概念与关系 | 抽取是**知识生产**，A 的产出是**来源**；混在一起会让"来源对不对"与"抽得对不对"无法分别归因 | **B** |
-| 写 `concepts` / `relations` | A 的写集是 `{search_requests, literature}`（`capabilities.WRITE_SETS`），**不含**知识表 | **B** |
+| 写 `statements`（含概念行）/ `relations` | A 的写集是 `{search_requests, literature}`（`capabilities.WRITE_SETS`），**不含**知识表 | **B** |
 | 判断一篇文献"有没有用" | 相关性判断需要图上的结构信息（度数、路径），A 拿到的是候选元数据 | **C**（分析）/ **D**（决策） |
 | 逐字引文回验 | 回验需要**文献正文 + 关系断言**，断言由 B 产出 | **B**（`quoteverify`） |
 | 决定研究问题该不该问 | A 只消费 `search_requests`；"该不该问"是研究判断 | **D**（`research.submit_gap` / `AgentD.submit_gaps`） |
@@ -736,7 +736,7 @@ B 的"没有结果"逐个列：
   - `config.yaml` 的 `agent_b.*` 阈值（`dup_strong` / `dup_review` / `quote_widen_pages` /
     `allow_fulltext_quote_fallback`）
 - **产出被谁消费**：
-  - `concepts` / `relations` → **C**（图）、**D**（研究问题）、**E**（断言）、**G**（引用）、**H**（审校）
+  - `statements`（含 `kind="concept"` 的概念行）/ `relations` → **C**（图）、**D**（研究问题）、**E**（断言）、**G**（引用）、**H**（审校）
   - `relations.quote_verified` → **C** 的路径评分（`score_breakdown` 里 `quote_verified` 是最强信号，`DESIGN-ROLES.md` §5.4）
   - `suspect` → **D** 的矛盾裁决（I2）
 
@@ -767,7 +767,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_b
 
 **C 是唯一"只读但确实会写自己的产出表"的角色**（`capabilities.WRITE_SETS["C"] = {"analysis_reports"}`）。
 这不是冲突：C 写的是**它自己说过什么**（`AnalysisReport.persist`，`agent_c.AnalysisReport.persist`），
-它**一行 `concepts`/`relations` 都不碰**。
+它**一行 `statements`/`relations` 都不碰**。
 
 ### C.2 职责
 
@@ -934,7 +934,7 @@ C 的产出有两类，状态语义完全不同。
 - **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`B`（`:596`）、`D`（`:598`）、
   `F`（`:600`）。**C 也能被 `A`/`E`/`G`/`H` 召唤吗？不能。**
 - **C 能召唤谁**：**没有人**（`ALLOWED_EDGES["C"] = frozenset()`，逐字理由见 `capabilities.ALLOWED_EDGES`）。
-- **入参从哪来**：`concepts` / `relations` 表（B 写入）；`request` 原文（人/编排层给的）。
+- **入参从哪来**：`statements`（含概念行）/ `relations` 表（B 写入）；`request` 原文（人/编排层给的）。
 - **产出被谁消费**：
   - `analysis_reports` 行 + `reports/*.md` → **D**（`ingest` 把它消化成研究问题）
   - `candidate_gaps` → **D** / 编排层 → `search_requests`（I3）

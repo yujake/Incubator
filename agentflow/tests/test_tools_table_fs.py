@@ -44,31 +44,38 @@ def test_table_crud_roundtrip_preserves_untouched_fields(tables):
     """create→get→update→delete：未在 patch 里出现的字段（含 `_` 诊断字段）必须原样保留。"""
     created = tables.call(
         "table.create",
-        table="concepts",
-        row={"name": "环", "definition": "环的原始定义", "aliases": ["ring"], "related_concepts": [], "_probe": "诊断字段"},
+        table="statements",
+        row={
+            "origin": "own_result", "kind": "theorem",
+            "statement_text": "环", "statement_full": "环的原始定义",
+            "aliases": ["ring"], "derived_from": [], "quote_reason": "尚未逐字校验",
+            "_probe": "诊断字段",
+        },
     )
     assert created.ok, created.error
     cid = created.data
     assert cid == "0000"
 
-    got = tables.call("table.get", table="concepts", id=cid)
+    got = tables.call("table.get", table="statements", id=cid)
     assert got.ok and got.meta["found"] is True
-    assert got.data["name"] == "环"
+    assert got.data["statement_text"] == "环"
 
-    upd = tables.call("table.update", table="concepts", id=cid, patch={"name": "环（改）"})
+    upd = tables.call("table.update", table="statements", id=cid, patch={"statement_text": "环（改）"})
     assert upd.ok, upd.error
 
-    after = tables.call("table.get", table="concepts", id=cid).data
-    assert after["name"] == "环（改）"
-    assert after["definition"] == "环的原始定义", "未在 patch 里的 definition 被清掉了"
+    after = tables.call("table.get", table="statements", id=cid).data
+    assert after["statement_text"] == "环（改）"
+    assert after["statement_full"] == "环的原始定义", "未在 patch 里的 statement_full 被清掉了"
     assert after["aliases"] == ["ring"], "未在 patch 里的 aliases 被清掉了"
-    assert after["related_concepts"] == [], "未在 patch 里的 related_concepts 被清掉了"
+    assert after["derived_from"] == [], "未在 patch 里的 derived_from 被清掉了"
     assert after["_probe"] == "诊断字段", "`_` 开头的诊断字段被抹掉了"
-    assert after["created_at"] and after["updated_at"], "时间戳应当被自动补上"
+    # 时间戳：`statements` 的 schema 里只有 `created_at`（没有 `updated_at`）——
+    # 建行时它由 `_touch_timestamps` 自动补上（本行刻意没给这一格）⇒ 非空即证。
+    assert after["created_at"], "时间戳应当被自动补上"
 
-    deleted = tables.call("table.delete", table="concepts", id=cid)
+    deleted = tables.call("table.delete", table="statements", id=cid)
     assert deleted.ok and deleted.data is True
-    assert tables.call("table.get", table="concepts", id=cid).meta["found"] is False
+    assert tables.call("table.get", table="statements", id=cid).meta["found"] is False
 
 
 def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
@@ -101,7 +108,7 @@ def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
 
 def test_table_get_missing_row_is_ok_with_found_false(tables):
     """「没找到」是有效结论而不是错误：ok=True 且 meta.found=False。"""
-    res = tables.call("table.get", table="concepts", id="9999")
+    res = tables.call("table.get", table="statements", id="9999")
     assert res.ok is True
     assert res.data is None
     assert res.meta["found"] is False
@@ -111,9 +118,15 @@ def test_table_get_missing_row_is_ok_with_found_false(tables):
 
 
 def test_delete_concept_referenced_by_relation_names_the_referrer(tables):
-    """删被关系引用的概念必须被拒，且错误里点名"是谁在引用"。"""
-    tables.call("table.create", table="concepts", row={"name": "群", "definition": "d", "related_concepts": []})
-    tables.call("table.create", table="concepts", row={"name": "阿贝尔群", "definition": "d", "related_concepts": []})
+    """删被关系引用的概念必须被拒，且错误里点名"是谁在引用"。
+
+    概念行并表之后住在 `statements` 里（`kind="concept"`）—— 名字与这条判据的
+    保护意图都不变（静默删掉被引用的行会让 verify 报 `dangling_*`，而那时
+    "原来是谁引用的"已经查不出来了），变的只是行现在落在哪张表。
+    所以这里照旧用 `kind="concept"` 的行，`relations.concept_ids` 照旧指向它。
+    """
+    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
+    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "阿贝尔群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
     tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
     rel = tables.call(
         "table.create",
@@ -122,14 +135,14 @@ def test_delete_concept_referenced_by_relation_names_the_referrer(tables):
     )
     assert rel.ok, rel.error
 
-    res = tables.call("table.delete", table="concepts", id="0000")
+    res = tables.call("table.delete", table="statements", id="0000")
     assert res.ok is False
     assert res.meta["kind"] == "referenced"
     assert "relations" in res.error and rel.data in res.error, res.error
     refs = res.meta["references"]
     assert any(r["table"] == "relations" and r["row_id"] == rel.data for r in refs)
     # 被拒之后行必须还在（宁可误拒也不能误删）
-    assert tables.call("table.get", table="concepts", id="0000").meta["found"] is True
+    assert tables.call("table.get", table="statements", id="0000").meta["found"] is True
 
 
 def test_delete_literature_referenced_by_request_result_lit_ids_is_refused(tables):
@@ -153,27 +166,27 @@ def test_delete_literature_referenced_by_request_result_lit_ids_is_refused(table
 
 def test_table_update_refuses_primary_key_change(tables):
     """主键是外键的锚点：update 不许改主键（否则一次调用就造出一片悬空引用）。"""
-    tables.call("table.create", table="concepts", row={"name": "环", "definition": "d", "related_concepts": []})
-    res = tables.call("table.update", table="concepts", id="0000", patch={"concept_id": "0009"})
+    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "theorem", "statement_full": "d", "quote_reason": "尚未逐字校验"})
+    res = tables.call("table.update", table="statements", id="0000", patch={"stmt_id": "0009"})
     assert res.ok is False
     assert res.meta["kind"] == "primary_key_change"
     assert "不允许修改主键" in res.error
-    assert tables.call("table.get", table="concepts", id="0000").meta["found"] is True
+    assert tables.call("table.get", table="statements", id="0000").meta["found"] is True
 
 
 def test_table_update_rejects_unknown_field_and_empty_patch(tables):
     """拼错的字段名必须报错而不是静默忽略；空 patch 也要拒（它只会改 updated_at）。"""
-    tables.call("table.create", table="concepts", row={"name": "环", "definition": "d", "related_concepts": []})
-    bad = tables.call("table.update", table="concepts", id="0000", patch={"nmae": "拼错"})
+    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "theorem", "statement_full": "d", "quote_reason": "尚未逐字校验"})
+    bad = tables.call("table.update", table="statements", id="0000", patch={"nmae": "拼错"})
     assert bad.ok is False and bad.meta["kind"] == "validation"
-    empty = tables.call("table.update", table="concepts", id="0000", patch={})
+    empty = tables.call("table.update", table="statements", id="0000", patch={})
     assert empty.ok is False and empty.meta["kind"] == "param_error"
 
 
 def test_table_delete_of_unreferenced_relation_is_allowed(tables):
     """relations 不在硬拒绝名单里：删它放行（§1.1：危险等级可接受）。"""
-    tables.call("table.create", table="concepts", row={"name": "群", "definition": "d", "related_concepts": []})
-    tables.call("table.create", table="concepts", row={"name": "阿贝尔群", "definition": "d", "related_concepts": []})
+    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
+    tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "阿贝尔群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
     tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
     tables.call("table.create", table="relations", row={"concept_ids": ["0000", "0001"], "description": "d", "lit_id": "0000"})
     res = tables.call("table.delete", table="relations", id="0000")

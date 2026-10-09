@@ -1388,22 +1388,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `ALLOWED_EDGES` 里能召唤 C 的是 B / D / F / M（A→[B]、E→[B,D]、G→[A,D,E,F]、
 #: H→[A,E,G]、V→[F] 都不含 C）⇒ 实测换值五格 = C 自己 + 那四个，
 #: 其余五格（A/E/G/H/V）逐字不动 —— 换几格本身就是"谁看得见 C"的读数。
-#: `p56`（2026-10-09，S1r 依赖的第四种来源）：`doc.register_dependency` 加
-#: `source_stmt_id` / `path_group` ⇒ 那一件工具的说明原文变了，而 G 自己的提示词里
-#: 逐工具渲染的就是说明 ⇒ 只有 G 那一格换值；H/M 的伙伴表只列"动作名 + 必填参数"
-#: （两格都是可选）⇒ 那两格逐字不动。换一格本身就是"这次改动只落在 G 自己"的读数。
-_FROZEN_PROMPT_VERSION = "p56"
+#: `p57`（2026-10-10，S1r 并表落刀）：`specs/b.py` 的写集去掉 `concepts`（表退役）⇒
+#: 十格全换 —— 伙伴表在每个角色的提示词里都逐条列着"这个伙伴写哪些表"，B 的写集
+#: 一动，看得到 B 的那些行全换；实测十格摘要无一相同（现算脚本 `temp/_s1r_prompt_digests.py`
+#: 逐格对照过）。与 `p55`（只换那五格）对照着看，"换几格"本身就是这次改动的读数。
+_FROZEN_PROMPT_VERSION = "p57"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",
-    "B": "ca40323d829da25b9a13b2c8322ea953d4520845343b801fedc74ac09129ab3b",
-    "C": "24695fbffce9c826a7524aaa1f557a5609e6a62f85d6e894ae80d2abbe9ead66",
-    "D": "90897ef41a8fc620d87a16e47984adfb5053ea753bcb35a5bef862556ae4ca4d",
-    "E": "7df2627677772e8447b9db4a7ca94394d910c2132ae2daf441300e2b91e9e013",
-    "F": "a2fa23c0748825f52dfa2524113882ddd5eabf5a9e610b9fd8dc218f1a73cca8",
-    "G": "dea28325506398e2e1f2e7366585abb46afd6d98a23c83ced3563bca1f6f5740",
-    "H": "90bf5f20175f9bba118884e4bedcc848bc81c4ef3847e17ff16dd3c6c639f865",
-    "V": "d05ce8da7181e87c981d21b116de04f1f5cc6b7b4c535803f49205fd350aa093",
-    "M": "20232fdb1e852b27a43133ec17e3679e15bb5bc7f8e2ae968426767ee2a3fe6e",
+    "A": "2c1d653b212480845d3d20d0df29d48d891a558cf39b151841e063c0537a7f0c",
+    "B": "b047336b14c677a910e754cf140be9c5b152a8c58253a9eacc2de052cacc4b1d",
+    "C": "42c872452a68417c948b89b24d3f401ff5c09a8883cc97c4fcc880fcc38d3f06",
+    "D": "f3afd4dbbab49df23fdb8a8eeef791dd3171c1ac9508fbcaca278bda391f04ee",
+    "E": "1f6352c44e1e18603f30a1408c88e4f4437459f8d3b8b3bc3d978e33e9ead50b",
+    "F": "2a72f34df88ea23d2a77094b8c58fa22cbcea1563d9bd10d6dba877a5b10479b",
+    "G": "5448f10719ae690a94a03a3069849542c0aeaff89cbaf81df0fb2ab22e913dbb",
+    "H": "65145a398dcfb36e353f51c2b22fd6bd5de27c433eb9ccdd771b76d67e071a06",
+    "V": "9f4599d46cd10a86c5fadf9573ac71872ab5373b4bd48f11da03035afc5c6f77",
+    "M": "743a60fd12cf673bbf47659b54761a5099b00d829b5859acf711dda605c3c3cc",
 }
 
 

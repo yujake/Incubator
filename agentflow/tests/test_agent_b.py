@@ -1,10 +1,20 @@
 """B 智能体：概念复用、related_concepts 派生、无文件不堵队列、抽取失败不置 processed。
 
 （DESIGN.md §6.1/§6.2：写入顺序与自愈语义。）
+
+并表（S1r）之后本文件有两处读法换了落点，判据本身没放宽：
+
+- 概念行的读口是 `conceptrows.view(..., shape="legacy")`（老字段名投影）——
+  `store.rows("concepts")` 在新 schema 下是受控错；
+- `related_concepts` 是老表专有的一格，新标准里没有它的承载点：真相由 relations
+  表回答（`dedup.derive_related_concepts` 仍是唯一实现）⇒ 原来断言"概念行里那一格
+  == 派生值"的地方，改成断言"同一件事的派生面"（互含、升序、不含自身），
+  并补一条负控证明它不是恒空。
 """
 
 from __future__ import annotations
 
+from agentflow import conceptrows as CR
 from agentflow import dedup as D
 from agentflow.agent_b import AgentB
 from agentflow.extract import DocumentText, extract_text
@@ -71,17 +81,31 @@ def test_concept_is_reused_instead_of_created_twice(store):
 
     assert first.concepts_created == 1 and second.concepts_created == 0
     assert second.concepts_reused == 1
-    concepts = store.rows("concepts")
+    concepts = CR.view(store, shape="legacy")["rows"]
     assert len(concepts) == 1, f"同名概念被重复创建：{concepts}"
     assert concepts[0]["name"] == "群"
-    assert concepts[0]["related_concepts"] == []
+    # related_concepts 是老表专有的一格：(并表之后)新标准里没有它的承载点，读老字段名
+    # 拿到的是空列表（"没有这一格"），不是"没有边"。真相在 relations 表 —— 这里断言
+    # 从关系表现算出来的邻域为空（这条路径上一条关系都没写）。
+    assert D.derive_related_concepts(concepts[0]["concept_id"], store.rows("relations"),
+                                     include_suspect=True) == []
 
 
 # --------------------------------------------------------------------------- related_concepts 派生
 
 
 def test_related_concepts_are_derived_from_relations(store):
-    """related_concepts 必须由关系表整体派生：互相包含、升序、不含自身（§6.2）。"""
+    """相关概念必须由关系表整体派生：互相包含、升序、不含自身（§6.2）。
+
+    改写（并表 S1r）：原文断言"概念行里的 related_concepts == 派生值"。并表之后那一格
+    在新标准里没有承载点（`view(shape="legacy")` 对 statements 那一档一律投影成空列表
+    ⇒ 拿它比派生值会恒真/恒假），真相由 relations 表回答，`dedup.derive_related_concepts`
+    仍是唯一实现。所以这里断的是同一件事的派生面：
+
+    ① 互含（关系是无向的：a 的相关集合里有 b ⇔ b 的里面也有 a）；
+    ② 形状（升序去重、不含自身）；
+    ③ 负控：这条判据不是恒空 —— 0000 恰好同时连着 0001（旧关系）与 0002（新关系）。
+    """
     write_library_file(store, "0001/c.txt", f"环是一个集合。{QUOTE}")
     add_literature(store, "0000", title="旧文献", path=None, processed=True)
     add_literature(store, "0001", title="新文献", path="0001/c.txt")
@@ -110,25 +134,40 @@ def test_related_concepts_are_derived_from_relations(store):
     res = _agent_b(store, extractor).run_once()
     assert res.relations_added == 1 and res.relations_duplicate == 0
 
-    concepts = {c["concept_id"]: c for c in store.rows("concepts")}
+    concepts = {c["concept_id"]: c for c in CR.view(store, shape="legacy")["rows"]}
     relations = store.rows("relations")
     assert set(concepts) == {"0000", "0001", "0002"}
 
+    derived = {
+        cid: D.derive_related_concepts(cid, relations, include_suspect=True)
+        for cid in concepts
+    }
     # 手工构造的旧关系 (0000,0001) 与新关系 (0000,0002) 都应体现在两侧
-    assert "0001" in concepts["0000"]["related_concepts"]
-    assert "0002" in concepts["0000"]["related_concepts"]
-    assert concepts["0001"]["related_concepts"] == ["0000"]
-    assert concepts["0002"]["related_concepts"] == ["0000"]
+    assert "0001" in derived["0000"]
+    assert "0002" in derived["0000"]
+    assert derived["0001"] == ["0000"]
+    assert derived["0002"] == ["0000"]
+    # ③ 负控：邻域非空且恰好这两条（"派生"不是恒空，也不是把整张表的邻域都算上）
+    assert derived["0000"] == ["0001", "0002"]
 
-    for cid, c in concepts.items():
-        rel = c["related_concepts"]
-        assert rel == sorted(set(rel)), "related_concepts 必须升序去重"
-        assert cid not in rel, "related_concepts 不能含自身"
-        assert rel == D.derive_related_concepts(cid, relations), "落库值必须等于关系表派生值"
+    for cid, rel in derived.items():
+        assert rel == sorted(set(rel)), "派生集合必须升序去重"
+        assert cid not in rel, "派生集合不能含自身"
+        for other in rel:
+            assert cid in derived[other], "关系是无向的：派生集合必须互含"
+
+    # 老字段名那一格在新标准里没有权威值 —— 这件事必须显式（否则按老字段名读的人
+    # 会把"没有这一格"读成"这个概念的邻域是空集"）。
+    assert all(c["related_concepts"] == [] and c["legacy_related"] is False
+               for c in concepts.values())
 
 
 def test_related_concepts_ignores_rejected_relations(store):
-    """被拒绝（rejected）的关系不计入 related_concepts（§6.2）。"""
+    """被拒绝（rejected）的关系不计入相关概念（§6.2）。
+
+    改写（并表 S1r）：真相在 relations 表 ⇒ 从它派生；并补一条负控（把那条关系改成
+    active，派生结果必须变非空）——否则"派生结果为空"可能只是因为派生本身不工作。
+    """
     write_library_file(store, "0002/d.txt", QUOTE)
     add_literature(store, "0002", title="D", path="0002/d.txt")
     add_concept(store, "0000", "群")
@@ -138,9 +177,16 @@ def test_related_concepts_ignores_rejected_relations(store):
     extractor = StubExtractor(concepts=[], relations=[])
     _agent_b(store, extractor).run_once()
 
-    concepts = {c["concept_id"]: c for c in store.rows("concepts")}
-    assert concepts["0000"]["related_concepts"] == []
-    assert concepts["0001"]["related_concepts"] == []
+    assert D.derive_related_concepts("0000", store.rows("relations"), include_suspect=True) == []
+    assert D.derive_related_concepts("0001", store.rows("relations"), include_suspect=True) == []
+
+    # 负控：同一条边一旦不是 rejected，它就必须出现在派生集合里
+    with store.tx("relations", actor="test") as tx:
+        row = tx.find("relations", relation_id="0000")
+        row["status"] = "active"
+        tx.upsert("relations", row, note="test:unreject")
+    assert D.derive_related_concepts("0000", store.rows("relations"), include_suspect=True) == ["0001"]
+    assert D.derive_related_concepts("0001", store.rows("relations"), include_suspect=True) == ["0000"]
 
 
 # --------------------------------------------------------------------------- 无法读取的文献

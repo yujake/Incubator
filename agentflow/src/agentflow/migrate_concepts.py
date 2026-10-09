@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""把 `concepts` 折进 `statements`（S1r 的迁移内核）—— 纯函数，不碰盘。
+r"""把 `concepts` 折进 `statements`（S1r 的迁移内核）—— 纯函数，不碰盘。
 
 业主 2026-10-09：「concept表真并进statements。由于你用"类型"标记了concept的身份，
 proof里就证这个概念为什么是良定义的」+「并表了就并干净」。
@@ -264,13 +264,29 @@ def remap_concept_ids(relation_rows: Iterable[Mapping[str, Any]],
     返回 `{"rows": [...], "changed": [...], "missing": [...]}`：
     `changed` 是 `(rel_id, 旧号, 新号)`，`missing` 是"映射表里没有这个号"的那些
     （点名，不静默丢 —— 那说明关系表里挂着一个概念表里没有的号）。
+
+    ## 改号必须连带重算派生字段（实测抓到的一条真缺陷）
+
+    这一格第一版只改了 `concept_ids`。合成 v1 库跑 `rebuild` 之后 `verify` 当场报
+    `relations.0001: stale_group_key`（错误级）—— 因为 `verify` 判的是
+    `concept_group_key == textutil.concept_group_key(concept_ids)`（现算比对），
+    而号改了、键没改 ⇒ 迁移出来的库自己就带着一条"判重会失效"。
+    所以这里把 `concept_group_key` 与 `dedup_key` 一并按当前的唯一实现重算
+    （`textutil.concept_group_key` / `dedup.relation_dedup_key`，不在这里抄第三份口径）。
     """
+    from . import dedup as _D   # 惰性：判重键的唯一实现
+    from . import textutil as _T  # 惰性：概念组键的唯一实现
+
     rows: list[dict[str, Any]] = []
     changed: list[tuple[str, str, str]] = []
     missing: list[tuple[str, str]] = []
     for raw in relation_rows:
         r = dict(raw)
-        rid = str(r.get("rel_id") or "")
+        # 主键字段是 `relation_id`（`Relation` 的声明）；`rel_id` 是这一格早期写错的
+        # 名字 —— 那时 `changed` 里每一条的 `rel_id` 都是空串，于是 `out/migrate-map.jsonl`
+        # 上写着"关系改了号"却指不出是哪一条（账本的意义正是"逐条可复算"）。
+        # 两个都认（老行的兼容），但正名优先。
+        rid = str(r.get("relation_id") or r.get("rel_id") or "")
         old_ids = [str(x) for x in (r.get("concept_ids") or [])]
         new_ids: list[str] = []
         for cid in old_ids:
@@ -283,5 +299,8 @@ def remap_concept_ids(relation_rows: Iterable[Mapping[str, Any]],
                 new_ids.append(cid)          # 原样留着：丢掉会让"挂着一个不存在的号"这件事消失
         if new_ids != old_ids:
             r["concept_ids"] = sorted(set(new_ids))
+            r["concept_group_key"] = _T.concept_group_key(r["concept_ids"])
+            r["dedup_key"] = _D.relation_dedup_key(r["concept_group_key"],
+                                                   str(r.get("quote") or ""))
         rows.append(r)
     return {"rows": rows, "changed": changed, "missing": missing}

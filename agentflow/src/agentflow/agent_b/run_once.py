@@ -135,9 +135,10 @@ class _RunOnce:
             verified_rels.append({"rel": rel, "check": chk})
 
         # ---- 提交（锁内，短）
-        with self.store.tx("literature", "concepts", "relations", "statements",
+        # 声明哪几张表由过渡层决定（`concepts` 落刀之后不再存在 ⇒ 声明它会以"未知表"失败）。
+        with self.store.tx(*_CR.tables_for_concept_write("literature", "relations"),
                            actor=self.actor, note="commit") as tx:
-            concept_rows = tx.rows("concepts")
+            concept_rows = _CR.view_tx(tx, shape="legacy")["rows"]
             relation_rows = tx.rows("relations")
             touched: set[str] = set()
 
@@ -151,13 +152,15 @@ class _RunOnce:
                     if merged != (existing.get("aliases") or []):
                         existing["aliases"] = merged
                         existing["updated_at"] = S.now_iso()
-                        tx.upsert("concepts", existing, note="alias_merge")
-                        # 并表过渡期：老表那份改动要同步到新标准（同一个号），
-                        # 否则新标准那一行悄悄过期而盘上两边都在（见 conceptrows 的 docstring）
-                        _CR.sync_from_legacy(tx, existing, actor=self.actor)
+                        # 一处调用同时办两件事：老表还在时先写老表那一份，再同步新标准
+                        # （同一个号）；老表已退役 ⇒ 只写新标准。见 conceptrows。
+                        _CR.upsert_legacy_shaped(tx, existing, actor=self.actor,
+                                                 note="alias_merge")
                     res.concepts_reused += 1
                     return existing["concept_id"]
-                cid = tx.alloc_id("concept")
+                # 概念号与命题号是同一个号空间（业主 D2「同表同分配器不可能撞号」）
+                # ⇒ 这里从 `stmt` 发号；落刀之后 `concept` 这一档连计数器都没有了。
+                cid = tx.alloc_id("stmt")
                 row = S.Concept(
                     concept_id=cid,
                     name=name,
@@ -172,8 +175,7 @@ class _RunOnce:
                 row.validate()
                 d = row.to_dict()
                 concept_rows.append(d)
-                tx.upsert("concepts", d, note="created")
-                _CR.sync_from_legacy(tx, d, actor=self.actor)   # 同号同步（过渡期）
+                _CR.upsert_legacy_shaped(tx, d, actor=self.actor, note="created")
                 res.concepts_created += 1
                 return cid
 
@@ -313,8 +315,12 @@ class _RunOnce:
                 if d.get("lit_id") == lit_id or set(d.get("concept_ids") or []) & touched:
                     touched.update(d.get("concept_ids") or [])
 
-            # 4) 由关系表整体派生 related_concepts
-            for cid in sorted(touched):
+            # 4) 由关系表整体派生 related_concepts（老表专有的一格）
+            #
+            # 并表之后这一格没有承载点：新标准里"哪些概念相关"由 `relations` 表本身回答
+            # （读侧现算，`dedup.derive_related_concepts` 仍是唯一实现），落一行镜像
+            # 只会把派生结果又抄一份回老字段名上。所以这一支在落刀之后整段不跑。
+            for cid in sorted(touched) if _CR.legacy_present(self.store).get("present") else []:
                 target = next((c for c in concept_rows if c["concept_id"] == cid), None)
                 if target is None:
                     continue
@@ -322,8 +328,8 @@ class _RunOnce:
                 if target.get("related_concepts") != want:
                     target["related_concepts"] = want
                     target["updated_at"] = S.now_iso()
-                    tx.upsert("concepts", target, note="related_recomputed")
-                    _CR.sync_from_legacy(tx, target, actor=self.actor)   # 同号同步（过渡期）
+                    _CR.upsert_legacy_shaped(tx, target, actor=self.actor,
+                                             note="related_recomputed")
 
             # 5) 标记文献处理完成（与实体写入同一事务 —— 见 DESIGN.md §2.4）
             lit_row = tx.find("literature", lit_id=lit_id) or lit

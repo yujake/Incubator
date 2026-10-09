@@ -5,7 +5,7 @@
 | 函数 | 判据 | 为什么命中等级 |
 |---|---|---|
 | `cmd_submit` | 取号唯一 + 输入不合法 ⇒ 整批不写 | 写 `search_requests`（等级 1） |
-| `cmd_repair` | 没有显式目标就一行都不写 | 写 `concepts`（等级 1） |
+| `cmd_repair` | 没有显式目标就一行都不写（并表后 `--related` 受控退役、同样一行不写） | 写 `statements`（等级 1） |
 | `cmd_verify` | 默认就能当门用（有 error ⇒ 退出码 1） | 返回 verdict 的退出码（等级 2） |
 
 三条判据各自都对应一次真实踩过的坑（写在各函数的 docstring 里），
@@ -30,7 +30,7 @@ import pytest
 from agentflow import cli, schema as S
 from agentflow.store import Store
 
-from conftest import TS, add_concept, add_literature, add_relation, sync_counters
+from conftest import TS, add_concept, add_literature, add_relation, read_data_bytes, sync_counters
 
 
 # ============================================================ 夹具
@@ -110,30 +110,37 @@ def test_cmd_submit_rejects_non_array_manifest(ws: Store):
 # ============================================================ cmd_repair（等级 1）
 
 
-def test_cmd_repair_accepts_and_recomputes_related_concepts(ws: Store):
-    """正向：显式 `--related` ⇒ 退出码 0，且真的按派生规则重算了。
+def test_cmd_repair_related_exits_2_with_a_pointer_and_writes_nothing(ws: Store, capsys):
+    """正向（并表之后的新口径）：显式 `--related` ⇒ 受控退出 2 + 指路，且一行都不写。
 
-    断言打在判据上：`related_concepts` 必须等于
-    `dedup.derive_related_concepts` 的结果（而不是"变了"）。
+    `related_concepts` 是老表专有的一列；并表之后"哪个概念与哪个相关"由 `relations`
+    表现算（`dedup.derive_related_concepts` 仍是唯一实现）⇒ 没有可重算的落点。
+    所以命令改成受控退出 + 指路，而不是让 `tx("concepts")` 抛一句"未知表"
+    （读的人拿到那句话不知道下一步该做什么）。
+
+    保护意图一字不变（改前这条断言的是"退出码 0，且真的按派生规则重算了"）：
+    这个开关必须响亮地说出自己退役了、并指到真能回答那个问题的入口；
+    它既不许静默变成 no-op（声明了却不起作用），也不许在盘上留下一个字节。
     """
-    from agentflow import dedup as D
-
     add_literature(ws, "0000", path="0000/s.txt")
     add_literature(ws, "0001", path="0001/s.txt")
     add_concept(ws, "0000", "group", related_concepts=[])   # 故意空着
     add_concept(ws, "0001", "abelian group", related_concepts=[])
     add_relation(ws, "0000", ["0000", "0001"], "0000", quote="q", quote_verified=True)
     sync_counters(ws)
+    before = read_data_bytes(ws)
 
-    assert cli.cmd_repair(_args(root=ws.root, related=True)) == 0
-    rels = ws.rows("relations")
-    for c in ws.rows("concepts"):
-        want = D.derive_related_concepts(c["concept_id"], rels, include_suspect=True)
-        assert c["related_concepts"] == want, c["concept_id"]
+    assert cli.cmd_repair(_args(root=ws.root, related=True)) == 2
+    err = capsys.readouterr().err
+    assert "并表退役" in err and "relations" in err, err
+    # 指路必须指到真能回答"图与关系偏没偏"的那个入口（派生真相在 `relations`）
+    assert "agentflow verify" in err and "related_drift" in err, err
+    assert "agentflow rebuild" in err, err
+    assert read_data_bytes(ws) == before, "受控退出却动了盘：一个字节都不许改"
 
 
-def test_cmd_repair_rejects_missing_related_flag_and_writes_nothing(ws: Store):
-    """负控：不带 `--related` ⇒ 退出码 2，且 concepts 表逐字节未变。
+def test_cmd_repair_rejects_missing_related_flag_and_writes_nothing(ws: Store, capsys):
+    """负控：不带 `--related` ⇒ 退出码 2，且 `data/` 下逐字节未变。
 
     为什么这条是这份文件里最重要的一条：`--related` 曾经是一个被忽略的开关
     （docstring 逐字：函数体从不读 `args.related`，于是"不带参数跑一次"也会重写表）。
@@ -143,10 +150,11 @@ def test_cmd_repair_rejects_missing_related_flag_and_writes_nothing(ws: Store):
     add_literature(ws, "0000", path="0000/s.txt")
     add_concept(ws, "0000", "group", related_concepts=[])
     sync_counters(ws)
-    before = (ws.data / "concepts.json").read_bytes()
+    before = read_data_bytes(ws)
 
     assert cli.cmd_repair(_args(root=ws.root, related=False)) == 2
-    assert (ws.data / "concepts.json").read_bytes() == before, "不带 --related 却改了 concepts 表"
+    assert "--related" in capsys.readouterr().err
+    assert read_data_bytes(ws) == before, "不带 --related 却改了知识表"
 
 
 # ============================================================ cmd_verify（等级 2）

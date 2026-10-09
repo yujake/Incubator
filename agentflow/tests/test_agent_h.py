@@ -36,7 +36,7 @@ from agentflow.tools.doc_tools import CROSS_CHECK_DISCLAIMER
 from conftest import add_concept, add_literature, add_relation
 
 TS = "2026-01-01T00:00:00+00:00"
-KNOWLEDGE_FILES = ("concepts.json", "relations.json", "literature.json")
+KNOWLEDGE_FILES = ("statements.json", "relations.json", "literature.json")
 
 
 # ============================================================ 辅助

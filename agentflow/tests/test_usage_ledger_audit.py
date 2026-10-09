@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from agentflow import schema as S
 from agentflow.store import Store
 
 TS = "2026-01-01T00:00:00+00:00"
@@ -58,7 +59,12 @@ def _write_ws(root: Path, rows: list[dict], *, with_events: bool = True) -> Stor
     st = Store(root)
     st.init()
     (root / "data" / "usage_ledger.json").write_text(
-        json.dumps({"schema_version": 1, "rows": rows}, ensure_ascii=False, indent=2) + "\n",
+        # 版本号写当前契约（`schema.SCHEMA_VERSION`），不写死一个数字：
+        # 这一格原先是 `1`，S1r 并表把契约升到 2 之后它就成了一份"按定义读不进来"的
+        # 快照（读期 fail-closed）⇒ 判据在第一行 `st.rows("usage_ledger")` 就炸了。
+        # 这个夹具要模拟的是"修复前留下的重复账"，不是"旧磁盘格式"。
+        json.dumps({"schema_version": S.SCHEMA_VERSION, "rows": rows},
+                   ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     if with_events:

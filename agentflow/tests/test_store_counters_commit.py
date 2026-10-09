@@ -16,7 +16,7 @@
 
 ## 三条断言（缺一不可）
 
-1. 计数不丢：C 用 `set_counters` 写下 `concept=999` 并核实此刻盘上就是 999，
+1. 计数不丢：C 用 `set_counters` 写下 `stmt=999` 并核实此刻盘上就是 999，
    B 提交之后盘上仍然是 999（而不是 B 那份旧缓存里的值）；
 2. 有可判定的痕迹：`events.jsonl` 里有一条 `op=info` / `message=counters_commit_merged`
    的事件，带 `disk` / `cache` / `merged` 三个读数（`F3` 的修法）；
@@ -33,6 +33,13 @@
   没有它，"一律写 999"或"一律写痕迹"也能让正控通过。
 
 本文件只往 `tmp_path` 写（子进程的结果、工作区、副本都在那里），仓里一个字节都不写。
+
+## S1r 并表（`SCHEMA_VERSION=2`）之后的改动
+
+本文件守的是计数器提交合并判据（`R6-AN-1` / `R7-AN-1`），计数器类别只是
+标本。并表把 `concepts` 表与 `concept` 这一档计数器一起退役 ⇒ 标本换成
+`stmt`（表 `statements`，主键 `stmt_id`），三条断言（终值 / 痕迹 / 反真空读数）
+与两个负控注入点一字未改。
 """
 
 from __future__ import annotations
@@ -54,7 +61,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 TRACE_MESSAGE = "counters_commit_merged"
 TRACE_KEYS = ("disk", "cache", "baseline", "merged")
 
-#: 夹具起点与两个方向：把 `concept` 拨到 3 ⇒ 事务发出 `0003`、缓存变成 4。
+#: 夹具起点与两个方向：把 `stmt` 拨到 3 ⇒ 事务发出 `0003`、缓存变成 4。
 #: - 窗口里写 999（更大）⇒ 提交后盘上 999，痕迹方向 `disk_higher`；
 #: - 窗口里写 0（拨低）⇒ 提交后盘上仍是 4（`max` 语义不变），痕迹方向 `disk_lower`。
 SEED = 3
@@ -98,6 +105,18 @@ TIMEOUT = 60.0
 def _sha256(path: Path) -> str:
     """文件的 sha256（指纹用）。"""
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _clean_env() -> dict:
+    """子进程环境：剥掉 `PYTHONPATH`（探针必须只看见自己那份盘外副本）。
+
+    不剥的话，同时挂着真实 `src` 的 `PYTHONPATH` 会让探针导入到仓内的
+    `agentflow` —— 那时探针读到的就不是"冻结的那一版"，而它照样会打印 YES
+    （假绿：这是"装置在骗人"，不是判据在说话）。
+    """
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    return env
 
 
 def _read_counters(root: Path) -> dict:
@@ -147,7 +166,7 @@ def _judge(case: dict, *, override: int, direction: str, final: int) -> dict:
     """判据本体（纯函数，便于给它自己做自校）。
 
     通过要求三件事同时成立：盘上终值 = `final`、有痕迹事件、且那条事件带齐四个读数
-    （`disk` / `cache` / `baseline` / `merged`）、点名 `concept`、方向 = `direction`，
+    （`disk` / `cache` / `baseline` / `merged`）、点名 `stmt`、方向 = `direction`，
     并且事件是从盘上被读到的（`events_read > 0`）。
     两个方向共用这一份判据，只是参数不同（`disk_higher` / `disk_lower`）。
     """
@@ -156,18 +175,18 @@ def _judge(case: dict, *, override: int, direction: str, final: int) -> dict:
     shaped = [
         e for e in traces
         if all(isinstance(e.get(k), dict) for k in TRACE_KEYS)
-        and "concept" in (e.get("differing") or [])
-        and (e.get("direction") or {}).get("concept") == direction
-        and e["disk"].get("concept") == override
-        and e["baseline"].get("concept") == SEED
-        and e["merged"].get("concept") == final
+        and "stmt" in (e.get("differing") or [])
+        and (e.get("direction") or {}).get("stmt") == direction
+        and e["disk"].get("stmt") == override
+        and e["baseline"].get("stmt") == SEED
+        and e["merged"].get("stmt") == final
     ]
-    final_matches = case["after_commit"].get("concept") == final
+    final_matches = case["after_commit"].get("stmt") == final
     return {
         "events_read": len(events),
         "trace_events": len(traces),
         "trace_shaped": len(shaped),
-        "final": case["after_commit"].get("concept"),
+        "final": case["after_commit"].get("stmt"),
         "final_matches": final_matches,
         "pass": bool(final_matches and shaped and len(events) > 0),
     }
@@ -192,7 +211,7 @@ def _run_case(pkg_root: Path, base: Path, *, override: int = OVERRIDE,
 
     st = Store(ws)
     st.init()
-    st.set_counters({"concept": SEED}, actor="fixture", note="夹具：把计数器拨到 3")
+    st.set_counters({"stmt": SEED}, actor="fixture", note="夹具：把计数器拨到 3")
 
     script = str(Path(__file__).resolve())
     common = [sys.executable, script, "--pkg", str(pkg_root), "--root", str(ws),
@@ -243,6 +262,50 @@ def _audit_baseline_store() -> Path | None:
     return None
 
 
+def _baseline_pkg(baseline: Path, tmp_path: Path) -> Path:
+    """把审计冻结的那一版 `store.py` 放进一份当前包的盘外副本里，返回包根。
+
+    与 `_reverted_copy` 同一形状（复制当前包 + 覆盖一个文件），但不动注入点：
+    这一臂跑的是"逐字等于审计冻结字节"的那一版。
+    """
+    pkg = tmp_path / "negpkg-baseline"
+    pkg.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(_SRC / "agentflow", pkg / "agentflow")
+    shutil.copy2(baseline, pkg / "agentflow" / "store.py")
+    return pkg
+
+
+def _baseline_can_open_statements(baseline: Path, tmp_path: Path) -> bool:
+    """那一版 `store.py` 能不能开一笔 `statements` 事务？（判据 = 真的跑一次）
+
+    为什么要问：`a3857e0a…` 早于 `statements` 表（S1r 并表那一笔）。对它来说
+    `tx("statements", …)` 是"未知表"，子进程会卡在进不了事务体上 ——
+    症状是 60s 超时，而超时不是判据在说话（这种"装置没跑起来"必须与判据分开）。
+    判据刻意用真子进程 + 真包：写死一个版本号或者去读源码文本都会变成
+    第二份判据（并且会在文件一改就静默失效）。
+    """
+    probe_pkg = _baseline_pkg(baseline, tmp_path / "probe-common")
+    ws = tmp_path / "probe-ws"
+    code = (
+        "import sys, json;"
+        f"sys.path.insert(0, {str(probe_pkg)!r});"
+        "from agentflow.store import Store;"
+        f"st = Store({str(ws)!r}); st.init();"
+        "\ntry:\n"
+        "    with st.tx('statements', 'counters') as tx:\n"
+        "        tx.alloc_id('stmt')\n"
+        "except Exception:\n"
+        "    print('NO')\n"
+        "else:\n"
+        "    print('YES')\n"
+    )
+    proc = subprocess.run(  # noqa: S603 - 代码与路径都是自己给的
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=TIMEOUT, check=False,
+        env=_clean_env(),
+    )
+    return proc.returncode == 0 and proc.stdout.strip().endswith("YES")
+
+
 # --------------------------------------------------------------------------- 正控
 
 
@@ -258,8 +321,8 @@ def test_set_counters_write_survives_an_inflight_commit(tmp_path: Path) -> None:
     print(f"[指纹] tx 子进程跑的 store.py = {case['tx']['store_file']} sha256/16={store_sha[:16]}"
           f"；正控期望的当前字节 = {_sha256(_SRC / 'agentflow' / 'store.py')[:16]}")
     assert case["tx"]["allocated"] == "0003", case["tx"]
-    assert case["tx"]["tx_cache"] == {"concept": SEED + 1}, case["tx"]
-    assert case["set"]["on_disk"] == {"concept": OVERRIDE}, case["set"]
+    assert case["tx"]["tx_cache"] == {"stmt": SEED + 1}, case["tx"]
+    assert case["set"]["on_disk"] == {"stmt": OVERRIDE}, case["set"]
     assert verdict["events_read"] >= 2, (
         f"反真空：事件日志必须真的被读到（读到 {verdict['events_read']} 条）—— "
         "读到 0 条时任何「没有痕迹」的结论都不算证据"
@@ -290,7 +353,7 @@ def test_lowering_inside_the_window_is_visible_and_the_retry_works(tmp_path: Pat
                      final=MERGED_WHEN_LOWER)
     print(f"[读数] 拨低：C 落盘时 = {case['set']['on_disk']}；提交后 = {case['after_commit']}；"
           f"痕迹 = {verdict['trace_events']} 条（方向 disk_lower）")
-    assert case["set"]["on_disk"] == {"concept": OVERRIDE_LOWER}, case["set"]
+    assert case["set"]["on_disk"] == {"stmt": OVERRIDE_LOWER}, case["set"]
     assert verdict["events_read"] >= 2, f"反真空：事件日志必须真的被读到：{verdict}"
     assert verdict["trace_events"] == 1, f"窗口里的拨低必须留下痕迹：{verdict}"
     assert verdict["trace_shaped"] == 1, f"痕迹必须点名 disk_lower 且带四个读数：{verdict}"
@@ -300,8 +363,8 @@ def test_lowering_inside_the_window_is_visible_and_the_retry_works(tmp_path: Pat
     assert verdict["pass"], verdict
 
     # 对照臂：窗口结束后重试 ⇒ 拨低照常生效。
-    Store(case["ws"]).set_counters({"concept": OVERRIDE_LOWER}, actor="retry")
-    assert _read_counters(case["ws"])["concept"] == OVERRIDE_LOWER, (
+    Store(case["ws"]).set_counters({"stmt": OVERRIDE_LOWER}, actor="retry")
+    assert _read_counters(case["ws"])["stmt"] == OVERRIDE_LOWER, (
         "窗口结束后重试必须生效（被吞掉的是窗口，不是这个方法）"
     )
 
@@ -319,15 +382,15 @@ def test_quiet_commit_advances_the_counter_without_a_trace(tmp_path: Path) -> No
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
-    st.set_counters({"concept": SEED}, actor="fixture")
-    with st.tx("concepts", "counters", actor="quiet") as tx:
-        tid = tx.alloc_id("concept")
+    st.set_counters({"stmt": SEED}, actor="fixture")
+    with st.tx("statements", "counters", actor="quiet") as tx:
+        tid = tx.alloc_id("stmt")
     events = _read_events(ws)
     traces = [e for e in events if e.get("message") == TRACE_MESSAGE]
     counters = _read_counters(ws)
     assert tid == "0003", tid
-    assert counters["concept"] == SEED + 1, counters
-    assert counters["concept"] != SEED, "前提：本事务的推进让盘上与读到的基线不同"
+    assert counters["stmt"] == SEED + 1, counters
+    assert counters["stmt"] != SEED, "前提：本事务的推进让盘上与读到的基线不同"
     assert len(events) >= 2, f"反真空：这一笔事务必须留下事件（读到 {len(events)} 条）"
     assert traces == [], f"没有并发写者时不该写痕迹事件：{traces}"
 
@@ -343,11 +406,11 @@ def test_explicit_override_after_the_commit_still_wins(tmp_path: Path) -> None:
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
-    st.set_counters({"concept": SEED}, actor="fixture")
-    with st.tx("concepts", "counters", actor="tx") as tx:
-        tx.alloc_id("concept")
-    st.set_counters({"concept": 111}, actor="override")
-    assert _read_counters(ws)["concept"] == 111, _read_counters(ws)
+    st.set_counters({"stmt": SEED}, actor="fixture")
+    with st.tx("statements", "counters", actor="tx") as tx:
+        tx.alloc_id("stmt")
+    st.set_counters({"stmt": 111}, actor="override")
+    assert _read_counters(ws)["stmt"] == 111, _read_counters(ws)
 
 
 # --------------------------------------------------------------------------- 负控
@@ -384,7 +447,7 @@ def test_pre_fix_commit_swallows_the_set_counters_write(tmp_path: Path) -> None:
     case = _run_case(pkg, tmp_path / "neg-ws")
     assert case["tx"]["store_file"] == str(target), "负控必须真的跑那份副本"
     assert case["tx"]["store_sha256"] == injected_sha, "跑的必须是注入后的字节"
-    assert case["set"]["on_disk"] == {"concept": OVERRIDE}, (
+    assert case["set"]["on_disk"] == {"stmt": OVERRIDE}, (
         f"前置：C 的写入确实落盘（否则红是因为夹具坏了，不是判据在说话）：{case['set']}"
     )
     verdict = _judge(case, override=OVERRIDE, direction="disk_higher", final=OVERRIDE)
@@ -404,13 +467,21 @@ def test_pre_fix_commit_swallows_the_set_counters_write(tmp_path: Path) -> None:
     assert _sha256(baseline) == PRE_FIX_SHA256, (
         f"盘上那份备份必须逐字等于审计冻结字节：{baseline} sha256={_sha256(baseline)}"
     )
-    pkg2 = tmp_path / "negpkg-baseline"
-    pkg2.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(_SRC / "agentflow", pkg2 / "agentflow")
-    shutil.copy2(baseline, pkg2 / "agentflow" / "store.py")
+    # 前置：这一臂要跑的标本表必须在那一版里存在。
+    # 审计冻结的 `a3857e0a…` 早于 `statements` 表（S1r 并表那一笔）：
+    # 对它来说 `tx("statements", …)` 是"未知表"（实测：那时 `LOCK_ORDER.index`
+    # 抛 `ValueError`），于是子进程进不了事务体、就绪标记永远不出现 ——
+    # 症状是 60s 超时，而超时不是判据在说话。这一条与"备份不在盘上"同一口径：
+    # 前置不成立就如实登记并跳过那一臂，不假装跑过（也不把它读成通过）。
+    if not _baseline_can_open_statements(baseline, tmp_path):
+        print("[如实登记] 审计冻结的那一版 store.py（sha256="
+              f"{PRE_FIX_SHA256[:16]}…）里还没有 `statements` 表 ⇒ 这一臂不适用，"
+              "注入版负控（上一段）已经覆盖同一条判据")
+        return
+    pkg2 = _baseline_pkg(baseline, tmp_path)
     case2 = _run_case(pkg2, tmp_path / "neg-ws2")
     assert case2["tx"]["store_sha256"] == PRE_FIX_SHA256, "这一臂必须跑审计冻结的那一版字节"
-    assert case2["set"]["on_disk"] == {"concept": OVERRIDE}, case2["set"]
+    assert case2["set"]["on_disk"] == {"stmt": OVERRIDE}, case2["set"]
     verdict2 = _judge(case2, override=OVERRIDE, direction="disk_higher", final=OVERRIDE)
     print(f"[指纹] 审计冻结版 store.py sha256={PRE_FIX_SHA256}；终值 = {case2['after_commit']}；"
           f"痕迹条数 = {verdict2['trace_events']}")
@@ -448,7 +519,7 @@ def test_one_way_trace_condition_hides_the_lowering_again(tmp_path: Path) -> Non
     sha = _sha256(target)
     case = _run_case(pkg, tmp_path / "neg-lower", override=OVERRIDE_LOWER)
     assert case["tx"]["store_sha256"] == sha, "负控必须真的跑那份副本"
-    assert case["set"]["on_disk"] == {"concept": OVERRIDE_LOWER}, (
+    assert case["set"]["on_disk"] == {"stmt": OVERRIDE_LOWER}, (
         f"前置：C 的拨低确实落盘：{case['set']}"
     )
     verdict = _judge(case, override=OVERRIDE_LOWER, direction="disk_lower",
@@ -476,18 +547,18 @@ def test_the_judgement_is_neither_vacuous_nor_always_false() -> None:
     """
 
     def _trace(override: int, final: int, direction: str) -> dict:
-        return {"op": "info", "message": TRACE_MESSAGE, "differing": ["concept"],
-                "direction": {"concept": direction}, "merged_from_disk": ["concept"],
-                "disk": {"concept": override}, "cache": {"concept": SEED + 1},
-                "baseline": {"concept": SEED}, "merged": {"concept": final}}
+        return {"op": "info", "message": TRACE_MESSAGE, "differing": ["stmt"],
+                "direction": {"stmt": direction}, "merged_from_disk": ["stmt"],
+                "disk": {"stmt": override}, "cache": {"stmt": SEED + 1},
+                "baseline": {"stmt": SEED}, "merged": {"stmt": final}}
 
     higher = _trace(OVERRIDE, OVERRIDE, "disk_higher")
     lower = _trace(OVERRIDE_LOWER, MERGED_WHEN_LOWER, "disk_lower")
-    lost = {"events": [], "after_commit": {"concept": SEED + 1}}
+    lost = {"events": [], "after_commit": {"stmt": SEED + 1}}
     no_trace = {"events": [{"op": "upsert", "table": "counters"}],
-                "after_commit": {"concept": OVERRIDE}}
-    ok_higher = {"events": [higher], "after_commit": {"concept": OVERRIDE}}
-    ok_lower = {"events": [lower], "after_commit": {"concept": MERGED_WHEN_LOWER}}
+                "after_commit": {"stmt": OVERRIDE}}
+    ok_higher = {"events": [higher], "after_commit": {"stmt": OVERRIDE}}
+    ok_lower = {"events": [lower], "after_commit": {"stmt": MERGED_WHEN_LOWER}}
     assert _judge(lost, override=OVERRIDE, direction="disk_higher",
                   final=OVERRIDE)["pass"] is False, "丢了更新且没有痕迹 ⇒ 必须红"
     assert _judge(no_trace, override=OVERRIDE, direction="disk_higher",
@@ -532,12 +603,8 @@ def _child(argv: list[str]) -> int:
                         "pid": os.getpid()})
         st = store_mod.Store(a.root)
         if a.role == "tx":
-            with st.tx("concepts", "counters", actor="child-tx", note="R6-AN-1 夹具") as tx:
-                tid = tx.alloc_id("concept")
-                tx.upsert("concepts", S.Concept(
-                    concept_id=tid, name="probe", definition="", related_concepts=[],
-                    normalized_name="probe", aliases=[], created_at=TS, updated_at=TS,
-                ).to_dict())
+            with st.tx("statements", "counters", actor="child-tx", note="R6-AN-1 夹具") as tx:
+                tid = tx.alloc_id("stmt")
                 payload.update({
                     "allocated": tid,
                     "tx_cache": dict((st._dirty_counters or {}).get("counters") or {}),
@@ -545,16 +612,38 @@ def _child(argv: list[str]) -> int:
                 })
                 # 只写就绪标记（不写结果文件：结果文件是"这一趟结束了"的证据，
                 # 中途写一次会让父进程在事务还没提交时就读到一份半成品）。
+                #
+                # 顺序（这条顺序有判据上的理由，不是风格）：就绪标记紧跟在
+                # `alloc_id` 之后，早于建行。本文件的第二臂负控跑的是审计冻结的那一版
+                # `store.py`（`a3857e0a…`），它早于 `statements` 表 —— 对它来说
+                # `tx("statements", …)` 是"未知表"（实测：那时 `LOCK_ORDER.index`
+                # 会抛 `ValueError`）。把标记写在建行之前，窗口的两端（"事务已读
+                # counters" 与"提交"）在那一版上照旧成立 ⇒ 该臂仍然测得到它要测的
+                # 东西；建成行本身只是"这一笔事务像真的"，不是判据（见下面的注释）。
                 if a.ready:
                     Path(a.ready).write_text(
                         json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+                # 建行：计数器的判据不看它，但"取号 + 建行同一笔事务"是本仓的常态写法。
+                # 冻结版上没有 `statements` 表 ⇒ 那一版上如实跳过，并把它记在结果里
+                # （不静默：读结果的人看得见这一臂少做了什么）。
+                try:
+                    tx.upsert("statements", {
+                        "stmt_id": tid, "origin": "own_result", "kind": "theorem",
+                        "label": "probe", "statement_full": "probe 的命题正文（夹具）",
+                        "quote_verified": None, "quote_reason": "自产结果（测试夹具）",
+                        "created_at": TS,
+                    })
+                except (KeyError, ValueError) as exc:
+                    payload["row_upsert_skipped"] = (
+                        f"{type(exc).__name__}: {exc}（这一版 store/schema 还没有 statements 表）"
+                    )
                 _wait_for(Path(a.go), "tx 的放行标记")
             payload["after_commit"] = _read_counters(Path(a.root))
         else:
             _wait_for(Path(a.ready), "set 的就绪标记")
             payload["override"] = a.override
             payload["set_counters_returned"] = st.set_counters(
-                {"concept": a.override}, actor="child-set", note="R6-AN-1 / R7-AN-1 夹具")
+                {"stmt": a.override}, actor="child-set", note="R6-AN-1 / R7-AN-1 夹具")
             payload["on_disk"] = _read_counters(Path(a.root))
         payload["ok"] = True
     except BaseException as exc:  # noqa: BLE001 - 异常也要落盘，否则父进程只看得到"没结果"

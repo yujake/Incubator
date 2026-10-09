@@ -43,6 +43,10 @@ from .migrate_concepts import PENDING_SEARCH, PRIMITIVE_PROOF, fold_concepts
 #: 过渡期还在盘上的老表名（迁移那一笔之后它从 `TABLES` 里消失）。
 LEGACY_TABLE = "concepts"
 
+#: `_to_legacy` 给"墓碑"投影出的哨兵值：非空（读侧据此跳过它），且绝不是一个合法 id
+#: （`schema.is_valid_id` 为假 ⇒ 谁把它当号用都会当场看出不对，而不是去找一个不存在的概念）。
+SUPERSEDED_INTO = "superseded"
+
 
 def legacy_present(store: Any) -> dict[str, Any]:
     """过渡期还作不作数（`present` = 老表还在 `TABLES` 里），以及盘上还剩什么。
@@ -95,6 +99,13 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     # 并记明它是"过渡期的一格"，不是新标准的一部分。
     out["related_concepts"] = list(row.get("related_concepts") or [])
     out["legacy_related"] = True   # "这一格有权威值"（判据据此分档，见 `view` 的 docstring）
+    # 墓碑（`merged_into`）必须带过来：它是"这一行不是活节点"的唯一机器可读标记，
+    # 而读侧（`dedup.find_concept` / `decide_structural_duplicate`）判的正是这一格的真值性。
+    # 丢弃它等于把墓碑重新变成活节点 —— 新知识会挂到幽灵节点上、survivor 永远接不到
+    # （实测抓到，见 `_to_legacy` 的 docstring 与 `draft/97` §13.2l）。
+    if str(row.get("merged_into") or ""):
+        out["merged_into"] = str(row["merged_into"])
+        out["status"] = "superseded"   # 与 `sync_from_legacy` 的墓碑映射同一档
     return out
 
 
@@ -150,8 +161,17 @@ def _to_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
       640/2233 条与现算不符（`pipeline.py` 当年把原始名字写了进去），投影里跟现算走，
       与 `migrate_concepts` 的"读侧现算、丢弃那一格"同一口径；
     - `related_concepts` 给 `[]`（并表之后那件事由 `relations` 表管）；
-      `merged_into` 不编：新标准里用 `status="superseded"` 表达，投影把
-      `merged_into` 留空但把 `status`/`via` 原样带上，读的人能看出"这一行不是老表的原貌"。
+    - `merged_into`：新标准里没有这一列，墓碑用 `status="superseded"` 表达 ⇒
+      这一格按 `status` 投影出一个非空哨兵（`SUPERSEDED_INTO`），不是编一个目标号
+      （目标号在新标准里没有机器可读的落点，只有 `quote_reason` 里那句话）；
+      老表那一档（`row["merged_into"]` 真的有值）原样带过来。
+      为什么必须给非空：读侧判"这一行是不是活节点"读的正是这一格的真值性 ——
+      `dedup.find_concept` 是 `if row.get("merged_into"): continue`，
+      `agent_b.decide_structural_duplicate` 是 `if a.get("merged_into") or b.get("merged_into")`。
+      投影恒给 `None` 会把墓碑重新变成活节点：新来的同名概念命中幽灵节点、
+      survivor 永远接不到新知识，而盘上一切正常（实测抓到：让被合并方在
+      `statements.json` 里排在前面，`find_concept(view_rows, "abelian group")`
+      返回墓碑而不是 survivor）。
     """
     out: dict[str, Any] = {}
     for legacy_name, new_name in LEGACY_VIEW_FIELDS.items():
@@ -163,7 +183,9 @@ def _to_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     # （`verify._check_4` 那一档）。两件事折平会造出假红。
     out["related_concepts"] = list(row.get("related_concepts") or [])
     out["legacy_related"] = bool(row.get("legacy_related"))  # 见 `_from_legacy`
-    out["merged_into"] = None
+    superseded = str(row.get("status") or "") == "superseded"
+    out["merged_into"] = (str(row["merged_into"]) if str(row.get("merged_into") or "")
+                          else (SUPERSEDED_INTO if superseded else None))
     out["aliases"] = list(row.get("aliases") or [])
     out["status"] = row.get("status")
     out["via"] = row.get("via")
@@ -356,14 +378,17 @@ def mirror_gaps(store: Any) -> dict[str, Any]:
     所以它是一个判据，不是一句注释：`statements_only` 非空 ⇒ 要么补镜像，
     要么把那一处写侧搬过来。
 
-    返回 `{"checked", "statements_only", "legacy_only", "merged", "reason"}`。
+    返回 `{"checked", "statements_only", "legacy_only", "merged", "transition_over", "reason"}`。
+    `transition_over=True`（S1r 落刀之后加的那一档）说的是"老表既不在 schema 里、
+    盘上也没有老文件"⇒ 没有"另一侧"，缺口不成立、三个集合都为空 —— 不这样分档的话
+    新标准里每一条概念都会被读成"缺镜像"。
 
     注意这里读的是两张表的原始行（不是合并视图）：合并视图里"两边都有"的那一行
     只带 `via="statements"`，从它看不出老表那一份在不在 —— 而这一格问的正是
     "老表那一份在不在"。
     """
     out: dict[str, Any] = {"checked": False, "statements_only": [], "legacy_only": [],
-                           "merged": [], "reason": ""}
+                           "merged": [], "transition_over": False, "reason": ""}
     try:
         stmt_ids = {str(r.get("stmt_id") or "") for r in store.rows("statements")
                     if str(r.get("kind") or "") == "concept"}
@@ -373,6 +398,18 @@ def mirror_gaps(store: Any) -> dict[str, Any]:
     state = legacy_present(store)
     if not state.get("checked"):
         out["reason"] = str(state.get("reason") or "老表在不在判不了 ⇒ 镜像完整性判不了")
+        return out
+    if not state.get("present") and not state.get("stale_file"):
+        # 并表那一笔之后：老表既不在 schema 里、盘上也没有那份文件 ⇒ 没有"另一侧"，
+        # 于是"缺口"这件事根本不成立。不加这一档的话，新标准里每一条概念都会被读成
+        # "缺镜像"（`statements_only` = 全体）—— 一个永不消失的假告警，而假告警的
+        # 代价是"这一格从此没人看"。
+        # `stale_file` 那一支不走这里：老文件还在盘上（可能装着没搬完的行）⇒
+        # 那不是"过渡结束"，是"还有一份没搬"，照旧按缺口报。
+        out["checked"] = True
+        out["transition_over"] = True
+        out["reason"] = ("并表那一笔已经落刀（老表不在 schema 里、盘上也没有老文件）"
+                         "⇒ 没有'另一侧'，镜像完整性这一格不再适用")
         return out
     legacy_ids: set[str] = set()
     if state.get("present"):
@@ -397,6 +434,12 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
     `Secretary.record_statement`），而 `upsert` 自己开事务 —— 事务不能嵌套
     （文件锁不可重入）。所以把"写哪两张表、怎么写"抽成这一个函数，
     `upsert`（单独写一条概念）与秘书那一笔都调它，口径只有一处。
+
+    `mirror=True` 只在老表还在 schema 里时才有意义（落刀之后那张表不存在，
+    硬写会以"未知表"整笔失败）⇒ 这里自己判、把判断收进这一处，
+    与 `upsert` / `upsert_legacy_shaped` 同一口径（调用方不必知道过渡到哪一步了）。
+    事务的表声明仍然由调用方负责：要镜像时得声明 `LEGACY_TABLE`，
+    统一走 `tables_for_concept_write(...)`。
     """
     row = concept_statement(stmt_id=stmt_id, label=label, definition=definition,
                             aliases=aliases, source_lit_id=source_lit_id,
@@ -404,7 +447,7 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
     row.validate()
     data = row.to_dict()
     tx.upsert("statements", data, note="concept_upsert")
-    if mirror:
+    if mirror and LEGACY_TABLE in S.TABLES:
         crow = S.Concept(
             concept_id=stmt_id, name=str(label or ""), definition=str(definition or ""),
             related_concepts=[], normalized_name=T.normalize(str(label or "")),
@@ -427,6 +470,12 @@ def _apply_merge_tombstone(row: dict[str, Any], legacy_row: Mapping[str, Any]) -
     """
     into = str(legacy_row.get("merged_into") or "")
     if not into:
+        return
+    if into == SUPERSEDED_INTO:
+        # 投影的哨兵被原样送了回来（`_to_legacy` 的输出当输入用）⇒ 状态对上了就到此为止：
+        # 再写一次理由只会把 `quote_reason` 改成"已并入 superseded"这种没人看得懂的话，
+        # 而真相（并入的是哪一条）已经写在那一格里了。
+        row["status"] = "superseded"
         return
     why = str(legacy_row.get("merge_reason") or "").strip()
     row["status"] = "superseded"
