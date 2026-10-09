@@ -38,10 +38,10 @@ from typing import Any, Callable, Iterable, Mapping
 PENDING_SEARCH = "concept:pending_search"
 SELF_AUTHORED = "concept:self_authored"
 
-#: 定义待补那一行的建议状态（`STATEMENT_STATUSES` 今天没有这一档：`active` 要求
-#: `statement_full` 非空，而 schema.py 里有一条边界注释写着"为'待补'加一个 status 取值
-#: ……那是人裁的事"）。所以折叠函数只把它写进读数与待办清单，
-#: 由 `draft/93·续` D12 请业主点头之后再决定最终落法（加取值 / 落标记 / 延后建行）。
+#: 定义待补那一行的状态（`D12` 已裁，2026-10-09 业主选甲）：`STATEMENT_STATUSES` 加了
+#: 这一档，且它在 `STATEMENT_UNUSABLE_STATUSES` 里（定义还没到的概念不是依据）。
+#: 折叠与写入都必须同时落"待补标记"（`PENDING_SEARCH` / `SELF_AUTHORED`）——
+#: `Statement.validate` 会把"没有标记的待补行"当场拒掉（判据在 schema.py 那两条）。
 PENDING_DEFINITION = "pending_definition"
 
 #: 迁移行的良定义性证明那一格（原始概念：义务为空）。
@@ -79,7 +79,7 @@ def fold_concepts(concept_rows: Iterable[Mapping[str, Any]],
                                                           if src_lit else "原 concepts 行")
             status = "active"
         else:
-            reason = (f"迁移自 concepts {old_id}：**原行没有定义** ⇒ 待补"
+            reason = (f"迁移自 concepts {old_id}：原行没有定义 ⇒ 待补"
                       f"（{PENDING_SEARCH}：由直接父/A 检索，或基本概念由 B 自撰）")
             status = PENDING_DEFINITION
             pending.append({"concept_id": old_id, "name": name, "reason": reason})

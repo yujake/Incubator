@@ -998,17 +998,25 @@ STATEMENT_ORIGINS = ("external_lit", "own_result")
 #:   disputed   —— 有争议、尚未裁决（不许当依据用，见 verify 的不变量）
 #:   refuted    —— 被证否（可能是我们证否的，也可能是文献本身错了）
 #:   superseded —— 被后来的一条取代（例如我们把它重写成了更强的形式）
-#: ⚠️ 2026-10-09 的一处待裁：业主裁定「抽不到定义的概念就让A去网上搜，写入时定义内容
-#: 留空，等A返回后写入」——"行已经写了、内容还没到"这一档今天没有 status 取值
-#: （下面那条边界注释逐字写着"为'待补'加一个 status 取值……那是人裁的事"）。
-#: 所以本批不动这一格：迁移/写入侧的"待补"先落成标记（`quote_reason` 里的
-#: `concept:pending_search` / `concept:self_authored`）+ 读数，等业主对"要不要加取值"点头
-#: 再加（题面见 `draft/93·续` D12）。取证：`src/agentflow/schema.py` 那一条边界注释。
-STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded")
+#:   pending_definition —— 概念行：行已经登记、定义还没到（`D12` 已裁，2026-10-09）
+#:
+#: 最后一档的来历与边界（`draft/93·续` D12，业主 2026-10-09 选甲）：业主裁定
+#: 「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入」——
+#: "行已经写了、内容还没到"这件事必须先有一个可读的落点，否则那一笔只能
+#: 落成 `active` + 空定义（`Statement.validate` 当场拒）或干脆不落（94 行概念在并表后
+#: 查不到）。所以加这一档，两条配套纪律一起落：
+#:   ① 它不是"可用依据"（与 `disputed`/`refuted`/`superseded` 同列，
+#:      见 `STATEMENT_UNUSABLE_STATUSES`）——定义还没到，下游不许拿它当依据；
+#:   ② 必须带待补标记（`quote_reason` 里的 `concept:pending_search` /
+#:      `concept:self_authored`，唯一出处是 `migrate_concepts`）⇒
+#:      "为什么空着"与"谁来补"在盘上读得到（`pending_inbox` 扫的就是它）。
+#: 取证：`src/agentflow/schema.py` 本条；题面与裁定见 `draft/93·续` D12（甲）。
+STATEMENT_STATUSES = ("active", "disputed", "refuted", "superseded", "pending_definition")
 
 #: 命题台账里不许再被当作依据的状态。`verify` 的不变量读的就是这一份名单 ——
 #: 两处各写一份是"同一判据两个落位"，漂移时没有任何地方会红。
-STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded")
+#: `pending_definition` 在列：定义还没到的概念不是依据（"待补"不是"已成立"）。
+STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded", "pending_definition")
 
 # ---------------------------------------------------------------- 断言的语义词表
 #
@@ -1837,15 +1845,43 @@ class Statement:
         # 反过来（拒收）的代价是实测过的：13 条 `own_result` 全带 `proof_text` 而现算等级
         # 13/13 全是 `conjecture` —— 那条 raise 一条真猜想都没挡住，只挡住了"如实登记"。
         #
-        # 边界（不许顺手做）：不加字段、不加 `STATEMENT_STATUSES` 取值、不造新表 ——
-        # 为"待补"加一个 status 取值等于放宽词表、改历史读数口径，那是人裁的事。
+        # 边界（不许顺手做）：不加字段、不造新表 ——
+        # 放宽 `STATEMENT_STATUSES` 是"改历史读数口径"那一类，只走人裁。
+        # 2026-10-09：`pending_definition` 这一档就是人裁过的（`draft/93·续` D12 选甲，
+        # 业主逐字见 `STATEMENT_STATUSES` 上面那一段）。除此之外不许再加值。
         # ---- 负控（§16 P1 逐字要求的那一条）：缺完整假设的行不许进 active
         if self.status == "active" and not self.statement_full.strip():
             raise ValueError(
                 "status='active' 必须有 statement_full（含完整假设）："
                 "省掉假设的命题会被下游当成无条件成立 —— 这是 FC-23 在命题级的同一种病。"
-                "要么补全假设，要么把状态标成 disputed/refuted/superseded"
+                "概念行还没抽到定义时走 `pending_definition`（D12 甲：那一档不是依据，"
+                "且必须带待补标记）；其余情形请补全假设或标成 disputed/refuted/superseded"
             )
+        # ---- 待补那一档的配套纪律（D12 甲的第 ② 条）：空定义必须说清"为什么空、谁来补"。
+        # 只对概念行要求：别的命题若落成 pending_definition，那是把"还没做"记成一笔
+        # 没人能接手的账（与 `quote_verified` 的三态纪律同一条）。
+        if self.status == "pending_definition":
+            if self.kind != "concept":
+                raise ValueError(
+                    "pending_definition 只给概念行用（'定义还没抽到'这一档）："
+                    f"收到 kind={self.kind!r} —— 别的命题没有'等定义'这种中间态，"
+                    "要么是证据没凑齐（走 bits 的四态），要么是有争议（走 disputed）"
+                )
+            if self.statement_full.strip():
+                raise ValueError(
+                    "pending_definition 与'定义已经有了'自相矛盾（statement_full 非空）⇒ "
+                    "定义到了就把它改回 active（那一笔同时清掉待补标记）"
+                )
+            marker = str(self.quote_reason or "")
+            from . import migrate_concepts as _MC   # 惰性：待补标记的唯一出处（不新增模块级依赖边）
+
+            wanted = (_MC.PENDING_SEARCH, _MC.SELF_AUTHORED)
+            if not any(m in marker for m in wanted):
+                raise ValueError(
+                    "status='pending_definition' 必须在 quote_reason 里写清待补标记"
+                    f"（{wanted} 之一，唯一出处是 `migrate_concepts`）："
+                    "只留一个空字段等于把'还没抽到'记成一笔没人能接手的账"
+                )
         # ---- derived_from：升序去重、不含自身、每个都得是合法 id
         _problems = _set_problems("derived_from", self.derived_from)
         if _problems:

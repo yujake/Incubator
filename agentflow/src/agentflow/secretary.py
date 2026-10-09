@@ -550,6 +550,44 @@ def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
     return steps, missing
 
 
+def _concept_statement(c: Mapping[str, Any], *, stmt_id: str, doc_id: str,
+                       actor: str) -> Any:
+    """一个概念 ⇒ 一条 `statements` 行（并表之后概念的落点，`draft/97` §10）。
+
+    两档（`D12` 甲，2026-10-09）：
+
+    - 定义在 ⇒ `status="active"`，`statement_full` 就是定义；
+    - 定义还没抽到 ⇒ `status="pending_definition"` + `quote_reason` 里写待补标记
+      （`concept:pending_search`：等 A 检索回来，或基本概念由 B 自撰）。
+      不许落成 `active` + 空定义（schema 当场拒），也不许干脆不落（那样并表之后
+      这个概念查不到 —— 业主的裁定要的是"行先落、内容后到"）。
+
+    良定义性证明那一格照旧：`proof_text`（原始概念写 `concept:primitive`）。
+    """
+    from . import migrate_concepts as MC   # 惰性：待补标记的唯一出处
+
+    definition = str(c.get("definition") or "")
+    src = str(c.get("source_lit_id") or "")
+    pending = not definition.strip()
+    if pending:
+        reason = (f"概念 {str(c.get('name') or '')!r} 的定义还没抽到（D12 甲）："
+                  f"{MC.PENDING_SEARCH} —— 由直接父/A 检索回来，或基本概念由 B 自撰；"
+                  "定义到了就改回 active 并清掉这一标记。"
+                  "良定义性证明那一格照旧记 proof_text（原始概念写 concept:primitive）")
+    else:
+        reason = ("概念的良定义性证明记在 proof_text（原始概念写 concept:primitive）；定义来自 "
+                  + (src if src else "B 的消化（没有外部来源）"))
+    return S.Statement(
+        stmt_id=stmt_id, origin="own_result", kind="concept",
+        label=str(c.get("name") or ""), statement_text=definition, statement_full=definition,
+        proof_text=str(c.get("proof_text") or "concept:primitive"),
+        source_lit_id=src or None, quote_verified=None, quote_reason=reason,
+        evidence_kind="heuristic",
+        aliases=[str(a) for a in (c.get("aliases") or []) if str(a).strip()],
+        status=("pending_definition" if pending else "active"),
+        doc_id=doc_id or None, created_at=S.now_iso(), created_by=actor)
+
+
 class Secretary:
     """一名智能体的秘书（`draft/53` v3 §4：一个共享类 + 每角色一个实例）。
 
@@ -2348,8 +2386,9 @@ class Secretary:
 
         理由码：`secretary_unavailable`（没装 store —— B 那条"自己写"的后备路不存在）、
         `not_statement_writer`（不是 B 的活）、`wash_failed`（格式洗不动）、
-        `concept_definition_pending`（概念的定义空着，等 D12 裁定）、
-        `unresolved_dependency`（依赖指着一个不在册的 id）。
+        `unresolved_dependency`（依赖指着一个不在册的 id）、`unknown_lit_id`（出处不在册）、
+        `empty_statement`（命题缺 `statement_full` —— 只有短版不算数）。
+        概念的定义空着不是拒绝：它落成 `pending_definition` + 待补标记（`D12` 甲）。
 
         ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）
 
@@ -2392,15 +2431,11 @@ class Secretary:
         kind = str(body.get("kind") or "theorem")
         if not full.strip():
             if kind == "concept":
-                from . import migrate_concepts as MC   # 惰性：待补标记的唯一出处
-
-                out.update(refused="concept_definition_pending",
-                           reason=("概念的定义空着 ⇒ 这一笔不写：待补标记是 "
-                                   f"{MC.PENDING_SEARCH}（等 A 检索或 B 自撰），而"
-                                   "'定义为空的行落哪个 status'还没裁（`draft/93·续` D12；"
-                                   "`schema.py` 里那条人裁边界写着不许自己加取值）⇒ "
-                                   "等裁定再落，先不落一条 active 的空定义行"))
-                return out
+                # D12 已裁（2026-10-09，业主选甲）：定义还没抽到的概念行照落 ——
+                # 落成 `pending_definition`（不是依据）+ 待补标记（谁去补写在 reason 里）。
+                # 不许折成 `active` + 空定义（`Statement.validate` 当场拒），
+                # 也不许"干脆不落"（那样这个概念并表之后查不到）。
+                return self._record_pending_concept(body, out=out)
             out.update(refused="empty_statement",
                        reason=("statement_full 是空的 ⇒ 不写（只有短版不算数：省掉假设的"
                                "命题会被下游当成无条件成立）"))
@@ -2412,6 +2447,48 @@ class Secretary:
             out.update(checked=False, created=False, refused="write_failed",
                        reason=f"落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
             return out
+
+    def _record_pending_concept(self, body: dict[str, Any], *,
+                                out: dict[str, Any]) -> dict[str, Any]:
+        """交来的就是一条还没抽到定义的概念 ⇒ 落成 `pending_definition`（D12 甲）。
+
+        与 `_record_statement_tx` 分开的理由：那一条路要求 `statement_full` 非空
+        （命题没有"内容待补"这一档），而概念有 —— 混在一处会把"命题缺假设"
+        与"概念缺定义"折成同一件事（前者该拒，后者该落）。
+        查重按概念标签的规范化值（同名的概念不重复建行；改名由人/秘书那一层决定）。
+        """
+        from . import textutil as T   # 惰性：查重键的唯一实现
+
+        name = str(body.get("label") or "")
+        if not name.strip():
+            out.update(refused="empty_statement",
+                       reason="一条概念至少要有 label（名字）—— 没有名字的行谁也认不出它")
+            return out
+        with self.store.tx(*STATEMENT_WRITE_TABLES, actor=f"secretary-{self.role}",
+                           note="record_statement:concept_pending") as tx:
+            key = T.normalize(name)
+            dup = next((r for r in tx.rows("statements")
+                        if str(r.get("kind") or "") == "concept"
+                        and T.normalize(str(r.get("label") or "")) == key), None)
+            if dup is not None:
+                out.update(checked=True, created=False, duplicate=True,
+                           stmt_id=str(dup.get("stmt_id") or ""),
+                           reason=("同一个概念标签已在册 ⇒ 不新建行（秘书查重；"
+                                   "定义到了去改那一行，而不是再起一条）"))
+                return out
+            cid = tx.alloc_id(S.TABLES["statements"]["id_kind"])
+            row = _concept_statement(
+                {"name": name, "definition": "", "aliases": body.get("aliases") or [],
+                 "source_lit_id": body.get("source_lit_id") or ""},
+                stmt_id=cid, doc_id=str(body.get("doc_id") or ""),
+                actor=f"secretary-{self.role}")
+            row.validate()
+            tx.upsert("statements", row.to_dict(), note="record_statement:concept_pending")
+        out.update(checked=True, created=True, stmt_id=cid, row=row.to_dict(),
+                   tables=["statements"], pending_concepts=1,
+                   reason=("概念行已落成 pending_definition（定义待补）—— 它不是依据，"
+                           "`proof_text` 那一格记的是良定义性证明"))
+        return out
 
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
                              force_new: bool, out: dict[str, Any]) -> dict[str, Any]:
@@ -2449,39 +2526,19 @@ class Secretary:
                                    f"{ids or '（一个都没有 —— 表是空的）'}"),
                            literature_rows=len(lit_rows), available_lit_ids=ids)
                 return out
-            for c in concepts:
-                if not str(c.get("definition") or "").strip():
-                    from . import migrate_concepts as MC
-
-                    out.update(refused="concept_definition_pending",
-                               reason=("概念 "
-                                       f"{str(c.get('name') or '')!r} 的定义空着 ⇒ 整笔不写：待补"
-                                       f"标记是 {MC.PENDING_SEARCH}，而'定义空行的 status'等 "
-                                       "D12 裁定（不许先落一条 active 的空定义行）"))
-                    return out
             stmt_kind = S.TABLES["statements"]["id_kind"]
             stmt_id = tx.alloc_id(stmt_kind)
             row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
             row.validate()
             tx.upsert("statements", row.to_dict(), note="record_statement")
             written = ["statements"]
+            pending_concepts = 0
             for c in concepts:
                 cid = tx.alloc_id(stmt_kind)
-                crow = S.Statement(
-                    stmt_id=cid, origin="own_result", kind="concept",
-                    label=str(c.get("name") or ""), statement_text=str(c.get("definition") or ""),
-                    statement_full=str(c.get("definition") or ""),
-                    proof_text=str(c.get("proof_text") or "concept:primitive"),
-                    source_lit_id=str(c.get("source_lit_id") or "") or None,
-                    quote_verified=None,
-                    quote_reason=("概念的良定义性证明记在 proof_text（原始概念写 "
-                                  "concept:primitive）；定义来自 "
-                                  + (str(c.get("source_lit_id")) if c.get("source_lit_id")
-                                     else "B 的消化（没有外部来源）")),
-                    evidence_kind="heuristic",
-                    aliases=[str(a) for a in (c.get("aliases") or []) if str(a).strip()],
-                    status="active", doc_id=str(body.get("doc_id") or "") or None,
-                    created_at=S.now_iso(), created_by=f"secretary-{self.role}")
+                crow = _concept_statement(c, stmt_id=cid, doc_id=str(body.get("doc_id") or ""),
+                                          actor=f"secretary-{self.role}")
+                if crow.status == "pending_definition":
+                    pending_concepts += 1
                 crow.validate()
                 tx.upsert("statements", crow.to_dict(), note="record_statement:concept")
             for step in steps:
@@ -2504,7 +2561,7 @@ class Secretary:
             written.append("dependencies")
         out.update(checked=True, created=True, duplicate=False, stmt_id=stmt_id,
                    row=row.to_dict(), tables=written, deps_written=len(steps),
-                   path_groups=len(groups))
+                   path_groups=len(groups), pending_concepts=pending_concepts)
         return out
 
     def _statement_from(self, body: Mapping[str, Any], *, full: str, kind: str,

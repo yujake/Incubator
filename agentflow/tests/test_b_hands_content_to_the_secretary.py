@@ -174,14 +174,41 @@ def test_a_dependency_on_a_missing_id_writes_nothing(store):
     assert _rows(store, "statements") == [] and _rows(store, "dependencies") == []
 
 
-def test_a_concept_without_a_definition_is_refused_until_d12(store):
-    """定义空着的概念行：等 D12 裁定，先不落（受控拒绝，一行不落）。"""
+def test_a_concept_without_a_definition_lands_as_pending(store):
+    """定义空着的概念行照落（`D12` 甲）：`pending_definition` + 待补标记，且不是依据。
+
+    这一条改过一次口径（2026-10-09 业主选甲）：此前是"整笔不写"（等裁定），
+    现在是"行先落、内容后到"——边界钉在这里：它落在
+    `STATEMENT_UNUSABLE_STATUSES` 里（下游不许拿它当依据），
+    而且必须带 `concept:pending_search` 标记（谁去补写在 reason 里）。
+    """
     add_literature(store, "0000")
     sec = _sec(store)
     out = sec.record_statement(_payload(concepts=[{"name": "新概念", "definition": ""}]),
                                role="B")
-    assert out["refused"] == "concept_definition_pending" and not out["created"], out
-    assert "pending_search" in out["reason"]
+    assert out["checked"] and out["created"] and out["pending_concepts"] == 1, out
+    rows = [s for s in _rows(store, "statements") if s["kind"] == "concept"]
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert row["status"] == "pending_definition", row["status"]
+    assert row["status"] in S.STATEMENT_UNUSABLE_STATUSES, "待补不是依据"
+    assert "concept:pending_search" in row["quote_reason"], row["quote_reason"]
+    assert row["statement_full"] == "" and row["label"] == "新概念"
+    # 反真空：同一个概念再交一次 ⇒ 查重（不新建行、指向既有那一条）。
+    # 查重按概念标签比（不是命题那一格）：所以这里交的是"只交一条概念"的载荷 ——
+    # 那也正是 A 检索回来之前 B 交的形状（`kind="concept"` + 空 `statement_full`）。
+    again = sec.record_statement(_payload(kind="concept", label="新概念", statement_full="",
+                                          proof_text="concept:primitive"), role="B")
+    assert again["duplicate"] and again["stmt_id"] == row["stmt_id"], again
+    assert len([s for s in _rows(store, "statements") if s["kind"] == "concept"]) == 1
+
+
+def test_a_theorem_without_full_statement_is_still_refused(store):
+    """反真空的另一半：命题缺 `statement_full` 仍然拒（"待补"那一档只给概念）。"""
+    add_literature(store, "0000")
+    sec = _sec(store)
+    out = sec.record_statement(_payload(statement_full="", kind="theorem"), role="B")
+    assert out["refused"] == "empty_statement" and not out["created"], out
     assert _rows(store, "statements") == []
 
 
