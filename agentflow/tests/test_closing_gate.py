@@ -2600,13 +2600,20 @@ def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
     assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
     assert rep.readings["artifact_ledger"]["entries"] == 1, rep.readings
 
-    # ② 同一条被改写（sha 变了）⇒ changed ⇒ unknown（不是 fail）
+    # ② 同一条被改写（sha 变了）⇒ changed ⇒ pass + warning（D9，2026-10-09 裁"收窄"）
+    #
+    # 改前这一条断言的是 `unknown`（旧口径）——而真机 t1u 的 23 条 changed 全是框架自己
+    # 幂等重写的 `out/tasks/*.json` ⇒ 任何有派活的跑批都收不了工。裁定之后：
+    # 比对改成按路径取最后一条登记，而"最后一次登记之后又被改写"这一格记 pass，
+    # 但这件事仍然以 warning + 阅读数可见（可见性一格不减）。
     good.write_text("改过了\n", encoding="utf-8")
     rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
                            checks=("artifact_ledger",))
-    assert rep.status["artifact_ledger"] == "unknown", rep.to_dict()
+    assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
     assert rep.readings["artifact_ledger"]["changed"] == 1, rep.readings
+    assert rep.blockers == [], [f.to_dict() for f in rep.blockers]
     assert [f.code for f in rep.findings] == ["artifact_ledger_changed_only"], rep.to_dict()
+    assert rep.findings[0].level == "warning", rep.findings[0]
 
     # ③ 登记过、盘上没了 ⇒ missing ⇒ fail（同一个格，强度不同）
     _ledger("out/paper/NOPE.tex", "deadbeef")
@@ -2622,6 +2629,35 @@ def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
                            checks=("artifact_ledger",))
     assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
     assert rep.readings["artifact_ledger"]["absent"] is True, rep.readings
+
+
+def test_the_ledger_compares_against_the_last_registration_per_path(tmp_path: pathlib.Path):
+    """D9 正控（真机 t1u 的形态）：同一个路径登记两次（框架幂等重写 ⇒ 再登记一次）⇒
+    按最后一条登记比 ⇒ `pass`，且不是 `changed`。
+
+    改前的口径是"逐行比"：同一条 append-only 历史里的旧行永远对不上，
+    于是 t1u 那 23 条框架自己重写的 `out/tasks/*.json` 把这一格读成 `unknown`
+    （八格全 pass 因此不可能，任何有派活的跑批都收不了工）。
+    """
+    st, report = _good(tmp_path)
+    p = tmp_path / "out" / "tasks" / "t-0002.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('{"n": 1}', encoding="utf-8")
+    A = __import__("agentflow.artifacts", fromlist=["x"])
+    led = tmp_path / "ARTIFACTS.jsonl"
+    for body in ('{"n": 1}', '{"n": 2}'):
+        p.write_text(body, encoding="utf-8")
+        with led.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps({"path": "out/tasks/t-0002.json",
+                                 "sha256": A.sha256_of(p), "producer": "framework",
+                                 "at": TS}, ensure_ascii=False) + "\n")
+    rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
+                           checks=("artifact_ledger",))
+    assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
+    rd = rep.readings["artifact_ledger"]
+    assert rd["changed"] == 0 and rd["missing"] == 0, rd
+    # 反真空：台账里确实是两行（append-only 历史还在），只是比对取最后一条
+    assert sum(1 for _ in led.read_text(encoding="utf-8").splitlines()) == 2, rd
 
 
 # ============================================================ 内容判据（D66 / D67 / T1 / T3）

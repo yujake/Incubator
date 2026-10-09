@@ -850,7 +850,14 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
         raise LegNotApplicable(
             "artifact_ledger_bad_rows", f"这个工作区没有产物台账：{led}")
     records, bad_lines = A.read_ledger(project_root)
-    rows = A.verify_entries(project_root, records)
+    # ---- D9（业主 2026-10-09 裁"收窄"，即选择题 T1c 的 1c-1）：
+    # 台账是 append-only 历史，逐行比必然把任何被改写过的文件读成 `changed`
+    # （真机 t1u：23 条全是框架自己幂等重写的 `out/tasks/*.json`）⇒
+    # 按路径取最后一条登记比 —— 那才是"交出去的那一版"。
+    latest: dict[str, dict[str, Any]] = {}
+    for rec in records:
+        latest[str(rec.get("path") or "")] = rec        # 后写覆盖先写 = 取最后一条
+    rows = A.verify_entries(project_root, list(latest.values()))
     counts: dict[str, int] = {"ok": 0, "changed": 0, "missing": 0,
                               "unreadable": 0, "not_a_file": 0}
     for r in rows:
@@ -871,8 +878,10 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
                      for r in bad[:8]],
         "note": ("产物台账要和盘上一致：`renderanchor` 只盯 PDF 那一维"
                  "（回执里的 `pdf_sha256`），这一档盯的是**每一条登记过的产物**。"
-                 "三态分开报：`changed`（登记后被正常改写 ⇒ 真机上常见，"
-                 "在第八格里记 `unknown`）、`missing`（盘上没了 ⇒ 真缺陷）、"
+                 "**按路径取最后一条登记**比（D9：台账是 append-only 历史，"
+                 "逐行比会把正常改写读成 changed）。三态分开报："
+                 "`changed`（最后一次登记之后又被改写 ⇒ **pass + warning**，"
+                 "可见性不减）、`missing`（盘上没了 ⇒ 真缺陷）、"
                  "`unreadable`（读不到 ⇒ 没查成那一行）"),
     }
     if bad_lines:
@@ -3334,8 +3343,10 @@ def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> 
 
     - 全部 `ok` ⇒ `pass`；
     - 有 `missing` / `unreadable` ⇒ `fail`（登记过的东西盘上没了 / 读不到 —— 真缺陷）；
-    - 只有 `changed` ⇒ `unknown`（登记之后又被正常改写是常态：真机根 B 589 条
-      ≈18.75% ⇒ 直接判 `fail` 会把正常产物读成坏，那正是"假读数"的另一种形态）；
+    - 只有 `changed` ⇒ `pass` + warning（D9，2026-10-09 裁定"收窄"）：比对口径改成
+      按路径取最后一条登记（台账是 append-only 历史，逐行比会把正常改写读成 changed），
+      而"最后一次登记之后又被改写"是常态（真机 t1u：23 条全是框架自己幂等重写的
+      `out/tasks/*.json`）⇒ 不再把这一格读成 `unknown`（旧口径下任何有派活的跑批都收不了工）；
     - 台账不在盘上 ⇒ `pass` + 读数写明"没有这一栏"（`absent: true`）——
       与 `acceptance` 对非研究型项目的口径一致："没有这一栏"不是"没查成"。
       要说清的是"这一趟没有产物台账"，而不是"产物与盘上一致"（读数里 `entries: 0`
@@ -3376,12 +3387,18 @@ def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> 
               "产物登记必须与盘上一致：盘上没了就是没了，不要留在台账里充当产出"))
         return
     if changed:
-        rep.status["artifact_ledger"] = "unknown"
+        # D9（业主 2026-10-09 裁"收窄"）：最后一次登记之后又被改写 ⇒ pass + warning。
+        # 依据：真机 t1u 的 23 条 changed 全是框架自己幂等重写的 `out/tasks/*.json`
+        # （per-task 摘要），旧口径把它们读成 `unknown` ⇒ 任何有派活的跑批都收不了工。
+        # 判"交出去的那一版有没有被换过"是 `anchor` / 编译回执那一维的事。
+        rep.status["artifact_ledger"] = "pass"
         rep.findings.append(Finding(
             "artifact_ledger", "artifact_ledger_changed_only", "warning",
-            f"有 {changed} 条登记过的产物在登记之后被改写过（盘上还在，只是不是登记时那一版）"
-            f"⇒ 这一格记 `unknown`：改写在研究流程里是常态，直接判 fail 会把正常产物读成坏。"
-            "要判的是「交出去的那一版有没有被换过」 ⇒ 看 `anchor` / 编译回执那一维"))
+            f"有 {changed} 条产物的**最后一次登记**之后又被改写过（盘上还在，"
+            "只是不是登记时那一版）⇒ 这一格仍记 `pass`，但这件事看得见："
+            "改写在研究流程里是常态（真机上 23 条全是框架自己重写的 `out/tasks/*.json`），"
+            "直接判 fail 会把正常产物读成坏。要判「交出去的那一版有没有被换过」"
+            " ⇒ 看 `anchor` / 编译回执那一维",))
         return
     rep.status["artifact_ledger"] = "pass"
 
