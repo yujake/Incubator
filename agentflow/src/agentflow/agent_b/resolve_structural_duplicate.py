@@ -25,7 +25,8 @@ class _ResolveStructuralDuplicate:
         改写还会影响 `related_concepts`，因此所有受影响的概念都用
         `dedup.derive_related_concepts` 整体重算（派生而非增量，DESIGN.md §6.2）。
         """
-        with self.store.tx("concepts", "relations", actor=self.actor, note="structural_merge") as tx:
+        with self.store.tx("concepts", "relations", "statements", actor=self.actor,
+                           note="structural_merge") as tx:
             decision = self.decide_structural_duplicate(
                 candidate, concepts=tx.rows("concepts"), relations=tx.rows("relations")
             )

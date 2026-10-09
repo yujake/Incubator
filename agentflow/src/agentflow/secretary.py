@@ -2459,7 +2459,12 @@ class Secretary:
                            reason=("同一个概念标签已在册 ⇒ 不新建行（秘书查重；"
                                    "定义到了去改那一行，而不是再起一条）"))
                 return out
-            cid = tx.alloc_id(S.TABLES["statements"]["id_kind"])
+            # 过渡期的号空间只有一个权威：老表还在的时候就是 `concept`（B 的 pipeline
+            # 从那儿发号），迁移之后才是 `stmt` —— 两边各发各的会让同一张表出现
+            # `id_gap`（分配了号却没建行），而两张表还要同号。
+            concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
+                            else S.TABLES["statements"]["id_kind"])
+            cid = tx.alloc_id(concept_kind)
             # 过渡期两处同号（`conceptrows` 的契约 1）：老表那份镜像沿用这个号
             data = CR.write_concept(tx, stmt_id=cid, label=name, definition="",
                                     aliases=body.get("aliases") or [],
@@ -2514,6 +2519,9 @@ class Secretary:
                            literature_rows=len(lit_rows), available_lit_ids=ids)
                 return out
             stmt_kind = S.TABLES["statements"]["id_kind"]
+            # 过渡期的号空间只有一个权威（老表还在时是 `concept`，迁移之后是 `stmt`）
+            concept_kind = (S.TABLES[CR.LEGACY_TABLE]["id_kind"] if legacy.get("present")
+                            else stmt_kind)
             stmt_id = tx.alloc_id(stmt_kind)
             row = self._statement_from(body, full=full, kind=kind, stmt_id=stmt_id)
             row.validate()
@@ -2534,7 +2542,9 @@ class Secretary:
             written = ["statements"]
             pending_concepts = 0
             for c in concepts:
-                cid = tx.alloc_id(stmt_kind)
+                # 与上面同一口径：老表还在的时候号空间的权威是 `concept`（两张表要同号，
+                # 而各自发号会让两边的号不连续 —— `verify` 的 `id_gap` 会报出来）
+                cid = tx.alloc_id(concept_kind)
                 # 过渡期两处同号 + 老表镜像（`conceptrows` 的契约 1）：走同一处写口
                 crow_data = CR.write_concept(
                     tx, stmt_id=cid, label=str(c.get("name") or ""),

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from ._support import Any, BClaimOutcome, D, I, Mapping, NOTE_LIMIT, NO_EXTRACTOR_ERROR, REPROCESS_RESULTS, S, Sequence, Store, T, _passages, check_quote, lease_expired, make_lease
+from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from .run_once import _RunOnce
 from .reprocess_once import _ReprocessOnce
 from .run_reprocess import _RunReprocess
@@ -962,6 +963,7 @@ class _Core:
                 row["related_concepts"] = want
                 row["updated_at"] = S.now_iso()
                 tx.upsert("concepts", row, note="related_recomputed")
+                _CR.sync_from_legacy(tx, row, actor=self.actor)   # 同号同步（过渡期）
 
         # ---- 概念行：survivor 收别名（含被合并方的名字），被合并方立墓碑
         survivor = next(c for c in tx.rows("concepts") if str(c.get("concept_id")) == survivor_id)
@@ -975,6 +977,7 @@ class _Core:
             survivor["aliases"] = aliases
         survivor["updated_at"] = S.now_iso()
         tx.upsert("concepts", survivor, note="alias_merge")
+        _CR.sync_from_legacy(tx, survivor, actor=self.actor)   # 别名也要落到新标准那一行
 
         reason = str(decision.get("reason") or "")
         reason += (
@@ -998,6 +1001,9 @@ class _Core:
             "evidence": dict(decision.get("evidence") or {}),
         }
         tx.upsert("concepts", merged, note="merged")
+        # 墓碑（`merged_into`）在新标准里映射成 `superseded` + 理由（`sync_from_legacy` 里那一支）：
+        # 不映射的话，一次真的合并在新标准那一边完全看不见，下游会继续把被合并的那条当可用命题。
+        _CR.sync_from_legacy(tx, merged, actor=self.actor)
         return {
             "applied": True,
             "survivor_id": survivor_id,

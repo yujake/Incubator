@@ -17,6 +17,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import schema as S
+from . import conceptrows as CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 from . import tty
 from .console import pin_utf8
 from .store import Store, StoreError
@@ -384,7 +385,7 @@ def cmd_repair(args) -> int:
         return 2
 
     st = make_store(args.root)
-    with st.tx("concepts", "relations", actor="repair", note="related") as tx:
+    with st.tx("concepts", "relations", "statements", actor="repair", note="related") as tx:
         rels = tx.rows("relations")
         changed = 0
         for c in tx.rows("concepts"):
@@ -393,6 +394,8 @@ def cmd_repair(args) -> int:
                 c["related_concepts"] = want
                 c["updated_at"] = S.now_iso()
                 tx.upsert("concepts", c, note="related_recomputed")
+                # 并表过渡期：老表那份改动同步到新标准（同号）—— 见 `conceptrows` 的 docstring
+                CR.sync_from_legacy(tx, c, actor="repair")
                 changed += 1
     print(f"[repair] related_concepts 重算了 {changed} 行")
     return 0

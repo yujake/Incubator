@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
+from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
 
 class _RunOnce:
     def run_once(self) -> BRunResult:
@@ -134,7 +135,8 @@ class _RunOnce:
             verified_rels.append({"rel": rel, "check": chk})
 
         # ---- 提交（锁内，短）
-        with self.store.tx("literature", "concepts", "relations", actor=self.actor, note="commit") as tx:
+        with self.store.tx("literature", "concepts", "relations", "statements",
+                           actor=self.actor, note="commit") as tx:
             concept_rows = tx.rows("concepts")
             relation_rows = tx.rows("relations")
             touched: set[str] = set()
@@ -150,6 +152,9 @@ class _RunOnce:
                         existing["aliases"] = merged
                         existing["updated_at"] = S.now_iso()
                         tx.upsert("concepts", existing, note="alias_merge")
+                        # 并表过渡期：老表那份改动要同步到新标准（同一个号），
+                        # 否则新标准那一行悄悄过期而盘上两边都在（见 conceptrows 的 docstring）
+                        _CR.sync_from_legacy(tx, existing, actor=self.actor)
                     res.concepts_reused += 1
                     return existing["concept_id"]
                 cid = tx.alloc_id("concept")
@@ -168,6 +173,7 @@ class _RunOnce:
                 d = row.to_dict()
                 concept_rows.append(d)
                 tx.upsert("concepts", d, note="created")
+                _CR.sync_from_legacy(tx, d, actor=self.actor)   # 同号同步（过渡期）
                 res.concepts_created += 1
                 return cid
 
@@ -317,6 +323,7 @@ class _RunOnce:
                     target["related_concepts"] = want
                     target["updated_at"] = S.now_iso()
                     tx.upsert("concepts", target, note="related_recomputed")
+                    _CR.sync_from_legacy(tx, target, actor=self.actor)   # 同号同步（过渡期）
 
             # 5) 标记文献处理完成（与实体写入同一事务 —— 见 DESIGN.md §2.4）
             lit_row = tx.find("literature", lit_id=lit_id) or lit

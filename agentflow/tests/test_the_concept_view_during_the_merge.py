@@ -171,3 +171,66 @@ def test_an_empty_view_says_zero(store):
     assert set(view["counts"]) == {"statements", "legacy", "merged", "legacy_only",
                                   "definition_only_in_legacy"}
     assert all(v == 0 for v in view["counts"].values()), view["counts"]
+
+
+# ==================================================== 四、写侧搬运（sync_from_legacy）
+
+def test_an_edit_on_the_old_row_is_synced_to_the_new_standard(store):
+    """改一条老行（不是新建）也要落到新标准 —— 只搬"新建"那一支是最容易漏的。"""
+    # 老写侧先建（新标准还没有）
+    with store.tx(CR.LEGACY_TABLE, "statements", actor="test") as tx:
+        legacy = S.Concept(concept_id="0003", name="群", definition="",
+                           related_concepts=[], normalized_name="群", aliases=[],
+                           created_at=TS, updated_at=TS)
+        tx.upsert(CR.LEGACY_TABLE, legacy.to_dict())
+        created = CR.sync_from_legacy(tx, legacy.to_dict(), actor="agent-B")
+    assert created["stmt_id"] == "0003" and created["status"] == "pending_definition"
+
+    # 定义到了（老行改）⇒ 新标准那一行回 active，且别名带过来
+    legacy.definition = "带运算的集合"
+    legacy.aliases = ["group"]
+    with store.tx(CR.LEGACY_TABLE, "statements", actor="test") as tx:
+        tx.upsert(CR.LEGACY_TABLE, legacy.to_dict())
+        updated = CR.sync_from_legacy(tx, legacy.to_dict(), actor="agent-B")
+    assert updated["status"] == "active", updated["status"]
+    assert updated["statement_full"] == "带运算的集合" and updated["aliases"] == ["group"]
+    assert updated["proof_text"] == created["proof_text"], (
+        "新标准独有那几格（良定义性证明）不许被老表覆盖 —— 老表里根本没有它们")
+    view = CR.view(store)
+    assert view["counts"]["merged"] == 1 and view["counts"]["legacy_only"] == 0
+
+
+def test_a_merge_tombstone_becomes_superseded(store):
+    """老表的墓碑（`merged_into`）映射成 `superseded` + 理由（不许在新标准里消失）。"""
+    with store.tx(CR.LEGACY_TABLE, "statements", actor="test") as tx:
+        CR.sync_from_legacy(tx, {"concept_id": "0000", "name": "交换群",
+                                 "definition": "运算可交换的群", "aliases": []}, actor="t")
+        dead = {"concept_id": "0001", "name": "阿贝尔群", "definition": "同 0000",
+                "aliases": [], "merged_into": "0000", "merge_reason": "结构等价 + 名字侧证据"}
+        out = CR.sync_from_legacy(tx, dead, actor="t")
+    assert out["status"] == "superseded", out["status"]
+    assert "0000" in out["quote_reason"] and "结构等价" in out["quote_reason"], out["quote_reason"]
+    assert out["status"] in S.STATEMENT_UNUSABLE_STATUSES, "被合并的那条不许再当依据"
+
+
+def test_the_two_counters_are_pushed_past_the_shared_id(store):
+    """过渡期是一个号空间、两个计数器 ⇒ 镜像完之后两个计数器都要在号之后。
+
+    实测抓到的一条真缺陷：B 从 `concept` 计数器发号、镜像行落进 `statements`，
+    而 `stmt` 计数器没动 ⇒ `verify` 当场报 `counter_behind`（"继续分配会撞号"）。
+    """
+    from agentflow.verify import verify_all
+
+    out = CR.upsert(store, label="谱", definition="矩阵的谱")
+    sid = int(out["stmt_id"])
+    counters = dict(store.read("counters")["counters"])
+    assert counters["stmt"] > sid and counters["concept"] > sid, counters
+    codes = [i["code"] for i in verify_all(store).to_dict()["errors"]]
+    assert "counter_behind" not in codes, codes
+
+
+def test_a_legacy_row_without_an_id_is_not_guessed(store):
+    """反真空：老行没有 `concept_id` ⇒ 返回 `None`（不猜一个号出来）。"""
+    with store.tx(CR.LEGACY_TABLE, "statements", actor="test") as tx:
+        assert CR.sync_from_legacy(tx, {"name": "没有号的行"}, actor="t") is None
+    assert store.rows("statements") == []

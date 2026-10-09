@@ -423,6 +423,57 @@ class Tx:
             )
         return f"{nxt:04d}"
 
+    def raise_counter_to(self, kind: str, used_id: str) -> int:
+        """把某个 ID 类别的计数器抬到 `used_id + 1`（只抬，不发号、不烧号）。
+
+        ## 为什么需要它（`alloc_id` 的 docstring 自己点名要的形状）
+
+        `alloc_id` 的正文逐字写着："如果将来真的需要'只取号、不建行'，那必须是一个
+        显式可审计的形状（例如另开一个 `reserve_id()` 并说明为什么不需要查占用），
+        而不是默默把检查跳过"。这个方法是那个显式形状的另一支：不是"取号不建行"，
+        而是"别的地方已经用了这个号，把计数器追上去"。
+
+        现场（2026-10-09，S1r 并表过渡期）：概念行要同时写在 `concepts`（老表）与
+        `statements`（新标准，`kind="concept"`）里，两处同号，而两张表各有自己的
+        计数器。B 的 pipeline 从 `concept` 发号 ⇒ 镜像进 `statements` 的那些行让
+        `stmt` 计数器落在后面，`verify` 当场报 `counter_behind`（"继续分配会撞号"）。
+        第一版用"多调一次 `alloc_id` 把计数器顶上去"来修 —— 那是错的：它烧掉一个
+        没建行的号，于是同一张表出现 `id_gap`（"分配了 ID 但未建成行"），
+        在真机上被 `test_demo_end_to_end` 的"零问题"判据当场抓出来。
+        所以正确的形状是"把计数器设到 `max(used)+1`"，一个号都不烧。
+
+        三条边界：
+
+        - 未知类别 / 没声明 `counters` ⇒ 抛 `StoreError`（与 `alloc_id` 同一口径）；
+        - `used_id` 不是 4 位数字串 ⇒ 什么都不做，返回当前值（不猜）；
+        - 只抬不降：`used_id + 1` 不大于当前值时不写盘（降计数器是
+          `Store.set_counters` 的事，它有它自己的语义与痕迹）。
+        """
+        if kind not in S.ID_COUNTERS:
+            raise StoreError(f"未知 ID 类别：{kind}")
+        if "counters" not in self.tables:
+            raise StoreError("抬计数器的事务必须声明 counters 表")
+        c = self._store._dirty_counters
+        if c is None:
+            c = self._store._load("counters")
+            self._store._dirty_counters = c
+        counters = c.setdefault("counters", {})
+        text = str(used_id or "")
+        current = int(counters.get(kind, 0))
+        if not text.isdigit():
+            return current
+        target = int(text) + 1
+        if target <= current:
+            return current
+        counters[kind] = target
+        self._dirty.add("counters")
+        # 与 `alloc_id` 同一口径地记一笔：提交时这一类要写回（`_alloc_kinds`），
+        # 事件行也让 `rebuild` 能把计数器折回来（见 `rebuild` 对 `counters` 的折叠）。
+        self._alloc_kinds.add(kind)
+        self._record("counters", {"kind": kind, "allocated": f"{target - 1:04d}"},
+                     note="raise_counter_to")
+        return target
+
     # ---- 事件
     def _record(self, table: str, row: dict, note: str = "", *, op: str = "upsert",
                 extra: dict | None = None) -> None:

@@ -647,6 +647,38 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 一处实现去重：`secretary._concept_statement` 从"本文件里的第二份构造"改成薄转发
 （唯一构造口在 `conceptrows.concept_statement`）—— 两份同口径的构造漂了不会有任何地方红。
 
+#### 13.2d 写侧搬运（2026-10-09）与踩到的两个坑
+
+**搬了哪些写点**（生产路径；`faculty_checks` / `demo` / `pipeline` / 各模块自检里的
+夹具写入**故意不搬** —— 它们造的是"老写侧还没搬完"的工作区，正是这一层要能读的东西）：
+
+| 文件 | 写点 | 收口方式 |
+|---|---|---|
+| `agent_b/run_once.py` | `created` / `alias_merge` / `related_recomputed`（3 处）+ 提交事务声明 | 每处 `tx.upsert("concepts", …)` 之后紧跟 `_CR.sync_from_legacy(tx, row)`；事务加声明 `statements` |
+| `agent_b/core.py` | `_apply_merge` 里的 `related_recomputed` / `alias_merge` / `merged`（3 处） | 同上；墓碑那一处靠 `sync_from_legacy` 映射成 `superseded` |
+| `agent_b/resolve_structural_duplicate.py` | 打开的那笔事务（`_apply_merge` 在里面写） | 事务加声明 `statements` |
+| `cli.py` 的 `repair` | `related_recomputed`（1 处） | 同上 |
+
+**坑一：只搬"新建"不搬"改动"是最容易漏的一格**。B 的 pipeline 里"改一条老行"
+（合并别名、重算 `related_concepts`、结构重复合并墓碑）比"新建"多 —— 只把新建改成两处同号，
+那些改动就只落在老表上，新标准那一份**悄悄过期**（两边都有那一行，只是内容不同了）。
+所以补了 `sync_from_legacy`（老行 ⇒ 新标准那一行的通用同步：只更新从老表推得出来的几格，
+保留新标准独有的 `proof_text`/`doc_id`/`bits`；定义由无到有 ⇒ `pending_definition` 回
+`active`；老表把定义清空 ⇒ 反向回待补）。
+
+**坑二（`verify` 当场抓出来的真缺陷，而且第一版修法是错的）**：过渡期是**一个号空间、
+两个计数器**。B 从 `concept` 计数器发号、镜像行落进 `statements`，而 `stmt` 计数器没动
+⇒ `verify` 报 `counter_behind`（"stmt 计数器为 0，但表里已用到 3；继续分配会撞号"）。
+**第一版**用"多调一次 `alloc_id` 把计数器顶上去"来修 —— `test_demo_end_to_end` 的
+"零问题"判据当场抓出来：那会**烧掉一个没建行的号**，同一张表于是出现 `id_gap`
+（"分配了 ID 但未建成行"）。正确形状是 `Tx.raise_counter_to(kind, used_id)`：
+把计数器**设到** `max(used)+1`，一个号都不烧 —— 这正是 `alloc_id` 自己的 docstring
+点名要求的那个"显式可审计的形状"（原文：「如果将来真的需要'只取号、不建行'，
+那必须是一个显式可审计的形状」）。另外，过渡期号空间的**权威只有一个**：
+老表还在时是 `concept`（B 的 pipeline 从那儿发号），迁移之后才是 `stmt` ——
+两边各发各的同样会造 `id_gap`。判据两条：两个计数器都在号之后且 `verify` 无
+`counter_behind`；`test_demo_end_to_end` 的零问题读数不破。
+
 ### 13.3 `src/agentflow/tools/doc_tools.py` + `agent_b/*` + `secretary.py`（B 走秘书）
 
 ```python

@@ -175,6 +175,30 @@ def view(store: Any) -> dict[str, Any]:
     return out
 
 
+def push_counters(tx: Any, used_id: str) -> None:
+    """把 `stmt` 与 `concept` 两个计数器都抬到 `used_id` 之后（只抬，不烧号）。
+
+    为什么必须有这一格（实测抓到的一条真缺陷）：过渡期是"同一个号写在两张表里"，
+    而两张表各有自己的计数器。B 的 pipeline 从 `concept` 计数器发号 ⇒ 写入 `statements`
+    的那些镜像行会让 `stmt` 计数器落在后面（`verify` 的 `counter_behind` 当场报
+    "stmt 计数器为 0，但表里已用到 3；继续分配会撞号"）；反过来，秘书那条路从 `stmt`
+    发号 ⇒ `concept` 计数器落在后面。两个方向都要补。
+
+    第一版是错的，记在这里（`test_demo_end_to_end` 的"零问题"判据当场抓出来）：
+    它用"多调一次 `alloc_id` 把计数器顶上去"来修 —— 那会烧掉一个没建行的号，
+    同一张表于是出现 `id_gap`（"分配了 ID 但未建成行"）。正确形状是
+    `Tx.raise_counter_to(kind, used_id)`：把计数器设到 `max(used)+1`，一个号都不烧。
+    """
+    text = str(used_id or "")
+    if not text.isdigit():
+        return
+    for kind in ("stmt", "concept"):
+        try:
+            tx.raise_counter_to(kind, text)
+        except Exception:  # noqa: BLE001 —— 抬不动不影响这一笔已经写好的行
+            continue
+
+
 def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
                   aliases: Iterable[str] = (), source_lit_id: str = "", proof_text: str = "",
                   doc_id: str = "", actor: str = "agent-B", mirror: bool = False) -> dict[str, Any]:
@@ -200,6 +224,96 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
             created_at=S.now_iso(), updated_at=S.now_iso())
         crow.validate()
         tx.upsert(LEGACY_TABLE, crow.to_dict(), note="concept_upsert:mirror")
+    push_counters(tx, stmt_id)   # 一个号空间、两个计数器（见 push_counters 的 docstring）
+    return data
+
+
+def _apply_merge_tombstone(row: dict[str, Any], legacy_row: Mapping[str, Any]) -> None:
+    """把老表的墓碑（`merged_into`）落到新标准那一行上：`superseded` + 理由。
+
+    新标准里没有 `merged_into` 这一列，但有语义等价的一档 `superseded`
+    （"被后来的一条取代"，且在 `STATEMENT_UNUSABLE_STATUSES` 里 ⇒ 下游不许再当依据）。
+    不映射的话，一次真的合并会在新标准那一边完全看不见 —— C 的依赖链与收工门会继续
+    把被合并的那条当可用命题，而盘上没有任何地方会响。
+    """
+    into = str(legacy_row.get("merged_into") or "")
+    if not into:
+        return
+    why = str(legacy_row.get("merge_reason") or "").strip()
+    row["status"] = "superseded"
+    row["quote_reason"] = (f"已并入 {into}（同步自老表的 merged_into）"
+                           + (f"；{why}" if why else ""))
+
+
+def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
+                     actor: str = "agent-B") -> dict[str, Any] | None:
+    """把一条老表行同步成新标准那一行（同号）—— 写侧搬运的通用一格。
+
+    为什么需要它（这是过渡期最容易漏的一格）：B 的 pipeline 里有好几处是"改一条老行"
+    （合并别名、重算 `related_concepts`、结构重复合并），而不是"新建一条"。只把"新建"
+    改成两处同号，那些改动就只落在老表上 ⇒ 新标准那一份悄悄过期，而盘上看起来
+    一切正常（两边都有那一行，只是内容不同了）。
+
+    口径（三态）：
+
+    - 老行没有 `concept_id` ⇒ 返回 `None`（调用方点名；不猜号）；
+    - 新标准里已有同号行 ⇒ 只更新"从老表推得出来的那几格"
+      （`label` / `statement_full` / `aliases` / `source_lit_id`），并保留新标准独有的
+      那些（`proof_text` 的良定义性证明、`doc_id`、`bits`、`created_at`、`created_by`）
+      —— 那些信息老表里根本没有；定义从"没有"变成"有" ⇒ 状态从 `pending_definition`
+      回到 `active`（`D12` 甲说的"定义到了就改回 active 并清掉标记"就是这一支）；
+    - 新标准里没有 ⇒ 建一条（空定义自动落待补档）。
+
+    返回写进新标准的那一行 dict（调用方可以拿去当读数）。
+    """
+    cid = str(legacy_row.get("concept_id") or "")
+    if not cid:
+        return None
+    label = str(legacy_row.get("name") or "")
+    definition = str(legacy_row.get("definition") or "")
+    aliases = [str(a) for a in (legacy_row.get("aliases") or []) if str(a).strip()]
+    source_lit = str(legacy_row.get("definition_source_lit_id") or "")
+    existing = tx.find("statements", stmt_id=cid)
+    if existing is None:
+        row = concept_statement(stmt_id=cid, label=label, definition=definition,
+                                aliases=aliases, source_lit_id=source_lit, actor=actor)
+        data = row.to_dict()
+        if str(legacy_row.get("merged_into") or ""):
+            # 老表的墓碑在新标准里也要立起来（新建那一支同样要 —— 第一次同步就碰到
+            # 一条已经被合并的老行是常事：迁移历史数据时全是这种）
+            _apply_merge_tombstone(data, legacy_row)
+        obj = S.row_from_dict("statements", data)
+        obj.validate()
+        data = obj.to_dict()
+        tx.upsert("statements", data, note="concept_sync:create")
+        push_counters(tx, cid)   # 一个号空间、两个计数器（见 push_counters）
+        return data
+    updated = dict(existing)
+    updated["label"] = label
+    updated["statement_text"] = definition
+    updated["statement_full"] = definition
+    updated["aliases"] = aliases
+    updated["source_lit_id"] = source_lit or None
+    merge_into = str(legacy_row.get("merged_into") or "")
+    if merge_into:
+        # 老表的墓碑（`merged_into`）在新标准里没有同名列，但有语义等价的一档：
+        # `superseded`（"被后来的一条取代"）。不映射的话，一次真的合并会在新标准那一边
+        # 完全看不见 —— 下游（C 的链、收工门）会继续把被合并的那条当可用命题。
+        _apply_merge_tombstone(updated, legacy_row)
+    elif definition.strip():
+        if str(updated.get("status") or "") == "pending_definition":
+            updated["status"] = "active"
+            updated["quote_reason"] = ("定义已到（同步自老表）⇒ 回到 active；"
+                                       + str(updated.get("quote_reason") or ""))
+    elif str(updated.get("status") or "") == "active":
+        # 反向：老表把定义清空了 ⇒ 新标准那一行不能继续假装有定义
+        updated["status"] = "pending_definition"
+        updated["quote_reason"] = f"定义被清空（同步自老表）⇒ 回到 {PENDING_SEARCH}"
+    obj = S.row_from_dict("statements", updated)
+    obj.validate()
+    data = obj.to_dict()
+    tx.upsert("statements", data, note="concept_sync:update")
+    push_counters(tx, cid)   # 一个号空间、两个计数器（见 push_counters）
     return data
 
 
