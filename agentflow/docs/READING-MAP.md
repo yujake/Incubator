@@ -196,7 +196,7 @@
 | `deliver.py` | 交付前的判据闸门：逐项判据 + 机械半 → 结论、报告、派回去的工作项 |
 | `closing.py` | 收工门（`draft/37` §16 P3）：**八格**各自一个三态读数（`closing.DEFAULT_CHECKS` 是权威清单）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / 实质产出（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ 验收表的机器可判行 / 产物台账与盘上一致（`ARTIFACTS.jsonl` 逐条重算）。**工具 `conductor.closing` 与 CLI `agentflow closing` 都调 `closing.check_closing`（同一份实现、两个入口）**；`unknown` 不是通过 |
 | `reviewaccept.py` | 审稿场景的**内容级**验收（`draft/37` §17.3）：报告九节且每栏有读数 / 定理台账每条有完整假设与出处页码 / 三态分支落盘可查 / 在成本上限内 / 每跳留下可读输入。**判据与辅助读数分栏** —— `sha`/页数/锚/行数那五种"容易拿到"的读数照原样给出，但**一个都不参与 `passed`** |
-| `migrate_concepts.py` | `concepts` 并进 `statements` 的折叠内核（`draft/97` §10/§14）：概念号走同一分配器重发、定义待补标记、别名带过、`relations.concept_ids` 改号逐条落账（纯函数，不碰盘） |
+| `migrate_concepts.py` | `concepts` 并进 `statements` 的折叠内核与**迁移计划**（`draft/97` §10/§14/§15.2）：`plan_migration`（计划 = 折叠 + 关系改号 + 逐条落账 + 边界读数，真跑的那一笔照抄它）、`counter_alloc`（确定性发号替身，让预演与真跑的号逐条对得上）、`ledger_lines`（改号台账的行形状：`out/` 下那份 `migrate-map` 记录）、`fold_concepts` / `remap_concept_ids`（内核：概念号走同一分配器重发、定义待补标记、别名带过）。纯函数，不碰盘 |
 
 ### 第 7 层 · 质量与产物面
 
@@ -266,7 +266,7 @@
 | `capabilities.py` | 2453 | 动作表 + 写集 + 边表 + 导入期交叉断言 | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2880 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2752 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
-| `schema.py` | 3198 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
+| `schema.py` | 3234 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区） |
 | `runflow.py` | 2039 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层 |
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
 | `cli.py` | 2567 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |

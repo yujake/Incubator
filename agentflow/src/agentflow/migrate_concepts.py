@@ -29,6 +29,22 @@ proof里就证这个概念为什么是良定义的」+「并表了就并干净�
 
 不许做的事：不许给迁移行编良定义性证明（`proof_text` 固定写"原始概念"这一档）；
 不许把"定义空着"读成"定义就是空的"（空 ⇒ `pending_search`，等 A 去搜或 B 自撰）。
+
+## 两步走：先算计划，再照抄进 `rebuild`（业主 2026-10-09「并干净」）
+
+并表要动磁盘格式（`SCHEMA_VERSION 1→2`、`TABLES` 删 `concepts`、读侧统一新标准），
+而迁移是错误不可逆的那一类（`AGENTS.md` 的七类之一）⇒ 顺序定成：
+
+1. `plan_migration(...)`：把"这次迁移会长成什么样"整个算出来（纯函数、确定性、
+   可在真盘上只读预演）—— 折出的行、改过的关系、逐条改号账、号冲突 / 悬空号 /
+   定义待补 / 并表后同名四组读数；
+2. `store.rebuild` 那一笔照抄它（同一套内核 ⇒ 预演与真跑不可能分家）。
+
+真盘预演读数（2026-10-09，62 个工作区、28 个有概念；只读）：
+2233 条概念、1752 条关系、既有 147 条命题；813 条要改号（其中 22 条与既有命题撞号
+—— 不重发号就会静默顶掉那 22 行）、1342 条关系改号、悬空概念号 0、
+定义待补 94 条（全在 p6c/p6e）、并表后同名 0。
+报告：`D:\Incubator\temp\_s1r_plan_readings.txt`（脚本 `temp/_s1r_plan_readings.py`）。
 """
 from __future__ import annotations
 
@@ -119,6 +135,126 @@ def fold_concepts(concept_rows: Iterable[Mapping[str, Any]],
 def c_has_normalized(rows: Iterable[Mapping[str, Any]]) -> bool:
     """有没有行带 `normalized_name`（用来决定要不要记那条"丢弃"的读数）。"""
     return any(str((r or {}).get("normalized_name") or "").strip() for r in rows)
+
+
+def counter_alloc(start: int = 0, *, width: int = 4,
+                  taken: Iterable[str] = ()) -> Callable[[], str]:
+    """一个确定性的号分配器（纯函数世界的替身）：从 `start` 起发号、跳过 `taken`。
+
+    生产路径上号由 `Tx.alloc_id("stmt")` 给（E5：唯一分配器、撞号在结构上不可能）；
+    这个替身存在的理由是预演：迁移在真盘上会长成什么样，必须能在一张纸上算出来
+    （不碰盘、不开事务），而"算出来的号"与"真跑出来的号"要能逐条对上 ——
+    对不上就说明预演与迁移不是同一套口径（那正是预演最会骗人的地方）。
+    """
+    taken_set = {str(x) for x in taken}
+    box = {"n": int(start)}
+
+    def _next() -> str:
+        while True:
+            n = box["n"]
+            box["n"] = n + 1
+            cand = f"{n:0{width}d}"
+            if cand not in taken_set:
+                return cand
+
+    return _next
+
+
+def plan_migration(concept_rows: Iterable[Mapping[str, Any]],
+                   relation_rows: Iterable[Mapping[str, Any]],
+                   *, existing_stmt_ids: Iterable[str] = (),
+                   alloc: Callable[[], str] | None = None,
+                   start: int = 0) -> dict[str, Any]:
+    """迁移的完整计划：`concepts` 并进 `statements` 会长成什么样（纯函数，不碰盘）。
+
+    这是 `store.rebuild` 那一笔要照抄的东西 —— 预演与真跑必须是同一套口径，
+    所以计划与执行共用 `fold_concepts` / `remap_concept_ids` 两个内核，这里只做三件
+    "计划才需要"的事：
+
+    1. 发号：不给 `alloc` 就用 `counter_alloc(start, taken=existing_stmt_ids)`
+       （确定性替身）；给了就用它（生产传 `tx.alloc_id("stmt")` 的包装）。
+    2. 逐条落账：`ledger` 每改一个号一行（旧号、新号、名字、有没有定义、待补标记），
+       末行是汇总 —— "这次迁移到底动了什么"必须能逐条复算（`draft/97` §15.2）。
+    3. 边界读数：号冲突（概念号与既有命题号撞上 —— 由分配器跳过，但要点名）、
+       重复概念名（按 `textutil.normalize` 比）、悬空 `concept_ids`（关系表挂着概念表里
+       没有的号）、定义待补条数。这些都是读数，不是错误：迁移照做，但读的人必须看得见。
+
+    返回键：`statements` / `relations` / `id_map` / `ledger` / `changed` / `missing` /
+    `notes` / `pending` / `duplicate_names` / `collisions` / `counts`。
+    """
+    concept_list = [dict(r) for r in concept_rows]
+    relation_list = [dict(r) for r in relation_rows]
+    taken = {str(x) for x in existing_stmt_ids}
+    real_alloc = alloc or counter_alloc(start, taken=taken)
+    folded = fold_concepts(concept_list, alloc=real_alloc)
+    remapped = remap_concept_ids(relation_list, folded["id_map"])
+
+    # 重复概念名：并表之后两类行住同一张表 ⇒ "同名两条"从"两个表各自的常态"
+    # 变成"同一张表里的重名"（秘书查重就是为了让它不发生）。这里只报，不改。
+    from . import textutil as _T   # 惰性：归一化的唯一实现
+
+    by_name: dict[str, list[str]] = {}
+    for row in concept_list:
+        cid = str(row.get("concept_id") or "")
+        key = _T.normalize(str(row.get("name") or ""))
+        by_name.setdefault(key, []).append(cid)
+    duplicate_names = {k: sorted(v) for k, v in by_name.items() if k and len(v) > 1}
+
+    collisions = sorted(set(folded["id_map"]) & taken)
+    had_definition = {str(r.get("concept_id") or ""): bool(str(r.get("definition") or "").strip())
+                      for r in concept_list}
+    names = {str(r.get("concept_id") or ""): str(r.get("name") or "") for r in concept_list}
+    ledger: list[dict[str, Any]] = []
+    for old_id, new_id in folded["id_map"].items():
+        ledger.append({
+            "kind": "concept→statement", "old_id": old_id, "new_id": new_id,
+            "name": names.get(old_id, ""), "had_definition": had_definition.get(old_id, False),
+            "marker": "" if had_definition.get(old_id, False) else PENDING_SEARCH,
+        })
+    counts = {
+        "concepts": len(folded["rows"]),
+        "relations": len(remapped["rows"]),
+        "renumbered": sum(1 for o, n in folded["id_map"].items() if str(o) != str(n)),
+        "collisions_with_existing_statements": len(collisions),
+        "relations_changed": len(remapped["changed"]),
+        "dangling_concept_ids": len(remapped["missing"]),
+        "pending_search": int(folded["pending_search"]),
+        "duplicate_names": len(duplicate_names),
+    }
+    ledger.append({"kind": "summary", **counts})
+    return {
+        "statements": folded["rows"],
+        "relations": remapped["rows"],
+        "id_map": dict(folded["id_map"]),
+        "ledger": ledger,
+        "changed": remapped["changed"],
+        "missing": remapped["missing"],
+        "notes": folded["notes"],
+        "pending": folded["pending"],
+        "duplicate_names": duplicate_names,
+        "collisions": collisions,
+        "counts": counts,
+    }
+
+
+def ledger_lines(plan: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """计划 ⇒ 可以逐行写进 `out/migrate-map.jsonl` 的记录（append-only，一行一件事）。
+
+    为什么单独一个函数：落账的形状由它一处决定，`store.rebuild` 与预演脚本
+    因此写出来的是同一种行（读的人不必分辨"这条是预演写的还是迁移写的"）。
+    """
+    out: list[dict[str, Any]] = []
+    for rec in plan.get("ledger") or []:
+        out.append({"op": "migrate_map", **dict(rec)})
+    for rel_id, old_id, new_id in plan.get("changed") or []:
+        out.append({"op": "relation_renumbered", "rel_id": str(rel_id),
+                    "old_id": str(old_id), "new_id": str(new_id)})
+    for rel_id, missing_id in plan.get("missing") or []:
+        out.append({"op": "relation_dangling_concept_id", "rel_id": str(rel_id),
+                    "concept_id": str(missing_id),
+                    "why": "关系表挂着概念表里没有的号：原样保留并点名（丢掉它等于让"
+                           "'挂着一个不存在的号'这件事消失）"})
+    return out
 
 
 def remap_concept_ids(relation_rows: Iterable[Mapping[str, Any]],

@@ -606,6 +606,27 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 - **依据**：E4/E5。
 - **判据**：`temp/_s1r_rehearsal.py` 的 2233 条逐条对得上；迁移后 `dependencies` 行**逐字不变**（只多两列缺省值）；改号映射逐条可复算。
 
+#### 13.2b 迁移计划的真实读数（2026-10-09，只读预演；脚本 `temp/_s1r_plan_readings.py`）
+
+`plan_migration` 与将来的 `store.rebuild` 那笔**共用内核**（`fold_concepts` /
+`remap_concept_ids`），所以这份读数就是"真跑会长成什么样"的预测 ——
+号从各工作区 `data/counters.json` 的 `stmt` 计数起算，预演的号与真跑的号应当逐条相同。
+
+| 读数 | 值 | 说明 |
+|---|---|---|
+| 工作区 | **62**（有概念的 28） | 比 `draft/95` 早先记的 59 多 3 个（这一段又新建了工作区） |
+| `concepts` 行 | **2233** | 与早先只读普查一致 |
+| `relations` 行 | 1752 | 悬空 `concept_ids` **0** |
+| 迁移前既有 `statements` 行 | 147 | 概念号必须**避开**这些号 |
+| **要改号** | **813** | 其中 **22 条与既有命题撞号** —— 这一条是**新发现**：按"概念号原样保留"的旧草案，那 22 行会被 `upsert` **静默顶掉**（业主 D2 的"同一个分配器"正是为此） |
+| `relations` 改号 | 1342 | 逐条落账（`out/` 下那份 `migrate-map` 记录） |
+| 定义待补 | **94** | 全在 p6c / p6e，落 `pending_definition` + `concept:pending_search`（`D12` 甲） |
+| 并表后同名 | **0** | 业主"秘书会查重 ⇒ 合并概念不会发生"这一条在真盘上成立 |
+
+⇒ 迁移的**风险点已经量出来了**：不是"数据太多"，而是**那 22 个撞号**（`plan_migration`
+的 `collisions` 点名它们），以及 94 条待补定义（谁去补写在标记里）。
+完整报告：`D:\Incubator\temp\_s1r_plan_readings.txt`。
+
 ### 13.3 `src/agentflow/tools/doc_tools.py` + `agent_b/*` + `secretary.py`（B 走秘书）
 
 ```python
