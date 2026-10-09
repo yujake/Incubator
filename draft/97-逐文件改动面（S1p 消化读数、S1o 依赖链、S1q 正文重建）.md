@@ -722,6 +722,60 @@ def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
 当场把它数了出来（`盘上多出 {'tests/test_the_mirror_is_complete.py': 1}`）——
 这正是那条判据要的效果：**清单不会因为"我又加了点东西"而悄悄失真**。
 
+#### 13.2k 落刀的一次实测（2026-10-09）：**源侧一次就通，真正的大头是测试面**
+
+本轮把落刀整刀做了一遍并**在源侧验证通过**，然后**撤回**（树回到绿的 `6bd0c60`）。
+记下这次实测的边界，下一轮按这个顺序做就能一次成：
+
+**源侧（做完了、验证过、可原样重放）**
+
+1. `schema.py`：`SCHEMA_VERSION 1→2`；`TABLES` 去 `concepts`；`ARRAY_FIELD_KINDS` 去那一条；
+   `ID_COUNTERS` 去 `"concept"`（**不去会怎样**：表没了而类别还在 ⇒ `verify` 反查不到表，
+   每次都报一条 `counter_table_missing`，那是"已经不存在的表"，不是缺陷）；
+2. `store.py`：`_load` 对"已并走的表"给**受控错 + 指路**（"去读 `statements` 的
+   `kind='concept'`，统一入口 `conceptrows.view(…, shape='legacy')`"）；
+   `rebuild` 接受**上一版**事件（`known_old = (SCHEMA_VERSION - 1,)`，读数落在
+   `migrated_v1_events`）并在重放后用 `migrate_concepts.plan_migration` 折叠：
+   概念号从 `counters` 续着发（撞既有命题号往后跳）、`relations.concept_ids` 改号、
+   改号映射 append 到 `out/migrate-map.jsonl`、定义空行带 `pending_definition` +
+   `concept:pending_search`。**实测**（合成 v1 库：2 概念 + 1 关系 + commit）：
+   `applied=3 / migrated_v1_events=3 / migrated_concepts=2 / pending_search=1 /
+   relations_renumbered=0 / ledger 3 行`，statements 里 `0000 active` + `0001
+   pending_definition` —— 与预演脚本的读数口径一致；
+3. 四处写侧遗留（`run_once` 查重、`_apply_merge`、`cli repair`、`resolve_structural_duplicate`）
+   改用 `tables_for_concept_write` / `view_tx` / `upsert_legacy_shaped`；`cli repair --related`
+   在表退役后给**受控退出 + 指路**（那一格随并表退役：连接由 `relations` 表管）；
+4. `mirror_gaps` 加 `transition_over`：老表不在 schema 里 ⇒ **没有"另一侧"**，
+   于是"缺口"不成立（不加这一档，新标准里每条概念都会被读成"缺镜像"——
+   一个永不消失的假告警）。
+
+**测试面（这才是大头，本轮**没有**做完，所以整刀撤回）**
+
+实测命令与读数：把测试面用"机械替换"过一遍之后，
+`test_agent_b / agent_b_gates / agent_c / agent_c_service / agent_d / agent_h / verify /
+verify_extended / 两个过渡层判据 / intake / demo / download_handoff / fc05 / judges /
+review_acceptance / release_acceptance_wiring / coverage_agent_b` 一批跑出
+**84 failed + 59 errors**。原因不是"改错了"，而是**三类测试要三种不同的处置**，
+机械替换必然错配：
+
+| 类 | 例子 | 处置 |
+|---|---|---|
+| **样品类别**（测分配器/计数器/事件流，`concept` 只是随手挑的样品） | `test_store_counters_commit` / `test_store_alloc_guard` / `test_store_concurrency` / `test_tx_mark_dirty` | 把样品类别换成 `stmt`（`ID_COUNTERS` 里还有它）；**注意内嵌子进程脚本里的字面量也要换**（那几个 subprocess 判据会等 60s 就绪标记超时，症状是"超时"而不是"报错"） |
+| **样品表** | `test_store_delete_events`（`tx.delete("concepts", …)` / `table.delete(table="concepts")`） | 换 `statements` |
+| **过渡期判据**（我在 113–122 轮写的那批，判的是"两处同号"） | `test_the_concept_view_during_the_merge`（约 20 条）/ `test_the_mirror_is_complete` | **按落刀后的现实重写**：两处同号那几条作废（改成"写只落新标准"），保留的：受控错、"`transition_over` 之后没有缺口"、"`upsert_legacy_shaped` 只写 statements"、`raise_counter_to` |
+| **夹具** | `conftest.add_concept`（19 个文件用它） | 改 `upsert_legacy_shaped`（一处改动、覆盖大半） |
+
+**建议的批次顺序（下一轮照这个走）**：
+① 先做测试面迁移（样品类别/样品表/夹具 + 重写过渡期判据），**此时源侧还没动 ⇒ 树仍然绿**，
+每一步都能单独跑；
+② 再落源侧那一刀（§13.2k 上面四条，本轮已验证过的代码原样重放）；
+③ 跑全量、收尾（行数账、读图、机械改写守卫）。
+
+**另一条经验（写在这里免得重演）**：机械替换脚本对本仓**不安全** ——
+多行调用、内嵌脚本字符串、缩进块里的 import、以及"散文里出现同一个词"这四类
+会让它改出语法错或改错地方。真要机械替换，必须**逐文件 ast.parse 校验 + 报告**，
+而且第一次跑完就要按失败清单分类，而不是继续加大替换面。
+
 #### 13.2j 两个入口让**夹具/测试不牵连落刀**（2026-10-09）
 
 落刀那一笔把 `concepts` 从 `TABLES` 里删掉，而 `Store.tx` 对未知表会**拒** ——
