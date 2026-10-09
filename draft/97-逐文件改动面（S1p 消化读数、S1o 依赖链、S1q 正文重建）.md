@@ -88,7 +88,31 @@ ActionSpec(
   `used_by` 指向本行 `stmt_id`；负控 —— 不给 `deps` ⇒ **0 行**且 `deps_state="unknown"`
   （不许变成"无前提"）；反真空 —— `deps` 指向不存在的号 ⇒ 拒（与 `check_citations` 同一条纪律）。
 
-## §5 计数合同与"待核"清单（施工第一步跑这三条命令）
+## §4 **定义也入库**（业主 2026-10-09：「新概念的定义也是依赖项，是特殊形式的"定理"，
+也入库。这样 C 的职责面就统一了」）—— 逐文件见下
+
+- **`specs/b.py`**：`register_statement` 的**描述文字**里加一句"新概念的定义也走这个动作
+  （`kind` 写'定义'），并把它的依赖（它建立在哪些概念/定义上）写进 `deps`"。
+  **`params` 不用加任何一格**：`kind` 已经是自由字符串（见下面的依据）。
+- **`agent_b/register_statement.py`**：无需改判据分支 —— 加一条**自检**：
+  `kind == "定义"` 时**允许** `proof_text` 为"（定义，无需证明）"这类说明、
+  并**要求** `deps` 里至少写清它用到的上游（没有上游=原始定义 ⇒ 落 `deps_state="primitive"`）。
+- **依据（真实，2026-10-09 现算）**：`schema.py` 里 `Statement.kind` 的注释逐字写着
+  「`kind`（theorem / lemma / …）：**刻意不是受控词表**。理由：它不参与任何判据分支
+  （分支只看 `origin` / `status` / `evidence_kind` / `bits`）」⇒ 写"定义"不需要改 schema；
+  `CLAIM_KINDS` 现算 = `('定义','定理','命题','引理','推论','例','注','反例')`（稿件侧本来就有这一档）；
+  `DEP_KINDS` 现算含 `"definition"`（边上能说"这条定理用到那个定义"）。
+- **待核 V3**：`Statement.validate()` 对 `kind="定义"` 的行**在 `proof_text` / `quote_verified`
+  上有没有硬要求**（若有，定义那一档要给出合规的写法，或按人裁放宽）——施工第一步读一遍
+  `Statement.validate()` 并把读数记进提交信息。
+- **判据（S1p/S1o 各加一条）**：
+  - S1p：一份手稿过审后，它**引入的新定义**也进了库（`kind="定义"` 的 `statements` 行）——
+    与"成果逐条入库"同一档读数（`reviewed_then_digested_rows` 的 `detail` 里分列
+    "定理 N 条 / 定义 M 条"）；
+  - S1o：负控④ —— 一条 `kind="定义"` 且**没有任何 `dependencies` 行**的行**可以当根**
+    （原始定义），而一条 `kind="定理"` 且没有边、又没有 proof 证据的行**不许当根**（依赖没写）。
+
+
 
 ```powershell
 # V1：C 的声明真身是不是禁改区（决定走不走"授权先改后审"）
