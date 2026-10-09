@@ -776,6 +776,34 @@ backend.registry_factory = lambda face: build_registry(workspace_root=face, ...)
 **⇒ 未来查重的键**：`T.normalize(label)` + 读出来的 `aliases` —— 一处口径
 （`textutil.normalize` 是唯一实现，秘书不另写一份）。
 
+#### 14.4c **D10′ 是什么**（业主 2026-10-09：「D10'没听懂」⇒ 用真名真例重讲）
+
+**别名是什么（不是抽象的）**：同一个数学对象常常有好几个名字 —— 现场从 888 条里取的例子：
+
+| 台账号 | 记的名字 | 别名（同一个东西的别的写法） |
+|---|---|---|
+| `p6/0000` | `vertex-girth-regular vgr(n, k, g, λ)` | `vertex-girth-regular graph`、`vgr(n, k, g, λ)-graph` |
+| `p6/0001` | `(k, g)-cage` | `cage`、`cage problem` |
+| `p6/0005` | `edge-girth-regular graph egr(n, k, g, λ)` | `egr(n, k, g, λ)-graph` |
+
+**为什么必须有它**：秘书的**查重**是"按名字认同一个东西"。手稿里下一次写
+"`vgr(n, k, g, λ)-graph`"时，如果台账里只存了主名字、没有别名表，
+秘书就认不出它与 `p6/0000` 是同一个 ⇒ **又登记一行**（这正是"重复登记"从后门溜回来），
+C 的图上同一个概念会变成两个节点。
+**别名不能靠现算**（不像 `normalized_name` 只是大小写/空白的归一）：上表里
+"`cage`" 与 "`cage problem`" 之间没有可计算的规则，那是**外部知识** ⇒ 必须**存**。
+
+**D10′ 要你定的那一句话**：这份别名表存哪儿？（并表之后 `statements` **没有这一列**）
+
+- **甲（建议）**：塞进一个**已有的自由文本格**（例如 `quote_reason`/备注），用**受控前缀**写
+  `concept:aliases=["cage","cage problem"]`，读的时候解出来。**不动 schema**，
+  代价是"别名要靠解析才能读"（不是一列，SQL 式查询看不见它，但 grep 得到、可审计）；
+- **乙**：给 `statements` **加一列**（`concept_meta` 或干脆 `aliases`）。读起来干净、
+  查询方便；代价是**再动一次禁改区的 schema**（并表这一笔已经要把 `SCHEMA_VERSION` 抬到 2），
+  而且 888 条历史行要多走一次迁移。
+
+**不裁的后果**：按甲走 —— 别名以受控前缀落在文本格里，秘书查重时先读它再比主名字。
+
 ### 14.5 **概念行不参与等级**（否则被读成"猜想"）
 
 现场：等级由 `evidencebits.derive_grade` 现算，`bits={}`（概念没有证据位）时它会给出
