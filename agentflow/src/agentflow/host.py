@@ -609,6 +609,21 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     backend.registry = built.registry
     backend.conductor = conductor
     backend.store = store
+    # ---- D8 / E23（业主 2026-10-09 裁"修"）：把"每实例一个注册表"的装配点接上。
+    #
+    # 不接会让权限面自相矛盾（现场依据 `draft/90` §2 的 E23）：`_surface_refusal` 的基准是
+    # 这一趟的 `workspace_root`（它跟着面走），而 `fs.*` 真正落盘的根是共用注册表的根
+    # （= 父的工作区）⇒ 一条相对路径的检查结论是"在面内"，真写下去却落在面外，
+    # 而测试全绿 —— 正是本仓最忌的"测试全绿、上线即越权"。
+    #
+    # 契约：`registry_factory(face) -> ToolRegistry`，`fs.*` 的根 = 那个面；
+    # `LlmBackend` 在给子代理起循环时按它的面调这个工厂（那一边一行没改）。
+    def _registry_for_face(face: str) -> Any:
+        return build_registry(store=store, conductor=conductor, role_registry=role_reg,
+                              workspace_root=str(face), config=config,
+                              session_root=root, sid=eff_sid).registry
+
+    backend.registry_factory = _registry_for_face
     return {"conductor": conductor, "backend": backend, "registry": built.registry,
             "loops": table, "session_root": root,
             # 这一趟定下的会话号（§63）：调用方与运维据此核对"工具面读的是哪一段"。
