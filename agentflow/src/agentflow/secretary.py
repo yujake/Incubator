@@ -2730,17 +2730,16 @@ class Secretary:
             raw = body.get(key)
             return S.PageRange.from_dict(raw) if isinstance(raw, Mapping) else S.PageRange()
 
-        def _lines(key: str) -> str:
-            """`line_range` 是字符串那一格：调用方给 `{"start":343,"end":414}` 这种
-            归一化过的区间时写成 `"343-414"`（`Statement.line_range` 的声明是"如 120-148"）。
-            直接 `str(dict)` 会落成 `"{'start': 343, 'end': 414}"` —— 与声明对不上，
-            而下游按"行范围"读的人拿到的是一个字典（判据抓不到它：`verify` 不查那一格）。
+        def _lines(key: str) -> Any:
+            """`line_range` 的既有约定是归一化后的区间（`{"start":120,"end":148}`）。
+
+            本轮一度照 `Statement.line_range` 的注释（"如 120-148"）把它写成字符串，
+            结果被 `tests/test_intake_actions.py`（`own_row["line_range"]["start"] == 120`）
+            当场判红 —— 仓里早已定死这一格落的是归一化区间，而 `_normalize_range`
+            就是那个唯一实现。所以回到 `_rng`：判据比注释权威，而"注释与判据对不上"
+            这件事该单独记一笔，不该在这一笔里顺手改掉任何一边。
             """
-            raw = body.get(key)
-            if isinstance(raw, Mapping):
-                start, end = raw.get("start"), raw.get("end")
-                return f"{start}-{end}" if start is not None and end is not None else ""
-            return _s(key)
+            return _rng(key)
 
         origin = _s("origin") or "external_lit"
         reason = _s("quote_reason")

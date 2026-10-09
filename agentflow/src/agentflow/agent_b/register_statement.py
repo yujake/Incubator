@@ -242,21 +242,14 @@ class _RegisterStatement:
                            "origin='external_lit' 时必须给 source_lit_id —— "
                            "从文献摘的命题必须有出处（没有出处的摘录就是二手结论）")
         if quote_verified is not True and not str(quote_reason or "").strip():
-            # `own_result`（我们自己证的）这一档不在这里拦：业主 `draft/97` §14.11 的
-            # 契约是"B 只交定理内容 + 证明过程"，而自产命题没有第二份文本可比 ——
-            # 它那一格的受控理由由写入代理（`Secretary.record_statement`）补，
-            # 补完在读数里给 `quote_reason_filled=True`。栏里留白的病根是"盘上写着空"，
-            # 而盘上那一格由秘书保证非空（三态纪律仍然成立）。
-            # `external_lit` 照旧在这里拦：从文献摘的命题有第二份文本可比，
-            # "还没查"必须由 B 当场说出来。
-            if origin == "own_result":
-                pass
-            else:
-                return _refuse("missing_quote_reason",
-                               "quote_verified 不是 True 时必须给 quote_reason —— "
-                               "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）"
-                               "（`own_result` 那一档不在此拦：它没有可比对的第二份文本，"
-                               "理由由秘书补受控值）")
+            # 这一条不按 origin 放宽（本轮试过：被 `test_action_surface_matches_acceptance`
+            # 那条"每一级缺失都被拒"的梯子当场判红）：三态纪律管的是"盘上那一格不许留白"，
+            # `own_result` 也一样有"我为什么还没核"可以说（没核 / 没有第二份文本可比 /
+            # 证明在 proof_text 里……）。业主 §14.11 的两件式契约管的是内容
+            # （定理内容 + 证明过程），不是把三态纪律免掉。
+            return _refuse("missing_quote_reason",
+                           "quote_verified 不是 True 时必须给 quote_reason —— "
+                           "三态纪律：没通过要说为什么没通过，**还没查**也要说出来（不许留白）")
         # 出处：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数），
         # 而"出处是哪一栏"按来源分档（§68 人裁的甲档，与审稿判据逐条对齐）。
         #

@@ -67,21 +67,25 @@ def test_the_dependencies_come_out_of_the_proof_text(store):
 
 
 def test_the_two_things_contract_gets_a_controlled_quote_reason(store):
-    """只交两样 ⇒ `quote_reason` 由秘书补受控值（补了看得见），且 `line_range` 是字符串。"""
+    """只交两样 ⇒ `quote_reason` 由秘书补受控值（补了看得见），`line_range` 按既有约定落区间。
+
+    `line_range` 那一格不是字符串：仓里的既有约定是 `_normalize_range` 归一化后的
+    区间（`tests/test_intake_actions.py` 断言 `["start"] == 120`）—— 本轮一度照
+    `Statement.line_range` 的注释改成 `"343-414"` 那种字符串，被那条判据当场判红。
+    这里改成钉住既有约定（判据比注释权威），并把"注释与判据对不上"记成一条待办。
+    """
     out = _sec(store).record_statement(_two_things(store, proof_text="证明：由定义直接得到。"))
     assert out["checked"] and out["created"], out
     assert out.get("quote_reason_filled") is True, "补了必须留读数（否则'这格为什么有值'无从分辨）"
     row = store.rows("statements")[0]
     assert "own_result" in row["quote_reason"] and len(row["quote_reason"]) > 20, row["quote_reason"]
-    assert isinstance(row["line_range"], str), (
-        f"`line_range` 是 str 那一格，收到 {type(row['line_range']).__name__}: {row['line_range']!r}")
-    # 调用方给归一化过的区间（B 的动作就是这么给的）⇒ 落成 `"343-414"` 这种字符串
+    # 调用方给归一化过的区间（B 的动作就是这么给的）⇒ 原样落区间，不许写成字符串
     out3 = _sec(store).record_statement(_two_things(
         store, label="T3", statement_full="定理：行范围那一格。", proof_text="证明：略。",
         line_range={"start": 343, "end": 414, "label": ""}))
     assert out3["checked"], out3
     got = next(r for r in store.rows("statements") if r["stmt_id"] == out3["stmt_id"])
-    assert got["line_range"] == "343-414", got["line_range"]
+    assert got["line_range"]["start"] == 343 and got["line_range"]["end"] == 414, got["line_range"]
     # 调用方给了理由就照用（不覆盖）
     out2 = _sec(store).record_statement(_two_things(
         store, label="T2", statement_full="定理：另一条。", proof_text="证明：略。",
@@ -209,21 +213,23 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
         origin="own_result", kind="theorem", label="T1",
         statement_full="定理：对任意群 G，命题 ph 成立。",
         proof_text="证明：由 lit:0003 的引理推出，并用 stmt:0777（还没进库）。",
+        quote_reason="自产：没有第二份文本可比（证明过程见 proof_text）",
         line_range={"start": 1, "end": 9})
     assert out["ok"] is True, out
     assert out["deps_state"] == "from_proof" and out["deps_written"] == 2, out
     assert [d["ref"] for d in out["deps_dangling"]] == ["stmt:0777"], out["deps_dangling"]
     assert out["pending_definitions"] == [], "命题不缺定义 ⇒ 这一档不许凭空冒出来"
-    # `own_result` 且没给 quote_reason ⇒ 不再在 B 那一侧拦（§14.11 的两件式契约），
-    # 由秘书补受控值；自产命题的出处规则照旧（要指出它住哪一行）
+    # `own_result` 也要给 `quote_reason`（三态纪律不按 origin 放宽：本轮试过，被
+    # `test_action_surface_matches_acceptance` 的"每一级缺失都被拒"判红）⇒ 给一个理由就落得下
     out1b = b.register_statement(
         origin="own_result", kind="theorem", label="T2",
         statement_full="定理：另一条自产命题。", proof_text="证明：由定义直接得到。",
+        quote_reason="自产：没有第二份文本可比，所以这一格是'还没核'",
         line_range={"start": 12, "end": 20})
     assert out1b["ok"] is True, out1b
     row1b = next(r for r in store.rows("statements") if r["stmt_id"] == out1b["stmt_id"])
-    assert "own_result" in row1b["quote_reason"], row1b["quote_reason"]
-    assert row1b["line_range"] == "12-20", row1b["line_range"]
+    assert row1b["quote_reason"].startswith("自产"), row1b["quote_reason"]
+    assert row1b["line_range"]["start"] == 12, row1b["line_range"]
     # 概念（定义还没抽到，正是 §15.4 那个场景：B 消化 A 查回来的论文时撞到生僻定义）
     # ⇒ 读数点名"问直接父"
     out2 = b.register_statement(origin="external_lit", kind="concept", label="生僻概念 X",
