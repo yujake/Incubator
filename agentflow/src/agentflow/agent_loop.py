@@ -3356,8 +3356,8 @@ class AgentLoop:
         ## 面的基准 == 执行的基准（D8 / E23 已收口，2026-10-10 校）
 
         这一段此前写着"已知未收口：`registry_factory` 的装配点未接 ⇒ 检查按面、执行按工作区"。
-        那已经**不是事实**了：`host.py` 装配时把 `backend.registry_factory` 接上，
-        子代理那一趟由 `registry_factory(face)` **按面造一个注册表**（同一个面复用同一个，
+        那已经不是事实了：`host.py` 装配时把 `backend.registry_factory` 接上，
+        子代理那一趟由 `registry_factory(face)` 按面造一个注册表（同一个面复用同一个，
         见下面 `child_registry` 那一段），于是 `fs.*` 的根就是这一趟的面 ——
         本判据的基准（`self.surface`）与执行的基准（`fs` 工具的 root）终于是同一个目录。
         判据：`tests/test_the_surface_is_also_the_tools_root.py`（正控①装配点可调用、
