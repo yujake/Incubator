@@ -3491,7 +3491,17 @@ class AgentLoop:
         "要谁、做什么动作、什么参数、为什么"，让 M 不必回头问。
         """
         asked = {k: v for k, v in (params or {}).items() if not str(k).startswith("_")}
-        body_lines = [f"要谁：{role}", f"做什么动作：{action}"]
+        # ---- 收件人：直接父（业主 2026-10-09：「最常见的定义不明极可能是A查论文要B消化时
+        # 遇到生僻定义，这时和父代理A交流即可」）——
+        # 父通常就是那个能办这件事的人（B 的父常常就是 A，原文在它手里，就地就能给定义）；
+        # 顶层（没有父）才发给主控 M。父那一行读不到 ⇒ 落回 M，并把"为什么落回"记进读数
+        # （不静默改主，也不把申请丢掉）。
+        to_role, whose = self._relay_recipient()
+        if whose:
+            body_lines_extra = [f"收件人：{whose}"]
+        else:
+            body_lines_extra = []
+        body_lines = [*body_lines_extra, f"要谁：{role}", f"做什么动作：{action}"]
         if asked:
             body_lines.append("参数：" + json.dumps(asked, ensure_ascii=False, default=str)[:600])
         else:
@@ -3501,20 +3511,48 @@ class AgentLoop:
             body_lines.append("注意：他不在我的可唤起伙伴里，所以我**看不到他的参数表** —— "
                               "参数可能不合法，请用 conductor.role_spec 核一遍再派。")
         body_lines.append(f"申请方：{self.role}（台账号 {self.my_task_id or '未拿到'}）；"
-                          f"批准与否由你决定，我这一步不会替你做。")
+                          "批准与否由你决定，我这一步不会替你做。")
         body = "\n".join(body_lines)
-        msg_id, problem = send_message(self.session_root, sender=self.role, to=S.CONDUCTOR_ROLE,
+        msg_id, problem = send_message(self.session_root, sender=self.role, to=to_role,
                                        subject=RELAY_SUBJECT, body=body, sid=self.sid)
         rec: dict[str, Any] = {"kind": "agent_summon_request", "role": self.role,
                                "wants_role": role, "wants_action": action, "params": asked,
-                               "refusal_reason": reason, "message_id": msg_id}
+                               "refusal_reason": reason, "message_id": msg_id,
+                               "relay_to": to_role, "relay_why": whose}
         if problem:
             rec["problem"] = problem
         SS.append(self.session_root, rec, sid=self.sid)
-        return {"to": S.CONDUCTOR_ROLE, "subject": RELAY_SUBJECT, "message_id": msg_id,
+        return {"to": to_role, "subject": RELAY_SUBJECT, "message_id": msg_id,
                 "problem": problem,
-                "note": ("越权的边不会因为重试而成立 ⇒ 已向主控申请代唤；"
+                "note": (f"越权的边不会因为重试而成立 ⇒ 已向 {to_role} 申请代唤（{whose}）；"
                          "不要把这条申请当成'对方已经在做'。")}
+
+    def _relay_recipient(self) -> tuple[str, str]:
+        """「请代唤」该发给谁：直接父的角色（顶层 / 读不到 ⇒ 落回主控 M）。
+
+        业主 2026-10-09 的口径是"与父代理交流即可"（最常见的场景里父就是 A），
+        而这一档此前写死发给 M（越级：中间那一层看不见，M 被当路由器）。
+        返回 `(角色, 为什么是它)`；读不成时第二项写明原因（读数，不静默）。
+        """
+        pid = str(getattr(self, "parent_task_id", "") or "")
+        mine = str(getattr(self, "my_task_id", "") or "")
+        if not pid:
+            return S.CONDUCTOR_ROLE, "顶层（没有父）⇒ 发给主控 M"
+        if mine and pid == mine:
+            # 顶层跑批那一行就是"我自己"（`open_top_level_run` 建的那一行）——
+            # 它不当父（否则申请会发回给自己，等于没发）。
+            return S.CONDUCTOR_ROLE, "父那一行就是我自己（顶层跑批的行）⇒ 发给主控 M"
+        try:
+            rows = list(self.conductor._tasks()) if self.conductor is not None else []
+        except Exception as exc:  # noqa: BLE001 —— 读不成要如实说
+            return S.CONDUCTOR_ROLE, f"台账读不成（{type(exc).__name__}: {exc}）⇒ 落回 M"
+        row = next((r for r in rows if str(r.get("task_id") or "") == pid), None)
+        role = str((row or {}).get("role") or "")
+        if not role:
+            return S.CONDUCTOR_ROLE, f"父那一行（{pid}）读不到 / 没有 role ⇒ 落回 M"
+        if role == S.CONDUCTOR_ROLE:
+            return S.CONDUCTOR_ROLE, f"父就是主控（{pid}）⇒ 发给 M"
+        return role, f"发给直接父 {role}（台账号 {pid}）"
 
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         to = str(payload.get("to"))
