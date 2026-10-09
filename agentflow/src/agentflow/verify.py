@@ -2,15 +2,15 @@
 
 为什么需要一个独立的校验器，而不是"相信写入路径是对的"：
 
-- 写入路径只覆盖"正常流程"。而本系统的数据会被**两个智能体 + 可能的人工编辑**同时
-  触碰，schema 级校验（`schema.validate`）只能保证"单行自洽"，管不了**跨表一致性**
+- 写入路径只覆盖"正常流程"。而本系统的数据会被两个智能体 + 可能的人工编辑同时
+  触碰，schema 级校验（`schema.validate`）只能保证"单行自洽"，管不了跨表一致性
   ——例如 `relations.lit_id` 指向的文献是否真的存在、`related_concepts` 是否与关系表
   一致、`processed=true` 的文献是否真的处理过。
-- 校验器也是**自愈的入口**：`related_concepts` 若与派生结果不一致，报告里会给出
+- 校验器也是自愈的入口：`related_concepts` 若与派生结果不一致，报告里会给出
   "应该是多少"，可以直接据此修复，而不是靠人肉比对。
 
 `verify` 分两级：默认只做静态检查（快，随时可跑）；`--deep` 会重新打开文献做引文复核
-（慢，需要文件在本地）。`--deep` 报两类引文问题，分级不同：引文**找不到**
+（慢，需要文件在本地）。`--deep` 报两类引文问题，分级不同：引文找不到
 （`quote_not_found` / `quote_known_unverifiable`）与引文**逐字存在、但页码不在声明的
 范围内**（`page_range_mismatch`，`E-11`）—— 后者的引文是真的，错的是页码标注，
 所以是 warning，处置是改 `page_range` 而不是查幻觉。
@@ -128,7 +128,7 @@ class VerifyReport:
 def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], int]:
     """检查 4 位 ID 是否从 0000 起连续无空洞。
 
-    空洞本身**不是错误**（ID 只需唯一+单调），但值得报警告：它通常意味着
+    空洞本身不是错误（ID 只需唯一+单调），但值得报警告：它通常意味着
     "分配了 ID 却没建成行"，也就是某次事务中途出过问题。
 
     `D-R44`（第 44 轮新发现，判据四第 5 组的负控里撞出来的）：**非数字 ID 不许
@@ -137,7 +137,7 @@ def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], in
     `ValueError: invalid literal for int() with base 10: 'raw-p3-97'` ——
     `verify_all` 于是从"审计器"变成"崩溃点"：调用方拿到的是一次 Python 异常，
     而不是一条"这一行 ID 不合法"的 finding。三态纪律里"查了、结论是坏"与
-    "没查成"必须分开，而**崩掉两者都不是**。
+    "没查成"必须分开，而崩掉两者都不是。
     现在：非数字 ID 被显式报出来（`missing` 里给出那些串），`maxid` 只取数字 ID 的
     最大值（一个数字 ID 都没有时为 -1，与"空表"同形 —— 那本身会由 schema 级判据接住）。
     """
@@ -184,14 +184,14 @@ def _check_1(rep, store):
 
     # ---- ID 唯一性与连续性
     #
-    # ⚠️ **"哪些表属于 4 位编号空间"必须从 schema 推导，不许写死表名。**
+    # ⚠️ "哪些表属于 4 位编号空间"必须从 schema 推导，不许写死表名。
     #
     # 这里原先只写了 `if table == "search_requests": continue`。新增
     # `reprocess_requests`（ID 形如 `p-NNNN`）之后，`_id_contiguity` 会对它做
-    # `int("p-0001")` ⇒ **verify 自己崩掉**，而崩掉的原因与"库里有没有问题"
+    # `int("p-0001")` ⇒ verify 自己崩掉，而崩掉的原因与"库里有没有问题"
     # 完全无关。这类"写死一张名单"的缺陷在本项目里已经出现过三次
     # （roles 字符串、sync_counters 的 kind 列表、现在这里）。
-    # 判据只有一个：**这个表的 id_field 是否被 ID_COUNTERS 覆盖**。
+    # 判据只有一个：这个表的 id_field 是否被 ID_COUNTERS 覆盖。
     counter_fields = set(S.ID_COUNTERS.values())
     for table, spec in S.TABLES.items():
         rows = store.rows(table)
@@ -249,7 +249,7 @@ def _check_1(rep, store):
             continue
         # `D-R44`：这里也必须容忍非法 ID。旧实现 `int(r[field])` 会把
         # "库里有一行 ID 不成形态"变成一次 `ValueError` 崩溃 —— 而 `verify_all`
-        # 是审计器，它该把这件事**报出来**（`_id_contiguity` 已经会报），
+        # 是审计器，它该把这件事报出来（`_id_contiguity` 已经会报），
         # 不该自己炸。非数字 ID 在这里被跳过（已经由上面那条 `id_gap` 记账）。
         used = [int(r[field]) for r in store.rows(table)
                 if field in r and str(r[field]).isdigit()]
@@ -290,19 +290,19 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                     Issue("error", "search_requests", rid, "dangling_lit_ref",
                           f"result_lit_ids 含不存在的文献 {lid}")
                 )
-        # ⚠️ **这条检查必须与 schema 的规则一致，否则它就是一个假警报源。**
+        # ⚠️ 这条检查必须与 schema 的规则一致，否则它就是一个假警报源。
         #
         # 原实现是"`done=true` 且既无 `result_lit_ids` 也无 `last_error` ⇒ error"。
         # 但 `outcome="no_results"`（搜索正常执行、确实没有命中）**本来就是一个
         # 有效的终局**：它没有文献、也没有错误，而 `schema.SearchRequest.validate`
         # 明确允许这种组合（见 `SEARCH_OUTCOMES` 的说明："no_results —— 搜索正常
-        # 执行但确实没有命中（这是一个**有效结论**）"）。
+        # 执行但确实没有命中（这是一个有效结论）"）。
         #
         # 后果实测：一条 `outcome="no_results"` 的请求（A 在无检索后端时如实登记）
         # 让 `verify` 报 error —— 而"假报警比不校验更糟，因为它会训练人忽略告警"。
         # 这正是 FC-11（校验器与写入方必须共享同一份规则）的教科书形态。
         #
-        # 修法：**只在 schema 判不出语义的那一种情况下报**——`outcome` 缺失
+        # 修法：只在 schema 判不出语义的那一种情况下报——`outcome` 缺失
         # （历史数据）且既无文献也无错误，此时"跑过了"与"空转"确实无法区分。
         # 其余情形交由 `schema.SearchRequest.validate` 负责（它在写表时已经跑过）。
         if r.get("done") and r.get("outcome") is None \
@@ -320,11 +320,11 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                     Issue("warning", "literature", lid, "unknown_request_ref",
                           f"source_request_ids 指向未知请求 {rid}")
                 )
-        # ---- 命中校验（`draft/37` §2 R1b + §16 P2 的 A 行）：**下错了的那一篇不许被消化**。
+        # ---- 命中校验（`draft/37` §2 R1b + §16 P2 的 A 行）：下错了的那一篇不许被消化。
         #
         # 为什么这条必须是 error 而不是 warning：真机实测（2026-10-01）里 A 把 Brown 1971
         # 下成了 2022 年另一篇 CLT 论文 —— 登记成功、下载成功、569,776 字节的真 PDF，
-        # **没有任何地方报出来**，于是下游会拿一篇无关文献去建概念与命题。
+        # 没有任何地方报出来，于是下游会拿一篇无关文献去建概念与命题。
         # 这是"静默登记成找到"的形态，与 FC-23 那一族同源（把不是自己的东西当成自己的）。
         #
         # 分级：`mismatch` + 已消化 ⇒ error（必须撤）；`partial` + 已消化 ⇒ warning
@@ -366,7 +366,7 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                       "download.status=ok 但没有 path，元数据与实际不一致")
             )
         elif dl.get("status") == "content_mismatch":
-            # 缺陷 #8 的契约：检测到内容类型不符时，**字节必须留作证据**。
+            # 缺陷 #8 的契约：检测到内容类型不符时，字节必须留作证据。
             # 丢了文件就再也无法回答"对方到底返回了什么"，而那个答案正是修复的依据。
             rep.issues.append(
                 Issue("warning", "literature", lid, "mismatch_without_evidence",
@@ -540,8 +540,8 @@ def _check_5(rep, lit_by_id, questions, store):
     """
     # ---- E/F/G/H 新增表的交叉引用（同样是"悬空引用"检查的一部分）
     #
-    # 为什么每个新表都要在这里过一遍：`schema.py` 的行校验只能保证**本行内部**自洽
-    # （字段非空、枚举合法、交叉字段一致），它**看不到别的表**。
+    # 为什么每个新表都要在这里过一遍：`schema.py` 的行校验只能保证本行内部自洽
+    # （字段非空、枚举合法、交叉字段一致），它看不到别的表。
     # "这个 lit_id 真的存在吗"这种问题只有在这里才可能被发现 —— 而它正是
     # "依赖集不闭合"的技术形态。
     experiments = store.rows("experiments")
@@ -562,7 +562,7 @@ def _check_5(rep, lit_by_id, questions, store):
         if qid and qid not in q_id_set:
             rep.issues.append(Issue("error", "experiments", eid, "dangling_question_ref",
                                     f"for_question_id 指向不存在的研究问题 {qid}"))
-        # FC-22 的**第二道**闸：schema 已在写入时拒绝"计算类称 proof"，
+        # FC-22 的第二道闸：schema 已在写入时拒绝"计算类称 proof"，
         # 这里再核一遍表里的存量数据（历史数据、手工改过的数据都在射程内）。
         if e.get("evidence_kind") == "proof" and e.get("method") != "formal":
             rep.issues.append(Issue("error", "experiments", eid, "evidence_kind_overclaim",
@@ -597,10 +597,10 @@ def _check_5(rep, lit_by_id, questions, store):
             rep.issues.append(Issue("error", "attack_plans", pid, "stalled_without_partial",
                                     "stalled 却没写 best_partial：攻坚停下来了却什么都不交出去"))
 
-    # ---- I12 / FC-23：**依赖闭合检查**（本块是 verify 里最"数学"的一条）
+    # ---- I12 / FC-23：依赖闭合检查（本块是 verify 里最"数学"的一条）
     #
-    # 数学上把引用的定理当成自己的定理，会**静默放大结论的适用范围**。
-    # 下面这条检查把"我们依赖了一个拿不到的外部结论"变成一条**可查询的事实**，
+    # 数学上把引用的定理当成自己的定理，会静默放大结论的适用范围。
+    # 下面这条检查把"我们依赖了一个拿不到的外部结论"变成一条可查询的事实，
     # 而不是藏在引文角标里。
     dep_ok = 0
     #: `refuted` / `disputed` 的条数（`draft/37` §16 P1 加的两档）。
@@ -640,8 +640,8 @@ def _check_5(rep, lit_by_id, questions, store):
             else:
                 dep_ok += 1
         elif st == "external_unavailable":
-            # ⚠️ 分级（FC-13）：这是"我们**已经知道并记录**了这个前提拿不到" ——
-            # 属于**已知边界**，不是谎报 ⇒ warning。
+            # ⚠️ 分级（FC-13）：这是"我们已经知道并记录了这个前提拿不到" ——
+            # 属于已知边界，不是谎报 ⇒ warning。
             # 报成 error 会把红灯训练成噪音，于是真正的 error 也会被忽略。
             rep.issues.append(Issue(
                 "warning", "dependencies", did, "dangling_dep_external",
@@ -654,7 +654,7 @@ def _check_5(rep, lit_by_id, questions, store):
                                     f"{used_by} 的依赖「{str(d.get('label') or '')[:80]}」悬空且未闭合。"
                                     "要么补上来源（closed），要么说明为什么拿不到（external_unavailable）"))
         elif st == "refuted":
-            # `draft/37` §9 的落点：**被证否的前提撑不起任何东西**。
+            # `draft/37` §9 的落点：被证否的前提撑不起任何东西。
             # 报 error 而不是 warning：它不是"已知边界"，而是"压在它上面的结论现在
             # 都不能算数了"，必须有人去撤（或改成 disputed 并送裁决）。
             rep.issues.append(Issue(
@@ -665,9 +665,9 @@ def _check_5(rep, lit_by_id, questions, store):
                 "那么以它为据的结论就不能再算数）",
             ))
         elif st == "disputed":
-            # 与 `external_unavailable` 同级（warning）：这是"我们**已经记录**了
+            # 与 `external_unavailable` 同级（warning）：这是"我们已经记录了
             # 这里有争议、尚未裁决"，属于已知边界而不是谎报。§16 P3 的收工门会
-            # 把未裁决的 disputed 当成拦路条件 —— 那是**交付**的口径，比 verify 更严；
+            # 把未裁决的 disputed 当成拦路条件 —— 那是交付的口径，比 verify 更严；
             # 两处不同是刻意的：verify 说"账记得对"，收工门说"这样还不能交"。
             rep.issues.append(Issue(
                 "warning", "dependencies", did, "disputed_dependency_in_use",
@@ -692,17 +692,17 @@ def _check_6(rep, dependencies, documents, exp_by_id, experiments):
     入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
     泄漏语义（后面的段确实读到了它们）。
     """
-    # ---- **依赖的缺陷继承**（来自对本地先例 Danus 的观摩）
+    # ---- 依赖的缺陷继承（来自对本地先例 Danus 的观摩）
     #
-    # Danus 的收束点是"让**前提不干净**沿着依赖链传播下去"。我们已经有
-    # `dependencies` 表了，缺的只是**让它在前提变脏时说话**。三条检查：
+    # Danus 的收束点是"让前提不干净沿着依赖链传播下去"。我们已经有
+    # `dependencies` 表了，缺的只是让它在前提变脏时说话。三条检查：
     #
     # 1. `proof` 级断言引用的实验本身不是 `proof` 级 ⇒ error。
     #    这是"证据等级被偷偷升级"的机械形态：断言的等级不能强于它的依据。
     # 2. `status="closed"` 的依赖指向一条 `inconclusive` 的实验 ⇒ error。
     #    "closed" 的意思是"这条依赖有支撑"；一条没跑出结论的实验不是支撑。
-    # 3. `proof` 级断言挂在一条**未闭合**（`dangling`/`external_unavailable`）的依赖上 ⇒ error。
-    #    这是最要紧的一条：整套框架允许"引用一个拿不到的外部定理"，但**必须限制它的后果** ——
+    # 3. `proof` 级断言挂在一条未闭合（`dangling`/`external_unavailable`）的依赖上 ⇒ error。
+    #    这是最要紧的一条：整套框架允许"引用一个拿不到的外部定理"，但必须限制它的后果 ——
     #    拿不到的前提撑不起 `proof` 级的主张。（若挂的是 `cross_check` 级断言，维持原来的 warning。）
     weaker: list[tuple[str, str, str, str]] = []  # (docid, cid, expid, exp_kind)
     for doc in documents:
@@ -712,7 +712,7 @@ def _check_6(rep, dependencies, documents, exp_by_id, experiments):
                 continue
             cid = str(c.get("claim_id") or "")
             for x in c.get("citations") or []:
-                # 引用解析的**唯一实现**在 `textutil.citation_ref_parts`（`P-5`：
+                # 引用解析的唯一实现在 `textutil.citation_ref_parts`（`P-5`：
                 # 这里曾经内联着第二份 `partition(":")` + `split("#")`）。
                 kind, ref = T.citation_ref_parts(x)
                 if kind != "exp":
@@ -729,10 +729,10 @@ def _check_6(rep, dependencies, documents, exp_by_id, experiments):
 
     # ---- `E-2`（人裁 = verify 侧事后加严，观测时刻 2026-09-26 20:5x）
     #
-    # 背景：proof 只锚在**自报字段**上 —— 手写一行 `method='formal'` +
+    # 背景：proof 只锚在自报字段上 —— 手写一行 `method='formal'` +
     # `evidence_kind='proof'` + 任意 `verifier_output` 就能进库，而 `verify` 与 gates
     # 都不会响（重审实测，登记为 `draft/28` 的 `E-2`）。
-    # 所有者裁定走 (b)：**在 verify 里事后加严**（不动 schema、不做迁移）。
+    # 所有者裁定走 (b)：在 verify 里事后加严（不动 schema、不做迁移）。
     #
     # 两条硬检查（都 fail-closed，报 error）：
     #   1. proof 级实验行的 `verifier_output` 里必须有绑在被检查声明名上的
@@ -842,7 +842,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
     #: 哪些依赖状态会让压在它上面的 `proof` 级断言变成违规，以及各自的理由码。
     #:
     #: 为什么要分开三个理由码（而不是一个 `proof_claim_on_bad_dependency`）：
-    #: 本仓的代码就是**处置把手** —— `dangling`/`external_unavailable` 要做的是
+    #: 本仓的代码就是处置把手 —— `dangling`/`external_unavailable` 要做的是
     #: "去把来源补齐"，`refuted` 要做的是"把结论撤下来或降档"，`disputed` 要做的是
     #: "送裁决"。三件事的接手人都不一样（前者 G、中者 D+G、后者人）。合并成一个码，
     #: 台账上就只剩一句"有个问题"，而"谁去做、做什么"必须靠读 message 才猜得出来。
@@ -879,13 +879,13 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
 
     # ---- 稿件断言的可追溯性（FC-02）
     #
-    # ⚠️ 这里除了"引用存不存在"，还要查**被引用的东西现在还算不算数**。
+    # ⚠️ 这里除了"引用存不存在"，还要查被引用的东西现在还算不算数。
     #
-    # 这一条来自对本地先例 Danus 的观摩：它有明确的**撤回（retraction）语义**，
+    # 这一条来自对本地先例 Danus 的观摩：它有明确的撤回（retraction）语义，
     # 并强调"撤回会级联"、"没有 revoke 动作时要把撤回面向上暴露"。
-    # 我们此前只有 `duplicate_of` / `status="rejected"` 这类**行级**状态，
-    # 却**没有一条检查**去问"引用了它的那些结论还站得住吗" ——
-    # 于是"关系被判重否决"与"稿件还在拿它当依据"可以长期共存而**没有任何报错**。
+    # 我们此前只有 `duplicate_of` / `status="rejected"` 这类行级状态，
+    # 却没有一条检查去问"引用了它的那些结论还站得住吗" ——
+    # 于是"关系被判重否决"与"稿件还在拿它当依据"可以长期共存而没有任何报错。
     # 这就是撤回不级联的形态：知识被撤回了，依赖它的结论却静默地留在那里。
     rejected_by_id: dict[str, dict] = {}
     suspect_ids: set[str] = set()
@@ -902,7 +902,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
     for doc in documents:
         docid = doc.get("doc_id")
         # ---- 行内自洽：`content_sha256` 是"审的是这一版"的锚（`draft/30` §T4-A）。
-        # 它由写侧（G）算一次，这里**重算**比对 —— 存的哈希是一句声称，重算才是判据。
+        # 它由写侧（G）算一次，这里重算比对 —— 存的哈希是一句声称，重算才是判据。
         stored_hash = str(doc.get("content_sha256") or "")
         if stored_hash:
             want_hash = SIG.content_sha256_of(doc)
@@ -921,7 +921,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                 continue
             for x in cites:
                 # 唯一实现在 `textutil.citation_ref_parts`（`P-5`）。与
-                # `doc_tools.citation_ref_parts` 是**同一个函数**：两边不可能再给出
+                # `doc_tools.citation_ref_parts` 是同一个函数：两边不可能再给出
                 # 不同答案（否则"G 认为合法"与"verify 认为悬空"会静默分家）。
                 kind, ref = T.citation_ref_parts(x)
                 if kind == "rel" and ref not in rel_by_id:
@@ -938,7 +938,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                                             f"断言 {cid} 引用了不存在的评测结果 {ref}"))
                 elif kind == "stmt" and ref not in stmt_by_id:
                     # `E1/R-03`（`draft/49` §E1 方案 A，所有者授权主控代改）：`stmt:` 与
-                    # 其余几档**同权** —— 加进词表就必须同时有一条真检查它的分支，
+                    # 其余几档同权 —— 加进词表就必须同时有一条真检查它的分支，
                     # 否则它变成"既不 warn 也没人查"的一类，那正是裁定时否掉方案 B 的
                     # 理由（逐字："不校验就等于不设防"）。
                     rep.issues.append(Issue("error", "documents", docid, "dangling_citation",
@@ -959,12 +959,31 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                     # 判据来源（搬一处，不改口径）：判据码、报案顺序、报文、短路时机
                     # 逐字不变（改前/改后的差分读数在本次交付报告里；常驻判据见
                     # `tests/test_internal_citations.py` 第 ⑤ 节：结构级 + 行为级 + 负控）。
+                    # 【FC-27 禁改区 · 本次改动业主授权（2026-10-09：「禁改区允许你在仔细
+                    # 考虑后先进行改动和测试，后面我再审」），待人审】本次只加一档：
+                    # 正式论文（`kind="paper"`）里直接引我方手稿 ⇒ `paper_cites_manuscript`。
+                    # 口径与写入期同源（`doc_tools.check_citations(citing_kind=)` 的那一支），
+                    # 业主逐字：「正式论文阶段只能引用真实论文，正式论文中手稿内容不可直接
+                    # 引用，必须重建」。写入期已经 fail-closed；审计期这一档管的是**历史行与
+                    # 手工写入**（`.noai-approvals.json` 未动，未跑 `noai_gate --approve`）。
+                    citing = doc_by_id.get(docid) or {}
+                    if str(citing.get("kind") or "") == "paper":
+                        rep.issues.append(Issue(
+                            "error", "documents", docid, "paper_cites_manuscript",
+                            f"断言 {cid} 在正式论文（documents {docid}，kind=paper）里直接引了"
+                            f"我方手稿 {x!r}：**手稿里的成果若要用，只可在论文正文里重建**"
+                            "（业主 2026-10-09）—— 重建后以 `stmt:` / `exp:` / `rel:` 引它"
+                            "变成的台账行；要引真实论文写 `lit:`",
+                        ))
+                        continue
                     verdict = SIG.doc_ref_verdict(str(x), doc_by_id.get)
                     if verdict.code == SIG.DOC_REF_BAD_SHAPE:
                         rep.issues.append(Issue(
                             "error", "documents", docid, "dangling_doc_citation",
-                            f"断言 {cid} 的内部引用 {x!r} 形状不对："
-                            "应为 doc:<稿件>#<断言>@<内容哈希前 16 位>",
+                            f"断言 {cid} 的内部引用 {x!r} 形状不对：应为 "
+                            "doc:<稿件>#<断言>@<内容哈希前 16 位>（引某条断言），或 "
+                            "doc:<稿件>（引我方那份手稿的整体成果，可写 "
+                            "doc:<稿件>@<内容哈希前 16 位> 钉版本）",
                         ))
                     elif verdict.code in (SIG.DOC_REF_NO_DOC, SIG.DOC_REF_NO_CLAIM):
                         rep.issues.append(Issue(
@@ -977,7 +996,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                         # （`verdict.doc` 一并带回来了）；`or {}` 只是让"万一不在"
                         # 落进下面那条 fail-closed 的判定，而不是静默放过。
                         tdoc = verdict.doc or {}
-                        # 审计期独有的一条内容政策（`draft/68` 题 12 选 A：两侧**保持不对称**）。
+                        # 审计期独有的一条内容政策（`draft/68` 题 12 选 A：两侧保持不对称）。
                         # 写入期刻意不查这一条 —— 写稿阶段本来就要能引一份还在审的稿子
                         # （否则"边写边审"的正常流程会被挡住）；审计期才判"引文图能不能把
                         # 没审过的稿子当来源"（`draft/29` §8.5 第 1 条）。
@@ -1008,7 +1027,7 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                     rep.issues.append(Issue("warning", "documents", docid, "unknown_citation_kind",
                                             f"断言 {cid} 的引用 {x!r} 前缀无法识别"
                                             f"（应为 {'/'.join(k + ':' for k in CITATION_KINDS)}）"))
-                # ---- **撤回级联**：引用了已被否决的关系 ⇒ 结论失去依据
+                # ---- 撤回级联：引用了已被否决的关系 ⇒ 结论失去依据
                 if kind == "rel" and ref in rejected_by_id:
                     row = rejected_by_id[ref]
                     why = (f"判重（duplicate_of={row.get('duplicate_of')}）"
@@ -1070,21 +1089,21 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
 
     # ---- 主控编队 / 花销 / 评测口径（`tasks` / `usage_ledger` / `eval_results`）
     #
-    # 口径（主控 2026-10-06 自查要求）：这里是**台账全量**读，**不是委托计数** ——
+    # 口径（主控 2026-10-06 自查要求）：这里是台账全量读，不是委托计数 ——
     # 下面四条判据（父任务悬空 / 深度不连续 / 缺 input_key / 离线仍 running）
     # 与 usage 对账（`dangling_usage_task` / `usage_task_total_mismatch`）问的都是
-    # "台账自己一致吗"。所以**顶趟行**（`role=<本体>`、`action="run"`、`called_by="user"`、
-    # `depth=1`、`parent_task_id=None`、`input_key="top:…"`）在这里是一行**合法**记录：
+    # "台账自己一致吗"。所以顶趟行（`role=<本体>`、`action="run"`、`called_by="user"`、
+    # `depth=1`、`parent_task_id=None`、`input_key="top:…"`）在这里是一行合法记录：
     # 它不触发上面任何一条（父为 None、深度无父、input_key 非空、status=done），
     # 也不进任何 `checked[...]` 计数（本函数没有任何"tasks 行数"读数）。
-    # ⇒ **不排除、不改口径**；数"派了几跳"的地方在 `reviewaccept._c_hops`
+    # ⇒ 不排除、不改口径；数"派了几跳"的地方在 `reviewaccept._c_hops`
     # （那里已按 `called_by != "user"` 排除顶趟行，并留 `excluded_top_run_rows` 读数）。
     tasks = store.rows("tasks")
     usage = store.rows("usage_ledger")
-    # ---- 幂等键的唯一性（"同一笔账被记了两次"的**唯一**自动防线）
+    # ---- 幂等键的唯一性（"同一笔账被记了两次"的唯一自动防线）
     #
-    # 为什么必须新增而不是复用 duplicate_id：重复记账的**两行 usage_id 不同**，
-    # 所以按主键数重复永远不响；而 tasks.tokens 与账本汇总是**一起**虚高的，
+    # 为什么必须新增而不是复用 duplicate_id：重复记账的两行 usage_id 不同，
+    # 所以按主键数重复永远不响；而 tasks.tokens 与账本汇总是一起虚高的，
     # 所以 usage_task_total_mismatch 也不响 —— 它们仍然"相等"，只是相等的是错的数。
     seen_idem: dict[str, str] = {}
     for u in usage:
@@ -1128,7 +1147,7 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
                                     "离线校验时它是一条**没有 end 的 start**。可能是崩溃残留；"
                                     "本项目**不自动续跑**（重跑一个可能已经写了半张表的任务更危险），"
                                     "由人决定是弃掉还是重发"))
-        # artifacts 的判据**不在这里**：它是 `capabilities.audit_task_ledger` 的
+        # artifacts 的判据不在这里：它是 `capabilities.audit_task_ledger` 的
         # "唯一实现"（那一份的 docstring 逐字这么写）。这里转发过去取它的判定结果，
         # 而不是再写一份 —— 实测过漂移的代价：R-47 的产出摘要（文件路径）先在
         # `verify.py` 这份副本里被认下，`audit_task_ledger` 那份仍在报，于是
@@ -1183,20 +1202,20 @@ def _check_9(rep, documents, questions, req_ids, store):
     入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
     泄漏语义（后面的段确实读到了它们）。
     """
-    # ---- FC-24 的**渲染层 gate**：报告里的数字必须能追到一条带完整口径的评测结果
+    # ---- FC-24 的渲染层 gate：报告里的数字必须能追到一条带完整口径的评测结果
     #
-    # 为什么这条检查必须有：FC-24 的判据②是"缺任一字段的数字**不得进入对外报告**"。
-    # 而 `EvalResult.validate` 只能在**登记时**保证字段齐全 —— 它管不到
-    # **正文里写了一个数字却没引用任何评测记录**这种情况。
+    # 为什么这条检查必须有：FC-24 的判据②是"缺任一字段的数字不得进入对外报告"。
+    # 而 `EvalResult.validate` 只能在登记时保证字段齐全 —— 它管不到
+    # 正文里写了一个数字却没引用任何评测记录这种情况。
     # 而后者才是真正会流出去的形态：报告里一句"pass@1 达到 97%"，
     # 读者无法知道那是 LLM judge 分、还是端到端精确值、还是别人论文的数字。
     #
     # 同一个 miniF2F 数字可以是四件完全不同的事，同对模型在两口径下差 13–30 个百分点
-    # （`08-…md` §A.5.5）。**所以"没带口径的数字"与"没有出处的断言"是同一类错误。**
+    # （`08-…md` §A.5.5）。所以"没带口径的数字"与"没有出处的断言"是同一类错误。
     #
-    # 判据写成"出现了基准数字的形态 **且** 没有任何 `eval:` 引用" ⇒ warning。
+    # 判据写成"出现了基准数字的形态 且 没有任何 `eval:` 引用" ⇒ warning。
     # 分级为 warning 而不是 error：正则识别"基准数字"必然有假阳性
-    # （正文里的年份、章节号、页码都可能是数字），所以它交付的是**指针**，
+    # （正文里的年份、章节号、页码都可能是数字），所以它交付的是指针，
     # 而不是缺陷判定 —— 与 linter 的 R006 同一取舍。
     _bench_number = re.compile(r"(pass@\s*\d+|\d+(?:\.\d+)?\s*%|\bSOTA\b|\bstate[- ]of[- ]the[- ]art\b)")
     for doc in documents:
@@ -1237,7 +1256,7 @@ def _check_9(rep, documents, questions, req_ids, store):
     # ---- D 的提问台账（模块私有文件，不在 schema 里）
     # `tools/research_tools.py` 刻意把"本问题已经问过 A 什么"记在
     # `data/research_request_ledger.json` 而不是 schema 表里（避免牵动 LOCK_ORDER/rebuild）。
-    # 代价是它**不能从 events.jsonl 重建**。既然接受了这个代价，就必须让它**可观测**：
+    # 代价是它不能从 events.jsonl 重建。既然接受了这个代价，就必须让它可观测：
     # 否则台账与主表一旦漂移，D 会重复提问或永远等不到，而没有任何地方会报错。
     ledger_path = store.data / "research_request_ledger.json"
     if ledger_path.exists():
@@ -1337,8 +1356,8 @@ def _check_10(rep, allow_fulltext_quote_fallback, deep, extract_text, lit_by_id,
                     ))
                 if chk.verified is False:
                     # 区分"表里已经承认这条引文不可核实"与"表里说能核实、实际找不到"：
-                    #  - 表里 `quote_verified=False` → 这是一个**已知并被记录**的缺陷，
-                    #    重算只是**确认**它，不该升级成 error（否则任何刻意保留坏样本的数据集
+                    #  - 表里 `quote_verified=False` → 这是一个已知并被记录的缺陷，
+                    #    重算只是确认它，不该升级成 error（否则任何刻意保留坏样本的数据集
                     #    都会永远 verify 失败，而 error 应当是"需要动手修的不一致"）。
                     #  - 表里 `quote_verified=True` → 表与现实矛盾，这才是 error（上面那条
                     #    `quote_state_changed` 已经报了，这里再补一条更明确的原因）。
@@ -1361,7 +1380,7 @@ def _check_11(rep, documents, store):
     入参 / 出参见该脚本的 dry-run 输出；出参是为了保持原来 for 循环变量的
     泄漏语义（后面的段确实读到了它们）。
     """
-    # ---- 签名台账（`draft/30` §T4-B）：`accepted` 的稿件必须有**可核的**签名
+    # ---- 签名台账（`draft/30` §T4-B）：`accepted` 的稿件必须有可核的签名
     #
     # 台账是文件（`DOC-SIGNATURES.jsonl`），不进 `schema.TABLES`（`draft/29` §8.8.7）。
     # 三态纪律在这块的具体形态：账"读不出来"（坏行/断链）与"没有这条签名"是两件事，
@@ -1375,15 +1394,15 @@ def _check_11(rep, documents, store):
         rep.issues.append(Issue("error", "documents", None, SIG.CODE_LEDGER_CORRUPT,
                                 f"签名台账链断了：{broken}"))
     sig_checked = 0
-    #: 签名判据只对 `SIG.SIGNABLE_STATUSES` 的稿件成立 ⇒ "查了几行"数的就是**这些**行。
+    #: 签名判据只对 `SIG.SIGNABLE_STATUSES` 的稿件成立 ⇒ "查了几行"数的就是这些行。
     #: 不写死 `"accepted"`：那个字面量的唯一落点现在是 `signatures.SIGNABLE_STATUSES`
     #: （两处各写一份就会分叉 —— 而分叉的症状是读数说"查了 N 行"而判据一行没查）。
-    #: E-07（`draft/52` D5）之后它是**元组**（`accepted` + `revised`）：`revised` 那份
+    #: E-07（`draft/52` D5）之后它是元组（`accepted` + `revised`）：`revised` 那份
     #: 稿子的签名钉着改之前那一版，正是最该被看见的形态。
     sig_rows_checked = 0
     missing_statuses = [s for s in SIG.SIGNABLE_STATUSES if s not in S.DOC_STATUSES]
     if missing_statuses:
-        # 词表分叉的**当场上报**：否则 `SIGNABLE_STATUSES` 一旦拼错，签名判据会一份稿件
+        # 词表分叉的当场上报：否则 `SIGNABLE_STATUSES` 一旦拼错，签名判据会一份稿件
         # 都不查，而 `checked` 里那个 0 看起来与"全部干净"逐字一样（P16 族的真空通过）。
         rep.issues.append(Issue(
             "error", "documents", None, "signable_status_not_in_doc_statuses",
@@ -1398,15 +1417,15 @@ def _check_11(rep, documents, store):
         for code, msg in SIG.signature_problems(sig_root, d, sig_records):
             rep.issues.append(Issue("error", "documents", d.get("doc_id"), code, msg))
             sig_checked += 1
-    # ---- `R-38`（`draft/28` §150.5）：这一格的**名字**必须说实话
+    # ---- `R-38`（`draft/28` §150.5）：这一格的名字必须说实话
     #
-    # 原来叫 `checked["signatures"]`，值却是"**签名问题的条数**"（`sig_checked` 只在
+    # 原来叫 `checked["signatures"]`，值却是"签名问题的条数"（`sig_checked` 只在
     # 发现问题时 `+= 1`），而同一个 `checked` 字典里相邻的计数全是"查了几行" ——
     # 同一个字典两种语义 ⇒ `0` 会被读成"没有稿件查过签名"（真相恰好相反：
     # 0 是"查过、干净"）。现在拆成两个各自说清自己的键：
     #   - `signature_problems`：问题条数（0 = 干净）；
-    #   - `accepted_documents_checked`：签名判据真正看过的行数（0 = **没查**，不是干净）。
-    # 旧键**删掉**而不是留别名：留一个名字错的别名，`checked.get("signatures", 0)` 的
+    #   - `accepted_documents_checked`：签名判据真正看过的行数（0 = 没查，不是干净）。
+    # 旧键删掉而不是留别名：留一个名字错的别名，`checked.get("signatures", 0)` 的
     # 读者照样会读错；删掉会让它当场 `KeyError` —— 吵，但不静默。
     rep.checked["signature_problems"] = sig_checked
     rep.checked["accepted_documents_checked"] = sig_rows_checked
@@ -1467,9 +1486,9 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
                                             f"promoted_to 指的断言 {claim_id!r} 不在稿件 "
                                             f"{doc_id!r} 里（升格落空）"))
 
-        # ---- T2：状态配不配**它自己举出的**证据（依据 `draft/30` §T2）
+        # ---- T2：状态配不配它自己举出的证据（依据 `draft/30` §T2）
         #
-        # 三态纪律在这里的形态：状态是**结论**、不是**声明**。T1 判"代号在不在"，
+        # 三态纪律在这里的形态：状态是结论、不是声明。T1 判"代号在不在"，
         # 这一段判"这个结论有没有它自称的那件证据撑着"。
         # 缺行的情况（`eid not in exp_by_id`）由上面的 `dangling_experiment` 报，这里不重复报。
         status = str(c.get("status") or "")
@@ -1555,21 +1574,21 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
 def _check_13(rep, store) -> None:
     """`verify_all` 的第 13 段：命题台账（`statements`）的不变量（`draft/37` §16 P1）。
 
-    这一段的四条判据，各守一种**已经在真机上出现过**的病：
+    这一段的四条判据，各守一种已经在真机上出现过的病：
 
-    1. **出处必须存在**（`dangling_lit_ref` / `dangling_doc_ref`）：一条"从文献里摘的"
+    1. 出处必须存在（`dangling_lit_ref` / `dangling_doc_ref`）：一条"从文献里摘的"
        命题指着一篇不存在的文献 —— 逐字回验就没有第二份文本，而报告照样印。
        这与 `dangling_dep` 同族，只是发生在命题级。
-    2. **`derived_from` 引用完整性**（`dangling_stmt_ref`）：承重链上少一环，
+    2. `derived_from` 引用完整性（`dangling_stmt_ref`）：承重链上少一环，
        "这条结论靠什么站着"就答不出来（`draft/37` §4 的依赖图读数就是被这种缺口污染的）。
-    3. **`proof` 级命题不许压在不可用的命题上**（`proof_stmt_on_unusable_stmt`）：
-       这是 §8/§9 的矛盾闭环在**命题级**的落点，与依赖级的
+    3. `proof` 级命题不许压在不可用的命题上（`proof_stmt_on_unusable_stmt`）：
+       这是 §8/§9 的矛盾闭环在命题级的落点，与依赖级的
        `proof_claim_on_refuted_dependency` 成对。`refuted` / `superseded` 报 error
        （结论必须撤或降档），`disputed` 报 warning（等裁决）。
-    4. **`active` 的文献命题却没逐字回验**（`active_stmt_quote_unverified`，warning）：
+    4. `active` 的文献命题却没逐字回验（`active_stmt_quote_unverified`，warning）：
        "B 的唯一自动幻觉防线"就是逐字回验（见 `quoteverify` 的 docstring）。
        它降为 warning 而不是 error，理由与 `external_unavailable` 那条一致：
-       这是**已知未做**、不是谎报；但它在报告里必须看得见。
+       这是已知未做、不是谎报；但它在报告里必须看得见。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
@@ -1639,9 +1658,9 @@ def verify_all(
 ) -> VerifyReport:
     """校验全局不变量。
 
-    `quote_widen` / `allow_fulltext_quote_fallback` **必须与 agent_b 用的一致**，
+    `quote_widen` / `allow_fulltext_quote_fallback` 必须与 agent_b 用的一致，
     否则 `--deep` 会按一套比写入时更严的规则重算，把"写入时合规"的引文报成
-    `quote_not_found` —— 那是**假报警**，比不校验更糟，因为它会训练人忽略告警。
+    `quote_not_found` —— 那是假报警，比不校验更糟，因为它会训练人忽略告警。
     调用方（CLI）负责从同一份配置里取这两个值。
     """
     rep = VerifyReport(deep=deep)

@@ -1373,10 +1373,12 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p52`（2026-10-09，S1g-2）：共享的循环协议新增一句"派活那一刻秘书还会替你看一遍
 #: 『这件活在被派人的读写面里做不做得成』"（业主 2026-10-09：「"超越职责"的一个主要可能
 #: 是无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）⇒ 共享段 ⇒ 十格全换。
-#: `p53` 撤回（2026-10-09，同一轮）：那两句本想写进 M 的提示词，而 M 那一段的真身
-#: 在 `src/agentflow/specs/m.py`（FC-27 禁改区）⇒ `test_agent_spec_reconciliation`
-#: 当场红。按禁改区纪律撤回本文件里的那一句，把"请人写进真身"登记为 H-4。
-_FROZEN_PROMPT_VERSION = "p52"
+#: `p53`（2026-10-09，交付格式词表 + 引用两阶段）：M 的 `brief.policy` 新增两条 ——
+#: 真身在 `src/agentflow/specs/m.py`（`agent_prompts.ROLE_BRIEFS["M"]` 是镜像，
+#: 两处逐字相同，`test_agent_spec_reconciliation` 按位比）⇒ 只有 M 那一格变。
+#: 业主授权（2026-10-09）：「禁改区允许你在仔细考虑后先进行改动和测试，后面我再审」
+#: —— 这一处禁改区改动待人审，`noai_gate` 会报 requires_human(1)。
+_FROZEN_PROMPT_VERSION = "p53"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",
     "B": "cba03f853d8226512f36f5e9ac7257843b27f983fb65b9b27c69c57f3fe4e28a",
@@ -1387,7 +1389,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "b70c63c723843f5484c5ddea42f4f47be0523217ba0918c440d067fcd2b7c436",
     "H": "90bf5f20175f9bba118884e4bedcc848bc81c4ef3847e17ff16dd3c6c639f865",
     "V": "d05ce8da7181e87c981d21b116de04f1f5cc6b7b4c535803f49205fd350aa093",
-    "M": "984a5627bce19cd4b708525949a1d5146d3c1e126b7446fe212a983d43516b77",
+    "M": "0250b5832c1838462b393fd46a9965027fa59803c34d37642f4461543acb04a6",
 }
 
 

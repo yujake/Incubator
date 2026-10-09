@@ -109,7 +109,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p50`（2026-10-09，业主三句裁定）：收工由自己判（被派的活做完没有；M 自列任务列表，
 #: 收工时交 `task_list`/`goal_met`）、干不了就上报父 / M 上报用户、机器八格是读数不是判决。
 #: 落在共享的循环协议上 ⇒ 十格全部换值。
-PROMPT_VERSION = "p52"
+PROMPT_VERSION = "p53"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1415,6 +1415,11 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "不带或填错也照样派活，留痕退回框架据派活本身派生的那一行"
             "（注明「框架据派活派生」——**那一行是日志，不算交接**）。"
             "**要让人看得见你交给了什么，就得自己写 `notify`。**",
+    # 业主 2026-10-09 两句（判决与判据在 `draft/83` §5.2/§5.3）：交付格式词表
+    # 与引用两阶段。真身在 `src/agentflow/specs/m.py` 的 `brief.policy`
+    # （那两句话与这里逐字相同 —— `test_agent_spec_reconciliation` 按位比）。
+    "**交付形式是你定的，但你要知道常见的几种各由哪些件构成**（业主 2026-10-09：「工作内容和交付形式由 M 决定……不卡机械判据。但 M 需要知道一些任务需要的明确的交付格式，如什么叫论文包之类的。这样 M 在排任务的时候自然会把这些内容的生产写进任务排期」；判决与判据在 `draft/83` §5.2）：①**论文包** = `out/paper/main.tex`（正文，主件）+ `main.pdf` + 两份验收表（`ACCEPTANCE-CHECKS.json` / `ACCEPTANCE.md`）+ `COMPILE-RECEIPT.json` + `RENDER-ANCHOR.json`；②**研究手稿** = 一行 `documents`（`kind=\"note\"` 或 `\"survey\"`）+ 它的 markdown + `out/review/REPORT.md`；③**清单型交付** = 一行 `documents`（`kind=\"survey\"`，条目写进 `sections`）+ 说明报告；④**说明报告** = `out/review/REPORT.md`（每一趟都要交）。排期时把「生产这些件」当成一条任务写出来。",
+    "**引用的两阶段**（业主 2026-10-09：「研究手稿阶段可以互相引用，正式论文阶段只能引用真实论文，正式论文中手稿内容不可直接引用，必须重建」）：研究手稿之间可以引我方手稿 —— `doc:<稿件>`（引整份手稿）或三段式 `doc:<稿件>#<断言>@<内容哈希前 16 位>`（钉到某条断言与那一版）；**正式论文（`kind=\"paper\"`）里 `doc:` 一律会被拒**，拒信里写着「手稿里的成果若要用，只可在论文正文里重建」—— 重建之后以 `stmt:` / `exp:` / `rel:` 引它变成的台账行（`lit:` 只指真实论文）。要重建一条手稿里的成果时，**先用 `C.proof_chain` 找它的最短证明依赖链**（这条成果靠哪些前提与实验撑着、几步能重建完），照着那条链在正文里重搭，比通读整份手稿省得多。",
         ),
         signature_error="把派活本身当成结论。",
         deliverable="一份交付说明，落在 out/review/REPORT.md（工作区相对路径，用 fs.write 写；"

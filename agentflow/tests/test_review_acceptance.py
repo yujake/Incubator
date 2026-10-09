@@ -206,7 +206,12 @@ def test_the_report_shape_is_not_judged_when_m_declares_nothing(tmp_path):
 
 
 def test_m_s_declared_style_is_judged_section_by_section(tmp_path):
-    """R9：M 声明了体例 ⇒ 逐节核它有没有兑现（缺一节就是这一条红）。"""
+    """R9 + 裁定 9：M 声明了体例 ⇒ 逐节核出缺哪一节（读数），但不拦门。
+
+    业主 2026-10-09：「工作内容和交付形式由 M 决定……不卡机械判据」⇒ 这一格从
+    `fail` + `report_incomplete`（blocker）收窄成 `pass` + warning：
+    "你说的和你写的不一致"要被看见，但不是一条不许收工的理由。
+    """
     from agentflow import closing as CL
 
     st, report = _good(tmp_path)
@@ -216,9 +221,11 @@ def test_m_s_declared_style_is_judged_section_by_section(tmp_path):
         encoding="utf-8", newline="\n")
     rep = CL.check_closing(st, project_dir=str(st.root),
                            report_path=str(report), checks=("report_shape",))
-    assert rep.status["report_shape"] == "fail", rep.to_dict()
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
     assert rep.readings["report_shape"]["missing_declared_sections"] == ["十、M 自己加的一节"]
-    assert [f.code for f in rep.blockers] == ["report_incomplete"]
+    assert rep.blockers == [], [f.to_dict() for f in rep.blockers]
+    codes = [f.code for f in rep.findings if f.level == "warning"]
+    assert "declared_sections_missing" in codes, codes
 
 
 def test_a_statement_without_a_page_range_fails(tmp_path):

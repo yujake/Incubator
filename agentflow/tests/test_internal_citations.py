@@ -41,9 +41,15 @@ def _claim(cid: str, cites: list[str], text: str = "谱落在区间内。") -> d
 
 
 def _doc_row(doc_id: str, claims: list[dict], *, status: str = "draft",
-             title: str = "稿", **kw) -> dict:
-    """构造一行稿件（accepted ⇒ 由写侧口径补上内容哈希）。"""
-    row = {"doc_id": doc_id, "kind": "paper", "title": title, "sections": [],
+             title: str = "稿", kind: str = "note", **kw) -> dict:
+    """构造一行稿件（accepted ⇒ 由写侧口径补上内容哈希）。
+
+    `kind` 缺省是 `note`（研究手稿阶段）：2026-10-09 的两阶段口径之后，
+    "我可以互引我方手稿"这一档属于手稿阶段；正式论文（`kind="paper"`）里
+    `doc:` 一律拒 —— 那一档由 `test_a_formal_paper_citation_of_a_manuscript_is_refused`
+    与 `test_a_formal_paper_may_not_cite_a_manuscript_directly` 单独判。
+    """
+    row = {"doc_id": doc_id, "kind": kind, "title": title, "sections": [],
            "claims": claims, "open_problems": [], "status": status,
            "created_at": TS, "updated_at": TS}
     row.update(kw)
