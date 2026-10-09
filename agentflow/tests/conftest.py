@@ -160,6 +160,7 @@ def _pin_settings_path() -> str:
 
 PINNED_SETTINGS_PATH = _pin_settings_path()
 
+from agentflow import conceptrows as _CR  # noqa: E402  （并表过渡期：夹具也要两处同号）
 from agentflow import schema as S  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
@@ -361,11 +362,16 @@ def add_concept(
         updated_at=TS,
     )
     row.validate()
-    with store.tx("concepts", actor="test") as tx:
-        tx.upsert("concepts", row.to_dict())
+    _data = row.to_dict()
+    # 过渡期（2026-10-09）：夹具是"生产写侧"的替身 —— 老表照旧写全，同一笔事务里
+    # 同步一份新标准（两处同号）。只写老表的话，测试世界里的概念永远只活在老表那一侧，
+    # 于是所有"读侧走合成视图"的判据在夹具里都只测了一半。
+    with store.tx("concepts", "statements", actor="test") as tx:
+        tx.upsert("concepts", _data)
+        _CR.sync_from_legacy(tx, _data, actor="test")
     if sync:
         sync_counters(store)
-    return row.to_dict()
+    return _data
 
 
 def add_relation(

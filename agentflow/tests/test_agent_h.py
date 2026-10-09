@@ -43,32 +43,23 @@ KNOWLEDGE_FILES = ("concepts.json", "relations.json", "literature.json")
 
 
 def sync_all_counters(st: Store) -> None:
-    """把 counters.json 对齐到"每张表 max(已用)+1"。
+    """把 counters.json 对齐到"每张表 max(已用)+1" —— 转发到 `conftest.sync_counters`。
 
     夹具直接写行（绕过 `alloc_id`）时必须补这一步：`verify` 会检查 counters 与
     已用 ID 的一致性，不补就会引入与本用例无关的 `counter_behind` 噪音
     —— 而噪音比不校验更糟：它会训练人忽略告警。
+
+    本函数此前在这里写死了第二份 (kind, table) 名单（`lit`/`concept`/`relation`/…）——
+    正是 `conftest.sync_counters` 的 docstring 点名的那种漂移："测试代码也是代码，
+    写死第二份名单同样会漂移"。它今天真的漂了：并表过渡期新标准那一侧（`stmt`）
+    不在名单里 ⇒ 夹具两处同号之后报 `counter_behind(stmt)`，而那条读数与本用例
+    要验的东西毫无关系（`test_agent_h.py::test_h_output_does_not_break_the_global_verify`
+    当场变红，第 125 轮的重测把它抓了出来）。所以改成转发：覆盖范围由
+    `S.ID_COUNTERS` 反查，一处定义、一处维护。
     """
-    counters: dict[str, int] = {}
-    for kind, table in (
-        ("lit", "literature"),
-        ("concept", "concepts"),
-        ("relation", "relations"),
-        ("question", "research_questions"),
-        ("report", "analysis_reports"),
-        ("experiment", "experiments"),
-        ("plan", "attack_plans"),
-        ("doc", "documents"),
-        ("dep", "dependencies"),
-        ("finding", "review_findings"),
-    ):
-        field = S.TABLES[table]["id_field"]
-        ids = [int(r[field]) for r in st.rows(table) if field in r]
-        counters[kind] = (max(ids) + 1) if ids else 0
-    (st.data / "counters.json").write_text(
-        json.dumps({"schema_version": S.SCHEMA_VERSION, "counters": counters}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    from conftest import sync_counters as _sync
+
+    _sync(st)
 
 
 def clean_claim() -> dict:
