@@ -718,6 +718,15 @@ backend.registry_factory = lambda face: build_registry(workspace_root=face, ...)
 
 **设计（必须写进 S1r 的同一笔）**：`store.py` 的读取侧接受"**版本 ≤ 当前**"，并在
 **第一次写**时把快照升到 v2（`rebuild` 重放事件 → 写 v2 快照；旧事件保留）。
+
+> **订正（2026-10-09，施工时核实）**：上面那句"读取侧接受版本 ≤ 当前"**撤回** ——
+> `store.py` 的 `_check_version` 是 **`F-7` 的人裁**（注释逐字：「所有者裁定：**读期拒绝**」，
+> 不许按当前语义解释旧数据）⇒ 覆盖它等于推翻人裁。**正确路径 = 乙：不改读侧**，
+> 迁移就是"**对每个工作区跑一次 `agentflow rebuild`**"（`rebuild` 写快照时本来就
+> 盖当前版本号，`store.py` 里那一行 `merged["schema_version"] = S.SCHEMA_VERSION`），
+> 而报错信息里的处置也正是这句（"必要时跑 `agentflow rebuild`（从 events.jsonl 重建）"）。
+> 判据随之改成：**v1 工作区在 v2 代码下读⇒受控报错（要求先 rebuild）→ rebuild 之后读得成**。
+
 判据：**v1 夹具工作区**在 v2 代码下 `rows("statements")` 读得成；迁移后快照写着 2；
 **不许**静默把 v1 快照当成 v2 读（要记账：读数里报"这一份是从 v1 升上来的"）。
 
