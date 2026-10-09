@@ -386,11 +386,98 @@ def _is_root(row, deps_of) -> tuple[bool, str]:
 | 反真空 | `concepts` 表在盘上**读不成**（旧工作区）⇒ 报 `checked=False` + 说清，不许当成"没有概念" |
 | 三态 | 一条 `kind="concept"` 而 `proof_text` 为空 ⇒ **既不是根、也不算"良定义"**：`proof_chain` 对它报"良定义性证明没写" |
 
-### 10.5 批次顺序（被这一次裁定改了一处）
+## §11 业主 2026-10-09 新裁：B 的写入全走秘书 + 五元状态映射 + 证明完善协作链 + D6/D8/D9
+
+### 11.1 **写入侧都是 B 的活，但 B 不直接写**：秘书实际操作"增 / 改 / 查"
+
+业主逐字：
+
+> 「写入侧应该都是B的活，让B的秘书帮它洗格式、拿编号、改表、查重，即B不直接用增工具，
+> 秘书实际操作增、改（比如一个定理在两个文献中都有证明，可以互相借鉴把证明写好点；
+> 如果证明路径不唯一，可增另一组依赖，实现用二维列表）、查工具，B纯粹负责消化理解。」
+
+⇒ 一句话：**B 交内容，秘书落盘**。四件活各有落点（都能在现有代码里找到同一族的先例）：
+
+| 秘书要做 | 落点（先例） |
+|---|---|
+| **洗格式** | `Secretary.wash_delegation`（S1g）对派活那一族；这里要一条同族的 `wash_statement`：键名归一 / 顶层折叠 / 去空白，**内容一个字不动** |
+| **拿编号** | `store.alloc_id`（唯一分配器）—— 与 D2 同一条口径：同表同分配器 ⇒ 撞号在结构上不可能 |
+| **查重** | 规范化去重（`register_conjecture` 的 D13 规范化判重是同一族的先例）：同一条 `statement_full` 不重复建行，`force_new` 才另起 |
+| **改表** | 落 `statements` / 概念行（`kind="concept"`）/ `dependencies` 三处一次性写（一笔事务），**B 自己一次写工具都不调** |
+
+**判据（S1o 同批）**：正控 —— B 交一条消化结果 ⇒ 三张表各多一行且号来自 `alloc_id`；
+负控 —— 同一个内容交两次 ⇒ 第二次是"重复"读数（不新建行）；**反真空** —— 秘书没装（无 store）
+⇒ 明确拒（`secretary_unavailable`），**不许"B 自己写"这条后备路**（那正是业主要去掉的形态）。
+
+**多证明路径（业主指定的形状）**：一条定理**可以有多组依赖**（两个文献各有证明、
+或一条更漂亮的路径）。输入是**二维列表**：`deps = [[组1的步骤…], [组2的步骤…]]`
+（外层 = 可选路径，内层 = 一条路径上的步骤）。落地两条候选：
+
+- **甲（零 schema 改动）**：一行一条边，用**受控前缀**带组号（`status_reason` 或 `quote` 写
+  `group:<n>`），读数按组还原成二维列表；**建议先用甲**（与"schema 零变更"的既有纪律一致）；
+- **乙**：`dependencies` 加一列 `path_group`；更干净，但动 `schema-migration`（要人审）。
+
+### 11.2 五元状态在哪张表 —— 已核实，并给出映射与判据
+
+业主问：「再确认一条命题的五元状态是哪张表在维护，要做好映射（如果五元状态里说有证明，
+证明应该在B维护的表里可查）」。
+
+**答案（现算，`agentflow/evidencebits.py`）**：
+
+| 五元位 | 谁产生（`BIT_OWNERS`） | 取值（`BIT_STATES`） |
+|---|---|---|
+| `numeric` | **E** | `pending` / `na` / `failed` / `verified` |
+| `proof` | **F** | 同上 |
+| `reviewed` | **V** | 同上 |
+| `formal` | **E** | 同上 |
+| `audited` | **H** | 同上 |
+
+- **落在哪**：`statements.bits` 这一格（**不是**另一张表；等级 `conjecture → strong_conjecture
+  → pre_theorem → theorem`（`GRADES`）**不落盘**，由 `evidencebits.derive_grade` 现算）；
+  形状与四态纪律的唯一判据来源是 `agentflow/evidencebits.py`（`Statement.validate()` 只转发
+  `bits_shape_problems`，不抄第二份口径）。
+- **映射要做的判据（业主点名的那一条）**：`bits["proof"] == "verified"` ⇒ 那条证明必须能在
+  **B 维护的表**里查到：`statements.proof_text` 非空 **且** 有指向的 proof 证据行
+  （`experiments` 里 `evidence_kind="proof"` 且检查器 verified），或一条 `dependencies` 边指出它。
+  **改前必红**（这一条今天没有任何判据），判据落 `verify_all`：
+  "五元位里说 verified 的那几位，各自都要在对应的表里查得到"——逐位给"去哪张表查"的映射表
+  （`numeric`/`formal` → `experiments`；`proof` → `statements.proof_text` + `experiments`；
+  `reviewed` → `review_signatures`/`doc-signatures`；`audited` → 签名台账）。
+
+### 11.3 D7 改成**协作链**（不做机器验证）：C → D → F+V → D → B
+
+业主逐字：「D7先不搞机器验证，但做一个协作链：C整理好后交给D整理，D联系F让F和V配合
+一个写一个审完善过程，发还给D定成手稿，由B消化后确认此证明路径。」
+
+| 步 | 谁 | 做什么 | 产出落哪 |
+|---|---|---|---|
+| 1 | **C** | 整理（哪条成果缺证明、哪几条路径可选、依赖链） | `C.proof_chain` 的返回 + 一条给 D 的报文/手稿 |
+| 2 | **D** | 整理成"证明完善任务"（要证哪条、允许哪几条路径、验收口径） | 手稿（`handoffs.jsonl`）给 F |
+| 3 | **F** | 写过程（一条路径一份过程；多路径各写一份） | 实验行 / 手稿 |
+| 4 | **V** | 审那几份过程（独立核） | `review_findings` / 签名 |
+| 5 | **D** | 收到 V 的裁决 ⇒ 定成**手稿**（`G.build_document` 那一档的产物，或 D 自己的手稿行） | `documents` 行 + `manuscripts` |
+| 6 | **B** | 消化：确认此证明路径（写 `dependencies` 组 + `bits.proof`） | `statements` / `dependencies`（**经 B 的秘书**，见 11.1） |
+
+**判据（S1o 同批，红前必红）**：这条链上每一步都要有**可读的载体**（C 的返回、D 的手稿、
+F 的实验行、V 的裁决、D 定的手稿行、B 登记的依赖组）——**缺哪一步就点名哪一步**
+（与 `escalation_gaps` 同一族的读数），而不是"链跑没跑过没人知道"。
+
+### 11.4 D6 / D8 / D9（业主 2026-10-09 裁定）
+
+- **D6 认可**：`escalation_gaps` 把"写进交付说明"算上报载体，读数分四档
+  `via: question / message / handoff / report`（实现落 `closing._escalation_reading` + 一条判据）。
+- **D8 修**：接上面装配点（`run-agent` 与 `webui` 两处的 `registry_factory`），
+  并加判据"检查的基准 == 执行的基准"（E23）。
+- **D9 收窄**：`_check_artifact_ledger` 改成"按路径取最新一次登记比对"，`changed ⇒ pass + warning`
+  （1c-1），并加一条判据钉住"正常改写不再把这一格读成 unknown"。
+
+### 10.5 批次顺序（被这两次裁定改了一处）
 
 **S1r（并表迁移，要人审）→ S1p（消化读数）→ S1o（依赖链）→ S1q（正文重建）**：
 S1p/S1o 读的就是 `statements`（并表之后的唯一落点）⇒ 迁移必须在它们**之前**，
 否则两批要写两遍。S1r 未过审期间，S1p/S1o 按 §10.3 的**过渡期读法**写（两处同号合并），
 于是"迁移卡在人审"不会让后面三批停摆。
+**本页 §11 的三件（B 的写入全走秘书 / 五元位映射判据 / C→D→F+V→D→B 协作链）并入 S1o 那一批**；
+**D8（E23）与 D9（第八格收窄）各是一批**，排在 S1o 前后（D8 优先，它属"权限面说两句话"）。
 
 
