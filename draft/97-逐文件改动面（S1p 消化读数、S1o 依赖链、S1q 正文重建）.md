@@ -651,6 +651,35 @@ for stmt in statements:
 - **依据**：E7（函数名与词表现算）。
 - **判据**：正控（`bits={"proof":"verified"}` + `proof_text` 非空 + proof 行在 ⇒ 无 issue）；负控（`proof:"verified"` 而 `proof_text` 空 ⇒ 报 `bits_verified_without_evidence`）；反真空（`statements` 读不成 ⇒ 报"没查成"，不许当成"都对上了"）。
 
+#### 13.4b 施工订正（落地后按盘上事实改的五处，逐条记偏差）
+
+1. **`signatures` 表不存在** ⇒ 第 3/5 位的台账改成 `documents`（V/H 的审校结论**按稿件钉**）。
+   核实方式：`schema.TABLES` 的 18 个键里没有 `signatures`（这一条是本次落地时才现算的，草稿写它
+   是照 `signatures.py` 的模块名顺手写的）。命题这一级只看得见 `doc_id`，所以那两位
+   **刻意不产生命题级判据**：没有 `doc_id` ⇒ 判不了（报一条假的 error 比不报更糟）。
+2. **映射是"位 ⇒ 表"的常量表，不是 `bit_table_map(bits)`**：`BIT_LEDGERS`（模块级）+
+   `bit_ledger(bit)`。理由：映射是**位**的性质，不是某一行取值的结果；写成常量表才能被
+   判据逐格断言"五位都在、owner 与 `BIT_OWNERS` 一致、三栏非空"（函数返回字面量则没得断言）。
+3. **`proof` 的判据拆成两半**（草稿把它们写成一条 error）：`proof_text` 空 ⇒ **error**
+   （B 的表里查不到证明 —— 业主点名的那一种）；位里指的实验行不在册 ⇒ 另一条 error；
+   行在册而 `method` 不对 ⇒ **warning**（"查了别的东西"不是"没查"，看得见但不拦门）。
+   为什么拆：证明的台账是 B 的表，**实验行是另一根轴**（手写的证明可以没有任何形式化实验行），
+   合成一条会把手写证明判成缺陷。
+4. **`proof_text` 空这一条是可达的**（负控因此不是假绿）：写入期**合规**的形态是
+   "证明过程写在位自己的载荷里（`evidence.proof_process`，`bit_problems` 放行）、
+   而 B 的表是空的"——判据抓的正是"证明只活在位里"。
+5. **"读不成"由 `verify_all` 自己大声失败**（`store.rows("statements")` 抛异常 ⇒ 整趟审计
+   不是"绿"）：`bit_evidence_gaps` 的 docstring 写明调用方必须先确认表读到了，
+   再判"指针行不存在"——否则表读不成会被读成"每一条指针都悬空"（假红）。
+
+- **落地读数**：新判据 **7 条**（正控 2 / 负控 3 / 反真空 2）；相关一批 **336 passed**；
+  读图 + 发布清点 + 新判据 **89 passed**；lint `error 0 / warning 15 / info 49`；
+  strict 档 65（`scripts/lint_rules.py --strict`，与 `DEVELOPMENT.md` 的 `LIVE-READINGS` 一致）。
+- **顺带两处**：① `agent_c/proof_chain.py::groups_of` 补 docstring —— strict 档 R007
+  **65→66 的真实成因**（新模块欠一条成文规则），补上后回到 65，**不改数字**；
+  ② 读图 §3 三处行数按盘上订正（`agent_c/core.py` 1135 / `capabilities.py` 2449 /
+  `verify.py` 1698，前两处是 S1r 那几批欠下的账）。
+
 ### 13.5 `specs/c.py` + `agent_c/proof_chain.py` + `agent_c/core.py`（C 的组语义；E10）
 
 ```python

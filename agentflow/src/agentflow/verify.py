@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from . import dedup as D
+from . import evidencebits as EB
 from . import schema as S
 from . import signatures as SIG
 from . import textutil as T
@@ -1574,7 +1575,7 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
 def _check_13(rep, store) -> None:
     """`verify_all` 的第 13 段：命题台账（`statements`）的不变量（`draft/37` §16 P1）。
 
-    这一段的四条判据，各守一种已经在真机上出现过的病：
+    这一段的五条判据，各守一种已经在真机上出现过的病（第 5 条是业主 2026-10-09 点名的）：
 
     1. 出处必须存在（`dangling_lit_ref` / `dangling_doc_ref`）：一条"从文献里摘的"
        命题指着一篇不存在的文献 —— 逐字回验就没有第二份文本，而报告照样印。
@@ -1589,13 +1590,19 @@ def _check_13(rep, store) -> None:
        "B 的唯一自动幻觉防线"就是逐字回验（见 `quoteverify` 的 docstring）。
        它降为 warning 而不是 error，理由与 `external_unavailable` 那条一致：
        这是已知未做、不是谎报；但它在报告里必须看得见。
+    5. 五元位与它们各自的台账对不对得上（业主 2026-10-09：「再确认一条命题的五元状态
+       是哪张表在维护，要做好映射（如果五元状态里说有证明，证明应该在 B 维护的表里
+       可查）」）：判据本体是 `evidencebits.bit_evidence_gaps`（位 ⇒ 表的映射也住那里，
+       本处只把它的读数翻成 `Issue`，不抄第二份口径）。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
     lit_ids = {str(x.get("lit_id")) for x in store.rows("literature")}
     doc_ids = {str(x.get("doc_id")) for x in store.rows("documents")}
+    experiments = store.rows("experiments")
 
     usable = 0
+    bit_gaps = 0
     for s in statements:
         sid = str(s.get("stmt_id") or "")
         lid = str(s.get("source_lit_id") or "")
@@ -1643,9 +1650,15 @@ def _check_13(rep, store) -> None:
                 f"（{str(s.get('quote_reason') or '没说为什么')[:120]}）⇒ "
                 "逐字回验是 B 那条路上唯一的自动幻觉防线；没做就要在报告里标明",
             ))
+        for gap in EB.bit_evidence_gaps(s, experiments=experiments):
+            bit_gaps += 1
+            rep.issues.append(Issue(
+                str(gap["level"]), "statements", sid, str(gap["code"]), str(gap["reason"]),
+            ))
         if str(s.get("status") or "") == "active":
             usable += 1
     rep.checked["statements_usable"] = usable
+    rep.checked["bit_ledger_gaps"] = bit_gaps
 
 
 def verify_all(

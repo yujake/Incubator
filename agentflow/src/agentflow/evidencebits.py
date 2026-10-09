@@ -11,6 +11,13 @@
 | 4 | 形式化通过 `formal` | E | 四态，同第 1 位；`verified` 才算过 |
 | 5 | 正式审查 `audited` | H（G 申请） | H 的审校轮次与结论（H 只看证据是否确凿 + 引用是否得当，不读证明判数学） |
 
+## 位与台账的映射（业主 2026-10-09：五元状态是哪张表在维护，要做好映射）
+
+上面的表说的是"这一位属于谁"，`BIT_LEDGERS` 说的是"这一位去哪张表里查"：
+`proof` 去 `statements.proof_text`（B 维护的那张表）、`numeric`/`formal` 去
+`experiments`（`method` 要对得上）、`reviewed`/`audited` 去稿件上的 V/H 结论。
+判据（`bit_evidence_gaps`）只做一件业主点名的事：位上说有，表里要查得到。
+
 ## 等级机械派生（不许任何角色自报等级）
 
 - 全空/false ⇒ 猜想；
@@ -248,6 +255,139 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     if bits.get("audited") and not ev.get("audited_by"):
         problems.append("audited=true 必须带 H 的审校轮次与结论")
     return problems
+
+
+#: 五元位 ⇒ 哪张表在维护它（业主 2026-10-09：「再确认一条命题的五元状态是哪张表在维护，
+#: 要做好映射（如果五元状态里说有证明，证明应该在 B 维护的表里可查）」）。
+#:
+#: 每一格四件事：`owner`（谁签的字）/ `ledger`（去哪张表的哪个字段查）/ `pointer`
+#: （位里写的那个可追查凭据字段）/ `criteria`（位说 `verified` 时，台账里必须查得到什么）。
+#:
+#: 为什么要有这张表：位是读数，表是凭据。只说"这一位是 verified"而不说
+#: "去哪张表里能查到它"，五元状态就会退化成自报 —— 而"自报不算凭据"正是这套位存在的理由
+#: （见 `bits_from_row` 的 docstring）。映射写在这里而不是散在判据里，是为了让
+#: "哪一位归哪张表"只有一个出处：`verify.py` 的第 13 段按这张表派判据。
+#:
+#: 第五位（正式审查）与第三位（审过）的凭据是按稿件钉的（V/H 的审校结论落在稿件上），
+#: 所以它们的 `ledger` 是 `documents` 而非命题表：命题这一级只看得见 `doc_id`，
+#: "doc_id 存不存在"由 `verify` 的 `dangling_doc_ref` 守。这一格刻意不产生命题级判据 ——
+#: 命题没有 `doc_id` 时那一档判不了，报一条假的 error 比不报更糟（会训练人忽略告警）。
+BIT_LEDGERS: dict[str, dict[str, str]] = {
+    "numeric": {
+        "owner": "E",
+        "ledger": "experiments（method='numeric'）",
+        "pointer": "bits.evidence.numeric 里的 experiment_id / experiments / script",
+        "criteria": "位说 verified ⇒ 指针指的那条实验行必须在 experiments 表里，且 method='numeric'",
+    },
+    "proof": {
+        "owner": "F",
+        "ledger": "statements.proof_text（B 维护的那张表）",
+        "pointer": "命题自己那一行（同表内查，不需要跨表指针）",
+        "criteria": "位说 true ⇒ 同行的 proof_text 非空（证明过程逐步可读）；"
+                    "引用命题例外（凭据是文献代号 + 逐字核验）",
+    },
+    "reviewed": {
+        "owner": "V",
+        "ledger": "documents（V 的审校结论，按稿件钉）",
+        "pointer": "doc_id",
+        "criteria": "位说 true ⇒ V 的结论挂在稿件上 ⇒ 命题级只查 doc_id 在不在册"
+                    "（由 dangling_doc_ref 守）；没有 doc_id ⇒ 判不了，不报",
+    },
+    "formal": {
+        "owner": "E",
+        "ledger": "experiments（method='formal'）",
+        "pointer": "bits.evidence.formal 里的 experiment_id / checker",
+        "criteria": "位说 verified ⇒ 指针指的那条实验行必须在 experiments 表里，且 method='formal'",
+    },
+    "audited": {
+        "owner": "H",
+        "ledger": "documents（H 的审校轮次与结论，按稿件钉；G 申请）",
+        "pointer": "doc_id",
+        "criteria": "同第 3 位：命题级判不了，只查稿件在不在册",
+    },
+}
+
+
+def bit_ledger(bit: str) -> dict[str, str]:
+    """取某一位的台账映射（未知位 ⇒ 空 dict，调用方按"没查成"处理，不按"查过了没问题"）。"""
+    return dict(BIT_LEDGERS.get(str(bit), {}))
+
+
+def bit_evidence_gaps(row: Mapping[str, Any], *,
+                      experiments: Iterable[Mapping[str, Any]] = (),
+                      ) -> list[dict[str, str]]:
+    """五元位与它们各自的台账对不对得上（空列表 = 位说的都能在表里查到）。
+
+    只判跨表的那一半（"位说有证明 ⇒ 证明在 B 的表里可查"）：位自身的形状
+    （`na` 要理由、`verified` 要凭据）由 `bit_problems` 判，这里不重复。
+
+    三条判据，各守一种病：
+
+    1. `proof` 位为真而 `statements.proof_text` 空（`bits_proof_without_evidence`，error）：
+       位上说"有证明"，去 B 维护的那张表里却查不到证明过程 —— 这正是业主点名的形态。
+       引用命题（`evidence.proof_source == 'citation'`）不在此列：它的凭据是文献代号
+       ＋逐字核验，证明过程在别人的文献里，不在我们的台账里。
+    2. 指针指的实验行不存在（`bits_evidence_pointer_dangling`，error）：位里的凭据
+       指名道姓写了 `experiment_id`，而 experiments 表里没有这一行 ⇒ 这条凭据复跑不了，
+       且"复跑不了"与"跑过"在报告里长得一样。
+    3. 指针指的实验行存在但 `method` 不是这一位该有的（`bits_evidence_method_mismatch`，
+       warning）：拿一条数值实验当形式化凭据（或反之）—— 三态纪律里这是"查了别的东西"
+       而不是"没查"，所以看得见但不拦门。
+
+    边界（三态）：没有指针时不报（`bit_problems` 已经报过"凭据要指名道姓"，
+    同一件事报两次会让"改哪里"变得不清楚）；experiments 表读不到时由调用方给空序列，
+    此时指针行必然"不存在" —— 所以调用方必须先确认表读到了再判第 2/3 条。
+    """
+    bits = bits_from_row(row)
+    ev = dict(bits.get("evidence") or {})
+    by_exp = {str(e.get("experiment_id") or ""): e for e in experiments}
+    gaps: list[dict[str, str]] = []
+
+    if bits.get("proof"):
+        text = str(row.get("proof_text") or "").strip()
+        cited = str(ev.get("proof_source") or "") == "citation"
+        if not text and not cited:
+            gaps.append({
+                "bit": "proof", "level": "error", "code": "bits_proof_without_evidence",
+                "reason": ("第 2 位（有证明）为真，而 statements.proof_text 是空的 ⇒ "
+                           "去 B 维护的那张表里查不到证明过程（位上说有、表里没有）；"
+                           "要么把证明过程写进 proof_text，要么把这一位降下来"),
+            })
+
+    for bit, method, key in (("numeric", "numeric", "numeric"), ("formal", "formal", "formal")):
+        if _state(bits.get(bit)) != "verified":
+            continue
+        payload = dict(ev.get(key) or {})
+        # 指针可能写成单个号（`experiment_id`）或一列号（`experiments`）—— 两种都要认，
+        # 而且列要摊平：把整列 `str()` 成一个号，报出来的就是一条查不到的假指针
+        # （"0001,0002" 这种号永远不会在表里，负控会以"表里没有"的形态假绿）。
+        raw: list[Any] = []
+        for cand in (payload.get("experiment_id"), payload.get("experiments"),
+                     payload.get("experiment_ids")):
+            if isinstance(cand, (list, tuple, set)):
+                raw.extend(cand)
+            elif str(cand or "").strip():
+                raw.append(cand)
+        ids = [x for x in dict.fromkeys(str(v) for v in raw) if x]
+        for eid in ids:
+            hit = by_exp.get(eid)
+            if hit is None:
+                gaps.append({
+                    "bit": bit, "level": "error", "code": "bits_evidence_pointer_dangling",
+                    "reason": (f"第 {'1' if bit == 'numeric' else '4'} 位为 verified，凭据指向实验 "
+                               f"{eid!r}，而 experiments 表里没有这一行 ⇒ 这条凭据复跑不了"
+                               "（台账映射：" + BIT_LEDGERS[bit]["ledger"] + "）"),
+                })
+                continue
+            got = str(hit.get("method") or "")
+            if got and got != method:
+                gaps.append({
+                    "bit": bit, "level": "warning", "code": "bits_evidence_method_mismatch",
+                    "reason": (f"第 {'1' if bit == 'numeric' else '4'} 位为 verified，凭据指的实验 "
+                               f"{eid!r} 的 method={got!r}（这一位要 method={method!r}）⇒ "
+                               "等于拿另一类证据当这一位的凭据"),
+                })
+    return gaps
 
 
 def clean_statement_ids(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:

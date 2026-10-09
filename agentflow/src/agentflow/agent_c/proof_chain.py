@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
 
-#: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，见 `_is_root`）。
+#: 走到根就算完的两种 `kind`（第三种是 `lit:` 行本身，见 `_DepGraph.is_root`）。
 _PROOF_KINDS = ("proof",)
 
 
@@ -146,6 +146,12 @@ class _DepGraph:
                 self.edges.setdefault(used, []).append(dict(d))
 
     def groups_of(self, used_by: str) -> dict[int, list[dict[str, Any]]]:
+        """某一个使用点的边按 `path_group` 分组（组内 AND、组间"任一成立即到根"）。
+
+        `used_by` 的两种写法（`stmt:0007` 与裸号 `0007`）都认 —— 索引里两种都挂了，
+        这里再兜一次，免得调用方传了另一种写法就静默拿到空组（"没查到"与"没有依赖"
+        必须分得开）。
+        """
         out: dict[int, list[dict[str, Any]]] = {}
         key = str(used_by or "")
         bare = key[5:] if key.startswith("stmt:") else key
