@@ -270,3 +270,90 @@ def _is_root(stmt_row, deps_of) -> tuple[bool, str]:
 | §6 的 V2 只说"哪些计数会动" | 改前/改后各跑一次并把两次数记进提交信息；**已知会动**：`capabilities` 的导入期读数（动作数 +1）；**待测**：`docs/` 角色动作数、`tests/golden/agent_surface_snapshot`（金标由人重冻） |
 | §5 的"待核 V3" | 收窄成 V4（见 §9.1 表的 `evidence_kind` 那一行）：核 `Statement.validate()` 对 `kind="concept"` 的要求，并把缺省写法定下来 |
 
+## §10 裁定升级：`concepts` **真并进** `statements`，`proof_text` 写**良定义性证明**（业主 2026-10-09）
+
+业主逐字：
+
+> 「concept表真并进statements。由于你用"类型"标记了concept的身份，proof里就证这个概念
+> 为什么是良定义的」
+
+⇒ 两件事：**(1)** 走 §9.1 的**乙档**（并表，不是"同号对齐"）；**(2)** §9.1 里那条
+"`proof_text` 逐字写 `concept`"**作废** —— 身份由 `kind="concept"` 标记之后，
+`proof_text` 这一栏空出来干**正事**：**证这个概念为什么是良定义的**
+（不依赖选择、无歧义、存在性/非空、与既有定义不冲突）。
+
+### 10.1 `kind="concept"` 的那些行，五格取值（**取代 §9.1 那张表**）
+
+| 字段 | 取值 | 说明 |
+|---|---|---|
+| `kind` | `"concept"` | **身份标记**（`Statement.kind` 不是受控词表 ⇒ 合法，依据见 §5） |
+| `proof_text` | **良定义性证明**（为什么这个概念是良定义的）；**原始概念**写受控标记 `"concept:primitive"` | 这是本次升级的核心：证明栏不再占位，而是承担"良定义"这道义务 |
+| `evidence_kind` | 按**证明的强度**取：机器核过 ⇒ `proof`；交叉核对 ⇒ `cross_check`；只有论证 ⇒ `heuristic` | `EVIDENCE_KINDS = (proof, cross_check, heuristic)`（现算） |
+| `quote_verified` | 三态照旧（`True`/`False`/`None` + `quote_reason`） | "还没查"与"查过不一致"分得开 |
+| `origin` / `derived_from` / `deps` | 与 §5/§9.1 同 | `own_result` + 出处（`doc_id`/`line_range`）+ 它建立在哪些上游上 |
+
+**三态纪律落在这一格上**：`proof_text` 为空 ⇒ **不是"原始概念"**，是"良定义性证明还没写"
+（`unknown`）。"原始概念"必须**显式**写 `concept:primitive` —— 空与原始分得开，
+这是本仓最忌折平的那一类。
+
+### 10.2 于是"根"的判定改成**按义务**判（取代 §9.3）
+
+```python
+def _is_root(row, deps_of) -> tuple[bool, str]:
+    if deps_of(row["stmt_id"]):            # 有依赖边 ⇒ 不是根
+        return False, ""
+    if row["kind"] == "concept":
+        if row["proof_text"] == "concept:primitive":
+            return True, "原始概念（良定义性义务为空，显式标记）"
+        if row["proof_text"].strip() and row["evidence_kind"] in EVIDENCE_KINDS:
+            return True, "概念：良定义性证明在"
+        return False, "良定义性证明没写（不是原始概念）"      # ⇒ unknown
+    if row["evidence_kind"] == "proof" and _verified(row):
+        return True, "无前提自证定理"
+    return False, "依赖没写（没有边，也没有 proof 证据）"
+```
+
+（`lit:` 在册即根，不走这个函数；C 的 `preconditions.results_registered` 对 concept
+目标的"成果"含义 = **这个概念行 + 它的良定义性证明**。）
+
+### 10.3 并表的迁移设计（**FC-27 `schema-migration` 档，要人审 2 名**）
+
+- **`schema.py`**：`SCHEMA_VERSION` 由 **1 → 2**（现算：`S.SCHEMA_VERSION == 1`）；
+  `TABLES` 去掉 `concepts`；`relations.concept_ids` 的语义改成"指向 `statements` 的 `stmt_id`"
+  （字段名不动，**语义在迁移说明里写明**）。
+- **`store.py` 的 `rebuild`**：重放旧事件时，`concepts` 的 upsert 折成 `statements` 的 upsert：
+  `concept_id → stmt_id`、`name → label`、`definition → statement_full`、
+  `kind="concept"`、`origin="own_result"`、**`proof_text="concept:primitive"`**（历史行没有
+  良定义性证明 ⇒ **不许编一段**，落受控标记）、`related_concepts` **丢掉**（那是 `relations`
+  的职责）。
+- **影响面（现算：16 个文件提到 `"concepts"`）**：`cli.py` / `demo.py` / `extract.py` /
+  `faculty_checks.py` / `llm.py` / `pipeline.py` / `projects.py` / `reviewaccept.py` /
+  `schema.py` / `store.py` / `verify.py` / `agent_b/{core,decide_structural_duplicate,
+  resolve_structural_duplicate,run_once}.py` / `agent_c/__main__.py`（另有测试与 WebUI 读侧）。
+  每处都要按"读 `concepts` ⇒ 改读 `statements` 且 `kind="concept"`"逐个过一遍。
+- **过渡期读法（S1r 未审期间的桥）**：`proof_chain` 与 S1p 的读数**同时看两处**（
+  `statements` 里 `kind="concept"` 的行 + 遗留 `concepts` 表的行），按**同号**合并，
+  并在读数里写明 `concept_source: "statements" | "legacy_table" | "both"` ——
+  迁移落地后这一格自然变成 `"statements"`（**读数不减、口径可见**）。
+- **不许做的事**：① 不许给迁移来的行编良定义性证明；② 不许在迁移里丢 `relations`
+  （它不在本次处置面内）；③ 不许把 `concept:primitive` 当"查过了没问题"（它是
+  "原始概念"这一档，不是"证明通过"）。
+
+### 10.4 判据（S1r，改前必红）
+
+| 档 | 判据 |
+|---|---|
+| 正控 | 迁移后：`concepts` 不在 `TABLES` 里、`SCHEMA_VERSION == 2`；每条旧 concept 行都有一条 `kind="concept"` 的 `statements` 行，**号相等**、`statement_full` 逐字等于旧 `definition`、`proof_text == "concept:primitive"` |
+| 负控① | 迁移行的 `proof_text` 里出现"证明/证毕/Proof"这类字样 ⇒ 红（**不许编证明**） |
+| 负控② | `relations.concept_ids` 里有一个号在 `statements` 里找不到 ⇒ 红（悬空） |
+| 反真空 | `concepts` 表在盘上**读不成**（旧工作区）⇒ 报 `checked=False` + 说清，不许当成"没有概念" |
+| 三态 | 一条 `kind="concept"` 而 `proof_text` 为空 ⇒ **既不是根、也不算"良定义"**：`proof_chain` 对它报"良定义性证明没写" |
+
+### 10.5 批次顺序（被这一次裁定改了一处）
+
+**S1r（并表迁移，要人审）→ S1p（消化读数）→ S1o（依赖链）→ S1q（正文重建）**：
+S1p/S1o 读的就是 `statements`（并表之后的唯一落点）⇒ 迁移必须在它们**之前**，
+否则两批要写两遍。S1r 未过审期间，S1p/S1o 按 §10.3 的**过渡期读法**写（两处同号合并），
+于是"迁移卡在人审"不会让后面三批停摆。
+
+
