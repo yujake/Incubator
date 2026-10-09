@@ -3319,19 +3319,37 @@ class AgentLoop:
 
         三态：面目录不在盘上 ⇒ 拒绝（不许当"整工作区可写"）。
 
+        ## 哪些参数算"路径"：一处口径
+
+        `draft/90` §2 的 E22：先前这里只看 `args["path"]`，而 `fs.move` 的参数叫
+        `src`/`dst`（它的 schema 里没有 `path`）⇒ 子代理可以用 `fs.move` 把面外的
+        文件搬进自己的面、或把面内的文件搬出去，这一步不被任何判据拦。
+        现在参数名从 `secretary.surface_path_args()` 取（默认 `path`，例外逐条登记）
+        —— 与秘书的预看读数（`Secretary.surface_fit`）共用同一张表，
+        免得出现"预看说越界、硬拦放过去"。
+
         ## 面是工作区里的一个子目录（过渡语义，为什么）
 
         今天 `fs.*` 的根焊死在注册表里（`build_registry(workspace_root=…)` 就定死了），
         所以"从面里看 `x.md`"这件事得先有每实例一个注册表（`draft/92` §3.6）——
         那是装配点的改动，另立一批。在那之前这里守的是"路径要写全、且必须落在面内"：
         既挡住越界与别人的面，也不假装"面就是新的根"。
+
+        已知未收口（`draft/90` §2 的 E23）：`registry_factory` 的装配点未接 ⇒
+        子这一趟 `workspace_root` 跟着面走（本判据的基准 = 面），而 `fs.*` 用的还是
+        共用注册表（根 = 父的工作区）⇒ 相对路径这一档是"检查按面、执行按工作区"。
+        收口件在 S1n，判据是"检查的基准与执行的基准是同一个目录"。
         """
         if not str(self.surface or ""):
             return ""
-        if not name.startswith("fs."):
+        from .secretary import surface_path_args
+
+        keys = surface_path_args(name)
+        if not keys:
             return ""
-        raw = str(args.get("path") or "")
-        if not raw:
+        raws = [(k, str(args.get(k) or "")) for k in keys]
+        raws = [(k, v) for k, v in raws if v]
+        if not raws:
             return ""                     # 没有路径参数（例如 `fs.list` 的缺省根）⇒ 不拦
         try:
             face = Path(str(self.surface)).resolve()
@@ -3341,16 +3359,20 @@ class AgentLoop:
             return (f"读写面不在盘上（{face}）⇒ 这一步不许执行："
                     "没有面的时候不许当'整工作区可写'（业主 T23）")
         base = Path(str(self.workspace_root or ".")).resolve()
-        try:
-            target = (Path(raw) if Path(raw).is_absolute() else (base / raw)).resolve()
-        except Exception as exc:  # noqa: BLE001
-            return f"路径解析不了（{type(exc).__name__}: {exc}）⇒ 这一步不许执行"
-        try:
-            target.relative_to(face)
-        except ValueError:
-            return (f"{raw} 越出了你这趟的读写面（{face}）—— 面外一律不做："
-                    "要别的目录就请父给你切一块（业主 T23）")
-        return ""
+        refusals: list[str] = []
+        for key, raw in raws:
+            try:
+                target = (Path(raw) if Path(raw).is_absolute() else (base / raw)).resolve()
+            except Exception as exc:  # noqa: BLE001
+                refusals.append(f"{key}={raw} 路径解析不了（{type(exc).__name__}: {exc}）"
+                                "⇒ 这一步不许执行")
+                continue
+            try:
+                target.relative_to(face)
+            except ValueError:
+                refusals.append(f"{key}={raw} 越出了你这趟的读写面（{face}）—— "
+                                "面外一律不做：要别的目录就请父给你切一块（业主 T23）")
+        return "；".join(refusals)
 
     def _do_summon(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         role = str(payload.get("role"))
@@ -3662,7 +3684,8 @@ class AgentLoop:
             # `admission` 是依赖注入：秘书要判 `message` 的协作边，判据本体在
             # 本模块（`message_admission`）—— 传进去而不是让 `secretary.py` 自己抄一份。
             got = self.secretary.optimize_outbound(shape, dict(payload),
-                                                   admission=message_admission)
+                                                   admission=message_admission,
+                                                   base=str(self.workspace_root or ""))
             out["alarms"] = list(got.get("alarms") or [])
             out["fail_open"] = bool(got.get("fail_open"))
             if got.get("problem"):
@@ -3679,6 +3702,12 @@ class AgentLoop:
                            "reason": str(wash.get("reason") or "")}
             out["changes"] = [dict(x) for x in (got.get("changes") or ())]
             out["_washed_payload"] = got.get("after")
+            # ---- S1g-2：面适配读数（业主 2026-10-09「"超越职责"的一个主要可能是
+            # 无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）。
+            # `base` 传本实例自己的根：子代理那一趟它的根是它的面，父视角的基准
+            # 必须跟着走（否则"父视角有、面内没有"这一档会算错）。
+            out["surface_fit"] = dict(got.get("surface") or {}) if isinstance(
+                got.get("surface"), Mapping) else {}
             if wash.get("refused"):
                 # 硬拒：一次派活连"派给谁/做什么"都不全 ⇒ 不执行、不评估、不协商。
                 return out
@@ -3696,7 +3725,12 @@ class AgentLoop:
                     dups = self.conductor.duplicate_candidates(to, action, key)
                 out["assessment"] = self.secretary.assess_delegation(
                     to=to, action=action, params=dict(payload.get("params") or {}),
-                    input_key=key, duplicates=dups)
+                    input_key=key, duplicates=dups,
+                    # S1g-2：复用已有子代理时它的面是已知的（名册那一格）
+                    # ⇒ 面适配那一维判得最准；新起一个时槽位还没分（判得了
+                    # "越界"与"父视角有、面内没有"两档）。
+                    reuse=str(payload.get("reuse") or payload.get("name") or ""),
+                    base=str(self.workspace_root or ""))
             except Exception as exc:  # noqa: BLE001 - 同上
                 out["assessment_fail_open"] = f"{type(exc).__name__}: {exc}"
             # `R2b-⑲`：协商（职责 2 的"给出重新安排建议并协商"）—— 评估摆了同 key 的既有

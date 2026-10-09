@@ -234,6 +234,39 @@ def _wash_one(self, payload, out, *, field, refuse=True) -> dict: ...   # 纯计
 def _wash_summon_many(self, payload, out) -> dict: ...                  # 逐项洗、不整批硬拒
 def _action_spec(self, role, action) / _param_props(self, spec)         # 声明读取（读不到 ⇒ 判不了）
 
+# ---- S1g-2：面适配（`draft/90` §1.11；业主 2026-10-09「"超越职责"的一个主要可能是
+#      无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）
+#: **一处口径**：哪些工具的哪些参数是"落在盘上的路径"。
+#: 默认规则 = `fs.*` 的 `path`；名字不叫 `path` 的逐条登记在这里（今天只有 `fs.move`）。
+#: 两个时机共用它：预看（本方法）与硬拦（`AgentLoop._surface_refusal`）——
+#: 分开写两份迟早出现"预看说越界、硬拦放过去"。
+SURFACE_PATH_ARGS: dict[str, tuple[str, ...]] = {"fs.move": ("src", "dst")}
+
+def surface_fit(self, *, action: str, params: Mapping[str, Any],
+                face: str = "") -> dict:
+    """这件活在被派人的读写面里做不做得成（三态读数，**只报不改**）。
+
+    返回 `{"checked": bool, "fits": True|False|None, "paths": [...], "reason": str}`；
+    `paths[]` 每条 = `{"where","value","face","ws","face_exists","ws_exists","verdict"}`，
+    `verdict ∈ {in_face, escapes, not_in_face, unknown}`。
+
+    - `face` 给了（复用/续跑：面已定）⇒ 判"解析结果在不在面里"；
+    - `face` 没给（新起一个子代理：槽位在派活那一刻才分）⇒ **判不了槽位**，但
+      `escapes`（绝对路径 / `..` 逃出）与 `not_in_face`（父视角盘上有、面内没有）
+      两档**不需要槽位**就能判 —— 这两档正是"面内做不成"的主体；
+    - 没有可判的路径（非 `fs.` 动作 / 没给路径）⇒ `checked=False` 或 `fits=None` +
+      说清（**绝不为 `True`**）；面/名册读不成 ⇒ `fits=None`。
+
+    为什么只报不改：路径值是**内容面**（`draft/90` §1.2 那条红线）——秘书不许替父
+    把它改成别的路径（那是在替它决定"这事该在哪儿做"）。"""
+def _surface_path_args(self, action: str) -> tuple[str, ...]: ...      # 声明 → 参数名（表读不到 ⇒ 空）
+def _face_of(self, *, owner: str, name: str = "") -> dict: ...          # 面已知 ⇒ 路径；未知 ⇒ 空 + 理由
+
+# 落点（三处，一处口径）：`optimize_outbound` 返回加一格 `surface`；
+#   `assess_delegation` 返回加一格 `surface` 并在 `reason` 里点名（"不只是角色设计"那一半）；
+#   `_outbound_hook` 把它并进这一步的结果（`{"surface_fit": {...}}`）。
+# `agent_loop._surface_refusal`：路径参数名改成读同一张表（`fs.move` 的 `src`/`dst` 收口，E22）。
+
 # ---- S1k：名册 / 对照表 / 译码 / 退役 / 调查（全部只碰 secretary/ 下的 jsonl）
 def roster_add(self, *, owner: str, role: str, task_id: str, brief: str,
                want_name: str = "", reuse: str = "") -> dict:

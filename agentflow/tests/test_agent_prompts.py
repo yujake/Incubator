@@ -1370,18 +1370,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （"`can_close` 只在八格全过时为真"）—— 模型读的就是那一句，与 p50 的新语义当场相反 ⇒
 #: 改那一句 + 同一张表里那一行。只有 M 有这件工具 ⇒ 只 M 那一格变（其余九格逐字不动，
 #: 这正是这条判据该有的分辨率：改一处、只动该动的那一格）。
-_FROZEN_PROMPT_VERSION = "p51"
+#: `p52`（2026-10-09，S1g-2）：共享的循环协议新增一句"派活那一刻秘书还会替你看一遍
+#: 『这件活在被派人的读写面里做不做得成』"（业主 2026-10-09：「"超越职责"的一个主要可能
+#: 是无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）⇒ 共享段 ⇒ 十格全换。
+_FROZEN_PROMPT_VERSION = "p52"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "bca1d915d5c2464166edfbad81becae7ff9200d190f249a0929919ee64ef6eb7",
-    "B": "d5400b1b1f2d9f97073b94dea85051a30c3f3d90d4a04f5c2a2a7d910ed52a20",
-    "C": "7c3c18dbecb145c6f795e9310525d8f9d570ae5e421ec36c69c7486919b9f49d",
-    "D": "5331bf9389a107708b2e21b7f8f69d77821b0151b7e8aa3c510e39633ebcd472",
-    "E": "5228e52a418b9edf490dcc4c68f1a90bfcd1b85e2888ab90de9a08a4b5733825",
-    "F": "6e41290cc5dc36a01ceea1682834ef3bfb2824b679c1a6dff01484ab46a49665",
-    "G": "97cd4b44af04e1bbeee57c0c5344a9aaff0f1e17197b6fa400e5d20e8b1deec1",
-    "H": "cc19514229561e8f32caa52f4f35595f36a058cc971c67f60eeae7d4a2829ef2",
-    "V": "a96ff42483465fee8b4f23a0d86e1174373a9735cbd9045d2d8dc9ff96bb5bbf",
-    "M": "bc2999c33b5f97934365260b19f63535e7162e7d8b6b96c968b1096c728e163e",
+    "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",
+    "B": "cba03f853d8226512f36f5e9ac7257843b27f983fb65b9b27c69c57f3fe4e28a",
+    "C": "32d03fdd302eba53cc737d45a6658900ca9f86c39722ff1691c7098f79150b55",
+    "D": "486c1ca219ded6017dd098790a3a3552317394d1b36724427106dd1ace61c775",
+    "E": "7df2627677772e8447b9db4a7ca94394d910c2132ae2daf441300e2b91e9e013",
+    "F": "46db3b0ad4bda86b624aec5821472080fac5ea6e7bdc37d902f14ac0164701b8",
+    "G": "b70c63c723843f5484c5ddea42f4f47be0523217ba0918c440d067fcd2b7c436",
+    "H": "90bf5f20175f9bba118884e4bedcc848bc81c4ef3847e17ff16dd3c6c639f865",
+    "V": "d05ce8da7181e87c981d21b116de04f1f5cc6b7b4c535803f49205fd350aa093",
+    "M": "984a5627bce19cd4b708525949a1d5146d3c1e126b7446fe212a983d43516b77",
 }
 
 

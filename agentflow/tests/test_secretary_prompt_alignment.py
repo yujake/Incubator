@@ -92,6 +92,20 @@ DUTIES: dict[str, dict[str, object]] = {
         "probe": ("让一个子代理退役", "父决定"),
         "why": "退役由父说、秘书做（三分支）：角色必须知道有这件工具，否则它只能干等",
     },
+    # S1g-2（2026-10-09，业主：「"超越职责"的一个主要可能是无法在被分配的读写面内
+    # 完成任务，这个秘书也要帮忙看，不只是看任务是否符合角色设计」）：派活那一刻的
+    # 面适配读数。提示词里承诺了两句（"秘书还会替你看一遍这件活在被派人的读写面里
+    # 做不做得成"与"这一步的结果里有 `surface_fit`"）⇒ 两条探针各认领一句。
+    "surface_fit": {
+        "code": "surface_fit",
+        "where": "secretary.py",
+        "call": ("secretary.py 的 surface_readings", "agent_loop.py 的 _outbound_hook"),
+        "visibility": "prompt",
+        "probe": ("在被派人的读写面里做不做得成", "surface_fit"),
+        "why": "面适配：这一件点名要动的盘上路径，在收件方那趟的面里是不是同一个文件 —— "
+               "业主点名的『职责之外』那一档的主要来源（面不够）。角色必须知道这一步存在，"
+               "否则 `fits=false` 的读数没人看，它只会以为活已经派出去了",
+    },
     "duty4_rework": {
         "code": "rework_inbound",
         "where": "secretary.py",

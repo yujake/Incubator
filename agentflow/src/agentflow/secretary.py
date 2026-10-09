@@ -216,6 +216,29 @@ def retired_path(root: str | Path, owner: str) -> Path:
 
 SURFACES_DIR: tuple[str, ...] = ("out", "surfaces")
 
+#: 哪些工具的哪些参数是"落在盘上的路径"（`draft/90` §1.11 / §2 的 E22）。
+#:
+#: 默认规则：`fs.*` 的 `path`。名字不叫 `path` 的逐条登记在这里 —— 今天只有
+#: `fs.move`（它的 schema 是 `{'src','dst'}`，没有 `path`，于是它在 S1n-b 的硬拦里
+#: 整个漏掉了：子代理可以用它把面外的文件搬进自己的面）。
+#:
+#: 这张表只有一处，两个时机共用：预看（`Secretary.surface_fit`）与硬拦
+#: （`AgentLoop._surface_refusal`）。分两份写迟早出现"预看说越界、硬拦放过去"
+#: 这种自相矛盾，而两边的判据都会是绿的。
+SURFACE_PATH_ARGS: dict[str, tuple[str, ...]] = {"fs.move": ("src", "dst")}
+
+
+def surface_path_args(action: str) -> tuple[str, ...]:
+    """某个工具/动作里"是路径"的那几个参数名（空元组 = 这个动作没有可判的盘上路径）。
+
+    读不到名字（空串）⇒ 空元组；非 `fs.` 的动作一律空元组（面这一维今天只说 `fs.*`，
+    与 `AgentLoop._surface_refusal` 同一条范围）。
+    """
+    name = str(action or "")
+    if not name.startswith("fs."):
+        return ()
+    return ("path",) + tuple(SURFACE_PATH_ARGS.get(name, ()))
+
 
 def surfaces_path(root: str | Path, owner: str) -> Path:
     """池事件流（`alloc` / `release` / `archive_failed`），append-only。"""
@@ -1003,7 +1026,7 @@ class Secretary:
         return out
 
     def optimize_outbound(self, shape: str, payload: Mapping[str, Any], *,
-                          admission: Any = None) -> dict[str, Any]:
+                          admission: Any = None, base: str = "") -> dict[str, Any]:
         """职责 1：格式与内容优化（发件前）。
 
         不改变实质主张：不替本体承诺、不改结论、不加证据（`draft/53` §2 的
@@ -1048,6 +1071,7 @@ class Secretary:
                 return {"problem": "；".join([str(wash.get("reason") or ""), *alarms]).strip("；"),
                         "payload": original, "after": original, "wash": wash, "changes": [],
                         "washed": False, "refused": True, "alarms": alarms,
+                        "surface": self.surface_readings(shape, original, base=base),
                         "judge": {"checked": False, "reason": "硬拒：没有可判的载荷"},
                         "engaged": False, "fail_open": False, "seq": rec.get("seq")}
             washed = dict(wash.get("payload") or original) if wash.get("checked") else original
@@ -1095,6 +1119,7 @@ class Secretary:
                     "wash": wash, "changes": changes,
                     "washed": bool(wash.get("washed")), "refused": False,
                     "alarms": alarms, "judge": judged, "engaged": bool(engage),
+                    "surface": self.surface_readings(shape, washed, base=base),
                     "fail_open": False, "seq": rec.get("seq")}
         except Exception as exc:  # noqa: BLE001 - fail-open：超时/出错一律放行
             self.note_decision(duty=1, kind=KIND_OPTIMIZED, decision="已优化",
@@ -1107,7 +1132,9 @@ class Secretary:
                                                 "refused": "", "changes": [],
                                                 "reason": f"没跑成：{type(exc).__name__}"},
                     "changes": [], "washed": False, "refused": False,
-                    "alarms": [], "fail_open": True}
+                    "alarms": [], "fail_open": True,
+                    "surface": {"checked": False, "fits": None,
+                                "reason": "秘书没跑成 ⇒ 面这一维没查成（不是通过）"}}
 
     # ------------------------------------------------------------ 洗格式（S1g）
 
@@ -1327,7 +1354,7 @@ class Secretary:
 
     def assess_delegation(self, *, to: str, action: str, params: Mapping[str, Any],
                           input_key: str = "", duplicates: Sequence[Mapping[str, Any]] = (),
-                          novel: bool = False) -> dict[str, Any]:
+                          novel: bool = False, reuse: str = "", base: str = "") -> dict[str, Any]:
         """职责 2：委派评估（"收件方真做得到吗、该不该派"）。
 
         结论 ∈ :data:`DECISIONS` 的四档（`draft/55` §2 的 B 类）+ 理由 + 依据。
@@ -1336,10 +1363,20 @@ class Secretary:
         同 key 的既有终态行是最重要的一条输入（`draft/53` §10：派活去重归发件方
         秘书，"该不该派"含"是不是重复"）—— 机器只把那些行摆出来，判"算重复
         还是正当重试"由秘书做。
+
+        不止"任务是否符合角色设计"（业主 2026-10-09）：`surface` 那一格是
+        "这件活在被派人的读写面里做不做得成"（`draft/90` §1.11）。`reuse` 给了
+        一个名册名（复用已有子代理）时它的面是已知的 ⇒ 判得最准；新起一个时槽位
+        还没分，但"越界"与"父视角有、面内没有"两档仍判得出来。`fits=False` 时
+        它进 `reason`（当成一条"该不该派"的理由），但不拦（处置权在父）。
         """
         dups = [dict(r) for r in duplicates]
         alarms = self.prescreen(to=to, action=action, params=params)
         mismatch = [a for a in alarms if "动作表里没有" in a or "缺必填参数" in a]
+        face = self._face_of_name(owner=str(self.task_id or ""), name=reuse) if reuse else ""
+        surface = self.surface_readings("summon", {"action": action, "params": dict(params or {})},
+                                        face=face, base=base)
+        face_bad = surface.get("fits") is False
         if dups and not mismatch:
             decision, reason = "建议重排", (f"同 (role={to}, action={action}, "
                                           f"input_key={input_key}) 已有 {len(dups)} 条终态行"
@@ -1349,9 +1386,18 @@ class Secretary:
         elif not self._can_take(to, action):
             decision, reason = "建议改派", (f"{to} 的能力面里没有 {action}"
                                           "（改派权在 M：这只是建议）")
+        elif face_bad:
+            # 面这一维与"能力面"是两回事：能力面说"这个动作你能做"，面说"那块盘
+            # 不在你手里"—— 后者今天没有任何别的地方能在派活那一刻看出来。
+            decision, reason = "建议改派", (f"{to} 这趟的面里做不成这一件："
+                                          f"{surface.get('reason')}"
+                                          "（要它做，就把它要用的那一块切进它的面，"
+                                          "或者把这一件记成『职责之外』那一档）")
         else:
             decision, reason = "可派", "没有发现重复候选，能力面与参数都对得上"
         basis = ["specs/<role>.py 的动作表", "tasks: 同 key 的既有终态行"]
+        if surface.get("checked"):
+            basis.append("out/surfaces/<父>/<槽位>：这件活点名的路径在不在里面")
         # ---- 判断类：只有该介入时才叫模型（"切勿全写死成机器判据"的落点）。
         # 两条判断分开问，因为它们是两个问题：同 key 那些行算不算重复（`duplicate_retry`）、
         # 以及该把这条委托重排成什么（`rearrange`）。
@@ -1378,6 +1424,7 @@ class Secretary:
         )
         return {"decision": decision, "reason": reason, "basis": basis,
                 "duplicates": dups, "alarms": alarms, "novel": bool(novel),
+                "surface": surface,
                 "judge": judged, "engaged": bool(engaged), "seq": rec.get("seq")}
 
     def _can_take(self, role: str, action: str) -> bool:
@@ -2024,6 +2071,240 @@ class Secretary:
                     "reason": f"{name} 名下没登记读写面（老项或补登记）"}
         return {"checked": True, "name": name, "slot": slot,
                 "path": str(surface_dir(self.root, owner, slot)), "reason": ""}
+
+    # ------------------------------------------------------------ 面适配（S1g-2）
+
+    def surface_fit(self, *, action: str, params: Mapping[str, Any],
+                    face: str = "", base: str = "") -> dict[str, Any]:
+        """这件活落在被派人的读写面里做不做得成（三态读数，只报不改）。
+
+        业主 2026-10-09 逐字：「"超越职责"的一个主要可能是无法在被分配的读写面内
+        完成任务，这个秘书也要帮忙看，不只是看任务是否符合角色设计」
+        （`draft/90` §1.11；符号级规格见 `draft/92` §3.3 的 S1g-2 块）。
+
+        ## 判什么
+
+        只判声明里给出的盘上路径（参数名由 :func:`surface_path_args` 一处给出，
+        与执行期硬拦同一张表）。逐条给"这一句话在两边的所指是不是同一个文件"：
+
+        | `verdict` | 判据 | 意思 |
+        |---|---|---|
+        | `escapes` | 解析结果落在面外 | 越界：面内做不成 |
+        | `in_face` | 解析结果在面里（面已知时才给这一档） | 做得到 |
+        | `not_in_face` | 父视角那一份（`base/<raw>`）盘上有，而面内那一份盘上没有 | 错位：同一句路径在两边不是同一个文件 |
+        | `unknown` | 面未定 / 盘上两边都没有 / 解析不了 | 判不了（不许折成 in_face） |
+
+        ## 为什么 `not_in_face` 不需要知道槽位
+
+        新起一个子代理时槽位还没分（`surface_alloc` 与 `roster_add` 同一趟），所以
+        "落点在这一族的面里的哪一格"判不了。但 `escapes` 与 `not_in_face` 两档的判据是
+        "两份所指不是同一个文件"，与槽位无关 —— 它们正是"面内做不成"的主体，
+        于是这条读数在派活那一刻就有用（不必等子的第 1 步撞墙）。
+
+        ## 为什么只报不改
+
+        路径值是内容面（`draft/90` §1.2 那条红线）：把它改写成另一条路径 = 替父决定
+        "这件事该在哪儿做"。秘书的活是把它变成看得见的事，处置权在父
+        （切一块面给子 / 派给已经有那块盘的实例 / 记成"职责之外"那一档）。
+
+        ## 参数
+
+        - `face`：收件方这趟的面（复用/续跑时已知，`surface_of` 读得出）；
+        - `base`：本实例自己的根（父视角的基准）—— 不给 ⇒ 用 `self.root`
+          （顶层那一趟两者相同；子代理那一趟它自己的根是它的面，调用方要传进来）。
+        """
+        out: dict[str, Any] = {"checked": False, "fits": None, "paths": [],
+                               "reason": ""}
+        names = surface_path_args(action)
+        if not names:
+            out["reason"] = (f"{action or '（没给动作）'} 不是 fs 动作 ⇒ 面这一维不适用"
+                             "（不适用不是通过）")
+            return out
+        try:
+            root = Path(str(base or self.root))
+            face_dir = Path(str(face)).resolve() if str(face or "") else None
+        except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 判不了（不是"没问题"）
+            out["reason"] = f"面/基准读不成（{type(exc).__name__}: {exc}）⇒ 判不了"
+            out["checked"] = True
+            return out
+        rows: list[dict[str, Any]] = []
+        for key in names:
+            raw = (params or {}).get(key)
+            if not isinstance(raw, str) or not raw.strip():
+                continue                       # 没给这一格 ⇒ 没有可判的路径（如实记在 reason 里）
+            rows.append(self._judge_one_path(key, raw.strip(), root=root, face_dir=face_dir))
+        if not rows:
+            out.update(checked=True,
+                       reason=f"{action} 这一件没给路径参数（{'/'.join(names)}）⇒ 判不了"
+                              "（不是通过）")
+            return out
+        verdicts = {str(r.get("verdict") or "") for r in rows}
+        fits: bool | None
+        if verdicts & {"escapes", "not_in_face"}:
+            fits = False
+        elif verdicts == {"in_face"}:
+            fits = True
+        else:
+            fits = None                        # 全是 unknown ⇒ 判不了（三态不许折平）
+        bad = [r for r in rows if str(r.get("verdict") or "") in ("escapes", "not_in_face")]
+        reason = ""
+        if fits is False:
+            reason = "；".join(
+                f"{r['where']}={r['value']!r} {r['why']}" for r in bad)
+        elif fits is None:
+            reason = "；".join(str(r.get("why") or "") for r in rows) or "没有可判的路径 ⇒ 判不了"
+        out.update(checked=True, fits=fits, paths=rows, reason=reason)
+        return out
+
+    def _judge_one_path(self, where: str, raw: str, *, root: Path,
+                        face_dir: Path | None) -> dict[str, Any]:
+        """一条路径的判决（纯计算；`surface_fit` 的逐条那一半）。
+
+        分两种情形（`face_dir` 有没有给），判据都只有一条：这一句话在两边指的是不是
+        同一个文件。
+        """
+        row: dict[str, Any] = {"where": where, "value": raw, "face": "", "ws": "",
+                               "face_exists": None, "ws_exists": None,
+                               "verdict": "unknown", "why": ""}
+        try:
+            p = Path(raw)
+            ws_path = (p if p.is_absolute() else (root / raw)).resolve()
+        except Exception as exc:  # noqa: BLE001 —— 解析不了 ⇒ unknown（不许猜）
+            row["why"] = f"路径解析不了（{type(exc).__name__}: {exc}）"
+            return row
+        row["ws"] = str(ws_path)
+        if face_dir is not None:
+            try:
+                face_path = (p if p.is_absolute() else (face_dir / raw)).resolve()
+            except Exception as exc:  # noqa: BLE001
+                row["face"] = str(face_dir)
+                row["why"] = f"面内落点算不出来（{type(exc).__name__}: {exc}）"
+                return row
+            row["face"] = str(face_path)
+            row["face_exists"] = bool(face_path.exists())
+            row["ws_exists"] = bool(ws_path.exists())
+            try:
+                face_path.relative_to(face_dir)
+            except ValueError:
+                row["verdict"] = "escapes"
+                row["why"] = "越出了收件方这趟的读写面（面外一律不做）"
+                return row
+            if row["face_exists"] or face_path == ws_path:
+                # 面里就有这一份（父已经把它切进面了），或两边算出来是同一个文件
+                # ⇒ 做得到。面内的新文件也走这一档（T23："若子代理想新写文件，
+                # 这个是允许的"）—— 见下面"两边都没有"那一格。
+                row["verdict"] = "in_face"
+                row["why"] = "落在面内（面内的新文件本来就允许）"
+                return row
+            if row["ws_exists"]:
+                # 父视角那一份在工作区里（父指的就是它），而面内的落点不是同一个
+                # 文件、且面里没有这一份 ⇒ 子在它那边找的是另一条路径：错位。
+                row["verdict"] = "not_in_face"
+                row["why"] = ("这一份在工作区里（父的视角指得到它），而收件方那趟的根是"
+                              "它的面 ⇒ 子在它那边找的是另一条路径：面内做不成（要么把"
+                              "这一份切进它的面，要么这一件就是『职责之外』那一档）")
+                return row
+            row["verdict"] = "unknown"
+            row["why"] = ("两边都没有这一份 ⇒ 判不了（面内新建是允许的；若父要的是工作区"
+                          "那一份，它现在还不存在）")
+            return row
+        # ---- 面未定（新起一个子代理）：判"父视角那一份在不在面可能覆盖的范围内"
+        family = (root / "out" / "surfaces" / str(self.task_id or "")).resolve()
+        try:
+            ws_path.relative_to(root.resolve())
+            in_workspace = True
+        except ValueError:
+            in_workspace = False
+        row["ws_exists"] = bool(ws_path.exists())
+        if not in_workspace:
+            row["verdict"] = "escapes"
+            row["why"] = ("落点在整个工作区之外（面是工作区里的一个子目录）⇒ 面内做不成")
+            return row
+        try:
+            ws_path.relative_to(family)
+            in_family = True
+        except ValueError:
+            in_family = False
+        if in_family:
+            row["verdict"] = "unknown"
+            row["why"] = ("落点在这一族的面里，但槽位要到派活那一刻才分 ⇒ 判不了"
+                          "（不是通过）")
+            return row
+        if row["ws_exists"]:
+            row["verdict"] = "not_in_face"
+            row["why"] = ("这一份在工作区里（父的视角指得到它），而收件方那趟的根是它的面"
+                          "⇒ 子在它那边找的是另一条路径：面内做不成（要么把这一份切进它的"
+                          "面，要么这一件就是『职责之外』那一档）")
+            return row
+        row["verdict"] = "unknown"
+        row["why"] = "盘上没有这一份、也不在这一族的面里 ⇒ 判不了（新文件本来就允许）"
+        return row
+
+    def surface_readings(self, shape: str, payload: Mapping[str, Any],
+                         *, face: str = "", base: str = "") -> dict[str, Any]:
+        """派活形状 → 面适配读数（`summon` 一条；`summon_many` 逐项）。
+
+        不派活的形状（`handoff` / `message` / `retire` / `roster`）⇒ 这一维不适用，
+        如实说清（不适用不是通过）。
+        """
+        try:
+            if shape == "summon":
+                got = self.surface_fit(action=str(payload.get("action") or ""),
+                                       params=(payload.get("params")
+                                               if isinstance(payload.get("params"),
+                                                             Mapping) else {}),
+                                       face=face, base=base)
+                return {**got, "shape": shape}
+            if shape == "summon_many":
+                targets = payload.get("targets")
+                if not isinstance(targets, (list, tuple)):
+                    return {"shape": shape, "checked": False, "fits": None, "items": [],
+                            "reason": "targets 不是数组 ⇒ 面这一维判不了"}
+                items = []
+                for i, item in enumerate(targets):
+                    sub = item if isinstance(item, Mapping) else {}
+                    items.append({"index": i,
+                                  **self.surface_fit(action=str(sub.get("action") or ""),
+                                                     params=(sub.get("params")
+                                                             if isinstance(
+                                                                 sub.get("params"), Mapping)
+                                                             else {}),
+                                                     face=face, base=base)})
+                fits: bool | None
+                if any(x.get("fits") is False for x in items):
+                    fits = False
+                elif items and all(x.get("fits") is True for x in items):
+                    fits = True
+                else:
+                    fits = None
+                bad = [x for x in items if x.get("fits") is False]
+                return {"shape": shape, "checked": True, "fits": fits, "items": items,
+                        "reason": "；".join(f"targets[{x['index']}]：{x.get('reason')}"
+                                            for x in bad)}
+        except Exception as exc:  # noqa: BLE001 —— 面这一维没查成不许打断派活
+            return {"shape": shape, "checked": False, "fits": None,
+                    "reason": f"面适配没跑成（{type(exc).__name__}: {exc}）"}
+        return {"shape": shape, "checked": False, "fits": None,
+                "reason": f"{shape} 不派活 ⇒ 面这一维不适用（不适用不是通过）"}
+
+    def _face_of_name(self, *, owner: str, name: str) -> str:
+        """名册名 → 它此刻的面目录（读不成 / 已退役 / 没登记 ⇒ 空串 + 不假装查过）。"""
+        want = str(name or "")
+        if not want:
+            return ""
+        try:
+            rows, bad = self.roster_rows(owner)
+            if bad:
+                return ""
+            item = next((r for r in rows if str(r.get("name") or "") == want), None)
+            if item is None or item.get("retired"):
+                return ""
+            slot = str(item.get("surface") or "")
+            if not slot:
+                return ""
+            return str(surface_dir(self.root, owner, slot))
+        except Exception:  # noqa: BLE001
+            return ""
 
     def roster_repair(self, *, owner: str) -> tuple[int, str]:
         """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。返回 `(补了几条, 问题)`。
