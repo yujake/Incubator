@@ -1378,7 +1378,10 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 两处逐字相同，`test_agent_spec_reconciliation` 按位比）⇒ 只有 M 那一格变。
 #: 业主授权（2026-10-09）：「禁改区允许你在仔细考虑后先进行改动和测试，后面我再审」
 #: —— 这一处禁改区改动待人审，`noai_gate` 会报 requires_human(1)。
-_FROZEN_PROMPT_VERSION = "p53"
+#: `p54`（2026-10-09，S1p）：M 的受控档位清单加 `reviewed_then_digested_rows`
+#: （实现在 `closing.py`；业主：「D 的手稿过审后是否被 B 消化或研究成果逐条入库。
+#: 前置条件具备了，C 才能在里面找依赖链」）⇒ 只有 M 那一格变。
+_FROZEN_PROMPT_VERSION = "p54"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "caf93b2cbafc906981fefafdd5d2a9ea6304779b6ddab0eeedd749f5bb2de2dc",
     "B": "cba03f853d8226512f36f5e9ac7257843b27f983fb65b9b27c69c57f3fe4e28a",
@@ -1389,7 +1392,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "b70c63c723843f5484c5ddea42f4f47be0523217ba0918c440d067fcd2b7c436",
     "H": "90bf5f20175f9bba118884e4bedcc848bc81c4ef3847e17ff16dd3c6c639f865",
     "V": "d05ce8da7181e87c981d21b116de04f1f5cc6b7b4c535803f49205fd350aa093",
-    "M": "0250b5832c1838462b393fd46a9965027fa59803c34d37642f4461543acb04a6",
+    "M": "4a495b08c91728c56384d18f79c7ae877db68ae44f1318e46c22b4aa412ec399",
 }
 
 

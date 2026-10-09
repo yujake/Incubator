@@ -109,7 +109,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p50`（2026-10-09，业主三句裁定）：收工由自己判（被派的活做完没有；M 自列任务列表，
 #: 收工时交 `task_list`/`goal_met`）、干不了就上报父 / M 上报用户、机器八格是读数不是判决。
 #: 落在共享的循环协议上 ⇒ 十格全部换值。
-PROMPT_VERSION = "p53"
+PROMPT_VERSION = "p54"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1328,7 +1328,8 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "`search_frontier_rows` / `enumeration_optimization_rows` / `manuscript_rows` / "
             "`unfinished_request_rows` / `reviewed_current_rows` / `retrieval_ok_rows` / "
             "`document_rows` / `document_body_rows` / `document_claim_rows` / "
-            "`claim_evidence_fit_rows` / `artifact_ledger_bad_rows`。"
+            "`claim_evidence_fit_rows` / `artifact_ledger_bad_rows` / "
+            "`reviewed_then_digested_rows`。"
             # `artifact_ledger_bad_rows` 是 EE-05 第八格加进 `closing.LEG_CHECK_KINDS` 的
             # （2026-10-06，C 线）：`tests/test_agent_prompts.py` 的 D35 判据要求
             # "受控词表里每一档都出现在写表那个角色的 brief 里"，所以它必须逐字在这里。
