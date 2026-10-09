@@ -530,5 +530,182 @@ S1p/S1o 读的就是 `statements`（并表之后的唯一落点）⇒ 迁移必�
   负控② —— **跨组汇总的节点数按去重算**（同一条边写进两组不会把规模读数吹大）；
   反真空 —— `path_group` 读不成 ⇒ 整条读数 `checked=False`（不许当成"只有一组"）。
 
+## §13 逐文件改动设计（伪代码）+ 真实系统证据
+
+**先订正本页草案里一处写错的符号（诚实项）**：§11.1 与 §12 我写成 `store.alloc_id` ——
+**`Store` 上没有这个方法**。现场核实（2026-10-09）：
+`class Tx`（`store.py:154`）才有 `def alloc_id(self, kind: str) -> str`（`store.py:306`），
+`store.py:286` 的写入路径是 `row[id_field] = self.alloc_id(id_kind)`；
+`Store` 上只有 `_next_seq()`（`store.py:1044`）与 `rebuild(backup=True)`。
+**⇒ 正确口径：编号由事务的 `tx.alloc_id(kind)` 分配**（下文一律用这个）。
+
+**本案的"真实依据"清单**（都是现场读出来的，不是推想）：
+
+| # | 依据 | 现场 |
+|---|---|---|
+| E1 | `SCHEMA_VERSION = 1`；`TABLES['dependencies']['id_field'] = 'dep_id'` | 现算 `schema.SCHEMA_VERSION` / `S.TABLES['dependencies']` |
+| E2 | `Dependency` 字段表**没有** `source_stmt_id`、**没有** `path_group` | 现算 `Dependency.__dataclass_fields__`（`dep_id/used_by/kind/label/status/source_lit_id/source_experiment_id/page_range/quote/status_reason/created_at/source_doc_id/source_claim_id/created_by`） |
+| E3 | `Dependency.validate()` 只要求 `used_by` 非空 + `kind`/`status` 在词表内 | `schema.py` 那一段正文 |
+| E4 | `Relation.concept_ids` 是 `list[str]`（迁号时要一起改） | 现算 `.type` |
+| E5 | `Tx.alloc_id`（`store.py:306`）/ `Store.rebuild`（签名 `(backup: bool = True)`） | `inspect.signature` |
+| E6 | `doc_tools.register_dependency(store, used_by, kind, label, *, source_lit_id=None, source_experiment_id=None, page_range=None, quote='', status='dangling', status_reason='', actor='agent-G')` | `inspect.signature` |
+| E7 | `evidencebits` 的公共函数：`bits_of` / `bits_from_row` / `bits_shape_problems` / `derive_grade` / `apply_cascade` / `void` / `void_refusal` / `normalize_raw` / `clean_statement_ids`；常量 `BIT_NAMES=(numeric,proof,reviewed,formal,audited)`、`BIT_OWNERS={numeric:E, proof:F, reviewed:V, formal:E, audited:H}`、`BIT_STATES=(pending,na,failed,verified)`、`GRADES=(conjecture,strong_conjecture,pre_theorem,theorem)` | 现算 |
+| E8 | `Secretary` 已有 `wash_delegation` / `surface_fit`；模块级 `append_jsonl` 是唯一追加口 | `hasattr` 现算 |
+| E9 | `closing._check_artifact_ledger(rep, store, project_dir)`、`_leg_reading(store, kind, project_root)`、`LEG_CHECK_KINDS`（32 档，S1p 已加一档） | `inspect.signature` / 现算 |
+| E10 | C 的动作真身 `specs/c.py` 的 `ACTIONS`，拼装在 `agent_c/core.py:1132` 的 `AgentC(...)` 基类表 | 现场读文件 |
+
+### 13.1 `src/agentflow/schema.py`（禁改区 `schema-migration`，与并表同一笔）
+
+```python
+# ① `Dependency` 加两列（E2 说今天都没有）
+path_group: int = 1          # 组内 AND / 组间 OR；缺省 1 ⇒ 历史行语义不变
+source_stmt_id: str = ""     # "这条定理用到的那条命题/概念"（E2：今天没有这一格，
+                             #  所以"定理→定理"这条边**现在无处安放** —— 这是乙档的必需项）
+
+def validate(self) -> None:
+    ...                                   # 既有检查一字不动（E3）
+    if int(self.path_group) < 1: raise ValueError("path_group 必须是正整数")
+    # 被依赖的那一端必须**恰好有一个**：lit / experiment / doc+claim / stmt
+    ends = [bool(self.source_lit_id), bool(self.source_experiment_id),
+            bool(self.source_stmt_id), bool(self.source_doc_id)]
+    if sum(ends) != 1: raise ValueError("被依赖端必须恰好给一个（lit/experiment/stmt/doc）")
+    if self.source_stmt_id: require_id(self.source_stmt_id, "source_stmt_id")
+
+# ② `Concept.validate()` 补"定义三态"（D1：空串为什么能写进来）
+if not self.definition.strip():
+    if not (self.definition_source_lit_id or self.definition_reason.strip()):
+        raise ValueError("定义为空 ⇒ 必须给出定义来源或理由（三态：不许静默写空）")
+
+# ③ 并表：`TABLES` 去掉 `concepts`；`SCHEMA_VERSION = 2`
+```
+
+- **依据**：E1/E2/E3/E4 逐条现算；`Concept.validate` 正文里**确实没有**定义非空那一条（D1 已核）。
+- **判据**：正控（`path_group=1` 的历史行 `validate()` 照过）；负控（`path_group=0` / 两个被依赖端 / 空定义无来源 ⇒ 各自拒）；反真空（`SCHEMA_VERSION == 2` 与 `TABLES` 里没有 `concepts`）。
+
+### 13.2 `src/agentflow/store.py`
+
+```python
+def rebuild(self, *, backup: bool = True) -> dict:      # 签名不变（E5）
+    events = self._read_events()
+    for ev in events:
+        if ev["table"] == "concepts":                    # 折成 statements（draft/97 §10.3）
+            row = {"stmt_id": ev["row"]["concept_id"],   # 号由本笔迁移统一重发（见下）
+                   "kind": "concept", "origin": "own_result",
+                   "label": ev["row"]["name"],
+                   "statement_full": ev["row"]["definition"],
+                   "proof_text": "concept:primitive" if not ev["row"]["definition"].strip()
+                                 else "",               # 空定义 ⇒ 受控标记，**不编**
+                   "created_at": ev["row"]["created_at"]}
+            seen_new_ids[row["stmt_id"]] = True
+        ...
+    # 号：概念行统一走 **同一个分配器**（`Tx.alloc_id("statements")`，E5）
+    # ⇒ 结构上不可能与既有命题撞号（业主 D2 定调）
+    # relations.concept_ids 同步改号（E4：它是 list[str]），改号映射落 migrate-map.jsonl
+```
+
+- **依据**：E4/E5。
+- **判据**：`temp/_s1r_rehearsal.py` 的 2233 条逐条对得上；迁移后 `dependencies` 行**逐字不变**（只多两列缺省值）；改号映射逐条可复算。
+
+### 13.3 `src/agentflow/tools/doc_tools.py` + `agent_b/*` + `secretary.py`（B 走秘书）
+
+```python
+# doc_tools：边多两格（E6 的签名 + 两格）
+def register_dependency(store, used_by, kind, label, *, source_lit_id=None,
+                        source_experiment_id=None, source_stmt_id=None,   # 新
+                        path_group: int = 1,                              # 新
+                        page_range=None, quote="", status="dangling",
+                        status_reason="", actor="agent-G") -> dict: ...
+
+# secretary：B 的写入代理（四件活，E8 说秘书已有同族先例）
+def wash_statement(self, payload) -> dict:      # 洗格式：键名归一/顶层折叠/去空白（内容一字不动）
+def record_statement(self, *, role, payload) -> dict:
+    """B 交内容 ⇒ 秘书落盘：同 key 查重 → `tx.alloc_id('statements')` 拿号 →
+    一笔事务写 statements（+ 概念行 kind='concept'）/ dependencies（二维列表按 path_group 展开）。"""
+    # 秘书没装（无 store）⇒ 明确拒 `secretary_unavailable`（不许"B 自己写"这条后备路）
+
+# agent_b/register_statement.py：B 只交内容（`deps` 是二维列表）
+deps = [[{"kind": "theorem", "stmt": "0003"}, {"kind": "experiment", "exp": "0004"}],   # 路径 1
+        [{"kind": "definition", "stmt": "0001"}]]                                        # 路径 2
+```
+
+- **依据**：E6/E8；`register_statement` 今天的"第四条必填"逐字支持 `origin=own_result` + `doc_id`/`line_range`。
+- **判据**：正控（交一条 ⇒ 三表各多一行、号来自 `tx.alloc_id`、`path_group` 按外层下标）；负控（同内容两次 ⇒ "重复"读数不新建行）；**反真空**（无秘书 ⇒ 拒，且**不落任何行**）。
+
+### 13.4 `evidencebits.py` + `verify.py`（五元位的映射判据；E7）
+
+```python
+# evidencebits：加一条纯函数（唯一实现，verify 只转发它）
+def bit_table_map(bits) -> dict[str, str]:        # 每一位"去哪张表查"的映射
+    return {"numeric": "experiments", "formal": "experiments", "proof": "statements.proof_text",
+            "reviewed": "signatures", "audited": "signatures"}
+
+# verify_all：新不变量（D7 的"机器侧"只到这里 —— 业主说 D7 先不做 used_by 的机器验证）
+for stmt in statements:
+    for bit, state in bits.items():
+        if state == "verified":
+            # `proof` 那一档：证明必须能在 **B 维护的表** 里查到（`proof_text` 非空 +
+            # 有指向的 proof 证据行，或一条 dependencies 边指出它）—— 业主点名的那条
+            ...issue("bits_verified_without_evidence", ...)
+```
+
+- **依据**：E7（函数名与词表现算）。
+- **判据**：正控（`bits={"proof":"verified"}` + `proof_text` 非空 + proof 行在 ⇒ 无 issue）；负控（`proof:"verified"` 而 `proof_text` 空 ⇒ 报 `bits_verified_without_evidence`）；反真空（`statements` 读不成 ⇒ 报"没查成"，不许当成"都对上了"）。
+
+### 13.5 `specs/c.py` + `agent_c/proof_chain.py` + `agent_c/core.py`（C 的组语义；E10）
+
+```python
+# specs/c.py 的 ACTIONS 末尾加一条（形状照抄现有 8 条）
+ActionSpec("C", "proof_chain", "一条成果的最短证明依赖链（按路径组）",
+           _obj({"target": _S, "max_depth": _I, "k": _I, "weights": _OBJ}, ("target",)),
+           "AnalysisReport", side_effect="read", handler_name="proof_chain")
+
+# agent_c/proof_chain.py（新文件，与 hottest.py 同形：一个 _Xxx mixin）
+class _ProofChain:
+    def proof_chain(self, target, *, max_depth=4, k=1, weights=None) -> dict:
+        edges = group_by_path_group(dependencies_of(target))     # 组内 AND / 组间 OR
+        groups = [{"group": g, "hops": BFS(g.edges), "length": len(g.edges)} for g in edges]
+        best = min(groups, key=lambda x: (x["length"], x["group"])) if groups else None
+        return {"checked": ..., "groups": groups, "best_group": best["group"] if best else None,
+                "groups_total": len(groups), "hops 带 via_dep_id+path_group",
+                "truncated": ..., "reason": ...}
+
+# agent_c/core.py：两处接线（E10：import 那一片 + 1132 行的基类表）
+from .proof_chain import _ProofChain
+class AgentC(..., _StructuralDuplicates, _ProofChain, _Handle, _Core): ...
+```
+
+- **依据**：E10。
+- **判据**：§12.3 那四条（`best_group` / 单组环不牵连 / 跨组去重 / `path_group` 读不成 ⇒ `checked=False`）。
+
+### 13.6 `closing.py`（D6 + D9）与 `agent_loop.py`/`cli.py`/`webui`（D8）
+
+```python
+# D9：第八格收窄（1c-1）
+def _check_artifact_ledger(rep, store, project_dir):     # E9 的签名不变
+    # 改：按**路径**取最新一次登记比对（append-only 历史逐行比必然把改写读成 changed）
+    # `changed` ⇒ rep.status["artifact_ledger"] = "pass" + warning 读数（不再 unknown）
+
+# D6：上报载体四档
+def _escalation_reading(root, sid, tasks):
+    # 匹配表加一档：`out/review/REPORT.md` 里点名 ⇒ via="report"（读数四档不折平）
+
+# D8：面装配点（E23）——两处各一行
+# cli.py（run-agent 装配）与 webui 装配处：
+backend.registry_factory = lambda face: build_registry(workspace_root=face, ...)
+# 判据：`_surface_refusal` 的基准目录 == fs 工具实际 root（同一条断言）
+```
+
+- **依据**：E9 + `draft/90` §2 的 E23（实现行号在那里）。
+- **判据**：D9 正控（框架幂等重写 `out/tasks/*.json` ⇒ 那一格 `pass` + warning）；负控（产物真被删 ⇒ 仍 `fail`）；D8 正控（子代理写相对路径 ⇒ 落在**它自己的面**里）；D6 一条（报告里点名 ⇒ `via="report"`）。
+
+### 13.7 还未核到的（施工第一步核，核法写在括号里）
+
+- **V5**：`Tx.alloc_id("statements")` 的 `counters` 键是否与"既有 statements 的最大号"一致
+  （核法：读 `counters.json` 里那一格 + 一次 `alloc_id` 的返回）；
+- **V6**：`relations` 表有没有**别的**字段也存概念号（现只核到 `concept_ids`；核法：读 `Relation` 全字段）；
+- **V7**：WebUI 里读 `concepts` 的落点（`webui/readers.py`；核法：grep `concepts`）；
+- **V8**：`agent_c/__main__.py` 那四处 `upsert("concepts")`（CLI 侧的探针命令）要不要跟着改。
+
+
 
 
