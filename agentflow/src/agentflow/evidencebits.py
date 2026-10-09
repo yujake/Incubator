@@ -40,11 +40,16 @@ from typing import Any, Iterable, Mapping
 BIT_STATES: tuple[str, ...] = ("pending", "na", "failed", "verified")
 #: 派生等级（由弱到强；`audited` 是并列的追加档，不进这个序列）。
 GRADES: tuple[str, ...] = ("conjecture", "strong_conjecture", "pre_theorem", "theorem")
+#: 「不适用」那一档（`draft/97` §14.5）：概念行不参与等级链。
+#: 刻意不在 `GRADES` 里：进了那条序列就会被排序、被算进"定理有几条"的计数，
+#: 而"这个概念是猜想"这句话本身是错的（概念没有真值，只有良定义没良定义）。
+GRADE_NOT_APPLICABLE = "not_applicable"
 GRADE_LABELS: dict[str, str] = {
     "conjecture": "猜想",
     "strong_conjecture": "强猜想",
     "pre_theorem": "预备定理级",
     "theorem": "正式定理",
+    GRADE_NOT_APPLICABLE: "不适用（概念行不参与等级）",
 }
 #: 五位的名字（对外读数、台账字段都用这一套）。
 BIT_NAMES: tuple[str, ...] = ("numeric", "proof", "reviewed", "formal", "audited")
@@ -75,7 +80,8 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
             formal_reason: str = "", audited: Any = None,
             audited_by: Mapping[str, Any] | None = None, origin: str = "own_result",
             source_lit_id: str = "", quote_verified: Any = None,
-            voided_by: Mapping[str, Any] | None = None) -> dict[str, Any]:
+            voided_by: Mapping[str, Any] | None = None,
+            kind: str = "") -> dict[str, Any]:
     """把各方标下的读数组装成五元位（纯函数：不读盘、不写盘）。
 
     ## 引用命题那一条（`draft/39` §3.15 三）
@@ -107,8 +113,9 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
         },
         "voided_by": dict(voided_by or {}),
     }
-    bits["grade"] = derive_grade(bits)
-    bits["audited_badge"] = bool(bits["audited"]) and bits["grade"] != "conjecture"
+    bits["grade"] = derive_grade(bits, kind=kind)
+    bits["audited_badge"] = (bool(bits["audited"])
+                             and bits["grade"] not in ("conjecture", GRADE_NOT_APPLICABLE))
     return bits
 
 
@@ -128,10 +135,11 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     """
     raw = dict(row.get("bits") or {})
     origin = str(row.get("origin") or "own_result")
+    kind = str(row.get("kind") or "")
     if not raw:
         return bits_of(origin=origin, source_lit_id=str(row.get("source_lit_id") or ""),
-                       quote_verified=row.get("quote_verified"))
-    return normalize_raw(raw, origin=origin,
+                       quote_verified=row.get("quote_verified"), kind=kind)
+    return normalize_raw(raw, origin=origin, kind=kind,
                          voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
 
 
@@ -140,7 +148,8 @@ BIT_META_KEYS: tuple[str, ...] = ("evidence", "voided_by", "origin", "grade", "a
 
 
 def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
-                  voided_by: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                  voided_by: Mapping[str, Any] | None = None,
+                  kind: str = "") -> dict[str, Any]:
     """盘上那一栏 `bits` ⇒ 规范化的五位（布尔/四态都归一，等级现算）。
 
     读与写共用这一份：`bits_from_row`（读）与 `bits_shape_problems`（写之前把形状关）
@@ -156,12 +165,14 @@ def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
         "evidence": dict(raw.get("evidence") or {}),
         "voided_by": dict(voided_by if voided_by is not None else (raw.get("voided_by") or {})),
     }
-    bits["grade"] = derive_grade(bits)
-    bits["audited_badge"] = bool(bits["audited"]) and bits["grade"] != "conjecture"
+    bits["grade"] = derive_grade(bits, kind=kind)
+    bits["audited_badge"] = (bool(bits["audited"])
+                             and bits["grade"] not in ("conjecture", GRADE_NOT_APPLICABLE))
     return bits
 
 
-def bits_shape_problems(raw: Mapping[str, Any] | None) -> list[str]:
+def bits_shape_problems(raw: Mapping[str, Any] | None, *,
+                        kind: str = "") -> list[str]:
     """写台账之前把 `bits` 那一栏的形状关（未知键 / 自报等级与现算不一致 / 位自身不合规）。
 
     为什么连"自报的等级"也要管：判据从不读盘上那个等级（`bits_from_row` 永远现算），
@@ -180,7 +191,7 @@ def bits_shape_problems(raw: Mapping[str, Any] | None) -> list[str]:
             f"bits 里有不认识的键 {unknown}：位的名字只有 {list(BIT_NAMES)}"
             f"（另加 {'/'.join(BIT_META_KEYS)}）—— 拼错的键会被静默忽略，"
             "于是它与「这一位还没填」长得一模一样")
-    bits = normalize_raw(raw, origin=str(raw.get("origin") or "own_result"))
+    bits = normalize_raw(raw, origin=str(raw.get("origin") or "own_result"), kind=kind)
     claimed = raw.get("grade")
     if claimed is not None and str(claimed) != bits["grade"]:
         problems.append(
@@ -190,12 +201,21 @@ def bits_shape_problems(raw: Mapping[str, Any] | None) -> list[str]:
     return problems
 
 
-def derive_grade(bits: Mapping[str, Any]) -> str:
+def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     """五元位 ⇒ 等级（唯一的等级来源；任何角色自报的等级都不认）。
 
     第 1 位只做一件事：把"猜想"抬成"强猜想"——封顶就在这一条：
     数值验证再多、再强，也到不了"定理"（用户口径：数值验证不构成证明）。
+
+    `kind="concept"` 短路（`draft/97` §14.5，业主 2026-10-09「concept 表真并进
+    statements……proof 里就证这个概念为什么是良定义的」）：概念不参与这条链。
+    它没有证据位（`bits={}`），若照常派生，现算结果是最弱那一档 ——
+    于是并表之后每条概念都会被读成"猜想"，而"猜想"在报告里是一句关于真值的话，
+    概念根本没有真值可言（它只有"良定义没良定义"）。所以这一档单独给一个值
+    （`GRADE_NOT_APPLICABLE`），它不在 `GRADES` 里 —— 不参与排序、不算进定理计数。
     """
+    if str(kind or "") == "concept":
+        return GRADE_NOT_APPLICABLE
     if bits.get("voided_by"):
         return "conjecture"          # 作废之后等级清零（历史留在 voided_by 里）
     has_proof = bool(bits.get("proof"))
@@ -419,6 +439,12 @@ def clean_statement_ids(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
                 reasons[sid] = f"引用命题：逐字核过（凭据 lit:{row.get('source_lit_id')}）"
             else:
                 reasons[sid] = "引用命题但没逐字核过 ⇒ 不许当依据（I4 的边界）"
+            continue
+        if str(row.get("kind") or "") == "concept":
+            # 概念行不参与等级（`draft/97` §14.5）⇒ 它当然不在"干净引用对象"里，
+            # 但理由必须说对：不是"等级太低"，而是"它不是一条有真值的断言"。
+            reasons[sid] = ("概念行（不参与等级）：引用概念要引它的定义，"
+                            "而不是把它当定理用")
             continue
         if str(bits.get("grade") or "") in ("pre_theorem", "theorem"):
             clean.append(sid)

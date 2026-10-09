@@ -1915,7 +1915,10 @@ class Statement:
         if self.bits:
             from . import evidencebits as _EB
 
-            problems = _EB.bits_shape_problems(self.bits)
+            # `kind` 必须传进去：概念行不参与等级链（`draft/97` §14.5），
+            # 而"自报等级 vs 现算等级"那一比也要按同一个 kind 算 —— 不传的话
+            # 概念行存下的 `grade="not_applicable"` 会被当成"与现算不符"而拒收。
+            problems = _EB.bits_shape_problems(self.bits, kind=self.kind)
             if problems:
                 raise ValueError("bits 不合规：" + "；".join(problems))
             row = {"stmt_id": self.stmt_id, "origin": self.origin, "bits": self.bits,

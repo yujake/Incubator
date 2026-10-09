@@ -959,6 +959,16 @@ if any(T.normalize(a) == T.normalize(self.label) for a in self.aliases):
 返回"不适用"，**不参与 `conjecture → … → theorem` 这条链**。
 判据：一条概念行现算等级**不是**"猜想"（改前必红）；报表里概念的等级那一栏写"不适用"。
 
+**已落地（2026-10-09）**：`GRADE_NOT_APPLICABLE = "not_applicable"`（**刻意不在 `GRADES` 里**
+—— 进了那条序列就会被排序、被算进"定理有几条"的计数）+ `GRADE_LABELS` 给它的渲染标签
+"不适用（概念行不参与等级）"。`kind` 一路透传：`derive_grade(bits, kind=)` /
+`bits_of(..., kind=)` / `normalize_raw(..., kind=)` / `bits_from_row(row)`（从行里取 kind）/
+`bits_shape_problems(raw, kind=)`，而 `Statement.validate` 把自己那一行的 `kind` 传给最后那个
+（不传的话，概念行存下的 `grade="not_applicable"` 会被"自报等级与现算不符"当场拒收）。
+`audited_badge` 对概念不成立（不参与等级的东西不该挂"已过正式审查"）；
+`clean_statement_ids` 给概念的理由也改对了口径：**不是**"等级太低"，而是"它不是一条有真值的
+断言（引用概念要引它的定义）"。判据 5 条（正控 2 / 负控 1 / 反真空 2）：`tests/test_a_concept_has_no_grade.py`。
+
 ### 14.6 **组内有一条悬空 ⇒ 整组不可达**（§12.2 只写了"悬空边不算到根"）
 
 组内是 AND（都要）⇒ 一条 `status="dangling"` 的边让**那一组**不完整：
