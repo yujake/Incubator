@@ -106,6 +106,17 @@ LEG_CHECK_KINDS: dict[str, str] = {
                              "（签名钉 `e7346eb7…`），随后 G.revise 追加了第 4 条断言（现行版 "
                              "`68bfc4c7…`）—— 那一条断言从未被任何一次审校看过，而收工门读的是 "
                              "`status=revised` ⇒ 七格全绿、`review_findings` 0 条",
+    "reviewed_then_digested_rows": "**审过之后有没有被逐条消化**：`status ∈ accepted/revised` 的"
+                                   "`documents` 行里，至少有一条断言已经落成 `statements` 行"
+                                   "（`origin=own_result`、`doc_id` 指向该稿件、`kind != \"concept\"`）"
+                                   "的份数 —— 缺省阈值 1。它问的是「审完之后有没有人把它变成可引的"
+                                   "台账行」，与 `reviewed_current_rows` 分工：后者问「审过没有」。"
+                                   "为什么单列（业主 2026-10-09：「D 的手稿过审后是否被 B 消化或"
+                                   "研究成果逐条入库。前置条件具备了，C 才能在里面找依赖链」）："
+                                   "T2 第 22 趟（`t2a`）现场就是「① 手稿成稿、② H 过审」都有而 "
+                                   "`statements=0` —— 没有任何读数说得出来缺的是这一环，"
+                                   "而 C 的依赖链正是建在它上面。明细里按「定理 N 条 / 定义 M 条 / "
+                                   "审过 D 份 / 消化 X 份」分列（定义也入库那一档要看得见）",
     "manuscript_edited": "可改的主稿有没有**实质**改动（`out/paper/main.tex` 与只读基线 "
                          "`source/main.tex` 去空白规范化之后仍不相同 ⇒ 1，相同 ⇒ 0）——"
                          "缺只读基线时这一行记 `not_applicable`（E-05 ③ / CC-05）",
@@ -887,6 +898,46 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "true": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is True),
             "false": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is False),
             "unchecked": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is None),
+        }
+    if kind == "reviewed_then_digested_rows":
+        # 「审过之后有没有被逐条消化」（业主 2026-10-09；口径与判据见 `draft/97` §9.4）。
+        #
+        # 为什么要有这一档：T2 第 22 趟（`t2a`）现场是「① 手稿成稿 + ② H 过审」都有、
+        # 而 `statements=0`（手稿里的成果一条都没变成台账行）—— 收工门只报得出
+        # "报告缺附件那一件"，没有任何一格说得出来缺的是"消化"这一环；
+        # 而 C 的最短依赖链（`C.proof_chain`）正是建在它上面：
+        # 前置条件具备了，C 才找得到依赖链。
+        from . import signatures as SIG
+
+        docs = [dict(r) for r in store.rows("documents")]
+        stmts = [dict(r) for r in store.rows("statements")]
+        claimed_statuses = tuple(SIG.SIGNABLE_STATUSES)
+        reviewed = [d for d in docs if str(d.get("status") or "") in claimed_statuses]
+        per_doc: dict[str, dict[str, int]] = {}
+        digested: list[str] = []
+        for d in reviewed:
+            did = str(d.get("doc_id") or "")
+            mine = [s for s in stmts
+                    if str(s.get("doc_id") or "") == did
+                    and str(s.get("origin") or "") == "own_result"]
+            # `concept` 不算"成果"：它是依赖图上的节点（良定义性证明那一档），
+            # 不是这一档要数的"手稿里的研究结果"。
+            theorems = [s for s in mine if str(s.get("kind") or "") != "concept"]
+            concepts = [s for s in mine if str(s.get("kind") or "") == "concept"]
+            per_doc[did] = {"theorems": len(theorems), "concepts": len(concepts)}
+            if theorems:
+                digested.append(did)
+        return len(digested), {
+            "docs_reviewed": len(reviewed),
+            "docs_digested": len(digested),
+            "theorems": sum(v["theorems"] for v in per_doc.values()),
+            "concepts": sum(v["concepts"] for v in per_doc.values()),
+            # 未消化的逐份点名 + 出路（这一档红的时候要能直接照着做）
+            "undigested": [{"doc_id": did, **per_doc[did]} for did in per_doc
+                           if did not in digested],
+            "next_step": ("手稿过了审而成果没逐条登记 ⇒ 派 B 的 `register_statement`"
+                          "（`origin=own_result` + `doc_id`/`line_range` 作出处，"
+                          "并把 `deps` 一起给）"),
         }
     if kind == "proof_experiment_rows":
         rows = [r for r in store.rows("experiments")
