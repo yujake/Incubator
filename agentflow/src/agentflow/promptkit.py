@@ -70,7 +70,11 @@ SECTION_ORDERS: dict[str, int] = {
     # 它是机器相关的，写死在提示词里会让冻结快照变成"某一台机器"的快照。
     "TOOLCHAIN_FACTS": 9000,
     "WORKSPACE_FACTS": 10000,
-    "DEPLOYMENT_SUFFIX": 10200,
+    # 身份的两个槽位（`persona.py` 是它们唯一的注册入口）。名字与号与 DSH 逐字一致：
+    # 前缀 order 0（与 `AGENT_IDENTITY` 同号 ⇒ 同号按名字排，`AGENT_IDENTITY` 在前），
+    # 后缀 10200（最后：易变事实放最后，前面那一段稳定前缀的 KV-cache 复用不受影响）。
+    "DEPLOYMENT_PERSONA_PREFIX": 0,
+    "DEPLOYMENT_PERSONA_SUFFIX": 10200,
 }
 
 #: 动态上下文的顺序（与 `SECTION_ORDERS` 分开的一张表，理由见模块 docstring）。

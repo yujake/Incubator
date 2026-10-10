@@ -35,6 +35,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import attackround as AR
 from . import capabilities as C
 from . import judge as J
+from . import persona as P
 from . import schema as S
 from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 
@@ -2023,6 +2024,12 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         raise ValueError(f"未登记的角色 {role!r}（已知 {tuple(ROLE_BRIEFS)}）")
     brief = ROLE_BRIEFS[role]
     reg = PromptRegistry()
+
+    # 身份的两个槽位（`persona.py` 是它们唯一的注册入口）：无条件注册、文本今天为空
+    # （空段会被丢掉 ⇒ 提示词一字不变）。它在这里的作用是给"某个角色换一份身份/加一句
+    # 身份后缀"留下唯一入口 —— 部署这一份是遮蔽的靶子，换身份就是
+    # `persona.apply_persona(reg, Persona(...), scope=role)`。
+    P.register_deployment_persona(reg)
 
     facts: dict[str, str] = {
         "role": role,
