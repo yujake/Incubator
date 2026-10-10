@@ -573,6 +573,50 @@ def test_every_role_knows_M_and_the_escalation_rule(registry: ToolRegistry):
     assert "做不了就上报" not in _prompt("M", registry), "主控不需要向自己上报"
 
 
+def test_the_three_kinds_of_reference_are_told_apart(registry: ToolRegistry):
+    """三种指称的总判据（`draft/104` §4.4）：台账号对账 / 名册名指称 / 实例标签分实例。
+
+    为什么需要它：今天两处各说一半 —— 身份段渲染台账号并说"编号用来对账与回报"，
+    而 `retire` / `interrupt` 只认名册名，那条纪律只写在受控拒绝的文案里
+    （`agent_loop._do_retire` 逐字「绝对编码不是父子之间的指称」）⇒ 模型要犯一次错
+    才读得到它。真机代价：拿台账号去 `retire` 白费一步；反过来对账时用名册名也对不上。
+
+    受众与 `PARENT_LIMITS` 同一条判据（`partners_out` 非空）：能派活才有"我名下的子代理"，
+    而 C 的出边是 0、一辈子没有子代理 ⇒ 名册名对它没有意义（`draft/104` §5.1 原写"全部"，
+    这一处按业主口径 C「从代码现算」收窄，读数记在 `draft/103` §4.1b-8）。
+    """
+    holders: list[str] = []
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        can = bool(AP.partners_out(role))
+        assert ("COLLAB_NAMES" in sections) is can, (
+            f"{role}：出边{'非空' if can else '为空'}，"
+            f"而段表里{'有' if 'COLLAB_NAMES' in sections else '没有'}指称那一段")
+        if not can:
+            continue
+        holders.append(role)
+        for want in ("台账号", "名册名", "实例标签", "对账", "绝对编码"):
+            assert want in text, f"{role} 的指称判据里缺 {want!r}"
+    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "M"], holders
+
+
+def test_blocked_is_not_a_substitute_for_reporting(registry: ToolRegistry):
+    """`blocked` 与上报是两件事，都要做（`draft/104` §4.10 的文案修正）。
+
+    原文只写"并且照旧上报一次"，容易被读成"二选一"（`blocked` 就替代了上报）——
+    而代码侧两条路各管一半：`blocked` 让父知道这一支卡住（`conductor.note_blocked`
+    ⇒ `subtree_blocked`），上报让有人知道缺口存在（会话/板项/问题落盘）。
+    只做前者，缺口在系统里消失（三态纪律不允许）。
+    """
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        assert "`blocked` 只管「我停下了」" in text, (
+            f"{role} 的循环协议里没有那一句：{text[-500:]}")
+        assert "两件事都要做" in text, f"{role} 的提示词里没写清 blocked 不是上报的替代"
+
+
 def test_the_relay_instruction_names_the_same_recipient_as_the_code(registry: ToolRegistry):
     """代唤的收件人：提示词与代码必须说同一个人（直接父；顶层才是 M）。
 
@@ -1665,18 +1709,29 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:      `agent_loop._children_text` 逐字写着"这一趟开始那一刻的名单，不假装实时"
 #:      ⇒ 改成"这一趟开始那一刻…要看活的用 `{"roster": {"of": "self"}}`"。
 #: 两处都在共享段（循环协议与身份段）⇒ 十格全换（这是"改一处、十格都动"的读数）。
-_FROZEN_PROMPT_VERSION = "p71"
+#: `p72`（2026-10-11，协作块族第三块：指称与 blocked 口径；`draft/104` §4.4 / §4.10）：
+#:   ① 新段 `COLLAB_NAMES`（order 5220）：三种指称的总判据（台账号对账 / 名册名指称 /
+#:      实例标签分实例 / 产出用台账引用）—— 原文只在受控拒绝的文案里说"绝对编码不是
+#:      父子之间的指称"，模型要犯一次错才读得到。受众与 `PARENT_LIMITS` 同一条判据
+#:      （出边非空 ⇒ 实测九个；C 出边 0、一辈子没有子代理）⇒ 那九格 +1 段；
+#:   ② 循环协议第 ② 档补一句：`blocked` 只管「我停下了」、上报只管「有人知道了」——
+#:      两件事都要做（原文只写"照旧上报一次"，容易被读成二选一）⇒ 共享段 ⇒ 十格全变。
+#: 合起来：十格全换（九格是"加段 + 换字"、C 那一格只是"换字"）。
+#: 尾注：名册名那一句的措辞刻意沿用探针表里的锚（"父可以自己提名 / 由秘书分配 / 名字一经分配"）——
+#: `tests/test_secretary_prompt_alignment.py` 按这些短语把"提示词承诺的秘书职责"与代码里的接住方
+#: 对上；换一套同义词会让它判成"承诺了没人接住"（第一版正是那么红的）。
+_FROZEN_PROMPT_VERSION = "p72"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "d94f0c5cc559570ea764a07e6b7fe3b1ea381604a50b73bc17d75284f60d0d53",
-    "B": "09e32ce065c61e45deb26670b1f221dd85eab18197bafe7037cce3c33a4b5036",
-    "C": "473099e8cd59e7e62b5baa5af60f8374eaa10225d4500ebafe806d91759fcfd8",
-    "D": "ad1bb9b24f9a879e75737e902f0f770fb0b83bf6c00e498961fad605fb72562f",
-    "E": "9fcd746945fc6219d5721b8072590611ddf5e9c7db5367116e9c0d7280623f85",
-    "F": "77cac9e6a6792c44f3fc13cc81243a68de07a4e0d6afe61d0895fa5b93547265",
-    "G": "0ae0a97ccecfebf7177aa06be73cddfbf2ffd92ccaf399ebfc8128abe5c67e9f",
-    "H": "a16704bc4b8875d1f5e0d9ec53b067f1204cc459443b838fd7068c400e8113aa",
-    "V": "9ec6301c1303cdb97744d5275b74ee67e9c8e100aca0985dc1c9c70bd205d6b6",
-    "M": "2aee760f34693c110fc987cfcb044c032d5f42530a5f492a5346aa3cf8d8f0fc",
+    "A": "dc8990ccd226e681a5c07101ff6b951172bdc5c0ec5cdef35ba376ebdc443005",
+    "B": "c419fbc1e8ce848afd5bf670a828d31877d93d6165b836d2447cdff8ed4aa1db",
+    "C": "ab03071b2c1d9251f305b1049a9a438e20fd613bb9744eddd4b30aaaa5d8d639",
+    "D": "f4c6d67f35437379a59ce80249f8bfa39394b50886bdb6339b35ec3c85c7feec",
+    "E": "5480f231be2c934c785f097ef3698f93f73f690106a13229bb4fe383b79b86af",
+    "F": "f4ae56a4eaa68c88e2e3e5252e9829caa659be2fa8dcaa207c9ef86c09df2805",
+    "G": "7544ce5288ad2e4c21d81e9f6e1e00b590203a3e83c634b6622dde85db208030",
+    "H": "85b7606873d9346c6a0702f7dd7e712eb10b80430ba103a22731c4f8270325c3",
+    "V": "c109c5638c98a63ae4654858645a665ef414828cebbd0a3b3c7a90ac63bb873b",
+    "M": "915c4504050efeac96f9fa9babc11b353d718dd1b7cf791cc0dab0e8e517f853",
 }
 
 
