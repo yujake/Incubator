@@ -657,6 +657,23 @@ def _recorded_reasoning(text: str) -> str:
     return str(_for_record({"reasoning": raw})["reasoning"])
 
 
+def step_node_tokens(step: int, payload: Mapping[str, Any],
+                     result: Mapping[str, Any]) -> int:
+    """这一步作为"节点"的估价（S-B：节点计价，给压力门当输入）。
+
+    按未截断的那一份算（施工单 §2 逐字：不要用 `_for_record` 的截断副本 ——
+    那会系统性偏小，于是压力门永远晚一步才响）。这里收到的 `result` 是循环手里
+    那一份（`_for_record` 之前），所以那一句成立；`_result_half` 内部的
+    `_observe` 仍按观测层口径剪一次，那是模型实际看到的那一份 —— 计价要按
+    "它会占多少上下文"算，所以用被观测层剪过的那一份是对的。
+    """
+    from . import tokenestimate as TE
+
+    msgs = [assistant_message(step, payload, name="step", content=_spoken_half(step, payload)),
+            tool_message(step, _result_half(result), name="step")]
+    return TE.estimate_messages(msgs).tokens
+
+
 def message_sequence_problem(messages: Sequence[Mapping[str, Any]]) -> str:
     """序列的配对判据（S-C 的负控）：每一条 `tool` 必须挂在上一条 assistant 给的 id 上。
 
@@ -2942,6 +2959,10 @@ class AgentLoop:
             event: dict[str, Any] = {
                 "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
                 "payload": dict(payload), "result": dict(step_obj.result),
+                # S-B：这一步作为"节点"的估价（压力门的输入）。它与 `result` 一起落盘，
+                # 于是"当时那一段历史值多少 token"事后可复核（不必重算，也不会因为
+                # 观测层的口径改了就与当时对不上）。
+                "heuristic_tokens": step_node_tokens(step, payload, result),
             }
             if thought:
                 event["reasoning"] = thought

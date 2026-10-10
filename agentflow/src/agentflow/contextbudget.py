@@ -78,7 +78,14 @@ _INT_FIELDS = (
     "max_inline_bytes",
     "compaction_threshold_chars",
     "compaction_keep_recent",
+    # S-B 新增的两格（都得是整数）：容量与"直接给保留额"那一档。
+    "context_window",
+    "retain_tokens",
 )
+#: 浮点配置键（S-B 新增）：比值与估值器的尺。为什么单列一组而不是塞进 `_INT_FIELDS`：
+#: `_as_int` 刻意拒绝 `0.8` 这类浮点（那是"整数键写成了浮点"的拼写错误），
+#: 而比值天生是浮点 —— 两把尺混在一个校验器里会让两类错误互相掩盖。
+_FLOAT_FIELDS = ("threshold_ratio", "retain_ratio", "chars_per_token")
 
 #: 需要字符串校验的字段。
 _STR_FIELDS = ("spill_dir",)
@@ -107,6 +114,20 @@ class ContextBudget:
     # ---- compaction：一串条目总长超过阈值时，更早的折成摘要
     compaction_threshold_chars: int = 200_000
     compaction_keep_recent: int = 8
+    # ---- 压力口径（S-B / 裁定 8乙 + 12-H=甲）：照 DSH 的"token 压力"那一套
+    #
+    # 为什么两套并存而不是把字符那套删掉：`compaction_threshold_chars` 的读者还在
+    # （`compact()` 那条老的机械路与它的判据），而这一批只是新增一条 DSH 口径的路
+    # （`compact_by_pressure`）。删掉旧口径会让"这一批到底换了什么"变成一团。
+    #: 模型的上下文窗口（token）。0 = 没配（= 读不到容量那一档，不许当成"够用"）。
+    context_window: int = 0
+    #: 触发阈值与保留尾部的比值（DSH 逐字：`thresholdRatio = .8` / `retainRatio = .16`）。
+    threshold_ratio: float = 0.8
+    retain_ratio: float = 0.16
+    #: 直接给"保留多少 token"（> 0 时不用 `retain_ratio`）。0 = 用比值。
+    retain_tokens: int = 0
+    #: 每 token 几个字符（估值器的尺；默认 4 与 DSH 对数，中文语料可调小）。
+    chars_per_token: float = 4.0
 
     # ---- 装载
 
@@ -126,27 +147,31 @@ class ContextBudget:
         "用户以为改了阈值、实际没改"，这正是本项目最忌讳的失败形态。
         """
         block = _extract_block(cfg)
-        unknown = sorted(set(block) - set(_INT_FIELDS) - set(_STR_FIELDS))
+        unknown = sorted(set(block) - set(_INT_FIELDS) - set(_STR_FIELDS) - set(_FLOAT_FIELDS))
         if unknown:
             raise ValueError(
                 f"context_budget 里有未知配置键：{unknown}。"
-                f"合法键只有 {sorted(set(_INT_FIELDS) | set(_STR_FIELDS))}。"
+                f"合法键只有 {sorted(set(_INT_FIELDS) | set(_STR_FIELDS) | set(_FLOAT_FIELDS))}。"
                 "拼错的键会被忽略，于是'改了阈值'与'没改'长得一样 —— 所以这里直接拒绝"
             )
         # 覆盖不到所有 dataclass 字段时必须炸：否则新增字段会永远拿不到
         # config.yaml 的值，而没有任何地方报错（"加了配置项但没接线"）。
         all_fields = {f.name for f in fields(cls)}
-        covered = set(_INT_FIELDS) | set(_STR_FIELDS)
+        covered = set(_INT_FIELDS) | set(_STR_FIELDS) | set(_FLOAT_FIELDS)
         if all_fields - covered:
             raise ValueError(
                 f"ContextBudget 有字段没有任何校验器：{sorted(all_fields - covered)}。"
-                "新增字段必须同时加入 _INT_FIELDS / _STR_FIELDS，否则它永远无法从配置装载"
+                "新增字段必须同时加入 _INT_FIELDS / _STR_FIELDS / _FLOAT_FIELDS，"
+                "否则它永远无法从配置装载"
             )
 
         values: dict[str, Any] = {}
         for key in _INT_FIELDS:
             if key in block:
                 values[key] = _as_int(key, block[key])
+        for key in _FLOAT_FIELDS:
+            if key in block:
+                values[key] = _as_float(key, block[key])
         for key in _STR_FIELDS:
             if key in block:
                 values[key] = _as_rel_dir(key, block[key])
@@ -189,11 +214,34 @@ class ContextBudget:
                 f">= threshold_chars({self.threshold_chars})。"
                 "头 + 尾已经不比原文短，再加省略标记就是**把内容变长** —— 这不是剪枝"
             )
+        # ---- S-B（裁定 8乙 + 12-H=甲）：压力口径的装载期校验（照 DSH `CB:128-136/:169`）
+        for key in ("context_window", "retain_tokens"):
+            value = getattr(self, key)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"context_budget.{key}={value!r} 必须是 >= 0 的整数")
+        if self.retain_tokens > 0 and self.retain_ratio != _DEFAULT_RETAIN_RATIO:
+            raise ValueError(
+                f"context_budget 自相矛盾：retain_tokens({self.retain_tokens}) 与 "
+                f"retain_ratio({self.retain_ratio}) 同时给了（DSH 逐字：同给即拒）。"
+                "我们的 dataclass 分不清'与默认值相同的显式赋值'，所以判据是"
+                "`retain_tokens > 0 且 retain_ratio 不等于默认值` —— 这处偏差写在注释里"
+            )
+        if self.retain_ratio >= self.threshold_ratio:
+            raise ValueError(
+                f"context_budget 自相矛盾：retain_ratio({self.retain_ratio}) >= "
+                f"threshold_ratio({self.threshold_ratio})（DSH 逐字：保留得比阈值还多，"
+                "等于压完立刻又超阈值）"
+            )
         if not isinstance(self.spill_dir, str) or not self.spill_dir.strip():
             raise ValueError(f"context_budget.spill_dir={self.spill_dir!r} 必须是非空字符串")
         # 直接构造出来的对象也要过同一套目录校验（`from_mapping` 之外的第二道门）：
         # 绝对路径 / 盘符 / '..' 会让落盘跑到工作区外面去。
         _as_rel_dir("spill_dir", self.spill_dir)
+
+
+#: 保留比值的默认值（与 `ContextBudget.retain_ratio` 同一处口径；`validate()` 拿它当
+#: "这一格有没有被显式赋值"的哨兵，理由见那一段）。
+_DEFAULT_RETAIN_RATIO = 0.16
 
 
 def _extract_block(cfg: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -225,6 +273,23 @@ def _as_int(key: str, value: Any) -> int:
             "不许静默转换（YAML 里写成 '8000'、8000.0、'8e3' 都会被拒绝）"
         )
     return value
+
+
+def _as_float(key: str, value: Any) -> float:
+    """浮点校验（比值与估值器的尺）。整数形态接受（`1` == `1.0`），字符串一律拒绝。
+
+    与 `_as_int` 同一条纪律：`"0.8"`（带引号）这种拼写错误必须当场红，
+    否则"配置写对了"与"配置被引号包着、其实没生效"在读数上长得一样。
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"context_budget.{key} 必须是数，收到 {type(value).__name__}：{value!r}。"
+            "不许静默转换（YAML 里写成 '0.8' 会被拒绝）"
+        )
+    out = float(value)
+    if out != out or out <= 0:
+        raise ValueError(f"context_budget.{key}={value!r} 必须是正的有限数")
+    return out
 
 
 def _as_rel_dir(key: str, value: Any) -> str:
@@ -440,6 +505,22 @@ class CompactResult:
     compacted: bool
     summarizer: str
     reason: str
+    # ---- S-B（token 压力那条路）多出来的读数。老那条字符路不填它们
+    # （默认值就是"没这一档"，于是两类结果在 `to_dict` 上仍然分得开）。
+    #: 这一次用的阈值与保留额（token；0 = 没走压力那条路）
+    threshold_tokens: int = 0
+    retain_tokens: int = 0
+    #: 被遮掉那一段的估价与摘要成帧后的估价（token）—— "摘要必须更小"那条判据的两端
+    shadowed_tokens: int = 0
+    framed_tokens: int = 0
+    #: 按哪把尺估的（`chars_per_token`）与压力基线取自哪一半
+    #: （`heuristic` 估算 / `usage_anchor` 上一轮真实 usage）
+    chars_per_token: float = 0.0
+    baseline_source: str = ""
+    #: 被遮蔽的位置 span（`(第一条, 最后一条)`）。这是位置不是数值区间：
+    #: 上一轮替换把摘要放到旧区间的位置后，start 在值上可能大于 end
+    #: （DSH `types.d.ts:115-122` 的警告）⇒ 不许写 `range(start, end + 1)`。
+    shadowed_range: tuple[int, int] = (0, 0)
 
 
 def compact(
@@ -722,4 +803,283 @@ def _prune_note(
     return (
         f"{stats['pruned']} 个字符串已剪枝，其中 {len(stats['spills'])} 个落盘；"
         f"完整路径见 spill_paths"
+    )
+
+
+# ================================================================ 压力口径（S-B / DSH）
+#
+# 这一段是新增的一条路（`compact_by_pressure`），它照 DSH 的"token 压力"那一套
+# （`dsh-compaction-basic/lib/index.js`）：两道门（阈值 / 复测）+ 容量标定 + 从尾回积
+# + 三条不变量。老的字符口径（`compact()`）一个字没动 —— 它的读者与判据都还在。
+
+
+class TargetPressureConfigError(ValueError):
+    """容量那一档读不到（或配置自相矛盾）—— DSH 手动路径就是抛这个（`CB:897-898`）。"""
+
+
+class CompactionNotSmallerError(ValueError):
+    """摘要不比被遮掉的量小（DSH `CB:571-572`：判据是 `>=`，等于也拒）。
+
+    为什么"相等"也算失败：压缩的产物就是那条摘要，若它不比被遮掉的那一段更小，
+    这一趟的账（`shadowedTokenCount` vs `framedSummaryTokenCount`）会指向一个荒谬的结论 ——
+    "压过了，而历史一点没短"。DSH 选的是当场判失败，我们照抄。
+    """
+
+
+@dataclass(frozen=True)
+class CompactSpec:
+    """容量标定的结果（DSH `CB:108-126` 的四样 + 尺的读数）。"""
+
+    context_window: int
+    threshold_tokens: int
+    retain_tokens: int
+    chars_per_token: float
+    source: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"context_window": self.context_window,
+                "threshold_tokens": self.threshold_tokens,
+                "retain_tokens": self.retain_tokens,
+                "chars_per_token": self.chars_per_token, "source": self.source}
+
+
+def _spec_of(budget: "ContextBudget") -> tuple[CompactSpec | None, str]:
+    """容量标定（三态）：`(规格, 问题)`。问题非空 = 读不到容量那一档。
+
+    逐条照 DSH：`contextWindow` 非正整数 ⇒ 读不到；`thresholdTokens = floor(cw*ratio)`；
+    `retainTokens = floor(cw*retainRatio)`（或配置直接给的那一份）；
+    `retainTokens >= thresholdTokens` ⇒ 配置自相矛盾（装载期已经拦过，这里再拦一次，
+    因为 `ContextBudget(...)` 可以直接构造而不走 `from_mapping`）。
+    """
+    cw = int(getattr(budget, "context_window", 0) or 0)
+    if cw <= 0:
+        return None, ("context_window 没配（或不是正整数）⇒ **读不到容量**那一档："
+                      "既不静默当 0、也不阻断这一趟（照 DSH 自动路径：警告一次、带完整历史继续）")
+    threshold = int(cw * float(budget.threshold_ratio))
+    retain = int(budget.retain_tokens) if int(budget.retain_tokens or 0) > 0 \
+        else int(cw * float(budget.retain_ratio))
+    if retain >= threshold:
+        raise TargetPressureConfigError(
+            f"容量自相矛盾：retainTokens({retain}) >= thresholdTokens({threshold})"
+            "（DSH 逐字：压完立刻又超阈值）")
+    return CompactSpec(context_window=cw, threshold_tokens=threshold, retain_tokens=retain,
+                       chars_per_token=float(getattr(budget, "chars_per_token", 4.0)),
+                       source="context_window"), ""
+
+
+def _node_text(item: Any) -> str:
+    """一条节点（消息）的模型可见文本（估价与"节点 0 保护"都用它）。"""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, Mapping):
+        if "content" in item:
+            return str(item.get("content") or "")
+        return str(item.get("text") or "")
+    raise ValueError(f"压力路的 items 只能是 str 或带 content/text 的 mapping，收到 "
+                     f"{type(item).__name__}")
+
+
+def _pairing_cuts(items: Sequence[Any]) -> list[bool]:
+    """配对平衡表：`cuts[i]` = "在第 i 条之前下刀是否不切断一次调用/结果对"。
+
+    搬的是 DSH 的 `cutBalanced`（`dsh-compaction-surface`：长度 = 节点数 + 1 的布尔数组，
+    `Before(seq) = cutBalanced[idx]`）。我们的节点现在就是消息（S-C 之后：
+    assistant 带 `tool_calls`、tool 带 `tool_call_id`）⇒ "一次调用"跨两条节点，
+    切在它们中间就会让模型看到一个没有结果的调用（或一个没被要求过的结果）。
+    """
+    n = len(items)
+    cuts = [True] * (n + 1)
+    for i, item in enumerate(items):
+        if not isinstance(item, Mapping) or str(item.get("role") or "") != "assistant":
+            continue
+        ids = {str(c.get("id") or "") for c in (item.get("tool_calls") or [])
+               if isinstance(c, Mapping)}
+        if not ids:
+            continue
+        for j in range(i + 1, n):
+            nxt = items[j]
+            if not isinstance(nxt, Mapping) or str(nxt.get("role") or "") != "tool":
+                break
+            if str(nxt.get("tool_call_id") or "") in ids and j == i + 1:
+                cuts[j] = False          # 切在 assistant 与它的 tool 之间 = 切断配对
+                break
+    return cuts
+
+
+def _select_keep(items: Sequence[Any], *, spec: CompactSpec, chars_per_token: float,
+                 exclude_first: bool) -> int:
+    """从尾往回按 token 累加到 `retain_tokens` 为止，再做配对平衡回退（DSH `CB:401-412`）。
+
+    返回 `keep`（"从第 keep 条起保留原文"）。`retain_tokens == 0` ⇒ 第一轮就停 ⇒
+    只保留最后一个节点（DSH 的 overflow 语义，也是"一次最大的平衡压缩"）。
+    """
+    from . import tokenestimate as TE
+
+    n = len(items)
+    keep = n
+    if spec.retain_tokens <= 0:
+        keep = max(1, n - 1)
+    else:
+        acc = 0
+        while keep > 1:
+            tokens = TE.estimate_message(items[keep - 1], chars_per_token=chars_per_token) \
+                if isinstance(items[keep - 1], Mapping) else \
+                TE.estimate_text_tokens(items[keep - 1], chars_per_token=chars_per_token)
+            if acc + tokens > spec.retain_tokens:
+                break
+            acc += tokens
+            keep -= 1
+    first = 1 if exclude_first else 0        # 节点 0（开场简报/任务原文）永不遮蔽
+    if keep <= first:
+        keep = min(n, first + 1)             # 至少留一条，且它必须在允许遮蔽的范围之外
+    cuts = _pairing_cuts(items)
+    while keep > first and not cuts[keep]:
+        keep -= 1                            # 回退只动 start（往回走）⇒ 永不切断配对
+    return max(keep, first)
+
+
+def compact_by_pressure(
+    items: Sequence[Any],
+    *,
+    budget: ContextBudget,
+    summarize: Callable[[list[Any]], str] | None = None,
+    usage_tokens: int | None = None,
+    strict: bool = False,
+) -> CompactResult:
+    """token 压力那条路（S-B / 裁定 8乙 + 12-H=甲 + 12-I=甲）。
+
+    `{"compacted", "shadowed_range", "shadowed_tokens", "framed_tokens", …}` 那一族读数
+    都在返回的 `CompactResult` 里（多出来的格子见那个 dataclass）。
+
+    ## 与 DSH 逐条对齐的地方
+
+    - 两道门（`CB:899-905`）：`total < threshold ⇒ 不压`；压完复测仍在阈值之上
+      才谈得上再压（本函数只做一次；重试那一格是调用方的事 —— 见下）。
+    - 节点 0 永不遮蔽（`CB:379-382`）：第一条（开场简报：任务原文 + 身份 + 收件箱）
+      不进被遮蔽的范围；`surface` 的第 0 个节点是 system，区间从 1 起。
+    - 从尾回积 + 配对平衡回退（`CB:401-412`）：见 `_select_keep`。
+    - `retain_tokens = 0` ⇒ 只留最后一个节点（`CB:891`、`:951`）。
+    - 摘要必须更小（`CB:571-572`，判据是 `>=`）：不比被遮掉的量小 ⇒ 判失败
+      （`CompactionNotSmallerError`），不是"成功但没省"。
+    - 读不到容量（三态，`CB:803-808` / `:897-898`）：`strict=False`（自动路径）
+      ⇒ 返回 `compacted=False` + 一句"读不到容量"的读数，带完整历史继续；
+      `strict=True`（手动路径）⇒ 抛 `TargetPressureConfigError`。
+
+    ## 两处如实登记的差异
+
+    1. 压力基线：DSH 用"usage 锚（够大就信）否则估算"。我们收 `usage_tokens`
+       （上一轮的真实 usage）并取 `max(估算, 锚)` —— 锚更大时以锚为准，两条读数都在
+       `baseline_source` 里说明。"锚 + 本轮增量"那个更省的做法没做（每次全量重算），
+       那是接线那一批的事。
+    2. 重试那一格不做：DSH 压力路径最多重试 1 次（`compactionRetries=1` ⇒ 最多 2 次），
+       那句"仍超阈值 ⇒ 抛"属于调用方的循环。本函数只回答"这一次压出什么"。
+    """
+    import math
+
+    from . import tokenestimate as TE
+
+    if isinstance(items, (str, bytes)) or not isinstance(items, Sequence):
+        raise ValueError(
+            f"compact_by_pressure() 的 items 必须是有序序列，收到 {type(items).__name__}")
+    if not isinstance(budget, ContextBudget):
+        raise ValueError(f"compact_by_pressure() 的 budget 必须是 ContextBudget，"
+                         f"收到 {type(budget).__name__}")
+    if summarize is not None and not callable(summarize):
+        raise ValueError("compact_by_pressure() 的 summarize 必须可调用（list -> str）或为 None")
+    budget.validate()
+
+    spec, problem = _spec_of(budget)
+    if spec is None:
+        if strict:
+            raise TargetPressureConfigError(problem)
+        return CompactResult(
+            text=_render_kept([_node_text(it) for it in items]),
+            dropped_count=0, kept_count=len(items),
+            original_chars=sum(len(_node_text(it)) for it in items),
+            kept_chars=sum(len(_node_text(it)) for it in items),
+            compacted=False, summarizer="none",
+            reason=f"读不到容量 ⇒ 未压缩，带完整历史继续（照 DSH 自动路径）：{problem}",
+        )
+
+    messages = [it if isinstance(it, Mapping) else {"role": "user", "content": str(it)}
+                for it in items]
+    est = TE.estimate_messages(messages, chars_per_token=spec.chars_per_token, source=spec.source)
+    anchor = int(usage_tokens or 0)
+    total = max(est.tokens, anchor)
+    baseline_source = "usage_anchor" if anchor > est.tokens else "heuristic"
+    if total < spec.threshold_tokens:
+        return CompactResult(
+            text=_render_kept([_node_text(it) for it in items]),
+            dropped_count=0, kept_count=len(items),
+            original_chars=est.chars, kept_chars=est.chars,
+            compacted=False, summarizer="none",
+            reason=(f"未到阈值：{total} token（{baseline_source}）< threshold_tokens="
+                    f"{spec.threshold_tokens}（= {spec.context_window} × {budget.threshold_ratio}）"
+                    "⇒ 一次也不压"),
+            threshold_tokens=spec.threshold_tokens, retain_tokens=spec.retain_tokens,
+            shadowed_tokens=0, framed_tokens=0, chars_per_token=spec.chars_per_token,
+            baseline_source=baseline_source,
+        )
+
+    keep = _select_keep(items, spec=spec, chars_per_token=spec.chars_per_token, exclude_first=True)
+    first = 1                      # 节点 0（开场简报 = 任务原文 + 身份 + 收件箱）永不遮蔽
+    if keep <= first:
+        return CompactResult(
+            text=_render_kept([_node_text(it) for it in items]),
+            dropped_count=0, kept_count=len(items),
+            original_chars=est.chars, kept_chars=est.chars, compacted=False, summarizer="none",
+            reason=f"超阈值（{total} token ≥ {spec.threshold_tokens}）但可遮蔽的条目为空"
+                   f"（keep={keep} ≤ {first}）：节点 0 永不遮蔽，故未压缩",
+            threshold_tokens=spec.threshold_tokens, retain_tokens=spec.retain_tokens,
+            shadowed_tokens=0, framed_tokens=0, chars_per_token=spec.chars_per_token,
+            baseline_source=baseline_source,
+        )
+
+    # 被遮蔽的是 `[first, keep-1]` —— 不含节点 0（DSH `CB:379-382`、`:398`：
+    # 表层第 0 个节点是 system/开场，区间从 1 起）。第一版写成了 `items[:keep]`，
+    # 于是节点 0 一起被折进摘要 —— 那正是"压缩永远压不到任务原文"要挡的形态。
+    node0 = _node_text(items[0])
+    early = list(items[first:keep])
+    kept = list(items[keep:])
+    early_messages = messages[first:keep]
+    shadowed_tokens = TE.estimate_messages(early_messages,
+                                           chars_per_token=spec.chars_per_token).tokens
+    if summarize is None:
+        summary = _mechanical_summary([_node_text(it) for it in early],
+                                      [type(it).__name__ for it in early])
+        summarizer = "mechanical"
+    else:
+        out = summarize(early)
+        if not isinstance(out, str) or not out.strip():
+            raise ValueError(
+                f"注入的 summarize 必须返回非空 str，收到 {type(out).__name__}：{out!r}"
+                "（返回空摘要等于把这段历史静默扔掉）")
+        summary = out
+        summarizer = "llm"
+    head = (f"\n\n[早期 {len(early)} 条已压缩（{summarizer}）："
+            f"{shadowed_tokens} token 折成摘要，保留最近 {len(kept)} 条原文]\n")
+    summary_node = head + summary
+    rendered = (node0 + summary_node + "\n--- 最近 " + str(len(kept)) + " 条原文 ---\n"
+                + _render_kept([_node_text(it) for it in kept]))
+    # "摘要必须更小"比的是替换节点的价 vs 被遮节点的价（DSH：`framedSummaryTokenCount`
+    # vs `shadowedTokenCount`）—— 不是整份渲染文本（那里面还有节点 0 与保留的尾部，
+    # 拿它去比等于把"没被遮的东西"也算进摘要的账里，第一版就是这么写的）。
+    framed_tokens = TE.estimate_text_tokens(summary_node, chars_per_token=spec.chars_per_token)
+    if framed_tokens >= shadowed_tokens:
+        raise CompactionNotSmallerError(
+            f"摘要不比被遮掉的量小：framed={framed_tokens} >= shadowed={shadowed_tokens} "
+            f"（判据是 >=，等于也拒 —— DSH `CB:571-572`）。这一趟**不算压过**："
+            "压完历史一点没短，而账上会写着'压过了'")
+    return CompactResult(
+        text=rendered, dropped_count=len(early), kept_count=len(kept),
+        original_chars=est.chars, kept_chars=len(rendered), compacted=True,
+        summarizer=summarizer,
+        reason=(f"token 压力触发：{total} token（{baseline_source}）≥ threshold_tokens="
+                f"{spec.threshold_tokens}；早期 {len(early)} 条（{shadowed_tokens} token）"
+                f"折成 {summarizer} 摘要（framed {framed_tokens} token，严格更小），"
+                f"最近 {len(kept)} 条保留原文；节点 0（任务原文/开场）未遮蔽"),
+        threshold_tokens=spec.threshold_tokens, retain_tokens=spec.retain_tokens,
+        shadowed_tokens=shadowed_tokens, framed_tokens=framed_tokens,
+        chars_per_token=spec.chars_per_token, baseline_source=baseline_source,
+        shadowed_range=(first, max(first, keep - 1)),
     )
