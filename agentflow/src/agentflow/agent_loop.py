@@ -3419,17 +3419,39 @@ class AgentLoop:
             if aliased_from:
                 out["aliased_from"] = aliased_from
             return out
+        tscope: Any = None
         try:
             # S6-b：工具调用也带上"我是谁"（`conductor.broadcast` 的收件人是
             # "我名下的直接子代理"，而工具的形状里没有这一格）。用 `calling_as`
             # 而不是给 conductor 塞属性：同一角色的两个并发实例共享对象。
             from .conductor import calling_as
 
-            with calling_as(str(self.my_task_id or ""), self.role):
-                res = self.registry.call(name, role=self.role, **args)
+            # ---- S-E（裁定 13甲 / 12-D / 12-G）：逐工具超时只在这一层装钟。
+            #
+            # 为什么不改 `tools/base.py`（禁改区）：截止是协作式的 ContextVar
+            # （`tool_timeout` 模块），处理函数在检查点调 `raise_if_timed_out()`；
+            # 循环在调 `registry.call` 前后设/清。没声明限时的工具一个字节都不变。
+            from . import tool_timeout as TT
+
+            tscope = TT.tool_deadline(name)
+            with tscope:
+                with calling_as(str(self.my_task_id or ""), self.role):
+                    res = self.registry.call(name, role=self.role, **args)
         except Exception as exc:  # 工具层抛错也要变成"模型看得见的结果"
-            return {"tool": name, "ok": False, "error": f"{type(exc).__name__}: {exc}",
-                    **({"aliased_from": aliased_from} if aliased_from else {})}
+            self._note_tool_deadline(tscope)
+            out = {"tool": name, "ok": False, "error": f"{type(exc).__name__}: {exc}",
+                   **({"aliased_from": aliased_from} if aliased_from else {})}
+            return out
+        # 超时的两半分开报（裁定 12-E）：结果逐字节相同（耗时只在侧信道），
+        # 而"工具到底停住没有"落一条会话事件（`observed` / `deadline_passed_unobserved`）。
+        self._note_tool_deadline(tscope)
+        if tscope.observed_timed_out:
+            run = tscope.run
+            assert run is not None      # observed_timed_out 只在装了钟时为真
+            out = TT.timeout_result(name, run.code, run.timeout_ms)
+            if aliased_from:
+                out["aliased_from"] = aliased_from
+            return out
         out = {"tool": name, "ok": bool(res.ok), "data": res.data,
                "error": res.error or "", "meta": dict(res.meta or {})}
         if aliased_from:
@@ -3446,6 +3468,38 @@ class AgentLoop:
             out["definition_ask"] = ask
             out["meta"]["definition_ask"] = dict(ask)
         return out
+
+    def _note_tool_deadline(self, scope: Any) -> None:
+        """把这一口钟的读数落到侧信道（会话事件）—— 耗时不进结果（裁定 12-E）。
+
+        为什么耗时必须是侧信道：`_call_reading` 把整条结果哈希进"原地打转"的连击键，
+        而结果里带上"这次等了多久"会让两次超时产生不同的读数 ⇒ 判停永远不触发
+        （模型可以无限循环在一个超时调用上）。裁定 12-E 逐字选的是"超时结果逐字节相同"。
+
+        为什么只在钟响过时落事件：绝大多数步根本没到点，每一步都落一条会把会话记录淹掉；
+        `state` 为空串（没声明 / 没到点）⇒ 一个事件都不落。
+        `state` 的两档分开报（三态）：`observed` = 工具真的停在检查点上；
+        `deadline_passed_unobserved` = 到点了而工具没看信号（那一档不许替换结果，
+        也不许说成"已经停住了"）。
+        """
+        run = getattr(scope, "run", None)
+        if run is None or not run.state:
+            return
+        try:
+            SS.append(self.session_root, {
+                "kind": "tool_timeout", "role": self.role, "tool": run.name,
+                "state": run.state, "code": run.code, "timeout_ms": run.timeout_ms,
+                "elapsed_ms": round(run.elapsed_ms, 1), "note": run.note(),
+            }, sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 侧信道落不成不许改变这一步的结果
+            # 落不成也要留痕（本仓最忌"报告没写成"与"不用报告"长得一样）：走 conductor
+            # 的日志口子，没有就退到 stdout —— 但绝不动这一步的结果。
+            line = f"[tool_timeout] 工具超时读数没落成（{type(exc).__name__}: {exc}）"
+            log = getattr(self.conductor, "_log", None)
+            if callable(log):
+                log(line)
+            else:
+                print(line)
 
     def _surface_refusal(self, name: str, args: Mapping[str, Any]) -> str:
         """这一句工具调用越出读写面了吗？返回拒信（空串 = 放行）。

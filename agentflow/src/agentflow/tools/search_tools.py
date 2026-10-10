@@ -699,6 +699,12 @@ def _h_literature(
                         providers_requested=wanted)
         sources = tuple(getattr(p, "name", n) for p, n in zip(provs, wanted))
         mp = P.MultiProvider(provs, name="multi")
+        # ---- S-E 协作式截止的检查点（裁定 13甲 / 12-D「不机械杀进程」）：
+        # 多源检索是最容易把一步拖到分钟级的一件（每个源各有自己的网络超时）。
+        # 检查点放在打出去之前：已经到点就不要再发新的请求了。
+        from ..tool_timeout import raise_if_timed_out
+
+        raise_if_timed_out()
         try:
             candidates, elapsed = _timed(mp.search, topic, mode, description, int(limit))
         except Exception as exc:  # noqa: BLE001 - 检索失败必须如实上报（"没做成"）
@@ -731,6 +737,10 @@ def _h_literature(
         except ToolError as exc:
             return fail(str(exc), kind="unknown_provider", available=_known_names(ctx))
 
+        # 同一条检查点（单源那一支）：到点了就别再打这一个源。
+        from ..tool_timeout import raise_if_timed_out
+
+        raise_if_timed_out()
         try:
             candidates, elapsed = _timed(prov.search, topic, mode, description, int(limit))
         except Exception as exc:  # noqa: BLE001 - 检索失败必须如实上报（"没做成"）
