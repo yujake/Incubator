@@ -15,10 +15,10 @@
 """
 from __future__ import annotations
 
-import json
 import pathlib
 
 import pytest
+import yaml
 
 from agentflow import presets as P
 
@@ -26,14 +26,15 @@ from agentflow import presets as P
 def _make_preset(base: pathlib.Path, preset_id: str, *, name: str = "",
                  rows: object = None, raw: str | None = None,
                  description: str = "来源的描述") -> pathlib.Path:
-    """在 `base/<id>/` 落一个预设（写 `preset.json` + 组装文件）。"""
+    """在 `base/<id>/` 落一个预设（`preset.yml` + 组装文件，都是 DSH 的 YAML 形状）。"""
     path = base / preset_id
     path.mkdir(parents=True, exist_ok=True)
     (path / P.PRESET_MANIFEST_NAME).write_text(
-        json.dumps({"name": name or preset_id, "description": description, "order": 7},
-                   ensure_ascii=False), encoding="utf-8")
-    body = raw if raw is not None else json.dumps(
-        rows if rows is not None else [{"id": "r1", "name": "mod.a"}])
+        yaml.safe_dump({"name": name or preset_id, "description": description, "order": 7},
+                       allow_unicode=True, sort_keys=False), encoding="utf-8")
+    body = raw if raw is not None else yaml.safe_dump(
+        rows if rows is not None else [{"id": "r1", "name": "mod.a"}],
+        allow_unicode=True, sort_keys=False)
     (path / P.COMPOSITION_NAME).write_text(body, encoding="utf-8")
     return path
 
@@ -77,7 +78,7 @@ def test_broken_presets_stay_in_the_list_with_a_reason_naming_the_fault(tmp_path
     _make_preset(configured, "ok")
     (configured / "no-composition").mkdir()
     (configured / "no-composition" / P.PRESET_MANIFEST_NAME).write_text("{}", encoding="utf-8")
-    _make_preset(configured, "unparsable", raw="{ 不是 JSON")
+    _make_preset(configured, "unparsable", raw="- id: [没闭合")
     _make_preset(configured, "not-a-list", rows={"id": "r1", "name": "mod.a"})
     _make_preset(configured, "nameless-row", rows=[{"id": "r1"}])
     _make_preset(configured, "dup-row", rows=[{"id": "r1", "name": "a"},
@@ -143,8 +144,9 @@ def test_a_preset_is_composed_once_per_stamp_and_a_new_stamp_starts_a_generation
     assert not mount.is_stale(preset)
 
     # 组装文件改一个字节（size 变）⇒ 过期 ⇒ 换代
-    preset.composition_path.write_text(json.dumps(
-        [{"id": "r1", "name": "mod.a"}, {"id": "r2", "name": "mod.b"}]), encoding="utf-8")
+    preset.composition_path.write_text(
+        yaml.safe_dump([{"id": "r1", "name": "mod.a"}, {"id": "r2", "name": "mod.b"}],
+                       allow_unicode=True, sort_keys=False), encoding="utf-8")
     reloaded = P.read_preset(preset.path, root=preset.root, trust=preset.trust)
     assert mount.is_stale(reloaded)
     third = mount.mount(reloaded, lambda p: {"gen": 3})
@@ -174,7 +176,7 @@ def test_a_broken_preset_is_refused_at_mount_and_a_missing_file_too(tmp_path):
 
 
 def test_authoring_is_copy_only_and_refuses_the_four_bad_calls(tmp_path):
-    """创作面只有复制：落在第一个用户根、`preset.json` 被改写；四种调用被拒。
+    """创作面只有复制：落在第一个用户根、`preset.yml` 被改写；四种调用被拒。
 
     退化会坏成什么：允许直接覆盖已有目录，等于让"新建一个预设"这个动作可以毁掉别人的
     预设，而且没有任何读数会报出来；允许复制一个坏来源，等于把坏处复制一份
@@ -191,7 +193,7 @@ def test_authoring_is_copy_only_and_refuses_the_four_bad_calls(tmp_path):
 
     target = P.copy_preset(got["standard"], "my-copy", home=home)
     assert target.parent == P.writable_root(home=home)
-    meta = json.loads((target / P.PRESET_MANIFEST_NAME).read_text(encoding="utf-8"))
+    meta = P.load_yaml(target / P.PRESET_MANIFEST_NAME)
     assert meta["description"] == "来源的描述", "复制没有保留来源的描述（作者要改的就是它）"
     assert "order" not in meta, "复制没有丢掉 order ⇒ 名册分不清副本与来源"
     assert (target / P.COMPOSITION_NAME).is_file(), "复制没有带上组装文件"
@@ -225,6 +227,117 @@ def test_remove_only_touches_presets_under_the_writable_root(tmp_path):
     mine = P.read_preset(target, root=target.parent, trust=P.TRUST_USER)
     P.remove_preset(mine, home=home)
     assert not target.exists()
+
+
+def test_a_js_gate_is_reported_as_conditional_not_as_disabled(tmp_path):
+    """YSML 的 `!!js` 门求值不了 ⇒ 那一行是 `conditional`，不是 `disabled`。
+
+    退化会坏成什么：把 `!!js` 折成 False（"这一行这次不挂"），会让 DSH 的
+    `disabled: !!js process.platform === 'win32'` 在 Linux 上也永远不挂；
+    折成 True 则相反。两者都是替求值器回答，而正确处置是 DSH 自己也有的那一档
+    （`README:125` 逐字："A gate the evaluator refuses stays `'conditional'`"）。
+    字符串表达式（手写时忘了写 `!!js` 标签）同样进 conditional —— 非空字符串在 Python
+    里恒真，把它当 enabled 会让"这一行本该有条件"变成"永远挂上"。
+    """
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    _make_preset(cfg, "gated", raw=(
+        "- id: shell\n"
+        "  name: mod.shell\n"
+        "  disabled: !!js process.platform === 'win32'\n"
+        "- id: bare\n"
+        "  name: mod.bare\n"
+        "  disabled: \"platform == 'win32'\"\n"
+        "- id: off\n"
+        "  name: mod.off\n"
+        "  disabled: true\n"
+        "- id: on\n"
+        "  name: mod.on\n"))
+    got = P.discover(roots=[P.PresetRoot(cfg)], include_user=False)[0]
+    assert got.broken == "", got.broken
+    states = {row.id: row.state for row in got.rows}
+    assert states == {"shell": P.GATE_CONDITIONAL, "bare": P.GATE_CONDITIONAL,
+                      "off": P.GATE_DISABLED, "on": P.GATE_ENABLED}, states
+    assert [row.active for row in got.rows] == [False, False, False, True]
+    # 那一行的表达式被原样留着（事后能回答"它当时在等什么"）。
+    assert got.rows[0].disabled.expression == "process.platform === 'win32'"
+    # 一个求值不了的门不参与 resolve 检查（DSH 先求值、再决定要不要解析模块）。
+    # 判据的形状：只对那两行 conditional 的名字炸 ⇒ 它仍然不坏，才证明它们被跳过了。
+    def resolve(name: str) -> str:
+        if name in ("mod.shell", "mod.bare"):
+            raise KeyError(name)
+        return name
+
+    assert P.read_preset(got.path, root=got.root, trust=got.trust,
+                         resolve=resolve).broken == ""
+    # 反负控：换一个会对 enabled 那一行炸的 resolve ⇒ 必须坏（证明上面那条不是因为
+    # "resolve 根本没被调用"而通过）。
+    def strict(name: str) -> str:
+        raise KeyError(name)
+
+    assert "解析不了" in P.read_preset(got.path, root=got.root, trust=got.trust,
+                                       resolve=strict).broken
+
+
+def test_yaml_1_1_booleans_do_not_swallow_row_ids(tmp_path):
+    """`id: off` / `id: on` 必须是字符串（YAML 1.2 口径），不是布尔。
+
+    退化会坏成什么：PyYAML 实现 YAML 1.1，默认把 `on` / `off` / `yes` / `no` 当布尔 ——
+    于是一行 `- id: off` 变成 `id: False`，读起来是"缺 id"，而配置里明明写着；
+    DSH 用的 js-yaml 4 是 YAML 1.2（那几个词是字符串），所以这一刀是向 DSH 对齐。
+    （实测出处：`temp/_probe_js_gate.py`。）
+    """
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    _make_preset(cfg, "words", raw=(
+        "- id: off\n  name: mod.a\n"
+        "- id: on\n  name: mod.b\n"
+        "- id: no\n  name: mod.c\n"
+        "- id: yes\n  name: mod.d\n"
+        "- id: y\n  name: mod.e\n"))
+    got = P.discover(roots=[P.PresetRoot(cfg)], include_user=False)[0]
+    assert got.broken == "", got.broken
+    assert [row.id for row in got.rows] == ["off", "on", "no", "yes", "y"]
+    # 真布尔仍然认（只有 true/false 两个词）。
+    _make_preset(cfg, "bools", raw="- id: r1\n  name: m\n  disabled: true\n")
+    flag = P.discover(roots=[P.PresetRoot(cfg)], include_user=False)
+    gated = next(p for p in flag if p.id == "bools")
+    assert gated.rows[0].disabled is True and gated.rows[0].state == P.GATE_DISABLED
+
+
+def test_an_unknown_disabled_shape_is_a_broken_row_with_a_reason(tmp_path):
+    """`disabled:` 写成不认识的对象 ⇒ 那一行坏，带理由（不许静默当真/当假）。
+
+    退化会坏成什么：一个非空映射在 Python 里恒真 ⇒ "这一行永远不挂"，
+    而配置里写的是一个没被实现的形状（例如想写结构化条件）。坏配置要能报出来。
+    """
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    _make_preset(cfg, "weird", raw="- id: r1\n  name: mod.a\n  disabled: {platform: win32}\n")
+    got = P.discover(roots=[P.PresetRoot(cfg)], include_user=False)[0]
+    assert "disabled 的形状不认识" in got.broken, got.broken
+
+
+def test_the_manifest_is_yaml_in_dsh_shape(tmp_path):
+    """`preset.yml` 是 YAML，且复制之后仍然是 YAML（不是 JSON 混进来）。
+
+    退化会坏成什么：两种方言混用会让"这一份是 DSHT 格式"这句话变成"取决于谁写的"；
+    而读取端只认一种时，另一种会被读成"坏预设"，症状是"我明明写对了它却说读不了"。
+    """
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    home = tmp_path / "home"
+    path = _make_preset(cfg, "standard", name="内置")
+    text = (path / P.PRESET_MANIFEST_NAME).read_text(encoding="utf-8")
+    assert "name: 内置" in text and not text.lstrip().startswith("{"), text
+    assert P.PRESET_MANIFEST_NAME == "preset.yml"
+    assert P.COMPOSITION_NAME == "agent.agentflow.yml"
+
+    got = P.discover(roots=[P.PresetRoot(cfg)], include_user=False)[0]
+    copied = P.copy_preset(got, "copy", home=home)
+    copied_text = (copied / P.PRESET_MANIFEST_NAME).read_text(encoding="utf-8")
+    assert "description:" in copied_text and not copied_text.lstrip().startswith("{")
+    assert P.load_yaml(copied / P.PRESET_MANIFEST_NAME)["description"] == "来源的描述"
 
 
 def test_the_id_regex_is_the_path_safety_judge():

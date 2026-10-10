@@ -2543,7 +2543,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # （装配 / 提示词 / 模型缝 / 循环）。同样逐条登记并写一行理由。
     "promptkit.py": "提示词装配：有序段 + 变量 + complete + 作用域遮蔽，失败全部抛（学 DSH 的 `dsh-system-prompt`；`draft/28` §179、`draft/34`）",
     "persona.py": "身份的两个具名槽位（`deployment:persona-prefix` / `-suffix`）与它们的唯一注册入口：部署那一份无条件注册、角色那一份靠同名遮蔽、`scope` 必填（学 DSH 的 `dsh-persona`；`draft/101` §3）",
-    "presets.py": "预设机制：一个预设一个目录（`preset.json` + `agent.agentflow.json`）、发现按根优先级（随包前置赢同 id）、坏预设列出来带理由、一个预设挂一次（生成键 = mtime+size）、创作面只有复制（学 DSH 的 `dsh-agent-presets`；`draft/101` §2）",
+    "presets.py": "预设机制：一个预设一个目录（`preset.yml` + `agent.agentflow.yml`，DSH 的 YAML 形状）、发现按根优先级（随包前置赢同 id）、坏预设列出来带理由、一个预设挂一次（生成键 = mtime+size）、创作面只有复制、`!!js` 门是三态里的 conditional（学 DSH 的 `dsh-agent-presets`；`draft/101` §2）",
     "instructions.py": "工作区指令通道：只从文件来（AGENTS.md 一类 + .local 叠加件）、项目根 = 第一个带 `.git` 的祖先、由宽到窄、按目录去重（raw/trim 两个 SHA-1）、maxBytes 降级（先丢更宽的再截最具体的，绝不总结）、追加式 + 转义框闭合标记（学 DSH 的 `dsh-agent-instructions`；`draft/101` §4）",
     "agent_prompts.py": "A–H 与主控的前置提示词：手写判断 + 现算事实（工具面 / 伙伴边 / 动作参数 / 失败词表；`draft/28` §178/§179）",
     "llmseam.py": "统一的模型缝：一次调用一条审计记录（版本 / 哈希 / tokens / 花销）+ 三态词表 + 预算守卫（`draft/28` §179）",

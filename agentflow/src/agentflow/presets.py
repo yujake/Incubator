@@ -9,7 +9,7 @@ DSH 把这一层做成数据：一个预设就是一个目录，目录里有一�
 
 ## 搬过来的七条（逐条带 DSH 出处）
 
-1. 一个预设一个目录：`preset.json`（显示三件：name / description / order）+
+1. 一个预设一个目录：`preset.yml`（显示三件：name / description / order）+
    组装文件（必需）。DSH 的对应物是 `presets/<id>/preset.yml` + `agent.cordis.yml`
    （实测四个随包预设的目录形状见 `draft/101` §2.1）。
 2. 根按优先级扫（`README:54-60`）：随包根前置（所以内置永远赢同 id）→ 部署配置的根
@@ -25,19 +25,28 @@ DSH 把这一层做成数据：一个预设就是一个目录，目录里有一�
    删只允许删本地创作的那些（随部署发的不可删）。
 7. id 是一条正则（`README:77`）：`^[a-z0-9][a-z0-9-]*$` —— 因为 id 会成为目录名。
 
-## 与 DSH 的偏差（三条，都写在下面各自的位置上）
+## 与 DSH 的偏差（两条，都写在下面各自的位置上）
 
-- 组装文件用 JSON（stdlib）而不是 YAML：本仓运行期依赖只有 `filelock`
-  （`pyproject.toml` 的注释逐字："运行期依赖必须保持极小"），而 YAML 不在声明里。
-  形状（"具名行的列表"）与 DSH 一致。
 - DSH 的组装行名字解析成 Cordis 插件；本模块不解析（那是接线面的事）：
   `resolve` 由调用方传进来（不给就跳过这一条健康检查）。机制与内容因此分开。
 - DSH 的"用户根"是 `<dshHome>/.agent-presets`；本框架没有 `dshHome`，默认取
   `~/.agentflow/agent-presets`（同样可关掉）。
+
+## 文件格式（业主 2026-10-11 裁定："就用 dsh 的格式"）
+
+用 YAML，文件名照 DSH 的形状：`preset.yml`（显示三件）+
+`agent.agentflow.yml`（组装；DSH 的宿主是 Cordis，所以它那份叫 `agent.cordis.yml`）。
+组装行的键与 DSH 逐字一致：`id` / `name` / `config` / `disabled` / `group` / `isolate`。
+
+`disabled` 上有一处必须记账的形状差异：DSH 写 `disabled: !!js process.platform === 'win32'`
+（它在 Node 上直接求值）。本仓是 Python，求不了 JS ⇒ 那个标签被解析成一个
+不被求值的门（`Gate.expression`），它的状态是 `conditional` 而不是 `false`。
+这不是妥协，而是 DSH 自己也有的口径（`dsh-agent-presets/README:125` 逐字：
+"A gate the evaluator refuses stays `'conditional'`"）—— 三态纪律：
+"没求值"不许读成"不生效"。求值不了就说求值不了。
 """
 from __future__ import annotations
 
-import json
 import pathlib
 import re
 import shutil
@@ -45,11 +54,14 @@ import stat
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
-#: 显示元数据的文件名（DSH：`preset.yml`）。
-PRESET_MANIFEST_NAME = "preset.json"
+import yaml
 
-#: 组装文件的文件名（DSH：`agent.cordis.yml`；本框架的组装语言是 JSON，见模块 docstring）。
-COMPOSITION_NAME = "agent.agentflow.json"
+#: 显示元数据的文件名（DSH：`preset.yml`）。
+PRESET_MANIFEST_NAME = "preset.yml"
+
+#: 组装文件的文件名。DSH 的形状是 `agent.<宿主>.yml`（它那份叫 `agent.cordis.yml`，
+#: 因为它的组装语言是 Cordis）；本框架的宿主是 agentflow，所以是这一份。
+COMPOSITION_NAME = "agent.agentflow.yml"
 
 #: 用户根的默认位置（DSH：`<dshHome>/.agent-presets`）。
 USER_ROOT_SUBDIR = pathlib.Path(".agentflow") / "agent-presets"
@@ -66,6 +78,70 @@ TRUSTS: tuple[str, ...] = (TRUST_SYSTEM, TRUST_CONFIGURED, TRUST_USER)
 
 class PresetError(ValueError):
     """预设的配置错误（id 非法、复制覆盖、删随包预设、组装文件读不了）。"""
+
+
+#: 一行/一个预设的三种状态。第三态是刻意留的：DSH 的 `disabled` 可以是一个
+#: 求值不了的门（`!!js`），那时它的状态是 conditional 而不是 false
+#: （`dsh-agent-presets/README:125` 逐字："A gate the evaluator refuses stays 'conditional'"）。
+GATE_ENABLED = "enabled"
+GATE_DISABLED = "disabled"
+GATE_CONDITIONAL = "conditional"
+
+
+@dataclass(frozen=True)
+class Gate:
+    """一个没有被求值的门（YAML 的 `!js` / `!!js` 标签）。
+
+    为什么保留表达式而不是折成 True/False：DSH 在 Node 上直接求值，
+    本仓是 Python 求不了 JS。折成 False 会让"这一行这次不挂"与"我不知道它挂不挂"
+    变成同一件事 —— 而后者正是需要一个能点名的状态的场合（三态纪律）。
+    """
+
+    expression: str
+
+    @property
+    def state(self) -> str:
+        return GATE_CONDITIONAL
+
+
+class _PresetLoader(yaml.SafeLoader):
+    """安全加载器 + 一个标签：`!js` / `!!js` 捕获成 `Gate`（不求值）。
+
+    另外把隐式布尔的分辨率收窄成 YAML 1.2 那一套（只有 `true` / `false`）。
+    PyYAML 实现的是 YAML 1.1，它把 `on` / `off` / `yes` / `no` / `y` / `n` 也当布尔 ——
+    于是 DSH 形状里一行 `- id: off` 会被解析成 `id: False`，读起来变成"缺 id"，
+    而配置里明明写着。DSH 用的 js-yaml 4 是 YAML 1.2 core schema（那几个词是字符串），
+    所以这一刀是向 DSH 对齐，不是本地偏好。
+    （实测：`temp/_probe_js_gate.py` —— 收窄之前 `id: off` 与 `id: on` 分别是
+    `False` 与 `True`，`id: off` 那一行被判成"缺 id 或 name"。）
+    """
+
+
+_PresetLoader.yaml_implicit_resolvers = {
+    ch: [(tag, regexp) for tag, regexp in resolvers
+         if tag != "tag:yaml.org,2002:bool"]
+    for ch, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_PresetLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|false)$", re.IGNORECASE),
+    list("tTfF"))
+
+
+def _js_gate(loader: yaml.Loader, node: yaml.Node) -> Gate:
+    return Gate(expression=str(loader.construct_scalar(node)))
+
+
+_PresetLoader.add_constructor("!js", _js_gate)
+_PresetLoader.add_constructor("tag:yaml.org,2002:js", _js_gate)
+
+
+def load_yaml(path: pathlib.Path) -> Any:
+    """读一个 YAML 文件（安全加载器；`!!js` 捕获成不求值的 `Gate`）。
+
+    为什么用 SafeLoader 而不是 FullLoader：预设是配置，它不该能构造任意 Python 对象。
+    DSH 的组装文件同样是数据（`!!js` 那一处也只是表达式文本）。
+    """
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_PresetLoader)
 
 
 @dataclass(frozen=True)
@@ -99,19 +175,29 @@ class PresetRow:
 
     `name` 是"要挂什么"的名字，本模块不解释它（见模块 docstring 的偏差二）：
     机制只知道"有哪些行、哪一行坏了"，"这一行是谁"由接线面回答。
+
+    `disabled` 可以是布尔，也可以是一个求值不了的门（`!!js`）—— 后者让这一行落进
+    `conditional` 那一档（见 `state`）。
     """
 
     id: str
     name: str
     config: Any = None
-    disabled: bool = False
+    disabled: "Gate | bool" = False
     group: bool = False
     isolate: Mapping[str, bool] = field(default_factory=dict)
 
     @property
+    def state(self) -> str:
+        """这一行这次算不算生效：`enabled` / `disabled` / `conditional`。"""
+        if isinstance(self.disabled, Gate):
+            return self.disabled.state
+        return GATE_DISABLED if self.disabled else GATE_ENABLED
+
+    @property
     def active(self) -> bool:
-        """这一行这次会不会生效（`disabled` 为真时不挂，但仍在清单里可见）。"""
-        return not self.disabled
+        """只有明确 enabled 才算挂上（`conditional` 不算 —— 那是"还没求值"）。"""
+        return self.state == GATE_ENABLED
 
 
 @dataclass(frozen=True)
@@ -203,11 +289,11 @@ def read_preset(path: pathlib.Path, *, root: pathlib.Path, trust: str,
     manifest = path / PRESET_MANIFEST_NAME
     if manifest.is_file():
         try:
-            loaded = json.loads(manifest.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
+            loaded = load_yaml(manifest)
+        except (OSError, ValueError, yaml.YAMLError) as exc:
             return Preset(**base, broken=f"{PRESET_MANIFEST_NAME} 读不了：{type(exc).__name__}: {exc}")
         if not isinstance(loaded, Mapping):
-            return Preset(**base, broken=f"{PRESET_MANIFEST_NAME} 的最外层必须是对象")
+            return Preset(**base, broken=f"{PRESET_MANIFEST_NAME} 的最外层必须是映射")
         meta = dict(loaded)
 
     composition = path / COMPOSITION_NAME
@@ -217,8 +303,8 @@ def read_preset(path: pathlib.Path, *, root: pathlib.Path, trust: str,
                       broken=f"缺组装文件 {COMPOSITION_NAME}")
 
     try:
-        rows_raw = json.loads(composition.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        rows_raw = load_yaml(composition)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
         return Preset(**base, name=str(meta.get("name", "")),
                       description=str(meta.get("description", "")),
                       broken=f"组装文件读不了：{type(exc).__name__}: {exc}")
@@ -251,7 +337,10 @@ def _read_rows(rows_raw: Any, *, resolve: Callable[[str], Any] | None) -> tuple[
         isolate = raw.get("isolate", {}) or {}
         if not isinstance(isolate, Mapping):
             return (), f"第 {index} 行（{row_id}）的 isolate 必须是对象"
-        if resolve is not None and not bool(raw.get("disabled")):
+        gate, why = _gate_of(raw.get("disabled"))
+        if why:
+            return (), f"第 {index} 行（{row_id}）：{why}"
+        if resolve is not None and gate is False:
             try:
                 resolve(row_name)
             except Exception as exc:  # noqa: BLE001 —— 这里就是要把它翻成"这一行坏了"
@@ -259,10 +348,28 @@ def _read_rows(rows_raw: Any, *, resolve: Callable[[str], Any] | None) -> tuple[
                             f"{type(exc).__name__}: {exc}")
         rows.append(PresetRow(
             id=row_id, name=row_name, config=raw.get("config"),
-            disabled=bool(raw.get("disabled")), group=bool(raw.get("group")),
+            disabled=gate, group=bool(raw.get("group")),
             isolate={str(k): bool(v) for k, v in dict(isolate).items()},
         ))
     return tuple(rows), ""
+
+
+def _gate_of(value: Any) -> tuple["Gate | bool", str]:
+    """把 `disabled:` 归一成布尔或门；不认识的形状 ⇒ 返回坏行理由。
+
+    为什么要认字符串：手写 YAML 时很容易写成 `disabled: "platform == win32"`
+    （忘了写 `!!js` 标签）。那种写法不能被当成真（非空字符串在 Python 里恒真，
+    于是"这一行永远不挂"），也不能被当成假。它进 `conditional` 那一档 —— 与
+    `!!js` 同一条处置：求值不了就说求值不了。
+    """
+    if value is None or isinstance(value, bool):
+        return bool(value), ""
+    if isinstance(value, Gate):
+        return value, ""
+    if isinstance(value, str):
+        return Gate(expression=value), ""
+    return False, (f"disabled 的形状不认识：{type(value).__name__}"
+                   "（只认布尔、字符串表达式或 `!!js` 标签）")
 
 
 def discover(*, roots: Sequence[PresetRoot] = (), shipped_root: pathlib.Path | None = None,
@@ -373,7 +480,7 @@ def copy_preset(source: Preset, new_id: str, *, roots: Sequence[PresetRoot] = ()
     """把一个已有预设整目录复制成新的本地预设，返回新目录。
 
     四条拒绝（DSH `README:77` 逐字）：id 不合法、id 已被占用、来源未知、
-    没有可写根。复制永不覆盖；复制之后 `preset.json` 被改写（保留 description、
+    没有可写根。复制永不覆盖；复制之后 `preset.yml` 被改写（保留 description、
     丢掉 name 与 order）—— 理由逐字：复制保留来源的描述是给作者改的，
     而 name/order 丢掉是为了"名册分得清副本与来源"。
     """
@@ -395,8 +502,10 @@ def copy_preset(source: Preset, new_id: str, *, roots: Sequence[PresetRoot] = ()
     root.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source.path, target)
     meta = {"name": name or source.display, "description": source.description}
+    # `allow_unicode=True`：描述是中文，转义成 \uXXXX 之后人改不动它；
+    # `sort_keys=False`：先 name 后 description，与 DSH 的 `preset.yml` 同序。
     (target / PRESET_MANIFEST_NAME).write_text(
-        json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        yaml.safe_dump(meta, allow_unicode=True, sort_keys=False), encoding="utf-8")
     _tighten(target)
     return target
 
@@ -446,14 +555,15 @@ def selftest() -> int:
         path = base / preset_id
         path.mkdir(parents=True, exist_ok=True)
         (path / PRESET_MANIFEST_NAME).write_text(
-            json.dumps({"name": name or preset_id, "description": "d", "order": 1},
-                       ensure_ascii=False), encoding="utf-8")
+            yaml.safe_dump({"name": name or preset_id, "description": "d", "order": 1},
+                           allow_unicode=True, sort_keys=False), encoding="utf-8")
         if broken_rows is not None:
             (path / COMPOSITION_NAME).write_text(str(broken_rows), encoding="utf-8")
         else:
             (path / COMPOSITION_NAME).write_text(
-                json.dumps(rows if rows is not None else [{"id": "a", "name": "mod.a"}]),
-                encoding="utf-8")
+                yaml.safe_dump(rows if rows is not None
+                               else [{"id": "a", "name": "mod.a"}],
+                               allow_unicode=True, sort_keys=False), encoding="utf-8")
         return path
 
     with tempfile.TemporaryDirectory(prefix="preset-") as td:
@@ -465,7 +575,19 @@ def selftest() -> int:
         write_preset(shipped, "standard", name="内置")
         write_preset(configured, "standard", name="配置的")     # 同 id ⇒ 内置赢
         write_preset(configured, "extra", name="额外的")
-        write_preset(configured, "bad", broken_rows="{ 不是合法 JSON")
+        write_preset(configured, "bad", broken_rows="{ 不是合法 YAML: [")
+        # DSH 那种带标签的门：`!!js` 求值不了 ⇒ 这一行是 conditional（不是 disabled）。
+        # 用真的 YAML 源文本写，走的是 `!!js` 标签那条构造路径，而不是直接造 Gate 对象。
+        gated = configured / "gated"
+        gated.mkdir()
+        (gated / PRESET_MANIFEST_NAME).write_text("name: 带门的\n", encoding="utf-8")
+        (gated / COMPOSITION_NAME).write_text(
+            "- id: shell\n"
+            "  name: mod.shell\n"
+            "  disabled: !!js process.platform === 'win32'\n"
+            "- id: always\n"
+            "  name: mod.always\n",
+            encoding="utf-8")
         (configured / "not-a-preset-dir").mkdir()
         (configured / "Bad_Id").mkdir()
 
@@ -480,6 +602,15 @@ def selftest() -> int:
               "非法 id 的目录没有被列成坏行（它占着 id 却不显示，就没法删）")
         check(by_id["standard"].trust == TRUST_SYSTEM, "trust 不是 system")
 
+        # 三态：`!!js` 那一行的状态是 conditional（求值不了 ⇒ 不许读成"不生效"）
+        gated = by_id["gated"]
+        check(gated.broken == "", f"带门的预设被读坏了：{gated.broken}")
+        states = {row.id: row.state for row in gated.rows}
+        check(states == {"shell": GATE_CONDITIONAL, "always": GATE_ENABLED},
+              f"门的三态不对：{states}")
+        check(gated.rows[0].active is False,
+              "conditional 的那一行被当成 active（没求值不许读成生效）")
+
         # 生成：戳不变 ⇒ 同一代；改一下 ⇒ 新的一代
         mount = PresetMount()
         calls: list[str] = []
@@ -490,8 +621,9 @@ def selftest() -> int:
               "戳没变却又组装了一次（前缀就不稳定了）")
         check(mount.generation("standard") == 1, "代数不对")
         comp = std.composition_path
-        comp.write_text(json.dumps([{"id": "a", "name": "mod.a"},
-                                    {"id": "b", "name": "mod.b"}]), encoding="utf-8")
+        comp.write_text(yaml.safe_dump([{"id": "a", "name": "mod.a"},
+                                        {"id": "b", "name": "mod.b"}],
+                                       allow_unicode=True, sort_keys=False), encoding="utf-8")
         reloaded = read_preset(std.path, root=std.root, trust=std.trust)
         check(mount.is_stale(reloaded), "戳变了却没判成过期")
         mount.mount(reloaded, lambda p: "组装2")
@@ -506,7 +638,7 @@ def selftest() -> int:
         # 复制：合法 → 落在用户根；重名/非法/坏来源 ⇒ 抛
         target = copy_preset(std, "my-copy", roots=[], home=home)
         check(target.parent == (home / USER_ROOT_SUBDIR).resolve(), f"复制没落在用户根：{target}")
-        copied_meta = json.loads((target / PRESET_MANIFEST_NAME).read_text(encoding="utf-8"))
+        copied_meta = load_yaml(target / PRESET_MANIFEST_NAME)
         check("order" not in copied_meta, "复制没有丢掉 order（名册分不清副本与来源）")
         for bad_call, why in (
             (lambda: copy_preset(std, "my-copy", roots=[], home=home), "重名"),

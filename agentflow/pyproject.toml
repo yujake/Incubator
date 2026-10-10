@@ -21,6 +21,14 @@ license = { text = "Proprietary" }
 # 正式版的依赖以本文件为准（`requirements.txt` 保留为历史说明）。
 dependencies = [
     "filelock>=3.12",
+    # 预设层的组装文件用 YAML —— 业主 2026-10-11 裁定「就用 dsh 的格式」。
+    # DSH 的预设是 `preset.yml` + `agent.cordis.yml`（`dsh-agent-presets/presets/*`），
+    # 而那条路上有一处我们无法用标准库替代的形状：组装行里有 `disabled: !!js <表达式>`
+    # 这种带标签的门（DSH 在 Node 上直接求值）。自己写一门 YAML 方言比引一个
+    # 到处都有的解析器更贵，而且"缩进即语义"的东西自己实现，出错时最难查。
+    # 只影响预设层：核心路径（检索 / 抽取 / 台账 / 网关 / 循环）一个字节都没变，
+    # 仍然只用标准库 + filelock。
+    "PyYAML>=6.0",
 ]
 
 # 控制台入口：装上之后 `agentflow` 与 `python -m agentflow` 是同一条命令。
