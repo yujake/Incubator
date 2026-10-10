@@ -2531,6 +2531,14 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 它是真模块（不是对拍副本）：`artifacts.read_ledger` / `signatures.read_ledger` /
     # `sessions.read_session` 都转发到它；逐对查证与合并理由见 §211。
     "jsonlfile.py": "JSONL 文件的读法唯一实现：坏行逐条报出、空行跳过、\"合法 JSON 但不是对象\"单列一档（`draft/36` T-6；`draft/28` §211）",
+    # 2026-10-11（`draft/100` 的 S-A / S-E / S-B）：三批各新增一个顶层模块 ——
+    # 前两个是"搬运落点"（DSH 的观测闸门与超时策略都要求一个新家），
+    # 后一个是"口径换 DSH"的估值器（12-H=甲 把每 token 几字符做成配置项）。
+    # 三个都不是对拍副本：分别被 `tools/fs_tools`、`agent_loop._do_tool`、
+    # `contextbudget.pressure_reading` 在用。
+    "fs_observation.py": "文件\"读后写\"的观测闸门：读过才许改、按 (dev,ino,size,mtime,ctime) 记版本（S-A / 裁定 9甲；DSH `fs-observation-policy` 的搬运）",
+    "tool_timeout.py": "逐工具超时：协作式 ContextVar 截止 + 一张限时表 + 逐字节相同的超时结果（S-E / 裁定 13甲、12-D、12-E、12-G）",
+    "tokenestimate.py": "固定密度估值器：DSH 的三个常量原样保留 + `chars_per_token` 配置项 + 三态（S-B / 裁定 12-H=甲）",
     # 2026-09-29 第二批新增的四个模块（`draft/28` §179）：把 LLM 接入规范化
     # （装配 / 提示词 / 模型缝 / 循环）。同样逐条登记并写一行理由。
     "promptkit.py": "提示词装配：有序段 + 变量 + complete + 作用域遮蔽，失败全部抛（学 DSH 的 `dsh-system-prompt`；`draft/28` §179、`draft/34`）",
