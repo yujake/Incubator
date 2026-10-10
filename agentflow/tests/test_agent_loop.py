@@ -728,6 +728,23 @@ def test_every_documented_shape_actually_parses(tmp_path: pathlib.Path):
     # 这条判据问的是"骨架里每一行都能被解析器认出来"，所以清单要与 `SHAPES` 同源。
     assert sorted(parsed) == sorted(SHAPES), parsed
 
+    # ---- 同源还要深一层：`_shape_of` 只认形状名，`_decode_shape` 才决定字段怎么读
+    #
+    # 实测（2026-10-11）：骨架教 `{"final": {"final": …}}`（嵌套两层），而解码器读的是顶层
+    # `{"final": …, "evidence": […]}` ⇒ 模型照抄骨架时 `final` 落成一个 JSON 字符串、
+    # `evidence` 恒空。形状名两边都是 "final"，所以上面那条判据照不到这一跳 ——
+    # 而这一跳正是"骨架是文档、文档必须与解码器同源"这句话的另一半。
+    from agentflow.agent_loop import _decode_shape
+
+    final_line = next(ln for ln in fixed.splitlines() if '"final"' in ln)
+    key, payload, problem = _decode_shape(json.loads(final_line))
+    assert (key, problem) == ("final", ""), (key, problem)
+    assert isinstance(payload["final"], str), (
+        f"照抄骨架之后 `final` 不是一句话而是一个 {type(payload['final']).__name__}：{final_line}")
+    assert payload["final"] == "做完了", payload
+    assert payload["evidence"] == ["<你实际用到的 id>"], (
+        f"照抄骨架之后 `evidence` 是空的（协议让它带'实际用到的 id'）：{final_line}")
+
 
 def test_the_skeleton_teaches_the_preferred_handoff_field_names():
     """骨架教的名字必须是协议的首选名 `summary`，不许教旧名 `title`/`brief`。

@@ -119,10 +119,9 @@ DEFINITION_ASK_SUBJECT = "定义待补：请就地给出"
 #: 它不是不听指令，是没读到：中间那句"请只输出一个 JSON 对象"离它的回答太远了。
 JSON_TAIL = (
     "只回一行 JSON（不要解释、不要 Markdown 围栏、不要前后缀）。形状取其一"
-    "（键名与嵌套层级照抄，`<...>` 是占位符）。**括号数看最后两行**："
-    "`tool` 那行只以一个 `}` 结尾；`summon` / `summon_many` / `message` / `handoff` / "
-    "`final` 这几行**本来就以 `}}` 结尾**（嵌套两层）—— 照抄时别再多补一个，"
-    "实测最常见的坏 JSON 就是多补一个 `}`：\n"
+    "（键名与嵌套层级照抄，`<...>` 与 `{...}` 是占位符）。把下面这些行**连括号一起抄**、"
+    "只把占位符换成你的内容：不要自己数括号、也不要自己加一层嵌套 —— "
+    "实测最常见的坏 JSON 就是最后多补一个 `}`：\n"
     '{"tool": "<工具名>", "args": {...}}\n'
     '{"summon": {"role": "A-H", "action": "<动作名>", "params": {...}}}\n'
     '{"summon_many": {"targets": [{"role": "A-H", "action": "<动作名>", "instance": "<可选>"}],'
@@ -144,7 +143,15 @@ JSON_TAIL = (
     # S-H（裁定 14）：`interrupt` 停的是某一个子代理当前那一轮 —— 它不是全局叫停
     # （那是 `conductor.stop`，所有人都停），也不是"结束它"（那是 `retire`）。
     '{"interrupt": {"name": "D1"}}\n'
-    '{"final": {"final": "<结论>", "evidence": []}}'
+    # `final` 的层级曾经是错的（2026-10-11 修，业主口径"一切以代码为参考"）：
+    # 骨架原写 `{"final": {"final": "<结论>", "evidence": []}}`（嵌套两层），而解码器读的是
+    # 顶层 `{"final": <字符串>, "evidence": [...]}`（`_decode_shape` 的 final 那一支），
+    # 原生工具面的 schema 也是顶层（`llmseam.py` 的 `framework_final`）。
+    # 实测照抄骨架的后果：`final` 落成一个 JSON 字符串（`'{"final": "结论", …}'`）、
+    # `evidence` 恒为空 —— 也就是"结论不是一句话、引用全丢"，而形状名两边都是 `final`，
+    # 所以 `_shape_of` 那条同源判据照不到这一跳（判据只认形状名，不认字段怎么读）。
+    # 判据（已扩到解码器那一跳）：`test_the_skeleton_and_the_parser_speak_the_same_shape`。
+    '{"final": "<结论>", "evidence": ["<你实际用到的 id>"]}'
 )
 
 #: 公共频道。`message.to` 写它 = 所有人都能收到（说话，而不是派活）。
