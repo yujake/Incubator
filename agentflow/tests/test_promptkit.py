@@ -21,7 +21,16 @@ from __future__ import annotations
 
 import pytest
 
-from agentflow.promptkit import SECTION_ORDERS, PromptError, PromptRegistry, Scope, Section
+from agentflow.promptkit import (
+    CONTEXT_HEADER,
+    CONTEXT_ORDERS,
+    SECTION_ORDERS,
+    Context,
+    PromptError,
+    PromptRegistry,
+    Scope,
+    Section,
+)
 
 
 # ------------------------------------------------------------------ 段序
@@ -299,6 +308,87 @@ def test_assembly_names_and_unregistered_scope_role_still_render_globals():
     assert assembly.names == ("FIRST", "BLANK", "SECOND")
     assert assembly.render() == "第一段\n\n第二段"
     assert reg.render(Scope(role="NOBODY")) == reg.render("")
+
+
+# ------------------------------------------------------------------ 动态上下文
+
+
+def test_contexts_render_in_order_behind_the_supersede_header():
+    """动态上下文按 order 升序（同 order 按名字）排，前面加一句 supersede 头。
+
+    退化会坏成什么：快照是追加进会话的，没有那个头，模型会把先后两份快照当成
+    两条并列事实（"当时的沙箱政策"与"现在的沙箱政策"各算一条），于是旧政策会一直
+    参与判断；若顺序改按注册顺序，同一份注册表在两台机器上会渲染出两种快照。
+    """
+    reg = PromptRegistry(variables={"root": "D:/x"})
+    reg.context(Context("APPROVAL_POLICY", CONTEXT_ORDERS["APPROVAL_POLICY"], "审批：问。"))
+    reg.context(Context("SANDBOX_POLICY", CONTEXT_ORDERS["SANDBOX_POLICY"], "沙箱根：{{root}}"))
+    reg.context(Context("DELEGATION", CONTEXT_ORDERS["DELEGATION"], "委派：有界。"))
+    assembly = reg.assemble(Scope(role="M"))
+    assert assembly.context_names == ("SANDBOX_POLICY", "APPROVAL_POLICY", "DELEGATION")
+    snap = assembly.render_context_snapshot()
+    assert snap.startswith(CONTEXT_HEADER)
+    assert snap.index("沙箱根：D:/x") < snap.index("审批：问。") < snap.index("委派：有界。")
+    # 上下文不进 system 提示词：两者是两类东西。
+    assert assembly.render() == ""
+
+
+def test_contexts_shadow_globally_but_suppression_is_all_or_nothing():
+    """上下文与段同一条遮蔽规矩；抑制是全有全无（没有按提供者的过滤）。
+
+    退化会坏成什么：若抑制变成"逐条过滤"，"这份快照为什么是空的"就同时有两个可能
+    （没人注册 / 被过滤掉了），而读数上分不开 —— 三态纪律要的是"被抑制"是一个能被
+    点名的状态（本用例钉住 contexts_suppressed 与 contexts 同时可读）。
+    """
+    reg = PromptRegistry()
+    reg.context(Context("SANDBOX_POLICY", 110, "全局沙箱"))
+    reg.context(Context("SANDBOX_POLICY", 110, "A 的沙箱"), scope="A")
+    assert reg.assemble(Scope(role="A")).context_names == ("SANDBOX_POLICY",)
+    assert "A 的沙箱" in reg.assemble(Scope(role="A")).render_context_snapshot()
+    assert "全局沙箱" in reg.assemble(Scope(role="B")).render_context_snapshot()
+
+    reg.suppress_runtime_context(scope="A")
+    a = reg.assemble(Scope(role="A"))
+    assert a.contexts == () and a.contexts_suppressed is True
+    assert a.render_context_snapshot() == ""
+    # 只对 A 抑制：B 那一份照旧（抑制也是按作用域的）。
+    b = reg.assemble(Scope(role="B"))
+    assert b.contexts_suppressed is False and b.render_context_snapshot()
+
+
+def test_empty_contexts_disappear_and_a_context_variable_must_be_registered():
+    """空上下文与"这次没有"同义（丢掉）；上下文里引用未注册变量 ⇒ 装配即抛。
+
+    退化会坏成什么：若空上下文留在快照里，头还在、正文空着，模型读到的是"环境事实是
+    空的"而不是"没有这条消息"；若上下文的变量解析被放宽成静默留空，快照就会带着
+    `{{missing}}` 字面量发给模型（模块 docstring 记的 P16 形态）。
+    """
+    reg = PromptRegistry(variables={"ok": "有"})
+    reg.context(Context("GONE", 110, lambda sc: ""))
+    reg.context(Context("HERE", 115, "在：{{ok}}"))
+    assert reg.assemble().context_names == ("HERE",)
+
+    bad = PromptRegistry()
+    bad.context(Context("HERE", 115, "在：{{missing}}"))
+    with pytest.raises(PromptError) as exc:
+        bad.assemble()
+    assert "missing" in str(exc.value)
+    assert "上下文" in str(exc.value)
+
+
+def test_two_contexts_with_the_same_name_in_one_layer_raise():
+    """同一层里同名上下文 ⇒ 注册即抛（与段同一条规矩）。
+
+    退化会坏成什么：同层覆盖会让"这条环境事实是谁给的"取决于注册顺序；而顺序是插件
+    加载的副产品，不是声明 —— 于是同一份配置在两台机器上可能报出不同的沙箱政策。
+    """
+    reg = PromptRegistry()
+    reg.context(Context("SANDBOX_POLICY", 110, "第一条"))
+    with pytest.raises(PromptError):
+        reg.context(Context("SANDBOX_POLICY", 115, "第二条"))
+    # 作用域里同名是可以的（那正是遮蔽）。
+    reg.context(Context("SANDBOX_POLICY", 110, "角色这一条"), scope="C")
+    assert "角色这一条" in reg.assemble(Scope(role="C")).render_context_snapshot()
 
 
 # ------------------------------------------------------------------ 反真空
