@@ -688,12 +688,32 @@ def citation_coverage(
         }
 
     digested = [r for r in lit_rows if r.get("processed") is True]
+    try:
+        n_questions = len(list(rows_of("research_questions")))
+    except Exception:  # noqa: BLE001 —— 读不到就说读不到（-1，不编 0）
+        n_questions = -1
+    with_cites = sum(1 for c in claims if isinstance(c, Mapping) and (c.get("citations") or []))
     available = {
         "literature_total": len(lit_rows),
         "literature_processed": len(digested),
         "relations": len(rel_rows),
         "experiments": _count("experiments"),
         "statements": _count("statements"),
+        "research_questions": n_questions,
+    }
+    # 「立了几条研究问题」与「这份稿件有几条带引文的断言」的对照（T4 第 4/5 趟的整改）。
+    #
+    # 两趟连着的 blocker 都是这一个形状：`t4d` 是 `retrieval_ok_rows` 5 < 6（研究问题 6 条）、
+    # `t4e` 是 `document_claim_rows` 12 < 16（研究问题 16 条）—— 两档的隐式门槛都是
+    # "研究问题条数"，而 M 在写稿那一刻多半没有回头数自己立了几条问题。
+    # 这一格只把两个数摆在一起（读数，不拦），并说清默认门槛与两条出路
+    # （把断言写够，或在验收表那一行显式声明更低的 `min` 并写明理由）。
+    questions_vs_claims = {
+        "research_questions": n_questions,
+        "claims_with_citations": with_cites,
+        # 差几条：不取负（"写得比立的多"不是缺口）；读不到研究问题表时是 -1
+        # （与全项目同一条三态：-1 是"没查成"，不是"差 0 条"）。
+        "short": (max(0, n_questions - with_cites) if n_questions >= 0 else -1),
     }
     suggest_lit = [
         {"lit_id": str(r.get("lit_id") or ""), "title": str(r.get("title") or "")[:110]}
@@ -752,6 +772,14 @@ def citation_coverage(
         # 反真空：库里本来就没有可引的文献时不喊（"你没引"与"没东西可引"
         # 是两件事）—— 这件事由 `available.literature_processed == 0` 如实记着。
         pass
+    if questions_vs_claims["short"] > 0:
+        gaps.append(
+            f"库里立了 {n_questions} 条研究问题，而这份稿件只有 {with_cites} 条带引文的断言"
+            f"（差 {questions_vs_claims['short']} 条）—— 收工门那一档（`document_claim_rows`）的"
+            "默认门槛就是「研究问题条数」，而「检索」那一档（`retrieval_ok_rows`）同理。"
+            "两条出路：把断言写够，**或**在验收表那两行上显式声明更低的 `min` 并写明理由"
+            "（声明是你写的，门槛就按你写的判）"
+        )
     if misfit:
         gaps.append(
             f"这份稿子有 {len(misfit)} 条断言的引文与原文对不上"
@@ -769,6 +797,7 @@ def citation_coverage(
         "fit": counters,
         "fit_rows": fit_rows,
         "misfit": misfit,
+        "questions_vs_claims": questions_vs_claims,
         "suggest_lit": suggest_lit,
         "suggest_rel": suggest_rel,
         "note": ("只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；"

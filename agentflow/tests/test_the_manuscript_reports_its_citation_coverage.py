@@ -262,3 +262,48 @@ def test_anti_vacuum_no_features_on_one_side_is_unjudged_not_mismatch(tmp_path: 
     assert cov["fit"]["unjudged"] == 1 and cov["misfit"] == [], cov["fit"]
     assert cov["gaps"] == [] or all("引文与原文对不上" not in g for g in cov["gaps"]), cov["gaps"]
 
+
+# ---- 「立了几条研究问题 vs 稿件几条带引文断言」那一格（T4 第 4/5 趟的整改）----
+#
+# 两趟连着的 blocker 是同一个形状：`t4d` 的 `retrieval_ok_rows` 5 < 6、
+# `t4e` 的 `document_claim_rows` 12 < 16 —— 两档的隐式门槛都是"研究问题条数"，
+# 而 M 在写稿那一刻多半没回头数自己立了几条问题。
+
+
+def _with_questions(root: Path, n: int) -> Store:
+    store = _seed_library(root)
+    with store.tx("research_questions", actor="test", note="seed") as tx:
+        for i in range(n):
+            tx.upsert("research_questions", {"question_id": f"{i:04d}",
+                                             "question": f"problem {i}",
+                                             "status": "open",
+                                             "created_at": TS}, note="seed")
+    return store
+
+
+def test_positive_the_gap_between_questions_and_claims_is_named(tmp_path: Path) -> None:
+    """正控：立的比写的多 ⇒ 报出差几条，并给出两条出路。"""
+    store = _with_questions(tmp_path, 4)
+
+    res = _build(tmp_path, store, [_claim(["lit:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["questions_vs_claims"]["research_questions"] == 4, cov["questions_vs_claims"]
+    assert cov["questions_vs_claims"]["claims_with_citations"] == 1, cov["questions_vs_claims"]
+    assert cov["questions_vs_claims"]["short"] == 3, cov["questions_vs_claims"]
+    assert any("4 条研究问题" in g for g in cov["gaps"]), cov["gaps"]
+
+
+def test_negative_no_questions_no_nagging(tmp_path: Path) -> None:
+    """负控（反真空）：一条研究问题都没立 ⇒ 不喊（"没立题"与"写得少"是两件事）。"""
+    store = _seed_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["lit:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["questions_vs_claims"]["research_questions"] == 0, cov["questions_vs_claims"]
+    assert cov["questions_vs_claims"]["short"] == 0, cov["questions_vs_claims"]
+    assert all("条研究问题" not in g for g in cov["gaps"]), cov["gaps"]
+
