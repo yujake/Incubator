@@ -132,7 +132,7 @@ def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
     monkeypatch.setattr(TC, "mathlib_state",
                         lambda *a, **k: {"checked": True, "root": "",
                                          "reason": "没找到 Mathlib 工程根"})
-    AP2.toolchain_facts_text.cache_clear()
+    AP2.reset_toolchain_readings()
     with_lean = AP2.toolchain_facts_text()
     assert "lean 4.7.0" in with_lean and "没找到工程根" in with_lean, with_lean
 
@@ -141,24 +141,57 @@ def test_the_toolchain_reading_is_in_every_prompt_and_is_not_hardcoded(
                                       "available_names": [], "probe_errors": [],
                                       "reason": "探测完成：环境里没有任何受支持的证明检查器",
                                       "looked_in": [], "sources": {}})
-    AP2.toolchain_facts_text.cache_clear()
+    AP2.reset_toolchain_readings()
     without = AP2.toolchain_facts_text()
     assert "没有任何受支持的检查器" in without, without
     assert without != with_lean, "换了探针读数、这一行却没变 ⇒ 它是写死的"
-    AP2.toolchain_facts_text.cache_clear()
+    AP2.reset_toolchain_readings()
+
+
+def test_the_formal_writing_block_goes_to_whoever_holds_the_tool(registry: ToolRegistry):
+    """`TOOLCHAIN_FORMAL` 只发给手上真有 `verify.check_formal` 的角色（业主裁定 G）。
+
+    两头都钉，因为两头的错法不一样：
+      - 漏发（会用它的角色没拿到）⇒ 重演 `draft/37` §89：8 次 `check_formal` 里
+        6 次白撞 `import Mathlib`，而框架手里有读数；
+      - 滥发（不写 Lean 的角色也收到一段"怎么写 Lean 源码"）⇒ 提示词变噪音，
+        而噪音的代价是"该看的那几句被淹掉"（本文件的伙伴表判据同一句话）。
+
+    判据按工具面现算（`_writes_lean`），不写死角色名 —— 所以它同时钉住
+    "角色与工具面对得上"这件事：注册表里谁有这件工具，谁就该有这一段。
+    """
+    holders: list[str] = []
+    for role in ALL_ROLES:
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        holds = any(s.name == "verify.check_formal" for s in registry.for_role(role))
+        assert ("TOOLCHAIN_FORMAL" in sections) is holds, (
+            f"{role}：工具面上{'有' if holds else '没有'} `verify.check_formal`，"
+            f"而段表里{'有' if 'TOOLCHAIN_FORMAL' in sections else '没有'}那一段")
+        if holds:
+            holders.append(role)
+    assert holders == ["E", "F", "G"], (
+        f"持有这件工具的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
+        "不是判据坏了，是读数变了：改这一行之前先看那三个角色的提示词是不是真的都该拿到它")
 
 
 def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """判据：Mathlib 可用时，那一行必须说"显式传 `['Mathlib']`"，而不是叫你去写自足文件。
+    """判据：Mathlib 可用时，那一段必须说"显式传 `['Mathlib']`"，而不是叫你去写自足文件。
 
-    真机读数（2026-10-05 T1 第 16 趟）：这一行在 Mathlib 可用时仍然写死
+    真机读数（2026-10-05 T1 第 16 趟）：这一段在 Mathlib 可用时仍然写死
     "`check_formal` 可达的写法是不 import Mathlib 的自足文件" —— 它与上面一行的现算读数
     直接打架，而模型信了它：`experiments` 里 8 次 formal 全是
     `imports=（默认：不注入任何库）`、全部 `compile_error`（检查器原话
     `failed to synthesize instance`），一条 proof 行都没落成。
     负控：读数说没装时，"自足文件"那句必须还在 —— 那一支的处置本来就该是它。
+
+    2026-10-11（E 的迁移批）这一轴拆成两段：事实（`toolchain_facts_text`，
+    全角色）与怎么写（`toolchain_formal_text`，持有 `verify.check_formal` 的角色）。
+    这条判据因此同时钉住"拆干净了"：事实段里不再出现写法口径
+    （否则九个不写 Lean 的角色照样读到它 ⇒ 拆了个寂寞），
+    而口径段里按读数给路（三档都测）。
     """
     from agentflow import agent_prompts as AP2
     from agentflow import toolchain as TC
@@ -170,19 +203,49 @@ def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
     monkeypatch.setattr(TC, "mathlib_state",
                         lambda *a, **k: {"checked": True, "root": "R",
                                          "umbrella_olean": "R/Mathlib.olean",
-                                         "import_mathlib": "可用"})
-    AP2.toolchain_facts_text.cache_clear()
-    text = AP2.toolchain_facts_text()
-    assert "'Mathlib'" in text and "imports" in text and "failed to synthesize instance" in text, text
+                                         "import_mathlib": "可用",
+                                         "import_mathlib_probe": {"checked": True,
+                                                                  "verified": True}})
+    AP2.reset_toolchain_readings()
+    facts = AP2.toolchain_facts_text()
+    text = AP2.toolchain_formal_text()
+    assert "'Mathlib'" in text and "imports" in text, text
     assert "不 import Mathlib 的自足文件" not in text, text
+    # 事实段只报读数：它不该再夹一句"所以你该怎么写"（那是另一段的事）
+    assert "显式传" not in facts and "自足文件" not in facts, facts
 
+    # 负控：读数说没装 ⇒ 口径段改说自足文件（那一支本来就该是它）
     monkeypatch.setattr(TC, "mathlib_state",
                         lambda *a, **k: {"checked": True, "root": "",
                                          "reason": "没找到 Mathlib 工程根"})
-    AP2.toolchain_facts_text.cache_clear()
-    text = AP2.toolchain_facts_text()
-    assert "不 import Mathlib 的自足文件" in text, text
-    AP2.toolchain_facts_text.cache_clear()
+    AP2.reset_toolchain_readings()
+    text = AP2.toolchain_formal_text()
+    assert "自足文件" in text, text
+    assert "显式传 `imports: ['Mathlib']`" not in text, text
+
+    # 负控：实测编译失败（根在、umbrella 在、但真编译过不去）⇒ 也说自足，
+    # 且必须说清"这是环境问题，不是命题问题"（否则模型会据它改结论）
+    monkeypatch.setattr(TC, "mathlib_state",
+                        lambda *a, **k: {"checked": True, "root": "R",
+                                         "umbrella_olean": "R/Mathlib.olean",
+                                         "import_mathlib": "可用",
+                                         "import_mathlib_probe": {
+                                             "checked": True, "verified": False,
+                                             "missing_imports": ["Std"],
+                                             "status": "import_unavailable"}})
+    AP2.reset_toolchain_readings()
+    text = AP2.toolchain_formal_text()
+    assert "自足文件" in text and "环境问题" in text and "Std" in text, text
+
+    # 负控：探测没做成 ⇒ 不许猜（"没读到"与"没有"必须分得开）
+    monkeypatch.setattr(TC, "probe_checkers",
+                        lambda **kw: {"checked": False, "available": [],
+                                      "available_names": [], "probe_errors": [],
+                                      "reason": "没查成", "looked_in": [], "sources": {}})
+    AP2.reset_toolchain_readings()
+    text = AP2.toolchain_formal_text()
+    assert "没做成" in text and "别猜" in text, text
+    AP2.reset_toolchain_readings()
 
 
 def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind():
@@ -1379,6 +1442,10 @@ def test_each_rendered_protocol_is_exactly_the_constant_minus_its_own_blocks(
 # 而这张表要守的是"段与版本一起前进"，不是"这台机器上装了什么"。
 _SURFACE_FIXTURE_TOOLCHAIN = ("这台机器上的证明工具链（现算读数，不是记忆）：\n"
                               "- 检查器：（判据夹具，与机器无关）")
+#: 会写 Lean 源码的角色那一段（`TOOLCHAIN_FORMAL`）也钉成固定串，理由同上。
+#: 它与上面那个夹具是同一批读数的两种用法：上面报事实、这一条说怎么写。
+_SURFACE_FIXTURE_FORMAL = ("你这一岗怎么写形式化（由上面那份读数现算）：\n"
+                           "- （判据夹具：这一次按自足文件写）")
 _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 
 #: 冻结的版本号与十格摘要（口径见上）。更新规则：改段 ⇒ 同一个 commit 里改这张表 + 版本。
@@ -1480,22 +1547,24 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:      改成把两条读法都写明（含"主控直接读那个追加式账本"）。
 #: 两处都在共享段（`PAPER_PACK` 与 `HANDOFF_PROTOCOL`，后者十格都有）⇒ 十格全换
 #: （下面的读数：`temp/_s1r_prompt_digests.py` 逐格对照，十格无一相同）。
-#: `p68`（2026-10-11，接线批 C1 + A 的预设目录；`draft/103` §4.1b）：
-#: A 的第一段写死的正文从代码搬到了预设目录（`agentflow/presets/roles/a/blocks/search_style.md`
-#: ⇒ 新段 `A_SEARCH_STYLE`，order 2000），角色提示词第一次由"组装文件 + 现算的块"拼出来。
-#: 这是只动一个角色的读数：实测 A 段 64→65、字 17020→17393、摘要换；其余九格
-#: （B 58/16051 · C 62/14795 · D 71/21456 · E 61/20189 · F 72/20981 · G 87/29936 ·
-#: H 76/25867 · V 55/14844 · M 68/42623）段数/字数/摘要三样全同 ——
-#: 这正是接线契约想要的形态：预设改的是"谁来给这一段"，不是"别的角色看见了什么"。
-_FROZEN_PROMPT_VERSION = "p68"
+#: `p69`（2026-10-11，E 的迁移批：业主裁定 G「E 的工具链专属段要」+ 拆段）：
+#: 证明工具链那一轴拆成两段 —— 事实（`TOOLCHAIN_FACTS`，全角色）与
+#: 怎么写（新段 `TOOLCHAIN_FORMAL`，order 9010，只发给手上真有 `verify.check_formal`
+#: 的角色，现算 = E / F / G）。原来那句"由上一条推得：要用 Mathlib 就显式传…"是写在
+#: 事实段末尾的（十格都有），现在按读数现算成三档、只发给会写 Lean 源码的角色。
+#: 读数（夹具固定值下逐格对照）：只有 E / F / G 换（段各 +1：E 61→62 / F 72→73 /
+#: G 87→88），其余七格一个字节都没动 —— 夹具把事实段钉成了固定串，那句"由上一条推得"
+#: 本来就不在夹具里。真机上它还会从另外七个角色的文本里消失（那七个不写 Lean 源码），
+#: 两份读数都在 `draft/103` §4.1b-4。
+_FROZEN_PROMPT_VERSION = "p69"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "84792c6812d4e7c61230a18d614c86f9bbee59576901a7e4a4465a9e8ce13e4d",
     "B": "a2ed75c5d26ab6427b75464239e31e3fc3455b4a13305f6984512b080372b590",
     "C": "76d2efc0834ee28bf813636376e5489aa1f58ff33e69ea28dbec646279b21170",
     "D": "cd2b4ebbe7474ed17757e825ae81d1ba6b383abcc4ec8b5a62e5524d5ba36abb",
-    "E": "79eeaaa9ff2721f8ee033ada3b9fbd087e1d03b037d6c43636ee207575155739",
-    "F": "f2097b6873745f73cddb3e1c3f32e101b437785a876932a33f7c048054da9810",
-    "G": "232d7d10e64b3d19c11b80250422299f6b4a08cf5b318fb19354c0f14415e886",
+    "E": "13a9ddb4f2c81ca318bec963e3c9d43aac6b1d253cd3318cab6dca1166b54cc7",
+    "F": "138c840d738771fd07d01475bc7eb7a31fbc3331d8a9eb5ecbece5cfcf0398d9",
+    "G": "9ebb4d1c6bb03ff0ed487785e5b2890caeced6a9080245cf2a7e0c288b8f4e7e",
     "H": "5385f0f47d72b03e2cc7b3b4efb6264a3b1c3b2f2ae3db06ae6f3c64f1f52c9e",
     "V": "571c43366f540e03646dc071233e9268e231034a88664ed40dcd63e3934ccb0c",
     "M": "56d5aaad9ecd5390c462a80b3c16dd79139716a39bcd277fbb0559788e54e16a",
@@ -1504,7 +1573,8 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
 
 def _surface_digest(role: str, registry: ToolRegistry) -> str:
     """某个角色这一次渲染出来的提示词的摘要（版本那一行归一掉，见上面的口径）。"""
-    text = _prompt(role, registry, toolchain_facts=_SURFACE_FIXTURE_TOOLCHAIN)
+    text = _prompt(role, registry, toolchain_facts=_SURFACE_FIXTURE_TOOLCHAIN,
+                   toolchain_formal=_SURFACE_FIXTURE_FORMAL)
     normalized, hits = _VERSION_LINE.subn("- 提示词版本：<PROMPT_VERSION>", text)
     assert hits == 1, (
         f"{role} 的提示词里「提示词版本」那一行有 {hits} 条（应当恰好 1 条）⇒ "

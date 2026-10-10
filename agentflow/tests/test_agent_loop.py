@@ -601,6 +601,10 @@ def test_the_loop_hands_the_live_toolchain_reading_to_the_model(tmp_path: pathli
 
     monkeypatch.setattr(AP, "toolchain_facts_text",
                         lambda: "哨兵：本机没有 Mathlib，自足 Lean 文件可用")
+    # `TOOLCHAIN_FORMAL`（怎么写）是同一批读数的第二种用法，也打补丁：
+    # 不补的话这一次会去真跑探针（起子进程、Mathlib 那一轴还可能真编译一次）。
+    monkeypatch.setattr(AP, "toolchain_formal_text",
+                        lambda: "哨兵：这一次按自足 Lean 文件写")
     scripts = {"E": [_json.dumps({"final": "好"})]}
     st, cond, registry, gw, root = _wired(tmp_path, scripts, max_steps=2)
     run_role("E", "核验一条断言", store=st, registry=registry, conductor=cond,

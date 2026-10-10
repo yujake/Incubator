@@ -123,6 +123,10 @@ SECTION_ORDERS: dict[str, int] = {
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——
     # 它是机器相关的，写死在提示词里会让冻结快照变成"某一台机器"的快照。
     "TOOLCHAIN_FACTS": 9000,
+    # 会写 Lean 源码的角色怎么用上面那份读数（业主裁定 G：「E 的工具链专属段要」）。
+    # 紧跟在事实段之后：读数是前提、口径是推论，读的人按同一顺序读。
+    # 它也由调用方传（`toolchain_formal=…`），理由与事实段逐字相同 —— 机器相关。
+    "TOOLCHAIN_FORMAL": 9010,
     "WORKSPACE_FACTS": 10000,
     # 身份的两个槽位（`persona.py` 是它们唯一的注册入口）。名字与号与 DSH 逐字一致：
     # 前缀 order 0（与 `AGENT_IDENTITY` 同号 ⇒ 同号按名字排，`AGENT_IDENTITY` 在前），
