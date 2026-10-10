@@ -1158,8 +1158,8 @@ def _edgeless_roles() -> list[str]:
 def _excise(protocol: str, units: tuple[str, ...]) -> str:
     """用判据自己那份逐字副本把 `units` 删掉（换行口径与 `loop_protocol_for` 一致）。
 
-    [a]/[b] 只吃它们自己那一行的换行；[c] 连它后面那个空行一起删 ——
-    结果是每一版里都没有多余或缺失的连续空行。
+    [a]/[b] 只吃它们自己那一行的换行（它们嵌在 `2)` 与 `7)` 两块内部，
+    删掉不影响块数）。[c] 是整块，它的删法见 `_blank_block`。
     """
     out = protocol
     for unit in units:
@@ -1170,12 +1170,28 @@ def _excise(protocol: str, units: tuple[str, ...]) -> str:
     return out
 
 
+def _blank_block(protocol: str, block: str) -> str:
+    """把整块 `block` 清空（保留它两侧的空行 ⇒ 块数不变）。
+
+    为什么不是"连它后面那个空行一起删"：`draft/103` §2.1 的 A 轴把循环协议按空行
+    切成了 15 段（`_LOOP_BLOCK_NAMES`）—— 空行就是段边界。删掉一个空行会把两块并成一块
+    （15 → 14），于是 `_block_sections` 的"块数与名字数不等即抛"当场触发。
+    而分段之后，"这一块不在提示词里"本来就应该表达成"这一段是空串"
+    （`Assembly.render` 丢掉空段，`promptkit.py` 的 `render`）—— 这与整块删掉的渲染结果
+    逐字相同，且不破坏结构。这是 A 轴带来的一处判据口径更新，不是放宽：
+    `_roles_with_block()` 仍然逐字在渲染后的提示词里找那一块。
+    """
+    assert protocol.count(block) == 1, (
+        "要清空的那一块在协议里找不到或不止一处 —— 判据自己那份逐字副本与它对不上")
+    return protocol.replace(block, "", 1)
+
+
 #: 判据自己算出来的三版协议（不读被测函数的返回值）。
 #: 一版给"出边非空"的非 M 角色（减 [a]/[b]），一版给"出边为空"的角色（再把 [c] 换残桩），
-#: 外加"整块删、不留残桩"的那一版 —— 它只用来做反负控（那是作用域更正前那一版的形状）。
+#: 外加"整块清空、不留残桩"的那一版 —— 它只用来做反负控（那是作用域更正前那一版的形状）。
 _WITHOUT_CONDUCTOR_BLOCKS = _excise(AP.LOOP_PROTOCOL, (_BLOCK_A + "\n", _BLOCK_B + "\n"))
-_WITHOUT_ALL_THREE = _excise(_WITHOUT_CONDUCTOR_BLOCKS, (_BLOCK_C + "\n\n",))
-_WITH_STUB = _WITHOUT_CONDUCTOR_BLOCKS.replace(_BLOCK_C + "\n\n", _STUB + "\n\n", 1)
+_WITHOUT_ALL_THREE = _blank_block(_WITHOUT_CONDUCTOR_BLOCKS, _BLOCK_C)
+_WITH_STUB = _WITHOUT_CONDUCTOR_BLOCKS.replace(_BLOCK_C, _STUB, 1)
 
 
 def _roles_with_block(block: str, registry: ToolRegistry) -> list[str]:

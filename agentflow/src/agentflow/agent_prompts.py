@@ -37,7 +37,7 @@ from . import capabilities as C
 from . import judge as J
 from . import persona as P
 from . import schema as S
-from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
+from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
 
 #: 提示词版本。改了任何一段文本都要改它 —— 它是审计记录里"这次用的是哪一版"的答案。
 #: 为什么不用内容哈希当版本号：人读审计时需要的是一个可比较的短名字，
@@ -1214,6 +1214,48 @@ def _numbered_sections(prefix: str, lines: Sequence[str], base_order: int) -> li
     ]
 
 
+#: 循环协议（`loop_protocol_for()` 的返回值）按空行切出的 15 块的名字。
+#:
+#: 顺序与正文一一对应：前言 / 形状表头 / 11 个形状（`02B` 就是正文的 `2b)`）/ 规则表头 / 16 条规则。
+#: 十个角色的块数都是 15（实测：出边为空的 C 用一行残桩替掉 `2b)` 那一块，块数不变；
+#: M 多出来的两段专段嵌在 `2)` 与 `7)` 块内部）⇒ 名字表可以写死，
+#: 但仍然断言块数相等（见 `_block_sections`）：块数一变就当场抛，不静默少切半块。
+_LOOP_BLOCK_NAMES: tuple[str, ...] = (
+    "AGENT_TOOLS_SDK", "LOOP_SHAPES_HEAD",
+    "LOOP_SHAPE_01", "LOOP_SHAPE_02", "LOOP_SHAPE_02B", "LOOP_SHAPE_03", "LOOP_SHAPE_04",
+    "LOOP_SHAPE_05", "LOOP_SHAPE_06", "LOOP_SHAPE_07", "LOOP_SHAPE_08", "LOOP_SHAPE_09",
+    "LOOP_SHAPE_10",
+    "LOOP_RULES_HEAD", "LOOP_RULES",
+)
+
+
+def _block_sections(text: str, names: Sequence[str]) -> list[Section]:
+    """把一段文本按空行切成多段，段名与 order 都取自 `names` / `SECTION_ORDERS`。
+
+    ## 为什么这样切是逐字节不变的（`draft/103` §2.1 的"字节律"）
+
+    `Assembly.render()` 用 `"\n\n".join(非空段文本)` 拼提示词（`promptkit.py` 的 `render`）。
+    所以只要切点落在原文的空行上，`"\n\n".join(blocks) == text` 就成立 ——
+    换成多个段再渲染，得到的字符串一个字节都不差（段数变多、字符数不变）。
+    反过来，在连续行（如 `- ` 子弹列表）中间切必然会多插一个空行 ⇒ 那是文本改动，
+    要走 B 轴（版本 bump + 重冻），不在这条路径上。
+
+    两条断言都是"漂了当场炸"而不是"静默少切半块"：块数与名字数不等、或拼不回原文 ⇒ 抛。
+    这与 `LOOP_PROTOCOL` 那三条 `_LOOP_BLOCK_*` 的模块级断言同一精神。
+    """
+    blocks = text.split("\n\n")
+    if len(blocks) != len(names):
+        raise PromptError(
+            f"块数与名字数不等：{len(blocks)} 块 vs {len(names)} 个名字 —— "
+            "循环协议的文本被改过（增删了空行或整块），先按新的块数更新 "
+            "`_LOOP_BLOCK_NAMES`，不要让它静默地按名字截断"
+        )
+    if "\n\n".join(blocks) != text:
+        raise PromptError("按空行切块之后拼不回原文 —— 段结构会与文本漂开，必须当场停下来查")
+    return [Section(name, SECTION_ORDERS[name], block)
+            for name, block in zip(names, blocks, strict=True)]
+
+
 #: 没有读到工具链读数时那一段的正文。写在这里是为了让"没读到"也是一句诚实的话：
 #: 空字符串会让模型以为这一栏本来就没有，而"我不知道"与"没有"是两件事。
 _NO_TOOLCHAIN = ("这台机器上的证明工具链：（这一次没有读到读数 —— 探测没做，"
@@ -1485,12 +1527,16 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                                "不如改派能做的，或如实说明缺什么。"
                                if unusable else "")))
     reg.section(Section("HANDOFF", SECTION_ORDERS["HANDOFF"], HANDOFF_PROTOCOL))
-    # `R6` §2-⑥：循环协议按角色渲染 —— 主控那一版就是 `LOOP_PROTOCOL` 常量本身，
-    # 其余九个角色少掉里面三块只有 M 用得到的文本（见 `loop_protocol_for`）。
-    # 注册点的形状照同一文件里 `PAPER_PACK` 的先例（`paper_pack_for` + 一个 lambda）：
-    # 不新开第二张注册表，段名与顺序一个字符都没动。
-    reg.section(Section("AGENT_TOOLS_SDK", SECTION_ORDERS["AGENT_TOOLS_SDK"],
-                        lambda sc: loop_protocol_for(str(getattr(sc, "role", "") or ""))))
+    # 循环协议（`R6` §2-⑥ 按角色渲染）：主控那一版就是 `LOOP_PROTOCOL` 常量本身，
+    # 其余九个角色少掉里面几块只有 M 用得到的文本（见 `loop_protocol_for`）。
+    #
+    # `draft/103` §2.1 的 A 轴第一步（业主 2026-10-11 口径：代码超前提示词太多，
+    # 要让提示词追上代码）：把这一段按空行切成 15 块分别登记 ——
+    # 切点全在空行上 ⇒ 渲染逐字节不变（判据：十角色 `prompt_sha256` 一格不变），
+    # 换来的是 `prompt_audit["sections"]` 能逐块报出"哪一块是形状、哪一块是规则"，
+    # 于是"哪一块落后于代码"才定位得到（`draft/104` §1.2 与 `draft/105` 的 C 节全靠这个粒度）。
+    for section in _block_sections(loop_protocol_for(role), _LOOP_BLOCK_NAMES):
+        reg.section(section)
     # 证明工具链那一轴（`draft/37` §89）：读数是机器相关的，所以由调用方传；
     # 没传就如实写"这一次没有读到读数"（不是"没有检查器"，也不是什么都不说）。
     reg.section(Section("TOOLCHAIN_FACTS", SECTION_ORDERS["TOOLCHAIN_FACTS"],

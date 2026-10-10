@@ -64,7 +64,25 @@ SECTION_ORDERS: dict[str, int] = {
     "TASK_FRAME": 4200,              # 这一次要做的任务（提供者按调用求值）
     "PARTNERS": 4500,                # 可协作的伙伴（从 ALLOWED_EDGES 生成）
     "HANDOFF": 4700,                 # 交接手稿协议（`draft/37` §134）：编号 + 谁给谁 + 一句描述
-    "AGENT_TOOLS_SDK": 5000,
+    "AGENT_TOOLS_SDK": 5000,         # 循环协议：第一块（前言），见下面那一段块号
+    # 循环协议按空行切成 15 块（`draft/103` §2.1 的字节律：只在空行处切 ⇒
+    # 段间用 `\n\n" 连回去逐字节相同）。名字与号一次定死：块名是外读数
+    # （`prompt_audit["sections"]`），改名会被读成"提示词变了"。
+    # 形状块的名字带形状自己的序号（`LOOP_SHAPE_02B` ↔ 正文的 `2b)`）。
+    "LOOP_SHAPES_HEAD": 5010,        # 「十一种形状，互斥，每次只取其一：」
+    "LOOP_SHAPE_01": 5020,
+    "LOOP_SHAPE_02": 5030,
+    "LOOP_SHAPE_02B": 5040,          # 一次唤起一批（出边为空的角色这一块是残桩）
+    "LOOP_SHAPE_03": 5050,
+    "LOOP_SHAPE_04": 5060,
+    "LOOP_SHAPE_05": 5070,
+    "LOOP_SHAPE_06": 5080,
+    "LOOP_SHAPE_07": 5090,
+    "LOOP_SHAPE_08": 5100,
+    "LOOP_SHAPE_09": 5110,
+    "LOOP_SHAPE_10": 5120,
+    "LOOP_RULES_HEAD": 5130,         # 「规则：」
+    "LOOP_RULES": 5140,              # 16 条规则（连续子弹行 ⇒ 今天是一整块）
     # 环境事实分两段：工作区（结构/版本）与这台机器的工具链（现算读数）。
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——
     # 它是机器相关的，写死在提示词里会让冻结快照变成"某一台机器"的快照。
