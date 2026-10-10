@@ -2012,7 +2012,13 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 why = (f"{got} 条，上限 {want_max} 条（这一档要的是「上限」："
                        f"越多越不达标 —— 0 才是达标）")
             unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{why} —— 读数 {detail}"
-                         + (f"；{note}" if note else ""))
+                         + (f"；{note}" if note else "")
+                         # 同一环里现在就能达标的其它成员档（T4 第 6 趟 `t4f` 的真机读数）：
+                         # M 把"想"那一环声明成 `conjecture_rows`（0 条），而同一环的
+                         # `statement_rows` 有 448 条 —— 它选了唯一为 0 的那一档，而当时
+                         # 门只说了"这行没达标"，没说"同一环换个成员档就达标"。
+                         + _alternatives_note(store, kind,
+                                              Path(resolve_under_workspace(store, project_dir))))
 
     # ---- 四条自动分支的守卫（E-04a）：只看「真算过的 kind」。
     #
@@ -3233,6 +3239,44 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         ))
     else:
         rep.status["load_bearing"] = "pass"
+
+
+def _alternatives_note(store: Any, kind: str, project_root: Path) -> str:
+    """同一环里现在就能达标的其它成员档 —— 一段读数，接在没达标那一行的话后面。
+
+    为什么要有它（T4 第 6 趟 `t4f` 的真机读数）：M 把"想"那一环声明成 `conjecture_rows`
+    （这一趟 0 条），而同一环的 `statement_rows` 有 448 条 —— 它选了唯一为 0 的那一档，
+    于是收工门报 `blocker acceptance_unmet`，M 看到之后仍按 `met=true` 收工。
+    验收表的成员档本来就是可选的（`RESEARCH_CHAIN_GROUPS` 每一环给好几档），
+    但"换一档就达标"这件事当时没有任何地方说出来 —— 这一句就是那句话。
+
+    只报数、不判：哪一档是诚实的声明仍归 M 判（某个项目这一环真的没有对应产物时，
+    正确做法是写 `na` + 理由，而不是挑一档数字好看的）。
+    读不出来的档跳过（不编）。
+    """
+    for _label, members in RESEARCH_CHAIN_GROUPS:
+        if kind not in members:
+            continue
+        alts: list[str] = []
+        for m in members:
+            if m == kind:
+                continue
+            try:
+                got, detail = _leg_reading(store, m, project_root)
+            except Exception:  # noqa: BLE001 —— 这一档读不出来就不提它（不编）
+                continue
+            kmin = (detail or {}).get("implicit_min") if isinstance(detail, dict) else None
+            need = int(kmin) if kmin is not None else 1
+            # 要有实质：`got ≥ 1` 且不低于它自己的下限。`got=0 / need=0` 那种"因为这一环
+            # 没有研究问题、门槛被算成 0"的档不算出路 —— 提它等于教人换一档空声明。
+            if int(got) >= max(1, need):
+                alts.append(f"`{m}`（{got} ≥ {max(1, need)}）")
+        if not alts:
+            return ""
+        return ("。同一环里现在就能达标的其它成员档：" + "、".join(alts)
+                + " —— 验收表那一行写哪一档由你定（这一环的成员档是可选的）；"
+                  "若这一环这个项目真的没有产物，写 `na` + 理由才是诚实的做法")
+    return ""
 
 
 def declared_report_sections(store: Any, report_path: str) -> tuple[list[str], str]:

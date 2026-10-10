@@ -132,7 +132,12 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: + 库里有多少可引的"—— 那一句是工具目录的一部分，而 M 的提示词里逐条列着它名下
 #: 的工具与返回值 ⇒ 换的是 M 那一格（与 `p56` 换 G 那一格同形：改哪个角色看得见的那一段，
 #: 就换哪一格）。
-PROMPT_VERSION = "p59"
+#: `p60`（2026-10-10，D 的交付物声明更正）：`specs/d.py` 与 `agent_prompts.py` 两处的 D
+#: `deliverable` 原先写着"analysis_reports 里的分析、结论、建议三层"，而 `analysis_reports`
+#: 是 C 的报告通道（D 的写集里没有它、`write_report` 也只写 `reports/<qid>-research.md`）
+#: ⇒ 改成指向那份报告文件 + D 登记的两行。看得见 D 那一行的角色全换（D 自己，
+#: 以及伙伴表里列着 D 的 E/F/G/M ⇒ 实测五格：D/E/F/G/M）—— 换哪几格本身就是这次改动的读数。
+PROMPT_VERSION = "p60"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -981,7 +986,13 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "把 `status` 推成 `refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。",
         ),
         signature_error="把没有证据写成没有争议。",
-        deliverable="analysis_reports 里的分析、结论、建议三层，以及它可以交出去的缺口清单。",
+        # 与 `specs/d.py` 逐字一致（两处由 `tests/test_agent_spec_reconciliation.py` 对账）：
+        # `analysis_reports` 是 C 的报告通道，D 的 `write_report` 只写
+        # `reports/<qid>-research.md` 那份 markdown、不写任何表。
+        deliverable=("研究报告文件（`write_report` 写出的 `reports/<qid>-research.md`）里的"
+                     "分析、结论、建议三层，以及它登记进 `research_questions` 的问题与缺口清单、"
+                     "提交给 A/E 的检索请求（`search_requests`）。报告只落成文件、不进任何报告表"
+                     "（「有没有落点」这件事的读数是 `report_landing_reading`）。"),
         stance=(
             "研究的标志不是把话写圆，而是把'卡在哪'定位到具体的一步：缺哪条证据、缺哪个反例、缺哪个定义。",
             "遇到互相矛盾的文献时，先读原始证明的那一步，再判断是结论错、条件被漏、还是口径不同 —— "

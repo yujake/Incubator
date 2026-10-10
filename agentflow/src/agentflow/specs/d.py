@@ -120,10 +120,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "D", "propose_question",
         "把一句话研究问题立成 research_questions 一行；D 的其余动作都要求 qid 已存在，"
         "所以从零起手先派它",
-        # `kind` / `priority` 的取值必须**在声明里**写出来（`draft/37` §130 的真机读数）：
+        # `kind` / `priority` 的取值必须在声明里写出来（`draft/37` §130 的真机读数）：
         # 此前这里是裸 `_S`（只表示"是个字符串"），而 handler 按受控词表拒收 ——
         # 真机里主控连续 4 次传 `kind='existence'` / `'main'`，每次都落 `refused/bad_kind`，
-        # 而它在自己的提示词里**看不到合法取值**（同一个坑在 `F.create_plan` 的预算上出现过：
+        # 而它在自己的提示词里看不到合法取值（同一个坑在 `F.create_plan` 的预算上出现过：
         # 声明不写、handler 拒收 ⇒ 主控只能猜）。枚举值从 `schema` 那一份取，不另抄字面量。
         _obj({"question": _S,
               "kind": {"type": "string", "enum": list(S.QUESTION_KINDS)},
@@ -195,7 +195,21 @@ SPEC = AgentSpec(
             "**猜想写出来之后要交给 F 攻坚**（`draft/37` §138）：D→F 的边是通的 —— `conductor.summon` 唤起 F 的 `create_plan`，`problem_key` 就用猜想的 `conjecture_id`（计划与猜想在台账上因此对得上），`subgoals` 给一到三个可判定的子目标。被实验反驳的猜想同样是成果：登记那条反例（`result=refutes` + 非空 `counterexample`）、把 `status` 推成 `refuted`，并**立刻**告诉 F 那条路封了（否则它会替一条已死的猜想烧预算）。",
         ),
         signature_error="把没有证据写成没有争议。",
-        deliverable="analysis_reports 里的分析、结论、建议三层，以及它可以交出去的缺口清单。",
+        # `44 J-01` / `S-07` 的口径更正（2026-10-10，T4 第 6 趟 `t4f` 的真机读数）：
+        # 这一句原先写的是"analysis_reports 里的分析、结论、建议三层" —— 而
+        # `analysis_reports` 是 C 的报告通道（`schema.REPORT_KINDS` 只收
+        # `hottest/paths/cold/gaps` 四档），D 的写集里没有它，`write_report` 也只写
+        # `reports/<qid>-research.md` 那份 markdown（不写任何表）。
+        # M 因此在 `t4f` 里报了一条 `cannot`：「D 调用 write_report 6 次均返回 ok，
+        # 但台账里没有一张表收得下它（WRITE_SETS["D"] 无 analysis_reports）」——
+        # 它照着的正是这一句。`agent_d/_support.py` 的 `report_landing_reading`
+        # 早就把这件事做成读数（S-07），但声明这一层没跟上：
+        # 声明里点名的那张表，角色写不了 ⇒ 判据见
+        # `tests/test_the_brief_names_only_writable_tables.py`（那句话点的表必须在写集里）。
+        deliverable=("研究报告文件（`write_report` 写出的 `reports/<qid>-research.md`）里的"
+                     "分析、结论、建议三层，以及它登记进 `research_questions` 的问题与缺口清单、"
+                     "提交给 A/E 的检索请求（`search_requests`）。报告只落成文件、不进任何报告表"
+                     "（「有没有落点」这件事的读数是 `report_landing_reading`）。"),
         stance=(
             "研究的标志不是把话写圆，而是把'卡在哪'定位到具体的一步：缺哪条证据、缺哪个反例、缺哪个定义。",
             "遇到互相矛盾的文献时，先读原始证明的那一步，再判断是结论错、条件被漏、还是口径不同 —— 不盲从权威，也不盲从你自己上一轮的判断。",
