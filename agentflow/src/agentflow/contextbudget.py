@@ -214,6 +214,20 @@ class ContextBudget:
                 f">= threshold_chars({self.threshold_chars})。"
                 "头 + 尾已经不比原文短，再加省略标记就是**把内容变长** —— 这不是剪枝"
             )
+        # S-B ③（照 DSH `dsh-compaction-tool-result-pruner/lib/index.js:43-44`）：
+        # 那条不变量必须把标记自身的长度算进去 —— `head + tail < threshold` 只保证
+        # "头尾比原文短"，而剪完还要插一句省略标记；标记比"省下的那点"还长时，
+        # 剪枝后反而更长（DSH 选的是配置期就抛，我们照抄）。
+        marker_len = len(_MARKER_FMT.format(removed=0, total=0))
+        if self.head_chars + marker_len + self.tail_chars > self.threshold_chars:
+            raise ValueError(
+                f"context_budget 自相矛盾：head_chars({self.head_chars}) + 省略标记"
+                f"({marker_len} 字符) + tail_chars({self.tail_chars}) = "
+                f"{self.head_chars + marker_len + self.tail_chars} > "
+                f"threshold_chars({self.threshold_chars})。"
+                "剪枝的本意是变短；这一组数会让它变长（DSH 逐字："
+                "`head + len(marker) + tail <= threshold`，否则抛）"
+            )
         # ---- S-B（裁定 8乙 + 12-H=甲）：压力口径的装载期校验（照 DSH `CB:128-136/:169`）
         for key in ("context_window", "retain_tokens"):
             value = getattr(self, key)
@@ -747,6 +761,138 @@ def prune_tool_result(
     return replace(result, data=new_data, meta=meta)
 
 
+# ---------------------------------------------------------------- 剪枝：跨块一条字符流
+#
+# S-B ③（施工单 §2 的"甲"方案）。我们原来的 `_prune_value` 是逐字符串各留头尾：
+# `data` 里有 5 个 3000 字的字段时一个都不剪（各自都没超 8000），而 DSH 会把它们拼成
+# 一条虚拟字符流、按 `[0, head) ∪ (tail, end)` 取保留区 ⇒ 剪得掉。
+# 下面这一族就是那条流：非文本块原序通过，标记插在"与删除区间真正相交的第一块"里、且只插一次。
+
+
+def _text_slots(value: Any) -> list[tuple[Any, ...]]:
+    """结构里所有文本块的位置（深度优先、原序）。每个槽是 `(路径, 文本)`。
+
+    路径是一串"怎么走到它"的键（mapping 的键 / list 的下标），`_put_text` 用同一套
+    路径把剪过的文本放回去 —— 两处共用一张表，免得"找得到却放不回"。
+    """
+    slots: list[tuple[tuple[Any, ...], str]] = []
+
+    def walk(node: Any, path: tuple[Any, ...]) -> None:
+        if isinstance(node, str):
+            slots.append((path, node))
+            return
+        if isinstance(node, Mapping):
+            for k, v in node.items():
+                walk(v, path + (k,))
+            return
+        if isinstance(node, (list, tuple)):
+            for i, v in enumerate(node):
+                walk(v, path + (i,))
+
+    walk(value, ())
+    return slots
+
+
+def _put_text(value: Any, path: tuple[Any, ...], text: str) -> Any:
+    """按 `_text_slots` 给的路径把一段文本放回结构里（返回新容器，不改原对象）。"""
+    if not path:
+        return text
+    head, rest = path[0], path[1:]
+    if isinstance(value, Mapping):
+        out = {k: v for k, v in value.items()}
+        out[head] = _put_text(value[head], rest, text)
+        return out
+    if isinstance(value, tuple):
+        items = list(value)
+        items[head] = _put_text(value[head], rest, text)
+        return tuple(items)
+    if isinstance(value, list):
+        items = list(value)
+        items[head] = _put_text(value[head], rest, text)
+        return items
+    raise ValueError(f"路径 {path!r} 落在一个不可写的节点上（{type(value).__name__}）")
+
+
+def prune_stream(value: Any, *, budget: ContextBudget,
+                 spill_root: str | os.PathLike[str] | None = None) -> tuple[Any, PrunedText]:
+    """把一个结构里的文本块当成一条字符流来剪（DSH `PR:94-117` 的形状）。
+
+    返回 `(剪过的结构, 读数)`。读数里的字符数是整条流的（不是逐块的），
+    于是"省了多少"这件事在一处可读。
+
+    ## 与逐块剪枝的差别（这条差别是真的、也是本函数存在的理由）
+
+    逐块各留头尾：`{"a": 3000字, "b": 3000字, ...}` 里一个都不剪（各自都没超阈值），
+    而模型一次看到的是 15000 字符。拼成一条流之后 `[0, head)` 只落在开头那几块上、
+    `(end-tail, end]` 落在末尾那几块上，中间整段被删掉、标记插在第一块与删除区相交的位置。
+
+    ## 两条自查（DSH `PR:119`、`:122`，逐条照抄）
+
+    1. 标记必须真的插进去了（没插到 ⇒ 抛）：那说明"删除区间与任何文本块都不相交"
+       的推断错了，而一个"剪过但没留痕"的结果比不剪更坏（读的人不知道中间没了）；
+    2. 产出必须 ≤ 阈值且严格小于原文（否则抛）：不然这次剪枝是在把内容变长。
+    """
+    budget.validate()
+    slots = _text_slots(value)
+    if not slots:
+        return value, PrunedText(text="", original_chars=0, kept_chars=0, pruned=False,
+                                 spilled=False, spill_path=None,
+                                 reason="结构里没有任何文本块 ⇒ 没有可剪的东西")
+    stream = "".join(text for _path, text in slots)
+    total = len(stream)
+    if total <= budget.threshold_chars:
+        return value, PrunedText(text=stream, original_chars=total, kept_chars=total,
+                                 pruned=False, spilled=False, spill_path=None,
+                                 reason=(f"未超阈值：整条字符流 {total} 字符 ≤ "
+                                         f"threshold_chars={budget.threshold_chars}；一个块也没剪"))
+    head, tail = budget.head_chars, budget.tail_chars
+    removed_start, removed_end = head, max(head, total - tail)
+    removed = removed_end - removed_start
+    marker = _MARKER_FMT.format(removed=removed, total=total)
+    # 逐块重建：维护一个游标，标记插在"与删除区间相交的第一块"里（只插一次）。
+    out_parts: list[tuple[tuple[Any, ...], str]] = []
+    cursor = 0
+    inserted = False
+    for path, text in slots:
+        start, end = cursor, cursor + len(text)
+        cursor = end
+        kept = text
+        if end <= removed_start or start >= removed_end:
+            # 完全在保留区（或完全被删——那种块的文本整段没了，但要留标记的那一次插在它前面）
+            if start >= removed_end and not inserted:
+                kept = marker + ""
+                inserted = True
+            out_parts.append((path, kept))
+            continue
+        # 与删除区间相交：保留它落在保留区里的两段，中间插标记
+        local_start = max(0, removed_start - start)
+        local_end = max(0, min(len(text), removed_end - start))
+        if not inserted:
+            kept = text[:local_start] + marker + text[local_end:]
+            inserted = True
+        else:
+            kept = text[:local_start] + text[local_end:]
+        out_parts.append((path, kept))
+    if not inserted:
+        raise CompactionNotSmallerError(
+            "剪枝自查失败：省略标记没有插进任何文本块 —— 那说明'删除区间与文本块的相交'"
+            "这个推断错了，而'剪过但没留痕'比不剪更坏（读的人不知道中间没了）")
+    out = value
+    for path, text in out_parts:
+        out = _put_text(out, path, text)
+    rendered = "".join(text for _p, text in out_parts)
+    if len(rendered) > budget.threshold_chars or len(rendered) >= total:
+        raise CompactionNotSmallerError(
+            f"剪枝自查失败：产出 {len(rendered)} 字符（原文 {total}，阈值 "
+            f"{budget.threshold_chars}）—— 剪枝必须真的变短")
+    reading = PrunedText(text=rendered, original_chars=total, kept_chars=len(rendered),
+                         pruned=True, spilled=False, spill_path=None,
+                         reason=(f"跨块剪枝：整条字符流 {total} → {len(rendered)} 字符"
+                                 f"（省略 {total - len(rendered)}）；标记插在第 "
+                                 f"{next(i for i, (_p, t) in enumerate(out_parts) if marker in t) + 1} 块里"))
+    return out, reading
+
+
 def _prune_value(
     value: Any,
     *,
@@ -944,6 +1090,37 @@ def _select_keep(items: Sequence[Any], *, spec: CompactSpec, chars_per_token: fl
     return max(keep, first)
 
 
+def pressure_reading(items: Sequence[Any], *, budget: ContextBudget,
+                     usage_tokens: int | None = None) -> dict[str, Any]:
+    """压力门的读数（S-B ③）：`{"checked","tokens","threshold_tokens","over","reason",…}`。
+
+    为什么要把它从 `compact_by_pressure` 里抽出来：剪枝要先看这道门
+    （DSH `CB:887-890` 的 overflow 分支与 `:901-904` 的压力分支都先确认压力，
+    README:89 逐字「低于压力绝不动」）。抽成一处之后，"该不该剪"与"该不该压"
+    问的是同一个函数，不会出现"门说没超、剪枝却动了"的分叉。
+    三态：容量读不到 ⇒ `checked=False`（`over=False`，并且理由原样带出去）。
+    """
+    from . import tokenestimate as TE
+
+    spec, problem = _spec_of(budget)
+    if spec is None:
+        return {"checked": False, "tokens": 0, "threshold_tokens": 0, "over": False,
+                "baseline_source": "", "chars_per_token": 0.0, "reason": problem}
+    messages = [it if isinstance(it, Mapping) else {"role": "user", "content": str(it)}
+                for it in items]
+    est = TE.estimate_messages(messages, chars_per_token=spec.chars_per_token, source=spec.source)
+    anchor = int(usage_tokens or 0)
+    total = max(est.tokens, anchor)
+    baseline_source = "usage_anchor" if anchor > est.tokens else "heuristic"
+    over = total >= spec.threshold_tokens
+    return {"checked": True, "tokens": total, "threshold_tokens": spec.threshold_tokens,
+            "retain_tokens": spec.retain_tokens, "chars_per_token": spec.chars_per_token,
+            "baseline_source": baseline_source, "over": over,
+            "reason": (f"{total} token（{baseline_source}）"
+                       f"{'≥' if over else '<'} threshold_tokens={spec.threshold_tokens}"
+                       f"（= {spec.context_window} × {budget.threshold_ratio}）")}
+
+
 def compact_by_pressure(
     items: Sequence[Any],
     *,
@@ -1009,19 +1186,17 @@ def compact_by_pressure(
 
     messages = [it if isinstance(it, Mapping) else {"role": "user", "content": str(it)}
                 for it in items]
+    pressure = pressure_reading(items, budget=budget, usage_tokens=usage_tokens)
     est = TE.estimate_messages(messages, chars_per_token=spec.chars_per_token, source=spec.source)
-    anchor = int(usage_tokens or 0)
-    total = max(est.tokens, anchor)
-    baseline_source = "usage_anchor" if anchor > est.tokens else "heuristic"
-    if total < spec.threshold_tokens:
+    total = int(pressure["tokens"])
+    baseline_source = str(pressure["baseline_source"])
+    if not pressure["over"]:
         return CompactResult(
             text=_render_kept([_node_text(it) for it in items]),
             dropped_count=0, kept_count=len(items),
             original_chars=est.chars, kept_chars=est.chars,
             compacted=False, summarizer="none",
-            reason=(f"未到阈值：{total} token（{baseline_source}）< threshold_tokens="
-                    f"{spec.threshold_tokens}（= {spec.context_window} × {budget.threshold_ratio}）"
-                    "⇒ 一次也不压"),
+            reason=f"未到阈值：{pressure['reason']} ⇒ 一次也不压",
             threshold_tokens=spec.threshold_tokens, retain_tokens=spec.retain_tokens,
             shadowed_tokens=0, framed_tokens=0, chars_per_token=spec.chars_per_token,
             baseline_source=baseline_source,

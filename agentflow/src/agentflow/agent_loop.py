@@ -2429,7 +2429,18 @@ class AgentLoop:
 
         cid = f"c{step:04d}-{self.role}"
         self._last_summary_note = {}
-
+        # ---- ① 压力门（S-B ③）：先问一次"该不该动历史"。
+        #
+        # DSH 的两条分支（overflow / 压力）都先确认压力，README:89 逐字「低于压力绝不动」
+        # ⇒ 剪枝与摘要共用同一道门，不会出现"门说没超、剪枝却动了"那种分叉。
+        pressure = CB.pressure_reading(messages, budget=budget)
+        if pressure["checked"] and not pressure["over"]:
+            return messages
+        # ---- ② 剪枝不在这里做（S-B ③ 的落点在工具结果进历史之前，见 `_prune_result`）。
+        #
+        # 为什么不在这一步边界上剪：到这一步时工具结果已经渲染过（观测层把单字段压到
+        # `RESULT_CHARS=6000`），而"假开"那条读数的病根正是"拿渲染过的文本去比 8000 的阈值"。
+        # 剪枝必须落在原始结构上（那里没有逐字段上限），也就是 `_prune_result` 那一处。
         def _summarize(early: list[Any]) -> str:
             """`compact_by_pressure` 要的摘要器（8乙：真调模型）。
 
@@ -2494,6 +2505,57 @@ class AgentLoop:
             f"{result.framed_tokens} token（阈值 {result.threshold_tokens}，"
             f"保留额 {result.retain_tokens}，尺 {result.chars_per_token} 字符/token）")
         return swapped
+
+    def _prune_result(self, result: Any, *, step: int, run: "AgentLoop.LoopRun",
+                      messages: Sequence[Mapping[str, Any]]) -> Any:
+        """把这一步的工具结果按 DSH 的形状剪一遍（S-B ③ / 施工单 §2 的甲方案）。
+
+        返回剪过的结果（没剪就原样返回）。
+
+        ## 为什么剪的是原始结果结构、而不是渲染后的那段文本
+
+        这是"假开"那条读数的病根所在：工具层那次剪枝（禁改区 `tools/base.py`）
+        剪的是已经渲染过的字符串，而观测层把单字段压到 `RESULT_CHARS=6000`
+        ⇒ 那条分支在当前配置下永远不触发（"剪枝开着"是一句空话）。
+        原始结构没有逐字段上限（`{"a": 3000字, "b": 3000字, …}` 就是 15000），
+        所以"跨块一条字符流"这个形状在这里才真的剪得掉东西。
+
+        ## 触发时机（照 DSH，不是"每次都剪"）
+
+        DSH 只在压缩触发成立之后剪一次（`CB:887-890`、`:901-904`，README:89
+        「低于压力绝不动」），而工具层是每次调用都剪。这里用同一个 `pressure_reading`
+        问一次压力门 —— 剪枝与摘要因此共用一道门，不会出现"门说没超、剪枝却动了"。
+
+        ## 为什么不需要"替换事件"来保证可重放
+
+        剪发生在这一步的结果落档之前 ⇒ `agent_step` 事件里存的就是剪过的那一份，
+        `resume_messages` 重建时天然拿到它（与压缩那条替换不同：那条替换动的是更早的
+        节点，必须靠 `surface_op` 重放）。`compaction_prune` 这条事件仍然要落 ——
+        它是"这一趟剪过、省了多少"的唯一读数（复测也能据此回答"剪完是否免掉了摘要"）。
+        """
+        budget = getattr(self.registry, "default_budget", None)
+        if budget is None or not isinstance(result, (Mapping, list, tuple, str)):
+            return result
+        from . import contextbudget as CB
+
+        # 压力门：只在"该动历史"的时候剪（容量读不到 ⇒ 不剪，走压缩那条路的"警告一次"）。
+        pressure = CB.pressure_reading(messages, budget=budget)
+        if not pressure["checked"] or not pressure["over"]:
+            return result
+        pruned, reading = CB.prune_stream(result, budget=budget)
+        if not reading.pruned:
+            return result
+        SS.append(self.session_root, {
+            "kind": "compaction_prune", "role": self.role, "step": step,
+            "original_chars": reading.original_chars, "kept_chars": reading.kept_chars,
+            "saved_chars": reading.original_chars - reading.kept_chars,
+            "reason": reading.reason,
+            # 位置语义与压缩那条替换同族，但这里的"被替换的节点"是这一步自己：
+            # 结果还没落档，所以重放不需要它（见 docstring）。
+            "replaced_node": {"kind": "agent_step", "index": step},
+        }, sid=self.sid)
+        run.notes.append(f"剪枝（第 {step + 1} 步的结果）：{reading.reason}")
+        return pruned
 
     def _in_flight_reading(self) -> str:
         """收工那一刻"我名下还有几条在飞"（S-G，裁定 15；读数，不拦）。
@@ -3119,6 +3181,14 @@ class AgentLoop:
                 hint = self._param_table(shape, payload)
                 if hint:
                     result = {**result, "参数表": hint}
+            # ---- S-B ③（施工单 §2 的甲方案）：剪枝在观测层之前做一次。
+            #
+            # 位置是关键，也是"假开"那条读数的真正修法：工具层那次（禁改区 `tools/base.py`）
+            # 用 `threshold_chars=8000` 剪已经渲染过的文本，而观测层把单字段压到
+            # `RESULT_CHARS=6000` ⇒ 那个分支永远不触发。这里剪的是原始结果结构
+            # （它没有逐字段上限：5 个 3000 字的字段就是 15000）⇒ 跨块一条字符流才有意义，
+            # 剪完再交给观测层渲染。触发时机照 DSH：只在压力门确认之后（低于压力绝不动）。
+            result = self._prune_result(result, step=step, run=run, messages=messages)
             step_obj = LoopStep(step, shape, payload, _for_record(result))
             run.steps.append(step_obj)
             # 12-A=乙：思维链原样带回去。进消息与进事件的是同一份文本
@@ -5342,7 +5412,10 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
     # `surface_op` 是闭区间、两端都含，且它是位置 span（不是数值区间）
     # ⇒ 按位置做切片替换，绝不写 `range(start, end + 1)`。
     for e in events[begin + 1:end]:
-        if e.get("kind") != "compaction_swap" or str(e.get("role")) != role:
+        # 压缩那条替换（`compaction_swap`）与剪枝那条（`compaction_prune`）共用同一套
+        # 位置语义（`surface_op` 闭区间 + `replacement_message`）⇒ 重放只写一遍。
+        if e.get("kind") not in ("compaction_swap", "compaction_prune") \
+                or str(e.get("role")) != role:
             continue
         op = e.get("surface_op") if isinstance(e.get("surface_op"), Mapping) else {}
         repl = e.get("replacement_message")
