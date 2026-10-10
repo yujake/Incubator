@@ -177,3 +177,29 @@ def test_revise_returns_the_same_reading(tmp_path: Path) -> None:
     assert len(cov["gaps"]) == 2, cov["gaps"]
     assert [x["lit_id"] for x in cov["suggest_lit"]] == ["0000", "0001"], cov["suggest_lit"]
 
+
+def test_negative_the_g_role_path_must_carry_the_reading_too(tmp_path: Path) -> None:
+    """负控（T2 第 25 趟抓出来的真缺口）：`G.build_document` 那条路必须带着读数回。
+
+    为什么单列一条：工具层把读数放在 `meta` 里，而 `AgentG._call` 只交出 `res.data`
+    —— meta 丢在门里 ⇒ M 手里那条路（`conductor.summon` → `G.build_document`）
+    一个字都看不到。真机读数：T2 第 25 趟 `t2t` 的 `sessions/t2t.jsonl` 全文件搜
+    `citation_coverage` 0 命中。这一条钉住"两个入口都要给"。
+    """
+    from agentflow.agent_g import AgentG
+
+    store = _seed_library(tmp_path)
+    g = AgentG(store, config={"docs_subdir": "documents"})
+
+    out = g.build_document("note", "初稿", claims=[_claim(["exp:0000"])])
+
+    assert out["doc_id"] == "0000", out          # 稿件那一行的字段一个不少
+    assert out["claims"], out                    # 也不许多少
+    cov = out["citation_coverage"]               # 读数就在同一个返回值里
+    assert cov["readable"] is True, cov
+    assert cov["counts"]["lit"] == 0 and cov["counts"]["rel"] == 0, cov["counts"]
+    assert len(cov["gaps"]) == 2, cov["gaps"]
+    # 落库的那一行不许带上读数（它要算内容哈希、要被 schema 校验）
+    stored = dict(list(store.rows("documents"))[0])
+    assert "citation_coverage" not in stored, sorted(stored)
+
