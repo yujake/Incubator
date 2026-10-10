@@ -657,6 +657,31 @@ def _recorded_reasoning(text: str) -> str:
     return str(_for_record({"reasoning": raw})["reasoning"])
 
 
+class _CompactionRefused(Exception):
+    """摘要这一次没拿到（没接线 / 调不通 / 空回复）⇒ 不压，如实落读数。
+
+    与 `ValueError`（接线错误：注入的 summarize 违约）刻意分开：前者是一次失败
+    （warn-and-continue，照 DSH 自动路径），后者是本仓自己的接线 bug，该炸就炸。
+    """
+
+
+#: 摘要那一次调用的指令（S-B / 裁定 8乙）。措辞是我们的，不是 DSH 那段逐字：
+#: DSH 的 8 个固定小节是给英文会话写的，而我们的历史是中文 + 台账编号 +
+#: "三态纪律"那一套本仓特有的口径 —— 逐字搬会让摘要漏掉这几样。
+#: 结构照它（固定小节 + 规则），内容按我们的形态写。
+COMPACTION_INSTRUCTION = """\
+把下面这一段历史改写成一份**可继续工作的检查点摘要**。按这五个小节写，缺的写"无"：
+
+1. 任务与目标：这一趟要做什么（原文里的那句话里的目标，别改写成别的）。
+2. 已确认的事实与决定：已经查证过什么、定下过什么口径（带上来源/编号）。
+3. 读过与引用过的编号：台账 id（`lit:` / `stmt:` / `exp:` / `rel:` / 手稿号）逐条列出。
+4. 未完成与卡点：还没做什么、卡在哪（不知道的写"未知"，不要猜）。
+5. 下一步：接着做时第一件该干的事。
+
+规则：只复述上面给的历史里出现过的东西；不许下新结论、不许补充新事实、
+不许写"我将要"这类计划外的承诺。摘要要比原文短得多 —— 它是检查点，不是第二份报告。"""
+
+
 def step_node_tokens(step: int, payload: Mapping[str, Any],
                      result: Mapping[str, Any]) -> int:
     """这一步作为"节点"的估价（S-B：节点计价，给压力门当输入）。
@@ -881,6 +906,8 @@ class LoopRun:
     dead_loop_stopped: bool = False
     #: 最近一次计数清零发生在第几步（裁定 12-F：计数按委托记账，"这一次委托从哪算起"要可复核）。
     counters_reset_at: int = 0
+    #: 这一趟压了几次历史（S-B；读数，不是判据）：0 = 一次都没压。
+    compactions: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 「收工那一步」的原始载荷（模型给的 `final` / `evidence` / `notify` 逐字一份）。
@@ -966,6 +993,8 @@ class LoopRun:
             "dead_loop_nudges": self.dead_loop_nudges, "stalled_nudges": self.stalled_nudges,
             "dead_loop_stopped": self.dead_loop_stopped,
             "counters_reset_at": self.counters_reset_at,
+            # S-B：这一趟压了几次（0 = 一次都没压；与"没启用"那一档合起来读）。
+            "compactions": self.compactions,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
@@ -2020,6 +2049,12 @@ class AgentLoop:
     #: 自动派生失败时的理由（空串 = 没事）。must not 静默：写路径关闭这件事
     #: 必须能从盘上/返回值读到（D81 的第 ③ 条就是为它加的留痕）。
     secretary_problem: str = ""
+    #: 「容量读不到」那一档每趟只警告一次（S-B；照 DSH `CB:803-808` 的去重）。
+    #: 不这样的话每一步都会往会话记录里塞同一句"读不到容量"。
+    _compaction_capacity_warned: bool = False
+    #: 最近一次摘要调用的读数（S-B：`{"note": "compaction"}` 那一族）。
+    #: 判据与 `compaction_summary` 事件都读它 —— 于是"这一笔钱是压缩花的"可归口。
+    _last_summary_note: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """T14：每唤起一个智能体就自带一个秘书（不传就派生）。
@@ -2331,6 +2366,135 @@ class AgentLoop:
             return {}
         return {"可退役": rows}
 
+    def _summarize_for_compaction(self, early: Sequence[Mapping[str, Any]]) -> tuple[str, str]:
+        """把被遮蔽的那一段交给模型写摘要（裁定 8乙：机械摘要换成 LLM）。
+
+        返回 `(摘要, 问题)`。三条照 DSH：
+
+        - 送进去的是模型可见的 `content`（三个移植包里 `grep reasoning` 零命中 ⇒
+          思维链不进摘要请求：摘要要复述的是"发生了什么"，不是"它当时怎么想的"）；
+        - 这次调用记在现成的用量档上 + `note="compaction"`（裁定 12-J=甲：
+          不新造 scope、不动 `schema.py`）—— 花销因此可归口，钱不会静默流走；
+        - 拿不到摘要（没接线 / 调不通 / 空回复）⇒ 返回问题，不压（warn-and-continue，
+          照 DSH 自动路径的姿态）。
+        """
+        body = "\n\n".join(str(m.get("content") or "") for m in early)
+        prompt = f"{COMPACTION_INSTRUCTION}\n\n--- 要压缩的历史 ---\n{body}"
+        try:
+            call = self.seam.ask(prompt, system=self._compaction_system(), note="compaction",
+                                 task_id=str(self.my_task_id or ""))
+        except Exception as exc:  # noqa: BLE001 —— 摘要调用抛异常也要如实变成"没压成"
+            return "", f"摘要调用抛异常（{type(exc).__name__}: {exc}）"
+        if not call.ok:
+            return "", f"摘要调用没成（{call.problem}：{call.detail or '无细节'}）"
+        text = str(call.text or "").strip()
+        if not text:
+            return "", "摘要调用回了空文本（空摘要等于把那段历史静默扔掉）"
+        return text, ""
+
+    def _compaction_system(self) -> str:
+        """摘要那一次调用用的 system：与研究无关的"压缩器"身份（不含本岗的工具面）。
+
+        为什么另起一句而不是复用 `self` 那一份身份提示词：那一份写的是"你是谁、你的职责、
+        你的工具面"，而这一次调用要它做的是压缩，不是接着干活 —— 拿干活的身份去要摘要，
+        它会按职责继续研究（真机里那种"摘要变成第二份结论"的形态）。
+        """
+        return ("你是一个上下文压缩器。你的唯一任务是把给定的一段历史改写成一份可继续工作的"
+                "检查点摘要。不要继续研究、不要调用工具、不要下新结论 —— 只复述已知信息，"
+                "并如实标出未知。")
+
+    def _maybe_compact(self, messages: list[dict[str, Any]], *, step: int,
+                       run: "AgentLoop.LoopRun") -> list[dict[str, Any]]:
+        """步边界上的压缩判定（S-B / 裁定 7乙 + 8乙 + 12-I=甲）。返回（可能被替换过的）序列。
+
+        四件事按顺序，每一件都有它自己的读数：
+
+        1. 没配预算（`registry.default_budget is None`）⇒ 什么都不做 ——
+           那是"没启用"，不是"没查成"（三态里的第一档，所以不落任何"没压"的噪声）。
+        2. 走 `compact_by_pressure`（token 压力那条路）。
+        3. 没压（未到阈值 / 容量读不到 / 没有可遮蔽的条目 / 摘要更大）⇒ 不替换历史；
+           "读不到容量"那一档每趟只警告一次（照 DSH `CB:803-808` 的去重）。
+        4. 压了 ⇒ 事件三件套（`compaction_start` / `compaction_summary` /
+           `compaction_end`）+ 一条带 `surface_op` 的替换事件（位置区间，闭区间两端都含），
+           并把 `[start, end]` 换成一条摘要消息。
+
+        为什么把替换消息也写进事件（施工单 §2 逐字）：只在内存里压会让续跑那一趟看到
+        没压过的版本 —— 而"续跑看到的正是当时那份对话"是本仓最强的一条判据
+        （`resume_messages`）。`resume_messages` 读这些事件按序重放，两处因此逐条相等。
+        """
+        budget = getattr(self.registry, "default_budget", None)
+        if budget is None:
+            return messages
+        from . import contextbudget as CB
+
+        cid = f"c{step:04d}-{self.role}"
+        self._last_summary_note = {}
+
+        def _summarize(early: list[Any]) -> str:
+            """`compact_by_pressure` 要的摘要器（8乙：真调模型）。
+
+            拿不到摘要时抛一个受控异常而不是返回空串：返回空串会被
+            `compact_by_pressure` 当成"注入的 summarize 违约"抛 `ValueError`，
+            而那与"摘要这次没拿到"是两件事（前者是接线错误，后者是一次失败）。
+            """
+            text, problem = self._summarize_for_compaction(early)
+            if problem:
+                raise _CompactionRefused(problem)
+            self._last_summary_note = {"note": "compaction"}
+            return text
+
+        try:
+            result = CB.compact_by_pressure(messages, budget=budget, summarize=_summarize)
+        except (CB.CompactionNotSmallerError, _CompactionRefused) as exc:
+            # 自动路径的处置：如实记一条读数、不替换历史（DSH 手动路径才抛给调用方）。
+            SS.append(self.session_root, {
+                "kind": "compaction_end", "role": self.role, "compaction_id": cid,
+                "step": step, "ok": False, "error": f"{type(exc).__name__}: {exc}"}, sid=self.sid)
+            run.notes.append(f"压缩没做成：{exc}")
+            return messages
+        if not result.compacted:
+            if "读不到容量" in result.reason and not self._compaction_capacity_warned:
+                self._compaction_capacity_warned = True
+                SS.append(self.session_root, {
+                    "kind": "agent_note", "role": self.role,
+                    "note": f"压缩：{result.reason}"}, sid=self.sid)
+                run.notes.append(f"压缩：{result.reason}")
+            return messages
+        # ---- 压成了：三件套 + 替换事件（start 先落盘 = 事实上的锁，照 DSH `CB:436-452`）
+        summary_node = (result.text.split("--- 最近 ", 1)[0]) if result.text else ""
+        SS.append(self.session_root, {
+            "kind": "compaction_start", "role": self.role, "compaction_id": cid,
+            "step": step, "turn": step}, sid=self.sid)
+        summary_call_note = self._last_summary_note
+        SS.append(self.session_root, {
+            "kind": "compaction_summary", "role": self.role, "compaction_id": cid,
+            "step": step, "summary": summary_node,
+            "shadowed_range": list(result.shadowed_range),
+            "shadowed_tokens": result.shadowed_tokens, "framed_tokens": result.framed_tokens,
+            "threshold_tokens": result.threshold_tokens, "retain_tokens": result.retain_tokens,
+            "chars_per_token": result.chars_per_token, "baseline_source": result.baseline_source,
+            "summarizer": result.summarizer, "note": "compaction",
+            "usage": dict(self._last_summary_note or {})}, sid=self.sid)
+        start, end = result.shadowed_range
+        replacement = {"role": "user", "content": summary_node}
+        swapped = (list(messages[:start]) + [dict(replacement)] + list(messages[end + 1:]))
+        SS.append(self.session_root, {
+            "kind": "compaction_swap", "role": self.role, "compaction_id": cid, "step": step,
+            # 闭区间、两端都含（DSH `SURF:165-174`）。这是位置 span 不是数值区间
+            # （`types.d.ts:115-122` 的警告）⇒ 读回时按位置重放，不许写 range(start, end+1)。
+            "surface_op": {"op": "replace", "start_seq": start, "end_seq": end},
+            "replacement_index": start, "replacement_message": dict(replacement),
+            "shadowed_token_count": result.shadowed_tokens}, sid=self.sid)
+        SS.append(self.session_root, {
+            "kind": "compaction_end", "role": self.role, "compaction_id": cid,
+            "step": step, "ok": True}, sid=self.sid)
+        run.compactions += 1
+        run.notes.append(
+            f"压缩（{result.summarizer}）：{result.shadowed_tokens} token → "
+            f"{result.framed_tokens} token（阈值 {result.threshold_tokens}，"
+            f"保留额 {result.retain_tokens}，尺 {result.chars_per_token} 字符/token）")
+        return swapped
+
     def _in_flight_reading(self) -> str:
         """收工那一刻"我名下还有几条在飞"（S-G，裁定 15；读数，不拦）。
 
@@ -2637,6 +2801,12 @@ class AgentLoop:
                     prev_key, prev_reading, prev_stall = "", "", ""
                     same_call, stalled = 0, 0
                     counters_reset_at = step
+            # ---- S-B（裁定 7乙 + 8乙 + 12-I=甲）：步边界上的压缩判定。
+            #
+            # 位置与理由：读插话之后、`ask_step` 之前 —— 这一步的提示词是下一句就要发出去的，
+            # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
+            # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
+            messages = self._maybe_compact(messages, step=step, run=run)
             data, call = self.seam.ask_step(self._prompt(messages, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",
@@ -5167,6 +5337,22 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
                                          reasoning=thought))
             out.append(tool_message(step, _result_half(result), name=shape))
         next_step = max(next_step, step + 1)
+    # ---- S-B：把压缩的替换按序重放（施工单 §2 逐字：只在内存里压会让续跑那一趟
+    # 看到没压过的版本，而"续跑看到的正是当时那份对话"是本仓最强的一条判据）。
+    # `surface_op` 是闭区间、两端都含，且它是位置 span（不是数值区间）
+    # ⇒ 按位置做切片替换，绝不写 `range(start, end + 1)`。
+    for e in events[begin + 1:end]:
+        if e.get("kind") != "compaction_swap" or str(e.get("role")) != role:
+            continue
+        op = e.get("surface_op") if isinstance(e.get("surface_op"), Mapping) else {}
+        repl = e.get("replacement_message")
+        if str(op.get("op") or "") != "replace" or not isinstance(repl, Mapping):
+            continue
+        start = int(op.get("start_seq") or 0)
+        end = int(op.get("end_seq") or 0)
+        if start < 0 or end < start or end >= len(out):
+            continue
+        out = out[:start] + [dict(repl)] + out[end + 1:]
     return out, next_step
 
 

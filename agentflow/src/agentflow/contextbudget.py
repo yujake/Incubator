@@ -929,6 +929,12 @@ def _select_keep(items: Sequence[Any], *, spec: CompactSpec, chars_per_token: fl
                 break
             acc += tokens
             keep -= 1
+    # 至少保留最后一个节点：节点是整体，不能只保留它的一部分 —— 一个节点自己就超过
+    # `retain_tokens` 时，累加在第一轮就 break，而"什么都不留"是另一件事（那会把最近的
+    # 上下文也折进摘要，模型接着干活时连上一句都看不到）。DSH 的 `retainTokens=0` 那一档
+    # 逐字就是"只保留最后一个节点"，这里把同一条不变量推广到所有取值。
+    if n >= 2:
+        keep = min(keep, n - 1)
     first = 1 if exclude_first else 0        # 节点 0（开场简报/任务原文）永不遮蔽
     if keep <= first:
         keep = min(n, first + 1)             # 至少留一条，且它必须在允许遮蔽的范围之外
