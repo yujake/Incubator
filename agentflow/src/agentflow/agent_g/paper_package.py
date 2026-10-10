@@ -68,6 +68,27 @@ class _PaperPackage:
             one = next((s for s in steps if str(s.get("step")) == name), {})
             out[name] = {"ok": bool(one.get("ok")), "kind": str(one.get("kind") or ""),
                          "error": str(one.get("error") or one.get("problem") or "")}
+            if not out[name]["ok"]:
+                # 失败时把脚本自己的话带出来（T3 第 5 趟 `t3e` 的真机读数）。
+                #
+                # 那一趟 M 只看到「脚本没打印 `REPRO_RESULT:` 结论行 ⇒ 结论读不到」，
+                # 于是把它误诊成"本工作区没有 `source/` 基线"（渲染器 docstring 里那句
+                # "out/paper/main.tex 从 source/main.tex 逐字复制"），并据此改了交付形式
+                # —— 而真正的原因藏在脚本的 stderr 里（`out/paper/` 目录不存在 ⇒ 写锚时
+                # `FileNotFoundError`），它当时就在 `render` 这一步的读数里，只是被这一层
+                # 抹掉了。与 `draft/39` §6.45（D56）同一条纪律："没查成"必须带上原因，
+                # 否则下一步的动作会照着猜出来的原因走。
+                out[name].update({
+                    "exit_code": one.get("exit_code"),
+                    "timed_out": bool(one.get("timed_out")),
+                    "script": str(one.get("script") or ""),
+                    "script_path": str(one.get("script_path") or ""),
+                    "repro_found": one.get("repro_found"),
+                    "stdout_tail": str(one.get("stdout_tail") or "")[-600:],
+                    "stderr_tail": str(one.get("stderr_tail") or "")[-600:],
+                    "note": "这一步没走成；脚本自己的 stdout/stderr 尾巴就在这两格里"
+                            "（先看它们，别照着『可能的原因』猜）",
+                })
         if not res.ok and (not names or names[-1] != "anchor_check"):
             stage = names[-1] if names else "render"
             out.update({"ok": False, "kind": "package_build_failed", "stage": stage,
