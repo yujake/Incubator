@@ -682,6 +682,14 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "properties": {
             "of": {"type": "string",
                    "description": "缺省 = 自己的名册；也可写我名下某个子代理的名册名"},
+            # S-H（裁定 14）的"全树"那一档：原生工具面此前没有这一格，
+            # 于是模型在原生调用那条路上结构上给不出它（提示词里却写着）——
+            # 与解码器那一侧的漏字段是同一件事的两半，两处一起补（`draft/105` A9）。
+            # 不写 `enum`：取值合法性由读侧当面拒绝（与文本那条路同一套口径），
+            # 不在这里多一道只在原生路上生效的闸。
+            "scope": {"type": "string",
+                      "description": "写 descendants 就给全树（每一行带 parent 与 depth）；"
+                                     "缺省 = 只看下一层"},
         },
         "required": [],
     }),

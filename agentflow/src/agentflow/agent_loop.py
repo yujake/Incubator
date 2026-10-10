@@ -1695,7 +1695,15 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
         # `of` 只做"是不是字符串"这一层：可见面由读侧判（`_do_roster` 对越界的名字
         # 受控拒绝并点名"越界"）—— 解码器预判"这个名字算不算数"会把两件事混起来，
         # 而其中一件（我能不能看）只有读侧知道。
-        return key, {"of": of}, ""
+        #
+        # `scope`（S-H 裁定 14 的"全树"那一档）必须原样带过：它此前在解码器这一层被丢掉，
+        # 于是提示词里写的 `scope="descendants"` 在协议上不可达 ——
+        # 读侧 `_do_roster` 支持它、原生工具面的 schema 也补了它、秘书那一侧的正控也测过，
+        # 断的只有这一条缝（业主 2026-10-11 口径：一切以代码为参考 ⇒ 把代码自己的意图接通）。
+        # 取值合法性仍归读侧判（不认的值当场拒绝），与 `of` 同一条分工。
+        # 空串不写进 payload：`{"of": …}` 的形状保持不变（老路径逐字节不变）。
+        scope = str(value.get("scope") or "").strip()
+        return key, ({"of": of, "scope": scope} if scope else {"of": of}), ""
     final = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
     payload: dict[str, Any] = {"final": final,
                                "evidence": [str(x) for x in (data.get("evidence") or [])]}

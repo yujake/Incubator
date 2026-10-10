@@ -138,6 +138,19 @@ def test_descendants_scope_gives_the_whole_tree(tmp_path: pathlib.Path) -> None:
     leaf_row = deep["rows"][1]
     assert leaf_row["status"] == "idle" and leaf_row["in_flight"] == 0, leaf_row
 
+    # ---- 协议那一跳（`draft/105` A9 的那条缝）
+    #
+    # 上面那些断言走的是秘书那一侧（直接调 `roster_view(scope=…)`），所以它们
+    # 在"解码器把 `scope` 丢掉"的那段时间里照样全绿 —— 而模型在协议上根本递不进这一格。
+    # 这一段把那一跳也测到：解码器必须原样带过 `scope`，且缺省形状一个键都不多。
+    key, payload, problem = AL._decode_shape({"roster": {"of": "self", "scope": "descendants"}})
+    assert (key, problem) == ("roster", ""), (key, problem)
+    assert payload == {"of": "self", "scope": "descendants"}, payload
+    _, plain, _ = AL._decode_shape({"roster": {"of": "D1"}})
+    assert plain == {"of": "D1"}, plain
+    _, blank, _ = AL._decode_shape({"roster": {"of": "self", "scope": ""}})
+    assert blank == {"of": "self"}, blank
+
 
 def test_bad_lines_are_diagnosed_per_line(tmp_path: pathlib.Path) -> None:
     """正控（逐行 diagnostic）：坏行不再让整份名册读不出来。
