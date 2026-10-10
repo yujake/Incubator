@@ -55,15 +55,43 @@ SECTION_ORDERS: dict[str, int] = {
     "AGENT_IDENTITY": 0,
     "ROLE_BOUNDARY": 100,
     "FACULTIES": 200,                # 十项官能（不是工具清册：先说"你有什么"，再说"按键在哪"）
+    # `FACULTIES` 按空行切成 5~7 块。组数按角色变动（实测：D 没有"次要官能"组 ⇒ 5 块、
+    # M 没有"结构上不许"组 ⇒ 6 块、多数角色 7 块）⇒ 段名用位置编号而不是语义名，
+    # 理由见 `agent_prompts._faculty_block_names`（会撒谎的段名比位置段名坏）。
+    "FACULTIES_02": 210,
+    "FACULTIES_03": 220,
+    "FACULTIES_04": 230,
+    "FACULTIES_05": 240,
+    "FACULTIES_06": 250,
+    "FACULTIES_07": 260,
     "STANCE": 300,                   # 这个角色的治学姿态（脑子/思辨/创新/品味/高观点）
     "ROLE_POLICY": 500,
     "TOOL_GUIDANCE_BASE": 1000,      # 每工具一条：1000 + 序号 * 10
     "EVIDENCE_CONTRACT": 3000,
+    "EVIDENCE_RULES": 3010,          # 证据契约的正文（6 条连续子弹 ⇒ 一整块）
+    # 论文包按空行切成 10 块（只有 M/G/H 注册；第八块按角色给不同文本 —— 见 `paper_pack_for`）
+    "PAPER_PACK": 3100,
+    "PAPER_01": 3110,
+    "PAPER_02": 3120,
+    "PAPER_03": 3130,
+    "PAPER_04": 3140,
+    "PAPER_05": 3150,
+    "PAPER_06": 3160,
+    "PAPER_07": 3170,
+    "PAPER_07_BODY": 3175,           # "七、"的正文（它与标题之间有一个空行 ⇒ 是独立一块）
+    "PAPER_08": 3180,
     "OUTPUT_CONTRACT": 4000,
     "THREE_STATE": 4100,
     "TASK_FRAME": 4200,              # 这一次要做的任务（提供者按调用求值）
+    # 任务框按空行切成 6 栏（实测恒为 6：任务 / 留言 / 板 / 用户回答 / 草稿本 / 预算）
+    "TASK_INBOX": 4210,
+    "TASK_BOARD": 4220,
+    "TASK_USER_REPLIES": 4230,
+    "TASK_NOTEBOOK": 4240,
+    "TASK_BUDGET": 4250,
     "PARTNERS": 4500,                # 可协作的伙伴（从 ALLOWED_EDGES 生成）
     "HANDOFF": 4700,                 # 交接手稿协议（`draft/37` §134）：编号 + 谁给谁 + 一句描述
+    "HANDOFF_RULES": 4710,           # 手稿协议的 5 条（连续子弹 ⇒ 一整块；末尾换行并在它身上）
     "AGENT_TOOLS_SDK": 5000,         # 循环协议：第一块（前言），见下面那一段块号
     # 循环协议按空行切成 15 块（`draft/103` §2.1 的字节律：只在空行处切 ⇒
     # 段间用 `\n\n" 连回去逐字节相同）。名字与号一次定死：块名是外读数

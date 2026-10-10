@@ -1241,14 +1241,28 @@ def _block_sections(text: str, names: Sequence[str]) -> list[Section]:
     要走 B 轴（版本 bump + 重冻），不在这条路径上。
 
     两条断言都是"漂了当场炸"而不是"静默少切半块"：块数与名字数不等、或拼不回原文 ⇒ 抛。
-    这与 `LOOP_PROTOCOL` 那三条 `_LOOP_BLOCK_*` 的模块级断言同一精神。
+    这与 `LOOP_PROTOCOL` 那几条 `_LOOP_BLOCK_*` 的模块级断言同一精神。
+
+    ## 末尾那个空块（实测踩到的坑）
+
+    `HANDOFF_PROTOCOL` 以两个换行收尾 ⇒ `split` 会给出一个空白的尾块。
+    空段在渲染时被丢掉（`render` 过滤空串），于是"3 块"会变成"2 段 + 少一个分隔符" ——
+    与原文不再逐字节相同。所以这里把尾空块的分隔符并进它前面那一块：
+
+        "a\\n\\nb\\n\\n" → ["a", "b\\n\\n"]（2 段），而 "\\n\\n".join 拼回来仍是 "a\\n\\nb\\n\\n"
+
+    于是调用方给的 `names` 数要按规范化之后的块数算（`HANDOFF` 是 2 而不是 3）。
     """
     blocks = text.split("\n\n")
+    if blocks and blocks[-1] == "":                 # 尾空块 ⇒ 分隔符并进前一块（见 docstring）
+        blocks = blocks[:-1]
+        if blocks:
+            blocks[-1] = blocks[-1] + "\n\n"
     if len(blocks) != len(names):
         raise PromptError(
             f"块数与名字数不等：{len(blocks)} 块 vs {len(names)} 个名字 —— "
-            "循环协议的文本被改过（增删了空行或整块），先按新的块数更新 "
-            "`_LOOP_BLOCK_NAMES`，不要让它静默地按名字截断"
+            "这段文本被改过（增删了空行或整块），先按新的块数更新对应的名字表，"
+            "不要让它静默地按名字截断"
         )
     if "\n\n".join(blocks) != text:
         raise PromptError("按空行切块之后拼不回原文 —— 段结构会与文本漂开，必须当场停下来查")
@@ -1256,8 +1270,39 @@ def _block_sections(text: str, names: Sequence[str]) -> list[Section]:
             for name, block in zip(names, blocks, strict=True)]
 
 
-#: 没有读到工具链读数时那一段的正文。写在这里是为了让"没读到"也是一句诚实的话：
-#: 空字符串会让模型以为这一栏本来就没有，而"我不知道"与"没有"是两件事。
+#: 其余五坨的块名表（A 轴批 2；块数与名字数都由 `_block_sections` 当场对账）。
+#:
+#: 逐条实测（`draft/103` §2.1 / §2.2）：`PAPER_PACK` 10 块（只有 M/G/H 注册）、
+#: `TASK_FRAME` 恒 6 块、`EVIDENCE_CONTRACT` 2 块、`HANDOFF` 2 块（末尾那个空块是
+#: `HANDOFF_PROTOCOL` 的收尾换行，按 `_block_sections` 的口径并进了第 2 块）。
+_PAPER_BLOCK_NAMES: tuple[str, ...] = (
+    "PAPER_PACK", "PAPER_01", "PAPER_02", "PAPER_03", "PAPER_04",
+    "PAPER_05", "PAPER_06", "PAPER_07", "PAPER_07_BODY", "PAPER_08",
+)
+_TASK_FRAME_BLOCK_NAMES: tuple[str, ...] = (
+    "TASK_FRAME", "TASK_INBOX", "TASK_BOARD", "TASK_USER_REPLIES", "TASK_NOTEBOOK",
+    "TASK_BUDGET",
+)
+_EVIDENCE_BLOCK_NAMES: tuple[str, ...] = ("EVIDENCE_CONTRACT", "EVIDENCE_RULES")
+_HANDOFF_BLOCK_NAMES: tuple[str, ...] = ("HANDOFF", "HANDOFF_RULES")
+
+
+def _faculty_block_names(count: int) -> tuple[str, ...]:
+    """`FACULTIES` 的块名：第一块沿用旧名，其余按位置编号。
+
+    为什么不用语义名（`FACULTY_CORE` / `FACULTY_MINOR` / …）：这一段的组按角色变动 ——
+    实测 D 是 5 块（没有"次要官能"那一组）、M 是 6 块（没有"结构上不许"那一组）、
+    多数角色 7 块。写死一张语义名表会让"缺了中间那一组的角色"被贴上错标签
+    （第 3 块在 A 上是"结构上不许"、在 B 上是"次要官能"）——
+    一个会撒谎的段名比一个位置段名坏得多，因为段名是拿来定位"哪一块落后于代码"的读数。
+    要语义名，正确的做法是在 `faculties_text` 里按组带标签，那属于 B 轴（会动文本），
+    留到那一批做；本批只做零文本改动的分块。
+    """
+    return ("FACULTIES",) + tuple(f"FACULTIES_{i:02d}" for i in range(2, count + 1))
+
+
+
+#: 没有读到工具链读数时那一段的正文。写在这里是为了让"没读到"也是一句诚实的话：#: 空字符串会让模型以为这一栏本来就没有，而"我不知道"与"没有"是两件事。
 _NO_TOOLCHAIN = ("这台机器上的证明工具链：（这一次没有读到读数 —— 探测没做，"
                  "不是「没有检查器」。要判断能不能做形式化核验，先让框架跑一次 "
                  "`agentflow doctor`）")
@@ -1463,7 +1508,11 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         "此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：{{children}}。"
                         "（编号用来对账与回报：派活仍按角色走 `summon`，父子关系由框架"
                         "按台账号记；要谁做事就让谁**亲自**做，传话/代读不算送达。）"))
-    reg.section(Section("FACULTIES", SECTION_ORDERS["FACULTIES"], faculties_text(role, registry)))
+    # A 轴批 2（`draft/103` §2.1）：官能 / 证据契约 / 论文包 / 任务框 / 手稿协议各按空行切块。
+    # 切点全在空行上 ⇒ 渲染逐字节不变；换来的是 `prompt_audit["sections"]` 能逐块点名。
+    _faculties = faculties_text(role, registry)
+    for section in _block_sections(_faculties, _faculty_block_names(_faculties.count("\n\n") + 1)):
+        reg.section(section)
     reg.section(Section("STANCE", SECTION_ORDERS["STANCE"],
                         ("你在这一岗上的治学姿态：\n"
                          + "\n".join(f"- {x}" for x in brief.stance)) if brief.stance else ""))
@@ -1486,16 +1535,17 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                                                   SECTION_ORDERS["TOOL_GUIDANCE_BASE"])):
         reg.section(section)
         del i
-    reg.section(Section("EVIDENCE_CONTRACT", SECTION_ORDERS["EVIDENCE_CONTRACT"],
-                        EVIDENCE_CONTRACT))
+    for section in _block_sections(EVIDENCE_CONTRACT, _EVIDENCE_BLOCK_NAMES):
+        reg.section(section)
     if role in PAPER_PACK_ROLES:
         # 论文包专用段：只给碰它的角色（M 统筹交付 / G 写稿与打包 / H 审校）。
         # 顺序放在证据契约之后、输出契约之前：它是对"这次交付什么"的补充说明，
         # 压过它会把通用契约挤到看不见的地方。
-        # `R6` 缺陷 4：这一段按角色渲染 —— M 得完整那节，G/H 得"体例由 M 裁定（不是你的活）"
-        # （改前无条件注入整段，G/H 会读到"体例由你（M）裁定"而以为归自己定）。
-        reg.section(Section("PAPER_PACK", SECTION_ORDERS["EVIDENCE_CONTRACT"] + 100,
-                            lambda sc: paper_pack_for(str(getattr(sc, "role", "") or ""))))
+        # `R6` 缺陷 4：这一段按角色渲染 —— M 得完整那节，G/H 得"体例由 M 裁定（不是你的活）"。
+        # A 轴批 2：10 块分别登记 ⇒ `paper_pack_for` 那处"替换标题行"的补丁仍然照旧
+        # （它换的是第八块内部的标题行）；要改成"第八块按角色给不同文本"属于 B 轴，留到那一批。
+        for section in _block_sections(paper_pack_for(role), _PAPER_BLOCK_NAMES):
+            reg.section(section)
 
     acts = actions_lines(role)
     reg.section(Section("OUTPUT_CONTRACT", SECTION_ORDERS["OUTPUT_CONTRACT"],
@@ -1507,13 +1557,16 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         + "、".join(J.JUDGE_PROBLEMS)
                         + "。拿到这些码时，正确做法是走确定性回退并在结论里写明来源，"
                           "不许折成「没问题」，也不许折成「不存在」。"))
-    reg.section(Section("TASK_FRAME", SECTION_ORDERS["TASK_FRAME"],
-                        "这一次的任务：\n{{task}}\n\n"
-                        "你收到的留言（可能为空）：\n{{inbox}}\n\n"
-                        "挂在你名下的工作项（板；可能为空）：\n{{board}}\n\n"
-                        "用户回答过的问题（含迟到送达的回答）：\n{{user_replies}}\n\n"
-                        "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
-                        "剩余预算：{{budget_left}}"))
+    # 任务框按空行切成 6 栏（实测恒为 6）—— 每一栏一段，于是"哪一栏落后于代码"能点名。
+    for section in _block_sections(
+            "这一次的任务：\n{{task}}\n\n"
+            "你收到的留言（可能为空）：\n{{inbox}}\n\n"
+            "挂在你名下的工作项（板；可能为空）：\n{{board}}\n\n"
+            "用户回答过的问题（含迟到送达的回答）：\n{{user_replies}}\n\n"
+            "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
+            "剩余预算：{{budget_left}}",
+            _TASK_FRAME_BLOCK_NAMES):
+        reg.section(section)
     partners = partners_lines(role, availability)
     reg.section(Section("PARTNERS", SECTION_ORDERS["PARTNERS"],
                         "可协作的伙伴：\n" + "\n".join(partners)))
@@ -1526,7 +1579,8 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                             + ("\n派活前先看这一栏：没接线的伙伴派了也会被拒（refused/not_wired），"
                                "不如改派能做的，或如实说明缺什么。"
                                if unusable else "")))
-    reg.section(Section("HANDOFF", SECTION_ORDERS["HANDOFF"], HANDOFF_PROTOCOL))
+    for section in _block_sections(HANDOFF_PROTOCOL, _HANDOFF_BLOCK_NAMES):
+        reg.section(section)
     # 循环协议（`R6` §2-⑥ 按角色渲染）：主控那一版就是 `LOOP_PROTOCOL` 常量本身，
     # 其余九个角色少掉里面几块只有 M 用得到的文本（见 `loop_protocol_for`）。
     #

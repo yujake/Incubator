@@ -1534,7 +1534,13 @@ def test_the_prompt_version_moves_with_the_sections(registry: ToolRegistry,
     assert drift == [], "段与版本没有一起动：\n" + "\n".join(drift)
 
     # ---- 反负控 ①：只改段、不改版本 ⇒ 必须红（端到端：临时改一段真文本，再渲染一次）
-    monkeypatch.setattr(AP, "HANDOFF_PROTOCOL", AP.HANDOFF_PROTOCOL + "（判据探针：这一句是反负控）")
+    #
+    # 探针必须在最后一块内部改，不能往末尾追加一句：`HANDOFF_PROTOCOL` 以两个换行收尾，
+    # 直接 `+ "…"` 会多出一个空行块（2 → 3），而 A 轴（`draft/103` §2.1）把空行当段边界
+    # —— `_block_sections` 的"块数与名字数不等即抛"会当场触发，探针就变成了"改结构"而不是"改文本"。
+    # `rstrip("\n")` 之后再拼既改了文本（摘要必然动），又不动块数。
+    monkeypatch.setattr(AP, "HANDOFF_PROTOCOL",
+                        AP.HANDOFF_PROTOCOL.rstrip("\n") + "（判据探针：这一句是反负控）")
     moved = {role: _surface_digest(role, registry) for role in ALL_ROLES}
     assert moved != live, "反负控失效：改了一段真文本，摘要却没变（那这条判据什么也抓不住）"
     assert _version_drift(moved, AP.PROMPT_VERSION,
