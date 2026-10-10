@@ -1,0 +1,21 @@
+# A（文献检索）的组装：只列"写死的块"由谁给。
+#
+# 契约（`draft/103` §4.1b）：预设决定"写死的块由哪段文件给"；代码永远给现算的块。
+# 所以这个文件里不出现 TOOL_* / FACULTIES* / OUTPUT_CONTRACT / PARTNERS /
+# TASK_* / TOOLCHAIN_FACTS / WORKSPACE_FACTS —— 它们跟着注册表与当次事实现算，
+# 搬进文件就等于允许文件与事实各说一套。
+#
+# 行名 `agentflow.text_blocks` 的 blocks[] 每项恰好给一个 file 或 text
+# （两个都给 ⇒ 那一行坏："这一段是谁写的"没有答案）。
+#
+# order 这一格：集中的号段在 `promptkit.SECTION_ORDERS`（`A_SEARCH_STYLE = 2000`，
+# 角色"做法"块那一族：工具指引之后、证据契约之前）。这里显式再写一遍是**冗余**的，
+# 留着是为了让"这一段排在哪"在组装文件里直接看得见 —— 读的人不必跳去另一个文件。
+
+- id: search-style
+  name: agentflow.text_blocks
+  config:
+    blocks:
+      - section: A_SEARCH_STYLE
+        order: 2000
+        file: blocks/search_style.md

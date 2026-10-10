@@ -2422,6 +2422,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "claimanatomy.py": "断言解剖学：`documents.claims` 每个元素的唯一判据来源",
     "claims.py": "原子断言拆分：把一段答复切成一堆可逐条回验的断言",
     "cli.py": "命令行入口",
+    # 接线批 C1（`draft/103` §4.1b）：预设组装 → 角色提示词的接线层。
+    # 它不发明机制：发现/优先级/挂载/创作在 `presets.py`（DSH 端口批 3），
+    # `composition.py` 只回答"组装文件里那一行名字落到哪个注册函数上"。
+    # 与 `presets.py` 分开的理由与 DSH 同形（`dsh-agent-presets` × 插件的分工）：
+    # 机制要能被别的消费者用，接线要知道本仓的段名与注册表长什么样。
+    "composition.py": "预设组装的接线层：行名 → 解析函数（`agentflow.text_blocks` / "
+                      "`agentflow.brief_blocks`）、随包预设根、`prompt_audit[\"preset\"]` 的读数",
     "conductor.py": "主控编队：把一次召唤做成可审计、可拒绝、可取消、可重建的台账行",
     "console.py": "把 CLI 的输出编码钉在 UTF-8 上（这件事只有一份实现）",
     "contextbudget.py": "上下文预算：压缩 / 剪枝 / spill 三件套（FC-17）",

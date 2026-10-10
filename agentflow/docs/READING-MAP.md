@@ -179,6 +179,7 @@
 | `promptkit.py` | 提示词装配：有序段 + 变量 + 作用域遮蔽 + 动态上下文（快照那一类） |
 | `persona.py` | 身份的两个具名槽位 + 唯一注册入口：部署那一份无条件注册、角色那一份靠同名遮蔽、`scope` 必填（学 DSH 的 `dsh-persona`；`draft/101` §3） |
 | `presets.py` | 预设机制：目录 = 一个预设（`preset.<yaml>` + `agent.<宿主>.yml`，DSH 的 YAML 形状；两份的名字是常量 `PRESET_MANIFEST_NAME` / `COMPOSITION_NAME`）、根优先级、坏预设带理由、挂一次 + 生成戳、只许复制式创作、`!!js` 门落 conditional（学 DSH 的 `dsh-agent-presets`；`draft/101` §2） |
+| `composition.py` | 预设的**接线层**：组装行名 → 解析函数（今天两行：`agentflow.text_blocks` 给写死的正文块、`agentflow.brief_blocks` 声明五格身份文本由真身 `specs/<role>.py` 渲染）、随包预设根 `agentflow/presets/roles/`、角色 id → 预设 id（小写化）、以及回落时的读数 `prompt_audit["preset"]`；约定只有一条：预设决定"写死的块由哪段文件给"，代码永远给现算的块（`draft/103` §4.1b） |
 | `instructions.py` | 工作区指令通道：AGENTS.md 一类文件的发现 / 去重 / maxBytes 降级 / 转义 / 追加式状态（学 DSH 的 `dsh-agent-instructions`；`draft/101` §4） |
 | `contextbudget.py` | 上下文预算：压缩 / 剪枝 / spill |
 | `tokenestimate.py` | 固定密度估值器（S-B/12-H：DSH 常数 + `chars_per_token` 配置项） |

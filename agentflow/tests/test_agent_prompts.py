@@ -571,13 +571,23 @@ def test_roles_that_can_summon_a_are_told_its_index_is_english(registry: ToolReg
     的中文 description 把 `precise` 的查询清零，而两层闸门都不拦它）。
     这条判据同时钉住两半：有 A 这条边的角色要读到、没有这条边的角色不要读到
     （无差别地贴一句放之四海皆准的提示词，就是把提示词当噪音）。
+
+    探针钉的是"对唤起者说的那句"（`唤起 A 时注意`），不是"英文关键词"这个词：
+    2026-10-11 接线批 C1 之前它钉的是词，而 A 自己的第一段写死的正文
+    （`presets/roles/a/blocks/search_style.md`，段名 `A_SEARCH_STYLE`）里合法地
+    写着"`topic` 里要带英文关键词" —— 那是对 A 自己说的，与这句对唤起者说的不是同一句。
+    钉词的判据在那一刻变成假红（实测：`p68` 时 A 的 `partners_out` 里没有 A，
+    而提示词里有这个词 ⇒ 判据红）—— 而这条判据要守的性质是
+    "谁读到了这句提醒"，主体是收件人。（`draft/105` 已登记这一条形态：
+    探针钉词而不钉收件人时，任何一个角色自己谈到同一个概念都会把它钉红。）
     """
     for role in ALL_ROLES:
         text = _prompt(role, registry)
         can_summon_a = "A" in AP.partners_out(role)
-        assert ("英文关键词" in text) is can_summon_a, (
+        told = "唤起 A 时注意" in text
+        assert told is can_summon_a, (
             f"{role}：partners_out 里{'有' if can_summon_a else '没有'} A，"
-            f"而提示词里{'有' if '英文关键词' in text else '没有'}那句英文索引提醒")
+            f"而提示词里{'有' if told else '没有'}那句对唤起者说的英文索引提醒")
         if can_summon_a:
             assert "query_not_applicable" in text, (
                 f"{role} 的提示词没写清「这一问没发出去」的返回码，"
@@ -1470,9 +1480,16 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:      改成把两条读法都写明（含"主控直接读那个追加式账本"）。
 #: 两处都在共享段（`PAPER_PACK` 与 `HANDOFF_PROTOCOL`，后者十格都有）⇒ 十格全换
 #: （下面的读数：`temp/_s1r_prompt_digests.py` 逐格对照，十格无一相同）。
-_FROZEN_PROMPT_VERSION = "p67"
+#: `p68`（2026-10-11，接线批 C1 + A 的预设目录；`draft/103` §4.1b）：
+#: A 的第一段写死的正文从代码搬到了预设目录（`agentflow/presets/roles/a/blocks/search_style.md`
+#: ⇒ 新段 `A_SEARCH_STYLE`，order 2000），角色提示词第一次由"组装文件 + 现算的块"拼出来。
+#: 这是只动一个角色的读数：实测 A 段 64→65、字 17020→17393、摘要换；其余九格
+#: （B 58/16051 · C 62/14795 · D 71/21456 · E 61/20189 · F 72/20981 · G 87/29936 ·
+#: H 76/25867 · V 55/14844 · M 68/42623）段数/字数/摘要三样全同 ——
+#: 这正是接线契约想要的形态：预设改的是"谁来给这一段"，不是"别的角色看见了什么"。
+_FROZEN_PROMPT_VERSION = "p68"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "caf3d9f63e2ffea0922c0a1c8d5667640ddcee3955177789deedafd3b89e22eb",
+    "A": "84792c6812d4e7c61230a18d614c86f9bbee59576901a7e4a4465a9e8ce13e4d",
     "B": "a2ed75c5d26ab6427b75464239e31e3fc3455b4a13305f6984512b080372b590",
     "C": "76d2efc0834ee28bf813636376e5489aa1f58ff33e69ea28dbec646279b21170",
     "D": "cd2b4ebbe7474ed17757e825ae81d1ba6b383abcc4ec8b5a62e5524d5ba36abb",

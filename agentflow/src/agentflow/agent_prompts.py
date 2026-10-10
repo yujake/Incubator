@@ -34,6 +34,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from .agentspec import AgentBrief, builtin_registry
 from . import attackround as AR
 from . import capabilities as C
+from . import composition as _composition
 from . import judge as J
 from . import persona as P
 from . import schema as S
@@ -154,7 +155,14 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `p66`（2026-10-10，S-H 裁定 14）：协议里补第 9 条 `interrupt`（停某一个子代理当前那一轮，
 #: 不是全局叫停），名册那一句补 `scope=descendants` 与三格新读数（status / in_flight /
 #: last_reading）。改的仍是共用段（循环协议十格都有）⇒ 十格全换。
-PROMPT_VERSION = "p67"
+#: `p67`（2026-10-11，业主口径「一切以代码为参考」；`draft/105` 的 A22/A24）：两处在共享段里
+#: 指了一件收件人没有的工具（纸包第二节点名只发给 M 的 `conductor.acceptance`；手稿协议
+#: 点名 M 读不到的 `manuscripts.read`）⇒ 改成各写两条可行读法。改的是共享段 ⇒ 十格全换。
+#: `p68`（2026-10-11，接线批 C1 + A 的预设目录；`draft/103` §4.1b）：A 的第一段写死的正文
+#: 搬到了 `presets/roles/a/blocks/search_style.md`（新段 `A_SEARCH_STYLE`，order 2000）
+#: ⇒ 只换 A 那一格（其余九格的段数/字数/摘要三样全同 —— 读数见
+#: `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上面那段）。
+PROMPT_VERSION = "p68"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -920,6 +928,51 @@ RoleBrief = AgentBrief
 
 
 
+def brief_sections(role: str) -> list[tuple[str, int, str]]:
+    """五格身份文本的唯一渲染口：`[(段名, order, 正文)]`。
+
+    为什么要有这么一个函数：`role_prompt_registry` 与 `composition._register_brief_blocks`
+    都要把这几格渲染成段 —— 两处各写一遍渲染就是两份实现（本仓反复登记过的形态）。
+    这里只做"字段 → 段正文"这一层排版，内容来自 `ROLE_BRIEFS`
+    （它本身是 `specs/<role>.py::SPEC.brief` 的视图 ⇒ 唯一真身仍在禁改区那一侧）。
+
+    空段口径照抄改前，不要顺手统一（实测：改前 `STANCE` 是无条件注册的、空的也注册，
+    而 `ROLE_POLICY` / `SIGNATURE_ERROR` / `DELIVERABLE` 三格只在非空时注册）。
+    于是 M 的 `STANCE` 这一格在读数里看得见（`Assembly.names` 的口径是"含那些这次渲染成
+    空串、会被丢掉的段"，`promptkit` 的 docstring 逐字），而 G/H 的空格看不见。
+    我这里原样照抄：接线批的判据是"十格读数逐格不变"，顺手统一口径会让 G 的段数 +1、
+    H 的段数 +2 —— 那是读数变更，得有它自己的一条理由，不能夹在接线里蒙过去。
+    （这条不对称本身已登记为待办：统一它是一种口径选择，见 `draft/103` §4.1b 末尾。）
+
+    不含 `AGENT_IDENTITY`：那一段是模板（插值 `{{task_id}}` / `{{depth}}` / `{{children}}`
+    这些当次事实），它的渲染跟着拥有那些事实的代码走，不在这条路上。
+    """
+    brief = ROLE_BRIEFS[role]
+    base = SECTION_ORDERS["ROLE_BOUNDARY"]
+    stance = SECTION_ORDERS["STANCE"]
+    rows: list[tuple[str, int, str]] = [
+        # `STANCE`：无条件（空则空串），与改前逐字一致
+        ("STANCE", stance,
+         ("你在这一岗上的治学姿态：\n" + "\n".join(f"- {x}" for x in brief.stance))
+         if brief.stance else ""),
+        # 边界无条件出现（它是硬约束那一格；空边界由 `agentspec` 的注册期校验挡住）
+        ("ROLE_BOUNDARY", base,
+         "边界（这些是硬约束，越过它们做的事一律不算数）：\n"
+         + "\n".join(f"- {x}" for x in brief.boundary)),
+    ]
+    if brief.policy:
+        rows.append(("ROLE_POLICY", SECTION_ORDERS["ROLE_POLICY"],
+                     "这次运行的政策：\n" + "\n".join(f"- {x}" for x in brief.policy)))
+    if brief.signature_error:
+        rows.append(("SIGNATURE_ERROR", base + 50,
+                     "你最需要防的那个错：" + brief.signature_error
+                     + " 它在这个框架里被单独登记过，因为它最难自己发现。"))
+    if brief.deliverable:
+        rows.append(("DELIVERABLE", base + 60,
+                     "你这一岗的交付物：" + brief.deliverable))
+    return rows
+
+
 def _specs_for(role: str, registry: Any) -> list[Any]:
     """该角色工具面上的工具（按名字排序）。
 
@@ -1453,6 +1506,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
                         availability: Mapping[str, str] | None = None,
                         toolchain_facts: str = "",
+                        preset_root: str | Path | None = None,
                         ) -> PromptRegistry:
     """按角色装配一份提示词注册表（段 + 变量），供 `render` 或审计使用。
 
@@ -1466,6 +1520,24 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         raise ValueError(f"未登记的角色 {role!r}（已知 {tuple(ROLE_BRIEFS)}）")
     brief = ROLE_BRIEFS[role]
     reg = PromptRegistry()
+
+    # ---- 预设那一层（`draft/103` §4.1b 的契约：预设决定"写死的块由哪段文件给"，
+    # 代码永远给现算的块）。三态纪律：预设坏 ⇒ 回落内置注册，并把"为什么回落"
+    # 记进 `prompt_audit["preset"]`（读数的算法见 `composition.preset_reading` ——
+    # 它涵盖两档：发现期的 `broken` 与组装期抛出的异常）；绝不半组装
+    # （`apply_preset` 一抛就把注册表整个丢掉重来）。
+    #
+    # 谁接管了哪一段由 `apply_preset` 的返回值给（`provided`），下面注册写死块时按它跳过 ——
+    # 因为 `promptkit` 对同名两次注册是注册期即抛（那是对的：两份文本抢一个段名时
+    # "哪一份是真的"必须有答案，而答案就是组装文件）。
+    provided: set[str] = set()
+    _preset = _composition.role_preset(role, root=preset_root)
+    if _preset is not None and not _preset.broken:
+        try:
+            provided = _composition.apply_preset(reg, _preset, role=role)
+        except Exception:  # noqa: BLE001 —— 坏预设回落（理由由 `preset_reading` 给出）
+            provided = set()
+            reg = PromptRegistry()      # 半组装必须整个丢掉：不许留半份提示词
 
     # 身份的两个槽位（`persona.py` 是它们唯一的注册入口）：无条件注册、文本今天为空
     # （空段会被丢掉 ⇒ 提示词一字不变）。它在这里的作用是给"某个角色换一份身份/加一句
@@ -1514,23 +1586,12 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     _faculties = faculties_text(role, registry)
     for section in _block_sections(_faculties, _faculty_block_names(_faculties.count("\n\n") + 1)):
         reg.section(section)
-    reg.section(Section("STANCE", SECTION_ORDERS["STANCE"],
-                        ("你在这一岗上的治学姿态：\n"
-                         + "\n".join(f"- {x}" for x in brief.stance)) if brief.stance else ""))
-    reg.section(Section("ROLE_BOUNDARY", SECTION_ORDERS["ROLE_BOUNDARY"],
-                        "边界（这些是硬约束，越过它们做的事一律不算数）：\n"
-                        + "\n".join(f"- {x}" for x in brief.boundary)))
-    if brief.policy:
-        reg.section(Section("ROLE_POLICY", SECTION_ORDERS["ROLE_POLICY"],
-                            "这次运行的政策：\n" + "\n".join(f"- {x}" for x in brief.policy)))
-    if brief.signature_error:
-        reg.section(Section("SIGNATURE_ERROR", SECTION_ORDERS["ROLE_BOUNDARY"] + 50,
-                            "你最需要防的那个错："
-                            + brief.signature_error
-                            + " 它在这个框架里被单独登记过，因为它最难自己发现。"))
-    if brief.deliverable:
-        reg.section(Section("DELIVERABLE", SECTION_ORDERS["ROLE_BOUNDARY"] + 60,
-                            "你这一岗的交付物：" + brief.deliverable))
+    # 五格身份文本（`brief_sections` 是它们唯一的渲染口）：预设接管的那些跳过
+    # （`provided` 来自组装文件；同名两次注册在 `promptkit` 里是注册期即抛）。
+    for _name, _order, _text in brief_sections(role):
+        if _name in provided:
+            continue
+        reg.section(Section(_name, _order, _text))
 
     for i, section in enumerate(_numbered_sections("TOOL", tools_lines(role, registry),
                                                   SECTION_ORDERS["TOOL_GUIDANCE_BASE"])):
@@ -1640,10 +1701,14 @@ def system_prompt(role: str, **kw: Any) -> str:
 
 
 def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
-    """这次提示词的审计读数：版本、哈希、长度、段名、变量名。
+    """这次提示词的审计读数：版本、哈希、长度、段名、变量名、预设。
 
     每次模型调用都要把这份读数落档 —— 没有它，
     "这次结论是哪个版本的提示词加上哪个模型的产物"就无法事后回答。
+
+    `preset` 那一格回答的是另一个问题："这一趟读的是哪一份组装文件、
+    它有没有坏到让内置那份顶上来"（`draft/103` §4.1b）。它由
+    `composition.preset_reading` 现算（含"读的时候就看到坏"与"组装时才坏"两档）。
     """
     reg = role_prompt_registry(role, **kw)
     assembly = reg.assemble(Scope(role=role))
@@ -1655,6 +1720,7 @@ def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
         "prompt_chars": len(text),
         "sections": list(assembly.names),
         "variables": sorted(assembly.variables),
+        "preset": _composition.preset_reading(role, root=kw.get("preset_root")),
     }
 
 
