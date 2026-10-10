@@ -444,6 +444,72 @@ def _words_in(text: Any) -> set[str]:
     return {w.lower() for w in words if w.lower() not in _FIT_STOPWORDS}
 
 
+def claim_evidence_fit(
+    claim: Mapping[str, Any],
+    *,
+    exps: Mapping[str, Mapping[str, Any]],
+    lits: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """一条断言与它引的证据对不对口 —— 逐条判据的唯一实现（`D61`/`D62`）。
+
+    两个调用方共用它，这是刻意的（`R003` 那条纪律：同一判据不许有第二份实现）：
+
+    - `citation_fit`（收工门那一档，读全库）；
+    - `doc_tools.citation_coverage`（写稿那一刻的读数）—— T4 第 3 趟 `t4c` 的真机读数
+      逼出来的：那一趟 `documents/0000` 的 5 条断言里 2 条把数学教育论文当出处，
+      收工门的 `citation_fit` 点名了、M 调了 5 次 `closing` 看到之后仍按 met=true 收工；
+      而写稿期那条读数当时只报"引了几条"，不报"对不对口"。
+      同一份判据放到写稿那一刻，才有机会在收工前改掉。
+
+    判据分两条腿，都是特征交集（详见 `citation_fit` 的 docstring）：
+    引 `exp:` 比整数特征，引 `lit:` 比英文实词；两侧任一侧没有可判特征 ⇒ `unjudged`
+    （"没查成"，绝不读成"对上了"）。
+    """
+    claim_nums = _numbers_in(claim.get("text"))
+    claim_words = _words_in(claim.get("text"))
+    verdict = "unjudged"
+    why: list[str] = []
+    for cite in (claim.get("citations") or []):
+        cid = str(cite)
+        if cid.startswith("exp:"):
+            exp = exps.get(cid[4:])
+            if exp is None:
+                why.append(f"{cid}：实验行不在册 ⇒ 不可判")
+                continue
+            ev_nums = (_numbers_in(exp.get("claim")) | _numbers_in(exp.get("claim_key"))
+                       | _numbers_in(json.dumps(exp.get("search_bound") or {},
+                                                ensure_ascii=False))
+                       | _numbers_in(json.dumps(exp.get("params") or {},
+                                                ensure_ascii=False)))
+            if not claim_nums or not ev_nums:
+                why.append(f"{cid}：一侧没有数字特征 ⇒ 不可判")
+                continue
+            if claim_nums & ev_nums:
+                verdict = "fit"
+            elif verdict != "fit":
+                verdict = "mismatch"
+                why.append(f"{cid}：断言里的数字 {sorted(claim_nums)[:6]} 与被引实验的 "
+                           f"{sorted(ev_nums)[:6]} 没有交集 ⇒ 说的不是同一个界/参数")
+        elif cid.startswith("lit:"):
+            lit = lits.get(cid[4:].split("#", 1)[0])
+            if lit is None:
+                why.append(f"{cid}：文献行不在册 ⇒ 不可判")
+                continue
+            ev_words = _words_in(lit.get("title")) | _words_in(lit.get("summary"))
+            if len(claim_words) < 2 or not ev_words:
+                why.append(f"{cid}：一侧没有实词特征 ⇒ 不可判")
+                continue
+            if claim_words & ev_words:
+                verdict = "fit"
+            elif verdict != "fit":
+                verdict = "mismatch"
+                why.append(f"{cid}：断言的实词与《{str(lit.get('title') or '')[:40]}》"
+                           f"没有交集 ⇒ 引文可能跑题")
+    return {"verdict": verdict, "why": why[:3],
+            "numbers_in_claim": sorted(claim_nums)[:6],
+            "words_in_claim": sorted(claim_words)[:6]}
+
+
 def citation_fit(store: Any) -> dict[str, Any]:
     """逐条断言核「它引的证据是不是说的同一件事」（确定性、可复算，D61/D62）。
 
@@ -466,52 +532,14 @@ def citation_fit(store: Any) -> dict[str, Any]:
         for claim in (doc.get("claims") or []):
             if not isinstance(claim, Mapping):
                 continue
-            claim_nums = _numbers_in(claim.get("text"))
-            claim_words = _words_in(claim.get("text"))
-            verdict = "unjudged"
-            why: list[str] = []
-            for cite in (claim.get("citations") or []):
-                cid = str(cite)
-                if cid.startswith("exp:"):
-                    exp = exps.get(cid[4:])
-                    if exp is None:
-                        why.append(f"{cid}：实验行不在册 ⇒ 不可判")
-                        continue
-                    ev_nums = (_numbers_in(exp.get("claim")) | _numbers_in(exp.get("claim_key"))
-                               | _numbers_in(json.dumps(exp.get("search_bound") or {},
-                                                        ensure_ascii=False))
-                               | _numbers_in(json.dumps(exp.get("params") or {},
-                                                        ensure_ascii=False)))
-                    if not claim_nums or not ev_nums:
-                        why.append(f"{cid}：一侧没有数字特征 ⇒ 不可判")
-                        continue
-                    if claim_nums & ev_nums:
-                        verdict = "fit"
-                    elif verdict != "fit":
-                        verdict = "mismatch"
-                        why.append(f"{cid}：断言里的数字 {sorted(claim_nums)[:6]} 与被引实验的 "
-                                   f"{sorted(ev_nums)[:6]} 没有交集 ⇒ 说的不是同一个界/参数")
-                elif cid.startswith("lit:"):
-                    lit = lits.get(cid[4:].split("#", 1)[0])
-                    if lit is None:
-                        why.append(f"{cid}：文献行不在册 ⇒ 不可判")
-                        continue
-                    ev_words = _words_in(lit.get("title")) | _words_in(lit.get("summary"))
-                    if len(claim_words) < 2 or not ev_words:
-                        why.append(f"{cid}：一侧没有实词特征 ⇒ 不可判")
-                        continue
-                    if claim_words & ev_words:
-                        verdict = "fit"
-                    elif verdict != "fit":
-                        verdict = "mismatch"
-                        why.append(f"{cid}：断言的实词与《{str(lit.get('title') or '')[:40]}》"
-                                   f"没有交集 ⇒ 引文可能跑题")
+            # 逐条判据只有一份实现（`claim_evidence_fit`，写稿期那条读数共用它）。
+            one = claim_evidence_fit(claim, exps=exps, lits=lits)
             checked.append({"doc_id": str(doc.get("doc_id") or ""),
                             "claim_id": str(claim.get("claim_id") or ""),
                             "citations": [str(c) for c in (claim.get("citations") or [])],
-                            "verdict": verdict, "why": why[:3],
-                            "numbers_in_claim": sorted(claim_nums)[:6],
-                            "words_in_claim": sorted(claim_words)[:6]})
+                            "verdict": one["verdict"], "why": one["why"],
+                            "numbers_in_claim": one["numbers_in_claim"],
+                            "words_in_claim": one["words_in_claim"]})
     fits = [c for c in checked if c["verdict"] == "fit"]
     bad = [c for c in checked if c["verdict"] == "mismatch"]
     unknown = [c for c in checked if c["verdict"] == "unjudged"]

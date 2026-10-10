@@ -72,11 +72,11 @@ def _build(root: Path, store: Store, claims: list[dict]):
     return reg.call("doc.build_document", role="G", kind="note", title="t", claims=claims)
 
 
-def _claim(citations: list[str], cid: str = "claim-1") -> dict:
+def _claim(citations: list[str], cid: str = "claim-1", text: str = "") -> dict:
     """一条合规的 claim（用唯一的构造入口 `compose_claim`，不手拼必填字段）。"""
     from agentflow.tools import doc_tools as DT
 
-    return DT.compose_claim("围长恰为 k 的图里每条边至少落在两个 k-圈里。",
+    return DT.compose_claim(text or "围长恰为 k 的图里每条边至少落在两个 k-圈里。",
                             citations=list(citations), evidence_kind="cross_check",
                             section="主结果", claim_id=cid)
 
@@ -202,4 +202,63 @@ def test_negative_the_g_role_path_must_carry_the_reading_too(tmp_path: Path) -> 
     # 落库的那一行不许带上读数（它要算内容哈希、要被 schema 校验）
     stored = dict(list(store.rows("documents"))[0])
     assert "citation_coverage" not in stored, sorted(stored)
+
+
+# ---- 「引文对不对口」那一半（T4 第 3 趟 `t4c` 的整改）----
+#
+# 真机读数：`t4c` 的清单里 2 条断言把数学教育论文当出处，收工门的 `citation_fit`
+# 点名了，M 调了 5 次 `closing` 看到 blocker 之后仍按 `met=true` 收工。写稿那一刻
+# 那条读数原先只说"引了几条" ⇒ 这一半补上"对不对口"（判据与 `citation_fit` 共用一份实现）。
+
+
+def _off_topic_library(root: Path) -> Store:
+    """库里混进一篇数学教育论文（`t4c` 的真实形态）。"""
+    store = _seed_library(root)
+    with store.tx("literature", actor="test", note="seed") as tx:
+        tx.upsert("literature", {
+            "lit_id": "0002",
+            "title": "Promoting Problem Solving across Geometry and Algebra by Using Technology",
+            "type": "J", "summary": "classroom study on problem solving with technology",
+            "path": None, "processed": True, "added_at": TS}, note="seed")
+    return store
+
+
+def test_positive_an_off_topic_citation_is_reported_as_misfit(tmp_path: Path) -> None:
+    """正控：断言的实词与被引文献没有交集 ⇒ 进 `misfit`，并且 `gaps` 里有一句。"""
+    store = _off_topic_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(
+        ["lit:0002"],
+        text="Termination of flips for klt singularities in dimension four remains open.")])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["fit"]["mismatch"] == 1, cov["fit"]
+    assert [m["claim_id"] for m in cov["misfit"]] == ["claim-1"], cov["misfit"]
+    assert "跑题" in cov["misfit"][0]["why"][0], cov["misfit"][0]
+    assert any("引文与原文对不上" in g for g in cov["gaps"]), cov["gaps"]
+
+
+def test_negative_an_on_topic_citation_is_not_flagged(tmp_path: Path) -> None:
+    """负控：引对了不许误报（不然这条读数会退化成"每次都喊"）。"""
+    store = _off_topic_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(
+        ["lit:0000"], text="Edge-girth-regular graphs are the setting of this note.")])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["fit"]["fit"] == 1 and cov["misfit"] == [], cov["fit"]
+
+
+def test_anti_vacuum_no_features_on_one_side_is_unjudged_not_mismatch(tmp_path: Path) -> None:
+    """反真空：一侧抽不出可判特征 ⇒ `unjudged`（"没查成"绝不读成"对不上"）。"""
+    store = _off_topic_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["lit:0002"], text="Open.")])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["fit"]["unjudged"] == 1 and cov["misfit"] == [], cov["fit"]
+    assert cov["gaps"] == [] or all("引文与原文对不上" not in g for g in cov["gaps"]), cov["gaps"]
 

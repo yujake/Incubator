@@ -706,6 +706,36 @@ def citation_coverage(
     ]
 
     gaps: list[str] = []
+    # ---- 引用对不对口（T4 第 3 趟 `t4c` 的整改；判据只有一份实现，见下）
+    #
+    # 那一趟：`documents/0000` 的 5 条断言里 2 条把数学教育论文当出处
+    # （`lit:0000`《Promoting Problem Solving across Geometry…》/`lit:0003`《Creative
+    # thinking level of visual-spatial students on geometry…》），收工门的 `citation_fit`
+    # 点名了这两条，M 调了 5 次 `closing`、看到 blocker 之后仍按 met=true 收工。
+    # 这一格原先只报"引了几条" ⇒ 写稿那一刻说不出"对不对口"。
+    # 判据不另写一份：直接调 `closing.claim_evidence_fit`（那边 `citation_fit` 用的同一份）。
+    fit_rows: list[dict] = []
+    misfit: list[dict] = []
+    counters = {"fit": 0, "mismatch": 0, "unjudged": 0}
+    try:
+        from .. import closing as CL  # 惰性：避免 `tools` ↔ `closing` 的 import 期耦合
+
+        exps = {str(r.get("experiment_id") or ""): dict(r) for r in rows_of("experiments")}
+        lits = {str(r.get("lit_id") or ""): r for r in lit_rows}
+        for i, c in enumerate(claims, 1):
+            if not isinstance(c, Mapping):
+                continue
+            one = CL.claim_evidence_fit(c, exps=exps, lits=lits)
+            counters[one["verdict"]] = counters.get(one["verdict"], 0) + 1
+            row = {"claim_id": str(c.get("claim_id") or f"claim-{i}"),
+                   "citations": [str(x) for x in (c.get("citations") or [])],
+                   "verdict": one["verdict"], "why": one["why"]}
+            fit_rows.append(row)
+            if one["verdict"] == "mismatch":
+                misfit.append(row)
+    except Exception as exc:  # noqa: BLE001 —— 这一半算不出不影响上面那些读数
+        fit_rows, counters = [], {"fit": -1, "mismatch": -1, "unjudged": -1,
+                                  "reason": f"{type(exc).__name__}: {exc}"}
     if counts["lit"] == 0 and len(digested) > 0:
         gaps.append(
             f"这份稿子 0 条 `lit:` 引用，而库里已有 **{len(digested)} 篇已消化的文献**"
@@ -722,6 +752,13 @@ def citation_coverage(
         # 反真空：库里本来就没有可引的文献时不喊（"你没引"与"没东西可引"
         # 是两件事）—— 这件事由 `available.literature_processed == 0` 如实记着。
         pass
+    if misfit:
+        gaps.append(
+            f"这份稿子有 {len(misfit)} 条断言的引文与原文对不上"
+            f"（逐条见 `misfit`：断言的实词/数字与被引来源没有交集）"
+            " —— 把引文换成真的支持这条断言的那一条（或把断言改成与证据相符），"
+            "别让『引了一条不相关的』冒充『有出处』"
+        )
 
     return {
         "own": own,
@@ -729,6 +766,9 @@ def citation_coverage(
         "available": available,
         "readable": True,
         "gaps": gaps,
+        "fit": counters,
+        "fit_rows": fit_rows,
+        "misfit": misfit,
         "suggest_lit": suggest_lit,
         "suggest_rel": suggest_rel,
         "note": ("只报数、不拦：引用的**存在性**由 `check_citations` 判（fail-closed）；"
