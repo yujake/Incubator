@@ -37,6 +37,7 @@ from . import capabilities as C
 from . import composition as _composition
 from . import judge as J
 from . import persona as P
+from . import policy as POL
 from . import schema as S
 from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDERS
 
@@ -165,7 +166,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `p69`（2026-10-11，E 的迁移批，业主裁定 G）：工具链那一轴拆成"事实"与"怎么写"两段，
 #: 后者（`TOOLCHAIN_FORMAL`，order 9010）只发给手上真有 `verify.check_formal` 的角色
 #: ⇒ 只换 E / F / G 三格（现算受众，不是写死名单）。
-PROMPT_VERSION = "p69"
+#: `p70`（2026-10-11，协作块族第一块：派活上限；业主裁定 A「数字写、且现算」）：
+#: 新段 `PARENT_LIMITS`（order 5210），四类上限 + 墙钟的数字全部从这一次 run 的
+#: `Policy` 现算；受众 = 出边非空的九个角色（实测只有 C 出边为 0）⇒ 换九格，C 不动。
+PROMPT_VERSION = "p70"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1541,6 +1545,71 @@ def toolchain_formal_text() -> str:
             + "）⇒ 按自足文件写（今天一定可达），并把「没查成」写进 `notes`")
 
 
+#: `PARENT_LIMITS` 在没拿到策略读数时的诚实说法（与 `_NO_TOOLCHAIN` 同一条纪律：
+#: 「这一次没有读到」不是「没有上限」）。
+_NO_PARENT_LIMITS = ("这一次没有读到策略读数 ⇒ 派活按最保守那一档做：一次只派一件、"
+                     "等它返回再派下一件；被拒时把「被策略挡下」如实写进汇报"
+                     "（别写成「我不会做」）。上限的数字要问框架要，不要自己猜一个。")
+
+
+def parent_limits_text(policy: Any, role: str) -> str:
+    """这一次 run 的派活上限（数字全部现算：来自 `policy.Policy` 与 `fanout_limit_for`）。
+
+    ## 为什么这一段必须有（业主 2026-10-11 裁定 A：上限数字写、且现算）
+
+    `draft/104` §2.1 的真机读数：四类上限在提示词里一个数字都没有 ——
+    原文只说"唤起伙伴要过能力表与策略（允许的边 / 深度 / 扇出 / 并发 / 总量 / 预算）"，
+    于是模型知道自己的 `depth`，却不知道上限是 5、也不知道"同时在飞最多 5 个（主控 20 个）"。
+    `draft/104` §2.8 的读数接着说：四类上限在真机上从未触发，而模型撞上的失败是
+    `invalid_params`（第一失败形态）。两者合起来就是这个段落的理由：把数字给它，
+    它才会去规划；不给数字只给"过策略"，它就只能撞上去再回头。
+
+    ## 为什么是现算、而不是把数字写死在提示词里
+
+    业主口径 C 逐字：「尽可能避免做机器判据」⇒ 凡"提示词须与代码一致"的地方一律
+    从代码现算。四类上限是 `Policy` 的字段（`policy.py` 的 `Policy` 与
+    `FANOUT_LIMIT_BY_ROLE`），而它们可以被 run 的配置覆盖（`cli.py` 就传过
+    `wall_clock_sec`）⇒ 写死的数字在覆盖过的 run 里就是一句谎话。
+    这里只做"字段 → 句子"的排版，一个数字都不抄：调大 `Policy.max_fanout`，
+    这一段当场跟着变（判据见 `tests/test_agent_prompts.py::test_the_parent_limits_...`）。
+
+    ## 口径的三处细节（每条都有真机/逐字出处）
+
+    1. "在飞"= 单时刻，不是累计（`draft/104` §2.2 业主逐字：「智能体返回后腾出空间」；
+       累计口径的真机代价：T1 第 18/19 趟在第 51–88 步就用完 20 个名额，后半趟派不出活）。
+    2. 名额逐实例（§2.3 业主逐字：D 满了就另起 D2）。
+    3. 触顶先等，不是拒（§2.4；`conductor_tools.DEFAULT_FANOUT_WAIT_SEC = 900`）。
+       把它写成"到顶就做不了"会让模型提前放弃 —— 而框架其实是让它等一个返回。
+    """
+    wall = policy.wall_clock_sec
+    wall_line = (
+        f"- 墙钟：{int(float(wall))} 秒（从 run 开始算）。到点之后新召唤一律被拒"
+        f"（`deadline_exceeded`），已在跑的走**协作式取消** —— 不是强杀"
+        if wall is not None else
+        "- 墙钟：这一次**不限**（`wall_clock_sec=None`）—— 但「不限」是这一次的策略，"
+        "不是「永远可以慢慢来」")
+    fanout = int(POL.fanout_limit_for(policy, role))
+    other = ("" if fanout == policy.max_fanout
+             else f"（工人档是 {int(policy.max_fanout)} 个；你这一档是单独定的）")
+    return (
+        "这一次 run 的派活上限（现算读数，不是记忆）：\n"
+        f"- 你**同时**在飞的子代理最多 {fanout} 个{other}。口径是「同时在飞」："
+        "子行 `status` 还在 `pending`/`running` 的那些；子代理一返回就腾出名额，"
+        "与它返回得好不好无关。名额是**逐实例**的 —— 别人再向同一个角色派活会新建一个"
+        "实例（D#2），不是让忙着的那个接手。\n"
+        f"- 召唤链深度上限 {int(policy.max_depth)}（主控发起 = 1）。你现在在深度 {{{{depth}}}}"
+        f" ⇒ 到 {int(policy.max_depth)} 就到底，再往下派会落 `depth_exceeded`。\n"
+        f"- 全局同时运行 {int(policy.max_concurrency)} 个（超了落 `concurrency_exceeded`）；"
+        f"一次 run 的召唤总数 {int(policy.max_tasks_per_run)} 个。\n"
+        f"{wall_line}\n"
+        "- **触顶的处置是「先等」，不是「这条路不通」**：达到派活上限时框架会让你等到"
+        "一个子代理返回再照常派（`fanout_wait_sec`）；等到超时或墙钟到点才算真的被拒。\n"
+        "- 被拒不是「你不会做」：读 `refusal_reason` 的原话（`fanout_exceeded` / "
+        "`depth_exceeded` / `concurrency_exceeded` / `deadline_exceeded` / `budget_exceeded` / "
+        "`forbidden_edge`）写进汇报 —— 「被策略挡下」与「我不会做」是两件事。"
+    )
+
+
 
 #: 画像文件的名字（工作区根相对路径）。`draft/37` §109（用户口径：
 #: "M 要看到所有人的简介，其它智能体只要看到可协作的同伴的简介，这些应该落成
@@ -1614,6 +1683,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
                         availability: Mapping[str, str] | None = None,
                         toolchain_facts: str = "", toolchain_formal: str = "",
+                        parent_limits: str = "",
                         preset_root: str | Path | None = None,
                         ) -> PromptRegistry:
     """按角色装配一份提示词注册表（段 + 变量），供 `render` 或审计使用。
@@ -1761,6 +1831,12 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 于是"哪一块落后于代码"才定位得到（`draft/104` §1.2 与 `draft/105` 的 C 节全靠这个粒度）。
     for section in _block_sections(loop_protocol_for(role), _LOOP_BLOCK_NAMES):
         reg.section(section)
+    # 派活上限（业主裁定 A：数字写、且现算）。受众 = 派得出活的角色（`partners_out`
+    # 非空 ⇒ 它真的会 `summon`）；出边为 0 的角色（实测 C）拿到这一段只会读到
+    # "你能派几个"这种与它无关的话 —— 它那一档的处置在协作块族里（`draft/104` §5.2 的 C 行）。
+    if partners_out(role):
+        reg.section(Section("PARENT_LIMITS", SECTION_ORDERS["PARENT_LIMITS"],
+                            (parent_limits or "").strip() or _NO_PARENT_LIMITS))
     # 证明工具链那一轴（`draft/37` §89）：读数是机器相关的，所以由调用方传；
     # 没传就如实写"这一次没有读到读数"（不是"没有检查器"，也不是什么都不说）。
     reg.section(Section("TOOLCHAIN_FACTS", SECTION_ORDERS["TOOLCHAIN_FACTS"],

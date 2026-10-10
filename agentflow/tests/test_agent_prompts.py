@@ -248,6 +248,65 @@ def test_the_toolchain_line_says_to_pass_mathlib_when_the_probe_says_it_works(
     AP2.reset_toolchain_readings()
 
 
+def test_the_parent_limits_block_goes_to_whoever_can_summon(registry: ToolRegistry):
+    """`PARENT_LIMITS` 只发给派得出活的角色（`partners_out` 非空），两头都钉。
+
+    为什么要有这一段（业主 2026-10-11 裁定 A：上限数字写、且现算）：
+    `draft/104` §2.1 的真机读数 —— 四类上限在提示词里一个数字都没有，模型知道自己的
+    `depth` 却不知道上限是 5、也不知道同时在飞最多 5 个（主控 20 个）；
+    §2.8 接着说这四类上限在真机上从未触发，而第一失败形态是 `invalid_params`。
+    把数字给它，它才会去规划。
+
+    两头都钉的理由与 `TOOLCHAIN_FORMAL` 那条一样：漏发（真会派活的人没有数字）
+    与滥发（出边为 0、连 `summon` 都发不出的角色读到"你能派几个"）都是错的。
+    判据按 `partners_out` 现算，所以它钉的是"角色与能力表对得上"这件事。
+    """
+    holders: list[str] = []
+    for role in ALL_ROLES:
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        can = bool(AP.partners_out(role))
+        assert ("PARENT_LIMITS" in sections) is can, (
+            f"{role}：出边{'非空' if can else '为空'}，"
+            f"而段表里{'有' if 'PARENT_LIMITS' in sections else '没有'}派活上限那一段")
+        if can:
+            holders.append(role)
+    assert holders == ["A", "B", "D", "E", "F", "G", "H", "V", "M"], (
+        f"能派活（出边非空）的角色集合变了（现算：{holders}）⇒ 这一段的受众跟着变 —— "
+        "不是判据坏了，是能力表变了（唯一发不出 `summon` 的实测是 C）")
+
+
+def test_the_parent_limits_are_computed_from_the_policy():
+    """数字必须从 `Policy` 现算，一个都不许写死（业主口径 C：从代码现算）。
+
+    正控：换一个把四类上限都改掉的 `Policy` ⇒ 渲染出来的那一句跟着换；
+    负控：默认值（5 / 4 / 200 / 900）一个字都不该出现在改过的那一段里 ——
+    写死的数字在"被覆盖过的 run"里就是一句谎话（`cli.py` 就传过 `wall_clock_sec`）。
+    另外钉住两处口径：主控那一档来自 `FANOUT_LIMIT_BY_ROLE`（20，同时把工人档
+    5 写出来做对照），而 `wall_clock_sec=None` 那一支必须写成"这一次不限"
+    （不是"限 0"，也不是不写 —— 业主裁定 B 的另一面：墙钟不缩短，
+    但"没设"与"设为 0"必须分得开）。
+    """
+    from agentflow import policy as POL
+
+    odd = POL.Policy(max_depth=9, max_fanout=7, max_concurrency=3,
+                     max_tasks_per_run=11, wall_clock_sec=None)
+    text = AP.parent_limits_text(odd, "E")
+    for want in ("7 个", "9", "3 个", "11 个", "这一次**不限**"):
+        assert want in text, f"改过 Policy 之后这一段里没有 {want!r}：{text}"
+    for stale in ("最多 5 个", "全局同时运行 4 个", "总数 200 个", "墙钟：900 秒"):
+        assert stale not in text, f"这一段里还留着写死的旧数字 {stale!r}：{text}"
+
+    # 主控那一档来自 FANOUT_LIMIT_BY_ROLE；工人档来自 Policy.max_fanout（两处都现算）
+    m_text = AP.parent_limits_text(odd, "M")
+    assert "最多 20 个" in m_text and "工人档是 7 个" in m_text, m_text
+    assert "最多 7 个（" not in m_text, m_text
+
+    # 默认 Policy 的那一支：工人档等于 Policy.max_fanout ⇒ 不再补"工人档是…"那半句
+    plain = AP.parent_limits_text(POL.Policy(), "E")
+    assert "最多 5 个。" in plain and "工人档" not in plain, plain
+
+
 def test_the_role_that_writes_the_acceptance_table_knows_every_controlled_kind():
     """广告面判据（D35）：写表的人必须拿到受控词表的逐字清单。
 
@@ -1446,6 +1505,10 @@ _SURFACE_FIXTURE_TOOLCHAIN = ("这台机器上的证明工具链（现算读数�
 #: 它与上面那个夹具是同一批读数的两种用法：上面报事实、这一条说怎么写。
 _SURFACE_FIXTURE_FORMAL = ("你这一岗怎么写形式化（由上面那份读数现算）：\n"
                            "- （判据夹具：这一次按自足文件写）")
+#: 派活上限那一段（`PARENT_LIMITS`）同理：真数字来自这一次 run 的 `Policy`
+#: （`cli.py` 的 `wall_clock_sec` 就能覆盖它）⇒ 不钉住它，冻结摘要会随 run 的配置变。
+_SURFACE_FIXTURE_LIMITS = ("这一次 run 的派活上限（现算读数，不是记忆）：\n"
+                           "- （判据夹具：同时在飞 5 个、深度 5、墙钟 900 秒）")
 _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 
 #: 冻结的版本号与十格摘要（口径见上）。更新规则：改段 ⇒ 同一个 commit 里改这张表 + 版本。
@@ -1556,25 +1619,35 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: G 87→88），其余七格一个字节都没动 —— 夹具把事实段钉成了固定串，那句"由上一条推得"
 #: 本来就不在夹具里。真机上它还会从另外七个角色的文本里消失（那七个不写 Lean 源码），
 #: 两份读数都在 `draft/103` §4.1b-4。
-_FROZEN_PROMPT_VERSION = "p69"
+#: `p70`（2026-10-11，协作块族第一块：派活上限；业主裁定 A「上限数字写、且现算」）：
+#: 新段 `PARENT_LIMITS`（order 5210，`draft/104` §6-1 合并后的协作块号段）——
+#: 四类上限（同时在飞 / 深度 / 全局并发 / 总量）+ 墙钟，数字全部从这一次 run 的
+#: `Policy` 现算（`policy.Policy` + `fanout_limit_for`）。受众从能力表现算：
+#: 出边非空的九个角色（实测只有 C 出边为 0 ⇒ 它连 `summon` 都发不出）。
+#: 读数：A/B/D/E/F/G/H/V/M 九格换，只有 C 那一格逐字不动（段数 +1：A 65→66、
+#: B 58→59、D 71→72、E 62→63、F 73→74、G 88→89、H 76→77、V 55→56、M 68→69）。
+#: 这一批的理由是真机读数（`draft/104` §2.1）：四类上限在提示词里一个数字都没有，
+#: 而模型知道自己的 `depth` 却不知道上限是 5（主控同时在飞 20）⇒ 只能撞上去再回头。
+_FROZEN_PROMPT_VERSION = "p70"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "84792c6812d4e7c61230a18d614c86f9bbee59576901a7e4a4465a9e8ce13e4d",
-    "B": "a2ed75c5d26ab6427b75464239e31e3fc3455b4a13305f6984512b080372b590",
+    "A": "07c31266ce464ab25696e34513110ba7233fd8bfeabd93b3d08a67246eaa23b9",
+    "B": "131db093bca53c4b5888b43ef36aed09aed7a94c94b9f926f286f6695d663734",
     "C": "76d2efc0834ee28bf813636376e5489aa1f58ff33e69ea28dbec646279b21170",
-    "D": "cd2b4ebbe7474ed17757e825ae81d1ba6b383abcc4ec8b5a62e5524d5ba36abb",
-    "E": "13a9ddb4f2c81ca318bec963e3c9d43aac6b1d253cd3318cab6dca1166b54cc7",
-    "F": "138c840d738771fd07d01475bc7eb7a31fbc3331d8a9eb5ecbece5cfcf0398d9",
-    "G": "9ebb4d1c6bb03ff0ed487785e5b2890caeced6a9080245cf2a7e0c288b8f4e7e",
-    "H": "5385f0f47d72b03e2cc7b3b4efb6264a3b1c3b2f2ae3db06ae6f3c64f1f52c9e",
-    "V": "571c43366f540e03646dc071233e9268e231034a88664ed40dcd63e3934ccb0c",
-    "M": "56d5aaad9ecd5390c462a80b3c16dd79139716a39bcd277fbb0559788e54e16a",
+    "D": "2c638458a8ea656de0020039f9a424725f8b05b10f9a0c855ced829eacaf9e5b",
+    "E": "d09e268ce9935073c71dc8c28d9cf86d0e82b474c7f49c64dbaab39758a1d0ba",
+    "F": "3a31ce5c61d3ad258efb1980176d5289165b22826136e1252a7a8a4a55d6288f",
+    "G": "4ae0e49bdd969a5bfed6a2eb076d9ad178977acbf50bf3759ab12fe28bc66c0e",
+    "H": "630c33b4193e229550648988dbda45f4032eb92644e82d2b1a0902bbc4897099",
+    "V": "4fe5405185d7d077108da85428b177cdeb22def4d0c2eb6f9018f65dcafc6305",
+    "M": "b4d08d284b37a8a9f056d59b9dc1164cf020774a4cf92f3bc1f792154763a801",
 }
 
 
 def _surface_digest(role: str, registry: ToolRegistry) -> str:
     """某个角色这一次渲染出来的提示词的摘要（版本那一行归一掉，见上面的口径）。"""
     text = _prompt(role, registry, toolchain_facts=_SURFACE_FIXTURE_TOOLCHAIN,
-                   toolchain_formal=_SURFACE_FIXTURE_FORMAL)
+                   toolchain_formal=_SURFACE_FIXTURE_FORMAL,
+                   parent_limits=_SURFACE_FIXTURE_LIMITS)
     normalized, hits = _VERSION_LINE.subn("- 提示词版本：<PROMPT_VERSION>", text)
     assert hits == 1, (
         f"{role} 的提示词里「提示词版本」那一行有 {hits} 条（应当恰好 1 条）⇒ "

@@ -2704,7 +2704,13 @@ class AgentLoop:
                      # `toolchain_formal` 是同一批读数的第二种用法（怎么写），
                      # 只发给手上真有 `verify.check_formal` 的角色（业主裁定 G）。
                      toolchain_facts=AP.toolchain_facts_text(),
-                     toolchain_formal=AP.toolchain_formal_text())
+                     toolchain_formal=AP.toolchain_formal_text(),
+                     # 派活上限（业主裁定 A）：数字从这一次 run 的 Policy 现算，
+                     # 不写死 —— `cli.py` 就传过 `wall_clock_sec`，写死的数字在
+                     # 覆盖过的 run 里是谎话。没有 conductor 时退回默认 Policy（那一档
+                     # 的派活本来也不会发生：没有 conductor 就没有 summon）。
+                     parent_limits=AP.parent_limits_text(
+                         getattr(self.conductor, "policy", None) or P.Policy(), self.role))
         run.prompt_audit = AP.prompt_audit(self.role, registry=self.registry, **facts)
         system = AP.system_prompt(self.role, registry=self.registry, **facts)
         if resumed is None:
