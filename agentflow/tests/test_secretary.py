@@ -1081,7 +1081,13 @@ def test_rework_inbound_runs_through_the_inbound_hook(tmp_path: pathlib.Path):
     assert one["item"] == heard[0], "原文一字不动（不加码不减码）"
     add = str(one["addendum"])
     assert add, one
-    assert "analysis_reports" in add, f"补的该是本角色（D）的产出物口径：{add}"
+    # 钉的是"补的确实是本角色当前的产出物口径"，不是某个写死的表名：
+    # 2026-10-10 那条 D 的交付物声明从 `analysis_reports`（C 的报告通道、D 写不了）
+    # 改成它真交付的东西之后，写死表名的那一版当场红了 —— 判据要比的东西是声明本身。
+    from agentflow import capabilities as _C
+
+    _deliverable = _C._specs.builtin_specs()["D"].brief.deliverable
+    assert _deliverable in add, f"补的该是本角色（D）的产出物口径：{add}"
     assert "研究循环" in add, f"还该补它在条线上的位置（duty 那一句）：{add}"
 
     last = sec.decisions()[-1]
