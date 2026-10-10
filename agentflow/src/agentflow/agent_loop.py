@@ -991,6 +991,64 @@ def read_messages(session_root: Path, role: str, *, sid: str | None = None,
     return out, problems
 
 
+def pending_wake(session_root: Path | str, role: str, *, sid: str | None = None,
+                 parent_task_id: str = "", parent_role: str = "") -> dict[str, Any]:
+    """我停着的时候，有没有"值得再开一轮"的东西（S-G，裁定 15；DSH 的 `next-turn`）。
+
+    `{"checked", "pending", "count", "why"}`
+
+    ## 为什么它只认"还没投递过的"留言
+
+    `inbox_digest` 的返回值里有一半是"这一轮新渲染出来、且还没投递的 id"（`fresh`），
+    而投递登记（`mark_delivered`）刻意推迟到"模型真的被问过一次"才写。
+    唤醒判据用的正是那个 `fresh`：
+
+    - 只认没投递过的 ⇒ 读过的旧留言不会一轮又一轮地把循环开起来
+      （那会把"轮次已用尽"的停止变成死循环，而且烧钱）；
+    - 三态：会话读不成 ⇒ `checked=False` —— 不许折成"没有新消息"。折过去会把一次
+      真的唤醒吞掉，而"有人叫我"这件事在盘上是有痕迹的（那正是三态的用处）。
+
+    为什么不做"父代理循环里 sleep N 秒再看一次"（施工单 S-G 第 3 条逐字禁的形态）：
+    那是 DSH 明确没有的东西，而且会把墙钟吃掉；唤醒是事件驱动的 —— 事件就是
+    "收件箱里有新的、还没投递的留言"，由驱动的下一轮去读。
+    """
+    text, fresh, problems = inbox_digest(session_root, role, sid=sid, window=None,
+                                        parent_task_id=parent_task_id,
+                                        parent_role=parent_role)
+    if problems:
+        return {"checked": False, "pending": [], "count": 0,
+                "why": "；".join(str(p) for p in problems), "text": text}
+    return {"checked": True, "pending": [str(x) for x in fresh], "count": len(fresh),
+            "why": "", "text": text}
+
+
+def message_source(record: Mapping[str, Any]) -> dict[str, str]:
+    """一条留言的来源读数（S-G）：`{kind, form, summary}` —— DSH 的 `source` 那一格。
+
+    为什么必须搬（施工单 S-G 逐字）：DSH 的通知是带
+    `source{kind, form:"notice", summary}` 的消息（`dsh-subagent:663-680`），
+    而我们的 `heard` 是裸 dict ⇒ "这条是子代理结算 / 插话 / 广播"在读数上分不开。
+    分开之后，"父收到的哪一条是孩子的交差通报"就有了机器可判的答案。
+
+    四种 kind（取值刻意少而稳，且都是盘上已有的字面量）：
+    - `subagent-settled`：框架投递的通报（`by_framework` 为真，即 `_emit_settlement` 那一类）；
+    - `broadcast`：公共频道（`channel == "public"`）；
+    - `user`：发信人是用户/主控以外的用户频道；
+    - `message`：其余（角色之间的一条普通留言）。
+    """
+    channel = str(record.get("channel") or "")
+    sender = str(record.get("from") or "")
+    if record.get("by_framework"):
+        kind = "subagent-settled"
+    elif channel == "public":
+        kind = "broadcast"
+    elif sender in ("user", "用户"):
+        kind = "user"
+    else:
+        kind = "message"
+    return {"kind": kind, "form": "notice", "summary": str(record.get("subject") or "")}
+
+
 def send_message(session_root: Path, *, sender: str, to: str, subject: str, body: str,
                  reply_to: str = "", sid: str | None = None, from_task_id: str = "",
                  by_framework: bool = False) -> tuple[str, str]:
@@ -2057,7 +2115,10 @@ class AgentLoop:
             if str(m.get("msg_id")) in fresh:
                 heard.append({"id": m.get("msg_id"), "from": m.get("from"),
                               "channel": m.get("channel"), "subject": m.get("subject"),
-                              "body": _clip(m.get("body"), 400)})
+                              "body": _clip(m.get("body"), 400),
+                              # S-G：来源那一格（DSH 的 `source`）—— 没有它，
+                              # "这条是孩子交差 / 广播 / 用户的话"在读数上分不开。
+                              "source": message_source(m)})
         if problem:
             heard.append({"投递登记失败": problem})
         if board_ids:
@@ -2095,6 +2156,36 @@ class AgentLoop:
         if not rows:
             return {}
         return {"可退役": rows}
+
+    def _in_flight_reading(self) -> str:
+        """收工那一刻"我名下还有几条在飞"（S-G，裁定 15；读数，不拦）。
+
+        四态各自如实（读不成也要说清是哪一档，不许静默返回空串糊过去）：
+        - 没有 conductor / 没有台账号 ⇒ 空串（顶层没建行那一档，本来就没有"名下的孩子"）；
+        - 台账读不成 ⇒ 一句"没读成"（不许当成"都回来了"——那是把没查成折成查过了）；
+        - 一条在飞都没有 ⇒ 空串（绝大多数收工是这一档，不落噪声）；
+        - 有在飞 ⇒ 点名那几条 + 明说"不拦收工"（含 DSH 的 `retry` 那一格：读数期间
+          台账变了就重算，`retried=True` 要写在句子里）。
+        """
+        if self.conductor is None or not str(self.my_task_id or ""):
+            return ""
+        look = getattr(self.conductor, "settlement_reading", None)
+        if not callable(look):
+            return ""
+        try:
+            got = look(self.my_task_id)
+        except Exception as exc:  # noqa: BLE001 —— 读不成也如实说
+            return f"在飞读数没读成（{type(exc).__name__}: {exc}）⇒ 不知道收工时还有没有孩子在飞"
+        if not isinstance(got, dict) or not got.get("checked"):
+            return f"在飞读数没读成（{str((got or {}).get('reason') or '读数不是对象')}）"
+        n = int(got.get("in_flight") or 0)
+        if n <= 0:
+            return ""
+        who = "、".join(f"{r.get('role') or '?'}·{r.get('task_id')}" for r in
+                        list(got.get("rows") or [])[:5] if int(r.get("in_flight") or 0) > 0)
+        return (f"收工时名下还有 {n} 条在飞：{who}"
+                "（读数，不拦收工 —— 这一趟的结论可能不含它们的产出）"
+                + ("（注：这个读数是重算过的 —— 读数期间台账又变了）" if got.get("retried") else ""))
 
     def _budget_text(self) -> str:
         if self.seam.usd_budget is None:
@@ -2764,6 +2855,15 @@ class AgentLoop:
         status_note = self._ensure_status_report(run)
         if status_note:
             run.notes.append(status_note)
+        # ---- S-G（裁定 15）：收工那一刻读一次"我名下还有几条在飞"（读数，不拦）。
+        #
+        # 为什么只落读数、绝不放行/否决：裁定 1 逐字是"收工由 M 判"，裁定 15 又要求
+        # "超时/还有人在飞 ⇒ 记读数继续收工"。所以这一格的产物是一句 note（它跟着
+        # `agent_run_end` 一起落盘），不是一个打断。代价（父的交付可能没有孩子的结论）
+        # 由这句话本身说出来 —— 那是这一格存在的全部意义。
+        flight_note = self._in_flight_reading()
+        if flight_note:
+            run.notes.append(flight_note)
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,            "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
             # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，

@@ -1166,6 +1166,58 @@ class Conductor:
                 cur["in_flight"] = int(cur.get("in_flight") or 0) + 1
         return {"checked": True, "by_child": by_child, "reason": ""}
 
+    def poke_generation(self) -> str:
+        """台账的"世代"读数（S-G，裁定 15）：读数期间它变了 ⇒ 结论要重算。
+
+        搬的是 DSH `settlementState`（`dsh-subagent/lib/index.js:1192-1198`）里我们缺的
+        那一格 `retry`（它的 `poke` 世代比较）：拿一份旧快照下"孩子们都停了"的结论，
+        而读的过程中恰好有一个孩子交差 —— 那个结论在写下它的那一刻就已经过期了。
+        世代取三样拼起来（行数 / 在飞数 / 最晚的结束时刻），任何一样变了就是另一代。
+        读不成 ⇒ 空串（那是"判不了"，`settlement_reading` 会如实说没重算成）。
+        """
+        try:
+            rows = self._tasks()
+        except Exception:  # noqa: BLE001 —— 读不成 ⇒ 没有世代可比（不许编一个）
+            return ""
+        ends = [str(r.get("ended_at") or "") for r in rows]
+        running = sum(1 for r in rows
+                      if str(r.get("status") or "") in ("pending", "running"))
+        return f"{len(rows)}:{running}:{max(ends) if ends else ''}"
+
+    def settlement_reading(self, parent_task_id: str) -> dict[str, Any]:
+        """父的结算读数（S-G，裁定 15）：此刻还有几条在飞 + 逐条是谁 + 世代 + 重算过没有。
+
+        `{"checked", "in_flight", "rows", "generation", "retried", "reason"}`
+
+        用途：① 收工那一刻写一条读数（读数，不拦 —— 裁定 1「收工由 M 判」与裁定 15
+        的"超时 ⇒ 记读数继续收工"）；② 将来"等"那条路用它获知还有谁没回来。
+
+        `retried` 那一格是这一批的重点：读一遍台账（`children_facts`）前后各取一次
+        世代，两次不同 ⇒ 重算一遍并如实报 `retried=True`。不重算的后果很具体：父会把
+        "孩子们都回来了"写进结论，而有一个孩子的 `done` 行是在读的中间落下的。
+        """
+        gen1 = self.poke_generation()
+        got = self.children_facts(parent_task_id)
+        if not got.get("checked"):
+            return {"checked": False, "in_flight": 0, "rows": [], "generation": gen1,
+                    "retried": False, "reason": str(got.get("reason") or "台账读不成")}
+        gen2 = self.poke_generation()
+        retried = bool(gen1 and gen2 and gen1 != gen2)
+        if retried:
+            again = self.children_facts(parent_task_id)
+            if again.get("checked"):
+                got = again
+                gen2 = self.poke_generation()
+        by = dict(got.get("by_child") or {})
+        rows = [{"task_id": tid, "role": str(v.get("role") or ""),
+                 "status": str(v.get("status") or ""),
+                 "in_flight": int(v.get("in_flight") or 0),
+                 "items_open": int(v.get("items_open") or 0)}
+                for tid, v in sorted(by.items())]
+        in_flight = sum(1 for r in rows if r["in_flight"] > 0)
+        return {"checked": True, "in_flight": in_flight, "rows": rows,
+                "generation": gen2, "retried": retried, "reason": ""}
+
     def interrupt_child(self, *, parent_task_id: str, child_task_id: str,
                         reason: str = "", by: str = "") -> dict[str, Any]:
         """父叫停某一个子代理的当前那一轮（S-H，裁定 14；照 DSH `interrupt_agent`）。

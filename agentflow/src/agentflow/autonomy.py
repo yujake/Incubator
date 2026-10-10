@@ -123,6 +123,13 @@ FINAL_CHARS = 300
 #: 一轮的用量里要逐栏相加的计数器（与 `SeamSpend.to_dict` 的键同名，不另立口径）。
 _COUNTER_KEYS = ("calls", "tokens_in", "tokens_out", "unknown_usd_calls")
 
+#: 「唤醒」允许多开几轮（S-G，裁定 15）。为什么必须有这个上限：唤醒的判据是
+#: "收件箱里有没投递过的留言"，而只要有人一直在说话，那个判据就永远为真 ——
+#: 没有上限等于把"轮次用尽"这个停止条件变成死循环（而且每一轮都在烧钱）。
+#: 一次唤醒只多开一轮：那一轮的 `_hear` 会把留言标记成已投递 ⇒ 下一轮的判据
+#: 自然为假（"唤醒"是事件，不是状态）。
+WAKE_ALLOWANCE = 1
+
 
 @dataclass
 class RoundReport:
@@ -157,12 +164,16 @@ class AutonomyRun:
     resumed_from: int = 0
     #: 检查点路径（这一段跑完把它写到哪）。
     checkpoint: str = ""
+    #: 被"唤醒"多开的轮数（S-G，裁定 15；DSH 的 `next-turn` 那一格）：
+    #: 轮次用尽之后，收件箱里还有没投递过的留言 ⇒ 再开一轮（有界，见 `WAKE_ALLOWANCE`）。
+    woke_rounds: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """一程的扁平记录（轮次 + 逐轮汇报 + 停止原因 + 用量 + 异常各一行）。"""
         return {"role": self.role, "task": self.task, "rounds_done": self.rounds_done,
                 "resumed_from": self.resumed_from, "checkpoint": self.checkpoint,
                 "stop_reason": self.stop_reason, "spend": dict(self.spend),
+                "woke_rounds": self.woke_rounds,
                 "reports": [r.to_dict() for r in self.reports], "notes": list(self.notes)}
 
 
@@ -239,7 +250,8 @@ def _round_task(task: str, previous: RoundReport, index: int, *, user_answer: st
 def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
                        usd_budget: float | None, stop_path: Path | None,
                        user_answer: str, last_stop_reason: str = "",
-                       pending_qids: tuple[str, ...] = ()) -> str:
+                       pending_qids: tuple[str, ...] = (),
+                       wake_pending: int = 0, woke: int = 0) -> str:
     """下一轮开跑前的停止判据；返回停止原因（空串 = 继续跑）。
 
     顺序是 `waiting_for_user` → `rounds` → `budget` → `stop_file` → `user_stop`：
@@ -263,6 +275,18 @@ def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
     if last_stop_reason == "waiting_for_user" and tuple(pending_qids):
         return "waiting_for_user"
     if index > rounds:
+        # ---- S-G（裁定 15；DSH 的 `next-turn` + `wakeDriver`）：轮次用尽之后，
+        # 收件箱里还有没投递过的留言 ⇒ 再开一轮（那是"有人在等我"这件事的机器可判形态）。
+        # 有界（`WAKE_ALLOWANCE`）：一次唤醒只多开一轮，理由见那个常量的注释。
+        #
+        # 三条不许被它挤掉的东西：① `waiting_for_user` 已在上面拦过（那一档"人没答"不许被
+        # "有人说话"绕过去）；② 钱 / 人工开关 / 用户叫停照旧优先 —— 唤醒不是硬闸的豁免
+        # （判据：预算用尽 + 有留言 ⇒ 停，理由仍是下面那一道给出的那个）；
+        # ③ 报出来的理由顺序一个字不改（`rounds` 在 `budget` 之前是文档化的口径）。
+        hard = (usd_budget is not None and spent_usd >= usd_budget) or \
+            (stop_path is not None and stop_path.exists()) or (STOP_TOKEN in user_answer)
+        if not hard and wake_pending > 0 and woke < WAKE_ALLOWANCE:
+            return ""
         return "rounds"
     if usd_budget is not None and spent_usd >= usd_budget:
         return "budget"
@@ -460,7 +484,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
             return float(baseline["usd"] + shared.spend.usd)
         return float(baseline["usd"] + total["usd"])
 
-    def _stop_reason_for(next_index: int, last_stop_reason: str = "") -> tuple[str, list[str], str]:
+    def _stop_reason_for(next_index: int, last_stop_reason: str = "",
+                         woke: int = 0) -> tuple[str, list[str], str]:
         """算"第 next_index 轮开跑前会不会停"，并现读一次用户频道（返回 `(原因, 说明, 回答)`）。
 
         第三个返回值是给下一轮的任务用的（`§14.5` 第 4 件）：读一次就用一次，
@@ -479,17 +504,26 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         from . import userio
 
         pending = tuple(q.qid for q in userio.pending_questions(root, sid=sid))
+        # S-G（裁定 15）：唤醒判据现读一次收件箱（"还没投递过的留言"）。
+        # 读不成 ⇒ 0（不放行）：`pending_wake` 的 `checked=False` 走的是"没有可唤醒的"，
+        # 而"没读成"这件事会由那一轮的收工读数再报一次（不许在这里悄悄多烧一轮钱）。
+        from . import agent_loop as AL
+
+        wake = AL.pending_wake(root, role, sid=sid)
+        wake_pending = int(wake.get("count") or 0) if wake.get("checked") else 0
         reason = _stop_before_round(next_index, rounds=total_rounds, spent_usd=_spent_usd(),
                                     usd_budget=usd_budget, stop_path=stop_path,
                                     user_answer=answer, last_stop_reason=last_stop_reason,
-                                    pending_qids=pending)
+                                    pending_qids=pending, wake_pending=wake_pending, woke=woke)
         return reason, answer_notes, answer
 
     # 上一轮的停止理由（续跑时来自上一段的最后一轮）：`waiting_for_user` 会让这一次
     # 在开跑下一轮之前就停 —— 见 `_stop_before_round` 的 docstring。
     last_round_stop = prev_report.stop_reason if prev_report is not None else ""
+    #: 被唤醒多开的轮数（S-G，裁定 15）：只在超过 `total_rounds` 的那几轮上加一。
+    woke_rounds = 0
     while True:
-        reason, answer_notes, latest_answer = _stop_reason_for(index, last_round_stop)
+        reason, answer_notes, latest_answer = _stop_reason_for(index, last_round_stop, woke_rounds)
         for line in answer_notes:
             if line not in notes:
                 notes.append(line)
@@ -501,6 +535,11 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
         # 续跑的第一轮：`reports` 是空的（那些轮在上一段），上一轮结论来自检查点
         previous = reports[-1] if reports else prev_report
+        # S-G（裁定 15）：这一轮是不是"被唤醒多开的"（超过轮次预算 ⇒ 它必须是被唤醒开起来的，
+        # 因为唯一的例外就是那条）。落进事件与读数，"为什么多跑了一轮"事后答得出来。
+        woke = index > total_rounds
+        if woke:
+            woke_rounds += 1
         if index == 1:
             # 第一轮也要带上用户的最新回答（"先答后跑"与"跑到一半答了"是同一件事：
             # 问答频道是跨轮的，不该只在第 N>1 轮才被读到）
@@ -522,6 +561,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         _path, problem = SS.append(root, {
             "kind": "autonomy_round", "role": role, "index": index,
             "stop_reason": run.stop_reason, "spend": dict(run.spend),
+            "woke": woke,
         }, sid=sid)
         if problem:
             notes.append(f"第 {index} 轮的 autonomy_round 事件没有落进会话记录：{problem}")
@@ -533,7 +573,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
 
         # 最后一轮必发：它要么是轮次用尽的那一轮，要么是"跑完这轮就不得不停"的那一轮；
         # 没有接线时也算收工（那一轮没有产出，更要说清楚）。
-        next_reason, next_notes, _next_answer = _stop_reason_for(index + 1, last_round_stop)
+        next_reason, next_notes, _next_answer = _stop_reason_for(index + 1, last_round_stop,
+                                                                 woke_rounds)
         for line in next_notes:
             if line not in notes:
                 notes.append(line)
@@ -577,7 +618,7 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
     view = _spend_view(total)
     view["baseline_usd"] = round(float(baseline["usd"]), 6)
     return AutonomyRun(role=role, task=task, rounds_done=len(reports), reports=reports,
-                       stop_reason=stop_reason or "rounds", spend=view,
+                       stop_reason=stop_reason or "rounds", spend=view, woke_rounds=woke_rounds,
                        notes=notes, resumed_from=resumed_from, checkpoint=str(cp_path))
 
 
