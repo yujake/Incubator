@@ -60,7 +60,9 @@ class _BuildDocument:
 
         try:
             return DT.citation_coverage(
-                self.store.rows, list(data.get("claims") or []), citing_kind=str(kind or "")
+                self.store.rows, list(data.get("claims") or []), citing_kind=str(kind or ""),
+                # 与工具层同一个接法：判"真有全文"要看盘上 `library/`。
+                library_root=(self.workspace_root / "library"),
             )
         except Exception as exc:  # noqa: BLE001 —— 读数算不出不许影响这笔写入
             return {"readable": False, "reason": f"{type(exc).__name__}: {exc}"}

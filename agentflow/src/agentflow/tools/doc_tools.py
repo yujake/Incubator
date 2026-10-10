@@ -630,6 +630,7 @@ def citation_coverage(
     *,
     citing_kind: str = "",
     suggest: int = 5,
+    library_root: str | Path | None = None,
 ) -> dict:
     """这份稿子引了哪几张表的凭据、库里还有多少可以引的东西 —— 只报数，不拦。
 
@@ -688,6 +689,29 @@ def citation_coverage(
         }
 
     digested = [r for r in lit_rows if r.get("processed") is True]
+    # 「有多少篇真的有全文」——与「登记了几篇」是两件事（T4 第 7 趟 `t4g` 的真机读数：
+    # 库里 15 篇，5 条 `download.status=skipped`（后端只给了元数据、没有可下的 URL）、
+    # 4 条 `content_mismatch`（落成了 HTML 壳）、2 条 `ok`、4 条 `failed`（404/403/429）
+    # ⇒ 真能逐字回验的只有 2 篇，而交付物因此退化成了"证据不足的报告"）。
+    #
+    # 判据：`download.status == "ok"` 且 `path` 在盘上真的存在（两件都要：
+    # 状态说 ok 而文件没了，那是另一种"没查成"）。读不到盘就不编（-1）。
+    # 判据：`download.status == "ok"` 且 `path` 在盘上真的存在（两件都要：
+    # 状态说 ok 而文件没了，那是另一种"没查成"）。没给 `library_root` 时只按状态算，
+    # 并在 `note` 里说清"没看盘"（三态：不把"没看"折成"有"）。
+    def _has_fulltext(r: dict) -> bool:
+        dl = r.get("download") if isinstance(r.get("download"), dict) else {}
+        if str(dl.get("status") or "") != "ok":
+            return False
+        rel = str(r.get("path") or "")
+        if not rel:
+            return False
+        if library_root is None:
+            return True
+        return (Path(library_root) / rel).exists()
+
+    n_fulltext = sum(1 for r in lit_rows if _has_fulltext(r))
+
     try:
         n_questions = len(list(rows_of("research_questions")))
     except Exception:  # noqa: BLE001 —— 读不到就说读不到（-1，不编 0）
@@ -696,6 +720,10 @@ def citation_coverage(
     available = {
         "literature_total": len(lit_rows),
         "literature_processed": len(digested),
+        # 真有全文的篇数（`download.status == "ok"` 且盘上文件在）——
+        # 与"登记了几篇"是两件事：T4 第 7 趟 `t4g` 里 15 篇只 2 篇有全文，
+        # 交付物因此退化成了"证据不足的报告"。
+        "literature_with_fulltext": n_fulltext,
         "relations": len(rel_rows),
         "experiments": _count("experiments"),
         "statements": _count("statements"),
@@ -772,6 +800,16 @@ def citation_coverage(
         # 反真空：库里本来就没有可引的文献时不喊（"你没引"与"没东西可引"
         # 是两件事）—— 这件事由 `available.literature_processed == 0` 如实记着。
         pass
+    if counts["lit"] > 0 and n_fulltext == 0:
+        # T4 第 7 趟 `t4g` 的形态：稿子引了 `lit:`，而库里一篇可用全文都没有
+        # （只有元数据行）。这不是"不许引" —— 元数据级出处是允许的；要的是正文里写明
+        # 哪些结论只有元数据支撑（`draft/38` §10 五 5 的诚实边界那一档）。
+        gaps.append(
+            f"这份稿子引了 {counts['lit']} 条 `lit:`，而库里**一篇有可用全文的都没有**"
+            f"（登记 {len(lit_rows)} 篇、已消化 {len(digested)} 篇；"
+            f"`download.status` 分布见各行）—— 元数据级出处可以引，但每条结论要在正文里"
+            "写明它只有元数据支撑（该写「未核到」就写「未核到」，别让元数据看起来像读过全文）"
+        )
     if questions_vs_claims["short"] > 0:
         gaps.append(
             f"库里立了 {n_questions} 条研究问题，而这份稿件只有 {with_cites} 条带引文的断言"
@@ -2159,7 +2197,10 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     if res.ok and isinstance(res.data, Mapping):
         try:
             res.meta["citation_coverage"] = citation_coverage(
-                store.rows, res.data.get("claims") or [], citing_kind=str(kind or "")
+                store.rows, res.data.get("claims") or [], citing_kind=str(kind or ""),
+                # 盘上那个 `library/` 的根：判"真有全文"要看盘（状态说 ok 而文件没了
+                # 是另一种"没查成"）。
+                library_root=(Path(workspace) / "library") if workspace else None,
             )
         except Exception as exc:  # noqa: BLE001 —— 读数算出问题不许影响这笔写入
             res.meta["citation_coverage"] = {"readable": False,

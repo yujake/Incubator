@@ -47,9 +47,21 @@ def _relation(tx, rel_id: str, a: str, b: str) -> None:
 def _seed_library(root: Path, *, processed: bool = True) -> Store:
     store = Store(root)
     store.init()
+    # `lit:0000` 给一份真有全文的行（`download.status="ok"` + 盘上真有那个文件）——
+    # 「登记了几篇」与「真有全文几篇」是两件事（T4 第 7 趟 `t4g` 的读数），
+    # 健康夹具必须是真健康的，否则那条"引了文献却不喊"的负控会被这一格叫住（实测）。
+    lib = root / "library" / "0000"
+    lib.mkdir(parents=True, exist_ok=True)
+    (lib / "paper.pdf").write_bytes(b"%PDF-1.4\n% fixture\n")
     with store.tx("literature", "relations", "statements", actor="test", note="seed") as tx:
         _literature(tx, "0000", "Edge-girth-regular graphs", processed=processed)
         _literature(tx, "0001", "Constructions for cubic graphs with large girth", processed=processed)
+        tx.upsert("literature", {"lit_id": "0000", "title": "Edge-girth-regular graphs",
+                                 "type": "J", "summary": "s", "path": "0000/paper.pdf",
+                                 "processed": processed,
+                                 "download": {"status": "ok", "http_status": 200,
+                                              "bytes": 18},
+                                 "added_at": TS}, note="seed")
         tx.upsert("statements", {"stmt_id": "0000", "origin": "external_lit", "kind": "concept",
                                  "label": "girth", "statement_full": "围长",
                                  "source_lit_id": "0000",
@@ -306,4 +318,61 @@ def test_negative_no_questions_no_nagging(tmp_path: Path) -> None:
     assert cov["questions_vs_claims"]["research_questions"] == 0, cov["questions_vs_claims"]
     assert cov["questions_vs_claims"]["short"] == 0, cov["questions_vs_claims"]
     assert all("条研究问题" not in g for g in cov["gaps"]), cov["gaps"]
+
+
+# ---- 「真有全文几篇」那一格（T4 第 7 趟 `t4g` 的整改）----
+#
+# 真机读数：`t4g` 的 `literature` 15 篇里 5 条 `download.status=skipped`（后端只给元数据）、
+# 4 条 `content_mismatch`（HTML 壳）、2 条 `ok`、4 条 `failed`（404/403/429）⇒ 真能逐字回验的
+# 只有 2 篇，而交付物退化成了"证据不足的报告"。「登记了几篇」与「真有全文几篇」是两件事，
+# 写稿那一刻要把后者摆出来（元数据级出处可以引，但正文要写明它只有元数据支撑）。
+
+
+def _no_fulltext_library(root: Path) -> Store:
+    """把 `lit:0000` 的全文拿掉（状态不是 ok），只留元数据。"""
+    store = _seed_library(root)
+    with store.tx("literature", actor="test", note="seed") as tx:
+        tx.upsert("literature", {"lit_id": "0000", "title": "Edge-girth-regular graphs",
+                                 "type": "J", "summary": "s", "path": None,
+                                 "processed": True,
+                                 "download": {"status": "skipped", "http_status": None},
+                                 "added_at": TS}, note="seed")
+    return store
+
+
+def test_positive_no_full_text_is_named_as_a_gap(tmp_path: Path) -> None:
+    """正控：引了 `lit:` 而库里一篇可用全文都没有 ⇒ 那一句要点出来。"""
+    store = _no_fulltext_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["lit:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["available"]["literature_with_fulltext"] == 0, cov["available"]
+    assert any("一篇有可用全文的都没有" in g for g in cov["gaps"]), cov["gaps"]
+
+
+def test_negative_a_real_full_text_is_counted_and_not_nagged(tmp_path: Path) -> None:
+    """负控：盘上有全文且状态 ok ⇒ 计进 `literature_with_fulltext`，且不喊那一句。"""
+    store = _seed_library(tmp_path)
+
+    res = _build(tmp_path, store, [_claim(["lit:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["available"]["literature_with_fulltext"] == 1, cov["available"]
+    assert all("一篇有可用全文的都没有" not in g for g in cov["gaps"]), cov["gaps"]
+
+
+def test_anti_vacuum_status_ok_but_the_file_is_gone_does_not_count(tmp_path: Path) -> None:
+    """反真空：状态说 `ok` 而盘上文件没了 ⇒ 不算有全文（"没查成"不许读成"有"）。"""
+    store = _seed_library(tmp_path)
+    (tmp_path / "library" / "0000" / "paper.pdf").unlink()
+
+    res = _build(tmp_path, store, [_claim(["lit:0000"])])
+
+    assert res.ok is True, res
+    cov = res.meta["citation_coverage"]
+    assert cov["available"]["literature_with_fulltext"] == 0, cov["available"]
+    assert any("一篇有可用全文的都没有" in g for g in cov["gaps"]), cov["gaps"]
 
