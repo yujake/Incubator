@@ -137,7 +137,11 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: 是 C 的报告通道（D 的写集里没有它、`write_report` 也只写 `reports/<qid>-research.md`）
 #: ⇒ 改成指向那份报告文件 + D 登记的两行。看得见 D 那一行的角色全换（D 自己，
 #: 以及伙伴表里列着 D 的 E/F/G/M ⇒ 实测五格：D/E/F/G/M）—— 换哪几格本身就是这次改动的读数。
-PROMPT_VERSION = "p60"
+#: `p61`（2026-10-10，T4 第 8 趟的漂移）：`specs/m.py` 的「清单本体」那一句补了半句 ——
+#: 清单的每一条要写题目问的那个领域里的事，C 的关系读数与 D 的研究问题是依据、
+#: 不代替清单本体（`t4g`/`t4h` 两趟把"我们自己的结构洞/中心性"当成了清单条目 ⇒ 答的不是
+#: 题面上那个问题）。只换 M 那一格。
+PROMPT_VERSION = "p61"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1392,7 +1396,12 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
             "（派 G 落 `documents`，每条带 `citations` 与 `evidence_kind`），报告只是说明 ——"
             ""
             "验收表里对应那一行要引它（`statement_rows` / `supported_claims` / "
-            "`document_literature_citations` 任一档）。",
+            "`document_literature_citations` 任一档）。**清单的每一条要写题目问的那个领域里的事**"
+            "（题目问「代数几何有哪些开放问题」⇒ 条目就是那些开放问题，引 `lit:` 为据、"
+            "`evidence_kind` 按证据等级如实写）；C 的关系读数（`rel:` 引用）与 D 的研究问题"
+            "进交付面时是**依据**——放在正文里、或另开一节/附录都可以，但**不代替清单本体**："
+            "把结构洞、度数中心性这类「我们自己的图读数」当成清单的条目，等于答的不是题面上"
+            "那个问题（`draft/95` §6r：T4 第 7/8 趟就是这么漂的）。",
             "**调查 / 探索 / 综述这一类任务要把 C 用起来**（用户点名过「重点考察 C」）："
             "文献进来了不等于看过 —— 派 C 的关系分析动作（`C.hottest` 看热点概念、"
             "`C.gaps` 看结构缺口、`C.contradictions` 看待裁的矛盾），它们**不过模型、确定性**，"

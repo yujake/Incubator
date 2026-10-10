@@ -1400,7 +1400,10 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p60`（2026-10-10，D 的交付物声明更正）：D 的 `deliverable` 原先点名 `analysis_reports`
 #: （那是 C 的报告通道，D 的写集里没有它）⇒ 改成指向 `write_report` 写出的报告文件。
 #: 看得见 D 那一行的角色全换 ⇒ 实测五格（D/E/F/G/M），现算脚本逐格对照过。
-_FROZEN_PROMPT_VERSION = "p60"
+#: `p61`（2026-10-10，T4 第 8 趟的漂移）：M 的「清单本体」那一句补了半句 ——
+#: 清单的每一条要写「题目问的那个领域」里的事，C 的关系读数是"依据"、不代替清单本体
+#: ⇒ 只换 M 那一格。
+_FROZEN_PROMPT_VERSION = "p61"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "2c1d653b212480845d3d20d0df29d48d891a558cf39b151841e063c0537a7f0c",
     "B": "b047336b14c677a910e754cf140be9c5b152a8c58253a9eacc2de052cacc4b1d",
@@ -1411,7 +1414,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "605c08afbb78b5ea61b39129d04adb8acb2cec4854aaa3a59828a413f983f1b1",
     "H": "65145a398dcfb36e353f51c2b22fd6bd5de27c433eb9ccdd771b76d67e071a06",
     "V": "9f4599d46cd10a86c5fadf9573ac71872ab5373b4bd48f11da03035afc5c6f77",
-    "M": "9692b04a30ccd622e547b3a16d446950d92cd1db150e136cabe319f83f8d23e9",
+    "M": "ab01bf6a531c3d09910870c30737c87dd6892eba965c537bf2c972a918bbf2bf",
 }
 
 
