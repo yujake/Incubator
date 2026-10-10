@@ -39,6 +39,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -2608,6 +2609,45 @@ class AgentLoop:
         left = max(0.0, self.seam.usd_budget - self.seam.spend.usd)
         return f"{left:.6f} 美元（上限 {self.seam.usd_budget:.6f}）"
 
+    def _refresh_system(self, facts: Mapping[str, Any], system: str, *, step: int) -> str:
+        """步边界上重算"会变的那两格"，变了才换 system（业主裁定 J=乙）。
+
+        ## 为什么必须有这一步（`draft/103` §4.5 的真机口径）
+
+        提示词在 `run` 里只渲染一次，而 `budget_left` 是模型据以决定"还能不能继续"的数
+        —— 花销每一步都在涨 ⇒ 从第 2 步起，模型读到的是一个偏大的旧数字，
+        而循环协议里又逐字写着"预算耗尽时你必须收工"。它据以决策的那个数，是开局那个。
+        `notebook` 同理：`note` 是追加写盘的（`notebook_digest` 现读），
+        而提示词里那份是开局那一版。
+
+        裁定（`draft/106` §5 的 J）：允许 system 重发。落成三档里的"甲"档
+        （`draft/103` §4.5.2）：只重算这两格，其余开局事实一趟之内不变 ——
+        把它们也每步重算只会制造无意义的差异，而前缀一变 KV cache 就白扔。
+
+        ## 为什么先比再发
+
+        "没变却重发"与"变了不重发"是两种不同的坏：前者让每一步的前缀都变（cache 全废），
+        后者让模型继续按旧数字决策。所以这里是逐字比：相同就复用旧串（一个字节都不动），
+        不同才换，并落一条带 `system_sha256` 的读数 —— 于是"第 N 步的模型读的是哪一版
+        system"事后答得出来（今天只答得出"开局那一版"）。
+
+        渲染成本实测 11.5 ms（`AP.system_prompt` 一次），比一次模型调用便宜五个数量级；
+        `notebook_digest` 是一次小文件读。两者都不值得为省它而让模型按旧数决策。
+        """
+        cand_facts = dict(facts)
+        cand_facts["budget_left"] = self._budget_text()
+        cand_facts["notebook"] = notebook_digest(self.session_root, self.role)
+        cand = AP.system_prompt(self.role, registry=self.registry, **cand_facts)
+        if cand == system:
+            return system
+        SS.append(self.session_root, {
+            "kind": "agent_note", "role": self.role,
+            "note": f"system 重发（会变的事实变了）：第 {step} 步",
+            "step": step,
+            "system_sha256": hashlib.sha256(cand.encode("utf-8")).hexdigest(),
+        }, sid=self.sid)
+        return cand
+
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
             parent_task_id: str = "", surface: str = "",
             depth: int = 1, resumed: tuple[Sequence[Mapping[str, Any]], int] | None = None,
@@ -2893,6 +2933,9 @@ class AgentLoop:
             # 压缩必须在那之前生效；而插话（新用户消息）不该被刚压过的历史吃掉。
             # 判定本身在 `_maybe_compact`（它负责三态、事件三件套与"只压一次"的闸门）。
             messages = self._maybe_compact(messages, step=step, run=run)
+            # 裁定 J=乙（`draft/103` §4.5）：这一步的 system 里那两格"会变的事实"
+            # （预算 / 草稿本）先重算 —— 变了才换串，没变逐字复用（见 `_refresh_system`）。
+            system = self._refresh_system(facts, system, step=step)
             data, call = self.seam.ask_step(self._prompt(messages, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",

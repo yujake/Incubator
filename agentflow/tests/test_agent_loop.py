@@ -71,15 +71,20 @@ class ScriptedGateway:
 
 def _wired(tmp_path: pathlib.Path, scripts: dict[str, list[str]], *,
            max_steps: int = 4, usd_budget: float | None = None,
+           price: tuple[float, float] = (0.0, 0.0),
            ) -> tuple[Store, Conductor, Any, dict[str, ScriptedGateway], pathlib.Path]:
-    """造一个工作区 + 主控 + 工具层，并把替身模型接到 LlmBackend 上。"""
+    """造一个工作区 + 主控 + 工具层，并把替身模型接到 LlmBackend 上。
+
+    `price=(输入价, 输出价)`：默认 0 ⇒ 花销不涨（于是裁定 J=乙 那一轴的两格不变、
+    system 逐字复用）；要测"变了才重发"就传一个非零价（那两格每步都变）。
+    """
     st = Store(tmp_path / "ws")
     st.init()
     gateways = {role: ScriptedGateway(replies) for role, replies in scripts.items()}
 
     def seam_factory(role: str) -> LlmSeam:
         return LlmSeam(role=role, session_root=tmp_path / "ws", gateway=gateways.get(role),
-                       price=(0.0, 0.0), usd_budget=usd_budget, sid="test-run")
+                       price=price, usd_budget=usd_budget, sid="test-run")
 
     inner = LocalBackend({})
     backend = LlmBackend(inner=inner, loops=LOOPS, session_root=tmp_path / "ws",

@@ -36,22 +36,26 @@ import pathlib
 from agentflow import agent_loop as AL
 from agentflow.agent_loop import run_role
 from agentflow.llmseam import LlmSeam
-from test_agent_loop import _wired
+from test_agent_loop import _events, _wired
 
 
 def _reply(obj: dict) -> str:
     return json.dumps(obj, ensure_ascii=False)
 
 
-def _two_step_run(tmp_path: pathlib.Path, sid: str = "t-msg"):
-    """跑两步：第 0 步调一个工具、第 1 步收工（第二步的序列才是要看的那一份）。"""
+def _two_step_run(tmp_path: pathlib.Path, sid: str = "t-msg",
+                  price: tuple[float, float] = (0.0, 0.0)):
+    """跑两步：第 0 步调一个工具、第 1 步收工（第二步的序列才是要看的那一份）。
+
+    `price` 决定花销涨不涨 —— 裁定 J=乙 那一轴（system 里那两格会变的事实）靠它分开。
+    """
     st, cond, registry, gw, root = _wired(
         tmp_path, {"M": [_reply({"tool": "conductor.role_spec", "args": {"role_name": "C"},
                                  "why": "先看一眼 C 的规格"}), _reply({"final": "收工"})]},
-        max_steps=3)
+        max_steps=3, price=price)
     run = run_role("M", "看两步的消息序列", store=st, registry=registry, conductor=cond,
                    seam=LlmSeam(role="M", session_root=root, gateway=gw["M"],
-                                price=(0.0, 0.0), sid=sid),
+                                price=price, sid=sid),
                    workspace_root=str(root), sid=sid, from_env=False)
     return run, gw, root
 
@@ -195,6 +199,47 @@ def test_no_thinking_means_no_thinking_block(tmp_path: pathlib.Path) -> None:
     assert "reasoning_content" not in run.messages[1], run.messages[1]
     assert "我先想" not in gw.prompts[1], gw.prompts[1][:300]
     assert AL.render_messages(run.messages) == run.transcript
+
+
+def test_the_system_is_resent_only_when_the_changing_facts_change(tmp_path: pathlib.Path) -> None:
+    """裁定 J=乙（`draft/103` §4.5）：只有会变的那两格变了才重发 system。
+
+    三跳一起判（缺任一跳这条判据都有洞）：
+
+    1. 正控（变了就换）：给一个非零价 ⇒ 花销每步都涨 ⇒ 第 1 步的 system 与第 0 步
+       不同，且里面那个数字真的换了。这一跳守的是"模型据以决策的数是新的"——
+       改前它在 `run` 里只渲染一次 ⇒ 第 2 步起读到的是一个偏大的旧预算，
+       而循环协议里逐字写着"预算耗尽时你必须收工"。
+       （价的单位是每百万 token（`modelcost.usd_for`）：夹具每次报 10 in / 10 out，
+       所以价要 ≥ 0.1 才在六位小数上看得出来 —— 第一版给了 0.001/0.002，
+       算出来是 3e-8 ⇒ 渲染出来仍是 `0.000000`，判据当场红，而红的原因是夹具不是代码。）
+    2. 负控（没变就复用）：价为 0 ⇒ 花销不变 ⇒ 每一步的 system 逐字相同。
+       这一跳守的是"别每步都重发"：前缀一变 KV cache 就白扔，
+       而"每步都换"与"该换才换"在只看第 1 跳时长得一样。
+    3. 读数（变了才写）：会话记录里有一条带 `system_sha256` 的 `agent_note`
+       ⇒ "第 N 步的模型读的是哪一版 system"事后答得出来；而价为 0 那一趟一条都不该有
+       （有 = 读数在撒谎，或者 system 其实变了而没被察觉）。
+    """
+    run, gw, root = _two_step_run(tmp_path / "charged", sid="test-run", price=(1.0, 2.0))
+    assert run.stop_reason == "final", run.to_dict()
+    assert len(gw["M"].systems) >= 2, gw["M"].systems
+    assert gw["M"].systems[0] != gw["M"].systems[1], (
+        "花销涨了而 system 一个字没变 ⇒ 模型读的还是开局那版预算")
+    assert "已用" in gw["M"].systems[1], gw["M"].systems[1][-300:]
+    notes = [e for e in _events(root)
+             if e.get("kind") == "agent_note" and "system 重发" in str(e.get("note"))]
+    assert notes, "重发了却没留读数 ⇒ 事后答不出'第 N 步读的是哪一版'"
+    assert len(str(notes[0].get("system_sha256") or "")) == 64, notes[0]
+    assert notes[0].get("step") == 1, notes[0]
+
+    # 负控：花销不变 ⇒ 逐字复用（一条重发读数都不该有）
+    _run2, gw2, root2 = _two_step_run(tmp_path / "free", sid="test-run", price=(0.0, 0.0))
+    assert len(set(gw2["M"].systems)) == 1, (
+        "花销没变却重发了 ⇒ 前缀每步都在变，KV cache 全废："
+        f"{[s[-80:] for s in gw2['M'].systems]}")
+    stale = [e for e in _events(root2)
+             if e.get("kind") == "agent_note" and "system 重发" in str(e.get("note"))]
+    assert not stale, stale
 
 
 def test_a_long_thought_is_truncated_with_the_marker_in_itself(tmp_path: pathlib.Path) -> None:
