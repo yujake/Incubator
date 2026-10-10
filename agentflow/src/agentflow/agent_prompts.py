@@ -154,7 +154,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `p66`（2026-10-10，S-H 裁定 14）：协议里补第 9 条 `interrupt`（停某一个子代理当前那一轮，
 #: 不是全局叫停），名册那一句补 `scope=descendants` 与三格新读数（status / in_flight /
 #: last_reading）。改的仍是共用段（循环协议十格都有）⇒ 十格全换。
-PROMPT_VERSION = "p66"
+PROMPT_VERSION = "p67"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -717,7 +717,8 @@ PAPER_PACK = """\
 
 二、验收表就是 P1–P11，交付说明必须逐条对齐
 - 判据表在 `out/paper/ACCEPTANCE.md`：十行（P1–P7 各一行，P8、P9、P10/P11 各一行），
-  每行三列「名称 / 结论 / 读数」。用 `conductor.acceptance` 读它。
+  每行三列「名称 / 结论 / 读数」。主控用 `conductor.acceptance` 读它；
+  `G` / `H` 没有这一件工具（它只发给主控）—— 你们直接 `fs.read` 那个文件。
 - 一次读不完就按批读（`ids=['P5','P6','P7']`）—— 工具结果被上下文预算剪枝时，
   剪掉的部分不会自己回来；宁可多读两次，也不要跳过某一行。
 - 你的交付说明不是另写一份总结：它必须逐条回应那十行，每条给读数（数字、路径、退出码），
@@ -1624,7 +1625,9 @@ HANDOFF_PROTOCOL = """\
   - `refs`：引用到的前序手稿编号（必须真实存在）；
   - 旧名 `title` / `brief` 仍然接受（都当 `summary` 用），但新写的一律用 `summary`。
 - 框架会**同时**把留言发出去（编号 + 那句简要描述），你不需要再发一条 `message`；
-  对方用 `manuscripts.read(id="0007")` 读全文，`manuscripts.list(to="你")` 看发给你的那些。
+  读全文用 `manuscripts.read(id="0007")`、看发给自己的用 `manuscripts.list(to="你")`
+  （主控 M 没有这两件工具 —— 它的读面是 `fs.*`：直接读 `manuscripts/handoffs.jsonl`
+  这个追加式账本，一行一份）。
 - 为什么值得这么做：徒手传信息时，"派活依据"只活在对话里；写了手稿之后，
   **每一跳都能被第三方从盘上复核**（谁在什么时候把什么交给了谁、依据是哪几个编号）。
 

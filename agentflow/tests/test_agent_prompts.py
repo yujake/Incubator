@@ -1460,18 +1460,28 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p66`（2026-10-10，S-H 裁定 14）：协议补第 9 条 `interrupt`（停某一个子代理当前那一轮，
 #: 不是全局叫停）+ 名册那一句补 `scope=descendants` 与三格新读数（status / in_flight /
 #: last_reading）⇒ 又是共用段，十格全换。
-_FROZEN_PROMPT_VERSION = "p66"
+#: `p67`（2026-10-11，业主口径「一切以代码为参考」；`draft/105` 的 A22/A24 两条）：
+#: 两处在共享段里指了一件收件人没有的工具 ——
+#:   ① 纸包第二节原写"用 `conductor.acceptance` 读它"，而那一件只发给 M
+#:      （`conductor_tools.py` 的 `roles=("M",)`）⇒ G/H 读不到；改成"主控用它读、G/H 直接
+#:      `fs.read` 那个文件"；
+#:   ② 手稿协议原写"对方用 `manuscripts.read(...)` 读全文"，而 `_READ_ROLES` 不含 M
+#:      （`manuscript_tools.py` 逐字记着"M 的读面是 `fs.*` 白名单，扩它要裁定"）⇒
+#:      改成把两条读法都写明（含"主控直接读那个追加式账本"）。
+#: 两处都在共享段（`PAPER_PACK` 与 `HANDOFF_PROTOCOL`，后者十格都有）⇒ 十格全换
+#: （下面的读数：`temp/_s1r_prompt_digests.py` 逐格对照，十格无一相同）。
+_FROZEN_PROMPT_VERSION = "p67"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "b76ea3daa212d8c71353fb22d24571c7d9a4aa0baf6518989f39a467acaaa8e3",
-    "B": "b8172753e95e32defacdfdf4681b8784263d490668dfc279620a9322f06bac60",
-    "C": "4717077112bd9836bbfa2abfc6668fa7bff20da65c38740d0a05a2fb20b616b4",
-    "D": "9d53de158ae260986546ca6097a854a0caf14ee8cbfd410b0ed03bae992a2641",
-    "E": "1d89e78da9c8149471b3cc8f65d27a3bc2f7a71d0564b6a73bb74ad240de8073",
-    "F": "5a036b43b3280315942e04bd4b35203da2ebb51fa71ea4f3d335226f3bc105b0",
-    "G": "670bef2bb66e8caecef950369b8d135abd8039e3dda95435c6130b45f9b1b992",
-    "H": "63263550c52cc3e5ae70fd085574357924b81c6c617f3911ea47011c021c0771",
-    "V": "38b7f6dad02f42208220f872dcbd4b637058286e426dff904096a838121d2223",
-    "M": "ecb493d5fd7de37265126461e548cdd3410037582295ea059d51abb0b72b2cef",
+    "A": "caf3d9f63e2ffea0922c0a1c8d5667640ddcee3955177789deedafd3b89e22eb",
+    "B": "a2ed75c5d26ab6427b75464239e31e3fc3455b4a13305f6984512b080372b590",
+    "C": "76d2efc0834ee28bf813636376e5489aa1f58ff33e69ea28dbec646279b21170",
+    "D": "cd2b4ebbe7474ed17757e825ae81d1ba6b383abcc4ec8b5a62e5524d5ba36abb",
+    "E": "79eeaaa9ff2721f8ee033ada3b9fbd087e1d03b037d6c43636ee207575155739",
+    "F": "f2097b6873745f73cddb3e1c3f32e101b437785a876932a33f7c048054da9810",
+    "G": "232d7d10e64b3d19c11b80250422299f6b4a08cf5b318fb19354c0f14415e886",
+    "H": "5385f0f47d72b03e2cc7b3b4efb6264a3b1c3b2f2ae3db06ae6f3c64f1f52c9e",
+    "V": "571c43366f540e03646dc071233e9268e231034a88664ed40dcd63e3934ccb0c",
+    "M": "56d5aaad9ecd5390c462a80b3c16dd79139716a39bcd277fbb0559788e54e16a",
 }
 
 
