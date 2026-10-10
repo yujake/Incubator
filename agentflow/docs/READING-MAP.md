@@ -179,6 +179,7 @@
 | `promptkit.py` | 提示词装配：有序段 + 变量 + 作用域遮蔽 + 动态上下文（快照那一类） |
 | `persona.py` | 身份的两个具名槽位 + 唯一注册入口：部署那一份无条件注册、角色那一份靠同名遮蔽、`scope` 必填（学 DSH 的 `dsh-persona`；`draft/101` §3） |
 | `presets.py` | 预设机制：目录 = 一个预设、根优先级、坏预设带理由、挂一次 + 生成戳、只许复制式创作（学 DSH 的 `dsh-agent-presets`；`draft/101` §2） |
+| `instructions.py` | 工作区指令通道：AGENTS.md 一类文件的发现 / 去重 / maxBytes 降级 / 转义 / 追加式状态（学 DSH 的 `dsh-agent-instructions`；`draft/101` §4） |
 | `contextbudget.py` | 上下文预算：压缩 / 剪枝 / spill |
 | `tokenestimate.py` | 固定密度估值器（S-B/12-H：DSH 常数 + `chars_per_token` 配置项） |
 | `tool_timeout.py` | 逐工具超时：协作式截止 + 一张限时表（S-E/12-D/12-G） |
