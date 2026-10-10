@@ -35,6 +35,20 @@ from agentflow.tools import build_registry
 
 SID = "t21"
 
+#: `AGENT_IDENTITY` 里"我名下的子代理"那一格的锚（逐字取自
+#: `agent_prompts.role_prompt_registry` 的身份段）。
+#:
+#: 为什么集中成一处：四条判据都要把那一格从渲染出来的提示词里切出来
+#: （`.split(锚)[1]`），锚写成四份就会在改文案时四处各错一次 ——
+#: 2026-10-11 批 P2 把"此刻你名下的子代理"改成"这一趟开始那一刻…（快照）"
+#: （`draft/104` §4.2：代码 `_children_text` 逐字写着"不假装实时"）时，
+#: 四条判据一起红，而它们要守的东西（父知道有哪些子 / 板项不算子代理 / 没有子时是一句话 /
+#: 两个格子是那些编号的唯一来源）一条都没坏。
+#: 锚必须与提示词逐字一致：不一致时 `.split()` 会抛 IndexError（响亮地坏，不是静默通过）。
+_CHILDREN_ANCHOR = ("这一趟开始那一刻你名下的子代理（名册摘要：名字 · 一句简介 · 状态。"
+                    "**这是快照** —— 这一趟里新派的不会自己出现在这里，要看活的用 "
+                    "`{\"roster\": {\"of\": \"self\"}}`）：")
+
 
 class _Gate:
     """照剧本回答的替身模型（只记 `system` 提示词，不联网）。"""
@@ -155,7 +169,7 @@ def test_the_prompt_tells_a_parent_which_children_it_has(tmp_path: pathlib.Path)
         assert got["problem"] == "", got
     loop.run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
     system = gate.systems[-1]
-    line = system.split("此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：")[1].split("\n")[0]
+    line = system.split(_CHILDREN_ANCHOR)[1].split("\n")[0]
     for kid, name in zip(kids, ("B1", "B2")):
         assert name in line, ("名册名要出现", line)
         assert kid not in line, ("E17：那一格是名册摘要，不许出现台账号", line, kid)
@@ -185,7 +199,7 @@ def test_a_work_item_addressed_to_me_is_not_reported_as_a_child_agent(
     for n, kid in enumerate(kids, start=1):
         loop.secretary.roster_add(owner=me, role="B", task_id=kid, brief=f"第 {n} 件活")
     loop.run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
-    line = gate.systems[-1].split("此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：")[1].split("\n")[0]
+    line = gate.systems[-1].split(_CHILDREN_ANCHOR)[1].split("\n")[0]
     assert notice not in line, ("工作项不是子代理（两轴分开）：", line, notice)
     for kid, name in zip(kids, ("B1", "B2")):
         assert name in line, (line, kids)
@@ -213,7 +227,7 @@ def test_no_children_is_rendered_as_a_sentence_not_an_empty_cell(tmp_path: pathl
     gate = _Gate([json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)])
     _loop(cond, reg, ws, st, gate).run("把这一趟做完", summoned_by="M", my_task_id=me, depth=2)
     system = gate.systems[-1]
-    assert "此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：（此刻名下没有子代理）" in system, system[-800:]
+    assert _CHILDREN_ANCHOR + "（此刻名下没有子代理）" in system, system[-800:]
 
 
 # ============================================================ 负控：删掉那一格 ⇒ 红
@@ -235,7 +249,7 @@ def test_the_two_cells_are_the_only_source_of_those_ids(tmp_path: pathlib.Path):
     for kid in kids:
         assert kid not in text, ("没喂子编号却在提示词里读到了它 ⇒ 同上的问题：", kid)
     assert "你的父代理台账号：（顶层发起：这一趟没有父代理的台账号）" in text, text[-800:]
-    assert "此刻你名下的子代理（名册：名字 · 一句简介 · 状态）：（此刻名下没有子代理）" in text, text[-800:]
+    assert _CHILDREN_ANCHOR + "（此刻名下没有子代理）" in text, text[-800:]
 
 
 def test_an_unreadable_ledger_is_not_folded_into_having_no_parent(tmp_path: pathlib.Path):

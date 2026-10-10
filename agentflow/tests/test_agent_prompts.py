@@ -551,18 +551,46 @@ def test_the_profiles_file_lists_every_role_with_its_full_picture(tmp_path: path
 
 
 def test_every_role_knows_M_and_the_escalation_rule(registry: ToolRegistry):
-    """判据（`draft/37` §110，用户逐字）：非 M 角色要知道 M 的存在，
-    并且明说「自己做不了、同伴也做不了 ⇒ 报告主控」。
+    """判据（`draft/37` §110 + `draft/104` §4.1）：非 M 角色要说清"做不了怎么上报"，
+    而且收件人必须与代码一致（2026-10-11 改到直接父）。
 
     为什么单列一条：原来的文本只把 M 说成"找不在名单里的人时的中转站"
     （`subject` 固定「请代唤」）—— 那是"替别人办事"的口径；而"我自己办不了"是另一种情形，
     不明说就会出现"静默少做"或"把没做成的写成做成了"（第 7/8 趟都有过）。
+
+    收件人那一半是 2026-10-11 的修正（`draft/104` §4.1 甲案，业主 2026-10-09 逐字
+    「和父代理 A 交流即可」）：代码 `agent_loop._relay_recipient` 一直发给直接父
+    （只有顶层 / 父那一行读不成才落回 M），而提示词还写着"发给主控 M" ⇒
+    模型会照着自己那一版手动越级（中间那一层看不见，M 被当路由器）。
     """
     for role in [r for r in ALL_ROLES if r != "M"]:
         text = _prompt(role, registry)
         assert "做不了就上报" in text, f"{role} 的提示词里没有上报规则"
+        assert "报告你的直接父" in text, (
+            f"{role} 的上报规则没写收件人（要与 `_relay_recipient` 一致）："
+            f"{text[-600:]}")
         assert "M" in text and "主控" in text, f"{role} 的提示词里没有主控 M"
     assert "做不了就上报" not in _prompt("M", registry), "主控不需要向自己上报"
+
+
+def test_the_relay_instruction_names_the_same_recipient_as_the_code(registry: ToolRegistry):
+    """代唤的收件人：提示词与代码必须说同一个人（直接父；顶层才是 M）。
+
+    这条判据钉的是两侧一致，两侧各自的实现都在别处：
+      - 代码侧：`agent_loop._relay_recipient`（`tests/test_the_relay_goes_to_the_parent.py`
+        守着"发给直接父"这件事本身）；
+      - 文本侧：本判据守"提示词不再教模型发给 M"。
+
+    为什么值得一条：`draft/104` §4.1 记着这一处的历史 —— 提示词那两句是立项时的措辞
+    （用户原话"至少要能向主控申请唤起别的智能体"），2026-10-09 的裁定改了收件人却漏了提示词。
+    两侧不一致的代价不是报错，而是模型自己把越级做回来：M 被当路由器，
+    真正的父那一层看不见这次申请。
+    """
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        assert "直接父" in text, f"{role} 的提示词里没有「直接父」这个收件人口径"
+        for stale in ("给主控（M）的代唤申请", "换目标为 M", "直接把 message 发给主控 M"):
+            assert stale not in text, f"{role} 的提示词里还留着旧收件人的写法：{stale!r}"
 
 
 def test_the_profiles_file_header_carries_the_escalation_rule(tmp_path: pathlib.Path):
@@ -1628,18 +1656,27 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: B 58→59、D 71→72、E 62→63、F 73→74、G 88→89、H 76→77、V 55→56、M 68→69）。
 #: 这一批的理由是真机读数（`draft/104` §2.1）：四类上限在提示词里一个数字都没有，
 #: 而模型知道自己的 `depth` 却不知道上限是 5（主控同时在飞 20）⇒ 只能撞上去再回头。
-_FROZEN_PROMPT_VERSION = "p70"
+#: `p71`（2026-10-11，协作块族第二块：收件人与名册口径；`draft/104` §4.1 甲案 / §4.2）：
+#: 两处纯文案改到以代码为准 ——
+#:   ① 代唤与上报的收件人：`agent_loop._relay_recipient` 一直发给直接父
+#:      （只有顶层 / 父那一行读不成才落回 M），而提示词三处还写着"发给主控 M"
+#:      （立项时的措辞，2026-10-09 的裁定漏改了文本）⇒ 改成"直接父"；
+#:   ② 名册是快照：`AGENT_IDENTITY` 原写"此刻你名下的子代理"，而
+#:      `agent_loop._children_text` 逐字写着"这一趟开始那一刻的名单，不假装实时"
+#:      ⇒ 改成"这一趟开始那一刻…要看活的用 `{"roster": {"of": "self"}}`"。
+#: 两处都在共享段（循环协议与身份段）⇒ 十格全换（这是"改一处、十格都动"的读数）。
+_FROZEN_PROMPT_VERSION = "p71"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "07c31266ce464ab25696e34513110ba7233fd8bfeabd93b3d08a67246eaa23b9",
-    "B": "131db093bca53c4b5888b43ef36aed09aed7a94c94b9f926f286f6695d663734",
-    "C": "76d2efc0834ee28bf813636376e5489aa1f58ff33e69ea28dbec646279b21170",
-    "D": "2c638458a8ea656de0020039f9a424725f8b05b10f9a0c855ced829eacaf9e5b",
-    "E": "d09e268ce9935073c71dc8c28d9cf86d0e82b474c7f49c64dbaab39758a1d0ba",
-    "F": "3a31ce5c61d3ad258efb1980176d5289165b22826136e1252a7a8a4a55d6288f",
-    "G": "4ae0e49bdd969a5bfed6a2eb076d9ad178977acbf50bf3759ab12fe28bc66c0e",
-    "H": "630c33b4193e229550648988dbda45f4032eb92644e82d2b1a0902bbc4897099",
-    "V": "4fe5405185d7d077108da85428b177cdeb22def4d0c2eb6f9018f65dcafc6305",
-    "M": "b4d08d284b37a8a9f056d59b9dc1164cf020774a4cf92f3bc1f792154763a801",
+    "A": "d94f0c5cc559570ea764a07e6b7fe3b1ea381604a50b73bc17d75284f60d0d53",
+    "B": "09e32ce065c61e45deb26670b1f221dd85eab18197bafe7037cce3c33a4b5036",
+    "C": "473099e8cd59e7e62b5baa5af60f8374eaa10225d4500ebafe806d91759fcfd8",
+    "D": "ad1bb9b24f9a879e75737e902f0f770fb0b83bf6c00e498961fad605fb72562f",
+    "E": "9fcd746945fc6219d5721b8072590611ddf5e9c7db5367116e9c0d7280623f85",
+    "F": "77cac9e6a6792c44f3fc13cc81243a68de07a4e0d6afe61d0895fa5b93547265",
+    "G": "0ae0a97ccecfebf7177aa06be73cddfbf2ffd92ccaf399ebfc8128abe5c67e9f",
+    "H": "a16704bc4b8875d1f5e0d9ec53b067f1204cc459443b838fd7068c400e8113aa",
+    "V": "9ec6301c1303cdb97744d5275b74ee67e9c8e100aca0985dc1c9c70bd205d6b6",
+    "M": "2aee760f34693c110fc987cfcb044c032d5f42530a5f492a5346aa3cf8d8f0fc",
 }
 
 
