@@ -131,7 +131,13 @@ ENV_SETTINGS = "AGENTFLOW_SETTINGS"
 #: `toolchain` 段认识的键（顺序即文档顺序）。
 TOOLCHAIN_KEYS: tuple[str, ...] = ("lean_bin", "mathlib_root", "coq_bin", "isabelle_bin")
 #: `model` 段认识的键（顺序即文档顺序）。
-MODEL_KEYS: tuple[str, ...] = ("api_key", "base_url", "name")
+#:
+#: `reasoning_effort` 是 2026-10-10 加的（所有者裁定逐字：「所有智能体都要能 thinking，
+#: 且开默认到 High」）。它的取值词表不在这里：唯一来源是
+#: `modelgw.REASONING_EFFORTS` —— 本模块按设计不认识业务词表（它只管"取到一个字符串"），
+#: 在这里再写一份就是同一个词表的第二个定义点。词表外的取值由
+#: `modelgw.ModelSpec` 构造时当场拒绝（拼错一个字母会报错，不会静默按缺省跑）。
+MODEL_KEYS: tuple[str, ...] = ("api_key", "base_url", "name", "reasoning_effort")
 #: `workspace` 段认识的键（顺序即文档顺序）。
 WORKSPACE_KEYS: tuple[str, ...] = ("projects_dir",)
 
@@ -212,10 +218,12 @@ def toolchain_settings(path: str | Path | None = None, *,
 
 def model_settings(path: str | Path | None = None, *,
                    env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """`model` 段：`api_key` / `base_url` / `name`（缺的补空串）。
+    """`model` 段：`api_key` / `base_url` / `name` / `reasoning_effort`（缺的补空串）。
 
     这一口只负责「取值」，不负责脱敏也不负责判定：回显 key 的地方一律走
     `ModelSpec.redacted()`（见模块 docstring 的「安全阀」）。
+    `reasoning_effort` 空串 = 未设置 = 用缺省（`modelgw.DEFAULT_REASONING_EFFORT`，High）；
+    它的词表外取值也不在这里判（见 `MODEL_KEYS` 上面那段理由）。
     """
     return _section("model", MODEL_KEYS, path, env)
 

@@ -892,7 +892,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     在 key 非空时给 `***`）。判据 `tests/test_webui_readers.py` 有一条逐字符断言
     真 key 不在读数里。
     """
-    from ..modelgw import ModelSpec
+    from ..modelgw import ModelSpec, key_source
     from ..settings import (MODEL_KEYS, TOOLCHAIN_KEYS, WORKSPACE_KEYS, load_settings,
                             model_settings, settings_path, toolchain_settings,
                             workspace_settings)
@@ -909,19 +909,45 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     tool = {k: str(v) for k, v in toolchain_settings().items()}
     model = {k: str(v) for k, v in model_settings().items()}
     work = {k: str(v) for k, v in workspace_settings().items()}
-    spec = ModelSpec(base_url=model.get("base_url", "") or "",
-                     model=model.get("name", "") or "",
-                     api_key=model.get("api_key", "") or "")
+    # 推理强度（2026-10-10 所有者裁定「所有智能体都要能 thinking，默认 High」）：
+    # 它同属"这台机器上的模型配置"，所以机器面必须报它 —— 否则台面上默认写着
+    # 一切正常，而 `settings.json` 里那个值可能是 `off`。
+    effort_raw = model.get("reasoning_effort", "") or ""
+    effort_problem = ""
+    try:
+        spec = ModelSpec(base_url=model.get("base_url", "") or "",
+                         model=model.get("name", "") or "",
+                         api_key=model.get("api_key", "") or "",
+                         reasoning_effort=effort_raw)
+        effort_shown = spec.redacted()["reasoning_effort"]
+    except ValueError as exc:
+        # 词表外的强度：这是"查过了、那格里是坏的"，不是崩溃，也不是"没配"。
+        # 所以照旧给出成形的读数，只把这一段判成 unreadable 并把原值原样回显
+        # （回显成缺省会让人以为配置生效了）。
+        spec = ModelSpec(base_url=model.get("base_url", "") or "",
+                         model=model.get("name", "") or "",
+                         api_key=model.get("api_key", "") or "")
+        effort_shown = effort_raw
+        effort_problem = f"{type(exc).__name__}: {exc}"
     red = spec.redacted()
     reading = {
         "path": str(path) if path is not None else "",
         "exists": on_disk,
         "toolchain": {k: tool.get(k, "") for k in TOOLCHAIN_KEYS},
         "model": {"api_key": red["api_key"], "base_url": red["base_url"],
-                  "name": red["model"], "configured": spec.configured},
+                  "name": red["model"], "reasoning_effort": effort_shown,
+                  # key 是从哪一档取到的（`"env"` / `"settings"` / 空串）。
+                  # 所有者 2026-10-10 的裁定是"key 从 config 里面接"——
+                  # 这一格就是那句话在机器面上的读数：`settings` 才算成立，
+                  # `env` 说明有一个环境变量盖住了配置文件（写错了也不会有人发现）。
+                  "key_source": key_source(),
+                  "configured": spec.configured},
         "workspace": {k: work.get(k, "") for k in WORKSPACE_KEYS},
         "raw_keys": sorted(raw) if isinstance(raw, dict) else [],
     }
+    if effort_problem:
+        return reading, TRI_UNREADABLE, ("settings.json 的 model.reasoning_effort 不是合法取值："
+                                         + effort_problem)
     reason = ""
     if not on_disk:
         reason = (f"设置文件不在盘上（{path}）：三段全是『没配』这一档，"
@@ -947,12 +973,14 @@ def machine_face(root: str | Path = "", *, env: Mapping[str, str] | None = None)
     try:
         report = dict(toolchain_report(env))
     except Exception as exc:  # noqa: BLE001
-        return {"tri": TRI_UNREADABLE,
-                "reason": f"toolchain.toolchain_report 读不出来："
-                          f"{type(exc).__name__}: {exc}",
-                "model": {}, "provers": {}, "lean_ready": None, "lean_path": "",
-                "lean_version": "", "mathlib": {}, "can_do_formal": None,
-                "settings": {}}
+        # 工具链那一趟读不出来 ⇒ 整面 `unreadable`，但设置那一段照样给出来：
+        # 病因常常就在那一段里。最现成的一例是 `settings.json` 的
+        # `model.reasoning_effort` 拼成了词表外的值 —— `toolchain_report` 会经
+        # `_model_spec`（`spec_from_env`）把它抛上来，于是这一格若不保留，
+        # 台面只会说"工具链探测读不出来"，把排查方向指到 Lean 上去，
+        # 而真正要改的是模型那一格。
+        report = {}
+        problems.append(f"toolchain.toolchain_report 读不出来：{type(exc).__name__}: {exc}")
     provers = report.get("provers") or {}
     if provers.get("checked") is False:
         problems.append("工具链探测没跑完（provers.checked=false）："
@@ -1180,6 +1208,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("path", "string"), ("exists", "boolean"),
       ("toolchain", "Record<string, string>"),
       ("model", "{ api_key: string; base_url: string; name: string; "
+                "reasoning_effort: string; key_source: string; "
                 "configured: boolean }"),
       ("workspace", "Record<string, string>"), ("raw_keys", "string[]"))),
     ("MachineView",

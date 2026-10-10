@@ -137,6 +137,18 @@ export function Machine() {
           api_key <span class="mono">{settings.model.api_key === "" ? "（空）" : settings.model.api_key}</span>
         </div>
         <div class="readings">
+          推理强度 <span class="mono">{settings.model.reasoning_effort}</span>（所有智能体都按这一档 thinking；
+          `settings.json` 的 `model.reasoning_effort` 留空 = 内置默认 High）·
+          key 来源 <span class="mono">{settings.model.key_source === ""
+            ? "没取到（环境变量与设置文件都没有）"
+            : settings.model.key_source}</span>
+          {settings.model.key_source === "settings"
+            ? "（从 config 取到的）"
+            : settings.model.key_source === "env"
+              ? "（一个环境变量盖住了 config —— 写错了也不会有人发现）"
+              : ""}
+        </div>
+        <div class="readings">
           这一页永远不显示 key 的值：后端 `ModelSpec.redacted()` 给的就是 `***`
           （裁定 E1：key 只写不读）。这里是同一句话的机器读数。
         </div>

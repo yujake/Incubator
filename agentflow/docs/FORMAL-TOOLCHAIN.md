@@ -165,10 +165,17 @@ python -m agentflow.formalgw --toolchain
 | `toolchain` | `coq_bin` / `isabelle_bin` | Coq / Isabelle 的同类落点 |
 | `model` | `api_key` | 模型 API key |
 | `model` | `base_url` / `name` | 端点与模型名（留空则用内置默认） |
+| `model` | `reasoning_effort` | 推理强度：`off` / `low` / `high` / `max`（留空 = 内置默认 `high`）。`off` 发 `thinking:{type:disabled}`，其余三档发 `reasoning_effort`。拼成词表外的值不会静默按缺省跑：构造配置时当场报错（端点对词表外取值照 200，所以拦的必须是客户端）。判据 `tests/test_every_agent_can_think.py` |
 
 **优先级（逐字，唯一口径）：环境变量 > 设置文件 > 内置默认/自动探测。**
 环境变量压在最上面，是为了 CI 与既有脚本不被这次改动弄坏；设置文件里写的是
 "这台机器"的事实，内置默认是兜底，不是配置。
+
+**"key 到底是从哪一档取到的"是一个读数**（2026-10-10 所有者裁定："key 从 config 里面接"）：
+`ModelSpec.key_source` 取 `env` / `settings` / 空串，`redacted()` 与网页 Machine 页都回显它
+（来源不是密钥）。为什么需要它：没有这一格时，"我以为它在 config 里"与"它其实来自一个残留的
+环境变量"在其余所有读数上完全一样（`configured` 都是 `True`、请求都发得出去）。
+单跑一行的读数：`pwsh -File temp/_key_source_check.ps1`（不回显 key）。
 
 **安全阀（`api_key` 落盘的代价）**：① 真正的 `agentflow/settings.json`
 **被 git 忽略**（`.gitignore` 第 13 节逐字写着理由）；② 入库的只是示例，

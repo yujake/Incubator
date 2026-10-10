@@ -294,7 +294,7 @@ export interface SettingsReading {
   path: string;
   exists: boolean;
   toolchain: Record<string, string>;
-  model: { api_key: string; base_url: string; name: string; configured: boolean };
+  model: { api_key: string; base_url: string; name: string; reasoning_effort: string; key_source: string; configured: boolean };
   workspace: Record<string, string>;
   raw_keys: string[];
 }

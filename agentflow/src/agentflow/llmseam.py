@@ -72,6 +72,26 @@ class SeamCall:
     #: 这一趟广告了几件函数（工具 + 循环形状），以及那份工具面的摘要。
     tools_advertised: int = 0
     tools_sha256: str = ""
+    #: 这一趟按哪个推理强度问的（`modelgw.REASONING_EFFORTS` 之一；没接线时是空串）。
+    #:
+    #: ## 为什么要与下面的 `reasoning_chars` 成对存在
+    #:
+    #: 两个读数回答两个不同的问题，折成一个就答不了任何一个：
+    #: `reasoning_effort` 是"我们要求它想多深"（配置面），
+    #: `reasoning_chars` 是"它实际想了多少字"（结果面）。
+    #: 真机形态有四种，各自指向不同的修法：
+    #:
+    #:   effort=high + chars>0    正常；
+    #:   effort=off  + chars=0    这一档本来就不想（是配置，不是缺陷）；
+    #:   effort=high + chars=0    请求发了但它没想 ⇒ 查模型/端点，别查提示词；
+    #:   effort=off  + chars>0    配置说关而它照想 ⇒ 查 `off` 那条序列化。
+    #:
+    #: 所有者 2026-10-10 的原话是"感觉像不怎么过脑子"—— 那一句在改前无法验证：
+    #: 请求体里没有这一栏，回复里的 `reasoning_content` 也从没被读过。
+    reasoning_effort: str = ""
+    #: 这一趟回复里的思维链字数（上游 `message.reasoning_content`）。
+    #: 只记字数不记原文：与 `tool_call_list` 不进 `to_dict()` 同一条纪律（会随每次调用膨胀）。
+    reasoning_chars: int = 0
     #: 模型给了几条结构化工具调用（0 = 没给，于是回落去解析文本）。
     tool_calls: int = 0
     #: 原始的 `tool_calls`（`ask_step` 要把它们翻成循环的形状）。
@@ -104,6 +124,8 @@ class SeamCall:
             "protocol": self.protocol,
             "tools_advertised": self.tools_advertised,
             "tools_sha256": self.tools_sha256,
+            "reasoning_effort": self.reasoning_effort,
+            "reasoning_chars": self.reasoning_chars,
             "tool_calls": self.tool_calls,
         }
 
@@ -244,6 +266,17 @@ class LlmSeam:
         spec = getattr(self.gateway, "spec", None)
         return str(getattr(spec, "model", "") or "")
 
+    @property
+    def reasoning_effort(self) -> str:
+        """这次按哪个推理强度问（审计记录的一栏；没接线时是空串）。
+
+        为什么从 spec 上读而不是在这里再写一个缺省：强度的唯一来源是
+        `ModelSpec.reasoning_effort`（`modelgw`），这里只做"如实转抄"。
+        转抄的那一栏会进会话事件 —— 于是"这一趟要求它想多深"在审计面上可查。
+        """
+        spec = getattr(self.gateway, "spec", None)
+        return str(getattr(spec, "reasoning_effort", "") or "")
+
     # -------------------------------------------------------------- 调用
     def ask(self, prompt: str, *, system: str = "", task_id: str = "",
             note: str = "", max_tokens: int | None = None,
@@ -264,6 +297,8 @@ class LlmSeam:
             protocol="tool_calls" if face is not None else "text",
             tools_advertised=len(face.functions) if face is not None else 0,
             tools_sha256=face.sha256 if face is not None else "",
+            # "我们要求它想多深"：配置面的读数（结果面是下面的 `reasoning_chars`）。
+            reasoning_effort=self.reasoning_effort,
         )
         if not self.wired:
             call = SeamCall(ok=False, problem="judge_not_wired",
@@ -306,6 +341,9 @@ class LlmSeam:
         call = SeamCall(
             ok=bool(getattr(reply, "ok", False)),
             text=str(getattr(reply, "text", "") or ""),
+            # "它实际想了多少字"：结果面的读数。它与 `base` 里的 `reasoning_effort`
+            # 成对，四种组合各自指向不同的修法（见 `SeamCall.reasoning_effort` 那段）。
+            reasoning_chars=len(str(getattr(reply, "reasoning", "") or "")),
             problem="" if getattr(reply, "ok", False) else "judge_failed:ModelReplyNotOk",
             detail=str(getattr(reply, "error_detail", "") or ""),
             tokens_in=int(getattr(reply, "tokens_in", 0) or 0),

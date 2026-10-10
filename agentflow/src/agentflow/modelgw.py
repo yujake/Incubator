@@ -35,6 +35,55 @@
 
 三条各配正控与负控，判据在 `tests/test_settings.py`。
 
+## key 从哪一档取到的，是一个读数（2026-10-10 所有者裁定）
+
+所有者当轮的两句是："key 从 config 里面接" / "我是说我们系统的 key 在 config 里面设置的"。
+梯子本身没改（逐字仍是 `环境变量 > 设置文件 > 内置默认`）—— 这一批补的是
+`ModelSpec.key_source`：`"env"` / `"settings"` / 空串。
+
+为什么它必须存在：没有它，"我以为它在 config 里"与"它其实来自一个残留的环境变量"
+在其余所有读数上完全一样（`configured` 都是 `True`、请求都发得出去、钱都照花）。
+唯一的区别是这一格。少了它，`settings.json` 写错了也不会有人发现。
+
+同一批还把跑批入口 `temp/_run_T.ps1` 里那段"从 `~/.dsh/.credentials.yaml` 正则刮一个
+key 再 export 成 `AGENTFLOW_MODEL_API_KEY`"的接线删了：它让每一趟的 key 都来自环境变量，
+而 config 里那份根本没人读。现在那一趟不设任何 key 环境变量，并在开跑前打出来源读数
+（`temp/_key_source_check.ps1` 是同一段判据的单跑版）。真机对照（本机，2026-10-10）：
+
+    干净环境                spec.redacted() → key_source='settings'
+    export 一个残留 key 后   spec.redacted() → key_source='env'
+
+## 推理强度（2026-10-10 所有者裁定）
+
+所有者的原话是两句，先后落在同一件事上：
+
+    现在每个智能体都会 thinking 吗？感觉像不怎么过脑子的。特别是做研究的 D 和 F。
+    所有智能体都要能 thinking，且开默认到 High。
+
+改前的读数是"确实没过脑子"，而且这个事实在网线上只有一行证据：`_payload` 的请求体里
+没有 `reasoning_effort` 这一栏，回复里的 `reasoning_content` 也从没被读过
+（全仓 grep `reasoning` 零命中）。改后：
+
+- 词表 `REASONING_EFFORTS`（`off | low | high | max`）与缺省
+  `DEFAULT_REASONING_EFFORT`（`high`）都在这里，唯一来源；
+- 取值梯子与 key 同一条（环境变量 `AGENTFLOW_MODEL_REASONING_EFFORT` >
+  `settings.json` 的 `model.reasoning_effort` > 内置默认 High）；
+- 形状由 `reasoning_body_fields` 一处决定，逐字对齐 DSH 的
+  `dsh-llm-deepseek`（`off` 发 `thinking: {type: disabled}`，其余三档发
+  `reasoning_effort`）；
+- 回复里的 `reasoning_content` 收进 `ModelReply.reasoning`，`to_dict()` 报
+  `reasoning_chars` —— "这一趟想了吗"从此是一个读数，而不是一句印象。
+
+真机对照（`temp/_thinking_probe.py`，`deepseek-chat`，同一条 prompt）：
+
+    裸调                        200 reasoning_chars=absent tokens_in=13 tokens_out=1
+    reasoning_effort=high       200 reasoning_chars=76     tokens_in=39 tokens_out=30
+    thinking={type: disabled}   200 reasoning_chars=absent tokens_in=13 tokens_out=1
+    reasoning_effort=medium     200 reasoning_chars=101    tokens_in=39 tokens_out=36
+
+第三行说明 `off` 那条形状端点也认；第四行是词表外取值照样 200 ——
+端点不拦，所以拦的必须是客户端（见 `normalize_reasoning_effort`）。
+
 ## 三态纪律（本文件的核心）
 
 一次调用有三种结局，绝不许折叠：
@@ -102,9 +151,25 @@ ENV_BASE = "AGENTFLOW_MODEL_BASE_URL"
 ENV_NAME = "AGENTFLOW_MODEL_NAME"
 ENV_TIMEOUT = "AGENTFLOW_MODEL_TIMEOUT_SEC"
 ENV_RETRIES = "AGENTFLOW_MODEL_MAX_RETRIES"
+ENV_EFFORT = "AGENTFLOW_MODEL_REASONING_EFFORT"
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 DEFAULT_MODEL = "deepseek-chat"
+
+#: 推理强度词表（唯一来源）。逐字对齐 DSH 的 `dsh-llm-deepseek`：
+#: 它的 README 把 `reasoningEffort` 的取值面写成 `off | low | high | max`，
+#: 于是这里不许自创第二套拼写。
+#:
+#: 为什么照抄它的词表而不是自己定一套（2026-10-10 读 `dsh-llm-deepseek/README.zh.md`）：
+#: 那一份已经被真机跑过，且它写明了两条协议细节 —— `low`/`high`/`max` 以
+#: `reasoning_effort` 序列化，`off` 则发 `thinking: {type: disabled}` 并省略
+#: `reasoning_effort`（"对拒绝未知强度取值的网关保持协议拼写有效"）。
+#: 本仓的网关是同一个端点的另一个客户端，形状不一致只会制造一个没人维护的方言。
+REASONING_EFFORTS: tuple[str, ...] = ("off", "low", "high", "max")
+
+#: 缺省强度。2026-10-10 所有者裁定逐字："所有智能体都要能 thinking，且开默认到 High"。
+#: 它取代改前那种"什么也不发"的形态 —— 后者在真机上的读数是"模型没想"。
+DEFAULT_REASONING_EFFORT = "high"
 
 #: 传输层的签名：`(url, headers, body, timeout_sec) -> (http_status, text)`。
 Transport = Callable[[str, Mapping[str, str], bytes, float], "tuple[int, str]"]
@@ -132,6 +197,58 @@ def _int_env(env: Mapping[str, str], name: str, default: int) -> int:
         return default
 
 
+def normalize_reasoning_effort(raw: Any) -> str:
+    """把一处来源的强度归一成词表里的取值；空 ⇒ 缺省（High），词表外 ⇒ 当场报错。
+
+    ## 为什么词表外的取值必须当场炸，而不是回落到缺省
+
+    真机读数（2026-10-10，`temp/_thinking_probe.py`）：`deepseek-chat` 对
+    `reasoning_effort` 的词表外取值（试了 `medium`）不报错，照样 200、照样回
+    `reasoning_content`（101 字）。也就是说端点把"拼错一个字母"和"一个合法的更高档"
+    当同一件事办了 —— 客户端这边若也回落成缺省，那么
+    `settings.json` 里写 `"hgih"` 的效果与写 `"high"` 逐位相同，而没有任何读数说得出
+    "你那个值没人认"。这正是本项目反复登记的那一类静默缺陷形态。
+
+    所以这里与 DSH 的 `UNSUPPORTED_REASONING_EFFORT` 同一条纪律：
+    在发起任何网络 I/O 之前失败。触发点放在 :meth:`ModelSpec.__post_init__`，
+    于是"一个不合法的强度"根本构造不出 spec —— 比"调用时再查"更早。
+    """
+    text = str(raw or "").strip().lower()
+    if not text:
+        return DEFAULT_REASONING_EFFORT
+    if text not in REASONING_EFFORTS:
+        raise ValueError(
+            f"reasoning_effort 必须是 {REASONING_EFFORTS} 之一（空值等价于缺省 "
+            f"{DEFAULT_REASONING_EFFORT!r}），收到 {raw!r}。"
+            "端点对词表外的取值不报错（真机实测：照 200 并照常返回 reasoning_content），"
+            "所以这里必须自己拦 —— 否则一个拼错的强度会静默地按缺省跑"
+        )
+    return text
+
+
+def reasoning_body_fields(effort: str) -> dict[str, Any]:
+    """强度 → chat-completions 请求体里的字段（唯一实现，全仓只此一处）。
+
+    规则逐字来自 `dsh-llm-deepseek/README.zh.md` §带 thinking 与图片的流式调用：
+
+        `low`、`high` 与 `max` 启用 thinking 并以 `reasoning_effort` 序列化，
+        适配器自有的 `off` 则发送 `thinking.type: disabled`。
+
+    为什么 `off` 不写成 `reasoning_effort: "off"`：那句话的后半段给了理由 ——
+    "对拒绝未知强度取值的网关保持协议拼写有效"（`off` 不是端点认的强度）。
+    为什么默认这一档不在这里判：调用方拿到的 `effort` 已经从
+    :func:`normalize_reasoning_effort` 过了一遍（`ModelSpec` 构造时），
+    这里只管形状。
+    """
+    if effort == "off":
+        return {"thinking": {"type": "disabled"}}
+    if effort not in REASONING_EFFORTS:
+        # 兜底：正常构造路径到不了这里（`ModelSpec.__post_init__` 已经拦过）。
+        # 留着它是因为这个函数的入参是裸字符串，而"没人查的取值"必须能被看见。
+        raise ValueError(f"reasoning_effort 不在词表里：{effort!r}；词表 {REASONING_EFFORTS}")
+    return {"reasoning_effort": effort}
+
+
 @dataclass(frozen=True)
 class ModelSpec:
     """一次调用的静态配置（全部来自环境变量，代码里不写死任何密钥）。"""
@@ -143,6 +260,37 @@ class ModelSpec:
     max_retries: int = 2
     temperature: float = 0.2
     max_tokens: int = 4096
+    #: 推理强度（词表 `REASONING_EFFORTS`，缺省 `DEFAULT_REASONING_EFFORT`）。
+    #:
+    #: 它取代改前那种"请求体里根本没有这一栏"的形态：真机读数（2026-10-10）
+    #: `deepseek-chat` 裸调与带 `reasoning_effort=high` 的对照 —— 前者
+    #: `reasoning_chars=absent`、`tokens_in=13`，后者 `reasoning_chars=76`、
+    #: `tokens_in=39`。这两行就是"模型有没有过脑子"在网线上的唯一区别。
+    reasoning_effort: str = DEFAULT_REASONING_EFFORT
+    #: key 是从哪一档取到的：`"env"` / `"settings"` / `""`（都没取到）。
+    #:
+    #: ## 为什么这是一个必须存在的读数（2026-10-10 所有者裁定「key 从 config 里面接」）
+    #:
+    #: 取值梯子是 `环境变量 > settings.json > 内置默认`，于是"我以为它在 config 里"
+    #: 与"它其实来自一个残留的环境变量"在其余所有读数上完全一样：
+    #: `configured` 都是 `True`、请求都发得出去、钱都照花。唯一的区别是这个来源位。
+    #: 少了它，"key 从 config 接的"就只是一句信念 —— 而 config 写错了也不会有人发现，
+    #: 因为环境变量把它盖住了。`redacted()` 会带上它（来源不是密钥，可以回显）。
+    #:
+    #: 只有 `spec_from_env` 会填它；直接构造的 spec 是空串（= 没经过那条梯子）。
+    key_source: str = ""
+
+    def __post_init__(self) -> None:
+        """构造即校验强度（唯一的拦截点，见 `normalize_reasoning_effort`）。
+
+        为什么放在 `__post_init__` 而不是 `complete()` 里：放在调用侧的话，
+        校验要穿过 `_once` 的 `try` —— 那里的 `ValueError` 会被
+        `complete` 的兜底 `except Exception` 折成 `error_kind="unknown"`（"没查成"），
+        于是"配置文件里写错了一个词"长得像"网络没通"。构造时炸掉则不同：
+        spec 造不出来，调用方连发请求的机会都没有。
+        """
+        object.__setattr__(self, "reasoning_effort",
+                           normalize_reasoning_effort(self.reasoning_effort))
 
     @property
     def configured(self) -> bool:
@@ -155,10 +303,14 @@ class ModelSpec:
             "base_url": self.base_url,
             "model": self.model,
             "api_key": "***" if self.api_key else "",
+            # 来源不是密钥：把"从哪一档取到的"回显出来，好让"key 在 config 里设的"
+            # 这句话有一个机器读数（见 `key_source` 上面的那段）。
+            "key_source": self.key_source,
             "timeout_sec": self.timeout_sec,
             "max_retries": self.max_retries,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            "reasoning_effort": self.reasoning_effort,
         }
 
 
@@ -193,14 +345,39 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
     ms = SET.model_settings(env=env)
     base_url, _ = SET.env_or_setting(ENV_BASE, ms.get("base_url", ""), env=src)
     name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
-    api_key, _ = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
+    # key 与它的来源一起取：来源进 `ModelSpec.key_source`，
+    # 于是"这一次的 key 到底是哪一档给的"在机器面上可查（见该字段的 docstring）。
+    api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
+    # 推理强度走同一条梯子（环境变量 > 设置文件 > 内置默认），
+    # 第三档的"内置默认"就是 `DEFAULT_REASONING_EFFORT`（High）——
+    # 所有者 2026-10-10 的裁定：「所有智能体都要能 thinking，且开默认到 High」。
+    # 词表外的取值在 `ModelSpec` 构造时当场抛（见 `normalize_reasoning_effort`），
+    # 不在这里吞成缺省。
+    effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
     return ModelSpec(
         base_url=(base_url or DEFAULT_BASE_URL).rstrip("/"),
         model=name or DEFAULT_MODEL,
         api_key=api_key,
         timeout_sec=_float_env(src, ENV_TIMEOUT, 60.0),
         max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
+        reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
+        key_source=key_src,
     )
+
+
+def key_source(env: Mapping[str, str] | None = None) -> str:
+    """这次 `spec_from_env` 会从哪一档取到 key：`"env"` / `"settings"` / 空串。
+
+    只回来源，不回值：它是给机器面用的（`webui.readers.settings_reading`），
+    用来回答所有者 2026-10-10 那句"key 从 config 里面接"到底成没成立。
+    为什么不回值、也不复用 `spec_from_env`：那一口会把 key 读进内存里的一个对象，
+    而"只看来源"的调用方没有理由也能拿到密钥 —— 少一条通路就少一处泄漏面
+    （与 `settings._masked_section` 的"key 只写不读"同一条纪律）。
+    """
+    src = dict(os.environ if env is None else env)
+    ms = SET.model_settings(env=env)
+    _value, source = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
+    return source
 
 
 @dataclass(frozen=True)
@@ -209,6 +386,16 @@ class ModelReply:
 
     ok: bool
     text: str = ""
+    #: 这次回复里的思维链原文（上游 `message.reasoning_content`），拿不到就是空串。
+    #:
+    #: ## 为什么它必须与 `text` 分开存
+    #:
+    #: 把思维链并进 `text` 会让下游（抽取、判 JSON、逐字引文回验）拿到一段
+    #: 不该被当成答案的散文；把它丢掉则会让"这次到底想没想"不可回答 ——
+    #: 而所有者 2026-10-10 的那句"感觉像不怎么过脑子"要的正是这个读数。
+    #: 所以它单独一栏，且 `to_dict()` 只报字数（原文会随每次调用膨胀，
+    #: 与 `tool_call_list` 不进 `to_dict()` 同一条纪律）。
+    reasoning: str = ""
     error_kind: str = ""
     error_detail: str = ""
     http_status: int = 0
@@ -241,6 +428,9 @@ class ModelReply:
         return {
             "ok": self.ok,
             "text_len": len(self.text),
+            # "它想了吗"：0 与"这一栏不存在"必须分得开 —— 改前是后者，
+            # 于是"没配 thinking"与"配了但它没想"在读数上长得一样。
+            "reasoning_chars": len(self.reasoning),
             "error_kind": self.error_kind,
             "error_detail": self.error_detail,
             "http_status": self.http_status,
@@ -338,6 +528,10 @@ class ModelGateway:
             "temperature": self.spec.temperature if temperature is None else temperature,
             "max_tokens": self.spec.max_tokens if max_tokens is None else max_tokens,
             "stream": False,
+            # 推理强度：唯一实现在 `reasoning_body_fields`（`off` 发 thinking.type=disabled，
+            # 其余三档发 reasoning_effort）。改前这里没有这一栏 ——
+            # 那正是"模型不过脑子"在网线上的成因。
+            **reasoning_body_fields(self.spec.reasoning_effort),
         }
         if tools:
             # 原生工具面：与 DSH 的请求形状一致（`dsh-llm-deepseek` 也是把
@@ -391,11 +585,17 @@ class ModelGateway:
 
         choices = data.get("choices") if isinstance(data, dict) else None
         content = ""
+        reasoning = ""
         calls: list[dict[str, Any]] = []
         if isinstance(choices, list) and choices:
             first = choices[0] if isinstance(choices[0], dict) else {}
             message = first.get("message") if isinstance(first.get("message"), dict) else {}
             content = message.get("content") if isinstance(message.get("content"), str) else ""
+            # 思维链：上游在开了 thinking 的调用里给 `reasoning_content`
+            # （真机读数 2026-10-10：`reasoning_effort=high` ⇒ 76 字，裸调 ⇒ 这一栏不在）。
+            # 它不是答案，所以只在这里分开收着，绝不并进 `content`。
+            reasoning = (message.get("reasoning_content")
+                         if isinstance(message.get("reasoning_content"), str) else "")
             raw_calls = message.get("tool_calls")
             if isinstance(raw_calls, list):
                 for item in raw_calls:
@@ -415,14 +615,20 @@ class ModelGateway:
             # 空内容绝不许当成成功：下游会把"没答"读成"答了"。
             # 但有原生工具调用时 content 本来就可以是空的（DSH 那条路上就是这样），
             # 所以这一条判据从"content 非空"改成"content 或 tool_calls 至少有一个"。
+            #
+            # 这一条还必须报出"它到底想没想"（2026-10-10）：想了 500 字却一个字没答，
+            # 与什么都没想，是两种不同的病因（前者是输出被截断/协议漂移，后者是没开 thinking）
+            # —— 折成同一句话会让排障的人去查错方向。
             return _reply_failure("bad_response",
                                   "上游返回空内容（choices/message/content 缺失或为空，"
-                                  f"且没有 tool_calls）：{raw.strip()[:200]}",
+                                  f"且没有 tool_calls；思维链 {len(reasoning)} 字）："
+                                  f"{raw.strip()[:200]}",
                                   status=status, attempt=attempt, elapsed=elapsed,
                                   model=self.spec.model, scope=scope)
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         return ModelReply(
             ok=True, text=content,
+            reasoning=reasoning,
             tool_calls=tuple(calls),
             http_status=status,
             tokens_in=int(usage.get("prompt_tokens") or 0),
@@ -535,12 +741,26 @@ def _fake_transport(status: int, body: str) -> Transport:
     return _t
 
 
-def _ok_body(text: str = "4", tokens_in: int = 11, tokens_out: int = 3) -> str:
-    """OpenAI 兼容的成功应答（含 usage）。"""
+def _ok_body(text: str = "4", tokens_in: int = 11, tokens_out: int = 3,
+             reasoning: str = "") -> str:
+    """OpenAI 兼容的成功应答（含 usage；`reasoning` 非空时带上思维链那一栏）。"""
+    message: dict[str, Any] = {"role": "assistant", "content": text}
+    if reasoning:
+        message["reasoning_content"] = reasoning
     return json.dumps({
-        "choices": [{"message": {"role": "assistant", "content": text}}],
+        "choices": [{"message": message}],
         "usage": {"prompt_tokens": tokens_in, "completion_tokens": tokens_out},
     }, ensure_ascii=False)
+
+
+def _grab_transport(seen: list[dict[str, Any]], body: str) -> Transport:
+    """造一个"把请求体记下来再回固定应答"的传输层（自检看请求形状用）。"""
+
+    def _t(url: str, headers: Mapping[str, str], data: bytes, timeout_sec: float) -> tuple[int, str]:
+        seen.append(json.loads(data.decode("utf-8")))
+        return 200, body
+
+    return _t
 
 
 def selftest() -> int:
@@ -578,9 +798,40 @@ def selftest() -> int:
             continue
         problems.append(f"负控：{label} 必须当场报错，不许静默落进某一档")
 
+    # 第四段：推理强度（2026-10-10 所有者裁定「所有智能体都要能 thinking，默认 High」）。
+    # 这一段刻意读请求体而不是读 `spec.reasoning_effort`：后者只能证明"想让它开"，
+    # 只有前者能证明"真的发出去的请求上有这一栏"（改前缺的正是这一栏）。
+    seen: list[dict[str, Any]] = []
+    thought = ModelGateway(ModelSpec(api_key="k"),
+                           transport=_grab_transport(seen, _ok_body("4", reasoning="一加一等于二。")))
+    r4 = thought.complete("1+1=?", scope="reason")
+    if not seen or seen[0].get("reasoning_effort") != DEFAULT_REASONING_EFFORT:
+        problems.append(f"缺省强度必须进请求体（期望 {DEFAULT_REASONING_EFFORT!r}）："
+                        f"{seen[0] if seen else '没有发出请求'}")
+    if r4.reasoning != "一加一等于二。" or r4.to_dict()["reasoning_chars"] != 7:
+        problems.append(f"回复里的思维链必须被收下来并报出字数：{r4.to_dict()}")
+
+    quiet = ModelGateway(ModelSpec(api_key="k", reasoning_effort="off"),
+                         transport=_grab_transport(seen, _ok_body("4")))
+    quiet.complete("1+1=?", scope="reason")
+    if seen[-1].get("thinking") != {"type": "disabled"} or "reasoning_effort" in seen[-1]:
+        problems.append(f"off 必须序列化成 thinking.type=disabled 且不发 reasoning_effort：{seen[-1]}")
+
+    try:
+        ModelSpec(reasoning_effort="medium")
+    except ValueError:
+        # 这一档正是期望的结局：词表外的强度必须当场被拒。
+        # 这里不记问题，由下面的 `else` 分支负责报"它居然过了"。
+        pass
+    else:
+        problems.append("负控：词表外的强度必须在构造 spec 时就炸"
+                        "（端点对词表外取值照 200，客户端不拦就没有任何读数）")
+
     for p in problems:
         print(f"  [FAIL] {p}")
-    print(f"[modelgw] 自检：没配 key={r1.error_kind} / 成功={r2.ok} / 认证={r3.error_kind}")
+    print(f"[modelgw] 自检：没配 key={r1.error_kind} / 成功={r2.ok} / 认证={r3.error_kind}"
+          f" / 强度={thought.spec.reasoning_effort}"
+          f"（想 {r4.to_dict()['reasoning_chars']} 字）")
     if problems:
         return 1
     print("[modelgw] 三条路径的结局都正确（三态没有折叠）")
@@ -594,6 +845,10 @@ def live_smoke() -> int:
     reply = gw.complete("只回答一个数字：1+1=?", scope="reason")
     print(f"[modelgw] live：{reply.to_dict()}")
     print(f"[modelgw] 配置（key 已脱敏）：{spec.redacted()}")
+    # 这一行是"模型过没过脑子"的直读（2026-10-10 所有者裁定的验收面）：
+    # 强度 0 字思维链 = 请求发出去了但它没想，先查强度而不是先查模型。
+    print(f"[modelgw] 思考读数：强度={spec.reasoning_effort} / "
+          f"思维链 {len(reply.reasoning)} 字 / 答案 {len(reply.text)} 字")
     if reply.ok:
         print(f"[modelgw] 模型回答：{reply.text.strip()[:120]}")
         return 0
