@@ -5,7 +5,7 @@
   "_TOOLCHAIN_LEAN_EXAMPLE": "工作区根相对写法：_env/lean470/lean-4.7.0-windows/bin（目录）或 _env/lean470/lean-4.7.0-windows/bin/lean.exe（文件）",
   "_TOOLCHAIN_MATHLIB_EXAMPLE": "工作区根相对写法：_env/mathlib-pinned2/mathlib4-4.7.0（必须同时含 lakefile.lean 与 lean-toolchain）",
   "_MODEL_WARNING": "api_key 落盘是有代价的：密钥一旦落盘就会进备份与误提交。三道安全阀：settings.json 被 git 忽略；入库的只有这个示例且 api_key 是空串；任何打印/读数都不回显 key（只出现 *** 或『配没配』这一格）。",
-  "_MODEL_KEYS": "model 段的四个键：api_key / base_url / name / reasoning_effort。base_url 与 name 留空则各用内置默认值（https://api.deepseek.com/v1 与 deepseek-chat）。",
+  "_MODEL_KEYS": "model 段的四个键：api_key / base_url / name / reasoning_effort。base_url 与 name 留空则各用内置默认值（https://api.deepseek.com/v1 与 deepseek-flash）。",
   "_MODEL_REASONING_EFFORT": "推理强度，取值只能是 off / low / high / max（词表唯一来源：modelgw.REASONING_EFFORTS，逐字对齐 DSH 的 dsh-llm-deepseek）。留空 = 用内置默认 high —— 所有者 2026-10-10 的裁定是「所有智能体都要能 thinking，且开默认到 High」。off 会发 thinking:{type:disabled}，其余三档发 reasoning_effort。拼成词表外的值（例如 hgih）不会静默按缺省跑：ModelSpec 构造时当场报错，机器面把 model.reasoning_effort 判成 unreadable 并把原值原样回显。",
   "_WORKSPACE_KEYS": "workspace 段的键：projects_dir（projects/ 的落点，即 agentflow project 与 M 的 conductor.ensure_project 的缺省落点）。留空则用『由本包位置推出的工作区根 + projects/』——那正是本机改前的那个值。取值顺序：--projects-dir 显式参数 > AGENTFLOW_PROJECTS_DIR > 本键 > 推导默认。",
   "toolchain": {

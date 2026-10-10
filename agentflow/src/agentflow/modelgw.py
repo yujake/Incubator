@@ -74,7 +74,7 @@ key 再 export 成 `AGENTFLOW_MODEL_API_KEY`"的接线删了：它让每一趟�
 - 回复里的 `reasoning_content` 收进 `ModelReply.reasoning`，`to_dict()` 报
   `reasoning_chars` —— "这一趟想了吗"从此是一个读数，而不是一句印象。
 
-真机对照（`temp/_thinking_probe.py`，`deepseek-chat`，同一条 prompt）：
+真机对照（历史读数：`temp/_thinking_probe.py`，模型 = `deepseek-chat`，同一条 prompt）：
 
     裸调                        200 reasoning_chars=absent tokens_in=13 tokens_out=1
     reasoning_effort=high       200 reasoning_chars=76     tokens_in=39 tokens_out=30
@@ -154,7 +154,18 @@ ENV_RETRIES = "AGENTFLOW_MODEL_MAX_RETRIES"
 ENV_EFFORT = "AGENTFLOW_MODEL_REASONING_EFFORT"
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-DEFAULT_MODEL = "deepseek-chat"
+#: 缺省模型（S-I / 裁定 19乙，2026-10-10）：从 `deepseek-chat` 换成 `deepseek-flash`。
+#:
+#: ## 这次换模型为什么要在读数上留痕（不是改一个字符串）
+
+#: 本仓此前的每一趟真机读数（T1–T5、判据里的 token/usd 基线）都是在 `deepseek-chat` 上取的，
+#: 而换模型之后两种读数不可比：同一个任务在 flash 与 chat 上的 token 数、reasoning 长度、
+#: 甚至会不会想，都可能不同。处置（施工单 §9）：
+#: ① 内置默认改成 flash（这一行）；② 旧的读数逐条标注"模型 = deepseek-chat"
+#: （`modelgw` 里那几处"真机对照"就是这一档，别把它们改写成 flash —— 那是伪造读数）；
+#: ③ `run-manifest` 里一直记着 `model`，所以"这一趟是哪个模型跑的"事后可查。
+#: 判据 `tests/test_the_model_default_is_deepseek_flash.py` 把这三条都钉住。
+DEFAULT_MODEL = "deepseek-flash"
 
 #: 推理强度词表（唯一来源）。逐字对齐 DSH 的 `dsh-llm-deepseek`：
 #: 它的 README 把 `reasoningEffort` 的取值面写成 `off | low | high | max`，
@@ -202,7 +213,7 @@ def normalize_reasoning_effort(raw: Any) -> str:
 
     ## 为什么词表外的取值必须当场炸，而不是回落到缺省
 
-    真机读数（2026-10-10，`temp/_thinking_probe.py`）：`deepseek-chat` 对
+    真机读数（2026-10-10，`temp/_thinking_probe.py`，模型 = `deepseek-chat`）：该模型对
     `reasoning_effort` 的词表外取值（试了 `medium`）不报错，照样 200、照样回
     `reasoning_content`（101 字）。也就是说端点把"拼错一个字母"和"一个合法的更高档"
     当同一件事办了 —— 客户端这边若也回落成缺省，那么
@@ -263,7 +274,7 @@ class ModelSpec:
     #: 推理强度（词表 `REASONING_EFFORTS`，缺省 `DEFAULT_REASONING_EFFORT`）。
     #:
     #: 它取代改前那种"请求体里根本没有这一栏"的形态：真机读数（2026-10-10）
-    #: `deepseek-chat` 裸调与带 `reasoning_effort=high` 的对照 —— 前者
+    #: `deepseek-chat`（历史读数）裸调与带 `reasoning_effort=high` 的对照 —— 前者
     #: `reasoning_chars=absent`、`tokens_in=13`，后者 `reasoning_chars=76`、
     #: `tokens_in=39`。这两行就是"模型有没有过脑子"在网线上的唯一区别。
     reasoning_effort: str = DEFAULT_REASONING_EFFORT
@@ -291,6 +302,20 @@ class ModelSpec:
         """
         object.__setattr__(self, "reasoning_effort",
                            normalize_reasoning_effort(self.reasoning_effort))
+        # ---- S-I：空串 = "没配"（设置文件里那一格留空就是这个意思），落到内置默认。
+        #
+        # 为什么放在构造点而不是各调用点：`ModelSpec()` 的 dataclass 默认值给的是常量，
+        # 而显式传空串（`ModelSpec(api_key=…, model="", base_url="")` —— 从设置文件
+        # 读出来就是空串）不会走默认值 ⇒ 之前那样造出来的 spec 里 `base_url=""`，
+        # 于是 `url = "" + "/models"` = `"/models"`，`urllib` 抛
+        # `unknown url type`（真机实测：那一次被读成"没查成"，掩盖了"其实没配 lo"这件事）。
+        # 两处各写一遍归一化，就一定会有一处漏 —— 所以归一到构造点上，只此一处。
+        if not str(self.base_url or "").strip():
+            object.__setattr__(self, "base_url", DEFAULT_BASE_URL)
+        else:
+            object.__setattr__(self, "base_url", str(self.base_url).rstrip("/"))
+        if not str(self.model or "").strip():
+            object.__setattr__(self, "model", DEFAULT_MODEL)
 
     @property
     def configured(self) -> bool:
@@ -495,6 +520,28 @@ def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
         return int(exc.code), raw
     except urllib.error.URLError as exc:
         # URLError 覆盖 DNS 失败、连接被拒、证书错误、超时（socket.timeout 会被它包住）
+        raise ConnectionError(f"{type(exc.reason).__name__}: {exc.reason}") from exc
+
+
+def urllib_get(url: str, headers: Mapping[str, str],
+               timeout_sec: float) -> tuple[int, str]:
+    """生产传输层里的 GET（只给 `/models` 那一类"读清单"用）。
+
+    为什么不能拿 `urllib_transport` 凑合：它固定 `method="POST"`（chat-completions 只有
+    POST）。真机实测（2026-10-11）：用 POST 去问 `/v1/models` 得到 HTTP 405，
+    而那条读数会被读成"端点不认这个模型名/这个路径"—— 一个假的结论。
+    换成 GET 之后同一个端点的清单里真的有 `deepseek-flash`
+    （`['deepseek-flash', 'deepseek-v4-pro']`）。
+    """
+    try:
+        req = urllib.request.Request(url, headers=dict(headers), method="GET")
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            return int(getattr(resp, "status", 200)), resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        with exc:
+            raw = exc.read().decode("utf-8", "replace") if hasattr(exc, "read") else ""
+        return int(exc.code), raw
+    except urllib.error.URLError as exc:
         raise ConnectionError(f"{type(exc.reason).__name__}: {exc.reason}") from exc
 
 
@@ -836,6 +883,49 @@ def selftest() -> int:
         return 1
     print("[modelgw] 三条路径的结局都正确（三态没有折叠）")
     return 0
+
+
+def list_models(spec: "ModelSpec | None" = None, *,
+                get: "Callable[[str, Mapping[str, str], float], tuple[int, str]] | None" = None
+                ) -> dict[str, Any]:
+    """问端点"你认哪些模型名"（`GET /models`）。三态，S-I 的第一条判据用它。
+
+    `{"checked", "models", "status", "reason"}`
+
+    - `checked=True` + `models=[...]`：真的读到了清单（判据据此说"含不含 flash"）；
+    - `checked=False` + `reason`：没查成（没配 key / 网络不通 / 端点回了非 200 / 回的不是
+      它该有的形状）。这一档绝不许被折成"不在清单里" —— 那会把一次网络故障读成
+      "这个模型不存在"，而两者指向的处置完全相反（前者重试、后者换名字）。
+
+    为什么这条判据必须存在（施工单 §9 判据①逐字）：换模型名这件事不能靠"发一次请求没报错"
+    来验 —— 一个不认识的模型名在某些网关上会静默回落到别的模型（照样 200），
+    于是"换成了 flash"与"写错了名字、实际还在跑 chat"在读数上分不开。
+    """
+    spec = spec or spec_from_env()
+    if not spec.api_key:
+        return {"checked": False, "models": [], "status": 0,
+                "reason": f"没配 key（{ENV_KEY} 或设置文件的 model.api_key）⇒ 没查成"}
+    url = f"{spec.base_url.rstrip('/')}/models"
+    headers = {"Authorization": f"Bearer {spec.api_key}", "Accept": "application/json"}
+    try:
+        status, text = (get or urllib_get)(url, headers, spec.timeout_sec)
+    except Exception as exc:  # noqa: BLE001 —— 网络异常是"没查成"，不是"没有这个模型"
+        return {"checked": False, "models": [], "status": 0,
+                "reason": f"端点没读成（{type(exc).__name__}: {exc}）"}
+    if status != 200:
+        return {"checked": False, "models": [], "status": int(status),
+                "reason": f"端点回了 HTTP {status}（不是 200）⇒ 没查成：{str(text)[:200]}"}
+    try:
+        payload = json.loads(text)
+        rows = payload.get("data") if isinstance(payload, dict) else None
+        models = [str(r.get("id") or "") for r in (rows or []) if isinstance(r, Mapping)]
+    except Exception as exc:  # noqa: BLE001 —— 形状不对也是"没查成"
+        return {"checked": False, "models": [], "status": int(status),
+                "reason": f"清单不是 `{{data:[{{id}}]}}` 那个形状（{type(exc).__name__}: {exc}）"}
+    if not models:
+        return {"checked": False, "models": [], "status": int(status),
+                "reason": "清单是空的 ⇒ 没查成（空清单与'没有这个模型'是两件事）"}
+    return {"checked": True, "models": sorted(models), "status": int(status), "reason": ""}
 
 
 def live_smoke() -> int:

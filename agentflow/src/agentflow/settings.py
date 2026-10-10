@@ -33,7 +33,7 @@
 | `toolchain` | `isabelle_bin` | Isabelle 的 `isabelle`（同上：文件或目录） |
 | `model` | `api_key` | 模型 API key（落盘这件事的代价与安全阀见下面「安全阀」一节） |
 | `model` | `base_url` | OpenAI 兼容端点（缺省 `https://api.deepseek.com/v1`） |
-| `model` | `name` | 模型名（缺省 `deepseek-chat`） |
+| `model` | `name` | 模型名（缺省 `deepseek-flash`；2026-10-10 裁定 19乙 从 `deepseek-chat` 换过来） |
 | `workspace` | `projects_dir` | `projects/` 的落点（`agentflow project` 与 M 的 `conductor.ensure_project` 的缺省落点） |
 
 （`workspace` 这一段是同一个指示的第二半：那条写死的 `D:\Incubator\projects`

@@ -1991,7 +1991,7 @@ class AgentLoop:
     stall_alert: int = 6
     #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
     #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
-    #: 8,192 是 `deepseek-chat` 一档的输出上限；要改就改这里，别在各处传不同的数。
+    #: 8,192 是 `deepseek-chat` 一档的输出上限（历史读数那一档；S-I 换到 `deepseek-flash` 之后这一格是否还合适，要按新模型的实测重定）；要改就改这里，别在各处传不同的数。
     max_output_tokens: int = 8192
     workspace_root: str = ""
     sid: str | None = None
