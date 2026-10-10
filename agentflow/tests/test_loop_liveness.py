@@ -10,7 +10,7 @@ T2 第 4 趟真机（`projects/p6d-research-from-zero`）的盘上读数：M 连
 
 1. 同调用 + 同读数连着 `dead_loop_nudge`（3）次 ⇒ 那一步的结果里出现
    【没有新事实】的提醒，而循环继续（提醒不是判死）；
-2. 连着 `max_dead_loop`（6）次 ⇒ 这一趟以 `no_progress_limit` 收工
+2. 连着 `max_dead_loop`（5，业主 2026-10-10 裁定 10丙）次 ⇒ 这一趟以 `no_progress_limit` 收工
    （不是 `max_steps`：两个停止理由说的是两件事），收工语写清"没有新事实"；
 3. 读数在变的重问（轮询那种）与"只重复了两次"都不算打转 —— 判据不许把
    正当的重问判成原地打转（那是把一个读数折成两个结论的反面）。
@@ -102,19 +102,27 @@ def test_three_identical_readings_are_named_but_do_not_stop(tmp_path: pathlib.Pa
     assert [s.shape for s in run.steps] == ["tool", "tool", "tool", "final"], run.to_dict()
 
 
-def test_six_identical_readings_stop_the_run_as_no_progress(tmp_path: pathlib.Path):
-    """正控：连着六次 ⇒ 以 `no_progress_limit` 收工（不是 `max_steps`），且话说清了。"""
+def test_five_identical_readings_stop_the_run_as_no_progress(tmp_path: pathlib.Path):
+    """正控：连着五次 ⇒ 以 `no_progress_limit` 收工（不是 `max_steps`），且话说清了。
+
+    业主 2026-10-10 裁定 10丙 把这个数从 6 改成 5（「提醒3次、判停5次」）——
+    于是提醒之后还剩两次改主意的机会（改前那句注释写的是"6 给三次机会"）。
+    这一条同时钉住"两档分开"：提醒出现在第 3 步，判停发生在第 5 步，两个读数各说各的。
+    """
     run = _run(tmp_path, [_reply(STATIC_CALL)], max_steps=12)
 
     assert run.stop_reason == "no_progress_limit", run.to_dict()
-    assert len(run.steps) == 6, run.to_dict()
-    assert run.dead_loop_max == 6, run.to_dict()
+    assert len(run.steps) == 5, run.to_dict()
+    assert run.dead_loop_max == 5, run.to_dict()
     assert "原地打转" in run.final and "没有新事实" in run.final, run.final
     # 收工语要指向"下一趟该换什么"，而不是只说"停了"。
     assert "换" in run.final, run.final
     # 点名只发生一次（第 3 步），不是每一步都刷一行。
     named = [s.index for s in run.steps if "框架提醒" in s.result]
     assert named == [2], named
+    # 两档分开（裁定 10丙）：提醒过 1 次、并且确实是因此停的 —— 两个读数各说各的。
+    assert run.dead_loop_nudges == 1, run.to_dict()
+    assert run.dead_loop_stopped is True, run.to_dict()
 
 
 def test_two_identical_readings_are_not_enough(tmp_path: pathlib.Path):

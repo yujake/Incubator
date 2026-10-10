@@ -1431,18 +1431,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p62`（2026-10-10，T4 第 9 趟的反面）：`p61` 那半句只说"C 是依据" ⇒ M 把它降成叙述、
 #: 交付面连一条 `rel:` 都不引 ⇒ 补全为"C 的读数也要真的被引到"（至少引一条 `rel:`）。
 #: 仍只换 M 那一格。
-_FROZEN_PROMPT_VERSION = "p63"
+#: `p64`（2026-10-10，裁定 10丙「提醒3次、判停5次」+ 12-F 计数按委托记账）：那一句散文在
+#: 十格里都有（"别原地打转"是共用段）⇒ 十格全换；这正是"改一个数字、十格都动"的读数。
+_FROZEN_PROMPT_VERSION = "p64"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "2c1d653b212480845d3d20d0df29d48d891a558cf39b151841e063c0537a7f0c",
-    "B": "43e080f82f0c52911c5a920073e4ef5161d1ae6c4b6db81b258faeaed8f3cb65",
-    "C": "42c872452a68417c948b89b24d3f401ff5c09a8883cc97c4fcc880fcc38d3f06",
-    "D": "ef678da1ebff284a2aa62942e56966fbea0a043598159e6a791729e525a720ea",
-    "E": "19fd4cbdabec3af1534d5ee814db896f0e1690c2816fd01b465199ebb58ddc48",
-    "F": "974617093f1edb38cc57a7f64d1c35ee2b8260a1466a2126fbad5b1a3a03b7d6",
-    "G": "605c08afbb78b5ea61b39129d04adb8acb2cec4854aaa3a59828a413f983f1b1",
-    "H": "65145a398dcfb36e353f51c2b22fd6bd5de27c433eb9ccdd771b76d67e071a06",
-    "V": "cfc32a29c7e09353ac6ca55bc5a02b09127a37d92907beb98a7471147ab47cb6",
-    "M": "31484f99d7d636c874d7efeb83accd10a651dc514b5568064a5807bc491c2bc3",
+    "A": "a1c3f459d952b6f11aa715dd4845840ed95ad799e75e49a4cd496300cda9559b",
+    "B": "5b58c4aa93b266beb2da526621b0d87fce05bb0ede0970ff1a33e3f460bee429",
+    "C": "0abf0025d95b773d4cece1c5875cbb1225d3f02ebbb8f9739c42feccb19f2406",
+    "D": "706267133e72ab152204e4555e03731adb62aa6fa0a2abec1d9c78cc34da31e7",
+    "E": "889abeaa37f66b7add25b1639f8f4160c055dfb5861742e1c13893d0dcb3e524",
+    "F": "ead0b772200b0a2a43a930e8be6dd2235b94463f6640a873158a3969c7246beb",
+    "G": "2439efc0581b2721e9ac5b44b61beee3f985b72d8a72d2ecf80b4a6274f1382f",
+    "H": "81a9ab009eaa1155e722de5b16abba18a579f0aca6e6581b6366538e0ead77f6",
+    "V": "c7b1cde5b586322dee9f96dbf081e5df9012af9bc74102695f3e2e222fc0cf8c",
+    "M": "e092396a83fc39d7c8b724cec3bb5078d30b8e1d4e05055e6f014efa52241ccf",
 }
 
 

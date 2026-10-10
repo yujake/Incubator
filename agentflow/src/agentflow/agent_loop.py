@@ -713,6 +713,14 @@ class LoopRun:
     #: 与 `dead_loop_max` 并列报出来，因为"同一件事问了 9 遍"与"同一条路撞了 9 次
     #: 同一类墙"是两种不同的卡法，处置也不同（前者换问法，后者换做法或改小目标）。
     stalled_max: int = 0
+    #: 「提醒」这一档的读数（裁定 10丙：提醒与判停必须在读数上分开报）：
+    #: 提醒触发了几次、以及"因此判停了没有"。改前这两个问题共用 `dead_loop_max` 一个数
+    #: （它既当"提醒过没有"又当"停没停"），而那正是"两档分开"要拆开的地方。
+    dead_loop_nudges: int = 0
+    stalled_nudges: int = 0
+    dead_loop_stopped: bool = False
+    #: 最近一次计数清零发生在第几步（裁定 12-F：计数按委托记账，"这一次委托从哪算起"要可复核）。
+    counters_reset_at: int = 0
     elapsed_sec: float = 0.0
     notes: list[str] = field(default_factory=list)
     #: 「收工那一步」的原始载荷（模型给的 `final` / `evidence` / `notify` 逐字一份）。
@@ -784,6 +792,10 @@ class LoopRun:
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
             "dead_loop_max": self.dead_loop_max, "same_call_max": self.same_call_max,
             "stalled_max": self.stalled_max,
+            # 两档分开报（裁定 10丙）：提醒了几次 / 有没有因此判停 / 账从第几步算起。
+            "dead_loop_nudges": self.dead_loop_nudges, "stalled_nudges": self.stalled_nudges,
+            "dead_loop_stopped": self.dead_loop_stopped,
+            "counters_reset_at": self.counters_reset_at,
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections, "handoffs": list(self.handoffs),
             "summons": self.summons, "messages_sent": self.messages_sent,
@@ -1693,7 +1705,15 @@ class AgentLoop:
     #: 读一遍再读一遍），而 6 给模型留三次改主意的机会。两个数都要能被 `AgentLoop`
     #: 覆盖（`run_role` 不收这两个旋钮 —— 它们是安全阀，不是常规调参面）。
     dead_loop_nudge: int = 3
-    max_dead_loop: int = 6
+    #: 判停阈值（裁定 10丙：提醒 3 次、判停 5 次）。
+    #:
+    #: 改前是 6。为什么现在 5 而不是 6：口径没变（"提醒过之后又重复了几次就停"），
+    #: 变的是业主当场定的那个数；而那个数写在两处（这里与提示词里那句散文），
+    #: 所以 S-D 的判据里有一条"散文里的数字必须等于这一格"（改一处忘了另一处是经典形态）。
+    #:
+    #: 改前那句注释写的是"6 给模型留三次改主意的机会"—— 5 是两次，
+    #: 所以这里不是把数字换掉，是重新推导：提醒在第 3 次，判停在第 5 次 ⇒ 提醒之后还有 2 次。
+    max_dead_loop: int = 5
     #: 「同一条路 + 同一类读数」的两个档（`draft/39` §6.23 的 D31）：3 次提醒、6 次再说一遍。
     #:
     #: 为什么不复用 `dead_loop_nudge` / `max_dead_loop`：那一对认的是"同一个调用"
@@ -2199,12 +2219,25 @@ class AgentLoop:
 
         # 活性读数的游标（`draft/37` §136）：上一步的"调用键"与"读数"，以及连击数。
         # `same_call` = 连续同调用；`dead` = 连续同调用 + 同读数（后者才是"没有新事实"）。
+        #
+        # ## 计数按委托记账（业主 2026-10-10 裁定 12-F + 补充）
+        #
+        # 逐字：「只有主控会和用户交互，其余子代理不会和用户交互，适应性地改为每做完一个委托清一次」。
+        # 于是清零的触发点有两条（都在本文件里现成可判）：
+        #   ① 委托边界：这里（新委托开始）与收工处（委托做完）各清一次 —— "这一次委托之内的账"；
+        #   ② 只有主控：新的用户消息/插话到手时清（下面 `_user_message_reset`）——
+        #      子代理收不到用户消息，这条对它们在结构上不存在。
+        # 父代理的一条普通留言不清：留言不是新委托，否则"同一件事被反复要求"最该被发现的时候会被清掉。
         prev_key = ""
         prev_reading = ""
         same_call = 0
         #: 「同一条路」的游标与连击（D31）：上一个粗键，以及它连着出现了几次。
         prev_stall = ""
         stalled = 0
+        #: 这两格是读数（提醒过几次），与"因此停了没有"分开报（裁定 10丙 要的两档分开）。
+        nudged_calls = 0
+        nudged_stalls = 0
+        counters_reset_at = start_step        # 最近一次清零发生在第几步（可复核"这一次委托从哪算起"）
         #: 这一步收到的插话（叫停类要在这一步做完之后落一条"有没有改变做法"的读数）。
         pending_interjections: dict[str, Any] | None = None
 
@@ -2253,6 +2286,18 @@ class AgentLoop:
                     # 叫停类：这一步做完之后要落"有没有改变做法"（下面按 key 比）
                     pending_interjections = {"ids": ids, "step": step,
                                              "prev_key": prev_key, "prev_reading": prev_reading}
+                # ---- 新用户消息 ⇒ 进度计数清零（裁定 12-F；只有主控有这条通道）
+                #
+                # 逐字理由（DSH 的承诺，照搬）：「A new user message clears the count,
+                # so a fresh instruction is never treated as a loop」。
+                # 只有 M 收得到用户插话（`read_interjections` 对非主控直接返回空表），
+                # 所以这一格结构上只对主控生效；子代理按"委托边界"清零（见循环头的说明）。
+                # 父代理的一条普通留言不清：留言不是新委托 —— 那条负控在
+                # `tests/test_the_progress_counts_are_per_delegation.py` 里。
+                if any(str(i.get("channel") or "") == "user" for i in new_interjections):
+                    prev_key, prev_reading, prev_stall = "", "", ""
+                    same_call, stalled = 0, 0
+                    counters_reset_at = step
             data, call = self.seam.ask_step(self._prompt(transcript, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",
@@ -2529,15 +2574,21 @@ class AgentLoop:
             run.same_call_max = max(run.same_call_max, same_call)
             run.dead_loop_max = max(run.dead_loop_max, dead)
             run.stalled_max = max(run.stalled_max, stalled if stall_key else 0)
+            # 两档分开报（裁定 10丙）：提醒过几次是读数，"因此停了没有"由 `dead_loop_stopped` 说。
+            run.dead_loop_nudges = nudged_calls
+            run.stalled_nudges = nudged_stalls
+            run.counters_reset_at = counters_reset_at
             remarks: list[str] = []
             if same_call == self.dead_loop_nudge:
                 # 点名（不改结论、不停循环）：提醒写进这一步的结果里 ——
                 # `_step_line` 读的就是它，于是"当时那一份"与"续跑重建那一份"逐字一致。
+                nudged_calls += 1
                 remarks.append(_dead_loop_line(
                     streak=same_call, same_reading=dead, limit=self.max_dead_loop,
                     what=_call_brief(shape, payload)))
             if stall_key and stalled in (self.stall_nudge, self.stall_alert):
                 # 同一条路 + 同一类读数（D31）：参数改了不算换做法。这一条只提醒、不判停。
+                nudged_stalls += 1
                 remarks.append(_stall_line(streak=stalled, alert=self.stall_alert,
                                            what=_call_brief(shape, payload)))
             if remarks:
@@ -2568,6 +2619,7 @@ class AgentLoop:
             # 剩下的步数买不到新读数，只会买更多同样的调用。
             if dead >= self.max_dead_loop:
                 run.stop_reason = "no_progress_limit"
+                run.dead_loop_stopped = True
                 run.final = (f"原地打转收工：{_call_brief(shape, payload)}——"
                              f"同一份参数、同样的读数连着 {dead} 次。"
                              f"没有新事实，所以停在这里（不是失败，是这一趟没有往前走）。"
@@ -2612,6 +2664,12 @@ class AgentLoop:
         run.spend = self.seam.spend.to_dict()
         run.elapsed_sec = time.monotonic() - t0
         run.transcript = transcript
+        # 委托做完 ⇒ 进度计数清零（裁定 12-F 逐字："每做完一个委托清一次"）。
+        # 这一次清零在读数上留下 `counters_reset_at`（= 收工那一步），于是"上一笔账
+        # 到哪结束"可复核；下一个委托开始时循环头会再清一次（两句合起来才是那个边界）。
+        prev_key, prev_reading, prev_stall = "", "", ""
+        same_call, stalled = 0, 0
+        run.counters_reset_at = max(run.counters_reset_at, len(run.steps))
         # 正常收工就注销进程登记（被杀时它自然留在盘上，`stopctl.live_pids` 会把死 pid 滤掉）。
         try:
             from . import stopctl as _sc
