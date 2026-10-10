@@ -43,7 +43,7 @@ def test_positive_the_list_policy_says_what_the_items_are() -> None:
     policy = C._specs.builtin_specs()["M"].brief.policy
     one = _list_policy(policy)
     assert one, "M 的 policy 里找不到「清单本体」那一条 ⇒ 判据没接上（不是没问题）"
-    for needle in ("题目问的那个领域", "`lit:` 为据", "依据", "不代替清单本体"):
+    for needle in ("题目问的那个领域", "`lit:` 为据", "依据", "至少引一条 `rel:`", "不代替清单本体"):
         assert needle in one, f"清单那一条缺「{needle}」：{one[:200]}"
     # 反真空：这半句必须落在这一条上（别条里出现不算）
     assert "不代替清单本体" in one, one

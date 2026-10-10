@@ -1403,7 +1403,10 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p61`（2026-10-10，T4 第 8 趟的漂移）：M 的「清单本体」那一句补了半句 ——
 #: 清单的每一条要写「题目问的那个领域」里的事，C 的关系读数是"依据"、不代替清单本体
 #: ⇒ 只换 M 那一格。
-_FROZEN_PROMPT_VERSION = "p61"
+#: `p62`（2026-10-10，T4 第 9 趟的反面）：`p61` 那半句只说"C 是依据" ⇒ M 把它降成叙述、
+#: 交付面连一条 `rel:` 都不引 ⇒ 补全为"C 的读数也要真的被引到"（至少引一条 `rel:`）。
+#: 仍只换 M 那一格。
+_FROZEN_PROMPT_VERSION = "p62"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "2c1d653b212480845d3d20d0df29d48d891a558cf39b151841e063c0537a7f0c",
     "B": "b047336b14c677a910e754cf140be9c5b152a8c58253a9eacc2de052cacc4b1d",
@@ -1414,7 +1417,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "605c08afbb78b5ea61b39129d04adb8acb2cec4854aaa3a59828a413f983f1b1",
     "H": "65145a398dcfb36e353f51c2b22fd6bd5de27c433eb9ccdd771b76d67e071a06",
     "V": "9f4599d46cd10a86c5fadf9573ac71872ab5373b4bd48f11da03035afc5c6f77",
-    "M": "ab01bf6a531c3d09910870c30737c87dd6892eba965c537bf2c972a918bbf2bf",
+    "M": "dce3dc790de58ba257f3d1f090cadce8dc8d04910f3beaa0693795c3464133e1",
 }
 
 
