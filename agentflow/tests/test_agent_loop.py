@@ -26,6 +26,7 @@ import pytest
 
 from agentflow import schema as S
 from agentflow import sessions as SS
+from agentflow import agent_loop as AL
 from agentflow.agent_loop import LlmBackend, inbox_digest, run_role
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.llmseam import LlmSeam
@@ -486,7 +487,8 @@ def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Pat
                      seam=LlmSeam(role="M", session_root=root, gateway=gw["M"], price=(0.0, 0.0),
                                   sid="test-run"), max_steps=3, workspace_root=str(root),
                      sid="test-run", store=st)
-    prompt = loop._prompt("转录", step=0)
+    # S-C 第 ① 步之后 `_prompt` 接的是消息序列（它内部渲染成文本）：夹具跟着换形态。
+    prompt = loop._prompt([AL.user_message("转录")], step=0)
     assert prompt.rstrip().endswith(JSON_TAIL.rstrip()), prompt[-200:]
     # 形状名单从 `SHAPES` 现取（原先这里手抄了七个，漏掉 `handoff`）：
     for shape in SHAPES:
@@ -574,7 +576,8 @@ def test_the_shape_table_has_exactly_one_source(tmp_path: pathlib.Path):
         spend = _Spend()
 
     loop = AgentLoop(role="M", session_root=tmp_path, registry=object(), seam=_Seam())
-    prompt = loop._prompt("转录", step=0)
+    # S-C 第 ① 步之后 `_prompt` 接的是消息序列（它内部渲染成文本）：夹具跟着换形态。
+    prompt = loop._prompt([AL.user_message("转录")], step=0)
     assert f"{len(SHAPES)} 种形状取其一" in prompt, prompt[-300:]
     for shape in SHAPES:
         assert shape in prompt, f"拼出来的那一步提示词里没有 {shape}"

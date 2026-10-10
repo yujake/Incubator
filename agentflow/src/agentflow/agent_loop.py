@@ -546,8 +546,104 @@ def _dead_loop_line(*, streak: int, same_reading: int, limit: int, what: str) ->
 
 def _step_line(step: int, payload: Mapping[str, Any], result: Mapping[str, Any]) -> str:
     """一个有效步的简报行：模型说了什么 + 框架执行结果（键序见 `_canonical`）。"""
-    return (f"\n\n[第 {step + 1} 步] 你说了：{_clip(_canonical(payload), ECHO_CHARS)}\n"
-            f"框架执行结果：{_observe(_canonical(result))}")
+    return _spoken_half(step, payload) + _result_half(result)
+
+
+def _spoken_half(step: int, payload: Mapping[str, Any]) -> str:
+    """一步的"你说了"那半（S-C 改成消息序列之后，它进 assistant 那条消息）。"""
+    return (f"\n\n[第 {step + 1} 步] 你说了：{_clip(_canonical(payload), ECHO_CHARS)}")
+
+
+def _result_half(result: Mapping[str, Any]) -> str:
+    """一步的"框架执行结果"那半（S-C 之后它进 tool 那条消息）。"""
+    return f"\n框架执行结果：{_observe(_canonical(result))}"
+
+
+# ---------------------------------------------------------------- 消息序列（S-C，裁定 5甲）
+#
+# 搬的是 DSH 的 messages：assistant 带 `tool_calls`、tool 带 `tool_call_id`。
+# 我们的形态有一处必须说清的差异：协议是 JSON 形状的（每一步都是一句话，
+# 不是原生函数调用），所以"一次工具调用"对我们等于"一步"—— 每一个非 final 的步
+# 都落成 `assistant(tool_calls=[{id, name=形状, arguments=载荷}])` + `tool(结果)` 两条。
+# `id` 由步号派生（不是随机数）：会话记录里只有步号，而重建序列要与当时那一份逐条相等。
+
+#: 序列里允许的角色（与 DSH 的三种同名）。
+MESSAGE_ROLES: tuple[str, ...] = ("user", "assistant", "tool")
+
+
+def call_id_of(step: int) -> str:
+    """第 `step` 步那次调用的 id —— 由步号派生，所以从会话记录里重建得回来。"""
+    return f"call-{int(step) + 1}"
+
+
+def user_message(content: str) -> dict[str, Any]:
+    """一条 user 消息（开场简报那一整段、以及插话那一段，都是"别人对我说的"）。"""
+    return {"role": "user", "content": str(content)}
+
+
+def assistant_message(step: int, payload: Mapping[str, Any], *,
+                      content: str = "", name: str = "") -> dict[str, Any]:
+    """一条 assistant 消息：它在这一步要求了哪一件事（`tool_calls` 那半）。
+
+    `content` 放"你说了"那半（渲染回文本时与改前逐字相同）；`tool_calls` 是结构化的
+    那一份（这才是序列化的收益：谁调的、参数是什么，不必再从一行散文里解析）。
+    """
+    shape = str(name or payload.get("tool") or payload.get("shape") or "step")
+    return {"role": "assistant", "content": str(content),
+            "tool_calls": [{"id": call_id_of(step), "type": "function",
+                            "function": {"name": shape,
+                                         "arguments": _clip(_canonical(payload), ECHO_CHARS)}}]}
+
+
+def tool_message(step: int, content: str, *, name: str = "") -> dict[str, Any]:
+    """一条 tool 消息：框架对第 `step` 步那个调用的回答（`tool_call_id` 必须配对）。"""
+    out: dict[str, Any] = {"role": "tool", "tool_call_id": call_id_of(step),
+                           "content": str(content)}
+    if name:
+        out["name"] = str(name)
+    return out
+
+
+def render_messages(messages: Sequence[Mapping[str, Any]]) -> str:
+    """把序列渲染成那份 prompt 文本（S-C 第 ① 步：`transcript` 从载体降成渲染）。
+
+    逐字不变这件事是刻意的：`run.transcript` 的所有读者（Web UI 的事件回放、续跑、
+    `--resume`）在这一步之后照旧拿到同一份文本 —— 换的是"谁是载体"，不是"念出来是什么"。
+    """
+    return "".join(str(m.get("content") or "") for m in messages)
+
+
+def message_sequence_problem(messages: Sequence[Mapping[str, Any]]) -> str:
+    """序列的配对判据（S-C 的负控）：每一条 `tool` 必须挂在上一条 assistant 给的 id 上。
+
+    DSH 的 tool 消息靠 `tool_call_id` 与 assistant 的 `tool_calls[].id` 配对 ——
+    挂错 id 的后果是模型看到"一个它没要求过的结果"（它会把那条结果当成别人的，
+    或者干脆当成协议漂移）。这个函数是那条判据的唯一实现，判据文件直接拿它做负控。
+    返回空串 = 配对都对；非空 = 那句话就是问题本身。
+    """
+    last_ids: set[str] = set()
+    for i, m in enumerate(messages or []):
+        role = str(m.get("role") or "")
+        if role not in MESSAGE_ROLES:
+            return f"第 {i} 条的角色是 {role!r}，不在 {MESSAGE_ROLES} 里"
+        if role == "assistant":
+            ids = {str(c.get("id") or "") for c in (m.get("tool_calls") or [])
+                   if isinstance(c, Mapping)}
+            if not ids or "" in ids:
+                return f"第 {i} 条 assistant 没有可配对的 tool_calls"
+            last_ids = ids
+        elif role == "tool":
+            cid = str(m.get("tool_call_id") or "")
+            if not cid:
+                return f"第 {i} 条 tool 没有 tool_call_id"
+            if cid not in last_ids:
+                return (f"第 {i} 条 tool 挂在 {cid!r} 上，而上一条 assistant 给的 id 是 "
+                        f"{sorted(last_ids) or '（没有）'} —— 挂错 id 等于把结果交给"
+                        "一个没要求过它的调用")
+            last_ids = set()
+        else:
+            last_ids = set()
+    return ""
 
 
 def _invalid_line(step: int, problem: str) -> str:
@@ -773,6 +869,16 @@ class LoopRun:
     #: 而简报里有整段观测文本（单字段上限 6000 字 × 步数）—— 把它抄进去会让
     #: 审计文件翻几倍，而它本来就是 `agent_step` 事件重算得出来的东西。
     transcript: str = ""
+    #: 这一趟的消息序列（S-C，裁定 5甲）：`[{role: user|assistant|tool, ...}]`，
+    #: assistant 带 `tool_calls`（`id` 由步号派生 ⇒ 会话记录里重建得回来）、
+    #: tool 带 `tool_call_id`（配对判据在 `message_sequence_problem`）。
+    #:
+    #: 与 `transcript` 的关系：序列是载体，文本是它的渲染
+    #: （`render_messages(messages) == transcript` 由构造保证）。`transcript` 留着是因为
+    #: 它的读者还在（Web UI 的事件回放、续跑简报、`--resume`）；`to_dict()` 只报条数
+    #: 与角色分布 —— 整份序列逐条进 `agent_run_end` 会把会话记录撑大，而它是可重建的
+    #: （`agent_step` 事件里有步号与载荷）。
+    messages: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def summons(self) -> list[str]:
@@ -2009,7 +2115,14 @@ class AgentLoop:
         head = "、".join(kids[:20])
         return head if len(kids) <= 20 else f"{head} …等 {len(kids)} 个"
 
-    def _prompt(self, transcript: str, *, step: int) -> str:
+    def _prompt(self, messages: Sequence[Mapping[str, Any]], *, step: int) -> str:
+        """这一步发给模型的提示词 = 序列的渲染 + 尾部那几句（S-C，裁定 5甲）。
+
+        改前它接的是一整段 `transcript` 字符串；现在它接的是消息序列并在内部渲染 ——
+        "历史载体是谁"从这一处起换了个东西，而念出来的那份文本一个字没变
+        （`render_messages` 与改前那些 `+=` 拼法逐字相同，见 `_spoken_half`/`_result_half`）。
+        """
+        transcript = render_messages(messages)
         # 步数不是收工理由（业主 2026-10-10 裁定 12-K）⇒ 这一段里不再有
         # "这是最后一步"这一支。改前它在第 `max_steps` 步上对模型说
         # 「这是最后一步：不要再调用工具…直接输出 final」—— 那是硬闸的口吻，
@@ -2290,11 +2403,18 @@ class AgentLoop:
         system = AP.system_prompt(self.role, registry=self.registry, **facts)
         if resumed is None:
             start_step = 0
-            transcript = _opening_transcript(task, inbox=inbox, summoned_by=summoned_by,
-                                             task_id=my_task_id, depth=depth)
+            # ---- S-C（裁定 5甲）第 ① 步：历史载体从"一段字符串"换成消息序列。
+            #
+            # 开场那一整段（收件箱/任务/身份）是序列里的第一条 `user` 消息；
+            # `transcript` 从此是 `render_messages(messages)` 的渲染（逐字不变），
+            # 所以它的所有读者（Web UI 回放、续跑、`--resume`）这一步之后照旧。
+            messages: list[dict[str, Any]] = [user_message(
+                _opening_transcript(task, inbox=inbox, summoned_by=summoned_by,
+                                    task_id=my_task_id, depth=depth))]
         else:
-            transcript, start_step = resumed
+            rebuilt_text, start_step = resumed
             run.resumed_from = start_step
+            messages = [user_message(rebuilt_text)]
             # 注意：这里「不」把"上一趟停在等谁"写进 `run.waiting_for`。
             # 那个字段的口径是"这一趟停在等谁"，而上一趟的值只进下面那条 start 事件
             # （它是续跑的输入面）。混用会让一趟收工（final）的 run_end 事件里
@@ -2432,7 +2552,7 @@ class AgentLoop:
             run.notes.extend(f"插话读取：{p}" for p in ij_problems)
             if new_interjections:
                 ids = [str(i.get("interjection_id") or "") for i in new_interjections]
-                transcript += _interjection_block(new_interjections)
+                messages.append(user_message(_interjection_block(new_interjections)))
                 _p, seen_problem = mark_interjections_seen(self.session_root, self.role, ids,
                                                            sid=self.sid, step=step)
                 if seen_problem:
@@ -2453,7 +2573,7 @@ class AgentLoop:
                     prev_key, prev_reading, prev_stall = "", "", ""
                     same_call, stalled = 0, 0
                     counters_reset_at = step
-            data, call = self.seam.ask_step(self._prompt(transcript, step=step),
+            data, call = self.seam.ask_step(self._prompt(messages, step=step),
                                             system=system, task_id=my_task_id,
                                             note=f"{self.role}.step{step}",
                                             max_tokens=self.max_output_tokens,
@@ -2528,14 +2648,19 @@ class AgentLoop:
                         run.final = (f"连续 {run.bad_args_streak} 次把工具参数写成不合法 JSON"
                                      f"（最后一次：{call.detail}），停止")
                         break
-                    transcript += _bad_args_line(step, str(bad_result["detail"]))
+                    # S-C：这一句纠正进 tool 那条消息（配对 id 照给 —— 它确实是
+                    # 框架对"这一步那次调用"的回答）。
+                    messages.append(assistant_message(step, {}, name="invalid"))
+                    messages.append(tool_message(step, _bad_args_line(step, str(bad_result["detail"]))))
                     continue
                 if run.bad_json_streak > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
                     run.final = (f"连续 {run.bad_json_streak} 次没有给出可解析的 JSON"
                                  f"（最后一次：{call.problem}），停止")
                     break
-                transcript += _bad_json_line(step, call.problem, str(bad_result["detail"]))
+                messages.append(assistant_message(step, {}, name="invalid"))
+                messages.append(tool_message(
+                    step, _bad_json_line(step, call.problem, str(bad_result["detail"]))))
                 continue
             shape, payload, problem = _shape_of(data)
             if problem:
@@ -2571,8 +2696,10 @@ class AgentLoop:
                     run.final = (f"连续 {run.bad_json_streak} 次形状不合法"
                                  f"（最后一次：{problem}），停止")
                     break
-                transcript += (_payload_line(step, recognized, problem) if recognized
-                               else _invalid_line(step, problem))
+                messages.append(assistant_message(step, data, name=recognized or "step"))
+                messages.append(tool_message(
+                    step, _payload_line(step, recognized, problem) if recognized
+                    else _invalid_line(step, problem), name=recognized or "step"))
                 continue
             # 说对了一次 ⇒ 连击清零（`draft/37` §68）。清零的判据是"它按协议说出了一个形状"，
             # 不是"那件事办成了" —— 工具被拒、召唤被拒、参数不合法都算说对了协议，
@@ -2764,7 +2891,13 @@ class AgentLoop:
                 "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
                 "payload": dict(payload), "result": dict(step_obj.result),
             }, sid=self.sid)
-            transcript += _step_line(step, payload, result)
+            # S-C（裁定 5甲）：这一笔进消息序列 —— assistant（它要求了什么，
+            # 结构化一份 `tool_calls`）+ tool（框架给了什么，`tool_call_id` 配对）。
+            # 渲染回文本与改前 `_step_line` 逐字相同（`_spoken_half`/`_result_half` 是
+            # 那两个"半句"的唯一拼法，`_step_line` 也由它们拼出来）。
+            messages.append(assistant_message(step, payload, name=shape,
+                                              content=_spoken_half(step, payload)))
+            messages.append(tool_message(step, _result_half(result), name=shape))
             # ---- 原地打转：同调用 + 同读数连着到上限 ⇒ 这一趟收在这里（不再是"步数用尽"）
             #
             # 为什么停下来是"如实"而不是"失败"：这一步确实做了（台账与会话记录里都有），
@@ -2819,7 +2952,8 @@ class AgentLoop:
 
         run.spend = self.seam.spend.to_dict()
         run.elapsed_sec = time.monotonic() - t0
-        run.transcript = transcript
+        run.messages = list(messages)
+        run.transcript = render_messages(messages)
         # 委托做完 ⇒ 进度计数清零（裁定 12-F 逐字："每做完一个委托清一次"）。
         # 这一次清零在读数上留下 `counters_reset_at`（= 收工那一步），于是"上一笔账
         # 到哪结束"可复核；下一个委托开始时循环头会再清一次（两句合起来才是那个边界）。
