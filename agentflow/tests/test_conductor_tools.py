@@ -788,6 +788,72 @@ def test_state_shows_the_unprocessed_literature_backlog(tmp_path: Path):
     assert blind["rows"] == -1, blind
 
 
+def test_state_shows_the_implicit_thresholds_of_the_two_coupled_legs(tmp_path: Path) -> None:
+    """判据（T4 第 10 趟 `t4j` 的整改）：状态视图要摆出"立了几条问题 vs 那两档的读数"。
+
+    为什么需要这一格：`closing` 的 `retrieval_ok_rows` 与 `document_claim_rows` 两档，
+    缺省门槛（`kind_min`）就是研究问题条数，而生效值是 `max(declared, kind_min)`
+    ⇒ 验收表里写小了压不下去。真机读数（`t4j`）：M 立了 12 条研究问题、只跑了 4 次检索、
+    只写了 5 条断言 ⇒ 收工门两条 blocker（4<12、5<12），而这两句话在提示词里已经写着
+    —— 散文改不了行为，所以把三个数并排摆到 M 每次看状态都看得到的地方。
+
+    三态：三个数读不出来时整格记 -1（"没查成"不许读成 0）。
+    """
+    store, _c, reg = _wired(tmp_path)
+    _TS = "2026-10-10T00:00:00+08:00"
+    with store.tx("research_questions", "search_requests", "documents",
+                  actor="test", note="probe") as tx:
+        for i in range(3):
+            tx.upsert("research_questions", {"question_id": f"{i:04d}",
+                                             "question": f"q{i}", "status": "open",
+                                             "created_at": _TS}, note="probe")
+        tx.upsert("search_requests", {"request_id": "r-0001", "timestamp": _TS, "topic": "a",
+                                      "mode": "precise", "content_description": "p",
+                                      "done": True, "outcome": "ok", "submitted_by": "agent-A",
+                                      "attempts": 1, "result_lit_ids": ["0000"],
+                                      "priority": "low", "submit_note": ""}, note="probe")
+        tx.upsert("search_requests", {"request_id": "r-0002", "timestamp": _TS, "topic": "b",
+                                      "mode": "precise", "content_description": "p",
+                                      "done": True, "outcome": "no_results",
+                                      "submitted_by": "agent-A", "attempts": 1,
+                                      "result_lit_ids": [], "priority": "low",
+                                      "submit_note": ""}, note="probe")
+        tx.upsert("documents", {"doc_id": "0000", "kind": "survey", "title": "t",
+                                "status": "draft", "review_rounds": 0, "revision": 1,
+                                "created_at": _TS, "updated_at": _TS, "created_by": "agent-G",
+                                "claims": [{"claim_id": "claim-1", "text": "x",
+                                            "citations": ["lit:0000"],
+                                            "evidence_kind": "heuristic"}]}, note="probe")
+
+    th = reg.call("conductor.state", role="M").data["queues"]["thresholds"]
+    assert th["research_questions"] == 3, th          # 两档门槛的来源
+    assert th["retrieval_ok"] == 1, th                # 只有 outcome=ok 的那条算
+    assert th["document_claims"] == 1, th
+    assert th["short_retrieval"] == 2 and th["short_claims"] == 2, th
+    assert "研究问题条数" in th["note"] and "压不下去" in th["note"], th
+
+    # 负控：检索做够了 ⇒ `short_retrieval` 归 0（不是"没查成"）；断言那一半还差两条
+    with store.tx("search_requests", actor="test", note="probe") as tx:
+        for i in (3, 4):
+            tx.upsert("search_requests", {"request_id": f"r-{i:04d}", "timestamp": _TS,
+                                          "topic": "c", "mode": "precise",
+                                          "content_description": "p", "done": True,
+                                          "outcome": "ok", "submitted_by": "agent-A",
+                                          "attempts": 1, "result_lit_ids": ["0000"],
+                                          "priority": "low", "submit_note": ""}, note="probe")
+    after = reg.call("conductor.state", role="M").data["queues"]["thresholds"]
+    assert after["retrieval_ok"] == 3 and after["short_retrieval"] == 0, after
+    assert after["short_claims"] == 2, after
+
+    # 反真空：表读不到 ⇒ -1 + unreadable（不许把"没查成"读成"差 0 条"）
+    class _Blind:
+        def rows(self, table):  # noqa: ANN001 - 替身
+            raise RuntimeError("表读不到")
+
+    blind2 = CT._queue_backlog(_Blind())["thresholds"]
+    assert blind2["research_questions"] == -1 and blind2["unreadable"] is True, blind2
+
+
 def test_ledger_views(tmp_path: Path):
     """台账四个视图都能出读数（tree/stats/issues/verify）。"""
     _store, _c, reg = _wired(tmp_path, role_registry={"E": ("object", _FakeE())})

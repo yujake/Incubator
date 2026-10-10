@@ -779,6 +779,37 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
             "unprocessed": len(pending),
             "unprocessed_ids": [str(r.get("lit_id") or "") for r in pending[:12]],
         }
+    # 第四条："你立了几条研究问题"与"那两档的隐式门槛"（T4 第 10 趟 `t4j` 的整改）。
+    #
+    # 为什么要有这一格：`closing` 的 `retrieval_ok_rows` 与 `document_claim_rows` 两档，
+    # 缺省门槛（`kind_min`）就是研究问题条数，而 `min_overridden` 的规则是
+    # `max(declared, kind_min)` ⇒ 验收表里写什么都不能把它压低。真机读数（`t4j`）：
+    # M 立了 12 条研究问题、只跑了 4 次检索、只写了 5 条断言
+    # ⇒ 收工门报两条 blocker（4<12、5<12），而这两句话在提示词里已经写着
+    # （`specs/m.py` 那两个"缺省阈值 = 你立起来的研究问题条数"）—— 散文改不了行为，
+    # 所以这一格把它放到 M 每次看状态时都看得到的地方：三个数并排摆着。
+    try:
+        n_qs = len(list(store_.rows("research_questions")))
+        n_ok = len([r for r in store_.rows("search_requests") if str(r.get("outcome") or "") == "ok"])
+        n_claims = sum(len([c for c in (dict(d).get("claims") or [])
+                            if isinstance(c, dict) and (c.get("citations") or [])])
+                       for d in store_.rows("documents"))
+    except Exception:  # noqa: BLE001 —— 读不到就整格记 -1（不编 0）
+        out["thresholds"] = {"research_questions": -1, "retrieval_ok": -1,
+                             "document_claims": -1, "unreadable": True}
+    else:
+        out["thresholds"] = {
+            "research_questions": n_qs,          # 这两档缺省门槛的来源
+            "retrieval_ok": n_ok,                # `retrieval_ok_rows` 的当前读数
+            "document_claims": n_claims,         # `document_claim_rows` 的当前读数
+            "short_retrieval": max(0, n_qs - n_ok),
+            "short_claims": max(0, n_qs - n_claims),
+            "note": ("`retrieval_ok_rows` 与 `document_claim_rows` 两档的**缺省门槛就是"
+                     "研究问题条数**（`closing` 的 `kind_min`；而生效值是 "
+                     "`max(你在验收表里写的 min, kind_min)` ⇒ 写小了压不下去）。"
+                     "`short_*` 是还差几条：要收工时它们应当是 0 —— 要么把检索与断言做够，"
+                     "要么立题时克制一点。"),
+        }
     return out
 
 
