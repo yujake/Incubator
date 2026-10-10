@@ -162,27 +162,28 @@ def test_the_incomplete_budget_refusal_is_visible_as_a_refusal(store):
     c = Conductor(store, registry={"F": ("object", AgentF(store))})
     reg = build_registry(store=store, conductor=c).registry
 
-    bad = reg.call("conductor.summon", role="M", target_role="F", action="create_plan",
-                   params={"problem": "难题丁", "problem_key": "PK-D",
-                           "budget": {"max_rounds": 6}}, input_key="plan-bad")
-    assert bad.data["outcome"] == "refused", bad.data
-    assert bad.data["refusal_reason"] == "invalid_params", bad.data
+    # F 只能由 D 转达（业主 2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）⇒
+    # 这一跳走 `M→D→F`，而 `conductor.summon` 工具只开给主控（`by` 在
+    # `tools/conductor_tools.py` 里写死成 M），所以这里直接调 Conductor 的 API（`by="D"`）。
+    def _summon(key: str, **params):
+        return c.summon("F", "create_plan", params, by="D", input_key=key)
+
+    bad = _summon("plan-bad", problem="难题丁", problem_key="PK-D",
+                  budget={"max_rounds": 6})
+    assert bad.outcome == "refused", (bad.status, bad.outcome, bad.refusal_reason)
+    assert bad.refusal_reason == "invalid_params", bad.refusal_reason
     assert len(store.rows("attack_plans")) == 0, "被拒的那次不许留下行"
 
-    good = reg.call("conductor.summon", role="M", target_role="F", action="create_plan",
-                    params={"problem": "难题丁", "problem_key": "PK-D",
-                            "budget": {"max_rounds": 6, "max_parallel_subgoals": 2,
-                                       "max_persist_attempts": 2, "max_depth": 2}},
-                    input_key="plan-good")
-    assert good.data["outcome"] == "ok", good.data
+    good = _summon("plan-good", problem="难题丁", problem_key="PK-D",
+                   budget={"max_rounds": 6, "max_parallel_subgoals": 2,
+                           "max_persist_attempts": 2, "max_depth": 2})
+    assert good.outcome == "ok", (good.status, good.outcome, good.refusal_reason)
     assert len(store.rows("attack_plans")) == 1
 
-    again = reg.call("conductor.summon", role="M", target_role="F", action="create_plan",
-                     params={"problem": "难题丁", "problem_key": "PK-D",
-                             "budget": {"max_rounds": 6, "max_parallel_subgoals": 2,
-                                        "max_persist_attempts": 2, "max_depth": 2}},
-                     input_key="plan-again")
-    assert again.data["outcome"] == "ok", again.data
+    again = _summon("plan-again", problem="难题丁", problem_key="PK-D",
+                    budget={"max_rounds": 6, "max_parallel_subgoals": 2,
+                            "max_persist_attempts": 2, "max_depth": 2})
+    assert again.outcome == "ok", (again.status, again.outcome, again.refusal_reason)
     assert len(store.rows("attack_plans")) == 1, "幂等：已有的计划不新建"
 
 

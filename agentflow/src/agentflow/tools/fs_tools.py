@@ -38,6 +38,7 @@ from functools import partial, wraps
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Iterator, Mapping
 
+from .. import fs_observation as OBS
 from .base import ToolError, ToolRegistry, ToolResult, ToolSpec, fail, ok, tool
 
 #: 与 `table_tools` 一致：文件 CRUD 对 A/B/C/D 全开。
@@ -494,11 +495,15 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
     """
     target = _resolve(ctx, path)
     if not target.exists():
+        # 先记"确认缺失"、再抛（逐字照 DSH `TFS:276` 的顺序）：
+        # 反过来会让"读一个不存在的路径以授权带防护的创建"这条路断掉。
+        OBS.observed_gate().note_absent(OBS.current_owner(), target)
         raise ToolError(f"文件不存在：{_rel(ctx, target)}")
     if target.is_dir():
         raise ToolError(f"{_rel(ctx, target)} 是目录（要列出内容请用 fs.list）")
 
-    size = target.stat().st_size
+    st = target.stat()
+    size = st.st_size
     suffix = target.suffix.casefold()
     head = _read_head(target, min(size, SNIFF_BYTES))
     is_bin, why = _looks_binary(head)
@@ -549,6 +554,11 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         if total_lines > 1:
             scope = "已读窗口内" if truncated else "共"
             note = (note + "；" if note else "") + f"{scope} {total_lines} 行"
+    # 读成功即"看过"（DSH `TFS:430`）——哪怕只读了一个窗口/被截断：
+    # 授权依据是"版本新鲜度"，不是"视图完整性"（DSH 自己承认的已知弱化，照搬）。
+    # 版本取读之前那一次 stat（`st`），与 DSH `TFS:274`→`TFS:430` 同一顺序。
+    OBS.observed_gate().observe(OBS.current_owner(), str(target), OBS.Observation(OBS.OBS_PRESENT,
+                                                                       OBS.version_of(st)))
     return ok(
         shown,
         path=_rel(ctx, target),
@@ -645,8 +655,32 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
             existed=True,
         )
 
+    # 读后写那一闸（裁定 9甲；DSH `FSL:821-828` 的搬运）。
+    # 顺序：意图（policy 层）→ 版本核对（provider 层）→ 落盘 → 重新观察。
+    owner = OBS.current_owner()
+    key = str(target)
+    intent, expected = OBS.observed_gate().write_intent(owner, key)
+    if intent == "replace_if_version":
+        now = OBS.stat_version(target)
+        if not now:
+            return fail(OBS.remedy_stale(f'不能写 "{_rel(ctx, target)}"：它在你读过之后没了'),
+                        path=_rel(ctx, target), kind=OBS.CODE_STALE_VERSION,
+                        observed_version=expected, version_now="")
+        if now != expected:
+            return fail(OBS.remedy_stale(f'不能写 "{_rel(ctx, target)}"：它在你读过之后变过了'),
+                        path=_rel(ctx, target), kind=OBS.CODE_STALE_VERSION,
+                        observed_version=expected, version_now=now)
+    elif existed:
+        # createIfAbsent + 目标已存在 = 没读过就要覆盖 ⇒ 拒（这是本闸的主战场）。
+        return fail(OBS.remedy_not_observed(_rel(ctx, target)),
+                    path=_rel(ctx, target), kind=OBS.CODE_NOT_OBSERVED,
+                    existed=True)
+
     target.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write_bytes(target, payload)
+    # 写完之后重新观察"写后版本"，而不是沿用意图里的期望版本（DSH `FSL:831`、`TFS:657`）：
+    # 否则同一步里"写 → 再写"会被自己拒掉。
+    OBS.observed_gate().note_present(owner, target)
     return ok(
         {"path": _rel(ctx, target), "bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest(), "created": not existed},
         path=_rel(ctx, target),
@@ -695,20 +729,33 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     - 改动上限：`new_string` 超过 `MAX_EDIT_BYTES` 就拒 —— 那说明这次改动不是"定点"。
     """
     target = _resolve(ctx, path)
+    # 读后写那一闸在最前面（policy 层先于 provider 层，逐字照 DSH `POL:64-70` → `FSL:840`）：
+    # DSH 的编辑闸跑在逐字匹配之前，为的是"陈旧的编辑绝不报成误导性的「找不到」"。
+    rel = _rel(ctx, target)
+    owner = OBS.current_owner()
+    key = str(target)
+    try:
+        observed_version = OBS.observed_gate().edit_intent(owner, key, rel)
+    except OBS.ObservationRefusal as refusal:
+        return fail(refusal.message, path=rel, kind=refusal.code)
     if not target.exists():
-        return fail(f"{_rel(ctx, target)} 不存在（定点替换只能改已有文件）",
-                    path=_rel(ctx, target), kind="not_found")
+        return fail(f"{rel} 不存在（定点替换只能改已有文件）",
+                    path=rel, kind="not_found")
     if target.is_dir():
-        raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件改")
+        raise ToolError(f"{rel} 是目录，不能当文件改")
     before = target.read_bytes()
     if len(before) > MAX_READ_BYTES:
-        return fail(f"{_rel(ctx, target)} 有 {len(before)} 字节，超过可改上限 {MAX_READ_BYTES}",
-                    path=_rel(ctx, target), kind="too_large", bytes=len(before))
+        return fail(f"{rel} 有 {len(before)} 字节，超过可改上限 {MAX_READ_BYTES}",
+                    path=rel, kind="too_large", bytes=len(before))
+    if OBS.stat_version(target) != observed_version:
+        return fail(OBS.remedy_stale(f'不能改 "{rel}"：它在你读过之后变过了'),
+                    path=rel, kind=OBS.CODE_STALE_VERSION,
+                    observed_version=observed_version, version_now=OBS.stat_version(target))
     if sha256 and sha256 != hashlib.sha256(before).hexdigest():
         return fail(
-            f"{_rel(ctx, target)} 现在这一版的 sha256 与调用方给的不符 ⇒ 拒绝改。"
+            f"{rel} 现在这一版的 sha256 与调用方给的不符 ⇒ 拒绝改。"
             "（这一条防的是「我拿到的是别人改之前的那一版」—— 盲改会把别人的改动覆盖掉。）",
-            path=_rel(ctx, target), kind="sha_mismatch",
+            path=rel, kind="sha_mismatch",
             sha256_now=hashlib.sha256(before).hexdigest(),
         )
     text, encoding, had_errors = _decode_text(before)
@@ -741,6 +788,9 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     after_text = text.replace(old_string, new_string)
     after_bytes = after_text.encode("utf-8")
     _atomic_write_bytes(target, after_bytes)
+    # 改完之后重新观察"改后版本"（DSH `FSL:850`、`TFS:810`）——
+    # 于是同一步里"改 → 再改同一处"不必再读一遍才被允许。
+    OBS.observed_gate().note_present(owner, target)
     return ok(
         {
             "path": _rel(ctx, target),
@@ -1080,6 +1130,10 @@ def register(
     """
     if root is None:
         raise ToolError("fs_tools 需要一个工作区根（root / workspace_root），当前为 None：沙箱边界不可省略")
+    # 新装配 = 新的一趟：清空观察台账（DSH 的 `gate.clear()`，`POL:87-89`）。
+    # 为什么在这里清：观察表不持久化，而"恢复的会话必须重读目标"是照搬的语义；
+    # 进程内多次装配（换工作区、换注册表）时不清就会把上一趟的账带过来。
+    OBS.clear()
     ctx = FsContext(root=Path(root), actor=actor)
     out: list[ToolSpec] = []
     for fn in _TOOL_FUNCTIONS:

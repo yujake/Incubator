@@ -184,6 +184,13 @@ def _doc_row() -> dict:
     ).to_dict()
 
 
+#: 有些工具的判据要求先跑另一个工具（`fs.edit` 的"读后写"闸：业主 2026-10-10 裁定 9甲，
+#: DSH `dsh-fs-observation-policy` 的搬运）。探针照真实循环同一条纪律：先读、再改。
+_PREREQS: dict[str, tuple[str, dict]] = {
+    "fs.edit": ("fs.read", {"path": "out/edit-target.txt"}),
+}
+
+
 def tool_params() -> dict[str, dict]:
     """55 个工具各自那一次调用的参数。"""
     return {
@@ -773,6 +780,11 @@ def observations(registry: ToolRegistry) -> dict[str, Observation]:
             kw = dict(params.get(name, {}))
             if name == "conductor.ensure_project":
                 kw["projects_dir"] = str(tmp_projects)
+            # 前置：有的工具的判据要求先跑另一个工具（`fs.edit` 的"读后写"闸，
+            # 业主 2026-10-10 裁定 9甲）。这不是取巧 —— 真实循环里模型也必须先读后改。
+            pre = _PREREQS.get(name)
+            if pre is not None:
+                registry.call(pre[0], **dict(pre[1]))
             res = registry.call(name, **kw)
             out[name] = Observation(name, res.ok, res.meta.get("kind"), res.error, res.data,
                                     dict(res.meta))

@@ -93,6 +93,9 @@ def test_the_edit_lands_and_the_package_catches_up(tmp_path):
     assert _verdict(tmp_path, st) == "consistent", "夹具前提：起手是封好的包"
     before = (out / "main.tex").read_bytes()
 
+    # 读后写那一闸（业主 2026-10-10 裁定 9甲）：定点替换要求先读过目标 ——
+    # 夹具照真实循环同一条纪律（先读、再改）；本用例判的是"改完锚漂移 → 重渲染回 consistent"。
+    assert reg.call("fs.read", role="G", path="out/paper/main.tex").ok, "夹具前提：先读一次"
     res = reg.call("fs.edit", role="G", path="out/paper/main.tex",
                    old_string=AFTER_OLD, new_string=AFTER_NEW,
                    note="把「收敛」补成「依分布收敛」（原文缺了这句话）")
@@ -119,8 +122,15 @@ def test_the_edit_lands_and_the_package_catches_up(tmp_path):
 
 
 def test_a_stale_sha_edit_on_the_paper_is_refused(tmp_path):
-    """负控（R2 的第二条负控，落到论文上）：文件被外部改过之后，拿着旧 sha 的定点改必须被拒。"""
+    """负控（R2 的第二条负控，落到论文上）：文件被外部改过之后，拿着旧 sha 的定点改必须被拒。
+
+    裁定 9甲（读后写）之后这一条有两道闸，判据要接受先响的那一道：
+    先读一次（记下观察版本）→ 外部改过 → 定点改 ⇒ 观察版本已经不符 ⇒ `stale_version` 先响；
+    `sha256` 那条仍然留着，给"读过之后没变、但调用方自己拿的是更早那一版"的场合。
+    两道都算"被拒"，所以断言收两者的并集，并钉住"盘上那处外部改动还在"。
+    """
     st, reg, out = _project(tmp_path)
+    assert reg.call("fs.read", role="G", path="out/paper/main.tex").ok, "夹具前提：先读一次"
     old_sha = reg.call("fs.stat", role="G", path="out/paper/main.tex").data["sha256"]
     # 外部有人改了正文（不是 G 改的）
     (out / "main.tex").write_text(BEFORE.replace("body", "someone else changed it"),
@@ -129,7 +139,6 @@ def test_a_stale_sha_edit_on_the_paper_is_refused(tmp_path):
                    old_string=AFTER_OLD, new_string=AFTER_NEW,
                    sha256=str(old_sha), note="基于我读到的那一版改")
     assert not res.ok, res
-    assert "sha" in str(res.error or "").lower() or res.meta.get("kind") == "sha_mismatch", (
-        res.error, res.meta)
+    assert res.meta.get("kind") in ("stale_version", "sha_mismatch"), (res.error, res.meta)
     assert "someone else changed it" in (out / "main.tex").read_text(encoding="utf-8"), (
         "被拒之后不许动文件")

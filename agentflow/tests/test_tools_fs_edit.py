@@ -53,6 +53,9 @@ def test_fs_edit_changes_exactly_one_place_and_reports_hashes(store):
 
     old = "$|d_n-F(C_n)|<\\binom m2$"
     new = "$|d_n-F(C_n)|\\le\\binom m2$"
+    # 读后写那一闸（业主 2026-10-10 裁定 9甲；DSH `POL:64-70`）：定点替换要求先读过目标。
+    # 这是本夹具的前提、不是被测对象（被测的是"只改那一处"）。
+    assert reg.call("fs.read", path="out/paper/main.tex").ok, "夹具前提：先读一次才有改的授权"
     got = reg.call("fs.edit", path="out/paper/main.tex", old_string=old, new_string=new,
                    sha256=hashlib.sha256(before).hexdigest(), note="严格不等号在 n=0 时依赖边界说明，改为 ≤")
 
@@ -78,6 +81,7 @@ def test_fs_edit_refuses_an_ambiguous_match(store):
 
     ambiguous = "what is missing is the proof of the two steps"
     assert paper.read_text(encoding="utf-8").count(ambiguous) == 2, "夹具前提：这句必须出现两次"
+    assert reg.call("fs.read", path="out/paper/main.tex").ok, "夹具前提：读后写那一闸"
     got = reg.call("fs.edit", path="out/paper/main.tex", old_string=ambiguous, new_string="X")
 
     assert not got.ok, "歧义匹配必须拒绝（替换错地方比不替换更坏）"
@@ -97,6 +101,7 @@ def test_fs_edit_refuses_a_stale_sha(store):
     stale = hashlib.sha256(b"another version").hexdigest()
     reg = _registry(root)
 
+    assert reg.call("fs.read", path="out/paper/main.tex").ok, "夹具前提：读后写那一闸"
     got = reg.call("fs.edit", path="out/paper/main.tex",
                    old_string="\\begin{lemma}[floor lemma]", new_string="\\begin{lemma}[FLOOR]",
                    sha256=stale)
@@ -111,6 +116,7 @@ def test_fs_edit_refuses_the_three_other_edges(store):
     before = paper.read_bytes()
     reg = _registry(root)
 
+    assert reg.call("fs.read", path="out/paper/main.tex").ok, "夹具前提：读后写那一闸"
     empty = reg.call("fs.edit", path="out/paper/main.tex", old_string="", new_string="X")
     missing = reg.call("fs.edit", path="out/paper/main.tex", old_string="这段不在文件里", new_string="X")
     huge = reg.call("fs.edit", path="out/paper/main.tex", old_string="\\begin{lemma}[floor lemma]",
