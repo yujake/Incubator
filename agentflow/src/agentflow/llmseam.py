@@ -92,6 +92,13 @@ class SeamCall:
     #: 这一趟回复里的思维链字数（上游 `message.reasoning_content`）。
     #: 只记字数不记原文：与 `tool_call_list` 不进 `to_dict()` 同一条纪律（会随每次调用膨胀）。
     reasoning_chars: int = 0
+    #: 思维链的原文（S-C / 12-A=乙 之后才带上；空串 = 上游没给）。
+    #:
+    #: 为什么不进 `to_dict()`：它逐字可能上千字，每条 `llm_call` 事件都抄一份会把
+    #: 会话记录撑大（与 `tool_call_list` 同一条纪律）。它的归属地是消息序列里
+    #: assistant 那条的 `reasoning_content`（以及随后那条 `agent_step` 事件的
+    #: `reasoning` 格 —— 序列要能从事件重建，见 `agent_loop.resume_messages`）。
+    reasoning: str = ""
     #: 模型给了几条结构化工具调用（0 = 没给，于是回落去解析文本）。
     tool_calls: int = 0
     #: 原始的 `tool_calls`（`ask_step` 要把它们翻成循环的形状）。
@@ -344,6 +351,8 @@ class LlmSeam:
             # "它实际想了多少字"：结果面的读数。它与 `base` 里的 `reasoning_effort`
             # 成对，四种组合各自指向不同的修法（见 `SeamCall.reasoning_effort` 那段）。
             reasoning_chars=len(str(getattr(reply, "reasoning", "") or "")),
+            # 原文那一条（12-A=乙：下一轮原样带回去）—— 只有它能让"它记得自己想过什么"成立。
+            reasoning=str(getattr(reply, "reasoning", "") or ""),
             problem="" if getattr(reply, "ok", False) else "judge_failed:ModelReplyNotOk",
             detail=str(getattr(reply, "error_detail", "") or ""),
             tokens_in=int(getattr(reply, "tokens_in", 0) or 0),

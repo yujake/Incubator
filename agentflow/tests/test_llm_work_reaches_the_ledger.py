@@ -263,7 +263,7 @@ def test_the_closing_step_still_leaves_no_agent_step_event(tmp_path: pathlib.Pat
 
     这不是"漏改"，是选择：补一条 `agent_step(shape="final")` 会让
     `resume_transcript` 重建的简报多一行（它按 `agent_step` 逐条重拼），于是
-    `tests/test_user_channel_stop_and_resume.py::test_resume_transcript_is_byte_equal_to_the_live_transcript`
+    `tests/test_user_channel_stop_and_resume.py::test_resume_messages_is_item_equal_to_the_live_sequence`
     那条"重建 == 当时那一份"的判据就守不住了。所以留痕走 `agent_run_end`。
     这一条把那个取舍钉住：谁哪天改成"顺手补一条 step 事件"，这里会红。
     """

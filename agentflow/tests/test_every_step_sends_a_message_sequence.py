@@ -128,3 +128,88 @@ def test_an_interjection_is_a_user_message(tmp_path: pathlib.Path) -> None:
     # 序列里 user 那条不掺工具配对（配对判据只认 assistant/tool 两两成对）
     assert AL.message_sequence_problem([AL.user_message(seg), AL.assistant_message(
         0, {"tool": "fs.read"}, content="x"), AL.tool_message(0, "y")]) == ""
+
+
+# ============================================================ 12-A：思维链原样带回去
+
+
+class _ThinkingGateway:
+    """照剧本回答，并在每条回复里带一段"我先想……"（12-A=乙 要带回去的那一段）。"""
+
+    spec = type("Spec", (), {"model": "scripted-thinking", "api_key": "fake"})()
+
+    def __init__(self, replies: list[str], thoughts: list[str]) -> None:
+        self.replies = list(replies)
+        self.thoughts = list(thoughts)
+        self.prompts: list[str] = []
+        self.systems: list[str] = []
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        self.prompts.append(prompt)
+        self.systems.append(str(system or ""))
+        i = min(len(self.prompts) - 1, len(self.replies) - 1)
+        thought = self.thoughts[min(len(self.prompts) - 1, len(self.thoughts) - 1)]
+        return type("Reply", (), {"ok": True, "text": self.replies[i], "reasoning": thought,
+                                  "tokens_in": 7, "tokens_out": 7,
+                                  "error_detail": "", "error_kind": ""})()
+
+
+def _thinking_run(tmp_path: pathlib.Path, thoughts: list[str], sid: str = "t-think"):
+    st, cond, registry, _gw, root = _wired(
+        tmp_path, {"M": [_reply({"tool": "conductor.role_spec", "args": {"role_name": "C"},
+                                 "why": "先看一眼 C 的规格"}), _reply({"final": "收工"})]},
+        max_steps=3)
+    gw = _ThinkingGateway([_reply({"tool": "conductor.role_spec", "args": {"role_name": "C"},
+                                   "why": "先看一眼 C 的规格"}), _reply({"final": "收工"})],
+                          thoughts)
+    run = run_role("M", "带着心里话跑两步", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw,
+                                price=(0.0, 0.0), sid=sid),
+                   workspace_root=str(root), sid=sid, from_env=False)
+    return run, gw, root
+
+
+def test_the_thinking_is_carried_back_verbatim(tmp_path: pathlib.Path) -> None:
+    """正控（12-A=乙）：上一段"我先想……"下一轮原样带回去（它记得自己想过什么）。
+
+    两处一起判：① 序列里 assistant 那条带 `reasoning_content`；② 下一个提示词里真的
+    念了出来（DSH 靠消息字段带回去，我们的传输面是一段文本 ⇒ 它必须出现在 prompt 里）。
+    """
+    thought = "我先想：C 是只读角色，规格读一次就够，别重复问。"
+    run, gw, _root = _thinking_run(tmp_path, [thought])
+    assistant = run.messages[1]
+    assert assistant["role"] == "assistant", assistant
+    assert assistant.get("reasoning_content") == thought, assistant
+    assert thought in gw.prompts[1], gw.prompts[1][:400]
+    assert "[第 1 步] 我先想：" in gw.prompts[1], gw.prompts[1][:200]
+    assert AL.message_sequence_problem(run.messages) == ""
+
+
+def test_no_thinking_means_no_thinking_block(tmp_path: pathlib.Path) -> None:
+    """负控（不许凭空造一格）：没给思维链 ⇒ 序列里没有那一格、提示词里也没有那一行。
+
+    "它没想"与"它想了但原文丢了"必须分得开 —— 凭空写一个空的"我先想"会让两者同形。
+    """
+    run, gw, _root = _thinking_run(tmp_path, [""])
+    assert "reasoning_content" not in run.messages[1], run.messages[1]
+    assert "我先想" not in gw.prompts[1], gw.prompts[1][:300]
+    assert AL.render_messages(run.messages) == run.transcript
+
+
+def test_a_long_thought_is_truncated_with_the_marker_in_itself(tmp_path: pathlib.Path) -> None:
+    """正控（截断写在消息里）：超长思维链按落档那一把尺截断，标记就在那段文本里。
+
+    施工单 §3 第 4 条：「截断这件事要写进那条消息本身」。这一条同时钉住"进消息的那一份
+    与落档的那一份是同一个字符串" —— 少了这半句，重建出来的序列会与当时那份差一截。
+    """
+    thought = "想" * (AL.RECORD_CHARS + 500)
+    run, _gw, root = _thinking_run(tmp_path, [thought], sid="t-long")
+    got = run.messages[1].get("reasoning_content") or ""
+    assert got.endswith("字）"), got[-40:]
+    assert len(got) < len(thought), (len(got), len(thought))
+    assert "落档截断" in got, got[-60:]
+    rebuilt, step0 = AL.resume_messages(root, "M", "t-long", task="带着心里话跑两步")
+    # 这一趟只有第 0 步落过 `agent_step`（收工那一步不落：它走的是收工那一支）
+    assert step0 == 1, step0
+    assert rebuilt == run.messages, "截断口径在当时与重建两边不一致"

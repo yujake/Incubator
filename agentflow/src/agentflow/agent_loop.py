@@ -582,17 +582,26 @@ def user_message(content: str) -> dict[str, Any]:
 
 
 def assistant_message(step: int, payload: Mapping[str, Any], *,
-                      content: str = "", name: str = "") -> dict[str, Any]:
+                      content: str = "", name: str = "",
+                      reasoning: str = "") -> dict[str, Any]:
     """一条 assistant 消息：它在这一步要求了哪一件事（`tool_calls` 那半）。
 
     `content` 放"你说了"那半（渲染回文本时与改前逐字相同）；`tool_calls` 是结构化的
     那一份（这才是序列化的收益：谁调的、参数是什么，不必再从一行散文里解析）。
+
+    `reasoning`（12-A=乙，业主裁定"原样带回去"）：那一趟"我先想……"的原文，
+    占 `reasoning_content` 那一格（DSH 的同名格）。只有非空才写那一格 ——
+    写一个空串会让"它没想"与"它想了但原文丢了"在盘上长得一样。
     """
     shape = str(name or payload.get("tool") or payload.get("shape") or "step")
-    return {"role": "assistant", "content": str(content),
-            "tool_calls": [{"id": call_id_of(step), "type": "function",
-                            "function": {"name": shape,
-                                         "arguments": _clip(_canonical(payload), ECHO_CHARS)}}]}
+    out: dict[str, Any] = {"role": "assistant", "content": str(content),
+                           "tool_calls": [{"id": call_id_of(step), "type": "function",
+                                           "function": {"name": shape,
+                                                        "arguments": _clip(_canonical(payload),
+                                                                           ECHO_CHARS)}}]}
+    if reasoning:
+        out["reasoning_content"] = str(reasoning)
+    return out
 
 
 def tool_message(step: int, content: str, *, name: str = "") -> dict[str, Any]:
@@ -605,12 +614,47 @@ def tool_message(step: int, content: str, *, name: str = "") -> dict[str, Any]:
 
 
 def render_messages(messages: Sequence[Mapping[str, Any]]) -> str:
-    """把序列渲染成那份 prompt 文本（S-C 第 ① 步：`transcript` 从载体降成渲染）。
+    """把序列渲染成那份 prompt 文本（S-C：`transcript` 从载体降成渲染）。
 
     逐字不变这件事是刻意的：`run.transcript` 的所有读者（Web UI 的事件回放、续跑、
-    `--resume`）在这一步之后照旧拿到同一份文本 —— 换的是"谁是载体"，不是"念出来是什么"。
+    `--resume`）拿到的是同一份文本 —— 换的是"谁是载体"，不是"念出来是什么"。
+
+    一处例外（12-A=乙，业主裁定"原样带回去"）：assistant 那条若带 `reasoning_content`，
+    它会原样出现在那一句之前，前缀只有"我先想："那几个字（文本传输面唯一需要的结构标记
+    —— DSH 靠消息字段把思维链带回去，我们的传输面是一段文本 ⇒ 它必须念出来）。
+    代价是提示词变长（裁定里写明的），收益是"它记得自己想过什么"。
     """
-    return "".join(str(m.get("content") or "") for m in messages)
+    parts: list[str] = []
+    for m in messages:
+        thought = str(m.get("reasoning_content") or "")
+        if thought:
+            parts.append(f"\n\n[第 {_step_of_call_id(m)} 步] 我先想：{thought}")
+        parts.append(str(m.get("content") or ""))
+    return "".join(parts)
+
+
+def _step_of_call_id(message: Mapping[str, Any]) -> int:
+    """从 `tool_calls[0].id`（`call-<n>`）读回步号 —— 渲染"我先想"那一行要用它。"""
+    for c in (message.get("tool_calls") or []):
+        if isinstance(c, Mapping):
+            cid = str(c.get("id") or "")
+            if cid.startswith("call-") and cid[5:].isdigit():
+                return int(cid[5:])
+    return 0
+
+
+def _recorded_reasoning(text: str) -> str:
+    """思维链落档/进消息用的是同一份文本（12-A=乙 的 item-相等前提）。
+
+    为什么要过 `_for_record` 这一道：一段上千字的思维链会随每一步进会话记录，
+    而"落档截断"的口径在本仓只有一处（`RECORD_CHARS`）。让消息与事件共用那一份，
+    两件事同时成立：① 重建序列与当时那份逐条相等；② 截断标记就在那条消息的文本里
+    （"截断这件事要写进那条消息本身"，施工单 §3 第 4 条）。
+    """
+    raw = str(text or "")
+    if not raw:
+        return ""
+    return str(_for_record({"reasoning": raw})["reasoning"])
 
 
 def message_sequence_problem(messages: Sequence[Mapping[str, Any]]) -> str:
@@ -836,7 +880,7 @@ class LoopRun:
     #: 为什么不改走"给 final 补一条 `agent_step`"：那会把收工那一步塞进
     #: `resume_transcript` 重建的简报里（它按 `agent_step` 逐条重拼），于是"重建的那一段"
     #: 与"当时拼的那一段"不再逐字相等 —— 那是续跑正确性的判据
-    #: （`tests/test_user_channel_stop_and_resume.py::test_resume_transcript_is_byte_equal_to_the_live_transcript`），
+    #: （`tests/test_user_channel_stop_and_resume.py::test_resume_messages_is_item_equal_to_the_live_sequence`），
     #: 代价比多三个字段大得多。所以这一格与 `agent_run_end` 一起落盘。
     final_payload: dict[str, Any] = field(default_factory=dict)
     #: 这一趟停在等哪个问题（`stop_reason="waiting_for_user"` 时非空）。
@@ -2308,15 +2352,16 @@ class AgentLoop:
 
     def run(self, task: str, *, summoned_by: str = "", my_task_id: str = "",
             parent_task_id: str = "", surface: str = "",
-            depth: int = 1, resumed: tuple[str, int] | None = None,
+            depth: int = 1, resumed: tuple[Sequence[Mapping[str, Any]], int] | None = None,
             waiting_for: str = "") -> LoopRun:
         """跑一次循环。`task` 是这次要做的事（被召唤时就是调用方给的参数）。
 
-        `resumed` 是 `(重建出来的 transcript, 从第几步接着跑)`（由 `run_role` 在
-        `--resume` 那一趟里从检查点 + 会话记录算出来，见 `resume_transcript`）。
-        给了它就「不再自己拼开头」 —— 那一趟要接着说的正是"它上次说过的那些话"，
-        重拼一遍等于换一段话重新开始。收件箱那一段仍然现读（新到的留言本来就该听到），
-        投递登记也照旧做（那两件事是"这一趟"的事实，不是"上一趟"的）。
+        `resumed` 是 `(重建出来的消息序列, 从第几步接着跑)`（由 `run_role` 在
+        `--resume` 那一趟里从检查点 + 会话记录算出来，见 `resume_messages`）——
+        S-C 第 ② 步之前它是"一段文本"，现在是序列本身：给了它就「不再自己拼开头」，
+        那一趟要接着说的正是"它上次说过的那些话"，重拼一遍等于换一段话重新开始。
+        收件箱那一段仍然现读（新到的留言本来就该听到），投递登记也照旧做
+        （那两件事是"这一趟"的事实，不是"上一趟"的）。
         """
         t0 = time.monotonic()
         self.my_task_id = my_task_id
@@ -2412,9 +2457,11 @@ class AgentLoop:
                 _opening_transcript(task, inbox=inbox, summoned_by=summoned_by,
                                     task_id=my_task_id, depth=depth))]
         else:
-            rebuilt_text, start_step = resumed
+            rebuilt, start_step = resumed
             run.resumed_from = start_step
-            messages = [user_message(rebuilt_text)]
+            # S-C 第 ② 步：续跑拿到的是消息序列（不是一段文本）——
+            # 于是"接着上次那份对话"这句话从"两段字符串相等"变成"两条序列逐条相等"。
+            messages = [dict(m) for m in rebuilt]
             # 注意：这里「不」把"上一趟停在等谁"写进 `run.waiting_for`。
             # 那个字段的口径是"这一趟停在等谁"，而上一趟的值只进下面那条 start 事件
             # （它是续跑的输入面）。混用会让一趟收工（final）的 run_end 事件里
@@ -2887,16 +2934,25 @@ class AgentLoop:
                     result = {**result, "参数表": hint}
             step_obj = LoopStep(step, shape, payload, _for_record(result))
             run.steps.append(step_obj)
-            SS.append(self.session_root, {
+            # 12-A=乙：思维链原样带回去。进消息与进事件的是同一份文本
+            # （`_recorded_reasoning` 走的截断口径与落档一致）—— 于是"当时那份序列"
+            # 与"从事件重建的那份序列"逐条相等（`resume_messages` 的判据靠这一条成立），
+            # 而"这段被截过"这件事本身写在文本里（不静默截断）。
+            thought = _recorded_reasoning(call.reasoning)
+            event: dict[str, Any] = {
                 "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
                 "payload": dict(payload), "result": dict(step_obj.result),
-            }, sid=self.sid)
+            }
+            if thought:
+                event["reasoning"] = thought
+            SS.append(self.session_root, event, sid=self.sid)
             # S-C（裁定 5甲）：这一笔进消息序列 —— assistant（它要求了什么，
             # 结构化一份 `tool_calls`）+ tool（框架给了什么，`tool_call_id` 配对）。
             # 渲染回文本与改前 `_step_line` 逐字相同（`_spoken_half`/`_result_half` 是
             # 那两个"半句"的唯一拼法，`_step_line` 也由它们拼出来）。
             messages.append(assistant_message(step, payload, name=shape,
-                                              content=_spoken_half(step, payload)))
+                                              content=_spoken_half(step, payload),
+                                              reasoning=thought))
             messages.append(tool_message(step, _result_half(result), name=shape))
             # ---- 原地打转：同调用 + 同读数连着到上限 ⇒ 这一趟收在这里（不再是"步数用尽"）
             #
@@ -4993,15 +5049,30 @@ def _is_fresh_run_start(event: Mapping[str, Any]) -> bool:
 
 def resume_transcript(session_root: Path | str, role: str, sid: str | None,
                       *, task: str) -> tuple[str, int]:
-    """从会话记录重建"本趟"的 transcript，返回 `(transcript, 下一个 step)`。
+    """从会话记录重建"本趟"的 transcript（S-C 第 ② 步之后：它是 `resume_messages` 的渲染）。
 
-    ## 判据：与循环里拼出来的那一份逐字一致
+    名字保留是因为它的读者还在（`run_role` 的检查点与拒绝读数都印它，判据也读它）；
+    但它现在是一层薄壳：`render_messages(resume_messages(...))`。
+    于是"重建两份"这件事在结构上不成立 —— 序列是真身，文本是渲染。
+    """
+    messages, step = resume_messages(session_root, role, sid, task=task)
+    return render_messages(messages), step
+
+
+def resume_messages(session_root: Path | str, role: str, sid: str | None,
+                    *, task: str) -> tuple[list[dict[str, Any]], int]:
+    """从会话记录重建"本趟"的消息序列，返回 `(messages, 下一个 step)`（S-C 第 ② 步）。
+
+    ## 判据：与循环里那份逐条相等（含思维链那一格）
 
     重建只认两样东西：本趟的起点（最后一条"全新开始"的 `agent_run_start`，
     它带着任务 / 发起者 / 深度 / 台账号）与它之后逐条落盘的 `agent_step` 事件。
-    每一行的拼法都走 `agent_loop` 里那几个模块级函数
-    （`_opening_transcript` / `_step_line` / `_invalid_line` / ...）——
-    循环里也是它们，所以"两处拼法"这件事在结构上不成立。
+    每一条消息都走 `agent_loop` 里那几个模块级函数
+    （`_opening_transcript` / `_spoken_half` / `_result_half` / `*_line` / `assistant_message` /
+    `tool_message`）—— 循环里也是它们，所以"两处拼法"这件事在结构上不成立。
+
+    思维链（12-A=乙）：事件里那一格 `reasoning` 就是当时进消息的那一份
+    （`_recorded_reasoning` 与落档同一把尺）⇒ 重建出来的 `reasoning_content` 与当时逐字相同。
 
     ## 窗口怎么定（这是最容易读错的一段）
 
@@ -5035,7 +5106,7 @@ def resume_transcript(session_root: Path | str, role: str, sid: str | None,
     fresh_mine = [i for i in role_starts
                   if _is_fresh_run_start(events[i]) and str(events[i].get("task")) == task]
     if not fresh_mine:
-        return "", 0
+        return [], 0
     begin = fresh_mine[-1]
     fresh_any = [i for i in role_starts if _is_fresh_run_start(events[i])]
     end = next((i for i in fresh_any if i > begin), len(events))
@@ -5045,10 +5116,11 @@ def resume_transcript(session_root: Path | str, role: str, sid: str | None,
     inbox, _fresh, _problems2 = inbox_digest(root, role, sid=sid,
                                              parent_task_id=str(head.get("parent_task_id") or ""),
                                              parent_role=str(head.get("summoned_by") or ""))
-    parts = [_opening_transcript(task, inbox=inbox,
-                                 summoned_by=str(head.get("summoned_by") or ""),
-                                 task_id=str(head.get("task_id") or ""),
-                                 depth=int(head.get("depth") or 1))]
+    out: list[dict[str, Any]] = [user_message(
+        _opening_transcript(task, inbox=inbox,
+                            summoned_by=str(head.get("summoned_by") or ""),
+                            task_id=str(head.get("task_id") or ""),
+                            depth=int(head.get("depth") or 1)))]
     next_step = 0
     for e in events[begin + 1:end]:
         if e.get("kind") != "agent_step" or str(e.get("role")) != role:
@@ -5057,18 +5129,24 @@ def resume_transcript(session_root: Path | str, role: str, sid: str | None,
         shape = str(e.get("shape") or "")
         payload = e.get("payload") if isinstance(e.get("payload"), Mapping) else {}
         result = e.get("result") if isinstance(e.get("result"), Mapping) else {}
+        thought = str(e.get("reasoning") or "")
         if shape == "invalid":
             problem = str(result.get("problem") or "")
             if problem == "judge_bad_args":
-                parts.append(_bad_args_line(step, str(result.get("detail") or "")))
+                correction = _bad_args_line(step, str(result.get("detail") or ""))
             elif problem == "judge_bad_json":
-                parts.append(_bad_json_line(step, problem, str(result.get("detail") or "")))
+                correction = _bad_json_line(step, problem, str(result.get("detail") or ""))
             else:
-                parts.append(_invalid_line(step, problem))
+                correction = _invalid_line(step, problem)
+            out.append(assistant_message(step, payload, name=shape, reasoning=thought))
+            out.append(tool_message(step, correction, name=shape))
         else:
-            parts.append(_step_line(step, payload, result))
+            out.append(assistant_message(step, payload, name=shape,
+                                         content=_spoken_half(step, payload),
+                                         reasoning=thought))
+            out.append(tool_message(step, _result_half(result), name=shape))
         next_step = max(next_step, step + 1)
-    return "".join(parts), next_step
+    return out, next_step
 
 
 def _task_fingerprint(role: str, task: str) -> str:
@@ -5263,7 +5341,9 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                                       f"用 `agentflow --root {root} answer {waiting} \"<回答>\"{f' --sid {sid}' if sid else ''}` 答完，再用 "
                                        f"`agentflow --root {root} run-agent --resume …"
                                        f"{f' --sid {sid}' if sid else ''}` 续跑。"))
-        rebuilt, step0 = resume_transcript(root, role, sid, task=task)
+        # S-C 第 ② 步：续跑的载体换成了消息序列（`resume_messages`）——
+        # 重建出来的那份要么逐条相等、要么这一步没查成（三态：不猜、不从第 1 步重跑）。
+        rebuilt, step0 = resume_messages(root, role, sid, task=task)
         if step0 <= 0:
             _note_resume_refusal(root, role, task, sid, "resume_no_transcript",
                                  attempted_from=int(cp.get("step") or 0))
