@@ -1433,18 +1433,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 仍只换 M 那一格。
 #: `p64`（2026-10-10，裁定 10丙「提醒3次、判停5次」+ 12-F 计数按委托记账）：那一句散文在
 #: 十格里都有（"别原地打转"是共用段）⇒ 十格全换；这正是"改一个数字、十格都动"的读数。
-_FROZEN_PROMPT_VERSION = "p64"
+#: `p65`（2026-10-10，S-F 裁定 12-K「步数上限不作硬标准」）：把"步数或预算耗尽时你必须收工 /
+#: 框架会在最后一步要求你收工"改成"预算耗尽才收工 + 每满阈值向父代理报一次账"，另两处
+#: "步数有限"的说辞同样改掉 ⇒ 换的是共用段（循环协议），所以十格全换。
+_FROZEN_PROMPT_VERSION = "p65"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "a1c3f459d952b6f11aa715dd4845840ed95ad799e75e49a4cd496300cda9559b",
-    "B": "5b58c4aa93b266beb2da526621b0d87fce05bb0ede0970ff1a33e3f460bee429",
-    "C": "0abf0025d95b773d4cece1c5875cbb1225d3f02ebbb8f9739c42feccb19f2406",
-    "D": "706267133e72ab152204e4555e03731adb62aa6fa0a2abec1d9c78cc34da31e7",
-    "E": "889abeaa37f66b7add25b1639f8f4160c055dfb5861742e1c13893d0dcb3e524",
-    "F": "ead0b772200b0a2a43a930e8be6dd2235b94463f6640a873158a3969c7246beb",
-    "G": "2439efc0581b2721e9ac5b44b61beee3f985b72d8a72d2ecf80b4a6274f1382f",
-    "H": "81a9ab009eaa1155e722de5b16abba18a579f0aca6e6581b6366538e0ead77f6",
-    "V": "c7b1cde5b586322dee9f96dbf081e5df9012af9bc74102695f3e2e222fc0cf8c",
-    "M": "e092396a83fc39d7c8b724cec3bb5078d30b8e1d4e05055e6f014efa52241ccf",
+    "A": "a715c153a7f5d154120ba235588479ff06531977bdbc9d4d2762f94ea75dc4da",
+    "B": "21255fcbf1b848b8003c5c66c71627dae7260175ab39f388cc426138a140e28c",
+    "C": "0b23affd5f46711a4fbac8666142e1b60de78f965d116b55255e8d2d087ecaa3",
+    "D": "191039aa17f225b06f949c7cf53a028d6346e8a3fcecba37c5a66688b3423540",
+    "E": "141b63258d2ed5bff39d53decd4c596cb03a8563b595ef612c195bab2b752bac",
+    "F": "6150d313673d86abdad4357409629e0ac45c6944912376fcb256f11c05d615e9",
+    "G": "a9496e51db7d75d2756ab65a6f639666c7b0cc8dfdd1688d97108553b1d257ed",
+    "H": "f2f008a3e33757af2c658574b7571cd29b88895d04b04ef18c49ded89b04fa7d",
+    "V": "a40d4d6433a6753ccd22b6ded91cbe4b817e8990ca19a12878d84879353e215b",
+    "M": "75e01fed60470e81b7bee92a7fded06b8feba5c4e880fcfcb9d830948c2e63b6",
 }
 
 

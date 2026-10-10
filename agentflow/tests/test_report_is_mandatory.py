@@ -119,11 +119,20 @@ def test_no_conductor_is_reported_not_swallowed(tmp_path: pathlib.Path):
 
 
 def test_a_non_terminal_run_is_not_reported(tmp_path: pathlib.Path):
-    """负控（边界）：没停在终态（步数用尽 / 还在等用户）⇒ 不补通报 —— 它不是"跑完了"。"""
+    """负控（边界）：没停在终态（还在等用户 / 还没有定论）⇒ 不补通报 —— 它不是"跑完了"。
+
+    名单换过一格（裁定 12-K）：改前这里还有 `"max_steps"`，因为那时步数用尽是真的会
+    收工的一档；现在循环不再因步数收工（步数只上报、由父代理决定放行还是刹停），
+    那一格就成了一个永远不会为真的分支，与它一起从名单与源码里删掉。
+    """
     from agentflow.agent_loop import AgentLoop
 
     stub = type("S", (), {"conductor": object(), "role": "D", "session_root": tmp_path,
                           "sid": "x", "my_task_id": "", "depth": 1})()
-    for reason in ("max_steps", "waiting_for_user", ""):
+    for reason in ("waiting_for_user", ""):
         run = type("R", (), {"stop_reason": reason, "handoffs": [], "final": "x"})()
         assert AgentLoop._emit_settlement(stub, run) == "", reason
+    # 正控对照（判据不许空转）：换成真的终态理由，它就必须去落板 ——
+    # 这里用替身 conductor（`object()`）让它落不成，于是读数是那句"没落板"。
+    done = type("R", (), {"stop_reason": "final", "handoffs": [], "final": "x"})()
+    assert "终态回报没落板" in AgentLoop._emit_settlement(stub, done)

@@ -136,7 +136,10 @@ _HASHED = re.compile(r"\.[A-Za-z0-9_-]{8,}\.")
 _STOP_BADGES = {
     "final": ("badge-pass", "跑完"),
     "budget": ("badge-unknown", "预算用尽"),
-    "max_steps": ("badge-unknown", "步数用尽"),
+    # 裁定 12-K 之后循环不再产生它（步数只上报、不收工），这一格留着是给历史读数
+    # 用的：旧会话记录里真有 `max_steps` 的趟，徽标表要把它们解释得出来。
+    # 与"读它去决定行为"是两件事 —— 决策点上那一格已经删了（`agent_loop._emit_settlement`）。
+    "max_steps": ("badge-unknown", "步数用尽（旧读数）"),
     "not_wired": ("badge-fail", "没接线"),
     "bad_json_limit": ("badge-fail", "坏 JSON 连击"),
     "bad_args_limit": ("badge-fail", "坏参数连击"),

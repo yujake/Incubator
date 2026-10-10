@@ -2423,7 +2423,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "想离线验证这条链路就写 `--provider fixture`")
     #: 默认 30（`draft/37` §16 P0）：默认 6 的时候，一个被驱动的动作连"读完一段正文"都不够
     #: —— 真机实测 G 拿了 151 步、89 次在读，最后还是没能落盘一处改动，而框架默认只给 6 步。
-    sp.add_argument("--max-steps", type=_non_negative_int, default=30, help="单次循环最多几步")
+    #: 它是报告阈值、不是闸（裁定 12-K）：超过它只会向上报一次账，不强制收工。
+    sp.add_argument("--max-steps", type=_non_negative_int, default=30,
+                    help="每满几步向父代理报一次步数账（不设步数闸：超了不强制收工）")
     #: 墙钟（`policy.wall_clock_sec`）默认 900 秒：真机里第 8 次派活就是被它挡下的（`deadline_exceeded`）。
     #: 放成可配而不是写死：长任务（审一篇论文）该给一小时量级，短任务仍可以压到几分钟。
     sp.add_argument("--wall-clock-sec", type=float, default=3600.0,

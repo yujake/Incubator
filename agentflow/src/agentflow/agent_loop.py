@@ -1846,6 +1846,18 @@ class AgentLoop:
         return (str(row.get("parent_task_id") or ""),
                 str(row.get("called_by") or ""), "")
 
+    def _step_counter(self, start: int) -> Iterator[int]:
+        """步号计数器：无限（业主 2026-10-10 裁定 12-K：步数上限不作硬标准、不设机器闸）。
+
+        为什么单独一个方法而不是在循环里写 `while True`：这一句就是那条裁定的落点本身，
+        值得有个能被 grep 到的名字与 docstring（判据也直接打在它上面）。
+        出口不在这里 —— 循环的 `break` 各自带 `stop_reason`（收工/叫停/预算/墙钟/判停/未接线…）。
+        """
+        step = start
+        while True:
+            yield step
+            step += 1
+
     def _resolve_parent(self, given: str, summoned_by: str) -> tuple[str, str, str]:
         """定这一趟的收件人：`(父的台账号, 父的角色, 问题)`。三条分支，逐条都有理由。
 
@@ -1930,10 +1942,13 @@ class AgentLoop:
         return head if len(kids) <= 20 else f"{head} …等 {len(kids)} 个"
 
     def _prompt(self, transcript: str, *, step: int) -> str:
-        last = step >= self.max_steps - 1
-        tail = ("这是最后一步：不要再调用工具、不要再唤起伙伴，直接输出 "
-                '{"final": "<结论>", "evidence": [...]}。' if last else
-                "请按循环协议输出下一步（一个 JSON 对象，"
+        # 步数不是收工理由（业主 2026-10-10 裁定 12-K）⇒ 这一段里不再有
+        # "这是最后一步"这一支。改前它在第 `max_steps` 步上对模型说
+        # 「这是最后一步：不要再调用工具…直接输出 final」—— 那是硬闸的口吻，
+        # 模型读到它会赶在线上交一个没做完的结论；而循环当时确实会收工，
+        # 所以那句话是真的。现在循环不再因步数收工，这句话就成了谎话
+        # （比没有更糟：它会让模型自己把活截断）。留给模型的是报告阈值本身。
+        tail = ("请按循环协议输出下一步（一个 JSON 对象，"
                 f"{len(SHAPES)} 种形状取其一：{' / '.join(SHAPES)}）。")
         # 输出契约重述在最后一行（`draft/28` §195 实测）：
         # 系统提示词有 6k+ token，循环协议埋在中间；真机跑 M 做"核验证明"那种长任务时，
@@ -1949,7 +1964,8 @@ class AgentLoop:
             face_note = ("（本岗同时开了原生工具调用：你可以直接走函数调用接口；"
                          "若仍回一行 JSON，`tool` 字段要写真名（工具清册里那个，"
                          "例如 `fs.read`），不是函数名里的下划线写法。两种都可以。）\n")
-        return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（最多 {self.max_steps} 步）。{tail}\n"
+        return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
+                f"每满 {self.max_steps} 步会向父代理报一次账，由它决定继续放行还是刹停）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"{face_note}"
                 f"{JSON_TAIL}")
@@ -2240,8 +2256,46 @@ class AgentLoop:
         counters_reset_at = start_step        # 最近一次清零发生在第几步（可复核"这一次委托从哪算起"）
         #: 这一步收到的插话（叫停类要在这一步做完之后落一条"有没有改变做法"的读数）。
         pending_interjections: dict[str, Any] | None = None
+        #: 步数上报（业主 2026-10-10 裁定 12-K 逐字：「步数上限不做为硬标准，不设机器闸，
+        #: 但向父代理报告步数超限行为，由父代理决定继续放行还是刹停」）⇒
+        #: `max_steps` 从"循环自己收工的理由"变成报告阈值：跨过它只落一条上报，
+        #: 循环照常继续（父代理什么都不做 ⇒ 继续跑；要停由它走 `interrupt`）。
+        #: 保留的闸只有两件 —— 预算与墙钟（它们不是"轮次预算"），以及 S-D 那道判停。
+        reports_sent = 0
+        next_report_at = max(1, int(self.max_steps))
 
-        for step in range(start_step, self.max_steps):
+        #: 不设步数硬闸（照 DSH：它的 agent-loop 里没有 maxSteps 这类字段）。
+        #: 出口只有 `break`（收工 / 叫停 / 预算 / 墙钟 / 判停 / 未接线…），每个都带自己的 stop_reason。
+        for step in self._step_counter(start_step):
+            if step + 1 >= next_report_at:
+                # 跨过阈值 ⇒ 上报（四样读数：已用步数 / 最近在做什么 / 花了多少 / 还没交 final）。
+                # 它不改循环行为：父代理不动作就继续跑 —— 这正是本裁定的核心判据。
+                reports_sent += 1
+                next_report_at += max(1, int(self.max_steps))
+                step_note = (
+                    f"步数超限报告（第 {reports_sent} 次）：已用 {step + 1} 步（阈值 {self.max_steps}）；"
+                    "最近三步：" + "；".join(_call_brief(s.shape, s.payload) for s in run.steps[-3:])
+                    + f"；花销 {self._budget_text()}；到这一步为止没有 final。"
+                )
+                SS.append(self.session_root, {
+                    "kind": "agent_note", "role": self.role, "note": step_note,
+                    "steps_used": step + 1, "threshold": int(self.max_steps),
+                    "reports_sent": reports_sent,
+                }, sid=self.sid)
+                # 报给父代理；主控是顶层（`depth == 1`，上面没有人可发）⇒ 读数留在会话里，
+                # 由它自己裁。判"有没有父"用的是层号而不是 `summoned_by`：
+                # `run_role` 给顶趟的 `summoned_by` 填的就是 `S.CONDUCTOR_ROLE`
+                # （`agent_loop.py:4814`），所以"父的角色是 M"这件事既可能是顶层、
+                # 也可能是"被 M 召唤的孩子"—— 两者用 `summoned_by` 分不开，
+                # 而 `depth` 分得开（顶趟 1、被召唤 2 起，`agent_loop.py:4815`）。
+                parent_role = str(self.parent_role or "")
+                if int(self.depth or 1) > 1 and parent_role:
+                    _mid, mproblem = send_message(
+                        self.session_root, sender=self.role, to=parent_role,
+                        subject=f"步数超限：{self.role} 已用 {step + 1} 步",
+                        body=step_note, sid=self.sid, from_task_id=my_task_id)
+                    if mproblem:
+                        run.notes.append(f"步数上报未送达：{mproblem}")
             stop_reason = self._user_stop_reason(run)
             if stop_reason:
                 # 人叫停：把这一步之前做过的事「如实收尾」（不是把进程杀掉）。
@@ -2658,8 +2712,9 @@ class AgentLoop:
                                  f"问题还在待答清单里 —— 取消不等于用户答过了")
                 break
         else:
-            run.stop_reason = "max_steps"
-            run.final = run.final or f"步数用尽（{self.max_steps} 步）仍未给出 final"
+            # 到不了这里（上面的 `for` 走的是无限计数器，裁定 12-K：不设步数硬闸）。
+            # 留着这一支只为"万一有人把计数器换成有限 range"时不静默：见下面的判据。
+            run.stop_reason = "no_progress_limit"
 
         run.spend = self.seam.spend.to_dict()
         run.elapsed_sec = time.monotonic() - t0
@@ -4045,8 +4100,12 @@ class AgentLoop:
         "这一趟自己"，与改前逐字相同）。判据：`tests/test_report_is_mandatory.py` /
         `tests/test_children_and_parent_are_visible.py`（负控：换成自己的编号 ⇒ 红）。
         """
-        if not str(run.stop_reason or "") or run.stop_reason in ("max_steps", "waiting_for_user"):
-            return ""          # 没停在终态（步数用尽/还在等用户）⇒ 它不是"跑完了"，不补通报
+        #: 三档"不停在终态"都在这一行里：正在等用户（`waiting_for_user`）、
+        #: 以及还没定论就让出（空串）。改前这里还有 `"max_steps"` 一格 ——
+        #: 裁定 12-K 之后循环不再产生它（步数只上报、不收工），留着就是一个
+        #: 永远不会为真的分支，所以按"死取值"删掉而不是注释掉。
+        if not str(run.stop_reason or "") or run.stop_reason == "waiting_for_user":
+            return ""          # 没停在终态（还在等用户 / 还没有定论）⇒ 它不是"跑完了"，不补通报
         if run.handoffs:
             return ""          # 模型自撰过 ⇒ 不补第二条（不许把模型的内容淹掉）
         if self.conductor is None:

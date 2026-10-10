@@ -84,6 +84,31 @@ class ScriptedGateway:
                                   "error_detail": "", "error_kind": ""})()
 
 
+class _StopAfterNth(ScriptedGateway):
+    """答到第 `n` 条时把停机开关写下 —— 用真实的叫停通道把这一趟停在第 `n` 步。
+
+    为什么需要它：裁定 12-K 之后步数不再收工，于是"把一趟停在第 3 步"这件事
+    不能再靠 `max_steps`。停机开关是循环里真的会停的那条路（`stop_file`），
+    而且它的检查点在每一步的开头：第 `n` 条回答时写下开关 ⇒ 第 `n + 1` 步的开头
+    读到它 ⇒ 恰好做完 `n` 步。
+    """
+
+    def __init__(self, replies: list[str], root: pathlib.Path, n: int) -> None:
+        super().__init__(replies)
+        self.root = root
+        self.n = n
+        self.fired = False
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        if len(self.prompts) == self.n - 1 and not self.fired:
+            from agentflow import stopctl
+
+            stopctl.request_stop(self.root, reason="判据：够步数了")
+            self.fired = True
+        return super().complete(prompt, scope=scope, system=system, **kw)
+
+
 def ask(text: str = "口径用哪个？", *, timeout: float | None = 0,
         options: Any = None, header: str = "口径") -> str:
     """一条 `ask_user` 剧本行；`timeout=None` 表示不给 `timeout_sec`（吃框架缺省）。"""
@@ -115,7 +140,7 @@ def _run(st: Store, registry: Any, cond: Conductor, root: pathlib.Path,
          replies: list[str], *, role: str = "M", task: str = "把口径定下来",
          max_steps: int = 4, sid: str = "t", resume: bool = False,
          user_timeout_sec: float | None = 0, direct: bool = False,
-         my_task_id: str = "") -> tuple[Any, ScriptedGateway]:
+         my_task_id: str = "", gateway: Any = None) -> tuple[Any, ScriptedGateway]:
     """跑一趟角色循环（用替身模型），返回 `(run, 替身)`。
 
     `user_timeout_sec=0` 是这一组的缺省：它对应"问了就停"（CLI 的 `--user-wait-sec 0`），
@@ -124,7 +149,7 @@ def _run(st: Store, registry: Any, cond: Conductor, root: pathlib.Path,
     `direct=True` 直接建 `AgentLoop`（绕过 `run_role`）：只有子角色那条判据需要它，
     因为"我有没有父任务号"是 `LlmBackend` 在真实召唤里填的，而这里要把它钉死。
     """
-    gw = ScriptedGateway(replies)
+    gw = gateway if gateway is not None else ScriptedGateway(replies)
     seam = LlmSeam(role=role, session_root=root, gateway=gw, price=(0.0, 0.0), sid=sid)
     if direct:
         loop = AL.AgentLoop(role=role, session_root=root, registry=registry, seam=seam,
@@ -292,8 +317,15 @@ def test_resume_transcript_is_byte_equal_to_the_live_transcript(tmp_path: pathli
     模型看到的处境就变了，而"它是不是接着上次说的往下做"就没有判据了。
     """
     st, registry, cond, root = _ws(tmp_path)
-    run, _gw = _run(st, registry, cond, root, [NOTE, NOTE, NOTE], max_steps=3)
-    assert len(run.steps) == 3 and run.stop_reason == "max_steps", run.to_dict()
+    # 停法换过一次（裁定 12-K）：改前这里是 `[NOTE]*3` + `max_steps=3`，靠步数闸
+    # 把这一趟截停；步数不再收工之后那一支不成立了，于是改用停机开关（那条真的会停的路）：
+    # 第 3 条回答时写下开关、第 4 步的开头读到它 ⇒ 做完 3 步停住。
+    # 为什么不能改成"第 3 答复一条 final"：final 那一步不落 `agent_step` 事件
+    # （它走的是收工那一支），重建出来的就只剩 2 步，而"重建 == 当时那一份"这条判据
+    # 衡量的正是"落盘的那几步能不能拼回原样"。
+    gw = _StopAfterNth([NOTE, NOTE, NOTE], root, 3)
+    run, _gw = _run(st, registry, cond, root, [NOTE, NOTE, NOTE], gateway=gw)
+    assert len(run.steps) == 3 and run.stop_reason == "stop_file", run.to_dict()
     rebuilt, step0 = AL.resume_transcript(root, "M", "t", task="把口径定下来")
     assert step0 == 3, step0
     assert rebuilt == run.transcript, "重建的 transcript 与当时那一份不逐字相等"
