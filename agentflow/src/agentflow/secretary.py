@@ -359,6 +359,46 @@ def _state_from(branch: str, retired: bool, cond: Any, task_id: str) -> str:
     return "已停"
 
 
+def _status_enum(facts: Mapping[str, Any], *, retired: bool) -> str:
+    """`status` 那一格（S-H，裁定 14）。前三档照 DSH `list-agents.js:24-29` 逐字。
+
+    - 不在 live registry（我们这边 = 台账里没有它正在跑的行）⇒ `ready`；
+    - 在且 `status in (pending, running)` ⇒ `running`；
+    - 否则 ⇒ `idle`（DSH 的 `maintenance`（正在收尾）也算 idle，我们这边 `closing`
+      那一档同理 —— 收尾不是"在干活"）。
+
+    第四档 `retired` 是如实加的一档（我们的销号名字永久不复用）：
+    DSH 的 `ready` 逐字意思是"没有活着的 Agent、但仍可续"，把销号读成它会让模型
+    去叫一个再也叫不醒的名字 ⇒ 那个错法的代价比"多一个取值"大。
+    """
+    if retired:
+        return "retired"
+    if not facts:
+        # 台账里没有它这一行（未登记 / 已被清）⇒ `ready`：那一档的语义正是
+        # "不在活的登记表里"，而"能不能续"由旁边那格 `state` 回答。
+        return "ready"
+    if str(facts.get("status") or "") in ("pending", "running"):
+        return "running"
+    return "idle"
+
+
+def _diagnose_line(problem: str) -> dict[str, Any]:
+    """一条坏行读数 → 逐行 diagnostic（DSH `list-agents.js:30-47` 的三档）。
+
+    `corrupt` = 那一行不是合法 JSON / 不是对象；`unavailable` = 整个文件读不出来
+    （IO 层失败）；`unsupported` = 其余（形状能读、但我们不认这一行的内容）——
+    第三档留着是因为把"没见过的东西"折进前两档会让"这一行到底坏在哪"失去分辨率。
+    """
+    text = str(problem or "")
+    if "读不出来（" in text and "第 " not in text:
+        kind = "unavailable"
+    elif "第 " in text and "行" in text:
+        kind = "corrupt"
+    else:
+        kind = "unsupported"
+    return {"line": text, "kind": kind}
+
+
 def _clip_text(text: str, limit: int) -> str:
     """剪一段可读的正文（多余部分写清"还有多少字没进来"，不许静默截断）。"""
     body = str(text or "").strip()
@@ -3075,44 +3115,140 @@ class Secretary:
                 return str(r.get("name") or ""), ""
         return "", f"对照表里没有 {task_id}（未登记）"
 
-    def roster_view(self, *, owner: str) -> dict[str, Any]:
-        """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","reason"}`。
+    #: `status` 那一格的取值（S-H，裁定 14）。前三档照 DSH `list-agents.js:24-29` 的算法逐字：
+    #: 不在 live registry ⇒ `ready`；在且在跑 ⇒ `running`；否则 `idle`。
+    #: 第四档 `retired` 是我们的如实加一档（见 `roster_view` 的 docstring）：
+    #: DSH 的 `ready` 说的是"没有活着的 Agent、但仍可续"，而我们的销号名字永久不复用
+    #: ⇒ 把它也读成 `ready` 会让模型去 `send_message` 一个再也叫不醒的名字。
+    STATUS_VALUES: tuple[str, ...] = ("running", "idle", "ready", "retired")
 
-        每一行：`name` / `role` / `brief` / `state`（活跃 / 待命 / 已停 / 已退役）/
+    def roster_view(self, *, owner: str, scope: str = "self",
+                    limit: int = 20) -> dict[str, Any]:
+        """名册视图（只读，不许修补 —— I-15）：`{"checked","rows","more","reason","diagnostics"}`。
+
+        每一行：`name` / `role` / `brief` / `state`（活跃 / 待命 / 已停 / 已退役 / 未登记）/
         `retirable`（按 `conductor.retire_ready` 的三分支）/ `items_open`（只报不拦）/
-        `task_id`（当前调用）。
+        `task_id`（当前调用），外加 S-H（裁定 14）补的三格：
+
+        - `status`：机器可判的那一格（`running` / `idle` / `ready` / `retired`）。
+          为什么要它：中文那五档是给人读的，而"父要不要现在动手"这件事需要一格能直接判的；
+        - `in_flight`：它名下此刻还在跑的任务数（`Conductor.children_facts` 现算）；
+        - `last_reading`：它最近一条工作报告的摘要（`latest_report_of` 的同一份数据，
+          但一次读一份手稿再逐行取，不是每行读一次）。DSH 的 `list_agents` 没有这一格，
+          我们的比它全 ⇒ 照裁定"净减一样别丢"留着。
+
+        `scope="descendants"` 时给全树（每一行多 `parent` 与 `depth`）—— 改前只有下一层。
         规模：默认只回 20 项 + `more`（与 `inbox_digest` 的窗口同族口径）。
+
+        ## 逐行 diagnostic（不再一行坏就整份拒）
+
+        改前：名册里有一行读不出来 ⇒ `{"checked": False, "rows": []}`（整体拒）。
+        DSH 的 `list-agents.js:30-47` 是逐行报 `corrupt/unsupported/unavailable`。
+        现在照它：好行照常渲染，坏行逐条落进 `diagnostics`（带行号与类别）。
+        只有一种情形仍然整体拒：一条好行都没有而坏行有（那时"名册是空的"与
+        "名册读不成"会被折成同一句话，而那正是三态纪律要挡的）。
         """
         cond = self._conductor()
         rows, bad = self.roster_rows(owner)
-        if bad:
-            return {"checked": False, "rows": [], "more": 0,
-                    "reason": f"名册有 {len(bad)} 行读不出来：{bad[0]}"}
+        diagnostics = [_diagnose_line(line) for line in bad]
+        if not rows and bad:
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                    "diagnostics": diagnostics,
+                    "reason": f"名册有 {len(bad)} 行读不出来、且没有一行读得出来：{bad[0]}"}
         if cond is None:
-            return {"checked": False, "rows": [], "more": 0,
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                    "diagnostics": diagnostics,
                     "reason": "没有 store ⇒ 读不到台账（状态判不了）"}
         try:
             ready = cond.retire_ready(owner)
         except Exception as exc:  # noqa: BLE001
-            return {"checked": False, "rows": [], "more": 0,
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                    "diagnostics": diagnostics,
                     "reason": f"就绪读数没读成（{type(exc).__name__}: {exc}）"}
         if not ready.get("checked"):
-            return {"checked": False, "rows": [], "more": 0,
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                    "diagnostics": diagnostics,
                     "reason": f"就绪读数没读成（{ready.get('reason')}）"}
         by_child = {str(r["task_id"]): r for r in ready.get("ready", [])}
+        # 一份手稿读数，逐行取"它最近报了什么"（每行读一次会把名册变成 N 次全表读）。
+        reports: dict[str, str] = {}
+        try:
+            mrows, _mbad = MS.read_rows(self.root)
+            for r in mrows:
+                tid = str(r.get("task_id") or "")
+                if tid and str(r.get("summary") or ""):
+                    reports[tid] = str(r.get("summary") or "")
+        except Exception:  # noqa: BLE001 —— 手稿读不成 ⇒ 那几格空着（不是"它没报过"）
+            reports = {}
+        targets = self._roster_targets(owner=owner, rows=rows, scope=scope, cond=cond)
         out: list[dict[str, Any]] = []
-        for r in rows:
+        for t in targets:
+            r, parent_name, depth = t["row"], t["parent"], t["depth"]
             tid = str(r.get("task_id") or "")
             branch = str((by_child.get(tid) or {}).get("branch") or "")
+            facts = t["facts"]
             state = _state_from(branch, bool(r.get("retired")), cond, tid)
-            out.append({"name": str(r.get("name") or ""), "role": str(r.get("role") or ""),
-                        "brief": str(r.get("brief") or ""), "state": state,
-                        "retirable": branch == "waiting_no_children",
-                        "items_open": int(((by_child.get(tid) or {}).get("reading") or {})
-                                          .get("items_open") or 0),
-                        "task_id": tid})
-        more = max(0, len(out) - 20)
-        return {"checked": True, "rows": out[:20], "more": more, "reason": ""}
+            row: dict[str, Any] = {
+                "name": str(r.get("name") or ""), "role": str(r.get("role") or ""),
+                "brief": str(r.get("brief") or ""), "state": state,
+                "retirable": branch == "waiting_no_children",
+                "items_open": int(((by_child.get(tid) or {}).get("reading") or {})
+                                  .get("items_open") or 0),
+                "task_id": tid,
+                "status": _status_enum(facts, retired=bool(r.get("retired"))),
+                "in_flight": int(facts.get("in_flight") or 0),
+                "last_reading": reports.get(tid, ""),
+            }
+            if scope == "descendants":
+                row["parent"] = parent_name
+                row["depth"] = depth
+            out.append(row)
+        more = max(0, len(out) - int(limit))
+        return {"checked": True, "rows": out[:int(limit)], "more": more, "scope": scope,
+                "diagnostics": diagnostics, "reason": ""}
+
+    def _roster_targets(self, *, owner: str, rows: list[dict[str, Any]], scope: str,
+                        cond: Any) -> list[dict[str, Any]]:
+        """要渲染的那几行（`scope="descendants"` 时是全树，带 `parent`/`depth`）。
+
+        深度上限 64：坏链不许把这里变成死循环（与 `inside_subtree` 的上行链同一条纪律）。
+        每一层的 `facts` 现算一次（`children_facts`）—— 只在要渲染的那几行上算。
+        """
+        def parent_facts(tid: str) -> dict[str, Any]:
+            try:
+                got = cond.children_facts(tid)
+            except Exception:  # noqa: BLE001
+                return {"checked": False}
+            return got
+
+        out: list[dict[str, Any]] = []
+        root_by = dict((parent_facts(owner).get("by_child") or {}))
+        if scope != "descendants":
+            return [{"row": r, "parent": "", "depth": 1,
+                     "facts": dict(root_by.get(str(r.get("task_id") or "")) or {})}
+                    for r in rows]
+        # 全树：逐层往下，每一层的 facts 从它的父那一格里取。
+        # 这一格最容易写错（第一版就是）：`children_facts(X)` 给的是"X 名下"的读数，
+        # 而某一行要的是"它父名下的它自己"那一格 —— 拿 X 去查 X 只会得到空表，
+        # 于是全树的每一行都会读成 `ready`（一个安静的错误：没有任何地方会报错）。
+        queue: list[tuple[dict[str, Any], str, int, dict[str, Any]]] = [
+            (r, "", 1, dict(root_by.get(str(r.get("task_id") or "")) or {})) for r in rows]
+        seen = 0
+        while queue and seen < 512:
+            r, parent_name, depth, facts = queue.pop(0)
+            seen += 1
+            out.append({"row": r, "parent": parent_name, "depth": depth, "facts": facts})
+            if depth >= 64:
+                continue
+            tid = str(r.get("task_id") or "")
+            kids, _bad = self.roster_rows(tid)
+            if not kids:
+                continue
+            by = dict((parent_facts(tid).get("by_child") or {}))
+            for k in kids:
+                kt = str(k.get("task_id") or "")
+                queue.append((k, str(r.get("name") or ""), depth + 1, dict(by.get(kt) or {})))
+        return out
 
     def latest_report_of(self, *, task_id: str, role: str = "") -> dict[str, Any]:
         """某个实例最近的工作报告（退役第①支要端给父的东西）。

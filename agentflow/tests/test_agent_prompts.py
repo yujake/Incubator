@@ -977,7 +977,8 @@ _SHAPE_TABLE_ANCHOR = "每次只取其一"
 _SHAPE_TABLE_END = "\n规则："
 
 #: 中文数词（`len(SHAPES)` → 文本里该出现的那个字）。
-_CN_NUM = {1: "一", 2: "两", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九", 10: "十"}
+_CN_NUM = {1: "一", 2: "两", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九",
+           10: "十", 11: "十一"}
 
 
 def _shape_table(protocol: str = "") -> str:
@@ -1008,11 +1009,12 @@ def test_loop_protocol_shape_table_lists_every_shape_the_loop_accepts():
     若这条破了：正典表少列一种形状，模型可能永远不写它，而框架照旧全绿 ——
     这一次少的是 `handoff`（手稿落行的唯一形状入口）。
 
-    `== 10` 是本判据的提醒线（S1k-2 从 8 抬到 10：新增 `retire` / `roster`）：
+    `== 11` 是本判据的提醒线（S1k-2 从 8 抬到 10：新增 `retire` / `roster`；
+    S-H 从 10 抬到 11：新增 `interrupt`）：
     形状表被动过就得把它与提示词一起过一遍，别让下面的数目对拍变成对着旧数目对。
     """
     seg = _shape_table()
-    assert len(AL.SHAPES) == 10, (
+    assert len(AL.SHAPES) == 11, (
         f"形状表本身被动过了（`agent_loop.SHAPES` 现在有 {len(AL.SHAPES)} 个）⇒ "
         "先把这条判据与提示词一起过一遍，别让下面的数目对拍变成对着旧数目对")
     missing = [n for n in AL.SHAPES if n not in _shape_names_in(seg)]
@@ -1020,7 +1022,9 @@ def test_loop_protocol_shape_table_lists_every_shape_the_loop_accepts():
         f"循环协议的形状表里少了 {missing}（`agent_loop.SHAPES`={tuple(AL.SHAPES)}）—— "
         "形状表是模型看到的正典，少一种就等于那种形状在协议里不存在")
     want = _CN_NUM[len(AL.SHAPES)]
-    counts = set(re.findall(r"([一二三四五六七八九十])种形状", seg))
+    # 数词那一格要连着读（`[一二三四五六七八九十]+`）：抬到 11 之后表头写的是「十一」，
+    # 单字符的正则会读到"一" ⇒ 判据会把对的表判错（改这一处是因为形状数越过了十）。
+    counts = set(re.findall(r"([一二三四五六七八九十]+)种形状", seg))
     assert counts == {want}, (
         f"形状表里的数目是 {sorted(counts) or '（读不到中文数目）'}，而 `agent_loop.SHAPES` "
         f"有 {len(AL.SHAPES)} 个 ⇒ 应当写「{want}种形状」")
@@ -1077,10 +1081,11 @@ def test_every_served_prompt_carries_the_whole_shape_table(registry: ToolRegistr
                '5) {"ask_user": {"question": "?"}}\n'
                '6) {"retire": {"name": "D1"}}\n'
                '7) {"roster": {"of": "self"}}\n'
+               '7b) {"interrupt": {"name": "D1"}}\n'
                '8) {"final": "<结论>", "evidence": []}')
     assert _shape_names_in(old_seg) == [n for n in AL.SHAPES if n != "handoff"], \
         f"反负控失效：旧表被读成 {_shape_names_in(old_seg)}"
-    assert set(re.findall(r"([一二三四五六七八九十])种形状", old_seg)) != {_CN_NUM[len(AL.SHAPES)]}, \
+    assert set(re.findall(r"([一二三四五六七八九十]+)种形状", old_seg)) != {_CN_NUM[len(AL.SHAPES)]}, \
         "反负控失效：写着「九种」的旧表居然通过了数目对拍"
 
 
@@ -1436,18 +1441,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p65`（2026-10-10，S-F 裁定 12-K「步数上限不作硬标准」）：把"步数或预算耗尽时你必须收工 /
 #: 框架会在最后一步要求你收工"改成"预算耗尽才收工 + 每满阈值向父代理报一次账"，另两处
 #: "步数有限"的说辞同样改掉 ⇒ 换的是共用段（循环协议），所以十格全换。
-_FROZEN_PROMPT_VERSION = "p65"
+#: `p66`（2026-10-10，S-H 裁定 14）：协议补第 9 条 `interrupt`（停某一个子代理当前那一轮，
+#: 不是全局叫停）+ 名册那一句补 `scope=descendants` 与三格新读数（status / in_flight /
+#: last_reading）⇒ 又是共用段，十格全换。
+_FROZEN_PROMPT_VERSION = "p66"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "a715c153a7f5d154120ba235588479ff06531977bdbc9d4d2762f94ea75dc4da",
-    "B": "21255fcbf1b848b8003c5c66c71627dae7260175ab39f388cc426138a140e28c",
-    "C": "0b23affd5f46711a4fbac8666142e1b60de78f965d116b55255e8d2d087ecaa3",
-    "D": "191039aa17f225b06f949c7cf53a028d6346e8a3fcecba37c5a66688b3423540",
-    "E": "141b63258d2ed5bff39d53decd4c596cb03a8563b595ef612c195bab2b752bac",
-    "F": "6150d313673d86abdad4357409629e0ac45c6944912376fcb256f11c05d615e9",
-    "G": "a9496e51db7d75d2756ab65a6f639666c7b0cc8dfdd1688d97108553b1d257ed",
-    "H": "f2f008a3e33757af2c658574b7571cd29b88895d04b04ef18c49ded89b04fa7d",
-    "V": "a40d4d6433a6753ccd22b6ded91cbe4b817e8990ca19a12878d84879353e215b",
-    "M": "75e01fed60470e81b7bee92a7fded06b8feba5c4e880fcfcb9d830948c2e63b6",
+    "A": "b76ea3daa212d8c71353fb22d24571c7d9a4aa0baf6518989f39a467acaaa8e3",
+    "B": "b8172753e95e32defacdfdf4681b8784263d490668dfc279620a9322f06bac60",
+    "C": "4717077112bd9836bbfa2abfc6668fa7bff20da65c38740d0a05a2fb20b616b4",
+    "D": "9d53de158ae260986546ca6097a854a0caf14ee8cbfd410b0ed03bae992a2641",
+    "E": "1d89e78da9c8149471b3cc8f65d27a3bc2f7a71d0564b6a73bb74ad240de8073",
+    "F": "5a036b43b3280315942e04bd4b35203da2ebb51fa71ea4f3d335226f3bc105b0",
+    "G": "670bef2bb66e8caecef950369b8d135abd8039e3dda95435c6130b45f9b1b992",
+    "H": "63263550c52cc3e5ae70fd085574357924b81c6c617f3911ea47011c021c0771",
+    "V": "38b7f6dad02f42208220f872dcbd4b637058286e426dff904096a838121d2223",
+    "M": "ecb493d5fd7de37265126461e548cdd3410037582295ea059d51abb0b72b2cef",
 }
 
 

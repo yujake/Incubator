@@ -182,6 +182,135 @@ def stop_scope(state: Mapping[str, Any] | None) -> dict[str, Any]:
             "reason": ""}
 
 
+# ============================================================ 单个子代理的中断信号（S-H）
+#
+# 为什么它不与上面那把开关共用一个文件（这是一处刻意的落位差异，理由要说清）：
+# 工作区那把开关的语义是"先到先得、后来者原样返回 existing"
+# （`request_stop_detail` 的注释逐字：「第一次写下的那份不许被后来的请求覆盖」）。
+# 一个文件只能装一个目标 ⇒ 第二个被叫停的孩子会被读成 `existing` 而静默不停，
+# 那正是"报告没写成"与"不用报告"长得一样的那一族。
+# 所以"停某一个孩子"是一份信号一个目标：`runs/interrupts/<台账号>.json`，N 个目标 N 份。
+# 三态照旧：读不懂 ⇒ `unreadable`（不许当成"没人叫停"）。
+
+#: 中断信号目录（`<工作区>/runs/interrupts/`）。
+INTERRUPT_DIR_NAME = "interrupts"
+#: 中断信号的审计流水（与 `stop-history.jsonl` 同一个 `runs/` 目录）。
+INTERRUPT_HISTORY_NAME = "interrupt-history.jsonl"
+#: 逐子代理中断的理由码：它就是循环里那条停止理由的逐字同一个词（`agent_loop` 读它）。
+INTERRUPT_REASON = "interrupted_by_parent"
+
+
+def interrupt_dir(root: str | Path) -> Path:
+    """中断信号目录。"""
+    return Path(root) / PID_DIR_NAME / INTERRUPT_DIR_NAME
+
+
+def interrupt_path(root: str | Path, task_id: str) -> Path:
+    """某一个子代理的中断信号落在哪（一个目标一份文件，见上面那段理由）。"""
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in str(task_id or ""))
+    return interrupt_dir(root) / f"{safe or '_'}.json"
+
+
+def request_interrupt(root: str | Path, task_id: str, *,
+                      reason: str = INTERRUPT_REASON, by: str = "",
+                      by_task_id: str = "") -> dict[str, Any]:
+    """写下"停这一个孩子当前那一轮"的信号。返回信号里那份负载。
+
+    幂等（同一个目标已有一份 ⇒ 原样返回 `existing`）：与工作区那把开关同一条纪律 ——
+    "谁在什么时候为什么叫停"只能有第一次那一份。
+    """
+    path = interrupt_path(root, task_id)
+    existing = read_interrupt(root, task_id)
+    if existing is not None and "unreadable" not in existing:
+        return existing
+    payload = {"reason": str(reason or INTERRUPT_REASON), "by": str(by or "?"),
+               "by_task_id": str(by_task_id or ""), "target_task_id": str(task_id or ""),
+               "at": _now_iso(), "path": str(path)}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+    return payload
+
+
+def read_interrupt(root: str | Path, task_id: str) -> dict[str, Any] | None:
+    """读某一个目标的中断信号：没叫停 ⇒ `None`；叫停了但读不懂 ⇒ 带 `unreadable` 的负载。"""
+    path = interrupt_path(root, task_id)
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw) if raw.strip() else {}
+        if not isinstance(data, dict):
+            raise ValueError(f"顶层不是对象（{type(data).__name__}）")
+    except Exception as exc:  # noqa: BLE001 —— 读不懂就是读不懂（三态：不许折成"没叫停"）
+        return {"reason": INTERRUPT_REASON, "by": "?", "by_task_id": "",
+                "target_task_id": str(task_id or ""), "at": "", "path": str(path),
+                "unreadable": f"{type(exc).__name__}: {exc}"}
+    data.setdefault("reason", INTERRUPT_REASON)
+    data.setdefault("by", "?")
+    data.setdefault("target_task_id", str(task_id or ""))
+    data.setdefault("path", str(path))
+    return data
+
+
+def interrupt_applies(state: Mapping[str, Any] | None, my_task_id: str) -> dict[str, Any]:
+    """这份信号管不管我：`{"checked","applies","reason"}`。
+
+    只有精确的那一个目标才停（DSH `interrupt_agent` 的授权面：目标必须是后代，
+    而停止只落在目标自己那一轮）。别人名字的信号对我不适用，而且那是"查过了、
+    不适用"，不是"没查成" —— 两者分得开正是这个函数存在的理由。
+    """
+    if not isinstance(state, Mapping):
+        return {"checked": False, "applies": False, "reason": "没有信号负载 ⇒ 判不了"}
+    target = str(state.get("target_task_id") or "")
+    me = str(my_task_id or "")
+    if not target or not me:
+        return {"checked": False, "applies": False,
+                "reason": "没有目标编号或我没有台账号 ⇒ 判不了（判不了 ≠ 适用）"}
+    return {"checked": True, "applies": target == me,
+            "reason": "" if target == me else f"这份信号是给 {target} 的，不是我（{me}）"}
+
+
+def consume_interrupt(root: str | Path, task_id: str, *, sid: str | None = None,
+                      level: str = INTERRUPT_REASON) -> dict[str, Any]:
+    """撤走这一份信号并把审计写进 `runs/interrupt-history.jsonl`（一次性信号，§140 同族）。"""
+    path = interrupt_path(root, task_id)
+    state = read_interrupt(root, task_id) or {}
+    entry = {"at": _now_iso(), "level": str(level), "target_task_id": str(task_id or ""),
+             "sid": str(sid or ""), "reason": str(state.get("reason") or ""),
+             "by": str(state.get("by") or ""), "by_task_id": str(state.get("by_task_id") or "")}
+    try:
+        hist = interrupt_dir(root) / INTERRUPT_HISTORY_NAME
+        hist.parent.mkdir(parents=True, exist_ok=True)
+        with hist.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass        # 审计写不成不改变"信号已撤走"这件事（返回到调用方去读 `removed`）
+    try:
+        if path.is_file():
+            path.unlink()
+            return {**entry, "removed": True}
+    except OSError:
+        return {**entry, "removed": False}
+    return {**entry, "removed": False}
+
+
+def interrupt_history(root: str | Path, limit: int = 5) -> list[dict[str, Any]]:
+    """最近几条中断审计（读不成返回空表 —— 调用方要自己判"没有"与"读不到"）。"""
+    hist = interrupt_dir(root) / INTERRUPT_HISTORY_NAME
+    if not hist.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    try:
+        for line in hist.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                out.append(json.loads(line))
+    except Exception:  # noqa: BLE001 —— 坏行不许让整个历史读不出来
+        return out
+    return out[-max(1, int(limit)):]
+
+
 def request_stop(root: str | Path, *, reason: str = DEFAULT_REASON, by: str = "user",
                  force: bool = False, sid: str | None = None,
                  explicit: str | Path | None = None,

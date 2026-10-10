@@ -63,7 +63,7 @@ from .llmseam import LlmSeam
 #: `{"summon_many": …}`（被判"认不出的形状"，白扔两步），而且"像主控的 subagent"
 #: 这句话对角色同样成立 —— 一批文献分给几个自己去读，是每个角色都会遇到的事。
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
-          "retire", "roster")
+          "retire", "roster", "interrupt")
 #: 出站门：哪些形状由秘书接管（所有者的裁定逐字"如果有些形状涉及到结构化交互，
 #: 则需要秘书接管"）。判据是"这个形状是不是跨智能体的结构化交互"——
 #: `summon` / `summon_many`（委托）· `handoff`（手稿通道）· `message`（私聊/公共频道，
@@ -141,6 +141,9 @@ JSON_TAIL = (
     # 复用已有子代理写 `reuse:"D1"`（名册名，不是台账号）—— 它不新增名册项，只多一次调用。
     '{"retire": {"name": "A1"}}\n'
     '{"roster": {"of": "self"}}\n'
+    # S-H（裁定 14）：`interrupt` 停的是某一个子代理当前那一轮 —— 它不是全局叫停
+    # （那是 `conductor.stop`，所有人都停），也不是"结束它"（那是 `retire`）。
+    '{"interrupt": {"name": "D1"}}\n'
     '{"final": {"final": "<结论>", "evidence": []}}'
 )
 
@@ -1411,7 +1414,7 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
                      # 旧行保留）。它是可选键：不填就是新增（旧行为逐字不变）。
                      "revises": str(value.get("revises") or "").strip(),
                      "why": str(value.get("why") or "")}, ""
-    if key in ("retire", "roster"):
+    if key in ("retire", "roster", "interrupt"):
         # 名册面的两个形状（S1k-2 加进 `SHAPES`、S1k-3 的判据直接打在 `_do_retire` /
         # `_do_roster` 上）—— 解码器当时漏了这两支，于是它们一路掉进下面那个
         # `final` 兜底：真机实测（M2 的 K1 探针，2026-10-09）模型写
@@ -1426,6 +1429,13 @@ def _decode_shape(data: Mapping[str, Any]) -> tuple[str, Mapping[str, Any], str]
             if not name:
                 return "", {}, ("retire 需要 `name`（名册名，例如 \"D1\"）："
                                 "「要退谁」只能用名册名说，绝对编码不是父子之间的指称")
+            return key, {"name": name}, ""
+        if key == "interrupt":
+            # S-H（裁定 14）：与 `retire` 同一条指称纪律 —— 名册名，不是台账号。
+            name = str(value.get("name") or "").strip()
+            if not name:
+                return "", {}, ("interrupt 需要 `name`（名册名，例如 \"D1\"）："
+                                "「要停谁」只能用名册名说，绝对编码不是父子之间的指称")
             return key, {"name": name}, ""
         of = str(value.get("of") or "self").strip() or "self"
         # `of` 只做"是不是字符串"这一层：可见面由读侧判（`_do_roster` 对越界的名字
@@ -3004,6 +3014,26 @@ class AgentLoop:
         `runs/stop-history.jsonl`，开关撤走）。这样 E 的子进程、续跑、以及"用户第二次叫停"
         三条路都不再被一把旧开关卡住。
         """
+        # ---- S-H（裁定 14）：父叫停某一个孩子当前那一轮的那一份信号。
+        #
+        # 为什么排在全局开关之前：工作区那把开关说的是"所有人停"，而这一份只针对我 ——
+        # 先看我自己的那一份，"谁停了我"这个读数才准确（全局开关的理由码会是 user/stop_file）。
+        # 一次性信号：读到即消费（与 §140 那把开关同一条纪律），排队消息一个字节都不动。
+        if str(self.my_task_id or ""):
+            try:
+                from . import stopctl as _SC
+
+                sig = _SC.read_interrupt(self.session_root, self.my_task_id)
+                if sig is not None:
+                    verdict = _SC.interrupt_applies(sig, self.my_task_id)
+                    if verdict.get("checked") and verdict.get("applies"):
+                        _SC.consume_interrupt(self.session_root, self.my_task_id, sid=self.sid)
+                        return str(sig.get("reason") or _SC.INTERRUPT_REASON)
+                    if not verdict.get("checked"):
+                        run.notes.append(f"有一份中断信号，但作用面判不了 ⇒ 不停"
+                                         f"（判不了 ≠ 适用：{verdict.get('reason')}）")
+            except Exception as exc:  # noqa: BLE001 —— 读不成不是"没人叫停"，要留读数
+                run.notes.append(f"中断信号没读成（{type(exc).__name__}: {exc}）⇒ 按没叫停继续")
         if self.stop_file and Path(self.stop_file).exists():
             # 显式给的路径也按同一套"停一次就消费"办（CLI 传的就是工作区那把开关）。
             try:
@@ -3263,7 +3293,55 @@ class AgentLoop:
             return self._do_retire(payload)
         if shape == "roster":
             return self._do_roster(payload)
+        if shape == "interrupt":
+            return self._do_interrupt(payload)
         return self._do_message(payload)
+
+    def _do_interrupt(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """`{"interrupt": {"name": "D1"}}` —— 停某一个子代理当前那一轮（S-H，裁定 14）。
+
+        搬运来源与四条语义见 `Conductor.interrupt_child`；这一层只做三件事：
+
+        1. 指称：只用名册名（与 `retire` 同一条纪律 —— 台账号不是父子之间的指称），
+           越界的名字（不在我名下）当面拒绝；
+        2. 转发授权：谁有资格停谁由 `Conductor.interrupt_child` 判（精确活着的祖先、
+           不许停自己、判不了就拒）—— 这一层不重写第二份授权判据；
+        3. 留痕：落一条会话事件（谁停了谁、受理了没有、什么码），因为信号本身是
+           "一个目标一份文件"，不落事件的话"父叫停过"在会话记录里看不见。
+        """
+        name = str(payload.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "accepted": False, "code": "bad_request",
+                    "why": ["要停谁：`name` 是名册名，不能空"]}
+        if self.secretary is None or self.conductor is None:
+            return {"ok": False, "accepted": False, "code": "no_secretary", "name": name,
+                    "why": ["这一趟没有秘书/conductor ⇒ 名册不在手上，停不了"]}
+        tid, problem = self.secretary.resolve_down(owner=self.my_task_id, name=name)
+        if problem:
+            return {"ok": False, "accepted": False, "code": "not_mine", "name": name,
+                    "why": [f"{name} 不在我名下的名册里（{problem}）⇒ 越界的不许停"]}
+        try:
+            got = self.conductor.interrupt_child(parent_task_id=self.my_task_id,
+                                                child_task_id=tid, by=self.role)
+        except Exception as exc:  # noqa: BLE001 —— 叫停没跑成要如实报（不许当"停过了"）
+            got = {"ok": False, "accepted": False, "code": "error", "why":
+                   [f"叫停没跑成：{type(exc).__name__}: {exc}"]}
+        if not isinstance(got, dict):
+            got = {"ok": False, "accepted": False, "code": "bad_reading",
+                   "why": ["叫停读数不是对象"]}
+        got.setdefault("name", name)
+        got["target_task_id"] = str(got.get("target_task_id") or tid)
+        try:
+            SS.append(self.session_root, {
+                "kind": "agent_interrupt", "role": self.role, "name": name,
+                "target_task_id": got["target_task_id"],
+                "accepted": bool(got.get("accepted")), "code": str(got.get("code") or ""),
+                "no_op": bool(got.get("no_op")),
+            }, sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 事件落不成不许改变受理结果
+            got.setdefault("why", [])
+            got["why"] = list(got["why"]) + [f"（留痕没落成：{type(exc).__name__}: {exc}）"]
+        return got
 
     def _do_retire(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """`{"retire": {"name": "A1"}}` —— 父说"A1 退役"，判定与执行都在秘书那一侧。
@@ -3299,13 +3377,20 @@ class AgentLoop:
         if self.secretary is None:
             return {"checked": False, "rows": [], "reason": "这一趟没有秘书 ⇒ 名册不在手上"}
         want = str(payload.get("of") or "self").strip()
+        # `scope="descendants"`（S-H，裁定 14）：全树（每一行带 `parent`/`depth`）。
+        # 缺省仍是"下一层"（老行为逐字不变）；不认的取值当面拒绝 —— 静默折回缺省
+        # 会让"我要全树"与"我要下一层"这两个请求得到同一个答案。
+        scope = str(payload.get("scope") or "self").strip() or "self"
+        if scope not in ("self", "descendants"):
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
+                    "reason": f"scope={scope!r} 不认（只有 self / descendants）"}
         if want in ("", "self", "自己"):
-            return self.secretary.roster_view(owner=self.my_task_id)
+            return self.secretary.roster_view(owner=self.my_task_id, scope=scope)
         tid, problem = self.secretary.resolve_down(owner=self.my_task_id, name=want)
         if problem:
-            return {"checked": False, "rows": [], "more": 0,
+            return {"checked": False, "rows": [], "more": 0, "scope": scope,
                     "reason": f"{want} 不在我名下的名册里（{problem}）⇒ 越界的不许查"}
-        return self.secretary.roster_view(owner=tid)
+        return self.secretary.roster_view(owner=tid, scope=scope)
 
     def _do_summon_many(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """一次派一批活（并发）：走 `Conductor.run_plan`，按写集分波、同波并发。

@@ -1166,6 +1166,10 @@ NOT_STRUCTURED = {
     # 不需要再过一遍"发件前优化"那道门（过门反而会把执行者当成被优化的载荷）。
     "retire": "不是交互：退役由秘书自己执行（Secretary.retire 的三分支）",
     "roster": "不是交互：查名册是只读视图（Secretary.roster_view）",
+    # S-H（裁定 14）：叫停走的是停机信号那条路（`Conductor.interrupt_child` +
+    # `stopctl` 的一份信号一个目标），不经秘书的"发件前优化"那道门 ——
+    # 被叫停的是子代理的当前那一轮，没有任何载荷要优化。
+    "interrupt": "不是交互：叫停落在停机信号上（Conductor.interrupt_child）",
 }
 
 

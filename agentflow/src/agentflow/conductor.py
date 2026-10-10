@@ -1127,6 +1127,131 @@ class Conductor:
             cur = nxt
         return {"checked": True, "inside": False, "path": path, "reason": ""}
 
+    def children_facts(self, parent_task_id: str) -> dict[str, Any]:
+        """父名下每一个子代理的"此刻在飞几件 / 名下几条未消的项 / 台账状态"（S-H）。
+
+        `{"checked", "by_child": {<子台账号>: {"in_flight","items_open","status","role"}},
+          "reason"}`
+
+        为什么单独一个读侧、而不复用 `retire_ready`：那一张表跳过已经记过消边的
+        子代理（它回答的是"现在能不能退役"），而名册要的是"每一个孩子此刻在飞几件" ——
+        拿退役表当名册会让已销号的那些读成"0 件在飞"，那是两件事被折成一格。
+        一次 `_tasks()` 快照算完（名册每步都可能被查一次）。
+        读不成 ⇒ `checked=False`（不许返回一串 0：那会让父以为"孩子们都闲着"）。
+        """
+        try:
+            rows = self._tasks()
+        except Exception as exc:  # noqa: BLE001
+            return {"checked": False, "by_child": {}, "reason": f"{type(exc).__name__}: {exc}"}
+        by_child: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            if r.get("parent_task_id") != parent_task_id:
+                continue
+            tid = str(r.get("task_id") or "")
+            if not tid:
+                continue
+            if str(r.get("kind") or ""):
+                # 板项行（`kind` 非空）：它的 `parent_task_id` 是收件人的编号，
+                # 与"谁派出去的"是两轴 —— 只把未消的项计到收件人名下。
+                if str(r.get("item_state") or "") != "done":
+                    cur = by_child.setdefault(tid, {"in_flight": 0, "items_open": 0,
+                                                    "status": "", "role": ""})
+                    cur["items_open"] = int(cur.get("items_open") or 0) + 1
+                continue
+            cur = by_child.setdefault(tid, {"in_flight": 0, "items_open": 0,
+                                            "status": "", "role": ""})
+            cur["status"] = str(r.get("status") or "")
+            cur["role"] = str(r.get("role") or "")
+            if cur["status"] in ("pending", "running"):
+                cur["in_flight"] = int(cur.get("in_flight") or 0) + 1
+        return {"checked": True, "by_child": by_child, "reason": ""}
+
+    def interrupt_child(self, *, parent_task_id: str, child_task_id: str,
+                        reason: str = "", by: str = "") -> dict[str, Any]:
+        """父叫停某一个子代理的当前那一轮（S-H，裁定 14；照 DSH `interrupt_agent`）。
+
+        返回 `{"ok","accepted","code","target_task_id","no_op","why","signal"}`。
+
+        ## 四条语义照抄（DSH 的几条 no-op 逐条）
+
+        1. 只停当前那一轮：信号只被精确的那一个目标读到，读到即消费
+           （`stopctl.interrupt_applies` / `consume_interrupt`）；
+        2. 队列保留：本方法一个字节都不碰收件箱与板项 —— 被中断的孩子下一次被唤醒时
+           照旧看到它排队时收到的那些消息（DSH `{keepInbox:true}` 的对应物）；
+        3. 不递归：它已 claim 的活不重排、它自己起的子代理继续跑
+           （DSH 逐字：`interrupt` 不递归）；
+        4. 不在册 / 已结束 ⇒ 静默 no-op：`accepted=True` + `no_op=True` +
+           一句读数（工具描述逐字「interrupting an agent that already finished is an
+           accepted no-op」）。
+
+        ## 授权（DSH `:853-866` 的三条）
+
+        叫停者必须是精确活着的祖先；不许停自己；目标非后代 ⇒ `UNAUTHORIZED`。
+        判据用的是已经是三态的 :meth:`inside_subtree`：`checked=False`（判不了）时
+        拒绝 —— 把"没读成"折成"不是后代"会让一次正当的叫停静默失效，
+        折成"是后代"会让越权通过，两种都错（`draft/92` E9 同族）。
+
+        ## 为什么它是新增而不是给 `cancel` 加参数
+
+        `cancel`（:meth:`Conductor.cancel`）"一个共享 token 覆盖全部在飞与待启动任务"的语义
+        被 41 处调用依赖 ⇒ 给它加一个"只停某一个"的参数等于顺手改掉全局停机的语义。
+        所以：`cancel` 一个字都不动，逐子代理的中断走这里 + `stopctl` 那份一个目标一份的
+        信号（为什么不能共用工作区那把开关：见 `stopctl` 里那段注释 —— 一个文件装不下 N 个目标）。
+        """
+        by_tid = str(parent_task_id or "")
+        child = str(child_task_id or "")
+        base: dict[str, Any] = {"ok": False, "accepted": False, "code": "",
+                                "target_task_id": child, "no_op": False, "why": [],
+                                "signal": {}}
+        if not by_tid or not child:
+            base["code"] = "bad_request"
+            base["why"] = ["没给叫停者或目标的台账号 ⇒ 不受理（判不了 ≠ 放行）"]
+            return base
+        if by_tid == child:
+            base["code"] = "unauthorized"
+            base["why"] = [f"不许停自己（{by_tid}）：要停的是当前那一轮，"
+                           "而「当前那一轮」就是叫停这件事本身"]
+            return base
+        inside = self.inside_subtree(by_tid, child)
+        if not inside.get("checked"):
+            base["code"] = "unauthorized"
+            base["why"] = [f"判不了 {child} 在不在 {by_tid} 这一支里 ⇒ 拒绝："
+                           f"{inside.get('reason')}（判不了 ≠ 不是后代）"]
+            return base
+        if not inside.get("inside"):
+            base["code"] = "unauthorized"
+            base["why"] = [f"{child} 不在 {by_tid} 这一支里（祖先链：{inside.get('path')}）"
+                           "⇒ 越权的叫停当面拒绝"]
+            return base
+        try:
+            rows = {str(r.get("task_id")): r for r in self._tasks()}
+        except Exception as exc:  # noqa: BLE001 —— 读不成不是"它已经结束了"
+            base["code"] = "unknown"
+            base["why"] = [f"台账读不成（{type(exc).__name__}: {exc}）⇒ 不受理"
+                           "（没读成 ≠ 不在飞）"]
+            return base
+        row = rows.get(child)
+        if row is None:
+            base.update({"ok": True, "accepted": True, "code": "no_op", "no_op": True,
+                         "why": [f"台账里没有 {child} 这一行 ⇒ 它不在册，"
+                                 "静默 no-op（DSH 逐字：已经结束的中断是 accepted no-op）"]})
+            return base
+        status = str(row.get("status") or "")
+        if status not in ("pending", "running"):
+            base.update({"ok": True, "accepted": True, "code": "no_op", "no_op": True,
+                         "why": [f"{child} 此刻 status={status!r}（不是 pending/running）"
+                                 "⇒ 已经结束了，静默 no-op"]})
+            return base
+        from . import stopctl as SC
+
+        state = SC.request_interrupt(self.store.root, child,
+                                     reason=str(reason or SC.INTERRUPT_REASON),
+                                     by=str(by or ""), by_task_id=by_tid)
+        base.update({"ok": True, "accepted": True, "code": "accepted", "signal": state,
+                     "why": [f"信号已落盘：只停 {child} 当前那一轮；"
+                             "排队消息留在收件箱里、它自己起的子代理继续跑"]})
+        return base
+
     #: 停机通知的落痕前缀（父那一行的 `inputs` 里）：`stop-notified:<子>@<iso>|<通知项>`
     _STOP_NOTIFIED_PREFIX = "stop-notified:"
     #: 停止通知被确认的落痕前缀（同上；时间只能落在这里，见 `note_stop_ack`）

@@ -147,6 +147,9 @@ _STOP_BADGES = {
     # 刻意不是 `badge-fail`：那不是出错，是"这一趟没有往前走"（一档读数）。
     "no_progress_limit": ("badge-unknown", "原地打转"),
     "waiting_for_user": ("badge-pending", "停在等用户"),
+    # S-H（裁定 14）：父叫停了这一个子代理当前那一轮。
+    # 刻意不是 `badge-fail`：它不是出错，是"上级喊停"（与 `no_progress_limit` 同一档读数）。
+    "interrupted_by_parent": ("badge-unknown", "被父叫停"),
 }
 
 
