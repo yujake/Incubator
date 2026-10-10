@@ -112,8 +112,10 @@ class _PresetLoader(yaml.SafeLoader):
     于是 DSH 形状里一行 `- id: off` 会被解析成 `id: False`，读起来变成"缺 id"，
     而配置里明明写着。DSH 用的 js-yaml 4 是 YAML 1.2 core schema（那几个词是字符串），
     所以这一刀是向 DSH 对齐，不是本地偏好。
-    （实测：`temp/_probe_js_gate.py` —— 收窄之前 `id: off` 与 `id: on` 分别是
-    `False` 与 `True`，`id: off` 那一行被判成"缺 id 或 name"。）
+    判据是 `tests/test_presets.py::test_yaml_1_1_booleans_do_not_swallow_row_ids`
+    （收窄之前 `id: off` 与 `id: on` 分别是 `False` 与 `True`，`id: off` 那一行被判成
+    "缺 id 或 name"）。刻意不引 `temp/` 下的探针路径：那种路径会随探针一起消失，
+    而注释里的引用必须指向盘上真有的东西（判据 `test_the_quoted_references_in_comments_all_exist`）。
     """
 
 

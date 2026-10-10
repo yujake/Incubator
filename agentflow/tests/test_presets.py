@@ -285,7 +285,7 @@ def test_yaml_1_1_booleans_do_not_swallow_row_ids(tmp_path):
     退化会坏成什么：PyYAML 实现 YAML 1.1，默认把 `on` / `off` / `yes` / `no` 当布尔 ——
     于是一行 `- id: off` 变成 `id: False`，读起来是"缺 id"，而配置里明明写着；
     DSH 用的 js-yaml 4 是 YAML 1.2（那几个词是字符串），所以这一刀是向 DSH 对齐。
-    （实测出处：`temp/_probe_js_gate.py`。）
+    本用例就是那条实测的判据本身（收窄之前 `id: off` 那一行会被判成"缺 id 或 name"）。
     """
     cfg = tmp_path / "cfg"
     cfg.mkdir()
