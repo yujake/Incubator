@@ -446,6 +446,20 @@ class Relation:
     status: str = "active"
     duplicate_of: str | None = None
     created_at: str = ""
+    #: 这条关系**正式并进概念图**的时刻（12-C=甲，业主 2026-10-10 裁定）。
+    #:
+    #: 与 `created_at` 的区别（这一格存在的全部理由）：`created_at` 是"这一**行**什么时候
+    #: 建出来的"（任何行都有，包括还没并进去的 `suspect` / `rejected`），
+    #: 而 `merged_at` 回答的是旧标准里那一格问的问题 —— **"这条边是哪天进来的"**。
+    #: 两段式写路径（先起草、后并入）里两者不同；今天的主路径一趟写一行，
+    #: `status == "active"` 时两者相等 —— 但读的人不必再去猜"`created_at` 是不是并表时间"。
+    #:
+    #: 空串那一档要按 `status` 读（三态纪律）：
+    #: `status in ("suspect", "rejected")` 且空串 ⇒ **还没并进图**；
+    #: `status == "active"` 且空串 ⇒ **这一格出现之前的历史行，并表时间未知**
+    #: （不是"没并进去"——它已经在图里了）。把这两者折成一个空串会让
+    #: "老数据没有这一格"看起来像"这些边没并进图"。
+    merged_at: str = ""
     #: 本条关系还引用了哪些文献（除主引文 `lit_id` 之外）。
     #:
     #: 为什么必须补这个字段：上一版"一条关系只能引一篇文献"是明确记录的缺口
@@ -475,6 +489,12 @@ class Relation:
             raise ValueError(f"status 必须是 {RELATION_STATUS} 之一，收到 {self.status!r}")
         if self.quote_verified is not None and not isinstance(self.quote_verified, bool):
             raise ValueError("quote_verified 必须是 bool 或 None")
+        # 12-C：并表时间与状态必须自洽（一处判据，别让读者自己去猜空串的含义）
+        if self.merged_at and self.status != "active":
+            raise ValueError(
+                f"relation {self.relation_id} 标了 merged_at={self.merged_at!r} 而 "
+                f"status={self.status!r}：只有 active 的关系才算'并进了概念图'"
+                "（suspect/rejected 留着这一格会让'哪天进来的'读出一个不存在的时刻）")
 
     def to_dict(self) -> dict:
         d = asdict(self)

@@ -287,6 +287,11 @@ class _RunOnce:
                     status=status,
                     duplicate_of=decision.existing_id if decision.kind == "suspect" else None,
                     created_at=S.now_iso(),
+                    # 12-C（业主裁定 甲）：并表时间只在"这一条真的进了概念图"时写 ——
+                    # `suspect`/`rejected` 的行留在待议/被拒那一档，它还没有并进去
+                    # （写了会让"哪天进来的"读出一个不存在的时刻，而 schema 的校验
+                    # 也会当场拒；两处判据同一个口径）。
+                    merged_at=S.now_iso() if status == "active" else "",
                 )
                 row.validate()
                 d = row.to_dict()
