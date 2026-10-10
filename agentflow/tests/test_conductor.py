@@ -855,10 +855,15 @@ def test_subagent_backend_refuses_loudly_not_silently(tmp_path):
 
 
 def test_local_backend_unwired_role_refuses_not_wired(tmp_path):
-    """没给接线的角色也是 `not_wired`（不是 failed、不是 no_result）。"""
+    """没给接线的角色也是 `not_wired`（不是 failed、不是 no_result）。
+
+    B 由 A 转达（2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）⇒ 这一条走 M→A→B。
+    判的仍然是"目标角色没接线"这一档；`forbidden_edge` 是另一档，
+    见 `test_the_conductor_does_not_directly_control_bfv.py`。
+    """
     store = _mk_store(tmp_path)
     c = _conductor(store, registry={"C": ("object", FakeC())})
-    r = c.summon("B", "run_once", {})
+    r = c.summon("B", "run_once", {}, by="A", input_key="unwired-b")
     assert r.status == "done" and r.outcome == "refused" and r.refusal_reason == "not_wired"
 
 

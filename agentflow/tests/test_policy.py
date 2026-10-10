@@ -153,7 +153,11 @@ def test_allowed_edges_match_design_table():
     assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
     # `V`（验证者）只与 F 交互：出边只有 F（用户 2026-10-05 第七轮裁定）。
     assert C.ALLOWED_EDGES["V"] == frozenset({"F"})
-    assert C.ALLOWED_EDGES["M"] == frozenset(S.ROLES)
+    # 主控的出边（业主 2026-10-10 第 146 轮第 4 条裁定：「不许直接控制 B、F、V，
+    # 只可间接由父代理转达」）。改前它是 `frozenset(S.ROLES)` 九条；
+    # 改后少这三个，而三条间接路径各自有判据（见本文件下面那两条负控）。
+    assert C.ALLOWED_EDGES["M"] == frozenset({"A", "C", "D", "E", "G", "H"}), \
+        "主控的直接出边：B / F / V 按裁定必须走父代理（B 走 A、F 走 D、V 走 F）"
     # 负控（这条改动最该守住的边界）：H 与 V 仍然是只读角色 —— 新加的两条边只让它
     # "请求"，权限面（工具层）没有跟着动。
     from agentflow.tools import READ_ONLY_ROLES as _RO
@@ -178,18 +182,27 @@ def test_unknown_edge_target_is_rejected():
 
 
 def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
-    """负控（`FINAL-R4-01`）：主控的边漏掉一个角色（值少一个）⇒ 能力层自家判据必须炸。
+    """负控（`FINAL-R4-01`）：主控够不到某个角色（值少一个）⇒ 能力层自家判据必须炸。
 
     这一条钉的是"键集判据看不见的那一半"：`set(ALLOWED_EDGES) >= set(S.ROLES)`
-    只问"每个角色有没有出边条目"，不问"主控的边是不是全部角色"。
+    只问"每个角色有没有出边条目"，不问"主控能不能够到每一个角色"。
     实测（R4 批）：把 `ALLOWED_EDGES["M"]` 写成 7 元字面量后，
     按权限相关的 7 个测试文件跑子集全绿（守点在别处）。
+
+    ## 2026-10-10 口径更新（裁定第 4 条之后）
+
+    改前这里删的是最后一条直接边（因为当时"够得到"等价于"直接边里有它"）。
+    裁定之后"直接边里有它"不再是必要条件 ⇒ 删直接边不再必然让判据炸
+    （删 B / F / V 正是裁定要的形态）。所以负控改成删一条会被别人间接补回来也不算够
+    的边：这里删 `H`（H 的进路只有主控这一条，删掉它以后整个图里到不了 H）——
+    `test_the_three_indirect_roles_still_have_a_path` 从另一面钉住"间接那三条还在"。
     """
     original = frozenset(C.ALLOWED_EDGES["M"])
-    assert original == frozenset(S.ROLES), "前提：真表上主控的边就是全部角色"
-    C.ALLOWED_EDGES["M"] = frozenset(sorted(original)[:-1])
+    assert original == frozenset({"A", "C", "D", "E", "G", "H"}), \
+        "前提：真表上主控的直接出边就是这六个（裁定第 4 条之后）"
+    C.ALLOWED_EDGES["M"] = frozenset(sorted(original)[:-1])   # 去掉 'H'
     try:
-        with pytest.raises(AssertionError, match="必须恰好等于 schema.ROLES"):
+        with pytest.raises(AssertionError, match="到不了这些角色"):
             C.assert_capabilities()
     finally:
         C.ALLOWED_EDGES["M"] = original

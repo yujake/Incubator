@@ -165,7 +165,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 | 召唤方 | 允许召唤 |
 |---|---|
-| `M`（主控） | `A B C D E F G H V`（全部） |
+| `M`（主控） | `A C D E G H` —— **不许直接控制 B / F / V**（2026-10-10 裁定；B 走 `A`、F 走 `D`、V 走 `F`） |
 | `A` | `B` |
 | `B` | `C` |
 | `C` | **（空）** —— 只读角色连"请求"都不直接发 |
@@ -176,8 +176,11 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `H` | `A E G` |
 | `V` | `F` |
 
-**边总数 = 32**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
-—— 新增的三条是 `M→V`、`F→V`、`V→F`。观测 2026-10-06（角色 V 落地））。
+**边总数 = 29**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
+—— 新增的三条是 `M→V`、`F→V`、`V→F`。观测 2026-10-06（角色 V 落地）。
+**2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
+（B / F / V 改由父代理转达；见 §M.4.1 上面那段）。读数：
+`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"`）。
 
 **没有任何角色能召唤 `M`**（`capabilities.NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`）。
 
@@ -2254,25 +2257,33 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 >   整趟作废。`fs.edit` 的输出量与**改动量**成正比（不是与文件大小成正比），
 >   而且比整文件覆盖更安全 ——"不可逆"那条理由对它不适用。
 
-#### M.4.1 M 能召唤的 9 个角色 × 它们的动作（60 个可召唤动作）
+#### M.4.1 M 能召唤的 6 个角色 × 它们的动作（46 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
 > 抓到的正是这里：A 少算 `search_literature`（写 2 实 3）、D 少算 `register_conjecture`（13→14）、
 > H 少算 `review_report`（3→4），标题还写着 48。**要么两处合成一处，要么判据同时盯着两处**；
 > 现在选的是后者（合成一处要动文档结构，收益不如先让它不再漂）。
+>
+> **2026-10-10 少了三个角色（B / F / V）与 14 个动作（60 → 46）**：业主第 146 轮第 4 条裁定逐字
+> 「M 的出边设限（不许直接控制 B、F、V，只可间接由父代理转达）」。三条间接路径：
+> **B ← A**（`M→A→B`，抽取 / 重抽取由 A 转达）、**F ← D**（`M→D→F`，攻坚推进由 D 建计划并派 F）、
+> **V ← F**（`M→D→F→V`，V 改后只剩 F 这一条进路）。判据
+> `tests/test_the_conductor_does_not_directly_control_bfv.py`（边表 / 行为 / 三条链三层）
+> 与 `capabilities.assert_capabilities` 第 [1b] 条。**被拒的理由码是 `forbidden_edge`**
+> （"这条边不存在"，不是故障）—— 提示词里已经写明要换成上面那条链。
 
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
 | A | 5 | `run_once` `run` `search_literature` `ingest_local` `shelf_search` |
-| B | 7 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
-| F | 4 | `create_plan` `step` `status` `list_plans` |
 | G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `paper_package` |
 | H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
-| V | 3 | `verify_proof` `list_verifications` `read_proof` |
+
+**B / F / V 的动作表没变，只是主控不再直接够到它们**（上面这张表数的是
+`ALLOWED_EDGES["M"]` 覆盖到的角色的动作之和，见 `tests/test_role_specs_action_table.py`）。
 
 每个动作的 `params`（JSON Schema 子集）、`returns`、`side_effect`、`handler_name`
 在 `capabilities.CAPABILITIES` + `capabilities.assert_capabilities`；**装配期由 `assert_capabilities()` 用 `importlib`

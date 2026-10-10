@@ -521,20 +521,45 @@ def test_every_tool_on_the_face_is_listed_with_its_required_parameter_keys(regis
 
 
 def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
-    """每个角色的伙伴条目必须与 ALLOWED_EDGES 的出边一致：一个不少、一个不多。
+    """伙伴条目 = "看得见的那些"；"唤不起的"必须逐条标出来。
+
     若这条破了：模型会去唤起一个边表不允许的伙伴（换回 forbidden_edge），
-    或者根本不知道某条已经放开的边存在；不可召唤的角色还会误以为自己能被召唤。"""
+    或者根本不知道某条已经放开的边存在；不可召唤的角色还会误以为自己能被召唤。
+
+    ## 2026-10-10 口径更新（看两层，不再是一层）
+
+    改前这里是"伙伴条目恰等于出边"（一层）。裁定第 4 条之后主控的出边只剩六个，
+    而 2026-10-09 的裁定又要求「M 要看到所有人的简介」—— 两句话同时成立 ⇒
+    主控的条目是全体，其中唤不起的三个带「你唤不起它」标记。
+    所以这条判据改成：① 条目恰等于 `visible_partners`（不多不少）；
+    ② 看得见但唤不起的那些必须有标记（否则"看得见"会被读成"派得动"）；
+    ③ 反真空：真的存在这样的角色（否则 ② 是空转）。
+    """
+    gaps: dict[str, set[str]] = {}
     for role in ALL_ROLES:
         text = _prompt(role, registry)
-        expected = set(AP.partners_out(role))
-        assert _partner_bullets(text) == expected, (
-            f"{role} 的伙伴条目与边表不一致：多出 {_partner_bullets(text) - expected}，"
-            f"少了 {expected - _partner_bullets(text)}"
+        expected = set(AP.visible_partners(role))
+        got = _partner_bullets(text)
+        assert got == expected, (
+            f"{role} 的伙伴条目与「看得见的那些」不一致：多出 {got - expected}，"
+            f"少了 {expected - got}"
         )
+        unreachable = expected - set(AP.partners_out(role))
+        gaps[role] = unreachable
         for partner in expected:
             assert f"- {partner}：" in text, f"{role} 缺伙伴条目 {partner}"
+            line = next(ln for ln in text.splitlines() if ln.startswith(f"- {partner}："))
+            assert ("你唤不起它" in line) == (partner in unreachable), (
+                f"{role} 看到的 {partner}：标记与出边不一致（在出边里={partner not in unreachable}）"
+                f"：{line[:160]}")
+        if unreachable:
+            assert "只能间接由父代理转达" in text, f"{role} 有唤不起的伙伴，却没写那句话"
         if role in C.NON_SUMMONABLE:
             assert "不可以被任何人唤起" in text, f"{role} 不可召唤，但提示词没写"
+    # 反真空：这一批就是因为主控有 B / F / V 三个"看得见、唤不起"的角色才加的。
+    assert gaps["M"] == {"B", "F", "V"}, gaps["M"]
+    assert not any(gaps[r] for r in gaps if r != "M"), \
+        f"只有主控该有这一档（其余角色的条目就是出边）：{ {r: g for r, g in gaps.items() if g} }"
 
 
 def test_roles_that_can_summon_a_are_told_its_index_is_english(registry: ToolRegistry):
@@ -1406,18 +1431,18 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p62`（2026-10-10，T4 第 9 趟的反面）：`p61` 那半句只说"C 是依据" ⇒ M 把它降成叙述、
 #: 交付面连一条 `rel:` 都不引 ⇒ 补全为"C 的读数也要真的被引到"（至少引一条 `rel:`）。
 #: 仍只换 M 那一格。
-_FROZEN_PROMPT_VERSION = "p62"
+_FROZEN_PROMPT_VERSION = "p63"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "2c1d653b212480845d3d20d0df29d48d891a558cf39b151841e063c0537a7f0c",
-    "B": "b047336b14c677a910e754cf140be9c5b152a8c58253a9eacc2de052cacc4b1d",
+    "B": "43e080f82f0c52911c5a920073e4ef5161d1ae6c4b6db81b258faeaed8f3cb65",
     "C": "42c872452a68417c948b89b24d3f401ff5c09a8883cc97c4fcc880fcc38d3f06",
     "D": "ef678da1ebff284a2aa62942e56966fbea0a043598159e6a791729e525a720ea",
     "E": "19fd4cbdabec3af1534d5ee814db896f0e1690c2816fd01b465199ebb58ddc48",
-    "F": "67a03c907021be22d23aa10180d1c77a88140f55fd649d10a81eb5cb92f471f0",
+    "F": "974617093f1edb38cc57a7f64d1c35ee2b8260a1466a2126fbad5b1a3a03b7d6",
     "G": "605c08afbb78b5ea61b39129d04adb8acb2cec4854aaa3a59828a413f983f1b1",
     "H": "65145a398dcfb36e353f51c2b22fd6bd5de27c433eb9ccdd771b76d67e071a06",
-    "V": "9f4599d46cd10a86c5fadf9573ac71872ab5373b4bd48f11da03035afc5c6f77",
-    "M": "dce3dc790de58ba257f3d1f090cadce8dc8d04910f3beaa0693795c3464133e1",
+    "V": "cfc32a29c7e09353ac6ca55bc5a02b09127a37d92907beb98a7471147ab47cb6",
+    "M": "31484f99d7d636c874d7efeb83accd10a651dc514b5568064a5807bc491c2bc3",
 }
 
 

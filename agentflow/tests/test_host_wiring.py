@@ -357,9 +357,15 @@ def test_semantic_review_seam_goes_only_to_h(tmp_path: Path):
     b = reg["B"][1](store=st)
     assert type(b.extractor).__name__ == "RuleExtractor", type(b.extractor).__name__
     c = wiring["conductor"]
-    for role, action in (("B", "run_once"), ("E", "list_experiments")):
-        res = c.summon(role, action, {}, by="M", instance="probe-1")
-        assert res.outcome == "ok", (role, res.status, res.outcome, res.error)
+    # B 只能由父代理转达（2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）。
+    # 这一组里已接线的父代理只有 E（B 的进路是 `A/D/E/F`，见 `capabilities.ALLOWED_EDGES`）
+    # ⇒ 走 M→E→B，判的仍然是"B 被召唤时抽取器与读数对不对"。
+    e1 = c.summon("E", "list_experiments", {}, by="M", instance="probe-1")
+    assert e1.outcome == "ok", (e1.status, e1.outcome, e1.refusal_reason, e1.detail)
+    for role, action, by, parent in (("B", "run_once", "E", e1.task_id),
+                                     ("E", "list_experiments", "M", None)):
+        res = c.summon(role, action, {}, by=by, parent_task_id=parent, instance="probe-1")
+        assert res.outcome == "ok", (role, res.status, res.outcome, res.refusal_reason, res.detail)
 
 
 def test_a_factory_that_raises_typeerror_is_not_masked(tmp_path: Path):
@@ -670,8 +676,11 @@ def test_run_agent_wiring_exposes_the_extractor_notes(tmp_path: Path):
     assert "notes" in wiring, wiring.keys()
     assert not any("B：" in n for n in wiring["notes"]), (
         "还没造过 B 就写了它的抽取器读数？那是装配期的谎话（画像文件那条 note 不算）")
-    res = wiring["conductor"].summon("B", "run_once", {}, by="M")
-    assert res.status == "done", (res.status, res.outcome, res.error)
+    e1 = wiring["conductor"].summon("E", "list_experiments", {}, by="M")
+    assert e1.outcome == "ok", (e1.status, e1.outcome, e1.refusal_reason, e1.detail)
+    # B 只能由父代理转达（2026-10-10 裁定第 4 条）；这一组里已接线的父代理只有 E。
+    res = wiring["conductor"].summon("B", "run_once", {}, by="E", parent_task_id=e1.task_id)
+    assert res.status == "done", (res.status, res.outcome, res.refusal_reason, res.detail)
     assert any("B：" in n for n in wiring["notes"]), wiring["notes"]
     # 负控（同一条读数的另一面）：没有 key 时它必须说清"会拒抽"，而不是沉默
     assert any("拒抽" in n or "LLMExtractor" in n for n in wiring["notes"]), wiring["notes"]

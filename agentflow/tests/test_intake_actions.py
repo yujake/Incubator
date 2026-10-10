@@ -393,12 +393,15 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     编排层（主控只能 summon 动作）。所以这一条每一步都走 `conductor.summon`：
 
         A.ingest_local    → literature 1 行（拿到 lit_id）
-        B.register_statement → statements 1 行（三件套 + 出处）
+        A → B.register_statement → statements 1 行（三件套 + 出处）
         G.build_document  → documents 1 行（claims 引 lit:）
         H.review          → 我方稿件 status 由 draft 推成 accepted
 
+    第二跳的召唤方是 A（业主 2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V，
+    只能间接由父代理转达）—— 这一条链顺手把"间接那一跳真的走得通"也钉住了。
+
     每一步都断言 `outcome == "ok"`（不是"没报错"）：`refused` 是允许的失败形态，
-    但它不算走通 —— 这条链要么四跳全 ok，要么判据红。
+    但它不算走通 —— 这条链要么全 ok，要么判据红。
     """
     st = _store(tmp_path)
     c = Conductor(st, registry=_agents(st))
@@ -411,10 +414,17 @@ def test_the_whole_chain_is_walkable_through_conductor_summon(tmp_path: Path):
     assert lit.data["outcome"] == "ok", lit.data
     lit_id = st.rows("literature")[0]["lit_id"]
 
-    stmt = reg.call("conductor.summon", role="M", target_role="B", action="register_statement",
-                    params={"source_lit_id": lit_id, **STATEMENT}, input_key="hop-b")
-    hops.append(stmt.data)
-    assert stmt.data["outcome"] == "ok", stmt.data
+    # 第二跳的召唤方是 A（业主 2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V，
+    # 只能间接由父代理转达）—— 这一条链顺手把"间接那一跳真的走得通"也钉住了。
+    #
+    # 为什么这一跳直接调 `Conductor.summon` 而不是走 `conductor.summon` 工具：
+    # 那件工具的可调用面只有主控（`tools/conductor_tools.py` 里 `by=S.CONDUCTOR_ROLE` 写死），
+    # 而 A→B 在生产里是 A 自己的循环发出 `summon` 形状时由 `agent_loop` 代调的。
+    # 工具的返回结构（`data["payload"]`）在这里用不上，直接读 `SummonResult.payload` 即可。
+    stmt = c.summon("B", "register_statement", {"source_lit_id": lit_id, **STATEMENT},
+                    by="A", parent_task_id=lit.data["task_id"], input_key="hop-b")
+    hops.append({"action": "register_statement", "status": stmt.status, "outcome": stmt.outcome})
+    assert stmt.outcome == "ok", (stmt.status, stmt.outcome, stmt.refusal_reason, stmt.detail)
     assert len(st.rows("statements")) == 1
 
     doc = reg.call("conductor.summon", role="M", target_role="G", action="build_document",
@@ -466,11 +476,12 @@ def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_p
            "page_range": None, "doc_id": "0000",
            "quote_verified": None, "quote_reason": "证明还没做完（推到第 3 步卡住）"}
     own.pop("proof_text")  # 自产命题、证明还没做完 ⇒ 登记 + 标记（不再拒绝）
-    res = reg.call("conductor.summon", role="M", target_role="B", action="register_statement",
-                   params=own, input_key="record-proof-text")
-    assert res.ok, res.error
-    assert res.data["outcome"] == "ok", res.data
-    assert res.data["refusal_reason"] is None, res.data
+    # 召唤方是 A（2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）。
+    # 与上一条同理：`conductor.summon` 工具只开给主控，所以这一跳直接调 API。
+    res = c.summon("B", "register_statement", own, by="A", input_key="record-proof-text")
+    assert res.status == "done", (res.status, res.outcome, res.refusal_reason, res.error)
+    assert res.outcome == "ok", (res.outcome, res.refusal_reason, res.detail)
+    assert res.refusal_reason is None, res.refusal_reason
 
     rows = st.rows("statements")
     assert len(rows) == 1, rows
@@ -478,8 +489,7 @@ def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_p
     assert str(row.get("proof_text") or "") == "", row
     assert row.get("quote_verified") is None and str(row.get("quote_reason") or ""), row
     assert EB.derive_grade(row.get("bits") or {}) == "conjecture", row.get("bits")
-    pending = res.data.get("payload", {}).get("pending") if isinstance(
-        res.data.get("payload"), dict) else None
+    pending = res.payload.get("pending") if isinstance(res.payload, dict) else None
     if pending:                       # 返回值里挂着待办（形状取决于工具层的裁剪，能判就判）
         assert pending[0]["kind"] == "missing_proof", pending
         assert pending[0]["who"] == "F" and pending[0]["missing"] == "proof_text", pending

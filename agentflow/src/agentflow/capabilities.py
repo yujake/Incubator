@@ -1875,11 +1875,16 @@ def assert_capabilities(
         f"少 {sorted(set(S.ROLES) | {S.CONDUCTOR_ROLE} - set(_ws))}"
     )
     assert set(ALLOWED_EDGES) >= set(S.ROLES), f"ALLOWED_EDGES 缺少角色 {sorted(set(S.ROLES) - set(ALLOWED_EDGES))}"
-    # `FINAL-R4-01`：上面那一条只核键集（"每个角色都有出边条目"），
-    # 不核值。于是把 M 的边写成 7 元字面量（漏掉 H）之后，新角色永远不会被
-    # 主控召唤，而这条断言照样过 —— 今天守住它的用例在 `tests/test_policy.py`
-    # （`assert C.ALLOWED_EDGES["M"] == frozenset(S.ROLES)`），落点不在能力层自家
-    # 判据里。这里补上同一条：主控的出边必须恰好是全部角色。
+    # `FINAL-R4-01`：上面那一条只核键集（"每个角色都有出边条目"），不核值 ——
+    # 漏掉一个角色时它照样过。这里守住"主控到底能不能够到每一个角色"，
+    # 判据形态在 2026-10-10（第 146 轮第 4 条裁定）换过一次：
+    #
+    #   改前：`ALLOWED_EDGES["M"] == frozenset(S.ROLES)`（恰好等于全部角色）。
+    #   改后：业主裁定逐字「M 的出边设限（不许直接控制 B、F、V，只可间接由父代理转达）」
+    #         ⇒ 那条等式按定义不再成立。换成的判据有三条，见下面 `_INDIRECT_FROM_M` 那段。
+    #
+    # 为什么不是"把等式右边改成 `set(S.ROLES) - {B,F,V}`"：那等于把裁定抄成第二份字面量，
+    # 声明层（`specs/m.py`）一改它就跟着漂，而它自己说不出"少了哪条链就不对"。
     #
     # 位置刻意放在下面那个逐条循环之后：先让"含非角色目标"那条判据对
     # `{"agent-A"}` 这类拼错说话（`test_unknown_edge_target_is_rejected` 逐字匹配
@@ -1898,11 +1903,43 @@ def assert_capabilities(
             f"ALLOWED_EDGES[{frm!r}] 允许召唤这些不可召唤的角色 {sorted(set(tos) & NON_SUMMONABLE)} —— "
             "没有『召唤主控』这件事，它只能由用户/调用方驱动"
         )
-    assert set(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ()) == set(S.ROLES), (
-        f"ALLOWED_EDGES[{S.CONDUCTOR_ROLE!r}] 必须恰好等于 schema.ROLES："
-        f"多 {sorted(set(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ()) - set(S.ROLES))}，"
-        f"少 {sorted(set(S.ROLES) - set(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ()))}"
-        "（少的那些角色永远不会被主控召唤，而键集判据看不见这件事）"
+    # ---- [1b] 主控的出边：三条判据（2026-10-10 第 146 轮第 4 条裁定）
+    #
+    # 裁定的内容是一条"间接"要求：主控不许直接控制 B / F / V，只可间接由父代理转达。
+    # 它有三处可判的地方，缺一条就有一种坏法看不见：
+    #
+    #   ① 直接边不许含这三个 ⇒ 裁定本身（把边偷偷加回去会被这里抓住）；
+    #   ② 这三个各自要有**别的**进路 ⇒ 否则它们成了孤儿（"间接转达"根本没有路，
+    #      而那三个角色从此谁也召唤不到，键集判据与 ① 都看不见）；
+    #   ③ 从主控出发在边图上可达每一个角色 ⇒ 换掉旧等式之后，"够不到某个角色"
+    #      这件事仍然有人守（旧的等式守的就是这个，只是它顺带把"必须直接"也写死了）。
+    #
+    # 三个角色名在这里是判据的一部分（判据必须能独立说出"哪一条不对"）；
+    # 它们**不是**边表的第二份定义 —— 边表的真身是 `specs/m.py` 的 `edges`。
+    _INDIRECT_FROM_M = frozenset({"B", "F", "V"})
+    _m_edges = frozenset(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ())
+    assert not (_m_edges & _INDIRECT_FROM_M), (
+        f"ALLOWED_EDGES[{S.CONDUCTOR_ROLE!r}] 含 {sorted(_m_edges & _INDIRECT_FROM_M)}："
+        "这三个角色按 2026-10-10 的裁定只能间接由父代理转达（B 走 A、F 走 D、V 走 F），"
+        "主控直接派它们是被明确设限的那一件事"
+    )
+    for _role in sorted(_INDIRECT_FROM_M):
+        _inbound = sorted(frm for frm, tos in ALLOWED_EDGES.items()
+                          if _role in tos and frm != S.CONDUCTOR_ROLE)
+        assert _inbound, (
+            f"{_role} 既不能被主控直接召唤、又没有别的父代理进路 ⇒ 这个角色成了孤儿"
+            "（裁定要的是『间接转达』，不是『谁都派不动』）"
+        )
+    _reachable = set(_m_edges)
+    while True:
+        _grew = {t for frm in _reachable for t in ALLOWED_EDGES.get(frm, ())} - _reachable
+        if not _grew:
+            break
+        _reachable |= _grew
+    _unreachable = sorted(set(S.ROLES) - _reachable)
+    assert not _unreachable, (
+        f"从 {S.CONDUCTOR_ROLE} 出发在边图上到不了这些角色：{_unreachable} —— "
+        "它们永远不会被召唤（改前那条『出边恰好等于 schema.ROLES』守的就是这件事）"
     )
 
     # ---- [2] handler 真的存在

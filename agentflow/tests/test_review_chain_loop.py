@@ -37,6 +37,22 @@ _ROW: dict = {
 }
 
 
+class _StubA:
+    """A 的替身（只为了给 B 一个能转达的父代理）。
+
+    为什么这一组需要它（2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）：
+    改前这里直接 `summon("B", ..., by="M")`；裁定之后 B 必须由 A/D/E/F 转达，
+    而本组的 registry 里只登记了循环角色（`LOOPS` 只有 B）⇒ 不补一个 A，
+    "B 被召唤"这件事在这张工作区里根本发生不了。
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    def run_once(self):
+        return {"outcome": "ok", "detail": "stub-A"}
+
+
 class _Scripted:
     """照剧本回答的替身模型：每次取一条，取完重复最后一条。"""
 
@@ -72,7 +88,7 @@ def _world(tmp_path: pathlib.Path):
                                        "## 我卡在哪\n不卡。\n", "refs": []}},
                    ensure_ascii=False),
     ])
-    inner = LocalBackend({})
+    inner = LocalBackend({"A": ("object", _StubA())})
     backend = LlmBackend(inner=inner, loops=LOOPS, session_root=st.root,
                          seam_factory=lambda role: LlmSeam(role=role, session_root=st.root,
                                                            gateway=gw, price=(0.0, 0.0),
@@ -136,9 +152,12 @@ def test_a_dangling_artifact_reference_is_caught_by_verify(tmp_path):
 
     st, cond, reg, gw = _world(tmp_path)
     # 走主控的召唤（`run_role` 直接调不写台账行 —— 台账行是召唤写的）
-    res = cond.summon("B", "run_once", {}, by="M")
-    assert res.outcome == "ok", (res.status, res.outcome, res.error, res.refusal_reason)
-    rows = st.rows("tasks")
+    # B 只能由 A 转达（2026-10-10 裁定第 4 条：主控不许直接控制 B / F / V）⇒ 走 M→A→B。
+    a1 = cond.summon("A", "run_once", {}, by="M")
+    assert a1.outcome == "ok", (a1.status, a1.outcome, a1.refusal_reason, a1.detail)
+    res = cond.summon("B", "run_once", {}, by="A", parent_task_id=a1.task_id)
+    assert res.outcome == "ok", (res.status, res.outcome, res.refusal_reason, res.detail)
+    rows = [r for r in st.rows("tasks") if r.get("role") == "B"]
     assert len(rows) == 1, rows
     # 把那次召唤的产出改成指向一个不存在的行
     with st.tx("tasks", actor="test") as tx:

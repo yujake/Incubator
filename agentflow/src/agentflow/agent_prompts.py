@@ -144,7 +144,7 @@ from .promptkit import PromptRegistry, Scope, Section, SECTION_ORDERS
 #: `p62`（2026-10-10，T4 第 9 趟的反面）：`p61` 那半句只说"C 是依据、不是本体" ⇒ M 把它降成
 #: 叙述、交付面连一条 `rel:` 都不引（收工门 blocker："C 跑了 6 次而产物一条都没进交付面"）
 #: ⇒ 把那半句补全：依据也要真的被引到（交付物里至少引一条 `rel:`）。仍只换 M 那一格。
-PROMPT_VERSION = "p62"
+PROMPT_VERSION = "p63"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 LOOP_PROTOCOL = """\
@@ -1205,6 +1205,12 @@ ROLE_BRIEFS: dict[str, RoleBrief] = {
         ),
         policy=(
             "先窄后宽：优先派能一次给出可判定结果的角色；每一轮结束后看一眼台账再决定下一步。",
+            "**B / F / V 只能间接由父代理转达，你派不动它们**（业主 2026-10-10 裁定："
+            "不许直接控制这三个角色）：要 B 做的抽取/重抽取 ⇒ 派 A（`A.run_once` / `A.run`），"
+            "由 A 转达；要 F 的攻坚推进 ⇒ 派 D（立题/关系那一侧的动作），由 D 建计划并派 F；"
+            "要 V 的复核 ⇒ 走 D → F 那条链（V 改后只剩 F 这一条进路）。直接 `conductor.summon` "
+            "点名这三个角色会被判 `forbidden_edge` —— 那句话的意思是「这条边不存在」，不是故障；"
+            "拿到它就换成上面那条链，别重试同一条边。",
             "步数有限：现状侦察最多做一次（conductor.state 与 conductor.ledger 二选一），"
             "随后必须派活或留言。用只读调用填满步数是这次运行最常见的失败形态。",
             "被拒绝了就换一条路（换伙伴、换动作、或把缺口如实写进交付），而不是停在那里；"
@@ -1683,6 +1689,20 @@ def partners_out(role: str) -> tuple[str, ...]:
     return tuple(sorted(C.ALLOWED_EDGES.get(role, frozenset())))
 
 
+def visible_partners(role: str) -> tuple[str, ...]:
+    """这个角色在提示词里看得到谁：主控看全体，其余角色看自己的出边。
+
+    为什么"看得见"与"派得动"必须是两个面（两条裁定合起来才成立）：
+    2026-10-09 的裁定逐字是「M 要看到所有人的简介，其它智能体只要看到可协作的同伴的简介」，
+    而 2026-10-10 第 146 轮第 4 条又把主控的出边砍到六个（不许直接控制 B / F / V）。
+    两句话同时成立 ⇒ 主控的伙伴表仍是全体（它要按全体简介排期），但表里那三个
+    必须带「你唤不起它」的标记 —— 否则提示词里那句"你可以唤起这些伙伴"就是一句假话。
+    """
+    if role == S.CONDUCTOR_ROLE:
+        return tuple(sorted(S.ROLES))
+    return partners_out(role)
+
+
 def partners_in(role: str) -> tuple[str, ...]:
     """谁能唤起这个角色（边表的入边；主控永远不在里面）。"""
     return tuple(sorted(r for r, to in C.ALLOWED_EDGES.items() if role in to))
@@ -1700,13 +1720,22 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
     """
     out: list[str] = []
     outs = partners_out(role)
+    seen = visible_partners(role)
     # 指路（§109）：画像已经落盘，随时可查 —— 开头注入的那一份跑到后面会被挤远。
     out.append(f"（每个伙伴的完整画像——职责 / 交付物 / 边界 / 动作与参数——"
                f"也落在工作区根的 `{PROFILES_FILE}` 里，随时用 fs.read 查）")
-    if outs:
+    if seen:
+        if set(seen) != set(outs):
+            # 主控这一档：看得到全体，但其中几个唤不起（2026-10-10 裁定第 4 条）。
+            # 这句话必须在这里说，因为下面的表头写的是"你可以唤起这些伙伴"。
+            out.append("下面这些伙伴里，带「你唤不起它」标记的那几个只能间接由父代理转达"
+                       "（业主 2026-10-10 裁定：主控不许直接控制 B / F / V）："
+                       "派它们会被判 `forbidden_edge` —— 那句话的意思是「这条边不存在」，"
+                       "不是故障；要它们干活就走别的角色转达（policy 里逐条写了走哪条链）。"
+                       "其余那些是你的直接出边。")
         out.append("你可以唤起这些伙伴（用 summon 形状），他们的职责与可调用动作如下"
                    "（括号里只列必填；可用键是封闭集合，写错时框架会把完整参数表回给你）：")
-        for other in outs:
+        for other in seen:
             # 每个动作带上一句摘要（`draft/39` §6.45 的 D56）：此前伙伴行里只有
             # `动作名（参数提示）`，于是无参动作等于只有一个名字 —— 真机代价是
             # T5 第 5 趟里 M 从头到尾没派过 `A.run_once`（它是消费检索队列的那一个），
@@ -1715,10 +1744,13 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
             acts = "；".join(f"{a.action}{_params_hint(a)}——{a.summary}"
                              for a in C.actions_for(other))
             mark = ""
+            if other not in outs:
+                # 看得到但唤不起（主控那一档的 B / F / V，2026-10-10 裁定第 4 条）。
+                mark += "（你唤不起它：只能间接由父代理转达）"
             if availability is not None:
                 state = str(availability.get(other) or "unknown")
                 if state != "wired":
-                    mark = f"（现在没接线：{state}）"
+                    mark += f"（现在没接线：{state}）"
             # `draft/37` §108（用户口径"先加强描述"）：伙伴画像此前只有"它有什么动作"，
             # 没有"它交付什么、它不许做什么"。真机代价：主控把 `ingest_local` 派给了 B
             # （那是 A 的动作，`refused/unknown_action`），也会拿"越权请求"去撞拒绝 ——
