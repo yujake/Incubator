@@ -108,19 +108,3 @@ def test_anti_vacuum_3_the_criterion_only_looks_at_deliverable() -> None:
 
     assert _violations({"Z": _Spec()}) == [] or all("deliverable" in b for b in _violations({"Z": _Spec()})), \
         _violations({"Z": _Spec()})
-
-
-def test_negative_the_two_copies_of_the_same_declaration_stay_in_step() -> None:
-    """负控（同一条声明的两处副本）：`specs/d.py` 与 `agent_prompts.ROLE_BRIEFS["D"]` 逐字一致。
-
-    为什么单列：这两处由 `tests/test_agent_spec_reconciliation.py` 对账，而"声明改一处、
-    另一处不改"正是这条判据要防的形态 —— 本轮改 D 的交付物时就先撞上了它
-    （`pytest` 报 `[D] brief.deliverable：spec … ≠ 真相 …`）。
-    """
-    from agentflow import agent_prompts as AP
-
-    specs = C._specs.builtin_specs()
-    two = (specs["D"].brief.deliverable, AP.ROLE_BRIEFS["D"].deliverable)
-    assert two[0] == two[1], f"两处 D 交付物不一致：\nspecs: {two[0]}\nprompts: {two[1]}"
-    # 而这一句里若提到 `analysis_reports`，必须是在说"不进那张表"（不许把它当交付落点）
-    assert "analysis_reports" not in two[0] or "不进那张表" in two[0], two[0]

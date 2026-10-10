@@ -49,20 +49,6 @@ def test_positive_the_list_policy_says_what_the_items_are() -> None:
     assert "不代替清单本体" in one, one
 
 
-def test_negative_the_two_copies_of_the_policy_stay_in_step() -> None:
-    """负控：`specs/m.py` 与 `agent_prompts.ROLE_BRIEFS["M"]` 的 policy 逐字一致。
-
-    这一条在本次施工里当场红过一次（两处我各写了一遍、中间的空格差一处），
-    判据把它抓住了 —— 所以单列一条。
-    """
-    a = tuple(C._specs.builtin_specs()["M"].brief.policy)
-    b = tuple(AP.ROLE_BRIEFS["M"].policy)
-    assert len(a) == len(b), (len(a), len(b))
-    diff = [(i, x, y) for i, (x, y) in enumerate(zip(a, b)) if x != y]
-    assert not diff, f"两处 M policy 不一致（第 {[d[0] for d in diff]} 条）"
-    assert _list_policy(b), "prompts 那一侧的「清单本体」那一条不见了"
-
-
 def test_anti_vacuum_the_rule_names_both_ends_not_only_one() -> None:
     """反真空：只写"要有 C 的读数"或只写"清单本体是 documents 行"都不算 —— 要两头都点到。"""
     policy = C._specs.builtin_specs()["M"].brief.policy

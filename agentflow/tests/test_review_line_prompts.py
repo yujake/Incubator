@@ -129,22 +129,22 @@ def test_the_facts_table_covers_exactly_the_six_roles_of_this_phase() -> None:
 
 @pytest.mark.parametrize("role", ["A", "B", "C", "D", "H", "M"])
 def test_the_role_brief_and_the_spec_are_the_same_object(role: str) -> None:
-    """提示词的真身是 `ROLE_BRIEFS`；`specs/<角色>.py` 是它逐字镜像。
+    """这六条口径必须落在 `boundary` 或 `policy` 里，不许只落在 `stance` 里。
 
-    这一条与 `tests/test_agent_spec_reconciliation.py` 的关系：那条判据比"六格全等"，
-    这条只比本次改过的六个角色，并额外守一条结构性的要求 ——
-    P2 的这批口径必须落在 `boundary` 或 `policy` 这两格里，
- 不许只落在 `stance` 里：`stance` 受官能轻重（`FACULTY_EMPHASIS`）影响，
-    某一档被改成 `denied` 时它就不再渲染，于是"口径还在"与"口径进不了提示词"会分家
-    —— 而分家时上面那条"关键词必须出现"的判据才会红，红得比病因晚一步。
+    ## 唯一化之后（业主 2026-10-11）
+
+    本用例原名"`ROLE_BRIEFS` 与 `specs/<角色>.py` 是同一个对象"，里面比过
+    `tuple(spec_brief.boundary) == tuple(brief.boundary)` 与 `policy` 那两行。
+    业主裁定「I 保证文本唯一性」+「I-1 `specs/<role>.py::SPEC.brief` 是唯一真身；
+    `agent_prompts.ROLE_BRIEFS` 改成它的视图」之后，那两行比的是同一个对象
+    ⇒ 恒真的假绿，按裁定删掉；用例名的"same object"因此只对了一半，留在这里是因为
+    改名会牵动 `draft/107` 的清单编号，改动本身留到提示词施工那一批一起做。
+
+    它守什么（与唯一性无关，所以保留）：`stance` 受官能轻重（`FACULTY_EMPHASIS`）影响 ——
+    某一档被改成 `denied` 时它就不再渲染，于是"口径还在"与"口径进不了提示词"会分家。
     （H 的 `policy` 本来就是空的：只读角色的政策写在边界里。这条判据不要求每格都非空。）
     """
-    from agentflow.agentspec import builtin_registry
-
     brief = AP.ROLE_BRIEFS[role]
-    spec_brief = builtin_registry().get(role).brief
-    assert tuple(spec_brief.boundary) == tuple(brief.boundary)
-    assert tuple(spec_brief.policy) == tuple(brief.policy)
     always_rendered = "\n".join(brief.boundary) + "\n" + "\n".join(brief.policy)
     loose = [f"{role}：「{needle}」只落在 stance 里（官能轻重一改就可能不再渲染）"
              for r, needle, _w in FACTS if r == role and needle not in always_rendered]

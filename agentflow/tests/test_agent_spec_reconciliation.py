@@ -1,13 +1,21 @@
 # -*- coding: utf-8 -*-
-"""`AgentSpec` 与"今天的六处真相"的逐格对账（`goal-7f5116c1` M2 的判据）。
+"""`AgentSpec` 与"今天的几处真相"的逐格对账（`goal-7f5116c1` M2 的判据）。
 
 M2 只做"声明集中到角色自己的模块里"这一步，不接管真相：动作表还在 `capabilities.py`、
 构造工厂还在 `host.py`。所以这一步的产物是"第二份声明与第一份逐格相等"的证据 ——
 没有它，M3/M4 的接管就是在一个不知道对不对的基线上动刀。
 
-对账的六处：`agent_prompts.ROLE_BRIEFS` / `FACULTY_EMPHASIS` / `FACULTY_LOCAL`、
-`capabilities.ALLOWED_EDGES` / `WRITE_SETS`、`tools.READ_ONLY_ROLES`、
-`capabilities.NON_SUMMONABLE`、以及"`host` 真的会构造出哪个类"。
+对账的几处：`FACULTY_EMPHASIS` / `FACULTY_LOCAL`、`capabilities.ALLOWED_EDGES` / `WRITE_SETS`、
+`tools.READ_ONLY_ROLES`、`capabilities.NON_SUMMONABLE`、以及"`host` 真的会构造出哪个类"。
+
+## 唯一化之后：六格 brief 不再对账（业主 2026-10-11）
+
+原判据还比六格 brief（`duty`/`boundary`/`policy`/`signature_error`/`deliverable`/`stance`）：
+`spec.brief` vs `agent_prompts.ROLE_BRIEFS[role]`。业主裁定「保证文本唯一性」+
+「I-1 `specs/<role>.py::SPEC.brief` 是唯一真身；`agent_prompts.ROLE_BRIEFS` 改成它的视图」之后，
+两者是同一个对象 ⇒ 那一半成了恒真的假绿，按裁定删掉（不是改成别的东西：
+它要守的"两份会漂"这件事在唯一化之后不存在了）。
+一句话口径：一条判据在它守的东西消失之后仍然亮绿，就是假绿 —— 本仓对死判据一贯是删。
 """
 from __future__ import annotations
 
@@ -26,17 +34,16 @@ from agentflow.tools import READ_ONLY_ROLES, TOOL_ROLES
 
 
 def _mismatches(spec: AgentSpec) -> list[str]:
-    """一份 spec 与今天六处真相不一致的地方（空列表 = 逐格相等）。"""
+    """一份 spec 与今天几处真相不一致的地方（空列表 = 逐格相等）。
+
+    六格 brief（`duty`/`boundary`/`policy`/`signature_error`/`deliverable`/`stance`）
+    不在这里比：业主 2026-10-11 裁定"保证文本唯一性"之后，`agent_prompts.ROLE_BRIEFS`
+    已经是 `spec.brief` 的视图（`agent_prompts.py` 的 `ROLE_BRIEFS` 那一段），
+    再比就是"同一对象与自己比" —— 一条恒真的假绿。那一半判据按同一裁定删掉了
+    （见模块 docstring 的"唯一化之后"一节）。
+    """
     role = spec.role
     out: list[str] = []
-    brief = AP.ROLE_BRIEFS[role]
-    for field in ("duty", "boundary", "policy", "signature_error", "deliverable", "stance"):
-        mine = getattr(spec.brief, field)
-        theirs = getattr(brief, field)
-        if isinstance(theirs, tuple):
-            theirs = tuple(theirs)
-        if mine != theirs:
-            out.append(f"brief.{field}：spec {mine!r:.120} ≠ 真相 {theirs!r:.120}")
     if dict(spec.emphasis) != dict(AP.FACULTY_EMPHASIS[role]):
         out.append(f"emphasis：spec {sorted(spec.emphasis.items())} ≠ 真相 "
                    f"{sorted(AP.FACULTY_EMPHASIS[role].items())}")
@@ -112,7 +119,11 @@ def test_the_class_path_is_what_host_actually_builds() -> None:
 
 
 def test_the_reconciliation_catches_a_drifted_spec() -> None:
-    """负控：主判据真的在比内容 —— 把 spec 的每一类格子各改一格，它都必须报出来。"""
+    """负控：主判据真的在比内容 —— 把 spec 的每一类还在对账的格子各改一格，它都必须报出来。
+
+    刻意不再包含 `brief=...` 那一档：六格 brief 唯一化之后没有"第二份"可漂
+    （见模块 docstring 的"唯一化之后"一节），拿它做漂移等于伪造一个不可能发生的形态。
+    """
     reg = builtin_registry()
     spec = reg.get("A")
     drift = [
@@ -120,7 +131,6 @@ def test_the_reconciliation_catches_a_drifted_spec() -> None:
         dataclasses.replace(spec, read_only=True),
         dataclasses.replace(spec, summonable=False),
         dataclasses.replace(spec, write_set=frozenset({"literature"})),
-        dataclasses.replace(spec, brief=dataclasses.replace(spec.brief, duty="改过的职责")),
         dataclasses.replace(spec, emphasis={**spec.emphasis, "眼睛": "minor"}),
         dataclasses.replace(spec, local_notes={}),
     ]
