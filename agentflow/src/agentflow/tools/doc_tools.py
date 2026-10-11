@@ -2463,8 +2463,16 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> 
     registry.register(
         ToolSpec(
             name="doc.paper_render",
-            summary="跑项目里的渲染脚本（默认 code/make_paper.py）：从库里的行重新产出主稿、"
-            "四张表与六件配套，并写渲染锚。原始退出码与脚本的 REPRO_RESULT 结论一字不改带回。",
+            # 摘要此前写死"从库里的行重新产出主稿、四张表与六件配套" —— 那只是生成器那一档
+            # 项目脚本的行为；真机 77 个工作区里 37 份 `code/make_paper.py` 有 35 份是
+            # "洁净室渲染器：只写锚，不碰 main.tex"（`draft/37` §35.2/§37.1 的口径）。
+            # 对那一档说"重产主稿"是假话，而且与提示词自己那句"main.tex 可改、该改"打脸
+            # ⇒ 改成脚本无关的事实：重产哪些文件由脚本决定，读数看 REPRO_RESULT
+            # （`draft/108` CS-19）。
+            summary="跑项目里的渲染脚本（默认 code/make_paper.py）：重产哪些文件由那个脚本决定"
+            "（有的项目连主稿、附录与表一起重产，有的只写渲染锚、不碰你改过的 main.tex）——"
+            "以它那行 `REPRO_RESULT: {json}` 的读数为准；原始退出码与结论一字不改带回，"
+            "没有结论行就算没走成。",
             params={
                 "type": "object",
                 "properties": {

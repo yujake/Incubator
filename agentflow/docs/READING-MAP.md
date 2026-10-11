@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R48），
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R52），
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **212 个 `.py`、124,026 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,791 行** —— 批 R40 把它补进了 §3 的表；
+> **212 个 `.py`、124,044 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,791 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行是 `schema.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -19,7 +19,8 @@
 > `framework_interrupt` 两个广告面与 `framework_final.blocked` 的透传，净 +60 行）；
 > **批 R48 再改一次**：123,991 → **124,026**（`llmseam.py` 补派活那一栏的
 > `DISPATCH_NOTIFY_JSON_SCHEMA` 并挂到 `framework_summon` / `framework_summon_many`，
-> 净 +35 行）。）
+> 净 +35 行）；**批 R52 再改一次**：124,026 → **124,044**（工具层改
+> `doc.paper_render` 的摘要 + `agent_prompts.py` 的纸包两处，净 +18 行）。）
 >
 > **它自己也有判据**：`tests/test_reading_map.py` 会断言
 > ①图里提到的每个文件名都真实存在；②`src/agentflow` 的每个模块至少在这张图里出现一次

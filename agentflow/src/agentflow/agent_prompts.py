@@ -323,7 +323,14 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `recorded=False`（"不许静默卡住"是硬条件，且这句话只在收工之后才回给模型，事前看不见）
 #: ⇒ 模型会写出一笔落不到盘上的 `blocked`。改成"`why` 与 `needs` 都必填"（补的是事实，
 #: 不是新判据；不写死任何数字）。改的是共享段 ⇒ 十格全换。
-PROMPT_VERSION = "p95"
+#: `p96`（2026-10-12，批 R52：`draft/108` CS-19 —— "渲染脚本产出什么"的承诺说过头了）：
+#: `doc.paper_render` 的工具摘要（`doc_tools.py`）与纸包两处（`PAPER_01` / `PAPER_04`）
+#: 都写死了"从库里的行重新产出主稿、四张表与六件配套"；而真机 77 个工作区里 37 份
+#: `code/make_paper.py` 有 35 份是"洁净室渲染器：只写锚，不碰 main.tex"（`draft/37`
+#: §35.2/§37.1 的口径）⇒ 对那一档是假话，而且与同一段里"main.tex 可改、该改"互相打脸。
+#: 改成脚本无关的事实：重产哪些文件由那个脚本决定、以它那行 `REPRO_RESULT` 的读数为准
+#: （产不产 `appendix.tex` / `tables/*.tex` 都看它）。纸包只发给 M/G/H ⇒ 只换三格。
+PROMPT_VERSION = "p96"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -1047,8 +1054,10 @@ PAPER_PACK = """\
 - 每次改动都要留下"依据"（引文片段 / 实验 id / 检查器原话 / 论文内部矛盾在哪），
   一句话即可，但要能被读者核对。改不了、核不到、拿不准的，如实写成"未核到"或
   "维持原样"，不许把没做的事写成做了。
-- 机械生成的那一半**不要手改**：`out/paper/appendix.tex` 与 `tables/*.tex` 由
-  `doc.paper_render` 从台账生成（四张表 + 台账摘要）；手改它们会在下一次渲染时被覆盖。
+- 机械生成的那一半**不要手改**：`out/paper/appendix.tex` 与 `tables/*.tex`（四张表 + 台账摘要）
+  由项目的渲染脚本产 —— **产不产看 `doc.paper_render` 的 `REPRO_RESULT` 读数**
+  （有的项目连它们一起重产，有的项目只写渲染锚、连主稿都不碰）；真产出来的那些，
+  手改会在下一次渲染时被覆盖。
   主稿 `main.tex` 的正文、证明、表述、引用 —— 那才是你写的地方。
 - **外部论文不是我方稿件**（`draft/37` §41/§43 的用户裁定，方案 A）：盘上拿到的、别人写的那份稿子，
   登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
@@ -1086,8 +1095,9 @@ PAPER_PACK = """\
 四、体例与工作循环
 - 主稿保持**论文自己的体例**（现在是 `article` + `amsmath`/`amsthm`/`hyperref`）：改它的时候
   不要换文档类、不要把台账表塞进正文 —— 正文是给读者读的论文，台账是附录。
-- `appendix.tex` 与 `tables/*.tex` 由 `doc.paper_render` 生成（`ctexart` + `booktabs`/`longtable`），
-  它们是机械产物，不手改。
+- `appendix.tex` 与 `tables/*.tex` 是机械产物（`ctexart` + `booktabs`/`longtable`），不手改：
+  它们由项目的渲染脚本产（产不产以 `doc.paper_render` 的 `REPRO_RESULT` 读数为准 ——
+  有的项目只写渲染锚）。
 - **工作循环**：改 `out/paper/main.tex`（`fs.read` 读、`fs.write` 写）→ `doc.paper_render`
   （刷新附录与四张表、重算锚）→ `doc.paper_compile`（重编 `main.pdf`）→ `doc.paper_state`
   （锚必须回到 `consistent`）。锚的 `files` 维度把主稿也算在内 ⇒ **改了正文不重渲染/重编译，
