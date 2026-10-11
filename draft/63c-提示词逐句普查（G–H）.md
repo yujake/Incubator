@@ -442,6 +442,31 @@
 # 七、我没判准的（留（未判），没给建议数字）
 
 1. **`PAPER_PACK 八` 是否对 G/H 整删**：它明确写「你（M）」，但 `PAPER_PACK_ROLES=("M","G","H")` 是刻意的设计决定（`agent_prompts.py:379-389` 的注释说这一段只对碰论文包的角色成立）。我没有证据证明 G/H 从不写 `out/review/REPORT.md`（`conductor.closing` 的 `report_path` 是 M 的用法，但 G/H 的 `fs.write` 面存在）⇒ 标「需确认」。
+   > **批 R49 的复核（2026-10-12）—— 把前提查准了，结论按工具面分角色**：
+   > 上面那句「G/H 的 `fs.write` 面存在」**对 G 成立、对 H 不成立**。现算读数
+   > （`temp/_probe_prompt_symbols.py`；`build_registry(store=…, workspace_root=…)` 逐角色取面）：
+   > `fs.write` → **A B D E F G M**（**没有 C / H / V**，只读角色由 `tools/base._role_surface`
+   > 结构性剥离）；`doc.paper_render` / `doc.paper_compile` / `doc.paper_anchor` → **只有 G**；
+   > `doc.paper_state` → **G、H**（191.2 那条"H 的只读核对路径"）；`fs.read` → 所有角色。
+   > ⇒ **H 读得到第四条「工作循环」与第八条体例声明里的每一步吗？不能**：
+   > 第四条那四步（`fs.write` 写主稿 → `doc.paper_render` → `doc.paper_compile` → `doc.paper_state`）
+   > 只有 G 跑得动；第八条那几句（用 `fs.write` 写 `REPORT-STYLE.json`、`REPORT.md` 的落点、
+   > `conductor.closing` 要跑）是 M 的活，M 也**没有** `doc.paper_state`。
+   > 加一条批 R49 新扫出来的**同类项**（这张表里没有它）：**第四条「工作循环」对 H 是"做不到的指示"**
+   > —— 它逐字写「改 `out/paper/main.tex`（`fs.read` 读、`fs.write` 写）→ `doc.paper_render` → …」，
+   > 而这三件 H 都没有（H 的只读核对面是 `fs.read` + `doc.paper_state` 的锚读数）。
+   > 这一条与 §二 表里"删（对 G/H）"是同一件事的两半。
+   > **两条修法（本轴只出草稿，等一句话）**：
+   > ① **最小（补事实）**：给第四条加一句边界 ——「这一套只有写主稿的那个角色跑得动：
+   > H 是只读角色，它核的是产物（`fs.read` 主稿 + `doc.paper_state` 的锚读数）」，
+   > 并按本表对 G/H 删第八条（表里那八行合计 ≈1,610 字）；
+   > ② **只删不补**：按本表把第八条对 G/H 整删，第四条的"工作循环"对 H 删掉（H 的活与
+   > "锚必须回到 consistent"这一条判据仍由 `doc.paper_state` 的返回自带）。
+   > 两条都要走一次提示词批（`p95 → p96`）：① 换十格里的共享段？**不是** —— `PAPER_PACK`
+   > 只发给 M/G/H；① 若按角色分岔，作用域是 `PAPER_04` / `PAPER_08` 两块（G/H/M 三格，
+   > 且 G 与 M/H 的文本会不同 ⇒ 段内需按角色渲染，属结构改动）；② 只删对 G/H 的那部分，
+   > 同样是"按角色不同文本"。**这一处要业主先定"①还是②"**，因为它决定要不要引入
+   > "段落按角色分岔"这种结构（本仓此前用 `paper_pack_for(role)` 的替换补丁做过一次同类事）。
 2. **`STRUCTURE_NOT_PROMPT` 十项该不该缩**：它是「事实与判断分开」这一设计的可读落点，有测试守着符号存在（`tests/test_agent_prompts.py`）。缩成一句会不会让模型把拒绝当失败，我判不准。
 3. **工具面「可选键」枚举能否交给秘书②**：`agent_prompts.py:1228-1234` 记录了一次真机事故（只写必填 ⇒ 模型给无参动作乱传键）。秘书① 现在会在发出前报警并列候选，但**报警不是拦下**（`prescreen` 只出 alarms，`optimize_outbound` fail-open）⇒ 我判不准「有候选」是否等价于「不会错」。
    **批 R23/R24 的复核（2026-10-11）**：**这条疑问与它的前提都不必再判** ——
