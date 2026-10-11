@@ -585,6 +585,83 @@ def test_confidence_stays_low_when_evidence_is_insufficient(tmp_path):
     assert result["criteria"] == ["a_no_keyword_hit", "b_low_degree_unverified"]
 
 
+def _sufficient_store(root) -> Store:
+    """三个概念 + 三条关系，使 `analyze_gaps` 的三条判据一条都不触发（sufficient）。
+
+    度数 ≥ 阈值、关键词在关系的 quote/description 里有命中、没有成对矛盾。
+    刻意让 `confidence` 仍是 low：置信度衡量证据强度，sufficient 衡量"有没有触发'不足'
+    的判据" —— 两者不是一回事（CS-5 的收口判据不许拿置信度当门槛）。
+    """
+    st = Store(root)
+    st.init()
+    for cid, name in (("0001", "甲"), ("0002", "乙"), ("0003", "丙"), ("0004", "丁")):
+        add_concept(st, cid, name, definition="d", sync=False)
+    add_relation(st, "0000", ["0001", "0002"], "0000", description="甲与乙有关", quote="q0", sync=False)
+    add_relation(st, "0001", ["0002", "0003"], "0000", description="乙与丙有关", quote="q1", sync=False)
+    add_relation(st, "0002", ["0003", "0004"], "0000", description="丙与丁有关", quote="q2", sync=False)
+    add_literature(st, "0000", title="A", processed=True, sync=False)
+    sync_counters(st)
+    return st
+
+
+def test_research_closes_a_sufficient_question_and_clears_the_waiting_set(tmp_path):
+    """证据足够 ⇒ `research()` 自己把状态收口到 `answered`，并按终态纪律清空等待集（CS-5）。
+
+    为什么值得一条判据：`researching → answered` 这条边早就在状态机表里
+    （`research_tools.LEGAL_TRANSITIONS`），但缺口这条路上没有任何代码走它 —— 真机 118 行
+    `research_questions` 里 `answered` 0 行，于是两道"已下结论就跳过"的过滤
+    （`pipeline.py` 的复查、`agent_d/core.py` 的裁决）永远不生效，同一个问题每一轮都被
+    重新研究、重新评估。不清空等待集的话 `verify` 会报 `stale_waiting` —— 与矛盾闭环
+    （`agent_d/adjudicate.py` 的 `resolved` 那一支）同一条纪律。
+
+    反真空在下面那一条里（不足时不许收口）。
+    """
+    st = _sufficient_store(tmp_path / "ws")
+    with st.tx("search_requests", actor="test", note="fixture") as tx:
+        req = S.SearchRequest(
+            request_id="r-0001", timestamp=TS, topic="甲与乙", mode="topical",
+            content_description="", done=True, submitted_by="agent-D", outcome="ok",
+            result_lit_ids=["0000"], for_question_id="0000",
+        )
+        req.validate()
+        tx.upsert("search_requests", req.to_dict(), note="fixture")
+    add_question(
+        st, "0000", question="甲与乙之间的链条是否成立？", related_concept_ids=["0001", "0002"],
+        related_relation_ids=["0000"], status="researching", waiting_request_ids=["r-0001"],
+    )
+
+    agent = AgentD(st)
+    assert agent.assess("0000")["sufficient"] is True, "夹具前提崩了：这一档应当是 sufficient"
+    res = agent.research("0000")
+
+    row = st.rows("research_questions")[0]
+    assert row["status"] == "answered", (
+        "证据够却不收口 ⇒ 问题永远停在 researching，台账里没有结论")
+    assert row["waiting_request_ids"] == [], (
+        "终态必须清空等待集，否则 verify 报 stale_waiting（也说明这一问不该再等谁）")
+    assert res["confidence"] == "low", "收口不等于拔高置信度（这两件事必须分得开）"
+    codes = {i.code for i in verify_all(st).issues}
+    assert "stale_waiting" not in codes
+
+
+def test_research_leaves_an_insufficient_question_researching(tmp_path):
+    """反真空：判据触发（证据不足）⇒ 不许收口成 `answered`。
+
+    把"收口"错写成"凡是 `research()` 都收口"，缺口就再也没有出口：
+    `submit_gaps` 与 `poll` 都只在非终态上工作，而 `answered` 是终态。
+    """
+    st = _opaque_store(tmp_path / "ws")
+    add_question(
+        st, "0000", question="关于韦伊猜想的证明路径是否已经完整",
+        related_concept_ids=["0001", "0002"], related_relation_ids=["0000"],
+        status="researching",
+    )
+    res = AgentD(st).research("0000")
+    assert res["criteria"] == ["a_no_keyword_hit", "b_low_degree_unverified"], res
+    assert st.rows("research_questions")[0]["status"] == "researching", (
+        "证据不足还收口 ⇒ 这一问再也没有机会去要检索")
+
+
 def test_llm_hook_cannot_raise_confidence(tmp_path):
     """LLM 钩子只能把置信度调低：它写 high 也必须被强制降回确定性算出的 low。"""
     st = _opaque_store(tmp_path / "ws")

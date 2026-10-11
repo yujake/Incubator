@@ -292,7 +292,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 注释逐字"不靠调用方记得写（FC-22）"），原文"必须带…常量（逐字符一致，不要手写近义句）"
 #: 是一件已经自动发生的事。G 的 `signature_error=""` 保持为空（待裁项，本批不动）。
 #: 只动 G ⇒ 换值的作用域见批 R16 的读数。
-PROMPT_VERSION = "p91"
+#: `p92`（2026-10-11，批 R20：靶子 D1 的反向修订 —— 代码补上之后那句要求变成恒真）：
+#: 批 R6 往 D 的硬边界第 5 条补的"回答完不等于它会自己收口：给出结论之后要自己调
+#: `research.set_status` 把状态推到 `answered`"，存在的唯一原因是代码里没人做这件事
+#: （真机 118 行 `research_questions` 里 `answered` 0 行，`draft/108` §四 CS-5）。
+#: 本批把代码补上：`agent_d/research.py` 在 `verdict["sufficient"]` 时走
+#: `research_tools.LEGAL_TRANSITIONS` 里早就在的那条边（`researching → answered`），
+#: 并按终态纪律清空等待集（与矛盾闭环 `agent_d/adjudicate.py` 的 `resolved` 那一支同理）。
+#: 于是那句话改成"读代码"：判据没触发 ⇒ 框架自己收口；不足 ⇒ 留在 `researching`；
+#: 判不下去仍由 D 调 `research.set_status` 推 `dropped`。
+#: 只动 D 一句话的内容、条数不变 ⇒ 换值只落在 D 那一格（伙伴表渲染的是每条伙伴的
+#: 边界条数与角色摘要，不是逐句边界正文）。
+PROMPT_VERSION = "p92"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:

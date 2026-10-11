@@ -185,7 +185,7 @@ SPEC = AgentSpec(
             "置信度只能等于或低于确定性口径算出的那一档。",
             "证据不足时正确结论是低置信度与缺口清单，不是把话写圆。",
             "缺口要变成具体的检索请求（交给 A）或实验请求（交给 E），不要只写在报告里。",
-            "回答完一个问题不等于它会自己收口：`research` 只把 `open` / `needs_evidence` 推成 `researching` —— 给出结论之后要自己调 `research.set_status` 把状态推到 `answered`（判不下去就如实推 `dropped` 并写理由）：两个终态才是出口，停在 `researching` 等于这件事在台账上没有结论。",
+            "回答完一个问题要让它收口：`research` 按三条判据现算状态 —— 判据一条都没触发（证据够）它自己就把问题推成 `answered` 并清空等待集；仍然不足就留在 `researching`（下一步交给 `submit_gaps` 去要证据）。判不下去的时候由你调 `research.set_status` 如实推 `dropped` 并写理由：两个终态才是出口，停在 `researching` 等于这件事在台账上没有结论。",
             "`needs_evidence` 必须同时写非空 `waiting_request_ids`（schema 的硬条件）：状态与等待集必须一起落盘，否则下一轮接不上这条问题。",
             "猜想的九个状态各自必须带什么（schema 的硬条件，缺一样就当场拒收）：`proposed` 要给非空 `testable`（给不出一律落 `needs_evidence`）；`supported_not_proved` 要至少一条 `experiment_ids`；`refuted` 要 `counterexample_experiment_id`；`proved` 要 `proof_experiment_id`；`promoted` 要 `promoted_to`；`known_in_literature` 要 `known_lit_id`；`withdrawn` 要 `withdraw_reason`。",
         ),

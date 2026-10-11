@@ -1098,7 +1098,7 @@ SELF-CHECK DONE
 | 给了参数但没命中 | `checked=True` + `experiments=[]` | 自检实测（`agent_e` 自检第 [7] 项逐字："给了参数但没有 ⇒ `checked=True` 且 `experiments=[]`"） |
 | 请求已结束但 B 未消化 | `waiting`，reason 逐字："请求已结束，但结果文献还没被 B 消化完（`processed=false`）" | 自检实测 |
 | 请求未结束 | `waiting`，reason 逐字："仍有查询请求未结束（A 还没跑完 / 还没跑到）" | 自检实测 |
-| **证据足够** | 走 `consider()` → `researching`（**不许什么都不做**） | `LESSONS.md` P2 |
+| **证据足够** | 走 `consider()` → `researching`（**不许什么都不做**）；`research()` 跑完按同一批判据现算收口 —— 判据没触发 ⇒ `answered` 并清空等待集（`research_tools.LEGAL_TRANSITIONS` 里 `researching → answered` 那条边，批 R20 / CS-5） | `LESSONS.md` P2；`tools/research_tools.py` 的状态机表 |
 | **置信度不许拔高** | 自检实测：确定性 `medium` + LLM 声称 `high` ⇒ **强制 `medium`** | `DESIGN-ROLES.md` §6.6；自检第 [10] 项 |
 | 一致但样本有限 | `medium` + 判据 `a_no_keyword_hit`，结论逐字"证据方向一致但样本有限（且部分引文未通过校验），结论应视为待复核的假设" | 自检实测 |
 | 证据不足 | `low` + 逐字"本节的措辞刻意停在「可能存在/尚未证实」，**不作为可引用的判断**" | 自检实测 |
