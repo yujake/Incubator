@@ -2199,18 +2199,30 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 本批刻意不新增判据：这是文本搬运，两头已有判据（spec↔prompt 逐字对账 + 冻结摘要）；
 #: 按业主口径"尽可能避免做机器判据"，也按 `draft/105` D3 的教训（钉词的判据会被
 #: 别的角色谈到同一个概念钉红）—— 不为这一句话新钉一个词。
-_FROZEN_PROMPT_VERSION = "p84"
+#: `p85`（2026-10-11，批 R4：F 的迁移第一批 —— `draft/108` §二·F 的靶子 1–4）：
+#: `specs/f.py` 补三条硬边界 + 一条政策，四件全部是代码里已经硬的、而提示词一个字没说的
+#: （词频实测各 0 次）：① 预算四类键缺一不可（`max_rounds` / `max_parallel_subgoals` /
+#: `max_persist_attempts` / `max_depth`；`create_plan` 判 `budget_incomplete` 拒绝创建，FC-18）；
+#: ② 停下必须交 `best_partial`（`status='stalled'` 的 schema 硬条件 + `verify` 的
+#: `stalled_without_partial` 判据）；③ 子目标 `closed` 必须有 proof 级证据，数值/穷举支持
+#: 只能 `supported_not_proved`（FC-22）；④ 子目标 `blocked` 时 `blocked_reason` 必填
+#: （"不许静默卡住"是 schema 的硬条件）。
+#: 作用域读数（一处改动、五格换值）：F 自己那格换（25,453 → 26,079 字，段数 80 不变），
+#: 另外四格是伙伴表把它带过去的 —— 出边指向 F 的 D/G/V 与"唤不起它"的 M，
+#: 它们的 `PARTNERS` 里逐条渲染 F 的边界条数（「它的边界共 4 条」→「7 条」，
+#: 字数一个不变、只有摘要变）。这本身是"改动作用域"的读数。
+_FROZEN_PROMPT_VERSION = "p85"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "e75c517961285c37f82b39de970fd1570349aab640bdb24ac993945e0dcf959f",
     "B": "302701533a67379996c3c7fc57575c9ee31a7dec1763344034e9de741061f43e",
     "C": "a0dd676bb3a37953684079c1d31484fd62bbf40a25a18770f7391e42734d2719",
-    "D": "6255de8191787b74a20ac5fc83f85142828521e7881fdcdd2e711c06ba6f8f40",
+    "D": "798ba9912d7a3602fb0bd85efd120868a785b70667a963bbddc41a96f53c4b9f",
     "E": "1085abee1b7b371072958b6029f2be73d0e7e96831b0eb6a882a7cb768dd16c8",
-    "F": "5508c9ed1c70f3f0273a6014020b76a3ae09af31f26dd72a186d9bff406451f2",
-    "G": "42581735ce08bafe77b983f5232131664345e2161c855866f88106fd4c1c74fa",
+    "F": "8bead57af5d521f958edd44b64be617c9f551d4cf8394cfa5d552cbfafc3c487",
+    "G": "fdb5dbd951f2eb2382cef655ae431efd151c51de71b7f7d6d4b87b664b4262dc",
     "H": "ffb3f221568c6dc753f51a8882908997bc2ad825822ce940afb9175595182341",
-    "V": "56e3944b8c90c20d4b5acaa4bbe968a7af6c280459ed1747bfa6ed509b5aba5d",
-    "M": "82e7cfe1dfaf5f1a03ed40785cb08ef42ac7f47338e0d389798e194f68abc906",
+    "V": "824dc06cd502eca67b646e90ff93efa436847b8ec37fa6e51d79fb23a64cd7f5",
+    "M": "75a7b8ff752c989a645d886cc5d5d770694c39eceec6e262dfefd110f5789b7d",
 }
 
 

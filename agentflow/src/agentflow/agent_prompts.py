@@ -223,7 +223,17 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （相等 ⇒ 产出方根本没走过位记录；小于 ⇒ 算了、只是不够档）；
 #: ③ 要抬档只能去派签位的人（数值/形式化 E、证明 F、审过 V、正式审查 H；
 #: 写位的是 B 的 `register_statement`）。只动 M ⇒ 只换 M 那一格、段数不变。
-PROMPT_VERSION = "p84"
+#: `p85`（2026-10-11，批 R4：F 的迁移第一批 —— 考察出的四个靶子落进声明面）：
+#: `specs/f.py` 补三条硬边界 + 一条政策，四件全部是代码里已经硬的、而提示词一个字没说的
+#: （`draft/108` §二·F 的靶子 1–4，词频实测各 0 次）：
+#: ① 预算四类键缺一不可（`max_rounds` / `max_parallel_subgoals` / `max_persist_attempts` /
+#: `max_depth`；`create_plan` 判 `budget_incomplete` 拒绝创建，FC-18）；
+#: ② 停下必须交 `best_partial`（`status='stalled'` 的 schema 硬条件 + `verify` 的
+#: `stalled_without_partial` 判据）；
+#: ③ 子目标 `closed` 必须有 proof 级证据，数值/穷举支持只能 `supported_not_proved`（FC-22）；
+#: ④ 子目标 `blocked` 时 `blocked_reason` 必填（"不许静默卡住"是 schema 的硬条件）。
+#: 只动 F ⇒ 只换 F 那一格、段数不变。
+PROMPT_VERSION = "p85"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
