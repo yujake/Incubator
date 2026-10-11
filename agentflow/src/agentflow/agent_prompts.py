@@ -273,7 +273,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 收工门 `reviewed_current_rows` 的口径（`closing.REVIEWED_DOC_STATUSES`）。
 #: H 的 `policy=()` 与 `signature_error=""` 保持为空（待裁项，本批不动）。
 #: 只动 H ⇒ 换值的作用域见批 R12 的读数。
-PROMPT_VERSION = "p89"
+#: `p90`（2026-10-11，批 R14：V 的迁移第一批 —— `draft/108` §二·V 的靶子 V1–V3，
+#: 两侧同批：`specs/v.py` + `specs/f.py`）：
+#: 真机读数（本批现算）是这条边的代价：100 个工作区里 `role=='V'` 的任务 0 条、
+#: `verifications/` 目录 0 份 —— F 真机确实产出过 12 轮 `product=proof`，但一次都没走到 V。
+#: 原因是两侧的 brief 都没写这条边：F 的 policy 里"交给 V"出现 0 次（那句只活在
+#: `specs/f.py` 的代码注释里），V 的 brief 里也没有"你由 F 唤起"。
+#: 本批补三句：① V 的边界第 1 条写明"F 提交、你退回并要求补步骤"；
+#: ② V 的边界第 4 条写明"台账是文件不是表"（`verifications/<命题号>.jsonl`，
+#: 三条动作为此声明成只读）；③ F 的 policy 补第 6 条：proof 轮之后用 `summon` 唤起
+#: V 的 `verify_proof`（交证明全文 + 只读读数），退回时按步号补那一步。
+#: 只动 V 与 F ⇒ 换值的作用域见批 R14 的读数。
+PROMPT_VERSION = "p90"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
