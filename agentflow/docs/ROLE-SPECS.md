@@ -1020,7 +1020,7 @@ SELF-CHECK DONE
 > 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
 > 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
-### D.4 工具面（41 个，实测 —— **全项目最宽**）
+### D.4 工具面（41 个，实测 —— **并列全项目最宽**：G 也是这个数）
 
 `side_effect` 分布：`{'read': 25, 'write_local': 9, 'none': 5}`
 
@@ -1042,7 +1042,7 @@ SELF-CHECK DONE
 > **这是"角色即权限面"的直接体现**：D 想立项必须显式调 `AgentF`
 > （`tools.attack_tools._WRITE_ROLES` 的注释逐字解释了为什么）。
 
-### D.5 状态机（**全项目唯一有显式迁移表的状态机**）
+### D.5 状态机（**全项目唯一在代码里有显式迁移表的状态机** —— `tools/research_tools.py` 的 `LEGAL_TRANSITIONS`）
 
 `tools.research_tools.LEGAL_TRANSITIONS` 的 `LEGAL_TRANSITIONS` **本身就是文档**：
 
@@ -2224,7 +2224,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 
 | # | 职责 | 判据（实现位置） |
 |---|---|---|
-| M-1 | **唯一的召唤入口**：`summon(role, action, params, by, parent_task_id, input_key, budget, token, lineage)` | `conductor.summon` |
+| M-1 | **单件召唤的入口**：`summon(role, action, params, by, parent_task_id, input_key, budget, token, lineage)`（批量的那条是 `conductor.summon_many`，见 §R0 的第 79 行与 §M 的"批量入口"） | `conductor.summon` |
 | M-2 | 过策略：角色/动作存在性、边、深度、扇出、循环、并发、总量、预算、墙钟 | `policy.check_action` / `policy.check` |
 | M-3 | 写台账（**每个 start 恰好一个 end**） | `Conductor._write_row` / `conductor.finish` |
 | M-4 | 派给 backend（`LocalBackend` / `SubagentBackend`） | `conductor.SubagentBackend` |
