@@ -190,7 +190,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ⇒ 十格全换（换字）。
 #: `p76`（2026-10-11，批 Q4：`draft/105` 的 A7）：`ask_user` 写明"只有主控能直接用"、
 #: 非主控的替代路（写进最终结果 / 请 M 代问）与两档不回答的处置 ⇒ 十格全换（换字）。
-PROMPT_VERSION = "p76"
+#: `p77`（2026-10-11，批 Q5：`draft/105` 的 A26）：V 的提示词补一句入口说明
+#: （真实入口是冷启动 `verifications.cold_start_prompt`，循环只在 `--drive V.<动作>` 时用）
+#: ⇒ 只换 V 那一格（受众从声明现算）。
+PROMPT_VERSION = "p77"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -1061,6 +1064,21 @@ def _specs_for(role: str, registry: Any) -> list[Any]:
 #: 实测（2026-10-11）：E / F / G 三家持有 `verify.check_formal`。
 _LEAN_TOOL = "verify.check_formal"
 
+#: "走冷启动入口"这件事的判据 = 它的实现类是 `agentflow.agent_v`（从声明现算，不写死 "V"）。
+#: 今天只有 V 走这条路（`specs/v.py::SPEC.class_path == "agentflow.agent_v:AgentV"`，
+#: 而 `agent_v/core.py` 的 `verify_proof` 用 `verifications.cold_start_prompt` 拼好问题
+#: 直接问一次）。判据 `test_the_cold_start_role_is_told_it_has_two_entries` 用同一函数。
+_COLD_START_MODULE = "agentflow.agent_v"
+
+
+def _is_cold_start_role(role: str) -> bool:
+    """这个角色的实现类是不是"冷启动入口"那一个（`agentflow.agent_v`）。"""
+    try:
+        spec = builtin_registry().get(role)
+    except KeyError:
+        return False
+    return str(getattr(spec, "class_path", "")).split(":", 1)[0] == _COLD_START_MODULE
+
 
 def _writes_lean(role: str, registry: Any) -> bool:
     """这个角色手上有没有那件形式化工具（决定它拿不拿 `TOOLCHAIN_FORMAL`）。
@@ -1317,6 +1335,20 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
     if ins:
         out.append("这些伙伴可以唤起你：" + "、".join(ins)
                    + "。他们给你的任务会出现在下面的任务框里，参数就是他们给的原文。")
+    if _is_cold_start_role(role):
+        # A26（`draft/105`）：V 的真实入口是冷启动提示词，不是这套循环。
+        # 证据：`agent_v/core.py` 的 `verify_proof` 用 `verifications.cold_start_prompt(...)`
+        # 拼好问题直接问一次（`self._ask(prompt)`），读完结论就落台账；
+        # 全仓没有任何生产路径渲染 `system_prompt("V")`（只有审计与判据面渲染十格）。
+        # 那这套循环对 V 是不是死的？不是 —— 调用方可以用 `--drive V.<动作>` 把 V 当循环角色
+        # 驱动。所以这一句的落点不是"删掉协议"，而是把两个入口的关系说清：
+        # 只讲循环会让读的人（或模型）以为"V 的日常就是跑这套循环"。
+        out.append("你的**真实入口**不是这套循环：V 是**一次性问答** —— 框架用 "
+                   "`verifications.cold_start_prompt` 把问题拼好直接问你一次，"
+                   "读完结论就落台账（`verifications/<命题号>.jsonl`）。"
+                   "下面这一套循环形状与工具只在有人用 `--drive V.<动作>` 把你当"
+                   "循环角色驱动时才用得上 —— 两种入口各照各的规矩做，"
+                   "但别把「跑循环」当成你的日常。")
     if role in C.NON_SUMMONABLE:
         out.append("你不可以被任何人唤起（不可召唤名单里有你）：你的行动一律由你自己发起。")
     # ---- 代唤通道（2026-09-30）：边表之外的那条路

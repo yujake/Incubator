@@ -676,6 +676,8 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "policy.waves_of": "同 autonomy.run_autonomous",
     "quoteverify.check_quote": "同 autonomy.run_autonomous",
     "userio.ask_user": "同 autonomy.run_autonomous",
+    "verifications.cold_start_prompt": "同 autonomy.run_autonomous（V 那一格的入口说明："
+                                       "它说清 V 走的是冷启动入口，不是工具）",
 }
 
 #: "像工具名"的点号 token：反引号包着、两段都是小写标识符。
@@ -816,6 +818,34 @@ def test_the_user_channel_is_told_as_conductors_only(registry: ToolRegistry):
         assert "只有主控 M 能直接用这个形状" in text, (
             f"{role} 的提示词没说清谁可以问用户")
         assert "请它代问" in text, f"{role} 的提示词没给非主控的替代路"
+
+
+def test_the_cold_start_role_is_told_it_has_two_entries(registry: ToolRegistry):
+    """V 的真实入口是冷启动提示词（`draft/105` A26）：提示词要把两个入口的关系说清。
+
+    代码真身：`agent_v/core.py::verify_proof` 用 `verifications.cold_start_prompt(...)`
+    拼好问题直接问一次（`self._ask(prompt)`），读完结论就落台账；而 `system_prompt("V")`
+    这一套循环只在有人 `--drive V.<动作>` 把它当循环角色驱动时才用得上
+    （全仓没有生产路径渲染 `system_prompt("V")`，只有审计与判据面渲染十格）。
+
+    受众从声明现算（`agent_prompts._is_cold_start_role`：实现类是 `agentflow.agent_v`），
+    不写死 "V"；并断言 `verifications.cold_start_prompt` 真的存在（这条判据的锚）。
+    两头都钉：走冷启动那一格必须写、别格不许写 —— 否则这句话会变成所有角色的噪音。
+    """
+    from agentflow import verifications as VR
+
+    assert callable(getattr(VR, "cold_start_prompt", None)), (
+        "锚点没了：`verifications.cold_start_prompt` 不在了 ⇒ 这条判据要先跟着改")
+    holders: list[str] = []
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        cold = AP._is_cold_start_role(role)
+        assert ("cold_start_prompt" in text) is cold, (
+            f"{role}：实现类{'是' if cold else '不是'} `agentflow.agent_v`，"
+            f"而提示词里{'有' if 'cold_start_prompt' in text else '没有'}那句入口说明")
+        if cold:
+            holders.append(role)
+    assert holders == ["V"], f"走冷启动入口的角色集合变了（现算：{holders}）⇒ 受众跟着变"
 
 
 def _hint_text(line: str) -> str:
@@ -1915,7 +1945,13 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: "只有用户能定的取舍"同步改（原来对所有角色说"要用 ask_user 问"，且"等不到就按
 #: 最保守的做法继续"与代码相反：有人值守时它是停在原地等、无人值守那一档才 fail-closed），
 #: D 的"能互动"那一格也改成"交回召唤者或请 M 代问"。全在共享段 ⇒ 十格全换；段数不变。
-_FROZEN_PROMPT_VERSION = "p76"
+#: `p77`（2026-10-11，批 Q5：`draft/105` 的 A26 —— V 的真实入口；A23 经核对为"已满足"）：
+#: V 的伙伴表那句"你可以唤起这些伙伴：F"旁边补一句入口说明（"你的真实入口不是这套循环：
+#: V 是一次性问答，框架用 `verifications.cold_start_prompt` 直接问你一次；下面这套循环只在
+#: 有人 `--drive V.<动作>` 时用得上"）。受众从声明现算（实现类是 `agentflow.agent_v`）。
+#: 读数：只有 V 那一格变（A/B/C/D/E/F/G/H/M 九格逐字节不动）—— 这正是这条判据
+#: 该有的分辨率。`PROMPT_VERSION` 仍要动（段与版本必须一起前进）。
+_FROZEN_PROMPT_VERSION = "p77"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "711f4e7eb5e3ebf9e815a9e15a144d40b74b98d6d4ffa223aef3fbad76699a4b",
     "B": "0a90d6416295c683b405e52412d5e29742e47ffd60db72a05a165155a9ec2352",
@@ -1925,7 +1961,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "F": "1cf37ce27c09e813a4bc9c9e143f4218bbc11e87a0e4d17785c8c501303a96e3",
     "G": "4d771076b6acde89ccc16fcefca00e4c48eb9c617afca635864cd4450ac2b4c3",
     "H": "7bfda781e4ad0f001cea5f5479192f08926014afe1664c1675400b0e9c7bde48",
-    "V": "9749c44533f7a231fece49eac6d9f1187493d80c2ada2a3153789ea097ce5b55",
+    "V": "e7957c508eb0b12a581e1d808b93e0eb98a9e25e6104751e98c087ca799794e7",
     "M": "d1d339d34d78397735310212520fde9ffacd4d1cb156ead7ed5b7588ce38ed51",
 }
 
