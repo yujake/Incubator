@@ -126,6 +126,9 @@ SECTION_ORDERS: dict[str, int] = {
     # 其余九块按需加 —— 没写出来的块不留号（本仓对死表的纪律）。
     "PARENT_LIMITS": 5210,           # 派活上限（现算：Policy + fanout_limit_for）
     "COLLAB_NAMES": 5220,            # 三种指称的总判据（台账号 / 名册名 / 实例标签）
+    # 什么时候停（预算 / 打转 / 上报两档）—— 正文从 `LOOP_PROTOCOL` 里逐字搬出来
+    # （`draft/104` §4.9）。放在循环协议之后：先读"怎么跑"，再读"什么时候停"。
+    "PARENT_STOP": 5230,
     # 环境事实分两段：工作区（结构/版本）与这台机器的工具链（现算读数）。
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——
     # 它是机器相关的，写死在提示词里会让冻结快照变成"某一台机器"的快照。

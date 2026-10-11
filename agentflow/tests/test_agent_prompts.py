@@ -30,6 +30,7 @@ from agentflow import capabilities as C
 from agentflow import judge as J
 from agentflow import schema as S
 from agentflow import userio as U
+from agentflow.promptkit import Scope
 from agentflow.tools import ToolRegistry, build_registry
 
 #: 需要一份提示词的全部角色：可被召唤的 A-H 加主控。
@@ -846,6 +847,37 @@ def test_the_cold_start_role_is_told_it_has_two_entries(registry: ToolRegistry):
         if cold:
             holders.append(role)
     assert holders == ["V"], f"走冷启动入口的角色集合变了（现算：{holders}）⇒ 受众跟着变"
+
+
+def test_the_stop_rules_moved_out_of_the_loop_protocol_verbatim(registry: ToolRegistry):
+    """「什么时候停」三条从循环协议里搬到 `PARENT_STOP`：搬走 + 逐字都在（两头钉）。
+
+    `draft/104` §4.9 的口径：那三条（预算耗尽 / 原地打转 / 上报两档）与"预算耗尽才收工"是
+    同一根轴上的话，原先分散在 16 条规则的三处；协作块族要求合成一块讲"什么时候停"。
+
+    这条判据在段层判（不是抽出来在整篇文本里找短语）：
+      ① `LOOP_RULES` 那一段里不再有这三条（搬走了）；
+      ② `PARENT_STOP` 那一段里逐行都有（逐字搬的，不是重写的）；
+      ③ 整个提示词里这三条各只出现一次（没搬重）。
+    这样"搬"与"抄"分得开：抄的话 ① 会红；重写的话 ② 会红；两者都做的话 ③ 会红。
+    """
+    moved = [ln for ln in AP.PARENT_STOP_TEXT.splitlines() if ln.strip()]
+    assert len(moved) > 10, f"搬出来那一段看着不像那三条规则：{moved[:3]}"
+    keys = ("花销预算耗尽时你必须收工", "别原地打转", "干不了 / 干不着就上报")
+    for role in ALL_ROLES:
+        assembly = AP.role_prompt_registry(role, registry=registry, task=TASK,
+                                           workspace_root=ROOT).assemble(Scope(role=role))
+        texts = {s.name: s.render(assembly.scope) for s in assembly.sections}
+        assert "PARENT_STOP" in texts and "LOOP_RULES" in texts, sorted(texts)
+        stop, rules = texts["PARENT_STOP"], texts["LOOP_RULES"]
+        for head in keys:
+            assert head in stop, f"{role} 的 PARENT_STOP 里没有 {head!r}"
+            assert head not in rules, f"{role} 的循环协议里还留着 {head!r}（那是抄不是搬）"
+            whole = assembly.render()
+            assert whole.count(head) == 1, (
+                f"{role} 的提示词里 {head!r} 出现了 {whole.count(head)} 次 ⇒ 搬重了")
+        for line in moved:
+            assert line in stop, f"{role} 的 PARENT_STOP 少了一行：{line[:60]!r}"
 
 
 def _hint_text(line: str) -> str:
@@ -1951,18 +1983,28 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 有人 `--drive V.<动作>` 时用得上"）。受众从声明现算（实现类是 `agentflow.agent_v`）。
 #: 读数：只有 V 那一格变（A/B/C/D/E/F/G/H/M 九格逐字节不动）—— 这正是这条判据
 #: 该有的分辨率。`PROMPT_VERSION` 仍要动（段与版本必须一起前进）。
-_FROZEN_PROMPT_VERSION = "p77"
+#: `p78`（2026-10-11，批 Q6：`draft/104` §4.9 —— 「什么时候停」合成一块 `PARENT_STOP`）：
+#: 把循环协议 16 条规则里的三条（预算耗尽 / 原地打转 / 上报两档）逐字搬到新段
+#: `PARENT_STOP`（order 5230），协议里相应删掉；顺手把留在协议里的那句交叉引用
+#:（"如实记成上面那一档「职责之外」"）改成"见下面「什么时候停」那一段"（它现在在下面了）。
+#: 读数：十格全换 + 段数各 +1（A 67→68、B 60→61、C 62→63、D 73→74、E 64→65、F 75→76、
+#: G 90→91、H 78→79、V 57→58、M 70→71）—— 三条对十个角色都有意义（谁都可能预算耗尽、
+#: 原地打转、或做不了某件活），所以这一次不分受众。
+#: 判据 `test_the_stop_rules_moved_out_of_the_loop_protocol_verbatim` 在段层两头钉：
+#: ① `LOOP_RULES` 里不再有、② `PARENT_STOP` 里逐行都有、③ 整篇各只出现一次
+#: （抄 ⇒ ①红；重写 ⇒ ②红；两样都做 ⇒ ③红）。
+_FROZEN_PROMPT_VERSION = "p78"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "711f4e7eb5e3ebf9e815a9e15a144d40b74b98d6d4ffa223aef3fbad76699a4b",
-    "B": "0a90d6416295c683b405e52412d5e29742e47ffd60db72a05a165155a9ec2352",
-    "C": "f668998ceb6f03328cec87a69ac526c76e22fa95ab7efcc3079666a42caf476a",
-    "D": "f5fa9c5f597c0e1c55e92dd646e8a9ff6b714c795d038c4c79808f8c8201b5f0",
-    "E": "1d5d23e2ed5ae82652dba23c780a77cdb400afc56e04958916b9e7022f3b5312",
-    "F": "1cf37ce27c09e813a4bc9c9e143f4218bbc11e87a0e4d17785c8c501303a96e3",
-    "G": "4d771076b6acde89ccc16fcefca00e4c48eb9c617afca635864cd4450ac2b4c3",
-    "H": "7bfda781e4ad0f001cea5f5479192f08926014afe1664c1675400b0e9c7bde48",
-    "V": "e7957c508eb0b12a581e1d808b93e0eb98a9e25e6104751e98c087ca799794e7",
-    "M": "d1d339d34d78397735310212520fde9ffacd4d1cb156ead7ed5b7588ce38ed51",
+    "A": "a769f0226d0443f0aaa4dbba0f08ce7499099acdd64be467e7a31671ac1d98db",
+    "B": "0c13b321015e321f5ae8bdcbff8e814d2ab967e308cecefecb762c59b0a83840",
+    "C": "a0674ae1ba15bb0432ff7a927845cb6d8c7afacd8cf50d32b36db8fc07f772a9",
+    "D": "39b1ee91df676f5750cbb29f9c91b0c9797058c9907362d304bfb6f821d0944d",
+    "E": "a68b337ec5e1f88dfadc8a1fcacb771c3371d50dad586c7f4dc0511209305be2",
+    "F": "88cdc64c7a4570c84b0e088b1f9633d31e5050ae1a2e6d19478aad466f6f566a",
+    "G": "83ce71df989e485f4f5bd556dc62d1df516d62987903d75a9cd0060ad20b61eb",
+    "H": "57f5203b7387ac723467b974a84febb4817c65e6e42517a2c518b1d76c09c3d5",
+    "V": "476b36c51813662389cb39c12f878c63a1528e8307b7ad7cdb17758c908193da",
+    "M": "4aff18ebb67f709975a1a1b79fc031906137015bb89b392d5651cf1307e571b8",
 }
 
 
