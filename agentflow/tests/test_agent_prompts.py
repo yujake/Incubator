@@ -2187,7 +2187,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:      两处都按代码改：去掉错前提、留下规则（别拿只读调用把这一趟填满 / 收工门看的是盘上那份）。
 #: 三处都只动 M ⇒ 只有 M 那一格换（其余九格逐字节不动），段数不变：M 47,110 → 47,347 字。
 #: 逐格读数用 `temp/read_prompt_grid.py`（口径从本文件导入，不另抄一份）。
-_FROZEN_PROMPT_VERSION = "p83"
+#: `p84`（2026-10-11，批 R2：`draft/106` §4 的 `M_FIVEBITS` 的另一半 —— "够不够交"怎么判）：
+#: M 那条验收表政策里对 `reviewed_proof_rows` 只写着"（有证明过程 + 审过的我方命题）"，
+#: 于是它读不出三件事（三件都现算自 `closing.py` 的 `reviewed_proof_rows` 读侧）：
+#: ① 等级是五位现算的（不读盘上存的那份），引用命题（`origin=external_lit`）到高档也不算；
+#: ② "0 条"有两种，靠 `statements_without_bits` 与 `statements` 是否相等分开
+#: （相等 ⇒ 产出方根本没走过位记录；小于 ⇒ 算了、只是不够档）；
+#: ③ 要抬档只能去派签位的人（数值 / 形式化 E、证明 F、审过 V、正式审查 H；
+#: 写位的是 B 的 `register_statement`）。
+#: 只动 M ⇒ 只有 M 那一格换（其余九格逐字节不动），段数不变：M 47,347 → 47,682 字（+335）。
+#: 本批刻意不新增判据：这是文本搬运，两头已有判据（spec↔prompt 逐字对账 + 冻结摘要）；
+#: 按业主口径"尽可能避免做机器判据"，也按 `draft/105` D3 的教训（钉词的判据会被
+#: 别的角色谈到同一个概念钉红）—— 不为这一句话新钉一个词。
+_FROZEN_PROMPT_VERSION = "p84"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "e75c517961285c37f82b39de970fd1570349aab640bdb24ac993945e0dcf959f",
     "B": "302701533a67379996c3c7fc57575c9ee31a7dec1763344034e9de741061f43e",
@@ -2198,7 +2210,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "42581735ce08bafe77b983f5232131664345e2161c855866f88106fd4c1c74fa",
     "H": "ffb3f221568c6dc753f51a8882908997bc2ad825822ce940afb9175595182341",
     "V": "56e3944b8c90c20d4b5acaa4bbe968a7af6c280459ed1747bfa6ed509b5aba5d",
-    "M": "5a96067cbe098b9614f3afa4a83fdae5b32128b5b018f8d1be56bae8af2dc94e",
+    "M": "82e7cfe1dfaf5f1a03ed40785cb08ef42ac7f47338e0d389798e194f68abc906",
 }
 
 

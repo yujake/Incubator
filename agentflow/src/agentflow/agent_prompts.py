@@ -214,7 +214,16 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ② `specs/m.py` 的政策原写"步数有限"，与循环协议里"框架不设步数闸"互相矛盾
 #: （同一格里两句互相打脸）⇒ 去掉那个错前提、留下"别拿只读调用把这一趟填满"的规则
 #: ⇒ 只换 M 那一格、段数不变。
-PROMPT_VERSION = "p83"
+#: `p84`（2026-10-11，批 R2：`draft/106` §4 的 `M_FIVEBITS` 的另一半 —— "够不够交"怎么判）：
+#: M 那条验收表政策里对 `reviewed_proof_rows` 只写着"（有证明过程 + 审过的我方命题）"，
+#: 于是它读不出三件事（三件都现算自 `closing.py` 的 `reviewed_proof_rows` 读侧）：
+#: ① 等级是"五位现算"的（`bits_from_row` ⇒ `derive_grade`，不读盘上存的那份），
+#: 引用命题（`origin=external_lit`）到高档也不算 —— 这一档数的是我们自己造的判决性证据；
+#: ② "0 条"有两种，用 `statements_without_bits` 与 `statements` 是否相等分开
+#: （相等 ⇒ 产出方根本没走过位记录；小于 ⇒ 算了、只是不够档）；
+#: ③ 要抬档只能去派签位的人（数值/形式化 E、证明 F、审过 V、正式审查 H；
+#: 写位的是 B 的 `register_statement`）。只动 M ⇒ 只换 M 那一格、段数不变。
+PROMPT_VERSION = "p84"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
