@@ -280,7 +280,13 @@ class _Step:
             history_row["product"] = str(product.get("product") or "")
             history_row["strategy"] = str(product.get("strategy") or "")
             history_row["best_partial"] = list(product.get("best_partial") or [])
-            if product.get("reason"):
+            # `dead_end_reason` 只属于 `dead_end` 那一档（CS-6）：`attackround.parse_round`
+            # 给 `reduction` 与 `dead_end` 两档都写了 `product["reason"]`，而这里从前
+            # "见 reason 就写 `dead_end_reason`" ⇒ 归约轮的"为什么这样归约"落进了一个
+            # 名叫"死路理由"的字段（2026-10-11 现算：两个根 22 条 reduction 行全部误名，
+            # 且全部落在受控 7 值之外）。归约的理由一个字都没丢 —— 它在
+            # `product_detail["reason"]` 里（整份产物照旧进 history）。
+            if str(product.get("product") or "") == "dead_end" and product.get("reason"):
                 history_row["dead_end_reason"] = str(product["reason"])
         history.append(history_row)
         row["subgoals"] = subgoals

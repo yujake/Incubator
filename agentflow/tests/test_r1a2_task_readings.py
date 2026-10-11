@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import pathlib
 
@@ -127,6 +128,82 @@ def test_no_reading_means_an_empty_slot_not_a_missing_key(tmp_path: pathlib.Path
         assert "没有 llm_reading" in str(exc), exc
     else:
         raise AssertionError("没有读数时 `_reading_of` 竟然通过了 —— 判据失去反应")
+
+
+# ======================================================= ③ CS-11：dataclass 产物要被投影，不许只剩 repr
+
+@dataclasses.dataclass
+class _Report:
+    """C 那类产物的替身：`AnalysisReport` 的形状（dataclass + 自己的 `to_dict`）。"""
+
+    kind: str
+    summary: str
+    markdown: str
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "summary": self.summary, "markdown": self.markdown}
+
+
+class _DataclassRole:
+    """handler 直接返回 dataclass（不是 Mapping）—— 真机 C 的那条路。"""
+
+    def handle(self, request_text: str = "") -> _Report:
+        return _Report(kind="hottest", summary=f"最热的 3 个概念（请求：{request_text}）",
+                       markdown="# 最热概念\n- 甲：7\n- 乙：5\n")
+
+
+class _PlainDataclassRole:
+    """没有 `to_dict()` 的 dataclass：走 `asdict` 那一档（投影的第二档）。"""
+
+    def handle(self, request_text: str = "") -> _Bare:
+        return _Bare(kind="gaps", n=2)
+
+
+@dataclasses.dataclass
+class _Bare:
+    kind: str
+    n: int
+
+
+def test_a_dataclass_product_is_projected_not_stringified(tmp_path: pathlib.Path):
+    """CS-11：dataclass 产物必须被投影成结构化 dict，而不是只留一段 repr。
+
+    病因（`draft/108` §四 CS-11）：`_write_task_digest` 的 `payload_keys` 与 `readings`
+    都是按 `Mapping` 取的，而 C 的产物是 dataclass ⇒ 那两格恒空、预览只剩
+    `json.dumps(default=str)` 的前 2000 字（真机 `p2-review` 的 `hottest` 744 字节 /
+    `gaps` 4890 字节就是这一档）。
+    """
+    st = _ws(tmp_path)
+    cond = Conductor(st, backend=LocalBackend({"C": _DataclassRole()}))
+    res = cond.summon("C", "handle", {"request_text": "统计最热门的 3 个概念"})
+    digest = _digest(st, str(res.task_id))
+
+    assert sorted(digest["payload_keys"]) == ["kind", "markdown", "summary"], digest["payload_keys"]
+    preview = json.loads(digest["payload_preview"])     # 从前这里是 repr 的截断，parse 一定失败
+    assert preview["kind"] == "hottest", preview
+    assert "最热概念" in preview["markdown"], preview
+    # 投影之后"整份产物"的形状是可读的（不再依赖人去看 repr）
+    assert digest["payload_bytes"] > 0 and digest["payload_sha256"], digest
+
+
+def test_a_bare_dataclass_falls_back_to_asdict(tmp_path: pathlib.Path):
+    """第二档：没有 `to_dict()` 的 dataclass 走 `asdict`（键集照样读得出来）。"""
+    st = _ws(tmp_path)
+    cond = Conductor(st, backend=LocalBackend({"C": _PlainDataclassRole()}))
+    res = cond.summon("C", "handle", {"request_text": "找结构洞"})
+    digest = _digest(st, str(res.task_id))
+    assert sorted(digest["payload_keys"]) == ["kind", "n"], digest["payload_keys"]
+    assert json.loads(digest["payload_preview"]) == {"kind": "gaps", "n": 2}
+
+
+def test_a_mapping_product_is_untouched(tmp_path: pathlib.Path):
+    """反真空：本来就结构化（Mapping）的产物一个字都不动 —— 投影只对非 Mapping 生效。"""
+    st = _ws(tmp_path)
+    cond = Conductor(st, backend=LocalBackend({"D": _ReadingRole(st)}))
+    res = cond.summon("D", "poll", {})
+    digest = _digest(st, str(res.task_id))
+    assert "llm_reading" in digest["payload_keys"], digest["payload_keys"]
+    assert digest["readings"], digest["readings"]
 
 
 def test_not_wired_is_a_visible_slot_on_disk(tmp_path: pathlib.Path):

@@ -52,7 +52,7 @@ import itertools
 import json
 import threading
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
@@ -411,6 +411,45 @@ _BUSINESS_ERROR_NAMES = frozenset({
     "ExperimentError", "DocumentError", "PlanError", "ReviewError",
     "EvidenceError", "ConjectureError", "ToolError",
 })
+
+
+def _structured_payload(payload: Any) -> Any:
+    """把产物投影成"能被 `json.dumps` 结构化读懂"的形状（CS-11）。
+
+    动机只有一条：`_write_task_digest` 里 `payload_keys` 与 `readings` 两格都是按
+    `Mapping` 取的，而 C 的产物是 dataclass（`AnalysisReport`）⇒ 那两格恒空、
+    预览只剩 repr 的前 2000 字（真机 `p2-review` 的 `hottest` / `gaps` 就是这一档，
+    见 `draft/108` §四 CS-11 与 `draft/41-D` §1.3 的逐字读数）。
+
+    三档投影，逐档记清"为什么是它"：
+      ① `to_dict()` 可用 ⇒ 用它（对象自己声明的机器可读视图，`AnalysisReport.to_dict()`
+         就是；`schema` 的行对象也都有这个方法）；
+      ② 是 dataclass ⇒ `dataclasses.asdict`（`AgentC` 的 `_store` 不是 dataclass 字段，
+         因此不会被带进来 —— 这是 `agent_c/_support.py:231-233` 刻意留的口子）；
+      ③ 其余原样返回（`json.dumps(default=str)` 仍然是最后的兜底）。
+
+    投影失败（`to_dict()` 抛、`asdict` 遇到坏字段）⇒ 原样返回：这条链路的既有纪律是
+    "摘要写不成不许改坏任务终态"（`_write_task_digest` 的 docstring 逐字），
+    所以这里既不吞异常去假装投影成功，也不让它穿出去。
+    """
+    if isinstance(payload, Mapping):
+        return payload
+    to_dict = getattr(payload, "to_dict", None)
+    if callable(to_dict):
+        try:
+            got = to_dict()
+        except Exception:  # noqa: BLE001 —— 见 docstring：失败就退回原样
+            got = None
+        if isinstance(got, Mapping):
+            return dict(got)
+    if is_dataclass(payload) and not isinstance(payload, type):
+        try:
+            got = asdict(payload)
+        except Exception:  # noqa: BLE001 —— 同上
+            got = None
+        if isinstance(got, Mapping):
+            return dict(got)
+    return payload
 
 
 def _closure_suffix(reading: Mapping[str, Any]) -> str:
@@ -2940,7 +2979,11 @@ class Conductor:
         root = Path(getattr(self.store, "root", ".") or ".")
         rel = f"out/tasks/{task_id}.json"
         try:
-            blob = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+            # 非 Mapping 的产物先投影成结构化 dict（CS-11）：C 的 `AnalysisReport` 是个
+            # dataclass，不投影的话下面那两格（`payload_keys` / `readings`）恒空、
+            # 整份产物只剩 repr 前 2000 字（真机 p2-review 的 hottest/gaps 就是这一档）。
+            shaped = _structured_payload(payload)
+            blob = json.dumps(shaped, ensure_ascii=False, sort_keys=True, default=str)
             doc = {
                 "task_id": task_id,
                 "role": str(row.get("role") or ""),
@@ -2953,7 +2996,7 @@ class Conductor:
                 "payload_bytes": len(blob.encode("utf-8")),
                 # 键集是"这一步产出了什么形状的东西"的最小可读证据；
                 # 预览截断到 2 KB，避免把大对象整份塞进产物。
-                "payload_keys": sorted(str(k) for k in payload) if isinstance(payload, Mapping) else [],
+                "payload_keys": sorted(str(k) for k in shaped) if isinstance(shaped, Mapping) else [],
                 "payload_preview": blob[:2000],
                 # ---- 读数键提到顶层（`R1-A2`，真机回放抓出来的）
                 #
@@ -2965,9 +3008,9 @@ class Conductor:
                 # 于是"这次到底问没问模型、问成没问成"在盘上读不出来）。
                 # 空的时候给 `{}` 而不是省略这个键：省略会让"这一步没有读数"与
                 # "这是旧格式的摘要"长得一样（三态纪律：没读到与没有要分得开）。
-                "readings": ({str(k): v for k, v in payload.items()
+                "readings": ({str(k): v for k, v in shaped.items()
                               if str(k).endswith("_reading")}
-                             if isinstance(payload, Mapping) else {}),
+                             if isinstance(shaped, Mapping) else {}),
             }
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)

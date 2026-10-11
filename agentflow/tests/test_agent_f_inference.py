@@ -99,6 +99,53 @@ def test_a_wired_f_really_advances_one_round(store: Store):
         assert word in llm.prompts[0], f"提示词没把禁用词 {word} 告诉模型"
 
 
+# ============================================================ CS-6：`dead_end_reason` 只属于 dead_end
+
+
+def test_a_reduction_round_does_not_write_a_dead_end_reason(store: Store):
+    """`dead_end_reason` 只属于 `dead_end` 那一档（CS-6，2026-10-11 修）。
+
+    病因（`draft/108` §四 CS-6）：`attackround.parse_round` 给 `reduction` 与 `dead_end`
+    两档都写了 `product["reason"]`（`:112` 与 `:149`），而 `step` 从前是
+    "见 reason 就写 `dead_end_reason`" —— 于是归约轮的"为什么这样归约"落进了一个名叫
+    "死路理由"的字段。现算读数（两个根、100 个工作区）：22 条 reduction 行全部带
+    `dead_end_reason`，且那 22 条全部落在受控 7 值之外。
+
+    归约的理由一个字都没丢：整份产物照旧进 `product_detail`（这一条同时钉这件事）。
+    """
+    llm = FakeLLM(_round(product="reduction", reason="把存在性归约成两个更小的判定",
+                         new_subgoals=[{"goal": "判定小情形 n<=12",
+                                        "testable": "枚举 n<=12 全部候选"},
+                                       {"goal": "判定构造族是否无限",
+                                        "testable": "给出参数族与它的 girth 公式"}]))
+    f = _f(store, llm=llm)
+    pid = _new_plan(f)
+    f.step(pid)
+
+    rec = store.rows("attack_plans")[0]["history"][-1]
+    assert rec["product"] == "reduction", rec
+    assert "dead_end_reason" not in rec, (
+        "归约轮写了一个名叫 `dead_end_reason` 的字段 ⇒ 读的人会把归约当成死路（CS-6）"
+        f"：{rec.get('dead_end_reason')!r}")
+    assert rec["product_detail"].get("reason") == "把存在性归约成两个更小的判定", rec["product_detail"]
+
+
+def test_a_dead_end_round_still_writes_the_controlled_reason(store: Store):
+    """另一半（防止把上面那条修成"谁都不写"）：`dead_end` 照旧写，且在受控词表里。"""
+    llm = FakeLLM(_round(product="dead_end", reason="缺工具",
+                         evidence="这一轮要走的那条路没有可用的检查器",
+                         best_partial=[{"what": "已把命题改小到有限枚举", "ids": [],
+                                        "why_partial": "缺工具"}]))
+    f = _f(store, llm=llm)
+    pid = _new_plan(f)
+    f.step(pid)
+
+    rec = store.rows("attack_plans")[0]["history"][-1]
+    assert rec["product"] == "dead_end", rec
+    assert rec.get("dead_end_reason") in AR.DEAD_END_REASONS, rec
+    assert rec["product_detail"].get("reason") == "缺工具", rec["product_detail"]
+
+
 def test_a_proof_round_is_progress_but_never_closes_the_subgoal(store: Store):
     """`proof`：论证进 history 的 `product_detail`；子目标不因此关闭（FC-22）。
 
