@@ -31,7 +31,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "C", "hottest",
         "最热概念榜（度数中心性）",
         _obj({"top_n": {**_I, "minimum": 1}, "request": _S}),
-        "AnalysisReport（内存对象；要落库需显式 persist）",
+        "AnalysisReport（内存对象；要落库就走 `handle` 收口 —— 它 ok 时落 `analysis_reports` 一行）",
         side_effect="read", handler_name="hottest",
     ),
 
@@ -40,21 +40,22 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "两个概念之间的关系路径",
         _obj({"a": _S, "b": _S, "max_paths": _I, "max_len": _I,
               "max_overlap": _N, "request": _S}, ("a", "b")),
-        "AnalysisReport", side_effect="read", handler_name="paths",
+        "AnalysisReport（落库走 `handle`）", side_effect="read", handler_name="paths",
     ),
 
     ActionSpec(
         "C", "cold",
         "冷门/完全孤立概念",
         _obj({"top_n": {**_I, "minimum": 1}, "request": _S}),
-        "AnalysisReport", side_effect="read", handler_name="cold",
+        "AnalysisReport（落库走 `handle`）", side_effect="read", handler_name="cold",
     ),
 
     ActionSpec(
         "C", "gaps",
         "结构缺口候选（可显式选择是否提交检索请求）",
         _obj({"limit": {**_I, "minimum": 1}, "request": _S, "submit_requests": _B}),
-        "AnalysisReport", side_effect="read", handler_name="gaps",
+        "AnalysisReport（落库走 `handle`；`submit_requests=true` 时另把候选落成检索请求）",
+        side_effect="read", handler_name="gaps",
     ),
 
     ActionSpec(
@@ -88,9 +89,11 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "C", "handle",
-        "自然语言需求 -> 分派到上面某个分析器",
+        "自然语言需求 -> 分派到上面某个分析器；**它同时是本角色的产出登记口**："
+        "报告 ok 时由它收口落盘（`analysis_reports` 一行 + `reports/<rid>-<kind>.md`），"
+        "并把 `report_id` / `markdown_path` 带回来",
         _obj({"request_text": _S}, ("request_text",)),
-        "AnalysisReport（kind 可能是 'unknown'，不可落库）",
+        "AnalysisReport（带 `report_id` / `markdown_path`；`kind='unknown'` 那种失败报告不落库）",
         side_effect="read", handler_name="handle",
     ),
 
@@ -121,14 +124,14 @@ SPEC = AgentSpec(
     brief=    AgentBrief(
         duty="关系分析：用确定性代码算图与计数，只在排序与措辞这两件事上动用模型",
         boundary=(
-            "你是只读角色：不许写任何数据，也不许直接向别人发请求（你的可召唤边是空的）。",
+            "你是只读角色：工具面全量只读（拿不到任何写工具），也不许直接向别人发请求（你的可召唤边是空的）。能落库的只有两处**登记过的例外**：`handle` 收口时写 `analysis_reports`（那是你自己产出的登记行），以及**调用方**开 `submit_requests=true` 时 `gaps` 写 `search_requests`（它带主题去重、单次上限与在途闸门）—— 知识表（文献 / 概念 / 关系）在你这里零写入点。",
             "计数、索引、图搜索、路径枚举、去重、评分、溯源全部由代码算，你不许用模型重算它们。",
             "模型的输出只能给一个排列或一个判断（值不值得研究），不许改分数、不许删路径。",
             "钩子没接线或返回坏结果时必须回退到确定性顺序，并在结论里写明这次排序的来源。",
         ),
         policy=(
             "两处钩子各只许做一件事：路径排序只给 index 排列；缺口判断只给 worth 与 confidence。",
-            "缺口不许只写在报告里：走 C.gaps 的 submit_requests=true（默认 false）把候选缺口落成检索请求 —— 那才是闭环。每条请求要写清「为什么值得查」，否则 A 拿到的是一个没法执行的问句。",
+            "缺口不许只写在报告里：让这次派你的人开 `gaps` 的 `submit_requests=true`（默认 false，开关由**调用方**给，不由你在循环里拧）把候选缺口落成检索请求 —— 那才是闭环。每条请求要写清「为什么值得查」，否则 A 拿到的是一个没法执行的问句。",
             "被问「这条结论靠什么站着」时给两样读数：最短依赖链（经过哪几条命题）与污染面（它一旦被推翻，哪些后代跟着倒）。",
         ),
         signature_error="把模型给的排序当成算出来的评分。",
@@ -155,7 +158,7 @@ SPEC = AgentSpec(
     local_notes={
         '高观点': '枢纽、冗余、绕行：结构判断要落到读数上（度数、重复、绕行长度）。',
         '能思辨': '两条链矛盾时追共同上游：矛盾常常来自同一个定义被两种口径使用。',
-        '敢创新': '你可以提候选缺口（那是猜想），但不能自己把它变成请求 —— 交给 D 或人判。',
+        '敢创新': '你可以提候选缺口（那是猜想）；要不要把它变成检索请求由调用方决定（派你时给 `submit_requests=true`）—— 你在自己的循环里不拧这个开关。',
         '手': '数据面写是结构禁止的（只读角色）；草稿本 note 照写。',
         '眼睛': '读的是关系图与计数：形状、度数、重复、绕行，不是文献本身。',
         '脑子': "把'图长什么样'变成'哪条链值得下钻'：判断要可复算。",
