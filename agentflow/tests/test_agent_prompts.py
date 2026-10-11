@@ -667,6 +667,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "fs.read": "真工具，但只在带 workspace_root 的注册表里 —— 本文件的夹具刻意不带（见文件头）",
     "fs.write": "同 fs.read",
     "fs.edit": "同 fs.read",
+    "research.set_status": "真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`，"
+                           "`roles=('D',)`）—— 本文件的夹具不带 store，`research_tools` 按契约"
+                           "跳过（`tools/__init__.py:390`，原因记在 `build_registry().skipped`）。"
+                           "口径的两个读数见 `draft/108` §四 CS-9：无 store 70/28 件、"
+                           "带 store 83/41 件",
     "main.tex": "文件名（稿件落点），不是工具",
     "main.pdf": "文件名（渲染产物），不是工具",
     "appendix.tex": "文件名（附录落点），不是工具",
@@ -2211,18 +2216,29 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 另外四格是伙伴表把它带过去的 —— 出边指向 F 的 D/G/V 与"唤不起它"的 M，
 #: 它们的 `PARTNERS` 里逐条渲染 F 的边界条数（「它的边界共 4 条」→「7 条」，
 #: 字数一个不变、只有摘要变）。这本身是"改动作用域"的读数。
-_FROZEN_PROMPT_VERSION = "p85"
+#: `p86`（2026-10-11，批 R6：D 的迁移第一批 —— `draft/108` §二·D 的靶子 D1–D5）：
+#: `specs/d.py` 补三条硬边界 + 一条政策、改写一条政策，五件全部对着代码：
+#: ① 回答完要自己推状态（`research` 只推 `researching`；`answered` 只有 `research.set_status`
+#: 与矛盾裁决两个写入点 —— 真机 118 行 `research_questions` 里 `answered` 0 行，CS-5）；
+#: ② `needs_evidence` 必须带非空 `waiting_request_ids`（`research_tools.py:260-262`）；
+#: ③ 猜想九个状态各自必须带什么（`schema.Conjecture.validate`，`schema.py:756-820`）；
+#: ④ 证据就绪的三条可核实判据（`agent_d/_support.py:241-330` 的 `analyze_gaps`）；
+#: ⑤ 猜想登记的判重与更新（`tools/conjecture_tools.py:107-136`）。
+#: 作用域读数：D / E / F / G / M 五格换值，A / B / C / H / V 逐字节不动。
+#: D 自己那格 25,896 → 26,954 字（段数 78 不变）；另外四格是伙伴表把 D 的边界条数
+#: 带过去的（「它的边界共 4 条」→「7 条」，字数一个不变、只有摘要变）。
+_FROZEN_PROMPT_VERSION = "p86"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "e75c517961285c37f82b39de970fd1570349aab640bdb24ac993945e0dcf959f",
     "B": "302701533a67379996c3c7fc57575c9ee31a7dec1763344034e9de741061f43e",
     "C": "a0dd676bb3a37953684079c1d31484fd62bbf40a25a18770f7391e42734d2719",
-    "D": "798ba9912d7a3602fb0bd85efd120868a785b70667a963bbddc41a96f53c4b9f",
-    "E": "1085abee1b7b371072958b6029f2be73d0e7e96831b0eb6a882a7cb768dd16c8",
-    "F": "8bead57af5d521f958edd44b64be617c9f551d4cf8394cfa5d552cbfafc3c487",
-    "G": "fdb5dbd951f2eb2382cef655ae431efd151c51de71b7f7d6d4b87b664b4262dc",
+    "D": "23b3ac85d64d8fde1a31983841f16a796403d654410f3a9006d7e111f8b4a339",
+    "E": "4b290fc57c33a5fbcb4eed71750f7fbfc465c4de0a9d439f4e0bb1224b3a4c0a",
+    "F": "d7c3e1877efc4616485816549c42e4abe11d40bc9139608e0fdbac5546d84fe5",
+    "G": "65e4c5720d8f95ac10b711f5e4af1ef3ec25cffaf5bcd75ed46e6d7146ef6cc1",
     "H": "ffb3f221568c6dc753f51a8882908997bc2ad825822ce940afb9175595182341",
     "V": "824dc06cd502eca67b646e90ff93efa436847b8ec37fa6e51d79fb23a64cd7f5",
-    "M": "75a7b8ff752c989a645d886cc5d5d770694c39eceec6e262dfefd110f5789b7d",
+    "M": "3704856430eecf14161b82f3435fb03756d2d9651d14825eade72802be044424",
 }
 
 

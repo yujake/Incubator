@@ -233,7 +233,16 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ③ 子目标 `closed` 必须有 proof 级证据，数值/穷举支持只能 `supported_not_proved`（FC-22）；
 #: ④ 子目标 `blocked` 时 `blocked_reason` 必填（"不许静默卡住"是 schema 的硬条件）。
 #: 只动 F ⇒ 只换 F 那一格、段数不变。
-PROMPT_VERSION = "p85"
+#: `p86`（2026-10-11，批 R6：D 的迁移第一批 —— `draft/108` §二·D 的靶子 D1–D5）：
+#: `specs/d.py` 补三条硬边界 + 一条政策、改写一条政策。五件都对着代码：
+#: ① 回答完要自己推状态（`research` 只推 `researching`，`answered` 只有 `research.set_status`
+#: 与矛盾裁决两个写入点 —— 真机 118 行里 `answered` 0 行，见 `draft/108` §四 CS-5）；
+#: ② `needs_evidence` 必须带非空 `waiting_request_ids`（`research_tools.py:260-262`）；
+#: ③ 猜想九个状态各自必须带什么（`schema.Conjecture.validate`，`schema.py:756-820`）；
+#: ④ 证据就绪的三条可核实判据（`agent_d/_support.py:241-330` 的 `analyze_gaps`）；
+#: ⑤ 猜想登记的判重与更新（`tools/conjecture_tools.py:107-136`）。
+#: 只动 D ⇒ 换值的作用域见批 R6 的读数（伙伴表里"它的边界共 N 条"会连带改几格）。
+PROMPT_VERSION = "p86"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
