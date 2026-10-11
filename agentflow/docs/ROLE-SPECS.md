@@ -194,8 +194,8 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 |---|---|
 | `A` | `search_requests`, `literature` |
 | `B` | `literature`, `statements`, `relations`, `reprocess_requests`（S1r 并表后：概念行住 `statements` 的 `kind="concept"` 那一档，`concepts` 已退役） |
-| `C` | `analysis_reports`（**只读角色的显式登记例外**） |
-| `D` | `research_questions`, `search_requests`, `relations` |
+| `C` | `analysis_reports`, `search_requests`（**两格都是只读角色的显式登记例外**：`analysis_reports` 是 `handle` 的产出登记口，`search_requests` 是 I3 直连那条通道；真身 `specs/c.py` 的 `write_set`，两条理由见 §C 的那张表与 `agent_c/core.py` 的注释） |
+| `D` | `research_questions`, `search_requests`（**不含** `relations`：D 对关系是**读** —— `specs/d.py` 的 `write_set` 是它的真身，`capabilities.py` 的注释逐字写着"D 的 `relations` 是读"；改关系状态的是 B） |
 | `E` | `experiments` |
 | `F` | `attack_plans`, `search_requests`, `reprocess_requests` |
 | `G` | `documents`, `dependencies`, `review_findings` |
@@ -204,12 +204,14 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
 
-> **`statements`（命题台账，`draft/37` §16 P1）为什么不在上面任何一行的写集里**：
-> 写集登记的是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
-> 到今天为止，没有任何角色的实现写这张表 —— 它由持有 `table.*` 写工具的角色
-> （B 消化、D 审阅）**通过通用表工具**写，而通用表工具的落点是数据层校验，
-> 不走写集。等 P2 的提示词落地、B 的实现真的开始写它时，`specs/b.py` 的写集
-> 必须同步加上 `statements`（否则"两个并发任务同时改它"不会被判成冲突）。
+> **`statements`（命题台账，`draft/37` §16 P1）的现状（批 R27 按代码改正）**：这张表**已经**在
+> `B` 的写集里 —— 见上面 `B` 那一行末尾的 `statements`，真身是 `specs/b.py` 的 `write_set`，
+> 那里的注释逐字记着加它的理由："`draft/37` §46：`register_statement` 让'B 登记命题台账'
+> 第一次有了实现 —— 而写集原先没有这张表（声明落后于边界里那句'三件套缺一不可'）"。
+> 这一段此前写的是"为什么不在上面任何一行的写集里…到今天为止没有任何角色的实现写这张表…
+> 等 P2 的提示词落地、`specs/b.py` 的写集必须同步加上 `statements`" ——
+> **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
+> 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
 ### 0.7 动作表（`capabilities.CAPABILITIES`，60 个动作）
 
@@ -1001,17 +1003,22 @@ SELF-CHECK DONE
 |---|---|---|
 | 检索/下载 | 网络副作用只归 A | **A** |
 | 抽概念/关系 | 知识生产归 B；D 只读关系表 | **B** |
-| 改关系的 `status`（把 `suspect` 改 `active`） | D 的写集是 `{research_questions, search_requests, relations}` —— **`relations` 在写集里** ⇒ 这是**已知的越界面**，需要专门看（见下方 ⚠️） | 理论上是 **B**（重抽取） |
+| 改关系的 `status`（把 `suspect` 改 `active`） | D 的写集是 `{research_questions, search_requests}` —— **`relations` 不在里面**（真身 `specs/d.py` 的 `write_set`；`capabilities.py` 的注释逐字写着"D 的 `relations` 是读"）⇒ 这一步 D 做不了 | 写者是 **B**（重抽取；裁决只把关系当输入读） |
 | 做实验/形式化 | 实验需要子进程与脚本，是 E 的职责 | **E**（`D → E`） |
 | 立项攻坚 | 攻坚有独立的三维预算与终止条件，必须唯一主人 | **F**（`D → F`，I10 升级） |
 | 写稿件 | 稿件有话术/引用格式/降级规则 | **G** |
 | 审校自己的结论 | D 是产出者 | **H** |
 
-> ⚠️ **D 的写集包含 `relations`**（`capabilities.WRITE_SETS["D"]`，`capabilities.WRITE_SETS`）。
-> 代码里的注释给的理由是"`agent_d.AgentD.adjudicate` 的 `research_questions+relations`"（裁决矛盾时
-> 会把关系标 `suspect`/`rejected`）。**这确实是一个需要审计的权限面**：
-> 它是唯一一个"研究角色能改知识表"的路径。本次**未逐行核实**
-> `agent_d.AgentD.adjudicate` 处到底改了什么字段 —— **标 `（据 capabilities.py 注释，未在代码中逐行核实）`**。
+> ✅ **批 R27 按代码改正（原文与它上面那一行都写着"D 的写集包含 `relations`"，现算不是）**：
+> 现算 `capabilities.WRITE_SETS["D"] = {research_questions, search_requests}`
+> （真身 `specs/d.py` 的 `write_set`），而 `capabilities.py` 的注释逐字写着
+> "**D 的 `relations` 是读**"；`agent_d/core.py` 里唯一写 `relations` 的地方是
+> `_selftest`（自检夹具，不在生产路径上）；`agent_d/adjudicate.py` 只把关系当**输入**读。
+> ⇒ "研究角色能改知识表"这条**越界面今天不存在**，改关系状态的仍是 B
+> （与上面那张表里"改关系的 `status`"那一行的口径一致）。
+> 原文还写着"本次**未逐行核实** `agent_d.AgentD.adjudicate` 改了什么字段" ——
+> 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
+> 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
 ### D.4 工具面（41 个，实测 —— **全项目最宽**）
 
