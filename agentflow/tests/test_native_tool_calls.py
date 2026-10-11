@@ -250,6 +250,84 @@ def test_the_advertised_face_is_recorded_in_the_audit_trail(tmp_path: Path):
     assert gw.seen and len(gw.seen[0]["tools"]) == len(face.functions)
 
 
+def test_every_non_tool_shape_has_an_advertised_function(tmp_path: Path):
+    """`llmseam.build_tool_face` 的注释说"`SHAPES` 减去 `tool` 全都广告成函数" —— 这条判据
+    把那句话变成机器读数（`draft/108` CS-17 的正面）。
+
+    为什么值得单开一条：广告面与接受面分家有两种形态，第二种更坏 —— 模型按形状名写，
+    框架回一句"没广告过这个函数"（白扔一步，还能改）；或者模型在广告过的函数里
+    带了一个没广告过的参数，框架静默丢掉（模型以为生效了）。这一条钉第一种：
+    逐形状从 `agent_loop.SHAPES` 现算（加一个形状而忘了广告 ⇒ 必红），
+    并做一次往返：广告名 → `to_shape` → `_shape_of` 必须解回同一个形状、无 problem。
+    """
+    from agentflow import agent_loop as AL
+
+    face = LL.build_tool_face("M", build_registry().registry)
+    by_shape = {shape: san for san, shape, _schema in LL.META_FUNCTIONS}
+    advertised = {f["function"]["name"] for f in face.functions}
+    #: 每个形状一份最小合法载荷（与 `_decode_shape` 各支的必填一致）。加形状不在这里
+    #: 补一份 ⇒ 下面那句 `sorted(samples)` 会红 —— 判据不会因为"新形状没人管"而变空。
+    samples: dict[str, dict] = {
+        "summon": {"role": "G", "action": "revise", "params": {}},
+        "summon_many": {"targets": [{"role": "B", "action": "run_once"}]},
+        "message": {"to": "F", "subject": "喂", "body": "在吗"},
+        "handoff": {"to": "F", "summary": "把结论交给你", "body": "第二版在 refs 里。"},
+        "note": {"text": "记一句"},
+        "ask_user": {"question": "选哪个？"},
+        "final": {"final": "交付说明"},
+        "retire": {"name": "D1"},
+        "roster": {},
+        "interrupt": {"name": "D1"},
+    }
+    non_tool = tuple(s for s in AL.SHAPES if s != "tool")
+    assert sorted(samples) == sorted(non_tool), (
+        f"样例表与 `agent_loop.SHAPES`（减 `tool`）不等额：{sorted(samples)} vs {sorted(non_tool)}")
+    for shape in non_tool:
+        san = by_shape.get(shape, "")
+        assert san, f"{shape} 没有对应的 `framework_*` 广告名（`llmseam.META_FUNCTIONS`）"
+        assert san in advertised, f"{san} 不在广告面里：{sorted(advertised)[:6]}…"
+        data, problem, detail = face.to_shape(_call(san, samples[shape]))
+        assert problem == "" and data is not None, (shape, problem, detail)
+        got, payload, bad = AL._shape_of(data)
+        assert (got, bad) == (shape, ""), (shape, got, bad, data)
+        assert payload, f"{shape} 解出来的载荷是空的（那等于「广告了但什么也没发生」）"
+
+
+def test_the_native_final_keeps_the_blocked_declaration():
+    """`blocked`（"我在等上级指导"的收工声明）在原生那条路上不许被静默丢掉。
+
+    `draft/108` CS-17：文本路 `_decode_shape` 一直带过 `{"final": …, "blocked": {…}}`，
+    而原生面此前既没广告 `blocked`、`to_shape` 又只重建 `final`/`evidence`/`notify`
+    ⇒ 模型在 `framework_final` 里带 `blocked` 时那一笔凭空消失：父那边 `subtree_blocked`
+    读出来仍是"没卡住"，而模型以为它声明了（这一轴要治的"静默"里最坏的一种）。
+
+    三条一起钉：① 广告面里有这一格；② 给了就原样透传；③ 没给就不许造一个空 dict
+    （"没声明"与"声明了空"必须在盘上分得开），且它不许进 `required`
+    （那会先拒掉一次"合法的收工" —— 与 `NOTIFY_JSON_SCHEMA` 上面那条教训同源）。
+    """
+    from agentflow import agent_loop as AL
+
+    meta = {name: schema for name, _shape, schema in LL.META_FUNCTIONS}
+    fin = meta["framework_final"]
+    props = fin["properties"]
+    assert "blocked" in props, sorted(props)
+    assert fin.get("required") == ["final"], fin.get("required")
+    assert set(props["blocked"]["properties"]) == {"what", "why", "needs"}, props["blocked"]
+
+    face = LL.build_tool_face("A", build_registry().registry)
+    decl = {"what": "核引文", "why": "口径没定", "needs": "请上级定『引文一致』的判定口径"}
+    data, problem, detail = face.to_shape(
+        _call("framework_final", {"final": "卡住了", "blocked": decl}))
+    assert problem == "" and data is not None, (problem, detail)
+    assert data.get("blocked") == decl, data
+    # 负控（不凭空造键）：没给 `blocked` 时那一格不许出现
+    plain, _p, _d = face.to_shape(_call("framework_final", {"final": "收工"}))
+    assert "blocked" not in plain, plain
+    # 与文本那条路同源：同一个载荷经 `_shape_of` 解出来也带 `blocked`
+    shape, payload, bad = AL._shape_of({"final": "卡住了", "blocked": decl})
+    assert (shape, bad) == ("final", "") and payload.get("blocked") == decl, (shape, bad, payload)
+
+
 # ============================================================ 三、负控与回落
 
 def test_bad_arguments_are_reported_as_arguments_not_as_shape(tmp_path: Path):

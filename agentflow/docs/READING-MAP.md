@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R46），
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R47），
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **212 个 `.py`、123,931 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,791 行** —— 批 R40 把它补进了 §3 的表；
+> **212 个 `.py`、123,991 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,791 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行是 `schema.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -14,7 +14,9 @@
 > 再原先写"77 个文件、77,391 行、38 个文件超过 800 行"，都过期了 ——
 > 批 R27 按现算改正并把复跑命令写进这一行；**批 R46 又改了一次行数**：
 > 123,924 → **123,931**（动的是 `agent_prompts.py` 的 `p95` 变更，净 +7 行 ——
-> 这个数会被 `temp/_probe_doc_vs_code.py` 的 ③ 抓住，见 `draft/108` §三 的常驻探针那一段）。）
+> 这个数会被 `temp/_probe_doc_vs_code.py` 的 ③ 抓住，见 `draft/108` §三 的常驻探针那一段）；
+> **批 R47 再改一次**：123,931 → **123,991**（`llmseam.py` 补 `framework_handoff` /
+> `framework_interrupt` 两个广告面与 `framework_final.blocked` 的透传，净 +60 行）。）
 >
 > **它自己也有判据**：`tests/test_reading_map.py` 会断言
 > ①图里提到的每个文件名都真实存在；②`src/agentflow` 的每个模块至少在这张图里出现一次

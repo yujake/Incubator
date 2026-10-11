@@ -674,6 +674,32 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         },
         "required": ["to", "body"],
     }),
+    # `framework_handoff` 与 `framework_interrupt` 此前不在（这张表里没有它们），而
+    # `agent_loop.SHAPES` 里两个都在、提示词也按形状名教模型写它们（手稿是"交接落行"的
+    # 唯一入口）。于是"`SHAPES` 减去 `tool` 全都广告成函数"这条纪律有一条裂缝：
+    # 原生路上写 `framework_handoff` 只会拿到"模型调用了一个没广告过的函数"。
+    # 两处一起补（`draft/108` CS-17）：这一张表 + `to_shape` 的通用支
+    # （它本来就能把任意 `{形状: 载荷}` 翻过去，`handoff` / `interrupt` 不需要特例）。
+    ("framework_handoff", "handoff", {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string",
+                   "description": "交给谁：A–H / M / V；给所有人写 ALL（与 #public 等价）"},
+            "summary": {"type": "string",
+                        "description": "一句话：它就是留言里那句 `[手稿 NNNN] <summary>`"},
+            "body": {"type": "string",
+                     "description": "markdown 正文：做了什么 / 依据（实验号、文献号、手稿号）/ "
+                                    "要对方做什么 / 我卡在哪"},
+            "refs": {"type": "array", "items": {"type": "string"},
+                     "description": "引用到的编号（stmt:/exp:/lit:/rel: 或手稿号）—— 会被逐条核"},
+            "revises": {"type": "string",
+                        "description": "可选：要订正的那一号手稿（旧行保留，不覆盖）"},
+            "why": {"type": "string", "description": "可选：为什么写这一份"},
+        },
+        # 与 `agent_loop._decode_shape` 的 handoff 那一支同源：这三样缺一样就当场拒
+        # （空手稿是"我交接了"的假证据）。
+        "required": ["to", "summary", "body"],
+    }),
     # S1k-4（业主 T22 的名册口径）：两个新形状的原生广告面。
     # 与 `agent_loop._do_roster` / `_do_retire` 的接受面同源：`of` 缺省 = 自己；
     # `retire` 只要一个名册名（父决定退役，判定与执行在秘书那一侧）。
@@ -700,6 +726,16 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         },
         "required": ["name"],
     }),
+    # `interrupt` 与 `retire` 同一条指称纪律（S-H 裁定 14）：只说名册名。它停的是
+    # "某一个子代理当前那一轮"，不是全局叫停（`conductor.stop` 才是）。
+    ("framework_interrupt", "interrupt", {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string",
+                     "description": "名册名（如 D1）—— 停它当前那一轮，不是全局叫停"},
+        },
+        "required": ["name"],
+    }),
     ("framework_final", "final", {
         "type": "object",
         "properties": {
@@ -709,6 +745,25 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             # 不在广告面上 ⇒ 原生工具面下模型结构上给不出这一栏。见
             # `NOTIFY_JSON_SCHEMA` 上面那段（含"为什么 required 里没有它"）。
             "notify": NOTIFY_JSON_SCHEMA,
+            # `blocked`（"我在等上级指导"的收工声明）与 `notify` 是同一条纪律的两半：
+            # 文本那条路由 `_decode_shape` 带过 `{"final": …, "blocked": {…}}`，
+            # 而原生面此前既没广告它、`to_shape` 又把它静默丢掉 ⇒ 模型以为声明了、
+            # 父那边 `subtree_blocked` 读出来仍是没有（`draft/108` CS-17）。
+            # 这里只做广告 + 透传，不在传输层判必填：`why` / `needs` 齐不齐由
+            # `AgentLoop._note_blocked_declaration` 判并给读数 —— 把它列进 `required`
+            # 会先拒掉一次"合法的收工"，正是 `NOTIFY_JSON_SCHEMA` 上面记的那条教训。
+            "blocked": {
+                "type": "object",
+                "properties": {
+                    "what": {"type": "string", "description": "哪一件活卡住了"},
+                    "why": {"type": "string",
+                            "description": "被什么卡住（与 needs 都必填，否则这一笔不落痕）"},
+                    "needs": {"type": "string",
+                              "description": "请上级定什么（与 why 都必填）"},
+                },
+                "description": ("只有『等上级指导实施细则』这一档才写它（职责之外那一档不写）："
+                                "`why` 与 `needs` 都非空才落痕"),
+            },
         },
         "required": ["final"],
     }),
@@ -782,6 +837,11 @@ class ToolFace:
             # 形状不对的 `notify` 也照带（读数是 `notify_problem`，不是在这里静默丢掉）。
             if "notify" in args:
                 out["notify"] = args["notify"]
+            # `blocked` 同一条纪律（`draft/108` CS-17）：给了就原样带过，没给就不造空 dict ——
+            # 此前这一格被静默丢掉，于是"模型声明卡住了"与"没人声明"在盘上长得一样。
+            # 校验与落痕仍归 `AgentLoop._note_blocked_declaration`（含它那两句读数）。
+            if "blocked" in args:
+                out["blocked"] = args["blocked"]
             return out, "", ""
         if target == "note":
             return {"note": {"text": str(args.get("text") or "")}}, "", ""
