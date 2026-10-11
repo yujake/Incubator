@@ -979,6 +979,31 @@ def test_the_board_block_teaches_the_boards_own_vocabulary(registry: ToolRegistr
         assert "COLLAB_BOARD" in sections, f"{role} 的段表里没有工作项板那一段"
 
 
+def test_every_shape_has_a_name_in_the_prompt_and_a_line_in_the_chooser(
+        registry: ToolRegistry):
+    """十一种形状：每一种都要在提示词里有名字，`COLLAB_SHAPES` 那张决策表要在（现算）。
+
+    两侧都由代码说话：形状集合取自 `agent_loop.SHAPES`（加一个形状时这一条会告诉你
+    "提示词里还没有它的名字"）；受众那条按 `partners_out` 现算 —— 出边为空的角色（实测 C）
+    拿到的是 `2b)` 的残桩，里面按设计不出现 `summon_many` 这个键
+    （那一档一个伙伴都唤不动），所以它的期望集合少一个。
+    """
+    shapes = tuple(AL.SHAPES)
+    assert len(shapes) == 11, f"形状数变了（现算 {len(shapes)} 个）⇒ 这条判据的期望要跟着改"
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        assert "COLLAB_SHAPES" in sections, f"{role} 的段表里没有那张决策表"
+        expect = set(shapes) if AP.partners_out(role) else set(shapes) - {"summon_many"}
+        missing = sorted(s for s in expect if f'"{s}"' not in text and f"`{s}`" not in text)
+        assert not missing, (
+            f"{role} 的提示词里没有这些形状的名字：{missing}（形状集合现算自 `SHAPES`）")
+        if not AP.partners_out(role):
+            assert '"summon_many"' not in text, (
+                f"{role} 出边为空却读到了 `summon_many` 的键 ⇒ 残桩机制坏了")
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -2110,18 +2135,23 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 渲染即 seen、没读就 ack ⇒ `ack_unbacked` 读数）+ "板项不是子代理"。
 #: 受众 = 全部十个角色（板项可以开在任何一个角色名下）。
 #: 读数：十格全换 + 段数各 +1（A 71、B 64、C 65、D 77、E 68、F 79、G 94、H 82、V 61、M 74）。
-_FROZEN_PROMPT_VERSION = "p81"
+#: `p82`（2026-10-11，批 Q10：`draft/104` §5.1 的 `COLLAB_SHAPES` —— 十一种形状"用哪个"）：
+#: 新段（order 5270）是一张决策表（"要做什么 ⇒ 用哪个形状"），形状的写法仍只在
+#: 循环协议那张表里（不写第二遍）。同批登记：`COLLAB_ADDRESS` / `COLLAB_RELAY` 不单独落
+#: —— 它们的正文逐句核过，已经写在 `message`/`handoff` 那两个形状与代唤那条规则里。
+#: 读数：十格全换 + 段数各 +1（A 72、B 65、C 66、D 78、E 69、F 80、G 95、H 83、V 62、M 75）。
+_FROZEN_PROMPT_VERSION = "p82"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "65bdfc01fcb0469b47538a172544fa82655b8151f03ec11f68b4c7da9faaafbb",
-    "B": "9967cc56839dcf63061fa1603881eb2c64989dabbfffa14d2975f7665740e559",
-    "C": "0a12245c7805773b38b991b09b003bc164e4b72e62e7510bcd7d2d775ae42a63",
-    "D": "4f08be5afeb512620f1441c98224533dcdbfc18035748a5291c8afd512f3a4b4",
-    "E": "f67990578bfb2dd2704a738352b1f3b37ab50491ce6cc9c355e9c10a48972c26",
-    "F": "df4a00afc78f093c044b20a5587fef9a5d75e85108080ab67080fb95e14b331a",
-    "G": "1c52246f053e0dd523301c9c06fd0c9afc088655cde4cf9d88d2a6c28d45174a",
-    "H": "45ac5b53f35dbb80e5bbc30344f11582222c918d9e3f70d24869c81585c0b522",
-    "V": "664b4522262c153405f2208542e78e571ed9fa52e789d87c349e2f75373b45fd",
-    "M": "cd11a32093ee4a50b91aaaab99e6f36db161fed1a1f1c6d4712c893b6a4864c9",
+    "A": "e75c517961285c37f82b39de970fd1570349aab640bdb24ac993945e0dcf959f",
+    "B": "302701533a67379996c3c7fc57575c9ee31a7dec1763344034e9de741061f43e",
+    "C": "a0dd676bb3a37953684079c1d31484fd62bbf40a25a18770f7391e42734d2719",
+    "D": "6255de8191787b74a20ac5fc83f85142828521e7881fdcdd2e711c06ba6f8f40",
+    "E": "1085abee1b7b371072958b6029f2be73d0e7e96831b0eb6a882a7cb768dd16c8",
+    "F": "5508c9ed1c70f3f0273a6014020b76a3ae09af31f26dd72a186d9bff406451f2",
+    "G": "42581735ce08bafe77b983f5232131664345e2161c855866f88106fd4c1c74fa",
+    "H": "ffb3f221568c6dc753f51a8882908997bc2ad825822ce940afb9175595182341",
+    "V": "56e3944b8c90c20d4b5acaa4bbe968a7af6c280459ed1747bfa6ed509b5aba5d",
+    "M": "654c12ca4b6dd40d5cbcaaf5f82fc3a09068fe097530c2471eced3574595cd2c",
 }
 
 

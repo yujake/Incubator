@@ -203,7 +203,9 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `p81`（2026-10-11，批 Q9：`draft/104` §5.1 的 `COLLAB_BOARD`）：工作项板的语义
 #: 现算自 `schema` 的四张词表（kind / expects / 状态机 / 收口），进新段（order 5260）
 #: ⇒ 十格全换（各 +1 段）。
-PROMPT_VERSION = "p81"
+#: `p82`（2026-10-11，批 Q10：`draft/104` §5.1 的 `COLLAB_SHAPES`）：十一种形状的
+#: 决策表进新段（order 5270）⇒ 十格全换（各 +1 段）。
+PROMPT_VERSION = "p82"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -416,6 +418,33 @@ PARENT_ROSTER_TEXT = """\
 - **停与退是两件事**：`{"interrupt": {"name": "D1"}}` 停它**当前那一轮**（排队消息还在、
   它自己起的子代理继续跑）；`{"retire": {"name": "D1"}}` 是结束它 —— 名字**永久不再复用**、
   面归还可分配池。子代理自己不能退自己（那是父的决定）。"""
+
+
+#: 「十一种形状，什么时候用哪个」（`draft/104` §5.1 的 `COLLAB_SHAPES`）。
+#:
+#: 为什么是决策表而不是又一份形状说明：形状的写法已经在循环协议那张表里（含每条的
+#: 纪律），再写一遍就是第二份副本。这一块补的是"选哪个"—— 那一层协议里没有集中写过
+#: （每条的"什么时候用"散在各自那一段里）。
+#:
+#: 为什么列十一种而 `draft/104` §1.2 说"8 种是协作"：选择这件事是按"要做什么"分的，
+#: `tool` / `note` / `ask_user` 同样是每一步要选的形状之一 —— 少列三种会让这张表在真选择时
+#: 缺三行（它们各自的口径在协议里都有）。
+#:
+#: `COLLAB_ADDRESS` / `COLLAB_RELAY` 这两块没有单独落：逐句核过协议之后，
+#: 它们的正文已经在那里了 —— 可见面（`#public` 只到你名下的直接子代理；私聊要一条协作边；
+#: 手稿是盘上可复核的那一份）写在 `message` / `handoff` 那两个形状里，
+#: 代唤（被拒时自动转给直接父、也可以自己发）写在规则那一条里（P2 那批校过）。
+#: 再写两块就是把同一件事说第三遍 —— 本仓"不留重复文本"的纪律不许。登记见 `draft/104` §5.1。
+COLLAB_SHAPES_TEXT = """\
+十一种形状，什么时候用哪个（写法见上面那张形状表；每一步只取其一）：
+- `tool`：自己动手做（调一件工具）。`note`：记自己的想法 —— 给别人看的东西不要写在这里。
+- `summon`：要一个伙伴去做一件事；`summon_many`：一批，而且要它们真的并发
+  （同角色多实例、按写集分波）。
+- `message`：只把信息传过去，不要求对方立刻做事。`handoff`：交接手稿 ——
+  盘上那份可复核的正文（别人之后要读、要引、要溯源的，用这个而不是 `message`）。
+- `ask_user`：要用户的取舍（只有主控能当面问；别人请主控代问）。
+- `final`：收工并给结论（带上 `notify` 就顺手写一份交接手稿）。
+- `roster`：看名册（只读）。`interrupt`：停某个子代理当前那一轮；`retire`：结束它。"""
 
 
 def collab_board_text() -> str:
@@ -2085,6 +2114,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 工作项板的语义（现算自 `schema` 的四张词表）：板项可以开在任何一个角色名下。
     reg.section(Section("COLLAB_BOARD", SECTION_ORDERS["COLLAB_BOARD"],
                         collab_board_text()))
+    # 十一种形状"什么时候用哪个"（决策表）：选择是每个角色每一步都要做的事。
+    reg.section(Section("COLLAB_SHAPES", SECTION_ORDERS["COLLAB_SHAPES"],
+                        COLLAB_SHAPES_TEXT))
     # 派活上限（业主裁定 A：数字写、且现算）。受众 = 派得出活的角色（`partners_out`
     # 非空 ⇒ 它真的会 `summon`）；出边为 0 的角色（实测 C）拿到这一段只会读到
     # "你能派几个"这种与它无关的话 —— 它那一档的处置在协作块族里（`draft/104` §5.2 的 C 行）。
