@@ -657,6 +657,80 @@ def test_every_role_prompt_is_rendered_without_template_leftovers(registry: Tool
         assert AP.ROLE_BRIEFS[role].duty in text, f"{role} 的职责没有进提示词"
 
 
+#: 提示词里允许出现的"点号 token"但不是工具名的那些，逐条登记理由。
+#: 判据：`test_the_prompt_never_names_a_tool_that_does_not_exist`。
+#: 登记表的用途与 `test_secretary_prompt_alignment` 里那张表同形：豁免必须留下理由，
+#: 而"表里某条已经不在提示词里"本身也要红（腐烂的豁免表＝看起来还在挡着什么）。
+_NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
+    "fs.read": "真工具，但只在带 workspace_root 的注册表里 —— 本文件的夹具刻意不带（见文件头）",
+    "fs.write": "同 fs.read",
+    "fs.edit": "同 fs.read",
+    "main.tex": "文件名（稿件落点），不是工具",
+    "main.pdf": "文件名（渲染产物），不是工具",
+    "appendix.tex": "文件名（附录落点），不是工具",
+    "documents.claims": "台账字段（documents 表的 claims 列），不是工具",
+    "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
+    "autonomy.run_autonomous": "模块.函数引用（说明这条纪律由哪段代码保证），不是工具",
+    "policy.check": "同 autonomy.run_autonomous",
+    "policy.waves_of": "同 autonomy.run_autonomous",
+    "quoteverify.check_quote": "同 autonomy.run_autonomous",
+    "userio.ask_user": "同 autonomy.run_autonomous",
+}
+
+#: "像工具名"的点号 token：反引号包着、两段都是小写标识符。
+_DOTTED_TOKEN = re.compile(r"`([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)`")
+
+
+def test_the_prompt_never_names_a_tool_that_does_not_exist(registry: ToolRegistry):
+    """广告面不说谎：提示词里每个"像工具名"的 token 要么是真工具，要么登记过理由。
+
+    真机代价（`draft/105` 的 B1/B2 + `draft/41`）：`unknown_action` 52 次，
+    其中一部分就是提示词指名了一个不存在的工具 —— 从前写着"要发给某一个同伴看
+    就用 `manuscripts.write`"（全仓没有这件工具：`manuscript_tools.py` 的表格逐字写着
+    "它不是工具：走循环形状 handoff"）与"传话走留言（`message.send`）"（也没有这个名字，
+    `message` 是形状）。批 Q1 把两处改成形状名，并加了这一条判据 ——
+    它是那两条的通用形式：与其为每个名字写一条短语探针，不如扫一遍十格提示词。
+
+    两侧都钉：
+      - 正控：十格提示词里抽得到 token（抽不到 = 扫描面坏了，不是"没有问题"）；
+      - 对拍：每个 token 要么在这一岗的工具面里，要么在 `_NON_TOOL_DOTTED_TOKENS`
+        里逐条登记过理由；
+      - 反真空：登记表里每一条都真的还在提示词里（豁免表腐烂时红）。
+    """
+    seen: dict[str, list[str]] = {}
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        for tok in _DOTTED_TOKEN.findall(text):
+            seen.setdefault(tok, []).append(role)
+    assert seen, "十格提示词里一个点号 token 都没抽到 ⇒ 扫描面坏了（不是'没有问题'）"
+    tools = {str(s.name) for role in ALL_ROLES for s in registry.for_role(role)}
+    unknown = {tok: roles for tok, roles in seen.items()
+               if tok not in tools and tok not in _NON_TOOL_DOTTED_TOKENS}
+    assert not unknown, (
+        "这些 token 长得像工具名，却既不在工具面上、也没在 `_NON_TOOL_DOTTED_TOKENS` 里"
+        f"登记理由（模型照着写会拿到 `unknown_action`）：{ {k: ''.join(v) for k, v in unknown.items()} }")
+    stale = sorted(k for k in _NON_TOOL_DOTTED_TOKENS if k not in seen)
+    assert not stale, f"登记表里这些 token 已经不在任何一格的提示词里了 ⇒ 摘掉它们：{stale}"
+
+
+def test_the_tool_name_scan_can_actually_go_red(registry: ToolRegistry,
+                                                monkeypatch: pytest.MonkeyPatch):
+    """反负控：往提示词里塞一个不存在的工具名 ⇒ 上面那条判据必红。
+
+    为什么单列一条：那一条判据的实现是"扫 + 对拍"，两侧都容易退化成恒真
+    （抽不到 token 时 `unknown` 恒空；登记表写全时也恒空）。这里用注入证明它有分辨率 ——
+    它正是批 Q1 抓到 `manuscripts.write` / `message.send` 的那种形态。
+    """
+    real = AP.system_prompt
+
+    def patched(role: str, **kw: Any) -> str:
+        return real(role, **kw) + "\n- 顺手写一句 `fake.tool_name` 看看\n"
+
+    monkeypatch.setattr(AP, "system_prompt", patched)
+    with pytest.raises(AssertionError, match="fake.tool_name"):
+        test_the_prompt_never_names_a_tool_that_does_not_exist(registry)
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -1720,18 +1794,27 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 尾注：名册名那一句的措辞刻意沿用探针表里的锚（"父可以自己提名 / 由秘书分配 / 名字一经分配"）——
 #: `tests/test_secretary_prompt_alignment.py` 按这些短语把"提示词承诺的秘书职责"与代码里的接住方
 #: 对上；换一套同义词会让它判成"承诺了没人接住"（第一版正是那么红的）。
-_FROZEN_PROMPT_VERSION = "p72"
+#: `p73`（2026-10-11，批 Q1：`draft/105` 的五条"提示词写错/写旧了" + 一条通用判据）：
+#:   ① B1：`manuscripts.write` 不是工具（从前写着"要发给某一个同伴看就用它"）⇒ 改成"手稿是 `handoff` 形状"；
+#:   ② B2：`message.send` 不存在（`message` 是形状）⇒ 改成"走 `message` 形状（留言）"；
+#:   ③ A25：公共频道两种拼法（`#public` / `ALL`）说清一次 —— 两个名字同一个频道、框架两个都收；
+#:   ④ A19：打转提醒的口径改成"同一个调用连着第 3 次"（代码只认 `same_call`，不要求读数相同）；
+#:   ⑤ A20：`ask_user` 的语义改成"这一趟停在原地等（`stop_reason="waiting_for_user"`）"，
+#:      `user_no_answer` 只是"还没答"那一个读数；
+#:   ⑥ A15：`#public` 那条补上例外（框架自己发的通报对所有角色可见）。
+#: 全在共享段 ⇒ 十格全换；段数不变（换字，不加段）。
+_FROZEN_PROMPT_VERSION = "p73"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "dc8990ccd226e681a5c07101ff6b951172bdc5c0ec5cdef35ba376ebdc443005",
-    "B": "c419fbc1e8ce848afd5bf670a828d31877d93d6165b836d2447cdff8ed4aa1db",
-    "C": "ab03071b2c1d9251f305b1049a9a438e20fd613bb9744eddd4b30aaaa5d8d639",
-    "D": "f4c6d67f35437379a59ce80249f8bfa39394b50886bdb6339b35ec3c85c7feec",
-    "E": "5480f231be2c934c785f097ef3698f93f73f690106a13229bb4fe383b79b86af",
-    "F": "f4ae56a4eaa68c88e2e3e5252e9829caa659be2fa8dcaa207c9ef86c09df2805",
-    "G": "7544ce5288ad2e4c21d81e9f6e1e00b590203a3e83c634b6622dde85db208030",
-    "H": "85b7606873d9346c6a0702f7dd7e712eb10b80430ba103a22731c4f8270325c3",
-    "V": "c109c5638c98a63ae4654858645a665ef414828cebbd0a3b3c7a90ac63bb873b",
-    "M": "915c4504050efeac96f9fa9babc11b353d718dd1b7cf791cc0dab0e8e517f853",
+    "A": "6b4fbcd491b6c29805b7982c780757f5b2a851d11d8465923a475ba262f87b19",
+    "B": "783b861965ad38224e3a1a0834fb08dbbb2e748b9ae3e609e51025683d57da40",
+    "C": "2d8bacb0b475e3fb4b5e6c16aaa52d4027cf989729644910cbab221494ece9c3",
+    "D": "05549bf5c6d9b5d296b727b489d8eaf79a46f8b521d996b47baf07e0ddbd44af",
+    "E": "51f6daf9869d8c8cd1cad669653e8d1fd274a4781f1d7a95442213e9b3f0dcf6",
+    "F": "0c08179fe2eacecfb85fef2f9625693a2cfae4b161fcbe263aaa941482a40a77",
+    "G": "3f359760c7b5dca9e1d8fb30de4bf3187b5a52c62bed51aec47adfaf78cba876",
+    "H": "70237e3bddda3f284e35c676c71973496d9c124a562bf6c4a3f1f419958c484c",
+    "V": "d5322aee941f7cbcb88542039a410038b19e16807d0594a0c9650146f49dc9aa",
+    "M": "0fe138edafdfb03def64fbd7935b0767f0024d98a191a2b059143fae147535b6",
 }
 
 
