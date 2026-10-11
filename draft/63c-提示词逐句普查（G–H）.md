@@ -205,6 +205,23 @@
 
 > **工具面的可转交点**：这 4,534 字里，「必填/可选」的枚举占大头，而**同样的枚举**又出现在 `OUTPUT_CONTRACT` 的动作表里（`compose_claim`/`register_dependency`/`build_document`/`render`/`refresh_markdown`/`revise` 六件事两处都有）。真身都是 `specs/g.py:ActionSpec.params`，且秘书①会在发送前报「缺哪个必填」+ 并列候选。⇒ 可把「可选」键列表从提示词里去掉（留「键是封闭集合」一句），代价是一次真机上发生过的 `invalid_params`（`agent_prompts.py:1228-1234` 记录了它）。建议：**缩（≈1,200 字，需先确认秘书①在所有发出路径上都开着）**——本表把它记为「未判」而非直接删。
 
+> **批 R23 的复核（2026-10-11：判「可以缩」，但理由要换掉）**：上面那句前提
+> 「秘书①会在发送前报…」**不成立** ——
+> `SECRETARY_OUTBOUND_SHAPES = ("summon","summon_many","handoff","message")`（`agent_loop.py:76`），
+> 它唯一的调用点在 `:3142` 的 `_outbound_hook`，而那个函数开头就是
+> `if self.secretary is None or shape not in SECRETARY_OUTBOUND_SHAPES: return {}`（`:4689`）
+> ⇒ **`tool` 形状根本不经过秘书①**（秘书管的是派活与留言，不是工具调用；`SHAPES` 八种里
+> `tool` 不在那四种之内）。
+> 但那一档**仍然可以缩**，理由是另一条 —— 这次是从代码里读出来的：
+> 工具**闸门**在拒收时已经把完整的键集合原样回给模型，`tools/base.py:484` 逐字
+> `出现未声明的参数：{sorted(extra)}（schema 只允许 {sorted(props)}）`，
+> 并列候选在 `:945`（`candidate_tool_names`）⇒ 提示词里的"可选键枚举"是
+> **同一条信息的第二份副本**（真身是 `ActionSpec.params`，渲染进 `OUTPUT_CONTRACT` 的动作表）。
+> 代价照旧写清：真机上发生过一次 `invalid_params`（`agent_prompts.py:1228-1234`），
+> 且模型要多花一步；**「键是封闭集合」那一句必须留**（它给的是"为什么会被拒"，报错给不了）。
+> 处置：本表把这一档从「未判」改为 **「缩（≈1,200 字）—— 理由换成闸门那一句」**；
+> 真动手时按 `draft/108` §三 的口径走一次提示词批（`p92 → p93`）。
+
 ## 2.2 G 对外动作表（G:307-314，1,053 字）
 
 | 节 | 逐字原句（≤120字） | 它是什么 | 谁接住 | 处置 | 若删，风险 | 可省≈ |
@@ -417,6 +434,13 @@
 1. **`PAPER_PACK 八` 是否对 G/H 整删**：它明确写「你（M）」，但 `PAPER_PACK_ROLES=("M","G","H")` 是刻意的设计决定（`agent_prompts.py:379-389` 的注释说这一段只对碰论文包的角色成立）。我没有证据证明 G/H 从不写 `out/review/REPORT.md`（`conductor.closing` 的 `report_path` 是 M 的用法，但 G/H 的 `fs.write` 面存在）⇒ 标「需确认」。
 2. **`STRUCTURE_NOT_PROMPT` 十项该不该缩**：它是「事实与判断分开」这一设计的可读落点，有测试守着符号存在（`tests/test_agent_prompts.py`）。缩成一句会不会让模型把拒绝当失败，我判不准。
 3. **工具面「可选键」枚举能否交给秘书②**：`agent_prompts.py:1228-1234` 记录了一次真机事故（只写必填 ⇒ 模型给无参动作乱传键）。秘书① 现在会在发出前报警并列候选，但**报警不是拦下**（`prescreen` 只出 alarms，`optimize_outbound` fail-open）⇒ 我判不准「有候选」是否等价于「不会错」。
+   **批 R23 的复核（2026-10-11）**：**这条疑问的前提就是错的** —— 秘书① **看不见工具调用**
+   （`SECRETARY_OUTBOUND_SHAPES` 只有派活/留言四种形状，`tool` 不在里面；逐字读数见 §2.1 的复核框），
+   所以"交给秘书②"从来不是这一档的替代品。真正的替代品是**闸门自己的报错**
+   （`tools/base.py:484` 把"schema 只允许的全部键"随拒收一起回话）。⇒ 结论改为：
+   **可以缩，理由换成闸门那一句**；这一条同时是一份教训 —— 把安全网认成一件它没做的事，
+   正是"没先考察系统真实情况"的形态（与本文件 §二 的 G2「免责声明其实早就由代码自动补」
+   同族、方向相反：那次是提示词要求了一件已自动发生的事，这次是**以为**有防线而其实没有）。
 4. **`ROLE_BRIEFS` 与 `specs/<角色>.py` 的双份**：`tests/test_agent_spec_reconciliation.py` 逐字对账守着，所以它不是「自由重复」；要不要合并成一份生成另一份，属架构决定，我不判。
 5. **`table.schema` 的「6 张表」**：已核实是错的（`S.TABLES` 17 张；`tools/table_tools.py:48` 的注释同样还写着「六张表」，而下一行 `ALL_TABLES = tuple(S.TABLES)` 才是真身）。修法（改渲染器/摘要现算）会动到 `tools/table_tools.py` —— 该文件不在 `.noai-paths` 里，但它与 FC-27 的「评测口径/权限面」相邻，需人确认。我按「修」而非「删」记，未给数字。
 6. **`收工自查①` 能否整交秘书④**：`remind_closure` / `inbox_todos` 确实覆盖「未反馈」，但「该转达哪条约束」是判断 ⇒ 我只给了 80 字的压缩建议，没建议整删。
