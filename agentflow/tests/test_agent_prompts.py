@@ -1004,6 +1004,41 @@ def test_every_shape_has_a_name_in_the_prompt_and_a_line_in_the_chooser(
                 f"{role} 出边为空却读到了 `summon_many` 的键 ⇒ 残桩机制坏了")
 
 
+def test_no_prompt_claims_a_step_limit_and_the_actionless_role_is_told_why(
+        registry: ToolRegistry):
+    """两件同族的"读起来像另一个人写的"（`draft/106` §4 第 3 块 + `draft/105` A21 的第三处）。
+
+    ① 没有哪一格说"步数有限"：框架不设步数闸（`max_steps` 只是报告阈值，
+    12-K 裁定与 `agent_loop` 的注释都这么写），协议里那句"步数不是收工理由"才是真的。
+    `specs/m.py` 曾有两条政策拿"步数有限"当前提（"步数有限：现状侦察最多做一次…"与
+    "步数预算有限，留出最后几步…"）—— 而同一份提示词的协议里写着"框架不设步数闸"
+    ⇒ 一格里两句互相矛盾（批 R1 改掉；这是 A21 的第三处与它的同族，前两处由 p65 修）。
+    这条判据钉两头：旧前提不许留（含"步数预算有限"这种同一个意思的换词写法 ——
+    只判那四个字会漏掉它）、真话必须在。
+
+    ② 0 个对外动作的角色（现算：`actions_lines(role)` 空 ⇒ 实测只有 M）要读到
+    "这是设计，不是缺口"与它的三张面（对用户 / 对同伴 / 对框架）——
+    原来那一句"你没有对外可被调用的动作（你的产出由框架直接读）"读起来像缺省值，
+    像在说"我什么都做不了"（`draft/103` §5.2 第 2 条点过；`draft/106` §4 的 `M_DELIVERABLE`）。
+    """
+    #: "步数…有限"的几种写法都算命中：中间那几格是"预算"这类修饰语。
+    claims = re.compile(r"步数[^。；，、\n]{0,4}有限")
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        hit = claims.search(text)
+        assert hit is None, (
+            f"{role} 的提示词里还写着「{hit.group(0) if hit else ''}」"
+            "⇒ 与同一格里的「框架不设步数闸」矛盾")
+        assert "步数不是收工理由" in text, f"{role} 的提示词里没说清步数不是收工理由"
+    actionless = [r for r in ALL_ROLES if not AP.actions_lines(r)]
+    assert actionless == ["M"], f"没有对外动作的角色集合变了（现算：{actionless}）"
+    m_text = _prompt("M", registry)
+    assert "这是设计，不是缺口" in m_text, (
+        "M 那格还是那句像缺省值的「你没有对外可被调用的动作」")
+    for face in ("对用户", "对同伴", "对框架"):
+        assert face in m_text, f"M 的三张面里缺 {face!r}"
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -2140,7 +2175,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 循环协议那张表里（不写第二遍）。同批登记：`COLLAB_ADDRESS` / `COLLAB_RELAY` 不单独落
 #: —— 它们的正文逐句核过，已经写在 `message`/`handoff` 那两个形状与代唤那条规则里。
 #: 读数：十格全换 + 段数各 +1（A 72、B 65、C 66、D 78、E 69、F 80、G 95、H 83、V 62、M 75）。
-_FROZEN_PROMPT_VERSION = "p82"
+#: `p83`（2026-10-11，批 R1：M 的迁移第一小批 —— `M_DELIVERABLE` + 两处"步数有限"的说辞）：
+#:   ① `OUTPUT_CONTRACT` 那句"你没有对外可被调用的动作"对"对外动作数为 0"的角色
+#:      （受众由 `actions_lines` 现算 ⇒ 只有 M）读起来像缺省值 ⇒ 改成"这是设计，不是缺口"
+#:      + 三张面（对用户 = 收工那句 `final`；对同伴 = 任务行与手稿；对框架 = `conductor.*`）
+#:      + 交付说明落 `out/review/REPORT.md`（`draft/106` §4 的 `M_DELIVERABLE`）；
+#:   ② `specs/m.py` 两条政策都拿"步数有限"当前提：一条写"步数有限：现状侦察最多做一次…"、
+#:      一条写"步数预算有限，留出最后几步…"，而同一份提示词的协议里写着"框架不设步数闸"
+#:      （`agent_loop` 的步号计数器是无限的，`max_steps` 只当报告阈值）
+#:      ⇒ 一格里两句互相打脸（`draft/105` A21 的第三处与它的同族；前两处由 p65 修）。
+#:      两处都按代码改：去掉错前提、留下规则（别拿只读调用把这一趟填满 / 收工门看的是盘上那份）。
+#: 三处都只动 M ⇒ 只有 M 那一格换（其余九格逐字节不动），段数不变：M 47,110 → 47,347 字。
+#: 逐格读数用 `temp/read_prompt_grid.py`（口径从本文件导入，不另抄一份）。
+_FROZEN_PROMPT_VERSION = "p83"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "e75c517961285c37f82b39de970fd1570349aab640bdb24ac993945e0dcf959f",
     "B": "302701533a67379996c3c7fc57575c9ee31a7dec1763344034e9de741061f43e",
@@ -2151,7 +2198,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "42581735ce08bafe77b983f5232131664345e2161c855866f88106fd4c1c74fa",
     "H": "ffb3f221568c6dc753f51a8882908997bc2ad825822ce940afb9175595182341",
     "V": "56e3944b8c90c20d4b5acaa4bbe968a7af6c280459ed1747bfa6ed509b5aba5d",
-    "M": "654c12ca4b6dd40d5cbcaaf5f82fc3a09068fe097530c2471eced3574595cd2c",
+    "M": "5a96067cbe098b9614f3afa4a83fdae5b32128b5b018f8d1be56bae8af2dc94e",
 }
 
 

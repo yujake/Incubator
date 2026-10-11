@@ -205,7 +205,16 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ⇒ 十格全换（各 +1 段）。
 #: `p82`（2026-10-11，批 Q10：`draft/104` §5.1 的 `COLLAB_SHAPES`）：十一种形状的
 #: 决策表进新段（order 5270）⇒ 十格全换（各 +1 段）。
-PROMPT_VERSION = "p82"
+#: `p83`（2026-10-11，批 R1：`draft/106` §4 的 `M_DELIVERABLE` + `draft/105` A21 的第三处）：
+#: ① `OUTPUT_CONTRACT` 里那句"你没有对外可被调用的动作"对"对外动作数为 0"的角色
+#: （受众由 `actions_lines` 现算，只有 M）读起来像缺省值、像"我什么都做不了"
+#: ⇒ M 那一档改成"这是设计，不是缺口"并写明三张面（对用户 = 收工那句 `final`；
+#: 对同伴 = 任务行与交接手稿；对框架 = `conductor.*`），
+#: 以及交付物必须落盘（`out/review/REPORT.md`）；
+#: ② `specs/m.py` 的政策原写"步数有限"，与循环协议里"框架不设步数闸"互相矛盾
+#: （同一格里两句互相打脸）⇒ 去掉那个错前提、留下"别拿只读调用把这一趟填满"的规则
+#: ⇒ 只换 M 那一格、段数不变。
+PROMPT_VERSION = "p83"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -2064,7 +2073,16 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     reg.section(Section("OUTPUT_CONTRACT", SECTION_ORDERS["OUTPUT_CONTRACT"],
                         ("你对外可被调用的动作（这些是伙伴唤起你时用的名字）：\n"
                          + "\n".join(acts)) if acts else
-                        "你没有对外可被调用的动作（你的产出由框架直接读）。"))
+                        # `draft/106` §4 的第三块（`M_DELIVERABLE`）：这一句对 M 是"真的"，
+                        # 但只说"你没有动作"读起来像缺省值/像"我什么都做不了"。
+                        # 所以 M 那一档把它的三张面写清（`draft/103` §5.2 第 2 条点过这一处）。
+                        "你没有对外可被调用的动作 —— **这是设计，不是缺口**："
+                        "你的产出由框架直接读。你的三张面各有各的落点："
+                        "**对用户**的接口是收工那句 `final`（例外句见上面的留痕那块）；"
+                        "**对同伴**的接口是任务行（`summon` / `summon_many` 落的账）与交接手稿；"
+                        "**对框架**的接口是 `conductor.*` 那十四件读数与操作。"
+                        "交付物是一份**落在盘上**的交付说明（`out/review/REPORT.md`）——"
+                        "只写在对话里、没有落盘的交付不算交付。"))
     reg.section(Section("THREE_STATE", SECTION_ORDERS["THREE_STATE"],
                         "三态词表（框架用这几个码表示「没查成」，它们不等于「没有这个问题」）：\n"
                         + "、".join(J.JUDGE_PROBLEMS)
