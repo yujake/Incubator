@@ -200,7 +200,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `p80`（2026-10-11，批 Q8：`draft/104` §5.1 的 `COLLAB_FIVEBITS`）：五元位那一段
 #: 现算自 `evidencebits`（位名 / owner / 凭据表 / 四态 / 等级），进新段（order 5250）
 #: ⇒ 十格全换（各 +1 段）。
-PROMPT_VERSION = "p80"
+#: `p81`（2026-10-11，批 Q9：`draft/104` §5.1 的 `COLLAB_BOARD`）：工作项板的语义
+#: 现算自 `schema` 的四张词表（kind / expects / 状态机 / 收口），进新段（order 5260）
+#: ⇒ 十格全换（各 +1 段）。
+PROMPT_VERSION = "p81"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -413,6 +416,42 @@ PARENT_ROSTER_TEXT = """\
 - **停与退是两件事**：`{"interrupt": {"name": "D1"}}` 停它**当前那一轮**（排队消息还在、
   它自己起的子代理继续跑）；`{"retire": {"name": "D1"}}` 是结束它 —— 名字**永久不再复用**、
   面归还可分配池。子代理自己不能退自己（那是父的决定）。"""
+
+
+def collab_board_text() -> str:
+    """工作项板那一段（`draft/104` §5.1 的 `COLLAB_BOARD`）—— 现算。
+
+    为什么现算（业主口径 C）：四个词表都在 `schema`（`ITEM_KINDS` / `ITEM_EXPECTS` /
+    `ITEM_STATES` / `ITEM_CLOSES`），而状态机的不变量写在 `conductor._set_item` 里
+    （不许倒退；`done` 之前必须 `seen`；没 `seen` 就 ack ⇒ 一条 `ack_unbacked` 读数）。
+    提示词只要抄错一个词（比如把 `report` 写成 `reports`），模型就会拿一个不存在的 kind
+    去收口 —— 那正是 `invalid_params` 那一族（真机第一失败形态）。所以这里只做"词表 → 句子"。
+
+    受众 = 全部十个角色：板项可以开在任何一个角色名下（派活通报、留言、交差回报、叫停通报
+    都会开一项），而"这一项要不要回执、算不算做完"是每个角色都要读的语义。
+    真机读数（`draft/104` §2.8）：`tasks` 2276 行里板项 0 行 —— 机制在用
+    （`open_items_of` 与 `mark_item_seen` 都接上了），而提示词从没讲过这些词的语义
+    ⇒ 这一段补的正是那个缺口（`draft/105` 的 C4/C10/C13 那一族）。
+    """
+    from . import schema as _S
+
+    kinds = " / ".join(f"`{k}`" for k in _S.ITEM_KINDS)
+    expects = " / ".join(f"`{e}`" for e in _S.ITEM_EXPECTS)
+    states = " → ".join(f"`{s}`" for s in _S.ITEM_STATES)
+    closes = " / ".join(f"`{c}`" for c in _S.ITEM_CLOSES)
+    return (
+        "工作项板（挂在你名下的「要你消的项」—— 它与「子代理名册」是两条轴，别混）：\n"
+        f"- 四种 `kind`：{kinds}（现算自 `schema.ITEM_KINDS`）。开项的是别人，你只管读它、消它。\n"
+        f"- 两种 `expects`（什么算做完）：{expects} —— `ack` 是「读到并回执」，"
+        "`work` 是「真去做完」。收口方式只有两种：" + closes
+        + "，且各自只配一种 expects（`acked` 配 `ack`、`completed` 配 `work`）。\n"
+        f"- 状态机 {states}：`done` 之前必须先 `seen`，而 `seen` 是「这一项被读进某一步」"
+        "—— 框架在你读到它的那一步**自动标**（渲染即 `seen`），你不用自己报「我读了」。"
+        "没读就 ack ⇒ 框架记一条 `ack_unbacked` 读数（只记读数、不拒写，业主 A5）。\n"
+        "- 板项不是子代理：它挂在你的台账号名下、进的是板，不进名册 —— "
+        "别拿名册名去指它，也别把它当成「我派出去的人」；反过来说，"
+        "「这一项我消掉了」与「我派的那个子代理回来了」是两件事。"
+    )
 
 
 def collab_fivebits_text() -> str:
@@ -2043,6 +2082,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 一条命题的五个证据位（现算自 `evidencebits`）：证据语法对十个角色都有用。
     reg.section(Section("COLLAB_FIVEBITS", SECTION_ORDERS["COLLAB_FIVEBITS"],
                         collab_fivebits_text()))
+    # 工作项板的语义（现算自 `schema` 的四张词表）：板项可以开在任何一个角色名下。
+    reg.section(Section("COLLAB_BOARD", SECTION_ORDERS["COLLAB_BOARD"],
+                        collab_board_text()))
     # 派活上限（业主裁定 A：数字写、且现算）。受众 = 派得出活的角色（`partners_out`
     # 非空 ⇒ 它真的会 `summon`）；出边为 0 的角色（实测 C）拿到这一段只会读到
     # "你能派几个"这种与它无关的话 —— 它那一档的处置在协作块族里（`draft/104` §5.2 的 C 行）。

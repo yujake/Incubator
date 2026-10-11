@@ -948,6 +948,37 @@ def test_the_five_bits_block_is_computed_from_evidencebits(registry: ToolRegistr
         assert "COLLAB_FIVEBITS" in sections, f"{role} 的段表里没有五元位那一段"
 
 
+def test_the_board_block_teaches_the_boards_own_vocabulary(registry: ToolRegistry,
+                                                           monkeypatch: pytest.MonkeyPatch):
+    """工作项板那一段的四个词表是现算的（`draft/104` §5.1 的 `COLLAB_BOARD`）。
+
+    真机口径（`draft/104` §2.8）：`tasks` 2276 行里板项 0 行 —— 机制在用
+    （`open_items_of` / `mark_item_seen` 都接上了），而提示词从没讲过 `kind` / `expects` /
+    `item_state` / `item_close` 这几个词的语义 ⇒ 模型拿着板项不知道怎么消它。
+
+    判据的形态与五元位那条同源（改真身、看渲染）：词表抄错一个词，模型就会拿一个
+    不存在的 kind 去收口 —— 那正是 `invalid_params` 那一族。所以这里也 monkeypatch 真身
+    证明渲染跟着走，而不是对着字符串比。
+    """
+    from agentflow import schema as S
+
+    text = AP.collab_board_text()
+    for group in (S.ITEM_KINDS, S.ITEM_EXPECTS, S.ITEM_STATES, S.ITEM_CLOSES):
+        for word in group:
+            assert f"`{word}`" in text, f"这一段里没有 {word!r}（词表 {group}）"
+    assert "ack_unbacked" in text, "没写「没读就 ack」那一条读数"
+    assert "板项不是子代理" in text, "没写两条轴的分工（板项 ≠ 名册里的子代理）"
+
+    monkeypatch.setattr(S, "ITEM_KINDS", S.ITEM_KINDS + ("judgefake",))
+    grown = AP.collab_board_text()
+    assert "`judgefake`" in grown, f"词表变了而这一段没变 ⇒ 它是抄的：{grown}"
+
+    for role in ALL_ROLES:
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        assert "COLLAB_BOARD" in sections, f"{role} 的段表里没有工作项板那一段"
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -2073,18 +2104,24 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 受众 = 全部十个角色（§5.1 原写"M/G/H/V"，落地时按"证据语法对所有人"给全；
 #: 段很短，不会淹掉别的）。
 #: 读数：十格全换 + 段数各 +1（A 70、B 63、C 64、D 76、E 67、F 78、G 93、H 81、V 60、M 73）。
-_FROZEN_PROMPT_VERSION = "p80"
+#: `p81`（2026-10-11，批 Q9：`draft/104` §5.1 的 `COLLAB_BOARD` —— 工作项板的语义）：
+#: 新段（order 5260）现算自 `schema` 的四张词表（`ITEM_KINDS` / `ITEM_EXPECTS` /
+#: `ITEM_STATES` / `ITEM_CLOSES`）+ 状态机那三条不变量（`done` 前必须 `seen`、
+#: 渲染即 seen、没读就 ack ⇒ `ack_unbacked` 读数）+ "板项不是子代理"。
+#: 受众 = 全部十个角色（板项可以开在任何一个角色名下）。
+#: 读数：十格全换 + 段数各 +1（A 71、B 64、C 65、D 77、E 68、F 79、G 94、H 82、V 61、M 74）。
+_FROZEN_PROMPT_VERSION = "p81"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "4c4d49187d0af9948e7d1429fb06cbddeaade7f81aa6dd4c0f17d01abd3ea22f",
-    "B": "b5cdb0888ff0cb2dab6324d8d2267115beffd143e027c2719ea5f37a0bd24632",
-    "C": "b514f5710ee3f4996fedc336356356bf1145952faaf1fcbf10ef409d12631112",
-    "D": "cc895f54ff91ed9e873c8989d66202462205d27a68cd30b51a8afe0934892493",
-    "E": "bad9b3803a3ed33bdebe0a3568737ef532ca24d273aa3b40cc4577380e629ed5",
-    "F": "c2be809a73c0ae0de5b1c8a1d83e1c0aaa1f860c3422752becf416da20c123cc",
-    "G": "a81cc0fa5bedaebe75370450407fed7878c3e2578573ac6a6f1ca7b38d3099f7",
-    "H": "59989e91175d2f0ff2d7e889be0015186f3c909716d5907fad275424b2f367e2",
-    "V": "3dbf8518510aab2c4a7fde3d9b7384ec56f5c0a1bc3b65429ff07af8fa725209",
-    "M": "d252457b27a1e525b6d45ba1a5f86fae8292d1def9f77dd04b234015ab253b5f",
+    "A": "65bdfc01fcb0469b47538a172544fa82655b8151f03ec11f68b4c7da9faaafbb",
+    "B": "9967cc56839dcf63061fa1603881eb2c64989dabbfffa14d2975f7665740e559",
+    "C": "0a12245c7805773b38b991b09b003bc164e4b72e62e7510bcd7d2d775ae42a63",
+    "D": "4f08be5afeb512620f1441c98224533dcdbfc18035748a5291c8afd512f3a4b4",
+    "E": "f67990578bfb2dd2704a738352b1f3b37ab50491ce6cc9c355e9c10a48972c26",
+    "F": "df4a00afc78f093c044b20a5587fef9a5d75e85108080ab67080fb95e14b331a",
+    "G": "1c52246f053e0dd523301c9c06fd0c9afc088655cde4cf9d88d2a6c28d45174a",
+    "H": "45ac5b53f35dbb80e5bbc30344f11582222c918d9e3f70d24869c81585c0b522",
+    "V": "664b4522262c153405f2208542e78e571ed9fa52e789d87c349e2f75373b45fd",
+    "M": "cd11a32093ee4a50b91aaaab99e6f36db161fed1a1f1c6d4712c893b6a4864c9",
 }
 
 
