@@ -29,6 +29,7 @@ from agentflow import agent_prompts as AP
 from agentflow import capabilities as C
 from agentflow import judge as J
 from agentflow import schema as S
+from agentflow import userio as U
 from agentflow.tools import ToolRegistry, build_registry
 
 #: 需要一份提示词的全部角色：可被召唤的 A-H 加主控。
@@ -793,6 +794,28 @@ def test_the_three_shapes_that_carry_more_fields_teach_all_of_them(registry: Too
             assert want in text, f"{role} 的提示词里没有 {want!r}"
         if AP.partners_out(role):
             assert "名册三格" in text, f"{role} 的 2b 段没写清每一项还能带哪三格"
+
+
+def test_the_user_channel_is_told_as_conductors_only(registry: ToolRegistry):
+    """`ask_user` 只有主控能用（`draft/105` A7）：提示词必须写清"谁可以问"与"别人怎么办"。
+
+    代码真身（`agent_loop._do_ask_user` 第一句）：`if self.role != S.CONDUCTOR_ROLE:` ⇒
+    返回受控拒绝，`problem = userio.ASK_NOT_CONDUCTOR`，并在 `note` 里给出替代路
+    （"把未决问题写进你的最终结果交回召唤者，由主控汇总给人"）。
+    提示词从前对所有角色讲 `ask_user` 怎么写，一个字没提"只有 M 能问" ⇒
+    九个角色照着写、然后被拒（浪费一步，而且"该问的没问出去"在读数上看起来像"它没问"）。
+
+    两侧一起钉：① 判据的锚是 `userio.ASK_NOT_CONDUCTOR` 这个常量（改名/删除时这条先红）；
+    ② 十格都要写到"只有主控能直接用这个形状"与非主控的替代路（写进最终结果 / 交给 M 代问）。
+    """
+    assert U.ASK_NOT_CONDUCTOR, "userio 里那个'不是主控'的问题码不见了 ⇒ 这条判据的锚没了"
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        assert U.ASK_NOT_CONDUCTOR in text, (
+            f"{role} 的提示词没说清'当面问用户'会被拒（码 {U.ASK_NOT_CONDUCTOR!r}）")
+        assert "只有主控 M 能直接用这个形状" in text, (
+            f"{role} 的提示词没说清谁可以问用户")
+        assert "请它代问" in text, f"{role} 的提示词没给非主控的替代路"
 
 
 def _hint_text(line: str) -> str:
@@ -1886,18 +1909,24 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 注：2b 那一段正文在仓库里有三份（`LOOP_PROTOCOL` 内联、`agent_prompts._LOOP_BLOCK_C`、
 #: 本文件 `_BLOCK_C` 那份判据自己的逐字副本）—— 改一处会先后撞两个 assert（模块级那个 +
 #: 本文件模块级那个）。这是刻意的（副本被改过就当场炸），但也意味着改 2b 要改三处。
-_FROZEN_PROMPT_VERSION = "p75"
+#: `p76`（2026-10-11，批 Q4：`draft/105` 的 A7 —— `ask_user` 只有主控能用）：
+#: 形状 6) 的抬头补"只有主控 M 能直接用这个形状（你不是主控 ⇒ `problem` 是
+#: `not_conductor`，把未决问题写进最终结果交回召唤者或请 M 代问）"，规则里那条
+#: "只有用户能定的取舍"同步改（原来对所有角色说"要用 ask_user 问"，且"等不到就按
+#: 最保守的做法继续"与代码相反：有人值守时它是停在原地等、无人值守那一档才 fail-closed），
+#: D 的"能互动"那一格也改成"交回召唤者或请 M 代问"。全在共享段 ⇒ 十格全换；段数不变。
+_FROZEN_PROMPT_VERSION = "p76"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "b40bc09de5863472512a722a2d8087ccff35aa5ce646e71fe3e5cca655283d01",
-    "B": "bf6c3d6569c55b0821bfecfdaf0bc6e460d9bc5605e1bcfcf10e2e4d5bae8eb1",
-    "C": "8592b8cc6e0b0d416bee704428d2370283c9e9f51d19a7309a8dbf993841cc5d",
-    "D": "54150145f0dce19cea2ab97bfb9b47e11e905ac99928220c0cb3f0e70e877584",
-    "E": "0c42a8a6105e890d3fa91cd5c06450ed49f4f181ff993ff0b30ad48d21e36a6d",
-    "F": "4504600163988755a3dfa147b32dff0c089f90964082a62e452fb7f447946226",
-    "G": "78a9a41ce0bb28b552d12e0e3fd9f5223a313af1191c9d19a7c8d063f7c2d8fe",
-    "H": "68bd13e75789616c846c95fecc3980cd21e73193023824381064337ebded0661",
-    "V": "e8430e0bfc9f200636893aa4fd0fd856fb73d52c71c00223dfa5935a69528238",
-    "M": "b1509c970d6bba63e1421be5824c52171f19ebae7e73d21d8ff2077a324f4c75",
+    "A": "711f4e7eb5e3ebf9e815a9e15a144d40b74b98d6d4ffa223aef3fbad76699a4b",
+    "B": "0a90d6416295c683b405e52412d5e29742e47ffd60db72a05a165155a9ec2352",
+    "C": "f668998ceb6f03328cec87a69ac526c76e22fa95ab7efcc3079666a42caf476a",
+    "D": "f5fa9c5f597c0e1c55e92dd646e8a9ff6b714c795d038c4c79808f8c8201b5f0",
+    "E": "1d5d23e2ed5ae82652dba23c780a77cdb400afc56e04958916b9e7022f3b5312",
+    "F": "1cf37ce27c09e813a4bc9c9e143f4218bbc11e87a0e4d17785c8c501303a96e3",
+    "G": "4d771076b6acde89ccc16fcefca00e4c48eb9c617afca635864cd4450ac2b4c3",
+    "H": "7bfda781e4ad0f001cea5f5479192f08926014afe1664c1675400b0e9c7bde48",
+    "V": "9749c44533f7a231fece49eac6d9f1187493d80c2ada2a3153789ea097ce5b55",
+    "M": "d1d339d34d78397735310212520fde9ffacd4d1cb156ead7ed5b7588ce38ed51",
 }
 
 
