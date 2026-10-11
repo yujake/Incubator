@@ -127,7 +127,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 ### 0.4 全库不变式检查项（`verify.py`，机械抽取 84 个 `Issue.code`；观测 2026-09-29（T1+T2））
 
 **任何角色**的产出都会被下面这些检查覆盖（`verify_all`，`verify.verify_all`）。
-本节列出与角色直接相关的检查；完整清单见 `DEVELOPMENT.md` §9 附录（那里连"调用点 95 / 字面量 94 / 去重 84"的三元组与**可复跑的命令**一起写着 —— 本节此前写 71，是 T1/T2 之前的值）。
+本节列出与角色直接相关的检查；完整清单见 `DEVELOPMENT.md` §9 附录（那里连"调用点 121 / 字面量 114 / 去重 98"的三元组与**可复跑的命令**一起写着 —— 本节此前写 71，再此前引 95/94/84；观测 2026-10-11（批 R19）重算时，95/94/84 那一格已经落后于盘上的 119/112/96）。
 
 | 检查码 | 级别 | 判什么 | 主要针对 |
 |---|---|---|---|
@@ -137,6 +137,8 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `counter_behind` / `counter_overflow` | error | counters 落后（会撞号）/ 超出 4 位空间 | 全体 |
 | `dangling_lit_ref` / `unknown_request_ref` | error / warning | 请求 ↔ 文献双向可追溯 | A |
 | `done_without_result` | error | `outcome is None` 且无文献无错误 | A |
+| `inflight_over_limit` | warning | 在途请求超过 I7 上限（按提交方点名）。只报不拦：人工面（CLI `submit` / WebUI `/api/submit`）刻意不过闸门，人有权把队列排长，机器只把"谁排长的"记下来 | A |
+| `unregistered_submitter` | warning | 在途行的提交方不在 `SUBMITTER_DEFAULT_PRIORITY` 里 ⇒ 过闸门的来源优先级会落到 low、理由串写成"陌生来源"（那对框架自己的角色是一句错话）。只读在途行 | A |
 | `file_missing` / `ok_without_path` / `mismatch_without_evidence` | error / warning×2 | 文献文件与下载状态一致 | A |
 | `unsorted_concepts` / `dangling_concept` / `stale_group_key` / `dangling_lit` / `lit_not_processed` / `bad_page_range` | error | 关系行自身的一致性 | B |
 | `duplicate_quote` / `near_duplicate` | error / warning | 同概念组内引文重复 | B |

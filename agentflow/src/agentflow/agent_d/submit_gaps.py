@@ -68,6 +68,15 @@ class _SubmitGaps:
             self.last_submit_skip = {"question_id": qid, "reason": data.get("reason")}
             return []
         rid = data.get("request_id")
+        if not rid:
+            # 查重没挡下、却没有请求号 ⇒ 只剩一种可能：I7 的在途配额挡下了
+            # （工具层从批 R19 起过闸门）。这一支必须留痕：静默少提一个请求会让报告里的
+            # "已提交查询"一节与事实不符，而这里的"少提"是外部原因，不是 D 没判断出来。
+            # 从前这里直接往下走 ⇒ 写下一条"已向 A 提交查询请求 None"的笔记（CS-1）。
+            reason = str(data.get("reason") or "")
+            self.last_submit_skip = {"question_id": qid, "reason": reason}
+            self._note(qid, f"[inflight] 在途配额挡下了这次提问（{reason}）")
+            return []
         self._note(
             qid,
             f"[submit_gap] 证据不足（触发判据 {'/'.join(c['id'] for c in verdict['criteria'])}），"

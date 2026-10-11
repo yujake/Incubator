@@ -28,6 +28,7 @@ from typing import Any
 from . import conceptrows as CR
 from . import dedup as D
 from . import evidencebits as EB
+from . import interactions as IX
 from . import schema as S
 from . import signatures as SIG
 from . import textutil as T
@@ -339,6 +340,56 @@ def _check_2(rep, lit_by_id, literature, requests, store):
                       "done=true、outcome 缺失、且既无 result_lit_ids 也无 last_error —— "
                       "无法判断是真的搜索过还是空转。请补 outcome（ok/no_results/search_failed/gave_up）")
             )
+
+    # ---- I7 在途上限的**事后读数**（CS-1 的乙半边，批 R19 新增；本段其余部分是 T-5 的逐字搬移）
+    #
+    # 为什么必须有这条读数：I7 的闸门（`interactions.admit_search_request`）只装在
+    # **角色面**的入队口上；**人工面**（CLI `submit`、WebUI `/api/submit`）刻意不过闸门 ——
+    # 理由逐字写在 `agent_a/core.py:60-63`（"CLI 那条人工路径不闸（人自己知道自己在提交什么）"）。
+    # 于是"在途超过上限"在盘上是一个**合法**状态。合法不等于不必看见：上限是 A 的产能约束，
+    # 超了就意味着 A 的队列比设计的更长，而在此之前**没有任何地方**会说出这件事
+    # （角色面被闸门挡住 ⇒ 没有读数；人工面不闸 ⇒ 也没有读数。这正是"没人看守的那条边"）。
+    #
+    # 判据只报**事实**、不判对错：人有权把队列排长（他可能正要手工塞一批），
+    # 机器要做的是把"谁把它排长的"指名道姓地写下来，而不是替人决定不许。
+    inflight = IX.inflight_requests(requests)
+    rep.checked["inflight_requests"] = len(inflight)
+    _limit = IX.DEFAULTS["max_inflight_requests"]
+    if len(inflight) > _limit:
+        by: dict[str, int] = {}
+        for r in inflight:
+            by[str(r.get("submitted_by") or "")] = by.get(str(r.get("submitted_by") or ""), 0) + 1
+        detail = "、".join(f"{k or '(空)'}×{v}"
+                          for k, v in sorted(by.items(), key=lambda kv: (-kv[1], kv[0])))
+        rep.issues.append(Issue(
+            "warning", "search_requests", None, "inflight_over_limit",
+            f"在途检索请求 {len(inflight)} 条，超过 I7 上限 {_limit}（按提交方：{detail}）—— "
+            "角色面的入队口都过 `admit_search_request`，所以超限只可能来自**不过闸门的人工面**"
+            "（CLI `submit` / WebUI `/api/submit`；那是写下来的设计决定，见 "
+            "`agent_a/core.py:60-63`）或历史数据。这一条**不拦**（人有权把队列排长），"
+            "只把'谁排长的'记下来；要拦的是角色面那几条路，它们已经被闸门挡住",
+        ))
+
+    # ---- 在途行的提交方是否都登记过（`schema.SUBMITTER_DEFAULT_PRIORITY`）
+    #
+    # `schema.py:46-49` 逐字要求"本框架自己的角色必须显式登记，不能靠'未登记 ⇒ low'
+    # 这条兜底"（否则"F 提交的需求读到 low，看上去像框架决定它不重要，实际是框架没登记它"）。
+    # 登记面漂了不会让任何判据变红，所以在审计里读一次：过闸门的来源若不在那张表里，
+    # 它的优先级会落到 low、理由串会写成"陌生来源" —— 对框架自己的角色那是一句错话。
+    # 只读**在途**行：请求结束之后 `priority` 已经是历史，活着的那个值才是排队依据。
+    _strangers = sorted({str(r.get("submitted_by") or "") for r in inflight}
+                        - set(S.SUBMITTER_DEFAULT_PRIORITY))
+    if _strangers:
+        rep.issues.append(Issue(
+            "warning", "search_requests", None, "unregistered_submitter",
+            f"在途行里有没登记的提交方：{_strangers} —— 它们不在 "
+            "`schema.SUBMITTER_DEFAULT_PRIORITY` 里。过闸门的来源会因此把优先级落到 low，"
+            "理由串写成'未登记默认优先级 ⇒ 落到 low（不让陌生来源插队）'；不过闸门的人工面"
+            "（CLI/WebUI）读不到那张表，它们的 priority 是行上写下的值。两种都不必然错，"
+            "但'谁是陌生来源'必须是有意为之（`schema.py:46-49`）；本读数只报事实 ——"
+            "有意的就把它登记进那张表，无意的就补上",
+        ))
+
     for l in literature:
         lid = l.get("lit_id")
         for rid in l.get("source_request_ids") or []:

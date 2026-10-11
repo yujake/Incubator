@@ -47,7 +47,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .. import schema as S
-from ..interactions import IdSpaceExhausted, next_prefixed_id
+from ..interactions import IdSpaceExhausted, admit_search_request, next_prefixed_id
 from .base import ToolError, ToolResult, fail, ok, spec_from_dataclass_fields, tool
 from .table_tools import assert_request_id_in_space
 
@@ -299,6 +299,41 @@ def research_submit_gap(
                     }
                 )
 
+            # ---- I7 在途配额闸门（CS-1：这条路径此前是唯一不过闸门的角色面）
+            #
+            # 同族的另外四条（`agent_a/core.py:72`、`agent_c/core.py:663`、
+            # `agent_f/core.py:914`、`agent_d/adjudicate.py:311`）都在建行之前问过
+            # `admit_search_request`，只有这一条没问 ⇒ 全局在途上限（缺省 20）
+            # 可以被这条路刷爆。现场读数（`draft/41-D` §3.4 的只读探针）：先塞 25 条在途
+            # 再调本工具 ⇒ 闸门说 `admitted=False`（25/20），而本工具照样把在途推成 26。
+            #
+            # 为什么闸门加在工具层而不是 agent 层（`agent_d/submit_gaps.py`）：
+            # agent 层只挡得住 D 自己；工具层是"任何调用方走这条路"的咽喉，而别的
+            # 调用方确实存在（`demo.py`、`agent_c/__main__.py` 的转交路径、手敲的工具调用）。
+            # 两处都加就是两份判据 —— 本仓最忌。
+            gate = admit_search_request(req_rows, submitted_by="agent-D", for_question_id=question_id)
+            if not gate.get("admitted"):
+                # 拒绝时一行都不写（闸门自己不落盘，这里也当场返回）。
+                # `duplicated` 如实给 False：这一支不是"查重挡下的"，是"配额挡下的"；
+                # 两者压进同一个布尔位，调用方就再也分不开了（三态纪律）。
+                # 返回的键集与另外两支逐字相同（`G-23`）：调用方不必先判标志位才能安全读键。
+                return ok(
+                    {
+                        "request_id": None,
+                        "question_id": question_id,
+                        "duplicated": False,
+                        "topic": None,
+                        "mode": None,
+                        "reason": str(gate.get("reason") or ""),
+                        # 本问题没有未完成的请求（有的话上面查重那一支已经返回了）——
+                        # 占着配额的是别人的在途请求，那件事的读数在 `verify` 的
+                        # `inflight_over_limit` 那一条里。不在这里拿它冒充"本问题的未完成
+                        # 请求"：同一个键两种含义就是口径分裂（CS-3 的教训）。
+                        "open_requests": [],
+                        "waiting_request_ids": _sorted_unique(qrow.get("waiting_request_ids")),
+                    }
+                )
+
             # ---- 建请求行
             req_id = _next_request_id(req_rows)
             row = S.SearchRequest(
@@ -309,6 +344,10 @@ def research_submit_gap(
                 content_description=str(description or ""),
                 done=False,
                 submitted_by="agent-D",
+                # 优先级由闸门按 `schema.SUBMITTER_DEFAULT_PRIORITY` 现算（不再靠
+                # dataclass 的默认值碰巧等于它）：闸门算出来的口径与写进行里的那个值
+                # 必须是同一个，否则"谁排前面"会有两个答案。
+                priority=str(gate.get("priority") or "medium"),
                 # `for_question_id` 是这一行的结构化归属（`schema.py:226-228` 逐字：
                 # "该请求是为哪个研究问题服务的"）—— 从前这里不写它，于是消费方
                 # （I2 闭环 / 证据就绪判据 / D 自己的每问题预算）只能拿

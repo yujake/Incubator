@@ -20,6 +20,7 @@ import json
 import pytest
 
 from agentflow import conceptrows as CR
+from agentflow import interactions as X
 from agentflow import schema as S
 from agentflow.agent_c import AgentC
 from agentflow.agent_d import AgentD, analyze_gaps, detect_contradictions, evidence_confidence, install_d_tools
@@ -326,6 +327,61 @@ def test_submit_gap_writes_the_structured_question_id(tmp_path):
     again = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical")
     assert again.data["duplicated"] is True
     assert st.rows("search_requests")[0]["for_question_id"] == "0000"
+
+
+def test_submit_gap_goes_through_the_i7_gate(tmp_path):
+    """缺口提交必须过 I7 在途闸门（CS-1：这条路径曾是唯一不过闸门的角色面）。
+
+    在途到上限时，`research.submit_gap` 必须一行都不写，并如实说清是被配额挡下的：
+    `request_id is None`、理由里含"已达上限"，而 `duplicated` 仍是 False ——
+    它不是"查重挡下的"（那件事由上一支负责），两者压进同一个布尔位调用方就再也分不开了。
+
+    为什么判据长在工具层：`agent_d/submit_gaps.py` 自己那一层预算只挡得住 D 自己；
+    工具层才是"任何调用方走这条路"的咽喉（`demo.py`、`agent_c/__main__.py` 的转交、
+    手敲的工具调用都从这里过）。
+
+    反真空一并在内：把在途腾出一格 ⇒ 同一条路必须放行（否则"加了闸门"与"把这条路
+    整个堵死"在读数上同形）。
+    """
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ",
+                 related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    limit = X.DEFAULTS["max_inflight_requests"]
+    with st.tx("search_requests", actor="agent-C", note="fixture") as tx:
+        for i in range(limit):
+            row = S.SearchRequest(
+                request_id=f"r-{i + 1:04d}", timestamp=TS, topic=f"占位主题{i}",
+                mode="topical", content_description="", done=False, submitted_by="agent-C",
+            )
+            row.validate()
+            tx.upsert("search_requests", row.to_dict(), note="fixture")
+
+    reg = install_d_tools(st)
+    got = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical",
+                   description="在途满时提问")
+    assert got.ok, got
+    assert got.data["request_id"] is None, got.data
+    assert got.data["duplicated"] is False, (
+        "配额挡下不是查重挡下 —— 两者压成同一个布尔位，调用方就分不开了")
+    assert "已达上限" in got.data["reason"], got.data["reason"]
+    assert got.data["open_requests"] == [], got.data
+    assert len(st.rows("search_requests")) == limit, "被挡下时一行都不许写"
+    qrow = st.rows("research_questions")[0]
+    assert qrow["waiting_request_ids"] == [], (
+        "被挡下的请求不许进等待集（否则 D 会永远等一条不存在的请求）")
+    assert qrow["status"] == "open", "被挡下时状态也不许动"
+
+    # 反真空：腾出一格 ⇒ 放行，且行的 priority 与闸门现算的那个值一致。
+    with st.tx("search_requests", actor="agent-C", note="fixture") as tx:
+        tx.delete("search_requests", "r-0001")
+    room = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical",
+                    description="留出一格")
+    assert room.ok and room.data["duplicated"] is False, room
+    assert room.data["request_id"] is not None, room.data
+    new_row = next(r for r in st.rows("search_requests")
+                   if r["request_id"] == room.data["request_id"])
+    assert new_row["priority"] == S.SUBMITTER_DEFAULT_PRIORITY["agent-D"], new_row
+    assert new_row["priority"] == "medium", "改前那一行的 priority 就是 medium，本批不许改行为"
 
 
 def test_the_per_question_budget_prefers_the_structured_field(tmp_path):
