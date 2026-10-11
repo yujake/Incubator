@@ -284,7 +284,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 三条动作为此声明成只读）；③ F 的 policy 补第 6 条：proof 轮之后用 `summon` 唤起
 #: V 的 `verify_proof`（交证明全文 + 只读读数），退回时按步号补那一步。
 #: 只动 V 与 F ⇒ 换值的作用域见批 R14 的读数。
-PROMPT_VERSION = "p90"
+#: `p91`（2026-10-11，批 R16：G 的迁移第一批 —— `draft/108` §二·G 的靶子 G1–G2）：
+#: `specs/g.py` 的边界改两句：① 第 4 条去掉出处标记并与边表对齐（原文写"（`G → A` 这条边
+#: 2026-09-30 由人批准加上，见 `draft/28` §199）"，而 `ALLOWED_EDGES` 是 G→A/D/E/F 四条
+#: —— 与批 R12 里 H 的那一处同形）；② 第 2 条改成说 `evidence_kind`：免责声明由代码
+#: 自动附上（`tools/doc_tools.py:67` 的 `CROSS_CHECK_DISCLAIMER`，`:1196` 在构造期补，
+#: 注释逐字"不靠调用方记得写（FC-22）"），原文"必须带…常量（逐字符一致，不要手写近义句）"
+#: 是一件已经自动发生的事。G 的 `signature_error=""` 保持为空（待裁项，本批不动）。
+#: 只动 G ⇒ 换值的作用域见批 R16 的读数。
+PROMPT_VERSION = "p91"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
