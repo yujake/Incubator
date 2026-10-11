@@ -1577,21 +1577,79 @@ def _h_writable_tools_is_derived() -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class EmptyWriteSet:
+    """一个"空写集"角色在并发轴上的含义（`:data:`EMPTY_WRITE_SETS` 的值类型）。
+
+    `concurrent=True` = 真·空集：它不写任何**表**，因此与任何角色的表写集都不冲突
+    （V 的台账是文件）。`concurrent=False` = 空写集只是"没有逐表声明"，并发上必须
+    当它可能写任何表（M 的召唤会写 `tasks`，派生的子任务可能写任何东西）。
+
+    为什么用一个具名类型而不是 `tuple[bool, str]`：调用点要能读成
+    `entry.concurrent` / `entry.why`，而不是 `entry[0]` —— 后者在半年后没人能读。
+    """
+
+    concurrent: bool
+    why: str
+
+
+#: 空写集的两种含义（CS-14：这一格此前是折平的）。
+#:
+#: `WRITE_SETS[role] == frozenset()` 有两个完全不同的来源：
+#:   · M：它的召唤本身会写 `tasks`，而且它派生的子任务可能写任何东西
+#:     ⇒ 并发上必须与任何人串行（这一条的理由逐字写在 `specs/m.py` 的写集声明里）；
+#:   · V：它的台账是一个文件（`verifications/<4 位>.jsonl`，见
+#:     `agent_v` 的说明与 `verifications.py`）、也没有子代理 ⇒ 与任何人的表写集都不冲突，
+#:     是一个真·空集。
+#:
+#: 折平的后果（本批现算）：`write_set_of("V")` 返回全部 16 张表 —— 与"完全不认识的
+#: 执行单元"（`write_set_of("Z")`）返回的东西一模一样，也与 M 一模一样。
+#: 于是 V 一旦真跑起来，写集轴（`write_sets_intersect` / `policy` 的波次 / `scheduler`
+#: 的 `write_set` 读数）会把它当成"能写全部表"的角色；更糟的是读返回值的人无法分辨
+#: 这三种情形（"没有表写集" / "不写任何表" / "不认识"），而那正是本仓反复禁止的折平。
+#:
+#: 为什么这张表在这里而不是各角色的 spec 里：写集轴的口径只有一处（`write_set_of`），
+#: 含义表必须与它同址。spec 里那个空元组只说明"没有表写集"，说明不了并发含义。
+#: 反真空由 `assert_capabilities` 的 [6b] 段守着：空写集角色必须在这里登记、
+#: 且这里不许留下已经不是空写集的名字。
+EMPTY_WRITE_SETS: dict[str, "EmptyWriteSet"] = {
+    "M": EmptyWriteSet(
+        concurrent=False,
+        why="召唤本身会写 tasks，且它派生的子任务可能写任何东西 ⇒ 并发上与任何人串行",
+    ),
+    "V": EmptyWriteSet(
+        concurrent=True,
+        why="台账是文件（verifications/<4 位>.jsonl）、没有子代理 ⇒ 真·空集，"
+            "与任何人的表写集都不冲突",
+    ),
+}
+
+
 def write_set_of(role: str) -> frozenset[str]:
     """某角色的写集。
 
-    未知角色返回"整张表"而不是空集：空集意味着"它什么都不写，可以和任何人并发"，
-    那是最危险的方向（一个不认识的执行单元被当成了只读）。三态纪律在这里的形态是
-    "不知道 ⇒ 保守"，而保守 = 与所有人串行。
+    ## 三态（这一格此前只有两态，CS-14）
+
+    1. 有写集 ⇒ 用它；
+    2. 空写集且在这里登记过并发含义 ⇒ 按 `EMPTY_WRITE_SETS` 走
+       （M 串行 / V 真·空集）；
+    3. 空写集但没登记，或者角色根本不在 `WRITE_SETS` 里 ⇒ 全部表。
+
+    第 3 档是原有的语义，一字未改：空集意味着"它什么都不写，可以和任何人并发"，
+    那是最危险的方向（一个不认识的执行单元被当成了只读）⇒ "不知道 ⇒ 保守"，
+    而保守 = 与所有人串行。
+
+    新增的是第 2 档：同一个空集不许再折平两种含义。
+    "没有表写集"（V：写的是文件）与"不写任何表"（M：因为可能写任何表，所以按全表算）
+    不是一件事 —— 把它们折成同一个返回值，读的人就再也分不开了。
     """
     ws = WRITE_SETS.get(role)
-    if ws is None:
+    if ws:
+        return ws
+    entry = EMPTY_WRITE_SETS.get(role) if ws is not None else None
+    if entry is None:
         return _ALL_TABLES
-    if not ws:
-        # 没有写集的角色（M）在并发判据上必须与任何角色串行 —— 因为它的
-        # 召唤本身会写 tasks，而且它派生的子任务可能写任何东西。
-        return _ALL_TABLES
-    return ws
+    return frozenset() if entry.concurrent else _ALL_TABLES
 
 
 _ALL_TABLES: frozenset[str] = frozenset(
@@ -2148,6 +2206,27 @@ def assert_capabilities(
             f"但该角色没有任何效果轴为 {_WRITE_LIKE} 的动作（实测轴值：{sorted(set(axes)) or '（无动作）'}）"
             "—— 写集说它会写表，效果轴说它不写：这两个判据不许分叉"
         )
+
+    # ---- [6b] 空写集角色的并发含义必须登记（CS-14 的反真空，两个方向都查）
+    #
+    # 为什么必须有这一条：`write_set_of` 的第 2 档只在"这个空写集角色登记过"时才生效，
+    # 没登记就退回第 3 档（全部表 ⇒ 与所有人串行）。那个退回是**保守**的，所以不会有
+    # 数据被改坏 —— 但它会把"新加了一个空写集角色、忘了写它的并发含义"这件事静默吃掉，
+    # 而返回值看不出来（还是全部表）。两个方向都要红：漏登记、以及登记表里留下
+    # 已经不是空写集的名字（后者会让读的人以为那个角色仍是空写集）。
+    _empty_roles = sorted(r for r, ws in _ws.items() if not ws)
+    _unregistered = [r for r in _empty_roles if r not in EMPTY_WRITE_SETS]
+    assert not _unregistered, (
+        f"这些角色的写集是空集，却没有在 `EMPTY_WRITE_SETS` 里登记并发含义：{_unregistered} ⇒ "
+        "`write_set_of` 会把它们当成'可能写任何表'（保守，但没有读数能说明这是有意的）。"
+        "补一行：`concurrent=True`（真·空集：它不写表，与任何人可并发）或 "
+        "`concurrent=False`（空写集只是'没有逐表声明'，并发上当它写任何表）。"
+    )
+    _stale_empty = sorted(set(EMPTY_WRITE_SETS) - set(_empty_roles))
+    assert not _stale_empty, (
+        f"`EMPTY_WRITE_SETS` 里这些名字的写集已经不是空集了：{_stale_empty} ⇒ "
+        "登记表要自我清理，否则读的人会以为那个角色仍是空写集"
+    )
 
     # ---- [7] 两层声明的对账：不许静默地少比对
     #

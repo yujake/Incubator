@@ -2343,6 +2343,12 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
   激进的代价是数据被改坏**。"
 - **未知角色返回"整张表"而不是空集**（`capabilities.write_set_of`，`capabilities.write_set_of`）：
   "空集意味着'它什么都不写，可以和任何人并发'，**那是最危险的方向**。"
+- **空写集的两种含义**（`capabilities.EMPTY_WRITE_SETS`，CS-14 / 批 R21）：
+  `WRITE_SETS` 为空有两种原因，并发含义相反 —— V 写的是**文件**（`verifications/<命题号>.jsonl`）、
+  没有子代理 ⇒ 真·空集，与任何人的表写集都不相交；M 的空集只是"没有逐表声明"
+  （它派生的子任务可能写任何东西）⇒ 按整张表处理。上面 §0.6 的第 203/204 行早就把这两者
+  分开了，而 `write_set_of` 从前把它们与"完全不认识的角色"折成同一个返回值 ⇒
+  读返回值的人分不出这三种情形（批 R21 起按 `concurrent` 那一格分档）。
 
 ### M.5 状态机（`tasks` 表）
 
