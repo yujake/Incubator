@@ -693,7 +693,13 @@ def test_i2_global_quota_refuses_new_requests_byte_identically(tmp_path):
     agent = AgentD(st, c=RecordingC(), config={"max_contradiction_requests": 1})
     first = agent.adjudicate("0000")
     assert first["verdict"] == "unresolved" and len(first["request_ids"]) == 1
-    assert agent._contradiction_budget() == {"used": 1, "limit": 1, "remaining": 0, "exhausted": True}
+    # 两本账都要对得上（批 R22 新增的两格读数）：`used` 是问题行上的台账口径（判定用），
+    # `by_rows` 是请求行口径（本角色提交的、挂在矛盾问题上的行数），`reconciled` 只回答
+    # "这两本账今天对不对得上"，不是"配额是否用完"（那是 `exhausted`）。
+    assert agent._contradiction_budget() == {
+        "used": 1, "limit": 1, "remaining": 0, "exhausted": True,
+        "by_rows": 1, "reconciled": True,
+    }
 
     path = st.data / "search_requests.json"
     before = path.read_bytes()

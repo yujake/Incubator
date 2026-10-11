@@ -27,7 +27,9 @@ class _Gaps:
         默认 False（见下方那段为什么必须默认关闭）。
 
         I5（检测侧）：payload 里另附 `structural_duplicates` 摘要
-        （结构重复概念的候选计数与少量样本；完整候选按 `graph.structural_duplicates` 取）。
+        （结构重复概念的候选计数与少量样本；完整候选按调大 `limit` 再调一次本动作取 ——
+        不许指向 `graph.structural_duplicates`：那 9 件只注册在 C 的 CLI 自检面，
+        编排路径上调它只会拿到 `unknown_action`，见 `draft/108` 四·CS-12）。
 
         ── 为什么 I3 的写入不构成"绕过 B 引文回验"（必须写清楚，否则下一个维护者会
         以为这里有个权限漏洞，然后"顺手"把整条服务面也开成可写）──
@@ -260,7 +262,7 @@ class _Gaps:
             f"- 候选 {structural['candidate_count']} 对（merge 建议 {structural['merge_proposals']} 对 / "
             f"review {structural['review_proposals']} 对，截断={structural['truncated']}）",
             f"- {structural['method_note']}",
-            f"- 完整候选按需查询：`{structural['detail_tool']}`",
+            f"- 完整候选：{structural['detail_reading']}",
             "",
             "## 候选缺口（通过了否决门，且 confidence 至少 medium）",
             "",

@@ -537,7 +537,15 @@ class _Core:
                 for p in cands[:5]
             ],
             "method_note": "结构等价 ≠ 同义：只有结构证据时 proposal=review，合并决定权在 B",
-            "detail_tool": "graph.structural_duplicates（按需取完整候选）",
+            # CS-12（批 R22）：这里从前写的是 `"detail_tool": "graph.structural_duplicates（按需取完整候选）"`
+            # —— 而 `graph.*` 那 9 件不在任何角色的工具面上（只注册在 C 的 CLI 自检入口
+            # `agent_c/__main__.py`）。payload 指名一件编排路径上调不到的工具，模型照着写
+            # 只会拿到 `unknown_action`（与 `draft/105` 的 B1/B2 同族，源头在 payload）。
+            # 现在的取值是真的可取的那条路：本动作自己带 `limit`。
+            "detail_reading": (
+                "完整候选：把 `limit` 调大再调一次本动作（`structural_duplicates`）；"
+                "不要在编排路径上调 `graph.*` —— 那 9 件只注册在 C 的 CLI 自检面"
+            ),
         }
     def _submit_gap_requests(self, candidates: Sequence[Mapping[str, Any]], *, enabled: bool) -> dict:
         """把 `gaps` 的候选直接变成 A 的检索请求（I3，唯一的确定性写入路径）。

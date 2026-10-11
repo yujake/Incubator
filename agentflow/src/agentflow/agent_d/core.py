@@ -910,11 +910,24 @@ class _Core:
         两道闸：每个问题最多 2 轮、全局最多 20 个请求。
         没有预算的话，一个措辞有问题的判据就能让 D 对着同一个问题无限提问，
         而 A 的队列是共享资源（别的智能体也在用）。
+
+        账本来自 :meth:`_d_requests`（含矛盾闭环那些带后缀的行 —— CS-3 的另一半）。
+        从前这里按 `== self.actor` 精确过滤，于是矛盾那一支提交的请求不被计入：
+        全局上限与"每问题 2 轮"都少算一整类，而 `submit_gaps` 用的正是这两个数。
+
+        返回里另附 `by_channel`：本角色提交的请求按通道分组（缺省通道 `gap` = 缺口那一支，
+        带后缀的按后缀名）。它是纯读数，不参与任何判定 —— 存在的理由是"总额少了/多了"这句话
+        必须能一眼看出是哪条通道贡献的。
         """
-        requests = self.store.rows("search_requests")
-        mine = [r for r in requests if str(r.get("submitted_by") or "") == self.actor]
+        mine = self._d_requests()
         per_q: dict[str, int] = {}
+        by_channel: dict[str, int] = {}
         for r in mine:
+            who = str(r.get("submitted_by") or "")
+            # 通道名 = `actor` 之后那个冒号后面剩下的部分；没有冒号 ⇒ 缺口那一支（缺省通道）。
+            by_channel[who.split(":", 1)[1] if ":" in who else "gap"] = (
+                by_channel.get(who.split(":", 1)[1] if ":" in who else "gap", 0) + 1
+            )
             # 归属优先读结构化字段（`for_question_id`，`schema.py:226-228`）；
             # 只有老行（那个字段还是空的）才回落到描述文本里的 `[q:NNNN]`。
             # 为什么要有这条回落：并表/加字段之前落下的行没有那个键，
@@ -932,7 +945,38 @@ class _Core:
             "remaining": max(0, self.max_total_requests - len(mine)),
             "per_question": per_q,
             "per_question_limit": self.max_requests_per_question,
+            "by_channel": by_channel,
         }
+    def _d_requests(self) -> list[dict]:
+        """本角色提交过的全部检索请求行（含带通道后缀的那些）。
+
+        这本账只此一处：`_budget` 与 `_contradiction_budget` 都从这里取。
+        从前两处各读一次 `search_requests`、按各自的口径过滤 ⇒ 同一件事有两套计数（CS-3）。
+
+        ## 为什么必须认后缀（CS-3 的另一半）
+
+        矛盾闭环提交的行写的是 `submitted_by="agent-D:contradiction"`
+        （`agent_d/adjudicate.py` 写行那一处）。那个后缀是有意的：
+        `interactions.resolve_priority` 按它把优先级分成 high 与 medium 两档，
+        `schema.SUBMITTER_DEFAULT_PRIORITY` 里也是两个独立的键。
+        而旧的过滤是 `== self.actor` 的精确比较 ⇒ 矛盾那一支提交的请求一条都不进这本账：
+        全局上限（缺省 20）少算一整类请求，"每个问题最多 2 轮"也看不见它们 ——
+        而这两道闸门管的是共享资源（A 的产能），少算的方向恰好是"闸门看起来在、实际更松"。
+
+        ## 为什么只认冒号后缀，不认"以 actor 开头"
+
+        本仓的通道后缀用冒号（`agent-D:contradiction` 是登记过的键），
+        实例后缀用连字符（`agent-A-egr` 那种，见 `draft/108` 四·CS-15）。
+        `startswith(actor)` 会把 `agent-D2` 这类别的实例一起吞进来；
+        `startswith(actor + "-")` 会把实例轴也拉进这本账 —— 那是 CS-15 要裁的政策，
+        不该在这里顺手决定。所以只认冒号。
+        """
+        prefix = f"{self.actor}:"
+        return [
+            dict(r)
+            for r in self.store.rows("search_requests")
+            if (who := str(r.get("submitted_by") or "")) == self.actor or who.startswith(prefix)
+        ]
     def _pending_of(self, qrow: dict) -> list[dict]:
         return RT.pending_requests_of(qrow, self.store.rows("search_requests"))
     def _search_topic_and_desc(self, qrow: dict, evidence: dict) -> tuple[str, str]:
@@ -1005,13 +1049,39 @@ class _Core:
         之和 —— 不是"本轮提交了几条"，也不是"还在途几条"。只有用"历史上提交过
         几条"才能保证这个循环一定在有限步内停下来；用"在途条数"会在请求完成
         之后重新腾出配额，循环又活了（这正是"看起来有闸门、实际没有"的形态）。
+
+        ## 读侧对账（CS-3 的另一半）
+
+        上面那本账记在问题行上（`contradiction_request_ids`），而请求行自己只记
+        `submitted_by`。两者今天由 `adjudicate` 在同一笔事务里一起写 ⇒ 必然一致，
+        但没有任何判据守这件事：一次手工补行、一次中途失败的迁移、或将来某条新路径
+        只写一边，都会让"配额统计"与"盘上到底有几条"悄悄分家，而两边的读数看起来都正常。
+        所以这里把另一个方向也数出来（:meth:`_d_requests` 里挂在矛盾问题上的那些行）：
+
+        - `used`      —— 问题行上的台账口径（判定用，不变）；
+        - `by_rows`   —— 请求行口径：本角色提交的、`for_question_id` 指向矛盾问题的行数；
+        - `reconciled` —— 两者相等。不许把它当成"配额是否用完"的判据（那是 `exhausted`），
+          它只回答"这两本账今天对不对得上"。
         """
         rows = self.store.rows("research_questions")
+        contradiction_qids = {
+            str(r.get("question_id")) for r in rows if str(r.get("kind")) == "contradiction"
+        }
         used = sum(
             len(r.get("contradiction_request_ids") or []) for r in rows if str(r.get("kind")) == "contradiction"
         )
+        by_rows = sum(
+            1 for r in self._d_requests() if str(r.get("for_question_id") or "") in contradiction_qids
+        )
         limit = int(self.max_contradiction_requests)
-        return {"used": used, "limit": limit, "remaining": max(0, limit - used), "exhausted": used >= limit}
+        return {
+            "used": used,
+            "limit": limit,
+            "remaining": max(0, limit - used),
+            "exhausted": used >= limit,
+            "by_rows": by_rows,
+            "reconciled": used == by_rows,
+        }
     def _contradiction_scope(self, rel_ids: Sequence[str]) -> list[dict]:
         """同一概念组的全部关系（重新从表里读，I2 要求"复核"而不是"回忆"）。
 

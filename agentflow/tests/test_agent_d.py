@@ -49,6 +49,11 @@ def add_question(st: Store, qid: str, **kw) -> dict:
         priority=kw.get("priority", "medium"),
         evidence_lit_ids=list(kw.get("evidence_lit_ids", [])),
         waiting_request_ids=list(kw.get("waiting_request_ids", [])),
+        # 批 R22 补上两格：I2 的对账读数需要 `kind="contradiction"` 与它自己的请求台账
+        # （`add_question` 从前不传这两格 ⇒ 用它的用例永远造不出矛盾问题）。
+        kind=kw.get("kind", "gap"),
+        contradiction_relation_ids=list(kw.get("contradiction_relation_ids", [])),
+        contradiction_request_ids=list(kw.get("contradiction_request_ids", [])),
         notes=kw.get("notes", ""),
         created_at=TS,
         updated_at=TS,
@@ -426,6 +431,72 @@ def test_the_per_question_budget_prefers_the_structured_field(tmp_path):
     budget = agent._budget()
     assert budget["per_question"] == {"0000": 2}, budget
     assert budget["total"] == 3, budget
+
+
+def test_the_budget_counts_the_contradiction_channel_too(tmp_path):
+    """矛盾闭环提交的请求必须进 `_budget` 的账（CS-3 的另一半）。
+
+    从前 `_budget` 按 `submitted_by == self.actor` 精确过滤，而矛盾那一支写的是
+    `agent-D:contradiction`（那个后缀是有意的：`resolve_priority` 按它分成 high / medium
+    两档）⇒ 那一整类请求一条都不进账：全局上限（共享资源 A 的产能）与"每问题 2 轮"
+    都少算。判据两头都钉：① 带后缀的行计入 `total` / `per_question` / `by_channel`；
+    ② 只认冒号后缀（`agent-D2` 那种别的实例不许被吞进来 —— 实例轴是 CS-15 要裁的事）。
+    """
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ",
+                 related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    rows = [
+        ("r-0001", "agent-D", "0000"),                    # 缺口那一支
+        ("r-0002", "agent-D:contradiction", "0000"),      # 矛盾那一支（同一个问题）
+        ("r-0003", "agent-D2", "0000"),                   # 别的实例：不许被吞进来
+        ("r-0004", "agent-C", "0000"),                    # 别人提的：更不许
+    ]
+    with st.tx("search_requests", actor="agent-D", note="fixture") as tx:
+        for rid, who, qid in rows:
+            tx.upsert("search_requests", {
+                "request_id": rid, "timestamp": "2026-01-01T00:00:00+00:00",
+                "topic": "甲", "mode": "topical", "content_description": "",
+                "done": False, "submitted_by": who, "for_question_id": qid,
+            }, note="fixture")
+
+    budget = AgentD(st)._budget()
+    assert budget["total"] == 2, budget
+    assert budget["per_question"] == {"0000": 2}, budget
+    assert budget["by_channel"] == {"gap": 1, "contradiction": 1}, budget
+    assert budget["remaining"] == budget["total_limit"] - 2, budget
+
+
+def test_the_contradiction_ledgers_are_reconciled(tmp_path):
+    """两本账的对账读数：问题行上的台账 vs 请求行上的归属（CS-3 的另一半）。
+
+    两本账今天由 `adjudicate` 在同一笔事务里一起写 ⇒ 必然相等；但没有任何判据守它，
+    所以这里把另一个方向也数出来，并钉住"不相等时读得出来"。
+    """
+    st = Store(tmp_path / "ws")
+    st.init()
+    add_question(st, "0000", question="关系 0002 与 0003 的陈述互相矛盾",
+                 kind="contradiction", related_relation_ids=["0002", "0003"],
+                 contradiction_relation_ids=["0002", "0003"],
+                 contradiction_request_ids=["r-0001"])
+    with st.tx("search_requests", actor="agent-D", note="fixture") as tx:
+        tx.upsert("search_requests", {
+            "request_id": "r-0001", "timestamp": "2026-01-01T00:00:00+00:00",
+            "topic": "甲", "mode": "topical", "content_description": "",
+            "done": False, "submitted_by": "agent-D:contradiction",
+            "for_question_id": "0000",
+        }, note="fixture")
+    agent = AgentD(st)
+    got = agent._contradiction_budget()
+    assert got["used"] == 1 and got["by_rows"] == 1 and got["reconciled"] is True, got
+
+    # 反真空：把请求行换成一个不属于任何矛盾问题的（归属指到另一个问题上）⇒
+    # 对账必须当场变 False（否则这两格读数只是"看起来在算"）。
+    with st.tx("search_requests", actor="agent-D", note="fixture") as tx:
+        row = tx.find("search_requests", request_id="r-0001")
+        row["for_question_id"] = "9999"
+        tx.upsert("search_requests", row, note="fixture")
+    bad = agent._contradiction_budget()
+    assert bad["used"] == 1 and bad["by_rows"] == 0 and bad["reconciled"] is False, bad
 
 
 # ============================================================ [6] poll：等待集

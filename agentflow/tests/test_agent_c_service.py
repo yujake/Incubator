@@ -625,13 +625,21 @@ def test_i3_skips_topics_already_in_flight_on_a_second_run(kn):
 
 
 def test_i3_payload_reports_the_structural_duplicate_summary(demo):
-    """I5 检测侧：gaps 的 payload 里带结构重复摘要（纯读，且指向按需查询的工具）。"""
+    """I5 检测侧：gaps 的 payload 里带结构重复摘要（纯读，且指向真能调到的那条路）。
+
+    CS-12（批 R22）：这一格从前叫 `detail_tool` 且取值是 `graph.structural_duplicates…`
+    —— 而 `graph.*` 那 9 件只在 C 的 CLI 自检面注册，编排路径上调它只会拿到
+    `unknown_action`。现在改成 `detail_reading`，指向本动作自己的 `limit`。
+    """
     rep = AgentC(demo).gaps()
     summary = rep.payload["structural_duplicates"]
 
     assert summary["checked"] is True
     assert summary["candidate_count"] == summary["merge_proposals"] + summary["review_proposals"]
-    assert summary["detail_tool"].startswith("graph.structural_duplicates")
+    assert "limit" in summary["detail_reading"], summary["detail_reading"]
+    assert "不要在编排路径上调 `graph.*`" in summary["detail_reading"], (
+        "这一格的取值必须先给真能调到的路（调大 limit 再调一次本动作），"
+        "再明确否掉那 9 件取不到的 `graph.*`：只说'不要用'而不给替代，模型会照旧去试")
     assert "结构等价 ≠ 同义" in summary["method_note"]
     assert isinstance(json.loads(json.dumps(summary)), dict), "摘要必须可 JSON 序列化（要落进报告表）"
 
