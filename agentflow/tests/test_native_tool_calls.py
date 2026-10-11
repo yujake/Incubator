@@ -328,6 +328,99 @@ def test_the_native_final_keeps_the_blocked_declaration():
     assert (shape, bad) == ("final", "") and payload.get("blocked") == decl, (shape, bad, payload)
 
 
+def test_every_advertised_key_survives_the_decoder(tmp_path: Path):
+    """键一级的"广告一份、执行另一份"：广告面声明的每一格，解码器都要真收。
+
+    `draft/108` CS-17 那一族的另一半（批 R48 开这个角时补的）：形状名一级由上面那条判据钉着，
+    而键一级此前只有人记着。这一条把方向一并钉住 —— 广告了就必须收
+    （反向"收了解码器却没广告"由 `temp/_probe_shape_keys.py` 出读数；判据面放一条
+    只读一半的理由：那一半要挨个试键、会把测试变成探针，而这一半是纯集合运算）。
+
+    形状与广告键都现算自 `llmseam.META_FUNCTIONS`，载荷样例与
+    `temp/_probe_shape_keys.py` 同源（只放最小合法值）。
+    """
+    from agentflow.agent_loop import _shape_of
+
+    base: dict[str, object] = {
+        "summon": {"role": "G", "action": "revise", "params": {}},
+        "summon_many": {"targets": [{"role": "B", "action": "run_once"}]},
+        "message": {"to": "F", "body": "在吗"},
+        "handoff": {"to": "F", "summary": "交给你", "body": "正文"},
+        "note": {"text": "一句"},
+        "ask_user": {"question": "选哪个？"},
+        "final": "收工",
+        "retire": {"name": "D1"},
+        "roster": {},
+        "interrupt": {"name": "D1"},
+    }
+    sample: dict[str, object] = {
+        "params": {}, "notify": {"to": "F", "summary": "s", "body": "b"},
+        "blocked": {"what": "w", "why": "y", "needs": "n"},
+        "targets": [{"role": "B", "action": "run_once"}], "refs": ["0001"],
+        "evidence": ["x"], "options": [], "multi_select": True, "revises": "0001",
+        "reuse": "D1", "name": "D1", "scope": "descendants", "of": "self",
+        "brief": "一句话", "instance": "i", "input_key": "k", "timeout_sec": 0,
+        "reply_to": "0001", "subject": "标题", "role": "G", "action": "revise",
+        "text": "一句", "question": "问？", "summary": "s", "body": "b", "why": "w",
+        "final": "收工", "header": "标题", "to": "F", "what": "w", "needs": "n",
+    }
+    checked = 0
+    for _san, shape, schema in LL.META_FUNCTIONS:
+        assert shape in base, f"新形状 {shape} 没在样例表里（这一条判据就没覆盖它）"
+        for key in sorted(schema.get("properties") or {}):
+            if shape == "final":      # final 的其余键住在 data 顶层（值是字符串）
+                data = {"final": base["final"], key: sample.get(key, "x")}
+            else:
+                data = {shape: {**dict(base[shape]), key: sample.get(key, "x")}}  # type: ignore[arg-type]
+            got, payload, bad = _shape_of(data)
+            assert (got, bad) == (shape, ""), (shape, key, got, bad)
+            assert payload.get(key) not in (None, ""), (
+                f"广告面声明了 `{shape}.{key}`，而解码器没把它带进 payload：{payload}")
+            checked += 1
+    assert checked >= 25, f"只核了 {checked} 格 —— 判据看着像是空转了"
+
+
+def test_the_native_summon_carries_the_dispatch_notify():
+    """主控派活时的留痕：`summon` / `summon_many` 里的 `notify` 在原生那条路上也要给得出。
+
+    `draft/108` CS-18（批 R48）：`agent_loop._decode_shape` 的 `summon` / `summon_many`
+    两支都调 `_with_notify` 把这一栏带进 payload，`_dispatch_notify` 还会把缺省的 `to`
+    补成"被派的那个角色"；而 `llmseam.META_FUNCTIONS` 的两个 schema 都没有这一格
+    ⇒ 原生路上主控结构上给不出留痕，只能退回"框架据派活派生"的那一行 ——
+    而那一行按本仓口径只是日志、不算交接（`agent_prompts` 循环协议第 2) 段逐字写着）。
+
+    四条一起钉：① 两个 schema 都有 `notify`；② 那一格的 `required` 不含 `to`
+    （缺省由 `_dispatch_notify` 补 —— 与收工那一份 `NOTIFY_JSON_SCHEMA` 的唯一差别）；
+    ③ `to_shape` 原样透传；④ 解码器真收，且没给时不造键。
+    """
+    from agentflow import agent_loop as AL
+
+    meta = {name: schema for name, _shape, schema in LL.META_FUNCTIONS}
+    for san in ("framework_summon", "framework_summon_many"):
+        props = meta[san]["properties"]
+        assert "notify" in props, (san, sorted(props))
+        sub = props["notify"]
+        assert sub.get("required") == ["summary", "body"], (san, sub.get("required"))
+        assert "to" in (sub.get("properties") or {}), (san, sorted(sub.get("properties") or {}))
+
+    face = LL.build_tool_face("M", build_registry().registry)
+    note = {"summary": "派了核引文这活", "body": "依据见 refs。"}
+    for san, args in (("framework_summon",
+                       {"role": "G", "action": "revise", "params": {}, "notify": note}),
+                      ("framework_summon_many",
+                       {"targets": [{"role": "B", "action": "run_once"}], "notify": note})):
+        data, problem, detail = face.to_shape(_call(san, args))
+        assert problem == "" and data is not None, (san, problem, detail)
+        shape = next(sh for n, sh, _s in LL.META_FUNCTIONS if n == san)
+        assert data[shape].get("notify") == note, data
+        got, payload, bad = AL._shape_of(data)
+        assert (got, bad) == (shape, "") and payload.get("notify") == note, (got, bad, payload)
+    # 负控（不凭空造键）：没给 `notify` 时那一格不许出现
+    plain, _p, _d = face.to_shape(
+        _call("framework_summon", {"role": "G", "action": "revise", "params": {}}))
+    assert "notify" not in plain["summon"], plain
+
+
 # ============================================================ 三、负控与回落
 
 def test_bad_arguments_are_reported_as_arguments_not_as_shape(tmp_path: Path):

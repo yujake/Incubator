@@ -588,6 +588,37 @@ NOTIFY_JSON_SCHEMA: dict[str, Any] = {
 }
 
 
+#: `framework_summon` / `framework_summon_many` 的 `notify` 那一栏：主控派活时的留痕
+#: （`agent_prompts` 循环协议第 2) 段逐字："主控（M）派活时留痕：这一句里可以带一张 `notify` 表"）。
+#:
+#: 与收工那一份 `NOTIFY_JSON_SCHEMA` 的差别只有一格：`to` 可以不填 ——
+#: `agent_loop._dispatch_notify` 会把它补成"被派的那个角色"（多目标补 `ALL`），
+#: 于是"给谁派了活"与"手稿发给谁"不会因为要填两遍而分家。所以这一份的 `required`
+#: 是 `summary` / `body`，不是 `["to", "summary", "body"]`。
+#:
+#: 为什么必须广告（`draft/108` CS-18）：`_decode_shape` 的 `summon` / `summon_many`
+#: 两支都调 `_with_notify` 把这一栏带进 payload，而原生面此前没有它 ⇒ 原生那条路上
+#: 主控结构上给不出留痕，只能退回"框架据派活派生"的那一行 —— 而那一行按本仓口径
+#: 只是日志、不算交接。与 `NOTIFY_JSON_SCHEMA` / `blocked` 是同一族（批 R47 修的是
+#: 形状名与 `final.blocked`，本批修的是键一级的这两格）。
+DISPATCH_NOTIFY_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "to": {"type": "string",
+               "description": ("交给谁（可省略：不填就是被派的那个角色；多目标写 ALL）")},
+        "summary": {"type": "string",
+                    "description": "一句话：派了什么活（它就是留言里那句）"},
+        "body": {"type": "string",
+                 "description": ("markdown 正文：派了什么、依据（实验号、文献号、手稿号）/ "
+                                 "要对方做什么 / 为什么")},
+        "refs": {"type": "array", "items": {"type": "string"},
+                 "description": "前序手稿编号，或 stmt:/exp:/lit:/rel: 这类台账引用（会被逐条核）"},
+        "why": {"type": "string", "description": "一句话说明为什么交这一份（可选）"},
+    },
+    "required": ["summary", "body"],
+}
+
+
 #: 循环协议里那些不是工具的形状（`agent_loop.SHAPES` 减去 `tool`）：
 #: 它们与真工具一起被广告成函数。理由是我们自己的一条纪律：广告出来的形状必须
 #: 与接受得到的形状一致（判据 `tests/test_native_tool_calls.py` 逐字对账两张表），
@@ -610,6 +641,8 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             "brief": {"type": "string", "description": "一句任务简介（单行、≤60 字），进名册"},
             "name": {"type": "string", "description": "可选：给这个子代理起的名册名（如 D3）"},
             "reuse": {"type": "string", "description": "复用已有子代理时写它的名册名（如 D1）"},
+            # 主控派活时的留痕（CS-18）：与 `_dispatch_notify` 同源，`to` 可省略。
+            "notify": DISPATCH_NOTIFY_JSON_SCHEMA,
         },
         "required": ["role", "action"],
     }),
@@ -632,6 +665,8 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
                 "required": ["role", "action"],
             }},
             "why": {"type": "string"},
+            # 一批派活同样带留痕（`agent_prompts` 第 2b) 段的例子逐字有这一格，CS-18）。
+            "notify": DISPATCH_NOTIFY_JSON_SCHEMA,
         },
         "required": ["targets"],
     }),
