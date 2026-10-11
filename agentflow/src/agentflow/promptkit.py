@@ -129,6 +129,9 @@ SECTION_ORDERS: dict[str, int] = {
     # 什么时候停（预算 / 打转 / 上报两档）—— 正文从 `LOOP_PROTOCOL` 里逐字搬出来
     # （`draft/104` §4.9）。放在循环协议之后：先读"怎么跑"，再读"什么时候停"。
     "PARENT_STOP": 5230,
+    # 名册的用法（快照≠现状 / reuse 复用名字不复用名额 / 真并发只有 summon_many+instance /
+    # 停与退是两件事）—— 形状在循环协议里，这一块讲"什么时候用哪个"。
+    "PARENT_ROSTER": 5240,
     # 环境事实分两段：工作区（结构/版本）与这台机器的工具链（现算读数）。
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——
     # 它是机器相关的，写死在提示词里会让冻结快照变成"某一台机器"的快照。

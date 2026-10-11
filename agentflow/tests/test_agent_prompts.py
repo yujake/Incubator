@@ -880,6 +880,39 @@ def test_the_stop_rules_moved_out_of_the_loop_protocol_verbatim(registry: ToolRe
             assert line in stop, f"{role} 的 PARENT_STOP 少了一行：{line[:60]!r}"
 
 
+def test_the_roster_usage_block_is_told_only_where_there_is_a_roster(registry: ToolRegistry):
+    """名册的用法（`draft/104` §5.1 的 `PARENT_ROSTER`）：受众 + 四条用法都与代码一致。
+
+    形状（协议第 8/9/10 条）讲"怎么写"，这一块讲"什么时候用哪个"。四条里两条有代码锚：
+      - `_decode_shape`：`summon` 形状里写 `instance` 会被丢掉，而 `summon_many` 的每个 target
+        留着它 ⇒ "真并发只有 `summon_many` + `instance` 一条路"这句话有依据；
+      - `secretary.roster_add` 的 `reuse` 那一支是往对照表写一条 `bind`（把既有名字绑到新的
+        task_id 上），而 `_do_summon` 每次都调 `conductor.summon(...)` 建新任务行
+        ⇒ "`reuse` 复用名字、不复用名额"有依据。
+    受众与 `PARENT_LIMITS` / `COLLAB_NAMES` 同一条判据（`partners_out` 非空）；C 的出边是 0
+    ⇒ 它一辈子没有子代理，也没有名册可看。
+    """
+    _shape, pay, _problem = AL._decode_shape({"summon": {"role": "B", "action": "run",
+                                                         "params": {}, "instance": "B#2"}})
+    assert "instance" not in pay, f"`summon` 形状开始收 `instance` 了 ⇒ 这段话要重写：{pay}"
+    _shape, pay, _problem = AL._decode_shape({"summon_many": {"targets": [
+        {"role": "B", "action": "run", "params": {}, "instance": "B#2"}], "why": "w"}})
+    assert pay["targets"][0].get("instance") == "B#2", pay
+
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        can = bool(AP.partners_out(role))
+        assert ("PARENT_ROSTER" in sections) is can, (
+            f"{role}：出边{'非空' if can else '为空'}，"
+            f"而段表里{'有' if 'PARENT_ROSTER' in sections else '没有'}名册用法那一段")
+        if not can:
+            continue
+        for want in ("快照不是现状", "复用名字，不复用名额", "真并发只有一条路", "停与退是两件事"):
+            assert want in text, f"{role} 的名册用法那一块缺 {want!r}"
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -1993,18 +2026,24 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 判据 `test_the_stop_rules_moved_out_of_the_loop_protocol_verbatim` 在段层两头钉：
 #: ① `LOOP_RULES` 里不再有、② `PARENT_STOP` 里逐行都有、③ 整篇各只出现一次
 #: （抄 ⇒ ①红；重写 ⇒ ②红；两样都做 ⇒ ③红）。
-_FROZEN_PROMPT_VERSION = "p78"
+#: `p79`（2026-10-11，批 Q7：`draft/104` §5.1 的 `PARENT_ROSTER` —— 名册的用法）：
+#: 新段（order 5240）四条：快照不是现状 / `reuse` 复用名字不复用名额 / 真并发只有
+#: `summon_many`+`instance` / 停与退是两件事。受众与 `PARENT_LIMITS`/`COLLAB_NAMES` 同一条判据
+#: （出边非空）⇒ 九格换（各 +1 段）、C 那一格逐字节不动（它一辈子没有子代理）。
+#: 两条有代码锚：`_decode_shape` 对 `summon` 会丢掉 `instance`（`summon_many` 留着它）、
+#: `roster_add` 的 `reuse` 支是往对照表写 `bind` 绑到新 task_id（⇒ 名额照占）。
+_FROZEN_PROMPT_VERSION = "p79"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "a769f0226d0443f0aaa4dbba0f08ce7499099acdd64be467e7a31671ac1d98db",
-    "B": "0c13b321015e321f5ae8bdcbff8e814d2ab967e308cecefecb762c59b0a83840",
+    "A": "97198ef69f183cbc203a9d7f70670453ed352e21cc94640b0503aeac2064b491",
+    "B": "5f043e3c56f495f25dba2c815d5d3928111604c15d6e5e21e67076d90a521e1f",
     "C": "a0674ae1ba15bb0432ff7a927845cb6d8c7afacd8cf50d32b36db8fc07f772a9",
-    "D": "39b1ee91df676f5750cbb29f9c91b0c9797058c9907362d304bfb6f821d0944d",
-    "E": "a68b337ec5e1f88dfadc8a1fcacb771c3371d50dad586c7f4dc0511209305be2",
-    "F": "88cdc64c7a4570c84b0e088b1f9633d31e5050ae1a2e6d19478aad466f6f566a",
-    "G": "83ce71df989e485f4f5bd556dc62d1df516d62987903d75a9cd0060ad20b61eb",
-    "H": "57f5203b7387ac723467b974a84febb4817c65e6e42517a2c518b1d76c09c3d5",
-    "V": "476b36c51813662389cb39c12f878c63a1528e8307b7ad7cdb17758c908193da",
-    "M": "4aff18ebb67f709975a1a1b79fc031906137015bb89b392d5651cf1307e571b8",
+    "D": "fa57fda5c8c55d8be70b9653f2fb17aba9f2c98e351aa3096efb19ce4d0b42b8",
+    "E": "ebccbb96545e28e59cf42fc0957cedff6096711689fc2fbe6d15f567da9bc200",
+    "F": "04f3965b856b62671ab4deb97f107b6d1142ec28bf035024bde8eb91d27cd611",
+    "G": "7584577bf11adf4c82be9d24121760e6d636dcb07278e5567fa9e7115fa55c0f",
+    "H": "12f5287ace5262e66a6df36f92deeadf9c4bdfeed88ae7d51dc1c53da409ddb7",
+    "V": "547a40a16e1400db7b233821d7fe2b21e0aff9381ebc9b3a82419f4e2b1afdfb",
+    "M": "8a5e622c46e95eb43b9c23f6bc80189ebff1a5413bed58584bf1972ed6e5f559",
 }
 
 

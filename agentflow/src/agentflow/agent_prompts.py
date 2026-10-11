@@ -195,7 +195,9 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ⇒ 只换 V 那一格（受众从声明现算）。
 #: `p78`（2026-10-11，批 Q6：`draft/104` §4.9）：「什么时候停」三条逐字搬到新段
 #: `PARENT_STOP`（order 5230）⇒ 十格全换、段数各 +1。
-PROMPT_VERSION = "p78"
+#: `p79`（2026-10-11，批 Q7：`draft/104` §5.1 的 `PARENT_ROSTER`）：名册的用法四条
+#: 进新段（order 5240）⇒ 出边非空的九格换（各 +1 段），C 那一格不动。
+PROMPT_VERSION = "p79"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -382,6 +384,32 @@ LOOP_PROTOCOL = """\
   （不会发给别人，但也没人收到）。拿不准就给 `ALL`（广播）。
 - 你永远不许把"没查到 / 没接线 / 被拒绝"写成"没有问题"或"不存在"（三态纪律），
   也不许编造一个没出现过的 id 当证据。"""
+
+#: 名册的用法四条（`draft/104` §5.1 的 `PARENT_ROSTER`）—— 形状（协议第 8/9/10 条）只讲
+#: 怎么写，这一块讲"什么时候用哪个"。四条都对着代码核过：
+#:
+#: ① 快照 ≠ 现状：身份段那份名册是这一趟开始那一刻的（`_children_text` 逐字"不假装实时"），
+#:    要活的只能现查 `roster`（三格读数）；
+#: ② `reuse` 复用名字、不复用名额：`_do_summon` 每次都调 `conductor.summon(...)` 建新任务行
+#:    （实测 `roster_add` 的 `reuse` 那一支是往对照表写一条 `bind`，把既有的名字绑到新的
+#:    task_id 上），而在飞名额按"这个父此刻在飞的子代理"数 ⇒ 它照样占一个名额；
+#: ③ 真并发只有 `summon_many` + `instance` 一条路：`_decode_shape` 实测 —— `summon` 形状里写
+#:    `instance` 会被丢掉（那一格只在 `summon_many` 的每个 target 里有）；
+#: ④ 停与退是两件事：`interrupt` 只停当前那一轮，`retire` 结束它且名字永久不复用。
+PARENT_ROSTER_TEXT = """\
+名册怎么用（形状见上面第 8/9/10 条；这里只讲什么时候用哪个）：
+- **快照不是现状**：身份段里那份名册是**这一趟开始那一刻**的 —— 这一趟里新派的子代理不会自己
+  出现在那里。要知道现在谁在跑、谁闲着、谁名下还压着几件活，就现查
+  `{"roster": {"of": "self"}}`（每一行带 `status` / `in_flight` / `last_reading`）。
+- **`reuse` 复用名字，不复用名额**：`reuse:"D1"` 让这一件活挂在已经叫 D1 的那个孩子名下
+  （不新分配名字、不新增名册项），但**它仍然是一次新的召唤** —— 新的台账号、照样占你一个
+  在飞名额。想腾名额就等它返回，不是写 `reuse`。
+- **真并发只有一条路**：同一个角色要同时多开几个实例 ⇒ 用 `summon_many`，给每个 target
+  不同的 `instance` 标签（那是唯一能让它们真的并发的形态；`summon` 那一形状里**没有**
+  `instance` 这一格，写了会被丢掉）。
+- **停与退是两件事**：`{"interrupt": {"name": "D1"}}` 停它**当前那一轮**（排队消息还在、
+  它自己起的子代理继续跑）；`{"retire": {"name": "D1"}}` 是结束它 —— 名字**永久不再复用**、
+  面归还可分配池。子代理自己不能退自己（那是父的决定）。"""
 
 #: 「什么时候停」那三条（预算 / 打转 / 上报两档）—— 逐字从 `LOOP_PROTOCOL` 里搬出来的。
 #:
@@ -1984,6 +2012,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         # 三种指称的总判据（同一条受众判据：能派活才有"我名下的子代理"要说）。
         reg.section(Section("COLLAB_NAMES", SECTION_ORDERS["COLLAB_NAMES"],
                             _COLLAB_NAMES_TEXT))
+        # 名册的用法（同一条受众判据：没有子代理就没有名册可看）。
+        reg.section(Section("PARENT_ROSTER", SECTION_ORDERS["PARENT_ROSTER"],
+                            PARENT_ROSTER_TEXT))
     # 证明工具链那一轴（`draft/37` §89）：读数是机器相关的，所以由调用方传；
     # 没传就如实写"这一次没有读到读数"（不是"没有检查器"，也不是什么都不说）。
     reg.section(Section("TOOLCHAIN_FACTS", SECTION_ORDERS["TOOLCHAIN_FACTS"],
