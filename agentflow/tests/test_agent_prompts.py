@@ -676,6 +676,8 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "main.pdf": "文件名（渲染产物），不是工具",
     "appendix.tex": "文件名（附录落点），不是工具",
     "documents.claims": "台账字段（documents 表的 claims 列），不是工具",
+    "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
+                        "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
     "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
     "autonomy.run_autonomous": "模块.函数引用（说明这条纪律由哪段代码保证），不是工具",
     "policy.check": "同 autonomy.run_autonomous",
@@ -2236,7 +2238,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `local_notes['敢创新']` 与政策第 2 条的表面矛盾。
 #: 作用域读数：B / C / D / F / M 五格换值（C 自己那格 17,901 → 18,383 字、段数 66
 #: 不变；另外四格恰好是能唤 C 的四个角色，各 +304 字 —— 伙伴表里逐条渲染它的动作摘要）。
-_FROZEN_PROMPT_VERSION = "p88"
+_FROZEN_PROMPT_VERSION = "p89"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "771c1a61585e53e3723dcefa144a0d062f1f57c89cbe9cbb7af621bb0d6a8480",
     "B": "0ff07b2c4c3dcb57dc398a964d9c7f7bcf5fd4cb61c606dc09c10018f5dc7961",
@@ -2245,9 +2247,9 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "E": "ef70ac493cf5552d20593aa73b819487612af18c2bb33c8038cfeabf4e2413ef",
     "F": "47c7642dbc068b6491e637c372308fcdc0e7a8191b4376f64b105a9cb37959a6",
     "G": "65e4c5720d8f95ac10b711f5e4af1ef3ec25cffaf5bcd75ed46e6d7146ef6cc1",
-    "H": "ffb3f221568c6dc753f51a8882908997bc2ad825822ce940afb9175595182341",
+    "H": "b71dd88d3fcfac4cdff4be3a94563ab3fa95d0d1c3babe36d440c5fcadb3d34e",
     "V": "824dc06cd502eca67b646e90ff93efa436847b8ec37fa6e51d79fb23a64cd7f5",
-    "M": "48c1fd78f34652c6569649df780472a1ee2a7ad903fdf691a538b250abcb0574",
+    "M": "fb0ce2e4c6fc70968fee9782fda58d2950ab01f0a4e65e63f99252156085f46e",
 }
 
 

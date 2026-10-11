@@ -261,7 +261,19 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 的措辞改成"概念行（`statements` 里 `kind="concept"`）"：`stance` 与 `local_notes['高观点']`
 #: （后者必须与 `FACULTY_LOCAL[("B","高观点")]` 逐字同步 —— 判据当场要求）。
 #: 靶子 B3（I4 重抽取通道从没走过）本批不动：它要业主在三条处置里裁一条。
-PROMPT_VERSION = "p88"
+#: `p89`（2026-10-11，批 R12：H 的迁移第一批 —— `draft/108` §二·H 的靶子 H1–H3）：
+#: `specs/h.py` 改三处，都对着代码：① 边界第 1 条去掉日期与 §号、边数与 `ALLOWED_EDGES`
+#: 对齐（代码是 H→A/E/G 三条，原文写"H → A/E 两条边 2026-09-30 由人批准加上"
+#: —— `draft/63c` §H 早就点过，建议"必留，去日期/§号"）；
+#: ② "只读"说准：工具面全只读（连 `fs.write` 都没有），能落库的只有三件登记过的代理
+#: （`review` / `verify_fixes` / `review_report`，理由逐条在 `tools/base.py:226-247`）；
+#: ③ 补上"裁决落成什么"（这是最大的一处空缺）：四档 verdict（`review_tools.py:1035-1043`）、
+#: 状态落点（`:1045`/`:1364`/`:1378`；`accepted` ⇒ 稿件置 `accepted`，否则 `in_review`；
+#: 复审到上限 ⇒ `unresolved_review`）、判 accepted 时框架签一条（`:1047-1055`）与
+#: 收工门 `reviewed_current_rows` 的口径（`closing.REVIEWED_DOC_STATUSES`）。
+#: H 的 `policy=()` 与 `signature_error=""` 保持为空（待裁项，本批不动）。
+#: 只动 H ⇒ 换值的作用域见批 R12 的读数。
+PROMPT_VERSION = "p89"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
