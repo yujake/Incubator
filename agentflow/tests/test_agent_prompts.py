@@ -731,6 +731,30 @@ def test_the_tool_name_scan_can_actually_go_red(registry: ToolRegistry,
         test_the_prompt_never_names_a_tool_that_does_not_exist(registry)
 
 
+def test_the_notebook_is_told_as_a_file_on_disk_not_as_session_local(registry: ToolRegistry):
+    """草稿本（`note`）的存活期与可见性：提示词说的必须与代码一致（`draft/105` A14）。
+
+    代码真身（`agent_loop.write_note` / `note_path`）：追加写 `<项目根>/notes/<角色>.md`
+    —— 盘上的文件，收工后仍在；同一批还在会话记录里留一份（`agent_note` 带 `path`）。
+    提示词从前写"`note` 只活在这一次会话里（别人看不到、收工后查不到）" ⇒ 两句都错：
+    模型据此会以为"写了也没人看得到、过后也没了"，于是该用 `note` 记的东西不记
+    （或者反过来，把要交接的事写进 `note` 当一个"私下留痕"用）。
+
+    判据两侧一起钉：① 提示词里写的是代码里那个路径（目录名取自 `AL.NOTES_DIR_NAME`，
+    不是抄一个字符串）；② 旧的两句"会话本地/过后查不到"不许再出现。
+    """
+    root = pathlib.Path("R")
+    assert AL.note_path(root, "D") == root / AL.NOTES_DIR_NAME / "D.md", \
+        "代码里草稿本的路径变了 ⇒ 这条判据的锚要跟着改（它引的就是这个函数）"
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        assert f"{AL.NOTES_DIR_NAME}/<你的角色号>.md" in text, (
+            f"{role} 的提示词没说清草稿本落在哪（代码是 {AL.NOTES_DIR_NAME}/<角色>.md）："
+            f"{text[-500:]}")
+        for stale in ("只活在这一次会话里", "收工后查不到"):
+            assert stale not in text, f"{role} 的提示词还在说 {stale!r} ⇒ 与盘上的事实相反"
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -1803,18 +1827,27 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:      `user_no_answer` 只是"还没答"那一个读数；
 #:   ⑥ A15：`#public` 那条补上例外（框架自己发的通报对所有角色可见）。
 #: 全在共享段 ⇒ 十格全换；段数不变（换字，不加段）。
-_FROZEN_PROMPT_VERSION = "p73"
+#: `p74`（2026-10-11，批 Q2：`draft/105` 的 A12/A13/A14 三条 —— 名册复用、被拒的是哪一件事、
+#: 草稿本的存活期）：
+#:   ① A12：复用也要给 `brief`（`secretary.roster_add` 先查简介、再看 `reuse`；
+#:      只给 `reuse` 时那一笔名册绑定不落、`roster_problem` 里写明，而派活照样进行）；
+#:   ② A13："被占用或已销号 ⇒ 这一句会被受控拒绝"改成"被拒的是那一笔名册登记"；
+#:   ③ A14：`note` 从"只活在这一次会话里（收工后查不到）"改成"盘上的文件
+#:      `notes/<你的角色号>.md`"（同批也修了 `specs/m.py` 里同一处错误说法 —— 禁改区，
+#:      记 FC-27 人审）。
+#: 全在共享段 ⇒ 十格全换；段数不变（换字）。
+_FROZEN_PROMPT_VERSION = "p74"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "6b4fbcd491b6c29805b7982c780757f5b2a851d11d8465923a475ba262f87b19",
-    "B": "783b861965ad38224e3a1a0834fb08dbbb2e748b9ae3e609e51025683d57da40",
-    "C": "2d8bacb0b475e3fb4b5e6c16aaa52d4027cf989729644910cbab221494ece9c3",
-    "D": "05549bf5c6d9b5d296b727b489d8eaf79a46f8b521d996b47baf07e0ddbd44af",
-    "E": "51f6daf9869d8c8cd1cad669653e8d1fd274a4781f1d7a95442213e9b3f0dcf6",
-    "F": "0c08179fe2eacecfb85fef2f9625693a2cfae4b161fcbe263aaa941482a40a77",
-    "G": "3f359760c7b5dca9e1d8fb30de4bf3187b5a52c62bed51aec47adfaf78cba876",
-    "H": "70237e3bddda3f284e35c676c71973496d9c124a562bf6c4a3f1f419958c484c",
-    "V": "d5322aee941f7cbcb88542039a410038b19e16807d0594a0c9650146f49dc9aa",
-    "M": "0fe138edafdfb03def64fbd7935b0767f0024d98a191a2b059143fae147535b6",
+    "A": "cb697bddfde66f98bfffeaee98b2272d38594a2d5a55439d8ddb585d66e4b3bc",
+    "B": "57ea903d37c44a5f658028f14553488996bef172acacb83153f69c27a99e061c",
+    "C": "702d5b2fe4b146d5b433678dd32dedb2e528feee3ef08b60e24e0765e8a461cd",
+    "D": "917bf5341243d9748a71e1e6a01fe5ca9b8257f6ab626906bbf71a8e061215a4",
+    "E": "d65c610a6ea4775452caa044b9043b653c7c610fa4e0ec0d1d1c16b35bd968cc",
+    "F": "272dcaaf36d34834595e2b34dfdd1d528c7bdf631e89cc930dd49749acd59925",
+    "G": "d22179c0e4dbb5e0035e60f6ae27211b6cb805da15406e2169b6b074fb829f2f",
+    "H": "cb6fd74c2102d605de0dcd0a0a29041a25078cebd852199cc216284425e7f9e8",
+    "V": "74bdac515b886f3074dfedbc593a20e8d2094ce86437d6ec5e9a5eefec6e9cc0",
+    "M": "e848b1e7f09ded439464d22744f8f6ea82f3a6d3b387cb58f32ec82f5686f6c1",
 }
 
 
