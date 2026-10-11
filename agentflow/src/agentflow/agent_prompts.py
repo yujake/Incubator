@@ -253,7 +253,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `analysis_reports`、调用方开 `submit_requests=true` 时的 `search_requests`），
 #: 并消解 `local_notes['敢创新']` 与政策第 2 条的表面矛盾（开关由调用方给）。
 #: 只动 C ⇒ 换值的作用域见批 R8 的读数。
-PROMPT_VERSION = "p87"
+#: `p88`（2026-10-11，批 R10：B 的迁移第一批 —— `draft/108` §二·B 的靶子 B1–B2）：
+#: 并表（S1r，`SCHEMA_VERSION=2`）之后 `concepts` 从 `schema.TABLES` 退役（真身
+#: `store._MOVED_TABLES`：概念行住 `statements` 的 `kind="concept"`），而 B 的 `deliverable`
+#: 还逐字点着"concepts 与 relations 行" —— 点了一张已经不存在的表（与 `draft/44` `J-01`
+#: 里 D 的 `analysis_reports` 同族，只是那一张表还在、因此被判据抓过）。同批把两处"概念表"
+#: 的措辞改成"概念行（`statements` 里 `kind="concept"`）"：`stance` 与 `local_notes['高观点']`
+#: （后者必须与 `FACULTY_LOCAL[("B","高观点")]` 逐字同步 —— 判据当场要求）。
+#: 靶子 B3（I4 重抽取通道从没走过）本批不动：它要业主在三条处置里裁一条。
+PROMPT_VERSION = "p88"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -849,7 +857,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("A", "脑子"): "把'我要找的是哪一类东西'想清楚，再决定查什么、怎么判相关、什么时候收手。",
     ("A", "敢创新"): "不造概念、不提猜想：你是把外部材料搬进来的人，不是替它们下定义的人。",
     ("B", "眼睛"): "读正文要读到逐字那一句：你的产出全部挂在可回验的引文上。",
-    ("B", "高观点"): "概念表的结构比条数重要：别名归位、上下位分清、同一概念两种说法要合并。",
+    ("B", "高观点"): "概念行（`statements` 里 `kind=\"concept\"`）的结构比条数重要：别名归位、上下位分清、同一概念两种说法要合并。",
     ("B", "能思辨"): "原文自身论证有漏洞时，记下来并公开说出去，不要悄悄按你的理解补全。",
     ("B", "有品味"): "定义要能被下游直接拿去推理，而不是一句看着像定义的句子。",
     ("C", "高观点"): "枢纽、冗余、绕行：结构判断要落到读数上（度数、重复、绕行长度）。",
