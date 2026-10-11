@@ -755,6 +755,46 @@ def test_the_notebook_is_told_as_a_file_on_disk_not_as_session_local(registry: T
             assert stale not in text, f"{role} 的提示词还在说 {stale!r} ⇒ 与盘上的事实相反"
 
 
+def test_the_three_shapes_that_carry_more_fields_teach_all_of_them(registry: ToolRegistry):
+    """`draft/105` 的 A3/A4/A5：三个形状各有"代码收了、提示词一个字没说"的字段。
+
+    两侧一起钉（提示词说了 + 代码真的收）：只钉一侧时，两种错法都抓不到 ——
+    教了一个不存在的字段（模型写了被拒），或者收了一个没教的字段（模型不知道该写）。
+
+      - `summon_many` 的每一项：`brief` / `name` / `reuse`（与 `summon` 同三格）——
+        一批里派三件不同的活时，各自的简介写在各自那一项里（`_decode_shape` 的 `**extra`）；
+      - `message`：`reply_to` —— 回一条已经存在的对话 ⇒ 不再要求协作边
+        （`message_admission` 的准入判据里它是第三个放行项）。这一条是"旁的角色先开口、
+        你再回"这条路在提示词里唯一的落点，不写它模型就只能干看着；
+      - `handoff`：`revises`（订正某一号，旧行保留）/ `why`。
+    """
+    # 代码侧①：解析器真的把这几个字段收进 payload
+    shape, pay, problem = AL._decode_shape({"summon_many": {"targets": [
+        {"role": "B", "action": "run", "params": {}, "brief": "甲", "name": "B1"}], "why": "w"}})
+    assert shape == "summon_many" and problem == "", (shape, problem)
+    assert pay["targets"][0].get("brief") == "甲", pay
+    assert pay["targets"][0].get("name") == "B1", pay
+    shape, pay, problem = AL._decode_shape({"message": {"to": "B", "subject": "s", "body": "b",
+                                                        "reply_to": "m-0001"}})
+    assert shape == "message" and problem == "" and pay.get("reply_to") == "m-0001", pay
+    shape, pay, problem = AL._decode_shape({"handoff": {"to": "F", "summary": "s", "body": "b",
+                                                        "revises": "0003", "why": "w"}})
+    assert shape == "handoff" and problem == "", (shape, problem)
+    assert pay.get("revises") == "0003" and pay.get("why") == "w", pay
+
+    # 代码侧②：`reply_to` 的准入效果（提示词教的正是它）
+    assert AL.message_admission("A", "C") != "", "A→C 没有协作边 ⇒ 应当被拒（这是前置事实）"
+    assert AL.message_admission("A", "C", "m-0001") == "", "带 reply_to 应当放行"
+
+    # 提示词侧：十格都要写到这两格；派得出活的角色还要写到 2b 的名册三格
+    for role in ALL_ROLES:
+        text = _prompt(role, registry)
+        for want in ("reply_to", "revises"):
+            assert want in text, f"{role} 的提示词里没有 {want!r}"
+        if AP.partners_out(role):
+            assert "名册三格" in text, f"{role} 的 2b 段没写清每一项还能带哪三格"
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -1429,6 +1469,8 @@ _BLOCK_C = '''\
      "why": "<一句话说明为什么一次派这一批>",
      "notify": {"summary": "<一句话：这一批派了什么>", "body": "<markdown>"}}}
    （主控派这一批时同样走上面 2) 那段留痕：一波算一次派活、写一行。）
+   每一项还能带与 2) 一样的**名册三格**（\rief\ / ame\ / euse\）—— 一批里派三件不同的活时，
+   每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
    同一角色在一批里出现多次、又没给 `instance` 时，框架会自动补 `<角色>#N` ——
    所以"并发三个 B"这件事可以就这么写。返回里的 `waves` 与 `concurrent_peak` 是
@@ -1836,18 +1878,26 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:      `notes/<你的角色号>.md`"（同批也修了 `specs/m.py` 里同一处错误说法 —— 禁改区，
 #:      记 FC-27 人审）。
 #: 全在共享段 ⇒ 十格全换；段数不变（换字）。
-_FROZEN_PROMPT_VERSION = "p74"
+#: `p75`（2026-10-11，批 Q3：`draft/105` 的 A3/A4/A5 —— 三个形状各有"代码收了、提示词没说"的字段）：
+#:   ① `summon_many` 的每一项还能带名册三格（`brief` / `name` / `reuse`）；
+#:   ② `message` 补 `reply_to`（回一条已存在的对话 ⇒ 不再要求协作边）；
+#:   ③ `handoff` 补 `revises`（订正某一号，旧行保留）与 `why`，`to` 的例子统一成 `ALL`。
+#: 全在共享段 ⇒ 十格全换；段数不变（换字）。
+#: 注：2b 那一段正文在仓库里有三份（`LOOP_PROTOCOL` 内联、`agent_prompts._LOOP_BLOCK_C`、
+#: 本文件 `_BLOCK_C` 那份判据自己的逐字副本）—— 改一处会先后撞两个 assert（模块级那个 +
+#: 本文件模块级那个）。这是刻意的（副本被改过就当场炸），但也意味着改 2b 要改三处。
+_FROZEN_PROMPT_VERSION = "p75"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "cb697bddfde66f98bfffeaee98b2272d38594a2d5a55439d8ddb585d66e4b3bc",
-    "B": "57ea903d37c44a5f658028f14553488996bef172acacb83153f69c27a99e061c",
-    "C": "702d5b2fe4b146d5b433678dd32dedb2e528feee3ef08b60e24e0765e8a461cd",
-    "D": "917bf5341243d9748a71e1e6a01fe5ca9b8257f6ab626906bbf71a8e061215a4",
-    "E": "d65c610a6ea4775452caa044b9043b653c7c610fa4e0ec0d1d1c16b35bd968cc",
-    "F": "272dcaaf36d34834595e2b34dfdd1d528c7bdf631e89cc930dd49749acd59925",
-    "G": "d22179c0e4dbb5e0035e60f6ae27211b6cb805da15406e2169b6b074fb829f2f",
-    "H": "cb6fd74c2102d605de0dcd0a0a29041a25078cebd852199cc216284425e7f9e8",
-    "V": "74bdac515b886f3074dfedbc593a20e8d2094ce86437d6ec5e9a5eefec6e9cc0",
-    "M": "e848b1e7f09ded439464d22744f8f6ea82f3a6d3b387cb58f32ec82f5686f6c1",
+    "A": "b40bc09de5863472512a722a2d8087ccff35aa5ce646e71fe3e5cca655283d01",
+    "B": "bf6c3d6569c55b0821bfecfdaf0bc6e460d9bc5605e1bcfcf10e2e4d5bae8eb1",
+    "C": "8592b8cc6e0b0d416bee704428d2370283c9e9f51d19a7309a8dbf993841cc5d",
+    "D": "54150145f0dce19cea2ab97bfb9b47e11e905ac99928220c0cb3f0e70e877584",
+    "E": "0c42a8a6105e890d3fa91cd5c06450ed49f4f181ff993ff0b30ad48d21e36a6d",
+    "F": "4504600163988755a3dfa147b32dff0c089f90964082a62e452fb7f447946226",
+    "G": "78a9a41ce0bb28b552d12e0e3fd9f5223a313af1191c9d19a7c8d063f7c2d8fe",
+    "H": "68bd13e75789616c846c95fecc3980cd21e73193023824381064337ebded0661",
+    "V": "e8430e0bfc9f200636893aa4fd0fd856fb73d52c71c00223dfa5935a69528238",
+    "M": "b1509c970d6bba63e1421be5824c52171f19ebae7e73d21d8ff2077a324f4c75",
 }
 
 
