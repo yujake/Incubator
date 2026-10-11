@@ -132,6 +132,8 @@ SECTION_ORDERS: dict[str, int] = {
     # 名册的用法（快照≠现状 / reuse 复用名字不复用名额 / 真并发只有 summon_many+instance /
     # 停与退是两件事）—— 形状在循环协议里，这一块讲"什么时候用哪个"。
     "PARENT_ROSTER": 5240,
+    # 一条命题的五个证据位（位名 / owner / 凭据表）—— 现算自 `evidencebits`。
+    "COLLAB_FIVEBITS": 5250,
     # 环境事实分两段：工作区（结构/版本）与这台机器的工具链（现算读数）。
     # 后者由调用方传进来（`agent_prompts.role_prompt_registry(toolchain_facts=…)`）——
     # 它是机器相关的，写死在提示词里会让冻结快照变成"某一台机器"的快照。

@@ -913,6 +913,41 @@ def test_the_roster_usage_block_is_told_only_where_there_is_a_roster(registry: T
             assert want in text, f"{role} 的名册用法那一块缺 {want!r}"
 
 
+def test_the_five_bits_block_is_computed_from_evidencebits(registry: ToolRegistry,
+                                                           monkeypatch: pytest.MonkeyPatch):
+    """五元位那一段是现算的（业主口径 C）：真身在 `evidencebits`，提示词里不许抄一份。
+
+    为什么这条判据的形态是"改真身、看渲染"而不是"对字符串"：抄一份进提示词的坏处不是
+    当场红，而是以后漂（`verify.py` 第 13 段按 `BIT_LEDGERS` 派判据 ⇒ 判据与提示词各说
+    一套时，模型按一套写、门按另一套判）。所以这里 monkeypatch 真身（加一位假位、改 owner）
+    来证明渲染确实跟着走 —— 写死的话这一段不会变。
+    """
+    from agentflow import evidencebits as EB
+
+    text = AP.collab_fivebits_text()
+    for bit in EB.BIT_NAMES:
+        meta = EB.BIT_LEDGERS[bit]
+        for want in (bit, str(meta["owner"]), str(meta["ledger"])):
+            assert want in text, f"这一段里没有 {want!r}（位 {bit} 那一行）：{text}"
+    for state in EB.BIT_STATES:
+        assert state in text, f"四态里没有 {state!r}"
+    for grade in EB.GRADES:
+        assert grade in text, f"等级里没有 {grade!r}"
+
+    # 现算的正控：改真身 ⇒ 渲染跟着变（写死的话这一跳会红）
+    monkeypatch.setitem(EB.BIT_LEDGERS, "fakebit",
+                        {"owner": "ZZ", "ledger": "某张表（判据夹具）"})
+    monkeypatch.setattr(EB, "BIT_NAMES", EB.BIT_NAMES + ("fakebit",))
+    grown = AP.collab_fivebits_text()
+    assert "fakebit" in grown and "ZZ" in grown and "某张表（判据夹具）" in grown, grown
+
+    # 受众：十个角色都有这一段（证据语法对所有人都要用）
+    for role in ALL_ROLES:
+        sections = AP.prompt_audit(role, registry=registry, task=TASK,
+                                   workspace_root=ROOT)["sections"]
+        assert "COLLAB_FIVEBITS" in sections, f"{role} 的段表里没有五元位那一段"
+
+
 def _hint_text(line: str) -> str:
     """参数提示那一段（从"（必填"到它配对的"）"）。
 
@@ -2032,18 +2067,24 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （出边非空）⇒ 九格换（各 +1 段）、C 那一格逐字节不动（它一辈子没有子代理）。
 #: 两条有代码锚：`_decode_shape` 对 `summon` 会丢掉 `instance`（`summon_many` 留着它）、
 #: `roster_add` 的 `reuse` 支是往对照表写 `bind` 绑到新 task_id（⇒ 名额照占）。
-_FROZEN_PROMPT_VERSION = "p79"
+#: `p80`（2026-10-11，批 Q8：`draft/104` §5.1 的 `COLLAB_FIVEBITS` —— 五元位）：
+#: 新段（order 5250）现算自 `evidencebits`：五位（`BIT_NAMES`）各自谁签（`BIT_LEDGERS`
+#: 的 `owner`）与凭据去哪张表（`ledger`）+ 四态 + 等级也是现算的。
+#: 受众 = 全部十个角色（§5.1 原写"M/G/H/V"，落地时按"证据语法对所有人"给全；
+#: 段很短，不会淹掉别的）。
+#: 读数：十格全换 + 段数各 +1（A 70、B 63、C 64、D 76、E 67、F 78、G 93、H 81、V 60、M 73）。
+_FROZEN_PROMPT_VERSION = "p80"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "97198ef69f183cbc203a9d7f70670453ed352e21cc94640b0503aeac2064b491",
-    "B": "5f043e3c56f495f25dba2c815d5d3928111604c15d6e5e21e67076d90a521e1f",
-    "C": "a0674ae1ba15bb0432ff7a927845cb6d8c7afacd8cf50d32b36db8fc07f772a9",
-    "D": "fa57fda5c8c55d8be70b9653f2fb17aba9f2c98e351aa3096efb19ce4d0b42b8",
-    "E": "ebccbb96545e28e59cf42fc0957cedff6096711689fc2fbe6d15f567da9bc200",
-    "F": "04f3965b856b62671ab4deb97f107b6d1142ec28bf035024bde8eb91d27cd611",
-    "G": "7584577bf11adf4c82be9d24121760e6d636dcb07278e5567fa9e7115fa55c0f",
-    "H": "12f5287ace5262e66a6df36f92deeadf9c4bdfeed88ae7d51dc1c53da409ddb7",
-    "V": "547a40a16e1400db7b233821d7fe2b21e0aff9381ebc9b3a82419f4e2b1afdfb",
-    "M": "8a5e622c46e95eb43b9c23f6bc80189ebff1a5413bed58584bf1972ed6e5f559",
+    "A": "4c4d49187d0af9948e7d1429fb06cbddeaade7f81aa6dd4c0f17d01abd3ea22f",
+    "B": "b5cdb0888ff0cb2dab6324d8d2267115beffd143e027c2719ea5f37a0bd24632",
+    "C": "b514f5710ee3f4996fedc336356356bf1145952faaf1fcbf10ef409d12631112",
+    "D": "cc895f54ff91ed9e873c8989d66202462205d27a68cd30b51a8afe0934892493",
+    "E": "bad9b3803a3ed33bdebe0a3568737ef532ca24d273aa3b40cc4577380e629ed5",
+    "F": "c2be809a73c0ae0de5b1c8a1d83e1c0aaa1f860c3422752becf416da20c123cc",
+    "G": "a81cc0fa5bedaebe75370450407fed7878c3e2578573ac6a6f1ca7b38d3099f7",
+    "H": "59989e91175d2f0ff2d7e889be0015186f3c909716d5907fad275424b2f367e2",
+    "V": "3dbf8518510aab2c4a7fde3d9b7384ec56f5c0a1bc3b65429ff07af8fa725209",
+    "M": "d252457b27a1e525b6d45ba1a5f86fae8292d1def9f77dd04b234015ab253b5f",
 }
 
 

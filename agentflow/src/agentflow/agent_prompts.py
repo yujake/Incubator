@@ -197,7 +197,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `PARENT_STOP`（order 5230）⇒ 十格全换、段数各 +1。
 #: `p79`（2026-10-11，批 Q7：`draft/104` §5.1 的 `PARENT_ROSTER`）：名册的用法四条
 #: 进新段（order 5240）⇒ 出边非空的九格换（各 +1 段），C 那一格不动。
-PROMPT_VERSION = "p79"
+#: `p80`（2026-10-11，批 Q8：`draft/104` §5.1 的 `COLLAB_FIVEBITS`）：五元位那一段
+#: 现算自 `evidencebits`（位名 / owner / 凭据表 / 四态 / 等级），进新段（order 5250）
+#: ⇒ 十格全换（各 +1 段）。
+PROMPT_VERSION = "p80"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -410,6 +413,40 @@ PARENT_ROSTER_TEXT = """\
 - **停与退是两件事**：`{"interrupt": {"name": "D1"}}` 停它**当前那一轮**（排队消息还在、
   它自己起的子代理继续跑）；`{"retire": {"name": "D1"}}` 是结束它 —— 名字**永久不再复用**、
   面归还可分配池。子代理自己不能退自己（那是父的决定）。"""
+
+
+def collab_fivebits_text() -> str:
+    """一条命题的五个证据位（`draft/104` §5.1 的 `COLLAB_FIVEBITS`）—— 现算。
+
+    为什么现算（业主口径 C）：这张表在代码里有唯一真身 `evidencebits.BIT_NAMES` /
+    `BIT_LEDGERS`（位名 / 谁签的字 / 凭据去哪张表查 / 位说 verified 时台账里要查得到什么），
+    而 `verify.py` 的第 13 段就是按它派判据的。抄一份进提示词 = 两处必然漂
+    （`draft/103` §4.1b-11 那条"三份副本"的教训就在旁边）。
+    所以这里只做"表 → 句子"的排版：`BIT_LEDGERS` 加一位、改一个 owner、换一张凭据表，
+    这一段当场跟着变（判据 `test_the_five_bits_block_is_computed_from_evidencebits`
+    用 monkeypatch 钉的就是这件事）。
+
+    受众 = 全部十个角色（`draft/104` §5.1 原写"M/G/H/V"，落地时按"证据语法对所有人"给全）：
+    每个角色的产出都要落进某一位、或引某一位（A 的文献、B 的 statements、C 的关系读数、
+    D 的结论、E/F 的实验与形式化、G 的稿件断言、H 的审校、V 的核验、M 的收工门都读它）。
+    这一段很短（五条 + 两句口径），给全不会淹掉别的段。
+    """
+    from . import evidencebits as EB       # 局部导入：避免与 agentspec/capabilities 那一圈形成环
+
+    lines = ["一条命题的五个证据位（现算：位名 / 谁签的字 / 凭据去哪张表查）："]
+    for bit in EB.BIT_NAMES:
+        meta = EB.BIT_LEDGERS.get(str(bit)) or {}
+        owner = str(meta.get("owner") or EB.BIT_OWNERS.get(str(bit)) or "（没登记 owner）")
+        ledger = str(meta.get("ledger") or "（没登记凭据表）")
+        lines.append(f"- `{bit}`：**{owner}** 签 —— 凭据在 {ledger}")
+    lines += [
+        "四态（第 1/4 位 `numeric` / `formal`）："
+        + " / ".join(f"`{s}`" for s in EB.BIT_STATES)
+        + " —— **只有 `verified` 才算过**；`na` 必须写理由（「不适用」不是「没做」）。",
+        "等级（" + " / ".join(f"`{g}`" for g in EB.GRADES) + "）是从这些位**现算**的："
+        "自报不算凭据（判据从不读盘上那个等级），所以别自己写一个更漂亮的。",
+    ]
+    return "\n".join(lines)
 
 #: 「什么时候停」那三条（预算 / 打转 / 上报两档）—— 逐字从 `LOOP_PROTOCOL` 里搬出来的。
 #:
@@ -2003,6 +2040,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 的（`draft/104` §4.9 要求合成一块讲"什么时候停"）。十个角色都有 —— 谁都可能预算耗尽、
     # 谁都可能原地打转、谁都有做不了的活。
     reg.section(Section("PARENT_STOP", SECTION_ORDERS["PARENT_STOP"], PARENT_STOP_TEXT))
+    # 一条命题的五个证据位（现算自 `evidencebits`）：证据语法对十个角色都有用。
+    reg.section(Section("COLLAB_FIVEBITS", SECTION_ORDERS["COLLAB_FIVEBITS"],
+                        collab_fivebits_text()))
     # 派活上限（业主裁定 A：数字写、且现算）。受众 = 派得出活的角色（`partners_out`
     # 非空 ⇒ 它真的会 `summon`）；出边为 0 的角色（实测 C）拿到这一段只会读到
     # "你能派几个"这种与它无关的话 —— 它那一档的处置在协作块族里（`draft/104` §5.2 的 C 行）。
