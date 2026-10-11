@@ -305,6 +305,73 @@ def test_submit_gap_respects_budget_and_reports_it(tmp_path):
     assert "[budget]" in st.rows("research_questions")[0]["notes"]
 
 
+def test_submit_gap_writes_the_structured_question_id(tmp_path):
+    """提交出来的请求行必须带 `for_question_id`（CS-2）。
+
+    为什么值得一条判据：`schema.SearchRequest.for_question_id` 的注释逐字写着它就是
+    "该请求是为哪个研究问题服务的（I2 矛盾闭环 / 证据就绪判据都要它）"，
+    而同角色的矛盾那一支（`agent_d/adjudicate.py`）一直是填的 —— 只有缺口这一支没填，
+    于是消费方只能拿 `content_description` 里的 `[q:NNNN]` 做正则（CS-3）。
+    这条判据钉的是"结构化字段真的写进去了"，不是"描述文本里有没有那句话"。
+    """
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ", related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    reg = install_d_tools(st)
+    got = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical")
+    assert got.ok and got.data["duplicated"] is False, got
+    row = st.rows("search_requests")[0]
+    assert row["for_question_id"] == "0000", (
+        "缺口路径没有写结构化归属 ⇒ I2 闭环与证据就绪判据读不到它是为哪个问题服务的")
+    # 查重那一支不许改既有行（"没做"与"做了没结果"要分得开）
+    again = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical")
+    assert again.data["duplicated"] is True
+    assert st.rows("search_requests")[0]["for_question_id"] == "0000"
+
+
+def test_the_per_question_budget_prefers_the_structured_field(tmp_path):
+    """每问题预算优先读 `for_question_id`，老行（没有那个键）才回落到描述文本（CS-3）。
+
+    判据两头都钉：① 结构化字段在、描述里没有 `[q:NNNN]` ⇒ 也算进那一问；
+    ② 结构化字段为空、描述里有 ⇒ 仍按老口径算（并表之前的行不能被读成"不属于任何问题"）。
+    """
+    st = _opaque_store(tmp_path / "ws")
+    add_question(st, "0000", question="完全不存在的关键词XYZ", related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    agent = AgentD(st, config={"max_requests_per_question": 1, "max_total_requests": 10})
+
+    # ① 结构化归属（描述里故意不写 [q:]）
+    with st.tx("search_requests", actor="agent-D", note="t") as tx:
+        tx.upsert("search_requests", {
+            "request_id": "r-0001", "timestamp": "2026-01-01T00:00:00+00:00",
+            "topic": "甲", "mode": "topical", "content_description": "没有方括号问题号",
+            "done": False, "submitted_by": "agent-D", "for_question_id": "0000",
+        }, note="t")
+    budget = agent._budget()
+    assert budget["per_question"] == {"0000": 1}, budget
+    assert budget["remaining"] == 9, budget
+
+    # ② 老行：没有 for_question_id，靠描述里的 [q:0000] 认领
+    with st.tx("search_requests", actor="agent-D", note="t") as tx:
+        tx.upsert("search_requests", {
+            "request_id": "r-0002", "timestamp": "2026-01-01T00:00:00+00:00",
+            "topic": "乙", "mode": "topical",
+            "content_description": "[q:0000] origin=user；老行",
+            "done": False, "submitted_by": "agent-D",
+        }, note="t")
+    budget = agent._budget()
+    assert budget["per_question"] == {"0000": 2}, budget
+
+    # ③ 两条都没有 ⇒ 不计入任何一问（"读不到"不许折成"属于 0000"）
+    with st.tx("search_requests", actor="agent-D", note="t") as tx:
+        tx.upsert("search_requests", {
+            "request_id": "r-0003", "timestamp": "2026-01-01T00:00:00+00:00",
+            "topic": "丙", "mode": "topical", "content_description": "谁也不属于",
+            "done": False, "submitted_by": "agent-D",
+        }, note="t")
+    budget = agent._budget()
+    assert budget["per_question"] == {"0000": 2}, budget
+    assert budget["total"] == 3, budget
+
+
 # ============================================================ [6] poll：等待集
 
 

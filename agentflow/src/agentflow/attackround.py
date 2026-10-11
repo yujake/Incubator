@@ -170,9 +170,14 @@ def _clean_step(step: Any, n: int) -> dict[str, Any]:
             "不许用措辞跳过去"
         )
     if not cites and not is_assumption:
+        # 报错文本只说本层判得到的那件事（`cites` 空不空）。这一层拿不到 store，
+        # 判不了"那个 id 在不在册" —— 存在性判据在 `agent_f/core.py` 的 `_foreign_cites`
+        # （引用台账里没有的 id ⇒ 那一轮当场拒收，理由里会点名是哪个 id）。
+        # 从前这里写的是"既没有引到在册的 id"，那等于承诺了本层没做的判据（CS-4）。
         raise RoundError(
-            f"steps[{n}] 既没有引到在册的 id，也没有声明成前提（`assumption: true`）—— "
-            "「每一步都要指出依据」是 I10 的最小形态"
+            f"steps[{n}] 既没有给 `cites`（一个引用的 id 都没有），也没有声明成前提"
+            "（`assumption: true`）—— 「每一步都要指出依据」是 I10 的最小形态"
+            "（引用的 id 在不在册由框架核：查不到时这一轮会被拒收并点名那个 id）"
         )
     return {"n": n, "text": text, "cites": cites, "assumption": is_assumption}
 

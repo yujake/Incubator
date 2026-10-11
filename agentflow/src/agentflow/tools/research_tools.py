@@ -309,6 +309,12 @@ def research_submit_gap(
                 content_description=str(description or ""),
                 done=False,
                 submitted_by="agent-D",
+                # `for_question_id` 是这一行的结构化归属（`schema.py:226-228` 逐字：
+                # "该请求是为哪个研究问题服务的"）—— 从前这里不写它，于是消费方
+                # （I2 闭环 / 证据就绪判据 / D 自己的每问题预算）只能拿
+                # `content_description` 里的 `[q:NNNN]` 做正则（CS-2/CS-3）。
+                # `question_id` 在这个作用域里是现成的参数，填它零成本。
+                for_question_id=str(question_id),
             )
             row.validate()  # 先校验：绝不把非法行落到盘上
             tx.upsert("search_requests", row.to_dict(), note=f"research_gap:{question_id}")

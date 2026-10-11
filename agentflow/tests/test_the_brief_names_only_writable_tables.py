@@ -30,6 +30,7 @@ import pytest
 
 from agentflow import capabilities as C
 from agentflow import schema as S
+from agentflow import store as ST
 
 #: 不算"交付落点"的表：纯账本 / 过程记录类（任何角色都可以在说明里提它们，提了也不算
 #: "声明要写它"）。刻意只排这几张：`documents` / `review_findings` / `statements` /
@@ -108,3 +109,69 @@ def test_anti_vacuum_3_the_criterion_only_looks_at_deliverable() -> None:
 
     assert _violations({"Z": _Spec()}) == [] or all("deliverable" in b for b in _violations({"Z": _Spec()})), \
         _violations({"Z": _Spec()})
+
+
+# ---------------------------------------------------------------- 第二类扫描面：退役的表名（CS-13）
+#
+# 上面那三条判据按 `schema.TABLES` 现算词表 —— 于是已经退役的表名它一个都扫不到，
+# 而"声明点名一张不存在的表"正是它当初要防的形态（`draft/44` `J-01`：D 的 `deliverable`
+# 点了自己写不了的 `analysis_reports`；那一张表还在，所以被判据抓住了）。
+# 真机上的实例（批 R10 修掉）：B 的 `deliverable` 写着"concepts 与 relations 行"，
+# 而 `concepts` 早在并表（S1r，`SCHEMA_VERSION=2`）时就住进了 `statements`
+# （`store._MOVED_TABLES` 是那件事的显式登记处）—— 那句话安然通过了上面三条。
+#
+# 这一节补的就是那第二类：退役的表名。词表不另立 —— 直接读 `store._MOVED_TABLES`
+# （它是"并走的表 → 新家"的唯一登记处，`store.py:99-124`）。
+
+
+def _retired_tables_named_in(text: str) -> dict[str, str]:
+    """一句话里点到的已并走的表名 → 新家（空 dict = 一个都没点到）。"""
+    return {old: str(meta.get("into") or "")
+            for old, meta in ST._MOVED_TABLES.items() if old in str(text or "")}
+
+
+def test_no_deliverable_names_a_retired_table() -> None:
+    """正控：没有哪个角色的 `deliverable` 点着一张已经并走的表。
+
+    为什么要单列一条（而不是并进上面那个 `_violations`）：两类的词表来源不同 ——
+    一类是 `schema.TABLES`（现役表），一类是 `store._MOVED_TABLES`（退役表 → 新家）。
+    合起来写会让"命中"这句话失去指路能力（读的人分不出"你写不了这张表"与"这张表没了"）。
+    """
+    specs = C._specs.builtin_specs()
+    bad: list[str] = []
+    for role, spec in sorted(specs.items()):
+        brief = getattr(spec, "brief", None)
+        if brief is None:
+            continue
+        hit = _retired_tables_named_in(getattr(brief, "deliverable", ""))
+        for old, new_home in sorted(hit.items()):
+            bad.append(f"{role}.deliverable 点了已并走的表 {old}（新家：{new_home}）")
+    assert not bad, (
+        "有角色的交付物声明点了一张已经并走的表（声明落后于存储布局）——\n  "
+        + "\n  ".join(bad)
+        + "\n改法照 `draft/103` §4.1b-24 那一处：写成新家（例如 "
+          "`statements`（`kind=\"concept\"`）），别留着老表名。"
+    )
+
+
+def test_anti_vacuum_the_retired_table_scan_sees_something() -> None:
+    """反真空 + 负控：退役词表真的读到了东西，且喂一份旧声明时当场报出来。"""
+    assert ST._MOVED_TABLES, (
+        "`store._MOVED_TABLES` 是空的 ⇒ 这一条判据退化成恒真（并表那次登记的"
+        "『concepts → statements』必须留在那里，它是这一类的词表来源）")
+    hit = _retired_tables_named_in("交付物是 concepts 与 relations 行")
+    assert hit == {"concepts": "statements"}, hit
+
+    class _Brief:
+        # 刻意只写退役的那一个名字：句子里若再带上 `relations`（现役表），
+        # 第一类判据也会报它 ⇒ 这条负控就分不出"哪一类看见的"。
+        deliverable = "concepts 行"
+
+    class _Spec:
+        brief = _Brief()
+
+    # 负控：这份旧声明在第一类判据（现役表词表）眼里是干净的 —— 那正是缺口的样子
+    assert _violations({"Z": _Spec()}) == [], "第一类判据不该看见退役表名（它按 S.TABLES 现算）"
+    # 而第二类判据必须报出来
+    retired_hit = _retired_tables_named_in(_Spec.brief.deliverable)
+    assert retired_hit == {"concepts": "statements"}, retired_hit

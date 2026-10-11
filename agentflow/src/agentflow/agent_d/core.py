@@ -915,10 +915,17 @@ class _Core:
         mine = [r for r in requests if str(r.get("submitted_by") or "") == self.actor]
         per_q: dict[str, int] = {}
         for r in mine:
-            note = str(r.get("content_description") or "")
-            m = re.search(r"\[q:(\d{4})\]", note)
-            if m:
-                per_q[m.group(1)] = per_q.get(m.group(1), 0) + 1
+            # 归属优先读结构化字段（`for_question_id`，`schema.py:226-228`）；
+            # 只有老行（那个字段还是空的）才回落到描述文本里的 `[q:NNNN]`。
+            # 为什么要有这条回落：并表/加字段之前落下的行没有那个键，
+            # 而"读不到"与"不属于任何问题"必须分得开（三态纪律）——
+            # 于是这里按"字段空 ⇒ 试正则 ⇒ 都空 ⇒ 不计入 per_q"三档走。
+            qid = str(r.get("for_question_id") or "").strip()
+            if not qid:
+                m = re.search(r"\[q:(\d{4})\]", str(r.get("content_description") or ""))
+                qid = m.group(1) if m else ""
+            if qid:
+                per_q[qid] = per_q.get(qid, 0) + 1
         return {
             "total": len(mine),
             "total_limit": self.max_total_requests,
