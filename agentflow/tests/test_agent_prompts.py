@@ -2442,3 +2442,22 @@ def test_every_read_only_role_says_it_must_not_write():
         f"反负控失效：删掉 H 的禁令之后判据还是绿的（读到 {_readonly_prohibition(broken)}）"
         "—— 那这条判据抓不住它本该抓的那种删改")
     assert _readonly_prohibition(h), "正控失效：H 的禁令现在读不出来"
+
+def test_empty_brief_sections_are_never_registered(registry: ToolRegistry):
+    """空段一律不注册（业主 2026-10-12 裁定 CS-16 ②）—— 两条注册路径同一条口径。
+
+    改前不对称：`STANCE` 无条件返回（M 的 `stance=()` ⇒ 它以空段出现在段清单里），
+    而 `ROLE_POLICY` / `SIGNATURE_ERROR` / `DELIVERABLE` 只在非空时返回；
+    预设那条路（`composition._register_brief_blocks`）本来就跳空。裁定 ② = 统一"都不注册"。
+
+    两条一起钉：① `brief_sections` 逐角色返回的每一段正文都非空（从真身现算）；
+    ② 活的那一格 —— M 的段清单里没有 `STANCE`，G 有（它的 `stance` 非空）。
+    渲染出来的正文不变（空段本来就不渲染）⇒ 这条只动段清单读数，不动提示词版本。
+    """
+    for role in ALL_ROLES:
+        for name, _order, text in AP.brief_sections(role):
+            assert text.strip(), f"{role} 的 {name} 是空段 —— 空的不该注册（CS-16 ②）"
+    m_audit = AP.prompt_audit("M", registry=registry, task=TASK, workspace_root=ROOT)
+    g_audit = AP.prompt_audit("G", registry=registry, task=TASK, workspace_root=ROOT)
+    assert "STANCE" not in m_audit["sections"], m_audit["sections"]
+    assert "STANCE" in g_audit["sections"], g_audit["sections"]

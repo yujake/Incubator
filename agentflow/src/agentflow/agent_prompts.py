@@ -1309,13 +1309,12 @@ def brief_sections(role: str) -> list[tuple[str, int, str]]:
     这里只做"字段 → 段正文"这一层排版，内容来自 `ROLE_BRIEFS`
     （它本身是 `specs/<role>.py::SPEC.brief` 的视图 ⇒ 唯一真身仍在禁改区那一侧）。
 
-    空段口径照抄改前，不要顺手统一（实测：改前 `STANCE` 是无条件注册的、空的也注册，
-    而 `ROLE_POLICY` / `SIGNATURE_ERROR` / `DELIVERABLE` 三格只在非空时注册）。
-    于是 M 的 `STANCE` 这一格在读数里看得见（`Assembly.names` 的口径是"含那些这次渲染成
-    空串、会被丢掉的段"，`promptkit` 的 docstring 逐字），而 G/H 的空格看不见。
-    我这里原样照抄：接线批的判据是"十格读数逐格不变"，顺手统一口径会让 G 的段数 +1、
-    H 的段数 +2 —— 那是读数变更，得有它自己的一条理由，不能夹在接线里蒙过去。
-    （这条不对称本身已登记为待办：统一它是一种口径选择，见 `draft/103` §4.1b 末尾。）
+    空段口径（业主 2026-10-12 裁定 CS-16 ②）：空的一律不注册 —— 与
+    `composition._register_brief_blocks`（预设那条路，"空段不出现"）统一成同一条口径。
+    改前是不对称的：`STANCE` 无条件返回（M 的 `stance=()` ⇒ 它以空段出现在段清单里），
+    另三格只在非空时返回。这条不对称此前是照抄改前行为（接线批的判据是"十格读数逐格不变"），
+    现在按裁定统一：渲染出来的正文一个字不变（空段本来就不渲染），变的是段清单读数
+    （M 那一格少一个段名）。统一它同时消掉"同一个 Assembly 里两种空段口径"。
 
     不含 `AGENT_IDENTITY`：那一段是模板（插值 `{{task_id}}` / `{{depth}}` / `{{children}}`
     这些当次事实），它的渲染跟着拥有那些事实的代码走，不在这条路上。
@@ -1324,15 +1323,17 @@ def brief_sections(role: str) -> list[tuple[str, int, str]]:
     base = SECTION_ORDERS["ROLE_BOUNDARY"]
     stance = SECTION_ORDERS["STANCE"]
     rows: list[tuple[str, int, str]] = [
-        # `STANCE`：无条件（空则空串），与改前逐字一致
-        ("STANCE", stance,
-         ("你在这一岗上的治学姿态：\n" + "\n".join(f"- {x}" for x in brief.stance))
-         if brief.stance else ""),
+        # `STANCE`：与另三格同一条口径 —— 空的不注册（业主 2026-10-12 裁定 CS-16 ②）
+    ]
+    if brief.stance:
+        rows.append(("STANCE", stance,
+                     "你在这一岗上的治学姿态：\n" + "\n".join(f"- {x}" for x in brief.stance)))
+    rows.append(
         # 边界无条件出现（它是硬约束那一格；空边界由 `agentspec` 的注册期校验挡住）
         ("ROLE_BOUNDARY", base,
          "边界（这些是硬约束，越过它们做的事一律不算数）：\n"
          + "\n".join(f"- {x}" for x in brief.boundary)),
-    ]
+    )
     if brief.policy:
         rows.append(("ROLE_POLICY", SECTION_ORDERS["ROLE_POLICY"],
                      "这次运行的政策：\n" + "\n".join(f"- {x}" for x in brief.policy)))
