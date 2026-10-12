@@ -445,13 +445,15 @@ def test_resolve_priority_folds_instance_suffixes_to_the_role():
     # 冒号后缀仍走精确匹配：`agent-D:contradiction` = high，不是 `agent-D` 的 medium
     assert I.resolve_priority("agent-D:contradiction")[0] == "high"
     assert I.resolve_priority("agent-D")[0] == "medium"
-    # 负控一：角色自己没登记（A）⇒ 折了也还是没登记：仍 low，但理由不再说"陌生来源"
-    p, why = I.resolve_priority("agent-A-egr")
-    assert p == "low" and "未登记" in why and "陌生来源" not in why, (p, why)
-    assert "agent-A" in why, why
-    # 负控二：折出来的键不在表里 ⇒ 不许瞎猜档位
-    assert I.resolve_priority("agent-Z-egr")[0] == "low"
-    # 负控三：没有短横线的名册名不折（"D2 是不是 D 的实例"要读名册，属另一个问题）
+    # 负控一：角色自己没登记（Z 不是角色）⇒ 折了也还是没登记：low + 说清"查过也没有"
+    p, why = I.resolve_priority("agent-Z-egr")
+    assert p == "low" and "未登记" in why, (p, why)
+    # A 的实例（业主 2026-10-12 补了 `"agent-A": "low"` 那一行 —— CS-15 的残留项）：
+    # 折中命中了，理由要说清"按角色那一档"，不再是"未登记"、更不是"陌生来源"
+    p2, why2 = I.resolve_priority("agent-A-egr")
+    assert p2 == "low" and "agent-A" in why2 and "角色" in why2, (p2, why2)
+    assert "未登记" not in why2 and "陌生来源" not in why2, (p2, why2)
+    # 负控二：没有短横线的名册名不折（"D2 是不是 D 的实例"要读名册，属另一个问题）
     assert I.resolve_priority("agent-D2")[0] == "low"
 
 

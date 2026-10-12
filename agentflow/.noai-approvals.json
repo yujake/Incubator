@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-08T12:24:57+08:00",
+  "generated_at": "2026-10-12T12:20:46+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -83,26 +83,26 @@
       "path": "pyproject.toml",
       "glob": "pyproject.toml",
       "category": "release-deploy",
-      "sha256": "78989cdc18501911bea0ebb30cbc8bbbd7d79f62308a43fe01df8b32fb0bca9f",
+      "sha256": "a6b300f392cba8b8b2bd3656e1ba4f2504e08cc4f74b934ab6be788469ef4269",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "Web 批 W1：browser 可选依赖 + marker + addopts 默认排除（draft/77 2.2 / draft/79 T1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-08T12:24:56+08:00",
-          "scope": "optional-dependencies.browser / markers 的 browser 行 / addopts 三处",
-          "note": "逐行走查：三条都在 draft/77 2.2 的范围内；addopts 动既有行是 T1 裁定的直接后果",
+          "at": "2026-10-12T12:20:28+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-08T12:24:57+08:00",
-          "scope": "optional-dependencies.browser / markers 的 browser 行 / addopts 三处",
-          "note": "独立复核：运行期依赖仍只有 filelock；marker 描述里'未装就是 unknown 不是 pass'仍在",
+          "at": "2026-10-12T12:20:28+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -150,9 +150,28 @@
       "sha256": "9b548baa91826919c59c82856b938907d34479a1a6e411d1c13d076b3c034f09",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "§173：R-64 十条估价逐条登记为预留；R-62 让台账 stale 在默认路径可见",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:28+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:28+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -160,12 +179,31 @@
       "path": "scripts/release_check.py",
       "glob": "scripts/release_check.py",
       "category": "release-deploy",
-      "sha256": "493bd0b36d6348755692cc23279e45525c4c12fd04307d5168cc1eff615603c9",
+      "sha256": "caecfd51cfacc0003801aac3389889d59ac141029e1ffc223887407210caead7",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M7：八个角色模块拆成包之后的落点适配（只改读取路径，不改判据口径）。(1) capabilities._h_writable_tools_is_derived：H 的自检落点从 src/agentflow/agent_h.py 变成 src/agentflow/agent_h/_support.py（拆包后 _H_WRITABLE_TOOLS 的定义住在那儿），旧路径保留为回退分支；判据仍是「右侧不是字面量容器 + 模块里出现 READONLY_CALL_EXCEPTIONS」。(2) scripts/release_check.item_selftests：模块文件不存在时再看 <角色>/__main__.py（包形态下 python -m 执行的正是它；自检块 M7 搬到了那里），「有没有自检块」这条判据的口径不变。登记 ≠ 批准：reviewers 留 0，留给人逐行走查。",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:29+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:29+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -173,12 +211,31 @@
       "path": "src/agentflow/agentspec.py",
       "glob": "src/agentflow/agentspec.py",
       "category": "auth-audit",
-      "sha256": "7ce1058423d9d9927a92e1e5445a7fd433bf57e80651866d6f322d99eeebc236",
+      "sha256": "c1191e95370f6545d76942eb956ef921d80d9ac828e887add22c45585efbd298",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M5（draft/28 §224）：给闸门与装配加可选注册表（capabilities.registry/roles_in/edges_for、policy.check/check_action/check_edge 的 registry=、conductor 的 specs=），并给声明层加 audit_registry。默认 None ⇒ 行为逐字不变；新角色 Z 只在测试的局部注册表里存在。reviewers 仍为 0。",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:30+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:30+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -186,27 +243,27 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "e67b00c9af158fecf1b51c5334951913b712b09cb226219a2fd2dad2291aaad4",
+      "sha256": "f984c3c9440a53b4ef7c8c127937dcaf8f0166a325125b145914be71afcc830f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:43+08:00",
-          "scope": "_TOOL_GROUPS_BY_ROLE[V]、_KNOWN_UNMATCHED_ACTIONS(+A.shelf_search)、等式 59=21+38+0；:1203 注释更正（H 能召唤 A/E/G）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:30+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:43+08:00",
-          "scope": "_TOOL_GROUPS_BY_ROLE[V]、_KNOWN_UNMATCHED_ACTIONS(+A.shelf_search)、等式 59=21+38+0；:1203 注释更正（H 能召唤 A/E/G）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:30+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -288,26 +345,26 @@
       "path": "src/agentflow/interactions.py",
       "glob": "src/agentflow/interactions.py",
       "category": "auth-audit",
-      "sha256": "171b9cf2ec487edaf9c7687e649383d89c6f5549387ed52d4f5cbbbc4114b444",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "本会话（体检-修复-重审闭环）改动的禁改区文件；2026-09-27 所有者确认后收敛并签字（AI 代录）",
+      "sha256": "9ea7fdebe8d249cbcf79dee6dbfae955b97b4f16dc45b76c6abbb79894ec4743",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-2",
-          "at": "2026-09-27T08:58:26+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "所有者口头确认：全部都走查过、可签字；AI 代录，姓名代记 owner-1/owner-2",
+          "name": "Yu",
+          "at": "2026-10-12T12:20:31+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
-          "name": "owner-1",
-          "at": "2026-09-27T08:58:40+08:00",
-          "scope": "本会话对该文件的全部改动（所有者逐行走查，2026-09-27）",
-          "note": "第二名人审：owner-1（所有者口头确认全部都走查过、可签字；AI 代录）",
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:31+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -320,12 +377,31 @@
       "path": "src/agentflow/providers.py",
       "glob": "src/agentflow/providers.py",
       "category": "solver-core",
-      "sha256": "d290cfb3ff9f60a77b597abf31576f93578371979630ff02491425aa173da212",
+      "sha256": "501de420c69b5aa89ac65f624c83f04b01b740eff4bdeeeb3d1c945c063fcf5f",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "F1/R-46+P-51：REFUSAL_REASONS 补 invalid_params（原表没有『这次调用不成立』的位置，参数门只好借 unknown_action）；_openalex_pdf_url 标记 pdf_url 与落地页逐字相同",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:32+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:32+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": [
         {
@@ -371,12 +447,31 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "1900c73c5e0980a21f9dd754ccc5a8207416f056d302c4ca5d530bb28f46834b",
-      "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "draft/37 §64：USAGE_SCOPE_PRODUCERS['reason'] 的登记补上第二个产出点（llmseam.LlmSeam._charge_ledger）；SCHEMA_VERSION/TABLES/EVAL_REQUIRED_FIELDS 一个字未动",
-      "changed_this_session": true,
-      "reviewers": [],
+      "sha256": "e0621456f8944712527f07f53bafa63f4111b1f4e32445621458e76feb772ade",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:32+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:33+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": [
         {
@@ -393,9 +488,28 @@
       "sha256": "bdcd472525541abec1ff39554ad436fe593b2e56f5703f00ea11c5fc0f010f38",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "goal-7f5116c1 M4（draft/28 §223）：角色的构造期依赖工厂搬进各自的声明（specs/<角色>.py::_build + needs/peers），host._Builder 只剩薄壳 + 通用 _build。声明面变化 ⇒ 重新登记 sha256；reviewers 仍为 0，留给人审。",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:33+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:33+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -403,27 +517,27 @@
       "path": "src/agentflow/specs/a.py",
       "glob": "src/agentflow/specs/a.py",
       "category": "auth-audit",
-      "sha256": "9105b68876a544dd7e481090fa927ddf0c3f467eee4fc69d80aa68bb2215426d",
+      "sha256": "434d3fa68ea37a0cec192e569da389f3f5b7d7718c3412dc5c699e66786883dc",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:38+08:00",
-          "scope": "brief 六字段逐字镜像重建（批④：事故叙事/结构复述退场，规则句保留）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:34+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:38+08:00",
-          "scope": "brief 六字段逐字镜像重建（批④：事故叙事/结构复述退场，规则句保留）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:34+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -435,27 +549,27 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "71bc099284812ef36ad5ab8ccc4205c448755338ddb864675b5482b1c45f6fe3",
+      "sha256": "079c41bb08feacb6fad86df4a1bf9027fa8a3221431fe6a397c7ecfc19c961d8",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:38+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:34+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:39+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:35+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -467,27 +581,27 @@
       "path": "src/agentflow/specs/c.py",
       "glob": "src/agentflow/specs/c.py",
       "category": "auth-audit",
-      "sha256": "5363ea93f614e32f07b68739ca12c8145f0c1fef9b39f28a04eeac8790051192",
+      "sha256": "18512c6a132bd9ad5c8f910a112508c642fbdca2e500eff1a95a4a6aabd01a5e",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:39+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:35+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:39+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:35+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -499,27 +613,27 @@
       "path": "src/agentflow/specs/d.py",
       "glob": "src/agentflow/specs/d.py",
       "category": "auth-audit",
-      "sha256": "41382c7651d67ec6f20c5e2925648d5f2addebb686674724699c5dccdd9afd7e",
+      "sha256": "3eac4615a8fac538e146d70c484b779a957370b135a7e41685cbd549ab7f2d25",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:39+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:36+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:39+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:36+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -531,27 +645,27 @@
       "path": "src/agentflow/specs/e.py",
       "glob": "src/agentflow/specs/e.py",
       "category": "auth-audit",
-      "sha256": "c06d5372b3e10bc11076185aeabf607d8896106bfc264a84c152a530303acc21",
+      "sha256": "64b58ff240cbde264dfd4e1b1868df7acfe6062cbd87eba7bfb4ff41e654348d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:39+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上；含与 attackround.BUDGET_UNREADABLE_NOTE 同源的那句）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:36+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:40+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上；含与 attackround.BUDGET_UNREADABLE_NOTE 同源的那句）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:37+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -563,27 +677,27 @@
       "path": "src/agentflow/specs/f.py",
       "glob": "src/agentflow/specs/f.py",
       "category": "auth-audit",
-      "sha256": "eb065983afc7744c8205bee61fa754a098879950ef19c6d74e5f187d8f3e8652",
+      "sha256": "dea14dd4c86f1b211b865c0c56f1d0a2e32eeca0e490cadaec607d2d5a1cfeb4",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:40+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:37+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:40+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:37+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -595,27 +709,27 @@
       "path": "src/agentflow/specs/g.py",
       "glob": "src/agentflow/specs/g.py",
       "category": "auth-audit",
-      "sha256": "5a804421520b23e2d83cf09994c5f6b430ffebf672877d29e91a653b7683eecc",
+      "sha256": "d16afcea20f15673b1a703870584b2125c7cd6aca78692b090b83c0eb280ec8b",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:40+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:38+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:40+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:38+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -627,27 +741,27 @@
       "path": "src/agentflow/specs/h.py",
       "glob": "src/agentflow/specs/h.py",
       "category": "auth-audit",
-      "sha256": "18a98de35e39cd6e1b55212a0caa4b1e217aee517eec49d0c8310d7841b1c8df",
+      "sha256": "b14d02ff20b0468177a027811711f2f6e6339ce76dfe5174380563172e0f234a",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:41+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:39+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:41+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:39+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -659,27 +773,27 @@
       "path": "src/agentflow/specs/m.py",
       "glob": "src/agentflow/specs/m.py",
       "category": "auth-audit",
-      "sha256": "2280282b9ad9441f357fd3121453492a642fc04b54a4f9015c35f05c929fbfb0",
+      "sha256": "e51d1744276aaf14853812b6a4e63092b661b1a391ed8999dbfbeff1cedae4a7",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:41+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上；含 M 的 policy 减负与受控档清单补齐 c_analysis_runs）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:39+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:41+08:00",
-          "scope": "brief 六字段逐字镜像重建（同上；含 M 的 policy 减负与受控档清单补齐 c_analysis_runs）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:39+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -691,27 +805,27 @@
       "path": "src/agentflow/specs/v.py",
       "glob": "src/agentflow/specs/v.py",
       "category": "auth-audit",
-      "sha256": "809700e9bbb0acb1da90884ca10dbbe82ee8c76ac41f0c4af9fcaa283b4334d5",
+      "sha256": "4c53004ff58542b497b79c7e3a0a01b0296d6175b6e9b16c352c9b1cb82309f2",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:41+08:00",
-          "scope": "新建：V 的 ACTIONS 三条 + SPEC 全字段（edges=(F,)、read_only=True、write_set=frozenset()）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:40+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:42+08:00",
-          "scope": "新建：V 的 ACTIONS 三条 + SPEC 全字段（edges=(F,)、read_only=True、write_set=frozenset()）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:40+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -723,27 +837,27 @@
       "path": "src/agentflow/store.py",
       "glob": "src/agentflow/store.py",
       "category": "schema-migration",
-      "sha256": "af425d86999850b4a4d5ae9440bc02812abed00b89e62896913db78f48c5d08b",
+      "sha256": "b9fb649845a1326fa961156d42ba542aa78c3177b2a5f166d3423293d08e1500",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:42+08:00",
-          "scope": "rebuild() 返回只增 skipped_by_reason/skipped_details 两键；四处跳过点分四类；未收窄 except；skipped 整数未动",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:41+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:42+08:00",
-          "scope": "rebuild() 返回只增 skipped_by_reason/skipped_details 两键；四处跳过点分四类；未收窄 except；skipped 整数未动",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:41+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -787,12 +901,31 @@
       "path": "src/agentflow/tools/base.py",
       "glob": "src/agentflow/tools/base.py",
       "category": "auth-audit",
-      "sha256": "f54b47310fdfeef2426a7fb433ca1b783e9f7071241a3a16535df797ed61885e",
+      "sha256": "4a7316a800e292b603d0a533417e585dff068b257649a1ce08a93c13f2ded0df",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 69e1715a9061 变为 f54b47310fdf，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
-      "reviewers": [],
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:41+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:41+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
       "audits": [],
       "also_hits": []
     },
@@ -800,27 +933,27 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "12215ee8b13f177b1cfdddd0fd9651f1a32c8d7856fe1ecc4aa2c8292a2d974d",
+      "sha256": "70e65abdd81ac5879aa9e1443c551ac161a482308ecf5ad0b72845dd7180a4be",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:43+08:00",
-          "scope": "V 的三件只读工具 + 注入；detect_verifier/check_formal 的 TypeError 捕获与文案分叉",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:42+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:43+08:00",
-          "scope": "V 的三件只读工具 + 注入；detect_verifier/check_formal 的 TypeError 捕获与文案分叉",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:42+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -832,27 +965,155 @@
       "path": "src/agentflow/verify.py",
       "glob": "src/agentflow/verify.py",
       "category": "auth-audit",
-      "sha256": "0b977662bacb5a58fc3ede7c0af0a4e742cdee3a1c53257e9d4e8db78d78fbdc",
+      "sha256": "be794bae8c4a0463b386222a0c436eb64b6c66c816c31c3cbfda8c0c7619c722",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:38+08:00",
-          "scope": "verify_all 的 D5/D7 读侧跟 signatures.SIGNABLE_STATUSES；:1028-1037 口径注释（台账全量 != 委托计数）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:43+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:38+08:00",
-          "scope": "verify_all 的 D5/D7 读侧跟 signatures.SIGNABLE_STATUSES；:1028-1037 口径注释（台账全量 != 委托计数）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:20:43+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tests/golden/agent_surface_snapshot.json",
+      "glob": "tests/golden/*.json",
+      "category": "eval-criteria",
+      "sha256": "81443cd1c41061ed69a435448a8923f2a4a52902ef4bca06ae6b6201da5a1052",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:43+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:43+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tests/golden/run_topic_snapshot.json",
+      "glob": "tests/golden/*.json",
+      "category": "eval-criteria",
+      "sha256": "17dad99db0f82f22a84a9609db127732f7bb593980a9306e127b5e53c8a1720e",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:44+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:44+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tests/golden/tool_surface_snapshot.json",
+      "glob": "tests/golden/*.json",
+      "category": "eval-criteria",
+      "sha256": "4b612b410c716456a89757104bce511addffa9b8c4c268d3823e04d2610bd1ca",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:45+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:45+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        }
+      ],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "tests/golden/verify_all_snapshot.json",
+      "glob": "tests/golden/*.json",
+      "category": "eval-criteria",
+      "sha256": "579496004a246c5a2c04268f2e358834d301c0e26c1be5f5f239c22072b3fc39",
+      "authored": "unknown",
+      "authored_basis": "inferred",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "changed_this_session": null,
+      "reviewers": [
+        {
+          "name": "Yu",
+          "at": "2026-10-12T12:20:45+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
+        },
+        {
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:45+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -864,65 +1125,29 @@
       "path": "tools/coverage_zero_test.py",
       "glob": "tools/coverage_zero_test.py",
       "category": "release-deploy",
-      "sha256": "d51bffe455702e84fab997139232d37fcaeccfeef1b8048bb2d8f94e692c242c",
+      "sha256": "96d28fdf21670a7a7ef2d20fe09a3ce33771430800b52b590f432cda60d8f40c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "集中审查后续修复窗口（tools__coverage_zero_test.py.txt）",
+      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
       "changed_this_session": null,
       "reviewers": [
         {
-          "name": "owner-1",
-          "at": "2026-09-28T16:19:39+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
-          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+          "name": "Yu",
+          "at": "2026-10-12T12:20:46+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         },
         {
-          "name": "owner-2",
-          "at": "2026-09-28T16:19:39+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
-          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:20:57+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
-          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:20:57+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
-          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
-        },
-        {
-          "name": "owner-1",
-          "at": "2026-09-28T16:21:53+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
-          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
-        },
-        {
-          "name": "owner-2",
-          "at": "2026-09-28T16:21:53+08:00",
-          "scope": "集中审查后续修复窗口的全部改动（见锚文件）",
-          "note": "",
-          "verdict": "逐行走查：tools__coverage_zero_test.py.txt 记的改动与判据已复核",
-          "evidence_path": "D:\\Incubator\\temp\\sign\\tools__coverage_zero_test.py.txt",
-          "evidence_sha256": "6e8e75fee9f611edd5c902d55d881f59c7ad3fb76eb07efda62f56dcebcf4f36"
+          "name": "Jiaqi",
+          "at": "2026-10-12T12:20:46+08:00",
+          "scope": "R54-R60 的禁改区改动（逐行走查）",
+          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "verdict": "逐行走查通过",
+          "evidence_path": "",
+          "evidence_sha256": ""
         }
       ],
       "audits": [],

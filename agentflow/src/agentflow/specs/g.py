@@ -111,8 +111,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
     # 于是"锚回到 consistent"在编排层结构上做不到 —— 与 §44.4（A/B 缺登记动作）同形。
     #
     # 两根轴逐条读出：
-    #   - 效果轴 `write_local`：它真的改盘（渲染出的 `appendix.tex` / `tables/*.tex`、
-    #     重编的 `main.pdf`、重写的锚与回执）。
+    #   - 效果轴 `write_local`：它真的改盘（跑项目脚本产出的那些文件 —— 有的项目是
+    #     `appendix.tex` / `tables/*.tex` 与主稿一起重产，有的只写渲染锚、不碰主稿；
+    #     具体产哪些以 `doc.paper_render` 的 `REPRO_RESULT` 读数为准，见 `draft/108` CS-19）。
     #   - 外部轴 `exec`：渲染与编译都会起子进程（项目脚本 / LaTeX 工具链）——
     #     与 `verify.run_experiment` 同一档；不标 `egress`（它不出网）。
     ActionSpec(

@@ -66,6 +66,12 @@ SUBMITTER_DEFAULT_PRIORITY: dict[str, str] = {
     "agent-E": "low",
     "agent-G": "low",
     "agent-H": "low",
+    # A 自己的检索需求：业主 2026-10-12 裁定（CS-15 的残留项）—— 显式登记为 low。
+    # 它是写下来的决定，不是"没登记所以碰巧低"：A 实例提交的行（真机 280 行里约 270 行，
+    # `agent-A-A1` / `agent-A-egr` 这类带后缀的写法）经 `interactions.role_key_of_submitter`
+    # 折到 `agent-A` 之后命中的就是这一行；理由串因此读作"按提交方 … 的角色 agent-A 的
+    # 默认优先级"，不再把它说成"陌生来源"。
+    "agent-A": "low",
     "unknown": "low",
 }
 

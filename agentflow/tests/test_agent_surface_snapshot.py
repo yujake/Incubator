@@ -163,7 +163,15 @@ def test_the_surface_is_whole_and_not_vacuous() -> None:
         f"快照扫到 {total_actions} 条动作，而现场 `CAPABILITIES` 是 {live_actions} 条"
         "（快照漏扫了某些角色）")
     assert total_actions >= 54, f"动作总数缩到 {total_actions} 条（加动作之前是 54）"
-    assert sum(len(v["edges"]) for v in snap["roles"].values()) == 32
+    # 边总数不写死（原先写 `== 32`）：真身是 `capabilities.ALLOWED_EDGES`，
+    # 而它在"B/F/V 不许直连 M"（`draft/106` §2 口径 B）那批里被有意减掉了三条
+    # ⇒ 写死的那个数变成了一句陈旧计数，判据随之恒红。与上面动作总数同一条纪律：
+    # 数字从代码现算，判据只留一个防真空的下界。
+    live_edges = sum(len(v) for v in C.ALLOWED_EDGES.values())
+    assert sum(len(v["edges"]) for v in snap["roles"].values()) == live_edges, (
+        f"快照扫到的边总数与现场 `capabilities.ALLOWED_EDGES`（{live_edges} 条）对不上"
+        "（快照漏扫了某些角色的边）")
+    assert live_edges >= 25, f"边总数缩到 {live_edges} 条 ⇒ 先查是不是扫了个空集"
     for role, got in snap["roles"].items():
         assert got["tools"], f"{role} 一个工具都没有"
         assert len(got["prompt"]) > 5000, f"{role} 的提示词只有 {len(got['prompt'])} 字符"
