@@ -2719,8 +2719,17 @@ python -B -m pytest tests/test_tools_fs_edit.py tests/test_budget_knobs.py `
 - `out/paper/main.tex` = `source/main.tex` 的**逐字副本**（sha `8c5c431b46f7…`，两份实测相同）
   ——**这是 agent 可以改的主稿**；
 - `code/make_paper.py`（**只写锚、绝不碰 `main.tex`**）与 `code/compile_paper.py`
-  （写回执，页数/字节数**照实数记**：7 页 / 355,253 字节；本机**没有 LaTeX 工具链**，
-  所以 PDF 不重排 —— 这件事写在脚本 docstring 里，不许它看起来像"编译过了"）；
+  （写回执，页数/字节数**照实数记**：7 页 / 355,253 字节；建这一版时本机**没有 LaTeX 工具链**，
+  所以 PDF 不重排 —— 这件事写在脚本 docstring 里，不许它看起来像"编译过了"）。
+  **2026-10-12 更正（批 R62）**：那句话当时是真的，后来本机装了 MiKTeX（`pdflatex` /
+  `latexmk` / `xelatex` 在 `C:\CTEX\MiKTeX\miktex\bin\x64\`，**不在 PATH**），而这条注释
+  **没有跟着改** —— 于是它成了一个写在盘上的假事实，并且当场骗到了一趟真机：严格口径 T1
+  （`projects/p5-review-strict-20261012`，sid `t1strict3`）读到它，把任务⑤
+  「改完重新编译 main.pdf」如实记成 `cannot`（读数 `out/review/REPORT.md` §三④）。
+  处置：`code/compile_paper.py` 改成"找到编译器就真编译"（`--disable-installer` +
+  `MIKTEX_USERDATA`/`MIKTEX_USERCONFIG` 指到工作区内可写目录 —— 这两条不写就会被沙箱
+  拒掉注册表/日志写入，退出码变成 1 或 `0xC0000409`，而 PDF 照样产出：一个会骗人的读数），
+  找不到才回落到"未重排"。读数与复跑命令见 `draft/110`。
 - `README-PROVENANCE.md` 钉住"这一轮审的是哪一版"；
 - 封锚后 `renderanchor.check_package` = **`consistent`**（tables/files/receipt 三维一致）。
 - 建工作区时 `Store.init()` **被它自己的守卫拒过一次**（目录非空且无 `data/` ——
