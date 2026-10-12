@@ -340,7 +340,17 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: ③ H 的 `signature_error`（`specs/h.py`）与 ④ G 的 `signature_error`（`specs/g.py`）
 #: 各补一句（两格此前是空串 ⇒ 现在多出 `SIGNATURE_ERROR` 那一段）。
 #: 作用域：C / F / G / H 四格（C 只是摘要与边界那两句，F 是政策 +1 条，G/H 各多一段）。
-PROMPT_VERSION = "p97"
+#: `p98`（2026-10-12，批 R56：业主裁定第 5 条 + 第 6 条①，都在纸包这一段）：
+#: ① 第 5 条（`draft/63c` 的文本经济，只取它点名的那一笔）：`PAPER_PACK 六` 里三段事故叙事
+#: （2026-09-30 的形态 / 第 6 趟真机的 `experiments` 0 行 / 第九趟连派三次 `G.revise`）、
+#: 日期与哈希读数、以及与「四」重复的工作循环压掉，规则本体（时机与顺序、两步核验、
+#: 会写台账的动作排在最后，最后核锚）一字不动；
+#: ② 第 6 条①：`PAPER_08` 对 G/H 从"只换标题行"改成整块替换（`_PAPER_PACK_EIGHT_OTHERS`）——
+#: 那一节 1,876 字里绝大部分是 M 的活（体例声明落点 / `conductor.closing` 参数 / triage 门），
+#: 对 G/H 只留"这不是你的活"+ 两条与它们有关的事实 + 无人值守那一条（判据点名要它在场）；
+#: ③ `PAPER_04` 的「工作循环」补半句事实边界（"这一步只有 G 跑得动"）。
+#: 作用域：纸包只发给 M/G/H ⇒ M 与 G/H 都换（G/H 换得更多）。
+PROMPT_VERSION = "p98"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -1132,30 +1142,22 @@ PAPER_PACK = """\
 
 六、收工前的最后一条：**改了台账就要让包跟上**
 - 只要这一轮动了 `documents` / `experiments` / `review_findings`，`out/paper/` 里的表与稿件
-  就已经是旧的了 —— 锚会报 `drifted`，第 1 条过不了。这不是警告，是真机实测的形态
-  （2026-09-30：一轮跑出 `documents +3`、`experiments +4`，而 `main.pdf` 一个字节没变、
-  `doc.paper_state` 报 `drifted`，交付定义第 1 条当场不成立）。
-- 收工之前必须有人（G 走 `doc.paper_render` → `doc.paper_compile`，或主控派 G 做这件事）
-  把包重渲染、重编译，并让 `doc.paper_state` 回到 `consistent`；做不到就如实写"包与台账分家"，
-  不许把漂移留在一份写着"已完成"的交付说明里。
-- **怎么派**（2026-10-03 更新，真机读数 `draft/37` §58）：让包跟上的是
-  `G.paper_package` —— 它一次做完「重渲染 → 重编译 → 核锚」并把 `verdict` 与漂移条数回报。
-  派它时把 `project` 写成**项目根**（这个工作区就是根 ⇒ `"."`）。
-  反例（都实测过）：`G.build_document` 只是另写一行稿件，它不会重渲染论文包；
-  `G.revise` / `G.refresh_markdown` / `G.render` 动的是**稿件 markdown**
-  （`documents/<id>.md`），**不是**论文包 —— 第九趟主控连派三次 `G.revise`，
-  而 `main.pdf` 与 `RENDER-ANCHOR.json` 一个字节都没变（锚必然 `drifted`）。
+  就已经是旧的了 —— 锚会报 `drifted`，第 1 条过不了。
+- 收工之前必须让包重渲染、重编译并回到 `consistent`（这一步**只有 G 跑得动**，见上面「四」）；
+  做不到就如实写"包与台账分家"，不许把漂移留在一份写着"已完成"的交付说明里。
+- **怎么派**：让包跟上的是 `G.paper_package` —— 它一次做完「重渲染 → 重编译 → 核锚」
+  并把 `verdict` 与漂移条数回报；派它时把 `project` 写成**项目根**（这个工作区就是根 ⇒ `"."`）。
+  反例：`G.build_document` / `G.revise` / `G.refresh_markdown` / `G.render` 动的是**稿件
+  markdown**（`documents/<id>.md`），**不重渲染论文包**（派它们不会让锚回到 `consistent`）。
 - 核锚的**时机**与**顺序**：只要这一轮动过台账（哪怕只是 +1 条 experiment），锚就会 drift ⇒
   在动手**之后**再核一次；在动手之前核出来的 `consistent` 是关于旧包的读数。
-  顺序上有一条真机踩过的坑（2026-10-01）：**会写台账的人先全部收工，最后一步才是让 G 重渲染**。
-  那次主控按「H.review → G.revise（重渲染重编译）→ H.verify_fixes」走，H 那一步又改了
-  `review_findings`（行数没变、内容哈希变了），锚当场从 `consistent` 变回 `drifted`
-  （读数：`表 review_findings：锚 253 行/4d4ccaa4a9fd ≠ 现在 253 行/695150ddb871`）。
+  真机踩过的坑：**会写台账的人先全部收工，最后一步才是让 G 重渲染** —— 那次 H 那一步又改了
+  `review_findings`（行数没变、内容哈希变了），锚当场从 `consistent` 变回 `drifted`。
   所以：`H.verify_fixes` 这类**会写台账**的动作必须排在最后一次重渲染之前；
   最后一次核锚必须是**最后一次写台账之后**。若最后核出来是 `drifted`，唯一能把锚拉回来的
   动作是再派一次 G 修订（重渲染）—— 不要带着 drift 写"已完成"。
-- 修订要落到**稿件**上，不是只落到台账上：H 报出来的 fail 门（例如 G1 自含性 / G5 结论强度 /
-  G7 台账完整）是可操作的修订点 —— 把证据不足以支撑强结论的句子改弱或补证据，改完再重渲染。
+- 修订要落到**稿件**上，不是只落到台账上：H 报出来的 fail 门是可操作的修订点 ——
+  把证据不足以支撑强结论的句子改弱或补证据，改完再重渲染。
   真的没有可操作项时才写"包无需修订"，并给出读数（哪几道门 pass、哪几条 finding 被逐条查过）。
 - **"核验证明"分两步，两步都要走**（`draft/37` §92 的真机读数，别只走第一步）：
   1. **裁决**：`E.check_formal` 逐条核工作区里已有的 Lean 源码（声明名可自动认名：恰好一条
@@ -1166,10 +1168,6 @@ PAPER_PACK = """\
      必须派 `E.run_experiment(method='formal', source=…/script_path=…, name=…)` ——
      它把 `experiments` 的 proof 行写进去（带 `proof_location` 与检查器原话），
      `documents` 的断言才引用得到 `exp:<id>`（FC-22 的硬要求）。
-     第 6 趟真机：主控用 `check_formal` 真的核过了两条（`exactness_core` / `fekete_core`，
-     都是 `verified=true`），但 `experiments` 是 **0 行** ⇒ 10 条 proof 级断言一条都建不进稿件，
-     `documents` / H 那两跳全部落空。它自己在报告里把这条写成"关键缺口"。
-  只让 H 走机械门 + 让 G 重渲染，包的文字不会变 —— 那不是"更优质的论文包"，只是"包刷新了一遍"。
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
 
 七、摄取与派活的三条纪律（2026-10-03 加，`draft/37` §48 的真机读数逼出来的）
@@ -1231,26 +1229,40 @@ PAPER_PACK = """\
 
 #: `R6` 缺陷 4（`draft/63 §3`）：这一段无条件注入 M/G/H，而第八节是对 M 说的
 #: （"体例由你（M）裁定"）⇒ G/H 读到会以为体例归自己定（收件人错）。
-#: 修法是条件渲染：M 得完整那节，G/H 得一句"报告体例由 M 裁定（不是你的活）"。
-#: 为什么用"替换标题行"而不是"从第八节截断"：第八节不是最后一段（它后面还有节），
-#: 截断会把后面几节从 G/H 的提示词里删掉。
+#: 修法是条件渲染：M 得完整那节，G/H 得压缩版（见 `_PAPER_PACK_EIGHT_OTHERS`）。
+#: 业主 2026-10-12 裁定第 6 条①（依据 `draft/63c` 的表"删（对 G/H）"，那八行 ≈1,610 字）：
+#: G/H 那一档从"只换标题行"改成整块替换 —— 第八节是最后一块
+#: （`_PAPER_BLOCK_NAMES` 的最后一项），整块替换安全；旧注释说"它后面还有节"是错的，一并改正。
 _PAPER_PACK_STYLE_M = ('八、交付说明的体例由你（M）裁定（R9 / 裁决 1：框架不再规定"该写哪几节"）')
-_PAPER_PACK_STYLE_OTHERS = (
-    "八、报告体例由 M 裁定 —— **不是你的活**（写哪几节、顺序、每节多长都由 M 定；"
-    "M 会把它声明的体例落到 `out/review/REPORT-STYLE.json`，你按它写 / 按它审）。"
-)
+#: G/H 那一档的第八节（业主裁定第 6 条①：对 G/H 只留"这不是你的活" + 两条与它们有关的事实 +
+#: 无人值守那一条 —— 那一条是 G/H 也要读的纪律，判据里点名要它在场，所以不能跟着删）。
+_PAPER_PACK_EIGHT_OTHERS = """\
+八、报告体例由 M 裁定 —— **不是你的活**
+- 写哪几节、顺序、每节多长都由 M 定（M 把它声明的体例落到 `out/review/REPORT-STYLE.json`）：
+  **G 按它写、H 按它审**。那份文件不归你写，`conductor.closing` 也不归你跑（它是 M 的收工门）。
+- 与你有关、仍然成立的两条：报告里点到的每一行台账必须真的在盘上；G 的附件三件套要在报告里
+  可见（`origin=own_result`、`依据`、`sha`）；H 的 findings 全部落 `review_findings` 台账。
+  这一条对你也成立：**被拒的派活与没登记的条目不许写成已登记**（`conductor.summon` 的结果里
+  `outcome=refused` + `detail` 写着为什么，照它写）；每一处 `statements 0001` / `lit:0000` /
+  `documents 0000` 这样的引用都要能在对应的表里查到那一行 —— 查不到就别写，或者写清"没做成、卡在哪"。
+  **判据是机械的**（报告里的带前缀 4 位号逐个**回查台账**），写错就会红。
+- **无人值守那一趟**：你按纪律问了、用户还没答 ⇒ 那一格判 `fail`（"停在等待用户"）——
+  这不是缺陷，也不许靠"不问"绕开；用户答完（`agentflow answer <qid> "<回答>"`）再 `--resume`
+  续跑才会翻 `pass`（三档登记见 `draft/37` §66，当前采用**乙**，即甲/乙/丙里的乙）。"""
 
 
 def paper_pack_for(role: str) -> str:
-    """这一段按角色渲染（`R6` 缺陷 4）。
+    """这一段按角色渲染（`R6` 缺陷 4；第 6 条① 收紧了非 M 那一档）。
 
-    `M`：完整那节（含"体例由你（M）裁定"）。`G`/`H`：只换掉第八节的标题行，
-    换成"报告体例由 M 裁定，不是你的活" —— 不出现第二人称（"由你（M）"），
-    因为 G/H 读到时"你"就是它自己。其余各节一字不动（对 G/H 同样有用）。
+    `M`：完整那节（含"体例由你（M）裁定"）。`G`/`H`：整块替换成
+    `_PAPER_PACK_EIGHT_OTHERS` —— 不出现第二人称（"由你（M）"），因为 G/H 读到时"你"就是它自己；
+    其余九块一字不动（对 G/H 同样有用）。
     """
     if str(role) == "M":
         return PAPER_PACK
-    return PAPER_PACK.replace(_PAPER_PACK_STYLE_M, _PAPER_PACK_STYLE_OTHERS, 1)
+    blocks = PAPER_PACK.split("\n\n")
+    blocks[-1] = _PAPER_PACK_EIGHT_OTHERS
+    return "\n\n".join(blocks)
 
 
 #: 十角色的六格身份文本（职责 / 边界 / 政策 / 招牌错误 / 交付物 / 姿态）。
