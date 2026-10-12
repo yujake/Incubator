@@ -66,6 +66,51 @@ _WRITER_ROLES = ("G",)
 #: 而"靠语义判断"正是我们要避免的东西。
 CROSS_CHECK_DISCLAIMER = "数值交叉验证，不构成证明"
 
+#: `proof_review` 类断言必须自带的声明（业主 2026-10-12：「写论文那一档原先卡每个定理都要到
+#: proof 水平，但没 Lean 显然做不到，但也要能写」）。它与上面那句同一族：读者必须在正文
+#: 旁边就看到"这一档凭什么"。两档的差别只在这句话里，所以这句话不许被合并成一句。
+PROOF_REVIEW_DISCLAIMER = "逐行审阅过的证明，未经机器检查"
+
+#: 证据等级 → 那一档必须自带的声明（没有的档给空串）。一处定义，写入口与读入口共用。
+DISCLAIMER_BY_EVIDENCE_KIND = {
+    "cross_check": CROSS_CHECK_DISCLAIMER,
+    "proof_review": PROOF_REVIEW_DISCLAIMER,
+}
+
+
+def _disclaimer_for(evidence_kind: str) -> str:
+    """这一档要自动补的那句声明（没有这一档的要求就给空串）。"""
+    return DISCLAIMER_BY_EVIDENCE_KIND.get(str(evidence_kind), "")
+
+
+def wording_ceiling() -> tuple[str, ...]:
+    """允许「定理 / 证明 / 必然」这类措辞的证据等级（唯一口径，两处消费者共用）。
+
+    业主 2026-10-12 的口径（逐字）：「比如写论文那一档原先卡每个定理都要到 proof 水平，
+    但没 Lean 显然做不到，但也要能写」。
+
+    两档：
+
+    - `proof` 永远在：检查器核过的证明，任何模式下都是最高一档；
+    - `proof_review` 只在 Lean 开关关掉时在：那一档说的是"一份逐行审阅过的证明
+      （`statements.proof_text` + V 签「成立」）"，是关掉 Lean 之后能达到的最高证据。
+      开关开着时它不在这一档里 —— 老套路不变：只有检查器说过的才算证明，
+      「逐行审阅过」仍然低于 `proof`，用了那些措辞照样判 `overclaim`。
+
+    开关读不出来（设置文件写坏）时按开着处理（保守方向）：那一边会误报，
+    而误报是可修的；反方向的漏报会让"数值/审阅"悄悄冒充"证明"。
+    """
+    kinds = ["proof"]
+    try:
+        from .. import settings as SET
+
+        if not SET.lean_enabled()[0]:
+            kinds.append("proof_review")
+    except Exception:  # noqa: BLE001 —— 读不到开关就按开着（保守），见 docstring
+        pass
+    return tuple(kinds)
+
+
 #: 视为"过度声称"的措辞。`evidence_kind != "proof"` 的断言里出现这些词即报。
 #: 这份清单必须显式列出：隐含的判据无法被审阅、无法被反驳。
 #:
@@ -88,6 +133,7 @@ OVERCLAIM_MARKERS = (
 #: 直接出现在给人读的稿件里会让人需要额外翻译一次才能确认它没被夸大。
 EVIDENCE_LABELS = {
     "proof": "形式化核验（proof）",
+    "proof_review": "逐行审阅（proof_review）",
     "cross_check": "交叉验证（cross_check）",
     "heuristic": "启发式（heuristic）",
 }
@@ -1192,8 +1238,8 @@ def compose_claim(
         "citations": cites,
         "is_negative": is_negative is True,
         "negation_kind": negation_kind,
-        #: cross_check 的"不构成证明"声明由结构强制，不靠人记得写（FC-22）。
-        "disclaimer": CROSS_CHECK_DISCLAIMER if evidence_kind == "cross_check" else "",
+        #: cross_check / proof_review 的那句声明由结构强制，不靠人记得写（FC-22）。
+        "disclaimer": _disclaimer_for(evidence_kind),
     }
     #: §8.3 的字段：给了才写（不给就不写键 —— 见 docstring 的三态理由）。
     extra = {

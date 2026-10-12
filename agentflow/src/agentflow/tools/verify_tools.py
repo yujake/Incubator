@@ -67,7 +67,11 @@ _ROLES_WRITE = ("E", "F", "G")
 #: 的取值口径（"最强的那个"）如果与 schema 对证据等级的排序不一致，
 #: 就会出现"报告说 proof、实验记录里只有 cross_check"这种**无人报错**的分歧。
 #: 宁可在这里 fail-closed，也不要靠"两个地方恰好写对了"。
-_EVIDENCE_ORDER = ("heuristic", "cross_check", "proof")
+#:
+#: `proof_review`（业主 2026-10-12：逐行审阅过的证明，见 `doc_tools.PROOF_REVIEW_DISCLAIMER`）
+#: 排在 `cross_check` 与 `proof` 之间：它比"数值上支持"强（有人逐行走查过整份证明），
+#: 但比机器核过的 `proof` 弱 —— `_TOP_EVIDENCE` 仍然是 `proof`（末位口径不变）。
+_EVIDENCE_ORDER = ("heuristic", "cross_check", "proof_review", "proof")
 assert set(_EVIDENCE_ORDER) == set(S.EVIDENCE_KINDS), (
     f"_EVIDENCE_ORDER={_EVIDENCE_ORDER} 与 schema.EVIDENCE_KINDS={S.EVIDENCE_KINDS} 不一致 —— "
     "证据等级的排序口径必须只有一处定义"

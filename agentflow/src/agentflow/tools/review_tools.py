@@ -428,19 +428,28 @@ def scan_document(
                     quote=repr(ek),
                 )
             )
-        # ---- 过度声称
-        if ek == "cross_check" and not str(c.get("disclaimer") or "").strip():
+        # ---- 过度声称（用词上限的唯一实现在 `doc_tools.wording_ceiling`：`proof` 永远到顶，
+        # Lean 开关关掉时 `proof_review` 也到顶 —— 业主 2026-10-12：「没 Lean 也要能写论文」）
+        if ek in ("cross_check", "proof_review") and not str(c.get("disclaimer") or "").strip():
+            want = ("数值交叉验证，不构成证明" if ek == "cross_check"
+                    else "逐行审阅过的证明，未经机器检查")
             findings.append(
                 _finding(
                     "overclaim",
                     level="error",
                     target=cid,
                     evidence=f"evidence_kind={ek!r} 且 disclaimer 为空",
-                    message="数值交叉验证必须显式声明'不构成证明'",
+                    message=f"这一档必须显式声明「{want}」",
                     quote=text or cid,
                 )
             )
-        if ek in S.EVIDENCE_KINDS and ek != "proof":
+        try:
+            from .doc_tools import wording_ceiling
+
+            _ceiling = tuple(wording_ceiling())
+        except Exception:  # noqa: BLE001 —— 工具层读不到就按最保守（只有 proof）
+            _ceiling = ("proof",)
+        if ek in S.EVIDENCE_KINDS and ek not in _ceiling:
             hit = [m for m in OVERCLAIM_MARKERS if m in text]
             if hit:
                 findings.append(

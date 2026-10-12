@@ -703,8 +703,13 @@ CLAIM_FAMILIES: dict[int, dict[str, str]] = {
         "rule": "`evidence_kind=\"cross_check\"` 的断言必须自带那句「数值交叉验证，不构成证明」"
                 "（写在独立的 `disclaimer` 一栏里）",
         "example": '{"evidence_kind": "cross_check", "disclaimer": "数值交叉验证，不构成证明"}'},
+    5: {"name": "免责声明",
+        "rule": "`evidence_kind=\"cross_check\"` 要自带「数值交叉验证，不构成证明」；"
+                "`proof_review` 要自带「逐行审阅过的证明，未经机器检查」（都写在独立的一栏里）",
+        "example": '{"evidence_kind": "proof_review", "disclaimer": "逐行审阅过的证明，未经机器检查"}'},
     6: {"name": "过度声称词表",
-        "rule": "证据等级不是 proof 时，正文里不许出现「证明/定理/必然」这类词",
+        "rule": "用词不许超过它挂的证据：`proof` 永远到顶；Lean 开关关掉时 `proof_review`"
+                "（逐行审阅过的证明）也到顶 —— 其余档出现「证明/定理/必然」这类词一律报",
         "example": '证据是 cross_check 时正文写「数值上支持（未证明）」而不是「证明了」'},
     7: {"name": "数值证据结构",
         "rule": f"`numeric_evidence` 要有 {NUMERIC_EVIDENCE_KEYS} 四项（缺一即不可复跑/不可判定覆盖）",
@@ -1057,6 +1062,31 @@ def _cross_check_disclaimer() -> str:
         return "数值交叉验证，不构成证明"
 
 
+def _proof_review_disclaimer() -> str:
+    """`proof_review` 必需的那句声明（唯一来源同 `_cross_check_disclaimer`）。"""
+    try:
+        from .tools.doc_tools import PROOF_REVIEW_DISCLAIMER
+
+        return str(PROOF_REVIEW_DISCLAIMER)
+    except Exception:  # noqa: BLE001
+        return "逐行审阅过的证明，未经机器检查"
+
+
+def _wording_ceiling() -> tuple[str, ...]:
+    """哪些证据等级允许用「定理 / 证明 / 必然」这类措辞（唯一实现在 `doc_tools`）。
+
+    业主 2026-10-12：「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
+    但也要能写」—— 关掉 Lean 时上限换成 `proof_review`（逐行审阅过的证明），
+    开着时仍然只有 `proof`。这里只做转发，不在判据层再写一份口径（FC-03）。
+    """
+    try:
+        from .tools.doc_tools import wording_ceiling
+
+        return tuple(wording_ceiling())
+    except Exception:  # noqa: BLE001 —— 工具层不可导入时按最保守（只有 proof）
+        return ("proof",)
+
+
 def _bad_type(name: str, val: Any, spec: FieldSpec) -> str:
     """返回类型错误的说明（空串 = 类型没问题）。"""
     if name in ("frozen", "is_negative", "falsifiable"):
@@ -1287,16 +1317,21 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
     ek_norm = _value_of(norm, "evidence_kind")
     statement_text = claim_statement(norm)
     if ek_norm in _evidence_kinds():
-        if ek_norm == "cross_check" and not str(_value_of(norm, "disclaimer") or "").strip():
+        # `cross_check` 与 `proof_review` 都要那句声明（各自的声明不同：一个是"数值交叉验证"，
+        # 一个是"逐行审阅过的证明，未经机器检查"）—— 读者必须在正文旁边就读到"这一档凭什么"。
+        if ek_norm in ("cross_check", "proof_review") \
+                and not str(_value_of(norm, "disclaimer") or "").strip():
+            want = (_cross_check_disclaimer() if ek_norm == "cross_check"
+                    else _proof_review_disclaimer())
             issues.append(
                 ClaimIssue(
                     code="missing_disclaimer",
                     field_name="disclaimer",
                     level="error",
                     message=(
-                        f"断言 {cid} 的 `evidence_kind='cross_check'` 却没有 disclaimer。"
-                        f"数值交叉验证必须显式写明「{_cross_check_disclaimer()}」"
-                        f"—— 找的是这条断言对象的**独立一栏** `disclaimer`"
+                        f"断言 {cid} 的 `evidence_kind={ek_norm!r}` 却没有 disclaimer。"
+                        f"这一档必须显式写明「{want}」"
+                        f"—— 找的是这条断言对象的独立一栏 `disclaimer`"
                         f"（写进 `text` 不算，写在别的断言里也不算）；"
                         f"这条断言的 text 前 60 字：{statement_text[:60]!r}"
                     ),
@@ -1307,21 +1342,25 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                     claim_id=cid,
                 )
             )
-        if ek_norm != "proof":
+        # 用词上限（业主 2026-10-12）：关掉 Lean 时 `proof_review` 也算到了顶
+        # —— 那时"正文里写定理"这件事必须有路可走，否则没有 Lean 的用户连论文都写不了。
+        if ek_norm not in _wording_ceiling():
             hit = [m for m in _overclaim_markers() if m in statement_text]
             if hit:
+                ceiling = "、".join(_wording_ceiling())
                 issues.append(
                     ClaimIssue(
                         code="overclaim",
                         field_name="evidence_kind",
                         level="error",
                         message=(
-                            f"断言 {cid} 的 `evidence_kind={ek_norm!r}`（不是 proof），"
-                            f"但正文出现「{'、'.join(hit)}」—— 这是把交叉验证说成了证明"
+                            f"断言 {cid} 的 `evidence_kind={ek_norm!r}`（不在用词上限"
+                            f" {ceiling} 里），但正文出现「{'、'.join(hit)}」"
+                            "—— 这是把交叉验证/启发式说成了证明"
                         ),
                         evidence=(
-                            f"evidence_kind={ek_norm!r}；命中的措辞={hit}；"
-                            f"正文摘要={statement_text[:80]!r}"
+                            f"evidence_kind={ek_norm!r}；用词上限={ceiling}；"
+                            f"命中的措辞={hit}；正文摘要={statement_text[:80]!r}"
                         ),
                         claim_id=cid,
                     )

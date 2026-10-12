@@ -2249,7 +2249,11 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: G/H/M 拿到的是纸包那一句）。另外两段随开关现算的文本（`TOOLCHAIN_FACTS` /
 #: `TOOLCHAIN_FORMAL`）不进这张表 —— 它们由调用方传入（`_SURFACE_FIXTURE_*`），
 #: 开关那两条判据在 `tests/test_lean_switch.py` 里单独守。
-_FROZEN_PROMPT_VERSION = "p99"
+#: `p100`（2026-10-12，业主口径：「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean
+#: 显然做不到，但也要能写」）：纸包三的"结论不许强于它挂的证据"补两段（用词上限的说法 +
+#: 关掉 Lean 时上限换成 `proof_review`、必须带那句声明、不许写「已形式化验证」）。
+#: 作用域读数：**只有 G / H / M 三格换值**（纸包只发给 M/G/H），A–F 与 V 逐字未动。
+_FROZEN_PROMPT_VERSION = "p100"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "1136cd1c3cc3b44186447cdecd9c4cb93a865c41b724765a41b17d7e7b18c3db",
     "B": "181e81bd0acebc0f7bd24d09b3495d95405fbdeed8ee97f9986bdb898f940a5c",
@@ -2257,10 +2261,10 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "6f1788f41dcd54c60dd00ca229ad61cc4dfc9e2cbd69f1e22703b0ad04f18c95",
     "E": "7290c97c9875432595b037332060b35b972b84721968a90635a1d026085fb0e5",
     "F": "c68a82f083e6e7e464b0340a44e2bc1432538cec95710c6a930f735bbdcc01e4",
-    "G": "aec9c5b589605d985362c7a27d669347b049386593f3539309c8432639fa5864",
-    "H": "7775a05c5ba55b5b0054d77694f2a3e7e8d63f790c44cae02c01ecb29726f45e",
+    "G": "aaece65b82a1c138e112cc6093b647acc6bdc866d9c44d19f6bacac3d50222a1",
+    "H": "f0d7bfd56d762a99a345c81fcb599e4e01a97f23fc5d8cce8b27a67c37edfedb",
     "V": "02f14a2aed20f4bfc32b035f78928d4c46fb8a0195b4bcf510e406b56d7782f7",
-    "M": "665a4e560caf61fc7b2436b8acca1b028e7d089034d51c62381df310686598cd",
+    "M": "a8227f12a5ebaf6ee71432dceead72ec17a4786c5f433a35084ec15208f14008",
 }
 
 

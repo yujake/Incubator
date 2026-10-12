@@ -1153,9 +1153,14 @@ def _check_7(rep, dependencies, doc_by_id, documents, eval_by_id, exp_by_id, lit
                         f"断言 {cid} 引用的关系 {ref} 处于 status='suspect'（依据可疑，未判定）⇒ "
                         "该结论目前只有**未经确认**的依据",
                     ))
-            if c.get("evidence_kind") == "cross_check" and not str(c.get("disclaimer") or "").strip():
-                rep.issues.append(Issue("error", "documents", docid, "overclaim",
-                                        f"断言 {cid} 是 cross_check 却没有 disclaimer（FC-22）"))
+            if c.get("evidence_kind") in ("cross_check", "proof_review") \
+                    and not str(c.get("disclaimer") or "").strip():
+                # 两档共一个 code（`overclaim`），但话要说清是哪一档：
+                # `cross_check` = 数值交叉验证；`proof_review` = 逐行审阅过的证明
+                # （业主 2026-10-12：没 Lean 也要能写论文，那一档的凭据是 V 的审阅）。
+                rep.issues.append(Issue(
+                    "error", "documents", docid, "overclaim",
+                    f"断言 {cid} 是 {c.get('evidence_kind')} 却没有 disclaimer（FC-22）"))
 
     return rejected_by_id
 

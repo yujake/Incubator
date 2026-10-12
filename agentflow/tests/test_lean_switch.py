@@ -244,7 +244,52 @@ def test_the_no_lean_variant_rewrites_every_role_face(
         AP.reset_toolchain_readings()
 
 
-# ============================================================ 6. 收工门
+# ============================================================ 6. 用词上限（论文那一档）
+def test_the_wording_ceiling_follows_the_switch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """业主 2026-10-12：「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
+    但也要能写」—— 关掉时用词上限多一档 `proof_review`（逐行审阅过的证明），开着时不多。
+
+    ① 关掉时 `proof_review` + 声明 ⇒ 干净（可以写「定理/证明」）；
+    ② 关掉时缺声明 ⇒ `missing_disclaimer`；③ 开着时同一份断言 ⇒ `overclaim`（老套路不变）；
+    ④ `cross_check` 不是上限（写了照旧报）；⑤ 实验表不许声称这一档（凭据在 `verifications`）。
+    """
+    from agentflow import claimanatomy as CA
+    from agentflow import schema as S
+    from agentflow.tools import doc_tools as DT
+
+    def _claim(ek: str, disc: str | None) -> dict:
+        c = {"claim_id": "c1", "section": "1", "text": "定理 3.1 成立：我们证明了它",
+             "evidence_kind": ek, "citations": ["stmt:0001"], "is_negative": False}
+        if disc is not None:
+            c["disclaimer"] = disc
+        return c
+
+    def _codes(c: dict) -> set[str]:
+        res = CA.validate_claim(c)
+        issues = getattr(res, "issues", None)
+        if issues is None:
+            issues = res if isinstance(res, (list, tuple)) else []
+        return {i.code for i in issues}
+
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+    assert set(DT.wording_ceiling()) == {"proof", "proof_review"}
+    assert "overclaim" not in _codes(_claim("proof_review", DT.PROOF_REVIEW_DISCLAIMER))
+    assert "missing_disclaimer" in _codes(_claim("proof_review", None))
+    assert "overclaim" in _codes(_claim("cross_check", DT.CROSS_CHECK_DISCLAIMER)), \
+        "cross_check 不是用词上限：写「定理/证明」照旧要报"
+
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+    assert set(DT.wording_ceiling()) == {"proof"}, "开着时上限回到只有 proof（老套路）"
+    assert "overclaim" in _codes(_claim("proof_review", DT.PROOF_REVIEW_DISCLAIMER))
+
+    got = DT.compose_claim("定理 3.1 成立", citations=["stmt:0001"],
+                           evidence_kind="proof_review", section="1")
+    assert got["disclaimer"] == DT.PROOF_REVIEW_DISCLAIMER, got
+    assert "proof_review" not in S.EXPERIMENT_EVIDENCE_KINDS
+    assert "proof_review" in S.EVIDENCE_KINDS
+
+
+# ============================================================ 7. 收工门
 class _Rep:
     """收工门那一格的最小替身（`_check_load_bearing` 只碰这三个属性）。"""
 

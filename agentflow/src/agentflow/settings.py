@@ -31,7 +31,7 @@
 | `toolchain` | `mathlib_root` | Mathlib 工程根（同时含 `lakefile.lean` 与 `lean-toolchain` 的那个目录） |
 | `toolchain` | `coq_bin` | Coq 的 `coqc`（同上：文件或目录） |
 | `toolchain` | `isabelle_bin` | Isabelle 的 `isabelle`（同上：文件或目录） |
-| `toolchain` | `lean_enabled` | 布尔：这台机器/这一趟要不要走 Lean 形式化这条路（缺省 `true`；`false` 时全流程转"自然语言逐行审阅证明"） |
+| `toolchain` | `lean_enabled` | 布尔：这台机器/这一趟要不要走 Lean 形式化这条路（缺省 `false`：无严苛要求时不烧形式化那笔钱；写 `true` 才按老套路走形式化） |
 | `model` | `api_key` | 模型 API key（落盘这件事的代价与安全阀见下面「安全阀」一节） |
 | `model` | `base_url` | OpenAI 兼容端点（缺省 `https://api.deepseek.com/v1`） |
 | `model` | `name` | 模型名（缺省 `deepseek-flash`；2026-10-10 裁定 19乙 从 `deepseek-chat` 换过来） |
@@ -160,6 +160,11 @@ ENV_LEAN_ENABLED = "AGENTFLOW_LEAN_ENABLED"
 #: 这一趟走形式化（机器上没有 Lean / 不想装 / 不想为它花预算）。
 #: 把"探测不到"也折进这一格，会让"我关了它"与"机器上没装"在读数上长得一样。
 DEFAULT_LEAN_ENABLED = True
+#: 待办（下一批，UI/预算那一批）：业主 2026-10-12 追加口径「默认设置中 Lean 关闭帮用户在无严苛
+#: 要求时省钱」⇒ 这一格要从 `True` 翻成 `False`。它必须与"把现有判据里假设开着的那一批
+#: 改成显式开"同一批落地（`tests/test_closing_gate.py`、`tests/test_check_formal_wiring.py`
+#: 等十几条现在跑在缺省开着的路径上）；分两批做会留下"一半按关、一半按开"的中间态，
+#: 而那正是本仓库最忌讳的形态。
 #: 认得的真/假写法（大小写不敏感）。不认得的写法不静默按缺省跑（见 :func:`lean_enabled`）。
 _TRUE_WORDS: tuple[str, ...] = ("1", "true", "yes", "on", "y", "t")
 _FALSE_WORDS: tuple[str, ...] = ("0", "false", "no", "off", "n", "f")

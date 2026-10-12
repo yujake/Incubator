@@ -804,6 +804,7 @@
          "description": "证据等级：proof / cross_check / heuristic。注意没有 'own_result' 这个取值 —— 那是 `origin`（来源）的词表，不是这一栏的",
          "enum": [
           "proof",
+          "proof_review",
           "cross_check",
           "heuristic"
          ],
@@ -909,6 +910,7 @@
      "evidence_kind": {
       "enum": [
        "proof",
+       "proof_review",
        "cross_check",
        "heuristic"
       ],

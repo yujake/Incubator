@@ -942,15 +942,30 @@ EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 
 #: 证据等级（FC-22 的落地核心）。
 #:
-#:   proof       —— 由形式化检查器核验过的证明（只有 `method="formal"` 才可能拿到）
-#:   cross_check —— 数值/穷举的交叉验证。它不是证明，且在任何报告里都必须
-#:                  自动附加"不构成证明"的字样。
-#:   heuristic   —— 启发式观察（例如"看起来像"），证据力最弱。
+#:   proof        —— 由形式化检查器核验过的证明（只有 `method="formal"` 才可能拿到）
+#:   proof_review —— **证明经逐行审阅**（`statements` 表的 `proof_text` 非空 + V 的
+#:                   `verifications` 里那一条签「成立」）。它不是机器检查：读者必须
+#:                   看到那句声明，所以它和 `cross_check` 一样**必须自带 disclaimer**。
+#:                   这一档是"没有 Lean 也要能写论文"的落点（业主 2026-10-12：
+#:                   「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
+#:                   但也要能写」）—— 用词上限（「定理/证明」）在 Lean 关掉时从 `proof`
+#:                   换成它；Lean 开着时它仍然低于 `proof`（老套路一个字不变）。
+#:   cross_check  —— 数值/穷举的交叉验证。它不是证明，且在任何报告里都必须
+#:                   自动附加"不构成证明"的字样。
+#:   heuristic    —— 启发式观察（例如"看起来像"），证据力最弱。
 #:
 #: 为什么把它做成 schema 字段而不是靠人记得标注：数学里"数值对了"与"证完了"
 #: 是天壤之别，而人一定会忘。把它变成字段，并让 schema 拒绝
 #: "method=numeric 却声称 evidence_kind=proof"，这条错误就在写入时炸掉。
-EVIDENCE_KINDS = ("proof", "cross_check", "heuristic")
+EVIDENCE_KINDS = ("proof", "proof_review", "cross_check", "heuristic")
+
+#: `experiments` 表能用的证据等级（比 `EVIDENCE_KINDS` 少 `proof_review`）。
+#:
+#: 为什么实验表不许用它：`proof_review` 说的是"一份**证明**被逐行审阅过"，
+#: 而实验表登记的是一次**实验**（脚本 / 检查器）的结论。让一行实验去声称
+#: `proof_review`，等于把"审阅"这件事从 `verifications` 那张表搬到一个没有审阅信息
+#: 的字段里 —— 于是"谁审的、审的是哪一版"就再也读不出来了。
+EXPERIMENT_EVIDENCE_KINDS = ("proof", "cross_check", "heuristic")
 
 #: 一次实验对被检验命题的结论。
 EXPERIMENT_RESULTS = ("supports", "refutes", "inconclusive")
@@ -1267,8 +1282,11 @@ class Experiment:
             raise ValueError("claim_key 不能为空（没有它就无法回答'这条实验检验的是哪个命题'）")
         if self.method not in EXPERIMENT_METHODS:
             raise ValueError(f"method 必须是 {EXPERIMENT_METHODS} 之一，收到 {self.method!r}")
-        if self.evidence_kind not in EVIDENCE_KINDS:
-            raise ValueError(f"evidence_kind 必须是 {EVIDENCE_KINDS} 之一，收到 {self.evidence_kind!r}")
+        if self.evidence_kind not in EXPERIMENT_EVIDENCE_KINDS:
+            raise ValueError(
+                f"experiments 表的 evidence_kind 必须是 {EXPERIMENT_EVIDENCE_KINDS} 之一，"
+                f"收到 {self.evidence_kind!r}（`proof_review` 不在这一档：它是**审阅**的等级，"
+                "凭据在 `verifications` 表里，不属于任何一行实验）")
         if self.result not in EXPERIMENT_RESULTS:
             raise ValueError(f"result 必须是 {EXPERIMENT_RESULTS} 之一，收到 {self.result!r}")
         if self.negation_kind is not None and self.negation_kind not in NEGATION_KINDS:
@@ -1585,11 +1603,18 @@ class Document:
             ek = c.get("evidence_kind")
             if ek not in EVIDENCE_KINDS:
                 raise ValueError(f"claims[{cid}].evidence_kind 必须是 {EVIDENCE_KINDS} 之一，收到 {ek!r}")
-            # ---- 硬约束 2：cross_check 的断言必须自带"不构成证明"声明（FC-22）
-            if ek == "cross_check" and not str(c.get("disclaimer") or "").strip():
+            # ---- 硬约束 2：cross_check / proof_review 的断言必须自带声明（FC-22）
+            #
+            # 两档要的声明不同（一句话说清"这一档凭什么"）：
+            # cross_check = 数值交叉验证；proof_review = 逐行审阅过的证明（非机器检查）。
+            # 为什么用同一个字段：读者只看一句话，而"这一条是哪种证据"必须在正文旁边
+            # 就能读到 —— 这也是 `doc.compose_claim` 自动补那句声明的落点。
+            if ek in ("cross_check", "proof_review") and not str(c.get("disclaimer") or "").strip():
+                what = ("数值交叉验证，不构成证明" if ek == "cross_check"
+                        else "逐行审阅过的证明，未经机器检查")
                 raise ValueError(
-                    f"claims[{cid}] 的 evidence_kind='cross_check'，必须给 disclaimer"
-                    "（如'数值交叉验证，不构成证明'）。**这句话由结构强制，不靠人记得写**"
+                    f"claims[{cid}] 的 evidence_kind={ek!r}，必须给 disclaimer（如'{what}'）。"
+                    "**这句话由结构强制，不靠人记得写**"
                 )
             # ---- 硬约束 3：否定型断言必须分类（FC-25）
             if c.get("is_negative") is True and not c.get("negation_kind"):
