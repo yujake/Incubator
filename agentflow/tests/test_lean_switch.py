@@ -200,6 +200,50 @@ def test_the_prompt_blocks_follow_the_switch(monkeypatch: pytest.MonkeyPatch) ->
     assert AP.toolchain_facts_text() == on_facts, "复位之后必须回到开着那一版（缓存要清干净）"
 
 
+# ============================================================ 5b. 关掉时的「面」
+def test_the_no_lean_variant_rewrites_every_role_face(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """业主 2026-10-12（逐字）：「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的
+    提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证
+    所有人的第一反应是系统做不了」。
+
+    三个方向都判：① 反真空（改写表/删除表的左边必须在开着时的提示词里逐字出现，
+    否则它们会在某次重写之后悄悄失效，而"关掉时没有形式化字样"就成了假绿）；
+    ② 关掉时十个角色里一个形式化广告面都不许剩（职责句 / 工具描述 / 伙伴表都算），
+    且每格都必须出现「系统做不了」；③ 关掉时 E 不再载入 `TOOLCHAIN_FORMAL` 那一段。
+    """
+    from agentflow import agent_prompts as AP
+    from agentflow import schema as S
+    from agentflow.specs import e as E
+    from agentflow.tools import build_registry
+
+    roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
+    reg = build_registry().registry
+    on_text = "\n".join(AP.system_prompt(r, registry=reg) for r in roles)
+    for old, _new in E.NO_LEAN_REPLACEMENTS:
+        assert old in on_text, f"改写表的左边在开着时的提示词里找不到（表失效了）：{old!r}"
+    for mark in E.NO_LEAN_DROP_LINE_MARKERS:
+        assert mark in on_text, f"删除表的标记在开着时的提示词里找不到（表失效了）：{mark!r}"
+    for start, keep in E.NO_LEAN_DROP_BLOCKS:
+        assert start in on_text and keep in on_text, (start, keep)
+
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
+    AP.reset_toolchain_readings()
+    try:
+        facts = AP.toolchain_facts_text()
+        for role in roles:
+            text = AP.system_prompt(role, registry=reg, toolchain_facts=facts)
+            for face in ("数值实验与形式化验证", "转发到形式化检查器",
+                         "你这一岗怎么写形式化", "默认不注入任何库",
+                         "`E.check_formal` 逐条核"):
+                assert face not in text, f"{role} 的提示词里还留着形式化广告面：{face!r}"
+            assert "系统做不了" in text, (
+                f"{role} 的提示词里必须说清「本会话不做形式化验证：系统做不了」")
+    finally:
+        monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+        AP.reset_toolchain_readings()
+
+
 # ============================================================ 6. 收工门
 class _Rep:
     """收工门那一格的最小替身（`_check_load_bearing` 只碰这三个属性）。"""

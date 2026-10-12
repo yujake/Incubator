@@ -1909,9 +1909,9 @@ def toolchain_facts_text() -> str:
                  }.get(switch_src, "内置缺省")
         lines = [
             "这台机器上的证明工具链（现算读数，不是记忆）：",
-            f"- Lean 形式化：**已关闭**（{where} = false）⇒ 这一趟**不要**写 Lean 源码、"
-            "不要派 `verify.check_formal`、也不要落 `method=\"formal\"` 的实验；"
-            "关掉的是这条路，不是「这台机器做不到」",
+            f"- Lean 形式化：已关闭（{where} = false）⇒ 本会话不做形式化验证（系统做不了）。"
+            "这一趟不要写 Lean 源码、不要派 `verify.check_formal`、也不要落 "
+            "`method=\"formal\"` 的实验；"
             "- 替代路线（这条路上唯一的「审过」凭据）：把证明过程写进 `statements` 的 "
             "`proof_text`，再请 V 用 `verify.verify_proof` 逐行走查 —— 结论进 "
             "`verifications` 表；`evidence_kind=\"proof\"` 这一档本会话**产不出来**，"
@@ -2399,8 +2399,11 @@ def role_prompt_registry(role: str, *, registry: Any = None,
                         (toolchain_facts or "").strip() or _NO_TOOLCHAIN))
     # 会写 Lean 源码的角色才有"怎么写"这一段（业主裁定 G；谁算"会写"由工具面现算，
     # 不写死角色名 —— 拿到 `verify.check_formal` 就拿到它，理由见
-    # `toolchain_formal_text` 的 docstring）。
-    if _writes_lean(role, registry):
+    # `toolchain_formal_text` 的 docstring）。开关关掉时整段不载入
+    # （业主 2026-10-12：「E 在开关关掉时可不载入有关形式化验证的提示词」）——
+    # 这一档没有"怎么写"可讲，因为这条路整个不存在；那一档的"系统做不了"由
+    # `TOOLCHAIN_FACTS` 的第一行说清（每一段都载入它）。
+    if _writes_lean(role, registry) and _lean_switch()[0]:
         reg.section(Section("TOOLCHAIN_FORMAL", SECTION_ORDERS["TOOLCHAIN_FORMAL"],
                             (toolchain_formal or "").strip() or _NO_TOOLCHAIN_FORMAL))
     reg.section(Section("WORKSPACE_FACTS", SECTION_ORDERS["WORKSPACE_FACTS"],
@@ -2442,9 +2445,52 @@ HANDOFF_PROTOCOL = """\
 """
 
 
+def _apply_no_lean_variant(text: str) -> str:
+    """开关关掉时，按 `specs.e.NO_LEAN_REPLACEMENTS` 改写渲染出来的提示词。
+
+    业主 2026-10-12（逐字）：「负责 Lean 的智能体 E 在开关关掉时可不载入有关形式化验证的
+    提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，一旦提到形式化验证
+    所有人的第一反应是系统做不了」。
+
+    三处刻意的做法：
+
+    - 改写表住在 `specs/e.py`（E 的声明旁边）：声明本身一个字不改（它派生权限面的四张表、
+      被冻结快照钉着），随开关变的只是"渲染给模型看的那份文本"；
+    - 应用点是唯一的收口（`system_prompt` / `prompt_audit` 都经过它）——
+      提示词有多条渲染路径（角色段 / 伙伴表 / 工具面 / 政策），逐条去改会漏掉某一条，
+      而漏掉的表现正是"某个角色还以为 E 负责形式化验证"；
+    - 开关开着时逐字返回原文（连一次字符串替换都不做）—— 开着时的行为与 p99 完全一致，
+      这一条由 `tests/test_lean_switch.py` 的负控守着。
+    """
+    if _lean_switch()[0]:
+        return text
+    from .specs import e as _E_SPEC
+
+    # 先整块删（跨行的那些"整块都在讲形式化"的块），再整行删，最后逐条替换 ——
+    # 顺序刻意如此：删掉的内容里可能含有后面两步要匹配的片段，反过来做会留下半句话。
+    for start, keep in tuple(getattr(_E_SPEC, "NO_LEAN_DROP_BLOCKS", ())):
+        kept: list[str] = []
+        skipping = False
+        for line in text.split("\n"):
+            if not skipping and start in line:
+                skipping = True
+            if skipping and keep and keep in line:
+                skipping = False
+            if not skipping:
+                kept.append(line)
+        text = "\n".join(kept)
+    drop = tuple(getattr(_E_SPEC, "NO_LEAN_DROP_LINE_MARKERS", ()))
+    if drop:
+        text = "\n".join(line for line in text.split("\n")
+                         if not any(mark in line for mark in drop))
+    for old, new in _E_SPEC.NO_LEAN_REPLACEMENTS:
+        text = text.replace(old, new)
+    return text
+
+
 def system_prompt(role: str, **kw: Any) -> str:
     """渲染某个角色这一次的 system prompt。"""
-    return role_prompt_registry(role, **kw).render(Scope(role=role))
+    return _apply_no_lean_variant(role_prompt_registry(role, **kw).render(Scope(role=role)))
 
 
 def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
@@ -2459,7 +2505,7 @@ def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
     """
     reg = role_prompt_registry(role, **kw)
     assembly = reg.assemble(Scope(role=role))
-    text = assembly.render()
+    text = _apply_no_lean_variant(assembly.render())
     return {
         "prompt_version": PROMPT_VERSION,
         "role": role,

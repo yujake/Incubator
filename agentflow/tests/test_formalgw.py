@@ -113,17 +113,25 @@ def test_production_path_really_calls_the_frozen_probe_layer(monkeypatch):
 
 
 def test_status_vocabulary_is_controlled():
-    """词表就是这十个；多一个少一个都要人来改这条断言。"""
+    """词表就是这十一个；多一个少一个都要人来改这条断言。"""
     assert set(FG.STATUSES) == {
         "verified", "compile_error", "uses_sorry", "extra_axioms", "decl_mismatch",
         "timeout", "import_unavailable", "no_backend", "tool_crashed",
         "source_unreadable",
+        # 业主 2026-10-12：`toolchain.lean_enabled=false` 时这条路被用户关掉。
+        # 它是"没查成"这一组，不是"查了没通过" —— 所以它既要有自己的名字
+        # （不许借用 `no_backend`：那会把"用户关了它"说成"机器上没有 Lean"），
+        # 又不许进 `_CONCLUDED_STATUSES`（下面那一条负控）。
+        "lean_disabled",
     }
     assert FG.PROOF_STATUS == "verified"
     # `source_unreadable`（`E-3`）是"没查成"，必须不在 `_CONCLUDED_STATUSES` 里：
     # 它在里面时 `evidence_of` 的 `checked` 位为 True，工具层于是把一次
     # 路径写错折成 `verified=False`（"查了、命题不成立"）。
     assert "source_unreadable" not in FG._CONCLUDED_STATUSES
+    # 开关那条同理，而且更硬：关掉时连检查器都没起过进程，
+    # 进了这一组就会凭空长出一条"查了、命题不成立"的结论。
+    assert "lean_disabled" not in FG._CONCLUDED_STATUSES
 
 
 @pytest.mark.parametrize("status", FG.STATUSES)
