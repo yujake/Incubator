@@ -2238,18 +2238,18 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `local_notes['敢创新']` 与政策第 2 条的表面矛盾。
 #: 作用域读数：B / C / D / F / M 五格换值（C 自己那格 17,901 → 18,383 字、段数 66
 #: 不变；另外四格恰好是能唤 C 的四个角色，各 +304 字 —— 伙伴表里逐条渲染它的动作摘要）。
-_FROZEN_PROMPT_VERSION = "p96"
+_FROZEN_PROMPT_VERSION = "p97"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "1136cd1c3cc3b44186447cdecd9c4cb93a865c41b724765a41b17d7e7b18c3db",
-    "B": "b04afa2b456d3600d65d13374eada4b7a6e69d9b1b34749332b15e33347bf266",
-    "C": "1a94d39c723705c3d304c45c9803c9cdabca3e026840f16236e3936193a46306",
-    "D": "22beff51d9e940ce322495f388f46c8d91ac500e870464863e6f44ab2c9ce941",
+    "B": "181e81bd0acebc0f7bd24d09b3495d95405fbdeed8ee97f9986bdb898f940a5c",
+    "C": "0db1c148033a1e57a00cd6c51e4f74bfe5a2171a2cd67397ea5a7a8a86e2b5fe",
+    "D": "6f1788f41dcd54c60dd00ca229ad61cc4dfc9e2cbd69f1e22703b0ad04f18c95",
     "E": "65c6e6a047df3af559d09a37b4df78f1b7b968e571bc8b80425d0d75bf6a69b5",
-    "F": "b8e9333fb2cdc241ea717fdbcf40ff4f89a5ea553f741664380c72e04cd53167",
-    "G": "230b58a4a7babe443e9e48eb71d3876976337ba63189d62c1c4bd0e14954637a",
-    "H": "76251f1594a0879ded03e521648290921a7be90b67145ba029a3df6e4e4f408f",
+    "F": "c68a82f083e6e7e464b0340a44e2bc1432538cec95710c6a930f735bbdcc01e4",
+    "G": "758885a513b398169280ccd99298791abaddfd4e2d8ee1be1deb58875deeaf5f",
+    "H": "d1a3ce46dc539df34901b9448783f24349eb9e5075bf3bd2079a05bfdfc67c4e",
     "V": "02f14a2aed20f4bfc32b035f78928d4c46fb8a0195b4bcf510e406b56d7782f7",
-    "M": "9d0928d0987be03bee913a16de615df393ccc7b080ddd77e7a12e5d73ac521a1",
+    "M": "d01777efdee63f115174a3d6548a90126817ff12c40f8b60a38d322ad801e235",
 }
 
 

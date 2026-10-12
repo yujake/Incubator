@@ -653,4 +653,8 @@ def test_i3_requests_are_valid_schema_rows(kn):
         assert row["request_id"].startswith("r-")
         assert S.is_valid_id(row["request_id"][2:]), "search_requests 用 r-NNNN 形态（不占用 4 位 ID 空间）"
         S.SearchRequest(**{k: v for k, v in row.items() if k in S.SearchRequest.__dataclass_fields__}).validate()
-    assert kn.rows("analysis_reports") == [], "gaps 不落报告表（要落盘必须显式 persist）"
+    # 业主 2026-10-12 裁定 CS-10 ②「直接调分析器也落库」：`gaps` 自己登记一条
+    # （改前这条断言是 `== []`，钉的是"要落盘必须显式 persist"—— 那条口径已被裁定改掉）。
+    reports = kn.rows("analysis_reports")
+    assert [r["kind"] for r in reports] == ["gaps"], (
+        f"直接调 `gaps` 就该自己登记一条 `analysis_reports`（CS-10 ②）；实到 {reports}")

@@ -31,7 +31,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "C", "hottest",
         "最热概念榜（度数中心性）",
         _obj({"top_n": {**_I, "minimum": 1}, "request": _S}),
-        "AnalysisReport（内存对象；要落库就走 `handle` 收口 —— 它 ok 时落 `analysis_reports` 一行）",
+        "AnalysisReport（**产出即登记**：ok 时自己落 `analysis_reports` 一行 —— 业主 2026-10-12 裁定 CS-10 ②「直接调分析器也落库」；`handle` 还会再收口一次，幂等）",
         side_effect="read", handler_name="hottest",
     ),
 
@@ -40,21 +40,21 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "两个概念之间的关系路径",
         _obj({"a": _S, "b": _S, "max_paths": _I, "max_len": _I,
               "max_overlap": _N, "request": _S}, ("a", "b")),
-        "AnalysisReport（落库走 `handle`）", side_effect="read", handler_name="paths",
+        "AnalysisReport（ok 时产出即登记 `analysis_reports`）", side_effect="read", handler_name="paths",
     ),
 
     ActionSpec(
         "C", "cold",
         "冷门/完全孤立概念",
         _obj({"top_n": {**_I, "minimum": 1}, "request": _S}),
-        "AnalysisReport（落库走 `handle`）", side_effect="read", handler_name="cold",
+        "AnalysisReport（ok 时产出即登记 `analysis_reports`）", side_effect="read", handler_name="cold",
     ),
 
     ActionSpec(
         "C", "gaps",
         "结构缺口候选（可显式选择是否提交检索请求）",
         _obj({"limit": {**_I, "minimum": 1}, "request": _S, "submit_requests": _B}),
-        "AnalysisReport（落库走 `handle`；`submit_requests=true` 时另把候选落成检索请求）",
+        "AnalysisReport（ok 时产出即登记 `analysis_reports`；`submit_requests=true` 时另把候选落成检索请求）",
         side_effect="read", handler_name="gaps",
     ),
 
@@ -124,7 +124,7 @@ SPEC = AgentSpec(
     brief=    AgentBrief(
         duty="关系分析：用确定性代码算图与计数，只在排序与措辞这两件事上动用模型",
         boundary=(
-            "你是只读角色：工具面全量只读（拿不到任何写工具），也不许直接向别人发请求（你的可召唤边是空的）。能落库的只有两处**登记过的例外**：`handle` 收口时写 `analysis_reports`（那是你自己产出的登记行），以及**调用方**开 `submit_requests=true` 时 `gaps` 写 `search_requests`（它带主题去重、单次上限与在途闸门）—— 知识表（文献 / 概念 / 关系）在你这里零写入点。",
+            "你是只读角色：工具面全量只读（拿不到任何写工具），也不许直接向别人发请求（你的可召唤边是空的）。能落库的只有两处**登记过的例外**：每个分析动作 ok 时收口登记 `analysis_reports`（那是你自己产出的登记行；`handle` 只是再收口一次、幂等），以及**调用方**开 `submit_requests=true` 时 `gaps` 写 `search_requests`（它带主题去重、单次上限与在途闸门）—— 知识表（文献 / 概念 / 关系）在你这里零写入点。",
             "计数、索引、图搜索、路径枚举、去重、评分、溯源全部由代码算，你不许用模型重算它们。",
             "模型的输出只能给一个排列或一个判断（值不值得研究），不许改分数、不许删路径。",
             "钩子没接线或返回坏结果时必须回退到确定性顺序，并在结论里写明这次排序的来源。",

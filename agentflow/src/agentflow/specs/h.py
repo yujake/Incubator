@@ -115,7 +115,7 @@ SPEC = AgentSpec(
             "你的裁决由机械检查给出四档：有 error ⇒ `rejected`；依赖闭合**没查** ⇒ `unverified`（不许在这个前提下判通过）；只有 warning ⇒ `accepted_with_warnings`；都没有 ⇒ `accepted`。它同时落成稿件状态：`accepted` ⇒ 稿件置 `accepted`，否则置 `in_review`；复审到轮数上限仍不通过 ⇒ `unresolved_review`。判 `accepted` 时框架会**签一条**（签名钉住那一版的内容哈希）—— 收工门的 `reviewed_current_rows` 数的就是这一档，所以「改完不复核」会让它掉下来。",
         ),
         policy=(),
-        signature_error="",
+        signature_error="把'这一轮没查出 error'说成'这份稿子没问题'（只有 warning 不等于审过了）。",
         deliverable="review_findings 行、一次审校的裁决（哪些问题拦住交付）与它落成的稿件状态（通过 ⇒ `accepted` 并签一条；不通过 ⇒ `in_review` / `unresolved_review`）。",
         stance=(
             "你只判'说清楚没有'：把不确定的话写成确定的话、把猜想写成定理、把交叉验证写成证明，这三类是你最该抓的。",

@@ -483,18 +483,27 @@ def test_handle_says_it_cannot_dispatch_when_no_keyword_matched(demo):
 
 
 def test_persist_writes_markdown_file_and_registers_report_row(demo):
-    """persist 必须双份落盘：reports/<id>-<kind>.md 文件 + analysis_reports 登记行。"""
+    """`persist` 必须双份落盘：`reports/<id>-<kind>.md` 文件 + `analysis_reports` 登记行。
+
+    批 R54（业主 2026-10-12 裁定 CS-10 ②「直接调分析器也落库」）之后：`hottest` 自己
+    已经登记了一条，所以这里显式 `persist()` 写的是第二条（显式双份落盘仍然允许；
+    `handle` 那条路靠 `report_id` 幂等，不会重复写）。两号必须不同、两条行都在表里。
+    """
     rep = AgentC(demo).hottest(top_n=3, request="统计最热门的 3 个概念")
+    sealed = rep.report_id
+    assert sealed, "分析器产出即登记（CS-10 ②）—— `hottest` 返回时就该带 report_id"
     out = rep.persist()
     rid = out["report_id"]
-    assert S.is_valid_id(rid) and out["markdown_path"] == f"reports/{rid}-hottest.md"
+    assert S.is_valid_id(rid) and rid != sealed, f"两次落盘各拿一个号：{sealed} / {rid}"
+    assert out["markdown_path"] == f"reports/{rid}-hottest.md"
 
     path = demo.root / out["markdown_path"]
     assert path.exists() and path.read_text(encoding="utf-8") == rep.markdown
     rows = demo.rows("analysis_reports")
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["report_id"] == rid and row["kind"] == "hottest"
+    assert [r["report_id"] for r in rows] == [sealed, rid], (
+        "第一条是分析器自己落的、第二条是这次显式 persist 落的")
+    row = next(r for r in rows if r["report_id"] == rid)
+    assert row["kind"] == "hottest"
     assert row["request"] == "统计最热门的 3 个概念"
     assert row["summary"] and row["payload"]["entries"]
     assert row["markdown_path"] == out["markdown_path"]

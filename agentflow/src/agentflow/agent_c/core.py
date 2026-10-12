@@ -101,6 +101,16 @@ class _Core:
             created_by=self.actor,
         )
         rep._store = self.store  # type: ignore[attr-defined]  让 report.persist() 免参数可用
+        # 产出即登记（业主 2026-10-12 裁定 CS-10 ②：「直接调分析器也落库」）。
+        # 三条守则与 `handle.py` 那三条边界同源：
+        #   ① 只有 `ok` 的报告才登记 —— 失败报告（概念解析不到、关系表为空）不是"一份分析产物"，
+        #      登记它会让 `analysis_reports` 里混进答非所问的行；
+        #   ② `kind` 必须在受控词表里（`persist()` 自己也会拒表外 kind，这里先挡一道）；
+        #   ③ 幂等：已有 `report_id` 就不再落（`handle` 那条路还会再收口一次）。
+        if ok_ and rep.kind in S.REPORT_KINDS and not getattr(rep, "report_id", None):
+            settled = rep.persist()
+            rep.report_id = str(settled.get("report_id") or "") or None
+            rep.markdown_path = str(settled.get("markdown_path") or "") or rep.markdown_path
         return rep
     def _md_head(self, kind: str, summary: str, warnings: Sequence[str]) -> list[str]:
         lines = [

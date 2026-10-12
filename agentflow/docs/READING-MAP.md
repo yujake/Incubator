@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R52），
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R54），
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **212 个 `.py`、124,044 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,791 行** —— 批 R40 把它补进了 §3 的表；
+> **212 个 `.py`、124,068 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,791 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行是 `schema.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -20,7 +20,9 @@
 > **批 R48 再改一次**：123,991 → **124,026**（`llmseam.py` 补派活那一栏的
 > `DISPATCH_NOTIFY_JSON_SCHEMA` 并挂到 `framework_summon` / `framework_summon_many`，
 > 净 +35 行）；**批 R52 再改一次**：124,026 → **124,044**（工具层改
-> `doc.paper_render` 的摘要 + `agent_prompts.py` 的纸包两处，净 +18 行）。）
+> `doc.paper_render` 的摘要 + `agent_prompts.py` 的纸包两处，净 +18 行）；
+> **批 R54 再改一次**：124,044 → **124,068**（CS-10 ② 的产出即登记 + 四处 `specs/` 的文本，
+> 净 +24 行）。）
 >
 > **它自己也有判据**：`tests/test_reading_map.py` 会断言
 > ①图里提到的每个文件名都真实存在；②`src/agentflow` 的每个模块至少在这张图里出现一次
@@ -285,7 +287,7 @@
 |---|---:|---|---|
 | `agent_d/core.py` | 1772 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1771 行；`agent_d/_support.py` 是模块级 helper 与常量，999 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
 | `agent_loop.py` | 5791 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
-| `agent_c/core.py` | 1143 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1143 行；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
+| `agent_c/core.py` | 1153 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1153 行（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 2569 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2939 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2752 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |

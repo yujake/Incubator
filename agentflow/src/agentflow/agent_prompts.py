@@ -330,7 +330,17 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: §35.2/§37.1 的口径）⇒ 对那一档是假话，而且与同一段里"main.tex 可改、该改"互相打脸。
 #: 改成脚本无关的事实：重产哪些文件由那个脚本决定、以它那行 `REPRO_RESULT` 的读数为准
 #: （产不产 `appendix.tex` / `tables/*.tex` 都看它）。纸包只发给 M/G/H ⇒ 只换三格。
-PROMPT_VERSION = "p96"
+#: `p97`（2026-10-12，批 R54：业主裁定一次裁完后的第一批落地 —— CS-10 ② / B3① / H·G 的
+#: `signature_error`；四处都落在 `specs/*`（禁改区 ⇒ 命中 `auth-audit`，按 `draft/106` §1 挂起签字））：
+#: ① CS-10 ②（`specs/c.py`）：分析动作产出即登记（`AgentC._report` 在 ok 且 kind 合法时
+#: 收口一次 `persist()`），于是四条动作摘要里那句"落库走 `handle`"改成"ok 时产出即登记
+#: `analysis_reports`"，边界那一条也同步（"能落库的只有两处登记过的例外"仍然只有两处）；
+#: ② B3①（`specs/f.py`）：政策补一条"引文对不上 / 关系表述要换读法时就提重抽取，
+#: 落进 `reprocess_requests`"（通道早已是通的，缺的只是生产者）；
+#: ③ H 的 `signature_error`（`specs/h.py`）与 ④ G 的 `signature_error`（`specs/g.py`）
+#: 各补一句（两格此前是空串 ⇒ 现在多出 `SIGNATURE_ERROR` 那一段）。
+#: 作用域：C / F / G / H 四格（C 只是摘要与边界那两句，F 是政策 +1 条，G/H 各多一段）。
+PROMPT_VERSION = "p97"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:

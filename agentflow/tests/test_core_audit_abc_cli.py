@@ -458,7 +458,9 @@ def test_cli_analyze_negative_control_success_registers_a_report(tmp_path: Path,
     out = capsys.readouterr().out
     assert rc == 0, out
     rows = st.rows("analysis_reports")
-    assert len(rows) == 1 and rows[0]["kind"] == "hottest"
+    # 业主 2026-10-12 裁定 CS-10 ②：「直接调分析器也落库」⇒ 分析器自己先落一条，
+    # `analyze` 那条命令行若再显式 persist 就是第二条 ⇒ 这里只钉"至少一条、且都是 hottest"。
+    assert rows and all(r["kind"] == "hottest" for r in rows), rows
     assert "报告已登记" in out
 
 
@@ -822,7 +824,12 @@ def test_agent_c_writes_only_analysis_reports_and_never_the_knowledge_tables(tmp
     after = {t: (st.data / S.TABLES[t]["file"]).read_bytes() for t in before}
     for table in before:
         assert before[table] == after[table], f"{table} 被 C 改动了（C 必须只读）"
-    assert len(st.rows("analysis_reports")) == 3, "它自己的产出（analysis_reports）应当照常登记"
+    rows = st.rows("analysis_reports")
+    # 批 R54（业主裁定 CS-10 ②）：分析器产出即登记 ⇒ 上面前三个调用各落一条，
+    # 后面那三个显式 `persist()` 各再落一条（显式双份落盘仍允许）。这一格钉的是
+    # "C 的产出只进 `analysis_reports`、知识表逐字节不变"，所以只钉下界与 kind 合法。
+    assert len(rows) >= 3, f"它自己的产出（analysis_reports）应当照常登记：{rows}"
+    assert all(r["kind"] in S.REPORT_KINDS for r in rows), rows
 
 
 # =========================================================================== 交叉：cli 不越权
