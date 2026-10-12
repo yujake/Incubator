@@ -578,10 +578,15 @@ def test_manifest_globs_point_at_real_files() -> None:
             )
             continue
         assert (root / rule.glob).is_file(), f"{rule.glob} 在仓库里不存在"
-    # 反真空：通配分支必须真的被走到（否则上面那半是死代码，"至少命中一个"从没被执行过）。
-    assert wildcard >= 1, (
-        "清单里一条通配行都没有 ⇒ 上面那段通配判据是死代码（判据解析出空集会无条件通过）"
-    )
+    # 反真空（2026-10-12 业主裁定 ① 之后改准）：原先要求"清单里至少有一条通配行"——
+    # 那是为了让上面那段通配分支不是死代码。裁定 ① 把 `tests/golden/*.json` 拆成四条
+    # 逐文件行（glob 条目只能存一个 sha256，四份快照里必有三份永远判 stale），
+    # "必须还有通配行"这条前提随之消失。新的反真空钉在解析出来的保护面上：
+    # 受检路径数必须够多 —— 空集/被截断的清单照样红，而不再要求某种写法的行存在
+    # （要求写法存在，就是拿判据去钉实现细节）。
+    checked = [r.glob for r in G.load_manifest() if r.glob not in DELIBERATELY_ABSENT]
+    assert len(checked) >= 30, (
+        f"清单解析出来只有 {len(checked)} 条受检路径 ⇒ 判据可能空转了（解析器坏了或被截断）")
 
 
 def test_manifest_globs_are_all_hit_by_themselves() -> None:
