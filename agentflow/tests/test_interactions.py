@@ -429,6 +429,32 @@ def test_priority_rank_unknown_falls_to_low():
     assert I.priority_rank("HIGH") == I.priority_rank("low"), "大小写不同不得被当成高优先级"
 
 
+def test_resolve_priority_folds_instance_suffixes_to_the_role():
+    """CS-15 ②+③（业主 2026-10-12 裁定）：实例后缀按角色前缀回落 —— 冒号后缀刻意不折。
+
+    真机读数（77 个工作区，`temp/_probe_submitters.py`）：`search_requests` 280 行里约
+    270 行的 `submitted_by` 是 `agent-A-A1` / `agent-A-egr` / `agent-A-topical` 这类
+    实例写法，而 `SUBMITTER_DEFAULT_PRIORITY` 的键是角色级的 ⇒ 改前逐行落到兜底 low、
+    理由串写着"陌生来源"。② 修的是机制（`agent-<R>-<实例>` 折到 `agent-<R>` 再查一次）；
+    ③ 是那句理由串（不再把框架自己的角色说成"陌生来源"）。
+    """
+    # 正控：已登记角色的实例 ⇒ 拿到角色那一档（不再是兜底 low）
+    assert I.resolve_priority("agent-C-egr")[0] == "medium"
+    assert I.resolve_priority("agent-D-A1")[0] == "medium"
+    assert I.resolve_priority("agent-B-x")[0] == "low"
+    # 冒号后缀仍走精确匹配：`agent-D:contradiction` = high，不是 `agent-D` 的 medium
+    assert I.resolve_priority("agent-D:contradiction")[0] == "high"
+    assert I.resolve_priority("agent-D")[0] == "medium"
+    # 负控一：角色自己没登记（A）⇒ 折了也还是没登记：仍 low，但理由不再说"陌生来源"
+    p, why = I.resolve_priority("agent-A-egr")
+    assert p == "low" and "未登记" in why and "陌生来源" not in why, (p, why)
+    assert "agent-A" in why, why
+    # 负控二：折出来的键不在表里 ⇒ 不许瞎猜档位
+    assert I.resolve_priority("agent-Z-egr")[0] == "low"
+    # 负控三：没有短横线的名册名不折（"D2 是不是 D 的实例"要读名册，属另一个问题）
+    assert I.resolve_priority("agent-D2")[0] == "low"
+
+
 def test_resolve_priority_table_and_fallback():
     assert I.resolve_priority("agent-D:contradiction")[0] == "high"
     assert I.resolve_priority("agent-B")[0] == "low"

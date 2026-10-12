@@ -1042,11 +1042,35 @@ def priority_rank(priority: Any) -> int:
     return S.PRIORITY_RANK.get(str(priority or ""), S.PRIORITY_RANK["low"])
 
 
+def role_key_of_submitter(submitted_by: str) -> str:
+    """把提交方折到"角色那一层"（`agent-A-egr` → `agent-A`）；折不动就原样返回。
+
+    业主 2026-10-12 裁定 CS-15 ②：**实例后缀不改变档位**。真机读数（77 个工作区）：
+    `search_requests` 280 行里约 270 行的 `submitted_by` 是 `agent-A-A1` / `agent-A-egr` /
+    `agent-A-topical` 这类实例写法，而 `SUBMITTER_DEFAULT_PRIORITY` 里的键是**角色级**的
+    ⇒ 改前逐行落到兜底 low，理由串还写着"陌生来源"（对框架自己的角色是一句错话）。
+
+    两条刻意的界：
+    - **冒号后缀不折**：`agent-D:contradiction` 靠精确匹配与 `agent-D` 分成两个键
+      （high vs medium）——折了就把这两个键并成一个，那是改设计而不是修 bug；
+    - **只折 `agent-<单段>` 这一形态**（`agent-D2` 这种没有短横线的名册名不折）：
+      "D2 是不是 D 的实例"要读名册才知道，属于另一个问题。
+    """
+    s = str(submitted_by or "")
+    if s in S.SUBMITTER_DEFAULT_PRIORITY or ":" in s:
+        return s
+    parts = s.split("-")
+    if len(parts) >= 3 and parts[0] == "agent":
+        return "-".join(parts[:2])
+    return s
+
+
 def resolve_priority(submitted_by: str, explicit: Any = None) -> tuple[str, str]:
     """定优先级。返回 ``(priority, why)``。
 
     规则：显式给出的优先（校验合法后直接用）；否则查
-    `schema.SUBMITTER_DEFAULT_PRIORITY`；再否则 ``low``。
+    `schema.SUBMITTER_DEFAULT_PRIORITY`（**先按原样精确匹配，再按 `role_key_of_submitter`
+    折到角色那一层查一次** —— CS-15 ②）；再否则 ``low``。
     **返回 ``why`` 是刻意的**：让"为什么这条排前面"在日志里可查，
     而不是一个没人知道来源的字段值。
     """
@@ -1054,12 +1078,20 @@ def resolve_priority(submitted_by: str, explicit: Any = None) -> tuple[str, str]
         p = str(explicit)
         if p in S.PRIORITIES:
             return p, f"由提交方显式指定为 {p}"
-        return S.SUBMITTER_DEFAULT_PRIORITY.get(submitted_by, "low"), (
+        return S.SUBMITTER_DEFAULT_PRIORITY.get(role_key_of_submitter(submitted_by), "low"), (
             f"提交方指定的优先级 {explicit!r} 非法（应为 {S.PRIORITIES}）⇒ 回退到默认"
         )
     if submitted_by in S.SUBMITTER_DEFAULT_PRIORITY:
         return S.SUBMITTER_DEFAULT_PRIORITY[submitted_by], f"按提交方 {submitted_by} 的默认优先级"
-    return "low", f"提交方 {submitted_by} 未登记默认优先级 ⇒ 落到 low（不让陌生来源插队）"
+    key = role_key_of_submitter(submitted_by)
+    if key != submitted_by and key in S.SUBMITTER_DEFAULT_PRIORITY:
+        return S.SUBMITTER_DEFAULT_PRIORITY[key], (
+            f"按提交方 {submitted_by} 的**角色** {key} 的默认优先级"
+            f"（实例后缀不改变档位，业主 2026-10-12 裁定 CS-15 ②）")
+    return "low", (
+        f"提交方 {submitted_by} 未登记默认优先级"
+        + (f"（按角色前缀 {key} 查过也没有）" if key != submitted_by else "")
+        + " ⇒ 落到 low（不让未登记来源插队）")
 
 
 def inflight_requests(rows: Sequence[Mapping[str, Any]]) -> list[dict]:
