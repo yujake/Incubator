@@ -31,6 +31,7 @@
 | `toolchain` | `mathlib_root` | Mathlib 工程根（同时含 `lakefile.lean` 与 `lean-toolchain` 的那个目录） |
 | `toolchain` | `coq_bin` | Coq 的 `coqc`（同上：文件或目录） |
 | `toolchain` | `isabelle_bin` | Isabelle 的 `isabelle`（同上：文件或目录） |
+| `toolchain` | `lean_enabled` | 布尔：这台机器/这一趟要不要走 Lean 形式化这条路（缺省 `true`；`false` 时全流程转"自然语言逐行审阅证明"） |
 | `model` | `api_key` | 模型 API key（落盘这件事的代价与安全阀见下面「安全阀」一节） |
 | `model` | `base_url` | OpenAI 兼容端点（缺省 `https://api.deepseek.com/v1`） |
 | `model` | `name` | 模型名（缺省 `deepseek-flash`；2026-10-10 裁定 19乙 从 `deepseek-chat` 换过来） |
@@ -103,8 +104,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 __all__ = [
+    "BOOL_KEYS",
+    "DEFAULT_LEAN_ENABLED",
     "DEFAULT_SETTINGS_REL",
+    "ENV_LEAN_ENABLED",
     "ENV_SETTINGS",
+    "LEAN_ENABLED_KEY",
     "MASKED_KEY",
     "MODEL_KEYS",
     "PROJECT_ROOT",
@@ -112,6 +117,7 @@ __all__ = [
     "WORKSPACE_KEYS",
     "WORKSPACE_ROOT",
     "env_or_setting",
+    "lean_enabled",
     "load_settings",
     "model_settings",
     "resolve_setting_path",
@@ -132,7 +138,33 @@ WORKSPACE_ROOT = PROJECT_ROOT.parent
 #: 指到别处的环境变量（优先级最高的一档，见模块 docstring）。
 ENV_SETTINGS = "AGENTFLOW_SETTINGS"
 #: `toolchain` 段认识的键（顺序即文档顺序）。
-TOOLCHAIN_KEYS: tuple[str, ...] = ("lean_bin", "mathlib_root", "coq_bin", "isabelle_bin")
+TOOLCHAIN_KEYS: tuple[str, ...] = ("lean_bin", "mathlib_root", "coq_bin", "isabelle_bin",
+                                   "lean_enabled")
+#: `toolchain` 段里那个布尔开关的键名（业主 2026-10-12 口径：机器上有没有 Lean
+#: 环境由用户设一个 bool，全流程涉及 Lean 的都要跟着它的状态走）。
+#:
+#: ## 为什么它不走 `_section` 那条"非字符串 ⇒ 空串"的路
+#:
+#: 那一条是给路径定的（写进来一个 `123` 当路径用比"当作没配"更难查）。
+#: 而这一格正经的值就是一个 JSON 布尔 `false` —— 按那条口径折成空串，
+#: 等于把用户关掉的开关又打开（而且是在机器面上看不出来的那种）。
+#: 所以它由 :func:`_bool_cell` 归一：`false` / `"false"` / `"off"` 一律 ⇒ `"false"`。
+LEAN_ENABLED_KEY = "lean_enabled"
+#: 环境变量档（优先级最高的一档，与其余键同一条梯子）。
+ENV_LEAN_ENABLED = "AGENTFLOW_LEAN_ENABLED"
+#: 缺省：`True` —— 不设它时行为与 2026-10-12 之前逐字相同。
+#:
+#: 为什么缺省是"开"而不是"按探测自动决定"：这一格的语义是许可，不是读数。
+#: 本机的探测读数（`toolchain.probe_checkers` / `formalgw.detect_backend`）本来就如实
+#: 报"没装 Lean"，那条路不需要这个开关；它要解决的是另一种情形 —— 用户明确不想让
+#: 这一趟走形式化（机器上没有 Lean / 不想装 / 不想为它花预算）。
+#: 把"探测不到"也折进这一格，会让"我关了它"与"机器上没装"在读数上长得一样。
+DEFAULT_LEAN_ENABLED = True
+#: 认得的真/假写法（大小写不敏感）。不认得的写法不静默按缺省跑（见 :func:`lean_enabled`）。
+_TRUE_WORDS: tuple[str, ...] = ("1", "true", "yes", "on", "y", "t")
+_FALSE_WORDS: tuple[str, ...] = ("0", "false", "no", "off", "n", "f")
+#: 值可能是 JSON 布尔（而不只是字符串）的那几格。
+BOOL_KEYS: tuple[str, ...] = (LEAN_ENABLED_KEY,)
 #: `model` 段认识的键（顺序即文档顺序）。
 #:
 #: `reasoning_effort` 是 2026-10-10 加的（所有者裁定逐字：「所有智能体都要能 thinking，
@@ -194,6 +226,30 @@ def load_settings(path: str | Path | None = None, *,
     return data
 
 
+def _bool_cell(key: str, value: Any) -> Any:
+    """把"可能是布尔"的那几格归一成 `"true"` / `"false"`；其余键原样返回。
+
+    - JSON 布尔 `True`/`False` ⇒ `"true"`/`"false"`（不许折成空串：空串是"没配"，
+      而"配了 false"与"没配"处置相反 —— 前者是用户关掉了形式化，后者是走缺省）；
+    - 认得的字符串写法（`true/false/yes/no/on/off/1/0/y/n/t/f`，大小写不敏感）
+      归一成同一对字面值；
+    - 认不出的字符串原样留着：读侧（:func:`lean_enabled`）要拿它报错，
+      在这里折成空串就等于把一个配置错误静默成"没配"。
+    """
+    if key not in BOOL_KEYS:
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        low = value.strip().lower()
+        if low in _TRUE_WORDS:
+            return "true"
+        if low in _FALSE_WORDS:
+            return "false"
+        return value.strip()
+    return value
+
+
 def _section(name: str, keys: tuple[str, ...], path: str | Path | None,
              env: Mapping[str, str] | None) -> dict[str, str]:
     """取一段（`toolchain` / `model`）：只认登记过的键，值统一成去空白的字符串。
@@ -202,21 +258,78 @@ def _section(name: str, keys: tuple[str, ...], path: str | Path | None,
     "非空就用"这一件事，键集合固定它们的 `.get()` 才不会有第二套默认值。
     非字符串的值（数字 / 列表）一律折成空串（=未设置）而不是 `str(value)`：
     把一个 `123` 悄悄当路径用，比"当作没配"更难查。
+    例外只有 :data:`BOOL_KEYS` 那几格：它们先过 :func:`_bool_cell`
+    （JSON 布尔是它们的正常写法，折成空串会把关掉的开关又打开）。
     """
     raw = load_settings(path, env=env)
     seg = raw.get(name)
     seg = seg if isinstance(seg, Mapping) else {}
-    return {k: (seg.get(k).strip() if isinstance(seg.get(k), str) else "") for k in keys}
+    out: dict[str, str] = {}
+    for k in keys:
+        v = _bool_cell(k, seg.get(k))
+        out[k] = v.strip() if isinstance(v, str) else ""
+    return out
 
 
 def toolchain_settings(path: str | Path | None = None, *,
                        env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """`toolchain` 段：`lean_bin` / `mathlib_root` / `coq_bin` / `isabelle_bin`（缺的补空串）。
+    """`toolchain` 段：`lean_bin` / `mathlib_root` / `coq_bin` / `isabelle_bin` /
+    `lean_enabled`（缺的补空串）。
 
-    四个键「总是在」返回里（空串 = 未设置）。调用方据此做"非空就用"，
+    键「总是在」返回里（空串 = 未设置）。调用方据此做"非空就用"，
     不需要在三个地方各写一份 `.get(key, "")`。
+    `lean_enabled` 那一格出来的是归一后的 `"true"`/`"false"`（JSON 布尔也认，
+    见 :func:`_bool_cell`）；读它请走 :func:`lean_enabled`，那一口还会判
+    "读不懂"，并把"这个值是哪一档给的"一起回传。
     """
     return _section("toolchain", TOOLCHAIN_KEYS, path, env)
+
+
+def lean_enabled(path: str | Path | None = None, *,
+                 env: Mapping[str, str] | None = None) -> tuple[bool, str]:
+    """这一趟走不走 Lean 形式化 —— 一个布尔，按唯一梯子取。返回 `(值, 来源)`。
+
+    来源取值 `"env"` / `"settings"` / `""`（= 用了缺省 `True`）——
+    与 :func:`env_or_setting` 同一条口径："这个值是用户设的还是缺省给的"
+    必须能被读出来，否则"我明明关了"与"我没设过"在读数上长得一样。
+
+    取值梯子（唯一口径，见模块 docstring）：环境变量 `AGENTFLOW_LEAN_ENABLED`
+    > 设置文件 `toolchain` 段的 `lean_enabled` > :data:`DEFAULT_LEAN_ENABLED`（`True`）。
+
+    ## 读不懂的值必须当场报错（fail-closed）
+
+    写 `"maybe"` / `2` / `"flase"` 这类值时抛 `ValueError`，不静默按缺省跑。
+    理由与 `modelgw.normalize_reasoning_effort` 逐字同族：静默按缺省跑会让
+    "我关掉了形式化"与"我以为我关掉了"在读数上分不开 —— 而这一次分不开的代价
+    是一套 proof 级证据：模型会照旧去派 `check_formal`，或者反过来，
+    用户以为形式化开着、实际全趟都没跑。
+    错误信息里回显收到的原文（它不是密钥，可以回显）。
+    """
+    src = dict(os.environ if env is None else env)
+    raw = str(src.get(ENV_LEAN_ENABLED) or "").strip()
+    if raw:
+        return _parse_switch(raw, where=f"环境变量 {ENV_LEAN_ENABLED}"), "env"
+    cell = toolchain_settings(path, env=env).get(LEAN_ENABLED_KEY) or ""
+    if cell:
+        where = f"设置文件 {DEFAULT_SETTINGS_REL} 的 toolchain.{LEAN_ENABLED_KEY}"
+        return _parse_switch(cell, where=where), "settings"
+    return DEFAULT_LEAN_ENABLED, ""
+
+
+def _parse_switch(raw: str, *, where: str) -> bool:
+    """`"true"`/`"false"`（及认得的那几种写法）⇒ 布尔；认不出 ⇒ `ValueError`。"""
+    low = str(raw).strip().lower()
+    if low in _TRUE_WORDS:
+        return True
+    if low in _FALSE_WORDS:
+        return False
+    raise ValueError(
+        f"{where} 读不懂：{raw!r} —— 只认真值 {list(_TRUE_WORDS)} 与假值 "
+        f"{list(_FALSE_WORDS)}（大小写不敏感），或者 JSON 的 true/false。"
+        "这一个值不静默按缺省跑（缺省是 true）："
+        "'我关掉了形式化'与'我以为我关掉了'分不开的代价是一整套 proof 级证据 —— "
+        "该跑的没跑，或者该停的没停"
+    )
 
 
 def model_settings(path: str | Path | None = None, *,
@@ -336,6 +449,17 @@ def _clean_write_values(values: Mapping[str, Any]) -> tuple[dict[str, dict[str, 
                             f"（只认 {list(known[section])}）")
             if raw_value is None:
                 seg[key] = ""
+            elif key in BOOL_KEYS:
+                # `lean_enabled` 是布尔键：真布尔与认得的字符串都收，
+                # 归一成 `"true"`/`"false"` 落盘（读侧两条写法都认）。
+                # 认不出的字符串在这里就拒 —— 写进去一条永远读不懂的配置，
+                # 症状是"我配了，运行的时候却报错/却按缺省跑"，那比当场拒更贵。
+                cell = _bool_cell(key, raw_value)
+                if not isinstance(cell, str) or cell not in ("true", "false", ""):
+                    return {}, (f"{section}.{key} 只认真布尔或 'true'/'false'"
+                                f"（收到 {raw_value!r}）—— 其余写法一律拒，"
+                                "免得写进一条读侧读不懂的配置")
+                seg[key] = cell
             elif isinstance(raw_value, str):
                 seg[key] = raw_value.strip()
             else:
@@ -352,8 +476,10 @@ def _masked_section(section: str, seg: Mapping[str, Any]) -> dict[str, str]:
     key 只写不读那条裁定的落点就是这一个函数（判据的负控把它改成恒等函数，
     正控必须当场红 —— 否则"不回显"这句话没有任何机器读数）。
     """
-    out = {k: (seg.get(k) if isinstance(seg.get(k), str) else "") for k in
-           dict(_write_sections()).get(section, ())}
+    out = {}
+    for k in dict(_write_sections()).get(section, ()):
+        v = _bool_cell(k, seg.get(k))
+        out[k] = v if isinstance(v, str) else ""
     if section == "model" and out.get("api_key"):
         out["api_key"] = MASKED_KEY
     return out

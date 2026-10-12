@@ -3181,6 +3181,50 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         rep.findings.append(Finding("load_bearing", "no_store", "warning",
                                     "没有 store ⇒ 承重结论没查成"))
         return
+    # ---- 开关（业主 2026-10-12）：这一格的判据整条建立在
+    # 「`method="formal"` 能产出 `evidence_kind="proof"`」之上。用户把形式化关掉时，
+    # 那条路结构上产不出 proof 行，于是这一格的红不再是"承重结论没背书"，
+    # 而是"这一格问的东西这一趟不适用" —— 三态纪律要求把这两件事分开：
+    # 记 `na` + 理由，并把替代读数（V 逐行走查过的证明行）一并给出来。
+    # 为什么不直接继续判：那会让每一个关掉 Lean 的用户都收不了工，
+    # 而红的理由又是假的（"你的定理没形式化" —— 他压根没打算形式化）。
+    from . import settings as _SET
+    from . import verifications as _VR
+
+    if not _SET.lean_enabled()[0]:
+        stmts = store.rows("statements")
+        # V 的审校不是台账表，是工作区里 `verifications/<命题号>.jsonl`
+        # （`verifications` 模块的 docstring：它唯一的产物就是那个文件）。读法只能走
+        # `VR.list_verifications` —— 那一口也是 `verify.list_verifications` /
+        # `verify.read_proof` 两个工具用的那一口；在这里再解析一遍 JSONL 会有
+        # 两个"什么算一行审校"的答案。
+        vrows, _problems = _VR.list_verifications(store.root, limit=None)
+        signed = {str(r.get("statement_id") or "") for r in vrows if _VR.signs_bit3(r)}
+        prose_reviewed = [s for s in stmts
+                          if str(s.get("proof_text") or "").strip()
+                          and str(s.get("stmt_id")) in signed]
+        #: 替代读数（这一档里"审过"的凭据）：有证明过程 且 V 逐行走查签了「成立」。
+        rep.readings["load_bearing"] = {
+            "disabled": True,
+            "reason": ("本会话的 Lean 形式化已关闭（`toolchain` 段的 `lean_enabled=false`）⇒ "
+                       "`method=\"formal\"` 产不出 proof 行，这一格的 T3 判据**不适用**；"
+                       "替代口径见 prose_reviewed_statements（V 逐行走查签「成立」的那些）"),
+            "claims_with_proof": 0,
+            "prose_reviewed_statements": len(prose_reviewed),
+            "prose_reviewed_ids": [str(s.get("stmt_id")) for s in prose_reviewed[:8]],
+            "verification_rows": len(vrows),
+            "state": "na",
+        }
+        rep.status["load_bearing"] = "na"
+        rep.findings.append(Finding(
+            "load_bearing", "lean_disabled", "info",
+            "形式化已关闭 ⇒ 承重结论的 T3 判据不适用（不是通过，也不是失败）；"
+            f"这一趟的替代凭据是 V 逐行走查过的证明行：{len(prose_reviewed)} 条"
+            "（`statements` 表的 `proof_text` 列非空 且 `verifications/<命题号>.jsonl` 里"
+            "有一行签「成立」）。要恢复 T3 判据：把设置文件 `toolchain` 段的 `lean_enabled` "
+            "改成 true（或 `AGENTFLOW_LEAN_ENABLED=1`）再跑。",
+        ))
+        return
     docs = store.rows("documents")
     exps = {str(r.get("experiment_id")): r for r in store.rows("experiments")}
     closed_exp_ids = {str(r.get("source_experiment_id"))

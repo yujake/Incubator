@@ -284,6 +284,14 @@ def _import_mathlib_probe(root: str) -> dict[str, Any]:
     """真编译一次 `import Mathlib`（按根缓存；探测自己崩了也如实报，不折成"可用"）。"""
     from . import formalgw as FG
 
+    # 开关关着时连这一次真编译都不做（它要起 `lean` 子进程，还可能跑满 180 秒）：
+    # "用户说了这一趟不走形式化"这件事必须体现成一次都不碰。
+    if not lean_enabled()[0]:
+        return {"checked": True, "verified": False, "status": "lean_disabled",
+                "reason": ("本会话的 Lean 形式化已关闭（toolchain.lean_enabled=false 或 "
+                           "AGENTFLOW_LEAN_ENABLED=0）⇒ 不跑 Mathlib 探针："
+                           "这是「没查」不是「不可用」"),
+                "missing_imports": [], "elapsed_sec": None, "exit_code": None}
     try:
         res = FG.check_lean(_IMPORT_MATHLIB_PROBE_SRC, name="agentflow_mathlib_probe",
                             timeout_sec=180)
@@ -306,6 +314,11 @@ def _import_mathlib_probe(root: str) -> dict[str, Any]:
 
 def _measured_mathlib_verdict(probe: Mapping[str, Any]) -> str:
     """把探针读数变成一句人话（三态：可用 / 不可用 / 没查成）。"""
+    if str(probe.get("status") or "") == "lean_disabled":
+        # 开关关着时没有探：这一档必须与"探了、编译失败"分开说 ——
+        # 后者会让人去查 junction / 缺包（一条真实的排障路），而这一次该看的是开关。
+        return (f"没查（{probe.get('reason') or '本会话形式化已关闭'}）—— "
+                "这不是「Mathlib 坏了」，也不是「没装」")
     if probe.get("verified"):
         secs = probe.get("elapsed_sec")
         return ("可用（**实测**：真的编译了一次 `import Mathlib` + `norm_num`"
@@ -380,6 +393,24 @@ def mathlib_state(env: Mapping[str, str] | None = None) -> dict[str, Any]:
             }
 
 
+def lean_enabled(env: Mapping[str, str] | None = None) -> tuple[bool, str]:
+    """这一趟要不要走 Lean 形式化（业主 2026-10-12 的开关）。返回 `(值, 来源)`。
+
+    实现在 `settings.lean_enabled`（取值梯子只有一处：环境变量
+    `AGENTFLOW_LEAN_ENABLED` > 设置文件 `toolchain.lean_enabled` > 缺省 `True`）。
+    本函数只是把它接到工具链这一层的读面上 —— 于是"模型看得见的 TOOLCHAIN_FACTS"、
+    `agentflow doctor`、`formalgw.check_lean` 三处读的是同一个答案，
+    不存在"一处说关着一处说开着"。
+    """
+    return SET.lean_enabled(env=env)
+
+
+def formal_mode(env: Mapping[str, str] | None = None) -> str:
+    """这一趟的证明路线：`"formal"`（默认）或 `"prose_review"`（开关关掉时）。"""
+    enabled, _ = lean_enabled(env)
+    return "formal" if enabled else "prose_review"
+
+
 def _model_spec(env: Mapping[str, str] | None = None) -> Any:
     """模型那一格的读数（取值口仍是 `modelgw.spec_from_env`，口径只有一处）。
 
@@ -407,12 +438,22 @@ def toolchain_report(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     spec = _model_spec(env)
     probe = probe_checkers(env)
     lean = next((r for r in probe["available"] if r["name"] == "lean"), None)
+    enabled, enabled_src = lean_enabled(env)
     return {
         "model": {"key_present": bool(spec.api_key),
                   "base_url": spec.base_url,
                   "model": spec.model},
         "provers": probe,
+        #: 用户设的那个开关（业主 2026-10-12）：`False` ⇒ 全流程不做 Lean 形式化。
+        #: 它与下面 `lean_ready`（探测读数）是两条独立的事实：
+        #: "机器上装了 Lean"不等于"这一趟允许用它"，反过来"关掉了"也不等于"没装"。
+        #: 折叠这两件事的症状是：关掉开关的用户被报成"环境里没有检查器"，
+        #: 于是他会去查环境，而真正该看的是设置文件。
+        "lean_enabled": enabled,
+        "lean_enabled_source": enabled_src,
+        "formal_mode": formal_mode(env),
         "lean_ready": bool(lean),
+        "can_do_formal": bool(lean) and enabled,
         "lean_path": (lean or {}).get("path", ""),
         "lean_version": (lean or {}).get("version", ""),
         "mathlib": mathlib_state(env),

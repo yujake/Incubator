@@ -94,6 +94,29 @@ class _RunExperiment:
                 "静默忽略会让调用方以为自己指定了检查条件（说明了 imports，实际用的是默认值）"
             )
 
+        # ---- [0] 开关（业主 2026-10-12）：`toolchain.lean_enabled=false` 时
+        # 形式化这条路整条不走 —— 在跑脚本之前就拒，理由与上面 R-01 那一段同族
+        # （形式化实验的产物是一份 `.lean`，它跑起来要起检查器；既然这条路关着，
+        # 连脚本都不该被跑）。
+        #
+        # 为什么在这里拒，而不是只靠 `formalgw.check_lean` 那一层兜：
+        # 那一层拒的是"编译"这一步，而这里拒的是"登记一条 method='formal' 的实验"
+        # 这件事本身。只靠下游兜的表现是：台账里多一条 inconclusive 的 formal 行、
+        # 模型多花一步、而用户看到的是"实验失败"而不是"这条路我关了"。
+        # 三态纪律：拒绝要可行动 —— 消息里既说清是哪个开关，也说清替代路线。
+        if method == "formal":
+            from .. import settings as SET
+
+            if not SET.lean_enabled()[0]:
+                raise ExperimentError(
+                    "本会话的 Lean 形式化已关闭（`toolchain.lean_enabled=false` 或 "
+                    "`AGENTFLOW_LEAN_ENABLED=0`）⇒ 不登记 method='formal' 的实验，"
+                    "也不起检查器。改走自然语言证明审阅这条路：把证明过程写进 "
+                    "`statements` 的 `proof_text`，再请 V 用 `verify.verify_proof` 逐行走查"
+                    "（它的结论进 `verifications` 表，是这条路唯一的'审过'凭据）；"
+                    "确需形式化时把设置文件里的 `toolchain.lean_enabled` 改成 true 再重来"
+                )
+
         # ---- R-01（`draft/44`）：这四条不用跑脚本就能判 ⇒ 在起子进程之前判掉。
         #
         # 真机读数：52 次失败 / 110.7 分钟 / 0 行 —— 脚本先跑完（有的跑十分钟），

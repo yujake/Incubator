@@ -1214,7 +1214,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("MachineView",
      "machine_face() —— toolchain.toolchain_report() 的键 + 设置三段",
      (("tri", "Tri"), ("reason", "string"), ("model", "Record<string, unknown>"),
-      ("provers", "Record<string, unknown>"), ("lean_ready", "boolean | null"),
+      ("provers", "Record<string, unknown>"),
+      # 业主 2026-10-12 的开关（`toolchain.lean_enabled`）：与 `lean_ready`（机器上有
+      # 没有装）是两条独立的事实 —— 台面必须两条都看得见，否则"关掉了"会被读成"没装"。
+      ("lean_enabled", "boolean"), ("lean_enabled_source", "string"),
+      ("formal_mode", "string"),
+      ("lean_ready", "boolean | null"),
       ("lean_path", "string"), ("lean_version", "string"),
       ("mathlib", "Record<string, unknown>"), ("can_do_formal", "boolean | null"),
       ("settings", "SettingsReading"), ("settings_tri", "Tri"),

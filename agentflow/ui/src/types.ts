@@ -305,6 +305,9 @@ export interface MachineView {
   reason: string;
   model: Record<string, unknown>;
   provers: Record<string, unknown>;
+  lean_enabled: boolean;
+  lean_enabled_source: string;
+  formal_mode: string;
   lean_ready: boolean | null;
   lean_path: string;
   lean_version: string;

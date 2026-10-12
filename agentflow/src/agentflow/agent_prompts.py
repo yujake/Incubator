@@ -350,7 +350,19 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 对 G/H 只留"这不是你的活"+ 两条与它们有关的事实 + 无人值守那一条（判据点名要它在场）；
 #: ③ `PAPER_04` 的「工作循环」补半句事实边界（"这一步只有 G 跑得动"）。
 #: 作用域：纸包只发给 M/G/H ⇒ M 与 G/H 都换（G/H 换得更多）。
-PROMPT_VERSION = "p98"
+#: `p99`（2026-10-12，业主口径：「由于某些用户没有 Lean 环境，再设计一个模式，
+#: 在全程不做 Lean 形式化的情况下尽可能用审阅自然语言证明的方式推进论文审阅或课题研究。
+#: 至于有没有 Lean 环境，这做一个 bool 值让用户设置。全流程涉及 Lean 的都要跟进这个开关的状态」）：
+#: ① `TOOLCHAIN_FACTS`（`toolchain_facts_text`）开关关掉时先报"形式化已关闭"，
+#:    机器事实降级成"背景读数（不改变处置）"；
+#: ② `TOOLCHAIN_FORMAL`（`toolchain_formal_text`）在关掉时不再讲"怎么写 Lean"，
+#:    改讲"这一步该交什么"：`statements` 表的 `proof_text` 列 + 派 V 的 `verify_proof` +
+#:    结论强度上限（`proof` 产不出来）；
+#: ③ 纸包六的"核验证明分两步"补一段：TOOLCHAIN_FACTS 第一行说已关闭时，
+#:    那两步整条不适用，改走自然语言逐行审阅。
+#: 开关本体：`settings` 的 `toolchain` 段 `lean_enabled`（环境变量 `AGENTFLOW_LEAN_ENABLED`），
+#: 缺省 true —— 不设它时这三段文本与 p98 逐字相同。
+PROMPT_VERSION = "p99"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -1169,6 +1181,17 @@ PAPER_PACK = """\
      它把 `experiments` 的 proof 行写进去（带 `proof_location` 与检查器原话），
      `documents` 的断言才引用得到 `exp:<id>`（FC-22 的硬要求）。
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
+- **但先看 TOOLCHAIN_FACTS 的第一行**（业主 2026-10-12 的开关）：那一行说
+  **「Lean 形式化：已关闭」**时，上面两步**整条不适用** —— 这一趟不要写 Lean 源码、
+  不要派 `check_formal`、也不要落 `method='formal'`；`evidence_kind='proof'` 这一档
+  本会话**产不出来**，所以正文与交付里都不许出现"已形式化验证/已证明"这类词。
+  这条路换成**自然语言逐行审阅**，交付形状是：
+  1. 证明过程逐字进 `statements` 的 `proof_text`（含假设、每一步依据、你接不上的那一步）；
+  2. 派 V 的 `verify_proof`（命题号 + 证明全文）逐行走查，结论落 `verifications` 表 ——
+     这是本会话**唯一**的"审过"凭据（收工门与 H 的采信都改看它）；
+  3. 审阅报告里逐条写清：哪几步站得住、哪几步是缺口、缺口缺的是哪一类依据。
+  检查器那一步若仍被调用，它会如实回 `lean_disabled`（那是"用户关掉了这条路"，
+  不是"机器上没有 Lean"，也不是"证明没过"）—— 见到它**别再重试**，改走上面三步。
 
 七、摄取与派活的三条纪律（2026-10-03 加，`draft/37` §48 的真机读数逼出来的）
 
@@ -1809,14 +1832,37 @@ def _toolchain_readings() -> tuple[Mapping[str, Any], Mapping[str, Any]] | None:
         return None
 
 
+@lru_cache(maxsize=1)
+def _lean_switch() -> tuple[bool, str]:
+    """用户设的那个开关（`toolchain` 段的 `lean_enabled`）：`(能不能走形式化, 来源)`。
+
+    与 `_toolchain_readings` 分开缓存：那一条算的是机器事实（装没装、库能不能
+    import，可能要真编译一次、180 秒超时），而这一条读的是用户许可
+    （一个布尔，读设置文件即可）。合成一条会让"改一下开关"变成"重新真编译一次 Mathlib"。
+
+    读数读不懂时（`settings.lean_enabled` 对词表外的值抛 `ValueError`）
+    不让它把提示词渲染炸掉：这里折成"按缺省 true 走，并在文案里点名这件事" ——
+    一个设置文件写错的用户仍然应该拿到一份能跑的提示词，而"读不懂"这件事
+    由 `agentflow doctor` 与 `toolchain_report` 如实报出来（那两处不吞异常）。
+    """
+    from . import settings as SET
+
+    try:
+        return SET.lean_enabled()
+    except ValueError:
+        return True, "unreadable"
+
+
 def reset_toolchain_readings() -> None:
-    """把这一轴的缓存一起清掉（读数 + 两段文案）。
+    """把这一轴的缓存一起清掉（读数 + 开关 + 两段文案）。
 
     为什么要有这么一个函数：只清文案缓存会留着旧读数（两段文案都从
-    `_toolchain_readings` 取），于是判据会对着换过的探针给出旧结论 —— 那种红/绿都不可信。
-    判据与探针用它复位（原先直接调 `toolchain_facts_text.cache_clear()`，那只清了一层）。
+    `_toolchain_readings` / `_lean_switch` 取），于是判据会对着换过的探针给出旧结论 ——
+    那种红/绿都不可信。判据与探针用它复位（原先直接调 `toolchain_facts_text.cache_clear()`，
+    那只清了一层）。
     """
     _toolchain_readings.cache_clear()
+    _lean_switch.cache_clear()
     toolchain_facts_text.cache_clear()
     toolchain_formal_text.cache_clear()
 
@@ -1847,6 +1893,40 @@ def toolchain_facts_text() -> str:
     这里只负责"没传时也要诚实"。
     """
     got = _toolchain_readings()
+    enabled, switch_src = _lean_switch()
+    if not enabled:
+        # 业主 2026-10-12 的开关（`lean_enabled=false`（`toolchain` 段））：这一段必须
+        # 先说他关掉了这条路，再报机器事实。顺序是刻意的 ——
+        # 机器事实（"有 Lean 吗、Mathlib 能不能 import"）在这一档里不再是
+        # 行动依据：用户已经说了这一趟不走形式化。把机器事实摆在前面，
+        # 模型会照着它去派 `check_formal`（真实机读数：T1 前几趟就是这么烧掉的）。
+        from . import settings as SET
+
+        where = {"env": f"环境变量 {SET.ENV_LEAN_ENABLED}",
+                 "settings": f"设置文件 toolchain 段的 {SET.LEAN_ENABLED_KEY}",
+                 "unreadable": (f"设置文件 toolchain 段的 {SET.LEAN_ENABLED_KEY}"
+                                "（值读不懂，按缺省 true 走）"),
+                 }.get(switch_src, "内置缺省")
+        lines = [
+            "这台机器上的证明工具链（现算读数，不是记忆）：",
+            f"- Lean 形式化：**已关闭**（{where} = false）⇒ 这一趟**不要**写 Lean 源码、"
+            "不要派 `verify.check_formal`、也不要落 `method=\"formal\"` 的实验；"
+            "关掉的是这条路，不是「这台机器做不到」",
+            "- 替代路线（这条路上唯一的「审过」凭据）：把证明过程写进 `statements` 的 "
+            "`proof_text`，再请 V 用 `verify.verify_proof` 逐行走查 —— 结论进 "
+            "`verifications` 表；`evidence_kind=\"proof\"` 这一档本会话**产不出来**，"
+            "任何断言都不许写成已证明",
+        ]
+        if got is not None:
+            probe, mathlib = got
+            # 机器事实降级成"背景读数"：它不再决定做什么，但读的人有权知道。
+            lines.append(
+                "- 背景读数（下面这些**不改变上面的处置**）：检查器 "
+                + ("有" if probe.get("available") else "没有（或没查成）")
+                + "；Mathlib " + str(mathlib.get("import_mathlib_measured")
+                                     or mathlib.get("import_mathlib") or "没读到"))
+        return "\n".join(lines)
+
     if got is None:
         return ("这台机器上的证明工具链：没查成 —— 探测本身失败了"
                 " ⇒ 不知道环境里有没有检查器（先让框架跑一次 `agentflow doctor`）")
@@ -1912,6 +1992,23 @@ def toolchain_formal_text() -> str:
     （重抄就是第二份副本）。这里只回答散文回答不了的那一问：这一次按读数该走哪条。
     """
     got = _toolchain_readings()
+    enabled, _src = _lean_switch()
+    if not enabled:
+        # 开关关掉时，这一段的主题从"怎么写 Lean"换成"这一步该交什么"。
+        # 为什么不是"留一段说'本机做不到'"：那是环境口径，而这一档是用户许可口径；
+        # 而且"这条路关了"必须配一条可走的路，否则模型会去反复重试一个必然被拒的动作
+        # （真机读数：T1 第 3 趟 8 次 check_formal 全撞在同一件事上）。
+        return ("你这一岗怎么写形式化（由上面那份读数现算；读数是这一刻的，变了它跟着变）：\n"
+                "- 本会话 Lean 形式化**已关闭**（`lean_enabled=false`（`toolchain` 段））⇒ "
+                "这一趟的证明审阅走**自然语言逐行**那条路，交付形状是：\n"
+                "  1. 把证明过程逐字写进 `statements` 的 `proof_text`"
+                "（含假设、每一步的依据、以及你没能接上的那一步）；\n"
+                "  2. 派 V（`summon` 它的 `verify.verify_proof`，交命题号 + 证明全文）逐行走查 —— "
+                "它的三态结论落 `verifications/<命题号>.jsonl`，这是本会话**唯一**的「审过」凭据；\n"
+                "  3. 结论强度：`evidence_kind=\"proof\"` 产不出来 ⇒ 断言最高只能到"
+                "「cross_check / heuristic」，正文里不许出现「已形式化验证」这类词；\n"
+                "  4. 检查器状态那一栏会如实报 `lean_disabled`（不是 `no_backend`："
+                "前者是用户关掉了这条路，后者是机器上没装）—— 见到它别再重试，改走上面三步")
     if got is None:
         return _NO_TOOLCHAIN_FORMAL
     probe, mathlib = got

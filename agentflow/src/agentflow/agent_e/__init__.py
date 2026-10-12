@@ -69,15 +69,19 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
    `decl_mismatch`）⇒ `inconclusive` + `heuristic`：它给不出任何正面证据，
    所以不许落 `cross_check`（那是"另一个方法旁证过"，见 `formalgw.evidence_of`）；
 3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /
-   `source_unreadable` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。
+   `source_unreadable` / `lean_disabled` / `param_error`）⇒ 同上，且 `notes` 里写明是哪一种。
    其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`
-   （`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` / `param_error`）
+   （`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
+   `lean_disabled` / `param_error`）
    —— 上面这一行必须覆盖它，导入期断言与 `tests/test_agent_e.py` 各守一遍。
    为什么必须机器守：这里此前只有四项（少了 `source_unreadable` 与 `param_error`），
    而没有任何一条测试会因此变红（`R2-AN-3`），于是同一文件里
    docstring 与常量互相矛盾。`import_unavailable` 不在那张常量表里：
    它是 `formalgw` 的检查器状态（库不可得 ⇒ 那次检查没有发生），
    见 `FORMAL_REASONS` 与 `_FORMAL_REASON_BY_TOOL_REASON`。
+   `lean_disabled`（业主 2026-10-12 的开关：`toolchain.lean_enabled=false`）
+   在那张表里：它是"本会话这条路被用户关掉了"，与"机器上没有 Lean"
+   （`no_backend`）是两件事 —— 混起来的代价是让人去查环境，而该看的是设置文件。
    三态纪律：没查成绝不等于查了通过。
 4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
    形式化路径的输入是一份检查器能读的形式化源码，"用 Python 脚本冒充形式化产物"
@@ -93,12 +97,12 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
   给了参数但库里没有 ⇒ `checked=True, experiments=[], proved=False`（查了、没有）。
 - `check_formal` 无后端 ⇒ `checked=False, reason="no_backend"`，
   不是 `verified=False`（那是"验证没过"，与"没验证"完全不同）。
-  受控理由至少要分清四种：`no_backend` / `timeout` / `tool_crashed` /
+  受控理由至少要分清六种：`no_backend` / `timeout` / `tool_crashed` /
   `source_unreadable`（环境的锅，本次没查成 —— 最后那一档是"`script_path`
-  给的源码文件读不到"，`E-3`）与 `no_script`（调用方没给源码 —— 有后端时
-  也会走到这一态，它不是"本机没有检查器"）。把"没查成"的判据写成
-  `checked is False` 就会把后两者折叠成前者。
-  这五种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，
+  给的源码文件读不到"，`E-3`）、`lean_disabled`（用户把这条路关掉了）与
+  `no_script`（调用方没给源码 —— 有后端时也会走到这一态，它不是"本机没有检查器"）。
+  把"没查成"的判据写成 `checked is False` 就会把这几档全部折叠成第一档。
+  这六种理由都属于本模块的局部受控词表 :data:`FORMAL_REASONS`，
   而检查器原样报的那个状态另走 `verifier_status`（见 :meth:`AgentE.check_formal`
   的 docstring：收口与透传必须同时在，否则收口就是删信息）。
 - `proved` 只有在存在 proof 级实验时才为 True（FC-22）。

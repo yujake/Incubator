@@ -314,6 +314,35 @@ def check_formal(
     会把"执行调用方给的程序"这件事从第二根轴上抹掉，回到"两根轴压成一档"的老形态。
     `.noai-paths` 给这个文件的登记理由逐字是"桥接层说谎 ⇒ proof 级证据是假的"。
     """
+    # ---- 开关（业主 2026-10-12，`toolchain` 段的 `lean_enabled`）：用户把这条路关掉时，
+    # 判据是**那个开关**，不是"环境里有没有检查器" —— 所以这一步必须排在探测**之前**：
+    # ① 关掉时连探测都不做（探测会起 `lean --version` 子进程）；
+    # ② 理由码必须报 `lean_disabled`（"用户关掉了"），不许报 `no_backend`
+    #    （"机器上没有"）—— 两者处置相反：前者去改设置文件，后者去装工具链。
+    # 这一条与 `formalgw.check_lean` 里那一道是同一个判据的两层：
+    # 那一层保证"编译不会发生"，这一层保证"**用户看到的理由**是开关"。
+    from .. import settings as _SET
+
+    if not _SET.lean_enabled()[0]:
+        return ok(
+            {
+                "checked": False,
+                "verified": None,
+                "claim": claim,
+                "reason": "lean_disabled",
+                "detail": (
+                    "本会话的 Lean 形式化已关闭（设置文件 `toolchain` 段的 `lean_enabled=false` "
+                    "或环境变量 `AGENTFLOW_LEAN_ENABLED=0`）⇒ 没有起过检查器：这一次是"
+                    "「用户关掉了这条路」，不是「环境里没有 Lean」、也不是「证明没过」。"
+                    "处置：改走自然语言逐行审阅（模型按 `statements` 表的 `proof_text` 列逐行读，"
+                    "V 的 `verify.verify_proof` 签字），或把那个开关改成 true 之后重来"
+                ),
+                "verifier_output": "",
+                "missing_imports": [],
+                "verifier_status": "lean_disabled",
+                "exit_code": None,
+            }
+        )
     det = detect_verifier()
     if not det["available"]:
         # `E-4`：`available` 与 `checked` 是两条独立的事实（见 `detect_verifier`

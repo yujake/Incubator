@@ -135,6 +135,11 @@ STATUSES: tuple[str, ...] = (
     "no_backend",
     "tool_crashed",
     "source_unreadable",
+    #: 用户把这条路关掉了（`settings.json` 的 `toolchain.lean_enabled=false`，
+    #: 或环境变量 `AGENTFLOW_LEAN_ENABLED=0`；业主 2026-10-12 口径）。
+    #: 它是"没查成"这一组（`evidence_of` ⇒ `checked=False`），
+    #: 而不是"查了没通过" —— 后者读起来像一个数学结论，会污染台账。
+    "lean_disabled",
 )
 
 #: 唯一允许的"证明通过"结论。
@@ -1168,12 +1173,15 @@ def evidence_of(result: Mapping[str, Any]) -> dict:
       为什么不是 `cross_check`：那是"另一个方法旁证过"，而这里"没通过"给不出旁证；
       把它写成 `cross_check` 会让"检查失败"变成一条正面证据。
     - `timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /
-      `source_unreadable` ⇒ `checked=False`（没查成）。
+      `source_unreadable` / `lean_disabled` ⇒ `checked=False`（没查成）。
       `import_unavailable` 在这里而不是在"跑了但没通过"那一组：
       库没装时编译根本没开始，那次检查没有发生 —— 把它读成"查了没通过"
       等于把一次环境配置问题说成一个数学结论。
       `source_unreadable`（`E-3`）同理：`source_path` 读不到时连"文件里有没有
       那条声明"都没判过，`checked=True` 会把一次路径写错说成"查了、命题不成立"。
+      `lean_disabled`（业主 2026-10-12 的开关）同理，而且更硬：用户关掉这条路时
+      连检查器都没起过进程 —— 这一格必须读成"没查成"，否则一套 proof 级证据
+      会从"被关掉的形式化"里凭空长出来。
     """
     status = str(result.get("status") or "")
     concluded = status in _CONCLUDED_STATUSES
@@ -1320,6 +1328,34 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
         "evidence": {},
     }
     result["source_path"] = str(source_path) if source_path is not None and source == "" else ""
+
+    # ---- 开关：用户可以用 `toolchain.lean_enabled=false` 明确关掉这条路
+    # （业主 2026-10-12：「有没有 Lean 环境做一个 bool 让用户设置，全流程涉及 Lean 的
+    # 都要跟进这个开关的状态」）。
+    #
+    # 三条刻意的做法：
+    # 1. 连探测都不做：关掉时不起任何子进程（`detect_backend` 会跑 `lean --version`）
+    #    —— "关掉了"这件事必须是一次都不碰，而不是"碰了但不用结果"；
+    # 2. 状态进受控词表（`lean_disabled`），落在"没查成"那一组 ⇒
+    #    `evidence_of` 给 `checked=False`、`evidence_kind=None`。它绝不进
+    #    `_CONCLUDED_STATUSES`：那会让"没启用"读成"查过了、命题不成立"；
+    # 3. 理由里写清"这是谁关的、怎么打开"，因为读到这一条的多半是模型
+    #    （它会照这句话决定改走哪条路：自然语言逐行审阅，而不是反复重试）。
+    from . import settings as SET
+
+    enabled, source = SET.lean_enabled()
+    if not enabled:
+        origin = {"env": f"环境变量 {SET.ENV_LEAN_ENABLED}",
+                  "settings": f"设置文件 toolchain.{SET.LEAN_ENABLED_KEY}",
+                  "": "内置缺省"}.get(source, source or "内置缺省")
+        return _conclude(
+            result, "lean_disabled",
+            f"本会话的 Lean 形式化已关闭（{origin} = false）⇒ 没有起过检查器，"
+            "这一次不是'环境里没有 Lean'、也不是'证明没过'，而是'这条路被关掉了'。"
+            "处置：改走自然语言逐行证明审阅（V 的 verify_proof / H 的复核），"
+            "或在设置文件里把 toolchain.lean_enabled 改成 true（环境变量 "
+            f"{SET.ENV_LEAN_ENABLED}=1 亦可）之后重来",
+        )
 
     version = ""
     exe = BACKEND_NAME

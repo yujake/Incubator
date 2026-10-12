@@ -965,15 +965,21 @@ def test_docstring_guard_negative_control_four_item_version_goes_red():
     assert injected != current, "注入没有生效（文本没变）"
     # 指纹②：改前那一段确实是"四项"（与 §40.3 的 C1 读数一致）
     before_found = AE._docstring_not_checked_reasons(injected)
-    assert {"source_unreadable", "param_error"} - before_found == {"source_unreadable",
-                                                                  "param_error"}
-    # 判据红了：缺的正是那两项
-    assert set(AE._NOT_CHECKED_REASONS) - before_found == {"source_unreadable", "param_error"}
+    missing_before = set(AE._NOT_CHECKED_REASONS) - before_found
+    # 判据红了：`R2-AN-3` 那两项必须缺（这是这条负控的靶子）。
+    # 2026-10-12 起断言从"等于那两项"改成"包含那两项"：受控词表后来又加了
+    # `lean_disabled`（业主的 Lean 开关），历史文本当然也缺它 ——
+    # 把等式写死会让一条负控自己因为"词表长大"而变红，
+    # 而它要证明的性质（缺项必红）一点没变。
+    assert {"source_unreadable", "param_error"} <= missing_before, missing_before
+    assert missing_before, "历史那一段竟然覆盖了全部理由 ⇒ 这条负控是空的"
 
-    # 同一判据的"必然通过"一侧：把清单补全 ⇒ 判据不红（证明红的来源是缺项而不是文本损坏）
+    # 同一判据的"必然通过"一侧：把清单补全 ⇒ 判据不红（证明红的来源是缺项而不是文本损坏）。
+    # 清单现算自 `_NOT_CHECKED_REASONS`，不再手抄那五项：2026-10-12 加
+    # `lean_disabled` 那一档时，这一侧的夹具因为抄死在文本里而当场变红 ——
+    # 一条"必然通过"的负控自己过期，等于这条判据白守（手抄清单是同一个病的两种形态）。
     fixed = _swap_docstring_item3(
         current,
-        "3. 没查成（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` / "
-        "`param_error`）⇒ 同上。\n",
+        "3. 没查成（" + " / ".join(f"`{r}`" for r in AE._NOT_CHECKED_REASONS) + "）⇒ 同上。\n",
     )
     assert AE._docstring_not_checked_reasons(fixed) >= set(AE._NOT_CHECKED_REASONS)

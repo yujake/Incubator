@@ -2238,18 +2238,29 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `local_notes['敢创新']` 与政策第 2 条的表面矛盾。
 #: 作用域读数：B / C / D / F / M 五格换值（C 自己那格 17,901 → 18,383 字、段数 66
 #: 不变；另外四格恰好是能唤 C 的四个角色，各 +304 字 —— 伙伴表里逐条渲染它的动作摘要）。
-_FROZEN_PROMPT_VERSION = "p98"
+#: `p99`（2026-10-12，业主口径：Lean 环境做成一个 bool 开关，全流程跟着它的状态走）：
+#: 三处一起改 —— ① 纸包六的"核验证明分两步"补"先看 TOOLCHAIN_FACTS 第一行"的开关分支；
+#: ② `specs/e.py` 的 Mathlib 政策前加开关分支（关闭时不写 Lean，改走
+#: `statements` 表的 `proof_text` 列 + V 的 `verify_proof`）；③ `specs/h.py` 的采信规则
+#: 补一档例外（关闭时第二条背书换成"V 逐行走查过"）；④ `specs/m.py` 的形式化政策与
+#: 「算或造」验收档各补一句（`proof_experiment_rows` 必然 0 ⇒ 写 `na` + 换
+#: `reviewed_proof_rows`）。
+#: 作用域读数：A–D 与 V 逐字未动；E / G / H / M 四格换值（E 自己那格的声明政策变了，
+#: G/H/M 拿到的是纸包那一句）。另外两段随开关现算的文本（`TOOLCHAIN_FACTS` /
+#: `TOOLCHAIN_FORMAL`）不进这张表 —— 它们由调用方传入（`_SURFACE_FIXTURE_*`），
+#: 开关那两条判据在 `tests/test_lean_switch.py` 里单独守。
+_FROZEN_PROMPT_VERSION = "p99"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "1136cd1c3cc3b44186447cdecd9c4cb93a865c41b724765a41b17d7e7b18c3db",
     "B": "181e81bd0acebc0f7bd24d09b3495d95405fbdeed8ee97f9986bdb898f940a5c",
     "C": "0db1c148033a1e57a00cd6c51e4f74bfe5a2171a2cd67397ea5a7a8a86e2b5fe",
     "D": "6f1788f41dcd54c60dd00ca229ad61cc4dfc9e2cbd69f1e22703b0ad04f18c95",
-    "E": "65c6e6a047df3af559d09a37b4df78f1b7b968e571bc8b80425d0d75bf6a69b5",
+    "E": "7290c97c9875432595b037332060b35b972b84721968a90635a1d026085fb0e5",
     "F": "c68a82f083e6e7e464b0340a44e2bc1432538cec95710c6a930f735bbdcc01e4",
-    "G": "bae081d6343510e3cb10dc17b8c253606f150bf309d408bc8cdcc7eeda43f06f",
-    "H": "70453c1278a7eb0b73621b6894c7fda79afa6f4ef8f87444c51bec407d32a619",
+    "G": "aec9c5b589605d985362c7a27d669347b049386593f3539309c8432639fa5864",
+    "H": "7775a05c5ba55b5b0054d77694f2a3e7e8d63f790c44cae02c01ecb29726f45e",
     "V": "02f14a2aed20f4bfc32b035f78928d4c46fb8a0195b4bcf510e406b56d7782f7",
-    "M": "caca552c89b56589c857d971f828244a7b24b1e2c54561afc17da5337949635f",
+    "M": "665a4e560caf61fc7b2436b8acca1b028e7d089034d51c62381df310686598cd",
 }
 
 
