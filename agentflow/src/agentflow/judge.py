@@ -13,6 +13,12 @@
 
 - `judge_not_wired`：没接线（`llm is None`）。这是"没查成"，不是"没有这个结论"。
 - `judge_timeout`：超时。可以重试，但重试策略在调用方（受预算约束）。
+  两条路都归它：缝抛 `TimeoutError`（走 `_problem_of`），或网关不抛、只回了
+  `ok=False`/`error_kind="timeout"`（走 `problem_of_reply`）。
+- `judge_output_limit`：输出预算被思考吃光（`finish_reason=length` + 正文为空 +
+  思维链非空；2026-10-12 T2 真机读数 109,397 字思维链 / `max_tokens=32768`）。
+  它与 `judge_timeout` 同族（都是"我们没拿到可用的回复"，不是"它说错了"），
+  处置却不同：这一档要的是"把这一步拆小、把思考压短"，不是重发同一个请求。
 - `judge_bad_json`：返回的不是合法 JSON（LLM 的输出形态不可控）。
 - `judge_over_budget`：预算耗尽（由调用方抛 `BudgetExhausted`，或由计量层拒绝）。
 - `judge_refused`：判定方明确拒绝（由调用方抛 `JudgeRefused`）。
@@ -38,6 +44,8 @@ from .llm import parse_llm_json
 JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_not_wired",
     "judge_timeout",
+    # `judge_output_limit`（2026-10-12 加）：输出预算被思考吃光 —— 见模块 docstring 那一行。
+    "judge_output_limit",
     "judge_bad_json",
     "judge_bad_args",
     "judge_over_budget",
@@ -91,6 +99,35 @@ def _problem_of(exc: BaseException) -> str:
     if isinstance(exc, TimeoutError):
         return "judge_timeout"
     return f"judge_failed:{type(exc).__name__}"
+
+
+def problem_of_reply(reply: Any) -> str:
+    """网关的一次结局对象（不是异常）→ 本层的失败码；成功给空串。
+
+    为什么要有它：同一个"没查成"有两条路进本层，而它们此前给了两个码 ——
+    抛异常那条走 `_problem_of`（`TimeoutError` ⇒ `judge_timeout`），
+    不抛那条在 `llmseam` 里写死成 `judge_failed:ModelReplyNotOk`。
+    后者不是罕见路径：`modelgw.ModelGateway.complete` 从不抛 —— 它把超时、网络、
+    认证失败一律折成 `ok=False` 的回复，把"哪一档"放在 `error_kind` 里。
+
+    真机读数（2026-10-12 无 Lean 模式 T2 步 1）：三次 `detail=超过 60.0s 未返回`
+    落成的都是 `judge_failed:ModelReplyNotOk`，循环据此按"坏 JSON"计数、
+    收场措辞写成"连续 3 次没有给出可解析的 JSON" —— 三句话没有一句是真的：
+    它没有"给出"任何东西，是我们没等到。归因错在"码"这一格，不在读数。
+
+    只认两档（其余维持原串 —— 加新码等于加新词表，得有出处）：
+    `timeout` ⇒ `judge_timeout`；`output_exhausted`（输出预算被思考吃光）
+    ⇒ `judge_output_limit`。两条都不是"它说错了"，而是"我们没拿到可用的回复"，
+    与"它回了个看不懂的东西"必须分得开（处置方向相反）。
+    """
+    if bool(getattr(reply, "ok", False)):
+        return ""
+    kind = str(getattr(reply, "error_kind", "") or "")
+    if kind == "timeout":
+        return "judge_timeout"
+    if kind == "output_exhausted":
+        return "judge_output_limit"
+    return "judge_failed:ModelReplyNotOk"
 
 
 def seam_json(seam: Any, prompt: str, *,
@@ -176,4 +213,4 @@ def reason_of(problem: str, *, point: str = "") -> str:
 
 
 __all__ = ["JUDGE_PROBLEMS", "BudgetExhausted", "JudgeRefused", "is_judge_problem",
-           "judge_json", "seam_json", "reason_of"]
+           "judge_json", "seam_json", "reason_of", "problem_of_reply"]

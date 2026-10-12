@@ -2253,18 +2253,23 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 显然做不到，但也要能写」）：纸包三的"结论不许强于它挂的证据"补两段（用词上限的说法 +
 #: 关掉 Lean 时上限换成 `proof_review`、必须带那句声明、不许写「已形式化验证」）。
 #: 作用域读数：只有 G / H / M 三格换值（纸包只发给 M/G/H），A–F 与 V 逐字未动。
-_FROZEN_PROMPT_VERSION = "p100"
+#: `p101`（2026-10-12，批 R68：归因修复 —— 超时与"思考吃光输出预算"不再记成"坏 JSON"）：
+#: 失败词表加一格 `judge_output_limit`，而这张词表本身就是提示词的一部分
+#: （`agent_prompts` 把 `judge.JUDGE_PROBLEMS` 逐项拼进"没查成与查成了"那一段）
+#: ⇒ 十格全部换值。这一条读数比"加了一个词"更重要：加一个失败码等于改十个角色的
+#: 提示词，所以它必须走版本号 + 冻结快照 + 人审那一条路，而不是"顺手加个字符串"。
+_FROZEN_PROMPT_VERSION = "p101"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "1136cd1c3cc3b44186447cdecd9c4cb93a865c41b724765a41b17d7e7b18c3db",
-    "B": "181e81bd0acebc0f7bd24d09b3495d95405fbdeed8ee97f9986bdb898f940a5c",
-    "C": "0db1c148033a1e57a00cd6c51e4f74bfe5a2171a2cd67397ea5a7a8a86e2b5fe",
-    "D": "6f1788f41dcd54c60dd00ca229ad61cc4dfc9e2cbd69f1e22703b0ad04f18c95",
-    "E": "7290c97c9875432595b037332060b35b972b84721968a90635a1d026085fb0e5",
-    "F": "c68a82f083e6e7e464b0340a44e2bc1432538cec95710c6a930f735bbdcc01e4",
-    "G": "aaece65b82a1c138e112cc6093b647acc6bdc866d9c44d19f6bacac3d50222a1",
-    "H": "f0d7bfd56d762a99a345c81fcb599e4e01a97f23fc5d8cce8b27a67c37edfedb",
-    "V": "02f14a2aed20f4bfc32b035f78928d4c46fb8a0195b4bcf510e406b56d7782f7",
-    "M": "a8227f12a5ebaf6ee71432dceead72ec17a4786c5f433a35084ec15208f14008",
+    "A": "3748a64c289c8bd3c7ff7b43d2d040ef5a93bc5ab2223f38f4e4f5e8c218e0c0",
+    "B": "14cde8726064ccabf20100b780da2e7273662935ad709767f9eeec30911136e3",
+    "C": "1d0fe8557521108d36149c5ffe0da05f20a78ab2a7a14fa3d41eee05fa855551",
+    "D": "814ef6a531e3318f5244a9bb5edc133c0a57a9a219edadc289285ed6c1a9ed00",
+    "E": "680f8813cbc9225393cc866e5031c19d34ee3f1fec9f78d83ef763d38d7d0c9d",
+    "F": "c42b5a151178c128c0cbe3432e1de4393e56fe4ac329d4bd7c128b8d7b9925b4",
+    "G": "28792cf1e2fd92742e1d323694175620d21f086a4da58539fde9c78db8b08922",
+    "H": "f83a47114ed6a0d071f8b1ac09cbfd7e02b0e7a2460cc8cffb1ffcccdae8e486",
+    "V": "dc0bbc7a51112a4dbff02bcabe8065effb9c7cfed11efb3452eb114dfad1fa2e",
+    "M": "03055453440ec19cdabbd572c9c6ba759c2d47c19ac0aba417c4a3303bc63351",
 }
 
 

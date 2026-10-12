@@ -126,6 +126,31 @@ def test_the_writing_step_passes_a_larger_output_allowance(tmp_path: pathlib.Pat
         f"实测收到 {gw2.max_tokens_seen}")
 
 
+def test_the_request_timeout_covers_a_high_effort_step() -> None:
+    """请求超时默认值必须容得下「开 thinking 的一步」（实测最坏 260 秒）。
+
+    两条真机读数（2026-10-12）：
+
+    - 探针 `temp/_probe_chain.py`：`max_tokens=32768` 的那一次跑了 181 秒才回
+      （32,768 token 全是思维链）；
+    - 无 Lean 模式跑 T2 的第一趟（`projects/p6t2-research-20261012`，sid `t2u1`）：
+      步 0 用 260 秒（`tokens_out=12178`、思维链 39,755 字）并成功，步 1 就被旧的
+      60 秒上限砍成 `超过 60.0s 未返回`（重试 3 次共 424 秒）——它不是模型不会做，
+      是我们把"想得久"设成了失败。
+
+    所以这条判据钉两件事：默认值 ≥ 180 秒（覆盖实测最坏情况），
+    以及 `AGENTFLOW_MODEL_TIMEOUT_SEC` 那一档仍然压在最上面（要按机器改走它）。
+    """
+    from agentflow import modelgw as MG
+
+    assert MG.ModelSpec().timeout_sec >= 180.0, (
+        f"请求超时默认值 {MG.ModelSpec().timeout_sec}s 容不下一个开 thinking 的步"
+        "（实测最坏 260s）—— 那一刀会把「想得久」砍成失败，见本用例 docstring")
+    assert MG.spec_from_env({}).timeout_sec >= 180.0
+    assert MG.spec_from_env({MG.ENV_TIMEOUT: "45"}).timeout_sec == 45.0, \
+        "环境变量那一档必须仍然压在最上面"
+
+
 def test_the_observation_window_fits_one_statement_slice() -> None:
     """观测窗口（`RESULT_CHARS`）必须容得下「一条定理」的切片；超出时仍要截断（负控）。
 

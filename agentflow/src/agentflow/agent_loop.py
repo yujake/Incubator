@@ -28,6 +28,10 @@
   总数（`run.bad_json`）与连击（`run.bad_json_streak`）分开记 —— 停不停的判据是连击（§68）；
 - 工具参数不是合法 JSON（`judge_bad_args`）：「另计一个数」（`run.bad_args`），
   连击超过上限停成 `bad_args_limit`（§65）—— 它交回工具层就能改对，不是"形状漂移"；
+- 没拿到可用的回复（`judge_timeout` / `judge_output_limit`）：又「另计一个数」
+  （`run.no_reply`），连击超过上限停成 `model_timeout` / `model_output_limit` ——
+  这一档不是"它说错了"，是"我们没拿到能用的回答"（等不到返回，或思考把输出预算吃光）；
+  判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2；
 - 工具被拒 / 召唤被拒：结果里带原因码，并且原样回给模型（那是一次纠正，不是失败）；
 - 步数或预算耗尽：停，并把 `stop_reason` 如实写进运行记录。
 
@@ -802,6 +806,34 @@ def _bad_json_line(step: int, problem: str, detail: str) -> str:
             "只回一行 JSON。骨架：\n" + JSON_TAIL)
 
 
+#: 「没拿到可用的回复」的两档（`LoopRun.no_reply`）：超时与"输出预算被思考吃光"。
+#: 判据只有这一处 —— 计数、纠正行、停止理由三处都按它分流。
+_NO_REPLY_PROBLEMS: tuple[str, ...] = ("judge_timeout", "judge_output_limit")
+
+
+def _no_reply_line(step: int, problem: str, detail: str) -> str:
+    """这一次没拿到可用的回复（`judge_timeout` / `judge_output_limit`）要回给它的那一句。
+
+    为什么不复用"坏 JSON"那一行（2026-10-12 T2 真机读数）：那一行纠正的是
+    "它说错了"，而这里它什么都没说 —— 拿"只回一行 JSON"去纠正一次超时或一次
+    "思考把预算吃光"，它只能照原样再做一遍，而外部原因没变（单次请求的耗时与
+    这一步要产出的长度成正比）。可行动的那句话是"把这一步拆小"：上限固定时，
+    唯一由它控制的就是这一步要产出多少。
+    """
+    why = f"：{_clip(detail, 200)}" if detail else ""
+    if problem == "judge_output_limit":
+        head = (f"\n\n[第 {step + 1} 步] 框架：上一条回复把**输出预算全花在思考上**了"
+                f"（{why}）—— 正文一个字都没留下。处置：**下一步只回一行 JSON**，"
+                "把想法压到十句以内（推理与正文共用同一份输出预算）；"
+                "这一步要做的事如果本来就大，就把它拆小。")
+    else:
+        head = (f"\n\n[第 {step + 1} 步] 框架：上一条请求**没等到返回**（超时{why}）—— "
+                "不是你回了坏东西，是这一条回复在规定时间内没有回来。处置：**把这一步拆小**"
+                "（一次只做一件事、只派一个 target，长产物先落盘再用路径引用），"
+                "单次回复短了才来得及返回。")
+    return head + "然后照旧只回一行 JSON。骨架：\n" + JSON_TAIL
+
+
 def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str) -> str:
     """把解析不出来的整条回复原样落盘，返回工作区相对路径。
 
@@ -894,6 +926,21 @@ class LoopRun:
     #: 就把一趟运行判成 `bad_json_limit` 收场，而它离"改对参数"只差一步。
     bad_args: int = 0
     bad_args_streak: int = 0
+    #: 「没拿到可用的回复」的总数与连击数 —— 与上面两档分开计。
+    #:
+    #: 这一档装的不是"它说错了"，而是"它没有给出可用的回复"，今天有两个成员：
+    #: `judge_timeout`（我们没等到返回）与 `judge_output_limit`（输出预算被思考吃光）。
+    #:
+    #: 为什么必须有这一档（2026-10-12 第一次无 Lean T2 真机读数）：步 1 连着三次
+    #: `detail=超过 60.0s 未返回`、步 2/18 是"思维链 109,397 / 96,969 字而正文一个字没有"，
+    #: 而它们当时都落成 `judge_failed:ModelReplyNotOk` ⇒ 计数进 `bad_json_streak`、
+    #: 收场措辞是"连续 3 次没有给出可解析的 JSON"。那句归因是错的：模型没有"给出"
+    #: 任何东西 —— 一端是我们在等另一端（超时），另一端是它把预算全花在思考上。
+    #: 归因错的后果不是难看，是修错地方：坏 JSON 的处置是收紧输出协议，
+    #: 超时的处置是调大上限，输出吃光的处置是把这一步拆小、把思考压短 —— 三个方向。
+    #: 于是给它自己的计数与自己的停止理由（`model_timeout` / `model_output_limit`）。
+    no_reply: int = 0
+    no_reply_streak: int = 0
     #: 「原地打转」的读数（`draft/37` §136）：这一趟最长的一次
     #: 「同调用 + 同读数」连击（`dead_loop_max`）与"同调用"连击（`same_call_max`）。
     #:
@@ -995,6 +1042,8 @@ class LoopRun:
             "stop_reason": self.stop_reason, "bad_json": self.bad_json,
             "bad_json_streak": self.bad_json_streak,
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
+            "no_reply": self.no_reply,
+            "no_reply_streak": self.no_reply_streak,
             "dead_loop_max": self.dead_loop_max, "same_call_max": self.same_call_max,
             "stalled_max": self.stalled_max,
             # 两档分开报（裁定 10丙）：提醒了几次 / 有没有因此判停 / 账从第几步算起。
@@ -2915,9 +2964,27 @@ class AgentLoop:
                              "已做过的事留在台账与会话记录里，步检查点由 run_role 落盘"),
                 }, sid=self.sid)
                 break
-            if self.seam.usd_budget is not None and self.seam.spend.usd >= self.seam.usd_budget:
+            budget = getattr(self.seam, "budget_limit", None)
+            limit = self.seam.usd_budget if budget is None else budget()
+            if limit is not None and self.seam.spend.usd >= limit:
                 run.stop_reason = "budget"
-                run.final = run.final or "预算已耗尽，停止（没有继续调用模型）"
+                run.final = run.final or (
+                    f"预算已耗尽，停止（已用 {self.seam.spend.usd:.6f} / 上限 {limit:.6f}；"
+                    "没有继续调用模型）。追加预算（`agentflow budget --add` 或网页上的预算窗口）"
+                    "之后用 `--resume` 可以接着跑。")
+                # 业主 2026-10-12：「扣完时自动发送优雅停止请求（这时预算可能会继续扣成
+                # 负的一点点，但无大碍）」。三件事一起做：
+                # ① 给我还在飞的直接子代理各开一条停止通知（复用用户叫停那一套：板项 + ack）；
+                # ② 在工作区落一个一次性停机记录（`stopctl` 的三态 + 历史）——
+                #    它让别的进程（CLI 起的另一条循环、E 的实验子进程）也看得到"该收了"；
+                # ③ 立刻把它消费掉（记一笔历史、撤走文件）：否则"追加预算后 --resume"会在
+                #    第 0 步被自己上一趟留下的开关当场停掉 —— `draft/37` §140 那个 bug 的同一形态。
+                out = self._notify_children_of_stop("budget")
+                if out:
+                    run.notes.append(out)
+                note = self._land_budget_stop_record(limit)
+                if note:
+                    run.notes.append(note)
                 break
             # ---- 集体插话（`draft/39` §3.11 二 D07，用户 2026-10-05 裁）
             #
@@ -2995,9 +3062,15 @@ class AgentLoop:
                 pending_seen = still
             if data is None:
                 args_error = call.problem == "judge_bad_args"
+                # 「没拿到可用的回复」不进坏 JSON 那一档（`LoopRun.no_reply` 的说明）：
+                # 它不是"它说错了"，是我们没收到能用的回答。
+                no_reply = call.problem in _NO_REPLY_PROBLEMS
                 if args_error:
                     run.bad_args += 1
                     run.bad_args_streak += 1
+                elif no_reply:
+                    run.no_reply += 1
+                    run.no_reply_streak += 1
                 else:
                     run.bad_json += 1
                     run.bad_json_streak += 1
@@ -3038,6 +3111,25 @@ class AgentLoop:
                     # 框架对"这一步那次调用"的回答）。
                     messages.append(assistant_message(step, {}, name="invalid"))
                     messages.append(tool_message(step, _bad_args_line(step, str(bad_result["detail"]))))
+                    continue
+                if no_reply:
+                    # 这一档不走"重述协议"那条纠正（它不是它说错了），也不与坏 JSON 共用一个上限。
+                    # 上限仍复用 `max_bad_json`：它量的是"连着几次这一步没产出任何东西"，
+                    # 而上限存在的理由是"不许拿整趟运行去等一个不回来的回答"
+                    # （每次超时在网关里已经自己重试过 `ModelSpec.max_retries` 次）。
+                    if run.no_reply_streak > self.max_bad_json:
+                        run.stop_reason = ("model_timeout" if call.problem == "judge_timeout"
+                                           else "model_output_limit")
+                        run.final = (
+                            f"连着 {run.no_reply_streak} 次没拿到可用的回复"
+                            f"（最后一次：{_clip(str(bad_result['detail']), 200)}）—— "
+                            "这不是它回了坏 JSON，是这一步没有产出可用的东西；停止。"
+                            "下一趟可以 `--resume` 续跑；超时那一档可调大 "
+                            "AGENTFLOW_MODEL_TIMEOUT_SEC，输出吃光那一档要把这一步拆小")
+                        break
+                    messages.append(assistant_message(step, {}, name="invalid"))
+                    messages.append(tool_message(
+                        step, _no_reply_line(step, call.problem, str(bad_result["detail"]))))
                     continue
                 if run.bad_json_streak > self.max_bad_json:
                     run.stop_reason = "bad_json_limit"
@@ -3092,6 +3184,7 @@ class AgentLoop:
             # 那些走的是各自的纠正路径（`RELAY_REFUSALS` / `invalid_params`）。
             run.bad_json_streak = 0
             run.bad_args_streak = 0
+            run.no_reply_streak = 0
             if shape == "final":
                 # ---- 强制 notify 表（`draft/39` §3.2/§3.3，用户 2026-10-05 裁）
                 #
@@ -3437,6 +3530,38 @@ class AgentLoop:
         return run
 
     # -------------------------------------------------------------- 执行
+    def _land_budget_stop_record(self, limit: float) -> str:
+        """预算耗尽时落一个一次性停机记录（写 + 立刻消费，见调用点的三条理由）。
+
+        返回空串 = 落成了；非空 = 没落成的那一句（调用方把它收进 `run.notes`）——
+        静默失败会让"停机信号发出去了"变成一句假话。
+
+        为什么用 `stopctl` 而不是自己写一个文件：跨进程停机信号这一层已经有它
+        （三态结局 `created/upgraded/existing`、append-only 历史 `runs/stop-history.jsonl`、
+        `agentflow stop --status` 读它），再写一份必然分叉 —— 而分叉的形态是
+        "有一条循环停了、另一条没看见"。
+        """
+        from . import stopctl as SC
+
+        problems: list[str] = []
+        try:
+            _payload, outcome = SC.request_stop_detail(
+                self.session_root, reason=f"预算耗尽（上限 {limit:.6f}）", by="budget",
+                sid=self.sid)
+        except Exception as exc:  # noqa: BLE001 —— 见 docstring
+            return f"预算停机记录没落成：{type(exc).__name__}: {exc}"
+        if outcome != "created":
+            # 盘上已经有一把别人的开关（`existing` / `upgraded`）：不许动它
+            # （谁写的谁清，`request_stop_detail` 的 docstring 逐字写着这条），
+            # 于是这一次不消费 —— 只把这件事记成读数。
+            return (f"预算耗尽，但盘上已有一把停机开关（结局 {outcome}）"
+                    "⇒ 这一次没有再写、也没有消费它")
+        try:
+            SC.consume_stop(self.session_root, sid=self.sid, level="budget")
+        except Exception as exc:  # noqa: BLE001
+            problems.append(f"预算停机记录消费失败：{type(exc).__name__}: {exc}")
+        return "；".join(problems)
+
     def _notify_children_of_stop(self, stop_reason: str) -> str:
         """停止沿边下发（S4-b）：把通知交给 conductor，并回报一句读数（空串 = 没话说）。
 
@@ -5487,6 +5612,9 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
                 correction = _bad_args_line(step, str(result.get("detail") or ""))
             elif problem == "judge_bad_json":
                 correction = _bad_json_line(step, problem, str(result.get("detail") or ""))
+            elif problem in _NO_REPLY_PROBLEMS:
+                # 续跑要拼出当时那一句（判据：重建的对话与当时逐字相等）。
+                correction = _no_reply_line(step, problem, str(result.get("detail") or ""))
             else:
                 correction = _invalid_line(step, problem)
             out.append(assistant_message(step, payload, name=shape, reasoning=thought))

@@ -93,7 +93,7 @@ key 再 export 成 `AGENTFLOW_MODEL_API_KEY`"的接线删了：它让每一趟�
 1. 成功：`ok=True`，`text` 非空，`usage` 有数；
 2. 失败：`ok=False`，`error_kind` 是"查过了、确实不行"（如 `auth_failed`、`bad_response`）；
 3. 没查成：`ok=False`，`error_kind` 在 `NOT_CHECKED` 里（`no_key` / `timeout` / `network` /
-   `server_error` / `unknown`）—— "没查成"与"查了失败"必须能分辨。
+   `server_error` / `unknown` / `output_exhausted`）—— "没查成"与"查了失败"必须能分辨。
 
 把第 3 类读成第 2 类，会让"key 没配好"看起来像"模型答错了"；反过来，
 把第 3 类读成成功，就是本项目反复记过的那种最贵的错误。
@@ -138,14 +138,24 @@ MODEL_ERROR_KINDS: tuple[str, ...] = (
     "timeout",        # 读取或连接超时 —— 没查成
     "network",        # DNS / 连接被拒 / 证书等 —— 没查成
     "bad_response",   # 响应不是预期的 JSON / 缺字段 / 内容为空
+    #: 输出预算被思考吃光（`finish_reason=length` + 正文为空 + 思维链非空）——
+    #: 2026-10-12 第一次无 Lean T2 的真机读数：步 2 思维链 109,397 字、步 18 96,969 字，
+    #: 两条都是"一个字正文都没留下"。它不是 `bad_response`（响应是对的，只是没有正文），
+    #: 也不是"它没想"（正好相反）—— 归因不同，处置也不同（拆小这一步 / 压缩思考）。
+    "output_exhausted",
     "server_error",   # 5xx —— 没查成
     "unknown",        # 其余状态码 —— 没查成
 )
 
 #: 这些结局属于"没查成"，不是"查了没通过"。
-NOT_CHECKED: frozenset[str] = frozenset({"no_key", "timeout", "network", "server_error", "unknown"})
+NOT_CHECKED: frozenset[str] = frozenset({"no_key", "timeout", "network", "server_error", "unknown",
+                                         "output_exhausted"})
 
 #: 值得重试的结局（auth_failed 与 bad_response 不重试：重试不会让它变好）。
+#:
+#: `output_exhausted` 也不重试：它上次正好停在输出上限上，同一个请求重试必然同一个结局，
+#: 而每一次重试都要付一整份输出预算（真机那两条各 32,768 token）。处置在调用方
+#: （把这一步拆小、把思考压短），不在网关上 —— 重试只是把钱再烧一遍。
 RETRYABLE: frozenset[str] = frozenset({"rate_limited", "timeout", "network", "server_error"})
 
 ENV_KEY = "AGENTFLOW_MODEL_API_KEY"
@@ -269,7 +279,21 @@ class ModelSpec:
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
     api_key: str = ""
-    timeout_sec: float = 60.0
+    #: 单次请求的墙钟上限（秒）。2026-10-12 从 60 抬到 300 —— 真机读数逼出来的：
+    #:
+    #: - 探针（`temp/_probe_chain.py`）：开了 thinking 的一道难题，`max_tokens=32768`
+    #:   那一次真的跑了 181 秒才回（32,768 token 全是思维链）；
+    #: - 无 Lean 模式跑 T2 的第一趟（`projects/p6t2-research-20261012`，sid `t2u1`）：
+    #:   步 0 用了 260 秒（`tokens_out=12178`、思维链 39,755 字）并成功，
+    #:   步 1 就在这 60 秒上限上被砍（`detail=超过 60.0s 未返回`，重试 3 次共 424 秒）——
+    #:   而它不是模型不会做，是我们自己把"想得久"这件事设成了失败。
+    #:
+    #: 60 秒对"开 thinking + 大 prompt"的档位来说是一个系统性的错配：
+    #: 输出上限抬到 32,768 之后，一个合法的步本来就可能花 3–5 分钟。
+    #: 300 秒是"覆盖实测最坏情况（260 s）再留一点余量"；它仍是一个上限，
+    #: 真正的熔断另有其人（预算闸门 / 墙钟 / 步循环），所以放大它不会让失控的运行跑更久。
+    #: 要按机器改就设 `AGENTFLOW_MODEL_TIMEOUT_SEC`（或设置文件里那一档，见 `spec_from_env`）。
+    timeout_sec: float = 300.0
     max_retries: int = 2
     temperature: float = 0.2
     max_tokens: int = 4096
@@ -385,7 +409,7 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
         base_url=(base_url or DEFAULT_BASE_URL).rstrip("/"),
         model=name or DEFAULT_MODEL,
         api_key=api_key,
-        timeout_sec=_float_env(src, ENV_TIMEOUT, 60.0),
+        timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
         max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
         reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
         key_source=key_src,
@@ -678,6 +702,20 @@ class ModelGateway:
             # 这一条还必须报出"它到底想没想"（2026-10-10）：想了 500 字却一个字没答，
             # 与什么都没想，是两种不同的病因（前者是输出被截断/协议漂移，后者是没开 thinking）
             # —— 折成同一句话会让排障的人去查错方向。
+            #
+            # 想了很多却一个字没答，再分一档（2026-10-12 T2 真机）：`finish_reason=length`
+            # 且思维链非空 ⇒ 完成预算被思考吃光了（推理 token 与正文共用 `max_tokens`）。
+            # 这一档的处置与"协议漂移"完全不同：前者要它把这一步拆小、把思考压短，
+            # 后者要它重念一遍输出协议。实测那两条：思维链 109,397 / 96,969 字，
+            # 而 `max_tokens=32768`（109397 ÷ 32768 ≈ 3.3 字/token，与中文推理的字-token 比一致）。
+            if finish_reason == "length" and reasoning.strip():
+                return _reply_failure(
+                    "output_exhausted",
+                    "输出预算被思考吃光（finish_reason=length 且正文为空；"
+                    f"思维链 {len(reasoning)} 字）—— 这一步要产出的东西太大，"
+                    "拆小它，或让它把思考压短",
+                    status=status, attempt=attempt, elapsed=elapsed,
+                    model=self.spec.model, scope=scope)
             return _reply_failure("bad_response",
                                   "上游返回空内容（choices/message/content 缺失或为空，"
                                   f"且没有 tool_calls；finish_reason={finish_reason or '缺失'}；"

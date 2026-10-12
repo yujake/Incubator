@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R62），
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **212 个 `.py`、124,843 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,814 行** —— 批 R40 把它补进了 §3 的表；
+> **213 个 `.py`、125,256 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,814 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行是 `schema.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -96,6 +96,7 @@
 | `cli.py` | 命令行入口（24 个子命令；`project`/`run`/`run-agent`/`verify`/`tools`/`web`/`doctor`…） |
 | `webui/` | 用户端网页（包；2026-10-07 的 W0 从单文件模块一次拆到位）：`webui/state.py` 是**读模型**（`snapshot()`：全局待回答面板 + 运行态 + 一趟的事件回放，只读投影；待答与选项按裁定 L1 转发到 `userio`）、`webui/readers.py` 是**只读面**（`/api/state` · `/api/run/{sid}` · `/api/run/{sid}/events`（题 T2-a 的逐条事件：`index` 与 `run_view` 的 `start_index`/`end_index` 同一套编号，`since_index`/`limit` 游标分页） · `/api/evidence` · `/api/artifacts` · `/api/acceptance` · `/api/machine`，各带三态头）、`webui/sse.py` 是 `GET /api/stream` 的广播器 + 写路径钩子（`attach`/`detach`，谁开的代谁接 —— 生产路径在 `server.serve()`）、`webui/writes.py` 是唯一写路径（`POST /answer` → `userio.answer_question`）与它的写面、`webui/routes.py` 是路由表 `ROUTES`（= `_OWN` + `readers.ROUTES` + `writes.ROUTES`）、`webui/server.py` 是 http.server + 静态路由 + 两条页面入口（`/` 与 `/run/{sid}`）的 SPA 外壳 + SPA 回退 + 服务器自己写的那几张错误页；服务端渲染的旧壳已在 W5 清仓（裁定 P1 的两面都迁到 SPA 外壳，那个文件整件退场）；公开面由 `webui/__init__.py` re-export（W5 收窄：旧壳的两个渲染入口随之退场） |
 | `settings.py` | **机器级设置的一处定义**（2026-10-07 起）：落点（默认是 `agentflow/` 下的那份，被 git 忽略；`AGENTFLOW_SETTINGS` 指到别处）、键名（`toolchain.*` / `model.*` / `workspace.projects_dir`）与**唯一口径的优先级**（环境变量 > 设置文件 > 内置默认/自动探测，唯一实现 `env_or_setting`）。为什么要有它：本机路径与模型 key 此前散在"代码里的字面量 + 环境变量"两处 —— 换一台机器就有一句假话。判据 `tests/test_settings.py`（含"源码里 0 条死地址"与三道 key 安全阀） |
+| `budget.py` | 可追加的总预算：盘上寄存器（工作区根下那一个 JSON）+ 每次花钱前现读的口子 —— 花销不在这里（唯一权威账是 `usage_ledger`） |
 | `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ `AGENTFLOW_PROVER_PATH`（两者都是环境变量）→ **设置文件的 `toolchain.*`** → PATH 四档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看（打的是"从哪一档找到的"） |
 | `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`）；`web/assets.py` 是令牌的唯一真身（**我们自己的组件样式在 W5 随旧壳退场，搬到了前端工程的 `ui/src/theme/app.css`**）、`web/emit_theme.py` 把它生成到前端；`web/static/` 是**前端构建产物**（裁定 B1：入库；`index.html` + `assets/*.js|css`，`GET /` 与 `GET /run/{sid}` 吐的就是它） |
 | `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`（六页 `pages/*.tsx` · 六组件 `components/*.tsx` · `main.tsx` 路由 · `api.ts` 端点表 · `sse.ts` 订阅 · `live.tsx` 一次订阅分发给六页 · `theme/app.css`），其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库；开发说明见 `ui/README-DEV.md` |
@@ -287,7 +288,7 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d/core.py` | 1772 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1771 行；`agent_d/_support.py` 是模块级 helper 与常量，999 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 5814 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_loop.py` | 5942 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1153 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1153 行（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 2569 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2939 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
@@ -295,7 +296,7 @@
 | `schema.py` | 3303 | 16 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
 | `runflow.py` | 2039 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层 |
 | `evidence.py` | 1892 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 2591 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
+| `cli.py` | 2678 | 25 个子命令的入口与打印 | 每个子命令的 `--help`、三态退出码、卡片式输出 |
 | `claimanatomy.py` | 1856 | 断言解剖学（每条断言的可判定性） | 判据多且互相独立 |
 | `agent_b/core.py` | 1314 | B 的 7 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员，1314 行；`agent_b/_support.py` 是模块级 helper 与常量，186 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 1811 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 13 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |

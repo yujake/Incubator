@@ -251,6 +251,28 @@ class LlmSeam:
     #: 见 `ask` 的前两个分支），复用会让两次早退撞同一个幂等键，
     #: 而后到的那一笔被静默判成 `duplicate` —— 一笔真实记录凭空消失。
     ledger_calls: int = 0
+    #: 现读上限的口子（业主 2026-10-12 的预算轴）：给一个无参可调用，
+    #: 每次花钱之前问一次"现在的总预算是多少"。`None` = 不看寄存器（用 `usd_budget`）。
+    #:
+    #: 为什么是回调而不是一个数：追加预算是运行期发生的（网页上点一下），
+    #: 而这个缝是 dataclass —— 上限若只是一个字段，追加之后必须重启进程才生效，
+    #: 那正好把业主那句"用户可追加预算"变成一句空话。回调每次读盘（`budget.limit_usd`），
+    #: 于是"加钱 ⇒ 下一个调用就受新上限约束"。
+    budget_of: Any = None
+
+    def budget_limit(self) -> float | None:
+        """这一次调用之前的上限（现读）：寄存器 > `usd_budget` > 不限。
+
+        三态纪律：回调本身炸了（盘坏了/权限）不许把这一趟变成"不限量" ——
+        回退到构造期那个 `usd_budget`（少花是安全的那一侧），异常由调用方在读数里看见。
+        """
+        if self.budget_of is None:
+            return self.usd_budget
+        try:
+            got = self.budget_of()
+        except Exception:  # noqa: BLE001 —— 见 docstring：回退到静态上限
+            return self.usd_budget
+        return self.usd_budget if got is None else got
 
     # -------------------------------------------------------------- 构造
     @classmethod
@@ -317,10 +339,11 @@ class LlmSeam:
             # 会话事件照旧留一条（"试过、没接线"是事实），账本不入账。
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)
-        if self.usd_budget is not None and self.spend.usd >= self.usd_budget:
+        budget = self.budget_limit()
+        if budget is not None and self.spend.usd >= budget:
             call = SeamCall(ok=False, problem="judge_over_budget",
                             detail=f"花销预算已耗尽（已用 {self.spend.usd:.6f} / 上限 "
-                                   f"{self.usd_budget:.6f}）—— 这一次没有发起请求",
+                                   f"{budget:.6f}）—— 这一次没有发起请求",
                             elapsed_sec=time.monotonic() - t0, **base)
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)
@@ -353,7 +376,11 @@ class LlmSeam:
             reasoning_chars=len(str(getattr(reply, "reasoning", "") or "")),
             # 原文那一条（12-A=乙：下一轮原样带回去）—— 只有它能让"它记得自己想过什么"成立。
             reasoning=str(getattr(reply, "reasoning", "") or ""),
-            problem="" if getattr(reply, "ok", False) else "judge_failed:ModelReplyNotOk",
+            # "没查成"与"它回了看不懂的东西"在这一格必须分得开：网关从不抛异常，
+            # 超时/网络/认证都折成 `ok=False` + `error_kind`（映射只有 `judge.problem_of_reply`
+            # 一处）。2026-10-12 T2 真机读数：三次超时全落成 `judge_failed:ModelReplyNotOk`，
+            # 循环据此把它算成"坏 JSON"并写成"连续 3 次没有给出可解析的 JSON"。
+            problem=J.problem_of_reply(reply),
             detail=str(getattr(reply, "error_detail", "") or ""),
             tokens_in=int(getattr(reply, "tokens_in", 0) or 0),
             tokens_out=int(getattr(reply, "tokens_out", 0) or 0),

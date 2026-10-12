@@ -472,6 +472,80 @@ def test_bad_json_stops_the_loop_instead_of_faking_an_answer(tmp_path: pathlib.P
         "坏 JSON 不许被当成一次有效的动作"
 
 
+class _TimeoutGateway:
+    """一个"从不返回结果"的替身模型：`ok=False` + `error_kind="timeout"`。
+
+    为什么不让替身抛 `TimeoutError`：真机那条路不抛 —— `modelgw.ModelGateway.complete`
+    把超时折成一次失败的结局（`modelgw.py` 的 `_reply_failure("timeout", …)`），
+    缝拿到的是一个 `ok=False` 的回复。用抛异常的替身测的是另一条路
+    （异常走 `judge._problem_of`），测不到这次的病灶。
+    """
+
+    spec = type("Spec", (), {"model": "scripted", "api_key": "fake"})()
+
+    def __init__(self, detail: str = "超过 300.0s 未返回",
+                 kind: str = "timeout") -> None:
+        self.detail = detail
+        self.kind = kind
+        self.calls = 0
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        self.calls += 1
+        return type("Reply", (), {"ok": False, "text": "", "tokens_in": 0, "tokens_out": 0,
+                                  "error_kind": self.kind, "error_detail": self.detail})()
+
+
+def test_not_getting_a_reply_is_not_a_bad_json(tmp_path: pathlib.Path):
+    """判据（2026-10-12 无 Lean 模式 T2 真机读数）：没拿到可用的回复 ≠ 它回了坏 JSON。
+
+    真机现场：T2 步 1 连着三次 `超过 60.0s 未返回`（`elapsed_sec=424.594` =
+    3 次各 60 秒 + 退避），而它当时落成 `judge_failed:ModelReplyNotOk` ⇒ 计进
+    `bad_json_streak`、收场写成"连续 3 次没有给出可解析的 JSON"。三件事一起钉：
+
+    1. 停止理由是 `model_timeout`（不是 `bad_json_limit`）；
+    2. `bad_json` 保持 0 —— 账不许记到它头上（归因错 ⇒ 修错地方：坏 JSON 的处置是
+       收紧输出协议，超时的处置是调大上限/拆小这一步，两者方向相反）；
+    3. 收场那句话说的是"没拿到可用的回复"，并给出可行动的下一步。
+    """
+    st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=5)
+    tty = _TimeoutGateway()
+    run = run_role("M", "等一个不回来的回答", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=tty, price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.stop_reason == "model_timeout", run.to_dict()
+    assert run.bad_json == 0 and run.bad_json_streak == 0, run.to_dict()
+    assert run.no_reply >= 3, run.to_dict()
+    steps = [s for s in run.steps if s.shape == "invalid"]
+    assert steps and all(s.problem == "judge_timeout" for s in steps), \
+        [(s.shape, s.problem) for s in run.steps]
+    assert "没拿到可用的回复" in run.final and "坏 JSON" in run.final, run.final
+    assert "AGENTFLOW_MODEL_TIMEOUT_SEC" in run.final, run.final
+
+
+def test_thinking_that_eats_the_output_budget_is_its_own_failure(tmp_path: pathlib.Path):
+    """判据（同一条真机读数的第二档）：思考把输出预算吃光，也要与坏 JSON 分开。
+
+    真机现场：步 2 / 18 的上游回复是 `content=""` + `finish_reason=length` + 思维链
+    109,397 / 96,969 字 —— 推理 token 与正文共用 `max_tokens=32768`，正文一个字没留下。
+    这一档的纠正必须是"把思考压短 / 把这一步拆小"，而不是"重念输出协议"。
+    """
+    st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=5)
+    gw = _TimeoutGateway(detail="输出预算被思考吃光（思维链 109397 字）",
+                         kind="output_exhausted")
+    run = run_role("M", "想得太多的一步", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.stop_reason == "model_output_limit", run.to_dict()
+    assert run.bad_json == 0, run.to_dict()
+    assert run.no_reply >= 3, run.to_dict()
+    assert [s.problem for s in run.steps if s.shape == "invalid"] == \
+        ["judge_output_limit"] * run.no_reply, [(s.shape, s.problem) for s in run.steps]
+    assert "输出预算" in run.final and "拆小" in run.final, run.final
+
+
 def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Path):
     """判据（§195 真机实测逼出来的）：每一步最后读到的一行必须是输出契约的骨架。
 

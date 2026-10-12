@@ -247,6 +247,23 @@ def _round_task(task: str, previous: RoundReport, index: int, *, user_answer: st
     return head
 
 
+def _round_budget(root: str | Path, fallback: float | None) -> float | None:
+    """开下一轮之前现读这一趟的总预算（业主 2026-10-12 的追加预算轴）。
+
+    为什么每一轮都现读（而不是构造期取一次）：多轮跑是小时级的，用户在网页上追加预算
+    之后，下一轮就该受新上限约束 —— 取一次会把"追加"变成"重启才生效"。
+    读不懂时回退到调用方给的上限（少花是安全的那一侧，见 `budget` 模块的 docstring）。
+    """
+    from . import budget as B
+
+    if not root:
+        # 没有工作区根 ⇒ 没有寄存器可读（测试里常给 `session_root=None`）：
+        # 直接用调用方给的上限，别去 `Path(None)` —— 那会抛 TypeError，
+        # 把"这一趟没有预算寄存器"说成一个崩溃。
+        return fallback
+    return B.limit_usd(root, fallback=fallback)
+
+
 def _stop_before_round(index: int, *, rounds: int, spent_usd: float,
                        usd_budget: float | None, stop_path: Path | None,
                        user_answer: str, last_stop_reason: str = "",
@@ -512,7 +529,8 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         wake = AL.pending_wake(root, role, sid=sid)
         wake_pending = int(wake.get("count") or 0) if wake.get("checked") else 0
         reason = _stop_before_round(next_index, rounds=total_rounds, spent_usd=_spent_usd(),
-                                    usd_budget=usd_budget, stop_path=stop_path,
+                                    usd_budget=_round_budget(session_root, usd_budget),
+                                    stop_path=stop_path,
                                     user_answer=answer, last_stop_reason=last_stop_reason,
                                     pending_qids=pending, wake_pending=wake_pending, woke=woke)
         return reason, answer_notes, answer
@@ -550,7 +568,9 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         before = _spend_of(shared.spend.to_dict() if shared is not None else None)
         run: LoopRun = run_role(role, round_task, store=store, registry=registry,
                                 session_root=root, conductor=conductor, seam=shared,
-                                gateway=gateway, max_steps=max_steps, usd_budget=usd_budget,
+                                gateway=gateway, max_steps=max_steps,
+                                # 每一轮现读一次（追加预算在下一轮生效）：
+                                usd_budget=_round_budget(root, usd_budget),
                                 workspace_root=str(root), sid=sid, from_env=from_env,
                                 user_timeout_sec=user_timeout_sec)
         delta = _spend_delta(before, _spend_of(run.spend))

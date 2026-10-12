@@ -1429,11 +1429,17 @@ def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: f
     `reviewaccept.within_cost_cap` 据此报"没超上限"（假绿）。
     不给 `store` ⇒ `meter=None` ⇒ 如实报"没有入账"（不是记一笔零）。
     """
+    from . import budget as B
     from .llmseam import LlmSeam
     from .tokenmeter import TokenMeter
 
+    # `budget_of`：每一次花钱之前现读这一趟的总预算（业主 2026-10-12：
+    # 「用户可追加预算，运行消耗的钱从总预算里实时扣除」）。`usd_budget`（命令行给的）
+    # 是寄存器缺席时的兜底 —— 两者都在 `budget.limit_usd` 里合一，别在这里再判一次。
+    read_limit = (lambda: B.limit_usd(root, fallback=usd_budget))
     meter = TokenMeter(store, budget_usd=usd_budget) if store is not None else None
-    return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget, meter=meter)
+    return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget,
+                            meter=meter, budget_of=read_limit)
 
 
 def _parse_drive(items) -> tuple[dict, str]:
@@ -1596,7 +1602,15 @@ def cmd_run_agent(args) -> int:
     from .policy import Policy
 
     wall = getattr(args, "wall_clock_sec", None)
-    pol = Policy(wall_clock_sec=wall) if wall is not None else None
+    # `Policy.usd_budget` 必须拿到同一个数（业主 2026-10-12 的预算轴；只读调查发现
+    # 这一格此前从来没被灌过 —— 改前 `Policy(wall_clock_sec=wall)`，
+    # 于是 `conductor` 那个全局 meter 的 `budget_usd=None`、
+    # 「编排层的全局 USD 守卫实际不受 --budget-usd 约束」）。
+    # 与别处同一条取值口径：命令行给的数 > 无（不限）—— 寄存器那一档由
+    # `budget.limit_usd` 在每一次闸门上现读，不在这里预先合并。
+    usd_cap = getattr(args, "budget_usd", None)
+    pol = Policy(wall_clock_sec=wall, usd_budget=usd_cap) if wall is not None \
+        else Policy(usd_budget=usd_cap)
     # `--stop-file` 接给谁（`draft/37` §125）：「单趟」那一档接进步循环（它此前根本
     # 没有停机点 —— 真机实测：用户叫停后继续跑完 60 多个任务、烧掉 $0.98，最后被强杀，
     # 台账里没有 `agent_run_end`、盘上没有步检查点）；多轮自主跑那一档照旧由
@@ -1936,6 +1950,64 @@ def cmd_web(args) -> int:
     if getattr(args, "no_settings_write", False):
         argv.append("--no-settings-write")
     return webui.run(argv)
+
+
+def cmd_budget(args) -> int:
+    """这一趟的总预算：看、设、追加（业主 2026-10-12 的预算轴）。退出码：0 做成了 / 2 没查成。
+
+    三种用法（`budget` 模块是唯一实现，这里只做台面）：
+
+    - `agentflow budget` / `--status`：读一格读数 —— 总额度、已花、剩余、追加历史、三态。
+      「已花」不来自寄存器：唯一权威账是 `usage_ledger`（`tokenmeter.spent()`）。
+    - `agentflow budget --set 5` ：设一个总额度（覆盖式；第一次设预算用这个）。
+    - `agentflow budget --add 2 --note "让它跑完"`：追加（运行期生效：
+      下一次花钱之前的那个闸门就会现读到新上限 —— 不需要重启、不需要重跑）。
+
+    为什么要有这一条命令：改前"跑到一半加钱"在结构上没有入口（`Policy` 是 frozen、
+    `LlmSeam.usd_budget` 与 `TokenMeter.budget_usd` 只在构造期注入），唯一的办法是重跑一次。
+    """
+    from . import budget as B
+    from .tokenmeter import TokenMeter
+
+    root = Path(args.root or DEFAULT_ROOT).resolve()
+    st = make_store(root)
+    try:
+        meter = TokenMeter(st)
+        spent = meter.spent().get("usd")
+    except Exception:  # noqa: BLE001 —— 账本读不出来时"已花"记 unknown（不许折成 0）
+        spent = None
+    wrote = False
+    if getattr(args, "set_usd", None) is not None:
+        got = B.write_initial(root, float(args.set_usd), by=str(getattr(args, "by", "user") or "user"),
+                              note=str(getattr(args, "note", "") or ""))
+        print(f"[budget] 设总额度：{json.dumps(got, ensure_ascii=False)}")
+        wrote = True
+        if not got.get("ok"):
+            return 2
+    if getattr(args, "add_usd", None) is not None:
+        got = B.add_usd(root, float(args.add_usd), by=str(getattr(args, "by", "user") or "user"),
+                        note=str(getattr(args, "note", "") or ""))
+        print(f"[budget] 追加：{json.dumps(got, ensure_ascii=False)}")
+        wrote = True
+        if not got.get("ok"):
+            return 2
+    snap = B.reading(root, spent_usd=spent, fallback=getattr(args, "fallback_usd", None))
+    if args.json:
+        print(json.dumps(snap, ensure_ascii=False, indent=2))
+    else:
+        total = "不限量" if snap["total_usd"] is None else f"${snap['total_usd']:.6f}"
+        used = "没查成" if snap["spent_usd"] is None else f"${snap['spent_usd']:.6f}"
+        left = "—" if snap["remaining_usd"] is None else f"${snap['remaining_usd']:.6f}"
+        print(tty.paint(f"[budget] {root}", "bold"))
+        print(f"  总预算：{total}（来源 {snap['source']}）；已花：{used}；剩余：{left}"
+              + ("（**已超**）" if snap["exceeded"] else ""))
+        print(f"  追加历史 {len(snap['added'])} 条；寄存器：{snap['path']}"
+              + (f"；问题：{snap['problem']}" if snap["problem"] else ""))
+        if not wrote and snap["total_usd"] is None:
+            # 三态纪律：没设过预算 ≠ 预算充足。把"下一步怎么做"写出来，别让人猜。
+            print("  （这一趟没有设过预算 ⇒ 不限量。要设：`agentflow budget --set 5`；"
+                  "要追加：`agentflow budget --add 2`）")
+    return 0
 
 
 def cmd_stop(args) -> int:
@@ -2453,6 +2525,21 @@ def build_parser() -> argparse.ArgumentParser:
                          "`--rounds > 1` 时在**每轮之间**查（当前这一轮跑完再停）")
     sp.add_argument("--json", action="store_true", help="把运行记录打成 JSON")
     sp.set_defaults(func=cmd_run_agent)
+
+    sp = sub.add_parser("budget",
+                        help="这一趟的总预算：看 / 设 / 追加（业主 2026-10-12：不限制步数只限预算，"
+                             "运行消耗实时从总预算里扣除，扣完自动优雅停）")
+    sp.add_argument("--status", action="store_true", help="只读：总额度 / 已花 / 剩余 / 追加历史")
+    sp.add_argument("--set", dest="set_usd", type=float, default=None,
+                    help="设一个总额度（覆盖式；第一次设预算用它）")
+    sp.add_argument("--add", dest="add_usd", type=float, default=None,
+                    help="追加一笔额度（运行期生效：下一个闸门就受新上限约束）")
+    sp.add_argument("--by", default="user", help="谁加的（写进追加历史，默认 user）")
+    sp.add_argument("--note", default="", help="一句话说明（写进追加历史）")
+    sp.add_argument("--fallback-usd", type=float, default=None,
+                    help="寄存器缺席时按这个数显示（不给就是不限量）")
+    sp.add_argument("--json", action="store_true", help="打成 JSON（给网页/脚本读）")
+    sp.set_defaults(func=cmd_budget)
 
     sp = sub.add_parser("stop",
                         help="停一趟正在跑的 run-agent（`draft/37` §128）：缺省优雅停，"

@@ -2417,6 +2417,9 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "specs/": "每个角色一份**声明真身**（`goal-7f5116c1` M3）：`ACTIONS`（动作表）与 `SPEC` —— "
               "`capabilities.py` 的四张表由它派生；它在 `.noai-paths` 里逐文件受保护",
     "agentspec.py": "一个 agent 的声明与注册表（`AgentSpec`/`AgentBrief`：职责与门面、官能轻重、只读与否、能召唤谁、写集、实现类）——`goal-7f5116c1` 的 M2，每个角色在自己模块里写一份 `SPEC`，装配面逐步改成从这里读",
+    "budget.py": "一笔可追加的总预算（业主 2026-10-12 的预算轴）：盘上寄存器 "
+                  "`<工作区>/budget.json`，每次花钱之前现读（追加之后下一个调用就受新上限"
+                  "约束）；花销本身不在这里 —— 唯一权威账是 `usage_ledger`",
     "cancellation.py": "取消语义（FC-20 的四条纪律）",
     "capabilities.py": "角色能力表 + 写集 + 允许的召唤边（主控编队的声明层）",
     "claimanatomy.py": "断言解剖学：`documents.claims` 每个元素的唯一判据来源",

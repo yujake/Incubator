@@ -143,6 +143,10 @@ _STOP_BADGES = {
     "not_wired": ("badge-fail", "没接线"),
     "bad_json_limit": ("badge-fail", "坏 JSON 连击"),
     "bad_args_limit": ("badge-fail", "坏参数连击"),
+    # 2026-10-12 T2 真机读数加的两格：它们与上面两格都是"停下了"，但归因不同 ——
+    # "坏 JSON/坏参数"是模型说错了话，"模型超时/输出吃光"是我们没拿到能用的回答。
+    "model_timeout": ("badge-fail", "模型没返回（超时）"),
+    "model_output_limit": ("badge-fail", "思考吃光输出预算"),
     # `draft/37` §136：同调用 + 同读数连着到上限 ⇒ 这一趟停在"没有新事实"。
     # 刻意不是 `badge-fail`：那不是出错，是"这一趟没有往前走"（一档读数）。
     "no_progress_limit": ("badge-unknown", "原地打转"),

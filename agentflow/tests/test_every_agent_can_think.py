@@ -180,7 +180,7 @@ def test_the_reply_keeps_the_thinking_chain_apart_from_the_answer():
 
 
 def test_a_reply_with_thinking_but_no_answer_is_still_not_success():
-    """负控：想了却一个字没答 ⇒ 仍然不是成功，但读数要说清"它想了多少字"。
+    """负控：想了却一个字没答 ⇒ 仍然不是成功，但读数要说清"它想了多少字、卡在哪一档"。
 
     这一栏的必要性：`content` 被截断（输出上限太小）与"根本没开 thinking"
     是两种不同的病因，折成同一句"空内容"会让排障的人去查错方向。
@@ -188,19 +188,24 @@ def test_a_reply_with_thinking_but_no_answer_is_still_not_success():
     批 R62 追加（2026-10-12 真机读数）：还要说清"它是被输出额度截断，
     还是真的没答" —— 严格口径 T1 那 5 次 `ModelReplyNotOk` 就是 `length` 那一档
     （思维链 26215 / 26814 字把 8,192 的输出额度吃满、正文 0 字），
-    探针读数见 `temp/_probe_chain.txt`。两种 `finish_reason` 的处方不同
-    （抬额度 / 降强度，还是查提示词），所以这里两条都判 —— 只判 `length`
-    的话，"这一栏永远等于 length"（读错了）也会绿。
+    探针读数见 `temp/_probe_chain.txt`。
+
+    批 R68 改口径（同一天的 T2 真机：思维链 109,397 / 96,969 字把 32,768 吃满）：
+    "想太久把预算吃光"从 `bad_response` 里分出来成 `output_exhausted` ——
+    因为处方相反（这一档是"拆小这一步 / 压短思考"，`bad_response` 是"查响应/提示词"），
+    而 `stop` + 思维链那一档仍是 `bad_response`。两档都判，判据才不是"这一栏永远等于某个值"。
     """
     bodies: list[dict] = []
     reply = _gw(bodies, _reply("", reasoning="想了很多但是没写答案",
                                finish_reason="length")).complete("1+1=?", scope="reason")
-    assert reply.ok is False and reply.error_kind == "bad_response", reply.to_dict()
+    assert reply.ok is False and reply.error_kind == "output_exhausted", reply.to_dict()
+    assert reply.not_checked is True, "没拿到可用的回复属于没查成"
     assert "思维链 10 字" in reply.error_detail, reply.error_detail
     assert "finish_reason=length" in reply.error_detail, reply.error_detail
 
     # 负控：同一句话在 `stop` 那一档必须长得不一样（否则这一栏等于没读）
     stopped = _gw([], _reply("", reasoning="想了很多但是没写答案")).complete("1+1=?", scope="reason")
+    assert stopped.error_kind == "bad_response", stopped.to_dict()
     assert "finish_reason=stop" in stopped.error_detail, stopped.error_detail
     assert stopped.error_detail != reply.error_detail
 

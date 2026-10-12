@@ -111,6 +111,38 @@ def test_bad_response_is_never_success(body):
     assert r.not_checked is False, "上游答了但答坏了，属于失败，不属于没查成"
 
 
+def test_thinking_that_eats_the_budget_is_its_own_kind():
+    """判据（2026-10-12 T2 真机）：`finish_reason=length` + 正文空 + 思维链非空 ⇒ 单独一档。
+
+    真机那两条：思维链 109,397 / 96,969 字、正文 ""、`max_tokens=32768`
+    （109397 ÷ 32768 ≈ 3.3 字/token，与中文推理的字-token 比一致）——
+    推理 token 与正文共用同一份完成预算，于是这一步一个字都没留下。
+    四件事一起钉：
+
+    1. 不许当成功；
+    2. 不许折成 `bad_response`（"协议漂移"与"想太久把预算吃光"处置方向相反）；
+    3. 属于"没查成"（我们没拿到可用的回复）；
+    4. 不重试 —— 同一个请求必然同一个结局，而每次重试都要再付一整份输出预算。
+    """
+    body = json.dumps({"choices": [{"finish_reason": "length",
+                                    "message": {"role": "assistant", "content": "",
+                                                "reasoning_content": "想" * 800}}],
+                       "usage": {"prompt_tokens": 10, "completion_tokens": 32768}},
+                      ensure_ascii=False)
+    calls: list[int] = []
+    r = _gw(200, body, retries=2, calls=calls).complete("hi", scope="reason")
+    assert r.ok is False and r.error_kind == "output_exhausted", r.to_dict()
+    assert r.not_checked is True, "没拿到可用的回复属于没查成，不是'查了没通过'"
+    assert len(calls) == 1, "同一个请求重试必然同一个结局，只会再烧一份输出预算"
+    assert "思维链 800 字" in r.error_detail, r.error_detail
+    # 负控一：同样空正文、但没被截断（`stop`）⇒ 仍是 `bad_response`
+    plain = _gw(200, '{"choices":[{"finish_reason":"stop","message":{"content":""}}]}')
+    assert plain.complete("hi", scope="reason").error_kind == "bad_response"
+    # 负控二：被截断但一个字都没想 ⇒ 也仍是 `bad_response`（那一档是"它没想"，不是"想太多"）
+    quiet = _gw(200, '{"choices":[{"finish_reason":"length","message":{"content":""}}]}')
+    assert quiet.complete("hi", scope="reason").error_kind == "bad_response"
+
+
 # --------------------------------------------------------------- 成功与重试
 
 def test_success_carries_usage_and_attempts():
