@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-12T20:20:28+08:00",
+  "generated_at": "2026-10-13T00:40:55+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -997,26 +997,26 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "9416a7e891cba45f1b99e75caa7ba2ce5c7eafcffcc3f276cdd80b1098c71092",
+      "sha256": "4d4b8ee7b3ece350125a495717d847a555a3b85b12f6baca7492727d593b0f83",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "按 draft/112 §1 逐行走查：新证据档 proof_review 只在 Lean 关掉时进用词上限；实验表禁用它；两处判据共用 doc_tools.wording_ceiling；两份快照的重冻差异逐格核过（tool 2 处 enum / agent 11 处：版本行+G/H/M 正文+B 动作 params）",
+      "change_note": "R68 两份冻结快照逐格走查：agent_surface 十格各两处（失败词表多一格 judge_output_limit + 版本行 p100→p101），run_topic 恰好 2 处（timeout_sec 60.0→300.0）；差异由 diff 逐格核过，无第三种改动。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-12T20:20:27+08:00",
-          "scope": "34d1281..HEAD 的改动行（逐行走查）",
-          "note": "按 draft/112 §1 逐行走查：新证据档 proof_review 只在 Lean 关掉时进用词上限；实验表禁用它；两处判据共用 doc_tools.wording_ceiling；两份快照的重冻差异逐格核过（tool 2 处 enum / agent 11 处：版本行+G/H/M 正文+B 动作 params）",
+          "at": "2026-10-13T00:40:54+08:00",
+          "scope": "9e51694..HEAD 的改动行（逐行走查）",
+          "note": "R68 两份冻结快照逐格走查：agent_surface 十格各两处（失败词表多一格 judge_output_limit + 版本行 p100→p101），run_topic 恰好 2 处（timeout_sec 60.0→300.0）；差异由 diff 逐格核过，无第三种改动。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-12T20:20:28+08:00",
-          "scope": "34d1281..HEAD 的改动行（逐行走查）",
-          "note": "按 draft/112 §1 逐行走查：新证据档 proof_review 只在 Lean 关掉时进用词上限；实验表禁用它；两处判据共用 doc_tools.wording_ceiling；两份快照的重冻差异逐格核过（tool 2 处 enum / agent 11 处：版本行+G/H/M 正文+B 动作 params）",
+          "at": "2026-10-13T00:40:55+08:00",
+          "scope": "9e51694..HEAD 的改动行（逐行走查）",
+          "note": "R68 两份冻结快照逐格走查：agent_surface 十格各两处（失败词表多一格 judge_output_limit + 版本行 p100→p101），run_topic 恰好 2 处（timeout_sec 60.0→300.0）；差异由 diff 逐格核过，无第三种改动。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -1029,26 +1029,26 @@
       "path": "tests/golden/run_topic_snapshot.json",
       "glob": "tests/golden/run_topic_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "17dad99db0f82f22a84a9609db127732f7bb593980a9306e127b5e53c8a1720e",
+      "sha256": "67290c373f6b796fa410c5f9648e2c879682ba04296d82fa580597c717f2b877",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
+      "change_note": "R68 两份冻结快照逐格走查：agent_surface 十格各两处（失败词表多一格 judge_output_limit + 版本行 p100→p101），run_topic 恰好 2 处（timeout_sec 60.0→300.0）；差异由 diff 逐格核过，无第三种改动。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-12T12:20:44+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "at": "2026-10-13T00:40:55+08:00",
+          "scope": "9e51694..HEAD 的改动行（逐行走查）",
+          "note": "R68 两份冻结快照逐格走查：agent_surface 十格各两处（失败词表多一格 judge_output_limit + 版本行 p100→p101），run_topic 恰好 2 处（timeout_sec 60.0→300.0）；差异由 diff 逐格核过，无第三种改动。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-12T12:20:44+08:00",
-          "scope": "R54-R60 的禁改区改动（逐行走查）",
-          "note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+          "at": "2026-10-13T00:40:55+08:00",
+          "scope": "9e51694..HEAD 的改动行（逐行走查）",
+          "note": "R68 两份冻结快照逐格走查：agent_surface 十格各两处（失败词表多一格 judge_output_limit + 版本行 p100→p101），run_topic 恰好 2 处（timeout_sec 60.0→300.0）；差异由 diff 逐格核过，无第三种改动。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
