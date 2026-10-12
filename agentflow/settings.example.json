@@ -5,7 +5,7 @@
   "_TOOLCHAIN_LEAN_EXAMPLE": "工作区根相对写法：_env/lean470/lean-4.7.0-windows/bin（目录）或 _env/lean470/lean-4.7.0-windows/bin/lean.exe（文件）",
   "_TOOLCHAIN_MATHLIB_EXAMPLE": "工作区根相对写法：_env/mathlib-pinned2/mathlib4-4.7.0（必须同时含 lakefile.lean 与 lean-toolchain）",
   "_MODEL_WARNING": "api_key 落盘是有代价的：密钥一旦落盘就会进备份与误提交。三道安全阀：settings.json 被 git 忽略；入库的只有这个示例且 api_key 是空串；任何打印/读数都不回显 key（只出现 *** 或『配没配』这一格）。",
-  "_TOOLCHAIN_LEAN_ENABLED": "lean_enabled 是**布尔**（与那四个路径键同段，但它不是路径）：这台机器/这一趟要不要走 Lean 形式化这条路。true（缺省，等价于不写这一格）＝ 照旧按工具链的真实情况走；false ＝ 全流程不再做 Lean 形式化，改用『自然语言逐行审阅证明』推进 —— 模型看得见的工具链事实那一段会现算成『形式化已关闭』，E 不再派 check_formal、也不再落 method=formal 的实验，收工门里那几格要求 proof 级证据的判据转为『不适用 + 理由』并把『V 审过的证明行』作为替代读数。取值梯子：环境变量 AGENTFLOW_LEAN_ENABLED > 本键 > 缺省 true；读不懂的值（例如 maybe）当场报错，绝不静默按缺省跑。",
+  "_TOOLCHAIN_LEAN_ENABLED": "lean_enabled 是**布尔**（与那四个路径键同段，但它不是路径）：这台机器/这一趟要不要走 Lean 形式化这条路。**缺省 false**（业主 2026-10-12：「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）—— 不写这一格或写 false 时，全流程不做 Lean 形式化：模型看得见的工具链事实那一段现算成「已关闭 / 系统做不了」，E 不再派 check_formal、也不落 method=formal 的实验，论文里写「定理/证明」的用词上限换成 proof_review（逐行审阅过的证明，必须带那句声明）。写 true ＝ 回到老套路（形式化全流程照旧，一个字不变）。取值梯子：环境变量 AGENTFLOW_LEAN_ENABLED > 本键 > 缺省 false；读不懂的值（例如 maybe）当场报错，绝不静默按缺省跑。",
   "_MODEL_KEYS": "model 段的四个键：api_key / base_url / name / reasoning_effort。base_url 与 name 留空则各用内置默认值（https://api.deepseek.com/v1 与 deepseek-flash）。",
   "_MODEL_REASONING_EFFORT": "推理强度，取值只能是 off / low / high / max（词表唯一来源：modelgw.REASONING_EFFORTS，逐字对齐 DSH 的 dsh-llm-deepseek）。留空 = 用内置默认 high —— 所有者 2026-10-10 的裁定是「所有智能体都要能 thinking，且开默认到 High」。off 会发 thinking:{type:disabled}，其余三档发 reasoning_effort。拼成词表外的值（例如 hgih）不会静默按缺省跑：ModelSpec 构造时当场报错，机器面把 model.reasoning_effort 判成 unreadable 并把原值原样回显。",
   "_WORKSPACE_KEYS": "workspace 段的键：projects_dir（projects/ 的落点，即 agentflow project 与 M 的 conductor.ensure_project 的缺省落点）。留空则用『由本包位置推出的工作区根 + projects/』——那正是本机改前的那个值。取值顺序：--projects-dir 显式参数 > AGENTFLOW_PROJECTS_DIR > 本键 > 推导默认。",
@@ -14,7 +14,7 @@
     "mathlib_root": "",
     "coq_bin": "",
     "isabelle_bin": "",
-    "lean_enabled": true
+    "lean_enabled": false
   },
   "model": {
     "api_key": "",

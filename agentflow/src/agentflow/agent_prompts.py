@@ -366,7 +366,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 显然做不到，但也要能写」）：纸包三的"结论不许强于它挂的证据"那一条补两段 ——
 #: ① 用词上限的说法从"不是 proof 就不许写证明/定理"改成"看用词上限"；
 #: ② 关掉 Lean 时那一档的上限是 `proof_review`（`statements` 表的 `proof_text` 列逐字写着
-#:    证明过程 + V 逐行走查签「成立」），可以写「定理/证明」**但必须带那句声明**
+#:    证明过程 + V 逐行走查签「成立」），可以写「定理/证明」但必须带那句声明
 #:    （逐行审阅过的证明，未经机器检查），且不许写「已形式化验证」。
 #: 作用域读数：只有 G / H / M 三格换值（纸包只发给 M/G/H）；A–F 与 V 逐字未动。
 PROMPT_VERSION = "p100"

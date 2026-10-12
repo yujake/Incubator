@@ -879,6 +879,29 @@ def test_the_projects_dir_setting_is_strict_about_shapes(
 # --------------------------------------------------------------------------- #
 
 
+def test_the_suite_pins_the_lean_switch_on() -> None:
+    """守卫（业主 2026-10-12 翻缺省之后）：整趟套件跑在「Lean 形式化开着」那一档。
+
+    两件事必须分开、各自有判据：
+
+      - 产品缺省是关的（「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）——
+        由 `tests/test_lean_switch.py::test_the_product_default_is_lean_off` 钉住；
+      - 套件跑的是开着那一档 —— 这一套判据守的是形式化那条路的接线（桥接层、
+        E 的动作与受控理由、提示词里的"怎么写"、收工门的承重格、`runflow` 的 Lean 段、
+        两份冻结快照），缺省关掉只是"默认不烧那笔钱"，不是"这条路没了"。
+        实测：翻缺省那一刻 98 条判据变红，全部落在这一档。
+
+    为什么这条守卫必要：`conftest.py` 那一行是手写的环境钉，它一旦被删/被改，
+    那几百条判据会静默跑在"这条路不存在"的档上 —— 它们照样绿（关掉时那些分支
+    根本不发生），而"开着时逐字不变"这条性质就没人看着了。
+    """
+    import os
+    assert os.environ.get("AGENTFLOW_LEAN_ENABLED") == "1", (
+        "套件没有钉在 Lean 开着那一档（见 tests/conftest.py）⇒ 这一批判据会跑错档")
+    assert SET.DEFAULT_LEAN_ENABLED is False, (
+        "产品缺省必须是关的；它与「套件跑在开着那一档」是两件事，不许混")
+
+
 def test_the_suite_pins_the_machine_settings_away() -> None:
     """守卫（2026-10-07 的全量门真事故）：判据不许读到本机那份设置文件。
 

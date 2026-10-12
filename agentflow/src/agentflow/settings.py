@@ -156,15 +156,15 @@ ENV_LEAN_ENABLED = "AGENTFLOW_LEAN_ENABLED"
 #:
 #: 为什么缺省是"开"而不是"按探测自动决定"：这一格的语义是许可，不是读数。
 #: 本机的探测读数（`toolchain.probe_checkers` / `formalgw.detect_backend`）本来就如实
-#: 报"没装 Lean"，那条路不需要这个开关；它要解决的是另一种情形 —— 用户明确不想让
-#: 这一趟走形式化（机器上没有 Lean / 不想装 / 不想为它花预算）。
-#: 把"探测不到"也折进这一格，会让"我关了它"与"机器上没装"在读数上长得一样。
-DEFAULT_LEAN_ENABLED = True
-#: 待办（下一批，UI/预算那一批）：业主 2026-10-12 追加口径「默认设置中 Lean 关闭帮用户在无严苛
-#: 要求时省钱」⇒ 这一格要从 `True` 翻成 `False`。它必须与"把现有判据里假设开着的那一批
-#: 改成显式开"同一批落地（`tests/test_closing_gate.py`、`tests/test_check_formal_wiring.py`
-#: 等十几条现在跑在缺省开着的路径上）；分两批做会留下"一半按关、一半按开"的中间态，
-#: 而那正是本仓库最忌讳的形态。
+#: 报"没装 Lean"，那条路不需要开关；它要回答的是「这一趟值不值得为形式化花钱」：
+#: 形式化的每一次尝试都要真起 Lean 子进程（`import Mathlib` 一次 ~25–30 秒），而多数趟次
+#: 拿不到 proof 行 —— 真机读数里 T1 三趟的 $6.1553 有一大半花在这条线上。
+#:
+#: 缺省是关（业主 2026-10-12 的口径逐字：「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）：
+#: 要形式化就显式写 `true`（或 `AGENTFLOW_LEAN_ENABLED=1`），那时全流程回到老套路、
+#: 一个字都不变（`tests/test_lean_switch.py` 的负控逐条钉这一点）。
+#: 把"探测不到"折进这一格仍然不允许 —— 那会让"我关了它"与"机器上没装"在读数上长得一样。
+DEFAULT_LEAN_ENABLED = False
 #: 认得的真/假写法（大小写不敏感）。不认得的写法不静默按缺省跑（见 :func:`lean_enabled`）。
 _TRUE_WORDS: tuple[str, ...] = ("1", "true", "yes", "on", "y", "t")
 _FALSE_WORDS: tuple[str, ...] = ("0", "false", "no", "off", "n", "f")

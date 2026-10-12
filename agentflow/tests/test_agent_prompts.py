@@ -2252,7 +2252,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: `p100`（2026-10-12，业主口径：「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean
 #: 显然做不到，但也要能写」）：纸包三的"结论不许强于它挂的证据"补两段（用词上限的说法 +
 #: 关掉 Lean 时上限换成 `proof_review`、必须带那句声明、不许写「已形式化验证」）。
-#: 作用域读数：**只有 G / H / M 三格换值**（纸包只发给 M/G/H），A–F 与 V 逐字未动。
+#: 作用域读数：只有 G / H / M 三格换值（纸包只发给 M/G/H），A–F 与 V 逐字未动。
 _FROZEN_PROMPT_VERSION = "p100"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "1136cd1c3cc3b44186447cdecd9c4cb93a865c41b724765a41b17d7e7b18c3db",

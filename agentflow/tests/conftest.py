@@ -160,6 +160,27 @@ def _pin_settings_path() -> str:
 
 PINNED_SETTINGS_PATH = _pin_settings_path()
 
+#: 判据套件跑在「Lean 形式化开着」那一档（产品缺省是关的，业主 2026-10-12：
+#: 「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）。
+#:
+#: ## 为什么套件与产品缺省不同
+#:
+#: 这一套判据守的是形式化那条路的接线：桥接层（`formalgw` / `verify_tools`）、
+#: E 的动作与受控理由、提示词里的"怎么写"那一段、收工门的承重格、`runflow` 的 Lean 段、
+#: 以及两份冻结快照里的形式化声明。产品缺省关掉它，只是"默认不烧那笔钱"，
+#: 不是"这条路没有了" —— 业主写 `lean_enabled: true` 时全流程必须逐字回到老套路。
+#: 若让整批跑在关掉那一档，几百条判据会去测一个"这条路不存在"的世界，
+#: 而"开着时逐字不变"这条性质就再没有判据看着了（2026-10-12 实测：翻缺省的那一刻
+#: 98 条判据变红，全部落在这一档）。
+#:
+#: ## 两个方向都有判据
+#:
+#: `tests/test_lean_switch.py` 自己设置/删除这个环境变量（它按用例显式声明自己测哪一档），
+#: 并显式钉住"产品缺省是 `False`"与"设置文件示例里写的是 `false`"这两件事；
+#: 本行由 `test_settings.py::test_the_suite_pins_the_lean_switch_on` 守着。
+#: 子进程（`python -m agentflow.agent_e` 这类自检）继承 `os.environ`，所以它们也在这条钉上。
+os.environ["AGENTFLOW_LEAN_ENABLED"] = "1"
+
 from agentflow import conceptrows as _CR  # noqa: E402  （并表过渡期：夹具也要两处同号）
 from agentflow import schema as S  # noqa: E402
 from agentflow.store import Store  # noqa: E402

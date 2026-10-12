@@ -54,13 +54,20 @@
 
 ---
 
-## §3 一处**刻意没有做**的（留给业主裁）
+## §3 缺省翻转（批 R66，已落地）
 
-`agentflow/tests/` 里那一批"假设 Lean 开着"的判据（`test_closing_gate.py`、
-`test_check_formal_wiring.py` 等十几条）**现在仍然按缺省开着跑** —— 因为业主在同一批里追加的
-「默认设置中 Lean 关闭」还没落地：`settings.DEFAULT_LEAN_ENABLED` 仍是 `True`，
-那一条翻面必须与"把假设开着的那批判据改成显式开"同一批做，否则会留下
-"一半按关、一半按开"的中间态。已在该常量上逐字登记为下一批的待办。
+`settings.DEFAULT_LEAN_ENABLED` 已从 `True` 翻成 **`False`**（业主：「默认设置中 Lean 关闭
+帮用户在无严苛要求时省钱」），`settings.example.json` 同步写 `false`。两件事分开钉：
+
+- **产品缺省是关的**：`test_lean_switch.py::test_the_product_default_is_lean_off`（含示例文件）；
+- **判据套件跑在"开着"那一档**：`tests/conftest.py` 在导入期把 `AGENTFLOW_LEAN_ENABLED=1`
+  钉上（子进程继承），由 `test_settings.py::test_the_suite_pins_the_lean_switch_on` 守卫。
+
+为什么要分成两件事：这一套判据守的是**形式化那条路**的接线（桥接层、E 的动作与受控理由、
+提示词里的"怎么写"、收工门的承重格、`runflow` 的 Lean 段、两份冻结快照）。缺省关掉它只是
+"默认不烧那笔钱"，**不是"这条路没了"** —— 实测：翻缺省那一刻 **98 条判据变红**，全部落在这一档；
+若让它们跑在关掉那一档，那几百条会静默变绿（关掉时那些分支根本不发生），
+而"开着时逐字不变"这条性质就再没有判据看着了。
 
 ---
 

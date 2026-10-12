@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 
 import pytest
@@ -37,9 +38,15 @@ from agentflow.store import Store
 
 
 @pytest.fixture(autouse=True)
-def _no_ambient_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """判据跑在确定环境里：本机就算设了那个环境变量，也不许渗进来。"""
-    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+def _lean_on_by_suite_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """套件契约：`tests/conftest.py` 把整趟套件钉成"Lean 开着"（产品缺省是关的）。
+
+    本文件里的用例各自显式声明自己要哪一档（`monkeypatch.setenv(..., "0"/"1")`），
+    所以这里只核那条钉还在 —— 它不见了就说明这一批判据跑在了一个不该有的档上，
+    而那种错会让"关掉时的行为"这件事被误判成"实现了"。
+    """
+    assert os.environ.get(SET.ENV_LEAN_ENABLED) == "1", (
+        "套件的 Lean 开关钉不见了（见 tests/conftest.py）⇒ 这一批会跑错档")
 
 
 def _settings(tmp_path: pathlib.Path, text: str) -> pathlib.Path:
@@ -49,9 +56,24 @@ def _settings(tmp_path: pathlib.Path, text: str) -> pathlib.Path:
 
 
 # ============================================================ 1. 开关本体
+def test_the_product_default_is_lean_off() -> None:
+    """产品缺省是关（业主 2026-10-12：「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）。
+
+    这条判据与 `tests/conftest.py` 里"套件跑在开着那一档"的那一行是一对：
+    套件跑开着（守形式化那条路的接线），而产品缺省由这一条单独钉住 ——
+    两者分家的形态是"套件全绿、用户装出来却是关的"，而那种错没有任何读数会报。
+    """
+    assert SET.DEFAULT_LEAN_ENABLED is False, SET.DEFAULT_LEAN_ENABLED
+    assert SET.lean_enabled(env={}) == (False, ""), "没设任何一档时就是关"
+    # 示例文件也必须写 false（用户照抄一份就得到缺省行为 —— 那句注释与它必须一致）
+    example = pathlib.Path(__file__).resolve().parents[1] / "settings.example.json"
+    data = json.loads(example.read_text(encoding="utf-8"))
+    assert data["toolchain"]["lean_enabled"] is False, data["toolchain"]
+
+
 def test_the_switch_ladder_is_env_then_settings_then_default(tmp_path: pathlib.Path) -> None:
     """正控：三档梯子各走一遍，且来源位如实报出来。"""
-    assert SET.lean_enabled(env={}) == (True, ""), "缺省必须是 true（不设它 = 行为不变）"
+    assert SET.lean_enabled(env={}) == (False, ""), "缺省是关（见上一条）"
     p = _settings(tmp_path, json.dumps({"toolchain": {"lean_enabled": False}}))
     assert SET.lean_enabled(p, env={}) == (False, "settings"), "JSON 布尔 false 必须被读到"
     assert SET.lean_enabled(p, env={SET.ENV_LEAN_ENABLED: "1"}) == (True, "env"), \
@@ -60,8 +82,12 @@ def test_the_switch_ladder_is_env_then_settings_then_default(tmp_path: pathlib.P
         "空串 = 未设置，不遮住下一档"
     # 字符串写法也认（写设置文件的人手写 "false" 是常见的）
     p3 = tmp_path / "s3.json"
-    p3.write_text(json.dumps({"toolchain": {"lean_enabled": "off"}}), encoding="utf-8")
-    assert SET.lean_enabled(p3, env={}) == (False, "settings")
+    p3.write_text(json.dumps({"toolchain": {"lean_enabled": "on"}}), encoding="utf-8")
+    assert SET.lean_enabled(p3, env={}) == (True, "settings")
+    # 显式写 true 就等于老套路（产品缺省的翻转只影响"不写这一格"的人）
+    p4 = tmp_path / "s4.json"
+    p4.write_text(json.dumps({"toolchain": {"lean_enabled": True}}), encoding="utf-8")
+    assert SET.lean_enabled(p4, env={}) == (True, "settings")
 
 
 def test_a_value_that_cannot_be_understood_is_refused_not_defaulted(
@@ -87,11 +113,11 @@ def test_the_writer_accepts_a_real_bool_and_refuses_garbage(tmp_path: pathlib.Pa
     assert bad["tri"] == "refused" and "lean_enabled" in bad["reason"], bad
 
 
-def test_the_settings_example_carries_the_key_with_true(tmp_path: pathlib.Path) -> None:
-    """示例文件里必须有这一格，且缺省是 true（用户照抄一份就得到今天的行为）。"""
+def test_the_settings_example_carries_the_key_with_false() -> None:
+    """示例文件里必须有这一格，且写的是 false（用户照抄一份就得到今天的缺省行为）。"""
     example = pathlib.Path(__file__).resolve().parents[1] / "settings.example.json"
     data = json.loads(example.read_text(encoding="utf-8"))
-    assert data["toolchain"]["lean_enabled"] is True, data["toolchain"]
+    assert data["toolchain"]["lean_enabled"] is False, data["toolchain"]
     assert any("lean_enabled" in str(k) or "lean_enabled" in str(v)
                for k, v in data.items()), "示例里要有这一格的说明行"
 
@@ -99,12 +125,12 @@ def test_the_settings_example_carries_the_key_with_true(tmp_path: pathlib.Path) 
 # ============================================================ 2. 读数层
 def test_the_toolchain_reading_carries_the_switch(monkeypatch: pytest.MonkeyPatch) -> None:
     """读数层：开关与"机器上装没装"是两条独立的事实，都要能读出来。"""
-    on = TC.toolchain_report(env={})
-    assert on["lean_enabled"] is True and on["formal_mode"] == "formal"
-    assert on["lean_enabled_source"] == ""
-    off = TC.toolchain_report(env={SET.ENV_LEAN_ENABLED: "0"})
+    off = TC.toolchain_report(env={})
     assert off["lean_enabled"] is False and off["formal_mode"] == "prose_review"
-    assert off["lean_enabled_source"] == "env"
+    assert off["lean_enabled_source"] == "", "没设任何一档 ⇒ 来源是空串（缺省关）"
+    on = TC.toolchain_report(env={SET.ENV_LEAN_ENABLED: "1"})
+    assert on["lean_enabled"] is True and on["formal_mode"] == "formal"
+    assert on["lean_enabled_source"] == "env"
     assert off["can_do_formal"] is False, "关掉时这一格必须是 False（不许报成能做）"
 
 
@@ -130,7 +156,7 @@ def test_check_lean_starts_no_process_when_the_switch_is_off(
 
 def test_the_switch_on_does_not_change_the_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     """负控：开关开着时逐字不变 —— 那条路照旧走检查器（这里用注入的 run_fn 证明）。"""
-    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     seen: list[tuple] = []
 
     def _fake(cmd, *, cwd, timeout_sec):
@@ -184,7 +210,7 @@ def test_the_prompt_blocks_follow_the_switch(monkeypatch: pytest.MonkeyPatch) ->
     """提示词：关掉时先报"已关闭"并给出替代路线；开着时逐字不提关闭那件事。"""
     from agentflow import agent_prompts as AP
 
-    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     AP.reset_toolchain_readings()
     on_facts, on_formal = AP.toolchain_facts_text(), AP.toolchain_formal_text()
     assert "已关闭" not in on_facts and "已关闭" not in on_formal
@@ -195,7 +221,7 @@ def test_the_prompt_blocks_follow_the_switch(monkeypatch: pytest.MonkeyPatch) ->
     assert "已关闭" in off_facts, off_facts
     assert "verify.verify_proof" in off_formal and "proof_text" in off_formal, off_formal
     assert "lean_disabled" in off_formal, "要告诉模型见到这个状态别再重试"
-    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     AP.reset_toolchain_readings()
     assert AP.toolchain_facts_text() == on_facts, "复位之后必须回到开着那一版（缓存要清干净）"
 
@@ -219,6 +245,9 @@ def test_the_no_lean_variant_rewrites_every_role_face(
 
     roles = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
     reg = build_registry().registry
+    # 反真空那一半必须在显式打开的那一档取：产品缺省是关的（见本文件第一条判据）
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+    AP.reset_toolchain_readings()
     on_text = "\n".join(AP.system_prompt(r, registry=reg) for r in roles)
     for old, _new in E.NO_LEAN_REPLACEMENTS:
         assert old in on_text, f"改写表的左边在开着时的提示词里找不到（表失效了）：{old!r}"
@@ -240,7 +269,7 @@ def test_the_no_lean_variant_rewrites_every_role_face(
             assert "系统做不了" in text, (
                 f"{role} 的提示词里必须说清「本会话不做形式化验证：系统做不了」")
     finally:
-        monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+        monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")   # 还原成套件钉的那一档
         AP.reset_toolchain_readings()
 
 
@@ -331,7 +360,7 @@ def test_the_closing_cell_is_unchanged_when_the_switch_is_on(
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
-    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     rep = _Rep()
     CL._check_load_bearing(rep, st)
     assert rep.status["load_bearing"] == "pass", rep.status
