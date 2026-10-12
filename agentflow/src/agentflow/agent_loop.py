@@ -2007,8 +2007,31 @@ class AgentLoop:
     stall_alert: int = 6
     #: 单次回复的输出上限。网关缺省 4,096 token，而"写完一段 LaTeX + JSON 信封"
     #: 动辄几千 token ⇒ 写稿步会被静默截断（表现是 `judge_bad_json` 或半句话）。
-    #: 8,192 是 `deepseek-chat` 一档的输出上限（历史读数那一档；S-I 换到 `deepseek-flash` 之后这一格是否还合适，要按新模型的实测重定）；要改就改这里，别在各处传不同的数。
-    max_output_tokens: int = 8192
+    #:
+    #: ## 为什么从 8,192 抬到 32,768（2026-10-12 真机读数）
+    #:
+    #: 8,192 是 `deepseek-chat` 一档的输出上限（历史读数那一档）—— 这一格
+    #: 在 `deepseek-flash` + `reasoning_effort=high` 下已经被打穿过两次：
+    #:
+    #: 1. 2026-10-03 第八趟真机（`tools/fs_tools.py` 的 `fs.edit` 那一段逐字记着）：
+    #:    模型想用 `fs.write` 整份重写 26 KB 的 `main.tex`，回复被截断在字符串中间
+    #:    （步 27/30 的 `text_len` 是 26110 / 26134，`tokens_out` 都是 8192）；
+    #: 2. 2026-10-12 严格口径 T1：第 12 步起连续 5 次 `judge_failed:ModelReplyNotOk`，
+    #:    读数是"上游返回空内容（……没有 tool_calls；思维链 26215 / 26814 字）"——
+    #:    思维链把 8,192 吃满，正文一个字都没轮到。
+    #:
+    #: 探针读数（`temp/_probe_chain.py`，2026-10-12，同一道难题跑三档上限）：
+    #: `max_tokens=256` ⇒ `finish_reason=length`、正文 0 字、256 token 全记在
+    #: `reasoning_tokens` 上；`1024` ⇒ 同样（思维链 2299 字）；`32768` ⇒ 同样
+    #: （思维链 86296 字、耗时 181 秒）。另一次探针（`temp/_probe_outcap.py`）：
+    #: 76,617 字的 prompt 配 `max_tokens=32768` 回 200、`prompt_tokens=47906`
+    #: ⇒ 端点认这个数。也就是说"想很久"本身没有内在上限 ——
+    #: 这一格只能把天花板抬高（让正常步有地方写正文），保证不了模型肯收手；
+    #: 真要治"想了不答"，得在下游按 `finish_reason=length` 判一次
+    #: （网关已经把这一格写进失败读数了，见 `modelgw._once`）。
+    #:
+    #: 要改就改这里，别在各处传不同的数。
+    max_output_tokens: int = 32768
     workspace_root: str = ""
     sid: str | None = None
     token: Any = None

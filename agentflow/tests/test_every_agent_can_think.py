@@ -33,13 +33,13 @@ from agentflow import schema as S
 
 
 def _reply(text: str = "4", reasoning: str = "", tokens_in: int = 11,
-           tokens_out: int = 3) -> str:
+           tokens_out: int = 3, finish_reason: str = "stop") -> str:
     """一条 OpenAI 兼容应答；`reasoning` 非空时带上思维链那一栏。"""
     message: dict[str, object] = {"role": "assistant", "content": text}
     if reasoning:
         message["reasoning_content"] = reasoning
     return json.dumps({
-        "choices": [{"message": message}],
+        "choices": [{"message": message, "finish_reason": finish_reason}],
         "usage": {"prompt_tokens": tokens_in, "completion_tokens": tokens_out},
     }, ensure_ascii=False)
 
@@ -184,11 +184,25 @@ def test_a_reply_with_thinking_but_no_answer_is_still_not_success():
 
     这一栏的必要性：`content` 被截断（输出上限太小）与"根本没开 thinking"
     是两种不同的病因，折成同一句"空内容"会让排障的人去查错方向。
+
+    批 R62 追加（2026-10-12 真机读数）：还要说清"它是被输出额度截断，
+    还是真的没答" —— 严格口径 T1 那 5 次 `ModelReplyNotOk` 就是 `length` 那一档
+    （思维链 26215 / 26814 字把 8,192 的输出额度吃满、正文 0 字），
+    探针读数见 `temp/_probe_chain.txt`。两种 `finish_reason` 的处方不同
+    （抬额度 / 降强度，还是查提示词），所以这里两条都判 —— 只判 `length`
+    的话，"这一栏永远等于 length"（读错了）也会绿。
     """
     bodies: list[dict] = []
-    reply = _gw(bodies, _reply("", reasoning="想了很多但是没写答案")).complete("1+1=?", scope="reason")
+    reply = _gw(bodies, _reply("", reasoning="想了很多但是没写答案",
+                               finish_reason="length")).complete("1+1=?", scope="reason")
     assert reply.ok is False and reply.error_kind == "bad_response", reply.to_dict()
     assert "思维链 10 字" in reply.error_detail, reply.error_detail
+    assert "finish_reason=length" in reply.error_detail, reply.error_detail
+
+    # 负控：同一句话在 `stop` 那一档必须长得不一样（否则这一栏等于没读）
+    stopped = _gw([], _reply("", reasoning="想了很多但是没写答案")).complete("1+1=?", scope="reason")
+    assert "finish_reason=stop" in stopped.error_detail, stopped.error_detail
+    assert stopped.error_detail != reply.error_detail
 
 
 def test_the_session_event_records_both_the_asked_strength_and_the_returned_chain(

@@ -635,9 +635,19 @@ class ModelGateway:
         choices = data.get("choices") if isinstance(data, dict) else None
         content = ""
         reasoning = ""
+        #: 上游为什么停（`stop` / `length` / …）；缺这一格时是空串。
+        #:
+        #: 为什么必须读它（2026-10-12 真机读数）：`length` + 空正文 = 输出额度被吃满
+        #: （严格口径 T1 的 `ModelReplyNotOk` 就是这一种：思维链 26215 字、正文 0 字），
+        #: 而 `stop` + 空正文 = 模型真的什么都没说。两种病的处方完全不同
+        #: （前者抬额度 / 降强度，后者查提示词），折成同一句话就是让人查错方向
+        #: —— 所以它进下面那条 detail（`ModelReply` 的形状不动，测试与落库照旧）。
+        finish_reason = ""
         calls: list[dict[str, Any]] = []
         if isinstance(choices, list) and choices:
             first = choices[0] if isinstance(choices[0], dict) else {}
+            finish_reason = first.get("finish_reason") if isinstance(
+                first.get("finish_reason"), str) else ""
             message = first.get("message") if isinstance(first.get("message"), dict) else {}
             content = message.get("content") if isinstance(message.get("content"), str) else ""
             # 思维链：上游在开了 thinking 的调用里给 `reasoning_content`
@@ -670,7 +680,8 @@ class ModelGateway:
             # —— 折成同一句话会让排障的人去查错方向。
             return _reply_failure("bad_response",
                                   "上游返回空内容（choices/message/content 缺失或为空，"
-                                  f"且没有 tool_calls；思维链 {len(reasoning)} 字）："
+                                  f"且没有 tool_calls；finish_reason={finish_reason or '缺失'}；"
+                                  f"思维链 {len(reasoning)} 字）："
                                   f"{raw.strip()[:200]}",
                                   status=status, attempt=attempt, elapsed=elapsed,
                                   model=self.spec.model, scope=scope)
