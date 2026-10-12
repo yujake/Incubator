@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-12T17:08:18+08:00",
+  "generated_at": "2026-10-12T18:07:52+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -645,26 +645,26 @@
       "path": "src/agentflow/specs/e.py",
       "glob": "src/agentflow/specs/e.py",
       "category": "auth-audit",
-      "sha256": "e47894f7d4d4789921b6fe520cdced03d20e40c54e2c136624bb2e527fab846c",
+      "sha256": "5e912bbb54e594b96cf5b057694ce7b4fcbe2179875097ef080b05295940ac54",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "按 draft/111 §1–§2 逐行走查：开关只在关掉时改变这五处的口径，开着时逐字不变；重冻的 10 行全是 E/G/H/M 四格的提示词字符串",
+      "change_note": "按 draft/111 + 本次提交信息逐行走查：声明未动，改的是渲染文本；关掉时十个角色的形式化广告面残留 0，开着时逐字不变",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-12T17:08:16+08:00",
-          "scope": "a470740..HEAD 的改动行（逐行走查）",
-          "note": "按 draft/111 §1–§2 逐行走查：开关只在关掉时改变这五处的口径，开着时逐字不变；重冻的 10 行全是 E/G/H/M 四格的提示词字符串",
+          "at": "2026-10-12T18:07:52+08:00",
+          "scope": "7293f89..HEAD 的改动行（逐行走查）",
+          "note": "按 draft/111 + 本次提交信息逐行走查：声明未动，改的是渲染文本；关掉时十个角色的形式化广告面残留 0，开着时逐字不变",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-12T17:08:16+08:00",
-          "scope": "a470740..HEAD 的改动行（逐行走查）",
-          "note": "按 draft/111 §1–§2 逐行走查：开关只在关掉时改变这五处的口径，开着时逐字不变；重冻的 10 行全是 E/G/H/M 四格的提示词字符串",
+          "at": "2026-10-12T18:07:52+08:00",
+          "scope": "7293f89..HEAD 的改动行（逐行走查）",
+          "note": "按 draft/111 + 本次提交信息逐行走查：声明未动，改的是渲染文本；关掉时十个角色的形式化广告面残留 0，开着时逐字不变",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
