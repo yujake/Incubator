@@ -100,7 +100,10 @@ src/agentflow/store.py           [category: schema-migration] `LOCK_ORDER` / `re
 # `EVAL_REQUIRED_FIELDS` 的注释有逐字论证）。口径不是数字的补充说明，
 # 口径**就是**那个数字的一部分。
 src/agentflow/schema.py          [category: eval-criteria] `EVAL_REQUIRED_FIELDS` 与 `EvalResult`：必填口径字段与比率口径（0..1）—— 改它等于追溯性地改写历史报告里每个数字的含义
-tests/golden/*.json              [category: eval-criteria] 冻结快照（F15 入册）：`agent_surface_snapshot` 与 `tool_surface_snapshot` 这两份"面"的基线 —— 快照被随手重冻，"声明与行为没变"这句话就失去了唯一的可比对象；两份快照的 diff 是"这一改到底动了哪一格"的唯一机器读数，所以重冻必须由人逐格看过
+tests/golden/agent_surface_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：「面」的基线（10 角色 / 60 动作）—— 快照被随手重冻，"声明与行为没变"这句话就失去了唯一的可比对象；diff 是"这一改到底动了哪一格"的唯一机器读数，重冻必须由人逐格看过。2026-10-12 按业主裁定 ① **从 glob 拆成逐文件**：glob 条目只能存一个 sha256，四份快照里必有三份永远判 stale
+tests/golden/tool_surface_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（83 个工具 / 10 个角色 / 11 条 CLI 输出）—— 2026-10-12 从 glob 拆出来（理由同上）
+tests/golden/run_topic_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（6 件产物 × 2 条路径）—— 2026-10-12 从 glob 拆出来（理由同上）
+tests/golden/verify_all_snapshot.json  [category: eval-criteria] 冻结快照（F15 入册）：同上（8 个工作区 / 8 条 issue）—— 2026-10-12 从 glob 拆出来（理由同上）
 
 
 [category: release-deploy] 六、发布与部署脚本（发出去就收不回来）

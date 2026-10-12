@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-12T12:20:46+08:00",
+  "generated_at": "2026-10-12T12:50:08+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -19,27 +19,27 @@
       "path": ".noai-paths",
       "glob": ".noai-paths",
       "category": "auth-audit",
-      "sha256": "715d7b951d83c21ca65dc711165e48a203795058c0fa808f299f443ca78c2d2f",
+      "sha256": "13305143f46cbd221dd844705c295bff6dece425a48ab6664cb6aaafb1f37853",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:36+08:00",
-          "scope": "新增 tests/golden/*.json 通配行 + src/agentflow/specs/v.py 登记；与 AGENTS.md 逐条一致（--check-consistency=0）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:50:06+08:00",
+          "scope": "清单那一行的拆分 + 四份快照的现版 hash",
+          "note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:36+08:00",
-          "scope": "新增 tests/golden/*.json 通配行 + src/agentflow/specs/v.py 登记；与 AGENTS.md 逐条一致（--check-consistency=0）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:50:06+08:00",
+          "scope": "清单那一行的拆分 + 四份快照的现版 hash",
+          "note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -51,27 +51,27 @@
       "path": "AGENTS.md",
       "glob": "AGENTS.md",
       "category": "auth-audit",
-      "sha256": "d99a8d2229d264cb7f558c4d3224f00bc92dc09b0c14c9e80b90c5a4e9164bf4",
+      "sha256": "94bb515293eb2aead0cfce1ef1547d6ea5566d560f20f648ac677c760c979222",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "三线并行施工后的口径刷新（人审前的登记步骤；逐条改动见 draft/59 §1）",
+      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-06T22:02:36+08:00",
-          "scope": "同上（本清单在 AGENTS.md 的副本，两处必须逐条一致）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:50:07+08:00",
+          "scope": "清单那一行的拆分 + 四份快照的现版 hash",
+          "note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-06T22:02:37+08:00",
-          "scope": "同上（本清单在 AGENTS.md 的副本，两处必须逐条一致）",
-          "note": "",
-          "verdict": "改动属实、方向与裁定一致；负控（改前必红/改后绿）在对应测试里；未发现放宽保护面",
+          "at": "2026-10-12T12:50:07+08:00",
+          "scope": "清单那一行的拆分 + 四份快照的现版 hash",
+          "note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
+          "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         }
@@ -995,12 +995,12 @@
     },
     {
       "path": "tests/golden/agent_surface_snapshot.json",
-      "glob": "tests/golden/*.json",
+      "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
       "sha256": "81443cd1c41061ed69a435448a8923f2a4a52902ef4bca06ae6b6201da5a1052",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
       "changed_this_session": null,
       "reviewers": [
         {
@@ -1027,12 +1027,12 @@
     },
     {
       "path": "tests/golden/run_topic_snapshot.json",
-      "glob": "tests/golden/*.json",
+      "glob": "tests/golden/run_topic_snapshot.json",
       "category": "eval-criteria",
       "sha256": "17dad99db0f82f22a84a9609db127732f7bb593980a9306e127b5e53c8a1720e",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
       "changed_this_session": null,
       "reviewers": [
         {
@@ -1059,12 +1059,12 @@
     },
     {
       "path": "tests/golden/tool_surface_snapshot.json",
-      "glob": "tests/golden/*.json",
+      "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
       "sha256": "4b612b410c716456a89757104bce511addffa9b8c4c268d3823e04d2610bd1ca",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
       "changed_this_session": null,
       "reviewers": [
         {
@@ -1091,12 +1091,12 @@
     },
     {
       "path": "tests/golden/verify_all_snapshot.json",
-      "glob": "tests/golden/*.json",
+      "glob": "tests/golden/verify_all_snapshot.json",
       "category": "eval-criteria",
       "sha256": "579496004a246c5a2c04268f2e358834d301c0e26c1be5f5f239c22072b3fc39",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-12 指示：逐行走查已完成（走查人 Yu / Jiaqi），同意按现版登记",
+      "change_note": "业主 2026-10-12 裁定 ①：golden 从 glob 拆成逐文件 + 两份清单同步改；逐行走查已完成（Yu / Jiaqi）",
       "changed_this_session": null,
       "reviewers": [
         {
