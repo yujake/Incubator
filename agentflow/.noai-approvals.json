@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-13T17:41:48+08:00",
+  "generated_at": "2026-10-13T18:45:46+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -997,26 +997,26 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "1222d07280f305d349be17b7854031accb961841927b19ebcad2037a7f4af864",
+      "sha256": "cca90e27520e1a7735256add9822348e11ca27d49faccd2582de1b4e9a70958c",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "逐行走查 R73 的禁改区改动：① specs/b.py 加出边 V（业主裁定「允许 B 唤起 V，理由是 B 需要初步检验收录的证明」）—— 只加一条出边，V 的只读与冷启动面、B 的写集与动作面一字未动；② specs/g.py / h.py / m.py / v.py 的四条口径（论文只在成文阶段写 / H 的落点由派活给 + 审校链中间那一环 / M 按链排期 + 两阶段 / V 是签名环），逐条与业主 2026-10-13 的原话对得上；③ tests/golden/agent_surface_snapshot.json 重冻：只有 B/G/H/M/V 五格的 prompt 与 B 的伙伴面换值（提示词版本 p102→p103），其余五格只差版本号那一行。权限面这一批是**加一条边**（29→30，文档 §0.5 同步），没有放宽任何动作、工具或只读面。",
+      "change_note": "逐行走查 R74 附记里的快照重冻：agent_surface 的十格 prompt 全换值，原因是 ITEM_STATES 加了 block、而板那一段的状态机是**现算渲染**进提示词的（candidates: queued → claimed → seen → done → block）；逐格对拍确认除这一句之外没有别的变化（工具面、动作面、召唤面都未动）。同批的 READING-MAP 与冻结摘要表只改数字/摘要，不改判据。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-13T17:16:46+08:00",
-          "scope": "specs/b.py 的 edges=('C','V') 与其上那段理由；specs/{g,h,m,v}.py 各自新增的那一条 policy/boundary；agent_surface 快照逐格 diff（B/G/H/M/V 的 prompt + B 的 summon 面）",
-          "note": "逐行走查 R73 的禁改区改动：① specs/b.py 加出边 V（业主裁定「允许 B 唤起 V，理由是 B 需要初步检验收录的证明」）—— 只加一条出边，V 的只读与冷启动面、B 的写集与动作面一字未动；② specs/g.py / h.py / m.py / v.py 的四条口径（论文只在成文阶段写 / H 的落点由派活给 + 审校链中间那一环 / M 按链排期 + 两阶段 / V 是签名环），逐条与业主 2026-10-13 的原话对得上；③ tests/golden/agent_surface_snapshot.json 重冻：只有 B/G/H/M/V 五格的 prompt 与 B 的伙伴面换值（提示词版本 p102→p103），其余五格只差版本号那一行。权限面这一批是**加一条边**（29→30，文档 §0.5 同步），没有放宽任何动作、工具或只读面。",
+          "at": "2026-10-13T18:45:46+08:00",
+          "scope": "tests/golden/agent_surface_snapshot.json 的逐格 prompt diff（十格同源：板状态机那一段）",
+          "note": "逐行走查 R74 附记里的快照重冻：agent_surface 的十格 prompt 全换值，原因是 ITEM_STATES 加了 block、而板那一段的状态机是**现算渲染**进提示词的（candidates: queued → claimed → seen → done → block）；逐格对拍确认除这一句之外没有别的变化（工具面、动作面、召唤面都未动）。同批的 READING-MAP 与冻结摘要表只改数字/摘要，不改判据。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-13T17:16:46+08:00",
-          "scope": "specs/b.py 的 edges=('C','V') 与其上那段理由；specs/{g,h,m,v}.py 各自新增的那一条 policy/boundary；agent_surface 快照逐格 diff（B/G/H/M/V 的 prompt + B 的 summon 面）",
-          "note": "逐行走查 R73 的禁改区改动：① specs/b.py 加出边 V（业主裁定「允许 B 唤起 V，理由是 B 需要初步检验收录的证明」）—— 只加一条出边，V 的只读与冷启动面、B 的写集与动作面一字未动；② specs/g.py / h.py / m.py / v.py 的四条口径（论文只在成文阶段写 / H 的落点由派活给 + 审校链中间那一环 / M 按链排期 + 两阶段 / V 是签名环），逐条与业主 2026-10-13 的原话对得上；③ tests/golden/agent_surface_snapshot.json 重冻：只有 B/G/H/M/V 五格的 prompt 与 B 的伙伴面换值（提示词版本 p102→p103），其余五格只差版本号那一行。权限面这一批是**加一条边**（29→30，文档 §0.5 同步），没有放宽任何动作、工具或只读面。",
+          "at": "2026-10-13T18:45:46+08:00",
+          "scope": "tests/golden/agent_surface_snapshot.json 的逐格 prompt diff（十格同源：板状态机那一段）",
+          "note": "逐行走查 R74 附记里的快照重冻：agent_surface 的十格 prompt 全换值，原因是 ITEM_STATES 加了 block、而板那一段的状态机是**现算渲染**进提示词的（candidates: queued → claimed → seen → done → block）；逐格对拍确认除这一句之外没有别的变化（工具面、动作面、召唤面都未动）。同批的 READING-MAP 与冻结摘要表只改数字/摘要，不改判据。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
