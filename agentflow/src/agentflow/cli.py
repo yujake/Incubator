@@ -1067,6 +1067,25 @@ def cmd_project(args) -> int:
                     print(line)
             return 0
 
+        if args.action == "create":
+            if not args.paper:
+                print("[project] 没查成：`create` 要 `--paper <那篇外部论文>`"
+                      "（它是这个项目的输入；不给就不知道该铺什么）", file=sys.stderr)
+                return 2
+            res = P.create_review_project(root, paper=args.paper, name=args.name)
+            seeded = res["seeded"]
+            for line in tty.panel(
+                f"建好项目：{res['project']['name']}",
+                [("落点", res["project"]["path"]),
+                 ("只读基线", ", ".join(seeded["source"])),
+                 ("可改正文", seeded["manuscript"] or "(还没写：G 的活)")],
+                body=[seeded["note"] or "论文已铺好：source/ 只读，out/paper/main.tex 可改。",
+                      "下一步：`agentflow --root <工作区> run-agent M --task …` 派活。"],
+                tone="green",
+            ):
+                print(line)
+            return 0
+
         if args.action == "plan":
             info = P.plan(root, args.name, start=args.start, books_dir=args.books,
                           topic=args.topic or "")
@@ -2393,8 +2412,9 @@ def build_parser() -> argparse.ArgumentParser:
         "project",
         help="项目工作区：list / plan / run（一个项目一个文件夹，冷启动还是热启动看文件夹在不在）",
     )
-    sp.add_argument("action", choices=["list", "plan", "run"],
-                    help="list 列出现有项目；plan 只说明这次会怎么跑（不写字节）；run 真跑")
+    sp.add_argument("action", choices=["list", "plan", "run", "create"],
+                    help="list 列出现有项目；plan 只说明这次会怎么跑（不写字节）；"
+                         "run 真跑；create 正常地建一个审阅型项目（--paper 给那篇外部论文）")
     sp.add_argument("--name", default=None,
                     help="项目名（缺省=自动取下一个 projectN；run 时也接受已有名字=热启动）")
     sp.add_argument("--projects-dir", default=None,
@@ -2407,6 +2427,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help=r"本地书架目录（例如 D:\books）：里面的 PDF 会被登记进项目库")
     sp.add_argument("--books-limit", type=_non_negative_int, default=None,
                     help="本次最多登记几本（超出的一本都不登记，清单里写明理由）")
+    sp.add_argument("--paper", default=None,
+                    help="审阅型项目要铺进去的那篇外部论文（.pdf；同目录有同名 .tex 就一并铺成"
+                         "只读基线与可改正文）—— 只对 `project create` 有意义")
     sp.add_argument("--topic", default=None, help="研究主题（给了才会调模型；缺省只做登记）")
     sp.add_argument("--budget-usd", type=float, default=0.5,
                     help="这一次运行的美元额度（每次调用之前检查）")
