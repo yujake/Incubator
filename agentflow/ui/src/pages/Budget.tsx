@@ -125,37 +125,34 @@ export function Budget() {
         <div class="readings">
           剩余 <span class="mono">{usd(b.remaining_usd)}</span> ·{" "}
           {b.exceeded ? (
-            <Badge kind="badge-unknown" text="已越上限（业主：可为负一点点，是读数不是错误）" />
+            <Badge kind="badge-unknown" text="已越上限" />
           ) : (
             <Badge kind="badge-pass" text="还没越上限" />
           )}
         </div>
         <div class="readings">
-          寄存器：<span class="mono">{b.path}</span>（在盘上{" "}
-          <span class="mono">{String(b.exists)}</span>）· 追加历史{" "}
-          <span class="mono">{String(b.added_count)}</span> 条 ·
-          账本里 <span class="mono">{cell(b.entries)}</span> 笔 /{" "}
+          寄存器 <span class="mono">{b.path}</span>（在盘上{" "}
+          <span class="mono">{String(b.exists)}</span>）· 历史{" "}
+          <span class="mono">{String(b.added_count)}</span> 条 · 账本{" "}
+          <span class="mono">{cell(b.entries)}</span> 笔 /{" "}
           <span class="mono">{cell(b.tokens)}</span> tokens
         </div>
         {b.problem === "" ? null : (
           <div class="readings">
-            寄存器读不出来：<span class="mono">{b.problem}</span> —— 这一档**不是**"不限量"：
-            闸门会退回命令行给的那个上限（少花是安全的那一侧）。
+            寄存器读不出来：<span class="mono">{b.problem}</span>。
+            此项不等于"不限量"：闸门退回到命令行给出的上限。
           </div>
         )}
         {b.source === "unlimited" ? (
           <div class="readings">
-            现在没有任何上限（既没有寄存器，也没有命令行给了上限）⇒ 这一趟不会因为钱停。
-            要设一个：在下面写一个数、动作选「重设总额」。
+            当前无上限：不会因预算停止。可在下方输入金额后选择「重设总额」。
           </div>
         ) : null}
       </Card>
 
-      <Card title="追加 / 重设（运行期生效）">
+      <Card title="追加 / 重设">
         <div class="readings">
-          「追加」是单调的（总额只增不减，历史留痕）；「重设」按给定值覆盖总额
-          （旧总额也记进历史 —— 见下面那张表）。两者都在**下一次花钱之前**生效：
-          闸门每次都现读盘，不需要重启、不需要重跑。
+          「追加」为单调增长；「重设」按给定值覆盖。两者均在下一笔支出前生效，无需重启。
         </div>
         <div class="readings">
           <label class="opt">
@@ -233,10 +230,10 @@ export function Budget() {
         {result === "" ? null : <div class="readings">{result}</div>}
       </Card>
 
-      <Card title="追加历史" subtitle="谁在什么时候加了多少 —— 与「钱花在哪儿」是两条轴">
+      <Card title="追加历史" subtitle="谁在何时改了多少">
         <Table
           rows={added}
-          empty="还没有任何追加/重设记录（寄存器里 added[] 是空的）。"
+          empty="暂无追加或重设记录。"
           columns={[
             { key: "kind", title: "动作" },
             { key: "usd", title: "美元", render: (r) => <span class="mono">{cell(r.usd)}</span> },
@@ -247,7 +244,7 @@ export function Budget() {
         />
       </Card>
 
-      <Card title="按角色 / 按归口" subtitle="钱是谁花的、为了什么花的（两条不同的轴）">
+      <Card title="按角色 / 按归口" subtitle="谁花的、为什么花的">
         <Table
           rows={byRole}
           empty="账本里还没有行（读过、是空的）。"

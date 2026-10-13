@@ -28,6 +28,7 @@ import { ConfirmButton } from "../components/ConfirmButton";
 import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
+import type { SettingsReading } from "../types";
 
 /** 设置窗口里的每一格（`段.键` 形状逐字对应后端 `handle_settings` 读的表单键）。 */
 const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
@@ -48,6 +49,23 @@ function field(rec: Record<string, unknown>, key: string): string {
   return cell(rec[key]);
 }
 
+/** 设置文件里某一格现在的值（按 `段.键` 取；取不到 ⇒ 空串 = 盘上没设过）。
+ *
+ * 为什么要它（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像
+ * 啥都没设置过一样」）：这一格的读数后端早就在给（`GET /api/machine` 的 `settings` 三段），
+ * 但输入框初值一直是空串 ⇒ 打开面板看到的永远是"没配"。
+ */
+function currentOf(settings: SettingsReading, key: string): string {
+  const parts = key.split(".");
+  const part = parts[0] ?? "";
+  const leaf = parts[1] ?? "";
+  const seg = (settings as unknown as Record<string, Record<string, unknown>>)[part];
+  if (seg === undefined || seg === null) {
+    return "";
+  }
+  return field(seg, leaf);
+}
+
 /** 三态布尔：`null` / `undefined` ⇒ `unknown`（不折成 false）。 */
 function triBool(value: unknown): string {
   return typeof value === "boolean" ? String(value) : "unknown";
@@ -58,6 +76,14 @@ function pairs(rec: Record<string, unknown>): Array<{ k: string; v: string }> {
   return Object.keys(rec)
     .sort()
     .map((k) => ({ k, v: field(rec, k) }));
+}
+
+/** 初值：设置文件里的现值；`model.api_key` 例外（读数是 `***`，回填等于写回它）。 */
+function presetOf(settings: SettingsReading, key: string): string {
+  if (key === "model.api_key") {
+    return "";
+  }
+  return currentOf(settings, key);
 }
 
 export function Machine() {
@@ -207,8 +233,9 @@ export function Machine() {
 
       <Card title="设置窗口（写设置）">
         <div class="readings">
-          写的是**机器级**设置文件（上面那一格里的路径）。逐格填，空着表示"这一格不动"
-          （`settings.write_settings` 的口径是只写给了值的键）。`model.api_key` 落盘、
+          写的是**机器级**设置文件（上面那一格里的路径）。每一格的初值就是**设置文件里的现值**（打开即可见；`model.api_key` 只写不读，
+        所以那一格不回填）。逐格改，**清空某一格**表示"这一格不动"
+        （`settings.write_settings` 的口径是只写给了值的键）。`model.api_key` 落盘、
           回执里恒为 `***`（key 只写不读）。`lean_enabled` 那一格是业主 2026-10-12 的
           省钱开关，取值只认 `true` / `false`；缺省是**关**。
         </div>
@@ -218,8 +245,14 @@ export function Machine() {
               <span class="mono">{field.key}</span>
               <input
                 type="text"
-                placeholder={field.hint}
-                value={values[field.key] ?? ""}
+                placeholder={
+                  field.key === "model.api_key"
+                    ? field.hint
+                    : currentOf(settings, field.key) === ""
+                      ? `${field.hint}（盘上没设过）`
+                      : field.hint
+                }
+                value={values[field.key] ?? presetOf(settings, field.key)}
                 onInput={(ev) => {
                   const v = ev.currentTarget.value;
                   setValues((old) => ({ ...old, [field.key]: v }));

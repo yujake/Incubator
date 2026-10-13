@@ -792,3 +792,24 @@ def test_a_session_write_reaches_the_stream_through_serve(tmp_path: pathlib.Path
             resp2.close()
             conn2.close()
 
+# ====================================================================== 设置窗口的回填（R81）
+
+def test_the_settings_panel_prefills_from_the_reading() -> None:
+    """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥
+    都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。
+
+    按源码读（与这一组其余判据同一条路）：页面是客户端渲染的，Python 判据看不到 DOM，
+    但这件事实在源码里是**结构可见**的 —— 输入框的 `value` 必须落到"读数 ⊕ 用户输入"
+    这个表达式上，而不是恒为空串。
+
+    两向都钉：
+    - 正向：`value` 用 `presetOf(settings, …)`（读数为底）、存在 `currentOf` 取现值；
+    - 反向：`model.api_key` **不许**回填（读数恒为 `***`，回填等于把 `***` 写回文件）。
+    """
+    src = _page_text("Machine")
+    assert "presetOf(settings, field.key)" in src, "设置窗口的输入框没有按读数回填"
+    assert "function currentOf(" in src and "function presetOf(" in src, "取值帮手不在"
+    assert "盘上没设过" in src, "占位符里没写清这一格是空在哪一边"
+    i = src.index("function presetOf(")
+    body = src[i:i + 400]
+    assert 'key === "model.api_key"' in body and 'return ""' in body, body
