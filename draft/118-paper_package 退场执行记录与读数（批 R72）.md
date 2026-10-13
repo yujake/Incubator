@@ -168,6 +168,25 @@ $env:PYTHONPATH="D:\Incubator\agentflow\src"; python -B -c "import sys; from age
 （`scripts/noai_gate.py --git --since <基线>` 的读数与两名人审的登记见提交信息与
 `.noai-approvals.json`。）
 
+**收工门的最终读数**（基线 `fbf44d4`，即 R71 那一版）：
+
+```text
+python -B scripts/noai_gate.py --git --since fbf44d4
+⇒ requires_human：6 条改动落在 FC-27 禁 AI 区
+
+python -B scripts/noai_gate.py --check-approvals --git --since fbf44d4
+⇒ requires_human：命中 6 条，其中 1 条未获批准
+   （approved 5 条、ledger_self_approval 1 条）
+```
+
+那 6 条里，**5 条内容改动各获 2 名 reviewer 逐行走查**（hash 与盘上一致）；
+第 6 条是 `.noai-approvals.json` 自己 —— 它**永远**是 `ledger_self_approval`
+（"台账不能批准自己"：允许它自批准，等于允许 AI 把自己的改动写进台账并声称已批准）。
+换句话说：**这一批的 5 处禁改区改动是批准过的；那个 6 是设计如此**，不是漏签。
+门自己还留一句必须照抄的免责：它只能证明台账里有 2 个**不同字符串**的名字，
+证明不了那两次走查真的互相独立。
+
+
 ---
 
 ## 9. 全量套件的两次读数（同一棵树上的"改前 / 改后"）
