@@ -1,0 +1,70 @@
+R73：审校链（B / H / V）做实 —— 允许 B 唤起 V、审校报告落进 out/review、两阶段分工、H 的只读审稿
+
+业主 2026-10-13 的五条口径 + 两条更正（逐字见 `draft/119` §0）：
+「review 只是任务的一种，咋产出中稳定产出 review 文件夹呢？」→「review 不是一种模式，
+显然应该是以 B，H 和 V 为中心的智能体协作工程」→「允许 B 唤起 V」+「理由是 B 需要初步
+检验收录的证明」。下面按口径逐条落。
+
+## 一、审校是一条链，不是一次检查（⑥⑦）
+
+- **`B→V` 那条边**（`specs/b.py` 的 `edges=('C','V')`，`capabilities.ALLOWED_EDGES` 由它派生）：
+  B **收录**进台账的证明（`origin=external_lit` + 逐字 `proof_text`）要 V 先做一次逐行走查，
+  下游（H 的采信规则：「E 的 proof 或 V 的签名」）才谈得上用它；在这条边之前 B 够不着 V，
+  得转两次手，而链断在哪里在台账上看不出来。边总数 29 → **30**（文档那一份同步：
+  `docs/ROLE-SPECS.md` §0.5 的 B 行与边总数）。
+- **三格各自写明链上的位置**：B 是"第一环"（逐字 `quote`/`quote_verified`/`proof_text` 是下游唯一
+  能拿原文比一比的东西）、V 是"签名环"（Lean 关掉时 H 采信的就是它签的「审过」）、H 是"中间那环"
+  （上游 B 的台账与 V 的签名，它判稿用的就是这两样）。M 的政策从"review 是一类任务"
+  **改写成"按这条链排期"**（我第一版写成"一类任务"，业主当场更正）。
+
+## 二、review 面稳定产出（⑤）
+
+- 审校报告的落点**由框架定**：`review_tools.DEFAULT_REPORT_SUBDIR` 从 `reports` 挪进
+  **`out/review`**（与 M 的交付说明 `REPORT.md`、体例声明、状态报告同住一个目录）——
+  模型挑路径时"稳定产出"只能靠运气。
+- 新增受控档 **`review_files`**（`closing.LEG_CHECK_KINDS`）：数 `out/review/*.md` 里**减掉**
+  M 自己那两份（`REPORT.md` / `STATUS-*`）之后的审校报告数 ⇒ M 可以在验收表里写一行
+  「审校报告 ≥ 1」，「没审」不再只是一个说法。判据：
+  `tests/test_closing_gate.py::test_the_review_files_row_counts_review_reports_not_the_agents_own_report`
+  （只有 M 自己的说明时 `got == 0`；H 的报告落进同一目录之后那一行才成立）。
+
+## 三、两阶段分工（③④）
+
+- **研究阶段**（题面没说「整理成论文 / 交付论文 / 稿件」）只积累研究手稿、命题与证明 ——
+  M 不派 G 写正文、也不派 H 审论文（G 交 `documents` 手稿，H 审那些手稿）；
+  G 的政策里也写明"论文只在成文阶段写"。
+- **成文阶段所有角色都可能有任务**：正文里的瑕疵要回去补（补证据 D/F、核引文 A/B、
+  重算关系读数 C、逐行审阅 V、把命题与出处对齐 B）—— 别把「写论文」读成只有 G/H 的事。
+
+## 四、H 的只读审稿：落点由派活给（②）
+
+H 的工具面全量只读 ⇒ 它审论文靠 `fs.read`，所以**落点必须由派活给**（业主的话就是
+"在派活时告诉它"）：M 把 `out/paper/main.tex` 与 `main.pdf` 写进派活，报告由 `review_report`
+落到框架定的 `out/review/<doc_id>-review.md`。**没有加新工具** —— 业主指的路是派活，不是工具。
+判据 `tests/test_paper_pack.py::test_the_review_role_is_told_where_the_paper_is`。
+
+## 五、读数
+
+- 提示词版本 p102 → **p103**；真的换值的格：**B / G / H / M / V** 五格
+  （B 因为出边 V 与"第一环"、V 因为"签名环"、G/H/M 因为两阶段与链的框架）。
+- 冻结快照：`agent_surface` 重冻（上面五格的 `prompt` 与 B 的伙伴面）；
+  `tool_surface` **无变化**（这一批没动手工具声明）。
+- 判据读数：`test_agent_prompts` + `test_paper_pack` 90 passed；`test_policy` +
+  `test_role_specs_complete` + `test_doc_code_consistency` 96 passed；
+  `test_agent_spec_reconciliation` + `test_mechanical_rewrite_guards` 等 108 passed。
+- 全量套件：见 `temp/r73-full-suite.txt`（**1 failed / 5077 passed** 那一跑暴露的两处 ——
+  边总数 29 与两处换行档位被脚本写回时弄成了 LF —— 已修，修后那四条重跑 108 passed）。
+
+## 六、没做的那一条（①，等一句确认）
+
+业主把口径补全了两次：「优雅停止就是主控用这个操作或预算耗尽自动触发主控用这个操作」+
+「接收到停的时候，剩余任务委托状态自动变成 `block`」。设计写在 `draft/119` §3：
+接停的那一层由**框架**把板项与未终态的委托翻成 `block`（留"谁翻的/为什么/什么时候"三样读数），
+一路汇总到 M，M 在收工读数里落成 `not_done`/`cannot` 并写进交付说明。
+**要动 `schema.py`（状态词表加 `block`，禁改区）**，所以先请业主确认这一点再开工。
+
+## 七、禁改区（FC-27）
+
+命中：`specs/b.py` · `specs/g.py` · `specs/h.py` · `specs/m.py` · `specs/v.py`（auth-audit）
+与 `tests/golden/agent_surface_snapshot.json`（eval-criteria，重冻 —— 逐格读数见上面"读数"一节）。
+签名落在 `.noai-approvals.json`（2 名 reviewer 逐行走查）。

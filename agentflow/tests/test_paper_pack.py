@@ -53,6 +53,19 @@ def _prompt(role: str, store: Store) -> str:
     return AP.system_prompt(role, registry=_registry(store), task="只读重放一次论文包")
 
 
+def test_the_review_role_is_told_where_the_paper_is(store: Store):
+    """判据（业主 2026-10-13：「H 要能对论文进行只读审核，至于论文在哪可在派活时告诉它」）。
+
+    H 的工具面全量只读 ⇒ 它审论文靠 `fs.read`，所以**落点必须由派活给**（不是靠它猜、
+    也不是靠框架新加一件工具）。这条判据钉住三件事在 H 读得到的地方：
+    ① 落点由派活告诉它；② 它只读（一个字都不改）；③ 报告落到框架定的 `out/review/`。
+    """
+    text = _prompt("H", store)
+    for fact in ("由派活告诉你", "out/paper/main.tex", "fs.read", "读是你的全部手段",
+                 "out/review/<doc_id>-review.md", "review_files"):
+        assert fact in text, f"H 的提示词里没有 {fact!r}"
+
+
 def test_the_paper_section_goes_to_the_roles_that_touch_the_paper(store: Store):
     """正控：M（统筹交付）/ G（写正文并编译）/ H（审校）看得到这一段。
 
@@ -113,7 +126,12 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
                  "out/paper/ACCEPTANCE.md", "P1–P11", "逐条回应那十行",
                  "cross_check", "不构成证明", "结论不许强于它挂的证据",
                  "doc.paper_compile", "COMPILE-RECEIPT.json",
-                 "正文与 PDF 对得上", "正文有内容级的改动", "review_findings", "依据"):
+                 "正文与 PDF 对得上", "正文有内容级的改动", "review_findings", "依据",
+                 # 2026-10-13 业主的四条口径（③②⑤）：只在成文阶段写论文 / H 的落点由派活给 /
+                 # 成文阶段所有角色都可能有任务 / review 报告的落点与它的读数
+                 "但只在成文阶段写", "H 审论文", "靠派活告诉它",
+                 "成文阶段所有角色都可能有任务", "review_files",
+                 "审校这条链的中心是 B / H / V"):
         assert fact in text, f"论文段里没有 {fact!r}"
     # 第七节（摄取与派活的三条纪律，`draft/37` §48 的真机读数）：这三句是行为口径，
     # 不是说明文字 —— 上一趟真机正是在这三处各栽了一次（通配吃掉配套文档 /

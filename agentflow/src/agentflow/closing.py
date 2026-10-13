@@ -188,6 +188,15 @@ LEG_CHECK_KINDS: dict[str, str] = {
                             "C 自己的产出登记行），D 只是它的读者（`D.ingest(report)`）。"
                             "别把它当成 D 的交付物（2026-10-04 真机读数：主控为此重试 7 次、"
                             "换实例，最后只能如实记未核到 —— 因为 D 的动作面里没有写这张表的动作）",
+    "review_files": "**审校报告文件数**（`out/review/*.md` 里除 M 自己那两份之外的）—— "
+                    "H 的动作 `review_report` 只写文件、不落表，而它**没有**任何一档读数看着它。"
+                    "为什么单列（业主 2026-10-13：「review 只是任务的一种，咋产出中稳定产出 "
+                    "review 文件夹呢？」）：`out/review/` 里同时住着 M 的交付说明 `REPORT.md` 与 "
+                    "状态报告 `STATUS-*.md`，所以这一档**要减掉它们**，只数「审出来的那些」；"
+                    "审校报告的落点由框架定（`review_tools.DEFAULT_REPORT_SUBDIR`）而不是模型挑，"
+                    "于是「任务里排了审、报告就必然在这个文件夹里」可以被数出来。"
+                    "它与 `reviewed_documents` 分工不同：后者读 `documents` 行的审校状态（台账），"
+                    "这一档读盘上那份报告（产物）—— 台账说「审过」而盘上没有报告，正是它要抓的",
     "report_files": "D 写出来的报告文件数 —— D 的动作 `write_report` 只写文件、不落表"
                     "（签名 `write_report(out_path=None) -> str`）；要看它有没有真的产出，"
                     "数这个才是数对了地方。落位取并集：`out/reports/` 与写者自己用的那个"
@@ -1385,6 +1394,24 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(rows), {"attack_plans": [
             {"id": str(r.get("plan_id") or r.get("id") or ""),
              "status": str(r.get("status") or "")} for r in rows[:8]]}
+    if kind == "review_files":
+        # H 的审校报告（`review_report` 的框架缺省落点 = `out/review/`）。
+        # M 自己的三件（`REPORT.md` / `STATUS-*.md` / `REPORT-STYLE.json`）也在那个目录里
+        # ⇒ 这一档必须减掉它们，否则"M 写了交付说明"就会冒充"审过了"。
+        d = project_root / "out" / "review"
+        got = sorted(d.glob("*.md")) if d.is_dir() else []
+        excluded = [p.name for p in got
+                    if p.name == "REPORT.md" or p.name.startswith("STATUS-")]
+        reviews = [p for p in got if p.name not in set(excluded)]
+        detail: dict[str, Any] = {
+            "dir": "out/review",
+            "files": [p.name for p in reviews[:8]],
+            "excluded": sorted(excluded)[:8],
+        }
+        if not d.is_dir():
+            detail["note"] = (f"{d} 不在盘上 ⇒ 这一档按 0 条算（还没审过任何一份，"
+                              "不是「没查成」—— 盘上有没有那个目录本身是确定的）")
+        return len(reviews), detail
     if kind == "report_files":
         # D 的 `write_report` 只写文件（返回路径），不落 `analysis_reports` —— 这一档就数文件。
         #

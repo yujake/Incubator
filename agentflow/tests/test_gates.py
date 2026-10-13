@@ -702,7 +702,8 @@ def test_agent_h_produces_a_hash_pinned_report_on_disk(tmp_path):
     h = AgentH(st)
     out = h.review_report("0000", own_errors=["第一轮我把未查的 G8 当成了通过"])
     assert out["gates_total"] == 15
-    assert out["report_path"] == "reports/0000-review.md"
+    # 2026-10-13：审校报告的框架缺省落点从 `reports/` 挪进 `out/review/`（⑤ 稳定产出）
+    assert out["report_path"] == "out/review/0000-review.md"
     body = (st.root / out["report_path"]).read_text(encoding="utf-8")
     assert out["revision_hash"] in body
     assert "我这一轮犯的错" in body

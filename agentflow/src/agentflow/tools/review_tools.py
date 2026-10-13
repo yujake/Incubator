@@ -1516,7 +1516,14 @@ def list_findings(
 #: 审校报告默认落点（相对工作区）。沿用 `draft/17` §8.1 的目录树建议：
 #: 报告与稿件分开放，且按被审对象命名，于是"这份报告审的是哪一版"靠文件名
 #: 就能对上 —— 再加上报告头里的内容 hash，"行号失效"这件事才不可能悄悄发生。
-DEFAULT_REPORT_SUBDIR = "reports"
+#:
+#: 2026-10-13 从 `reports` 挪进 `out/review`（业主：「review 只是任务的一种，
+#: 咋产出中稳定产出 review 文件夹呢？」）：`out/review/` 已经是 M 的交付说明
+#: （`REPORT.md`）、体例声明（`REPORT-STYLE.json`）、状态报告（`STATUS-*`）与
+#: M 判据（`m-verdicts.jsonl`）的落点 —— 审校报告住进同一个目录，"这一趟审过什么"
+#: 就有**一个**可数的面（收工门那一档 `review_files` 数的就是它）。
+#: 落点由框架定、不由模型挑：模型挑路径时，"稳定产出"这件事就只能靠运气。
+DEFAULT_REPORT_SUBDIR = "out/review"
 
 
 def review_report(
@@ -1550,7 +1557,7 @@ def review_report(
 
     ## 它写哪里、写什么
 
-    只写一个 markdown 文件（默认 `<workspace>/reports/<doc_id>-review.md`），
+    只写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），
     不碰任何数据表、不碰 `claims`。这是 `AgentH` 落库代理的一个入口，
     因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
 

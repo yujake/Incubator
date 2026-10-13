@@ -361,6 +361,19 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
+    # 2026-10-13 业主更正：审校链的中心是 B / H / V —— 三个角色各自的框都要写着它
+    for role in ("B", "H", "V"):
+        rb = AP.ROLE_BRIEFS[role]
+        mine = "\n".join([rb.duty, rb.deliverable, *rb.boundary, *rb.policy])
+        assert "以 B、H 和 V 为中心" in mine or "以 B / H / V 为中心" in mine, role
+        assert "review 不是一种模式" in mine, role
+
+    # 2026-10-13 业主口径：两阶段分工（研究阶段不写论文）+ review 是一类任务且要落产物
+    assert "两阶段的分工" in text and "所有角色都可能有任务" in text, text
+    # 业主 2026-10-13 更正：审校**不是一种模式**，而是一条以 B / H / V 为中心的协作链 ——
+    # 这一条钉的正是"M 有没有按这条链排期"，不是"表里有没有一行 review"。
+    assert "审校不是一种模式" in text and "以 B / H / V 为中心的协作链" in text, text
+    assert "review_files" in text, text
     # D47：交付物按任务那句话说 —— "整理成论文"那一类要交出论文（T3 第 1 趟就是漏了这一句）。
     # 2026-10-13（`draft/117`）：口径从"必须建论文包"改成"让 G 自己写正文再编" ——
     # 业主裁定「paper_package 里那些东西都是古早废案了，我们要智能体写文章」。
@@ -2274,18 +2287,18 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （实测：不带开关算出 D/E/F = da82…/85f5…/a990…，而判据要的是 814e…/680f…/c42b…，
 #: 也就是**与 p101 逐字相同**的那一组）。照它抄之前，先让判据自己说一遍（跑本文件），
 #: 或者让计算器替你钉上那个开关（`agentflow/temp/recompute_prompt_digests.py` 已经这么做了）。
-_FROZEN_PROMPT_VERSION = "p102"
+_FROZEN_PROMPT_VERSION = "p103"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "3748a64c289c8bd3c7ff7b43d2d040ef5a93bc5ab2223f38f4e4f5e8c218e0c0",
-    "B": "14cde8726064ccabf20100b780da2e7273662935ad709767f9eeec30911136e3",
+    "B": "dc95648fa7668fcc06d3a81214911fa2593a34b333a6c3665907d5a6a6c04077",
     "C": "1d0fe8557521108d36149c5ffe0da05f20a78ab2a7a14fa3d41eee05fa855551",
     "D": "814ef6a531e3318f5244a9bb5edc133c0a57a9a219edadc289285ed6c1a9ed00",
     "E": "680f8813cbc9225393cc866e5031c19d34ee3f1fec9f78d83ef763d38d7d0c9d",
     "F": "c42b5a151178c128c0cbe3432e1de4393e56fe4ac329d4bd7c128b8d7b9925b4",
-    "G": "e2838408c6b50ff5ec28d6d06c8ff95b5777201b44e9f18624d2dd5975623f0a",
-    "H": "3babbb4eb71d730385879f9d914c6c35051d9cde734b8fb2adee3f0ea4200de5",
-    "V": "dc0bbc7a51112a4dbff02bcabe8065effb9c7cfed11efb3452eb114dfad1fa2e",
-    "M": "27273840a21a0273e502992e46b2236969a71c4f54168182daa47f65e87493a7",
+    "G": "1e4e6d3a6e5904a84ee48cdd5d22d1955953c0fd22ce43edb088eec7e9394369",
+    "H": "1970b9e137f057ca6807b5119f7f88e5cf8714d04b293396ec01d80dda2325f8",
+    "M": "31d12e956882a77b4ab50d2db4eb9bb20245483df46b954e009b9e53d5405f0f",
+    "V": "efa6859f672596f9770d0e224ae82531eb95bb4371512129f9d0d3fb5a3e3254",
 }
 
 

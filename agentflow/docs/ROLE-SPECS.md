@@ -170,7 +170,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 |---|---|
 | `M`（主控） | `A C D E G H` —— **不许直接控制 B / F / V**（2026-10-10 裁定；B 走 `A`、F 走 `D`、V 走 `F`） |
 | `A` | `B` |
-| `B` | `C` |
+| `B` | `C V` |
 | `C` | **（空）** —— 只读角色连"请求"都不直接发 |
 | `D` | `A B C E F` |
 | `E` | `B D` |
@@ -179,10 +179,13 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `H` | `A E G` |
 | `V` | `F` |
 
-**边总数 = 29**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
+**边总数 = 30**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
 —— 新增的三条是 `M→V`、`F→V`、`V→F`。观测 2026-10-06（角色 V 落地）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
-（B / F / V 改由父代理转达；见 §M.4.1 上面那段）。读数：
+（B / F / V 改由父代理转达；见 §M.4.1 上面那段）。
+**2026-10-13 加一条 `B→V` 回到 30**：业主裁定逐字「允许 B 唤起 V。理由是 B 需要初步检验
+收录的证明」—— 审校链（B / H / V）的第一环要能把**收录进台账的证明**直接交给 V 逐行走查，
+否则它得转两次手才够得着 V。读数：
 `python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"`）。
 
 **没有任何角色能召唤 `M`**（`capabilities.NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`）。

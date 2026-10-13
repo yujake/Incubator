@@ -146,7 +146,12 @@ def test_allowed_edges_match_design_table():
     assert C.ALLOWED_EDGES["H"] == frozenset({"A", "E", "G"}), \
         "审校者可以向 A/E 要证据、请 G 修订，但**不许自己改数据**（它的只读面在 tools 层）"
     assert C.ALLOWED_EDGES["A"] == frozenset({"B"})
-    assert C.ALLOWED_EDGES["B"] == frozenset({"C"})
+    # 2026-10-13（业主裁定逐字：「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」）：
+    # B 是审校链（B / H / V）的第一环 —— 它把外部文献里的证明收录进 `statements`
+    # （`origin=external_lit` + 逐字 `proof_text`）之后，那份证明要 V 先做一次逐行走查，
+    # 下游（H 的采信规则）才谈得上用它；在这条边之前 B 只能转两次手才够得着 V。
+    # 这一条只加"B 可以直接请 V 签字"，`V` 的只读/冷启动面与它自己的出边一个字未动。
+    assert C.ALLOWED_EDGES["B"] == frozenset({"C", "V"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D"})
     assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E", "V"})

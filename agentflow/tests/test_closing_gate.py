@@ -811,6 +811,33 @@ def test_a_project_without_a_paper_has_nothing_to_check(tmp_path: pathlib.Path):
     assert [f.code for f in rep3.findings if f.check == "paper"] == ["paper_not_checked"]
 
 
+def test_the_review_files_row_counts_review_reports_not_the_agents_own_report(
+        tmp_path: pathlib.Path):
+    """判据（业主 2026-10-13：「review 只是任务的一种，咋产出中稳定产出 review 文件夹呢？」）：
+    `review_files` 数的是 `out/review/` 里的**审校报告**，且必须减掉 M 自己那两份。
+
+    为什么必须单列：`out/review/` 同时住着 M 的交付说明（`REPORT.md`）与状态报告
+    （`STATUS-*.md`）⇒ 只 glob `*.md` 会让「M 写了一份说明」冒充「审过了」。
+    三态：那个目录不在盘上 ⇒ 0 条（盘上有没有目录是确定的，不是「没查成」）。
+    """
+    st, report = _good(tmp_path)                 # `_good` 会写 out/review/REPORT.md
+    rows = [{"id": "R1", "name": "审校报告", "kind": "review_files", "min": 1}]
+    _acceptance_checks(tmp_path, rows, st=st)
+    only_m = _gate(st, report)
+    row = only_m.readings["acceptance"]["rows"][0]
+    assert row["got"] == 0, row
+    assert "REPORT.md" in row["detail"]["excluded"], row["detail"]
+    assert only_m.status["acceptance"] == "fail", only_m.to_dict()
+
+    # H 的报告落进同一个目录（`review_report` 的框架缺省落点）⇒ 这一行成立
+    (tmp_path / "out" / "review" / "0000-review.md").write_text("# 审校报告\n", encoding="utf-8")
+    _acceptance_checks(tmp_path, rows, st=st)
+    with_review = _gate(st, report)
+    assert with_review.readings["acceptance"]["rows"][0]["got"] == 1, \
+        with_review.readings["acceptance"]
+    assert with_review.status["acceptance"] == "pass", with_review.to_dict()
+
+
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
     """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
 
