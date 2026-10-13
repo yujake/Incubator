@@ -644,6 +644,8 @@ class ClaimIssue:
     `unknown_status_axis`               3       判不了（缺字段 / 取值非法）—— 第三态，不是违规
     `lifecycle_incomplete`              4       `frozen`/`is_negative`/`作废` 的生命周期不闭合
     `missing_disclaimer`                5       `cross_check` 缺那句"不构成证明"声明
+    `uncontrolled_disclaimer`           5       声明写了，但不是这一档的受控那一句
+                                                 （2026-10-13 加：自造近义声明此前一路过关）
     `overclaim`                         6       证据等级 < proof 却用了"证明/定理/必然"这类词
     `incomplete_numeric_evidence`       7       `numeric_evidence` 四元组缺键
     `duplicate_claim_id`                8       同一稿件里代号重复
@@ -730,6 +732,7 @@ CLAIM_FAMILY_BY_CODE: dict[str, int] = {
     "inconsistent_status": 3, "unknown_status_axis": 3,
     "lifecycle_incomplete": 4,
     "missing_disclaimer": 5,
+    "uncontrolled_disclaimer": 5,
     "overclaim": 6,
     "incomplete_numeric_evidence": 7,
     "duplicate_claim_id": 8,
@@ -1342,6 +1345,35 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                     claim_id=cid,
                 )
             )
+        elif ek_norm in ("cross_check", "proof_review"):
+            # 2026-10-13（无 Lean T2 的真机）：写了的声明也必须是受控那一句。
+            #
+            # 现场：`projects/p6t2-research-20261012b` 的 doc 0002 claim-1 挂着
+            # 『文献交叉比对，不构成证明』—— 这句在全仓代码里不存在（受控的只有
+            # 「数值交叉验证，不构成证明」与「逐行审阅过的证明，未经机器检查」）。
+            # 此前这条判据只查"非空"，于是自造声明一路写库；而声明的用途正是"让读者
+            # 一眼看出这一档凭什么"——换一句近义的话，等于把那句受控承诺换成了作者
+            # 自己愿意承担的话（FC-03：同一个受控字符串不许各自手打）。
+            got_text = str(_value_of(norm, "disclaimer") or "").strip()
+            want_text = (_cross_check_disclaimer() if ek_norm == "cross_check"
+                         else _proof_review_disclaimer())
+            if got_text != want_text:
+                issues.append(
+                    ClaimIssue(
+                        code="uncontrolled_disclaimer",
+                        field_name="disclaimer",
+                        level="error",
+                        message=(
+                            f"断言 {cid} 的 disclaimer 不是这一档的受控那一句。"
+                            f"应当逐字写「{want_text}」，而现在是「{got_text[:60]}」"
+                            "—— 三态/免责声明是受控字符串，换一句近义的话会让下游"
+                            "（H 的采信规则、报告里的分档统计、读者）对不上口径"
+                        ),
+                        evidence=(f"evidence_kind={ek_norm!r}；受控={want_text!r}；"
+                                  f"现场={got_text!r}"),
+                        claim_id=cid,
+                    )
+                )
         # 用词上限（业主 2026-10-12）：关掉 Lean 时 `proof_review` 也算到了顶
         # —— 那时"正文里写定理"这件事必须有路可走，否则没有 Lean 的用户连论文都写不了。
         if ek_norm not in _wording_ceiling():
@@ -1400,7 +1432,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                 level="error",
                 message=(
                     f"断言 {cid} 不是否定型（`is_negative` 不是 True）却带了 "
-                    f"`negation_kind={nk_norm!r}`：会让『否定型结论』的**计数虚高**，"
+                    f"`negation_kind={nk_norm!r}`：会让『否定型结论』的计数虚高，"
                     "而否定计数是结论适用范围的一部分（FC-25）"
                 ),
                 evidence=f"is_negative={_value_of(norm, 'is_negative')!r}、negation_kind={nk_norm!r}",
@@ -1545,7 +1577,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                     code="unknown_status_axis",
                     field_name="status",
                     level="info",
-                    message=f"断言 {cid} 的 status×evidence_kind 一致性**判不了**：{reason}",
+                    message=f"断言 {cid} 的 status×evidence_kind 一致性判不了：{reason}",
                     evidence=f"status={status_val!r}、evidence_kind={ek_val!r}",
                     claim_id=cid,
                 )
@@ -1555,7 +1587,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
     if status_val == "作废" and not _retraction_reason(norm):
         retract_reason = (
             "`status='作废'` 却没有 `errata_ids` 也没有 `freeze_reason`："
-            "作废这件事**判不出原因**（缺的不是一个值，而是撤销的依据）"
+            "作废这件事判不出原因（缺的不是一个值，而是撤销的依据）"
         )
         issues.append(
             ClaimIssue(
@@ -1651,7 +1683,7 @@ def validate_document_claims(doc: Mapping[str, Any], *, strict: bool = False) ->
                 code="missing_field",
                 field_name="claims",
                 level="error",
-                message="稿件没有 `claims` 字段 ⇒ 无从判定（**没查**，不是『没有断言』）",
+                message="稿件没有 `claims` 字段 ⇒ 无从判定（没查，不是『没有断言』）",
                 evidence=f"doc 的键={sorted(doc) if isinstance(doc, Mapping) else type(doc).__name__}",
             )
         ]

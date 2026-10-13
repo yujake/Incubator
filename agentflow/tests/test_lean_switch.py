@@ -318,7 +318,86 @@ def test_the_wording_ceiling_follows_the_switch(monkeypatch: pytest.MonkeyPatch)
     assert "proof_review" in S.EVIDENCE_KINDS
 
 
-# ============================================================ 7. 收工门
+def test_a_self_written_disclaimer_does_not_pass() -> None:
+    """判据（2026-10-13，无 Lean T2 的真机）：写了的声明也必须是受控那一句。
+
+    真机现场（`projects/p6t2-research-20261012b/documents/0002.md`，无 Lean 那一趟）：
+    claim-1 的 `disclaimer` 是『文献交叉比对，不构成证明』—— 这句在全仓代码里不存在
+    （受控的只有「数值交叉验证，不构成证明」与「逐行审阅过的证明，未经机器检查」）。
+    此前这条判据只查"非空"，于是自造声明一路写库、一路渲染进 PDF。
+
+    为什么"近义就行"不成立：那句声明是受控字符串，下游按它逐字对口径
+    （H 的采信规则、报告里的分档统计、读者看到的"这一档凭什么"）——
+    换一句作者自己愿意承担的话，等于把受控承诺换掉了，而没有任何读数会响（FC-03）。
+
+    两件事一起钉：受控那句必须干净；近义那句必须报 `uncontrolled_disclaimer`。
+    反负控：判据必须用 `doc_tools` 里那两个常量（唯一来源），不是在本判据里手打一份。
+    """
+    from agentflow import claimanatomy as CA
+    from agentflow.tools import doc_tools as DT
+
+    def _codes(ek: str, disc: str) -> set[str]:
+        c = {"claim_id": "c1", "section": "1", "text": "数值上支持 P。",
+             "evidence_kind": ek, "citations": ["exp:0000"],
+             "disclaimer": disc, "is_negative": False}
+        res = CA.validate_claim(c)
+        issues = getattr(res, "issues", None)
+        if issues is None:
+            issues = res if isinstance(res, list | tuple) else []
+        return {i.code for i in issues}
+
+    assert "uncontrolled_disclaimer" not in _codes("cross_check", DT.CROSS_CHECK_DISCLAIMER)
+    assert "uncontrolled_disclaimer" not in _codes("proof_review", DT.PROOF_REVIEW_DISCLAIMER)
+    # 档与声明必须配对：拿错那一档的声明也要报（否则"受控"只是一句话）
+    assert "uncontrolled_disclaimer" in _codes("cross_check", DT.PROOF_REVIEW_DISCLAIMER)
+    for variant in ("文献交叉比对，不构成证明", "数值交叉验证，仅供参考",
+                    DT.CROSS_CHECK_DISCLAIMER + "。"):
+        assert "uncontrolled_disclaimer" in _codes("cross_check", variant), variant
+        assert "missing_disclaimer" not in _codes("cross_check", variant), variant
+
+
+# ============================================================ 7. 稿子的「阅读须知」
+def _levels_named_in(text: str) -> set[str]:
+    """一段说明文字里以 `` `等级` `` 形态点到的证据等级集合（只看词表里那些名字）。"""
+    from agentflow import schema as _S
+
+    return {k for k in _S.EVIDENCE_KINDS if f"`{k}`" in text}
+
+
+def test_the_rendered_paper_lists_every_evidence_level() -> None:
+    """判据（2026-10-13，无 Lean T2 的真机）：稿子的「阅读须知」必须列全证据等级。
+
+    真机现场（`projects/p6t2-research-20261012b/documents/0002.md`，无 Lean 那一趟）：
+    第 11 行逐字写着"证据等级只有三档"，只列了 `proof` / `cross_check` / `heuristic`；
+    而同一份稿子第 19–24 行的统计表里 `proof_review` 一行赫然在目 —— 自相矛盾，
+    而且方向恰好是最坏的那个：没有 Lean 的用户读到它，会以为"逐行审阅过的证明"
+    这一档不存在，而那一档正是他这个模式下唯一能承载「定理 / 证明」的凭据。
+
+    根因是渲染函数手写了"三档"与那三个名字，而统计表按 `schema.EVIDENCE_KINDS` 出行。
+    现在第 0 节也从词表现算，所以这条判据钉的是"两处同源"：
+    第 0 节点名的等级集合必须等于 `S.EVIDENCE_KINDS`，且 `proof_review` 那句声明
+    必须在读者能看到的地方（读者要读得到"这一档凭什么"）。
+    """
+    from agentflow import schema as S
+    from agentflow.tools import doc_tools as DT
+
+    text = DT.render_markdown({"doc_id": "0001", "kind": "paper", "title": "t",
+                               "status": "draft", "claims": []})
+    head = text.split("## 1.", 1)[0]
+    assert _levels_named_in(head) == set(S.EVIDENCE_KINDS), (
+        "第 0 节没列全证据等级：", sorted(set(S.EVIDENCE_KINDS) - _levels_named_in(head)))
+    assert DT.PROOF_REVIEW_DISCLAIMER in head, (
+        "第 0 节没有 `proof_review` 那句声明 ⇒ 读者看不出这一档凭什么（无 Lean 模式的正题）")
+    # 统计表那一半照旧按词表出行（两处同源 ⇒ 自相矛盾这种形态不会再出现）
+    table = text.split("## 1.", 1)[1].split("## 2.", 1)[0]
+    assert _levels_named_in(table) == set(S.EVIDENCE_KINDS), sorted(_levels_named_in(table))
+
+    # 反负控：把某一档从说明里拿掉 ⇒ 同一把尺子必须报出来（否则这条判据恒真）
+    crippled = head.replace("`proof_review`", "`某档`")
+    assert _levels_named_in(crippled) != set(S.EVIDENCE_KINDS), "反负控失效：拿掉一档却没报"
+
+
+# ============================================================ 8. 收工门
 class _Rep:
     """收工门那一格的最小替身（`_check_load_bearing` 只碰这三个属性）。"""
 

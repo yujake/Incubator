@@ -25,7 +25,49 @@ from agentflow import renderanchor as RA
 from agentflow.store import Store
 from agentflow.tools import build_registry
 
-# ============================================================ 夹具
+# ============================================================ 锚的格式不对 ⇒ 没查成（不是漂移）
+def test_a_hand_made_anchor_is_unknown_not_drifted(tmp_path: pathlib.Path) -> None:
+    """判据（2026-10-13，无 Lean T2 的真机）：锚的格式不对属于"没查成"，不是"漂了"。
+
+    真机现场（`projects/p6t2-research-20261012b/out/paper/RENDER-ANCHOR.json`）：
+    那份锚由项目自己补写的 `code/compile_paper.py` 产，两个毛病同时存在 ——
+
+    ① 表哈希是 12 位（框架写 64 位；前 12 位逐字相同 ⇒ 规范化口径一致，只是被截断）；
+    ② `files` 的键是项目相对（`out/paper/main.tex`），而框架按包相对读（`main.tex`），
+       还把编译产物 `main.pdf` 也塞进了 `files`。
+
+    旧判据的后果：verdict 是 `drifted`，而漂移行把两侧都截到 12 位 ⇒
+    「表 documents：锚 3 行/695d20acca07 ≠ 现在 3 行/695d20acca07」，读的人只会以为判据坏了；
+    文件那一维则报「锚里有、盘上没了」×2 +「盘上有、锚里没有」×1（三条都是基准不同）。
+    把"这份锚读不了"折成"包确实漂了"，正是三态纪律要挡的那一档。
+    """
+    root = tmp_path / "proj"
+    st = _sealed_project(root)
+    out = root / "out" / "paper"
+
+    # 把基准那份锚改成"手写风格"：表哈希截到 12 位、文件键改项目相对、再把 PDF 塞进去
+    anchor = json.loads((out / RA.ANCHOR_NAME).read_text(encoding="utf-8"))
+    anchor["tables"] = {k: {"rows": v["rows"], "sha256": str(v["sha256"])[:12]}
+                        for k, v in anchor["tables"].items()}
+    anchor["files"] = {"out/paper/main.tex": RA.file_digest(out / "main.tex"),
+                       "out/paper/main.pdf": RA.file_digest(out / "main.pdf")}
+    (out / RA.ANCHOR_NAME).write_text(json.dumps(anchor), encoding="utf-8")
+
+    got = RA.check_package(root, store=st)
+    assert got["verdict"] == "unknown", got
+    assert got["dimensions"]["tables"] == "unknown", got["dimensions"]
+    assert got["dimensions"]["files"] == "unknown", got["dimensions"]
+    assert got["drift"] == [], f"格式不对不该产出漂移行：{got['drift']}"
+    joined = "；".join(got["problems"])
+    assert "12 位" in joined and "64 位" in joined, joined
+    assert "项目相对" in joined and "包相对" in joined, joined
+
+    # 反负控：把锚按框架口径重写一遍 ⇒ 必须回到一致（否则上面那条可能只是"永远 unknown"）
+    (out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)), encoding="utf-8")
+    again = RA.check_package(root, store=st)
+    assert again["verdict"] == "consistent", (again["dimensions"], again["drift"])
+
+
 
 
 def _sealed_project(root: pathlib.Path, *, tex: str = "\\date{2026-01-01}\nbody\n",

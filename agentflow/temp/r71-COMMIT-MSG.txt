@@ -1,0 +1,94 @@
+R71：修四处判据看不见的缺陷（锚的格式不对被报成漂移 / 自造免责声明过关 / 引否证当支撑 / 稿子的证据等级表漏档）+ 第二次 T2 逐文件夹读数
+
+业主 2026-10-13：「你认真读之前第二次T2的每个文件夹产出，看看发现了什么问题」
+＋「不急着做第三回T2，着重记录并修复已知问题」。
+
+逐文件夹读数全文落在 `draft/116`（22 条问题，每条带证据路径与原话）。这一批修掉其中
+**四处能判据化**的；剩下的按"待修清单"排在那一节里，其中两条要业主裁（改的是评测口径 /
+schema），一条要选路（改 agent_a 还是动禁改区）。
+
+## 一、锚的格式不对 ⇒ 没查成，不是"漂了"（`renderanchor.check_package`）
+
+真机：第二次 T2 的 `out/paper/RENDER-ANCHOR.json` 由项目自己补写的
+`code/compile_paper.py` 产，表哈希是 **12 位**（框架写 64 位，前 12 位逐字相同），
+`files` 的键是**项目相对**（`out/paper/main.tex`）而框架按**包相对**读（`main.tex`），
+还把 `main.pdf` 塞进了 `files`。旧判据的后果：`verdict=drifted`，而漂移行把两侧都截到
+12 位 ——「表 documents：锚 3 行/695d20acca07 ≠ 现在 3 行/695d20acca07」——读的人只会
+以为判据坏了；文件那一维再吐三条假的（"锚里有、盘上没了"×2 + "盘上有、锚里没有"×1）。
+
+现在：哈希位数不符 / 文件键基准不同 ⇒ 该维 `unknown` + 点名理由，**不产漂移行**；
+漂移行也把两侧位数一并打出来（截断后看起来一样正是这次误读的来源）。
+真机复算：同一份锚，修后 `verdict=unknown`、`dimensions` 三维全 `unknown`、**`drift=[]`**。
+判据 `tests/test_renderanchor.py::test_a_hand_made_anchor_is_unknown_not_drifted`。
+
+## 二、自造免责声明不再过关（`claimanatomy` 新增第 5 族 `uncontrolled_disclaimer`）
+
+真机：`documents/0002.md` 的 claim-1 挂着『文献交叉比对，不构成证明』—— 这句在**全仓
+代码里不存在**（受控只有「数值交叉验证，不构成证明」与「逐行审阅过的证明，未经机器检查」）。
+此前那条判据只查"非空"，于是自造声明一路写库、一路渲染进 PDF。现在：写了但**不等于受控
+那一句**（含拿错档的声明）⇒ error，理由里给出受控原句。
+判据 `tests/test_lean_switch.py::test_a_self_written_disclaimer_does_not_pass`。
+
+## 三、引一条否证当支撑会被拦下（`doc_tools.check_proofs` 第 5 条判据）
+
+真机：`exp:0002` 自己的结论是 `result="refutes"`（`counterexample: criterion mismatch …,
+mismatches: 108`），而论文 claim-2 把它列进 `citations` 当**支撑**，交付说明只写一句
+"那只是脚本内部判据的问题"。`check_citations` 只问"对象在不在"，于是这条一路写库。
+现在：引 `refutes` 的实验 ⇒ 该断言必须是否定型里"已证否"那一档
+（`is_negative` + `negation_kind="disproved"`），否则报 `claim_cites_a_refuting_experiment`。
+判据 `tests/test_d1_proof_evidence_anchor.py::test_a_claim_may_not_cite_a_refuting_experiment_as_support`
+（负控：否定型引它是对的）。写夹具时 schema 自己又拦了两下（`refutes` 必须给
+`counterexample`、`negation_kind` 必须是 `disproved`）—— 那两条本来就在。
+
+## 四、稿子的「阅读须知」漏了 `proof_review` 那一档（`doc_tools`）
+
+真机：`documents/0002.md` 第 11 行逐字"证据等级只有三档"（只列 proof/cross_check/heuristic），
+而同一份稿子第 19–24 行的统计表按 `schema.EVIDENCE_KINDS` 列出**四**行。方向恰好最坏：
+没有 Lean 的用户读到它，会以为"逐行审阅过的证明"这一档不存在，而那正是他这个模式下
+唯一能承载「定理 / 证明」的凭据。现在第 0 节也从词表现算（"证据等级共 N 档" + 每档自带
+哪句声明），并顺带修了 `compose_claim` docstring 里同病的旧口径
+（"`evidence_kind != proof` ⇒ 抛" → 按 `wording_ceiling()` 现算）。
+判据 `tests/test_lean_switch.py::test_the_rendered_paper_lists_every_evidence_level`。
+
+## 五、顺带（同一天早先发现的那一条）：越权拒绝必须可行动
+
+`policy.py` 的 `forbidden_edge` 理由现在点名"谁能替你派"（`M→F` ⇒ "改派 D、G"；
+`M→B` ⇒ "改派 A、D、E"，取自同一张边表；一跳内真没有中转就保持原话，不编）。
+理由是会话里的实况：M 按政策派了 `A.run_once` 拿回 `no_pending_request`，再"试直接派 B
+以确认链路"时，旧理由只说"这条边不在允许的边里"，没说那该找谁。
+判据 `tests/test_policy.py::test_the_refusal_names_who_can_relay`。
+
+## 读数
+
+- 全量套件（冻结树上）：**5116 passed, 5 skipped, 10 deselected, 1 xfailed in 1737.71s
+  (0:28:57)**，退出码 0（`temp/r72b-full-suite.txt`；批内第一次跑的 1 条红是
+  `test_reading_map.py` 的行数过期 —— `claimanatomy.py` 1856 → 1888，改数字不改判据）；
+- lint：**error 0 / warning 15 / info 49**（中途 R009 抓出 20 处新写的强调标记，逐行去掉）；
+- 真机复算（拿第二次 T2 那份**坏锚**跑修好的判据）：`unknown` / `drift=[]` / 三条点名理由；
+- 相关一组（分批跑）：renderanchor + lean_switch + d1_anchor + paperbuild + paper_package = 81 passed；
+  policy + conductor + 不直接控制 BFV = 116 passed；claimanatomy + agent_g + agent_h + core_audit
+  = 189 passed；
+- 禁改区：这一批**零命中**（`policy.py` / `renderanchor.py` / `claimanatomy.py` / `tools/doc_tools.py`
+  都不在清单里）。
+
+## 待修（`draft/116` §4，按优先级）
+
+1. 论文包脚手架：框架铺一份规范的 `code/make_paper.py` / `code/compile_paper.py`
+   （fontenc 治 `¿=`/`¡=`、`\section{}` 不再叠加手写序号、非 ASCII 不许静默变空格、
+   `lit:` 渲染成 `\bibitem`、编译带 `MIKTEX_*` 环境、锚按 `renderanchor` 的格式写）；
+2. 文档取代关系（三份 `accepted` 并存、无 supersedes）—— **要业主裁**（碰 schema）；
+3. 收工门报 blocker 仍能收工 —— **要业主裁**（改的是评测口径）；
+4. `literature.unprocessed` 没有队列入口（13 条 `processed=false` 无人消化）——
+   改 `agent_a`（非禁改区）或给 B 一条入口（禁改区）；
+5. H 的签名缺 `model`/`prompt_version`（已定位 `tools/review_tools.py:1164-1166`：
+   机械审那一格刻意留空，而开了语义判据那一趟没把缝的读数接进来）；
+6. 读数与盘上不符的两处（`REPORT.md` 说 main.tex 103 行、实际 52 行；最终 ACCEPTANCE
+   写"documents 2 行"却列了三行）、`handoffs` 37/38 计数不一致且 `doc_id` 全空、
+   `ARTIFACTS.jsonl` 只登记 task-result。
+
+## 一处更正（我上一轮说错的）
+
+上一轮我把"攻坚腿没跑"归因成"提示词没告诉 M 要绕路"——**错了**。`specs/m.py` 逐字写着
+"B/F/V 只能间接由父代理转达…要 B 的抽取 ⇒ 派 A…要 F 的攻坚 ⇒ 派 D…拿到 `forbidden_edge`
+就换成上面那条链"，会话也证明 M 知道（t2b 步 9 正确派了 `A.run_once`，A 回
+`no_pending_request`；步 10 才试直接派 B"以确认链路"）。真问题是**入口面**（见待修第 4 条）。

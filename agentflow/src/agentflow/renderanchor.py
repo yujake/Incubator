@@ -283,12 +283,51 @@ def check_package(project_root: Path | str, *, store: Any = None) -> dict[str, A
             tables_verdict = "unknown"
             problems.append(f"表 {name} 读不了：{now['problem']}")
             continue
-        if was.get("rows") != now["rows"] or was.get("sha256") != now["sha256"]:
+        # 2026-10-13（来自无 Lean T2 的真实读数）：锚的格式不对不是漂移。
+        #
+        # 真机现场：`projects/p6t2-research-20261012b/out/paper/RENDER-ANCHOR.json`
+        # 由项目自己补写的 `code/compile_paper.py` 产，表哈希是 12 位（框架写 64 位），
+        # 于是每一张表都判 `drifted`，而漂移行里两侧都被截到 12 位：
+        # 「表 documents：锚 3 行/695d20acca07 ≠ 现在 3 行/695d20acca07」
+        # —— 读的人第一反应是"判据坏了"，而真相是那份锚根本不是框架写的（或被截断过）。
+        # 判据的语义是"包与库是不是同一时点"；"这份锚读不了"属于没查成那一档
+        # （与"锚文件不在盘上"同级），把它折成 drifted 会把一次"没查成"说成"确实漂了"。
+        was_sha = str(was.get("sha256") or "")
+        now_sha = str(now["sha256"])
+        if was_sha and len(was_sha) != len(now_sha):
+            tables_verdict = "unknown"
+            problems.append(
+                f"表 {name}：锚里的 sha256 是 {len(was_sha)} 位，框架现算的是 {len(now_sha)} 位 "
+                "⇒ 这份锚不是框架写的（或被截断过）⇒ 这一维判不了（不是「漂了」）"
+            )
+            continue
+        if was.get("rows") != now["rows"] or was_sha != now_sha:
             tables_verdict = "drifted"
-            drift.append(f"表 {name}：锚 {was.get('rows')} 行/{str(was.get('sha256'))[:12]} ≠ "
-                         f"现在 {now['rows']} 行/{now['sha256'][:12]}")
+            drift.append(f"表 {name}：锚 {was.get('rows')} 行/{was_sha[:12]}（{len(was_sha)} 位） ≠ "
+                         f"现在 {now['rows']} 行/{now_sha[:12]}（{len(now_sha)} 位）")
 
     # ---- 维度 2：源文件（编译产物不在内；老锚里若还记着 PDF，跳过它）
+    #
+    # 同一处真机读数还有第二半：那份锚的 `files` 键是项目相对（`out/paper/main.tex`），
+    # 而框架按包相对记（`main.tex`）⇒ 判据报「锚里有、盘上没了」×2 与
+    # 「盘上有、锚里没有」×1（三条都是路径基准不同，不是内容漂移）。
+    # 基准不同同样是"这一维判不了"，不许折成 drifted。
+    root_dir = Path(str(project_root))
+    out_rel = ""
+    try:
+        out_rel = out.relative_to(root_dir).as_posix() + "/"
+    except ValueError:
+        out_rel = ""
+    raw_files = dict(anchor.get("files") or {})
+    misbased = sorted(k for k in raw_files if out_rel and k.startswith(out_rel))
+    if misbased:
+        problems.append(
+            "锚里的文件键是项目相对路径（如 "
+            f"{misbased[0]}），而框架按包相对路径读（如 main.tex）⇒ 这一维判不了"
+            "（不是「文件漂了」）：请用框架的渲染入口落锚，或在项目脚本里按包相对路径记"
+        )
+        return _result({"tables": tables_verdict, "files": "unknown", "receipt": "unknown"},
+                       drift, problems, anchor=anchor, receipt=None, out=out)
     files_now = package_files(out)
     files_was = {k: v for k, v in (anchor.get("files") or {}).items()
                  if k not in COMPILE_PRODUCTS

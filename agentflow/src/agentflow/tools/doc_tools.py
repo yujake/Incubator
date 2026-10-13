@@ -970,11 +970,14 @@ def check_proofs(
     `proof_claim_rests_on_weaker_evidence`），所以 ③ 那种"一条 exp: 都不引"的形态
     连事后也查不出来。
 
-    ## 四条判据（全部 fail-closed）
+    ## 五条判据（全部 fail-closed）
 
     ==========================================  ==========================================
     条件                                        要求
     ==========================================  ==========================================
+    引用的 `exp:` 行                            `result` 是 `"refutes"` 时必须是否定型断言
+                                                （`is_negative` + `negation_kind="disproved"`）
+                                                —— 2026-10-13 加：引一条否证当支撑此前一路过闸
     `evidence_kind == "proof"`                  必须至少有 1 条 `exp:` 引用
     被引用的 `exp:` 行                          `evidence_kind` 必须是 `"proof"`
     同一条断言                                  必须给出 `proof_location`
@@ -1033,20 +1036,52 @@ def check_proofs(
     resolved = 0
     for i, c in enumerate(claims, 1):
         c = c or {}
-        if str(c.get("evidence_kind") or "") != "proof":
-            continue
         cid = str(c.get("claim_id") or f"claim-{i}")
         exp_refs = [
             citation_ref_parts(x)[1]
             for x in (c.get("citations") or [])
             if citation_ref_parts(x)[0] == "exp"
         ]
+        # ---- 第五道（2026-10-13，无 Lean T2 的真机）：引一条否证的实验当支撑。
+        #
+        # 现场：`projects/p6t2-research-20261012b` 的 exp:0002 自己的结论是
+        # `result="refutes"`（`counterexample: criterion mismatch …, mismatches: 108`），
+        # 而论文的 claim-2 把它列进 `citations` 当支撑用，交付说明只用一句
+        # "那只是脚本内部判据的问题"带过。`check_citations` 只问"引用的对象在不在"，
+        # 所以这条一路写库；而按 `evidence_kind` 的分档，一条"被自己的实验否证"的断言
+        # 与"被自己的实验支持"的断言在纸面上长得一模一样。
+        #
+        # 判据：引了 `result="refutes"` 的实验 ⇒ 这条断言必须是否定型里"已证否"那一档
+        # （`is_negative` 且 `negation_kind="disproved"`）。别的组合都报 —— 因为
+        # "实验否证了 P"与"P 成立"是两件相反的事，不许靠读正文才分得出来。
+        for ref in exp_refs:
+            row = exp_by_id.get(ref)
+            if row is None:
+                continue
+            if str(row.get("result") or "") != "refutes":
+                continue
+            disproved = bool(c.get("is_negative")) \
+                and str(c.get("negation_kind") or "") == "disproved"
+            if not disproved:
+                problems.append({
+                    "claim_id": cid,
+                    "kind": "claim_cites_a_refuting_experiment",
+                    "detail": (
+                        f"这条断言引了 {ref} 当支撑，而 {ref} 自己的结论是 "
+                        f"`result={str(row.get('result'))!r}`（否证）⇒ 引一条否证当支撑。"
+                        "要么把这条断言改成否定型并写 `negation_kind='disproved'`"
+                        "（'我们证否了它'），要么换一条支持它的证据；"
+                        "只在正文里解释'那只是脚本内部判据的问题'不算数 —— 台账上它仍是 refutes"
+                    ),
+                })
+        if str(c.get("evidence_kind") or "") != "proof":
+            continue
         if not exp_refs:
             problems.append({
                 "claim_id": cid,
                 "kind": "proof_claim_without_formal_experiment",
                 "detail": (
-                    "声称 evidence_kind='proof'，却**一条 `exp:` 引用都没有** ⇒ "
+                    "声称 evidence_kind='proof'，却一条 `exp:` 引用都没有 ⇒ "
                     "没有任何形式化实验参与过这条断言。proof 级证据必须指向一条"
                     "真的跑过检查器的实验行（FC-22：断言不能强于它的依据）"
                 ),
@@ -1064,7 +1099,7 @@ def check_proofs(
                         "kind": "proof_claim_rests_on_weaker_evidence",
                         "detail": (
                             f"声称 evidence_kind='proof'，但它引用的实验 {ref} 的等级是 "
-                            f"{str(row.get('evidence_kind'))!r} ⇒ **断言不能强于它的依据**"
+                            f"{str(row.get('evidence_kind'))!r} ⇒ 断言不能强于它的依据"
                             "（与 `verify.proof_claim_rests_on_weaker_evidence` 同一条口径，"
                             "只是提前到写入现场）"
                         ),
@@ -1195,7 +1230,10 @@ def compose_claim(
       "未证明"、"已证否"、"没搜过"是三件不同的事，默认值等于替作者做了
       一个他可能不同意的数学判断。
     - `citations` 为空 ⇒ 抛。无引用的断言在结构上不允许存在（FC-02）。
-    - 正文含过度声称措辞而 `evidence_kind != "proof"` ⇒ 抛。
+    - 正文含超过用词上限的措辞 ⇒ 抛（上限由 `wording_ceiling()` 现算：
+      `proof` 永远在，关掉 Lean 时 `proof_review` 也在 —— 2026-10-13 更正：
+      这一行此前写的是"而 `evidence_kind != "proof"`"，那是加 `proof_review` 之前的旧口径，
+      与代码不符；没有 Lean 的用户照着它读会以为"逐行审阅过的证明"不许写「定理 / 证明」）。
     - `status="作废"` 且既无 `errata_ids` 又无 `freeze_reason` ⇒ 抛
       （作废必须有原因）。
     - `frozen=True` 且 `freeze_reason` 为空 ⇒ 抛。
@@ -1377,9 +1415,20 @@ def render_markdown(
     lines.append("1. **每条断言都带引用**（`citations`，形如 "
                  + citation_prefix_examples() + "）。")
     lines.append("   没有引用的断言在结构上无法进入本稿（`schema.Document.validate` 强制）。")
-    lines.append("2. 证据等级只有三档，且**必须分列**：`proof`（形式化检查器核验）、")
-    lines.append(f"   `cross_check`（数值/穷举交叉验证）、`heuristic`（启发式）。")
-    lines.append(f"3. **`cross_check` 不是证明**：这类断言后面自动附「{CROSS_CHECK_DISCLAIMER}」。")
+    # 证据等级那一段从词表现算（2026-10-13 修）：此前这里写死"只有三档"并列了
+    # 三档（`proof` / `cross_check` / `heuristic`），而下面第 1 节的表按
+    # `S.EVIDENCE_KINDS` 逐档出行 —— `proof_review` 加进来之后，同一篇稿子的第 0 节
+    # 说"三档"、第 1 节的表却列出四行，自相矛盾。真机读数：
+    # `projects/p6t2-research-20261012b/documents/0002.md`（无 Lean 模式那一趟）第 11 行
+    # 逐字是"证据等级只有三档"，而第 19–24 行的表里赫然有 `proof_review` 一行。
+    # 后果不只是难看：没有 Lean 的用户读到这句话，会以为"逐行审阅过的证明"这一档
+    # 不存在 —— 而那一档正是他这个模式下唯一能承载"定理 / 证明"的凭据。
+    _levels = "、".join(f"`{k}`（{EVIDENCE_LABELS.get(k, '')}）" for k in S.EVIDENCE_KINDS)
+    lines.append(f"2. 证据等级共 {len(S.EVIDENCE_KINDS)} 档，且**必须分列**：{_levels}。")
+    lines.append(f"3. **`cross_check` 不是证明**：这类断言后面自动附「{CROSS_CHECK_DISCLAIMER}」；")
+    _pr = DISCLAIMER_BY_EVIDENCE_KIND.get("proof_review", "")
+    if _pr and "proof_review" in S.EVIDENCE_KINDS:
+        lines.append(f"   `proof_review` 那一档同样自带「{_pr}」—— 两条声明各写在自己那一栏里。")
     lines.append("4. 否定型结论分四类：未证明 / 已证否 / 未搜索 / 无本地证据 —— 它们的含义完全不同，")
     lines.append("   合并计数会让人把「没搜过」读成「已证否」。")
     lines.append("")
@@ -1393,7 +1442,7 @@ def render_markdown(
             ek_count[ek] += 1
         else:
             unknown_ek += 1
-    lines.append("## 1. 证据等级统计（三分档，不是单一通过率）")
+    lines.append("## 1. 证据等级统计（分档计数，不是单一通过率）")
     lines.append("")
     lines.append("| 证据等级 | 含义 | 条数 |")
     lines.append("|---|---|---|")
@@ -1404,7 +1453,8 @@ def render_markdown(
     lines.append("")
     lines.append(
         "说明：一个「通过率 80%」会掩盖「另外 20% 是失败还是没校验」这个决定性差异，"
-        "因此这里**只报三个分档计数**（FC-10）。"
+        f"因此这里**只报分档计数**（FC-10）：每一档一条，档数由 `schema.EVIDENCE_KINDS` 定，"
+        f"今天是 {len(S.EVIDENCE_KINDS)} 档。"
     )
     lines.append("")
 

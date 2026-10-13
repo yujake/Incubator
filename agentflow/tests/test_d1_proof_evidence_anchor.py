@@ -203,6 +203,45 @@ def test_check_proofs_separates_kinds_of_problems(ws: Store):
                      "c2": "proof_claim_rests_on_weaker_evidence"}, kinds
 
 
+def test_a_claim_may_not_cite_a_refuting_experiment_as_support(ws: Store):
+    """判据（2026-10-13，无 Lean T2 的真机）：引一条否证当支撑必须报出来。
+
+    真机现场（`projects/p6t2-research-20261012b`）：`exp:0002` 自己的结论是
+    `result="refutes"`（`counterexample: criterion mismatch …, mismatches: 108`），
+    而论文的 claim-2 把它列进 `citations` 当支撑，交付说明只用一句
+    "那只是脚本内部判据的问题"带过 —— `check_citations` 只问"对象在不在"，
+    于是这条一路写库，而在纸面上它与"被实验支持"长得一模一样。
+
+    两件事一起钉：
+    ① 正向断言引一条 refutes 的实验 ⇒ `claim_cites_a_refuting_experiment`；
+    ② 反负控：否定型断言（`is_negative` + `negation_kind="disproved"`）引它是对的
+       —— 那时它引的正是"我们证否了它"的那条证据。
+    """
+    _add_experiment(ws, "0009", method="numeric", kind="cross_check")
+    with ws.tx("experiments", actor="test") as tx:
+        row = dict(tx.find("experiments", experiment_id="0009") or {})
+        row["result"] = "refutes"
+        # schema 自己的两条硬条件（"证否"必须可复核、且必须与否定型一致）—— 夹具照它给。
+        row["counterexample"] = "criterion mismatch (108 cases)"
+        row["negation_kind"] = "disproved"
+        tx.upsert("experiments", row, note="probe: refutes")
+
+    positive = [{"claim_id": "c1", "evidence_kind": "cross_check",
+                 "citations": ["exp:0009"], "disclaimer": DT.CROSS_CHECK_DISCLAIMER,
+                 "statement": "数值上支持 P。"}]
+    out = DT.check_proofs(ws.rows, positive, workspace_root=ws.root)
+    kinds = {p["claim_id"]: p["kind"] for p in out["problems"]}
+    assert kinds == {"c1": "claim_cites_a_refuting_experiment"}, kinds
+    assert "refutes" in out["problems"][0]["detail"], out["problems"][0]
+
+    negative = [{"claim_id": "c2", "evidence_kind": "cross_check",
+                 "citations": ["exp:0009"], "disclaimer": DT.CROSS_CHECK_DISCLAIMER,
+                 "statement": "这条刻画是错的（已证否）。",
+                 "is_negative": True, "negation_kind": "disproved"}]
+    out2 = DT.check_proofs(ws.rows, negative, workspace_root=ws.root)
+    assert out2["problems"] == [], out2["problems"]
+
+
 # ============================================================ 改写那条路也必须过闸
 
 

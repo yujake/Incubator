@@ -350,9 +350,25 @@ def check(policy: Policy, d: Decision, *, registry: Any = None) -> Refusal | Non
         return Refusal("unknown_role", f"召唤方 {d.frm!r} 不是合法角色", "role")
     allowed = C.edges_for(d.frm, registry=registry)
     if d.to not in allowed:
+        # 2026-10-13（来自无 Lean T2 的两趟真机）：这句话必须可行动。
+        #
+        # 真机现场（`projects/p6t2-research-20261012b`，t2b 步 9/10）：M 先按政策
+        # 正确地派了 `A.run_once`（想让 A 转达 B 消化 13 条未处理的文献），A 回了
+        # `no_pending_request`（没有待认领的检索请求）；M 于是试了一次直接派 B
+        # （brief 逐字是"试直接派 B 以确认链路"）—— 拿到的是这一句
+        # `forbidden_edge`，而它只说"这条边不在允许的边里"，没说"那该找谁"。
+        # 政策上绕路是存在的（M→A→B、M→D→F），提示词里也写着（`specs/m.py` 的政策段），
+        # 但拒绝那一刻给出的信息不足以行动 —— 而拒绝正是模型最需要指路的一刻。
+        #
+        # 所以这里把"谁能替我派它"算出来（一跳，取自同一张边表）并写进理由。
+        # 它是读数不是新规则：能到就说能到（说得出名字），不能到就还是原来那句话。
+        via = sorted(r for r in allowed
+                     if d.to in C.edges_for(r, registry=registry))
+        hint = (f"；改派 {'、'.join(via)} —— 它能替你派 {d.to}（政策指定的绕路，别再重试这条边）"
+                if via else "")
         return Refusal(
             "forbidden_edge",
-            f"{d.frm} → {d.to} 不在策略允许的边里（{d.frm} 只能召唤 {sorted(allowed)}）",
+            f"{d.frm} → {d.to} 不在策略允许的边里（{d.frm} 只能召唤 {sorted(allowed)}）{hint}",
             "edge",
         )
 

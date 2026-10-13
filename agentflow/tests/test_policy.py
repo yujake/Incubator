@@ -475,6 +475,47 @@ def test_forbidden_edge_c_to_b():
     assert "C" in r.detail and "B" in r.detail
 
 
+def test_the_refusal_names_who_can_relay() -> None:
+    """判据（2026-10-13，无 Lean T2 的真机）：越权拒绝必须可行动。
+
+    真机现场（`projects/p6t2-research-20261012b`，t2b 步 9/10）：M 先按政策派了
+    `A.run_once`（想让 A 转达 B 消化 13 条未处理的文献），A 回 `no_pending_request`；
+    M 于是试了一次直接派 B（brief 逐字"试直接派 B 以确认链路"）—— 拿到的是这一句
+    `forbidden_edge`。旧的理由只说"这条边不在允许的边里"，没说那该找谁，
+    于是那一趟的「消化文献」这条腿就断在这里（P8 收尾时 13 条仍是未处理）。
+
+    这条判据钉两件事：
+
+    1. 能绕的：`M → F` / `M → B` 的理由里必须点名一跳能到的那几个伙伴
+       （取自同一张边表，不是另抄一份名单）；
+    2. 不能绕的：`M → V` 一跳内没有中转（V 只有 F 这一条入边，而 M 到不了 F）
+       ⇒ 理由里不许编一个中转出来（宁可不说，也不许说错）。
+    """
+    from agentflow.agentspec import builtin_registry
+
+    reg = builtin_registry()
+
+    def detail(frm: str, to: str, action: str) -> str:
+        r = P.check(P.Policy(), _d(frm=frm, to=to, action=action), registry=reg)
+        assert r is not None and r.reason == "forbidden_edge", (frm, to, r)
+        return r.detail
+
+    m_to_f = detail("M", "F", "step")
+    assert "D" in m_to_f and "替你派 F" in m_to_f, m_to_f
+    m_to_b = detail("M", "B", "run")
+    assert "A" in m_to_b and "替你派 B" in m_to_b, m_to_b
+    # 反负控：一跳内没有中转时不许编
+    m_to_v = detail("M", "V", "verify_proof")
+    assert "替你派" not in m_to_v, m_to_v
+    # 反负控：提示必须来自真边表 —— 把它点名的那几个中转逐个拿去核对
+    from agentflow import capabilities as C
+
+    names = m_to_f.split("改派 ", 1)[1].split(" ——", 1)[0].split("、")
+    assert names == ["D", "G"], m_to_f
+    for via in names:
+        assert "F" in C.edges_for(via, registry=reg), via
+
+
 def test_forbidden_edge_takes_priority_over_depth():
     """顺序是判据的一部分：越权优先于深度。
 
