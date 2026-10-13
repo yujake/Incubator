@@ -1,0 +1,27 @@
+R87：使用说明页文案收敛 + 清掉渲染文本里残留的 markdown 记号
+
+业主的口径是「简约大气、字少、正式、字体统一」。这一轮只动呈现层，不动任何判据。
+
+一、`ui/src/pages/Help.tsx`
+- 「七页各自在看什么」：原来一段 130+ 字的长句，改成按页分列的短句，
+  `**验收**` / `**本机**` 两个 markdown 记号原本会**原样印在网页上**，
+  收成 `验收：` / `本机：`（本页一律用 `<b>` 表强调，不用 markdown）。
+- 「预算」卡末尾那段：`没有寄存器也没有命令行上限 ⇒ 不限量（这一档在「预算」页上写得很清楚）`
+  一句里有一半是废话，收成「寄存器与命令行上限都没设 ⇒ 不限量；寄存器读不出来 ⇒
+  退回命令行上限，并把原因原样显示，不折成「不限量」」——三态语义一字不少，
+  行数减半。`**不折成"不限量"**` 同样收掉记号并换成中文引号。
+
+二、`ui/src/pages/Budget.tsx`
+- 重设总额按钮的 `impact` 里写着 `会把总额**覆盖**成 $…`，`**` 会在确认框里
+  原样显示 —— 和上面同一类缺陷，直接去掉记号。
+
+三、重建前端产物
+`pnpm run build` ⇒ `web/static/assets/index.CliHH2R4.js` + `index.DWg3NzEe.css`，
+旧的 `index.BOn_d_aZ.js` 由 vite 清掉。`pnpm run typecheck` 干净。
+
+判据（本机实跑，2026-10-13）：
+- `python -B -m pytest tests/test_webui*.py -q` ⇒ **186 passed, 1 skipped**（80s）。
+- `cd ui && pnpm run typecheck` ⇒ 无输出（干净）。
+- `cd ui && pnpm run build` ⇒ built in 444ms，上述两个文件名。
+- `python scripts/noai_gate.py --git --since d9fb6a2` ⇒ `[clean]`，退出码 0
+  （24 条改动路径均未命中禁改区）。

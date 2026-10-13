@@ -212,7 +212,7 @@ export function Budget() {
         />
         <ConfirmButton
           action="重设总额"
-          impact={`会把总额**覆盖**成 $${
+          impact={`会把总额覆盖成 $${
             Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
           }（旧总额也记进追加历史）`}
           onConfirm={() => {
