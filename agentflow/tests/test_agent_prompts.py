@@ -361,6 +361,12 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
+    # 2026-10-13 业主口径：M 的第一步是"看工作区、认输入、据此排工作流"
+    assert "开工第一件事：看工作区、认输入" in text, text
+    assert "其他内容不会是结构化的" in text and "输入面读数" in text, text
+    # 业主当场更正：不许假定丢进来的都是论文（角色由证据定）
+    assert "不要刻意认为丢进来的都是论文" in text, text
+
     # 2026-10-13 业主更正：审校链的中心是 B / H / V —— 三个角色各自的框都要写着它
     for role in ("B", "H", "V"):
         rb = AP.ROLE_BRIEFS[role]
@@ -683,11 +689,14 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "fs.read": "真工具，但只在带 workspace_root 的注册表里 —— 本文件的夹具刻意不带（见文件头）",
     "fs.write": "同 fs.read",
     "fs.edit": "同 fs.read",
+    "fs.list": "同 fs.read（M 的「看工作区、认输入」那一条口径里点名了它）",
+    "fs.stat": "同 fs.read（同上）",
     "research.set_status": "真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`，"
                            "`roles=('D',)`）—— 本文件的夹具不带 store，`research_tools` 按契约"
                            "跳过（`tools/__init__.py:390`，原因记在 `build_registry().skipped`）。"
                            "口径的两个读数见 `draft/108` §四 CS-9：无 store 70/28 件、"
                            "带 store 83/41 件",
+    "project.json": "文件名（项目卡：收编/冷启动时写下的那一张），不是工具",
     "main.pdf": "文件名（编译产物），不是工具",
     "appendix.tex": "文件名（附录落点），不是工具 —— 2026-10-13 之后它只作为"
                     "「旧路里那份机械产物」出现在退场说明里，正文由智能体自己写",
@@ -2297,7 +2306,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "F": "4a2c426d1d2baf59e89205c68752b549c71442f77cb3ccb570cafc4282f87c72",
     "G": "fc12b43ecfe5122298abd319a3253f9ed18546224bec04161e77703eaa9dec8e",
     "H": "b988763dc4ab6f42e4615ffb0e39d6f7019b3578058c79a43af3f81ae267a8c8",
-    "M": "0eef061fe28d9565395f356106cb42733dd53a5761c0980939ac8ef99b0b894a",
+    "M": "99a57b99f48e485c2f5fcfb58f85f08bf51cb2243ff532e5952026245588083a",
     "V": "eb26c568110cba26e7e5470a284c1b1f89e1ac2178eacfef2e859ee8f2efa9f7",
 }
 
