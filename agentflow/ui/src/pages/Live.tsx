@@ -15,7 +15,6 @@
  * 而用户正要用这一格决定要不要叫停）。
  */
 import { api } from "../api";
-import { InterjectCard } from "../components/Ask";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Money } from "../components/Money";
@@ -81,7 +80,6 @@ export function Live() {
 
   return (
     <>
-      <InterjectCard />
       <Card
         title="在飞"
         subtitle={l === null ? "" : `结论：${l.answer === "" ? "unknown" : l.answer}`}

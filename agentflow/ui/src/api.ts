@@ -364,12 +364,23 @@ export async function postBudget(body: {
  * 起一趟工作流（`POST /api/run`）：把一句话交给主控，等价 CLI 的
  * `run-agent M --task … --subagents`。后端 detached 起进程，回执里给 `pid` 与日志路径。
  */
+/**
+ * 起一趟（`POST /api/run`）。
+ *
+ * `sid` + `resume` 是 R91 补上的那一档：M **闲着**时对话页要让它接着说下去 ——
+ * 先把用户那句话记进收件箱（`postInterject`），再用**同一句话任务**唤醒这一段
+ * （`resume: true` + `sid`）。`resume` 必须配 `sid`（后端 400 拒绝裸 resume）。
+ */
 export async function postRun(body: {
   task: string;
+  sid?: string;
+  resume?: boolean;
   dryRun?: boolean;
 }): Promise<WriteResult> {
   return await postJSON<WriteResult>(ENDPOINTS.runTask, {
     task: body.task,
+    sid: body.sid ?? "",
+    resume: body.resume === true ? "1" : "",
     confirm: "1",
     dry_run: body.dryRun === true ? "1" : "",
   });

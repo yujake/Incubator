@@ -943,6 +943,26 @@ def test_no_rendered_text_carries_a_stray_block_comment_opener() -> None:
     assert bad == [], "这些 `/*` 会把剥注释器带偏（渲染文本里请拆开写）：" + "；".join(bad)
 
 
+def test_the_home_page_is_a_chat_box_that_picks_the_right_endpoint() -> None:
+    """R94（业主：「要把前端做成对话框」）：首页那一个输入框按当刻状态走对的那条路。
+
+    静态这一半钉两件事：页面真的读了对话面那几栏（`GET /api/chat` 的 `lines` / `who`
+    / `sessions`），以及四条路各自那条写端点都在源码里（起一趟 `postRun`、续跑
+    `postRun` + `resume: true`、插话 `postInterject`、回答 `postAnswer`）。
+    真浏览器那一半在 `tests/test_webui_browser.py` 的
+    `test_the_chat_box_routes_the_message_by_state`（四条路各发到对的那条端点，
+    回答那一条真落盘）。
+    """
+    src = _page_text("Home")
+    reads = _page_reads(src)
+    for key in ("lines", "who", "sessions", "pending_questions", "waiting_on"):
+        assert key in reads, f"Home 没有读对话面的 {key}"
+    for call in ("getChat(", "postAnswer(", "postInterject(", "postRun("):
+        assert call in src, f"Home 里没有 {call}"
+    assert "resume: true" in src, "续跑那一支没有带 resume"
+    assert "MODE_WORDS" in src, "没有把'这一下会做什么'写出来"
+
+
 def test_the_settings_panel_prefills_from_the_reading() -> None:
     """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥
     都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。

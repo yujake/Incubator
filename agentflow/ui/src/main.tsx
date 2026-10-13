@@ -51,7 +51,7 @@ export function matchRoute(path: string): { route: Route; sid: string } {
 
 /** 顶部导航：每一条都是 C4 表里的一个客户端路由（`/run/:sid` 由会话行进入）。 */
 const NAV: ReadonlyArray<{ path: string; label: string }> = [
-  { path: "/", label: "待回答" },
+  { path: "/", label: "对话" },
   { path: "/live", label: "在飞" },
   { path: "/budget", label: "预算" },
   { path: "/evidence", label: "证据链" },

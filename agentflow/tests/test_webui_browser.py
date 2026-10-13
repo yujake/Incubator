@@ -580,63 +580,121 @@ def test_the_budget_set_button_really_writes_the_register(tmp_path: pathlib.Path
 
 
 # ============================================================ 6 两处"跟系统说话"的入口
-def test_the_two_talk_cards_are_really_clickable(tmp_path: pathlib.Path) -> None:
-    """点得动（R80 补的两处入口，在真浏览器里量一遍）。
+def test_the_chat_box_routes_the_message_by_state(tmp_path: pathlib.Path) -> None:
+    """对话框（R94，业主：「要把前端做成对话框」）：同一个输入框按当刻状态走对的那条路。
 
-    业主的原话是"整个网页愣是没找到让我给系统说话的地方"，所以这两张卡片的判据不能停在
-    "源码里有这个函数"：这里量的是**浏览器里那半条链** —— 空输入时按钮点不动；
-    填了字之后第一次点击只"上膛"（`ConfirmButton` 的两次确认），第二次才真发请求；
-    请求真的发出去（方法与请求体读得到）、回执按三态原样显示。
+    量四条路，逐条对应一条真端点：
 
-    ⚠️ `POST /api/run` 真打下去会**真起一趟**（花预算），所以这一条在页面里把那两个
-    端点拦下来（`page.route` 喂一份真实形状的回执）。拦的是网络，不是按钮 ——
-    按钮、确认、取数、渲染都还是页面自己那一条路。
+    1. **还没有会话** ⇒ 这一句**起一趟**（`POST /api/run`，`task=` 就是这句话）；
+    2. **这一段收过工、闲着** ⇒ 先把话记进收件箱（`POST /api/task`），再用
+       **同一句话任务**唤醒它（`POST /api/run` 带 `sid` + `resume=1`）——
+       任务原文必须逐字相同（`resume_messages` 按它挑重建窗口，换了就是另一趟）；
+    3. **M 在飞**（会话里一条没配对的 `agent_run_start`）⇒ 只插话，不许顺手又起一趟；
+    4. **有提问在等回答** ⇒ `POST /answer`（带**那一条自己的** qid + sid），
+       而且这一下真的落盘 —— 这一段不拦网络（回答不花钱）。
+
+    ⚠️ `POST /api/run` 真打下去会**真起一趟**（花预算）：前三条把 `/api/run` 在页面里
+    拦下来喂一份真实形状的回执。拦的是**网络**，不是按钮 —— 按钮、两次确认、取数、
+    渲染走的还是页面自己那一条路。
     """
+    import urllib.parse
+
+    from agentflow import sessions as SS
+    from agentflow import userio as U
+
     sent: list[tuple[str, str]] = []
 
     def _fake(route: Any) -> None:
         req = route.request
-        sent.append((req.method, req.post_data or ""))
+        sent.append((req.url.split("/api/")[-1].split("?")[0], req.post_data or ""))
         route.fulfill(status=200, content_type="application/json",
                       body=json.dumps({"ok": True, "tri": "computed",
                                        "reason": "拦下来喂的回执（没有真起一趟）"},
                                       ensure_ascii=False))
 
+    def _form(where: str, field: str) -> str:
+        for path, raw in sent:
+            if path == where:
+                return (urllib.parse.parse_qs(raw).get(field) or [""])[0]
+        return ""
+
+    def _say(page: Any, text: str) -> None:
+        box = page.locator("input.input")
+        box.wait_for(timeout=10_000)
+        box.fill(text)
+
     with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
         page = live["page"]
+        # 两条写端点都拦下来：`/api/run` 会**真起一趟**（花预算），`/api/task` 会**真写**
+        # 一条插话 —— 它们在 `test_webui_writes.py` 里各有真读数的判据，这一条只量
+        # "同一个框在四种状态下把话送到哪一条端点"。拦的是网络，不是按钮：
+        # 按钮、两次确认、取数、渲染走的还是页面自己那一条路。
         page.route("**/api/run", _fake)
         page.route("**/api/task", _fake)
 
-        # 一、`/` 页那句话起一趟
+        # 一、还没有会话 ⇒ 起一趟（点两次：它会花钱）
         _enter_spa(live, "/")
-        page.wait_for_selector("input", timeout=10_000)
-        start = page.get_by_role("button", name="启动")
-        assert start.is_disabled(), "任务框是空的，启动按钮却点得动"
-        page.fill("input", "帮我把工作区里那篇论文从头到尾审核一遍。")
-        assert not start.is_disabled(), "写了任务之后启动按钮还是点不动"
-        start.click()
-        page.wait_for_timeout(200)
-        assert sent == [], f"第一次点击就发了请求：{sent}"
-        page.get_by_role("button", name="确认启动").click()
-        page.wait_for_timeout(400)
-        assert len(sent) == 1 and sent[0][0] == "POST", sent
-        assert "task=" in sent[0][1], sent[0][1]
-        assert "拦下来喂的回执" in page.inner_text("body"), "回执没有原样显示"
-
-        # 二、`/live` 页往在飞的那一趟插话
-        sent.clear()
-        _enter_spa(live, "/live")
-        page.wait_for_selector("input", timeout=10_000)
-        send = page.get_by_role("button", name="送出")
-        assert send.is_disabled(), "插话框是空的，送出按钮却点得动"
-        page.fill("input", "第二节那句「必然成立」改弱一点。")
-        send.click()
+        _say(page, "帮我把工作区里那篇论文从头到尾审核一遍。")
+        say = page.get_by_role("button", name="送出")
+        assert say.is_disabled() is False, "写了字之后送出按钮还是点不动"
+        say.click()
         page.wait_for_timeout(200)
         assert sent == [], f"第一次点击就发了请求：{sent}"
         page.get_by_role("button", name="确认送出").click()
-        page.wait_for_timeout(400)
-        assert len(sent) == 1 and sent[0][0] == "POST", sent
-        assert "body=" in sent[0][1], sent[0][1]
+        page.wait_for_timeout(500)
+        assert [p for p, _raw in sent] == ["run"], sent
+        assert "task=" in sent[0][1], sent[0][1]
+        # 起一趟那一支不许带 --resume（表单里那一格恒在，但必须是空的）
+        assert _form("run", "resume") == "", sent[0][1]
+        assert _form("run", "sid") == "", sent[0][1]
+
+        # 二、一段收过工的会话 ⇒ 记进收件箱 + 用原来那句话唤醒它
+        SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "原来那句话",
+                         "summoned_by": "M", "depth": 1,
+                         "ts": "2026-10-13T10:00:00+08:00"}, sid="s-idle")
+        SS.append(root, {"kind": "agent_run_end", "role": "M", "stop_reason": "final",
+                         "final": "收工了", "ts": "2026-10-13T10:05:00+08:00"}, sid="s-idle")
+        sent.clear()
+        _enter_spa(live, "/")
+        _say(page, "接着说：先看第二节。")
+        page.get_by_role("button", name="送出").click()
+        page.wait_for_timeout(200)
+        assert sent == [], f"第一次点击就发了请求：{sent}"
+        page.get_by_role("button", name="确认送出").click()
+        page.wait_for_timeout(800)
+        assert [p for p, _raw in sent] == ["task", "run"], sent
+        assert _form("run", "resume") == "1", sent
+        assert _form("run", "sid") == "s-idle", sent
+        assert _form("run", "task") == "原来那句话", (
+            f"续跑带的不是原来那句话：{sent}")
+        assert _form("task", "body") == "接着说：先看第二节。", sent
+
+        # 三、M 在飞（一条没配对的 run_start）⇒ 只插话
+        SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "那一趟",
+                         "summoned_by": "M", "depth": 1,
+                         "ts": "2026-10-13T11:00:00+08:00"}, sid="s-live")
+        sent.clear()
+        _enter_spa(live, "/")
+        _say(page, "插一句：别扩大范围。")
+        page.get_by_role("button", name="送出").click()
+        page.wait_for_timeout(800)
+        assert [p for p, _raw in sent] == ["task"], sent
+        assert _form("task", "body") == "插一句：别扩大范围。", sent
+
+        # 四、有提问在等回答 ⇒ /answer（真落盘）
+        sent.clear()
+        U.ask_user(root, role="M", question="口径用哪一档？",
+                   options=({"label": "第二档", "description": "可复核即可"},),
+                   sid="s-live", timeout_sec=0, wait=False)
+        qid = U.pending_questions(root, sid="s-live")[0].qid
+        _enter_spa(live, "/")
+        page.wait_for_selector(f"#q-s-live-{qid}", timeout=10_000)
+        page.locator(f"#q-s-live-{qid} button").first.click()
+        page.wait_for_timeout(800)
+        events, _bad = SS.read_session(root, sid="s-live")
+        answers = [e for e in events if e.get("kind") == U.ANSWER_KIND]
+        assert [a.get("qid") for a in answers] == [qid], answers
+        assert "第二档" in str(answers[0].get("answer")), answers[0]
 
 
 # ============================================================ 6 九页逐页核对（R88）

@@ -341,3 +341,35 @@ h2 {
 h3 {
   font-size: var(--fs-3);
 }
+
+/* 对话那一段来回（R94）：一整条就是"谁说的 + 正文"，之间用一条细线分开。
+   字号与间距只走 token（判据 test_app_css_uses_only_tokens 会拦裸数字）。 */
+.chat-line {
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  padding: var(--sp-2) 0;
+}
+
+.chat-line:first-of-type {
+  border-top: 0;
+}
+
+.chat-user .chat-body {
+  color: var(--dsw-alias-label-secondary);
+  font-style: italic;
+}
+
+.chat-m .chat-body {
+  color: var(--dsw-alias-label-primary);
+}
+
+.chat-team .chat-body {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--fs-2);
+}
+
+.chat-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 24em;
+  overflow: auto;
+}

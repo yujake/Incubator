@@ -1500,8 +1500,24 @@ def chat_face(root: str | Path, sid: str = "", *,
             return {"tri": TRI_NOT_APPLICABLE, "sid": "", "lines": [], "total": 0,
                     "shown": 0, "clipped": False, "sessions": [],
                     "reason": "这个工作区还没有会话（合法初态，不是没查成）"}
-        chosen = max(sessions, key=lambda s: s["last_ts"])["sid"]
-        notes.append(f"没指定会话 ⇒ 取了最近的那一段（{chosen}）")
+        # 默认选哪一段（R94 实测的坑）：不能只看 `last_ts` —— 框架自己会往"今天那段
+        # 缺省会话"里写结算类事件（`task_end`，没有 sid），它的 `last_ts` 往往比真跑过的
+        # 那一段**还新**，于是对话框一打开就停在一段几乎没有来回的会话上。
+        # 口径：先在最近的若干段里找**最近起过一趟**（有 `agent_run_start` 的对话线）
+        # 的那一段，找不到才退回"最近有动静的那一段"，并把这次选择写进 `reason`。
+        def _has_run_start(row: dict[str, str]) -> bool:
+            events, _bad = SS.read_session(root_p, sid=row["sid"])
+            return any(_chat_line(i, ev) is not None and str(ev.get("kind") or "")
+                       == "agent_run_start" for i, ev in enumerate(events))
+
+        newest_first = sorted(sessions, key=lambda s: s["last_ts"], reverse=True)
+        pick = next((s for s in newest_first[:10] if _has_run_start(s)), None)
+        if pick is None:
+            pick = newest_first[0]
+            notes.append(f"没指定会话 ⇒ 取了最近有动静的那一段（{pick['sid']}）")
+        else:
+            notes.append(f"没指定会话 ⇒ 取了最近起过一趟的那一段（{pick['sid']}）")
+        chosen = pick["sid"]
     path = SS.session_path(root_p, chosen)
     if not path.is_file():
         return {"tri": TRI_UNREADABLE, "sid": chosen, "lines": [], "total": 0,
