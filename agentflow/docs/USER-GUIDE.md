@@ -20,14 +20,22 @@
 在 `D:\Incubator\agentflow` 下：
 
 ```powershell
-$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; $env:PYTHONPATH='D:\Incubator\agentflow\src'
-python -B -m agentflow --root D:\Incubator web --port 8792 --open
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
+$env:PYTHONPATH='D:\Incubator\agentflow\src'
+python -B -m agentflow --root D:\Incubator\projects\t1-review web --port 8792 --json
 ```
 
-- `--root` 是**工作区**（不是 `agentflow` 包目录）。`--port` 不给就让系统挑一个空闲端口，
-  `--open` 起来之后自动开浏览器。屏幕会打印**确切地址**（形如 `http://127.0.0.1:8792/`）。
-- 只想跑一个项目、不想看列表：把 `--root` 指到那个项目目录本身即可
-  （`--root D:\Incubator\projects\t1-review`）。
+> ⚠️ **`agentflow` 现在没装进 site-packages**：不设 `PYTHONPATH` 就会报
+> `No module named agentflow`（在哪个目录都一样）。上面这段**在任意目录**贴进去都能起来。
+> 嫌每次写 `PYTHONPATH` 麻烦，二选一：
+> ① 在 `D:\Incubator\agentflow` 下 `python -m pip install -e .`（装一次，之后到哪都能用）；
+> ② `setx PYTHONPATH "D:\Incubator\agentflow\src"`（固化进用户环境变量，重开终端生效）。
+
+`--json` 会打印确切地址，形如 `{"url": "http://127.0.0.1:8792/", "root": "…"}` ——
+把它贴进浏览器就是用户端（本机已在跑一例）。
+
+- `--root` 是**工作区**（不是 `agentflow` 包目录）；给项目目录本身也行，那就只看这一个项目。
+- `--port` 不给就让系统挑一个空闲端口；`--open` 起来之后自动开浏览器。
 - 别人（另一台机器）要访问才加 `--host 0.0.0.0`；要口令加 `--token <口令>`。
 
 网页里你会用到这几页（左栏就是这些）：
