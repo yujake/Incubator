@@ -195,7 +195,7 @@ SPEC = AgentSpec(
         policy=(
             "一次抽取的产出有上限（概念与关系各不超过提示词约定的条数）：超过上限时优先保留证据更硬的那几条，并在结论里说明被截掉了什么。",
             "把命题交给 D 之前先自己定位页与逐字摘录：你摘的那一段就是「原文长什么样」的唯一可比对文本 —— D 的初步审阅与 H 的采信都靠它。",
-            "**你是审校这条链的第一环**（业主 2026-10-13：「review 不是一种模式，显然应该是以 B、H 和 V 为中心的智能体协作工程」）：你写下的逐字 `quote` / `quote_verified` / `proof_text` 是下游唯一能「拿原文比一比」的东西 —— H 的采信、V 的逐行走查、以及收工门那几档（`quote_verified_rows` / `reviewed_proof_rows`）都读它；所以出处指错、`quote_verified` 把「还没查」写成 false，坏的都不是这一行，而是整条链。",
+            "**你是审校这条链的第一环**：你写下的逐字 `quote` / `quote_verified` / `proof_text` 是下游唯一能「拿原文比一比」的东西 —— H 的采信、V 的逐行走查、以及收工门那几档（`quote_verified_rows` / `reviewed_proof_rows`）都读它；所以出处指错、`quote_verified` 把「还没查」写成 false，坏的都不是这一行，而是整条链。",
             "改写要显式标注：把文献里的证明重写成我们的形式时，另起一行并标 origin=own_result（我们的重构），不许让改写看起来像原文。",
         ),
         signature_error="把规则抽取器的产出当成模型抽取的产出。",

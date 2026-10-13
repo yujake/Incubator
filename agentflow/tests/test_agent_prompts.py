@@ -362,23 +362,29 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
     # 2026-10-13 业主口径：M 的第一步是"看工作区、认输入、据此排工作流"
-    assert "开工第一件事：看工作区、认输入" in text, text
-    assert "其他内容不会是结构化的" in text and "输入面读数" in text, text
-    # 业主当场更正：不许假定丢进来的都是论文（角色由证据定）
-    assert "不要刻意认为丢进来的都是论文" in text, text
+    # 2026-10-13 业主当场更正：提示词里**不要写业主的话**，这一条就一句"先扫一眼工作区"
+    assert "开工先扫一眼工作区" in text, text
+    # 这一条只钉"别把业主那几句话抄进提示词"（别的条目里的历史括注不动）
+    for quoted in ("不要刻意认为丢进来的都是论文", "其他内容不会是结构化的",
+                   "做断点续跑就不担心了"):
+        assert quoted not in text, f"提示词正文里抄了业主原话：{quoted!r}"
 
     # 2026-10-13 业主更正：审校链的中心是 B / H / V —— 三个角色各自的框都要写着它
-    for role in ("B", "H", "V"):
+    # 三格各自的那句"我在链上干什么"（业主 2026-10-13 更正后：不再抄原话，只留做法）
+    chain_phrases = {"B": "你是审校这条链的第一环", "H": "你站在这条审校链的中间",
+                     "V": "你是这条链的签名环"}
+    for role, phrase in chain_phrases.items():
         rb = AP.ROLE_BRIEFS[role]
         mine = "\n".join([rb.duty, rb.deliverable, *rb.boundary, *rb.policy])
-        assert "以 B、H 和 V 为中心" in mine or "以 B / H / V 为中心" in mine, role
-        assert "review 不是一种模式" in mine, role
+        assert phrase in mine, f"{role}：提示词里没有「{phrase}」"
+        assert "不是一种模式" not in mine, f"{role}：提示词里还抄着业主原话"
 
     # 2026-10-13 业主口径：两阶段分工（研究阶段不写论文）+ review 是一类任务且要落产物
     assert "两阶段的分工" in text and "所有角色都可能有任务" in text, text
     # 业主 2026-10-13 更正：审校**不是一种模式**，而是一条以 B / H / V 为中心的协作链 ——
     # 这一条钉的正是"M 有没有按这条链排期"，不是"表里有没有一行 review"。
-    assert "审校不是一种模式" in text and "以 B / H / V 为中心的协作链" in text, text
+    assert "以 B / H / V 为中心的协作链" in text, text
+    assert "不是一种模式" not in text, "提示词里还抄着业主原话"
     assert "review_files" in text, text
     # D47：交付物按任务那句话说 —— "整理成论文"那一类要交出论文（T3 第 1 趟就是漏了这一句）。
     # 2026-10-13（`draft/117`）：口径从"必须建论文包"改成"让 G 自己写正文再编" ——
@@ -696,7 +702,6 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
                            "跳过（`tools/__init__.py:390`，原因记在 `build_registry().skipped`）。"
                            "口径的两个读数见 `draft/108` §四 CS-9：无 store 70/28 件、"
                            "带 store 83/41 件",
-    "project.json": "文件名（项目卡：收编/冷启动时写下的那一张），不是工具",
     "main.pdf": "文件名（编译产物），不是工具",
     "appendix.tex": "文件名（附录落点），不是工具 —— 2026-10-13 之后它只作为"
                     "「旧路里那份机械产物」出现在退场说明里，正文由智能体自己写",
@@ -2299,15 +2304,15 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 _FROZEN_PROMPT_VERSION = "p103"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "3b3d96f6f5f73ae8b4a6eb01959adb0f838aa148ccbae8c1153ce7c94ef763d4",
-    "B": "3aaadec50b421ac1839d4e47f1be6a4375db3a33b27d5dc38af7d15ccf54afe4",
+    "B": "23f0a3b5197e78205ae8e4907fe50f9f86cd74d5a419ed93f075a74232fbdc7f",
     "C": "2e08bc10d80b92bfa8d0d365eeaf1810de51b3e3ab7c7a89f4f9c75befc41731",
     "D": "997b102c4f0e7dbb29543b3ab87677385bf97d191f98c7a2c1bb77abf89f2e57",
     "E": "86ec335620c5e9298111199957fccc1fd5205e4d04c1f24952e1faeecec07f9c",
     "F": "4a2c426d1d2baf59e89205c68752b549c71442f77cb3ccb570cafc4282f87c72",
-    "G": "fc12b43ecfe5122298abd319a3253f9ed18546224bec04161e77703eaa9dec8e",
-    "H": "b988763dc4ab6f42e4615ffb0e39d6f7019b3578058c79a43af3f81ae267a8c8",
-    "M": "99a57b99f48e485c2f5fcfb58f85f08bf51cb2243ff532e5952026245588083a",
-    "V": "eb26c568110cba26e7e5470a284c1b1f89e1ac2178eacfef2e859ee8f2efa9f7",
+    "G": "dc917dff4387d4276303983e8f2221e6ae063d3c0aaeb00bd15662a6f5e1db79",
+    "H": "2c46d889aec1587355270b2326d4c9bf5a64b81f7ef22c00040f92584a457cc5",
+    "M": "a52386f44d94c45f061b79eca2e780699d650a642f6db909dae11fc1583d095e",
+    "V": "2a94fab09532e7ef527343746c0a578d9a06835c4f1a807755848542e0b96ee2",
 }
 
 
