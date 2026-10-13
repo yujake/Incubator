@@ -733,6 +733,67 @@ def running_loops(root: str | Path) -> dict[str, Any]:
             "answer": "有" if (running or live) else "没有"}
 
 
+def block_remaining_tasks(store: Any, *, task_id: str = "", why: str,
+                          all_runs: bool = False) -> dict[str, Any]:
+    """优雅停止：把这一趟**还没做完**的任务与委托由框架翻成 `block`（业主 2026-10-13）。
+
+    业主的原话：「接收到停的时候，剩余任务委托状态自动变成block」+「最终由M整理汇报用户」。
+    所以这一层的三件事，一件都不许靠模型自觉：
+
+    1. **它翻谁**：`task_id` 那一行自己（还 `pending`/`running` 时），以及**它派出去的**
+       那些行（`parent_task_id == task_id` 且还没终态）—— 那正是"剩余任务与委托"；
+    2. **它留什么**：`status="block"` + `detail`（为什么停：`why`）+ `ended_at`（什么时候）；
+       名下的板项（`kind` 非空、`item_state` 还没 `done`）跟着置 `block` —— 否则一件
+       被停掉的委托会在板上永远挂着"待办"；
+    3. **它报什么**：（`{"checked", "blocked", "blocked_items", "why"}`）——
+       父拿到的子结果里带这份清单（`agent_loop` 把它放进结果与 `agent_run_end`），
+       M 再把它汇总进交付说明。
+
+    三态：`store` 不在（没接线）或写不进去 ⇒ `checked=False` + `why`，**不写成"没有剩余"**。
+    """
+    if store is None:
+        return {"checked": False, "blocked": [], "blocked_items": [], "why": why,
+                "reason": "没有 store ⇒ 剩余任务翻不了（没查成，不是「没有剩余」）"}
+    from . import schema as S
+
+    now = _now_iso()
+    blocked: list[str] = []
+    blocked_items: list[str] = []
+    try:
+        rows = [dict(r) for r in store.rows("tasks")]
+    except Exception as exc:  # noqa: BLE001 —— 读不到是"没查成"
+        return {"checked": False, "blocked": [], "blocked_items": [], "why": why,
+                "reason": f"tasks 读不到：{type(exc).__name__}: {exc}"}
+    if all_runs:
+        # 主控那条优雅停止操作要停的是**整趟**（它的树就是工作区里这一趟的全部召唤）
+        # ⇒ 按"所有还没终态的行"翻，而不是只翻自己那一条与直接子代。
+        targets = rows
+    else:
+        targets = [r for r in rows
+                   if str(r.get("task_id") or "") == str(task_id)
+                   or str(r.get("parent_task_id") or "") == str(task_id)]
+    todo = [r for r in targets if str(r.get("status") or "") in ("pending", "running")]
+    if not todo:
+        return {"checked": True, "blocked": [], "blocked_items": [], "why": why,
+                "reason": "这一趟名下没有未终态的任务或委托"}
+    note = f"优雅停止（{why}）：这活停在这里、没做完 —— 由框架翻的 block"
+    with store.tx("tasks", actor="framework") as tx:
+        for r in todo:
+            patch = dict(r)
+            patch["status"] = "block"
+            patch["detail"] = (str(r.get("detail") or "") + ("；" if r.get("detail") else "")
+                               + note)
+            patch["ended_at"] = r.get("ended_at") or now
+            if str(r.get("kind") or "") and str(r.get("item_state") or "") in (
+                    "queued", "claimed", "seen"):
+                patch["item_state"] = "block"
+                blocked_items.append(str(r.get("task_id") or ""))
+            tx.upsert("tasks", S.Task(**patch).to_dict())
+            blocked.append(str(r.get("task_id") or ""))
+    return {"checked": True, "blocked": blocked, "blocked_items": blocked_items, "why": why,
+            "reason": f"{len(blocked)} 条任务/委托翻了 block"}
+
+
 def _now_iso() -> str:
     import datetime as _dt
 

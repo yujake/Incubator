@@ -564,7 +564,18 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
         # （杀掉自己的进程树会让这次工具调用永远回不去）。
         killed = stopctl.kill_registered(root, exclude_pid=os.getpid())
     brief = _write_resume_brief(c)
+    # 业主 2026-10-13：「优雅停止就是主控用这个操作…」+「接收到停的时候，剩余任务委托状态
+    # 自动变成 block」—— 这一条是 M 的优雅停止操作，所以**整趟**还没终态的任务与委托
+    # 在这里由框架翻成 `block`（不留"谁该收尾"的模糊），读数随结果回去，M 汇总进交付说明。
+    try:
+        blocked_remaining = stopctl.block_remaining_tasks(
+            c.store, why=code, all_runs=True)
+    except Exception as exc:  # noqa: BLE001 —— 翻不动是"没查成"，如实报，不吞
+        blocked_remaining = {"checked": False, "blocked": [], "blocked_items": [],
+                             "why": code,
+                             "reason": f"剩余任务翻 block 没走成：{type(exc).__name__}: {exc}"}
     data = {"reason": code, "reason_mapped_from": mapped_from,
+            "blocked_remaining": blocked_remaining,
             "detail": receipt.get("detail", ""),
             "inflight_at_stop": list(receipt.get("inflight") or ()),
             "drained_sec": waited, "disposed": disposed,

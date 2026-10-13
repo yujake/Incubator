@@ -905,6 +905,11 @@ class LoopRun:
     final: str = ""
     evidence: list[str] = field(default_factory=list)
     stop_reason: str = "final"
+    #: 优雅停止时**框架**翻成 `block` 的那批任务/委托（业主 2026-10-13：
+    #: 「接收到停的时候，剩余任务委托状态自动变成block」+「最终由M整理汇报用户」）。
+    #: 形状取自 `stopctl.block_remaining_tasks` 的读数：`{checked, blocked, blocked_items, why}`。
+    #: 它是"停的时候手上还剩什么"的唯一读数 —— 父在子结果里读它，M 再汇总进交付说明。
+    blocked_remaining: dict[str, Any] = field(default_factory=dict)
     prompt_audit: dict[str, Any] = field(default_factory=dict)
     spend: dict[str, Any] = field(default_factory=dict)
     #: 坏 JSON 的「总数」（审计读数：这一趟一共说了几次不是 JSON 的话）。
@@ -1040,6 +1045,7 @@ class LoopRun:
             "steps": [s.to_dict() for s in self.steps],
             "final": self.final, "evidence": list(self.evidence),
             "stop_reason": self.stop_reason, "bad_json": self.bad_json,
+            "blocked_remaining": dict(self.blocked_remaining),
             "bad_json_streak": self.bad_json_streak,
             "bad_args": self.bad_args, "bad_args_streak": self.bad_args_streak,
             "no_reply": self.no_reply,
@@ -2952,6 +2958,8 @@ class AgentLoop:
                 # "跑到哪儿了"事后无从回答。这条 break 就是补那一格。
                 run.stop_reason = stop_reason
                 run.final = run.final or self._stop_note(stop_reason, step)
+                # 「接收到停的时候，剩余任务委托状态自动变成 block」—— 收停的这一支
+                self._block_remaining(run, stop_reason)
                 # S4-b（`draft/84` §2.2）：停止沿边下发 —— 给我还在飞的直接子代理
                 # 各开一条 `notice`/`ack` 板项（ack 才算传达到）。放在 break 之前：
                 # 这一趟马上就要收工，边上的通知是它最后一次能做的事。
@@ -2982,6 +2990,9 @@ class AgentLoop:
                 out = self._notify_children_of_stop("budget")
                 if out:
                     run.notes.append(out)
+                # 业主 2026-10-12/13：预算耗尽自动触发的优雅停止走**同一条路** ——
+                # 剩余任务与委托在这里由框架翻 block（不是等模型自己声明）
+                self._block_remaining(run, "budget")
                 note = self._land_budget_stop_record(limit)
                 if note:
                     run.notes.append(note)
@@ -3500,6 +3511,7 @@ class AgentLoop:
             run.notes.append(flight_note)
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role, "stop_reason": run.stop_reason,            "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
+            "blocked_remaining": dict(run.blocked_remaining),
             # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，
             # 不必去解析 `final` 那句话里的 qid。
             "waiting_for": run.waiting_for,
@@ -3530,6 +3542,29 @@ class AgentLoop:
         return run
 
     # -------------------------------------------------------------- 执行
+    def _block_remaining(self, run: "AgentLoop.LoopRun", why: str) -> None:
+        """优雅停止：把这一趟没做完的任务与委托由框架翻成 `block`（业主 2026-10-13）。
+
+        为什么是框架翻而不是"让模型汇报"：预算耗尽那一支**根本没有模型回合**
+        （循环在步边界直接 break）—— 想让它汇报就只能等下一次模型调用，而那时钱已经没了。
+        所以口径落成：状态由框架翻、理由由框架写（`why` = 停机理由），模型只在下游读它。
+        """
+        task_id = str((run.prompt_audit or {}).get("task_id") or "")
+        if not task_id:
+            run.blocked_remaining = {"checked": False, "blocked": [], "blocked_items": [],
+                                     "why": why,
+                                     "reason": "这一趟还没落台账号 ⇒ 剩余任务翻不了（没查成）"}
+            return
+        from . import stopctl as SC
+
+        got = SC.block_remaining_tasks(self.store, task_id=task_id, why=why)
+        run.blocked_remaining = dict(got)
+        if got.get("blocked"):
+            run.notes.append(
+                f"优雅停止（{why}）：{len(got['blocked'])} 条没做完的任务/委托已由框架翻成 "
+                f"`block`（{', '.join(got['blocked'][:6])}）—— 这一步会随结果回给父代理，"
+                "由 M 汇总进交付说明")
+
     def _land_budget_stop_record(self, limit: float) -> str:
         """预算耗尽时落一个一次性停机记录（写 + 立刻消费，见调用点的三条理由）。
 
@@ -5345,7 +5380,9 @@ class LlmBackend:
                                       "path": artifact, "stop_reason": run.stop_reason,
                                       "task_id": run.prompt_audit.get("task_id", "")}, sid=self.sid)
         out = {"llm_run_path": artifact, "final": run.final, "stop_reason": run.stop_reason,
-               "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent}
+               "steps": len(run.steps), "summons": run.summons, "messages": run.messages_sent,
+               # 优雅停止时"手上还剩什么"随结果回给父（父再往上报，M 汇总给用户）
+               "blocked_remaining": dict(run.blocked_remaining)}
         if not artifact:
             out["llm_run"] = run.to_dict()      # 落盘失败时退回内联，绝不静默丢产出
         return out

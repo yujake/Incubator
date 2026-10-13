@@ -2179,12 +2179,20 @@ ITEM_KINDS: tuple[str, ...] = ("delegation", "message", "report", "notice")
 ITEM_EXPECTS: tuple[str, ...] = ("ack", "work")
 #: 工作项轴的四档（`draft/88` §3）。措辞由业主定：`claimed` = 接手（写 `running` 行那一刻）、
 #: `seen` = 渲染（被读进某一步的提示词）。它与 `status` 是两根轴，不许共用一个名字。
-ITEM_STATES: tuple[str, ...] = ("queued", "claimed", "seen", "done")
+#: 2026-10-13：加 `block` 一档（与 `TASK_STATUSES` 同一件事的另一根轴）—— 优雅停止时
+#: 被停掉的委托，它在板上的那一项也不许继续写着"待办"（`stopctl.block_remaining_tasks`
+#: 把两根轴一起翻）。它不进 `ITEM_CLOSES`：`block` 不是收口方式，是"停在这里"。
+ITEM_STATES: tuple[str, ...] = ("queued", "claimed", "seen", "done", "block")
 #: `done` 的两种收口：`acked`（知道了）与 `completed`（做完了）必须分得开 ——
 #: 折平它就是把"光知道个信息"读成"交付了"。
 ITEM_CLOSES: tuple[str, ...] = ("acked", "completed")
 
-TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed")
+#: 2026-10-13（业主：「接收到停的时候，剩余任务委托状态自动变成block」）：加 `block`
+#: 一档 —— 它说的是"停了、但这件活没做完"，与 `cancelled`（被取消）和 `failed`（崩了）
+#: 都不同：前者是"人不让它做了"，后者是"它做坏了"，而 `block` 是"优雅停止时它还在手上"。
+#: 翻这一档的是**框架**（`stopctl.block_remaining_tasks`），不是模型自己声明 ——
+#: 于是"停的时候手上还剩什么"在台账上有主人、有理由（`detail` 必填）、有时间（`ended_at`）。
+TASK_STATUSES = ("pending", "running", "done", "cancelled", "failed", "block")
 
 #: 召唤的终局类型（回答"这次召唤到底给出了什么"）。
 #:
@@ -2368,6 +2376,18 @@ class Task:
             raise ValueError("status=failed 时必须写 error（失败的原因不能是空白）")
         if self.status == "failed" and self.outcome != "failed":
             raise ValueError("status=failed 时 outcome 必须是 'failed'")
+        if self.status == "block":
+            # 「停了、没做完」必须留下**为什么**：翻这一档的是框架，而框架只知道停机理由
+            # （预算耗尽 / 用户叫停 / 上级叫停）—— 那句理由写进 `detail`，读的人才知道
+            # 这活是被谁、因为什么停下的（三态纪律：不许让"没做完"变成一行没有来路的空状态）。
+            if not str(self.detail or "").strip():
+                raise ValueError(
+                    "status='block' 必须写 detail（为什么停下：预算耗尽 / 用户叫停 / …）—— "
+                    "「停了、没做完」这一档不许没有来路")
+            if self.outcome not in (None, "no_result"):
+                raise ValueError(
+                    f"status='block' 的 outcome 只能是 None 或 'no_result'，收到 {self.outcome!r}"
+                    "（没做完就不是 ok / not_applicable）")
         if self.status == "cancelled" and self.outcome not in ("cancelled", "refused"):
             raise ValueError(
                 "status=cancelled 时 outcome 必须是 'cancelled'（被取消）"
