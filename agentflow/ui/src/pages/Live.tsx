@@ -97,20 +97,15 @@ export function Live() {
           <span class="readings">{liveFace.problem === "" ? "正在读盘……" : liveFace.problem}</span>
         ) : (
           <>
-            <div class="readings">
-              会话面：某角色起了还没收到工 ⇒ 报出来。进程面：登记在盘上**且真的活着**
-              的 pid ⇒ 也报出来。两面都空才是"没有"；读不出来时这一格显"没查成"，
-              **不显"没有"**（读不出会话进程时那一格判不了）。
-            </div>
             {l.unreadable_sessions.length > 0 ? (
               <div class="readings">
-                这些会话读不出来（这一路判不了，不是"没在跑"）：
+                这些会话读不出来：
                 <span class="mono">{l.unreadable_sessions.join("、")}</span>
               </div>
             ) : null}
             <Table
               rows={running}
-              empty="会话面：没有在跑的循环（每一趟起过的都收到了工，或一次都没起过）。"
+              empty="没有在跑的循环。"
               columns={[
                 { key: "role", title: "角色", render: (r) => <Badge kind="badge-unknown" text={String(r.role)} /> },
                 { key: "sid", title: "会话号", render: (r) => <span class="mono">{r.sid}</span> },
@@ -145,7 +140,7 @@ export function Live() {
         {l === null ? null : (
           <>
             <div class="readings">
-              开关那一份（停机开关是跨进程的唯一通道；叫停那一页的按钮写的就是它）：
+              停机开关：
             </div>
             {l.switch_present ? (
               <Table
@@ -161,7 +156,7 @@ export function Live() {
             ) : (
               <div class="readings">盘上没有停机开关。</div>
             )}
-            <div class="readings">近几条停机历史（`runs/stop-history.jsonl`）：</div>
+ <div class="readings">近几条停机历史（runs/stop-history.jsonl）：</div>
             <Table
               rows={history}
               empty="还没有停机历史。"
@@ -202,12 +197,11 @@ export function Live() {
         ) : (
           <>
             <div class="readings">
-              落点 <span class="mono">{reports.data.dir}</span> ·
-              框架与主控写的 `STATUS-&lt;时间&gt;.md/.json` 最近几份（此前写了没人读）。
+ 落点 <span class="mono">{reports.data.dir}</span>（STATUS-&lt;时间&gt;.md/.json）。
             </div>
             <Table
               rows={(reports.data.reports ?? []) as unknown as ReportRow[]}
-              empty="还没有状态报告（还没跑过带状态报告的那一档）。"
+              empty="暂无状态报告。"
               columns={[
                 { key: "ts", title: "时间戳", render: (r) => <span class="mono">{r.ts}</span> },
                 { key: "name", title: "文件", render: (r) => <span class="mono">{r.name}</span> },

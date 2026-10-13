@@ -246,7 +246,7 @@ export function Run(props: RunProps) {
     return (
       <Card title="一趟详情" right={<TriState tri="not_applicable" reason="URL 里没有会话号" />}>
         <span class="empty">
-          这一页要看的是 `/run/&lt;会话号&gt;`。会话号在首页的「会话概览」里点得进来。
+ 这一页要看的是 /run/&lt;会话号&gt;。会话号在首页的「会话概览」里点得进来。
         </span>
       </Card>
     );
@@ -328,7 +328,7 @@ export function Run(props: RunProps) {
                   text={index.data.drift.length > 0 ? "索引与现算对不上" : "索引不可用（没建或读不出）"}
                 />
                 <span class="readings">
-                  本页的趟次因此是回退现算的（`sessions.runs_in_session` 从会话文件现切），
+ 本页的趟次因此是回退现算的（sessions.runs_in_session 从会话文件现切），
                   索引不可信 —— 先把上面那一条理由处理掉。
                 </span>
               </div>
@@ -497,7 +497,7 @@ export function Run(props: RunProps) {
         }
       >
         <div class="readings">
-          叫停的落点是一个跨进程开关（工作区 `runs/` 下那一份）：在飞的循环在下一个步检查点
+ 叫停的落点是一个跨进程开关（工作区 runs/ 下那一份）：在飞的循环在下一个步检查点
           读到它就收工，把已做过的事留在台账与会话记录里。这一页的按钮写的就是它；
           「在飞」页能看到开关是谁按的、以及最近几条停机历史。
           {liveFace.data === null
@@ -517,7 +517,7 @@ export function Run(props: RunProps) {
                 setStopResult(`写请求失败：${whyOf(exc)}`);
               });
           }}
-          note="写面没开（`agentflow web --allow-writes`）时后端会回 403，回执如实显示"
+ note="写面没开（agentflow web --allow-writes）时后端会回 403，回执如实显示"
         />
         <ConfirmButton
           action="强制停（连子孙进程）"
@@ -549,7 +549,7 @@ export function Run(props: RunProps) {
         }
       >
         <div class="readings">
-          这一栏要新增一条只读端点（`store.rows("search_requests")`）才能给读数 ——
+ 这一栏要新增一条只读端点（store.rows("search_requests")）才能给读数 ——
           按纪律，页面不许自己编一个数。
         </div>
       </Card>

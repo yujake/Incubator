@@ -37,7 +37,7 @@ const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
   { key: "toolchain.coq_bin", hint: "Coq 落点（没有就留空）" },
   { key: "toolchain.isabelle_bin", hint: "Isabelle 落点（没有就留空）" },
   { key: "toolchain.lean_enabled", hint: "true / false —— 缺省 false（省钱档）" },
-  { key: "model.api_key", hint: "只写不读；写进去之后回执里恒为 ***" },
+ { key: "model.api_key", hint: "只写不读；写进去之后回执里恒为 *" },
   { key: "model.base_url", hint: "留空 = 用内置缺省端点" },
   { key: "model.name", hint: "留空 = 用内置缺省模型" },
   { key: "model.reasoning_effort", hint: "off / low / high / max" },
@@ -144,7 +144,7 @@ export function Machine() {
           ]}
         />
         <div class="readings">
-          `checked=false` ⇒ 上面那些是"探测没跑完"：整面记 `unreadable`，
+ checked=false ⇒ 上面那些是"探测没跑完"：整面记 unreadable，
           不是"一个检查器都没找到"。
         </div>
       </Card>
@@ -183,7 +183,7 @@ export function Machine() {
         </div>
         <div class="readings">
           推理强度 <span class="mono">{settings.model.reasoning_effort}</span>（所有智能体都按这一档 thinking；
-          `settings.json` 的 `model.reasoning_effort` 留空 = 内置默认 High）·
+ settings.json 的 model.reasoning_effort 留空 = 内置默认 High）·
           key 来源 <span class="mono">{settings.model.key_source === ""
             ? "没取到（环境变量与设置文件都没有）"
             : settings.model.key_source}</span>
@@ -194,7 +194,7 @@ export function Machine() {
               : ""}
         </div>
         <div class="readings">
-          这一页永远不显示 key 的值：后端 `ModelSpec.redacted()` 给的就是 `***`
+ 这一页永远不显示 key 的值：后端 ModelSpec.redacted() 给的就是 *
           （裁定 E1：key 只写不读）。这里是同一句话的机器读数。
         </div>
       </Card>
@@ -233,11 +233,11 @@ export function Machine() {
 
       <Card title="设置窗口（写设置）">
         <div class="readings">
-          写的是**机器级**设置文件（上面那一格里的路径）。每一格的初值就是**设置文件里的现值**（打开即可见；`model.api_key` 只写不读，
-        所以那一格不回填）。逐格改，**清空某一格**表示"这一格不动"
-        （`settings.write_settings` 的口径是只写给了值的键）。`model.api_key` 落盘、
-          回执里恒为 `***`（key 只写不读）。`lean_enabled` 那一格是业主 2026-10-12 的
-          省钱开关，取值只认 `true` / `false`；缺省是**关**。
+ 写的是机器级设置文件（上面那一格里的路径）。每一格的初值就是设置文件里的现值（打开即可见；model.api_key 只写不读，
+ 所以那一格不回填）。逐格改，清空某一格表示"这一格不动"
+ （settings.write_settings 的口径是只写给了值的键）。model.api_key 落盘、
+ 回执里恒为 *（key 只写不读）。lean_enabled 那一格是业主 2026-10-12 的
+ 省钱开关，取值只认 true / false；缺省是关。
         </div>
         <div class="readings">
           {FIELDS.map((field) => (
@@ -279,7 +279,7 @@ export function Machine() {
           note={
             Object.values(values).every((v) => v === "")
               ? "一格都没填 —— 按钮点不动（不假装成功）"
-              : "写面没开（`agentflow web --allow-writes`）时后端会回 403，回执如实显示"
+ : "写面没开（agentflow web --allow-writes）时后端会回 403，回执如实显示"
           }
         />
         {writeResult === "" ? null : <div class="readings">{writeResult}</div>}
@@ -294,8 +294,8 @@ export function Machine() {
           <a class="nav-link" href="/live">
             「在飞」
           </a>
-          那一页（`GET /api/live` / `/api/status-reports` / `/api/usage` 三条只读端点）。
-          这一张卡片此前渲染的是 `not_applicable` 加一句"没有端点给它"——
+ 那一页（GET /api/live / /api/status-reports / /api/usage 三条只读端点）。
+ 这一张卡片此前渲染的是 not_applicable 加一句"没有端点给它"——
           那在今天是错的，所以改成指路。
         </div>
       </Card>

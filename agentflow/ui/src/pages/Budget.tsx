@@ -207,7 +207,7 @@ export function Budget() {
               ? "金额读不成数字 —— 先改成数字（按钮点不动，也不假装成功）"
               : busy
                 ? "正在写……"
-                : "写面没开（`agentflow web --allow-writes`）时后端会回 403，回执如实显示"
+ : "写面没开（agentflow web --allow-writes）时后端会回 403，回执如实显示"
           }
         />
         <ConfirmButton

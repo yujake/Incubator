@@ -221,7 +221,7 @@ export function Evidence() {
           <>
             <div class="readings">
               一共 <span class="mono">{ev.relations.length}</span> 条关系。不是「真」的那些
-              必须连理由一起看（`quote_reason` 是空的就写 unknown，不写空）。
+ 必须连理由一起看（quote_reason 是空的就写 unknown，不写空）。
             </div>
             {notTrue.length === 0 ? (
               <span class="empty">
@@ -259,7 +259,7 @@ export function Evidence() {
       >
         <div class="readings">
           裁定 K2：盘上（真机）没有 <span class="mono">verifications/</span> 的样本 ⇒
-          这一栏的读数由 `tests/conftest.py` 的夹具造（页面上如实标明"夹具样本"）。
+ 这一栏的读数由 tests/conftest.py 的夹具造（页面上如实标明"夹具样本"）。
         </div>
         {isUnreadable(ev.verifications_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>

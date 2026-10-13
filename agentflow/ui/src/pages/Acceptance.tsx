@@ -77,7 +77,7 @@ export function Acceptance() {
         {acc.failed.length === 0 ? null : (
           <div class="readings">
             不是 pass 的格子 <span class="mono">{acc.failed.join("、")}</span>
-            （后端的 `failed` 把 `fail` 与 `unknown` 放在一起 —— 逐条看下面「结论」那一列，
+ （后端的 failed 把 fail 与 unknown 放在一起 —— 逐条看下面「结论」那一列，
             两者处置不同）
           </div>
         )}
@@ -171,7 +171,7 @@ export function Acceptance() {
         }
       >
         <div class="readings">
-          "同一件事在两处是否同值"要一条读 `conductor_tools.conductor_closing` 的端点
+ "同一件事在两处是否同值"要一条读 conductor_tools.conductor_closing 的端点
           才能给读数 —— 页面不许自己编一个数。
         </div>
       </Card>
@@ -187,7 +187,7 @@ export function Acceptance() {
         }
       >
         <div class="readings">
-          命题级 / 断言级分布与 `too_large` 那一档同样要新增端点才能给读数。
+ 命题级 / 断言级分布与 too_large 那一档同样要新增端点才能给读数。
         </div>
       </Card>
     </>

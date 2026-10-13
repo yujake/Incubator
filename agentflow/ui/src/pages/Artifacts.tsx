@@ -184,7 +184,7 @@ export function Artifacts() {
         right={<TriState tri={art.checks_tri} label="checks" />}
       >
         <div class="readings">
-          真机样本是 8 行 C1–C8；夹具造的是 3 行（`tests/conftest.py` 的
+ 真机样本是 8 行 C1–C8；夹具造的是 3 行（tests/conftest.py 的
           <span class="mono"> ACCEPTANCE_CHECKS_SAMPLE</span>）—— 判据与页面都标明"夹具样本"。
         </div>
         {isUnreadable(art.checks_tri) ? (
@@ -309,7 +309,7 @@ export function Artifacts() {
         }
       >
         <div class="readings">
-          `processed` 三态、`download.status/bytes/sha256`、`matched` 那几栏要新增一条
+ processed 三态、download.status/bytes/sha256、matched 那几栏要新增一条
           只读端点才能给读数 —— 页面不许自己编一个数。
         </div>
       </Card>
