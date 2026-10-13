@@ -161,7 +161,7 @@ def test_allowed_edges_match_design_table():
     # 主控的出边（业主 2026-10-10 第 146 轮第 4 条裁定：「不许直接控制 B、F、V，
     # 只可间接由父代理转达」）。改前它是 `frozenset(S.ROLES)` 九条；
     # 改后少这三个，而三条间接路径各自有判据（见本文件下面那两条负控）。
-    assert C.ALLOWED_EDGES["M"] == frozenset({"A", "C", "D", "E", "G", "H"}), \
+    assert C.ALLOWED_EDGES["M"] == frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
         "主控的直接出边：B / F / V 按裁定必须走父代理（B 走 A、F 走 D、V 走 F）"
     # 负控（这条改动最该守住的边界）：H 与 V 仍然是只读角色 —— 新加的两条边只让它
     # "请求"，权限面（工具层）没有跟着动。
@@ -203,8 +203,8 @@ def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
     `test_the_three_indirect_roles_still_have_a_path` 从另一面钉住"间接那三条还在"。
     """
     original = frozenset(C.ALLOWED_EDGES["M"])
-    assert original == frozenset({"A", "C", "D", "E", "G", "H"}), \
-        "前提：真表上主控的直接出边就是这六个（裁定第 4 条之后）"
+    assert original == frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
+        "前提：真表上主控的直接出边就是这七条（裁定第 4 条 + 2026-10-13「补 M 到 B」之后）"
     C.ALLOWED_EDGES["M"] = frozenset(sorted(original)[:-1])   # 去掉 'H'
     try:
         with pytest.raises(AssertionError, match="到不了这些角色"):
@@ -491,10 +491,14 @@ def test_the_refusal_names_who_can_relay() -> None:
 
     这条判据钉两件事：
 
-    1. 能绕的：`M → F` / `M → B` 的理由里必须点名一跳能到的那几个伙伴
+    1. 能绕的：`M → F` 的理由里必须点名一跳能到的那几个伙伴
        （取自同一张边表，不是另抄一份名单）；
-    2. 不能绕的：`M → V` 一跳内没有中转（V 只有 F 这一条入边，而 M 到不了 F）
-       ⇒ 理由里不许编一个中转出来（宁可不说，也不许说错）。
+    2. `M → V` 的**中转现在有了**：业主 2026-10-13「补 M 到 B」之后 `M→B→V` 成立
+       ⇒ 这一格从"不许编中转"翻成"**必须点名 B**"（同一条口径：提示只能来自真边表）。
+
+    2026-10-13：`M → B` 从这一组挪走了 —— 业主「补 M 到 B」之后它**不再是被拒的边**
+    （所以这里不能再拿它当负控；守卫这一侧的那条判据见
+    `test_the_conductor_may_summon_b_again_but_not_f_or_v`）。
     """
     from agentflow.agentspec import builtin_registry
 
@@ -507,11 +511,8 @@ def test_the_refusal_names_who_can_relay() -> None:
 
     m_to_f = detail("M", "F", "step")
     assert "D" in m_to_f and "替你派 F" in m_to_f, m_to_f
-    m_to_b = detail("M", "B", "run")
-    assert "A" in m_to_b and "替你派 B" in m_to_b, m_to_b
-    # 反负控：一跳内没有中转时不许编
     m_to_v = detail("M", "V", "verify_proof")
-    assert "替你派" not in m_to_v, m_to_v
+    assert "改派 B" in m_to_v and "替你派 V" in m_to_v, m_to_v
     # 反负控：提示必须来自真边表 —— 把它点名的那几个中转逐个拿去核对
     from agentflow import capabilities as C
 
@@ -519,6 +520,27 @@ def test_the_refusal_names_who_can_relay() -> None:
     assert names == ["D", "G"], m_to_f
     for via in names:
         assert "F" in C.edges_for(via, registry=reg), via
+    assert m_to_v.split("改派 ", 1)[1].split(" ——", 1)[0].split("、") == ["B"], m_to_v
+    assert "V" in C.edges_for("B", registry=reg), "B 到不了 V ⇒ 那条提示是假的"
+
+
+def test_the_conductor_may_summon_b_again_but_not_f_or_v():
+    """业主 2026-10-13「补 M 到 B」的守卫：M 派得动 B（两跳够到 V），但仍派不动 F / V。
+
+    为什么要单列：这条边是**加宽权限面**的那一类改动（30 → 31），而它的目的是让
+    「命题进台账 + 证明逐条走查」这条采信链从主控够得着（`M→B→V`）。判据两向都钉：
+    正向（M→B 放行、B→V 在，于是 V 可达），反向（F / V 仍然只走间接）。
+    """
+    from agentflow import capabilities as C
+    from agentflow.agentspec import builtin_registry
+
+    reg = builtin_registry()
+    assert "B" in C.ALLOWED_EDGES["M"], "M→B 没接上"
+    assert "V" in C.ALLOWED_EDGES["B"], "B→V 没接上 ⇒ M→B→V 这条两跳路不成立"
+    for refused, act in (("F", "step"), ("V", "verify_proof")):
+        assert refused not in C.ALLOWED_EDGES["M"], f"M→{refused} 不许直接放行"
+        r = P.check(P.Policy(), _d(frm="M", to=refused, action=act), registry=reg)
+        assert r is not None and r.reason == "forbidden_edge", (refused, r)
 
 
 def test_forbidden_edge_takes_priority_over_depth():

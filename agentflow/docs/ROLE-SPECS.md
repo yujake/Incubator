@@ -168,7 +168,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 | 召唤方 | 允许召唤 |
 |---|---|
-| `M`（主控） | `A C D E G H` —— **不许直接控制 B / F / V**（2026-10-10 裁定；B 走 `A`、F 走 `D`、V 走 `F`） |
+| `M`（主控） | `A B C D E G H` —— **不许直接控制 F / V**（2026-10-10 裁定；F 走 `D`、V 走 `F`）。B 于 2026-10-13 加回（业主：「补 M 到 B」）—— 采信链要走 `M→B→V` |
 | `A` | `B` |
 | `B` | `C V` |
 | `C` | **（空）** —— 只读角色连"请求"都不直接发 |
@@ -179,10 +179,11 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `H` | `A E G` |
 | `V` | `F` |
 
-**边总数 = 30**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
+**边总数 = 31**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
 —— 新增的三条是 `M→V`、`F→V`、`V→F`。观测 2026-10-06（角色 V 落地）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
 （B / F / V 改由父代理转达；见 §M.4.1 上面那段）。
+**2026-10-13 再加一条 `M→B` 到 31**（业主裁定逐字「补 M 到 B」：B 是采信链第一环，无 Lean 的 T1 实测 M 够不着 B/V ⇒ `verifications` 目录压根没被创建）。
 **2026-10-13 加一条 `B→V` 回到 30**：业主裁定逐字「允许 B 唤起 V。理由是 B 需要初步检验
 收录的证明」—— 审校链（B / H / V）的第一环要能把**收录进台账的证明**直接交给 V 逐行走查，
 否则它得转两次手才够得着 V。读数：
@@ -2272,7 +2273,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 >   整趟作废。`fs.edit` 的输出量与**改动量**成正比（不是与文件大小成正比），
 >   而且比整文件覆盖更安全 ——"不可逆"那条理由对它不适用。
 
-#### M.4.1 M 能召唤的 6 个角色 × 它们的动作（45 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（52 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
@@ -2282,7 +2283,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 >
 > **2026-10-10 少了三个角色（B / F / V）与 14 个动作（60 → 46）**：业主第 146 轮第 4 条裁定逐字
 > 「M 的出边设限（不许直接控制 B、F、V，只可间接由父代理转达）」。三条间接路径：
-> **B ← A**（`M→A→B`，抽取 / 重抽取由 A 转达）、**F ← D**（`M→D→F`，攻坚推进由 D 建计划并派 F）、
+> **B 于 2026-10-13 由业主加回**（逐字「补 M 到 B」：采信链第一环，`M→B→V` 两跳够到逐条走查）、**F ← D**（`M→D→F`，攻坚推进由 D 建计划并派 F）、
 > **V ← F**（`M→D→F→V`，V 改后只剩 F 这一条进路）。判据
 > `tests/test_the_conductor_does_not_directly_control_bfv.py`（边表 / 行为 / 三条链三层）
 > 与 `capabilities.assert_capabilities` 第 [1b] 条。**被拒的理由码是 `forbidden_edge`**
@@ -2291,13 +2292,14 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | 角色 | 可召唤动作数 | 动作名 |
 |---|---:|---|
 | A | 5 | `run_once` `run` `search_literature` `ingest_local` `shelf_search` |
+| B | 7 | `run_once` `run` `run_reprocess` `reprocess_once` `decide_structural_duplicate` `resolve_structural_duplicate` `register_statement` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
 | H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
 
-**B / F / V 的动作表没变，只是主控不再直接够到它们**（上面这张表数的是
+**B 的动作表 2026-10-13 起重新算进这一栏**（业主「补 M 到 B」）；**F / V 的动作表没变，只是主控够不到它们**（仍走 `M→D→F` / `M→D→F→V`）（上面这张表数的是
 `ALLOWED_EDGES["M"]` 覆盖到的角色的动作之和，见 `tests/test_role_specs_action_table.py`）。
 
 每个动作的 `params`（JSON Schema 子集）、`returns`、`side_effect`、`handler_name`

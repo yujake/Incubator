@@ -1169,8 +1169,9 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
             assert "只能间接由父代理转达" in text, f"{role} 有唤不起的伙伴，却没写那句话"
         if role in C.NON_SUMMONABLE:
             assert "不可以被任何人唤起" in text, f"{role} 不可召唤，但提示词没写"
-    # 反真空：这一批就是因为主控有 B / F / V 三个"看得见、唤不起"的角色才加的。
-    assert gaps["M"] == {"B", "F", "V"}, gaps["M"]
+    # 反真空：这一批就是因为主控有"看得见、唤不起"的角色才加的。
+    # 2026-10-13：业主「补 M 到 B」之后，主控唤不起的只剩 F / V（B 已能直接派）。
+    assert gaps["M"] == {"F", "V"}, gaps["M"]
     assert not any(gaps[r] for r in gaps if r != "M"), \
         f"只有主控该有这一档（其余角色的条目就是出边）：{ {r: g for r, g in gaps.items() if g} }"
 
@@ -2304,14 +2305,14 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 _FROZEN_PROMPT_VERSION = "p103"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "3b3d96f6f5f73ae8b4a6eb01959adb0f838aa148ccbae8c1153ce7c94ef763d4",
-    "B": "23f0a3b5197e78205ae8e4907fe50f9f86cd74d5a419ed93f075a74232fbdc7f",
+    "B": "35b7ef11eb853eeb8f0ccdf524c28d0dbbbdbe01eda37098273f9e233f079039",
     "C": "2e08bc10d80b92bfa8d0d365eeaf1810de51b3e3ab7c7a89f4f9c75befc41731",
     "D": "997b102c4f0e7dbb29543b3ab87677385bf97d191f98c7a2c1bb77abf89f2e57",
     "E": "86ec335620c5e9298111199957fccc1fd5205e4d04c1f24952e1faeecec07f9c",
     "F": "4a2c426d1d2baf59e89205c68752b549c71442f77cb3ccb570cafc4282f87c72",
     "G": "dc917dff4387d4276303983e8f2221e6ae063d3c0aaeb00bd15662a6f5e1db79",
     "H": "2c46d889aec1587355270b2326d4c9bf5a64b81f7ef22c00040f92584a457cc5",
-    "M": "a52386f44d94c45f061b79eca2e780699d650a642f6db909dae11fc1583d095e",
+    "M": "2b7847fc279e0fb444c1532b031b5e598fb1a846296ead05e5c23016eb2124b2",
     "V": "2a94fab09532e7ef527343746c0a578d9a06835c4f1a807755848542e0b96ee2",
 }
 

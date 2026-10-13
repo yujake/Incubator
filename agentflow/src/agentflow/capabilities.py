@@ -1967,7 +1967,7 @@ def assert_capabilities(
     # 裁定的内容是一条"间接"要求：主控不许直接控制 B / F / V，只可间接由父代理转达。
     # 它有三处可判的地方，缺一条就有一种坏法看不见：
     #
-    #   ① 直接边不许含这三个 ⇒ 裁定本身（把边偷偷加回去会被这里抓住）；
+    #   ① 直接边不许含 {F, V} ⇒ 裁定本身（把边偷偷加回去会被这里抓住）；
     #   ② 这三个各自要有**别的**进路 ⇒ 否则它们成了孤儿（"间接转达"根本没有路，
     #      而那三个角色从此谁也召唤不到，键集判据与 ① 都看不见）；
     #   ③ 从主控出发在边图上可达每一个角色 ⇒ 换掉旧等式之后，"够不到某个角色"
@@ -1975,12 +1975,17 @@ def assert_capabilities(
     #
     # 三个角色名在这里是判据的一部分（判据必须能独立说出"哪一条不对"）；
     # 它们**不是**边表的第二份定义 —— 边表的真身是 `specs/m.py` 的 `edges`。
-    _INDIRECT_FROM_M = frozenset({"B", "F", "V"})
+    # 2026-10-13 业主裁定逐字「补 M 到 B」⇒ 受限集合从 {B, F, V} 收成 {F, V}。
+    # 真机读数（无 Lean 的 T1，`projects/p9-t1-nolean-20261013-1848`）：采信链的第一环是 B
+    # （命题与逐字出处），而 V 只由 F 唤起 —— M 够不着 B 时那一趟报「硬要求 B 不可达」，
+    # `verifications` 目录压根没被创建（`reviewed_proof_rows = 0`，阈值 7）。
+    # 加回 M→B 之后 **M→B→V** 两跳就够得着逐条走查；F / V 仍只走间接（② 与 ③ 两条判据照旧守它们）。
+    _INDIRECT_FROM_M = frozenset({"F", "V"})
     _m_edges = frozenset(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ())
     assert not (_m_edges & _INDIRECT_FROM_M), (
         f"ALLOWED_EDGES[{S.CONDUCTOR_ROLE!r}] 含 {sorted(_m_edges & _INDIRECT_FROM_M)}："
-        "这三个角色按 2026-10-10 的裁定只能间接由父代理转达（B 走 A、F 走 D、V 走 F），"
-        "主控直接派它们是被明确设限的那一件事"
+        "F / V 按 2026-10-10 的裁定只能间接由父代理转达（F 走 D、V 走 F）——"
+        "主控直接派它们仍是被明确设限的那一件事（B 已于 2026-10-13 由业主加回，见 `specs/m.py`）"
     )
     for _role in sorted(_INDIRECT_FROM_M):
         _inbound = sorted(frm for frm, tos in ALLOWED_EDGES.items()

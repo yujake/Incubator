@@ -80,9 +80,10 @@ def test_the_registry_is_not_vacuous() -> None:
     assert len(reg.roles()) == 10
     assert reg.read_only_roles() == ("C", "H", "V"), reg.read_only_roles()
     assert "M" not in reg.summonable_roles()
-    assert sum(len(v) for v in reg.edges().values()) == 30, (
+    assert sum(len(v) for v in reg.edges().values()) == 31, (
         "边总数：2026-10-10 裁定第 4 条去掉 M→B / M→F / M→V 三条（32 → 29）；"
         "2026-10-13 业主裁定「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」（29 → 30）；"
+        "2026-10-13 业主裁定「补 M 到 B」（30 → 31）；"
         "文档那一份在 docs/ROLE-SPECS.md §0.5"
     )
     for role in reg.roles():
