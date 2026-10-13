@@ -1,0 +1,18 @@
+R87 附记：给「渲染正文里不许有 markdown 记号」补一条判据
+
+R87 修的那两处（Help 页的 `**验收**`、预算页重设按钮 `impact` 里的 `**覆盖**`）
+是同一种缺陷的两个落点：JSX 不解析 markdown，写进去的星号会**原样印在网页上**。
+既然它是"改完还会再犯"的一类，就该有一条判据守着，而不是靠这次手工扫一遍。
+
+`tests/test_webui_pages.py`
+- 新增 `_markdown_marker_problems()`：**先剥注释再扫**（`_strip_js_comments`，
+  同文件既有那一份）—— 注释不上屏，写在注释里的 `**` 不算缺陷；页面的 JSX 正文
+  与组件里留着 `**…**` 就逐条报出「哪个文件、记号原文」。
+- 新增 `test_no_page_prints_markdown_markers_to_the_screen()`：覆盖九页 +
+  `ui/src/components/*.tsx` 全部组件。带四条负控（正常正文不报 / 正文里的记号必报 /
+  块注释不报 / 整行注释不报）—— 没有负控，这条判据可能只是"永远不报"的空壳。
+
+判据（本机实跑，2026-10-13）：
+- `python -B -m pytest tests/test_webui_pages.py -q` ⇒ **20 passed**（17s，本轮 +1 条）。
+- 全量网页面 `tests/test_webui*.py -q` ⇒ **187 passed, 1 skipped**（80s）。
+- `python scripts/noai_gate.py --git --since d9fb6a2` ⇒ `[clean]`，退出码 0。

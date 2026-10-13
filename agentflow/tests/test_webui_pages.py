@@ -641,6 +641,41 @@ def test_every_page_is_registered_and_every_page_source_exists() -> None:
             f"{name} 页自己 fetch 了 —— 端点必须只从 api.ts 走")
 
 
+#: 渲染正文里的 markdown 强调记号：JSX 不解析 markdown，写进去就**原样印在网页上**。
+_MD_BOLD = re.compile(r"\*\*[^*\n]+\*\*")
+
+
+def _markdown_marker_problems(label: str, text: str) -> list[str]:
+    """源码剥掉注释后仍留着 markdown 记号 ⇒ 逐条报出来（2026-10-13 R87）。"""
+    body = _strip_js_comments(text)
+    return [f"{label} 的渲染正文里留着 markdown 记号：{m.group(0)!r}"
+            for m in _MD_BOLD.finditer(body)]
+
+
+def test_no_page_prints_markdown_markers_to_the_screen() -> None:
+    """九页与各组件的渲染正文里不许有 markdown 记号（`**粗**` 会被原样印出来）。
+
+    为什么单列一条：这一批实测漏过两处 —— Help 页的「**验收**」、预算页重设按钮的
+    `impact`（`会把总额**覆盖**成 $…`）。两处都不是 JSX 能消化的语法，用户看到的是
+    多出来的星号。注释里的记号不算（注释不上屏），所以先剥注释再扫。
+
+    负控：同一段正文里塞一个记号必须报出来；只写在注释里必须不报。
+    """
+    assert _markdown_marker_problems("样本", "正常一句话，没有记号。\n") == []
+    assert _markdown_marker_problems("样本", "const a = <b>**加粗**</b>;\n") != []
+    assert _markdown_marker_problems("样本", "/* **注释里的** */\n") == []
+    assert _markdown_marker_problems("样本", "  // **整行注释里的**\n") == []
+
+    problems: list[str] = []
+    for name in sorted(PAGES):
+        path = UI_SRC / "pages" / f"{name}.tsx"
+        problems += _markdown_marker_problems(f"{name} 页", path.read_text(encoding="utf-8"))
+    for comp in sorted((UI_SRC / "components").glob("*.tsx")):
+        problems += _markdown_marker_problems(f"{comp.stem} 组件",
+                                              comp.read_text(encoding="utf-8"))
+    assert problems == [], problems
+
+
 def test_the_run_index_endpoint_is_really_in_the_route_table() -> None:
     """反真空（裁定 O2 的消费端）：`/api/run-index` 在总表里，且 handler 找得到。"""
     assert "/api/run-index" in routes.patterns(), routes.patterns()
