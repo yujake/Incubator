@@ -101,7 +101,7 @@ export function Artifacts() {
         ) : (
           <Table
             rows={art.ledger}
-            empty="台账 0 行（读到了，里面是空的 —— 这一趟还没登记过产物）。"
+            empty="暂无产物台账行。"
             columns={[
               { key: "path", title: "路径" },
               { key: "producer", title: "谁产出的" },
@@ -184,8 +184,7 @@ export function Artifacts() {
         right={<TriState tri={art.checks_tri} label="checks" />}
       >
         <div class="readings">
- 真机样本是 8 行 C1–C8；夹具造的是 3 行（tests/conftest.py 的
-          <span class="mono"> ACCEPTANCE_CHECKS_SAMPLE</span>）—— 判据与页面都标明"夹具样本"。
+ 夹具样本（<span class="mono">tests/conftest.py</span> 的 ACCEPTANCE_CHECKS_SAMPLE）；真机为 8 行 C1–C8。
         </div>
         {isUnreadable(art.checks_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
@@ -216,7 +215,7 @@ export function Artifacts() {
         {isUnreadable(art.style_tri) ? (
           <span class="empty">这一栏没查成（不是"0 节"）。</span>
         ) : art.style.sections.length === 0 ? (
-          <span class="empty">体例文件里没有声明任何一节（读到了，里面是空的）。</span>
+          <span class="empty">体例文件没有声明任何一节。</span>
         ) : (
           <ol class="list">
             {art.style.sections.map((s, i) => (
@@ -232,7 +231,7 @@ export function Artifacts() {
         right={<TriState tri={art.products_tri} label="products" />}
       >
         <div class="readings">
-          {art.products_reason === "" ? "（裁定 J2：真机无样本 ⇒ 判据用夹具造，页面标明）" : art.products_reason}
+          {art.products_reason === "" ? "夹具样本" : art.products_reason}
         </div>
         {isUnreadable(art.products_tri) ? (
           <span class="empty">这一栏没查成（不是"六件都不在"）。</span>
@@ -279,7 +278,7 @@ export function Artifacts() {
         ) : (
           <Table
             rows={art.tasks}
-            empty="tasks 台账 0 行（读到了，里面是空的）。"
+            empty="tasks 台账为空。"
             columns={[
               { key: "task_id", title: "任务号" },
               { key: "role", title: "角色" },

@@ -71,14 +71,12 @@ export function Acceptance() {
         right={<TriState tri={acc.tri} label="验收面" reason={acc.reason} />}
       >
         <div class="readings">
-          判据名的唯一来源是 <span class="mono">reviewaccept.CRITERIA</span>（5 条）与
-          <span class="mono"> AUXILIARY_SIGNALS</span>（5 条）；这一页不另抄一份名单。
+          判据名唯一来源：<span class="mono">reviewaccept.CRITERIA</span> 与 <span class="mono">AUXILIARY_SIGNALS</span>。
         </div>
         {acc.failed.length === 0 ? null : (
           <div class="readings">
             不是 pass 的格子 <span class="mono">{acc.failed.join("、")}</span>
- （后端的 failed 把 fail 与 unknown 放在一起 —— 逐条看下面「结论」那一列，
-            两者处置不同）
+ （后端把 fail 与 unknown 都放进 failed；逐条看「结论」列）
           </div>
         )}
         {unknownCells.length === 0 ? null : (
@@ -105,7 +103,7 @@ export function Acceptance() {
 
       <Card title="五条判据" subtitle="逐条：名字 · 三态 · 读数">
         {criteria.length === 0 ? (
-          <span class="empty">一条判据都没读到（那是"没查成"，看上面的整面三态）。</span>
+          <span class="empty">一条判据都没读到（即"没查成"）。</span>
         ) : (
           <table class="grid">
             <thead>
@@ -133,7 +131,7 @@ export function Acceptance() {
 
       <Card title="五种辅助读数" subtitle="逐条同形（读不出来写 unknown，不写 0）">
         {auxiliary.length === 0 ? (
-          <span class="empty">一条辅助读数都没读到（那是"没查成"）。</span>
+          <span class="empty">一条辅助读数都没读到。</span>
         ) : (
           <table class="grid">
             <thead>
