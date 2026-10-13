@@ -54,6 +54,15 @@ function field(rec: Record<string, unknown>, key: string): string {
  * 为什么要它（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像
  * 啥都没设置过一样」）：这一格的读数后端早就在给（`GET /api/machine` 的 `settings` 三段），
  * 但输入框初值一直是空串 ⇒ 打开面板看到的永远是"没配"。
+ *
+ * ⚠️ 2026-10-13（R90）改一处**要命的**地方：这里不许走 `cell()`。`cell("")` 的口径是
+ * `unknown`（那一套是给**读数表**用的），可这一格的返回值会直接进输入框的 `value` ——
+ * 于是盘上没写的四格（`coq_bin` / `isabelle_bin` / `lean_enabled` / `projects_dir`）
+ * 全被填上了字面量 `unknown`，用户一按「写这些设置」就把 `lean_enabled=unknown` 写进盘上：
+ * `settings.lean_enabled()` 对词表外的值**抛错**，开关从此读不出来 ——
+ * 业主报的「lean 开关网页上没法真的开关」正是这一条。
+ * 所以这里读**原值**：缺席 ⇒ 空串（输入框空着、placeholder 说"盘上没设过"），
+ * 「空串 = 这一格不动」这条口径也才成立。
  */
 function currentOf(settings: SettingsReading, key: string): string {
   const parts = key.split(".");
@@ -63,7 +72,11 @@ function currentOf(settings: SettingsReading, key: string): string {
   if (seg === undefined || seg === null) {
     return "";
   }
-  return field(seg, leaf);
+  const raw = seg[leaf];
+  if (raw === undefined || raw === null) {
+    return "";
+  }
+  return typeof raw === "string" ? raw : String(raw);
 }
 
 /** 三态布尔：`null` / `undefined` ⇒ `unknown`（不折成 false）。 */
@@ -71,12 +84,38 @@ function triBool(value: unknown): string {
   return typeof value === "boolean" ? String(value) : "unknown";
 }
 
-/** 把"键值对"渲染成一张两列的表（设置三段与嵌套读数都用它）。 */
-function pairs(rec: Record<string, unknown>): Array<{ k: string; v: string }> {
+/** 把"键值对"渲染成一张两列的表（设置三段与嵌套读数都用它）。
+ *
+ * `raw` 是原值：设置三段那一张要按"盘上写没写"读（空串 = 没写），不能在这里先被
+ * `cell()` 折成 `unknown` —— 折过之后 `settingsCell()` 拿到的已经是词，回不去了。
+ */
+function pairs(rec: Record<string, unknown>): Array<{ k: string; v: string; raw: unknown }> {
   return Object.keys(rec)
     .sort()
-    .map((k) => ({ k, v: field(rec, k) }));
+    .map((k) => ({ k, v: field(rec, k), raw: rec[k] }));
 }
+
+/** 设置文件里的一格怎么读（R90）。
+ *
+ * 为什么不用 `cell()` 的默认读法：它的口径是"空串 ⇒ `unknown`"（三态纪律：读不到 ≠ 空），
+ * 可这一格读到的是一个**盘上没写**的键 —— 文件已经读出来了（这一卡只有在
+ * `settings_tri` 不是 unreadable 时才渲染）。把"没写"显成 `unknown`，用户看到的就是
+ * 「lean_enabled unknown」，像是开关读不出来 —— 业主 2026-10-13 就是这么读的
+ * （原话：「lean 开关网页上没法真的开关」）。
+ */
+function settingsCell(value: unknown): string {
+  if (value === "" || value === null || value === undefined) {
+    return "（盘上没写）";
+  }
+  return cell(value);
+}
+
+/** 形式化开关的来源（`GET /api/machine` 的 `lean_enabled_source`）。 */
+const SWITCH_SOURCES: Record<string, string> = {
+  env: "环境变量 AGENTFLOW_LEAN_ENABLED",
+  settings: "设置文件 toolchain.lean_enabled",
+  "": "缺省（设置文件里没写这一格）",
+};
 
 /** 初值：设置文件里的现值；`model.api_key` 例外（读数是 `***`，回填等于写回它）。 */
 function presetOf(settings: SettingsReading, key: string): string {
@@ -90,6 +129,7 @@ export function Machine() {
   const face = useFace(() => api.getMachine());
   const [values, setValues] = useState<Record<string, string>>({});
   const [writeResult, setWriteResult] = useState("");
+  const [switchResult, setSwitchResult] = useState("");
 
   if (face.data === null) {
     return (
@@ -107,6 +147,23 @@ export function Machine() {
   const settings = m.settings;
   const provers = m.provers;
   const mathlib = m.mathlib;
+  // 开关的读数（三态）：`null` = 这一格没读成，不许折成"关"。
+  const leanOn: boolean | null = typeof m.lean_enabled === "boolean" ? m.lean_enabled : null;
+
+  /** 翻这个开关：写 `toolchain.lean_enabled` 那一格（`postSettings` 自带 `confirm=1`）。 */
+  const flipLean = (want: boolean): void => {
+    setSwitchResult("");
+    postSettings({ "toolchain.lean_enabled": want ? "true" : "false" })
+      .then((got) => {
+        setSwitchResult(
+          `${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}` +
+            (got.ok ? " —— 新起的循环按新开关走；正在跑的那一趟按它自己那份跑。" : ""));
+        face.reload();
+      })
+      .catch((exc: unknown) => {
+        setSwitchResult(`写请求失败：${whyOf(exc)}`);
+      });
+  };
 
   return (
     <>
@@ -153,6 +210,66 @@ export function Machine() {
         title="Lean / Mathlib"
         subtitle={`lean_ready=${triBool(m.lean_ready)} · can_do_formal=${triBool(m.can_do_formal)}`}
       >
+        {/* 开关那一行（R90）：业主 2026-10-13「lean 开关网页上没法真的开关」。
+            原先这一页只显示 `lean_ready`（这台机器装没装 Lean）与 `can_do_formal`
+            （装了能不能用），**不显示 `lean_enabled`（用户设的开关）** —— 于是页面上
+            根本看不出开关是开是关，改它只能去下面那个自由文本框里手打 true/false。
+            两条事实必须同框（`readers.py` 里写过同一句：只看后者会把"关掉了"读成"没装"）。 */}
+        <div class="readings">
+          形式化开关{" "}
+          <b>{leanOn === null ? "unknown（这一格没查成）" : leanOn ? "开" : "关"}</b>
+          {" "}· 来源 <span class="mono">
+            {SWITCH_SOURCES[m.lean_enabled_source] ?? m.lean_enabled_source}
+          </span>
+          {" "}· 当前模式 <span class="mono">{m.formal_mode === "" ? "unknown" : m.formal_mode}</span>
+        </div>
+        <div class="readings">
+          关掉时全员不做形式化：证明核验走 V 的自然语言逐行走查（`verifications` 表签「成立」），
+          检查器如实回 `lean_disabled` —— 它不是"这台机器上没有 Lean"，也不是"证明没过"。
+          {/* 环境变量压着设置文件时，写文件不生效 —— 这件事必须在页面上说出来，
+              否则用户改了设置文件、读数不动，只会以为"这个开关坏了"。 */}
+          {m.lean_enabled_source === "env" ? (
+            <span class="tri-reason">
+              {" "}注意：现在压着它的是环境变量，改设置文件不会改变这一档 ——
+              要么去掉那个环境变量再起服务，要么就按它跑。
+            </span>
+          ) : null}
+        </div>
+        <div class="readings">
+          <ConfirmButton
+            action="打开形式化"
+            impact="会把设置文件 toolchain.lean_enabled 写成 true（下一趟起按它走）"
+            onConfirm={() => {
+              flipLean(true);
+            }}
+            disabled={leanOn !== false}
+            note={
+              leanOn === null
+                ? "开关读数没查成 —— 先解决上面那条 reason，别蒙着写"
+                : leanOn
+                  ? "已经是开的"
+                  : "写面没开（agentflow web --allow-writes）时后端回 403，回执如实显示"
+            }
+          />
+        </div>
+        <div class="readings">
+          <ConfirmButton
+            action="关闭形式化"
+            impact="会把设置文件 toolchain.lean_enabled 写成 false（省钱档；证明核验改走 V 逐行走查）"
+            onConfirm={() => {
+              flipLean(false);
+            }}
+            disabled={leanOn !== true}
+            note={
+              leanOn === null
+                ? "开关读数没查成 —— 先解决上面那条 reason，别蒙着写"
+                : leanOn
+                  ? "写面没开（agentflow web --allow-writes）时后端回 403，回执如实显示"
+                  : "已经是关的（缺省就是关）"
+            }
+          />
+        </div>
+        {switchResult === "" ? null : <div class="readings">{switchResult}</div>}
         <div class="readings">
           lean 落点 <span class="mono">{m.lean_path === "" ? "unknown（没读到）" : m.lean_path}</span> ·
           版本 <span class="mono">{m.lean_version === "" ? "unknown（没读到）" : m.lean_version}</span>
@@ -224,7 +341,7 @@ export function Machine() {
               columns={[
                 { key: "part", title: "段" },
                 { key: "k", title: "键" },
-                { key: "v", title: "值", render: (r) => <span class="mono">{r.v}</span> },
+                { key: "v", title: "值", render: (r) => <span class="mono">{settingsCell(r.raw)}</span> },
               ]}
             />
           </>

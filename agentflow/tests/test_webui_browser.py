@@ -349,6 +349,146 @@ def test_the_settings_form_is_never_prefilled_with_the_key(
         assert SET.MASKED_KEY in html or "api_key" in html, "这一页根本没读设置"
 
 
+def test_the_lean_switch_really_flips_it(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """真浏览器点「打开形式化」⇒ 盘上那一格真的变了、读数也跟着翻（R90）。
+
+    业主 2026-10-13 的原话是「lean 开关网页上没法真的开关」。取证结论：后端一直是好的
+    （`POST /api/settings` 写 `toolchain.lean_enabled=true` 之后 `settings.lean_enabled()`
+    立刻回 `(True, "settings")`），缺的是台面 —— 这一页原先只画 `lean_ready`
+    （机器装没装）与 `can_do_formal`，**不画也不给**那个开关。
+
+    这一条从页面上点下去，一路量到三处：盘上那份设置文件、`settings.lean_enabled()`
+    这个唯一口径、以及页面刷新后的读数（按钮的可用态就是读数的镜子）。
+    """
+    target = tmp_path / "settings.json"
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
+    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+    # 盘上先有一份**没有** `lean_enabled` 那一格的设置文件：这正是最常见的情形
+    # （开关缺省 = 关），也正是"盘上没写"与"没读到"必须分得开的那一格。
+    target.write_text(json.dumps({"toolchain": {"lean_bin": "_env/lean/bin"}}),
+                      encoding="utf-8")
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        _enter_spa(live, "/machine")
+        page.wait_for_selector('input[type="password"]', timeout=10_000)
+        assert SET.lean_enabled() == (False, ""), "初态不是缺省档，这条判据的前提变了"
+        body = page.inner_text("body")
+        assert "形式化开关" in body, "页面上没有开关那一行"
+        assert "缺省（设置文件里没写这一格）" in body, body[:400]
+        assert "（盘上没写）" in body, (
+            "设置三段里那一格缺席的键显成了 unknown（读到了空 ≠ 没读到）")
+        assert not page.get_by_role("button", name="打开形式化").is_disabled(), \
+            "开关是关的，'打开形式化'却点不动"
+
+        page.get_by_role("button", name="打开形式化").click()
+        page.wait_for_timeout(200)
+        page.get_by_role("button", name="确认打开形式化").click()
+        page.wait_for_timeout(700)
+        on_disk = json.loads(target.read_text(encoding="utf-8"))
+        assert str(on_disk["toolchain"]["lean_enabled"]).lower() == "true", on_disk
+        assert SET.lean_enabled() == (True, "settings"), SET.lean_enabled()
+        assert "设置文件 toolchain.lean_enabled" in page.inner_text("body"), \
+            "打开之后页面上的来源没变（读数没跟着翻）"
+
+        page.get_by_role("button", name="关闭形式化").click()
+        page.wait_for_timeout(200)
+        page.get_by_role("button", name="确认关闭形式化").click()
+        page.wait_for_timeout(700)
+        on_disk2 = json.loads(target.read_text(encoding="utf-8"))
+        assert str(on_disk2["toolchain"]["lean_enabled"]).lower() == "false", on_disk2
+        assert SET.lean_enabled() == (False, "settings"), SET.lean_enabled()
+
+
+def test_the_page_says_when_the_env_var_overrides_the_lean_switch(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """环境变量压着设置文件时，页面必须说出来（R90）。
+
+    `settings.lean_enabled()` 的取值梯子是 **环境变量 > 设置文件 > 缺省**（唯一口径）。
+    带着 `AGENTFLOW_LEAN_ENABLED=1` 起服务时，网页上写设置文件**不会**改变这一档 ——
+    这正是"我改了，它不动"最容易发生的地方，所以页面上必须写清，而不是让用户以为开关坏了。
+
+    两处读数一起量：页面上那句提醒在，且**写完之后**唯一口径仍然回 `env`。
+    """
+    target = tmp_path / "settings.json"
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
+    monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        _enter_spa(live, "/machine")
+        page.wait_for_selector('input[type="password"]', timeout=10_000)
+        assert SET.lean_enabled() == (True, "env"), SET.lean_enabled()
+        body = page.inner_text("body")
+        assert "环境变量 AGENTFLOW_LEAN_ENABLED" in body, body[:400]
+        assert "不会改变这一档" in body, "页面上没说环境变量压着设置文件"
+        assert page.get_by_role("button", name="打开形式化").is_disabled(), \
+            "环境变量已经把它打开了，'打开形式化'还点得动"
+
+        page.get_by_role("button", name="关闭形式化").click()
+        page.wait_for_timeout(200)
+        page.get_by_role("button", name="确认关闭形式化").click()
+        page.wait_for_timeout(700)
+        assert SET.lean_enabled() == (True, "env"), (
+            "写设置文件竟然盖住了环境变量 —— 取值梯子变了？")
+
+
+def test_no_settings_input_is_prefilled_with_the_word_unknown(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """设置窗口那几格不许被填上字面量 `unknown`（R90，这一条是业主报的那件事的真身）。
+
+    取证（本机 2026-10-13，真浏览器读输入框的 `value`）：盘上没写的四格
+    —— `toolchain.coq_bin` / `toolchain.isabelle_bin` / `toolchain.lean_enabled` /
+    `workspace.projects_dir` —— **全被填上了 `unknown`**。原因是输入框初值走了
+    `currentOf()` → `field()` → `cell()`，而 `cell("")` 的口径是 `unknown`
+    （那一套是给读数表用的）。用户一按「写这些设置」，盘上就多出
+    `lean_enabled: "unknown"` 这类值：`settings.lean_enabled()` 对词表外的值**抛错**，
+    开关从此读不出来 —— 「lean 开关网页上没法真的开关」正是这一条。
+
+    这一条量两处：每一格的 `value` 只能是"盘上真有的值"或空串；按一次「写这些设置」
+    之后，盘上那份文件里**只多出用户真填的那一格**，一个 `unknown` 都不许落盘。
+    """
+    target = tmp_path / "settings.json"
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
+    monkeypatch.delenv(SET.ENV_LEAN_ENABLED, raising=False)
+    target.write_text(json.dumps({"toolchain": {"lean_bin": "_env/lean/bin"}}),
+                      encoding="utf-8")
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        _enter_spa(live, "/machine")
+        page.wait_for_selector('input[type="password"]', timeout=10_000)
+        rows = page.eval_on_selector_all(
+            "label.opt",
+            """ls => ls.map(l => {
+                 const i = l.querySelector('input');
+                 const s = l.querySelector('span');
+                 return {key: s ? s.textContent : '?', value: i ? i.value : null};
+               })""")
+        assert len(rows) >= 10, rows
+        bad = [r for r in rows if r["value"] == "unknown"]
+        assert bad == [], f"这些格被填上了字面量 unknown：{bad}"
+        by_key = {r["key"]: r["value"] for r in rows}
+        assert by_key["toolchain.lean_bin"] == "_env/lean/bin", by_key
+        for key in ("toolchain.coq_bin", "toolchain.isabelle_bin",
+                    "toolchain.lean_enabled", "workspace.projects_dir"):
+            assert by_key[key] == "", (key, by_key[key])
+
+        # 一格都不填 ⇒ 按钮点不动（口径：空串 = 这一格不动）
+        assert page.get_by_role("button", name="写这些设置").is_disabled(), \
+            "一格都没填，'写这些设置'却点得动 —— 空串的口径被破坏了"
+        # 真填一格再写：盘上只多这一格
+        page.fill('label.opt:has(span:text-is("model.name")) input', "deepseek-chat")
+        page.get_by_role("button", name="写这些设置").click()
+        page.wait_for_timeout(200)
+        page.get_by_role("button", name="确认写这些设置").click()
+        page.wait_for_timeout(700)
+        on_disk = json.loads(target.read_text(encoding="utf-8"))
+        assert json.dumps(on_disk, ensure_ascii=False).find("unknown") < 0, on_disk
+        assert on_disk["toolchain"].get("lean_enabled") != "unknown", on_disk
+        assert on_disk["model"]["name"] == "deepseek-chat", on_disk
+        assert on_disk["toolchain"]["lean_bin"] == "_env/lean/bin", on_disk
+        assert SET.lean_enabled() == (False, ""), SET.lean_enabled()
+
+
 def test_the_stop_button_asks_for_confirmation_before_calling_stop(
         tmp_path: pathlib.Path) -> None:
     """正控（`draft/73` §2.8 的 `test_stop_requires_confirmation`）：叫停要按两下。
@@ -506,6 +646,9 @@ def test_every_page_mounts_clean_and_prints_no_markdown_markers(
                 f"{route} 的正文里有 markdown 记号："
                 f"{clean[max(0, where - 60):where + 60]!r}")
             assert body.strip() != "", f"{route} 是白屏（正文一个字都没有）"
+            assert "[object Object]" not in body, (
+                f"{route} 的正文里印出了 `[object Object]` —— 有一个对象被 String() 了"
+                "（本机实测：Mathlib 探针那一格曾经就是这样）")
             assert page.eval_on_selector("#app", "n => n.children.length") > 0, \
                 f"{route} 的 #app 里一个子节点都没有"
             noisy = [e for e in live["errors"] if "favicon" not in e]

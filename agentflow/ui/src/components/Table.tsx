@@ -36,6 +36,11 @@ export function cell(value: unknown): string {
   if (Array.isArray(value)) {
     return value.length === 0 ? "（空表）" : value.map((x) => cell(x)).join("、");
   }
+  if (typeof value === "object") {
+    // R90：对象不许落到 `String(value)` —— 那会印出 `[object Object]`（本机实测：
+    // Mathlib 探针那一格就是这样上的屏）。JSON 至少是真的读数，读得懂。
+    return JSON.stringify(value);
+  }
   return String(value);
 }
 

@@ -83,8 +83,10 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
     "Artifacts": ("ledger", "ledger_verify", "handoffs", "checks", "style",
                   "products", "tasks", "sha256_now", "run_dir"),
     "Acceptance": ("criteria", "auxiliary", "details", "failed", "capUsd"),
+    # R90 追加三个：形式化开关本身（`lean_enabled`）、它的来源（`lean_enabled_source`）
+    # 与当前模式（`formal_mode`）—— 只看 `lean_ready` 会把"用户关掉了"读成"没装"。
     "Machine": ("provers", "mathlib", "lean_ready", "can_do_formal", "settings",
-                "configured"),
+                "configured", "lean_enabled", "lean_enabled_source", "formal_mode"),
     # 三页新的（2026-10-12）：各钉住"这一页真的读了那一面的哪几栏"。
     "Budget": ("total_usd", "spent_usd", "remaining_usd", "exceeded", "source",
                "added", "added_count", "by_role", "by_scope", "spent_tri",
@@ -850,6 +852,33 @@ def test_the_budget_page_has_two_explicit_buttons_and_no_dead_select() -> None:
     assert "（没写说明）" in src, "空说明那一格会显成 unknown（把\"没写说明\"读成\"没读到\"）"
 
 
+def test_the_machine_page_really_has_a_lean_switch() -> None:
+    """判据（业主 2026-10-13：「lean 开关网页上没法真的开关」）：这一页要能看、能翻。
+
+    取证（本机实测）：后端一直在给这一格 —— `GET /api/machine` 有
+    `lean_enabled`（开关）= `false`、`lean_enabled_source`（谁定的 = 缺省）、
+    `formal_mode`（走了哪一档 = `prose_review`）；`POST /api/settings` 写
+    `toolchain.lean_enabled=true` 也一直是好的（写完 `settings.lean_enabled()`
+    立刻回 `(True, "settings")`）。缺的是**台面**：这一页原先只画 `lean_ready`
+    （这台机器装没装 Lean）与 `can_do_formal`，既不画开关本身，也没有一个能按的
+    开关 —— 改它只能去「设置窗口」那个自由文本框里手打 `true` / `false`。
+
+    所以这一条钉三件事：
+    - 开关那一格真的读了（`lean_enabled` / `lean_enabled_source` / `formal_mode`，
+      见 `PAGE_KEYS["Machine"]`）；
+    - 有两个各自带动作的按钮（「打开形式化」/「关闭形式化」），确认里写的是
+      `toolchain.lean_enabled` 那一格；
+    - 环境变量压着设置文件时（`lean_enabled_source === "env"`）页面上要说出来 ——
+      否则用户改了设置文件、读数不动，只会以为开关坏了。
+    """
+    src = _page_text("Machine")
+    assert "SWITCH_SOURCES" in src, "开关的来源没有词表（'谁定的'会显成一串机器字）"
+    assert 'action="打开形式化"' in src and 'action="关闭形式化"' in src, src[:200]
+    assert '"toolchain.lean_enabled": want ? "true" : "false"' in src, \
+        "开关那两个按钮没有写 toolchain.lean_enabled 这一格"
+    assert 'm.lean_enabled_source === "env"' in src, "环境变量压着设置文件时，页面上不说"
+
+
 def test_the_settings_panel_prefills_from_the_reading() -> None:
     """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥
     都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。
@@ -871,6 +900,11 @@ def test_the_settings_panel_prefills_from_the_reading() -> None:
     assert "盘上没设过" in src, "占位符里没写清这一格是空在哪一边"
     assert 'field.key === "model.api_key" ? "password" : "text"' in src, \
         "key 那一格不是 password（输入的 key 会明文上屏）"
+    # R90：输入框初值不许走 `cell()` —— 它的口径是"空串 ⇒ unknown"，于是盘上没写的
+    # 那几格会被填上字面量 `unknown`，一按「写这些设置」就把它写进盘上（`lean_enabled`
+    # 就此读不出来）。这条负控钉住那一行别再回来。
+    assert "return field(seg, leaf)" not in src, (
+        "输入框初值又走回 cell() 了 —— 盘上没写的格子会被填成字面量 unknown")
     i = src.index("function presetOf(")
     body = src[i:i + 400]
     assert 'key === "model.api_key"' in body and 'return ""' in body, body

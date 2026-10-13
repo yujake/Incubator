@@ -1,0 +1,76 @@
+R90：修掉「lean 开关网页上没法真的开关」—— 真身是设置窗口把没写的格子填成了字面量 unknown
+
+业主 2026-10-13（R89 之后）：「lean 开关网页上没法真的开关」。逐层取证之后，
+这一句底下是**三件事**，其中第一件是真凶。
+
+## 一、真凶：输入框初值走错了读法，把 `unknown` 当成"现值"
+
+`ui/src/pages/Machine.tsx` 的 `currentOf()` → `field()` → `cell()`，而 `Table.cell()`
+的口径是 **空串 ⇒ `unknown`**（三态纪律：读不到 ≠ 空）。那一套是给**读数表**用的，
+可这里的返回值直接进了输入框的 `value`。实测（真浏览器读 `value`，工作区 `t1-review`）：
+
+```
+toolchain.coq_bin        value='unknown'
+toolchain.isabelle_bin   value='unknown'
+toolchain.lean_enabled   value='unknown'
+workspace.projects_dir   value='unknown'
+```
+
+后果是**不可逆**的那一类：用户一按「写这些设置」，这四个字面量就落盘 ——
+`lean_enabled: "unknown"` 会撞上 `settings.lean_enabled()` 的词表（它对认不出的值
+**抛错**，见 `settings.py` 的口径），开关从此读不出来；`coq_bin="unknown"` /
+`isabelle_bin="unknown"` 会让探针去一个叫 unknown 的落点找检查器；
+`projects_dir="unknown"` 会把默认项目目录指到一个不存在的路径。
+（本机那份 `settings.json` 实测**没有被写坏**：四格仍是空的。）
+
+修法：`currentOf()` 读**原值**（缺席 ⇒ 空串），"空串 = 这一格不动"这条口径这才成立，
+placeholder 的「（盘上没设过）」也这才显出来。另加负控（静态）：`return field(seg, leaf)`
+不许再出现。
+
+## 二、台面上根本没有那个开关
+
+`GET /api/machine` 一直在给三格 —— `lean_enabled`（开关 = `false`）、
+`lean_enabled_source`（谁定的 = 缺省）、`formal_mode`（走了哪一档 = `prose_review`），
+而这一页只画 `lean_ready`（这台机器装没装 Lean）与 `can_do_formal`。
+两条事实不同框，"关掉了"就会被读成"没装"（`readers.py` 里写过同一句）。
+
+现在「Lean / Mathlib」卡第一行就是开关本身 + 来源 + 当前模式，并给了两个各自带动作的
+按钮「打开形式化」/「关闭形式化」（写 `toolchain.lean_enabled`，两次确认，回执原样显示，
+写完刷读数）。顺带把"关掉意味着什么"写在旁边：证明核验走 V 的自然语言逐行走查、
+检查器如实回 `lean_disabled`（不是"没装"也不是"证明没过"）。
+
+环境变量压着设置文件时（`lean_enabled_source === "env"`）页面上**明说**：
+改设置文件不会改变这一档 —— 那正是"我改了它不动"最容易发生的地方。
+
+## 三、设置三段里那几格显成 `unknown`，看着像读不出来
+
+同一张表里"盘上没写"的键（`coq_bin` / `isabelle_bin` / `lean_enabled` / `projects_dir`）
+一直印着 `unknown`——文件明明读出来了，只是没写这一格。改成「（盘上没写）」，
+`unknown` 只留给"这一面没查成"。另外发现 `import_mathlib_probe` 那一格印的是
+`[object Object]`（`cell()` 对对象落到 `String(value)`）⇒ 改成 JSON 真读数。
+
+## 判据
+
+- 静态（`tests/test_webui_pages.py`）：
+  - `PAGE_KEYS["Machine"]` 追加 `lean_enabled` / `lean_enabled_source` / `formal_mode`；
+  - 新增 `test_the_machine_page_really_has_a_lean_switch`（两个按钮 + 写的那一格 +
+    env 压着时页面上要说出来）；
+  - 设置面板那条负控：`return field(seg, leaf)` 不许回来。
+- 真浏览器（`tests/test_webui_browser.py`，+3 条）：
+  - `test_the_lean_switch_really_flips_it`：点「打开形式化」⇒ 盘上 `lean_enabled=true`
+    且 `settings.lean_enabled() == (True, "settings")`，页面来源跟着变；再点「关闭形式化」
+    ⇒ 回 `false`；
+  - `test_the_page_says_when_the_env_var_overrides_the_lean_switch`：带
+    `AGENTFLOW_LEAN_ENABLED=1` 起服务时页面上明说，且**写设置文件盖不住环境变量**
+    （唯一口径仍是 env）；
+  - `test_no_settings_input_is_prefilled_with_the_word_unknown`：十个输入框都不许是
+    `unknown`，缺席的四格必须是空串；按一次「写这些设置」之后盘上只多用户真填的那一格；
+  - 逐页核对的 `[object Object]` 负控。
+
+## 本机实跑（2026-10-13）
+
+- `python -B -m pytest -q -m browser tests/test_webui_browser.py` ⇒ **17 passed**（43s）。
+- `python -B -m pytest tests/test_webui*.py -q`（浏览器档筛掉）⇒ **189 passed**（79s）。
+- 逐页截图：九页 `stars=0 errs=0`（工作区 `projects/t1-review`）。
+- `pnpm run typecheck` 干净；`pnpm run build` ⇒ `index.CjdX2ybm.js`。
+- 真浏览器读数（改后）：四个缺席格 `value=''`，`settings.json` 里没有 `unknown`。
