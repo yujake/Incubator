@@ -20,6 +20,7 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Money } from "../components/Money";
 import { Table, cell } from "../components/Table";
+import { StopButtons } from "../components/Stop";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 
@@ -128,6 +129,7 @@ export function Live() {
 
       <Card
         title="停机开关与历史"
+        subtitle="叫停就在这里：下面两个按钮"
         right={
           l === null ? null : (
             <Badge
@@ -137,6 +139,15 @@ export function Live() {
           )
         }
       >
+        {/* 业主 2026-10-13：「网页中没找到停机开关」——它此前只长在「一趟详情」里，
+            而人要叫停时待的往往是这一页。现在这一页就是它的落点：先给一句导引，
+            再给同一对按钮（`components/Stop.tsx`，与「一趟详情」共用）。 */}
+        <div class="readings">
+          叫停的落点是工作区 <span class="mono">runs/</span> 下那一个跨进程开关：在飞的循环
+          在下一个检查点读到它就收工，把已做过的事留在台账与会话记录里。
+          <b>要停就按下面那对按钮</b>（优雅停 / 强制停），「一趟详情」页里是同一对。
+        </div>
+        {l === null ? null : <StopButtons onDone={() => liveFace.reload()} />}
         {l === null ? null : (
           <>
             <div class="readings">

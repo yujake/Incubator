@@ -406,6 +406,46 @@ export interface StatusReportsView {
   reports: StatusReportRow[];
 }
 
+/** 出处：chat_face() 的 options[] 一项（`userio.option_view` 渲染视图里的两栏）。 */
+export interface ChatOption {
+  label: string;
+  description: string;
+}
+
+/** 出处：chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）。 */
+export interface ChatLine {
+  index: number;
+  who: string;
+  role: string;
+  kind: string;
+  ts: string;
+  title: string;
+  text: string;
+  clipped: boolean;
+  qid?: string;
+  options?: ChatOption[];
+}
+
+/** 出处：chat_face() 的 sessions[] —— 供对话页挑会话（`sessions.list_sessions` 的四栏）。 */
+export interface ChatSession {
+  sid: string;
+  last_ts: string;
+  events: number;
+  bad_lines: number;
+}
+
+/** 出处：chat_face() —— 一段会话的对话读数（有界：只给最近的 lines_max 条，截断逐条标明）。 */
+export interface ChatView {
+  tri: Tri;
+  reason: string;
+  sid: string;
+  lines: ChatLine[];
+  total: number;
+  shown: number;
+  clipped: boolean;
+  sessions: ChatSession[];
+}
+
 /** 出处：store.rows("statements")（无真机样本 ⇒ 权威来源是 `schema.Statement`）。 */
 export interface StatementRow {
   stmt_id: string;

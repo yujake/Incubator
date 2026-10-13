@@ -513,13 +513,28 @@ HANDLERS.update({
 # ---------------------------------------------------------------- 网页上"说话"的两处
 
 
-def _run_argv(root: Path, task: str) -> list[str]:
-    """起一趟要跑的那条命令行（判据拿它比对；`dry_run` 也回它）。"""
-    return [sys.executable, "-B", "-m", "agentflow", "--root", str(root),
+def _run_argv(root: Path, task: str, *, sid: str = "",
+              resume: bool = False) -> list[str]:
+    """起一趟要跑的那条命令行（判据拿它比对；`dry_run` 也回它）。
+
+    `sid` / `resume`（R91，业主「要能对话」）：对话页在 M **闲着**的时候要让那一段
+    会话接着说下去 —— 用户的话先落进收件箱（`/api/task`），再按**同一句话任务**
+    唤醒 M（`--sid <那段会话> --resume`）。为什么必须带上原来那句话：`resume_messages`
+    按"role 相同 + task 原文相同 + 是全新开始"来定重建窗口，换了任务就是另一趟
+    （`--resume` 会以指纹不符拒掉，那是有意的守卫）。收件箱那一段是**现读**的，
+    所以新留言正好落在 M 醒来的第一步里。
+    """
+    argv = [sys.executable, "-B", "-m", "agentflow", "--root", str(root),
             "run-agent", S.CONDUCTOR_ROLE, "--task", task, "--subagents"]
+    if sid.strip():
+        argv += ["--sid", sid.strip()]
+    if resume:
+        argv.append("--resume")
+    return argv
 
 
-def _spawn_run(root: Path, task: str) -> tuple[int, str]:
+def _spawn_run(root: Path, task: str, *, sid: str = "",
+               resume: bool = False) -> tuple[int, str]:
     """真起一趟：detached 子进程，stdout/stderr 追加进 `runs/web-run-*.log`。
 
     为什么 detached 而不是在服务进程里跑：一趟是几十分钟的模型循环，跟着网页进程生灭
@@ -541,7 +556,8 @@ def _spawn_run(root: Path, task: str) -> tuple[int, str]:
     if os.name == "nt":
         flags = getattr(subprocess, "DETACHED_PROCESS", 0) | \
             getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-    proc = subprocess.Popen(_run_argv(root, task), cwd=str(root), env=env,
+    proc = subprocess.Popen(_run_argv(root, task, sid=sid, resume=resume), cwd=str(root),
+                            env=env,
                             stdout=handle, stderr=subprocess.STDOUT,
                             stdin=subprocess.DEVNULL, creationflags=flags,
                             close_fds=True)
@@ -552,17 +568,22 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
                query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
     """`POST /api/run`：用一句话起一趟工作流（等价 CLI 的 `run-agent M --task …`）。
 
-    请求字段：`task`（要系统做的那件事，一句话）· `confirm=1` · `dry_run?`。
-    三态：没开写面 / CSRF 不对 ⇒ 403；任务为空 / 缺 confirm ⇒ 400（一个字节都不写）；
-    起不来 ⇒ 500 并原样给错误；起来了 ⇒ 200 + `{pid, log, argv}`。
+    请求字段：`task`（要系统做的那件事，一句话）· `confirm=1` · `dry_run?` ·
+    `sid?` + `resume?`（R91：让**闲着**的那段会话接着说下去 —— 对话页在 M 不跑时
+    走的就是这一支；`resume` 必须配 `sid`，因为它问的是"接着哪一段跑"）。
+    三态：没开写面 / CSRF 不对 ⇒ 403；任务为空 / 缺 confirm / `resume` 没给 `sid`
+    ⇒ 400（一个字节都不写）；起不来 ⇒ 500 并原样给错误；起来了 ⇒ 200 + `{pid, log, argv}`。
     """
     del params, query
     form = handler._form()
     root = Path(handler.root)
     source, _why = _source_of(handler)
     task = _one(form, "task").strip()
+    sid = _one(form, "sid").strip()
+    resume = _flag(form, "resume")
     dry = _flag(form, "dry_run")
-    seen = {"task": task, "dry_run": dry, "confirm": _flag(form, "confirm")}
+    seen = {"task": task, "sid": sid, "resume": resume, "dry_run": dry,
+            "confirm": _flag(form, "confirm")}
     allowed, code, why = authorize(handler, endpoint="POST /api/run")
     if not allowed:
         return _finish(handler, endpoint="/api/run", source=source, params=seen,
@@ -570,22 +591,27 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
     if not task:
         return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
                        result="拒绝：任务不能为空 —— 它就是你要对系统说的那一句话", ok=False)
+    if resume and not sid:
+        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
+                       result=("拒绝：resume 要配 sid —— 它问的是"
+                               "「接着哪一段会话跑」，缺了无从选窗口"), ok=False)
     if not _flag(form, "confirm"):
         return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
                        result="拒绝：起一趟会真的花预算，必须带 confirm=1 一次显式确认", ok=False)
-    argv = _run_argv(root, task)
+    argv = _run_argv(root, task, sid=sid, resume=resume)
     if dry:
         return _finish(handler, endpoint="/api/run", source=source, params=seen, code=200,
                        result="试运行：没有起任何进程（argv 见 extra）", ok=True,
                        extra={"argv": argv, "dry_run": True})
     try:
-        pid, log = _spawn_run(root, task)
+        pid, log = _spawn_run(root, task, sid=sid, resume=resume)
     except Exception as exc:  # noqa: BLE001 - 起不来要如实报，不许静默
         return _finish(handler, endpoint="/api/run", source=source, params=seen, code=500,
                        result=f"起不来：{type(exc).__name__}: {exc}", ok=False,
                        extra={"argv": argv})
     return _finish(handler, endpoint="/api/run", source=source, params=seen, code=200,
-                   result=f"已起一趟（pid={pid}）—— 去「在飞」页看它",
+                   result=(f"已{'续跑' if resume else '起'}一趟（pid={pid}）"
+                           f"—— 去「对话」或「在飞」页看它"),
                    ok=True, ident=log,
                    extra={"pid": pid, "log": log, "argv": argv})
 

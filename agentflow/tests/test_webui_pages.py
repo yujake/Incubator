@@ -879,6 +879,70 @@ def test_the_machine_page_really_has_a_lean_switch() -> None:
     assert 'm.lean_enabled_source === "env"' in src, "环境变量压着设置文件时，页面上不说"
 
 
+def test_the_evidence_and_artifacts_pages_drop_the_dead_readings() -> None:
+    """R93 体检（业主逐条点出来的那几格）：该拿的拿、该撤的撤、该改档的改档。
+
+    业主 2026-10-13 在跑着的 T1 上逐页看了一遍，点名六处"永远是 unknown / 不适用"。
+    逐条对着盘上真数据定过性（读数记在那一轮的提交信息里），这一条把结论钉在源码上：
+
+    1. 命题台账「正文」：盘上 `statement_text`（短版）常为空，而 `statement_full`
+       （含假设的全文）有字 ⇒ 短版优先、缺席退回全文（旧版整列 `unknown`）；
+    2. 「引文回验」：`quote_verified` 的比对对象是 `proof_text`，而概念行结构上
+       没有逐字摘录 ⇒ 那一档是**不适用**，不是「未查」（旧版把两者印成同一个词）；
+    3. 秘书决策「判据」：盘上它是整份判定记录（对象）或 `null` ⇒ 只读"经不经判据、
+       判过没有"，不把对象 `cell()` 出去、也不把 `null` 印成 `unknown`；
+    4. 产物台账「退出码」：格式里有这一栏，但真机登记的 `out/tasks/*.json` 没有退出码
+       ⇒ 整列恒 `unknown`，撤掉（真落点在「证据链 → 实验」那张表）；
+    5. 「验收表的机器可判行」/「报告体例兑现」：没有那份文件时一句话说清它是谁写的、
+       什么时候会有，不铺一屏"不适用"；
+    6. 「六件产物」：那是 `project run` 那条流水线的产物面，审阅型项目里恒 `不适用`
+       ⇒ 整卡换成一句导引（真有 `out/run-N/` 时照旧画表）；
+    7. 叫停按钮：`Live` 与 `Run` 两页共用同一份实现（此前只长在 Run 页，
+       而人要叫停时待的是「在飞」）。
+    """
+    ev = _page_text("Evidence")
+    art = _page_text("Artifacts")
+    live = _page_text("Live")
+    run = _page_text("Run")
+
+    assert "r.statement_full" in ev and "短版没写" in ev, "正文没有退回 statement_full"
+    assert "这一行没有逐字摘录" in ev, "没有逐字摘录的行仍会被印成「未查」"
+    assert "cell(r.judge)" not in ev, "判据那一栏还在把整份判定记录 String()"
+    assert "这一行不经判据" in ev, "不经判据的行没说清那一档"
+    assert '"exit_code"' not in art, "产物台账里那一列退出码还在（真机恒 unknown）"
+    assert "还没走到那一步就没有它" in art, "验收表缺席时没有说清那是哪一步的产物"
+    assert "M 还没声明交付说明的体例" in art, "体例缺席时没有说清那是谁写的"
+    assert "属于另一条流水线" in art, "六件产物整卡还在（审阅型里恒不适用）"
+    assert "StopButtons" in live and "StopButtons" in run, \
+        "叫停按钮没有共用一份实现（Live / Run 两页）"
+
+
+def test_no_rendered_text_carries_a_stray_block_comment_opener() -> None:
+    """渲染文本里不许出现裸的 `/*`（R93 踩过的那个坑）。
+
+    为什么这是一条真判据：本文件（以及契约判据）读前端源码靠
+    `_strip_js_comments()` —— 它是 `re.compile(r"/\\*.*?\\*/", re.S)`，
+    **不认 JSX 文本**。于是页面正文里只要有一个 `/*`（本机实测：产物页那行
+    `out/secretary/*.jsonl`），它就会和**后面任意一个** `*/` 配成一对，把中间
+    整段代码当成注释吃掉 —— 判据随之以"这一页什么都没读"的形态假红（本次实测：
+    产物台账、台账对账、交接手稿三张卡一起消失）。注释里的 `/*` 不算（那是真注释）。
+
+    判据：每个 `/*` 都必须是一个注释的开头 —— 行首（可有缩进），或紧跟 `{`。
+    """
+    bad: list[str] = []
+    for path in sorted(list((UI_SRC / "pages").glob("*.tsx"))
+                       + list((UI_SRC / "components").glob("*.tsx"))
+                       + [UI_SRC / "main.tsx", UI_SRC / "live.tsx", UI_SRC / "api.ts",
+                          UI_SRC / "sse.ts"]):
+        text = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"/\*", text):
+            line_no = text.count("\n", 0, m.start()) + 1
+            head = text[text.rfind("\n", 0, m.start()) + 1:m.start()]
+            if head.strip() != "" and not head.rstrip().endswith("{"):
+                bad.append(f"{path.name}:{line_no}: {text.splitlines()[line_no - 1].strip()[:70]}")
+    assert bad == [], "这些 `/*` 会把剥注释器带偏（渲染文本里请拆开写）：" + "；".join(bad)
+
+
 def test_the_settings_panel_prefills_from_the_reading() -> None:
     """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥
     都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。

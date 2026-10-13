@@ -579,6 +579,19 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
         out["RunEventsView"] = set(ev_rows)
         _take(ev_rows.get("events"), "EventRow")
 
+    # 对话那一面（R92 新增的 `GET /api/chat`）。与 `EventRow` 同一条口径：
+    # 新面落地后要让后端那一侧真的去读它，否则它会"既不在受核对名单、也没在欠账名单"。
+    # 夹具那一段会话里有主控的 run_start 与一条提问 ⇒ `ChatLine` 读得出键
+    # （`qid` / `options` 是可选的两栏，靠 `types.ts` 里的 `?` 覆盖）。
+    chat = RD.chat_face(root, sid)
+    out["ChatView"] = set(chat)
+    _take(chat.get("lines"), "ChatLine")
+    _take(chat.get("sessions"), "ChatSession")
+    for line in chat.get("lines") or []:
+        if line.get("options"):
+            _take(line["options"], "ChatOption")
+            break
+
     ev = RD.evidence_chain(root)
     for key, name in (("statements", "StatementRow"), ("conjectures", "ConjectureRow"),
                       ("experiments", "ExperimentRow"), ("review_findings", "ReviewFindingRow"),

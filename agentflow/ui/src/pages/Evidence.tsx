@@ -95,19 +95,49 @@ export function Evidence() {
               { key: "status", title: "状态", render: (r) => cell(r.status) },
               { key: "kind", title: "类别", render: (r) => cell(r.kind) },
               { key: "label", title: "标签", render: (r) => cell(r.label) },
-              { key: "statement_text", title: "正文" },
+              {
+                // 正文（R93 体检）：盘上 `statement_text`（短版）常常是空的，而
+                // `statement_full`（含完整假设的那一版）有字 —— 旧版直接印
+                // `statement_text`，于是整列 7 行全是 `unknown`，看着像"没读到"。
+                // 两者的分工是"短版 / 含假设全文"（`schema.Statement` 的 docstring），
+                // 不是"有 / 没有"，所以这里按"短版优先、缺席退回全文"读，并说清退的是哪一版。
+                key: "statement_text",
+                title: "正文",
+                render: (r) => {
+                  if (r.statement_text !== "") {
+                    return r.statement_text;
+                  }
+                  if (r.statement_full !== "") {
+                    return (
+                      <>
+                        {r.statement_full}
+                        <span class="tri-reason">（短版没写；这是含假设的全文）</span>
+                      </>
+                    );
+                  }
+                  return <span class="tri-reason">（这一行没写正文）</span>;
+                },
+              },
               {
                 key: "quote_verified",
                 title: "引文回验",
-                render: (r) =>
-                  r.quote_verified === null ? (
+                // 三态在这里要多一档（R93 体检）：`quote_verified` 的比对对象是
+                // `proof_text` 那一栏的逐字摘录（`schema.Statement` 逐字写过"没有逐字原文，
+                // 引文回验这件事无从做起"）。概念行（`kind=concept`）结构上就没有引文，
+                // 旧版把这一档印成「未查」——那是把"这一步对它不适用"读成"这一步没人做"。
+                render: (r) => {
+                  if (r.proof_text === "" && r.quote_verified === null) {
+                    return <span class="tri-reason">不适用（这一行没有逐字摘录）</span>;
+                  }
+                  return r.quote_verified === null ? (
                     "未查"
                   ) : (
                     <Badge
                       kind={r.quote_verified ? "badge-pass" : "badge-fail"}
                       text={r.quote_verified ? "真" : "假"}
                     />
-                  ),
+                  );
+                },
               },
               { key: "quote_reason", title: "回验理由", render: (r) => cell(r.quote_reason) },
             ]}
@@ -302,7 +332,36 @@ export function Evidence() {
               { key: "seq", title: "序号" },
               { key: "duty", title: "职责号" },
               { key: "decision", title: "决定", render: (r) => cell(r.decision) },
-              { key: "judge", title: "判据", render: (r) => cell(r.judge) },
+              {
+                // 判据那一栏（R93 体检）：盘上它是一个**整份判定记录**（`basis`/`checked`/
+                // `cost`/`decision`/`reason`…），只有"建议不派"那一类才有；"已执笔"这类
+                // 不经判据的行它是 `null`。旧版直接 `cell()` ——对象被 String() 成
+                // `[object Object]`（后来改成 JSON 一大坨），`null` 则印成 `unknown`。
+                // 两种都不是给人看的。这里只读人真正要问的两件事：这一行经不经判据、
+                // 判过没有；细节（依据/花销）折在理由那一栏里已有。
+                key: "judge",
+                title: "判据",
+                render: (r) => {
+                  const j = r.judge as Record<string, unknown> | null;
+                  if (j === null || j === undefined) {
+                    return <span class="tri-reason">不适用（这一行不经判据）</span>;
+                  }
+                  const checked = j["checked"];
+                  const cost = j["cost"] as Record<string, unknown> | undefined;
+                  const usd = cost === undefined ? undefined : cost["usd"];
+                  return (
+                    <>
+                      <Badge
+                        kind={checked === true ? "badge-pass" : "badge-unknown"}
+                        text={checked === true ? "查过" : "没查成"}
+                      />
+                      {typeof usd === "number" ? (
+                        <span class="mono"> ${usd.toFixed(6)}</span>
+                      ) : null}
+                    </>
+                  );
+                },
+              },
               { key: "reason", title: "理由", render: (r) => cell(r.reason) },
               { key: "basis", title: "依据" },
               {

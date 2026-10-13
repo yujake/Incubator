@@ -752,6 +752,60 @@ def test_run_dry_run_returns_the_argv_without_spawning(tmp_path: pathlib.Path) -
     assert not list((root / "runs").glob("web-run-*.log")) if (root / "runs").is_dir() else True
 
 
+def test_a_run_can_wake_an_idle_session_with_the_same_task(
+        tmp_path: pathlib.Path) -> None:
+    """R91（业主「要能对话」）：`resume=1` + `sid` ⇒ argv 带 `--sid` 与 `--resume`。
+
+    这是"M 闲着的时候还能跟它说话"那一支的落点：用户的话先落进收件箱
+    （`/api/task`），再用**同一句话任务**把那段会话唤醒 —— `resume_messages` 按
+    "role 相同 + task 原文相同 + 是全新开始"挑重建窗口，换了任务就是另一趟
+    （`--resume` 会以指纹不符拒掉，那是有意的守卫）。所以这一条钉两件事：
+    续跑那一支带 `--sid` + `--resume`；**不续跑那一支一个都不带**（否则"起一趟"
+    会静默变成"接上一趟"）。
+    """
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        code, body, _ct = _post(base, "/api/run",
+                                {"task": "帮我把工作区里那篇论文审一遍", "sid": "20261013b",
+                                 "resume": "1", "confirm": "1", "dry_run": "1"})
+        got = _json_of(body)
+        assert code == 200 and got["ok"] is True, (code, body[:300])
+        argv = got["extra"]["argv"]
+        assert argv[argv.index("--sid") + 1] == "20261013b", argv
+        assert "--resume" in argv, argv
+        assert argv[argv.index("--task") + 1] == "帮我把工作区里那篇论文审一遍", argv
+
+        code2, body2, _ct2 = _post(base, "/api/run",
+                                   {"task": "审一遍", "sid": "20261013b",
+                                    "confirm": "1", "dry_run": "1"})
+        argv2 = _json_of(body2)["extra"]["argv"]
+        assert "--resume" not in argv2, argv2
+        assert argv2[argv2.index("--sid") + 1] == "20261013b", argv2
+
+        code3, body3, _ct3 = _post(base, "/api/run",
+                                   {"task": "审一遍", "confirm": "1", "dry_run": "1"})
+        argv3 = _json_of(body3)["extra"]["argv"]
+        assert "--sid" not in argv3 and "--resume" not in argv3, argv3
+    assert not list((root / "runs").glob("web-run-*.log")) if (root / "runs").is_dir() else True
+
+
+def test_resume_without_a_sid_is_refused(tmp_path: pathlib.Path) -> None:
+    """拒绝档③（R91）：`resume=1` 却没给 `sid` ⇒ 400，盘上零改动。
+
+    为什么是硬要求：resume 问的是"接着哪一段会话跑"（重建窗口按 sid + 任务原文挑），
+    缺了它只能瞎猜一段 —— 那是把用户刚说的话投进别的会话，而用户看不出来。
+    """
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        code, body, _ct = _post(base, "/api/run",
+                                {"task": "接着说", "resume": "1", "confirm": "1"})
+        got = _json_of(body)
+        assert code == 400 and got["ok"] is False, (code, body[:300])
+        assert "sid" in got["reason"], got["reason"]
+    assert not list((root / "runs").glob("web-run-*.log")) if (root / "runs").is_dir() else True
+    assert _events(root) == [], "被拒的那一次不该写任何事件"
+
+
 def test_interject_writes_one_event_for_the_conductor(tmp_path: pathlib.Path) -> None:
     """真写入：`/api/task` 落一条 `agent_interjection`，`to` 是主控、`from` 是用户。"""
     root = _mk(tmp_path)

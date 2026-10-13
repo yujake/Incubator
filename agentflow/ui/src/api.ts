@@ -26,6 +26,7 @@ import type {
   RunView,
   StateSnapshot,
   StatusReportsView,
+  ChatView,
   Tri,
   UsageView,
   WriteResult,
@@ -56,6 +57,7 @@ export const ENDPOINTS = {
   live: "/api/live",
   usage: "/api/usage",
   statusReports: "/api/status-reports",
+  chat: "/api/chat",
   stream: "/api/stream",
 } as const;
 
@@ -89,8 +91,28 @@ export function runEventsPath(
   return tail === "" ? base : `${base}?${tail}`;
 }
 
-/** 收工门那条端点的查询串（三个可选输入，逐字对应后端的 `?project_dir=` 等）。 */
-export function acceptancePath(opts: {
+/**
+ * 对话那一段来回的实参拼装（`/api/chat`）。
+ *
+ * 两个查询参数逐字对应后端 `handle_chat` 读的那两个：`sid` 是会话号（不给就由后端取
+ * **最近**的那一段，并在 `reason` 里写明这件事），`lines` 是最多几条线（后端默认 300）。
+ */
+export function chatPath(
+  sid: string,
+  opts: { lines?: number } = {},
+): string {
+  const q = new URLSearchParams();
+  if (sid !== "") {
+    q.set("sid", sid);
+  }
+  if (typeof opts.lines === "number") {
+    q.set("lines", String(opts.lines));
+  }
+  const tail = q.toString();
+  return tail === "" ? ENDPOINTS.chat : `${ENDPOINTS.chat}?${tail}`;
+}
+
+/** 收工门那条端点的查询串（三个可选输入，逐字对应后端的 `?project_dir=` 等）。 */export function acceptancePath(opts: {
   projectDir?: string;
   reportPath?: string;
   capUsd?: number | null;
@@ -313,6 +335,8 @@ export const api = {
   getUsage: (): Promise<UsageView> => getJSON<UsageView>(ENDPOINTS.usage),
   getStatusReports: (): Promise<StatusReportsView> =>
     getJSON<StatusReportsView>(ENDPOINTS.statusReports),
+  getChat: (sid: string, opts: { lines?: number } = {}): Promise<ChatView> =>
+    getJSON<ChatView>(chatPath(sid, opts)),
 };
 
 /**

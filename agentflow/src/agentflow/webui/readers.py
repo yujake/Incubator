@@ -83,7 +83,8 @@ __all__ = [
     "CHECKED_TYPES", "EVENTS_LIMIT_DEFAULT", "EVENTS_LIMIT_MAX", "HANDLERS",
     "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
     "RUN_ROW_KEYS", "UNCHECKED_TYPES", "acceptance_face", "artifacts_face",
-    "evidence_chain", "handle_acceptance", "handle_artifacts", "handle_evidence",
+    "chat_face", "evidence_chain", "handle_acceptance", "handle_artifacts",
+    "handle_chat", "handle_evidence",
     "handle_machine", "handle_run_events", "handle_run_view", "handle_state",
     "machine_face", "run_events", "run_products", "run_view", "state_face",
     "ts_fields", "type_decls",
@@ -125,6 +126,8 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/live", "handle_live"),
     ("GET", "/api/usage", "handle_usage"),
     ("GET", "/api/status-reports", "handle_status_reports"),
+    # 业主 2026-10-13 的对话框：一段会话里"用户 ↔ 主控"的来回（对话页那一面）。
+    ("GET", "/api/chat", "handle_chat"),
     # 真身在 `webui/sse.py`（`GET /api/stream` 的推送流）。
     ("GET", "/api/stream", "handle_stream"),
 )
@@ -154,6 +157,10 @@ CHECKED_TYPES: tuple[str, ...] = (
     # （寄存器缺席、账本为空、没有进程都只是三态里的另一档，不是"读不出键"），
     # 所以它们进受核对名单；行一级的类型见 `UNCHECKED_TYPES` 的理由。
     "BudgetView", "LiveView", "UsageView", "StatusReportsView",
+    # 2026-10-13（业主的对话框）：`ChatView` 的键在任何工作区上都在（"还没有会话"
+    # 与"没查成"都只是三态里的另一档）；夹具那一段会话里有主控的 run_start 与一条
+    # 提问，所以行一级的 `ChatLine` / `ChatSession` 也读得出键。
+    "ChatView", "ChatLine", "ChatSession", "ChatOption",
 )
 
 #: 声明了、但夹具上还读不出键的接口（`{接口名: 理由}`）。判据不许它们同时出现在
@@ -1357,6 +1364,177 @@ def handle_status_reports(handler: Any, params: Mapping[str, str],
     _json_of(handler, status_reports_face(handler.root))
 
 
+# ====================================================================== 2c 对话（R92）
+#: 一条对话线最多印多少字（超了截断并把"截过"写在正文里）。
+#:
+#: 为什么必须有界：`agent_run_end.final` 与 `agent_message.body` 动辄上万字
+#: （本机实测：M 的一份 final 一万六千字），一次几十条塞进浏览器既慢又没人看。
+#: 截断这件事**不许静默**（本项目的三态纪律）：截过的线自己带着那句话。
+CHAT_LINE_CLIP = 4000
+
+#: 一次最多给多少条对话线（取**最近**的这么多条，总数照实报）。
+CHAT_LINES_MAX = 300
+
+#: 对话线的三种身份。业主 2026-10-13 要的是"用户 ↔ 主控"的对话框，所以前两档是主角；
+#: 其余角色在公共频道/私有频道说的话单列 `team` 一档（它们对看的人有用，但不是"对话"，
+#: 页面默认把它们折起来）。
+CHAT_WHO = ("user", "conductor", "team")
+
+
+def _chat_clip(raw: Any, limit: int = CHAT_LINE_CLIP) -> tuple[str, bool]:
+    """一条对话正文（截断时把总字数写进正文里 —— 截了多少要看得见）。"""
+    text = "" if raw is None else str(raw)
+    if limit <= 0 or len(text) <= limit:
+        return text, False
+    return (text[:limit] + f"\n……（这一条共 {len(text)} 字，这里只印前 {limit} 字）",
+            True)
+
+
+def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
+    """一条会话事件 → 一条对话线；不是"对话"的事件回 `None`。
+
+    映射口径（逐条都能在盘上对上，不许靠猜）：
+
+    | 盘上的 kind | 谁的线 | 印什么 |
+    |---|---|---|
+    | `agent_run_start`（role=M 且不是被别的角色召唤的） | `user` | 那一句话任务（`resumed_from>0` ⇒ 标"接着上一步说"） |
+    | `user_answer` | `user` | 用户的回答 |
+    | `agent_interjection`（`from` = 用户） | `user` | 插话正文 |
+    | `user_question` | `conductor` | 主控问的话 + 选项 + qid |
+    | `agent_message`（`from`=M） | `conductor` | 主控发给谁/公共频道的那段话 |
+    | `agent_message`（别的角色） | `team` | 同上 |
+    | `agent_run_end`（role=M，有 final） | `conductor` | 主控这一趟的交付 |
+    | `agent_run_end`（别的角色，有 final） | `team` | 那个角色的交付 |
+
+    刻意不进对话的两类：`agent_note`（协议层的步级留痕，如"system 重发：第 1 步"）与
+    `agent_step`/`llm_call`（工具与模型调用）—— 它们留在「一趟详情」的逐条事件里。
+    """
+    from .. import userio as U
+    from ..schema import CONDUCTOR_ROLE as M
+
+    kind = str(event.get("kind") or "")
+    role = str(event.get("role") or "")
+    who = ""
+    title = ""
+    text = ""
+    qid = ""
+    options: list[dict[str, str]] = []
+    if kind == "agent_run_start":
+        if role != M or str(event.get("summoned_by") or "") not in ("", M):
+            return None
+        who = "user"
+        title = "接着上一步说" if int(event.get("resumed_from") or 0) else "起一趟"
+        text = str(event.get("task") or "")
+    elif kind == U.ANSWER_KIND:
+        who = "user"
+        qid = str(event.get("qid") or "")
+        title = f"回答 {qid}".strip()
+        text = str(event.get("answer") or "")
+    elif kind == "agent_interjection":
+        if str(event.get("from") or "") != U.USER:
+            return None
+        who = "user"
+        title = str(event.get("subject") or "插话")
+        text = str(event.get("body") or "")
+    elif kind == U.ASK_KIND:
+        who = "conductor"
+        qid = str(event.get("qid") or "")
+        title = f"问你（{qid}）" if qid else "问你"
+        text = str(event.get("text") or "")
+        for raw in event.get("options") or ():
+            view = U.option_view(raw)
+            options.append({"label": str(view.get("label") or ""),
+                            "description": str(view.get("description") or "")})
+    elif kind == "agent_message":
+        who = "conductor" if str(event.get("from") or "") == M else "team"
+        title = (f"{event.get('from') or '?'} → {event.get('to') or '?'}"
+                 f"（{event.get('channel') or '?'}）")
+        text = str(event.get("body") or "")
+    elif kind == "agent_run_end":
+        text = str(event.get("final") or "")
+        if text.strip() == "":
+            return None          # 没有交付的那一趟不进对话（它没有"话"）
+        who = "conductor" if role == M else "team"
+        title = "主控交付" if who == "conductor" else f"{role} 交付"
+    else:
+        return None
+    body, clipped = _chat_clip(text)
+    line: dict[str, Any] = {"index": index, "who": who, "role": role, "kind": kind,
+                            "ts": str(event.get("ts") or ""), "title": title,
+                            "text": body, "clipped": clipped}
+    if qid:
+        line["qid"] = qid
+    if options:
+        line["options"] = options
+    return line
+
+
+def chat_face(root: str | Path, sid: str = "", *,
+              lines_max: int = CHAT_LINES_MAX) -> dict[str, Any]:
+    """`GET /api/chat` 的读模型：一段会话里的"用户 ↔ 主控"对话（逐条、有界）。
+
+    业主 2026-10-13：「用户和主控的对话不应该只做成只能一句话启动任务，应该是能对话的」。
+    这一面就是那句话的读侧 —— 把一段会话里属于**对话**的事件投影成逐条线，
+    与「一趟详情」的逐条事件分开：后者是"盘上发生了什么"（含工具与模型调用），
+    这一面是"谁对谁说了什么"。
+
+    口径四条：
+
+    - `sid` 不给 ⇒ 取**最近**的那一段（按 `last_ts`），并在 `reason` 里写明这件事
+      （那是替用户做的选择，不许无声无息）；
+    - 没有会话 ⇒ `not_applicable` + "还没有会话（合法初态）"，不是错误；
+    - 会话文件不在盘上 ⇒ `unreadable`（`sid` 是调用方给的，找不到就是"没查成"）；
+    - 有坏行 ⇒ `unreadable` + 坏行数，读得出来的那些线照常给（与 `run_events` 同一条）；
+    - 线是有界的：只给**最近** `lines_max` 条，`total`/`shown` 照实报，截断逐条标明。
+    """
+    root_p = Path(str(root))
+    sessions = [{"sid": str(s.get("sid") or ""),
+                 "last_ts": str(s.get("last_ts") or ""),
+                 "events": int(s.get("events") or 0),
+                 "bad_lines": int(s.get("bad_lines") or 0)}
+                for s in SS.list_sessions(root_p)]
+    chosen = str(sid or "")
+    notes: list[str] = []
+    if chosen == "":
+        if not sessions:
+            return {"tri": TRI_NOT_APPLICABLE, "sid": "", "lines": [], "total": 0,
+                    "shown": 0, "clipped": False, "sessions": [],
+                    "reason": "这个工作区还没有会话（合法初态，不是没查成）"}
+        chosen = max(sessions, key=lambda s: s["last_ts"])["sid"]
+        notes.append(f"没指定会话 ⇒ 取了最近的那一段（{chosen}）")
+    path = SS.session_path(root_p, chosen)
+    if not path.is_file():
+        return {"tri": TRI_UNREADABLE, "sid": chosen, "lines": [], "total": 0,
+                "shown": 0, "clipped": False, "sessions": sessions,
+                "reason": f"会话文件不在盘上：{path}"}
+    events, bad = SS.read_session(root_p, sid=chosen)
+    mapped = [line for i, ev in enumerate(events)
+              if (line := _chat_line(i, ev)) is not None]
+    total = len(mapped)
+    shown = mapped[-int(lines_max):] if int(lines_max) > 0 else mapped
+    if total > len(shown):
+        notes.append(f"只给最近的 {len(shown)} 条对话（这一段共 {total} 条）")
+    if bad:
+        notes.append(f"会话有 {len(bad)} 条坏行：" + "；".join(bad[:3]))
+    return {"tri": TRI_UNREADABLE if bad else TRI_COMPUTED,
+            "sid": chosen, "lines": shown, "total": total, "shown": len(shown),
+            "clipped": any(bool(l["clipped"]) for l in shown),
+            "sessions": sessions, "reason": "；".join(notes)}
+
+
+def handle_chat(handler: Any, params: Mapping[str, str],
+                query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/chat?sid=<会话号>&lines=<最多几条>`：对话页那一段来回。"""
+    del params
+    sid = str((query.get("sid") or [""])[0])
+    raw = str((query.get("lines") or [""])[0])
+    try:
+        lines_max = int(raw) if raw.strip() else CHAT_LINES_MAX
+    except ValueError:
+        lines_max = CHAT_LINES_MAX
+    _json_of(handler, chat_face(handler.root, sid, lines_max=lines_max))
+
+
 # ====================================================================== 类型声明
 # 前端唯一类型来源（`ui/src/types.ts`）由 `agentflow/web/emit_types.py` 生成，它把三条
 # 零交线各自的 `type_decls()` 拼起来（`draft/78 §3`）。本模块这一份是六个只读面。
@@ -1497,6 +1675,25 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "status_reports_face() —— 状态报告最近几份（`statusreport` 写了没人读的那个缺口）",
      (("tri", "Tri"), ("reason", "string"), ("dir", "string"),
       ("count", "number | null"), ("reports", "StatusReportRow[]"))),
+    # 2026-10-13（业主的对话框）：一段会话里"用户 ↔ 主控"的来回。
+    # `qid` / `options` 是"有就带上"的两栏（只有提问那一条线才有），所以写成可选。
+    ("ChatOption",
+     "chat_face() 的 options[] 一项（`userio.option_view` 渲染视图里的两栏）",
+     (("label", "string"), ("description", "string"))),
+    ("ChatLine",
+     "chat_face() —— 一条对话线（`who` 只有 user / conductor / team 三档，见 CHAT_WHO）",
+     (("index", "number"), ("who", "string"), ("role", "string"), ("kind", "string"),
+      ("ts", "string"), ("title", "string"), ("text", "string"),
+      ("clipped", "boolean"), ("qid?", "string"), ("options?", "ChatOption[]"))),
+    ("ChatSession",
+     "chat_face() 的 sessions[] —— 供对话页挑会话（`sessions.list_sessions` 的四栏）",
+     (("sid", "string"), ("last_ts", "string"), ("events", "number"),
+      ("bad_lines", "number"))),
+    ("ChatView",
+     "chat_face() —— 一段会话的对话读数（有界：只给最近的 lines_max 条，截断逐条标明）",
+     (("tri", "Tri"), ("reason", "string"), ("sid", "string"),
+      ("lines", "ChatLine[]"), ("total", "number"), ("shown", "number"),
+      ("clipped", "boolean"), ("sessions", "ChatSession[]"))),
     ("StatementRow",
      "store.rows(\"statements\")（无真机样本 ⇒ 权威来源是 `schema.Statement`）",
      (("stmt_id", "string"), ("origin", "string"), ("kind", "string"),
@@ -1682,4 +1879,5 @@ HANDLERS.update({
     "handle_live": handle_live,
     "handle_usage": handle_usage,
     "handle_status_reports": handle_status_reports,
+    "handle_chat": handle_chat,
 })

@@ -23,7 +23,7 @@ import type { ComponentChildren } from "preact";
 import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
-import { Table, cell } from "../components/Table";
+import { Table, cell, plain } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 
@@ -87,7 +87,7 @@ export function Artifacts() {
           <span class="mono">manuscripts/handoffs.jsonl</span> · 验收表{" "}
           <span class="mono">out/paper/ACCEPTANCE-CHECKS.json</span> · 体例{" "}
           <span class="mono">out/review/REPORT-STYLE.json</span> · 秘书{" "}
-          <span class="mono">out/secretary/*.jsonl</span>
+          <span class="mono">out/secretary/</span> 下的 <span class="mono">*.jsonl</span>
         </div>
       </Card>
 
@@ -112,13 +112,13 @@ export function Artifacts() {
                 title: "字节",
                 render: (r) => String(r.bytes),
               },
-              {
-                key: "exit_code",
-                title: "退出码",
-                render: (r) => (r.exit_code === null ? "unknown" : String(r.exit_code)),
-              },
               { key: "task_id", title: "任务" },
               { key: "at", title: "登记时间", render: (r) => cell(r.at) },
+              // R93 体检：这里原来还有一列「退出码」。台账的格式里**有** `exit_code`
+              // 这一栏（`artifacts.FIELDS`），但真机上登记的都是 `out/tasks/` 下那些
+              // "任务结果文件"——那种东西没有退出码，于是整列恒 `unknown`
+              // （本机实测：t1-review-2 的 6 行全是）。退出码真正的落点是「证据链 →
+              // 实验」那一张表（`experiments.exit_code`，那里是真读数），所以这一列撤掉。
             ]}
           />
         )}
@@ -161,7 +161,7 @@ export function Artifacts() {
               { key: "id", title: "编号" },
               { key: "sender", title: "发" },
               { key: "to", title: "收" },
-              { key: "summary", title: "摘要" },
+              { key: "summary", title: "摘要", render: (r) => plain(r.summary) },
               { key: "refs", title: "引用" },
               { key: "sha256", title: "sha256" },
               { key: "sid", title: "会话", render: (r) => cell(r.sid) },
@@ -172,7 +172,7 @@ export function Artifacts() {
                 title: "字节",
                 render: (r) => String(r.bytes),
               },
-              { key: "body", title: "正文（截断）", render: (r) => clip(r.body) },
+              { key: "body", title: "正文（截断）", render: (r) => plain(clip(r.body)) },
             ]}
           />
         )}
@@ -180,14 +180,24 @@ export function Artifacts() {
 
       <Card
         title="验收表的机器可判行"
-        subtitle={`${art.checks.length} 行`}
+        subtitle={
+          art.checks_tri === "not_applicable"
+            ? "这一趟没有这份表"
+            : `${art.checks.length} 行`
+        }
         right={<TriState tri={art.checks_tri} label="checks" />}
       >
-        <div class="readings">
- 夹具样本（<span class="mono">tests/conftest.py</span> 的 ACCEPTANCE_CHECKS_SAMPLE）；真机为 8 行 C1–C8。
-        </div>
+        {/* R93 体检：这张卡原先在"没有这份文件"时照样铺满一张表（每格 `不适用`），
+            读者看到的是"一屏不适用"，而不是"这一趟没走到这一步"。现在按三态分档：
+            没这份表 ⇒ 一句话说清它是谁写的、什么时候会有；有才画表。 */}
         {isUnreadable(art.checks_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
+        ) : art.checks.length === 0 ? (
+          <span class="readings">
+            这一趟没有 <span class="mono">out/paper/ACCEPTANCE-CHECKS.json</span> ——
+            它是收工那一步（G 的收工门 / `closing`）写给论文包看的机器可判行，
+            还没走到那一步就没有它（不是"0 行"，也不是没查成）。
+          </span>
         ) : (
           <Table
             rows={art.checks}
@@ -209,13 +219,22 @@ export function Artifacts() {
 
       <Card
         title="报告体例兑现"
-        subtitle={`${art.style.sections.length} 节`}
+        subtitle={
+          art.style_tri === "not_applicable"
+            ? "M 还没声明体例"
+            : `${art.style.sections.length} 节`
+        }
         right={<TriState tri={art.style_tri} label="REPORT-STYLE" />}
       >
+        {/* 体例是 M 在收工前自己声明的那一份（`out/review/REPORT-STYLE.json`）。
+            它缺席 = "M 还没声明"，不是"没读到"—— 这一档要在页面上说出来。 */}
         {isUnreadable(art.style_tri) ? (
           <span class="empty">这一栏没查成（不是"0 节"）。</span>
         ) : art.style.sections.length === 0 ? (
-          <span class="empty">体例文件没有声明任何一节。</span>
+          <span class="readings">
+            M 还没声明交付说明的体例（<span class="mono">out/review/REPORT-STYLE.json</span>
+            不在盘上）。它在收工前由主控写；写完这一栏会逐节列出来。
+          </span>
         ) : (
           <ol class="list">
             {art.style.sections.map((s, i) => (
@@ -225,48 +244,67 @@ export function Artifacts() {
         )}
       </Card>
 
-      <Card
-        title="六件产物"
-        subtitle={art.run_dir === "" ? "没找到 out/run-N/" : art.run_dir}
-        right={<TriState tri={art.products_tri} label="products" />}
-      >
-        <div class="readings">
-          {art.products_reason === "" ? "夹具样本" : art.products_reason}
-        </div>
-        {isUnreadable(art.products_tri) ? (
-          <span class="empty">这一栏没查成（不是"六件都不在"）。</span>
-        ) : (
-          <Table
-            rows={art.products}
-            empty="六件产物一件都没有（读到了，里面是空的）。"
-            columns={[
-              { key: "name", title: "名字" },
-              {
-                key: "exists",
-                title: "在不在",
-                render: (r) => (
-                  <Badge
-                    kind={r.exists ? "badge-pass" : "badge-na"}
-                    text={r.exists ? "在" : "不在"}
-                  />
-                ),
-              },
-              {
-                key: "bytes",
-                title: "字节",
-                render: (r) => (r.bytes === null ? "unknown" : String(r.bytes)),
-              },
-              {
-                key: "lines",
-                title: "行数",
-                render: (r) => (r.lines === null ? "unknown（非 JSONL，按设计没有行数）" : String(r.lines)),
-              },
-              { key: "sha256", title: "sha256", render: (r) => cell(r.sha256) },
-              { key: "tri", title: "三态", render: (r) => <TriState tri={r.tri} /> },
-            ]}
-          />
-        )}
-      </Card>
+      {/* R93 体检：原来这里还有一张「六件产物」卡（`run-manifest.json` /
+          `model-transcript.jsonl` / `evidence.json` / `claims.json` / `cost.json` /
+          `report.md`）。那六件属于 **`agentflow project run` 那条流水线**
+          （`out/run-N/` 下的运行产物），审阅型项目里一张都不会有 ⇒ 整卡恒 `不适用`
+          （本机实测：t1-review-2 六件全是 not_applicable）。所以整卡改成一句导引；
+          真有那个目录时（`project run` 跑过的项目）照旧画表。 */}
+      {art.run_dir === "" ? (
+        <Card title="六件产物（属于另一条流水线）">
+          <div class="readings">
+            六件产物（<span class="mono">run-manifest.json</span> /
+            <span class="mono">model-transcript.jsonl</span> /
+            <span class="mono">evidence.json</span> / <span class="mono">claims.json</span> /
+            <span class="mono">cost.json</span> / <span class="mono">report.md</span>）
+            是 <span class="mono">agentflow project run</span> 那条流水线落在
+            <span class="mono">out/run-N/</span> 下的运行产物。本项目是审阅型，
+            没有那个目录 —— 这一趟的产物看上面的台账、交接手稿与
+            <span class="mono">out/paper/</span>。
+          </div>
+        </Card>
+      ) : (
+        <Card
+          title="六件产物"
+          subtitle={art.run_dir}
+          right={<TriState tri={art.products_tri} label="products" />}
+        >
+          {isUnreadable(art.products_tri) ? (
+            <span class="empty">这一栏没查成（不是"六件都不在"）。</span>
+          ) : (
+            <Table
+              rows={art.products}
+              empty="六件产物一件都没有（读到了，里面是空的）。"
+              columns={[
+                { key: "name", title: "名字" },
+                {
+                  key: "exists",
+                  title: "在不在",
+                  render: (r) => (
+                    <Badge
+                      kind={r.exists ? "badge-pass" : "badge-na"}
+                      text={r.exists ? "在" : "不在"}
+                    />
+                  ),
+                },
+                {
+                  key: "bytes",
+                  title: "字节",
+                  render: (r) => (r.bytes === null ? "unknown" : String(r.bytes)),
+                },
+                {
+                  key: "lines",
+                  title: "行数",
+                  render: (r) =>
+                    r.lines === null ? "unknown（非 JSONL，按设计没有行数）" : String(r.lines),
+                },
+                { key: "sha256", title: "sha256", render: (r) => cell(r.sha256) },
+                { key: "tri", title: "三态", render: (r) => <TriState tri={r.tri} /> },
+              ]}
+            />
+          )}
+        </Card>
+      )}
 
       <Card
         title="任务产物"

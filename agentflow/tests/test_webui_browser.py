@@ -489,6 +489,30 @@ def test_no_settings_input_is_prefilled_with_the_word_unknown(
         assert SET.lean_enabled() == (False, ""), SET.lean_enabled()
 
 
+def test_the_stop_button_is_on_the_live_page_and_really_stops(
+        tmp_path: pathlib.Path) -> None:
+    """R93（业主：「网页中没找到停机开关」）：叫停按钮长在「在飞」页，且点了真的落开关。
+
+    取证：这一对按钮此前只长在「一趟详情」（`/run/{sid}`）里，而人要叫停时待的
+    往往是「在飞」那一页 —— 于是用户的原话是"网页中没找到停机开关"。
+    这一条量三件事：按钮在「在飞」页真的画出来了；第一次点击只"上膛"（盘上零改动）；
+    第二次点击才落 `.agentflow-stop` 并留下一条写台账。
+    """
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        _enter_spa(live, "/live")
+        stop = page.get_by_role("button", name="叫停这一趟")
+        stop.wait_for(timeout=10_000)
+        stop.click()
+        page.wait_for_timeout(200)
+        assert SC.read_stop(root) is None, "第一次点击就落了停机开关 —— 确认那一格是空的"
+        page.get_by_role("button", name="确认叫停这一趟").click()
+        page.wait_for_timeout(700)
+        assert SC.read_stop(root) is not None, "确认之后停机开关没落盘"
+        rows = audit.read_actions(root)
+        assert rows and rows[-1]["endpoint"] == "/api/stop", rows
+
+
 def test_the_stop_button_asks_for_confirmation_before_calling_stop(
         tmp_path: pathlib.Path) -> None:
     """正控（`draft/73` §2.8 的 `test_stop_requires_confirmation`）：叫停要按两下。

@@ -44,6 +44,17 @@ export function cell(value: unknown): string {
   return String(value);
 }
 
+/** 一格里放的是**别人写的 markdown 正文**时用它：把强调记号去掉再上屏（R93）。
+ *
+ * 为什么要有这一档：交接手稿的 `summary` / `body` 是各角色自己写的 markdown
+ * （本机实测：产物页那两列里就有 `**…**`）。表格里印 markdown 记号 = 读者看到一堆
+ * 星号；而"去掉记号"只是**排版**选择，正文一个字都不改（盘上那份原件照旧）。
+ * 与 `cell()` 的分工：`cell()` 管三态（读不到 ⇒ `unknown`），`plain()` 管排版。
+ */
+export function plain(value: unknown): string {
+  return cell(value).replace(/\*\*([^*\n]+)\*\*/g, "$1");
+}
+
 export function Table<T>(props: TableProps<T>) {
   if (props.rows.length === 0) {
     return <div class="empty">{props.empty}</div>;

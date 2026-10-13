@@ -31,10 +31,10 @@
  * 对账钉住（10 个），要给它读数得新增一条只读端点 —— 那一栏照旧渲染
  * `not_applicable` 并写明，不许自己编一个数。
  */
-import { api, postStop, whyOf } from "../api";
+import { api, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
-import { ConfirmButton } from "../components/ConfirmButton";
+import { StopButtons } from "../components/Stop";
 import { Money } from "../components/Money";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
@@ -240,7 +240,6 @@ export function Run(props: RunProps) {
   // 它是一个独立的 hook，所以必须在下面那些 early return **之前**调 ——
   // hooks 的调用顺序是 React/Preact 的硬约束，放进分支里会当场炸。
   const liveFace = useFace(() => api.getLive());
-  const [stopResult, setStopResult] = useState("");
 
   if (props.sid === "") {
     return (
@@ -499,43 +498,14 @@ export function Run(props: RunProps) {
         <div class="readings">
  叫停的落点是一个跨进程开关（工作区 runs/ 下那一份）：在飞的循环在下一个步检查点
           读到它就收工，把已做过的事留在台账与会话记录里。这一页的按钮写的就是它；
-          「在飞」页能看到开关是谁按的、以及最近几条停机历史。
+          「在飞」页能看到开关是谁按的、以及最近几条停机历史，那里也有同一对按钮。
           {liveFace.data === null
             ? ""
             : ` 现在盘上${liveFace.data.switch_present ? "有" : "没有"}停机开关。`}
         </div>
-        <ConfirmButton
-          action="叫停这一趟"
-          impact="会给工作区落一个停机开关，并请求正在跑的循环在下一个检查点收尾"
-          onConfirm={() => {
-            postStop({ reason: "user" })
-              .then((got) => {
-                setStopResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
-                liveFace.reload();
-              })
-              .catch((exc: unknown) => {
-                setStopResult(`写请求失败：${whyOf(exc)}`);
-              });
-          }}
- note="写面没开（agentflow web --allow-writes）时后端会回 403，回执如实显示"
-        />
-        <ConfirmButton
-          action="强制停（连子孙进程）"
-          impact="先落停机开关，再按进程登记把在跑的循环连同子孙进程一起杀掉 —— 不可逆"
-          onConfirm={() => {
-            postStop({ reason: "user", force: true })
-              .then((got) => {
-                setStopResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
-                liveFace.reload();
-              })
-              .catch((exc: unknown) => {
-                setStopResult(`写请求失败：${whyOf(exc)}`);
-              });
-          }}
-          requireForce
-          note="不可逆：要勾选确认才允许按第二次"
-        />
-        {stopResult === "" ? null : <div class="readings">{stopResult}</div>}
+        {/* R93：这对按钮与「在飞」页共用同一份实现（`components/Stop.tsx`）——
+            以前两页各写一份，用户报的是"网页里找不到停机开关"，根因就是它只长在这一页。 */}
+        <StopButtons onDone={() => liveFace.reload()} />
       </Card>
 
       <Card

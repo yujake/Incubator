@@ -735,6 +735,17 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     got["LiveView"] = set(R.live_face(artifacts_ws))
     got["UsageView"] = set(R.usage_face(artifacts_ws))
     got["StatusReportsView"] = set(R.status_reports_face(artifacts_ws))
+    # 2026-10-13（R92 的对话面）：夹具那一段会话里有主控的 run_start 与一条提问，
+    # 所以顶层与行一级（含 `options[]` 里的 `ChatOption`）都读得出键。
+    chat = R.chat_face(artifacts_ws, SID)
+    got["ChatView"] = set(chat)
+    assert chat["lines"], "夹具没造出对话线"
+    got["ChatLine"] = set(chat["lines"][0])
+    got["ChatSession"] = set(chat["sessions"][0])
+    for line in chat["lines"]:
+        if line.get("options"):
+            got["ChatOption"] = set(line["options"][0])
+            break
     missing = [n for n in R.CHECKED_TYPES if n not in got]
     assert not missing, f"受核对名单里这些接口在夹具上没有读数：{missing}（登记该改）"
 
@@ -839,7 +850,9 @@ def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
                     "handle_machine", "handle_stream",
                     # 2026-10-12（业主的预算窗口与监控）
                     "handle_budget_view", "handle_live", "handle_usage",
-                    "handle_status_reports"}, ours
+                    "handle_status_reports",
+                    # 2026-10-13（业主的对话框）
+                    "handle_chat"}, ours
     for _m, path, name in R.ROUTES:
         assert path in routes.patterns(), f"{path} 没进总表"
         assert routes.handler_for(name) is not None, f"{name} 没有实现"
