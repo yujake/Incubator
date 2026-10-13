@@ -106,6 +106,16 @@ python -B -m agentflow --root D:\Incubator\projects\t1-review run-agent M --task
   （寄存器是项目下的 `budget.json`，追加历史留痕）。
 - 花销与上限随时在 `/budget` 看，或 `agentflow budget --status`。
 - 预算耗尽会**优雅停止**（在飞的活收尾、没做完的标成 `block`），追加预算后用 `--resume` 接着跑。
+- ⚠️ **在网页上改预算（追加 / 重设）需要起服务时带 `--allow-writes`**：
+
+  ```powershell
+  python -B -m agentflow --root D:\Incubator\projects\t1-review web --port 8792 --allow-writes --json
+  ```
+
+  不带它时，网页上点"追加"会拿到 **403**：`拒绝：POST /api/budget：写面没开 —— 要用
+  agentflow web --allow-writes 才允许写`（回执会落到项目下的 `web-actions.jsonl`，能复查）。
+  改了立刻生效——闸门**下一次花钱之前**现读盘，不用重启、不用重跑。
+  不想开写面就用命令行改（同一份寄存器）：`agentflow budget --add 2`。
 
 ---
 
