@@ -690,3 +690,94 @@ def _mk(tmp_path: pathlib.Path) -> pathlib.Path:
     root.mkdir()
     Store(root).init()
     return root
+
+# ============================================================ 两条"说话"的端点（R80）
+
+def test_the_two_talking_endpoints_are_registered() -> None:
+    """登记：路由表里有它们、`HANDLERS` 里有名字、`handler_for` 取得回（三处一致）。"""
+    posts = routes.patterns("POST")
+    assert "/api/run" in posts and "/api/task" in posts, posts
+    for path, name in (("/api/run", "handle_start_run"), ("/api/task", "handle_interject")):
+        assert writes.HANDLERS.get(name) is not None, (path, sorted(writes.HANDLERS))
+        assert routes.handler_for(name) is writes.HANDLERS[name], name
+
+
+def test_both_refuse_when_the_write_face_is_off(tmp_path: pathlib.Path) -> None:
+    """拒绝档①（写面没开）：两条都 403，且盘上零改动。"""
+    root = _mk(tmp_path)
+    with _server(root, allow_writes=False) as base:
+        for path, fields in (("/api/run", {"task": "审一遍", "confirm": "1"}),
+                             ("/api/task", {"body": "先看引文", "confirm": "1"})):
+            code, body, ctype = _post(base, path, fields)
+            got = _json_of(body)
+            assert code == 403 and ctype.startswith("application/json"), (path, code, body[:200])
+            assert got["ok"] is False and got["tri"] == "not_applicable", got
+            assert "写面没开" in got["reason"], got["reason"]
+    assert not (root / "runs").exists() or not list((root / "runs").glob("web-run-*.log")), \
+        "没开写面却起了进程"
+    assert [e for e in _events(root) if e.get("kind") == "agent_interjection"] == [], \
+        "没开写面却写了插话"
+
+
+def test_both_demand_confirm_and_a_nonempty_payload(tmp_path: pathlib.Path) -> None:
+    """拒绝档②（缺确认 / 空内容）：400，并且一个字节都不写。"""
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        code, body, _ct = _post(base, "/api/run", {"task": "审一遍"})
+        assert code == 400 and "confirm" in _json_of(body)["reason"], (code, body[:200])
+        code2, body2, _ct2 = _post(base, "/api/run", {"task": "   ", "confirm": "1"})
+        assert code2 == 400 and "不能为空" in _json_of(body2)["reason"], (code2, body2[:200])
+        code3, body3, _ct3 = _post(base, "/api/task", {"body": "看引文"})
+        assert code3 == 400 and "confirm" in _json_of(body3)["reason"], (code3, body3[:200])
+        code4, body4, _ct4 = _post(base, "/api/task", {"body": "", "confirm": "1"})
+        assert code4 == 400 and "不能为空" in _json_of(body4)["reason"], (code4, body4[:200])
+    assert not list((root / "runs").glob("web-run-*.log")) if (root / "runs").is_dir() else True
+    assert [e for e in _events(root) if e.get("kind") == "agent_interjection"] == []
+
+
+def test_run_dry_run_returns_the_argv_without_spawning(tmp_path: pathlib.Path) -> None:
+    """`dry_run=1`：只把将要执行的 argv 回给调用方 —— 判据靠它验命令行，而不必真跑一趟模型。"""
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        code, body, _ct = _post(base, "/api/run",
+                                {"task": "帮我把工作区里那篇论文审一遍",
+                                 "confirm": "1", "dry_run": "1"})
+        got = _json_of(body)
+        assert code == 200 and got["ok"] is True, (code, body[:300])
+        argv = got["extra"]["argv"]
+        assert argv[1:4] == ["-B", "-m", "agentflow"], argv
+        assert "run-agent" in argv and "M" in argv and "--subagents" in argv, argv
+        assert argv[argv.index("--task") + 1] == "帮我把工作区里那篇论文审一遍", argv
+        assert "--root" in argv, argv
+    assert not list((root / "runs").glob("web-run-*.log")) if (root / "runs").is_dir() else True
+
+
+def test_interject_writes_one_event_for_the_conductor(tmp_path: pathlib.Path) -> None:
+    """真写入：`/api/task` 落一条 `agent_interjection`，`to` 是主控、`from` 是用户。"""
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        code, body, _ct = _post(base, "/api/task",
+                                {"body": "第二段请改弱一点", "subject": "用户插话",
+                                 "confirm": "1", "sid": "t"})
+        got = _json_of(body)
+        assert code == 200 and got["ok"] is True, (code, body[:300])
+        assert got["extra"]["interjection_id"].startswith("i-"), got
+    rows = [e for e in _events(root) if e.get("kind") == "agent_interjection"]
+    assert len(rows) == 1, rows
+    from agentflow import userio as U
+
+    assert rows[0]["to"] == "M" and rows[0]["from"] == U.USER, rows[0]
+    assert rows[0]["body"] == "第二段请改弱一点", rows[0]
+    assert rows[0]["is_stop"] is False, rows[0]
+
+
+def test_a_stop_words_interjection_is_marked_as_stop(tmp_path: pathlib.Path) -> None:
+    """叫停类插话要额外落 `is_stop`（那份读数是"收到之后有没有改变做法"的锚）。"""
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        code, _body, _ct = _post(base, "/api/task",
+                                 {"body": "别做这一档了", "subject": "叫停",
+                                  "confirm": "1", "sid": "t"})
+        assert code == 200, code
+    rows = [e for e in _events(root) if e.get("kind") == "agent_interjection"]
+    assert rows and rows[0]["is_stop"] is True, rows

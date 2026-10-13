@@ -51,6 +51,8 @@ export const ENDPOINTS = {
   submit: "/api/submit",
   settings: "/api/settings",
   budget: "/api/budget",
+  runTask: "/api/run",
+  interject: "/api/task",
   live: "/api/live",
   usage: "/api/usage",
   statusReports: "/api/status-reports",
@@ -333,3 +335,38 @@ export async function postBudget(body: {
     confirm: "1",
   });
 }
+
+/**
+ * 起一趟工作流（`POST /api/run`）：把一句话交给主控，等价 CLI 的
+ * `run-agent M --task … --subagents`。后端 detached 起进程，回执里给 `pid` 与日志路径。
+ */
+export async function postRun(body: {
+  task: string;
+  dryRun?: boolean;
+}): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.runTask, {
+    task: body.task,
+    confirm: "1",
+    dry_run: body.dryRun === true ? "1" : "",
+  });
+}
+
+/**
+ * 往**正在跑**的那一趟插话（`POST /api/task`）：只有用户能发、只有 M 收，
+ * 下一步开头读到，当前这一步不被打断。
+ */
+export async function postInterject(body: {
+  body: string;
+  subject?: string;
+  sid?: string;
+  dryRun?: boolean;
+}): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.interject, {
+    body: body.body,
+    subject: body.subject ?? "用户插话",
+    sid: body.sid ?? "",
+    confirm: "1",
+    dry_run: body.dryRun === true ? "1" : "",
+  });
+}
+

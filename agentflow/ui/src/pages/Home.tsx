@@ -18,6 +18,7 @@ import { useState } from "preact/hooks";
 
 import { postAnswer, whyOf } from "../api";
 import type { WriteOutcome } from "../api";
+import { StartRunCard } from "../components/Ask";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Table } from "../components/Table";
@@ -174,6 +175,7 @@ export function Home() {
 
   return (
     <>
+      <StartRunCard />
       {problems.length > 0 ? (
         <Card
           title="没查成"

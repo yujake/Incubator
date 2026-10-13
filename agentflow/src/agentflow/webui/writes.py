@@ -110,6 +110,8 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     # 业主 2026-10-12 的预算窗口：追加 / 重设额度（写面，走同一套授权、
     # CSRF、审计与 `confirm=1`）。
     ("POST", "/api/budget", "handle_budget"),
+    ("POST", "/api/run", "handle_start_run"),
+    ("POST", "/api/task", "handle_interject"),
 )
 
 #: 本模块还欠的 TS 接口（`(名字, 为什么还没有)`）。写面的三态回执在 W3/W4 才有
@@ -505,6 +507,143 @@ HANDLERS.update({
     "handle_submit": handle_submit,
     "handle_settings": handle_settings,
     "handle_budget": handle_budget,
+})
+
+
+# ---------------------------------------------------------------- 网页上"说话"的两处
+
+
+def _run_argv(root: Path, task: str) -> list[str]:
+    """起一趟要跑的那条命令行（判据拿它比对；`dry_run` 也回它）。"""
+    return [sys.executable, "-B", "-m", "agentflow", "--root", str(root),
+            "run-agent", S.CONDUCTOR_ROLE, "--task", task, "--subagents"]
+
+
+def _spawn_run(root: Path, task: str) -> tuple[int, str]:
+    """真起一趟：detached 子进程，stdout/stderr 追加进 `runs/web-run-*.log`。
+
+    为什么 detached 而不是在服务进程里跑：一趟是几十分钟的模型循环，跟着网页进程生灭
+    会把"用户关掉标签页"变成"任务被杀"。日志落到项目自己的 `runs/` 下，网页的"在飞"页
+    与 `sessions/` 照样读得到它。
+    """
+    import os
+    import subprocess
+    from datetime import datetime
+
+    runs = root / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    log = runs / f"web-run-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+    env = dict(os.environ)
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
+    handle = open(log, "ab")
+    flags = 0
+    if os.name == "nt":
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0) | \
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    proc = subprocess.Popen(_run_argv(root, task), cwd=str(root), env=env,
+                            stdout=handle, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, creationflags=flags,
+                            close_fds=True)
+    return int(proc.pid), str(log.relative_to(root)).replace("\\", "/")
+
+
+def handle_start_run(handler: Any, params: Mapping[str, str],
+               query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """`POST /api/run`：用一句话起一趟工作流（等价 CLI 的 `run-agent M --task …`）。
+
+    请求字段：`task`（要系统做的那件事，一句话）· `confirm=1` · `dry_run?`。
+    三态：没开写面 / CSRF 不对 ⇒ 403；任务为空 / 缺 confirm ⇒ 400（一个字节都不写）；
+    起不来 ⇒ 500 并原样给错误；起来了 ⇒ 200 + `{pid, log, argv}`。
+    """
+    del params, query
+    form = handler._form()
+    root = Path(handler.root)
+    source, _why = _source_of(handler)
+    task = _one(form, "task").strip()
+    dry = _flag(form, "dry_run")
+    seen = {"task": task, "dry_run": dry, "confirm": _flag(form, "confirm")}
+    allowed, code, why = authorize(handler, endpoint="POST /api/run")
+    if not allowed:
+        return _finish(handler, endpoint="/api/run", source=source, params=seen,
+                       code=code, result=f"拒绝：{why}", ok=False)
+    if not task:
+        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
+                       result="拒绝：任务不能为空 —— 它就是你要对系统说的那一句话", ok=False)
+    if not _flag(form, "confirm"):
+        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
+                       result="拒绝：起一趟会真的花预算，必须带 confirm=1 一次显式确认", ok=False)
+    argv = _run_argv(root, task)
+    if dry:
+        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=200,
+                       result="试运行：没有起任何进程（argv 见 extra）", ok=True,
+                       extra={"argv": argv, "dry_run": True})
+    try:
+        pid, log = _spawn_run(root, task)
+    except Exception as exc:  # noqa: BLE001 - 起不来要如实报，不许静默
+        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=500,
+                       result=f"起不来：{type(exc).__name__}: {exc}", ok=False,
+                       extra={"argv": argv})
+    return _finish(handler, endpoint="/api/run", source=source, params=seen, code=200,
+                   result=f"已起一趟（pid={pid}）—— 去「在飞」页看它",
+                   ok=True, ident=log,
+                   extra={"pid": pid, "log": log, "argv": argv})
+
+
+def handle_interject(handler: Any, params: Mapping[str, str],
+                query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """`POST /api/task`：**往正在跑的那一趟插话**（只有用户能发、只有 M 收）。
+
+    请求字段：`body`（要说的话）· `subject?` · `sid?` · `confirm=1` · `dry_run?`。
+    送达方式由 `agent_loop.send_interjection` 定义：下一步开头单列一段【插话】，
+    **不打断当前步**；写进会话事件流（`agent_interjection`），所以盘上可复查。
+    """
+    del params, query
+    from .. import agent_loop as AL
+    from .. import userio as U
+
+    form = handler._form()
+    root = Path(handler.root)
+    source, _why = _source_of(handler)
+    body = _one(form, "body").strip()
+    subject = _one(form, "subject").strip() or "用户插话"
+    sid = _one(form, "sid").strip()
+    dry = _flag(form, "dry_run")
+    seen = {"body": body, "subject": subject, "sid": sid, "dry_run": dry,
+            "confirm": _flag(form, "confirm")}
+    allowed, code, why = authorize(handler, endpoint="POST /api/task")
+    if not allowed:
+        return _finish(handler, endpoint="/api/task", source=source, params=seen,
+                       code=code, result=f"拒绝：{why}", ok=False)
+    if not body:
+        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=400,
+                       result="拒绝：插话内容不能为空", ok=False)
+    if not _flag(form, "confirm"):
+        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=400,
+                       result="拒绝：插话会改变正在跑的那一趟的做法，必须带 confirm=1", ok=False)
+    if dry:
+        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=200,
+                       result="试运行：没有写任何一条插话", ok=True, extra={"dry_run": True})
+    try:
+        iid, problem = AL.send_interjection(root, sender=U.USER, subject=subject,
+                                            body=body, sid=(sid or None))
+    except Exception as exc:  # noqa: BLE001 - 写失败不许折成 200
+        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=500,
+                       result=f"没写成：{type(exc).__name__}: {exc}", ok=False)
+    if problem:
+        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=400,
+                       result=f"没写成：{problem}", ok=False)
+    return _finish(handler, endpoint="/api/task", source=source, params=seen, code=200,
+                   result=f"已投递（{iid}）：主控会在下一步开头读到，当前这一步不被打断",
+                   ok=True, ident=iid,
+                   extra={"interjection_id": iid, "sid": sid})
+
+
+#: 两条"说话"的端点在下面才定义（它们的正文紧邻本段之上）⇒ 注册放在这里，
+#: 免得 `HANDLERS.update` 引用尚未绑定的名字。
+HANDLERS.update({
+    "handle_start_run": handle_start_run,
+    "handle_interject": handle_interject,
 })
 
 
