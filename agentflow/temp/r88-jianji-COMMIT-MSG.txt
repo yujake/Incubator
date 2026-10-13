@@ -1,0 +1,36 @@
+R88 附记：把业主报过的两处「点不动」在真浏览器里钉成判据
+
+R88 已经把浏览器那一档跑通，那就不该只用来扫正文 —— 业主这一轮的两条原始抱怨
+（①预算页「重设金额」用不了、②网页上找不到"给系统说话"的地方）应该各有一条
+**从页面点进去、量到盘上**的判据，而不是停在"源码里有这个按钮"。
+
+## 一、①「重设金额」用不了（业主 2026-10-13 原话）
+
+`test_the_budget_set_button_really_writes_the_register`：`/budget` 页填金额 ⇒ 点
+「重设总额」⇒ 点「确认重设总额」⇒ 盘上 `budget.json` 的 `total_usd == 3.0`
+且 `added[-1].kind == "set"`；再填 1.5 ⇒ 点「追加额度」⇒ 确认 ⇒ `total_usd == 4.5`
+且 `added[-1].kind == "add"`。两条路都通、回执在页面上原样显示，这一格才算真修好了。
+
+依据（R81 的取证，记在这里免得日后重查）：后端一直是好的 —— `POST /api/budget` 的
+`action=set` 用真 CSRF 打下去 HTTP 200、`added` 从 4 行变 5 行、`kind="set"`；
+坏的是前端：原先只有一个按钮，动作靠原生 `select` 切换，选完再按那一下在浏览器里
+切不过去。R81 改成两个各自带 action 的 `ConfirmButton`。
+
+## 二、②「给系统说话的地方」（业主原话：整个网页愣是没找到）
+
+`test_the_two_talk_cards_are_really_clickable`：量浏览器里那半条链 ——
+空输入时「启动」/「送出」**点不动**；填了字之后第一次点击只"上膛"（`ConfirmButton`
+的两次确认，此时**一个请求都没发**），第二次才真发出去（HTTP 方法与请求体都读得到），
+回执按三态显示。
+
+⚠️ `POST /api/run` 真打下去会**真起一趟**（花预算），所以这一条在页面里用
+`page.route` 把那两个端点拦下来、喂一份真实形状的回执：拦的是**网络**，不是按钮 ——
+按钮、两次确认、取数、渲染走的还是页面自己那一条路。
+
+## 判据（本机实跑，2026-10-13）
+
+- `python -B -m pytest -q -m browser tests/test_webui_browser.py` ⇒ **14 passed**（34s；
+  R88 主提交时是 12 条，本附记 +2 条）。
+- 非浏览器档没有改动，R88 主提交那一刻的读数照旧：`tests/test_webui*.py` +
+  `tests/test_review_acceptance.py` + `tests/test_release_acceptance_wiring.py`
+  ⇒ 237 passed。

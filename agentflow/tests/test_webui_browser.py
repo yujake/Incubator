@@ -372,7 +372,110 @@ def test_the_stop_button_asks_for_confirmation_before_calling_stop(
         assert len(rows) == 1 and rows[0]["ok"] is True, rows
 
 
-# ============================================================ 5 九页逐页核对（R88）
+# ============================================================ 5 业主报过的那两处
+def test_the_budget_set_button_really_writes_the_register(tmp_path: pathlib.Path) -> None:
+    """真浏览器里点「重设总额」⇒ 盘上寄存器真的写下 `kind="set"`。
+
+    业主 2026-10-13 报的原话是「预算页『重设金额』用不了」。后端一直是好的
+    （`POST /api/budget` 的 `action=set` 实测 200），坏的是前端：原先靠一个原生
+    `select` 切动作，选完再按同一个按钮 —— 那一下在浏览器里切不过去。R81 改成两个
+    各自带 action 的 `ConfirmButton`。这条判据就从页面上点，一路量到盘上那份
+    `budget.json`，并且**顺带量"追加"那一支**（两条路子都通才算修好了）。
+
+    这一条不需要拦网络：改预算是纯本地写，不花钱、不起进程。
+    """
+    from agentflow import budget as B
+
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        _enter_spa(live, "/budget")
+        page.wait_for_selector("input", timeout=10_000)
+        amount = page.locator("input").first  # 这一卡里第一个输入框就是金额
+        amount.fill("3")
+        page.get_by_role("button", name="重设总额").click()
+        page.wait_for_timeout(200)
+        page.get_by_role("button", name="确认重设总额").click()
+        page.wait_for_timeout(500)
+        reg = B.read_register(root)
+        assert reg.get("total_usd") == 3.0, reg
+        added = reg.get("added") or []
+        assert added and added[-1].get("kind") == "set", reg
+        assert "成了" in page.inner_text("body"), "回执没有原样显示"
+
+        # 追加那一支（同一页、同一份寄存器）
+        amount = page.locator("input").first
+        amount.fill("1.5")
+        page.get_by_role("button", name="追加额度").click()
+        page.wait_for_timeout(200)
+        page.get_by_role("button", name="确认追加额度").click()
+        page.wait_for_timeout(500)
+        reg2 = B.read_register(root)
+        assert reg2.get("total_usd") == 4.5, reg2  # 3.0 追加 1.5
+        kinds = [row.get("kind") for row in (reg2.get("added") or [])]
+        assert kinds[-1] == "add", reg2
+
+
+# ============================================================ 6 两处"跟系统说话"的入口
+def test_the_two_talk_cards_are_really_clickable(tmp_path: pathlib.Path) -> None:
+    """点得动（R80 补的两处入口，在真浏览器里量一遍）。
+
+    业主的原话是"整个网页愣是没找到让我给系统说话的地方"，所以这两张卡片的判据不能停在
+    "源码里有这个函数"：这里量的是**浏览器里那半条链** —— 空输入时按钮点不动；
+    填了字之后第一次点击只"上膛"（`ConfirmButton` 的两次确认），第二次才真发请求；
+    请求真的发出去（方法与请求体读得到）、回执按三态原样显示。
+
+    ⚠️ `POST /api/run` 真打下去会**真起一趟**（花预算），所以这一条在页面里把那两个
+    端点拦下来（`page.route` 喂一份真实形状的回执）。拦的是网络，不是按钮 ——
+    按钮、确认、取数、渲染都还是页面自己那一条路。
+    """
+    sent: list[tuple[str, str]] = []
+
+    def _fake(route: Any) -> None:
+        req = route.request
+        sent.append((req.method, req.post_data or ""))
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"ok": True, "tri": "computed",
+                                       "reason": "拦下来喂的回执（没有真起一趟）"},
+                                      ensure_ascii=False))
+
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        page.route("**/api/run", _fake)
+        page.route("**/api/task", _fake)
+
+        # 一、`/` 页那句话起一趟
+        _enter_spa(live, "/")
+        page.wait_for_selector("input", timeout=10_000)
+        start = page.get_by_role("button", name="启动")
+        assert start.is_disabled(), "任务框是空的，启动按钮却点得动"
+        page.fill("input", "帮我把工作区里那篇论文从头到尾审核一遍。")
+        assert not start.is_disabled(), "写了任务之后启动按钮还是点不动"
+        start.click()
+        page.wait_for_timeout(200)
+        assert sent == [], f"第一次点击就发了请求：{sent}"
+        page.get_by_role("button", name="确认启动").click()
+        page.wait_for_timeout(400)
+        assert len(sent) == 1 and sent[0][0] == "POST", sent
+        assert "task=" in sent[0][1], sent[0][1]
+        assert "拦下来喂的回执" in page.inner_text("body"), "回执没有原样显示"
+
+        # 二、`/live` 页往在飞的那一趟插话
+        sent.clear()
+        _enter_spa(live, "/live")
+        page.wait_for_selector("input", timeout=10_000)
+        send = page.get_by_role("button", name="送出")
+        assert send.is_disabled(), "插话框是空的，送出按钮却点得动"
+        page.fill("input", "第二节那句「必然成立」改弱一点。")
+        send.click()
+        page.wait_for_timeout(200)
+        assert sent == [], f"第一次点击就发了请求：{sent}"
+        page.get_by_role("button", name="确认送出").click()
+        page.wait_for_timeout(400)
+        assert len(sent) == 1 and sent[0][0] == "POST", sent
+        assert "body=" in sent[0][1], sent[0][1]
+
+
+# ============================================================ 6 九页逐页核对（R88）
 #: 九页的客户端路由（`ui/src/main.tsx` 的路由表；`/run/:sid` 用一个不存在的会话号，
 #: 页面照样要挂起来 —— 它那时该显"读不出来"，不是白屏）。
 ROUTES = ("/", "/live", "/budget", "/evidence", "/artifacts", "/acceptance",
