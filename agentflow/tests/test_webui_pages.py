@@ -829,6 +829,27 @@ def test_a_session_write_reaches_the_stream_through_serve(tmp_path: pathlib.Path
 
 # ====================================================================== 设置窗口的回填（R81）
 
+def test_the_budget_page_has_two_explicit_buttons_and_no_dead_select() -> None:
+    """预算页的「追加 / 重设」两个动作各自一个按钮，且没有"不接线的选择器"。
+
+    业主 2026-10-13 报的是「预算页『重设金额』用不了」。取证结论：坏在前端 ——
+    原先只有一个按钮、动作靠原生 `select` 切换，选完再按那一下在浏览器里切不过去。
+    R81 改成两个各自带 action 的 `ConfirmButton`，R89 把那个 `select` 彻底删掉：
+    它已经**不接任何线**（改它什么也不会发生），留着就是一个会骗人的控件。
+
+    这一条钉三件事：两个动作各有一个按钮（`onConfirm` 里分别 `submit("add")` /
+    `submit("set")`）、页面上不再有 `select`、追加历史里"没写说明"的那一格显
+    「（没写说明）」而不是 `unknown`（`Table.cell()` 的空串口径是"没读到"，
+    而这里读到的是一个空说明 —— 两件事不许折成一个词）。
+    """
+    src = _page_text("Budget")
+    assert 'submit("add")' in src and 'submit("set")' in src, "两个动作没有各自的按钮"
+    assert "action=\"追加额度\"" in src and "action=\"重设总额\"" in src, src[:200]
+    assert "<select" not in src, "那个不接线的动作选择器又回来了"
+    assert "setAction" not in src, "动作状态又回来了 —— 两个按钮各带 action，不需要它"
+    assert "（没写说明）" in src, "空说明那一格会显成 unknown（把\"没写说明\"读成\"没读到\"）"
+
+
 def test_the_settings_panel_prefills_from_the_reading() -> None:
     """判据（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥
     都没设置过一样」）：设置窗口每一格的初值来自 `GET /api/machine` 的 `settings` 三段。

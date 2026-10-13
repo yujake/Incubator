@@ -67,7 +67,6 @@ function buckets(rec: Record<string, unknown>): BucketRow[] {
 export function Budget() {
   const face = useFace(() => api.getBudget());
   const [amount, setAmount] = useState("1");
-  const [action, setAction] = useState<"add" | "set">("add");
   const [note, setNote] = useState("");
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,7 +90,6 @@ export function Budget() {
   const parsed = Number(amount);
 
   const submit = (which: "add" | "set"): void => {
-    setAction(which);
     setBusy(true);
     setResult("");
     postBudget({ action: which, usd: parsed, note })
@@ -152,26 +150,9 @@ export function Budget() {
 
       <Card title="追加 / 重设">
         <div class="readings">
-          「追加」为单调增长；「重设」按给定值覆盖。两者均在下一笔支出前生效，无需重启。
+          「追加」在总额上做加法，「重设」直接用给定值覆盖。两者都在下一笔支出前生效。
         </div>
         <div class="readings">
-          <label class="opt">
-            <span>动作</span>
-            <select
-              value={action}
-              onChange={(ev) => {
-                const v = ev.currentTarget.value;
-                setAction(v === "set" ? "set" : "add");
-              }}
-              onInput={(ev) => {
-                const v = ev.currentTarget.value;
-                setAction(v === "set" ? "set" : "add");
-              }}
-            >
-              <option value="add">追加（add）</option>
-              <option value="set">重设总额（set）</option>
-            </select>
-          </label>
           <label class="opt">
             <span>美元</span>
             <input
@@ -193,40 +174,45 @@ export function Budget() {
             />
           </label>
         </div>
-        <ConfirmButton
-          action="追加额度"
-          impact={`会把总额改成 ${usd(b.total_usd)} + $${
-            Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
-          }`}
-          onConfirm={() => {
-            submit("add");
-          }}
-          disabled={busy || !Number.isFinite(parsed)}
-          note={
-            !Number.isFinite(parsed)
-              ? "金额读不成数字 —— 先改成数字（按钮点不动，也不假装成功）"
-              : busy
-                ? "正在写……"
- : "写面没开（agentflow web --allow-writes）时后端会回 403，回执如实显示"
-          }
-        />
-        <ConfirmButton
-          action="重设总额"
-          impact={`会把总额覆盖成 $${
-            Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
-          }（旧总额也记进追加历史）`}
-          onConfirm={() => {
-            submit("set");
-          }}
-          disabled={busy || !Number.isFinite(parsed)}
-          note={
-            !Number.isFinite(parsed)
-              ? "金额读不成数字 —— 先改成数字"
-              : busy
-                ? "正在写……"
-                : "与「追加」同一个端点，只是 action=set"
-          }
-        />
+        {/* 两个按钮各占一行：并排时两段 note 会连成一句读不断的长句（R89 实测）。 */}
+        <div class="readings">
+          <ConfirmButton
+            action="追加额度"
+            impact={`会把总额改成 ${usd(b.total_usd)} + $${
+              Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
+            }`}
+            onConfirm={() => {
+              submit("add");
+            }}
+            disabled={busy || !Number.isFinite(parsed)}
+            note={
+              !Number.isFinite(parsed)
+                ? "金额读不成数字 —— 先改成数字（按钮点不动，也不假装成功）"
+                : busy
+                  ? "正在写……"
+                  : "写面没开（agentflow web --allow-writes）时后端回 403，回执如实显示"
+            }
+          />
+        </div>
+        <div class="readings">
+          <ConfirmButton
+            action="重设总额"
+            impact={`会把总额覆盖成 $${
+              Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
+            }（旧总额也记进追加历史）`}
+            onConfirm={() => {
+              submit("set");
+            }}
+            disabled={busy || !Number.isFinite(parsed)}
+            note={
+              !Number.isFinite(parsed)
+                ? "金额读不成数字 —— 先改成数字"
+                : busy
+                  ? "正在写……"
+                  : "覆盖式：旧总额只留在追加历史里"
+            }
+          />
+        </div>
         {result === "" ? null : <div class="readings">{result}</div>}
       </Card>
 
@@ -239,7 +225,8 @@ export function Budget() {
             { key: "usd", title: "美元", render: (r) => <span class="mono">{cell(r.usd)}</span> },
             { key: "by", title: "谁" },
             { key: "at", title: "什么时候", render: (r) => <span class="mono">{r.at}</span> },
-            { key: "note", title: "说明" },
+            { key: "note", title: "说明",
+              render: (r) => (r.note === "" ? "（没写说明）" : r.note) },
           ]}
         />
       </Card>
