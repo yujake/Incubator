@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-13T19:28:52+08:00",
+  "generated_at": "2026-10-13T20:40:22+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -243,26 +243,26 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "459fbb3028cbae7cd21d9b2d7cb0144f52cc3d5c0e78ee3c8e4507cb22525975",
+      "sha256": "0d66cd235bd0d5463a3c479dd3e318ef01e089a1ef4383398bdfa354f6999014",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "逐行走查 R72 的 5 处禁改区改动：specs/g.py 删 G.paper_package 动作 + 政策改写为「正文由 G 自己写并调 doc.paper_compile」、specs/m.py 的交付形式口径、capabilities.py 拿掉该动作登记、两份冻结快照按 draft/118 §3 的逐格读数重冻（agent_surface 只有 G/H/M 真换值，tool_surface 删四条工具并改 doc.paper_compile 一格）。权限面这一批是**收紧**：工具 83→79、动作 60→59、H 少一件只读核包工具（doc.paper_state）；判据读数见 draft/118 §3/§9（tests/test_papercompile.py 16 条 + 全量套件）。",
+      "change_note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-13T15:18:49+08:00",
-          "scope": "specs/g.py 的 ACTIONS/SPEC.policy；specs/m.py 的 SPEC.policy 两条；capabilities.py 的 NON_SUMMONABLE 登记；两份 golden 快照的逐格 diff",
-          "note": "逐行走查 R72 的 5 处禁改区改动：specs/g.py 删 G.paper_package 动作 + 政策改写为「正文由 G 自己写并调 doc.paper_compile」、specs/m.py 的交付形式口径、capabilities.py 拿掉该动作登记、两份冻结快照按 draft/118 §3 的逐格读数重冻（agent_surface 只有 G/H/M 真换值，tool_surface 删四条工具并改 doc.paper_compile 一格）。权限面这一批是**收紧**：工具 83→79、动作 60→59、H 少一件只读核包工具（doc.paper_state）；判据读数见 draft/118 §3/§9（tests/test_papercompile.py 16 条 + 全量套件）。",
+          "at": "2026-10-13T20:40:20+08:00",
+          "scope": "specs/m.py 的 edges 与政策那一条；capabilities.py 的 _INDIRECT_FROM_M 与其断言；agent_surface 快照 roles.B/M.prompt",
+          "note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-13T15:18:49+08:00",
-          "scope": "specs/g.py 的 ACTIONS/SPEC.policy；specs/m.py 的 SPEC.policy 两条；capabilities.py 的 NON_SUMMONABLE 登记；两份 golden 快照的逐格 diff",
-          "note": "逐行走查 R72 的 5 处禁改区改动：specs/g.py 删 G.paper_package 动作 + 政策改写为「正文由 G 自己写并调 doc.paper_compile」、specs/m.py 的交付形式口径、capabilities.py 拿掉该动作登记、两份冻结快照按 draft/118 §3 的逐格读数重冻（agent_surface 只有 G/H/M 真换值，tool_surface 删四条工具并改 doc.paper_compile 一格）。权限面这一批是**收紧**：工具 83→79、动作 60→59、H 少一件只读核包工具（doc.paper_state）；判据读数见 draft/118 §3/§9（tests/test_papercompile.py 16 条 + 全量套件）。",
+          "at": "2026-10-13T20:40:20+08:00",
+          "scope": "specs/m.py 的 edges 与政策那一条；capabilities.py 的 _INDIRECT_FROM_M 与其断言；agent_surface 快照 roles.B/M.prompt",
+          "note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -773,26 +773,26 @@
       "path": "src/agentflow/specs/m.py",
       "glob": "src/agentflow/specs/m.py",
       "category": "auth-audit",
-      "sha256": "7db4fcacc8a2517ffef724a556ec882ac8c6d5b4943fba3fd69a8cbdd902a054",
+      "sha256": "251b97018ef549f01b1dc436e0bbff118773bd2fe5e4968314a487de8bf90588",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+      "change_note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-13T19:28:51+08:00",
-          "scope": "specs/m.py 的 intake 那一条与两处删原话；specs/b.py、specs/g.py、specs/h.py、specs/v.py 各一处删原话；agent_surface 快照的 roles.G/H/M/V.prompt",
-          "note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+          "at": "2026-10-13T20:40:21+08:00",
+          "scope": "specs/m.py 的 edges 与政策那一条；capabilities.py 的 _INDIRECT_FROM_M 与其断言；agent_surface 快照 roles.B/M.prompt",
+          "note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-13T19:28:51+08:00",
-          "scope": "specs/m.py 的 intake 那一条与两处删原话；specs/b.py、specs/g.py、specs/h.py、specs/v.py 各一处删原话；agent_surface 快照的 roles.G/H/M/V.prompt",
-          "note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+          "at": "2026-10-13T20:40:21+08:00",
+          "scope": "specs/m.py 的 edges 与政策那一条；capabilities.py 的 _INDIRECT_FROM_M 与其断言；agent_surface 快照 roles.B/M.prompt",
+          "note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -997,26 +997,26 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "4f873dfa484a26f0d44f93ce045b0f38f755ba45d45f200cf3d2ac1a22c81e08",
+      "sha256": "a985bef9ad13c8016ff6469202ba9538eb858b9553c641bb58759165b5c9ff54",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+      "change_note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-13T19:28:52+08:00",
-          "scope": "specs/m.py 的 intake 那一条与两处删原话；specs/b.py、specs/g.py、specs/h.py、specs/v.py 各一处删原话；agent_surface 快照的 roles.G/H/M/V.prompt",
-          "note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+          "at": "2026-10-13T20:40:21+08:00",
+          "scope": "specs/m.py 的 edges 与政策那一条；capabilities.py 的 _INDIRECT_FROM_M 与其断言；agent_surface 快照 roles.B/M.prompt",
+          "note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-13T19:28:52+08:00",
-          "scope": "specs/m.py 的 intake 那一条与两处删原话；specs/b.py、specs/g.py、specs/h.py、specs/v.py 各一处删原话；agent_surface 快照的 roles.G/H/M/V.prompt",
-          "note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+          "at": "2026-10-13T20:40:22+08:00",
+          "scope": "specs/m.py 的 edges 与政策那一条；capabilities.py 的 _INDIRECT_FROM_M 与其断言；agent_surface 快照 roles.B/M.prompt",
+          "note": "逐行走查 R78 的三处禁改区改动：① specs/m.py 的 M 出边加回 B（业主逐字「补 M 到 B」，边总数 30→31），边上写着无 Lean T1 的真机读数（verifications 目录没被创建、reviewed_proof_rows=0/7）；政策里\"B/F/V 只能间接\"改成\"F/V 只能间接、B 可直接派\"并点明 M→B→V；② capabilities.py 的导入期守卫 _INDIRECT_FROM_M 从 {B,F,V} 收成 {F,V}（另两条判据——可达每个角色、F/V 不许成孤儿——原样保留）；③ agent_surface 快照重冻，只有 B/M 两格 prompt 换值。这一批是**加宽一条边**（M→B），F/V 的间接限制未动。判据 232 passed。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
