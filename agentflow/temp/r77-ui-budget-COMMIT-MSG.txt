@@ -1,0 +1,17 @@
+UI 预算页：追加与重设改成两个显式按钮（不再靠下拉切换动作）+ 重建产物
+
+业主 2026-10-13：「预算的『重设金额』用不了」。逐层查过：
+- 后端 set 路径是好的 —— 用真 CSRF 令牌 POST /api/budget action=set ⇒ HTTP 200、
+  added_count 从 4 变 5、盘上 entry.kind=set、总额按给定值覆盖；
+- 所以病在网页那一层：动作要靠一个原生 select 切换，切换事件没生效时按钮仍停在「追加额度」，
+  用户看到的就是「重设点不动 / 没反应」。
+
+改法（`ui/src/pages/Budget.tsx`）：
+- 两个 `ConfirmButton` 各带自己的 action（**追加额度** / **重设总额**），各自有 impact 与 note ——
+  不再有"先选再点"这一步，重设从此不可能找不到；
+- select 仍留着但当镜子（`onChange` 与 `onInput` 都绑同一个处理，避免运行时事件名不一致）；
+- 两处金额都从同一个输入框读；读不成数字时两只按钮都点不动并写明理由。
+
+读数：`pnpm run typecheck` 干净；`pnpm run build` 重建（新产物
+`src/agentflow/web/static/assets/index.sodiEMQu.js`，旧 `index.D3J3e0aB.js` 已删，
+`index.html` 指向新产物；本地服务 8792 已重启并在引用它）。

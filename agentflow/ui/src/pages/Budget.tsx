@@ -90,10 +90,11 @@ export function Budget() {
   const byScope = buckets(b.by_scope as unknown as Record<string, unknown>);
   const parsed = Number(amount);
 
-  const submit = (): void => {
+  const submit = (which: "add" | "set"): void => {
+    setAction(which);
     setBusy(true);
     setResult("");
-    postBudget({ action, usd: parsed, note })
+    postBudget({ action: which, usd: parsed, note })
       .then((got) => {
         setResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
         face.reload();
@@ -165,6 +166,10 @@ export function Budget() {
                 const v = ev.currentTarget.value;
                 setAction(v === "set" ? "set" : "add");
               }}
+              onInput={(ev) => {
+                const v = ev.currentTarget.value;
+                setAction(v === "set" ? "set" : "add");
+              }}
             >
               <option value="add">追加（add）</option>
               <option value="set">重设总额（set）</option>
@@ -192,13 +197,13 @@ export function Budget() {
           </label>
         </div>
         <ConfirmButton
-          action={action === "add" ? "追加额度" : "重设总额"}
-          impact={`会把总额改成 ${
-            action === "add"
-              ? `${usd(b.total_usd)} + $${Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"}`
-              : `$${Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"}`
+          action="追加额度"
+          impact={`会把总额改成 ${usd(b.total_usd)} + $${
+            Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
           }`}
-          onConfirm={submit}
+          onConfirm={() => {
+            submit("add");
+          }}
           disabled={busy || !Number.isFinite(parsed)}
           note={
             !Number.isFinite(parsed)
@@ -206,6 +211,23 @@ export function Budget() {
               : busy
                 ? "正在写……"
                 : "写面没开（`agentflow web --allow-writes`）时后端会回 403，回执如实显示"
+          }
+        />
+        <ConfirmButton
+          action="重设总额"
+          impact={`会把总额**覆盖**成 $${
+            Number.isFinite(parsed) ? parsed.toFixed(6) : "（读不成数字）"
+          }（旧总额也记进追加历史）`}
+          onConfirm={() => {
+            submit("set");
+          }}
+          disabled={busy || !Number.isFinite(parsed)}
+          note={
+            !Number.isFinite(parsed)
+              ? "金额读不成数字 —— 先改成数字"
+              : busy
+                ? "正在写……"
+                : "与「追加」同一个端点，只是 action=set"
           }
         />
         {result === "" ? null : <div class="readings">{result}</div>}
