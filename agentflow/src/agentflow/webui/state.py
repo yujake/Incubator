@@ -473,8 +473,7 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
         # `R4` ⑨：只写口径，不改语义 —— 这个数就是 `tasks` 台账的全量行数
         # （不筛选、不减一）。它含顶趟行（`role=M` / `action=run` / `called_by=user`），
         # 所以它比"子任务条数"大；读数旁边不写这句，读的人会把它当成子任务数。
-        out["tables_note"] = ("含顶趟行（role=M / action=run / called_by=user）—— "
-                              "这是 tasks 台账的全量行数，不是子任务条数")
+        out["tables_note"] = "含顶趟行；为 tasks 全量行数，非子任务条数"
     except Exception as exc:  # noqa: BLE001 - 读数而已，读不到就如实说没查成
         out["note"] = f"台账没查成：{type(exc).__name__}: {exc}"
         problems.append(out["note"])

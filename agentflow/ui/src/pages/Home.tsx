@@ -191,13 +191,12 @@ export function Home() {
       ) : null}
 
       <Card
-        title="待回答（全局，不按会话过滤）"
+        title="待回答"
         subtitle={`${pending.length} 条 · 快照 ${snapshot.generated_at}`}
         right={unreachable ? <TriState tri="unreadable" reason={live.problem} label="快照" /> : null}
       >
-        <div class="readings">这些提问可能属于别的会话 —— 面板一次取全工作区，不按会话过滤。</div>
         {pending.length === 0 ? (
-          <span class="empty">没有待回答的问题（合法初态，不是「没查成」）。</span>
+          <span class="empty">暂无待回答的问题（合法初态）。</span>
         ) : (
           pending.map((q) => (
             <QuestionCard
@@ -212,11 +211,11 @@ export function Home() {
 
       <Card title="会话概览" subtitle={`${snapshot.sessions.length} 段`}>
         {snapshot.sessions.length === 0 ? (
-          <span class="empty">盘上一段会话都没有（读到了，里面是 0 段 —— 不是「没查成」）。</span>
+          <span class="empty">暂无会话（读到了，里面是 0 段）。</span>
         ) : (
           <Table
             rows={snapshot.sessions}
-            empty="盘上一段会话都没有。"
+            empty="暂无会话。"
             columns={[
               {
                 key: "sid",
@@ -248,7 +247,7 @@ export function Home() {
         )}
       </Card>
 
-      <Card title="台账（第二个独立读数）">
+      <Card title="台账">
         <div class="readings">
           台账事件{" "}
           <span class="mono">{snapshot.ledger.events === null ? "unknown" : snapshot.ledger.events}</span>{" "}
@@ -262,7 +261,7 @@ export function Home() {
         {snapshot.ledger.note === "" ? null : <div class="readings">{snapshot.ledger.note}</div>}
       </Card>
 
-      <Card title="落点" subtitle="这页读的那一份快照从哪来">
+      <Card title="落点">
         <div class="readings">
           工作区根 <span class="mono">{snapshot.root}</span> · 生成于{" "}
           <span class="mono">{snapshot.generated_at}</span>
