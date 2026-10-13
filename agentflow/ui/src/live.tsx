@@ -180,7 +180,7 @@ export function LiveProvider(props: LiveProviderProps) {
   return <LiveContext.Provider value={value}>{props.children}</LiveContext.Provider>;
 }
 
-/** 连接态与快照问题的那一条横幅（六个页面共用一个，口径只有一处）。 */
+/** 连接态与快照问题的那一条横幅（九个页面共用一个，口径只有一处）。 */
 export function ConnectionBanner() {
   const live = useLive();
   if (live.connection === "degraded") {

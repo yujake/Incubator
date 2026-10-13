@@ -14,17 +14,34 @@
  * 3. `lean_ready` / `can_do_formal` 与 `provers.checked` 一样是**三态**：
  *    `null` 渲染成 `unknown`，不许折成 `false`。
  *
- * 一处**如实标注的缺口**：`draft/74 §3.5` 第 6 行（活着的 loop / 进程）要
- * `stopctl.live_pids` / `running_loops` 的读数，而 `MachineView` 里没有这一栏，
- * 今天也没有别的端点给它 ⇒ 渲染 `not_applicable` 并写明。
+ * 一处**已经接上的缺口**（2026-10-12 更正）：`draft/74 §3.5` 第 6 行要的
+ * "活着的 loop / 进程"此前没有端点，那一栏渲染成 `not_applicable` 并写明；
+ * 现在 `GET /api/live`（在飞面）给了它，卡片改成指路「在飞」页 ——
+ * 说明文与读数说同一件事，别留一句"没有端点"的旧话在页面上。
  */
-import { api } from "../api";
+import { useState } from "preact/hooks";
+
+import { api, postSettings, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
+
+/** 设置窗口里的每一格（`段.键` 形状逐字对应后端 `handle_settings` 读的表单键）。 */
+const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
+  { key: "toolchain.lean_bin", hint: "Lean 可执行文件所在目录（例：_env/lean470/.../bin）" },
+  { key: "toolchain.mathlib_root", hint: "Mathlib 检出的根目录" },
+  { key: "toolchain.coq_bin", hint: "Coq 落点（没有就留空）" },
+  { key: "toolchain.isabelle_bin", hint: "Isabelle 落点（没有就留空）" },
+  { key: "toolchain.lean_enabled", hint: "true / false —— 缺省 false（省钱档）" },
+  { key: "model.api_key", hint: "只写不读；写进去之后回执里恒为 ***" },
+  { key: "model.base_url", hint: "留空 = 用内置缺省端点" },
+  { key: "model.name", hint: "留空 = 用内置缺省模型" },
+  { key: "model.reasoning_effort", hint: "off / low / high / max" },
+  { key: "workspace.projects_dir", hint: "默认项目目录（留空 = 工作区自己那一个）" },
+];
 
 /** 从 `Record<string, unknown>` 里读一格：读不到 ⇒ `unknown`（不是空串、不是 false）。 */
 function field(rec: Record<string, unknown>, key: string): string {
@@ -45,6 +62,8 @@ function pairs(rec: Record<string, unknown>): Array<{ k: string; v: string }> {
 
 export function Machine() {
   const face = useFace(() => api.getMachine());
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [writeResult, setWriteResult] = useState("");
 
   if (face.data === null) {
     return (
@@ -186,33 +205,65 @@ export function Machine() {
         )}
       </Card>
 
-      <Card title="写设置（缺口）">
+      <Card title="设置窗口（写设置）">
         <div class="readings">
-          `POST /api/settings` 属于 C 线 W4，后端今天没有这条路由 ⇒ 按钮点不动；
-          key 只写不读（裁定 E1）那一条要等它上线才有东西可判。
+          写的是**机器级**设置文件（上面那一格里的路径）。逐格填，空着表示"这一格不动"
+          （`settings.write_settings` 的口径是只写给了值的键）。`model.api_key` 落盘、
+          回执里恒为 `***`（key 只写不读）。`lean_enabled` 那一格是业主 2026-10-12 的
+          省钱开关，取值只认 `true` / `false`；缺省是**关**。
+        </div>
+        <div class="readings">
+          {FIELDS.map((field) => (
+            <label class="opt" key={field.key}>
+              <span class="mono">{field.key}</span>
+              <input
+                type="text"
+                placeholder={field.hint}
+                value={values[field.key] ?? ""}
+                onInput={(ev) => {
+                  const v = ev.currentTarget.value;
+                  setValues((old) => ({ ...old, [field.key]: v }));
+                }}
+              />
+            </label>
+          ))}
         </div>
         <ConfirmButton
-          action="写机器级设置"
-          impact="会改这台机器的 settings.json（工具链落点 / 模型接线）"
-          onConfirm={() => undefined}
-          requireForce
-          disabled
-          note="写端点还没上线（C 线 W4）—— 点不动，也不假装成功"
+          action="写这些设置"
+          impact={`会改盘上那份设置文件（${settings.path === "" ? "落点没读到" : settings.path}）：
+            只写填了值的 ${Object.values(values).filter((v) => v !== "").length} 格`}
+          onConfirm={() => {
+            postSettings(values)
+              .then((got) => {
+                setWriteResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
+                face.reload();
+              })
+              .catch((exc: unknown) => {
+                setWriteResult(`写请求失败：${whyOf(exc)}`);
+              });
+          }}
+          disabled={Object.values(values).every((v) => v === "")}
+          note={
+            Object.values(values).every((v) => v === "")
+              ? "一格都没填 —— 按钮点不动（不假装成功）"
+              : "写面没开（`agentflow web --allow-writes`）时后端会回 403，回执如实显示"
+          }
         />
+        {writeResult === "" ? null : <div class="readings">{writeResult}</div>}
       </Card>
 
       <Card
-        title="停机 / 进程（缺口）"
-        right={
-          <TriState
-            tri="not_applicable"
-            label="live_pids / running_loops"
-            reason="draft/74 说这一栏读 stopctl.live_pids 与 running_loops，而 MachineView 里没有这一栏，今天也没有别的端点给它"
-          />
-        }
+        title="停机 / 进程"
+        right={<Badge kind="badge-pass" text="已接线：见「在飞」页" />}
       >
         <div class="readings">
-          这一栏要一条读 `stopctl` 的只读端点才能给读数。工作区根在首页的「落点」那一格里。
+          活着的循环与进程、停机开关与历史、状态报告、用量拆解 —— 都在
+          <a class="nav-link" href="/live">
+            「在飞」
+          </a>
+          那一页（`GET /api/live` / `/api/status-reports` / `/api/usage` 三条只读端点）。
+          这一张卡片此前渲染的是 `not_applicable` 加一句"没有端点给它"——
+          那在今天是错的，所以改成指路。
         </div>
       </Card>
     </>

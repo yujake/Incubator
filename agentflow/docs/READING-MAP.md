@@ -99,7 +99,7 @@
 | `budget.py` | 可追加的总预算：盘上寄存器（工作区根下那一个 JSON）+ 每次花钱前现读的口子 —— 花销不在这里（唯一权威账是 `usage_ledger`） |
 | `toolchain.py` | 这台机器上的证明工具链（一处定义）：显式配置（`AGENTFLOW_LEAN_BIN` 等）→ `AGENTFLOW_PROVER_PATH`（两者都是环境变量）→ **设置文件的 `toolchain.*`** → PATH 四档查找 + 三态探测 + Mathlib 那一轴；探测（禁改区的 `verify_tools.detect_verifier`）与调用（`formalgw.find_lean`）共用这一个答案，`agentflow doctor` 把读数打给人看（打的是"从哪一档找到的"） |
 | `web/` | 网页的样式与令牌：DSH 的令牌整份照搬（来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`）；`web/assets.py` 是令牌的唯一真身（**我们自己的组件样式在 W5 随旧壳退场，搬到了前端工程的 `ui/src/theme/app.css`**）、`web/emit_theme.py` 把它生成到前端；`web/static/` 是**前端构建产物**（裁定 B1：入库；`index.html` + `assets/*.js|css`，`GET /` 与 `GET /run/{sid}` 吐的就是它） |
-| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`（六页 `pages/*.tsx` · 六组件 `components/*.tsx` · `main.tsx` 路由 · `api.ts` 端点表 · `sse.ts` 订阅 · `live.tsx` 一次订阅分发给六页 · `theme/app.css`），其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库；开发说明见 `ui/README-DEV.md` |
+| `ui/` | 用户端前端工程（Preact + Vite，裁定 A2）：源码在 `ui/src/`（九页 `pages/*.tsx` · 六组件 `components/*.tsx` · `main.tsx` 路由 · `api.ts` 端点表 · `sse.ts` 订阅 · `live.tsx` 一次订阅分发给九页 · `theme/app.css`），其中 `ui/src/types.ts` 与 `ui/src/theme/generated/theme.css` 是生成物（`python -m agentflow.web.emit_types` / `python -m agentflow.web.emit_theme`，手改必红）；构建产物落到 `src/agentflow/web/static/` 并按裁定 B1 入库；开发说明见 `ui/README-DEV.md` |
 | `__main__.py` | `python -m agentflow` 的入口 |
 | `__init__.py` | 包说明与公开面 |
 | `demo.py` | 离线端到端演示：不访问网络，把 A→B→校验整条链路真跑一遍 |
@@ -276,7 +276,7 @@
 | 动**发布门** | `tools/release_all.py`（禁改区） | `tools/coverage_zero_test.py`、`tools/run_each_test_file.py` | `tests/test_release_all.py`、`README.md` §6 |
 | 动**lint 规则** | `scripts/lint_rules.py`（禁改区） | `tools/vocab_census.py`（禁改区） | `tests/test_lint_rules*.py` |
 | 改**禁改区规则本身** | `AGENTS.md` + `.noai-paths`（两处必须逐条一致） | `scripts/noai_gate.py`（禁改区） | `tests/test_noai_gate.py`、`--check-consistency` |
-| 改**用户端网页**（页面 / 端点 / SSE） | `ui/src/api.ts` 的 `ENDPOINTS`（端点的唯一出口）+ `webui/routes.py`（`ROUTES`） | `ui/src/pages/*.tsx`（六页）· `ui/src/live.tsx`（一次订阅分发给六页）· `webui/readers.py`（只读面：六面 + 逐条事件那一面）· `webui/sse.py`（流与钩子）· `webui/server.py`（`/` 的外壳与静态路由） | `tests/test_webui_contracts.py`（A–D 四条名字层 + 新鲜度）、`tests/test_webui_pages.py`（每页真读数/空态/三态）、`tests/test_webui_readers.py`（各面正控/负控 + 逐条事件的分页与编号口径）、`tests/test_webui_sse.py`（流）、`tests/test_webui_static.py`（`/` 与静态）、`ui/README-DEV.md` |
+| 改**用户端网页**（页面 / 端点 / SSE） | `ui/src/api.ts` 的 `ENDPOINTS`（端点的唯一出口）+ `webui/routes.py`（`ROUTES`） | `ui/src/pages/*.tsx`（九页）· `ui/src/live.tsx`（一次订阅分发给九页）· `webui/readers.py`（只读面：十个面，含 2026-10-13 加的预算/在飞/用量/状态报告）· `webui/sse.py`（流与钩子）· `webui/server.py`（`/` 的外壳与静态路由） | `tests/test_webui_contracts.py`（A–D 四条名字层 + 新鲜度）、`tests/test_webui_pages.py`（每页真读数/空态/三态）、`tests/test_webui_readers.py`（各面正控/负控 + 逐条事件的分页与编号口径）、`tests/test_webui_sse.py`（流）、`tests/test_webui_static.py`（`/` 与静态）、`ui/README-DEV.md` |
 | 加一个**子命令** | `cli.py`（`build_parser`） | 对应 `cmd_*` | `tests/test_cli_run.py`、`tests/test_user_quickstart.py` |
 | 查**一次运行到底做了什么** | 产物目录 `out/run-N/`（六件） | `runflow.py`、`evidence.py` | `report.md` / `run-manifest.json` |
 | 查**谁在什么时候说了什么** | `sessions.py` 的会话记录 | `agent_loop.py`（事件种类） | `tests/test_sessions.py` |

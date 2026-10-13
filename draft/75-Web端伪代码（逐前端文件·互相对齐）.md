@@ -23,6 +23,11 @@
 | 9 | `POST /api/submit` | `topic` · `mode` · `content` · `providers[]?` | `WriteResult` + `request_id?` | `interactions.next_prefixed_id:1233` + `store.tx:890` + `row.validate()` |
 | 10 | `POST /api/settings` | `toolchain.*` · `model.*` · `workspace.*` · `confirm=1` | `WriteResult`（**响应里 key 恒 `***`**） | W4 新增 `settings.write_settings(...)` |
 | 11 | `GET /api/stream` | `sid?` · `since?` | `text/event-stream`（C2） | W2 新增 `webui.sse` |
+| 12 | `GET /api/budget` | — | `BudgetView` | 2026-10-12 新增（业主：预算显示窗口）；`webui/readers.py` 的 `budget_face` —— 总额度读 `<工作区>/budget.json`（`budget.reading`），已花永远读 `usage_ledger`（`TokenMeter.spent/by_role/by_scope`）；三态：寄存器不在 ⇒ `not_applicable`、读不出来 ⇒ `unreadable` + `problem`（**不是**"不限量"）、账本读不出来 ⇒ `spent_tri="unreadable"` 且金额为 `null`（**不是 0**） |
+| 13 | `POST /api/budget` | `action=add\|set` · `usd` · `note?` · `by?` · `confirm=1` | `WriteResult`（`extra` 带 `total_usd` / `entry` / `added_count` / `history_lost`） | 2026-10-12 新增（业主：用户可追加预算）；`webui/writes.py:handle_budget` → `budget.add_usd` / `write_initial`。**运行期生效**：下一个花钱之前的闸门（`llmseam.budget_limit`）就现读到新上限 |
+| 14 | `GET /api/live` | — | `LiveView` | 2026-10-12 新增（业主：对多智能体系统的监控能力）；`webui/readers.py:live_face` —— 在飞的循环 + 活进程（`stopctl.running_loops` 两路判据）· 停机开关（`read_stop`）· 近几条停机/中断历史。行逐字透传 `stopctl` 的字典 |
+| 15 | `GET /api/usage` | — | `UsageView` | 2026-10-12 新增；`webui/readers.py:usage_face` —— `usage_ledger` 的汇总（总计 + 按角色 + 按归口 + 重试开销 + 最近 10 笔）；读不出来 ⇒ `unreadable`，**不折成 0** |
+| 16 | `GET /api/status-reports` | — | `StatusReportsView` | 2026-10-12 新增；`webui/readers.py:status_reports_face` —— `out/review/STATUS-<ts>.{md,json}` 最近 5 份（`statusreport` 一直在写、此前盘上没有读者） |
 
 > **对齐判据（§3-A）**：`api.ts` 里出现的路径字面量集合 **必须逐字等于** `routes.py` 的 `ROUTES` 里 `GET/POST` 的路径集合（`/api/*` 与 `/answer` 都算）。
 
@@ -82,11 +87,14 @@
 | 客户端路由 | 页面文件 | 用到的端点 | 用到的 SSE kind |
 |---|---|---|---|
 | `/` | `pages/Home.tsx` | 1 · 7 | `state` · `question` · `answered` |
-| `/run/:sid` | `pages/Run.tsx` | 1 · 2 · 8 | `state` · `checkpoint` · `stop` |
+| `/run/:sid` | `pages/Run.tsx` | 1 · 2 · 8 · 14 | `state` · `checkpoint` · `stop` |
 | `/evidence` | `pages/Evidence.tsx` | 3 | `state` |
 | `/artifacts` | `pages/Artifacts.tsx` | 4 | `state` |
 | `/acceptance` | `pages/Acceptance.tsx` | 5 | `state` |
 | `/machine` | `pages/Machine.tsx` | 6 · 10 | `state` |
+| `/budget` | `pages/Budget.tsx` | 12 · 13 | `state` |
+| `/live` | `pages/Live.tsx` | 14 · 15 · 16 | `state` |
+| `/help` | `pages/Help.tsx` | （不调端点：它讲的是用法） | `state` |
 
 > **对齐判据（§3-D）**：`main.tsx` 的路由字面量集合 == 本表的路由列；且每条路由用到的端点必须 ∈ C1、kind 必须 ∈ C2。
 

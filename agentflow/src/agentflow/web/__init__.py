@@ -10,7 +10,7 @@ CLI 够用，但「有一趟正停在等你回答」这件事，在终端里只�
 
 所以这一层只做两件事，且都不引入任何依赖：
 
-- :mod:`agentflow.webui` —— 标准库 `http.server` 上的本地服务：六个只读面 + 三条写端点（`/answer` / `/api/stop` / `/api/submit`，默认只读）+ 一条 SSE 流；
+- :mod:`agentflow.webui` —— 标准库 `http.server` 上的本地服务：十个只读面 + 五个写端点（`/answer` / `POST /api/stop` / `POST /api/submit` / `POST /api/settings` / `POST /api/budget`，默认只读）+ 一条 SSE 流；
 - :mod:`agentflow.web.assets` —— DSH 的令牌与控制台样式（照搬，MIT；我们自己的组件）。
 
 ## 设计依据与判据

@@ -5,11 +5,11 @@
  *
  * 1. 路径只在 ENDPOINTS 里写一次 —— `tests/test_webui_contracts.py` 的 A 条把
  *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对。
- *    后端有的（B 线六个只读面 + A 线的 /api/run-index + C 线既有的
- *    POST /answer + 题 T2-a 的 `/api/run/{sid}/events`）前端必须逐条声明；反过来，前端多写一个后端没有的端点也会红。
- *    `POST /api/stop` / `POST /api/submit` / `POST /api/settings`（契约 C1 第 8–10 行）
- *    属于 C 线 W3/W4，后端今天还没有那三条路由 —— 所以这里一条都不写：
- *    "前端声明了而后端没有"正是 A 条要抓的漂移。
+ *    后端有的（B 线那十个只读面 + A 线的 /api/run-index + C 线的
+ *    POST /answer / POST /api/stop / POST /api/submit / POST /api/settings /
+ *    POST /api/budget）前端必须逐条声明；反过来，前端多写一个后端没有的端点也会红。
+ *    （2026-10-12 更正：这段注释此前写着"stop/submit/settings 后端今天还没有那三条路由"——
+ *    它们早已落地，注释留在那里就是一处在说谎的路标。预算那两条与本条同一批落地。）
  * 2. 失败不许折成空读数：HTTP 非 2xx 与网络故障都抛 ApiError，三态走 `tri`
  *    （`unreadable` = 没查成），由页面渲染成 TriState。绝不返回空对象装作读到了。
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
@@ -17,13 +17,18 @@
 import type {
   AcceptanceView,
   ArtifactsView,
+  BudgetView,
   EvidenceView,
+  LiveView,
   MachineView,
   RunEventsView,
   RunIndexDrift,
   RunView,
   StateSnapshot,
+  StatusReportsView,
   Tri,
+  UsageView,
+  WriteResult,
 } from "./types";
 
 /**
@@ -45,6 +50,10 @@ export const ENDPOINTS = {
   stop: "/api/stop",
   submit: "/api/submit",
   settings: "/api/settings",
+  budget: "/api/budget",
+  live: "/api/live",
+  usage: "/api/usage",
+  statusReports: "/api/status-reports",
   stream: "/api/stream",
 } as const;
 
@@ -198,6 +207,47 @@ export interface WriteOutcome {
 }
 
 /**
+ * 叫停（`POST /api/stop`）：落一个跨进程停机开关；`force` 再连子孙进程一起杀。
+ *
+ * `confirm: "1"` 是后端的硬要求（缺它一律 400，盘上零改动）。**前端不许替用户默认填上**
+ * 真正的不可逆动作（`force`）——那是 `ConfirmButton` 的 `requireForce` 那一档。
+ */
+export async function postStop(opts: {
+  reason?: string;
+  force?: boolean;
+} = {}): Promise<WriteResult> {
+  const body: Record<string, string> = {
+    reason: opts.reason ?? "user",
+    confirm: "1",
+  };
+  if (opts.force === true) {
+    body.force = "1";
+  }
+  return await postJSON<WriteResult>(ENDPOINTS.stop, body);
+}
+
+/**
+ * 写机器级设置（`POST /api/settings`，本机页的「设置窗口」）。
+ *
+ * 表单键是 `段.键` 形状（`toolchain.lean_bin` / `model.api_key` / `workspace.projects_dir`），
+ * 这是后端 `writes.handle_settings` 逐字读的那一套。`confirm: "1"` 由后端当硬要求。
+ *
+ * key 只写不读（裁定 E1）：传进去的 `model.api_key` 会落盘，而回执里恒为 `***`。
+ * 空串表示"这一格不动"——后端 `settings.write_settings` 的口径是只写给了值的键。
+ */
+export async function postSettings(
+  values: Record<string, string>,
+): Promise<WriteResult> {
+  const body: Record<string, string> = { confirm: "1" };
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== "") {
+      body[key] = value;
+    }
+  }
+  return await postJSON<WriteResult>(ENDPOINTS.settings, body);
+}
+
+/**
  * 回答一个问题（`POST /answer`，C 线今天唯一已有的写路径）。
  *
  * 为什么不用 `postJSON`：这一批的 `/answer` 回的是 PRG（303 回首页），不是
@@ -237,7 +287,7 @@ export async function postAnswer(body: Record<string, string | string[]>): Promi
 /**
  * 页面用的那几个调用（每个读端点一个，返回的都是后端那一面的字典逐字）。
  *
- * 六页各自只调自己那一面：Home（以及每页的壳）读 `getState()`，Run 读 `getRun()`
+ * 九页各自只调自己那一面：Home（以及每页的壳）读 `getState()`，Run 读 `getRun()`
  * 与 `getRunIndex()`，Evidence / Artifacts / Acceptance / Machine 各读自己那一面。
  */
 export const api = {
@@ -256,4 +306,30 @@ export const api = {
     capUsd?: number | null;
   } = {}): Promise<AcceptanceView> => getJSON<AcceptanceView>(acceptancePath(opts)),
   getMachine: (): Promise<MachineView> => getJSON<MachineView>(ENDPOINTS.machine),
+  getBudget: (): Promise<BudgetView> => getJSON<BudgetView>(ENDPOINTS.budget),
+  getLive: (): Promise<LiveView> => getJSON<LiveView>(ENDPOINTS.live),
+  getUsage: (): Promise<UsageView> => getJSON<UsageView>(ENDPOINTS.usage),
+  getStatusReports: (): Promise<StatusReportsView> =>
+    getJSON<StatusReportsView>(ENDPOINTS.statusReports),
 };
+
+/**
+ * 追加一笔额度 / 重设总额（`POST /api/budget`，业主 2026-10-12 的预算窗口）。
+ *
+ * 与其它写端点同一条路：表单编码 + CSRF 头，回执是写面的统一形状 `WriteResult`。
+ * `confirm: "1"` 由后端当硬要求（缺它一律 400，盘上零改动）——前端不许替用户默认填上。
+ */
+export async function postBudget(body: {
+  action: "add" | "set";
+  usd: number;
+  note?: string;
+  by?: string;
+}): Promise<WriteResult> {
+  return await postJSON<WriteResult>(ENDPOINTS.budget, {
+    action: body.action,
+    usd: String(body.usd),
+    note: body.note ?? "",
+    by: body.by ?? "web",
+    confirm: "1",
+  });
+}

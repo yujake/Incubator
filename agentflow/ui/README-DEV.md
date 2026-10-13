@@ -1,14 +1,14 @@
 # ui/ —— 用户端前端工程（Preact + Vite）开发说明
 
-> 这份文件写给"要改这个前端的人"。设计口径（抄 DSH 的皮、六个页面各自读什么、两套三态词表）
-> 在 `../docs/USER-END-DSH-STYLE.md`（§1 皮 · §3 界面纪律 · **§3.1 六页逐栏**）；
+> 这份文件写给"要改这个前端的人"。设计口径（抄 DSH 的皮、九个页面各自读什么、两套三态词表）
+> 在 `../docs/USER-END-DSH-STYLE.md`（§1 皮 · §3 界面纪律 · **§3.1 九页逐栏**）；
 > 契约表（端点逐条 / 事件 6 个 kind / 字段 / 路由 / 组件 props）在
 > `../../draft/75-Web端伪代码（逐前端文件·互相对齐）.md` §1，**它是名字的唯一来源**
 > （题 T2-a 新加的那一条端点由主控落进 §1.1 的 C1 表）。
 
 ---
 
-## 1. 目录与文件清单（本机读数：19 个文件、4126 行）
+## 1. 目录与文件清单（本机读数：22 个文件、5128 行；2026-10-13 批 R69）
 
 ```text
 ui/
@@ -22,9 +22,9 @@ ui/
     main.tsx            # 挂载 + 客户端路由（ROUTES 是 C4 契约的前端一侧）+ 顶部导航
     api.ts              # ENDPOINTS（端点的唯一出口）+ 取数函数 + ApiError（三态）
     sse.ts              # KINDS（= 后端 EVENT_KINDS）+ EventSource 订阅 + ?since= 续传 + 降级轮询
-    live.tsx            # 全站只订阅一次 SSE；快照/连接态/version 分发给六页（useLive/useFace）
+    live.tsx            # 全站只订阅一次 SSE；快照/连接态/version 分发给九页（useLive/useFace）
     types.ts            # 生成物，勿手改（python -m agentflow.web.emit_types）
-    pages/              # 六个页面：Home Run Evidence Artifacts Machine Acceptance
+    pages/              # 九个页面：Home Run Evidence Artifacts Machine Acceptance Budget Live Help
     components/         # 六个组件：Badge Card ConfirmButton Money Table TriState
     theme/app.css       # 只用令牌（var(--dsw-*)），一个色值都不许写死
     theme/generated/theme.css   # 生成物，勿手改（python -m agentflow.web.emit_theme）

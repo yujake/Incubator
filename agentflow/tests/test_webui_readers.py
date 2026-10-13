@@ -728,8 +728,102 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     mach = R.machine_face(artifacts_ws)
     got["MachineView"] = set(mach)
     got["SettingsReading"] = set(mach["settings"])
+    # 2026-10-12 的四条新面（预算窗口与监控）：它们的顶层键在任何工作区上都在
+    # （寄存器缺席、账本为空、没有进程都只是三态里的另一档），所以进受核对名单时
+    # 必须有落脚点 —— 行一级的类型各自登记在 `UNCHECKED_TYPES` 里。
+    got["BudgetView"] = set(R.budget_face(artifacts_ws))
+    got["LiveView"] = set(R.live_face(artifacts_ws))
+    got["UsageView"] = set(R.usage_face(artifacts_ws))
+    got["StatusReportsView"] = set(R.status_reports_face(artifacts_ws))
     missing = [n for n in R.CHECKED_TYPES if n not in got]
     assert not missing, f"受核对名单里这些接口在夹具上没有读数：{missing}（登记该改）"
+
+
+# ====================================================================== 7 预算面
+def test_the_budget_face_is_three_state_and_never_folds_unreadable_into_zero(
+        tmp_path: pathlib.Path) -> None:
+    """判据（2026-10-12 的预算窗口）：寄存器三态 + 已花那一栏单独三态。
+
+    三件事一起钉（业主那句"运行消耗的钱从总预算里实时扣除"要的正是这三档分得开）：
+
+    1. 寄存器不在盘上 ⇒ `not_applicable` + `source="unlimited"`（还没设过，合法初态）；
+    2. 寄存器在 ⇒ 总额度来自它，而已花来自 `usage_ledger`（两处不同源）；
+    3. 寄存器坏掉 ⇒ `unreadable` + `problem` 原样带出，且总额度不许变成"不限量"
+       —— 这一档最贵：把"读不出来"读成"没有上限"会让一趟无上限地烧钱。
+    """
+    from agentflow import budget as B
+    from agentflow.store import Store
+
+    root = tmp_path / "ws"
+    Store(root).init()
+    empty = R.budget_face(root)
+    assert empty["tri"] == R.TRI_NOT_APPLICABLE, empty
+    assert empty["source"] == "unlimited" and empty["total_usd"] is None, empty
+    assert empty["spent_usd"] == 0.0, "账本是空的、但读得到 ⇒ 已花是 0，不是 unknown"
+
+    B.write_initial(root, 5.0, by="Yu")
+    got = R.budget_face(root)
+    assert got["tri"] == R.TRI_COMPUTED and got["total_usd"] == 5.0, got
+    assert got["source"] == "register" and got["remaining_usd"] == 5.0, got
+    assert [a["kind"] for a in got["added"]] == ["set"], got["added"]
+
+    (root / B.REGISTER_NAME).write_text("{ 这不是 JSON", encoding="utf-8")
+    broken = R.budget_face(root)
+    assert broken["tri"] == R.TRI_UNREADABLE and broken["problem"], broken
+    assert broken["total_usd"] is None and broken["source"] != "register", broken
+
+
+# ====================================================================== 8 在飞面
+def test_the_live_face_sees_a_started_but_unfinished_run(tmp_path: pathlib.Path) -> None:
+    """判据（监控）：起了没收到工的那一趟必须报出来，且"没有"与"没查成"分得开。
+
+    这一格是用户决定要不要叫停时唯一能看的东西，所以两档都要钉：
+    有一条只有 `agent_run_start` 的会话 ⇒ `answer="有"` 且那一趟在 `running` 里；
+    补上 `agent_run_end` ⇒ `answer="没有"`（不是仍然"有"）。
+    """
+    from agentflow.store import Store
+
+    root = tmp_path / "ws"
+    Store(root).init()
+    SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "在跑的那一趟",
+                     "ts": "2026-10-13T00:00:00+08:00"}, sid="s1")
+    got = R.live_face(root)
+    assert got["tri"] == R.TRI_COMPUTED, got
+    assert got["answer"] == "有", got
+    assert [r["role"] for r in got["running"]] == ["M"], got["running"]
+    assert got["switch_present"] is False, got
+
+    SS.append(root, {"kind": "agent_run_end", "role": "M", "stop_reason": "final"},
+              sid="s1")
+    after = R.live_face(root)
+    assert after["answer"] == "没有" and after["running"] == [], after
+
+
+# ====================================================================== 10 状态报告面
+def test_the_status_reports_face_lists_what_is_on_disk(tmp_path: pathlib.Path) -> None:
+    """判据：`out/review/STATUS-*.md` 有人读了（`statusreport` 写了没人读的那个缺口）。
+
+    没有报告时是 `not_applicable`（还没写过），不是"没查成"。
+    """
+    from agentflow.store import Store
+
+    root = tmp_path / "ws"
+    Store(root).init()
+    none = R.status_reports_face(root)
+    assert none["tri"] == R.TRI_NOT_APPLICABLE and none["reports"] == [], none
+
+    out = root / "out" / "review"
+    out.mkdir(parents=True, exist_ok=True)
+    # `newline="\n"`：不写它 Windows 上会把 \n 翻成 \r\n，于是"字节数"那一条断言
+    # 量的是平台的换行习惯，不是这一面的读数（实测就这么红过一次）。
+    (out / "STATUS-20261013-0200.md").write_text("# 状态\n", encoding="utf-8", newline="\n")
+    (out / "STATUS-20261013-0200.json").write_text("{}\n", encoding="utf-8", newline="\n")
+    got = R.status_reports_face(root)
+    assert got["tri"] == R.TRI_COMPUTED and got["count"] == 1, got
+    row = got["reports"][0]
+    assert row["ts"] == "20261013-0200", row
+    assert row["json_path"].endswith("STATUS-20261013-0200.json"), row
+    assert row["bytes"] == len("# 状态\n".encode("utf-8")), row
 
 
 def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
@@ -742,7 +836,10 @@ def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
     ours = {name for _m, _p, name in R.ROUTES}
     assert ours == {"handle_state", "handle_run_view", "handle_run_events",
                     "handle_evidence", "handle_artifacts", "handle_acceptance",
-                    "handle_machine", "handle_stream"}, ours
+                    "handle_machine", "handle_stream",
+                    # 2026-10-12（业主的预算窗口与监控）
+                    "handle_budget_view", "handle_live", "handle_usage",
+                    "handle_status_reports"}, ours
     for _m, path, name in R.ROUTES:
         assert path in routes.patterns(), f"{path} 没进总表"
         assert routes.handler_for(name) is not None, f"{name} 没有实现"

@@ -24,12 +24,14 @@
  * - 轮次之外的零散事件单独一栏，**不许并进 runs**（后台那条既有的判据
  *   `test_events_outside_a_run_never_become_a_run` 守的就是这件事）。
  *
- * 两处**如实标注的缺口**（不是我漏做）：停机状态与检索腿那两栏，`draft/74` 写的
- * 输入是 `GET /api/state` 的 `stop` 与 `search_requests` 两个键，而 `snapshot()`
- * 的顶层键是公开面对账钉住的 10 个（`temp/_verify_w0.py`），那两个键不在其中，
- * 今天也没有别的端点给它们 —— 所以那两栏渲染成 `not_applicable` 并写明原因。
+ * 两处缺口现在只剩一处（2026-10-12 更正）：**停机**那一栏已经接上了 ——
+ * 后端 `GET /api/live`（在飞面）给停机开关与历史、`POST /api/stop` 给按钮，
+ * 所以这一页的「停机」卡片是真能按的（写面没开时后端回 403，回执如实显示）。
+ * 仍然缺的是**检索腿**（`search_requests` 汇总）：`snapshot()` 的顶层键被公开面
+ * 对账钉住（10 个），要给它读数得新增一条只读端点 —— 那一栏照旧渲染
+ * `not_applicable` 并写明，不许自己编一个数。
  */
-import { api, whyOf } from "../api";
+import { api, postStop, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
@@ -234,6 +236,11 @@ export function Run(props: RunProps) {
   const live = useLive();
   const view = useFace(() => api.getRun(props.sid));
   const index = useFace(() => api.getRunIndex());
+  // 在飞面：这一页只用它的「停机开关」那一格（谁按的、按没按过）。
+  // 它是一个独立的 hook，所以必须在下面那些 early return **之前**调 ——
+  // hooks 的调用顺序是 React/Preact 的硬约束，放进分支里会当场炸。
+  const liveFace = useFace(() => api.getLive());
+  const [stopResult, setStopResult] = useState("");
 
   if (props.sid === "") {
     return (
@@ -479,35 +486,65 @@ export function Run(props: RunProps) {
       </Card>
 
       <Card
-        title="停机状态（缺口）"
+        title="停机"
         right={
-          <TriState
-            tri="not_applicable"
-            label="停机面"
-            reason="draft/74 说这一栏读 GET /api/state 的 stop 键，而 snapshot() 的顶层键被公开面对账钉住（10 个），没有它；今天也没有别的端点给停机读数"
-          />
+          liveFace.data === null ? null : (
+            <Badge
+              kind={liveFace.data.switch_present ? "badge-fail" : "badge-pass"}
+              text={liveFace.data.switch_present ? "盘上有停机开关" : "盘上没有停机开关"}
+            />
+          )
         }
       >
         <div class="readings">
-          叫停（`POST /api/stop`）属于 C 线 W3，后端今天没有这条路由 ⇒ 按钮点不动。
+          叫停的落点是一个跨进程开关（工作区 `runs/` 下那一份）：在飞的循环在下一个步检查点
+          读到它就收工，把已做过的事留在台账与会话记录里。这一页的按钮写的就是它；
+          「在飞」页能看到开关是谁按的、以及最近几条停机历史。
+          {liveFace.data === null
+            ? ""
+            : ` 现在盘上${liveFace.data.switch_present ? "有" : "没有"}停机开关。`}
         </div>
         <ConfirmButton
           action="叫停这一趟"
-          impact="会给工作区落一个停机开关，并请求正在跑的循环收尾"
-          onConfirm={() => undefined}
-          requireForce
-          disabled
-          note="写端点还没上线（C 线 W3）—— 点不动，也不假装成功"
+          impact="会给工作区落一个停机开关，并请求正在跑的循环在下一个检查点收尾"
+          onConfirm={() => {
+            postStop({ reason: "user" })
+              .then((got) => {
+                setStopResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
+                liveFace.reload();
+              })
+              .catch((exc: unknown) => {
+                setStopResult(`写请求失败：${whyOf(exc)}`);
+              });
+          }}
+          note="写面没开（`agentflow web --allow-writes`）时后端会回 403，回执如实显示"
         />
+        <ConfirmButton
+          action="强制停（连子孙进程）"
+          impact="先落停机开关，再按进程登记把在跑的循环连同子孙进程一起杀掉 —— 不可逆"
+          onConfirm={() => {
+            postStop({ reason: "user", force: true })
+              .then((got) => {
+                setStopResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
+                liveFace.reload();
+              })
+              .catch((exc: unknown) => {
+                setStopResult(`写请求失败：${whyOf(exc)}`);
+              });
+          }}
+          requireForce
+          note="不可逆：要勾选确认才允许按第二次"
+        />
+        {stopResult === "" ? null : <div class="readings">{stopResult}</div>}
       </Card>
 
       <Card
-        title="检索腿（缺口）"
+        title="检索腿（仍是缺口）"
         right={
           <TriState
             tri="not_applicable"
             label="search_requests"
-            reason="draft/74 说这一栏读 GET /api/state 的 search_requests 汇总，而 snapshot() 的顶层键被钉住，没有它；今天也没有别的端点给这一栏"
+            reason="要一条读 store.rows('search_requests') 的只读端点才有读数；今天还没有那条端点"
           />
         }
       >

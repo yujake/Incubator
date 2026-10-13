@@ -124,7 +124,7 @@ def test_the_write_endpoints_are_registered_in_this_line_s_own_subtable() -> Non
     而且 `routes.compose` 真的把它拼进了总表（不是"写了却没人看"）。
     """
     mine = {row[1]: row[2] for row in writes.ROUTES}
-    for path in ("/api/stop", "/api/submit", "/api/settings"):
+    for path in ("/api/stop", "/api/submit", "/api/settings", "/api/budget"):
         assert path in mine, f"writes.ROUTES 里没有 {path}：{writes.ROUTES}"
         assert mine[path] in routes.handler_names(), (path, mine[path])
         assert routes.handler_for(mine[path]) is not None, mine[path]
@@ -143,7 +143,7 @@ def test_the_handlers_are_callable_from_the_subtable_lookup() -> None:
     —— 名字写错时它会当场 500，而不是静默 404。
     """
     for path, name in (("/api/stop", "handle_stop"), ("/api/submit", "handle_submit"),
-                       ("/api/settings", "handle_settings")):
+                       ("/api/settings", "handle_settings"), ("/api/budget", "handle_budget")):
         assert writes.HANDLERS.get(name) is not None, (path, name, sorted(writes.HANDLERS))
         assert routes.handler_for(name) is writes.HANDLERS[name], name
 
@@ -395,6 +395,62 @@ def test_submit_rejects_bad_input_without_writing_anything(tmp_path: pathlib.Pat
                                 {"topic": "   ", "mode": "topical", "confirm": "1"})
         assert code2 == 400, code2
     assert Store(root).rows("search_requests") == [], "被拒的提交居然落了盘"
+
+
+# ====================================================================== /api/budget
+def test_the_budget_endpoint_appends_and_the_next_gate_sees_it(tmp_path: pathlib.Path) -> None:
+    """正控（/api/budget）：追加一笔落盘，而且下一个闸门就现读到新上限。
+
+    这一条钉的是业主那句"用户可追加预算"的机器形态：网页上点一下 ⇒ 落进
+    `<工作区>/budget.json` ⇒ `budget.limit_usd` 立刻变（不需要重启、不需要重跑）。
+    只判"回执 ok"是不够的 —— 回执 ok 而闸门读不到，那句话就是一句空话。
+    """
+    from agentflow import budget as B
+
+    root = _mk(tmp_path)
+    with _server(root) as base:
+        first, body1, _ct = _post(base, "/api/budget",
+                                  {"action": "set", "usd": "2", "confirm": "1", "by": "web"})
+        assert first == 200, (first, body1[:300])
+        code, body, ctype = _post(base, "/api/budget",
+                                  {"action": "add", "usd": "1.5", "note": "让它跑完",
+                                   "confirm": "1"})
+    got = _json_of(body)
+    assert code == 200 and got["ok"] is True, (code, got)
+    assert ctype.startswith("application/json"), ctype
+    assert got["tri"] == "computed", got
+    assert got["extra"]["total_usd"] == 3.5, got["extra"]
+    assert got["extra"]["entry"]["note"] == "让它跑完", got["extra"]
+    snap = B.reading(root, spent_usd=0.0)
+    assert snap["total_usd"] == 3.5, snap
+    assert [a["kind"] for a in snap["added"]] == ["set", "add"], snap["added"]
+    assert B.limit_usd(root, fallback=None) == 3.5, "闸门那一口现读不到新上限 ⇒ 追加是空话"
+
+
+def test_the_budget_endpoint_refuses_without_writes_or_confirmation(
+        tmp_path: pathlib.Path) -> None:
+    """拒绝档：没开写面 ⇒ 403；缺 `confirm=1` / `action` 不认 / `usd` 非数 ⇒ 400 且零写入。"""
+    from agentflow import budget as B
+
+    root = _mk(tmp_path)
+    with _server(root, allow_writes=False) as base:
+        code, body, _ct = _post(base, "/api/budget",
+                                {"action": "add", "usd": "1", "confirm": "1"})
+    assert code == 403 and _json_of(body)["ok"] is False, (code, body[:200])
+    with _server(root) as base:
+        for fields, why in (
+            ({"action": "add", "usd": "1"}, "缺 confirm"),
+            ({"action": "add", "usd": "1", "confirm": "1", "action": "eat"}, "不认的 action"),
+            ({"action": "add", "usd": "abc", "confirm": "1"}, "usd 非数"),
+            ({"action": "add", "confirm": "1"}, "usd 空"),
+        ):
+            code, body, _ct = _post(base, "/api/budget", fields)
+            assert code == 400, (why, code, body[:200])
+            assert _json_of(body)["ok"] is False, (why, body[:200])
+    assert not (root / B.REGISTER_NAME).exists(), "被拒的那几次不许在盘上留下寄存器"
+    # 审计照旧：每一次尝试（含被拒的）都留一行
+    rows = audit.read_actions(root)
+    assert len([r for r in rows if r.get("endpoint") == "/api/budget"]) >= 5, rows
 
 
 # ====================================================================== /answer

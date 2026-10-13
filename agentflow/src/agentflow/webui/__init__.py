@@ -32,14 +32,14 @@ CLI 够用，但「有一趟正停在等你回答」这件事在终端里只有�
 | 文件 | 职责 |
 |---|---|
 | `state.py` | 读模型：`snapshot()` 与它的内部件（语义与拆包前一字不改） |
-| `readers.py` | 六个只读面的读模型与端点（`/api/state` 起，各带三态头） |
+| `readers.py` | 十个只读面的读模型与端点（`/api/state` 起，各带三态头；2026-10-12 加了预算 / 在飞 / 用量 / 状态报告四条） |
 | `sse.py` | `GET /api/stream` 的广播器 + 写路径钩子（`attach`/`detach`） |
 | `writes.py` | 写路径：`answer()`（提交回答，走 `userio.answer_question`）与它的写面 |
 | `routes.py` | 路由表 `ROUTES`：`(method, path 模式, 处理器方法名)` |
 | `server.py` | `WebHandler` / `serve()` / `run()` + 静态路由 + SPA 外壳 + 错误页 |
 
 旧壳 `views.py` 已整件退场（裁定 P1 的最后一块，W5 清仓）：`/` 于 2026-10-07 先迁，
-`/run/{sid}` 随后也改成吐同一支外壳（六页面全部由 SPA 提供），于是那个文件里
+`/run/{sid}` 随后也改成吐同一支外壳（九页面全部由 SPA 提供），于是那个文件里
 九个函数一个都不剩 —— 服务器自己还写 HTML 的地方只剩 `server._error_page`
 （外壳不在盘上 / 静态未命中 / 写失败这三类诚实错误页）。
 

@@ -90,9 +90,9 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
   回答 `{id, selected:[…], custom:"…"}`；推荐项放首位、label 末尾写 `(Recommended)`
   ——推荐是一个**可读的事实**，不是默认选中的状态。实现见 `userio.Option` / `Question`。
 
-## §3.1 六个页面各自读什么（2026-10-07 W1 落地）
+## §3.1 九个页面各自读什么（2026-10-07 W1 落地；2026-10-13 加后三页）
 
-六个客户端路由对应六页（`ui/src/pages/*.tsx`），**每一页每一个栏位都能指到盘上的一行真数据**。
+九个客户端路由对应九页（`ui/src/pages/*.tsx`），**每一页每一个栏位都能指到盘上的一行真数据**。
 这张表就是那份对照（后端出处与逐栏字段的完整矩阵在 `../draft/74-前端×后端配合矩阵（按前端文件）.md` §3，
 这里给的是"读哪条端点、读哪几栏、空态与三态怎么办"）：
 
@@ -103,7 +103,17 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 | `/evidence` | `Evidence.tsx` | `GET /api/evidence` | `statements` · `conjectures`（含 `counterexample_experiment_id`）· `experiments` · `review_findings` · `relations.quote_verified`（真/假/未查三个数）· `verifications` · `secretary` | 每一栏各自的 `<栏>_tri == computed` 且 0 行 ⇒ "0 条（读到了，里面是空的）" | **逐栏**读 `<栏>_tri`（整面一个词会吞掉"哪一栏没读成"）；`quote_verified !== true` 必须连 `quote_reason` 一起看 |
 | `/artifacts` | `Artifacts.tsx` | `GET /api/artifacts` | `ledger` · `ledger_verify`（台账钉的 sha vs 盘上现在这一版）· `handoffs`（`body` 按 `CLIP=400` 截断）· `checks` · `style.sections` · `secretary` · `products`（六件，裁定 J2 的夹具样本）· `tasks` | 逐栏："台账 0 行（读到了，里面是空的）" | 逐栏 `<栏>_tri`；`products_tri == not_applicable` ⇒ "这一路本机还没跑过"，不是"六件都不在" |
 | `/acceptance` | `Acceptance.tsx` | `GET /api/acceptance`（`?project_dir=` `?report_path=` `?cap_usd=`） | `criteria`（5 条，值 `pass`/`fail`/`unknown`）· `details` · `auxiliary`（5 条）· `failed` · `auxiliary_note` | "一条判据都没读到"（判据名表来自 `reviewaccept.CRITERIA`，页面不另抄） | `unknown` 显成"没查成（不是通过）"；**不给 `cap_usd` ⇒「在成本上限内」那一格必为 `unknown`** |
-| `/machine` | `Machine.tsx` | `GET /api/machine` | `provers`（含 `checked` 与 `sources` —— "从哪一档找到的"）· `mathlib` · `lean_ready`/`can_do_formal` · `settings.path`/`exists`/三段 · `settings.model.configured`（**永无 key 值**） | "探测读数里一格都没有" | `provers.checked=false` ⇒ 整面 `unreadable`（探测没跑完 ≠ 一个都没找到）；`lean_ready`/`can_do_formal` 的 `null` 显 `unknown`，不折成 `false` |
+| `/machine` | `Machine.tsx` | `GET /api/machine` + `POST /api/settings` | `provers`（含 `checked` 与 `sources` —— "从哪一档找到的"）· `mathlib` · `lean_ready`/`can_do_formal` · `settings.path`/`exists`/三段 · `settings.model.configured`（**永无 key 值**）；写面：`toolchain.*` / `model.*` / `workspace.*` 逐格 + `confirm=1` | "探测读数里一格都没有" | `provers.checked=false` ⇒ 整面 `unreadable`（探测没跑完 ≠ 一个都没找到）；`lean_ready`/`can_do_formal` 的 `null` 显 `unknown`，不折成 `false`；写面 403（没开 `--allow-writes`）如实显示回执 |
+| `/budget` | `Budget.tsx` | `GET /api/budget` + `POST /api/budget` | `total_usd`/`spent_usd`/`remaining_usd`/`exceeded`/`source`/`problem` · `added[]`（`kind`/`usd`/`by`/`at`/`note`）· `by_role`/`by_scope` · `spent_tri`/`spent_reason`；写面：`action=add\|set` · `usd` · `note` · `confirm=1` | "还没有任何追加/重设记录（寄存器里 added[] 是空的）" | 寄存器缺席 ⇒ `not_applicable`（还没设过，不是"没查成"）；寄存器读不出来 ⇒ `unreadable` + `problem`，且**不许显示成"不限量"**；账本读不出来 ⇒ `spent_tri=unreadable` 且金额显示 `unknown`（**不是 $0.000000**）；`exceeded` 是读数不是错误 |
+| `/live` | `Live.tsx` | `GET /api/live` + `GET /api/status-reports` + `GET /api/usage` | `answer`/`running[]`/`live[]`/`unreadable_sessions`/`switch`/`switch_present`/`history[]`/`interrupts[]` · `reports[]`（`ts`/`name`/`bytes`/`json_path`）· `spent`/`by_role`/`by_scope`/`entries` | "会话面：没有在跑的循环（每一趟起过的都收到了工）" | `answer` 有三档字面量（"有" / "没有" / "没查成"）：读不出来时 **必须**显"没查成"——那一格正是用户决定要不要叫停时看的 |
+| `/help` | `Help.tsx` | （不调端点：说明页） | 角色分工 · 常用命令 · 预算 · Lean 开关 · 报错去哪看 | ——（没有读数，也就没有空态） | 不适用 |
+
+**后三页是业主 2026-10-12 那两条的落点**（「做预算设置和显示窗口，用户可追加预算」
+「特别照顾……对多智能体系统的监控能力」+「使用说明」）：`/budget` 是预算窗口，
+`/live` 是监控面，`/help` 是使用说明。三条读端点（`GET /api/budget` / `/api/live` /
+`/api/usage` / `/api/status-reports`）与两条写端点（`POST /api/budget` / `POST /api/settings`）
+从 2026-10-13 起是接线的一部分：`Run` 页原来的两处"缺口"（停机状态、活进程）随之接上，
+只剩"检索腿"（`search_requests` 汇总）仍是缺口。
 
 **逐条事件那一栏是补回来的（题 T2-a，所有者裁定，2026-10-08）**：旧壳 `/run/{sid}` 那张
 "逐条事件卡片"随 `views.py` 退场之后，`RunView` 只剩聚合读数（`runs[]` 的 `steps`/`llm_calls`/
@@ -120,14 +130,20 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 都投影到 `components/TriState.tsx` 的三种视觉态（`ok` / `unknown` / `na`），映射只有那一处
 （`visualOf()`）；页面里不许把一个词表的值当另一个用。
 
-**五处如实标注的缺口（页面显 `not_applicable` + 原因，不编数）**：`draft/74 §3` 的矩阵里有五栏
-写的输入在今天的后端**不存在** —— 停机状态（`GET /api/state` 的 `stop`）与检索腿
-（`search_requests` 汇总）都在 `snapshot()` 被公开面对账钉住的 10 个顶层键之外；文献库
-（`library`）不在 `ArtifactsView` 里；"与工具面同源"（`conductor.closing` 的 `review_acceptance` 子树）
-与"污染面"不在 `AcceptanceView` 里。它们要各加一条只读端点才能给读数 —— 本批没有加，
-页面把这件事写在卡片上，而不是显示一个 0。
+**如实标注的缺口（页面显 `not_applicable` + 原因，不编数）**：`draft/74 §3` 的矩阵里有几栏
+写的输入在今天的后端**不存在**。2026-10-13 的实况是**五处里接上了三处**：
 
-**六页面全部由 SPA 提供（裁定 P1 走完了，2026-10-08）**：`GET /` 与 `GET /index.html`
+- 停机状态与活着的 loop / 进程：**已接上** —— `GET /api/live`（在飞面）给停机开关、
+  停机/中断历史、`running_loops` 的两路判据；`Run` 页的停机卡片与 `Machine` 页的
+  "停机 / 进程"卡片都改成真读数/指路（不再是 `not_applicable`）；
+- 检索腿（`search_requests` 汇总）：**仍是缺口**（要一条读 `store.rows("search_requests")`
+  的只读端点）；
+- 文献库（`library`）不在 `ArtifactsView` 里、"与工具面同源"（`conductor.closing` 的
+  `review_acceptance` 子树）与"污染面"不在 `AcceptanceView` 里：**仍是缺口**。
+
+缺口那一档的处置没变：页面把这件事写在卡片上（指名"要加哪一条端点"），而不是显示一个 0。
+
+**九页面全部由 SPA 提供（裁定 P1 走完了，2026-10-08；后三页 2026-10-13）**：`GET /` 与 `GET /index.html`
 （第一块，2026-10-07）与 `GET /run/{sid}`（最后一块，W5 清仓）今天都吐同一支
 `web/static/index.html`（+ 注入本进程的 CSRF 占位符）—— 三条路（含"未知路径但要 HTML"的回退）
 共用 `server._serve_spa_shell()` 这一份实现，谁都不许再写第二份注入。

@@ -601,6 +601,15 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
         out["SettingsReading"] = set(mac["settings"])
     out.setdefault("MachineView", set(mac))
 
+    # ---- 2026-10-12 的四条新面（预算窗口与监控）
+    # 与上面六面同一条口径：让后端那一侧真的去读，`CHECKED_TYPES` 里那四个顶层接口
+    # 才有落脚点。它们的行一级类型登记在 `UNCHECKED_TYPES`（夹具上恒为空数组），
+    # 所以这里刻意不 `_take` 那些行 —— 登记与读数是同一件事的两面。
+    out["BudgetView"] = set(RD.budget_face(root))
+    out["LiveView"] = set(RD.live_face(root))
+    out["UsageView"] = set(RD.usage_face(root))
+    out["StatusReportsView"] = set(RD.status_reports_face(root))
+
     acc = RD.acceptance_face(root)
     out.setdefault("AcceptanceView", set(acc))
     return out
@@ -1021,11 +1030,22 @@ def test_the_switches_are_bound_on_the_server_and_readable(tmp_path: pathlib.Pat
 
 
 def test_the_route_table_is_the_single_source_for_dispatch() -> None:
-    """反真空（A 的前提）：`ROUTES` 覆盖了今天真有的每一条路由，且没有重复登记。"""
+    """反真空（A 的前提）：`ROUTES` 覆盖了今天真有的每一条路由，且没有重复登记。
+
+    2026-10-12 改口径：重复的判据从"路径不许重复"改成 `(method, path)` 不许重复。
+    理由是一条真路由：`GET /api/budget`（读预算）与 `POST /api/budget`（追加额度）
+    是同一条路径上的两种动作 —— REST 里这是常态，而旧口径会把一次正确的登记
+    判成重复。真正要抓的形态是"同一个 (方法, 路径) 登记了两遍"（那会让 `match()`
+    的后一条永远不可达），所以判据按那个形态写。
+    """
     paths = routes.patterns()
-    assert len(paths) == len(set(paths)), f"ROUTES 里有重复的路径模式：{paths}"
+    pairs = [(m, p) for m, p, _h in routes.ROUTES]
+    assert len(pairs) == len(set(pairs)), f"ROUTES 里有重复的 (方法, 路径)：{pairs}"
     for must in ("/", "/api/state", "/run/{sid}", "/static/{file...}", "/answer"):
         assert must in paths, f"ROUTES 里缺 {must}：{paths}"
+    # 反真空：上面那条放宽不许变成"什么都不查"—— 真重复一个 (方法, 路径) 必须红。
+    dup = pairs + [pairs[0]]
+    assert len(dup) != len(set(dup)), "重复 (方法, 路径) 的负控失效了"
     assert routes.match("GET", "/api/state") is not None
     assert routes.match("POST", "/answer") is not None
     assert routes.match("POST", "/api/state") is None, "方法不匹配时不许命中"

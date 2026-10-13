@@ -318,6 +318,94 @@ export interface MachineView {
   settings_reason: string;
 }
 
+/** 出处：budget.reading() 的 `added[]` 一行（`budget._write` 写进寄存器的那一笔）。 */
+export interface BudgetEntry {
+  kind: string;
+  usd: number;
+  by: string;
+  at: string;
+  note: string;
+}
+
+/** 出处：budget_face() —— 总额度（寄存器）+ 已花（`usage_ledger`）与两个归口。 */
+export interface BudgetView {
+  tri: Tri;
+  reason: string;
+  path: string;
+  exists: boolean;
+  source: string;
+  total_usd: number | null;
+  spent_usd: number | null;
+  remaining_usd: number | null;
+  exceeded: boolean;
+  added: BudgetEntry[];
+  problem: string;
+  spent_tri: Tri;
+  spent_reason: string;
+  entries: number | null;
+  tokens: number | null;
+  attempts: number | null;
+  added_count: number;
+  by_role: Record<string, UsageBucket>;
+  by_scope: Record<string, UsageBucket>;
+}
+
+/** 出处：tokenmeter.by_role() / by_scope() 的一格（`{tokens, usd, entries, attempts[, roles]}`）。 */
+export interface UsageBucket {
+  tokens: number;
+  usd: number;
+  entries: number;
+  attempts: number;
+  roles?: Record<string, number>;
+}
+
+/** 出处：live_face() —— 在飞的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）。 */
+export interface LiveView {
+  tri: Tri;
+  reason: string;
+  root: string;
+  answer: string;
+  running: Array<Record<string, unknown>>;
+  live: Array<Record<string, unknown>>;
+  unreadable_sessions: string[];
+  switch: Record<string, unknown>;
+  switch_present: boolean;
+  history: Array<Record<string, unknown>>;
+  interrupts: Array<Record<string, unknown>>;
+}
+
+/** 出处：usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）。 */
+export interface UsageView {
+  tri: Tri;
+  reason: string;
+  path: string;
+  entries: number | null;
+  spent: Record<string, unknown>;
+  by_role: Record<string, UsageBucket>;
+  by_scope: Record<string, UsageBucket>;
+  retry_overhead: Record<string, unknown>;
+  recent: Array<Record<string, unknown>>;
+}
+
+/** 出处：status_reports_face() 的一行 —— `out/review/STATUS-<ts>.{md,json}` 的一份。 */
+export interface StatusReportRow {
+  name: string;
+  stem: string;
+  path: string;
+  json_path: string;
+  bytes: number | null;
+  ts: string;
+}
+
+/** 出处：status_reports_face() —— 状态报告最近几份（`statusreport` 写了没人读的那个缺口）。 */
+export interface StatusReportsView {
+  tri: Tri;
+  reason: string;
+  dir: string;
+  count: number | null;
+  reports: StatusReportRow[];
+}
+
 /** 出处：store.rows("statements")（无真机样本 ⇒ 权威来源是 `schema.Statement`）。 */
 export interface StatementRow {
   stmt_id: string;

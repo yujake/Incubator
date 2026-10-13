@@ -119,6 +119,12 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/artifacts", "handle_artifacts"),
     ("GET", "/api/acceptance", "handle_acceptance"),
     ("GET", "/api/machine", "handle_machine"),
+    # 业主 2026-10-12 的两条：预算窗口（②）与多智能体监控（①）。
+    # 它们与六个面同族（读盘现算、三态、不缓存），所以落在同一张子表里。
+    ("GET", "/api/budget", "handle_budget_view"),
+    ("GET", "/api/live", "handle_live"),
+    ("GET", "/api/usage", "handle_usage"),
+    ("GET", "/api/status-reports", "handle_status_reports"),
     # 真身在 `webui/sse.py`（`GET /api/stream` 的推送流）。
     ("GET", "/api/stream", "handle_stream"),
 )
@@ -144,6 +150,10 @@ CHECKED_TYPES: tuple[str, ...] = (
     "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
+    # 2026-10-12（业主的预算窗口与监控）：这四面的顶层键在任何工作区上都在
+    # （寄存器缺席、账本为空、没有进程都只是三态里的另一档，不是"读不出键"），
+    # 所以它们进受核对名单；行一级的类型见 `UNCHECKED_TYPES` 的理由。
+    "BudgetView", "LiveView", "UsageView", "StatusReportsView",
 )
 
 #: 声明了、但夹具上还读不出键的接口（`{接口名: 理由}`）。判据不许它们同时出现在
@@ -158,6 +168,15 @@ UNCHECKED_TYPES: dict[str, str] = {
     "UsageRow": "夹具没有造 usage_ledger 行（真机 p9b/data/usage_ledger.json 有 37 行，"
                 "但那是运行数据面、不入库）",
     "SearchRequestRow": "夹具没有造 search_requests 行（同上）",
+    # 2026-10-12 三条：它们的行是运行期数据，夹具上恒为空数组。
+    # 三态纪律在这里的落点与 `UsageRow` 同一条：没有读数就登记"为什么没有"，
+    # 不是把接口从 types.ts 里删掉假装不存在。
+    "BudgetEntry": "夹具没有预算寄存器（`budget.json` 由用户设过一次才有）"
+                   "⇒ `added[]` 是空数组，行形状以 `budget._write` 为准",
+    "UsageBucket": "夹具的 `usage_ledger` 是空的（真机 T2 那本有几十行）"
+                   "⇒ 两个归口的格子读不出来，形状以 `tokenmeter.by_role/by_scope` 为准",
+    "StatusReportRow": "夹具没有 `out/review/STATUS-*`（那是跑过一趟之后才写的）"
+                       "⇒ `reports[]` 是空数组，形状以 `statusreport.status_report_paths` 为准",
 }
 
 #: 契约判据 D 的例外面：本模块声明、但后端还没落地的端点（`{端点: 理由}`）。
@@ -997,6 +1016,181 @@ def machine_face(root: str | Path = "", *, env: Mapping[str, str] | None = None)
     return out
 
 
+# ====================================================================== 7 预算
+def budget_face(root: str | Path) -> dict[str, Any]:
+    """`GET /api/budget` 的读模型：总额度 / 已花 / 剩余 / 追加历史 + 两个归口。
+
+    两件事刻意来自两个地方（`budget` 模块的 docstring 逐字）：
+
+    - 总额度来自盘上的寄存器（`<工作区>/budget.json`，`budget.reading`）；
+    - 已花永远来自 `usage_ledger`（`TokenMeter.spent()`/`by_role()`/`by_scope()`）——
+      寄存器里不记花销，两处记账必然漂移。
+
+    三态：账本读不出来 ⇒ `spent_tri="unreadable"` 且 `spent_usd=None`
+    （不是 0 —— "没查成"与"一分钱没花"在本仓是两个词）；寄存器读不出来
+    ⇒ `tri="unreadable"` + `problem` 原样带出（`budget.reading` 那一档已经这么做了，
+    这一层只透传，不二次判断）。寄存器不在盘上 ⇒ `not_applicable`（还没设过预算，
+    合法初态），而不是"没查成"。
+    """
+    from .. import budget as B
+    from ..store import Store
+    from ..tokenmeter import TokenMeter
+
+    root_p = Path(str(root))
+    spent: dict[str, Any] = {}
+    by_role: dict[str, Any] = {}
+    by_scope: dict[str, Any] = {}
+    spent_problem = ""
+    try:
+        meter = TokenMeter(Store(root_p))
+        spent = dict(meter.spent() or {})
+        by_role = dict(meter.by_role() or {})
+        by_scope = dict(meter.by_scope() or {})
+    except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
+        spent_problem = (f"usage_ledger 读不出来：{type(exc).__name__}: {exc}"
+                         "（已花那一栏记「没查成」，不记 0）")
+    snap = B.reading(root_p,
+                     spent_usd=(float(spent["usd"]) if spent else None))
+    snap.update({
+        "spent_tri": TRI_UNREADABLE if spent_problem else TRI_COMPUTED,
+        "spent_reason": spent_problem,
+        "entries": int(spent.get("entries") or 0) if spent else None,
+        "tokens": int(spent.get("tokens") or 0) if spent else None,
+        "attempts": int(spent.get("attempts") or 0) if spent else None,
+        "added_count": len(snap.get("added") or []),
+        "by_role": by_role,
+        "by_scope": by_scope,
+    })
+    if spent_problem and snap.get("tri") != TRI_UNREADABLE:
+        snap["tri"] = TRI_UNREADABLE
+        snap["reason"] = "；".join(x for x in (str(snap.get("reason") or ""),
+                                               spent_problem) if x)
+    return snap
+
+
+# ====================================================================== 8 在飞
+def live_face(root: str | Path) -> dict[str, Any]:
+    """`GET /api/live` 的读模型：在飞的循环 + 活进程 + 停机开关 + 近几条停机历史。
+
+    为什么这三样在一格里（业主 2026-10-12：「特别照顾……对多智能体系统的监控能力」）：
+    用户问"现在到底还有没有人在跑"时，`running_loops` 的会话面与 `live_pids` 的
+    进程面缺一路都会漏（那边 docstring 逐字写了两个方向的漏法），而停机开关是
+    "我按过停没有/谁按的"的唯一盘上事实 —— 三者分开成三条端点，页面就得自己拼，
+    拼错的那一版会把"有进程在跑"显示成"没事"。
+
+    行一律用 `stopctl` 自己的字典逐字透传（`running` / `live` / 历史行）：
+    在这一层再抄一份字段表就是第二份形状定义，必然与那边漂移。
+    """
+    from .. import stopctl as SC
+
+    root_p = Path(str(root))
+    problems: list[str] = []
+    loops: dict[str, Any] = {"running": [], "live": [], "unreadable_sessions": [],
+                             "answer": "没查成"}
+    try:
+        got = SC.running_loops(root_p)
+        loops = dict(got) if isinstance(got, Mapping) else loops
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"stopctl.running_loops 读不出来：{type(exc).__name__}: {exc}")
+    switch: dict[str, Any] = {}
+    try:
+        got_switch = SC.read_stop(root_p)
+        switch = dict(got_switch) if isinstance(got_switch, Mapping) else {}
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"stopctl.read_stop 读不出来：{type(exc).__name__}: {exc}")
+    history: list[dict[str, Any]] = []
+    try:
+        history = [dict(r) for r in SC.stop_history(root_p, limit=5)]
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"stopctl.stop_history 读不出来：{type(exc).__name__}: {exc}")
+    interrupts: list[dict[str, Any]] = []
+    try:
+        interrupts = [dict(r) for r in SC.interrupt_history(root_p, limit=5)]
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"stopctl.interrupt_history 读不出来：{type(exc).__name__}: {exc}")
+    return {
+        "tri": TRI_UNREADABLE if problems else TRI_COMPUTED,
+        "reason": "；".join(problems),
+        "root": str(root_p),
+        "answer": str(loops.get("answer") or ""),
+        "running": list(loops.get("running") or []),
+        "live": list(loops.get("live") or []),
+        "unreadable_sessions": list(loops.get("unreadable_sessions") or []),
+        "switch": switch,
+        "switch_present": bool(switch.get("present") or switch.get("path")),
+        "history": history,
+        "interrupts": interrupts,
+    }
+
+
+# ====================================================================== 9 用量
+def usage_face(root: str | Path) -> dict[str, Any]:
+    """`GET /api/usage` 的读模型：`usage_ledger` 的汇总（总计 + 两个归口 + 最近几笔）。
+
+    「最近几笔」按文件顺序取尾部（`usage_ledger` 是 append-only 的 JSON 表）——
+    不排序、不猜时间戳：那一列的名字由 `schema.UsageEntry` 定，这一层不改口径。
+    """
+    from ..store import Store
+    from ..tokenmeter import TokenMeter
+
+    root_p = Path(str(root))
+    try:
+        meter = TokenMeter(Store(root_p))
+        rows = Store(root_p).rows("usage_ledger")
+        recent = [dict(r) for r in rows[-10:]]
+        return {
+            "tri": TRI_COMPUTED, "reason": "",
+            "path": str(root_p / "data" / "usage_ledger.json"),
+            "entries": len(rows),
+            "spent": dict(meter.spent() or {}),
+            "by_role": dict(meter.by_role() or {}),
+            "by_scope": dict(meter.by_scope() or {}),
+            "retry_overhead": dict(meter.retry_overhead() or {}),
+            "recent": recent,
+        }
+    except Exception as exc:  # noqa: BLE001 - 读不到就是没查成，不许折成 0
+        return {"tri": TRI_UNREADABLE,
+                "reason": f"usage_ledger 读不出来：{type(exc).__name__}: {exc}",
+                "path": str(root_p / "data" / "usage_ledger.json"),
+                "entries": None, "spent": {}, "by_role": {}, "by_scope": {},
+                "retry_overhead": {}, "recent": []}
+
+
+# ====================================================================== 10 状态报告
+def status_reports_face(root: str | Path) -> dict[str, Any]:
+    """`GET /api/status-reports` 的读模型：`out/review/STATUS-*.md|json` 最近几份。
+
+    这一条补的是一个真缺口（`draft/112` §4.2 第 3 条）：`statusreport` 一直在写
+    `STATUS-<ts>.{md,json}`，而盘上没有任何消费者 —— 写了没人读，等于没写。
+    """
+    root_p = Path(str(root))
+    out_dir = root_p / "out" / "review"
+    try:
+        mds = sorted(out_dir.glob("STATUS-*.md"))
+        jsons = {p.stem: p for p in out_dir.glob("STATUS-*.json")}
+    except OSError as exc:
+        return {"tri": TRI_UNREADABLE, "reason": f"读 {out_dir} 失败：{exc}",
+                "dir": str(out_dir), "count": None, "reports": []}
+    reports: list[dict[str, Any]] = []
+    for md in mds[-5:]:
+        stem = md.stem
+        js = jsons.get(stem)
+        row: dict[str, Any] = {
+            "name": md.name, "stem": stem, "path": str(md),
+            "json_path": str(js) if js is not None else "",
+            "bytes": None, "ts": "",
+        }
+        try:
+            row["bytes"] = md.stat().st_size
+        except OSError:
+            row["bytes"] = None
+        row["ts"] = stem[len("STATUS-"):] if stem.startswith("STATUS-") else stem
+        reports.append(row)
+    return {"tri": TRI_COMPUTED if reports else TRI_NOT_APPLICABLE,
+            "reason": "" if reports else "out/review 下还没有 STATUS-* 报告（还没写过）",
+            "dir": str(out_dir), "count": len(mds), "reports": reports}
+
+
 # ====================================================================== HTTP 外壳
 def _json_of(handler: Any, obj: Any) -> None:
     """按 `WebHandler._json` 的形态回一份 JSON（A 线的那个方法在这里被复用）。"""
@@ -1128,6 +1322,41 @@ def handle_machine(handler: Any, params: Mapping[str, str],
     _json_of(handler, machine_face(handler.root))
 
 
+def handle_budget_view(handler: Any, params: Mapping[str, str],
+                       query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/budget`：预算读数（总额度 / 已花 / 剩余 / 追加历史）。
+
+    名字末尾那个 view 后缀不是装饰（2026-10-12 判据当场抓到的）：写面 `writes.py` 里
+    也有一个同名的 `handle_budget`（`POST /api/budget`，追加额度），而
+    `routes.handler_for` 是按名字在三条子表里找处理器的 —— 两个模块用同一个
+    名字时，先被查到的那个（readers）会吃掉写请求：实测 `POST /api/budget` 回了
+    一份读数的 JSON 和 200，`--allow-writes` 那一道闸门一步都没走。
+    """
+    del params, query
+    _json_of(handler, budget_face(handler.root))
+
+
+def handle_live(handler: Any, params: Mapping[str, str],
+                query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/live`：在飞的循环 / 活进程 / 停机开关与历史。"""
+    del params, query
+    _json_of(handler, live_face(handler.root))
+
+
+def handle_usage(handler: Any, params: Mapping[str, str],
+                 query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/usage`：用量台账的汇总（总计 + 按角色 + 按归口 + 最近几笔）。"""
+    del params, query
+    _json_of(handler, usage_face(handler.root))
+
+
+def handle_status_reports(handler: Any, params: Mapping[str, str],
+                          query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/status-reports`：`out/review/STATUS-*` 最近几份。"""
+    del params, query
+    _json_of(handler, status_reports_face(handler.root))
+
+
 # ====================================================================== 类型声明
 # 前端唯一类型来源（`ui/src/types.ts`）由 `agentflow/web/emit_types.py` 生成，它把三条
 # 零交线各自的 `type_decls()` 拼起来（`draft/78 §3`）。本模块这一份是六个只读面。
@@ -1224,6 +1453,50 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("mathlib", "Record<string, unknown>"), ("can_do_formal", "boolean | null"),
       ("settings", "SettingsReading"), ("settings_tri", "Tri"),
       ("settings_reason", "string"))),
+    ("BudgetEntry",
+     "budget.reading() 的 `added[]` 一行（`budget._write` 写进寄存器的那一笔）",
+     (("kind", "string"), ("usd", "number"), ("by", "string"), ("at", "string"),
+      ("note", "string"))),
+    ("BudgetView",
+     "budget_face() —— 总额度（寄存器）+ 已花（`usage_ledger`）与两个归口",
+     (("tri", "Tri"), ("reason", "string"), ("path", "string"), ("exists", "boolean"),
+      ("source", "string"), ("total_usd", "number | null"),
+      ("spent_usd", "number | null"), ("remaining_usd", "number | null"),
+      ("exceeded", "boolean"), ("added", "BudgetEntry[]"), ("problem", "string"),
+      ("spent_tri", "Tri"), ("spent_reason", "string"),
+      ("entries", "number | null"), ("tokens", "number | null"),
+      ("attempts", "number | null"), ("added_count", "number"),
+      ("by_role", "Record<string, UsageBucket>"),
+      ("by_scope", "Record<string, UsageBucket>"))),
+    ("UsageBucket",
+     "tokenmeter.by_role() / by_scope() 的一格（`{tokens, usd, entries, attempts[, roles]}`）",
+     (("tokens", "number"), ("usd", "number"), ("entries", "number"),
+      ("attempts", "number"), ("roles?", "Record<string, number>"))),
+    ("LiveView",
+     "live_face() —— 在飞的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）",
+     (("tri", "Tri"), ("reason", "string"), ("root", "string"), ("answer", "string"),
+      ("running", "Array<Record<string, unknown>>"),
+      ("live", "Array<Record<string, unknown>>"),
+      ("unreadable_sessions", "string[]"),
+      ("switch", "Record<string, unknown>"), ("switch_present", "boolean"),
+      ("history", "Array<Record<string, unknown>>"),
+      ("interrupts", "Array<Record<string, unknown>>"))),
+    ("UsageView",
+     "usage_face() —— usage_ledger 的汇总（总计 + 两个归口 + 重试开销 + 最近几笔）",
+     (("tri", "Tri"), ("reason", "string"), ("path", "string"),
+      ("entries", "number | null"), ("spent", "Record<string, unknown>"),
+      ("by_role", "Record<string, UsageBucket>"),
+      ("by_scope", "Record<string, UsageBucket>"),
+      ("retry_overhead", "Record<string, unknown>"),
+      ("recent", "Array<Record<string, unknown>>"))),
+    ("StatusReportRow",
+     "status_reports_face() 的一行 —— `out/review/STATUS-<ts>.{md,json}` 的一份",
+     (("name", "string"), ("stem", "string"), ("path", "string"),
+      ("json_path", "string"), ("bytes", "number | null"), ("ts", "string"))),
+    ("StatusReportsView",
+     "status_reports_face() —— 状态报告最近几份（`statusreport` 写了没人读的那个缺口）",
+     (("tri", "Tri"), ("reason", "string"), ("dir", "string"),
+      ("count", "number | null"), ("reports", "StatusReportRow[]"))),
     ("StatementRow",
      "store.rows(\"statements\")（无真机样本 ⇒ 权威来源是 `schema.Statement`）",
      (("stmt_id", "string"), ("origin", "string"), ("kind", "string"),
@@ -1405,4 +1678,8 @@ HANDLERS.update({
     "handle_artifacts": handle_artifacts,
     "handle_acceptance": handle_acceptance,
     "handle_machine": handle_machine,
+    "handle_budget_view": handle_budget_view,
+    "handle_live": handle_live,
+    "handle_usage": handle_usage,
+    "handle_status_reports": handle_status_reports,
 })

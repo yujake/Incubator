@@ -51,7 +51,7 @@ from agentflow.webui import routes
 REPO = pathlib.Path(__file__).resolve().parents[1]
 UI_SRC = REPO / "ui" / "src"
 
-#: 六页的文件名 → 那一页那条（或那几条）端点。
+#: 九页的文件名 → 那一页那条（或那几条）端点（2026-10-12：业主的预算窗口与监控加了后三页）。
 PAGES: dict[str, tuple[str, ...]] = {
     "Home": ("/api/state",),
     "Run": ("/api/run/{sid}", "/api/run-index"),
@@ -59,6 +59,11 @@ PAGES: dict[str, tuple[str, ...]] = {
     "Artifacts": ("/api/artifacts",),
     "Acceptance": ("/api/acceptance",),
     "Machine": ("/api/machine",),
+    "Budget": ("/api/budget",),
+    "Live": ("/api/live", "/api/status-reports", "/api/usage"),
+    # Help 页刻意不调端点：它讲的是"其余几页各自在看什么、要动手时该做什么"。
+    # 这一格空着是声明，不是漏登记 —— 下面那条正控会把空元组也照常核一遍。
+    "Help": (),
 }
 
 #: 每页必须读到的键（逐字对着 `draft/74 §3` 那一页的行；写错一个就红）。
@@ -67,10 +72,11 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
              "ledger", "tables_note", "waiting_on"),
     # Run 那一页后半段十条是题 T2-a 的逐条事件（`api.getRunEvents` 那一块）：
     # 端点与类型由契约 A/C 钉，这里钉的是"页面真的读了它"。
+    # 2026-10-12 追加 `switch_present`：停机那一栏接上了 `/api/live`（它是那一面的键）。
     "Run": ("runs", "report", "checkpoint", "unknown_usd", "drift", "usable",
             "orphans", "stop_reason", "spend", "events_in_run",
             "events", "total", "from_index", "to_index", "truncated",
-            "index", "kind", "ts", "shape", "ok", "usd"),
+            "index", "kind", "ts", "shape", "ok", "usd", "switch_present"),
     "Evidence": ("statements", "conjectures", "experiments", "review_findings",
                  "relations", "verifications", "secretary", "quote_verified",
                  "counterexample_experiment_id"),
@@ -79,6 +85,14 @@ PAGE_KEYS: dict[str, tuple[str, ...]] = {
     "Acceptance": ("criteria", "auxiliary", "details", "failed", "capUsd"),
     "Machine": ("provers", "mathlib", "lean_ready", "can_do_formal", "settings",
                 "configured"),
+    # 三页新的（2026-10-12）：各钉住"这一页真的读了那一面的哪几栏"。
+    "Budget": ("total_usd", "spent_usd", "remaining_usd", "exceeded", "source",
+               "added", "added_count", "by_role", "by_scope", "spent_tri",
+               "spent_reason", "problem", "entries", "tokens"),
+    "Live": ("answer", "running", "live", "unreadable_sessions", "switch_present",
+             "switch", "history", "interrupts", "reports", "count", "dir",
+             "spent"),
+    "Help": (),
 }
 
 #: 逐条事件那一块必须写死的那句话（题 T2-a 的三态纪律：`unreadable` 不许渲染成
@@ -94,6 +108,10 @@ EMPTY_WORDS: dict[str, str] = {
     "Artifacts": "台账 0 行（读到了，里面是空的",
     "Acceptance": "一条判据都没读到",
     "Machine": "探测读数里一格都没有",
+    "Budget": "还没有任何追加/重设记录",
+    "Live": "会话面：没有在跑的循环",
+    # Help 页没有读数，也就没有空态文案（那一格对它不适用）。
+    "Help": "",
 }
 
 #: 每页必须把三态交给组件的证据：`TriState` 这个标识符必须出现在页面源码里。
@@ -600,18 +618,24 @@ def test_machine_negative_control_catches_a_page_that_drops_the_source_column() 
 
 # ====================================================================== 反真空
 def test_every_page_is_registered_and_every_page_source_exists() -> None:
-    """反真空：六页都在这一组里，源码都在盘上，而且每页都用了 TriState。
+    """反真空：九页都在这一组里，源码都在盘上，而且每页都用了 TriState。
 
-    没有这一条，"页面改名/被删"会让上面六条以 skip 的形态静默变绿 —— 绿得毫无内容。
+    没有这一条，"页面改名/被删"会让上面几条以 skip 的形态静默变绿 —— 绿得毫无内容。
+    2026-10-12：`Help` 页刻意不调端点（它是说明页），但"在盘上 + 不自己 fetch"
+    这两条照旧核 —— 空端点表是声明，不是免检。
     """
-    expected = {"Home", "Run", "Evidence", "Artifacts", "Acceptance", "Machine"}
+    expected = {"Home", "Run", "Evidence", "Artifacts", "Acceptance", "Machine",
+                "Budget", "Live", "Help"}
     assert set(PAGES) == expected, sorted(PAGES)
     assert set(PAGE_KEYS) == expected, sorted(PAGE_KEYS)
     for name in sorted(expected):
         path = UI_SRC / "pages" / f"{name}.tsx"
         assert path.is_file(), f"{path} 不在盘上"
         body = path.read_text(encoding="utf-8")
-        assert TRI_TOKEN in body, f"{name} 页没有用 {TRI_TOKEN}"
+        if name != "Help":
+            # Help 页是一张静态说明页（没有读数要画三态）；其余每一页都必须在源码里
+            # 出现 `TriState`，否则"没查成"与"读到 0"在那一页上会长成一个样子。
+            assert TRI_TOKEN in body, f"{name} 页没有用 {TRI_TOKEN}"
         # 页面必须走 api.ts 的那一层，不许自己 fetch 一个裸地址（端点的唯一出口）
         assert "fetch(" not in _strip_js_comments(body), (
             f"{name} 页自己 fetch 了 —— 端点必须只从 api.ts 走")

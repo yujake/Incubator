@@ -265,20 +265,27 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 
 ---
 
-## 2.2 用户端网页（SPA）：六个页面读什么、怎么构建
+## 2.2 用户端网页（SPA）：九个页面读什么、怎么构建
 
 `agentflow web` 起的是一个小服务（默认只听 `127.0.0.1:8788`）。页面的**皮**是从 DSH 抄的
-（令牌整份照搬，来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`），**面**是六个客户端路由，
+（令牌整份照搬，来源与 MIT 见 `docs/USER-END-DSH-STYLE.md`），**面**是九个客户端路由，
 数据一律从盘上派生（页面里不缓存）：
 
 | 路由 | 页面 | 读哪条端点 |
 |---|---|---|
 | `/` | 全局待回答面板 + 会话概览 | `GET /api/state` |
-| `/run/:sid` | 一趟详情（时间线 / 逐条事件 / 花销两个来源 / 索引对账 / 交付说明） | `GET /api/run/{sid}` + `GET /api/run-index` + `GET /api/run/{sid}/events` |
+| `/run/:sid` | 一趟详情（时间线 / 逐条事件 / 花销两个来源 / 索引对账 / 交付说明 / 停机） | `GET /api/run/{sid}` + `GET /api/run-index` + `GET /api/run/{sid}/events` + `GET /api/live` |
 | `/evidence` | 证据链七栏 | `GET /api/evidence` |
 | `/artifacts` | 产物（台账 / 交接 / 验收行 / 体例 / 六件产物 / 任务） | `GET /api/artifacts` |
 | `/acceptance` | 收工门内容级验收（5 判据 + 5 辅助） | `GET /api/acceptance` |
-| `/machine` | 本机（检查器 / Lean / Mathlib / 钥匙配没配） | `GET /api/machine` |
+| `/machine` | 本机（检查器 / Lean / Mathlib / 钥匙配没配）+ **设置窗口（写）** | `GET /api/machine` + `POST /api/settings` |
+| `/budget` | **预算窗口**：总额度 / 已花 / 剩余 / 追加历史 / 按角色与按归口 + 追加与重设按钮 | `GET /api/budget` + `POST /api/budget` |
+| `/live` | **在飞**：在跑的循环与活进程 / 停机开关与历史 / 状态报告 / 用量拆解 | `GET /api/live` + `GET /api/status-reports` + `GET /api/usage` |
+| `/help` | **使用说明**：这套系统怎么用（角色分工 / 常用命令 / 预算 / Lean 开关 / 报错去哪看） | （不调端点） |
+
+后三页是业主 2026-10-12 那两条（预算显示窗口 + 多智能体监控 + 使用说明）的落点；
+`POST /api/budget` 与 `POST /api/stop`、`POST /api/settings` 一样默认只读
+（要 `agentflow web --allow-writes` 才允许写，每一次尝试都留审计）。
 
 逐页逐栏的字段、空态与三态口径见 `docs/USER-END-DSH-STYLE.md` §3.1；判据在
 `tests/test_webui_pages.py`（每页一条：真读数出现 + 空态 + 三态）。
@@ -299,16 +306,20 @@ python -m agentflow.cli          # 不带任何参数 ⇒ 进交互台
 判据在 `tests/test_webui.py`（18 条：外壳形状 / JSON 读数 / 写路径三态 / 转义 / 只用令牌 /
 客户端中途断开不留回溯）。前端工程自己的说明见 `ui/README-DEV.md`。
 
-**本机读数（2026-10-08，复算命令见括号）**：
+**本机读数（2026-10-13，批 R69；复算命令见括号）**：
 
-- 路由表 `ROUTES` **17 行**、其中 JSON 端点 **13 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
-  其中 `/api/state`、`/api/run/{sid}`、`/api/run/{sid}/events` 与其余四个只读面按裁定 2b 归 B 线的
-  `readers.ROUTES`、`/api/run-index` 是 A 线自有的那一条；
-- 前端源码 `ui/src/` **19 个文件、4126 行**（含两份生成物），其中六页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
-- `ui/src/types.ts` 是生成物：**16,869 字节 / 41 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
+- 路由表 `ROUTES` **22 行**、其中 JSON 端点 **18 条**（`python -B -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes;print(len(routes.ROUTES), len(routes.api_paths()))"`），
+  其中 `/api/state`、`/api/run/{sid}`、`/api/run/{sid}/events`、`/api/evidence`、`/api/artifacts`、
+  `/api/acceptance`、`/api/machine`、`/api/budget`、`/api/live`、`/api/usage`、`/api/status-reports`
+  与 `/api/stream` 归 B 线的 `readers.ROUTES`，`/api/run-index` 是 A 线自有的那一条，
+  四条写端点（`/api/stop`、`/api/submit`、`/api/settings`、`/api/budget`）加 `/answer` 归 C 线
+  `writes.ROUTES`。`GET /api/budget` 与 `POST /api/budget` 是同一条路径上的两种动作
+  （读取模型与写面各在自己那条零交线里），所以"路径去重"那条判据按 `(方法, 路径)` 判；
+- 前端源码 `ui/src/` **22 个文件、5128 行**（含两份生成物），其中九页 + 六组件 + `main.tsx` / `api.ts` / `sse.ts` / `live.tsx` / 两份 css；
+- `ui/src/types.ts` 是生成物：**20,045 字节 / 48 个接口 + 2 个类型别名**（`python -B -m agentflow.web.emit_types`）；
 - 事件词表 6 个 kind（`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`），前端 `sse.ts` 逐个注册并带 `?since=` 续传与"退避三次 ⇒ 降级轮询"；
 - 入库的构建产物 3 个文件（`web/static/index.html` + `assets/` 下的一支 `.js` 与一支 `.css`，
-  本次读数共 **85,197 字节** —— 六页面与 `live.tsx` 全进包之后 JS 那一支就有 64.0 KB（T2-a 的逐条事件时间线进来之后）；
+  本次读数共 **107,327 字节** —— 九页与 `live.tsx` 全进包之后 JS 那一支就有 86,119 字节；
   文件名带内容哈希 ⇒ **每次重建都会变**，所以这里刻意不写死哈希名；
   复算：`Get-ChildItem -Recurse -File src/agentflow/web/static | Measure-Object Length -Sum`）。
 

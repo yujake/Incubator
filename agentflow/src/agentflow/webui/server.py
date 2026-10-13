@@ -4,7 +4,7 @@
 ## 这一层是什么
 
 标准库 `http.server` 上的一个小服务（`ThreadingHTTPServer` + `BaseHTTPRequestHandler`），
-把 :mod:`agentflow.webui.state` 的快照与六个只读面/写面的读数发成 JSON、
+把 :mod:`agentflow.webui.state` 的快照与十个只读面/写面的读数发成 JSON、
 把两个页面入口（`/` 与 `/run/{sid}`）发成前端构建产物那一支外壳，
 其余一切人可读的东西都由前端渲染。路由不再写成 `if path == …` 链 —— 它是
 :data:`agentflow.webui.routes.ROUTES` 那张表（`draft/73` §1.2 的 R1 拆包）。
@@ -607,7 +607,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(
         prog="agentflow-webui",
-        description="agentflow 用户端：SPA 外壳（六个页面）+ 六个只读面 + 一趟详情与提交回答")
+        description="agentflow 用户端：SPA 外壳（九个页面）+ 十个只读面 + 一趟详情与提交回答")
     ap.add_argument("--root", default="", help="工作区根（不给就用 DEFAULT_ROOT）")
     ap.add_argument("--host", default=DEFAULT_HOST, help=f"监听地址（默认 {DEFAULT_HOST}）")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT,

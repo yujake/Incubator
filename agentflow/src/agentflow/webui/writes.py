@@ -65,6 +65,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from .. import budget as B
 from .. import interactions as X
 from .. import schema as S
 from .. import sessions as SS
@@ -76,7 +77,8 @@ from . import audit
 from .state import _clip, _e, _sid_ok, _text, answer_text_of, snapshot
 
 __all__ = ["HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
-           "UNCHECKED_TYPES", "answer", "authorize", "handle_settings", "handle_stop",
+           "UNCHECKED_TYPES", "answer", "authorize", "handle_budget", "handle_settings",
+           "handle_stop",
            "handle_submit", "type_decls"]
 
 #: 处理器的落点（与 `readers.py`/`sse.py` 同一条约定）：键 = `ROUTES` 第三元素，
@@ -105,6 +107,9 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", "/api/stop", "handle_stop"),
     ("POST", "/api/submit", "handle_submit"),
     ("POST", "/api/settings", "handle_settings"),
+    # 业主 2026-10-12 的预算窗口：追加 / 重设额度（写面，走同一套授权、
+    # CSRF、审计与 `confirm=1`）。
+    ("POST", "/api/budget", "handle_budget"),
 )
 
 #: 本模块还欠的 TS 接口（`(名字, 为什么还没有)`）。写面的三态回执在 W3/W4 才有
@@ -433,10 +438,73 @@ def handle_settings(handler: Any, params: Mapping[str, str],
                    extra=extra, tri=mapped)
 
 
+def handle_budget(handler: Any, params: Mapping[str, str],
+                  query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """`POST /api/budget`：追加一笔额度（`action=add`）或重设总额（`action=set`）。
+
+    业主 2026-10-12：「用户可追加预算，运行消耗的钱从总预算里实时扣除」。
+    这一条端点是那句话的台面落点 —— 运行中途点一下，下一个花钱之前的闸门
+    （`llmseam.budget_limit`）就现读到新上限（`budget` 模块的 docstring 逐字解释了
+    为什么这件事必须走盘上寄存器而不是一个内存参数）。
+
+    请求字段：`action`（`add` / `set`，缺省 `add`）· `usd` · `note?` · `by?` ·
+    `confirm=1`。确认是硬要求：改预算会改到"这一趟还能不能继续花钱"，
+    与停机同一档（`draft/75` §1.1 第 8 行的口径）。
+
+    三态：`budget.add_usd` / `write_initial` 的回执只有两档（`ok` 与非 `ok` + 原因），
+    而"寄存器读不出来"那一档在回执里是拒绝（它算得出基数才算得对），
+    于是这里把 `ok=False` 一律映射成 400 + `not_applicable`
+    （"查过了、这次没写成"，不是"没查成"——盘上那一份没被动过，这是查得清的）。
+    """
+    del params, query
+    form = handler._form()
+    root = Path(handler.root)
+    source, _why = _source_of(handler)
+    action = (_one(form, "action").strip() or "add").lower()
+    raw_usd = _one(form, "usd").strip()
+    note = _one(form, "note")
+    by = _one(form, "by").strip() or "web"
+    seen = {"action": action, "usd": raw_usd, "note": note, "by": by,
+            "confirm": _flag(form, "confirm")}
+    allowed, code, why = authorize(handler, endpoint="POST /api/budget")
+    if not allowed:
+        return _finish(handler, endpoint="/api/budget", source=source, params=seen,
+                       code=code, result=f"拒绝：{why}", ok=False)
+    if not _flag(form, "confirm"):
+        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
+                       result=("拒绝：改预算要 confirm=1 一次显式确认"
+                               "（它改的是这一趟还能不能继续花钱）"), ok=False)
+    if action not in ("add", "set"):
+        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
+                       result=f"拒绝：action 只认 add / set（收到 {action!r}）", ok=False)
+    if raw_usd == "":
+        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
+                       result="拒绝：usd 不能为空", ok=False)
+    try:
+        amount = float(raw_usd)
+    except (TypeError, ValueError):
+        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
+                       result=f"拒绝：usd 读不成数字（收到 {raw_usd!r}）", ok=False)
+    got = (B.add_usd(root, amount, by=by, note=note) if action == "add"
+           else B.write_initial(root, amount, by=by, note=note))
+    ok = bool(got.get("ok"))
+    return _finish(handler, endpoint="/api/budget", source=source, params=seen,
+                   code=200 if ok else 400,
+                   result=(f"已{'追加' if action == 'add' else '重设'}额度："
+                           f"总额现在是 ${float(got.get('total_usd') or 0.0):.6f}"
+                           if ok else f"没写成：{got.get('reason') or '（没给理由）'}"),
+                   ok=ok, ident=str(got.get("path") or ""),
+                   extra={"action": action, "total_usd": got.get("total_usd"),
+                          "entry": got.get("entry") or {},
+                          "added_count": got.get("added_count"),
+                          "history_lost": got.get("history_lost") or ""})
+
+
 HANDLERS.update({
     "handle_stop": handle_stop,
     "handle_submit": handle_submit,
     "handle_settings": handle_settings,
+    "handle_budget": handle_budget,
 })
 
 

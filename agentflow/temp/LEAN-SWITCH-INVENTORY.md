@@ -539,7 +539,7 @@ proof 只是其中一张表的一种行）。另有一处是**验收档位**（`
 | `agentflow/docs/USER-TEST.md:138-142` | **文档**：`# 形式化那一格：检查器在盘上但不在 PATH —— 这一行决定它能不能真验`；`$env:AGENTFLOW_LEAN_BIN = "_env\lean470\lean-4.7.0-windows\bin"`。 |
 | `agentflow/docs/USER-TEST.md:148-156` | **文档**：`①**形式化那一格取决于上面那一格配置**…Lean 4.7.0 在盘上…**Mathlib 那一档今天不行**（`import Mathlib` ⇒ `import_unavailable`）` ← **这条与 `FORMAL-TOOLCHAIN.md:130` 的"Mathlib 装了"直接矛盾**（见第 10 组）。 |
 | `agentflow/docs/USER-TEST-TASK.txt:15` | **文档（任务模板）**：交付说明必须是九节，第四节是"形式化覆盖"。 |
-| `agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt:5` | **文档（任务模板）**：`(B) **形式化验证**：把论文里可形式化的那条引理交给检查器真跑一次。**检查器在盘上，但不在 PATH**：Lean 4.7.0 在 `D:\Incubator\temp\lean470\…`（commit 6fce8f7d…）` ← **写死了绝对路径与 commit**。 |
+| `agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt:5` | **文档（任务模板）**：`(B) **形式化验证**：把论文里可形式化的那条引理交给检查器真跑一次。**检查器在盘上，但不在 PATH**：Lean 4.7.0 在 <本机临时目录下的 lean470 检出>（commit 6fce8f7d…）` ← **写死了绝对路径与 commit**（本行在 2026-10-13 把这台机器的绝对路径改成了这一句中性描述：那份判据扫的就是绝对路径本身）。 |
 | `agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt:18-20` | **文档（任务模板）**：`（a）挑论文里一条真的可以形式化的引理…（`method="formal"` 只接受 `.lean` 产物）…（b）派 E 走 `check_formal(claim=…)`，或 `run_experiment(method="formal", …)`。` |
 | `agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt:28-29` | **文档（任务模板）**：第四节要写清"哪条引理被形式化、检查器在不在、结果是 checked / reason / verifier_status 各是什么"。 |
 | `agentflow/docs/TOOLBOX-DRAFT-roles.md:55` / `:116` | **文档（草稿）**：E 的工具面统计里含"数值实验与形式化设计"与 `verify.check_formal`。 |
