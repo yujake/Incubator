@@ -31,9 +31,9 @@ const VISUAL: Record<string, Visual> = {
 };
 
 const WORD: Record<Visual, string> = {
-  ok: "算出来了",
-  unknown: "没查成",
-  na: "用不着",
+  ok: "已读出",
+  unknown: "未读出",
+  na: "不适用",
 };
 
 const BADGE: Record<Visual, string> = {

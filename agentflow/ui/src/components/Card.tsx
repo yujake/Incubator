@@ -16,7 +16,7 @@ export function Card(props: CardProps) {
   return (
     <section class={cls}>
       <div class="card-head">
-        <span class="caption">{props.title}</span>
+        <span class="card-title">{props.title}</span>
         {props.subtitle === undefined ? null : <span class="readings">{props.subtitle}</span>}
         {props.right === undefined ? null : <span class="card-right">{props.right}</span>}
       </div>

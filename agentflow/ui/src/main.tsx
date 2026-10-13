@@ -71,8 +71,7 @@ function Top() {
     <header class="top">
       <div class="brand">agentflow 用户端</div>
       <div class="sub">
-        状态一律从盘上派生（每次请求重新读，页面里不缓存）· 工作区根{" "}
-        <span class="mono">{root}</span> · 连接{" "}
+        工作区根 <span class="mono">{root}</span> · 连接{" "}
         <span class="mono">{live.connection}</span>
       </div>
       <nav class="nav">
