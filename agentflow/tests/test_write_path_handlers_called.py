@@ -180,7 +180,7 @@ def test_the_production_caller_gauge_is_stated_in_the_output() -> None:
     """F7/裁决 2（主控 2026-10-06）：读数必须口径自明 —— 两档分开、各说各数什么。
 
     为什么单列：生产路径常直调工具体（`agent_a/shelf_search.py` 调 `_h_shelf`/
-    `_h_local`、`agent_g/_support.py`、`paper_package.py` 同族）而不写工具名串
+    `_h_local`、`agent_g/_support.py` 同族）而不写工具名串
     （`registry.call("search.shelf")`）⇒ 同一句话会被两种读法读成两个结论。
     读数自己不说口径，就是本项目最忌的形态（"没查成"与"查过了"读起来一样）。
     """

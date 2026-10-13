@@ -23,6 +23,11 @@ cd D:\\Incubator\\agentflow
 $env:PYTHONUTF8='1'; python -B tests/test_tool_surface_snapshot.py --write
 ```
 生成之后先看 diff：差在哪、为什么。这条命令只该在"权限面确实变了"时用。
+
+⚠️ **环境要和判据同一套**（2026-10-13 实测踩到，与 `test_agent_surface_snapshot.py` 同因）：
+`tests/conftest.py` 在导入期把 `AGENTFLOW_LEAN_ENABLED` 钉成 "1"，而工具摘要里
+（例如 `verify.check_formal`）就写着形式化开/关的口径。直接重生成会写出一份判据不认的基线。
+所以本文件在导入 agentflow 之前自己钉上同一个开关。
 """
 from __future__ import annotations
 
@@ -30,10 +35,14 @@ import contextlib
 import inspect
 import io
 import json
+import os
 import pathlib
 import re
 import sys
 import tempfile
+
+#: 先钉开关，再导入 agentflow（理由见上面 docstring 末尾那一段）。
+os.environ.setdefault("AGENTFLOW_LEAN_ENABLED", "1")
 
 import pytest
 

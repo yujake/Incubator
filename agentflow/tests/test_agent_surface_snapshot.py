@@ -25,16 +25,26 @@ cd D:\\Incubator\\agentflow
 $env:PYTHONUTF8='1'; python -B tests/test_agent_surface_snapshot.py --write
 ```
 生成之后先看 diff：差在哪、为什么。
+
+⚠️ **环境要和判据同一套**（2026-10-13 实测踩到）：`tests/conftest.py` 在导入期把
+`AGENTFLOW_LEAN_ENABLED` 钉成 "1"，而 Lean 开关会改掉 D/E/F/H 四格提示词里的措辞
+（"形式化验证" vs "逐行审阅"）。直接这样重生成会写出一份**判据不认**的基线
+（跑 pytest 时当场红，且红的位置看着像"改了声明"）。所以本文件在导入 agentflow 之前
+自己钉上同一个开关 —— 口径只许有一处，这里复现判据那一套，而不是另立一份。
 """
 from __future__ import annotations
 
 import dataclasses
 import inspect
 import json
+import os
 import pathlib
 import re
 import sys
 import tempfile
+
+#: 先钉开关，再导入 agentflow（理由见上面 docstring 末尾那一段）。
+os.environ.setdefault("AGENTFLOW_LEAN_ENABLED", "1")
 
 import pytest
 

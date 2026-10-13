@@ -21,7 +21,17 @@
 
 from __future__ import annotations
 
+import os
 import sys
+
+#: 先钉开关，再导入 agentflow（2026-10-13 实测踩到的坑）。
+#:
+#: `tests/conftest.py` 在导入期就把 `AGENTFLOW_LEAN_ENABLED` 钉成 "1"（它还要钉设置文件
+#: 与几个 *_BIN 环境变量），而 D/E/F 三格的提示词摘要**对 Lean 开关敏感**。少了这一行，
+#: 在开发壳里跑这个计算器会算出与判据不同的那一组 D/E/F（实测 da82… 对 814e…），
+#: 而照着抄进冻结表就会让 `test_the_prompt_version_moves_with_the_sections` 红，
+#: 读的人还会以为"段动了"。口径只许有一处：这里复现判据那一套环境，而不是另写一份。
+os.environ.setdefault("AGENTFLOW_LEAN_ENABLED", "1")
 
 sys.path.insert(0, "tests")  # 复用测试文件里的口径，不另抄一份
 

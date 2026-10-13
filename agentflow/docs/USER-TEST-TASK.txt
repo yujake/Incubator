@@ -10,7 +10,7 @@
 4. 派 G 用 build_document 另起一行「我方修订稿」（claims 的 citations 引论文那一行的 lit:）。**注意**：`evidence_kind='cross_check'` 的断言必须自带那句逐字常量「数值交叉验证，不构成证明」（拿不准就用 `heuristic`，别在这上面反复试）。
 5. **把正文真正改掉**（这是 P2）：逐字定位要改的几处，**用 `fs.edit`**（`path` + `old_string` + `new_string`，一次一处、不命中就拒）。**不要**用 `fs.write` 重写整份大文件（真机实测会被输出额度截断、整趟作废）。
 6. 派 H 审我方稿件（doc_id 用**我方稿件**的 id）；H 落了发现就派 G 修。
-7. **让论文包跟上台账**：派 G 走 **`G.paper_package`** —— 它一次做完「重渲染 → 重编译 → 核锚」并回报 verdict 与漂移条数（`project` 给项目根 `"."`）。**不要**指望 `G.revise` / `G.render` / `G.refresh_markdown`：它们动的是稿件 markdown，不是论文包（真机实测：连派三次 revise，`main.pdf` 与锚文件一个字节都没变，锚必然 drifted）。
+7. **把改完的正文编成 PDF（这一步在 G 手上）**：正文由 **G 自己写进 `out/paper/main.tex`**（`fs.write` 整段写，或 `fs.edit` 逐处改），写完调工具 **`doc.paper_compile`**（`project` 给项目根 `"."`）编出 `out/paper/main.pdf`；然后**读 `out/paper/COMPILE-RECEIPT.json`** 核两件事 —— `tex_sha256` 是不是盘上那份 `main.tex` 的摘要（对不上就是"这份 PDF 是旧正文编的"）、`pages` 是不是你要的页数。**不要**指望 `G.revise` / `G.render` / `G.refresh_markdown`：它们动的是 `documents` 的 markdown，不碰 `out/paper/main.tex`（真机实测：连派三次 revise，`main.pdf` 一个字节都没变 —— 改了正文不重编，收工门 `paper` 那一格就会报 `paper_pdf_is_stale`）。
 8. **关键取舍用 ask_user 问一次，然后停下等回答**：把当前状态与「卡在哪」写进报告，不要在没有回答时当成默许继续 —— 框架里会有人回答你，回答回来之后可以续跑。
 9. 你自己把交付说明写到 out/review/REPORT.md（fs.write；重写要 overwrite=true）。**它必须是九节**：一、任务与范围 / 二、逐条读数 / 三、定理与引理清单 / 四、形式化覆盖 / 五、引文核验 / 六、体例与表述 / 七、我们做的补救 / 八、未决问题 / 九、诚实边界；**每一节都要有读数**（数字或台账行号）—— 没有内容的节也要写清依据（例如「本轮未做形式化核验：formal 级实验 0 条」），**空标题不算交了这一节**；并**分栏**写「我们补的」与「原文的」，报告里要出现 `origin=own_result`、`依据`、`sha`。
 10. 收工前用 conductor.closing 自检：`project_dir` 给 `"."`（项目根），`report_path` 给 out/review/REPORT.md。它会把缺的节名逐个报出来 —— **按它改到 report_shape 过为止**，再把 can_close / failed / unknowns 原样写进交付说明。

@@ -2454,9 +2454,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "llm.py": "抽取层：`Extractor` 协议 + 离线基线 + 可插拔 `LLMExtractor`",
     # 2026-09-28 新增的四个模块（本地书架 + 项目工作区 + 交互界面那一批）。
     # 它们都不是"对拍副本"，所以按 `R6-AN-1` 建议③的要求登记并各写一行理由。
+    # 其中两个（`paperbuild.py` / `renderanchor.py`）2026-10-13 随整条
+    # `paper_package` 路退场（业主裁定见 `draft/117`）：登记过期与漏登记同样危险，
+    # 所以这里删掉它们那两行，并由接手那一格的 `papercompile.py` 补一行。
     "locallib.py": "本地书架：把目录里的 PDF 登记进项目库，并作为 `run_topic` 的检索/取全文接缝",
-    "paperbuild.py": "论文包的构建/编译/锚核对：受限地起项目脚本、读回 `REPRO_RESULT` 契约、把三态翻成工具层结论（`draft/28` §188）",
-    "renderanchor.py": "渲染锚与编译回执的判据本体（纯函数）：源表/源文件/回执三维 + 三态；只读角色也能调它核包（`draft/28` §191）",
+    "papercompile.py": "论文包只剩一件事：把智能体自己写进 `<项目根>/out/paper/main.tex` 的正文编成 "
+                       "`main.pdf`（框架直接起 LaTeX 引擎、不跑项目脚本）并写一份**框架自己写的** "
+                       "`COMPILE-RECEIPT.json`；退出码与产物分两栏（MiKTeX 会写完 PDF 却非 0 退出）、"
+                       "三态 `not_applicable` / `unknown` / `computed`、回执与盘上正文对不上的读数 "
+                       "`receipt_matches_tex()` 分给收工门那一格 —— 旧路（`paperbuild` / `renderanchor` / "
+                       "`G.paper_package`）2026-10-13 整条退场（`draft/117`）",
     # `draft/37` §134（2026-10-04，用户口径）：交接手稿——「交接工作前写一份手稿」。
     # 它不是对拍副本：`agent_loop._do_handoff`（循环形状）与 `tools/manuscript_tools.py`
     # 都转发到它的 `write` / `read` / `list_all`；编号分配与命名规则只有这一份实现。
@@ -2652,6 +2659,8 @@ def _duplicate_inventory_keys() -> list[str]:
     而 `len(_AGENTFLOW_TOP_LEVEL_MODULES)` 与盘上集合的比对照样能对上
     （两条重复键只占一个名额）。2026-10-04 实测：`renderanchor.py` 那一行
     在这张表里出现了两次，谁也没发现 —— 这正是"看起来有人看过了"的形态。
+    （那条记录说的是当年那次实测；`renderanchor.py` 本身 2026-10-13 随
+    `paper_package` 整条退场了，而"重复键会静默合并"这条形态与这条判据都还在。）
     """
     tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
     for node in ast.walk(tree):

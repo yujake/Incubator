@@ -1045,7 +1045,8 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）—— 锚 consistent / 无未裁决矛盾 / "
+    "只读：跑收工门（八格）—— 正文与 PDF 对得上（编译回执里的 tex 摘要 == 盘上这份 "
+    "`out/paper/main.tex`；盘上没有正文 ⇒ 不适用）/ 无未裁决矛盾 / "
     "承重结论有 T3 或已降档 / 报告体例兑现（R9 之后门不自带节名清单，逐节核的是 M 自己声明的体例） / "
     "没有还在等用户回答的问题 / "
     "**实质产出**（`documents`/`relations`/`experiments`/`review_findings`/`statements` "
@@ -1063,9 +1064,9 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
         "type": "object",
         "properties": {
             "project_dir": {"type": "string",
-                            "description": "项目根（相对工作区；渲染锚在 <它>/out/paper/"
-                                           "RENDER-ANCHOR.json —— 传论文包目录会把 out/paper "
-                                           "拼两次；不给 ⇒ 锚那一格是 unknown）"},
+                            "description": "项目根（相对工作区；正文与编译回执在 <它>/out/paper/ "
+                                           "—— 传 out/paper 目录会把 out/paper 拼两次；不给 ⇒ "
+                                           "论文那一格是 unknown）"},
             "report_path": {"type": "string",
                             "description": "报告路径（不给 ⇒ 报告形状那一格是 unknown）"},
             "cap_usd": {"type": "number", "minimum": 0,
@@ -1116,7 +1117,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
              "逐项点名；M 没给判据 ⇒ `can_close=false` + 读数说明『没人判过』；"
              "M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`"
              "（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；"
-             "status 的键是八格检查（anchor/contradictions/load_bearing/report_shape/"
+             "status 的键是八格检查（paper/contradictions/load_bearing/report_shape/"
              "user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；"
              "acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、"
              "台账现算值、是否满足（不满足的那几行同时进 findings）；"

@@ -18,7 +18,7 @@ import json
 import pathlib
 
 from conftest import TS, sync_counters
-from agentflow import renderanchor as RA
+import paperfixture as FX
 from agentflow import reviewaccept as RX
 from agentflow import schema as S
 from agentflow import userio as U
@@ -102,15 +102,13 @@ def _usage(store: Store, uid: str, usd: float | None) -> None:
                                    "at": TS, "note": "test", "prompt_version": "p24"})
 
 
-def _seal(root: pathlib.Path, st: Store) -> None:
-    out = root / "out" / "paper"
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "main.tex").write_text("\\date{2026-01-01}\nbody\n", encoding="utf-8")
-    (out / "main.pdf").write_bytes(b"%PDF-1.4 fake")
-    (out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)), encoding="utf-8")
-    (out / RA.RECEIPT_NAME).write_text(json.dumps(RA.build_receipt(
-        out, tex_sha256=RA.file_digest(out / "main.tex"), pages=21, markers_missing=[],
-        pdf_bytes=13, compiler_exit_codes=[0])), encoding="utf-8")
+def _seal(root: pathlib.Path, st: Store) -> None:  # noqa: ARG001 —— st 不再参与
+    """写正文并编一遍（回执由框架写；这一格测的是内容级验收，不是论文那一格）。
+
+    2026-10-13（`draft/117`）：旧口径是"封渲染锚"（锚三维 + 回执），现在只剩一件 ——
+    正文 `out/paper/main.tex` 与框架写的 `COMPILE-RECEIPT.json`。假引擎照旧只写 PDF。
+    """
+    FX.compiled_project(root, text="\\date{2026-01-01}\nbody\n")
 
 
 def _good(tmp_path: pathlib.Path):
@@ -380,7 +378,7 @@ def test_pretty_auxiliary_signals_cannot_fake_a_pass(tmp_path):
 
     acc = _check(st, report, cap=10.0)
     # 辅助读数确实漂亮
-    assert acc.auxiliary["anchor_verdict"] == "consistent", acc.auxiliary
+    assert acc.auxiliary["receipt_matches_tex"] == "consistent", acc.auxiliary
     assert acc.auxiliary["tex_sha256"], acc.auxiliary
     assert acc.auxiliary["task_rows"] >= 3 and acc.auxiliary["ledger_rows"] >= 1, acc.auxiliary
     # 页数是辅助读数里最脆的一个：夹具的 PDF 是假的（`%PDF-1.4 fake`，没有真页）
@@ -401,7 +399,9 @@ def test_missing_inputs_are_unknown_not_pass(tmp_path):
     assert acc.criteria["within_cost_cap"] == "unknown", acc.to_dict()
     assert acc.criteria["attachment_is_honest"] == "unknown", acc.to_dict()
     assert not acc.passed
-    assert acc.auxiliary["anchor_verdict"] == "", acc.auxiliary
+    # 没给项目根 ⇒ 这个辅助读数是 `unknown`（旧口径给的是空串 —— 那等于把
+    # "没查成"折成一个空值，与三态纪律相反）
+    assert acc.auxiliary["receipt_matches_tex"] == "unknown", acc.auxiliary
     # R9：报告形状这条判据已废除 ⇒ 它不该再出现在 `criteria` 里（连 `unknown` 都不许）
     assert "report_sections_have_readings" not in acc.criteria
 

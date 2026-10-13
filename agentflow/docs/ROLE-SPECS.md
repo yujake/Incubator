@@ -15,8 +15,9 @@
 > 例如 `network: 2` 在 B3 之后是 **0**），**少改表格 = 少一处漂移面**；第二根轴的权威展示由
 > `cli tools` 承担（它能直接从注册表打，不必手工维护）。
 > - 工具面：`build_registry(store=Store(tempfile.mkdtemp()), workspace_root=<同目录>, roles=schema.ROLES)`
->   一次装配后的**实测**结果（**83** 个工具、13 个模块 loaded、0 skipped；观测 2026-10-09（S1b 的
->   `conductor.board` 落地后由 H-1a 归位），与 §R0 标题及 `cli tools` 当次输出一致。
+>   一次装配后的**实测**结果（**79** 个工具、13 个模块 loaded、0 skipped；观测 2026-10-13
+>   （`paper_package` 整条退场后复算）；本行的历史读数：2026-10-09（S1b 的
+>   `conductor.board` 落地后由 H-1a 归位）记 **83**，与 §R0 标题及 `cli tools` 当次输出一致。
 >   本行原先写 81，再前写 75/73，都已过期）。
 >   命令与输出见 `DEVELOPMENT.md` §9 附录与本文 §0.3。
 > - 自注册工具：读 `agent_c.register_tools` / `agent_d._fallback_trace_tools` /
@@ -51,7 +52,7 @@
 ### 0.2 工具面的三条公共事实（实测）
 
 > ⚠️ **本表的"55"是 2026-09-26 那次装配的读数（历史快照）**，不是今天的读数。
-> 今天 `build_registry` 的条数是 **83**（见 §R0.1 的标题，由
+> 今天 `build_registry` 的条数是 **79**（见 §R0.1 的标题，由
 > `tests/test_role_specs_complete.py` 与发布门的 `tools/verify_role_specs.py` 逐条对账）。
 > 本节这两处的口径可能不同（本节记的是当时那次装配的输出，§R0.1 记的是今天的装配条数），
 > 而**没有一条判据盯着 §0.2 这一格** —— 所以：**引用工具总数请以 §R0.1 为准**。
@@ -59,7 +60,7 @@
 
 | 事实 | 实测值 | 出处 |
 |---|---|---|
-| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 83） | **55** | 本文 §0.3（带观测时刻的实测输出） |
+| 工具总数（`build_registry`，**2026-09-26 的历史快照**；当前读数见 §R0.1 = 79） | **55** | 本文 §0.3（带观测时刻的实测输出） |
 | 全部 8 个角色**共有**的工具 | 9 个：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` | 实测（交集） |
 | 只读角色（C/H/V）工具面里的写工具 | **0**（`role_filter_notes = {}` ⇒ 结构性拦截一次都没触发） | 实测 |
 
@@ -213,7 +214,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，60 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，59 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
@@ -223,7 +224,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
-| G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `paper_package` |
+| G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
 | H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
 | V | 3 | `verify_proof` `list_verifications` `read_proof` |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
@@ -235,7 +236,13 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 
 ---
 
-## R0. 全局工具总表（83 个，逐条）
+## R0. 全局工具总表（79 个，逐条）
+
+> ⚠️ **本表的 `#` 是"行号"而不是"第几个"**：2026-10-13 `paper_package` 整条退场时删掉了
+> 四行（`doc.paper_anchor` #9、`doc.paper_build` #11、`doc.paper_render` #15、
+> `doc.paper_state` #16），**后面那些行号刻意不补位** —— 本文别处按行号引用过它们
+> （#50–#55、#67–#69、#79），补位会让那些引用静默指到别的工具上。
+> 所以 `#` 现在**不连续**，而行数（79）按表里实际的行数算。
 
 **列义**：`工具名 / summary / side_effect / 需审批 / roles / 参数（**粗体=required**） / 返回结构 / 测试 / 已知问题`。
 `测试` 列指向 `tests/` 下**提到该工具名**的文件；`—` 表示本次未逐文件核对（**未核实**项已在 §0.8 汇总）。
@@ -252,14 +259,10 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 6 | `attack.step` | 推进攻坚计划一轮：按 owner 分派（E 做实验/A 提检索/B 提重抽取）；C/D/F 的推理未接线则如实记 `no_change` | `write_local` | **是** | F | **plan_id** | `{plan_id,round,sid,action,outcome,status,budget_left,reason,budget_known,budget_reading}` | `test_agent_f.py` | INVENTORY 4.4：经 `_deploy_e` 跑 E 的脚本子进程（**声明里没有"执行进程"这一档**）；`budget_known`/`budget_reading` 是 P-09 的预算读数（读不到时 `status="unknown"` + `why`，**不据此否决**花钱） |
 | 7 | `doc.build_document` | 写一行 documents 并渲染 markdown 到工作区内（逐条机械检查后再落库；`out_path` 越界即拒绝） | `write_local` | **是** | G | **kind**,**title**,**claims**；open_problems, out_path, sections | 落库后的 documents 行（含 `doc_id`/`markdown_path`） | `test_agent_g.py` | INVENTORY 4.3(a)②：`citations:["lit:9999"]` 可通过全部闸门并落库（**引用存在性不核**）；4.3(b) `StoreError` 逃逸 |
 | 8 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补"不构成证明"；无引用/否定未分类/过度声称在构造时就抛错 | `none` | 否 | G H F D | **text**,**citations**,**evidence_kind**,**section**；claim_id, is_negative, negation_kind | 合规的 claim dict（含 `claim_id`/`disclaimer`） | `test_agent_g.py` | INVENTORY 总表：三态位 **无**（据 INVENTORY，未在代码中核实） |
-| 9 | `doc.paper_anchor` | 查论文包的渲染锚（`make_paper.py --check`）：三态 —— 0 一致 / 1 有漂移 / 2 没查成（锚不在盘上），漂移逐条列出 | `read` | **是** | G | **project**；script, timeout_sec | `{verdict,expected_exit_code,exit_code,drift,why,script,anchor_path,anchor_present,anchor_sha256,stdout_tail,stderr_tail,elapsed_sec,repro_found,problem}` | `test_paperbuild.py` | **本轮新增**（`draft/28` §188）；`external=exec`（执行项目里的脚本）⇒ 审批列是；退出码与漂移行矛盾时判 unknown |
 | 10 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数与 markdown 路径） | `read` | 否 | G H F D | kind, status | `{count,documents:[{doc_id,kind,title,status,review_rounds,claim_count,markdown_path}]}` | `test_agent_g.py` | INVENTORY 4.3(b)：`StoreError` 逃逸 |
-| 11 | `doc.paper_build` | 从源重编一次论文包并核对渲染锚：渲染 → 编译 → 再渲染（把锚挪到新 PDF 上）→ 查锚；`ok=True` 只在锚 0 漂移时为真 | `write_local` | **是** | G | **project**；render_script, compile_script, timeout_sec | `{ok,anchor,pdf_path,pdf_sha256,pdf_bytes,pdf_pages,markers_missing,compiler_exit_codes,tex_content_stable,tex_note,steps,problem}` | `test_paperbuild.py` | **本轮新增**（§188，终点门槛 B 的抓手）；顺序是判据的一部分 |
 | 12 | `doc.register_dependency` | 登记外部依赖（FC-23）：`status="closed"` 会先用真实数据核 `lit_id`/`experiment_id`；`dangling`/`external_unavailable` 必须写 `status_reason` | `write_local` | **是** | G | **used_by**,**kind**,**label**；page_range, quote, source_experiment_id, source_lit_id, status, status_reason | 落库后的 dependencies 行（含 `dep_id`/`status`） | `test_agent_g.py` | — |
-| 13 | `doc.paper_compile` | 跑项目里的编译脚本（默认 `code/compile_paper.py`）：从 `main.tex` 重编 `main.pdf`；本机 MiKTeX 写完 PDF 却以 0xC0000409 退出 ⇒ 判据是 PDF 内容、退出码原样带回 | `write_local` | **是** | G | **project**；script, timeout_sec | `{script,script_path,argv,exit_code,timed_out,ok,result,elapsed_sec,stdout_tail,stderr_tail,repro_found,problem}` | `test_paperbuild.py` | **本轮新增**（§188） |
+| 13 | `doc.paper_compile` | 把 `<项目根>/out/paper/main.tex`（**正文由智能体自己写**）编成 `main.pdf`，并写**框架自己产**的编译回执 `COMPILE-RECEIPT.json`；**不跑项目脚本**（LaTeX 引擎由框架直接起） | `write_local` | **是** | G | **project**；timeout_sec | `{tri,ok,reason,tex,pdf,engine,exit_codes,runs,pages,pdf_bytes,receipt_path,pdf_fresh,engine_stderr_tail,engine_stdout_tail,problems}`（`tri` ∈ `not_applicable` / `unknown` / `computed`） | `tests/test_papercompile.py` | **2026-10-13 重写**（业主裁定逐字「paper_package 里那些东西都是古早废案了，我们要智能体写文章」+ `draft/117`）：旧行跑项目里的 `code/compile_paper.py`，那条通道整条退场；`external=exec`（真的起 LaTeX 引擎）⇒ 审批列是；失败 kind ∈ `bad_project` / `paper_no_source` / `paper_compile_failed`；本机 MiKTeX 写完 PDF 却以 0xC0000409 退出 ⇒ 产物与退出码分两栏如实带回 |
 | 14 | `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类 | `none` | 否 | G H F D | **claim** | `{checked,claim_id,ok,findings,error_count,warning_count}` | `test_agent_g.py` | INVENTORY 4.5#10：与 `review.scan_document` 重复检查**且已漂移** |
-| 15 | `doc.paper_render` | 跑项目里的渲染脚本（默认 `code/make_paper.py`）：**重产哪些文件由脚本决定**（有的项目连主稿/附录/表一起重产，有的只写渲染锚、不碰主稿）；读数看它那行 `REPRO_RESULT` | `write_local` | **是** | G | **project**；script, timeout_sec | 同 `doc.paper_compile` 的外层键；`result` 是脚本那行 `REPRO_RESULT` | `test_paperbuild.py` | **本轮新增**（§188）；结论行里**没有** `ok` 键（成功与否看退出码）—— 这一点是真机读数逼出来的；**批 R52 改过摘要**（原写"重出主稿/四张表/六件配套"，对洁净室那一档是假话，见 `draft/108` CS-19） |
-| 16 | `doc.paper_state` | 只读核对论文包：**进程内**算渲染锚三维（源表 / 渲染出的源文件 / 编译回执）并给三态结论 | `read` | 否 | G H | **project** | `{verdict,dimensions,drift,problems,why,anchor_path,anchor_present,receipt_path,receipt_present,rendered_at,compiled_at,checked}` | `tests/test_renderanchor.py` | **本轮新增**（`draft/28` §191）：判据是纯函数，不起子进程 ⇒ 只读角色 H 也能自己核这份包 |
 | 17 | `fs.delete` | 删除文件；删目录必须显式 `recursive=true`（且不允许删工作区根） | `write_local` | **是** | A B D E F G | **path**；recursive | `data`=是否真的删掉；`meta.found` 区分本来就没有 | `test_tools_table_fs.py` | — |
 | 18 | `fs.edit` | 定点替换文件里的一段文本（`old_string`→`new_string`）：默认要求唯一匹配、可要求前置 `sha256` 一致、`new_string` 有上限 —— 整文件覆盖之外的唯一正路 | `write_local` | **是** | A B D E F G **M**（§57：大文件只能靠它改） | **path**,**old_string**,**new_string**；sha256, allow_multiple, note | `{path,sha256_before,sha256_after,replacements,bytes_before,bytes_after,note}` | `tests/test_tools_fs_edit.py` | — |
 | 19 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；`recursive=true` 时递归 | `read` | 否 | A B C D E F G H **M**（§38） **V** | limit, path, recursive | `{entries:[{name,path,is_dir,is_file,is_symlink,size,mtime}],total,returned,truncated}` | **零提及** | INVENTORY 4.1：`limit`/`truncated` 分页逻辑无断言 |
@@ -323,12 +326,12 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | 77 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
 | 78 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable}` | `tests/test_conductor_tools.py` | 无 |
 | 79 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
-| 80 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的八格）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在八格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是八格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
+| 80 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的八格）—— 论文那一格（回执里的 `tex_sha256` 与盘上那份 `main.tex` 的摘要对得上；没有 `main.tex` ⇒ 不适用，回执读不到 ⇒ 没查成）/ 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在八格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是八格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 | 81 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
 | 82 | `conductor.board` | 只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，`expects=work` 的项要交付才算完。不含建议，也不替你决定要不要重派 | `read` | 否 | M | limit | `{checked,open_items,open_count,readings}`（**读不成 ⇒ 报错**，不回一个空板：`checked=False` 是"没查成"、`open_count==0` 才是"板上没事"，折平就是本仓最忌的形态） | `tests/test_board_items.py`、`tests/test_conductor_tools.py` | **本轮新增**（业主 2026-10-08 裁 A1=甲、T16）：A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）—— M 不进 `manuscripts.*` 是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`） |
 | 83 | `conductor.broadcast` | 给我名下的**直接子代理**广播一条通告（每个收件人一条 `expects=ack` 的板项）：级联由收件人自己决定（框架不代转）—— 要覆盖全树就逐层向下调用；我名下没有子代理时如实报"没有收件人"（**不假装发出去了**）；不知道我是谁（没有台账号、也没有调用上下文）⇒ 受控拒绝 | `write_local` | **是** | A B D E F G M | subject, body | `{checked,ok,broadcast,recipients,items,cascade,readings,note}`（`readings` 把"开了几条 / seen 几条 / acked 几条"分开报：展开了 ≠ 读到了） | `tests/test_broadcast_reaches_my_children.py` | **本轮新增**（业主 T20/T21 附二 乙）：一件能力、所有角色同一个做法（T21 作废了"只有 M 有全树档"那一版）；只读角色（C/H/V）不在它的 `roles` 声明里（声明了再剥掉会被 `cli tools` 报成"声明本身应改"）；"我是谁"由 `AgentLoop._do_tool` 的 `calling_as` 挂进调用上下文 |
 
-### R0.1 83 个工具的公共事实（机械可验证）
+### R0.1 79 个工具的公共事实（机械可验证）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑
   `validate_params(spec.params, params)`（`tools/base.py:372`），参数非法返回
@@ -1020,7 +1023,7 @@ SELF-CHECK DONE
 > 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
 > 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
-### D.4 工具面（41 个，实测 —— **并列全项目最宽**：G 也是这个数）
+### D.4 工具面（41 个，实测 —— **全项目最宽**；G 在 `paper_package` 退场后是 37，见 §G.4）
 
 `side_effect` 分布：`{'read': 25, 'write_local': 9, 'none': 5}`
 
@@ -1586,13 +1589,13 @@ SELF-CHECK DONE（agent_f）：失败 0 项
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（41 个，实测）
+### G.4 工具面（37 个，实测）
 
-`side_effect` 分布：`{'read': 20, 'write_local': 12, 'none': 6}`
+`side_effect` 分布：`{'read': 20, 'write_local': 12, 'none': 5}`
 
 | 组 | 工具 | `side_effect` | 审批 |
 |---|---|---|---|
-| `doc.*`（9） | `build_document` **write** / `compose_claim` none / `list_documents` read / `register_dependency` **write** / `scan_claim` none / `paper_render` **write** / `paper_compile` **write** / `paper_build` **write** / `paper_anchor` read | — | `build_document` / `register_dependency` / `paper_render` / `paper_compile` / `paper_build` **需审批**（论文包那四个都是 `declared_external=exec`） |
+| `doc.*`（6） | `build_document` **write** / `compose_claim` none / `list_documents` read / `register_dependency` **write** / `scan_claim` none / `paper_compile` **write** | — | `build_document` / `register_dependency` / `paper_compile` **需审批**（`paper_compile` 是 `declared_external=exec`：它真的起 LaTeX 引擎；旧路那四件 `paper_render` / `paper_build` / `paper_anchor` / `paper_state` 已随 `paper_package` 整条退场，见 `draft/117`） |
 | `verify.*`（6） | 同 F（含 `run_experiment` **write**） | — | `run_experiment` **需审批** |
 | `attack.*` 只读侧（4） | `check_budget` `list_plans` `pick_next_subgoal` `status` | — | 否（**不能** `create_plan`/`step`） |
 | `review.*` 只读侧（2） | `list_findings` `scan_document` | — | 否 |
@@ -1832,9 +1835,9 @@ ValueError: experiments.rows[0] 校验失败：evidence_kind='proof' 时必须�
 | 判数学对错 | H 的工具只有机械判据（引用/等级/否定/依赖闭合）；**数学正确性不在机械判据的射程内** | 形式化检查器 / 人 |
 | 自己造证据 | 每条发现必须带 `evidence`；没有证据的发现是 error | `verify.finding_without_evidence`（error） |
 
-### H.4 工具面（27 个，实测）
+### H.4 工具面（26 个，实测）
 
-`side_effect` 分布：`{'read': 19, 'none': 5}` —— **0 个 `write_local`，0 个需审批**。
+`side_effect` 分布：`{'read': 21, 'none': 5}` —— **0 个 `write_local`，0 个需审批**。
 
 > B3 收官的变化：`verify.check_formal` 从 H 的工具面里**移出**（它现在声明 `read` + `external="exec"`，
 > 于是沙箱未声明时需要人工审批，而 H 是只读角色）⇒ 工具面从 23 个变 22 个，
@@ -2266,7 +2269,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 >   整趟作废。`fs.edit` 的输出量与**改动量**成正比（不是与文件大小成正比），
 >   而且比整文件覆盖更安全 ——"不可逆"那条理由对它不适用。
 
-#### M.4.1 M 能召唤的 6 个角色 × 它们的动作（46 个可召唤动作）
+#### M.4.1 M 能召唤的 6 个角色 × 它们的动作（45 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
@@ -2288,7 +2291,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
-| G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `paper_package` |
+| G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
 | H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
 
 **B / F / V 的动作表没变，只是主控不再直接够到它们**（上面这张表数的是

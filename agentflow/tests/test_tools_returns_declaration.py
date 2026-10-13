@@ -65,15 +65,21 @@ from test_tools_audit_fixes import declared_keys, parse_declared_keys
 #: 那个名字）：负控要能把 `parse_declared_keys` 打成两态，而只有走模块属性才打得到
 #: —— 打不到的话，那条负控就变成了在同义反复里自证。
 import test_tools_audit_fixes as shared_declaration
-# 假论文包项目的造法只留一份：直接用 `test_paperbuild` 里那个同名夹具函数，
-# 免得"打包脚本长什么样"在测试里有两份实现（两份必然漂移）。
-from test_paperbuild import _make_project as _make_paper_project
+# 论文正文 + 假 LaTeX 引擎的造法只留一份：`tests/paperfixture.py`。
+# 旧路那个 `test_paperbuild._make_project` 随 `paper_package` 整条退场
+# （业主 2026-10-13 裁定，退场面见 `draft/117`）—— 两份造法必然漂移，
+# 所以这一格与 `tests/test_papercompile.py` 共用同一个夹具模块。
+import paperfixture as FX
+from agentflow import papercompile as PC
 
 TS = "2026-01-01T00:00:00+00:00"
 
 #: 名册规模。写死是刻意的：新增/删除工具时这条断言会红，而不是让新工具
 #: 悄悄从这份门下面溜过去（「少测了几个」与「都测过了」必须能分开）。
-TOOL_COUNT = 83
+#: 2026-10-13 随 `paper_package` 退场（`draft/117`）从 83 改成 79：
+#: 四条旧工具（`paper_render` / `paper_build` / `paper_anchor` / `paper_state`）
+#: 一起下线，编译那一格由既有的 `doc.paper_compile` 接手。
+TOOL_COUNT = 79
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -147,7 +153,9 @@ BUDGET: dict = {"max_rounds": 4, "max_parallel_subgoals": 2, "max_persist_attemp
 
 #: 工作区内的样例正文（fs.* / ocr.* / trace.literature / verify.* 都读它）。
 SOURCE_REL = "library/0000/source.txt"
-#: 论文包四件工具的假项目根（夹具在临时工作区里现造，脚本是会写文件的那几行 Python）。
+#: `doc.paper_compile` 的探针项目根。夹具在临时工作区里现造：用 `paperfixture`
+#: 把正文写进 `<根>/out/paper/main.tex`、再装一个会写出 `main.pdf` 的假 LaTeX 引擎
+#: （默认那一条走的是"编成了"那一支，声明里的键集合就是它给的）。
 PAPER_PROJECT = "projects/p2"
 SOURCE_TEXT = "An abelian group is a group in which the commutative law holds.\n"
 
@@ -220,8 +228,10 @@ def tool_params() -> dict[str, dict]:
         "conductor.board": {},
         "conductor.role_spec": {"role_name": "C"},
         "conductor.acceptance": {},
-        # 收工门（`draft/37` §16 P3）：默认两格是 unknown（工作区里没有论文包与报告，
-        # 而 unknown 不是失败）—— 这条走的就是那个成功支，`can_close` 为假不算工具失败。
+        # 收工门（`draft/37` §16 P3）：探针没给项目根 ⇒ **两格都是 unknown**
+        # （`paper` 落 `paper_not_checked`、`acceptance` 落 `acceptance_not_checked`）——
+        # 而 unknown 不是失败：这条走的就是那个成功支，`can_close` 为假不算工具失败。
+        # （旧那一格是 `anchor`，2026-10-13 随 `paper_package` 整条退场，见 `draft/117`。）
         "conductor.closing": {},
         "conductor.status_report": {"since": "2026-10-05", "out_dir": "out/review"},
         # 广播（S6-b）：探针工作区里"M 名下的子代理"一个都没有 ⇒ 走的是
@@ -249,11 +259,7 @@ def tool_params() -> dict[str, dict]:
             "status_reason": "不在可得范围内",
         },
         "doc.scan_claim": {"claim": dict(CLAIM)},
-        "doc.paper_anchor": {"project": PAPER_PROJECT, "timeout_sec": 60},
-        "doc.paper_state": {"project": PAPER_PROJECT},
-        "doc.paper_build": {"project": PAPER_PROJECT, "timeout_sec": 60},
         "doc.paper_compile": {"project": PAPER_PROJECT, "timeout_sec": 60},
-        "doc.paper_render": {"project": PAPER_PROJECT, "timeout_sec": 60},
         "fs.delete": {"path": "out/new.txt"},
         "fs.list": {},
         "fs.move": {"src": SOURCE_REL, "dst": "library/0000/moved.txt"},
@@ -342,8 +348,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "attack.status", "attack.step",
         "doc.build_document", "doc.compose_claim", "doc.list_documents", "doc.register_dependency",
         "doc.scan_claim",
-        "doc.paper_anchor", "doc.paper_build", "doc.paper_compile", "doc.paper_render",
-        "doc.paper_state",
+        "doc.paper_compile",
         "fs.delete", "fs.edit", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
         "manuscripts.list", "manuscripts.read",
@@ -715,8 +720,15 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
         "| 判据 | 名称 | 结论 | 读数 |\n|---|---|---|---|\n"
         "| P1 | 真实检索 | 成立 | 夹具读数（探针用的假表） |\n",
         encoding="utf-8")
-    # 论文包四件要一个真有脚本的项目根；造在夹具的工作区里。
-    _make_paper_project(store.root / PAPER_PROJECT, check_exit=0)
+    # `doc.paper_compile` 要一个真有正文、且真的编得出 PDF 的项目根：正文与假引擎
+    # 都从 `paperfixture` 现造（造法只留一份，理由见那个模块的 docstring）。
+    # 引擎走 `papercompile.ENGINE_ENV` 注入 —— 与 `FX.use_engine` 同一个键；
+    # `monkeypatch` 在夹具结束时原样还回去，所以假引擎不会泄漏到别的测试文件。
+    # 为什么必须真的编一遍：`MAX_SKIPPED = 0` 的依据是"每个工具都走到成功支"，
+    # 而走不到成功支的探针压根没回答"实现到底给不给这些键"（同 `_seed` 那条纪律）。
+    _paper_root = store.root / PAPER_PROJECT
+    FX.write_paper(_paper_root)
+    monkeypatch.setenv(PC.ENGINE_ENV, str(FX.fake_engine(_paper_root / "_engine")))
 
     # 检索侧：provider 构造与探测函数都换成桩，下载器也不联网。
     # 三个 patch 都必须打在模块前缀所指的那个对象上：

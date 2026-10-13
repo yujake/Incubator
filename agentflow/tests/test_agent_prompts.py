@@ -361,8 +361,11 @@ def test_the_research_brief_sends_conjectures_to_the_attack_role():
     text = "\n".join([brief.duty, brief.deliverable, *brief.policy])
     assert "F.create_plan" in text and "attack_plans" in text, text
     assert "plan_progress_rows" in text, text
-    # D47：交付物按任务那句话说 —— "整理成论文"那一类必须建包（T3 第 1 趟就是漏了这一句）
-    assert "交付物按任务那句话说" in text and "必须建论文包" in text, text
+    # D47：交付物按任务那句话说 —— "整理成论文"那一类要交出论文（T3 第 1 趟就是漏了这一句）。
+    # 2026-10-13（`draft/117`）：口径从"必须建论文包"改成"让 G 自己写正文再编" ——
+    # 业主裁定「paper_package 里那些东西都是古早废案了，我们要智能体写文章」。
+    assert "交付物按任务那句话说" in text and "自己写正文" in text, text
+    assert "doc.paper_compile" in text, text
     # D44：只立项不算推进 —— 这一句不写，M 就会像 T2 第 13 趟那样只 create_plan、不 step
     assert "F.step" in text and "只立项不算推进" in text, text
     # D45：子目标要带可检验形式 —— 不写，M 派的子目标就会被 I9 闸门挡在门外（F 一次都不调）
@@ -672,9 +675,9 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
                            "跳过（`tools/__init__.py:390`，原因记在 `build_registry().skipped`）。"
                            "口径的两个读数见 `draft/108` §四 CS-9：无 store 70/28 件、"
                            "带 store 83/41 件",
-    "main.tex": "文件名（稿件落点），不是工具",
-    "main.pdf": "文件名（渲染产物），不是工具",
-    "appendix.tex": "文件名（附录落点），不是工具",
+    "main.pdf": "文件名（编译产物），不是工具",
+    "appendix.tex": "文件名（附录落点），不是工具 —— 2026-10-13 之后它只作为"
+                    "「旧路里那份机械产物」出现在退场说明里，正文由智能体自己写",
     "documents.claims": "台账字段（documents 表的 claims 列），不是工具",
     "documents.status": "台账字段（documents 表的 status 列），不是工具 —— H 的裁决正落在它上面"
                         "（`accepted` / `in_review` / `unresolved_review`，见 `draft/103` §4.1b-25）",
@@ -2258,7 +2261,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （`agent_prompts` 把 `judge.JUDGE_PROBLEMS` 逐项拼进"没查成与查成了"那一段）
 #: ⇒ 十格全部换值。这一条读数比"加了一个词"更重要：加一个失败码等于改十个角色的
 #: 提示词，所以它必须走版本号 + 冻结快照 + 人审那一条路，而不是"顺手加个字符串"。
-_FROZEN_PROMPT_VERSION = "p101"
+#: `p102`（2026-10-13，业主裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体
+#: 写文章」）：纸包那一段整轮改写 —— 交付物从"修订后的外部论文 + 渲染锚"改成"**由智能体
+#: 自己写出来的正文**"，工作循环三步（`fs.write` 到 `out/paper/main.tex` → `doc.paper_compile`
+#: → 核回执里的 `tex_sha256`），完成定义第 1 条从"渲染锚 0 漂移"改成"这份 PDF 是不是盘上
+#: 这份正文编的"（收工门那一格 `paper`）。退场面见 `draft/117`。
+#: 作用域读数：只有 M / G / H 三格换值（这一段只发给它们）；A–F 与 V 逐字未动 ——
+#: 这一条本身就是判据要看的形态（段与版本必须一起前进，而没碰段的角色不该换值）。
+#: ⚠️ 算这张表之前**先看环境**（2026-10-13 实测踩到）：`conftest.py` 在导入期钉了设置与几个
+#: 环境变量（含 `AGENTFLOW_LEAN_ENABLED=1`），而 D/E/F 三格的摘要对 Lean 开关敏感 ——
+#: 在开发壳里直接跑 `agentflow/temp/recompute_prompt_digests.py` 会算出与判据不同的那一组
+#: （实测：不带开关算出 D/E/F = da82…/85f5…/a990…，而判据要的是 814e…/680f…/c42b…，
+#: 也就是**与 p101 逐字相同**的那一组）。照它抄之前，先让判据自己说一遍（跑本文件），
+#: 或者让计算器替你钉上那个开关（`agentflow/temp/recompute_prompt_digests.py` 已经这么做了）。
+_FROZEN_PROMPT_VERSION = "p102"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "3748a64c289c8bd3c7ff7b43d2d040ef5a93bc5ab2223f38f4e4f5e8c218e0c0",
     "B": "14cde8726064ccabf20100b780da2e7273662935ad709767f9eeec30911136e3",
@@ -2266,10 +2282,10 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "814ef6a531e3318f5244a9bb5edc133c0a57a9a219edadc289285ed6c1a9ed00",
     "E": "680f8813cbc9225393cc866e5031c19d34ee3f1fec9f78d83ef763d38d7d0c9d",
     "F": "c42b5a151178c128c0cbe3432e1de4393e56fe4ac329d4bd7c128b8d7b9925b4",
-    "G": "28792cf1e2fd92742e1d323694175620d21f086a4da58539fde9c78db8b08922",
-    "H": "f83a47114ed6a0d071f8b1ac09cbfd7e02b0e7a2460cc8cffb1ffcccdae8e486",
+    "G": "e2838408c6b50ff5ec28d6d06c8ff95b5777201b44e9f18624d2dd5975623f0a",
+    "H": "3babbb4eb71d730385879f9d914c6c35051d9cde734b8fb2adee3f0ea4200de5",
     "V": "dc0bbc7a51112a4dbff02bcabe8065effb9c7cfed11efb3452eb114dfad1fa2e",
-    "M": "03055453440ec19cdabbd572c9c6ba759c2d47c19ac0aba417c4a3303bc63351",
+    "M": "27273840a21a0273e502992e46b2236969a71c4f54168182daa47f65e87493a7",
 }
 
 

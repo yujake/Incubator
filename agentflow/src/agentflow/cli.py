@@ -2242,7 +2242,7 @@ def _print_review_acceptance(store, *, project: str, report: str,
     末尾再写一句它们不构成通过。
 
     这一段只读盘：`check_review` 走 `store.rows` / `sessions.read_session` /
-    `userio` 的读口 / `renderanchor.check_package`，一处都不写。
+    `userio` 的读口 / `papercompile.receipt_matches_tex`，一处都不写。
     """
     from . import reviewaccept as RX
 
@@ -2581,7 +2581,7 @@ def build_parser() -> argparse.ArgumentParser:
         "closing",
         help=f"跑收工门（draft/37 §16 P3 的 {len(_CL.DEFAULT_CHECKS)} 格；退出码 0/1/2）")
     sp.add_argument("--project-dir", default="",
-                    help="论文包所在目录（查渲染锚用；不给 ⇒ 锚那一格是「没查成」）")
+                    help="项目根目录（正文与编译回执在 <它>/out/paper/；不给 ⇒ 论文那一格是「没查成」）")
     sp.add_argument("--report", default="",
                     help="报告路径（不给且没给 --project-dir ⇒ 报告形状那一格是「没查成」）")
     # 内容级验收（`draft/37` §17.3）那一段的入参：只影响那一段的读数，

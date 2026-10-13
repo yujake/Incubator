@@ -192,18 +192,18 @@ def test_for_role_releases_exec_when_sandbox_is_declared_available(monkeypatch):
 #: `for_role` 的剥离规则意味着"多一个 exec 工具"就等于"C/H 的工具面少一个"
 #: （P-13 §8.2 的受影响清单）。钉住清单 ⇒ 每次迁移都必须显式改这一行，改动可见。
 #:
-#: 现状（B3 收官后）：恰好 2 条 —— `verify.run_experiment`（B3 第 0 步）
-#: 与 `verify.check_formal`（B3 收官）。
+#: 现状：恰好 3 条 —— `verify.run_experiment`（B3 第 0 步）与 `verify.check_formal`
+#: （B3 收官），加上 `doc.paper_compile`（框架自己起 LaTeX 引擎那一档）。
 #: 前者同时是写工具（`side_effect="write_local"`）⇒ 就算 exec 轴不存在，
-#: C/H 也照样拿不到它；后者是 `read` + `exec` ⇒ 只有 exec 轴能把它剥掉，
-#: 所以这一条是"第二根轴的剥离规则真的在干活"的证据
+#: C/H 也照样拿不到它；`verify.check_formal` 是 `read` + `exec` ⇒ 只有 exec 轴能把它
+#: 剥掉，所以这一条是"第二根轴的剥离规则真的在干活"的证据
 #: （它的 `roles` 也已从 `_ROLES` 改成 `_ROLES_WRITE`，不靠过滤兜底）。
-#: 现状（§188 之后）：6 条 —— 上面两条，加上论文包四件（渲染 / 编译 / 重编 / 查锚）。
-#: 论文包那四条执行的是项目里的脚本（`project` + `script` 由调用方给）⇒ 按定义是 exec；
-#: 它们的 `roles` 直接写死 `("G",)`，所以"只读角色拿不到"是声明与过滤两道都成立的。
+#: 2026-10-13（业主裁定「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
+#: 退场面见 `draft/117`）：旧路那四条 exec 工具（渲染 / 重编 / 查锚 / 读锚）整条退场，
+#: 编译那一格由 `doc.paper_compile` 一件接手（`write_local` + `exec` + `roles=("G",)`
+#: 写死在声明里）⇒ 这份清单从 6 条收回到 3 条。
 KNOWN_EXEC_TOOLS = frozenset({"verify.run_experiment", "verify.check_formal",
-                              "doc.paper_render", "doc.paper_compile", "doc.paper_build",
-                              "doc.paper_anchor"})
+                              "doc.paper_compile"})
 
 
 def _exec_inventory_delta(registry, expected: frozenset[str]) -> dict[str, list[str]]:
@@ -213,7 +213,7 @@ def _exec_inventory_delta(registry, expected: frozenset[str]) -> dict[str, list[
 
 
 def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(store):
-    """真实树上的现状：exec 清单是 2 条（B3 收官），且只读角色仍 0 条。
+    """真实树上的现状：exec 清单是 3 条，且只读角色仍 0 条。
 
     这条断言原来写的是"一个 exec 工具都没有"，它的职责从来不是"现状如此"，
     而是"exec 清单变化必须被人看见"。B3 落地后按设计变红，于是它改为"钉住清单"：
@@ -236,10 +236,7 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
     extra = ToolRegistry(name="t-extra-exec")
     for _name, _se, _roles in (("verify.run_experiment", "write_local", ("E", "F", "G")),
                                ("verify.check_formal", "read", ("E", "F", "G")),
-                               ("doc.paper_render", "write_local", ("G",)),
-                               ("doc.paper_compile", "write_local", ("G",)),
-                               ("doc.paper_build", "write_local", ("G",)),
-                               ("doc.paper_anchor", "read", ("G",))):
+                               ("doc.paper_compile", "write_local", ("G",))):
         extra.register(_spec(_name, _se, _roles, external="exec"))
     extra.register(_spec("bogus.exec", "none", ("E",), external="exec"))
     assert _exec_inventory_delta(extra, KNOWN_EXEC_TOOLS) == {
@@ -250,14 +247,12 @@ def test_real_registry_exec_inventory_is_pinned_and_read_only_roles_stay_clean(s
     absent.register(_spec("verify.check_formal", "read", ("E", "F", "G"), external="exec"))
     assert _exec_inventory_delta(absent, KNOWN_EXEC_TOOLS) == {
         "unexpected": [],
-        "missing": ["doc.paper_anchor", "doc.paper_build", "doc.paper_compile",
-                    "doc.paper_render", "verify.run_experiment"],
+        "missing": ["doc.paper_compile", "verify.run_experiment"],
     }, _exec_inventory_delta(absent, KNOWN_EXEC_TOOLS)
     none_at_all = ToolRegistry(name="t-no-exec")
     assert _exec_inventory_delta(none_at_all, KNOWN_EXEC_TOOLS) == {
         "unexpected": [],
-        "missing": ["doc.paper_anchor", "doc.paper_build", "doc.paper_compile",
-                    "doc.paper_render", "verify.check_formal", "verify.run_experiment"],
+        "missing": ["doc.paper_compile", "verify.check_formal", "verify.run_experiment"],
     }, _exec_inventory_delta(none_at_all, KNOWN_EXEC_TOOLS)
 
     # 只读角色侧：真实树上 exec 工具一条都进不去，且留痕为空（= 声明侧也干净）。

@@ -1,0 +1,112 @@
+R72：`paper_package` 整条退场（业主裁定：我们要智能体写文章）—— 正文由 G 自己写、框架只负责编 PDF
+
+业主 2026-10-13 裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」。
+另经提问定下**范围 A**（整条路退场：一个动作 + 五件工具 + 收工门一格 + 三个模块）与
+**作者 A**（G 自己把正文写进 `out/paper/main.tex`，框架在框架内编译出 PDF）。
+执行记录、逐条读数与过程中发现并修掉的五个坑落在 `draft/118`；计划在 `draft/117`。
+
+## 一、退场面
+
+删：角色动作 `G.paper_package`；工具 `doc.paper_render` / `doc.paper_build` /
+`doc.paper_anchor` / `doc.paper_state`；模块 `renderanchor.py` / `paperbuild.py` /
+`agent_g/paper_package.py`；`demo/paper_from_results/`（那对脚本的样板）；
+四个只判这套机制的测试文件。
+新增：`src/agentflow/papercompile.py`（把 `out/paper/main.tex` 编成 `main.pdf` 并写
+**框架自己产**的回执 `COMPILE-RECEIPT.json`）、工具 `doc.paper_compile`（只给 G）、
+共享夹具 `tests/paperfixture.py`（假引擎经 `AGENTFLOW_LATEX_ENGINE` 注入，
+判据不依赖"这台机器装了 LaTeX"）、判据 `tests/test_papercompile.py`（16 条）。
+
+读数：工具 83 → **79**（G 41→37、H 27→26）、动作 60 → **59**、`PROMPT_VERSION` p101 → **p102**
+（只有 M/G/H 三格的**段**换值；A–F 与 V 的段逐字未动 —— 十格摘要里它们只差版本号那一行）。
+
+## 二、新那一层的四条刻意口径
+
+1. **不跑项目脚本**：引擎由框架直接起（`pdflatex`/`xelatex`/`lualatex`，可用
+   `AGENTFLOW_LATEX_ENGINE` 指定）——"要求项目自带渲染脚本"这件事本身就是旧路的病灶；
+2. **回执由框架写**：`tex_sha256`/`pdf_sha256`/`engine`/`runs`/`exit_codes`/`pages`/
+   `pdf_bytes`/`pdf_fresh`/`compiled_at`/`written_by`/`stderr_tail`。它是"这份 PDF 是不是
+   盘上这份正文编的"的**唯一**读数；
+3. **产物与退出码分两栏**：本机 MiKTeX 会写完 PDF 却以 `0xC0000409` 退出
+   （第二次 T2 实测 `exit_codes=[3221226505, 3221226505]`、`pages=3`）⇒ 判据是回执里的
+   产物读数，退出码照实带回，谁也不冒充谁；
+4. **三态 + 一条新读数 `pdf_fresh`**：`not_applicable` / `unknown` / `computed`。
+   `pdf_fresh` 是写这一层时探针逼出来的 —— 只判"文件在不在"会把上一次编的 PDF 当成本次
+   读数（引擎什么都没产、旧 PDF 还躺在那里 ⇒ 读成"编成功了"）。判据是编译前后的快照变了，
+   而**不删**旧 PDF（一次失败的编译不该顺手毁掉上一份能看的稿子）。
+
+## 三、收工门那一格换对象：`anchor` → `paper`
+
+判据只有一条：回执里的 `tex_sha256` == 盘上这份 `main.tex` 的摘要。四种读数各有各的名字：
+没有正文 ⇒ `not_applicable`；对不上 ⇒ `fail` + `paper_pdf_is_stale`（blocker）；
+回执读不到/摘要算不出 ⇒ `unknown` + `paper_not_checked`；对得上 ⇒ `pass`。
+`reviewaccept` 的辅助读数 `anchor_verdict` → `receipt_matches_tex`（没给项目根时是
+`unknown`，不再是空串 —— 那等于把"没查成"折成一个空值）。
+
+**写台账不再让 PDF 过期**（旧锚把 `store` 的行算进一个维度）⇒ 旧提示词那条
+"会写台账的动作要排在最后一次重渲染之前"随机制消失（不是被删，是没了对象）。
+
+## 四、这一批删掉的判据，以及它们的教训挪去了哪（不粉饰）
+
+- `test_paperbuild.py` / `test_renderanchor.py` / `test_paper_package_action.py`：
+  机制没了 ⇒ 判据没了；**三态**那一半由 `test_papercompile.py` 接手
+  （`not_applicable` / `unknown` / `computed` 各自单列，含"回执读不到 ⇒ 判不了"那一档）。
+- `test_the_package_failure_carries_the_script_stderr.py`：**完整接手** ——
+  "失败要把外部工具自己的话带回来"（`t3e` 的读数）现在是 `test_papercompile.py` 的两条
+  （引擎 stdout/stderr 尾巴随读数回来 + 回执里也留一份）。LaTeX 的错误印在 stdout 上
+  （`.log` 转录）⇒ 两栏都留。
+- `test_refusals.py` 里三条 `agent_g/paper_package.py` 的失败码：逐条删掉并写明接手判据，
+  **没有**给不存在的机制编新判据。
+- "洁净室渲染器不许改正文"（生成器整份重写正文的真机血案）：变成**结构性保证**
+  （框架的编译本来就不碰正文），并在 `test_review_polish_loop.py` 里以"改动还在、
+  其余正文逐字未动"这一对断言继续钉。
+
+## 五、过程中发现并修掉的五个坑
+
+1. `closing.py` 的 `manuscript_edited` 那一腿还留着一处 `RA.file_digest`（`renderanchor` 删掉后
+   就是 `NameError`）—— **判据自己抓出来的**：那一腿落 `acceptance_leg_unreadable` ⇒
+   整格 `unknown`（不是 pass、也不是 fail）。三态纪律在这里救了一次。
+2. `agent_prompts.py` 被脚本整体写回时从 CRLF 变成 LF（`read_text` 归一 + `write_text(newline="")`）
+   ⇒ `git diff` 显示"改了 5282 行"而实际只改了七处。已按字节修回 CRLF（现 diff 76 插入/58 删除）。
+3. 冻结提示词摘要表的环境坑：`conftest.py` 钉 `AGENTFLOW_LEAN_ENABLED=1`，而 D/E/F 三格的摘要
+   对 Lean 开关敏感 —— 不带它跑算出的 D/E/F 是另一组，抄进表里判据当场红且看着像"段动了"。
+   已让 `temp/recompute_prompt_digests.py` 自己钉上开关并在冻结表上方写明。
+4. 快照 `--write` 是同一个坑的第二处：直接重生成会写出 Lean **关闭**口径的提示词文本
+   （D 的"背书在形式化（E）或人"、E 的"数值实验与形式化验证"……），而判据比的是 Lean 开启那一套。
+   已让两个 `--write` 入口在导入 agentflow **之前**自己钉上开关。
+5. 三处 `ok(body)` / 陈旧计数 / 坏引用被本仓自己的判据抓出来并修掉：
+   `ok({…})` 改成字面量键表（`test_tools_branch_key_sets`）、`capabilities` 的对账读数
+   60→59（`test_r4_roles_surface`）、注释里 `temp/…` 的坏引用两处（`test_r5_orchestration_cost`）。
+
+## 六、判据读数
+
+- `tests/test_papercompile.py` 16 passed；`test_closing_gate.py` 80 passed；
+  `test_paper_pack.py` 25 passed；`test_agent_prompts.py` 64 passed；
+  `test_review_acceptance.py` + `test_relative_paths_under_workspace.py` 26 passed；
+  `test_review_polish_loop.py` 2 passed；`test_release_all.py` 65+2 passed；
+  `test_reading_map.py` + `test_doc_code_consistency.py` + `test_role_specs_complete.py` 51 passed。
+- 冻结快照重冻（逐格读数是算出来的，不是看 diff 看出来的）：`agent_surface` 只有
+  G（actions/handler_signatures/tools/write_tools/prompt）、H（tools/prompt）、M（prompt）
+  真的换值，其余七格**只差版本号那一行**（长度逐字相同）；`tool_surface` 的
+  `declarations`/`signatures` 各 83→79（删四条、`doc.paper_compile` 改一格）、
+  `roles`/`roles_with_m` 的 G/H、`summary`、11 条 CLI 输出。
+- 全量套件读数见本批的提交前那一跑（`temp/r72b-full-suite.txt`）。
+
+## 七、禁改区（FC-27）
+
+命中 5 条，`required_approvals=2`：`specs/g.py`、`specs/m.py`、`capabilities.py`（auth-audit）
+与 `tests/golden/agent_surface_snapshot.json`、`tests/golden/tool_surface_snapshot.json`
+（eval-criteria，重冻必须由人逐格看过 —— 逐格读数见 `draft/118` §3）。签名落在
+`.noai-approvals.json`。
+
+## 八、没做（如实列）
+
+- 第三次 T2 **没有**启动（业主：「不急着做第三回T2，着重记录并修复已知问题」）。
+- 待业主裁的两件（`draft/116` 带过来）：稿件作废/取代（`supersedes`）的语义；
+  `blocker` 是否阻断收工。
+- `literature.unprocessed` 没有队列项（修 `agent_a` 非禁改区，或给 B 加 intake 动作 = FC-27）。
+- H 不再有只读的核包工具（`doc.paper_state` 退场）：独立复核落在 M 的 `conductor.closing`
+  与 H 的 `fs.read` + `reviewaccept` 的辅助读数上。若业主要求"H 也能独立核"，
+  加法是一件只读的 `doc.paper_status`（本次刻意没加，范围 A 定的是退场）。
+- 已知遗留陈旧提及（都不是判据对象，逐条记在 `draft/118` §7）：`tools/coverage_zero_test.py`
+  注释里拿 `paper_package.py` 举例（禁改区文件）、`test_tools_returns_declaration.py` 头部
+  几处"55 个工具"（既有陈旧）、`agent_e/author_script.py` 一处同族注释。

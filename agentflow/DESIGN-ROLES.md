@@ -275,10 +275,14 @@ verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
 2. **交付闸门**：`agentflow/src/agentflow/deliver.py::gate`（`DeliveryGate`），
    不通过时产出**可派回去的工作项**（`WorkItem` / `append_work_item` / `dispatch_work_items`）——
    这把"H 判 fail"从"记一笔"变成"有一条能回到 G 的路径"，与 I8 的闭环同源。
-3. **论文包的三维锚**：`agentflow/src/agentflow/renderanchor.py::check_package`，
-   把"源表 / 渲染出的源文件 / 编译回执（`tex_sha256` 与盘上 tex 是否一致）"三维对齐，
-   判定只有 `consistent` / `drifted` / `unknown` 三态 —— 它是 §2.3"依赖闭合第一道闸"在
-   **论文包**这一层的同构物（"这份 PDF 是不是从磁盘上这份 tex 编的"）。
+3. **"这份 PDF 是不是盘上这份 tex 编的"**：`agentflow/src/agentflow/papercompile.py::receipt_matches_tex`，
+   把编译回执（`out/paper/COMPILE-RECEIPT.json`）里的 `tex_sha256` 与盘上那份 `main.tex` 的
+   摘要对齐，三态是 `True` / `False` / `None`（对得上 / 对不上 / **判不了** —— 回执不在或读数读不到，
+   不许折成"对得上"）；收工门的 `paper` 那一格与 `reviewaccept` 的辅助信号 `receipt_matches_tex`
+   都读它。它是 §2.3"依赖闭合第一道闸"在**论文**这一层的同构物。
+   （旧路上这一条叫"论文包的三维锚"：判据在 `renderanchor.py::check_package`，把"源表 /
+   渲染出的源文件 / 编译回执"三维对齐；它随业主 2026-10-13 的裁定整条退场（`draft/117`）——
+   正文由智能体自己写，"包与台账同不同时点"这件事不再成立。）
 
 ---
 

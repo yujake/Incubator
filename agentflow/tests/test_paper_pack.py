@@ -1,16 +1,27 @@
-"""论文包专用提示词（⑥）与 24 条断言的验收判据（⑦）（`draft/28` §189）。
+"""论文段的提示词（⑥）与 24 条断言的验收判据（⑦）（`draft/28` §189；`draft/117` 改写）。
 
 ## 这一组守什么
 
 `draft/28` §184.5 的第 6、7 步，以及终点门槛 A 里那两句可机械判的话
 （"交付说明与 ACCEPTANCE.md 对齐"、"5 条判据无一条 judge_not_wired"）。
 
-1. 提示词段只给该看的角色：论文包专用段里有 P1–P11 的判据表位置、claims 台账语义、
-   期刊体例与五条完成定义。它给 M/G/H；给 A/B/C/E/F 是噪音 —— 而噪音会稀释它们真正
+1. 提示词段只给该看的角色：论文段里有 P1–P11 的判据表位置、claims 台账语义、
+   期刊体例与完成定义。它给 M/G/H；给 A/B/C/E/F 是噪音 —— 而噪音会稀释它们真正
    要看的东西。这一条用"该有的都有、不该有的都没有"两个方向钉住。
 2. 结论强于引文：机械半（`faculty_checks.claim_strength_findings`）逐条比对
    "这条断言说了多强"与"它挂的证据等级"，语义半（`judges` 的
    `claims.conclusion_strength`）带负控准入。两半都由判据本体检查，不靠我口头保证。
+
+## 2026-10-13 这一轮改了什么（业主裁定：「paper_package 里那些东西都是古早废案了，
+## 我们要智能体写文章」）
+
+段里凡是"项目自带渲染脚本 / 机械产的附录与四张表 / 渲染锚 0 漂移 / 派 `G.paper_package`"
+的句子都换成了"正文由智能体自己写 → `doc.paper_compile` 编 → 核回执里的 `tex_sha256`"。
+两条判据因此**换了对象**（不是被删）：`PACK_FOLLOW_FACTS` 从"点名让包跟上那个动作"
+改成"点名让 PDF 跟上那份正文的工具与回执"，"核锚的时机"那条改成"重编的时机"。
+另有一条纪律**随机制一起消失**（不是被删）：旧段要求"会写台账的动作（`H.verify_fixes`）
+排在最后一次重渲染之前"—— 那是因为旧锚把台账行也算进 `files` 维度；现在回执只认
+`main.tex`，写台账不再让 PDF 过期，所以那句话既不对也没用了。退场面见 `draft/117`。
 """
 
 from __future__ import annotations
@@ -42,8 +53,8 @@ def _prompt(role: str, store: Store) -> str:
     return AP.system_prompt(role, registry=_registry(store), task="只读重放一次论文包")
 
 
-def test_the_paper_pack_section_goes_to_the_roles_that_touch_the_package(store: Store):
-    """正控：M（统筹交付）/ G（写稿与打包）/ H（审校）看得到这一段。
+def test_the_paper_section_goes_to_the_roles_that_touch_the_paper(store: Store):
+    """正控：M（统筹交付）/ G（写正文并编译）/ H（审校）看得到这一段。
 
     `R6`：这条判据原先钉的是旧字面量 `完成定义（五条全过才算交付`，而那个"五条"是
     手抄计数（真身 = `closing.DEFAULT_CHECKS` 的 8 格）⇒ 改成钉新口径：
@@ -52,7 +63,7 @@ def test_the_paper_pack_section_goes_to_the_roles_that_touch_the_package(store: 
     """
     for role in AP.PAPER_PACK_ROLES:
         text = _prompt(role, store)
-        assert "论文包的" in text or "论文包（你参与的那份交付物）" in text, role
+        assert "论文（你参与的那份交付物）" in text, role
         assert "完成定义" in text, role
         assert "五条全过" not in text, f"{role}：完成定义里还写着旧的手抄条数（五条全过）"
         assert "收工门八格全过" in text, f"{role}：完成定义里没写清真身格数（八格）与「以读数给」的口径"
@@ -98,12 +109,12 @@ def test_the_paper_pack_section_carries_the_four_required_facts(store: Store):
     摘要里凑齐五个标记与"一篇更好的论文"是两件事，判据必须钉后者。
     """
     text = _prompt("G", store)
-    for fact in ("修订后的论文正文", "可改、该改", "只读基线", "appendix.tex",
+    for fact in ("由智能体自己写出来的论文正文", "可改、该改", "只读基线", "appendix.tex",
                  "out/paper/ACCEPTANCE.md", "P1–P11", "逐条回应那十行",
                  "cross_check", "不构成证明", "结论不许强于它挂的证据",
-                 "doc.paper_render", "doc.paper_compile", "doc.paper_state",
-                 "渲染锚 0 漂移", "正文有内容级的改动", "review_findings", "依据"):
-        assert fact in text, f"论文包段里没有 {fact!r}"
+                 "doc.paper_compile", "COMPILE-RECEIPT.json",
+                 "正文与 PDF 对得上", "正文有内容级的改动", "review_findings", "依据"):
+        assert fact in text, f"论文段里没有 {fact!r}"
     # 第七节（摄取与派活的三条纪律，`draft/37` §48 的真机读数）：这三句是行为口径，
     # 不是说明文字 —— 上一趟真机正是在这三处各栽了一次（通配吃掉配套文档 /
     # 出处指到配套文档 / 把"没核"写成 false）。
@@ -152,10 +163,10 @@ def test_the_paper_pack_section_is_versioned(store: Store):
     assert int(AP.PROMPT_VERSION[1:]) >= 24, AP.PROMPT_VERSION
 
 
-#: `2026-10-01` 真机实测逼出来的那一条：光说"重渲染 → 重编译 → 锚回 consistent"不够，
-#: 还要点名走哪条动作路径 —— 实测的那次（工作区 `projects/p3-review`）主控派的是
-#: `G.build_document`（两次都被 `invalid_params` 拒），包一个字节没变、锚报 `drifted`，
-#: 21 步打完收工，交付说明里写着"包与台账分家"。
+#: `2026-10-01` 真机实测逼出来的那一条：光说"让包跟上"不够，还要点名走哪条路径 ——
+#: 实测的那次（工作区 `projects/p3-review`）主控派的是 `G.build_document`（两次都被
+#: `invalid_params` 拒），包一个字节没变、锚报 `drifted`，21 步打完收工，交付说明里
+#: 写着"包与台账分家"。
 #: 第二次实测（`projects/p3-review-20261001-220936`）证明点名动作这条路走通了（G 真的重渲染重编译），
 #: 但顺序错了：`H.verify_fixes` 排在 G 之后，它又改了 `review_findings`，锚当场变回 `drifted`
 #: ⇒ 段里必须同时写"会写台账的动作排在最后一次重渲染之前"。
@@ -164,23 +175,29 @@ def test_the_paper_pack_section_is_versioned(store: Store):
 #: 第四次（2026-10-03，`draft/37` §58/§59）：第九趟主控连派三次 `G.revise` 都没能让包跟上
 #: （`revise` / `refresh_markdown` / `render` 动的是稿件 markdown），而"重渲染 + 重编译 + 核锚"
 #: 是三个工具、没有动作能召唤 ⇒ 于是加了 `G.paper_package`（一次做完三件事并回报 verdict）。
-#: 段里现在必须点名它；`G.revise` 从"那条路"降级成"反例之一"。
-PACK_FOLLOW_FACTS = ("`G.paper_package`", "build_document", "G.revise", "doc.paper_render",
-                     "doc.paper_state", "verify_fixes", "最后一次写台账之后",
+#:
+#: **2026-10-13（业主裁定，`draft/117`）**：`G.paper_package` 那一整条退场 —— 正文由智能体
+#: 自己写。所以这一组事实换对象：段里必须点名"正文怎么进去的（`fs.write`）"、
+#: "用哪件工具编（`doc.paper_compile`）"、"核什么（`COMPILE-RECEIPT.json` 里的 `tex_sha256`）"，
+#: 以及"没有建论文包这个动作"这个反例。第二次实测那条顺序纪律随机制消失
+#: （新回执只认 `main.tex`，写台账不再让 PDF 过期）—— 它不是被删，是没了对象。
+PACK_FOLLOW_FACTS = ("fs.write", "doc.paper_compile", "COMPILE-RECEIPT.json",
+                     "tex_sha256", "build_document", "G.revise",
+                     '没有"建论文包"这个动作', "最后一次改正文",
                      "E.check_formal", "不注入任何库")
 
 
 def pack_follow_problems(text: str) -> list[str]:
-    """只做一件事：段里有没有"让包跟上要走哪个动作"这件事（空 = 有）。负控跑的就是它。"""
-    return [f"论文包段里没有 {fact!r}" for fact in PACK_FOLLOW_FACTS if fact not in text]
+    """只做一件事：段里有没有"让 PDF 跟上正文要走哪条路"这件事（空 = 有）。负控跑的就是它。"""
+    return [f"论文段里没有 {fact!r}" for fact in PACK_FOLLOW_FACTS if fact not in text]
 
 
-def test_the_paper_pack_names_the_action_that_makes_the_package_follow(store: Store):
-    """判据：段里必须点名 `G.revise` 这条路径，并说清哪个动作不会让包跟上。
+def test_the_paper_pack_names_the_tool_that_keeps_the_pdf_current(store: Store):
+    """判据：段里必须点名"正文怎么进去、用哪件工具编、核哪个读数"，并说清哪些动作不会。
 
-    为什么要写到这个粒度：`G.build_document` / `G.render` 只动台账与稿件，
-    只有 `G.revise`（模型驱动那条路）会走 `doc.paper_render` → `doc.paper_compile` →
-    `doc.paper_state`。一个字不写清，主控就会去派那个看起来最像"建包"的动作，而它不会。
+    为什么要写到这个粒度：`G.build_document` / `G.revise` / `G.render` 只动台账与稿件
+    markdown，它们**既不改 `out/paper/main.tex`、也编不出 PDF**。一个字不写清，
+    主控就会去派那个看起来最像"把论文弄出来"的动作，而它不会。
     """
     problems: list[str] = []
     for role in ("M", "G"):
@@ -188,34 +205,36 @@ def test_the_paper_pack_names_the_action_that_makes_the_package_follow(store: St
     assert not problems, "；".join(problems)
 
 
-def test_the_pack_follow_judge_catches_a_section_without_the_action() -> None:
-    """负控：把主路径那个动作名从段里拿掉 ⇒ 同一个检查函数必须报出来（否则那条判据是装饰）。
+def test_the_pack_follow_judge_catches_a_section_without_the_tool() -> None:
+    """负控：把主路径那件工具名从段里拿掉 ⇒ 同一个检查函数必须报出来（否则那条判据是装饰）。
 
-    "主路径"在 2026-10-03 之后是 `G.paper_package`（§59 加的动作）——负控要拿掉的是它，
-    而不是仍然作为反例留在段里的 `G.revise`（拿掉反例不改变"路在哪"这个事实，
-    判据不该因此报错：这两件事是分开的）。
+    拿掉的是 `doc.paper_compile`（2026-10-13 之后唯一能编 PDF 的那一件），
+    而不是仍然作为反例留在段里的 `G.revise` / `build_document`
+    （拿掉反例不改变"路在哪"这个事实，判据不该因此报错：这两件事是分开的）。
     """
     good = AP.PAPER_PACK
     assert pack_follow_problems(good) == [], "正控输入下必须干净"
-    assert pack_follow_problems(good.replace("`G.paper_package`", "某个动作")), "主路径动作名被拿掉却没报"
+    assert pack_follow_problems(good.replace("doc.paper_compile", "某个工具")), \
+        "主路径工具名被拿掉却没报"
     assert pack_follow_problems(good.replace("build_document", "另一个动作")), "反例没报"
-    assert pack_follow_problems("论文包要重渲染、重编译。"), "空话连篇的段没报"
+    assert pack_follow_problems("论文要编出 PDF。"), "空话连篇的段没报"
 
 
-def test_the_paper_pack_says_the_package_must_follow_the_ledger(store: Store):
-    """判据（§196 真机实测逼出来的）：改了台账就要让包跟上，这句必须在段里。
+def test_the_paper_pack_says_the_pdf_must_be_rebuilt_after_the_edits(store: Store):
+    """判据：最后一次改正文之后必须重编，这句必须在段里（不然"已完成"会与盘上产物分家）。
 
-    实测（2026-09-30）：一轮跑出 `documents +3`、`experiments +4`，而 `out/paper/main.pdf`
-    一个字节没变、`doc.paper_state` 报 `drifted` —— 台账动了、包没跟上，交付定义第 1 条
-    当场不成立。G 的修订落进 documents 之后没有任何人重渲染，是这一轮真实的失败形态；
-    所以"重渲染 → 重编译 → 锚回 consistent"要写成收工前的动作，而不是一句原则。
+    来历（旧口径下实测，2026-09-30）：一轮跑出 `documents +3`、`experiments +4`，而
+    `out/paper/main.pdf` 一个字节没变 —— 台账动了、包没跟上。现在那两件事不再耦合
+    （回执只认 `main.tex`），但"改了正文不重编"这一形态一模一样地还在：收工门那一格
+    会报 `paper_pdf_is_stale`，而它读的就是回执里的 `tex_sha256`。所以这句话要写成
+    收工前的动作，而不是一句原则。
     """
     text = _prompt("G", store)
-    for fact in ("doc.paper_render", "doc.paper_compile", "doc.paper_state", "drifted",
-                 "包跟上"):
-        assert fact in text, f"论文包段里没有 {fact!r}"
-    # 负控：这句话不能只写给"读了论文包段"的角色 —— M 才是决定收工的人。
-    assert "包跟上" in _prompt("M", store), "主控的提示词里没有这条收工判据"
+    for fact in ("doc.paper_compile", "COMPILE-RECEIPT.json", "tex_sha256",
+                 "paper_pdf_is_stale", "最后一次改正文"):
+        assert fact in text, f"论文段里没有 {fact!r}"
+    # 负控：这句话不能只写给"读了论文段"的角色 —— M 才是决定收工的人。
+    assert "paper_pdf_is_stale" in _prompt("M", store), "主控的提示词里没有这条收工判据"
 
 
 # ============================================================ ⑥ 验收表解析（真机抓到的缺陷）

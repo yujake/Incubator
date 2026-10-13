@@ -21,6 +21,18 @@ T1 第 2 趟真机（2026-10-04）：`B.register_statement` 被召唤 14 次，�
 凡是手写的 `{"ok": False, ...}` 都必须逐条登记在下面的表里并写明理由
 （那些是"执行了、没成功"的真失败，不是拒绝），扫描结果与表双向比对 ——
 表里多一条（豁免腐烂）与少一条（新写的漏网）都会红。
+
+## 2026-10-13：登记表里 `agent_g/paper_package.py` 那三档随旧路退场
+
+业主裁定逐字：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
+范围 A（整条 `paper_package` 路退场）⇒ 那个模块连同它的三档手写失败
+（`package_build_failed` / `state_failed` / `anchor_script_failed`）一起删除
+（退场面与逐条理由见 `draft/117`）。这一条判据的对象是"模块里手写的 `ok=False`"，
+模块不在了就**没有对象可判** —— 所以这里删掉那三行，而不是给一个不存在的机制编新判据。
+它留下的那一课是**失败要把外部工具自己说的话带回来**（旧路只回一句"脚本不在盘上"，
+而脚本的 stderr 当时就在手边，`draft/116` §4）；接手的判据在
+`tests/test_papercompile.py`：`test_the_engine_tail_is_carried_when_the_compile_fails`
+与 `test_the_receipt_on_disk_carries_the_engine_tail`。
 """
 from __future__ import annotations
 
@@ -41,14 +53,9 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
     ("agent_d/poll.py", ""):
         "工具 `research.poll_waiting` 自己失败了（不是参数不对、也不是前置条件不满足）"
         "⇒ 这是「执行了、没成功」，该落 `failed`，不该冒充 `refused`",
-    ("agent_g/paper_package.py", "package_build_failed"):
-        "渲染/编译是外部工具链，它失败不等于这次调用不成立 ⇒ `failed`",
-    ("agent_g/paper_package.py", "state_failed"):
-        "读锚失败是读盘失败，同上 ⇒ `failed`",
-    ("agent_g/paper_package.py", "anchor_script_failed"):
-        "并列读数（第二条核锚通道 `doc.paper_anchor` 的脚本 `--check`）自己抛了异常："
-        "它是并列读数、不是这一格的权威，所以它坏了不代表这次调用不成立 ⇒ `failed`；"
-        "此时权威读数（`renderanchor` 那一份）照样给出来，坏掉的那一条只如实写 `problem`",
+    # 注：`agent_g/paper_package.py` 的三档（`package_build_failed` / `state_failed` /
+    # `anchor_script_failed`）2026-10-13 随整条 `paper_package` 路退场而删除
+    # （业主裁定与退场面见文件头 docstring 与 `draft/117`）。
     # `E.author_script`（S-10(a)）的三档：都不是"这次调用不成立"，而是
     # "执行了、没成功" ⇒ 该落 `failed`，不许冒充 `refused`（冒充会把
     # "模型网关炸了"记成"你参数写错了"，调用方于是去改一个没错的参数）。
@@ -59,8 +66,9 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "模型回了一份不合格的脚本（没有 `REPRO_RESULT` / 空 / 过长）：调用本身成立、"
         "产出不能用 ⇒ 执行失败",
     ("agent_e/author_script.py", "write_failed"):
-        "写盘失败（含落点越界）：与 `paper_package` 的 `state_failed` 同族 —— "
-        "读盘/写盘失败不等于这次调用不成立 ⇒ 执行失败",
+        "写盘失败（含落点越界）：读盘/写盘失败是「执行了、没成功」，不等于这次调用"
+        "不成立 ⇒ 执行失败（同族的还有工具层的 `paper_compile_failed`：编不出来只是"
+        "没编成，不是调用方参数写错了）",
     # 注：同一方法里 `bad_spec` / `no_seam` 两档不在这里 —— 它们是"这次调用本身
     # 不成立"（判据不全 / 没接缝），走 `refusals.refuse`（先例：`A.search_literature`
     # 的 `no_provider` 与 `A.ingest_local` 的 `bad_books_dir`）。所以本表只登记
@@ -99,8 +107,10 @@ def _hand_rolled_ok_false(text: str) -> list[tuple[int, str]]:
     """扫一个源文件里手写的 `{"ok": False, "kind": ...}` ⇒ `[(行号, kind)]`。
 
     判据取的是"字典字面量里同时出现 `"ok": False`"，因为它对返回与
-    `out.update({...})` 两种写法都一样 —— 后者正是 `G.paper_package` 的写法
-    （只扫 `return` 会漏掉它，第一版就是这么漏的）。
+    `out.update({...})` 两种写法都一样 —— 旧路 `G.paper_package` 用的正是后一种
+    （只扫 `return` 会漏掉它，第一版就是这么漏的）。那个动作 2026-10-13 随
+    `paper_package` 整条退场了（`draft/117`），但"只扫 `return` 会漏掉另一种写法"
+    这条教训与扫描面本身不随它退场 ⇒ 判据照旧收字典字面量，不改成只扫 `return`。
     """
     tree = ast.parse(text)
     found: list[tuple[int, str]] = []

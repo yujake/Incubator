@@ -2,9 +2,10 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-12（批 R62），
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-10-13
+> （`paper_package` 整条退场后复算），
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **213 个 `.py`、125,256 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,814 行** —— 批 R40 把它补进了 §3 的表；
+> **211 个 `.py`、124,841 行**，**44 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，5,942 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行是 `schema.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -23,7 +24,15 @@
 > `doc.paper_render` 的摘要 + `agent_prompts.py` 的纸包两处，净 +18 行）；
 > **批 R54 再改一次**：124,044 → **124,068**（CS-10 ② 的产出即登记 + 四处 `specs/` 的文本，
 > 净 +24 行）；**批 R56 再改一次**：124,068 → **124,112**（纸包第六节的删减 + G/H 版的
-> 第八节整块替换，净 +44 行）。）
+> 第八节整块替换，净 +44 行）；**2026-10-13 再改一次**：125,256 → **124,829**
+> （`paper_package` 整条退场：删 `renderanchor` / `paperbuild` / `agent_g/paper_package`
+> 三个模块、加 `papercompile.py`，净 −427 行；三格里的文件数 213 → **211**，`>800 行` 仍是 44。
+> **2026-10-13 R72 收尾再改一次**：124,829 → **124,841**（净 +12 行：改掉三条被全量套件抓出来的
+> 陈旧读数 —— `capabilities.py` 里被 `test_r4_roles_surface` 逐字比对的那句对账读数、
+> `tools/doc_tools.py` 的成功支从 `ok(body)` 改成字面量键表；文件数 211 与 `>800 行` 的 44 都不变。
+> 复算命令就是上面那一条）。
+> **退场的那三个模块名这里刻意不写 `.py` 扩展名**：本图自己的判据要求图里每个像文件名的
+> token 都在盘上真的存在，写全名会让那条判据红 —— 而它们确实已经不在盘上了）。）
 >
 > **它自己也有判据**：`tests/test_reading_map.py` 会断言
 > ①图里提到的每个文件名都真实存在；②`src/agentflow` 的每个模块至少在这张图里出现一次
@@ -218,7 +227,7 @@
 | `cancellation.py` | 取消语义（四条纪律） |
 | `faculty_checks.py` | 十项官能里"可机械判的那一半" |
 | `deliver.py` | 交付前的判据闸门：逐项判据 + 机械半 → 结论、报告、派回去的工作项 |
-| `closing.py` | 收工门（`draft/37` §16 P3）：**八格**各自一个三态读数（`closing.DEFAULT_CHECKS` 是权威清单）—— 锚 `consistent` / 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / 实质产出（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ 验收表的机器可判行 / 产物台账与盘上一致（`ARTIFACTS.jsonl` 逐条重算）。**工具 `conductor.closing` 与 CLI `agentflow closing` 都调 `closing.check_closing`（同一份实现、两个入口）**；`unknown` 不是通过 |
+| `closing.py` | 收工门（`draft/37` §16 P3）：**八格**各自一个三态读数（`closing.DEFAULT_CHECKS` 是权威清单）—— 论文那一格（回执里的 `tex_sha256` 与盘上那份 `main.tex` 的摘要对得上；没有 `main.tex` ⇒ 不适用，回执读不到 ⇒ 没查成）/ 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题 / 实质产出（`documents`/`relations`/`experiments`/`review_findings`/`statements` 至少一张非空）/ 验收表的机器可判行 / 产物台账与盘上一致（`ARTIFACTS.jsonl` 逐条重算）。**工具 `conductor.closing` 与 CLI `agentflow closing` 都调 `closing.check_closing`（同一份实现、两个入口）**；`unknown` 不是通过 |
 | `reviewaccept.py` | 审稿场景的**内容级**验收（`draft/37` §17.3）：报告九节且每栏有读数 / 定理台账每条有完整假设与出处页码 / 三态分支落盘可查 / 在成本上限内 / 每跳留下可读输入。**判据与辅助读数分栏** —— `sha`/页数/锚/行数那五种"容易拿到"的读数照原样给出，但**一个都不参与 `passed`** |
 | `migrate_concepts.py` | `concepts` 并进 `statements` 的折叠内核与**迁移计划**（`draft/97` §10/§14/§15.2）：`plan_migration`（计划 = 折叠 + 关系改号 + 逐条落账 + 边界读数，真跑的那一笔照抄它）、`counter_alloc`（确定性发号替身，让预演与真跑的号逐条对得上）、`ledger_lines`（改号台账的行形状：`out/` 下那份 `migrate-map` 记录）、`fold_concepts` / `remap_concept_ids`（内核：概念号走同一分配器重发、定义待补标记、别名带过）。纯函数，不碰盘 |
 | `conceptrows.py` | 并表**过渡期**概念行的唯一读写口（`draft/97` §10.3）：写的时候新标准（`statements`）先写、老表（`concepts`）照旧镜像且**两处同号**；读的时候合成一个视图（新标准优先，逐行标 `via="statements"/"legacy"`）；`legacy_present` 三态（表已退役而老文件还在 ⇒ `stale_file` 点名）；四个计数分开给（`merged` / `legacy_only` / `definition_only_in_legacy` / `statements`）—— 有了它，读侧可以一个一个搬到新标准，而"两边不同步"永远看得见 |
@@ -230,8 +239,7 @@
 |---|---|
 | `evidence.py` | 证据层：先检索、再逐字回验 —— 每条结论都落在某段真实原文上 |
 | `artifacts.py` | 产物登记：谁在哪个路径产出了什么 |
-| `paperbuild.py` | 论文包的构建 / 编译 / 锚核对 |
-| `renderanchor.py` | 渲染锚与编译回执：判"包还是不是库里现在的样子" |
+| `papercompile.py` | 把智能体写好的 `out/paper/main.tex` 编成 `main.pdf`，并写框架自己的编译回执：判"这份 PDF 是不是盘上这份 tex 编的"（`receipt_matches_tex`） |
 | `modelgw.py` | 模型网关：全仓唯一读 API key 的地方 |
 | `modelclient.py` | 把 `modelgw` 适配成抽取层要的 `.complete(prompt) -> str` |
 | `modelcost.py` | 模型花销入账适配器 |
@@ -264,7 +272,7 @@
 | 动 **D 的研究循环** | `agent_d/`（包） | `claimanatomy.py`、`tools/research_tools.py` | `tests/test_agent_d*.py`、`tests/test_claimanatomy.py` |
 | 动 **E 的实验 / 形式化** | `agent_e/`（包） | `formalgw.py`、`tools/verify_tools.py`（禁改区） | `tests/test_agent_e*.py` |
 | 动 **F 的攻坚** | `agent_f/`（包） | `tools/attack_tools.py` | `tests/test_agent_f.py` |
-| 动 **G 的写作** | `agent_g/`（包） | `gates.py`、`tools/doc_tools.py`、`paperbuild.py` | `tests/test_agent_g.py`、`tests/test_paper_pack.py` |
+| 动 **G 的写作** | `agent_g/`（包） | `gates.py`、`tools/doc_tools.py`、`papercompile.py` | `tests/test_agent_g.py`、`tests/test_papercompile.py` |
 | 动 **H 的审校** | `agent_h/`（包） | `gates.py`、`tools/review_tools.py` | `tests/test_agent_h.py`、`tests/test_gates.py` |
 | 动 **V 的证明级验证** | `agent_v/`（包）、`specs/v.py`（禁改区：边与写集在那里） | `verifications.py`（台账 / 冷启动提示词 / 签位）、`tools/verify_tools.py`（禁改区：三件工具） | `tests/test_verifier_role.py`、`tests/test_capabilities_two_layer.py` |
 | 动**主控编队 / 并发** | `conductor.py` | `scheduler.py` → `host.py` → `tools/conductor_tools.py` | `tests/test_conductor.py`、`tests/test_scheduler.py`、`tests/test_host_wiring.py` |
@@ -290,7 +298,7 @@
 | `agent_d/core.py` | 1772 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员，1771 行；`agent_d/_support.py` 是模块级 helper 与常量，999 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
 | `agent_loop.py` | 5942 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**全仓最大的文件，批 R40 补进本表** —— 它此前只在 §2 的用途表里）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正） | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1153 | C 的 9 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员，1153 行（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，325 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
-| `capabilities.py` | 2569 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
+| `capabilities.py` | 2565 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `providers.py` | 2939 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试 | 上游越多、字段越脏，解析越长（禁改区） |
 | `gates.py` | 2752 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
 | `schema.py` | 3303 | 16 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |

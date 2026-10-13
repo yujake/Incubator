@@ -12,7 +12,7 @@
 
 | 检查 | 判什么 |
 |---|---|
-| `anchor` | 渲染锚必须 `consistent`（`renderanchor.check_package` 的同一份实现） |
+| `paper` | 有论文正文（`out/paper/main.tex`）⇒ 必须由**本次**编译出 `main.pdf`（回执里的 `tex_sha256` == 盘上那一份）；没有正文 ⇒ 不适用。旧那一格是「渲染锚 consistent」，2026-10-13 随 `paper_package` 整条退场（`draft/117`） |
 | `contradictions` | 没有未裁决的矛盾：`dependencies.status ∈ {disputed, refuted}`、
 |  | `statements.status = disputed`、稿件 `status = unresolved_review` |
 | `load_bearing` | 承重结论（正文里 `evidence_kind="proof"` 的断言）必须有 T3（形式化）或已降档 |
@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from . import renderanchor as RA
+from . import papercompile as PC
 from . import schema as S
 from . import textutil as T
 from . import userio as U
@@ -50,7 +50,7 @@ from . import userio as U
 #:「这一趟到底产出了什么」。这不是新判据，是把已有的三态纪律补到它该管的地方：
 #: 「没做」不许读成「没问题」。
 DEFAULT_CHECKS: tuple[str, ...] = (
-    "anchor", "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
+    "paper", "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
     "acceptance",
     # 第八格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
     # 「进格」是人的裁定（`draft/46-04` §2.10 ③ 原本把它列为独立裁定项）；
@@ -272,7 +272,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                "这一档的方向与 `unfinished_request_rows` 同一根轴："
                                "**越少越好**（`implicit_max = 0`）。为什么单列（`draft/43-D` "
                                "§2.4 / `draft/44` 批次 5 的红线「产物登记必须与盘上一致」）："
-                               "`renderanchor` 只盯 PDF 那一维（回执里的 `pdf_sha256`），"
+                               "`paper` 那一格只盯 PDF 的来路（回执里的 `tex_sha256`），"
                                "而「这份登记过的产物还是不是登记时那一版」在收工门上**没有任何读数**。"
                                "注意三态：`changed` 在真机上是**常见**的（根 B 589 条 ≈18.75%："
                                "登记之后又被正常改写），所以 `DEFAULT_CHECKS` 的第八格只把 "
@@ -904,7 +904,7 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
         "implicit_max": 0,
         "bad_rows": [{"path": r.get("path"), "status": r.get("status")}
                      for r in bad[:8]],
-        "note": ("产物台账要和盘上一致：`renderanchor` 只盯 PDF 那一维"
+        "note": ("产物台账要和盘上一致：`paper` 那一格只盯 PDF 的来路"
                  "（回执里的 `pdf_sha256`），这一档盯的是**每一条登记过的产物**。"
                  "**按路径取最后一条登记**比（D9：台账是 append-only 历史，"
                  "逐行比会把正常改写读成 changed）。三态分开报："
@@ -1076,8 +1076,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         b_raw = base.read_text(encoding="utf-8", errors="replace")
         d_norm = re.sub(r"\s+", " ", d_raw).strip()
         b_norm = re.sub(r"\s+", " ", b_raw).strip()
-        d_sha = RA.file_digest(draft)
-        b_sha = RA.file_digest(base)
+        d_sha = PC.file_digest(draft)
+        b_sha = PC.file_digest(base)
         same = d_sha == b_sha
         substantive = d_norm != b_norm
         return (0 if not substantive else 1), {
@@ -2557,97 +2557,70 @@ def _reports_subdir_of(project_root: Path) -> str:
         return ""
     return str(got) if got else "reports"
 
+def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
+    """论文那一格：有正文就要求"这份 PDF 是本次从盘上这份 tex 编的"，没有正文就是不适用。
 
-def _has_paper_package(root: Path) -> bool:
-    """这个项目根下「有没有论文包的实物」（`draft/37` §117 的判据）。
+    判据只有一处实现（`agentflow.papercompile`）。旧那一格叫 `anchor`，查的是"渲染锚三维
+    （源表 / 渲染出的源文件 / 编译回执）"—— 它随 `paper_package` 整条退场
+    （业主 2026-10-13：「paper_package 里那些东西都是古早废案了，我们要智能体写文章」，
+    退场面与理由见 `draft/117`）：正文由智能体自己写，框架只负责编译，所以"包与台账
+    同不同时点"这件事不再成立，成立的是"**这份 PDF 是不是盘上这份正文编的**"。
 
-    为什么不是"`out/paper/` 目录在不在"：人给的验收表按 `ACCEPTANCE_CHECKS_NAME`
-    的定义就住在 `out/paper/` 里 ⇒ 任何有机器可判验收行的项目都必然有那个目录，
-    "目录在"于是成了恒真信号（本轮预检实测：空白 T2 工作区 `anchor=unknown`、
-    `can_close` 永远为假）。
+    三态（`receipt_matches_tex` 的话原样带出）：
 
-    认的实物（与 `renderanchor` 的四件同一份口径，不另立一套名字）：
-    正文 `main.tex` / 编译产物 `main.pdf` / 渲染锚 `RENDER-ANCHOR.json` /
-    编译回执 `COMPILE-RECEIPT.json` / 构建历史 `BUILD-HISTORY.jsonl`。
-    验收表、说明、`out/reports/*.md` 「不算」 —— 它们是本框架的记账，不是论文。
-
-    三态纪律：这里只回答"要不要查锚"，不回答"锚对不对"——有正文而无锚仍然走
-    `check_package` 那条「可操作的 `unknown`」，不许被这里吞掉。
-    """
-    pkg = root / "out" / "paper"
-    if not pkg.is_dir():
-        return False
-    return any((pkg / name).is_file() for name in
-               ("main.tex", "main.pdf", RA.ANCHOR_NAME, RA.RECEIPT_NAME, RA.HISTORY_NAME))
-
-
-def _check_anchor(rep: ClosingReport, project_dir: str, store: Any) -> None:
-    """锚：复用 `renderanchor.check_package`（同一份实现，不另写一个判据）。
-
-    `project_dir` 要的是项目根，不是论文包目录 —— `check_package` 自己会拼
-    `out/paper`。这一点原先只有实现知道、措辞全说反了（工具描述与这里的提示语都写
-    "论文包所在目录"），2026-10-02 的真机读数就是后果：主控照描述传 `out/paper`，
-    工具去找 `out/paper/out/paper/RENDER-ANCHOR.json`，锚那一格变成 `unknown`，
-    白花一步（`draft/37` §44.5）。所以现在两件事一起做：
-    措辞改成"项目根"，并在找不到锚时把期望的路径形状点名。
-    相对路径按工作区根解析（见 `resolve_under_workspace`）。
+    - 没有 `out/paper/main.tex` ⇒ `pass` + `not_applicable`（这个项目不交付论文，合法）；
+    - 有正文、回执也在、`tex_sha256` 对得上 ⇒ `pass`；
+    - 有正文而回执的 tex 哈希对不上 ⇒ `fail` + `paper_pdf_is_stale`（改完正文没重编）；
+    - 回执不在 / 读不出来 ⇒ `unknown` + `paper_not_checked`（没查成，不是通过）。
     """
     if not str(project_dir or "").strip():
-        rep.status["anchor"] = "unknown"
+        rep.status["paper"] = "unknown"
         rep.findings.append(Finding(
-            "anchor", "anchor_not_checked", "warning",
-            "没给项目根（project_dir）⇒ 渲染锚没查成。这是没查成，不是一致 —— "
-            "交付前必须指到**项目根**再跑一次（锚在 <项目根>/out/paper/RENDER-ANCHOR.json）",
+            "paper", "paper_not_checked", "warning",
+            "没给项目根（project_dir）⇒ 论文那一格没查成。这是没查成，不是一致 —— "
+            "交付前必须指到项目根再跑一次（正文在 <项目根>/out/paper/main.tex）",
         ))
         return
     root = Path(resolve_under_workspace(store, project_dir))
-    # 只有"像项目根、但确实没有论文包"才算不适用；`out/paper` 这种把论文包目录当项目根传的
-    # 情形必须继续走下面那条可操作的 `unknown`（`draft/37` §44.5 的老账，
-    # 判据 `test_the_wrong_directory_gets_an_actionable_message` 正守着它）。
-    looks_like_paper_dir = root.name == "paper" or (root / "main.tex").is_file()
-    if not looks_like_paper_dir and not _has_paper_package(root):
-        # `draft/37` §115 + §117：没有论文包的项目（T2 从零研究、T4 检索类测试…）里，
-        # 锚这一格是不适用，不是「没查成」—— 否则 `can_close` 永远为假（它要求七格全 pass），
-        # 而那类测试根本不该有论文包。
-        #
-        # §117 把判据从"`out/paper/` 目录在不在"改成"有没有论文包的实物"：验收表
-        # （人给的 `out/paper/ACCEPTANCE-*.json|md`）按 `ACCEPTANCE_CHECKS_NAME` 的定义
-        # 「就住在 `out/paper/` 里」，于是任何有机器可判验收行的项目都必然有那个目录
-        # ——"目录在"于是成了恒真信号，T2 那类工作区永远关不上门（本轮预检实测：
-        # 空白 T2 工作区 `anchor=unknown`）。现在只有盘上有正文/锚/编译产物才算论文包：
-        # 有正文而无锚 ⇒ 仍然是那条可操作的 `unknown`（§44.5 的老账不丢）。
-        rep.status["anchor"] = "pass"
-        rep.readings["anchor"] = {"verdict": "not_applicable", "root": str(root),
-                                  "note": ("这个项目没有论文包（out/paper 下没有正文/锚/"
-                                           "编译产物）⇒ 锚不适用")}
+    pkg = root / "out" / "paper"
+    tex = pkg / PC.TEX_NAME
+    # 常见的调用姿势错误：把论文包目录（…/out/paper）当项目根传。指出来，别静默不适用。
+    if not tex.is_file() and (root / PC.TEX_NAME).is_file():
+        rep.status["paper"] = "unknown"
+        rep.findings.append(Finding(
+            "paper", "paper_not_checked", "warning",
+            f"给的目录看起来是论文包本身（{root} 下有 {PC.TEX_NAME}）⇒ 论文那一格没查成。"
+            f"请改传**项目根**（正文在 <项目根>/out/paper/{PC.TEX_NAME}）",
+        ))
         return
-    got = RA.check_package(str(root), store=store)
-    verdict = str(got.get("verdict") or "unknown")
-    rep.readings["anchor"] = {"verdict": verdict, "dimensions": got.get("dimensions"),
-                              "drift": list(got.get("drift") or [])[:10]}
-    if verdict == "consistent":
-        rep.status["anchor"] = "pass"
-    elif verdict == "drifted":
-        rep.status["anchor"] = "fail"
+    if not tex.is_file():
+        rep.status["paper"] = "pass"
+        rep.readings["paper"] = {
+            "verdict": "not_applicable", "root": str(root),
+            "note": (f"这个项目没有论文正文（{tex} 不在盘上）⇒ 论文那一格不适用。"
+                     "交付论文那一档才需要它：正文由 G 写到那个落点，再调 "
+                     "`doc.paper_compile` 编出 PDF"),
+        }
+        return
+    matched, why = PC.receipt_matches_tex(root)
+    verdict = "consistent" if matched is True else ("drifted" if matched is False else "unknown")
+    rep.readings["paper"] = {"verdict": verdict, "root": str(root), "tex": str(tex),
+                             "pdf": str(pkg / PC.PDF_NAME), "reason": why}
+    if matched is True:
+        rep.status["paper"] = "pass"
+        return
+    if matched is False:
+        rep.status["paper"] = "fail"
         rep.findings.append(Finding(
-            "anchor", "anchor_drifted", "blocker",
-            f"渲染锚报 drifted：{('；'.join(list(got.get('drift') or [])[:3]))[:200]} ⇒ "
-            "包不是库里现在的样子。重渲染 + 重编译，并在**最后一次写台账之后**再核一次",
+            "paper", "paper_pdf_is_stale", "blocker",
+            f"{why} —— 重编一次（`doc.paper_compile`），并在最后一次改正文之后再核一遍",
         ))
-    else:
-        rep.status["anchor"] = "unknown"
-        hint = ""
-        if not got.get("anchor_present"):
-            # 没找到锚时把"该给哪个目录"说清楚：这是最常见的调用姿势错误
-            # （给论文包目录而不是项目根），而原来的错误只说"读不到"。
-            expect = Path(str(project_dir)) / "out" / "paper" / RA.ANCHOR_NAME
-            hint = (f"；锚要在 {expect} —— 若你给的是论文包目录（…/out/paper），"
-                    "请改传**项目根**（check_package 会自己拼 out/paper）")
-        rep.findings.append(Finding(
-            "anchor", "anchor_unknown", "warning",
-            f"渲染锚报 unknown：{('；'.join(list(got.get('problems') or [])[:3]))[:200]} ⇒ "
-            "有一维判不了（锚不在 / 回执不在）。这不是一致" + hint,
-        ))
+        return
+    rep.status["paper"] = "unknown"
+    rep.findings.append(Finding(
+        "paper", "paper_not_checked", "warning",
+        f"论文那一格没查成：{why} ⇒ 这一格判不了（不是「PDF 不对」，也不是「没有 PDF」）",
+    ))
 
 
 #: 污染面的残余边界（改前那句已作废，逐字理由见下）。
@@ -3755,8 +3728,8 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
             if got.get("checked") and got.get("verdict"):
                 rep.m_verdict = dict(got["verdict"])
     for name in checks:
-        if name == "anchor":
-            _check_anchor(rep, project_dir, store)
+        if name == "paper":
+            _check_paper(rep, project_dir, store)
         elif name == "contradictions":
             _check_contradictions(rep, store)
         elif name == "load_bearing":

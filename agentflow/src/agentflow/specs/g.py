@@ -101,29 +101,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "dict", side_effect="write_local", handler_name="revise",
     ),
 
-    # ---- `paper_package`（2026-10-03 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
-    #
-    # 为什么必须有它（`draft/37` §58/§59 的真机读数）：第九趟主控把正文改动落盘、九节报告过门，
-    # 只剩 `anchor` 一格 —— 而"重渲染 + 重编译 + 核锚"这三件事是工具
-    # （`doc.paper_render` / `doc.paper_compile` / `doc.paper_state`），
-    # 没有任何动作能召唤它们：主控连派三次 `G.revise` 都没用
-    # （`revise` / `refresh_markdown` / `render` 动的都是稿件 markdown，不是论文包）。
-    # 于是"锚回到 consistent"在编排层结构上做不到 —— 与 §44.4（A/B 缺登记动作）同形。
-    #
-    # 两根轴逐条读出：
-    #   - 效果轴 `write_local`：它真的改盘（跑项目脚本产出的那些文件 —— 有的项目是
-    #     `appendix.tex` / `tables/*.tex` 与主稿一起重产，有的只写渲染锚、不碰主稿；
-    #     具体产哪些以 `doc.paper_render` 的 `REPRO_RESULT` 读数为准，见 `draft/108` CS-19）。
-    #   - 外部轴 `exec`：渲染与编译都会起子进程（项目脚本 / LaTeX 工具链）——
-    #     与 `verify.run_experiment` 同一档；不标 `egress`（它不出网）。
-    ActionSpec(
-        "G", "paper_package",
-        "一次做完论文包的重渲染 → 重编译 → 核锚，并回报 verdict 与漂移条数",
-        _obj({"project": _S, "timeout_sec": _N, "render_script": _S, "compile_script": _S}),
-        "dict（render / compile / verdict / dimensions / drift / problems / anchor_path）",
-        side_effect="write_local", handler_name="paper_package",
-        external="exec",
-    ),
+    # ---- `paper_package` 已退场（2026-10-13，业主裁定逐字：「paper_package 里那些东西都是
+    # 古早废案了，我们要智能体写文章」）。原先是 G 的角色级动作"重渲染 → 重编译 → 核锚"，
+    # 它要求项目里自带一对渲染/编译脚本（`code/make_paper.py` / `code/compile_paper.py`），
+    # 而从零研究工作区没有那对脚本 ⇒ 第二次 T2 里 `G.paper_package` 四次 `package_build_failed`，
+    # 主控只好自己现写一个 Python 生成器（排版固化成脚本模板：一节一整段、摘要硬编码、
+    # 非 ASCII 静默变空格、没有 fontenc）。现在正文由智能体自己写进 `out/paper/main.tex`，
+    # 框架只保留一件工具 `doc.paper_compile`（内置编译 + 回执）。
+    # 退场面与逐条理由见 `draft/117`；渲染锚那一格也随之从收工门拿掉。
 )
 
 
@@ -146,7 +131,7 @@ SPEC = AgentSpec(
             "发现证据不足时要回去要：文献原文找 A、形式化找 E、论证与实验找 D/F —— 而不是把话说软（这四条边都在你的伙伴表里）。",
         ),
         policy=(
-            "改完稿要让**包**跟上，不是只让台账跟上：修订落进 `documents` 之后，调 `doc.paper_render` 重渲染、`doc.paper_compile` 重编译，再用 `doc.paper_state` 读一次锚 —— 只把修订写进 documents、没重渲染，锚就会报 `drifted`，而交付定义第 1 条要求 0 漂移 ⇒ 那样的修订等于没交付。渲染与编译都要看工具给的读数（标记是否齐全、receipt 是否本次），不看编译器退出码。",
+            "**正文是你写的，不是脚本生成的**（业主 2026-10-13 裁定）：把论文正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排、`\\cite`/定理环境随你），落笔前后用 `fs.read` 读回来核一遍；写完调 `doc.paper_compile` 把它编成 `out/paper/main.pdf`，页数与引擎退出码看那一次回执（本机 MiKTeX 会写完 PDF 却以 0xC0000409 退出 ⇒ 产物与退出码分两栏读，别只看退出码）。**没有「渲染脚本」这回事**：不建论文包、不核锚。",
             "**断言只能声称它所引实验的 `result` 支持的东西**（`draft/37` §122）：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先去让 E 跑出一个真给出 `REPRO_RESULT:` 的实验。**引用一个与断言相反的证据行，比没有引用更坏**：读者会以为它被核过。",
             "**研究型手稿要引它据以立论的那几篇文献（`lit:`）**（`draft/39` §6.27 的 D37）：只引自家 `exp:` 的稿子在台账上叫「零文献引用」（收工门有一档 `document_literature_citations` 专门数它）。写稿前先让 A 把对口文献的题名与结论给你，把「我们的构造与哪篇文献的哪条结论是什么关系」逐条写进断言（是复现、是特例、还是新的）。",
             # 所有者授权、主控代改（`draft/68` 题 16 选 A，2026-10-07）：下面这一条是

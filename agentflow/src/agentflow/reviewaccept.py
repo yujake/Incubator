@@ -51,7 +51,7 @@ RESOLVED_MARKERS: tuple[str, ...] = ("已解决", "已修复", "已闭合", "res
 AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
     ("tex_sha256", "主稿 sha 变了（跑一次就会变）"),
     ("pdf_pages", "页数对得上"),
-    ("anchor_verdict", "渲染锚 consistent（**单项**不算通过）"),
+    ("receipt_matches_tex", "这份 PDF 是从盘上这份 tex 编的（**单项**不算通过）"),
     ("task_rows", "任务数增加"),
     ("ledger_rows", "台账行数增加"),
 )
@@ -507,7 +507,7 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
     import hashlib
 
     from . import conceptrows as CR   # 并表过渡期：概念那一份走合成视图
-    from . import renderanchor as RA
+    from . import papercompile as PC
     from .closing import resolve_under_workspace
 
     project_dir = resolve_under_workspace(store, project_dir)
@@ -524,8 +524,9 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
             aux["pdf_pages"] = _page_count(pdf)
         except Exception:  # noqa: BLE001 —— 辅助读数读不到就算了，它不参与判定
             aux["pdf_pages"] = None
-    aux["anchor_verdict"] = (RA.check_package(project_dir, store=store).get("verdict")
-                             if project_dir else "")
+    _matched, _why = (PC.receipt_matches_tex(project_dir) if project_dir else (None, ""))
+    aux["receipt_matches_tex"] = ("unknown" if _matched is None
+                                 else ("consistent" if _matched else "drifted"))
     aux["task_rows"] = len(store.rows("tasks")) if store is not None else 0
     # 台账行数：概念那一份读合成视图（并表过渡期：老表 + 新标准 `kind="concept"`，
     # 同号去重）—— 它是给人看的辅助读数，读一边都会在迁移前后各错一次。

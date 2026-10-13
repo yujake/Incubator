@@ -126,9 +126,9 @@ def test_every_name_the_module_exports_exists(ws: pathlib.Path) -> None:
     """反真空：`__all__` 里写的名字必须真的存在。
 
     为什么单为这一个模块立一条：`budget.py` 的读函数从 `state` 改名成 `reading`
-    （避开与 `paperbuild.state` 之类的重名），而 `__all__` 里漏改的那一格没有任何
-    判据看着 —— `from agentflow.budget import *` 会当场炸，而"没人 import *"
-    不等于"公开面是对的"。
+    （`state` 这种通用名在模块间各写一份会被 lint 的 `R003` 判成"同名公开定义"），
+    而 `__all__` 里漏改的那一格没有任何判据看着 —— `from agentflow.budget import *`
+    会当场炸，而"没人 import *"不等于"公开面是对的"。
     """
     missing = [n for n in B.__all__ if not hasattr(B, n)]
     assert not missing, f"__all__ 里这些名字不存在：{missing}"

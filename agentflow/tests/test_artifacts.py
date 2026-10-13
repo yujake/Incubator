@@ -175,7 +175,7 @@ def test_ee11_an_unregistered_producer_is_written_and_shown_not_rejected(tmp_pat
     from agentflow import artifacts as A
 
     _file(tmp_path, "out/r.md", "x")
-    known = ("G", "E", "M", "tool:fs.write", "agentflow.paperbuild",
+    known = ("G", "E", "M", "tool:fs.write", "agentflow.papercompile",
              "paper-generator")          # 最后一个是已登记的"已知"外部生产者
     for good in known:
         assert A.producer_is_known(good), good

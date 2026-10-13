@@ -96,7 +96,9 @@ class ToolSpec:
 > `python -m agentflow.cli tools --role <X>`（`docs/ROLE-SPECS.md` §0.3 是同一口径）。
 >
 > ⚠️ **本表已不完整（本机实测）**：它只列了写作时那一批。今天工具层是
-> **12 个已装模块 / 72 个工具**，另有 `conjecture.register_conjecture` 一条不在 `build_registry` 里。
+> **13 个已装模块 / 79 个工具**（观测 2026-10-13（`paper_package` 整条退场后复算）；
+> 复算 `$env:PYTHONPATH='src'; python -m agentflow.cli tools` 的第一行
+> `工具总数：79（已装模块 13：…）`），另有 `conjecture.register_conjecture` 一条不在 `build_registry` 里。
 > 逐模块条数与路径（复跑：`python -m agentflow.cli tools`；实测 2026-09-30）：
 >
 > | 模块（相对工作区根） | 工具前缀 | 条数 |
@@ -393,7 +395,7 @@ agentflow/src/agentflow/
 │   ├── research_tools.py    D：问题与缺口（5 条）
 │   ├── verify_tools.py      E：数值实验与形式化验证（6 条）
 │   ├── attack_tools.py      F：多轮难题攻坚（6 条）
-│   ├── doc_tools.py         G：稿件与论文包（10 条）
+│   ├── doc_tools.py         G：稿件与论文（6 条）
 │   ├── review_tools.py      H：审校（2 条）
 │   ├── conductor_tools.py   M：主控动作（9 条）
 │   └── conjecture_tools.py  猜想台账（1 条，不在 build_registry 里）

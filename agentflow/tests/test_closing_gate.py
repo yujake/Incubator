@@ -11,7 +11,7 @@ P3 的收工门是"把纪律变成门"，所以判据的重点不是"门能不�
 
 | 检查 | 负控（本文件里各一条） |
 |---|---|
-| `anchor` | 封好锚之后再改一次 `main.tex` ⇒ `drifted` |
+| `paper` | 封好（把正文编一遍）之后再改一次 `main.tex` ⇒ PDF 过期（`paper_pdf_is_stale`） |
 | `contradictions` | 挂一条 `status="disputed"` 的依赖 |
 | `load_bearing` | 一条 `evidence_kind="proof"` 的正文断言没有 T3 背书 |
 | `report_shape` | 报告抽掉一节 + 抽掉分栏标记 |
@@ -26,9 +26,10 @@ from __future__ import annotations
 import json
 import pathlib
 
+import paperfixture as FX
 from conftest import TS, sync_counters
 from agentflow import closing as CL
-from agentflow import renderanchor as RA
+from agentflow import papercompile as PC
 from agentflow import schema as S
 from agentflow import userio as U
 from agentflow.store import Store
@@ -37,20 +38,20 @@ from agentflow.store import Store
 
 
 def _seal(root: pathlib.Path, st: Store) -> None:
-    """写锚 + 回执（必须在最后一次写台账之后，否则锚一出生就是 drifted）。
+    """把盘上这份正文编一遍（回执由框架写）—— 封完之后改 `main.tex` 就会让 PDF 过期。
 
-    这一条本身就是 `doc.paper_state` 的真机教训：锚的 `rows` 维度把 store 的行
-    也算在内 ⇒ 封完之后再写一行台账，锚立刻报 `drifted`。
+    旧口径（2026-10-13 之前）是"封渲染锚"，那时锚把 `store` 的行也算进一个维度 ⇒
+    写完台账必须重新封锚，否则锚一出生就是 `drifted`。现在回执只认 `main.tex`：
+    **写台账不再让 PDF 过期**，所以下面那些"写完台账再封一次"的调用留着无害，
+    但它们守的东西已经变了（退场面见 `draft/117`）。`st` 参数保留只为不改调用点。
     """
-    out = root / "out" / "paper"
-    (out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)), encoding="utf-8")
-    (out / RA.RECEIPT_NAME).write_text(json.dumps(RA.build_receipt(
-        out, tex_sha256=RA.file_digest(out / "main.tex"), pages=21, markers_missing=[],
-        pdf_bytes=13, compiler_exit_codes=[0])), encoding="utf-8")
+    engine = FX.fake_engine(root / "_engine")
+    with FX.use_engine(engine):
+        PC.compile_paper(root)
 
 
 def _project(root: pathlib.Path, *, seed=None) -> Store:
-    """造一个论文包项目：先写台账行（seed）再封锚（顺序就是 §PAPER_PACK 要求的那个）。"""
+    """造一个项目：写台账行（seed）→ 写正文并把它编一遍（`_seal`）。"""
     out = root / "out" / "paper"
     out.mkdir(parents=True, exist_ok=True)
     st = Store(root)
@@ -171,7 +172,7 @@ def _paper_with_claim(store: Store, *, evidence_kind: str = "proof",
 
 
 def _good(tmp_path: pathlib.Path):
-    """五条全过的那个工作区（正控的底座）：先写台账，再封锚，最后写报告。"""
+    """各格全过的那个工作区（正控的底座）：先写台账，再写正文并编一遍，最后写报告。"""
     def seed(st: Store) -> None:
         """台账里的两条行：一条 T3 实验 + 一条引到它的 proof 级断言。"""
         _t3_experiment(st)
@@ -231,9 +232,9 @@ def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
 def _acceptance_checks(root: pathlib.Path, rows: list[dict], *, st: Store | None = None) -> pathlib.Path:
     """把机器可判的验收行写进项目（`out/paper/ACCEPTANCE-CHECKS.json`）。
 
-    给了 `st` 就顺手重封一次锚：这一格的文件落在 `out/paper` 里，而锚的 `files` 维度
-    覆盖那个目录 ⇒ 封锚之后再写它，锚会报 `drifted`（真机上这份文件是建工作区时
-    就写好的，所以那个顺序不是问题；判据里要显式重封，免得把锚的红当成这一格的红）。
+    给了 `st` 就顺手再编一次：**这一行现在不是必需的**（回执只认 `main.tex`，
+    写 `out/paper/ACCEPTANCE-CHECKS.json` 不会再让 PDF 过期）—— 留着是因为它在旧口径
+    （锚的 `files` 维度覆盖整个 `out/paper`）下是必需的，调用点因此保持原样。
     """
     path = root / "out" / "paper" / CL.ACCEPTANCE_CHECKS_NAME.split("/", 2)[-1]
     path.write_text(json.dumps({"checks": rows}, ensure_ascii=False), encoding="utf-8")
@@ -258,7 +259,7 @@ def test_the_acceptance_cell_goes_red_alone_when_a_named_leg_has_no_ledger_row(
     rep = _gate(st, report)
     assert rep.status["acceptance"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["acceptance_unmet"], rep.to_dict()
-    assert rep.status["anchor"] == "pass" and rep.status["substance"] == "pass", rep.to_dict()
+    assert rep.status["paper"] == "pass" and rep.status["substance"] == "pass", rep.to_dict()
     detail = rep.blockers[0].detail
     # 夹具里本来就有一条 formal+proof 实验（`_t3_experiment`）⇒ P8 满足、只有 P7 缺。
     # 这一格必须逐行判（不许一票通吃），所以缺的那一行要点名、满足的那一行不进 detail。
@@ -775,39 +776,39 @@ def test_the_manuscript_must_cite_the_literature_it_retrieved(tmp_path: pathlib.
     assert row["got"] == got2 and row["ok"] is (got2 >= 2), row
 
 
-def test_a_project_without_a_paper_package_has_no_anchor_to_check(tmp_path: pathlib.Path):
-    """判据（`draft/37` §115 + §117）：没有论文包的项目里，锚这一格是「不适用」，不是「没查成」。
+def test_a_project_without_a_paper_has_nothing_to_check(tmp_path: pathlib.Path):
+    """判据（`draft/37` §115 + §117）：没有正文的项目里，论文那一格是「不适用」，不是「没查成」。
 
-    为什么必须单列（T2 第 1 趟的真机读数）：从零研究的工作区里没有论文包，
-    而 `_check_anchor` 只会报 `unknown`（锚文件读不到）—— `can_close` 要求七格全 pass
-    ⇒ 那类测试永远关不上门，而它们本来就不该有论文包。
+    为什么必须单列（T2 第 1 趟的真机读数）：从零研究的工作区里没有论文，
+    而旧那一格只会报 `unknown`（锚文件读不到）—— `can_close` 要求各格全 pass
+    ⇒ 那类测试永远关不上门，而它们本来就不该交论文。
 
-    §117 把"论文包在不在"的判据从「`out/paper/` 目录在不在」改成「盘上有没有论文包的实物」：
+    判据从「`out/paper/` 目录在不在」改成「**盘上有没有 `main.tex`**」：
     人给的验收表按 `ACCEPTANCE_CHECKS_NAME` 的定义就住在 `out/paper/` 里，于是
     "目录在"是个恒真信号（本轮预检实测：空白 T2 工作区 `anchor=unknown`、门永远关不上）。
-    反面那一半照旧守住：「有正文」而没有锚 ⇒ 仍然是 `unknown`（那是真出了问题，不许被吞掉）。
+    反面那一半照旧守住：「有正文」而回执读不到 ⇒ 仍然是 `unknown`（那是真出了问题，不许被吞掉）。
     """
     ws = tmp_path / "ws-no-paper"
     (ws / "data").mkdir(parents=True)
     st = Store(ws)
     st.init()
     rep = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep.status["anchor"] == "pass", rep.to_dict()
-    assert rep.readings["anchor"]["verdict"] == "not_applicable", rep.readings["anchor"]
+    assert rep.status["paper"] == "pass", rep.to_dict()
+    assert rep.readings["paper"]["verdict"] == "not_applicable", rep.readings["paper"]
 
-    # ① 只有验收表（人给的记账）⇒ 还不是论文包 ⇒ 仍然「不适用」
+    # ① 只有验收表（人给的记账）⇒ 还没有正文 ⇒ 仍然「不适用」
     (ws / "out" / "paper").mkdir(parents=True)
     (ws / "out" / "paper" / "ACCEPTANCE.md").write_text("验收表\n", encoding="utf-8")
     rep2 = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep2.status["anchor"] == "pass", rep2.to_dict()
-    assert rep2.readings["anchor"]["verdict"] == "not_applicable", rep2.readings["anchor"]
+    assert rep2.status["paper"] == "pass", rep2.to_dict()
+    assert rep2.readings["paper"]["verdict"] == "not_applicable", rep2.readings["paper"]
 
-    # ② 有正文、没有锚 ⇒ 真有问题 ⇒ 回到那条可操作的 `unknown`
+    # ② 有正文、没编过 ⇒ 回执读不到 ⇒ 那条可操作的 `unknown`（不是失败、也不是通过）
     (ws / "out" / "paper" / "main.tex").write_text("\\documentclass{article}\n",
                                                    encoding="utf-8")
     rep3 = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep3.status["anchor"] == "unknown", rep3.to_dict()
-    assert [f.code for f in rep3.findings if f.check == "anchor"] == ["anchor_unknown"]
+    assert rep3.status["paper"] == "unknown", rep3.to_dict()
+    assert [f.code for f in rep3.findings if f.check == "paper"] == ["paper_not_checked"]
 
 
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
@@ -836,8 +837,8 @@ def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathli
     assert unknown.readings["acceptance"]["rows_unreadable"] == 1, unknown.readings["acceptance"]
 
 
-def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
-    """负控①（锚）：封好之后改一次正文 ⇒ 锚 `drifted`，其余各条仍然绿。
+def test_the_paper_check_goes_red_alone(tmp_path: pathlib.Path):
+    """负控①（论文）：封好（编过一遍）之后改一次正文 ⇒ PDF 过期，其余各条仍然绿。
 
     按业主 2026-10-09 的口径补后半：这一格红了不阻断 M 停（判据归 M），
     但 M 说"达成"时 `overrode` 必须逐格点名它 —— 判据归 M ≠ 机器读数可以被盖掉。
@@ -845,17 +846,17 @@ def test_the_anchor_check_goes_red_alone(tmp_path: pathlib.Path):
     st, report = _good(tmp_path)
     (tmp_path / "out" / "paper" / "main.tex").write_text("改过了\n", encoding="utf-8")
     rep = _gate(st, report)
-    assert rep.status["anchor"] == "fail", rep.to_dict()
-    assert [f.code for f in rep.blockers] == ["anchor_drifted"], rep.to_dict()
-    assert {k: v for k, v in rep.status.items() if k != "anchor"} == {
-        name: "pass" for name in CL.DEFAULT_CHECKS if name != "anchor"}
+    assert rep.status["paper"] == "fail", rep.to_dict()
+    assert [f.code for f in rep.blockers] == ["paper_pdf_is_stale"], rep.to_dict()
+    assert {k: v for k, v in rep.status.items() if k != "paper"} == {
+        name: "pass" for name in CL.DEFAULT_CHECKS if name != "paper"}
     # 没有 M 的判据 ⇒ 不算能交（"没人判过"）；M 判"达成" ⇒ 能停，但那一格被点名
     assert not rep.can_close and CL.tri_state_exit_code(rep) == 2, rep.to_dict()
     judged = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
                               goal="审完交付", goal_met=True,
                               task_list=[{"what": "审完", "state": "done"}])
     assert judged.can_close and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
-    assert [x["check"] for x in judged.overrode] == ["anchor"], judged.overrode
+    assert [x["check"] for x in judged.overrode] == ["paper"], judged.overrode
 
 
 def test_the_contradiction_check_goes_red_alone(tmp_path: pathlib.Path):
@@ -868,7 +869,7 @@ def test_the_contradiction_check_goes_red_alone(tmp_path: pathlib.Path):
     with st.tx("dependencies", actor="test") as tx:
         tx.upsert("dependencies", row.to_dict())
     sync_counters(st)
-    _seal(tmp_path, st)          # 写完台账要重新封锚（否则红的是锚，不是矛盾那一条）
+    # 写台账不再让 PDF 过期（回执只认 `main.tex`）⇒ 这里不必再编一次
     rep = _gate(st, report)
     assert rep.status["contradictions"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["contradiction_disputed_source"], \
@@ -882,7 +883,7 @@ def test_the_load_bearing_check_goes_red_alone(tmp_path: pathlib.Path):
     st, report = _good(tmp_path)
     # 把那条 T3 实验换成只有数值支持的一条（同一实验号，形态不再是 T3）
     _numeric_experiment(st, eid="0001")
-    _seal(tmp_path, st)          # 台账变了 ⇒ 重新封锚，让红的那一条只剩 load_bearing
+    # 同上：台账变了不影响回执 ⇒ 不必再编一次
     rep = _gate(st, report)
     assert rep.status["load_bearing"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["load_bearing_without_t3"]
@@ -1004,15 +1005,15 @@ def test_missing_readings_are_unknown_and_unknown_is_not_a_pass(tmp_path: pathli
     """
     st, _report = _good(tmp_path)
     rep = CL.check_closing(st, project_dir="", report_path="")
-    assert rep.status["anchor"] == "unknown", rep.to_dict()
+    assert rep.status["paper"] == "unknown", rep.to_dict()
     assert rep.status["report_shape"] == "unknown", rep.to_dict()
     assert not rep.can_close, "没查成却报告可交付 —— 这正是这门要防的形态"
-    # 要项目根的每一格都要在名单里：锚 / 报告形状 / 验收表（第七格）/ 产物台账（第八格）
-    assert rep.unknowns == ["acceptance", "anchor", "artifact_ledger", "report_shape"], rep.unknowns
+    # 要项目根的每一格都要在名单里：论文 / 报告形状 / 验收表（第七格）/ 产物台账（第八格）
+    assert rep.unknowns == ["acceptance", "artifact_ledger", "paper", "report_shape"], rep.unknowns
     assert rep.failed == []
     assert CL.tri_state_exit_code(rep) == 2, "没查成 ⇒ 退出码 2（不是 1，也不是 0）"
     codes = sorted(f.code for f in rep.findings)
-    assert codes == ["acceptance_not_checked", "anchor_not_checked", "no_project_dir",
+    assert codes == ["acceptance_not_checked", "no_project_dir", "paper_not_checked",
                      "report_path_missing"], codes
 
 
@@ -1029,27 +1030,29 @@ def test_a_missing_report_file_is_unknown_not_a_failure(tmp_path: pathlib.Path):
 def test_the_wrong_directory_gets_an_actionable_message(tmp_path: pathlib.Path):
     """正控 + 可行动性（`draft/37` §44.5 / §45）：传错目录时，错误必须说清该传哪一个。
 
-    `project_dir` 要的是项目根，`renderanchor.check_package` 自己会拼 `out/paper`。
+    `project_dir` 要的是**项目根**，正文与回执在 `<项目根>/out/paper/` 下。
     2026-10-02 那趟真机上，主控照着工具描述（原话"论文包所在目录"）传了 `out/paper`，
-    结果工具去找 `out/paper/out/paper/RENDER-ANCHOR.json`，锚那一格变成 `unknown`，
-    白花一步 —— 而那句错误当时只说"读不到 <双拼路径>"，没有一个字提示路径多了一层。
+    结果工具去找 `out/paper/out/paper/...`，那一格变成 `unknown`，白花一步 ——
+    而那句错误当时只说"读不到 <双拼路径>"，没有一个字提示路径多了一层。
 
     所以这条判据守两件事：
     1. 传项目根 ⇒ `pass`（正确姿势能过）；
     2. 传论文包目录 ⇒ `unknown`（不改判据口径，仍然不许当"一致"），
-       但 finding 里必须点名期望的路径形状与"改传项目根"这个动作。
+       但 finding 里必须点名"你给的是哪一层"与"改传项目根"这个动作。
+
+    2026-10-13 之后认这一层的判据从"路径被拼了两次"改成**结构性的**：那个目录下
+    直接躺着 `main.tex` ⇒ 它就是论文包本身（不再依赖路径拼接的读数）。
     """
     st, report = _good(tmp_path)
     right = _gate(st, report, project_dir=tmp_path)
-    assert right.status["anchor"] == "pass", right.to_dict()
+    assert right.status["paper"] == "pass", right.to_dict()
 
     wrong = _gate(st, report, project_dir=tmp_path / "out" / "paper")
-    assert wrong.status["anchor"] == "unknown", wrong.to_dict()
-    msg = next(f.detail for f in wrong.findings if f.code == "anchor_unknown")
-    # 消息里点出了"被拼了两次的那一段"（平台分隔符），以及该改传什么。
-    doubled = str(pathlib.Path("out") / "paper" / "out" / "paper")
-    assert doubled in msg, msg
-    assert "项目根" in msg and "out/paper" in msg, msg
+    assert wrong.status["paper"] == "unknown", wrong.to_dict()
+    msg = next(f.detail for f in wrong.findings if f.code == "paper_not_checked")
+    # 消息里点出"你给的那个目录下有 main.tex（= 论文包本身）"，以及该改传什么。
+    assert str(tmp_path / "out" / "paper") in msg, msg
+    assert "项目根" in msg and "main.tex" in msg, msg
 
 
 def test_the_substance_check_goes_red_alone(tmp_path: pathlib.Path):

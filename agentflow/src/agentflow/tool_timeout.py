@@ -152,13 +152,9 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
         "首次构造 Reader 要下 ~100MB 模型（R010-b 的已知盲区）；给它五分钟"),
     # ---- 起子进程（exec）：这些活的时长由被调的编译器/检查器决定。
     "doc.paper_compile": TimeoutDecl(
-        300.0, "COMPILE_TIMEOUT", "pending", "LaTeX 编译：慢是本分，但也不该无限等"),
-    "doc.paper_render": TimeoutDecl(
-        300.0, "RENDER_TIMEOUT", "pending", "渲染与编译同族，同一口钟的量级"),
-    "doc.paper_build": TimeoutDecl(
-        600.0, "BUILD_TIMEOUT", "pending", "整篇论文的构建（编译 + 渲染 + 锚点），给十分钟"),
-    "doc.paper_anchor": TimeoutDecl(
-        120.0, "ANCHOR_TIMEOUT", "pending", "锚点提取要读整份稿，两分钟量级"),
+        1800.0, "COMPILE_TIMEOUT", "pending",
+        "框架内置的 LaTeX 编译（两遍 pdflatex）—— 长稿子分钟级起步，给它半小时；"
+        "读者从 `draft/117` 起：旧路的 render/build/anchor 三条已退场"),
     # `verify.*` 两件在禁改区 `tools/verify_tools.py` 里 ⇒ 检查点只能由人加（如实标 pending）。
     "verify.check_formal": TimeoutDecl(
         600.0, "VERIFY_TIMEOUT", "pending",

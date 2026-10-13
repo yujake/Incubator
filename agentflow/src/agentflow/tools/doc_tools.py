@@ -44,7 +44,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from .. import claimanatomy as CA
-from .. import paperbuild as PB
+from .. import papercompile as PC
 from .. import schema as S
 from .. import textutil as T
 from ..store import StoreError
@@ -2409,7 +2409,7 @@ def register(
     _register_paper_tools(registry, workspace=workspace)
 
 
-# ---------------------------------------------------------------- 论文包（打包 / 编译 / 查锚）
+# ---------------------------------------------------------------- 正文编译（`doc.paper_compile`）
 
 
 def _resolve_project_root(workspace: Path | None, project: str) -> tuple[Path | None, str]:
@@ -2421,7 +2421,7 @@ def _resolve_project_root(workspace: Path | None, project: str) -> tuple[Path | 
     """
     raw = str(project or "").strip()
     if not raw:
-        return None, "project 不能为空（它是论文包所在的项目根，例如 projects/p2-review）"
+        return None, "project 不能为空（它是正文所在的项目根，例如 projects/p6t2-research-x）"
     cand = Path(raw)
     if cand.is_absolute():
         return None, f"project 必须是工作区内的相对路径（收到绝对路径 {raw}）"
@@ -2445,281 +2445,87 @@ def _paper_root(workspace: Path | None, project: str) -> Any:
         return fail(f"论文包：{problem}", kind="bad_project", project=project)
     return target
 
+def _paper_compile(workspace: Path | None, project: str, timeout_sec: float) -> Any:
+    """`doc.paper_compile`：把 `<项目根>/out/paper/main.tex` 编成 `main.pdf`（框架内置编译）。
 
-def _paper_state(workspace: Path | None, project: str) -> Any:
-    """`doc.paper_state`：进程内核一份论文包（不起子进程、不出网）。
-
-    为什么要它（`draft/28` §191）：H 是只读角色，结构性拿不到 `exec` 工具，
-    而"这份包与库一致吗"本该由审校者自己回答。判据在 `agentflow.renderanchor` 里，
-    这里只把它读出来 —— 所以这条是 `read` 工具，H 拿得到。
+    它**不跑项目脚本**。旧路那一整套（`paper_render` / `paper_anchor` / `paper_build` /
+    `paper_state` 四条工具 + `G.paper_package` 动作）随业主 2026-10-13 的裁定退场：
+    「paper_package 里那些东西都是古早废案了，我们要智能体写文章」——
+    正文由智能体自己写进 `out/paper/main.tex`，框架只负责把它编成 PDF 并留下回执
+    （现状与理由逐条写在 `draft/117`，实现只有一处：`agentflow.papercompile`）。
     """
     root = _paper_root(workspace, project)
     if not isinstance(root, Path):
         return root
-    got = PB.state(root)
+    got = PC.compile_paper(root, timeout_sec=timeout_sec)
+    body = {
+        "tri": got["tri"], "ok": got["ok"], "reason": got["reason"],
+        "tex": got["tex"], "pdf": got["pdf"], "engine": got["engine"],
+        "exit_codes": got["exit_codes"], "runs": got["runs"], "pages": got["pages"],
+        "pdf_bytes": got["pdf_bytes"], "receipt_path": got["receipt_path"],
+        "pdf_fresh": got["pdf_fresh"],
+        "engine_stderr_tail": got["engine_stderr_tail"],
+        "engine_stdout_tail": got["engine_stdout_tail"],
+        "problems": got["problems"],
+    }
+    if got["tri"] == "not_applicable":
+        return fail(f"还没有可编的正文：{got['reason']}", kind="paper_no_source", **body)
+    if got["tri"] != "computed":
+        return fail(f"编译没走成：{got['reason']}", kind="paper_compile_failed", **body)
+    # 成功支写成字面量键表：让"返回了哪些键"静态可见（`tests/test_tools_branch_key_sets.py`
+    # 的判据按调用点扫 `ok({…})`；写成 `ok(body)` 就成了"看不清"，那一格会红）。
     return ok({
-        "verdict": got["verdict"], "dimensions": got["dimensions"], "drift": got["drift"],
-        "problems": got["problems"], "why": got["why"], "anchor_path": got["anchor_path"],
-        "anchor_present": got["anchor_present"], "receipt_path": got["receipt_path"],
-        "receipt_present": got["receipt_present"], "rendered_at": got["rendered_at"],
-        "compiled_at": got["compiled_at"], "checked": got["checked"],
-        # 构建历史（`draft/28` §193）：它是读数不是判据 —— 回答"渲染/编译过几次、
-        # 最近一次是什么时候"，不参与三维判定。
-        "history": got.get("history") or {},
-    })
-
-
-#: 论文包四件工具的实现。它们刻意写在模块级而不是嵌在 `_register_paper_tools` 里：
-#: `tests/test_tools_branch_key_sets.py` 的扫描器对每个函数做 `ast.walk`（含嵌套定义），
-#: 四个嵌套 handler 会被算成外层函数的四处分支 ⇒ 判据报「同一个 handler 两种键集合」
-#: （12/12/12/14 键 —— 查锚那件本来就不是同一个形状）。提出来之后每个 handler 各有一处
-#: 成功支，静态判据读得清，且四条工具的键表各自可见。
-def _paper_render(workspace: Path | None, project: str, script: str, timeout_sec: float) -> Any:
-    root = _paper_root(workspace, project)
-    if not isinstance(root, Path):
-        return root
-    got = PB.render(root, script=script or PB.DEFAULT_RENDER_SCRIPT, timeout_sec=timeout_sec)
-    if not got["ok"]:
-        return fail(f"渲染没走成：{got['problem'] or got['stderr_tail'][-200:]}",
-                    kind="paper_render_failed", **got)
-    # 成功支写成字面量键表（见模块里这条纪律的说明）：让"返回了哪些键"静态可见。
-    return ok({
-        "script": got["script"], "script_path": got["script_path"], "argv": got["argv"],
-        "exit_code": got["exit_code"], "timed_out": got["timed_out"], "ok": got["ok"],
-        "result": got["result"], "elapsed_sec": got["elapsed_sec"],
-        "stdout_tail": got["stdout_tail"], "stderr_tail": got["stderr_tail"],
-        "repro_found": got["repro_found"], "problem": got["problem"],
-    })
-
-def _paper_compile(workspace: Path | None, project: str, script: str, timeout_sec: float) -> Any:
-    root = _paper_root(workspace, project)
-    if not isinstance(root, Path):
-        return root
-    got = PB.compile_pdf(root, script=script or PB.DEFAULT_COMPILE_SCRIPT,
-                         timeout_sec=timeout_sec)
-    if not got["ok"]:
-        return fail(f"编译没走成：{got['problem'] or got['stderr_tail'][-200:]}",
-                    kind="paper_compile_failed", **got)
-    return ok({
-        "script": got["script"], "script_path": got["script_path"], "argv": got["argv"],
-        "exit_code": got["exit_code"], "timed_out": got["timed_out"], "ok": got["ok"],
-        "result": got["result"], "elapsed_sec": got["elapsed_sec"],
-        "stdout_tail": got["stdout_tail"], "stderr_tail": got["stderr_tail"],
-        "repro_found": got["repro_found"], "problem": got["problem"],
-    })
-
-def _paper_anchor(workspace: Path | None, project: str, script: str, timeout_sec: float) -> Any:
-    root = _paper_root(workspace, project)
-    if not isinstance(root, Path):
-        return root
-    got = PB.anchor_check_script(root, script=script or PB.DEFAULT_RENDER_SCRIPT,
-                          timeout_sec=timeout_sec)
-    # 三态：drifted 是"查过了、有漂移"（fail），unknown 是"没查成"（fail 但 kind 不同）。
-    # 两者都 fail：工具层的 ok 只表示"这一步做成了"，而"包与库一致"由 verdict 说。
-    if got["verdict"] == "consistent":
-        return ok({
-            "verdict": got["verdict"], "expected_exit_code": got["expected_exit_code"],
-            "exit_code": got["exit_code"], "drift": got["drift"], "why": got["why"],
-            "script": got["script"], "anchor_path": got["anchor_path"],
-            "anchor_present": got["anchor_present"], "anchor_sha256": got["anchor_sha256"],
-            "stdout_tail": got["stdout_tail"], "stderr_tail": got["stderr_tail"],
-            "elapsed_sec": got["elapsed_sec"], "repro_found": got["repro_found"],
-            "problem": got["problem"],
-        })
-    kind = "paper_anchor_unknown" if got["verdict"] == "unknown" else "paper_anchor_drifted"
-    return fail(f"渲染锚没到 0 漂移：{got['why']}", kind=kind, **got)
-
-def _paper_build(workspace: Path | None, project: str, render_script: str, compile_script: str, timeout_sec: float) -> Any:
-    root = _paper_root(workspace, project)
-    if not isinstance(root, Path):
-        return root
-    got = PB.build(root, render_script=render_script or PB.DEFAULT_RENDER_SCRIPT,
-                   compile_script=compile_script or PB.DEFAULT_COMPILE_SCRIPT,
-                   timeout_sec=timeout_sec)
-    if not got["ok"]:
-        return fail(f"从源重编没走成：{got['problem']}", kind="paper_build_failed", **got)
-    return ok({
-        "ok": got["ok"], "anchor": got["anchor"], "pdf_path": got["pdf_path"],
-        "pdf_sha256": got["pdf_sha256"], "pdf_bytes": got["pdf_bytes"],
-        "pdf_pages": got["pdf_pages"], "markers_missing": got["markers_missing"],
-        "compiler_exit_codes": got["compiler_exit_codes"], "receipt": got["receipt"],
-        "steps": got["steps"], "problem": got["problem"],
+        "tri": got["tri"], "ok": got["ok"], "reason": got["reason"],
+        "tex": got["tex"], "pdf": got["pdf"], "engine": got["engine"],
+        "exit_codes": got["exit_codes"], "runs": got["runs"], "pages": got["pages"],
+        "pdf_bytes": got["pdf_bytes"], "receipt_path": got["receipt_path"],
+        "pdf_fresh": got["pdf_fresh"],
+        "engine_stderr_tail": got["engine_stderr_tail"],
+        "engine_stdout_tail": got["engine_stdout_tail"],
+        "problems": got["problems"],
     })
 
 
 def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None) -> None:
-    """把"打包 / 编译 / 查渲染锚 / 一次重编"注册成 G 的工具。
+    """把"把写好的正文编成 PDF"注册成 G 的工具（旧路四条已退场，见 `draft/117`）。
 
-    四条工具共用 `agentflow.paperbuild` 里那一份实现：判据在项目脚本里，
-    这一层只负责受限地起子进程、读回 `REPRO_RESULT` 契约、把三态翻成 ok/fail。
-
-    `declared_external="exec"` 是刻意的：它们执行的是项目里的脚本（调用方选路径）。
-    声明成 `none` 等于说"这几个工具不执行任何东西"—— 而那正好是审批面最需要看的一栏。
+    一条工具、一件事：`doc.paper_compile`。它 `declared_external="exec"` 是刻意的 ——
+    它真的起 LaTeX 引擎（`pdflatex` / `xelatex` / `lualatex` 取第一个在 PATH 上的），
+    所以执行面必须如实声明；声明成 `none` 等于说"这条工具不执行任何东西"。
     """
     registry.register(
         ToolSpec(
-            name="doc.paper_render",
-            # 摘要此前写死"从库里的行重新产出主稿、四张表与六件配套" —— 那只是生成器那一档
-            # 项目脚本的行为；真机 77 个工作区里 37 份 `code/make_paper.py` 有 35 份是
-            # "洁净室渲染器：只写锚，不碰 main.tex"（`draft/37` §35.2/§37.1 的口径）。
-            # 对那一档说"重产主稿"是假话，而且与提示词自己那句"main.tex 可改、该改"打脸
-            # ⇒ 改成脚本无关的事实：重产哪些文件由脚本决定，读数看 REPRO_RESULT
-            # （`draft/108` CS-19）。
-            summary="跑项目里的渲染脚本（默认 code/make_paper.py）：重产哪些文件由那个脚本决定"
-            "（有的项目连主稿、附录与表一起重产，有的只写渲染锚、不碰你改过的 main.tex）——"
-            "以它那行 `REPRO_RESULT: {json}` 的读数为准；原始退出码与结论一字不改带回，"
-            "没有结论行就算没走成。",
-            params={
-                "type": "object",
-                "properties": {
-                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
-                    "script": {"type": "string", "maxLength": 300},
-                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
-                },
-                "required": ["project"],
-                "additionalProperties": False,
-            },
-            handler=lambda project, script="", timeout_sec=900.0: _paper_render(
-                workspace, project, script, timeout_sec),
-            side_effect="write_local",
-            declared_external="exec",
-            roles=("G",),
-            returns=(
-                "{'script','script_path','argv','exit_code','timed_out','ok','result','elapsed_sec',"
-                "'stdout_tail','stderr_tail','repro_found','problem'}；"
-                "`result` 是脚本自己那行 `REPRO_RESULT: {json}`（渲染脚本给 claims/experiments/"
-                "dependencies/conjectures/literature/findings/signature_verdict/coverage/"
-                "render_anchor/anchor_tables 等读数）；"
-                "失败：ok=False + kind=paper_render_failed + problem（超时/脚本不存在/越界/没有结论行）"
-            ),
-            tags=("document", "paper", "exec"),
-        )
-    )
-
-    registry.register(
-        ToolSpec(
             name="doc.paper_compile",
-            summary="跑项目里的编译脚本（默认 code/compile_paper.py）：从 main.tex 重编 main.pdf。"
-            "本机 MiKTeX 会写完 PDF 却以 0xC0000409 退出 ⇒ 判据是 PDF 的内容，退出码如实带回。",
+            summary="把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf，并写一份编译回执。"
+            "正文由你自己写（fs.write 到那个落点，散文体、章节自排）—— 这一条只做编译，"
+            "不生成正文、不改你的稿子。本机 MiKTeX 会写完 PDF 却以 0xC0000409 退出 ⇒ "
+            "产物（页数、字节数）与引擎退出码分成两栏如实带回。",
             params={
                 "type": "object",
                 "properties": {
                     "project": {"type": "string", "minLength": 1, "maxLength": 300},
-                    "script": {"type": "string", "maxLength": 300},
                     "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
                 },
                 "required": ["project"],
                 "additionalProperties": False,
             },
-            handler=lambda project, script="", timeout_sec=1800.0: _paper_compile(
-                workspace, project, script, timeout_sec),
+            handler=lambda project, timeout_sec=1800.0: _paper_compile(
+                workspace, project, timeout_sec),
             side_effect="write_local",
             declared_external="exec",
             roles=("G",),
             returns=(
-                "{'script','script_path','argv','exit_code','timed_out','ok','result','elapsed_sec',"
-                "'stdout_tail','stderr_tail','repro_found','problem'}；"
-                "`result` 含 {'ok','pdf','pdf_bytes','pdf_header','pages','text_extractor',"
-                "'markers_missing','runs','compiler_exit_codes','log_tail','note'}；"
-                "失败：ok=False + kind=paper_compile_failed"
+                "{'tri','ok','reason','tex','pdf','engine','exit_codes','runs','pages',"
+                "'pdf_bytes','receipt_path','pdf_fresh','engine_stderr_tail',"
+                "'engine_stdout_tail','problems'}；"
+                "tri ∈ not_applicable（还没有 main.tex，先写正文）/ unknown（没引擎、超时、"
+                "这一次没编出 PDF —— `pdf_fresh=false` 就是「盘上那份是上一次编的」那一档）/ "
+                "computed（**这一趟**拿到 PDF —— 页数与退出码如实带上，两栏不互相冒充）；"
+                "`engine_stdout_tail` / `engine_stderr_tail` 是引擎自己说的话（截尾）—— "
+                "编不过时先读它，别只看退出码；"
+                "失败：ok=False + kind=paper_no_source（还没写正文）/ "
+                "paper_compile_failed（编译没成）"
             ),
             tags=("document", "paper", "exec"),
-        )
-    )
-
-    registry.register(
-        ToolSpec(
-            name="doc.paper_anchor",
-            summary="查渲染锚（默认 code/make_paper.py --check）：三态 —— 0 一致 / 1 有漂移 / "
-            "2 没查成（锚不在盘上）。漂移逐条列出（哪张表、哪个文件）。",
-            params={
-                "type": "object",
-                "properties": {
-                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
-                    "script": {"type": "string", "maxLength": 300},
-                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
-                },
-                "required": ["project"],
-                "additionalProperties": False,
-            },
-            handler=lambda project, script="", timeout_sec=600.0: _paper_anchor(
-                workspace, project, script, timeout_sec),
-            side_effect="read",
-            declared_external="exec",
-            roles=("G",),
-            returns=(
-                "{'verdict','expected_exit_code','exit_code','drift','why','script','anchor_path',"
-                "'anchor_present','anchor_sha256','stdout_tail','stderr_tail','elapsed_sec',"
-                "'repro_found','problem'}；verdict ∈ consistent/drifted/unknown；"
-                "退出码与它打印的漂移行互相矛盾时判 unknown（两个信号打架不许挑一个信）。"
-                "失败：ok=False + kind=paper_anchor_drifted（查过了、有漂移）/ "
-                "paper_anchor_unknown（没查成）"
-            ),
-            tags=("document", "paper", "anchor"),
-        )
-    )
-
-    registry.register(
-        ToolSpec(
-            name="doc.paper_build",
-            summary="从源重编一次论文包并核对渲染锚：渲染 → 编译 → 再渲染（把锚挪到新 PDF 上）"
-            "→ 查锚，返回每一步的读数与最终漂移数。顺序是判据的一部分（见 draft/28 §188）。",
-            params={
-                "type": "object",
-                "properties": {
-                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
-                    "render_script": {"type": "string", "maxLength": 300},
-                    "compile_script": {"type": "string", "maxLength": 300},
-                    "timeout_sec": {"type": "number", "minimum": 1, "maximum": 7200},
-                },
-                "required": ["project"],
-                "additionalProperties": False,
-            },
-            handler=lambda project, render_script="", compile_script="", timeout_sec=1800.0: _paper_build(
-                workspace, project, render_script, compile_script, timeout_sec),
-            side_effect="write_local",
-            declared_external="exec",
-            roles=("G",),
-            returns=(
-                "{'ok','anchor','pdf_path','pdf_sha256','pdf_bytes','pdf_pages','markers_missing',"
-                "'compiler_exit_codes','receipt','steps','problem'}；"
-                "`anchor` 含 {'verdict','dimensions','drift','problems','why','anchor_path',"
-                "'anchor_present','receipt_path','receipt_present','anchor_sha256','rendered_at',"
-                "'compiled_at'}；`receipt` 是编译回执（tex_sha256/pdf_sha256/pages/"
-                "compiler_exit_codes）；`steps[]` 每项是 {'step','script','exit_code','ok',…}，"
-                "step ∈ render/compile/anchor_check —— **三步**：锚只管渲染出的源文件，"
-                "PDF 由编译回执管，所以不再需要再渲染一次；"
-                "ok=True 只在锚 verdict=consistent（0 漂移）时为真；"
-                "失败：ok=False + kind=paper_build_failed + problem（指出是哪一步没走成）"
-            ),
-            tags=("document", "paper", "build"),
-        )
-    )
-
-    registry.register(
-        ToolSpec(
-            name="doc.paper_state",
-            summary="只读核对一份论文包：进程内算渲染锚三维（源表 / 渲染出的源文件 / 编译回执），"
-            "给三态结论与逐条漂移。不起子进程、不出网 —— 只读角色也能自己核。",
-            params={
-                "type": "object",
-                "properties": {
-                    "project": {"type": "string", "minLength": 1, "maxLength": 300},
-                },
-                "required": ["project"],
-                "additionalProperties": False,
-            },
-            handler=lambda project: _paper_state(workspace, project),
-            side_effect="read",
-            roles=("G", "H"),
-            returns=(
-                "{'verdict','dimensions','drift','problems','why','anchor_path','anchor_present',"
-                "'receipt_path','receipt_present','rendered_at','compiled_at','checked','history'}；"
-                "verdict ∈ consistent/drifted/unknown（unknown = 有一维判不了，不是一致）；"
-                "dimensions 含 {'tables','files','receipt'} 三维各自的结论；"
-                "history 含 {'present','total','renders','compiles','last_render_at',"
-                "'last_compile_at','problems'}（它是读数，不参与判定）"
-            ),
-            tags=("document", "paper", "read"),
         )
     )

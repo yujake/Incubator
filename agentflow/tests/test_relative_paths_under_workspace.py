@@ -13,8 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import paperfixture as FX
 from agentflow import closing as CL
-from agentflow import renderanchor as RA
 from agentflow import reviewaccept as RA2
 from agentflow.store import Store
 
@@ -53,20 +53,13 @@ def _ws(tmp_path: Path) -> Path:
     (tmp_path / "data").mkdir(parents=True, exist_ok=True)
     (tmp_path / "out" / "paper").mkdir(parents=True)
     (tmp_path / "out" / "review").mkdir(parents=True)
-    (tmp_path / "out" / "paper" / "main.tex").write_text("% 主稿\n", encoding="utf-8")
-    (tmp_path / "out" / "paper" / "main.pdf").write_bytes(b"%PDF-1.4 x\n")
     (tmp_path / "out" / "review" / "REPORT.md").write_text(REPORT, encoding="utf-8")
     (tmp_path / "out" / "review" / "REPORT-STYLE.json").write_text(
         json.dumps(STYLE, ensure_ascii=False), encoding="utf-8")
     st = Store(tmp_path)
     st.init()
-    out = tmp_path / "out" / "paper"
-    # 回执必须在锚之前写好（锚的三维之一就是回执；顺序反了锚会报 receipt: unknown）
-    rec = RA.build_receipt(out, tex_sha256=RA.file_digest(out / "main.tex"), pages=1,
-                           markers_missing=[], pdf_bytes=(out / "main.pdf").stat().st_size,
-                           compiler_exit_codes=[])
-    (out / RA.RECEIPT_NAME).write_text(json.dumps(rec), encoding="utf-8")
-    (out / RA.ANCHOR_NAME).write_text(json.dumps(RA.build_anchor(st, out)), encoding="utf-8")
+    # 正文 + 框架写的编译回执（2026-10-13 之后论文那一格判的就是这两件对不对得上）
+    FX.compiled_project(tmp_path)
     return tmp_path
 
 
@@ -94,7 +87,7 @@ def test_a_relative_report_path_resolves_under_the_workspace(tmp_path: Path, mon
 
 
 def test_a_relative_project_dir_resolves_under_the_workspace(tmp_path: Path, monkeypatch):
-    """正控：`project_dir="."` 必须在工作区根上找锚（第十趟报的"锚文件读不到"）。"""
+    """正控：`project_dir="."` 必须在工作区根上找正文与回执（第十趟报的"锚文件读不到"）。"""
     ws = _ws(tmp_path / "ws")
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
@@ -102,8 +95,8 @@ def test_a_relative_project_dir_resolves_under_the_workspace(tmp_path: Path, mon
     st = Store(ws)
     st.init()
     rep = CL.check_closing(st, project_dir=".", report_path="out/review/REPORT.md")
-    assert rep.status["anchor"] == "pass", rep.to_dict()
-    assert rep.readings["anchor"]["verdict"] == "consistent", rep.readings["anchor"]
+    assert rep.status["paper"] == "pass", rep.to_dict()
+    assert rep.readings["paper"]["verdict"] == "consistent", rep.readings["paper"]
 
 
 def test_reviewaccept_resolves_the_same_way(tmp_path: Path, monkeypatch):
@@ -147,7 +140,7 @@ def test_an_absolute_path_is_left_alone(tmp_path: Path):
     st = Store(ws)
     st.init()
     rep = CL.check_closing(st, project_dir=str(ws), report_path=str(ws / "out" / "review" / "REPORT.md"))
-    assert rep.status["anchor"] == "pass" and rep.status["report_shape"] == "pass", rep.to_dict()
+    assert rep.status["paper"] == "pass" and rep.status["report_shape"] == "pass", rep.to_dict()
 
 
 # ------------------------------------------------- 第三个落点：`conductor.acceptance`

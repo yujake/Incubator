@@ -454,8 +454,7 @@ agentflow/
 │   ├── faculty_checks.py     十项官能里可机械判的那一半（引用落地 / 猜想卫生 / 体例）
 │   ├── judge.py / judges.py  语义判定的唯一缝协议 / 判据注册表（6 条判据 × 三态词表 + 负控）
 │   ├── deliver.py            交付前的判据闸门（机械半 ⇒ 结论、报告、可派回去的工作项）
-│   ├── paperbuild.py         论文包的渲染 / 编译 / 锚核对（build = render → compile → anchor_check 三步）
-│   ├── renderanchor.py       渲染锚与编译回执的本体（RENDER-ANCHOR.json / COMPILE-RECEIPT.json / BUILD-HISTORY.jsonl）
+│   ├── papercompile.py       把智能体写好的 `out/paper/main.tex` 编成 `main.pdf`（框架自己起 LaTeX 引擎），并写框架自己的编译回执 `COMPILE-RECEIPT.json`（旧路的渲染 / 锚核对已随业主 2026-10-13 的裁定退场）
 │   ├── promptkit.py          LLM 接入（一）：提示词装配（有序段 + 变量 + complete + 作用域遮蔽）
 │   ├── agent_prompts.py      LLM 接入（二）：A–H 与主控的前置提示词（手写判断 + 现算的工具面/伙伴边；版本号以 `src/agentflow/agent_prompts.py` 顶部的 `PROMPT_VERSION` 与 `tests/test_agent_prompts.py` 的冻结表为准 —— 这一行**刻意不抄那个数**：抄一次就会过期一次，此前这里写的是 p43）
 │   ├── llmseam.py            LLM 接入（三）：统一的模型缝（一次调用一条审计记录 + 三态词表 + 预算守卫）
@@ -520,7 +519,7 @@ agentflow/
 | `notes/<角色>.md` | 角色笔记（LLM 循环里 `note` 形状的落点；`inbox`/`notes` 一起构成角色的跨步记忆）。实现：`src/agentflow/agent_loop.py` |
 | `runs/<角色>-<时间戳>-<序号>.json` | **子循环的长产出落盘**：上游拿到的是路径而不是被截断的摘要（`RUNS_DIR_NAME = "runs"`）。实现：`src/agentflow/agent_loop.py` |
 | `.fulltext/` | 抽取正文的**内容寻址库**：整本书的正文只存一份，产物里只留引用。实现：`src/agentflow/fulltextstore.py` |
-| `<项目>/out/paper/`（项目工作区里） | 论文包本体：`main.tex` / `main.pdf` / `ACCEPTANCE.md` / `CLAIMS-LEDGER.md` / `tables/*.tex` / `RENDER-ANCHOR.json` / `COMPILE-RECEIPT.json` / `BUILD-HISTORY.jsonl`。三维锚的实现在 `src/agentflow/renderanchor.py` |
+| `<项目>/out/paper/`（项目工作区里） | **论文**：`main.tex` 是**智能体自己写的正文**（G 用 `fs.write` 写进那个落点，散文体、章节自排），`main.pdf` 由 `doc.paper_compile` 编出（框架自己起 LaTeX 引擎，**不跑项目脚本**），`COMPILE-RECEIPT.json` 是**框架自己写**的编译回执（`tex_sha256` 与盘上那份 tex 对不上 = 这份 PDF 是旧 tex 编的）。两份验收表 `ACCEPTANCE.md` / `ACCEPTANCE-CHECKS.json` 由 **M** 写。实现在 `src/agentflow/papercompile.py`；旧的"论文包"（`RENDER-ANCHOR.json` + 项目自带的 `code/make_paper.py` / `code/compile_paper.py`）已随业主 2026-10-13 的裁定整条退场（`draft/117`） |
 
 > 快照被改坏时：`python -m agentflow.cli rebuild`（会先自动备份）。
 
@@ -701,23 +700,41 @@ python tools/coverage_zero_test.py                  # 零测试公开函数风�
    当前值以本文 §6.2 与 `DEVELOPMENT.md` §1.5 的 `LIVE-READINGS` 为准；
    `NOAI-REVIEW-REGISTER.md` §0 是**历史档案**（它自己 §0/§7 逐字声明"当前值以那两处为准"），
    不当当前数字的真源（2026-09-28 集中审查 `R6-F4`：全仓 16 个引用里只有这一处用错）。
-10. **"修订落进台账"与"论文包跟上"是两件事**（2026-09-30 实测）。台账变了而
-    `out/paper/` 没重渲染时，`doc.paper_state` 会报 `drifted`（判据在
-    `src/agentflow/renderanchor.py::check_package`），交付定义第 1 条当场不成立。
-    提示词里已把"重渲染 → 重编译 → 锚回 `consistent`"写成收工判据
-    （`src/agentflow/agent_prompts.py` 的 `PAPER_PACK` 第六节），但**这不是机器强制的**。
-11. **`CAPABILITIES['G']` 里没有"重渲染论文包"这个可召唤动作**（`src/agentflow/capabilities.py`；
+10. **"改了正文"与"论文跟上"是两件事**（2026-09-30 实测；机制在 2026-10-13 换过一次）。
+    正文/台账改了而没有重编时，`out/paper/main.pdf` 与 `COMPILE-RECEIPT.json` 就停在旧那一版上 ——
+    现在由**收工门的 `paper` 那一格**当场拦下：回执里的 `tex_sha256` 与盘上那份 `main.tex`
+    的摘要对不上 ⇒ `fail` + `paper_pdf_is_stale`（blocker），交付定义第 1 条当场不成立。
+    判据只有一处实现：`src/agentflow/papercompile.py::receipt_matches_tex`（`closing._check_paper` 读它）；
+    没有 `main.tex` ⇒ 那一格 `not_applicable`，回执读不到 ⇒ `unknown`（"没查成"不是"没问题"）。
+    教训没变 —— **"产物在盘上"不等于"产物是盘上这一版源编出来的"**；变的是它现在**是机器强制的**：
+    旧路上这件事只写在提示词里（`src/agentflow/agent_prompts.py` 的 `PAPER_PACK` 第六节），
+    "重渲染 → 重编译 → 锚回 `consistent`"没有任何一格会因此变红。
+11. **`CAPABILITIES['G']` 里没有"编论文"这个可召唤动作**（`src/agentflow/capabilities.py`；
     G 只有 `compose_claim` / `register_dependency` / `build_document` / `render` /
-    `refresh_markdown` / `revise`）。重渲染目前靠 **G 的 LLM 循环自己调**
-    `doc.paper_render` / `doc.paper_compile`（`src/agentflow/tools/doc_tools.py`）——
-    G 那一轮不被驱动时，主控结构上无法让包跟上台账。加动作要改禁改区（需 2 名 reviewer）。
+    `refresh_markdown` / `revise`）。编译目前靠 **G 的 LLM 循环自己调**
+    `doc.paper_compile`（`src/agentflow/tools/doc_tools.py`，只给 G，一条工具一件事）——
+    G 那一轮不被驱动时，主控结构上无法替它编出 PDF。加动作要改禁改区（需 2 名 reviewer）。
+    这一条与上一条是一对：**主控逼不动它，但收工门拦得住它**（G 不编 ⇒ 上一条那一格报红）。
+
+    > **这次退场的由来**（业主 2026-10-13 裁定逐字：「paper_package 里那些东西都是古早废案了，
+    > 我们要智能体写文章」；范围 A 的现状与理由见 `draft/117`）：旧路上"论文包"要求**项目自带
+    > 一对脚本**（`code/make_paper.py` + `code/compile_paper.py`）来"从台账渲染 LaTeX → 编译 →
+    > 核锚"，于是排版固化成脚本模板（据 `src/agentflow/papercompile.py` 的模块 docstring 转记
+    > `draft/116` §2：从零研究工作区没有那对脚本 ⇒ `G.paper_package` 四次 `package_build_failed`）。
+    > 整条退场的落点：动作 `G.paper_package`、四件工具 `doc.paper_render` / `doc.paper_build` /
+    > `doc.paper_anchor` / `doc.paper_state`、模块 `paperbuild.py` / `renderanchor.py`、
+    > 渲染锚 `RENDER-ANCHOR.json` 与构建历史 `BUILD-HISTORY.jsonl` 一并删掉，
+    > 只留 `src/agentflow/papercompile.py` + 工具 `doc.paper_compile`。
 12. **语义判据是单样本**（`src/agentflow/judges.py`）：同一份产物在不同轮给过不同结论
     （`brain.blocker_specificity` 实测出现过 `vague` / `vague` / `specific`）。
     "N 样本一致"或"至少一条落地发现才判 `fail`"这类修法**尚未落地**。
-13. **三处已知边界**：论文包构建只认识 `out/paper/` 这一种布局（`src/agentflow/paperbuild.py`）；
+13. **三处已知边界**：新的论文层只认识一种布局 —— `<项目根>/out/paper/main.tex` 编成
+    `main.pdf`、回执 `COMPILE-RECEIPT.json` 落在同一个目录（`src/agentflow/papercompile.py` 的
+    `PACKAGE_REL` / `TEX_NAME` / `PDF_NAME` 是硬编码，且**完全不看项目里的脚本**）；
     本地灌库的 `books_dir` 未进沙箱（`src/agentflow/locallib.py::ingest_directory`，
     调用面是 `src/agentflow/tools/search_tools.py` 的 `search.ingest_local`，A 专属）；
-    锚与回执是"当前状态"而不是全历史（历史另存 `BUILD-HISTORY.jsonl`，无轮转与 actor 字段）。
+    回执只记"当前状态"而**没有历史**：每编一次就整份覆写 `COMPILE-RECEIPT.json`，
+    旧的 `BUILD-HISTORY.jsonl` 随旧路退场 ⇒"上一版 PDF 是哪一次编的"今天读不出来。
 14. **角色之间是"协同"而不是"接力"，但两件事要部署方显式打开**（2026-09-30）：
     - **角色要能自己唤起同伴**：被召唤的角色必须走 LLM 循环
       （`src/agentflow/agent_loop.py::LlmBackend`），而默认装配 `DEFAULT_LLM_LOOPS = {}`

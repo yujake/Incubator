@@ -389,8 +389,9 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（2026-10-09 加 `C.proof_chain` 之后，业主 2026-10-09 的"最短依赖链"那一条）：
-    60 个动作 = 21 compared + 39 unmatched + 0 ambiguous。
+    实测（2026-10-13 `G.paper_package` 退场之后）：59 个动作 = 21 compared + 38 unmatched + 0 ambiguous
+    （退场前是 60 = 21 + 39 + 0：`paper_package` 那一条本来也进 `unmatched`）。
+    此前各次（数字逐次可复算，每次只增不改）：
     `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]`
     里对不上工具组 ⇒ 进 `unmatched`，并逐条登记在 `_KNOWN_UNMATCHED_ACTIONS`。
     此前各次（数字逐次可复算，每次只增不改）：
@@ -398,7 +399,7 @@ def two_layer_reconciliation() -> dict:
     （V 的三条动作全部对上：`verify.verify_proof` / `verify.list_verifications` /
     `verify.read_proof` —— 工具名最后一段就是 `handler_name`，
     而 `_TOOL_GROUPS_BY_ROLE["V"]` 只登记了 `verify` 一组）；
-    2026-10-03 加 `G.paper_package` 之后 55 = 18 + 37 + 0；
+    2026-10-03 加 `G.paper_package`（2026-10-13 退场）之后 55 = 18 + 37 + 0；
     2026-10-02 加 `A.ingest_local` 与 `B.register_statement` 之后 53 = 18 + 35 + 0；
     2026-09-30 加 `A.search_literature` 之后 51 = 17 + 34 + 0。
     而 `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）——
@@ -2292,7 +2293,7 @@ def assert_capabilities(
 
     # ---- [7b] 对账面必须是一个分区（D-3）
     #
-    # 上面那条只钉 `unmatched`。实测（2026-10-03 加 `G.paper_package` 之后）：
+    # 上面那条只钉 `unmatched`。实测（2026-10-03 加 `G.paper_package` 之后；该动作 2026-10-13 退场）：
     # 55 个动作 = 18 compared + 37 unmatched + 0 ambiguous
     # （2026-10-02 是 53 = 18 + 35 + 0；2026-09-30 加 `A.search_literature` 之后是 51 = 17 + 34 + 0）。
     # 于是 `ambiguous` 那一格今天恰好是 0，
@@ -2490,21 +2491,16 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # `table`/`row` 与本动作的 `statement_full`），那种"比上了"比诚实的"没比对"更坏。
     # 与 `A.search_literature` / `H.review_report` 两条同族。
     "B.register_statement",
-    # `G.paper_package`（2026-10-03，`draft/37` §59）：G 的角色级动作，不是工具调用。
-    # 它一次做三件工具的事（`doc.paper_render` / `doc.paper_compile` / `doc.paper_state`），
-    # 所以没有哪一个工具名的最后一段等于 `paper_package`（唯一性约定要求逐字同名）。
-    # 为什么不拆成三个动作：它们必须连着做（先渲染再编译，最后核锚才有意义 ——
-    # 核锚放在最前面会让读数关于旧包），拆开就把"顺序"这件事留在调用方的记忆里，
-    # 而真机实测主控连派三次都没能把包更新掉。与 `A.search_literature` /
-    # `B.register_statement` / `H.review_report` 三条同族：诚实地登记"这一格没比对上"。
-    "G.paper_package",
+    # 2026-10-13：`G.paper_package` 已从这里拿掉（业主裁定「paper_package 里那些东西都是
+    # 古早废案了，我们要智能体写文章」）—— 动作本身、它的三个工具与渲染锚那一格一起退场，
+    # 所以"这一格没比对上"的登记也不再需要它。退场面与理由见 `draft/117`。
     # `A.shelf_search`（2026-10-06，J-53 / 裁决 2 族 1）：A 的角色级动作，不是工具调用。
     # 它调的是 `search.shelf` / `search.local`，两件工具名的最后一段是 `shelf` / `local`
     # ⇒ 与 `handler_name`（`shelf_search`）对不上（唯一性约定要求逐字同名）。
     # 为什么不给它凑一个同名工具：那两件是通用只读检索（A/C/H 都能调），而本动作是
     # "先列书架清单、再按需取逐字摘录"的一次编排 —— 配成一对会让两层类型对账去比
     # 两件不同的事。与 `A.search_literature` / `B.register_statement` / `G.paper_package`
-    # / `H.review_report` 五条同族：诚实地登记"这一格没比对上"。
+    # / `H.review_report` 四条同族：诚实地登记"这一格没比对上"。
     "A.shelf_search",
 })
 

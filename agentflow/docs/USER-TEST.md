@@ -40,6 +40,18 @@ python -B code\make_paper.py
 REPRO_RESULT: {"anchor": "written", "touched_main_tex": false}
 ```
 
+> ⚠️ **上面这一段（以及下面 §6 那一屏）是"旧路"的真机记录**：`code/make_paper.py` /
+> `code/compile_paper.py` 是**项目自带脚本**那条通道。业主 2026-10-13 裁定逐字
+> 「paper_package 里那些东西都是古早废案了，我们要智能体写文章」⇒ 那条通道整条退场
+> （`draft/117`）：不再有"渲染锚"，框架也不再要求任何项目脚本。**今天新面的走法**：
+> 正文由 **G 自己用 `fs.write` 写进 `out/paper/main.tex`**（散文体、章节自排），
+> 再调工具 **`doc.paper_compile`**（只给 G）编出 `out/paper/main.pdf`，并读**框架自己写**的
+> 回执 **`out/paper/COMPILE-RECEIPT.json`** 核 `tex_sha256`（是不是盘上那份 `main.tex`
+> 的摘要）与 `pages`；交付论文那一档还要两份验收表（`ACCEPTANCE.md` /
+> `ACCEPTANCE-CHECKS.json`，**M** 写）。构件这个工作区的那支临时脚本
+> （`D:\Incubator\temp\_p53_new_ws.py`）**仍然在按旧路往工作区里写 `code/` 那一对脚本**
+> —— 它不在交付物里、这一轮没有跟着改；所以上面这一段记录**照原样保留**（它是当时真跑出来的）。
+
 > ⚠️ 造场脚本 `D:\Incubator\temp\_p53_new_ws.py` 是我这轮的**临时工具**（在交付物
 > `agentflow/` 之外、不进版本库 ⇒ 它可能被清掉）。它不在了就用**现成的工作区**
 > `projects\p5-run15`（真机跑过 15 趟、有完整报告与台账）：把后面每一处的
@@ -240,12 +252,27 @@ python -B -m agentflow.cli --root . closing --project-dir . --report out\review\
 
 退出码 **0**。网页运行态里那一趟的 `stop_reason` 应是 `final`，花费与终端打印的一致。
 
+> ⚠️ **这一屏也是"旧路"的真机记录**（那一格当时叫 `anchor`）。**2026-10-13 起它改名叫 `paper`**，
+> 判据也从"渲染锚三维（源表 / 渲染出的源文件 / 编译回执）"换成
+> **"回执里的 `tex_sha256` 与盘上那份 `out/paper/main.tex` 的摘要对得上"**
+> （实现只有一处：`src/agentflow/papercompile.py::receipt_matches_tex`，`closing._check_paper` 读它）。
+> 所以今天在新面下重跑，第一行会印 `· paper：…`。**而它的结论取决于那个工作区里那份
+> `COMPILE-RECEIPT.json` 是不是新面写的** —— 老工作区（回执由 `code/compile_paper.py` 写）
+> 很可能根本没有 `tex_sha256` 这一栏，那时这一格是 `unknown`（"没查成"，**不是通过**）。
+> 本条**没有在盘上重跑**核对这一格，所以不在这里写一个新的读数。
+
 > 两个"必须这样写"的原因（都实测过，写错就会得到一条看着像代码坏了的 warning）：
-> ① `closing` 要**在论文包目录里**跑：`--project-dir` 是**按当前目录**解析的，
+> ① `closing` 要**在项目目录里**跑：`--project-dir` 是**按当前目录**解析的，
 > 在 `agentflow\` 下写 `--project-dir projects\p5-run15` 会被拼成
-> `projects\p5-run15\projects\p5-run15\…` ⇒ 报 `anchor_unknown` + `report_not_written`、退出码 **2**；
-> ② 所以这个块要先 `cd` 进包目录，而这就更需要上面那条**绝对** `PYTHONPATH`。
+> `projects\p5-run15\projects\p5-run15\…` ⇒ 报 `paper_not_checked` + `report_not_written`、退出码 **2**；
+> `paper_not_checked` 是**新的码**（论文那一格 2026-10-13 由 `anchor` 改名而来，
+> 旧记录里写的是 `anchor_unknown` —— 旧码今天不再产生）；
+> ② 所以这个块要先 `cd` 进项目目录，而这就更需要上面那条**绝对** `PYTHONPATH`。
 > 这两条合起来正是"能交"这一步最容易假红的地方 —— 它报的不是包坏了，是路径写错了。
+> ③ 另一头也要小心：**别把论文包目录本身当项目根传**（`--project-dir out\paper`）——
+> `closing._check_paper` 会认出来（它看见那个目录下有 `main.tex`）并如实报
+> `paper_not_checked`："给的目录看起来是论文包本身 ⇒ 论文那一格没查成"。
+> 所以"项目根"始终是**装着 `out/paper/` 的那一层**。
 
 ## §7 无人值守一档（验证"不许把没问当成默许"）
 
