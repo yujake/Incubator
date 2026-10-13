@@ -840,11 +840,16 @@ def test_the_settings_panel_prefills_from_the_reading() -> None:
     两向都钉：
     - 正向：`value` 用 `presetOf(settings, …)`（读数为底）、存在 `currentOf` 取现值；
     - 反向：`model.api_key` **不许**回填（读数恒为 `***`，回填等于把 `***` 写回文件）。
+
+    2026-10-13（R88）再加一条：key 那一格必须是 `type=password`（输入时不上屏）。
+    这是同一条"key 只写不读"纪律的另一半 —— 不回填不等于不上屏。
     """
     src = _page_text("Machine")
     assert "presetOf(settings, field.key)" in src, "设置窗口的输入框没有按读数回填"
     assert "function currentOf(" in src and "function presetOf(" in src, "取值帮手不在"
     assert "盘上没设过" in src, "占位符里没写清这一格是空在哪一边"
+    assert 'field.key === "model.api_key" ? "password" : "text"' in src, \
+        "key 那一格不是 password（输入的 key 会明文上屏）"
     i = src.index("function presetOf(")
     body = src[i:i + 400]
     assert 'key === "model.api_key"' in body and 'return ""' in body, body

@@ -13,26 +13,33 @@
 
 ## 没装就是 `unknown` 不是 `pass`
 
-`playwright` 没装 ⇒ 整个模块 `skip`，理由逐字写明"这是 unknown 不是 pass"
+`playwright` 没装 ⇒ 整个模块 `skip`，理由逐字写明这是 unknown 不是 pass
 （与 `-m network`、发布门 `unknown` 的处置同一条纪律：没查成不许记成通过）。
-本文件在写的时候没有跑过（本机没装 playwright、也没有浏览器），
-这一点写在报告里，不假装它绿过。
+本文件第一版写的时候一次都没跑过（当时本机既没 playwright 也没浏览器），
+这一点当时写在报告里，没有假装它绿过。
 
-## 两条实况（写判据时量到的，决定了下面哪些格是 skip）
+2026-10-13（R88）起本机能真跑了：`pip install playwright` + 本机自带的
+Microsoft Edge（`_launch()` 的第二条路，`channel="msedge"`）。这一天真跑过
+`python -m pytest -q -m browser tests/test_webui_browser.py`，读数记在那一轮的报告里。
+没装浏览器的机器上它照旧 `skip`（unknown，不是 pass）。
+
+## 三条实况（写判据时量到的，决定了下面哪些格是 skip）
 
 1. `GET /` 现在由 SPA 外壳提供（裁定 P1 的第一块，2026-10-07 落地）；`views.py` 已整件退场，
    所以浏览器里 `#app` 那一层只在 SPA 回退路径（`/machine` 这类客户端路由，
-   请求头带 `Accept: text/html`）上才挂得起来。判据一律从 `/machine` 进。
-2. Machine 页的"写设置表单"与 Run 页的"叫停按钮"今天还是 W0 空壳
-   （`ui/src/pages/Machine.tsx` 的 `TriState tri="not_applicable"`），
-   所以"点按钮 ⇒ 403 提示"这一格没有可点的按钮 —— 那两条判据如实 `skip`
-   并写明理由，不许改成一个会静默通过的弱断言。
-   写面本身的浏览器侧读数（真浏览器来源去打那三个端点）照常测，见下面第 4/5/6 条。
+   请求头带 `Accept: text/html`）上才挂得起来。
+2. Machine 页的"写设置表单"与 Run 页的"叫停按钮"**已经不是空壳了**（R81 起）：
+   下面那两条原先 `skip` 的判据已经换成真断言 —— 设置表单永不回填 key、且 key 那一格
+   是 `type=password`；叫停按钮第一次点击只"上膛"，盘上零改动。
+3. 九页的逐页核对（R88）走真浏览器：每页都要挂起来、控制台不许有 error、
+   正文里不许出现 markdown 记号（`**`；密钥掩码 `***` 不算）。
+   写面本身的浏览器侧读数（真浏览器来源去打那几个端点）见下面第 4/5/6 条。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import threading
 import urllib.parse
@@ -60,12 +67,57 @@ CSRF = "line-c-browser-csrf-0123456789"
 
 # ====================================================================== 夹具
 @contextmanager
-def _workspace(tmp_path: pathlib.Path) -> pathlib.Path:
-    """一个最小工作区（写面那几条判据要一个能落盘的地方）。"""
+def _workspace(tmp_path: pathlib.Path) -> Iterator[pathlib.Path]:
+    """一个最小工作区（写面那几条判据要一个能落盘的地方）。
+
+    R88 修正：这一支原先写的是 `return root`，可是它挂着 `@contextmanager` ——
+    生成器函数里 `return` 等于立刻收工，`contextlib` 拿到的是一个 `WindowsPath`
+    而不是迭代器，于是每一条用例都在 `with` 那一行炸 `TypeError`。
+    这个错误之所以能一直躺在这里，是因为本模块**从来没有被跑过**（没装 playwright
+    就整模块 skip）。2026-10-13 装上 playwright 真跑，第一条就露了。
+    """
     root = tmp_path / "ws"
     root.mkdir()
     Store(root).init()
-    return root
+    yield root
+
+
+#: 本机自带 Edge 的落点（`channel="msedge"` 认的就是它，不额外下载浏览器）。
+EDGE = pathlib.Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+
+
+def _launch_kwargs() -> dict[str, str]:
+    """挑一条起浏览器的路：**先看盘上有什么**，而不是"先起一次、失败再换一条"。
+
+    为什么必须先在盘上判（2026-10-13 实测）：在同一个 `sync_playwright()` 上下文里
+    让 `launch()` 失败一次，驱动的事件循环就废了 —— 后面每一次 `page.goto` 都报
+    `Event loop is closed! Is Playwright already stopped?`，十一条判据会以
+    "夹具坏了"的形态全红，看上去像产品缺陷。所以这里只读盘：
+    playwright 自带那一份落在 `ms-playwright/chromium-*`，没有就退到本机 Edge。
+    """
+    cache = pathlib.Path(
+        os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+        or (pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home()))
+            / "ms-playwright"))
+    if cache.is_dir():
+        for child in cache.iterdir():
+            if child.name.startswith("chromium-") and child.is_dir():
+                return {}
+    if EDGE.is_file():
+        return {"channel": "msedge"}
+    return {}  # 两条都没有 ⇒ 让它如实失败，由 `_launch` 判 skip（unknown 不是 pass）
+
+
+def _launch(pw: Any) -> Any:
+    """起一个浏览器；两条路都没有 ⇒ `skip` 并写明"这是 unknown 不是 pass"。"""
+    kwargs = _launch_kwargs()
+    try:
+        return pw.chromium.launch(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - 起不来就是"没查成"
+        pytest.skip(
+            f"浏览器起不来（试的是 {kwargs or 'playwright 自带 chromium'}）："
+            f"{type(exc).__name__}: {exc} —— 浏览器端到端这一档是 unknown 不是 pass"
+            f"（修法：`playwright install chromium`，或装 Microsoft Edge）")
 
 
 @contextmanager
@@ -73,35 +125,40 @@ def _live(root: pathlib.Path, *, allow_writes: bool = True,
           settings_write: bool = True) -> Iterator[dict[str, Any]]:
     """起服务 + 起浏览器，产出 `{base, page, errors, csrf}`。
 
-    浏览器起不来（没 `playwright install`）⇒ `skip` 并写明理由：
+    浏览器起不来（自带 chromium 与 Edge 都没起来）⇒ `skip` 并写明理由：
     那是"没查成"，不是"查过了没问题"。
+
+    R88 修正（同一处"没跑过所以没露"的坑）：收工顺序必须由我们自己定 ——
+    `sync_playwright()` 用 `with` 写在这里的话，生成器一 `yield` 就出了那个 `with`，
+    等用例跑完再恢复时驱动已经 `stop()`，`browser.close()` 于是报
+    `Event loop is closed!`，**每条用例都在收尾时炸**（看上去像产品缺陷）。
+    所以改成显式 `start()/stop()`：先关浏览器、再停驱动、最后关服务。
     """
     srv = W.serve(root, host="127.0.0.1", port=0, allow_writes=allow_writes,
                   settings_write=settings_write, csrf_token=CSRF)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
     base = f"http://{srv.server_address[0]}:{srv.server_address[1]}"
+    pw = _sync.sync_playwright().start()
     browser = None
     try:
-        with _sync.sync_playwright() as pw:
-            try:
-                browser = pw.chromium.launch()
-            except Exception as exc:  # noqa: BLE001 - 起不来就是"没查成"
-                pytest.skip(f"浏览器起不来（先跑 `playwright install chromium`）："
-                            f"{type(exc).__name__}: {exc} —— 这是 unknown 不是 pass")
-            page = browser.new_page()
-            errors: list[str] = []
-            page.on("console",
-                    lambda m: errors.append(f"console.{m.type}: {m.text}")
-                    if m.type == "error" else None)
-            page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
-            yield {"base": base, "page": page, "errors": errors, "csrf": CSRF}
+        browser = _launch(pw)
+        page = browser.new_page()
+        errors: list[str] = []
+        page.on("console",
+                lambda m: errors.append(f"console.{m.type}: {m.text}")
+                if m.type == "error" else None)
+        page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+        yield {"base": base, "page": page, "errors": errors, "csrf": CSRF}
     finally:
-        if browser is not None:
-            browser.close()
-        srv.shutdown()
-        srv.server_close()
-        thread.join(timeout=5.0)
+        try:
+            if browser is not None:
+                browser.close()
+        finally:
+            pw.stop()
+            srv.shutdown()
+            srv.server_close()
+            thread.join(timeout=5.0)
 
 
 def _enter_spa(live: dict[str, Any], route: str = "/machine") -> None:
@@ -187,7 +244,7 @@ def test_a_real_browser_origin_can_write_when_the_face_is_open(
         payload = json.loads(got["body"])
         assert payload["ok"] is True and payload["tri"] == "computed", payload
     assert SC.read_stop(root) is not None, "浏览器发来的叫停没落到盘上"
-    rows = audit.read(root)
+    rows = audit.read_actions(root)
     assert len(rows) == 1 and rows[0]["ok"] is True, rows
     assert rows[0]["source"].startswith("127.0.0.1"), rows[0]["source"]
 
@@ -208,7 +265,7 @@ def test_a_real_browser_origin_gets_403_when_the_face_is_closed(
         assert payload["ok"] is False and payload["tri"] == "not_applicable", payload
         assert "写面没开" in payload["reason"], payload["reason"]
     assert SC.read_stop(root) is None
-    assert audit.read(root)[0]["ok"] is False, audit.read(root)
+    assert audit.read_actions(root)[0]["ok"] is False, audit.read_actions(root)
 
 
 def test_a_write_without_the_csrf_header_is_refused_in_a_real_browser(
@@ -249,48 +306,126 @@ def test_the_key_reaches_the_file_but_never_the_page_or_the_response(
         assert payload["extra"]["values"]["model"]["api_key"] == SET.MASKED_KEY, payload
         assert secret not in got["body"], "响应回显了真 key"
         assert secret not in live["page"].content(), "页面里出现了真 key"
-        assert secret not in json.dumps(audit.read(root), ensure_ascii=False), \
+        assert secret not in json.dumps(audit.read_actions(root), ensure_ascii=False), \
             "台账里出现了真 key"
     on_disk = json.loads(target.read_text(encoding="utf-8"))
     assert on_disk["model"]["api_key"] == secret, on_disk
 
 
-# ====================================================================== 4 还没落地的那两格
-def test_the_settings_form_is_never_prefilled_with_the_key(tmp_path: pathlib.Path) -> None:
-    """未查（unknown，不是 pass）：Machine 页今天还没有"设置表单"这个 DOM。
+# ====================================================================== 4 三格真断言
+def test_the_settings_form_is_never_prefilled_with_the_key(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """正控（`draft/73` §2.8 的表单那一半）：key 那一格既不回填，也不明文上屏。
 
-    为什么写成 `skip` 而不是删掉：这是 `draft/73` §2.8 点名的那一条判据
-    （"key 填了但页面/响应都不回显"的表单那一半）。A 线的 Machine 页一落地，
-    把这条的 `skip` 换成真断言即可 —— 留着它，缺的那一格就是可见的。
+    这一条原先 `skip`（Machine 页当时还是 W0 空壳）。R81 起设置表单落地，
+    于是把它换成真断言，量三件事：
+    1. 后端读了设置文件之后，那一格仍然是**空的** —— 读数是 `***`，回填等于把
+       `***` 写回文件（`ui/src/pages/Machine.tsx` 的 `presetOf` 特意把这一格排除）；
+    2. 那一格的 `type` 是 `password`（输入时不上屏）；
+    3. 盘上那份真 key 在整页 HTML 里一个字都不出现。
     """
-    with _workspace(tmp_path) as root, _live(root) as live:
+    secret = "SENTINEL-machine-form-must-not-show-me-0123456789"
+    target = tmp_path / "settings.json"
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(target))
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
         _enter_spa(live, "/machine")
-        body = live["page"].content()
-        if "password" in body or "api_key" in body:
-            raise AssertionError(
-                "Machine 页已经有设置表单了 —— 请把这条 skip 换成真断言"
-                "（表单永不回填 key，type=password）")
-    pytest.skip("Machine 页还是 W0 空壳（`ui/src/pages/Machine.tsx` 只渲染一个 "
-                "TriState「这一面要等 W1 的读模型」）⇒ 表单那一格没查成："
-                "这是 unknown 不是 pass")
+        # 先把真 key 写进盘上那份设置文件（走真浏览器来源的那条写面）
+        got = _browser_post(live, "/api/settings",
+                            {"model.api_key": secret, "confirm": "1"})
+        assert got["status"] == 200, got
+        live["page"].reload(wait_until="load")
+        live["page"].wait_for_selector("#app > *", timeout=10_000)
+        # 设置三段那一卡是 `/api/machine` 回来之后才画的（`#app > *` 只保证外壳在），
+        # 所以等那一格本身出现，而不是等一个固定毫秒数（实测这处会偶发抢跑）。
+        live["page"].wait_for_selector('input[type="password"]', timeout=10_000)
+        box = live["page"].query_selector('input[type="password"]')
+        assert box is not None, (
+            "Machine 页没有 type=password 的那一格 —— key 输入框要么不在，"
+            "要么被改成了明文")
+        assert box.get_attribute("value") in (None, ""), (
+            f"key 那一格被回填了：{box.get_attribute('value')!r}")
+        html = live["page"].content()
+        assert secret not in html, "页面里出现了真 key"
+        assert SET.MASKED_KEY in html or "api_key" in html, "这一页根本没读设置"
 
 
 def test_the_stop_button_asks_for_confirmation_before_calling_stop(
         tmp_path: pathlib.Path) -> None:
-    """未查（unknown，不是 pass）：Run 页今天没有可点的"叫停"按钮。
+    """正控（`draft/73` §2.8 的 `test_stop_requires_confirmation`）：叫停要按两下。
 
-    同上：`draft/73` §2.8 的 `test_stop_requires_confirmation` 要的是
-    `ConfirmButton` 真接线之后的行为（不可逆动作必须先确认一次）。
+    这一条原先 `skip`（当时没有可点的叫停按钮）。R88 起 Run 页的「停机」卡片有
+    真按钮（`POST /api/stop`），于是量真行为：第一次点击只"上膛"（页面上出现
+    「确认叫停这一趟」并把影响写出来），盘上**零改动**；第二次点击才落停机开关，
+    并且写台账多一行。
+    """
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        _enter_spa(live, "/run/demo-sid")
+        live["page"].get_by_role("button", name="叫停这一趟").click()
+        live["page"].wait_for_timeout(300)
+        assert SC.read_stop(root) is None, "第一次点击就落了停机开关 —— 确认那一格是空的"
+        assert audit.read_actions(root) == [], audit.read_actions(root)
+        assert live["page"].get_by_role("button", name="确认叫停这一趟") is not None
+        live["page"].get_by_role("button", name="确认叫停这一趟").click()
+        live["page"].wait_for_timeout(600)
+        assert SC.read_stop(root) is not None, "确认之后停机开关没落盘"
+        rows = audit.read_actions(root)
+        assert len(rows) == 1 and rows[0]["ok"] is True, rows
+
+
+# ============================================================ 5 九页逐页核对（R88）
+#: 九页的客户端路由（`ui/src/main.tsx` 的路由表；`/run/:sid` 用一个不存在的会话号，
+#: 页面照样要挂起来 —— 它那时该显"读不出来"，不是白屏）。
+ROUTES = ("/", "/live", "/budget", "/evidence", "/artifacts", "/acceptance",
+          "/machine", "/help", "/run/demo-sid")
+
+
+def test_every_page_mounts_clean_and_prints_no_markdown_markers(
+        tmp_path: pathlib.Path) -> None:
+    """逐页核对（R88）：九页都要挂起来、控制台不許有 error、正文里不許有 markdown 记号。
+
+    为什么这一条必须在真浏览器里：`**` 这类记号是**上屏之后**才看得见的缺陷 ——
+    本机 2026-10-13 就是这样逮到验收页那两处的（`reviewaccept` 的话被逐字打印）。
+    静态扫源码只能守住前端那一半，后端产出的话只有渲染出来才知道。
+
+    `***` 是密钥掩码（`ModelSpec.redacted` / `SET.MASKED_KEY`），不是 markdown：
+    先把 `***` 从正文里去掉再找 `**`，免得把"key 配了"这件如实读数判成缺陷。
+    """
+    with _workspace(tmp_path) as root, _live(root, allow_writes=True) as live:
+        page = live["page"]
+        for route in ROUTES:
+            live["errors"].clear()
+            _enter_spa(live, route)
+            page.wait_for_timeout(250)
+            body = page.inner_text("body")
+            clean = body.replace("***", "")
+            where = clean.find("**")
+            assert where < 0, (
+                f"{route} 的正文里有 markdown 记号："
+                f"{clean[max(0, where - 60):where + 60]!r}")
+            assert body.strip() != "", f"{route} 是白屏（正文一个字都没有）"
+            assert page.eval_on_selector("#app", "n => n.children.length") > 0, \
+                f"{route} 的 #app 里一个子节点都没有"
+            noisy = [e for e in live["errors"] if "favicon" not in e]
+            assert noisy == [], f"{route} 的控制台有 error：{noisy}"
+
+
+def test_every_page_has_the_nav_and_at_least_one_card(tmp_path: pathlib.Path) -> None:
+    """反真空：九页每一页都从导航进得去，而且正文里真有卡片。
+
+    没有这一条，上面那条可以靠"每页都渲染同一张空白卡片"或"整页只有导航"变绿 ——
+    所以这里加两条下限：导航八条都在（`ui/src/main.tsx` 的 `NAV`），
+    且每一页至少有一张卡片标题（`.card-title`）。
     """
     with _workspace(tmp_path) as root, _live(root) as live:
-        _enter_spa(live, "/machine")
-        body = live["page"].content()
-        if "叫停" in body or "停机" in body:
-            raise AssertionError(
-                "页面上已经有叫停入口了 —— 请把这条 skip 换成真断言"
-                "（未确认时不许发出写请求）")
-    pytest.skip("Run / Machine 页还是 W0 空壳 ⇒ 没有可点的叫停按钮："
-                "这是 unknown 不是 pass")
+        page = live["page"]
+        for route in ROUTES:
+            _enter_spa(live, route)
+            page.wait_for_timeout(200)
+            links = page.eval_on_selector_all("nav a", "ns => ns.map(n => n.textContent)")
+            assert len(links) >= 8, f"{route} 上导航只有 {links}"
+            titles = page.eval_on_selector_all(
+                ".card-title", "ns => ns.map(n => n.textContent)")
+            assert titles, f"{route} 上一张卡片都没有（正文是空的）"
 
 
 # ====================================================================== 小件

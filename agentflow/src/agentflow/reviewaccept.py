@@ -35,7 +35,7 @@ CRITERIA: tuple[tuple[str, str], ...] = (
     ("triage_branch_recorded", "三态分支正确：该问用户的真问了，且问题落盘可查"),
     ("within_cost_cap", "在成本上限内完成"),
     ("hops_have_readable_prompts", "每一跳都留下了可读的输入（`input_key`+台账引用不悬空）"),
-    ("attachment_is_honest", "附件诚实：**明确标注是我们补的** + 依据读数 + 版本 sha；"
+    ("attachment_is_honest", "附件诚实：明确标注是我们补的 + 依据读数 + 版本 sha；"
                              "没过 T3 的不许写成「已解决」（R25 的两条负控）"),
 )
 
@@ -51,7 +51,7 @@ RESOLVED_MARKERS: tuple[str, ...] = ("已解决", "已修复", "已闭合", "res
 AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
     ("tex_sha256", "主稿 sha 变了（跑一次就会变）"),
     ("pdf_pages", "页数对得上"),
-    ("receipt_matches_tex", "这份 PDF 是从盘上这份 tex 编的（**单项**不算通过）"),
+    ("receipt_matches_tex", "这份 PDF 是从盘上这份 tex 编的（单项不算通过）"),
     ("task_rows", "任务数增加"),
     ("ledger_rows", "台账行数增加"),
 )
@@ -100,7 +100,7 @@ class ReviewAcceptance:
         if self.passed:
             return "审稿验收：五条内容级判据全过"
         return (f"审稿验收：未通过（{self.failed or '无'}）—— "
-                "注意：sha/页数/锚/行数这些辅助读数**不构成通过**")
+                "注意：sha/页数/锚/行数这些辅助读数不构成通过")
 
 
 # ------------------------------------------------------------------ 各条判据
@@ -203,7 +203,7 @@ def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any,
     if sid == NO_SESSION:
         acc.criteria["triage_branch_recorded"] = "unknown"
         acc.details["triage_branch_recorded"] = (
-            "这次审阅没有会话身份（装配期没注入 sid）⇒ 「该问的问了」这条**没查成**"
+            "这次审阅没有会话身份（装配期没注入 sid）⇒ 「该问的问了」这条没查成"
             "（按缺省会话读会把别的会话的提问算进来，或把本会话的提问读丢）")
         return
     from . import userio as U
@@ -217,11 +217,11 @@ def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any,
         acc.criteria["triage_branch_recorded"] = "fail"
         acc.details["triage_branch_recorded"] = (
             f"还有 {len(pending)} 个问题没被回答（{', '.join(q.qid for q in pending[:4])}）"
-            "⇒ 正确的分支是**停在「等待用户」**，不是继续往下做")
+            "⇒ 正确的分支是停在「等待用户」，不是继续往下做")
     elif not replies:
         acc.criteria["triage_branch_recorded"] = "unknown"
         acc.details["triage_branch_recorded"] = (
-            "这一次一次都没问过用户 ⇒ 「该问的问了」这条**没查成**"
+            "这一次一次都没问过用户 ⇒ 「该问的问了」这条没查成"
             "（不是通过：没有提问记录与'问得对'不是同一件事）")
     else:
         acc.criteria["triage_branch_recorded"] = "pass"
@@ -368,7 +368,7 @@ def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
         "without_input_key": missing,
         "note": "提示词正文在会话记录的 llm_call 事件里"
                 "（prompt_sha256/prompt_chars），本判据只看台账那一半；"
-                "`excluded_top_run_rows` 是本次**排除掉的顶趟行**（`called_by=\"user\"`）："
+                "`excluded_top_run_rows` 是本次排除掉的顶趟行（`called_by=\"user\"`）："
                 "那一条是用户发起的那一趟，不是一次召唤",
     }
     if not rows:

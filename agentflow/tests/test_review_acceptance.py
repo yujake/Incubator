@@ -14,8 +14,10 @@
 """
 from __future__ import annotations
 
+import ast
 import json
 import pathlib
+import re
 
 from conftest import TS, sync_counters
 import paperfixture as FX
@@ -492,3 +494,60 @@ def test_a_top_run_row_without_an_input_key_does_not_fail_the_hop_criterion(tmp_
     acc = _check(st, report)
     assert acc.criteria["hops_have_readable_prompts"] == "pass", acc.to_dict()
     assert acc.readings["hops"]["excluded_top_run_rows"] == 1, acc.readings["hops"]
+
+
+# ============================================================ 用户端可读性（R88）
+
+#: markdown 强调记号。`webui.readers.acceptance_face` 把 `acc.details[k]` 逐字交给
+#: 验收页（`ui/src/pages/Acceptance.tsx`），而 JSX 不解析 markdown ⇒ 写进去就上屏。
+_MD_BOLD = re.compile(r"\*\*[^*\n]+\*\*")
+
+
+def _module_strings_with_markdown(path: pathlib.Path) -> list[str]:
+    """模块里"非文档字符串"中还留着 markdown 记号的那些。
+
+    只扫字符串常量、且跳过程序/类/函数的第一段（docstring）：注释与 docstring
+    不上屏，那里写记号是给人读源码用的（本模块自己的 docstring 里就写着 markdown），
+    不算缺陷。跳过的必须是**那一段**（按 `id()` 认），不是"文件里所有多行串"——
+    否则人话那几段会被顺手放过。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    skip: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                             ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            first = body[0] if body else None
+            value = getattr(first, "value", None)
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                skip.add(id(value))
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                and id(node) not in skip:
+            found += [m.group(0) for m in _MD_BOLD.finditer(node.value)]
+    return found
+
+
+def test_no_user_facing_reason_string_carries_markdown_markers(tmp_path) -> None:
+    """验收页逐字打印 `details[k]` ⇒ 这些字符串里不许有 markdown 记号（R88）。
+
+    为什么写在这一组：`reviewaccept` 是验收页那几句话的**唯一**产出方
+    （`webui.readers.acceptance_face` 原样搬运 `criteria` / `details` / `auxiliary`）。
+    2026-10-13 用真浏览器逐页核对时，验收页正文里出现了 2 处 `**`
+    （「该问的问了」这条**没查成**）—— 用户看到的是多出来的星号，不是强调。
+
+    负控在同一支里：取样文件正文里的记号必须被报出来，docstring 与注释里的不许报。
+    """
+    sample = tmp_path / "sample.py"
+    sample.write_text(
+        '"""docstring 里的 **加粗** 不上屏，不算。"""\n'
+        "\n"
+        'X = "正文里的 **加粗** 要报出来"\n'
+        "# 注释里的 **加粗** 也不上屏\n",
+        encoding="utf-8")
+    assert _module_strings_with_markdown(sample) == ["**加粗**"], \
+        "负控没报 —— 这条判据自己坏了"
+    leftovers = _module_strings_with_markdown(pathlib.Path(RX.__file__))
+    assert leftovers == [], (
+        f"`reviewaccept.py` 里有 {len(leftovers)} 处 markdown 记号会原样上屏：{leftovers}")

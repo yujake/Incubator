@@ -244,7 +244,7 @@ export function Machine() {
             <label class="opt" key={field.key}>
               <span class="mono">{field.key}</span>
               <input
-                type="text"
+                type={field.key === "model.api_key" ? "password" : "text"}
                 placeholder={
                   field.key === "model.api_key"
                     ? field.hint
