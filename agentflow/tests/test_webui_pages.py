@@ -104,7 +104,7 @@ EVENTS_TRI_WORD = "不是一张空列表"
 EMPTY_WORDS: dict[str, str] = {
     "Home": "暂无待回答的问题（合法初态",
     "Run": "这一段会话里一趟都没有",
-    "Evidence": "0 条命题（读到了，里面是空的",
+    "Evidence": "暂无命题（已读出）",
     "Artifacts": "台账 0 行（读到了，里面是空的",
     "Acceptance": "一条判据都没读到",
     "Machine": "探测读数里一格都没有",

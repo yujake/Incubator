@@ -70,8 +70,7 @@ export function Evidence() {
         right={<TriState tri={ev.tri} label="证据面" reason={ev.reason} />}
       >
         <div class="readings">
-          落点读数来自 <span class="mono">store.rows(...)</span> 七张表 + 验证台账 +
-          秘书台账。每一栏另有一个自己的三态 —— 整面一个词会吞掉"哪一栏没读成"。
+          七张表 + 验证台账 + 秘书台账；每一栏各有自己的三态。
         </div>
         {ev.store_problems.length === 0 ? null : (
           <div class="readings">
@@ -90,7 +89,7 @@ export function Evidence() {
         ) : (
           <Table
             rows={ev.statements}
-            empty="0 条命题（读到了，里面是空的 —— 不是「没查成」）。"
+            empty="暂无命题（已读出）。"
             columns={[
               { key: "stmt_id", title: "命题号" },
               { key: "status", title: "状态", render: (r) => cell(r.status) },
@@ -220,12 +219,11 @@ export function Evidence() {
         ) : (
           <>
             <div class="readings">
-              一共 <span class="mono">{ev.relations.length}</span> 条关系。不是「真」的那些
- 必须连理由一起看（quote_reason 是空的就写 unknown，不写空）。
+              <span class="mono">{ev.relations.length}</span> 条关系；非「真」项须连同理由阅读。
             </div>
             {notTrue.length === 0 ? (
               <span class="empty">
-                没有"不是真"的引文（读到了：这一批关系全是真或者一条关系都没有）。
+                没有不是「真」的引文。
               </span>
             ) : (
               <Table
@@ -258,15 +256,14 @@ export function Evidence() {
         right={<TriState tri={ev.verifications_tri} label="verifications" />}
       >
         <div class="readings">
-          裁定 K2：盘上（真机）没有 <span class="mono">verifications/</span> 的样本 ⇒
- 这一栏的读数由 tests/conftest.py 的夹具造（页面上如实标明"夹具样本"）。
+          本机没有验证台账样本；此栏读数为夹具样本。
         </div>
         {isUnreadable(ev.verifications_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
         ) : (
           <Table
             rows={ev.verifications}
-            empty="这台机器还没有验证台账（合法初态：还没做过证明级验证）。"
+            empty="暂无验证台账（合法初态）。"
             columns={[
               { key: "verification_id", title: "验证号" },
               { key: "statement_id", title: "命题号" },
