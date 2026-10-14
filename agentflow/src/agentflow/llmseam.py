@@ -62,6 +62,16 @@ class SeamCall:
     system_sha256: str = ""
     tokens_in: int = 0
     tokens_out: int = 0
+    #: 输入里**命中缓存**的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
+    #: `None` = 上游没回这一格（"没查成"），`0` = 明说零命中 —— 三态，不许折平。
+    #: 它与 `usd` 成对：供应商按"命中/未命中/输出"三档计价，而这一格是那三档里
+    #: 唯一被我们此前丢掉的一档（业主 2026-10-14：「花销标准与供应商定价吻合」）。
+    cache_hit_tokens: int | None = None
+    #: 输入里**未命中缓存**的那一部分（上游 `usage.prompt_cache_miss_tokens`）。三态同上。
+    cache_miss_tokens: int | None = None
+    #: 这一笔的计价读数（`modelcost.billing_reading` 的返回：用了哪几档价、命中多少、
+    #: "命中价没登记 / 上游没报命中"这两种偏高情形各留一条痕迹）。
+    billing: dict[str, Any] = field(default_factory=dict)
     usd: float | None = None
     elapsed_sec: float = 0.0
     recorded: str = ""      # 空串 = 审计记录已落档；否则是没落成的原因
@@ -384,6 +394,10 @@ class LlmSeam:
             detail=str(getattr(reply, "error_detail", "") or ""),
             tokens_in=int(getattr(reply, "tokens_in", 0) or 0),
             tokens_out=int(getattr(reply, "tokens_out", 0) or 0),
+            # 缓存命中/未命中：三态照抄上游（`None` = 没回这一格）。
+            cache_hit_tokens=getattr(reply, "cache_hit_tokens", None),
+            cache_miss_tokens=getattr(reply, "cache_miss_tokens", None),
+            billing=self._billing_of(reply),
             usd=usd,
             elapsed_sec=time.monotonic() - t0,
             tool_calls=len(calls),
@@ -416,6 +430,20 @@ class LlmSeam:
             return float(MC.usd_for(reply, price)), ""
         except Exception as exc:  # 价格表缺失/格式不对：这不影响结论，但必须留痕
             return None, f"花销未能折算（{type(exc).__name__}: {exc}）"
+
+    def _billing_of(self, reply: Any) -> dict[str, Any]:
+        """这一笔的计价读数（三档价 + 命中数 + "我们不知道"的那几格）。
+
+        为什么留它（业主 2026-10-14「花销标准与供应商定价吻合」）：`usd` 是一个数，
+        而"这个数按哪几档价算出来的"必须能复核。两种会让它偏高的情形 ——
+        命中价未登记、上游没报命中数 —— 在这里各有一条痕迹，读账的人因此不会
+        把"我们算贵了"读成"供应商算错了"。
+        """
+        try:
+            price = self.price or MC.price_from_env()
+            return dict(MC.billing_reading(reply, price))
+        except Exception as exc:  # noqa: BLE001 —— 读数算不出来不许带走这一趟
+            return {"cache_tri": "unreadable", "why": f"{type(exc).__name__}: {exc}"}
 
     # -------------------------------------------------------------- 落账
     def _charge_ledger(self, call: SeamCall, *, task_id: str) -> dict[str, Any]:

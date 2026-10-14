@@ -75,13 +75,16 @@ __all__ = [
     "DEFAULT_PRICE_OUT_USD_PER_M",
     "ENV_PRICE_IN",
     "ENV_PRICE_OUT",
+    "ENV_PRICE_IN_HIT",
     "DEFAULT_ROLE",
     "Price",
     "price_of",
+    "price_of_full",
+    "price_from_env",
     "usd_for",
+    "billing_reading",
     "idempotency_key",
     "settle_key",
-    "price_from_env",
     "charge_reply",
 ]
 
@@ -92,6 +95,10 @@ DEFAULT_PRICE_OUT_USD_PER_M = 1.10
 
 ENV_PRICE_IN = "AGENTFLOW_MODEL_PRICE_IN_USD_PER_M"
 ENV_PRICE_OUT = "AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M"
+#: 命中缓存那一档的输入价（每百万 token 美元）。**故意没有默认值**：
+#: 这一档的价是供应商价目表上的一个具体数字，没登记就按未命中价算并留痕，
+#: 不许由一个"看起来差不多"的数字顶上（业主 2026-10-14：口径要与供应商定价吻合）。
+ENV_PRICE_IN_HIT = "AGENTFLOW_MODEL_PRICE_IN_HIT_USD_PER_M"
 
 #: 记账时的角色名。这一层只调模型、不扮演编排角色，所以默认登记为 modelgw
 #: 而不是硬塞一个 A–H 里的字母：冒名会让 `by_role()` 的归口统计说谎。
@@ -102,32 +109,54 @@ _PER_M = 1_000_000.0
 
 @dataclass(frozen=True)
 class Price:
-    """一个单价对（每百万 token 的美元价）。负价直接拒绝。"""
+    """一档单价（每百万 token 的美元价）。负价直接拒绝。
+
+    ## 为什么是三格而不是两格（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
+
+    供应商的价目表按**三种 token** 分开登：命中缓存的输入、未命中缓存的输入、输出。
+    我们此前只记两格（`in` / `out`），于是"命中缓存的那部分按未命中价算"——
+    系统性偏高，而且偏得没法核对（供应商账单上那三档是分开列的）。
+
+    `usd_per_m_in_hit` 的三态：`None` = **我们不知道这一档的价**（不是 0）。
+    未知时按未命中价计（偏保守），并在 `source` 里如实标出来 —— 宁可算贵，
+    也不许把"我不知道"写成一个更便宜的数字。
+    """
 
     usd_per_m_in: float
     usd_per_m_out: float
+    #: 命中缓存的输入价（每百万 token 美元）；`None` = 未登记（按未命中价算并留痕）。
+    usd_per_m_in_hit: float | None = None
+    #: 这份价是从哪来的（`env:…` / `default:…`）。由 `price_from_env` 在构造时写死 ——
+    #: 不能在属性里现读 `os.environ`：那样"用哪份 env 算的价"与"报出来的来源"
+    #: 会是两个东西（判据 `test_cost_matches_vendor` 当场抓到过这一格）。
+    source_note: str = ""
 
     def __post_init__(self) -> None:
-        if self.usd_per_m_in < 0 or self.usd_per_m_out < 0:
-            raise ValueError(
-                f"单价不能为负（收到 in={self.usd_per_m_in} out={self.usd_per_m_out}）"
-                "—— 负价会让'花了多少'这个数字失去意义"
-            )
+        for name, value in (("usd_per_m_in", self.usd_per_m_in),
+                            ("usd_per_m_out", self.usd_per_m_out),
+                            ("usd_per_m_in_hit", self.usd_per_m_in_hit)):
+            if value is not None and value < 0:
+                raise ValueError(
+                    f"单价不能为负（{name}={value}）—— 负价会让'花了多少'这个数字失去意义"
+                )
 
-    def to_dict(self) -> dict[str, float]:
+    def to_dict(self) -> dict[str, float | None]:
         """落盘用的扁平结构（`cost.json` 与清单都引用它）。"""
         return {
             "usd_per_m_in": self.usd_per_m_in,
             "usd_per_m_out": self.usd_per_m_out,
+            "usd_per_m_in_hit": self.usd_per_m_in_hit,
         }
+
+    @property
+    def hit_price_known(self) -> bool:
+        """命中缓存那一档的价**知不知道**（三态的那一格）。"""
+        return self.usd_per_m_in_hit is not None
 
     @property
     def source(self) -> str:
         """这份价是环境变量给的还是默认观测值？写进产物里，便于日后复核。"""
-        env = os.environ
-        if str(env.get(ENV_PRICE_IN) or "").strip() or str(env.get(ENV_PRICE_OUT) or "").strip():
-            return f"env:{ENV_PRICE_IN}/{ENV_PRICE_OUT}"
-        return "default:deepseek-public-observed"
+        return self.source_note or "default:deepseek-public-observed"
 
 
 def _float_env(env: Mapping[str, str], name: str, default: float) -> float:
@@ -141,25 +170,49 @@ def _float_env(env: Mapping[str, str], name: str, default: float) -> float:
         return default
 
 
+def _float_env_opt(env: Mapping[str, str], name: str) -> float | None:
+    """读一个**可缺**的浮点环境变量：没给就是 `None`（"未登记"，不是 0）。"""
+    raw = str(env.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def price_from_env(env: Mapping[str, str] | None = None) -> Price:
-    """从环境变量读单价；两个变量都可单独缺省。"""
+    """从环境变量读单价；三个变量都可单独缺省。"""
     src = dict(os.environ if env is None else env)
+    named = [k for k in (ENV_PRICE_IN, ENV_PRICE_OUT, ENV_PRICE_IN_HIT)
+             if str(src.get(k) or "").strip()]
     return Price(
         usd_per_m_in=_float_env(src, ENV_PRICE_IN, DEFAULT_PRICE_IN_USD_PER_M),
         usd_per_m_out=_float_env(src, ENV_PRICE_OUT, DEFAULT_PRICE_OUT_USD_PER_M),
+        usd_per_m_in_hit=_float_env_opt(src, ENV_PRICE_IN_HIT),
+        # 来源按**这一份 env** 记（不是按进程环境现读）—— 见 `Price.source_note`。
+        source_note=(f"env:{'/'.join(named)}" if named else ""),
     )
 
 
 def price_of(spec: Any = None, *, env: Mapping[str, str] | None = None) -> tuple[float, float]:
     """一次调用该按什么价算 ⇒ `(输入价, 输出价)`，单位是美元每百万 token。
 
-    为什么收 `spec` 却不用它：本轮的单价表就是一个全局对（DeepSeek 一家）。
-    真正的按模型分档表需要一个数据源，而"从模型问价"是错的方向（见模块 docstring）。
-    参数留着是因为调用方手上总有 `spec`，而"价格与配置同源"这件事在接口上
-    应当看得见；等有了多档价目表，扩展点就在这里，不必改调用方。
+    ⚠️ 这是**两格**的那个旧口径（未命中输入 / 输出），保留给"只想要两个数"的调用方
+    （`runflow` 的清单、`cost.json`）。要用上缓存命中那一档，请用
+    :func:`price_of_full` —— 它返回完整的 :class:`Price`（三格 + `source`）。
+
+    真正的按厂商/模型分档表需要一个数据源，而"从模型问价"是错的方向（见模块 docstring）：
+    今天的价目表就是"默认观测值 + 环境变量覆盖"，`spec` 参数留着是因为调用方手上总有它，
+    而"价格与配置同源"这件事在接口上应当看得见。
     """
     p = price_from_env(env)
     return (p.usd_per_m_in, p.usd_per_m_out)
+
+
+def price_of_full(spec: Any = None, *, env: Mapping[str, str] | None = None) -> Price:
+    """完整的那一档价（三格 + 来源）—— 记账时用这个，不要用 `price_of` 的两格。"""
+    return price_from_env(env)
 
 
 def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
@@ -180,14 +233,63 @@ def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
     上游只给 token 数，单价是每百万的近似值，所以结果按 6 位小数收口
     （与 UsageEntry.usd 的存储精度一致，避免"账上一个数、汇总里另一个数"
     这种对不上的假不一致）。
+
+    ## 三档 token（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
+
+    上游回 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 时，输入那一块按
+    **两档价**分别算：命中部分用 `usd_per_m_in_hit`，未命中部分用 `usd_per_m_in`。
+    上游没回这两格（`None`）⇒ 全部按未命中价算（保守），并在
+    :func:`billing_reading` 里留一条读数，免得"我们不知道"被读成"没有这回事"。
     """
     p = price if isinstance(price, Price) else Price(price[0], price[1])
+    tokens_in = int(getattr(reply, "tokens_in", 0) or 0)
+    tokens_out = int(getattr(reply, "tokens_out", 0) or 0)
+    hit = getattr(reply, "cache_hit_tokens", None)
+    miss = getattr(reply, "cache_miss_tokens", None)
+    if p.hit_price_known and hit is not None:
+        hit_tokens = max(0, min(int(hit), tokens_in))
+        miss_tokens = tokens_in - hit_tokens
+    else:
+        # 要么这一档价没登记，要么上游没报命中数 —— 两种都按未命中价算（偏保守）。
+        hit_tokens, miss_tokens = 0, tokens_in
     per_call = (
-        int(getattr(reply, "tokens_in", 0) or 0) * p.usd_per_m_in
-        + int(getattr(reply, "tokens_out", 0) or 0) * p.usd_per_m_out
+        hit_tokens * float(p.usd_per_m_in_hit or 0.0)
+        + miss_tokens * p.usd_per_m_in
+        + tokens_out * p.usd_per_m_out
     ) / _PER_M
     attempts = max(1, int(getattr(reply, "attempts", 1) or 1))
     return round(per_call * attempts, 6)
+
+
+def billing_reading(reply: Any, price: tuple[float, float] | Price) -> dict[str, Any]:
+    """这一笔的**计价读数**：用了哪几档价、命中多少、有没有"我们不知道"的格子。
+
+    它存在的理由（三态纪律）：`usd` 只是一个数，而"这个数是怎么来的"必须能复核 ——
+    尤其是"命中缓存的价没登记"与"上游没回命中数"这两种情形，它们都会让
+    `usd` 偏高，而偏高如果不留痕，读账的人只会以为供应商算错了。
+    """
+    p = price if isinstance(price, Price) else Price(price[0], price[1])
+    tokens_in = int(getattr(reply, "tokens_in", 0) or 0)
+    hit = getattr(reply, "cache_hit_tokens", None)
+    miss = getattr(reply, "cache_miss_tokens", None)
+    if hit is None and miss is None:
+        cache_tri = "not_reported"
+    elif not p.hit_price_known:
+        cache_tri = "price_unknown"
+    else:
+        cache_tri = "billed"
+    return {
+        "tokens_in": tokens_in,
+        "tokens_out": int(getattr(reply, "tokens_out", 0) or 0),
+        "cache_hit_tokens": hit,
+        "cache_miss_tokens": miss,
+        "usd_per_m_in": p.usd_per_m_in,
+        "usd_per_m_in_hit": p.usd_per_m_in_hit,
+        "usd_per_m_out": p.usd_per_m_out,
+        "cache_tri": cache_tri,
+        "price_source": p.source,
+        "usd": usd_for(reply, p),
+    }
 
 
 def idempotency_key(task_id: str, call_index: int) -> str:

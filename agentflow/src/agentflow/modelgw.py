@@ -452,6 +452,21 @@ class ModelReply:
     http_status: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
+    #: 输入 token 里**缓存命中**的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
+    #:
+    #: ## 为什么必须单独有一格（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
+    #:
+    #: 供应商的账单价目表**不是一个价**：命中缓存的输入、未命中缓存的输入、输出
+    #: 是三档不同的单价（DeepSeek 的定价页就是这么登的）。只记 `tokens_in` 一个数，
+    #: 这一层的花销就永远对不上供应商的账单 —— 而且差得**系统性偏向贵**（把命中价
+    #: 的那部分按未命中价算了）。
+    #:
+    #: 三态：`None` = 上游没回这一格（"没查成"），`0` = 上游明说零命中。
+    #: 折成同一个 0 会让"这家上游不报这一格"与"这次真的零命中"分不开。
+    cache_hit_tokens: int | None = None
+    #: 输入 token 里**未命中缓存**的那一部分（上游 `usage.prompt_cache_miss_tokens`）。
+    #: 与 `cache_hit_tokens` 同一条三态纪律。
+    cache_miss_tokens: int | None = None
     attempts: int = 1
     elapsed_sec: float = 0.0
     model: str = ""
@@ -487,6 +502,9 @@ class ModelReply:
             "http_status": self.http_status,
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
+            # 三态：`None`（上游没回这一格）必须与 0（明说零命中）分得开。
+            "cache_hit_tokens": self.cache_hit_tokens,
+            "cache_miss_tokens": self.cache_miss_tokens,
             "attempts": self.attempts,
             "elapsed_sec": round(self.elapsed_sec, 3),
             "model": self.model,
@@ -724,6 +742,9 @@ class ModelGateway:
                                   status=status, attempt=attempt, elapsed=elapsed,
                                   model=self.spec.model, scope=scope)
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        # 缓存命中/未命中：只有上游真的回了这一格才写数（三态，见 `ModelReply`）。
+        hit = usage.get("prompt_cache_hit_tokens")
+        miss = usage.get("prompt_cache_miss_tokens")
         return ModelReply(
             ok=True, text=content,
             reasoning=reasoning,
@@ -731,6 +752,8 @@ class ModelGateway:
             http_status=status,
             tokens_in=int(usage.get("prompt_tokens") or 0),
             tokens_out=int(usage.get("completion_tokens") or 0),
+            cache_hit_tokens=(int(hit) if hit is not None else None),
+            cache_miss_tokens=(int(miss) if miss is not None else None),
             attempts=attempt, elapsed_sec=elapsed, model=self.spec.model,
             scope=scope,
         )

@@ -48,11 +48,17 @@ def _rows(store: Store) -> list[dict]:
 
 
 def test_price_of_defaults_are_documented_observations():
-    """缺省价必须等于登记的那两个常量（否则文档里的数字与代码里的数字会漂移）。"""
+    """缺省价必须等于登记的那两个常量（否则文档里的数字与代码里的数字会漂移）。
+
+    2026-10-14（业主「花销标准与供应商定价吻合」）之后 `Price` 多了**一档命中缓存价**：
+    它**故意没有缺省值**（未登记就是 `None`，按未命中价算并留痕），
+    所以这里断言的是"两格照旧 + 第三格是 None"。
+    """
     assert MC.price_of() == (MC.DEFAULT_PRICE_IN_USD_PER_M, MC.DEFAULT_PRICE_OUT_USD_PER_M)
     assert MC.price_from_env({}).to_dict() == {
         "usd_per_m_in": MC.DEFAULT_PRICE_IN_USD_PER_M,
         "usd_per_m_out": MC.DEFAULT_PRICE_OUT_USD_PER_M,
+        "usd_per_m_in_hit": None,
     }
 
 
