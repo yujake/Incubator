@@ -184,19 +184,64 @@ def test_the_negative_control_catches_a_tool_named_only_in_the_body(monkeypatch)
 
 
 def test_the_body_scan_does_not_fire_on_actions_paths_or_filenames(monkeypatch):
-    """反负控之八：正文里的 `D.propose_question` / `data/x.json` / `main.tex` 不报。
+    """反负控之八：正文里的 `F.step` / `data/x.json` / `main.tex` / `fs.read` 不报。
 
     这一条守的是上面那条判据的**另一半**：假阳性会把判据变成噪音，
-    于是没人再看它。工具名的形状是"全小写组名.名"，而动作是"大写角色.动作"、
+    于是没人再看它。工具名的形状是"全小写组名.名"，动作是"大写角色.动作"、
     路径与文件名带斜杠或以 `.json`/`.tex` 结尾 —— 三者机器分得开。
+
+    这里举的动作取 `F.step`（V 的出边就是 F）：**动作那一格也有判据**
+    （存在 + 够得到），所以"举一个不报的例子"必须同时是一个够得到的动作，
+    否则这一条会与那一条判据互相打架。
     """
     good = AS.Skill(slug="正文里的非工具点号", title="x", summary="一句话", when="任何时候",
-                    body=("派 `D.propose_question`，读 `data/statements.json`、"
+                    body=("派 `F.step` 推进，读 `data/statements.json`、"
                           "`out/paper/main.tex` 与 `fs.read`。"),
                     tools=("fs.read",))
     monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (good,))
     problems = AS.validate()
     assert not [p for p in problems if "正文" in p], problems
+
+
+def test_the_negative_control_catches_a_fabricated_action_only_in_the_body(monkeypatch):
+    """反负控之九：**正文里**出现一个不存在的动作 ⇒ 红（业主 ④ 的正文那一半）。
+
+    `actions` 那一格早就有这条判据了；正文没有。而模型照做的对象是正文 ——
+    一句"然后调 `Z.fly_to_moon`"写在正文里，声明那一格永远看不见它。
+    """
+    bad = AS.Skill(slug="正文虚构动作", title="x", summary="一句话", when="任何时候",
+                   body="第 1 步：调 `Z.fly_to_moon` 把结论搬过去。")
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
+    problems = AS.validate()
+    assert any("Z.fly_to_moon" in p and "正文" in p for p in problems), problems
+
+
+def test_the_negative_control_catches_an_unreachable_action_only_in_the_body(monkeypatch):
+    """反负控之十：正文里的动作**真实存在**、但这个角色够不到 ⇒ 红。
+
+    这一条挡的是"把别人的活写进我的操作手册"的**正文版**：
+    V 的出边只有 F，正文里写"你自己去调 `A.run_once`"就是一句做不到的指令 ——
+    而动作是真动作，所以只查存在性的判据会放过它。
+    """
+    bad = AS.Skill(slug="正文越权动作", title="x", summary="一句话", when="任何时候",
+                   body="第 1 步：调 `A.run_once` 自己去检索一遍。")
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
+    problems = AS.validate()
+    assert any("A.run_once" in p and "出边" in p for p in problems), problems
+
+
+def test_the_cross_reference_registry_cannot_rot(monkeypatch):
+    """反负控之十一：`_BODY_CROSS_REFS` 里登记的"指到别人"不成立 ⇒ 红。
+
+    "指到别人"（"由 H 做"这类）必须在正文判据里豁免，否则判据变成噪音
+    （实测真有这样的句子）。但豁免**具名**之后就会腐烂：那一句正文被删了、
+    或者出边变了让它变得够得到 —— 那时这条登记就成了"看起来还在挡着什么"。
+    所以登记本身也在判据里：不成立就报出来（与本仓 R010 那张假阳性表的纪律同源）。
+    """
+    monkeypatch.setitem(AS._BODY_CROSS_REFS, ("V", "复核-三态并指到那一步", "A.run_once"),
+                        "（负面夹具）这一条不成立：那一句正文里没有它")
+    problems = AS.validate()
+    assert any("_BODY_CROSS_REFS" in p and "已经不成立" in p for p in problems), problems
 
 
 def test_the_catalog_covers_every_role():

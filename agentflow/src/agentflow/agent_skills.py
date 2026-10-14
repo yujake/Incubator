@@ -1390,6 +1390,7 @@ def validate() -> list[str]:
         return [f"读不到 capabilities（这一格没查成，不是没问题）：{type(exc).__name__}: {exc}"]
     surface = _role_tool_surface(problems)
     problems.extend(_slug_problems())
+    problems.extend(_body_action_problems())
     for owner, rows in CATALOG.items():
         for s in rows:
             if not s.summary.strip() or not s.when.strip() or not s.body.strip():
@@ -1463,6 +1464,86 @@ def _body_tool_problems(surface: dict[str, set[str]]) -> list[str]:
                     out.append(
                         f"{owner}/{s.slug}：正文里点名了工具 {tok}，但它不在 {owner} 的工具面上"
                         "（声明那一格查不出这种写法，而模型照做的是正文）")
+    return out
+
+
+#: 正文里那种"点名一个动作"的写法：反引号包着的 `大写角色.动作`。
+#:
+#: 形状与工具名**天然分得开**（工具是全小写的 `组.名`），所以这个正则零假阳性：
+#: `data/statements.json`（路径）、`main.tex`（文件名）、`re.compile`（标准库）
+#: 都不会命中。零假阳性是这条判据能活下来的前提。
+_BODY_ACTION_TOKEN = re.compile(r"`([A-Z])\.([a-z][a-z0-9_]*)`")
+
+#: 正文里**指到别人**的那种 `角色.动作`（不是让本角色去做）：逐条登记 + 一行理由。
+#:
+#: ## 口径
+#:
+#: 正文里的 `角色.动作` 默认必须从**拥有这条 skill 的角色**出发够得到（与 `actions`
+#: 那一格同一条纪律）。登记在这里的是例外 —— 它们出现在**"这不是我的活"**的句子里，
+#: 指到别人或别人产出的证据。**逐条登记而不是放宽判据**：多出一处就要有人看一眼
+#: "这是指到别人，还是真让人去做"。
+#:
+#: ## 反例比正例重要（为什么不干脆只查"动作存不存在"）
+#:
+#: 只查存在性会漏掉真缺陷：一条 skill 说"你自己去调 `F.step`"时，动作确实存在，
+#: 而那个角色**做不到**。而如果为了抓这一句就把"指到别人"也判红，判据立刻变成噪音
+#: （实测这三处都是正当的指到别人）——所以豁免必须**具名**，且必须能被反查（见下）。
+_BODY_CROSS_REFS: dict[tuple[str, str, str], str] = {
+    ("C", "矛盾-三态并指到那一对", "D.adjudicate"):
+        "「C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）」—— 指到别人",
+    ("G", "成稿-正文自己写而不是脚本生成", "H.review"):
+        "「稿件级审校由 **H** 做（`H.review`）」—— 指到别人",
+    ("V", "假设轴-前提是否真被满足", "E.check_formal"):
+        "「能机器核的（`E.check_formal` 过的那几条）」—— 指到别人产出的证据",
+}
+
+
+def _body_action_problems() -> list[str]:
+    """**正文里**提到的动作：必须真存在；够不到就要**具名登记**为"指到别人"。
+
+    `actions` 那一格是声明，正文是操作手册 —— 一句"派 `F.step` 去推"写在正文里，
+    声明那一格查得再严也管不到它，而模型照做的对象是**正文**（与
+    `_body_tool_problems` 同一条理由，只是这一格查的是动作而不是工具）。
+
+    三件事各查一遍：
+
+    1. **存在**：正文里任何一个 `角色.动作` 都必须在 `capabilities` 里（业主 ④：
+       严禁虚构本系统不存在的动作）；
+    2. **够得到**：从拥有这条 skill 的角色出发，要么是自己的动作、要么在它的出边里；
+       够不到但确实是"指到别人"的，必须登记进 `_BODY_CROSS_REFS`；
+    3. **登记不许腐烂**：登记过的每一条都必须还成立（skill 还在、正文里还有那一句、
+       而且从出边看**仍然**够不到）—— 一张永不生效的豁免表会腐烂成"看起来还在挡着什么"。
+    """
+    try:
+        from . import capabilities as C
+    except Exception as exc:  # noqa: BLE001 —— 没查成也要报（不许读成"没问题"）
+        return [f"读不到 capabilities（正文动作那一格没查成）：{type(exc).__name__}: {exc}"]
+    out: list[str] = []
+    hit: set[tuple[str, str, str]] = set()
+    for owner, rows in CATALOG.items():
+        for s in rows:
+            reachable = set(C.ALLOWED_EDGES.get(owner, ()))
+            for role, action in sorted(set(_BODY_ACTION_TOKEN.findall(s.body))):
+                item = f"{role}.{action}"
+                if C.find_action(role, action) is None:
+                    out.append(f"{owner}/{s.slug}：正文里的 {item} 不是本系统里存在的动作")
+                    continue
+                if owner == SHARED or role == owner or role in reachable:
+                    continue
+                key = (owner, s.slug, item)
+                if key in _BODY_CROSS_REFS:
+                    hit.add(key)
+                    continue
+                out.append(
+                    f"{owner}/{s.slug}：正文里的 {item} 不在 {owner} 的出边里"
+                    "（写进去就是一句做不到的指令）。若这一句是「指到别人」，"
+                    "请登记进 `_BODY_CROSS_REFS` 并写明理由")
+    for key, why in sorted(_BODY_CROSS_REFS.items()):
+        if key not in hit:
+            out.append(
+                f"{key[0]}/{key[1]}：`_BODY_CROSS_REFS` 里登记的 {key[2]} 已经不成立"
+                f"（要么这句正文没了、要么它现在够得到了）⇒ 请删掉这条登记，"
+                f"别让豁免表腐烂。理由原话：{why}")
     return out
 
 
