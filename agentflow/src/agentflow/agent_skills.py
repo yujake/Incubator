@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
+import re
 
 __all__ = ["SKILLS_DIR", "SURVEY", "Skill", "CATALOG", "skills_for", "index_block",
            "materialize", "validate", "builtin_sources"]
@@ -243,6 +244,111 @@ def _m_skills() -> tuple[Skill, ...]:
 一件活一个收件人；要一批并发就用 `conductor.summon_many` 并让它**按写集分波**
 （同角色多实例给不同 `instance` 标签）。派之前用 `conductor.role_spec`
 读一眼收件人的**写集**——那才是"能不能同时做"的判据，不是你的心情。
+""",
+        ),
+        Skill(
+            slug="验收-一份拆解要过四问",
+            title="收到一份拆解/计划，先过四问再让它开工",
+            summary="方案不止一份且实质不同、子目标可独立核、中间结论可复用、每份带第一个筛选测试",
+            when="D 或 F 交回一份拆解/攻坚计划，你要决定「就这么走」还是「退回去重拆」的时候",
+            actions=("D.propose_question", "D.assess", "E.run_experiment"),
+            tools=("fs.read", "conductor.role_spec"),
+            body="""# 一份拆解要过四问
+
+## 四问（逐条给结论，不许"看着还行"）
+
+1. **方案不止一份，而且实质不同**：只给一条路线的两种写法（"先证 A 再证 B" 与
+   "先证 B 再证 A"）**不算**多方案 —— 它们在同一步上会以同样的方式卡住。
+2. **每个子目标能独立核**：任一子目标要能被单独判定真假（落一行台账、派一次复核），
+   且**依赖显式、没有循环**（用 B 证 A、又用 A 证 B 是最常见的隐性空转）。
+3. **中间结论一般且可复用**：优先"对同类问题都成立"的中间结论；
+   只对这一支成立的窄事实，在台账里值不了几个钱。
+4. **每份方案都带"第一个筛选测试"**：用最小的代价先试哪一步、试出来什么样算通过 ——
+   没有这一格的计划，开跑之后你只能看着它跑到没得跑为止。
+
+## 与台账对账
+
+`plans` 的每一份要说得清**关键风险**与**预期瓶颈**；读 `attack_plans`
+（`fs.read` 读 `data/attack_plans.json`）+ `conductor.role_spec` 看写集，
+判断"这几件活能不能同波"，再决定派谁。
+
+## 一条反面（最常见）
+
+**把难点藏进含糊的子目标里** —— "先建立合适的框架"这种子目标过不了第 2 问
+（它无法被独立判定），退回时要点名是**哪一个**子目标含糊、要它改成能判真假的样子。
+""",
+        ),
+        Skill(
+            slug="失败-三档分类并据此改派",
+            title="反复失败时：把每一次失败定位到那一步，再分三档处置",
+            summary="技术性 / 结构性 / 反例不成立 —— 三档的处置完全不同，别一律「再试一次」",
+            when="同一件事连着失败、子代理反复 no_change、或有人报「这条路走不通」的时候",
+            actions=("C.neighbors", "D.propose_question", "E.run_experiment"),
+            tools=("fs.read",),
+            body="""# 失败分三档
+
+## 先凑齐失败记录（我们盘上就有，不必新建）
+
+三处读数合起来就是失败日志：`experiments`（`refutes` 与它的 `counterexample`）、
+`attack_plans` 的推进历史、`verifications` 的三态结论。按发生顺序编号，
+每一次写清"核心想法一句话 + 卡在哪一步"。
+
+## 三档（分类是处置的依据，不是修辞）
+
+1. **技术性失败**：局部可修的错 —— 漏了一个条件、算错一处、有一个小逻辑缝。
+   处置：**让原角色定点修那一步**（改动面越大越难复核），不要把整件事重派一遍。
+2. **结构性失败**：方法与拆解对这个问题的**根本不适用**（不是某一步错，是每一步都会
+   以同样的方式卡住）。处置：**改拆解或改问题** —— 派 D（`D.propose_question`）
+   重新立题/重拆，而不是让原角色再试第二次。
+3. **反例不成立**：提出的反例违反了假设、或者根本没有反驳结论。
+   处置：**退回并要求一个真反例**（或改成"在什么附加条件下结论不成立"），
+   不许把它记成"结论被推翻"，也不许悄悄把它降级成"表述不严谨"就收工。
+
+## 反复失败之后允许"加强"，但要说清是哪种
+
+把假设加严、范围缩小、或改证一个**更强的中间结论**，都是正当的研究动作 ——
+判据是：**它澄清了数学，而不是绕开了问题**。两件必须写明的事：
+
+- 加强后的那一条与原命题的关系（是哪一条更强、原命题因此**仍未证**还是**已被蕴含**）；
+- 加强过的那一条**不算原文的背书**（这一档在 H 那里有名字：`stronger_than_source`）。
+
+## 一条纪律
+
+分类之前先**指到那一步**。说不出"卡在哪一步"的失败诊断，只是把"没成功"换了句话。
+""",
+        ),
+        Skill(
+            slug="留什么-耐久的才落盘",
+            title="收手/交班前：判哪些东西值得留下，只落耐久的",
+            summary="可复用的结论/定义/失败教训/口径决定才落手稿；一次性的讨论措辞不落",
+            when="一趟快结束时；或要把活交给下一趟、下一个角色的时候",
+            actions=("A.ingest_local", "B.run_once", "G.build_document"),
+            tools=("conductor.status_report", "conductor.ledger"),
+            body="""# 耐久的才落盘
+
+## 一条自检（判"值不值得留"）
+
+**把这段文字放回一个空格子里单独读，它还讲得通、还有用吗？**
+
+- 讲得通 ⇒ 它是**耐久**的（结论、定义、口径决定、失败教训、可复用的中间结论）⇒ 落手稿/台账；
+- 要靠"上面刚聊过的那几句"才读得懂 ⇒ 它是**一次性**的对话措辞 ⇒ 不落
+  （落了只会给下一个读的人制造噪音）。
+
+## 只跑最小必要的那几件
+
+别为了"留全"把每个角色都唤一遍：要外部事实才派 A（`A.ingest_local` 只做盘上已有的），
+要消化成台账才派 B（`B.run_once`），要一份能交出去的稿子才派 G（`G.build_document`）。
+唤得越多，"这一趟到底产出了什么"越难读。
+
+## 交班前看两处读数
+
+`conductor.status_report`（谁在飞、谁交了差）与 `conductor.ledger`（这一趟落了几行）。
+台账是**别人复核你的唯一入口**：没有落行的产出，等于没有发生。
+
+## 一条反面
+
+把"我做了很多"写进手稿：手稿要给的是**别人能拿去用的东西**
+（结论 + 证据指到哪一行 + 还剩什么没做），不是一趟流水账。
 """,
         ),
     )
@@ -496,6 +602,46 @@ def _v_skills() -> tuple[Skill, ...]:
 **被加强过的假设**，而那正是这一轴要抓的。
 """,
         ),
+        Skill(
+            slug="自足-核的是那一行字面",
+            title="复核对象必须是自足的命题；三轴逐轴看，任一轴不过整条不过",
+            summary="假设/定义/范围/结论都要在那一行里；自由文本讨论不算核验结果",
+            when="拿到一份证明要复核、或有人用一段叙述（而不是一行命题）让你判真假的时候",
+            actions=("V.read_proof", "V.verify_proof", "V.list_verifications"),
+            tools=("fs.read", "table.get"),
+            body="""# 核的是那一行字面
+
+## 第一步：把命题补成自足的
+
+**送核的东西必须是一条完整的、能单独读懂的陈述** —— 假设、用到的定义、参数范围、
+论域、以及要判的那条结论，**都在那一行里**。缺任何一格，你核的是**另一个命题**，
+而两条都"复核通过"时没人分得清差别在哪。
+
+所以：`table.get` 读 `statements` 那一行（`statement_full` / `proof_text`），
+`V.read_proof` 读回被审的证明全文。**读不到就如实回，不要凭题目猜内容。**
+
+## 第二步：三轴逐轴看（任一看不过，整条不过）
+
+1. **前提轴**：写出来的每一条条件**真的被用到了**吗？有没有偷偷多用的假设
+   （隐藏前提、定义换了、例外情形漏了）？—— 这一轴最常抓的是"结论比原文更强"。
+2. **计算轴**：式子、估计、不等式、化简、边界与退化情形 —— 逐处过一遍。
+3. **逻辑轴**：蕴含方向、量词顺序、情形划分是否穷尽、依赖顺序有没有循环。
+
+三轴的结论写进这一次复核的 `detail`（**指到步号**），整体仍只有三态：
+成立 / 有毛病（指到那一步）/ 看不出来。
+
+## 边界（别把这一格读大）
+
+**逐轴的独立结论目前只是这一次复核的说明**，不是三条独立的台账字段，也没有
+"哪条轴由谁签"这回事 —— 那一件（每条轴单独出结论、单独落库）在 `draft/120` §四
+待业主批，**现在不许拿它当已完成的能力用**。
+
+## 一条纪律
+
+**自由文本的讨论不等于核验结论**：你签的字落在 `verifications/<命题号>.jsonl`
+那一行上。在对话里说"我觉得没问题"而那一行没落，等于没核。
+""",
+        ),
     )
 
 
@@ -670,6 +816,39 @@ V 的结论只有三个：**成立 / 有毛病（指到那一步）/ 看不出�
 （`code/lean/<名字>.lean`，`fs.write`）：裁决与落库之间差的就是这一份可复跑的文件。
 检查器没装 / 开关关着 ⇒ 如实回 `lean_disabled` / `not_wired`，替代路是 V 的逐行走查，
 **不是**"证明通过了"。
+""",
+        ),
+        Skill(
+            slug="拆解-子目标要能独立核",
+            title="拆解：子目标可独立核、依赖显式、无循环、中间结论可复用",
+            summary="一份拆解要能指出每个子目标各自怎么判真假，以及第一个该试的筛选测试",
+            when="给一条要证的命题立计划、或把一份拆解改成能开工的样子时",
+            actions=("F.create_plan", "F.step", "B.register_statement"),
+            tools=("attack.create_plan", "attack.pick_next_subgoal", "attack.status"),
+            body="""# 子目标要能独立核
+
+## 一条一条对（`F.create_plan` 立计划时逐条过）
+
+1. **可独立核**：每个子目标自己就能被判定真假 —— 交 **B** 登记成一条命题
+   （`B.register_statement`）或交 **V** 走一遍（`F → V` 是直接边），不依赖"等别的子目标做完才知道"。
+2. **依赖显式**：子目标之间的先后与依赖要写进计划；**不许循环**
+   （用乙证甲、又用甲证乙，是最常见的隐性空转：两面都"在推进"，其实一步没动）。
+3. **中间结论一般且可复用**：优先"对同类问题都成立"的中间结论；只对这一支成立的窄事实
+   在台账里值不了几个钱。
+4. **仍是数学上可控的**：每个子目标都要在现有工具（`E` 的数值/形式化、`V` 的逐行走查）
+   的射程之内 —— 拆出一个谁也做不了的子目标，等于把难题换了个名字。
+5. **覆盖原问题的核心难点**：拆完要能回答"原题难在哪里，这个拆解在哪一步上碰它"。
+6. **每份计划带"第一个筛选测试"**：先用最小代价试哪一步、试成什么样算通过。
+
+## 几份方案，而不是一份
+
+拆解要给**实质不同**的几条路（不是同一路线换个顺序）。挑一条当工作路线时，
+**明写**是它（`F.step` 推进的就是它），别让"当前走的是哪条"留在心里。
+
+## 一条反面
+
+**把难点藏在含糊的子目标里** —— "先建立合适的框架"过不了第 1 条。它的代价是：
+计划看起来每步都完成了，而原题一步没动，账面上还全是绿的。
 """,
         ),
     )
@@ -868,6 +1047,43 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
   "没做"与"做了没成"是两件事，报告里必须长得不一样。
 """,
         ),
+        Skill(
+            slug="立题-精确到能动手",
+            title="立一条问题：过四问，再决定 accept / refine / defer / reject",
+            summary="好问题不是「有趣」，是精确到能动手；含糊的即便激动人心也要扣分",
+            when="要把一个方向立成 research_questions 的一行、或有人拿来一条候选问题让你接手时",
+            actions=("D.propose_question", "D.assess", "D.submit_gaps"),
+            tools=("table.get", "table.schema"),
+            body="""# 立题：精确到能动手
+
+## 四问（每一问都要给出**依据**，不是印象）
+
+1. **影响**：它成立之后，谁的下游会变（哪条结论、哪种方法、哪个应用）？
+2. **可行**：以手上的工具与已入库的材料，第一步能不能落地（`D.assess` 判证据就绪度）？
+   不够 ⇒ 先 `D.submit_gaps` 要检索，**不是**先开工。
+3. **新意**：与已入库的结论重合多少？重合的那部分要指到 `lit:` / `stmt:` 那一行。
+4. **延展**：解掉之后能长出什么（后续子问题、可复用的中间结论）？长不出东西的题，
+   即使成立，也只是一条死结论。
+
+四问与台账对账：题面（假设 + 目标结论）写进 `D.propose_question` 那一行，
+依据用 `table.get` 读到原行，别凭记忆复述。
+
+## 四档处置（不是二选一）
+
+- **accept**：四问都有依据 ⇒ 立行、往下走；
+- **refine**：方向对但题面含糊 ⇒ **收紧**它（补条件、缩范围、把结论写成可判真假的句子）；
+- **defer**：现在缺关键材料/工具 ⇒ 记清缺什么，等 `submit_gaps` 回来再判；
+- **reject**：与已知结论重合、或根本不可判 ⇒ 退回去并写明理由。
+
+## 两条纪律
+
+- **含糊但激动人心，要扣分**：题面里出现"合适的""一般的""本质上"这类词而指不出
+  它们的确切含义时，它不是一条能动手的题；
+- **细化要减少歧义，不是把问题变平凡**：把"对所有群"改成"对平凡群"确实好证了，
+  但那已经不是原来那条题 —— 被改掉的版本**连同理由**要留下（`defer` / `reject` 也留），
+  下一趟的人不该重走一遍。
+""",
+        ),
     )
 
 
@@ -1028,7 +1244,8 @@ SURVEY: dict[str, tuple[str, ...]] = {
     "M": ("math-research-loop", "propose-subgoal-decomposition",
           "propose-research-plan-neural-network-functions", "identify-key-failures",
           "literature-survey", "quality-assessor", "record-novelty",
-          "memory-trigger-evaluator", "cross-domain-explore"),
+          "memory-trigger-evaluator", "cross-domain-explore",
+          "problem-solver", "extract-project-memory", "strengthening-agent"),
     "A": ("literature-survey", "cross-domain-explore", "extract-reference-memory",
           "query-memory", "problem-refiner"),
     "B": ("extract-project-claims", "extract-conclusion-memory", "conclusion-manage",
@@ -1036,18 +1253,20 @@ SURVEY: dict[str, tuple[str, ...]] = {
     "C": ("query-memory", "extract-conclusion-memory", "research-consolidation",
           "math-research-loop", "quality-assessor"),
     "D": ("problem-generator", "problem-refiner", "propose-subgoal-decomposition",
-          "cross-domain-explore", "identify-key-failures"),
+          "cross-domain-explore", "identify-key-failures", "quality-assessor",
+          "problem-solver"),
     "E": ("construct-counterexamples", "construct-toy-examples",
           "verify-correctness-computation", "examination-of-special-cases-neural-network-functions",
           "verify-correctness-assumption"),
     "F": ("lemma-prover", "proof-constructor", "direct-proving", "proof-corrector",
-          "propose-subgoal-decomposition"),
+          "propose-subgoal-decomposition", "propose-research-plan-neural-network-functions",
+          "strengthening-agent"),
     "G": ("research-consolidation", "literature-survey", "quality-assessor",
           "conclusion-manage", "extract-user-memory"),
     "H": ("verify-overall", "verify-correctness-logic", "pessimistic-verifier",
           "quality-assessor", "memory-hygiene"),
     "V": ("pessimistic-verifier", "verify-correctness-logic", "verify-correctness-assumption",
-          "lemma-prover", "verify-overall"),
+          "lemma-prover", "verify-overall", "verify-correctness-computation"),
 }
 
 #: 那一份来源目录里全部 38 个 skill 的目录名（判据拿它核对 `SURVEY` 里的名字）。
@@ -1196,7 +1415,55 @@ def validate() -> list[str]:
                 for who in (sorted(surface) if owner == SHARED else [owner]):
                     if name not in surface.get(who, set()):
                         problems.append(f"{owner}/{s.slug}：工具 {name} 不在 {who} 的工具面上")
+    problems.extend(_body_tool_problems(surface))
     return problems
+
+
+#: 正文里那种"点名一件工具"的写法：反引号包着的 `组.名`（全小写组名）。
+#:
+#: 为什么要有这个正则而不是"看见像工具就报"：正文里还会出现 `D.propose_question`
+#: （动作，角色名大写）、`data/statements.json`（路径）、`main.tex`（文件名）——
+#: 它们都不是工具。**只报"确实在工具面上存在、但不属于这个角色"的那一种**，
+#: 这样零假阳性，而真缺陷（"V 用 `fs.write` 落盘"这种做不到的指令）一个不漏。
+_BODY_TOOL_TOKEN = re.compile(r"`([a-z][a-z0-9_]*\.[a-z0-9_]+)`")
+
+
+def _body_tool_problems(surface: dict[str, set[str]]) -> list[str]:
+    """**正文里**点名的工具也必须在这个角色自己的工具面上。
+
+    ## 为什么 `tools` 那一格不够
+
+    `tools` 是声明，正文是**操作手册**。一条 skill 完全可以把 `tools=("fs.read",)`
+    写得干干净净，却在正文第一句写"用 `fs.write` 把结果落盘" —— 而 `fs.write`
+    正是只读角色拿不到的那一件。声明那一格查得再严也管不到这句话，
+    而模型照做的对象是**正文**。
+
+    ## `shared` 那一槽为什么豁免（这是明写出来的豁免，不是漏查）
+
+    `shared` 是**每个角色都读得到**的同一份文件。它此前声明用 `table.*`，
+    而 M 的工具面里没有库表类工具 ⇒ 那两句对 M 是做不到的指令。改法不是"把它删干净"，
+    而是**在正文里点明这一格与角色有关**（"库表工具在多数角色手上、主控用 `fs.read`
+    读同一份 JSON"）—— 那句话里必然同时出现 `table.get` 与 `fs.read`，
+    所以对共享那一份，按"每个角色都必须在面上"判会把它自己判死。
+    共享那一份的纪律因此是**声明**那一格（`tools`）取交集，判据在 `validate()` 的工具循环里。
+    """
+    known: set[str] = set()
+    for names in surface.values():
+        known |= names
+    if not known:
+        return []          # 工具面没读成 ⇒ 这一格跳过（validate 已经记过"没查成"）
+    out: list[str] = []
+    for owner, rows in CATALOG.items():
+        if owner == SHARED:
+            continue
+        allowed = surface.get(owner, set())
+        for s in rows:
+            for tok in sorted(set(_BODY_TOOL_TOKEN.findall(s.body))):
+                if tok in known and tok not in allowed:
+                    out.append(
+                        f"{owner}/{s.slug}：正文里点名了工具 {tok}，但它不在 {owner} 的工具面上"
+                        "（声明那一格查不出这种写法，而模型照做的是正文）")
+    return out
 
 
 def _slug_problems() -> list[str]:

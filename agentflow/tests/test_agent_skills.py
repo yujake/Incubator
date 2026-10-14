@@ -126,6 +126,38 @@ def test_the_negative_control_catches_an_empty_when(monkeypatch):
     assert any("when" in p for p in problems), problems
 
 
+def test_the_negative_control_catches_a_tool_named_only_in_the_body(monkeypatch):
+    """反负控之七：`tools` 那一格干净，但**正文里**点名了一件本角色没有的工具 ⇒ 红。
+
+    为什么这一格要单独判（2026-10-14）：声明与正文是两样东西 ——
+    `tools=("fs.read",)` 可以写得很干净，而正文第一句写"用 `fs.write` 把结果落盘"。
+    声明那一格查得再严也管不到那句话，**而模型照做的对象是正文**。
+    这一条是那一格判据的负控；正控是整本目录过 `validate()`。
+    """
+    bad = AS.Skill(slug="正文点名越面工具", title="x", summary="一句话", when="任何时候",
+                   body="第 1 步：用 `fs.write` 把结论落盘，然后用 `fs.read` 读回来。",
+                   tools=("fs.read",))
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
+    problems = AS.validate()
+    assert any("fs.write" in p and "正文" in p for p in problems), problems
+
+
+def test_the_body_scan_does_not_fire_on_actions_paths_or_filenames(monkeypatch):
+    """反负控之八：正文里的 `D.propose_question` / `data/x.json` / `main.tex` 不报。
+
+    这一条守的是上面那条判据的**另一半**：假阳性会把判据变成噪音，
+    于是没人再看它。工具名的形状是"全小写组名.名"，而动作是"大写角色.动作"、
+    路径与文件名带斜杠或以 `.json`/`.tex` 结尾 —— 三者机器分得开。
+    """
+    good = AS.Skill(slug="正文里的非工具点号", title="x", summary="一句话", when="任何时候",
+                    body=("派 `D.propose_question`，读 `data/statements.json`、"
+                          "`out/paper/main.tex` 与 `fs.read`。"),
+                    tools=("fs.read",))
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (good,))
+    problems = AS.validate()
+    assert not [p for p in problems if "正文" in p], problems
+
+
 def test_the_catalog_covers_every_role():
     """覆盖：`shared` 与**十个角色**每一格都有内容（少一格 = 那一岗没有按需材料）。
 

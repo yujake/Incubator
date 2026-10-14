@@ -2314,18 +2314,23 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （`shared` 那一槽的 skill 每个角色都读得到；正文在盘上，按需 `fs.read`）。
 #: p106 → p107（2026-10-14，同一件活的第二轮）：索引**按角色补齐** —— 加 F / A / C / D / G
 #: 五岗的条目、M 加"按任务类型选收件人"（含 `M → D → F`、`F → V` 两条间接链）⇒ 十格全动。
-_FROZEN_PROMPT_VERSION = "p107"
+#: p107 → p108（2026-10-14，第三轮调研）：M 加三条（拆解验收四问 / 失败三档分类 /
+#: 留什么才落盘）、D 加"立题-精确到能动手"、F 加"拆解-子目标要能独立核"、
+#: V 加"自足-核的是那一行字面"；`SURVEY` 按这一轮真读过的来源补齐。
+#: 作用域读数（现算对照）：只有 **M / D / F / V** 四格换值，A / B / C / E / G / H 六格
+#: 与 p107 **逐字相同** —— 索引按角色现算，别的角色读不到这四条。
+_FROZEN_PROMPT_VERSION = "p108"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1e13a3974f13c43f78f46fbf5453a8397428bcbb3a1b36c983a7a6a8448ec34",
     "B": "98094630815efaeb48dac896a867ea990bf868bcc799e2540dff78ceee904ff9",
     "C": "7f84953788257f1bb70e850167a769e847a9422a0d30c469e8f8d2af62b1dae7",
-    "D": "7393c44f2db14a3dd26841bc4f6ea221b9bc212d9963dc3202fd8665666193b1",
+    "D": "17318ea90d2249a4c9df60de91694eefac9dcf47cd4e9db8f8da3b4b9e3bd53b",
     "E": "75c267eda5d8f84c2d5d48fd1afacabada7a3ccf863d9f509d7cd247f4f0b82d",
-    "F": "082eb550c56ac62e713ba5c0077e1cfbc1200fb6a023390beecd024a3a6082b6",
+    "F": "016dcbe3fb07115c3a565234e5b8476fed7f4d79816fa01129b9bd9e81cdb192",
     "G": "b53b32548840fc17a91172426fec979d170e6eb7ca69b5c8a5e28f30be44dbc9",
     "H": "7071d26db3401274fcd8fe58213f72bc5838f57923c008f0d74e4e6e91bc2e2c",
-    "M": "dc1d261f6f8bf24b3b727eac9dd9b33f254ad80dbf7032188e128fb59f4782de",
-    "V": "9e42788959edba90942fa9861a679b4fa83f2999f49067ff3802013a337ae6ef",
+    "M": "60570a81daa6cd0472e2693bbb50a25dc71a079d293e82650ed8790b5a629eed",
+    "V": "6479b13d1faa5b1c25836a4e329481fdeec132229bf61c8346d35a1353628a87",
 }
 
 
