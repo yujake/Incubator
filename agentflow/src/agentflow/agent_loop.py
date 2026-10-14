@@ -4326,9 +4326,16 @@ class AgentLoop:
                       f"{str(got.get('reason') or '')[:300]}）。"
                       "两条判据至少答上一条再交一次：① 后面哪一步会用到它（指名道姓）；"
                       "② 它比收录表里最接近的那一条强在哪。答不上来就别收 —— "
-                      "平凡行会把收录表淹掉，而下游「按册子溯源」全靠这张表。"),
+                      "平凡行会把收录表淹掉，而下游「按册子溯源」全靠这张表。"
+                      # 2026-10-14 第五趟真机读数：同一份 21 字的命题被提交了 6 次，
+                      # 每次都拿到同一个「太平凡」，一次 run 因此烧掉 20/26 次调用。
+                      # 判断的对象只有那段文本，所以**原样再交一遍不会有别的结论** ——
+                      # 这一句把"该改什么"说死：改命题或改判据，不是再交一遍。
+                      "**同一个命题原样再交一次不会有别的结论**（这一趟已经判过它了）——"
+                      "要改的是命题本身或上面那两条判据。"),
             "secretary": {"checked": True, "decision": got.get("decision"),
-                          "reason": got.get("reason"), "basis": got.get("basis")},
+                          "reason": got.get("reason"), "basis": got.get("basis"),
+                          "reused": bool(got.get("reused"))},
             "meta": {"judged_by": "secretary", "kind": "statement_aesthetic"},
         }
 

@@ -1498,3 +1498,84 @@ def test_the_judge_prompt_names_that_kinds_own_vocabulary(tmp_path):
     for kind, verdicts in sec.JUDGE_VERDICTS.items():
         text = sec._judge_prompt(kind, {})
         assert all(v in text for v in verdicts), (kind, text[:200])
+
+
+def test_the_same_statement_is_not_judged_twice(tmp_path):
+    """同一个命题**只判一次**：第二次沿用（不花钱、结论逐字相同），换文本才再判一次。
+
+    2026-10-14 第五趟真机读数：同一份 21 字的 `statement_full` 被提交了 **6 次**，
+    每一次都发了一次模型调用、都得到同一个「太平凡」，一次 run 因此烧掉 26 次调用里的 20 次
+    与 $0.226，而 `statements` 仍是 0 行。判断的对象**只有那段文本**（加一句自证不平凡的说明），
+    所以同题再问一遍不会有别的结论 —— 记下来，省掉那几次调用。
+
+    负控（三态那一条）：**没查成不许缓存** —— 把"这一次没查成"变成"以后都别查了"，
+    等于让一次超时永久关掉一道门；缝好起来之后必须还能真判。
+    """
+    sec = _sec()
+    root = tmp_path / "ws"
+    root.mkdir()
+
+    class _Counting:
+        def __init__(self, payload):
+            self.payload = payload
+            self.calls = 0
+
+        def ask_json(self, prompt, **kw):
+            import types as _t
+
+            self.calls += 1
+            return dict(self.payload), _t.SimpleNamespace(ok=True, problem="", detail="")
+
+    # ① 同一份文本问两次 ⇒ 只花一次调用，第二次标 reused 且结论逐字相同
+    seam = _Counting({"decision": "太平凡", "reason": "两条依据都缺", "basis": ["x"]})
+    s = sec.Secretary("B", root=root, seam=seam, enable_model=True)
+    first = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。")
+    second = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。")
+    assert first["checked"] is True and first["decision"] == "太平凡", first
+    assert seam.calls == 1, f"同一个命题被真问了 {seam.calls} 次"
+    assert second["decision"] == first["decision"] and second.get("reused") is True, second
+    assert second["reason"] == first["reason"], second
+    assert second["cost"]["ledger"] == "", "沿用那一次不该记成花了钱"
+    # 台账里要留一行说清是沿用（读数不许静默）
+    rows = [json.loads(x) for x in s.decisions_path().read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert any("沿用" in str(r.get("reason") or "") for r in rows), rows[-2:]
+
+    # ② 换了文本（或补上判据）⇒ 那是新的一次判断，必须真问
+    third = s.judge_statement(statement_full="对任意正整数 n，n^2+n 一定是偶数。",
+                              basis_hint="判据①：L3 那一步要用到它。")
+    assert seam.calls == 2, f"换了文本却没再问（calls={seam.calls}）"
+    assert third.get("reused") is None, third
+
+    # ③ 负控（三态）：没查成的**不许**被记住
+    class _Boom:
+        def ask_json(self, prompt, **kw):
+            raise RuntimeError("缝炸了")
+
+    s2 = sec.Secretary("B", root=root / "two", seam=_Boom(), enable_model=True)
+    (root / "two").mkdir()
+    miss = s2.judge_statement(statement_full="同一条")
+    assert miss["checked"] is False, miss
+    assert not s2._statement_verdicts, "没查成的结论被缓存了（等于一次超时永久关掉这道门）"
+    ok_seam = _Counting({"decision": "合格", "reason": "有用", "basis": ["L3"]})
+    s2.seam = ok_seam
+    again = s2.judge_statement(statement_full="同一条")
+    assert again["checked"] is True and ok_seam.calls == 1, again
+
+
+def test_the_filing_refusal_says_the_same_statement_will_get_the_same_answer(tmp_path):
+    """拦下来的那句话必须写明**原样再交一遍不会有别的结论**（真机上一次 run 白烧 20 次调用）。"""
+    import types
+
+    from agentflow.agent_loop import AgentLoop
+
+    class _Sec:
+        def judge_statement(self, **kw):
+            return {"checked": True, "decision": "太平凡", "reason": "两条判据都答不上",
+                    "basis": [], "reused": True}
+
+    got = AgentLoop._statement_filing_refusal(
+        types.SimpleNamespace(role="B", secretary=_Sec(), my_task_id="t-1"),
+        "own.register_statement", {"statement_full": "x"})
+    assert got is not None and got["kind"] == "statement_too_trivial", got
+    assert "原样再交一次不会有别的结论" in got["error"], got["error"]
+    assert got["secretary"]["reused"] is True, got

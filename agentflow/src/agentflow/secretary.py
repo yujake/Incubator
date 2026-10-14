@@ -57,6 +57,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import threading
 import time
@@ -705,6 +706,18 @@ class Secretary:
         #: 不是判据（fail-open 的代价要看得见，但不许拿它去卡任何一条委托）。
         self._last_judge_elapsed = 0.0
         self._last_closure_engage = False
+        #: 入库审美的**同题不重判**表（2026-10-14 第五趟真机读数）。
+        #:
+        #: 真机上同一份 `statement_full`（21 字）被提交了 **6 次**：每一次都真的发了一次
+        #: 模型调用、都得到同一个「太平凡」，而**一次 run 因此烧掉 20/26 次调用与 $0.226**，
+        #: 最后 `statements` 仍是 0 行。判断的对象**只有那段文本**（加一句自证不平凡的说明），
+        #: 所以同一份文本问第二遍不会有别的结论 —— 记下来，省掉那几次调用，也让"再交一遍"
+        #: 这件事在读数上**立刻变便宜且答案不变**（于是没有理由反复试）。
+        #:
+        #: 键 = `(statement_full, why_this_is_not_trivial)` 的摘要；值 = 第一次的结论。
+        #: **只记 `checked=True` 的结论**：没查成（没缝 / 超时 / 坏 JSON）不许缓存 ——
+        #: 那会把"这一次没查成"变成"以后都别查了"，而缝是可能好起来的。
+        self._statement_verdicts: dict[str, dict[str, Any]] = {}
 
     # ------------------------------------------------------------ 台账（E 类：记录）
 
@@ -1242,7 +1255,29 @@ class Secretary:
             "source": str(source or "")[:300],
             "why_this_is_not_trivial": str(basis_hint or "")[:500],
         }
-        return self.judge("statement_aesthetic", context, task_id=task_id)
+        key = hashlib.sha256(
+            (context["statement_full"] + "\x00" + context["why_this_is_not_trivial"])
+            .encode("utf-8")).hexdigest()
+        prior = self._statement_verdicts.get(key)
+        if prior is not None:
+            # 同一个命题问第二遍：**不花钱**、**结论不变**（并在台账里留一行说清是沿用）。
+            self.note_decision(
+                duty=2, decision=str(prior.get("decision") or ""), fail_open=False,
+                target="statement_aesthetic",
+                before=json.dumps({"statement_full": context["statement_full"],
+                                   "why_this_is_not_trivial": context["why_this_is_not_trivial"]},
+                                  ensure_ascii=False)[:2000],
+                after=str(prior.get("reason") or ""),
+                reason="沿用本趟第一次的判断（同一个命题不重复花钱；结论与第一次逐字相同）",
+                basis=[f"reused_sha256={key[:12]}"],
+            )
+            return {**prior, "reused": True, "reused_key": key[:12],
+                    "cost": {"ledger": "", "reason": "没发调用（沿用本趟第一次的结论）"}}
+        got = self.judge("statement_aesthetic", context, task_id=task_id)
+        if got.get("checked"):
+            # 只记**判过**的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
+            self._statement_verdicts[key] = dict(got)
+        return got
 
     def last_judge_cost(self, kind: str) -> dict[str, Any]:
         """上一次该类别判断的花销归因（主控裁定 A5 的第 ③ 条）。
