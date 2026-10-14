@@ -1,0 +1,52 @@
+R101（新目标第 1 轮）：秘书那张"这件活做不做得成"加上**能力面闭包**（`reach_fit`）
+
+业主 2026-10-14 的新裁定把重点挪到提示词侧与派活判据：「秘书侧……评估派发出的任务能否由
+**子代理及子代理的出边**共同完成」。这一轮先落**判据本体**（纯计算、非禁改区），
+下一轮接进派活那条路与提示词。
+
+## 一、新读数 `secretary.reach_fit(role, action)`
+
+`surface_fit` 判的是**路径面**（这句话里的文件落不落在它的沙箱里）；`reach_fit` 判的是
+**能力面**：那个动作，被派人自己有没有？没有的话，它出边上的伙伴（再由伙伴的出边……
+直到 `policy.Policy().max_depth`）里有谁有、走哪几跳？四档：
+
+| 档 | 意思 |
+|---|---|
+| `in_self` | 被派人自己的动作表里就有（一跳都不用） |
+| `via_edges` | 靠出边上的伙伴，`hops` 给出那条链 |
+| `unreachable` | 它那一支闭包里没有任何人有 ⇒ **面内做不成**（改派 / 走上报那一档） |
+| `unknown` | 角色或动作名认不出 ⇒ 判不了（**不许折成"做得到"**） |
+
+深度上限取 `policy.Policy().max_depth`（唯一来源），不另带一份。
+
+## 二、真表读数（本机实跑）
+
+```
+H  judge_quote_semantics  in_self      ['H']
+B  judge_quote_semantics  via_edges    ['B', 'H']          ← 新设计那条边
+B  verify_proof           via_edges    ['B', 'V']
+A  build_document         via_edges    ['A', 'B', 'H', 'G'] ← 三跳；只看自己会漏掉
+C  run_experiment         unreachable  ['C']               ← C 没有出边，闭包只有它自己
+M  judge_quote_semantics  via_edges    ['M', 'H']
+谁 x / B 没这个动作        unknown      （各带一句为什么）
+```
+
+## 三、判据（新文件 `tests/test_secretary_reach_fit.py`，5 条）
+
+四档齐全；`B → H` 一跳那条（**这是新设计本身的回归守卫**：边或动作掉了当场红）；
+`A → B → H → G` 三跳那条（证明闭包真的按出边走，而不是只看被派人自己）；
+`C` 那一支 `unreachable`（并先断言 `ALLOWED_EDGES["C"]` 是空集，免得判据的前提漂掉）；
+认不出的角色 / 动作 / 空动作名各给 `unknown` + 一句为什么。
+
+## 四、读数
+
+`pytest tests/test_secretary_reach_fit.py tests/test_secretary.py -q` ⇒ **54 passed**；
+本轮只改非禁改区（`secretary.py` + 新测试）⇒ 无需签名。
+
+## 下一轮（新目标第 2 轮）
+
+① 把 `reach_fit` 接进派活那条路（秘书在派活那一刻给出这一维读数）+ M 提示词里
+"看到 `unreachable` 就改派或走上报那一档"那一句；② 二层唤起（父→子→孙）为什么真机上
+见不到 —— 已确认**不是**深度限制（`max_depth=5`，M 起算，两跳远没到顶），要查的是
+提示词有没有告诉子代理"你也能唤起"、以及代唤申请 relay 与写集分波那两条路；
+③ 四位编号改六位（`schema.is_valid_id` / 各分配器 / goldens / 文档）。

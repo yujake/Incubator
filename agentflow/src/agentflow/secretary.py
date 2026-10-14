@@ -3524,5 +3524,94 @@ def selftest() -> int:
     return 0 if all(g for _, g in checks) else 1
 
 
+def reach_fit(role: str, action: str) -> dict[str, Any]:
+    """这件活**由被派的人（连同它出边上的子代理们）合起来做不做得成**（纯计算，只报不改）。
+
+    业主 2026-10-14：「秘书侧……评估派发出的任务能否由**子代理及子代理的出边**共同完成」。
+    `surface_fit` 判的是**路径面**（这句话里的文件落不落在它的沙箱里），这一条判的是
+    **能力面**：那个动作，被派人自己有没有？没有的话，它出边上的伙伴（再由伙伴的出边……
+    直到 `policy.max_depth`）里有谁有？走哪几跳？
+
+    四档（与三态纪律同形，`unknown` 不许折成"做得到"）：
+
+    | `verdict` | 意思 |
+    |---|---|
+    | `in_self` | 被派人自己的动作表里就有这一件（一跳都不用） |
+    | `via_edges` | 要靠出边上的伙伴：`hops` 给出那条链（含每一跳的 role） |
+    | `unreachable` | 它那一支闭包里没有任何人有这一件 ⇒ 「面内做不成」，该改派或走上报那一档 |
+    | `unknown` | 角色或动作名认不出（`capabilities` 里没有）⇒ 判不了 |
+
+    ## 为什么按"闭包"而不是按"角色"="能做什么"的静态印象
+
+    真机形态是二层、三层地派（M→B→H 这种）：子代理自己拿不到某件工具，但它的伙伴拿得到 ——
+    而那正是"派得出去"与"派不出去"的分界。旧口径只看被派人自己的动作表，于是
+    「B 要把引文交给 H 判语义」这种事会被读成"面内做不成"，而它其实是走得通的
+    （`B → H` 那条边 + `H.judge_quote_semantics` 那个动作）。
+
+    ## 与 `surface_fit` 的分工
+
+    两条读数各判一维，都要给父看：这一条判"**谁能做**"，`surface_fit` 判"**在哪做**"
+    （路径落点）。两条都是读数、都不替父改主意。
+    """
+    from . import capabilities as C
+    from . import policy as P
+
+    who = str(role or "").strip()
+    want = str(action or "").strip()
+    out: dict[str, Any] = {"checked": False, "verdict": "unknown", "hops": [],
+                           "reason": ""}
+    roles = set(C.CAPABILITIES)
+    if who not in roles:
+        out["reason"] = f"角色 {who!r} 不在能力表里（{sorted(roles)}）⇒ 判不了"
+        out["checked"] = True
+        return out
+    if want == "":
+        out["reason"] = "没给动作名 ⇒ 判不了这一维（不适用不是通过）"
+        out["checked"] = True
+        return out
+    known = {a.action for acts in C.CAPABILITIES.values() for a in acts}
+    if want not in known:
+        out["reason"] = f"动作 {want!r} 不在任何角色的动作表里 ⇒ 判不了"
+        out["checked"] = True
+        return out
+
+    def _has(r: str) -> bool:
+        return any(a.action == want for a in C.CAPABILITIES.get(r, ()))
+
+    if _has(who):
+        out.update({"checked": True, "verdict": "in_self", "hops": [who],
+                    "reason": f"{who} 自己的动作表里就有 {want}"})
+        return out
+
+    # BFS：一层一层看出边上的伙伴（闭包），并把**最短那条链**记下来。
+    # 深度上限取**策略本体的默认值**（唯一来源：`policy.Policy`），不从调用方另带一份。
+    depth_cap = int(getattr(P.Policy(), "max_depth", 5) or 5)
+    seen = {who}
+    frontier: list[tuple[str, list[str]]] = [(who, [who])]
+    for _step in range(max(0, depth_cap - 1)):
+        nxt: list[tuple[str, list[str]]] = []
+        for node, path in frontier:
+            for peer in sorted(C.ALLOWED_EDGES.get(node, ())):
+                if peer in seen:
+                    continue
+                seen.add(peer)
+                chain = path + [peer]
+                if _has(peer):
+                    out.update({"checked": True, "verdict": "via_edges", "hops": chain,
+                                "reason": (f"{who} 自己没有 {want}，但出边上的 "
+                                           f"{' → '.join(chain[1:])} 有（"
+                                           f"{len(chain) - 1} 跳）")})
+                    return out
+                nxt.append((peer, chain))
+        frontier = nxt
+        if not frontier:
+            break
+    out.update({"checked": True, "verdict": "unreachable", "hops": sorted(seen),
+                "reason": (f"{who} 那一支（{'、'.join(sorted(seen))}）里没有任何角色有 "
+                           f"{want} ⇒ 这一件在它的面内做不成：改派给有它的那一支，"
+                           "或如实记成「职责之外」那一边")})
+    return out
+
+
 if __name__ == "__main__":  # pragma: no cover - 自检入口
     raise SystemExit(selftest())
