@@ -441,3 +441,25 @@ def test_the_index_says_to_read_it_now_and_says_why():
     # 反真空：每个角色的索引里都有这一句（不是只给 M 开了小灶）
     for role in ("A", "B", "C", "D", "E", "F", "G", "H", "M", "V"):
         assert "对上了就现在读" in AS.index_block(role), role
+
+
+def test_the_manuscript_sections_are_enumerated_once_and_identically():
+    """研究手稿的分节**只许有一处枚举**：D 的声明与 skill 里那七个名字必须一模一样。
+
+    2026-10-14 真机读数：两趟真跑里，一趟手稿以 `## 成果概述` 开头，另一趟直接从
+    「定义与已知」开头。原因在**两处枚举不一致** —— 声明里正文写着「六个分节」并逐个列名
+    （不含成果概述），而「开头要有成果概述」另起一句写在后面；模型两次各采用了一个。
+    现在两处都是七节、成果概述在第一位，这条判据守着它不再分岔。
+    """
+    from agentflow import specs as SP
+
+    NAMES = ("成果概述", "定义与已知", "已确定的结论", "尝试与失败", "例子与反例",
+             "未解问题", "下一步")
+    policy = "\n".join(SP.builtin_specs()["D"].brief.policy)
+    skill = next(s for s in AS.CATALOG["D"] if s.slug == "手稿-研究记忆就这一份")
+    for label, text in (("声明", policy), ("skill 正文", skill.body)):
+        missing = [n for n in NAMES if n not in text]
+        assert not missing, f"D 的{label}里少了这些节：{missing}"
+    assert "七节" in policy or "七节" in skill.body, "没有一处写明是七节 ⇒ 数不出来"
+    # 反真空：声明里不许再出现"六个分节"这种旧枚举（那正是分岔的来源）
+    assert "六个分节" not in policy, "声明里还留着旧的「六个分节」枚举"

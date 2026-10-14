@@ -1474,3 +1474,27 @@ def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
     assert got is None, "判断炸了不该把入库这条路堵死（fail-open）"
     assert rows, "fail-open 不等于静默：秘书台账里必须有这一格的一行"
     assert "缝炸了" in rows[0]["reason"] and rows[0]["fail_open"] is True, rows[0]
+
+
+def test_the_judge_prompt_names_that_kinds_own_vocabulary(tmp_path):
+    """**提示词说的词表 = 校验认的词表**（2026-10-14 真机读数）。
+
+    真机上一次就现形：加 `statement_aesthetic` 那一类时，`judge()` 的**校验**换成了按类别取，
+    而 `_judge_prompt` 的抬头仍写着 `DECISIONS`（派活那一轴）。于是 B 的秘书被问
+    「这条命题太平凡吗」，它照提示词答了 `建议不派`，然后被校验层判「不在词表里 ⇒ 不采信」——
+    **两处各写一份词表，提示词说的与判据认的不是同一张**，而两边都自洽。
+
+    判据要两个方向都验：这一类自己的词表**在**、另一轴的词表**不在**。
+    """
+    sec = _sec()
+    aesthetic = sec._judge_prompt("statement_aesthetic", {"statement_full": "x"})
+    for word in sec.STATEMENT_VERDICTS:
+        assert word in aesthetic, (word, aesthetic[:200])
+    assert "建议不派" not in aesthetic, "派活那一轴的词混进了审美的提示词"
+    delegation = sec._judge_prompt("duplicate_retry", {})
+    assert "建议不派" in delegation, "派活那一轴的提示词丢了词表"
+    assert "太平凡" not in delegation, "审美那一轴的词混进了派活的提示词"
+    # 反真空：每一类都必须能在提示词里读到它自己的词表
+    for kind, verdicts in sec.JUDGE_VERDICTS.items():
+        text = sec._judge_prompt(kind, {})
+        assert all(v in text for v in verdicts), (kind, text[:200])

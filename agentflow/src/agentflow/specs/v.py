@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .. import schema as S
 from ..agentspec import (
     ActionSpec,
     AgentBrief,
@@ -59,7 +60,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "并写 verifications/<命题号>.jsonl",
         _obj(
             {
-                "statement_id": {**_S, "minLength": 4, "maxLength": 4},
+                # 长度上界从**唯一那处宽度**取（`schema.ID_DIGITS`，2026-10-14 业主裁定
+                # 四位改六位）；下界 4 是**旧数据的宽度**（`LEGACY_ID_PATTERN`），
+                # 因为盘上的老命题号仍然可读。这里此前硬编码成 `minLength=4, maxLength=4`
+                # —— 改宽度那一批漏了它，真机上直接现形：`V.verify_proof 的参数不合法：
+                # statement_id. 长度最多 4`（B 试了两次都被拒，一次真跑因此白等一轮）。
+                "statement_id": {**_S, "minLength": 4, "maxLength": S.ID_DIGITS},
                 "proof_text": _S,
                 # 只读读数（命题现状 / 文献与实验台账摘要）由调用方取好传进来：
                 # 传字符串而不是传 store，是为了让"它能碰什么"在接口上就固定下来
@@ -82,7 +88,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "V", "read_proof",
         "按命题号读回被审的那份证明全文",
         _obj(
-            {"statement_id": {**_S, "minLength": 4, "maxLength": 4}},
+            # 同 `verify_proof`：上界取自 `S.ID_DIGITS`（不是硬编码 4）。
+            {"statement_id": {**_S, "minLength": 4, "maxLength": S.ID_DIGITS}},
             required=("statement_id",),
         ),
         "dict（proof_text / sha256 / 最近一次结论）",

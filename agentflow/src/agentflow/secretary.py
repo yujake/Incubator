@@ -3506,15 +3506,27 @@ class Secretary:
 
 
 def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
-    """三类判断的提示词（`draft/55` §2 的 B 类）。
+    """判断类的提示词（`draft/55` §2 的 B 类）。
 
-    契约三句：① 只回一个 JSON 对象；② `decision` 必须取自 :data:`DECISIONS` 的词表
-    （词表外的结论一律不采信，见 :meth:`Secretary.judge`）；③ `basis` 写"你凭什么"。
+    契约三句：① 只回一个 JSON 对象；② `decision` 必须取自**这一类自己那张**词表
+    （`JUDGE_VERDICTS[kind]`；词表外的结论一律不采信，见 :meth:`Secretary.judge`）；
+    ③ `basis` 写"你凭什么"。
     为什么把词表写进提示词：模型给的自由文本结论无法与台账的 `decision` 栏对齐，
     而"结论栏里出现第八种写法"正是同一件事两个名字的老毛病。
+
+    ## ⚠️ 这一行必须**按类别**取词表（2026-10-14 真机读数）
+
+    加 `statement_aesthetic` 那一类时，这里漏改成了按类别取 —— 仍把 `DECISIONS`
+    （派活那一轴：「可派」/「建议重排」…）写进提示词，而 `judge()` 的**校验**已经换成
+    按类别取。后果在真机上一次就现形：B 的秘书被问"这条命题太平凡吗"，
+    它照提示词答了 `建议不派`，然后被校验层当场判"不在 statement_aesthetic 的词表里 ⇒ 不采信"。
+    两处各写一份词表就会这样：**提示词说的与判据认的不是同一张表**，而两边都"自洽"。
+    现在两处都从 :data:`JUDGE_VERDICTS` 取。
     """
+    verdicts = JUDGE_VERDICTS.get(kind, DECISIONS)
     head = (f"你是「秘书」的判断面（类别：{kind}）。只回一个 JSON 对象，字段："
-            f'decision（必须取自 {list(DECISIONS)}）、reason（一句话）、basis（字符串数组，'
+            f'decision（**必须逐字取自** {list(verdicts)} —— 这是这一类的词表，'
+            "别的类别的词一律不采信）、reason（一句话）、basis（字符串数组，"
             "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）。")
     body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)[:4000]
     if kind == "duplicate_retry":

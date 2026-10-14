@@ -238,3 +238,39 @@ def test_the_text_does_not_hand_copy_the_action_count() -> None:
         + "。请改成从 `C.two_layer_reconciliation()['total']` 取，"
         "或写成『与能力表实测读数一致』这种可复跑的措辞"
     )
+
+
+def test_no_declared_id_param_caps_below_the_current_id_width():
+    """声明面里**不许有比当前编号宽度还短的上界**（2026-10-14 真机读数）。
+
+    真机上一次就现形：`V.verify_proof` / `V.read_proof` 的 `statement_id` 当时写着
+    `minLength=4, maxLength=4` —— 而业主 2026-10-14 已把编号宽度改成六位
+    （`schema.ID_DIGITS`）。后果是一条**正当的调用被拒**：
+    `V.verify_proof 的参数不合法：statement_id. 长度最多 4`，
+    而 B 的秘书据此判「重试不会成功」，一次真跑的复核链因此白等一轮。
+
+    判据用**唯一那处宽度**判（`schema.ID_DIGITS`），所以下一次改宽度时这一条会自己跟上：
+    任何 `*_id` 参数声明的 `maxLength` 都必须 ≥ 当前宽度。下界不判（旧数据是 4 位、
+    盘上仍可读，所以 `minLength=4` 是**对的**）。
+    """
+    from agentflow import capabilities as C
+    from agentflow import schema as S
+
+    width = len(S.format_id(0))
+    assert width == S.ID_DIGITS, (width, S.ID_DIGITS)
+    bad: list[str] = []
+    for role, specs in C.CAPABILITIES.items():
+        for spec in specs:
+            props = (getattr(spec, "params", {}) or {}).get("properties") or {}
+            for name, sub in props.items():
+                if not str(name).endswith("_id") or not isinstance(sub, dict):
+                    continue
+                cap = sub.get("maxLength")
+                if isinstance(cap, int) and cap < width:
+                    bad.append(f"{role}.{spec.action} 的 {name}: maxLength={cap} < {width}")
+    assert not bad, "这些声明的长度上界比当前编号宽度还短（正当调用会被拒）：\n  " + "\n  ".join(bad)
+    # 反真空：这一条真的扫到了东西（否则它可能一行都没看）
+    scanned = sum(1 for specs in C.CAPABILITIES.values() for spec in specs
+                  for name in ((getattr(spec, "params", {}) or {}).get("properties") or {})
+                  if str(name).endswith("_id"))
+    assert scanned >= 20, f"只扫到 {scanned} 个 *_id 参数 ⇒ 扫描面可能坏了"
