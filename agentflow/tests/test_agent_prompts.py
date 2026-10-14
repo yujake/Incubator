@@ -2326,10 +2326,13 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 其余八格换值。其中 **G / M 各只动了一行** —— D 那一行伙伴行里**引着 D 的交付物**
 #: （`deliverable` 现在写着研究手稿 `reports/RESEARCH.md`），所以 D 的交付物一变，
 #: 看得到 D 的那两格跟着变；C（没有伙伴）与 H（伙伴是 A/E/G）因此不受影响。
-_FROZEN_PROMPT_VERSION = "p109"
+#: p109 → p110（2026-10-14，裁决第 12 条**前半**）：B 的入库审美有了机器形态 ——
+#: 秘书在「入库那件动作」之前判一次（三态：合格 / 太平凡 / 判不了），判太平凡就拦下。
+#: 作用域读数：**只有 B 一格换值**（那一句只发给 B），其余九格逐字未动。
+_FROZEN_PROMPT_VERSION = "p110"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "8ce6c71410d9766fbffc9b7ec13a24912de373621c44398a0506033edb868932",
-    "B": "542c9e7ac31b0686a297d7f6656024612fcbbbd5c03851c768cde0493eba9e9c",
+    "B": "80904ff16556ebf6c6f4597f7137629e46d39d1a85d9875a66e00ad05f29fc6d",
     "C": "7f84953788257f1bb70e850167a769e847a9422a0d30c469e8f8d2af62b1dae7",
     "D": "c59b984a13bbd7218a48b5715a7d2f6062574635ffda7703007cb19a43bed0cc",
     "E": "2a28ba4ab6c6b0053ce0617dc6600e45de71246c94397bd5a77a73d00b122513",

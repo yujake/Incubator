@@ -140,6 +140,24 @@ DUTIES: dict[str, dict[str, object]] = {
         "probe": ("秘书执笔", "交给秘书", "写成手稿", "写成交接手稿"),
         "why": "交接手稿由秘书执笔编号；十个角色的提示词都写了这件事（这是唯一一处本来就双向对齐的）",
     },
+    # 2026-10-14（业主裁决第 12 条前半：「作为 **B 的秘书的任务**，判断一个待入库的命题是否
+    # **太平凡**有没有资格入库」）：入库口那一道审美闸。提示词里承诺了一句
+    # （"入库前你的秘书会替你把这一关……判太平凡就把这次入库当场拦下"）⇒ 这条探针认领它。
+    #
+    # 为什么它必须是**可见**的那一档：拦下来会改变本体那一步的结果（`kind=statement_too_trivial`），
+    # 而"怎么改才能收进去"只有本体知道（写清后面哪一步会用到它）—— 所以角色必须知道这台机器存在。
+    "statement_aesthetic": {
+        "code": "judge_statement",
+        "where": "secretary.py",
+        "call": ("agent_loop.py 的 _statement_filing_refusal",
+                 "agent_loop.py 的 _do_tool（调 registry.call 之前）"),
+        "visibility": "prompt",
+        "probe": ("入库前你的秘书", "太平凡", "statement_too_trivial"),
+        "why": "入库审美：B 调 `own.register_statement` 之前，它自己的秘书判一次「这条够不够格」"
+               "（三态：合格 / 太平凡 / 判不了；词表 `STATEMENT_VERDICTS`，与派活轴的 `DECISIONS` 分开）；"
+               "**只有**『判了且判太平凡』才拦，判不了 / 没查成 / 判断炸了一律 fail-open（+ 留痕）——"
+               "让『没查成』决定产出入库正是这一格要避开的那种错",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，

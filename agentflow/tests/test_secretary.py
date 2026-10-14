@@ -1338,3 +1338,139 @@ def test_the_inbound_hook_reworks_everything_it_hears(tmp_path, monkeypatch):
     bad = loop._inbound_hook(heard)
     assert "handoffs_digest_problem" in bad and "handoffs_digest" not in bad, bad
     assert loop._inbound_hook([]) == {}, "没有新消息时钩子是 no-op"
+
+
+# ================================================================ 5 入库审美（业主 2026-10-14 第 12 条前半）
+
+
+def _canned(payload: dict):
+    """固定回一个 JSON 的替身缝（不联网、不记账、不落会话）。"""
+
+    class _Canned:
+        def __init__(self) -> None:
+            self.payload = dict(payload)
+            self.prompts: list[str] = []
+
+        def ask_json(self, prompt, **kw):
+            import types as _t
+
+            self.prompts.append(str(prompt))
+            return dict(self.payload), _t.SimpleNamespace(ok=True, problem="", detail="")
+
+    return _Canned()
+
+
+def test_the_aesthetic_verdict_and_the_delegation_verdict_are_two_vocabularies(tmp_path):
+    """两根轴的词表不许互相串（`JUDGE_VERDICTS` 是唯一一处定义）。
+
+    为什么这条值得单判：把「太平凡」写进派活那一栏（或反过来把「可派」写进审美那一栏），
+    下游读的是同一个 `decision` 字段而**没有任何地方会报错** ——
+    这与本仓"同一件事两个名字"的老毛病同族。所以每一类**只认自己那张词表**。
+    """
+    sec = _sec()
+    root = tmp_path / "ws"
+    root.mkdir()
+    # ① 审美那一类收到派活轴的结论 ⇒ 不采信
+    s1 = sec.Secretary("B", root=root, seam=_canned({"decision": "建议不派", "reason": "x"}),
+                       enable_model=True)
+    got1 = s1.judge("statement_aesthetic", {"statement_full": "a+b=b+a"})
+    assert got1["checked"] is False and "建议不派" in got1["reason"], got1
+    # ② 派活那一类收到审美轴的结论 ⇒ 同样不采信
+    s2 = sec.Secretary("M", root=root, seam=_canned({"decision": "太平凡", "reason": "x"}),
+                       enable_model=True)
+    got2 = s2.judge("duplicate_retry", {"to": "D"})
+    assert got2["checked"] is False and "太平凡" in got2["reason"], got2
+    # ③ 各回各的 ⇒ 都采信（反真空：不是"一律不采信"）
+    s3 = sec.Secretary("B", root=root, seam=_canned({"decision": "太平凡", "reason": "两条都答不上"}),
+                       enable_model=True)
+    got3 = s3.judge("statement_aesthetic", {"statement_full": "a+b=b+a"})
+    assert got3["checked"] is True and got3["decision"] == "太平凡", got3
+    assert set(sec.STATEMENT_VERDICTS) == {"合格", "太平凡", "判不了"}
+    assert "太平凡" not in sec.DECISIONS, "审美轴的结论不许混进派活那一栏"
+
+
+def test_the_statement_judgement_belongs_to_B_only(tmp_path):
+    """这一问**只属于 B 的秘书**：别的角色的秘书调用它 ⇒ `checked=False` + 说清为什么。
+
+    三态纪律的另一面：不是 B ⇒ 不是"合格"，是"这一格没查成"（缺理由的放行会被读成通过）。
+    """
+    sec = _sec()
+    root = tmp_path / "ws"
+    root.mkdir()
+    a = sec.Secretary("A", root=root, seam=_canned({"decision": "合格", "reason": "有用"}),
+                      enable_model=True)
+    got = a.judge_statement(statement_full="某定理")
+    assert got["checked"] is False and "B" in got["reason"], got
+    b = sec.Secretary("B", root=root, seam=_canned({"decision": "合格", "reason": "有用"}),
+                      enable_model=True)
+    ok = b.judge_statement(statement_full="某定理", basis_hint="L3 要用")
+    assert ok["checked"] is True and ok["decision"] == "合格", ok
+
+
+def test_the_filing_gate_refuses_only_on_too_trivial(tmp_path):
+    """入库口那一道闸：**只有**「判了 + 判的是太平凡」才拦（其余一律放行）。
+
+    六个放行档逐个过一遍：合格 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书。
+    把它们折成"拦或不拦"两种结局是这一格最容易犯的错 —— 那会让"这一格没查成"决定产出入库。
+    """
+    import types
+
+    from agentflow.agent_loop import AgentLoop
+
+    def gate(role, secretary, name="own.register_statement"):
+        return AgentLoop._statement_filing_refusal(
+            types.SimpleNamespace(role=role, secretary=secretary, my_task_id="t-000001"),
+            name, {"statement_full": "a+b=b+a"})
+
+    class _Sec:
+        def __init__(self, out):
+            self.out = out
+
+        def judge_statement(self, **kw):
+            return self.out
+
+    refused = gate("B", _Sec({"checked": True, "decision": "太平凡", "reason": "两条都答不上"}))
+    assert refused is not None and refused["ok"] is False, refused
+    assert refused["kind"] == "statement_too_trivial", refused
+    assert "太平凡" in refused["error"] and "最接近的那一条" in refused["error"], refused
+    assert refused["secretary"]["decision"] == "太平凡", refused
+    for label, args in (
+        ("合格", ("B", _Sec({"checked": True, "decision": "合格"}))),
+        ("判不了", ("B", _Sec({"checked": True, "decision": "判不了"}))),
+        ("没查成", ("B", _Sec({"checked": False, "reason": "没有缝"}))),
+        ("不是 B", ("A", _Sec({"checked": True, "decision": "太平凡"}))),
+        ("不是入库那件工具", ("B", _Sec({"checked": True, "decision": "太平凡"}))),
+        ("没秘书", ("B", None)),
+    ):
+        if label == "不是入库那件工具":
+            assert gate(args[0], args[1], name="table.create") is None, label
+        else:
+            assert gate(*args) is None, label
+
+
+def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
+    """判断炸了 ⇒ **不拦**（fail-open），但**必须留痕**：秘书台账里要有一行说清这一格没查成。
+
+    为什么不是"炸了就拦"：拦下来等于让"没查成"决定产出（三态纪律）；而静默放行又会让
+    "秘书这趟根本没工作"永远查不出来。所以走 fail-open + 留痕这一对。
+    """
+    import types
+
+    from agentflow.agent_loop import AgentLoop
+
+    rows: list[dict] = []
+
+    class _Boom:
+        def judge_statement(self, **kw):
+            raise RuntimeError("缝炸了")
+
+        def note_decision(self, **kw):
+            rows.append(dict(kw))
+            return {}
+
+    got = AgentLoop._statement_filing_refusal(
+        types.SimpleNamespace(role="B", secretary=_Boom(), my_task_id="t-000001"),
+        "own.register_statement", {"statement_full": "a+b=b+a"})
+    assert got is None, "判断炸了不该把入库这条路堵死（fail-open）"
+    assert rows, "fail-open 不等于静默：秘书台账里必须有这一格的一行"
+    assert "缝炸了" in rows[0]["reason"] and rows[0]["fail_open"] is True, rows[0]

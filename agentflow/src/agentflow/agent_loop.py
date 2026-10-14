@@ -4267,6 +4267,71 @@ class AgentLoop:
                 f"这一批里 {len(need)} 项派不出去：{want}；明细见 results")
         return out
 
+    def _statement_filing_refusal(self, name: str, args: Mapping[str, Any]) -> dict[str, Any] | None:
+        """B 要入库一条命题时，先问它自己的秘书"这条太平凡吗"；太平凡就拦下。
+
+        业主 2026-10-14 裁决第 12 条前半逐字：「作为 **B 的秘书的任务**，判断一个待入库的
+        命题是否**太平凡**有没有资格入库」。
+
+        ## 只在这一格上拦
+
+        条件是三个同时成立：**本角色是 B**、**工具是它这一趟被派的那件入库动作**
+        （`own.register_statement`）、**秘书判了且判的是「太平凡」**。三者缺一 ⇒ 返回 `None`
+        （照旧入库）——
+
+        - 秘书没装配 / 没缝 / 开关关着 / 超时 / 坏 JSON ⇒ `checked=False` ⇒ **不拦**：
+          这是"这一格没查成"，把它当成"太平凡"就等于让"没查"决定产出入库（三态纪律）。
+          台账里那一行仍然会落（`judge` 的 `_record_judge`），所以"这次没查成"看得见。
+        - `判不了` 也**不拦**：那是秘书明说"材料不够，我不判"，拦它等于把"没结论"当"结论"。
+
+        ## 为什么在这里（而不是让 B 自己先问一句）
+
+        B 手上没有"问秘书"这个形状（秘书的调用点都在派活那一侧）。而"入库前判一下"
+        恰恰是那种**忘了就静默发生**的事：一条平凡命题收进去，收录表多一行、没人会去看。
+        所以它落在**动作真正落库之前**的那一步上，而不是靠提示词里的一句叮嘱。
+
+        返回值与别的工具拒绝同形（`ok=False` + `error`），模型据此能改（换一条命题、
+        或写清"后面哪一步会用到它"再交一次）。
+        """
+        if str(getattr(self, "role", "")) != "B" or str(name) != "own.register_statement":
+            return None
+        sec = getattr(self, "secretary", None)
+        if sec is None or not hasattr(sec, "judge_statement"):
+            return None
+        try:
+            got = sec.judge_statement(
+                statement_full=str(args.get("statement_full") or args.get("statement") or ""),
+                statement=str(args.get("statement") or ""),
+                source=str(args.get("source_lit_id") or args.get("source") or ""),
+                task_id=str(getattr(self, "my_task_id", "") or ""),
+            )
+        except Exception as exc:  # noqa: BLE001 —— 判断炸了**不许**把入库这条路堵死
+            # fail-open（与秘书的失败姿态同一条纪律）：**"没查成"不决定产出入库**。
+            # 但也不许静默：往秘书台账补一行，"这一格没查成"必须能从盘上读到。
+            try:
+                sec.note_decision(
+                    duty=0, decision="", fail_open=True,
+                    reason=f"入库前的审美判断炸了：{type(exc).__name__}: {exc}",
+                    target=str(name), after="照旧入库（fail-open）")
+            except Exception:  # noqa: BLE001 —— 连留痕都写不成时不再往上抛（同上）
+                pass
+            return None
+        if not got.get("checked"):
+            return None
+        if str(got.get("decision")) != "太平凡":
+            return None
+        return {
+            "tool": str(name), "ok": False, "kind": "statement_too_trivial",
+            "error": ("入库被你的秘书拦下：这条命题**太平凡**（"
+                      f"{str(got.get('reason') or '')[:300]}）。"
+                      "两条判据至少答上一条再交一次：① 后面哪一步会用到它（指名道姓）；"
+                      "② 它比收录表里最接近的那一条强在哪。答不上来就别收 —— "
+                      "平凡行会把收录表淹掉，而下游「按册子溯源」全靠这张表。"),
+            "secretary": {"checked": True, "decision": got.get("decision"),
+                          "reason": got.get("reason"), "basis": got.get("basis")},
+            "meta": {"judged_by": "secretary", "kind": "statement_aesthetic"},
+        }
+
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """执行一步工具调用。
 
@@ -4292,6 +4357,19 @@ class AgentLoop:
                 if real in known:
                     name, aliased_from = real, raw
         args = dict(payload.get("args") or {})
+        # ---- B 的入库口：先过秘书那一关（业主 2026-10-14 裁决第 12 条前半）
+        #
+        # 位置在这一层而不是工具层：这一格要**本体自己的缝**（`self.secretary`）与
+        # `my_task_id`，而工具层两样都没有；而且拦下来的形态必须与别的拒绝同形
+        # （模型据此改参数），所以它得在 `registry.call` 之前、在同一个返回面上。
+        #
+        # `name in known` 那一句是**必要**的（不是防御性写法）：注册表里没有这个名字时
+        # 这一步的结果是 `unknown_tool`，而秘书的这一次判断要花一次模型调用 ——
+        # 为一次**不会发生**的入库去问它，等于让"名字写错了"顺手扣一笔钱。
+        if name in known:
+            filing = self._statement_filing_refusal(name, args)
+            if filing is not None:
+                return filing
         # ---- 读写面（S1n-b，业主 T23）：子代理只能读写父切割给它的面。
         #
         # 判据在这一层（不是工具层）：`self.surface` 是这一趟的面（绝对路径），

@@ -83,8 +83,28 @@ KIND_PROPOSAL = "secretary_proposal"
 KIND_QUESTION = "secretary_question"
 KIND_NEGOTIATION = "secretary_negotiation"
 KIND_DECISION = "secretary_decision"
-#: 秘书的判断结论词表（`draft/55` §2 的 B 类）。
+#: 秘书的判断结论词表（`draft/55` §2 的 B 类）——**派活那一轴**的结论。
 DECISIONS = ("可派", "建议重排", "建议改派", "建议不派", "已优化", "已提醒", "已执笔")
+
+#: 「这条命题够不够格入库」的结论词表（业主 2026-10-14 裁决第 12 条**前半**）。
+#:
+#: 为什么要**另一张**词表而不是往 `DECISIONS` 里加两个字：那是两根不同的轴 ——
+#: `DECISIONS` 说的是"这条委托派不派、怎么派"，这张说的是"这条命题值不值得收"。
+#: 折进一张表里，"可派"与"太平凡"就会被下游当成同一栏的取值，而它们回答的问题不同
+#: （本仓把这种事叫"同一件事两个名字"的老毛病）。
+#: 三态：**判不了**是正经结论之一（没缝 / 开关关着 / 模型没回），不是"先收了再说"。
+STATEMENT_VERDICTS = ("合格", "太平凡", "判不了")
+
+#: 判断类别 → 它允许的结论词表（**唯一一处**把"哪类判断有哪些结论"写下来的地方）。
+#:
+#: 加一类判断时只加一行：`Secretary.JUDGE_KINDS` 与 `judge()` 的校验都从这张表派生，
+#: 于是"新类别悄悄用了别的轴的词"这件事在结构上就发生不了。
+JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
+    "duplicate_retry": DECISIONS,
+    "tool_name": DECISIONS,
+    "rearrange": DECISIONS,
+    "statement_aesthetic": STATEMENT_VERDICTS,
+}
 
 
 def decisions_path(root: str | Path, role: str, task_id: str = "") -> Path:
@@ -1087,17 +1107,25 @@ class Secretary:
         """
         return bool(alarms) or int(duplicates) > 0 or int(overdue) > 0 or bool(novel)
 
-    #: 三处"判断类"（`draft/55` §2 的 B 类；用户口径"切勿全写死成机器判据"）。
-    JUDGE_KINDS = ("duplicate_retry", "tool_name", "rearrange")
+    #: 判断类（`draft/55` §2 的 B 类；用户口径"切勿全写死成机器判据"）。
+    #:
+    #: 从 `JUDGE_VERDICTS` **派生**（不是另抄一份名单）：那一张表同时管着"这一类允许哪些结论"，
+    #: 两处各写一份的话，"加了一类判断却忘了给它词表"会静默落进 `DECISIONS` 的校验里。
+    JUDGE_KINDS = tuple(JUDGE_VERDICTS)
 
     def judge(self, kind: str, context: Mapping[str, Any], *, task_id: str = "") -> dict[str, Any]:
         """判断类：用本智能体自己的缝做一次模型调用，把结论落台账。
 
-        三处判断（`draft/53` §10 的三条"改判给秘书"）：
+        判断类别（`draft/53` §10 的三条"改判给秘书"，加业主 2026-10-14 裁决第 12 条前半）：
 
         - `duplicate_retry`：同 key 的既有终态行算重复还是正当重试（机器只摆出来）；
         - `tool_name`：错名映到哪一个候选（或一个都不映：那是"这次不该调工具"）；
-        - `rearrange`：建议重排成什么（改派权仍在 M，这里只给建议）。
+        - `rearrange`：建议重排成什么（改派权仍在 M，这里只给建议）；
+        - `statement_aesthetic`（B 的秘书专属）：这条待入库的命题够不够格 ——
+          三态 `合格` / `太平凡` / `判不了`（词表见 :data:`STATEMENT_VERDICTS`）。
+
+        每一类**只认自己那张词表**（:data:`JUDGE_VERDICTS`）：把"可派"填进审美那一栏，
+        在这一层就被拒 —— 两根轴的结论混进同一栏是查不出来的那种错。
 
         三态（`R002`/P16 的口径）：
 
@@ -1142,10 +1170,11 @@ class Secretary:
                           f"{str(getattr(call, 'detail', '') or '')[:200]}",
                 "cost": cost})
         decision = str(data.get("decision") or "").strip()
-        if decision not in DECISIONS:
+        allowed = JUDGE_VERDICTS[kind]
+        if decision not in allowed:
             return self._record_judge(kind, context, {
                 "checked": False,
-                "reason": f"模型给的结论 {decision!r} 不在词表 {list(DECISIONS)} 里 ⇒ 不采信",
+                "reason": f"模型给的结论 {decision!r} 不在 {kind} 的词表 {list(allowed)} 里 ⇒ 不采信",
                 "cost": cost})
         return self._record_judge(kind, context, {
             "checked": True, "decision": decision,
@@ -1176,6 +1205,44 @@ class Secretary:
             fail_open=False,
         )
         return result
+
+    def judge_statement(self, *, statement_full: str, statement: str = "",
+                        source: str = "", basis_hint: str = "",
+                        task_id: str = "") -> dict[str, Any]:
+        """**B 的秘书专属**：这条待入库的命题够不够格（业主 2026-10-14 裁决第 12 条前半）。
+
+        原话：「第十二条作为 **B 的秘书的任务**，判断一个待入库的命题是否**太平凡**
+        有没有资格入库，且让 B 在挑定理和命题提交入库时要有审美。」
+
+        ## 为什么是"秘书"而不是"又一条机器判据"
+
+        平凡与否**不是**字符串能判的事（`a+b=b+a` 与一条真定理的字面形态可能很像）。
+        它属于本仓划给秘书的那一类判断（`draft/55` §2 的 B 类：机器只摆材料，结论由
+        本体自己的缝给）。所以这里只是**取材料 + 交给 :meth:`judge`**，不新增算法。
+
+        ## 三态，且"没查成"不许读成"合格"
+
+        | 结局 | 返回 |
+        |---|---|
+        | 判了 | `checked=True` + `decision ∈ {"合格","太平凡","判不了"}` + `reason` + `basis` |
+        | 不是 B 的秘书 | `checked=False` + 理由（**这一问只属于 B**） |
+        | 没缝 / 开关关着 / 超时 / 坏 JSON | `checked=False` + 理由（`judge` 的那几支） |
+
+        调用方（`agent_loop._statement_filing_refusal`）**只在 `checked=True` 且
+        `decision == "太平凡"` 时才拦**：拦是"这条别收"，`checked=False` 是"这一格没查成"，
+        两者在台账与工具结果里长得不一样。
+        """
+        if str(self.role) != "B":
+            return {"checked": False, "decision": "", "basis": [],
+                    "reason": f"这一问只属于 B 的秘书（本条秘书属于 {self.role!r}）⇒ 这一格没查成",
+                    "cost": {"ledger": "", "reason": "没发调用（不是 B 的秘书）"}}
+        context = {
+            "statement_full": str(statement_full or "")[:2000],
+            "statement": str(statement or "")[:500],
+            "source": str(source or "")[:300],
+            "why_this_is_not_trivial": str(basis_hint or "")[:500],
+        }
+        return self.judge("statement_aesthetic", context, task_id=task_id)
 
     def last_judge_cost(self, kind: str) -> dict[str, Any]:
         """上一次该类别判断的花销归因（主控裁定 A5 的第 ③ 条）。
@@ -3457,6 +3524,15 @@ def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
         ask = ("问题：本体写的工具名不在注册表里。要映到下面哪一个候选吗？"
                "判『建议重排』= 映到某一个（在 reason 里写清是哪一个）；"
                "判『建议不派』= 一个都不映（这次不该调工具）。")
+    elif kind == "statement_aesthetic":
+        ask = ("问题：本体（B）要把下面这条命题收进 `statements`（定理与证明收录表）。"
+               "它够格吗？判据只有两条 —— ① **后面哪一步会用到它**（指得出一个具体的使用者："
+               "哪条证明的哪一步、哪个猜想）；② **它比已知的那一条强在哪**。"
+               "两条都答不上来就判『太平凡』（在 reason 里写清缺哪一条）。"
+               "判『合格』时 basis 里必须给出那两条依据。"
+               "判『判不了』= 材料不足（例如只有一句转述、没有逐字证明文本）——"
+               "**不许因为「看起来像个定理」就判合格**（业主原话：这张收录表比综述好太多，"
+               "前提是里面不留平凡的）。")
     else:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"
                "该重排成什么？判『建议重排』并在 reason 里给出重排后的说法；"
