@@ -106,6 +106,20 @@ DUTIES: dict[str, dict[str, object]] = {
                "业主点名的『职责之外』那一档的主要来源（面不够）。角色必须知道这一步存在，"
                "否则 `fits=false` 的读数没人看，它只会以为活已经派出去了",
     },
+    # 2026-10-14（业主：「秘书侧……评估派发出的任务能否由**子代理及子代理的出边**共同完成」）：
+    # 派活那一刻的**能力面**读数。提示词里承诺了一句（"秘书会顺手判一遍……"）+
+    # 四档名（`in_self`/`via_edges`/`unreachable`/`unknown`）⇒ 这条探针认领它。
+    "reach_fit": {
+        "code": "reach_fit",
+        "where": "secretary.py",
+        "call": ("secretary.py 的 reach_fit", "secretary.py 的 surface_readings",
+                 "agent_loop.py 的 _outbound_hook"),
+        "visibility": "prompt",
+        "probe": ("能力面", "reach_fit", "出边上的伙伴", "子代理及子代理的出边"),
+        "why": "能力面闭包：这个动作被派人**连同它出边上的伙伴**做不做得成（走哪几跳）—— "
+               "只看被派人自己会把「B 要把引文交给 H 判」读成面内做不成，而它其实一跳够得到；"
+               "四档只报不改，`unreachable` 由父决定改派/代唤/记成职责之外",
+    },
     "duty4_rework": {
         "code": "rework_inbound",
         "where": "secretary.py",

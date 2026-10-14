@@ -2302,18 +2302,23 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （实测：不带开关算出 D/E/F = da82…/85f5…/a990…，而判据要的是 814e…/680f…/c42b…，
 #: 也就是**与 p101 逐字相同**的那一组）。照它抄之前，先让判据自己说一遍（跑本文件），
 #: 或者让计算器替你钉上那个开关（`agentflow/temp/recompute_prompt_digests.py` 已经这么做了）。
-_FROZEN_PROMPT_VERSION = "p103"
+#: p103 → p104（2026-10-14）：派活那一段加了**第二条读数** `reach_fit`（能力面闭包：
+#: 被派人连同它出边上的伙伴做不做得成这件活，四档 `in_self`/`via_edges`/`unreachable`/`unknown`，
+#: 业主裁定「评估派发出的任务能否由子代理及子代理的出边共同完成」）。
+#: 这一句在**共用**的那一块里（每个会派活的角色都读得到）⇒ 十格摘要**全动**，
+#: 这与上一版"只有 M/G/H 三格换值"的形态不同，是这次改动的实际作用域，不是抄错。
+_FROZEN_PROMPT_VERSION = "p104"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "3b3d96f6f5f73ae8b4a6eb01959adb0f838aa148ccbae8c1153ce7c94ef763d4",
-    "B": "35b7ef11eb853eeb8f0ccdf524c28d0dbbbdbe01eda37098273f9e233f079039",
-    "C": "2e08bc10d80b92bfa8d0d365eeaf1810de51b3e3ab7c7a89f4f9c75befc41731",
-    "D": "997b102c4f0e7dbb29543b3ab87677385bf97d191f98c7a2c1bb77abf89f2e57",
-    "E": "86ec335620c5e9298111199957fccc1fd5205e4d04c1f24952e1faeecec07f9c",
-    "F": "4a2c426d1d2baf59e89205c68752b549c71442f77cb3ccb570cafc4282f87c72",
-    "G": "dc917dff4387d4276303983e8f2221e6ae063d3c0aaeb00bd15662a6f5e1db79",
-    "H": "2c46d889aec1587355270b2326d4c9bf5a64b81f7ef22c00040f92584a457cc5",
-    "M": "2b7847fc279e0fb444c1532b031b5e598fb1a846296ead05e5c23016eb2124b2",
-    "V": "2a94fab09532e7ef527343746c0a578d9a06835c4f1a807755848542e0b96ee2",
+    "A": "0465ea21fd62e1fb43bbdf29816fba6707e37459b060991343c74fa25f967c91",
+    "B": "97c9777034ba9a1a1c62838926018606d5bbe8eb17d4a3bb3b48ea368988c007",
+    "C": "0ab94ae969ee8faa449b982bff16b57c8d858b520d7213d8edd54b88b69255e7",
+    "D": "8d23b655b66650ed0baca62915f18acbd8a027464d46fb5528f0c862a482105e",
+    "E": "5d02a912863f9853c5581f53880fbc466bffb360ce2027a067dc300deec23fb3",
+    "F": "e551e7a30867ae81f175036280bd7b5cae908afef99b2539a890ecfbbf6de8f9",
+    "G": "3cad1340e5cad03fcbaddf0976f9d00050d4114a67dd894acd70b0cbe254fe6d",
+    "H": "90fd148831f1e8be12cedd5af8ceae826b49a42cbe3826b79860e52fe9db4b7d",
+    "M": "bac683653d1f2eb4ba2738523e97b3c69f009597c177d4471999261fc15d6ce4",
+    "V": "9afee3a2d1bb225a7bf5a1f3a0609130668acf277922bad61b0e233df1f04590",
 }
 
 

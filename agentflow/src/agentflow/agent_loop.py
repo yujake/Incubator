@@ -4900,6 +4900,15 @@ class AgentLoop:
             # 必须跟着走（否则"父视角有、面内没有"这一档会算错）。
             out["surface_fit"] = dict(got.get("surface") or {}) if isinstance(
                 got.get("surface"), Mapping) else {}
+            # ---- 能力面那一维（业主 2026-10-14：「秘书侧……评估派发出的任务能否由
+            # **子代理及子代理的出边**共同完成」）。与 `surface_fit`（路径面）各判一维：
+            # 这一条说"**谁能做**"（`in_self` / `via_edges` / `unreachable` / `unknown`），
+            # 那条说"**在哪做**"。两条都是读数，都不替父改主意。
+            if isinstance(got.get("surface"), Mapping):
+                out["reach_fit"] = dict(got["surface"].get("reach") or {})
+                if got["surface"].get("reach_bad"):
+                    out["reach_bad_targets"] = list(got["surface"]["reach_bad"])
+                    out["reach_reason"] = str(got["surface"].get("reach_reason") or "")
             if wash.get("refused"):
                 # 硬拒：一次派活连"派给谁/做什么"都不全 ⇒ 不执行、不评估、不协商。
                 return out

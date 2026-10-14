@@ -2990,12 +2990,16 @@ class Secretary:
         """
         try:
             if shape == "summon":
-                got = self.surface_fit(action=str(payload.get("action") or ""),
+                role = str(payload.get("role") or "")
+                action = str(payload.get("action") or "")
+                got = self.surface_fit(action=action,
                                        params=(payload.get("params")
                                                if isinstance(payload.get("params"),
                                                              Mapping) else {}),
                                        face=face, base=base)
-                return {**got, "shape": shape}
+                # 能力面那一维（业主 2026-10-14）：这个动作被派人（连同它出边上的伙伴）
+                # 做不做得成。与路径面各判一维，两条一起给父看。
+                return {**got, "shape": shape, "reach": reach_fit(role, action)}
             if shape == "summon_many":
                 targets = payload.get("targets")
                 if not isinstance(targets, (list, tuple)):
@@ -3004,13 +3008,15 @@ class Secretary:
                 items = []
                 for i, item in enumerate(targets):
                     sub = item if isinstance(item, Mapping) else {}
+                    action = str(sub.get("action") or "")
                     items.append({"index": i,
-                                  **self.surface_fit(action=str(sub.get("action") or ""),
+                                  **self.surface_fit(action=action,
                                                      params=(sub.get("params")
                                                              if isinstance(
                                                                  sub.get("params"), Mapping)
                                                              else {}),
-                                                     face=face, base=base)})
+                                                     face=face, base=base),
+                                  "reach": reach_fit(str(sub.get("role") or ""), action)})
                 fits: bool | None
                 if any(x.get("fits") is False for x in items):
                     fits = False
@@ -3019,9 +3025,16 @@ class Secretary:
                 else:
                     fits = None
                 bad = [x for x in items if x.get("fits") is False]
+                # 能力面那一维的汇总：哪几项在"被派人 + 它出边上的伙伴"里没人做得到
+                reach_bad = [x for x in items
+                             if (x.get("reach") or {}).get("verdict") == "unreachable"]
                 return {"shape": shape, "checked": True, "fits": fits, "items": items,
+                        "reach_bad": [x["index"] for x in reach_bad],
                         "reason": "；".join(f"targets[{x['index']}]：{x.get('reason')}"
-                                            for x in bad)}
+                                            for x in bad),
+                        "reach_reason": "；".join(
+                            f"targets[{x['index']}]：{(x.get('reach') or {}).get('reason')}"
+                            for x in reach_bad)}
         except Exception as exc:  # noqa: BLE001 —— 面这一维没查成不许打断派活
             return {"shape": shape, "checked": False, "fits": None,
                     "reason": f"面适配没跑成（{type(exc).__name__}: {exc}）"}
