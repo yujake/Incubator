@@ -52,6 +52,7 @@ class _JudgeQuoteSemantics:
         got = judge({"quote": quote, "span": span, "statement": statement,
                      "where": where})
         verified, mode, reason = JG.quote_fields_from_verdict(got["verdict"], got["why"])
+        call = dict(got.get("call") or {})
         self.tool_calls.append({"tool": "judge:quote.same_meaning",
                                 "ok": bool(got.get("verdict") == "same_meaning"),
                                 "error": "" if verified is not None else got["why"]})
@@ -61,8 +62,13 @@ class _JudgeQuoteSemantics:
             "same_meaning": verified,
             "quote_mode": mode,
             "quote_reason": reason,
+            # 证据两栏（业主：「语义那一档必须留证据」）—— B 拿它们直接回填行上的
+            # `quote_span` / `quote_call_sha256`；缺了这两样，`quote_mode="semantic"`
+            # 在 `schema` 那一层会被当场拒（说不出对着哪一段、哪一次判的就不算通过）。
+            "quote_span": str(span),
+            "quote_call_sha256": str(call.get("prompt_sha256") or ""),
             "judge": "H",
-            "call": dict(got.get("call") or {}),
+            "call": call,
             "span": str(span),
             "where": str(where or ""),
             "relation_id": str(relation_id or ""),

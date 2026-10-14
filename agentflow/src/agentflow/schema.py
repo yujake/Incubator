@@ -471,6 +471,18 @@ def _normalize_quote_mode(obj: Any, *, what: str) -> None:
         raise ValueError(f"{what} 的 quote_mode 必须是 {QUOTE_MODES} 之一或空串，"
                          f"收到 {mode!r}（引文回验只有'逐字命中'与'语义相同'两档）")
     obj.quote_mode = mode
+    # 语义那一档要求**证据**（业主 2026-10-14）：对着哪一段原文、哪一次调用判的，
+    # 两样都要落在行上 —— 否则"语义相同"就是一句谁都能说的话。
+    if mode == "semantic":
+        span = str(getattr(obj, "quote_span", "") or "").strip()
+        call = str(getattr(obj, "quote_call_sha256", "") or "").strip()
+        if not span or not call:
+            raise ValueError(
+                f"{what} 标了 quote_mode='semantic'，但"
+                + ("缺 quote_span（来源那一段逐字正文）" if not span else "")
+                + ("；" if not span and not call else "")
+                + ("缺 quote_call_sha256（那次语义判定的调用记录）" if not call else "")
+                + " —— 语义那一档必须留证据：说不出对着哪一段、哪一次判的，就不算通过")
 
 
 @dataclass
@@ -488,6 +500,15 @@ class Relation:
     quote_verified: bool | None = None
     #: 这条引文是**怎么**回验通过的（`QUOTE_MODES` 之一，或空串 = 没有方式可言）。
     quote_mode: str = ""
+    #: 为什么这么判（人话；语义那一档就是 H 的判定理由）。
+    quote_reason: str = ""
+    #: 语义那一档的**证据**（业主 2026-10-14：「语义那一档必须留证据」）：
+    #: `quote_span` 是来源里那一段**逐字**取来的正文，`quote_call_sha256` 是那次模型调用的
+    #: 提示词指纹（可复查的调用记录）。两条都由 `_normalize_quote_mode` 在
+    #: `quote_mode="semantic"` 时要求非空 —— 说不出"对着哪一段、哪一次判的"，
+    #: 就不算语义通过（这是"两栏不许互相冒充"在**内容**上的那一半）。
+    quote_span: str = ""
+    quote_call_sha256: str = ""
     statement: str = ""
     concept_group_key: str = ""
     dedup_key: str = ""
@@ -1879,6 +1900,9 @@ class Statement:
     quote_mode: str = ""
     #: 不是 True 时必填：为什么没通过、或者为什么还没查。
     quote_reason: str = ""
+    #: 语义那一档的证据（与 `Relation` 同一对）：来源那一段逐字正文 + 那次判定的调用记录。
+    quote_span: str = ""
+    quote_call_sha256: str = ""
     #: 证据等级（复用 `EVIDENCE_KINDS`）：proof / cross_check / heuristic。
     #: `draft/39` §3.14 起它是派生只读视图：真正判等级的是 `bits`（五元证据位）。
     evidence_kind: str = "heuristic"

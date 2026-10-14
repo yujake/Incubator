@@ -444,6 +444,10 @@ STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     "statement_full", "statement_text", "kind", "label", "proof_text", "origin",
     "source_lit_id", "doc_id", "page_range", "line_range", "evidence_kind",
     "quote_verified", "quote_reason", "derived_from", "aliases", "bits",
+    # 2026-10-14（业主：「回验……保持语义相同即可」+「语义那一档必须留证据」）：
+    # 方式与证据三栏必须能过秘书这一道 —— 否则 B 传给 `register_statement` 的
+    # `quote_mode` 会被这一层的白名单静默丢掉（那一栏就白填了）。
+    "quote_mode", "quote_span", "quote_call_sha256",
     "deps", "concepts",
     # 多段可选证明：B 自己分的段（每段一组 `path_group`）。不给就把
     # "定理内容 + 证明过程"当一段 —— 秘书不按空行/字样猜 B 想分几段（`draft/97` §14.11）。

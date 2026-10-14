@@ -205,6 +205,12 @@ class _RegisterStatement:
         #: `semantic` 语义相同 —— 业主 2026-10-14：「回验……保持语义相同即可」）。
         #: 不给就按历史行读（`True` ⇒ 逐字那一档），但**新写方应当说清方式**。
         quote_mode: str = "",
+        #: 语义那一档的**证据**（业主 2026-10-14：「语义那一档必须留证据」）：
+        #: `quote_span` 是来源里那一段逐字正文，`quote_call_sha256` 是那次语义判定的
+        #: 调用记录（H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`）。
+        #: 标了 `quote_mode="semantic"` 而缺这两样 ⇒ `Statement.validate()` 当场拒。
+        quote_span: str = "",
+        quote_call_sha256: str = "",
         derived_from: list | None = None,
         doc_id: str = "",
         line_range: dict | None = None,
@@ -346,6 +352,8 @@ class _RegisterStatement:
             "page_range": dict(page_norm), "quote_verified": quote_verified,
             "quote_mode": str(quote_mode or ""),
             "quote_reason": str(quote_reason or ""), "evidence_kind": evidence_kind,
+            "quote_span": str(quote_span or ""),
+            "quote_call_sha256": str(quote_call_sha256 or ""),
             "derived_from": S.sorted_unique(list(derived_from or [])),
             "doc_id": str(doc_id or ""), "line_range": dict(line_norm), "bits": bits,
         }

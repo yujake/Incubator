@@ -63,9 +63,11 @@ def test_a_bare_true_is_recorded_as_verbatim_not_left_empty() -> None:
 
 def test_the_semantic_verdict_is_kept_verbatim() -> None:
     """H 判的语义档原样留着 —— 不许被逐字档"顺手改写成" verbatim。"""
-    row = _stmt(quote_verified=True, quote_mode="semantic")
+    row = _stmt(quote_verified=True, quote_mode="semantic",
+                quote_span="来源里那一段逐字正文", quote_call_sha256="c0ffee")
     row.validate()
     assert row.quote_mode == "semantic", row.to_dict()
+    assert row.quote_span and row.quote_call_sha256, row.to_dict()
 
 
 def test_a_mode_outside_the_vocabulary_is_refused() -> None:
@@ -89,7 +91,8 @@ def test_the_relation_carries_the_same_two_columns() -> None:
     rel = S.Relation(relation_id="0001", concept_ids=["0001", "0002"],
                      description="d", lit_id="0000",
                      page_range=S.PageRange(1, 2, "p.1-2"),
-                     quote_verified=True, quote_mode="semantic")
+                     quote_verified=True, quote_mode="semantic",
+                     quote_span="来源里那一段逐字正文", quote_call_sha256="c0ffee")
     rel.validate()
     assert rel.quote_mode == "semantic"
     assert rel.to_dict()["quote_mode"] == "semantic"
@@ -97,6 +100,28 @@ def test_the_relation_carries_the_same_two_columns() -> None:
         S.Relation(relation_id="0002", concept_ids=["0001", "0002"], description="d",
                    lit_id="0000", page_range=S.PageRange(1, 2, "p.1-2"),
                    quote_verified=True, quote_mode="maybe").validate()
+
+
+def test_the_semantic_mode_demands_its_evidence() -> None:
+    """业主 2026-10-14：「语义那一档**必须留证据**」—— 缺证据的 semantic 当场拒。
+
+    两样缺一不可：对着哪一段原文（`quote_span`）、哪一次判的（`quote_call_sha256`）。
+    这一条是"两栏不许互相冒充"在**内容**上的那一半：不是写个 `semantic` 就算过。
+    """
+    with pytest.raises(ValueError) as got:
+        _stmt(quote_verified=True, quote_mode="semantic").validate()
+    assert "quote_span" in str(got.value) and "quote_call_sha256" in str(got.value), got.value
+    with pytest.raises(ValueError):
+        _stmt(quote_verified=True, quote_mode="semantic",
+              quote_span="有片段，但没有调用记录").validate()
+    with pytest.raises(ValueError):
+        S.Relation(relation_id="0003", concept_ids=["0001", "0002"], description="d",
+                   lit_id="0000", page_range=S.PageRange(1, 2, "p.1-2"),
+                   quote_verified=True, quote_mode="semantic").validate()
+    # 逐字那一档不需要这两栏（它自己那一份证据是"逐字命中"，由 check_quote 给）
+    plain = _stmt(quote_verified=True)
+    plain.validate()
+    assert plain.quote_mode == "verbatim" and plain.quote_span == "", plain.to_dict()
 
 
 # ============================================================ 3 学分
@@ -164,6 +189,17 @@ def test_the_semantic_criterion_is_registered_with_negative_controls() -> None:
     assert "stronger_than_source" in crit.verdicts, crit
     assert len(JG.NEGATIVE_CONTROLS["quote.same_meaning"]) >= 2
     assert JG.registry_problems() == [], JG.registry_problems()
+
+
+def test_every_criterion_tells_the_model_to_answer_json() -> None:
+    """每条判据的模板都要带上 `_JSON_RULES`（真机实测的教训，见那一处的 docstring）。
+
+    第一版 `quote.same_meaning` 忘了接它：假缝夹具全绿，真机 5 条引文全部
+    `judge_bad_json`（模型回散文）⇒ 那一档在真机上恒"没查成"。
+    """
+    from agentflow import judges as JG
+
+    assert JG.json_rules_problems() == [], JG.json_rules_problems()
 
 
 def test_a_rewritten_quote_passes_on_meaning_not_on_letters(tmp_path) -> None:
@@ -261,4 +297,91 @@ def test_the_h_action_refuses_incomplete_material(tmp_path) -> None:
     got = _h(tmp_path).judge_quote_semantics(quote="只有引文，没有来源那一段")
     assert got["tri"] == "unreadable" and got["same_meaning"] is None, got
     assert "材料不全" in got["reason"], got
+
+
+# ============================================================ 6 端到端：H 判 → B 落
+def test_h_judges_and_b_writes_it_back(tmp_path) -> None:
+    """整条链跑通一次（不花模型钱）：H 判语义 → B 用**自己的**写面回填。
+
+    这一条是"B 唤起 H"那件事的机器读数，三处一起量：
+
+    1. H 的判定带着**证据**回来（`quote_span` 逐字来源片段 + `quote_call_sha256` 调用记录）；
+    2. B 用 `table.update`（B 的面里有它，H 的面里没有）把判定写回 `relations`，
+       写完之后那一行的 `quote_state` 是 `semantic`；
+    3. 判与落分居两处：H 的可调用面里**没有** `table.update`。
+    """
+    from agentflow import evidencebits
+    from agentflow.agent_h import AgentH
+    from agentflow.llmseam import LlmSeam
+    from agentflow.store import Store
+    from agentflow.tools import build_registry
+
+    root = tmp_path / "ws-e2e"
+    root.mkdir()
+    store = Store(root)
+    store.init()
+    row = S.Relation(relation_id="0001", concept_ids=["0001", "0002"], description="d",
+                     lit_id="0000", page_range=S.PageRange(1, 2, "p.1-2"),
+                     quote="The distance is the number of walls crossed.",
+                     quote_verified=None, quote_reason="还没查").to_dict()
+    with store.tx("relations", actor="test") as tx:
+        tx.upsert("relations", row)
+
+    seam, _gate = _seam(root, '{"verdict": "same_meaning", "why": "换了一种说法，'
+                              '但说的是同一件事", "findings": []}')
+    h = AgentH(Store(root), llm=seam)
+    got = h.judge_quote_semantics(
+        quote=row["quote"], span="The distance equals the number of walls it crosses.",
+        statement="腔室距离 = 穿过的墙数", where="out/paper/main.tex:120",
+        relation_id="0001")
+    assert got["tri"] == "computed" and got["same_meaning"] is True, got
+    assert got["quote_mode"] == "semantic" and got["judge"] == "H", got
+    assert got["quote_span"].startswith("The distance equals"), got
+    assert got["quote_call_sha256"], got
+
+    built = build_registry(store=Store(root), workspace_root=root)
+    reg = getattr(built, "registry", built)
+    assert "table.update" in reg.call_surface("B"), "B 的面上没有 table.update"
+    assert "table.update" not in reg.call_surface("H"), \
+        "H 是只读角色，它的可调用面里不该出现写工具（判与落必须分居两处）"
+
+    res = reg.call("table.update", role="B", table="relations", id="0001",
+                   patch={"quote_verified": got["same_meaning"],
+                          "quote_mode": got["quote_mode"],
+                          "quote_reason": got["quote_reason"],
+                          "quote_span": got["quote_span"],
+                          "quote_call_sha256": got["quote_call_sha256"]})
+    assert getattr(res, "ok", False) is True, getattr(res, "error", res)
+    after = Store(root).rows("relations")[0]
+    assert evidencebits.quote_state(after) == "semantic", after
+    assert evidencebits.quote_explains_itself(after) is True, after
+
+
+def test_b_cannot_write_a_bare_semantic_without_evidence(tmp_path) -> None:
+    """B 想写一个**没有证据**的 `semantic` ⇒ 写不进去（schema 当场拒）。
+
+    这是"两栏不许互相冒充"在写边界上的那一半：光声明"语义相同"不算过 ——
+    必须带着"对着哪一段、哪一次判的"。
+    """
+    from agentflow.store import Store
+    from agentflow.tools import build_registry
+
+    root = tmp_path / "ws-bare"
+    root.mkdir()
+    store = Store(root)
+    store.init()
+    row = S.Relation(relation_id="0001", concept_ids=["0001", "0002"], description="d",
+                     lit_id="0000", page_range=S.PageRange(1, 2, "p.1-2"),
+                     quote="q", quote_verified=None, quote_reason="还没查").to_dict()
+    with store.tx("relations", actor="test") as tx:
+        tx.upsert("relations", row)
+    built = build_registry(store=Store(root), workspace_root=root)
+    reg = getattr(built, "registry", built)
+    res = reg.call("table.update", role="B", table="relations", id="0001",
+                   patch={"quote_verified": True, "quote_mode": "semantic",
+                          "quote_reason": "我说语义相同"})
+    assert getattr(res, "ok", False) is False, "没有证据的 semantic 竟然写进去了"
+    assert "quote_span" in str(getattr(res, "error", "")), getattr(res, "error", res)
+    after = Store(root).rows("relations")[0]
+    assert after.get("quote_verified") is None, after
 

@@ -1,15 +1,15 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-14T09:09:32+08:00",
+  "generated_at": "2026-10-14T09:21:26+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
       "glob": ".noai-approvals.json",
       "category": "auth-audit",
-      "sha256": "89c70788255f04e0867fdc0bf5fd21889b79780b60afc46625b55c1317e472e4",
+      "sha256": "85e10b1207c481301cb516f6a7170cc214d7eea309e6bc9beb50c9ac71857067",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "口径一致：尝试刷新台账自指条目",
+      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -246,7 +246,7 @@
       "sha256": "2cf13ecec4b27a540dd8af03274572a21d7572e0103268d810b5249d915f4ef6",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定两件事：①「允许 B 和 H 协作，B 唤起 H」；②「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本轮落地的四处：capabilities.py 的 _KNOWN_UNMATCHED_ACTIONS 登记 H.judge_quote_semantics（它是 H 的角色级只读方法、不是工具转发，工具层没有同名工具，按准入纪律逐条登记）；specs/h.py 新增 H.judge_quote_semantics 动作（side_effect=read，参数是引文/来源片段/断言/落点/两个记账 id）；specs/b.py 给 B 加一条边 H（edges=('C','H','V')）并在边界与注释里写明分工：逐字那一档 B 自己走 check_quote，逐字不中而语义相同的由 H 判、B 拿判定回填quote_verified + quote_mode=semantic；tests/golden/agent_surface_snapshot.json 重冻（边 31→32、动作 59→60、H 的动作 4→5、B 的 register_statement 多一个 quote_mode 参数，以及各角色提示词里伙伴表随边表变化的那几行——diff 已逐格看过）。H 仍是只读角色，它的落库代理仍钉死在 review_findings/documents.status 上（判与落分居两处）。逐行走查过：test_quote_semantics 24 条 + policy / agent_spec_reconciliation / agent_surface_snapshot / capability 两层 / role_specs_action_table / reading_map 全绿。",
+      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
       "changed_this_session": null,
       "reviewers": [
         {
@@ -447,26 +447,26 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "79d750b3fc0094c43f683122a957ddc67a3e4dd71adf64620de953b276b5fc17",
+      "sha256": "fac4e5d8975c271bc2f2896e280af1b0e4e8700333091c9f5ecd3eb0c7fd82da",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
+      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-14T08:53:38+08:00",
-          "scope": "引文回验的两档口径（verbatim / semantic）：数据模型（schema.Relation/Statement）与 B 的登记入口参数（specs/b.py）",
-          "note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
+          "at": "2026-10-14T09:21:11+08:00",
+          "scope": "语义档的证据三栏（schema.Relation/Statement 的 quote_span / quote_call_sha256 / quote_reason）与秘书白名单",
+          "note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-14T08:53:39+08:00",
-          "scope": "引文回验的两档口径（verbatim / semantic）：数据模型（schema.Relation/Statement）与 B 的登记入口参数（specs/b.py）",
-          "note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
+          "at": "2026-10-14T09:21:11+08:00",
+          "scope": "语义档的证据三栏（schema.Relation/Statement 的 quote_span / quote_call_sha256 / quote_reason）与秘书白名单",
+          "note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -552,7 +552,7 @@
       "sha256": "c1928fa421f3f305ebbeb9701599200a8af3f57a13eeda59851102a3e9cfb7dd",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定两件事：①「允许 B 和 H 协作，B 唤起 H」；②「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本轮落地的四处：capabilities.py 的 _KNOWN_UNMATCHED_ACTIONS 登记 H.judge_quote_semantics（它是 H 的角色级只读方法、不是工具转发，工具层没有同名工具，按准入纪律逐条登记）；specs/h.py 新增 H.judge_quote_semantics 动作（side_effect=read，参数是引文/来源片段/断言/落点/两个记账 id）；specs/b.py 给 B 加一条边 H（edges=('C','H','V')）并在边界与注释里写明分工：逐字那一档 B 自己走 check_quote，逐字不中而语义相同的由 H 判、B 拿判定回填quote_verified + quote_mode=semantic；tests/golden/agent_surface_snapshot.json 重冻（边 31→32、动作 59→60、H 的动作 4→5、B 的 register_statement 多一个 quote_mode 参数，以及各角色提示词里伙伴表随边表变化的那几行——diff 已逐格看过）。H 仍是只读角色，它的落库代理仍钉死在 review_findings/documents.status 上（判与落分居两处）。逐行走查过：test_quote_semantics 24 条 + policy / agent_spec_reconciliation / agent_surface_snapshot / capability 两层 / role_specs_action_table / reading_map 全绿。",
+      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
       "changed_this_session": null,
       "reviewers": [
         {
@@ -744,7 +744,7 @@
       "sha256": "9a96d72a7674aee4c5c3fbf0ee965293d1d6835b95c37244d9509a264d3d9578",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定两件事：①「允许 B 和 H 协作，B 唤起 H」；②「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本轮落地的四处：capabilities.py 的 _KNOWN_UNMATCHED_ACTIONS 登记 H.judge_quote_semantics（它是 H 的角色级只读方法、不是工具转发，工具层没有同名工具，按准入纪律逐条登记）；specs/h.py 新增 H.judge_quote_semantics 动作（side_effect=read，参数是引文/来源片段/断言/落点/两个记账 id）；specs/b.py 给 B 加一条边 H（edges=('C','H','V')）并在边界与注释里写明分工：逐字那一档 B 自己走 check_quote，逐字不中而语义相同的由 H 判、B 拿判定回填quote_verified + quote_mode=semantic；tests/golden/agent_surface_snapshot.json 重冻（边 31→32、动作 59→60、H 的动作 4→5、B 的 register_statement 多一个 quote_mode 参数，以及各角色提示词里伙伴表随边表变化的那几行——diff 已逐格看过）。H 仍是只读角色，它的落库代理仍钉死在 review_findings/documents.status 上（判与落分居两处）。逐行走查过：test_quote_semantics 24 条 + policy / agent_spec_reconciliation / agent_surface_snapshot / capability 两层 / role_specs_action_table / reading_map 全绿。",
+      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
       "changed_this_session": null,
       "reviewers": [
         {
@@ -1000,7 +1000,7 @@
       "sha256": "a74fcea48e5b5eb13742e83a2937b157d782338ae2cf66d83a436632258f4fd0",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定两件事：①「允许 B 和 H 协作，B 唤起 H」；②「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本轮落地的四处：capabilities.py 的 _KNOWN_UNMATCHED_ACTIONS 登记 H.judge_quote_semantics（它是 H 的角色级只读方法、不是工具转发，工具层没有同名工具，按准入纪律逐条登记）；specs/h.py 新增 H.judge_quote_semantics 动作（side_effect=read，参数是引文/来源片段/断言/落点/两个记账 id）；specs/b.py 给 B 加一条边 H（edges=('C','H','V')）并在边界与注释里写明分工：逐字那一档 B 自己走 check_quote，逐字不中而语义相同的由 H 判、B 拿判定回填quote_verified + quote_mode=semantic；tests/golden/agent_surface_snapshot.json 重冻（边 31→32、动作 59→60、H 的动作 4→5、B 的 register_statement 多一个 quote_mode 参数，以及各角色提示词里伙伴表随边表变化的那几行——diff 已逐格看过）。H 仍是只读角色，它的落库代理仍钉死在 review_findings/documents.status 上（判与落分居两处）。逐行走查过：test_quote_semantics 24 条 + policy / agent_spec_reconciliation / agent_surface_snapshot / capability 两层 / role_specs_action_table / reading_map 全绿。",
+      "change_note": "业主 2026-10-14 授权动禁改区，并裁定「语义那一档必须留证据」。本轮落地两处：① schema.py 给 Relation 与 Statement 各加两栏证据（quote_span = 来源里那一段逐字正文、quote_call_sha256 = 那次语义判定的调用记录），Relation 另加 quote_reason；并在 _normalize_quote_mode 里加一条结构约束：quote_mode='semantic' 而缺这两样 ⇒ 当场拒（说不出对着哪一段、哪一次判的就不算通过）—— 这是「两栏不许互相冒充」在内容上的那一半；② 上一轮已在台账里的 capabilities / specs/b / specs/h / 快照随本批一起复核（hash 未变）。附带：secretary 的 STATEMENT_PARAM_KEYS 补进 quote_mode / quote_span / quote_call_sha256 （不补的话 B 传的方式栏会被那一层白名单静默丢掉）。逐行走查过：test_quote_semantics 27 条（含端到端 H 判 → B 用 table.update 回填、以及没有证据的 semantic 写不进去）、secretary / agent_b / action_surface / evidence_bits 共 155 条全绿；另有一条真机读数：真模型（deepseek-flash）对 T1-2 的五条引文判出 5 个 semantic 并带证据写回成功。",
       "changed_this_session": null,
       "reviewers": [
         {

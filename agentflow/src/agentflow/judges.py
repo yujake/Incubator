@@ -396,7 +396,7 @@ _register(Criterion(
         "unjudgeable = 材料不足以判（来源那一段没给全 / 引文本身有歧义）。\n"
         "**不要**因为字面不完全一样就判 different —— 那是逐字比对，不是这一条要的。\n"
         "{context}\n"
-        "被审材料：\n{artifact}"
+        "被审材料：\n{artifact}\n\n" + _JSON_RULES
     ),
 ))
 
@@ -501,6 +501,18 @@ def registry_problems() -> list[str]:
 def covered_faculties() -> tuple[str, ...]:
     """有语义判据背书的官能（排序后）。"""
     return tuple(sorted({c.faculty for c in CRITERIA.values()}))
+
+
+def json_rules_problems() -> list[str]:
+    """每条判据的模板都得把 `_JSON_RULES` 带上（否则模型不知道该回 JSON）。
+
+    为什么单列一条（2026-10-14 真机实测的教训）：新加的 `quote.same_meaning`
+    第一版模板忘了接 `_JSON_RULES` —— 夹具（假缝回 JSON）全绿，真机上 5 条引文
+    全部 `judge_bad_json`（模型回的是散文），于是那一档在真机上恒"没查成"。
+    这不是"模型不行"，是**判据自己没把形状说给模型听**。凡新增判据，这一条都会先红。
+    """
+    missing = [cid for cid, c in CRITERIA.items() if _JSON_RULES not in c.template]
+    return [f"{cid} 的模板没带上 `_JSON_RULES`（模型不知道要回 JSON）" for cid in missing]
 
 
 def selftest() -> int:
