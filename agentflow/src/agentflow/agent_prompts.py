@@ -408,7 +408,12 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 于是 B 的秘书被问「这条太平凡吗」时照提示词答了「建议不派」，被校验层当场判不采信；
 #: ② `V.verify_proof` / `V.read_proof` 的 `statement_id` 长度上界从硬编码 4 改成 `schema.ID_DIGITS`
 #: （六位编号那一批漏了它，真机上正当调用被拒两次）；③ D 的手稿分节**只留一处枚举**（七节）。
-PROMPT_VERSION = "p113"
+#: `p114`（2026-10-14，**第三轮真机读数驱动**，第六趟）：两处落点纪律 ——
+#: ① E：反例只有一个合法落法（`claim` 写被检验的命题 + `result=refutes` + 非空
+#: `counterexample`），不许用「否定式 claim + supports」绕过（真机上 n=40 那个反例因此
+#: 在台账里一行都没有，下游全按"没有反例"算）；② D：引落点前先看那一行有哪些键，
+#: 不许自己编字段名（真机上手稿把证书引成 `exp:000000.certificate`，而那一行没有这个键）。
+PROMPT_VERSION = "p114"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:

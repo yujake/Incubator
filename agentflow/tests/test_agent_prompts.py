@@ -2343,13 +2343,17 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ③ D 的手稿分节只留一处枚举（七节，成果概述在第一位）。
 #: 作用域读数：**只有 D 一格换值** —— V 那一处改的是**参数上界**，而提示词里只印必填键，
 #: 不印长度约束，所以 V 的前置提示词逐字未动（这一改动的是门，不是话）。
-_FROZEN_PROMPT_VERSION = "p113"
+#: p113 → p114（2026-10-14，**第三轮真机读数驱动**，第六趟）：两处落点纪律 ——
+#: ① E：反例只有一个合法落法（claim 写被检验的命题 + `result=refutes` + 非空 counterexample），
+#: 不许用「否定式 claim + supports」绕过；② D：引落点前先看那一行有哪些键，不许自己编字段名。
+#: 作用域读数：只有 **D / E** 两格换值（那两条各自只发给那一岗）。
+_FROZEN_PROMPT_VERSION = "p114"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "313b24a114f7a560c2505af8578c2303d638cd837d8fdb5eecadd93d0bd006da",
     "B": "82bd6f7e211dce1d324ba12c17a98c2dce6ddff3792ae01a24637822cd793514",
     "C": "4ad1339d41286052608923bc4fd96c6260e7be6e2d77383b9b6aa2e87e22aa6f",
-    "D": "b4e3d67f774eea22935d8ded4721f566e829723191c94d7b3ba92d4c1587b8e2",
-    "E": "75e1594acfb63888e2501eb610192a0f9653cb349491fd714721ae29067de92a",
+    "D": "9d82ddc8e0a345999397ea40157fe60df4ee159738c00b664965f01278afbe74",
+    "E": "3f1b11de62d754f1ddbdbc51afb785cf684b6e6495f93486846eb0edf123a27f",
     "F": "eaa24cccb4bb17fbe0b05c677f32f69ecb8d5aa6cc17de680a578850b0cd3cf5",
     "G": "f2d29b2b3c4496ac07bb8938a7deae03e5340cbf1186fbcc64782d3c9c07bace",
     "H": "9fa608493b8e3b00a2c3c74fe64e82be21a1744151aefe7ac89890bde4605ceb",
