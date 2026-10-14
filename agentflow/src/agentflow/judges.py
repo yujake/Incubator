@@ -279,6 +279,12 @@ def _ground(artifact: str, raw_findings: Any) -> tuple[list[dict[str, str]], lis
     return kept, dropped
 
 
+#: 值得重试一次的失败档（见 `judge()` 里那一段）：模型**答歪了**（散文 / JSON 不可解析）
+#: 或**答案被思维链吃光**。这两档都不是"判过了没问题"，也不该只试一次就放弃 ——
+#: 而"没接模型"（`judge_not_wired`）、"预算耗尽"、"超时"不在此列（重试也没用）。
+RETRY_PROBLEMS: tuple[str, ...] = ("judge_bad_json", "judge_output_limit")
+
+
 def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
           context: str = "") -> Verdict:
     """按一条判据审一段产出。三态与引用落地都在这里落。"""
@@ -291,8 +297,22 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
         base.detail = "没有接模型（或没有 key）：这是没判成，不是判过了没问题"
         return base
 
-    data, problem, call = J.seam_json(seam, criterion.prompt(artifact, context),
-                                      point=f"judge:{criterion.id}")
+    prompt = criterion.prompt(artifact, context)
+    data, problem, call = J.seam_json(seam, prompt, point=f"judge:{criterion.id}")
+    # 一次重试（2026-10-14 真机实测逼出来的）：这一档用的是**会思考**的模型，
+    # 思维链把输出预算吃光（`judge_output_limit`）或把 JSON 说成散文（`judge_bad_json`）
+    # 都会让判据落到"没查成"—— 而那两档都不是"判过了没问题"，也不该白扔一次判定。
+    # 重试只加一句"先给 JSON"，只重试一次；仍然不行就如实回那一档（三态纪律）。
+    if data is None and problem in RETRY_PROBLEMS:
+        retry_prompt = (prompt + "\n\n（上一次的回答没能解析成一个 JSON 对象。"
+                        "这一次**先**直接输出那个 JSON 对象，再谈理由；"
+                        "不要写任何解释性文字、不要用 Markdown 围栏。）")
+        again, problem2, call2 = J.seam_json(seam, retry_prompt,
+                                             point=f"judge:{criterion.id}:retry")
+        if again is not None:
+            data, call = again, call2
+        else:
+            problem, call = problem2, call2
     base.model = str(getattr(call, "model", "") or "")
     base.prompt_version = str(getattr(call, "prompt_version", "") or "")
     base.prompt_sha256 = str(getattr(call, "prompt_sha256", "") or "")

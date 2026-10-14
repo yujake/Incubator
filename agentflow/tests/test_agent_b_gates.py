@@ -994,3 +994,49 @@ def test_i5_merge_evidence_survives_rebuild(store):
     assert after["reason"] == before["reason"] and after["reason"].strip(), "理由必须重建得回来"
     assert after["rejected"] == ["0001"], "关系改写的清单必须能从事件日志重建"
     assert after["rewritten"] == before["rewritten"]
+
+
+# =========================================================================== 逐字档的材料
+def test_a_quote_verbatim_in_the_workspace_manuscript_is_verbatim(store) -> None:
+    """逐字档**先试文献 PDF，没中再试工作区那份正文**（业主那句"逐字命中不花模型钱"）。
+
+    真机读数（T1-2，2026-10-14）：5 条引文逐字都在 `out/paper/main.tex` 里，而文献 PDF
+    那一档因为页码是估算的没中 —— 于是"真逐字"被推到语义档去花模型钱（还可能判错）。
+    这一条钉住那一档：**PDF 里没有、工作区正文里有 ⇒ 记 `verbatim`**，并且
+    `quote_reason` 要写清命中的是哪一份文件（两种证据不许混成一种）。
+    """
+    quote = "The distance is the number of walls crossed."
+    write_library_file(store, "0000/a.txt", "无关的正文，没有那一句引文。")
+    add_literature(store, "0000", title="A", path="0000/a.txt", processed=False,
+                   download={"status": "ok"})
+    paper = store.root / "out" / "paper"
+    paper.mkdir(parents=True, exist_ok=True)
+    (paper / "main.tex").write_text(f"\\section{{X}}\n{quote}\n", encoding="utf-8")
+
+    draft = RelationDraft(concept_names=["group", "abelian group"], description="d",
+                          quote=quote, page_range=PageRange(1, 1, "p. 1"))
+    agent = _agent_b(store, StubExtractor(relations=[draft]))
+    res = agent.run_once()
+    rows = Store(store.root).rows("relations")
+    assert rows, res.details
+    row = rows[-1]
+    assert row.get("quote_verified") is True, row
+    assert row.get("quote_mode") == "verbatim", row
+    assert "out/paper/main.tex" in str(row.get("quote_reason") or ""), row
+    assert any(d.get("stage") == "quote_manuscript" for d in res.details), res.details
+
+
+def test_without_a_manuscript_the_pdf_tier_still_decides(store) -> None:
+    """反真空：没有那份正文时，逐字档照旧只按文献 PDF 判（不许因此变成"通过"）。"""
+    quote = "The distance is the number of walls crossed."
+    write_library_file(store, "0000/a.txt", "无关的正文，没有那一句引文。")
+    add_literature(store, "0000", title="A", path="0000/a.txt", processed=False,
+                   download={"status": "ok"})
+    draft = RelationDraft(concept_names=["group", "abelian group"], description="d",
+                          quote=quote, page_range=PageRange(1, 1, "p. 1"))
+    agent = _agent_b(store, StubExtractor(relations=[draft]))
+    res = agent.run_once()
+    rows = Store(store.root).rows("relations")
+    assert rows, res.details
+    assert rows[-1].get("quote_verified") is not True, rows[-1]
+    assert rows[-1].get("quote_mode") == "", rows[-1]

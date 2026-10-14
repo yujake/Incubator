@@ -6,8 +6,44 @@ from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
+from ..extract import DocumentText as _DT
+from pathlib import Path as _Path
+
 
 class _RunOnce:
+    #: 工作区里那份**正文**的候选落点（审阅型项目：`out/paper/main.tex` 是可改稿，
+    #: `source/main.tex` 是只读基线）。逐字档先试它 —— 理由见 `_manuscript_doc`。
+    MANUSCRIPT_RELS: tuple[str, ...] = ("out/paper/main.tex", "source/main.tex")
+
+    def _manuscript_doc(self) -> tuple[object | None, str, str]:
+        """工作区那份正文的文本视图：返回 `(doc, 用的是哪一份, 读不出来的原因)`。
+
+        为什么要它（业主 2026-10-14 的两档口径）：**逐字命中是第一档、且不花模型钱**，
+        而审阅型项目里的引文常常逐字取自工作区那份 LaTeX 正文（作者自己的稿子）——
+        文献 PDF 却因为页码是估算的、或者正文在 LaTeX 源里而不在 PDF 的可抽层里，
+        于是"真逐字"的引文落到第二档去问模型（既有判错的风险，又白花钱）。
+
+        这一档**不另写判据**：仍然把材料交给 `quoteverify.check_quote` 那一个实现，
+        只换一份材料（`DocumentText(pages=[全文])`），并把"命中的是哪一份文件"
+        写进关系的 `quote_reason` —— 读数不说清来路，就等于把两种证据混成一种。
+        """
+        try:
+            root = _Path(self.store.root)
+        except Exception as exc:  # noqa: BLE001 - 读不到工作区根就是"没有这份材料"
+            return None, "", f"工作区根读不出来（{type(exc).__name__}: {exc}）"
+        for rel in self.MANUSCRIPT_RELS:
+            path = root / rel
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return None, "", f"{rel} 读不出来：{type(exc).__name__}: {exc}"
+            if not text.strip():
+                continue
+            return _DT(text=text, pages=[text], source_kind="tex"), rel, ""
+        return None, "", "工作区里没有 out/paper/main.tex 也没有 source/main.tex"
+
     def run_once(self) -> BRunResult:
         """处理至多一篇未处理文献，返回本轮的完整审计结果。
 
@@ -112,15 +148,31 @@ class _RunOnce:
             return res
 
         # ---- 引文校验（无锁；只依赖文档）
+        # 逐字那一档先试文献 PDF；**没中再试工作区那份正文**（同一份 `check_quote`，
+        # 只换材料）—— 审阅型项目的引文常常逐字取自 `out/paper/main.tex` 那份 LaTeX，
+        # 而 PDF 的页码是估算的，于是"真逐字"被推到第二档去花模型钱（还可能判错）。
+        mdoc, mrel, mwhy = self._manuscript_doc()
         verified_rels: list[dict] = []
         for rel in relations:
+            quote = getattr(rel, "quote", "") or ""
             chk = check_quote(
                 doc,
-                getattr(rel, "quote", "") or "",
+                quote,
                 getattr(rel, "page_range", None),
                 widen=self.widen_pages,
                 allow_fulltext_fallback=self.allow_fulltext_fallback,
             )
+            hit_note = ""
+            if chk.verified is not True and mdoc is not None:
+                mchk = check_quote(mdoc, quote, None,
+                                   widen=self.widen_pages,
+                                   allow_fulltext_fallback=True)
+                if mchk.verified is True:
+                    chk = mchk
+                    hit_note = f"逐字命中工作区正文 {mrel}"
+                    res.details.append({"lit_id": lit_id, "stage": "quote_manuscript",
+                                        "rel": getattr(rel, "description", "")[:80],
+                                        "where": mrel})
             if chk.verified is True:
                 res.quotes_verified += 1
                 # `E-11`：引文逐字存在、但落在声明的页码之外。判据取 `reason`
@@ -132,7 +184,7 @@ class _RunOnce:
                 res.quotes_failed += 1
             else:
                 res.quotes_unknown += 1
-            verified_rels.append({"rel": rel, "check": chk})
+            verified_rels.append({"rel": rel, "check": chk, "note": hit_note})
 
         # ---- 提交（锁内，短）
         # 声明哪几张表由过渡层决定（`concepts` 落刀之后不再存在 ⇒ 声明它会以"未知表"失败）。
@@ -285,6 +337,9 @@ class _RunOnce:
                     # 之后"通过"还多一档"语义相同（H 判）"，所以方式必须写实：
                     # 逐字命中记 `verbatim`，其余（不一致 / 没查）归空串。
                     quote_mode="verbatim" if chk.verified is True else "",
+                    # 逐字命中**工作区正文**那一档要把来路写实（`item["note"]`）：
+                    # 命中的是 PDF 还是我们手上那份 LaTeX，是两种不同的证据。
+                    quote_reason=str(item.get("note") or ""),
                     statement=description,
                     concept_group_key=group_key,
                     dedup_key=D.relation_dedup_key(group_key, quote),

@@ -202,6 +202,43 @@ def test_every_criterion_tells_the_model_to_answer_json() -> None:
     assert JG.json_rules_problems() == [], JG.json_rules_problems()
 
 
+class _BadThenGood:
+    """第一次回散文、第二次回合法 JSON 的替身（量"重试一次"那条）。"""
+
+    spec = type("Spec", (), {"model": "fake", "api_key": "fake"})()
+
+    def __init__(self, good: str) -> None:
+        self.good = good
+        self.calls = 0
+        self.prompts: list[str] = []
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: object) -> object:
+        self.calls += 1
+        self.prompts.append(prompt)
+        text = "我觉得差不多吧（不是 JSON）" if self.calls == 1 else self.good
+        return type("Reply", (), {"ok": True, "text": text, "tokens_in": 3,
+                                  "tokens_out": 3, "error_detail": "", "error_kind": ""})()
+
+
+def test_a_bad_first_answer_is_retried_once(tmp_path) -> None:
+    """答歪一次 ⇒ **重试一次**（真机那一档：思维链吃光预算 / 把 JSON 说成散文）。
+
+    重试只在"模型答歪了"那两档上做，且只做一次；重试仍不成 ⇒ 三态里的"没查成"
+    （`test_a_broken_answer_is_unchecked_not_a_pass` 钉着那一半）。
+    """
+    from agentflow import judges as JG
+    from agentflow.llmseam import LlmSeam
+
+    gate = _BadThenGood('{"verdict": "same_meaning", "why": "第二次答对了", "findings": []}')
+    seam = LlmSeam(role="H", session_root=tmp_path, gateway=gate, price=(0.0, 0.0), sid="t")
+    got = JG.judge("quote.same_meaning", "引文：a\n来源：a", seam=seam)
+    assert gate.calls == 2, f"没有重试（调用 {gate.calls} 次）"
+    assert got.ok is True and got.verdict == "same_meaning", got
+    # 第二次的 prompt 里多一句"先给 JSON"（告诉模型这次该怎么答）
+    assert len(gate.prompts) == 2 and "先" in gate.prompts[1], gate.prompts[1][-200:]
+
+
 def test_a_rewritten_quote_passes_on_meaning_not_on_letters(tmp_path) -> None:
     """语义相同 ⇒ 通过（`quote_mode="semantic"`），并把这次调用留在证据里。
 

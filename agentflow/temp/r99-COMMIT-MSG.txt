@@ -1,0 +1,56 @@
+R99（goal 第 5 轮）：逐字档改走"先 PDF、没中再试工作区正文"，并给语义档加一次重试
+
+这一轮清掉第 4 轮记下的两条残余，并把上一轮那笔"签字退出码 1"的账目查清。
+
+## 一、逐字档换材料（`agent_b/run_once.py`）
+
+新增 `_RunOnce._manuscript_doc()`：按 `out/paper/main.tex` → `source/main.tex` 的顺序
+把工作区那份**正文**读成 `DocumentText(pages=[全文])`。引文校验那一轮改成：
+
+1. 先按文献 PDF + 声明页码走 `check_quote`（原来那一条，一字未改）；
+2. **没中再拿同一句引文去正文那一档走同一个 `check_quote`**（只换材料，不另写判据）；
+3. 命中就把"命中的是哪一份文件"写进关系的 `quote_reason`，并在 `res.details` 里留一条
+   `stage="quote_manuscript"` —— 两份材料是不同的证据，混成一个词就等于把来路抹掉。
+
+为什么这是**省钱**那一档的修复：业主的口径是"逐字命中不花模型钱、先走它"，而审阅型项目
+的引文常常逐字取自作者自己那份 LaTeX（PDF 的页码是估算的 ⇒ 逐字档查不中），于是真逐字
+被推到语义档去花模型钱、还可能判错。真机读数（T1-2，新档干跑）：
+
+```
+0001..0005: 逐字命中 —— out/paper/main.tex（不花模型钱）：substring_match_fulltext
+```
+
+即第 4 轮那 5 条本该判 `verbatim`（盘上那份 `semantic` 证据原样留着，没有改写历史）。
+
+判据（`tests/test_agent_b_gates.py` 新增两条）：PDF 里没有、工作区正文里有 ⇒ 记
+`verbatim` + `quote_reason` 点名 `out/paper/main.tex` + `res.details` 有那条读数；
+**没有那份正文时照旧只按 PDF 判**（反真空：不许因为多了这一档就把"没中"变成"通过"）。
+
+## 二、语义档答歪了重试一次（`judges.py`）
+
+真机实测（第 4 轮）：一次 `judge_bad_json`（散文）与一次 `judge_output_limit`
+（思维链吃光输出预算，8309 字）。现在 `judge()` 在这两档上**重试一次**，重试的 prompt
+多一句"先直接输出那个 JSON 对象"；只重试一次，仍不成 ⇒ 如实回"没查成"（三态纪律）。
+`judge_not_wired` / 预算耗尽 / 超时**不重试**（重试也没用）。
+新增 `RETRY_PROBLEMS` 常量（唯一口径）+ 判据 `test_a_bad_first_answer_is_retried_once`
+（假缝第一次回散文、第二次回合法 JSON ⇒ 调用两次且判定成立、第二次 prompt 里带那句提醒）。
+
+## 三、上一轮那笔"签字退出码 1"的账目：查清了，是**设计如此**
+
+`--verify-only` 复核：四条真禁改区路径全部 `[approved]`（hash 一致 + 2 名 reviewer），
+唯一一条 `[unapproved]` 是 **`.noai-approvals.json` 自己**，门给出的理由逐字是
+「台账不能批准自己……这条**永远**是 unapproved，与 hash 是否一致、reviewers 有几个无关」
+（理由码 `ledger_self_approval`）。所以那个退出码 1 + "中止 12 处" 是**幂等 no-op**，
+不是我的改动没被批。这一条也解释了为什么"台账自己在改动集里"时签名总是以 1 收尾。
+
+## 四、判据与读数
+
+- `pytest tests/test_quote_semantics.py tests/test_agent_b_gates.py
+  tests/test_coverage_agent_b.py tests/test_judges.py tests/test_judge.py
+  tests/test_secretary.py tests/test_evidence_bits.py
+  tests/test_action_surface_matches_acceptance.py -q` ⇒ **205 passed**；
+- `noai_gate.py --paths <本轮四个文件>` ⇒ `[clean]`（本轮一个禁改区文件都没碰 ⇒ 无需签名）；
+- 真机干跑（T1-2）：5 条全部"逐字命中工作区正文"，一个模型调用都没发。
+
+下一轮（goal 6/20）：把"B 登记后把待回验的行交 H"这一步在**模型驱动**路径上做成可判的
+（现在边与动作都在，缺的是"B 真的会去交"的读数），并给语义档留一个"哪些行还没查"的读数面。
