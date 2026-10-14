@@ -1,0 +1,60 @@
+R126 收口核对：逐条拿机器读数核这四件事 —— 核出 ③ 少查了 3 个来源，当场补上
+
+业主在老 goal 结尾写的是「做完了就去看记载新 goal 的文件」。这一轮是那句的**反向动作**：
+不信文档里写的「已落地」，逐条拿**现场跑出来的读数**核一遍（结果抄进 `draft/120` §七）。
+核出**一处真的没做完**。
+
+## 一、核出的那一处：③「38 个来源逐条读完」当时是假的
+
+`agent_skills.SURVEY` 里实际只出现 **35** 个来源名字，而记录（`draft/120` §一③ 与 §三第 16 条）
+写着「来源 38 条已逐条读完」。一次都没被任何一岗记下的三份是：
+
+```
+construct-counterexamples-neural-network-functions
+direct-proving-neural-network-functions
+problem-generator-neural-network-functions
+```
+
+**为什么判据没抓住**：`tests/test_agent_skills.py` 那条只查「每格 ≥5 且名字都在那 38 个里」——
+两句都在管**另一个方向**（每个角色看够没有），少查一条不会让它们变红。
+「这份来源清单看完没有」当时没有任何判据。
+
+## 二、补法（两步：先真读完，再让机器判）
+
+**第一步，把三份真读完**，抽出的工作逻辑各归其主（都是那三份自己多出来的部分，
+不是同族那份的重复；每条都改写成「谁做、用哪个真动作」）：
+
+| 来源 | 抽出的工作逻辑 | 落在哪 |
+|---|---|---|
+| `problem-generator-neural-network-functions` | **类比要做结构映射**：逐项说清谁对谁（对象 / 参数 / 极值性质 / 唯一性机制），再把已知结论里的**复杂度参数**换成新领域的那个；「换了参数之后还成立吗」正是新题的要害 | D 的手册 `立题-精确到能动手`（第三条纪律） |
+| `construct-counterexamples-neural-network-functions` | **已知的拿来改**：从已证的结论 / 已知构造 / 已知反例出发，只做一件小事（扰动一个参数、组合两个例子、取极限或特化、改掉一条条件）——改的目标是那条**承重**的假设；先试**边界与退化** | E 的手册 `反例优先`（新增第 3 步，原第 3/4 步顺延） |
+| `direct-proving-neural-network-functions` | **一条路不通时先记下试过哪几条，再换**；「把同一份证明再抄一遍不是换路」；上面几条都试过且卡点说得清之后才允许造新办法，造完要回头套回当前子目标验一遍 | F 的手册 `攻坚-一次一步并留中间态`（新增一节） |
+
+三条都只用**已有的动作**（没新增动作、没新增工具），`validate()` 复跑无问题。
+
+**第二步，加覆盖判据**（`tests/test_agent_skills.py` +2 条）：
+
+- `test_the_whole_source_directory_is_surveyed_not_just_five_per_role`：
+  `set(BUILTIN_SOURCES) ⊆ ⋃SURVEY` —— 漏掉任何一个来源就红，报错里逐条列出漏掉的那些；
+- `test_the_negative_control_catches_a_source_that_no_role_surveyed`：
+  把**唯一**提到某来源的那一格摘掉 ⇒ 覆盖集必须正好少那一个（证明这条判据不是真空的）。
+
+## 三、另外三条核对的读数（都过）
+
+- **① 花销与 key**：四段各配一把不同 key（其中 E 换成 `openai/gpt-5`）⇒
+  `models.D` / `models.E` / `models.default`（回落）/ `secretary` 各取各的；
+  单价三档 × 峰谷都带 `source_note='table:deepseek-public-2026-10-14/peak|off_peak'`，
+  未登记厂商回落时 `hit_price_known=False`（「命中价不知道」≠「命中价是 0」）；
+  读侧故意喂一份每段只有三格的旧设置文件 ⇒ 三个作用域的 `MODEL_KEYS` **缺格 0**，
+  真 key 一个都没漏进读数。
+- **② 现做现读**：十个角色的前置索引 678–1327 字符 / 13–19 行，索引里没有正文。
+- **④ 动作真实**：`validate()` 无问题；正文里「指到别人」的 3 条逐条登记在 `_BODY_CROSS_REFS`。
+- **⑤**：§四 12 条 → §五 12 条裁决，10 条不需新动作、1 条不做（#5）、1 条要真机器（R119 已落地）。
+
+## 四、这一轮动到的文件
+
+`src/agentflow/agent_skills.py`（三份手册正文 + `SURVEY` 三条 + 覆盖口径的注释）、
+`tests/test_agent_skills.py`（+2 条判据）、`docs/READING-MAP.md`（行数）、`draft/120`（§一③ / §三第 20 条 / 新增 §七）。
+
+**提示词没动**（`p115` 不变）：改的是手册**正文**与调研记录，都不进前置 —— 前置里只有索引
+（slug + 一句话 + 什么时候读），正合「现做现读」。面快照因此一个字节没动，也未触 FC-27。

@@ -730,10 +730,15 @@ def _e_skills() -> tuple[Skill, ...]:
 
 1. **把命题写成可判定的形式**：哪些是变量、量词怎么排、边界在哪里；
 2. **从最小情形往外试**：参数取最小 → 逐步放大 → 随机试几组；
-3. **落盘**：`E.run_experiment`（数值实验）或 `E.run_script_experiment`（脚本），
+3. **已知的拿来改**（`construct-counterexamples` 那一族最实用的一步）：从一条**已证的结论 /
+   已知的构造 / 已知的反例**出发，只做一件小事 —— 扰动一个参数、把两个例子组合起来、
+   在某个变量上取极限或特化、改掉一条条件 —— **改的目标是那条「承重」的假设**：
+   命题里一旦它不成立、整个结论就塌的那一条。先试**边界与退化**（极值参数、最简模型、
+   对称性最高的那一档、结构塌掉的那种），它们最便宜，也最容易把隐含条件照出来；
+4. **落盘**：`E.run_experiment`（数值实验）或 `E.run_script_experiment`（脚本），
    带 `code_path` / `code_hash` / `exit_code` 与那句可复跑的命令 ——
    **只在报告里写"我试了一个反例"不算**；
-4. **结论二选一**：找到反例 ⇒ 让 `B.register_statement` 把"这一条不成立（反例：exp:…）"
+5. **结论二选一**：找到反例 ⇒ 让 `B.register_statement` 把"这一条不成立（反例：exp:…）"
    如实登记；没找到 ⇒ 把"试了哪几组参数、都没坏"写进依据 —— 它是"没找到"，
    **不是**"成立"。
 
@@ -868,6 +873,16 @@ def _f_skills() -> tuple[Skill, ...]:
 每一步的产出要能**被别人复核**：把一个中间结论写成命题（交 **B** 登记，
 `F → B` 是直接边）或写成盘上的文件（`fs.write`），而不是只在话里说"我证到了这一步"。
 理由：复核的人（**V**）是**冷启动**的 —— 它只看证明本身，不看你的心路。
+
+## 一条路不通时：先记下试过哪几条，再换
+
+同一个子目标**同时想几条路**（直接证 / 反证 / 归纳 / 归约到一条已知结论 / 改写一条已知论证），
+一条走不通就换下一条 —— 但换之前先把"这条路卡在哪"写进盘上那一行：
+**把同一份证明再抄一遍不是换路**，而"我换了思路"不写下来，下一趟的人只会重走第一条。
+
+**什么时候才允许自己造新办法**：上面那几条都试过、且卡点说得清（缺哪条引理、哪一步的界
+对不上、哪条假设用不上）之后。造出来的办法要回头套回**当前这个子目标**上验一遍；
+验不过就如实记"造了、没成" —— 那也是一条留给下一趟的读数。
 
 ## 卡住时
 
@@ -1271,7 +1286,12 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
   它们的确切含义时，它不是一条能动手的题；
 - **细化要减少歧义，不是把问题变平凡**：把"对所有群"改成"对平凡群"确实好证了，
   但那已经不是原来那条题 —— 被改掉的版本**连同理由**要留下（`defer` / `reject` 也留），
-  下一趟的人不该重走一遍。
+  下一趟的人不该重走一遍；
+- **要类比就做结构映射**：新题若是从一条已知结论"类比"过来的，逐项说清**谁对谁**
+  （对象、参数、极值性质、唯一性机制各对应什么），再把那条已知结论里的**复杂度参数**
+  换成新领域的那个（个数 / 维度 / 宽度 / 层数…）。只写"两者很像"不是类比；
+  而"**换了参数之后它还成立吗**"正是这条新题的要害 —— 那一步要么写成可判真假的题面，
+  要么先交给 A 搜一轮泛化（推广 / 类比 / 特例三档）。
 """,
         ),
         Skill(
@@ -1529,8 +1549,12 @@ def _shared_skills() -> tuple[Skill, ...]:
 #:
 #: 键是角色（含 `shared`），值是**真的读过并用上了的**那几条 builtin skill 名
 #: （目录名逐字，见 `temp/deepmath/moonshine/assets/skills/builtin`）。
-#: 判据 `tests/test_agent_skills.py` 断言每格 ≥5 且名字都在那张清单里 ——
-#: 这是"调研过"这件事唯一能被机器核的形态。
+#: 判据 `tests/test_agent_skills.py` 断言两件事：每格 ≥5 且名字都在那张清单里；
+#: 以及**并集覆盖全部 38 个来源**（2026-10-15 R126 补的那一条 —— 此前只查了"每格 ≥5"，
+#: 于是有 3 个来源一次都没被任何一岗记下，而记录里写着"38 条已逐条读完"。
+#: 三份 `-neural-network-functions` 变体读完之后各归其主：D 收 `problem-generator-…`
+#: （类比要做结构映射 + 换掉那个复杂度参数）、E 收 `construct-counterexamples-…`
+#: （已知的拿来改，破那条承重假设）、F 收 `direct-proving-…`（一条路不通先记下试过哪几条）。）
 SURVEY: dict[str, tuple[str, ...]] = {
     "shared": ("math-research-loop", "verify-overall", "pessimistic-verifier",
                "research-consolidation", "memory-hygiene", "conclusion-manage"),
@@ -1547,13 +1571,15 @@ SURVEY: dict[str, tuple[str, ...]] = {
           "math-research-loop", "quality-assessor"),
     "D": ("problem-generator", "problem-refiner", "propose-subgoal-decomposition",
           "cross-domain-explore", "identify-key-failures", "quality-assessor",
-          "problem-solver", "understanding-problems-neural-network-functions"),
+          "problem-solver", "understanding-problems-neural-network-functions",
+          "problem-generator-neural-network-functions"),
     "E": ("construct-counterexamples", "construct-toy-examples",
           "verify-correctness-computation", "examination-of-special-cases-neural-network-functions",
-          "verify-correctness-assumption"),
+          "verify-correctness-assumption",
+          "construct-counterexamples-neural-network-functions"),
     "F": ("lemma-prover", "proof-constructor", "direct-proving", "proof-corrector",
           "propose-subgoal-decomposition", "propose-research-plan-neural-network-functions",
-          "strengthening-agent"),
+          "strengthening-agent", "direct-proving-neural-network-functions"),
     "G": ("research-consolidation", "literature-survey", "quality-assessor",
           "conclusion-manage", "extract-user-memory"),
     "H": ("verify-overall", "verify-correctness-logic", "pessimistic-verifier",

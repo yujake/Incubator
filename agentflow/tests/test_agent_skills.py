@@ -158,6 +158,41 @@ def test_every_role_has_at_least_five_builtin_skills_surveyed():
         assert not unknown, f"{role} 的调研记录里有来源目录里不存在的名字：{unknown}"
 
 
+def test_the_whole_source_directory_is_surveyed_not_just_five_per_role():
+    """**并集必须覆盖全部 38 个来源**（R126 补）：只查"每格 ≥5"会漏掉整份来源。
+
+    这一条是 2026-10-15 的现场读数逼出来的：`SURVEY` 里当时只出现 **35** 个名字，
+    而记录（`draft/120` §三）写着"来源 38 条已逐条读完" —— 三份
+    `-neural-network-functions` 变体一次都没被任何一岗记下。
+    两条口径差在**方向**上：每格 ≥5 管的是"每个角色有没有看够"，
+    覆盖 38 管的是"这份来源清单有没有被看完" —— 少查一条不会让前者变红。
+
+    判据用集合（不是逐格）：一个来源被哪一岗记下由内容决定，不该由这条判据规定。
+    """
+    covered = {n for rows in AS.SURVEY.values() for n in rows}
+    missing = sorted(set(AS.builtin_sources()) - covered)
+    assert not missing, (
+        f"这 {len(missing)} 个来源一次都没被任何一岗记下 ⇒ " "「38 条已逐条读完」这句话是假的："
+        f"{missing}"
+    )
+
+
+def test_the_negative_control_catches_a_source_that_no_role_surveyed(monkeypatch):
+    """反负控：把一条来源从所有格子里摘掉 ⇒ 覆盖判据必须红（否则它是真空的）。
+
+    摘的是**唯一**提到它的那一格 —— 这一支正是漏掉那 3 个来源时的形态。
+    """
+    victim = "direct-proving-neural-network-functions"
+    owners = [k for k, rows in AS.SURVEY.items() if victim in rows]
+    assert len(owners) == 1, f"装置前提：这条来源应当只被一岗记下，实得 {owners}"
+    monkeypatch.setitem(
+        AS.SURVEY, owners[0], tuple(n for n in AS.SURVEY[owners[0]] if n != victim))
+    covered = {n for rows in AS.SURVEY.values() for n in rows}
+    assert victim not in covered, "装置自控失败：摘掉之后它还在覆盖集里"
+    assert set(AS.builtin_sources()) - covered == {victim}, (
+        "摘掉一条来源之后覆盖判据必须正好报出它 —— 报不出来说明这条判据是真空的")
+
+
 def test_the_negative_control_catches_an_empty_when(monkeypatch):
     """反负控之三：`when` 空 ⇒ 红（描述无歧义那一条的最低门槛）。"""
     bad = AS.Skill(slug="没时候", title="没时候", summary="一句话", when="",
