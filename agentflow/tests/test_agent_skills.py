@@ -244,6 +244,41 @@ def test_the_cross_reference_registry_cannot_rot(monkeypatch):
     assert any("_BODY_CROSS_REFS" in p and "已经不成立" in p for p in problems), problems
 
 
+def test_the_manuscript_path_is_named_identically_in_the_spec_and_the_skill():
+    """业主 2026-10-14 第 1 / 2 条那两个落点：**两处必须写得一模一样**。
+
+    研究手稿 `reports/RESEARCH.md`（D 的）与攻坚台账 `reports/attack-<plan_id>.md`（F 的）
+    各出现在两个地方：角色的**声明**（`specs/<角色>.py` 的 policy，进前置提示词 ——
+    因为它必须每一趟都生效）与那份**按需读**的 skill（写细节）。
+
+    两处写岔的表现是最难查的那一种：提示词说 `reports/RESEARCH.md`、
+    skill 说 `reports/research.md`，而**两边都自洽**（模型读哪个都可能），
+    盘上于是出现两份手稿、各自都"像是对的"。
+    """
+    import re
+
+    from agentflow import specs as SP
+
+    pairs = (
+        ("D", "手稿-研究记忆就这一份", "reports/RESEARCH.md"),
+        ("F", "推进-中间成果一处一条", "reports/attack-<plan_id>.md"),
+    )
+    #: 这一族里**允许**出现的落点：手稿、攻坚台账、D 的自动渲染工作稿。
+    #: 别的拼法（大小写不同、多了个横线）一律报 —— 那正是"盘上出现两份手稿"的开端。
+    allowed = {"reports/RESEARCH.md", "reports/attack-<plan_id>.md", "reports/<qid>-research.md"}
+    found_re = re.compile(r"reports/[A-Za-z0-9_<>\-]+\.md")
+    specs = SP.builtin_specs()
+    for role, slug, path in pairs:
+        skill = next(s for s in AS.CATALOG[role] if s.slug == slug)
+        policy = "\n".join(specs[role].brief.policy)
+        assert path in policy, f"{role} 的声明里没有那个落点：{path}"
+        assert path in skill.body, f"{role}/{slug} 的正文里没有那个落点：{path}"
+        for label, text in (("声明", policy), ("skill 正文", skill.body)):
+            found = set(found_re.findall(text))
+            extra = found - allowed
+            assert not extra, f"{role}/{slug} 的{label}里出现了没登记的落点：{sorted(extra)}"
+
+
 def test_the_catalog_covers_every_role():
     """覆盖：`shared` 与**十个角色**每一格都有内容（少一格 = 那一岗没有按需材料）。
 

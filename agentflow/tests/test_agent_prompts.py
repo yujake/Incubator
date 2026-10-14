@@ -2319,18 +2319,25 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: V 加"自足-核的是那一行字面"；`SURVEY` 按这一轮真读过的来源补齐。
 #: 作用域读数（现算对照）：只有 **M / D / F / V** 四格换值，A / B / C / E / G / H 六格
 #: 与 p107 **逐字相同** —— 索引按角色现算，别的角色读不到这四条。
-_FROZEN_PROMPT_VERSION = "p108"
+#: p108 → p109（2026-10-14，业主 12 条裁决逐条落地，见 `draft/120` §五）：六岗**声明**各加一段
+#: （V 的"启动即默认有问题"立场 + 五条审查角度、D 的研究手稿与泛化搜索派活、F 的中间成果落点、
+#: E 的例子交付、A 的泛化搜索、B 的入库审美）+ 四条新 skill。
+#: 作用域读数：**C / H 两格逐字未动**（这两岗与那 12 条都不相干，也不在 D 的伙伴圈里），
+#: 其余八格换值。其中 **G / M 各只动了一行** —— D 那一行伙伴行里**引着 D 的交付物**
+#: （`deliverable` 现在写着研究手稿 `reports/RESEARCH.md`），所以 D 的交付物一变，
+#: 看得到 D 的那两格跟着变；C（没有伙伴）与 H（伙伴是 A/E/G）因此不受影响。
+_FROZEN_PROMPT_VERSION = "p109"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "c1e13a3974f13c43f78f46fbf5453a8397428bcbb3a1b36c983a7a6a8448ec34",
-    "B": "98094630815efaeb48dac896a867ea990bf868bcc799e2540dff78ceee904ff9",
+    "A": "8ce6c71410d9766fbffc9b7ec13a24912de373621c44398a0506033edb868932",
+    "B": "542c9e7ac31b0686a297d7f6656024612fcbbbd5c03851c768cde0493eba9e9c",
     "C": "7f84953788257f1bb70e850167a769e847a9422a0d30c469e8f8d2af62b1dae7",
-    "D": "17318ea90d2249a4c9df60de91694eefac9dcf47cd4e9db8f8da3b4b9e3bd53b",
-    "E": "75c267eda5d8f84c2d5d48fd1afacabada7a3ccf863d9f509d7cd247f4f0b82d",
-    "F": "016dcbe3fb07115c3a565234e5b8476fed7f4d79816fa01129b9bd9e81cdb192",
-    "G": "b53b32548840fc17a91172426fec979d170e6eb7ca69b5c8a5e28f30be44dbc9",
+    "D": "c59b984a13bbd7218a48b5715a7d2f6062574635ffda7703007cb19a43bed0cc",
+    "E": "2a28ba4ab6c6b0053ce0617dc6600e45de71246c94397bd5a77a73d00b122513",
+    "F": "5316ed7bc7e9eb0df01c14d7eaf5346d2ef7fa56e24336ab6786e5b9bb6ebb0b",
+    "G": "54661e42bf8c61ad53917329d5111dc65800b2ccbe1d3da0499bfaeb6ceab8d5",
     "H": "7071d26db3401274fcd8fe58213f72bc5838f57923c008f0d74e4e6e91bc2e2c",
-    "M": "60570a81daa6cd0472e2693bbb50a25dc71a079d293e82650ed8790b5a629eed",
-    "V": "6479b13d1faa5b1c25836a4e329481fdeec132229bf61c8346d35a1353628a87",
+    "M": "c6594fa1506bd65e6d944b84f80eea7a98b2ffe914af290b1f557313db2e8cb1",
+    "V": "5d51cebfc121b8b2afc5fd6e39c4d99eac8308ab08945a66365cd8752d62cfb4",
 }
 
 
