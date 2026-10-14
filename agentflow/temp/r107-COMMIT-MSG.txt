@@ -1,0 +1,56 @@
+R107 按角色用不同厂商的 key + 秘书另共用一把（业主 2026-10-14 裁定 ① 的后半句）
+
+业主原话：「允许不同角色智能体用不同模型厂商的不同 api key（所有智能体的秘书另外
+共用一个 api key）」。
+
+## 一、设置文件长出了两段（读写都长）
+
+- `models`：**按角色**覆盖，键是角色名（`A`–`H` / `V` / `M`，从 `schema.ROLES` 现取）
+  或 `default`，值是 `MODEL_KEYS` 的子集；
+- `secretary`：**所有角色的秘书共用**的那一档（形状与 `model` 段逐字相同）；
+- `MODEL_KEYS` 加了一格 `vendor`（厂商名，今天的作用只有一个：`base_url` 没给时
+  按它选端点，见 `modelgw.VENDOR_BASE_URLS`；多厂商价目表在下一批）。
+
+三件事同时做到，缺一条这段配置就不可用：
+
+1. **读取有梯子**（唯一实现在 `settings.model_settings_for` / `secretary_settings`）：
+   `models.<角色>` → `models.default` → `model` 段 →（再往上由 `env_or_setting` 接管）
+   环境变量 → 内置缺省。**逐键取**而不是整段覆盖 —— "只给 A 换一把 key"是最常见的
+   写法，整段覆盖会把 `base_url`/`name` 一起清空，症状是"A 那一路突然按缺省端点跑"，
+   而且不会有任何报错。
+2. **写入有校验与槽级合并**：`models` 的槽必须是真角色名或 `default`、键必须登记过，
+   拼错一律拒且**零写入**；合并是**槽级**的（改 A 不动 B 与 `secretary`）。
+3. **key 只写不读**：`model` 段、`models` 的**每一个槽**、`secretary` 那一档都只回显
+   `***`（掩码只有一份实现 `_masked_model_cell` —— 漏掩一个槽就等于把那把 key 回显出来）。
+
+## 二、缝按角色造，秘书那一把真的会被用上
+
+- `modelgw.spec_for(role=…|secretary=True)`：取配置 + 报**来源**
+  （`models.A` / `models.default` / `model` / `secretary` / 空串）；
+- `llmseam.LlmSeam.for_role(role, settings_path=…)` 走它；
+  新增 `for_secretary(owner_role=…)`（`role` 记成 `secretary:<本体角色>`，
+  于是账本 `by_role` 上分得清"哪个角色的秘书花的钱"）；
+- `agent_loop._secretary_for` 改成：**`secretary` 那一档自己配了 key 才另起一个缝**
+  （账本 / 预算上限 / 价目表仍与本体共用同一份，换的只是 key/端点/模型），
+  没配就退回本体的缝（老行为逐字不变）；两条路都写进 `Secretary.model_source`。
+
+为什么判据是"那一格配没配"而不是"梯子末端有没有 key"：末端是 `model` 段，几乎所有
+工作区都配了它 —— 那等于默认给每个秘书换一把新缝，后果是
+① 判据里的替身网关会被一把真 key 顶掉（秘书改用真网关发请求）、
+② 账本归口从本体角色变成 `secretary:<角色>`（历史读数跟着变）。
+
+## 三、台面（`GET /api/machine`）
+
+`settings` 读数里加了 `models`（**每个槽**一档，key 一律掩码 + `configured` +
+`source`）与 `secretary`（同上 + 那一档自己的原文也掩码）。设置页面的编辑面
+（`ui/src/pages/Machine.tsx`）与类型再生成放下一批（R108）。
+
+## 四、判据
+
+`tests/test_role_models.py` 九条：三段梯子逐格取值与来源、环境变量仍压在最上面、
+`vendor` 只在缺 `base_url` 时选端点、**秘书那一档全角色共用**、每个槽都掩码
+（盘上是真值）、槽/键拼错零写入、槽级合并不动别的槽、装配口在配了秘书档时给另一把
+key 的缝（且预算窗口共用）、没配时退回本体缝。
+
+读数：`test_role_models` + `test_settings` + `test_webui_settings_write` +
+`test_webui_readers` + `test_webui` + `test_agent_loop` + `test_secretary` 全绿。

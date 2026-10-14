@@ -287,12 +287,40 @@ class LlmSeam:
     # -------------------------------------------------------------- 构造
     @classmethod
     def for_role(cls, role: str, *, session_root: Path | str, gateway: Any | None = None,
-                 from_env: bool = True, **kw: Any) -> "LlmSeam":
-        """按角色造一个缝。`from_env=True` 时从环境变量读配置（没 key 就是没接线）。"""
+                 from_env: bool = True, settings_path: str | Path | None = None,
+                 **kw: Any) -> "LlmSeam":
+        """按角色造一个缝。`from_env=True` 时读配置（没 key 就是没接线）。
+
+        配置的梯子是 `modelgw.spec_for(role, ...)`：`models.<角色>` → `models.default`
+        → `model` 段 → 环境变量 → 内置缺省（业主 2026-10-14：允许按角色用不同厂商的
+        不同 key）。`gateway` 显式给的时候按老口径用给的那个（判据与替身模型都走这条）。
+        """
         if gateway is None and from_env:
-            spec = MG.spec_from_env()
+            spec, _where = MG.spec_for(role, path=settings_path)
             gateway = MG.ModelGateway(spec) if spec.configured else None
         return cls(role=role, session_root=Path(session_root), gateway=gateway, **kw)
+
+    @classmethod
+    def for_secretary(cls, *, owner_role: str = "", session_root: Path | str,
+                      gateway: Any | None = None, from_env: bool = True,
+                      settings_path: str | Path | None = None, **kw: Any) -> "LlmSeam":
+        """**所有角色的秘书共用**的那一把 key（业主 2026-10-14 的后半句）。
+
+        它与 :meth:`for_role` 的差别只有一处：配置的第一格是 `secretary` 段
+        （`modelgw.spec_for(secretary=True)`），而不是那个角色自己的那一档。
+        为什么秘书要单独一把：秘书的模型调用是"判断类"（`Secretary.judge`），
+        共用一把 key 才能单独限额、单独看账；而"本体的 key"与"秘书的 key"
+        混在一起时，一次判断花掉的钱会记在本体的账上、看不出是谁花的。
+
+        `role` 那一栏记的是 `secretary:<owner_role>` —— 账本按 `by_role` 归口，
+        这一栏让"哪个角色的秘书花的钱"在汇总里读得出来
+        （`usage_ledger` 的 `by_role` 那一栏）。
+        """
+        if gateway is None and from_env:
+            spec, _where = MG.spec_for(secretary=True, path=settings_path)
+            gateway = MG.ModelGateway(spec) if spec.configured else None
+        label = f"secretary:{owner_role}" if owner_role else "secretary"
+        return cls(role=label, session_root=Path(session_root), gateway=gateway, **kw)
 
     @property
     def wired(self) -> bool:

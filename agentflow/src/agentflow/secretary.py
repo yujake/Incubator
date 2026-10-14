@@ -662,9 +662,15 @@ class Secretary:
         #: 关着的时候 :meth:`judge` 仍然返回三态中的"没查成"（`checked=False` + 理由），
         #: 于是"判断没做"与"判断过了、可派"在台账上永远分得开。
         #:
-        #: 生产装配由 `agent_loop._secretary_for` 打开它（主控裁定 A5）：
-        #: 用本体自己的那一个缝（同一个实例 ⇒ 角色/scope/账本一致，钱记在同一条账上）。
+        #: 生产装配由 `agent_loop._secretary_for` 打开它（主控裁定 A5）。
+        #: 2026-10-14 起那一口还会按业主的裁定换一把 key：设置文件里配了
+        #: `secretary` 档 ⇒ 秘书走**全角色共用**的那一档模型
+        #: （`llmseam.LlmSeam.for_secretary`）；没配 ⇒ 退回本体那一个缝。
         self.enable_model = bool(enable_model)
+        #: 秘书这一趟的模型是从哪一档来的（读数：`secretary（…）` / `body（…）`）。
+        #: 它回答"这次判断花的是共用那把 key，还是本体那把" —— 而这正是
+        #: 「所有智能体的秘书另外共用一个 api key」这条裁定生效与否的唯一机器读数。
+        self.model_source: str = ""
         #: 写集的声明式落点：它让"秘书有没有写集、写哪几张表"成为一个可读的事实，
         #: 而不是"读遍本文件找不到 store.tx 所以大概没有"。
         #: 2026-10-09 起不是空集：B 的写入代理要落 `statements`（含概念行）与

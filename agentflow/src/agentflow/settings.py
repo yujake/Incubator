@@ -103,6 +103,8 @@ import os
 from pathlib import Path
 from typing import Any, Mapping
 
+from . import schema as S   # `ROLE_SLOTS` 从 `S.ROLES` 现取（角色名单只有一处）
+
 __all__ = [
     "BOOL_KEYS",
     "DEFAULT_LEAN_ENABLED",
@@ -177,7 +179,17 @@ BOOL_KEYS: tuple[str, ...] = (LEAN_ENABLED_KEY,)
 #: `modelgw.REASONING_EFFORTS` —— 本模块按设计不认识业务词表（它只管"取到一个字符串"），
 #: 在这里再写一份就是同一个词表的第二个定义点。词表外的取值由
 #: `modelgw.ModelSpec` 构造时当场拒绝（拼错一个字母会报错，不会静默按缺省跑）。
-MODEL_KEYS: tuple[str, ...] = ("api_key", "base_url", "name", "reasoning_effort")
+MODEL_KEYS: tuple[str, ...] = ("vendor", "api_key", "base_url", "name", "reasoning_effort")
+#: `models` 段（**按角色**覆盖，业主 2026-10-14：「允许不同角色智能体用不同模型厂商的
+#: 不同 api key」）：键是角色名（`A`–`H` / `V` / `M`）或 `default`，值是那一段
+#: `MODEL_KEYS` 的子集。取缝时的梯子是：`models.<角色>` → `models.default` → `model`
+#: → 环境变量 → 缺省（唯一实现 `modelgw.spec_for`）。
+MODELS_SECTION = "models"
+#: `models` 段里那个"谁都兜底"的角色名。
+DEFAULT_MODEL_SLOT = "default"
+#: `secretary` 段：**所有角色的秘书共用**的那一档（业主同一条裁定的后半句：
+#: 「所有智能体的秘书另外共用一个 api key」）。形状与 `model` 段逐字相同。
+SECRETARY_SECTION = "secretary"
 #: `workspace` 段认识的键（顺序即文档顺序）。
 WORKSPACE_KEYS: tuple[str, ...] = ("projects_dir",)
 
@@ -339,14 +351,100 @@ def _parse_switch(raw: str, *, where: str) -> bool:
 
 def model_settings(path: str | Path | None = None, *,
                    env: Mapping[str, str] | None = None) -> dict[str, str]:
-    """`model` 段：`api_key` / `base_url` / `name` / `reasoning_effort`（缺的补空串）。
+    """`model` 段：`vendor` / `api_key` / `base_url` / `name` / `reasoning_effort`（缺的补空串）。
 
     这一口只负责「取值」，不负责脱敏也不负责判定：回显 key 的地方一律走
     `ModelSpec.redacted()`（见模块 docstring 的「安全阀」）。
     `reasoning_effort` 空串 = 未设置 = 用缺省（`modelgw.DEFAULT_REASONING_EFFORT`，High）；
     它的词表外取值也不在这里判（见 `MODEL_KEYS` 上面那段理由）。
+
+    它是**默认档**：按角色取缝走 :func:`model_settings_for`（那一口把 `models.<角色>`
+    与 `models.default` 叠在上面）；`model` 段本身仍然有效（向后兼容：只配过它的
+    工作区/机器行为逐字不变）。
     """
     return _section("model", MODEL_KEYS, path, env)
+
+
+def _models_section(path: str | Path | None = None, *,
+                    env: Mapping[str, str] | None = None) -> dict[str, dict[str, str]]:
+    """`models` 段原文：`{角色: {键: 值}}`（只认 `MODEL_KEYS`，缺的补空串）。
+
+    形状不合法（不是对象 / 某个槽不是对象）时**跳过那一格**并在
+    :func:`models_reading` 里如实报出来 —— 不清空别人的配置，也不假装读过。
+    """
+    raw = load_settings(path, env=env)
+    seg = raw.get(MODELS_SECTION)
+    seg = seg if isinstance(seg, Mapping) else {}
+    out: dict[str, dict[str, str]] = {}
+    for slot, body in seg.items():
+        if not isinstance(body, Mapping):
+            continue
+        out[str(slot)] = {k: (str(body.get(k)).strip() if isinstance(body.get(k), str) else "")
+                          for k in MODEL_KEYS}
+    return out
+
+
+def model_settings_for(role: str, path: str | Path | None = None, *,
+                       env: Mapping[str, str] | None = None) -> tuple[dict[str, str], str]:
+    """某个角色该用哪一档模型：返回 `(值, 来源)`。
+
+    梯子（唯一口径，唯一实现在这里；`modelgw.spec_for` 直接调它）：
+
+        `models.<角色>`（逐键取非空） → `models.default` → `model` 段 → 空串
+
+    为什么是**逐键**取而不是"整段覆盖"：运维最常见的写法是"只给 A 换一把 key、
+    其余沿用默认档" —— 整段覆盖会把 `base_url` / `name` 一起清空，
+    症状是"A 那一路突然按缺省端点跑"，而那不会有任何报错。
+
+    `来源` 记的是这一档的**出处**（`role:A` / `models.default` / `model` / 空串 =
+    什么都没有，调用方接着走环境变量与缺省）。它进读数：出了事要能回答
+    "这把 key 是从哪一格来的"。
+    """
+    base = model_settings(path, env=env)
+    slots = _models_section(path, env=env)
+    merged = dict(base)
+    source = "model" if any(str(v or "").strip() for v in base.values()) else ""
+    if DEFAULT_MODEL_SLOT in slots:
+        for k, v in slots[DEFAULT_MODEL_SLOT].items():
+            if str(v or "").strip():
+                merged[k] = v
+        if any(str(v or "").strip() for v in slots[DEFAULT_MODEL_SLOT].values()):
+            source = f"{MODELS_SECTION}.{DEFAULT_MODEL_SLOT}"
+    mine = slots.get(str(role)) or {}
+    for k, v in mine.items():
+        if str(v or "").strip():
+            merged[k] = v
+    if any(str(v or "").strip() for v in mine.values()):
+        source = f"{MODELS_SECTION}.{role}"
+    return merged, source
+
+
+def secretary_settings(path: str | Path | None = None, *,
+                       env: Mapping[str, str] | None = None) -> tuple[dict[str, str], str]:
+    """**所有角色的秘书共用**的那一档模型（业主 2026-10-14 的后半句）。
+
+    梯子与 :func:`model_settings_for` 同形，只是第一格换成 `secretary` 段：
+    `secretary` → `models.default` → `model` → 空串。
+
+    为什么秘书要单独一档：秘书的模型调用是"判断类"（`Secretary.judge`），
+    与本体那些"干活类"调用在成本与用途上都不是一回事；共用一把 key 才能单独
+    限额、单独看账（`usage_ledger` 的 `by_role` 里它们记在各自的 `by_role` 上）。
+    """
+    base = model_settings(path, env=env)
+    slots = _models_section(path, env=env)
+    merged = dict(base)
+    source = "model" if any(str(v or "").strip() for v in base.values()) else ""
+    if DEFAULT_MODEL_SLOT in slots:
+        for k, v in slots[DEFAULT_MODEL_SLOT].items():
+            if str(v or "").strip():
+                merged[k] = v
+    own = _section(SECRETARY_SECTION, MODEL_KEYS, path, env)
+    for k, v in own.items():
+        if str(v or "").strip():
+            merged[k] = v
+    if any(str(v or "").strip() for v in own.values()):
+        source = SECRETARY_SECTION
+    return merged, source
 
 
 def workspace_settings(path: str | Path | None = None, *,
@@ -425,6 +523,23 @@ def _write_sections() -> tuple[tuple[str, tuple[str, ...]], ...]:
             ("workspace", WORKSPACE_KEYS))
 
 
+def _nested_write_sections() -> tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]:
+    """**嵌套**的那两段：`models`（槽 → 键）与 `secretary`（平的一段）。
+
+    为什么单列一张表而不是把 `_write_sections` 改成嵌套形状：平的那三段被
+    `_section()` / `_masked_section()` / 面板 `/api/machine` 三处按「段→键」读，
+    把它们的形状改掉等于同时改三处的契约；嵌套只影响新增的这两段。
+    """
+    return ((MODELS_SECTION, MODEL_KEYS, ROLE_SLOTS), (SECRETARY_SECTION, MODEL_KEYS, ()))
+
+
+#: `models` 段允许的槽：十个角色 + `default`。
+#:
+#: 它从 `schema.ROLES` 现取（不另写名单）：角色名是跨模块约定，
+#: 手抄一份会在加角色时静默漏掉那一格。
+ROLE_SLOTS: tuple[str, ...] = (DEFAULT_MODEL_SLOT,) + tuple(S.ROLES)
+
+
 def _clean_write_values(values: Mapping[str, Any]) -> tuple[dict[str, dict[str, str]], str]:
     """把要写进去的东西整理成 `{段: {键: 字面值}}`；不合法 ⇒ `(空, 理由)`。
 
@@ -438,55 +553,131 @@ def _clean_write_values(values: Mapping[str, Any]) -> tuple[dict[str, dict[str, 
     空串是合法的值：它是「清掉这一格」的写法（读侧把空串当未设置）。
     """
     known = dict(_write_sections())
-    out: dict[str, dict[str, str]] = {}
+    nested = {name: keys for name, keys, _slots in _nested_write_sections()}
+    slots_of = {name: slots for name, _keys, slots in _nested_write_sections()}
+    out: dict[str, Any] = {}
     for raw_section, raw_seg in (values or {}).items():
         section = str(raw_section)
+        if section in nested:
+            # 嵌套那两段：`models`（槽 → 键）与 `secretary`（平的一段）。
+            if not isinstance(raw_seg, Mapping):
+                return {}, f"{section} 段必须是一个对象（收到 {type(raw_seg).__name__}）"
+            allowed_slots = slots_of[section]
+            if allowed_slots:
+                body: dict[str, dict[str, str]] = {}
+                for raw_slot, raw_cell in raw_seg.items():
+                    slot = str(raw_slot)
+                    if slot not in allowed_slots:
+                        return {}, (f"不认 {section} 段的这个槽：{slot!r}"
+                                    f"（只认 {list(allowed_slots)}）—— 角色名从 "
+                                    "`schema.ROLES` 现取，拼错一律拒，免得写进一格没人读的配置")
+                    seg, why = _clean_flat(section, slot, raw_cell, nested[section])
+                    if why:
+                        return {}, why
+                    body[slot] = seg
+                out[section] = body
+            else:
+                seg, why = _clean_flat(section, "", raw_seg, nested[section])
+                if why:
+                    return {}, why
+                out[section] = seg
+            continue
         if section not in known:
             return {}, (f"不认这段设置：{section!r}（只认 {sorted(known)}）—— "
                         "未知段一律拒，不悄悄写进去")
-        if not isinstance(raw_seg, Mapping):
-            return {}, f"{section} 段必须是一个对象（收到 {type(raw_seg).__name__}）"
-        seg: dict[str, str] = {}
-        for raw_key, raw_value in raw_seg.items():
-            key = str(raw_key)
-            if key not in known[section]:
-                return {}, (f"不认 {section} 段的这个键：{key!r}"
-                            f"（只认 {list(known[section])}）")
-            if raw_value is None:
-                seg[key] = ""
-            elif key in BOOL_KEYS:
-                # `lean_enabled` 是布尔键：真布尔与认得的字符串都收，
-                # 归一成 `"true"`/`"false"` 落盘（读侧两条写法都认）。
-                # 认不出的字符串在这里就拒 —— 写进去一条永远读不懂的配置，
-                # 症状是"我配了，运行的时候却报错/却按缺省跑"，那比当场拒更贵。
-                cell = _bool_cell(key, raw_value)
-                if not isinstance(cell, str) or cell not in ("true", "false", ""):
-                    return {}, (f"{section}.{key} 只认真布尔或 'true'/'false'"
-                                f"（收到 {raw_value!r}）—— 其余写法一律拒，"
-                                "免得写进一条读侧读不懂的配置")
-                seg[key] = cell
-            elif isinstance(raw_value, str):
-                seg[key] = raw_value.strip()
-            else:
-                return {}, (f"{section}.{key} 的值必须是字符串（收到 "
-                            f"{type(raw_value).__name__}）—— 非字符串一律拒，"
-                            "免得写进一条读侧永远读不到的配置")
+        seg, why = _clean_flat(section, "", raw_seg, known[section])
+        if why:
+            return {}, why
         out[section] = seg
     return out, ""
 
 
+def _clean_flat(section: str, slot: str, raw_seg: Any,
+                keys: tuple[str, ...]) -> tuple[dict[str, str], str]:
+    """把一段（或 `models` 里的一个槽）整理成 `{键: 字面值}`；不合法 ⇒ `(空, 理由)`。"""
+    where = f"{section}.{slot}" if slot else section
+    who = f"{section} 段" if not slot else f"{section}.{slot}"
+    if not isinstance(raw_seg, Mapping):
+        return {}, f"{where} 必须是一个对象（收到 {type(raw_seg).__name__}）"
+    seg: dict[str, str] = {}
+    for raw_key, raw_value in raw_seg.items():
+        key = str(raw_key)
+        if key not in keys:
+            # 平的那几段沿用原措辞（判据逐字钉它）；嵌套那两段点名 `段.槽`。
+            head = f"不认 {who} 的这个键" if slot else f"不认 {who}的这个键"
+            return {}, (f"{head}：{key!r}（只认 {list(keys)}）")
+        if raw_value is None:
+            seg[key] = ""
+        elif key in BOOL_KEYS:
+            # `lean_enabled` 是布尔键：真布尔与认得的字符串都收，
+            # 归一成 `"true"`/`"false"` 落盘（读侧两条写法都认）。
+            # 认不出的字符串在这里就拒 —— 写进去一条永远读不懂的配置，
+            # 症状是"我配了，运行的时候却报错/却按缺省跑"，那比当场拒更贵。
+            cell = _bool_cell(key, raw_value)
+            if not isinstance(cell, str) or cell not in ("true", "false", ""):
+                return {}, (f"{where}.{key} 只认真布尔或 'true'/'false'"
+                            f"（收到 {raw_value!r}）—— 其余写法一律拒，"
+                            "免得写进一条读侧读不懂的配置")
+            seg[key] = cell
+        elif isinstance(raw_value, str):
+            seg[key] = raw_value.strip()
+        else:
+            return {}, (f"{where}.{key} 的值必须是字符串（收到 "
+                        f"{type(raw_value).__name__}）—— 非字符串一律拒，"
+                        "免得写进一条读侧永远读不到的配置")
+    return seg, ""
+
+
+def _masked_model_cell(seg: Mapping[str, Any]) -> dict[str, str]:
+    """一档模型配置的回显形态（`MODEL_KEYS` 的键 + `api_key` 掩码）。
+
+    它同时服务三处：`model` 段、`models` 的每个槽、`secretary` 段 ——
+    三处形状逐字相同，掩码规则也就只能有一份（漏一处就是把那把 key 回显出来）。
+    """
+    out: dict[str, str] = {}
+    for k in MODEL_KEYS:
+        v = seg.get(k)
+        out[k] = v.strip() if isinstance(v, str) else ""
+    if out.get("api_key"):
+        out["api_key"] = MASKED_KEY
+    return out
+
+
 def _masked_section(section: str, seg: Mapping[str, Any]) -> dict[str, str]:
-    """一段的回显形态：`model.api_key` 换成 `MASKED_KEY`，其余原样。
+    """一段的回显形态：`api_key` 换成 `MASKED_KEY`，其余原样。
 
     key 只写不读那条裁定的落点就是这一个函数（判据的负控把它改成恒等函数，
     正控必须当场红 —— 否则"不回显"这句话没有任何机器读数）。
     """
+    if section in ("model", SECRETARY_SECTION):
+        return _masked_model_cell(seg)
     out = {}
     for k in dict(_write_sections()).get(section, ()):
         v = _bool_cell(k, seg.get(k))
         out[k] = v if isinstance(v, str) else ""
-    if section == "model" and out.get("api_key"):
-        out["api_key"] = MASKED_KEY
+    return out
+
+
+def _masked_models(seg: Mapping[str, Any]) -> dict[str, Any]:
+    """`models` 段的回显形态：**每一个槽**的 `api_key` 都换成掩码。
+
+    只掩 `model` 段那一处是最容易写漏的地方（判据 `test_role_models` 里有一条
+    负控专门盯它）：按角色配 key 之后，一个漏掩的槽就等于把那把 key 回显出来了。
+    """
+    out: dict[str, Any] = {}
+    raw = seg if isinstance(seg, Mapping) else {}
+    for slot, body in raw.items():
+        out[str(slot)] = _masked_model_cell(body if isinstance(body, Mapping) else {})
+    return out
+
+
+def _masked_all(merged: Mapping[str, Any]) -> dict[str, Any]:
+    """整份设置的回显形态（面板那一侧读它）：平的三段 + `models` + `secretary`。"""
+    out: dict[str, Any] = {name: _masked_section(name, merged.get(name) or {})
+                           for name, _keys in _write_sections()}
+    out[MODELS_SECTION] = _masked_models(merged.get(MODELS_SECTION) or {})
+    out[SECRETARY_SECTION] = _masked_section(SECRETARY_SECTION,
+                                             merged.get(SECRETARY_SECTION) or {})
     return out
 
 
@@ -579,9 +770,7 @@ def write_settings(values: Mapping[str, Any], path: str | Path | None = None, *,
                            f"{ENV_SETTINGS}）⇒ 什么都没写")}
     clean, why = _clean_write_values(values)
     if why:
-        masked = {name: _masked_section(name, (clean or {}).get(name, {}))
-                  for name, _keys in _write_sections()}
-        return {"ok": False, "tri": "refused", "path": str(target), "values": masked,
+        return {"ok": False, "tri": "refused", "path": str(target), "values": _masked_all({}),
                 "permissions": {}, "reason": why}
     try:
         current = load_settings(target, env=env)
@@ -594,6 +783,16 @@ def write_settings(values: Mapping[str, Any], path: str | Path | None = None, *,
                            f"{type(exc).__name__}: {exc}")}
     merged: dict[str, Any] = dict(current)
     for section, seg in clean.items():
+        if section == MODELS_SECTION:
+            # 槽级合并：只改点到的那些槽，别的槽一个字节不动
+            # （整段覆盖会把"没提过的角色"的配置一次抹掉）。
+            base = merged.get(section)
+            base = dict(base) if isinstance(base, Mapping) else {}
+            for slot, cell in seg.items():
+                old = base.get(slot)
+                base[slot] = {**(dict(old) if isinstance(old, Mapping) else {}), **cell}
+            merged[section] = base
+            continue
         base = merged.get(section)
         base = dict(base) if isinstance(base, Mapping) else {}
         base.update(seg)
@@ -606,11 +805,24 @@ def write_settings(values: Mapping[str, Any], path: str | Path | None = None, *,
     perms = _tighten(Path(target))
     # 回显按盘上合并后的那一份算（而不是按调用方给的那一份）：这样"写进去的"
     # 与"回报的"是同一件事，漏掉一个键会当场看出来。
-    masked = {name: _masked_section(name, merged.get(name) or {})
-              for name, _keys in _write_sections()}
+    masked = _masked_all(merged)
     # 理由里只写"改了哪几格"的键名，绝不带值 —— 这一句是要进回执与审计的，
     # 带上值就等于让 key 从另一条路回显出来。
-    touched = sorted(f"{section}.{key}" for section, seg in clean.items() for key in seg)
+    touched = sorted(_touched_names(clean))
     return {"ok": True, "tri": "written", "path": str(target), "values": masked,
             "permissions": perms,
             "reason": f"已写入 {target}（只改了这几格：{touched}）"}
+
+
+def _touched_names(clean: Mapping[str, Any]) -> list[str]:
+    """回执里那句"只改了这几格"的键名（嵌套段展开成 `models.A.api_key` 这种）。"""
+    out: list[str] = []
+    for section, seg in clean.items():
+        if not isinstance(seg, Mapping):
+            continue
+        if section == MODELS_SECTION:
+            for slot, cell in seg.items():
+                out.extend(f"{section}.{slot}.{k}" for k in cell)
+        else:
+            out.extend(f"{section}.{k}" for k in seg)
+    return out

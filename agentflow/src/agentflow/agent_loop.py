@@ -5833,22 +5833,65 @@ def _secretary_for(role: str, *, root: Path | str, store: Any, registry: Any,
 
     主控裁定 A5（2026-10-06）：打开秘书的模型判断。三个条件写在这一个函数里：
 
-    1. 同一个缝实例 —— 传进去的就是 `run_role` 为这个角色造的那一个
-       `LlmSeam`（`:2958`）。同一个实例意味着角色、`scope`、账本、预算都是同一份，
-       于是判断那一笔钱记在本体自己的账上，而不是另开一本；
+    1. **秘书自己那一档模型**（业主 2026-10-14：「所有智能体的秘书另外共用一个
+       api key」）：设置文件里有 `secretary` 段（或它回落到的某一档）配了 key 时，
+       秘书走 `LlmSeam.for_secretary`（同一把 key、同一个模型，全角色的秘书共用）；
+       **没配**时退回本体的缝（老行为逐字不变）—— 这一档不是"必须另配一把"，
+       而是"配了就真的用那一把"。两条路都写进 `Secretary.model_source` 留痕；
     2. `enable_model=True` —— 关着的时候三条判断在生产里等于不存在，
        而"把该不该派的判断全写死成确定性规则"正是用户点名不要的形态；
        花销由 `Secretary.should_engage` 绑在问题量上（干净的派活 0 次调用）；
     3. 可归因 —— 每次判断的 `usage_id`（取不到就 `call_index`）由
        `Secretary.last_judge_cost` 从缝自己落的 `llm_call` 事件读回来、进决定台账。
+       秘书那一档的账记在 `by_role="secretary:<本体角色>"` 上：共用一把 key
+       仍然分得清是哪个角色的秘书花的钱。
 
     装配失败不抛（fail-open）：`run_role` 那一层兜住异常 ⇒ 不装配秘书
     （写路径关闭、判断不发生），而这一趟照跑。
     """
     from . import secretary as _SEC
+    from . import modelgw as _MG
 
-    return _SEC.for_role(role, root=root, store=store, registry=registry,
-                         seam=seam, enable_model=True, sid=sid)
+    seam_for_secretary, source = _secretary_seam(role, root=root, seam=seam, sid=sid,
+                                                 mg=_MG)
+    sec = _SEC.for_role(role, root=root, store=store, registry=registry,
+                        seam=seam_for_secretary, enable_model=True, sid=sid)
+    try:
+        sec.model_source = source
+    except Exception:  # noqa: BLE001 —— 留痕失败不许带走秘书
+        pass
+    return sec
+
+
+def _secretary_seam(role: str, *, root: Path | str, seam: Any, sid: str | None,
+                    mg: Any) -> tuple[Any, str]:
+    """秘书这一趟用哪个缝（返回 `(缝, 来源)`；来源进 `Secretary.model_source`）。
+
+    **只有 `secretary` 段自己配了 key 才另起一个缝。** 为什么不用"梯子回落到了有 key
+    的那一档"作判据：回落链的末端是 `model` 段，而几乎所有工作区都配了它 ——
+    那等于"默认就给每个秘书换一把新缝"，后果有两样，都不是我们想要的：
+    ① 测试里那些替身网关会被一把真 key 顶掉（秘书改用真网关发请求）；
+    ② 账本归口从本体角色变成 `secretary:<角色>`，历史读数跟着变。
+    业主那句话的意思是"**另配**一把共用的 key 时用它"，所以判据就是那一格配没配。
+    """
+    if seam is None:
+        return None, "none"
+    from . import settings as SET
+
+    try:
+        spec, where = mg.spec_for(secretary=True)
+    except Exception as exc:  # noqa: BLE001 —— 配置读不成 ⇒ 退回本体那一档
+        return seam, f"body（秘书档读不成：{type(exc).__name__}: {exc}）"
+    if not spec.configured or where != SET.SECRETARY_SECTION:
+        return seam, f"body（secretary 档没配 key：{where or '空'}）"
+    # 共用的三样照抄本体的缝：账本（唯一一份账）、预算上限、价格表 ——
+    # 秘书那一档换的只是"用哪把 key/哪个端点/哪个模型"，不换预算窗口。
+    return LlmSeam(role=f"secretary:{role}", session_root=Path(root),
+                   gateway=mg.ModelGateway(spec), sid=sid,
+                   usd_budget=getattr(seam, "usd_budget", None),
+                   price=getattr(seam, "price", None),
+                   meter=getattr(seam, "meter", None),
+                   budget_of=getattr(seam, "budget_of", None)), f"secretary（{where}）"
 
 
 def run_role(role: str, task: str, *, store: Any, registry: Any,

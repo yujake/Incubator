@@ -918,10 +918,10 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     在 key 非空时给 `***`）。判据 `tests/test_webui_readers.py` 有一条逐字符断言
     真 key 不在读数里。
     """
-    from ..modelgw import ModelSpec, key_source
-    from ..settings import (MODEL_KEYS, TOOLCHAIN_KEYS, WORKSPACE_KEYS, load_settings,
-                            model_settings, settings_path, toolchain_settings,
-                            workspace_settings)
+    from ..modelgw import ModelSpec, key_source, spec_for
+    from ..settings import (MODELS_SECTION, SECRETARY_SECTION, TOOLCHAIN_KEYS,
+                            WORKSPACE_KEYS, load_settings, model_settings, settings_path,
+                            toolchain_settings, workspace_settings)
 
     path = settings_path()
     on_disk = bool(path is not None and Path(path).is_file())
@@ -929,12 +929,44 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         raw = load_settings()
     except Exception as exc:  # noqa: BLE001 - 设置文件坏掉 = 没查成，不是"没配"
         return ({"path": str(path) if path else "", "exists": on_disk,
-                 "toolchain": {}, "model": {}, "workspace": {}},
+                 "toolchain": {}, "model": {}, "workspace": {},
+                 MODELS_SECTION: {}, SECRETARY_SECTION: {}},
                 TRI_UNREADABLE, f"settings.load_settings 读不出来："
                                 f"{type(exc).__name__}: {exc}")
     tool = {k: str(v) for k, v in toolchain_settings().items()}
     model = {k: str(v) for k, v in model_settings().items()}
     work = {k: str(v) for k, v in workspace_settings().items()}
+    # 按角色 / 秘书那两档（业主 2026-10-14）：只给**掩码后**的形态 + "配没配"
+    # （真 key 一个字都不进读数，与 `model.api_key` 同一条纪律）。
+    slots: dict[str, Any] = {}
+    for slot in sorted((raw.get(MODELS_SECTION) or {}) if isinstance(raw, dict) else {}):
+        try:
+            spec_slot, where = spec_for(str(slot))
+        except Exception:  # noqa: BLE001 —— 单独一档坏掉不带走整份读数
+            slots[str(slot)] = {"configured": False, "key_source": "", "problem": "读不出来"}
+            continue
+        red_slot = spec_slot.redacted()
+        slots[str(slot)] = {"api_key": red_slot["api_key"], "base_url": red_slot["base_url"],
+                            "name": red_slot["model"],
+                            "reasoning_effort": red_slot["reasoning_effort"],
+                            "key_source": key_source(), "configured": spec_slot.configured,
+                            "source": where}
+    sec_cell: dict[str, Any] = {}
+    try:
+        sec_spec, sec_where = spec_for(secretary=True)
+        red_sec = sec_spec.redacted()
+        sec_cell = {"api_key": red_sec["api_key"], "base_url": red_sec["base_url"],
+                    "name": red_sec["model"], "reasoning_effort": red_sec["reasoning_effort"],
+                    "configured": sec_spec.configured, "source": sec_where,
+                    "own_slot": (raw.get(SECRETARY_SECTION) or {}) if isinstance(raw, dict) else {}}
+    except Exception as exc:  # noqa: BLE001
+        sec_cell = {"configured": False, "problem": f"{type(exc).__name__}: {exc}"}
+    if isinstance(sec_cell.get("own_slot"), Mapping):
+        # 那一档自己的 key 也只以掩码出现
+        from ..settings import MASKED_KEY as _MASK
+
+        sec_cell["own_slot"] = {k: (_MASK if k == "api_key" and v else v)
+                                for k, v in sec_cell["own_slot"].items()}
     # 推理强度（2026-10-10 所有者裁定「所有智能体都要能 thinking，默认 High」）：
     # 它同属"这台机器上的模型配置"，所以机器面必须报它 —— 否则台面上默认写着
     # 一切正常，而 `settings.json` 里那个值可能是 `off`。
@@ -969,6 +1001,10 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                   "key_source": key_source(),
                   "configured": spec.configured},
         "workspace": {k: work.get(k, "") for k in WORKSPACE_KEYS},
+        # 按角色那一档与秘书那一档（业主 2026-10-14）：`key_source` 报的是
+        # 那份**设置文件**里 key 的来源，`configured` 是"这一档到底有没有 key"。
+        MODELS_SECTION: slots,
+        SECRETARY_SECTION: sec_cell,
         "raw_keys": sorted(raw) if isinstance(raw, dict) else [],
     }
     if effort_problem:

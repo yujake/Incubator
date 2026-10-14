@@ -118,6 +118,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 #: 用途归口的受控词表。只有一处定义（`schema.USAGE_SCOPES`）：本模块 import 它，
@@ -363,6 +364,61 @@ class ModelSpec:
             "max_tokens": self.max_tokens,
             "reasoning_effort": self.reasoning_effort,
         }
+
+
+def spec_for(role: str = "", *, secretary: bool = False,
+             path: str | Path | None = None,
+             env: Mapping[str, str] | None = None) -> tuple[ModelSpec, str]:
+    """**按角色**（或按秘书那一档）取模型配置：返回 `(spec, 来源)`。
+
+    业主 2026-10-14：「允许不同角色智能体用不同模型厂商的不同 api key
+    （所有智能体的秘书另外共用一个 api key）」。梯子在 `settings` 里实现（唯一一处）：
+
+        `models.<角色>`（或 `secretary`） → `models.default` → `model` 段 → 空串，
+        然后环境变量压在最上面（`env_or_setting` 的既有口径，CI 与既有脚本不许被弄坏）。
+
+    `来源` 是 `settings.model_settings_for` / `secretary_settings` 给的那一格
+    （`models.A` / `models.default` / `model` / `secretary` / 空串）；
+    它进 `ModelSpec.key_source` 的位置旁边 —— "这把 key 是从哪一格来的"
+    是排障时第一个要回答的问题，而它此前只能靠人翻文件。
+
+    `vendor` 今天只做一件事：`base_url` 没给时按它选一个内置端点
+    （见 :data:`VENDOR_BASE_URLS`）。多厂商的**价目表**在 `modelcost` 那一侧，
+    下一批接（口径要与供应商定价页对齐）。
+    """
+    src = dict(os.environ if env is None else env)
+    if secretary:
+        ms, where = SET.secretary_settings(path, env=env)
+    elif role:
+        ms, where = SET.model_settings_for(role, path, env=env)
+    else:
+        ms, where = SET.model_settings(path, env=env), "model"
+    base_url, _ = SET.env_or_setting(ENV_BASE, ms.get("base_url", ""), env=src)
+    name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
+    api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
+    effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
+    vendor = str(ms.get("vendor") or "").strip().lower()
+    fallback_url = VENDOR_BASE_URLS.get(vendor, DEFAULT_BASE_URL)
+    spec = ModelSpec(
+        base_url=(base_url or fallback_url).rstrip("/"),
+        model=name or DEFAULT_MODEL,
+        api_key=api_key,
+        timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
+        max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
+        reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
+        key_source=key_src,
+    )
+    return spec, (where or "")
+
+
+#: 认得的厂商 → 它的默认端点（`base_url` 没显式给时用它）。
+#:
+#: 只登记"我们真的接过"的几家；没登记的名字不拒绝（`vendor` 是自由文本，
+#: 下一批的价目表会按它取价），但也不会猜一个端点 —— 猜错的表现是
+#: "请求发到了一个不存在的地址"，比"用缺省端点"难查得多。
+VENDOR_BASE_URLS: dict[str, str] = {
+    "deepseek": DEFAULT_BASE_URL,
+}
 
 
 def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
