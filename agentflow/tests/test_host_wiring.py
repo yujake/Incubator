@@ -684,3 +684,45 @@ def test_run_agent_wiring_exposes_the_extractor_notes(tmp_path: Path):
     assert any("B：" in n for n in wiring["notes"]), wiring["notes"]
     # 负控（同一条读数的另一面）：没有 key 时它必须说清"会拒抽"，而不是沉默
     assert any("拒抽" in n or "LLMExtractor" in n for n in wiring["notes"]), wiring["notes"]
+
+
+# ------------------------------------------------ 各角色的 skills 落到工作区（R116）
+
+def test_the_skills_step_lands_every_manual_under_the_workspace(tmp_path):
+    """`_materialize_skills` 真的把 33 份手册落到**工作区**里（"现做现读"的落点）。
+
+    为什么这条要单独判（2026-10-14 实测）：这一段此前是 `run()` 里的内联 `try/except`，
+    **一条判据都碰不到它** —— 与本文件对面那段注释记的是同一类缺陷。
+    它不跑，提示词里的索引就指向 33 个不存在的文件，而每一处各自自洽
+    （索引有、提示词有、角色会去读），没有任何地方会报错。
+    """
+    from agentflow import agent_skills as AS
+
+    st = Store(tmp_path / "ws")
+    st.init()
+    notes: list[str] = []
+    wrote = host._materialize_skills(st, notes)
+    assert len(wrote) == sum(len(v) for v in AS.CATALOG.values()), (len(wrote), notes)
+    assert any("落盘" in n for n in notes), notes
+    for owner, rows in AS.CATALOG.items():
+        for s in rows:
+            p = st.root / AS.SKILLS_DIR / owner / f"{s.slug}.md"
+            assert p.is_file(), p
+    # 幂等：第二次不重写（免得每次开跑都把工作区搅一遍）
+    again: list[str] = []
+    assert host._materialize_skills(st, again) == [], again
+    assert any("已是最新" in n for n in again), again
+
+
+def test_without_a_workspace_the_skills_step_writes_nothing(tmp_path, monkeypatch):
+    """负控（三态 + 一条真缺陷）：没有工作区 ⇒ **不在当前目录里凭空写一个 `skills/`**。
+
+    旧写法是 `materialize(".")` —— 谁在哪跑就把 33 个 `.md` 写进那个进程的工作目录。
+    这一条把当前目录换成一个空临时目录，然后要求它**一个文件都不多**，
+    并且留一条明说"这一格没做"的 note（"没做"不许读成"做好了"）。
+    """
+    monkeypatch.chdir(tmp_path)
+    notes: list[str] = []
+    assert host._materialize_skills(None, notes) == []
+    assert not (tmp_path / "skills").exists(), "没有工作区时它往当前目录里写了东西"
+    assert any("没落盘" in n for n in notes), notes

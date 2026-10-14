@@ -576,18 +576,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         notes.append(f"画像文件没写成：{type(exc).__name__}: {exc}")
 
     # ---- 各角色的 skills 落到工作区（业主 2026-10-14：「现做现读」）
-    #
-    # 前置提示词里只给**索引**（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
-    # `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
-    # 与画像文件同一条纪律：写不成不打断这一趟（提示词里的索引仍然有效），但要留痕。
-    try:
-        from . import agent_skills as _AS
-
-        _wrote = _AS.materialize(store.root if store is not None else ".")
-        notes.append(f"skills：落盘 {len(_wrote)} 份（按需读；索引在提示词的 SKILLS_INDEX 段）"
-                     if _wrote else "skills：盘上已是最新，未重写")
-    except Exception as exc:  # noqa: BLE001
-        notes.append(f"skills 没写成：{type(exc).__name__}: {exc}")
+    _materialize_skills(store, notes)
 
     # 内层 backend 必须带着 store：`LocalBackend.store` 由 `Conductor` 注入，
     # 而 `factory(role, store=None)` 会被角色工厂当场拒（"需要一个 store"）——
@@ -645,6 +634,44 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
             # 装配读数（B 的抽取器是什么、为什么；2026-10-03 §83 的根因修复）：
             # 空 = 一切按预期；非空 = 有人该看一眼（例如没 key ⇒ B 会拒抽）。
             "notes": notes}
+
+
+def _materialize_skills(store: Any, notes: list[str]) -> list[str]:
+    """把各角色的 skills 落到**工作区**（业主 2026-10-14：「现做现读」）。
+
+    前置提示词里只给**索引**（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
+    `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
+
+    ## 为什么抽成函数（2026-10-14，R116）
+
+    它此前是 `run()` 里的一段内联 `try/except`，**一条判据都碰不到它** ——
+    与本文件第 594 行那段注释记的是同一类缺陷（"§185 那批测试没看见它"）。
+    "现做现读"整件事的落点就是这一段：它不跑，提示词里的索引就指向 33 个不存在的文件，
+    而每一处各自自洽（索引有、提示词有、角色会去读）—— 没有任何地方会报错。
+
+    ## 没有工作区时**不写**
+
+    `store is None` 时旧写法是 `materialize(".")` —— 那会把 33 个 `.md` 写进
+    **进程当前目录**（谁在哪跑就写哪）。改成：没有工作区 ⇒ **这一格没做**，
+    并留一条明说的 note（三态：没做 ≠ 做好了）。
+
+    返回写出去的路径；一条不成也不打断这一趟（提示词里的索引仍然有效），但必须留痕。
+    """
+    if store is None or getattr(store, "root", None) is None:
+        notes.append("skills：这一趟没有工作区，没落盘（索引仍在提示词里，但盘上没有正文）")
+        # 这一格**没做**，不是"空输入得空输出"：没有工作区就没有落点，
+        # 所以"没写"这件事只能从 note 里读（`return []` 只表示"没写出任何路径"）。
+        return []
+    try:
+        from . import agent_skills as _AS
+
+        wrote = _AS.materialize(store.root)
+        notes.append(f"skills：落盘 {len(wrote)} 份（按需读；索引在提示词的 SKILLS_INDEX 段）"
+                     if wrote else "skills：盘上已是最新，未重写")
+        return list(wrote)
+    except Exception as exc:  # noqa: BLE001
+        notes.append(f"skills 没写成：{type(exc).__name__}: {exc}")
+        return []
 
 
 def selftest() -> int:

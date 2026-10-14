@@ -104,6 +104,47 @@ def test_the_skills_land_on_disk_so_they_can_be_read_on_demand(tmp_path):
     assert AS.materialize(tmp_path) == [], "第二次跑还是重写了一遍（不幂等）"
 
 
+def test_every_advertised_path_is_readable_through_the_fs_tool(tmp_path):
+    """"现做现读"的**闭环**：索引里印出来的路径，用真的 `fs.read` 必须读得到。
+
+    为什么这条是这一组里唯一端到端的一条：其余各条查的都是"目录自己自洽"
+    （索引列全了每条、正文没进提示词、落盘幂等、盘点路径存在）。而"现做现读"
+    这句话的落点是**三处拼在一起**才成立的：索引里那个路径、`materialize` 写的落点、
+    以及 `fs.read` 解析路径用的根。三处各自自洽而拼不上，正是本项目最忌讳的形态 ——
+    索引说 `skills/M/x.md`、正文写到别处、工具的根又是第三个地方，
+    而**没有任何地方会报错**（模型只会读不到，然后把索引当摆设）。
+
+    判据同时也是那条纪律的机器形态：提示词里那段索引是**给模型照抄的**，
+    所以必须能用它逐字去读，不能只"看起来对"。
+    """
+    import re
+
+    from agentflow.tools import build_registry
+
+    AS.materialize(tmp_path)
+    reg = build_registry(workspace_root=tmp_path).registry
+    roles = ("M", "A", "B", "C", "D", "E", "F", "G", "H", "V")
+    seen: list[tuple[str, str]] = []
+    for role in roles:
+        block = AS.index_block(role)
+        # 只取**表格行**里那一格（行首是 `| ` 的那种）—— 索引开头那句
+        # `skills/<角色>/<名字>.md` 是给人看的占位符，不是一条真路径。
+        paths = re.findall(r"^\| `(skills/[^`]+\.md)`", block, re.M)
+        assert paths, f"{role} 的索引表里一条路径都没有"
+        for rel in paths:
+            got = reg.call("fs.read", path=rel, role=role)
+            assert got.ok, f"{role} 照自己索引里的路径读不到：{rel}（{got.error}）"
+            owner = rel.split("/")[1]
+            slug = rel.rsplit("/", 1)[1][: -len(".md")]
+            want = next(s for s in AS.CATALOG[owner] if s.slug == slug)
+            assert want.title in got.data, f"{role} 读到的不是那一份：{rel}"
+            seen.append((role, rel))
+    # 反真空：条数必须等于"每个角色读得到的那些"之和（少一条就说明索引漏了行）
+    assert len(seen) == sum(len(AS.skills_for(r)) for r in roles), len(seen)
+    # 负控：盘上没有的路径必须失败 —— 否则上面那些 ok 说明不了"读的就是那一份"
+    assert not reg.call("fs.read", path=f"{AS.SKILLS_DIR}/M/不存在的.md", role="M").ok
+
+
 def test_every_role_has_at_least_five_builtin_skills_surveyed():
     """业主那句"每种智能体至少找 5 个 skill 来综合考量"的机器形态。"""
     names = set(AS.builtin_sources())
