@@ -1,0 +1,43 @@
+R105 二层唤起的收尾：被循环驱动的子代理能真的做「自己被派的那个动作」（业主裁定 ③）
+
+## 缺口（真机证据，`p9-t1-nolean` 那一趟）
+
+`--subagents`（`cli.py`，2026-09-30 上线）把所有 `(角色, 动作)` 交给 LLM 循环 ——
+包括带写库闸门的确定性动作。而被派的那个动作**不在任何角色的工具面上**
+（`capabilities._KNOWN_UNMATCHED_ACTIONS` 逐条登记的就是这一族）⇒ 被派的子代理
+在循环里**够不到自己被派的活**：
+
+- B 拿到 `unknown_tool`（它自己的原话："`register_statement` 不在 B 的工具面上"）；
+- 它改去 `table.create(table="statements")` 手写行 ⇒ 绕过 `register_statement` 的
+  出处核对、页码形状、引文证据、取号与查重五道预检，`quote_verified=true` 成了自报；
+- 那一趟的 5 条孙代理活全废（3 条崩、2 条被并发上限拒）—— 二层唤起"路通、活做不成"。
+
+## 修法：把「我这一趟被派的动作」包成一件只活在这次循环里的工具
+
+`LlmBackend.call` 在起循环之前调 `_registry_with_own_action()`：按声明面
+（`capabilities.find_action` 的 `params` / `side_effect`）把那件动作包成 `own.<动作>`
+（工具名必须带组名 —— 本仓的工具名约定当场拒不带点的名字），handler 走**内层后端**
+（`self.inner.call(role, action, ...)`），也就是那套带闸门的确定性实现，一个判据不少。
+三处如实处理：
+
+- 内层没有这个角色的实现 / 声明读不到 ⇒ **不注入**（绝不给一件调不通的工具）；
+- `token=None` 时补一个真令牌（内层会调 `raise_if_cancelled`，那是那条路上的硬约定）；
+- 动作自己的受控拒绝（`_refuse` 的 `{"ok": False, "kind", "reason"}`）照原样透给模型
+  —— `kind` / `reason` 是它改参数的唯一依据，不许被压成"成功"。
+
+工具只挂在这一趟循环的注册表上（`base.scoped_to(role)` 的副本），不进任何角色的
+常规工具面；`test_agent_surface_snapshot` / `test_tool_surface_snapshot` 因此逐字未动。
+
+## 判据（`tests/test_own_action_tool.py`，三条）
+
+- **正控一**：写坏一个参数（真机里那个"页码写成字符串"）⇒ 这一步以受控拒绝收场
+  （`page_range` 在拒绝理由里），**盘上一条 statements 行都没有** —— 证明它走的是
+  真判据，而不是绕道手写表；
+- **正控二**：参数合规 ⇒ 那一行是**真实现**写下的（自增号、出处栏、页码栏都在）；
+- **反负控**：把注入关掉（monkeypatch）⇒ 同一份剧本里 `own.register_statement`
+  变成 `unknown_tool`，模型改手写表，那一行**带着不存在的出处号**落库
+  （`source_lit_id=999999`）—— 把"绕过预检"这件事钉成读数，也就证明了绿是这件工具带来的。
+
+判据读数：`test_own_action_tool` 3 条 + 相关面 100 条（`test_agent_loop` /
+`test_two_hop_summon` / `test_surface_becomes_the_root` / `test_review_chain_*` /
+两份面快照 / `test_manuscript_handoff` / `test_forced_notify`）全绿。

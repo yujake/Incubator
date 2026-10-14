@@ -5366,6 +5366,18 @@ class LlmBackend:
                 child_registry = self.registry_factory(child_surface)
             except Exception:  # noqa: BLE001 —— 造不出来就退回共用（并在结果里留痕）
                 child_registry = self.registry
+        # ---- 「做我这一趟被派的那个动作」这一件工具（2026-10-14，业主裁定 ③ 的收尾）
+        #
+        # 真机形态（p9-t1-nolean 那一趟，`--subagents`）：`B.register_statement` 被交给
+        # 模型驱动，而**这个动作不在工具面上** ⇒ 模型拿到 `unknown_tool`，改去
+        # `table.create(table="statements")` 手写行 —— 于是绕过 `register_statement`
+        # 的全部写库前预检（出处、页码形状、引文证据、取号、查重）。
+        # 修法：把这一趟被派的那个动作**原样包成一件工具**交给它，handler 走内层
+        # 确定性实现（闸门一个不少），名字就是动作名（模型第一反应也是那么叫的）。
+        # 只在这一趟的循环里存在，不进任何角色的常规工具面。
+        child_registry = self._registry_with_own_action(
+            child_registry, role=role, action=action, token=token, instance=instance,
+            task_id=str(row.get("task_id") or params.get("_task_id") or ""))
         loop = AgentLoop(role=role, session_root=self.session_root,
                          registry=child_registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
@@ -5395,6 +5407,96 @@ class LlmBackend:
         if not artifact:
             out["llm_run"] = run.to_dict()      # 落盘失败时退回内联，绝不静默丢产出
         return out
+
+    def _registry_with_own_action(self, base: Any, *, role: str, action: str,
+                                  token: Any = None, instance: str = "",
+                                  task_id: str = "") -> Any:
+        """把「我被派的那个动作」包成一件工具，挂到这一趟循环的注册表上。
+
+        ## 为什么必须有它（业主 2026-10-14 裁定 ③ 的收尾，真机 p9-t1-nolean）
+
+        `--subagents` / `--drive 角色.动作` 会把 `(角色, 动作)` 交给 LLM 循环执行，
+        于是那份**确定性实现**在这一趟里不会被调用。而角色的动作**不在工具面上**
+        （`capabilities._KNOWN_UNMATCHED_ACTIONS` 逐条登记的就是这一族）⇒ 被派的
+        子代理拿不到自己被派的活，只能改用 `table.create` / `table.update` 手写表：
+        真机读数里 B 就是这么写 statements 的，绕过了出处、页码形状、引文证据、
+        取号与查重五道预检，`quote_verified=true` 变成它**自报**的。
+
+        这里把那个动作按声明面（`capabilities.find_action` 的 `params` / `side_effect`）
+        原样包成一件工具，handler 走**内层后端**（`self.inner.call`）—— 也就是那套
+        带闸门的确定性实现，一个判据都不少。工具名就是动作名（模型的第一反应就是
+        那么叫的），只活在**这一趟循环的注册表**里，不进任何角色的常规工具面。
+
+        不注入的两种情况（都如实不注入，绝不给一件调不通的工具）：
+        - 内层后端没有这个角色的实现（`role not in self.inner.known_roles()`，
+          例如被派去做只有循环能做的活）⇒ 那本来就该由模型自己用工具做；
+        - 这个动作的声明读不到（`capabilities.find_action` 返回 `None`）。
+        """
+        if self.inner is None or not hasattr(self.inner, "known_roles"):
+            return base
+        try:
+            if role not in set(self.inner.known_roles()):
+                return base
+        except Exception:  # noqa: BLE001 —— 读不到就不注入（不许猜）
+            return base
+        from . import capabilities as C
+        from .tools.base import ToolRegistry, ToolSpec
+
+        try:
+            spec = C.find_action(role, action)  # 声明面只有一处（`capabilities`，内置 specs）
+        except Exception:  # noqa: BLE001
+            spec = None
+        if spec is None:
+            return base
+        params_schema = dict(getattr(spec, "params", None) or {})
+        if not params_schema:
+            params_schema = {"type": "object", "properties": {}}
+
+        def _handler(**given: Any) -> Any:
+            """跑这一趟被派的那个动作（走内层确定性实现，闸门照旧）。"""
+            from . import cancellation as _CAN
+
+            # `token=None` 时补一个真令牌：内层后端会调它的 `raise_if_cancelled`
+            # （取消语义是那一条路上的硬约定，不许因为我这一层传了 `None` 就炸）。
+            tk = token if token is not None else _CAN.CancelToken()
+            try:
+                got = self.inner.call(role, action, given, token=tk,
+                                      instance=instance, task_id=task_id)
+            except Exception as exc:  # noqa: BLE001 —— 受控失败也要如实回给模型
+                return {"ok": False, "kind": "own_action_failed",
+                        "reason": f"{type(exc).__name__}: {exc}"}
+            if isinstance(got, Mapping) and got.get("ok") is False:
+                # 动作自己的受控拒绝（`_refuse` 的形态）照原样透出去：
+                # `kind` / `reason` 是模型据此改参数的唯一依据，不许被压成"成功"。
+                return {"ok": False,
+                        "kind": str(got.get("kind") or "refused"),
+                        "reason": str(got.get("reason") or got.get("detail") or "被拒"),
+                        **{k: v for k, v in got.items()
+                           if k in ("problems", "missing", "stmt_id", "available_lit_ids",
+                                    "literature_rows", "unresolved")}}
+            return got
+
+        own = ToolSpec(
+            # 名字带组名（`own.`）：本仓的工具名约定是 `组.动作`（`ToolSpec.__post_init__`
+            # 当场拒不带点的名字）。`own.` 这个组名本身也是一句说明 ——
+            # "这是你自己这一趟被派的那个动作"，与通用表工具 `table.*` 区分得开。
+            name=f"own.{action}",
+            summary=(f"做我这一趟被派的那个动作（{role}.{action}）："
+                     f"{str(getattr(spec, 'summary', '') or '').strip()}"),
+            params=params_schema,
+            handler=_handler,
+            side_effect=str(getattr(spec, "side_effect", "none") or "none"),
+            roles=(role,),
+            returns=("与动作实现同形；受控拒绝时给出 `kind` / `reason`"
+                     "（照它改参数，别改用 `table.*` 手写表绕过预检）"),
+            tags=("own_action", "drive"),
+        )
+        scoped = base.scoped_to(role) if hasattr(base, "scoped_to") else ToolRegistry(name=f"{role}:own")
+        try:
+            scoped.register(own)
+        except Exception:  # noqa: BLE001 —— 注入失败不许带走这一趟（也不假装注过）
+            return base
+        return scoped
 
     def _seam(self, role: str) -> LlmSeam:
         if self.seam_factory is not None:
