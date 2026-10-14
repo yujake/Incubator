@@ -122,3 +122,106 @@ def test_the_credit_reason_says_which_mode_it_was() -> None:
     assert got["clean"] == ["0001", "0002"], got
     assert "逐字" in got["reasons"]["0001"], got
     assert "语义" in got["reasons"]["0002"], got
+
+
+# ============================================================ 4 语义那一档（B 唤起 H）
+class _FakeGateway:
+    """按剧本回答的替身模型（与 `tests/test_judges.py` 同一个形态）。"""
+
+    spec = type("Spec", (), {"model": "fake", "api_key": "fake"})()
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.prompts: list[str] = []
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: object) -> object:
+        self.prompts.append(prompt)
+        return type("Reply", (), {"ok": True, "text": self.text, "tokens_in": 3,
+                                  "tokens_out": 3, "error_detail": "",
+                                  "error_kind": ""})()
+
+
+def _seam(root, text: str):
+    from agentflow.llmseam import LlmSeam
+
+    gate = _FakeGateway(text)
+    return LlmSeam(role="H", session_root=root, gateway=gate, price=(0.0, 0.0), sid="t"), gate
+
+
+_MATERIAL = {"quote": "The distance is the number of walls crossed.",
+             "span": "The distance equals the number of walls the walk crosses.",
+             "statement": "腔室距离 = 穿过的墙数", "where": "out/paper/main.tex:120"}
+
+
+def test_the_semantic_criterion_is_registered_with_negative_controls() -> None:
+    """判据表准入：这一条在表里、有 ≥2 条负控、且整张表自检干净。"""
+    from agentflow import judges as JG
+
+    assert "quote.same_meaning" in JG.CRITERIA
+    crit = JG.CRITERIA["quote.same_meaning"]
+    assert crit.pass_verdicts == ("same_meaning",), crit
+    assert "stronger_than_source" in crit.verdicts, crit
+    assert len(JG.NEGATIVE_CONTROLS["quote.same_meaning"]) >= 2
+    assert JG.registry_problems() == [], JG.registry_problems()
+
+
+def test_a_rewritten_quote_passes_on_meaning_not_on_letters(tmp_path) -> None:
+    """语义相同 ⇒ 通过（`quote_mode="semantic"`），并把这次调用留在证据里。
+
+    这一条就是业主那句话的正面：**改写、换记号也算通过** —— 逐字档会判它不通过，
+    语义档必须放它过，而且要说清是谁判的（judge）、哪一次调用（prompt_sha256）。
+    """
+    from agentflow import judges as JG
+
+    seam, gate = _seam(
+        tmp_path,
+        '{"verdict": "same_meaning", "why": "换了一种说法，但说的是同一件事", "findings": []}',
+    )
+    got = JG.quote_semantics_judge_for(seam)(_MATERIAL)
+    assert got["verdict"] == "same_meaning", got
+    verified, mode, reason = JG.quote_fields_from_verdict(got["verdict"], got["why"])
+    assert (verified, mode) == (True, "semantic"), (verified, mode, reason)
+    assert "语义相同" in reason, reason
+    assert got["call"]["prompt_sha256"], got["call"]
+    assert got["call"]["judge_version"], got["call"]
+    assert "不要" in gate.prompts[0] or "字面" in gate.prompts[0], gate.prompts[0][:200]
+
+
+def test_a_stronger_quote_still_fails(tmp_path) -> None:
+    """引文把来源的结论加强了 ⇒ **不通过**（语义档不是"放宽"，是换一把尺）。"""
+    from agentflow import judges as JG
+
+    seam, _gate = _seam(
+        tmp_path,
+        '{"verdict": "stronger_than_source", "why": "来源只对连通图成立，引文写成了对所有图",'
+        ' "findings": []}',
+    )
+    got = JG.quote_semantics_judge_for(seam)(_MATERIAL)
+    verified, mode, reason = JG.quote_fields_from_verdict(got["verdict"], got["why"])
+    assert got["verdict"] == "stronger_than_source", got
+    assert (verified, mode) == (False, ""), (verified, mode, reason)
+    assert "不通过" in reason, reason
+
+
+def test_without_a_seam_it_says_unchecked(tmp_path) -> None:
+    """没有模型缝（没有 key）⇒ **没查**（既不是通过，也不是不通过）。"""
+    from agentflow import judges as JG
+
+    got = JG.quote_semantics_judge_for(None)(_MATERIAL)
+    assert got["verdict"] == "unknown", got
+    assert "judge_not_wired" in got["why"], got
+    verified, mode, reason = JG.quote_fields_from_verdict(got["verdict"], got["why"])
+    assert (verified, mode) == (None, ""), (verified, mode)
+    assert reason.startswith("还没查"), reason
+
+
+def test_a_broken_answer_is_unchecked_not_a_pass(tmp_path) -> None:
+    """模型回了坏 JSON ⇒ 没查成（不许折成通过）。"""
+    from agentflow import judges as JG
+
+    seam, _gate = _seam(tmp_path, "我认为差不多吧（不是 JSON）")
+    got = JG.quote_semantics_judge_for(seam)(_MATERIAL)
+    verified, mode, _reason = JG.quote_fields_from_verdict(got["verdict"], got["why"])
+    assert (verified, mode) == (None, ""), got
+

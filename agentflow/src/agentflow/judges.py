@@ -373,6 +373,103 @@ def semantic_judge_for(seam: Any, *, criterion_id: str = "claims.conclusion_stre
     return _judge
 
 
+# ============================================================ 引文回验的语义档（2026-10-14）
+# 业主：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」，落点是 B 唤起 H。
+# 逐字那一档仍归 `quoteverify.check_quote`（不花模型钱，先走它）；逐字不中才轮到这一档。
+# **不许**把模型调用塞进 `check_quote`：那是禁改区里的逐字判据，混进模型会让
+# "引文级证据"的口径取决于模型 —— 两档分居两处，靠 `quote_mode` 那一栏分开记账。
+
+_register(Criterion(
+    id="quote.same_meaning", faculty="能思辨",
+    name="引文与来源是不是说同一件事",
+    question="这段引文与来源里的那一段，是不是在说同一件事（语义相同）？"
+             "改写、换记号、跨语言都算相同；引文比来源更强不算。",
+    artifact_kind="claims",
+    verdicts=("same_meaning", "different", "stronger_than_source", "unjudgeable"),
+    pass_verdicts=("same_meaning",),
+    template=(
+        "你在核一条引文。只判一件事：**引文与来源说的事是不是同一件**。\n"
+        "same_meaning = 语义相同（允许改写、换记号、跨语言、简写 —— 只要说的是同一件事）；\n"
+        "different = 说的不是同一件事（对象 / 条件 / 结论对不上）；\n"
+        "stronger_than_source = 引文把来源的结论**加强了**（来源说「在某条件下」而引文写成"
+        "无条件；来源说「可能」而引文写成「必然」……）—— 这一档**不算通过**；\n"
+        "unjudgeable = 材料不足以判（来源那一段没给全 / 引文本身有歧义）。\n"
+        "**不要**因为字面不完全一样就判 different —— 那是逐字比对，不是这一条要的。\n"
+        "{context}\n"
+        "被审材料：\n{artifact}"
+    ),
+))
+
+#: 负控（`registry_problems` 要求每条判据至少两条）：两条都必须在**语义**上不成立，
+#: 而字面上都与来源沾边 —— 这正是这一档存在的理由（逐字档判不了它们，
+#: 而"看起来像"也不该放过它们）。
+NEGATIVE_CONTROLS["quote.same_meaning"] = (
+    "引文：对一切有限图都有 d ≤ Δ。\n来源：对**连通**有限图，d ≤ Δ。",
+    "引文：该常数等于 4(1/6-(2-√3)/π)。\n来源：本节只给出该常数的数值上界 0.33（约）。",
+)
+
+
+def quote_semantics_judge_for(
+        seam: "LlmSeam | None") -> Callable[[Mapping[str, Any]], dict[str, Any]]:
+    """把一条模型缝接成"引文 ↔ 来源"的语义判据（给 H 用；B 唤起 H 之后由它判）。
+
+    输入 `material` 的四栏（调用方给，H 不自己去猜）：
+    `quote`（待核的引文）、`span`（来源里那一段，**逐字**取来的）、
+    `statement`（这条引文要支撑的断言，可空）、`where`（落点：文件/页码，给人看的）。
+
+    返回 `{"verdict", "why", "call"}`：`verdict` 是判据词表里的四档之一或 `unknown`；
+    `call` 是这次调用的审计事实（model / prompt_sha256 / prompt_version）——
+    **语义那一档必须留证据**（业主那一句的后半段），这三格就是"可复查的调用记录"。
+
+    三态：缝没接（或没有 key）⇒ `judge_not_wired` ⇒ `verdict="unknown"` 且理由写明
+    "没判成，不是判过了没问题"；坏 JSON 同理。**没有 key 时如实回没查**。
+    """
+    def _judge(material: Mapping[str, Any]) -> dict[str, Any]:
+        quote = str(material.get("quote") or "").strip()
+        span = str(material.get("span") or "").strip()
+        statement = str(material.get("statement") or "").strip()
+        where = str(material.get("where") or "").strip() or "（没给落点）"
+        artifact = (f"引文（待核）：\n{quote}\n\n来源里那一段（逐字取自 {where}）：\n{span}\n"
+                    + (f"\n这条引文要支撑的断言：\n{statement}\n" if statement else ""))
+        got = judge("quote.same_meaning", artifact, seam=seam,
+                    context="只判「是不是同一件事」；字面不同不算不同。")
+        call = {"model": got.model, "prompt_sha256": got.prompt_sha256,
+                "prompt_version": got.prompt_version, "judge_version": got.judge_version}
+        if got.problem:
+            return {"verdict": "unknown",
+                    "why": f"没判成（{got.problem}）：{got.detail or got.why or ''}"[:200],
+                    "call": call}
+        allowed = CRITERIA["quote.same_meaning"].verdicts
+        if got.verdict not in allowed:
+            return {"verdict": "unknown",
+                    "why": f"模型说这一条判不了（{got.verdict or '空判定'}）：{(got.why or '')[:160]}",
+                    "call": call}
+        return {"verdict": got.verdict, "why": (got.why or "")[:200], "call": call}
+
+    _judge.__name__ = "judge:quote.same_meaning"
+    return _judge
+
+
+def quote_fields_from_verdict(verdict: str, why: str, *, judge: str = "H"
+                              ) -> tuple[bool | None, str, str]:
+    """一条语义判定 ⇒ `(quote_verified, quote_mode, quote_reason)`（**唯一**口径）。
+
+    三条，逐条对着业主那句裁定：
+
+    - `same_meaning` ⇒ `(True, "semantic", …)`：**语义相同即通过**（这正是要改的那一条）；
+    - `different` / `stronger_than_source` ⇒ `(False, "", …)`：语义不同、或引文把来源的
+      结论加强了 —— 那一档**绝不会**因为"字面沾边"就被放过；
+    - 其余（`unjudgeable` / `unknown`）⇒ `(None, "", "还没查：…")`：三态里的第三档，
+      没判成不许折成通过，也不许折成不通过。
+    """
+    why = str(why or "")[:400]
+    if verdict == "same_meaning":
+        return True, "semantic", f"{judge} 判语义相同：{why}"
+    if verdict in ("different", "stronger_than_source"):
+        return False, "", f"{judge} 判不通过（{verdict}）：{why}"
+    return None, "", f"还没查：{why or '语义判定没给出结论'}"
+
+
 def registry_problems() -> list[str]:
     """判据表自身的完整性（判据也要有判据）。返回问题清单，空 = 干净。"""
     problems: list[str] = []
