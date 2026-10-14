@@ -358,10 +358,19 @@ class ModelSpec:
         return bool(self.api_key)
 
     def redacted(self) -> dict[str, Any]:
-        """可安全写进日志/台账的配置快照（永不包含 key 本体）。"""
+        """可安全写进日志/台账的配置快照（永不包含 key 本体）。
+
+        `vendor` 在 2026-10-14 加进来：它是**按角色配模型**那一批的可见字段之一
+        （`settings.MODEL_KEYS` 里有它、面板上每个角色都有一格），而这份快照此前
+        只给 `base_url` / `model` ⇒ 机器面读不到"这个角色用的是哪一家"。
+        面板那一侧的表现是：盘上写了 `models.A.vendor`，输入框却永远是空的
+        （前端按 `settings.models.A.vendor` 取初值，后端不给这一格）。
+        它不是密钥（`vendor` 是自由文本的厂商名），所以与其余非密钥字段同级。
+        """
         return {
             "base_url": self.base_url,
             "model": self.model,
+            "vendor": self.vendor,
             "api_key": "***" if self.api_key else "",
             # 来源不是密钥：把"从哪一档取到的"回显出来，好让"key 在 config 里设的"
             # 这句话有一个机器读数（见 `key_source` 上面的那段）。

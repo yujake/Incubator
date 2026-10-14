@@ -948,15 +948,23 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         red_slot = spec_slot.redacted()
         slots[str(slot)] = {"api_key": red_slot["api_key"], "base_url": red_slot["base_url"],
                             "name": red_slot["model"],
+                            "vendor": red_slot["vendor"],
                             "reasoning_effort": red_slot["reasoning_effort"],
-                            "key_source": key_source(), "configured": spec_slot.configured,
+                            # ⚠️ 这一格必须取**这一档自己的** `key_source`（`spec_for` 已经
+                            # 按这一档算过 env/settings）。此前这里调的是全局 `key_source()` ——
+                            # 它读的是 `model` 段 ⇒ 每一档都报同一个来源：`models.A` 的 key
+                            # 明明是从这一档取的，读数却说"看的是 model 段"。
+                            # 缺陷形态与"读数说谎"同族：数字自洽、没有任何地方会报错。
+                            "key_source": spec_slot.key_source, "configured": spec_slot.configured,
                             "source": where}
     sec_cell: dict[str, Any] = {}
     try:
         sec_spec, sec_where = spec_for(secretary=True)
         red_sec = sec_spec.redacted()
         sec_cell = {"api_key": red_sec["api_key"], "base_url": red_sec["base_url"],
-                    "name": red_sec["model"], "reasoning_effort": red_sec["reasoning_effort"],
+                    "name": red_sec["model"], "vendor": red_sec["vendor"],
+                    "reasoning_effort": red_sec["reasoning_effort"],
+                    "key_source": sec_spec.key_source,
                     "configured": sec_spec.configured, "source": sec_where,
                     "own_slot": (raw.get(SECRETARY_SECTION) or {}) if isinstance(raw, dict) else {}}
     except Exception as exc:  # noqa: BLE001
@@ -976,6 +984,10 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         spec = ModelSpec(base_url=model.get("base_url", "") or "",
                          model=model.get("name", "") or "",
                          api_key=model.get("api_key", "") or "",
+                         # ⚠️ `vendor` 必须一起传（2026-10-14）：这一格的读数取自
+                         # `spec.redacted()`，不传就等于"盘上写了厂商、机器面说没有"
+                         # —— 而面板上那一格的初值正是从这份读数取的。
+                         vendor=model.get("vendor", "") or "",
                          reasoning_effort=effort_raw)
         effort_shown = spec.redacted()["reasoning_effort"]
     except ValueError as exc:
@@ -984,7 +996,8 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         # （回显成缺省会让人以为配置生效了）。
         spec = ModelSpec(base_url=model.get("base_url", "") or "",
                          model=model.get("name", "") or "",
-                         api_key=model.get("api_key", "") or "")
+                         api_key=model.get("api_key", "") or "",
+                         vendor=model.get("vendor", "") or "")
         effort_shown = effort_raw
         effort_problem = f"{type(exc).__name__}: {exc}"
     red = spec.redacted()
@@ -993,7 +1006,14 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         "exists": on_disk,
         "toolchain": {k: tool.get(k, "") for k in TOOLCHAIN_KEYS},
         "model": {"api_key": red["api_key"], "base_url": red["base_url"],
-                  "name": red["model"], "reasoning_effort": effort_shown,
+                  "name": red["model"],
+                  # 厂商（2026-10-14）：`type_decls()` 里一直声明着这一格，而这里**没给** ——
+                  # 于是 `types.ts` 的 `SettingsReading.model.vendor` 名存实亡，
+                  # 面板上那一格的初值永远取不到（盘上写了也不显示）。
+                  # 这是"声明与读数差一格"，两个方向都该由判据管住（见
+                  # `tests/test_role_models.py` 的读数那三条）。
+                  "vendor": red["vendor"],
+                  "reasoning_effort": effort_shown,
                   # key 是从哪一档取到的（`"env"` / `"settings"` / 空串）。
                   # 所有者 2026-10-10 的裁定是"key 从 config 里面接"——
                   # 这一格就是那句话在机器面上的读数：`settings` 才算成立，
@@ -1671,12 +1691,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
                 "configured: boolean }"),
       # 按角色那一档（业主 2026-10-14）：槽 → 那一档的读数（key 一律掩码）。
       ("models", "Record<string, { api_key: string; base_url: string; name: string; "
-                 "reasoning_effort: string; key_source: string; configured: boolean; "
-                 "source: string }>"),
+                 "vendor: string; reasoning_effort: string; key_source: string; "
+                 "configured: boolean; source: string }>"),
       # 秘书那一档（全角色共用）：读数同上一格 + 那一档自己的原文（key 也掩码）。
-      ("secretary", "{ api_key: string; base_url: string; name: string; "
-                    "reasoning_effort: string; configured: boolean; source: string; "
-                    "own_slot?: Record<string, string> }"),
+      ("secretary", "{ api_key: string; base_url: string; name: string; vendor: string; "
+                    "reasoning_effort: string; key_source: string; configured: boolean; "
+                    "source: string; own_slot?: Record<string, string> }"),
       ("workspace", "Record<string, string>"), ("raw_keys", "string[]"))),
     ("MachineView",
      "machine_face() —— toolchain.toolchain_report() 的键 + 设置三段",

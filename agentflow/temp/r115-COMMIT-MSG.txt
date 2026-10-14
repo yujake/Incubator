@@ -1,0 +1,65 @@
+R115 ① 的面板回显：每个角色的厂商与"配了没配 + 来源"从盘上真的读得回来
+
+业主原话：「**更新设置面板**与相应文件，允许不同角色智能体用不同模型厂商的不同 api key
+（所有智能体的秘书另外共用一个 api key）」。同一位业主 2026-10-13 还报过一次同族的现象：
+「设置面板启动后应该同步设置文件里的参数，不然空空的就像啥都没设置过一样」。
+
+## 一、抓到的是"读侧少一格"，三处，全在同一个字段上
+
+面板输入框的初值取自 `GET /api/machine` 的 `settings`（`Machine.tsx` 的
+`roleValue` / `currentOf` 读 `settings.models.<角色>.<键>`）。所以**读侧少一格**的表现是
+"盘上写了、面板上永远空的"，而 placeholder 还说"盘上没设过"—— 不会让任何旧判据变红：
+
+1. **`SettingsReading.model.vendor` 名存实亡**：`type_decls()` 里一直声明着这一格，
+   而 `_settings_reading()` 从没给过 —— 顶层那格的读数取自一个**现搭的** `ModelSpec`，
+   搭的时候只传了 `base_url` / `model` / `api_key` / `reasoning_effort`。
+2. **`models.<槽>` 与 `secretary` 两处连声明都没有 `vendor`**：按角色那一批的读数里
+   有 `api_key` / `base_url` / `name` / `reasoning_effort`，偏偏缺业主点名的那一格。
+3. **`models.<槽>.key_source` 报的是别人的来源**：那一格此前调全局 `key_source()`，
+   而它只读 `model` 段 ⇒ **每一档都报同一个来源**。实测形态：`model` 段没有 key、
+   而 `models.A` 有 ⇒ 全局那个报 `""`（"哪儿都没找到"），读的人会据此以为
+   "按角色配的 key 没生效"—— 而它明明是 `"settings"`。
+
+## 二、改法（每处都只改"读出来"这一半，不动写侧口径）
+
+- `modelgw.ModelSpec.redacted()` 加 `vendor`（它不是密钥，与 `base_url` / `model` 同级；
+  这一份快照就是机器面的唯一来源）；
+- `_settings_reading()`：`model` / 每个 `models.<槽>` / `secretary` **三处都带 `vendor`**；
+  每档的 `key_source` 取**这一档自己的** `spec_for(...)` 结果（它已经按这一档算过
+  env/settings）；顶层那格的 `ModelSpec` 补传 `vendor`；
+- `type_decls()` 的 `models` / `secretary` 两处补 `vendor: string`，`ui/src/types.ts`
+  按后端声明重新生成（`emit_types.write_types()`）——**声明与读数两个方向都由判据管**；
+- 面板补两处**显示**：顶层那一行加 `vendor`；每个角色加一枚
+  「配了（来源 `models.A`）/ 沿用下一档」的徽章。不显的话，只有点开每一格
+  才知道哪个角色真的配了自己的 key —— 而"哪个角色在用哪一把"正是这一页要回答的问题。
+
+## 三、判据（`tests/test_role_models.py` 9 → 12 条）
+
+1. `test_the_readback_carries_vendor_for_the_body_every_slot_and_the_secretary`
+   （三处都要回显；反真空：厂商原样回显、掩码只落在 `api_key` 那一格）；
+2. `test_each_slot_reports_its_own_key_source_not_the_model_sections`
+   （同一份读数里两档结论必须**不同**，否则这条判据什么也没证明）；
+3. `test_every_model_key_on_the_write_side_shows_up_in_the_readback`
+   —— 按**写侧词表** `settings.MODEL_KEYS` 判，不抄第二份名单：将来往词表里加一格，
+   "能写、面板有输入框、读不回盘上的值"这条坑会被当场挡住（`vendor` 刚踩过）；
+   含反真空（从读数里挖掉一格，算式必须当场看见）。
+
+**三条新的都在旧代码下逐条验证过会红**（`git stash` 掉 `modelgw.py` + `readers.py`
+之后 `3 failed, 9 passed`）——不是"写了个恒真的断言"。
+
+## 四、端到端（真起的本地服务）
+
+`agentflow --root <临时工作区> web --port 0 --json` 起本地服务（127.0.0.1:4867），
+指着一份带按角色厂商的设置文件：
+
+- `GET /` → 200，引用的是**新** bundle `/static/assets/index.DpOVMT89.js`；
+- `GET /api/machine` → `settings.model.vendor=deepseek`、
+  `settings.models.A.vendor=deepseek`（`source=models.A`、`configured=true`）、
+  `settings.models.default.vendor=acme`、`settings.secretary.vendor=acme`（`source=secretary`）；
+- 那份响应里**不含**任何真 key（夹具里三把 `fixture-key-*` 逐字搜过，`False`）；
+- 新 bundle 里逐字含「沿用下一档」与「配了（」，说明面板那一改真的进了产物。
+
+UI 侧：`pnpm run typecheck` 干净、`pnpm run build` 重出
+`assets/index.DpOVMT89.js`（旧的 `index.8uwWWrhL.js` 删除、`index.html` 同步）。
+
+本轮**不触 FC-27**（没动禁改区路径，无需台账签名）；判据读数见提交时的全套。

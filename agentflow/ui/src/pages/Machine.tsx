@@ -66,17 +66,22 @@ const ROLE_FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
   { key: "name", hint: "模型名（留空 = 沿用）" },
 ];
 
-/** 按角色那一档现读的值（`settings.models.<角色>.<键>`）。 */
-function roleValue(settings: SettingsReading, role: string, key: string): string {
+/** 某一档的读数（`settings.models.<角色>`）—— **唯一一处**知道那一档形状的地方。 */
+function roleCell(settings: SettingsReading, role: string): Record<string, unknown> {
   const models = (settings as unknown as Record<string, unknown>).models;
   if (models === undefined || models === null || typeof models !== "object") {
-    return "";
+    return {};
   }
   const seg = (models as Record<string, unknown>)[role];
   if (seg === undefined || seg === null || typeof seg !== "object") {
-    return "";
+    return {};
   }
-  const raw = (seg as Record<string, unknown>)[key];
+  return seg as Record<string, unknown>;
+}
+
+/** 按角色那一档现读的值（`settings.models.<角色>.<键>`）。 */
+function roleValue(settings: SettingsReading, role: string, key: string): string {
+  const raw = roleCell(settings, role)[key];
   if (raw === undefined || raw === null) {
     return "";
   }
@@ -333,6 +338,7 @@ export function Machine() {
         }
       >
         <div class="readings">
+          vendor <span class="mono">{settings.model.vendor === "" ? "unknown（没配）" : settings.model.vendor}</span> ·
           base_url <span class="mono">{settings.model.base_url === "" ? "unknown（没配）" : settings.model.base_url}</span> ·
           name <span class="mono">{settings.model.name === "" ? "unknown（没配）" : settings.model.name}</span> ·
           api_key <span class="mono">{settings.model.api_key === "" ? "（空）" : settings.model.api_key}</span>
@@ -423,29 +429,42 @@ export function Machine() {
         <div class="readings">
           按角色配模型（留空 = 沿用 `models.default` / `model` 那两档；号与键都由后端现取）
         </div>
-        {ROLES.map((role) => (
-          <div class="readings" key={role}>
-            <span class="mono">models.{role}</span>
-            {ROLE_FIELDS.map((rf) => (
-              <label class="opt" key={rf.key}>
-                <span class="mono">{rf.key}</span>
-                <input
-                  type={rf.key === "api_key" ? "password" : "text"}
-                  placeholder={
-                    roleValue(settings, role, rf.key) === ""
-                      ? `${rf.hint}（盘上没设过）`
-                      : rf.hint
-                  }
-                  value={values[`models.${role}.${rf.key}`] ?? roleValue(settings, role, rf.key)}
-                  onInput={(ev) => {
-                    const v = ev.currentTarget.value;
-                    setValues((old) => ({ ...old, [`models.${role}.${rf.key}`]: v }));
-                  }}
-                />
-              </label>
-            ))}
-          </div>
-        ))}
+        {ROLES.map((role) => {
+          // 那一档"配了没配 + 从哪一档取到的"现算（读数由后端给：
+          // `settings.models.<角色>.configured` / `.source`）。为什么要显出来：
+          // 不显的话，只有点开每一格才知道哪个角色真的配了自己的 key ——
+          // 而"哪个角色在用哪一把"正是这一页要回答的问题。
+          const cell = roleCell(settings, role);
+          const configured = cell["configured"] === true;
+          const src = typeof cell["source"] === "string" ? (cell["source"] as string) : "";
+          return (
+            <div class="readings" key={role}>
+              <span class="mono">models.{role}</span>
+              <Badge
+                kind={configured ? "badge-pass" : "badge-na"}
+                text={configured ? `配了（${src === "" ? "来源没读到" : src}）` : "沿用下一档"}
+              />
+              {ROLE_FIELDS.map((rf) => (
+                <label class="opt" key={rf.key}>
+                  <span class="mono">{rf.key}</span>
+                  <input
+                    type={rf.key === "api_key" ? "password" : "text"}
+                    placeholder={
+                      roleValue(settings, role, rf.key) === ""
+                        ? `${rf.hint}（盘上没设过）`
+                        : rf.hint
+                    }
+                    value={values[`models.${role}.${rf.key}`] ?? roleValue(settings, role, rf.key)}
+                    onInput={(ev) => {
+                      const v = ev.currentTarget.value;
+                      setValues((old) => ({ ...old, [`models.${role}.${rf.key}`]: v }));
+                    }}
+                  />
+                </label>
+              ))}
+            </div>
+          );
+        })}
         <ConfirmButton
           action="写这些设置"
           impact={`会改盘上那份设置文件（${settings.path === "" ? "落点没读到" : settings.path}）：

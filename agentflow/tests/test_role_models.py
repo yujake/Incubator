@@ -176,3 +176,83 @@ def test_without_the_secretary_slot_the_secretary_keeps_the_body_seam(tmp_path, 
     seam, source = AL._secretary_seam("A", root=tmp_path, seam=body, sid="t", mg=MG)
     assert seam is body, source
     assert source.startswith("body"), source
+
+
+# ------------------------------------------------ 机器面的回显（面板的初值就从这里来）
+
+
+def _reading(tmp_path: pathlib.Path, monkeypatch) -> dict:
+    """把设置文件指到临时那份，再读一次机器面的 `settings`（面板初值的唯一来源）。"""
+    from agentflow.webui import readers as RD
+
+    monkeypatch.setenv(SET.ENV_SETTINGS, str(tmp_path / "settings.json"))
+    got, tri, why = RD._settings_reading()
+    assert tri in ("ok", "unknown", "unreadable") or isinstance(tri, str), (tri, why)
+    return got
+
+
+def test_the_readback_carries_vendor_for_the_body_every_slot_and_the_secretary(
+        tmp_path, monkeypatch):
+    """**厂商这一格必须三处都回显**：`model` / 每个 `models.<槽>` / `secretary`。
+
+    为什么这条是业主那句话的机器形态（2026-10-14 实测的缺陷）：面板上每个角色的
+    `vendor` 输入框，初值取自这份读数（`Machine.tsx` 的 `roleValue` 读
+    `settings.models.<角色>.vendor`）。读数里没有这一格 ⇒ **盘上写了厂商，面板上
+    永远是空的、placeholder 还说"盘上没设过"** —— 而"不同角色用不同厂商"
+    正是业主 ① 要的那件事。三处少任何一处，那一处的输入框就永远读不回盘上的值。
+    """
+    _write(tmp_path, {
+        "model": {"api_key": "k-base", "vendor": "deepseek"},
+        "models": {"A": {"api_key": "k-A", "vendor": "deepseek", "name": "m-A"},
+                   "default": {"api_key": "k-D", "vendor": "acme"}},
+        "secretary": {"api_key": "k-sec", "vendor": "acme", "name": "m-sec"},
+    })
+    got = _reading(tmp_path, monkeypatch)
+    assert got["model"]["vendor"] == "deepseek", got["model"]
+    assert got["models"]["A"]["vendor"] == "deepseek", got["models"]["A"]
+    assert got["models"]["default"]["vendor"] == "acme", got["models"]["default"]
+    assert got["secretary"]["vendor"] == "acme", got["secretary"]
+    # 反真空：厂商不是 key，它必须**原样**回显（掩码只该落在 api_key 那一格）
+    assert got["models"]["A"]["api_key"] == SET.MASKED_KEY
+
+
+def test_each_slot_reports_its_own_key_source_not_the_model_sections(tmp_path, monkeypatch):
+    """每一档的 `key_source` 必须是**这一档自己的**来源，不是 `model` 段的。
+
+    缺陷形态（2026-10-14 实测）：这一格此前调的是全局 `key_source()` ——
+    它只读 `model` 段 ⇒ **每一档都报同一个来源**。实测形态：`model` 段没有 key、
+    而 `models.A` 有 ⇒ 全局那个报 `""`（"哪儿都没找到"），而 A 那一档实打实是从
+    设置文件里取到的（`"settings"`）。读的人会据此以为"按角色配的 key 没生效"。
+    """
+    _write(tmp_path, {"models": {"A": {"api_key": "k-A"}, "B": {}},
+                      "model": {"base_url": "https://base/v1"}})
+    got = _reading(tmp_path, monkeypatch)
+    assert got["models"]["A"]["key_source"] == "settings", got["models"]["A"]
+    assert got["models"]["B"]["key_source"] == "", got["models"]["B"]
+    # 同一份读数里两档的**结论不同**才是这条判据在起作用（反真空）
+    assert got["models"]["A"]["key_source"] != got["models"]["B"]["key_source"]
+
+
+def test_every_model_key_on_the_write_side_shows_up_in_the_readback(tmp_path, monkeypatch):
+    """写侧词表（`settings.MODEL_KEYS`）里的每一格，读侧都要有 —— 三处都不许漏。
+
+    为什么按词表判而不是抄一份名单：`MODEL_KEYS` 是"一个角色能配哪几格"的**唯一来源**
+    （写侧按它校验、面板按它画输入框）。读侧照抄一份名单，将来往词表里加一格
+    （比如又一个厂商相关的字段）就会出现"能写、面板有输入框、但读不回盘上的值"
+    —— 而那正是 `vendor` 这一格刚踩过的坑。
+    """
+    _write(tmp_path, {"model": {"api_key": "k"}, "models": {"A": {"api_key": "k-A"}},
+                      "secretary": {"api_key": "k-sec"}})
+    got = _reading(tmp_path, monkeypatch)
+    want = set(SET.MODEL_KEYS)
+    assert want == {"vendor", "api_key", "base_url", "name", "reasoning_effort"}, want
+    missing = {
+        "model": sorted(want - set(got["model"])),
+        "models.A": sorted(want - set(got["models"]["A"])),
+        "secretary": sorted(want - set(got["secretary"])),
+    }
+    assert not any(missing.values()), f"读侧缺了写侧的格子：{missing}"
+    # 反真空：从读数里挖掉一格，上面那个算式必须当场看见（否则它只是在比较空集）
+    doctored = dict(got["models"]["A"])
+    doctored.pop("vendor")
+    assert sorted(want - set(doctored)) == ["vendor"]
