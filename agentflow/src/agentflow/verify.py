@@ -686,6 +686,26 @@ def _check_5(rep, lit_by_id, questions, store):
         if e.get("result") == "refutes" and not e.get("counterexample"):
             rep.issues.append(Issue("error", "experiments", eid, "refutation_without_counterexample",
                                     "result='refutes' 但没给 counterexample ⇒ '证否'不可复核"))
+        # 2026-10-15 真机读数（`draft/120` §六·补三 ①）：E 把"这条全称命题为假"写成了 `claim`
+        # （本该写被检验的那条命题）、配 `result=supports`，而反例落进了 `certificate`
+        # —— `method=exhaustive_search` 本来就要求给出证书，E 给得很诚实（`n=40`、
+        # `1681=41×41`）。于是 `counterexample` 那一格是空的（框架只在 `result=refutes`
+        # 时收它），收工门那一档实测 `counterexample_or_proof_rows=0`、验收表判 `fail`。
+        # **盘上有反例证书、台账那一格却是空的** —— 症状不是"丢了反例"，
+        # 而是"机器读数与盘上事实相反"，而下游（五元位、收工门、验收表）读的全是那一格。
+        cert = e.get("certificate")
+        if (isinstance(cert, dict) and str(cert.get("kind") or "") == "counterexample"
+                and str(e.get("result") or "") != "refutes"):
+            rep.issues.append(Issue(
+                "error", "experiments", eid, "counterexample_certificate_off_ledger",
+                f"这一行带了 `certificate.kind='counterexample'`"
+                f"（{str(cert)[:160]}），而 result={e.get('result')!r}、"
+                f"counterexample={e.get('counterexample')!r} ⇒ 反例在证书里、台账那一格却是空的："
+                "收工门的 `counterexample_or_proof_rows` 与五元位的反例读数都会按「没有反例」算"
+                "（真机实测过：那一档记 0、验收表判 fail，而判决性证据就在盘上）。"
+                "反例只有一个合法落法 —— `claim` 写**被检验的那条命题**、"
+                "`result` 写 'refutes'、`counterexample` 给可复核的那一个。",
+            ))
 
     plan_ids = {r["plan_id"] for r in plans}
     for pl in plans:
@@ -1776,6 +1796,107 @@ def _check_13(rep, store) -> None:
     rep.checked["bit_ledger_gaps"] = bit_gaps
 
 
+#: 报告面：工作区里 `reports/` 下那一层 markdown。D 的跨趟研究手稿（`reports/RESEARCH.md`）
+#: 与工作稿（`reports/<qid>-research.md`）、F 的攻坚台账（`reports/attack-<plan_id>.md`）
+#: 都住在这里 —— 它们是**自由文本**，不进 `schema.TABLES`，所以单行自洽校验管不到。
+REPORTS_DIR = "reports"
+
+#: 报告面里"引到某一行某一格"的记号：`前缀:编号.字段名`（如 `exp:000000.counterexample`）。
+#:
+#: 为什么不复用 `T.find_citations`：那一格的代号字符集里**没有点**
+#: （`[A-Za-z0-9][A-Za-z0-9_\-]*`），读到 `exp:000000.certificate` 会在点前停住 ——
+#: 字段那一段根本不在它的射程里。两件事、两条判据："这一行在不在"归它那一族，
+#: "这一格在不在"归这里。代号用 `schema.ID_OR_LEGACY_PATTERN`：编号宽度是
+#: `schema.ID_DIGITS` 一处的定义，这里只负责"看起来像别人写下的号"。
+_FIELD_REF_RE = re.compile(
+    r"(?<![\w:/])([A-Za-z][A-Za-z0-9_]*):(" + S.ID_OR_LEGACY_PATTERN + r")"
+    r"\.([A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+def _check_14(rep, store) -> None:
+    """`verify_all` 的第 14 段：报告面里的**字段级引用**必须落在真有的键上。
+
+    守的是一类"看着可复核、实际查不到"的引用：报告里写 `exp:000000.<某一格>`，
+    而那一行里**没有这个键**（名字写错了、或者写的是上一版的字段）——
+    读者顺着它什么也找不到，而这条引用看上去仍然成立。**比不引更坏。**
+
+    为什么要有这一格，而不是只在提示词/手册里写一句"引之前先看清那一行有哪些键"：
+    那句话是**纪律**（靠作者记得），这一格是**判据**（机器每次都读一遍）。
+    两者不冲突 —— 纪律告诉作者该怎么做，判据在作者忘掉时说话。
+
+    【立这一格的直接由头要说准，别抄错的】2026-10-15 第七趟真跑里定的是**纪律 + 判据**
+    这两条腿：那句纪律（D 的声明与手册正文）当时给的理由是**读错了盘** ——
+    第六趟手稿引的 `exp:000000.certificate` 其实**真的存在**（那一行的 `certificate`
+    里就装着 `n=40`、`1681=41×41`），当时只看了 `counterexample: null` 那一格就断言
+    "那一行没有这个键"，把"我没看见"当成了"它不在"（勘误见 `draft/120` §六·补三）。
+    纪律留着、理由改正，而兜底从"靠作者记得"换成这一格 —— 这一格**不是**为那次误判立的，
+    是为"引用一个不存在的落点"这一类立的。
+
+    为什么报 warning 而不是 error（与 `dangling_citation` 那一档的分界）：`documents`
+    里的 `citations` 是**声明过的**引用（作者填了那个字段，就是声明"这是引用"）；
+    而这里扫的是自由 markdown —— 作者也可能在**描述**某一格的缺失。
+    把"提到"折成"引错"会冤枉人，而本格的用处是"让人看见"，不是"阻断收工"。
+    写入期的硬条件仍在 `Experiment.validate` 那一层（`result=refutes` 必须有反例）。
+
+    三态口径（同 `checked` 其余各键）：
+
+    - 工作区里没有 `reports/*.md` ⇒ **不写这个键**（本格不适用，不是"查过、干净"）；
+    - 有、读得出来 ⇒ 写整数（扫到几处字段级引用）；
+    - 有、读不出来 ⇒ 写 `None` 并报一条 warning（**没查成**）。
+    """
+    root = Path(getattr(store, "root", ".") or ".")
+    reports = root / REPORTS_DIR
+    files = sorted(p for p in reports.glob("*.md") if p.is_file()) if reports.is_dir() else []
+    if not files:
+        return
+
+    scanned = 0
+    unreadable = 0
+    # 表 → {号: 行}。按需建、按表缓存：一份报告引几十条时不必逐条重读盘。
+    id_index: dict[str, dict[str, dict]] = {}
+    for report_path in files:
+        rel = f"{REPORTS_DIR}/{report_path.name}"
+        try:
+            text = report_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            unreadable += 1
+            rep.issues.append(Issue(
+                "warning", "reports", rel, "report_unreadable",
+                f"{rel} 读不出来（{type(exc).__name__}: {exc}）⇒ 这一份报告的字段级引用"
+                "**一处都没核**。这是「没查成」，不是「查过、没问题」。",
+            ))
+            continue
+        for m in _FIELD_REF_RE.finditer(text):
+            prefix, code, field = m.group(1), m.group(2), m.group(3)
+            table = S.citation_prefix_table(prefix)   # 认不认这个前缀，只有那一处说了算
+            if table is None:
+                continue      # 不认识的记号不归本格管（`textutil.find_citations` 同一口径）
+            if table not in id_index:
+                id_field = str((S.TABLES.get(table) or {}).get("id_field") or "id")
+                id_index[table] = {str(r.get(id_field) or ""): r for r in store.rows(table)}
+            scanned += 1
+            row = id_index[table].get(code)
+            if row is None:
+                rep.issues.append(Issue(
+                    "warning", "reports", rel, "report_ref_dangling",
+                    f"{rel} 里引了 `{m.group(0)}`，而 `{table}` 里没有号 {code} 这一行 "
+                    "⇒ 这条引用悬空（读者顺着它找不到任何东西）",
+                ))
+                continue
+            if field in row:
+                continue
+            rep.issues.append(Issue(
+                "warning", "reports", rel, "report_field_ref_missing",
+                f"{rel} 里引了 `{m.group(0)}`，而 `{table}` 里 {code} 那一行**没有 "
+                f"`{field}` 这个键**（那一行有的是：{sorted(row)}）⇒ "
+                "引一个不存在的落点比不引更坏：它看起来是可复核的。"
+                "要么改引真有的一格，要么把这句话写成散文。",
+            ))
+    # `None` = 有报告、但一份都没读成 ⇒ 没查成；整数 = 扫过几处字段级引用。
+    rep.checked["report_field_refs"] = None if (unreadable and not scanned) else scanned
+
+
 def verify_all(
     store: Store,
     *,
@@ -1810,4 +1931,5 @@ def verify_all(
     closed_dep_exps, doc_by_id, exp_by_id = _check_11(rep, documents, store)
     _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store)
     _check_13(rep, store)
+    _check_14(rep, store)
     return rep

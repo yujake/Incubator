@@ -790,10 +790,13 @@ def _e_skills() -> tuple[Skill, ...]:
 找到反例时，**claim 写被检验的那条命题**（「对所有正整数 n，…」）、`result` 写 `refutes`、
 `counterexample` 给可复核的那一个（`n=40`、`1681=41×41`）。
 
-**不许**把 claim 写成「这条命题**为假**」再配 `result=supports` —— 那样那一行里**没有**
-`counterexample` 字段，下游（五元位、收工门的 `counterexample_or_proof_rows`、D 的手稿）
-全按「没有反例」算：**反例明明在，读数是 0**。真机上就是这么发生的（n=40 那个反例因此
-在手稿里只能靠散文叙述，台账上一行都没有）。「它为假」是结论，不是 claim。
+**不许**把 claim 写成「这条命题**为假**」再配 `result=supports`：反例于是只落在
+`certificate` / `observations` 里（证书你给得没错 —— `method=exhaustive_search` 本来就要求它），
+而 `counterexample` 那一格是空的（框架只在 `result=refutes` 时收它）。真机实测的后果
+**不是"丢了反例"，而是"机器读数与盘上事实相反"**：收工门那一档
+`counterexample_or_proof_rows=0`（`proof_rows` 与 `counterexample_rows` 都空）、
+验收表判 `fail`，而判决性证据就在盘上 ——「反例明明在，读数是 0」。
+「它为假」是结论，不是 claim。
 
 ## 一条纪律
 
@@ -963,12 +966,14 @@ V 的结论只有三个：**成立 / 有毛病（指到那一步）/ 看不出�
 
 ## 引一个字段之前，先看那一行有哪些键
 
-手稿里的落点引的是**行里的字段**。第六趟真机的手稿把反例证书引成 `exp:000000.certificate`，
-而那一行里**没有这个键**（真正的反例在 `observations` 里）—— 引一个不存在的落点
-**比不引更坏**：它看起来可复核，而下一个接手的人查不到。
+手稿里的落点引的是**行里的字段**，不是行本身。写 `exp:000000.certificate` 这种写法时，
+读者会到那一行去找 `certificate` 这个键 —— **名字写错了他就什么也找不到**，
+而这条引用看上去仍然是可复核的（比不引更坏：它假装有落点）。
 
-所以引之前先 `table.get` 看一眼那一行的键（`result` / `counterexample` / `code_path` /
-`code_hash` / `observations` …），只引**真的在那里**的字段。
+所以引之前先 `table.get` 看一眼那一行的键（`result` / `counterexample` / `certificate` /
+`code_path` / `code_hash` / `observations` …），只引**真的在那里**的字段。
+`verify_all` 会逐条核报告面里的 `前缀:号.字段` —— 引错会被报成 `report_field_ref_missing`，
+悬空的行报 `report_ref_dangling`。
 
 ## 硬次序：先读后改
 

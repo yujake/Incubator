@@ -305,11 +305,19 @@ slug 非空/无空白/能当文件名/全目录唯一），由 `tests/test_agent
 18. **R124**：**第六趟真机跑**（换一条**假**命题：「对所有正整数 n，`n²+n+41` 均为素数？」，
     专为打通**反例那条链**）—— 手稿那一节写得**完整且诚实**（反例 `n=40`、`1681=41×41`、
     最小性由 `n=1..39` 逐项确定性素性判定给出、并写明"它反的是全称命题、不反 `n≤39` 的有限读数"），
-    但**台账读数是 0**：反例被登记成"否定式 `claim` + `result=supports`"，于是**没有进 `counterexample` 字段**，
-    而下游（五元位、收工门、手稿）读的全是那个字段 ⇒ 修 E 的落法（`claim` 写**被检验的命题**、
-    `result=refutes`、`counterexample` 给可复核的那一个）；另一处是手稿引了 `exp:000000.certificate`
-    —— **那一行里没有这个键** ⇒ 修 D 的引用纪律（**引之前先看那一行有哪些键**）。
-    两处细节各写进 E/D 那份**按需读**的手册正文，提示词 p113 → **p114**（作用域：只有 D / E 两格）。
+    但**台账读数是 0**：反例被登记成"否定式 `claim` + `result=supports`"，于是 `counterexample`
+    那一格是空的（反例其实落在 `certificate` 里），而收工门读的正是那一格 ⇒ 修 E 的落法
+    （`claim` 写**被检验的命题**、`result=refutes`、`counterexample` 给可复核的那一个）；
+    另一条是 D 的引用纪律（**引之前先看那一行有哪些键**）—— 它的**理由当时读错了盘**，
+    见 R125 的勘误。两处细节各写进 E/D 那份**按需读**的手册正文，提示词 p113 → **p114**。
+19. **R125**：**第七趟真机跑 = 复测 + 勘误**（同任务同参数、`p115`）—— ① 复测生效：两行
+    `experiments` 都是 `result=refutes` + 非空 `counterexample`，否定式 claim 0 行，
+    收工门 `counterexample_or_proof_rows` **0 → 2**（`ok=true`）；② **勘误 §六·补三 ②**：
+    那是**误判**（那一行的 `certificate` 就在那儿，手稿引对了），已把假读数从 prompt 里删掉，
+    并把这条纪律的兜底从「靠作者记得」换成**机器判据** —— `verify.py` 第 5 段新增
+    `counterexample_certificate_off_ledger`（error）、第 14 段新增 `_check_14`
+    （逐份核 `reports/*.md` 里的 `前缀:号.字段`；三态：没有报告面就不写那个键）；
+    判据 `tests/test_verify_report_refs.py` 新增 **10** 条；提示词 p114 → **p115**（同样只动 D / E 两格）。
 
 ## 四、待审批：科研 skill 推荐、而我们今天做不到的能力（逐条累积）
 
@@ -502,7 +510,7 @@ peak=False;cache=billed;in_hit=0.003;in=0.15;out=0.6` —— 厂商、模型、�
 $0.145789 + $0.181785 + $0.225541 = **$0.660244**，换来的是"这一版到底行不行"的硬读数与
 四处只有真跑才看得见的缺陷。
 
-### 六·补三、第六趟真跑（R124）：反例那条链走通了，但**读数与台账对不上**
+### 六·补三、第六趟真跑（R124）：反例那条链走通了，但**读数与台账对不上**（第 ② 条**已于 R125 勘误：那是误判**）
 
 任务换成一条**假**命题（「对所有正整数 n，`n²+n+41` 均为素数？」）—— 目的就是逼出反例那条链
 （E 数值搜索 → 反例 → 交 D 写进手稿的「例子与反例」）。读数：26 次调用 / **$0.213790** / 1717 s。
@@ -512,16 +520,55 @@ $0.145789 + $0.181785 + $0.225541 = **$0.660244**，换来的是"这一版到底
 （推翻的是"对所有 n 均为素数"这条**全称**命题；**不**推翻"`n ≤ 39` 时取素数"那条有限读数；
 **不**声称任何关于 `n ≥ 41` 的素数行为）。这正是引用纪律与三态纪律要的形状。
 
-**坏的一半（两处，都只有真跑才看得见）**：
+**坏的一半（一处真缺陷 + 一处误判 —— 后者见本节末的勘误）**：
 
 | # | 盘上逐字 | 为什么是缺陷 | 修法（落在哪） |
 |---|---|---|---|
-| ① | `experiments` 那一行：`claim` = "「对所有正整数 n，…均为素数」**为假**：最小反例 n=40…"、`result: supports`、`negation_kind: not_proved` | 反例**确实找到了**、也进了 `observations.bound.least_counterexample_n`，但**没进 `counterexample` 字段** —— 而下游读的全是那个字段（五元位反例读数、收工门 `counterexample_or_proof_rows`、D 的手稿）⇒ **反例明明在、读数是 0** | E 的声明把落法写死：`claim` 写**被检验的那条命题**、`result=refutes`、`counterexample` 给**可复核的那一个**；"这条命题为假"是**结论**、不是 claim（E 的手册正文同步） |
-| ② | 同一份手稿把反例证书引成 `exp:000000.certificate` —— 那一行里**没有这个键** | 引一个**不存在**的落点**比不引更坏**：它看起来是可复核的 | D 的声明写明：**引之前先 `table.get` 看那一行到底有哪些键**，只引真存在的（`result` / `counterexample` / `code_path` / `code_hash` / `observations` …），不许自己编字段名（D 的手册正文同步） |
+| ① | `experiments` `000000` 那一行：`claim` = 「命题「对所有正整数 n，…均为素数」**为假**：最小反例 n=40…」、`result: supports`、`negation_kind: not_proved`、**`counterexample: null`**、`certificate` = {kind: counterexample, n: 40, value: 1681, factorization: 41*41} | 反例**确实找到了**，E 给的**证书也很完整**（`method=exhaustive_search` 本来就要求给证书）—— 但它是**否定式 claim**：框架只在 `result=refutes` 时收 `counterexample`，于是那一格是 `null`，而下游读的正是那一格 ⇒ 收工门那一档实测 **`counterexample_or_proof_rows=0`**（`proof_rows` 与 `counterexample_rows` 都空）、验收表 `CEX` 行 `ok=false`、整张表 `acceptance=fail`。**判决性证据在盘上、读数说没有** | E 的声明把落法写死：`claim` 写**被检验的那条命题**、`result=refutes`、`counterexample` 给**可复核的那一个**；「这条命题为假」是**结论**、不是 claim（E 的手册正文同步） |
+| ② | ~~同一份手稿把反例证书引成 `exp:000000.certificate` —— 那一行里**没有这个键**~~ **（误判，R125 勘误）**：那一行里**有** `certificate`，里面就装着 `n=40`、`1681=41×41` | **不是缺陷**：手稿引对了。当时是读错了盘 —— 把「我没看见」当成了「它不在」 | （纪律本身留着：引之前先看清那一行有哪些键。R124 已落进 D 的声明与手册，R125 把它的**理由**改成真的，并把这件事变成机器判据 —— `verify_all` 第 14 段逐条核报告面里的 `前缀:号.字段`） |
 
 这一趟的其它读数（**都不算缺陷**）：`A.search_literature` failed（`--provider fixture` 只有一个假后端，
 检索本身走不通）；`G.build_document` 第二次被 `budget_exceeded` 拒（预算上限正常工作）；
 `conjectures` / `statements` 0 行（这条任务不需要猜想与命题登记，M 也没派）。
 
-**真机六趟累计**：$0.660244 + $0.213790 = **$0.874034**，换来的是六处只有真跑才看得见的缺陷
-（其中五处已修并复测，第六处即本轮的 ①②）。
+**真机六趟累计**：$0.660244 + $0.213790 = **$0.874034**。这一轮抓到**一处**真缺陷（①）并另立了一条**误判**（②）—— 后者在下一轮被自己推翻。
+
+**勘误（2026-10-15，R125 立）**：上面 ② 的那句话是**假的**，而且它当时被写进了两个地方 ——
+prompt（D 的声明与手册正文，`p114`）与 `agentflow/temp/r124-COMMIT-MSG.txt`。真相是：
+`exp:000000` 那一行的 `certificate` **就在那儿**（`n=40`、`value=1681`、`factorization=41*41`），
+手稿引它**引对了**。错在我：只看了 `counterexample: null` 那一格，就断言「那一行没有这个键」——
+**把「我没看见」当成了「它不在」**，正是这个项目最忌的那种读法。R125 已把假读数从 prompt 里删掉
+（`p115`），并把这条纪律的兜底从「靠作者记得」换成机器判据。
+
+### 六·补四、第七趟真跑（R125）：① **复测生效**，另加两条机器判据，并**勘误 §六·补三 ②**
+
+同一任务、同一参数，在 `p115` 上再跑一趟。读数：34 次调用 / **$0.266686** / 978 s（`stop_reason=final`）。
+
+| 读数 | run6（`p113`，修之前） | run7（`p115`，修之后） |
+|---|---|---|
+| `experiments` 行的 `result` | `supports`、`negation_kind=not_proved` | **`refutes`、`negation_kind=disproved`**（两行都是） |
+| `claim` 写的是 | 「这条全称命题**为假**」 | **「对所有正整数 n，n²+n+41 都是素数」**（被检验的那条命题） |
+| `counterexample` | `null` | **非空**（`{n:40, value:1681, value_is_prime:false, factorization_exact:{…41×41}}`） |
+| 「否定式 claim + supports」的行 | 1 行 | **0 行** |
+| 收工门 `counterexample_or_proof_rows` | **0**（`CEX` 行 `ok=false` ⇒ `acceptance=fail`） | **1 → 2**（`ok=true`；`counterexample_rows` 指着 `000000`/`000001`） |
+| 手稿里 `前缀:号.字段` 的悬空/错键 | ——（本轮才立的判据） | **0 处**（20 处带前缀的引用，引的是 `claim` / `observations` / `certificate` / `code_path` / `artifact_paths`） |
+
+**修法从纪律变成判据**（这一轮真正的分量在这里）—— 两处都落在 `verify.py`：
+
+1. **第 5 段新增**（守 ① 这一族）：`certificate.kind='counterexample'` 而 `result != 'refutes'`
+   ⇒ 报 `counterexample_certificate_off_ledger`（**error**）。这不是「已知未做」，而是
+   **读数与盘上事实相反**；run6 那一行就是现成的负控（判据在它上面红，在合法落法上绿）。
+2. **第 14 段新增** `_check_14`（守「引用一个不存在的落点」这一类 —— **不是**为那次误判立的；
+   误判只说明这一类的**理由**当时写错了，判据本身照样该有）：逐份扫 `reports/*.md`，
+   核每一个 `前缀:号.字段` —— 行不在报 `report_ref_dangling`、格不在报 `report_field_ref_missing`
+   （都是 warning：自由文本里"提到某一格"与"引某一格"分不开，硬拒会冤枉人；
+   写入期的硬条件仍归 `Experiment.validate`）。
+   三态：**没有 `reports/` 的工作区不写这个键**（不适用 ≠ 查过干净）；
+   有、读不出来 ⇒ `checked` 记 `None` + 一条 `report_unreadable`（**没查成**）。
+
+判据 `tests/test_verify_report_refs.py` 新增 **10** 条，每条都两个方向：真机上那一份手稿的原样
+必须绿、注入坏键必须红、别的证书种类不许误伤、只提行不提字段不许报、
+`reports/` 下每一份 markdown 都要扫（不许钉一个文件名）、编号宽度必须从
+`schema.ID_OR_LEGACY_PATTERN` 取（判据直接钉住正则的来源）。
+
+**花销**：六趟 $0.874034 + 本趟 $0.266686 = **$1.140720**。

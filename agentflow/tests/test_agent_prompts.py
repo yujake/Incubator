@@ -2343,17 +2343,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: ③ D 的手稿分节只留一处枚举（七节，成果概述在第一位）。
 #: 作用域读数：**只有 D 一格换值** —— V 那一处改的是**参数上界**，而提示词里只印必填键，
 #: 不印长度约束，所以 V 的前置提示词逐字未动（这一改动的是门，不是话）。
-#: p113 → p114（2026-10-14，**第三轮真机读数驱动**，第六趟）：两处落点纪律 ——
-#: ① E：反例只有一个合法落法（claim 写被检验的命题 + `result=refutes` + 非空 counterexample），
-#: 不许用「否定式 claim + supports」绕过；② D：引落点前先看那一行有哪些键，不许自己编字段名。
-#: 作用域读数：只有 **D / E** 两格换值（那两条各自只发给那一岗）。
-_FROZEN_PROMPT_VERSION = "p114"
+#: p113 → p114（2026-10-14，**第三轮真机读数驱动**，第六趟）：① E：反例只有一个合法落法
+#: （claim 写被检验的命题 + `result=refutes` + 非空 counterexample），不许用
+#: 「否定式 claim + supports」绕过；② D：引落点前先看那一行有哪些键（**理由当时读错了盘**）。
+#: p114 → p115（2026-10-15，**勘误**）：p114 的 ② 是**误判** —— 第六趟那份手稿引的
+#: `exp:000000.certificate` 真的存在（那一行的 `certificate` 里就装着 `n=40`、`1681=41×41`），
+#: 当时是读错了盘、把"我没看见"当成了"它不在"。于是把那句假读数从 D 的声明与手册里删掉、
+#: 换成机器判据的落点（`verify_all` 第 14 段逐条核报告面里的 `前缀:号.字段`）；
+#: E 那一条的读数同时改准（"那一格是空的"而不是"那个字段不存在"）。
+#: 作用域读数：只有 **D / E** 两格换值（两处各自只发给那一岗）。
+_FROZEN_PROMPT_VERSION = "p115"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "313b24a114f7a560c2505af8578c2303d638cd837d8fdb5eecadd93d0bd006da",
     "B": "82bd6f7e211dce1d324ba12c17a98c2dce6ddff3792ae01a24637822cd793514",
     "C": "4ad1339d41286052608923bc4fd96c6260e7be6e2d77383b9b6aa2e87e22aa6f",
-    "D": "9d82ddc8e0a345999397ea40157fe60df4ee159738c00b664965f01278afbe74",
-    "E": "3f1b11de62d754f1ddbdbc51afb785cf684b6e6495f93486846eb0edf123a27f",
+    "D": "4705d9f41eb8da6a19eae291da92987d6777f67cd6c156988bcc9fbb8dea07e6",
+    "E": "0b59e982bff175dc61fa7f1471f28341d5e76c71419947e01b88d11f582394f8",
     "F": "eaa24cccb4bb17fbe0b05c677f32f69ecb8d5aa6cc17de680a578850b0cd3cf5",
     "G": "f2d29b2b3c4496ac07bb8938a7deae03e5340cbf1186fbcc64782d3c9c07bace",
     "H": "9fa608493b8e3b00a2c3c74fe64e82be21a1744151aefe7ac89890bde4605ceb",

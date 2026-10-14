@@ -1,0 +1,78 @@
+R125 第七趟真机跑：反例那条落法**复测生效**；并**勘误 R124** —— 那条「引了不存在的字段」是我误判
+
+同一任务、同一参数（假命题「对所有正整数 n，n²+n+41 均为素数？」）在 `p115` 上再跑一趟：
+34 次调用 / **$0.266686** / 978 s / `stop_reason=final`。
+
+## 一、① 复测生效（反例落的哪一格）
+
+| 读数 | run6（`p113`，修之前） | run7（`p115`，修之后） |
+|---|---|---|
+| `experiments` 行的 `result` | `supports` / `negation_kind=not_proved` | **`refutes` / `disproved`**（两行都是） |
+| `claim` 写的是 | 「这条全称命题**为假**」 | **「对所有正整数 n，n²+n+41 都是素数」**（被检验的那条命题） |
+| `counterexample` | `null` | **非空**（`{n:40, value:1681, factorization_exact:{41×41}}`） |
+| 「否定式 claim + supports」的行 | 1 行 | **0 行** |
+| 收工门 `counterexample_or_proof_rows` | **0**（`CEX` 行 `ok=false` ⇒ `acceptance=fail`） | **1 → 2**（`ok=true`） |
+| 手稿里的 `前缀:号.字段` 悬空/错键 | ——（本轮才立的判据） | **0 处**（20 处带前缀的引用全部落在真有的键上） |
+
+## 二、② **勘误**：R124 说的那处缺陷**不存在**
+
+R124 的提交信息与 goal 记录里写着「手稿把证书引成 `exp:000000.certificate`，而那一行里**没有这个键**」。
+**那是假的**。那一行的 `certificate` 就在那儿：
+
+```
+"certificate": {"kind": "counterexample", "certificate_type": "least_counterexample",
+                "n": 40, "value": 1681, "factorization": "41*41", "witness_meaning": "…"}
+```
+
+手稿**引对了**。错在我：只看了 `counterexample: null` 那一格，就断言「那一行没有这个键」——
+**把「我没看见」当成了「它不在」**，正是这个项目最忌的那种读法。而且这句话当时被写进了
+**prompt**（D 的声明与手册正文，`p114`）—— 一段编出来的"真机读数"混进了给模型看的话里。
+
+处置（都在本轮）：
+
+- 把假读数从 D 的声明与手册里删掉，只留纪律本身（引之前先看清那一行有哪些键）——
+  **理由是真的，读数不是**；
+- E 那一条的读数同时改准：不是「那一个字段不存在」，而是「**那一格是空的**」；
+  也不再声称 D 的手稿漏了它（手稿把反例写全了）；
+- 往上的 prompt 版本推进到 **`p115`**，并在版本注释里逐字留下这次勘误
+  （`agent_prompts.py` 与 `tests/test_agent_prompts.py` 的冻结表各记一份）。
+- `agentflow/temp/r124-COMMIT-MSG.txt` **不改**：它是 e7996f8 那一次提交的原话留档，
+  改了它反而让"提交信息"与"盘上的文件"对不上。勘误写在这里与 goal 记录 §六·补三。
+
+## 三、把这两条纪律从「靠作者记得」换成**机器判据**（本轮真正的分量）
+
+两处都落在 `src/agentflow/verify.py`（禁改区，本轮已按 FC-27 走查签字）：
+
+1. **第 5 段新增** `counterexample_certificate_off_ledger`（**error**）：一行的
+   `certificate.kind='counterexample'` 而 `result != 'refutes'` ⇒ 报。这不是"已知未做"，
+   而是**读数与盘上事实相反**（run6 那一行就是现成的负控：判决性证据在盘上、收工门记 0）。
+2. **第 14 段新增** `_check_14`：逐份扫 `reports/*.md`，核每一个 `前缀:号.字段` ——
+   行不在报 `report_ref_dangling`、格不在报 `report_field_ref_missing`。
+   为什么是 warning 而不是 error：`documents` 里的 `citations` 是**声明过的**引用，
+   而这里是自由文本 ——"提到某一格"与"引某一格"分不开，硬拒会冤枉人；
+   写入期的硬条件仍在 `Experiment.validate` 那一层（`result=refutes` 必须有反例）。
+   **三态**：没有 `reports/` 的工作区**不写这个键**（不适用 ≠ 查过、干净）；
+   有、读不出来 ⇒ `checked` 记 `None` 并报 `report_unreadable`（**没查成**）。
+
+判据：`tests/test_verify_report_refs.py` 新增 **10** 条，每条都两个方向 ——
+run6 那一行原样必须红、合法落法必须绿、别的证书种类不许误伤、只提行不提字段不许报、
+没有报告面时那个键必须不存在、`reports/` 下每一份 markdown 都要扫（不许钉一个文件名）、
+编号宽度必须从 `schema.ID_OR_LEGACY_PATTERN` 取。
+
+## 四、走查与流程
+
+- 提示词 `p114` → **`p115`**；逐格走查：只有 **D / E** 两格换内容（各一行），
+  其余八格只差版本行，键集与行数逐字不变，顶层其余各格逐字相同；
+- 面快照按 FC-27 台账重冻并签字（Yu / Jiaqi；`verify.py`、`specs/d.py`、`specs/e.py`、
+  面快照各 2 名 reviewer，台账 hash 与盘上逐字节一致复核过）；
+- linter 读数不变（error **6** / info **49**，与上一轮同）；
+- 全套测试：**5234 passed / 3 skipped / 1 xfailed**，唯一那条红是 `test_reading_map`
+  的 §3 行数（`agent_skills.py` / `verify.py` 这一轮长了几行）⇒ 同步数字后该条复跑绿；
+  同步之后只动过 `docs/READING-MAP.md` 一个文件（`test_doc_code_consistency` /
+  `test_release_all` 一并复跑绿）。
+- `verify_all` 的冻结快照**一个字节都没动**（那 8 个工作区都没有 `reports/`，
+  所以新那格按三态口径"不适用"，不写键）。
+
+## 五、花销
+
+真机七趟：$0.660244（R121–R123 五趟）+ $0.213790（run6）+ **$0.266686**（run7）= **$1.140720**。
