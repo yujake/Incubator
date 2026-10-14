@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-10-13T20:40:22+08:00",
+  "generated_at": "2026-10-14T08:53:39+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -447,26 +447,26 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "d2fd2151f68603097d473c2e3499754761d3445b21834b8203030dbb0df91ea5",
+      "sha256": "79d750b3fc0094c43f683122a957ddc67a3e4dd71adf64620de953b276b5fc17",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "逐行走查 R74 唯一的禁改区改动：schema.py 的 TASK_STATUSES 与 ITEM_STATES 各加一档 block（业主裁定逐字「接收到停的时候，剩余任务委托状态自动变成block」），并加两条校验：status=block 必须写 detail（为什么停）、outcome 只能是 None/no_result。语义与 cancelled/failed 分得开（人不让做 / 做坏了 / 停了没做完）；翻这一档的是框架（stopctl.block_remaining_tasks），不是模型自报。判据 tests/test_graceful_stop_blocks_remaining.py 10 条 + 定向 53 passed（本批未跑全量，已在提交信息里写明）。",
+      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-13T17:41:47+08:00",
-          "scope": "schema.py 的 TASK_STATUSES / ITEM_STATES 两个词表与 Task.validate() 里新增的两条 block 校验",
-          "note": "逐行走查 R74 唯一的禁改区改动：schema.py 的 TASK_STATUSES 与 ITEM_STATES 各加一档 block（业主裁定逐字「接收到停的时候，剩余任务委托状态自动变成block」），并加两条校验：status=block 必须写 detail（为什么停）、outcome 只能是 None/no_result。语义与 cancelled/failed 分得开（人不让做 / 做坏了 / 停了没做完）；翻这一档的是框架（stopctl.block_remaining_tasks），不是模型自报。判据 tests/test_graceful_stop_blocks_remaining.py 10 条 + 定向 53 passed（本批未跑全量，已在提交信息里写明）。",
+          "at": "2026-10-14T08:53:38+08:00",
+          "scope": "引文回验的两档口径（verbatim / semantic）：数据模型（schema.Relation/Statement）与 B 的登记入口参数（specs/b.py）",
+          "note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-13T17:41:48+08:00",
-          "scope": "schema.py 的 TASK_STATUSES / ITEM_STATES 两个词表与 Task.validate() 里新增的两条 block 校验",
-          "note": "逐行走查 R74 唯一的禁改区改动：schema.py 的 TASK_STATUSES 与 ITEM_STATES 各加一档 block（业主裁定逐字「接收到停的时候，剩余任务委托状态自动变成block」），并加两条校验：status=block 必须写 detail（为什么停）、outcome 只能是 None/no_result。语义与 cancelled/failed 分得开（人不让做 / 做坏了 / 停了没做完）；翻这一档的是框架（stopctl.block_remaining_tasks），不是模型自报。判据 tests/test_graceful_stop_blocks_remaining.py 10 条 + 定向 53 passed（本批未跑全量，已在提交信息里写明）。",
+          "at": "2026-10-14T08:53:39+08:00",
+          "scope": "引文回验的两档口径（verbatim / semantic）：数据模型（schema.Relation/Statement）与 B 的登记入口参数（specs/b.py）",
+          "note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
@@ -549,26 +549,26 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "21b50a300f6f07904d5250270f6f5a0bc16675fea195471fc76c2bd0392ba699",
+      "sha256": "a0a4ec5763604a51d160a4bba674681072aa94fb243c39000a83acf92a0edda8",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+      "change_note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
       "changed_this_session": null,
       "reviewers": [
         {
           "name": "Yu",
-          "at": "2026-10-13T19:28:48+08:00",
-          "scope": "specs/m.py 的 intake 那一条与两处删原话；specs/b.py、specs/g.py、specs/h.py、specs/v.py 各一处删原话；agent_surface 快照的 roles.G/H/M/V.prompt",
-          "note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+          "at": "2026-10-14T08:53:39+08:00",
+          "scope": "引文回验的两档口径（verbatim / semantic）：数据模型（schema.Relation/Statement）与 B 的登记入口参数（specs/b.py）",
+          "note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""
         },
         {
           "name": "Jiaqi",
-          "at": "2026-10-13T19:28:49+08:00",
-          "scope": "specs/m.py 的 intake 那一条与两处删原话；specs/b.py、specs/g.py、specs/h.py、specs/v.py 各一处删原话；agent_surface 快照的 roles.G/H/M/V.prompt",
-          "note": "逐行走查 R76 的禁改区改动：① specs/m.py 的 M 政策第一条收成一句「开工先扫一眼工作区」（业主更正：提示词里不要写他的话、也不要长篇分类规矩），两阶段与审校链两条只删掉业主原话括注、做法一字未改；② specs/b.py、specs/g.py、specs/h.py、specs/v.py 四处同样是删原话留做法（B 的第一环 / H 的中间那一环 / V 的签名环 / G 的只在成文阶段写论文），权限面与动作面一字未动；③ agent_surface 快照重冻：只有 G/H/M/V 四格的 prompt 换值。判据新增反抄断言（业主那三句原话不许进提示词），97 passed。",
+          "at": "2026-10-14T08:53:39+08:00",
+          "scope": "引文回验的两档口径（verbatim / semantic）：数据模型（schema.Relation/Statement）与 B 的登记入口参数（specs/b.py）",
+          "note": "业主 2026-10-14 明确授权动禁改区，并裁定「引文回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。本次落地的两处：① schema.py 加一对自洽的口径 —— quote_verified（三态结论）与 quote_mode（通过的方式：verbatim / semantic），并加 _normalize_quote_mode（True 而没写方式的行记实成 verbatim —— 这条通路存在之前True 只可能来自 check_quote，是历史事实；没通过/还没查的行方式归空串；词表外的值拒收）；② specs/b.py 的 register_statement 增 quote_mode 参数与描述（逐字命中 / 语义相同，后者由 H 判、B 唤起 H）。逐行走查过：判据 test_quote_semantics.py 17 条 + evidence_bits / agent_b / action_surface / agent_spec_reconciliation / capabilities 共 200+ 条全绿，逐条读数见本轮报告。",
           "verdict": "逐行走查通过",
           "evidence_path": "",
           "evidence_sha256": ""

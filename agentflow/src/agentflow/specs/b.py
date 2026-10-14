@@ -115,7 +115,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
         "+ `page_range`；own_result 要 `doc_id`（4 位十进制）或 `line_range`。"
         "`proof_text` 可缺（缺则落最低等级并进待办）；`quote_verified` 是三态（不传 = 还没查），"
-        "不是 true 时必须给 `quote_reason`",
+        "不是 true 时必须给 `quote_reason`；是 true 时用 `quote_mode` 说清**怎么**通过的"
+        "（逐字命中 / 语义相同 —— 后者是 H 判的，B 唤起 H）",
         _obj(
             {
                 "statement_full": {**_S, "minLength": 1},
@@ -148,7 +149,17 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # —— 工具层的极简 schema 子集不支持联合类型（`["boolean","null"]`
                 # 会在校验期抛 `unhashable type: 'list'`，实测撞过）。不传 = None = 还没查，
                 # 而那时 `quote_reason` 必填（动作里预检）。
-                "quote_verified": {**_B, "description": "逐字比对是否通过；不传 = 还没查（None）"},
+                "quote_verified": {**_B, "description":
+                                   "引文回验是否通过；不传 = 还没查（None）。2026-10-14 起"
+                                   "“通过”分两档，方式写进 quote_mode：逐字命中 / 语义相同"},
+                "quote_mode": {"type": "string", "enum": list(S.QUOTE_MODES),
+                               "description":
+                               "这条引文是**怎么**通过的（业主 2026-10-14：「回验不应该"
+                               "是十分呆板的逐字验证，而是保持语义相同即可」）："
+                               "verbatim＝逐字命中（`quoteverify.check_quote` 那一档，"
+                               "不花模型钱，先走它）；semantic＝语义相同（交 H 判："
+                               "引文与来源说同一件事即通过，允许改写/换记号/跨语言；"
+                               "「结论强于引文」仍判不通过）。quote_verified=true 时应当给"},
                 "quote_reason": {**_S, "description":
                                  "quote_verified 不是 true 时必需：写清哪里不一致、或者为什么还没查"},
                 "derived_from": _ARR_S,

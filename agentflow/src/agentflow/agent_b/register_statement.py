@@ -201,6 +201,10 @@ class _RegisterStatement:
         evidence_kind: str = "cross_check",
         quote_verified: bool | None = None,
         quote_reason: str = "",
+        #: 这条引文是**怎么**回验通过的（`schema.QUOTE_MODES`：`verbatim` 逐字命中 /
+        #: `semantic` 语义相同 —— 业主 2026-10-14：「回验……保持语义相同即可」）。
+        #: 不给就按历史行读（`True` ⇒ 逐字那一档），但**新写方应当说清方式**。
+        quote_mode: str = "",
         derived_from: list | None = None,
         doc_id: str = "",
         line_range: dict | None = None,
@@ -340,6 +344,7 @@ class _RegisterStatement:
             "statement_text": str(statement_text or ""), "statement_full": full,
             "proof_text": str(proof_text or ""), "source_lit_id": lit_id,
             "page_range": dict(page_norm), "quote_verified": quote_verified,
+            "quote_mode": str(quote_mode or ""),
             "quote_reason": str(quote_reason or ""), "evidence_kind": evidence_kind,
             "derived_from": S.sorted_unique(list(derived_from or [])),
             "doc_id": str(doc_id or ""), "line_range": dict(line_norm), "bits": bits,
@@ -374,6 +379,7 @@ class _RegisterStatement:
                             or int(written.get("pending_concepts") or 0)) else [])
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
                 "quote_verified": quote_verified, "origin": origin,
+                "quote_mode": str(quote_mode or ""),
                 "evidence_kind": evidence_kind, "row": data,
                 "deps_state": str(written.get("deps_state") or ""),
                 "deps_written": int(written.get("deps_written") or 0),

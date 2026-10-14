@@ -36,6 +36,9 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
+#: 引文"通过"的两档（`schema.QUOTE_MODES` 的唯一来源就是它，这里只转发一次引用）。
+from .schema import QUOTE_MODES
+
 #: 第 1/4 位的四态（顺序就是"从没做到做到了"的强弱）。
 BIT_STATES: tuple[str, ...] = ("pending", "na", "failed", "verified")
 #: 派生等级（由弱到强；`audited` 是并列的追加档，不进这个序列）。
@@ -119,6 +122,45 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
     return bits
 
 
+def quote_state(row: Mapping[str, Any]) -> str:
+    """一条引文现在的**状态**（引文回验的唯一读口径，2026-10-14 业主裁定之后）。
+
+    业主那句话：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。
+    于是"通过"这件事分两档，四态字面量：
+
+    - `"verbatim"`：逐字命中（`quoteverify.check_quote` 那一档，不花模型钱）；
+    - `"semantic"`：语义相同（H 判的；允许改写、换记号、跨语言）；
+    - `"mismatch"`：查过了、不一致（`quote_verified is False`）——**语义档也救不了它**：
+      H 的判据是"引文与来源说同一件事"，"结论强于引文"照样落这一档；
+    - `"unchecked"`：还没查（`None`），**或者**方式那一栏是**认不出的词**
+      （词表外的值 ⇒ 说不出怎么通过的 ⇒ 按没查算）。
+
+    空 `quote_mode` 按 `verbatim` 读（**历史事实**，不是默认值）：这一栏是 2026-10-14
+    才有的，在那之前 `quote_verified=True` 只可能来自 `quoteverify.check_quote`
+    （逐字那一档）—— 判据 `test_a_legacy_external_lit_row_keeps_its_citation_credit`
+    钉着这条读法。**新的写入方必须说明方式**：`schema` 拒绝词表外的值，B 的语义档要
+    显式写 `semantic`（那条链的判据在 `tests/test_quote_semantics.py`）。
+
+    为什么读侧还要再判一次（写侧 `schema._normalize_quote_mode` 已经归一过）：盘上是
+    JSON —— 手改的行、旧版本写的行、别的工具写的行都可能绕过构造器。这一条是"读的人
+    永远看到自洽的一对"的兜底，`bits_from_row` 与收工门都走它。
+    """
+    verified = row.get("quote_verified")
+    if verified is None:
+        return "unchecked"
+    if verified is not True:
+        return "mismatch"
+    mode = str(row.get("quote_mode") or "")
+    if mode == "":
+        return "verbatim"          # 历史行：唯一可能的来路（见上面那段）
+    return mode if mode in QUOTE_MODES else "unchecked"
+
+
+def quote_explains_itself(row: Mapping[str, Any]) -> bool:
+    """这一行的"通过"有没有说出方式（`True` 且方式在两档词表里）。"""
+    return quote_state(row) in QUOTE_MODES
+
+
 def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     """台账里的一行 ⇒ 五元位（唯一的读入口：判据、门、状态报告都走这里）。
 
@@ -138,7 +180,7 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     kind = str(row.get("kind") or "")
     if not raw:
         return bits_of(origin=origin, source_lit_id=str(row.get("source_lit_id") or ""),
-                       quote_verified=row.get("quote_verified"), kind=kind)
+                       quote_verified=quote_explains_itself(row), kind=kind)
     return normalize_raw(raw, origin=origin, kind=kind,
                          voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
 
@@ -434,11 +476,14 @@ def clean_statement_ids(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             reasons[sid] = "已作废（不能作为依据）"
             continue
         if str(bits.get("origin") or "") == "external_lit":
-            if row.get("quote_verified") is True:
+            state = quote_state(row)
+            if state in QUOTE_MODES:
                 clean.append(sid)
-                reasons[sid] = f"引用命题：逐字核过（凭据 lit:{row.get('source_lit_id')}）"
+                how = "逐字核过" if state == "verbatim" else "语义核过（H 判：与来源说同一件事）"
+                reasons[sid] = f"引用命题：{how}（凭据 lit:{row.get('source_lit_id')}）"
             else:
-                reasons[sid] = "引用命题但没逐字核过 ⇒ 不许当依据（I4 的边界）"
+                reasons[sid] = ("引用命题但没核过（逐字与语义两档都没有）"
+                                "⇒ 不许当依据（I4 的边界）")
             continue
         if str(row.get("kind") or "") == "concept":
             # 概念行不参与等级（`draft/97` §14.5）⇒ 它当然不在"干净引用对象"里，

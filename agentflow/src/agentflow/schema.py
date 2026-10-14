@@ -433,6 +433,46 @@ class Concept:
         return asdict(self)
 
 
+#: 「这条引文是**怎么**回验通过的」（业主 2026-10-14：「回验不应该是十分呆板的逐字
+#: 验证，而是保持语义相同即可」）。两栏的分工，别混成一件：
+#:
+#: - `quote_verified`：三态**结论**（`True` 通过 / `False` 不一致 / `None` 还没查）；
+#: - `quote_mode`：**通过的方式** ——
+#:   `verbatim` = 逐字命中（`quoteverify.check_quote` 那一档，不花模型钱，先走它）；
+#:   `semantic` = 语义判定（交给 H：引文与来源**说同一件事**即通过，允许改写、换记号、
+#:   跨语言；"结论强于引文"仍判不通过）。
+#:
+#: 两栏不许互相冒充：`quote_verified is True` 而 `quote_mode` 说不出方式的行**按没查算**
+#: （`evidencebits.quote_state()` 是这条口径的唯一实现）。`validate()` 会把
+#: "只说了通过、没说方式"的行**记实成 `verbatim`** —— 这条通路存在之前，`True`
+#: 只可能来自逐字那一档，所以那是历史事实、不是猜测；反过来，没通过/还没查的行，
+#: 方式一律归空串（方式对它没有意义）。
+QUOTE_MODES: tuple[str, ...] = ("verbatim", "semantic")
+
+
+def _normalize_quote_mode(obj: Any, *, what: str) -> None:
+    """把一行的 `quote_verified` / `quote_mode` 两栏摆成自洽的一对（就地改写）。
+
+    三条，逐条对应 `QUOTE_MODES` 那段 docstring 的口径：
+
+    1. `quote_verified is True` 而 `quote_mode` 空 ⇒ **记实成 `verbatim`**
+       （这条通路存在之前，`True` 只可能来自 `check_quote` 那一档 —— 是事实，不是默认值）；
+    2. 不是 `True`（`False` / `None`）⇒ 方式一律归空串：方式对"没通过/还没查"没有意义，
+       留着会让人误读成"用某种方式查过了"；
+    3. 认不出的词 ⇒ 抛错（词表外的值不许进库；两栏不许互相冒充这条靠它兜住）。
+    """
+    verified = getattr(obj, "quote_verified", None)
+    mode = str(getattr(obj, "quote_mode", "") or "")
+    if verified is True and mode == "":
+        mode = "verbatim"
+    if verified is not True and mode != "":
+        mode = ""
+    if mode != "" and mode not in QUOTE_MODES:
+        raise ValueError(f"{what} 的 quote_mode 必须是 {QUOTE_MODES} 之一或空串，"
+                         f"收到 {mode!r}（引文回验只有'逐字命中'与'语义相同'两档）")
+    obj.quote_mode = mode
+
+
 @dataclass
 class Relation:
     """关系表的一行。需求字段：概念代号组/关系描述/文献代号/页码范围。"""
@@ -446,6 +486,8 @@ class Relation:
     quote: str = ""
     quote_normalized: str = ""
     quote_verified: bool | None = None
+    #: 这条引文是**怎么**回验通过的（`QUOTE_MODES` 之一，或空串 = 没有方式可言）。
+    quote_mode: str = ""
     statement: str = ""
     concept_group_key: str = ""
     dedup_key: str = ""
@@ -495,6 +537,7 @@ class Relation:
             raise ValueError(f"status 必须是 {RELATION_STATUS} 之一，收到 {self.status!r}")
         if self.quote_verified is not None and not isinstance(self.quote_verified, bool):
             raise ValueError("quote_verified 必须是 bool 或 None")
+        _normalize_quote_mode(self, what=f"relation {self.relation_id}")
         # 12-C：并表时间与状态必须自洽（一处判据，别让读者自己去猜空串的含义）
         if self.merged_at and self.status != "active":
             raise ValueError(
@@ -1829,8 +1872,11 @@ class Statement:
     #: 出处文献（`origin="external_lit"` 时必填）。
     source_lit_id: str | None = None
     page_range: PageRange = field(default_factory=PageRange)
-    #: 三态：True 逐字通过 / False 比对不一致 / None 没校验。见类 docstring。
+    #: 三态：True 通过 / False 比对不一致 / None 没校验。见类 docstring。
+    #: 2026-10-14 起"通过"分两档（`QUOTE_MODES`）：逐字命中 / 语义相同。
     quote_verified: bool | None = None
+    #: 这条引文是**怎么**回验通过的（`QUOTE_MODES` 之一，或空串 = 没有方式可言）。
+    quote_mode: str = ""
     #: 不是 True 时必填：为什么没通过、或者为什么还没查。
     quote_reason: str = ""
     #: 证据等级（复用 `EVIDENCE_KINDS`）：proof / cross_check / heuristic。
@@ -1875,6 +1921,7 @@ class Statement:
             raise ValueError(f"status 必须是 {STATEMENT_STATUSES} 之一，收到 {self.status!r}")
         if self.quote_verified is not None and not isinstance(self.quote_verified, bool):
             raise ValueError("quote_verified 必须是 bool 或 None（三态：通过 / 不一致 / 没校验）")
+        _normalize_quote_mode(self, what=f"statement {self.stmt_id}")
         if self.quote_verified is not True and not self.quote_reason.strip():
             raise ValueError(
                 f"quote_verified={self.quote_verified!r} 时必须写 quote_reason："

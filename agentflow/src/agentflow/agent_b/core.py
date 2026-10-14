@@ -672,6 +672,8 @@ class _Core:
                 "quote_normalized": T.normalize_for_quote(seg),
                 "page_range": S.PageRange(page, page, f"p. {page}").to_dict(),
                 "quote_verified": True,
+                # 这一档走的是 `quoteverify.check_quote`（逐字）⇒ 方式写实（R95）
+                "quote_mode": "verbatim",
                 "_quote_check": chk.to_dict(),
             },
         )

@@ -281,6 +281,10 @@ class _RunOnce:
                     quote=quote,
                     quote_normalized=T.normalize_for_quote(quote),
                     quote_verified=chk.verified,
+                    # 这一档是**逐字**回验（`quoteverify.check_quote`）—— 业主 2026-10-14
+                    # 之后"通过"还多一档"语义相同（H 判）"，所以方式必须写实：
+                    # 逐字命中记 `verbatim`，其余（不一致 / 没查）归空串。
+                    quote_mode="verbatim" if chk.verified is True else "",
                     statement=description,
                     concept_group_key=group_key,
                     dedup_key=D.relation_dedup_key(group_key, quote),
