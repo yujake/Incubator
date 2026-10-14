@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agentflow import schema as S
 from agentflow import capabilities as C
 from agentflow.agent_d import AgentD
 from agentflow.store import Store
@@ -28,7 +29,7 @@ def test_a_proposed_question_lands_as_a_row(tmp_path: Path):
     out = d.propose_question(question="哪些 (m,k) 存在无限 R(m,k)-例子？",
                              kind="gap", priority="high")
     assert out.get("ok") is True, out
-    assert out["question_id"] == "0000", out
+    assert out["question_id"] == S.format_id(0), out
     rows = st.rows("research_questions")
     assert len(rows) == 1, rows
     row = rows[0]

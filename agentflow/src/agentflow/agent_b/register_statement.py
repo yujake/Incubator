@@ -322,13 +322,14 @@ class _RegisterStatement:
                 quote_reason = "证明还没做完 / 未核到 ⇒ 这一行按待办挂着（等级现算是『猜想』）"
 
         # 第六级（§87）：ID 形态。`source_lit_id`/`doc_id` 的形态由 `schema.require_id`
-        # 定义（4 位十进制），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
+        # 定义（当前宽度六位；旧四位读侧兼容），这里在写库前用同一个谓词核，拒绝时带上 `kind` ——
         # "写成 doc:0000" 于是是一条可读的拒绝，而不是事务里抛出的 `ValueError`。
         for _what, _value in (("source_lit_id", lit_id),
                               ("doc_id", str(doc_id or "").strip())):
             if _value and not S.is_valid_id(_value):
                 return _refuse("bad_id",
-                               f"{_what} 必须是 4 位十进制字符串（如 \"0000\"），"
+                               f"{_what} 必须是 {S.ID_DIGITS} 位十进制字符串（如 \"{S.format_id(0)}\"；"
+                               f"旧数据里的 4 位号仍可读），"
                                f"收到 {_value!r} —— 形态由 schema.require_id 定义，"
                                "本动作在写库前用同一个谓词核，整笔不写")
 

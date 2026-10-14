@@ -154,9 +154,11 @@ def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], in
         return False, bad, (max(int(i) for i in numeric) if numeric else -1)
     missing: list[str] = []
     for i in range(len(ids)):
-        want = f"{i:04d}"
-        if ids[i] != want:
-            missing.append(want)
+        # 按**数值**比，不按固定宽度比：宽度是 `schema.ID_DIGITS` 一处定义的
+        # （2026-10-14 四位改六位），而盘上同时存在两种宽度的历史行 ——
+        # 按字面量比会把全部旧行报成"缺号"（那是假读数，不是缺号）。
+        if int(ids[i]) != i:
+            missing.append(S.format_id(i))
     return (not missing), missing, int(ids[-1])
 
 

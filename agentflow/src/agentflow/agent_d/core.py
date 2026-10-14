@@ -935,7 +935,7 @@ class _Core:
             # 于是这里按"字段空 ⇒ 试正则 ⇒ 都空 ⇒ 不计入 per_q"三档走。
             qid = str(r.get("for_question_id") or "").strip()
             if not qid:
-                m = re.search(r"\[q:(\d{4})\]", str(r.get("content_description") or ""))
+                m = re.search(rf"\[q:({S.ID_OR_LEGACY_PATTERN})\]", str(r.get("content_description") or ""))
                 qid = m.group(1) if m else ""
             if qid:
                 per_q[qid] = per_q.get(qid, 0) + 1
@@ -1481,7 +1481,7 @@ class _Core:
     def _origin_note(self, qrow: Mapping[str, Any]) -> str:
         """把 origin 里的报告号还原成 C 的报告摘要（引用 C 的证据）。"""
         origin = str(qrow.get("origin") or "")
-        m = re.search(r"C:(\w+):(\d{4})", origin)
+        m = re.search(rf"C:(\w+):({S.ID_OR_LEGACY_PATTERN})", origin)
         if not m:
             return f"来源 `{origin}`（无法解析出报告号）"
         kind, rid = m.group(1), m.group(2)
@@ -1683,7 +1683,7 @@ def _selftest() -> int:
     open_reqs = [r for r in st.rows("search_requests") if not r.get("done")]
     with st.tx("search_requests", "literature", actor="sim", note="simulate") as tx:
         for i, req in enumerate(open_reqs):
-            lid = f"{10 + i:04d}"
+            lid = S.format_id(10 + i)
             tx.upsert(
                 "literature",
                 S.Literature(lit_id=lid, title=f"simulated paper {i}", type="J", summary="s", path=None,

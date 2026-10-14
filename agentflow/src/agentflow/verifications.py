@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import jsonlfile as JF
+from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
 
 #: 验证台账目录（工作区根下）。
 VERIFICATIONS_DIR = "verifications"
@@ -71,10 +72,16 @@ def verifications_dir(root: str | Path) -> Path:
 
 
 def verification_ledger_path(root: str | Path, statement_id: str) -> Path:
-    """一个命题一份台账：`verifications/<命题号>.jsonl`（命题号必须是 4 位十进制）。"""
+    """一个命题一份台账：`verifications/<命题号>.jsonl`。
+
+    命题号的形态判据只有一处：`schema.is_valid_id`（当前宽度六位，旧数据四位读侧兼容）——
+    2026-10-14 之前这里自己写死了"恰好 4 位"，宽度一改就会把新号当场拒掉。
+    """
     sid = str(statement_id or "").strip()
-    if not (len(sid) == 4 and sid.isdigit()):
-        raise VerificationError(f"命题号必须是 4 位十进制字符串，收到 {statement_id!r}")
+    if not S.is_valid_id(sid):
+        raise VerificationError(
+            f"命题号必须是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读），"
+            f"收到 {statement_id!r}")
     return verifications_dir(root) / f"{sid}.jsonl"
 
 
@@ -166,6 +173,18 @@ def parse_verdict(text: str) -> dict[str, Any]:
             "unresolved_errors": sum(1 for f in findings if f["level"] == "error")}
 
 
+def next_verification_id(root: str | Path, statement_id: str) -> str:
+    """这个命题的验证台账里的下一个编号（`v-` + 当前宽度；宽度见 `schema.format_id`）。
+
+    为什么从 `record_verification` 里抽出来一处具名函数（2026-10-14 改宽度那一笔）：
+    它是**发号点**，而"每个发号点都发当前宽度"这条判据要能逐个真发一次 ——
+    发号逻辑埋在写函数中间时，判据只能靠"读一遍代码"来假装检查过。
+    """
+    path = verification_ledger_path(root, statement_id)
+    rows, _problems = JF.read_jsonl(path) if path.is_file() else ([], [])
+    return f"v-{S.format_id(len(rows) + 1)}"
+
+
 def record_verification(root: str | Path, *, statement_id: str, proof_text: str, verdict: Mapping[str, Any],
            verifier: str = "V", round_no: int | None = None,
            used_faces: Iterable[str] = (), submission_id: str = "") -> dict[str, Any]:
@@ -186,7 +205,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     rows, problems = JF.read_jsonl(path)
     if problems:
         raise VerificationError(f"这个命题的验证台账有读不出来的行：{problems[:3]}")
-    vid = f"v-{len(rows) + 1:04d}"
+    vid = next_verification_id(root, statement_id)
     row = {
         "verification_id": vid, "statement_id": str(statement_id),
         "verifier": str(verifier or "V"), "verdict": checked["verdict"],

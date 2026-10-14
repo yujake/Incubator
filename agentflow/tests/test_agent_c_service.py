@@ -615,10 +615,10 @@ def test_i3_skips_topics_already_in_flight_on_a_second_run(kn):
     assert len(first["submitted_request_ids"]) == 3
     second = c.gaps(submit_requests=True).payload
 
-    assert second["submitted_request_ids"] == ["r-0004"]
+    assert second["submitted_request_ids"] == [f"r-{S.format_id(4)}"]
     assert len(second["skipped_duplicate_topics"]) == 3
     first_run_topics = {
-        r["topic"] for r in kn.rows("search_requests") if r["request_id"] in ("r-0001", "r-0002", "r-0003")
+        r["topic"] for r in kn.rows("search_requests") if r["request_id"] in (f"r-{S.format_id(1)}", f"r-{S.format_id(2)}", f"r-{S.format_id(3)}")
     }
     assert {x["topic"] for x in second["skipped_duplicate_topics"]} == first_run_topics
     assert len(kn.rows("search_requests")) == 4

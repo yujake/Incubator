@@ -56,8 +56,8 @@ TOOL_ROLES: tuple[str, ...] = ("A", "B", "C", "D")
 LIST_LIMIT_MIN, LIST_LIMIT_MAX, LIST_LIMIT_DEFAULT = 1, 500, 50
 SEARCH_LIMIT_MIN, SEARCH_LIMIT_MAX, SEARCH_LIMIT_DEFAULT = 1, 500, 50
 
-#: 建行前的"探针 ID"里那 4 位数字的取值。见 `_probe_id`。
-_PROBE_ID = "9999"
+#: 建行前的"探针 ID"里那几位数字的取值（当前宽度下全 9）。见 `_probe_id`。
+_PROBE_ID = "9" * S.ID_DIGITS
 
 
 @dataclass(frozen=True)
@@ -260,18 +260,23 @@ def assert_request_id_in_space(new_id: str) -> str:
 
 
 def _assert_process_id_in_space(new_id: str, *, prefix: str, table: str) -> str:
-    """`<前缀>-NNNN` 的 4 位空间守卫（过程记录通用版）。
+    """`<前缀>-<号码>` 的编号空间守卫（过程记录通用版）。
 
     为什么参数化成"前缀 + 表名"而不是各写一份：过程记录不止 `search_requests`
-    一张（`schema.PROCESS_ID_PREFIXES` 里还有 `p` 与 `t`），而"号必须落在 4 位
+    一张（`schema.PROCESS_ID_PREFIXES` 里还有 `p` 与 `t`），而"号必须落在编号
     空间内"这条判据只能有一处 —— 复制一份出来，两处的上限就会漂移，
     而漂移的表现是"一处 fail-closed、另一处静默升位宽"。
+
+    宽度与上限都从 `schema` 现取（2026-10-14 四位改六位之后，这里原本写死的
+    `9999` 与"4 位契约"会变成假读数）。
     """
+    from ..store import MAX_ID as _MAX
+
     digits = new_id[len(prefix) + 1:] if new_id.startswith(f"{prefix}-") else ""
-    if not digits.isdigit() or int(digits) > 9999:
+    if not digits.isdigit() or int(digits) > _MAX:
         raise ToolError(
-            f"{table} 的 {prefix}-NNNN 编号空间已用尽（上限 9999），"
-            f"取号器给出的是 {new_id!r} —— 5 位号会静默违反 4 位契约"
+            f"{table} 的 {prefix}-{'N' * S.ID_DIGITS} 编号空间已用尽（上限 {_MAX}），"
+            f"取号器给出的是 {new_id!r} —— 超长号会静默违反 {S.ID_DIGITS} 位契约"
             "（`store.MAX_ID` 的 fail-closed 规则），因此在这里就拒绝。"
         )
     return new_id
@@ -335,9 +340,10 @@ def _next_request_id(rows: Sequence[Mapping[str, Any]]) -> str:
 def _allocate_id(tx: Tx, table: str) -> str:
     """按这张表在 `schema` 里的声明发一个主键。
 
-    两类分开：`ID_COUNTERS` 覆盖的实体表走 4 位计数器（用满抛 `IdExhausted`）；
+    两类分开：`ID_COUNTERS` 覆盖的实体表走编号计数器（用满抛 `IdExhausted`）；
     过程记录表（`id_kind` 不在 `ID_COUNTERS` 里）走 `interactions.next_prefixed_id`。
     主键字段名与前缀一律从 `schema` 现取 —— 这里不再写死任何一张表的对应关系。
+    宽度同理：形态只有 `schema.format_id()` 一处（2026-10-14 由四位改六位）。
     """
     spec = _spec_of(table)
     kind = spec["id_kind"]

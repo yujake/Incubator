@@ -113,7 +113,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "B", "register_statement",
         "把一条命题登记进命题台账（`statement_full` 是含完整假设的正文；写库前逐条硬校验，"
         "出处不在库里就整笔不写）。`origin` 决定其余必填项 —— external_lit 要 `source_lit_id`"
-        "+ `page_range`；own_result 要 `doc_id`（4 位十进制）或 `line_range`。"
+        "+ `page_range`；own_result 要 `doc_id`（六位十进制编号）或 `line_range`。"
         "`proof_text` 可缺（缺则落最低等级并进待办）；`quote_verified` 是三态（不传 = 还没查），"
         "不是 true 时必须给 `quote_reason`；是 true 时用 `quote_mode` 说清**怎么**通过的"
         "（逐字命中 / 语义相同 —— 后者是 H 判的，B 唤起 H）",
@@ -165,7 +165,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 "derived_from": _ARR_S,
                 "doc_id": {**_S, "description":
                            "origin='own_result' 时与 line_range **二者必居其一**：我方稿件那一行的 id。"
-                           "**格式：4 位十进制字符串（如 \"0000\"）** —— 写成 \"doc:0000\" 会被拒"},
+                           f"**格式：{S.ID_DIGITS} 位十进制字符串（如 \"{S.format_id(0)}\"；旧数据里的 4 位号仍可读）** —— 写成 \"doc:0000\" 会被拒"},
                 "line_range": {**_OBJ, "description":
                                "origin='own_result' 时与 doc_id **二者必居其一**："
                                "start 或 label 至少一个"},

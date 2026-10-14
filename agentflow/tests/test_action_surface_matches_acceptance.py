@@ -192,7 +192,7 @@ def test_the_conditional_ladder_of_register_statement_is_advertised():
     summary = str(action.summary or "")
     assert "proof_text" in summary and "quote_reason" in summary, summary
     assert "external_lit" in summary and "source_lit_id" in summary, summary
-    for field, needle in (("origin", "proof_text"), ("doc_id", "4 位十进制"),
+    for field, needle in (("origin", "proof_text"), ("doc_id", "6 位十进制"),
                           ("proof_text", "own_result"), ("source_lit_id", "external_lit"),
                           ("page_range", "external_lit"), ("quote_reason", "必需")):
         desc = str((props.get(field) or {}).get("description") or "")

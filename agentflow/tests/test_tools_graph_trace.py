@@ -14,6 +14,7 @@ import json
 
 import pytest
 
+from agentflow import schema as S
 from agentflow.tools import graph_tools, trace_tools
 from agentflow.tools.base import ToolRegistry
 
@@ -134,10 +135,10 @@ def test_trace_relation_keeps_quote_verified_trinary(trace_reg, clean_store):
 
 def test_trace_relation_unknown_id_fails_with_candidates(trace_reg):
     """代号不存在时如实失败并给出已知代号提示（D 可以据此改参数）。"""
-    res = trace_reg.call("trace.relation", relation_id="9999")
+    res = trace_reg.call("trace.relation", relation_id=S.format_id(9999))
     assert res.ok is False
-    assert "9999" in res.error
-    assert res.meta.get("known_relations") == ["0000"]
+    assert S.format_id(9999) in res.error
+    assert res.meta.get("known_relations") == ["0000"], res.meta
 
 
 # ============================================================ trace.concept（L2）

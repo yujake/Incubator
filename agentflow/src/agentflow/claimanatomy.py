@@ -143,6 +143,7 @@ from .schema import (  # noqa: E402 - 见上：位置放在词表这一节，不
     CLAIM_KINDS,
     CLAIM_SOURCE_KINDS,
     CLAIM_STATUSES,
+    ID_OR_LEGACY_PATTERN,
     NUMERIC_EVIDENCE_KEYS,
 )
 from . import textutil as T  # noqa: E402 - 引用前缀的唯一解析实现（`P-5`）
@@ -151,10 +152,10 @@ from . import textutil as T  # noqa: E402 - 引用前缀的唯一解析实现（
 #: 唯一来源是 `schema`：本模块只做"认不认得"这一格形态判定。
 _CITATION_PREFIXES: tuple[str, ...] = tuple(CITATION_PREFIXES)
 
-#: 裸号（4 位十进制、不带前缀）的形态 —— 只用于把拒信写得可操作
-#: （"写成 `stmt:0004` 或 `lit:0004`"）。判据本身不认裸号：`citations` 是
+#: 裸号（不带前缀、当前宽度或旧四位）的形态 —— 只用于把拒信写得可操作
+#: （"写成 `stmt:000004` 或 `lit:000004`"）。判据本身不认裸号：`citations` 是
 #: 混合列表，元素自己不说属于哪张表，按顺序试会静默错配。
-_BARE_NUMBER = re.compile(r"^\d{4}$")
+_BARE_NUMBER = re.compile(rf"^{ID_OR_LEGACY_PATTERN}$")
 
 
 def _is_bare_number(raw: object) -> bool:

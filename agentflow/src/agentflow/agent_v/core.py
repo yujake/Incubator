@@ -39,6 +39,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from .. import schema as S   # 命题号形态的唯一来源（当前宽度 + 旧四位读侧兼容）
 from .. import verifications as VR
 from ..store import Store, StoreError
 
@@ -208,9 +209,10 @@ class AgentV:
             "detail": "",
         }
         sid = out["statement_id"]
-        if not (len(sid) == 4 and sid.isdigit()):
+        if not S.is_valid_id(sid):
             out["reason"] = "bad_statement_id"
-            out["detail"] = f"命题号必须是 4 位十进制，收到 {statement_id!r}"
+            out["detail"] = (f"命题号必须是 {S.ID_DIGITS} 位十进制（旧数据里的 4 位号仍可读），"
+                             f"收到 {statement_id!r}")
             return out
         text = str(proof_text or "")
         statement_full = ""
@@ -311,8 +313,9 @@ class AgentV:
             "last_verdict": None, "last_verification_id": None,
             "problems": [], "reason": "",
         }
-        if not (len(sid) == 4 and sid.isdigit()):
-            out["reason"] = f"命题号必须是 4 位十进制，收到 {statement_id!r}"
+        if not S.is_valid_id(sid):
+            out["reason"] = (f"命题号必须是 {S.ID_DIGITS} 位十进制（旧数据里的 4 位号仍可读），"
+                             f"收到 {statement_id!r}")
             return out
         text, source = "", "none"
         if self.store is not None:

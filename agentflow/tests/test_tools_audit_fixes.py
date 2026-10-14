@@ -446,19 +446,21 @@ def test_a_bare_number_citation_is_refused_at_construction_time(store: Store):
 
 def test_build_document_accepts_real_citations_and_writes(store: Store):
     """负控：引用真的存在 ⇒ 正常落库 + 渲染（闸门不能把好数据一起拦掉）。"""
-    add_literature(store, "0000", title="真实文献", processed=True)
+    add_literature(store, S.format_id(0), title="真实文献", processed=True)
     reg = registry_for(DT, store, workspace_root=store.root)
 
     claims = [
-        DT.compose_claim("引用真实文献的断言。", citations=["lit:0000", "lit:0000#p.3"], evidence_kind="heuristic", section="s")
+        DT.compose_claim("引用真实文献的断言。",
+                         citations=[f"lit:{S.format_id(0)}", f"lit:{S.format_id(0)}#p.3"],
+                         evidence_kind="heuristic", section="s")
     ]
     res = _build(reg, claims)
     assert res.ok, res.error
     doc = res.data
-    assert doc["doc_id"] == "0000"
-    assert store.rows("documents")[0]["doc_id"] == "0000"
+    assert doc["doc_id"] == S.format_id(0)
+    assert store.rows("documents")[0]["doc_id"] == S.format_id(0)
     md = store.root / str(doc["markdown_path"])
-    assert md.is_file() and "lit:0000" in md.read_text(encoding="utf-8")
+    assert md.is_file() and f"lit:{S.format_id(0)}" in md.read_text(encoding="utf-8")
     # 同一次调用里的另一条断言带上假引用 ⇒ 整笔回滚（不许"部分成功"）
     before = (store.data / "documents.json").read_bytes()
     mixed = claims + [DT.compose_claim("y", citations=["exp:9999"], evidence_kind="heuristic", section="s")]
@@ -563,7 +565,7 @@ def test_research_tools_request_id_is_the_interactions_implementation():
     assert RT._next_request_id.__module__ == "agentflow.tools.research_tools"
 
     rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}, {"request_id": "not-an-id"}]
-    assert RT._next_request_id(list(rows)) == IX.next_prefixed_id(rows, "request_id", "r") == "r-0004"
+    assert RT._next_request_id(list(rows)) == IX.next_prefixed_id(rows, "request_id", "r") == f"r-{S.format_id(4)}"
     # 负控：旧副本没有前缀守卫（`interactions` 有）⇒ 现在的转发必须同样拒绝
     with pytest.raises(ValueError):
         IX.next_prefixed_id([], "request_id", "r-")
@@ -583,11 +585,11 @@ def test_table_tools_and_research_tools_share_the_one_request_id_implementation(
     `literature.source_request_ids` / `research_questions.waiting_request_ids`
     长期引用 `r-NNNN`，号被复用会让溯源静默指向另一条请求。
     所以它被改成了一致性断言（连同 `tests/test_tools_table_fs.py` 里
-    断言 `"r-0000"` 的那一行），并保留了"曾经分歧"这个事实作为注释。
+    断言 `f"r-{S.format_id(0)}"` 的那一行），并保留了"曾经分歧"这个事实作为注释。
     """
-    rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}, {"request_id": "not-an-id"}]
+    rows = [{"request_id": f"r-{S.format_id(1)}"}, {"request_id": f"r-{S.format_id(3)}"}, {"request_id": "not-an-id"}]
     expected = IX.next_prefixed_id(rows, "request_id", "r")
-    assert expected == "r-0004"
+    assert expected == f"r-{S.format_id(4)}"
     assert TT._next_request_id(rows) == expected, "table_tools 必须与权威实现同号"
     assert RT._next_request_id(list(rows)) == expected, "research_tools 必须与权威实现同号"
     # 同一份实现（不是副本）：两个模块都只是转发
@@ -595,12 +597,12 @@ def test_table_tools_and_research_tools_share_the_one_request_id_implementation(
     assert TT.next_prefixed_id is IX.next_prefixed_id
 
     # 空表：两处都必须给 r-0001（旧语义 r-0000 已废弃）
-    assert TT._next_request_id([]) == RT._next_request_id([]) == IX.next_prefixed_id([], "request_id", "r") == "r-0001"
+    assert TT._next_request_id([]) == RT._next_request_id([]) == IX.next_prefixed_id([], "request_id", "r") == f"r-{S.format_id(1)}"
     # 负控：任何输入下都必须与权威实现一致，且绝不发出已占用的号
     for probe in (
-        [{"request_id": "r-0000"}],
-        [{"request_id": "r-0000"}, {"request_id": "r-0002"}],
-        [{"request_id": "r-0009"}, {"request_id": "r-0001"}],
+        [{"request_id": f"r-{S.format_id(0)}"}],
+        [{"request_id": f"r-{S.format_id(0)}"}, {"request_id": f"r-{S.format_id(2)}"}],
+        [{"request_id": f"r-{S.format_id(9)}"}, {"request_id": f"r-{S.format_id(1)}"}],
     ):
         want = IX.next_prefixed_id(probe, "request_id", "r")
         assert TT._next_request_id(probe) == want == RT._next_request_id(list(probe))
@@ -620,13 +622,14 @@ def test_table_tools_request_id_fails_closed_when_the_space_is_exhausted():
     # 仍会产出 `r-10000`。`interactions.py` 是 FC-27 禁改区（auth-audit），
     # 我不改它 —— 已上报主控。本用例只覆盖工具层的两个入口。
     """
-    rows = [{"request_id": f"r-{i:04d}"} for i in range(0, 10000)]
+    top = 10 ** S.ID_DIGITS - 1
+    rows = [{"request_id": f"r-{S.format_id(i)}"} for i in range(0, top + 1)]
     with pytest.raises(ToolError):
         TT._next_request_id(rows)
     with pytest.raises(ToolError):
         RT._next_request_id(list(rows))
     # 负控：还没用满时不许炸（否则守卫会变成"永远拒绝"）
-    assert TT._next_request_id(rows[:-1]) == "r-9999"
+    assert TT._next_request_id(rows[:-1]) == f"r-{S.format_id(top)}"
 
 
 def test_research_submit_gap_uses_the_authority_for_new_request_ids(store: Store):
@@ -638,23 +641,23 @@ def test_research_submit_gap_uses_the_authority_for_new_request_ids(store: Store
         tx.upsert(
             "research_questions",
             S.ResearchQuestion(
-                question_id="0000",
+                question_id=S.format_id(0),
                 question="q",
                 origin="C:paths:0000->0001",
-                related_concept_ids=["0000"],
+                related_concept_ids=[S.format_id(0)],
                 priority="high",
                 created_at=TS,
                 updated_at=TS,
             ).to_dict(),
         )
-    add_request(store, "r-0001", done=True, last_error="no_results")
-    add_request(store, "r-0003", done=True, last_error="no_results")
+    add_request(store, f"r-{S.format_id(1)}", done=True, last_error="no_results")
+    add_request(store, f"r-{S.format_id(3)}", done=True, last_error="no_results")
 
     expected = IX.next_prefixed_id(store.rows("search_requests"), "request_id", "r")
-    res = reg.call("research.submit_gap", question_id="0000", topic="非交换环", mode="topical")
+    res = reg.call("research.submit_gap", question_id=S.format_id(0), topic="非交换环", mode="topical")
     assert res.ok, res.error
-    assert res.data["request_id"] == expected == "r-0004"
-    assert {r["request_id"] for r in store.rows("search_requests")} == {"r-0001", "r-0003", "r-0004"}
+    assert res.data["request_id"] == expected == f"r-{S.format_id(4)}"
+    assert {r["request_id"] for r in store.rows("search_requests")} == {f"r-{S.format_id(1)}", f"r-{S.format_id(3)}", f"r-{S.format_id(4)}"}
 
 
 # ============================================================ P1-6 search.dedup_check

@@ -1203,7 +1203,8 @@ def selftest() -> int:
     )
     print(f"[3] 立项 ⇒ {r1}")
     check("完整预算 ⇒ created=True", r1["created"] is True)
-    check("plan_id 是 4 位十进制", len(str(r1["plan_id"])) == 4 and str(r1["plan_id"]).isdigit())
+    check("plan_id 是当前宽度的十进制号", len(str(r1["plan_id"])) == S.ID_DIGITS
+          and str(r1["plan_id"]).isdigit())
 
     r_dup = f.create_plan("同一个难题再来一次", "P-1")
     print(f"[4] 同 problem_key 再立项 ⇒ {r_dup['reason']}")

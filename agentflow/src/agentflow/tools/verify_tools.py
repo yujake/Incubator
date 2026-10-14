@@ -1048,9 +1048,9 @@ _ROLES_V = ("V",)
            "properties": {
             "statement_id": {
                 "type": "string",
-                "minLength": 4,
-                "maxLength": 4,
-                "description": "命题号（4 位十进制，与 statements.stmt_id 同一套）",
+                "minLength": 4,  # 旧数据宽度（读侧兼容）
+                "maxLength": S.ID_DIGITS,
+                "description": f"命题号（{S.ID_DIGITS} 位十进制，与 statements.stmt_id 同一套；旧数据里的 4 位号仍可读）",
             },
             "proof_text": {"type": "string", "description": "待审的证明全文；不给时从 statements 取"},
     # 只读读数由调用方现取现传（`verifications.cold_start_prompt` 只收字符串）：
@@ -1121,9 +1121,9 @@ def _verify_list_verifications(_agent_v, statement_id=None, limit=None):
            "properties": {
             "statement_id": {
                 "type": "string",
-                "minLength": 4,
-                "maxLength": 4,
-                "description": "命题号（4 位十进制）",
+                "minLength": 4,  # 旧数据宽度（读侧兼容）
+                "maxLength": S.ID_DIGITS,
+                "description": f"命题号（{S.ID_DIGITS} 位十进制）",
             },
            },
            "required": ["statement_id"],

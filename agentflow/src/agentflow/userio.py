@@ -294,7 +294,7 @@ def _next_qid(events: Sequence[Mapping[str, Any]]) -> str:
         qid = str(e.get("qid") or "")
         if len(qid) > 1 and qid[0] == "q" and qid[1:].isdigit():
             top = max(top, int(qid[1:]))
-    return f"q{top + 1:04d}"
+    return f"q{S.format_id(top + 1)}"
 
 
 def _timeout_of(event: Mapping[str, Any]) -> float | None:

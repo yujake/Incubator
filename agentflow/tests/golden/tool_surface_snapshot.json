@@ -1611,7 +1611,7 @@
     "additionalProperties": false,
     "properties": {
      "concept_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      },
@@ -1644,12 +1644,12 @@
     "additionalProperties": false,
     "properties": {
      "a": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      },
      "b": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      }
@@ -1969,7 +1969,7 @@
       "type": "string"
      },
      "question_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      },
@@ -2022,7 +2022,7 @@
       "type": "string"
      },
      "question_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      },
@@ -2064,7 +2064,7 @@
       "type": "string"
      },
      "question_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      }
@@ -3048,7 +3048,7 @@
     "properties": {
      "relation_ids": {
       "items": {
-       "maxLength": 4,
+       "maxLength": 6,
        "minLength": 4,
        "type": "string"
       },
@@ -3081,7 +3081,7 @@
     "additionalProperties": false,
     "properties": {
      "concept_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      },
@@ -3113,7 +3113,7 @@
     "additionalProperties": false,
     "properties": {
      "lit_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      },
@@ -3155,7 +3155,7 @@
     "additionalProperties": false,
     "properties": {
      "relation_id": {
-      "maxLength": 4,
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      }
@@ -3388,8 +3388,8 @@
     "additionalProperties": false,
     "properties": {
      "statement_id": {
-      "description": "命题号（4 位十进制）",
-      "maxLength": 4,
+      "description": "命题号（6 位十进制）",
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      }
@@ -3505,8 +3505,8 @@
       "type": "string"
      },
      "statement_id": {
-      "description": "命题号（4 位十进制，与 statements.stmt_id 同一套）",
-      "maxLength": 4,
+      "description": "命题号（6 位十进制，与 statements.stmt_id 同一套；旧数据里的 4 位号仍可读）",
+      "maxLength": 6,
       "minLength": 4,
       "type": "string"
      }

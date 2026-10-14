@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+from agentflow import schema as S
 from agentflow.store import Store
 from agentflow.tools import build_registry
 
@@ -205,7 +206,7 @@ def test_negative_the_g_role_path_must_carry_the_reading_too(tmp_path: Path) -> 
 
     out = g.build_document("note", "初稿", claims=[_claim(["exp:0000"])])
 
-    assert out["doc_id"] == "0000", out          # 稿件那一行的字段一个不少
+    assert out["doc_id"] == S.format_id(0), out          # 稿件那一行的字段一个不少
     assert out["claims"], out                    # 也不许多少
     cov = out["citation_coverage"]               # 读数就在同一个返回值里
     assert cov["readable"] is True, cov

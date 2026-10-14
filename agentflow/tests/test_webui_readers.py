@@ -34,6 +34,7 @@ from typing import Any, Iterator
 import conftest
 import pytest
 
+from agentflow import schema as S
 from agentflow import sessions as SS
 from agentflow import userio as U
 from agentflow.webui import readers as R
@@ -941,7 +942,7 @@ def test_userio_pending_views_are_the_global_panel_source(
     allp = U.workspace_pending_view(artifacts_ws)
     assert len(allp) == 1, allp
     one = allp[0]
-    assert one["sid"] == SID and one["qid"] == "q0001"
+    assert one["sid"] == SID and one["qid"] == f"q{S.format_id(1)}"
     assert one["role"] == "M" and one["index"] == 3, one
     assert one["options"][0]["label"] == "保留", one["options"]
     assert one["options"][0]["description"] == "第一档", one["options"]

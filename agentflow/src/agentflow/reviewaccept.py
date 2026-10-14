@@ -410,11 +410,16 @@ def _dangling_report_refs(text: str, store: Any) -> tuple[list[str], str]:
     """
     import re
 
+    from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
+
     if store is None:
         return [], "没有 store ⇒ 报告里的台账引用没查成（不是「都查到了」）"
-    kinds = (("statements", "stmt_id", r"\bstatements?[:：]?\s*(\d{4})"),
-             ("literature", "lit_id", r"\b(?:lit|literature)[:：]?\s*(\d{4})"),
-             ("documents", "doc_id", r"\b(?:doc|documents?)[:：]?\s*(\d{4})"))
+    kinds = (("statements", "stmt_id",
+              rf"\bstatements?[:：]?\s*({S.ID_OR_LEGACY_PATTERN})"),
+             ("literature", "lit_id",
+              rf"\b(?:lit|literature)[:：]?\s*({S.ID_OR_LEGACY_PATTERN})"),
+             ("documents", "doc_id",
+              rf"\b(?:doc|documents?)[:：]?\s*({S.ID_OR_LEGACY_PATTERN})"))
     dangling: list[str] = []
     for table, id_field, pattern in kinds:
         wanted = {m for m in re.findall(pattern, text, flags=re.IGNORECASE)}

@@ -39,6 +39,7 @@ from urllib.parse import urlencode
 
 import pytest
 
+from agentflow import schema as S
 from agentflow import interactions as X
 from agentflow import sessions as SS
 from agentflow import settings as SET
@@ -323,11 +324,11 @@ def test_submit_enqueues_one_row_with_the_shared_id_allocator(tmp_path: pathlib.
                                  "providers": ["arxiv", "openalex"]})
     got = _json_of(body)
     assert code == 200 and got["ok"] is True, (code, got)
-    assert got["id"] == "r-0001", got["id"]
+    assert got["id"] == f"r-{S.format_id(1)}", got["id"]
     rows = Store(root).rows("search_requests")
     assert len(rows) == 1, rows
     row = rows[0]
-    assert row["request_id"] == "r-0001" and row["mode"] == "topical", row
+    assert row["request_id"] == f"r-{S.format_id(1)}" and row["mode"] == "topical", row
     assert row["topic"] == "拓扑度量的紧性", row["topic"]
     assert row["providers"] == ["arxiv", "openalex"], row["providers"]
     assert row["submitted_by"] == "web", row["submitted_by"]

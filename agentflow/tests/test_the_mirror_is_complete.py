@@ -148,7 +148,7 @@ def test_transition_over_is_false_the_moment_a_leftover_file_exists(store):
     _stale_concept_file(store)
     gaps = CR.mirror_gaps(store)
     assert gaps["checked"] and gaps["transition_over"] is False, gaps
-    assert gaps["statements_only"] == ["0000"], (
+    assert gaps["statements_only"] == [S.format_id(0)], (
         "老文件还在盘上 ⇒ 必须照旧按缺口报 —— 照这样才看得见「还有一份没搬」")
 
 

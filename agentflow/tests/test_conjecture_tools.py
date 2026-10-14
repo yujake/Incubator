@@ -71,10 +71,10 @@ def test_create_allocates_an_id_and_applies_the_defaults(tmp_path: Path):
                         origin="doc:0000#lem:varconst",
                         testable={"why": "枚举 m<=6 与闭式比对"})
     assert res.ok, res.error
-    assert res.data["conjecture_id"] == "0000"
+    assert res.data["conjecture_id"] == S.format_id(0)
     assert res.data["status"] == "proposed" and res.data["form"] == "universal"
     assert res.data["origin"] == "doc:0000#lem:varconst"
-    assert st.rows("conjectures")[0]["conjecture_id"] == "0000"
+    assert st.rows("conjectures")[0]["conjecture_id"] == S.format_id(0)
 
 
 def test_update_keeps_what_the_caller_did_not_mention(tmp_path: Path):

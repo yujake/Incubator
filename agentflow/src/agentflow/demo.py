@@ -246,7 +246,7 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
         rows = tx.rows("search_requests")
         for i, (topic, mode, desc) in enumerate(requests, 1):
             row = S.SearchRequest(
-                request_id=f"r-{i:04d}",
+                request_id=f"r-{S.format_id(i)}",
                 timestamp=S.now_iso(),
                 topic=topic,
                 mode=mode,

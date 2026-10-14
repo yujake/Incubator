@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
 from .. import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
+from .. import schema as S         # 编号形态的唯一来源（宽度随 schema.ID_DIGITS 走）
 from .base import ToolError, ToolRegistry, ToolResult, fail, ok, tool
 from .graph_tools import RelationGraph
 
@@ -174,7 +175,7 @@ def _chain_line(step_no: int, brief: dict) -> str:
     "L1 溯源：由关系代号取回引文/描述/陈述/页码/状态/引文校验三态，并把概念代号翻译成概念名、附文献元数据。",
     {
         "type": "object",
-        "properties": {"relation_id": {"type": "string", "minLength": 4, "maxLength": 4}},
+        "properties": {"relation_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS}},
         "required": ["relation_id"],
         "additionalProperties": False,
     },
@@ -201,7 +202,7 @@ def trace_relation(_g, relation_id: str) -> ToolResult:
             kind="not_found",
             checked=True,
             known_relations=sorted(g.relation_by_id)[:50],
-            hint="关系代号是 4 位十进制字符串；可用 graph.relations_between 先确认代号。",
+            hint=f"关系代号是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读）；可用 graph.relations_between 先确认代号。",
         )
     brief = _relation_brief(g, rel)
     return ok({"level": "L1", "contains_fulltext": False, **brief})
@@ -212,7 +213,7 @@ def trace_relation(_g, relation_id: str) -> ToolResult:
     {
         "type": "object",
         "properties": {
-            "concept_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "concept_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
             "with_relations": {"type": "boolean"},
         },
         "required": ["concept_id"],
@@ -280,7 +281,7 @@ def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResul
     {
         "type": "object",
         "properties": {
-            "lit_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "lit_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
             "pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "maxItems": 50},
             "max_chars": {"type": "integer", "minimum": 200, "maximum": 200000},
         },
@@ -481,7 +482,7 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
     {
         "type": "object",
         "properties": {
-            "relation_ids": {"type": "array", "items": {"type": "string", "minLength": 4, "maxLength": 4}, "minItems": 1, "maxItems": 50}
+            "relation_ids": {"type": "array", "items": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS}, "minItems": 1, "maxItems": 50}
         },
         "required": ["relation_ids"],
         "additionalProperties": False,

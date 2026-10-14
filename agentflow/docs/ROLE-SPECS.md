@@ -134,8 +134,8 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 |---|---|---|---|
 | `schema_invalid` | error | 任一行的 `validate()` 失败 | 全体 |
 | `duplicate_id` | error | 同表 ID 重复 | 全体 |
-| `id_gap` | warning | 4 位 ID 出现空洞 | 全体 |
-| `counter_behind` / `counter_overflow` | error | counters 落后（会撞号）/ 超出 4 位空间 | 全体 |
+| `id_gap` | warning | 编号出现空洞（六位；旧四位数据按数值判） | 全体 |
+| `counter_behind` / `counter_overflow` | error | counters 落后（会撞号）/ 超出编号空间上限（六位 = 999999） | 全体 |
 | `dangling_lit_ref` / `unknown_request_ref` | error / warning | 请求 ↔ 文献双向可追溯 | A |
 | `done_without_result` | error | `outcome is None` 且无文献无错误 | A |
 | `inflight_over_limit` | warning | 在途请求超过 I7 上限（按提交方点名）。只报不拦：人工面（CLI `submit` / WebUI `/api/submit`）刻意不过闸门，人有权把队列排长，机器只把"谁排长的"记下来 | A |
@@ -1248,7 +1248,7 @@ SELF-CHECK DONE（agent_d）
 | `verifier_subject_key` | 字符串 | **`evidence_kind="proof"` 时必填**（`schema.Experiment.validate`）："否则无法排除'把 A 命题的检查器输出贴到 B 命题的记录上'" |
 | `counterexample` | 结构 | `result="refutes"` 时**必须给**（`verify.refutation_without_counterexample`，error） |
 | `code_hash` | 字符串 | 必须有（`verify.unhashed_experiment_code`，error） |
-| `for_question_id` | 4 位代号 | 必须存在（`verify.dangling_question_ref`，error） |
+| `for_question_id` | 编号（六位，旧四位仍可读） | 必须存在（`verify.dangling_question_ref`，error） |
 
 **允许的迁移**（由 `schema.Experiment.validate` 与 `verify` 共同硬拦）：
 
@@ -2106,7 +2106,7 @@ SELF-CHECK DONE（agent_h）
 | 同一命题的台账行数 | **不设上限**（只追加；每一轮审校一行） | `verifications.record_verification` | 新的一行，旧行原样保留 |
 | 台账读取的条数 | `limit=None` ⇒ 全量；`limit=0` ⇒ **零条**；`limit=n>0` ⇒ 末尾 n 条 | `verifications.list_verifications` | 三态语义（"要零条"与"要全部"是两件事） |
 | 终止条件 | 三态结论之一落台账即终止；**"没查成"不是终止** —— 它不落行、如实报出来 | `verifications.parse_verdict` | 不落行 |
-| 命题号 | 必须 **4 位十进制** | `verifications.verification_ledger_path` | 抛 `VerificationError`（`verify.verify_proof` 回报 `reason="bad_statement_id"`） |
+| 命题号 | 必须 **六位十进制**（旧数据里的四位仍可读） | `verifications.verification_ledger_path` | 抛 `VerificationError`（`verify.verify_proof` 回报 `reason="bad_statement_id"`） |
 
 ### V.7 三态与失败模式
 
@@ -2125,7 +2125,7 @@ SELF-CHECK DONE（agent_h）
 | 输出不是合法 JSON / `verdict` 不在词表 / `finding.level` 不在词表 / `有毛病` 没给 `defect_step` | `checked=False` + `reason="unparsable"`，**不落台账行**（`verify.verify_proof`；`verifications.parse_verdict` 抛 `VerificationError`） |
 | 没有模型缝（没 key / 没接线） | `checked=False` + `reason="judge_not_wired"`（**不问模型、不落行**） |
 | 没有证明全文（也没从 `statements` 取到） | `checked=False` + `reason="no_proof_text"`（**不问模型**） |
-| 命题号不是 4 位十进制 | `checked=False` + `reason="bad_statement_id"` |
+| 命题号不是六位十进制（四位旧号除外） | `checked=False` + `reason="bad_statement_id"` |
 | 台账里有读不出来的行 | `VerificationError`："这个命题的验证台账有读不出来的行"（`record_verification` 拒绝在坏文件上追加） |
 
 > ⚠️ **"没查成 ≠ 看不出来"**（这一层最容易出错的地方，逐字见 `verifications.py` 的模块 docstring）：
@@ -2153,7 +2153,7 @@ SELF-CHECK DONE（agent_h）
 | **台账只追加、编号由脚本发** | `v-{len(rows) + 1:04d}`（与手稿编号、台账 id 同一套做法） | 自检 `[PASS] 编号从 v-0001 起` / `[PASS] 追加式：两行（第三份没落）` |
 | **第 3 位只在 `成立` 且无未解决 error 时被签** | `verifications.signs_bit3` / `bit3_payload`（签不了 ⇒ 返回 `{}`：**"没签"不是"忘了写"**） | 自检 `[PASS] 成立才签第 3 位` / `[PASS] 有毛病不签第 3 位` |
 | **冷启动没有句柄** | `cold_start_prompt` 的签名里没有 `store`/`conductor`/`registry`/`session_root` | 自检 `[PASS] 冷启动提示词没有句柄参数` |
-| **命题号必须 4 位十进制** | `verifications.verification_ledger_path` | 自检 `[PASS] 命题号必须 4 位` |
+| **命题号必须是六位十进制（旧四位可读）** | `verifications.verification_ledger_path` | 自检 `[PASS] 命题号必须是六位十进制（旧四位可读）` |
 | **`limit=0` 是零条** | `verifications.list_verifications`（`out[-0:]` 的巧合已修） | 自检 `[PASS] limit=None 是全量而不是零条` |
 | **V 不写任何表** | `capabilities.WRITE_SETS["V"] == frozenset()`；`schema.TABLES` 仍是 17 张（**V 没加表**） | 静态表 |
 | **V 只能召唤 F** | `ALLOWED_EDGES["V"] == {"F"}` | 静态表 |
@@ -2200,7 +2200,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
   [PASS] 提示词里带只读读数
   [PASS] 看不出来落行但不签
   [PASS] 没有证明全文就不问模型
-  [PASS] 命题号必须 4 位
+  [PASS] 命题号必须是六位十进制（旧四位可读）
 ```
 
 **退出码 0**；与 A–H 各包同一形态（入口在 `agent_v/__main__.py`，实现是包

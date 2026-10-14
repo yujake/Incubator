@@ -39,22 +39,27 @@ from agentflow.tools import build_registry
 
 
 def test_ids_start_at_zero_and_every_handoff_is_one_row(tmp_path: pathlib.Path):
-    """编号 `0000` 起顺次；一份交接一行；读得回来；`to=ALL` 是广播。"""
+    """编号从 `000000` 起顺次；一份交接一行；读得回来；`to=ALL` 是广播。
+
+    号身宽度取 `schema.format_id`（2026-10-14 业主裁定：四位改六位）——
+    判据里不写死宽度，否则下一次改宽度又要来改一遍判据。
+    """
+    first, second = S.format_id(0), S.format_id(1)
     root = tmp_path / "ws"
     root.mkdir()
     a = MS.write(root, sender="D", recipient="F", summary="把猜想交给你", body="证明它。")
     b = MS.write(root, sender="F", recipient=MS.ALL, summary="进展汇报", body="卡在第 3 步。")
-    assert a["id"] == "0000" and b["id"] == "0001", (a, b)
+    assert a["id"] == first and b["id"] == second, (a, b)
     # 一行一份（追加式账本）：两行、编号各一、没有第三个文件
-    assert [r["id"] for r in MS.rows(root)] == ["0000", "0001"]
+    assert [r["id"] for r in MS.rows(root)] == [first, second]
     assert MS.handoffs_path(root).is_file(), MS.handoffs_path(root)
     assert list((root / MS.MANUSCRIPTS_DIR).glob("*.md")) == [], "新格式不再产生 .md 文件"
-    got = MS.read(root, "0001")
+    got = MS.read(root, second)
     assert got and "卡在第 3 步" in got["text"] and got["record"]["to"] == "ALL", got
     # 广播那份，G 也收得到
-    assert [r["id"] for r in MS.list_all(root, to="G")] == ["0001"]
+    assert [r["id"] for r in MS.list_all(root, to="G")] == [second]
     # 那一行必须能回答"谁在什么时候把什么交给了谁"
-    row = MS.row_of(root, "0001") or {}
+    row = MS.row_of(root, second) or {}
     assert row["sender"] == "F" and row["summary"] == "进展汇报" and row["created_at"], row
     assert row["sha256"] and row["bytes"], row
 
@@ -77,7 +82,7 @@ def test_concurrent_writers_do_not_collide(tmp_path: pathlib.Path):
     for t in threads:
         t.join()
     assert len(set(got)) == 8, f"撞号了：{sorted(got)}"
-    assert sorted(got) == [f"{i:04d}" for i in range(8)], sorted(got)
+    assert sorted(got) == [S.format_id(i) for i in range(8)], sorted(got)
     # 8 份 = 8 行（不是 8 个文件）：追加写不会互相覆盖
     assert len(MS.rows(root)) == 8, MS.rows(root)
     assert len({str(r.get("id")) for r in MS.rows(root)}) == 8
@@ -117,10 +122,10 @@ def test_a_dangling_ref_is_recorded_and_visible_not_refused(tmp_path: pathlib.Pa
     root.mkdir()
     good = MS.write(root, sender="D", recipient="F", summary="先来一份没人引的", body="x")
     rec = MS.write(root, sender="D", recipient="F", summary="引一份在的与一份不在的",
-                   body="y", refs=[good["id"], "0099", "stmt:0007"])
+                   body="y", refs=[good["id"], "000099", "stmt:000007"])
     assert rec["id"] != good["id"], rec
-    assert set(rec["ref_problems"]) == {"0099", "stmt:0007"}, rec
-    assert "悬空" in rec["ref_problems"]["0099"] or "不在盘上" in rec["ref_problems"]["0099"], rec
+    assert set(rec["ref_problems"]) == {"000099", "stmt:000007"}, rec
+    assert "悬空" in rec["ref_problems"]["000099"] or "不在盘上" in rec["ref_problems"]["000099"], rec
     # 行真的落进账本（不是"报了错但文件里没有"）
     assert len(MS.rows(root)) == 2, MS.rows(root)
     got = MS.read(root, rec["id"])
@@ -129,7 +134,7 @@ def test_a_dangling_ref_is_recorded_and_visible_not_refused(tmp_path: pathlib.Pa
     rd = MS.ref_readings(root)
     assert rd["checked"] is True and rd["rows"] == 2, rd
     assert rd["rows_with_refs"] == 1, rd
-    assert rd["count"] == 2 and {p["ref"] for p in rd["problems"]} == {"0099", "stmt:0007"}, rd
+    assert rd["count"] == 2 and {p["ref"] for p in rd["problems"]} == {"000099", "stmt:000007"}, rd
     assert {p["id"] for p in rd["problems"]} == {rec["id"]}, rd
     # 三态：引用都立得住时不多那个键（"没问题"与"没检查"不许长成同一个样子）
     assert "ref_problems" not in MS.row_of(root, good["id"]), MS.row_of(root, good["id"])
@@ -161,29 +166,30 @@ def test_legacy_md_manuscripts_are_still_readable_but_not_counted_as_rows(tmp_pa
     assert MS.rows(root) == []
     # 新写的一份接在旧编号之后（不撞号：编号扫的是"行 + 旧文件"的并集）
     rec = MS.write(root, sender="F", recipient="D", summary="新的交接", body="x")
-    assert rec["id"] == "0001", rec
+    assert rec["id"] == S.format_id(1), rec
 
 
 def test_query_filters_by_id_recipient_sender_time_and_refs(tmp_path: pathlib.Path):
     """`query` 是脚本那一层的唯一实现：六个过滤器各自单独有用（判据逐档钉）。"""
     root = tmp_path / "ws"
     root.mkdir()
+    i0, i1, i2 = S.format_id(0), S.format_id(1), S.format_id(2)
     MS.write(root, sender="D", recipient="F", summary="第一份", body="x")
-    MS.write(root, sender="F", recipient="ALL", summary="第二份", body="y", refs=["0000"])
+    MS.write(root, sender="F", recipient="ALL", summary="第二份", body="y", refs=[i0])
     MS.write(root, sender="F", recipient="D", summary="第三份", body="z")
 
-    assert [r["id"] for r in MS.query(root, mid="0001")[0]] == ["0001"]
+    assert [r["id"] for r in MS.query(root, mid=i1)[0]] == [i1]
     # `to=F` 含广播给所有人的那份（与 `list_all` 同一口径）；`to=ALL` 只给广播
-    assert [r["id"] for r in MS.query(root, to="F")[0]] == ["0000", "0001"]
-    assert [r["id"] for r in MS.query(root, to="ALL")[0]] == ["0001"]
+    assert [r["id"] for r in MS.query(root, to="F")[0]] == [i0, i1]
+    assert [r["id"] for r in MS.query(root, to="ALL")[0]] == [i1]
     # `to=G` 能收到广播那份（与 list_all 同一口径）
-    assert [r["id"] for r in MS.query(root, to="G")[0]] == ["0001"]
-    assert [r["id"] for r in MS.query(root, sender="F")[0]] == ["0001", "0002"]
-    assert [r["id"] for r in MS.query(root, refs="0000")[0]] == ["0001"]
-    assert MS.query(root, limit=1)[0][-1]["id"] == "0002"
+    assert [r["id"] for r in MS.query(root, to="G")[0]] == [i1]
+    assert [r["id"] for r in MS.query(root, sender="F")[0]] == [i1, i2]
+    assert [r["id"] for r in MS.query(root, refs=i0)[0]] == [i1]
+    assert MS.query(root, limit=1)[0][-1]["id"] == i2
     # `since` 用 ISO 前缀比：未来时间 ⇒ 空（"没有"不等于"查不成"）
     assert MS.query(root, since="2999-01-01")[0] == []
-    assert MS.query(root, since="2000-01-01")[0][-1]["id"] == "0002"
+    assert MS.query(root, since="2000-01-01")[0][-1]["id"] == i2
 
 
 def test_missing_fields_names_what_a_row_lacks():
@@ -239,16 +245,17 @@ def test_the_handoff_shape_writes_the_manuscript_and_sends_the_brief(tmp_path: p
     ])
     step = next(s for s in run.steps if s.shape == "handoff")
     res = step.result
+    first = S.format_id(0)
     assert res.get("ok") is True, res
-    assert res["id"] == "0000", res
+    assert res["id"] == first, res
     # 盘上就一行（账本就是"哪一份"的真相），正文与摘要都在那一行里
     rows = MS.rows(ws)
-    assert [r["id"] for r in rows] == ["0000"], rows
+    assert [r["id"] for r in rows] == [first], rows
     assert rows[0]["summary"] == "猜想 0000 交给你攻坚", rows[0]
     assert "攻它" in rows[0]["body"], rows[0]
     msgs, problems = read_messages(ws, "F", sid="h1")
     assert not problems, problems
-    mine = [m for m in msgs if "手稿 0000" in str(m.get("body"))]
+    mine = [m for m in msgs if f"手稿 {first}" in str(m.get("body"))]
     assert mine, msgs
     assert "猜想 0000 交给你攻坚" in str(mine[0]["body"]), mine[0]
     assert "manuscripts.read" in str(mine[0]["body"]), mine[0]

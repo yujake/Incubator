@@ -201,7 +201,7 @@
     "code": "dangling_usage_task",
     "level": "error",
     "message": "task_id=t-9999 不在 tasks 表里 ⇒ 这笔花销挂不到任何一次召唤上",
-    "row_id": "0000",
+    "row_id": "000000",
     "table": "usage_ledger"
    },
    {

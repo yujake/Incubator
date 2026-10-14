@@ -315,12 +315,18 @@ def test_set_counters_write_survives_an_inflight_commit(tmp_path: Path) -> None:
     前置断言（C 确实落盘）与反真空断言（事件日志真被读到）都在这里 ——
     没有它们，"盘上是 999"可能来自一个根本没跑起来的装置。
     """
+    # 惰性 import（`noqa: PLC0415`）：本模块被当脚本跑（子进程）时，**导入期不许**
+    # 先把真实树里的 `agentflow` 灌进 `sys.modules` —— 否则子进程后面
+    # `sys.path.insert(0, --pkg)` 插进来的盘外副本永远抢不到（实测形态：
+    # 「导入到的 store 不在 --pkg 下」，负控整套失效）。
+    from agentflow import schema as S  # noqa: PLC0415
+
     case = _run_case(_SRC, tmp_path / "pos", override=OVERRIDE)
     verdict = _judge(case, override=OVERRIDE, direction="disk_higher", final=OVERRIDE)
     store_sha = case["tx"]["store_sha256"]
     print(f"[指纹] tx 子进程跑的 store.py = {case['tx']['store_file']} sha256/16={store_sha[:16]}"
           f"；正控期望的当前字节 = {_sha256(_SRC / 'agentflow' / 'store.py')[:16]}")
-    assert case["tx"]["allocated"] == "0003", case["tx"]
+    assert case["tx"]["allocated"] == S.format_id(3), case["tx"]
     assert case["tx"]["tx_cache"] == {"stmt": SEED + 1}, case["tx"]
     assert case["set"]["on_disk"] == {"stmt": OVERRIDE}, case["set"]
     assert verdict["events_read"] >= 2, (
@@ -378,6 +384,7 @@ def test_quiet_commit_advances_the_counter_without_a_trace(tmp_path: Path) -> No
     说成"别的写者拨低了盘上值"（假归因）。
     """
     from agentflow.store import Store  # noqa: PLC0415
+    from agentflow import schema as S  # noqa: PLC0415 - 同上：导入期不许灌 sys.modules
 
     ws = tmp_path / "ws"
     st = Store(ws)
@@ -388,7 +395,7 @@ def test_quiet_commit_advances_the_counter_without_a_trace(tmp_path: Path) -> No
     events = _read_events(ws)
     traces = [e for e in events if e.get("message") == TRACE_MESSAGE]
     counters = _read_counters(ws)
-    assert tid == "0003", tid
+    assert tid == S.format_id(3), tid
     assert counters["stmt"] == SEED + 1, counters
     assert counters["stmt"] != SEED, "前提：本事务的推进让盘上与读到的基线不同"
     assert len(events) >= 2, f"反真空：这一笔事务必须留下事件（读到 {len(events)} 条）"

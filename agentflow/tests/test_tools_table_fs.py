@@ -13,6 +13,7 @@ import hashlib
 
 import pytest
 
+from agentflow import schema as S
 from agentflow.tools import fs_tools, table_tools
 from agentflow.tools.base import ToolRegistry
 
@@ -54,7 +55,7 @@ def test_table_crud_roundtrip_preserves_untouched_fields(tables):
     )
     assert created.ok, created.error
     cid = created.data
-    assert cid == "0000"
+    assert cid == S.format_id(0)
 
     got = tables.call("table.get", table="statements", id=cid)
     assert got.ok and got.meta["found"] is True
@@ -93,7 +94,7 @@ def test_table_create_autofills_request_id_and_derived_relation_fields(tables):
     现在取号只有一份实现，空表得 `r-0001`（max+1）。
     """
     req = tables.call("table.create", table="search_requests", row={"timestamp": "2026-01-01T00:00:00+00:00", "topic": "群", "mode": "broad"})
-    assert req.ok and req.data == "r-0001", req.error
+    assert req.ok and req.data == f"r-{S.format_id(1)}", req.error
 
     tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
     rel = tables.call(
@@ -131,55 +132,55 @@ def test_delete_concept_referenced_by_relation_names_the_referrer(tables):
     rel = tables.call(
         "table.create",
         table="relations",
-        row={"concept_ids": ["0000", "0001"], "description": "描述", "lit_id": "0000", "quote": "q"},
+        row={"concept_ids": [S.format_id(0), S.format_id(1)], "description": "描述", "lit_id": S.format_id(0), "quote": "q"},
     )
     assert rel.ok, rel.error
 
-    res = tables.call("table.delete", table="statements", id="0000")
+    res = tables.call("table.delete", table="statements", id=S.format_id(0))
     assert res.ok is False
     assert res.meta["kind"] == "referenced"
     assert "relations" in res.error and rel.data in res.error, res.error
     refs = res.meta["references"]
     assert any(r["table"] == "relations" and r["row_id"] == rel.data for r in refs)
     # 被拒之后行必须还在（宁可误拒也不能误删）
-    assert tables.call("table.get", table="statements", id="0000").meta["found"] is True
+    assert tables.call("table.get", table="statements", id=S.format_id(0)).meta["found"] is True
 
 
 def test_delete_literature_referenced_by_request_result_lit_ids_is_refused(tables):
     """删被 search_requests.result_lit_ids 引用的文献同样被拒，并点名那张表。"""
     lit = tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
-    assert lit.ok and lit.data == "0000", lit.error
+    assert lit.ok and lit.data == S.format_id(0), lit.error
     req = tables.call("table.create", table="search_requests", row={"timestamp": "2026-01-01T00:00:00+00:00", "topic": "t", "mode": "broad"})
     # 取号已统一到 `interactions.next_prefixed_id`（max+1）：空表得 r-0001，不再是 r-0000。
     # 理由同 `test_table_create_autofills_request_id_and_derived_relation_fields`。
-    assert req.ok and req.data == "r-0001", req.error
-    upd = tables.call("table.update", table="search_requests", id="r-0001", patch={"done": True, "outcome": "ok", "result_lit_ids": ["0000"]})
+    assert req.ok and req.data == f"r-{S.format_id(1)}", req.error
+    upd = tables.call("table.update", table="search_requests", id=f"r-{S.format_id(1)}", patch={"done": True, "outcome": "ok", "result_lit_ids": [S.format_id(0)]})
     assert upd.ok, upd.error
 
-    res = tables.call("table.delete", table="literature", id="0000")
+    res = tables.call("table.delete", table="literature", id=S.format_id(0))
     assert res.ok is False
     assert res.meta["kind"] == "referenced"
     assert "search_requests" in res.error, res.error
-    assert "r-0001" in res.error, res.error
-    assert tables.call("table.get", table="literature", id="0000").meta["found"] is True
+    assert f"r-{S.format_id(1)}" in res.error, res.error
+    assert tables.call("table.get", table="literature", id=S.format_id(0)).meta["found"] is True
 
 
 def test_table_update_refuses_primary_key_change(tables):
     """主键是外键的锚点：update 不许改主键（否则一次调用就造出一片悬空引用）。"""
     tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "theorem", "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    res = tables.call("table.update", table="statements", id="0000", patch={"stmt_id": "0009"})
+    res = tables.call("table.update", table="statements", id=S.format_id(0), patch={"stmt_id": S.format_id(9)})
     assert res.ok is False
     assert res.meta["kind"] == "primary_key_change"
     assert "不允许修改主键" in res.error
-    assert tables.call("table.get", table="statements", id="0000").meta["found"] is True
+    assert tables.call("table.get", table="statements", id=S.format_id(0)).meta["found"] is True
 
 
 def test_table_update_rejects_unknown_field_and_empty_patch(tables):
     """拼错的字段名必须报错而不是静默忽略；空 patch 也要拒（它只会改 updated_at）。"""
     tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "theorem", "statement_full": "d", "quote_reason": "尚未逐字校验"})
-    bad = tables.call("table.update", table="statements", id="0000", patch={"nmae": "拼错"})
+    bad = tables.call("table.update", table="statements", id=S.format_id(0), patch={"nmae": "拼错"})
     assert bad.ok is False and bad.meta["kind"] == "validation"
-    empty = tables.call("table.update", table="statements", id="0000", patch={})
+    empty = tables.call("table.update", table="statements", id=S.format_id(0), patch={})
     assert empty.ok is False and empty.meta["kind"] == "param_error"
 
 
@@ -188,10 +189,10 @@ def test_table_delete_of_unreferenced_relation_is_allowed(tables):
     tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
     tables.call("table.create", table="statements", row={"origin": "own_result", "kind": "concept", "label": "阿贝尔群", "statement_full": "d", "quote_reason": "尚未逐字校验"})
     tables.call("table.create", table="literature", row={"title": "T", "type": "J", "summary": "s", "path": None, "processed": True})
-    tables.call("table.create", table="relations", row={"concept_ids": ["0000", "0001"], "description": "d", "lit_id": "0000"})
-    res = tables.call("table.delete", table="relations", id="0000")
+    tables.call("table.create", table="relations", row={"concept_ids": [S.format_id(0), S.format_id(1)], "description": "d", "lit_id": S.format_id(0)})
+    res = tables.call("table.delete", table="relations", id=S.format_id(0))
     assert res.ok and res.data is True
-    assert tables.call("table.delete", table="relations", id="0000").data is False
+    assert tables.call("table.delete", table="relations", id=S.format_id(0)).data is False
 
 
 # ============================================================ 文件：正面链路

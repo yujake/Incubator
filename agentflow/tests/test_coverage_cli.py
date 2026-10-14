@@ -27,6 +27,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agentflow import schema as S
 from agentflow import cli, schema as S
 from agentflow.store import Store
 
@@ -66,10 +67,10 @@ def test_cmd_submit_accepts_valid_batch_and_uses_the_single_id_allocator(ws: Sto
     """
     from conftest import add_request
 
-    add_request(ws, "r-0005")
+    add_request(ws, f"r-{S.format_id(5)}")
     assert cli.cmd_submit(_args(root=ws.root, topic="群论", mode=S.SEARCH_MODES[0], content="")) == 0
     ids = sorted(r["request_id"] for r in ws.rows("search_requests"))
-    assert ids == ["r-0005", "r-0006"], ids
+    assert ids == [f"r-{S.format_id(5)}", f"r-{S.format_id(6)}"], ids
 
 
 def test_cmd_submit_rejects_invalid_input_with_exit_2_and_writes_nothing(ws: Store):

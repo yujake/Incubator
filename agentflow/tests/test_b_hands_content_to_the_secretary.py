@@ -65,7 +65,7 @@ def _payload(**kw) -> dict:
         statement_full=("设 G 是有限连通图，且各边电导有正下界；则 (d(X_0,X_n)-E d)/sqrt(n) "
                         "依分布收敛到正态"),
         proof_text="Proof. By Theorem 6.5 of the companion book ...",
-        source_lit_id="0000", page_range={"start": 7, "end": 7},
+        source_lit_id=S.format_id(0), page_range={"start": 7, "end": 7},
         quote_verified=True, quote_reason="逐字比对通过（page 7）",
         evidence_kind="proof",
     )
@@ -77,8 +77,8 @@ def _payload(**kw) -> dict:
 
 def test_a_statement_lands_in_one_transaction_with_its_dependency_groups(store):
     """交一条消化结果 ⇒ 三张表一次落：命题行、两组依赖（`path_group` 按外层下标）。"""
-    add_literature(store, "0000")
-    _exp(store, "0001")
+    add_literature(store, S.format_id(0))
+    _exp(store, S.format_id(1))
     sec = _sec(store)
     # 路径 1 要指一条在册的命题 ⇒ 先落一条（依赖不许挂空号，见负控）
     target = sec.record_statement(_payload(statement_full="引理 A：电导有正下界", label="引理 A"),
@@ -87,12 +87,12 @@ def test_a_statement_lands_in_one_transaction_with_its_dependency_groups(store):
     bits = EB.bits_of(proof=True, proof_process="逐步论证……")
     out = sec.record_statement(_payload(bits=bits, deps=[
         [{"kind": "theorem", "stmt_id": target["stmt_id"], "label": "引理 A"}],   # 路径 1
-        [{"kind": "experiment", "exp": "0001"}],                                  # 路径 2
+        [{"kind": "experiment", "exp": S.format_id(1)}],                                  # 路径 2
     ]), role="B")
     assert out["checked"] and out["created"], out
     assert out["path_groups"] == 2 and out["deps_written"] == 2
     sid = out["stmt_id"]
-    assert len(sid) == 4 and sid.isdigit(), sid
+    assert len(sid) == S.ID_DIGITS and sid.isdigit(), sid
     stmts = {s["stmt_id"]: s for s in _rows(store, "statements")}
     assert set(stmts) == {target["stmt_id"], sid}, "这一笔只该多一行命题"
     assert stmts[sid]["bits"]["proof"] is True
@@ -102,19 +102,19 @@ def test_a_statement_lands_in_one_transaction_with_its_dependency_groups(store):
     assert {d["path_group"] for d in deps} == {1, 2}
     assert all(d["used_by"] == f"stmt:{sid}" for d in deps)
     exp_edge = next(d for d in deps if d["path_group"] == 2)
-    assert exp_edge["source_experiment_id"] == "0001" and exp_edge["kind"] == "experiment"
+    assert exp_edge["source_experiment_id"] == S.format_id(1) and exp_edge["kind"] == "experiment"
 
 
 def test_the_wash_only_touches_the_format_face(store):
     """别名键 / 顶层裹了一层 / 一维 deps —— 洗成受控形状，内容一个字不动。"""
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     _exp(store, "0001")
     sec = _sec(store)
     full = _payload()["statement_full"]
     washed = sec.wash_statement({
         "theorem": full,                                  # 别名 ⇒ statement_full
         "proof": "Proof. ……",                             # 别名 ⇒ proof_text
-        "lit_id": "0000",                                 # 别名 ⇒ source_lit_id
+        "lit_id": S.format_id(0),                                 # 别名 ⇒ source_lit_id
         "params": {"kind": "lemma", "label": " 引理 B "},  # 裹了一层 + 空白
         "deps": [{"stmt": "0002", "type": "experiment", "exp": "0001"}],   # 一维 + 别名
         "pages": {"start": 7, "end": 7},
@@ -131,10 +131,10 @@ def test_the_wash_only_touches_the_format_face(store):
 
 def test_a_concept_row_carries_its_well_definedness_proof(store):
     """概念也入库：`kind="concept"` + 良定义性证明那一格（原始概念写受控标记）。"""
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     sec = _sec(store)
     out = sec.record_statement(_payload(
-        source_lit_id="0000",
+        source_lit_id=S.format_id(0),
         concepts=[{"name": "电导（conductance）", "definition": "边上权重的倒数",
                    "aliases": ["conductance"]}]), role="B")
     assert out["checked"] and out["created"], out
@@ -150,7 +150,7 @@ def test_a_concept_row_carries_its_well_definedness_proof(store):
 
 def test_the_same_statement_twice_is_a_duplicate_reading(store):
     """同内容交两次 ⇒ 第二次是重复读数、不新建行；`force_new` 才另起。"""
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     sec = _sec(store)
     first = sec.record_statement(_payload(), role="B")
     again = sec.record_statement(_payload(), role="B")
@@ -164,7 +164,7 @@ def test_the_same_statement_twice_is_a_duplicate_reading(store):
 
 def test_a_dependency_on_a_missing_id_writes_nothing(store):
     """依赖指着不在册的 id ⇒ 整笔不写（不许少写一条边了事）。"""
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     sec = _sec(store)
     out = sec.record_statement(_payload(deps=[[{"kind": "theorem", "stmt_id": "9999"}]]),
                                role="B")
@@ -182,7 +182,7 @@ def test_a_concept_without_a_definition_lands_as_pending(store):
     `STATEMENT_UNUSABLE_STATUSES` 里（下游不许拿它当依据），
     而且必须带 `concept:pending_search` 标记（谁去补写在 reason 里）。
     """
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     sec = _sec(store)
     out = sec.record_statement(_payload(concepts=[{"name": "新概念", "definition": ""}]),
                                role="B")
@@ -205,7 +205,7 @@ def test_a_concept_without_a_definition_lands_as_pending(store):
 
 def test_a_theorem_without_full_statement_is_still_refused(store):
     """反真空的另一半：命题缺 `statement_full` 仍然拒（"待补"那一档只给概念）。"""
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     sec = _sec(store)
     out = sec.record_statement(_payload(statement_full="", kind="theorem"), role="B")
     assert out["refused"] == "empty_statement" and not out["created"], out
@@ -248,13 +248,13 @@ def test_b_register_statement_writes_through_the_secretary(store):
     """B 的动作用秘书落盘：行上留痕是秘书，号来自唯一分配器，内容一字不改。"""
     from agentflow.agent_b import AgentB
 
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     b = AgentB(store, extractor=None, extract_text=None)
     assert b._statement_secretary() is not None, "生产口径下 B 必须能拿到秘书（自动派生）"
     out = b.register_statement(
         origin="external_lit", kind="theorem", label="Theorem 1.5",
         statement_text="短版", statement_full="设 G 是有限连通图；则结论成立。",
-        proof_text="Proof. ……", source_lit_id="0000", page_range={"start": 7},
+        proof_text="Proof. ……", source_lit_id=S.format_id(0), page_range={"start": 7},
         quote_verified=True, quote_reason="逐字比对通过", evidence_kind="proof")
     assert out["ok"] is True, out
     row = store.rows("statements")[0]
@@ -269,11 +269,11 @@ def test_b_without_a_secretary_writes_nothing(store):
     """反真空：`auto_secretary=False` ⇒ 受控拒绝，一行都不落（没有"B 自己写"这条后备路）。"""
     from agentflow.agent_b import AgentB
 
-    add_literature(store, "0000")
+    add_literature(store, S.format_id(0))
     b = AgentB(store, extractor=None, extract_text=None, auto_secretary=False)
     out = b.register_statement(
         origin="external_lit", statement_full="设 G 是有限连通图；则结论成立。",
-        proof_text="Proof. ……", source_lit_id="0000", page_range={"start": 7},
+        proof_text="Proof. ……", source_lit_id=S.format_id(0), page_range={"start": 7},
         quote_verified=True, quote_reason="逐字比对通过")
     assert out["ok"] is False and out["kind"] == "secretary_unavailable", out
     assert store.rows("statements") == [], "被拒的命题不许留下半行"

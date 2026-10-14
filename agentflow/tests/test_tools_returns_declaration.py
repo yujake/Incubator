@@ -51,6 +51,15 @@ import pytest
 
 from agentflow import schema as S
 from agentflow import manuscripts as MS
+
+#: 手稿号由 `manuscripts.write` 按当前宽度分配（`schema.format_id`）——
+#: 探针参数与夹具断言都从这里取，不写死宽度。
+MS_ROW_ID = S.format_id(0)
+
+#: 夹具里 `attack.create_plan` 真分配出来的计划号（探针表据此取参数）。
+#: 为什么要有这一格：计划号是发号器给的（宽度随 `schema.ID_DIGITS`），
+#: 探针参数写死四位会让 `attack.status` 落到"查不到"那一支，声明与实返于是对不上。
+_ALLOCATED: dict[str, str] = {}
 from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
@@ -201,6 +210,7 @@ _PREREQS: dict[str, tuple[str, dict]] = {
 
 def tool_params() -> dict[str, dict]:
     """55 个工具各自那一次调用的参数。"""
+    plan_id = _ALLOCATED.get("plan_id") or "0000"
     return {
         # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
         # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
@@ -246,8 +256,8 @@ def tool_params() -> dict[str, dict]:
         "attack.create_plan": {"problem": "P2", "problem_key": "pk2", "budget": BUDGET},
         "attack.list_plans": {},
         "attack.pick_next_subgoal": {"subgoals": [{"sid": "s1", "status": "todo"}]},
-        "attack.status": {"plan_id": "0000"},
-        "attack.step": {"plan_id": "0000"},
+        "attack.status": {"plan_id": plan_id},
+        "attack.step": {"plan_id": plan_id},
         "doc.build_document": {"kind": "note", "title": "T", "claims": [dict(CLAIM)]},
         "doc.compose_claim": {"text": "x", "citations": ["lit:0000"], "evidence_kind": "heuristic", "section": "s"},
         "doc.list_documents": {},
@@ -279,7 +289,7 @@ def tool_params() -> dict[str, dict]:
         # `draft/37` §134：交接手稿的读面。编号 `0000` 由 `_seed` 真写一份手稿
         # （编号由脚本从 0000 起分配 —— 夹具不自己编文件名，走的是同一条实现）。
         "manuscripts.list": {},
-        "manuscripts.read": {"id": "0000"},
+        "manuscripts.read": {"id": MS_ROW_ID},
         "ocr.backends": {},
         "ocr.detect_text_layer": {"path": SOURCE_REL},
         "ocr.run": {"path": OCR_IMAGE_REL, "backend": "auto"},
@@ -613,10 +623,10 @@ def _seed(store: Store, root: Path) -> None:
     with store.tx("documents", actor="test", note="fixture") as tx:
         tx.upsert("documents", _doc_row())
     # 交接手稿（`draft/37` §134）：`manuscripts.read` / `manuscripts.list` 要有东西可读。
-    # 编号不写死：让 `manuscripts.write` 分配（`0000`），观测参数才与实现同源。
+    # 编号不写死：让 `manuscripts.write` 按当前宽度分配（`schema.format_id`），观测参数才与实现同源。
     _ms = MS.write(store.root, sender="D", recipient="F", title="夹具手稿",
                    body="铺夹具用的最小交接手稿。\n", summary="只验键集")
-    assert _ms["id"] == "0000", _ms
+    assert _ms["id"] == MS_ROW_ID, _ms
     with store.tx("experiments", actor="test", note="fixture") as tx:
         tx.upsert(
             "experiments",
@@ -769,6 +779,11 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
     # 那一支（不存在时它们照样 ok=True，但只有 checked/plan_id/reason 三个键 —— 那不是主路径）。
     bootstrap = reg.call("attack.create_plan", problem="P", problem_key="pk", budget=BUDGET)
     assert bootstrap.ok, bootstrap.error
+    # 探针表里那两条按"刚立的那个计划"取参数：计划号是**分配**出来的（当前宽度六位），
+    # 写死四位会让它们落到"查不到"那一支（返回只有 checked/plan_id/reason）⇒ 声明与实返对不上。
+    # `create_plan` 的 data 是一个字典（含 created/plan_id/…）⇒ 从这里取号。
+    got = bootstrap.data if isinstance(bootstrap.data, dict) else {}
+    _ALLOCATED["plan_id"] = str(got.get("plan_id") or "")
     return reg
 
 @pytest.fixture

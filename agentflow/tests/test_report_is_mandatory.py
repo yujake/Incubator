@@ -20,6 +20,7 @@ import pathlib
 
 from test_llm_work_reaches_the_ledger import NOTIFY, _run
 
+from agentflow import schema as S
 from agentflow import sessions as SS
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
@@ -62,7 +63,7 @@ def test_a_written_notify_is_not_duplicated_by_the_framework(tmp_path: pathlib.P
     ws, run = _run(tmp_path, [{"text": json.dumps(
         {"final": "照常收工", "evidence": [], "notify": NOTIFY}, ensure_ascii=False)}])
     assert run.stop_reason == "final", run.to_dict()
-    assert run.handoffs == ["0000"], run.to_dict()             # 模型那条手稿落了
+    assert run.handoffs == [S.format_id(0)], run.to_dict()             # 模型那条手稿落了
     st = _store_of(ws)
     assert _board(st) == [], _board(st)                         # 板上没有 notice
 

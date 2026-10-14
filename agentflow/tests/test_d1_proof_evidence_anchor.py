@@ -158,7 +158,7 @@ def test_a_proof_claim_resting_on_a_cross_check_experiment_is_rejected(g: AgentG
 def test_a_proof_claim_with_a_real_anchor_is_still_written(g: AgentG, ws: Store):
     """正控：证据锚齐备 ⇒ 照旧写库（别把判据做成"proof 永远进不去"）。"""
     doc = g.build_document("paper", "t", claims=[_proof_claim(g)])
-    assert doc["doc_id"] == "0000"
+    assert doc["doc_id"] == S.format_id(0)
     assert (ws.root / doc["markdown_path"]).is_file()
     assert len(ws.rows("documents")) == 1
     # proof_location 必须渲染进 markdown —— 否则读者在稿件里看不到那个落点

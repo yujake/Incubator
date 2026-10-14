@@ -192,7 +192,7 @@ def test_process_id_kinds_and_counter_kinds_are_disjoint():
     assert set(S.ID_COUNTERS) & set(S.PROCESS_ID_PREFIXES.values()) == set()
     # 声明面（PROCESS_ID_PREFIXES）与派生面（TABLES + ID_COUNTERS）必须一致。
     assert S.process_id_kinds() == frozenset(S.PROCESS_ID_PREFIXES)
-    assert S.four_digit_id_kinds() == frozenset(S.ID_COUNTERS)
+    assert S.id_space_kinds() == frozenset(S.ID_COUNTERS)
     # 两半互斥且互补：合起来正好是 TABLES 里全部 id_kind。
     all_kinds = {spec["id_kind"] for spec in S.TABLES.values()}
     assert set(S.ID_COUNTERS) | set(S.process_id_kinds()) == all_kinds

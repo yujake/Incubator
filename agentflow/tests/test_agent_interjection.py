@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from agentflow import schema as S
 from agentflow import sessions as SS
 from agentflow.agent_loop import (
     LlmBackend, read_interjections, run_role, send_interjection,
@@ -96,7 +97,7 @@ def test_an_interjection_is_an_event_with_a_script_allocated_id(tmp_path):
     second, problem2 = send_interjection(ws, sender="用户", subject="叫停",
                                          body="请各自收工。", sid="s")
     assert not problem and not problem2, (problem, problem2)
-    assert (first, second) == ("i-0001", "i-0002"), (first, second)
+    assert (first, second) == (f"i-{S.format_id(1)}", f"i-{S.format_id(2)}"), (first, second)
     events, bad = SS.read_session(ws, sid="s")
     assert not bad, bad
     got = [e for e in events if e.get("kind") == "agent_interjection"]
@@ -116,7 +117,7 @@ def test_only_the_user_may_interject_and_only_the_conductor_receives(tmp_path):
     ws.mkdir()
     iid, problem = send_interjection(ws, sender="用户", subject="口径变了",
                                      body="正文", sid="s")
-    assert iid == "i-0001" and not problem, (iid, problem)
+    assert iid == f"i-{S.format_id(1)}" and not problem, (iid, problem)
     bad_id, bad = send_interjection(ws, sender="M", subject="叫停",
                                     body="请各自收工。", sid="s")
     assert bad_id == "" and "只有用户能发" in bad, (bad_id, bad)
@@ -137,13 +138,13 @@ def test_only_the_conductor_reads_them_and_only_once(tmp_path):
     send_interjection(ws, sender="用户", subject="口径变了", body="正文", sid="s")
     send_interjection(ws, sender="用户", subject="叫停", body="正文", sid="s")
     got_m, bad = read_interjections(ws, "M", sid="s")
-    assert not bad and [i["interjection_id"] for i in got_m] == ["i-0001", "i-0002"], got_m
+    assert not bad and [i["interjection_id"] for i in got_m] == [f"i-{S.format_id(1)}", f"i-{S.format_id(2)}"], got_m
     for role in ("A", "D", "F"):
         got, _problems = read_interjections(ws, role, sid="s")
         assert got == [], f"{role} 不该有这条通道（只有 M 会收到用户的插话）：{got}"
-    mark_interjections_seen(ws, "M", ["i-0001"], sid="s", step=3)
+    mark_interjections_seen(ws, "M", [f"i-{S.format_id(1)}"], sid="s", step=3)
     again, _ = read_interjections(ws, "M", sid="s")
-    assert [i["interjection_id"] for i in again] == ["i-0002"], again
+    assert [i["interjection_id"] for i in again] == [f"i-{S.format_id(2)}"], again
     events, _bad = SS.read_session(ws, sid="s")
     seen = [e for e in events if e.get("kind") == "agent_interjection_seen"]
     assert seen and seen[0]["step"] == 3 and seen[0]["role"] == "M", seen
@@ -179,10 +180,10 @@ def test_e7_an_interjection_arrives_at_the_next_step_not_mid_step(tmp_path):
     events, bad = SS.read_session(ws, sid="ij")
     assert not bad, bad
     seen = [e for e in events if e.get("kind") == "agent_interjection_seen"]
-    assert seen and seen[0]["step"] == 2 and seen[0]["ids"] == ["i-0001"], seen
+    assert seen and seen[0]["step"] == 2 and seen[0]["ids"] == [f"i-{S.format_id(1)}"], seen
     effect = [e for e in events if e.get("kind") == "agent_interjection_effect"]
     assert effect, [e.get("kind") for e in events]
-    assert effect[0]["step"] == 2 and effect[0]["ids"] == ["i-0001"], effect[0]
+    assert effect[0]["step"] == 2 and effect[0]["ids"] == [f"i-{S.format_id(1)}"], effect[0]
 
 
 def test_e7_the_effect_reading_says_whether_the_step_changed(tmp_path):

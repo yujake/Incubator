@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import pathlib
 
+from agentflow import schema as S
 from agentflow import agent_loop as AL
 from agentflow.store import Store
 
@@ -134,7 +135,7 @@ def test_the_message_id_is_max_plus_one_not_a_count(tmp_path: pathlib.Path):
                    "subject": "手工占号", "body": "x", "channel": "private"}, sid=None)
     mid, problem = AL.send_message(ws, sender="M", to="D", subject="新的一条", body="y")
     assert not problem, problem
-    assert mid == "m0010", mid
+    assert mid == f"m{S.format_id(10)}", mid
 
 
 def test_a_message_line_without_an_id_is_a_bad_line_not_a_substitute(tmp_path: pathlib.Path):
@@ -166,7 +167,7 @@ def test_the_rendered_set_is_exactly_what_gets_marked(tmp_path: pathlib.Path):
     assert len(rendered) == 8, rendered
     assert rendered == ids[:8], (rendered, ids)          # 老的先读（时间升序）
     assert "还有 4 条留言没渲染" in text, text            # 积压是看得见的事实
-    assert text.splitlines()[0].startswith("- （新）[m0001]"), text
+    assert text.splitlines()[0].startswith(f"- （新）[m{S.format_id(1)}]"), text
     assert AL.mark_delivered(ws, "D", rendered, sid=None) == ""
     # 剩下的 4 条仍然是 fresh ⇒ 下一步会读到它们（这正是"不再丢"的机器形态）
     text2, rendered2, _ = AL.inbox_digest(ws, "D", sid=None)
@@ -196,7 +197,7 @@ def test_delivered_messages_are_background_not_priority(tmp_path: pathlib.Path):
     # 两条新的必须都在（窗口 8 > 2 条新的 ⇒ 余量给已投递的背景）
     assert set(new_ids) <= set(rendered), (new_ids, rendered)
     first_line = text.splitlines()[0]
-    assert first_line.startswith("- （新）[m0004]") and "n00" in first_line, text
+    assert first_line.startswith(f"- （新）[m{S.format_id(4)}]") and "n00" in first_line, text
 
 
 def test_an_empty_inbox_is_not_a_problem(tmp_path: pathlib.Path):

@@ -33,6 +33,7 @@ from typing import Any, Mapping, Sequence
 
 from . import faculty_checks as FC
 from . import judges as JG
+from . import schema as S   # 编号形态的唯一来源（`format_id`）
 from . import sessions as SS
 
 #: 交付闸门的落点：`<项目根>/gates/<名字>.json`。
@@ -115,8 +116,8 @@ class DeliveryGate:
 
 
 def _next_work_id(session_root: Path, seq: int) -> str:
-    """工作项号：`w-0001`。序号由调用方给（读取现有一遍就够）。"""
-    return f"w-{seq:04d}"
+    """工作项号：`w-000001`（宽度取 `schema.ID_DIGITS` 一处）。序号由调用方给（读取现有一遍就够）。"""
+    return f"w-{S.format_id(seq)}"
 
 
 def read_work_items(session_root: Path | str) -> list[dict[str, Any]]:

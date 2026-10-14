@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from agentflow import schema as S
 from agentflow import manuscripts as MS
 from agentflow.agent_loop import (
     AgentLoop, LlmBackend, notify_shape_problem, read_messages, run_role,
@@ -84,17 +85,17 @@ def test_e4_1_a_final_with_notify_writes_the_handoff_and_forwards_it(tmp_path):
     ])
     assert run.stop_reason == "final", run.to_dict()
     assert run.notify_rejections == 0, run.to_dict()
-    assert run.handoffs == ["0000"], run.to_dict()
+    assert run.handoffs == [S.format_id(0)], run.to_dict()
     rows = MS.rows(ws)
-    assert [r["id"] for r in rows] == ["0000"], rows
+    assert [r["id"] for r in rows] == [S.format_id(0)], rows
     assert rows[0]["to"] == "F" and rows[0]["summary"] == "交给 F：X 的族构造证据", rows[0]
     # 脚本代为转发：收件人收件箱里有那条带编号 + 一句话的留言
     msgs, problems = read_messages(ws, "F", sid="n1")
     assert not problems, problems
     body = "\n".join(str(m.get("body") or "") for m in msgs)
-    assert "[手稿 0000]" in body and "交给 F：X 的族构造证据" in body, msgs
+    assert f"[手稿 {S.format_id(0)}]" in body and "交给 F：X 的族构造证据" in body, msgs
     # 读数落在这一趟的记录里（谁交给了谁、哪一份）
-    assert run.steps[-1].result.get("notify_handoff", {}).get("id") == "0000", run.steps[-1]
+    assert run.steps[-1].result.get("notify_handoff", {}).get("id") == S.format_id(0), run.steps[-1]
 
 
 def test_the_conductor_is_exempt_because_its_final_goes_to_the_user(tmp_path):
@@ -131,7 +132,7 @@ def test_e4_2_a_final_without_notify_just_has_no_handoff(tmp_path):
     ws2, run2 = _run(tmp_path / "b", [{"final": "我做完了",
                                        "notify": {"to": "D", "summary": "交给 D",
                                                   "body": "正文"}}])
-    assert run2.stop_reason == "final" and run2.handoffs == ["0000"], run2.to_dict()
+    assert run2.stop_reason == "final" and run2.handoffs == [S.format_id(0)], run2.to_dict()
     assert MS.rows(ws2)[0]["sender"] == "D", MS.rows(ws2)
 
 
@@ -285,7 +286,7 @@ def test_the_conductor_must_leave_a_trail_when_it_dispatches(tmp_path):
     ], role="M")
     assert run.stop_reason == "final", run.to_dict()
     assert run.notify_rejections == 0, run.to_dict()
-    assert run.handoffs == ["0000"], run.to_dict()
+    assert run.handoffs == [S.format_id(0)], run.to_dict()
     rows = MS.rows(ws)
     assert rows[0]["to"] == "D", rows[0]
     assert "登记这条猜想" in rows[0]["summary"], rows[0]
@@ -488,10 +489,10 @@ def test_the_run_end_event_carries_the_handoff_readings(tmp_path):
     ws, run = _run(tmp_path, [
         {"final": "收工了", "notify": {"to": "M", "summary": "交给 M", "body": "正文。"}},
     ])
-    assert run.handoffs == ["0000"], run.to_dict()
+    assert run.handoffs == [S.format_id(0)], run.to_dict()
     events, problems = SS.read_session(ws, sid="n1")
     assert not problems, problems
     end = [e for e in events if e.get("kind") == "agent_run_end"]
     assert end, [e.get("kind") for e in events]
-    assert end[-1].get("handoffs") == ["0000"], end[-1]
+    assert end[-1].get("handoffs") == [S.format_id(0)], end[-1]
     assert end[-1].get("notify_rejections") == 0, end[-1]

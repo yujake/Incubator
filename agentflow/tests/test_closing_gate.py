@@ -1249,7 +1249,7 @@ def test_the_manuscript_leg_counts_rows_in_the_ledger_not_files(tmp_path: pathli
     row = after.readings["acceptance"]["rows"][0]
     assert row["got"] == 2, row
     assert after.status["acceptance"] == "pass", after.to_dict()
-    assert row["detail"]["authored_rows"] == ["0000", "0001"], row["detail"]
+    assert row["detail"]["authored_rows"] == [S.format_id(0), S.format_id(1)], row["detail"]
     assert row["detail"]["legacy_md_files"] == ["0009"], row["detail"]
     assert "不计入" in str(row["detail"].get("note") or ""), row["detail"]
 
@@ -1291,7 +1291,7 @@ def test_framework_derived_template_rows_do_not_count_as_handoffs(tmp_path: path
     rep2 = _gate(st, report)
     row2 = rep2.readings["acceptance"]["rows"][0]
     assert row2["got"] == 1 and row2["ok"] is True, row2
-    assert row2["detail"]["refs_ok"] == ["0002"], row2["detail"]
+    assert row2["detail"]["refs_ok"] == [S.format_id(2)], row2["detail"]
 
 
 def test_a_row_missing_a_required_field_does_not_count(tmp_path: pathlib.Path):

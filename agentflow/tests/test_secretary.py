@@ -111,7 +111,7 @@ def test_secretary_writes_the_row_with_the_served_role_as_sender(tmp_path: pathl
     rec = s.handoff_add(to="F", summary="把猜想交给你", body="## 任务\n证明它。",
                         refs=(), task_id="t-0001")
     assert rec["sender"] == "D", rec
-    assert rec["id"] == "0000"
+    assert rec["id"] == S.format_id(0)
     assert MS.rows(root) and MS.rows(root)[0]["sender"] == "D"
     # 台账记下"我替谁执笔了哪一行"
     led = s.decisions()
@@ -928,7 +928,7 @@ def test_every_role_can_get_its_own_secretary(tmp_path: pathlib.Path):
         rec = s.handoff_add(to="M" if role != "M" else "D", summary=f"{role} 的交接",
                             body=f"{role} 干完了这一步。")
         assert rec["sender"] == role, (role, rec)
-        assert rec["id"] == f"{i:04d}", (role, rec["id"])
+        assert rec["id"] == S.format_id(i), (role, rec["id"])
         assert sec.decisions_path(root, role).is_file(), role
     # 每角色一份：文件数 = 角色数（不许混写，也不许多写）
     written = sorted(p.name for p in (root / "out" / "secretary").glob("*.jsonl"))

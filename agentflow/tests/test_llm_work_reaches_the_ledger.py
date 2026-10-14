@@ -40,6 +40,7 @@ import json
 import pathlib
 from typing import Any
 
+from agentflow import schema as S
 from agentflow import agent_loop as AL
 from agentflow import llmseam as LL
 from agentflow import sessions as SS
@@ -327,7 +328,7 @@ def test_a_healthy_secretary_is_still_assembled_and_writes_the_handoff(tmp_path:
     """
     ws, run = _run(tmp_path, [{"text": json.dumps(
         {"final": "照常收工", "evidence": [], "notify": NOTIFY}, ensure_ascii=False)}])
-    assert run.handoffs == ["0000"], run.to_dict()
+    assert run.handoffs == [S.format_id(0)], run.to_dict()
     hp = ws / "manuscripts" / "handoffs.jsonl"
     assert hp.is_file(), "装配正常时手稿必须落行"
     assert len(hp.read_text(encoding="utf-8").splitlines()) == 1

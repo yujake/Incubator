@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from agentflow import schema as S
 from agentflow.agent_a import AgentA
 from agentflow.fetch import FetchResult
 from agentflow.providers import Candidate
@@ -219,20 +220,20 @@ def test_search_literature_does_not_pretend_someone_elses_request_is_its_own(sto
     区别 —— 否则调用方会把"别人那条的结果"当成"我要的文献"。
     """
     a = _agent_a(store, StubProvider([_cand()]), OkDownloader())
-    add_request(store, "r-0001", topic="older request")      # 先来一条（同为 low 优先级）
+    add_request(store, f"r-{S.format_id(1)}", topic="older request")      # 先来一条（同为 low 优先级）
     out = a.search_literature(topic="mine", mode="topical")
-    assert out["request_id"] != "r-0001"
+    assert out["request_id"] != f"r-{S.format_id(1)}"
     # 它先替更早那条跑完、再跑自己那条 —— 两条都要如实报出来。
-    assert out["claimed_request_ids"] == ["r-0001", out["request_id"]], out
+    assert out["claimed_request_ids"] == [f"r-{S.format_id(1)}", out["request_id"]], out
     assert out["claimed_own"] is True, out
     # 两条都在库里，各自都完成了（用的是同一个替身 provider，各登记一篇）
     by_id = {r["request_id"]: r for r in store.rows("search_requests")}
-    assert by_id["r-0001"]["done"] is True
+    assert by_id[f"r-{S.format_id(1)}"]["done"] is True
     assert by_id[out["request_id"]]["done"] is True
     assert len(store.rows("literature")) == 1, (
         "同一个替身候选被两条请求各查了一次 ⇒ 判重合成同一行（不是两行）")
     lit = store.rows("literature")[0]
-    assert lit["source_request_ids"] == ["r-0001", out["request_id"]], lit["source_request_ids"]
+    assert lit["source_request_ids"] == [f"r-{S.format_id(1)}", out["request_id"]], lit["source_request_ids"]
 
 
 def test_a_non_ascii_description_is_kept_for_audit_but_not_used_as_the_query(store):

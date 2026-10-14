@@ -213,20 +213,20 @@ def test_cli_submit_uses_the_single_id_allocator(tmp_path: Path, capsys) -> None
     from agentflow import interactions as X
 
     st = _ws(tmp_path)
-    add_request(st, "r-0005")
+    add_request(st, f"r-{S.format_id(5)}")
     expected_first = X.next_prefixed_id(st.rows("search_requests"), "request_id", "r")
-    assert expected_first == "r-0006", "前置条件：唯一判据应当给 r-0006"
+    assert expected_first == f"r-{S.format_id(6)}", "前置条件：唯一判据应当给 r-0006"
 
     rc = cli.main(["--root", str(st.root), "submit", "--topic", "群论", "--by", "cli-test"])
     out = capsys.readouterr().out
     ids = sorted(r["request_id"] for r in st.rows("search_requests"))
-    assert rc == 0 and "r-0006" in out and ids == ["r-0005", "r-0006"], out
+    assert rc == 0 and f"r-{S.format_id(6)}" in out and ids == [f"r-{S.format_id(5)}", f"r-{S.format_id(6)}"], out
 
 
 def test_cli_submit_negative_control_batch_ids_do_not_collide(tmp_path: Path, capsys) -> None:
     """负控：一次交多条时不许撞号（旧写法在 n 被 while 改过之后确实会错）。"""
     st = _ws(tmp_path)
-    add_request(st, "r-0001")
+    add_request(st, f"r-{S.format_id(1)}")
     payload = tmp_path / "batch.json"
     payload.write_text(json.dumps([{"topic": "a"}, {"topic": "b", "mode": "broad"}, {"topic": "c"}]),
                        encoding="utf-8")
@@ -234,7 +234,7 @@ def test_cli_submit_negative_control_batch_ids_do_not_collide(tmp_path: Path, ca
     assert cli.main(["--root", str(st.root), "submit", "--file", str(payload)]) == 0
     capsys.readouterr()
     ids = sorted(r["request_id"] for r in st.rows("search_requests"))
-    assert ids == ["r-0001", "r-0002", "r-0003", "r-0004"], ids
+    assert ids == [f"r-{S.format_id(1)}", f"r-{S.format_id(2)}", f"r-{S.format_id(3)}", f"r-{S.format_id(4)}"], ids
     assert len({r["request_id"] for r in st.rows("search_requests")}) == 4
 
 

@@ -78,22 +78,24 @@ def test_a_mapping_row_has_the_field_combination_from_the_spec(store):
     stmts = _stmts()
     with store.tx("statements", "dependencies", actor="test") as tx:
         tx.upsert("statements", S.Statement(
-            stmt_id="0007", origin="own_result", kind="theorem", label="主定理",
+            stmt_id=S.format_id(7), origin="own_result", kind="theorem", label="主定理",
             statement_full=stmts[0]["statement_full"], quote_verified=None,
-            quote_reason="（判据夹具）", doc_id="0001", created_at=TS).to_dict())
-        row = PL.map_theorem(tx, statement_row=stmts[0], paper_doc_id="0009",
+            quote_reason="（判据夹具）", doc_id=S.format_id(1), created_at=TS).to_dict())
+        row = PL.map_theorem(tx, statement_row=stmts[0], paper_doc_id=S.format_id(9),
                              claim_id="c-1.1", paper_number="1.1")
-    assert row["dep_id"] == "0000", row["dep_id"]
-    assert row["used_by"] == "doc:0009#c-1.1", row["used_by"]
+    assert row["dep_id"] == S.format_id(0), row["dep_id"]
+    assert row["used_by"] == f"doc:{S.format_id(9)}#c-1.1", row["used_by"]
     assert row["kind"] == "theorem" and row["label"] == "1.1", row
-    assert row["source_doc_id"] == "0001", row
+    # 来源手稿号取自**那一行自己**（`stmts[0]` 是夹具里的行，号由夹具给）——
+    # 判据断言的是"抄对了来源"，不是"来源恰好是哪个十进制写法"。
+    assert row["source_doc_id"] == str(stmts[0]["doc_id"]), row
     assert row["source_claim_id"] == "c-1.1", row
     # "四选一"是硬闸：这一行只挂手稿那一端，不许再挂 `source_stmt_id`
     assert not row.get("source_stmt_id"), (
         "同时给 source_doc_id 与 source_stmt_id 会被 `Dependency.validate` 拒"
         f"（给两个就说不清这条边到底依赖谁）：{row}")
     assert row["status"] == "closed", row
-    assert store.rows("dependencies")[0]["dep_id"] == "0000", store.rows("dependencies")
+    assert store.rows("dependencies")[0]["dep_id"] == S.format_id(0), store.rows("dependencies")
 
 
 # ==================================================== 二、负控（三种造假各一条）

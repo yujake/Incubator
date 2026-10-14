@@ -209,13 +209,13 @@ def test_alloc_id_skips_the_occupied_id_when_the_table_is_declared(store: Store)
     store._atomic_write(store.data / "counters.json",
                         {"schema_version": S.SCHEMA_VERSION, "counters": {"lit": 0}})
     with store.tx("literature", actor="t") as tx:
-        tx.upsert("literature", _lit("0000", "已占用"))
+        tx.upsert("literature", _lit(S.format_id(0), "已占用"))
     with store.tx("literature", actor="t") as tx:
         nid = tx.alloc_id("lit")
         tx.upsert("literature", _lit(nid, "新的"))
-    assert nid == "0001", nid
+    assert nid == S.format_id(1), nid
     rows = {r["lit_id"]: r["title"] for r in store.rows("literature")}
-    assert rows == {"0000": "已占用", "0001": "新的"}, rows
+    assert rows == {S.format_id(0): "已占用", S.format_id(1): "新的"}, rows
 
 
 # ============================================================ F-3

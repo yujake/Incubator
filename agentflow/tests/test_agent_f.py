@@ -115,7 +115,7 @@ def test_create_plan_with_complete_budget(store):
         subgoals=[{"sid": "s1", "text": "先做数值实验", "owner": "E"}],
     )
     assert out["created"] is True
-    assert out["plan_id"] == "0000"
+    assert out["plan_id"] == S.format_id(0)
     assert out["status"] == "open"
 
     row = store.rows("attack_plans")[0]
@@ -441,7 +441,7 @@ def test_owner_a_submits_a_search_request_through_the_gate(store):
     assert req["done"] is False
     sg = store.rows("attack_plans")[0]["subgoals"][0]
     assert sg["evidence_ids"] == [req["request_id"]], "证据列里要留下这次请求的代号"
-    assert req["request_id"] == "r-0001", "请求号形如 r-NNNN（前缀只出现一次）"
+    assert req["request_id"] == f"r-{S.format_id(1)}", "请求号形如 r-NNNN（前缀只出现一次）"
     assert "等 A 完成" in sg["blocked_reason"], "请求交出去之后要写清在等谁（否则无从接手）"
 
 

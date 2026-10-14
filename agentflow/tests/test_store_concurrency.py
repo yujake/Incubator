@@ -133,7 +133,7 @@ def test_no_lost_update_across_four_processes(tmp_path: Path) -> None:
     st = Store(root)
     ids = sorted(r["stmt_id"] for r in st.rows("statements"))
     assert len(ids) == 80, f"期望 80 行，实际 {len(ids)} 行（有更新被覆盖丢失）"
-    assert ids == [f"{i:04d}" for i in range(80)], "ID 必须从 0000 起连续且无重复"
+    assert ids == [S.format_id(i) for i in range(80)], "ID 必须从当前宽度起连续且无重复"
     allocated = [i for r in reports for i in r["ids"]]
     assert len(set(allocated)) == 80, "同一个 ID 被发给了两个进程"
     assert st.read("counters")["counters"]["stmt"] == 80
@@ -143,7 +143,7 @@ def test_alloc_id_is_unique_within_a_single_tx(store: Store) -> None:
     """同一事务内连续 alloc_id 5 次必须得到 5 个不同 ID（曾经同一事务重复发同一个号）。"""
     with store.tx("statements", actor="test") as tx:
         ids = [tx.alloc_id("stmt") for _ in range(5)]
-    assert ids == ["0000", "0001", "0002", "0003", "0004"]
+    assert ids == [S.format_id(0), S.format_id(1), S.format_id(2), S.format_id(3), S.format_id(4)]
     assert store.read("counters")["counters"]["stmt"] == 5
 
 
@@ -245,4 +245,4 @@ def test_failed_tx_does_not_leak_id_allocation(store: Store) -> None:
     with store.tx("statements", actor="test") as tx:
         sid = tx.alloc_id("stmt")
         tx.upsert("statements", _stmt_row(sid, "群"))
-    assert sid == "0000", f"回滚后重新分配应仍从 0000 开始，实际拿到 {sid}（ID 空洞）"
+    assert sid == S.format_id(0), f"回滚后重新分配应仍从 0000 开始，实际拿到 {sid}（ID 空洞）"

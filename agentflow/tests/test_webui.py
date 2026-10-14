@@ -60,6 +60,7 @@ from urllib.parse import urlencode
 
 import pytest
 
+from agentflow import schema as S
 from agentflow import sessions as SS
 from agentflow import userio as U
 from agentflow import webui as W
@@ -345,24 +346,24 @@ def test_post_answer_custom_text_comes_back(tmp_path: pathlib.Path):
 
 # ====================================================================== 4 正控
 def test_the_same_qid_in_two_sessions_does_not_cross_wire(tmp_path: pathlib.Path):
-    """负控（跨会话同名 qid）：每段会话各自从 `q0001` 编号，提交必须按 `(sid, qid)` 精确匹配。
+    """负控（跨会话同名 qid）：每段会话各自从 `q000001` 编号，提交必须按 `(sid, qid)` 精确匹配。
 
     实测撞过的那一版：待答清单只按 `qid` 索引，于是给一个「已经答过」的会话再提交，
-    会因为"别的会话还有一个 q0001"而通过存在性检查 —— 往那个会话里写下「第二条」
+    会因为"别的会话还有一个同号 qid"而通过存在性检查 —— 往那个会话里写下「第二条」
     回答（跨会话串味，而且 `read_replies` 会把这条假的当成真回答读给模型）。
     """
     root = tmp_path / "ws"
     root.mkdir()
     q1 = _ask(root, role="M", text="s1 的问题", sid="s1")
     q2 = _ask(root, role="M", text="s2 的问题", sid="s2")
-    assert q1 == q2 == "q0001", (q1, q2)          # 夹具前提：两段会话确实同号
+    assert q1 == q2 == f"q{S.format_id(1)}", (q1, q2)   # 夹具前提：两段会话确实同号
     with server(root) as base:
         # ① 答 s1：落在 s1，s2 不许被动到
         code, _b, _h = _post(base, "/answer", {"qid": q1, "sid": "s1", "custom": "给 s1 的"})
         assert code == 303, code
         assert [e.get("custom") for e in _answer_events(root, "s1")] == ["给 s1 的"]
         assert _answer_events(root, "s2") == []
-        assert [q.qid for q in U.pending_questions(root, sid="s2")] == ["q0001"]
+        assert [q.qid for q in U.pending_questions(root, sid="s2")] == [f"q{S.format_id(1)}"]
 
         # ② 再给 s1 提交一次（它已经答过）⇒ 409，且 s1 不许出现第二条回答
         code, _b, _h = _post(base, "/answer", {"qid": q1, "sid": "s1", "custom": "重复提交"})
@@ -800,7 +801,7 @@ def test_events_outside_a_run_never_become_a_run(tmp_path: pathlib.Path):
     SS.append(root, {"kind": "agent_run_end", "role": "M", "stop_reason": "final",
                      "steps": 1, "final": "做完了"}, sid="t")
     # 人刚提交的回答：落在轮次之外（真机里正是「按下提交」那一刻的形态）
-    SS.append(root, {"kind": "user_answer", "qid": "q0001", "answer": "第二档",
+    SS.append(root, {"kind": "user_answer", "qid": f"q{S.format_id(1)}", "answer": "第二档",
                      "by": "web"}, sid="t")
     # 另一个会话一条 `agent_run_start` 都没有：不带 --sid 的那次 CLI 调用写的台账事件
     SS.append(root, {"kind": "task_end", "role": "A", "outcome": "ok"}, sid="20261003")

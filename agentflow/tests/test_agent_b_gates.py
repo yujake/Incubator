@@ -143,7 +143,17 @@ def _reprocess(store, pid, relation_ids, *, reason="quote_unverifiable", status=
 
 
 def _relation(store, rid) -> dict:
-    row = next((r for r in store.rows("relations") if r["relation_id"] == rid), None)
+    """按关系号取行：**两种宽度都认**（夹具写的是四位、动作分配出来的是六位）。
+
+    这不是"放宽判据"：取到的行仍然必须真的存在（下面那条断言照旧）。
+    宽度统一成六位之后，夹具里显式写的四位号与动作新分配的六位号会同时出现在盘上，
+    而 case 想说的是"那一条关系"，不是"哪一个十进制写法"。
+    """
+    want = {str(rid)}
+    if str(rid).isdigit():
+        want.add(S.format_id(int(rid)))
+        want.add(f"{int(rid):04d}")  # LEGACY：夹具里的旧四位写法
+    row = next((r for r in store.rows("relations") if str(r["relation_id"]) in want), None)
     assert row is not None, f"关系 {rid} 不存在"
     return row
 

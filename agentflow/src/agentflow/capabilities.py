@@ -389,7 +389,7 @@ def two_layer_reconciliation() -> dict:
     - `unmatched`：`handler_name` 在角色工具组里对应 0 个工具 ⇒ 没比成（unknown）；
     - `ambiguous`：对应 ≥2 个工具 ⇒ 按唯一性约定拒绝猜（unknown）。
 
-    实测（2026-10-13 `G.paper_package` 退场之后）：59 个动作 = 21 compared + 38 unmatched + 0 ambiguous
+    实测（2026-10-14 现算）：60 个动作 = 21 compared + 39 unmatched + 0 ambiguous
     （退场前是 60 = 21 + 39 + 0：`paper_package` 那一条本来也进 `unmatched`）。
     此前各次（数字逐次可复算，每次只增不改）：
     `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]`

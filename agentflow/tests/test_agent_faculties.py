@@ -18,6 +18,7 @@ import json
 import pathlib
 from typing import Any
 
+from agentflow import schema as S
 from agentflow import capabilities as C
 from agentflow import sessions as SS
 from agentflow.agent_loop import (PUBLIC, LlmBackend, inbox_digest, note_path,
@@ -96,7 +97,7 @@ def test_public_channel_reaches_the_speakers_own_team(tmp_path: pathlib.Path):
     msg_id, problem = send_message(root, sender="C", to=PUBLIC, subject="口径",
                                   body="我把'度数'定义成去重后的邻居数", sid="t",
                                    from_task_id=speaker)
-    assert problem == "" and msg_id == "m0001"
+    assert problem == "" and msg_id == f"m{S.format_id(1)}"
     for role in ("A", "D"):
         msgs, problems = read_messages(root, role, sid="t", parent_task_id=speaker)
         assert not problems and len(msgs) >= 1 and msgs[0]["channel"] == "public", (role, msgs)

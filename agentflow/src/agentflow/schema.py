@@ -2,7 +2,8 @@
 
 设计要点：
 - 需求给定的字段一律保留原名与语义；本模块只做"结构化 + 约束"。
-- 所有 ID 是 4 位十进制字符串（"0000"…"9999"），不用 int，避免前导零在序列化时丢失。
+- 所有 ID 是不带前导零丢失风险的十进制字符串（当前宽度六位 "000000"…"999999"；
+  旧数据里的四位号按读侧兼容照样读得进来），不用 int，避免前导零在序列化时丢失。
 - 数组字段（related_concepts / concept_ids / source_request_ids）在写入前统一走
   `sorted_unique()`，把"保持升序、去重"从"调用方记得做"变成"结构上不可能做错"。
 - 时间戳统一 ISO-8601 带时区，由 `now_iso()` 产生，保证同库内可比。
@@ -136,7 +137,41 @@ DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 #: 在真机里各自都发生过一次（§1.1 与 §2 R14 的负控①）。
 LIT_MATCH_STATUSES = ("exact", "partial", "mismatch")
 
-_ID_RE = re.compile(r"^\d{4}$")
+#: 编号宽度的**唯一定义处**（业主 2026-10-14：「**所有四位编号改成六位**（`0000`→`000000`，防溢出）」）。
+#:
+#: 为什么必须是一处：`store.MAX_ID`（上限）与三个形态判据（`_ID_RE` / `_PROCESS_ID_RE` /
+#: 各消费方的正则）此前各写各的 4 —— 而 `assert_id_space_contract()` 存在的理由
+#: 就是"上限与形态不许分家"。宽度改成一处定义之后，这条对账依然是同一条：
+#: 改 `ID_DIGITS` 而忘了改 `MAX_ID`，导入期当场炸。
+ID_DIGITS = 6
+
+#: 当前宽度的编号形态（**新写的号必须是它**）。
+ID_PATTERN = rf"\d{{{ID_DIGITS}}}"
+
+#: 旧数据（4 位）的**读侧兼容**形态。
+#:
+#: 处置（业主同一条裁定：「留一条『六位』的反真空判据 + 旧四位数据的读侧兼容」）：
+#: 盘上已有的 4 位号**照样读得进来**（`is_valid_id` 两条形态都认），
+#: 但**发号器只发六位**（`format_id()` 一处；判据见 `tests/test_id_width.py`）。
+#: 不这么做的话，`store.rebuild()` 会把所有历史行当坏行静默跳过 —— 那是数据毁灭，
+#: 不是"迁移"。
+LEGACY_ID_PATTERN = r"\d{4}"
+
+#: "六位或旧四位"的合并形态：给**消费方**（解析别人写下的号的那些正则）用。
+ID_OR_LEGACY_PATTERN = rf"(?:{ID_PATTERN}|{LEGACY_ID_PATTERN})"
+
+_ID_RE = re.compile(rf"^{ID_PATTERN}$")
+_LEGACY_ID_RE = re.compile(rf"^{LEGACY_ID_PATTERN}$")
+
+
+def format_id(n: int) -> str:
+    """把整数编号按当前宽度写成字符串（**发号的唯一形态**）。
+
+    所有发号点（`store.alloc_id` / `interactions.next_prefixed_id` /
+    `table_tools._allocate_id` / 手稿号 / 留言号 / 问题号 / 审校号）都从这里取形态，
+    于是"宽度"只有一处可改，也不会有人漏掉某一个发号点。
+    """
+    return f"{int(n):0{ID_DIGITS}d}"
 
 
 def now_iso() -> str:
@@ -145,13 +180,33 @@ def now_iso() -> str:
 
 
 def is_valid_id(value: Any) -> bool:
-    """ID 必须是 4 位十进制字符串。"""
-    return isinstance(value, str) and bool(_ID_RE.match(value))
+    """ID 形态判据：**当前宽度（六位）或旧数据宽度（四位）**。
+
+    两个宽度都认的理由是读侧兼容：盘上已有的号是 4 位，`store.rebuild()` 与每一行
+    `validate()` 都走这里 —— 只认六位会把全部历史行判成坏行静默跳过。
+    "新号必须是六位"这条**不在这一格**判，它在发号器上判（`format_id()` 一处，
+    判据见 `tests/test_id_width.py`）：读侧要宽、写侧只有一条路。
+    """
+    return isinstance(value, str) and bool(_ID_RE.match(value) or _LEGACY_ID_RE.match(value))
+
+
+def is_legacy_id(value: Any) -> bool:
+    """这个号是不是**旧数据宽度**（4 位）——读侧留痕用，不当写入判据。"""
+    return isinstance(value, str) and bool(_LEGACY_ID_RE.match(value))
+
+
+def id_width(value: Any) -> int:
+    """这个号的宽度（不是字符串就是 0）——给判据与迁移读数用。"""
+    if not isinstance(value, str) or not value.isdigit():
+        return 0
+    return len(value)
 
 
 def require_id(value: Any, what: str = "id") -> str:
     if not is_valid_id(value):
-        raise ValueError(f"{what} 必须是 4 位十进制字符串，收到 {value!r}")
+        raise ValueError(
+            f"{what} 必须是 {ID_DIGITS} 位十进制字符串（如 {format_id(0)}；"
+            f"旧数据里的 4 位号仍可读），收到 {value!r}")
     return value
 
 
@@ -2330,7 +2385,7 @@ class Task:
        （由 `Conductor` 实现；schema 在这里提供"改了就违规"的判据）。
     """
 
-    task_id: str  # "t-NNNN"（过程记录，不占 4 位编号空间）
+    task_id: str  # "t-NNNNNN"（过程记录，不占编号空间）
     role: str  # 被召唤的角色（A–H），或 "M"（主控自己）
     action: str  # 该角色暴露的动作名
     #: 谁召唤的：`"M"`（主控）、`"A"`（角色 → 角色）、`"user"`（人直接指派）。
@@ -2984,7 +3039,7 @@ TABLES: dict[str, dict] = {
     "eval_results": {"file": "eval_results.json", "row": EvalResult, "id_field": "eval_id", "id_kind": "eval"},
 }
 
-#: 4 位 ID 分配器覆盖的表（search_requests 用 r-NNNN，reprocess_requests 用 p-NNNN，
+#: 编号空间计数器覆盖的表（search_requests 用 r-NNNNNN，reprocess_requests 用 p-NNNNNN，
 #: 都不占用 4 位编号空间 —— 它们是过程记录，而 4 位空间留给知识实体）。
 ID_COUNTERS = {
     "lit": "lit_id",
@@ -3012,10 +3067,12 @@ ID_COUNTERS = {
 
 # ---------------------------------------------------------------- 过程记录 ID（P-17）
 
-#: 过程记录 ID 的形态：`<前缀>-NNNN`（前缀是字母数字、且不带连接号）。
-#: 与 4 位 ID 的 `_ID_RE` 成对：两者互斥，而"互斥"正是
-#: "过程记录不占 4 位编号空间"这句话可判定的原因。
-_PROCESS_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-\d{4}$")
+#: 过程记录 ID 的形态：`<前缀>-NNNNNN`（前缀是字母数字、且不带连接号）。
+#: 与编号空间的 `_ID_RE` 成对：两者互斥，而"互斥"正是
+#: "过程记录不占编号空间"这句话可判定的原因。
+#: 号身认"当前宽度或旧四位"（读侧兼容，口径与 `is_valid_id` 同一处）——
+#: 盘上 `t-0252` 这类历史行必须照样读得进来。
+_PROCESS_ID_RE = re.compile(rf"^[A-Za-z][A-Za-z0-9]*-{ID_OR_LEGACY_PATTERN}$")
 
 #: 过程记录前缀的唯一来源就是"哪些表不在 `ID_COUNTERS` 里"。
 #: 不写死前缀名单（`r` / `p` / `t`）的理由：那会是第二份实现，而本项目
@@ -3134,8 +3191,12 @@ def process_id_kinds() -> frozenset[str]:
     )
 
 
-def four_digit_id_kinds() -> frozenset[str]:
-    """占 4 位编号空间的那几类（= `ID_COUNTERS` 的键）。与 `process_id_kinds()` 互斥。"""
+def id_space_kinds() -> frozenset[str]:
+    """占编号空间的那几类（= `ID_COUNTERS` 的键）。与 `process_id_kinds()` 互斥。
+
+    名字里的"编号空间"随 `ID_DIGITS` 一起动（2026-10-14 业主裁定：4 位 → 6 位）；
+    此前叫 `four_digit_id_kinds`，那个名字在改宽度之后会是一句假话。
+    """
     return frozenset(ID_COUNTERS)
 
 
@@ -3182,10 +3243,10 @@ def require_process_id(value: Any, id_kind: str) -> str:
     if not is_valid_process_id(value, id_kind):
         want = PROCESS_ID_PREFIXES.get(id_kind)
         raise ValueError(
-            f"{id_kind} 的过程记录 ID 必须是「前缀 {want!r} + 连接号 + 恰好 4 位数字」"
-            f"（如 {want}-0001），收到 {value!r}。"
+            f"{id_kind} 的过程记录 ID 必须是「前缀 {want!r} + 连接号 + {ID_DIGITS} 位数字」"
+            f"（如 {want}-{format_id(1)}；旧数据里的 4 位号仍可读），收到 {value!r}。"
             "只查非空会让 5 位号、双连接号、越界号与错前缀号静默落库，"
-            "直到某个下游按 4 位解析或按前缀过滤时才暴露（`c-1` / `c-2`）。"
+            "直到某个下游按整数解析或按前缀过滤时才暴露（`c-1` / `c-2`）。"
         )
     return value
 
@@ -3210,27 +3271,28 @@ def assert_process_id_contract() -> None:
     1. `set(ID_COUNTERS)` 与过程前缀（`r`/`p`/`t`）的交集为 空
        —— 直接钉住"占号空间"这件事本身；
     2. `set(PROCESS_ID_PREFIXES)`（声明面）与 `process_id_kinds()`（派生面）相等
-       —— 有人给过程表装上 4 位计数器时，派生面会变而声明面不变，两条路都炸；
+       —— 有人给过程表装上计数器时，派生面会变而声明面不变，两条路都炸；
     3. 每一张过程记录表的 `id_field` 都不在 `ID_COUNTERS` 的值里；
-    4. 过程 ID 与 4 位 ID 的形态判据互斥且各自可判定
-       （`"0000"` 不是过程 ID，`"t-0001"` 不是 4 位 ID）。
+    4. 过程 ID 与编号空间 ID 的形态判据互斥且各自可判定
+       （`"000000"` 与旧数据 `"0000"` 都不是过程 ID，`"t-000001"` 与旧数据
+       `"t-0001"` 都不是编号 ID）。
     """
     process_kinds = process_id_kinds()
-    counter_kinds = four_digit_id_kinds()
+    counter_kinds = id_space_kinds()
     prefixes = set(PROCESS_ID_PREFIXES.values())
 
     assert not (counter_kinds & prefixes), (
         f"ID_COUNTERS 里有过程记录前缀 {sorted(counter_kinds & prefixes)}："
-        "过程记录（r-/p-/t-）刻意不占 4 位编号空间。给它装计数器会让 4 位空间被"
+        "过程记录（r-/p-/t-）刻意不占编号空间。给它装计数器会让编号空间被"
         "过程记录吃掉，并且给 next_prefixed_id 的越界产号多开一个入口（P-17 / P-4）。"
         "要么把它从 ID_COUNTERS 里去掉，要么这是一次需要人裁的口径变更。"
     )
     assert set(PROCESS_ID_PREFIXES) == set(process_kinds), (
         f"声明面 PROCESS_ID_PREFIXES={sorted(PROCESS_ID_PREFIXES)} 与派生面 "
         f"process_id_kinds()={sorted(process_kinds)} 不一致："
-        "过程记录不占 4 位编号空间这条契约的**两个落位分家了**。"
+        "过程记录不占编号空间这条契约的**两个落位分家了**。"
         "派生面变了而声明面没变（或反之）都必须有人看一眼 —— 直接改派生面"
-        "（例如把 task 塞进 ID_COUNTERS）会让任务号开始吃 4 位空间。"
+        "（例如把 task 塞进 ID_COUNTERS）会让任务号开始吃编号空间。"
     )
     for tname, spec in TABLES.items():
         if spec["id_kind"] in process_kinds:
@@ -3238,28 +3300,33 @@ def assert_process_id_contract() -> None:
                 f"表 {tname} 是过程记录，它的 {spec['id_field']} 不该出现在 ID_COUNTERS 的值里"
             )
     # 两个形态判据必须互斥、且各自可判定 —— 否则"task_id 是什么形态"仍然只是注释。
-    assert is_valid_id("0000") and not is_valid_process_id("0000"), "4 位 ID 不被过程判据接受"
-    assert is_valid_process_id("t-0001") and not is_valid_id("t-0001"), "过程 ID 不被 4 位判据接受"
-    assert is_valid_process_id("r-9999") and is_valid_process_id("p-0001"), (
-        "过程 ID 形态判据要求 前缀+连接号+4 位数字"
+    # 两个宽度都试：新号（六位）与旧数据（四位）都必须落在"编号 ID"这一半。
+    for sample in (format_id(0), "0000"):
+        assert is_valid_id(sample) and not is_valid_process_id(sample), (
+            f"编号 ID {sample!r} 不被过程判据接受")
+    for sample in (f"t-{format_id(1)}", "t-0001"):
+        assert is_valid_process_id(sample) and not is_valid_id(sample), (
+            f"过程 ID {sample!r} 不被编号判据接受")
+    assert is_valid_process_id(f"r-{format_id(999999)}") and is_valid_process_id("p-0001"), (
+        "过程 ID 形态判据要求 前缀+连接号+号码（当前宽度或旧四位）"
     )
 
 
 def assert_id_space_contract() -> None:
     """断言"4 位契约"只有一个定义处，且它真的还是 4 位（`F-9` 第 4 条）。导入期自动跑一次。
 
-    为什么需要这一条：`store.MAX_ID = 9999` 是"4 位 ID 的上限"的唯一定义处
+    为什么需要这一条：`store.MAX_ID` 是"编号上限"的唯一定义处
     （`interactions.py` 明确说它 import 那个常量而不是另抄一份），`schema._ID_RE`
     是形态的唯一定义处，而两者之间此前没有任何对账 ——
     把 `MAX_ID` 改成 999（三位）或 99999（五位）不会有任何东西响，
-    而 `is_valid_id` 照样只认 4 位 ⇒ "上限"与"形态"分家，发出来的号
+    而 `is_valid_id` 照样只认一种宽度 ⇒ "上限"与"形态"分家，发出来的号
     要么被 `require_id` 拒掉、要么永久无法表达。
 
     判据两条：
     1. `MAX_ID` 必须是 `_ID_RE` 那种宽度的最大值（`10位数 - 1`）——
        改窄/改宽都会红，而"改它等于改磁盘契约"这句话此前只写在注释里；
     2. 每一类 ID（`TABLES` 的 `id_kind`）必须恰好落在两半之一：
-       要么进 `ID_COUNTERS` 吃 4 位空间，要么进 `PROCESS_ID_PREFIXES` 不占 ——
+       要么进 `ID_COUNTERS` 吃编号空间，要么进 `PROCESS_ID_PREFIXES` 不占 ——
        一个 `id_kind` 两边都不在，意味着有一张表的 ID 形态没有任何声明面管它。
     """
     # 惰性 import：`store` 顶层 `from . import schema as S`，模块级互相 import 会成环。
@@ -3271,7 +3338,7 @@ def assert_id_space_contract() -> None:
     width = int(m.group(1))
     assert MAX_ID == 10 ** width - 1, (
         f"store.MAX_ID = {MAX_ID}，而 schema._ID_RE = {_ID_RE.pattern!r} 只表达 "
-        f"{width} 位（该宽度的最大值是 {10 ** width - 1}）⇒ **4 位契约的两个落位分家了**。"
+        f"{width} 位（该宽度的最大值是 {10 ** width - 1}）⇒ **编号宽度契约的两个落位分家了**。"
         "MAX_ID 是上限的唯一定义处，_ID_RE 是形态的唯一定义处；改其中任何一个"
         "都等于改磁盘格式契约（DESIGN.md §0.1 C4）—— 这是需要人裁的口径变更，"
         "不许只改一边。"

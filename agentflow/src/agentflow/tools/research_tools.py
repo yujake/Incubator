@@ -221,7 +221,7 @@ def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -
     {
         "type": "object",
         "properties": {
-            "question_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "question_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
             "topic": {"type": "string", "minLength": 1},
             "mode": {"type": "string", "enum": list(S.SEARCH_MODES)},
             "description": {"type": "string"},
@@ -262,7 +262,7 @@ def research_submit_gap(
        "status=needs_evidence 却没有等待集"（那会让 D 的循环接不上）。
     """
     if not S.is_valid_id(question_id):
-        return fail(f"question_id 必须是 4 位十进制字符串，收到 {question_id!r}", kind="bad_id")
+        return fail(f"question_id 必须是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读），收到 {question_id!r}", kind="bad_id")
     if mode not in S.SEARCH_MODES:
         return fail(f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}", kind="bad_mode")
     if not str(topic).strip():
@@ -408,7 +408,7 @@ def research_submit_gap(
     {
         "type": "object",
         "properties": {
-            "question_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "question_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
             "note": {"type": "string", "minLength": 1},
         },
         "required": ["question_id", "note"],
@@ -428,7 +428,7 @@ def research_write_note(store: Any, question_id: str, note: str) -> ToolResult:
     审计价值正是在这个时间序列里。
     """
     if not S.is_valid_id(question_id):
-        return fail(f"question_id 必须是 4 位十进制字符串，收到 {question_id!r}", kind="bad_id")
+        return fail(f"question_id 必须是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读），收到 {question_id!r}", kind="bad_id")
     text = str(note).strip()
     if not text:
         return fail('note 不能为空（空笔记会污染研究记录，无法区分"想过但没写"与"没想过"）', kind="bad_note")
@@ -565,7 +565,7 @@ LEGAL_TRANSITIONS: dict[str, tuple[str, ...]] = {
     {
         "type": "object",
         "properties": {
-            "question_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "question_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
             "status": {"type": "string", "enum": list(S.QUESTION_STATUSES)},
             "notes": {"type": "string"},
         },
@@ -594,7 +594,7 @@ def research_set_status(store: Any, question_id: str, status: str, notes: str | 
     两道关卡的判定权都只有一份，不会出现第二个版本。
     """
     if not S.is_valid_id(question_id):
-        return fail(f"question_id 必须是 4 位十进制字符串，收到 {question_id!r}", kind="bad_id")
+        return fail(f"question_id 必须是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读），收到 {question_id!r}", kind="bad_id")
     if status not in S.QUESTION_STATUSES:
         return fail(f"status 必须是 {S.QUESTION_STATUSES} 之一，收到 {status!r}", kind="bad_status")
     try:

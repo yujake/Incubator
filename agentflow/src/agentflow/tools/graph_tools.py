@@ -76,6 +76,7 @@ from functools import partial
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .. import conceptrows as CR
+from .. import schema as S   # 编号宽度的唯一来源（工具参数的长度限制随它走）
 from .. import textutil as T
 from ..store import StoreError
 from .attack_tools import _guard  # 守卫只有一份实现（FC-03）：定义在 attack_tools.py
@@ -886,7 +887,7 @@ def graph_stats(holder, top_n: int = 10) -> ToolResult:
     {
         "type": "object",
         "properties": {
-            "concept_id": {"type": "string", "minLength": 4, "maxLength": 4},
+            "concept_id": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
             "max_neighbors": {"type": "integer", "minimum": 0},
         },
         "required": ["concept_id"],
@@ -947,8 +948,8 @@ def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -
     {
         "type": "object",
         "properties": {
-            "a": {"type": "string", "minLength": 4, "maxLength": 4},
-            "b": {"type": "string", "minLength": 4, "maxLength": 4},
+            "a": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
+            "b": {"type": "string", "minLength": 4, "maxLength": S.ID_DIGITS},
         },
         "required": ["a", "b"],
         "additionalProperties": False,

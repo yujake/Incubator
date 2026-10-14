@@ -1,6 +1,9 @@
-"""判据：主控不许直接控制 B / F / V，只可间接由父代理转达（业主 2026-10-10 裁定第 4 条）。
+"""判据：主控不许直接控制 F / V，只可间接由父代理转达。
 
-逐字：「M 的出边设限（不许直接控制 B、F、V，只可间接由父代理转达）」
+业主 2026-10-10 裁定第 4 条逐字：「M 的出边设限（不许直接控制 B、F、V，只可间接由父代理转达）」；
+**2026-10-13 裁定「补 M 到 B」把它收窄成两个角色**（逐字见 `specs/m.py`：
+「**B 你可以直接派**（业主 2026-10-13：「补 M 到 B」）……要 V 的复核 ⇒ 走 D → F 那条链」）。
+本文件跟这条现状判：B 在主控的直接出边里，F / V 不在。
 
 ## 这一批为什么两层都要判
 
@@ -8,14 +11,15 @@
 两处实现：只判边表，改坏了 `forbidden_edge` 那条路照样静默；只判行为，边表被人加回去
 （"反正行为层还会拒"）就没人管。所以三层各判一次：
 
-- 边表 = 那三个角色不在主控的直接出边里；
-- 行为 = 主控直接派它们 ⇒ `refused` / `forbidden_edge`（受控拒绝，不是崩溃、不是静默）；
-- 间接路径 = 同一张 Conductor 上 `M→A→B` / `M→D→F` / `M→D→F→V` 三条链各走通一次
+- 边表 = F / V 不在主控的直接出边里（B **在**，那是 2026-10-13 的裁定）；
+- 行为 = 主控直接派 F / V ⇒ `refused` / `forbidden_edge`（受控拒绝，不是崩溃、不是静默）；
+- 间接路径 = 同一张 Conductor 上 `M→D→F` / `M→D→F→V` 两条链各走通一次，外加 `M→B` 一条**直接**边
   （裁定要的是"间接转达"，所以"拒了直接边"只证明了一半：另外一半是这三条链还在）。
 
 改前的盘上读数（本文件写之前现算）：`M → {A,B,C,D,E,F,G,H,V}`，
 `B ← {A,D,E,F,M}`、`F ← {D,G,M,V}`、`V ← {F,M}`。
-改后：`M → {A,C,D,E,G,H}`，`B ← {A,D,E,F}`、`F ← {D,G,V}`、`V ← {F}`。
+改后（2026-10-10）：`M → {A,C,D,E,G,H}`；2026-10-13 加回 `M → B` 之后：
+`M → {A,B,C,D,E,G,H}`，`F ← {D,G,V}`、`V ← {F}`。
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from agentflow.conductor import Conductor
 from agentflow.policy import Policy
 from agentflow.store import Store
 
-INDIRECT = ("B", "F", "V")
+INDIRECT = ("F", "V")
 
 
 class _Stub(AgentA):
@@ -75,17 +79,18 @@ def _world(tmp_path: pathlib.Path) -> Conductor:
 
 # --------------------------------------------------------------- 权限面
 
-def test_the_conductor_has_no_direct_edge_to_the_three_indirect_roles() -> None:
-    """正控（权限面）：主控的直接出边里没有 B / F / V。
+def test_the_conductor_has_no_direct_edge_to_the_two_indirect_roles() -> None:
+    """正控（权限面）：主控的直接出边里没有 F / V，但**有** B（2026-10-13 裁定）。
 
-    这一条刻意写成"不含这三个"而不是"等于那六个"：前者是裁定的字面内容，
+    这一条刻意写成"不含这两个"而不是"等于那七个"：前者是裁定的字面内容，
     后者会把声明的形态抄成第二份定义（改一次要改两处，而漂移是静默的）。
     """
     got = set(C.ALLOWED_EDGES[S.CONDUCTOR_ROLE])
     assert not (got & set(INDIRECT)), f"主控仍然直接控制着 {sorted(got & set(INDIRECT))}"
-    # 反真空：判据扫得到东西（出边不是空集、被限的就是这三个）。
+    assert "B" in got, "2026-10-13 裁定「补 M 到 B」：主控可以直接派 B"
+    # 反真空：判据扫得到东西（出边不是空集、被限的就是这两个）。
     assert got >= {"A", "C", "D", "E", "G", "H"}, got
-    assert len(INDIRECT) == 3
+    assert len(INDIRECT) == 2
 
 
 def test_each_indirect_role_still_has_a_parent_that_can_reach_it() -> None:
@@ -128,15 +133,17 @@ def test_the_negative_control_putting_an_edge_back_is_rejected() -> None:
 
 # --------------------------------------------------------------- 行为面
 
-def test_a_direct_summon_of_the_three_is_refused_not_crashed(tmp_path: pathlib.Path) -> None:
-    """正控（行为面）：主控直接派 B / F / V ⇒ `refused` / `forbidden_edge`。
+def test_a_direct_summon_of_f_and_v_is_refused_not_crashed(tmp_path: pathlib.Path) -> None:
+    """正控（行为面）：主控直接派 F / V ⇒ `refused` / `forbidden_edge`；派 B 则受理。
 
     三态纪律：它是"查过了、这条边不存在"（受控拒绝），不是崩溃，也不是静默不派 ——
     主控拿到它才可能换一条链（提示词里那条政策的依据就是这个读数）。
+    B 这一档是**正控的另一半**：2026-10-13 之后它必须被受理（否则"补 M 到 B"没落地）。
     """
     c = _world(tmp_path)
-    cases = (("B", "run_once", {}), ("F", "list_plans", {}),
-             ("V", "list_verifications", {}))
+    b0 = c.summon("B", "run_once", {}, input_key="direct-B")
+    assert b0.outcome == "ok", (b0.status, b0.outcome, b0.refusal_reason)
+    cases = (("F", "list_plans", {}), ("V", "list_verifications", {}))
     for role, action, params in cases:
         res = c.summon(role, action, params, input_key=f"direct-{role}")
         assert res.status == "done" and res.outcome == "refused", (role, res.status, res.outcome)
@@ -185,6 +192,11 @@ def test_the_prompt_tells_the_conductor_the_three_routes(tmp_path: pathlib.Path)
 
     for brief in (AP.ROLE_BRIEFS["M"], SP.builtin_specs()["M"].brief):
         text = "\n".join(brief.policy)
-        assert "B / F / V 只能间接由父代理转达" in text, text[:200]
-        for route in ("A.run_once", "D → F", "forbidden_edge"):
+        assert "F / V 只能间接由父代理转达" in text, text[:200]
+        assert "B 你可以直接派" in text, text[:200]
+        # 路线名逐条现算：2026-10-13 之后 B 那条是**直接**边（`M→B`），
+        # 另外两条仍是间接链与那条拒信读数 —— 写死旧路线名会让这条判据随
+        # 业主的一句裁定变成假红（实测：`A.run_once` 已从 M 的 brief 里退场）。
+        for route in ("M→B" if "M→B" in text else "B 你可以直接派",
+                      "D → F", "forbidden_edge"):
             assert route in text, f"提示词里没有 {route}"

@@ -30,6 +30,7 @@ import pathlib
 
 import pytest
 
+from agentflow import schema as S
 from agentflow import evidencebits as EB
 from agentflow import verifications as VR
 
@@ -92,7 +93,7 @@ def test_e9_a_dirty_proof_is_refused_at_the_step_and_not_signed(tmp_path):
     rows, problems = VR.list_verifications(root, statement_id="0007")
     assert not problems and len(rows) == 1, (rows, problems)
     assert rows[0]["proof_sha256"] == VR.proof_sha(_DIRTY), rows[0]
-    assert rows[0]["verification_id"] == "v-0001", rows[0]
+    assert rows[0]["verification_id"] == f"v-{S.format_id(1)}", rows[0]
 
 
 def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
@@ -105,8 +106,8 @@ def test_e9_a_clean_proof_is_signed_and_moves_the_five_bit_grade(tmp_path):
     assert VR.signs_bit3(row) is True, row
     payload = VR.bit3_payload(row)
     assert payload["reviewed"] is True, payload
-    assert payload["reviewed_by"]["verification_id"] == "v-0001", payload
-    assert payload["reviewed_by"]["evidence"].endswith("0007.jsonl#v-0001"), payload
+    assert payload["reviewed_by"]["verification_id"] == f"v-{S.format_id(1)}", payload
+    assert payload["reviewed_by"]["evidence"].endswith(f"0007.jsonl#v-{S.format_id(1)}"), payload
 
     # 与五元位接起来：有证明过程（第 2 位）+ 这一签（第 3 位）⇒ 预备定理级
     bits = EB.bits_of(proof=True, proof_process=_CLEAN, **payload)
@@ -151,7 +152,7 @@ def test_a_wrong_field_in_a_handmade_verdict_is_refused_at_write_time(tmp_path):
 
 
 def test_the_ledger_is_append_only_and_ids_are_allocated_by_the_script(tmp_path):
-    """追加式 + 编号由脚本发：同一命题审三次 ⇒ 三行、`v-0001…v-0003`、不覆盖。"""
+    """追加式 + 编号由脚本发：同一命题审三次 ⇒ 三行、`v-000001…v-000003`、不覆盖。"""
     root = tmp_path / "ws"
     root.mkdir()
     ok = VR.parse_verdict('{"verdict": "成立", "findings": []}')
@@ -160,7 +161,7 @@ def test_the_ledger_is_append_only_and_ids_are_allocated_by_the_script(tmp_path)
                   verdict=ok, round_no=i + 1)
     rows, problems = VR.list_verifications(root, statement_id="0007")
     assert not problems, problems
-    assert [r["verification_id"] for r in rows] == ["v-0001", "v-0002", "v-0003"], rows
+    assert [r["verification_id"] for r in rows] == [f"v-{S.format_id(i)}" for i in (1, 2, 3)], rows
     assert [r["round"] for r in rows] == [1, 2, 3], rows
     assert len({r["proof_sha256"] for r in rows}) == 3, "三次提交的证明不同 ⇒ 三份 sha"
 

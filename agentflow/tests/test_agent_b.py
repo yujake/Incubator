@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from agentflow import schema as S
 from agentflow import conceptrows as CR
 from agentflow import dedup as D
 from agentflow.agent_b import AgentB
@@ -107,21 +108,21 @@ def test_related_concepts_are_derived_from_relations(store):
     ③ 负控：这条判据不是恒空 —— 0000 恰好同时连着 0001（旧关系）与 0002（新关系）。
     """
     write_library_file(store, "0001/c.txt", f"环是一个集合。{QUOTE}")
-    add_literature(store, "0000", title="旧文献", path=None, processed=True)
-    add_literature(store, "0001", title="新文献", path="0001/c.txt")
-    add_concept(store, "0000", "群")
-    add_concept(store, "0001", "阿贝尔群")
+    add_literature(store, S.format_id(0), title="旧文献", path=None, processed=True)
+    add_literature(store, S.format_id(1), title="新文献", path="0001/c.txt")
+    add_concept(store, S.format_id(0), "群")
+    add_concept(store, S.format_id(1), "阿贝尔群")
     add_relation(
         store,
-        "0000",
-        ["0000", "0001"],
-        "0000",
+        S.format_id(0),
+        [S.format_id(0), S.format_id(1)],
+        S.format_id(0),
         quote="A group is a set with a binary operation.",
         status="active",
     )
 
     extractor = StubExtractor(
-        concepts=[ConceptDraft(name="环", definition="有两个运算的代数结构", aliases=[], source_lit_id="0001")],
+        concepts=[ConceptDraft(name="环", definition="有两个运算的代数结构", aliases=[], source_lit_id=S.format_id(1))],
         relations=[
             RelationDraft(
                 concept_names=["群", "环"],
@@ -136,19 +137,19 @@ def test_related_concepts_are_derived_from_relations(store):
 
     concepts = {c["concept_id"]: c for c in CR.view(store, shape="legacy")["rows"]}
     relations = store.rows("relations")
-    assert set(concepts) == {"0000", "0001", "0002"}
+    assert set(concepts) == {S.format_id(0), S.format_id(1), S.format_id(2)}
 
     derived = {
         cid: D.derive_related_concepts(cid, relations, include_suspect=True)
         for cid in concepts
     }
     # 手工构造的旧关系 (0000,0001) 与新关系 (0000,0002) 都应体现在两侧
-    assert "0001" in derived["0000"]
-    assert "0002" in derived["0000"]
-    assert derived["0001"] == ["0000"]
-    assert derived["0002"] == ["0000"]
+    assert S.format_id(1) in derived[S.format_id(0)]
+    assert S.format_id(2) in derived[S.format_id(0)]
+    assert derived[S.format_id(1)] == [S.format_id(0)]
+    assert derived[S.format_id(2)] == [S.format_id(0)]
     # ③ 负控：邻域非空且恰好这两条（"派生"不是恒空，也不是把整张表的邻域都算上）
-    assert derived["0000"] == ["0001", "0002"]
+    assert derived[S.format_id(0)] == [S.format_id(1), S.format_id(2)]
 
     for cid, rel in derived.items():
         assert rel == sorted(set(rel)), "派生集合必须升序去重"

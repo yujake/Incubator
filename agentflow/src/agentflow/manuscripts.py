@@ -58,7 +58,9 @@ LOCK_NAME = ".lock"
 #: 给所有人的收件人写法（用户口径：`toALL`）。
 ALL = "ALL"
 #: 旧格式文件名（`0007-DtoF.md` / `0011-AtoALL.md`）：只读回退用，不再写。
-NAME_RE = re.compile(r"^(\d{4})-([A-Za-z]+)to([A-Za-z]+)\.md$")
+#: 号身认"当前宽度或旧四位"（编号宽度在 `schema.ID_DIGITS` 一处定义；
+#: 2026-10-14 由四位改六位，旧文件必须照样读得进来）。
+NAME_RE = re.compile(rf"^({S.ID_OR_LEGACY_PATTERN})-([A-Za-z]+)to([A-Za-z]+)\.md$")
 #: 一行的必填字段（缺一 ⇒ 这一行不是一份可溯源的交接）。
 REQUIRED_FIELDS: tuple[str, ...] = ("to", "summary", "body")
 #: 修订行的 `kind` 取值（`draft/53` §2.1「改」/ `draft/55` §3.1）：追加修订行、不改旧行。
@@ -156,51 +158,78 @@ def _legacy_row(root: str | Path, mid: str, path: Path, got: Mapping[str, str]) 
 
 
 def _scan_ids(root: str | Path) -> list[str]:
-    """盘上出现过的全部编号（账本行 + 旧文件，两处取并集 —— 任何一处漏读都不该导致撞号）。"""
+    """盘上出现过的全部编号（账本行 + 旧文件，两处取并集 —— 任何一处漏读都不该导致撞号）。
+
+    ## 为什么要按**数值**排序（2026-10-14，四位改六位这一笔抓出来的）
+
+    原实现只收 `len(mid) == 4` 的行、再把它当字符串排序取 `ids[-1]`：
+    宽度一改，"新写的号"整类被这个长度过滤挡在外面 ⇒ 扫描结果**永远看不到**刚写下的
+    那一行，`next_id` 于是一直返回同一个号（实测：并发 8 个写者全部拿到 `000000`，
+    8 份手稿撞在一个号上）。这是"按固定宽度写死的过滤 + 字符串序当数值序"两个形态
+    叠在一起的结果，所以这里两条一起改：**两种宽度都收**、**按 int 排序**。
+    """
     ids: set[str] = set()
     for rec in rows(root):
         mid = str(rec.get("id") or "")
-        if len(mid) == 4 and mid.isdigit():
+        if mid.isdigit() and S.id_width(mid) in (S.ID_DIGITS, 4):
             ids.add(mid)
     for mid, _p, _got in _legacy_files(root):
         ids.add(mid)
-    return sorted(ids)
+    return sorted(ids, key=lambda x: (int(x) if x.isdigit() else -1, x))
 
 
 def next_id(root: str | Path) -> str:
-    """下一个编号：盘上最大号 +1（第一份是 `0000`）。不持锁时只用于「读」，写请走 `write`。"""
-    ids = _scan_ids(root)
-    nxt = (int(ids[-1]) + 1) if ids else 0
-    return f"{nxt:04d}"
+    """下一个编号：盘上最大号 +1（第一份是 `000000`）。不持锁时只用于「读」，写请走 `write`。"""
+    ids = [i for i in _scan_ids(root) if i.isdigit()]
+    nxt = (max(int(i) for i in ids) + 1) if ids else 0
+    return S.format_id(nxt)
+
+
+def _mid_forms(mid: Any) -> tuple[str, ...]:
+    """一个手稿号的**各种写法**：当前宽度 + 旧四位（读侧兼容的唯一落点）。
+
+    盘上同时存在六位（新写）与四位（历史文件）两种号，而调用方写的是
+    `"7"` / `7` / `"000007"` 里的任意一种 ⇒ 查一次要和两种都比。
+    """
+    text = str(mid or "").strip()
+    if not text.isdigit():
+        return (text,)
+    n = int(text)
+    forms = [S.format_id(n), f"{n:04d}"]  # LEGACY：旧四位写法，只用于读侧兼容
+    return tuple(dict.fromkeys(forms))
 
 
 def row_of(root: str | Path, mid: str) -> dict[str, Any] | None:
     """按编号取一行（新格式优先；找不到再回退到旧文件；都没有 ⇒ `None`）。"""
-    want = f"{int(str(mid)):04d}" if str(mid).strip().isdigit() else ""
-    if not want:
+    wants = _mid_forms(mid)
+    if not wants or not wants[0]:
         return None
-    for rec in rows(root):
-        if str(rec.get("id") or "") == want:
-            return rec
+    rows_now = rows(root)
+    for want in wants:
+        for rec in rows_now:
+            if str(rec.get("id") or "") == want:
+                return rec
     d = dir_of(root)
     if d.is_dir():
-        for p in sorted(d.glob(f"{want}-*.md")):
-            got = parse_name(p)
-            if got:
-                return _legacy_row(root, want, p, got)
+        for want in wants:
+            for p in sorted(d.glob(f"{want}-*.md")):
+                got = parse_name(p)
+                if got:
+                    return _legacy_row(root, want, p, got)
     return None
 
 
 def path_of(root: str | Path, mid: str) -> Path | None:
     """按编号找旧格式文件（新格式没有一文件一手稿这回事 ⇒ 找不到返回 `None`）。"""
-    want = f"{int(str(mid)):04d}" if str(mid).strip().isdigit() else ""
-    if not want:
+    wants = [w for w in _mid_forms(mid) if w]
+    if not wants:
         return None
     d = dir_of(root)
     if not d.is_dir():
         return None
-    for p in sorted(d.glob(f"{want}-*.md")):
-        return p
+    for want in wants:
+        for p in sorted(d.glob(f"{want}-*.md")):
+            return p
     return None
 
 
@@ -393,9 +422,13 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
 
 
 def _norm_mid(mid: Any) -> str:
-    """编号归一成四位写法（`"7"` / `7` / `"0007"` ⇒ `"0007"`；不是数字就原样返回）。"""
+    """编号归一成**当前宽度**的写法（`"7"` / `7` / `"0007"` ⇒ `"000007"`；不是数字就原样返回）。
+
+    只归一"写"这一侧（新写的号统一当前宽度）；"读"那一侧要认两种写法，
+    走 `_mid_forms()`。宽度在 `schema.ID_DIGITS` 一处定义。
+    """
     text = str(mid or "").strip()
-    return f"{int(text):04d}" if text.isdigit() else text
+    return S.format_id(int(text)) if text.isdigit() else text
 
 
 def revise(root: str | Path, *, mid: str, title: str = "", summary: str = "", body: str,
@@ -539,9 +572,8 @@ def query(root: str | Path, *, mid: str = "", to: str = "", sender: str = "",
             out.append(_legacy_row(root, rid, path, parsed))
     out.sort(key=lambda r: str(r.get("id") or ""))
     if mid:
-        want = str(mid).strip()
-        want = f"{int(want):04d}" if want.isdigit() else want
-        out = [r for r in out if str(r.get("id")) == want]
+        wants = set(_mid_forms(mid))
+        out = [r for r in out if str(r.get("id")) in wants]
     if to:
         # 与 `list_all` 同一口径：问"给 G 的手稿"时，广播给所有人的那些也算
         # （收件人关心的是"我该看哪些"，不是"哪几份的收件人字段逐字等于我"）。

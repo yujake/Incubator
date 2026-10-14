@@ -1105,7 +1105,7 @@ def send_interjection(session_root: Path, *, sender: str, subject: str, body: st
                     "所有者 2026-10-08：只有 M 会收到用户的插话。要指定别的角色请用 `message.send`。")
     events, problems = SS.read_session(session_root, sid=sid)
     n = sum(1 for e in events if e.get("kind") == "agent_interjection") + 1
-    iid = f"i-{n:04d}"
+    iid = f"i-{S.format_id(n)}"
     payload = {"kind": "agent_interjection", "interjection_id": iid, "from": str(sender),
                "to": str(S.CONDUCTOR_ROLE), "subject": str(subject or ""),
                "body": str(body or ""),
@@ -1325,7 +1325,7 @@ def send_message(session_root: Path, *, sender: str, to: str, subject: str, body
     events, _problems = SS.read_session(session_root, sid=sid)
     used = [str(e.get("msg_id") or "") for e in events if e.get("kind") == "agent_message"]
     nums = [int(m[1:]) for m in used if m[:1] == "m" and m[1:].isdigit()]
-    msg_id = f"m{(max(nums) + 1) if nums else 1:04d}"
+    msg_id = f"m{S.format_id((max(nums) + 1) if nums else 1)}"
     rec: dict[str, Any] = {
         "kind": "agent_message", "msg_id": msg_id, "from": sender, "to": to,
         "subject": subject, "body": body, "reply_to": reply_to,
@@ -2521,7 +2521,7 @@ class AgentLoop:
             return messages
         from . import contextbudget as CB
 
-        cid = f"c{step:04d}-{self.role}"
+        cid = f"c{S.format_id(step)}-{self.role}"
         self._last_summary_note = {}
         # ---- ① 压力门（S-B ③）：先问一次"该不该动历史"。
         #

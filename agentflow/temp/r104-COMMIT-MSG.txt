@@ -1,0 +1,66 @@
+R104 编号宽度四位改六位（业主 2026-10-14 裁定 ②）
+
+业主原话：「**所有四位编号改成六位**（`0000`→`000000`，防溢出）：`schema.require_id`
+与各 id 分配器、生成点、判据、goldens、文档计数一处不漏，并留一条『六位』的反真空判据
++ 旧数据（四位）的读侧兼容处置」。本批按"宽度一处定义、发号点逐个跟上、读侧兼容、
+判据一处不漏"四件事做，全套 `pytest tests` = **5156 passed / 0 failed**。
+
+## 一、宽度只有一处定义
+
+`schema.ID_DIGITS = 6`，由它派生 `ID_PATTERN` / `LEGACY_ID_PATTERN` /
+`ID_OR_LEGACY_PATTERN` 与 `format_id(n)`；`store.MAX_ID = 10 ** S.ID_DIGITS - 1`
+（9999 → 999999，不再手写常量）。导入期既有的两条对账判据继续守着：
+`assert_id_space_contract()` 对账"上限 vs 形态"（改一边必红），
+`assert_process_id_contract()` 的互斥样本改成对**两种宽度**都成立。
+`four_digit_id_kinds()` 更名 `id_space_kinds()`（改宽度之后旧名是一句假话）。
+
+## 二、发号点逐个跟上（25 处，不是"改一个函数就完了"）
+
+`store.alloc_id` / `raise_counter_to`、`interactions.next_prefixed_id`、
+`table_tools._allocate_id` 与 `_PROBE_ID`、`manuscripts`、`agent_loop`（插话 / 留言 /
+压缩调用）、`userio`、`verifications`（顺手抽成具名 `next_verification_id` 以便判据
+逐个真发）、`deliver`、`demo` / `agent_c` / `agent_d` / `pipeline` 的夹具号。
+`tests/test_id_width.py` 是判据：**每个发号点真发一次**，号身不是六位就红；
+外加源码级反真空（除读侧兼容那一处带 `LEGACY` 标记的写法，不许再有人自己拼 `:04d`）。
+
+## 三、读侧兼容：旧四位读得进来
+
+`is_valid_id` 两宽度都认（新增 `is_legacy_id` / `id_width` 供读数与迁移），
+`_PROCESS_ID_RE` 的号身同样两条都认；消费方正则全部改用 `ID_OR_LEGACY_PATTERN`
+（`faculty_checks` / `reviewaccept` / `agent_d` / `agent_f·status` / `claimanatomy` /
+`doc_tools`）。`manuscripts` 查号时两种写法都试（`_mid_forms`），写号只写当前宽度。
+端到端判据：一条四位历史行在 `store.rebuild()` 之后**照样在**（只认六位的后果是
+它被静默跳过 —— 那是数据毁灭，不是迁移）。
+
+## 四、顺手抓出来的四个真缺陷（都不是这次改坏的）
+
+1. `manuscripts._scan_ids` 按 `len(mid)==4` 过滤 + 字符串序当数值序 ⇒ 宽度一改，
+   新写的号整类扫不到，`next_id` 永远返回同一个号（实测：并发 8 个写者全撞 `000000`）。
+2. `tools/trace_tools.py` 用了 `S.ID_DIGITS` 却没 import ⇒ `trace.relation` 抛
+   `NameError`（负控当场抓到）。
+3. **工具参数 schema 只收四位**（`graph_tools` / `research_tools` / `trace_tools` /
+   `verify_tools` 的 `minLength/maxLength: 4`）⇒ 发号器发六位、工具面把新号全拒了
+   （「参数错误：relation_id. 长度最多 4」）。改成 `4 .. S.ID_DIGITS`（旧四位仍收）。
+4. `tests/test_the_conductor_does_not_directly_control_bfv.py` 仍按 2026-10-10 的
+   「M 不许直接派 B」判 ⇒ 与 2026-10-13 业主裁定「补 M 到 B」分家（三条判据假红）。
+   已按现状改：B 在主控直接出边里、F / V 仍只可间接。
+
+另外：测试里"判据自己写死四位号"的那 82 处逐条改完（含一处**子进程负控** ——
+模块级 `from agentflow import schema as S` 会先把真实树灌进子进程的 `sys.modules`，
+让盘外副本永远抢不到 `sys.path` 首位，负控整套失效；已改回函数内惰性 import）。
+
+## 五、提示词 / 文档 / 快照一处不漏
+
+- 提示词：共用块「台账号 `t-NNNN`」→ `t-NNNNNN`（九格），M 那一格判据措辞改成
+  「报告里带前缀的台账号」；`PROMPT_VERSION` p104 → p105，冻结摘要表同轮更新。
+- 工具面/动作面里"4 位十进制"的说明与长度限制改成现算（含 `specs/b.py` 的 `doc_id`）。
+- 四份冻结快照重冻并**逐格走查**（`temp/_r104_golden_walk.py`）：agent_surface 12 条、
+  tool_surface、run_topic 11 条、verify_all 1 条 —— 无一条与本次改动无关的漂移。
+- 文档活口径：`docs/ROLE-SPECS*.md`（编号 / 命题号 / id_gap / counter_overflow 那几行）、
+  `DEVELOPMENT.md`（动作总数 60 / 可召唤 53，现算）、`READING-MAP.md` §3 行数；
+  `docs/PROPOSALS.md` 是历史提案档，逐字不动。`capabilities.py` 里那条实测注释
+  （59 → 现算 60）同轮更新。
+
+FC-27：命中 11 处（`schema.py` / `store.py` / `interactions.py` / `verify.py` /
+`capabilities.py` / `specs/b.py` / `tools/verify_tools.py` + 四份冻结快照），
+已按 `noai_batch_sign.py --write --reviewer-a Yu --reviewer-b Jiaqi` 逐行走查签名。

@@ -910,7 +910,7 @@ def test_the_task_row_survives_a_rebuild_byte_for_byte(store: Store,
     """
     _run(store, tmp_path, "a", now=TS1)
     before = (store.data / "tasks.json").read_bytes()
-    assert b"t-0001" in before, "前置条件没建立：盘上那一行没写出来"
+    assert f"t-{S.format_id(1)}".encode() in before, "前置条件没建立：盘上那一行没写出来"
     store.rebuild()
     after = (store.data / "tasks.json").read_bytes()
     assert before == after, (

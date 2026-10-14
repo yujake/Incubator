@@ -23,18 +23,21 @@ from pathlib import PurePath
 from typing import Any, Iterable, Mapping, Sequence
 
 from . import conceptrows as CR   # 并表过渡期：探针夹具走这一处写口（老表在不在由它决定）
+from . import schema as S        # 编号形态的唯一来源（`ID_OR_LEGACY_PATTERN`）
 
 #: 过程记录号的前缀 → 表（取自 `schema.PROCESS_ID_PREFIXES` 的语义；这里只做"可归属"这一件事）。
 PROCESS_ID_TABLES: dict[str, str] = {
     "r": "search_requests", "p": "reprocess_requests", "t": "tasks",
 }
-#: 过程号：`r-0001` 这种形态。它是可归属的（前缀就说明了表）。
-PROCESS_ID_TOKEN = re.compile(r"\b(" + "|".join(PROCESS_ID_TABLES) + r")-(\d{4})\b")
+#: 过程号：`r-000001` 这种形态（旧数据里的 `r-0001` 照样认）。它是可归属的（前缀就说明了表）。
+PROCESS_ID_TOKEN = re.compile(
+    r"\b(" + "|".join(PROCESS_ID_TABLES) + r")-(" + S.ID_OR_LEGACY_PATTERN + r")\b")
 
-#: 带表名的实体引用：`concepts/0001`、`experiments=0007`、`relations:0002`。
+#: 带表名的实体引用：`concepts/000001`、`experiments=000007`、`relations:000002`
+#: （旧数据里的四位号照样认）。
 #: 表名必须来自 `schema.TABLES`（由 `_table_names()` 现取），不另写一份名单。
 LABELED_ID = re.compile(
-    r"\b([a-z_]+)\s*[/=:]\s*(\d{4})\b")
+    r"\b([a-z_]+)\s*[/=:]\s*(" + S.ID_OR_LEGACY_PATTERN + r")\b")
 
 #: 占位符：写稿/整理阶段留下的"以后再说"。它们出现在交付物里就是缺陷。
 PLACEHOLDERS: tuple[str, ...] = ("TODO", "FIXME", "待填", "待补", "×××", "XXX", "???", "……待")

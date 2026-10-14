@@ -569,9 +569,9 @@ def test_admit_reprocess_request_respects_per_relation_cap():
 
 
 def test_next_prefixed_id_skips_used_numbers():
-    rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}, {"request_id": "p-0009"}]
-    assert I.next_prefixed_id(rows, "request_id", "r") == "r-0004"
-    assert I.next_prefixed_id([], "reprocess_id", "p") == "p-0001"
+    rows = [{"request_id": "r-000001"}, {"request_id": "r-000003"}, {"request_id": "p-000009"}]
+    assert I.next_prefixed_id(rows, "request_id", "r") == "r-000004"
+    assert I.next_prefixed_id([], "reprocess_id", "p") == "p-000001"
 
 
 # ============================================================ 预算默认值
@@ -594,46 +594,56 @@ def test_defaults_are_complete_and_positive():
     assert set(S.CONTRADICTION_VERDICTS) >= {"resolved", "unresolved", "new_contradiction", "persistent"}
 
 
-# ============================================================ P-4：取号的 4 位上限
+# ============================================================ P-4：取号的编号上限
 
 
 def test_next_prefixed_id_normal_range_is_unchanged():
     """正控（`P-4`）：正常范围内的取号序列必须逐字不变。
 
     上限下沉最大的风险是"顺手改了取号语义"。这条用例把改前的行为逐条钉住
-    （改前实测序列见 `temp/_b5a_p4_before.txt`）。
+    （改前实测序列见 `temp/_b5a_p4_before.txt`）；
+    2026-10-14 业主裁定"四位改六位"之后，序列的**号身**跟着宽度走
+    （`schema.format_id` 一处），语义（max+1、不复用空洞）逐字不变。
     """
-    assert I.next_prefixed_id([], "request_id", "r") == "r-0001"
-    assert I.next_prefixed_id([{"request_id": "r-0001"}], "request_id", "r") == "r-0002"
+    assert I.next_prefixed_id([], "request_id", "r") == "r-000001"
+    assert I.next_prefixed_id([{"request_id": "r-000001"}], "request_id", "r") == "r-000002"
     # 中间有空洞 ⇒ 仍然取 max+1（不复用空洞里的号，避免静默指向另一条请求）
-    rows = [{"request_id": "r-0001"}, {"request_id": "r-0003"}]
-    assert I.next_prefixed_id(rows, "request_id", "r") == "r-0004"
+    rows = [{"request_id": "r-000001"}, {"request_id": "r-000003"}]
+    assert I.next_prefixed_id(rows, "request_id", "r") == "r-000004"
     # 前缀各自独立
-    assert I.next_prefixed_id([{"reprocess_id": "p-0042"}], "reprocess_id", "p") == "p-0043"
-    assert I.next_prefixed_id([{"task_id": "t-0005"}], "task_id", "t") == "t-0006"
-    # 上限之内最大的那一档仍然照常发号（9999 本身是合法 4 位 ID）
-    assert I.next_prefixed_id([{"request_id": "r-9998"}], "request_id", "r") == "r-9999"
+    assert I.next_prefixed_id([{"reprocess_id": "p-000042"}], "reprocess_id", "p") == "p-000043"
+    assert I.next_prefixed_id([{"task_id": "t-000005"}], "task_id", "t") == "t-000006"
+    # 旧数据（四位）在表里 ⇒ 号身照样接着它的数值往下走（读侧兼容）
+    assert I.next_prefixed_id([{"request_id": "r-0001"}], "request_id", "r") == "r-000002"
+    # 上限之内最大的那一档仍然照常发号（上限本身是合法号）
+    from agentflow.store import MAX_ID
+
+    top = S.format_id(MAX_ID - 1)
+    assert I.next_prefixed_id([{"request_id": f"r-{top}"}], "request_id", "r") == \
+        f"r-{S.format_id(MAX_ID)}"
 
 
-def test_next_prefixed_id_refuses_past_the_4_digit_ceiling():
+def test_next_prefixed_id_refuses_past_the_ceiling():
     """负控（`P-4`）：编号已到上限 ⇒ 必须抛，且错误信息里给出上限值。
 
-    改前实测：这里静默返回 `"r-10000"`（5 位），而 `SearchRequest.validate`
+    改前实测：这里静默返回超长号，而 `SearchRequest.validate`
     只查非空 ⇒ 它会一路落库。所以这条负控钉的是"静默升位宽"这个形态本身。
     """
     from agentflow.store import MAX_ID
 
+    over = S.format_id(MAX_ID + 1)
     with pytest.raises(ValueError) as ei:
-        I.next_prefixed_id([{"request_id": "r-9999"}], "request_id", "r")
+        I.next_prefixed_id([{"request_id": f"r-{S.format_id(MAX_ID)}"}], "request_id", "r")
     msg = str(ei.value)
     assert str(MAX_ID) in msg, f"错误信息必须给出上限值 {MAX_ID}：{msg}"
-    assert "r-10000" in msg, f"必须回显那个越界号（可诊断）：{msg}"
+    assert f"r-{over}" in msg, f"必须回显那个越界号（可诊断）：{msg}"
 
 
-def test_next_prefixed_id_refuses_when_rows_already_contain_5_digit_id():
-    """负控的第二条路径：表里已经有 `r-10000` ⇒ 也要拒绝，不许继续往上加。"""
+def test_next_prefixed_id_refuses_when_rows_already_contain_an_overlong_id():
+    """负控的第二条路径：表里已经有超长号 ⇒ 也要拒绝，不许继续往上加。"""
     with pytest.raises(ValueError):
-        I.next_prefixed_id([{"request_id": "r-10000"}], "request_id", "r")
+        I.next_prefixed_id([{"request_id": f"r-{S.format_id(10 ** S.ID_DIGITS)}"}],
+                           "request_id", "r")
 
 
 def test_next_prefixed_id_still_refuses_a_prefix_with_separator():

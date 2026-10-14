@@ -1283,13 +1283,15 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
     现在：docstring 说清 `prefix="r"`，并且**在这里 fail-closed 拒绝含分隔符的前缀** ——
     与其让一个写错的参数静默产生坏 ID，不如当场炸。
 
-    ## ⚠️ 4 位上限在这里（`P-4`：上限下沉，判据只有一份）
+    ## ⚠️ 编号上限在这里（`P-4`：上限下沉，判据只有一份）
 
-    `r-NNNN` 是**4 位契约**，不是风格偏好：`store.MAX_ID = 9999` 是它唯一的常量来源
-    （本函数直接 import 它，**不另写一个 9999**），而 `store.alloc_id` 用满即
-    `IdExhausted`。本函数此前**没有任何上限**：表里已用到 `r-9999` 时它会给出
-    ``"r-10000"`` —— 一个 5 位号，而 `SearchRequest.validate` 只查"非空"，
-    所以它会**静默落库**，一直到某个下游按 4 位解析时才暴露。
+    `r-NNNNNN` 是**编号宽度契约**，不是风格偏好：`store.MAX_ID` 是它唯一的常量来源
+    （本函数直接 import 它，**不另写一个上限数字**），而 `store.alloc_id` 用满即
+    `IdExhausted`。宽度本身来自 `schema.ID_DIGITS`（2026-10-14 业主裁定：四位改六位，
+    防溢出），本函数只调 `schema.format_id()` —— 形态一处定义，发号点一处不漏。
+    本函数此前**没有任何上限**：表里已用到上限时它会给出超长号，而
+    `SearchRequest.validate` 只查"非空"，所以它会**静默落库**，
+    一直到某个下游按固定宽度解析时才暴露。
 
     这正是"静默升位宽"。所以越界时这里抛**具名**的 `IdSpaceExhausted`（`ValueError` 的子类，
     fail-closed，与工具层 `table_tools.assert_request_id_in_space` 同一语义），错误信息里给出上限值。
@@ -1310,7 +1312,7 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
             n = max(n, int(v[len(prefix) + 1 :]))
     used = {str(r.get(field) or "") for r in rows}
     n += 1
-    while f"{prefix}-{n:04d}" in used:
+    while f"{prefix}-{S.format_id(n)}" in used:
         n += 1
     if n > MAX_ID:
         # 越界**不许**静默产出超长 ID。消息里必须给出上限，否则调用方只知道
@@ -1318,14 +1320,14 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
         # 类型是**具名**的 `IdSpaceExhausted`（见它的 docstring）：工具层据此精确翻成
         # `ToolError`，避免被兜成 `kind='unexpected'`（那会让"空间用尽"与"内部 bug"同形）。
         raise IdSpaceExhausted(
-            f"{prefix}-NNNN 的 4 位编号空间已用尽（上限 {MAX_ID}）：下一个要发的号是 "
-            f"{prefix}-{n}，它是 {len(str(n))} 位，违反 4 位 ID 契约"
-            "（`store.MAX_ID` 是这条上限的唯一定义处，`schema.is_valid_id` 只认 4 位）。"
-            "静默产出 5 位号会让它一路落库、直到某个下游按 4 位解析才暴露 —— "
+            f"{prefix}-{'N' * S.ID_DIGITS} 的 {S.ID_DIGITS} 位编号空间已用尽（上限 {MAX_ID}）："
+            f"下一个要发的号是 {prefix}-{n}，它是 {len(str(n))} 位，违反 {S.ID_DIGITS} 位契约"
+            "（`store.MAX_ID` 是这条上限的唯一定义处，宽度在 `schema.ID_DIGITS` 一处定义）。"
+            "静默产出超长号会让它一路落库、直到某个下游按固定宽度解析才暴露 —— "
             "所以这里 fail-closed 拒绝。处理：归档/清理该表的历史行，"
-            "或把这次位宽变更当成人审项（改 `MAX_ID` 等于改磁盘契约）。"
+            "或把这次位宽变更当成人审项（改宽度等于改磁盘契约）。"
         )
-    return f"{prefix}-{n:04d}"
+    return f"{prefix}-{S.format_id(n)}"
 
 
 # ---------------------------------------------------------------- 导入期自检

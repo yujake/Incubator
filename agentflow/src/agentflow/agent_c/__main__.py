@@ -531,7 +531,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
         with target.tx(*CR.tables_for_concept_write("relations", "literature"),
                        actor="selftest", note="i3") as tx:
             for i in range(4):
-                CR.upsert_legacy_shaped(tx, {"concept_id": f"{i:04d}", "name": f"概念{i}", "definition": "d",
+                CR.upsert_legacy_shaped(tx, {"concept_id": S.format_id(i), "name": f"概念{i}", "definition": "d",
                                        "normalized_name": T.normalize(f"概念{i}"), "related_concepts": []})
             for r in [
                 _svc_rel("0000", ["0000", "0001"], "一条足够长的关系描述用于评分", "0000"),
@@ -568,7 +568,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     with st6.tx("search_requests", actor="selftest", note="i3gate") as tx:
         for i in range(20):
             row = S.SearchRequest(
-                request_id=f"r-{i + 1:04d}", timestamp=S.now_iso(), topic=f"占位主题{i}",
+                request_id=f"r-{S.format_id(i + 1)}", timestamp=S.now_iso(), topic=f"占位主题{i}",
                 mode="topical", submitted_by="agent-D",
             )
             row.validate()

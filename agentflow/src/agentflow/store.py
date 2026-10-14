@@ -93,8 +93,12 @@ LOCK_ORDER: tuple[str, ...] = (
     "counters",
 )
 
-#: 4 位 ID 的上限。用满即 fail-closed（DESIGN.md §0.1 C4）。
-MAX_ID = 9999
+#: 编号空间的上限（当前宽度下全 9）。用满即 fail-closed（DESIGN.md §0.1 C4）。
+#:
+#: 宽度**不在这里写死**：`schema.ID_DIGITS` 是唯一定义处，导入期
+#: `schema.assert_id_space_contract()` 会把这两处对账（改一边必红）。
+#: 2026-10-14 业主裁定「所有四位编号改成六位，防溢出」⇒ 上限由 9999 抬到 999999。
+MAX_ID = 10 ** S.ID_DIGITS - 1
 
 #: **已经并走的表**：名字 -> (新家, 怎么读它)。S1r 并表那一笔（`SCHEMA_VERSION=2`）
 #: 把 `concepts` 从 `schema.TABLES` 里真删了，于是 `_load("concepts")` 会走到
@@ -421,24 +425,24 @@ class Tx:
             )
         if table is not None and table in self.tables:
             used = {str(r.get(field)) for r in self.rows(table) if r.get(field) is not None}
-            while f"{nxt:04d}" in used:
+            while S.format_id(nxt) in used:
                 nxt += 1
                 jumped += 1
                 if nxt > MAX_ID:
                     raise IdExhausted(
-                        f"{kind} 的 4 位编号空间已用尽（上限 {MAX_ID}）。"
+                        f"{kind} 的 {S.ID_DIGITS} 位编号空间已用尽（上限 {MAX_ID}）。"
                         "请勿静默升位宽 —— 那会破坏所有历史 ID 的解析（DESIGN.md §0.1 C4/§9.7）。"
                     )
 
         if nxt > MAX_ID:
             raise IdExhausted(
-                f"{kind} 的 4 位编号空间已用尽（上限 {MAX_ID}）。"
+                f"{kind} 的 {S.ID_DIGITS} 位编号空间已用尽（上限 {MAX_ID}）。"
                 "请勿静默升位宽 —— 那会破坏所有历史 ID 的解析（DESIGN.md §0.1 C4/§9.7）。"
             )
         counters[kind] = nxt + 1
         self._dirty.add("counters")
         self._alloc_kinds.add(kind)
-        self._record("counters", {"kind": kind, "allocated": f"{nxt:04d}"}, note="alloc_id")
+        self._record("counters", {"kind": kind, "allocated": S.format_id(nxt)}, note="alloc_id")
         if jumped:
             # 跳过号这件事必须可见：它是"计数器和表已经漂移"的直接证据。
             self.info(
@@ -446,13 +450,13 @@ class Tx:
                 kind=kind,
                 table=table,
                 jumped=jumped,
-                allocated=f"{nxt:04d}",
+                allocated=S.format_id(nxt),
                 note=(
                     "计数器落后于表：已跳过被占用号以免 upsert 静默覆盖旧行。"
                     "建议跑 `agentflow verify`（会报 counter_behind）与 `agentflow rebuild`。"
                 ),
             )
-        return f"{nxt:04d}"
+        return S.format_id(nxt)
 
     def raise_counter_to(self, kind: str, used_id: str) -> int:
         """把某个 ID 类别的计数器抬到 `used_id + 1`（只抬，不发号、不烧号）。
@@ -501,7 +505,7 @@ class Tx:
         # 与 `alloc_id` 同一口径地记一笔：提交时这一类要写回（`_alloc_kinds`），
         # 事件行也让 `rebuild` 能把计数器折回来（见 `rebuild` 对 `counters` 的折叠）。
         self._alloc_kinds.add(kind)
-        self._record("counters", {"kind": kind, "allocated": f"{target - 1:04d}"},
+        self._record("counters", {"kind": kind, "allocated": S.format_id(target - 1)},
                      note="raise_counter_to")
         return target
 

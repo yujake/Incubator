@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.demo import run_demo
 from agentflow.extract import extract_text
@@ -94,7 +95,7 @@ def test_demo_duplicate_relation_is_rejected_on_rerun(tmp_path: Path) -> None:
 
     # 把重印文献重新放回队列（0004 = 与 0001 正文逐字相同的那篇）
     with st.tx("literature", actor="test") as tx:
-        row = tx.find("literature", lit_id="0004")
+        row = tx.find("literature", lit_id=S.format_id(4))
         assert row is not None
         row["processed"] = False
         row["claimed_by"] = None

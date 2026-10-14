@@ -40,7 +40,7 @@
 
 | 工具 | 类型 | 作用 |
 |---|---|---|
-| `verify.verify_proof` | `read` | 读证明全文 + 只读读数 ⇒ 三态结论 + findings（每条指到步号），写 `verifications/<4 位命题号>.jsonl` |
+| `verify.verify_proof` | `read` | 读证明全文 + 只读读数 ⇒ 三态结论 + findings（每条指到步号），写 `verifications/<命题号>.jsonl`（六位编号，旧四位仍可读） |
 | `verify.list_verifications` | `read` | 列验证台账（可按命题过滤） |
 | `verify.read_proof` | `read` | 按命题号读回被审的那份证明全文（+ sha256 + 最近一次结论） |
 
@@ -67,11 +67,11 @@
 - 输出不合法 / 字段缺 / 取值不在词表 ⇒ **没查成**（`VerificationError`，工具回报
   `reason="unparsable"`），不写台账行；
 - `有毛病` 必须给 `defect_step`（指不到步 = 让作者猜）；
-- 没有证明全文 ⇒ `reason="no_proof_text"`；命题号不是 4 位十进制 ⇒ `reason="bad_statement_id"`。
+- 没有证明全文 ⇒ `reason="no_proof_text"`；命题号不是编号形态（六位，或旧四位）⇒ `reason="bad_statement_id"`。
 
 ### V.8 不变式
 
-1. 台账只追加、编号由脚本发（`v-0001…`）；文件是 `verifications/<4 位命题号>.jsonl`；
+1. 台账只追加、编号由脚本发（`v-0001…`）；文件是 `verifications/<命题号>.jsonl`（六位编号）；
 2. 第 3 位只在 `成立` 且无 error 时被签；
 3. 冷启动：提示词里没有 F 的叙述、没有 store 句柄（由函数签名保证）；
 4. **V 不写任何表**：`capabilities.WRITE_SETS["V"] == frozenset()`，`schema.TABLES` 17 张不变；
@@ -79,7 +79,7 @@
 
 ### V.9 接口
 
-- 输入：`statement_id`（4 位）+ `proof_text`（不给时从 `statements` 取）+ `readonly_facts`
+- 输入：`statement_id`（六位编号，旧四位仍可读）+ `proof_text`（不给时从 `statements` 取）+ `readonly_facts`
   （已渲染的只读读数，是**字符串**而不是 store 句柄）；
 - 输出：一行台账 + `bit3_payload()`（五元位第 3 位那份读数）。
 

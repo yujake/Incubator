@@ -60,7 +60,7 @@ class _Status:
         stale_blocked: list[dict] = []
         for s in subgoals:
             reason = str(s.get("blocked_reason") or "")
-            ids = sorted(set(re.findall(r"\br-\d{4}\b", reason)))
+            ids = sorted(set(re.findall(rf"\br-{S.ID_OR_LEGACY_PATTERN}\b", reason)))
             if not ids:
                 continue
             # 判据是"已终结"，不是"成功了"：`search_failed` / `gave_up` 同样意味着

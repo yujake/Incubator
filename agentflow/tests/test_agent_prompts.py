@@ -2307,18 +2307,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 业主裁定「评估派发出的任务能否由子代理及子代理的出边共同完成」）。
 #: 这一句在**共用**的那一块里（每个会派活的角色都读得到）⇒ 十格摘要**全动**，
 #: 这与上一版"只有 M/G/H 三格换值"的形态不同，是这次改动的实际作用域，不是抄错。
-_FROZEN_PROMPT_VERSION = "p104"
+#: p104 → p105（2026-10-14，业主裁定 ②）：编号宽度四位改六位，提示词里两处跟着改 ——
+#: 共用块里的「台账号（`t-NNNN`）」→ `t-NNNNNN`（九格都动），
+#: 以及 M 那一格的判据措辞「报告里的带前缀 4 位号」→「报告里带前缀的台账号」。
+_FROZEN_PROMPT_VERSION = "p105"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "0465ea21fd62e1fb43bbdf29816fba6707e37459b060991343c74fa25f967c91",
-    "B": "97c9777034ba9a1a1c62838926018606d5bbe8eb17d4a3bb3b48ea368988c007",
+    "A": "e41e9ba3eaf72b182eff8e01f2c80a8964a5f7ae98c947d35267747d0becc274",
+    "B": "a7f009c6346af0cf798a5a9469e779dd7d7fb4538e2f6ed360939a8788e765df",
     "C": "0ab94ae969ee8faa449b982bff16b57c8d858b520d7213d8edd54b88b69255e7",
-    "D": "8d23b655b66650ed0baca62915f18acbd8a027464d46fb5528f0c862a482105e",
-    "E": "5d02a912863f9853c5581f53880fbc466bffb360ce2027a067dc300deec23fb3",
-    "F": "e551e7a30867ae81f175036280bd7b5cae908afef99b2539a890ecfbbf6de8f9",
-    "G": "3cad1340e5cad03fcbaddf0976f9d00050d4114a67dd894acd70b0cbe254fe6d",
-    "H": "90fd148831f1e8be12cedd5af8ceae826b49a42cbe3826b79860e52fe9db4b7d",
-    "M": "bac683653d1f2eb4ba2738523e97b3c69f009597c177d4471999261fc15d6ce4",
-    "V": "9afee3a2d1bb225a7bf5a1f3a0609130668acf277922bad61b0e233df1f04590",
+    "D": "0a3606a6fea9f5c3c37ed3d07f49bab23a8692a9f25339f108e3913b914d6c06",
+    "E": "17f9afde2490504e231a4a513a9064b423271b4039eb972fd3f20df489aa2bed",
+    "F": "0f6c7ccdf878af281f7d7b4cf1ef85a476d5d16cf038cff5d040508efbefec88",
+    "G": "31e09953311066d9553757f42412379456df70d768a58fa19d5f782030411fdb",
+    "H": "947538a3699d2260d188e69517b4d6e9a9af251878701caa6e4bdf9429e80ad8",
+    "M": "2efa584f609fa4e344b03cd3eaea35dc2f463eb593538227288598fdde3b1a82",
+    "V": "1766be98f16730b8e3807189f471fb23b69132912ad2f3c48cd70cdddc9cefec",
 }
 
 

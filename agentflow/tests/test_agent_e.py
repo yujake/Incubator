@@ -194,7 +194,7 @@ def test_run_experiment_records_row_with_hash_and_exit_code(store):
     assert out["evidence_kind"] == "cross_check"
     assert out["negation_kind"] == "not_proved", "数值支持只能导致 not_proved（不是 disproved）"
     assert out["code_hash"], "给了 code_path 就必须有 code_hash"
-    assert out["experiment_id"] == "0000"
+    assert out["experiment_id"] == S.format_id(0)
 
     rows = store.rows("experiments")
     assert len(rows) == 1
@@ -722,7 +722,7 @@ def test_second_run_allocates_the_next_id(store):
     e = make_e(store)
     a = e.run_experiment("第一次", "k1", rel)
     b = e.run_experiment("第二次", "k2", rel)
-    assert {a["experiment_id"], b["experiment_id"]} == {"0000", "0001"}
+    assert {a["experiment_id"], b["experiment_id"]} == {S.format_id(0), S.format_id(1)}
     assert len(store.rows("experiments")) == 2
 
 

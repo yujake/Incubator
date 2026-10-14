@@ -411,7 +411,7 @@ def citation_prefix_examples() -> str:
 # 那正是把这张表并入 `schema.CITATION_PREFIXES` 的理由；逐条历史理由现在是这条
 # 派生关系的注释，而不是第二份字面量。
 
-#: 裸号（4 位十进制、没有前缀）在这张表里不认。
+#: 裸号（不带前缀的编号）在这张表里不认。
 #:
 #: 现算证据（2026-10-07，`temp/b_probe_citation_shapes.py` / `b_probe_bare_ids_where.py`）：
 #: 两个真实根下 `documents.claims[].citations` 共 593 条引用，全部带前缀
@@ -424,7 +424,7 @@ def citation_prefix_examples() -> str:
 #: 所以在这条引用面上裸号没有可定的表：`citations` 是一个混合列表，
 #: 元素本身不说自己属于哪张表。让它"按顺序试"（先试 stmt 再试 lit）会静默错配
 #: —— 同一个 `0004` 在 A 项目是文献、在 B 项目是命题。宁可不认，也不猜。
-_CITATION_BARE_NUMBER = re.compile(r"^\d{4}$")
+_CITATION_BARE_NUMBER = re.compile(rf"^{S.ID_OR_LEGACY_PATTERN}$")
 
 
 class DocToolError(ValueError):

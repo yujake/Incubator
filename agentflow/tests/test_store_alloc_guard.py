@@ -47,19 +47,20 @@ def _mk(sid: str, label: str = "X") -> dict:
 
 
 def test_alloc_id_skips_occupied_ids_and_self_heals_counters(store):
-    """正向回归：计数器为 0 而表里已有 0000–0002 ⇒ 必须发 0003，不能发 0000。"""
+    """正向回归：计数器为 0 而表里已有前三个号 ⇒ 必须发第四个，不能发第一个。"""
     store.init()
     with store.tx("statements", "counters", actor="t") as tx:
         for i in range(3):
-            tx.upsert("statements", _mk(f"000{i}"))
+            tx.upsert("statements", _mk(S.format_id(i)))
     assert (store.read("counters") or {}).get("counters", {}).get("stmt", 0) == 0
 
     with store.tx("statements", "counters", actor="t") as tx:
         nid = tx.alloc_id("stmt")
         tx.upsert("statements", _mk(nid, "D"))
 
-    assert nid == "0003", f"必须跳过已占用的 0000，实际发出 {nid}"
-    assert sorted(r["stmt_id"] for r in store.rows("statements")) == ["0000", "0001", "0002", "0003"]
+    assert nid == S.format_id(3), f"必须跳过已占用的那三个号，实际发出 {nid}"
+    assert sorted(r["stmt_id"] for r in store.rows("statements")) == \
+        [S.format_id(i) for i in range(4)]
     # 缓存自愈：下一次 verify 不该再报 counter_behind
     assert (store.read("counters") or {}).get("counters", {}).get("stmt") == 4
 
@@ -68,21 +69,21 @@ def test_alloc_id_does_not_overwrite_existing_row(store):
     """负控：被占用号那一行的内容必须一字不变（真的没被覆盖）。"""
     store.init()
     with store.tx("statements", "counters", actor="t") as tx:
-        tx.upsert("statements", _mk("0000", "原始命题"))
+        tx.upsert("statements", _mk(S.format_id(0), "原始命题"))
     with store.tx("statements", "counters", actor="t") as tx:
         nid = tx.alloc_id("stmt")
         tx.upsert("statements", _mk(nid, "新命题"))
     rows = {r["stmt_id"]: r for r in store.rows("statements")}
-    assert rows["0000"]["label"] == "原始命题", "已占用的 0000 被静默覆盖了"
+    assert rows[S.format_id(0)]["label"] == "原始命题", "已占用的首号被静默覆盖了"
     assert rows[nid]["label"] == "新命题"
-    assert nid != "0000"
+    assert nid != S.format_id(0)
 
 
 def test_alloc_id_records_a_visible_event_when_it_jumps(store):
     """跳过号是"计数器已漂移"的直接证据 ⇒ 必须写进 `events.jsonl`，不许静默。"""
     store.init()
     with store.tx("statements", "counters", actor="t") as tx:
-        tx.upsert("statements", _mk("0000"))
+        tx.upsert("statements", _mk(S.format_id(0)))
     with store.tx("statements", "counters", actor="t") as tx:
         tx.alloc_id("stmt")
     evs = [e for e in store.read_events() if e.get("op") == "info"
@@ -127,26 +128,26 @@ def test_alloc_id_with_the_target_table_declared_still_works(store):
     """
     store.init()
     with store.tx("statements", "counters", actor="t") as tx:
-        tx.upsert("statements", _mk("0000", "已被占用"))
+        tx.upsert("statements", _mk(S.format_id(0), "已被占用"))
     with store.tx("statements", "counters", actor="t") as tx:
         nid = tx.alloc_id("stmt")
         tx.upsert("statements", _mk(nid, "新的"))
-    assert nid == "0001", nid
+    assert nid == S.format_id(1), nid
     rows = {r["stmt_id"]: r["label"] for r in store.rows("statements")}
-    assert rows == {"0000": "已被占用", "0001": "新的"}, rows
+    assert rows == {S.format_id(0): "已被占用", S.format_id(1): "新的"}, rows
 
 
 def test_alloc_id_raises_when_space_exhausted(store):
-    """4 位空间用尽 ⇒ fail-closed，不静默升位宽。
+    """编号空间用尽 ⇒ fail-closed，不静默升位宽。
 
-    用"计数器已被推到 10000"来构造用尽，而不是"表里塞满 9999" ——
-    后者的跳过循环要跑一万次，而且它构造的场景不是我们要测的那个
+    用"计数器已被推到上限 +1"来构造用尽，而不是"表里塞满全部号" ——
+    后者的跳过循环要跑上百万次，而且它构造的场景不是我们要测的那个
     （计数器的越界判据）。测试要打在真正的判据上。
     """
     store.init()
     store._atomic_write(
         store.data / "counters.json",
-        {"schema_version": S.SCHEMA_VERSION, "counters": {"stmt": 10000}},
+        {"schema_version": S.SCHEMA_VERSION, "counters": {"stmt": 10 ** S.ID_DIGITS}},
     )
     with pytest.raises(IdExhausted):
         with store.tx("statements", "counters", actor="t") as tx:

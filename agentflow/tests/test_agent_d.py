@@ -277,14 +277,14 @@ def test_analyze_gaps_and_detect_contradictions_are_pure_functions():
 def test_submit_gap_does_not_resubmit_while_a_request_is_unfinished(tmp_path):
     """同一问题已有未完成请求时不得重复提交（否则会刷爆 A 的队列）。"""
     st = _opaque_store(tmp_path / "ws")
-    add_question(st, "0000", question="完全不存在的关键词XYZ", related_concept_ids=["0001", "0002"], related_relation_ids=["0000"])
+    add_question(st, S.format_id(0), question="完全不存在的关键词XYZ", related_concept_ids=[S.format_id(1), S.format_id(2)], related_relation_ids=[S.format_id(0)])
 
     reg = install_d_tools(st)
-    first = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical", description="第一次")
+    first = reg.call("research.submit_gap", question_id=S.format_id(0), topic="甲 乙", mode="topical", description="第一次")
     assert first.ok and first.data["duplicated"] is False
-    assert first.data["request_id"] == "r-0001"
+    assert first.data["request_id"] == f"r-{S.format_id(1)}"
 
-    second = reg.call("research.submit_gap", question_id="0000", topic="甲 乙", mode="topical", description="第二次")
+    second = reg.call("research.submit_gap", question_id=S.format_id(0), topic="甲 乙", mode="topical", description="第二次")
     assert second.ok and second.data["duplicated"] is True
     assert second.data["request_id"] is None
     assert "未重复提交" in second.data["reason"]
@@ -292,11 +292,11 @@ def test_submit_gap_does_not_resubmit_while_a_request_is_unfinished(tmp_path):
 
     row = st.rows("research_questions")[0]
     assert row["status"] == "needs_evidence", "提交后状态必须与等待集同时落盘"
-    assert row["waiting_request_ids"] == ["r-0001"]
+    assert row["waiting_request_ids"] == [f"r-{S.format_id(1)}"]
 
     # 同一件事在 AgentD 层再做一遍：方法级也要省掉这次调用
     agent = AgentD(st)
-    assert agent.submit_gaps("0000") == []
+    assert agent.submit_gaps(S.format_id(0)) == []
     assert "未重复提交" in agent.last_submit_skip["reason"]
     assert len(st.rows("search_requests")) == 1
 

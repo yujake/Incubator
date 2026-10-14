@@ -63,7 +63,9 @@ def _world(tmp_path: pathlib.Path, replies: list[str]):
     st.init()
     doc = S.Document(doc_id="0001", kind="paper", title="未发表的论文", status="in_review",
                      claims=[{"claim_id": "c1", "text": "已证明定理 1.5",
-                              "citations": ["exp:0000"], "evidence_kind": "proof",
+                              # 举证的那一条是**分配**出来的号（当前宽度）——
+                              # 这一行与 `_T3_ROW` 落库后拿到的号必须同一个。
+                              "citations": [f"exp:{S.format_id(0)}"], "evidence_kind": "proof",
                               "section": "§2"}], created_at=TS)
     doc.validate()
     with st.tx("documents", actor="test") as tx:
@@ -113,7 +115,7 @@ def test_e_endorsement_turns_the_gate_green(tmp_path):
     got = rows[0]
     assert got["method"] == "formal" and got["evidence_kind"] == "proof", got
     assert got["verifier_output"].strip(), got
-    assert str(got["experiment_id"]) == "0000", got
+    assert str(got["experiment_id"]) == S.format_id(0), got
     # 门真的被这一跳关上了（断言的是同一个工作区、同一个判据）
     assert _gate(st) == "pass", CL.check_closing(st, checks=("load_bearing",)).to_dict()
 
