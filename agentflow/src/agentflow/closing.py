@@ -41,6 +41,9 @@ from . import papercompile as PC
 from . import schema as S
 from . import textutil as T
 from . import userio as U
+# 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是**唯一**读口径 ——
+# "true 而说不清怎么通过的"按没查算，收工门这一格必须跟着它走（见 `quote_verified_rows`）。
+from . import evidencebits as EB
 
 #: 检查的名字（顺序就是报告里的顺序）。
 #:
@@ -937,13 +940,25 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
     if kind == "quote_verified_rows":
         st = store.rows("statements")
         rel = store.rows("relations")
-        s_rows = [r for r in st if r.get("quote_verified") is not None]
-        r_rows = [r for r in rel if r.get("quote_verified") is not None]
-        return len(s_rows) + len(r_rows), {
-            "statements": len(s_rows), "relations": len(r_rows),
-            "true": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is True),
-            "false": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is False),
-            "unchecked": sum(1 for r in s_rows + r_rows if r.get("quote_verified") is None),
+        rows = list(st) + list(rel)
+        # 两档口径（2026-10-14 业主裁定：「回验……保持语义相同即可」）：`true` 那一栏
+        # **按 `evidencebits.quote_state` 算**，于是"说了通过却说不清怎么通过的"
+        # （`quote_mode` 空/认不出的词）**不算 true**，落回 `unchecked`。
+        # 逐字与语义分开报：前者不花模型钱、后者是 H 判的，混成一个数就看不出钱花在哪。
+        states = {"verbatim": 0, "semantic": 0, "mismatch": 0, "unchecked": 0}
+        for r in rows:
+            states[EB.quote_state(r)] = states.get(EB.quote_state(r), 0) + 1
+        judged = states["verbatim"] + states["semantic"] + states["mismatch"]
+        return judged, {
+            "statements": sum(1 for r in st
+                              if EB.quote_state(r) in ("verbatim", "semantic", "mismatch")),
+            "relations": sum(1 for r in rel
+                             if EB.quote_state(r) in ("verbatim", "semantic", "mismatch")),
+            "true": states["verbatim"] + states["semantic"],
+            "false": states["mismatch"],
+            "unchecked": states["unchecked"],
+            # 新增的两栏（方式）：`true` 那两个数各自是怎么来的
+            "verbatim": states["verbatim"], "semantic": states["semantic"],
         }
     if kind == "reviewed_then_digested_rows":
         # 「审过之后有没有被逐条消化」（业主 2026-10-09；口径与判据见 `draft/97` §9.4）。
@@ -1124,9 +1139,13 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         draft_items = (draft.read_text(encoding="utf-8", errors="replace").count("\\bibitem")
                        if draft.is_file() else None)
         rows = list(store.rows("statements")) + list(store.rows("relations"))
-        verdict = [r for r in rows if r.get("quote_verified") is not None]
+        # 与 `quote_verified_rows` 同一口径（`evidencebits.quote_state`）：有**结论**的行
+        # = 逐字命中 / 语义相同 / 不一致；说了通过却说不清方式的按"没查"算。
+        verdict = [r for r in rows
+                   if EB.quote_state(r) in ("verbatim", "semantic", "mismatch")]
         reasoned = [r for r in rows
-                    if r.get("quote_verified") is None and str(r.get("quote_reason") or "").strip()]
+                    if EB.quote_state(r) == "unchecked"
+                    and str(r.get("quote_reason") or "").strip()]
         return len(verdict) + len(reasoned), {
             "records": len(verdict) + len(reasoned), "with_verdict": len(verdict),
             "unchecked_with_reason": len(reasoned), "bibitems": bibitems,
@@ -1137,8 +1156,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             # 对照读数（只为看得见差异，不参与判据）
             "denominator_from": "source/main.tex",
             "draft_bibitems": draft_items,
-            "true": sum(1 for r in verdict if r.get("quote_verified") is True),
-            "false": sum(1 for r in verdict if r.get("quote_verified") is False),
+            "true": sum(1 for r in verdict if EB.quote_state(r) in ("verbatim", "semantic")),
+            "false": sum(1 for r in verdict if EB.quote_state(r) == "mismatch"),
+            "verbatim": sum(1 for r in rows if EB.quote_state(r) == "verbatim"),
+            "semantic": sum(1 for r in rows if EB.quote_state(r) == "semantic"),
         }
     if kind == "manuscript_rows":
         # 交接手稿那一档（`draft/37` §134/§140；`draft/39` §C1 起存储改成追加式 JSONL）：
@@ -1459,8 +1480,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # `conjecture`（算出来了、就是低档）· ③ 有记录、且到 `pre_theorem`/`theorem`
         # （这一档要数的）。①与②在旧读数里同形（都表现为"没被计入"），
         # 而"没算过"与"算了、不够档"是两件事（三态纪律：没查成 ≠ 没通过）。
-        from . import evidencebits as EB
-
+        # 这里的局部导入已删（2026-10-14）：`_leg_reading` 是一个跨上千行的大 if 链，
+        # 函数里任何一处 `import EB` 都会让**整个函数**里的 `EB` 变成局部名 ——
+        # 于是上面 `quote_verified_rows` 那一档用模块级那个导入时会报
+        # `UnboundLocalError`（真实症状：收工门那一格从 pass 变成 unknown）。
         rows = list(store.rows("statements"))
         counted: list[dict[str, Any]] = []
         grades: dict[str, int] = {}

@@ -191,7 +191,67 @@ def test_the_semantic_criterion_is_registered_with_negative_controls() -> None:
     assert JG.registry_problems() == [], JG.registry_problems()
 
 
-def test_every_criterion_tells_the_model_to_answer_json() -> None:
+def test_the_closing_gate_counts_by_the_same_two_columns(tmp_path) -> None:
+    """收工门那一格（`quote_verified_rows`）走的是**同一个**读口径，且分方式报数。
+
+    为什么单列一条：这一格的旧实现直接读 `quote_verified is True`，于是"说了通过、
+    却说不清怎么通过的"（`quote_mode` 空/认不出的词）照样算通过 —— 与 `quote_state`
+    那条纪律分家。改成走 `quote_state` 之后，`true` = 逐字 + 语义两个数之和，
+    并各自单独报一栏（前者不花钱、后者是 H 判的，混在一起就看不出钱花在哪）。
+
+    ⚠️ 真实踩过的坑：`_leg_reading` 是一个跨上千行的大 if 链，函数体里任何一处
+    `from . import evidencebits as EB` 都会让**整个函数**的 `EB` 变局部名，
+    于是这一档报 `UnboundLocalError`、收工门那一格从 `pass` 悄悄退成 `unknown`
+    （`test_closing_gate.py` 当场红）。这一条把"读得出来 + 口径对"一起钉住。
+    """
+    from agentflow import closing as CL
+    from agentflow.store import Store
+
+    root = tmp_path / "ws-close"
+    root.mkdir()
+    store = Store(root)
+    store.init()
+    rows = [
+        {"stmt_id": "0000", "origin": "external_lit", "kind": "theorem",
+         "statement_full": "甲", "source_lit_id": "0000",
+         "quote_verified": True, "quote_reason": "逐字比对通过"},
+        {"stmt_id": "0001", "origin": "external_lit", "kind": "theorem",
+         "statement_full": "乙", "source_lit_id": "0000",
+         "quote_verified": True, "quote_mode": "semantic",
+         "quote_span": "来源那一段", "quote_call_sha256": "abc",
+         "quote_reason": "H 判语义相同"},
+        {"stmt_id": "0002", "origin": "external_lit", "kind": "theorem",
+         "statement_full": "丙", "source_lit_id": "0000",
+         "quote_verified": None, "quote_reason": "（下面直接改盘上那份 JSON：手改行）"},
+        {"stmt_id": "0003", "origin": "external_lit", "kind": "theorem",
+         "statement_full": "丁", "source_lit_id": "0000",
+         "quote_verified": None, "quote_reason": "还没查"},
+    ]
+    with store.tx("statements", actor="test") as tx:
+        for row in rows:
+            tx.upsert("statements", row)
+
+    # ② 手改盘上那份 JSON 造一行"说了通过、方式认不出"的（写入侧本来会拒它 ——
+    #    而 `quote_state` 要挡的正是**绕过写入侧**的行：手改的、旧版本写的、别的工具写的）。
+    import json as _json
+
+    data_path = root / "data" / "statements.json"
+    doc = _json.loads(data_path.read_text(encoding="utf-8"))
+    body = doc["rows"] if isinstance(doc, dict) and "rows" in doc else doc
+    for row in body:
+        if str(row.get("stmt_id")) == "0002":
+            row["quote_verified"] = True
+            row["quote_mode"] = "fuzzy"
+            row["quote_reason"] = "说不清怎么通过的"
+    data_path.write_text(_json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+
+    count, reading = CL._leg_reading(Store(root), "quote_verified_rows", root)
+    assert reading["verbatim"] == 1, reading      # 老行（True 无方式）按逐字读
+    assert reading["semantic"] == 1, reading
+    assert reading["true"] == 2, reading          # 逐字 + 语义
+    assert reading["unchecked"] == 2, reading     # `fuzzy` 那一行 + 还没查那一行
+    assert count == 2, (count, reading)
+
     """每条判据的模板都要带上 `_JSON_RULES`（真机实测的教训，见那一处的 docstring）。
 
     第一版 `quote.same_meaning` 忘了接它：假缝夹具全绿，真机 5 条引文全部
