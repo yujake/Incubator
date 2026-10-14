@@ -458,17 +458,17 @@ class LlmSeam:
         否则按**这次调用用的那个模型**去价目表取（`modelcost.price_for`）——
         这正是"花销与供应商定价吻合"那条要求落地的地方：不同厂商/不同模型/峰谷
         各有自己的价，而不是一个数打天下。
+
+        "从配置里读出厂商与模型"这一步（含"没配 vendor 就按端点认一家"）
+        **不在本函数里**，在 `modelgw.vendor_model_of`：它此前是抄了两份的
+        （这一处一份，`modelcost.price_of` 那一处干脆没有）⇒ 两条路的计价口径
+        不一致而两边都自洽。口径只许有一处。
         """
         if self.price is not None:
             p = self.price if isinstance(self.price, MC.Price) else MC.Price(*self.price)
             return p, {"price_source": "explicit", "peak": None}
         spec = getattr(self.gateway, "spec", None)
-        vendor = str(getattr(spec, "vendor", "") or "")
-        model = str(getattr(spec, "model", "") or "")
-        if not vendor:
-            # `vendor` 没配时按端点猜一个（只有一条登记：api.deepseek.com ⇒ deepseek）
-            base = str(getattr(spec, "base_url", "") or "")
-            vendor = "deepseek" if "deepseek.com" in base else ""
+        vendor, model = MG.vendor_model_of(spec)
         return MC.price_for(vendor, model)
 
     def _usd_of(self, reply: Any) -> tuple[float | None, str]:

@@ -157,9 +157,16 @@ def test_the_table_matches_the_vendors_published_numbers():
 
 
 def test_peak_and_off_peak_are_chosen_by_the_clock():
-    """峰谷按官方口径现算：UTC 周一至周五的 01–04 与 06–10 点是峰值，其余（含周末）低谷。"""
-    peak = MC.price_for("deepseek", "deepseek-flash", at=_at(2))
-    off = MC.price_for("deepseek", "deepseek-flash", at=_at(12))
+    """峰谷按官方口径现算：UTC 周一至周五的 01–04 与 06–10 点是峰值，其余（含周末）低谷。
+
+    这一条逐句传 `env={}`：**钟是这一格唯一被测的输入**。不传就会读到进程环境里
+    别人钉的 `AGENTFLOW_MODEL_PEAK` —— 而"别人"可以是另一个测试文件的导入期语句
+    （实测 2026-10-14：`test_r5_orchestration_cost` 曾在导入期 setdefault 它，
+    于是这条判据在全量跑里红、单跑绿）。判据自己把输入钉死，才谈得上可复现。
+    """
+    off_clock = {}
+    peak = MC.price_for("deepseek", "deepseek-flash", at=_at(2), env=off_clock)
+    off = MC.price_for("deepseek", "deepseek-flash", at=_at(12), env=off_clock)
     assert peak[0].usd_per_m_in == 0.3 and peak[1]["peak"] is True, peak
     assert off[0].usd_per_m_in == 0.15 and off[1]["peak"] is False, off
     # 边界：左闭右开 —— 04:00 已出峰值窗，06:00 进第二个窗
@@ -168,6 +175,47 @@ def test_peak_and_off_peak_are_chosen_by_the_clock():
     # 周末整日低谷（官方原文：all other hours are off-peak, including weekends）
     assert MC.is_peak(_at(2, weekday=5)) is False
     assert MC.is_peak(_at(2, weekday=6)) is False
+
+
+def test_the_two_number_price_also_knows_the_vendor_and_the_clock():
+    """`price_of`（两格那个旧口径）**也看厂商与峰谷** —— 认得出就按表算。
+
+    为什么这条要单独判（2026-10-14）：`price_of` 此前只读环境变量与缺省价，
+    而 `runflow`（`agentflow run` 那条路）用它取价 ⇒ 同一个工作区里，
+    多智能体那条按厂商价目表算、单跑那条按缺省价算，**两个数字都自洽**
+    且没有任何地方会报错。业主 ① 要的正是把这一格收成一处。
+    """
+    from agentflow.modelgw import ModelSpec
+
+    spec = ModelSpec()          # 缺省：vendor 空、端点 api.deepseek.com、模型 deepseek-flash
+    at_peak = "2026-01-01T02:00:00+00:00"
+    at_off = "2026-01-01T00:00:00+00:00"
+    assert MC.price_of(spec, at=at_peak, env={}) == (0.3, 1.2)
+    assert MC.price_of(spec, at=at_off, env={}) == (0.15, 0.6)
+    # 显式写了厂商就用它（模型名查不到 ⇒ 回落成缺省价，读数里看得出来）
+    assert MC.price_of(ModelSpec(vendor="acme", model="x"), at=at_off, env={}) == \
+        (MC.DEFAULT_PRICE_IN_USD_PER_M, MC.DEFAULT_PRICE_OUT_USD_PER_M)
+    # 认不出厂商 / 不给 spec ⇒ **行为逐字不变**（既有调用点不受影响）
+    assert MC.price_of(None, env={}) == (MC.DEFAULT_PRICE_IN_USD_PER_M,
+                                         MC.DEFAULT_PRICE_OUT_USD_PER_M)
+    assert MC.price_of_full(ModelSpec(), at=at_off, env={}).usd_per_m_in_hit == 0.003
+
+
+def test_the_peak_clock_accepts_an_iso_string():
+    """`is_peak` 也收 ISO 串：调用方手上常常只有 `S.now_iso()` 那个串。
+
+    为什么值得有（2026-10-14）：`runflow` 就是拿自己那个时间戳去取价的
+    （"这一笔按它发生的那一刻计价"），而它手上那个 `stamp` 是字符串。
+    裸 `datetime` 按 UTC 解释 —— 按本机时区解释等于让"这台机器在哪"
+    悄悄改变一笔账的价格。
+    """
+    from datetime import datetime, timezone
+
+    assert MC.is_peak("2026-01-01T02:00:00+00:00") is True        # 周四 02:00 UTC
+    assert MC.is_peak("2026-01-01T04:00:00+00:00") is False       # 左闭右开
+    assert MC.is_peak("2026-01-01T02:00:00Z") is True              # 尾 Z 也认
+    assert MC.is_peak(datetime(2026, 1, 1, 2)) is True             # 裸时间按 UTC
+    assert MC.is_peak(datetime(2026, 1, 1, 2, tzinfo=timezone.utc)) is True
 
 
 def test_an_unregistered_vendor_or_model_falls_back_and_says_so():

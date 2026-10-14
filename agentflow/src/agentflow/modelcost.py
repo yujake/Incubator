@@ -253,42 +253,93 @@ def price_from_env(env: Mapping[str, str] | None = None) -> Price:
     )
 
 
-def price_of(spec: Any = None, *, env: Mapping[str, str] | None = None) -> tuple[float, float]:
+def price_of(spec: Any = None, *, at: Any = None,
+             env: Mapping[str, str] | None = None) -> tuple[float, float]:
     """一次调用该按什么价算 ⇒ `(输入价, 输出价)`，单位是美元每百万 token。
 
-    ⚠️ 这是**两格**的那个旧口径（未命中输入 / 输出），保留给"只想要两个数"的调用方
+    ⚠️ 这是**两格**那个口径（未命中输入 / 输出），保留给"只想要两个数"的调用方
     （`runflow` 的清单、`cost.json`）。要用上缓存命中那一档，请用
-    :func:`price_of_full` —— 它返回完整的 :class:`Price`（三格 + `source`）。
+    :func:`price_of_full`。
 
-    真正的按厂商/模型分档表需要一个数据源，而"从模型问价"是错的方向（见模块 docstring）：
-    今天的价目表就是"默认观测值 + 环境变量覆盖"，`spec` 参数留着是因为调用方手上总有它，
-    而"价格与配置同源"这件事在接口上应当看得见。
+    **本函数现在也看厂商与峰谷**（2026-10-14）：从 `spec` 上读 `vendor` / `model`
+    （认不出厂商就按端点认，见 `modelgw.vendor_model_of`），再走 :func:`price_for`。
+    改之前它只读环境变量与缺省价 ⇒ `agentflow run` 那条路的账与多智能体那条路
+    口径不一致（两边都自洽，谁也不会报错）。`spec=None` / 认不出厂商时**行为逐字不变**
+    （回落成 env/default），所以既有调用点不受影响。
+
+    `at` 是"这一笔发生在哪一刻"（决定峰谷）。不给就用现在 —— 但调用方手上常有
+    这一笔自己的时间戳，**按它计价**才对（一趟跑在低谷、结账时已进峰值，
+    读墙钟会把整趟按峰值算）。
     """
-    p = price_from_env(env)
+    p = price_of_full(spec, at=at, env=env)
     return (p.usd_per_m_in, p.usd_per_m_out)
 
 
-def price_of_full(spec: Any = None, *, env: Mapping[str, str] | None = None) -> Price:
-    """完整的那一档价（三格 + 来源）—— 记账时用这个，不要用 `price_of` 的两格。"""
-    return price_from_env(env)
+def price_of_full(spec: Any = None, *, at: Any = None,
+                  env: Mapping[str, str] | None = None) -> Price:
+    """完整的那一档价（三格 + 来源）—— 记账时用这个，不要用 `price_of` 的两格。
+
+    认得出厂商 ⇒ 走 :func:`price_for`（厂商 × 模型 × 峰谷）；认不出 ⇒ 回落成
+    `price_from_env`（环境变量 > 缺省价）。两条路的读数分别标 `table` / `env` / `fallback`。
+    """
+    vendor, model = _vendor_model_of(spec)
+    if not vendor:
+        return price_from_env(env)
+    p, _reading = price_for(vendor, model, at=at, env=env)
+    return p
+
+
+def _vendor_model_of(spec: Any) -> tuple[str, str]:
+    """`modelgw.vendor_model_of` 的**惰性**取用（`modelcost` 不依赖 `modelgw` 的导入期）。
+
+    为什么惰性：`modelgw` 的导入期不轻（读设置文件、拼工具面那条链上也有它），
+    而 `modelcost` 被 `tokenmeter` → `store` 那条最底层的链引着 —— 让计价模块
+    在导入期就去拉网关，会把一次"只是想记一笔账"变成一次"把整条链拖起来"。
+    取不到（极端情况下）就退回"只读 spec 上的 vendor"，不假装认得出。
+    """
+    try:
+        from .modelgw import vendor_model_of
+
+        return vendor_model_of(spec)
+    except Exception:  # noqa: BLE001 —— 取不到不等于"没有厂商"，只是这一格没查成
+        return (str(getattr(spec, "vendor", "") or "").strip().lower(),
+                str(getattr(spec, "model", "") or ""))
 
 
 def is_peak(at: Any = None) -> bool:
     """这次调用落在**峰值时段**吗（官方口径：UTC 周一至周五的 01–04 与 06–10 点）。
 
-    `at` 收一个带时区的 `datetime`；不给就用"现在"（UTC）。周末整日低谷；
-    中国法定节假日官方页面说"整日低谷"，我们**没有节假日表**，所以那一档如实不判
-    （见 :func:`price_for` 的读数：`holiday_table=False`）——不假装知道。
+    `at` 收一个带时区的 `datetime`，也收 ISO 字符串（调用方手上常常只有
+    `S.now_iso()` 那个串 —— 见 `price_of` 的 `at`）；不给就用"现在"（UTC）。
+    周末整日低谷；中国法定节假日官方页面说"整日低谷"，我们**没有节假日表**，
+    所以那一档如实不判（见 :func:`price_for` 的读数：`holiday_table=False`）——不假装知道。
     """
     from datetime import datetime, timezone
 
-    now = at if at is not None else datetime.now(timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+    now = _as_datetime(at) if at is not None else datetime.now(timezone.utc)
     now = now.astimezone(timezone.utc)
     if now.weekday() >= 5:      # 5/6 = 周六/周日
         return False
     return any(start <= now.hour < end for start, end in PEAK_HOURS_UTC)
+
+
+def _as_datetime(at: Any):
+    """把 `at` 收成带时区的 `datetime`：ISO 串按 `fromisoformat` 读，裸时间按 UTC。
+
+    为什么裸 `datetime` 按 UTC（而不是按本机时区）：这一格判的是**供应商的**峰谷窗口，
+    而官方口径写的是 UTC。按本机时区解释一个朴素时间，等于让"这台机器在哪"悄悄
+    改变一笔账的价格 —— 那正是"两边都自洽而互相矛盾"的那类形态。
+    """
+    from datetime import datetime, timezone
+
+    if isinstance(at, str):
+        text = at.strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        at = datetime.fromisoformat(text)
+    if getattr(at, "tzinfo", None) is None:
+        at = at.replace(tzinfo=timezone.utc)
+    return at
 
 
 def price_for(vendor: str = "", model: str = "", *, at: Any = None,

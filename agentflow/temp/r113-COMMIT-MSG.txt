@@ -1,0 +1,96 @@
+R113 各智能体的 skills（现做现读）按角色补齐 + 花销口径最后一处漏网收掉
+
+业主原话（新阶段）：「将面对不同类型任务应唤起的协作方式写成各智能体的 skills……
+**定制 skill 时需保证描述无歧义、准确适配角色、动作都可实现**……**不能虚构我们系统
+不存在的动作**」「特别要给 M 多找素材（毕竟它是军师）」「将花销计算标准调整到与模型
+供应商定价吻合」。
+
+## 一、skills：十岗 + shared 全部有内容（27 条）
+
+R111 只落了 M（四条）与 shared（两条）。本轮把其余九岗补齐：
+
+| 角色 | 新增 |
+|---|---|
+| A | `检索-先本地再联网`（本地书架 → 词面 → 才出网，出网过 I7 闸门）、`登记-一篇文献只留一个键` |
+| B / E / H / V | （R112 已写）B 三条、E 三条、H 两条、V 两条 |
+| C | `结构-先定位再下钻`（图 → 缺口 → 原文那一段；产出登记口只有 `C.handle`）、`矛盾-三态并指到那一对` |
+| D | `起手-先立问题再谈别的`（其余动作都要求 qid 已存在）、`一轮-有界地串起消化到研究` |
+| F | `攻坚-一次一步并留中间态`、`交付-证明要能被别人复核` |
+| G | `成稿-正文自己写而不是脚本生成`（2026-10-13 裁定）、`修订-按发现逐条改并留痕` |
+| M | 加第五条 `指派-按任务类型选收件人` |
+
+M 那一条是业主②那句的正面回答：一张「这类活 → 收件人 → 起手动作」的决策表，外加
+**两条只能间接走的链** —— 要 F 走 `M → D → F`、要 V 走 `F → V`（M 的出边是
+`{A,B,C,D,E,G,H}`，直接派 F/V 会被 `forbidden_edge` 拒）。它与
+`tests/test_the_conductor_does_not_directly_control_bfv.py` 是**同一条裁定的两侧**：
+那边守权限面，这边守"M 的操作手册里写着该换哪条路"。
+
+业主原话里还有半句「如果特别适合该智能体职责**可直接写进前置提示词**」——
+**今天的落法是不加**（理由写进 `draft/120` §②）：前置里已经有形状表与伙伴表，
+M 那条决策表正是这两张表的**用法**，再写进去就是把同一件事说第三遍。
+
+## 二、skills 这一侧修掉三处「判据/内容自己的毛病」
+
+都不是新功能，是**已有的东西查了个假面、或人眼看不出来**：
+
+1. **`validate()` 查的工具面是假的**。旧口径 `build_registry()`（不带工作区根）
+   ⇒ `fs.*` 整组根本不注册 ⇒ `fs.read` 这种**真名**被判成「不在工具面上」；
+   而且"注册表里有"不等于"这个角色拿得到"（C/H/V 是只读角色）。
+   现在按角色取 `for_role()` 那一份**已过只读过滤**的工具面，并加反负控
+   「`fs.write` 在注册表里、但 C 拿不到 ⇒ 必须红」。
+2. **slug 那三格没人查**。真机里真出现过一条 slug 是 `" pessimistic-先找边界与反例"`
+   （行首一个空格）与一条含空格的 `形式化-能机器核的才签 formal`：`summary` / `when` /
+   `body` / 动作 / 工具**全部照绿**，而盘上会多出名字带空格的 md、索引里两条的差异
+   人眼看不出来。现在机器查（非空 / 无空白 / 能当文件名 / 全目录唯一），两条已改名。
+3. **shared 两条 skill 给 M 下了做不到的指令**：它们声明用 `table.*`，而 M 的工具面里
+   **没有**库表类工具（只有 `conductor.*` 与 fs 那几件）。改为声明人人都有的一件
+   （`fs.read`），正文里写明「库表工具在多数角色手上、主控用 `fs.read` 读同一份 JSON」。
+
+判据：`tests/test_agent_skills.py` 8 条 → **14 条**，六条反负控（虚构动作 / 越权动作 /
+`when` 空 / 工具不在本角色面上 / slug 带空白 / slug 重名）；另加"目录必须覆盖
+`shared` + 十个角色每一格"（少写一个键以前是静默的）、"索引只列自己 + shared"、
+"M 那条决策表必须写着两条间接链且不许把 F/V 列成能直接派"。
+
+提示词版本 p106 → p107；面快照重冻并**逐格走查**：差异 10 条 = 十个角色的 `prompt`，
+每条只多出自己新增的那几行索引（A/C/D/F/G 各 +2、M +1；B/E/H/V 只有 shared 未变），
+`actions` / `tools` / 边 / 计数等其余各格逐字未动。
+
+## 三、① 的最后一处漏网：`runflow` 也走价目表了
+
+`agentflow run` / `runflow.run_topic` 那条路此前**不走价目表** ——
+`modelcost.price_of` 只读环境变量与缺省价（0.27 / 1.10）。于是同一个工作区里，
+多智能体那条按厂商价目表算、单跑那条按旧缺省价算，**两个数字都自洽、谁也不会报错**。
+
+- 「从配置里读厂商与模型」收成**一处**：`modelgw.vendor_model_of`（含"没配 vendor
+  就按 `base_url` 的**主机名**认一家"——不给子串匹配留后门）；
+  `price_of` / `price_of_full` / `llmseam._price_now` 都走它（此前 `llmseam` 里抄了一份、
+  `modelcost` 那份干脆没有）。
+- `runflow` 改成按**这一趟自己的时间戳**取价（`price_of(cfg, at=stamp)`）：跑在低谷、
+  收尾时已进峰值的那一趟，读墙钟会被整趟按峰值计价，而账面上看不出来。
+  `is_peak` 也因此开始收 ISO 串（调用方手上就是那个串）。
+- 新判据两条：`test_the_two_number_price_also_knows_the_vendor_and_the_clock`、
+  `test_the_run_prices_at_its_own_timestamp_not_the_wall_clock`（含反真空：峰值那趟
+  必须是低谷那趟的两倍）。
+
+## 四、同批清掉的四处旧债（都是"全量跑才看得见"的那一类）
+
+1. `test_cli_run` 手抄的单价 `0.00137`（= 0.27/1.10 那对旧价）在换价目表后静默过期，
+   三个预算类用例全红 ⇒ 改成按 `modelcost` 现算。
+2. `test_r5_orchestration_cost` 在**导入期** `os.environ.setdefault(AGENTFLOW_MODEL_PEAK, "0")`：
+   pytest 收集期就导入全部测试文件 ⇒ 它改了整台进程的环境，`test_cost_matches_vendor`
+   的峰谷判据在全量跑里拿到 `peak_source='env'` 而红、单跑却绿。
+   改成按用例作用域的 autouse fixture；钟那条判据自己传 `env={}`。
+3. `agent_skills.py`（R111 新增）没登记进 `tests/test_release_all._AGENTFLOW_TOP_LEVEL_MODULES`
+   与 `docs/READING-MAP.md` ⇒ 两条"孤儿模块"判据红；同批修掉 `agent_loop.py` / `runflow.py`
+   的过期行数。
+4. `tests/golden/run_topic_snapshot.json` 自 R106 起就没重冻：**45 格差异**逐格看过 ——
+   旧平价 0.27/1.10 → 表价 0.15/0.6（UTC 周四 00:00 低谷）及其派生的每一个
+   usd / spent / remaining 数，加上 `reply` 上新增的 `cache_hit_tokens`/`cache_miss_tokens`=null
+   （R106 的三态：上游没报**不等于** 0）。`result` / `tasks` / `usage` 三格**键级**核对过：
+   只有 usd 那几个数动，公开签名与其余各格逐字未动。
+
+两份冻结快照（`agent_surface_snapshot.json` / `run_topic_snapshot.json`）都按 FC-27 台账
+签名，reviewers = Yu / Jiaqi。
+
+判据读数：`test_agent_skills` 14 + `test_agent_prompts` 64 + `test_cli_run` 38 +
+`test_cost_matches_vendor`/`test_modelcost`/`test_r5` 68 + 读图 6 + 三份快照，全绿。

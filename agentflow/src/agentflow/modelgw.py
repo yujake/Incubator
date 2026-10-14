@@ -116,6 +116,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -427,6 +428,46 @@ def spec_for(role: str = "", *, secretary: bool = False,
 VENDOR_BASE_URLS: dict[str, str] = {
     "deepseek": DEFAULT_BASE_URL,
 }
+
+
+def vendor_model_of(spec: Any = None) -> tuple[str, str]:
+    """从一个模型配置里读出 `(厂商, 模型名)` —— **取价前的第一步**。
+
+    ## 为什么要有这一个函数（而不是各调用点自己 getattr）
+
+    它此前是**抄了两份**的：`llmseam._price_now` 里一份（`vendor` 没配就按端点猜一家），
+    而 `modelcost.price_of` 那一支干脆不猜（于是 `runflow` 那条路上价目表形同虚设）。
+    结果是同一次运行里两条路的计价口径不一致：多智能体那条按厂商表算，
+    `agentflow run` 那条按缺省价算 —— 而**两个数字都自洽**，没有任何地方会报错。
+    业主 2026-10-14「花销计算标准调整到与模型供应商定价吻合」要的正是把这一格收成一处。
+
+    ## 口径（三态，不猜成"没有厂商"）
+
+    - 配置里写了 `vendor` ⇒ 用它（小写去空白）；
+    - 没写 ⇒ 按 `base_url` 的**主机名**在 `VENDOR_BASE_URLS` 里认一家
+      （只有主机名相同才算，子串匹配会把 `api.deepseek.com.evil.tld` 也认成 deepseek）；
+    - 都认不出 ⇒ 返回 `("", 模型名)`，调用方据此回落到环境变量/缺省价
+      （"认不出"不是"没有厂商"：那一档的价格**不许**当成已知）。
+    """
+    if spec is None:
+        return "", ""
+    if isinstance(spec, Mapping):
+        vendor = str(spec.get("vendor") or "")
+        model = str(spec.get("model") or spec.get("name") or "")
+        base = str(spec.get("base_url") or "")
+    else:
+        vendor = str(getattr(spec, "vendor", "") or "")
+        model = str(getattr(spec, "model", "") or getattr(spec, "name", "") or "")
+        base = str(getattr(spec, "base_url", "") or "")
+    vendor = vendor.strip().lower()
+    if vendor:
+        return vendor, model
+    host = urllib.parse.urlsplit(base).hostname or ""
+    if host:
+        for name, url in VENDOR_BASE_URLS.items():
+            if host == (urllib.parse.urlsplit(url).hostname or ""):
+                return name, model
+    return "", model
 
 
 def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:

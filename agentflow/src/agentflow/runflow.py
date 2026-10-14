@@ -1092,11 +1092,15 @@ def _phase_1(max_calls, now, out_dir, spec, store, topic):
         raise ValueError(f"max_calls 不能为负（收到 {max_calls}）")
 
     cfg = spec if spec is not None else spec_from_env()
-    price = price_of(cfg)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stamp = now or S.now_iso()
     started_at = stamp
+    # 单价按**这一趟自己的时刻**取（`at=stamp`），不是按"结账时的墙钟"：
+    # 一趟跑在低谷、收尾时已进峰值，读墙钟会把整趟按峰值计价 —— 而账面上
+    # 看不出来（数字自洽）。`price_of` 会按 cfg 上的厂商/模型去价目表取；
+    # 认不出厂商就回落成环境变量/缺省价（口径见 `modelcost.price_of`）。
+    price = price_of(cfg, at=stamp)
     # `G-2`：幂等键必须按这一次运行命名，不能只按主题。
     #
     # 缺陷（2026-09-26 全面体检 · 子代理 G 实测，`temp/auditG-probe4.txt` A 段）：

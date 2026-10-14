@@ -33,6 +33,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import cli, evidence, runflow
+from agentflow import modelcost as MC
 from agentflow.modelgw import ModelSpec
 from agentflow.runflow import ARTIFACTS, run_topic
 from agentflow.store import Store
@@ -42,14 +43,31 @@ from agentflow.tokenmeter import TokenMeter
 KEY = "fixture-key-not-a-secret"
 #: 固定时间戳：产物里的时间戳必须可复现，否则断言会摇。
 TS = "2026-01-01T00:00:00+00:00"
-#: 一次成功调用回多少 token。刻意取 1000/1000：按缺省价算下来一次恰好 0.00137 美元，
-#: 于是"预算够几次"这个断言可以口算复核（而不是靠跑一遍看结果）。
+#: 一次成功调用回多少 token。刻意取 1000/1000：按价目表算下来一次恰好 0.00075 美元
+#: （`deepseek-flash` 低谷价 0.15 / 0.6 每百万），于是"预算够几次"这个断言可以口算复核
+#: （而不是靠跑一遍看结果）。
 TOKENS_IN = 1000
 TOKENS_OUT = 1000
-#: 成功应答的单价（按缺省价、6 位小数收口）：一次调用 0.00137 美元。
-#: 预算类用例都用它的整数倍（`2 × ONE_CALL_USD`），这样"允许几次"是精确可判的，
-#: 不会因为一点浮点余量让"第 N 次该不该被拦"变成靠运气的问题。
-ONE_CALL_USD = round(TOKENS_IN * 0.27 / 1e6 + TOKENS_OUT * 1.10 / 1e6, 6)
+
+
+def _one_call_usd() -> float:
+    """一次成功调用花多少钱 —— **按价目表现算**，不许手抄一个数。
+
+    为什么必须现算（2026-10-14 实测）：这里此前写的是
+    `TOKENS_IN * 0.27 / 1e6 + TOKENS_OUT * 1.10 / 1e6`（旧缺省价那一对），
+    价目表换成"厂商 × 模型 × 峰谷"之后它静默过期 ⇒ 三个预算类用例全红，
+    而红之前它已经在"这次调用值多少"这件事上算错过。口径只许有一处：
+    走 `modelcost.price_of(spec, at=...)` —— 与 `run_topic` 用的是同一条路，
+    时间戳也钉在这份文件那个固定时刻（`TS`，UTC 周四 00:00 ⇒ 低谷）。
+    """
+    price_in, price_out = MC.price_of(_spec(), at=TS)
+    return round(TOKENS_IN * price_in / 1e6 + TOKENS_OUT * price_out / 1e6, 6)
+
+
+def _one_call_usd_at(stamp: str) -> float:
+    """同一个算式，但时刻由调用方给（判"这一趟按哪个时刻计价"用）。"""
+    price_in, price_out = MC.price_of(_spec(), at=stamp, env={})
+    return round(TOKENS_IN * price_in / 1e6 + TOKENS_OUT * price_out / 1e6, 6)
 #: 假检索返回的那段原文；逐字引文必须从它里面复制。
 ABSTRACT = "An abelian group is a group in which the commutative law holds."
 #: 材料里逐字存在的一句话。
@@ -253,13 +271,13 @@ def test_network_error_also_exits_2(store: Store, tmp_path: Path):
 def test_budget_exhausted_exits_1_and_stops_before_overspending(store: Store, tmp_path: Path):
     """④ 预算耗尽 ⇒ 退出码 1，且调用次数不超过预算允许的次数（熔断在调用之前）。
 
-    预算刻意取"恰好两次的钱"（`2 × ONE_CALL_USD`）：这样断言是精确的
+    预算刻意取"恰好两次的钱"（`2 × _one_call_usd()`）：这样断言是精确的
     （浮点必须逐位相等才过），而"第 3 次被拦下"就是熔断在调用之前的直接证据。
     """
     calls: list[int] = []
     out = tmp_path / "budget"
     res = _run(store, out, transport=_transport(200, _body(), calls=calls),
-               spec=_spec(), budget=ONE_CALL_USD * 2, max_calls=10)
+               spec=_spec(), budget=_one_call_usd() * 2, max_calls=10)
     # 恰好两次的钱 ⇒ 只允许 2 次；第 3 次在调用前被拦下。
     assert res["exit_code"] == 1 and res["reason"] == "budget_exhausted"
     assert res["calls"] == 2 and len(calls) == 2, "熔断必须在调用之前，不许先调后查"
@@ -268,7 +286,7 @@ def test_budget_exhausted_exits_1_and_stops_before_overspending(store: Store, tm
     assert len(man["calls"]) == 2
     cost = _cost(out)
     assert cost["budget_exhausted"] is True
-    assert cost["spent_usd"] <= ONE_CALL_USD * 2, "花的钱不许超过预算"
+    assert cost["spent_usd"] <= _one_call_usd() * 2, "花的钱不许超过预算"
     assert cost["usage_ledger"]["usd"] == cost["spent_usd"]
     assert cost["reconciled_with_usage_ledger"] is True
     # 账本里恰好两行，且每次调用的账都在。
@@ -291,9 +309,34 @@ def test_budget_that_allows_exactly_one_call(store: Store, tmp_path: Path):
     calls: list[int] = []
     res = _run(store, tmp_path / "one",
                transport=_transport(200, _body(), calls=calls),
-               spec=_spec(), budget=ONE_CALL_USD, max_calls=5)
+               spec=_spec(), budget=_one_call_usd(), max_calls=5)
     assert res["calls"] == 1 and len(calls) == 1
     assert res["exit_code"] == 1 and res["reason"] == "budget_exhausted"
+
+
+def test_the_run_prices_at_its_own_timestamp_not_the_wall_clock(store: Store, tmp_path: Path):
+    """这一趟按**它自己的时刻**取价：峰值那一趟按峰值价，低谷那一趟按低谷价。
+
+    为什么这条是承重的（2026-10-14）：价目表分峰谷两档之后，"按哪一刻计价"
+    就成了账面上的一个自由度 —— 读结账时的墙钟，一趟跑在低谷、收尾时已进峰值，
+    整趟会被按峰值算，而**数字自洽、没有任何地方会报错**。所以口径钉在
+    `run_topic` 那个 `now=` 上（它同时也是产物里的时间戳），这一条就是那个口径的判据。
+    """
+    off_at, peak_at = "2026-01-01T00:00:00+00:00", "2026-01-01T02:00:00+00:00"
+    got: dict[str, dict] = {}
+    for tag, stamp in (("off", off_at), ("peak", peak_at)):
+        out = tmp_path / tag
+        res = run_topic(store, topic="阿贝尔群", budget_usd=1.0, out_dir=out,
+                        transport=_transport(200, _body()), spec=_spec(),
+                        max_calls=1, now=stamp, search_fn=_search())
+        assert res["exit_code"] == 0 and res["calls"] == 1, (tag, res)
+        cost = _cost(out)
+        price_in, _price_out = MC.price_of(_spec(), at=stamp, env={})
+        assert cost["price_usd_per_m"]["in"] == price_in, (tag, cost["price_usd_per_m"])
+        assert cost["spent_usd"] == _one_call_usd_at(stamp), (tag, cost["spent_usd"])
+        got[tag] = cost
+    # 反真空：两档价必须真不一样，否则上面对的是同一个数（判据什么也没证明）
+    assert got["peak"]["spent_usd"] == 2 * got["off"]["spent_usd"], (got["peak"], got["off"])
 
 
 # --------------------------------------------------------------- ⑤ 成功路径
@@ -467,7 +510,7 @@ def test_retry_attempts_are_charged_in_the_ledger(store: Store, tmp_path: Path):
     row = store.rows("usage_ledger")[0]
     assert row["attempts"] == 2
     # 重试按次计费：账上的 usd 已经是两次的钱（`usd_for` 里乘过 attempts）。
-    assert row["usd"] == round(ONE_CALL_USD * 2, 6)
+    assert row["usd"] == round(_one_call_usd() * 2, 6)
     assert _manifest(out)["calls"][0]["reply"]["attempts"] == 2
 
 

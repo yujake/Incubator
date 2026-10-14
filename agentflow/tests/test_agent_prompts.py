@@ -2312,18 +2312,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 以及 M 那一格的判据措辞「报告里的带前缀 4 位号」→「报告里带前缀的台账号」。
 #: p105 → p106（2026-10-14，业主新阶段 ②）：新增 `SKILLS_INDEX` 段 —— 十格**全动**
 #: （`shared` 那一槽的 skill 每个角色都读得到；正文在盘上，按需 `fs.read`）。
-_FROZEN_PROMPT_VERSION = "p106"
+#: p106 → p107（2026-10-14，同一件活的第二轮）：索引**按角色补齐** —— 加 F / A / C / D / G
+#: 五岗的条目、M 加"按任务类型选收件人"（含 `M → D → F`、`F → V` 两条间接链）⇒ 十格全动。
+_FROZEN_PROMPT_VERSION = "p107"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "9832b3194575e4c55417c1f5c53a58e8a208926e1c2adbc56fab98bc9ce15191",
-    "B": "3d8040241df10265b7536167beaab43da123e5e0befac15a49afe69fe8e49296",
-    "C": "4cd01a8f7b0377c573940d61473c07e6d5599bde5df64a2728ec1b867f66ba79",
-    "D": "4415a003baa1caeaed77b3f0ca3b9726ccf0f0999b03530352871bb1ac178087",
-    "E": "959f78b94b9fe9aef73e85534476ecd931e78ccf7a73adce97814abbbd6cc4cd",
-    "F": "d475e0bdeaf4a8139adfadab91160abe926048f2f4d805b25cf3a6afa21ce11d",
-    "G": "b17344ee2f5b7e78896f4385cb43777874ea4b7813533052b0788a2b011cc3a8",
-    "H": "5de7dec99d91cc451d37d02ebee5e4b288a426d651b5d60648e78c515827eea4",
-    "M": "2fd4df75df20b83519a06d8138533c3f6264c530003537b8f9f7229204bce57c",
-    "V": "d91d4ae3dd015a14df816813a0495a57ec6fd2a48baf5374bed0467edda1458b",
+    "A": "c1e13a3974f13c43f78f46fbf5453a8397428bcbb3a1b36c983a7a6a8448ec34",
+    "B": "98094630815efaeb48dac896a867ea990bf868bcc799e2540dff78ceee904ff9",
+    "C": "7f84953788257f1bb70e850167a769e847a9422a0d30c469e8f8d2af62b1dae7",
+    "D": "7393c44f2db14a3dd26841bc4f6ea221b9bc212d9963dc3202fd8665666193b1",
+    "E": "75c267eda5d8f84c2d5d48fd1afacabada7a3ccf863d9f509d7cd247f4f0b82d",
+    "F": "082eb550c56ac62e713ba5c0077e1cfbc1200fb6a023390beecd024a3a6082b6",
+    "G": "b53b32548840fc17a91172426fec979d170e6eb7ca69b5c8a5e28f30be44dbc9",
+    "H": "7071d26db3401274fcd8fe58213f72bc5838f57923c008f0d74e4e6e91bc2e2c",
+    "M": "dc1d261f6f8bf24b3b727eac9dd9b33f254ad80dbf7032188e128fb59f4782de",
+    "V": "9e42788959edba90942fa9861a679b4fa83f2999f49067ff3802013a337ae6ef",
 }
 
 

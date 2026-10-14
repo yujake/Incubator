@@ -381,7 +381,10 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tex_sha256`/`pages`），完成定义第 1 条从"渲染锚 0 漂移"改成"这份 PDF 是不是盘上这份正文
 #: 编的"（收工门那一格 `paper`）。退场面与逐条理由见 `draft/117`。
 #: 作用域读数：只有 M / G / H 三格换值（纸包只发给它们）；A–F 与 V 逐字未动。
-PROMPT_VERSION = "p106"
+#: `p107`（2026-10-14，业主：「将面对不同类型任务应唤起的协作方式写成各智能体的 skills，以防止前置大量提示词，现做现读」）：
+#: 前置提示词里加了 `SKILLS_INDEX` 那一段（只有目录索引），正文落在工作区 `skills/<角色>/`
+#: 按需 `fs.read`。十格全部换值（索引按角色现算，每个角色的索引都不同）。
+PROMPT_VERSION = "p107"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:

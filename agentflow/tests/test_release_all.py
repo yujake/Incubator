@@ -2563,6 +2563,10 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "presets.py": "预设机制：一个预设一个目录（`preset.yml` + `agent.agentflow.yml`，DSH 的 YAML 形状）、发现按根优先级（随包前置赢同 id）、坏预设列出来带理由、一个预设挂一次（生成键 = mtime+size）、创作面只有复制、`!!js` 门是三态里的 conditional（学 DSH 的 `dsh-agent-presets`；`draft/101` §2）",
     "instructions.py": "工作区指令通道：只从文件来（AGENTS.md 一类 + .local 叠加件）、项目根 = 第一个带 `.git` 的祖先、由宽到窄、按目录去重（raw/trim 两个 SHA-1）、maxBytes 降级（先丢更宽的再截最具体的，绝不总结）、追加式 + 转义框闭合标记（学 DSH 的 `dsh-agent-instructions`；`draft/101` §4）",
     "agent_prompts.py": "A–H 与主控的前置提示词：手写判断 + 现算事实（工具面 / 伙伴边 / 动作参数 / 失败词表；`draft/28` §178/§179）",
+    "agent_skills.py": "各智能体的 skills（业主 2026-10-14「现做现读」）：目录 / 正文 / 索引只有 `CATALOG` 一处定义，"
+                       "正文由 `materialize` 落到工作区 `skills/<角色>/<slug>.md`，前置提示词里只出现 `index_block(role)` 那一小段；"
+                       "`validate()` 逐条核「动作在 capabilities 里存在且从该角色够得到」「工具在该角色自己的工具面上」"
+                       "（`draft/120` §②）",
     "llmseam.py": "统一的模型缝：一次调用一条审计记录（版本 / 哈希 / tokens / 花销）+ 三态词表 + 预算守卫（`draft/28` §179）",
     "agent_loop.py": "LLM 驱动的角色循环：形状清单以 `agent_loop.SHAPES` 为唯一来源（八个，含手稿落行的唯一入口 `handoff`），唤起走 `Conductor.summon`、留言落会话记录（`draft/28` §179）",
     "userio.py": "用户频道：ask_user 把问题送进待答清单并等回答，超时是 `user_no_answer`（不是默许），迟到的回答照样捞得出来（`draft/28` §181）",

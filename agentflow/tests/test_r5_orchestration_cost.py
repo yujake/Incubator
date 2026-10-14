@@ -73,7 +73,21 @@ from agentflow import schema as S
 #: `6e-06` 那样的数抄进判据，等于把"当时的价目表"冻进判据里 —— 调一次价就假红一次。
 #: 峰谷那一位钉在**低谷**（`AGENTFLOW_MODEL_PEAK=0`）：读墙钟的话，同一条判据在峰值
 #: 时段会算出差一倍的钱（那正是"花销不可复现"）。
-os.environ.setdefault(modelcost.ENV_PEAK, "0")
+
+
+@pytest.fixture(autouse=True)
+def _pin_off_peak(monkeypatch):
+    """本文件的用例都在低谷价上判 —— **按用例作用域钉**，不许在导入期动环境。
+
+    这里此前是模块级的 `os.environ.setdefault(modelcost.ENV_PEAK, "0")`。
+    它看着无害，实际是**进程级**的：pytest 在**收集期**就把每个测试文件导入一遍，
+    于是这条 setdefault 在任何用例跑起来之前就已经改了整台进程的环境
+    ——`test_cost_matches_vendor.py::test_peak_and_off_peak_are_chosen_by_the_clock`
+    因此在全量跑里拿到 `peak_source='env'` 而红、单跑那个文件却是绿的
+    （实测 2026-10-14：全量 9 failed 里有它一条，隔离跑 46 passed）。
+    "只在跑这个文件时才生效"才是这里真正想要的语义。
+    """
+    monkeypatch.setenv(modelcost.ENV_PEAK, "0")
 
 
 def _one_call_usd(tokens_in: int = 11, tokens_out: int = 3) -> float:

@@ -124,3 +124,90 @@ def test_the_negative_control_catches_an_empty_when(monkeypatch):
     monkeypatch.setitem(AS.CATALOG, "M", AS.CATALOG["M"] + (bad,))
     problems = AS.validate()
     assert any("when" in p for p in problems), problems
+
+
+def test_the_catalog_covers_every_role():
+    """覆盖：`shared` 与**十个角色**每一格都有内容（少一格 = 那一岗没有按需材料）。
+
+    为什么这条要单独判：`CATALOG` 是一个字典，少写一个键**不会**让任何别的东西变红 ——
+    那一岗的索引就静默地只剩 `shared`，而"这一岗该怎么办"这件事没人发现它没写。
+    """
+    from agentflow import schema as S
+
+    want = {"shared", "M"} | set(S.ROLES)
+    assert set(AS.CATALOG) == want, f"少了 {sorted(want - set(AS.CATALOG))}，多了 {sorted(set(AS.CATALOG) - want)}"
+    for owner, rows in AS.CATALOG.items():
+        assert rows, f"{owner} 一格都没有"
+    assert len(set(S.ROLES)) == 9, f"角色表变了：{sorted(S.ROLES)}"
+
+
+def test_the_negative_control_catches_a_tool_that_exists_but_is_not_on_this_role_surface(monkeypatch):
+    """反负控之四：工具**真在注册表里**，但这个角色拿不到 ⇒ 必须红。
+
+    这一条挡的是判据本身的一种退化：把"注册表里有没有这个名字"当成"这个角色能不能用"。
+    `fs.write` 在注册表里，而 C 是只读角色（`READ_ONLY_ROLES`），`for_role("C")` 里没有它 ——
+    一条说"C 用 fs.write 落盘"的 skill 就是一句做不到的指令，而按旧口径它会被判绿。
+    """
+    reg = build_registry(workspace_root=pathlib.Path(".")).registry
+    names = {s.name for s in reg.for_role("C")}
+    assert "fs.write" not in names, "前提反了：C 的工具面里有 fs.write（只读约束松了？）"
+    bad = AS.Skill(slug="越面", title="越面", summary="一句话", when="任何时候",
+                   body="正文", tools=("fs.write",))
+    monkeypatch.setitem(AS.CATALOG, "C", AS.CATALOG["C"] + (bad,))
+    problems = AS.validate()
+    assert any("fs.write" in p and "C" in p for p in problems), problems
+
+
+def test_the_negative_control_catches_a_slug_that_cannot_be_a_filename(monkeypatch):
+    """反负控之五：slug 里有空白 ⇒ 红。
+
+    真机上出现过一条 slug 是 `" pessimistic-先找边界与反例"`（行首一个空格）：
+    它不会让 `summary` / `when` / `body` / 动作 / 工具任何一格变红，而盘上会多出一个
+    名字带首空格的文件、索引里两条的差异人眼看不出来。所以这一格必须是机器查的。
+    """
+    bad = AS.Skill(slug=" 先找边界", title="x", summary="一句话", when="任何时候", body="正文")
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
+    problems = AS.validate()
+    assert any("空白" in p for p in problems), problems
+
+
+def test_the_negative_control_catches_a_duplicated_slug(monkeypatch):
+    """反负控之六：两条 skill 用同一个 slug ⇒ 红（索引里那两行分不开）。"""
+    first = AS.CATALOG["V"][0]
+    dup = AS.Skill(slug=first.slug, title="重名", summary="一句话", when="任何时候", body="正文")
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (dup,))
+    problems = AS.validate()
+    assert any("重了" in p for p in problems), problems
+
+
+def test_every_role_index_is_generated_from_the_catalog():
+    """索引：每个角色的索引块只列**它自己 + shared** 的那些条，一条不多一条不少。"""
+    for role in AS.CATALOG:
+        if role == AS.SHARED:
+            continue
+        block = AS.index_block(role)
+        mine = AS.skills_for(role)
+        for s in mine:
+            assert f"{AS.SKILLS_DIR}/" in block and s.slug in block, (role, s.slug)
+        # 别的角色独有的条目不进这一份索引
+        others = {s.slug for r, rows in AS.CATALOG.items() if r not in (role, AS.SHARED)
+                  for s in rows} - {s.slug for s in mine}
+        for slug in others:
+            assert slug not in block, f"{role} 的索引里混进了别人的条目：{slug}"
+
+
+def test_the_conductor_skill_records_the_two_indirect_routes():
+    """M 的"派给谁"那一条必须写着两条间接链的**现状**，而不是旧路线。
+
+    与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：
+    权限面不许直接控制 F / V，那么"要 F / 要 V 派给谁"就必须在 M 的操作手册里写成链。
+    这条判据刻意不写死整段文字，只钉住三件事：指明 F 在 M 的出边外、给出 `D → F`、
+    以及"派 V 会被 `forbidden_edge` 拒"这个读数 —— 换一句话写仍然过。
+    """
+    route = next(s for s in AS.CATALOG["M"] if "按任务类型" in s.slug)
+    body = route.body
+    assert "D → F" in body and "F → V" in body, body[:200]
+    assert "forbidden_edge" in body, "没写「被拒的读数长什么样」"
+    assert "F" not in route.actions and "V" not in {a.split(".")[0] for a in route.actions}, \
+        f"M 的条目里不许把 F / V 列成能直接派的：{route.actions}"
+    assert "D.propose_question" in route.actions and "B.run_once" in route.actions, route.actions
