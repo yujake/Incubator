@@ -1,0 +1,54 @@
+R103 二层唤起（父→子→孙）：查清卡在哪、修掉真凶、留一条真跑的三跳判据（业主裁定 ③）
+
+业主 2026-10-14：「**确保二层唤起（父→子→孙）道路畅通**」并要求先查清卡在哪。
+本批的读数全部来自真机与可复现探针（`temp/_r103_*.py`），结论与修法如下。
+
+## 一、查清了：不是边表、不是深度、不是扇出、也不是秘书
+
+真机读数（`projects/*/sessions/*.jsonl` 19 个会话 + `p9-t1-nolean` 的 `tasks`）：
+
+- 派活步共 94 次；其中 **depth=2 的子代理派了 12 次活** ⇒ 子代理会派活这一档是通的；
+- 真机确实跑出过一条完整三跳链：M(t-0001,d1) → H(t-0018,d2) → A(t-0019,d3) → B(t-0020..24,d4)
+  ⇒ **结构上通**（`policy.max_depth=5`，M=1，离上限还远）；
+- 但那条链的**第三跳 5 次里 5 次都没成功**：
+  - 3 次 `failed`：`TypeError: Object of type PageRange is not JSON serializable`；
+  - 2 次 `refused`：`concurrency_exceeded`（"当前有 4 个任务在跑，达到 max_concurrency=4"；
+    全局在飞上限，不是深度）；
+- 另一条真机读数（T1-2 那一趟）：5 个子代理（A/E/B/G/H）**一次都没想过派活** ——
+  A 的推理里明确写了"B 在我的伙伴表里，我可以派它"，然后自己否掉了（"调用方只要 ingest"）。
+
+## 二、真凶：一个只读工具的返回**记不下来**，整趟就废
+
+顺着三条 `failed` 的 traceback 缩到最小（`temp/_r103_tool_ser.py`）：
+`table.schema`（不带 `table` ⇒ 反射全部表）把每一格的 `default` 原样放进返回，
+而 `statements.page_range` / `dependencies.page_range` 的默认值是一个 **`PageRange` 实例**
+⇒ 这一趟循环在记步/落产出时 `json.dumps` 抛 `TypeError` ⇒ **整趟 `failed`**。
+
+口径：**只读工具的返回必须能被如实记录**（记录不了 = 这一趟没有产出）。
+修法（`tools/table_tools.py`，非禁改区文件）：新增 `_jsonable_default()`，
+按 `to_dict()` → `dataclasses.asdict` → 递归容器 → 字符串 的顺序降级；
+`table_schema` 的 `default` 两条路（`default` / `default_factory`）都过它。
+
+## 三、判据（含反负控）
+
+- `tests/test_two_hop_summon.py`（新）：**真跑一次父→子→孙**（照剧本的替身模型，
+  三跳各自 `summon`，孙代理那一步照真机的样子读 `table.schema`），断言
+  ① `tasks` 里有一条 `depth=1→2→3`、`parent_task_id` 一环扣一环的链、
+  ② **三跳全部 `done/ok`**（有一条 failed，"畅通"这句话就不成立）、
+  ③ 孙代理那一趟的完整记录真落盘且可 `json.dumps`、
+  ④ 崩过的那一步在 `LoopRun` 里读得到；
+  外加**反负控**：把 `_jsonable_default` 换回恒等函数（= 修复前的行为），
+  孙代理那一趟**必须真的 `failed` 且 detail 带 `PageRange`` —— 绿是修出来的，不是链本身不会崩。
+- `tests/test_statements_table.py`：`table.schema` 的返回可 `json.dumps`；先给负控
+  （反射出的原始默认值确实不可 JSON 化，证明这一格不是空转），再断言它被如实降级成
+  `{"start": None, "end": None, "label": ""}`。
+
+## 四、还没修的（如实记，下一步）
+
+被循环驱动的子代理**做不了自己被派的那个动作**：角色级动作（如 `B.register_statement`）
+不在它的工具面上（`capabilities._KNOWN_UNMATCHED_ACTIONS` 里逐条登记的就是这一族），
+于是模型改用 `table.create` 直改表，**绕过该动作的出处/证据/取号/判重预检**
+（真机 t-0021 的 B 就是这么写的：`quote_verified=true` 是它自报的）。
+这是"二层唤起"下一个要修的结构问题，不是文档问题。
+
+判据读数：`test_two_hop_summon` + `test_statements_table` 共 17 条全绿。

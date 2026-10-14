@@ -115,6 +115,50 @@ def test_the_new_table_is_visible_to_the_generic_table_tools(store):
     assert "label" not in vocabs and "proof_text" not in vocabs
 
 
+def test_the_schema_reflection_is_jsonable(store):
+    """只读工具的返回必须能被如实记录：`table.schema` 的 `default` 不许是行内对象。
+
+    ## 这条判据治的是真机上的一个"三跳断在第二跳"（2026-10-13，`p9-t1-nolean`）
+
+    子代理 B 被二级唤起做 `register_statement`，它第一步读了 `table.schema`（不带
+    `table` ⇒ 反射全部表）。`statements.page_range` / `dependencies.page_range` 的
+    默认值是一个 `PageRange` **实例**，被原样放进返回里 ⇒ 这一趟循环在记步/落产出时
+    `json.dumps` 抛 `TypeError: Object of type PageRange is not JSON serializable`
+    ⇒ 整趟以 `failed` 收场（真机 t-0020 / t-0021 / t-0024 三条全废，
+    而"父→子→孙"这条链正是靠那三条活着的）。
+
+    先看负控（证明这条判据不是空转）：**反射出来的原始 `default` 确实不可 JSON 化**；
+    再看正控：`table.schema` 的返回整体可 `json.dumps`，且那一格的默认值被如实降级成
+    它的 `to_dict()`（不是丢掉、也不是编一个值）。
+    """
+    import dataclasses
+    import json
+
+    from agentflow.tools import build_registry
+
+    store.init()
+    cls = S.TABLES["statements"]["row"]
+    field = next(f for f in dataclasses.fields(cls) if f.name == "page_range")
+    # 这一格的默认值走 `default_factory`（`table.schema` 两条路都反射，口径同一处）
+    raw_default = field.default if field.default is not dataclasses.MISSING \
+        else field.default_factory()
+    with pytest.raises(TypeError):
+        json.dumps(raw_default)
+    assert isinstance(raw_default, S.PageRange), (
+        "`statements.page_range` 的默认值不再是 `PageRange` 实例 ⇒ 这条判据的对象变了，"
+        "要么换一格（`dependencies.page_range` 同族），要么删掉这条判据并说明理由")
+
+    reg = build_registry(store=store, workspace_root=store.root).registry
+    res = reg.call("table.schema", role="B")
+    assert res.ok, res
+    json.dumps(res.to_dict(), ensure_ascii=False)  # 不许抛
+
+    fields = {f["name"]: f for f in res.data["tables"]["statements"]["fields"]}
+    assert fields["page_range"]["default"] == {"start": None, "end": None, "label": ""}, (
+        f"`page_range` 的默认值应当如实降级成它的 to_dict()，读到 "
+        f"{fields['page_range']['default']!r}")
+
+
 # ==================================================== 二、进不来（负控）
 
 def test_a_statement_without_full_assumptions_cannot_be_active(store):

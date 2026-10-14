@@ -131,6 +131,40 @@ def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
     return obj, {**extra, **canonical}
 
 
+def _jsonable_default(value: Any) -> Any:
+    """把反射出来的默认值转成"能落进 JSON"的形态。
+
+    ## 为什么必须有这一级（2026-10-13 真机，`p9-t1-nolean` 的三跳那一趟）
+
+    `statements.page_range` / `dependencies.page_range` 的默认值是一个 **`PageRange`
+    实例**，而 `table.schema`（不带 `table` ⇒ 反射全部表）原先把它原样塞进返回里。
+    后果不是"少看一眼结构"，而是**这一趟循环在落产出时崩**：子代理 B 被二级唤起
+    做 `register_statement`，它第一步读了 `table.schema`，随后这一趟在记步/落产出时
+    `json.dumps` 抛 `TypeError: Object of type PageRange is not JSON serializable`
+    ⇒ 整趟以 `failed` 收场（实测 t-0020 / t-0021 / t-0024 三条全废）。
+
+    口径：**只读工具的返回必须能被如实记录** —— 记录不了就等于这一趟没有产出
+    （"我查了"落不到盘上）。所以这里按对象自己的 `to_dict()`（schema 的行对象都有一份）
+    → `dataclasses.asdict` → 递归容器 的顺序降级；最后一档兜底成字符串，
+    宁可让那一格读起来粗糙，也不许让一个只读工具的返回把整趟运行弄崩。
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        try:
+            return _jsonable_default(to_dict())
+        except Exception:  # noqa: BLE001 —— 转不动就走下面的降级，不许在这里抛
+            pass
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return _jsonable_default(dataclasses.asdict(value))
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable_default(v) for v in value]
+    if isinstance(value, Mapping):
+        return {str(k): _jsonable_default(v) for k, v in value.items()}
+    return str(value)
+
+
 def _probe_id(table: str) -> str:
     """建行前用来"预演校验"的占位 ID（按这张表自己的 ID 契约造）。
 
@@ -851,9 +885,10 @@ def table_schema(ctx: TableContext) -> ToolResult:  # noqa: ARG001 —— 纯反
             tp = hints.get(f.name, f.type)
             required = f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING
             if f.default is not dataclasses.MISSING:
-                default = f.default
+                default = _jsonable_default(f.default)
             elif f.default_factory is not dataclasses.MISSING:
-                default = f.default_factory()  # 只在反射期调用，用于把 [] 之类如实展示出来
+                # 只在反射期调用，用于把 [] 之类如实展示出来
+                default = _jsonable_default(f.default_factory())
             else:
                 default = None
             item: dict[str, Any] = {
