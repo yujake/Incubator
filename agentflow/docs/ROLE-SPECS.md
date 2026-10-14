@@ -170,7 +170,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 |---|---|
 | `M`（主控） | `A B C D E G H` —— **不许直接控制 F / V**（2026-10-10 裁定；F 走 `D`、V 走 `F`）。B 于 2026-10-13 加回（业主：「补 M 到 B」）—— 采信链要走 `M→B→V` |
 | `A` | `B` |
-| `B` | `C V` |
+| `B` | `C H V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判） |
 | `C` | **（空）** —— 只读角色连"请求"都不直接发 |
 | `D` | `A B C E F` |
 | `E` | `B D` |
@@ -179,14 +179,20 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | `H` | `A E G` |
 | `V` | `F` |
 
-**边总数 = 31**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
+**边总数 = 32**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
 —— 新增的三条是 `M→V`、`F→V`、`V→F`。观测 2026-10-06（角色 V 落地）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
 （B / F / V 改由父代理转达；见 §M.4.1 上面那段）。
 **2026-10-13 再加一条 `M→B` 到 31**（业主裁定逐字「补 M 到 B」：B 是采信链第一环，无 Lean 的 T1 实测 M 够不着 B/V ⇒ `verifications` 目录压根没被创建）。
 **2026-10-13 加一条 `B→V` 回到 30**：业主裁定逐字「允许 B 唤起 V。理由是 B 需要初步检验
 收录的证明」—— 审校链（B / H / V）的第一环要能把**收录进台账的证明**直接交给 V 逐行走查，
-否则它得转两次手才够得着 V。读数：
+否则它得转两次手才够得着 V。
+**2026-10-14 加一条 `B→H` 到 32**：业主裁定逐字「允许 B 和 H 协作，B 唤起 H」，理由是
+引文回验的口径改了 ——「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。
+逐字那一档 B 自己走（`quoteverify.check_quote`，不花模型钱，先走它）；**逐字不中而语义相同**的
+（作者自己改写、换记号、跨语言的引文）由 **H 判**（`H.judge_quote_semantics`），
+B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍只读、落库代理仍钉死在
+`review_findings` / `documents.status` 上（"判"与"落"分居两处）。读数：
 `python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"`）。
 
 **没有任何角色能召唤 `M`**（`capabilities.NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`）。
@@ -218,7 +224,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
 > 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
 
-### 0.7 动作表（`capabilities.CAPABILITIES`，59 个动作）
+### 0.7 动作表（`capabilities.CAPABILITIES`，60 个动作）
 
 | 角色 | 动作数 | 动作名 |
 |---|---:|---|
@@ -229,7 +235,7 @@ H: n=22 {'read': 17, 'none': 5}；第二根轴 {'none': 22}   ← 零 `exec`、�
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | F | 4 | `create_plan` `step` `status` `list_plans` |
 | G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
-| H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
+| H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
 | V | 3 | `verify_proof` `list_verifications` `read_proof` |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
@@ -2273,7 +2279,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 >   整趟作废。`fs.edit` 的输出量与**改动量**成正比（不是与文件大小成正比），
 >   而且比整文件覆盖更安全 ——"不可逆"那条理由对它不适用。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（52 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（53 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都手抄 `capabilities.CAPABILITIES`）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对 —— 2026-10-01 加这条判据时
@@ -2297,7 +2303,7 @@ $env:PYTHONPATH='src'; python -m agentflow.agent_v
 | D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
-| H | 4 | `review` `verify_fixes` `list_findings` `review_report` |
+| H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
 
 **B 的动作表 2026-10-13 起重新算进这一栏**（业主「补 M 到 B」）；**F / V 的动作表没变，只是主控够不到它们**（仍走 `M→D→F` / `M→D→F→V`）（上面这张表数的是
 `ALLOWED_EDGES["M"]` 覆盖到的角色的动作之和，见 `tests/test_role_specs_action_table.py`）。

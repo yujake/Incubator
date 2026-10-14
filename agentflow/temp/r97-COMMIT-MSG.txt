@@ -1,0 +1,77 @@
+R97（goal 第 3 轮）：B 唤起 H —— 边、H 的动作、快照重冻（禁改区已按流程签名）
+
+业主 2026-10-14 的两条裁定一起落地：「允许 B 和 H 协作，B 唤起 H」+
+「回验……保持语义相同即可」。上一轮做完了判据本体（`quote.same_meaning`），
+这一轮把**协作那一条链**接上。
+
+## 一、H 的动作（`specs/h.py` + `agent_h/judge_quote_semantics.py`）
+
+`H.judge_quote_semantics(quote, span, statement, where, relation_id, stmt_id)`：
+把材料喂给上一轮那条判据（`judges.quote_semantics_judge_for`），返回
+`{tri, verdict, same_meaning, quote_mode, quote_reason, judge, call, span, where, …}`。
+
+两条纪律写实：
+
+- **只判不写** —— H 的落库代理仍钉死在 `review_findings` / `documents.status` 上
+  （`agent_h/__init__.py` 三条"只读由什么保证"一条没破）：判定与证据交回**唤起方 B**，
+  由 B 用它自己的写面回填 `quote_verified` / `quote_mode`。判与落分居两处，
+  与"发现者不许同时是修正者"同一条纪律。
+- **没有 key ⇒ 没查**：缝只在 `run-agent --semantic-review` 时才接到 H 手上（默认确定性），
+  所以默认路径下这一件回 `tri=unreadable` + `judge_not_wired` —— 那句话本身就是如实读数，
+  不是通过、也不是不通过。材料不全（缺引文/缺来源片段）当场拒，不许"凭印象判一下"。
+
+## 二、边（`specs/b.py`）
+
+`edges=('C', 'H', 'V')`，注释里逐字写清分工与理由：逐字那一档 B 自己走
+（`quoteverify.check_quote`，不花模型钱，先走它）；**逐字不中而语义相同**的
+（作者自己改写、换记号、跨语言的引文）由 H 判、B 回填 `quote_mode="semantic"`。
+`capabilities.py` 的 `_KNOWN_UNMATCHED_ACTIONS` 按准入纪律登记
+`H.judge_quote_semantics`（H 的角色级只读方法，工具层没有同名工具，不是转发 ——
+也**不该**塞进 `quoteverify.check_quote`：那会让"引文级证据"的口径取决于模型）。
+
+真读数：**边 31 → 32**、**动作 59 → 60**、`B → {C, H, V}`、`H` 的动作 4 → 5。
+
+## 三、快照重冻（`tests/golden/agent_surface_snapshot.json`）
+
+`python -B tests/test_agent_surface_snapshot.py --write`，diff 逐格看过，只有四类：
+① `B.edges`（+H）；② `H.actions`（+`judge_quote_semantics`）；③ `B` 的
+`register_statement` 多一个 `quote_mode` 参数（上一轮的）；④ 各角色提示词里**伙伴表**
+随边表变化的那几行（H 的"谁能唤起它"多了 B）。没有一处是"顺手改的声明"。
+
+## 四、文档计数同步
+
+- `docs/ROLE-SPECS.md`：§0.5 边总数 31→32（+ 2026-10-14 那一条的来龙去脉）、
+  每角色边表 `B` 行 `C V`→`C H V`、§0.7 动作表 59→60 且 H 行 4→5 加上
+  `judge_quote_semantics`、§M.4.1 标题 52→53 个可召唤动作；
+- `docs/READING-MAP.md` §3：四处行数按盘上实际同步（capabilities/schema/cli/agent_b core）。
+
+## 五、判据
+
+- 新增（`tests/test_quote_semantics.py`，22 → 24）：
+  `test_the_h_action_says_unchecked_without_a_key`（没有 key ⇒ `tri=unreadable` +
+  `same_meaning=None` + 理由里是"没判成"，映射回 `(None, "")`）、
+  `test_the_h_action_refuses_incomplete_material`（缺来源片段 ⇒ 拒，理由"材料不全"）；
+- 修三处"数字型判据"（它们本来就是为这种改动准备的）：
+  `test_policy` 的 B 边断言 + 主控边负控、`test_agent_spec_reconciliation` 的边总数、
+  `test_role_specs_action_table` 的负控夹具那一行。
+  ⚠️ 主控边负控换了一刀：边表变密之后**单删一条不再造成"够不到"**
+  （删 `M→H` 还有 `M→B→H`），所以改成删**主控的全部直接出边** —— 仍守原意，只是换一刀真的割。
+
+## 六、FC-27（业主已授权）
+
+门判 `requires_human`（4 条：`capabilities.py`、`specs/b.py`、`specs/h.py`、
+`agent_surface_snapshot.json`）⇒ 台账签名 `--reviewer-a Yu --reviewer-b Jiaqi` ⇒
+`--check-approvals` 复核通过（`2cf13ecec4b2` / `c1928fa421f3` / `9a96d72a7674` / `a74fcea48e5b`）。
+门自己的告诫照记：它只证明台账里有 2 个不同名字，**证明不了两次走查真的互相独立**。
+
+## 本机实跑
+
+- `pytest tests/test_quote_semantics.py -q` ⇒ **24 passed**；
+- `pytest tests/test_policy.py tests/test_agent_spec_reconciliation.py
+  tests/test_agent_surface_snapshot.py tests/test_quote_semantics.py
+  tests/test_capabilities_two_layer.py -q` ⇒ **94 passed**；
+- `pytest tests/test_role_specs_action_table.py tests/test_reading_map.py -q` ⇒ **31 passed**。
+
+下一轮（goal 4/20）：B 那一侧的**回填**落点（模型驱动的 B 拿 H 的判定写回
+`quote_verified`/`quote_mode`/`quote_reason`：给出可判的路径或工具面说明）
++ 一条端到端判据 + 用 T1-2 那段真数据复验（`relations` 的 `quote_verified` 不再整列 `null`）。

@@ -197,7 +197,7 @@ def test_negative_control_a_deleted_row_is_caught(tmp_path: pathlib.Path, monkey
     import sys
 
     text = DOC.read_text(encoding="utf-8")
-    good = "| H | 4 | `review` `verify_fixes` `list_findings` `review_report` |"
+    good = "| H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |"
     bad = "| H | 3 | `review` `verify_fixes` `list_findings` |"
     assert good in text, "夹具前提变了：文档里 H 那一行不是判据假设的写法"
     fake = tmp_path / "ROLE-SPECS.md"

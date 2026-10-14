@@ -2469,6 +2469,13 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     "E.run_script_experiment",
     "G.render", "G.refresh_markdown", "G.revise",
     "H.review",
+    # 2026-10-14（业主：「允许 B 和 H 协作，B 唤起 H」+「回验……保持语义相同即可」）：
+    # `judge_quote_semantics` 是 H 的角色级只读方法（`agent_h/judge_quote_semantics.py`：
+    # 把材料喂给 `judges.quote_semantics_judge_for` 的缝，判完把结论交回调用方，
+    # **不碰任何表** —— H 的落库代理仍钉死在 review_findings/documents 上）。
+    # 工具层没有同名工具（它不是转发，也不该是：塞进 `quoteverify.check_quote`
+    # 会让"引文级证据"的口径取决于模型），所以它诚实地落进 unmatched 这一格。
+    "H.judge_quote_semantics",
     # `D-5`：`review_report` 转发 `review.report`，而工具名的最后一段是 `report`、
     # 本动作的 `handler_name` 是 `review_report` ⇒ `_matching_tool_name` 对不上
     # （唯一性约定要求逐字同名），于是它诚实地落进 `unmatched` 这一格。

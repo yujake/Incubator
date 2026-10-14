@@ -225,3 +225,40 @@ def test_a_broken_answer_is_unchecked_not_a_pass(tmp_path) -> None:
     verified, mode, _reason = JG.quote_fields_from_verdict(got["verdict"], got["why"])
     assert (verified, mode) == (None, ""), got
 
+
+# ============================================================ 5 H 那一件（B 唤起 H 的落点）
+def _h(tmp_path):
+    from agentflow.agent_h import AgentH
+    from agentflow.store import Store
+
+    root = tmp_path / "ws-h"
+    root.mkdir()
+    Store(root).init()
+    return AgentH(Store(root))
+
+
+def test_the_h_action_says_unchecked_without_a_key(tmp_path) -> None:
+    """没有 key（H 默认没有模型缝）⇒ 如实回「没查」，`same_meaning=None`。
+
+    真机默认路径就是这一档：缝只在 `run-agent --semantic-review` 时才接到 H 手上。
+    这一条钉的是"没有 key 时如实回没查"（业主那一句的后半段），
+    不是通过、也不是不通过。
+    """
+    got = _h(tmp_path).judge_quote_semantics(quote="The distance is the number of walls.",
+                                             span="The distance equals the number of walls.",
+                                             where="main.tex:120", relation_id="0001")
+    assert got["tri"] == "unreadable", got
+    assert got["same_meaning"] is None, got
+    assert got["judge"] == "H", got
+    assert "没判成" in got["reason"] or "judge_not_wired" in got["reason"], got
+    verified, mode, _reason = __import__("agentflow.judges", fromlist=["x"]) \
+        .quote_fields_from_verdict("unknown", got["reason"])
+    assert (verified, mode) == (None, ""), (verified, mode)
+
+
+def test_the_h_action_refuses_incomplete_material(tmp_path) -> None:
+    """材料不全（缺引文或缺来源片段）⇒ 明确拒绝，不许"凭印象判一下"。"""
+    got = _h(tmp_path).judge_quote_semantics(quote="只有引文，没有来源那一段")
+    assert got["tri"] == "unreadable" and got["same_meaning"] is None, got
+    assert "材料不全" in got["reason"], got
+

@@ -11,6 +11,7 @@ from .review import _Review
 from .verify_fixes import _VerifyFixes
 from .list_findings import _ListFindings
 from .review_report import _ReviewReport
+from .judge_quote_semantics import _JudgeQuoteSemantics
 
 
 class _Core:
@@ -136,7 +137,8 @@ class _Core:
             return 1
 
 
-class AgentH(_Review, _VerifyFixes, _ListFindings, _ReviewReport, _Core):
+class AgentH(_Review, _VerifyFixes, _ListFindings, _ReviewReport,
+             _JudgeQuoteSemantics, _Core):
     """审校智能体。
 
     两个注册表是刻意分开的，它们的区别就是"H 只读"这条约束本身：

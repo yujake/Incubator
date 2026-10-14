@@ -80,6 +80,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
     # `assert_capabilities` 第 [2] 条会 `getattr` 核它真的存在（编造动作名
     # 在导入期就炸），而参数表是主控构造调用时唯一机器可读的依据。
     ActionSpec(
+        "H", "judge_quote_semantics",
+        "判一条引文与来源**是不是说同一件事**（业主 2026-10-14：「回验不应该是十分呆板的"
+        "逐字验证，而是保持语义相同即可」）—— 允许改写/换记号/跨语言，但引文把来源的结论"
+        "**加强**了不算通过。只判不写：判定与证据交回调用方（B），由 B 回填 "
+        "quote_verified / quote_mode。没有模型缝（没有 key）时如实回「没查」",
+        _obj({"quote": _S, "span": _S, "statement": _S, "where": _S,
+              "relation_id": _S, "stmt_id": _S}),
+        "dict（tri / verdict / same_meaning / quote_mode / quote_reason / judge / "
+        "call / span / where / relation_id / stmt_id / reason）",
+        side_effect="read", handler_name="judge_quote_semantics",
+    ),
+
+    ActionSpec(
         "H", "review_report",
         "产出 G1–G15 的完整审校报告（markdown 落盘，转发 review.report）",
         _obj({"doc_id": _S, "own_errors": _ARR_S, "round_no": _I,

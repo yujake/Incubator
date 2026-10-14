@@ -245,7 +245,14 @@ SPEC = AgentSpec(
     #: 才谈得上下游采信（H 的采信规则里"E 的 proof 或 V 的签名"那一条）。
     #: 在这条边之前 B 够不着 V（只能经 D/C 或 M 转达两次），链断在哪里在台账上看不出来。
     #: 加这一条不动任何动作的权限面，只把"B 可以直接请 V 签字"说成真的。
-    edges=('C', 'V'),
+    #: 业主 2026-10-14：「允许 B 和 H 协作，B 唤起 H」—— 理由是那条引文回验的口径改了：
+    #: 「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。
+    #: 分工：逐字那一档 B 自己走（`quoteverify.check_quote`，不花模型钱，先走它）；
+    #: 逐字不中而**语义相同**的（作者自己改写、换记号、跨语言的引文）由 **H 判**，
+    #: B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"`
+    #: （H 只读、且它的落库代理被钉死在 review_findings/documents 上 ⇒ "判"与"落"分居两处）。
+    #: 在这条边之前 B 够不着 H，于是那些语义相同的引文只能一直挂着 `quote_verified=null`。
+    edges=('C', 'H', 'V'),
     write_set=frozenset((
                      # S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役 ⇒ 从写集里摘掉。
                      # 概念行现在住 `statements`（`kind="concept"`，已经在这一格里），

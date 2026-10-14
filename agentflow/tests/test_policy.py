@@ -151,7 +151,11 @@ def test_allowed_edges_match_design_table():
     # （`origin=external_lit` + 逐字 `proof_text`）之后，那份证明要 V 先做一次逐行走查，
     # 下游（H 的采信规则）才谈得上用它；在这条边之前 B 只能转两次手才够得着 V。
     # 这一条只加"B 可以直接请 V 签字"，`V` 的只读/冷启动面与它自己的出边一个字未动。
-    assert C.ALLOWED_EDGES["B"] == frozenset({"C", "V"})
+    # 2026-10-14（业主裁定逐字：「允许 B 和 H 协作，B 唤起 H」）：理由是引文回验的口径
+    # 改了 ——「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。逐字那一档 B
+    # 自己走（`check_quote`，不花钱）；**逐字不中而语义相同**的由 H 判，B 拿判定回填
+    # `quote_verified` + `quote_mode="semantic"`。H 的只读面与它的落库代理一个字未动。
+    assert C.ALLOWED_EDGES["B"] == frozenset({"C", "H", "V"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})
     assert C.ALLOWED_EDGES["E"] == frozenset({"B", "D"})
     assert C.ALLOWED_EDGES["F"] == frozenset({"A", "B", "C", "D", "E", "V"})
@@ -194,18 +198,23 @@ def test_negative_control_missing_a_role_in_the_conductor_edges_is_rejected():
     实测（R4 批）：把 `ALLOWED_EDGES["M"]` 写成 7 元字面量后，
     按权限相关的 7 个测试文件跑子集全绿（守点在别处）。
 
-    ## 2026-10-10 口径更新（裁定第 4 条之后）
+    ## 2026-10-10 口径更新（裁定第 4 条之后）+ 2026-10-14 的第二次收紧
 
     改前这里删的是最后一条直接边（因为当时"够得到"等价于"直接边里有它"）。
     裁定之后"直接边里有它"不再是必要条件 ⇒ 删直接边不再必然让判据炸
-    （删 B / F / V 正是裁定要的形态）。所以负控改成删一条会被别人间接补回来也不算够
-    的边：这里删 `H`（H 的进路只有主控这一条，删掉它以后整个图里到不了 H）——
-    `test_the_three_indirect_roles_still_have_a_path` 从另一面钉住"间接那三条还在"。
+    （删 B / F / V 正是裁定要的形态）。
+
+    2026-10-14（业主裁定「允许 B 和 H 协作，B 唤起 H」）之后**单删一条也不再炸**：
+    边表更密了 —— 删 `M→H` 还有 `M→B→H`，删 `M→G` 还有 `M→B→H→G`，
+    删 `M→A` 还有 `M→B→H→A`……除 F 之外每个角色都有第二条进路，而 F 走 `M→D→F`
+    也够得着。所以这一条负控改成删**主控的全部直接出边**（那是一刀真正的割）：
+    那时整张图里没有一个角色够得到，`assert_capabilities()` 必须报"到不了这些角色"。
+    这样改仍守着原来的意图（"够不到就得炸"），只是换了一刀真的会造成够不到。
     """
     original = frozenset(C.ALLOWED_EDGES["M"])
     assert original == frozenset({"A", "B", "C", "D", "E", "G", "H"}), \
         "前提：真表上主控的直接出边就是这七条（裁定第 4 条 + 2026-10-13「补 M 到 B」之后）"
-    C.ALLOWED_EDGES["M"] = frozenset(sorted(original)[:-1])   # 去掉 'H'
+    C.ALLOWED_EDGES["M"] = frozenset()
     try:
         with pytest.raises(AssertionError, match="到不了这些角色"):
             C.assert_capabilities()
