@@ -37,12 +37,51 @@ const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
   { key: "toolchain.coq_bin", hint: "Coq 落点（没有就留空）" },
   { key: "toolchain.isabelle_bin", hint: "Isabelle 落点（没有就留空）" },
   { key: "toolchain.lean_enabled", hint: "true / false —— 缺省 false（省钱档）" },
- { key: "model.api_key", hint: "只写不读；写进去之后回执里恒为 *" },
-  { key: "model.base_url", hint: "留空 = 用内置缺省端点" },
+  { key: "model.vendor", hint: "厂商名（留空 = 按 base_url/内置缺省；例：deepseek）" },
+  { key: "model.api_key", hint: "只写不读；写进去之后回执里恒为 *" },
+  { key: "model.base_url", hint: "留空 = 用内置缺省端点（给了 vendor 就按它选）" },
   { key: "model.name", hint: "留空 = 用内置缺省模型" },
   { key: "model.reasoning_effort", hint: "off / low / high / max" },
+  { key: "secretary.api_key", hint: "所有角色的秘书共用这一把 key（留空 = 秘书沿用它本体那一档）" },
+  { key: "secretary.vendor", hint: "秘书那一档的厂商（留空 = 跟随 base_url）" },
+  { key: "secretary.base_url", hint: "秘书那一档的端点" },
+  { key: "secretary.name", hint: "秘书那一档的模型名" },
+  { key: "secretary.reasoning_effort", hint: "off / low / high / max" },
   { key: "workspace.projects_dir", hint: "默认项目目录（留空 = 工作区自己那一个）" },
 ];
+
+/** 十个角色（`schema.ROLES` 的十个字母；`models.<角色>.<键>` 是三段形状）。 */
+const ROLES: readonly string[] = ["A", "B", "C", "D", "E", "F", "G", "H", "V", "M"];
+
+/** 按角色那一档要填的键（业主 2026-10-14：「允许不同角色智能体用不同模型厂商的不同 api key」）。
+ *
+ * 只给"换厂商 / 换端点 / 换模型 / 换 key"四格：逐角色配全套等于让人在十个角色上抄五遍
+ * 同一份配置，而梯子（`models.<角色>` → `models.default` → `model`）本来就是为"只改一格"
+ * 设计的 —— 留空即沿用下一档。
+ */
+const ROLE_FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
+  { key: "vendor", hint: "厂商名（例：deepseek；留空 = 沿用）" },
+  { key: "api_key", hint: "这个角色自己的 key（只写不读；留空 = 沿用）" },
+  { key: "base_url", hint: "端点（留空 = 沿用）" },
+  { key: "name", hint: "模型名（留空 = 沿用）" },
+];
+
+/** 按角色那一档现读的值（`settings.models.<角色>.<键>`）。 */
+function roleValue(settings: SettingsReading, role: string, key: string): string {
+  const models = (settings as unknown as Record<string, unknown>).models;
+  if (models === undefined || models === null || typeof models !== "object") {
+    return "";
+  }
+  const seg = (models as Record<string, unknown>)[role];
+  if (seg === undefined || seg === null || typeof seg !== "object") {
+    return "";
+  }
+  const raw = (seg as Record<string, unknown>)[key];
+  if (raw === undefined || raw === null) {
+    return "";
+  }
+  return typeof raw === "string" ? raw : String(raw);
+}
 
 /** 从 `Record<string, unknown>` 里读一格：读不到 ⇒ `unknown`（不是空串、不是 false）。 */
 function field(rec: Record<string, unknown>, key: string): string {
@@ -378,6 +417,35 @@ export function Machine() {
             </label>
           ))}
         </div>
+        {/* 按角色那一档（业主 2026-10-14）：十个角色各四格，留空 = 沿用下一档。
+            表单键是三段的 `models.<角色>.<键>` —— 后端 `handle_settings` 对
+            `models` 那段再切一刀（`writes.py`），其余段仍是两段。 */}
+        <div class="readings">
+          按角色配模型（留空 = 沿用 `models.default` / `model` 那两档；号与键都由后端现取）
+        </div>
+        {ROLES.map((role) => (
+          <div class="readings" key={role}>
+            <span class="mono">models.{role}</span>
+            {ROLE_FIELDS.map((rf) => (
+              <label class="opt" key={rf.key}>
+                <span class="mono">{rf.key}</span>
+                <input
+                  type={rf.key === "api_key" ? "password" : "text"}
+                  placeholder={
+                    roleValue(settings, role, rf.key) === ""
+                      ? `${rf.hint}（盘上没设过）`
+                      : rf.hint
+                  }
+                  value={values[`models.${role}.${rf.key}`] ?? roleValue(settings, role, rf.key)}
+                  onInput={(ev) => {
+                    const v = ev.currentTarget.value;
+                    setValues((old) => ({ ...old, [`models.${role}.${rf.key}`]: v }));
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+        ))}
         <ConfirmButton
           action="写这些设置"
           impact={`会改盘上那份设置文件（${settings.path === "" ? "落点没读到" : settings.path}）：

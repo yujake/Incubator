@@ -1663,12 +1663,20 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("auxiliary", "Record<string, string>"), ("failed", "string[]"),
       ("auxiliary_note", "string"))),
     ("SettingsReading",
-     "machine_face() 的 `settings` —— 设置文件三段（key 只给掩码后的那一份）",
+     "machine_face() 的 `settings` —— 设置文件的各段（key 只给掩码后的那一份）",
      (("path", "string"), ("exists", "boolean"),
       ("toolchain", "Record<string, string>"),
-      ("model", "{ api_key: string; base_url: string; name: string; "
+      ("model", "{ vendor: string; api_key: string; base_url: string; name: string; "
                 "reasoning_effort: string; key_source: string; "
                 "configured: boolean }"),
+      # 按角色那一档（业主 2026-10-14）：槽 → 那一档的读数（key 一律掩码）。
+      ("models", "Record<string, { api_key: string; base_url: string; name: string; "
+                 "reasoning_effort: string; key_source: string; configured: boolean; "
+                 "source: string }>"),
+      # 秘书那一档（全角色共用）：读数同上一格 + 那一档自己的原文（key 也掩码）。
+      ("secretary", "{ api_key: string; base_url: string; name: string; "
+                    "reasoning_effort: string; configured: boolean; source: string; "
+                    "own_slot?: Record<string, string> }"),
       ("workspace", "Record<string, string>"), ("raw_keys", "string[]"))),
     ("MachineView",
      "machine_face() —— toolchain.toolchain_report() 的键 + 设置三段",

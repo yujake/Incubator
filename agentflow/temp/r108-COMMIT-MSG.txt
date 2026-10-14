@@ -1,0 +1,38 @@
+R108 设置面板接上"按角色 + 秘书"两档（业主 2026-10-14 裁定 ① 的台面那一半）
+
+业主原话：「**更新设置面板与相应文件**，允许不同角色智能体用不同模型厂商的不同 api key
+（所有智能体的秘书另外共用一个 api key）」。R107 落了设置文件与取缝那一半，本批落台面。
+
+## 一、写路径：表单键可以是三段
+
+`POST /api/settings` 的表单是平的（`段.键`），而按角色那一档的键是
+`models.<角色>.<键>` ⇒ `webui/writes.handle_settings` 对 `models` 那一段**再切一刀**，
+其余段仍是两段（`toolchain.lean_bin` 这种一字未动）。负控在
+`tests/test_role_models.py` 里：槽名拼错一律拒且零写入。
+
+## 二、设置窗口（`ui/src/pages/Machine.tsx`）
+
+- `FIELDS` 加了 `model.vendor` 与 `secretary.*` 五格（秘书那一档：**所有角色的秘书共用**）；
+- 新增"按角色配模型"一块：十个角色（`A`–`H`/`V`/`M`）× 四格
+  （`vendor` / `api_key` / `base_url` / `name`），键是三段的
+  `models.<角色>.<键>`，每格初值取盘上现值、留空即"这一格不动"（沿用下一档）；
+- 每格 `api_key` 用 password 输入框；页面照旧**永远不显示 key 的值**
+  （后端给的就是掩码，前端拿不到真值这条通路）。
+
+## 三、读数与类型
+
+- `GET /api/machine` 的 `SettingsReading` 类型声明补上 `models` 与
+  `secretary` 两格（`webui/readers.type_decls` 是唯一来源，`ui/src/types.ts` 由
+  `web.exec_types.write_types()` 再生成）；
+- 前端 `Machine.tsx` 的"设置三段"那张表仍然只列平的三段；按角色那一档的读数挂在
+  写窗口的每一格初值上（打开即可见"盘上现在是哪把 key 的槽"）。
+
+## 四、判据与产物
+
+- `tests/test_webui_contracts.py`（26 条，含 C 条类型对账：后端有而 types.ts 没有的键
+  必须为空）、`test_webui.py` / `test_webui_readers.py` / `test_webui_settings_write.py` /
+  `test_webui_static.py` / `test_webui_pages.py` / `test_webui_writes.py` +
+  `test_role_models.py` 共 **183 passed**；
+- `pnpm run typecheck` 干净、`pnpm run build` 重出产物（`web/static/assets/index.8uwWWrhL.js`，
+  旧的 `index.i6veg6k4.js` 删除、`index.html` 跟着改指向）—— 三者都在同一笔里提交，
+  否则页面会引一个不存在的 bundle。

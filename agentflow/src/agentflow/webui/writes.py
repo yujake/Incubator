@@ -407,12 +407,19 @@ def handle_settings(handler: Any, params: Mapping[str, str],
     form = handler._form()
     root = Path(handler.root)
     source, _why = _source_of(handler)
-    values: dict[str, dict[str, str]] = {}
+    values: dict[str, dict[str, Any]] = {}
     for raw_key, vals in form.items():
         if "." not in str(raw_key):
             continue                      # confirm 之类的顶层字段不进设置
-        section, key = str(raw_key).split(".", 1)
-        values.setdefault(section, {})[key] = _text(vals[0]) if vals else ""
+        text = _text(vals[0]) if vals else ""
+        section, rest = str(raw_key).split(".", 1)
+        # `models` 是**三段**的键（`models.<角色>.<键>`，业主 2026-10-14 的按角色配置）：
+        # 表单是平的，所以这里再切一刀；其余段仍是两段。
+        if section == SET.MODELS_SECTION and "." in rest:
+            slot, key = rest.split(".", 1)
+            values.setdefault(section, {}).setdefault(slot, {})[key] = text
+        else:
+            values.setdefault(section, {})[rest] = text
     allowed, code, why = authorize(handler, endpoint="POST /api/settings",
                                    need_settings=True)
     if not allowed:

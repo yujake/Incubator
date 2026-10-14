@@ -289,12 +289,14 @@ export interface AcceptanceView {
   auxiliary_note: string;
 }
 
-/** 出处：machine_face() 的 `settings` —— 设置文件三段（key 只给掩码后的那一份）。 */
+/** 出处：machine_face() 的 `settings` —— 设置文件的各段（key 只给掩码后的那一份）。 */
 export interface SettingsReading {
   path: string;
   exists: boolean;
   toolchain: Record<string, string>;
-  model: { api_key: string; base_url: string; name: string; reasoning_effort: string; key_source: string; configured: boolean };
+  model: { vendor: string; api_key: string; base_url: string; name: string; reasoning_effort: string; key_source: string; configured: boolean };
+  models: Record<string, { api_key: string; base_url: string; name: string; reasoning_effort: string; key_source: string; configured: boolean; source: string }>;
+  secretary: { api_key: string; base_url: string; name: string; reasoning_effort: string; configured: boolean; source: string; own_slot?: Record<string, string> };
   workspace: Record<string, string>;
   raw_keys: string[];
 }
