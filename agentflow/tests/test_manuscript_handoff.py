@@ -310,3 +310,51 @@ def test_every_role_can_read_and_list_but_writing_is_a_loop_shape(tmp_path: path
         assert "manuscripts.write" not in names, (role, "写手稿不该在工具面上")
     m_names = {t.name for t in reg.for_role(S.CONDUCTOR_ROLE)}
     assert not ({"manuscripts.read", "manuscripts.list"} & m_names), sorted(m_names)
+
+
+def test_the_reference_surface_covers_questions_and_conjectures(tmp_path: pathlib.Path):
+    """引用面认得 `q:` / `c:`（2026-10-14 真机读数），且**没有放松"引的东西必须存在"**。
+
+    真机读数：一次跑里 M 派的活带着 `refs=["q:000000"]`（它要引自己派出去的那条研究问题），
+    而引用面当时只有 `stmt/exp/lit/rel` ⇒ 报「前缀不认识」。后果不是"M 被拦住了"
+    （`refs` 立不住只记读数、不拒写），而是**那一份手稿退回成「框架据派活派生」的那一行**
+    —— 模型自己写的那份留痕静默地没了。所以加 `q`（research_questions）与 `c`（conjectures）。
+
+    这条判据同时守另一半（负控）：**加了前缀不等于放宽核验** ——
+    编号不存在时照样立不住，不认识的前缀照样被拒，被拒的理由里要能读到那张词表。
+    """
+    root = tmp_path / "ws"
+    (root / "data").mkdir(parents=True)
+    qid = S.format_id(0)
+    cid = S.format_id(1)
+    (root / "data" / "research_questions.json").write_text(
+        json.dumps({"rows": [{"question_id": qid}]}, ensure_ascii=False), encoding="utf-8")
+    (root / "data" / "conjectures.json").write_text(
+        json.dumps({"rows": [{"conjecture_id": cid}]}, ensure_ascii=False), encoding="utf-8")
+
+    assert MS.ref_problem(root, f"q:{qid}") == "", MS.ref_problem(root, f"q:{qid}")
+    assert MS.ref_problem(root, f"c:{cid}") == "", MS.ref_problem(root, f"c:{cid}")
+    # 负控一：编号不存在 ⇒ 照样立不住（"加了前缀"没有把核验变成走过场）
+    bad_q = MS.ref_problem(root, f"q:{S.format_id(99)}")
+    assert "不在" in bad_q and "research_questions" in bad_q, bad_q
+    # 负控二：不认识的前缀 ⇒ 照旧被拒，且理由里列着词表（含新加的两个）
+    bad_z = MS.ref_problem(root, "z:0000")
+    assert "前缀不认识" in bad_z, bad_z
+    assert "q" in bad_z and "c" in bad_z, bad_z
+    # 原来那四个照旧（不许把老前缀挤掉）
+    for ns in ("stmt", "exp", "lit", "rel"):
+        assert MS.OBJECT_REFS[ns], ns
+
+
+def test_the_two_new_prefixes_land_in_the_handoff_row_readings(tmp_path: pathlib.Path):
+    """落到手稿那一行上：`q:` 立得住时行里**不该**出现 `ref_problems`（三态不许折平）。"""
+    root = tmp_path / "ws"
+    (root / "data").mkdir(parents=True)
+    qid = S.format_id(0)
+    (root / "data" / "research_questions.json").write_text(
+        json.dumps({"rows": [{"question_id": qid}]}, ensure_ascii=False), encoding="utf-8")
+    rec = MS.write(root, sender="M", recipient="D", summary="派一条研究问题",
+                   body="按它走。", refs=[f"q:{qid}"])
+    assert "ref_problems" not in rec, rec
+    rd = MS.ref_readings(root)
+    assert rd["rows_with_refs"] == 1 and rd["count"] == 0, rd

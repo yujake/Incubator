@@ -421,3 +421,23 @@ def test_the_registered_roots_cover_the_paths_we_actually_name():
     assert not outside, f"这些落点不在根表里：{outside}"
     # 表本身就是两张子表的并集（不许有人另写第三张）
     assert set(AS.PATH_ROOTS) == set(AS.WORKSPACE_PATH_ROOTS) | set(AS.REPO_PATH_ROOTS)
+
+
+def test_the_index_says_to_read_it_now_and_says_why():
+    """索引里必须有一句**祈使**（"对上了就现在读"）与**理由**（手册给的是步骤与反面形态）。
+
+    为什么判这一句（2026-10-14 真机读数）：两次真跑（3 次与 16 次模型调用）里，
+    索引在提示词里、`skills/` 也落了盘，而**正文一次都没被读过** ——
+    模型凭提示词里的口径就把活干完了。行为判不了（那是模型的自由），
+    但"有没有把这个选择讲清楚"判得了：提示词只给口径（每一格都要成立），
+    手册给的是**这一档的具体步骤与反面形态** —— 这一句就是把那个差别说出来。
+
+    与它配对的那条判据（索引里不许出现正文）仍然守着另一头：
+    这一句是**祈使**，不是把正文抄进来。
+    """
+    block = AS.index_block("M")
+    assert "对上了就现在读" in block, block[:300]
+    assert "具体步骤" in block and "反面形态" in block, block[:300]
+    # 反真空：每个角色的索引里都有这一句（不是只给 M 开了小灶）
+    for role in ("A", "B", "C", "D", "E", "F", "G", "H", "M", "V"):
+        assert "对上了就现在读" in AS.index_block(role), role

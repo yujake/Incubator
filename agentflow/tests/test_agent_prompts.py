@@ -2333,18 +2333,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: （先读懂再谈证；`SURVEY` 的 D 那一格同步补名）；E 的「小例先行」**正文**加一节
 #: 「特例是拿来看结论本身的」。作用域读数：**只有 D 一格换值** ——
 #: 索引印的是 `summary` / `when`，E 改的是正文，所以 E 的前置提示词逐字未动。
-_FROZEN_PROMPT_VERSION = "p111"
+#: p111 → p112（2026-10-14，**真机读数驱动**）：索引那一段加一句祈使 + 理由 ——
+#: 「对上了就现在读：手册里写着这一档的具体步骤与反面形态」。起因是两次真跑
+#: （3 次与 16 次模型调用）里索引在提示词里、`skills/` 也落了盘，而正文**一次都没被读过**。
+#: 作用域读数：十格**全动**（那一句在每个角色的索引里）。
+_FROZEN_PROMPT_VERSION = "p112"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "8ce6c71410d9766fbffc9b7ec13a24912de373621c44398a0506033edb868932",
-    "B": "80904ff16556ebf6c6f4597f7137629e46d39d1a85d9875a66e00ad05f29fc6d",
-    "C": "7f84953788257f1bb70e850167a769e847a9422a0d30c469e8f8d2af62b1dae7",
-    "D": "d5c44ae5915e17f6b01533b90b14f0cfae18a6e8ccaa348c817d1011c7c8bba4",
-    "E": "2a28ba4ab6c6b0053ce0617dc6600e45de71246c94397bd5a77a73d00b122513",
-    "F": "5316ed7bc7e9eb0df01c14d7eaf5346d2ef7fa56e24336ab6786e5b9bb6ebb0b",
-    "G": "54661e42bf8c61ad53917329d5111dc65800b2ccbe1d3da0499bfaeb6ceab8d5",
-    "H": "7071d26db3401274fcd8fe58213f72bc5838f57923c008f0d74e4e6e91bc2e2c",
-    "M": "c6594fa1506bd65e6d944b84f80eea7a98b2ffe914af290b1f557313db2e8cb1",
-    "V": "5d51cebfc121b8b2afc5fd6e39c4d99eac8308ab08945a66365cd8752d62cfb4",
+    "A": "313b24a114f7a560c2505af8578c2303d638cd837d8fdb5eecadd93d0bd006da",
+    "B": "82bd6f7e211dce1d324ba12c17a98c2dce6ddff3792ae01a24637822cd793514",
+    "C": "4ad1339d41286052608923bc4fd96c6260e7be6e2d77383b9b6aa2e87e22aa6f",
+    "D": "fec5fdb8bab0bc66e7c4ba101e9aa9fc81bb55d573b13101b1fc9e4165bdf135",
+    "E": "75e1594acfb63888e2501eb610192a0f9653cb349491fd714721ae29067de92a",
+    "F": "eaa24cccb4bb17fbe0b05c677f32f69ecb8d5aa6cc17de680a578850b0cd3cf5",
+    "G": "f2d29b2b3c4496ac07bb8938a7deae03e5340cbf1186fbcc64782d3c9c07bace",
+    "H": "9fa608493b8e3b00a2c3c74fe64e82be21a1744151aefe7ac89890bde4605ceb",
+    "M": "1b69ec3b3c22b521b3cb988de60b9badc1dbaf2bf86e33a9043e0fa0ec583ed9",
+    "V": "a7f778a3e27caf00ba248c974f64a4878896a9e5a74ac46b71e25bb7a888e34a",
 }
 
 

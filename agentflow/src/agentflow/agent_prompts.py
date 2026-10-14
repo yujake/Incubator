@@ -399,7 +399,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （来源 `understanding-problems-*`：先读懂再谈证；`SURVEY` 的 D 那一格同步补名）；
 #: E 的「小例先行」正文加一节「特例是拿来看结论本身的」（来源 `examination-of-special-cases-*`）。
 #: 作用域：只有 **D** 一格换值（E 改的是正文，它的索引行没动）。
-PROMPT_VERSION = "p111"
+#: `p112`（2026-10-14，真机读数驱动）：索引那一段加一句**祈使 + 理由** ——
+#: 「对上了就现在读：手册里写着这一档的具体步骤与反面形态（提示词只给口径，不给这些）」。
+#: 起因：两次真跑（3 次与 16 次模型调用）里索引在提示词里、`skills/` 也落了盘，
+#: 而正文**一次都没被读过**。作用域：十格**全动**（那一句在所有角色的索引里）。
+PROMPT_VERSION = "p112"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
