@@ -757,6 +757,25 @@ def _e_skills() -> tuple[Skill, ...]:
 
 用一个大而全的脚本一次算完：出错时你不知道是哪一步，
 而"跑通了"也不说明任何一步是对的。
+
+## 特例是拿来看**结论本身**的（不只是拿个数）
+
+来源（`examination-of-special-cases-*`）把这一档单列出来，理由值得照抄：
+特例的第一用途不是"算出个数字"，而是**检验这条结论/这个表述撑不撑得住具体的一例**。
+
+- **选特例要有理由**：低参数（宽度取最小）、特殊取值（权重退化、参数成比例）、
+  结构退化（对象变成最简形态）—— 每一例写清"我为什么挑它"；
+- **逐例给结论**：这一例上结论**成立吗**？不许只给一句"小例都还行"的总印象；
+- **成立时也要交东西**：它揭示了什么**简化**、**额外规律**或**结构线索**
+  （"这一例上不等式取等" 往往就是一般证明里那条紧的所在）；
+- **不成立时要说清是哪一种**：是**结论本身错**（那就是反例，走反例那一档），
+  还是**这一例的表述撑不住**（量词/条件写得太强）—— 后者是**严重障碍**级的信息，
+  它改的不是这条证明，而是这条题面（回报 D）。
+
+## 一条纪律
+
+把特例当"举例说明"是最常见的浪费：算完一个数、说一句"符合直觉"，
+既没有检验结论、也没有留下线索 —— 那一趟等于没做这个特例。
 """,
         ),
         Skill(
@@ -1281,6 +1300,46 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
 "这一趟哪三件事是下一趟必须知道的"，把它们写进去。
 """,
         ),
+        Skill(
+            slug="理解-先弄清内涵与外延",
+            title="动手之前先把这条问题弄懂（内涵与外延）",
+            summary="它在说什么、对哪些对象成立、要靠哪些已入库的知识、类比哪一部分可迁移",
+            when="一条问题刚立好、还没定攻法的时候；或反复碰壁而怀疑「是不是我们没读懂题」时",
+            actions=("D.propose_question", "D.assess", "C.neighbors"),
+            tools=("table.get", "table.search", "graph.neighbors", "fs.read"),
+            body="""# 先弄清内涵与外延
+
+来源里的那句话是这条 skill 的全部要点：**先把问题读懂，再谈证它**
+（`understanding-problems-*`：「build a programmatic understanding ... before trying to
+prove, refute, or refine」）。
+
+## 五问（写成一段，不是一张表）
+
+1. **内涵**：这句话到底在断言什么？把"它说了什么"与"它没说什么"分开写；
+2. **外延**：它对**哪些对象**成立（全类？某个子类？参数在什么范围？）——
+   外延写宽了会去证一条假的，写窄了会证一条没用的；
+3. **要用的知识点**：这条问题踩在哪些**已入库的**结论上（`table.search` 给 `stmt:` 那一行）；
+   踩不到的空白就是 `D.submit_gaps` 的活；
+4. **打算试的方法**：两到三种，各一句"为什么可能行"；
+5. **结构类比**：这条问题的形状在哪儿见过（另一个领域 / 另一张图 / 另一类对象）——
+   而且要**分开写**"哪一部分可以迁、哪一部分不能迁"。
+
+## 一条硬纪律：可以迁移的判断被推翻时要**明说**
+
+来源里那句 Notes 是这一条：**"If repeated attempts reveal that the analogy or background
+transfer is misleading, state that failure clearly instead of forcing a weak interpretation."**
+也就是说：类比是用来**生成假设**的，不是用来硬撑的。发现"这个类比其实不成立"时，
+写进手稿（「尝试与失败」那一节）并说清**是类比错了、还是这条问题本身站不住** ——
+**不许**为了保住原来的思路，把一个弱解释说成"大致对得上"。
+
+## 与"立题四问"的分工
+
+`立题-精确到能动手` 判的是**收不收这条题**（影响 / 可行 / 新意 / 延展）；
+这一条判的是**收下之后怎么读懂它**。两件都要做，顺序是：先立题，再理解 ——
+但立题时那四问里的"可行"要先有一条**读懂了**的题面才谈得上，所以两条在真跑时是咬着的
+（先粗读、立题、再细读、回头修题面）。
+""",
+        ),
     )
 
 
@@ -1451,7 +1510,7 @@ SURVEY: dict[str, tuple[str, ...]] = {
           "math-research-loop", "quality-assessor"),
     "D": ("problem-generator", "problem-refiner", "propose-subgoal-decomposition",
           "cross-domain-explore", "identify-key-failures", "quality-assessor",
-          "problem-solver"),
+          "problem-solver", "understanding-problems-neural-network-functions"),
     "E": ("construct-counterexamples", "construct-toy-examples",
           "verify-correctness-computation", "examination-of-special-cases-neural-network-functions",
           "verify-correctness-assumption"),
@@ -1588,6 +1647,7 @@ def validate() -> list[str]:
     surface = _role_tool_surface(problems)
     problems.extend(_slug_problems())
     problems.extend(_body_action_problems())
+    problems.extend(_path_problems())
     for owner, rows in CATALOG.items():
         for s in rows:
             if not s.summary.strip() or not s.when.strip() or not s.body.strip():
@@ -1742,6 +1802,107 @@ def _body_action_problems() -> list[str]:
                 f"（要么这句正文没了、要么它现在够得到了）⇒ 请删掉这条登记，"
                 f"别让豁免表腐烂。理由原话：{why}")
     return out
+
+
+#: 工作区里**允许**被点名的路径根（业主 2026-10-14「现做现读」那一批的落点全集）。
+#:
+#: 为什么要有这张表：一条 skill 说"去 `foo/report.md` 读结论"，而**没有任何东西会产出那个文件**
+#: —— 读的人找不到，写的人也没错，两边都不报错。所以落点必须落在这张表里的某个根下。
+#: 加新落点时**同时加这里**（这一条是那件事的机器形态；判据见 `_path_problems`）。
+WORKSPACE_PATH_ROOTS: tuple[str, ...] = (
+    "out/",          # 框架的产物区（论文、审校报告、任务全文、秘书台账）
+    "reports/",      # 研究手稿与攻坚台账（D / F 的落点）
+    "data/",         # 台账表落盘后的那份 JSON
+    "code/",         # 脚本与 Lean 源码
+    "skills/",       # 各角色的操作手册（本模块 materialize 写的）
+    "notes/",        # 草稿本
+    "manuscripts/",  # 交接手稿
+    "source/",       # 审阅型工作区的只读基线
+    "verifications/",  # V 的复核台账
+    "sessions/",     # 会话记录
+)
+
+#: 仓库里**允许**被点名的路径根（文档与源码 —— 提示词里引用它们是正当的，但它们不是工作区）。
+REPO_PATH_ROOTS: tuple[str, ...] = ("draft/", "docs/", "src/", "tests/", "scripts/", "tools/")
+
+#: 上面两张表合起来就是"一个落点可以落在哪儿"。
+PATH_ROOTS: tuple[str, ...] = WORKSPACE_PATH_ROOTS + REPO_PATH_ROOTS
+
+#: 反引号里那种"带目录的路径"：`a/b`、`a/b/c.md`、`a/b/`（目录形态）。
+_PATHY = re.compile(r"`([A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.<>*\-]+)+/?)`")
+
+#: 认得出的**文件后缀**：只有"带目录**且**像文件/目录"的串才判（见 `_path_problems` 的口径）。
+_PATH_SUFFIXES: tuple[str, ...] = (".md", ".json", ".jsonl", ".tex", ".pdf", ".py",
+                                   ".lean", ".csv", ".bib", ".txt", ".yaml", ".yml")
+
+
+def _looks_like_a_path(tok: str) -> bool:
+    """这个反引号串是"一个落点"吗（而不是别的东西碰巧带斜杠）。
+
+    ## 为什么必须加这一道筛子（现算读数）
+
+    第一版只按"带目录"判，于是 `heuristic/inconclusive` 当场被报成"没人写的落点" ——
+    而它是**证据等级的词表取值**（`heuristic` / `inconclusive` 那一档），
+    提示词里出现它是正文，不是路径。这类假阳性最贵：它让判据变成噪音，
+    然后没人再看它（本仓在 R114 的正文工具判据上已经栽过一次同款的坑）。
+
+    口径因此收成两条**之一**：**带已知后缀**（`.md` / `.json` / …）**或结尾是 `/`**（目录）。
+    `heuristic/inconclusive` 两条都不占 ⇒ 出局；而真的落点（`out/paper/main.tex`、
+    `code/lean/`）两条各占其一 ⇒ 照判。
+    """
+    t = tok.rstrip("/")
+    return tok.endswith("/") or t.lower().endswith(_PATH_SUFFIXES)
+
+
+def _path_problems() -> list[str]:
+    """正文/声明里点名的**带目录路径**，第一段必须在一张登记过的根表里。
+
+    ## 为什么只查"带目录的"
+
+    裸文件名（`main.pdf`、`dedup.py`）在这一批文本里都是**同句内已经给过全路径之后的简写**
+    （"`out/paper/main.tex`（正文…）+ `main.pdf`"），或者是在点一个**模块名**
+    （"归一化规则是盘上那一份（`dedup.py` 的 `normalize_doi`）"）。
+    把裸名字也管起来只会制造假阳性，而假阳性让判据变成噪音 —— 所以这一格只查带目录的：
+    那种写法**只有**两种可能，要么指个工作区里的真落点，要么指个仓库里的真文件，
+    而两者都在登记表里。
+
+    ## 三态
+
+    这条判据不吃任何运行期输入（它查的是**文本里的字面**），所以只有"报"与"不报"两种结局；
+    真正的三态在别处（读表能不能读成）。
+    """
+    out: list[str] = []
+    roots = tuple(PATH_ROOTS)
+    for owner, rows in CATALOG.items():
+        for s in rows:
+            for tok in sorted(set(_PATHY.findall(s.body))):
+                if not _looks_like_a_path(tok) or tok.startswith(roots):
+                    continue
+                out.append(
+                    f"{owner}/{s.slug}：正文里的路径 `{tok}` 不在登记过的根下"
+                    f"（认 {'、'.join(roots)}）—— 没人往那儿写东西，读的人会扑空；"
+                    "真要新增落点，请同时写进 `WORKSPACE_PATH_ROOTS`")
+    for role, spec in sorted(builtin_specs_for_paths().items()):
+        brief = spec.brief
+        for label, text in (("policy", "\n".join(brief.policy)),
+                            ("boundary", "\n".join(brief.boundary)),
+                            ("deliverable", str(brief.deliverable)),
+                            ("stance", "\n".join(brief.stance))):
+            for tok in sorted(set(_PATHY.findall(text))):
+                if not _looks_like_a_path(tok) or tok.startswith(roots):
+                    continue
+                out.append(
+                    f"{role}.{label}：路径 `{tok}` 不在登记过的根下"
+                    f"（认 {'、'.join(roots)}）—— 提示词里指一个没人写的落点，"
+                    "角色会照它去扑空")
+    return out
+
+
+def builtin_specs_for_paths() -> dict[str, Any]:
+    """十岗的声明（惰性取，`agent_skills` 不在导入期拖 `specs` 那条链）。"""
+    from . import specs as _SP
+
+    return dict(_SP.builtin_specs())
 
 
 def _slug_problems() -> list[str]:

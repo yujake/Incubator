@@ -395,7 +395,11 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 「入库那件动作」之前判一次「这条太平凡吗」（三态：合格 / 太平凡 / 判不了），判太平凡就把
 #: 这次入库当场拦下（`kind=statement_too_trivial`）；判不了与没查成**不拦**（三态纪律）。
 #: 作用域：只有 **B** 一格换值（那一句只发给 B）。
-PROMPT_VERSION = "p110"
+#: `p111`（2026-10-14，③ 的第四轮调研）：D 加一条 skill「理解-先弄清内涵与外延」
+#: （来源 `understanding-problems-*`：先读懂再谈证；`SURVEY` 的 D 那一格同步补名）；
+#: E 的「小例先行」正文加一节「特例是拿来看结论本身的」（来源 `examination-of-special-cases-*`）。
+#: 作用域：只有 **D** 一格换值（E 改的是正文，它的索引行没动）。
+PROMPT_VERSION = "p111"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:

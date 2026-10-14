@@ -2329,12 +2329,16 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: p109 → p110（2026-10-14，裁决第 12 条**前半**）：B 的入库审美有了机器形态 ——
 #: 秘书在「入库那件动作」之前判一次（三态：合格 / 太平凡 / 判不了），判太平凡就拦下。
 #: 作用域读数：**只有 B 一格换值**（那一句只发给 B），其余九格逐字未动。
-_FROZEN_PROMPT_VERSION = "p110"
+#: p110 → p111（2026-10-14，③ 的第四轮调研）：D 加 skill「理解-先弄清内涵与外延」
+#: （先读懂再谈证；`SURVEY` 的 D 那一格同步补名）；E 的「小例先行」**正文**加一节
+#: 「特例是拿来看结论本身的」。作用域读数：**只有 D 一格换值** ——
+#: 索引印的是 `summary` / `when`，E 改的是正文，所以 E 的前置提示词逐字未动。
+_FROZEN_PROMPT_VERSION = "p111"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "8ce6c71410d9766fbffc9b7ec13a24912de373621c44398a0506033edb868932",
     "B": "80904ff16556ebf6c6f4597f7137629e46d39d1a85d9875a66e00ad05f29fc6d",
     "C": "7f84953788257f1bb70e850167a769e847a9422a0d30c469e8f8d2af62b1dae7",
-    "D": "c59b984a13bbd7218a48b5715a7d2f6062574635ffda7703007cb19a43bed0cc",
+    "D": "d5c44ae5915e17f6b01533b90b14f0cfae18a6e8ccaa348c817d1011c7c8bba4",
     "E": "2a28ba4ab6c6b0053ce0617dc6600e45de71246c94397bd5a77a73d00b122513",
     "F": "5316ed7bc7e9eb0df01c14d7eaf5346d2ef7fa56e24336ab6786e5b9bb6ebb0b",
     "G": "54661e42bf8c61ad53917329d5111dc65800b2ccbe1d3da0499bfaeb6ceab8d5",

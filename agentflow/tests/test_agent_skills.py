@@ -364,3 +364,60 @@ def test_the_conductor_skill_records_the_two_indirect_routes():
     assert "F" not in route.actions and "V" not in {a.split(".")[0] for a in route.actions}, \
         f"M 的条目里不许把 F / V 列成能直接派的：{route.actions}"
     assert "D.propose_question" in route.actions and "B.run_once" in route.actions, route.actions
+
+
+def test_the_negative_control_catches_a_path_under_no_registered_root(monkeypatch):
+    """反负控之十二：正文点名一个**没人写的落点** ⇒ 红。
+
+    缺陷形态：一条 skill 说"去 `foo/report.md` 读结论"，而**没有任何东西会产出那个文件** ——
+    读的人找不到，写的人也没错，两边都不报错。所以落点必须落在登记过的根下
+    （`WORKSPACE_PATH_ROOTS` / `REPO_PATH_ROOTS`），加新落点时同时加进那张表。
+    """
+    bad = AS.Skill(slug="点名野落点", title="x", summary="一句话", when="任何时候",
+                   body="第 1 步：去 `foo/report.md` 读上一趟的结论。", tools=("fs.read",))
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (bad,))
+    problems = AS.validate()
+    assert any("foo/report.md" in p and "根下" in p for p in problems), problems
+
+
+def test_the_path_scan_does_not_fire_on_vocabulary_or_bare_filenames(monkeypatch):
+    """反负控之十三：`heuristic/inconclusive`（词表取值）与裸文件名**不**报。
+
+    这一条守的是上面那条判据的**另一半**（R120 实测踩到的假阳性）：
+    第一版只按"带目录"判，于是证据等级的词表取值 `heuristic/inconclusive` 被报成"野落点" ——
+    而它根本不是路径。假阳性会让判据变成噪音，然后没人再看它。
+    口径因此收成"**带已知后缀**或**结尾是 `/`**"，并配这条负控守着。
+    """
+    good = AS.Skill(slug="词表与裸名", title="x", summary="一句话", when="任何时候",
+                    body=("证据等级落在 `heuristic/inconclusive` 那一档；"
+                          "产物是 `out/paper/main.tex` 与同一目录下的 `main.pdf`。"),
+                    tools=("fs.read",))
+    monkeypatch.setitem(AS.CATALOG, "V", AS.CATALOG["V"] + (good,))
+    problems = AS.validate()
+    assert not [p for p in problems if "根下" in p], problems
+
+
+def test_the_registered_roots_cover_the_paths_we_actually_name():
+    """反真空：那张根表不是摆设 —— 现算一遍"文本里到底点了哪些落点"，逐个都在表里。
+
+    没有这一条，"根表"可以是一张只写着 `out/` 的空表而判据照样绿：
+    判据查的是"点名的路径在不在表里"，表越小、能点名的就越少，但那不说明覆盖到了我们的真实落点。
+    """
+    import re as _re
+
+    pat = _re.compile(r"`([A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.<>*\-]+)+/?)`")
+    seen: list[str] = []
+    for rows in AS.CATALOG.values():
+        for s in rows:
+            seen += [t for t in set(pat.findall(s.body)) if AS._looks_like_a_path(t)]
+    from agentflow import specs as SP
+
+    for role, spec in SP.builtin_specs().items():
+        brief = spec.brief
+        text = "\n".join(brief.policy) + "\n" + "\n".join(brief.boundary) + "\n" + str(brief.deliverable)
+        seen += [t for t in set(pat.findall(text)) if AS._looks_like_a_path(t)]
+    assert len(set(seen)) >= 15, f"只认得出 {len(set(seen))} 个落点 ⇒ 判据的扫描面可能坏了"
+    outside = sorted({t for t in seen if not t.startswith(tuple(AS.PATH_ROOTS))})
+    assert not outside, f"这些落点不在根表里：{outside}"
+    # 表本身就是两张子表的并集（不许有人另写第三张）
+    assert set(AS.PATH_ROOTS) == set(AS.WORKSPACE_PATH_ROOTS) | set(AS.REPO_PATH_ROOTS)
