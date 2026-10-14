@@ -280,6 +280,13 @@ class ModelSpec:
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
     api_key: str = ""
+    #: 厂商名（`settings` 的 `model.vendor` / `models.<角色>.vendor` / `secretary.vendor`）。
+    #:
+    #: 它今天做两件事：`base_url` 没给时按它选内置端点（`VENDOR_BASE_URLS`），
+    #: 以及**计价**时按它 + `model` 去 `modelcost.VENDOR_PRICES` 取那一档价
+    #: （业主 2026-10-14：「花销计算标准与供应商定价吻合」）。空串 = 没配
+    #: （计价那一侧会按端点猜一次，猜不到就如实回落并在读数里标出来）。
+    vendor: str = ""
     #: 单次请求的墙钟上限（秒）。2026-10-12 从 60 抬到 300 —— 真机读数逼出来的：
     #:
     #: - 探针（`temp/_probe_chain.py`）：开了 thinking 的一道难题，`max_tokens=32768`
@@ -403,6 +410,7 @@ def spec_for(role: str = "", *, secretary: bool = False,
         base_url=(base_url or fallback_url).rstrip("/"),
         model=name or DEFAULT_MODEL,
         api_key=api_key,
+        vendor=vendor,
         timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
         max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
         reasoning_effort=effort or DEFAULT_REASONING_EFFORT,

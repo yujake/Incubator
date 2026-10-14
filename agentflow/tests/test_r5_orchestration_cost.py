@@ -53,6 +53,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import pathlib
 import re
 import sys
@@ -62,7 +63,26 @@ import tokenize
 import pytest
 
 from agentflow import cancellation as CX
+from agentflow import modelcost
+from agentflow import modelgw
 from agentflow import schema as S
+
+#: 一次自检调用（11 in / 3 out，无缓存命中栏）该值多少钱 —— **现算**，不抄数。
+#:
+#: 为什么现算（2026-10-14 业主改了花销口径：三档 token + 峰谷两价）：把
+#: `6e-06` 那样的数抄进判据，等于把"当时的价目表"冻进判据里 —— 调一次价就假红一次。
+#: 峰谷那一位钉在**低谷**（`AGENTFLOW_MODEL_PEAK=0`）：读墙钟的话，同一条判据在峰值
+#: 时段会算出差一倍的钱（那正是"花销不可复现"）。
+os.environ.setdefault(modelcost.ENV_PEAK, "0")
+
+
+def _one_call_usd(tokens_in: int = 11, tokens_out: int = 3) -> float:
+    """一次自检调用的美元数（走**唯一那一处**价目表，与生产口径同源）。"""
+    price, _reading = modelcost.price_for("deepseek", modelgw.DEFAULT_MODEL)
+    return round((tokens_in * price.usd_per_m_in
+                  + tokens_out * price.usd_per_m_out) / 1_000_000.0, 6)
+
+
 from agentflow.conductor import LocalBackend
 from agentflow.modelgw import ModelSpec
 from agentflow.runflow import run_topic
@@ -444,13 +464,13 @@ def test_two_concurrent_runs_never_share_a_task_id(tmp_path: pathlib.Path) -> No
     for u in usage:
         assert int(u["tokens_total"]) == 14, u
 
-    # 两个子进程各自的产物也要自洽：自己那一跑的花费（14 token = 6e-06）。
+    # 两个子进程各自的产物也要自洽：自己那一跑的花费（14 token，价按价目表现算）。
     for label, res in (("a", first), ("b", second)):
         assert res["exit_code"] == 0, (label, res)
         assert res["task_row"]["written"] is True, (label, res)
         per_call = json.loads((tmp_path / label / "cost.json").read_text(encoding="utf-8"))
         assert all(c["charged"] is True for c in per_call["per_call"]), (label, per_call)
-        assert per_call["calls_usd"] == 6e-06, (label, per_call["calls_usd"])
+        assert per_call["calls_usd"] == _one_call_usd(), (label, per_call["calls_usd"])
         # `F5-FOUND-1`：并发下每一跑的 `spent_usd_this_run` 必须等于「自己」的
         # `calls_usd`。改前它是"工作区增量"（开跑基线到现在的差），而另一个进程
         # 在基线之后入的账会落进这个差里 ⇒ 第二次跑完的那一跑会报出两倍的钱。
@@ -726,7 +746,7 @@ def test_the_replay_path_is_not_reported_as_a_reconciliation_failure(
     改前 `calls_usd` 把 records 里每一笔的 `usd` 都加起来，而重放那一笔的 `usd`
     是继承自上一次运行的（duplicate 分支返回 prior 行的 usd），本次真实增量
     是 0 ⇒ 一次完全正常、被刻意支持的重放被自检位判成对账失败
-    （实测读数：`spent_usd_this_run=0.0 calls_usd=6e-06 reconciled=False`）。
+    （实测读数：`spent_usd_this_run=0.0` 而 `calls_usd` 是那一次调用的价，`reconciled=False`）。
     自检位在正常操作上翻红就等于它失去区分力。
 
     判据只钉"重放 ⇒ 0 == 0"这一半；另一半（真漏账必须报红）由
@@ -846,7 +866,7 @@ def test_a_small_budget_ignores_the_workspaces_history(store: Store,
     """`G-4` 回归：额度是"这一次运行"的，工作区里已经花掉的钱不许提前熔断它。
 
     工作区里先有一笔别的花销（模拟"这个工作区已经用了很久"），再跑一次
-    `budget_usd=6e-06`（正好等于一次调用 6e-06，而远小于那笔历史花销）
+    `budget_usd=一次调用的价`（现算，见 `_one_call_usd()`；远小于那笔历史花销）
     且 `max_calls=2` 的运行：第一次调用必须真的发出去；第二次调用之前的熔断
     才该停下它（`stopped_by == "budget"`、`reason == "budget_exhausted"`）。
 
@@ -866,7 +886,7 @@ def test_a_small_budget_ignores_the_workspaces_history(store: Store,
     from agentflow.modelgw import ModelReply
     from agentflow.tokenmeter import TokenMeter
 
-    # 工作区里先记一笔"历史花销"（另一个 task 的账，1.37 美元量级）。
+    # 工作区里先记一笔"历史花销"（另一个 task 的账；价目表现算，量级见下面的断言）。
     hist = TokenMeter(store, budget_usd=100.0)
     charge_reply(hist, ModelReply(ok=True, text="4", tokens_in=1_000_000,
                                   tokens_out=1_000_000, attempts=1, model="m",
@@ -875,21 +895,21 @@ def test_a_small_budget_ignores_the_workspaces_history(store: Store,
 
     text = f"- 阿贝尔群是交换群 || {ABSTRACT}\n"
     res = run_topic(
-        store, topic="同一个主题", budget_usd=6e-06, out_dir=tmp_path / "tiny",
+        store, topic="同一个主题", budget_usd=_one_call_usd(), out_dir=tmp_path / "tiny",
         transport=_transport(text), spec=ModelSpec(api_key="selftest-key"),
         max_calls=2, search_fn=_search, now=TS1,
     )
     cost = json.loads((tmp_path / "tiny" / "cost.json").read_text(encoding="utf-8"))
     assert res["calls"] == 1, (
-        f"历史花销不许提前熔断这一次运行：它应当发出第一次调用（6e-06 = 额度），"
+        f"历史花销不许提前熔断这一次运行：它应当发出第一次调用（{_one_call_usd()} = 额度），"
         f"第二次之前才停（实际 calls={res['calls']}）"
     )
     assert res["reason"] == "budget_exhausted", (
         f"第二次调用之前的熔断必须被记成 budget 熔断：{res['reason']}"
     )
-    assert cost["calls_usd"] == cost["spent_usd_this_run"] == 6e-06, cost
-    assert cost["usage_ledger"]["usd"] > 1.0, (
-        "账本累计必须同时给出，而且它比本次运行大 —— 这才是两个口径的分辨点"
+    assert cost["calls_usd"] == cost["spent_usd_this_run"] == _one_call_usd(), cost
+    assert cost["usage_ledger"]["usd"] > 10 * cost["spent_usd_this_run"], (
+        "账本累计必须同时给出，而且它比本次运行大得多 —— 这才是两个口径的分辨点"
     )
 
 

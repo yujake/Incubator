@@ -76,8 +76,14 @@ __all__ = [
     "ENV_PRICE_IN",
     "ENV_PRICE_OUT",
     "ENV_PRICE_IN_HIT",
+    "PEAK_HOURS_UTC",
+    "VENDOR_PRICES",
+    "ENV_PEAK",
+    "peak_override",
     "DEFAULT_ROLE",
     "Price",
+    "is_peak",
+    "price_for",
     "price_of",
     "price_of_full",
     "price_from_env",
@@ -88,10 +94,62 @@ __all__ = [
     "charge_reply",
 ]
 
-#: 每百万输入 token 的美元价。DeepSeek 公开价的观测值；调价后请用环境变量覆盖。
-DEFAULT_PRICE_IN_USD_PER_M = 0.27
-#: 每百万输出 token 的美元价。同上。
-DEFAULT_PRICE_OUT_USD_PER_M = 1.10
+#: 每百万输入 token 的美元价。**DeepSeek 官方定价页的观测值**（抓取时刻见下），
+#: 调价后请用环境变量覆盖，或把新数补进 :data:`VENDOR_PRICES`。
+#:
+#: 2026-10-14 抓 `https://api-docs.deepseek.com/quick_start/pricing`（英文页）：
+#: 官方把输入拆成 **cache hit / cache miss** 两档，且**峰谷两价**（低谷 = 峰值的一半），
+#: 所以"一个数"只能是最保守的那一档。这里的缺省取 `deepseek-flash` 的**低谷**价
+#: （$0.15 / $0.6）—— 真正该走的是 :func:`price_for`（按厂商 × 模型 × 峰谷取）。
+DEFAULT_PRICE_IN_USD_PER_M = 0.15
+#: 每百万输出 token 的美元价。同上（`deepseek-flash` 低谷）。
+DEFAULT_PRICE_OUT_USD_PER_M = 0.6
+
+#: **厂商 × 模型 × 峰谷**的价目表（业主 2026-10-14：「花销计算标准与供应商定价吻合」）。
+#:
+#: 口径来源逐字：`https://api-docs.deepseek.com/quick_start/pricing`，抓取于 2026-10-14。
+#: 单位是**每百万 token 的美元**，形状 `{键: {"hit"/"in"/"out": (peak, off_peak)}}`：
+#:
+#: | 模型 | 输入(命中) | 输入(未命中) | 输出 |
+#: |---|---|---|---|
+#: | `deepseek-flash` | 0.006 / 0.003 | 0.3 / 0.15 | 1.2 / 0.6 |
+#: | `deepseek-v4-pro` | 0.044 / 0.022 | 1.32 / 0.66 | 3.96 / 1.98 |
+#:
+#: 峰谷按官方页面的原文判定：**峰值时段 = UTC 周一至周五的 01:00–04:00 与 06:00–10:00**
+#: （不含中国法定节假日），其余时段（含周末与节假日整日）都是低谷；低谷价 = 峰值价的一半。
+#: 我们按调用发生的时刻现算（见 :func:`is_peak`），并把用了哪一档写进计价读数 ——
+#: 否则"账单对不上"这件事又变成没法定位的。
+#:
+#: 没登记的组合**不猜**：回落到 `DEFAULT_PRICE_*` 并在读数里标 `price_fallback`。
+VENDOR_PRICES: dict[str, dict[str, dict[str, tuple[float, float]]]] = {
+    "deepseek": {
+        "deepseek-flash": {"hit": (0.006, 0.003), "in": (0.3, 0.15), "out": (1.2, 0.6)},
+        "deepseek-v4-pro": {"hit": (0.044, 0.022), "in": (1.32, 0.66), "out": (3.96, 1.98)},
+    },
+}
+
+#: 峰值时段的 UTC 小时区间（左闭右开），官方原文：`01:00 - 04:00 and 06:00 - 10:00 UTC,
+#: Monday through Friday, excluding Chinese public holidays`。
+PEAK_HOURS_UTC: tuple[tuple[int, int], ...] = ((1, 4), (6, 10))
+#: 峰谷判定的显式覆盖：`1`/`0`（认得的真假写法同 `settings`）。
+#:
+#: 为什么要有它：峰谷判据读的是**墙钟**，于是同一份判据在不同时刻会算出两个不同的
+#: 数（差一倍）—— 那让"花销"这件事在判据里不可复现。真机当然按钟走；判据与
+#: 离线复算用这一格把它钉住（也顺手给运维一个"按谷价批账"的显式开关）。
+ENV_PEAK = "AGENTFLOW_MODEL_PEAK"
+_TRUE_WORDS: tuple[str, ...] = ("1", "true", "yes", "on")
+_FALSE_WORDS: tuple[str, ...] = ("0", "false", "no", "off")
+
+
+def peak_override(env: Mapping[str, str] | None = None) -> bool | None:
+    """`AGENTFLOW_MODEL_PEAK` 给的显式峰谷判定；没给/读不懂 ⇒ `None`（按钟现算）。"""
+    src = dict(os.environ if env is None else env)
+    raw = str(src.get(ENV_PEAK) or "").strip().lower()
+    if raw in _TRUE_WORDS:
+        return True
+    if raw in _FALSE_WORDS:
+        return False
+    return None
 
 ENV_PRICE_IN = "AGENTFLOW_MODEL_PRICE_IN_USD_PER_M"
 ENV_PRICE_OUT = "AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M"
@@ -213,6 +271,68 @@ def price_of(spec: Any = None, *, env: Mapping[str, str] | None = None) -> tuple
 def price_of_full(spec: Any = None, *, env: Mapping[str, str] | None = None) -> Price:
     """完整的那一档价（三格 + 来源）—— 记账时用这个，不要用 `price_of` 的两格。"""
     return price_from_env(env)
+
+
+def is_peak(at: Any = None) -> bool:
+    """这次调用落在**峰值时段**吗（官方口径：UTC 周一至周五的 01–04 与 06–10 点）。
+
+    `at` 收一个带时区的 `datetime`；不给就用"现在"（UTC）。周末整日低谷；
+    中国法定节假日官方页面说"整日低谷"，我们**没有节假日表**，所以那一档如实不判
+    （见 :func:`price_for` 的读数：`holiday_table=False`）——不假装知道。
+    """
+    from datetime import datetime, timezone
+
+    now = at if at is not None else datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now = now.astimezone(timezone.utc)
+    if now.weekday() >= 5:      # 5/6 = 周六/周日
+        return False
+    return any(start <= now.hour < end for start, end in PEAK_HOURS_UTC)
+
+
+def price_for(vendor: str = "", model: str = "", *, at: Any = None,
+              env: Mapping[str, str] | None = None) -> tuple[Price, dict[str, Any]]:
+    """按**厂商 × 模型 × 峰谷**取价；返回 `(Price, 读数)`。
+
+    读数（进 `billing_reading` 与账本 note）回答四件事：用了哪一档（`peak`）、
+    价格是从价目表还是回落来的（`price_source`）、有没有命中价（`hit_price_known`）、
+    以及我们**没有**节假日表这一条（`holiday_table=False`）——
+    最后一条是"低谷判定可能偏严（把节假日算成峰值）"的如实交代，不是缺陷掩盖。
+
+    环境变量仍然压在最上面（`price_from_env`）：CI 与既有脚本不许被这次改动弄坏。
+    """
+    src = dict(os.environ if env is None else env)
+    overridden = any(str(src.get(k) or "").strip()
+                     for k in (ENV_PRICE_IN, ENV_PRICE_OUT, ENV_PRICE_IN_HIT))
+    pinned = peak_override(env)
+    peak = is_peak(at) if pinned is None else pinned
+    table = VENDOR_PRICES.get(str(vendor or "").strip().lower(), {})
+    row = table.get(str(model or "").strip())
+    if overridden or row is None:
+        p = price_from_env(env)
+        return p, {
+            "peak": peak,
+            "peak_source": ("env" if pinned is not None else "clock"),
+            "price_source": ("env" if overridden else "fallback"),
+            "vendor": str(vendor or ""),
+            "model": str(model or ""),
+            "hit_price_known": p.hit_price_known,
+            "holiday_table": False,
+        }
+    idx = 0 if peak else 1
+    p = Price(usd_per_m_in=row["in"][idx], usd_per_m_out=row["out"][idx],
+              usd_per_m_in_hit=row["hit"][idx],
+              source_note=f"table:deepseek-public-2026-10-14/{'peak' if peak else 'off_peak'}")
+    return p, {
+        "peak": peak,
+        "peak_source": ("env" if pinned is not None else "clock"),
+        "price_source": "table",
+        "vendor": str(vendor or ""),
+        "model": str(model or ""),
+        "hit_price_known": True,
+        "holiday_table": False,
+    }
 
 
 def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:

@@ -126,3 +126,81 @@ def test_the_price_env_override_covers_all_three_tiers():
     assert MC.price_of(env={}) == (MC.DEFAULT_PRICE_IN_USD_PER_M, MC.DEFAULT_PRICE_OUT_USD_PER_M)
     assert set(MC.price_of_full().to_dict()) == {"usd_per_m_in", "usd_per_m_out",
                                                  "usd_per_m_in_hit"}
+
+
+# ---------------------------------------------------------------- 厂商价目表（官方定价页）
+
+def _at(hour: int, *, weekday: int = 0) -> "object":
+    """造一个 UTC 时刻：`weekday=0` 是周一（2026-10-12 是周一）。"""
+    from datetime import datetime, timedelta, timezone
+
+    return datetime(2026, 10, 12, hour, 0, tzinfo=timezone.utc) + timedelta(days=weekday)
+
+
+def test_the_table_matches_the_vendors_published_numbers():
+    """价目表就是**官方定价页那六个数**（两个模型 × 三档 × 峰谷）。
+
+    口径来源：`https://api-docs.deepseek.com/quick_start/pricing`，抓取于 2026-10-14。
+    官方把低谷价定义成峰值价的一半，所以这六个数互相校验：`peak == 2 × off_peak`。
+    """
+    flash = MC.VENDOR_PRICES["deepseek"]["deepseek-flash"]
+    assert flash["hit"] == (0.006, 0.003), flash
+    assert flash["in"] == (0.3, 0.15), flash
+    assert flash["out"] == (1.2, 0.6), flash
+    pro = MC.VENDOR_PRICES["deepseek"]["deepseek-v4-pro"]
+    assert pro["hit"] == (0.044, 0.022), pro
+    assert pro["in"] == (1.32, 0.66), pro
+    assert pro["out"] == (3.96, 1.98), pro
+    for row in (flash, pro):
+        for tier, (peak, off) in row.items():
+            assert abs(peak - 2 * off) < 1e-9, (tier, peak, off)
+
+
+def test_peak_and_off_peak_are_chosen_by_the_clock():
+    """峰谷按官方口径现算：UTC 周一至周五的 01–04 与 06–10 点是峰值，其余（含周末）低谷。"""
+    peak = MC.price_for("deepseek", "deepseek-flash", at=_at(2))
+    off = MC.price_for("deepseek", "deepseek-flash", at=_at(12))
+    assert peak[0].usd_per_m_in == 0.3 and peak[1]["peak"] is True, peak
+    assert off[0].usd_per_m_in == 0.15 and off[1]["peak"] is False, off
+    # 边界：左闭右开 —— 04:00 已出峰值窗，06:00 进第二个窗
+    assert MC.is_peak(_at(1)) is True and MC.is_peak(_at(4)) is False, "01–04 是左闭右开"
+    assert MC.is_peak(_at(6)) is True and MC.is_peak(_at(10)) is False, "06–10 是左闭右开"
+    # 周末整日低谷（官方原文：all other hours are off-peak, including weekends）
+    assert MC.is_peak(_at(2, weekday=5)) is False
+    assert MC.is_peak(_at(2, weekday=6)) is False
+
+
+def test_an_unregistered_vendor_or_model_falls_back_and_says_so():
+    """负控：没登记的组合**不猜** —— 回落到缺省价，并把 `price_source=fallback` 记下来。"""
+    p, reading = MC.price_for("acme", "whatever", at=_at(12))
+    assert reading["price_source"] == "fallback", reading
+    assert p.usd_per_m_in == MC.DEFAULT_PRICE_IN_USD_PER_M, p
+    assert p.usd_per_m_in_hit is None, p
+    # 登记了的组合走表，读数里带厂商与模型（账要对得上供应商的账单）
+    p2, r2 = MC.price_for("deepseek", "deepseek-v4-pro", at=_at(12))
+    assert r2["price_source"] == "table" and r2["vendor"] == "deepseek", r2
+    assert (p2.usd_per_m_in, p2.usd_per_m_out) == (0.66, 1.98), p2
+
+
+def test_the_env_override_still_beats_the_table():
+    """环境变量压在最上面：CI 与既有脚本不许被价目表弄坏。"""
+    env = {"AGENTFLOW_MODEL_PRICE_IN_USD_PER_M": "9.0"}
+    p, reading = MC.price_for("deepseek", "deepseek-flash", at=_at(12), env=env)
+    assert p.usd_per_m_in == 9.0, p
+    assert reading["price_source"] == "env", reading
+
+
+def test_the_seam_bills_the_configured_vendor_model(monkeypatch):
+    """缝那一层：按**这次用的那个模型**取价（厂商 + 模型 + 峰谷），并留读数。"""
+    from agentflow import llmseam as LS
+
+    seam = LS.LlmSeam(role="A", session_root=".", gateway=None, sid="t")
+    seam.gateway = type("G", (), {"spec": G_SPEC})()
+    reading = seam._billing_of(_reply(hit=0, miss=1000))
+    assert reading["price_source"] == "table", reading
+    assert reading["vendor"] == "deepseek" and reading["model"] == "deepseek-flash", reading
+    assert reading["peak"] in (True, False), reading
+    assert reading["usd_per_m_in"] in (0.15, 0.3), reading
+
+
+G_SPEC = G.ModelSpec(api_key="k", model="deepseek-flash", vendor="deepseek")

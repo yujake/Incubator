@@ -1,0 +1,51 @@
+R109 价目表按厂商 × 模型 × 峰谷（官方定价页现抓）
+
+业主原话：「花销计算标准调整到与模型供应商定价吻合」。R106 把记账口径改成三档 token，
+本批把**价目表**换成供应商自己登的那六个数字。
+
+## 一、口径来源（抓取时刻写进代码注释）
+
+`https://api-docs.deepseek.com/quick_start/pricing`，**抓取于 2026-10-14**，单位是
+每百万 token 的美元：
+
+| 模型 | 输入(命中缓存) | 输入(未命中) | 输出 |
+|---|---|---|---|
+| `deepseek-flash` | 0.006 / **0.003** | 0.3 / **0.15** | 1.2 / **0.6** |
+| `deepseek-v4-pro` | 0.044 / **0.022** | 1.32 / **0.66** | 3.96 / **1.98** |
+
+（斜杠前是**峰值**价、后是**低谷**价；官方原文：低谷价 = 峰值价的一半，峰值时段 =
+UTC 周一至周五 01:00–04:00 与 06:00–10:00，不含中国法定节假日，其余（含周末与节假日整日）
+都是低谷。）
+
+改前代码里的缺省是 `0.27 / 1.10` —— 那是**过时**的观测值（既不是这家今天的两个模型，
+也没有命中档与峰谷）。现在缺省换成 `deepseek-flash` 的**低谷**价（0.15 / 0.6），
+真正该走的是 `modelcost.price_for(vendor, model)`。
+
+## 二、实现了什么
+
+- `modelcost.VENDOR_PRICES`：厂商 → 模型 → `hit` / `in` / `out` → `(峰值, 低谷)`；
+  来源与抓取日期写在注释里（调价时改这一处，判据会当场把新数字钉住）；
+- `modelcost.is_peak(at)`：按**官方口径**现算峰谷（UTC、周一至周五、两个左闭右开区间、
+  周末低谷）；**没有节假日表**这件事如实进读数（`holiday_table=False`），不假装知道；
+- `modelcost.price_for(vendor, model, at=…)` ⇒ `(Price, 读数)`：读数带 `peak` /
+  `peak_source`（`clock` / `env`）/ `price_source`（`table` / `env` / `fallback`）；
+  `AGENTFLOW_MODEL_PEAK=1|0` 可以显式钉住峰谷（运维按谷价批账、判据离线复算都用它）——
+  没有它，"同一条判据在峰值时段算出差一倍的钱"会让花销读数不可复现；
+- 环境变量三档价仍压在最上面（CI 与既有脚本不许被弄坏）；
+- `ModelSpec.vendor`（R107 落的）现在真的参与计价：`llmseam._price_now()` 按
+  **这次用的那个模型**取价（没配 vendor 时按端点认 `api.deepseek.com` ⇒ deepseek），
+  取的读数并进 `SeamCall.billing`；
+- 没登记的组合**不猜**：回落缺省价并标 `price_source="fallback"`。
+
+## 三、判据
+
+`tests/test_cost_matches_vendor.py` 11 条（新增 5 条）：六个数字与官方页面逐字相等
+（并互相校验 `peak == 2 × off_peak`）、峰谷按钟选（含两个左闭右开边界与周末）、
+未登记组合回落且留读数、环境变量优先、缝那一层按配置的 vendor/model 取价。
+
+顺带修一条**判据自己把价抄死**的老毛病：`tests/test_r5_orchestration_cost.py` 里
+"一次调用 = `6e-06`"是按旧价目表算出来的数，改价之后假红。改成
+`_one_call_usd()` 现算（走同一个 `price_for`），并把峰谷钉在低谷。
+
+读数：`test_cost_matches_vendor` + `modelcost` + `modelgw` + `ledger_charging` +
+`tokenmeter` + `role_models` + `r5_orchestration_cost` 共 **122 passed**。

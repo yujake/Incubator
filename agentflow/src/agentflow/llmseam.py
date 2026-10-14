@@ -451,25 +451,47 @@ class LlmSeam:
         self.spend.calls += 1
         return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note)
 
+    def _price_now(self) -> tuple[Any, dict[str, Any]]:
+        """这一笔该按哪一档价算（厂商 × 模型 × 峰谷）+ 取价读数。
+
+        显式给了 `self.price`（判据与替身模型走这条）就用它，读数标 `explicit`；
+        否则按**这次调用用的那个模型**去价目表取（`modelcost.price_for`）——
+        这正是"花销与供应商定价吻合"那条要求落地的地方：不同厂商/不同模型/峰谷
+        各有自己的价，而不是一个数打天下。
+        """
+        if self.price is not None:
+            p = self.price if isinstance(self.price, MC.Price) else MC.Price(*self.price)
+            return p, {"price_source": "explicit", "peak": None}
+        spec = getattr(self.gateway, "spec", None)
+        vendor = str(getattr(spec, "vendor", "") or "")
+        model = str(getattr(spec, "model", "") or "")
+        if not vendor:
+            # `vendor` 没配时按端点猜一个（只有一条登记：api.deepseek.com ⇒ deepseek）
+            base = str(getattr(spec, "base_url", "") or "")
+            vendor = "deepseek" if "deepseek.com" in base else ""
+        return MC.price_for(vendor, model)
+
     def _usd_of(self, reply: Any) -> tuple[float | None, str]:
         """按价格表算这次花销。算不出来就如实说算不出来（不许悄悄记 0）。"""
         try:
-            price = self.price or MC.price_from_env()
+            price, _reading = self._price_now()
             return float(MC.usd_for(reply, price)), ""
         except Exception as exc:  # 价格表缺失/格式不对：这不影响结论，但必须留痕
             return None, f"花销未能折算（{type(exc).__name__}: {exc}）"
 
     def _billing_of(self, reply: Any) -> dict[str, Any]:
-        """这一笔的计价读数（三档价 + 命中数 + "我们不知道"的那几格）。
+        """这一笔的计价读数（三档价 + 命中数 + 用了峰/谷哪一档 + "我们不知道"的那几格）。
 
         为什么留它（业主 2026-10-14「花销标准与供应商定价吻合」）：`usd` 是一个数，
-        而"这个数按哪几档价算出来的"必须能复核。两种会让它偏高的情形 ——
-        命中价未登记、上游没报命中数 —— 在这里各有一条痕迹，读账的人因此不会
-        把"我们算贵了"读成"供应商算错了"。
+        而"这个数按哪几档价、按峰还是按谷算出来的"必须能复核。三种会让它偏高的情形 ——
+        命中价未登记、上游没报命中数、没登记的组合回落到了缺省价 —— 各有一条痕迹，
+        读账的人因此不会把"我们算贵了"读成"供应商算错了"。
         """
         try:
-            price = self.price or MC.price_from_env()
-            return dict(MC.billing_reading(reply, price))
+            price, reading = self._price_now()
+            out = dict(MC.billing_reading(reply, price))
+            out.update(reading)
+            return out
         except Exception as exc:  # noqa: BLE001 —— 读数算不出来不许带走这一趟
             return {"cache_tri": "unreadable", "why": f"{type(exc).__name__}: {exc}"}
 
