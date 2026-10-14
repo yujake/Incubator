@@ -190,7 +190,39 @@ def test_the_env_override_still_beats_the_table():
     assert reading["price_source"] == "env", reading
 
 
-def test_the_seam_bills_the_configured_vendor_model(monkeypatch):
+def test_the_ledger_row_note_carries_which_price_tier_was_used():
+    """账本那一行自己说得清"这笔钱按哪一档价算的"（不必去翻会话事件）。
+
+    判据打在**唯一那处入账口**（`LlmSeam._charge_ledger` → `note`）：它抄的是
+    `SeamCall.billing` 的四格，所以这条断言同时钉住"billing 真的被算过"。
+    """
+    from agentflow import llmseam as LS
+    from agentflow.modelgw import ModelSpec as _Spec
+    from agentflow.tokenmeter import TokenMeter
+    from agentflow.store import Store
+    import pathlib
+    import tempfile
+
+    st = Store(pathlib.Path(tempfile.mkdtemp(prefix="seam-note-")))
+    st.init()
+    seam = LS.LlmSeam(role="A", session_root=st.root, sid="t",
+                      meter=TokenMeter(st, budget_usd=1.0))
+    seam.gateway = type("G", (), {"spec": _Spec(api_key="k", model="deepseek-flash",
+                                               vendor="deepseek")})()
+    reply = _reply(hit=0, miss=1000)
+    seam._land(LS.SeamCall(ok=True, text="x", tokens_in=1000, tokens_out=100,
+                           usd=seam._usd_of(reply)[0],
+                           billing=seam._billing_of(reply)),
+               prompt="p", system="", task_id="", note="unit")
+    rows = st.rows("usage_ledger")
+    assert rows, "这一笔没有入账"
+    note = str(rows[0].get("note") or "")
+    for needle in ("price=table", "vendor=deepseek", "model=deepseek-flash",
+                   "peak=", "cache=billed", "in_hit=", "in=", "out="):
+        assert needle in note, (needle, note)
+
+
+def test_the_seam_bills_the_configured_vendor_model():
     """缝那一层：按**这次用的那个模型**取价（厂商 + 模型 + 峰谷），并留读数。"""
     from agentflow import llmseam as LS
 

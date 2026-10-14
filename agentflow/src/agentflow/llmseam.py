@@ -534,6 +534,19 @@ class LlmSeam:
         tid = str(task_id or "").strip() or None   # `""` 会被 schema 拒；None = 不挂任务
         outcome = "ok" if call.ok else (call.problem or "failed")
         note = f"source=llmseam;role={self.role};call_index={idx};outcome={outcome}"
+        # 花销口径的留痕（业主 2026-10-14：「花销计算标准与供应商定价吻合」）：
+        # 账本那一行**自己**要说得清这笔钱按哪一档价算的 —— 否则"和供应商账单对不上"
+        # 只能靠翻会话事件才查得出来。四格都从 `SeamCall.billing` 现抄（不另算一份）。
+        billing = dict(getattr(call, "billing", None) or {})
+        if billing:
+            note += ("；price=" + str(billing.get("price_source") or "?")
+                     + f";vendor={billing.get('vendor') or '-'}"
+                     + f";model={billing.get('model') or self.model_name or '-'}"
+                     + f";peak={billing.get('peak')}"
+                     + f";cache={billing.get('cache_tri') or '?'}"
+                     + f";in_hit={billing.get('usd_per_m_in_hit')}"
+                     + f";in={billing.get('usd_per_m_in')}"
+                     + f";out={billing.get('usd_per_m_out')}")
         tokens_in = int(call.tokens_in or 0)
         tokens_out = int(call.tokens_out or 0)
         if call.usd is None:
