@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from .agentspec import AgentBrief, builtin_registry
+from . import agent_skills
 from . import attackround as AR
 from . import capabilities as C
 from . import composition as _composition
@@ -380,7 +381,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tex_sha256`/`pages`），完成定义第 1 条从"渲染锚 0 漂移"改成"这份 PDF 是不是盘上这份正文
 #: 编的"（收工门那一格 `paper`）。退场面与逐条理由见 `draft/117`。
 #: 作用域读数：只有 M / G / H 三格换值（纸包只发给它们）；A–F 与 V 逐字未动。
-PROMPT_VERSION = "p105"
+PROMPT_VERSION = "p106"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
@@ -2436,6 +2437,12 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 十一种形状"什么时候用哪个"（决策表）：选择是每个角色每一步都要做的事。
     reg.section(Section("COLLAB_SHAPES", SECTION_ORDERS["COLLAB_SHAPES"],
                         COLLAB_SHAPES_TEXT))
+    # 这一岗的 skills：**只放索引**（slug + 一句话 + 什么时候读它 + 盘上路径）。
+    # 正文在盘上（`agent_skills.materialize` 开跑时落到工作区），角色按需 `fs.read`
+    # —— 业主 2026-10-14：「写成各智能体的 skills，以防止前置大量提示词，现做现读」。
+    _skills = agent_skills.index_block(role)
+    if _skills:
+        reg.section(Section("SKILLS_INDEX", SECTION_ORDERS["SKILLS_INDEX"], _skills))
     # 派活上限（业主裁定 A：数字写、且现算）。受众 = 派得出活的角色（`partners_out`
     # 非空 ⇒ 它真的会 `summon`）；出边为 0 的角色（实测 C）拿到这一段只会读到
     # "你能派几个"这种与它无关的话 —— 它那一档的处置在协作块族里（`draft/104` §5.2 的 C 行）。

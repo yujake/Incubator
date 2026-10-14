@@ -575,6 +575,20 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     except Exception as exc:  # noqa: BLE001 —— 写不成不影响这次运行，但必须留痕
         notes.append(f"画像文件没写成：{type(exc).__name__}: {exc}")
 
+    # ---- 各角色的 skills 落到工作区（业主 2026-10-14：「现做现读」）
+    #
+    # 前置提示词里只给**索引**（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
+    # `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
+    # 与画像文件同一条纪律：写不成不打断这一趟（提示词里的索引仍然有效），但要留痕。
+    try:
+        from . import agent_skills as _AS
+
+        _wrote = _AS.materialize(store.root if store is not None else ".")
+        notes.append(f"skills：落盘 {len(_wrote)} 份（按需读；索引在提示词的 SKILLS_INDEX 段）"
+                     if _wrote else "skills：盘上已是最新，未重写")
+    except Exception as exc:  # noqa: BLE001
+        notes.append(f"skills 没写成：{type(exc).__name__}: {exc}")
+
     # 内层 backend 必须带着 store：`LocalBackend.store` 由 `Conductor` 注入，
     # 而 `factory(role, store=None)` 会被角色工厂当场拒（"需要一个 store"）——
     # 实测 2026-09-29：`run-agent M` 派 H 做 review，两次都以

@@ -2310,18 +2310,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: p104 → p105（2026-10-14，业主裁定 ②）：编号宽度四位改六位，提示词里两处跟着改 ——
 #: 共用块里的「台账号（`t-NNNN`）」→ `t-NNNNNN`（九格都动），
 #: 以及 M 那一格的判据措辞「报告里的带前缀 4 位号」→「报告里带前缀的台账号」。
-_FROZEN_PROMPT_VERSION = "p105"
+#: p105 → p106（2026-10-14，业主新阶段 ②）：新增 `SKILLS_INDEX` 段 —— 十格**全动**
+#: （`shared` 那一槽的 skill 每个角色都读得到；正文在盘上，按需 `fs.read`）。
+_FROZEN_PROMPT_VERSION = "p106"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "e41e9ba3eaf72b182eff8e01f2c80a8964a5f7ae98c947d35267747d0becc274",
-    "B": "a7f009c6346af0cf798a5a9469e779dd7d7fb4538e2f6ed360939a8788e765df",
-    "C": "0ab94ae969ee8faa449b982bff16b57c8d858b520d7213d8edd54b88b69255e7",
-    "D": "0a3606a6fea9f5c3c37ed3d07f49bab23a8692a9f25339f108e3913b914d6c06",
-    "E": "17f9afde2490504e231a4a513a9064b423271b4039eb972fd3f20df489aa2bed",
-    "F": "0f6c7ccdf878af281f7d7b4cf1ef85a476d5d16cf038cff5d040508efbefec88",
-    "G": "31e09953311066d9553757f42412379456df70d768a58fa19d5f782030411fdb",
-    "H": "947538a3699d2260d188e69517b4d6e9a9af251878701caa6e4bdf9429e80ad8",
-    "M": "2efa584f609fa4e344b03cd3eaea35dc2f463eb593538227288598fdde3b1a82",
-    "V": "1766be98f16730b8e3807189f471fb23b69132912ad2f3c48cd70cdddc9cefec",
+    "A": "9832b3194575e4c55417c1f5c53a58e8a208926e1c2adbc56fab98bc9ce15191",
+    "B": "3d8040241df10265b7536167beaab43da123e5e0befac15a49afe69fe8e49296",
+    "C": "4cd01a8f7b0377c573940d61473c07e6d5599bde5df64a2728ec1b867f66ba79",
+    "D": "4415a003baa1caeaed77b3f0ca3b9726ccf0f0999b03530352871bb1ac178087",
+    "E": "959f78b94b9fe9aef73e85534476ecd931e78ccf7a73adce97814abbbd6cc4cd",
+    "F": "d475e0bdeaf4a8139adfadab91160abe926048f2f4d805b25cf3a6afa21ce11d",
+    "G": "b17344ee2f5b7e78896f4385cb43777874ea4b7813533052b0788a2b011cc3a8",
+    "H": "5de7dec99d91cc451d37d02ebee5e4b288a426d651b5d60648e78c515827eea4",
+    "M": "2fd4df75df20b83519a06d8138533c3f6264c530003537b8f9f7229204bce57c",
+    "V": "d91d4ae3dd015a14df816813a0495a57ec6fd2a48baf5374bed0467edda1458b",
 }
 
 
