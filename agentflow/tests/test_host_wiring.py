@@ -365,7 +365,15 @@ def test_semantic_review_seam_goes_only_to_h(tmp_path: Path):
     for role, action, by, parent in (("B", "run_once", "E", e1.task_id),
                                      ("E", "list_experiments", "M", None)):
         res = c.summon(role, action, {}, by=by, parent_task_id=parent, instance="probe-1")
-        assert res.outcome == "ok", (role, res.status, res.outcome, res.refusal_reason, res.detail)
+        # 这一组的工作区是**空的**（队列里没有待消化的文献）⇒ B 那一趟的终局是
+        # `no_result`（"跑完了、确实没有产出"，与 A 的"检索无命中"同一档），
+        # 不是 `ok`：2026-10-15 起 `B.run_once`/`B.run` 自己声明终局
+        # （`agent_b._support.task_outcome`），不允许"什么都没产出"被记成成功。
+        # E 那一件是纯读，照旧 `ok`。两格都要**精确**断言：这一条判的是接线，
+        # 但"接线通了"不等于"这一趟有产出"，把它放宽成 `in ("ok","no_result")`
+        # 会让下面那条 `failed` 的真缺陷从缝里漏过去。
+        want = "no_result" if role == "B" else "ok"
+        assert res.outcome == want, (role, res.status, res.outcome, res.refusal_reason, res.detail)
 
 
 def test_a_factory_that_raises_typeerror_is_not_masked(tmp_path: Path):

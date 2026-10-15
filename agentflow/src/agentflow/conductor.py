@@ -2938,6 +2938,16 @@ class Conductor:
                 tokens=int(raw.get("tokens") or 0),
                 usd=float(raw.get("usd") or 0.0),
             )
+        # 返回值不是 Mapping 时，也认**它自己声明的** `outcome` / `detail`
+        # （2026-10-15 加，T5 第 8 趟的真机读数）：`BRunResult` 这一类结果对象本来就带着
+        # `outcome` / `detail` 两个属性，而这一支此前一律记 `ok` —— 于是"这一趟什么都没
+        # 产出"与"干得漂亮"在台账上同形。只认受控词表里的取值（角色自己的判定词表，
+        # 例如 F 的 `no_change`，不在 `TASK_OUTCOMES` 里 ⇒ 不采信，仍记 `ok` 并把话留在
+        # `payload` 里），这样这条口子不会把两套词表折叠起来。
+        declared = getattr(raw, "outcome", None)
+        if isinstance(declared, str) and declared in S.TASK_OUTCOMES:
+            return self._end(tid, status="done", outcome=declared,
+                             detail=str(getattr(raw, "detail", "") or "执行完成"), payload=raw)
         return self._end(tid, status="done", outcome="ok", detail="执行完成", payload=raw)
 
     def _end(

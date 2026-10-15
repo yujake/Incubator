@@ -133,10 +133,78 @@ class BRunResult:
     skipped_reason: str | None = None
     details: list[dict] = field(default_factory=list)
 
+    #: **真消化**过几篇 = `processed` − `unreadable`（2026-10-15 加，T5 第 8 趟的真机读数）。
+    #:
+    #: 为什么这一格非有不可：`run_once` 在"没有本地全文 / 内容类型不符"那两支里**也**把
+    #: `processed` 置 True（那两支本身是对的 —— 不置 True，那些行会永远堵在队首、
+    #: 每一轮都被重领）。于是 `processed` 这一个布尔同时装着两件**处置相反**的事：
+    #: 「我读过并抽了」与「我连文件都没有、跳过了」。下游读的全是 `processed`，
+    #: 于是台账上写着"34 条已消化"，而真相是"10 条有全文、24 条只是被标了一下"。
+    #: T5 那一趟的后果：M 连着派了 11 次同一种活（每次都拿到 `ok`），`relations` 始终 0 行，
+    #: 一整轮预算花在"读不到的东西"上。**这就是"三态被折成一个布尔"的代价。**
+    #:
+    #: 它只数**真的调过抽取器**的那些，所以 `unreadable` / `skipped_no_extractor` 都不进
+    #: （后者本来就不置 `processed`，列出来只为把话说完）。
+    @property
+    def digested(self) -> int:
+        return max(0, int(self.processed) - int(self.unreadable))
+
+    #: 这一趟的**任务级终局**（`TASK_OUTCOMES` 里的一个）。由 :func:`task_outcome` 一处算。
+    @property
+    def outcome(self) -> str:
+        return task_outcome(self)[0]
+
+    @property
+    def detail(self) -> str:
+        return task_outcome(self)[1]
+
     def to_dict(self) -> dict:
         d = {k: v for k, v in self.__dict__.items() if k != "details"}
         d["details"] = self.details[:20]
+        # 三格一起进返回值（`digested` / `outcome` / `detail`）：主控读的是这份 dict，
+        # 而"这一趟到底有没有产出"必须**在这一层就说实话** —— 不能留给下游去猜
+        # （下发现在 `processed` 上猜错过一次，见 `digested` 的说明）。
+        d["digested"] = self.digested
+        d["outcome"], d["detail"] = task_outcome(self)
         return d
+
+
+def task_outcome(res: "BRunResult") -> tuple[str, str]:
+    """B 的抽取这一趟**该报什么终局** —— 唯一一处判据（动作自己声明，不由框架猜）。
+
+    为什么必须由动作声明（2026-10-15 T5 第 8 趟 `t5h`）：框架那边只看得见"handler 返回了
+    一个 dict 而没写 `outcome`"，于是按"有产出"记 `ok`（`conductor._end_from_payload`）。
+    那一趟 11 次 `B.run` 全部 `outcome=ok`、`detail="执行完成（handler 未声明 outcome，
+    按有产出处理）"`，而新建概念 0、新增关系 0 —— 主控据此以为"文献消化过了"，
+    继续派同一种活。**"什么都没做成"被报成了成功。**
+
+    规则（三态，与 `TASK_OUTCOMES` 同口径）：
+
+    | 这一趟发生了什么 | outcome |
+    |---|---|
+    | 真消化过 ≥1 篇（`digested > 0`） | `ok` |
+    | 一篇都没真动（全是"没全文 / 缺抽取器 / 放弃 / 队列空"） | **`no_result`** |
+    | 有失败、且一篇都没真消化 | `failed` |
+
+    `no_result` 是**有效结论**（"跑完了，确实没有产出"），不是错误 —— 它存在的意义正是
+    让主控**看得见**"这一趟白跑了"，从而不再原样重派。
+    """
+    worked = res.digested > 0
+    produced = bool(res.concepts_created or res.concepts_reused or res.relations_added
+                    or res.relations_duplicate or res.quotes_verified
+                    or res.quotes_failed or res.quotes_unknown)
+    stuck = bool(res.failed) and not worked and not produced
+    detail = (f"真消化 {res.digested} 篇（新建概念 {res.concepts_created} / 复用 "
+              f"{res.concepts_reused} / 新增关系 {res.relations_added} / 引文判定 "
+              f"{res.quotes_verified + res.quotes_failed + res.quotes_unknown}）；"
+              f"没有本地全文 {res.unreadable} 篇、缺抽取器 {res.skipped_no_extractor} 篇、"
+              f"放弃 {res.gave_up} 篇、失败 {res.failed} 篇"
+              + (f"；队列：{res.skipped_reason}" if res.skipped_reason else ""))
+    if worked or produced:
+        return "ok", detail
+    if stuck:
+        return "failed", detail + " ⇒ 这一趟没有任何产出"
+    return "no_result", detail + " ⇒ 这一趟**没有任何产出**（不是成功，别按成功读）"
 @dataclass
 class BClaimOutcome:
     """`_claim()` 的结果：取文献这件事本身的结果，而不只是"取到的那一行"。

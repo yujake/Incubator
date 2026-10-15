@@ -1754,6 +1754,12 @@ _BLOCK_C = '''\
    每一项还能带与 2) 一样的**名册三格**（\rief\ / ame\ / euse\）—— 一批里派三件不同的活时，
    每个子代理各自的简介就写在**它自己那一项**里（别只写一个总的：退役时读的人靠那一句认人）。
    框架按写集分波、同波并发跑；结果按输入顺序回来，每条各自带 status/outcome。
+   **先读 `outcome` 再决定下一步**：`ok` 才是"这一趟真做出了东西"；**`no_result` 是
+   "跑完了、确实没有产出"**（例如派人去消化文献，而那一批全都没有本地全文 —— 它会
+   如实报"真消化 0 篇"）；`refused` 是框架说不（照 `detail` 改参数）；`failed` 才是执行
+   没成功。**见到 `no_result` 不许原样再派一遍**：要么换做法（换动作 / 换目标 / 换参数），
+   要么如实记下"这一条路这一趟没有产出"。**把 `no_result` 当 `ok` 读，正是"以为干了、
+   其实没干"的根源。**
    同一角色在一批里出现多次、又没给 `instance` 时，框架会自动补 `<角色>#N` ——
    所以"并发三个 B"这件事可以就这么写。返回里的 `waves` 与 `concurrent_peak` 是
    "到底并发了没有"的读数；一次一个地派会把本该并行的活排成串行。'''
@@ -2355,18 +2361,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: p115 → p116（2026-10-15，**T5 第 8 趟真机读数驱动**）：失败词表加两格
 #: （`judge_no_reply` / `judge_auth_failed`）—— `judge.JUDGE_PROBLEMS` 被逐项拼进
 #: "三态词表"那一段，所以**十格全部换值**（与 p101 加 `judge_output_limit` 同形）。
-_FROZEN_PROMPT_VERSION = "p116"
+#: p116 → p117（2026-10-15，**同上那一趟按"错误行为"重读**）：共享段 `2b)` 补上
+#: 「召回的 `outcome` 该怎么读」（`no_result` 不许当 `ok` 读、也不许原样重派）。
+#: 作用域读数：**九格换值、C 不换** —— C 没有协作边，那一段对它是残桩。
+_FROZEN_PROMPT_VERSION = "p117"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "2c2f1530d4c0e5ea52368f3bc6f93cc0c044d5da4d081e2561f064c59014c791",
-    "B": "25f871389dce50193a2a169e0c05588bdb1dc726dd313d46b434b779044fc974",
+    "A": "7c7f07aeecc532e674b505a40ba7daf5f45b0019c7c4d5262a07f52b0a38842f",
+    "B": "17d58183aeda1debdb5dd76095303767ecabfb50af491b007e8f0c1e3aef8e03",
     "C": "55315bd83d58bebc4d71753bc94aa1375bd9bf210edde0b0fe5334656208559d",
-    "D": "fe831427cd6c8eab63d2610367a724ed01241b0247cbb52c9ba792d8faf6c04c",
-    "E": "d8524b99dc064a5f9ae26a26c6be96965804aa73b52ae1b5b853e0ad3a33a131",
-    "F": "93e9a9e50d607f09b2f9e302142c0c8a48bfeac5f0a95ca001e20fa2339ca1ea",
-    "G": "16ba1fe026f90d6da846553016113636d3a38eb24399be5155b1c49e0d28b3de",
-    "H": "4c365798548164e85eee7d46759432acfa96893d326eb5d2ddc994813bb1848b",
-    "M": "8539f60fb1ed1f10acf2465b0438ec98634a78cc78b2279d24c3ed44bd2d0661",
-    "V": "3a96d5eec5ec50664c079b8da2f4ead04e8209b9527ab22488b8af1cd9bbadb3",
+    "D": "9d197682d8f96ddd897ab692bb28fb4b1e5db090e8e3b2ada3f805c6bf5996bc",
+    "E": "d19af4dad90adceff6f6b17885429a91afef0ca86adc69bd012b573c73895c8d",
+    "F": "2d38e03fe2b2751d59ca7045f55a3f830f0c4ac5524d678369d530ac31ade89a",
+    "G": "76062e403ce8d25e3b397354b65c9812e82571091b8711ae14a6f813cd72c042",
+    "H": "6b454f8dc89b81bbb42fc5963d40f701638c00fc090b2fb54db2fccb4b8a627a",
+    "M": "ffbc9a2499c3f301f1e24e91f5ca34c12234fa31c10b4a203e5e07ccbac113e0",
+    "V": "683f03881c942bd8fa35303fc88fabb9debb7ea439de1485e3428be21ced8479",
 }
 
 

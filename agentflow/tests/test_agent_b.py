@@ -214,6 +214,69 @@ def test_literature_without_local_file_is_marked_processed(store):
     assert b.run_once().skipped_reason == "no_unprocessed_literature", "队列必须被清空"
 
 
+# ------------------------------------------------- "没有产出"不许报成成功（T5 真机读数）
+
+
+def test_the_digested_reading_does_not_count_rows_that_were_only_skipped():
+    """判据（2026-10-15，T5 第 8 趟 `t5h`）：`digested` = `processed` − `unreadable`。
+
+    `processed` 这一个布尔里同时装着**处置相反**的两件事：「我读过并抽了」与
+    「我连文件都没有、跳过了」。下游读的全是 `processed` ⇒ 台账上写着"34 条已消化"，
+    真相是"10 条有全文"。这一格就是把那一折打开的地方，所以它是**读数判据的第一条**：
+    折回去了，后面两条就没意义了。
+    """
+    from agentflow.agent_b._support import BRunResult, task_outcome
+
+    skipped = BRunResult(processed=5, unreadable=5, skipped_reason="no_unprocessed_literature")
+    assert skipped.digested == 0
+    assert task_outcome(skipped)[0] == "no_result"
+
+    mixed = BRunResult(processed=5, unreadable=4, concepts_created=2)
+    assert mixed.digested == 1 and task_outcome(mixed)[0] == "ok"
+
+    # 失败那一档：一篇都没真消化、也没有产出 ⇒ `failed`（不是 no_result，也不是 ok）
+    assert task_outcome(BRunResult(failed=3))[0] == "failed"
+
+    # 只复用不新建（读了、判重后没新行）也是"真消化过"，不许算成没产出
+    reused = BRunResult(processed=1, concepts_reused=3)
+    assert reused.digested == 1 and task_outcome(reused)[0] == "ok"
+
+
+def test_a_run_that_only_skipped_unreadable_rows_is_no_result_not_ok(store):
+    """判据（同上，端到端）：**什么都没消化**不许报成 ok —— 这一趟就是 T5 那一趟的缩影。
+
+    真机现场：A 取回 41 条，其中 31 条没有本地全文；B 连着跑了 11 次、11 次
+    `outcome=ok`（`detail` 还是"执行完成（handler 未声明 outcome，按有产出处理）"），
+    而新建概念 0 / 新增关系 0。主控据此以为"文献消化过了"，继续派同一种活 ——
+    一整轮预算花在读不到的东西上。**"什么都没做成"被报成了成功。**
+    """
+    add_literature(store, "0000", title="没有全文", path=None)
+    add_literature(store, "0001", title="文件被删", path="0001/gone.txt")
+    b = _agent_b(store, StubExtractor())
+    out = b.run()
+    assert out["digested"] == 0, out
+    assert out["unreadable"] == 2 and out["processed"] == 2, out
+    assert out["outcome"] == "no_result", out
+    assert "没有任何产出" in out["detail"], out["detail"]
+    assert "没有本地全文 2 篇" in out["detail"], out["detail"]
+
+
+def test_a_run_that_really_digested_is_ok_and_says_how_many(store):
+    """反负控（与上一条配对）：真抽过必须是 `ok`，且 `digested` 与产出一起报出来。
+
+    没有这一条，上一条可以靠"凡 run 都报 no_result"满足 —— 而那样主控会把**真干活**
+    的那几趟也当成白跑，处置方向正好反了。
+    """
+    write_library_file(store, "0000/a.txt", QUOTE)
+    add_literature(store, "0000", title="有全文", path="0000/a.txt")
+    b = _agent_b(store, StubExtractor(
+        concepts=[ConceptDraft(name="群", definition="d", aliases=[], source_lit_id="0000")]))
+    out = b.run()
+    assert out["digested"] == 1 and out["outcome"] == "ok", out
+    assert "真消化 1 篇" in out["detail"] and "新建概念 1" in out["detail"], out["detail"]
+
+
+
 # --------------------------------------------------------------------------- 抽取失败
 
 
