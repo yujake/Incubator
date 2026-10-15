@@ -421,7 +421,14 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （`verify_all` 第 14 段逐条核报告面里的 `前缀:号.字段`）；E 那一条的读数同时改准
 #: （"那一格是空的"而不是"那一个字段不存在"，也不再声称 D 的手稿漏了它）。
 #: 作用域：只有 D / E 两格。
-PROMPT_VERSION = "p115"
+#: `p116`（2026-10-15，**T5 第 8 趟真机读数驱动**）：失败词表加两格 ——
+#: `judge_no_reply`（其余"没查成"：网络 / 5xx / 未知 / 没 key / 重试完的限流，
+#: 实际串 `judge_no_reply:<error_kind>`）与 `judge_auth_failed`（key 无效，立刻停）。
+#: 真机现场：本机 DNS 失效三次落成 `judge_failed:ModelReplyNotOk`、被算成"模型回了坏 JSON"、
+#: 整趟 run 以 `bad_json_limit` 收场而那句话是假的。
+#: **作用域：十格全部换值** —— `judge.JUDGE_PROBLEMS` 被逐项拼进"三态词表"那一段
+#: （与 `p101` 加 `judge_output_limit` 那次同形）。
+PROMPT_VERSION = "p116"
 
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:

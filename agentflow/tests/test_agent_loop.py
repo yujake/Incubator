@@ -546,6 +546,72 @@ def test_thinking_that_eats_the_output_budget_is_its_own_failure(tmp_path: pathl
     assert "输出预算" in run.final and "拆小" in run.final, run.final
 
 
+def test_a_network_failure_is_not_a_bad_json_either(tmp_path: pathlib.Path):
+    """判据（2026-10-15 T5 第 8 趟 `t5h` 的真机读数）：**没连上**也不许算成坏 JSON。
+
+    真机现场：本机 DNS 中途失效（`detail='gaierror: [Errno 11002] getaddrinfo failed'`，
+    网关的 `error_kind="network"`），连着三步如此。当时判定"没拿到回复"的成员表只写了
+    `judge_timeout` 与 `judge_output_limit` 两个名字 ⇒ `network` 落成
+    `judge_failed:ModelReplyNotOk` ⇒ 被算进 `bad_json_streak` ⇒ 三步之后整趟 run
+    以 `bad_json_limit` 收场，收场那句话是「连续 3 次没有给出可解析的 JSON」——
+    **模型一个字都没说**，是这台机器没连上。这一条把那三件事一起钉住：
+    停止理由是 `model_unreachable`、账不记到 `bad_json` 头上、收场那句话说实话。
+    """
+    st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=5)
+    gw = _TimeoutGateway(detail="gaierror: [Errno 11002] getaddrinfo failed", kind="network")
+    run = run_role("M", "等一个连不上的回答", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.stop_reason == "model_unreachable", run.to_dict()
+    assert run.bad_json == 0 and run.bad_json_streak == 0, run.to_dict()
+    assert run.no_reply >= 3, run.to_dict()
+    problems = [s.problem for s in run.steps if s.shape == "invalid"]
+    assert problems == ["judge_no_reply:network"] * run.no_reply, problems
+    assert "没拿到可用的回复" in run.final and "judge_no_reply:network" in run.final, run.final
+    assert "没有给出可解析的 JSON" not in run.final, run.final
+
+
+def test_the_boundary_bad_response_is_still_counted_as_bad_json(tmp_path: pathlib.Path):
+    """反负控（与上一条配对）：**它回了、只是那份回复不可用**仍走坏 JSON 那一档。
+
+    没有这一条，上一条可以靠"凡 `ok=False` 都算没拿到回复"来满足 —— 那样一来
+    `bad_response`（响应不是预期的 JSON / 缺字段 / 内容为空，模型确实回了）会被
+    说成"我们没连上"，归因反向错一次。两档的处置方向相反，所以两条判据必须同时存在。
+    """
+    st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=5)
+    gw = _TimeoutGateway(detail="响应里没有 choices 字段", kind="bad_response")
+    run = run_role("M", "回了个不成形的响应", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.stop_reason == "bad_json_limit", run.to_dict()
+    assert run.no_reply == 0, run.to_dict()
+    problems = {s.problem for s in run.steps if s.shape == "invalid"}
+    assert problems == {"judge_failed:ModelReplyNotOk"}, problems
+
+
+def test_a_dead_key_stops_at_once_with_its_own_reason(tmp_path: pathlib.Path):
+    """判据（与上面两条同批）：key 无效**立刻停**，理由自己一档，且不并进任何 streak。
+
+    它不是"没查成"（`modelgw.NOT_CHECKED` 里没有 `auth_failed`：查过了、确定不行），
+    也不是"它说错了"。重试三次只是把钱再烧一遍 ⇒ 一次就停，且读数必须说出真正的原因
+    （"换 key"是唯一那条可行动的路）。
+    """
+    st, cond, registry, _gw, root = _wired(tmp_path, {"M": ["{}"]}, max_steps=5)
+    gw = _TimeoutGateway(detail="401 Unauthorized", kind="auth_failed")
+    run = run_role("M", "拿错钥匙", store=st, registry=registry, conductor=cond,
+                   seam=LlmSeam(role="M", session_root=root, gateway=gw, price=(0.0, 0.0),
+                                sid="test-run"), workspace_root=str(root), sid="test-run",
+                   from_env=False)
+    assert run.stop_reason == "model_auth_failed", run.to_dict()
+    assert run.bad_json == 0 and run.no_reply == 0, run.to_dict()
+    invalid = [s for s in run.steps if s.shape == "invalid"]
+    assert len(invalid) == 1 and invalid[0].problem == "judge_auth_failed", \
+        [(s.problem) for s in invalid]
+    assert "key" in run.final and "坏 JSON" in run.final, run.final
+
+
 def test_the_step_prompt_restates_the_output_contract_last(tmp_path: pathlib.Path):
     """判据（§195 真机实测逼出来的）：每一步最后读到的一行必须是输出契约的骨架。
 

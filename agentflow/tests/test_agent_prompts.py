@@ -2352,18 +2352,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: 换成机器判据的落点（`verify_all` 第 14 段逐条核报告面里的 `前缀:号.字段`）；
 #: E 那一条的读数同时改准（"那一格是空的"而不是"那个字段不存在"）。
 #: 作用域读数：只有 **D / E** 两格换值（两处各自只发给那一岗）。
-_FROZEN_PROMPT_VERSION = "p115"
+#: p115 → p116（2026-10-15，**T5 第 8 趟真机读数驱动**）：失败词表加两格
+#: （`judge_no_reply` / `judge_auth_failed`）—— `judge.JUDGE_PROBLEMS` 被逐项拼进
+#: "三态词表"那一段，所以**十格全部换值**（与 p101 加 `judge_output_limit` 同形）。
+_FROZEN_PROMPT_VERSION = "p116"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "313b24a114f7a560c2505af8578c2303d638cd837d8fdb5eecadd93d0bd006da",
-    "B": "82bd6f7e211dce1d324ba12c17a98c2dce6ddff3792ae01a24637822cd793514",
-    "C": "4ad1339d41286052608923bc4fd96c6260e7be6e2d77383b9b6aa2e87e22aa6f",
-    "D": "4705d9f41eb8da6a19eae291da92987d6777f67cd6c156988bcc9fbb8dea07e6",
-    "E": "0b59e982bff175dc61fa7f1471f28341d5e76c71419947e01b88d11f582394f8",
-    "F": "eaa24cccb4bb17fbe0b05c677f32f69ecb8d5aa6cc17de680a578850b0cd3cf5",
-    "G": "f2d29b2b3c4496ac07bb8938a7deae03e5340cbf1186fbcc64782d3c9c07bace",
-    "H": "9fa608493b8e3b00a2c3c74fe64e82be21a1744151aefe7ac89890bde4605ceb",
-    "M": "1b69ec3b3c22b521b3cb988de60b9badc1dbaf2bf86e33a9043e0fa0ec583ed9",
-    "V": "a7f778a3e27caf00ba248c974f64a4878896a9e5a74ac46b71e25bb7a888e34a",
+    "A": "2c2f1530d4c0e5ea52368f3bc6f93cc0c044d5da4d081e2561f064c59014c791",
+    "B": "25f871389dce50193a2a169e0c05588bdb1dc726dd313d46b434b779044fc974",
+    "C": "55315bd83d58bebc4d71753bc94aa1375bd9bf210edde0b0fe5334656208559d",
+    "D": "fe831427cd6c8eab63d2610367a724ed01241b0247cbb52c9ba792d8faf6c04c",
+    "E": "d8524b99dc064a5f9ae26a26c6be96965804aa73b52ae1b5b853e0ad3a33a131",
+    "F": "93e9a9e50d607f09b2f9e302142c0c8a48bfeac5f0a95ca001e20fa2339ca1ea",
+    "G": "16ba1fe026f90d6da846553016113636d3a38eb24399be5155b1c49e0d28b3de",
+    "H": "4c365798548164e85eee7d46759432acfa96893d326eb5d2ddc994813bb1848b",
+    "M": "8539f60fb1ed1f10acf2465b0438ec98634a78cc78b2279d24c3ed44bd2d0661",
+    "V": "3a96d5eec5ec50664c079b8da2f4ead04e8209b9527ab22488b8af1cd9bbadb3",
 }
 
 

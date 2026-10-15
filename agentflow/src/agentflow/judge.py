@@ -19,6 +19,18 @@
   思维链非空；2026-10-12 T2 真机读数 109,397 字思维链 / `max_tokens=32768`）。
   它与 `judge_timeout` 同族（都是"我们没拿到可用的回复"，不是"它说错了"），
   处置却不同：这一档要的是"把这一步拆小、把思考压短"，不是重发同一个请求。
+- `judge_no_reply:<error_kind>`（2026-10-15 加）：**其余"没查成"那一档**
+  （`modelgw.NOT_CHECKED` 里除上面两档以外的 `network` / `server_error` / `unknown` /
+  `no_key`，以及重试完仍失败的 `rate_limited`）—— 后缀逐字带上网关自己的 `error_kind`。
+  为什么它有资格占一个码（真机读数，T5 第 8 趟 `t5h`）：本机 DNS 中途失效，网关把
+  `gaierror: [Errno 11002] getaddrinfo failed` 折成 `error_kind="network"`，
+  而本函数当时**只认两档** ⇒ 三次网络失败落成 `judge_failed:ModelReplyNotOk`、
+  被循环按**坏 JSON** 计数、三次连击把整趟 run 判成 `bad_json_limit`，
+  收场那句话是「连续 3 次没有给出可解析的 JSON」—— **模型一个字都没说**，是我们没连上。
+  这与 2026-10-12 那次（超时被当成坏 JSON）是同一个病，病根就在"只认两档"这一行。
+- `judge_auth_failed`（2026-10-15 加）：key 无效/无权。它**不是**"没查成"
+  （`modelgw.NOT_CHECKED` 里没有它：查过了、确定不行），也不是"它说错了"；
+  处置只有一条（换 key / 查额度），所以调用方应当**立刻停**，不必等三次连击。
 - `judge_bad_json`：返回的不是合法 JSON（LLM 的输出形态不可控）。
 - `judge_over_budget`：预算耗尽（由调用方抛 `BudgetExhausted`，或由计量层拒绝）。
 - `judge_refused`：判定方明确拒绝（由调用方抛 `JudgeRefused`）。
@@ -32,6 +44,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from . import modelgw as MG
 from .llm import parse_llm_json
 
 #: 受控词表：`judge_failed` 是前缀，实际串是 `judge_failed:<异常类名>`。
@@ -46,6 +59,11 @@ JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_timeout",
     # `judge_output_limit`（2026-10-12 加）：输出预算被思考吃光 —— 见模块 docstring 那一行。
     "judge_output_limit",
+    # `judge_no_reply`（2026-10-15 加）：其余"没查成"（网络 / 5xx / 未知 / 没 key / 限流），
+    # 实际串是 `judge_no_reply:<error_kind>`。加它的理由见模块 docstring。
+    "judge_no_reply",
+    # `judge_auth_failed`（2026-10-15 加）：key 无效/无权 —— 立刻停，不必等三次连击。
+    "judge_auth_failed",
     "judge_bad_json",
     "judge_bad_args",
     "judge_over_budget",
@@ -114,11 +132,22 @@ def problem_of_reply(reply: Any) -> str:
     落成的都是 `judge_failed:ModelReplyNotOk`，循环据此按"坏 JSON"计数、
     收场措辞写成"连续 3 次没有给出可解析的 JSON" —— 三句话没有一句是真的：
     它没有"给出"任何东西，是我们没等到。归因错在"码"这一格，不在读数。
+    **第二次真机读数（2026-10-15 T5 第 8 趟 `t5h`）**：同一个病换了外衣 ——
+    当时只认 `timeout` 与 `output_exhausted` **两档**，于是本机 DNS 失效
+    （`gaierror: getaddrinfo failed`，`error_kind="network"`）连续三次落成
+    `judge_failed:ModelReplyNotOk`，又把整趟 run 判成 `bad_json_limit`。
+    所以现在**按 `modelgw.NOT_CHECKED` 这张已声明的词表分流**，而不是列举两档：
+    词表加了新档，这里自动跟着走（这正是"一处定义"要的效果）。
 
-    只认两档（其余维持原串 —— 加新码等于加新词表，得有出处）：
-    `timeout` ⇒ `judge_timeout`；`output_exhausted`（输出预算被思考吃光）
-    ⇒ `judge_output_limit`。两条都不是"它说错了"，而是"我们没拿到可用的回复"，
-    与"它回了个看不懂的东西"必须分得开（处置方向相反）。
+    分流表（只做归类，不做判断）：
+
+    | 网关的 `error_kind` | 本层的码 | 为什么 |
+    |---|---|---|
+    | `timeout` | `judge_timeout` | 没等到 —— 历史读数点名的那一档 |
+    | `output_exhausted` | `judge_output_limit` | 预算被思考吃光 —— 处置是拆小这一步 |
+    | 其余 `NOT_CHECKED`（`network` / `server_error` / `unknown` / `no_key`） | `judge_no_reply:<kind>` | 都是"我们没拿到可用的回复"，却各有各的原因；后缀逐字保留原因，便于事后归因 |
+    | `auth_failed` | `judge_auth_failed` | 查过了、确定不行（key 无效）—— 立刻停 |
+    | `bad_response` 及其余 | `judge_failed:ModelReplyNotOk` | **它回了**，只是那份回复不可用 —— 与上面几档分得开 |
     """
     if bool(getattr(reply, "ok", False)):
         return ""
@@ -127,7 +156,29 @@ def problem_of_reply(reply: Any) -> str:
         return "judge_timeout"
     if kind == "output_exhausted":
         return "judge_output_limit"
+    if kind == "auth_failed":
+        return "judge_auth_failed"
+    # `rate_limited` 不在 `NOT_CHECKED` 里（它在 `RETRYABLE`：服务是活的、值得重试），
+    # 但**重试完之后**它同样是"我们没拿到可用的回复" —— 归因与处置都跟"它说错了"相反
+    # （该做的是退避/换时段，不是收紧输出协议）。所以它与 `NOT_CHECKED` 同归这一族。
+    if kind in MG.NOT_CHECKED or kind == "rate_limited":
+        return f"judge_no_reply:{kind or 'unknown'}"
     return "judge_failed:ModelReplyNotOk"
+
+
+def is_no_reply(code: str) -> bool:
+    """这个失败码属于「我们没拿到可用的回复」那一档吗（`LoopRun.no_reply` 的成员判据）。
+
+    成员就是三样：`judge_timeout` / `judge_output_limit` / `judge_no_reply:<error_kind>`。
+
+    为什么是函数而不是一张元组常量：`judge_no_reply:` 带后缀（与 `judge_failed:` 同形），
+    拿 `in ("judge_timeout", "judge_output_limit")` 判会**漏**，而漏的表现就是
+    它被算进坏 JSON —— 这件事在真机上已经发生过两次（2026-10-12 超时、2026-10-15 网络）。
+    判据只许有这一处：计数、纠正行、停止理由三处都按它分流。
+    """
+    text = str(code or "")
+    return (text in ("judge_timeout", "judge_output_limit")
+            or text.startswith("judge_no_reply:"))
 
 
 def seam_json(seam: Any, prompt: str, *,

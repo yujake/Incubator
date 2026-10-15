@@ -28,7 +28,7 @@
   总数（`run.bad_json`）与连击（`run.bad_json_streak`）分开记 —— 停不停的判据是连击（§68）；
 - 工具参数不是合法 JSON（`judge_bad_args`）：「另计一个数」（`run.bad_args`），
   连击超过上限停成 `bad_args_limit`（§65）—— 它交回工具层就能改对，不是"形状漂移"；
-- 没拿到可用的回复（`judge_timeout` / `judge_output_limit`）：又「另计一个数」
+- 没拿到可用的回复（`judge_timeout` / `judge_output_limit` / `judge_no_reply:<kind>`）：又「另计一个数」
   （`run.no_reply`），连击超过上限停成 `model_timeout` / `model_output_limit` ——
   这一档不是"它说错了"，是"我们没拿到能用的回答"（等不到返回，或思考把输出预算吃光）；
   判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2；
@@ -806,19 +806,40 @@ def _bad_json_line(step: int, problem: str, detail: str) -> str:
             "只回一行 JSON。骨架：\n" + JSON_TAIL)
 
 
-#: 「没拿到可用的回复」的两档（`LoopRun.no_reply`）：超时与"输出预算被思考吃光"。
-#: 判据只有这一处 —— 计数、纠正行、停止理由三处都按它分流。
-_NO_REPLY_PROBLEMS: tuple[str, ...] = ("judge_timeout", "judge_output_limit")
+#: 「没拿到可用的回复」的那一档（`LoopRun.no_reply`）里**有名字的两个成员**：
+#: 超时、以及"输出预算被思考吃光"。第三族 `judge_no_reply:<error_kind>` 带后缀，
+#: 不能写成元组里的一个字面量 —— 成员判据只有 `judge.is_no_reply` 一处，
+#: 本常量留在这里是**给读的人看这一档有哪几张脸**（不再参与判定）。
+_NO_REPLY_NAMED: tuple[str, ...] = ("judge_timeout", "judge_output_limit")
+
+
+def _is_no_reply(problem: str) -> bool:
+    """这一档的成员判据 —— **转发 `judge.is_no_reply`**（`judge_no_reply:<kind>` 那一族带后缀）。
+
+    为什么不在这里就地判（2026-10-15 T5 第 8 趟 `t5h` 的真机读数）：本函数此前不存在，
+    这里拿的是上面那张**两元组**，而网关把 DNS 失效折成 `error_kind="network"`
+    ⇒ 落成 `judge_no_reply:network` ⇒ 不在元组里 ⇒ 被算进坏 JSON，
+    三次连击把 run 判成 `bad_json_limit`、收场那句话还说"模型没给出可解析的 JSON"。
+    成员表在 `judge`（失败码的唯一定义处），这里只许转发。
+    """
+    from . import judge as J   # 惰性：`agent_loop` 的 import 面已经很宽，不在这里加一条
+
+    return J.is_no_reply(problem)
 
 
 def _no_reply_line(step: int, problem: str, detail: str) -> str:
-    """这一次没拿到可用的回复（`judge_timeout` / `judge_output_limit`）要回给它的那一句。
+    """这一次没拿到可用的回复（`judge_timeout` / `judge_output_limit` / `judge_no_reply:*`）
+    要回给它的那一句。
 
     为什么不复用"坏 JSON"那一行（2026-10-12 T2 真机读数）：那一行纠正的是
     "它说错了"，而这里它什么都没说 —— 拿"只回一行 JSON"去纠正一次超时或一次
     "思考把预算吃光"，它只能照原样再做一遍，而外部原因没变（单次请求的耗时与
     这一步要产出的长度成正比）。可行动的那句话是"把这一步拆小"：上限固定时，
     唯一由它控制的就是这一步要产出多少。
+
+    **第三档（2026-10-15 T5 第 8 趟）**：`judge_no_reply:<kind>` 是"我们根本没连上"
+    （那一趟是 DNS）。这一档里**它没有任何可改的地方** —— 所以那一行不许写
+    "把这一步拆小"（那是超时/输出吃光的处置），只如实说明并把同样的请求再发一次。
     """
     why = f"：{_clip(detail, 200)}" if detail else ""
     if problem == "judge_output_limit":
@@ -826,6 +847,11 @@ def _no_reply_line(step: int, problem: str, detail: str) -> str:
                 f"（{why}）—— 正文一个字都没留下。处置：**下一步只回一行 JSON**，"
                 "把想法压到十句以内（推理与正文共用同一份输出预算）；"
                 "这一步要做的事如果本来就大，就把它拆小。")
+    elif problem.startswith("judge_no_reply:"):
+        head = (f"\n\n[第 {step + 1} 步] 框架：上一条请求**没送到 / 没回来**（{why}）—— "
+                "这一次不是你回了坏东西，也不是这一步太大，是这台机器到模型的那条路"
+                "这一会儿不通（网关已经按重试次数试过）。**你什么都不用改**："
+                "把同样这一步再做一遍即可；如果连着几次都不通，这一趟会停下来并把原因写清。")
     else:
         head = (f"\n\n[第 {step + 1} 步] 框架：上一条请求**没等到返回**（超时{why}）—— "
                 "不是你回了坏东西，是这一条回复在规定时间内没有回来。处置：**把这一步拆小**"
@@ -3075,13 +3101,21 @@ class AgentLoop:
                 args_error = call.problem == "judge_bad_args"
                 # 「没拿到可用的回复」不进坏 JSON 那一档（`LoopRun.no_reply` 的说明）：
                 # 它不是"它说错了"，是我们没收到能用的回答。
-                no_reply = call.problem in _NO_REPLY_PROBLEMS
+                no_reply = _is_no_reply(call.problem)
+                auth_failed = call.problem == "judge_auth_failed"
                 if args_error:
                     run.bad_args += 1
                     run.bad_args_streak += 1
                 elif no_reply:
                     run.no_reply += 1
                     run.no_reply_streak += 1
+                elif auth_failed:
+                    # key 无效/无权：**不是**"没查成"（查过了、确定不行），也不是它说错了。
+                    # 处置只有一条（换 key / 查额度），重试三次只是把钱再烧一遍 ⇒ 立刻停。
+                    # 这里**不并进任何 streak**（`bad_json` / `no_reply` 都不）：并进去会让
+                    # "三连击"这个读数把一个配置错误说成协议问题 —— 而这一条正是
+                    # 「归因错 ⇒ 处置错」那一族（2026-10-15 与 `judge_no_reply` 同批加）。
+                    pass
                 else:
                     run.bad_json += 1
                     run.bad_json_streak += 1
@@ -3109,6 +3143,14 @@ class AgentLoop:
                     run.final = ("没有接模型（judge_not_wired）：这次运行没有产生任何判断，"
                                  "也没有写任何数据")
                     break
+                if auth_failed:
+                    # 立刻停：理由说实话（既不是"它说错了"，也不是"网络没通"），
+                    # 并给出唯一那条可行动的路。步骤与事件已在上面记全（与 `judge_not_wired` 同形）。
+                    run.stop_reason = "model_auth_failed"
+                    run.final = (f"模型没认这把 key（{_clip(str(call.detail), 200)}）—— "
+                                 "这不是它回了坏 JSON，也不是网络没通；"
+                                 "换 key / 查额度之后再跑，重试没有意义")
+                    break
                 if args_error:
                     # 参数坏：「交回工具层」（`draft/37` §65，DSH 的 `ToolArgsError` 口径）。
                     # 反馈里点名"是哪个函数的参数坏了"（`call.detail` 带着工具名与原文），
@@ -3129,14 +3171,25 @@ class AgentLoop:
                     # 而上限存在的理由是"不许拿整趟运行去等一个不回来的回答"
                     # （每次超时在网关里已经自己重试过 `ModelSpec.max_retries` 次）。
                     if run.no_reply_streak > self.max_bad_json:
-                        run.stop_reason = ("model_timeout" if call.problem == "judge_timeout"
-                                           else "model_output_limit")
+                        # 停止理由逐档说实话（2026-10-15 加第三档）：超时 / 输出吃光 /
+                        # **没连上**（`judge_no_reply:<kind>`）三者的处置方向不同 ——
+                        # 调大上限、拆小这一步、等网络回来 —— 而它们此前共用一个
+                        # "bad_json_limit"，那句话在 DNS 失效那一趟是假的。
+                        if call.problem == "judge_timeout":
+                            run.stop_reason = "model_timeout"
+                            nxt = ("超时那一档可调大 AGENTFLOW_MODEL_TIMEOUT_SEC")
+                        elif call.problem == "judge_output_limit":
+                            run.stop_reason = "model_output_limit"
+                            nxt = "输出吃光那一档要把这一步拆小、把思考压短"
+                        else:
+                            run.stop_reason = "model_unreachable"
+                            nxt = ("没连上那一档要看网络/DNS 与本机到 api 的通路"
+                                   "（网关已按 `ModelSpec.max_retries` 重试过）")
                         run.final = (
                             f"连着 {run.no_reply_streak} 次没拿到可用的回复"
-                            f"（最后一次：{_clip(str(bad_result['detail']), 200)}）—— "
+                            f"（最后一次：{call.problem}；{_clip(str(bad_result['detail']), 200)}）—— "
                             "这不是它回了坏 JSON，是这一步没有产出可用的东西；停止。"
-                            "下一趟可以 `--resume` 续跑；超时那一档可调大 "
-                            "AGENTFLOW_MODEL_TIMEOUT_SEC，输出吃光那一档要把这一步拆小")
+                            f"下一趟可以 `--resume` 续跑；{nxt}")
                         break
                     messages.append(assistant_message(step, {}, name="invalid"))
                     messages.append(tool_message(
@@ -5845,7 +5898,7 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
                 correction = _bad_args_line(step, str(result.get("detail") or ""))
             elif problem == "judge_bad_json":
                 correction = _bad_json_line(step, problem, str(result.get("detail") or ""))
-            elif problem in _NO_REPLY_PROBLEMS:
+            elif _is_no_reply(problem):
                 # 续跑要拼出当时那一句（判据：重建的对话与当时逐字相等）。
                 correction = _no_reply_line(step, problem, str(result.get("detail") or ""))
             else:

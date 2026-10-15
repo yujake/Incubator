@@ -147,6 +147,11 @@ _STOP_BADGES = {
     # "坏 JSON/坏参数"是模型说错了话，"模型超时/输出吃光"是我们没拿到能用的回答。
     "model_timeout": ("badge-fail", "模型没返回（超时）"),
     "model_output_limit": ("badge-fail", "思考吃光输出预算"),
+    # 2026-10-15 T5 第 8 趟 `t5h` 的真机读数加的两格：同一族"归因不同、处置不同"。
+    # 本机 DNS 失效那三次原先落成 `bad_json_limit`（"坏 JSON 连击"）—— 那句话是假的；
+    # `auth_failed` 原先也要等三次连击才停，而换 key 才是唯一可行动的路。
+    "model_unreachable": ("badge-fail", "没连上模型（网络/DNS）"),
+    "model_auth_failed": ("badge-fail", "模型没认这把 key"),
     # `draft/37` §136：同调用 + 同读数连着到上限 ⇒ 这一趟停在"没有新事实"。
     # 刻意不是 `badge-fail`：那不是出错，是"这一趟没有往前走"（一档读数）。
     "no_progress_limit": ("badge-unknown", "原地打转"),

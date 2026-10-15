@@ -151,3 +151,65 @@ def test_the_json_asker_accepts_both_seam_shapes():
             return '{"ok": true}'
 
     assert J.judge_json(_CompleteOnly(), "p") == ({"ok": True}, "")
+
+
+# --------------------------------------------------------------- 网关结局 → 失败码
+
+
+class _Reply:
+    """一个网关结局的最小替身（`modelgw` 不抛，把结局折成 `ok=False` + `error_kind`）。"""
+
+    def __init__(self, ok: bool, kind: str = "") -> None:
+        self.ok = ok
+        self.error_kind = kind
+
+
+def test_every_kind_in_the_gateway_vocabulary_lands_on_a_declared_code():
+    """判据（一处定义）：`modelgw.MODEL_ERROR_KINDS` 里每一档都要落到本层的**受控码**上。
+
+    为什么这条非有不可（2026-10-15 T5 第 8 趟 `t5h` 的真机读数）：本函数此前只认
+    `timeout` 与 `output_exhausted` 两个名字，**词表里其余各档一律落成
+    `judge_failed:ModelReplyNotOk`**。于是本机 DNS 失效（`error_kind="network"`）
+    被下游算成"模型回了坏 JSON"，三步连击把整趟 run 判成 `bad_json_limit`，
+    收场那句话是「连续 3 次没有给出可解析的 JSON」—— 模型一个字都没说。
+
+    现在按词表分流：**词表加一档，这里自动跟着走**（这正是"一处定义"要的效果）。
+    反真空：词表本身要非空且含本趟真机那两档，否则这条判据什么都没查。
+    """
+    from agentflow import modelgw as MG
+
+    assert MG.MODEL_ERROR_KINDS, "装置前提：网关的失败词表不该是空的"
+    assert {"network", "timeout", "output_exhausted", "auth_failed"} <= set(MG.MODEL_ERROR_KINDS)
+    for kind in MG.MODEL_ERROR_KINDS:
+        code = J.problem_of_reply(_Reply(False, kind))
+        assert J.is_judge_problem(code), f"{kind} 落到了词表外的码：{code!r}"
+        # 归因分档：`NOT_CHECKED` 那一档（除两档有名字的）必须进 `judge_no_reply:*`，
+        # 不许落成 `judge_failed:ModelReplyNotOk`（后者说"它回了但不可用"）。
+        if kind in MG.NOT_CHECKED and kind not in ("timeout", "output_exhausted"):
+            assert code == f"judge_no_reply:{kind}", (kind, code)
+            assert J.is_no_reply(code), (kind, code)
+        if kind in ("timeout", "output_exhausted"):
+            assert J.is_no_reply(code), (kind, code)
+
+
+def test_the_reply_failure_split_is_the_same_set_as_the_gateway_declares():
+    """判据：`is_no_reply` 的成员集**恰好**是"没查成"那一档（加上重试完的限流）。
+
+    左：本层判成"没拿到可用的回复"的码；右：网关声明为 `NOT_CHECKED` 的那几档
+    （`rate_limited` 不在 `NOT_CHECKED` 里 —— 它在 `RETRYABLE`，但重试完之后
+    与"没拿到"同族）。两边一对，`judge_failed:ModelReplyNotOk` 就只剩
+    「它回了、那份回复不可用」这一种含义 —— 而这一条正是修复的意义所在。
+    """
+    from agentflow import modelgw as MG
+
+    no_reply_kinds = {k for k in MG.MODEL_ERROR_KINDS
+                      if J.is_no_reply(J.problem_of_reply(_Reply(False, k)))}
+    want = (set(MG.NOT_CHECKED) | {"rate_limited"})
+    assert no_reply_kinds == want, (
+        f"两边对不上：本层判成「没拿到回复」的是 {sorted(no_reply_kinds)}，"
+        f"网关声明的是 {sorted(want)}")
+
+    # 剩下的那几档必须**不**进这一族：它回了，只是不可用（或 key 无效 —— 那是另一档）。
+    for kind in set(MG.MODEL_ERROR_KINDS) - want:
+        code = J.problem_of_reply(_Reply(False, kind))
+        assert not J.is_no_reply(code), (kind, code)
