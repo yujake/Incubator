@@ -38,14 +38,22 @@
 4. 一份**没登记过**的非 LaTeX `main.tex` ⇒ 必须红（证明"不是论文"不是免检通道）。
 
 ⚠️ 这条判据是**工作区绑定**的：它扫的是盘上真实的 `projects/`，而 `projects/` 在
-`.gitignore` 第 164 行里（不入库）。于是在一个没有跑过论文的克隆里它会红 —— 这是
-**有意**的：那台机器上"论文有没有中文"谁都没有查过，"没查成"不许折叠成"干净"。
-真要在那种环境里跑发布门，就先跑一遍论文（或把 `projects/` 拷进去），不要改这条判据
-让自己变绿。
+`.gitignore` 第 164 行里（不入库）。两种"没有东西可查"的形态**必须分开**（业主 2026-10-18
+定的口径）：
+
+- **`projects/` 目录整个不存在**（= 刚 clone、从没跑过论文）⇒ `pytest.skip`，理由逐字写
+  「干净克隆里没有 projects/，这条判据没有对象」—— 那是**正常状态**，不是缺陷；
+- **`projects/` 存在但没有一篇 LaTeX 稿** ⇒ **判红**（负控 ③ 守这一条）：那说明有人跑过、
+  目录在，却一篇论文都读不到 —— "没查成"不许折叠成"查过了没问题"。
+
+判据本体 `language_problems()` 保持纯函数且**严格**（空目录 ⇒ 红）：skip 只发生在
+pytest 用例这一层，不改本体，否则负控 ③ 就失去对象。
 """
 from __future__ import annotations
 
 import pathlib
+
+import pytest
 
 #: 仓库根（`tests/` 的上一级）：判据扫的是**盘上真实的**论文，不是夹具。
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -74,13 +82,15 @@ CJK_RANGES: tuple[tuple[int, int], ...] = (
 
 #: 已知的、**不是 LaTeX 论文**的 `main.tex`（仓库根相对路径，逐条登记）。
 #:
-#: 现存这一条：2026-10-04 的 `p5-review-t5` 那一趟，`build_document` 按 `out_path`
-#: 把台账稿渲染进了 `out/paper/main.tex`（3992 字节的 markdown，开头是 `# What survives…`
-#: 与 `- 稿件代号：doc:0000`）。它不属于任何交付物，语言判据对它无从下手；
-#: **新出现的非 LaTeX `main.tex` 不在本表里 ⇒ 判红**（见 `language_problems`）。
-NON_LATEX_MAIN_TEX: frozenset[str] = frozenset({
-    "projects/p5-review-t5/out/paper/main.tex",
-})
+#: 2026-10-18 **空表**：原来那一条是 2026-10-04 `p5-review-t5` 的产物
+#: （`build_document` 按 `out_path` 把台账稿渲染进 `out/paper/main.tex`，
+#: 3992 字节 markdown，开头 `# What survives…` / `- 稿件代号：doc:0000`）。
+#: 业主裁定「按建议」**删除**该产物 ⇒ 表随之清空，登记不许僵死
+#: （见 `test_the_registered_non_latex_artifact_is_still_the_one_on_disk`）。
+#:
+#: 机制保留：**新出现的非 LaTeX `main.tex` 仍一律判红**（负控 ④ 守这一条），
+#: 要豁免只能往本表里逐条登记（带日期与成因）。空表不等于免检。
+NON_LATEX_MAIN_TEX: frozenset[str] = frozenset()
 
 
 def is_cjk(ch: str) -> bool:
@@ -181,8 +191,15 @@ def language_problems(root: pathlib.Path) -> list[str]:
 # ==================================================================== 正控（盘上真论文）
 
 
+def _skip_if_no_projects_dir() -> None:
+    """干净克隆（`projects/` 整个不存在）⇒ skip；目录存在就一定要判（空目录仍红）。"""
+    if not (REPO_ROOT / "projects").is_dir():
+        pytest.skip("干净克隆里没有 projects/，这条判据没有对象（目录存在但空仍判红）")
+
+
 def test_every_paper_is_written_in_english() -> None:
     """正控：盘上每一篇论文（`projects/*/out/paper/main.tex` 的 LaTeX 稿）都是英文。"""
+    _skip_if_no_projects_dir()
     problems = language_problems(REPO_ROOT)
     assert problems == [], (
         "论文里出现了不该出现的东西（正文必须是英文；非 LaTeX 的 main.tex 要登记）"
@@ -195,6 +212,7 @@ def test_the_criterion_really_scans_the_papers_it_claims_to_scan() -> None:
     没有这一条，一个把 `projects/` 拼错的实现会永远绿（"扫不到"那一句守卫
     也是它自己写的，写错时并不比主断言更可靠）。
     """
+    _skip_if_no_projects_dir()
     files = paper_files(REPO_ROOT)
     assert files, f"{REPO_ROOT / 'projects'}/*/out/paper/main.tex 里一篇 LaTeX 稿都没有"
     scanned = 0
@@ -212,6 +230,7 @@ def test_the_registered_non_latex_artifact_is_still_the_one_on_disk() -> None:
     这条不是"给那条豁免找一个理由"，而是反过来：**登记表过期**（那份产物被修好/删掉）
     也就该清表，否则下一个人会以为它还在。
     """
+    _skip_if_no_projects_dir()
     on_disk = {_relative(REPO_ROOT, path) for path in main_tex_files(REPO_ROOT)
                if path not in paper_files(REPO_ROOT)}
     assert on_disk == set(NON_LATEX_MAIN_TEX), (
