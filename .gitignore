@@ -449,3 +449,12 @@ desktop.ini
 /test/
 /agentflow/temp/
 
+
+# ---- 2026-10-18 清理：这些是运行残留/示例，不再纳入仓库
+/agentflow/release-all-sub-*/
+/agentflow/library/
+/agentflow/example/
+/agentflow/demo/run/
+/agentflow/demo/selftest/
+/agentflow/demo/sources/
+
