@@ -11,14 +11,18 @@
 | 文件 | 管什么 | 权威性 |
 |---|---|---|
 | [`../../README.md`](../../README.md)（仓库根） | 系统是什么、怎么装、怎么跑、有哪些命令与开关 | **当前**——数字都从代码现读 |
-| [`../DEVELOPMENT.md`](../DEVELOPMENT.md) | 开发规范：改哪里、怎么验、判据在哪 | **当前规格**（体量大，见 §4 欠账） |
+| [`../DEVELOPMENT.md`](../DEVELOPMENT.md) | **入口（42 行）**：职责 + 两份指针 + 改代码前先读哪三节 | 入口 |
+| [`DEVELOPMENT-SPEC.md`](DEVELOPMENT-SPEC.md) | **开发规范本体**（每节 `## [规范]`）：改哪里、怎么验、判据在哪 | **当前规格** |
+| [`DEVELOPMENT-APPENDIX.md`](DEVELOPMENT-APPENDIX.md) | 历史沿革（每节 `[附录·历史]`，数字为当时读数） | 附录·不构成判据 |
 | [`../AGENTS.md`](../AGENTS.md) | FC-27 禁改区三条硬约束与退出码语义 | **当前规格** |
 
 ## 2. 当前规格（与代码同步维护）
 
 | 文件 | 管什么 |
 |---|---|
-| [`ROLE-SPECS.md`](ROLE-SPECS.md) | 十个角色的职责面 / 动作表 / 边 / 写集（体量大） |
+| [`ROLE-SPECS.md`](ROLE-SPECS.md) | 十个角色的职责面 / 动作表 / 边 / 写集 —— **只放规格（判据）** |
+| [`ROLE-SPECS-APPENDIX.md`](ROLE-SPECS-APPENDIX.md) | `ROLE-SPECS.md` 的**实测附录**：工具面明细 / 自检实测 / R0.1–R0.3 / M.4.2–M.4.3 / S1–S3（**读数带日期、不构成判据**） |
+| [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md) | 各角色自检的**失败项台账**（待修缺陷证据，不是文档问题） |
 | [`LEAN-MODES.md`](LEAN-MODES.md) | 有 Lean / 无 Lean 两模式的完整矩阵：开关、动作可用面、证据上限、收工门各格 |
 | [`READING-MAP.md`](READING-MAP.md) | 大文件的行数与「该读哪一段」的索引 |
 | [`USER-GUIDE.md`](USER-GUIDE.md) | 用户视角：从哪进、怎么建项目、产物在哪、出错先看哪 |
@@ -51,8 +55,13 @@
 
 ### 已知的整理欠账（如实登记）
 
-1. `DEVELOPMENT.md`（约 194 KB）与 `ROLE-SPECS.md`（约 241 KB）**体量过大**，
+1. ~~`DEVELOPMENT.md`（约 194 KB）与 `ROLE-SPECS.md`（约 241 KB）体量过大~~ **已拆完（2026-10-18）**：
+   `DEVELOPMENT.md` → 入口 42 行 + `DEVELOPMENT-SPEC.md` 1354 行（规范）+ `DEVELOPMENT-APPENDIX.md` 374 行（历史）；
+   `ROLE-SPECS.md` 2644 → **1576 行**（规范）+ `ROLE-SPECS-APPENDIX.md` 1091 行（实测附录）+ `SELF-CHECK-FINDINGS.md`。
+   原始欠账前半句（
    其中不少读数是 2026-09 的。计划拆成「规范（重写、短）」＋「附录（保留、只作查证）」；
+   **2026-10-18 已拆**：`ROLE-SPECS.md`（规格）＋ `ROLE-SPECS-APPENDIX.md`（实测附录）。
+   分层已由七层更正为八层（新增 Web/用户端）；
 2. 「哪份算数」这件事**只有本索引一处维护** —— 所以**新增文档必须在这里登记**，
    否则下一个人只能靠猜；
 3. `DESIGN*.md` 五份尚未逐句核对与当前代码的一致性；引用它们时请只引「理由」，不引「行为」。

@@ -1214,12 +1214,33 @@ def test_every_step_declares_a_working_directory_that_exists():
 # 要有一条判据。这批（F8）的文件所有权只有两个测试文件，所以这些对账用例放在这里，
 # 并在下面逐条写清它读的是哪一段文本、复跑命令是什么。
 
-DEV_MD = REPO / "DEVELOPMENT.md"
-README_MD = REPO / "README.md"
+def doc_path(rel: str) -> Path:
+    """文档的真实落点：`agentflow/` 本目录优先、「仓库根」兜底。
+
+    2026-10-18（业主）：`README.md` 挪到仓库根（`D:\\Incubator/README.md`）。本文件原先
+    写死 `REPO / "README.md"`，于是 README 一搬，四条读它的判据一起变成
+    `FileNotFoundError` —— 那不是"文档漂了"，是「判据把对象读丢了」（两者的处置完全不同）。
+    兜底口径与 `tests/test_doc_code_consistency.py::_read` 逐字同形：
+    两处必须同形，否则"同一份文档、两个判据读到的不是同一个文件"而没有任何东西会红。
+    """
+    for base in (REPO, REPO.parent):
+        cand = base / rel
+        if cand.is_file():
+            return cand
+    return REPO / rel
+
+
+DEV_MD = REPO / "docs" / "DEVELOPMENT-SPEC.md"
+README_MD = doc_path("README.md")
 DESIGN_TOOLS_MD = REPO / "DESIGN-TOOLS.md"
 
 #: `DEVELOPMENT.md` 里"当次实测"那一块的界标。判据只读块里的 `名字 = 数字`，
 #: 于是"哪些数字是当前值、哪些是历史观测"不再靠读者猜。
+#:
+#: 2026-10 拆分（`P-28` 同族）：那块读数与它的判据对象一起搬到了
+#: `docs/DEVELOPMENT-SPEC.md`（`DEV_MD` 指它），`DEVELOPMENT.md` 只剩一页入口指针。
+#: 判据强度没有变：同一块、同一批键，另外多了 18 个键（见 `measured_readings()`）——
+#: 覆盖面只增不减。为什么不在入口里留一份副本：数字只能有一个家（`D-4.3`）。
 LIVE_BEGIN = "LIVE-READINGS:BEGIN"
 LIVE_END = "LIVE-READINGS:END"
 _LIVE_LINE_RE = re.compile(r"^([a-z_]+)\s*=\s*(\d+)\s*(?:#.*)?$")
@@ -1304,6 +1325,62 @@ def schema_table_count() -> int:
     return len(_schema.TABLES)
 
 
+def cli_tools_readings() -> dict[str, int]:
+    """`python -m agentflow.cli tools` 报出来的那一行（工具总数 / 已装模块 / 逐角色）。
+
+    2026-10 扩键（拆分那一批）：`DEVELOPMENT-SPEC.md` 的 `LIVE-READINGS` 块把这三个数
+    也钉住了 —— 判据只增不减：原来那 11 个键照旧逐键比对，这里多出 12 个。
+
+    为什么量法走子进程而不是进程内重建：文档里那一行写的命令就是这条命令，
+    判据与被判的对象必须是同一条命令（"量法不同"正是本项目最贵的那类缺陷）。
+    解析失败不许折成"没问题"：读不到就 assert，红的是"判据失去对象"。
+    """
+    env = dict(os.environ)
+    why_path = str(REPO / "src")
+    env["PYTHONPATH"] = (why_path + os.pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else why_path
+    p = subprocess.run(
+        [sys.executable, "-m", "agentflow.cli", "tools"], cwd=str(REPO),
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, env=env,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    total = re.search(r"工具总数：(\d+)", out)
+    modules = re.search(r"已装模块 (\d+)", out)
+    roles_line = re.search(r"各角色工具数：(\{[^}]*\})", out)
+    assert total and modules and roles_line, (
+        "`python -m agentflow.cli tools` 的输出里读不到那三格（判据失去对象，不是'没问题'）："
+        f"\n{out[-600:]}")
+    roles = {r.lower(): int(n) for r, n in re.findall(r"'([A-Z])':\s*(\d+)", roles_line.group(1))}
+    assert roles, f"逐角色那一格解析不出角色（判据失去对象）：{roles_line.group(1)!r}"
+    got = {"cli_tools_total": int(total.group(1)), "cli_tools_modules": int(modules.group(1))}
+    got.update({f"cli_tools_role_{r}": n for r, n in roles.items()})
+    return got
+
+
+def webui_readings() -> dict[str, int]:
+    """第八层（Web / 用户端）的四个读数：模块数 / 端点三条 / 事件种类 / 判据文件数。
+
+    端点的唯一来源是 `webui/routes.py` 的 `ROUTES`（与文档里那句"权威清单在
+    `ROUTES`"逐字对应）；`GET`/`POST` 两格是同一张表按方法数出来的，不是另抄一份。
+    """
+    from agentflow.webui import routes as W  # noqa: PLC0415
+
+    return {
+        "webui_modules": len(list((REPO / "src" / "agentflow" / "webui").glob("*.py"))),
+        "webui_routes": len(W.ROUTES),
+        "webui_routes_get": sum(1 for r in W.ROUTES if str(r[0]).upper() == "GET"),
+        "webui_routes_post": sum(1 for r in W.ROUTES if str(r[0]).upper() == "POST"),
+        "webui_event_kinds": _webui_event_kind_count(),
+        "webui_test_files": len(list((REPO / "tests").glob("test_webui*.py"))),
+    }
+
+
+def _webui_event_kind_count() -> int:
+    """`webui/sse.py` 的 `EVENT_KINDS` 条数（前端的 `KINDS` 由 B 条判据逐字对拍它）。"""
+    from agentflow.webui import sse as S  # noqa: PLC0415
+
+    return len(S.EVENT_KINDS)
+
+
 def measured_readings() -> dict[str, int]:
     """判据认的那几个读数，全部当场量一遍（跑一次 linter + 一次 collect-only，结果缓存）。"""
     if _MEASURED:
@@ -1331,6 +1408,10 @@ def measured_readings() -> dict[str, int]:
         "schema_tables": schema_table_count(),
         "noai_gate_pytest_collected": collected_test_count(NOAI_GATE_TEST),
     })
+    # 2026-10 扩键（拆分那一批）：`cli tools` 的三个数（总数 / 模块数 / 逐角色 10 格）
+    # 与第八层（Web）的四个数。只增不减：上面 11 个键的量法与含义一个字都没动。
+    _MEASURED.update(cli_tools_readings())
+    _MEASURED.update(webui_readings())
     return _MEASURED
 
 
@@ -1355,7 +1436,7 @@ def collected_test_count(rel: str) -> int:
 def live_reading_problems(declared: dict[str, int], measured: dict[str, int]) -> list[str]:
     """声明的读数 vs 实测 ⇒ 问题清单（空 = 成立）。返回清单而不是布尔，红时要能说清差在哪。"""
     if not declared:
-        return [f"`DEVELOPMENT.md` 里读不到 `{LIVE_BEGIN}` 块（或块里一行 `名字 = 数字` 都没有）"
+        return [f"`{DEV_MD.name}` 里读不到 `{LIVE_BEGIN}` 块（或块里一行 `名字 = 数字` 都没有）"
                 " ⇒ 本判据失去对象：删掉那块不等于数字是对的"]
     problems: list[str] = []
     unknown = sorted(set(declared) - set(measured))
@@ -1832,7 +1913,7 @@ def test_every_doc_reference_to_a_test_object_exists_on_disk():
     `NOAI-REVIEW-REGISTER.md`（`R6-AN-2` 的配套）—— 把那份历史档案从集合里删掉，
     这一条会当场红，而不是静默地少核一份文件。
     """
-    docs = {n: (REPO / n).read_text(encoding="utf-8") for n in _DOC_TEST_REF_DOCS}
+    docs = {n: doc_path(n).read_text(encoding="utf-8") for n in _DOC_TEST_REF_DOCS}
     assert "NOAI-REVIEW-REGISTER.md" in docs and len(docs) == 4, (
         "文档集合必须含历史档案 `NOAI-REVIEW-REGISTER.md`（`R6-AN-2` 的配套）："
         "少了它就等于那一整份文件里的指路又没人核")
@@ -1848,7 +1929,7 @@ def test_the_doc_reference_criterion_is_not_vacuous():
     ⇒ 扩展后的判据必须报"点名的文件不存在"，并逐字给出那个路径。
     改前这一注入返回 `[]`（register 不在文档集合里）；盘上那份档案一个字节都不动。
     """
-    docs = {n: (REPO / n).read_text(encoding="utf-8") for n in _DOC_TEST_REF_DOCS}
+    docs = {n: doc_path(n).read_text(encoding="utf-8") for n in _DOC_TEST_REF_DOCS}
     assert not doc_test_reference_problems(docs), "夹具前提：当前字节上是干净的"
 
     real = "test_development_md_linter_readings_and_rule_range_match_the_repo"
@@ -2010,7 +2091,7 @@ def ledger_counts(root: Path | None = None) -> dict[str, object]:
 
 def ledger_docs() -> dict[str, str]:
     """判据扫的三份文档面：`README.md` / `DEVELOPMENT.md` / `docs/*.md`。"""
-    docs = {n: (REPO / n).read_text(encoding="utf-8") for n in _LEDGER_LINE_SCOPED_DOCS}
+    docs = {n: doc_path(n).read_text(encoding="utf-8") for n in _LEDGER_LINE_SCOPED_DOCS}
     for p in sorted((REPO / "docs").glob("*.md")):
         docs[f"docs/{p.name}"] = p.read_text(encoding="utf-8")
     return docs

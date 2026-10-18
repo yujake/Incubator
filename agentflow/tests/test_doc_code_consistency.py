@@ -238,8 +238,15 @@ def _gate_count_scan_all(want: int) -> tuple[list[str], dict[str, int]]:
     return bad, reading
 
 
+#: 2026-10 拆分（`P-28` 同族）：三格手抄数字跟着规范面走 ——
+#: `DEVELOPMENT.md` 现在是一页入口指针，那三格（动作总数 / 可召唤动作数 / 子命令数）
+#: 落在 `docs/DEVELOPMENT-SPEC.md`。判据强度没变：同一个 `_count_of`、
+#: 同一条"找不到就红"的反真空断言，只是判据对象换了个文件（数字只能有一个家）。
+NUMBERS_DOC = "docs/DEVELOPMENT-SPEC.md"
+
+
 def test_the_action_counts_in_development_md_match_the_capability_table() -> None:
-    """`DEVELOPMENT.md` 的"动作总数 / 可召唤动作数"两格必须与能力表现算一致。
+    """`DEVELOPMENT-SPEC.md` 的"动作总数 / 可召唤动作数"两格必须与能力表现算一致。
 
     这两格此前没有判据（判据只盯 `docs/ROLE-SPECS.md` 的标题），实测漂到 54/51
     （真实 58）而没有任何东西会红 —— 这正是 F-07 要治的形态。
@@ -248,12 +255,12 @@ def test_the_action_counts_in_development_md_match_the_capability_table() -> Non
 
     total = C.two_layer_reconciliation()["total"]
     summonable = sum(len(C.actions_for(r)) for r in C.ALLOWED_EDGES["M"])
-    text = _read("DEVELOPMENT.md")
+    text = _read(NUMBERS_DOC)
     for label, want in (("动作总数", total), ("可召唤动作数", summonable)):
         got = _count_of(text, label)
         assert got is not None, (
-            f"`DEVELOPMENT.md` 里再也找不到「{label} **N**」这一格（判据不许因为找不到就通过）")
-        assert got == want, f"`DEVELOPMENT.md` 的「{label}」写 {got}，而能力表现算是 {want}"
+            f"`{NUMBERS_DOC}` 里再也找不到「{label} **N**」这一格（判据不许因为找不到就通过）")
+        assert got == want, f"`{NUMBERS_DOC}` 的「{label}」写 {got}，而能力表现算是 {want}"
 
     # 反负控：把那一格改成别的数 ⇒ 同一个判据必须看见（否则它是橡皮图章）
     mutated = text.replace(f"动作总数 **{total}**", f"动作总数 **{total + 1}**")
@@ -276,10 +283,11 @@ def test_the_action_table_titles_match_the_capability_table() -> None:
 
 
 def test_the_subcommand_count_in_the_docs_matches_the_live_parser() -> None:
-    """`DEVELOPMENT.md` 的"子命令数"这一格也要有判据（F-07 同族；实测曾 25 vs 真实 24）。
+    """`DEVELOPMENT-SPEC.md` 的"子命令数"这一格也要有判据（F-07 同族；实测曾 25 vs 真实 24）。
 
     `README.md` 那份读数已由 `tests/test_user_quickstart.py` 钉住；这一条管
-    `DEVELOPMENT.md` 的这一格 —— 两处都是"最容易漂的手抄数字"。
+    规范面这一格 —— 两处都是"最容易漂的手抄数字"。2026-10 拆分后 `DEVELOPMENT.md`
+    只剩入口指针，所以判据对象跟着换成 `docs/DEVELOPMENT-SPEC.md`（`NUMBERS_DOC`）。
     """
     from agentflow.cli import build_parser
 
@@ -287,10 +295,10 @@ def test_the_subcommand_count_in_the_docs_matches_the_live_parser() -> None:
     sub = next((a for a in parser._actions if getattr(a, "choices", None)), None)
     assert sub is not None, "夹具前提变了：`build_parser()` 里找不到子命令那个 action"
     live = len(sub.choices)
-    text = _read("DEVELOPMENT.md")
+    text = _read(NUMBERS_DOC)
     got = _count_of(text, "子命令数")
-    assert got is not None, "`DEVELOPMENT.md` 里再也找不到「子命令数 **N**」（不许因为找不到就通过）"
-    assert got == live, f"`DEVELOPMENT.md` 的子命令数写 {got}，`build_parser()` 当次给出 {live}"
+    assert got is not None, f"`{NUMBERS_DOC}` 里再也找不到「子命令数 **N**」（不许因为找不到就通过）"
+    assert got == live, f"`{NUMBERS_DOC}` 的子命令数写 {got}，`build_parser()` 当次给出 {live}"
 
 
 def test_the_documented_assertion_count_matches_the_live_labels() -> None:

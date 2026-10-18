@@ -1,0 +1,1354 @@
+# DEVELOPMENT-SPEC —— agentflow 开发规范（判据面）
+
+> ⚠️ **权威性**：本文是「开发规范」，属**当前规格**，是"怎么做才算对"的**判据**。
+> 与代码冲突时**以代码为准**；若代码与本文冲突，是**本文的 bug**（处置见 §12）。
+> 「哪份文档算数」的权威地图见 [`INDEX.md`](INDEX.md)。
+>
+> **本文与另外两份的关系**：
+> - [`../DEVELOPMENT.md`](../DEVELOPMENT.md) —— **入口**（一页，指路：改代码前先读哪三节）；
+> - **本文** —— **规范**（判据都在这；每节首行标 `[规范]`）；
+> - [`DEVELOPMENT-APPENDIX.md`](DEVELOPMENT-APPENDIX.md) —— **历史**（取样记录、FC 覆盖矩阵、
+>   已知不一致清单；每节首行标 `[附录·历史]`，**不构成判据**）。
+>
+> **配套文档**：
+> - [`ROLE-SPECS.md`](ROLE-SPECS.md) —— 各角色（A–H + V）与主控（M）的详细规格；
+>   节数与必备子节由 `python tools/verify_role_specs.py` 当次产出（本文不抄定值）
+> - [`PROPOSALS.md`](PROPOSALS.md) —— **已裁决的缺口与提案**（`P-` 要人做 / `G-` 已接受但**必须继续可见** / `N-` 不是缺陷）
+> - [`NOAI-GOVERNANCE.md`](NOAI-GOVERNANCE.md) —— FC-27 门的机制与人工批准流程
+> - [`../NOAI-REVIEW-REGISTER.md`](../NOAI-REVIEW-REGISTER.md) —— FC-27 **人读侧**登记表
+> - [`../AGENTS.md`](../AGENTS.md) —— **只**覆盖禁 AI 区 FC-27 这一节，不重复本文内容
+> - [`INDEX.md`](INDEX.md) —— 上述文档的索引与"按角色怎么读"
+> - `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` ——
+>   **现状导读**：逐项带**相对工作区根**的路径。它**不构成判据**；与它冲突时以本文与代码为准
+> - `LESSONS.md` —— 本文多处按这个短名引用它，但 `agentflow/` 下没有这个文件；
+>   实体在工作区根的 `draft/LESSONS-工程经验清单（FC-01…FC-27）.md`
+>
+> **本文的写作纪律**（读它的人可以用这三条反过来质问我）：
+> 1. **每一条规则都必须可判定** —— "要写清楚"不是规则，"每个公开函数必须有 docstring
+>    且 docstring 必须含'为什么'段落"才是。
+> 2. **每一个数字都有出处** —— 指向 `文件:行号`、指向实跑的**命令 + 输出**、或指向某个权威条目。
+>    **不许估。** 本文正文因此**只写命令与键名**，定值一律住 §0.2 的 `LIVE-READINGS` 块。
+> 3. **不许把"未落地/未核实"写成"已落地"**。凡只是从文档读到、没在代码里核实的，
+>    标 `（据 X，未在代码中核实）`。
+
+---
+
+## [规范] §0 怎么读这份规范
+
+### [规范] §0.1 三条口径，先立后文
+
+1. **读数只住一处**：任何"当次数"（工具数 / 表数 / lint 三栏 / 禁改区数 / 端点数是几）
+   只写在 §0.2 的 `LIVE-READINGS` 块里，正文只写**命令 + 键名**。
+   理由见 §1.1：同一个数字抄在几处，读者分不出哪一处是当次值、哪一处是历史快照。
+2. **历史不许当当前值**：带 `S1` / `S2` / `当时` / `观测 YYYY-MM-DD` / `原写` 这些字样的句子
+   是**历史读数**，一律住在 `DEVELOPMENT-APPENDIX.md`，且**不构成判据**。
+3. **"没查成"必须写"没查成"**（三态纪律，见 §5 纪律 1）：`unknown` / 未复跑 ✅ 允许；
+   把"没查"写成某个数 ❌ 一律是缺陷（§8-P16）。
+
+### [规范] §0.2 当次读数（`LIVE-READINGS` 块）
+
+**这一块就是判据的对象**：`tests/test_release_all.py` 的 `measured_readings()` 逐键量一遍，
+`live_reading_problems()` 逐键比对"这里写的"与"当次实测的"，对不上就红并在报错里点名。
+改这里的数，只要跑一遍块里点名的复跑命令。
+判据本体是两条：正控 `tests/test_release_all.py::test_development_md_linter_readings_and_rule_range_match_the_repo`
+与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
+判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
+
+**linter 的当次三栏（日常档）**：`error 6 / warning 15 / info 49`（复跑 `python -B scripts/lint_rules.py`；
+`error` 那一栏刻意不钉 —— 它由发布门第 5 项按"必须为 0"强制；**严格档的两个数只写进块里的
+`lint_rules_strict_*` 两行**，正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+
+```powershell
+cd D:\Incubator\agentflow
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
+$env:PYTHONPATH='src'   # 只有跑 `python -m agentflow.*` / `python -c "...import agentflow..."` 才需要
+```
+
+```text
+LIVE-READINGS:BEGIN
+# 名字 = 数字        # 含义 + 复跑命令 + 观测时刻
+# 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
+# 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
+lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
+lint_rules_warning      = 15   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
+lint_rules_info         = 49   # 同一档的 info 栏
+lint_rules_strict_warning = 73 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_info  = 48   # 同一档的 info 栏
+noai_paths_glob         = 43   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
+noai_paths_unique       = 40   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
+noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
+tools_star_tools_py     = 15   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
+schema_tables           = 16   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
+noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
+cli_tools_total         = 84   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
+cli_tools_modules       = 14   # 同一行"已装模块 N"
+cli_tools_role_a        = 29   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
+cli_tools_role_b        = 22
+cli_tools_role_c        = 21
+cli_tools_role_d        = 41
+cli_tools_role_e        = 25
+cli_tools_role_f        = 36
+cli_tools_role_g        = 37
+cli_tools_role_h        = 29
+cli_tools_role_v        = 14
+cli_tools_role_m        = 20
+webui_modules           = 9    # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
+webui_routes            = 25   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
+webui_routes_get        = 18   # 同上，按 `x[0] == 'GET'` 计数
+webui_routes_post       = 7    # 同上，按 `x[0] == 'POST'` 计数
+webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
+webui_test_files        = 9    # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`
+LIVE-READINGS:END
+```
+
+**`cli tools` 的三个数是三个口径，不许互换**（详见 §3.5 与 §4.2）：
+`cli tools`（含 store）给出上表那 10 个逐角色数；`build_registry(store=None, workspace_root='.')`
+与 `build_registry(store=None)` 各自再给一组**不同的**数。**把一个口径的数搬到另一个口径下，
+比写错一个数字更贵** —— 它看起来是精确的。
+
+**`cli tools` 还会打印一行"只读角色写工具泄漏"**：今天的值**不是空表** —— `H` 有一组
+**已逐条登记的落库代理**（`review.report` / `review.review_document` / `review.verify_fixes`），
+由 `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生，命令自己会打印那 3 个名字与放行理由。
+旧的"`{'C':[],'H':[],'V':[]}`（空 = 正常）"**已不成立**；判据要看的是"命令的输出里有没有
+未登记的泄漏"，不是"这一行是不是空表"。
+
+### [规范] §0.3 一份读数的三档身份
+
+| 档 | 长什么样 | 住哪 | 谁能改 |
+|---|---|---|---|
+| **当次值** | `LIVE-READINGS` 块里的 `名字 = 数字` | 本文 §0.2 | 跑一遍块里的命令，随手改 |
+| **历史读数** | 带 `S1` / `S2` / `当时` / `观测 2026-…` / `原写` | `DEVELOPMENT-APPENDIX.md` | 只许加，不许改（改它等于伪造历史） |
+| **区间读数** | `N1–N2（<UTC+8 观测时刻> 观测）` | 本文正文（只在无法钉住的量上） | 每次观测重写一行 |
+
+---
+
+## [规范] §1 计数类数字的写法（`G-32` / `D-1.6`）
+
+### [规范] §1.1 规矩：**区间 + 观测时刻**，或者**命令 + 键名**
+
+⭐ **本条是"怎么写数字"的规矩本身，不针对某一处。** 它由 `draft/25` 的 **`D-1.6`** 要求：
+*"证据落 `temp/`：命令 + 原始输出 + **观测时刻**；所有计数写成**区间 + 观测时刻**"*。
+
+**规矩（三条，缺一条这个数字就不可用）**：
+
+1. **行数 / 条数 / 命中数 / 通过数**一律写成 `N1–N2（<UTC+8 观测时刻> 观测）`，
+   **不许写成单个定值**。区间来自**同一观测窗口内重复两次**（本仓库是并发施工的仓库，
+   同一棵树在几分钟内就能从一组读数变成另一组 —— 而那不是"回归"，是别的执行体在同一目录里写文件）。
+   **能钉住的量就不走这一档，改走 §0.2 的 `LIVE-READINGS` 块**（有判据守着，比区间强）。
+2. **必须写清是哪条装配/哪条命令口径**。同一个量在不同命令下**可以**是两个数，
+   且**两个数都不许被丢掉**（三个口径的例子见 §0.2 与 §3.5）。
+3. **"没查成"必须写"没查成"**（三态纪律）：`unknown` / 未复跑 ✅ 允许；
+   把"没查"写成某个数 ❌ 一律是缺陷（`P16`）。
+
+**反例（这份文档里真实发生过的）**：`tests/` 的份数那一行**原写**过一个没有观测时刻的定值
+（读者无法判断该不该信）。现在的写法是**相对形态**：写 `N1–N2`（观测 `<开始时刻>→<结束时刻>`）
+的区间，并把"并发写会让同一棵树在几分钟内给出另一组读数"写成一句**不带任何定值的**说明 ——
+**每一次读数都带自己的观测时刻，读者自己能判它是不是当次值**。
+⇒ 示范段本身**不再复写任何定值**：要看当次数就照 §0.2 块里那条命令复跑。
+
+**为什么这条值得单列**：本项目已经有 `G-30`/`G-31`/`G-32` 三条登记都指向同一个病根 ——
+**数字看起来是客观的，于是没有人去问它的口径**。而"口径就是那个数字"这句话，
+`AGENTS.md` 已经把它列成**禁改区的一类理由**（评测口径的定义）。
+
+### [规范] §1.2 手抄数字清单：每个数字**住在哪、谁在守、怎么复跑**（`draft/36` 的 T-4）
+
+**为什么要有这一节**：`draft/36` 的体检读数里，⑥ 是"文档-代码漂移面"。加判据时实测到
+动作表已经漂了（三处数字与名字都过期），而**没有任何东西会红**。根因不是"打错一个数"，而是：
+**同一个数字抄在好几处、读者分不出哪一处是当次值、哪一处是历史快照。**
+本节把这类数字逐个登记，并写清它属于哪一档：
+
+- **有判据**：改了代码不改文档 ⇒ 有测试会红（列到具体测试名）；
+- **人工维护**：没有判据盯着，改动时请同步（并给出复跑命令）。
+
+| 数字 | 住在哪 | 数的是什么 | 谁在守 | 复跑 |
+|---|---|---|---|---|
+| 工具总数 | `LIVE-READINGS` 块的 `cli_tools_total`；`ROLE-SPECS.md` §R0 标题 / §R0.1 / §R0.2 | `build_registry()` 装配出的 `ToolSpec` 条数 | **有判据**：`tests/test_role_specs_complete.py`（§R0 标题 vs 实时装配）、`tools/verify_role_specs.py` | `python -m agentflow.cli tools` |
+| 逐角色工具数 | 同块的 `cli_tools_role_*`；`ROLE-SPECS.md` §R0 与各角色节标题 | 每个角色的工具面条数（含公共工具） | **有判据**：`tools/verify_role_specs.py`（逐角色条数 vs 现场装配） | 同上 |
+| 动作总数 / 可召唤动作数 | `ROLE-SPECS.md` §0.7 与 §M.4.1 的**标题** | `capabilities.CAPABILITIES` 的动作条数 / 按 `ALLOWED_EDGES["M"]` 覆盖的动作之和 | **有判据**：`tests/test_role_specs_action_table.py`、`tests/test_doc_code_consistency.py` | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
+| 逐角色**动作名** | `ROLE-SPECS.md` §0.7 与 §M.4.1 **两处**（同一份数据两个落点） | 每角色有哪些动作 | **有判据**：同上（两处都扫，含两条负控） | `python -m agentflow.cli tools --role <X>` |
+| 子命令数 | `README.md` §0 与 §4 文件树 | `cli.build_parser()` 的子命令数 | **有判据**：`tests/test_user_quickstart.py`、`tests/test_doc_code_consistency.py` | `python -m agentflow.cli --help` |
+| lint 五个读数 | `LIVE-READINGS` 块的 `lint_rules_*` | `scripts/lint_rules.py` 的摘要行 | **有判据**：`tests/test_release_all.py`（`measured_readings()` / `live_reading_problems()` 逐键比对） | `python -B scripts/lint_rules.py`（`--strict` 另跑） |
+| 禁改区三读数 | 同块的 `noai_paths_*` | `.noai-paths` 的条目行 | **有判据**：`tests/test_noai_gate.py` + 上面的 `live_reading_problems` | `python -B scripts/noai_gate.py --check-consistency` |
+| `schema.TABLES` / `tools_star_tools_py` / `noai_gate_pytest_collected` | 同块 | 表数 / 工具模块数 / 收集到的用例数 | **有判据**：同 `LIVE-READINGS` 那一条 | 见块里逐行的复跑命令 |
+| 角色节结构 | `LIVE-READINGS` 之外（由工具产出） | `ROLE-SPECS.md` 的节结构 | **有判据**：`tools/verify_role_specs.py`、`tests/test_role_specs_complete.py` | `python -B tools/verify_role_specs.py` |
+| 已装模块数 | 同块的 `cli_tools_modules` | `tools.build_registry` 装了几个工具模块 | **人工维护**（没有逐模块数的判据；模块名清单见 §4.1） | `python -m agentflow.cli tools` 的摘要行 |
+| Web 面三个数（模块 / 端点 / 判据文件） | 同块的 `webui_*` | `webui/` 的模块数、`ROUTES` 的条数、`test_webui*` 的文件数 | **有判据**：`tests/test_webui_contracts.py`（端点集合 vs `ROUTES`） | 见 §2 第 ⑧ 层与块里逐行的复跑命令 |
+| `ROLE-SPECS.md` §0.2 的历史快照 | §0.2 的表 | 某一次装配的读数 | **历史快照**（已在原地标注并指向 §R0.1） | 见该节的观测时刻 |
+
+**三格"判据要的逐字字面量"**（`tests/test_doc_code_consistency.py` 逐格对拍；
+它们**必须逐字**长成这样，否则判据报"再也找不到这一格"。旁边的命令就是它们的量法）：
+
+| 字面量 | 量法（复跑命令） |
+|---|---|
+| 动作总数 **61** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
+| 可召唤动作数 **54** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])` |
+| 子命令数 **25** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
+
+**两条使用规矩**（与 §1.1 同源）：
+1. **引用任何计数前先在这张表里找它**：找到"有判据"⇒ 可以信当次值；
+   找到"人工维护"⇒ 它是人写的，改动时请同步；找不到 ⇒ 说明它是一张**没登记的手抄数字**，
+   请登记进来（这一节本身就是**漂移面的清单**）。
+2. **同一份数据抄在两处就是风险**（§0.7 与 §M.4.1 就是例子）。能合成一处就合成；
+   暂时不能合的（结构上各有各的读者），就**让同一条判据同时盯着两处**。
+
+### [规范] §1.3 注释分三层：`[契约]` / `[为什么]` / `[踩过]`（`draft/36` 的 T-2）
+
+**为什么要有这条规矩**：本仓库的注释密度很高（每百行代码的注释/文档串行数按命令当次量，
+**本文不抄定值**；原文那个 `78.7` 是 2026-09 的一次读数，**本轮未复跑**）——
+那是**资产**，不是负债：`LESSONS.md` 就是靠这些"为什么"长出来的。
+外人觉得乱的**真正原因不是多，而是没分层**：读者分不出"我必须守住的不变量"
+与"某次事故的故事"，于是要么全信、要么全跳过。
+
+**三个标签（只许这三个，写错就红）**：
+
+| 标签 | 写什么 | 硬要求 |
+|---|---|---|
+| `[契约]` | 调用方**可以依赖**的事实：不变量、边界、承诺。改了它 = 破坏契约 | 必须是一句可判真假的话（"X 一定在 Y 之前发生"），不是感想 |
+| `[为什么]` | 为什么这样选（含**被否掉的选项**与它为什么更坏） | 要能让读者判断"我这次该不该照旧" |
+| `[踩过]` | 实测读数与事故：当时看到了什么、代价是什么 | **必须能追到出处**：`YYYY-MM-DD` 或 `draft/28` §NNN（任一即可，判据认） |
+
+**写法（两种位置，同一条规矩）**：
+
+```python
+"""模块或函数 docstring —— 章节标题带标签：
+
+## [契约] can_round 的两个维度不能混为一谈
+## [为什么] 为什么"攻坚"需要独立的预算模型
+## [踩过] 六个 handler 都过 _guard（2026-09-30，draft/28 §150）
+"""
+
+# 行内注释块 —— 块首那一行带标签，后面照旧写细节：
+# [踩过] 改前这一句只写源名 + 自由文本，"没有这一篇"与"上游坏了"读起来一样
+# （2026-09-29，draft/28 §150）。
+```
+
+**三条纪律**：
+
+1. **标签只加在注释或 docstring 里**，绝不出现在代码行上（判据用 `tokenize` 证明这一点）；
+2. **不加标签也合法** —— 文件结构导航、纯事实描述不必硬塞进三层；
+   判据只要求**样板文件**里三层都出现过，不要求每段注释都有标签；
+3. **`[契约]` 与 `[为什么]` 不许互相冒充**：把"我为什么这么写"写成 `[契约]`，
+   会让下一个人以为那是不能动的承诺；把不变量写成 `[为什么]`，会让它看起来可以商量。
+
+**样板文件**（判据点名的四个，见 `tests/test_comment_layers.py`）：
+`agent_d/`（包；原 `agent_d.py` 的大文件在 `goal-7f5116c1` M6 拆成了一个动作一个文件，
+三层标签现在分布在 `agent_d/_support.py` 与 `agent_d/adjudicate.py` 等文件里 ——
+判据按**整个包**取文本）、`tools/attack_tools.py`（工具层最密）、
+`claimanatomy.py`、`evidence.py`。这四份按上面的写法各标了一轮，供新代码照抄。
+
+---
+
+---
+
+## [规范] §2 系统分层：**八层**，每层只有一份判据
+
+> ⭐ **本层的形状：由七层改为八层。** 七层的原始出处是
+> `draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md` §2
+> 「分层：七层，每层只有一份判据」；**那一份里没有 ⑧ 这一层**（业主 2026-10 裁定补上）。
+> 所以本文的分层表比 `draft/35` **多一层** —— 这是**刻意的增量**，不是抄写错误。
+> 两处冲突时以本文为准；`draft/35` 里那句"七层"是**历史**（`DEVELOPMENT-APPENDIX.md` 的 A1 同理）。
+
+**系统的形状可以概括成"声明在上、实现在下、判据各一份"**。下面每一层给四件事：
+**职责 / 入口文件 / 契约与判据 / 已知边界**。路径一律**相对工作区根**（`agentflow/` 之下）。
+
+| 层 | 这一层的名字 | 相对工作区根的入口 |
+|---|---|---|
+| ① | 数据面 | `agentflow/src/agentflow/schema.py`、`store.py`、`canonical.py` |
+| ② | 声明面 | `agentflow/src/agentflow/capabilities.py`、`interactions.py`、`policy.py` |
+| ③ | 工具面 | `agentflow/src/agentflow/tools/` |
+| ④ | 角色面 | `agentflow/src/agentflow/agent_a/` … `agent_h/`、`agent_v/`、`conductor.py` |
+| ⑤ | 循环面 | `agentflow/src/agentflow/agent_loop.py`、`agent_prompts.py`、`llmseam.py`、`judge.py`、`judges.py` |
+| ⑥ | 接线面 | `agentflow/src/agentflow/host.py`、`cli.py`、`projects.py` |
+| ⑦ | 质量面 | `agentflow/scripts/`、`agentflow/tools/`、`agentflow/src/agentflow/gates.py`、`verify.py`、`deliver.py` |
+| ⑧ | **Web / 用户端**（本轮新增） | `agentflow/src/agentflow/webui/`、`web/`、`agentflow/ui/` |
+
+**"判据各一份"凭什么**：见 §5（六条硬纪律）。机械体现是 lint 规则 `R003`（重复公开定义）
+与 `canonical.py`（规范 JSON 字节串的唯一实现 —— 稿件内容哈希与编译回执哈希共用它）。
+
+### [规范] §2.1 逐层：职责 / 入口文件 / 契约与判据 / 已知边界
+
+**① 数据面**
+- **职责**：表结构、行级校验、事务与 ID 分配。**唯一的写入口**是 `store.py` 的事务对象。
+- **入口文件**：`src/agentflow/schema.py`（`TABLES` / 各 `validate()` / 全部受控词表）、
+  `store.py`（锁 / 原子写 / 事件日志 / `rebuild` / `alloc_id`）、`canonical.py`。
+- **契约与判据**：`verify.py` 的全库不变量（§6.1 的第 4/7 项就是给这一层加的）；
+  `tests/test_rebuild.py`（重建守恒：诊断字段相等 + 幂等）；`tests/test_fc05_contract.py`
+  （数组字段的集合/序列二分）。表数由 `LIVE-READINGS` 的 `schema_tables` 钉住。
+- **已知边界**：`schema.py` 与 `store.py` 在 FC-27 禁改区（`[category: schema-migration]`），
+  **改它们要人写或人逐行走查 + 2 名 reviewer**（§9.4）。
+
+**② 声明面**
+- **职责**：谁说谁能做什么 —— 召唤边、跨角色契约、四类上限。
+- **入口文件**：`capabilities.py`（`CAPABILITIES` / `WRITE_SETS` / `ALLOWED_EDGES` +
+  **导入期** `assert_capabilities()`）、`interactions.py`（I1–I12 的判据，纯函数，
+  签名里**没有** `store`）、`policy.py`（`Refusal` 或 `None`）。
+- **契约与判据**：`assert_capabilities()` 导入期就炸（"不可能忘记跑"）；`interactions.assert_store_free`；
+  动作总数与可召唤动作数见 §1.2 那两格（有判据逐字对拍）。
+- **已知边界**：这一层的能力表由 `specs/` 包里的逐角色声明派生，改 `specs/*.py`
+  等于改权限面本身，而判据守的是「两层一致」、不是「这一改该不该由人批」（`AGENTS.md` 的 `auth-audit`）。
+
+**③ 工具面**
+- **职责**：角色拿到手的原子动作，含**权限面过滤**（只读角色一律拿不到写工具）。
+- **入口文件**：`src/agentflow/tools/__init__.py`（`build_registry` 是**唯一**装配点）、
+  `tools/base.py`（`ToolSpec` 六件套校验 / `for_role` / `ToolRegistry.call`）。
+- **契约与判据**：`ToolSpec.__post_init__` 逐件校验（`§6.3` 第 1 项）；
+  `python -m agentflow.cli tools` 的普查（工具总数 / 已装模块 / 逐角色 / 只读泄漏，
+  四个数在 `LIVE-READINGS` 里）；`tests/test_tools_base.py`、`tests/test_tools_readonly_roles.py`。
+- **已知边界**：**只读角色的泄漏那一行今天不是空表** —— `H` 有 3 个**已逐条登记**的落库代理
+  （`review.report` / `review.review_document` / `review.verify_fixes`，由
+  `tools/base.py` 的 `READONLY_CALL_EXCEPTIONS` 产生）。"空 = 正常"这个读法**已过期**：
+  要判的是"命令有没有打印**未登记**的泄漏"。
+
+**④ 角色面**
+- **职责**：每个角色的动作实现与自检；主控的"召唤 → 台账 → backend → 终态"。
+- **入口文件**：`agent_a/` … `agent_h/`、`agent_v/`（**一个动作一个文件** + `core.py` +
+  `_support.py` + `__main__.py`；V 只有 `core.py` + `__init__.py` + `__main__.py`，只读）、
+  `conductor.py`（主控 M 不在角色包里，它是这个模块）。
+- **契约与判据**：每个角色都有 `python -m agentflow.agent_<role>` 自检（退出码 0）；
+  `tests/test_agent_<role>.py`；`capabilities.assert_capabilities()` 第 2 条核
+  `ActionSpec.handler_name` 真实可调用。
+- **已知边界**：**M 的 `CAPABILITIES["M"] == ()`** 是刻意设计（主控不产出知识，它只编排），
+  所以"M 没有动作"**不是**缺口；M 有工具面（编排面 + 文件白名单），见 `cli tools --role M`。
+
+**⑤ 循环面**
+- **职责**：模型驱动的决策循环与提示词装配。
+- **入口文件**：`agent_loop.py`（六种形状 + 观测层 + 长产出落盘）、`agent_prompts.py`
+  （`PROMPT_VERSION` / `ROLE_BRIEFS` / `SECTION_ORDERS`）、`llmseam.py`（一次调用 = 一条审计记录）、
+  `judge.py` / `judges.py`（`CRITERIA` 与模型判定的唯一缝）。
+- **契约与判据**：`llmseam` 的每次调用都落 `usage_ledger`（唯一写入方是
+  `tokenmeter.TokenMeter.charge`）；`tests/test_llmseam_charge_discipline.py`、
+  `tests/test_agent_loop.py`。
+- **已知边界**：**无真实 provider key ⇒ LLM 路径未端到端跑过**（`DEVELOPMENT-APPENDIX.md`
+  的 A6 / FC-14）。这条不许写成"已落地端到端"。
+
+**⑥ 接线面**
+- **职责**：把角色 / 工具 / 主控接到一起，并如实报出接线态；给命令行入口。
+- **入口文件**：`host.py`（角色登记表 / 接线态 / 接了线的工具层与主控）、`cli.py`、
+  `projects.py`（一个项目一个文件夹）。
+- **契约与判据**：**未接线 ⇒ 不进登记表**（不假装"没接线"是"跑过了"）；
+  `tests/test_doc_code_consistency.py` 逐格对拍子命令数（§1.2 那格）。
+- **已知边界**：`cli.py` 的 `--role choices` 曾经写死 A–D（`DEVELOPMENT-APPENDIX.md` 的 D2），
+  已修；**判断这件事的方法是 `python -m agentflow.cli tools --role E` 的退出码**，不是读注释。
+
+**⑦ 质量面**
+- **职责**：门、审计、发布检查。
+- **入口文件**：`src/agentflow/gates.py`（`GATES` 声明表 + 四态裁决）、`verify.py`、
+  `deliver.py`、`scripts/`（linter / 禁 AI 区门 / 发布检查）、`tools/`（`release_all` 编排层等）。
+- **契约与判据**：与语言无关的三档退出码 `0/1/2`（`unknown ≠ pass`，§10.1）；
+  `python tools/release_all.py` 的一键判定；`python -B scripts/lint_rules.py` 的三栏读数
+  （`LIVE-READINGS` 的 `lint_rules_*`）。
+- **已知边界**：`tools/release_all.py` 与 `scripts/release_check.py` **自身在 FC-27 禁改区、
+  且未经人逐行走查** ⇒ **它们全绿也不构成发布许可**（§9.3）。
+
+**⑧ Web / 用户端**（**本轮新增的一层**；下表的每个数都是当次实测 + 就地给出复跑命令）
+- **职责**：把"待回答面板 / 运行态 / 事件回放"变成一个本机网页；**只读为主，写面走 CSRF + 白名单**。
+  它不产生知识、不改台账语义 —— 它是**呈现与提问面**，不是第八个角色。
+- **入口文件**：
+  - 命令行入口是 `web` 子命令：`python -m agentflow.cli --help` 里逐字
+    「`web   起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）`」；
+  - 服务端 `src/agentflow/webui/` —— **9 个模块**（`__init__.py` / `__main__.py` /
+    `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `audit.py`）；
+    复跑 `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`，键 `webui_modules`；
+  - 端点清单的唯一来源是 `webui/routes.py` 的 `ROUTES`：**25 条**（GET **18** / POST **7**；
+    按读写二分 `READER_ROUTES` **13** / `WRITE_ROUTES` **7**，余 **5** 条是外壳与静态：
+    `/`、`/index.html`、`/run/{sid}`、`/static/{file...}` 等）。复跑
+    `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES),len(r.READER_ROUTES),len(r.WRITE_ROUTES))"`
+    ⇒ `25 13 7`；键 `webui_routes` / `webui_routes_get` / `webui_routes_post`；
+  - 事件种类在 `webui/sse.py` 的 `EVENT_KINDS`：**6** 个
+    （`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`）。复跑
+    `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
+    键 `webui_event_kinds`；
+  - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（920 B）+
+    `static/assets/index.DpOVMT89.js`（93824 B）+ `static/assets/index.BCQ4Zlgz.css`（22097 B）；
+    `src/agentflow/web/` 根一层是**源码/生成器**（`__init__.py` 1753 B、`assets.py` 23902 B、
+    `emit_theme.py` 3383 B、`emit_types.py` 6280 B）。**所以运行期不需要 `node_modules`**，
+    只有重建前端时才需要（复跑 `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`）；
+  - 前端源码在 `agentflow/ui/`：`src/api.ts` 声明端点字面量（`ENDPOINTS`）、
+    `src/sse.ts` 声明事件 kind（`KINDS`）、`src/types.ts` 声明字段、`src/main.tsx` 声明路由（`ROUTES`）。
+- **契约与判据**：
+  - `tests/test_webui_contracts.py` 的四条对拍 —— **A 端点**（前端 `ENDPOINTS` vs 后端 `ROUTES`
+    逐字）、**B 事件**（`sse.KINDS` vs 后端 `EVENT_KINDS` 逐字）、**C 类型字段**、
+    **D 路由**（`main.tsx` 的 `ROUTES`）；正控 + 负控都在；复跑
+    `python -m pytest -q tests/test_webui_contracts.py`（当次 26 passed）；
+  - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
+    `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
+    **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
+  - 判据文件共 **9** 个：`test_webui{,_contracts,_pages,_readers,_settings_write,_sse,_static,_writes,_browser}.py`；
+    复跑 `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`。
+- **已知边界**（照实写，**不许写成"已解决"**）：
+  1. `draft/35` 的七层里**没有这一层**（整份文件里 `webui` / `web/` / `Web 端` **0 命中**，
+     复跑 `Select-String -Path 'draft\35-… .md' -Pattern 'webui|web/|Web 端'`）——
+     它是业主后加的，本文是它第一次被写进分层表；
+  2. Web 面另有一份草稿 `draft/114` 记着"九页 / 十条只读面 / 五条写端点"，
+     **它与今天盘上的读数不是一个口径**（`ui/src/pages/` 的页数、`READER_ROUTES` 的条数、
+     `WRITE_ROUTES` 的条数各自按上面的命令量）—— 引用草稿前先跑命令；
+  3. `--allow-writes` / `--no-settings-write` 两个开关**在本批还没有接线**
+     （`python -m agentflow.cli web --help` 的 help 文本自己写着"W3 / W4 才真正生效"）
+     ⇒ 今天给不给都一样，**不许**把它们写成"已经能开关写面"；
+  4. 静态产物的字节数是**构建产物**，重建前端就会变 —— 它们**不是**规格，
+     要比对就以 `web/static/assets/` 的盘上事实为准。
+
+---
+
+---
+
+## [规范] §3 适用范围与阅读顺序
+
+### [规范] §3.1 三类读者
+
+| 读者 | 你要遵守什么 | 先读 | 再读 | 禁忌 |
+|---|---|---|---|---|
+| **人**（本项目的负责者） | 全部；尤其是**禁 AI 区**与**发布门** | `DEVELOPMENT.md`（入口）→ 本节 §3.2 → §5（六条硬纪律）→ §9（提交与评审）→ §10（发布检查） | `ROLE-SPECS.md` §0（公共约定） | — |
+| **AI 编码者**（你） | 全部；**并且必须先用证据反驳评审者**（§9.2） | `AGENTS.md`（**禁 AI 区**，最短、最硬）→ §5（六条硬纪律）→ §8（禁止模式清单）→ §6（DoD） | `ROLE-SPECS.md` 里**你要改的那个角色**那一节 | 不读 §8 就动手；改了禁 AI 区却自称"顺手改一下" |
+| **审计者** | 用 §6 的 checklist 与 §10 的门的**通过判据**逐条质问 | §6（DoD）→ §10（发布检查）→ §11（FC 状态口径）→ `DEVELOPMENT-APPENDIX.md` A6（FC 覆盖矩阵） | `ROLE-SPECS.md` 对应角色的 §"不变式"与 §"三态与失败模式" | 把"未核实"读成"已通过"（§11 的状态口径是**三档**：已落地 / 部分 / 未落地） |
+
+### [规范] §3.2 阅读顺序（一张图）
+
+```
+AGENTS.md（禁 AI 区，先读，最短）
+   ↓
+DEVELOPMENT.md（入口：改代码前先读哪三节）
+   ↓
+DEVELOPMENT-SPEC.md §5   六条不可违反的硬纪律  ← 违反任何一条 = 不改
+   ↓
+DEVELOPMENT-SPEC.md §8   禁止模式清单（静态可查）
+   ↓
+DEVELOPMENT-SPEC.md §2   八层里你要改的那一层（职责 / 入口 / 判据 / 边界）
+   ↓
+docs/ROLE-SPECS.md       你改的那个角色的规格（工具面 / 状态机 / 预算 / 三态 / 不变式）
+   ↓
+DESIGN-*.md              设计理由（**不构成判据**；与代码冲突时以代码为准）
+```
+
+**"改代码前先读哪三节"**（`DEVELOPMENT.md` 也逐字给这三条）：**§5（六条纪律）→ §8（禁止模式）→ §6（DoD）**。
+改的是某个角色时加读 `ROLE-SPECS.md` 该角色那一节；改的是 Web 面时加读 §2 第 ⑧ 层。
+
+### [规范] §3.3 权威顺序（**冲突时谁赢**）
+
+1. **代码**（`src/agentflow/` + `tests/`）
+2. **本文**（规范）
+3. **`ROLE-SPECS.md`**（角色规格）
+4. `AGENTS.md`（仅禁 AI 区，**与 `.noai-paths` 同级权威**，两处必须逐条一致）
+5. `DESIGN.md` / `DESIGN-TOOLS.md` / `DESIGN-INTERACTIONS.md` / `DESIGN-ROLES.md` /
+   `DESIGN-CONDUCTOR.md`（**设计理由**；它们描述"为什么"，不描述"现在是什么"；份数按
+   `(Get-ChildItem DESIGN*.md).Count` 当次读）
+6. `README.md`（**已知过期**；它的两处读数有判据盯着，其余以代码为准）
+7. `../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`
+   （**现状导读**：逐项带"相对工作区根"的路径。**不构成判据** —— 它排在本清单最后一位，
+   冲突时以代码与本文为准。⚠️ 它的 §2 是**七层**，本文是**八层**，见 §2 开头）
+8. `DEVELOPMENT-APPENDIX.md`（**历史**；不构成判据，只用来回答"当时是什么样、为什么"）
+
+### [规范] §3.4 盘点方法（怎么量本仓的"现在长什么样"）
+
+> ⚠️ **这一节取代了原文的 §1.4**。原文整节是围绕一份**外部普查**
+> 的数字对比表，而那张表的"本文实测"列是一个早已过期的口径
+> ⇒ 按 §1.1 它属于**必须删掉**的那一类（读数没有判据、也没有观测时刻之外的凭据）。
+> 保留下来的是**口径警告 + 盘点方法**，这才是能长期用的那一半。
+
+**① 外部普查不是本仓读数。** `D:\Incubator\temp\inventory\INVENTORY.md`（盘上存在；
+机械产出于 2026-09-24）第 3 行逐字写明它普查的是
+**`D:\Incubator\test\test1\`（包名 `abflow`）**，**不是** `D:\Incubator\agentflow\`。
+机器可读明细是同目录的 `tools.json`。引用它的规矩：
+
+- 引用 `INVENTORY.md` 的条目时，**必须写"INVENTORY 4.x"（按条目编号），不许写行号** ——
+  两份目录的行号不同；
+- 引用 `tools.json` 的 `source.file:line` 时，**必须标"（据 `tools.json`，指向 `test/test1`）"**；
+- **不要把它的任何数抄进本仓的当前值**：两份代码谱系的角色/工具/动作集合不同。
+
+**② 本仓的盘点以装配为准，不以文档为准。** 任何"工具有几个 / 每个角色有几个 /
+哪个角色能拿到写工具"的问题，只有一个权威答案来源：
+
+```powershell
+python -m agentflow.cli tools                 # 含 store 的完整装配（LIVE-READINGS 的 cli_tools_* 就是它）
+python -m agentflow.cli tools --role <X>      # 单个角色的工具面（含 side_effect 与「需审批」标记）
+python -m agentflow.cli tools --json          # 同一份装配的机器可读形态
+```
+
+**③ 三个口径不许互换**（见 §3.5）。`build_registry(store=None)` 单独给不出
+`build_registry(store=None, workspace_root='.')` 的那个数 —— **缺 `workspace_root` 时 fs 组不装配**。
+
+**④ 判据面优先。** 想知道"这个数有没有人守"，查 §1.2 的手抄数字清单；
+想知道"现在是多少"，跑 §0.2 块里那一行点名的命令。**两条都不做、直接相信一段散文，是本节要治的病。**
+
+### [规范] §3.5 禁改区的**三个数**必须并列写，且每个数写清口径（`X-5`）
+
+`draft/25` 的 `D-4.2` **原写**"统一为 **19 glob / 14 台账条目 / 7 类**"——
+**这三个数今天全部过期**，而且它们**量的不是同一件事**，所以"统一"这个动词本身就是错的：
+把它们并成一个数，读者会拿"清单 glob 数"去对"台账条目数"，然后得出"少了 5 条"的错误结论。
+
+| 数 | 量的是什么 | 当次值 |
+|---|---|---:|
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **43** |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **40** |
+| **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变） |
+| **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
+| **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变） |
+
+**前两格与类别数**的复跑命令逐字如下（它们就是 `LIVE-READINGS` 的 `noai_paths_*` 三个键）：
+
+```powershell
+(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count                  # ⇒ 43
+(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
+  ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count           # ⇒ 40
+(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:' |
+  ForEach-Object { if ($_.Line -match '\[category:\s*([a-z\-]+)\]') { $matches[1] } } |
+  Select-Object -Unique).Count                                                          # ⇒ 7
+```
+
+**后两格**（台账条目数 / 欠签）由 `python scripts/noai_gate.py --check-approvals` 当次产出：
+`entries` 的长度是条目数、`sum(len(e['reviewers']) for e in entries)` 是已签数、
+`entries × 2 − 已签数` 是欠签。
+
+**差集 = 清单唯一路径数 − 台账条目数**（两个数都见上表；**本行不写定值** ——
+差集随人跑 `--baseline` 与新增登记而变，当次以 `python scripts/noai_gate.py --check-approvals`
+报出的 `unregistered` 条目为准）。已知的两条边界，逐条说清：
+
+| 不在台账里的路径 | 为什么它没有台账条目 |
+|---|---|
+| `src/agentflow/release_check.py` | **盘上不存在**（`Test-Path` ⇒ `False`）。它由 `.noai-paths` **刻意先登记路径**（"一旦有人在这里新建它，会自动落入清单而不是绕过门"）⇒ 没有文件就没有 hash。判据面仍有效：`--paths src/agentflow/release_check.py` ⇒ `[requires_human]` + 理由码 **`unregistered`**。**它是差集里最稳的那一条** |
+| `src/agentflow/capabilities.py` | **刚纳入清单时台账条目待补、现已补上**：它由决策页**题 3** 的裁决纳入 FC-27 —— 它是 `A–H` 调用矩阵的**真身**。**登记 ≠ 批准**：`--baseline` 只登记 hash、**永远不写 `reviewers`** |
+
+**清单条目行数 − 唯一路径数 = 同一文件重复登记数**（**是派生量，不是差集**，所以这里不写定值）：
+`src/agentflow/dedup.py`（`solver-core` + `provenance-dedup`）、
+`src/agentflow/providers.py`（同两类的两处）、`src/agentflow/schema.py`
+（`schema-migration` + `eval-criteria`）—— `.noai-paths` 自己的注释逐字说明了这是**刻意的重复**。
+
+> ⚠️ **两处被猜错的地方**（`X-5` 原文的候选清单）：`.noai-paths` 与 `AGENTS.md`
+> **各自都有自己的台账条目**，所以"清单两处本体没有批准记录"**不成立**。
+> 「差集是 5 条」也不成立。**差集是派生量**：加一条登记、或人跑一次 `--baseline`，它就会变。
+
+**判据（三条命令）**：
+1. `python scripts/noai_gate.py --check-consistency` ⇒ `一致：.noai-paths 与 AGENTS.md 的清单逐条相同`，**退出码 0**；
+2. `python scripts/noai_gate.py --check-approvals --paths <台账里的路径…>` ⇒ 逐条报出
+   "命中若干条禁改区路径，其中若干条未获批准（`insufficient_reviewers`）"，退出码 **1**
+   （`stale 0`）。**这两个数是当次读数 —— 每签一个字就变，所以本行刻意不写定值**；
+3. `.noai-paths` 的条目行计数与 `[category:` 行计数 ⇒ 由 §0.2 的 `LIVE-READINGS` 块产出的
+   那三个键（`noai_paths_glob` / `noai_paths_unique` / `noai_paths_categories`）。
+
+⚠️ **`--check-approvals --paths` 的入参是「命中路径数」，不是「清单 glob 数」**：
+传清单的条目数进去，它报的是**台账条目数**（因为最小复现集去重 + 剔除台账自身）——
+**那不是"清单有那么多条"**。这正是 `X-5` 要防的口径混用。
+
+---
+
+## [规范] §4 目录与命名规范
+
+### [规范] §4.1 包布局（不可随意新增顶层目录）
+
+> **路径口径**：下面的树以 `agentflow/` 为根（这是本文内部的写法）。**相对工作区根**
+> 要加一层前缀 —— 例：`schema.py` ⇒ `agentflow/src/agentflow/schema.py`、
+> `tools/` ⇒ `agentflow/src/agentflow/tools/`。
+> **份数一律不写定值**：包根一层的 `.py` 清单与份数用
+> `(Get-ChildItem src/agentflow/*.py).Count` 当次读（完整清单见 `DEVELOPMENT-APPENDIX.md` 的 A2，
+> 那是 2026-10-13 的一次历史快照）。
+
+```
+agentflow/
+├── AGENTS.md                  禁 AI 区（人类专属区）硬约束 —— 改它=改门
+├── .noai-paths                机器可读的禁改区 glob 清单（与 AGENTS.md 逐条一致）
+├── DEVELOPMENT.md             ← 入口（指路）
+├── DESIGN*.md                 设计理由（**份数按命令当次读**：`(Get-ChildItem DESIGN*.md).Count`；不构成判据）
+├── README.md                  ⚠️ 已知部分过期；两处读数有判据盯着
+├── config.yaml                全部阈值（"所有阈值都在这里，不在代码里"）
+├── pyproject.toml             构建 + pytest 配置（**在禁 AI 区里**）
+├── docs/                      规格文档（份数按 `(Get-ChildItem docs -Filter '*.md').Count` 当次读）
+│   ├── DEVELOPMENT-SPEC.md    ← 本文（规范）
+│   ├── DEVELOPMENT-APPENDIX.md ← 历史（不构成判据）
+│   └── …
+├── src/agentflow/             包（包根一层的 `.py` 清单与份数见本节上方那条命令）
+│   ├── schema.py              ★ 数据模型 + 行级校验 + **全部受控词表**（单一来源）
+│   ├── store.py               ★ 锁 / 原子写 / 事务 / 事件日志 / ID 分配 / 重建
+│   ├── canonical.py           ★ 规范 JSON 字节串的唯一实现（稿件哈希与回执哈希共用）
+│   ├── policy.py              ★ 主控策略（四类上限 + 允许边 + 拒绝理由）
+│   ├── capabilities.py        ★ 角色能力表 / 写集 / 召唤边（**导入期自检**）
+│   ├── conductor.py           ★ 主控（召唤 → 台账 → backend → 终态）
+│   ├── scheduler.py           ★ 波浪调度（写集相交 ⇒ 串行）
+│   ├── cancellation.py        ★ 协作式取消（一个共享 signal）
+│   ├── contextbudget.py       ★ 上下文压缩 / 剪枝 / spill
+│   ├── interactions.py        ★ 角色间交互（I1–I12 的判据）+ CONTRACT_VERSION
+│   ├── host.py                ★ 接线面：角色登记表 / 接线态 / 接了线的工具层与主控
+│   ├── gates.py               ★ H 的门引擎（`GATES` 声明表；门数按 `len(gates.GATES)` 当次读，四态裁决）
+│   ├── judges.py / judge.py   ★ 语义判据（`CRITERIA`）与模型判定的唯一缝协议
+│   ├── deliver.py             ★ 交付闸门（`gate(...)` ⇒ `DeliveryGate`；不通过时产出可派回的工作项）
+│   ├── papercompile.py        ★ 论文包只剩一件事：把 `<项目根>/out/paper/main.tex`（**正文由智能体自己写**）编成 `main.pdf`，并写**框架自己产**的编译回执 `COMPILE-RECEIPT.json`（`tex_sha256` / `pages` / `exit_codes` …）；`receipt_matches_tex()` 是"这份 PDF 是不是盘上这份 tex 编的"的唯一判据
+│   ├── agent_loop.py          ★ 模型驱动的决策循环（六种形状 + 观测层 + 长产出落盘）
+│   ├── agent_prompts.py       ★ 提示词装配（`PROMPT_VERSION` / `ROLE_BRIEFS` / `SECTION_ORDERS`）
+│   ├── modelgw.py             ★ provider 无关的模型网关（**key 的唯一入口**：环境变量 → 机器级设置文件 `settings.json` 的 `model.api_key` → 缺省）
+│   ├── settings.py            ★ 机器级设置的一处定义（本机工具链落点 / Mathlib 根 / 模型 key / `workspace.projects_dir`）
+│   ├── llmseam.py             ★ 统一的模型缝：一次调用 = 一条审计记录
+│   ├── projects.py            ★ 项目工作区（一个项目一个文件夹）
+│   ├── verify.py              ★ 全库不变量校验（`Issue(...)` 的调用点/字面量/去重条数**按命令当次读**；量法见 `DEVELOPMENT-APPENDIX.md` A2 那一格里那条 `ast` 命令）
+│   ├── agent_a/ … agent_h/ · agent_v/   角色包（**每个角色一个包**：一个动作一个文件 + core.py + _support.py + __main__.py；V 只读，只有 core.py + __init__.py + __main__.py）
+│   ├── webui/                 ★ Web 服务端（第八层；模块清单与条数见 §2 第 ⑧ 层）
+│   ├── web/                   ★ Web 静态产物与生成器（`static/index.html` + `static/assets/`；见 §2 第 ⑧ 层）
+│   ├── cli.py                 命令行入口
+│   └── pipeline.py            固定顺序流水线（前三阶段的编排；旧机制，主路径是 `run-agent`）
+├── ui/                        前端源码（Vite；`pyproject` 之外的独立子工程，构建产物落到 `src/agentflow/web/static/`）
+├── scripts/                   发布门 / 门禁 / linter（份数与清单按 `(Get-ChildItem scripts/*.py).Count` 当次读；**不是运行期依赖**）
+├── tests/                     pytest（份数按 `(Get-ChildItem tests -Filter 'test_*.py').Count` 当次读 —— **这一格老得最快**；离线套件，联网套件用 `-m network`）
+├── tools/                     开发期工具与探针（份数按命令当次读；其中 `release_all.py`、`coverage_zero_test.py`、`run_each_test_file.py`、`verify_role_specs.py`、`vocab_census.py` 是**发布门/判据本体**）
+└── data/ library/ demo/       运行期数据（`data/` 的 JSON 份数 = `schema_tables` + `counters.json`，按 §0.2 那两行命令当次读）
+```
+
+### [规范] §4.2 模块职责边界（**一句话判据**）
+
+| 模块 | 只做这一件事 | **不许**做 |
+|---|---|---|
+| `schema.py` | 数据模型 + `validate()` + **全部跨模块受控词表** | 不 import 任何 `agent_*`；不碰 `store` |
+| `store.py` | 锁 / 事务 / 原子写 / 事件 / ID / 重建 | 不写业务规则；不 import `schema` 之外的同层模块 |
+| `capabilities.py` | 角色 → 动作 / 写集 / 召唤边（**声明层**） | **不 import `agent_*`**（用 `importlib` 惰性取类，理由见该模块的注释） |
+| `policy.py` | 纯策略判定（`Refusal` or `None`） | **不碰存储**、不发召唤 |
+| `conductor.py` | 召唤 → 台账 → backend → 终态 | 不产出知识（`CAPABILITIES["M"] == ()`） |
+| `scheduler.py` | 波浪划分 + 有界并发 + 顺序合并 | 不做策略判定（调 `policy`） |
+| `agent_<x>/` | 该角色的能力实现（**公开方法名 = `ActionSpec.handler_name`**） | 不直接构造 `ToolRegistry`（§8-P5） |
+| `tools/*.py` | 有名字 / 有 schema / 有校验 / 有结构化返回 / 声明副作用的原子动作 | 不写业务策略；不互相 import |
+| `host.py` | 把角色 / 工具 / 主控接到一起，并如实报出接线态 | 不假装"没接线"是"跑过了"（未接线 ⇒ 不进登记表） |
+| `gates.py` | H 的门引擎：`GATES` 声明表 + 四态裁决（`GateResult`） | 不做"没查"与"查了没问题"的折叠（零发现必须自证） |
+| `judges.py` / `judge.py` | 语义判据注册表（`CRITERIA`）与模型判定的唯一缝协议 | 不把"没查成"写成"没找到" |
+| `deliver.py` | 交付闸门：给一份产物出裁决，不通过时产出**可派回去的工作项** | 不自己改产物 |
+| `papercompile.py` | 把智能体写好的正文（`<项目根>/out/paper/main.tex`）编成 `main.pdf`，并写框架自己的编译回执 | **不生成正文、不渲染、不核锚**（正文归智能体自己写） |
+| `webui/` | 把台账 / 运行态 / 待回答面板**读出来**给人看，并把人的回答写回去 | 不产生知识、不改台账语义、不绕过 `READONLY_CALL_EXCEPTIONS` 的权限面 |
+| `verify.py` | 全库不变量审计 | **不许有写路径** |
+| `cli.py` | 入口（把操作固定成几个动词） | 不写业务逻辑（只装配与打印） |
+
+### [规范] §4.3 命名规范
+
+| 对象 | 规则 | 判据（可机械检查） | 出处 |
+|---|---|---|---|
+| **角色名** | `"A"`…`"H"` + `"V"` + `"M"`，**单一来源 `schema.ROLES`** | `grep -n 'ROLES' src/agentflow/schema.py` 只有一处定义；`tools.ROLES is schema.ROLES` | `schema.py`；`tools/__init__.py` |
+| **表名** | `snake_case` 复数（`search_requests` / `research_questions`），**单一来源 `schema.TABLES`** | 任何模块里的表名字面量必须 ∈ `schema.TABLES` | `schema.py` 的 `TABLES` |
+| **字段名** | `snake_case`；**ID 字段** `<实体>_id`（`lit_id` / `concept_id` / `question_id`） | 每张表的 `id_field` 在 `schema.TABLES[table]["id_field"]` 里 | 同上 |
+| **4 位实体 ID** | `^\d{4}$`（`_ID_RE`） | `schema.is_valid_id()` | `schema.py` 的 `_ID_RE` |
+| **过程记录 ID** | `<前缀>-NNNN`（`r-` / `p-` / `t-`），**不占 4 位空间** | `interactions.next_prefixed_id(rows, field, prefix)`（**全项目唯一实现**） | `interactions.py` |
+| **ID 分配器** | `schema.ID_COUNTERS`（kind → field）**单一来源** | `tests/conftest.py` 按它**反查**，不另写一张表 | `schema.py` 的 `ID_COUNTERS` |
+| **受控词表常量** | `UPPER_SNAKE` 元组，**定义在 `schema.py`**（除 `tools/base.SIDE_EFFECTS` 与 `capabilities.SIDE_EFFECTS` 这一对**交叉断言**的例外） | `grep -n '^[A-Z_]* = (' src/agentflow/schema.py` | `schema.py` 全文 |
+| **测试文件** | `tests/test_<被测对象>.py`（`test_agent_a.py` / `test_tools_base.py` / `test_fc05_contract.py`） | 文件名以 `test_` 开头 | `pyproject.toml` |
+| **测试函数** | `test_<门名>_<rejects\|accepts>_<情形>` —— **门必须有"拒绝"与"接受"两向** | `grep -c 'def test_.*_rejects' tests/` 与 `..._accepts` 都 > 0 | FC-09 |
+| **工具名** | `组.动作`（**必须含一个点**） | `ToolSpec.__post_init__` 抛 `ValueError` | `tools/base.py` |
+| **后端/动作方法名** | `agent_<role>.Agent<Role>.<handler_name>`，**由 `capabilities.ActionSpec.handler_name` 声明** | `capabilities.assert_capabilities()` 导入期 `callable(getattr(cls, name))` | `capabilities.py` |
+
+### [规范] §4.4 注释与 docstring 的**语言与形态要求**
+
+| 要求 | 判据（"是/否"可回答） | 落点 |
+|---|---|---|
+| **中文** | 注释与 docstring 里中文字符数 > 0 | 全项目 |
+| **每个公开函数必须有 docstring** | `scripts/lint_rules.py` 的 **R007**：日常档一条 `info`、`--strict` 逐模块 `warning`（**两档都不报 `error`** —— 这条规则今天没有 error 档） | 实测：**`R007` 默认档那条 `info` 消息里的两个数**（公开函数数 / 缺 docstring 数；**按命令当次读，本文不抄定值**）。复算：`python -B scripts/lint_rules.py`，读 `info R007` 那一行 |
+| **docstring 必须含"为什么"段落** | docstring 里出现"为什么"或"因为"或"理由"之一，**且**该段说明的是**取舍**（不是复述功能） | 无静态判据；`R007` 只查"有没有"，不查"有没有为什么" |
+| **禁止"不是装饰"式注释** | 注释里出现"不是装饰"/"确实"/"真的"这类**防御性措辞**时，**必须**在同一提交里补一条断言 | `LESSONS.md` P9（`literature_keys` 的"不是装饰"四个字透露了 bug 的存在） |
+| **禁止注释/docstring 里的装饰** | 注释或 docstring 里出现**成对的星号强调**、**未配对的残留星号**或 **emoji**，即判违规（先摘掉反引号代码跨度再判：`2**20`、`a/**/b`、`handler(**params)` 是字面语法） | `scripts/lint_rules.py` 的 **R009**：禁改区外 `error`，禁改区内一条汇总 `info`（见 §8-P17） |
+| **行内注释解释"为什么可以忽略异常"** | `except` 行或 `pass` 前有 ≥4 字注释，或 `# noqa: R001` | **R001** 的判据（当次数见 linter 输出） |
+| **每个模块顶部有模块 docstring** | 文件第一个语句是字符串字面量 | 口径：`(Get-ChildItem src/agentflow -Filter '*.py').Count`（**只数包根一层**，不含 `tools/` 子目录；要含子目录得用 `-Recurse`，那是另一个数） |
+
+---
+
+---
+
+## [规范] §5 ⭐ 六条不可违反的硬纪律
+
+> **违反其中任何一条 = 这次改动不算完成**。每条给：
+> ① 一句话规则 ② 为什么 ③ 可判定判据 ④ 违反后会怎样 ⑤ 现有正例/反例的落点。
+> ⚠️ **落点刻意不写行号**：行号易失（并行开发下几十分钟就漂），
+> 所以一律给「文件 + 符号名」，读者用 `grep -n '<符号>'` 定位。
+
+### [规范] §5.1 纪律 1：三态纪律（`True` / `False` / `None` + 受控 `reason`）
+
+**① 规则**：所有"判定"字段必须是三态，**且** `reason` 必须来自受控枚举；
+枚举里**必须**至少有一个"未执行"值。**禁止**把 `None` 与 `False` 合并。
+
+**② 为什么**（`LESSONS.md` FC-01 逐字）：
+"布尔无法区分'未校验'与'校验失败'，而这两者需要**完全不同的处置**
+（前者装 OCR / 补数据，后者改引文 / 剔除）。本项目在**四处**（引文、OCR、D 溯源、
+C 预算）都踩到同一坑。"
+`DESIGN-CONDUCTOR.md` 逐字补充了后果：
+"每一次的后果都是**下游把'我们没查'读成了'查了没有'**。"
+
+**③ 可判定判据**（三条全中才算过）：
+
+| 判据 | 怎么查 |
+|---|---|
+| 代码里**没有** `if not chk.verified:` 这种把 `None` 与 `False` 合并的写法 | `grep -n 'if not .*verified' src/agentflow/`；**当前无专用 lint 规则**（R001–R012 里没有它；`DEVELOPMENT-APPENDIX.md` 的 A6 里 FC-01 那一行记着同一件事） |
+| 每个受控 `reason` 词表**至少含一个"未执行"值** | 逐个人工核对；例：`REFUSAL_REASONS` 含 `not_wired`；`DOWNLOAD_STATUSES` 含 `skipped` |
+| 统计输出**分三个计数** | `grep -n 'quote_verified\|quote_unverified\|quote_unknown' src/agentflow/store.py`；`ARunResult` 的 `verified/failed/unknown` |
+
+**④ 违反后会怎样**：下游把"我们没查"读成"查了没有"，于是**不报错**、报告里出现
+一条**看起来完全合理的假结论**。
+
+**⑤ 正例 / 反例**：
+
+| 类型 | 落点 | 说明 |
+|---|---|---|
+| ✅ **正例（最规范）** | `agent_b` 的引文三态字段 | `quotes_verified` / `quotes_failed` / `quotes_unknown` 三个独立字段；`conflict_checks_run`（checked=True）/ `conflicts_detected` / `conflict_checks_skipped`（**checked=False**） |
+| ✅ **正例** | `tools/attack_tools.py` 的 `check_budget` | `budget=None` ⇒ `checked=False, allowed=None`，"注意这与'预算用尽'是两件事" |
+| ✅ **正例** | `conductor.py` 的 handler 返回值处理 | handler 返回 `None` ⇒ `outcome="no_result"`（**不许**映射成 `ok`） |
+| ✅ **正例** | `schema.py` 的 `Task.validate` | `status=done` 时**必须**给 `outcome` —— schema 层硬拦 |
+| ❌ **反例** | `tools/search_tools.py` 的 `search.dedup_check` | `except Exception: return []` ⇒ 把"表读不到"折叠成"不是重复"（假阴性） |
+| ❌ **反例** | `tools/review_tools.py` 的 `review.report` | `verdict` 完全没读 `dep_check["checked"]` ⇒ 同一个返回值里 `dep_check` 说"没查"、`verdict` 说"通过" |
+| ❌ **反例（历史）** | `LESSONS.md` P3 ① | D 的溯源 `tools=None` 静默返回空，报告写成"未能取到任何关系表述——**这本身就是一个重要事实**" |
+
+### [规范] §5.2 纪律 2：单一来源（跨模块字符串只在 `schema.py` 定义一次；`tools.ROLES` 就是 `schema.ROLES`）
+
+**① 规则**：任何**跨模块**的字符串集合（角色名 / 表名 / 字段名 / 受控词表 / ID 前缀）
+**只能有一处定义**，其他地方**只能 import**。**禁止第二份副本**（含测试代码、CLI 的 `choices`）。
+
+**② 为什么**（`LESSONS.md` FC-03 逐字）：
+"`"agent-D"` vs `"D"`、`download.status` 的受控词表、`title:...|*` 通配键
+—— 本项目同族问题出现 **3 次**。"
+后果（`DESIGN-CONDUCTOR.md` 逐字）：
+"两处各写一份名单，就会出现'schema 认为合法的角色，工具层不认'这种**没有任何报错**的分裂。"
+`LESSONS.md` §8.3 更狠的一句：
+"**跨模块约定必须只有一处定义（FC-03）在测试代码里同样成立 —— 测试代码也是代码，
+写死第二份名单同样会漂移。**"
+
+**③ 可判定判据**：
+
+| 判据 | 怎么查 |
+|---|---|
+| `tools.ROLES is schema.ROLES`（**同一个对象**，不是相等） | `python -c "import sys;sys.path.insert(0,'src');from agentflow import schema, tools; print(tools.ROLES is schema.ROLES)"` → **必须 `True`** |
+| 角色名单只有一处定义 | `grep -rn 'ROLES *=' src/agentflow/` → **只有 1 处**（`tools/__init__.py` 是 `from ..schema import ROLES`） |
+| 表名/字段名只在 `schema.TABLES` 定义 | 任何模块里的表名字面量必须 ∈ `schema.TABLES`；`grep -n '"search_requests"' src/agentflow/*.py` 应只见 `schema.py` 的定义与**必要的字面量使用**（使用允许，定义禁止） |
+| ID 分配器只有一处 | `interactions.next_prefixed_id`；**新增第二份 = 违规** |
+| 测试夹具不写死名单 | `tests/conftest.py` 按 `S.ID_COUNTERS` **反查** |
+| CLI 的 `choices` 来自 `ROLES` | `grep -n 'choices' src/agentflow/cli.py` |
+
+**④ 违反后会怎样**：**没有任何报错**，只是"少了一点东西"（少几个工具 / 少列几个角色 /
+判重键不匹配）—— 而"少了一点东西"会在最坏的时刻以"数据损坏"的形态出现。
+
+**⑤ 正例 / 反例**：
+
+| 类型 | 落点 | 说明 |
+|---|---|---|
+| ✅ **正例** | `tools/__init__.py` 的 `from ..schema import ROLES` | 注释逐字写了为什么不许各写一份 |
+| ✅ **正例** | `tests/conftest.py` 的 `sync_counters` | "⚠️ 覆盖范围由 **`S.ID_COUNTERS` 反查**，不在这里另写一张 (kind, table) 表。原先这里写死了 3 个 kind…" |
+| ✅ **正例（已修的 CLI）** | `cli.py` 的 `cmd_tools` | 注释逐字："角色清单必须来自 `ROLES`，**不许在这里写死**" |
+| ❌ **反例（已修，保留形态）** | `cli.py` 的 argparse `--role` | 曾写死 `choices=["A","B","C","D"]`（实测 `--role E` 退出码 2）—— 函数体修了、**参数层没修**。今天它已改成 `list(S.ROLES)`；**判据是那条命令的退出码** |
+| ❌ **反例（已修，保留形态）** | `capabilities.py` 的 `ALLOWED_EDGES["F"]` | 曾写死 `frozenset({"A","B","C","D","E"})`，触发 **R005**（"出现了写死的**完整**角色名单字面量"）—— 已改 `frozenset(S.ROLES)` |
+| ❌ **反例（已修，保留形态）** | `agent_d` 的工具 `roles=` | 曾写 `roles=("agent-C","agent-D")` —— **带 `agent-` 前缀**，不是 `ROLES` 里的 `"C"`/`"D"`；且那 3 个工具**不过 `build_registry` 的校验** |
+| ❌ **反例（已修，保留形态）** | `verify._id_contiguity` | 曾写死只排除 `search_requests`，新增 `p-NNNN` 后 **`verify` 自己崩掉** |
+
+### [规范] §5.3 纪律 3：fail-closed（未接线 / 依赖缺失 / 读不到 ⇒ 显式失败，**不许静默返回空**）
+
+**① 规则**：任何"上游为 `None` / 依赖缺失 / 文件读不到 / 后端不存在"的分支，
+**必须**返回结构化失败（`ok=False` + 受控 `kind`，或 `refused/not_wired`），
+**不得**返回空数据、`{}`、`[]`、`0`、`ok=True`。
+
+**② 为什么**（`LESSONS.md` FC-08 逐字）：
+"这是本项目最尖锐的缺陷：D 没接上 registry 时走了'无工具'
+降级分支并**静默返回空**，报告写成'未能取到任何关系表述——这本身就是一个重要事实'。"
+`LESSONS.md` N4 的判据只有一句："**不要把'没做'写成'没查到'**。"
+
+**③ 可判定判据**：
+
+| 判据 | 怎么查 |
+|---|---|
+| 有 `tools is None` / `store is None` / `registry is None` 的分支时，**返回失败而不是空** | `grep -n 'is None' src/agentflow/` 逐个人工看；**R002** 规则（`None`→空容器）报 error |
+| 每条"降级/未接线"路径有**一条测试**断言"返回失败而不是空" | `grep -rn 'not_wired\|no_store\|no_backend' tests/` 应有断言 |
+| 报告生成器遇到"未接线"**拒绝生成结论** | 人工核对：`agent_d` 的置信度路径是否会把 `checked=False` 写成"证据不足" |
+| `except` 必须解释为什么可以忽略 | **R001**（当次数见 linter 输出） |
+
+**④ 违反后会怎样**：错误**伪装成一条合理的结论**（"查过了，没有"），
+而它看起来**比报错更像结论**。
+
+**⑤ 正例 / 反例**：
+
+| 类型 | 落点 | 说明 |
+|---|---|---|
+| ✅ **正例** | `tools/search_tools.py` 的 `search.dedup_check`（修后那一段） | `store is None` ⇒ `fail("…任何判重结论都会是假阴性…", kind="no_store")` |
+| ✅ **正例** | `conductor.py` 的 `SubagentBackend` | 恒 `raise NotWiredError` ⇒ `refused/not_wired`（docstring 逐字列出两条诚实的路并选后者） |
+| ✅ **正例** | `conductor.py` 的 `LocalBackend` | 对 `("class", cls)` **明确拒绝**："自动 new 只能靠猜，而猜错会静默少做事" |
+| ✅ **正例** | `tools/ocr_tools.py` 的 `ocr.run` | 都不可用时 **fail** 并给安装建议（"绝不返回空文本假装成功"） |
+| ❌ **反例** | `tools/search_tools.py` 的 `except Exception: return []` | 与同一文件 `:591-598` 的严格 fail-closed **自相矛盾**（同一函数里两种口径） |
+| ❌ **反例** | `tools/trace_tools.py` 的 `_g()` | 无 store 无 graph 时返回空图 ⇒ `trace.chain` 仍 `return ok(...)`（唯一一个"成功"的静默空结果） |
+| ❌ **反例** | `tools/doc_tools.py` / `review_tools.py` / `attack_tools.py` / `verify_tools.py` | 「未接线」判据有 **4 份**实现（`_not_wired()` × 2 + `_need_store()` × 2） |
+
+### [规范] §5.4 纪律 4：证据等级（`proof` / `cross_check` / `heuristic`；计算类**拿不到** `proof`）
+
+**① 规则**：任何数值/计算产出必须带 `evidence_kind ∈ EVIDENCE_KINDS`；
+**计算类方法（`numeric` / `symbolic` / `exhaustive_search`）不得标 `proof`**；
+`proof` 必须另带 `verifier_subject_key`。
+
+**② 为什么**（`LESSONS.md` FC-22 逐字）：
+"数学里数值实验不构成证明（'验证通过 ≠ 数学正确'）；
+而本项目实测证明了'结构自洽 ≠ 内容正确'与'三个绿灯叠加仍不能证明系统有用'。"
+`LESSONS.md` M4："数值**只能作为交叉验证**，不能替代证明；同一个个例不能推广为定理。"
+
+**③ 可判定判据**：
+
+| 判据 | 怎么查 |
+|---|---|
+| 数据结构里有 `evidence_kind` 字段且受控 | `schema.py` 的 `EVIDENCE_KINDS` |
+| 计算类拿不到 `proof` | `verify.run_experiment` 的降级 + `schema.Experiment.validate`；自检实测"脚本自报 proof 被降级为 cross_check" |
+| `proof` 必须给 `verifier_subject_key` | `schema.py` 的 `Experiment.validate` 抛 `ValueError` |
+| 报告里 `cross_check` 结论**自动**附加"不构成证明" | `CROSS_CHECK_DISCLAIMER`（`doc.compose_claim` 自动补） |
+| "没有 proof 级证据时结论不得标已证明" 有测试 | `tests/test_agent_e.py` / `test_agent_f.py`（**用例数以 `--collect-only` 为准，本行不写定值**） |
+
+**④ 违反后会怎样**：**proof 级证据是假的，而报告照样打印** ——
+这是"过度声称"，也是一次**复核者自己犯错**的实例（`PROVED_HERE` 标签）。
+
+**⑤ 正例 / 反例**：
+
+| 类型 | 落点 | 说明 |
+|---|---|---|
+| ✅ **正例** | `schema.py` 的 `Experiment.validate` | 五条硬约束（含 `verifier_subject_key`） |
+| ✅ **正例** | `verify.py` 的 `evidence_kind_overclaim` / `proof_claim_rests_on_weaker_evidence` / `proof_claim_with_unclosed_dependency` | 三条 error 级检查 |
+| ✅ **正例** | `agent_e._selftest` | 主动用"想自称 proof 的脚本"验证降级 + notes 留痕 |
+| ❌ **反例（历史）** | `DEVELOPMENT-APPENDIX.md` A7 的 D 清单族 | 复核产物用了 `PROVED_HERE` 标签 —— 复核者自己犯了 FC-22 |
+| ⚠️ **未落地** | `schema.py` **无** `negation_kind` 对"计算类"的强制（只有 `proof` 的强制） | 见 `DEVELOPMENT-APPENDIX.md` A6 的 FC-25 行 |
+
+### [规范] §5.5 纪律 5：拒绝 ≠ 失败（`outcome="refused"` 是一次**成功**执行）
+
+**① 规则**：框架"正确地说了不"（越权 / 超预算 / 超深度 / 循环 / 未接线）必须记为
+`status="done", outcome="refused"` + 受控 `refusal_reason`；
+**不许**记成 `failed`。**拒绝也必须落台账**。
+
+**② 为什么**（`DESIGN-CONDUCTOR.md` 逐字）：
+"**`refused` 是一次成功的执行** —— 框架**正确地说了"不"**。把它写成 `failed`
+会让'策略拦住了'与'代码崩了'混在一起，而这两件事需要完全不同的处置。"
+"**拒绝也落台账**：不写这一行，'我们拒绝了它'这件事就**无可审计**。"
+
+**③ 可判定判据**：
+
+| 判据 | 怎么查 |
+|---|---|
+| `outcome="refused"` ⇒ `status == "done"` | `schema.py` 的 `Task.validate` **硬拦**（`status!=done` 直接 `ValueError`） |
+| `outcome="refused"` ⇒ `refusal_reason ∈ REFUSAL_REASONS` | 同上，**硬拦** |
+| `refusal_reason` 非空 ⇒ `outcome == "refused"` | 同上，**硬拦** |
+| 拒绝**必须落台账**（有行） | `Conductor._refuse` 写行 |
+| 但**"取消后不产生新任务"是例外**（`task_id=None`，无行） | `conductor.py` 的注释逐字解释了这个例外为什么不冲突 |
+| `SummonResult.ok` 的判据只有一处 | `conductor.py` 的 `SummonResult.ok`：`status=="done" and outcome=="ok"`（**refused 不算 ok**） |
+
+**④ 违反后会怎样**：两种需要**完全不同的处置**的事情长得一样；
+调用方问 `res.ok` 会把"越权被拦住"看成"成功交付"。
+
+**⑤ 正例 / 反例**：
+
+| 类型 | 落点 | 说明 |
+|---|---|---|
+| ✅ **正例（schema 硬拦）** | `schema.py` 的 `Task.validate` | 三条 `ValueError`，消息里逐字解释理由 |
+| ✅ **正例** | `conductor.py` 的 `_refuse` | 返回 `status="done", outcome="refused"`，并写 `started_at == ended_at`（"它一毫秒也没跑"由 detail 里的人话说明） |
+| ✅ **正例** | `policy.py` 的 `Refusal.__post_init__` | `reason` 不在 `REFUSAL_REASONS` 里就抛 |
+| ❌ **反例** | `tools/attack_tools.py` 的 `can_derive` | 在 `checked is False` 时返回 `blocked_by="incomplete"` —— **用"不完整"这个标签去表示"没检查"** |
+| ⚠️ **风险** | `conductor.verify_tasks` 与 `verify.py` 的 tasks 检查是**两套实现** | `conductor.py` 逐字承认并给了理由，但仍是 FC-11 的漂移风险面 |
+
+### [规范] §5.6 纪律 6：派生态不许当输入（**就地推导** 或 **装配期断言**，没有第三种）
+
+**① 规则**：任何"派生字段"（可从别的字段算出来的）在下游被读取时，
+**要么就地推导**，**要么在装配期断言它存在**。**不许**"假设上游会填"。
+
+**② 为什么**（一次**完全静默**的失效）：
+`detect_contradictions` 直接读行里的 `concept_pair_key`，但 `relations` 表存的字段名是
+`concept_group_key` ⇒ 对**直接从表里读出来的行**（C 的 `contradictions()`、任何脚本）
+**恒返回 `[]`** —— 不报错、不告警，看起来就像"没有矛盾"。
+"**派生态要么就地推导，要么在装配期断言它存在（不许有第三种）。**"
+
+**③ 可判定判据**：
+
+| 判据 | 怎么查 |
+|---|---|
+| 每个派生字段的每个读点，**要么**当场算，**要么**有断言 | `grep -n 'concept_pair_key\|related_concepts\|concept_group_key' src/agentflow/`，逐个看是否有 `or 推导()` 兜底 |
+| **正例的形态** | `interactions.py` 的 `... or concept_pair_key([...])` |
+| 派生态与真源不一致必须**可检出** | `verify.related_drift`（warning）；`verify.stale_group_key`（error） |
+| 派生字段必须有**重算**路径 | `verify` 重算比对；CLI 有 `repair --related` |
+| 可重建存储的**信息量守恒** | `tests/test_rebuild.py`（**用例数以 `--collect-only` 为准**：诊断字段守恒 / 幂等 / 坏事件不炸） |
+
+**④ 违反后会怎样**：**恒返回空 + 静默** —— 与 §5.1/§5.3 的后果同族，
+但这个更隐蔽：**没有异常、没有告警、没有空值**，只有一个看起来正常的 `[]`。
+
+**⑤ 正例 / 反例**：
+
+| 类型 | 落点 | 说明 |
+|---|---|---|
+| ✅ **正例** | `interactions.py` 的注释 + 修正 | 逐字记录了这次失效 |
+| ✅ **正例** | `Related_concepts = 由关系表派生` | "不由增量 append 直接决定，由关系表派生"⇒ **可自愈**（漏更新会在下次重算时修正），`verify` 会重算比对 |
+| ✅ **正例** | `capabilities.assert_capabilities()`（**导入期**） | "能力表一旦与实现漂移，症状不是崩溃而是**静默的越权/并发损坏**。让它 import 时就炸，是唯一'不可能忘记跑'的校验点" |
+| ❌ **反例** | `dedup.literature_keys` 的 `title:<norm>\|*` 第三级键 | 生成后**在匹配时被过滤掉** ⇒ "忽略年份"是死代码 |
+| ❌ **反例** | `interactions.related_relation_ids`（升序） | 为满足"升序"不变量**丢掉了跳序**，只能从 `origin` 字符串反解 |
+| ⚠️ **部分落地** | `schema.ARRAY_FIELD_KINDS` | 已落地"未声明数组字段即 `verify` 报 `undeclared_array_field`"；`Relation.chain` 的保序字段见 `DEVELOPMENT-APPENDIX.md` A6 的 FC-05 行 |
+
+---
+
+---
+
+## [规范] §6 ⭐ Definition of Done
+
+> **六份 checklist**。每项给"谁来检查 / 在哪检查"。**逐项可勾选**。
+> `[ ]` 全部勾上才算 Done。**任何一项无法勾 = 这次改动没完成。**
+
+### [规范] §6.1 新增/修改**表**（`schema.TABLES` + 行 dataclass）
+
+| # | 检查项 | 谁检查 | 在哪检查 |
+|---|:---:|---|---|
+| 1 | `[ ]` 在 `schema.TABLES` 加了 `{file, row, id_field, id_kind}`；`id_kind` 在 `ID_COUNTERS` 里（若要用 4 位 ID） | 实现者 | `schema.py` 的 `TABLES` |
+| 2 | `[ ]` 行 dataclass 有 `validate()`，且**每个受控字段**都有词表校验 | 实现者 | 该 dataclass 内 |
+| 3 | `[ ]` `row_from_dict` 加了该表的分支（含嵌套结构的 `from_dict`） | 实现者 | `schema.py` 的 `row_from_dict` |
+| 4 | `[ ]` 数组字段在 `schema.ARRAY_FIELD_KINDS` **显式声明**为"集合（升序去重）"或"序列（保序）" | **`verify`** | `verify.undeclared_array_field`（error） |
+| 5 | `[ ]` `store.empty_table()` / `Store.init()` 会建这个文件 | 实现者 | `store.py` |
+| 6 | `[ ]` `Store.rebuild()` 的事件重放支持该表 | 实现者 | `store.py` 的 `rebuild` |
+| 7 | `[ ]` `verify.py` 加了至少一条该表的**引用闭合**检查（若它引用别的表） | **`verify`** | `verify.py` |
+| 8 | `[ ]` **两条测试**：① 合法行通过；② 违反每个约束的行**被拒** | 实现者 → 审计者 | `tests/test_schema.py` |
+| 9 | `[ ]` **重建守恒**：`rebuild` 前后诊断字段相等 + 幂等（逐字节） | **`tests/test_rebuild.py`** | 发布门第 1 步 |
+| 10 | `[ ]` `docs/ROLE-SPECS.md` 里对应角色的 **§状态机** 补了迁移表与终态 | 文档维护者 | `docs/ROLE-SPECS.md` |
+| 11 | `[ ]` **写集更新**：`capabilities.WRITE_SETS[role]` 若该表会被某角色写 | **`capabilities.assert_capabilities()`** | 导入期 `AssertionError` |
+| 12 | `[ ]` `tests/test_fc05_contract.py` 的数组字段契约测试通过 | **发布门第 1 步** | `tests/test_fc05_contract.py` |
+
+### [规范] §6.2 新增/修改**字段**
+
+| # | 检查项 | 谁检查 | 在哪检查 |
+|---|:---:|---|---|
+| 1 | `[ ]` 若该字段是"判定"类 ⇒ 三态（§5.1），`reason` 进受控词表 | 审计者 | §5.1 的判据 |
+| 2 | `[ ]` 若是受控值 ⇒ 词表定义在 `schema.py`，**只此一处** | **linter R005 / 人工** | `scripts/lint_rules.py` |
+| 3 | `[ ]` 若是"状态 ⟹ 其它字段"的关系 ⇒ 写成**交叉检查**（schema 层 `validate()`） | 实现者 | FC-04 判据② |
+| 4 | `[ ]` 每条交叉检查有**一条"违反应被拒"**的测试 | 审计者 | FC-04 判据③ |
+| 5 | `[ ]` 若是数组 ⇒ 在 `ARRAY_FIELD_KINDS` 声明集合/序列 | **`verify`** | `verify.undeclared_array_field` |
+| 6 | `[ ]` 若是"有语义的顺序" ⇒ 与升序集合字段**成对存在**（`related_relation_ids`（升序）+ `chain`（保序）） | 审计者 | FC-05 判据② |
+| 7 | `[ ]` 保序字段有 **round-trip 测试**（写→读→相等） | **`tests/test_fc05_contract.py`** | `test_relation_chain_preserves_order_round_trip` |
+| 8 | `[ ]` `docs/ROLE-SPECS.md` 对应角色的 §状态机 与 §三态 更新 | 文档维护者 | — |
+| 9 | `[ ]` 更新 `DESIGN*.md` 的字段表（**可选**，但若改了必须与代码一致） | 文档维护者 | §12 的处置流程 |
+
+### [规范] §6.3 新增/修改**工具**
+
+| # | 检查项 | 谁检查 | 在哪检查 |
+|---|:---:|---|---|
+| 1 | `[ ]` **六件套齐全**：`name / summary / params / returns / side_effect / roles` | **`ToolSpec.__post_init__`（逐件）+ 实测 census** | `tools/base.py` 的 `ToolSpec.__post_init__` **真的逐件校验**：① `side_effect ∈ SIDE_EFFECTS` ② `declared_external ∈ EXTERNAL`（两根轴的受控词表）③ `name` 非空**且含 `.`** ④ `summary` 非空（`strip()` 后）⑤ `params` 是 `Mapping` 且 `params["type"] == "object"` ⑥ `returns` **必须是字符串** ⑦ `roles` 必须是元组。<br>**唯一不由 `__post_init__` 保证的是"`returns` 非空"**：三个内置降级替身没写它 ⇒ 由 census 观察（判据常量 `base.REQUIRED_NON_EMPTY_FIELDS`）。<br>**怎么验（两条命令，都要跑）**：① 负控 —— 构造 `ToolSpec(side_effect="network", …)` ⇒ **导入期就抛 `ValueError`**；② census —— 发布门第 3 项 `tools` 的输出（"六件套缺字段"那一栏） |
+| 2 | `[ ]` `side_effect ∈ SIDE_EFFECTS`（`none/read/write_local`）、`external ∈ EXTERNAL`（`none/egress/exec`） | **装配期**抛 `ValueError` | `tools/base.py` 的 `ToolSpec.__post_init__`（B3 收官已删掉遗留取值 `network` 与两张翻译表） |
+| 3 | `[ ]` **`side_effect` 与真实行为一致**（双向） | **linter R010（逐工具，三个方向）** + 人工 | R010：**按工具判**，声明非 exec 却起子进程 ⇒ `error`（R010-a），声明 `egress` 却无网络调用 ⇒ `warning`（R010-b），声明 `none` 却链里联网 ⇒ `warning`（R010-c）。**R006 已退休**（文件级共现指不出是哪一个工具，判据面移入 R010；编号保留以免历史报告悬空）。见 §8 的 P7 |
+| 3b | `[ ]` 两层声明（工具层 `ToolSpec` vs 能力层 `ActionSpec`）在两根轴上对同一动作说同一句话 | **`capabilities.declaration_divergences()`**（`assert_capabilities` 里的 error 级导入期断言；warning 级只报告） | 判据三种：能力层**低估**外部轴 ⇒ `two_layer_external_divergence`（error）；两层都非 `none` 但**精度不同** ⇒ `two_layer_external_imprecise`（warning，必须可见）；名字对不上或一对多 ⇒ `two_layer_name_unmatched` / `two_layer_name_ambiguous`（info，三态里的 unknown，不是"一致"） |
+| 4 | `[ ]` `roles` 里**没有** `READ_ONLY_ROLES`（若它是写工具） | **`for_role` 结构性剥离** + `role_filter_notes` | `tools/base.py` 的 `for_role` |
+| 5 | `[ ]` `params` 是 JSON Schema（object 根），**能原样喂给 function-calling** | 人工 | FC-07 / `LESSONS.md` D4 |
+| 6 | `[ ]` handler **只收关键字参数**（`spec.handler(**params)` 不报位置参数错） | 实测 census | 对 `build_registry(...)` 的每个 `spec.handler` 取 `inspect.signature`，数有没有 `POSITIONAL_ONLY` 形参；**当次实测：没有发现一例**（数目随装配变，本文不抄定值） |
+| 7 | `[ ]` 参数非法 ⇒ **返回结构化失败**（`ok=False` + `kind`），**不抛异常** | **`ToolRegistry.call`** | `tools/base.py` 的 `ToolRegistry.call` |
+| 8 | `[ ]` 未知工具名 ⇒ `ok=False, kind="unknown_tool"` | **`ToolRegistry.call`** | 同上 |
+| 9 | `[ ]` **返回结构有契约测试**（不是文档） | 实现者 | `LESSONS.md` B8 |
+| 10 | `[ ]` 返回里有三态位（若它是"查询"类） | 审计者 | §5.1 |
+| 11 | `[ ]` 依赖缺失 ⇒ **fail-closed**（`not_wired` / `no_store`） | 审计者 | §5.3 |
+| 12 | `[ ]` 只读工具**调用后工作区字节级不变** | **测试**（目录指纹） | FC-07 判据④；`agent_c` 自检有"I1 服务面只读：三张知识表逐字节不变" |
+| 13 | `[ ]` 若是只读工具 ⇒ **不得联网 / 起子进程 / 下模型** | **linter R010（逐工具）+ 人工** | 三个方向见第 3 项；级别是 `warning` 而不是 `error`（判据是字面标记可达，`search`/`download` 按末段相等匹配 ⇒ 真实树上会命中 `re.search`/`rx.search`，那些已逐条登记在 R010 的假阳性表里，以 `info` 继续出现）。**当次数见 §0.2 的 `LIVE-READINGS` 块** |
+| 14 | `[ ]` `docs/ROLE-SPECS.md` 的**全局工具总表**加一行（含所有列） | 文档维护者 | `docs/ROLE-SPECS.md` §R0 |
+| 15 | `[ ]` `tests/` 里**提到该工具名**（不是只靠"遍历 registry"覆盖） | 实现者 | 见 §1.2 的判据清单 |
+
+### [规范] §6.4 新增/修改**交互**（I1–I12 之类）
+
+| # | 检查项 | 谁检查 | 在哪检查 |
+|---|:---:|---|---|
+| 1 | `[ ]` 交互的判据在 `interactions.py`（**纯函数**，签名里**没有 `store`**） | **`interactions.assert_store_free`（导入期）** | `interactions.py` |
+| 2 | `[ ]` 若涉及新召唤边 ⇒ `capabilities.ALLOWED_EDGES` 更新，且 `assert_capabilities` 通过 | **导入期** | `capabilities.py` |
+| 3 | `[ ]` 若涉及新写入 ⇒ `WRITE_SETS` 更新（表级）；只读角色的例外必须**显式登记理由** | **导入期 `assert_capabilities` 第 4 条** | `capabilities.py` |
+| 4 | `[ ]` 有**配额/上限**（"每个交互都必须有上限"） | 审计者 | `interactions.DEFAULTS` |
+| 5 | `[ ]` 上限用尽时的行为**明确**（拒绝 / 降级 / 落盘）并把理由留在返回里 | 审计者 | `LESSONS.md` A13 |
+| 6 | `[ ]` 上限用尽**逐条留理由**（不是静默少几条） | 审计者 | `agent_c` 自检实测："被拒=1 条，示例理由=…已达每轮上限 max_gap_requests_per_run=3 ⇒ 未提交" |
+| 7 | `[ ]` 端到端交接测试：**同时**构造"上游产出该状态"与"下游消费它" | 实现者 | `LESSONS.md` P4(b) |
+| 8 | `[ ]` 交互的判据有**单测**（`tests/test_interactions.py`，**用例数以 `--collect-only` 为准**） | 实现者 | 发布门第 1 步 |
+| 9 | `[ ]` `docs/ROLE-SPECS.md` 的两个角色的 §接口 都更新 | 文档维护者 | — |
+
+### [规范] §6.5 新增/修改**角色**（**最重的一份**）
+
+| # | 检查项 | 谁检查 | 在哪检查 |
+|---|:---:|---|---|
+| 1 | `[ ]` 角色名加进 `schema.ROLES`（**只此一处**） | 实现者 | `schema.py` 的 `ROLES` |
+| 2 | `[ ]` 角色包里有 `Agent<Role>` 类，且每个动作的 `handler_name` **真实可调用** | **`capabilities.assert_capabilities()` 第 2 条（导入期）** | `capabilities.py` |
+| 3 | `[ ]` `capabilities.CAPABILITIES[role]` 每条 `ActionSpec` 有 `params`（object 根 + `properties`） | **`ActionSpec.__post_init__`** | `capabilities.py` |
+| 4 | `[ ]` `capabilities.WRITE_SETS[role]` **有值**（空也要显式写，且只读角色必须登记例外） | **导入期** | `capabilities.py` |
+| 5 | `[ ]` `capabilities.ALLOWED_EDGES` 有该角色（**双向都要想清楚**：它能召唤谁、谁能召唤它） | **导入期** | `capabilities.py` |
+| 6 | `[ ]` 若是只读角色 ⇒ 加进 `tools.READ_ONLY_ROLES`，并配**负向权限测试** | 实现者 + **`for_role`** | FC-06 判据④；`tests/test_tools_readonly_roles.py` |
+| 7 | `[ ]` 有**自检入口** `python -m agentflow.agent_<role>`，覆盖主路径，**退出码 0** | 实现者 | `python -m agentflow.agent_<role>` |
+| 8 | `[ ]` 有专属测试文件 `tests/test_agent_<role>.py` | 实现者 | 发布门第 1 步 |
+| 9 | `[ ]` 每个"没有结果"的场景有三态形态 | 审计者 | §5.1 |
+| 10 | `[ ]` 所有循环有**上限**，且上限用尽时的行为可读 | 审计者 | `docs/ROLE-SPECS.md` §预算 |
+| 11 | `[ ]` 有可被 `verify` 检查的不变式（若产出新表/新字段） | 审计者 | `verify.py` |
+| 12 | `[ ]` `cli.py` 的**角色相关 choices 不写死**（用 `list(S.ROLES)`） | **人工**（`grep -n 'choices' src/agentflow/cli.py`；`--role E` 退出码 0） | `cli.py` |
+| 13 | `[ ]` `docs/ROLE-SPECS.md` 新增完整一节（**结构必须与既有节一致**：必备子节由 `tools/verify_role_specs.py` 的 `REQUIRED` 当次读） | 文档维护者 | `docs/ROLE-SPECS.md` |
+
+### [规范] §6.6 新增/修改**验证门**
+
+| # | 检查项 | 谁检查 | 在哪检查 |
+|---|:---:|---|---|
+| 1 | `[ ]` 门有**明确的级别**（`error` / `warning` / `info`），级别写在 docstring **与**文档表里 | 审计者 | FC-13 判据① |
+| 2 | `[ ]` 级别规则可表述为两句："表里已记录的缺陷被重算确认" = warning；"表里记录与重算事实矛盾（谎报）" = error | 审计者 | FC-13 判据② |
+| 3 | `[ ]` **正控**：好数据必须通过 | 实现者 | FC-09 判据② |
+| 4 | `[ ]` **负控**：注入已知坏数据必须报错 | 实现者 | FC-09 判据① |
+| 5 | `[ ]` 负控用例**命名可辨认**（`test_<gate>_rejects_*`） | **发布门第 5 步（linter）** | `LESSONS.md` FC-09 落地形态 |
+| 6 | `[ ]` 校验器与写入方**共用同一配置来源**（不得一处读配置、一处硬编码） | 审计者 | FC-11；`cli.py` 的 `cmd_verify` 是正确的正面范例 |
+| 7 | `[ ]` 校验器函数的这些参数**不得有默认值**，或默认值 = "拒绝执行" | 审计者 | FC-11 判据① |
+| 8 | `[ ]` 门的**脚本有退出码**（三档：0/1/2，且 `unknown` 与 `fail` 分开） | **linter R008** | `draft/17` §6.3 教训 |
+| 9 | `[ ]` 三分档计数（`verified` / `failed` / `unknown`），**禁止单一通过率** | 审计者 | FC-10 |
+| 10 | `[ ]` 报告/CLI 输出**同时展示三个数字** | 审计者 | FC-10 判据② |
+| 11 | `[ ]` 有一条测试断言"注入无法校验的样本后 `unknown` 增加而 `failed` 不变" | 实现者 | FC-10 判据③ |
+| 12 | `[ ]` 在新门上线前，**在 ≥20 条真实样本上量过触发率** | **人**（不可自动） | `draft/13` §8.1 的教训（旧 `detect_contradictions` 的假报警率；量法与读数见那一节，本文不抄定值） |
+
+---
+
+## [规范] §7 测试规范
+
+### [规范] §7.1 每个验证门**必须**有一正一反（负控）
+
+| 要求 | 判据 |
+|---|---|
+| 每个门（`validate` / `verify` / `check` / `gate`）至少一条**注入已知坏数据并断言报错**的用例 | `grep -rn 'def test_.*_rejects' tests/` 的命中数 ≥ 门的数量 |
+| 每个门同时有**防误伤**用例（好数据必须通过） | `grep -rn 'def test_.*_accepts\|def test_.*_passes\|def test_.*_ok' tests/` |
+| 命名可辨认 | 测试函数名以 `_rejects_` / `_accepts_` 结尾或含之 |
+
+**为什么**（`LESSONS.md` FC-09 逐字）：
+"只有绿灯不能证明门在工作。本项目用**刻意伪造的假引文**证明了 `verify` 真的会抓，
+而当时的缺陷里**没有一条**能被 happy-path 抓到。"
+`LESSONS.md` C2 给了反方向的理由："**假报警比不校验更糟**。"
+
+**现有正例**：`tests/test_agent_h.py` 的三类负控（无引用 / 否定未分类 / 依赖悬空）+
+落库级负控；`tests/test_agent_c_service.py` 的"负控：邻域相同但名字不同 ⇒ `proposal=review`"；
+`scripts/release_check.py` 第 6 项要求 `noai_gate` 的**负控**。
+
+### [规范] §7.2 断言要打在**判据**上，而不是实现细节上
+
+| 反例（弱断言） | 正例（判据断言） |
+|---|---|
+| `assert count >= 1` | `assert relations_suspect == 1 and suspect_by_quote == 1 and relations_added == 0` |
+| `assert "0000→0001" not in body` | **段落级解析**后断言"正文 high 4 / 非 high 0；附录 medium 1；统计 low 1" |
+| `assert res.ok` | `assert res.data["checked"] is True and res.data["empty"] is True` |
+
+**为什么**（`LESSONS.md` P11 逐字）：
+"一个只做 `count >= 1` 的断言'**既能因正确原因通过，也能因错误原因通过**'——
+它在'给结论'上是有害的，因为它会让**相邻的、真正有判别力的断言**看起来像'边界错了'。"
+那次误判的真实代价：审查者据此错判了一个**不存在**的缺陷，实现者**用证据反驳**才纠正。
+
+**纪律**：新增断言时**必须同时问**"它会不会把合法的正确实现判错？"（`LESSONS.md` P11(c)）。
+
+### [规范] §7.3 测试夹具**不许写死**表名 / 角色名 / `kind` 列表
+
+| 要求 | 判据 | 现有正例 |
+|---|---|---|
+| 计数器同步按 `S.ID_COUNTERS` **反查** | `grep -n 'ID_COUNTERS' tests/conftest.py` | `tests/conftest.py` 的 `sync_counters` |
+| 角色名单来自 `ROLES` | `grep -n 'ROLES' tests/` 只见 import | 全项目 |
+| 表名来自 `schema.TABLES` | `grep -n 'TABLES' tests/` | `tests/test_fc05_contract.py` 的 `test_every_array_field_is_declared` |
+| 时间戳一律写死为常量 | `tests/conftest.py` 逐字（"避免测试依赖'当前时间/时区'"） | `conftest.py` 头部 |
+
+**两个**点名要引的实例：
+
+1. **`conftest.sync_counters`** —— `tests/conftest.py` 逐字：
+   "⚠️ 覆盖范围由 **`S.ID_COUNTERS` 反查**，不在这里另写一张 (kind, table) 表。
+   **原先这里写死了 3 个 kind**，于是新增 `experiment` / `plan` / `doc` / `dep` / … 后失效。
+   **测试代码也是代码，写死第二份名单同样会漂移**。"
+2. **`cli.cmd_tools`** —— `cli.py` 逐字：
+   "⚠️ 角色清单必须来自 `ROLES`，**不许在这里写死**。这里原先写死 `("A","B","C","D")`，
+   于是 E/F/G/H 落地之后，本命令会一边报告'工具总数 55'，一边只列 4 个角色的工具数 ——
+   而'角色即权限面'恰恰是靠这条命令变成**可打印的事实**的。写死名单让那句
+   '评审时可核对'落空。"
+
+> ⚠️ **同一族问题的那处残留已经收口**：`cli.py` 的 argparse `--role` 曾写死 A–D
+> （实测 `--role E` 退出码 2）—— 函数体修了、**参数层没修**。今天两层都是 `list(S.ROLES)`；
+> **判据仍是那条命令的退出码**：`python -m agentflow.cli tools --role E` ⇒ 0。
+
+### [规范] §7.4 离线确定性
+
+| 要求 | 判据 | 出处 |
+|---|---|---|
+| 日常套件**离线** | `pyproject.toml` 的 `addopts = "-m 'not network'"` | `pyproject.toml` |
+| 需要联网的用例**显式标记** | `@pytest.mark.network`；`markers` 已注册 | 同上 |
+| 联网套件**独立可跑** | `python -m pytest -q -m network` | 同上 |
+| 限流（429）判 `skip`，**400 一律判失败** | `README.md` 逐字 | 注意：该条最初针对的是 `test/test1` 那一份代码谱系 |
+| 默认套件规模 | **不写定值**（读数随并行施工变化）：口径见 §1.1 的"区间 + 观测时刻"与 §0.2 的复跑命令 | §1.1 / §0.2 |
+
+**"进套件 + 默认 deselect"是两个诉求的唯一交集**（`README.md` 逐字）：
+"日常套件必须离线、确定性、可重复 —— 否则一次上游限流就会把 CI 搞红，久而久之没人再看红灯。
+但有几个真实缺陷（Crossref `select` 参数错误导致全 400、`precise` 模式恒为 0）
+**只有真实 HTTP 往返才能发现**，所以它们必须留在套件里（不能只写在文档里），只是默认不跑。"
+
+### [规范] §7.5 时间断言要给余量
+
+| 要求 | 判据 |
+|---|---|
+| 任何"耗时"断言必须有**余量**（不能断言 `elapsed < 0.1`） | `grep -rn 'elapsed\|monotonic\|time()' tests/` 逐个人工看 |
+| 墙钟用 `time.monotonic()`（**不受 NTP 回拨影响**） | `conductor.py` 的逐字注释 |
+| 超时类断言用"**至少**花了 N 秒"，不用"**恰好** N 秒" | 现有正例：`agent_e` 自检的 `timeout=1s` 只断言 `result=inconclusive`，不断言精确耗时 |
+
+---
+
+## [规范] §8 ⭐ 禁止模式清单（静态可查）
+
+> **一条一行**：模式 / 为什么禁止 / 反例出处 / 替代写法。
+> 表中的 **P1–P9 与 P17** 已经落成 `scripts/lint_rules.py` 的 **R001–R012**
+> （**12 条规则**编号可直接跑；其中 **R006 已退休**：判据面移入 R010 的逐工具判定、
+> 编号保留以免历史报告悬空；**R004 也已退休**：判据面移入**注册期**
+> （`P-1` 把 `roles ⊆ schema.ROLES` 下沉到 `ToolRegistry.register*`），构造点不再有
+> 绕过校验的可能，编号同样保留。跑 linter 时摘要行会打印退休名单 ——
+> "规则 12 条"不等于"12 条都在干活"）。
+>
+> **另有一条 `R011`（受控词表的死取值）**：判据落在
+> `tools/vocab_census.py`（0.3 秒可复跑），报的是"词表里登记了、而 `src/` 里找不到产出点"
+> 的取值。原先那几条已逐条处置（补产出 / 删词表 / 登记为预留）——
+> 对一个从来没有产出路径的取值做"预留"，等于把一句办不到的承诺留在词表里；删值 + 写明边界
+> 才是根除（边界见 `quoteverify.check_quote` 的 docstring）。它**刻意不做成红灯**：正解是
+> `P-22`/`P-23` 的人类口径裁定，用门逼出来就是拿红灯替人做决定。
+> 反向那一半（"漏词表"）**本版未实现**，由规则自己打成一条 `info` 声明 ——
+> "没查"不许被读成"没问题"。
+> ⚠️ **两条"没查成"退路报 `warning`** —— ①读不到 `tools/vocab_census.py`；
+> ②普查 `checked=False`（反真空下限不满足）。它们此前与"查过了、干净"一样报 `info`，
+> 而 `info` 恰是发布门看不见的那一档（`scripts/release_check.py::item_linter` 只看 `error`）
+> ⇒ "探测器坏了"与"词表很干净"在报告里同形。`warning` 让它们在 `--strict` 档可见。
+> 第三条"没查成"（反向：漏词表）保持 `info`，因为那是**结构上不可能变绿**的已知缺口。
+
+| # | 模式（静态可查） | 为什么禁止 | 反例出处 | 替代写法 | lint |
+|---|---|---|---|---|---|
+| P1 | `except Exception: pass` / `except: …` 后**无解释** | "我知道这里会抛且知道为什么可以不管"与"我没注意"必须能区分 | **发现时的一批**（`agent_c` / `agent_d` / `agent_e` / `extract` / `llm` / `pipeline` / `store` 等十几处）；**现已归零** —— 每条都补了**具体**理由，不是空洞 `noqa`（其中两处是"回退链 / `relative_to` 抛错恰恰表示通过"的控制流，一处是 stdout `reconfigure` 的可忽略失败） | ① 让它抛；② 或在 `except` 行写 ≥4 字理由；③ 或 `# noqa: R001` | **R001** |
+| P2 | `if x is None: return []` / `return {}` / `return 0` | 把"没做"折叠成"没有"（§5.3） | `tools/search_tools.py` 的 `search.dedup_check`（**已修**：改为 `(rows, read_error)` 三态）；`tools/trace_tools.py` 的 `_g()`（**已修**：改三态，无图可查 ⇒ `no_graph` + `checked=False`） | `return fail("…", kind="no_store")`；或 `return [], "<为什么>"`（**带回伴生原因** ⇒ 不算折叠） | **R002** |
+| P3 | **写死角色/表名/kind/字段名单的第二份副本** | FC-03；"测试代码也是代码" | `cli.py` 的 `--role choices`（**已修** ⇒ `list(S.ROLES)`）；`capabilities.py` 的 `frozenset({"A".."H"})`（**已修**）；`agent_d` 的 `("agent-C","agent-D")`（**已修** ⇒ `("C","D")` + 装配期校验） | `from ..schema import ROLES` | **R005**（+ 人工） |
+| P4 | **校验器与写入方各持一套判据** | "假报警比不校验更糟"（`LESSONS.md` P7） | `tools/review_tools.py` 的 `verdict` vs `dep_check`（**已修**：`checked=False` ⇒ `unverified`）；`doc.scan_claim` vs `review.scan_document`（**已收敛**：`scan_claim` 改为纯适配层转发 `claimanatomy`）；`conductor.verify_tasks` vs `verify.py` 的 tasks 检查（**已收敛**为 `capabilities.audit_task_ledger` 唯一实现 + 一致性测试） | 判据只有一份函数；两处都 import 它 | 人工 / 后续规则 |
+| P5 | **`tools/__init__.py` 之外的 `ToolRegistry` 直接构造**（绕过角色校验） | `build_registry` 的 `bad_roles` 断言是"字符串拼法不同导致静默失配"的唯一通用解法 | 发现时的一批（`agent_d` / `agent_e` / `agent_f` / `agent_h` / `tools/fs_tools.py` / `tools/table_tools.py`）。**现在一个 `warning` 都没有**：R004 退休后那两处由**注册期断言**（`P-1`）覆盖，而注册期断言**不进 linter 报告**；其余早已降为 `info`（已调用了同一份校验，或已逐点登记为例外） | `build_registry` / `build_for_role`，或**显式调用同一份校验函数** | **R004 已退休**（判据移入注册期，见 `scripts/lint_rules.py::RETIRED_RULES`） |
+| P6 | **同名不同契约的重复实现** | 同一语义两种拼法，两边都不报错（FC-03 的"少了一点东西"） | `textutil.slugify(text, limit=60)`（保留 CJK，空⇒`"untitled"`）vs `fetch.slugify(text, max_length=80)`（**剥掉 CJK**，空⇒`"download"`）；`dedup.normalize_doi` vs `providers.normalize_doi` —— 实测 `http://dx.doi.org/10.1000/abc` 一份原样保留、一份归一化 | 保留**一份**实现，另一处 import；或**显式登记**为"刻意的两个类" | **R003**（+ 例外清单） |
+| P7 | **声明与代码不符**（**双向**）：① 声明 `side_effect="read"` 却联网 / 起子进程 / 下模型；② 声明**不执行**（`external != "exec"`）却在起子进程；③ 声明**出网**（`external == "egress"`）却全文无网络调用 | `side_effect` / `external` 是审批与沙箱的**唯一可信判据**；声明撒谎 ⇒ 权限面在说假话。**保守的假话仍然是假话**：审计问"哪些工具会出网"时会把不联网的工具列进去 | `ocr.run`（曾声明 `read` 却下载模型 —— B3 收官已改成 `write_local` + `egress`）；`ocr.backends`（`read` 却工作区外 mkdir + 起进程）；`verify.detect_verifier`（`none` 却起子进程，已逐条登记为例外）；`verify.check_formal`（曾声明 `read` + `none` 却起调用方给内容的检查器 —— B3 收官已改成 `read` + `exec`） | 声明成真实的取值：`external ∈ {none,egress,exec}` **加** `effect ∈ {none,read,write_local}`，两根轴各自如实 | **R010**（逐工具，三个方向）；**R006 已退休** |
+| P8 | **检查脚本没有退出码**（或"未报错"被当成"无问题"） | `draft/17` §6.3 逐字："多数脚本不设退出码…（假阴性）而**'未报错'被误读成'无问题'**" | 参考体例里只有极少数脚本有退出码 | 三档退出码：`0=clean / 1=requires_human（或 fail）/ 2=unknown`；`unknown ≠ clean` | **R008** |
+| P9 | 公开函数**没有 docstring** | 文档是接口的一部分；lambda 化的 handler 更是**只有** `summary` | 实测**由 `R007` 默认档那条 `info` 消息当次产出**（公开函数数与缺 docstring 的模块分布都在那条消息里；**本文不抄定值**，复算同 §4.4） | 补 docstring（含"为什么"段） | **R007**：日常一条带分布的 `info`；**`--strict` 逐模块 `warning`** |
+| P10 | 在 `except` 里**改变量后静默继续**（把失败变成默认值） | 同 P2，但更隐蔽 | `agent_b` 的 download 失败分支是**正面**（`return None, "…失败：…"`）；反例见 P2 | 同 P2 | 人工 |
+| P11 | 用**错误信息里的字符串前缀**充当跨模块状态 | 前缀脆弱（改一个字就失效） | `LESSONS.md` N8 / `draft/13` §8.3 | 提升为受控取值 + schema 校验 | 人工 |
+| P12 | 把空字符串/空列表当"通过" | Python 里 `"" in "abc"` 是 `True` | `LESSONS.md` N6 / E3（`quoteverify` 必须显式挡空引文） | 先判非空，再比对 | 人工（`quoteverify` 已落地） |
+| P13 | 按**后缀名**或 **HTTP 200** 判断"拿到的东西是对的" | 同一实测案例同时否证两条朴素策略 | `LESSONS.md` N19 / N20（`.pdf` URL 返回的是 HTML） | 内容类型校验（`content_type_mismatch`）+ 下游**必须消费**它 | 人工 |
+| P14 | **只改代码不补"防止用错方式修好"的断言** | 有两条修复路径时，错的那条会让断言变绿而语义变坏 | `LESSONS.md` N9；3 个现成正例：`test_precise_results_are_on_topic`、`test_agent_b_still_processes_normal_downloads`、`test_valid_download_statuses_are_accepted` | 再写一条断言把错路径**堵死** | 人工 |
+| P15 | 让**告警噪音化** | "假报警会训练人忽略告警"，"文化性损伤，几乎不可逆" | `LESSONS.md` N13 / P7 | 分级（error/warning/info）+ "已知缺陷"降级 + 上线前量触发率 | 人工 |
+| **P16** | ⭐ **让判据"真空通过"**：受检对象的声明**解析不出东西**，而判据把"解析不出"当成"没有问题"（空集永远是子集） | 这比"判据太松"更贵：它不是"某条判据漏了"，而是**"这条判据在大多数对象上根本没执行"**，而报告里它一直是绿的 | **实测**：`returns=` 的"声明 vs 实现"判据的正则只抓单引号键，于是不带引号的 `returns=` 被抽成**空集** ⇒ `declared - actual == {}` **永远成立** ⇒ 该判据在**多数工具上从来没跑过**（`PROPOSALS.md` **G-4**；当次比例见那一节） | ① **解析失败必须是一个可判定的结论**（三态：`parsed` / `empty_declaration` / `unparseable`），不许折叠成空集；② 给每条判据配一条**反真空断言**（"受检集合非空"或"被跳过的对象数 ≤ 一个写下来的 N"）；③ 解析器要**结构化**（顶层键 + 每个键的列表项键），并在测试里**双向**比对 | 测试（`tests/test_tools_returns_declaration.py`） |
+| **P17** | ⭐ **注释与 docstring 里的装饰**：Markdown 强调（成对的星号）、未配对的残留星号、emoji | 源码不经过渲染器：写在里面的星号到了读者眼里只是星号 —— "强调"没被传达，传达的是"这段文字是被生成出来的"。这类标记会**扩散**：下一段注释照抄上一段的写法，几十个文件后就成了默认风格 | 立项前的普查（含成对星号 / 残留星号 / emoji 三类计数，逐条见 `draft/28` §176 与 `PROPOSALS.md` 的 P17，**本文不抄定值**）：**禁改区外**曾两次归零、两次被并行施工重新积起来；**禁改区内**仍是**人**的待办（AI 不得改，见 §9.4） | 要强调就把它写进句子；要粗体/插图就写进 `docs/` 与 `draft/`（那里的 markdown 真的会被渲染）。代码跨度里的 `**`（`2**20`、`a/**/b`、`handler(**params)`）是字面语法，判据先摘掉再判 | **R009**：区外 `error`；禁改区内只报一条汇总 `info`（区内只有人能改，报 `error` 等于造一条永远红的灯，见 P15） |
+| **P18** | ⭐ **编排层写产物不控行尾**（`Path.write_text()` 不带 `newline=`） | `write_text` 在 Windows 上把 `\n` 刷成 `\r\n` ⇒ 产物的 `sha256` 与"盘上那一版"对不上，而禁改区批准台账钉住的正是 `sha256` | `tools/release_all.py` 的注释引用过一条禁令 `G-42：禁止 Path.write_text()`，而当时 `RULES` 里只有 R001–R011 —— **那条"被引用的禁令"在门里查不到**（实测）：读者以为有机器防线，实际只有一段散文 | 写产物的两种合规写法：`open(..., newline="")` 或 `write_bytes`；逐条登记的豁免见 `scripts/lint_rules.py::R012_NEWLINE_EXEMPTIONS`（登记过期会被反向报出来） | **R012**（`warning`；`scripts/release_check.py::item_linter` 走严格档，会逐条打印） |
+
+---
+
+---
+
+## [规范] §9 提交与评审规范
+
+### [规范] §9.1 一次改动必须带什么证据
+
+| # | 必须提交的证据 | 判据（"是/否"） |
+|---:|---|---|
+| 1 | **复跑命令 + 真实输出**（不是"我跑过了"） | 提交说明里含代码块，且是**粘贴的输出**（含 `exit code`） |
+| 2 | 若改了 `src/` ⇒ `python -m pytest -q` 的**完整末行** | 末行形如 `NNN passed, M failed, K deselected in Xs` |
+| 3 | 若改了某角色 ⇒ 该角色的**自检**退出码 | `python -m agentflow.agent_<x>`；退出码 0 |
+| 4 | 若改了工具 ⇒ **工具普查**（工具数 / 角色工具数 / 只读泄漏） | `python -m agentflow.cli tools` 的输出（**三个数当次读**；泄漏那一行今天**不是空表**，见 §2.1 ③） |
+| 5 | 若改了表/字段 ⇒ `verify` 的 **error = 0** | `python -m agentflow.cli verify` |
+| 6 | 若改了禁 AI 区 ⇒ `noai_gate` 的判定（`clean` 或 `requires_human`+2 批准） | `python scripts/noai_gate.py --paths <file>` 的退出码 |
+| 7 | 新增验证门 ⇒ **正控 + 负控两条测试** | 见 §7.1 |
+| 8 | 新增公开函数 ⇒ docstring（含"为什么"段） | **R007** |
+| 9 | 修一个缺陷 ⇒ **同时**提交"防止用错方式修好"的断言 | §8-P14 |
+| 10 | 修一个"漏判" ⇒ **同时**提交"不该判的时候不判"的用例 | `LESSONS.md` P16(a) |
+
+### [规范] §9.2 ⭐ **实现者必须用证据反驳评审者**
+
+**规则**：当评审者给出一个判断（尤其是"这里有个 bug"或"你的断言太松"）时，
+**实现者有责任用证据检验它**；若评审者错了，**必须用证据反驳**——
+**"评审者说"本身不是判据**。
+
+**为什么**（`LESSONS.md` P11 与 `draft/11` §11 的一手教训）：
+一次真实的审查者误判：审查者看到 C 的自检失败 `正文只含 high 路径`，结合上一行
+`[PASS] low 路径没有进正文`，**断言**"`medium` 进了正文，违反需求"。
+**判断是错的**：正文渲染的是 `群(0000) → 阿贝尔群(0001)` 这种**带名字**的形式，
+而失败断言查的是紧凑串 `"0000→0001→0002"` —— 那个串**只出现在统计段**，
+所以断言**恒假**，与 medium 毫无关系。
+误判根因："**是因为上一条 low 断言同样很弱**（只做 `count >= 1`），
+于是'一个 pass 一个 fail'的组合被我看成了'分级边界错了'"。
+
+**处理方式才是重点**：实现者**没有借机放宽断言**，而是
+① 把附录标题改成明确写"**未达正文标准、不作为证据**"；
+② 把断言换成**段落级解析** —— **测试反而更强**。
+
+**可判定判据**：
+
+| 判据 | 怎么查 |
+|---|---|
+| 每次"评审者说有 bug"的结论，提交里含一条**能证伪它的命令 + 输出** | 提交说明 |
+| 反驳时**不许**通过放宽断言来"修好看" | diff 里**新增**的断言数 ≥ 删除的断言数 |
+| 评审结论若被证伪，**被证伪的那条断言必须按"更强的形态"重写**（不是删掉） | `draft/11` §11.3 的范例 |
+
+### [规范] §9.3 发布前的完整门（**一条命令**）
+
+```powershell
+cd D:\Incubator\agentflow
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
+python tools\release_all.py                # 七步：见 §10.1；三档结论，退出码 0/1/2
+python tools\release_all.py --json dist\release.json
+```
+
+**分步跑**（调试时用；⚠️ 分步跑**不构成**发布检查的绿色结论 ——
+`release_all.py` 会把没跑的步骤记成 `unknown`）：
+
+```powershell
+python scripts/release_check.py            # 八项，退出码 0/1/2
+python tools/verify_role_specs.py          # 角色规格结构完整性（§10.3）
+python tools/coverage_zero_test.py         # 零测试公开函数风险分档
+python tools/frontend_gate.py              # 前端步：typecheck + 构建 + 入库产物新鲜度
+```
+
+**⚠️ 当前状态如实登记**：`scripts/release_check.py` 的 docstring 自陈
+
+```
+authored_by: AI agent（本框架的构建者），**尚未经人逐行走查**
+required_approvals: 2（尚未取得）
+```
+
+逐字理由（该文件 docstring）：
+"**这个门现在是'未批准'状态**，它跑出来的绿灯**不构成发布许可**。
+把这句话写进 docstring 而不是写进某个聊天记录里，是因为它是这个文件**最重要的属性**——
+一个'看起来在把关、其实自己还没被审过'的发布脚本，正是 FC-27 说的那种
+'测试全绿、上线即越权'的形态。"
+
+### [规范] §9.4 禁 AI 区的人工门槛
+
+> **本文不重复清单内容。** 清单在 **`.noai-paths`**（机器可读 glob），
+> 硬约束说明在 **`AGENTS.md`**；两者由 `scripts/noai_gate.py::check_manifest_consistency()`
+> **逐条比对**（实测：`一致：.noai-paths 与 AGENTS.md 的清单逐条相同`，退出码 0）。
+
+**四个本体都实测在盘上**（这一格是判据要的字面量，`tests/test_release_all.py` 逐字锚着它；
+它**必须**保持"引用块里的表格行"这个形状 —— 那条负控往这一行尾部注入更正说明来证明判据咬人）：
+
+> | 本体 | 现状 |
+> |---|---|
+> | `.noai-paths` | **已存在**（机器可读的禁改区 glob；条目数与类别数见 §3.5，判据见 §0.2 的 `noai_paths_*`） |
+> | `AGENTS.md` | **已存在**（含 `NOAI-MANIFEST` 区块，与 `.noai-paths` **逐条一致**，`--check-consistency` 退出码 0） |
+> | `.noai-approvals.json` | **已存在**（批准台账：`sha256` 钉住"被批准的那一版"；**登记 ≠ 批准**，`--baseline` 永不写 `reviewers`） |
+> | `scripts/noai_gate.py` | **已存在**（退出码 0/1/2 三档；`REQUIRED_APPROVALS_ON_HIT = 2` 是**单一来源**） |
+
+| 事项 | 去向 |
+|---|---|
+| 哪些路径是禁 AI 区（当次 **43** 条条目 / **40** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
+| 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
+| 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
+| 实际判定 | `python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
+
+**本文只补三条 AGENTS.md 未展开的判据**：
+
+| # | 判据 | 检查 |
+|---:|---|---|
+| 1 | 禁改区清单**两处逐条一致**（FC-27 判据①，符合 FC-03） | `python scripts/noai_gate.py --check-consistency` 退出码 0 |
+| 2 | 该规则本身有**负控**（构造一个命中禁改区的改动，断言 CI 拒绝） | `tests/test_noai_gate.py`（负控在跑，见 §11 的 FC-27 那一行） |
+| 3 | 命中时**要求 `required_approvals=2`**，且该数字**只有一处定义** | `scripts/noai_gate.py` 的 `REQUIRED_APPROVALS_ON_HIT = 2`（**单一来源**） |
+
+---
+
+## [规范] §10 ⭐ CI 等价的发布检查
+
+### [规范] §10.1 ⭐ **一键盘**是 `tools/release_all.py`（`release_check.py` 是其中的一步）
+
+用户点名的"一键发布检查"逐字是：**"全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter"**。
+`release_check.py` 覆盖其中**五项 —— 唯独没有"验收测试"**。所以正式的入口是编排层：
+
+```powershell
+python tools\release_all.py                       # 全跑
+python tools\release_all.py --json r.json
+python tools\release_all.py --only role-specs      # 调试时只跑一项
+python -c "import sys,pathlib;sys.path.insert(0,'.');from tools.release_all import build_steps;print([s.key for s in build_steps(pathlib.Path('.').resolve())])"
+```
+
+**步骤清单以上面最后那条命令当次产出为准**（本文不抄定值；当前是 `release-check` /
+`acceptance` / `repro` / `role-specs` / `coverage` / `per-file` / `frontend`）：
+
+| 步骤 key | 覆盖用户点名的哪一项 |
+|---|---|
+| `release-check` | 全量测试 + 全部自检 + verify + 工具普查 + linter（+ 禁 AI 区门 / 契约版本 / 源码树可导入） |
+| `acceptance` | **验收测试**（`test/test2/run_acceptance.py`，`AGENTFLOW_TARGET=formal`） |
+| `repro` | 论文独立复现 —— 用户要求的证据 |
+| `role-specs` | 角色规格结构完整性（`tools/verify_role_specs.py`，见 §10.3） |
+| `coverage` | 零测试公开函数的**风险分档**清单（`tools/coverage_zero_test.py`；**发布门的口径是 `--level 2`** ⇒ 等级 ≤ 2 的零测试函数必须为 0、退出码 0；等级 3/4 不在门里，只列清单） |
+| `per-file` | **逐文件单跑门**（`tools/run_each_test_file.py`）：把"全量绿掩盖单文件红/顺序依赖"变成可判定的结论 |
+| `frontend` | **前端步**（裁定 G2）：`tools/frontend_gate.py` 的 typecheck + 构建 + **入库产物新鲜度** —— 它守的是"入库的前端产物与源码脱节"，自带三态 `0/1/2` |
+
+**两条刻意的取舍**（改它们等于改门的强度，所以这些文件在禁改区里）：
+
+1. **`--skip` 掉的步骤记成 `unknown`，不是 `pass`** —— 否则 `--skip acceptance`
+   就成了"发布门全绿"的捷径。
+2. **超时 / 起不来 ⇒ `unknown`，且 `timed_out` 的判断必须先于退出码** ——
+   Windows 上被强杀的进程退出码常是 1，与"检查发现问题"的 1 **无法区分**。
+
+总判定：**任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；全 `pass` ⇒ `pass`**；退出码 0/1/2。
+
+> ⚠️ **它全绿也不构成发布许可**：它自己与 `scripts/release_check.py` **都在 FC-27 禁改区**，
+> 仍需人逐行走查 + 2 名 reviewer 批准（§9.3）。
+
+### [规范] §10.2 八项检查、通过判据、失败退出码（实测自 `scripts/release_check.py` 的 docstring 与源码）
+
+| # | 项 | 跑什么 | 通过判据 | 该失败时的 `verdict` |
+|---:|---|---|---|---|
+| 1 | **全量测试** | `pytest -q` | 退出码 0，且 **0 failed**、**0 errors** | `fail`；收集错误/超时 ⇒ **`unknown`**（"pytest 因为收集错误没跑起来既不是'通过'也不是'失败'"） |
+| 2 | **模块自检** | 各 agent + `pipeline` 各自 `python -m agentflow.X` | 全部退出码 0 | `fail`（任一 `exit_code != 0` 或未启动或超时） |
+| 3 | **工具普查** | 自建脚本调 `build_registry` | 工具数与角色工具数**可复现**；只读角色写工具泄漏逐条可解释 | `fail`；脚本起不来 ⇒ `unknown` |
+| 4 | **全库校验** | `verify_all` | **error = 0** | `fail`；跑不起来 ⇒ `unknown` |
+| 5 | **linter** | `scripts/lint_rules.py` | **error = 0** | 退出码 2 ⇒ **`unknown`**；其它非 0 ⇒ `fail` |
+| 6 | **禁 AI 区门** | `noai_gate --check-consistency` + `--paths <改动集>` | 一致性退出码 0，**且**本次改动集判定明确 | 一致性非 0 ⇒ `fail`；gate 退出码 1 ⇒ `fail`（requires_human）；退出码 2 ⇒ **`unknown`** |
+| 7 | **契约版本** | 比 `agentflow.CONTRACT_VERSION` vs `interactions.CONTRACT_VERSION`；`schema.SCHEMA_VERSION` vs `__schema_version__` | 一致 | `fail` |
+| 8 | **源码树可导入** | 每个模块单独 import | 全部成功（**循环依赖**会在这里炸） | `fail`；跑不起来 ⇒ `unknown` |
+
+**总判定与退出码**（`release_check.py` docstring 逐字）：
+
+```
+0 = 全部 pass
+1 = 有 fail
+2 = 有 unknown（**没跑成 ≠ 通过**），或检查器自身出错
+```
+
+**⭐ 三态纪律在发布门上的落地**（逐字）：
+"`unknown` 与 `fail` 分开，且都不等于 `pass`。这是三态纪律在发布门上的落地：
+'pytest 因为收集错误没跑起来'既不是'测试通过'，也不是'测试失败'，
+把它算成任何一档都会掩盖真相。"
+
+**为什么第 1 项全绿进不了"可以发布"**（逐字）：
+"已交付的缺陷里**没有一条**能被 happy-path 抓到。所以发布门不只看'测试过没过'，
+还看**门本身有没有被校准过**（第 3/4/5/6 项）与**契约版本有没有对齐**（第 7 项）。"
+
+### [规范] §10.3 发布门**之外**的第二道门：`tools/verify_role_specs.py`
+
+用户对正式版的要求里有两条是**文档**要求：
+**"为 A–H 八个角色各写详细规格说明书"**（并逐字点名了八个必备子节），
+以及审计判据里的 **"docstring 与实现一致"**。
+
+一份几千行的规格**最容易的坏法不是写错，而是写漏** —— 少写一节，**没有任何东西会变红**，
+而读者会以为"这一节大概没有那些内容"。所以这条也做成门：
+
+```powershell
+python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 / 2=没查成
+```
+
+| 结论 | 含义 |
+|---|---|
+| `ok` (0) | 每个角色节（A–H + V + M）的必备子节齐全、顺序与 `schema.ROLES` 一致，且每节的工具面子节标题里能读出**工具条数**（供与普查对账） |
+| `incomplete` (1) | **查过了、有缺失** —— 逐条打印是哪一节缺哪一项 |
+| `unknown` (2) | **没查成**：文档不存在 / 读不到 / 一个角色节都没匹配到。**`unknown` 绝不是 `ok`** |
+
+**它为什么不在 `release_check.py` 里**（如实说明，而不是遗漏）：
+`scripts/release_check.py` 本身在 FC-27 禁改区，**给它加一项要人审**
+（`PROPOSALS.md` 的 P-2/P-3 是同一类待办）。
+所以这道门目前是一个**并列的、可单独复跑**的门，并在 `tests/test_role_specs_complete.py`
+里有负控（"删掉一节 ⇒ 必须报 `incomplete`""文档被改名 ⇒ 必须报 `unknown` 而不是 `ok`"；
+**用例数以 `--collect-only` 为准**），以及一条**文档 ↔ 实测普查对账**：
+文档每节标题里的工具条数必须等于**真的跑一次** `python -m agentflow.cli tools` 得到的数字
+（而不是测试里硬编码一份逐角色字典 —— 那会把测试绑死在当前状态上）。
+
+---
+
+## [规范] §11 FC-01…FC-27 的状态口径
+
+> **状态口径（三档，不许含糊）**：
+> - **已落地** = 代码里有实现**且**有测试/验收判据；
+> - **部分** = 有实现但缺某一判据，或只在部分模块落地；
+> - **未落地** = 在 `src/agentflow/**` 里**找不到**实现（用 token 搜索为证）；
+> - **未核实** = 没查，或查了但证据不足。
+>
+> **一条 FC 只允许一个状态**。逐条的落地位置、判据、状态**全表**在
+> `DEVELOPMENT-APPENDIX.md` 的 A6（那是 2026-09-26 的一次快照，**不构成判据**；
+> 要当前值就按 A6 表里的判据当场跑）。
+> 本文只保留**唯一一条**必须留在这里的 FC —— 因为它的判据就是 §9.4 与本节。
+
+| FC | 约束（简写） | 落地位置 | 可判定判据 | 状态 |
+|---|---|---|---|---|
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **43** 条条目 / **40** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
+
+---
+
+## [规范] §12 `DESIGN*.md` 与代码的关系（**总则**）
+
+`DESIGN*.md` 描述的是**设计与理由**，**不是现状**（份数按 `(Get-ChildItem DESIGN*.md).Count` 当次读）。
+已知的类别性偏差与处置：
+
+| 类别 | 例子 | 处置 |
+|---|---|---|
+| 设计里"待决"的问题，代码里已经有实现 | `DESIGN-CONDUCTOR.md` §8 待决问题 1（"M 是确定性的策略执行者"）—— `conductor.py` 已按此实现；问题 2（跨会话恢复"不自动续跑"）—— `verify.task_still_running`（warning）已落地 | **以代码为准**；设计文档改不改由人决定 |
+| 设计里"本轮不做"，代码里已经做了 | `DESIGN-CONDUCTOR.md` §8 待决问题 3（`WRITE_SETS` 粒度"本轮是表级"）—— 代码**确实是表级** | — |
+| 设计里给的数字，代码里不同 | `DESIGN-CONDUCTOR.md` 的 `Policy` 默认值与 `policy.py` 的默认值 **逐字一致** | 一致即不必动；不一致时**以代码为准** |
+| 接口签名 | 例：`DESIGN-ROLES.md` §2.4 写 `verify_fixes(doc_id, round_no)`，实际 `verify_fixes(doc_id, *, round_no)`（`round_no` 是 keyword-only） | **以代码为准** |
+
+**本文与代码冲突时的处置流程**：① 先按 §9.2 用证据确认是谁错了；② 若错在本文 ⇒
+改本文（并把那一格数字换成"命令 + 键名"，见 §1.1）；③ 若错在代码 ⇒ 按 §6 的 DoD 改代码 +
+补判据；④ 两边都对但口径不同 ⇒ 把两个口径**都写出来**（§3.5 就是范例）。
+

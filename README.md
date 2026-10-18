@@ -415,3 +415,16 @@ Feature-complete for the research loop, with a judge-backed test suite and a rea
 ## License
 
 See the repository root for license information.
+
+## Repository facts（读数，判据在守）
+
+这一节是**机器会核对的读数**——每个数字都有判据盯着，改它必须同时改判据认的那个来源。
+
+```
+agentflow/.noai-paths            禁改区清单（**43** 条 glob / **40** 条唯一路径，**7** 个分组）
+agentflow/src/agentflow/tools/   **15** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
+```
+
+三个带 `--json` 出口的脚本（`scripts/lint_rules.py`、`tools/release_all.py`、`tools/run_each_test_file.py`）
+一律 `open(..., newline="")` 写文件，**不经过 `Path.write_text`** ⇒ 当次产物的行尾是
+**CR=0**（纯 LF），与他平台无关。
