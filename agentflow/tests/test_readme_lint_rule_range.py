@@ -42,6 +42,27 @@ REPO = Path(__file__).resolve().parents[1]
 _SCRIPTS = REPO / "scripts"
 
 
+def _doc_path(rel: str) -> Path:
+    """文档的真实落点：`agentflow/` 本目录优先、「仓库根」兜底。
+
+    2026-10-18（业主）：`README.md` 挪到仓库根（`D:\\Incubator/README.md`）。本文件原先
+    三处内联写死 `REPO / "README.md"`，README 一搬，三条判据就一起变成
+    `FileNotFoundError` —— 那不是"README 漂了"，是判据把对象读丢了。
+    兜底口径与 `tests/test_release_all.py::doc_path` 及
+    `tests/test_doc_code_consistency.py::_resolve` 逐字同形：两处都找不到时返回本目录那个
+    候选，让 `read_text` 以 `FileNotFoundError` 红掉（"找不到"不许读成"通过"）。
+    """
+    for base in (REPO, REPO.parent):
+        cand = base / rel
+        if cand.is_file():
+            return cand
+    return REPO / rel
+
+
+#: 判据要读的那一份 README（落点解析见 `_doc_path`）。
+README_MD = _doc_path("README.md")
+
+
 def _load_linter():
     """按路径导入 `scripts/lint_rules.py`（`scripts/` 不是包，不能普通 import）。
 
@@ -111,7 +132,7 @@ def test_readme_lint_rule_range_matches_the_real_max_rule_number() -> None:
     这条在 `D11` 落地时是红的（README 写 R011、真实到 R012），
     把 README 更新到 R012 之后转绿 —— 而它下次变红就正好说明"又漂了"。
     """
-    text = (REPO / "README.md").read_text(encoding="utf-8")
+    text = README_MD.read_text(encoding="utf-8")
     problems = range_problems(text, rule_numbers())
     assert not problems, problems
 
@@ -123,7 +144,7 @@ def test_the_criterion_is_not_vacuous_on_the_stale_range() -> None:
     （`temp/batchE2-README.md.bak` 里逐字就是它），而 `RULES` 今天真实到 R012。
     所以这条负控证明的是"判据会在真的漂移时报红"，而不是"它永远为真"。
     """
-    text = (REPO / "README.md").read_text(encoding="utf-8")
+    text = README_MD.read_text(encoding="utf-8")
     top = max(rule_numbers())
     stale = _RANGE_RE.sub(
         lambda m: f"R{m.group(1)}\u2013R{top - 1:03d}", text)
@@ -134,7 +155,7 @@ def test_the_criterion_is_not_vacuous_on_the_stale_range() -> None:
 
 def test_a_readme_without_any_range_is_a_problem_not_a_pass() -> None:
     """负控（反真空）：把区间整段删掉 ⇒ 判据必须报"失去对象"，不许读成通过。"""
-    text = (REPO / "README.md").read_text(encoding="utf-8")
+    text = README_MD.read_text(encoding="utf-8")
     stripped = _RANGE_RE.sub("linter（有退出码）", text)
     assert stripped != text, "夹具前提：README 里确实有区间可删"
     problems = range_problems(stripped, rule_numbers())

@@ -21,7 +21,21 @@ def _cli():
 
 
 def _doc(rel: str) -> str:
-    return (ROOT / rel).read_text(encoding="utf-8")
+    """文档的真实落点：`agentflow/` 本目录优先、「仓库根」兜底。
+
+    2026-10-18（业主）：`README.md` 挪到仓库根（`D:\\Incubator/README.md`）。本文件原先
+    写死 `ROOT / rel`，README 一搬，这一族的两条判据就变成 `FileNotFoundError`
+    —— 那不是"文档漂了"，是判据把对象读丢了（两者的处置完全不同）。
+    兜底口径与 `tests/test_release_all.py::doc_path` 及
+    `tests/test_doc_code_consistency.py::_resolve` 逐字同形；两处都找不到 ⇒ 红
+    （"找不到"不许读成"通过"）。
+    """
+    for base in (ROOT, ROOT.parent):
+        cand = base / rel
+        if cand.is_file():
+            return cand.read_text(encoding="utf-8")
+    raise AssertionError(
+        f"读不到 `{rel}`（`{ROOT}` 与仓库根 `{ROOT.parent}` 都没有）⇒ 判据的对象没了，不是通过")
 
 
 # ------------------------------------------------------------------ A-1（菜单入口退场）
@@ -72,7 +86,12 @@ def test_the_retired_project_section_stays_retired():
 
 
 def test_every_cli_demo_mention_is_tagged_as_the_old_path():
-    for rel in ("README.md", "DEVELOPMENT.md"):
+    # 2026-10 文档拆分：A-8/A-9 那两张"旧路径"标注表随规范一起搬走 ——
+    # 它们现在住在 `docs/DEVELOPMENT-APPENDIX.md`（历史那一半），`DEVELOPMENT.md`
+    # 只剩一页入口指针。判据的对象没变（"每一处 `cli demo` 都要标旧路径"），
+    # 变的只是它读哪个文件：README 按「本目录优先 / 仓库根兜底」解析，
+    # 标注表读它现在的落点，两边都找不到就红（`_doc` 那条）。
+    for rel in ("README.md", "docs/DEVELOPMENT-APPENDIX.md"):
         text = _doc(rel)
         hits = _hits_with_context(text, "cli demo")
         assert hits, f"{rel}: `cli demo` 一个落点都没有 ⇒ 这条判据失去对象（先查是不是整段删了）"

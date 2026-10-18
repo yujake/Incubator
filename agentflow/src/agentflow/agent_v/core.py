@@ -391,11 +391,26 @@ def selftest() -> int:
 
     clean = agent.verify_proof("0007", proof_text="1. 由定义直接得到。")
     checks.append(("干净证明签成立", clean["checked"] and clean["verdict"] == "成立"))
-    checks.append(("编号从 v-0001 起", clean["verification_id"] == "v-0001"))
+    # 编号宽度**不许写死**：2026-10-14 业主裁定「所有四位编号改成六位」
+    # （`schema.ID_DIGITS = 6`），发号点是 `verifications.next_verification_id`
+    # 的 `f"v-{S.format_id(...)}"`；读侧仍认旧四位号（`schema.LEGACY_ID_PATTERN`）。
+    # 旧断言把 `"v-0001"` 写死在两处 ⇒ 宽度一改它就红，而"红了"这件事没有任何
+    # 东西看得见（自检只在手工敲命令时跑）。这是**断言过期**，不是行为退化：
+    # 台账发的号是正确的六位（见下一条与 `tests/test_id_width.py`）。
+    checks.append((f"编号从 v-{S.format_id(1)} 起（六位；旧四位号读侧兼容）",
+                   clean["verification_id"] == f"v-{S.format_id(1)}"))
     checks.append(("成立才签第 3 位", clean["signed_bit3"] is True))
-    checks.append(("五元位第 3 位 owner 是 V",
-                   bool(clean["bits"].get("reviewed"))
-                   and clean["reviewed_by"].get("verification_id") == "v-0001"))
+    # 第 3 位（审过）的 owner 是 V —— 这句话有两半，都要核：
+    #   ① 静态那一半：`evidencebits.BIT_OWNERS["reviewed"] == "V"`（位表里的 owner）；
+    #   ② 实际那一半：这一行签名的是 V（`reviewed_by.verifier`）且凭据就是
+    #      本次发的那个号（`reviewed_by.verification_id`，不再写死四位）。
+    from .. import evidencebits as _EB
+
+    checks.append(("五元位第 3 位 owner 是 V（位表 owner=V，且签名者与凭据都是本次这行）",
+                   _EB.BIT_OWNERS.get("reviewed") == "V"
+                   and bool(clean["bits"].get("reviewed"))
+                   and clean["reviewed_by"].get("verifier") == DEFAULT_VERIFIER
+                   and clean["reviewed_by"].get("verification_id") == clean["verification_id"]))
 
     bad = agent.verify_proof("0007", proof_text="1. 由定义直接得到。2. 易证。")
     checks.append(("有毛病指到那一步", bad["verdict"] == "有毛病" and bad["defect_step"] == 2))
@@ -434,8 +449,24 @@ def selftest() -> int:
     checks.append(("没有证明全文就不问模型", got["checked"] is False
                    and got["reason"] == "no_proof_text"))
     bad_id = noproof.verify_proof("7", proof_text="x")
-    checks.append(("命题号必须 4 位", bad_id["reason"] == "bad_statement_id"))
+    # 标签写错过一次（"命题号必须 4 位"而 `schema.ID_DIGITS == 6`）：标签也是判据的
+    # 一部分 —— 读者照着它去改数据，会得到"越改越不对"。所以除了 `reason` 码，
+    # 这里还核一句**细节里报出的宽度**与 `schema.ID_DIGITS` 逐字一致。
+    checks.append((f"命题号必须 {S.ID_DIGITS} 位（旧数据里的 4 位号仍可读）",
+                   bad_id["reason"] == "bad_statement_id"
+                   and f"{S.ID_DIGITS} 位" in bad_id["detail"]
+                   and "4 位号仍可读" in bad_id["detail"]))
+    # 反真空：上面那条只证明"坏号被拒"。若发号/收号两侧一起把六位号也拒了，
+    # 它照样绿 ⇒ 这里正控地把一个**六位**命题号喂进去，必须被当成合法号。
+    six_ok = noproof.verify_proof(S.format_id(7), proof_text="")
+    checks.append((f"六位命题号被接受（{S.format_id(7)}；写侧的新形态）",
+                   six_ok["reason"] == "no_proof_text"))
 
     for name, good in checks:
         print(f"  [{'PASS' if good else 'FAIL'}] {name}")
-    return 0 if all(g for _, g in checks) else 1
+    passed = sum(1 for _, g in checks if g)
+    # 汇总行与退出码同源（与 `agent_e` 的 F-4 同一纪律）：`[FAIL]` 是逐条读数，
+    # 汇总行是可机械读出的那一个数；退出码只跟它走。
+    print(f"  SELF-CHECK {'DONE' if passed == len(checks) else 'FAILED'}（agent_v）："
+          f"{passed} 项通过 / {len(checks) - passed} 项失败")
+    return 0 if passed == len(checks) else 1

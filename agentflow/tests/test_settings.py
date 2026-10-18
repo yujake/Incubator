@@ -24,10 +24,13 @@
 第 3 条里"不许出现"的面是源码加工具链文档：`agentflow/src`、
 `agentflow/tools`、`agentflow/scripts` 与所有者点名的那两份文档
 （`docs/FORMAL-TOOLCHAIN.md`、`DEVELOPMENT.md`）。
-`draft/` 与 `docs/` 下少数几份历史登记/归档（一次真机运行的证据块、
-一份暂停公告）里仍留着那些路径 —— 它们是"当时这台机器的读数"的逐字记录，
+`docs/` 下三份历史登记/归档（一次真机运行的证据块、一份暂停公告、一份问题登记册）
+里仍留着那些路径 —— 它们是"当时这台机器的读数"的逐字记录，
 改写它们等于改历史证据。这一残渣不是"看不见"：`_RESIDUE_REGISTER` 把
 （文件, 次数）逐条钉住，任何新增都会红。
+（`draft/` 与 `temp/` 下原本也逐条钉着十来份；2026-10 业主裁定把它们移出索引
+⇒ 这一面按 `git ls-files` 取、取不到它们，登记随之减掉 —— 理由与留档见
+`_RESIDUE_REGISTER` 上方那段注释。判据强度没变：扫描面一个字没动。）
 """
 from __future__ import annotations
 
@@ -94,49 +97,26 @@ _MACHINE_ENV_PATH = re.compile(
 #: 逐条钉住的理由见模块 docstring —— 它们是"当时那台机器的读数"的逐字记录。
 #: 这一张表的作用是「只许减不许增」：任何新增（包括文档里随手再写一句绝对路径）都会红。
 #:
-#: 两类落位，逐类说清为什么不动它们：
-#: 1. `agentflow/docs/` 下那 5 份不是工具链文档：`PROPOSALS.md` 是问题登记册
-#:    （命中处是"改前的实测状态，保留供对照"与一条历史复跑命令）、
-#:    `NOAI-SUSPENSION-2026-09-25.md` 是一份已发布的暂停公告（历史文本）、
-#:    `USER-TEST-TASK-QUOTE-FORMAL.txt` 是某一次真机运行的输入数据
-#:    （`docs/INDEX.md` 逐字写着它"不是判据；它是输入数据"）、
-#:    `USER-TEST.md` 是同一次运行的操作记录、`INDEX.md` 是文档索引。
-#:    改写它们等于改历史证据与实验输入，不属于"把代码里写死的地址扒出来"这件事。
-#: 2. `draft/` 下的报告体：命中的是"那一天这台机器上 `lean --version` 打了什么"
-#:    这一类逐字读数（含 `lean.exe` / `lake.exe` 的真实输出）。历史报告只许加批注，
-#:    不许改原文 —— 这是本仓库对 `draft/` 的既有纪律。
-#: 3. `temp/` 下那 4 份（2026-10-07 补）：它们是因为被引用而入库的历史证据
-#:    （`B8a-evidence.md` 是 B8a 那一轮 `lean --version` / Mathlib 状态的逐字记录、
-#:    `auditE-lean-probe.json` / `run_gates.py` / `w5_p1_probe.py` 是同一批探针）。
-#:    入库之前它们不在 `git ls-files` 里（未跟踪），所以这一面看不见它们；
-#:    入库之后它们出现在这一面 —— 处置与第 2 类完全一样：改写它们等于改证据。
-#:    这也是一条读数：这一面按"入库的东西"取，所以"给证据物入库"这个动作
-#:    本身会把它们带进这一面（当时就该预料到，我没有 —— 见 `draft/65` 教训 33）。
-#: 已移除的一条（`agentflow/docs/USER-TEST.md`）：它命中的是那句"启动前把
-#: `D:\Incubator\temp\lean470\...` 加进 PATH"的操作指令。指令不是历史记录 ——
-#: 照它做会失败（环境已搬到工作区根 `_env/`，且落点改由设置文件给）。
-#: 2026-10-07 把那两句改成了设置文件口径 ⇒ 这一条随之从登记表里减掉
-#: （"只许减不许增"这个方向上的减，正是这条判据想要的那种减）。
+#: 2026-10 缩表（业主裁定的直接后果，不是判据放宽）：这一面按 `git ls-files` 取
+#: （只认入库的文档），而 `draft/`、`temp/`、`test/` 已从索引移除并写进 `.gitignore`
+#: （**不许恢复跟踪**）—— 于是登记表里那两类落位**不再可能命中**。
+#: 一条永不生效的登记与一张永不生效的豁免是同一种腐烂（R004 的 `R004_ALLOWED_SITES`
+#: 就是这样退场的），所以它们随裁定一起从表里减掉。为什么这不是"放过它们"：
+#: 扫描面一个字没动（`_scan_set` / `_tracked_files` 都是现算的），
+#: 这一面能看见的仍然只是"入库的东西"；"看不见"与"没问题"的分界由
+#: `test_the_scanned_set_is_scanned_at_all` 与模块 docstring 各自承担。
+#:
+#: 减掉的 16 条（原样留档，免得下一个人以为它们被静默放过）：
+#:   · `agentflow/docs/INDEX.md`（1）：2026-10 重写成权威地图，里面的逐字路径
+#:     改成了"命令 + 观测时刻"口径 ⇒ 命中归零（文件还在，只是不再命中）；
+#:   · `draft/` 下 11 份（22/23/24/25/26/27/28/31/35/37/38）：移出索引 ⇒ 这一面取不到；
+#:   · `temp/` 下 4 份（`B8a-evidence.md` / `auditE-lean-probe.json` / `run_gates.py` /
+#:     `w5_p1_probe.py`）：同上。
+#: 保留下来的三条都仍被跟踪，且命中处是"历史证据 / 实验输入"（理由见模块 docstring）。
 _RESIDUE_REGISTER: dict[str, int] = {
-    "agentflow/docs/INDEX.md": 1,
     "agentflow/docs/NOAI-SUSPENSION-2026-09-25.md": 1,
     "agentflow/docs/PROPOSALS.md": 3,
     "agentflow/docs/USER-TEST-TASK-QUOTE-FORMAL.txt": 1,
-    "draft/22-企业级交付与竞争力方案（200万预算）.md": 1,
-    "draft/23-收官报告.md": 2,
-    "draft/24-收官核验包（签字前）.md": 2,
-    "draft/25-问题总清单、修复建议与交付标准.md": 1,
-    "draft/26-第二轮执行状态（对照 D-1…D-5，如实版）.md": 2,
-    "draft/27-第二轮收官报告（对照 D-1…D-5）.md": 1,
-    "draft/28-全面体检问题总清单、修复建议与交付标准.md": 2,
-    "draft/31-最终通过标准（自主评审 p2_random_walk_chamber）.md": 1,
-    "draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md": 1,
-    "draft/37-论文审阅线（polish）的缺口与通路登记.md": 8,
-    "draft/38-下一阶段：五个系统能力测试与用户逐字指示.md": 1,
-    "temp/B8a-evidence.md": 5,
-    "temp/auditE-lean-probe.json": 1,
-    "temp/run_gates.py": 1,
-    "temp/w5_p1_probe.py": 1,
 }
 
 

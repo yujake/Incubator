@@ -557,7 +557,12 @@ class AgentE(_RunExperiment, _AuthorScript, _CheckFormal, _EvidenceFor, _ListExp
 
 
 def selftest() -> int:
-    """离线自检：不联网、不依赖仓库里的任何外部文件，返回失败数。
+    """离线自检：不联网、不依赖仓库里的任何外部文件，返回 0（全过）/ 1（有失败）。
+
+    退出码与末尾那行汇总**同源**（F-4）：`SELF-CHECK DONE` ⇒ 0；任何一个
+    `[FAIL]`（含主体异常中断）⇒ `SELF-CHECK FAILED` ⇒ 1。汇总行无条件打印
+    （主体搬进 `_run_selftest_checks`，外面套 try/except/finally）—— 三态纪律：
+    **没查成**由 `未查 N 段` 单独说，不许折进"通过"或"失败"。
 
     运行方式::
 
@@ -579,25 +584,57 @@ def selftest() -> int:
     10. 形式化路径（`P-8`）：`.lean` 产物真的走检查器那一条 —— 检查器给
         `verified` 时登记的行必须是 `evidence_kind="proof"` 且
         `verifier_subject_key == claim_key`；否则一行都不许标成 proof。
-        本机没有 Lean 时这一段的期望值自动降级成"不是 proof"，仍然核对
-        "没查成不许登记成 proof"（三态纪律）。
+        `toolchain.lean_enabled` 关闭时（**出厂默认**）这一段走另一条判据：
+        核对"当场拒绝、不留行、理由给出 V 那条替代路线"，并把这一段记成
+        "未查"（没走检查器 ≠ 通过）。
     """
     import sys as _sys
-    import tempfile
 
     try:
         _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:  # 有些 stdout 替身没有 reconfigure；切编码失败不该让自检本身挂掉
         pass
 
-    failures = 0
+    #: 三个计数器（不是两态）：`skipped` 留给"环境把这一段关着" —— 三态纪律：
+    #: **没查**不许写成"通过"，也不许写成"失败"（与 `_NOT_CHECKED_REASONS` 同一口径）。
+    counts: dict[str, int] = {"passed": 0, "failed": 0, "skipped": 0}
 
     def check(label: str, cond: bool, extra: str = "") -> None:
-        nonlocal failures
         okk = bool(cond)
-        if not okk:
-            failures += 1
+        counts["passed" if okk else "failed"] += 1
         print(f"    [{'PASS' if okk else 'FAIL'}] {label}" + (f"  {extra}" if extra else ""))
+
+    # 汇总行**无条件**打印 + 退出码与汇总同源（F-4）。两件事都是刻意的：
+    #   ① 原先汇总行在函数末尾，而第 11 段（形式化路径）在 Lean 关闭时会抛
+    #      `ExperimentError`（那是对的：关掉的路不许登记 formal 行）——
+    #      自检把它当"不该发生"⇒ 进程崩在汇总行之前，输出止于 `[9]`、退出码 1，
+    #      而"0 项失败"这句话根本没被打印过。读它的人拿到一对自相矛盾的读数。
+    #   ② 于是主体搬进 `_run_selftest_checks`，用 try/except/finally 保证**任何**
+    #      路径都走到汇总行；主体自己炸了也记成一条"失败"，不冒充"没结论"。
+    try:
+        _run_selftest_checks(check, counts)
+    except Exception as exc:  # noqa: BLE001 —— 自检自己炸了也是"失败"
+        import traceback
+
+        traceback.print_exc()
+        counts["failed"] += 1
+        print(f"    [FAIL] 自检主体异常中断（{type(exc).__name__}: {exc}）"
+              "—— 上面的 traceback 是根因；这一条按失败计，不按'没结论'")
+    finally:
+        print("=" * 72)
+        skipped = f" / 未查 {counts['skipped']} 段" if counts["skipped"] else ""
+        print(f"SELF-CHECK {'DONE' if counts['failed'] == 0 else 'FAILED'}（agent_e）："
+              f"{counts['passed']} 项通过 / {counts['failed']} 项失败{skipped}")
+    return 0 if counts["failed"] == 0 else 1
+
+
+def _run_selftest_checks(check, counts: dict[str, int]) -> None:
+    """自检主体（第 0–12 段）：只打印与计数，**汇总行与退出码在 `selftest()` 里**。
+
+    把它拆成独立函数的唯一理由就是"汇总行无条件"：只要主体里有一处会抛
+    （Lean 关闭时第 11 段就会），留在 `selftest` 末尾的汇总行就永远走不到。
+    """
+    import tempfile
 
     print("=" * 72)
     root = Path(tempfile.mkdtemp(prefix="agentflow-agente-"))
@@ -737,28 +774,60 @@ def selftest() -> int:
     # 判据与"本机有没有 Lean"解耦：有检查器且命题为真 ⇒ 必须是 proof；
     # 否则必须是"不是 proof"（没查成不许登记成 proof）。
     # 两个方向都不许把 `heuristic` 写成 `proof`，所以这条检查在任何环境下都有信息量。
+    #
+    # ⚠️ 这一支是 F-4 的根因。`toolchain.lean_enabled` 的**出厂默认是 false**
+    # （`settings.py`：`DEFAULT_LEAN_ENABLED = False`，业主 2026-10-12「默认设置中
+    # Lean 关闭帮用户在无严苛要求时省钱」；`tests/conftest.py` 为了让形式化那一段
+    # 跑起来才把环境变量钉成 1）。旧写法无条件 `run_experiment(..., method="formal")`，
+    # 在默认设置下它按设计**当场抛** `ExperimentError`（这条拒绝是对的：关掉的路
+    # 不许登记 formal 行），而自检把它当"不该发生"⇒ 崩在汇总行之前。
+    # 于是按三态写：开关开着 ⇒ 核对 proof 三件套；开关关着 ⇒ 核对"拒绝而不是
+    # 静默登记"，并明确记一段"未查"（没查 ≠ 通过 ≠ 失败）。
     lean_src = (
         "theorem selfcheck_formal_proof : 1 + 1 = 2 := rfl\n"
     )
     s10 = put_script("selfcheck_formal_proof.lean", lean_src)
-    r10 = e.run_experiment(
-        "内核级命题：1+1=2", "selfcheck-formal", s10,
-        method="formal", imports=(),
-    )
-    print(f"[11] formal 路径 ⇒ evidence_kind={r10['evidence_kind']} "
-          f"result={r10['result']} reason={_digest(r10['reason'], 90)!r}")
-    if r10["evidence_kind"] == "proof":
-        row10 = st.rows("experiments")[-1]
-        check("proof 行必须由检查器背书：verifier_subject_key == claim_key",
-              row10["verifier_subject_key"] == "selfcheck-formal")
-        check("proof 行必须有检查器原话（verifier_output 非空）",
-              bool(str(row10["verifier_output"]).strip()))
-        check("proof 行不许出现在非 formal 方法上", row10["method"] == "formal")
+    from .. import settings as _SET
+
+    lean_on, lean_switch = _SET.lean_enabled()
+    if not lean_on:
+        before10 = len(st.rows("experiments"))
+        refused10 = ""
+        try:
+            e.run_experiment(
+                "内核级命题：1+1=2", "selfcheck-formal", s10,
+                method="formal", imports=(),
+            )
+        except ExperimentError as exc:
+            refused10 = str(exc)
+        counts["skipped"] += 1
+        print(f"[11] formal 路径：Lean 形式化关闭（{lean_switch}）⇒ 这一段**没走检查器**"
+              "（记 1 段未查：不是'通过'，也不是'失败'）")
+        check("Lean 关闭时 method='formal' 当场拒绝（不是静默登记一条 inconclusive）",
+              "Lean 形式化已关闭" in refused10)
+        check("拒绝理由给出替代路线（V 的 verify.verify_proof 逐行走查）",
+              "verify.verify_proof" in refused10)
+        check("被拒绝的形式化实验一行都不许落（没查成 ≠ 登记成 inconclusive）",
+              len(st.rows("experiments")) == before10)
     else:
-        check("检查器没给出 verified 时，一行都不许标成 proof（三态纪律）",
-              r10["evidence_kind"] != "proof" and r10["result"] == "inconclusive")
-        check("没查成/没通过都必须写清检查器状态",
-              "检查器状态" in r10["reason"] or "检查器状态" in r10["notes"])
+        r10 = e.run_experiment(
+            "内核级命题：1+1=2", "selfcheck-formal", s10,
+            method="formal", imports=(),
+        )
+        print(f"[11] formal 路径 ⇒ evidence_kind={r10['evidence_kind']} "
+              f"result={r10['result']} reason={_digest(r10['reason'], 90)!r}")
+        if r10["evidence_kind"] == "proof":
+            row10 = st.rows("experiments")[-1]
+            check("proof 行必须由检查器背书：verifier_subject_key == claim_key",
+                  row10["verifier_subject_key"] == "selfcheck-formal")
+            check("proof 行必须有检查器原话（verifier_output 非空）",
+                  bool(str(row10["verifier_output"]).strip()))
+            check("proof 行不许出现在非 formal 方法上", row10["method"] == "formal")
+        else:
+            check("检查器没给出 verified 时，一行都不许标成 proof（三态纪律）",
+                  r10["evidence_kind"] != "proof" and r10["result"] == "inconclusive")
+            check("没查成/没通过都必须写清检查器状态",
+                  "检查器状态" in r10["reason"] or "检查器状态" in r10["notes"])
 
     # ---- 11. 形式化路径的负控：非 .lean 产物当场拒绝（不留半条记录）
     before11 = len(st.rows("experiments"))
@@ -777,7 +846,3 @@ def selftest() -> int:
     except Exception as ex:  # noqa: BLE001
         ignored = isinstance(ex, ExperimentError)
     check("计算类方法收到 imports ⇒ 拒绝而不是静默忽略", ignored)
-
-    print("=" * 72)
-    print(f"SELF-CHECK {'DONE' if failures == 0 else 'FAILED'}（agent_e）：失败 {failures} 项")
-    return failures

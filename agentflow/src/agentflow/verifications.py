@@ -339,7 +339,12 @@ def selftest() -> int:
                         '[{"level": "error", "step": 2, "kind": "无依据", "detail": "第 2 步"}]}')
     checks.append(("三态解析", bad["verdict"] == "有毛病" and bad["defect_step"] == 2))
     row = record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=bad)
-    checks.append(("编号从 v-0001 起", row["verification_id"] == "v-0001"))
+    # 编号宽度**不许写死**（2026-10-14 业主裁定：4 位 → 6 位）：发号点是
+    # `next_verification_id` 的 `f"v-{S.format_id(...)}"`，所以断言也从
+    # `schema` 取形态。旧写法写死 `"v-0001"`，宽度一改这条自检就红 ——
+    # 那是断言过期（`v-0001` 这一格属于旧四位号），不是发号器坏了。
+    checks.append((f"编号从 v-{S.format_id(1)} 起（六位；旧四位号读侧兼容）",
+                   row["verification_id"] == f"v-{S.format_id(1)}"))
     checks.append(("有毛病不签第 3 位", bit3_payload(row) == {}))
     good = parse_verdict('{"verdict": "成立", "findings": []}')
     ok_row = record_verification(root, statement_id="0007", proof_text="1. 由定义直接得到。", verdict=good)

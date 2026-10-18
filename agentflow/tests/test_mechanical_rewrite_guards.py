@@ -22,8 +22,11 @@
 """
 from __future__ import annotations
 
+import ast
 import pathlib
 import subprocess
+
+import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[1]      # 交付树（agentflow/）
 GIT_ROOT = REPO.parent                                  # `.git` 在上一级
@@ -281,6 +284,30 @@ def _accident_simulation(head: bytes) -> bytes:
     return b"\n".join(line for line in head.replace(b"**", b" ").split(b"\n") if line.strip())
 
 
+#: 这一族"当前不可判"的逐字理由（`draft/` 不再被 git 跟踪 ⇒ 没有 HEAD 样本可对拍）。
+#:
+#: 2026-10 业主裁定：`draft/`、`temp/`、`test/` 从 git 索引移除并写进 `.gitignore`，
+#: 不许恢复跟踪。于是下面两条判据（真事故样本的负控、未跟踪底稿缺口的读数）
+#: **失去了对象**：底稿不在 HEAD 里，就没有"改前"可比。
+#:
+#: 三态纪律要求这件事显式可见：既不许静默通过（那会把"覆盖不到"读成"没问题"），
+#: 也不许把判据删掉（那等于"这一族从此没人看"）。所以两条判据各自
+#: `pytest.skip(_draft_family_skip_reason())`，理由逐字出现在 skip 行里；
+#: 另一半是 `test_the_draft_family_resumes_as_soon_as_draft_is_tracked_again()`：
+#: `draft/` 哪天重新被跟踪，这一族必须真的恢复执行（还挂着 skip 就红）。
+_DRAFT_UNJUDGEABLE = ("draft/ 已按业主决定移出仓库：机械改写守卫没有 HEAD 样本，"
+                      "这一族当前不可判")
+
+
+def _draft_family_skip_reason() -> str | None:
+    """`draft/` 被跟踪 ⇒ `None`（这一族必须真跑）；不被跟踪 ⇒ 显式不可判的理由。
+
+    判据本体就是 `git ls-files draft`（现算，不写死"这个仓库的 draft/ 一定不在"）——
+    写死的话，底稿回来之后这一族仍然睡着，而没有任何东西会红。
+    """
+    return None if _paths("ls-files", "draft") else _DRAFT_UNJUDGEABLE
+
+
 def test_a_script_rewrite_of_a_draft_or_a_doc_is_caught() -> None:
     """防线 (b)：`draft/` 下与一切 `.md` 都不许被脚本改写成"连行 + 去强调"。
 
@@ -288,6 +315,10 @@ def test_a_script_rewrite_of_a_draft_or_a_doc_is_caught() -> None:
     全绿、条数也不变 —— 它只把行号锚点与史实一起弄没。真事故两次
     （`draft/46-01` 644→550、`draft/46-03` 797→556），都靠 `git checkout HEAD --` 还原。
     """
+    _skip = _draft_family_skip_reason()
+    if _skip:
+        # 三态：不可判要显式说出来（理由见 `_DRAFT_UNJUDGEABLE` 上那段注释）。
+        pytest.skip(_skip)
     _assert_accident_negative_controls()
     changed, _new, _tracked = _changed_new_tracked()
     watch = [r for r in changed if r.startswith("draft/") or r.endswith(".md")]
@@ -345,6 +376,11 @@ def test_the_untracked_draft_gap_is_a_visible_state() -> None:
     这一条判的是读数本身：两份底稿计数要在同一个面上（跟踪 <= 盘上），
     并且那个缺口必须带着"没有 HEAD 可对拍 / 覆盖不到"的说法报出来。
     """
+    _skip = _draft_family_skip_reason()
+    if _skip:
+        # `draft/` 整族不在索引里 ⇒ "跟踪 vs 盘上"这个读数没有第二个面可比
+        # （100% 未跟踪不是缺口，是这一族整体不可判）。理由见 `_DRAFT_UNJUDGEABLE`。
+        pytest.skip(_skip)
     draft_tracked = _paths("ls-files", "draft")
     draft_disk = [p for p in (GIT_ROOT / "draft").rglob("*") if p.is_file()]
     assert draft_disk, "draft/ 下一份底稿都没有 ⇒ 判据的落点不对（不是没问题）"
@@ -356,3 +392,47 @@ def test_the_untracked_draft_gap_is_a_visible_state() -> None:
               "本判据覆盖不到它们（不是『它们没问题』）")
     assert "没有 HEAD 可对拍" in reason and "覆盖不到" in reason, reason
     assert isinstance(gap, int) and gap >= 0, gap
+
+
+def test_the_draft_family_resumes_as_soon_as_draft_is_tracked_again() -> None:
+    """守卫：`draft/` 一旦重新被跟踪，这一族的 skip 必须立刻收回。
+
+    为什么需要它：`pytest.skip` 是"这一族当前不可判"的**临时**形态，不是常态 ——
+    没有这条守卫，`draft/` 哪天被重新跟踪（或换个名字重新入库），上面两条判据会
+    继续 skip，而"整族睡着"与"整族绿着"在报告里长得一样（本仓库反复踩的坑）。
+
+    它钉两件事，缺一件就会变成橡皮图章：
+    - **状态**：`git ls-files draft` 非空 ⇒ 那个不可判的理由必须自己消失，
+      且真事故样本必须取得到 HEAD 内容（底稿回来了、判据没回来 ⇒ 红）；
+      为空 ⇒ 理由必须逐字带出来（"不可判"不许静默变"没问题"）。
+    - **接线**：上面两条判据必须仍然经过同一个 `_draft_family_skip_reason()` 与
+      `pytest.skip(...)`（读本文件源码判）。把 skip 写死进函数体、或把判据从
+      理由上摘下来，都会在这里红 —— 那正是"未来被跟踪却仍然 skip"的形态。
+    """
+    src = pathlib.Path(__file__).resolve().read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    family = ("test_a_script_rewrite_of_a_draft_or_a_doc_is_caught",
+              "test_the_untracked_draft_gap_is_a_visible_state")
+    for fn in family:
+        node = next((n for n in tree.body
+                     if isinstance(n, ast.FunctionDef) and n.name == fn), None)
+        assert node is not None, f"这一族少了一条判据：{fn}（删判据不是处置不可判的形态）"
+        body = ast.get_source_segment(src, node) or ""
+        assert "_draft_family_skip_reason()" in body, (
+            f"{fn} 不再问 `_draft_family_skip_reason()` ⇒ 它要么被写死成 skip、"
+            "要么把不可判折成了通过")
+        assert "pytest.skip(" in body, f"{fn} 不再显式 skip ⇒ 不可判会被读成通过"
+
+    tracked = _paths("ls-files", "draft")
+    reason = _draft_family_skip_reason()
+    if not tracked:
+        assert reason == _DRAFT_UNJUDGEABLE, (
+            f"`draft/` 不在索引里，却给不出那条逐字理由（实得 {reason!r}）⇒ "
+            "这一族的 skip 理由被改过，请把理由与 `_DRAFT_UNJUDGEABLE` 对齐")
+        return
+    assert reason is None, (
+        f"`draft/` 已被重新跟踪（{len(tracked)} 份），这一族却仍报不可判 ⇒ "
+        "把 `_draft_family_skip_reason()` 的 skip 收回、让两条判据恢复执行")
+    assert _head_blobs([_ACCIDENT_SAMPLE]).get(_ACCIDENT_SAMPLE) is not None, (
+        f"`draft/` 已被重新跟踪，但真事故样本 {_ACCIDENT_SAMPLE} 取不到 HEAD 内容 ⇒ "
+        "换样本、或把 `_ACCIDENT_SAMPLE` 指向那份底稿的新落点")

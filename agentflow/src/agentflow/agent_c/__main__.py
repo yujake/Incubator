@@ -10,7 +10,7 @@ from __future__ import annotations
 import pathlib
 
 from .. import conceptrows as CR   # 并表过渡期：夹具/自检走这一处写口
-from ._support import D, Path, S, Store, T
+from ._support import D, Path, S, Store, T, interactions
 from .core import AgentC
 
 #: 包形态下 `__file__` 比原来深一层目录，而自检块里按 `Path(__file__)` 的
@@ -384,13 +384,23 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     print("[13] persist()：reports/<id>-<kind>.md + analysis_reports 登记行")
     info = pr.persist()
     print(f"    {info}")
-    row = st.rows("analysis_reports")[0]
-    print(f"    登记行：id={row['report_id']} kind={row['kind']} request={row['request']!r} path={row['markdown_path']}")
-    print(f"    summary={row['summary'][:60]}…")
+    # 取**这一次** persist 拿到的号对应的登记行，不能取 `rows[0]`：
+    # 2026-10-12 业主裁定 CS-10 ②（"直接调分析器也落库"）之后，`AgentC._report`
+    # 在 `ok` 且 kind 在受控词表里时会收口一次 `persist()`（`core.py` 的那段
+    # "产出即登记"）。于是走到本段时 `analysis_reports` 里已经有本文件前面几个
+    # 分析器各自落的行，`rows[0]` 是**第一份**报告而不是这一份 —— 旧断言
+    # (`rows[0]`) 是"产出即登记"之前的写法，它过期了，不是这里该变绿。
+    matched = [r for r in st.rows("analysis_reports") if r["report_id"] == info["report_id"]]
+    row = matched[0] if matched else {}
+    print(f"    登记行：id={row.get('report_id')} kind={row.get('kind')} "
+          f"request={row.get('request')!r} path={row.get('markdown_path')}")
+    print(f"    summary={str(row.get('summary') or '')[:60]}…")
     md_file = st.root / info["markdown_path"]
-    print(f"    文件存在={md_file.exists()} 大小={md_file.stat().st_size} 字节；payload 键={sorted(row['payload'].keys())[:6]}…")
-    check("persist 落盘且登记行一致",
-          row["report_id"] == info["report_id"] and row["markdown_path"] == info["markdown_path"] and md_file.exists())
+    print(f"    文件存在={md_file.exists()} 大小={md_file.stat().st_size} 字节；"
+          f"payload 键={sorted((row.get('payload') or {}).keys())[:6]}…")
+    check("persist 落盘且登记行一致（按这次拿到的号定位，且该号只有一行）",
+          len(matched) == 1 and row.get("report_id") == info["report_id"]
+          and row.get("markdown_path") == info["markdown_path"] and md_file.exists())
     no_persist = c.handle("随便说点什么不相干的话")
     try:
         no_persist.persist()
@@ -528,15 +538,21 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     st5 = make_store("i3")
 
     def _i3_fixture(target: Store) -> None:
+        # 概念号与关系里的 concept_ids 必须**同一套**：2026-10-14 业主裁定
+        # "所有四位编号改成六位"之后 `S.format_id` 发的是 `000000…`，而这里
+        # 原先概念行用 `S.format_id(i)`、关系行却写死 `"0000"…` ⇒ 图里每个
+        # 概念代号都查不到名字，候选全被 `_looks_like_non_concept` 否决，
+        # 于是 I3 正向与闸门两条断言测的都不是闸门（Fixture 过期，见 F-2/F-3）。
+        cid = [S.format_id(i) for i in range(4)]
         with target.tx(*CR.tables_for_concept_write("relations", "literature"),
                        actor="selftest", note="i3") as tx:
             for i in range(4):
-                CR.upsert_legacy_shaped(tx, {"concept_id": S.format_id(i), "name": f"概念{i}", "definition": "d",
+                CR.upsert_legacy_shaped(tx, {"concept_id": cid[i], "name": f"概念{i}", "definition": "d",
                                        "normalized_name": T.normalize(f"概念{i}"), "related_concepts": []})
             for r in [
-                _svc_rel("0000", ["0000", "0001"], "一条足够长的关系描述用于评分", "0000"),
-                _svc_rel("0001", ["0000", "0002"], "一条足够长的关系描述用于评分", "0001"),
-                _svc_rel("0002", ["0001", "0003"], "一条足够长的关系描述用于评分", "0000"),
+                _svc_rel(S.format_id(0), [cid[0], cid[1]], "一条足够长的关系描述用于评分", S.format_id(0)),
+                _svc_rel(S.format_id(1), [cid[0], cid[2]], "一条足够长的关系描述用于评分", S.format_id(1)),
+                _svc_rel(S.format_id(2), [cid[1], cid[3]], "一条足够长的关系描述用于评分", S.format_id(0)),
             ]:
                 tx.upsert("relations", r)
 
@@ -548,9 +564,16 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     rep_on = c5.gaps(submit_requests=True)
     rows5 = st5.rows("search_requests")
     topics5 = {"、".join(x["concept_names"]) for x in rep_on.payload["candidate_gaps"]}
-    print(f"    候选={len(rep_on.payload['candidate_gaps'])} 条；"
+    # 单轮上限是 `interactions.DEFAULTS["max_gap_requests_per_run"]`（裁定 C9：3 → 30）。
+    # 旧断言把它写死成 `<= 3`：那是 2026-10-12 之前的口径，**过期的是这个数字**，
+    # 不是闸门被放宽了。断言改成"新增条数 == min(候选数, 当次上限)"，比原来更紧：
+    # 它同时钉住"候选真的被提交"与"每轮上限真的生效"。
+    max_per_run = int(interactions.DEFAULTS["max_gap_requests_per_run"])
+    n_cand = len(rep_on.payload["candidate_gaps"])
+    print(f"    候选={n_cand} 条；"
           f"关闭时新增={len(rep_off.payload['submitted_request_ids'])} 条"
-          f"（enabled={rep_off.payload['request_submission']['enabled']}）")
+          f"（enabled={rep_off.payload['request_submission']['enabled']}）"
+          f"；每轮上限 max_gap_requests_per_run={max_per_run}")
     print(f"    开启后新增={len(rows5)} 条："
           f"{[(r['request_id'], r['topic'], r['submitted_by'], r['priority'], r['mode']) for r in rows5]}")
     print(f"    被拒={len(rep_on.payload['rejected_requests'])} 条，"
@@ -558,15 +581,19 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     check("I3 默认关闭：submit_requests=False 时一条 search_requests 都不写（逐字节不变）",
           req_before == req_after_off
           and rep_off.payload["submitted_request_ids"] == [] and rep_off.payload["request_submission"]["enabled"] is False)
-    check("I3 正向：新增 ≤3 条，且 submitted_by/priority/mode/topic 全部合规",
-          0 < len(rows5) <= 3
+    check("I3 正向：新增 == min(候选数, 每轮上限)，且 submitted_by/priority/mode/topic 全部合规",
+          0 < len(rows5) == min(n_cand, max_per_run)
           and all(r["submitted_by"] == "agent-C" and r["priority"] == "medium"
                   and r["mode"] == "topical" and r["topic"] in topics5 and not r["done"] for r in rows5))
 
+    # 闸门用例要**把在途填到当次上限**（`interactions.DEFAULTS["max_inflight_requests"]`，
+    # 裁定 C9：20 → 200）。旧夹具固定填 20 行并称"20/20 上限"——上限改成 200 之后
+    # 那 20 行只是"在途 20/200"，闸门当然放行。过期的是夹具里的数字。
+    inflight_limit = int(interactions.DEFAULTS["max_inflight_requests"])
     st6 = make_store("i3gate")
     _i3_fixture(st6)
     with st6.tx("search_requests", actor="selftest", note="i3gate") as tx:
-        for i in range(20):
+        for i in range(inflight_limit):
             row = S.SearchRequest(
                 request_id=f"r-{S.format_id(i + 1)}", timestamp=S.now_iso(), topic=f"占位主题{i}",
                 mode="topical", submitted_by="agent-D",
@@ -575,7 +602,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
             tx.upsert("search_requests", row.to_dict())
     gate_before = (st6.data / "search_requests.json").read_bytes()
     rep_gate = AgentC(st6, actor="agent-C-i3gate").gaps(submit_requests=True)
-    print(f"    在途 20/20（上限）时：新增={len(rep_gate.payload['submitted_request_ids'])} 条，"
+    print(f"    在途 {inflight_limit}/{inflight_limit}（上限）时：新增={len(rep_gate.payload['submitted_request_ids'])} 条，"
           f"被拒={len(rep_gate.payload['rejected_requests'])} 条")
     check("I3 闸门：在途到上限时拒绝而不是无限排队，且逐条留下理由",
           rep_gate.payload["candidate_gaps"]
@@ -590,4 +617,9 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     if failed:
         for lbl in failed:
             print(f"  FAILED: {lbl}")
-    print("SELF-CHECK " + ("DONE" if not failed else "FAILED"))
+    # 汇总行与退出码同源（F-7）：README/`release_check.py`/CI 读的都是**退出码**，
+    # 所以"打印 FAILED 却退 0"等于把三态折平（FAILED 降级成 pass）。
+    passed = len(CHECKS) - len(failed)
+    print(f"SELF-CHECK {'DONE' if not failed else 'FAILED'}（agent_c）："
+          f"{passed} 项通过 / {len(failed)} 项失败")
+    raise SystemExit(0 if not failed else 1)

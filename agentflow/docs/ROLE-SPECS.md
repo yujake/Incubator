@@ -691,7 +691,8 @@ C 的产出有两类，状态语义完全不同。
 
 ### C.10 自检入口
 
-**命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_c`。**当次（2026-10-18）**：`自检断言：43/46 通过` + 3 项 `FAILED` + `SELF-CHECK FAILED`；**退出码 0 —— 失败却不退非零（缺陷 F-7）**。
+**命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_c`。**当次（2026-10-18，F-1/F-2/F-3/F-7 修后复跑）**：`自检断言：46/46 通过` + `SELF-CHECK DONE（agent_c）：46 项通过 / 0 项失败`；**退出码 0**。
+汇总行与退出码**同源**（任一 `[FAIL]` ⇒ `SELF-CHECK FAILED` ⇒ 退出码 1）；判据在 `tests/test_selfcheck_exit_codes.py`（子进程 + 注入失败负控）。
 明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
 
 ## D —— 研究
@@ -924,7 +925,11 @@ C 的产出有两类，状态语义完全不同。
 
 ### E.10 自检入口
 
-**命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_e`。**当次（2026-10-18）**：**无汇总行**（输出止于 `[9]`，全部 `[PASS]`）⇒ **结论不可读**；**退出码 1**。
+**命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_e`。**当次（2026-10-18，F-4 修后复跑）**：汇总行**始终打印**、退出码与它同源 ——
+出厂默认（`toolchain.lean_enabled` 关闭）下：`SELF-CHECK DONE（agent_e）：25 项通过 / 0 项失败 / 未查 1 段`，**退出码 0**；
+把开关打开（`AGENTFLOW_LEAN_ENABLED=1`，形式化路径真的走检查器）后：`SELF-CHECK DONE（agent_e）：27 项通过 / 0 项失败`，**退出码 0**。
+「未查 1 段」是形式化路径在开关关闭时**没走检查器**：那一段改判"当场拒绝、不留行、理由给出 V 的替代路线"，记成"未查"（没查 ≠ 通过 ≠ 失败）。
+判据：`tests/test_selfcheck_exit_codes.py`（子进程 + 注入失败负控）。
 明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
 
 ## F —— 多轮难题攻坚
@@ -1386,7 +1391,8 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.10 自检入口
 
-**命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_v`。**当次（2026-10-18）**：14 `[PASS]` + **2 `[FAIL]`**；**退出码 1**。
+**命令**：`$env:PYTHONPATH='src'; python -m agentflow.agent_v`。**当次（2026-10-18，F-5/F-6 修后复跑）**：`SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败`；**退出码 0**。
+台账编号是**六位**（`v-000001`；发号点 `verifications.next_verification_id` 走 `schema.format_id`，旧四位号读侧兼容）；五元位第 3 位的 owner **就是 V**（`evidencebits.BIT_OWNERS["reviewed"] == "V"`，实际签名者 `reviewed_by.verifier == "agent-V"`）。
 明细（覆盖/未覆盖对照、失败项）见附录「A.10–M.10」与 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
 
 ## M —— 主控（Conductor）

@@ -903,12 +903,19 @@ def _rule_codes() -> list[str]:
     return out
 
 
+#: 2026-10 文档拆分：禁止模式清单（P1–P18）随规范搬进 `docs/DEVELOPMENT-SPEC.md`，
+#: 编号从 `DEVELOPMENT.md` 的 `§6` 变成 `§8` —— 判据的对象（那张禁止模式表）一个字没变，
+#: 变的只是它住哪一节。读不到仍然返回空串、由调用方判失败（fail-closed，不折成通过）。
+_SPEC = Path(__file__).resolve().parents[1] / "docs" / "DEVELOPMENT-SPEC.md"
+_SPEC_PROHIBITION_HEADER = "## [规范] §8"
+
+
 def _section6() -> str:
-    """`DEVELOPMENT.md` 的 §6 正文（禁止模式清单）。读不到时返回空串，由调用方判失败。"""
-    doc = (Path(__file__).resolve().parents[1] / "DEVELOPMENT.md").read_text(encoding="utf-8")
-    if "## §6" not in doc:
+    """`docs/DEVELOPMENT-SPEC.md` 的 §8 正文（禁止模式清单）。读不到时返回空串，由调用方判失败。"""
+    doc = _SPEC.read_text(encoding="utf-8")
+    if _SPEC_PROHIBITION_HEADER not in doc:
         return ""
-    return doc.split("## §6", 1)[1].split("\n## §7", 1)[0]
+    return doc.split(_SPEC_PROHIBITION_HEADER, 1)[1].split("\n## ", 1)[0]
 
 
 def test_every_lint_rule_is_registered_in_the_table():

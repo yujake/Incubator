@@ -869,10 +869,10 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 |---|---|---|
 | **V 的工具面 0 个写工具** | `for_role("V")` 结构性剥离 + `tools.READ_ONLY_ROLES` 里的 `"V"` | 实测 0（`{'C': [], 'H': [], 'V': []}`） |
 | **输出不合法绝不落台账行** | `verifications.parse_verdict` 抛 `VerificationError` ⇒ `record_verification` 不写行 | 自检 `[PASS] 没查成不落行` |
-| **台账只追加、编号由脚本发** | `v-{S.format_id(len(rows) + 1)}`（六位，与手稿编号、台账 id 同一套做法） | 自检 `[FAIL] 编号从 v-0001 起`（**当前实测失败**，见附录 §V.10）/ `[PASS] 追加式：两行（第三份没落）` |
+| **台账只追加、编号由脚本发** | `v-{S.format_id(len(rows) + 1)}`（六位，与手稿编号、台账 id 同一套做法） | 自检 `[PASS] 编号从 v-000001 起（六位；旧四位号读侧兼容）` —— **2026-10-18 修复轮后转绿**；采集当天红在写死四位的断言上（F-5，判为断言过期） |
 | **第 3 位只在 `成立` 且无未解决 error 时被签** | `verifications.signs_bit3` / `bit3_payload`（签不了 ⇒ 返回 `{}`：**"没签"不是"忘了写"**） | 自检 `[PASS] 成立才签第 3 位` / `[PASS] 有毛病不签第 3 位` |
 | **冷启动没有句柄** | `cold_start_prompt` 的签名里没有 `store`/`conductor`/`registry`/`session_root` | 自检 `[PASS] 冷启动提示词没有句柄参数` |
-| **命题号必须是六位十进制（旧四位可读）** | `verifications.verification_ledger_path` → `schema.is_valid_id`（`schema.ID_DIGITS == 6`，读侧兼容四位） | 自检那一项的**标签**写的是「命题号必须 4 位」（过期标签），判据本体是六位 |
+| **命题号必须是六位十进制（旧四位可读）** | `verifications.verification_ledger_path` → `schema.is_valid_id`（`schema.ID_DIGITS == 6`，读侧兼容四位） | 自检标签已对齐成「命题号必须 6 位（旧数据里的 4 位号仍可读）」，并加核 `detail` 里报出的宽度（采集当天标签写 4 位，F-6，已对齐） |
 | **`limit=0` 是零条** | `verifications.list_verifications`（`out[-0:]` 的巧合已修） | 自检 `[PASS] limit=None 是全量而不是零条` |
 | **V 不写任何表** | `capabilities.WRITE_SETS["V"] == frozenset()`；`schema.TABLES` 是 **16** 张（**V 没加表**） | 静态表 |
 | **V 只能召唤 F** | `ALLOWED_EDGES["V"] == {"F"}` | 静态表 |
@@ -965,29 +965,33 @@ verify_fixes:    同样的前提，**外加一条**（`R-59`，2026-09-29）：
 
 ---
 
-## A.10–M.10 [附录·实测] 全部自检入口与当次读数（2026-10-18）
+## A.10–M.10 [附录·实测] 全部自检入口与当次读数（2026-10-18；**C/E/V 三行是修复轮复跑**）
 
 ```powershell
 cd D:\Incubator\agentflow; $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline、llm
 ```
 
+> 采集当天（同日早些时候）C 是 `43/46 + 3 FAILED + 退出码 0`、E 无汇总行 + 退出码 1、
+> V 是 `14 PASS + 2 FAIL` + 退出码 1。修复轮逐条处理后，下面三行按**复跑读数**写；
+> 原读数保留在本节后面两段"修前逐字"里，用作"修了什么"的对照。
+
 | 入口 | 当次读数（尾部逐字） | 退出码 | 行数 | 与旧文档的差 |
-|---|---|---:|---:|---|
+|---|---|---|---:|---|
 | `agent_a` | `[agent_a 自检] 24/24 项通过` | **0** | 26 | 旧文写"0 行输出、无自检块" ⇒ **过期**（现在有自检块） |
 | `agent_b` | `[agent_b 自检] 19/19 项通过` | **0** | 21 | 同上 ⇒ **过期** |
-| `agent_c` | `自检断言：43/46 通过` + 3 项 `FAILED` + `SELF-CHECK FAILED` | **0** ⚠️ | 246 | 旧文写"46/46 通过、退出码 0" ⇒ **过期**（且失败却不退非零） |
+| `agent_c` | `自检断言：46/46 通过` + `SELF-CHECK DONE（agent_c）：46 项通过 / 0 项失败` | **0** | 243 | 采集当天是 `43/46` + 3 `FAILED` + **退出码 0**（F-1/F-2/F-3 判为断言/夹具过期，F-7 真缺陷，**均已处理**） |
 | `agent_d` | `SELF-CHECK DONE（agent_d）` | 0 | 58 | 一致 |
-| `agent_e` | 输出止于 `[9] …`，**无汇总行** | **1** ⚠️ | 42 | 旧文写"`SELF-CHECK DONE（agent_e）：失败 0 项`、退出码 0" ⇒ **过期** |
+| `agent_e` | `SELF-CHECK DONE（agent_e）：25 项通过 / 0 项失败 / 未查 1 段`（出厂默认：Lean 关闭） | **0** | 39 | 采集当天止于 `[9] …`、**无汇总行**、退出码 **1**（F-4，**已修**；开关打开时是 `27 项通过 / 0 项失败`，退出码 0） |
 | `agent_f` | `SELF-CHECK DONE（agent_f）：失败 0 项` | 0 | 42 | 一致 |
 | `agent_g` | `SELF-CHECK DONE（agent_g）` | **0** | 51 | 旧文写"`ValueError … verifier_subject_key`、退出码 1" ⇒ **已修复** |
 | `agent_h` | `SELF-CHECK DONE（agent_h）` | 0 | 69 | 一致 |
-| `agent_v` | 16 行 = **14 `[PASS]` + 2 `[FAIL]`** | **1** ⚠️ | 16 | 旧文写"16 行 `[PASS]`、退出码 0" ⇒ **过期** |
+| `agent_v` | `SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败` | **0** | 18 | 采集当天 16 行 = 14 `[PASS]` + 2 `[FAIL]`（F-5/F-6 判为断言过期并已对齐） |
 | `pipeline` | `SELF-CHECK DONE（pipeline）` | 0 | 48 | 一致 |
 | `llm` | `SELF-CHECK DONE` | 0 | 41 | 一致 |
 | `conductor` | **无入口**（`conductor.py` 是模块，不是包） | — | — | 一致（M 只有两个方法 + 测试） |
 
-**`agent_c` 的 3 个 FAILED（逐字）**：
+**修前逐字（采集当天）—— `agent_c` 的 3 个 FAILED**：
 
 ```
   ========================================================================
@@ -998,18 +1002,21 @@ python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline�
 SELF-CHECK FAILED
 ```
 
-**`agent_v` 的 2 个 FAIL（逐字）**：
+**修前逐字（采集当天）—— `agent_v` 的 2 个 FAIL**：
 
 ```
   [FAIL] 编号从 v-0001 起
   [FAIL] 五元位第 3 位 owner 是 V
 ```
 
-> 这两处失败**没有改代码去让它变绿**（本轮只写文档）。它们是**待修的缺陷证据**，
-> 逐条登记在 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)：F-1/F-2/F-3（C）、
-> F-4（E 的退出码）、F-5/F-6（V）、F-7（C 的退出码恒 0）。
-> `agent_v` 最后一项的**标签**写的是「命题号必须 4 位」，而规格是**六位**
-> （`schema.ID_DIGITS == 6`，读侧兼容四位）⇒ **标签过期、判据本体没错**（F-6）。
+> **修复轮（2026-10-18）的处理**（逐条依据见 [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)）：
+> **F-1/F-2/F-3**（C）判为**断言/夹具过期并已对齐** —— `rows[0]` 是"产出即登记"（CS-10 ②）之前的写法；
+> I3 断言写死 `≤3` / 夹具写死 20 条在途，是 `interactions.DEFAULTS` 按裁定 C9 改成 30 / 200 之前的口径；
+> 另有一处夹具混用四位概念号与六位关系号（`schema.ID_DIGITS` 已改六位）。
+> **F-5/F-6**（V）判为**断言过期并已对齐**：第 3 位的 owner 确实是 V
+> （`evidencebits.BIT_OWNERS["reviewed"] == "V"`，实测签名者 `agent-V`），红的只是写死的四位编号与过期标签。
+> **F-4 / F-7** 是**真缺陷并已修**：E 的汇总行改为无条件打印、退出码与汇总同源，形式化路径按 Lean 开关走三态；
+> C 的 `FAILED` 现在必定非零退出。判据 `tests/test_selfcheck_exit_codes.py`（子进程 + 注入失败负控）。
 
 ---
 
@@ -1073,19 +1080,22 @@ $env:PYTHONPATH='src'; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
 | 3 | `python -m pytest --collect-only -q` | `5433/5461 tests collected (28 deselected) in 8.28s` | 0 |
 | 4 | `python -m agentflow.agent_a` | `[agent_a 自检] 24/24 项通过` | 0 |
 | 5 | `python -m agentflow.agent_b` | `[agent_b 自检] 19/19 项通过` | 0 |
-| 6 | `python -m agentflow.agent_c` | `自检断言：43/46 通过` + 3 `FAILED` + `SELF-CHECK FAILED` | **0** ⚠️ |
+| 6 | `python -m agentflow.agent_c` | **修复轮复跑**：`自检断言：46/46 通过` + `SELF-CHECK DONE（agent_c）：46 项通过 / 0 项失败`（采集当天是 `43/46` + 3 `FAILED` + 退出码 **0**，F-7） | 0 |
 | 7 | `python -m agentflow.agent_d` | `SELF-CHECK DONE（agent_d）` | 0 |
-| 8 | `python -m agentflow.agent_e` | 止于 `[9] …`，无汇总行 | **1** ⚠️ |
+| 8 | `python -m agentflow.agent_e` | **修复轮复跑**：`SELF-CHECK DONE（agent_e）：25 项通过 / 0 项失败 / 未查 1 段`（出厂默认 Lean 关闭；采集当天止于 `[9] …`、无汇总行） | 0 |
 | 9 | `python -m agentflow.agent_f` | `SELF-CHECK DONE（agent_f）：失败 0 项` | 0 |
 | 10 | `python -m agentflow.agent_g` | `SELF-CHECK DONE（agent_g）` | 0 |
 | 11 | `python -m agentflow.agent_h` | `SELF-CHECK DONE（agent_h）` | 0 |
-| 12 | `python -m agentflow.agent_v` | 14 `[PASS]` + 2 `[FAIL]` | **1** ⚠️ |
+| 12 | `python -m agentflow.agent_v` | **修复轮复跑**：`SELF-CHECK DONE（agent_v）：17 项通过 / 0 项失败`（采集当天 14 `[PASS]` + 2 `[FAIL]`；F-5/F-6 判为断言过期） | 0 |
 | 13 | `python -m agentflow.pipeline` | `SELF-CHECK DONE（pipeline）` | 0 |
 | 14 | `python -m agentflow.llm` | `SELF-CHECK DONE` | 0 |
 | 15 | `python -m agentflow.cli verify` / `demo` | **未复跑**（本轮未跑；旧文记 `通过 错误 0 / 警告 0` 与 `演示成功。`） | — |
 | 16 | `python scripts/noai_gate.py --git` / `--paths …` | **未复跑**（旧文记 `[unknown] … Not a git repository`；这一句**已过期**：`D:\Incubator` 现在是 git 仓库，`--git` 需要 `--since <ref>` 才判得动） | — |
 
 > ⚠️ **旧版 S3 的 #1（`567/835/957 passed`）、#2（`工具总数：55`）、#3（`--role E` 退出码 2）、
-> #6（`46/46`）、#10（G 退出码 1）全部过期**，已按上表替换。
+> #6（`46/46`，采集当天实测是 `43/46`）、#10（G 退出码 1）全部过期**，已按上表替换。
+> **修复轮（同日）之后 #6 的 `46/46` 重新成立**，但成立的原因不同：采集当天是"断言过期导致的红"，
+> 修复轮把 F-1/F-2/F-3 对齐到当前口径（CS-10 ② / 裁定 C9 / 六位编号）后才绿 —— 见
+> [`SELF-CHECK-FINDINGS.md`](SELF-CHECK-FINDINGS.md)。
 > 判据类的命令（`pytest -q` 全量、`noai_gate`、`verify`、`demo`）本轮**没有跑全**，
 > 表中如实标"未复跑"，不拿旧读数充当今天的读数。

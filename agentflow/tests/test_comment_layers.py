@@ -26,7 +26,10 @@ import tokenize
 import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
-DEV = REPO / "DEVELOPMENT.md"
+#: 2026-10 文档拆分：`§0.3d（注释三层）` 的正文搬进了 `docs/DEVELOPMENT-SPEC.md` 的
+#: `§1.3`（旧编号在那个小节的迁移注里逐字保留）。判据对象、字面与强度都没变 ——
+#: 变的只是"这一节住在哪个文件"，指向入口（现在只剩 42 行指针）等于指向一个空壳。
+DEV = REPO / "docs" / "DEVELOPMENT-SPEC.md"
 
 #: 判据点名的样板（`DEVELOPMENT.md` §0.3d 里逐字列了同样四个）。
 #: `agent_d` 那一格是包（`goal-7f5116c1` M6 把一个 4188 行的大文件拆成一个动作一个文件），
