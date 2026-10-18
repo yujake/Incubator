@@ -152,8 +152,8 @@ def test_the_readme_subcommand_count_matches_the_live_parser():
     live = len(sub.choices)
 
     text = (REPO / "README.md").read_text(encoding="utf-8")
-    found = [int(n) for n in re.findall(r"(\d+)\s*个子命令", text)]
-    assert found, "README 里没有『N 个子命令』这个读数了 —— 要么删干净、要么改这条判据"
+    found = [int(n) for n in re.findall(r"(\d+)\s*(?:个子命令|subcommands)", text)]
+    assert found, "README 里没有『N 个子命令 / N subcommands』这个读数了 —— 要么删干净、要么改这条判据"
     wrong = [n for n in found if n != live]
     assert not wrong, (
         f"README 写了 {wrong} 个子命令，`build_parser()` 当次给出 {live} 个"
@@ -168,12 +168,18 @@ def test_the_readme_does_not_document_a_flag_that_does_not_exist():
     `--xxx`（不牵连别的子命令的开关：`§0` 里同一段还有 `project run --books` 之类）。
     """
     text = (REPO / "README.md").read_text(encoding="utf-8")
-    start = text.index("## 0. 先跑通")
-    text = text[start:text.index("## 1. 这是什么")]
+    # 2026-10-18：README 改成 Moonshine 骨架后不再有 `## 0. 先跑通`；
+    # 锚点改成语义等价的那一节（首次运行里的 run-agent 示例），判据意图不变。
+    start = text.index("### 4. Start a research run")
+    nxt = text.find("\n### ", start + 5)
+    text = text[start:nxt if nxt > 0 else len(text)]
     flags: set[str] = set()
+    # 2026-10-18：示例用反斜杠续行，`--task` 不在含 `run-agent` 的那一行上。
+    # 所以扫**整段**；`lines` 仍只用来确认"确实有 run-agent 示例"。
     lines = [ln for ln in text.splitlines() if "run-agent" in ln]
-    assert lines, "夹具前提：§0 里应当有 run-agent 的示例命令"
-    for ln in lines:
+    scan_lines = text.splitlines()
+    assert lines, "夹具前提：首次运行那一节里应当有 run-agent 的示例命令"
+    for ln in scan_lines:
         for token in ln.replace("`", " ").split():
             if token.startswith("--") and len(token) > 3:
                 flags.add(token.strip("，。、）（:："))

@@ -100,8 +100,11 @@ python -m agentflow.cli --root workspace demo
 
 ### 4. Start a research run
 
+The workspace is selected by a global argument that goes before the subcommand
+(see `agentflow.cli --help`); from inside the workspace directory it can be omitted:
+
 ```bash
-python -m agentflow.cli --root workspace run-agent M \
+python -m agentflow.cli run-agent M \
   --task "研究这个问题：<your research question>。交付研究手稿与说明。" \
   --budget-usd 5 \
   --provider crossref,doaj,europepmc,openalex
@@ -200,6 +203,8 @@ They are independent. When Lean is not available or not enabled, the framework r
 - `--resume` continues a run from its checkpoint, or from the session transcript when no checkpoint was written.
 
 ## Command Line
+
+The parser currently exposes 25 subcommands (the live reading; `build_parser()` is the source of truth):
 
 ```
 init         initialize data directories and empty tables
