@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:30:31+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3345,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"活已交付：out/paper/main.tex 已从「现状报告」重写为正式数学论文并重编译成功，documents 里已登记稿件一行。\\n\\n【读数】\\n1) doc_id = 000003（kind=paper，title=\\\"Universal enveloping algebras and noetherianity: finite dimension, finite codimension, and graded obstructions\\\"，11 条 claims，每条带 citations，证据档一律 proof_review + 受控免责声明「逐行审阅过的证明，未经机器检查」，无 proof/formal）。\\n2) 编译回执（out/paper/COMPILE-RECEIPT.json）：tex_sha256 = f129b3ffa12b97749cc6900cb66a1941b8f9bfcffde1640419d04484224bc9d4，与盘上 main.tex 的 sha256 逐字相同；pages = 14（≥1）；pdf_bytes = 399369；pdf_fresh = true；engine=pdflatex，runs=2，exit_codes=[0,0]；pdf_sha256 = ff2654699f…6866。\\n3) 环境个数（fs.search 盘上实数）：theorem 7 + lemma 5 + proposition 1 = 13 个（>6 要求），另有 corollary 2、conjecture 1，合计 16 个带编号环境；每个 theorem/lemma/proposition 均带 \\\\begin{proof}…\\\\end{proof}。\\n4) 新加 \\\\bibitem（3 条，盘上核过）：KN87 = Krichever–Novikov；MR01 = McConnell–Robson, Noncommutative Noetherian Rings, AMS GSM 30；SW14 = Sierra–Walton。不确定的题录没有列（按你的要求宁缺不编）。\\n\\n【正文内容】结构严格为 Title/Abstract/1 Introduction/2 Definitions and notation/3 Main results/4 Computational evidence/5 Discussion and open problems/References/Appendix；①有限维 ⇒ Noetherian（PBW 滤过 + Hilbert 基定理 + 滤过提升，逐步），②无限维阿贝尔反例（升链 (x_1)⊂(x_1,x_2)⊂…），③有限余维传递性（U(g) 是 U(h) 上有限生成模），④Witt 对 W 与 W_{≥−1} 同进同退（作为 ③ 的推论写成 corollary），⑤simple Z^n-分次且齐次分支有限维 ⇒ 非 Noetherian（含脚注说明该结论按文献方向陈述、证明未在本稿逐行重建），⑥KN 类、Z-分次多项式增长类、有限生成无限步可解 S_N 类（S_2 非 Noetherian 但为 Krull 整环）各一条带假设的定理并注明只在其原假设下成立；(3) 一般情形写成 Conjecture（Sierra–Walton 猜想）并明确缺的那一步（缺无限维非交换而 U(g) Noetherian 的构造，或缺幂零/可解/有限增长/其它分次类下的反向定理），未写成我方结果。正文与摘要零内部编号、零自审词，内部编号只在 Appendix 的 Reproducibility index 一节出现。\\n\\n【未做成一件事，如实报】我试过用 table.update 给 documents 000003 的 claims 补 lit: 引用（框架读数提示这份稿子 0 条 lit: 引用），被拒：documents 行校验要求 claims[i] 带 claim_id，我那次 patch 没带 ⇒ 该 patch 未落库，台账行仍是 11 条 stmt:/exp: 引用。正文本身用 \\\\cite 引了真实文献，缺的只是台账那一层的 lit: 指认；下一趟可带着 claim_id 重发一次 patch 补上。\\n\\n【证据】out/paper/main.tex（sha f129b3ff…）、out/paper/COMPILE-RECEIPT.json、documents 000003、statements 000001–000019（真实编号取自 table.list）、exp:00",
+ "payload_sha256": "4f684511f7bca5fd83b4de4c3a9d773ce866d928230a269216ded72847fcc7ef",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000062"
+}

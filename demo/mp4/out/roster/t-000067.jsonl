@@ -1,0 +1,2 @@
+{"at": "2026-10-18T22:48:58+08:00", "brief": "补写论文附录 A 可复现索引并重编译 PDF", "first_task_id": "t-000068", "kind": "add", "name": "G1", "owner": "t-000067", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000068"}
+{"at": "2026-10-18T22:50:26+08:00", "brief": "只读审阅附录 A 可复现索引是否成立并落 findings", "first_task_id": "t-000070", "kind": "add", "name": "H1", "owner": "t-000067", "role": "H", "seq": 2, "surface": "S02", "task_id": "t-000070"}

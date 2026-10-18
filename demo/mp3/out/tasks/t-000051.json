@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:54:34+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3821,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已完成：doc:000000 从 revision 3 推到 revision 4（本轮不写论文正文，只更新研究手稿；工作区 out/paper/main.tex 未动，也未编译——研究阶段不写它）。\\n\\n【产物读数】data/documents.json 的 000000 行：revision=4、updated_at=2026-10-18T22:40:00+08:00、content_sha256=9c0c5d57694ff3fb7a362a470e048687f8f767e48240b01640f32774263e8a15（= 新写的 documents/000000.md 的 sha256，12862 字节，已 fs.stat/fs.write 回执对上）；改完后 data/documents.json 自身 sha256=81b6d03dc87e5fe5bd1b8722ef9cb8daa413076b457fd2a3cf0f7cf2cd862，table.get 回读可解析。断言数 13→19（fs.search 机械数到 claim-1..claim-19 共 19 条），六节 body 全部非空（1 问题与已知方向 / 2 无限维反例方向 / 3 可复现计算证据 / 4 相关结果与线索 / 5 未决与证据不足 / 6 下一步），v3 的 13 条原样保留、只做增量（第 4、5 节各补一段）。\\n\\n【这一版新增的 6 条断言，各自引什么】\\n- claim-14：受限类（有限生成、无限维、二步可解）的增长读数——lit:000024 的 Theorem 2.1：多项式有界增长且 1 < GKdim(g) < d；引 rel:000007 + lit:000024，cross_check（带「数值交叉验证，不构成证明」）。\\n- claim-15：该类的反向蕴含——Remark 3.1(1)（[1] Amayo–Stewart：无限维可解一律非 Noetherian，非该文新证）＋ Theorem 3.1（U(g) 为 Krull 整环）；引 rel:000008 + rel:000009 + lit:000024，cross_check。\\n- claim-16：适用边界——Remark 2.2(2)：每个 N≥3 都有 S_N 中不具多项式有界增长的例子 ⇒ 二步可解前提不能去掉；引 rel:000010 + lit:000024，cross_check。\\n- claim-17：四档之「已判定」——(a) 有限维⇒Noetherian（stmt:000007，按 heuristic 档，与派活口径一致）、(b) 无限维阿贝尔⇒非 Noetherian（stmt:000004）、(c) simple Z^n-graded 且齐次分支有限维⇒Noetherian 推出有限维（stmt:000010）；三者合并按最弱环记 heuristic。\\n- claim-18：四档之「条件性判定」——exp:000008（I_n⊊I_{n+1}，n≤8、PBW 次数≤5，supports）与 exp:000012（n≤12，supports）只在界内；exp:000010（J_n 两两互不包含，refutes）只反驳候选族、不是升链证据；引 exp:000008 + exp:000012 + exp:000010，cross_check，明写 n>12 与次数>5 未跑。\\n- claim-19：四档之「未判定」——一般无限维非交换情形，research_questions 000000 以 dropped 收口、理由是证据不足而非「没有这个问题」；stmt:000006（Sierra–Walton 公开猜想）按 not_searched_here；heuristic + is_negative=true + negation_kind=not_searched_here。\\n\\n【如实交代三件事】(1) lit:000023 与 lit:000025 本轮仍只有题录（path=null / download.status=skipped / bytes=0），稿中按「已检索到、未取到全文」写，未造任何逐字引文；lit:000024 的逐字引文全部来自 B 已回验的 rel:000007–rel:000010。(2) 正文没有出现「已证明/已形式化验证/定理（指我方结论）」这类措辞；本会话 Lean 关闭，最高档 cross_check/heuristic。(3) 落库路径是 fs.edit 直改 data/documents.json（fs.edit",
+ "payload_sha256": "8982bf5c8fdc648fe7ecded3405f630a632638f56e3d9189f803167eddaf6576",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000051"
+}

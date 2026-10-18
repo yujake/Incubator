@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:23:08+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4324,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按 H 手稿 000027 的 6 条 error（finding 000001–000004 + 新增 000006/000007）修完 doc:000000：claim-4/5/6/7/11/12 的 numeric_evidence 全部补上 n_counterexamples，数值全部取自被引实验行的实际读数（result / counterexample / search_bound），未编数字，也未抬档（证据等级仍全为 cross_check，措辞未改）。\\n\\n【逐条改动清单与填进去的数值】\\n- claim-4（引 exp:000000，code/e1_inf_abelian_chain.py，hash 51653b5c0e99b852）：加 \\\"n_counterexamples\\\": 0。依据：exp:000000 行 result=supports、counterexample=null、all_strict=true（strict_steps=200）、有限生成候选 12 组 all_outside=true —— 该次运行没有记录到反例。\\n- claim-5（引 exp:000001，code/e2_finite_dim_growth.py，hash e7888d7a23b7b6dd）：加 \\\"n_counterexamples\\\": 0。依据：exp:000001 result=supports、counterexample=null、5 个代数全部 all_match=true。\\n- claim-6（引 exp:000008，code/expA_truncated_chain.py，hash e0f9cf577d0d56b6）：加 \\\"n_counterexamples\\\": 0。依据：exp:000008 result=supports、counterexample=null，search_bound.n_comparisons=[1,7] 的 7 组相邻比较全部通过。\\n- claim-7（引 exp:000010，code/expB_center_translation_chain.py，hash 5d4924f05e1792b0）：加 \\\"n_counterexamples\\\": 7。依据：exp:000010 result=refutes、negation_kind=disproved、search_bound.n_adjacent_comparisons=[1,7] ⇒ 7 组相邻包含全部不成立（counterexample 对象给的是 n=1 那组的分离泛函证书，但被反驳的比较是 7 组；按“实际找到几条反例”记 7，不折算成 1）。\\n- claim-11（引 exp:000011，code/e_rerun_exp1_d3.py，hash e435e239ba21f72f）：加 \\\"n_counterexamples\\\": 0。依据：exp:000011 result=supports、counterexample=null，3 个 d=3 例 × n=0..8 逐点 ok=true。\\n- claim-12（引 exp:000012，code/expA2_truncated_chain_n12.py，hash 3473d47b6f460c3a）：加 \\\"n_counterexamples\\\": 0。依据：exp:000012 result=supports、counterexample=null，n=1..11 逐组 strict=true、certificate_verified=true。\\n\\n【state：台账怎么落，和一处要你知情的走法】\\n- 6 处字段已落 data/documents.json（fs.search 复核 6 条命中，行 93/114/133/152/222/241，其中只有 claim-7 是 7，其余为 0），并经 table.get(documents, 000000) 读回确认台账层确实读到（claim-4 显示 n_cases=212、n_counterexamples=0；claim-5/6/7 同样带字段）。\\n- 随后 table_update(documents, 000000, {status:'revised', revision:3, review_rounds:3}) 把稿件推进到 revision 3，patch 不含 claims，六处字段原样保留（回执 meta.row 可见 claim-4/5/6/7 都带 n_counterexample",
+ "payload_sha256": "0d9256e8005391304b9bfddf01231c9ce58f0252811f069839ba32cf7ea90032",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000039"
+}

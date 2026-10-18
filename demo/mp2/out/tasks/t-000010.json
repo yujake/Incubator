@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T20:18:07+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 1281,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"队列消费完成：search_requests.unfinished = 0（r-000008 早已 done=true / outcome=ok / 23 条 result_lit_ids；我另跑的一次 search.literature 也当即跑完，未留欠账）。同时按 B 的手稿 000001/000004 把正文落地并回填 literature.path：已落地并抽出可用纯文字稿 4 篇 —— lit:000007（library/000007.txt，63 页）、lit:000002（library/000002.txt，5 页）、lit:000003（library/000003.txt，24 页）、lit:000009（library/000009.txt，12 页），PDF 与 path 均已回填。lit:000000（Rychlik 1997）PDF 已成功落地（library/000000/…pdf，764011 字节，sha256 9f0cc668…8002c7）并回填 path，但 text.extract 两次（全篇 / 前 12 页）均被质量闸判为疑似乱码（control_ratio 0.00205 / 0.00149，NUL 42/5），如实未写 .txt —— 这一篇要 B 取到正文，需换有文字层的原件或走 OCR（我这一面没有 ocr 工具，属职责之外，已上报）。仍无本地全文：lit:000001、000004、000005、000006、000008（未尝试到可下载源，不是「不存在」）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp2\\\\runs\\\\A-20261018-201807-001.json\", \"messages\": [], \"steps\": 28, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "180ae6bb940e5f3aa99221d678b85544b7dc19a2cff0cc09522262b91b73fdff",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000010"
+}

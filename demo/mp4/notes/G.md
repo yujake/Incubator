@@ -1,0 +1,1 @@
+- [2026-10-18 22:00:15] 待办：①删除误建的 documents:000001 行与其 markdown；②按 H 的散文缺席/claim-2 Gamma 两条 finding 修订 documents:000000。

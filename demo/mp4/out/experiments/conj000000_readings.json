@@ -1,0 +1,161 @@
+{
+ "readings": [
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 2,
+   "N": 8,
+   "seed": 102008,
+   "delta_hat": 4.983578955307086,
+   "rel_se": 0.03476481314504234,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 200000,
+   "hits": 824,
+   "p_hat": 0.00412,
+   "delta_exact_lnVX_over_lnN": 4.559863352275772
+  },
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 3,
+   "N": 8,
+   "seed": 103008,
+   "delta_hat": 6.519547233691536,
+   "rel_se": 0.006690932380545867,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 200000,
+   "hits": 20093,
+   "p_hat": 0.100465,
+   "delta_exact_lnVX_over_lnN": 6.386795342906588
+  },
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 3,
+   "N": 16,
+   "seed": 103016,
+   "delta_hat": 9.686707532765777,
+   "rel_se": 0.03083204166881946,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 100000,
+   "hits": 1041,
+   "p_hat": 0.01041,
+   "delta_exact_lnVX_over_lnN": 9.43395300472895
+  },
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 4,
+   "N": 8,
+   "seed": 104008,
+   "delta_hat": 7.624625604391618,
+   "rel_se": 0.0,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 200000,
+   "hits": 200000,
+   "p_hat": 1.0,
+   "delta_exact_lnVX_over_lnN": 7.624625604391618
+  },
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 4,
+   "N": 16,
+   "seed": 104016,
+   "delta_hat": 11.333179063050126,
+   "rel_se": 0.0,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 100000,
+   "hits": 100000,
+   "p_hat": 1.0,
+   "delta_exact_lnVX_over_lnN": 11.333179063050126
+  },
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 4,
+   "N": 32,
+   "seed": 104032,
+   "delta_hat": 18.050079001024436,
+   "rel_se": 0.0,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 100000,
+   "hits": 100000,
+   "p_hat": 1.0,
+   "delta_exact_lnVX_over_lnN": 18.050079001024436
+  },
+  {
+   "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+   "k": 4,
+   "N": 64,
+   "seed": 104064,
+   "delta_hat": 30.01429208516092,
+   "rel_se": 0.0,
+   "converged": true,
+   "feasible": true,
+   "normalization_scale": 1.0,
+   "M": 100000,
+   "hits": 100000,
+   "p_hat": 1.0,
+   "delta_exact_lnVX_over_lnN": 30.01429208516092
+  }
+ ],
+ "provenance": {
+  "conjecture_id": "000000",
+  "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+  "estimator_source": "scripts/f_conj000000_delta.py（同一估计器定义，未改参数）",
+  "domain": {
+   "k": [
+    2,
+    3,
+    4
+   ],
+   "m": [
+    3,
+    4,
+    5
+   ],
+   "N": [
+    8,
+    16,
+    32,
+    64
+   ],
+   "seed_rule": "seed(k,N)=100000+1000k+N；每个 (k,N) 一个确定性种子（按 testable 原文）"
+  },
+  "skipped_cells": [
+   {
+    "k": 2,
+    "N": 16,
+    "p_exact": 1.942954763341406e-06
+   },
+   {
+    "k": 2,
+    "N": 32,
+    "p_exact": 2.5167155333920777e-12
+   },
+   {
+    "k": 2,
+    "N": 64,
+    "p_exact": 4.2225713840113165e-24
+   },
+   {
+    "k": 3,
+    "N": 32,
+    "p_exact": 2.371676119850228e-05
+   },
+   {
+    "k": 3,
+    "N": 64,
+    "p_exact": 4.999864548860296e-10
+   }
+  ],
+  "limits": "delta_0 不是因子不变量；仅在标准自由生成元元组上；至多 supported_not_proved"
+ }
+}

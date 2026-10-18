@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:21:31+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2620,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"结论（heuristic 数值，**不构成任何证明**；本会话不做形式化验证）：\\n\\n**1) 主读数（确定性脚本输出，可复现）** 把 F_k 生成元近似为 k 个独立 n×n 随机酉 u_i，取归一化和的实部 R = k^{-1/2}Σ_i (u_i+u_i^*)/2，m_j = tr(R^j)/n (j≤6)，自由累积量由矩经非交叉划分递推（自校验 NC(6)=132、Bell(6)=203 通过）。H_haar 路线（Ginibre QR 的真 Haar 酉；独立性探针 τ(u1u2u1^Tu2^T)=0.0 vs 独立期望 1/n=7.8e-3）：n=128、S=40 时 s4=κ4/κ2² = **-0.2472 (k=2) / -0.1261 (k=4) / -0.0636 (k=8)**，解析律 s4=-1/(2k) 给 -0.25/-0.125/-0.0625（n=32,64 同趋势）；κ2≈0.5 与 k 无关。⇒「前 6 阶矩与自由累积量在 k=2,3,4,∞ 一致」被数值否证（k=2 vs 8 差 0.1836，74×合并 SE）——exp 000005 的 counterexample 即此。\\n\\n**2) 但这个否证的性质必须说清**：差异来自归一化标度 κ_j(R)=k^{1-j/2}κ_j(x)，即「任何固定归一化的生成元组，其矩读数都区分 k」是算术后果，**不是同构不变量**，不能据此推断任何关于 W*(F_k)≅W*(F_m) 的事。\\n\\n**3) exp 000000 的反例不可信（如实降级）**：B_perm（随机置换矩阵）路线在 k≥4、n≤128 不在渐近自由区——k=8 时 s4 在 n=32/64/128 为 2.152/1.729/1.087，随 n 增大仍远离解析 -0.0625 且反号；其登记的反例（s4(k=8)=1.75）是有限 n 伪影，不能当反例引用。exp 000002（同路线、独立脚本）据此落 inconclusive。同一 claim 的三行里**只有 000005 的 H_haar 部分可引用**，B_perm 部分一律标「截断读数不可用」。\\n\\n**4) d1 型有限维维度亏缺**（δ_n(L)=1-rank_R{长度≤L 的 u-词}/n²，L=6，每层词数上限 200，精确秩）：n=8 → rank 50/64, δ=0.21875；n=16 → rank 226/256, δ=0.1171875；**k=2,3,4,8 完全相同**（词数 684→1016 而秩不变）⇒ 这个具体读数 k-盲，不能区分 k。k=∞ 在有限维不可实现（只作解析参考，无 k=∞ 行）。\\n\\n**边界**：n≤128，S≤40，j≤6，seed 20261018/20261019/20261020；脚本 exit_code=0，evidence_kind=cross_check（非 proof）。\\n**复现**：python code/fk_truncation_corrected_check.py（sha256 ead03272c4787b17）、code/fk_truncation_moments.py（e6cd75226694bd91）、code/fk_truncation_kdep_check.py（3f411cdc58d3fe3b）；日志 out/experiments/{000000,000002,000005}.log。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp4\\\\runs\\\\E-20261018-212131-001.json\", \"messages\": [], \"steps\": 21, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "632fae242bf5196e1354cf7f8198e4c417d3b29376d7cb8fdd630e5def2f1549",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000005"
+}

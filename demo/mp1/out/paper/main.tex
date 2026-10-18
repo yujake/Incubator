@@ -1,0 +1,694 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\dZ}{\operatorname{dist}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+
+\title{Covering the plane by rotations of a periodic stripe:\\
+the covering radius, its elementary theory, and an open lower bound}
+\author{Project mp1 research team}
+\date{18 October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+For $\varepsilon>0$ let $E(\varepsilon)$ be the union of the closed vertical stripes of half-width
+$\varepsilon$ centred at the integers, and for a real angle $\theta$ let $R_\theta$ denote the rotation
+of the plane about the origin through $\theta$. The Pyjama problem asks whether finitely many rotations
+of $E(\varepsilon)$ can cover the plane. Manners answered this in the affirmative for every
+$\varepsilon>0$, but his argument does not control the number $N(\varepsilon)$ of rotations needed;
+Kravitz and Leng gave the first explicit quantitative bound, of the very weak shape
+$\exp\exp\exp(\varepsilon^{-C})$, while a volume count gives only
+$N(\varepsilon)\gtrsim\varepsilon^{-1/2}$.
+
+We isolate one scalar attached to a finite set $\Theta$ of angles, its \emph{covering radius}
+$r(\Theta)$, which turns coverage into the single inequality $r(\Theta)\le\varepsilon$. We develop its
+elementary theory in ten results, each with a complete stepwise proof: the covering criterion, the
+fact that the defining function evaluated at a grid point is a rigorous lower bound for $r(\Theta)$ at
+any mesh, a Lipschitz bound on a box, a period-lattice reduction that upgrades a box bound to a global
+one whenever two independent exact periods exist, the universal bound $r(\Theta)\le1/2$, monotonicity
+in $\Theta$, the exact value $r(\Theta)=1/2$ for a single direction and for any pair of independent
+directions, and the conditional consequence that $r(\Theta)\ge1/(2|\Theta|)$ would improve the volume
+lower bound from $\varepsilon^{-1/2}$ to $1/(2\varepsilon)$. We state that inequality as a conjecture:
+it is open for $|\Theta|\ge3$, and we say precisely which step is missing.
+
+Numerical evidence is deferred to Appendix~A, where the algorithms, the parameter domain, the readings
+and the provenance of every statement are collected. The conjecture is there reported as supported by
+computation and not proved.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+\subsection{The problem}
+
+Let
+\begin{equation}
+E(\varepsilon)\;=\;\{\,z\in\R^2\,:\,\dZ(z_1,\Z)\le\varepsilon\,\},
+\label{eq:stripe}
+\end{equation}
+the union of the closed vertical stripes of half-width $\varepsilon$ centred on the integers, and for a
+real angle $\theta$ let $R_\theta$ be the rotation of $\R^2$ about the origin through $\theta$. The
+Pyjama problem asks for which $\varepsilon>0$ there is a \emph{finite} set
+$\Theta=\{\theta_1,\dots,\theta_k\}$ with
+\begin{equation}
+\bigcup_{i=1}^{k}R_{\theta_i}E(\varepsilon)\;=\;\R^2 .
+\label{eq:cover}
+\end{equation}
+One rotation never suffices, since a rotation of the stripe family leaves all stripes parallel to one
+another; the question is how many directions are needed. Its quantitative form asks for the smallest
+admissible $k$, written $N(\varepsilon)$, as a function of $\varepsilon$.
+
+The problem is not a matter of area, because the stripes are unbounded and their images overlap in a
+complicated way: a point is uncovered exactly when, in every one of the $k$ rotated frames, its
+coordinate lies at distance more than $\varepsilon$ from an integer. Writing
+$u_\theta=(\cos\theta,\sin\theta)$, the quantity
+\begin{equation}
+f_\Theta(z)\;=\;\min_{1\le i\le k}\dZ(z\cdot u_{\theta_i},\Z)
+\label{eq:f}
+\end{equation}
+therefore measures how far $z$ is from being covered in the worst direction, and coverage \eqref{eq:cover}
+is the statement that $f_\Theta$ nowhere exceeds $\varepsilon$. Making that equivalence into a usable
+tool --- including the exact constant it carries --- is the content of Section~\ref{sec:main}.
+
+\subsection{What the literature settles}
+
+The problem was posed by Iosevich, Kolountzakis and Matolcsi \cite{ikm2006}. Besides the planar stripe
+question they prove a negative result in the lattice analogue: for a discrete lattice $\Lambda$ and
+$\varepsilon$ smaller than half the length of the shortest non-zero vector of $\Lambda$, no finite
+family of rotations produces a $(\Lambda,\varepsilon)$-good covering, and they leave the periodic
+stripe arrangement itself open.
+
+Manners \cite{manners2015} settled the finiteness question: for every $\varepsilon>0$, finitely many
+rotations of $E(\varepsilon)$ cover the plane. His method recasts the question as a dynamical statement
+on an appropriate solenoid; it establishes existence and does not track how the number of rotations
+depends on $\varepsilon$.
+
+Malikiosis, Matolcsi and Ruzsa \cite{mmr2013} treat variants of the problem, including solutions that
+are doubly periodic with respect to a common period lattice and the behaviour of families of rotations
+in general position; our description of that work follows its published abstract, as we did not have
+access to the full text.
+
+Kravitz and Leng \cite{kravitzleng2025} give the first explicit quantitative upper bound:
+$\exp\exp\exp(\varepsilon^{-C})$ rotations suffice, for an absolute constant $C$. On the other side the
+volume count gives only $N(\varepsilon)\gtrsim\varepsilon^{-1/2}$, because $k$ rotations of the stripe
+produce $k$ stripes of width $2\varepsilon$ per period cell and their total area cannot exceed the area
+of the cell. The gap between $\varepsilon^{-1/2}$ and $\exp\exp\exp(\varepsilon^{-C})$ is the
+quantitative content of the problem, and it is wide open.
+
+\subsection{What this paper does}
+
+We do not attempt to close that gap. We isolate the scalar $r(\Theta)$ of
+Definition~\ref{def:r}, the supremum of $f_\Theta$, and we prove ten elementary results about it.
+Three of them are tools: any grid point gives a rigorous lower bound at any mesh
+(Lemma~\ref{lem:lower}), a box bound follows from a Lipschitz estimate (Lemma~\ref{lem:box}), and a box
+bound becomes global as soon as the period group of $\Theta$ has rank two
+(Theorem~\ref{lem:period}). The others are structural: the covering criterion
+(Theorem~\ref{lem:criterion}), the universal bound $r(\Theta)\le1/2$ together with monotonicity in
+$\Theta$ (Theorem~\ref{prop:univ}), the exact values for one direction and for two independent
+directions (Propositions~\ref{prop:k1}, \ref{prop:orth} and Corollary~\ref{cor:two}), and the
+conditional consequence for $N(\varepsilon)$ (Proposition~\ref{prop:cond}).
+
+The structural results are proved in full and are unconditional. The lower bound
+$r(\Theta)\ge1/(2|\Theta|)$ is not: it holds with equality for $|\Theta|\le2$ and is stated as
+Conjecture~\ref{conj:main} for $|\Theta|\ge3$, where it is open. Section~\ref{sec:disc} says exactly
+which step is missing.
+
+\subsection{The status of the evidence}
+
+Every assertion of Section~\ref{sec:main} is a proved mathematical statement, with a natural-language
+proof written out step by step so that each step can be checked line by line. The conjecture of
+Section~\ref{sec:main} is supported by computation and by nothing more. All computational material ---
+the procedure, the parameter domain, the readings, and the provenance identifiers --- is collected in
+Appendix~A; numerical evidence is deferred to Appendix A and is used nowhere in the proofs of
+Section~\ref{sec:main}. No automated proof checker was applied to any proof in this paper.
+
+\section{Definitions and notation}
+\label{sec:defs}
+
+\begin{definition}[Stripe and rotation]
+\label{def:stripe}
+For $\varepsilon>0$, $E(\varepsilon)$ is given by \eqref{eq:stripe}. For $\theta\in\R$ we write
+$u_\theta=(\cos\theta,\sin\theta)\in\R^2$ and $R_\theta$ for the rotation of $\R^2$ about the origin
+through the angle $\theta$.
+\end{definition}
+
+\begin{definition}[Covering function and covering radius]
+\label{def:r}
+For a finite set $\Theta=\{\theta_1,\dots,\theta_k\}\subset\R$ and $p\in\R^2$,
+\[
+f_\Theta(p)\;=\;\min_{1\le i\le k}\dZ(p\cdot u_{\theta_i},\Z),
+\qquad
+r(\Theta)\;=\;\sup_{p\in\R^2}f_\Theta(p).
+\]
+We call $f_\Theta$ the covering function of $\Theta$ and $r(\Theta)$ its covering radius.
+\end{definition}
+
+\begin{definition}[Period group]
+\label{def:period}
+For a finite $\Theta$,
+$\Lambda(\Theta)=\{\,v\in\R^2\,:\,v\cdot u_\theta\in\Z\ \text{for every}\ \theta\in\Theta\,\}$.
+\end{definition}
+
+\begin{definition}[Grid on a box]
+\label{def:grid}
+Let $B=[a_1,b_1]\times[a_2,b_2]$ and let $n,m\ge1$. The grid of mesh $(h_x,h_y)$ with
+$h_x=(b_1-a_1)/n$ and $h_y=(b_2-a_2)/m$ is
+$\mathcal{G}=\{(a_1+ih_x,\,a_2+jh_y) : 0\le i\le n,\ 0\le j\le m\}$, and
+$L_{\mathcal{G}}=\max_{q\in\mathcal{G}}f_\Theta(q)$.
+\end{definition}
+
+Both $f_\Theta$ and $r(\Theta)$ depend only on the set of directions $\{u_\theta:\theta\in\Theta\}$, so
+$\Theta$ and $\Theta+\pi$ give the same covering radius; we shall not distinguish such sets, and we
+understand $\Theta$ as an unordered set throughout.
+
+\section{Main results}
+\label{sec:main}
+
+We begin with the one-dimensional fact from which every constant below is inherited.
+
+\begin{lemma}[Sawtooth]
+\label{lem:saw}
+Let $g(t)=\dZ(t,\Z)$. Then
+\begin{enumerate}
+\item[(i)] $0\le g(t)\le1/2$ for every $t\in\R$, with $g(t)=1/2$ if and only if
+$t\in\Z+\tfrac12$;
+\item[(ii)] $|g(t)-g(s)|\le|t-s|$ for all $s,t\in\R$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(1) \emph{The bound.} Let $t\in\R$ and $n=\lfloor t\rfloor$, so $n\le t\le n+1$ and the nearest
+integer to $t$ is $n$ or $n+1$. Hence $g(t)=\min(t-n,\,n+1-t)$. Both arguments are non-negative and
+they sum to $1$, so their minimum is at most $1/2$; and $g(t)\ge0$ by definition.
+
+(2) \emph{Equality.} If $\min(a,b)=1/2$ with $a,b\ge0$ and $a+b=1$, then $a=b=1/2$; here that reads
+$t-n=n+1-t=1/2$, i.e.\ $t=n+\tfrac12$. Conversely, for $t=n+\tfrac12$ the two neighbours $n$ and
+$n+1$ of $t$ in $\Z$ are both at distance $1/2$ and no integer is closer, so $g(t)=1/2$.
+
+(3) \emph{Lipschitz.} Fix $s$ and let $m\in\Z$ be a nearest integer to $s$, so that $|s-m|=g(s)$.
+Then $g(t)\le|t-m|\le|t-s|+|s-m|=|t-s|+g(s)$. Interchanging $s$ and $t$ gives
+$|g(t)-g(s)|\le|t-s|$.
+\end{proof}
+
+\begin{theorem}[Covering criterion]
+\label{lem:criterion}
+For every finite $\Theta=\{\theta_1,\dots,\theta_k\}$ and every $\varepsilon>0$,
+\[
+\bigcup_{i=1}^{k}R_{\theta_i}E(\varepsilon)=\R^2
+\qquad\Longleftrightarrow\qquad
+r(\Theta)\le\varepsilon .
+\]
+\end{theorem}
+
+\begin{proof}
+(1) \emph{One stripe.} Fix $z\in\R^2$ and $\theta$. Since $R_\theta$ is a bijection, $z\in
+R_\theta E(\varepsilon)$ if and only if $R_{-\theta}z\in E(\varepsilon)$, which by \eqref{eq:stripe}
+means $\dZ\big((R_{-\theta}z)_1,\Z\big)\le\varepsilon$. Now
+$R_{-\theta}z=(z_1\cos\theta+z_2\sin\theta,\,-z_1\sin\theta+z_2\cos\theta)$, so
+$(R_{-\theta}z)_1=z\cdot u_\theta$ and
+\[
+z\in R_\theta E(\varepsilon)\iff\dZ(z\cdot u_\theta,\Z)\le\varepsilon .
+\]
+
+(2) \emph{The union.} A point lies in the union of the $k$ sets if and only if it lies in one of them,
+so by (1) applied to each index $i$,
+\[
+z\in\bigcup_{i=1}^{k}R_{\theta_i}E(\varepsilon)
+\iff\min_{1\le i\le k}\dZ(z\cdot u_{\theta_i},\Z)\le\varepsilon
+\iff f_\Theta(z)\le\varepsilon .
+\]
+
+(3) \emph{Passing to the supremum.} Coverage is the statement that $f_\Theta(z)\le\varepsilon$ for
+every $z$, i.e.\ that $\varepsilon$ is an upper bound for the set of values $f_\Theta(\R^2)$. The least
+upper bound of that set is $r(\Theta)$, so the statement is equivalent to $r(\Theta)\le\varepsilon$: if
+$r(\Theta)\le\varepsilon$ then $f_\Theta(z)\le r(\Theta)\le\varepsilon$ for every $z$; conversely, if
+$f_\Theta\le\varepsilon$ pointwise then $\varepsilon$ is an upper bound and therefore dominates the
+least one.
+\end{proof}
+
+\begin{lemma}[Grid points are rigorous lower bounds]
+\label{lem:lower}
+Let $\Theta$ be finite, let $\mathcal{G}$ be a non-empty finite subset of $\R^2$ and
+$L_{\mathcal{G}}=\max_{q\in\mathcal{G}}f_\Theta(q)$. Then for every $q\in\mathcal{G}$,
+\[
+f_\Theta(q)\;\le\;L_{\mathcal{G}}\;\le\;r(\Theta).
+\]
+In particular a maximum over a grid is a lower bound for $r(\Theta)$ at every mesh, however coarse, and
+refining a grid can only increase the bound.
+\end{lemma}
+
+\begin{proof}
+(1) \emph{The maximum is attained.} A non-empty finite set of real numbers has a maximum, so
+$L_{\mathcal{G}}=f_\Theta(q_0)$ for some $q_0\in\mathcal{G}$; and $f_\Theta(q)\le L_{\mathcal{G}}$ for
+every $q\in\mathcal{G}$ by definition of a maximum.
+
+(2) \emph{The maximum is dominated by the supremum.} By Definition~\ref{def:r},
+$r(\Theta)=\sup_{p\in\R^2}f_\Theta(p)$ is an upper bound for all values of $f_\Theta$, in particular
+$L_{\mathcal{G}}=f_\Theta(q_0)\le r(\Theta)$. Combining (1) and (2) gives the displayed chain.
+
+(3) \emph{Monotonicity under refinement.} If $\mathcal{G}\subseteq\mathcal{G}'$ then the maximum over
+$\mathcal{G}'$ is taken over a larger finite set of candidates, hence
+$L_{\mathcal{G}}\le L_{\mathcal{G}'}$. Thus the bound is valid at any mesh, and its \emph{quality}
+depends on the mesh, which is what Lemma~\ref{lem:box} quantifies.
+\end{proof}
+
+\begin{lemma}[Lipschitz bound on a box, and its globalization]
+\label{lem:box}
+Let $\Theta$ be finite, let $B=[a_1,b_1]\times[a_2,b_2]$ and let $\mathcal{G}$ be the grid of
+Definition~\ref{def:grid} of mesh $(h_x,h_y)$. Then
+\begin{equation}
+\sup_{p\in B}f_\Theta(p)\;\le\;L_{\mathcal{G}}+\tfrac12\sqrt{h_x^{\,2}+h_y^{\,2}} .
+\label{eq:box}
+\end{equation}
+If moreover the closed box $B$ is a fundamental domain for a period lattice of $f_\Theta$ of rank two,
+then
+\begin{equation}
+r(\Theta)\;\le\;L_{\mathcal{G}}+\tfrac12\sqrt{h_x^{\,2}+h_y^{\,2}} .
+\label{eq:global}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+(1) \emph{Each summand is $1$-Lipschitz.} Fix a unit vector $u$ and put
+$g_u(p)=\dZ(p\cdot u,\Z)$. For $p,q\in\R^2$ the Cauchy--Schwarz inequality gives
+$|p\cdot u-q\cdot u|=|(p-q)\cdot u|\le|p-q|$, and Lemma~\ref{lem:saw}(ii) gives the $1$-Lipschitz
+property of $\dZ(\cdot,\Z)$ on $\R$. Composing the two,
+$|g_u(p)-g_u(q)|\le|p\cdot u-q\cdot u|\le|p-q|$.
+
+(2) \emph{The minimum is $1$-Lipschitz.} Write $g_i=g_{u_{\theta_i}}$. By (1),
+$g_i(p)\le g_i(q)+|p-q|$ for every $i$. Choose $i_0$ with $g_{i_0}(q)=f_\Theta(q)$; then
+$f_\Theta(p)\le g_{i_0}(p)\le g_{i_0}(q)+|p-q|=f_\Theta(q)+|p-q|$, and exchanging $p$ and $q$ yields
+$|f_\Theta(p)-f_\Theta(q)|\le|p-q|$.
+
+(3) \emph{Nearest grid point.} Let $p\in B$. Choose $i\in\{0,\dots,n\}$ and $j\in\{0,\dots,m\}$ with
+$|p_1-(a_1+ih_x)|\le h_x/2$ and $|p_2-(a_2+jh_y)|\le h_y/2$; such indices exist because
+$a_1\le p_1\le b_1$ and $a_2\le p_2\le b_2$. Put $q=(a_1+ih_x,\,a_2+jh_y)\in\mathcal{G}$. Then
+$|p-q|^2\le h_x^{\,2}/4+h_y^{\,2}/4$, that is $|p-q|\le\tfrac12\sqrt{h_x^{\,2}+h_y^{\,2}}$. By (2),
+\[
+f_\Theta(p)\;\le\;f_\Theta(q)+\tfrac12\sqrt{h_x^{\,2}+h_y^{\,2}}
+\;\le\;L_{\mathcal{G}}+\tfrac12\sqrt{h_x^{\,2}+h_y^{\,2}} .
+\]
+Taking the supremum over $p\in B$ gives \eqref{eq:box}.
+
+(4) \emph{Globalization.} Suppose $B$ is a fundamental domain for a lattice $\Lambda$ of exact periods
+of $f_\Theta$, of rank two: every $z\in\R^2$ is $z=q+v$ with $q\in B$ and $v\in\Lambda$, and
+$f_\Theta(z)=f_\Theta(q)$. Then $r(\Theta)=\sup_{\R^2}f_\Theta=\sup_{B}f_\Theta$, so \eqref{eq:box}
+gives \eqref{eq:global}.
+\end{proof}
+
+\begin{theorem}[Period-lattice reduction]
+\label{lem:period}
+Let $\Theta$ be finite and let $\Lambda(\Theta)$ be as in Definition~\ref{def:period}.
+\begin{enumerate}
+\item[(a)] Every $v\in\Lambda(\Theta)$ is an exact period of $f_\Theta$:
+$f_\Theta(p+v)=f_\Theta(p)$ for all $p$.
+\item[(b)] If $\Lambda(\Theta)$ contains two linearly independent vectors $v_1,v_2$, then with
+$P=\{s_1v_1+s_2v_2 : 0\le s_1,s_2<1\}$ and $\overline{P}$ its closure,
+\[
+r(\Theta)=\sup_{q\in\overline{P}}f_\Theta(q).
+\]
+\item[(c)] Let $e_j=v_j/|v_j|$, let $h_1,h_2>0$, and let $\mathcal{G}$ be the set of points
+$jh_1e_1+lh_2e_2$ ($j,l\in\Z$) at distance at most $\tfrac12(h_1+h_2)$ from $\overline{P}$. Then
+\[
+\sup_{q\in\overline{P}}f_\Theta(q)\;\le\;L_{\mathcal{G}}+\tfrac12(h_1+h_2).
+\]
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(1) \emph{(a).} Let $v\in\Lambda(\Theta)$, $p\in\R^2$ and $1\le i\le k$. Then
+$(p+v)\cdot u_{\theta_i}=p\cdot u_{\theta_i}+v\cdot u_{\theta_i}$ with $v\cdot u_{\theta_i}\in\Z$, and
+translating a real number by an integer does not change its distance to $\Z$:
+$\dZ(p\cdot u_{\theta_i}+\text{integer},\Z)=\dZ(p\cdot u_{\theta_i},\Z)$. Taking the minimum over $i$
+gives $f_\Theta(p+v)=f_\Theta(p)$.
+
+(2) \emph{(b).} Let $p\in\R^2$. By linear independence, $p=a_1v_1+a_2v_2$ for unique $a_1,a_2\in\R$.
+Let $n_j=\lfloor a_j\rfloor$ and $v=n_1v_1+n_2v_2$, an element of $\Lambda(\Theta)$ because it is an
+integer combination of $v_1,v_2$. Then $q=p-v=\{a_1\}v_1+\{a_2\}v_2$ lies in $P$, where
+$\{\cdot\}\in[0,1)$ denotes the fractional part, and by (a) $f_\Theta(p)=f_\Theta(q)$. Hence every
+value of $f_\Theta$ on $\R^2$ is attained on $P$; continuity of $f_\Theta$ and compactness of
+$\overline{P}$ give $r(\Theta)=\sup_{\R^2}f_\Theta=\sup_{\overline{P}}f_\Theta$.
+
+(3) \emph{(c).} Let $q\in\overline{P}$ and write $q=a_1v_1+a_2v_2$ with $0\le a_j\le|v_j|$. Choose
+integers $j,l$ with $|a_1-jh_1|\le h_1/2$ and $|a_2-lh_2|\le h_2/2$, and put
+$g=jh_1e_1+lh_2e_2\in\mathcal{G}$; indeed $|q-g|\le\tfrac12\sqrt{h_1^{\,2}+h_2^{\,2}}\le\tfrac12(h_1+h_2)$,
+so $g$ lies in the set defining $\mathcal{G}$. By Lemma~\ref{lem:box}(2) and that estimate,
+\[
+f_\Theta(q)\;\le\;f_\Theta(g)+\tfrac12(h_1+h_2)\;\le\;L_{\mathcal{G}}+\tfrac12(h_1+h_2),
+\]
+and taking the supremum over $q\in\overline{P}$ proves the claim.
+\end{proof}
+
+\begin{theorem}[Universal bound and monotonicity]
+\label{prop:univ}
+Let $\Theta$ be finite. Then
+\begin{enumerate}
+\item[(i)] $r(\Theta)\le1/2$;
+\item[(ii)] if $\Theta\subseteq\Theta'$ then $r(\Theta)\le r(\Theta')$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(1) \emph{Pointwise bound.} Let $p\in\R^2$ and fix any index $i_0$. Since a minimum is at most any of
+its entries, $f_\Theta(p)\le\dZ(p\cdot u_{\theta_{i_0}},\Z)\le1/2$ by Lemma~\ref{lem:saw}(i).
+
+(2) \emph{Supremum.} The bound in (1) is uniform in $p$, so
+$r(\Theta)=\sup_{p\in\R^2}f_\Theta(p)\le1/2$.
+
+(3) \emph{Monotonicity.} If $\Theta\subseteq\Theta'$, the minimum defining $f_{\Theta'}$ is taken over a
+superset of the indices defining $f_\Theta$; hence $f_{\Theta'}(p)\le f_\Theta(p)$ for every $p$, and
+taking suprema of both sides over $\R^2$ preserves the inequality.
+\end{proof}
+
+\begin{proposition}[A single direction]
+\label{prop:k1}
+For every $\theta\in\R$, $r(\{\theta\})=1/2$.
+\end{proposition}
+
+\begin{proof}
+(1) \emph{Upper bound.} $r(\{\theta\})\le1/2$ by Theorem~\ref{prop:univ}(i).
+
+(2) \emph{Lower bound.} Take $p=\tfrac12u_\theta$. Then
+$p\cdot u_\theta=\tfrac12u_\theta\cdot u_\theta=\tfrac12$, so by Lemma~\ref{lem:saw}(i)
+$f_{\{\theta\}}(p)=\dZ(\tfrac12,\Z)=\tfrac12$. Hence $r(\{\theta\})\ge f_{\{\theta\}}(p)=1/2$.
+
+(3) \emph{Conclusion.} The two inequalities give $r(\{\theta\})=1/2$.
+\end{proof}
+
+\begin{proposition}[A pair of orthogonal directions]
+\label{prop:orth}
+For $\Theta=\{0,\pi/2\}$ one has $r(\Theta)=1/2$.
+\end{proposition}
+
+\begin{proof}
+(1) \emph{Upper bound.} $r(\Theta)\le1/2$ by Theorem~\ref{prop:univ}(i).
+
+(2) \emph{Lower bound.} Here $u_0=(1,0)$ and $u_{\pi/2}=(0,1)$. Take $p=(\tfrac12,\tfrac12)$; then
+$p\cdot u_0=p\cdot u_{\pi/2}=\tfrac12$, so $f_\Theta(p)=\min(\tfrac12,\tfrac12)=\tfrac12$ and
+$r(\Theta)\ge f_\Theta(p)=1/2$.
+
+(3) \emph{Conclusion.} Together with (1), $r(\Theta)=1/2$.
+\end{proof}
+
+\begin{corollary}[Any two independent directions]
+\label{cor:two}
+Let $u,v$ be linearly independent unit vectors and let $\Theta$ be the set of their arguments. Then
+$r(\Theta)=1/2$.
+\end{corollary}
+
+\begin{proof}
+(1) \emph{Solving for a point.} The linear map $T(p)=(p\cdot u,\,p\cdot v)$ has kernel
+$\{p : p\perp u\ \text{and}\ p\perp v\}$, which is $\{0\}$ because $u,v$ are independent in $\R^2$;
+hence $T$ is an isomorphism and there is $p$ with $T(p)=(\tfrac12,\tfrac12)$.
+
+(2) \emph{Lower bound.} For that $p$,
+$f_\Theta(p)=\min(\dZ(\tfrac12,\Z),\dZ(\tfrac12,\Z))=\tfrac12$, so $r(\Theta)\ge1/2$.
+
+(3) \emph{Conclusion.} With Theorem~\ref{prop:univ}(i), $r(\Theta)=1/2$.
+\end{proof}
+
+So for $|\Theta|\le2$ the covering radius equals $1/2$ exactly, and by
+Theorem~\ref{lem:criterion} a set of at most two directions covers only at levels
+$\varepsilon\ge1/2$. The following is the natural extrapolation.
+
+\begin{conjecture}[Lower bound in terms of the number of directions]
+\label{conj:main}
+For every finite $\Theta$ with $|\Theta|=k$,
+\[
+r(\Theta)\;\ge\;\frac{1}{2k}.
+\]
+\end{conjecture}
+
+Proposition~\ref{prop:k1} and Corollary~\ref{cor:two} verify Conjecture~\ref{conj:main} with equality
+for $k=1$ and $k=2$. For $k\ge3$ it is open; see Section~\ref{sec:disc}. Its interest for the original
+problem lies in the following conditional statement.
+
+\begin{proposition}[Conditional lower bound for the number of rotations]
+\label{prop:cond}
+Assume Conjecture~\ref{conj:main}. If $\Theta$ is finite and
+$\bigcup_{\theta\in\Theta}R_\theta E(\varepsilon)=\R^2$, then
+\[
+|\Theta|\;\ge\;\frac{1}{2\varepsilon}.
+\]
+\end{proposition}
+
+\begin{proof}
+(1) \emph{Coverage is an inequality.} By Theorem~\ref{lem:criterion}, coverage at level $\varepsilon$ is
+equivalent to $r(\Theta)\le\varepsilon$.
+
+(2) \emph{Lower bound for the radius in terms of cardinality.} Let $k=|\Theta|$. For $k\le2$ we have
+$r(\Theta)=1/2\ge1/(2k)$ by Proposition~\ref{prop:k1} and Corollary~\ref{cor:two}; for $k\ge3$ the same
+inequality is precisely Conjecture~\ref{conj:main}. In both cases $r(\Theta)\ge1/(2k)$.
+
+(3) \emph{Combining.} Thus $1/(2k)\le r(\Theta)\le\varepsilon$, which gives $k\ge1/(2\varepsilon)$.
+\end{proof}
+
+\begin{remark}[What a computation can and cannot bracket]
+\label{rem:twoSided}
+For a fixed $\Theta$, Lemma~\ref{lem:lower} certifies a lower bound for $r(\Theta)$ from a single
+evaluation, at any mesh, while an upper bound is available only under a periodicity hypothesis, through
+Lemma~\ref{lem:box} and Theorem~\ref{lem:period}(c). This asymmetry --- a witness certifies from below,
+only a rank-two lattice of exact periods certifies from above --- also governs the computational study
+of Conjecture~\ref{conj:main}: computation can refute the conjecture at a particular $\Theta$ by
+exhibiting one point, but it cannot confirm the conjecture, and what the readings of Appendix~A confirm
+is the inequality $r(\Theta)\ge1/(2k)$ for the sets examined, not the conjecture itself.
+\end{remark}
+
+\section{Discussion and open problems}
+\label{sec:disc}
+
+\subsection{What is established}
+
+By Theorem~\ref{lem:criterion} the covering question for rotations of the periodic stripe is equivalent
+to a single scalar inequality: a finite $\Theta$ covers at level $\varepsilon$ if and only if
+$r(\Theta)\le\varepsilon$. The covering radius is always at most $1/2$
+(Theorem~\ref{prop:univ}(i)), is monotone in the set of directions
+(Theorem~\ref{prop:univ}(ii)), equals $1/2$ exactly for one direction and for any two independent
+directions (Propositions~\ref{prop:k1}, \ref{prop:orth}, Corollary~\ref{cor:two}), and is computable in
+the two-sided sense of Lemma~\ref{lem:lower} and Theorem~\ref{lem:period}: certified from below by evaluation,
+and from above by evaluation together with a rank-two period lattice.
+
+The general lesson is that the difficulty of the problem sits entirely in the lower bound: the upper
+bound $1/2$ is trivial, and every exact value we know equals $1/2$.
+
+\subsection{The conjecture and the missing step}
+
+Conjecture~\ref{conj:main} asserts $r(\Theta)\ge1/(2k)$ for $|\Theta|=k$. The cases $k\le2$ are proved
+above, and in both of them an extremal point is produced in closed form: $p=\tfrac12u_\theta$ for $k=1$,
+and the solution of a $2\times2$ linear system for $k=2$. For $k\ge3$ neither device is available. What
+is missing is precisely the following:
+\begin{itemize}
+\item one needs, for an \emph{arbitrary} $k$-element $\Theta$, a point $p$ with
+$\dZ(p\cdot u_{\theta_i},\Z)\ge1/(2k)$ simultaneously for all $i$;
+\item a pointwise argument controls one direction at a time, since $\dZ(t,\Z)\le1/2$ for every $t$ and
+a condition on the $i$-th coordinate says nothing about the remaining $k-1$ coordinates;
+\item the natural simultaneous devices (Dirichlet-type approximation, or a product of $k$
+one-dimensional coverings) give constants strictly weaker than $1/(2k)$ and cannot be sharpened to it
+without an additional structural input on $\Theta$;
+\item the extremal configurations --- the sets $\Theta$ minimising $r(\Theta)$ for fixed $k$ --- are
+not identified for any $k\ge3$.
+\end{itemize}
+Conjecture~\ref{conj:main} should therefore be read as a statement about configurations, not about
+points.
+
+\subsection{Relation to the quantitative problem}
+
+The volume count gives $N(\varepsilon)\gtrsim\varepsilon^{-1/2}$, and the explicit bound of
+\cite{kravitzleng2025} is of size $\exp\exp\exp(\varepsilon^{-C})$. Proposition~\ref{prop:cond} shows
+that Conjecture~\ref{conj:main} would yield $N(\varepsilon)\ge1/(2\varepsilon)$: a polynomial
+improvement of the lower bound, still far from the triple-exponential upper bound. The gap is thus
+structural on both sides, and nothing known to us suggests that either bound is close to the truth.
+
+\subsection{Further questions}
+
+\begin{enumerate}
+\item[(Q1)] Determine $r(\Theta)$ for the equispaced families $\Theta=\{i\pi/k : 0\le i<k\}$. The exact
+value is known to us only for $k=1,2$; is it $1/(2k)$, i.e.\ is the equally spaced configuration
+extremal for every $k$?
+\item[(Q2)] Is the infimum $\inf_{|\Theta|=k}r(\Theta)$ attained, and is it monotone in $k$? A failure
+of monotonicity would refute Conjecture~\ref{conj:main} in a strong form.
+\item[(Q3)] For which $\Theta$ does $\Lambda(\Theta)$ have rank two? Rank at most one is the generic
+situation for real angles, and it is exactly the situation in which the upper bound of
+Lemma~\ref{lem:box} cannot be globalised; a classification would separate the computable cases from the
+incomputable ones.
+\item[(Q4)] Extend Theorem~\ref{lem:period}(c) to a sub-lattice of $\Lambda(\Theta)$ up to a controlled
+error, which would give certified global upper bounds beyond rational multiples of $\pi$.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem[IKM06]{ikm2006}
+A.~Iosevich, M.~N.~Kolountzakis and M.~Matolcsi,
+\emph{Covering the plane by rotations of a lattice arrangement of disks},
+arXiv:math/0611800 (2006).
+
+\bibitem[Man15]{manners2015}
+F.~Manners,
+\emph{A solution to the pyjama problem},
+Inventiones Mathematicae (2015), doi:10.1007/s00222-014-0571-7.
+
+\bibitem[MMR13]{mmr2013}
+R.-D.~Malikiosis, M.~Matolcsi and I.~Z.~Ruzsa,
+\emph{A note on the pyjama problem},
+European Journal of Combinatorics \textbf{34} (2013), no.~7, 1071--1077.
+
+\bibitem[KL25]{kravitzleng2025}
+N.~Kravitz and Leng,
+\emph{Quantitative pyjama},
+arXiv:2510.17744 (2025).
+
+\end{thebibliography}
+
+\appendix
+\section{Computational evidence}
+\label{app:comp}
+
+Everything in this appendix is computational or bookkeeping. Nothing here is used as a hypothesis in
+Section~\ref{sec:main}: the proofs there are self-contained.
+
+\subsection{The algorithm, stated as a mathematical procedure}
+
+Fix $\Theta$ with $|\Theta|=k$ and the threshold $\tau=1/(2k)$. The procedure produces a two-sided
+bracket for $r(\Theta)$, as far as the available periodicity allows.
+
+\paragraph{Step 1: lower bound.} Choose the box $B=[-1,1]^2$ and a grid with $n$ subdivisions per axis,
+so $h=h_x=h_y=2/n$. Evaluate $f_\Theta$ at every grid point and set
+$r_{\mathrm{lower}}=L_{\mathcal{G}}$. By Lemma~\ref{lem:lower} this is a rigorous lower bound for
+$r(\Theta)$, valid for every $\Theta$ and every mesh.
+
+\paragraph{Step 2: box-local upper bound.} By Lemma~\ref{lem:box},
+\[
+\sup_{p\in B}f_\Theta(p)\;\le\;r_{\mathrm{upper,box}}
+\;=\;L_{\mathcal{G}}+\tfrac12\sqrt{2h^{2}}
+\;=\;L_{\mathcal{G}}+\frac{h}{\sqrt2}.
+\]
+This is a statement about $B$ only, and is recorded as such.
+
+\paragraph{Step 3: global upper bound via the period lattice.} Compute
+$\Lambda(\Theta)=\{v : v\cdot u_{\theta_i}\in\Z\ \forall i\}$ in exact rational arithmetic when the
+angles are rational multiples of $\pi$. If $\Lambda(\Theta)$ has rank two, replace $B$ by a fundamental
+parallelogram $P$ of $\Lambda(\Theta)$ and apply Theorem~\ref{lem:period}(c) with steps $h_1,h_2$; then
+$r_{\mathrm{upper}}=L_{\mathcal{G}}(P)+\tfrac12(h_1+h_2)$ is a genuine global upper bound for
+$r(\Theta)$. If the rank is less than two, no such reduction is available and the only global upper
+bound is the trivial constant $1/2$ of Theorem~\ref{prop:univ}(i).
+
+\paragraph{Step 4: the verdict.} The conjecture at level $k$ is \emph{supported} on $\Theta$ if
+$r_{\mathrm{lower}}\ge\tau$, and \emph{refuted} on $\Theta$ if $r_{\mathrm{upper}}<\tau$ with a global
+upper bound from Step~3. A box-local upper bound below $\tau$ is not a refutation: by
+Lemma~\ref{lem:lower} a single point with $f_\Theta(p)<\tau$ would already be a counterexample, and
+such a point, if it exists inside $B$, is found by the evaluation of Step~1.
+
+\subsection{Parameter domain}
+
+The sweep covers five structural families of angle sets for each $k=3,\dots,10$, giving $5\times8=40$
+cells: equispaced $\{i\pi/k\}$, cyclic $\{2i\pi/k\}$, commensurable $\{2i\pi/(2k+1)\}$, random rational
+$\{a_i\pi/997\}$ with integer $a_i$, and random real angles. All cells are evaluated on $B=[-1,1]^2$
+with $n=128$ subdivisions per axis, i.e.\ $129$ points per axis and mesh $h=1/64=0.015625$.
+
+The exhaustive scan covers the $N$-th roots of unity for $N=12$, $k=3,\dots,8$ and for $N=24$,
+$k=3,4,5$, enumerating every $k$-element subset with no sampling:
+\[
+\sum_{k=3}^{8}\binom{12}{k}+\sum_{k=3}^{5}\binom{24}{k}=3718+55\,154=58\,872 .
+\]
+For each such $\Theta$ an explicit point $p^{*}$ with $f_\Theta(p^{*})\ge\tau$ is produced; by
+Lemma~\ref{lem:lower} this certifies $r(\Theta)\ge\tau$ rigorously for that $\Theta$.
+
+\subsection{Readings}
+
+\begin{table}[htbp]
+\centering
+\caption{Readings of the computational study. The two kinds of bound are of different strength: a
+certified lower bound is a rigorous statement about that particular $\Theta$
+(Lemma~\ref{lem:lower}), whereas a box-local upper bound is a statement about the box alone.}
+\label{tab:readings}
+\begin{tabular}{lr}
+\toprule
+Quantity & Reading \\
+\midrule
+Cells in the sweep ($k=3,\dots,10$, five families) & $40$ \\
+Cells with certified lower bound $\ge1/(2k)$ & $40$ of $40$ \\
+Cells with a global upper bound below $1/(2k)$ & $0$ \\
+Certified refutations inside the searched box & $0$ \\
+Minimum certified lower bound over all cells & $0.1367$ \\
+Minimum box-local upper bound over all cells & $0.1459$ \\
+Maximum certified lower bound over all cells & $0.5000$ \\
+Angle sets in the exhaustive scan & $58\,872$ \\
+Sets with an explicit witness $f(p^{*})\ge1/(2k)$ & $58\,872$ \\
+Hardest scanned set ($N=12$, $k=6$): lower bound / threshold & $0.2113$ / $0.0833$ \\
+\midrule
+Numeric runs recorded & $25$ \\
+\quad conclusive, supporting the conjecture & $5$ \\
+\quad inconclusive & $12$ \\
+\quad other verdicts, none read as a refutation & $8$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The sweep establishes no global statement: each of its $40$ cells admits a certified lower bound at
+least $1/(2k)$, none admits a global upper bound below $1/(2k)$, and no counterexample was found inside
+the searched box. Its verdict is recorded as inconclusive, for lack of a global upper bound, and not
+because of a failure of the computation. The same reading applies to the exhaustive scan: the certified
+inequalities hold for all $58\,872$ sets, and the number of box candidates with
+$r_{\mathrm{upper,box}}<1/(2k)$ is $0$.
+
+Of the $25$ recorded numeric runs, $5$ are conclusive and support the conjecture, $12$ are
+inconclusive, and the remaining $8$ carry other verdicts. An inconclusive run is never read as evidence
+for the negation of the statement it failed to settle; in particular the runs along the Diophantine
+denseness route that exited with an error code are recorded as no conclusion.
+
+\subsection{Provenance}
+
+For auditability we list the internal identifiers of the material assembled for the project: the
+conjecture, its registered negation, the relations behind Section~\ref{sec:intro}, and each
+computational run alluded to above. Identifiers appear only in this appendix.
+
+\begin{description}
+\item[Conjecture~\ref{conj:main}] \texttt{conj:000000}: the statement $r(\Theta)\ge1/(2k)$ for
+$|\Theta|=k$, together with its registered negation and its refutation route.
+\item[Literature relations behind Section~\ref{sec:intro}] \texttt{rel:000002},
+\texttt{rel:000003}, \texttt{rel:000004}; \texttt{stmt:000020} (definition of $E(\varepsilon)$),
+\texttt{stmt:000021} (the problem as posed), \texttt{stmt:000022} (the affirmative answer),
+\texttt{stmt:000023} (the rationality lemma), \texttt{stmt:000025} (the original open problem).
+\item[Exact values at $k=1,2$ (Propositions~\ref{prop:k1}, \ref{prop:orth},
+Corollary~\ref{cor:two})] \texttt{exp:000021}, independently recomputed in \texttt{exp:000000} and
+\texttt{exp:000002}.
+\item[Period-lattice reduction (Theorem~\ref{lem:period})] \texttt{exp:000004}.
+\item[Supporting structural runs] \texttt{exp:000006}, \texttt{exp:000012}, \texttt{exp:000014}; the
+counterexample recorded in \texttt{exp:000018} refutes an auxiliary intermediate claim of one attack
+route, not Conjecture~\ref{conj:main}.
+\item[The sweep of Table~\ref{tab:readings}] \texttt{exp:000023}.
+\item[The exhaustive scan] \texttt{exp:000024}.
+\item[Inconclusive runs] \texttt{exp:000001}, \texttt{exp:000003}, \texttt{exp:000007},
+\texttt{exp:000008}, \texttt{exp:000009}, \texttt{exp:000010}, \texttt{exp:000011},
+\texttt{exp:000013}.
+\item[Literature] \texttt{lit:000000} (Manners), \texttt{lit:000001} (Kravitz--Leng),
+\texttt{lit:000002} (Iosevich--Kolountzakis--Matolcsi), \texttt{lit:000003}
+(Malikiosis--Matolcsi--Ruzsa, used in Section~\ref{sec:intro} from its published abstract),
+\texttt{lit:000004} (the view-obstruction formulation, context only).
+\end{description}
+
+\subsection{Evidence tier}
+
+The proofs of Section~\ref{sec:main} are natural-language proofs, written out step by step so that every
+step can be checked line by line; they were reviewed by hand. No automated proof checker was applied to
+them. The computational readings of this appendix are cross-checks of individual instances: they
+support Conjecture~\ref{conj:main} and they do not prove it, and the only statements of this paper that
+are proved are those of Section~\ref{sec:main}.
+
+\end{document}

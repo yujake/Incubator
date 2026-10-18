@@ -1,0 +1,867 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage[margin=1in]{geometry}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\EE}{\mathbb{E}}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{problem}[theorem]{Open problem}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\title{Equichordal Points on Ellipses and on an Odd-Harmonic Family:\\
+Proofs, Bounded Scans, and the Limits of Both}
+\author{Research manuscript prepared within a multi-agent workflow\\
+\small proofs, numerical readings and literature sources were produced by different agents of the same workflow}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+An equichordal point of a plane region is an interior point such that all chords through it have one and the same
+length. We give a self-contained account of what is known, what can be proved elementarily, and what has only
+been scanned, for two families: the ellipse $E(a,b)$ with $a\neq b$ and a radial family obtained by perturbing the
+unit circle with two odd harmonics.
+
+The mathematical part contains nine statements with complete proofs. Three are structural: the chord-length
+functional is continuous in the point and in the direction, so its standard deviation has a modulus of
+continuity; a similarity of the plane multiplies the variance of the chord length by the square of the scale,
+so only the shape ratio matters; and a positive-definite Hessian at a critical point gives an explicit ball on
+which the variance cannot vanish. Two are classification results: a disc has exactly one equichordal point,
+its centre, and the centre of a non-circular ellipse is never one. One is a construction: if the radial function
+satisfies $r(\theta)+r(\theta+\pi)\equiv 2c$, in particular for any finite sum of odd harmonics with
+$\varepsilon<1$, the origin is an equichordal point with chord length exactly $2c$. Three concern the limits of
+computation: an a priori error bound for the bisection evaluation of chord lengths, a covering-radius criterion
+that a finite grid must satisfy before it can certify the absence of a zero of the variance, and the quantified
+outcome of the finite scans themselves.
+
+The numerical part reports scans of nine shape ratios in $[1.01,5]$ and four values of the perturbation
+parameter, with two direction counts and two evaluation precisions; in none of them did a candidate away from
+the known exact points meet the pre-registered threshold. Both family-wide statements that these scans suggest
+are stated as conjectures, not theorems, and the discussion lists the seven specific gaps between the scans and
+their conjectures. No machine-checked proof exists for anything in this manuscript, and no statement here
+claims one.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{The problem}
+
+Let $\Gamma$ be a simple closed plane curve bounding a region $K$, and let $P$ be an interior point of $K$. The
+point $P$ is called an \emph{equichordal point} of $\Gamma$ if there is a constant $L>0$ such that every line
+through $P$ meets $\Gamma$ in two points whose distance is $L$; the curve is then an equichordal curve and $L$
+is the chord length of $P$. The terminology is that of the problem collection of Klee \cite{klee1960}, whose
+formulation we quote verbatim in Section~\ref{sec:intro-lit} because it is stated for star-shaped sets and not
+only for convex bodies.
+
+The equichordal point problem asks whether a plane convex body can possess two distinct equichordal points. The
+question was asked by Fujiwara in 1916 and, independently, by Blaschke, Rothe and Weitzenb\"ock in 1917, as the
+quoted commentary records. The answer is negative for plane convex bodies: the complete solution is due to
+Rychlik \cite{rychlik1997}, who reduced the problem to the non-existence of heteroclinic connections for a
+multi-valued algebraic map. A disc shows that one equichordal point is easy: its centre is one, with chord
+length equal to the diameter. The whole difficulty lies in the second point.
+
+\subsection{Known results and the exact class they cover}\label{sec:intro-lit}
+
+We reproduce only what can be pointed at with a verbatim quotation and a page of the consulted reprint; printed
+page numbers are given, and quotations are literal, including the source's spelling of names.
+
+The definition, printed p.\,24:
+\begin{quote}
+``If the set $C$ is star-shaped from its interior point $p$ (i.e. $C$ contains every segment joining $p$ to
+another point of $C$), $p$ is called an equichordal point of $C$ provided all chords of $C$ which pass through
+$p$ are of the same length.'' \cite{klee1960}
+\end{quote}
+Two features of this wording matter below. The definition is given for star-shaped sets, so it is not a
+convexity-only notion; and it is a property of a point with respect to a set, not of a curve alone.
+
+The attribution, printed p.\,24:
+\begin{quote}
+``Whether a plane convex body can possess two equichordal points was first asked by Fujiwara [5], and
+independently by Blaschke, Rothe, and Weitzenbock [1].'' \cite{klee1960}
+\end{quote}
+This fixes the origin of the question and asserts nothing about its answer.
+
+The accepted reading of the 1997 solution, printed p.\,27, in a commentary attached to the same problem:
+\begin{quote}
+``The accepted wisdom is that the 1997 paper [Ryc97] of Rychlik finally disposed of the problem, by showing that
+no 2e-curve (of a type that includes convex curves) can have two equichordal points.'' \cite{klee1960}
+\end{quote}
+Two restrictions are carried by this sentence and we keep both. First, it is a commentary's paraphrase, not a
+quotation from \cite{rychlik1997} itself, and we use it only as a second-hand report of a convention. Second,
+the class is described as ``a type that includes convex curves'', which is not the class of all simple closed
+curves; a statement about arbitrary simple closed curves is therefore not covered. A further commentary
+sentence, printed p.\,27, reads:
+\begin{quote}
+``In the early articles about the problem it is established that if a 2e-curve exists, it must have certain
+symmetry and smoothness properties, regardless of whether it is assumed to be convex or not; that much is not
+in dispute.'' \cite{klee1960}
+\end{quote}
+We take from it only that certain symmetry and smoothness properties are available without a convexity
+hypothesis, so such properties must not be cited as convex-only.
+
+\subsection{What this manuscript adds and what it does not}
+
+The two families studied here are deliberately special, because they are the ones on which a positive answer can
+be tested cheaply.
+\begin{enumerate}
+\item \emph{The ellipse.} For $E(a,b)$ with $a\neq b$: is any interior point equichordal? Nothing in the quoted
+literature answers this, since the quoted negative result concerns \emph{two} equichordal points on a curve of a
+restricted class, not one point on an ellipse. Section~\ref{sec:main} proves that the centre is not one
+(Proposition~\ref{prop:ellipse-centre}), and Section~\ref{app:comp} reports the scans.
+\item \emph{An odd-harmonic radial family.} Perturbing the circle by two odd harmonics produces a family whose
+origin is an exact equichordal point, with chord length exactly $2$ and with a proof rather than a reading
+(Theorem~\ref{thm:odd-harmonic}). The question is then whether a second one exists, and that question is answered
+here only by bounded scans.
+\end{enumerate}
+We claim no result about general convex bodies, about general non-convex simple closed curves, about shape ratios
+above $5$, about the limit ratio $1$, or about the limit of vanishing perturbation. Those exclusions are listed
+with their reasons in Section~\ref{sec:discussion} and, where the obstruction is a resolution limit of the
+method rather than a missing computation, they are stated as propositions about the method
+(Proposition~\ref{prop:grid-certificate}). Every numerical statement in this manuscript is a statement about a
+finite grid, a finite direction set and a stated threshold, and is written as such.
+
+Nothing in this manuscript is machine-checked. The proofs below are ordinary natural-language proofs written to
+be read line by line; the numerical readings are outputs of the algorithm described in
+Section~\ref{app:comp}. No claim is made that any proof has been verified by a computer, and no claim is made
+that a scan establishes non-existence.
+
+\section{Definitions and notation}\label{sec:defs}
+
+\begin{definition}[Equichordal point]\label{def:eqp}
+Let $\Gamma$ be a simple closed curve bounding a region $K$ with non-empty interior, and let $P\in\operatorname{int}K$.
+For a line $\ell$ through $P$ meeting $\Gamma$ in exactly two points $A,B$ (with $P$ between them) write
+$L_\ell=|AB|$. Then $P$ is an \emph{equichordal point} of $\Gamma$ if there is $L>0$ with $L_\ell=L$ for every
+line $\ell$ through $P$. The constant $L$ is the \emph{chord length} of $P$, and $\Gamma$ is then an
+\emph{equichordal curve}.
+\end{definition}
+
+We consider only curves for which every line through the relevant interior point meets the curve in exactly two
+points. This holds, for instance, for every convex body and for every star-shaped region with a radial function
+that is continuous and positive, which are the two cases used below.
+
+\begin{definition}[Radial function]\label{def:radial}
+A region $K$ containing the origin is \emph{star-shaped with respect to} $0$ if every ray from $0$ meets $\Gamma$ in
+exactly one point. It is then described by its radial function $r:\R\to(0,\infty)$, $2\pi$-periodic and continuous,
+through $\Gamma=\{r(\theta)(\cos\theta,\sin\theta):\theta\in\R\}$, and the chord through the origin in direction
+$\theta$ has length $r(\theta)+r(\theta+\pi)$.
+\end{definition}
+
+\begin{definition}[Chord-length function and its variance]\label{def:var}
+For $P$ interior and a unit vector $u(\varphi)=(\cos\varphi,\sin\varphi)$, let $L_P(\varphi)$ be the length of the
+chord through $P$ in direction $u(\varphi)$, and put
+\[
+m(P)=\frac{1}{2\pi}\int_0^{2\pi}L_P(\varphi)\,d\varphi,\qquad
+F(P)=\Var_\varphi L_P(\varphi)=\frac{1}{2\pi}\int_0^{2\pi}\bigl(L_P(\varphi)-m(P)\bigr)^2d\varphi .
+\]
+By Definition~\ref{def:eqp}, $P$ is equichordal if and only if $F(P)=0$.
+\end{definition}
+
+For computations we replace the circle of directions by a finite set and the integral by a mean. For $N\ge 2$ put
+$\Phi_N=\{2\pi k/N:k=0,\dots,N-1\}$ and
+\[
+m_N(P)=\frac1N\sum_{\varphi\in\Phi_N}L_P(\varphi),\qquad
+V_N(P)=\frac1N\sum_{\varphi\in\Phi_N}\bigl(L_P(\varphi)-m_N(P)\bigr)^2,\qquad \sigma_N(P)=\sqrt{V_N(P)}.
+\]
+
+\begin{definition}[The two families]\label{def:families}
+The ellipse with semi-axes $a,b>0$ is $E(a,b)=\{(x,y):x^2/a^2+y^2/b^2=1\}$, and its shape is described by the
+ratio $a/b$. Its radial function is $r(\varphi)=ab\,(b^2\cos^2\varphi+a^2\sin^2\varphi)^{-1/2}$. The second family is
+\[
+r(\theta)=1+\varepsilon\bigl(0.6111\cos 3\theta+0.3889\cos 5\theta\bigr),\qquad 0<\varepsilon<1,
+\]
+with coefficients normalised so that $0.6111+0.3889=1$; it is a radial perturbation of the unit circle containing
+only the odd harmonics $k=3,5$. We shall refer to it as the odd control family.
+\end{definition}
+
+\begin{definition}[Search criterion used below]\label{def:criterion}
+For a search domain $D$ and a point $P\in D$, we call $P$ a \emph{candidate} if both $V_{2000}(P)<10^{-18}$ and
+$V_{8000}(P)<10^{-18}$. In the odd-harmonic family the origin is excluded by construction, so candidates are
+sought in an annulus $D=\{P: \rho_-\le|P|\le\rho_+\}$; for the ellipse the whole disc $|P|\le\kappa\min(a,b)$ is
+searched. The threshold $10^{-18}$ and the two direction counts were fixed before the runs; they are not adjusted
+per family.
+\end{definition}
+
+The threshold is far above double-precision noise on the quantities involved: a value of the variance of order
+$10^{-27}$ is attained at an exact equichordal point (the centre of a circle, the origin of the odd-harmonic
+family), so $10^{-18}$ is fourteen orders of magnitude above what an exact zero computes to in this
+implementation. This is what makes the criterion a meaningful positive test; Section~\ref{app:comp} explains why
+it is not a meaningful negative test.
+
+\section{Main results}\label{sec:main}
+
+All numerical evidence referred to anywhere in this paper is collected in Appendix~A; conclusions whose justification depends on that evidence are marked as such in the text, and none of them is stated as a theorem.
+
+Throughout, $\Gamma$ is a simple closed curve bounding a region $K$, and $L_P$ is as in Definition~\ref{def:var}.
+
+\begin{lemma}[Continuity of the chord-length function]\label{lem:continuity}
+Let $K$ be compact, star-shaped with respect to the origin and bounded by a curve with continuous positive radial
+function $r$. Let $K^\circ$ denote its interior and let $D\Subset K^\circ$ be compact. Then:
+\begin{enumerate}
+\item[(i)] for every $P\in K^\circ$ the map $\varphi\mapsto L_P(\varphi)$ is continuous and $2\pi$-periodic;
+\item[(ii)] $P\mapsto L_P$ is continuous from $D$ to $C^0(\R/2\pi\R)$ equipped with the supremum norm, hence
+$F$ and $\sigma=\sqrt{F}$ are continuous on $D$; consequently $\sigma$ has a modulus of continuity $\omega_D$ on
+$D$, that is, $|\sigma(P)-\sigma(Q)|\le\omega_D(|P-Q|)$ for all $P,Q\in D$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(i) Fix $P\in K^\circ$ and a direction $u(\varphi)$. The line $\{P+t\,u(\varphi):t\in\R\}$ contains $P$, which lies
+in the open set $K^\circ$, and it meets $\Gamma$ in exactly two points because $K$ is star-shaped with a positive
+continuous radial function. Write the corresponding parameters as $t_-(\varphi)<0<t_+(\varphi)$, so that
+$L_P(\varphi)=t_+(\varphi)-t_-(\varphi)$. The function $G(t,\varphi)=|P+t\,u(\varphi)|-r(\arg(P+t\,u(\varphi)))$ is
+continuous, is negative at $t=0$, and tends to $+\infty$ as $t\to\pm\infty$; its positive zero is exactly
+$t_+(\varphi)$ and its negative zero exactly $t_-(\varphi)$. The set of zeros depends continuously on $\varphi$ in
+the Hausdorff sense because $G$ is continuous and the zeros are simple ($\Gamma$ is a curve and the line crosses
+it), so $t_+$ and $t_-$ are continuous, and with them $L_P$. Periodicity is clear.
+
+(ii) Let $P,Q\in D$. Fix $\varphi$. The two chords are the intersections of two parallel lines with $\Gamma$. Both
+lines pass through the compact set $D$, whose distance to $\Gamma$ is a positive number $\delta$. Moving the line
+from $P$ to $Q$ moves each endpoint continuously along $\Gamma$, and $\Gamma$ is compact, so the map
+$(P,\varphi)\mapsto L_P(\varphi)$ is uniformly continuous on $D\times\R/2\pi\R$. Hence for every $\eta>0$ there is
+$\zeta>0$ with $|L_P(\varphi)-L_Q(\varphi)|\le\eta$ for all $\varphi$ whenever $|P-Q|\le\zeta$; that is,
+$\|L_P-L_Q\|_\infty\le\eta$. Since the mean and the variance are continuous in the supremum norm (the mean is
+$1$-Lipschitz and the standard deviation is also $1$-Lipschitz, as $|\sigma(X)-\sigma(Y)|\le\|X-Y\|_\infty$ for
+random variables on a common probability space), $\sigma$ is continuous on the compact set $D$, hence uniformly
+continuous, hence has a modulus of continuity.
+\end{proof}
+
+\begin{lemma}[Variance vanishes only for constant chord length]\label{lem:zero-var}
+Let $P\in K^\circ$ and let $\varphi\mapsto L_P(\varphi)$ be continuous. Then $F(P)=0$ if and only if $L_P$ is
+constant; that is, $P$ is equichordal.
+\end{lemma}
+
+\begin{proof}
+\emph{Step 1 (integral of a continuous non-negative function).} The integrand $\varphi\mapsto(L_P(\varphi)-m(P))^2$ is
+continuous and non-negative on the circle, so its integral vanishes if and only if it vanishes identically: a
+continuous non-negative function that is positive at one point is positive on a neighbourhood of it, and that
+neighbourhood has positive measure.
+
+\emph{Step 2 (constant chord length).} Vanishing of the integrand is equivalent to $L_P(\varphi)=m(P)$ for all
+$\varphi$, i.e.\ to $L_P$ being constant.
+
+\emph{Step 3 (identification).} By Definition~\ref{def:eqp}, $L_P$ constant means that $P$ is an equichordal point.
+\end{proof}
+
+\begin{proposition}[The disc has exactly one equichordal point]\label{prop:disc}
+Let $K$ be the closed disc of radius $R$ about $O$, and let $P$ be an interior point at distance $d$ from $O$.
+Then, with $\psi$ the angle between the direction of the chord and the direction $OP$,
+\[
+L_P(\psi)=2\sqrt{R^2-d^2\sin^2\psi},\qquad
+F(P)=4R^2\Bigl[\Bigl(1-\tfrac{k^2}{2}\Bigr)-\Bigl(\frac{2E(k)}{\pi}\Bigr)^{2}\Bigr],\qquad k=\frac{d}{R},
+\]
+where $E(k)=\int_0^{\pi/2}\sqrt{1-k^2\sin^2\psi}\,d\psi$ is the complete elliptic integral of the second kind.
+Consequently $F(P)=0$ if and only if $d=0$: the centre is the only equichordal point of the disc.
+\end{proposition}
+
+\begin{proof}
+\emph{Step 1: chord length.} A point of the line through $P$ in direction $u$ has the form $P+tu$, and it lies on
+the circle when $|P+tu|^2=R^2$, that is
+\[
+t^2+2t\,(P\cdot u)+d^2-R^2=0 .
+\]
+The two roots $t_1<t_2$ satisfy $t_1+t_2=-2P\cdot u$ and $t_1t_2=d^2-R^2$, hence
+\[
+L_P=t_2-t_1=\sqrt{(t_1+t_2)^2-4t_1t_2}=\sqrt{4(P\cdot u)^2+4(R^2-d^2)}=2\sqrt{R^2-d^2+(P\cdot u)^2} .
+\]
+With $\psi$ the angle between $u$ and $OP$ we have $P\cdot u=d\cos\psi$, so
+$L_P=2\sqrt{R^2-d^2+d^2\cos^2\psi}=2\sqrt{R^2-d^2\sin^2\psi}$, which is the first formula.
+
+\emph{Step 2: two directions.} Taking $\psi=0$ gives $L_P=2R$, and taking $\psi=\pi/2$ gives
+$L_P=2\sqrt{R^2-d^2}$. If $d>0$ these two values differ, so $L_P$ is not constant and
+Lemma~\ref{lem:zero-var} gives $F(P)>0$.
+
+\emph{Step 3: the centre.} If $d=0$ the formula of Step 1 gives $L_P\equiv 2R$, which is constant, so $F(P)=0$ and
+$P$ is equichordal.
+
+\emph{Step 4: exact variance.} Averaging the square of the Step~1 formula over $\psi$ uniform on $[0,2\pi)$ and using
+$\int_0^{2\pi}\sin^2\psi\,d\psi=\pi$ gives $\EE[L_P^2]=4R^2(1-k^2/2)$. For the mean, substituting the four
+quadrants into $E(k)$ gives $\EE[L_P]=(1/2\pi)\int_0^{2\pi}2R\sqrt{1-k^2\sin^2\psi}\,d\psi=\frac{4R}{\pi}E(k)$.
+Hence $F(P)=\EE[L_P^2]-\EE[L_P]^2=4R^2[(1-k^2/2)-(2E(k)/\pi)^2]$. This formula is not needed for the
+classification, which Steps 2 and 3 already give, but it shows how the variance of a disc grows from zero: at
+$k=0$ the two terms coincide, and the expansion of $E$ shows that the bracket is of order $k^4$.
+\end{proof}
+
+\begin{proposition}[The centre of a non-circular ellipse is not an equichordal point]\label{prop:ellipse-centre}
+Let $a>b>0$ and let $E(a,b)$ be the ellipse with semi-axes $a,b$. Then its centre $O$ is not an equichordal point;
+more precisely $F(O)>0$.
+\end{proposition}
+
+\begin{proof}
+\emph{Step 1: radial function.} A point of $E(a,b)$ in direction $\varphi$ has the form $\rho(\cos\varphi,\sin\varphi)$
+with $\rho^2(\cos^2\varphi/a^2+\sin^2\varphi/b^2)=1$, hence
+\[
+\rho(\varphi)=\frac{ab}{\sqrt{b^2\cos^2\varphi+a^2\sin^2\varphi}} .
+\]
+This is continuous and positive, and the ellipse is convex, so every line through an interior point meets it in
+exactly two points.
+
+\emph{Step 2: chords through the centre.} The chord through $O$ in direction $\varphi$ has endpoints
+$\rho(\varphi)(\cos\varphi,\sin\varphi)$ and $-\rho(\varphi+\pi)(\cos\varphi,\sin\varphi)$, and
+$\rho(\varphi+\pi)=\rho(\varphi)$; the chord length is therefore $L_O(\varphi)=2\rho(\varphi)$.
+
+\emph{Step 3: two directions.} At $\varphi=0$ we get $L_O(0)=2\rho(0)=2a$; at $\varphi=\pi/2$ we get
+$L_O(\pi/2)=2b$. Since $a\neq b$ the function $L_O$ is not constant. It is continuous by Step 1, so
+Lemma~\ref{lem:zero-var} gives $F(O)>0$, and by Definition~\ref{def:eqp} the centre is not equichordal.
+\end{proof}
+
+\begin{remark}
+Proposition~\ref{prop:ellipse-centre} says only that the obvious candidate fails. It does not say that no other
+point of the ellipse is equichordal; that stronger statement is Conjecture~\ref{conjecture-ellipse} below, and the
+scans of Section~\ref{app:comp} are what supports it.
+\end{remark}
+
+\begin{lemma}[Similarity and reflection invariance]\label{lem:similarity}
+Let $a,b>0$, $\lambda>0$, and let $F_{a,b}$ denote the variance functional of Definition~\ref{def:var} for the
+ellipse $E(a,b)$. Then
+\[
+F_{\lambda a,\lambda b}(\lambda P)=\lambda^2 F_{a,b}(P)\quad\text{for all }P\in\operatorname{int}E(a,b),
+\]
+and $F_{a,b}$ is invariant under the reflections $(x,y)\mapsto(-x,y)$ and $(x,y)\mapsto(x,-y)$. Consequently, the
+sign of $F_{a,b}$ and the set of equichordal points depend on the ratio $a/b$ only, and the search for them may be
+restricted to a closed quadrant of the plane.
+\end{lemma}
+
+\begin{proof}
+\emph{Step 1: scaling.} The map $X\mapsto\lambda X$ sends $E(a,b)$ onto $E(\lambda a,\lambda b)$ and sends lines to
+lines, so the chord through $\lambda P$ in direction $\varphi$ is the image of the chord through $P$ in direction
+$\varphi$; hence $L^{\lambda a,\lambda b}_{\lambda P}(\varphi)=\lambda L^{a,b}_P(\varphi)$ for all $\varphi$.
+Therefore $m(\lambda P)=\lambda m(P)$ and
+\[
+F_{\lambda a,\lambda b}(\lambda P)=\frac{1}{2\pi}\int_0^{2\pi}\bigl(\lambda L^{a,b}_P(\varphi)-\lambda m(P)\bigr)^2d\varphi
+=\lambda^2F_{a,b}(P).
+\]
+\emph{Step 2: reflections.} The reflection $\varrho_1(x,y)=(-x,y)$ maps $E(a,b)$ onto itself and maps the chord
+through $P$ in direction $(\cos\varphi,\sin\varphi)$ onto the chord through $\varrho_1P$ in direction
+$(-\cos\varphi,\sin\varphi)$; the two chords have the same length, and the map on the direction circle is a
+measure-preserving bijection, so the mean and the variance are unchanged. The same argument applies to
+$\varrho_2(x,y)=(x,-y)$.
+
+\emph{Step 3: consequences.} By Step 1 the equation $F_{\lambda a,\lambda b}(Q)=0$ is equivalent to
+$F_{a,b}(Q/\lambda)=0$, so the answer does not change along a ray in the parameter $(a,b)$; it depends on $a/b$
+only. By Step 2 the set $\{P:F_{a,b}(P)=0\}$ is invariant under both reflections, so it is determined by its
+intersection with any closed quadrant.
+\end{proof}
+
+\begin{theorem}[Odd-harmonic radial families have the origin as an equichordal point]\label{thm:odd-harmonic}
+Let $\varepsilon>0$, let $a_3,\dots,a_{2m+1}\in\R$ be finitely many coefficients with
+$\sum_{j}|a_{2j+1}|=1$, and let
+\[
+r(\theta)=1+\varepsilon\sum_{j=0}^{m}a_{2j+1}\cos\bigl((2j+1)\theta\bigr).
+\]
+Then:
+\begin{enumerate}
+\item[(i)] if $0<\varepsilon<1$ then $r(\theta)>0$ for all $\theta$, so $r$ defines a star-shaped region with a
+simple closed boundary curve;
+\item[(ii)] $r(\theta)+r(\theta+\pi)=2$ for all $\theta$;
+\item[(iii)] every chord through the origin has length exactly $2$, so the origin is an equichordal point with
+chord length $2$.
+\end{enumerate}
+In particular this holds for $r(\theta)=1+\varepsilon(0.6111\cos3\theta+0.3889\cos5\theta)$ with $0<\varepsilon<1$, the
+odd control family of Definition~\ref{def:families}.
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1: positivity.} For all $\theta$, $|r(\theta)-1|\le\varepsilon\sum_j|a_{2j+1}|=\varepsilon$, so
+$r(\theta)\ge1-\varepsilon>0$. A continuous positive $2\pi$-periodic radial function defines a simple closed curve
+that is star-shaped with respect to the origin, and every ray from the origin meets it once.
+
+\emph{Step 2: the antipodal relation.} For every integer $k$, $\cos(k(\theta+\pi))=(-1)^k\cos(k\theta)$. All the
+frequencies in the sum are odd, so each term changes sign, and
+\[
+r(\theta+\pi)=1-\varepsilon\sum_j a_{2j+1}\cos\bigl((2j+1)\theta\bigr)=2-r(\theta).
+\]
+
+\emph{Step 3: chord lengths through the origin.} Fix $\theta$ and let $u=(\cos\theta,\sin\theta)$. The ray from the
+origin in direction $u$ meets the curve at the point $r(\theta)u$, and the opposite ray meets it at the point
+$-r(\theta+\pi)u$; both distances are positive by Step 1, and the two points are on the same line through the
+origin, on opposite sides of it. Hence the chord through the origin in the direction $u$ has length
+\[
+r(\theta)+r(\theta+\pi)=r(\theta)+2-r(\theta)=2 ,
+\]
+independently of $\theta$. By Definition~\ref{def:eqp} the origin is an equichordal point with chord length $2$, and
+by Lemma~\ref{lem:zero-var} $F(0)=0$.
+\end{proof}
+
+\begin{remark}
+Theorem~\ref{thm:odd-harmonic} shows that the property ``has an equichordal point'' is cheap: it is implied by one
+linear relation among the odd Fourier coefficients, namely $r(\theta+\pi)=2-r(\theta)$. Nothing similar is known
+to us for a second equichordal point, and the theorem says nothing in that direction. Note also that the family is
+not contained in the class of curves for which the quoted negative result is stated, so no contradiction with
+Section~\ref{sec:intro-lit} is possible: the theorem produces one equichordal point, the quoted result excludes
+two.
+\end{remark}
+
+Next we record exactly what a finite grid can and cannot certify. The statement is about the method; it is the
+mathematical reason why the scans of Section~\ref{app:comp} support a conjecture rather than a theorem.
+
+\begin{proposition}[Grid certificate and its covering-radius condition]\label{prop:grid-certificate}
+Let $D\Subset\operatorname{int}K$ be compact, let $\sigma=\sqrt{F}$ on $D$ with modulus of continuity
+$\omega_D$ as in Lemma~\ref{lem:continuity}, and let $G\subset D$ be a finite set with covering radius
+$\rho=\sup_{P\in D}\min_{g\in G}|P-g|$. If
+\[
+\min_{g\in G}\sigma(g)>\omega_D(\rho),
+\]
+then $F(P)>0$ for every $P\in D$; that is, $D$ contains no equichordal point. Conversely, if $D$ contains an
+equichordal point then necessarily $\min_{g\in G}\sigma(g)\le\omega_D(\rho)$.
+\end{proposition}
+
+\begin{proof}
+\emph{Step 1.} Let $P\in D$ be arbitrary and let $g\in G$ satisfy $|P-g|\le\rho$; such $g$ exists by the definition
+of covering radius. By Lemma~\ref{lem:continuity}, $\sigma(P)\ge\sigma(g)-\omega_D(|P-g|)\ge\sigma(g)-\omega_D(\rho)$,
+using that a modulus of continuity is non-decreasing.
+
+\emph{Step 2.} If $\sigma(g)>\omega_D(\rho)$ for every $g\in G$, Step 1 gives $\sigma(P)>0$ for every $P\in D$, hence
+$F(P)>0$ on $D$ and, by Lemma~\ref{lem:zero-var}, no point of $D$ is equichordal.
+
+\emph{Step 3.} For the converse, if $P_0\in D$ were equichordal then $\sigma(P_0)=0$, and Step 1 applied to
+$P_0$ gives $0=\sigma(P_0)\ge\sigma(g_0)-\omega_D(\rho)$ for a nearest grid point $g_0$, that is
+$\sigma(g_0)\le\omega_D(\rho)$, so the minimum over $G$ is at most $\omega_D(\rho)$.
+\end{proof}
+
+The content of Proposition~\ref{prop:grid-certificate} is that a scan certifies absence only by the margin between
+the smallest observed standard deviation and the modulus of continuity at the covering radius. A coarse grid has
+a large covering radius and therefore a large $\omega_D(\rho)$; a fine local refinement lowers the observed
+minimum but does not by itself lower $\omega_D(\rho)$ for the region between the grid points. Both effects are
+visible in the numbers of Section~\ref{app:comp}, where the smallest observed $\sigma$ is of order $3.5\times10^{-5}$
+while $\omega_D(\rho)$ for any grid used there is of order the grid spacing itself.
+
+\begin{lemma}[A positive-definite Hessian gives an explicit ball of non-vanishing]\label{lem:hessian}
+Let $F$ be twice continuously differentiable on a ball $B(P_0,R_0)$ with $\nabla F(P_0)=0$ and
+$D^2F(P_0)\succeq \lambda I$ for some $\lambda>0$. Suppose in addition that $\|D^3F\|\le M$ on $B(P_0,R_0)$ in the
+sense that $|F(P)-F(P_0)-\tfrac12\langle D^2F(P_0)(P-P_0),P-P_0\rangle|\le \tfrac{M}{6}|P-P_0|^3$. Then for
+\[
+|P-P_0|\le \min\Bigl\{R_0,\ \frac{3\lambda}{2M}\Bigr\}
+\]
+one has $F(P)\ge F(P_0)+\tfrac{\lambda}{4}|P-P_0|^2$. In particular $F$ has no zero in that ball whenever
+$F(P_0)>0$.
+\end{lemma}
+
+\begin{proof}
+\emph{Step 1: Taylor.} By the second-order Taylor theorem with the stated bound on the third derivative,
+\[
+F(P)=F(P_0)+\tfrac12\langle D^2F(P_0)(P-P_0),P-P_0\rangle+R_3(P),\qquad |R_3(P)|\le\tfrac{M}{6}|P-P_0|^3 .
+\]
+\emph{Step 2: lower bound.} Write $h=P-P_0$ and $r=|h|$. By positive definiteness,
+$\langle D^2F(P_0)h,h\rangle\ge\lambda r^2$, hence
+\[
+F(P)\ge F(P_0)+\tfrac{\lambda}{2}r^2-\tfrac{M}{6}r^3=F(P_0)+r^2\Bigl(\tfrac{\lambda}{2}-\tfrac{M}{6}r\Bigr).
+\]
+\emph{Step 3: the radius.} If $r\le 3\lambda/(2M)$ then $\tfrac{M}{6}r\le\tfrac{\lambda}{4}$, so
+$\tfrac{\lambda}{2}-\tfrac{M}{6}r\ge\tfrac{\lambda}{4}$ and $F(P)\ge F(P_0)+\tfrac{\lambda}{4}r^2$. The last claim
+follows since $F(P_0)>0$.
+\end{proof}
+
+Lemma~\ref{lem:hessian} is exactly what a recorded positive-definite Hessian at a numerically located minimiser
+buys: a zero-free ball around that minimiser, not a zero-free domain. It is used in
+Section~\ref{app:comp} to say precisely what the local rechecks establish and what they do not.
+
+\long\def\CompEvidenceBody{%
+% Body of Appendix~A; typeset at the end of the document, after the References.
+% The brace that closes this definition stands immediately before Section~4.
+
+\subsection{The algorithm as a mathematical specification}
+
+The objects evaluated are the quantities of Definition~\ref{def:var} and the criterion of
+Definition~\ref{def:criterion}. For an ellipse we set $b=1$ and vary $a$, which is legitimate by
+Lemma~\ref{lem:similarity}; the search domain is the disc $D_\kappa=\{P:|P|\le\kappa\min(a,b)\}$ with
+$\kappa\in\{0.6,0.9,0.99,0.999\}$ in the various runs, and the full interior $E(a,b)^\circ$ in one run.
+
+The procedure at each stage is the following.
+\begin{enumerate}
+\item[(A1)] \emph{Global stage.} An $11\times11$ (or $13\times13$) uniform grid on the square circumscribing
+$D_\kappa$, truncated to $D_\kappa$, together with the origin, provides the starting points. The covering radius of
+this grid inside the square is $\sqrt{2}\,h/2$ with $h$ the grid spacing.
+\item[(A2)] \emph{Local stage.} From each start a compass search minimises $F$, i.e.\ it evaluates the four (or
+eight) neighbouring points on a square lattice of step $s$, moves to the best one if it is strictly better, and
+divides $s$ by two when no neighbour improves, down to the step floor $s_{\min}=10^{-8}$ (ellipses) or $10^{-9}$
+(odd-harmonic family).
+\item[(A3)] \emph{Evaluation.} The chord lengths entering $V_N$ are computed by bisection ray shooting with $45$
+iterations, and the candidate minimisers are re-evaluated with $60$ iterations; at the argmin of several runs a
+fiftieth-digit evaluation by an independent multiple-precision implementation is used as a check on the
+double-precision value.
+\item[(A4)] \emph{Verdict.} A point is a candidate in the sense of Definition~\ref{def:criterion} if both
+$V_{2000}$ and $V_{8000}$ fall below $10^{-18}$ there; the run reports the smallest value found, its argument, and
+whether the argmin is interior or on the boundary of the search domain.
+\end{enumerate}
+
+Two quantities decide how a reading may be read. The first is the argument being interior or on the boundary: a
+boundary argmin is a statement about the disc $D_\kappa$ only. The second is the covering radius of the global
+stage, which by Proposition~\ref{prop:grid-certificate} is the only thing that could turn a scan into a
+certificate of absence.
+
+\begin{lemma}[A priori error bound for the bisection evaluation]\label{lem:bisection}
+Let the chord lie in a disc of radius $R_{\max}$ about the origin and let each of its two endpoints be computed by
+bisection to $n$ halvings, starting from an interval of length at most $2R_{\max}$. Then the computed chord
+length differs from the true one by at most $4R_{\max}2^{-n}$.
+\end{lemma}
+
+\begin{proof}
+\emph{Step 1: bracket length.} Starting from an interval of length $2R_{\max}$ containing the endpoint, after $n$
+halvings the surviving interval has length $2R_{\max}2^{-n}$, and the reported endpoint lies in it, so each
+endpoint is known to within $2R_{\max}2^{-n}$.
+
+\emph{Step 2: Lipschitz dependence.} If two chords have endpoints at distance at most $\delta$ from the
+corresponding endpoints of the other, then their lengths differ by at most $2\delta$: the length is
+$|A-B|$, and $\bigl||A-B|-|A'-B'|\bigr|\le|A-A'|+|B-B'|$ by the triangle inequality.
+
+\emph{Step 3: total.} Combining Steps 1 and 2 with $\delta=2R_{\max}2^{-n}$ gives an error of at most
+$4R_{\max}2^{-n}$.
+\end{proof}
+
+\begin{remark}
+With $R_{\max}\le5$ and $n=45$ the bound is about $5.7\times10^{-13}$, and with $n=60$ it is far below that. Since
+the reported readings that decide the criterion are of order $10^{-9}$ and above, the evaluation error is four
+orders of magnitude smaller than the smallest reported value. The readings are therefore not resolution
+artefacts; the obstruction to turning them into a theorem is the covering radius, not the arithmetic.
+\end{remark}
+
+\subsection{Controls}
+
+Two runs calibrate the method. On the unit disc, with $2000$ directions and the search domain $|P|\le0.5$, the
+minimiser is located at the centre to within $|P^{*}|=0$ (all reported coordinates vanished) with
+$V_{2000}\approx2.045\times10^{-27}$ and mean chord $2.0000000$; this is the positive control: when an exact zero
+exists, the minimiser reaches machine zero, so the $10^{-9}$-level values seen on ellipses are not a floor imposed
+by the method. The second control compares the fast chord evaluation with the closed-form chord of a circle,
+$2\sqrt{1-d^2}$, and finds agreement to $6.35\times10^{-14}$; an earlier reference implementation using a
+$2048$-edge polyline was found to degenerate near the origin and was discarded, which is why the later runs use
+the analytic or bisection convention only.
+
+\subsection{Ellipse family: readings}
+
+Table~\ref{tab:ellipse-small} collects the first scan on five shapes: five ratios, $2000$ directions, an
+$11\times11$ grid on $|P|\le0.6\min(a,b)$ followed by a compass search. Table~\ref{tab:ellipse-large} collects
+the readings at the three large ratios, where the domain was enlarged and the interior was searched
+independently. All values are values of $F$, not of $\sigma$; the threshold of
+Definition~\ref{def:criterion} corresponds to $F<10^{-18}$.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{First scan on five shapes: $2000$ directions, $11\times11$ grid on $|P|\le0.6\min(a,b)$, compass search
+to step $10^{-8}$. Column 3 is the smallest value of $F$ found; every value is strictly positive and far above
+the threshold $10^{-18}$.}
+\label{tab:ellipse-small}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+$a$ & $b$ & $\min F$ & verdict \\
+\midrule
+$2$ & $1$ & $3.0883\times10^{-2}$ & no candidate \\
+$1.5$ & $1$ & $3.4659\times10^{-3}$ & no candidate \\
+$3$ & $1$ & $2.10864\times10^{-1}$ & no candidate \\
+$2.5$ & $1.5$ & $1.9917\times10^{-2}$ & no candidate \\
+$1.1$ & $1$ & $1.0330\times10^{-5}$ & no candidate \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Readings at the three large ratios. The domain ladder $0.9\to0.95\to0.99\to0.999$ never changed the
+verdict; the argmin is interior and its distance from the centre is quoted in units of $\min(a,b)$; the last
+column is the smallest value of $F$ found on that ratio, confirmed by a separate radial layer scan with $240$
+angles per layer and by a fiftieth-digit recheck of the argmin.}
+\label{tab:ellipse-large}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+$a/b$ & domain & $|P^{*}|/\min(a,b)$ & interior? & $\min F$ \\
+\midrule
+$2.5$ & $|P|\le0.9$ & $0.92383$ & no (boundary) & $9.82997\times10^{-2}$ \\
+$2.5$ & $|P|\le0.99$ & $0.92383$ & yes & $9.83\times10^{-2}$ \\
+$3$ & $|P|\le0.99$ & $0.95174$ & yes & $2.11\times10^{-1}$ \\
+$5$ & $|P|\le0.99$ & $0.98920$ & yes & $1.09$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three further readings belong to this group. First, the nine-ratio scan with ratios
+$\{1.01,1.05,1.1,1.3,1.5,2,2.5,3,5\}$, $b=1$, domain $|P|\le0.9\min(a,b)$, $2000$-direction search and
+$8000$-direction recheck: the minimum over the nine ratios is $1.2254\times10^{-9}$, attained at $a/b=1.01$, and
+every one of the nine minima is strictly positive. Second, the decisive recheck at $a/b=1.01$: the argmin is
+interior, at $P^{*}=(-3.74\times10^{-10},-0.140371)$ with $|P^{*}|=0.140371$, and there
+$V_{2000}=V_{8000}=1.22537006\times10^{-9}$, reproduced by the fiftieth-digit evaluation. Since
+$\sigma=\sqrt{F}\approx3.5\times10^{-5}$, the covering-radius condition of
+Proposition~\ref{prop:grid-certificate} fails by orders of magnitude for any grid used, so this reading excludes a
+candidate on the grid but cannot exclude an equichordal point between grid points. Third, a log-least-squares fit
+of the nine minima against $(a/b-1)$ gives $\min F\approx c\,(a/b-1)^{p}$ with $c=0.024915$, $p=3.514$ and
+$R^2=0.9956$; this is a description of nine numbers and, as Section~\ref{sec:discussion} says, not an asymptotic law.
+
+A separate run searched the whole interior of the ellipse in elliptic coordinates, with a compass search and extra
+refinement near the boundary, in order to decide whether the value on the disc $|P|\le0.99\min(a,b)$ is the value
+on the interior; the reading supports the disc value. It remains a reading on a grid. For seven of the located
+minimisers a local recheck computed the Hessian and found it positive semidefinite; by
+Lemma~\ref{lem:hessian} this gives a zero-free ball around each minimiser, which is a local statement and nothing
+more.
+
+\subsection{Odd-harmonic family: readings}
+
+For the family of Definition~\ref{def:families} the origin is equichordal by Theorem~\ref{thm:odd-harmonic}, and
+the recorded value $V_{2000}\approx6\times10^{-28}$ with constant chord length $2$ is consistent with the theorem,
+as it must be. The question is whether a second point exists. A first attempt on the annulus
+$|P|\in[0.01,0.9\,r_{\max}]$ with a $13\times13$ grid and eight starts collapsed back towards the origin and
+answered nothing; the run is recorded as such. A hard annulus constraint, which forbids the local search from
+returning to the origin disc, gives the readings of Table~\ref{tab:fourier}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Odd-harmonic family under a hard annulus constraint: $13\times13$ grid, eight compass starts, $2000$
+directions, step floor $10^{-8}$; all infima are attained on the inner boundary of the annulus, and the shell
+minimum is non-decreasing in $|P|$. The origin's variance, of order $10^{-28}$ to $10^{-32}$, serves as the
+positive control.}
+\label{tab:fourier}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+$\varepsilon$ & annulus & $\arg\min |P|$ & $\min F$ \\
+\midrule
+$10^{-3}$ & $[0.0100,\,0.9\,r_{\max}]$ & $0.0100$ & $6.9099\times10^{-10}$ \\
+$3\times10^{-3}$ & $[0.0100,\,0.9\,r_{\max}]$ & $0.0100$ & $1.7186\times10^{-9}$ \\
+$10^{-2}$ & $[0.0100,\,0.9\,r_{\max}]$ & $0.0100$ & $2.7846\times10^{-8}$ \\
+$3\times10^{-2}$ & $[0.0100,\,0.9\,r_{\max}]$ & $0.0100$ & $2.9566\times10^{-7}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A later run pushed the search inward: $13\times13$ grid, twelve radial rings, five compass starts, step floor
+$10^{-9}$, over $|P|\in[10^{-6},0.9\,r_{\max}]$, with the $2000$- and $8000$-direction criteria at the argmin. No
+second candidate was found, and the ring readings increase with $|P|$, from about $2.9\times10^{-16}$ at
+$|P|=10^{-5}$ to about $1.5\times10^{-1}$ at $|P|=0.9$. The increase is the reason the constrained minima sit on the
+inner boundary: the annulus is where the variance is smallest, and by Theorem~\ref{thm:odd-harmonic} the origin,
+where it vanishes exactly, is just outside it.
+
+A side reading calibrates the family itself: for coefficient sets whose radial function is not of odd-harmonic type,
+the two-point residual $V(P_1)+V(P_2)$ under the constraint $|P_1-P_2|\ge0.05$ stays positive and grows with
+$\varepsilon$ with slope $1.885$ and $R^2=0.9975$. This growth is a scaling of the residual and is not evidence
+that a second equichordal point is absent; it is recorded because it shows that the odd-harmonic normalisation is
+the special case, not the generic one.
+
+\subsection{Runs that contributed nothing}
+
+Three runs terminated abnormally or reported themselves inconclusive (two by a non-zero exit status, one by an
+internal consistency check), and one run was a replication of another on the same grid. None of them contributes
+evidence in either direction; the questions they were aimed at are answered, where they are answered at all, by the
+runs listed above. A further run showed that the number of directions enters the evaluator non-trivially, which is
+why both $V_{2000}$ and $V_{8000}$ are required in the criterion of Definition~\ref{def:criterion}.
+
+\begin{proposition}[Quantified outcome of the finite scans]\label{prop:finite-scan}
+Consider the finite set of data consisting of the five shapes of Table~\ref{tab:ellipse-small}, the nine ratios
+of the nine-ratio scan, the three large ratios of Table~\ref{tab:ellipse-large}, and the four values of
+$\varepsilon$ of Table~\ref{tab:fourier}, each evaluated on the grid, with the direction counts, domains and step
+floors stated there. Then:
+\begin{enumerate}
+\item[(i)] for every grid point $P$ of every listed configuration, $F(P)>0$;
+\item[(ii)] the smallest value attained anywhere in the listed configurations, namely $1.2254\times10^{-9}$ at
+$a/b=1.01$, exceeds the threshold $10^{-18}$ by nine orders of magnitude;
+\item[(iii)] consequently no point of any listed configuration satisfies the criterion of
+Definition~\ref{def:criterion}, and the origin of the odd-harmonic family is the only point at which the recorded
+variance is at the level of an exact zero.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+\emph{Step 1 (the quantifier is finite).} The proposition quantifies over a finite set: the grid points of finitely
+many grids, evaluated at finitely many directions.
+
+\emph{Step 2 (parts (i) and (ii) are readings of the tables).} Each of (i) and (ii) is a statement about the numbers
+in Tables~\ref{tab:ellipse-small}, \ref{tab:ellipse-large} and~\ref{tab:fourier} together with the recorded minima
+of the nine-ratio scan; the comparison $1.2254\times10^{-9}>10^{-18}$ is arithmetic.
+
+\emph{Step 3 (part (iii) restates (ii)).} Part (iii) restates (ii) through Definition~\ref{def:criterion},
+together with the observation that the variance computations at exact equichordal points return values of order
+$10^{-27}$ or smaller, as the disc control and the origin of the odd-harmonic family both show.
+
+\emph{Step 4 (scope).} Nothing in this proof is a statement about points that are not grid points, and by
+Proposition~\ref{prop:grid-certificate} nothing of that kind could follow from these numbers.
+\end{proof}
+
+} % end of \CompEvidenceBody
+\section{Discussion and open problems}\label{sec:discussion}
+
+\subsection{What the two families suggest}
+
+The scans are consistent with a clean picture, which we state as conjectures with their exact quantifiers and with
+the list of what supports them.
+
+\begin{conjecture}[Ellipses have no equichordal point]\label{conjecture-ellipse}
+Let $a>b>0$. Then the ellipse $E(a,b)$ has no equichordal point in its interior.
+\end{conjecture}
+
+Support: the centre is excluded by Proposition~\ref{prop:ellipse-centre}; the scans of
+Section~\ref{app:comp} cover ratios from $1.01$ to $5$, four domains from $0.6$ to $0.999$ times the small
+semi-axis, one full-interior search, and two direction counts, and find no candidate. The conjecture is strictly
+stronger than the quoted literature: the literature excludes two equichordal points on a restricted class of
+curves, the conjecture excludes even one on an ellipse. Nothing in this manuscript proves it, and by
+Proposition~\ref{prop:grid-certificate} the scans cannot, in their present form, prove it.
+
+\begin{conjecture}[The odd-harmonic family has no second equichordal point]\label{conjecture-fourier}
+Let $r(\theta)=1+\varepsilon(0.6111\cos3\theta+0.3889\cos5\theta)$ with $0<\varepsilon<1$. Then the origin is the only
+equichordal point of the curve $\{r(\theta)(\cos\theta,\sin\theta)\}$.
+\end{conjecture}
+
+Support: Theorem~\ref{thm:odd-harmonic} establishes the origin; the annulus runs of
+Table~\ref{tab:fourier} and the inward run down to $|P|=10^{-6}$ find no second candidate, and the ring readings
+increase with $|P|$. The conjecture is stated for a single parametrised family with two harmonics and for a fixed
+coefficient pair; it says nothing about other coefficient vectors of odd type, even though
+Theorem~\ref{thm:odd-harmonic} shows that all of them have the origin as an equichordal point.
+
+\subsection{The gap between the scans and the conjectures}
+
+The following list says, for each conjecture, which step is missing. Items (1)--(4) are missing computations or
+missing estimates of a known type; items (5)--(7) are missing ideas.
+
+\begin{problem}[A global lower bound]\label{prob:global}
+Find a positive lower bound for $F$ on a compact subdomain of $\operatorname{int}E(a,b)$ that does not rest on a
+grid. By Proposition~\ref{prop:grid-certificate} it suffices to bound the modulus of continuity of $\sigma$ at the
+covering radius used and compare; interval arithmetic or a branch-and-bound in the style of global optimisation
+would give such a bound, and none has been carried out here.
+\end{problem}
+
+\begin{problem}[Ratios beyond five]\label{prob:ratios}
+Extend the scans to $a/b>5$. The three large ratios scanned show the infimum increasing with $a/b$ and the argmin
+approaching the boundary of the disc $|P|\le0.99\min(a,b)$, which is itself a warning: at large ratios the disc is
+a small part of the interior, and a boundary argmin is exactly the case in which the reading does not localise the
+minimum.
+\end{problem}
+
+\begin{problem}[The degenerate limit $a/b\to1$]\label{prob:limit}
+Determine the behaviour of $\inf F$ as $a/b\to1$. The nine scanned minima decrease towards zero, and the fitted
+power law $c\,(a/b-1)^{p}$ with $p\approx3.514$ and $R^2=0.9956$ describes the nine points; it is not an asymptotic
+statement, and no uniform lower bound is available from it. What is needed is either a two-sided estimate of
+$\inf F$ in terms of $(a/b-1)$ or a proof that the infimum is not attained in the limit.
+\end{problem}
+
+\begin{problem}[The limit $\varepsilon\to0$]\label{prob:eps}
+For the odd-harmonic family only four values of $\varepsilon$ were scanned. Whether the absence of a second point
+survives as $\varepsilon\to0$, and how the smallest annular variance scales in $\varepsilon$, is open here. The
+family degenerates to the circle at $\varepsilon=0$, where every interior point at distance $d$ has
+$F>0$ for $d>0$ by Proposition~\ref{prop:disc} and $F(0)=0$, so the $\varepsilon=0$ endpoint is understood and the
+question is about uniformity in $\varepsilon$.
+\end{problem}
+
+\begin{problem}[The neighbourhood of the origin in the odd-harmonic family]\label{prob:origin}
+The origin is equichordal, so $F$ vanishes there; a second point, if it existed, could in principle be arbitrarily
+close to the origin. The constrained runs exclude an inner disc by construction at radius $0.01$, and the inward
+run reaches $|P|=10^{-6}$ but only at isolated radii. A local analysis of $F$ near the origin, in the spirit of
+Lemma~\ref{lem:hessian} but with the Hessian degenerate at an exact zero, is missing.
+\end{problem}
+
+\begin{problem}[Families that are not of odd-harmonic type]\label{prob:families}
+Theorem~\ref{thm:odd-harmonic} uses only the relation $r(\theta+\pi)=2-r(\theta)$, which is one linear condition
+on the Fourier coefficients. Whether a curve with an equichordal point necessarily satisfies a relation of this
+kind, or whether equichordal curves with an equichordal point off the origin behave quite differently, is not
+addressed. The quoted literature does provide symmetry properties of $2e$-curves independent of convexity, and
+those are the natural starting point, but they are quoted at second hand and no proof was reconstructed here.
+\end{problem}
+
+\begin{problem}[The non-convex case]\label{prob:nonconvex}
+The quoted negative result is stated for a class of curves that contains the convex curves, and the commentary
+explicitly restricts it that way. Whether a non-star-shaped simple closed curve can carry two equichordal points
+is not settled by anything quoted or proved here. Not finding a source that settles it is not the same as the
+case being open, and we deliberately do not assert the latter.
+\end{problem}
+
+\subsection{On method}
+
+Three methodological points are worth recording, because each of them cost a run to learn.
+
+First, a positive control is not optional. The disc control shows that an exact equichordal point computes to
+$10^{-27}$ or below; without that number, a reading of $10^{-9}$ on an ellipse could not be distinguished from a
+resolution floor. Second, a negative control is not optional either: the discarded polyline reference would have
+produced discrepancies near the origin that look exactly like the phenomenon being searched for, and the
+comparison with the analytic circle chord is what exposed it. Third, a boundary argmin must be reported as such.
+Four of the eleven shapes in the wider scan had their argmin on the boundary of the search disc; those readings
+say that no zero was found inside the disc, not that the infimum inside the disc has been located, and they are
+recorded with that qualification.
+
+Finally, the distinction between what is proved and what is measured has to survive compression. Of the nine
+statements with proofs in this manuscript, none asserts the non-existence of an equichordal point on a family of
+curves; the two statements that do assert non-existence of an equichordal point (one for a disc, one for the
+centre of an ellipse) are proved directly. The two conjectures assert non-existence over families, and they are
+supported by finite scans with an explicit covering-radius obstruction. No proof in this manuscript has been
+machine-checked, and no statement here claims to have been.
+
+\begin{thebibliography}{9}
+
+\bibitem{klee1960}
+V.\ Klee,
+\emph{A problem collection}, in: Convexity (Proceedings of Symposia in Pure Mathematics), 1960; reprinted
+edition consulted. The problem statement on printed p.\,24 and the commentary on printed p.\,27 are the sources of
+the verbatim quotations in Section~\ref{sec:intro-lit}.
+
+\bibitem{fujiwara1916}
+T.\ Fujiwara, 1916. The attribution of the question to Fujiwara is quoted here from the commentary in
+\cite{klee1960}; the original article was not consulted.
+
+\bibitem{blaschke1917}
+W.\ Blaschke, E.\ Rothe, R.\ Weitzenb\"ock, 1917. The independent attribution of the question is quoted here from
+the commentary in \cite{klee1960}; the original articles were not consulted.
+
+\bibitem{rychlik1996}
+J.\ Rychlik, \emph{The equichordal point problem}, 1996. Registered as a source for this work but not available in
+full text, so no statement of this manuscript rests on it.
+
+\bibitem{rychlik1997}
+J.\ Rychlik, \emph{A complete solution to the equichordal point problem of Fujiwara, Blaschke, Rothe and
+Weitzenb\"ock}, Inventiones Mathematicae \textbf{129} (1997), no.\ 1, 141--212. The result is used here only at the
+strength of the second-hand report quoted in Section~\ref{sec:intro-lit}, namely for a class of curves that
+includes the convex curves; the paper itself was not available in a machine-readable text and nothing in it is
+paraphrased.
+
+\end{thebibliography}
+
+\appendix
+
+\section{Computational evidence}\label{app:comp}
+
+\CompEvidenceBody
+
+\subsection{Reproducibility index}\label{app:index}
+
+The following table maps each statement of this manuscript to the records that support it. It is the only place in
+this manuscript where internal identifiers appear.
+\begin{center}
+\small
+\begin{tabular}{@{}p{4.2cm}p{9.6cm}@{}}
+\toprule
+object & record \\
+\midrule
+Definitions of equichordal point and equichordal curve & stmt:000000, stmt:000001; source lit:000007 (verbatim, quote\_verified=true) \\
+Scope convention: convex body versus simple closed curve & stmt:000002; source lit:000000 at bibliographic level only \\
+Verbatim quotations of Section~\ref{sec:intro-lit} & rel:000000 (printed p.\,24), rel:000001 (printed p.\,24), rel:000002, rel:000003, rel:000004, rel:000005 (printed p.\,27); source file library/000007.txt \\
+Theorem~\ref{thm:odd-harmonic} & natural-language proof, no experiment needed; numerical consistency check exp:000002 (variance $\approx6\times10^{-28}$, chord $2$) \\
+Proposition~\ref{prop:disc} & exp:000001 (centre located, $V_{2000}\approx2.045\times10^{-27}$); method check exp:000003 (bisection versus analytic chord, $6.35\times10^{-14}$) \\
+Proposition~\ref{prop:ellipse-centre} & proof only; consistent with exp:000000 \\
+Table~\ref{tab:ellipse-small} & exp:000000 \\
+Table~\ref{tab:ellipse-large} & exp:000011 (domain ladder), exp:000012 (interior minima), exp:000015 (full interior), exp:000017 (radial layers) \\
+Nine-ratio scan and power-law fit & exp:000004 (nine ratios, minimum $1.2254\times10^{-9}$, $c=0.024915$, $p=3.514$, $R^2=0.9956$); wider scan exp:000008 (eleven shapes, four boundary argmins) \\
+Decisive recheck at $a/b=1.01$ & exp:000010 \\
+Local Hessian rechecks & exp:000018 (seven minimisers) \\
+Table~\ref{tab:fourier} & exp:000006 (hard annulus), exp:000007 (decisive annulus run) \\
+Inward run to $|P|=10^{-6}$ & exp:000019 \\
+Runs contributing nothing & exp:000005 (collapsed towards the origin), exp:000009 and exp:000016 (non-zero exit status), exp:000013 (self-reported inconclusive), exp:000014 (reading of exp:000013); exp:000020 is a replication of exp:000018 and is counted once \\
+Conjecture~\ref{conjecture-ellipse} & conjectures 000000, status supported\_not\_proved \\
+Conjecture~\ref{conjecture-fourier} & conjectures 000001, status supported\_not\_proved \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All numerical records carry evidence level cross\_check in the sense of this workflow: independent
+re-computation, not proof. Scripts, parameters and the recorded content digests of the scripts are stored with the
+experiment records in the project directory; the aggregate numerical output of the ellipse scans is in
+out/eq\_s1/results.json and the run logs are in out/experiments/.
+
+\end{document}

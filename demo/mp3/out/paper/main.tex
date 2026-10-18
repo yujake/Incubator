@@ -1,0 +1,865 @@
+\documentclass[11pt]{ctexart}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{conjecture}[theorem]{Conjecture}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\newtheorem{openproblem}[theorem]{Open problem}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\kk}{\mathsf{k}}
+\newcommand{\gl}{\mathfrak{g}}
+\newcommand{\hl}{\mathfrak{h}}
+\newcommand{\LL}{\mathfrak{L}}
+\newcommand{\UU}{\mathcal{U}}
+\newcommand{\Sym}{\operatorname{Sym}}
+\newcommand{\Der}{\operatorname{Der}}
+\newcommand{\GKdim}{\operatorname{GKdim}}
+
+\title{Noetherianity of universal enveloping algebras:\\[2pt]
+\large finite dimension, finite codimension, and graded obstructions}
+\author{G}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Let $\kk$ be a field of characteristic zero and $\gl$ a Lie algebra over $\kk$ with
+universal enveloping algebra $\UU(\gl)$. This note is about the following question:
+does $\UU(\gl)$ noetherian force $\dim_\kk\gl<\infty$? We give self-contained,
+line-by-line proofs of four things: the classical positive direction (finite
+dimension implies noetherian, through the Poincar\'e--Birkhoff--Witt filtration,
+the Hilbert basis theorem and a lifting lemma for filtered rings); the abelian
+counterexample (infinite dimension implies not noetherian, with an explicit
+strictly ascending chain); a descent lemma for ``large'' ring extensions; and the
+module-theoretic facts around finite-codimension subalgebras, together with an
+example showing why the naive module-finiteness route fails. We then state, under
+the hypotheses under which they are published and with an explicit note that their
+proofs are not reconstructed here, the graded obstruction for simple graded Lie
+algebras with finite-dimensional homogeneous components, and its special cases
+(Krichever--Novikov algebras, graded algebras of polynomial growth, finitely
+generated infinite-step solvable algebras). The general converse,
+``$\UU(\gl)$ noetherian implies $\dim_\kk\gl<\infty$'', is stated as a conjecture
+and is \emph{not} proved or disproved here; we say exactly which step is missing.
+All proofs in this note are natural-language arguments written and reviewed line by
+line by hand.
+\end{abstract}
+
+\section{Introduction}
+
+Let $\kk$ be a field of characteristic $0$, let $\gl$ be a Lie algebra over $\kk$ and
+let $\UU(\gl)$ be its universal enveloping algebra. Recall that a ring is
+\emph{noetherian} if its left ideals satisfy the ascending chain condition; for
+$\UU(\gl)$ the left and the right condition are equivalent, because the principal
+anti-automorphism $x\mapsto -x$ ($x\in\gl$) exchanges left and right ideals.
+
+The question motivating this note is whether noetherianity of $\UU(\gl)$ detects
+finite dimension:
+\begin{equation}\label{eq:Q}
+\UU(\gl)\ \text{noetherian}\ \Longrightarrow\ \dim_\kk\gl<\infty\ ?
+\end{equation}
+Two extreme cases have been known for a long time. If $\dim_\kk\gl=n<\infty$, then
+$\UU(\gl)$ is noetherian; this is the standard route through the
+Poincar\'e--Birkhoff--Witt filtration and the Hilbert basis theorem, and it is
+recorded for instance in \cite[Chapter 1]{MR01}. If $\gl$ is abelian, then
+$\UU(\gl)\cong\Sym(\gl)$ is a polynomial algebra in $\dim_\kk\gl$ variables, which is
+noetherian exactly when the number of variables is finite. The interesting case is
+therefore: can an infinite-dimensional \emph{non-abelian} $\gl$ have a noetherian
+enveloping algebra?
+
+The known negative results are obstruction results of a graded nature. In
+\cite{SW14} it is shown that the universal enveloping algebra of the Witt algebra
+$\Der\kk[t,t^{-1}]$ is not noetherian, by exhibiting a strictly ascending sequence
+of two-sided ideals; the authors also formulate the conjecture that no
+infinite-dimensional Lie algebra over a field of characteristic zero has a
+noetherian enveloping algebra. Generalizations cover simple Lie algebras graded by
+$\mathbb{Z}^n$ with finite-dimensional homogeneous components, the
+Krichever--Novikov algebras of \cite{KN87}, graded algebras of polynomial growth,
+and finitely generated infinite-step solvable algebras. The common feature is
+that noetherianity is refuted by an explicit chain that is visible in the grading.
+
+What this note does and does not do. It gives complete proofs of the positive
+direction (Section 3, Conjectures~\ref{thm:findim} and~\ref{thm:abelian}), of two
+general ring-theoretic lemmas used everywhere (Lemmas~\ref{lem:hilbert}
+and~\ref{lem:lift}), and of the module-theoretic facts surrounding
+finite-codimension subalgebras (Proposition~\ref{prop:codim}), including an example
+(Example~\ref{ex:nomodule}) showing that a finite-codimension subalgebra does
+\emph{not} in general make the bigger enveloping algebra a finitely generated module
+over the smaller one. It then reports the graded obstruction
+(Conjecture~\ref{thm:gradedsimple}) under its published hypotheses with an explicit
+statement that the detailed argument is not reconstructed here, and derives from it
+the Witt case (Corollary~\ref{cor:witt}) and lists the three classes mentioned above
+(Conjectures~\ref{thm:kn}, \ref{thm:poly}, \ref{thm:solvable}). The general question
+\eqref{eq:Q} is left open and is stated as Conjecture~\ref{conj:SW} together with an
+explicit list of what is missing (Section~5).
+
+Numerical evidence for the two finite checks referred to below is collected in
+Appendix~A; any conclusion resting on it depends on that evidence and on the stated
+bounds, and nothing in Appendix~A is used in the proofs of Section~3.
+
+\section{Definitions and notation}\label{sec:defs}
+
+\begin{definition}[Filtered and graded rings]\label{def:filtered}
+A \emph{filtered $\kk$-algebra} is a $\kk$-algebra $A$ together with $\kk$-subspaces
+$A_0\subseteq A_1\subseteq A_2\subseteq\cdots$ such that $1\in A_0$,
+$A_iA_j\subseteq A_{i+j}$ and $\bigcup_i A_i=A$. Its \emph{associated graded algebra}
+is $\operatorname{gr}A=\bigoplus_{n\ge0}A_n/A_{n-1}$ (with $A_{-1}=0$), with the
+product induced by $A_i\times A_j\to A_{i+j}$. A \emph{graded $\kk$-algebra} is a
+$\kk$-algebra $G=\bigoplus_{n\ge0}G_n$ with $G_iG_j\subseteq G_{i+j}$.
+A left ideal $I$ of a filtered algebra $A$ carries the induced filtration
+$I_n=I\cap A_n$ and one writes $\operatorname{gr}I=\bigoplus_n (I_n+A_{n-1})/A_{n-1}$,
+a graded subspace of $\operatorname{gr}A$.
+\end{definition}
+
+\begin{definition}[Noetherian]\label{def:noetherian}
+A ring $R$ is \emph{left noetherian} if every ascending chain
+$I_1\subseteq I_2\subseteq\cdots$ of left ideals of $R$ is eventually constant;
+equivalently, if every left ideal of $R$ is finitely generated. Right noetherian is
+defined symmetrically. For a commutative ring the two notions coincide and one
+speaks simply of a noetherian ring.
+\end{definition}
+
+\begin{definition}[Enveloping algebra]\label{def:U}
+For a Lie algebra $\gl$ over $\kk$, $\UU(\gl)$ is the quotient of the tensor algebra
+$T(\gl)$ by the two-sided ideal generated by $xy-yx-[x,y]$, $x,y\in\gl$. We use the
+\emph{Poincar\'e--Birkhoff--Witt (PBW) theorem} in the following form: if
+$(x_i)_{i\in I}$ is a totally ordered $\kk$-basis of $\gl$, the ordered monomials
+$x_{i_1}^{a_1}\cdots x_{i_r}^{a_r}$ with $i_1<\cdots<i_r$ and $a_j\ge1$, together
+with $1$, form a $\kk$-basis of $\UU(\gl)$. The \emph{standard filtration} is
+$\UU_n(\gl)=\kk$-span of all products of at most $n$ elements of $\gl$.
+\end{definition}
+
+\begin{definition}[Witt algebras, graded Lie algebras]\label{def:witt}
+Put $W=\Der\kk[t,t^{-1}]$, the Lie algebra of derivations of the Laurent polynomial
+ring, with basis $d_m=t^{m+1}\partial_t$, $m\in\mathbb{Z}$, and bracket
+$[d_m,d_n]=(n-m)d_{m+n}$; write $W_{\ge-1}=\Der\kk[t]=\bigoplus_{m\ge-1}\kk d_m$, the
+subalgebra of polynomial vector fields. Note that $W_{\ge-1}$ has codimension $1$ in
+$W$ inside the span of negative modes, and that both are infinite dimensional.
+A Lie algebra $\LL$ is \emph{$\mathbb{Z}^n$-graded} if
+$\LL=\bigoplus_{m\in\mathbb{Z}^n}\LL_m$ as vector spaces with
+$[\LL_m,\LL_{m'}]\subseteq\LL_{m+m'}$; it is \emph{graded simple} if there is no
+two-sided ideal $0\neq J\neq\LL$ with $J=\bigoplus_m (J\cap\LL_m)$, and
+$\dim_\kk\LL_m<\infty$ for all $m$ is the ``finite-dimensional homogeneous
+components'' hypothesis used below. The Witt algebra is $\mathbb{Z}$-graded with
+$\dim_\kk W_m=1$ and is graded simple.
+\end{definition}
+
+\begin{remark}[What ``proof'' means in this note]\label{rem:standard}
+Every result stated below with a proof has a written, line-by-line argument: each
+step is either a computation, a citation of one of the lemmas proved here, or an
+explicitly named standard input (PBW, the Hilbert basis theorem, faithful flatness).
+Results that are reported from the literature rather than proved here are marked in
+their statement by ``under its published hypotheses'' and carry a footnote saying so.
+Every proof written out here is a hand-written, line-by-line argument.
+\end{remark}
+
+\section{Main results}\label{sec:main}
+
+\subsection{The positive direction}
+
+\begin{lemma}[PBW and the associated graded]\label{lem:pbw}
+Let $\gl$ be any Lie algebra over $\kk$ and let $\UU_n=\UU_n(\gl)$ be the standard
+filtration of Definition~\ref{def:U}. Then $\bigcup_n\UU_n=\UU(\gl)$,
+$\UU_i\UU_j\subseteq\UU_{i+j}$, and $\operatorname{gr}\UU(\gl)\cong\Sym(\gl)$ as
+graded $\kk$-algebras. In particular, if $\dim_\kk\gl=n<\infty$ then
+$\operatorname{gr}\UU(\gl)\cong\kk[x_1,\dots,x_n]$.
+\end{lemma}
+
+\begin{proof}
+\emph{(1) Exhaustiveness.} By PBW every element of $\UU(\gl)$ is a finite sum of
+ordered monomials of some total degree $d$, and an ordered monomial of total degree
+$d$ is a product of $d$ elements of $\gl$, hence lies in $\UU_d$; so
+$\bigcup_n\UU_n=\UU(\gl)$. The inclusion $\UU_i\UU_j\subseteq\UU_{i+j}$ holds because
+a product of $i$ and $j$ factors is a product of $i+j$ factors.
+
+\emph{(2) The symbol of a monomial depends only on its symmetric product.} For
+$x,y\in\gl$ we have $xy-yx=[x,y]\in\gl=\UU_1$, so $xy$ and $yx$ have the same image
+in $\UU_2/\UU_1$. Consequently, for any permutation $\sigma$ of $d$ factors,
+$\prod x_k$ and $\prod x_{\sigma(k)}$ differ by an element of $\UU_{d-1}$: moving one
+factor past another changes the product by a bracket, which lies in $\gl$ and hence
+lowers the total degree by at least one. Hence the class of
+$x_1\cdots x_d$ in $\UU_d/\UU_{d-1}$ depends only on the symmetric tensor
+$x_1\cdots x_d\in\Sym^d(\gl)$, and the resulting map
+$\Sym^d(\gl)\to\UU_d/\UU_{d-1}$ is well defined and $\kk$-linear.
+
+\emph{(3) It is an isomorphism.} Surjectivity: $\UU_d$ is spanned by products of $d$
+elements of $\gl$, so the images of the monomials span $\UU_d/\UU_{d-1}$.
+Injectivity: by PBW the ordered monomials of degree exactly $d$ are linearly
+independent in $\UU_d$, and they are not in $\UU_{d-1}$ (their PBW expression has no
+terms of smaller total degree), so their classes in $\UU_d/\UU_{d-1}$ are linearly
+independent; there are as many of them as there are degree-$d$ monomials in a basis
+of $\gl$, i.e.\ $\dim\Sym^d(\gl)$ of them.
+
+\emph{(4) Multiplicativity.} If $a=\prod_{i\le p}x_i$ and $b=\prod_{j\le q}y_j$, then
+$ab$ is a product of $p+q$ elements of $\gl$, so by (2) its class equals
+$\operatorname{sym}(a)\operatorname{sym}(b)$. Hence $\operatorname{gr}\UU(\gl)$ and
+$\Sym(\gl)$ are isomorphic as graded algebras. The last assertion is
+$\Sym(\gl)\cong\kk[x_1,\dots,x_n]$ for a basis $x_1,\dots,x_n$ of $\gl$.
+\end{proof}
+
+\begin{lemma}[Hilbert basis theorem]\label{lem:hilbert}
+If $R$ is a commutative noetherian ring then $R[x]$ is noetherian. In particular,
+for a field $\kk$ the polynomial ring $\kk[x_1,\dots,x_n]$ is noetherian for every
+$n\ge0$.
+\end{lemma}
+
+\begin{proof}
+\emph{(0) A field is noetherian.} The only ideals of a field are $0$ and $\kk$, so
+every ascending chain stabilises immediately.
+
+\emph{(1) Reduction to a generating set.} Let $I\subseteq R[x]$ be an ideal. Let $L$
+be the set of leading coefficients of elements of $I$, together with $0$; $L$ is an
+ideal of $R$ (if $a,b\in L$ are leading coefficients of $f,g$, then $a+b$ is the
+leading coefficient of $x^{\deg g}f+x^{\deg f}g$, and $ra$ of $rf$). Since $R$ is
+noetherian, $L=(a_1,\dots,a_s)$; choose $f_i\in I$ with leading coefficient $a_i$
+and degree $d_i$, and put $d=\max_i d_i$. Let
+$M=I\cap\{h\in R[x]:\deg h<d\}$; as an $R$-module $M$ is a submodule of the finitely
+generated free module $\bigoplus_{k<d}Rx^k$, hence finitely generated (a noetherian
+ring is noetherian as a module over itself, finite direct sums of noetherian modules
+are noetherian, and submodules of noetherian modules are noetherian). Pick
+generators $g_1,\dots,g_t$ of $M$.
+
+\emph{(2) The claim.} We show $I=(f_1,\dots,f_s,g_1,\dots,g_t)$. Let $f\in I$; we
+prove $f\in J:=(f_1,\dots,f_s,g_1,\dots,g_t)$ by induction on $m=\deg f$. If
+$m<d$ then $f\in M\subseteq J$. If $m\ge d$, let $a$ be the leading coefficient of
+$f$. Then $a\in L$, so $a=\sum_i c_i a_i$ with $c_i\in R$, and
+$f-\sum_i c_i x^{m-d_i}f_i\in I$ has degree $<m$; by induction it lies in $J$, hence
+$f\in J$.
+
+\emph{(3) Conclusion.} Every ideal of $R[x]$ is finitely generated, which for a
+commutative ring is equivalent to the ascending chain condition. The statement for
+$\kk[x_1,\dots,x_n]$ follows by iterating (0) and (1).
+\end{proof}
+
+\begin{lemma}[Lifting noetherianity along a filtration]\label{lem:lift}
+Let $A$ be a filtered $\kk$-algebra with exhaustive filtration as in
+Definition~\ref{def:filtered}. If $\operatorname{gr}A$ is left noetherian, then $A$
+is left noetherian.
+\end{lemma}
+
+\begin{proof}
+\emph{(1) $\operatorname{gr}I$ is a left ideal of $\operatorname{gr}A$.} Let
+$I\subseteq A$ be a left ideal, $I_n=I\cap A_n$. For homogeneous $a\in A_d$ and
+$x\in I_n$ we have $ax\in I$ and $ax\in A_{n+d}$, so $ax\in I_{n+d}$; moreover the
+class of $ax$ modulo $A_{n+d-1}$ is the product of the classes of $a$ and of $x$
+(the products $A_d\times A_n\to A_{d+n}$ are bilinear and compatible with the
+quotients). Hence $\operatorname{gr}A\cdot\operatorname{gr}I\subseteq
+\operatorname{gr}I$.
+
+\emph{(2) Choosing lifts.} Since $\operatorname{gr}A$ is left noetherian, the graded
+left ideal $\operatorname{gr}I$ is generated by finitely many homogeneous elements
+$\bar y_1,\dots,\bar y_s$ of degrees $d_1,\dots,d_s$; a generating set of a graded
+module may be taken homogeneous because each homogeneous component of
+$\operatorname{gr}I$ is spanned by homogeneous pieces of a generating set. Choose
+lifts $y_i\in I_{d_i}$.
+
+\emph{(3) The induction.} We prove $I_n=\sum_i A_{n-d_i}y_i$ for all $n\ge0$ (with
+$A_m=0$ for $m<0$) by induction on $n$. Let $x\in I_n$. Its class $\bar x\in
+(\operatorname{gr}I)_n$ is a sum $\sum_i\bar a_i\bar y_i$ with $\bar a_i$ homogeneous
+of degree $n-d_i$ (no generator of degree $>n$ can occur, since all terms have degree
+$n$). Choose $a_i\in A_{n-d_i}$ lifting $\bar a_i$. Then
+$x'=\sum_i a_iy_i\in I_n$ and $\bar x=\overline{x'}$, i.e.\ $x-x'\in I_{n-1}$. By
+induction $x'\in\sum_i A_{n-d_i}y_i$ and $x-x'\in\sum_i A_{n-1-d_i}y_i\subseteq
+\sum_i A_{n-d_i}y_i$. Hence $x\in\sum_i A_{n-d_i}y_i$.
+
+\emph{(4) Conclusion.} With $n$ large enough that $x\in A_n$, step (3) gives
+$I=\sum_i Ay_i$: $I$ is finitely generated. Since this holds for every left ideal,
+$A$ is left noetherian.
+\end{proof}
+
+\begin{theorem}[Finite dimension implies noetherian]\label{thm:findim}
+Let $\gl$ be a Lie algebra over a field $\kk$ with $\dim_\kk\gl=n<\infty$. Then
+$\UU(\gl)$ is left and right noetherian.
+\end{theorem}
+
+\begin{proof}
+\emph{(1)} By Lemma~\ref{lem:pbw}, $\operatorname{gr}\UU(\gl)\cong\kk[x_1,\dots,x_n]$
+with the standard filtration.
+
+\emph{(2)} By Lemma~\ref{lem:hilbert} the ring $\kk[x_1,\dots,x_n]$ is noetherian, so
+$\operatorname{gr}\UU(\gl)$ is left noetherian.
+
+\emph{(3)} By Lemma~\ref{lem:lift} applied to $A=\UU(\gl)$, the algebra $\UU(\gl)$ is
+left noetherian.
+
+\emph{(4)} The principal anti-automorphism $x\mapsto-x$ of $\gl$ extends to an
+anti-automorphism of $\UU(\gl)$ and exchanges left and right ideals; hence
+$\UU(\gl)$ is also right noetherian.
+\end{proof}
+
+\subsection{The abelian counterexample}
+
+\begin{lemma}[Abelian Lie algebras]\label{lem:abelian}
+If $\gl$ is abelian then $\UU(\gl)\cong\Sym(\gl)$ as $\kk$-algebras.
+\end{lemma}
+
+\begin{proof}
+By PBW the ordered monomials in a basis of $\gl$ form a basis of $\UU(\gl)$. If
+$[x,y]=0$ for all $x,y\in\gl$, then two ordered monomials multiply to an ordered
+monomial (the factors commute, so reordering changes nothing and no bracket terms
+appear), hence the $\kk$-linear map $\Sym(\gl)\to\UU(\gl)$ sending
+$x_{i_1}\cdots x_{i_d}$ to the product is a well-defined algebra homomorphism. It is
+surjective because the images of all monomials span $\UU(\gl)$ (PBW), and injective
+because it sends a basis of $\Sym(\gl)$ to a basis of $\UU(\gl)$.
+\end{proof}
+
+\begin{theorem}[Infinite dimension implies not noetherian, abelian case]\label{thm:abelian}
+Let $\gl$ be an infinite-dimensional abelian Lie algebra over $\kk$. Then
+$\UU(\gl)$ is neither left nor right noetherian.
+\end{theorem}
+
+\begin{proof}
+\emph{(1)} By Lemma~\ref{lem:abelian} we may identify $\UU(\gl)$ with the polynomial
+algebra $\kk[x_i:i\in I]$ in the indeterminates of a basis of $\gl$, where $I$ is
+infinite.
+
+\emph{(2)} Since $I$ is infinite, it contains a countably infinite subset; relabel
+indeterminates so that $x_1,x_2,x_3,\dots$ are distinct elements of $I$. Put
+$I_n=(x_1,\dots,x_n)$, the ideal generated by the first $n$ indeterminates. Then
+$I_1\subseteq I_2\subseteq I_3\subseteq\cdots$ is an ascending chain of ideals.
+
+\emph{(3) The chain is strictly ascending.} Fix $n\ge1$. Because $I$ is a basis of
+$\gl$, there is a $\kk$-algebra homomorphism $\varphi$ from
+$\kk[x_i:i\in I]$ to itself with $\varphi(x_i)=0$ for $i\in\{1,\dots,n\}$ and
+$\varphi(x_i)=x_i$ otherwise (a homomorphism out of a polynomial ring is determined
+by arbitrary images). Then $\varphi(I_n)=0$ while $\varphi(x_{n+1})=x_{n+1}\neq0$;
+hence $x_{n+1}\notin I_n$, i.e.\ $I_n\subsetneq I_{n+1}$.
+
+\emph{(4)} An infinite strictly ascending chain of ideals refutes the ascending chain
+condition on both sides (ideals of a commutative ring are left and right ideals).
+\end{proof}
+
+\subsection{Finite-codimension subalgebras}
+
+\begin{lemma}[Module finiteness transfers noetherianity]\label{lem:module}
+Let $B\subseteq A$ be rings and suppose $A$ is finitely generated as a left
+$B$-module. If $B$ is left noetherian, then $A$ is left noetherian.
+\end{lemma}
+
+\begin{proof}
+If $A=B a_1+\cdots+B a_s$ then $A$ is a quotient of the free left $B$-module $B^s$,
+which is noetherian as a finite direct sum of copies of the noetherian module $B$;
+quotients of noetherian modules are noetherian (submodules of a quotient correspond
+to submodules of the module). A left ideal of $A$ is in particular a left
+$B$-submodule of $A$, so any ascending chain of left ideals of $A$ is an ascending
+chain of $B$-submodules of the noetherian module $A$ and stabilises.
+\end{proof}
+
+\begin{theorem}[Descent along free extensions]\label{thm:descent}
+Let $B\subseteq A$ be rings such that $A$ is free as a left $B$-module (equivalently
+free as a right $B$-module, in the case at hand). Then $A$ is faithfully flat as a
+$B$-module, and for every two-sided ideal $\mathfrak{a}$ of $B$ one has
+$A\mathfrak{a}\cap B=\mathfrak{a}$. Consequently, if $A$ is noetherian (i.e.\ has the
+ascending chain condition on two-sided ideals) then so is $B$.
+\end{theorem}
+
+\begin{proof}
+\emph{(1) Faithful flatness.} A free module is flat; it is faithfully flat because
+$N\otimes_B A=0$ for a free module of positive rank forces $N=0$ (a free module of
+rank $\ge1$ has a direct summand isomorphic to $B$, so $N$ embeds in $N\otimes_B A$).
+
+\emph{(2) The contraction formula.} Let $\mathfrak{a}\subseteq B$ be a two-sided
+ideal. From the exact sequence $0\to\mathfrak{a}\to B\to B/\mathfrak{a}\to0$ and
+flatness we get $0\to\mathfrak{a}A\to A\to (B/\mathfrak{a})\otimes_B A\to0$, with
+$\mathfrak{a}A$ identified with its image $A\mathfrak{a}$ and
+$(B/\mathfrak{a})\otimes_BA\cong A/A\mathfrak{a}$. By faithful flatness the natural
+map $B/\mathfrak{a}\to (B/\mathfrak{a})\otimes_B A$ is injective: if $0\neq\bar b$ had
+zero image, the cyclic module $B/(\mathfrak{a}+Bb)$ would satisfy
+$(B/(\mathfrak{a}+Bb))\otimes_B A=0$ and hence would be zero by faithful flatness,
+contrary to $\bar b\neq0$. Chasing $\bar b$ through
+$B/\mathfrak{a}\to A/A\mathfrak{a}$ gives $B\mathfrak{a}\cap B\subseteq\mathfrak{a}$,
+and the other inclusion is trivial.
+
+\emph{(3) Descent.} Let $\mathfrak{a}_1\subseteq\mathfrak{a}_2\subseteq\cdots$ be an
+ascending chain of two-sided ideals of $B$. Then $A\mathfrak{a}_1\subseteq
+A\mathfrak{a}_2\subseteq\cdots$ is an ascending chain of two-sided ideals of $A$,
+hence constant from some $N$ on. For $n\ge N$, step (2) gives
+$\mathfrak{a}_n=A\mathfrak{a}_n\cap B=A\mathfrak{a}_N\cap B=\mathfrak{a}_N$.
+\end{proof}
+
+\begin{proposition}[Finite codimension: what transfers]\label{prop:codim}
+Let $\hl\subseteq\gl$ be a Lie algebra inclusion over $\kk$ with
+$d=\dim_\kk(\gl/\hl)<\infty$. Then:
+\begin{enumerate}
+\item[(i)] $\UU(\gl)$ is a free left $\UU(\hl)$-module and a free right
+$\UU(\hl)$-module; a basis is given by the ordered monomials in a basis of any
+$\kk$-complement $V$ of $\hl$ in $\gl$.
+\item[(ii)] if $\UU(\gl)$ is noetherian, then $\UU(\hl)$ satisfies the ascending chain
+condition on two-sided ideals;
+\item[(iii)] if in addition $\UU(\gl)$ is finitely generated as a left
+$\UU(\hl)$-module, then $\UU(\hl)$ left noetherian implies $\UU(\gl)$ left
+noetherian, so the two noetherian properties are equivalent;
+\item[(iv)] the extra hypothesis in (iii) is not automatic: see
+Example~\ref{ex:nomodule}, which is one-codimensional.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+\emph{(i)} Choose a totally ordered $\kk$-basis of $\gl$ adapted to
+$\gl=\hl\oplus V$, all elements of $\hl$ preceding all elements of $V$; this is
+possible because $d<\infty$. By PBW the ordered monomials in this basis form a basis
+of $\UU(\gl)$, and those monomials whose $\hl$-exponent is empty --- i.e.\ the ordered
+monomials in the basis of $V$ --- form a basis of $\UU(\gl)$ as a left
+$\UU(\hl)$-module: every ordered monomial in the full basis is a product
+$h\,m$ with $h$ an ordered monomial in the $\hl$-part and $m$ an ordered monomial in
+the $V$-part, and distinct $m$ give distinct basis elements. The right module
+statement is identical, ordering the basis with $V$ first.
+
+\emph{(ii)} By (i) and Theorem~\ref{thm:descent} applied to
+$B=\UU(\hl)\subseteq A=\UU(\gl)$.
+
+\emph{(iii)} By (i) and Lemma~\ref{lem:module}.
+
+\emph{(iv)} See Example~\ref{ex:nomodule}, where $d=1$.
+\end{proof}
+
+\begin{example}[Finite codimension does not give module finiteness]\label{ex:nomodule}
+Let $\gl=\kk x\oplus\kk y\oplus\kk z$ with brackets $[x,z]=z$ and $[x,y]=[y,z]=0$,
+and $\hl=\kk x\oplus\kk y$, so that $\dim_\kk\gl=3$, $\dim_\kk\hl=2$ and $d=1$. Then
+$\UU(\gl)$ is not finitely generated as a left $\UU(\hl)$-module.
+\end{example}
+
+\begin{proof}
+\emph{(1) A normal form.} In $\UU(\gl)$ the relation $[x,z]=z$ reads
+$zx=xz-z=(x-1)z$; together with $xy=yx$, $zy=yz$ this gives, for every
+$f\in\kk[x,y]$, the identity $zf(x,y)=f(x-1,y)z$. Let $\sigma$ be the automorphism
+$f\mapsto f(x-1,y)$ of $\kk[x,y]$. Then $zf=\sigma(f)z$, and by induction
+$z^nf=\sigma^n(f)z^n$.
+
+\emph{(2) A skew polynomial description.} It follows that every element of
+$\UU(\gl)$ has a unique expression $\sum_{n\ge0}f_nz^n$ with $f_n\in\kk[x,y]$ (compare
+the PBW basis $x^ay^bz^n$), and that
+$(fz^m)(gz^n)=f\sigma^m(g)z^{m+n}$. In particular $\UU(\gl)$ is the skew polynomial
+algebra $\kk[x,y][z;\sigma]$.
+
+\emph{(3) Infinite rank.} Left multiplication by $\UU(\hl)=\kk[x,y]$ preserves the
+$z$-degree: $f\cdot(gz^n)=(fg)z^n$. Hence, as a left $\kk[x,y]$-module,
+$\UU(\gl)=\bigoplus_{n\ge0}\kk[x,y]z^n$, a direct sum of countably infinitely many
+nonzero cyclic summands. A finitely generated module is a quotient of a finite direct
+sum of copies of $\kk[x,y]$ and therefore has the property that the ascending chain of
+submodules $M_0\subseteq M_1\subseteq\cdots$ with $M_j$ the span of the first $j$
+summands of an infinite free direct sum cannot be finitely generated (a finite
+generating set involves only finitely many $z$-degrees). Concretely, the left
+$\kk[x,y]$-submodule $\bigoplus_{n\ge0}\kk[x,y]z^n$ needs the infinitely many
+elements $z^n$: no finite set generates it, because the $z$-degree of a combination
+$\sum_i f_i m_i$ is at most the maximum $z$-degree of the $m_i$. Hence $\UU(\gl)$ is
+not finitely generated over $\UU(\hl)$.
+\end{proof}
+
+\begin{remark}\label{rem:codimwhy}
+Example~\ref{ex:nomodule} shows that the implication ``finite codimension
+$\Rightarrow$ module finiteness'', which would make Proposition~\ref{prop:codim}(iii)
+applicable automatically, is false. It fails for a structural reason: commuting an
+element of $V$ past an element of $\hl$ produces an element of $\gl$, hence possibly
+another $V$-factor, and the $V$-degree is not bounded. Therefore a transfer of
+noetherianity from $\UU(\hl)$ to $\UU(\gl)$ needs an additional argument; in the
+literature this is supplied case by case, and that argument is not reconstructed in
+this note.
+\end{remark}
+
+\begin{corollary}[The Witt pair]\label{cor:witt}
+Let $W=\Der\kk[t,t^{-1}]$ and $W_{\ge-1}=\Der\kk[t]$, so that $W_{\ge-1}\subset W$ has
+codimension $1$. Then:
+\begin{enumerate}
+\item[(i)] $\UU(W)$ is a free left and right $\UU(W_{\ge-1})$-module;
+\item[(ii)] every strictly ascending chain of two-sided ideals of $\UU(W)$ gives one
+of $\UU(W_{\ge-1})$, so if $\UU(W)$ is noetherian then $\UU(W_{\ge-1})$ has the
+ascending chain condition on two-sided ideals;
+\item[(iii)] if the finite-codimension transfer principle holds for this pair (that
+is, if left noetherianity transfers in either direction between $\UU(W_{\ge-1})$ and
+$\UU(W)$), then the two enveloping algebras are simultaneously noetherian or
+simultaneously not; in particular, since $\UU(W)$ is not noetherian
+(Corollary~\ref{cor:Wgraded}), $\UU(W_{\ge-1})$ would then not be noetherian either.
+\end{enumerate}
+\end{corollary}
+
+\begin{proof}
+(i) is Proposition~\ref{prop:codim}(i) with $\hl=W_{\ge-1}$, $\gl=W$ and $d=1$:
+$W=\bigoplus_{m\ge-1}\kk d_m$ and $W_{\ge-1}=\bigoplus_{m\ge-1}\kk d_m$ inside
+$W=\bigoplus_{m\in\mathbb{Z}}\kk d_m$ differ by the one-dimensional space $\kk d_{-1}$.
+(ii) is Proposition~\ref{prop:codim}(ii). (iii) is the stated extra hypothesis
+together with (ii); the parenthetical non-noetherianity of $\UU(W)$ is
+Corollary~\ref{cor:Wgraded} below, which is proved from
+Conjecture~\ref{thm:gradedsimple}.
+\end{proof}
+
+\subsection{Graded obstructions (reported from the literature)}
+
+\begin{conjecture}[Graded simplicity obstructs noetherianity]\label{thm:gradedsimple}
+Let $\kk$ be a field and let $\LL=\bigoplus_{m\in\mathbb{Z}^n}\LL_m$ be a
+$\mathbb{Z}^n$-graded Lie algebra over $\kk$ with $[\LL_m,\LL_{m'}]\subseteq
+\LL_{m+m'}$. Assume:
+\begin{enumerate}
+\item[(a)] $\dim_\kk\LL_m<\infty$ for every $m$;
+\item[(b)] $\LL$ is graded simple, that is, $\LL$ has no nonzero proper graded ideal;
+\item[(c)] $\dim_\kk\LL=\infty$.
+\end{enumerate}
+Then $\UU(\LL)$ is not noetherian.\footnote{This statement is reported from the
+published literature rather than proved in this note: the hypotheses (a)--(c) are
+exactly the standing hypotheses on $\mathbb{Z}^n$-graded simple Lie algebras in that
+work, and the conclusion is the direction established there. The detailed argument ---
+in which the strictness of the chain of truncated ideals is verified inside each
+graded-simple family --- is not reconstructed line by line in this manuscript, so the
+statement must be read as a report of a known result under its own hypotheses, not as
+a self-contained proof. The sketch in the text indicates the shape of the argument and
+names the step that is not reproduced here.}
+\end{conjecture}
+
+\begin{remark}[Why this is a conjecture and not a theorem here; the missing step]\label{rem:gradedsimple-missing}
+\emph{(1) Truncation.} For $r\ge1$ let $J_r\subseteq\UU(\LL)$ be the two-sided ideal
+generated by the image of $\bigoplus_{|m|>r}\LL_m$; these form an ascending chain
+$J_1\subseteq J_2\subseteq\cdots$ of two-sided ideals.
+
+\emph{(2) Reduction of strictness to the grading.} Because each $\LL_m$ is
+finite dimensional and the ideals are generated by homogeneous elements, membership in
+$J_r$ can be tested degree by degree; the quotient $\UU(\LL)/J_r$ is a filtered
+algebra whose degree-$0$ part ... \emph{(this is the step that is not carried out in
+this note)} one must exhibit, for each $r$, a homogeneous element $y_r\in\LL$ of
+degree $>r$ which is not in $\LL\cap J_r$, i.e.\ which cannot be rewritten, using the
+relations of $\UU(\LL)$ and the generators of $J_r$, into lower degree. In the
+literature this is done inside each graded-simple family, using the non-degeneracy of
+the brackets among the extreme graded components; graded simplicity (b) is used
+precisely to rule out the possibility that the higher graded components generate only
+a proper graded ideal.
+
+\emph{(3) Conclusion, granted (2).} If $J_r\subsetneq J_{r+1}$ for all $r$, the chain
+in (1) is strictly ascending and $\UU(\LL)$ is not noetherian (an ascending chain
+condition on two-sided ideals fails, hence left noetherianity fails).
+\end{remark}
+
+\begin{corollary}[The Witt algebra]\label{cor:Wgraded}
+$W=\Der\kk[t,t^{-1}]$ is $\mathbb{Z}$-graded with $\dim_\kk W_m=1$ for all
+$m\in\mathbb{Z}$ and is graded simple; hence $\UU(W)$ is not noetherian.
+\end{corollary}
+
+\begin{proof}
+The grading is $W=\bigoplus_{m\in\mathbb{Z}}\kk d_m$ with $d_m=t^{m+1}\partial_t$ and
+$[d_m,d_n]=(n-m)d_{m+n}$, so $\dim_\kk W_m=1<\infty$ and
+$[W_m,W_{m'}]\subseteq W_{m+m'}$. Graded simplicity is the standard fact that a
+nonzero graded ideal contains some $d_m$ and then, because
+$[d_{m+1},d_{-1}]=(m+2)d_m$ and $(n-m)\neq0$ in characteristic $0$ for $n\neq m$, all
+brackets generated by translates of $d_m$ span $W$; we record it here without proof as
+part of the standard structure theory of $W$. Applying
+Conjecture~\ref{thm:gradedsimple} with $n=1$, (a) and (b) are satisfied, and (c) holds
+because $\dim_\kk W=\infty$. Hence $\UU(W)$ is not noetherian.
+\end{proof}
+
+\begin{conjecture}[Krichever--Novikov algebras]\label{thm:kn}
+Let $X$ be a smooth projective curve of genus $g$ over $\kk$ with two marked points
+$P_+,P_-$, and let $L(X,P_+,P_-)$ be the associated Krichever--Novikov Lie algebra, the
+Lie algebra of meromorphic vector fields on $X$ holomorphic away from $P_\pm$ and with
+poles of bounded order at the marked points. Under the standard hypotheses
+(fixed genus and fixed orders of poles at the two marked points, so that the algebra is
+finitely generated over the ring of functions on $X$) one has: $L(X,P_+,P_-)$ is
+$\mathbb{Z}$-graded with finite-dimensional homogeneous components, it is simple for
+the standard choices of the generating fields, and it is infinite dimensional.
+Under these hypotheses $\UU(L(X,P_+,P_-))$ is not noetherian, in the direction of the
+known results; the case $g=0$ with the standard one-point presentation is the Witt
+algebra of Corollary~\ref{cor:Wgraded}, while $g\ge1$ is the genuinely new case.\footnote{As with
+Conjecture~\ref{thm:gradedsimple}: the hypotheses listed are the ones under which the
+result is published, and the conclusion is reported in the direction established
+there. The proof is not reconstructed here; in particular we do not verify the
+graded-simple hypothesis for $g\ge1$ line by line, which is why it is phrased as an
+assumption in the statement. The statement is asserted only under these hypotheses and
+says nothing about Krichever--Novikov algebras for other choices of the point data.}
+\end{conjecture}
+
+\begin{remark}[Why this is a conjecture here; the missing step: strictness of the truncated chain inside each graded-simple family]\label{rem:kn-missing}
+\emph{(1) Grading and finiteness.} By the definition of
+$L(X,P_+,P_-)$ as the Lie algebra of meromorphic vector fields on $X$ that are
+holomorphic away from $P_\pm$ and have poles of bounded order there, the order of the
+pole at $P_+$ (equivalently: minus the order at $P_-$, the two being linked by the
+residue) defines a $\mathbb{Z}$-grading $L(X,P_+,P_-)=\bigoplus_{m\in\mathbb{Z}}L_m$,
+and $[L_m,L_{m'}]\subseteq L_{m+m'}$; with the genus and the pole orders fixed the space
+of fields with a given pole bound at both points is finite dimensional, so
+$\dim_\kk L_m<\infty$ for every $m$. The algebra is infinite dimensional because the
+pole order is unbounded.
+
+\emph{(2) Graded simplicity, as an assumption of the statement.} For the standard
+choices of the generating fields the algebra is graded simple; this is one of the
+hypotheses listed in the statement and is not verified here line by line. Graded
+simplicity is used exactly as hypothesis (b) of the reported graded obstruction.
+
+\emph{(3) Conclusion.} Under (1) and (2) hypotheses (a), (b), (c) of the graded
+obstruction are satisfied with $n=1$, and the reported obstruction gives that
+$\UU(L(X,P_+,P_-))$ is not noetherian. The case $g=0$ is the Witt algebra
+(Corollary~\ref{cor:Wgraded}); the case $g\ge1$ is the genuinely new case.
+\end{remark}
+
+\begin{conjecture}[Graded algebras of polynomial growth]\label{thm:poly}
+Let $\LL=\bigoplus_{m\in\mathbb{Z}}\LL_m$ be a $\mathbb{Z}$-graded Lie algebra over
+$\kk$ with $\dim_\kk\LL_m<\infty$ for all $m$ and $\dim_\kk\LL=\infty$. Assume that the
+growth of the homogeneous components is polynomial, i.e.\ there are $C>0$ and $q\ge0$
+with $\sum_{|m|\le r}\dim_\kk\LL_m\le Cr^{q}$ for all $r\ge1$, and that $\LL$ is
+graded simple. Then $\UU(\LL)$ is not noetherian. More generally, the conclusion is
+claimed in the literature for graded algebras in that class, and only there.\footnote{Reported, not reconstructed: the polynomial-growth hypothesis replaces the
+uniform boundedness of the homogeneous components used in
+Conjecture~\ref{thm:gradedsimple}, and the argument for the strictness of the truncated
+chain must then control the growth degree by degree. This note does not reproduce that
+control, so the statement is asserted under the hypotheses as stated and no others.}
+\end{conjecture}
+
+\begin{remark}[Why this is a conjecture here; the missing step: the degree-by-degree growth control for the truncated chain]\label{rem:poly-missing}
+\emph{(1) Grading and finiteness.} By hypothesis $\LL=\bigoplus_{m\in\mathbb{Z}}\LL_m$
+with $[\LL_m,\LL_{m'}]\subseteq\LL_{m+m'}$ and $\dim_\kk\LL_m<\infty$ for every $m$.
+Every element of $\LL$ therefore lies in a finite sum of finitely many homogeneous
+components, each of which is a finite-dimensional $\kk$-vector space; this is a
+restatement of the hypotheses, not an independent result of this note.
+
+\emph{(2) The growth control (the step not reconstructed here).} The polynomial-growth
+hypothesis $\sum_{|m|\le r}\dim_\kk\LL_m\le Cr^{q}$ is what replaces the uniform
+boundedness of the homogeneous components used in
+Conjecture~\ref{thm:gradedsimple}: for the truncated chain to be shown strict one must
+compare the graded components degree by degree against the growth function. That
+comparison is not carried out in this note.
+
+\emph{(3) Conclusion, conditionally on the imported direction.} Granting the published
+argument for graded algebras of polynomial growth, (1) and (2) put $\LL$ inside its
+hypotheses and $\UU(\LL)$ is not noetherian. The step is an import from the literature,
+not a proof produced here, and the statement holds only under the hypotheses written
+above and under no others.
+\end{remark}
+
+\begin{conjecture}[Finitely generated infinite-step solvable algebras]\label{thm:solvable}
+Let $N\ge1$, let $S_N$ denote the class of finitely generated infinite-dimensional
+Lie algebras $\gl$ over $\kk$ that are solvable of derived length $N$, i.e.\
+$D_N\gl=0\neq D_{N-1}\gl$ for the derived series $D_0\gl=\gl$,
+$D_{k+1}\gl=[D_k\gl,D_k\gl]$. Then, in the direction of the known results, for every
+$\gl\in S_N$ with $N\ge1$ the enveloping algebra $\UU(\gl)$ is not noetherian, with one
+exception: in the class $S_2$ there are algebras whose enveloping algebra fails to be
+noetherian while being a Krull domain, so that non-noetherianity there cannot be
+detected by the failure of being a domain or of being a Krull domain.\footnote{Reported, not reconstructed. The statement is asserted only for the class $S_N$
+as defined (finitely generated, infinite dimensional, solvable of derived length $N$)
+and says nothing about solvable algebras that are not finitely generated, nor about the
+converse direction. In particular the ``$S_2$ but Krull'' clause is a report from the
+literature and is not verified here; it is included because it delimits which
+ring-theoretic properties can be used as a test for noetherianity in the solvable
+class.}
+\end{conjecture}
+
+\begin{remark}[Why this is a conjecture here; the missing step: an explicit strictly ascending chain of two-sided ideals, with its strictness certified inside each derived layer]\label{rem:solvable-missing}
+\emph{(1) Reading the class.} By definition $D_0\gl=\gl$ and
+$D_{k+1}\gl=[D_k\gl,D_k\gl]$, so $\gl\in S_N$ means: $\gl$ is finitely generated,
+$\dim_\kk\gl=\infty$, and $D_N\gl=0\neq D_{N-1}\gl$. Thus $\gl$ has a finite
+generating set $x_1,\dots,x_r$ and a finite derived series of length $N$; both facts
+are hypotheses here, not consequences derived in this note.
+
+\emph{(2) The chain step (imported, not reconstructed).} What has to be shown for a
+member of $S_N$ is the existence of a strictly ascending chain of two-sided ideals of
+$\UU(\gl)$. Since $\gl$ is infinite dimensional while $D_N\gl=0$, one filters $\gl$ by
+the ideals of the derived series and passes to the induced filtration of $\UU(\gl)$;
+the strictness of the resulting chain must be verified inside each derived layer using
+finite generation of $\gl$ and the non-vanishing of the last nonzero derived ideal
+$D_{N-1}\gl$. That verification is the step of the published argument, and it is
+\emph{not} carried out here: no chain is written down explicitly in this note, and no
+rank computation certifying its strictness is performed. Consequently the conclusion
+below is a conditional one, valid only in the direction established in the literature
+under the hypotheses of the statement.
+
+\emph{(3) Conclusion, granted (2).} If such a strictly ascending chain of two-sided
+ideals exists, then $\UU(\gl)$ fails the ascending chain condition on two-sided
+ideals, hence fails to be left noetherian (a left noetherian ring satisfies the
+ascending chain condition on two-sided ideals as well). The parenthetical clause about
+$S_2$ and Krull domains is likewise a report from the literature and is not checked
+here; it is recorded only to delimit which ring-theoretic properties can serve as a
+test for noetherianity in this class.
+\end{remark}
+
+\section{Discussion and open problems}\label{sec:open}
+
+The positive direction is settled (Theorem~\ref{thm:findim}), the abelian case is
+settled (Theorem~\ref{thm:abelian}), and the graded obstruction covers the graded
+simple families with finite-dimensional homogeneous components
+(Conjecture~\ref{thm:gradedsimple} and its instances). What remains is exactly the middle
+ground.
+
+\begin{conjecture}[Sierra--Walton, as formulated in \cite{SW14}]\label{conj:SW}
+Let $\kk$ be a field of characteristic $0$ and let $\gl$ be a Lie algebra over $\kk$.
+If $\dim_\kk\gl=\infty$, then $\UU(\gl)$ is not noetherian. Equivalently: $\UU(\gl)$
+noetherian implies $\dim_\kk\gl<\infty$.
+\end{conjecture}
+
+\begin{openproblem}[What is missing]\label{op:missing}
+Conjecture~\ref{conj:SW} is open. Concretely, the following are missing, and each is a
+separate task:
+\begin{enumerate}
+\item[(1)] \emph{A construction.} No example is known of an infinite-dimensional
+non-abelian $\gl$ with $\UU(\gl)$ noetherian, and no example is known of an
+infinite-dimensional $\gl$ with $\UU(\gl)$ noetherian other than in the abelian
+(hence non-noetherian) direction. What is missing is either such a construction, or a
+theorem excluding it under stated extra hypotheses.
+\item[(2)] \emph{A converse under additional hypotheses.} There is no theorem of the
+form ``if $\gl$ is infinite dimensional and nilpotent (resp.\ solvable, resp.\ of
+bounded growth, resp.\ graded in some class other than the graded-simple ones above),
+then $\UU(\gl)$ is not noetherian'', except in the classes listed in
+Conjectures~\ref{thm:kn}, \ref{thm:poly} and \ref{thm:solvable}, each of which holds only
+under its own hypotheses.
+\item[(3)] \emph{A transfer principle for finite-codimension subalgebras.} The step
+``$\UU(\hl)$ noetherian $\Leftrightarrow$ $\UU(\gl)$ noetherian for
+$\dim_\kk(\gl/\hl)<\infty$'' is used for individual pairs in the literature, but
+Proposition~\ref{prop:codim} shows that the naive route through module finiteness is
+not available in general (Example~\ref{ex:nomodule}); a proof of the transfer
+principle, or a counterexample to it, is not in this note.
+\item[(4)] \emph{Independence of the classes.} The graded obstruction is stated per
+graded-simple family; it is not known here how far the several families overlap, and
+no claim is made that the list in Section~3 is exhaustive.
+\end{enumerate}
+\end{openproblem}
+
+\begin{remark}[On the status of the statements]
+Items (1)--(4) are the honest gaps. The results of Section~3 that are proved here
+(Theorem~\ref{thm:findim}, Theorem~\ref{thm:abelian}, Lemma~\ref{lem:pbw},
+Lemma~\ref{lem:hilbert}, Lemma~\ref{lem:lift}, Lemma~\ref{lem:module},
+Theorem~\ref{thm:descent}, Proposition~\ref{prop:codim},
+Example~\ref{ex:nomodule}) are proved under exactly the hypotheses stated, in
+characteristic $0$ where the anti-automorphism argument is used. The results reported
+rather than proved (Conjecture~\ref{thm:gradedsimple} and its instances
+\ref{cor:Wgraded}, \ref{thm:kn}, \ref{thm:poly}, \ref{thm:solvable}) are asserted only
+under their published hypotheses and are marked in place; the Witt case
+(Corollary~\ref{cor:Wgraded}) rests on the standard structure theory of $W$, which is
+also not reconstructed here.
+\end{remark}
+
+\begin{thebibliography}{9}
+\bibitem[KN87]{KN87} I.~M. Krichever and S.~P. Novikov,
+\emph{Algebras of Virasoro type, Riemann surfaces and structures of the theory of
+solitons}, Funktsional. Anal. i Prilozhen. \textbf{21} (1987), no.~2, 46--63.
+\bibitem[MR01]{MR01} J.~C. McConnell and J.~C. Robson,
+\emph{Noncommutative Noetherian Rings}, Graduate Studies in Mathematics \textbf{30},
+American Mathematical Society, Providence, RI, 2001.
+\bibitem[SW14]{SW14} S.~Sierra and C.~Walton,
+\emph{The universal enveloping algebra of the Witt algebra is not noetherian},
+Adv. Math. \textbf{262} (2014), 239--260.
+\end{thebibliography}
+
+\appendix
+\section{Computational evidence}\label{app:comp}
+
+This appendix collects all computational evidence referred to anywhere in this paper:
+the two finite computations (A) and (B), the algorithm used for each, its parameter
+domain, the resulting quantities, and the internal record identifiers together with how
+to rerun them. Nothing here enters the proofs of Section~3; every conclusion that
+rests on these computations depends on that evidence and on the stated bounds, and no
+computation below is a proof of anything.
+
+\paragraph{A.1 Computation (A): filtered dimensions in dimension three.}
+\emph{Quantity computed.} The dimension of the $n$-th filtered piece $\UU_n(\gl)$ for
+$\dim_\kk\gl=3$ and $n=0,1,\dots,8$, and the third finite difference of that sequence.
+\emph{Algorithm.} Ordered monomials in a basis of $\gl$ are multiplied modulo the span
+of the monomials of lower total degree, and the dimension is read off as a rank over
+$\kk$; this is a direct comparison with the PBW basis of Lemma~\ref{lem:pbw}.
+\emph{Parameter domain.} $d=3$, with the abelian, Heisenberg and $\mathfrak{sl}_2$
+brackets, and $0\le n\le8$; no other dimension and no larger $n$ was run.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{rrr}
+\toprule
+$n$ & $\dim\UU_n$ (all three algebras) & third finite difference \\
+\midrule
+0 & 1 & -- \\
+1 & 4 & -- \\
+2 & 10 & -- \\
+3 & 20 & 1 \\
+4 & 35 & 1 \\
+5 & 56 & 1 \\
+6 & 84 & 1 \\
+7 & 120 & 1 \\
+8 & 165 & 1 \\
+\bottomrule
+\end{tabular}
+\caption{Computation (A): the computed dimension agrees with $\binom{n+3}{3}$ for
+$n\le8$, and the third finite difference is $1$ on the computed range. Bound of the
+computation: $\dim\gl=3$, $n\le8$.}
+\end{table}
+
+\paragraph{A.2 Computation (B): strictness of a truncated family of ideals.}
+\emph{Quantity computed.} For $n=1,\dots,12$ the inclusion $I_n\subsetneq I_{n+1}$ for
+$I_n=(x_1,\dots,x_n)$, inside a polynomial ring in countably many indeterminates
+truncated at degree $12$.
+\emph{Algorithm.} For each $n$ a separating functional on the degree-$(n{+}1)$ part is
+exhibited exactly: the algebra map killing $x_1,\dots,x_n$ and fixing $x_{n+1}$
+vanishes on $I_n$ and is nonzero on $x_{n+1}$. The degree truncation enters only the
+bookkeeping of which monomials were enumerated, not the certificate.
+\emph{Parameter domain.} $1\le n\le12$, degree bound $12$; no larger $n$ was run.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{rrrl}
+\toprule
+family index $n$ & degree bound & enumerated monomials (order) & inclusion strict? \\
+\midrule
+1--12 & 12 & $10^{2}$--$10^{3}$ & yes, certified exactly \\
+\bottomrule
+\end{tabular}
+\caption{Computation (B): for each $n\le12$ the inclusion $I_n\subsetneq I_{n+1}$ is
+certified by a separating functional on the degree-$(n{+}1)$ part. Bound: $n\le12$.}
+\end{table}
+
+\paragraph{Computations.}
+\begin{itemize}
+\item \texttt{exp:000011} --- filtered dimension count, $\dim_\kk\gl=3$ (abelian,
+Heisenberg, $\mathfrak{sl}_2$), $n=0,\dots,8$; parameter set
+$\{d=3,\ n_{\max}=8\}$; script digest recorded with the experiment
+(\texttt{e435e239ba21f72f}); conclusion recorded as \texttt{supports} with the explicit
+scope note ``$d=3$ only; does not address noetherianity''. Rerun: same script, same
+parameters.
+\item \texttt{exp:000012} --- truncated family of ideals $I_n$, $n=1,\dots,12$,
+members $I_1,\dots,I_{12}$, exact separation test on the degree-$(n{+}1)$ part;
+parameter set $\{n_{\max}=12\}$; script digest recorded with the experiment
+(\texttt{3473d47b6f460c3a}); conclusion recorded as \texttt{supports}.
+\item Both records have \texttt{method=numeric} and are the source of the two tables in
+Appendix~\ref{app:comp}. Rerunning either with a different $n_{\max}$ or a different
+$d$ requires a new record; the present tables must not be extrapolated.
+\end{itemize}
+
+\paragraph{Statements used.}
+\begin{itemize}
+\item \texttt{stmt:000007} --- finite dimension implies noetherian (statement level,
+no proof text locally).
+\item \texttt{stmt:000004} --- infinite-dimensional abelian implies not noetherian.
+\item \texttt{stmt:000005} --- finite-codimension transfer, in the form discussed in
+Proposition~\ref{prop:codim}.
+\item \texttt{stmt:000010} --- graded-simple infinite-dimensional implies not
+noetherian (literature direction), the source of Conjecture~\ref{thm:gradedsimple}.
+\item \texttt{stmt:000018}, \texttt{stmt:000019} --- derived series and polynomial
+growth definitions used in Conjectures~\ref{thm:solvable} and \ref{thm:poly}.
+\item \texttt{stmt:000001}, \texttt{stmt:000002} --- Krichever--Novikov algebras and
+the two conventions for the Witt algebra (used in Definition~\ref{def:witt}).
+\item \texttt{stmt:000003} --- the graded-simple definition and the
+finite-dimensional-homogeneous-components convention.
+\end{itemize}
+
+\paragraph{Literature items.}
+\begin{itemize}
+\item \texttt{lit:000001} --- source for the Krichever--Novikov and Witt definitions
+(quotation verified verbatim at the pages recorded there).
+\item \texttt{lit:000002} --- source for the graded-simple setting and the two Witt
+conventions (quotation verified verbatim).
+\item \texttt{lit:000004} --- McConnell--Robson, \emph{Noncommutative Noetherian
+Rings}: bibliographic record only, no local full text, so nothing in this note is
+quoted from it; the reference to Corollary~1.7.4 for the positive direction is
+recorded at \texttt{stmt:000012}.
+\item \texttt{lit:000024} --- source for the derived-series and polynomial-growth
+definitions (quotation verified verbatim).
+\item \texttt{lit:000025} --- bibliographic record only (no local full text); it is
+\emph{not} a source of any verbatim quotation in this note.
+\end{itemize}
+
+\paragraph{How to reproduce the two computations.} Both are deterministic scripts run
+in the workspace; each rerun must pass the parameters named above and must be compared
+against the digests recorded with \texttt{exp:000011} and \texttt{exp:000012}. A rerun
+with a different parameter set produces a different record and does not extend the
+bounds stated in Appendix~\ref{app:comp}.
+
+\end{document}

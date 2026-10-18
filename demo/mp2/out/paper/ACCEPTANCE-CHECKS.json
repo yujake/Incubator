@@ -1,0 +1,19 @@
+{
+  "checks": [
+    {"id": "R1", "name": "立题", "kind": "research_question_rows", "min": 1, "note": "research_questions=1（等弦点问题；含凸情形 / 一般非凸 / 对称代数特例三子问题）"},
+    {"id": "R2", "name": "检索（真的取回）", "kind": "retrieval_ok_rows", "min": 1, "note": "outcome=ok 的检索 8 条；search_requests.unfinished=0；literature=32 行"},
+    {"id": "R3", "name": "算（数值）", "kind": "numeric_experiment_rows", "min": 17, "note": "experiments=21 行（000000–000020），多数 method=numeric / evidence_kind=cross_check；exp:000009 与 exp:000016 exit_code=1 如实记 inconclusive、分别由 exp:000010 / exp:000017 取代；exp:000013 自报 inconclusive、由 exp:000014 判读"},
+    {"id": "R4", "name": "造（proof / 形式化）", "kind": "proof_experiment_rows", "min": 0, "na": true, "note": "na：本会话 lean_enabled=false（TOOLCHAIN_FACTS 第一行）⇒ method=formal / evidence_kind=proof 结构上产不出来；替身腿 reviewed_proof_rows 亦为 0 —— statements 3 行全是概念行、无 proof_text、未派 V 逐行走查。第三态，不写 0、不写通过"},
+    {"id": "R5", "name": "逐字出处", "kind": "quote_verified_rows", "min": 1, "note": "relations=6 行（rel:000000–000005）全部 quote_verified=true / quote_mode=verbatim，来源 lit:000007（Klee 1960 全文 library/000007.txt），框架分页 p.28 与 p.31；本次写进 out/paper/main.tex 第 3 节共 6 条，每条带页码"},
+    {"id": "R6", "name": "想（猜想/命题）", "kind": "conjecture_rows", "min": 1, "note": "conjectures=2，两条均为 supported_not_proved：000000（experiment_ids 含 000000/000004/000008/000010/000020）、000001（000002/000019）；statements=3 概念行"},
+    {"id": "R7", "name": "看（关系分析 C）", "kind": "c_analysis_runs", "min": 1, "na": true, "note": "na：本趟（t-000052）未派 C。上一趟 t-000024 派过关系分析，但 C 的登记口被判 unknown_tool，analysis_reports=0 ⇒ 无可引读数；缺口 G1–G5 仅落在手稿 000020。不伪装成通过"},
+    {"id": "R8", "name": "攻（攻坚推进）", "kind": "plan_progress_rows", "min": 1, "note": "attack_plans=1（plan 000000，history 非空含 evidence_bound；S1/S2 支持但未证，S3 已绑 exp:000018）"},
+    {"id": "R9", "name": "交（手稿落盘）", "kind": "document_rows", "min": 1, "note": "documents=1（doc:000000，revision 3，claims 21 条）"},
+    {"id": "R9b", "name": "手稿有正文", "kind": "document_body_rows", "min": 1, "note": "doc:000000 8 节 body 全非空；另 out/paper/main.tex 共 508 行、§1–§7 + Appendix 每节都有实质段落（H 本轮通读四段核对）"},
+    {"id": "R9c", "name": "手稿带引文的断言", "kind": "document_claim_rows", "min": 21, "note": "doc:000000 claims=21 条，引 exp/lit/rel 共 31 条引用（H 机械通道 G2 逐条解析 31/31 通过）；main.tex 正文引 exp:000000–000020 与 rel:000000–000005"},
+    {"id": "R10", "name": "审校（findings 落库）", "kind": "review_files", "min": 1, "note": "out/review/000000-review.md：H 本趟对 main.tex（sha256=b99e9bb6…）审校，裁决 rejected（pass=9 / fail=3：G6、G7、G10 / unknown=2：G8、G11 / na=1：G12），15 道门逐门带自证；发现已落 review_findings"},
+    {"id": "R10b", "name": "审校钉在现行版", "kind": "reviewed_current_rows", "min": 1, "note": "H 本趟签的被审版本 hash=4f4777511d6f2fff（sha256(json(claims,sort_keys))[:16]），对应 doc:000000 现行 claims；正文 side 的 sha256=b99e9bb6eee1c7eb… 写入报告抬头"},
+    {"id": "R11", "name": "请求闭环", "kind": "unfinished_request_rows", "min": 0, "max": 0, "note": "search_requests.unfinished=0（8 行请求全部有终局）；reprocess_requests.unfinished=0"},
+    {"id": "R11b", "name": "文献队列", "kind": "literature_unprocessed_rows", "min": 0, "max": 0, "note": "literature.unprocessed=32 未清零，本趟未派 B 消化；理由逐字记：32 行里多数为 metadata-only / 无本地全文（含 Rychlik 1997 之外的检索命中），B 的 run_once 一次一篇且需要本地全文，本趟预算（剩余 <$1.3）不足以清零，故如实记未清零、不记 pass"}
+  ]
+}

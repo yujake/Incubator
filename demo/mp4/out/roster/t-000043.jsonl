@@ -1,0 +1,5 @@
+{"at": "2026-10-18T22:18:48+08:00", "brief": "写 out/paper/main.tex 并编译，按台账对齐两份验收表", "first_task_id": "t-000049", "kind": "add", "name": "G1", "owner": "t-000043", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000049"}
+{"at": "2026-10-18T22:20:59+08:00", "brief": "审论文正文 main.tex 与手稿，findings 全部落 review_findings", "first_task_id": "t-000050", "kind": "add", "name": "H1", "owner": "t-000043", "role": "H", "seq": 2, "surface": "S02", "task_id": "t-000050"}
+{"at": "2026-10-18T22:22:25+08:00", "brief": "修 §3 GATE 与台账不符一处并重编 main.pdf", "first_task_id": "t-000052", "kind": "add", "name": "G2", "owner": "t-000043", "role": "G", "seq": 3, "surface": "S03", "task_id": "t-000052"}
+{"at": "2026-10-18T22:24:18+08:00", "brief": "复核修订后的 main.tex，把签名钉到现行版", "first_task_id": "t-000054", "kind": "add", "name": "H2", "owner": "t-000043", "role": "H", "seq": 4, "surface": "S04", "task_id": "t-000054"}
+{"at": "2026-10-18T22:30:17+08:00", "brief": "认领并做完搜索请求 r-000010，把 search_requests.unfinished 收成 0", "first_task_id": "t-000059", "kind": "add", "name": "A1", "owner": "t-000043", "role": "A", "seq": 5, "surface": "S05", "task_id": "t-000059"}

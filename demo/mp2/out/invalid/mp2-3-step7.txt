@@ -1,0 +1,1 @@
+{"tool": "fs.search", "args": {"pattern": "star-shaped|star shaped|equichordal point", "path": "runs", "limit": 20}, "why": "找我此前拿到的 Klee / Rychlik 逐字文本落在哪个抽取产物里"}

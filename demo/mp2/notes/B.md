@@ -1,0 +1,2 @@
+- [2026-10-18 20:10:08] 第 10 步核查结论：lit:000000–000009 全部 10 条 literature 行 path 均为 null，download.status=skipped / error=no_local_path；library/ 空；全盘递归列目录（118 条）无任何 PDF 或正文文本；table.search 在 path 字段查 ".pdf" 与 "/" 均 0 命中；statements 表 0 行。⇒ 本轮等弦点文献没有本地全文，无法做逐字引文抽取。按边界不产出概念行/关系行，如实报抽取失败，并向 A 申请全文落地。
+- [2026-10-18 20:29:38] 第6步：已拿到 Klee K10 段（框架页 28，印刷页 24）逐字文本；下一步查 statements 表结构（概念行与命题行的字段），因为 relations 的 concept_ids 必须指向已存在的 concept 行，而台账目前 0 行 ⇒ 可能要先落概念行。

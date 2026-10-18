@@ -1,0 +1,2 @@
+{"at": "2026-10-18T20:25:36+08:00", "brief": "F 为 conjectures 000000 立项攻坚并同轮 step 一子目标", "first_task_id": "t-000015", "kind": "add", "name": "F1", "owner": "t-000014", "role": "F", "seq": 1, "surface": "S01", "task_id": "t-000015"}
+{"at": "2026-10-18T20:35:43+08:00", "brief": "E 为 h_∞ 写可复现左理想链实验并给 code_path", "first_task_id": "t-000016", "kind": "add", "name": "E1", "owner": "t-000014", "role": "E", "seq": 2, "surface": "S02", "task_id": "t-000016"}

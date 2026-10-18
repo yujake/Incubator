@@ -1,0 +1,1 @@
+{"at": "2026-10-18T22:25:08+08:00", "brief": "按论文体例重写 main.tex：≥6 个带证明的定理，重编译 PDF", "first_task_id": "t-000058", "kind": "add", "name": "G1", "owner": "t-000057", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000058"}

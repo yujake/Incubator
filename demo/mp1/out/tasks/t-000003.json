@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T20:17:09+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4947,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"Pyjama 覆盖半径 r(Θ)=sup_p min_i dist(p·u_i,Z) 的确定性计算已跑完，六条 experiments 行（000000–000005，method='numeric'，脚本都在 code/ 上、sha256 已绑定，stdout 均有 REPRO_RESULT 行）。逐条读数（全部由代码判，未过模型）：\\n\\n【① 覆盖半径与 witness】\\n- 000000（code/run_pyjama_part1.py → pyjama_numeric.py part1，exit 0，cross_check，supports）：k=1 任意角度 r=1/2，witness p=u_1/2，dist 直接求值为 0.5；k=2 族 θ_2/θ_1 ∈ {1.5, 2, 5/3, 8/5, 1.01} 用精确 2×2 线性解取 p·u_1=p·u_2=1/2，两条 dist 都读出 0.5 ⇒ r=1/2（这是可达到的上界，因为 dist≤1/2）；k=3 等边集给出显式 witness；k=4 有理方向集 {(1,0),(0,1),(3,4),(4,-3)} 有 5Z² 在周期格内，[0,5)² 是完整基本域，网格+局部爬坡给出见证点。\\n- 000005（code/pyjama_greedy_minr.py，exit 0，4.17s，cross_check，supports，含等距 k=3 自检读出 1/3）：角度坐标下降（4 个固定起点、步长减半、角 mod π）最小化采样最大值，各 k 的最佳集与 r 的**采样下界**：k=3 → r_lb=0.329113（角度 17.368°,77.189°,137.189°，witness (-7.252858,1.986824)）；k=4 → r_lb=0.410254（4.543°,43.210°,91.343°,135.000°）；k=5 → r_lb=0.324877（0°,35.228°,71.664°,107.653°,144.000°）。k=6 的读数在同一行里但我这次读窗被截断，**不引用**（没读到就不写数）。这些全是下界：下界 > eps 可证 r > eps，下界 < eps 什么也证不了。\\n- 000004（code/pyjama_bracket.py，exit 0，cross_check，supports）：用 f 的 1-Lipschitz 性补上上界，得到两侧括号——A 六条有理直线集 r ∈ [0.500000, 0.507071]（精确有理 witness p=(5/2,5/2)，六条 dist 恰为 1/2）；B 等边 k=3 r ∈ [0.333333, 0.333715]（与 1/3 的相对误差 -1e-9）；C 12 条有理直线集 r ∈ [0.500000, 0.535355]。B、C 两侧都在 0.1 以上 ⇒ 这两个集**被证明**不能服务 eps=0.1/0.05。\\n\\n【② eps=0.1 / 0.05 的最小 k】结论是 **inconclusive**，不是「搜不到就不存在」：000001（code/run_pyjama_part2.py，exit 0，inconclusive）对方向池 {(1,0),(0,1),(3,4),(4,3),(-3,4),(4,-3)} 的**全部** k=2..6 子集穷举（每集以 [0,5)² 为完整基本域、0.1 网格 + 步长减半精化），每个 k 的最佳值都是 0.5 ⇒ 池内没有任何角度集达到 r≤eps；000003（code/pyjama_regular.py，exit 0，inconclusive）对等距族 θ_i=iπ/k（k=3..12，每条 1e6 网格点）给出 r 的网格**下界**：k=3:0.333333, k=4:0.485281, k=5:0.381965, k=6:0.261652, k=7:0.361837, k=8:0.339388, k=9:0.203293, k=10:0.140725, k=11:0.228719, k=12:0.098076——k=12 那个 0.098 < 0.1 只是下界，**不能**读成「k=12 覆盖成功」，因为缺少上界证书；我已在 000004 用 Lipschitz 括号试过补上界，但补的是另外三个具体集，没有补等距 k=12 这一支。因此「最小 k」在已搜范围内（有理池 k≤6、等距 k≤12）**未判定**，需要针对等距族逐 k 补两侧括号才能推进。\\n\\n【③ 角度集不够的反例】000002（code/run_pyj",
+ "payload_sha256": "1254f954ccf6f8373e3cfb45afcba0debe04e3185c1db5ec6dabdf6ef8ba050b",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000003"
+}

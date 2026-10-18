@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:51:37+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 5241,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按派活把 documents:000000 更新到本趟现状；只改这一个 documents 行和它的 markdown，没有新建 out/paper/main.tex，也没有动 out/paper/ 下任何文件。\\n\\n一、改了几节（正文 sections 由 6 节增到 7 节，四处改动）：\\n1) §1 成果概述：补了一段『本版增补三处』的说明（新增文献两篇、猜想判定形式、新增第 7 节）；\\n2) §2 定义与已知：补入 lit:000011（Jung–Shlyakhtenko 2007，题名『Any generating set of an arbitrary property T von Neumann algebra has free entropy dimension ≤ 1』）与 lit:000012（Shlyakhtenko 2009，题名『Lower estimates on microstates free entropy dimension』），两条都只按题名/摘要层面转述，并明确写出 download.status=skipped、error=no_local_path、逐字引文未核，且都不含关于自由群因子 W*(F_k) 的任何结论；\\n3) §5 例子与反例：补入 conjectures:000000 更新后的 testable 判据——参数域 k∈{2,3,4}、m∈{3,4,5}（m≠k）、N∈{8,16,32,64}+每个 N 一个确定性种子；脚本入口 scripts/conj000000_verdict_gate.py 只吃 --readings、出 --out，自身不产任何数字；合格估计器闸门 Q1–Q4（收敛性 rel_se 单调不增且末档 ≤0.1；N-标度一致性 N=32→64 相对变化 ≤0.2；归一化不变性相对差 ≤0.05；可行性不可行档 ≥2 即不能支撑全序列）；三档出口 support/refute/insufficient_data 另加 estimator_not_qualified（缺估计器与缺数据分开记）；并写清它当前既无 support 读数也无 refute 读数，拦在 estimator_not_qualified，状态停在 proposed；\\n4) 新增 §7「已知事实台账」：逐条引 stmt:000000（δ_0=δ=δ*=δ⋆=k，出处 lit:000004，Shlyakhtenko 2006 Lemma 6，框架第 7 页，quote_verified=true）与 stmt:000001（δ*=δ⋆=β1(G)−β0(G)+1，出处 lit:000009，Mineyev–Shlyakhtenko 2005 主结果，框架第 2 页，quote_verified=true），数字与符号逐字照两行抄，并各抄下其限定：stmt:000000 的生成元无关性只在同一个 C F_k 内成立、不断言 von Neumann 代数不变性；stmt:000001 只涉及 δ*、δ⋆，不涉及 δ_0。\\n\\n二、新增 claims（documents 000000 的 claims 由 6 条到 11 条，5 条全带 citations）：\\n- claim-7｜cross_check｜citations=[stmt:000000, lit:000004]｜§7；\\n- claim-8｜cross_check｜citations=[stmt:000001, lit:000009]｜§7；\\n- claim-9｜heuristic｜is_negative=true, negation_kind=not_proved｜citations=[lit:000003, lit:000004, exp:000001, exp:000003]｜§5（猜想判定形式与『当前无支持也无反驳读数』）；\\n- claim-10｜heuristic｜citations=[lit:000011]｜§2（只题名层面）；\\n- claim-11｜heuristic｜citations=[lit:000012]｜§2（只题名层面）。\\n\\n三、核过什么（读数）：\\n- stmt:000000 / stmt:000001 两行都 table.get 读到，quote_verified=true、page_range 分别为框架第 7 页 / 第 2 页，source_lit_id 分别 000004 / 000009；lit:000009 已 table.get 核存在（download.status=ok，206454 字节）",
+ "payload_sha256": "b163f9c505f6296ade71f63a2e13ef45f909b77e67e336a8407ae20e72bdf88b",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000030"
+}

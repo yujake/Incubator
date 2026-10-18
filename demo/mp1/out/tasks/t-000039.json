@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:51:05+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3069,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"literature 队列已清零：table.count(literature, processed=false) = 0（Q8 那一格从 5 变 0）。逐篇清单如下。\\n\\n| lit_id | 是否消化 | 正文依据 | 产出 |\\n|---|---|---|---|\\n| 000000 Manners, A solution to the pyjama problem (2015) | 是（真消化） | library/000000.txt（全文，27 页分页标记） | statements 000020（定义 E(ε)/E_θ）、000021（Problem 1.1 Pyjama 问题）、000022（Theorem 2.1 显式旋转集 Θ′）、000023（Lemma 3.1 rationality lemma）、concept 000024（rational obstructions）；relation 000005 |\\n| 000001 Kravitz–Leng, Quantitative pyjama (2025) | 是（前序已消化，本次补回队列标志） | library/000001.txt | statements 000000–000009（含 concept 000008/000009）、relations 000000–000002（前序产出，本次只回填 processed） |\\n| 000002 Iosevich–Kolountzakis–Matolcsi (2006) | 是（真消化） | library/000002.txt（全文，521 行/带 page 标记） | statements 000025（§1 末 Open problem＝Pyjama 问题原始出处）、000026（Theorem 2：有限角集对离散格必不 (Λ,ǫ)-good）；relation 000006 |\\n| 000003 Malikiosis–Matolcsi–Ruzsa, A note on the pyjama problem (2013) | 否 —— 无全文、不可消化 | 无（download.status=skipped / no_local_path；real.mtak.hu 返回 HTTP 401；工作区无 library/000003*） | 无（不编引文、不产出关系行）；终态已写进 summary 前缀「【终态：无全文、不可消化（仅题录，本次未抽取任何 statement/relation）】」 |\\n| 000004 Bienia–Goddyn–Gvozdjak–Sebö–Tarsi, Flows, View Obstructions, and the Lonely Runner (1998) | 否 —— 无全文、不可消化 | 无（download.status=skipped / no_local_path；仅有 DOI/OpenAlex 题录） | 无（同上）；终态同样写在 summary 前缀 |\\n\\n口径说明（三态纪律）：000003/000004 的 processed=true 表示「已从队列取出并标定终态」，**不表示已消化** —— 它们的 summary 第一句就是「无全文、不可消化」，且没有任何 statement/relation 记在它们名下，谁去查 source_lit_id 都是零行。要真消化这两篇，缺的是全文本体（A 侧重取 PDF 或 OCR），不是抽取能力。\\n引文回验：本批 6 条 statement 行的 proof_text 与 2 条 relation 的 quote 全部先用 fs.search 在对应 library/*.txt 里逐字命中（000000: lines 39/45/72/115/146/159/228/230/247/250/228；000002: lines 60/72/77），再过 table.create 落库，quote_verified=true 的是真回验过、不是自报。\\n截断说明：单次抽取条数未触上限；000000 我只收到 Theorem 2.1 / Lemma 3.1 这一层（正文后半的 §4–§7 与附录 A 的技术引理未逐条收），理由是按品味判据它们要么是证明内部步骤、要么后面没有下游会直接引用；需要时可再补一轮定向抽取。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp1\\\\runs\\\\B-20261018-215105-001.json\", \"messages\":",
+ "payload_sha256": "9913adfccb48c0786cfdff0f3fefa90d541161426b928f7b850430d3ec7c582c",
+ "readings": {},
+ "role": "B",
+ "status": "done",
+ "task_id": "t-000039"
+}

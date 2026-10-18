@@ -1,0 +1,20 @@
+{
+  "checks": [
+    {"id": "RQ1", "name": "立题：研究问题已登记", "kind": "research_question_rows", "min": 1, "note": "research_questions 000000（U(g) Noetherian ⇒ dim g<∞ 是否成立，拆三档表述）；D 已收口到终态 dropped（证据不足以判定一般情形，不是「没有这个问题」）。本趟论文 doc:000002 的 §1/§6/§7 与摘要一致把它写成开放问题（H round 1 复核此口径为 pass）"},
+    {"id": "RET1", "name": "检索：真的取回了什么", "kind": "retrieval_ok_rows", "min": 1, "note": "search_requests 六行 outcome=ok（r-000001…r-000006），unfinished=0；缺省阈值=问题条数=1"},
+    {"id": "NUM1", "name": "算：可复现数值实验", "kind": "numeric_experiment_rows", "min": 1, "note": "experiments 13 行（exp:000000–000012），exp:000008 截断族 n<=8 supports、exp:000010 中心平移族 refutes（带分离泛函反例）；本趟论文 §6 逐条引到 13 条"},
+    {"id": "STMT1", "name": "命题台账行", "kind": "statement_rows", "min": 1, "note": "statements 21 行（任务派单写的是 18 条；本轮盘上读到 21 行 —— B 追加了 stmt:000018–000020 三条 Kobayashi–Sanami 概念行，差 3 条的来路如实记在交付说明里）。论文 doc:000002 的 citations 计数 stmt:21"},
+    {"id": "CONJ1", "name": "猜想行", "kind": "conjecture_rows", "min": 1, "note": "conjectures 000000，status=known_in_literature（等于 Sierra–Walton 公开猜想，stmt:000006/stmt:000013 逐字陈述）；本趟论文 §5 专节写它的文献位置"},
+    {"id": "C1", "name": "关系分析（C 跑过）", "kind": "c_analysis_runs", "min": 1, "note": "tasks 里有 role=C 的行（t-000009 / t-000013）；analysis_reports 仍为 0 行 —— C 自报收口需面外工具，如实记"},
+    {"id": "ATK1", "name": "攻坚计划", "kind": "attack_plan_rows", "min": 1, "note": "attack_plans 000000/000001（D 立、F 推进）"},
+    {"id": "ATK2", "name": "攻坚推进（history 非空）", "kind": "plan_progress_rows", "min": 1, "note": "plan 000001 history 非空（s2 两脚本哈希一致且 exit 0、s3 布尔级 n=1..7 逐条证书、s4 边界隔离完成）"},
+    {"id": "DOC1", "name": "交付稿件落盘", "kind": "document_rows", "min": 1, "note": "documents 现 2 行：000000（kind=note，revision 5，研究手稿）+ 000002（kind=paper，17 条 claims，本趟论文；正文 out/paper/main.tex 31991 字节，PDF 8 页）。000001 是同题旧版（lit: 引用 0），已被 000002 取代"},
+    {"id": "DOC2", "name": "稿件每节有正文", "kind": "document_body_rows", "min": 1, "note": "000000 六节 body 非空；000002 的 sections 每节 body 非空，盘上 main.tex 11 个 \\section 逐节有正文（H round 1 用 fs.read 读到 §1–§7 实质正文，§7 尾段受观测层截断）"},
+    {"id": "DOC3", "name": "带引文的断言条数", "kind": "document_claim_rows", "min": 1, "note": "000000 claims 19 条 + 000002 claims 17 条，全部带 citations；缺省阈值=问题条数=1"},
+    {"id": "REV1", "name": "审校报告落盘", "kind": "review_files", "min": 1, "note": "out/review/000000-review.md（H 四轮：rev4 rejected → rev5 accepted_with_warnings）+ out/review/000002-review.md（H round 1：verdict=rejected，pass=9 fail=2 unknown=2 na=2）"},
+    {"id": "REV2", "name": "审校钉在现行版本上", "kind": "reviewed_current_rows", "min": 1, "note": "口径：本行数「现行内容上有审校签名钉住」的稿件份数，不判签名背后的裁决好坏。读数 1 份：documents 000002（kind=paper，本趟论文正文，现行内容有 H.review round 1 写的签名 content_sha256=deab641e60192787…，钉在现行版上）。**这只记「钉住」这一件事**：同一轮 H 的裁决是 rejected（2 条 open finding 000013/000014 未修），故 000002 不得读成「审校通过」；那条裁决与未修项见 REV1、P9 与交付说明。"},
+    {"id": "REQ1", "name": "检索请求闭环", "kind": "unfinished_request_rows", "max": 0, "note": "queues.search_requests.unfinished=0；r-000006 已由 A 认领并落定 outcome=ok。literature.unprocessed=21 是 A 判为离题的题录（000005–000022），理由记在 P2/P8"},
+    {"id": "PRF1", "name": "证明级实验行", "kind": "proof_experiment_rows", "na": true, "note": "本会话 Lean 形式化已关闭（toolchain.lean_enabled=false）⇒ proof 级证据结构上产不出来；不适用，不是失败"},
+    {"id": "RPR1", "name": "我方命题的证明过程 + V 逐行走查", "kind": "reviewed_proof_rows", "na": true, "note": "本轮没有我方定理级命题（结论停在 cross_check / known_in_literature，我方未写独立证明），V 无对象可走查；不适用，不是失败"}
+  ]
+}

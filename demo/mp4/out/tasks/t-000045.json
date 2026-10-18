@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:13:17+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 6023,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"13 条逐条终局读数已全部落台账（无一条静默跳过）。先纠正派活前提：实际读到 literature 共 13 行（000000–000012），其中 000009 早已 download.status=ok（206454 字节，library/000009/…pdf + .txt 在盘）；12 行是 skipped/no_local_path，不是 13 行。另有 000004 的 PDF 本来就躺在 downloads/（1089879 字节，sha256 5e56b115…），只是台账没记，属「有字节没入账」而非取不到。\\n\\n【① 有字节 → 入账（2 条）】\\n- 000004 Shlyakhtenko 2006《Remarks on Free Entropy Dimension》：书架上确实在盘。先 dry_run 验过 ingest_local(downloads) 会新造一行、不归到 000004（already_present=0），故不做重复登记，改为就地补台账：download={status:ok, bytes:1089879, sha256:5e56b1155d1992e2eb91884b19fe8a495371552966db2b03564a786e8d97c17f}；并按 search.shelf 的 library/ 口径把 PDF 移入 library/000004/ 后把 path 改写为 000004/shlyakhtenko-remarks-on-free-entropy-dimension-survey.pdf（原文件保留、未删未改），使 B 真能取到正文。\\n- 000009 Mineyev–Shlyakhtenko 2005：读数为 download.status=ok / 206454 字节 / path=000009/…pdf，library/ 下另有一份 .txt；search.shelf 也把它列为唯一 shelf 全文。终局：ok，无需重取。\\n\\n【②③ 取不到 → external_unavailable（11 条，逐条带题名/理由/缺口）】\\n共同事实先摆清（这决定了下限）：search.providers 真实探测 → openalex status=probed_fail（HTTP 429，唯一稳定给 OA pdf_url 的源）；crossref / doaj / europepmc / fixture 可用，但实测 crossref 对这些 DOI 一律 pdf_url=null（只给 landing_url 到 doi.org），doaj 精确题名检索零命中，europepmc 不覆盖数学期刊；openalex 三次实测均被限流冷却拒绝（读数「还要 277s / 254s / 215s」）——这是「这一次没查成」，不是「上游没有这些文献」。注：download.status 的受控词表只有 ok/content_mismatch/failed/skipped，故 external_unavailable 写在 download.error 前缀、status 记 failed（external_unavailable 作为 table 级状态词只存在于 dependencies.status，我不越权去造 dependency 行）。\\n- 000000 Dykema 1994《Interpolated free group factors》(10.2140/pjm.1994.163.123)：crossref 命中该 DOI 但 pdf_url=null；openalex 429；PJM 不在 doaj。缺口：L(F_t) 插值族的定义与 W*(F_k)≅W*(F_m)? 的基准文献无逐字可回验来源。\\n- 000001 Popa–Shlyakhtenko 2020《Representing interpolated free group factors as group factors》(10.4171/ggd/565)：openalex 冷却、doaj 精确检索 0 命中、crossref 无 pdf_url，GGD/EMS 订阅墙。缺口：「每个 L(F_t) 都是真群因子」这一条无逐字来源。\\n- 000002 Houdayer 2009《Strongly solid group factors which are not interpolated free group factors》(10.1007/s00208-009-0417-6)：Springer Math. Ann.",
+ "payload_sha256": "4d3b783cbe85665a424dbc571ed9d79a73d83797786f84269bd2645958032ebf",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000045"
+}

@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:38:15+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 953,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"重编译完成，回执与盘上正文摘要一致。读数：tex_sha256=58d146f4d52e85e58194ce7f9a9701a2bd0e80914fa0983fe4fa2adb61b8d8fa（与派活给出的盘上值逐字相同，编译前用 fs.stat 核过，编译后回执 out/paper/COMPILE-RECEIPT.json 里也是这一串）；pages=15；pdf_bytes=368745；exit_codes=[0,0]（pdflatex 两次运行，均为 0，无崩溃码）；pdf_sha256=393b7157f59ac83f837f1c5f9689123279c61558bc42c3518dbaf0ab761af294；pdf_fresh=true，reason=「由本次源码编出（pdflatex，15 页）」，problems 为空。产物落点 out/paper/main.pdf。正文一个字未改（编译前后 main.tex 的 sha256 都是 58d146f4…，size=54098 字节，mtime 2026-10-18T22:37:55），台账未动、未新增实验。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp2\\\\runs\\\\G-20261018-223815-001.json\", \"messages\": [], \"steps\": 5, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "9409f087ca787f487aaeee64f1cf55d8e4089f7aec81cd9d10ae05c7c3da5644",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000066"
+}

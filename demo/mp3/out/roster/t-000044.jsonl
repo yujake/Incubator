@@ -1,0 +1,3 @@
+{"at": "2026-10-18T21:49:54+08:00", "brief": "消化 lit:000024 Kobayashi–Sanami 全文，建带逐字引文的关系行", "first_task_id": "t-000050", "kind": "add", "name": "B1", "owner": "t-000044", "role": "B", "seq": 1, "surface": "S01", "task_id": "t-000050"}
+{"at": "2026-10-18T21:56:58+08:00", "brief": "复核 doc:000000 revision 4 并钉签名", "first_task_id": "t-000052", "kind": "add", "name": "H1", "owner": "t-000044", "role": "H", "seq": 2, "surface": "S02", "task_id": "t-000052"}
+{"at": "2026-10-18T22:00:50+08:00", "brief": "修 doc:000000 的三条 fail，推到 revision 5", "first_task_id": "t-000054", "kind": "add", "name": "G1", "owner": "t-000044", "role": "G", "seq": 3, "surface": "S03", "task_id": "t-000054"}

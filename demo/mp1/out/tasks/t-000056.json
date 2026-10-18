@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:32:56+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 1692,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"H 发现 000012（dangling_dep：正文三处称「Appendix~A」而全文无 \\\\appendix）经查是**假阳性**，本轮对 main.tex 未做任何改动（最小改动 = 零改动，因为该令已在位），并已重编使回执对上盘上正文。读数：① out/paper/main.tex 第 558 行逐字为 \\\\appendix、第 559 行为 \\\\section{Computational evidence}\\\\label{app:comp}，即 \\\\appendix 已在该节之前（fs.read start_line=540 与 fs.search 双读数）；② 编译产物 out/paper/main.aux:49 为 \\\\newlabel{app:comp}{{A}{8}{}{section.1}{}} —— 该节实际排为「Appendix A」、第 8 页，正文三处「Appendix~A」不再悬空；③ 假阳性根因：H 的 evidence 里用的正则是 ^(\\\\\\\\section|\\\\\\\\appendix|\\\\\\\\subsection)\\\\\\\\*?\\\\\\\\{，而 \\\\appendix 不带花括号，故从未命中，被判成「全文没有 \\\\appendix」；H 自己记的 tex_sha256=82a29f4a… 与我这一趟读到的盘上 sha 相同，说明文件版本一致、只是检索式漏匹配；④ 重编回执 out/paper/COMPILE-RECEIPT.json：tex_sha256=82a29f4a414855878b80e89199b403acd50f4fb1c36c04ec66d79b004f9f2f15（与盘上 main.tex 的 fs.read sha256 逐字相同）、pages=10、pdf_bytes=304538、pdf_fresh=true、exit_codes=[0,0]（pdflatex，无 0xC0000409），引擎 stdout 记「Output written on main.pdf (10 pages, 304538 bytes)」。未核到：未用 PDF 抽取工具复核第 8 页正文版面（只核到 .aux 的编号与页码），这一步留给 H 只读复核。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp1\\\\runs\\\\G-20261018-223256-001.json\", \"messages\": [], \"steps\": 9, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "3f45d7ad2a0e95a9d41dad502005130fd27e5b96afd81e60d0edb7635fbd93b6",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000056"
+}

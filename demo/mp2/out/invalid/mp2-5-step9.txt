@@ -1,0 +1,1 @@
+{"tool": "fs.search", "args": {"include": "main.tex", "path": "out/paper", "pattern": "\\\\begin\\{(theorem|lemma|proposition|corollary|conjecture|definition|problem)\\}", "limit": 80}, "why": "数一遍定理/引理/命题环境与各自位置，核「≥6 个带分步 proof」与摘要所称「nine statements」是否对得上"}

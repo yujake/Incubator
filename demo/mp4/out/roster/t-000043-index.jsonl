@@ -1,0 +1,7 @@
+{"at": "2026-10-18T22:18:48+08:00", "first": true, "kind": "bind", "name": "G1", "owner": "t-000043", "role": "G", "seq": 1, "task_id": "t-000049"}
+{"at": "2026-10-18T22:20:59+08:00", "first": true, "kind": "bind", "name": "H1", "owner": "t-000043", "role": "H", "seq": 2, "task_id": "t-000050"}
+{"at": "2026-10-18T22:22:25+08:00", "first": true, "kind": "bind", "name": "G2", "owner": "t-000043", "role": "G", "seq": 3, "task_id": "t-000052"}
+{"at": "2026-10-18T22:24:18+08:00", "first": true, "kind": "bind", "name": "H2", "owner": "t-000043", "role": "H", "seq": 4, "task_id": "t-000054"}
+{"at": "2026-10-18T22:25:13+08:00", "kind": "bind", "name": "G2", "owner": "t-000043", "role": "G", "seq": 5, "task_id": "t-000055"}
+{"at": "2026-10-18T22:28:14+08:00", "kind": "bind", "name": "H2", "owner": "t-000043", "role": "H", "seq": 6, "task_id": "t-000057"}
+{"at": "2026-10-18T22:30:17+08:00", "first": true, "kind": "bind", "name": "A1", "owner": "t-000043", "role": "A", "seq": 7, "task_id": "t-000059"}

@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:48:57+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3779,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"附录 A 已重写为可复现索引并重新编译通过；正文、定理、证明一字未改（第 212 行 \\\\paragraph{Numerical evidence.} 原有那句已写明「Numerical evidence is collected in Appendix~A」，故按「只许补一句」的口径**没有再动正文**）。\\n\\n【改了哪几处（行号 + 依据）】落盘后回读第 225–249 行核对成形；其后各段未逐行回读（如实记「未逐行回读」）。\\n1) 第 230 行起插入 \\\\paragraph{A.0 Index of the statements the main text depends on.} + 两行表（stmt:000000 / stmt:000001）——依据：data/statements.json 两行，origin=external_lit、quote_verified=true、page 7 / page 2。\\n2) 第 242 行起插入 A.0.1「正文不依赖任何脚本读数」+ A.0.2「探索性计算（不承重）」表（exp:000000–exp:000005）——依据：experiments 台账的 claim_key / result / exit_code / code_path 与 observations.bound（k_set、n_set、samples_max、seed）。\\n3) 插入 A.0.3 表（exp:000006–exp:0010），并如实注明这些行 params 为空、参数域由脚本内常量固定（台账里确实 \\\"params\\\": {}）。\\n4) 插入 A.1「被引文献索引」表：8 条 \\\\cite 逐条对 lit 编号 —— Dyk94→lit:000000、PS20→lit:000001、Hou09→lit:000002、Voi99→lit:000003、Sh06→lit:000004、MS05→lit:000009；Voi94 与 At76 → **台账无对应行**（literature 表 14 行里没有这两篇）。本地全文：lit:000004、lit:000009 有（library/000004.txt、library/shlyakhtenko-…txt、library/mineyev-…txt），其余 6 条无。逐字核验：**literature 行没有 quote\\\\_verified 字段（检索 0 命中）⇒ 一律写「not checked」**，只有 statements 两行为 true。\\n5) 插入 A.2「How to re-run」表：11 条命令严格照 experiments 行登记的 code_path（全在 code/ 与 scripts/ 下，且已 fs.list 确认盘上存在），期望读数抄台账 exit_code 与 result（refutes/supports/inconclusive），exp:000000 另抄头部数值 diff=1.9396、se=0.0344、ratio=56.34；未另编期望值。\\n6) 原有叙述段重编号：原 A.1「A sampling bias…」→A.3、原 A.2「Truncated-moment route」→A.4、原 A.3「Gate criteria and the last run」→A.5、原 A.4「What would change the picture」→A.6（均为给新 A.0–A.2 腾编号，文字未动）。\\n\\n【附录用到的编号清单】stmt:000000、stmt:000001；exp:000000–exp:0010（共 11 条）；lit:000000、lit:000001、lit:000002、lit:000003、lit:000004、lit:000009（Voi94、At76 两台账无对应行）。\\n\\n【读数】fs.stat out/paper/main.tex：sha256=c641682d2f56799d0826e4d39dd5a21f7ad38fb8f00d07134d9326c17721bb18，size=34504，327 行。COMPILE-RECEIPT.json：tex_sha256=c641682d2f56799d0826e4d39dd5a21f7ad38fb8f00d07134d9326c17721bb18（与本文件当前 sha256 **一致**）、pages=11、pdf_bytes=325663、exit_codes=[0,0]、pdf_fresh=true、runs=2、pdf_",
+ "payload_sha256": "134be3a6c8693791cbcaa76c664e8951c70adfb607482a39fb47d9477dd48940",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000068"
+}

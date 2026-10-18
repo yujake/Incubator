@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:40:43+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4134,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"doc:000000 现行版（revision=2，content_sha256=3ccbf0a55eeaea2dc87d45965d5f7d40ae14607acfb28ac94497e2f1d3cd3690）的复核已做完，签名与 accepted 都钉在这一版上，但收工门那一格我断不了 —— 卡在 documents.review_rounds 这一格，而我的工具面没有写它的入口。\\n\\n一、这一趟我实际做了三件事（读数）\\n1. `review.review_document(doc_id=000000, round_no=6, dependencies=dep:000000–000003)`：机械检查 error=0 / warning=0 / info=0，新增 findings 0 条，重复跳过 0 条，覆盖率 6/6（判成 6），依赖闭合 checked=true（4 条，open=[]），**签名已落** `doc-signatures/000000-3ccbf0a55eeaea2d-005.json`（content_sha256=3ccbf0a5…，`inputs.doc_sha256` 同值；文件 sha256=f991c7c72c8b589b… 与签名账本 `DOC-SIGNATURES.jsonl` 第 5 行的 `evidence_sha256` 一致），signature_error=null，status 写 accepted（status_updated=true）。\\n2. 中间跑了一次 `verify_fixes(round_no=5)`（派活原口径）：verdict=accepted，但它**拒绝**置 accepted 并回落 in_review，原话是「台账里没有任何签名钉在当前这一版内容上（stale_signature）⇒ 请用 review 重新判一次并签名」；我照它的入口做了上面第 1 条，状态回到 accepted。\\n3. `review.report(doc_id=000000, round_no=6)`：报告落 `out/review/000000-review.md`（被审版本 hash 95a3d9f25fb5694a），15 门 **pass=11 / fail=0 / unknown=2（G8 可复跑、G11 版本冻结）/ not_applicable=2 ⇒ verdict=`unverified`**。这两格是「没查」不是「没问题」：H 是只读角色，拿不到执行面，本轮没有自己实跑任何复现命令；也没有第二个快照能判版本冻结。\\n\\n二、这套读数怎么读（不许折平）\\n- 「审过」= 我把裁决写进了台账：round 6 的裁决 accepted，签名钉在 3ccbf0a5… 上（第 005 号）。\\n- 「通过」= 不成立：报告 verdict 仍是 unverified（G8、G11 没查）；语义级判据未接线（claims_semantically_judged=0，属没查）；`statements` 表 0 行 ⇒ 采信规则两条（B 的 quote_verified 逐字台账 / V 的逐行签字背书）**都不满足**，6 条断言我只能记「采信不了」，不许因 error=0 写成采信或通过。\\n- `review_findings` 里 **0 条**：这是「机械六项 + 依赖 4 条都查过且全绿」，不是「没查」，也不是「稿子没问题」。\\n\\n三、收工门那一格为什么还红（环境缺口，不是我这一轮能补的）\\n- 签名账本现有 5 行（round 1/2/3/4/6），**每一行的 content_sha256 都是 3ccbf0a5…**，第 005 号文件 sha256 与账本 evidence_sha256 一致；`documents` 行 content_sha256 也是 3ccbf0a5…、status=accepted、reviewed_at 已随 round 6 更新到 21:38:57。\\n- 但 **`documents.review_rounds` 至今读 0**（六轮审校之后仍是 0；`reviewed_at`/`reviewed_by`/`status` 都写了，唯独这一格没写）。我的工具面（review / verify_fixes）按设计只写 `review_findings` 与 `documents.status`，没有任何入口能写 `review_rounds`。若收工门 `reviewed_current_rows` 读的是这一格，那么签多少次名都不会翻绿 ",
+ "payload_sha256": "db992b8a23abcd4ec4d357e642a6132acf5306648395037129bfb140991a1f50",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000021"
+}

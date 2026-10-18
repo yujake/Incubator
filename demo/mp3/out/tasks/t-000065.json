@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:35:00+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 246,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"H 审校 doc:000003 完毕，裁决 rejected。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp3\\\\runs\\\\H-20261018-223500-001.json\", \"messages\": [], \"steps\": 19, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "91f39414929e51e0af39f399a43338741369bc2939b559866aa28b713c732979",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000065"
+}

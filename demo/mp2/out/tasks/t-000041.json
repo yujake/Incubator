@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:48:41+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4747,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已落两条独立 experiments 行，均为 cross_check（不是 proof，也不构成证明）：exp:000019 判定猜想 000001 未找到原点外第二等弦点（supports）；exp:000020 给猜想 000000 补了 var_inf 搜索边界读数（supports，独立 data）。\\n\\n【exp:000019｜claim_key=equichordal_fourier_odd_second_half｜conjectures.000001】脚本 code/eq_fourier_odd_second_point_search.py（sha256 前16 位 48a4a799ec8c377a，exit_code=0，runtime 68.25s，method=numeric，evidence_kind=cross_check，result=supports，counterexample=null）。REPRO_RESULT 原话（out/experiments/000019.log:10 开头，逐字）：「REPRO_RESULT:{\\\"result\\\": \\\"supports\\\", \\\"bound\\\": {\\\"family\\\": \\\"Fourier 奇谐波族 odd_control（与 exp:000002 同一参数化），只有 k=3 (0.55) 与 k=5 (0.35) 分量\\\", \\\"eps_list\\\": [0.001, 0.003, 0.01, 0.03], \\\"P_search_domain\\\": \\\"|P| <= 0.9*rmax，排除 |P| < 1e-6；13x13 正方形粗网格 + 12 个半径环带(每环 32 角)打分，取最低 5 个起点做罗盘搜索（step_min=1e-9, max_evals=600）\\\", \\\"directions\\\": \\\"2000 方向求方差，最优点用 8000 方向复核\\\", \\\"refutation_threshold\\\": 1e-18, \\\"note\\\": \\\"数值判据，不是证明；结论只覆盖上面列出的 eps、搜索域、方向数与局部搜索算法\\\"}, \\\"strategy\\\": \\\"bisection ray-shooting(45 iters) + 粗网格/环带打分筛选 + compass(pattern) search multistart + 8000-dir verification\\\", \\\"scaling\\\": {\\\"dirs\\\": 2000, \\\"check_dirs\\\": 8000, \\\"seconds_per_eps\\\": [17.451, 16.872, 16.672, 16.915], \\\"total_seconds\\\": 67.913, \\\"objects\\\": \\\"4 个 eps x (169 格点 + 12 环 x 32 角 + 5 起点 x <=600 次罗盘求值)\\\"}}」。判据读数（每 ε 的最优点都落在排除边界 |P|≈1e-6 上）：ε=1e-3 原点 var=7.36e-28，最优点 |P|=1.0866e-6、var_2000=3.470e-18、var_8000=3.470e-18；ε=3e-3 |P|=1.0177e-6、var=2.7005e-17（8000 方向 2.70051e-17）；ε=1e-2 |P|=1.0015e-6、var=2.9063e-16（8000 方向 2.90630e-16）；ε=3e-2 行在 log 里但读数超出本趟读取窗口，未见逐字数值，不补写。关键：所有最优点方差均 >1e-18 阈值，且径向剖面单调（ε=1e-3：|P|=1e-5 时 min var=2.89e-16 → 0.1 时 1.18e-5 → 0.5 时 8.89e-3 → 0.9 时 1.549e-1），符合「只在 P=0 附近小方差、随 |P| 单调增」→ supports；未找到可复核反例，故不落 refutes、counterexample 空。\\n\\n【exp:000020｜claim_key=equichordal_ellipse_none｜conjectures.000000｜for_question_id=000000】脚本 code/eq_ellipse_varinf_search_bound.py（sha256 前 16 位 d6b07e6132c03fa0，exit_code=0，runtime 38.09s，method=numeric，evidence_kind=cross_check，result=suppo",
+ "payload_sha256": "674f9136ddf158d36d341fad4590169d85ae93aaef95e7511629210013464445",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000041"
+}

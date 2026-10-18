@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:24:21+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3859,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"doc:000000 第 1 轮复核剩下的 8 条 error（全部为 numeric_evidence 四元组不完整，判据 code=incomplete_numeric_evidence）已逐条改掉，改在台账字段上，正文断言一字未动。落盘证据：data/documents.json 逐处定点编辑 8 次（每次 replacements=1），fs.search 复核 8 处 range / 8 处 n_cases / 8 处 n_counterexamples 全部在位；表写层复验通过（table.update documents 000000 回读解析成功，claim-10/11/13 的四元组原样回读）。\\n\\n逐条对照表（finding_id → 改了哪个字段 → 现在的证据等级 → 依据）：\\n1. 000000（claim-10）→ numeric_evidence 补 range/n_cases/n_counterexamples → cross_check（不变）→ exp:000006 的 search_bound 与 observations：forward_sets=200、k_range=[3,20]、qmax_reverse=30、reverse_sets_with_even_sum=195、forward_exceptions_count=0 ⇒ n_cases=200、n_counterexamples=0。\\n2. 000001（claim-11）→ 同上三键 → cross_check（不变）→ exp:000019：n_families=300、pool_size=90、box=150、n_directions_total=1365、n_violations=0、n_failed=0 ⇒ range={n_families:300,pool_size:90,box:150,n_directions_total:1365}、n_cases=300、n_counterexamples=0。\\n3. 000002（claim-13）→ 同上三键 → cross_check（不变）→ exp:000004 的 B_equilateral3：grid_shape=[2000,1000]、points=2000000 ⇒ range={case:B_equilateral3,grid_shape:[2000,1000],points:2000000}、n_cases=2000000、n_counterexamples=0。\\n4. 000003（claim-17）→ 同上三键 → cross_check（不变）→ exp:000002 的 k=2 案（witness 由精确 2×2 解 + 有理取整 q=1e6）：n_cases=1、n_counterexamples=1。\\n5. 000004（claim-18）→ 同上三键 → cross_check（不变）→ exp:000002 的 k=3 与 k=6 两案：range 记 cases 与 eps_checked 及 k6 的 grid_points=10201 ⇒ n_cases=2、n_counterexamples=2。\\n6. 000005（claim-19）→ 补 range 与 n_cases（n_counterexamples=3 原已有，未动）→ cross_check（不变）→ exp:000018：k_range=[3,6]、每案 scanned_points=660000、k=4/5/6 三案判 refutes、k=3 未被推翻 ⇒ n_cases=4、n_counterexamples=3。\\n7. 000006（claim-20）→ 同上三键 → heuristic（不变，原文已写「未核到（猜想 K1，不写成结论）」）→ exp:000020：searched_k=[3,4,5,6]、mesh_N=200、eps=[0.1,0.05]、half_point_totals.n_families=226、结果 inconclusive ⇒ n_cases=4、n_counterexamples=0。\\n8. 000007（claim-21）→ 同上三键 → heuristic（不变，原文已写「未核到（猜想 K2，不写成结论）」）→ exp:000000 的 k=3 generic 案：grid_points=39710、grid_max=0.414531542 ⇒ n_cases=1、n_counterexamples=0。\\n\\n没有一条需要「降级 ",
+ "payload_sha256": "5175174e8b5e8c6ce12d5f46698c08131fdf799964c0cc30932ce1d4a07f5eb2",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000019"
+}

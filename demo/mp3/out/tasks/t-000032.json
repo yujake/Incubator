@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:15:51+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2856,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"两件数值活都做完了，各落一条新 experiments 行（未覆盖旧行），脚本先落盘再跑，均带 REPRO_RESULT 协议与 bound/strategy/scaling/data。\\n\\n① G8 缺口（独立重跑 exp:000001 的 d=3 组）→ **exp:000011**，`code/e_rerun_exp1_d3.py`（sha256 e435e239ba21f72f），exit=0，0.578 s，cross_check，supports。三族 abelian_3 / heisenberg_3 / sl2，n=0..8 全部得到 dim U(g)_{≤n}=C(n+3,3)=1,4,10,20,35,56,84,120,165；三阶差分恒 1、四阶差分恒 0 ⇒ 增长是次数恰为 3 的多项式。算法与 e2 不同：U(g) 内 PBW 正规形重写 + 两个素数域（GF(2147483647)、GF(1000000007)）上分别求秩，夹逼 rank_p ≤ rank_Q ≤ #排序单项式 = C(n+d,d)；两素数读数都等于 C(n+d,d)，精确有理秩被钉住。**范围**：这是 cross_check，且完全不含「滤过环 Noetherian」这一结论（环性质，未在此验证）。\\n\\n② 截断族界 n≤8 → **n≤12** → **exp:000012**，`code/expA2_truncated_chain_n12.py`（sha256 3473d47b6f460c3a），exit=0，7.422 s，cross_check，supports。I_n=sum_{i≤n}U(h_∞)(a_i b_i)，对 n=1..11（成员 I_1..I_12）：重量 2 分片的精确测试（无次数截断）+ 生成元左模约化余数 + 对偶分离证书 λ（λ 杀全部生成元、λ(a_{n+1}b_{n+1})=1、rank{生成元}+w = n+1）逐 n 全成立，重登记 search_bound 为 {n_comparisons:[1,11], n_members:12, weight2_test: n≤12 精确, product_scan_projected: wt(u)≤3 投影到重量2, n≤12, bruteforce_full: W≤5/n≤4 对拍控制, weight_convention: wt(a_i)=wt(b_i)=1, wt(z)=2}。scaling 在 observations.data.scaling 里：重量 2 分片每 n ≤0.001 s，乘积扫描与对拍为秒级；总耗时 7.4 s（上一版 0.5 s，代价来自把界推到 12 并加了两种交叉控制）。\\n\\n**诚实标注**：I_n ⊆ I_{n+1} 由生成元嵌套结构上显然，脚本把它记为 structural；脚本**算出**的内容是每次包含的**严格性**（w=a_{n+1}b_{n+1} 不在 I_n）。旧行 exp:000008（claim_key 带 _n8_）保留不动；新行用更宽的 claim_key `S2_truncated_chain_strictly_increasing_n12_deg5`，因为 n≤12 是一个更宽的命题，不宜借用 n8 的 key 冒充重跑。两条都没有发现反例（counterexample 为空是对的：结果是 supports）。\\n\\n**一个未送达**：我本来想私聊把 n≤12 的读数和 supersede 关系告诉 D（它的研究手稿有「例子与反例」一节），回执是 `no_reader`——D 没有 LLM 循环，这条留言没有任何进程会读。请 M 在步边界代为转达，或者让 D 下一次运行时直接读 exp:000011 / exp:000012 两行。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp3\\\\runs\\\\E-20261018-211551-001.json\", \"messages\": [\"D\"], \"steps\": 19, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "4fc6706f134d4d7eb27b8a430a4b00770a45ddd8b197f7c68ef897edffd11e3e",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000032"
+}

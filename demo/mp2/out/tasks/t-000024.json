@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:09:01+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3890,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"C 确定性关系分析（32 行 literature / 4 条关系行 / 3 个概念节点）。读数全部来自 graph.build + graph.stats + table.list(relations)，无模型参与。\\n\\n【图规模】节点=3（000000 等弦点、000001 等弦曲线、000002 Rychlik 1997 定理口径）；关系行=4；两两边(pair)=3；即 pair 层是 K3 完全图（密度 3/3=1.00），关系层 4/3=1.33（000000|000001 上有两条平行关系：rel:000000 定义口径、rel:000001 问题归属）。degree=3,3,2（和=8=2×4，校验通过）。group_count=3，isolated_concepts=0。\\n\\n【度数分布】k=3: 2 个节点（000000、000001，并列最热）；k=2: 1 个节点（000002，最冷但非孤立）；k=1/k=0: 0 个。\\n\\n【连通性 / 桥 / 割点】连通分量=1；桥=0；割点=0。**但这三项在本图上不可用**：K3 无桥无割点是平凡后果（三边各在一个 3-环上），不是关于语料的结论；同理介数中心性、绕行长度在 3 节点上无区分度。**这三项读数请勿引用为「结构健康」。**\\n\\n【密度判据：读数是否可用】literature_count=32，但关系行只覆盖 lit:000007（全 4 条关系的 lit_id 均为 000007，其中 rel:000000 另带 supporting_lit_ids=[000000]）⇒ 文献层到图层的覆盖率 = 2/32（若把 supporting 计入）或 1/32（按 primary lit_id）= 3.1%–6.3%。**结论：概念图密度低到「最热榜 / 冷门榜」两件读数不可用** —— 3 个节点全部来自同一篇文献（Klee 1960 问题集重印本）的一个三元团，「最热」只反映这一篇内部的三个术语共现，不反映 32 篇语料的热点分布。**低密度不等于「没有缺口」**：缺口是「31 篇文献在图上零边」，见下。\\n\\n【缺口候选（确定性，按可执行性排序）】G1 文献层 30–31 篇零边：除 lit:000007（及被 supporting 引用的 lit:000000）外，其余文献没有任何关系行，整张图无法回答跨文献问题。建议逐篇抽样建关系行。G2 概念层只覆盖三条术语（等弦点/等弦曲线/Rychlik 定理口径），语料中其余主题未成为概念节点 —— 这是概念抽取缺口，不是图论缺口。G3 平行边 000000|000001 上 2 条关系（rel:000000 与 rel:000001）语义互补（定义 vs 问题归属），登记为结构重复候选，须人或模型判是否合并；我只报读数，不判合并。G4 最高度数并列 3-3，图上无唯一枢纽 ⇒ 无可下钻的中心文献/中心概念，任何「从枢纽出发」的下钻策略在本图上都无对象。G5 反例提示：isolated_count=0 不可读成「覆盖完整」—— 孤立概念只在已入图的概念集合内计算，未被提及的概念根本不进图。\\n\\n【关系行自身证据位（好消息）】status 4/4 active，quote_verified 4/4 true，quote false/unknown 均 0 —— 4 条关系行本身证据位合格，问题纯在「数量」不在「质量」。\\n\\n【我卡在哪：登记未完成，需上报】我无法把本次结果落 analysis_reports：gaps / hottest / handle 这三个我名义上对外可被调用的动作，在本次循环的工具面上不存在 —— 依次试 gaps（unknown_tool，候选仅 research.list_gaps）、handle（unknown_tool）、analysis.gaps（unknown_tool），三次均为受控拒绝，非「查成」。因此 c_analysis_runs 仍为 0，本次分析只以本条 final 与随附手稿的文本形式存在。要让登记落地需由调用方以动作形式调用我：summon role=C action=gaps params={submit_requests:true}（或 hottest / handle），由框架侧收口登记 analysis_reports。submit_requests 开关归调用方，我不在循环里拧。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp2\\\\runs\\\\C-20261018-210901-001.json",
+ "payload_sha256": "09a7de28bd032081f7ed9dcf23d96f4c19c0e5e8eb544f706f436a2b9a9e2a83",
+ "readings": {},
+ "role": "C",
+ "status": "done",
+ "task_id": "t-000024"
+}

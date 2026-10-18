@@ -1,0 +1,711 @@
+{
+  "attack_rounds": {
+    "no_product_count": 2,
+    "no_product_rounds": [
+      "000000#1(outcome=no_change)",
+      "000000#2(outcome=no_change)"
+    ],
+    "products": {
+      "counterexample_request": 1,
+      "reduction": 1
+    },
+    "rounds": 4,
+    "strategies": {
+      "小情形搜索找模式": 2
+    }
+  },
+  "faculty": {
+    "claim_strength": {
+      "checked": true,
+      "criterion_source": "claimanatomy.overclaim",
+      "findings": [],
+      "missing_evidence": [],
+      "overclaimed": [],
+      "problem_count": 0,
+      "total": 10,
+      "verdict": "within_evidence"
+    },
+    "conjecture_hygiene": {
+      "by_kind": {},
+      "checked": true,
+      "conjectures": 1,
+      "findings": [],
+      "problem_count": 0
+    }
+  },
+  "five_bit": {
+    "grades": {
+      "not_applicable": 10,
+      "pre_theorem": 8
+    },
+    "problems": 0
+  },
+  "generated_at": "2026-10-18T20:56:03+08:00",
+  "in_flight": {
+    "calibers": {
+      "running_tasks": "tasks 里 status ∈ {pending, running} 的行（含顶趟行 action=run）",
+      "top_level_runs": "tasks 里 action==run 的行 = 用户发起的顶趟（不是召唤；召唤看 conductor.stats() 的 started_total）"
+    },
+    "last_stop_history": [],
+    "live_pids": [
+      {
+        "pid": 3228,
+        "role": "M"
+      }
+    ],
+    "readable_sessions": 1,
+    "running_loops": [
+      {
+        "role": "M",
+        "sid": "mp3-1",
+        "since": "2026-10-18T20:01:30+08:00"
+      }
+    ],
+    "running_task_ids": [
+      "t-000001",
+      "t-000003",
+      "t-000006",
+      "t-000009",
+      "t-000010",
+      "t-000018",
+      "t-000022",
+      "t-000023"
+    ],
+    "running_tasks": 10,
+    "stop_switch": false,
+    "top_level_runs": 1,
+    "unreadable_sessions": []
+  },
+  "interjections": {
+    "changed_action": 0,
+    "recent": [],
+    "seen_events": 0,
+    "sent": 0,
+    "unchanged_action": 0
+  },
+  "manuscripts": {
+    "bad_lines": [],
+    "derived": 6,
+    "model_authored": 0,
+    "recent": [
+      {
+        "at": "2026-10-18T20:42:10+08:00",
+        "id": "000011",
+        "sender": "A",
+        "source": "未注明",
+        "summary": "r-000004 复核订正：可用集为 lit 000000/000001/000002/000023/000024，000005–000022 离题、不得当证据",
+        "to": "B"
+      },
+      {
+        "at": "2026-10-18T20:45:48+08:00",
+        "id": "000012",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：A（派活：台账里还有一条未闭环的检索请求 r-000004（由 D 提交，queues.search_requests.unfinished=1）。请认领",
+        "to": "ALL"
+      },
+      {
+        "at": "2026-10-18T20:48:25+08:00",
+        "id": "000013",
+        "sender": "H",
+        "source": "未注明",
+        "summary": "H 审校 doc:000000：落 1 条依赖发现（dep-000000 external_unavailable，finding 000000），报告 ver",
+        "to": "G"
+      },
+      {
+        "at": "2026-10-18T20:48:41+08:00",
+        "id": "000014",
+        "sender": "H",
+        "source": "未注明",
+        "summary": "H 审校 doc:000000 判不通过（报告 verdict=rejected，fail G1/G7、unknown G11），但机械层已把稿件置 accep",
+        "to": "M"
+      },
+      {
+        "at": "2026-10-18T20:48:42+08:00",
+        "id": "000015",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：H（派活：审校我方研究手稿 documents 000000（标题：泛包络代数的 Noetherian 性与 Lie 代数维数：本轮研究与计算证据汇总）。",
+        "to": "H"
+      },
+      {
+        "at": "2026-10-18T20:53:53+08:00",
+        "id": "000016",
+        "sender": "G",
+        "source": "未注明",
+        "summary": "G 按 H 的 4 条修订点改完 doc:000000：依赖已登记 dep:000000、G7 两条数值断言补 numeric_evidence、exp 数字逐",
+        "to": "H"
+      },
+      {
+        "at": "2026-10-18T20:54:04+08:00",
+        "id": "000017",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：G（派活：按 H 的审校报告修订研究手稿 documents 000000（《泛包络代数的 Noetherian 性与 Lie 代数维数：本轮研究与计算证",
+        "to": "G"
+      },
+      {
+        "at": "2026-10-18T20:55:07+08:00",
+        "id": "000018",
+        "sender": "M",
+        "source": "框架派生",
+        "summary": "派活：H（派活：复核修订（verify fixes）：documents 000000 已由 G 在同一行上修订（review_rounds=1、status=",
+        "to": "H"
+      }
+    ],
+    "rows": 19
+  },
+  "next_steps": [
+    "有 10 条任务还在飞 ⇒ 现在别改口径，等它们收工（这份报告本身不打断它们）",
+    "有 60 个动作声明了却一次都没被召唤过（例如 A.ingest_local、A.run、A.search_literature、A.shelf_search）⇒ 该不该派归秘书/主控判断（`44 S-02` 只做读数，不进闸门）；要动它们就派活，别让它们在声明表里挂着",
+    "有 2 轮攻坚**没有产物**（['000000#1(outcome=no_change)', '000000#2(outcome=no_change)']）⇒ §3.16 要求每轮交一件（reduction/proof/counterexample_request/dead_end），先把形态补齐",
+    "攻坚轮次里**还没有一条 `proof` 产物** ⇒ 第 2 位（有证明）无从置起；先让 F 交一轮证明（哪怕只证一个子情形）"
+  ],
+  "pending_questions": 0,
+  "refusals": {
+    "by_reason": {},
+    "recent": [],
+    "total": 0
+  },
+  "report_landing": {
+    "caliber": "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比",
+    "calls": 0,
+    "checked": true,
+    "kind_writable": false,
+    "landed": 0,
+    "landing_tables": [],
+    "note": "D 的 `write_report` 只落磁盘（`reports/` 下的文件）：`schema.REPORT_KINDS` 四档是 C 的报告种类，`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports` ⇒ 台账里没有它的落点（`44 J-01`：扩 kind 或新开表都属改硬契约，不裁）。 这份读数就是让\"有调用、无落点\"这件事**看得见**。",
+    "reason": "",
+    "task_ids": []
+  },
+  "since": "",
+  "tables": {
+    "attack_plans": {
+      "count": 2,
+      "recent": [
+        {
+          "at": "2026-10-18T20:23:06+08:00",
+          "hint": "attacking（history 2 条）",
+          "id": "000000"
+        },
+        {
+          "at": "2026-10-18T20:36:07+08:00",
+          "hint": "attacking（history 2 条）",
+          "id": "000001"
+        }
+      ]
+    },
+    "conjectures": {
+      "count": 1,
+      "recent": [
+        {
+          "at": "2026-10-18T20:04:51+08:00",
+          "hint": "known_in_literature：对任意域 k 与任意 k-向量空间上的 Lie 代数 g，若其泛包络代数 U(g) 作为环是 Noe",
+          "id": "000000"
+        }
+      ]
+    },
+    "documents": {
+      "count": 1,
+      "recent": [
+        {
+          "at": "2026-10-18T20:45:30+08:00",
+          "hint": "note 泛包络代数的 Noetherian 性与 Lie 代数维数：本轮研究与计算证据汇总（研究手稿）（in_review）",
+          "id": "000000"
+        }
+      ]
+    },
+    "experiments": {
+      "count": 11,
+      "recent": [
+        {
+          "at": "2026-10-18T20:19:31+08:00",
+          "hint": "symbolic/cross_check inconclusive",
+          "id": "000003"
+        },
+        {
+          "at": "2026-10-18T20:21:03+08:00",
+          "hint": "symbolic/cross_check inconclusive",
+          "id": "000004"
+        },
+        {
+          "at": "2026-10-18T20:21:40+08:00",
+          "hint": "symbolic/cross_check inconclusive",
+          "id": "000005"
+        },
+        {
+          "at": "2026-10-18T20:22:14+08:00",
+          "hint": "symbolic/cross_check supports",
+          "id": "000006"
+        },
+        {
+          "at": "2026-10-18T20:31:21+08:00",
+          "hint": "numeric/cross_check inconclusive",
+          "id": "000007"
+        },
+        {
+          "at": "2026-10-18T20:32:33+08:00",
+          "hint": "numeric/cross_check supports",
+          "id": "000008"
+        },
+        {
+          "at": "2026-10-18T20:34:53+08:00",
+          "hint": "numeric/cross_check refutes",
+          "id": "000009"
+        },
+        {
+          "at": "2026-10-18T20:35:20+08:00",
+          "hint": "numeric/cross_check refutes",
+          "id": "000010"
+        }
+      ]
+    },
+    "literature": {
+      "count": 25,
+      "recent": [
+        {
+          "at": "2026-10-18T20:40:19+08:00",
+          "hint": "",
+          "id": "000017"
+        },
+        {
+          "at": "2026-10-18T20:40:19+08:00",
+          "hint": "",
+          "id": "000018"
+        },
+        {
+          "at": "2026-10-18T20:40:19+08:00",
+          "hint": "",
+          "id": "000019"
+        },
+        {
+          "at": "2026-10-18T20:40:19+08:00",
+          "hint": "",
+          "id": "000020"
+        },
+        {
+          "at": "2026-10-18T20:40:19+08:00",
+          "hint": "",
+          "id": "000021"
+        },
+        {
+          "at": "2026-10-18T20:40:19+08:00",
+          "hint": "",
+          "id": "000022"
+        },
+        {
+          "at": "2026-10-18T20:41:18+08:00",
+          "hint": "",
+          "id": "000023"
+        },
+        {
+          "at": "2026-10-18T20:41:29+08:00",
+          "hint": "",
+          "id": "000024"
+        }
+      ]
+    },
+    "review_findings": {
+      "count": 6,
+      "recent": [
+        {
+          "at": "2026-10-18T20:47:43+08:00",
+          "hint": "warning/dangling_dep fixed",
+          "id": "000000"
+        },
+        {
+          "at": "2026-10-18T20:54:45+08:00",
+          "hint": "error/unsupported_claim open",
+          "id": "000000"
+        },
+        {
+          "at": "2026-10-18T20:54:45+08:00",
+          "hint": "error/unsupported_claim open",
+          "id": "000000"
+        },
+        {
+          "at": "2026-10-18T20:54:45+08:00",
+          "hint": "error/unsupported_claim open",
+          "id": "000000"
+        },
+        {
+          "at": "2026-10-18T20:54:45+08:00",
+          "hint": "error/unsupported_claim open",
+          "id": "000000"
+        },
+        {
+          "at": "2026-10-18T20:54:45+08:00",
+          "hint": "warning/dangling_dep open",
+          "id": "000000"
+        }
+      ]
+    },
+    "search_requests": {
+      "count": 4,
+      "recent": [
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000001"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000002"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000003"
+        },
+        {
+          "at": "",
+          "hint": "",
+          "id": "r-000004"
+        }
+      ]
+    },
+    "statements": {
+      "count": 18,
+      "recent": [
+        {
+          "at": "2026-10-18T20:09:44+08:00",
+          "hint": "external_lit active",
+          "id": "000010"
+        },
+        {
+          "at": "2026-10-18T20:10:15+08:00",
+          "hint": "external_lit active",
+          "id": "000011"
+        },
+        {
+          "at": "2026-10-18T20:16:17+08:00",
+          "hint": "external_lit active",
+          "id": "000012"
+        },
+        {
+          "at": "2026-10-18T20:16:40+08:00",
+          "hint": "external_lit active",
+          "id": "000013"
+        },
+        {
+          "at": "2026-10-18T20:16:54+08:00",
+          "hint": "external_lit active",
+          "id": "000014"
+        },
+        {
+          "at": "2026-10-18T20:17:01+08:00",
+          "hint": "external_lit active",
+          "id": "000015"
+        },
+        {
+          "at": "2026-10-18T20:17:08+08:00",
+          "hint": "external_lit active",
+          "id": "000016"
+        },
+        {
+          "at": "2026-10-18T20:17:13+08:00",
+          "hint": "external_lit active",
+          "id": "000017"
+        }
+      ]
+    },
+    "tasks": {
+      "count": 28,
+      "recent": [
+        {
+          "at": "2026-10-18T20:40:20+08:00",
+          "hint": "G. done/ok",
+          "id": "t-000021"
+        },
+        {
+          "at": "",
+          "hint": "M.notice pending/None",
+          "id": "t-000022"
+        },
+        {
+          "at": "",
+          "hint": "M.notice pending/None",
+          "id": "t-000023"
+        },
+        {
+          "at": "2026-10-18T20:45:59+08:00",
+          "hint": "H. done/ok",
+          "id": "t-000024"
+        },
+        {
+          "at": "2026-10-18T20:48:48+08:00",
+          "hint": "G. done/ok",
+          "id": "t-000025"
+        },
+        {
+          "at": "",
+          "hint": "M.notice pending/None",
+          "id": "t-000026"
+        },
+        {
+          "at": "2026-10-18T20:54:08+08:00",
+          "hint": "H. done/ok",
+          "id": "t-000027"
+        },
+        {
+          "at": "",
+          "hint": "M.notice pending/None",
+          "id": "t-000028"
+        }
+      ]
+    }
+  },
+  "uncalled_actions": {
+    "caliber": "按 store.rows(\"tasks\") 数（tasks 台账的落盘行，可能只是缓存/最近一次落盘）；权威读数是 sessions/*.jsonl 的 events 重放 —— 两个口径的数不许互相比",
+    "called_total": 1,
+    "checked": true,
+    "count": 60,
+    "declared_total": 61,
+    "note": "这条读数只回答\"声明了但没被召唤过\"：为什么没人派、该不该派，归秘书判断（`J-37`）；本读数不构成任何门的通过条件。",
+    "reason": "",
+    "uncalled": [
+      {
+        "action": "ingest_local",
+        "role": "A"
+      },
+      {
+        "action": "run",
+        "role": "A"
+      },
+      {
+        "action": "search_literature",
+        "role": "A"
+      },
+      {
+        "action": "shelf_search",
+        "role": "A"
+      },
+      {
+        "action": "walk_citations",
+        "role": "A"
+      },
+      {
+        "action": "decide_structural_duplicate",
+        "role": "B"
+      },
+      {
+        "action": "register_statement",
+        "role": "B"
+      },
+      {
+        "action": "reprocess_once",
+        "role": "B"
+      },
+      {
+        "action": "resolve_structural_duplicate",
+        "role": "B"
+      },
+      {
+        "action": "run",
+        "role": "B"
+      },
+      {
+        "action": "run_once",
+        "role": "B"
+      },
+      {
+        "action": "run_reprocess",
+        "role": "B"
+      },
+      {
+        "action": "cold",
+        "role": "C"
+      },
+      {
+        "action": "contradictions",
+        "role": "C"
+      },
+      {
+        "action": "gaps",
+        "role": "C"
+      },
+      {
+        "action": "handle",
+        "role": "C"
+      },
+      {
+        "action": "hottest",
+        "role": "C"
+      },
+      {
+        "action": "neighbors",
+        "role": "C"
+      },
+      {
+        "action": "paths",
+        "role": "C"
+      },
+      {
+        "action": "proof_chain",
+        "role": "C"
+      },
+      {
+        "action": "relations_between",
+        "role": "C"
+      },
+      {
+        "action": "structural_duplicates",
+        "role": "C"
+      },
+      {
+        "action": "adjudicate",
+        "role": "D"
+      },
+      {
+        "action": "assess",
+        "role": "D"
+      },
+      {
+        "action": "consider",
+        "role": "D"
+      },
+      {
+        "action": "ingest",
+        "role": "D"
+      },
+      {
+        "action": "ingest_detailed",
+        "role": "D"
+      },
+      {
+        "action": "poll",
+        "role": "D"
+      },
+      {
+        "action": "probe_c",
+        "role": "D"
+      },
+      {
+        "action": "propose_question",
+        "role": "D"
+      },
+      {
+        "action": "register_conjecture",
+        "role": "D"
+      },
+      {
+        "action": "research",
+        "role": "D"
+      },
+      {
+        "action": "run_round",
+        "role": "D"
+      },
+      {
+        "action": "submit_gaps",
+        "role": "D"
+      },
+      {
+        "action": "trace_l3",
+        "role": "D"
+      },
+      {
+        "action": "trace_question",
+        "role": "D"
+      },
+      {
+        "action": "write_report",
+        "role": "D"
+      },
+      {
+        "action": "check_formal",
+        "role": "E"
+      },
+      {
+        "action": "evidence_for",
+        "role": "E"
+      },
+      {
+        "action": "list_experiments",
+        "role": "E"
+      },
+      {
+        "action": "run_experiment",
+        "role": "E"
+      },
+      {
+        "action": "run_script_experiment",
+        "role": "E"
+      },
+      {
+        "action": "create_plan",
+        "role": "F"
+      },
+      {
+        "action": "list_plans",
+        "role": "F"
+      },
+      {
+        "action": "status",
+        "role": "F"
+      },
+      {
+        "action": "step",
+        "role": "F"
+      },
+      {
+        "action": "build_document",
+        "role": "G"
+      },
+      {
+        "action": "compose_claim",
+        "role": "G"
+      },
+      {
+        "action": "refresh_markdown",
+        "role": "G"
+      },
+      {
+        "action": "register_dependency",
+        "role": "G"
+      },
+      {
+        "action": "render",
+        "role": "G"
+      },
+      {
+        "action": "revise",
+        "role": "G"
+      },
+      {
+        "action": "judge_quote_semantics",
+        "role": "H"
+      },
+      {
+        "action": "list_findings",
+        "role": "H"
+      },
+      {
+        "action": "review",
+        "role": "H"
+      },
+      {
+        "action": "review_report",
+        "role": "H"
+      },
+      {
+        "action": "verify_fixes",
+        "role": "H"
+      },
+      {
+        "action": "list_verifications",
+        "role": "V"
+      },
+      {
+        "action": "read_proof",
+        "role": "V"
+      },
+      {
+        "action": "verify_proof",
+        "role": "V"
+      }
+    ]
+  },
+  "workspace": "D:\\Incubator\\agentflow\\projects\\mp3"
+}

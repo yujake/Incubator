@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:32:18+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2628,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"S3 局部解析复核完成（不做任何新全局搜索）。实验 exp:000018（method=numeric，evidence_kind=cross_check，result=supports，exit_code=0，runtime 5.83s），code_path=scripts/eq_s3i_local_analytic.py（sha256 前 16 位 6b4ed827feddc944），脚本落盘 out/experiments/000018.log。\\n\\n【读数·逐点】7 个点全部 criteria_ok=True（0 个不通过、0 个反例）。λ_min(h=1e-5) / Var8000(mp50) / 与登记值相对差：1.01→1.9819e-02 / 1.2253700694e-09 / +7.27e-09；1.1→1.7389e-01 / 1.0330498044e-05 / +1.19e-11；1.5→5.2156e-01 / 3.4658867033e-03 / 0；2.0→6.3021e-01 / 3.0883124670e-02 / 0；2.5→6.2124e-01 / 9.8299659926e-02 / 0；3.0→5.8201e-01 / 2.1086432542e-01 / 0；5.0→4.0655e-01 / 1.0868529974e+00 / -1.43e-15。Hessian 两个步长（h=1e-4 与 h=1e-5）都半正定；λ_min 在两档之间的相对变化 0.12%–0.59%，稳定。负特征值阈值用的是按 h=1e-5 舍入噪声 4·eps·Var/h² 加 1e-13 底噪现算的 neg_tol（各点 -2.2e-11 到 -1.0e-5），全部 λ_min 远大于阈值。故按坐标文件 criteria：这 7 个点「局部极小 + 方差严格正」被数值认证（cross_check，不是证明）。\\n\\n【必须一起读的三条限定】(1) a/b=5 无登记 2D 坐标：脚本按坐标文件授权用短轴起点 (0,-0.9891951944994553) + 极小邻域局部细化，日志标 [abs_only]，P_used=(5.997e-08,-0.989195181499)；它的 Var 与登记值相对差 -1.4e-15 说明复现了同一个值，但那个 2D 坐标是本轮重建的，不是登记物。(2) mpmath 的 2000 与 8000 方向值逐位相同不是缺陷：L(φ) 是解析周期函数，中点法则以指数速率收敛，两档在 50 位下已完全收敛；f64 的 2000/8000 反而差 ~1.4e-5，那是 Var=s2/n-m² 的灾难性抵消（mean²~2、Var~1e-9），mpmath 正是为修这一项。(3) 登记值在坐标文件里只保留 11 位有效数字，所以 a/b=1.01 的 rel_diff 7.3e-9 是登记值的舍入下限，不是复核误差；全部点仍远小于 1e-6。\\n\\n【适用范围 / 未覆盖】只覆盖坐标文件列出的 7 个点；不覆盖 a/b>5 与 a/b<1.01（极近 1 的细端）；不声称全局最小性 —— 全局那一档仍只有启发式（601 起点网格 + 罗盘搜索），没有区间算术/分支定界下界证书。本会话 Lean 已关闭，evidence_kind 上限 cross_check，本行不含任何「已证明/已形式化验证」。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp2\\\\runs\\\\E-20261018-213218-001.json\", \"messages\": [], \"steps\": 15, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "953c3298c28a87e6ae0260b316e75d71b2fa02a8c72a5e3e84d3170ce37ba8ad",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000032"
+}

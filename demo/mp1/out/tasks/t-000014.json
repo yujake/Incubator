@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:16:11+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4512,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"H 审校完成（doc:000000，轮次 1，只读，未改一字）。裁决：**不通过（rejected）** —— 审校报告 G1–G15 逐门读数 pass=11 / fail=1 / unknown=1 / n.a.=2，被拒在 **G7 台账完整门**；同时 `review.review_document` 的机械半 0 error 已把 documents.status 置成 `accepted`，两者不一致这件事本身就要报给 M（详见下）。**「这一轮没查出 error」不等于「这份稿子没问题」**：语义级判据（结论是否强于引文）在 review_document 里 `claims_semantically_judged=0` = **没查**，是我人工读表读出来的，强度只到 cross_check。\\n\\n**一、拦住交付（error 级）**\\n1. G7：22 条断言里 **7 条数值型断言没有台账行**（`numeric_evidence` 全空）—— claim-10、claim-11、claim-17（其余见报告 G7 表）。这一档在本项目「仅泛证型直接取消」，不补行不能过。\\n2. **claim-13**：「这是目前唯一既有真周期格、又两侧闭合、又给出 r ≤ 1/3 的显式角度集」—— **结论强于证据**。exp:000004 的 B 案实际读数是 [0.3333333333333139, **0.33371521464222687**]，上端 0.33372 > 1/3，只能写 r ≈ 1/3 或 r ∈ [0.3333, 0.33372]，写成「r ≤ 1/3」是把没有过的东西写成了过。\\n3. **claim-9 / stmt:000011 引文截断**：`proof_text` 停在 \\\"…a ﬁnite set of orthogonal matrices O1, . . . , On such that\\\"，**结论那一句（覆盖某个球的外部）不在逐字引文里**，而稿中把这条承重结论写成了 stmt:000011 的逐字内容并标 quote_verified=true。要么补全 quote_span，要么把这句降为转述并说明依据。\\n\\n**二、可修订（warning 级，不动数学）**\\n4. **claim-15**：「只有 k = 3 两侧闭合」—— exp:000016 里 k=12 也有非平凡上端 `r_hi_subset=0.3346163359315325`（由 Θ_3 ⊂ Θ_12 的单调性给出）。改成「只有 k=3 的两侧括号来自真周期格；k=12 的上端由子集单调性给出」即可。\\n5. **claim-5 / claim-13 的「目前唯一」**：文献与搜索都是有限范围，「唯一」应写成「在我方可核对的文献/已搜范围内」。\\n6. **claim-16 / claim-22 的 r_ub_safe=0.3350 是**转引**：exp:000020 的这一格是从 `out/experiments/000017.log` 读回来的（observations 里 `certified_ub_source.source` 明写），稿件只引 exp:000020 不引 exp:000017，读者追不到头。加引 exp:000017。\\n7. **题面第二问（小 eps 下的具体角度集与所需数量）**：稿件答的是 **inconclusive**（claim-16：k∈{3..6}、|n_i|≤5、N=200 内没搜到，1/(2eps)=5 正落在边界、10 在范围外）。措辞是诚实的、没有伪装成结论 —— 但**交付意义上的缺口仍在**，不能读成「已答」。\\n\\n**三、核对通过的（给读数，不是「没问题」）**：claim-17/18 的 witness 坐标与 dist 与 exp:000002 逐字相符（(0.459101,0.207782) 两条 0.49999971723474124 / 0.4999998581100534；k=6 在 (2.5,2.5) 五条 0.5、一条 0.4999999999999991）；claim-10 与 exp:000006（forward_exceptions_count=0、195 组里 8 个见证、q≤30）相符；claim-11 与 exp:000019（300 族 1365 方向 0 失败、A 案 L=5、C 案 L=65）相符；claim-14 与 exp:000004 A/C 案上端 0.5070710678128655 / 0.5353553390603",
+ "payload_sha256": "6110dd89b116f6ffc28f9a1bf079f8b537e4871239653e8824a8ee67992be9c7",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000014"
+}

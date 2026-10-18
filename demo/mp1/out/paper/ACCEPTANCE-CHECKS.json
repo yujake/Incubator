@@ -1,0 +1,23 @@
+{
+  "checks": [
+    {"id": "Q1", "name": "立题（research_questions 行数）", "kind": "research_question_rows", "min": 1, "note": "research_questions 000000（Pyjama 定量化：N(eps) 的有限性与增长阶），状态 answered（带保留，D/t-000043 收口，updated_at=2026-10-18T21:53:55），waiting_request_ids=[]（r-000002 终局 done=true/outcome=ok）"},
+    {"id": "Q2", "name": "检索真的取回（outcome=ok 的检索条数）", "kind": "retrieval_ok_rows", "min": 1, "note": "search_requests 2 行、unfinished=0，两条均 outcome=ok（r-000001：lit:000000/lit:000003；r-000002：lit:000000/lit:000001/lit:000002）"},
+    {"id": "Q3", "name": "算或造（数值实验行）", "kind": "numeric_experiment_rows", "min": 5, "note": "experiments 25 行，全部 method=numeric；conclusive 5 行（000006/000012/000014/000021/000024），inconclusive 12 行如实记录（收工门现算 conclusive=5, inconclusive=12, experiments=25）"},
+    {"id": "Q3b", "name": "搜索前沿（带 search_bound 的实验）", "kind": "search_frontier_rows", "min": 1, "note": "角度池 / 覆盖半径搜索盒带 search_bound 读数的实验行（收工门现算通过）"},
+    {"id": "Q3c", "name": "形式化（proof 级实验）", "kind": "proof_experiment_rows", "na": true, "min": 0, "note": "不适用：本会话 Lean 形式化已关闭（toolchain.lean_enabled=false）⇒ method=formal 与 evidence_kind=proof 结构上产不出来。第三态，不记 0"},
+    {"id": "Q4", "name": "想（可检验猜想）", "kind": "conjecture_rows", "min": 1, "note": "conjectures 000000：|Theta|=k>=1 ⇒ r(Theta) >= 1/(2k)，带 how_to_refute / how_to_support；本趟状态 supported_not_proved（40/40 认证下界见 exp:000023，certified_global_refutations=0，但 r_upper_box 只在 [-1,1]^2 盒内成立 ⇒ 不是证明）"},
+    {"id": "Q4b", "name": "命题台账（逐字出处的 statements）", "kind": "statement_rows", "min": 20, "note": "台账现有 statements 27 行（含 concept 行），其中 20 行 quote_verified=true（quote_verification.unverified_ids=[]）——这 20 条是逐字回验过的定理/原始提法，全部进了论文与 doc:000000"},
+    {"id": "Q4c", "name": "证明级（V 逐行走查过的命题）", "kind": "reviewed_proof_rows", "na": true, "min": 0, "note": "不适用：本会话 Lean 关闭，且 statements.proof_text 里没有我方写出的、到预备定理级的证明正文 ⇒ 无待 V 走查的对象。是第三态，不是「V 否决」"},
+    {"id": "Q5", "name": "看（关系分析）", "kind": "c_analysis_runs", "na": true, "min": 0, "note": "不适用：未派 C。理由：单一开放问题的定量推进，概念图读数（热点/结构洞/中心性）不构成证据；文献间关系由 B 以带逐字引文的 relations 行交付"},
+    {"id": "Q6", "name": "攻（攻坚计划）", "kind": "attack_plan_rows", "min": 1, "note": "attack_plans 000000（D 经 F 落，子目标带 testable）"},
+    {"id": "Q6b", "name": "攻坚推进（history 非空的计划）", "kind": "plan_progress_rows", "min": 1, "note": "同一轮内 F.attack.step 推进一步，history 非空"},
+    {"id": "Q7", "name": "交（documents 行）", "kind": "document_rows", "min": 1, "note": "doc:000000 研究手稿（kind=survey，revision 2，markdown documents/000000.md）"},
+    {"id": "Q7b", "name": "交（有正文的稿件）", "kind": "document_body_rows", "min": 1, "note": "doc:000000 每节 sections.body 非空"},
+    {"id": "Q7c", "name": "交（带引文的断言条数）", "kind": "document_claim_rows", "min": 22, "note": "doc:000000 22 条 claims（引 stmt:/exp:/rel:），threshold 22；证据等级上限 cross_check（Lean 关闭）"},
+    {"id": "Q7d", "name": "文献进稿", "kind": "document_literature_citations", "min": 1, "note": "手稿经 stmt: 行引 lit:000000 / lit:000001 / lit:000002；论文正文逐字引同一批（lit:000001 p.1 Kravitz–Leng Thm 1.1）"},
+    {"id": "Q8", "name": "闭（未闭环请求，上限 0）", "kind": "unfinished_request_rows", "max": 0, "note": "search_requests unfinished=0、reprocess_requests 0 行；r-000002 已由 A.run_once 认领跑完（outcome=ok，其中 openalex 429 / doaj 400 如实记为没查成）"},
+    {"id": "Q9", "name": "审校报告落盘", "kind": "review_files", "min": 1, "note": "H 的 review_report 落 out/review/000000-review.md（round 2）；本趟 H 另按 out/paper/main.tex 只读审校一轮，写下文 P 行的读数"},
+    {"id": "Q9b", "name": "现行版本被审校记录钉住", "kind": "reviewed_current_rows", "min": 1, "note": "没查成（收工门现算 0，要求 >=1）：doc:000000 现行 content_sha256 前 16 位 6cb395b1fd60、review_report 钉的 revision_hash=4493c77efbdd2516，两者不一致 ⇒ pinned_to_current 空表、进 stale_signoffs。上一轮已由 H 按现行版重签一次仍未翻成 pinned（同样情形），本轮不再重复同一动作；按纪律如实记不成立，不折算成 pass"},
+    {"id": "P", "name": "论文正文与 PDF（kind 由 'paper' 改为受控档 'document_rows'）", "kind": "document_rows", "min": 1, "note": "本趟 G 亲手 fs.write 出 out/paper/main.tex（341 行 / 22324 字节 / sha256=71dccd1d6f0b349961773c68cfd9c664aa9ea842387ac32439b9fd13ab881301），doc.paper_compile 编出 out/paper/main.pdf（pages=7、pdf_bytes=279815、exit_codes=[0,0]），回执 out/paper/COMPILE-RECEIPT.json 的 tex_sha256 与盘上正文一致（pdf_fresh=true）⇒ 收工门 paper 格 pass。注：上一版本行 kind 写成 'paper'，不在受控词表里（收工门报 acceptance_unknown_kind），本趟改为受控档 document_rows，正文/PDF 的实质读数由上句与收工门 paper 格承担"}
+  ]
+}

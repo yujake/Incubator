@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:32:17+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2670,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"审校完成（doc_id=000000，轮次 2，被审版本 content_sha256=6cb395b1fd600bda…，main.tex sha256=82a29f4a414855878b80e89199b403acd50f4fb1c36c04ec66d79b004f9f2f15）。总体裁决：rejected（15 门 pass=10 / fail=1 / unknown=3 / n.a.=1）。三处审点读数：①体例：Title/Abstract/§1 Introduction/§2 Definitions and notation/§3 Main results/§4 Discussion and open problems/References 七项齐备（fs.search 命中 55/141/180/473/534/556 行），但附录那一项不成立——第 559 行是 \\\\section{Computational evidence}、全文无 \\\\appendix，因此正文第 132 行与第 468 行硬写的「Appendix~A」指向一个不存在的附录标号，且 References 排在它之前 ⇒ 已落 finding 000012（dangling_dep / error / 体例）。②残留词：正文 Abstract–§4 无 exp:/stmt:/lit:/rel:/conj: 台账 id（第 662–680 行的 conj:000000、rel:000002、stmt:000020、exp:000021 等全部位于附录 Provenance，且该节自述「Identifiers appear only in this appendix」）；全文未命中 sha256/SHA/Reproducibility/Lean/machine-verified/formally verified/验收/台账/ACCEPTANCE；数值小节（Readings 表、参数域、扫描计数）只在附录 A，正文只有 rem:twoSided 一处指向 Appendix A 的散文指引；§1.4 明写「No automated proof checker was applied to any proof in this paper」，无本会话不成立的措辞。③分步 proof：10 个定理级结果（Lemma 5 + Proposition 4 + Corollary 1）各带 (1)(2)(3) 编号 proof 环境，共 10 个 \\\\begin{proof}（185–469 行），≥6 成立；Conjecture 单独存在、未被当作已证。机械审校（review.review_document）回 accepted、0 发现、覆盖率 22/22，但这只是机械半：语义级判据 claims_semantically_judged=0（**没接线 = 没查**，不是「没问题」），我据此没有把 0 发现读成通过。unknown 三门如实记：G8 无实跑回执（H 无执行工具，派活未附，非「跑过没问题」）、G9 调用方未给声明侧计数、G11 版本冻结未见读数；G10 fail（5 条发现缺行号/逐字引文/最小修法，含我新落的 000012 与盘上既有行，我只读不能改）。PDF 一格我自己核了：out/paper/COMPILE-RECEIPT.json tex_sha256=82a29f4a…与盘上正文逐字相同、exit_codes=[0,0]、pages=10、pdf_fresh=true（这是 G 的读数，我只读复核一致）。报告落盘 out/review/000000-review.md（revision_hash 4493c77efbdd2516）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp1\\\\runs\\\\H-20261018-223217-001.json\", \"messages\": [], \"steps\": 16, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "a58d6457ebf5b605f94f6e2eca8dedb52598d6b84afc0b6067399b48c06a441d",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000054"
+}

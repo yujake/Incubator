@@ -1,0 +1,49 @@
+{
+ "conjecture_id": "000000",
+ "n_readings": 7,
+ "gate": {
+  "status": "disqualified",
+  "reasons": [
+   "Q3_range_violated: 7 条读数落在 (0,k] 之外（例 k=2 N=8 delta=4.983578955307086）",
+   "Q1_divergence: worst |ratio-1| = 0.663 > 0.15",
+   "Q2_not_tested: 没有任何 (estimator,k,N) 有 >=2 个 seed",
+   "Q4_not_tested: 没有同一 (k,N,seed) 下不同 normalization_scale 的读数"
+  ],
+  "q1_ratio_checks": [
+   {
+    "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+    "k": 3,
+    "N": 8,
+    "ratio": 1.4858
+   },
+   {
+    "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+    "k": 4,
+    "N": 8,
+    "ratio": 1.4864
+   },
+   {
+    "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+    "k": 4,
+    "N": 16,
+    "ratio": 1.5927
+   },
+   {
+    "estimator": "uniform_env_word_sampling_lnV_hat_over_lnN",
+    "k": 4,
+    "N": 32,
+    "ratio": 1.6628
+   }
+  ],
+  "note": "gate 未通过 = 缺合格估计器（结构性缺口）；不得据此判猜想被反驳。"
+ },
+ "criterion": {
+  "status": "insufficient_data",
+  "reasons": [
+   "gate=disqualified ⇒ 结构性缺口（缺合格估计器），不是反驳"
+  ],
+  "per_pair": {},
+  "undecided_pairs": [],
+  "note": "见 gate.reasons"
+ }
+}

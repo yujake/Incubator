@@ -1,0 +1,1 @@
+{"at": "2026-10-18T21:32:18+08:00", "basis": ["draft/55 §4 归属与审计"], "decision": "已执笔", "duty": 1, "fail_open": false, "from": "secretary/E", "kind": "secretary_handoff", "mid": "000025", "reason": "替本体执笔一行交接手稿（sender 仍是被服务的角色）", "role": "E", "seq": 1, "target": {"to": "D"}, "task_id": "t-000032"}

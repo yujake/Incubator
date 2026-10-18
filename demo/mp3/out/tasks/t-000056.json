@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:01:40+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2161,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"复核 doc:000000 revision 5 完成并已签名。动作链：(1) verify_fixes(round_no=5) 判 verdict=accepted、error=0、仍复现 1 条（finding 000005 dangling_dep, warning），但按 §8.8.4 不签名 ⇒ status 停在 in_review；(2) 改调 review.review_document(doc_id=000000, round_no=5, dependencies=[dep-000000 external_unavailable]) 正式裁决并签名：verdict=accepted_with_warnings，error=0 / warning=1 / info=0，依赖闭合 checked（1 条），签名 content_sha256=9c0c5d57694ff3fb7a362a470e048687f8f767e48240b01640f32774263e8a15 与 documents 000000 现行 revision 5 的 content_sha256 逐字一致，凭据 doc-signatures/000000-9c0c5d57694ff3fb-006.json（sha256=6103afa9…），documents.status=accepted。G 的三处修都已验证生效：claim-14 不再塞假 numeric_evidence（G7 由 fail 转 pass）、G5 禁词清零、claim-15 的『已证明』子串已改（finding 000008/000009 判 fixed，机械 overclaim 不再命中）。本轮新落 finding 000012（warning，语义级判据未接线，19 条断言只过措辞级检查）。报告已落 out/review/000000-review.md：pass=9 / fail=1 / unknown=3 / not_applicable=2，钉住 revision_hash=60a48c623cdff55b。**这是 accepted_with_warnings，不是无保留通过**：① G8 记 unknown —— 派活未附 run_evidence（无 commands/exit_code/output_tail），我的工具面没有执行工具，无法代跑，已请 G 补回执（见 finding 000010）；② G11 版本冻结 unknown（派活未附上一轮报告钉住的 hash）；③ G10 fail —— 12 条发现里 1 条不合格式契约，那是**我已有发现行**的字段缺口（旧行不许回填），不是正文缺陷，但对报告判词生效；④ 语义级判据未接线 ⇒ 『措辞干净而结论强于引文』这一形态本轮**没查**，不是没问题。未解决项只余 finding 000005（dep-000000 external_unavailable，已知边界：lit:000004 仅题录无本地全文）。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp3\\\\runs\\\\H-20261018-220140-001.json\", \"messages\": [], \"steps\": 9, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "583acd5750025103c32d347f94fc7cdb0d238d8176506b3d7a599476384e2353",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000056"
+}

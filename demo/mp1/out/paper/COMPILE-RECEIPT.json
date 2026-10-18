@@ -1,0 +1,16 @@
+{
+  "tex_sha256": "9720c473c9ded20c0a9eeba864323ba2d3aaae8df565a3a46f231e9a93782987",
+  "pdf_sha256": "d6b3206ddef0f6798bd4432e3c55a1cf318b6a68735f526b8638d098da16956d",
+  "engine": "pdflatex",
+  "runs": 2,
+  "exit_codes": [
+    0,
+    0
+  ],
+  "pages": 10,
+  "pdf_bytes": 304543,
+  "pdf_fresh": true,
+  "compiled_at": "2026-10-18T22:36:53+08:00",
+  "written_by": "agentflow.papercompile（框架内置编译）",
+  "stderr_tail": ""
+}

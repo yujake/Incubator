@@ -1,0 +1,221 @@
+{
+  "target": "attack_plans:000000 / conjectures:000000 — 是否存在能过 GATE Q1-Q4 的 delta_N(X_k) 估计器",
+  "verdict": "no_qualified_estimator_in_this_session",
+  "reason_code": "estimator_not_qualified",
+  "reason_label_zh": "结构性缺口（缺估计器）",
+  "not_to_be_confused_with": "数据不足：本会话没有产出任何 delta_N 读数，不是因为读数不够，而是没有任何口径被点名成合格估计器。",
+  "gate_script": "scripts/conj000000_verdict_gate.py",
+  "gate_tolerances": {
+    "Q1": 0.15,
+    "Q2": 0.1,
+    "Q4": 0.1,
+    "Q3": "0 < delta_hat <= k"
+  },
+  "session_execution_surface": {
+    "M_max_per_cell": 200000,
+    "rungs_N": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "ks": [
+      2,
+      3,
+      4
+    ],
+    "j_values_r": [
+      4,
+      5,
+      6,
+      7,
+      8
+    ]
+  },
+  "excluded_approaches": [
+    {
+      "approach_id": "E1",
+      "name": "literal_microstate_ball_Haar_volume",
+      "estimator": "delta_N(r) = ln mu_N(B_r) / (N^2 ln r)，外推 1/|ln r| -> 0",
+      "status": "excluded_infeasible",
+      "feasibility_criterion": "直接 MC 估计 mu_N(B_r) 期望命中数 = M * p >= 1，即 M >= 1/p；本会话执行面单档上限 M=200000（exp:000001/exp:000003 实测档）",
+      "magnitude": {
+        "formula": "mu_N(B_r) ~ r^(k N^2)，r = 2^-j，k 个自由生成元共 k N^2 个实自由度",
+        "most_favorable_cell": {
+          "k": 2,
+          "N": 8,
+          "r": "2^-4",
+          "ln_p": -354.9
+        },
+        "log10_p_k2_N8_r2^-4": -154.1,
+        "ln_p_k2_N16_r2^-8": -2839.1,
+        "samples_needed_k2_N16_r2^-8": "10^1233.0",
+        "feasible_cells": 0,
+        "total_cells": 60
+      },
+      "why_infeasible_here": "最有利的一格（最小的 k、最小的 N、最大的 r=2^-4）hit rate 仍远低于 1/M_max；要把 1/p 个样本跑完不是『需要更多算力』的量级差，而是需要能在 B_r 内直接生成微态的重要性采样/变分构造（E4），本会话执行面上没有。"
+    },
+    {
+      "approach_id": "E2",
+      "name": "proxy_ln_V_N_over_ln_N",
+      "estimator": "delta_N = ln V_N / ln N，V_N = 1 + sum_{l<=N} 2k(2k-1)^(l-1)",
+      "status": "excluded_divergent",
+      "feasibility_criterion": "GATE Q1：同 (k, estimator) 相邻倍档 N 与 2N 的均值比 |r-1| <= 0.15；GATE Q3：0 < delta_hat <= k",
+      "magnitude": {
+        "per_k": [
+          {
+            "k": 2,
+            "delta_by_N": {
+              "8": 4.2266,
+              "16": 6.3399,
+              "32": 10.1438,
+              "64": 16.9063
+            },
+            "range_violations_Q3": [
+              8,
+              16,
+              32,
+              64
+            ],
+            "q1_checks": [
+              {
+                "N": 8,
+                "N'": 16,
+                "ratio": 1.5,
+                "abs_ratio_minus_1": 0.5,
+                "pass_Q1": false
+              },
+              {
+                "N": 16,
+                "N'": 32,
+                "ratio": 1.6,
+                "abs_ratio_minus_1": 0.6,
+                "pass_Q1": false
+              },
+              {
+                "N": 32,
+                "N'": 64,
+                "ratio": 1.6667,
+                "abs_ratio_minus_1": 0.6667,
+                "pass_Q1": false
+              }
+            ]
+          },
+          {
+            "k": 3,
+            "delta_by_N": {
+              "8": 6.1918,
+              "16": 9.2877,
+              "32": 14.8603,
+              "64": 24.7672
+            },
+            "range_violations_Q3": [
+              8,
+              16,
+              32,
+              64
+            ],
+            "q1_checks": [
+              {
+                "N": 8,
+                "N'": 16,
+                "ratio": 1.5,
+                "abs_ratio_minus_1": 0.5,
+                "pass_Q1": false
+              },
+              {
+                "N": 16,
+                "N'": 32,
+                "ratio": 1.6,
+                "abs_ratio_minus_1": 0.6,
+                "pass_Q1": false
+              },
+              {
+                "N": 32,
+                "N'": 64,
+                "ratio": 1.6667,
+                "abs_ratio_minus_1": 0.6667,
+                "pass_Q1": false
+              }
+            ]
+          },
+          {
+            "k": 4,
+            "delta_by_N": {
+              "8": 7.4863,
+              "16": 11.2294,
+              "32": 17.9671,
+              "64": 29.9451
+            },
+            "range_violations_Q3": [
+              8,
+              16,
+              32,
+              64
+            ],
+            "q1_checks": [
+              {
+                "N": 8,
+                "N'": 16,
+                "ratio": 1.5,
+                "abs_ratio_minus_1": 0.5,
+                "pass_Q1": false
+              },
+              {
+                "N": 16,
+                "N'": 32,
+                "ratio": 1.6,
+                "abs_ratio_minus_1": 0.6,
+                "pass_Q1": false
+              },
+              {
+                "N": 32,
+                "N'": 64,
+                "ratio": 1.6667,
+                "abs_ratio_minus_1": 0.6667,
+                "pass_Q1": false
+              }
+            ]
+          }
+        ]
+      },
+      "why_infeasible_here": "ln V_N ~ N ln(2k-1) => delta_N ~ N ln(2k-1)/ln N -> 无穷。N 翻倍时比值 = 2 ln N / ln 2N -> 2，|ratio-1| -> 1，Q1 每一档都必然超 0.15；同时 N 一大 delta_hat > k，Q3 也破。它不是维数，用它读 ①/② 只会恒真到无意义。"
+    },
+    {
+      "approach_id": "E3",
+      "name": "cumulant_defect_D_N",
+      "estimator": "无（D_N(L) = max_{|w|<=L} |tau_N(w) - tau_free(w)| 不是 delta_N 的估计器）",
+      "status": "excluded_no_bridge",
+      "feasibility_criterion": "要作估计器，必须给出 D_N 与 delta_N 之间已证的定量桥（D_N -> delta_N 的不等式）",
+      "magnitude": {
+        "existing_readings": "无：本计划没有产出 D_N 的读数（轮 1 §A6 只写了口径，未执行）"
+      },
+      "why_infeasible_here": "D_N 量的是『采样点离自由 Haar 有多近』，delta_N 量的是微态球体积的 N 次幂增长率；两者之间本计划没有任何已证的桥。把 D_N 的衰减率当 delta_N 用就是又一个作废代理量（与 E2 同类错误）。"
+    },
+    {
+      "approach_id": "E4",
+      "name": "importance_sampling_or_variational_microstate_sampler",
+      "estimator": "（尚未构造）能在 B_r(X) 内直接产生微态的重要性采样器或变分族，再用其权重给 mu_N(B_r) 的无偏/有界估计",
+      "status": "not_wired",
+      "feasibility_criterion": "① 存在对 Haar 测度绝对连续、支撑覆盖 B_r 的提议分布且权重可比；② 在 M=200000 内使 ESS >= 100；③ 估计量对 normalization_scale 不变",
+      "magnitude": {
+        "existing_readings": "无；本会话 E 的可执行面只有『写脚本 + 数值跑』，没有这类构造的实现，也没有它的数学形式"
+      },
+      "why_infeasible_here": "这是本会话未接线的一条研究路线：它需要先给出提议分布/变分族的解析形式与权重有界性论证，再才是写脚本。缺的是数学构造，不是算力，也不是数据。"
+    }
+  ],
+  "qualified_estimator_spec": {
+    "what_counts_as_qualified_estimator": [
+      "S1 它是 delta_N(X_k) 的估计器：必须写出 delta_N 的定义式（如 log mu_N(B_r)/(N^2 log r) 的 r->0 外推、或与之等价的极限），并说明为什么该量的 N->无穷 极限等于微态熵维数 delta_0；只给『代理量』不算。",
+      "S2 可执行：给出可直接运行的脚本规范（参数名、取值范围、种子派生规则、样本数、收敛判据阈值），并由 E 在至少两个 (k,N) 档上实际跑出读数。",
+      "S3 过 GATE Q1（不发散）：rel_se 随 N 单调不增且末档 rel_se <= 0.1，delta_hat 在 N=32 -> 64 相对变化 <= 0.2。",
+      "S4 过 GATE Q2（种子可复现）：同一 (k,N) 至少两个 seed，delta_hat 极差 <= 0.10。",
+      "S5 过 GATE Q3（量程）：每条读数 0 < delta_hat <= k。",
+      "S6 过 GATE Q4（归一化不变）：同一 (k,N,seed) 在不同 normalization_scale 下 delta_hat 相对差 <= 0.05。",
+      "S7 可行性：feasible=false 的 (k,N) 档数 <= 1；否则不能支撑全序列判定（Q4 的可行性口径）。",
+      "S8 输出字段齐全：estimator、k、N、seed、delta_hat、rel_se、converged、feasible、normalization_scale，且读数落成 experiments 行。"
+    ],
+    "how_to_check": "把 S8 的读数写成 --readings JSON，跑 scripts/conj000000_verdict_gate.py --readings <json> --out <json>；status=qualified（或 qualified_except_Q4）才算过闸。"
+  },
+  "note": "本文件只记录『为什么没有合格估计器』与『要什么才算合格』，不产生任何 delta_N 读数，也不是对猜想 000000 的支持或反驳。"
+}

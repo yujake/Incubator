@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:25:13+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3961,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已完成 finding 000013（error）的单点修订与重编，正文其余段落、source/、ACCEPTANCE 一概未动。\\n\\n① 归属核实（read 证据）：\\n- `estimator_not_qualified` 只出现在两层：台账 `data/conjectures.json:16`（= conjectures:000000 的 `testable.outputs` 字段：『未过 GATE 时的 reason=estimator_not_qualified』），以及 `scripts/conj000000_infeasible_record.py:145` 的 `\\\"reason_code\\\": \\\"estimator_not_qualified\\\"`。\\n- 被判定的两个脚本里都没有这个串：`scripts/conj000000_verdict_gate.py`（fs 检索 *.py 只命中上举一处；且读完该文件 docstring 与过闸逻辑：它输出 `{\\\"gate\\\": {\\\"status\\\": \\\"qualified|disqualified\\\", \\\"reasons\\\": [...]}, \\\"criterion\\\": {...}, \\\"raw_notes\\\": [...]}`，未过闸门不写 `reason` 键，只把理由写进 `gate.reasons`，并在 `insufficient_data` 一档说明『这是结构性缺口，不得读成猜想被反驳』）；`code/conj000000_verdict_run.py` 的 reason 相关行只有 `cells_not_sampled[].reason`（取值为 cell status）、`gate_reasons`（转抄 gate.reasons）、`criterion_reasons`。⇒ H 的判断成立：原句把出口/reason 归给 script_entry 是错的。\\n\\n② old_string → new_string（逐字，均在 out/paper/main.tex 第 71 行同一段落内，只替换这一处，replacements=1）：\\nOLD：`出口由 \\\\texttt{script\\\\_entry} 确定性给出：三档判定 \\\\texttt{support} / \\\\texttt{refute} / \\\\texttt{insufficient\\\\_data}，外加逐条 GATE 的 pass/fail 与依据行；未过 GATE 时另记 \\\\texttt{reason=estimator\\\\_not\\\\_qualified}（不是 \\\\texttt{insufficient\\\\_data}：缺估计器与缺数据是两回事），不得据此判猜想被反驳。`\\nNEW：`三档判定 \\\\texttt{support} / \\\\texttt{refute} / \\\\texttt{insufficient\\\\_data}、外加逐条 GATE 的 pass/fail 与依据行，以及 \\\\texttt{gate} 的 \\\\texttt{status}/\\\\texttt{reasons} 读数，才是脚本实际打印的东西。按台账 \\\\texttt{conjectures:000000} 的 \\\\texttt{testable.outputs} 字段约定，未过 GATE 时 \\\\texttt{reason} 记 \\\\texttt{estimator\\\\_not\\\\_qualified}（不是 \\\\texttt{insufficient\\\\_data}：缺估计器与缺数据是两回事）；这是台账层面的字段约定，不是脚本的 \\\\texttt{stdout}：盘上脚本 \\\\texttt{scripts/conj000000\\\\_verdict\\\\_gate.py} 与 \\\\texttt{code/conj000000\\\\_verdict\\\\_run.py} 不含这一字符串（该字符串在盘上脚本中仅出现于 \\\\texttt{scripts/conj000000\\\\_infeasible\\\\_record.py} 的 \\\\texttt{reason\\\\_code} 字段）。无论哪一种写法，都不得据此判猜想被反驳。`\\n（注：上表按文件内实际内容为 TeX 单反斜杠转义 \\\\texttt / \\\\_；此处为 JSON 转义后显示。）\\n\\n③ 重编读数（doc.paper_compile, project=mp4）：ok=true，engine=pdflatex，runs=2，pages=7，pdf_bytes=10",
+ "payload_sha256": "93d8cf49cd6a3e727746ce0fd021c52c2b559967596cb38188dd119d576f7e6e",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000055"
+}

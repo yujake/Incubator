@@ -1,0 +1,1 @@
+{"at": "2026-10-18T22:37:09+08:00", "brief": "改写 main.tex：主结果用 theorem+proof，核验正文编号为 0，重编 PDF", "first_task_id": "t-000059", "kind": "add", "name": "G1", "owner": "t-000058", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000059"}

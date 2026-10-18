@@ -1,0 +1,1 @@
+{"tool": "fs.list", "args": {"path": "out/paper"}, "why": "确认 ACCEPTANCE.md 等验收件是否已落盘"}

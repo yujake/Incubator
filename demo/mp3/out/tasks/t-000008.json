@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T20:13:50+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2833,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"r-000003 结案（done=true，outcome=ok，result_lit_ids=[\\\"000000\\\"]，attempts=1）。\\n\\n**(2) Sierra & Walton —— 已交付，可逐字回验。** 命中校验通过：arXiv:1304.0114v3（2014-08-07），题名「THE UNIVERSAL ENVELOPING ALGEBRA OF THE WITT ALGEBRA IS NOT NOETHERIAN」，作者 SUSAN J. SIERRA AND CHELSEA WALTON，与 lit:000000 逐字对齐。PDF 276168 B，sha256 1b187667323379f530a5b71fbf7f450f6fdb469f17e36f485810d61f028a0535；纯文字稿 library/sierra-walton-witt-enveloping-algebra-not-noetherian-arxiv-1304-0114.txt（sha256 8019567c89ecbb4b0bf8ba941ea31030408390428a3bcea3bf40bc97391399cb），已挂到 lit:000000.path 与 download（status=ok）。原文在 PDF 第 1 页（arXiv v3 页标记）：\\n- 「We are motivated by the well-known question of whether it is possible for the universal enveloping algebra of an infinite dimensional Lie algebra to be noetherian (cf. [GW04, page xix]). It is generally thought that the answer to this question should be \\\"no,\\\" and we state this as a conjecture:」随即 **Conjecture 0.1.**「A Lie algebra L is finite dimensional if and only if the universal enveloping algebra U(L) is noetherian.」\\n- **Question 0.3.**「(C. Dean and L. Small, 1990) Is U(W) noetherian?」\\n- 同页还有指向 M&R 的那一句：「One direction holds easily. Namely, the universal enveloping algebra of a finite dimensional Lie algebra is noetherian; see [MR01, Corollary 1.7.4].」\\n\\n**(1) McConnell & Robson —— 未交付，如实报 metadata-only。** 全文取不到：sciencedirect pdf_url 与 AMS 直链 https://www.ams.org/books/gsm/030/gsm030.pdf 皆 http_403 / all_sources_failed；AMS 落地页（已落盘为证据）只有全卷 PDF 与 endmatter 两条 PDF 链接，无免费样章 ⇒ 这一条路本轮走完。这是「未获得全文」，**不是**「本书不存在」或「书中无此论证」。能核到的只有二手指针：M&R 的精确位置是 **[MR01, Corollary 1.7.4]**（由在手一手源 Sierra–Walton p.1 引用），但这不是 M&R 原文引文，**不许当 quote_verified 用**；gr U(g) ≅ Sym(g) 的滤过-分次论证的具体章节号仍未核到。\\n\\n**质量事件（不隐去）**：先按猜的 arXiv:1308.0992 下载，解出的文字稿实为 Venturi et al. 天体物理论文（Abell 3560）—— 命中校验判 mismatch，该 .txt 已删除、未登记、未当成 Sierra–Walton。\\n\\n**给下游的页码口径警告**：所报页码是 arXiv v3 PDF 页标记，不是 Adv. Math. 262 (2014) 期刊分页；引文中的 ﬁ 是文字层连字单字符，B 逐字回验请直接取该 txt 的字符。\", \"llm_run_path\": \"D:\\\\Incuba",
+ "payload_sha256": "d3ae5536f05f6ef98597ffd73f1237b86ddca34e60314361c72beaa7993f8faf",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000008"
+}

@@ -1,0 +1,1 @@
+{"tool": "table_schema", "args": {"table": "search_requests"}, "why": "先确认 search_requests 的字段与受控词表（outcome 可选值），再决定认领与收口的写法"}

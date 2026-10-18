@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T20:35:43+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3515,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"子目标 S2 的可复现数值实验已交付：两条 experiments 行（000008 家族 (i) supports；000010 家族 (ii) refutes，带可复核反例；000009 因自检缺陷已作废并被 000010 取代）。\\n\\n【脚本】\\nA: code/expA_truncated_chain.py  sha256=40282199b8de68e7（000007，作废）→ e0f9cf577d0d56b6（000008，干净版）\\nB: code/expB_center_translation_chain.py  sha256=db7c4941452906e7（000009，作废）→ 5d4924f05e1792b0（000010，干净版）\\n两版都用 Python 标准库的精确整数/Fraction 算术实现 PBW 标准形，判等全由代码判（无模型参与）。\\n复现：`python code/expA_truncated_chain.py` / `python code/expB_center_translation_chain.py`（各 exit_code=0，runtime 0.516s / 0.156s）。\\n\\n【家族 (i) exp 000008，method=numeric，result=supports，evidence_kind=cross_check】\\nI_n = Σ_{i≤n} U(g)·(a_i b_i)，n=1..8，比较 1→2 … 7→8。weight 约定 wt(a_i)=wt(b_i)=1、wt(z)=2（关系齐次）。\\n判据 (1) 子集：n=1..7 每一步 I_n 的全部生成元在 I_{n+1} 生成集下左模约化余数均为 0（remainder_nonzero_terms=0 全过）。\\n判据 (2) 严格：w=a_{n+1}b_{n+1}。逐 n 读数：w_in_span=false，约化余数恰 1 项即 w 本身（{\\\"(0,(( 'a',n+1),('b',n+1)))\\\":\\\"1\\\"}），对偶分离泛函 λ 满足 λ(所有 I_n 生成元)=0、λ(w)=1（如 n=1 时 λ: a2*b2↦1），certificate_verified=true 全部 7 步。即 λ 是 PBW 单项式线性无关性给出的可复核证书。\\n附加交叉核对：W=4 有界 brute-force 张成检验（n≤3，dim_ambient 239/541/1068，num_products 29/92/201）w_in_span 均为 false；乘积扫描（wt(u)≤3，覆盖次数≤5）在 w 处最大系数恒为 0。\\n范围：n>8 未查；W=5 对 n≥4 的 brute-force 未跑（状态数膨胀，已如实记在 bound 里）。\\n\\n【家族 (ii) exp 000010，method=numeric，result=refutes，negation_kind=disproved，evidence_kind=cross_check】\\nI_n = U(g)·(a_1 b_1 − n·z)，n=1..8。该族**不是链**：成员两两互不包含，故相邻包含 I_n ⊆ I_{n+1} 全部不成立（1→2 … 7→8 七个相邻对全部失败）。\\n反例（已登记在 counterexample 字段，可复核）：取 n=1：g_1 = a_1b_1 − z ∉ U(g)·(a_1b_1 − 2z) = I_2。分离泛函 λ: a1*b1 ↦ −1, z ↦ −1；对全部 86 个乘子（wt(u)≤4，字母 a_1,b_1,a_2,b_2,z）有 λ(u·g_2)=0，而 λ(g_1)=1，certificate_verified=true。\\n正向对照：对角 u=1 使 g_n∈I_n 对 n=1..8 全部 true（机器没坏）；非恒定乘子贡献 weight-2 分量的违例数=0。weight-2 空间维数 11。\\n范围（not_covered）：乘子重量 >4 未枚举；n>8 未查。\\n\\n【如实边界】\\n- 两条都是数值证据/cross_check 级，**不是定理、不是证明**；本会话 Lean 形式化关闭，未做也未声称任何形式化。\\n- 家族 (i) 未出现任何「封顶/稳定」迹象；也未有任何一步失败。这不构成「U(g) 非 Noetherian」的任何断言。\\n- 家族 (ii) 的「refutes」只否掉「中心平移族给出上升链」这条候选，不是对原问题（是否存在严格上升有限生成左理想链）的否定。\\n- 000009 已",
+ "payload_sha256": "88f34a5ccfa2710dc442c1720035b2fe42f26e093fb78f29493bd72ba5520020",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000016"
+}

@@ -1,0 +1,2 @@
+{"at": "2026-10-18T21:20:29+08:00", "brief": "跑脚本 scripts/f_conj000000_delta.py 并登记 δ_N(X_k) 的实验行", "first_task_id": "t-000007", "kind": "add", "name": "E1", "owner": "t-000006", "role": "E", "seq": 1, "surface": "S01", "task_id": "t-000007"}
+{"at": "2026-10-18T21:26:16+08:00", "brief": "查 δ(自由群因子的标准生成元)=k 是否已有定理，以及未解部分是「是否因子不变量」", "first_task_id": "t-000008", "kind": "add", "name": "A1", "owner": "t-000006", "role": "A", "seq": 2, "surface": "S02", "task_id": "t-000008"}

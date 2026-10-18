@@ -1,0 +1,283 @@
+{
+ "cases": [
+  {
+   "Lmax": 2.0000990068592257,
+   "Lmin": 1.9999999905397905,
+   "P_star": [
+    1.661009595586317e-08,
+    -0.14037079420907037
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 1.01,
+   "a_over_b": 1.01,
+   "abs_P_star": 0.14037079420907134,
+   "b": 1.0,
+   "case": "1.01/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 954,
+   "grid_points": 81,
+   "mean_chord": 2.000049499348334,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.09410643577575684,
+   "var_inf": 1.2253700694081736e-09
+  },
+  {
+   "Lmax": 2.002380328312427,
+   "Lmin": 1.9999986744926235,
+   "P_star": [
+    -4.409154298547101e-08,
+    -0.30491264948476016
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 1.05,
+   "a_over_b": 1.05,
+   "abs_P_star": 0.3049126494847633,
+   "b": 1.0,
+   "case": "1.05/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 871,
+   "grid_points": 81,
+   "mean_chord": 2.0011893142255186,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.08713436126708984,
+   "var_inf": 7.086163802833284e-07
+  },
+  {
+   "Lmax": 2.009082351955079,
+   "Lmin": 1.9999811696844971,
+   "P_star": [
+    -2.7613838554949325e-09,
+    0.41661646772447836
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 1.1,
+   "a_over_b": 1.1,
+   "abs_P_star": 0.41661646772447836,
+   "b": 1.0,
+   "case": "1.1/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 946,
+   "grid_points": 81,
+   "mean_chord": 2.0045291843492,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.08165693283081055,
+   "var_inf": 1.0330498044123298e-05
+  },
+  {
+   "Lmax": 2.049799132519249,
+   "Lmin": 1.9994970468902857,
+   "P_star": [
+    7.964290902496935e-08,
+    -0.6002681480108072
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 1.25,
+   "a_over_b": 1.25,
+   "abs_P_star": 0.6002681480108125,
+   "b": 1.0,
+   "case": "1.25/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 813,
+   "grid_points": 81,
+   "mean_chord": 2.0245698159415713,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.08395671844482422,
+   "var_inf": 0.0003124365874923029
+  },
+  {
+   "Lmax": 2.165104099225995,
+   "Lmin": 1.9952869178239934,
+   "P_star": [
+    3.594995217215234e-08,
+    0.7467581875130834
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 1.5,
+   "a_over_b": 1.5,
+   "abs_P_star": 0.7467581875130843,
+   "b": 1.0,
+   "case": "1.5/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 859,
+   "grid_points": 81,
+   "mean_chord": 2.079324587803271,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.07955384254455566,
+   "var_inf": 0.003465886703277425
+  },
+  {
+   "Lmax": 2.4919901759622536,
+   "Lmin": 1.9673960216292439,
+   "P_star": [
+    -7.029104320748186e-08,
+    -0.8706805130929709
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 2.0,
+   "a_over_b": 2.0,
+   "abs_P_star": 0.8706805130929738,
+   "b": 1.0,
+   "case": "2/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 806,
+   "grid_points": 81,
+   "mean_chord": 2.2218862823759933,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.07692217826843262,
+   "var_inf": 0.030883124670027295
+  },
+  {
+   "Lmax": 2.9386595964349,
+   "Lmin": 2.0,
+   "P_star": [
+    0.0,
+    -0.9
+   ],
+   "P_star_on_domain_boundary": true,
+   "a": 2.5,
+   "a_over_b": 2.5,
+   "abs_P_star": 0.9,
+   "b": 1.0,
+   "case": "2.5/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 412,
+   "grid_points": 81,
+   "mean_chord": 2.4178586342874944,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.0433354377746582,
+   "var_inf": 0.1039596246014142
+  },
+  {
+   "Lmax": 3.4608786466553796,
+   "Lmin": 2.0,
+   "P_star": [
+    0.0,
+    -0.9
+   ],
+   "P_star_on_domain_boundary": true,
+   "a": 3.0,
+   "a_over_b": 3.0,
+   "abs_P_star": 0.9,
+   "b": 1.0,
+   "case": "3/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 412,
+   "grid_points": 81,
+   "mean_chord": 2.624289806223745,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.038548946380615234,
+   "var_inf": 0.25310301295013904
+  },
+  {
+   "Lmax": 4.535681734574752,
+   "Lmin": 2.0,
+   "P_star": [
+    0.0,
+    -0.9
+   ],
+   "P_star_on_domain_boundary": true,
+   "a": 4.0,
+   "a_over_b": 4.0,
+   "abs_P_star": 0.9,
+   "b": 1.0,
+   "case": "4/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 412,
+   "grid_points": 81,
+   "mean_chord": 2.9601573206098593,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.03382134437561035,
+   "var_inf": 0.7574686372398571
+  },
+  {
+   "Lmax": 5.627016135402304,
+   "Lmin": 2.0,
+   "P_star": [
+    0.0,
+    -0.9
+   ],
+   "P_star_on_domain_boundary": true,
+   "a": 5.0,
+   "a_over_b": 5.0,
+   "abs_P_star": 0.9,
+   "b": 1.0,
+   "case": "5/1",
+   "converged": true,
+   "directions": 2000,
+   "evals": 412,
+   "grid_points": 81,
+   "mean_chord": 3.227424680325983,
+   "search_radius_0.9min": 0.9,
+   "seconds": 0.04944753646850586,
+   "var_inf": 1.483729932822727
+  },
+  {
+   "Lmax": 3.3951128860785595,
+   "Lmin": 2.9835697540351416,
+   "P_star": [
+    -1.1775676538132593e-08,
+    -1.203681036260272
+   ],
+   "P_star_on_domain_boundary": false,
+   "a": 2.5,
+   "a_over_b": 1.6666666666666667,
+   "abs_P_star": 1.203681036260272,
+   "b": 1.5,
+   "case": "2.5/1.5",
+   "converged": true,
+   "directions": 2000,
+   "evals": 928,
+   "grid_points": 81,
+   "mean_chord": 3.1859989342418538,
+   "search_radius_0.9min": 1.35,
+   "seconds": 0.10843396186828613,
+   "var_inf": 0.01991733416776598
+  }
+ ],
+ "compass_tol": 1e-07,
+ "directions": 2000,
+ "fit": {
+  "intercept": -3.760969849404923,
+  "n_points": 10,
+  "note": "calibration only: var_inf->0 as a/b->1 says the infimum degenerates with the ratio, it is NOT evidence against conjecture 000000",
+  "points": [
+   "1.01/1",
+   "1.05/1",
+   "1.1/1",
+   "1.25/1",
+   "1.5/1",
+   "2/1",
+   "2.5/1",
+   "3/1",
+   "4/1",
+   "5/1"
+  ],
+  "power_exponent_p": 3.4865606111417566,
+  "residual_rms_logspace": 0.42384549447455117,
+  "residuals": {
+   "1.01/1": -0.7028481136205578,
+   "1.05/1": 0.045820467525416575,
+   "1.1/1": 0.30866227581626937,
+   "1.25/1": 0.5232601349299575,
+   "1.5/1": 0.5128827306131472,
+   "2.5/1": 0.08353849407666702,
+   "2/1": 0.2834244779611357,
+   "3/1": -0.029688515372640945,
+   "4/1": -0.3471816286210325,
+   "5/1": -0.6778703233083934
+  }
+ },
+ "min_case": "1.01/1",
+ "min_var_inf": 1.2253700694081736e-09,
+ "runtime_sec": 0.7801816463470459,
+ "search_domain": "|P| <= 0.9*min(a,b)"
+}

@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:57:10+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 5392,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"documents:000000 已按 finding 000001 完成修订（status=revised，review_rounds=1）。逐处改动与依据如下。\\n\\n【盘上真实实现的核对（依据侧）】\\n- scripts/conj000000_verdict_gate.py（240 行，sha256=7a92bf538ffa555f…，size=10049）：L19「Q1 不发散：…相邻档 N 与 2N 的均值比 |r-1| <= 0.15」；L21「Q2 种子可复现：…极差 <= 0.10」；L22「Q3 量程：0 < delta_hat <= k」；L23「Q4 归一化不变：…极差 <= 0.10」；常量 TOL_Q1=0.15 / TOL_Q2=0.10 / TOL_Q4=0.10 / TOL_MONO=0.05 / D3_ABS=0.10；L31–33 三档出口 supports / refutes / insufficient_data；gate 状态为 qualified / qualified_except_Q4 / disqualified；main() 在 gate=disqualified 时强制把 criterion.status 记为 insufficient_data。全文无 estimator_not_qualified。\\n- data/review_findings.json finding 000001 原话即指出 claim-9 与 conjectures:000000 所说的「Q1 收敛性(rel_se)/Q2 N-标度一致性/Q3 归一化不变性≤0.05/Q4 可行性 + support/refute/insufficient_data 加 estimator_not_qualified」两处与脚本逐条对不上。\\n\\n【改动 1｜claim-9（documents 行 claims[8]）】改为按脚本逐字转述：Q1 不发散 |r−1|≤0.15（TOL_Q1=0.15）、Q2 种子可复现极差≤0.10（TOL_Q2=0.10，单 seed 记未测）、Q3 量程 0<delta_hat≤k（并注明文档口径与 gate() 实现按 k×1.05 判界）、Q4 归一化不变极差≤0.10（TOL_Q4，有数据才判）；gate 三态；分离判据 D1（逐步不低于 −0.05）/D2（x=1/log N 最小二乘，截距 ≥(m−k) 且 ≥1）/D3（N=32、64 两档 Δ<0.10 且 |Δ_64−Δ_32|<0.05）；出口只有 supports / refutes / insufficient_data；**删除 estimator_not_qualified 一档**，写明 gate 未通过一律并入 insufficient_data 且属结构性缺口、不得读成猜想被反驳；末句加「本文所述的判定口径以盘上脚本 scripts/conj000000_verdict_gate.py 为准」。citations 保持 lit:000003、lit:000004、exp:000001、exp:000003，evidence_kind 仍为 heuristic（未抬高），negation_kind 仍为 not_proved。依据：finding 000001 原话 + 脚本 L19/L21/L22/L23/L31-33/L128/main() 分支。\\n\\n【改动 2｜sections[4]「5 例子与反例」的散文段】同一套判据的复述整段重写为与脚本逐字一致的闸门名/阈值/词表，并同样删除 estimator_not_qualified、加写「本文所述的判定口径以盘上脚本 …为准」；末句改为「按脚本口径落在 insufficient_data（缺合格估计器，属结构性缺口）」。依据：同上，另对照 data/documents.json 改前该 body 与 data/conjectures.json 旧 testable 的措辞。\\n\\n【改动 3｜sections[1]「2 定义与已知」与 claim-2】按 finding 000002 删去「II_1 因子性与性质 Gamma 在全部 W*(F_k) 上同时成立」这一确定语：现写「II_1 因子性按 lit:000000/lit:000001 转引；性质 Gamma 在本趟证据包内没有逐字陈述（statements 现有 stmt:000000、stmt:000001 均涉自由熵维数，所挂 lit:000003/lit:000004 题名与摘要也只涉 free entro",
+ "payload_sha256": "fba43fa67bb52cfdbac0261e4957cf1628ef961c09938e762464b85b565132e1",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000033"
+}

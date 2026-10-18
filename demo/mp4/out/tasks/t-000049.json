@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:18:47+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3494,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"G 成文阶段主活完成（四件全做，逐件读数如下）。\\n\\n1) 正文已写并编译：`out/paper/main.tex`（18992 字节，sha256=`cf0df8f1abb1755fc67c32bc965cc93c59a664ed13d0119abc6b73f15b6d2744`）→ `out/paper/main.pdf`：pages=7、pdf_bytes=1021656、engine=pdflatex、exit_codes=[0,0]、回执 `pdf_fresh=true`（`out/paper/COMPILE-RECEIPT.json`），即 PDF 由盘上这一份正文编出。章节（每节均有非空散文正文）：引言 / 问题与背景 / 证据基座（stmt:000000、stmt:000001 及边界）/ 判定尝试与数值读数（exp:000000、000001、000003、000010 及 scripts/conj000000_verdict_gate.py 口径）/ 主问句三档（已判定·条件性·未判定，公开问题一律写成开放问题）/ 文献缺口与检索终局（手稿 000036：2 条 ok、11 条 external_unavailable）/ 未解问题与下一步 / 附录（证据等级与三态纪律）。落笔后 fs.search 回核「已证明|已形式化验证」：命中 4 行，全部是「不构成证明」「不含自称已形式化验证」「未判定≠已证否」的告诫语境，无一处把结论写成已证明。\\n\\n2) 体例问题：`documents/note-fk-fm-research.md` 盘上标题现已无双编号（fs.search 只有一处『### 3.1 定义与已知』）；残留的双编号在台账数据里——claims 的 `section` 字段仍是『2 定义与已知』。已用 fs.edit 一次定点替换（allow_multiple，5 处）改成『定义与已知』，与 sections 标题一致；markdown 正文段落一字未动。如实记：改的是 `data/documents.json` 而不是 .md，因为 .md 那一半已无双编号。\\n\\n3) 两张验收表：`out/paper/ACCEPTANCE.md`（人读，sha256=65a9eb27…）与 `out/paper/ACCEPTANCE-CHECKS.json`（机读，sha256=18f469c0…），逐格读数：P1 paper_pdf_fresh=yes（tex_sha256 对得上、pages=7）；P2 research_question_rows=1（000000，status=dropped）；P3 retrieval_ok_rows=8（table.count 过滤 outcome=ok）+ unfinished_request_rows=0；P4 statement_rows=2、conjecture_rows=1；P5 numeric_experiment_rows=11（table.count；含本轮 exp:000010 的 insufficient_data/gate=disqualified/缺合格估计器）；proof_experiment_rows=na（Lean 已关闭，proof 档结构上产不出来）；P6 c_analysis_runs=na（本趟未派 C，理由写在该行）；P7 plan_progress_rows=1（attack_plans:000000）；P8 document_rows=1、document_body_rows=1（7 节均有正文）、document_claim_rows=11 ≥ 研究问题条数 1；P9 unfinished_request_rows=0；P10 literature_unprocessed_rows=13（table.count 过滤 processed=false）→ 记 unknown 并写 unprocessed_reason：11 条 external_unavailable、2 条待 B 消化。review_findings 本轮读数 10 行。\\n\\n4) 还卡在哪：① literature_unprocessed=13 未清零，根因是缺本地全文（结构化缺口，不是动作没做），需 A 补全文、B 才谈得上消化；② δ_0 的因子不变性仍无落点，主问句维持 dropped/未判定；③ conjectures:000000 仍 proposed、缺合格 δ_N 估计器（exp:000010 判 insufficient_data）；④ 正文里的 known_",
+ "payload_sha256": "8c65306df5de845b98fdef99765835db26b73c2f22e2b70787c05eadfd7e4bd0",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000049"
+}

@@ -1,0 +1,1 @@
+{"tool": "fs.search", "args": {"limit": 60, "path": "out/paper/main.tex", "pattern": "\\\\begin\\{abstract\\}|\\\\bibitem|\\\\section\\{Computational evidence\\}|\\\\begin\\{thebibliography\\}", "why": "四件套那一格（Abstract / \\bibitem / Appendix A: Computational evidence）不能凭印象勾，要数出来：各自几处、在哪一行"}

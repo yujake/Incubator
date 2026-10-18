@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:19:44+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4236,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按 H 的 findings 修订 doc:000000（round 1 rejected → 已改为 status=revised / review_rounds=1 / revision=2），只动了 M 指定要改的那两处台账面 + 一处正文措辞，其余断言一字未动。\\n\\n【① claim-13 去排他性（error 已改）】新文本（已落 doc:000000.md 第 124 行并经 fs.read 回读确认）：「等边集（{0°,120°,240°} 的旋转等价类，exp:000004 的 B 案 B_equilateral3）的两侧夹逼为 r ∈ [0.3333333333333139, 0.33371521464222687]：下界 r_lo = 0.3333333333333139 来自 2000×1000 = 2·10^6 点网格的最大值（grid_max = 0.33325，refined_xy = (0.6666666666666278, 0.0)）加局部爬山，上界 r_hi = 0.33371521464222687 来自真周期平行四边形上的 1-Lipschitz 修正（period residual 2.2e-16）。上端 0.33371521464222687 略大于 1/3，所以这条读数只把 r 夹在该区间内，不给出 r ≤ 1/3 的结论；本稿只用它说「该角度集在已核读数里落在 1/3 附近」。这只是数值两侧夹逼，不构成证明。」数字逐字取自 exp:000004 的 observations.data.B（L/refined=0.3333333333333139、U=0.33371521464222687、grid_max=0.33325、grid_shape=[2000,1000]），『唯一』『r ≤ 1/3』两处排他/过强表述已删。\\n\\n【② G7 台账（error 已改）】7 条被点名的数值型断言全部挂上 numeric_evidence（script/params/result，数字与所引实验的 claim 或 observations 一致）：claim-10←exp:000006、claim-11←exp:000019、claim-17←exp:000002、claim-18←exp:000002、claim-19←exp:000018、claim-20←exp:000020、claim-21←exp:000000；另 claim-13 因本轮改措辞顺带补了 exp:000004 的台账行。读数：numeric_evidence.script 非空条数 0 → 8（G7 自证式里的『有台账行=0、缺台账行=7』应对应翻成有台账行 8、缺 0）。没有任何一条被降成 heuristic 后当结论写——claim-20/21 本来就是 heuristic + is_negative/no_local_evidence / not_proved，未动。\\n\\n【③ 改后 22 条断言的证据引用表（条数仍为 22，未增未删）】\\nclaim-1 stmt:000001｜claim-2 exp:000000,exp:000004｜claim-3 stmt:000002｜claim-4 stmt:000003｜claim-5 stmt:000004,stmt:000005｜claim-6 stmt:000000｜claim-7 stmt:000006,rel:000002｜claim-8 rel:000001,stmt:000003｜claim-9 stmt:000011,rel:000004｜claim-10 exp:000006＋NE(pyjama_r3_lemmaA.py)｜claim-11 exp:000019＋NE(pyjama_rational_block.py)｜claim-12 exp:000000｜claim-13 exp:000004＋NE(pyjama_bracket.py)｜claim-14 exp:000004,exp:000019｜claim-15 exp:000016｜claim-16 exp:000020｜claim-17 exp:000002＋NE(run_pyjama_part3.py)｜claim-18 exp:000002＋NE(run_pyjama_part3.py)｜claim-19 exp:000018＋NE(pyjama_refute_exp12.py)｜claim-20 stmt:000006,exp:000020＋NE(pyjama_conjecture_min_k.py)",
+ "payload_sha256": "091f56d50f55d14bf3492126dc00042f82ae62eda77c4a0823949944173145ee",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000015"
+}

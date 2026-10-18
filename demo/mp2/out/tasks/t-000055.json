@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:06:54+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2790,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"只读审校对 doc:000000 现行版（main.tex sha256=b99e9bb6eee1c7ebfce24069cefc5697f52eb353b50f083b9dc874ddcd0fed5d）已完成，裁决 rejected，稿件状态已置 in_review。\\n\\n读数：\\n① 各节都有非空正文——我通读 508 行、分四段读完（1–129/130–329/330–419/420–508），§1–§6、§7 结论与 Appendix 均有实质段落，无标题骨架节。\\n② 强于证据的措辞：fs.search 搜 Theorem|Lemma|Corollary|begin{proof}|we prove|is proved|已证明|已形式化|formally verified|machine-checked 仅 4 处命中，且全是否定式声明（第 34、392、471、505 行均写 not machine-checked / not a proof），未见 error 级过度声称。\\n③ 21 条 numeric 行在正文与表 tab:exps 中如实描述：exp:000009/000016 记 exit code 1 inconclusive、exp:000013 记 self-reported inconclusive、分别由 exp:000010/000017/000014 承接，并明写『later row covers the same question does not upgrade the failed row』。正文自洽；台账未逐行复核（这一档我在报告里如实标为未逐行核）。\\n④ 出处：table.list relations 返回 6 行（000000–000005），全部 quote_verified=true、quote_mode=verbatim、page_range 为 p.28/p.31（printed p.24/p.27），正文 §3 逐条给出 framework page + 行号 + 逐字证据，可对上。\\n⑤ 猜想：conjectures 表仅 2 行（000000、000001），status 均 supported_not_proved，正文 §5 两段亦逐条写 supported_not_proved 且各带限制说明。\\n\\n失败门（来自 review_report，不是我一句话）：pass=9 / fail=3 / unknown=2 / na=1 —— G6 虚证门 fail（claim-17 的 numeric_evidence.script 指向的脚本盘上不存在，且该字段塞了两个路径）、G7 台账完整门 fail（claim-13、claim-20 数值型断言缺 numeric_evidence，属仅泛证）、G10 审校格式门 fail（3 条发现缺轴/行号/≤20 词逐字引文/最小修法）；G8 可复跑门 unknown（本趟拿不出 run_evidence：预算不足以再派 E 重跑 code/ 下的数值脚本）、G11 版本冻结门 unknown。\\n\\n我自己读出来的、机械扫描覆盖不到的一条已用 record_finding 落库（finding 000004, warning）：Appendix 声称『Only the rows discussed in the text are listed』，只给 10 条 exp 的脚本/hash 绑定，而正文点名的 exp:000004/000008/000010/000017/000018 等在附录无绑定——读者按附录无法复核这部分读数。\\n\\nG8 记 {checked:false, reason:'本趟预算不足以再派 E 重跑 code/ 下的数值脚本'}，不折成通过。全程只读，一个字未改稿。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp2\\\\runs\\\\H-20261018-220654-001.json\", \"messages\": [], \"steps\": 15, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "e02e8ad4b3904df3314cbdfbefb1836b1b80050cb7eb8192e62bc906f8b3e05a",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000055"
+}

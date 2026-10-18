@@ -1,0 +1,6 @@
+{"at": "2026-10-18T21:13:55+08:00", "brief": "检索自由群因子同构问题的关键英文文献", "first_task_id": "t-000002", "kind": "add", "name": "A1", "owner": "t-000001", "role": "A", "seq": 1, "surface": "S01", "task_id": "t-000002"}
+{"at": "2026-10-18T21:28:50+08:00", "brief": "认领并闭环检索请求 r-000008", "first_task_id": "t-000011", "kind": "add", "name": "A2", "owner": "t-000001", "role": "A", "seq": 2, "surface": "S02", "task_id": "t-000011"}
+{"at": "2026-10-18T21:30:34+08:00", "brief": "把本趟研究收敛成研究手稿", "first_task_id": "t-000012", "kind": "add", "name": "G1", "owner": "t-000001", "role": "G", "seq": 3, "surface": "S03", "task_id": "t-000012"}
+{"at": "2026-10-18T21:32:25+08:00", "brief": "只读审校研究手稿 documents:000000", "first_task_id": "t-000014", "kind": "add", "name": "H1", "owner": "t-000001", "role": "H", "seq": 4, "surface": "S04", "task_id": "t-000014"}
+{"at": "2026-10-18T21:35:43+08:00", "brief": "复核 doc:000000 修订后版本", "first_task_id": "t-000017", "kind": "add", "name": "H2", "owner": "t-000001", "role": "H", "seq": 5, "surface": "S05", "task_id": "t-000017"}
+{"at": "2026-10-18T21:37:30+08:00", "brief": "复核 doc:000000 现行版并签字", "first_task_id": "t-000019", "kind": "add", "name": "H3", "owner": "t-000001", "role": "H", "seq": 6, "surface": "S06", "task_id": "t-000019"}

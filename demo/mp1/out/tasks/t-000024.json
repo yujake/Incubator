@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:29:30+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2429,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"sg1 完成（数值档，evidence_kind=cross_check，不是证明）。脚本 scripts/attack-000000-sg1.py（sha256 前16位 2a6e28fa849b2195）已在独立进程跑通，exit_code=0，runtime=3.313s，登记为 exp:000021（claim_key=conj:000000，method=numeric，result=supports，negation_kind=not_proved）。脚本 stdout 的读数（原话见 out/experiments/000021.log）：REPRO_RESULT 给出 bound={r_upper:0.5, r_lower:0.5, eps_grid_worst:0.063702367904}，即上界与下界在 1/2 处相遇。①k=1：6 个角度（0..5 × π/6）逐个用精确算术（Q(√3) 上的 Fraction，非浮点）验证 witness p=u/2 使 p·u=1/2、dist=1/2，dist_exact 全为 '1/2'，ok=true；上界 1/2 由「任意 p、任意单位 u 都有 dist(p·u,Z)≤1/2」给出并在 486 个网格点上精确抽查、违规 0 ⇒ r(Θ)=1/2 对任意单角度两侧闭合。②k=2：9 组 Θ={j0·π/6, j1·π/6}（{0,3}、{0,2}、{1,3}、{2,3}、{0,1}、{1,2}、{0,4}、{1,4}、{3,4}，全部为 π/6 的整数倍，故全程在 Q(√3) 上精确）9/9 都解出精确有理（Q(√3)）witness，dists 两分量均恰为 '1/2'，witness_found=9；独立稠密有理网格 33×33=1089 点/族的最大读数 grid_max≤1/2，ε=1/2−grid_max 各族的读数为 0、0.003284930204、0.004487298108、0.007772228311、0.063702367904（最差 0.063702367904）。注意口径：k=2 的下界 1/2 是由显式 witness 精确取到，所以两侧夹逼在这里退化为「上界 1/2 与下界 1/2 重合」，网格 ε 只是独立一致性检查，不是下界的来源。③顺带（float，非精确）k=3..10 等距族的 r 下界读数：0.333333、0.292893、0.236068、0.211325、0.182018、0.165911、0.147956、0.136729，逐个都 ≥ 1/(2k)（1/6、1/8、1/10、1/12、1/14、1/16、1/18、1/20），即在这个网格族上没找到反例——这仅是 float 下界，k=3 的 0.333333 也印证「等边集不紧」。失败/未覆盖如实记：没有失败项，但覆盖范围有限——k=2 只覆盖了 π/6 整数倍的 9 个族，一般 k=2（无理角差）未覆盖；k≥3 只有 float 网格下界，不能作为「猜想成立」的证据。本会话 Lean 关闭，故无 proof/formal 位，等级上限 cross_check。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp1\\\\runs\\\\E-20261018-212930-001.json\", \"messages\": [], \"steps\": 11, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "ea18858a27e41dcde538a676254d1e9861b4f661e9bcd82112a3dc8f3fa79132",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000024"
+}

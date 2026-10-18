@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:40:27+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2050,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"补账完成：search_requests 新行 r-000001 已落盘并复核（table.get meta.found=true）：topic='pyjama problem'（mode=topical, providers=['crossref'], claimed_by=t-000028）→ outcome=ok，result_lit_ids=[\\\"000000\\\",\\\"000003\\\"]，done=true，attempts=2。两条都是**去重命中**（已在库，非新登记）：lit:000000 = Manners, 'A solution to the pyjama problem', Invent. Math. 2015, doi:10.1007/s00222-014-0571-7；lit:000003 = Malikiosis–Matolcsi–Ruzsa, 'A note on the pyjama problem', Eur. J. Combin. 2013, doi:10.1016/j.ejc.2013.03.001 —— 按派活口径「已在库的走去重也算取回」，如实标明是去重命中。检索式：(a) 第一次 topic='pyjama problem' + mode=precise + description 带 'pyjama problem, covering the plane by rotated strips, finite union of rotated periodic strips…' → provider=openalex 返回 HTTP 429 provider_error：**这一路没查成，不是没有结果**，如实计入 attempts；(b) 第二次 topic='pyjama problem' mode=topical provider=crossref → ok=true，候选 10 条，其中 2 条即上述去重命中；其余 8 条（'Pyjama, pyjama suit'、'pyjama stripes'、'David Oliver: Fighting pyjama paralysis' 等）判为不相关，**只说这 8 条没进结果，不主张这些文献不存在**（已写进 submit_note）。诚实边界：这一行是我先按 schema 建行、执行真实检索后回填 outcome/result_lit_ids 的；raw search.literature 工具不返回 request_id，行内不存在的自动 claim 我也没有伪造，claimed_by 写的是真实台账号 t-000028，attempts=2 与两次真机读数一致。附带上一条旁证（供 M 判 Q2 是否够）：library/ 三份纯文字稿都在盘 —— 000000.txt 12497B（仅 p1–5，整本抽取被质量闸拒）、000001.txt 103344B、000002.txt 19976B，B 要的两份可直接读。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp1\\\\runs\\\\A-20261018-214026-001.json\", \"messages\": [], \"steps\": 12, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "943747e2ed3f12883d9d38aebda8101f96143e8fcaa8c80592744680300197d6",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000028"
+}

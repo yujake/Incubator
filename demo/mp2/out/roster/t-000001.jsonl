@@ -1,0 +1,2 @@
+{"at": "2026-10-18T20:21:15+08:00", "brief": "汇编等弦点问题研究手稿（documents，含历史/对称代数情形/数值证据三块）", "first_task_id": "t-000014", "kind": "add", "name": "G1", "owner": "t-000001", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000014"}
+{"at": "2026-10-18T20:22:46+08:00", "brief": "只读审校 documents 000000（等弦点问题研究手稿），findings 落 review_findings", "first_task_id": "t-000016", "kind": "add", "name": "H1", "owner": "t-000001", "role": "H", "seq": 2, "surface": "S02", "task_id": "t-000016"}

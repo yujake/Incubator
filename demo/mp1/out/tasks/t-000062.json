@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:47:19+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 354,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"10 条 own_result 命题（stmt:000027–000036）已逐条走查并落 verifications，7 成立 / 3 有毛病，未签第 3 位的三条已指到步号。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp1\\\\runs\\\\V-20261018-224719-001.json\", \"messages\": [], \"steps\": 18, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "37f40ce03f8e7d8cd360f37299b7766b5a3796c469b5a14be231a29eb78e013d",
+ "readings": {},
+ "role": "V",
+ "status": "done",
+ "task_id": "t-000062"
+}

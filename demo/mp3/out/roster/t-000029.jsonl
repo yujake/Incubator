@@ -1,0 +1,4 @@
+{"at": "2026-10-18T21:11:17+08:00", "brief": "规范术语检索反向蕴含与反例构造", "first_task_id": "t-000030", "kind": "add", "name": "A1", "owner": "t-000029", "role": "A", "seq": 1, "surface": "S01", "task_id": "t-000030"}
+{"at": "2026-10-18T21:15:52+08:00", "brief": "E 重跑 d=3 组并把 exp:000008 界推到 n=12", "first_task_id": "t-000032", "kind": "add", "name": "E1", "owner": "t-000029", "role": "E", "seq": 2, "surface": "S02", "task_id": "t-000032"}
+{"at": "2026-10-18T21:16:25+08:00", "brief": "B 消化新文献 000025，抽概念与关系行", "first_task_id": "t-000033", "kind": "add", "name": "B1", "owner": "t-000029", "role": "B", "seq": 3, "surface": "S03", "task_id": "t-000033"}
+{"at": "2026-10-18T21:24:57+08:00", "brief": "H 补 round_no 重签现行版", "first_task_id": "t-000042", "kind": "add", "name": "H1", "owner": "t-000029", "role": "H", "seq": 4, "surface": "S04", "task_id": "t-000042"}

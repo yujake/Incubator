@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T20:27:24+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3705,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按 H 的审校报告（out/review/000000-review.md，rejected，pass=9/fail=1/unknown=2/na=3）逐条修订 documents 000000，并把修订后的 claims/sections 重新落库（revision 2、review_rounds 1、status revised），documents/000000.md 已按修订后的数据重画。逐条对应如下。\\n\\n【G7 台账完整门 fail（唯一阻断项）】claim-8 原无 numeric_evidence。修法选了报告给的 (a)：给 claim-6/7/8/9/10/11 六条数值断言全部补 numeric_evidence 四元组（script/range/n_cases/n_counterexamples），取值分别是 code/eq_run_circle.py、code/eq_run_ellipse.py（n_cases=5）、code/eq_run_fourier.py（n_cases=5 与 10）、code/eq_check_polyline.py（n_cases=4），range 逐条按该实验 claim 的适用范围写；claim-8 的读数来源写明 exp:000000 observations.data.cases[*].var_inf_2000dirs。doc.scan_claim 复扫 claim-8：error_count=0（此前 1 条 missing_field 已消）。\\n\\n【warning 1：claim-2 缺声明】补上「我们未逐字核对原文：所引 stmt:000001/000002 的 quote_verified 为 null，只有摘要层转述」。\\n\\n【warning 2：来路行与台账矛盾】不再写「lit:000000 path=null、download.status=skipped」这种与 literature 行相反的话；按现查读数改写成：path=library/000000/rychlik-1997-complete-solution-equichordal-point-problem.pdf、download.status=ok、764011 字节、sha256 9f0cc668…，但文字层被判乱码 ⇒ 抽不出逐字引文。\\n\\n【派活点 (1) Rychlik 段落】section 3 与 claim-4/claim-5 都明确写「我们未逐字核对原文——文字层乱码，只核到题名/摘要层元数据」，并注明 quote_verified=null。\\n\\n【派活点 (2) 1927 线索】新增一节「历史线索的显式缺口」：现查 literature 表按 1927 检索为 0 行（table.search 读数 0 条）⇒ 台账里没有对应文献行，未核到；不配任何 lit: 引用、不当已知结论使用（markdown 的 §4.1 也写了同一句）。\\n\\n【派活点 (3) 三块数值断言的范围】椭圆钉死 5 组 (2,1)(1.5,1)(3,1)(2.5,1.5)(1.1,1)，并加「这 5 组之外没有读数，结论不外推」；原 claim-8 的「a/b→1 时下确界趋于 0」超出实验范围，改成「不能推 a/b→1 的极限行为，a/b→1 的读数未核到（见 open Q5）」；Fourier 钉死 genericA/genericB 两组 + odd_control 正对照、ε∈{0.001,0.005,0.01,0.02,0.05}、|P|≤0.25，并写「不外推到整个族」；圆只覆盖单位圆、2000 方向、|P|≤0.5。\\n\\n【派活点 (4) 证据等级与用词】最高档仍为 cross_check（6 条）/ heuristic（7 条），proof 与 proof_review 均为 0；正文不再用「定理口径」（改「结论口径」），无「已证明/必然」表述。\\n\\n【派活点 (5) 两门 unknown 的可核来路】section 4、5 逐条抄了 exp:000000/000001/000002/000003 的 claim 原话并点名读数出处（如 exp:000000「对 (a,b) ∈ {(2,1),(1.5,1),(3,1),(2.5,1.5),(1.1,1)} 的椭圆…数值下确界严格大于 0（2000 方向采样，数值，非证明）」），没有靠删断言规避。\\n\\n【没做到的，如实记】G9（计数一致）与 G11（版本冻结）两门 unknown 是调用方侧读数（缺 claim_counts / 缺上一轮 ",
+ "payload_sha256": "4c05b8edd612e1d3b478951eefca1c138fd00ecc4012270b9602fa04cdfeba34",
+ "readings": {},
+ "role": "G",
+ "status": "done",
+ "task_id": "t-000017"
+}

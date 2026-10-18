@@ -1,0 +1,3 @@
+{"at": "2026-10-18T22:37:32+08:00", "brief": "把 main.tex 从研究报告改写成论文体例并重编 PDF", "first_task_id": "t-000062", "kind": "add", "name": "G1", "owner": "t-000061", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000062"}
+{"at": "2026-10-18T22:39:56+08:00", "brief": "只读审阅重写后的论文正文并落 review_findings", "first_task_id": "t-000063", "kind": "add", "name": "H1", "owner": "t-000061", "role": "H", "seq": 2, "surface": "S02", "task_id": "t-000063"}
+{"at": "2026-10-18T22:43:44+08:00", "brief": "逐行走查论文第 3 节的自然语言证明并签 verifications", "first_task_id": "t-000065", "kind": "add", "name": "V1", "owner": "t-000061", "role": "V", "seq": 3, "surface": "S03", "task_id": "t-000065"}

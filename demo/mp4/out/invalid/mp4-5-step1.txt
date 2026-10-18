@@ -1,0 +1,1 @@
+{"tool": "fs.read", "args": {"path": "out/paper/main.tex", "start_line": 205, "max_lines": 120, "why": "读正文 \appendix 前后与附录 A 全文，逐条核五项"}}

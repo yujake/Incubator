@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T22:13:15+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4401,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"conjecture 000000 的 testable 判据已按原文参数域实跑完毕：结论不是 supported_not_proved，也不是 refuted —— 确定性闸门判 insufficient_data（gate=disqualified，结构性缺口=缺合格估计器）。\\n\\n【实验编号】exp:000010（method=numeric，evidence_kind=cross_check，exit_code=0，runtime=9.406s，脚本 code/conj000000_verdict_run.py sha256 前16位 299dd83f09401839）；前一次 exp:000009 是同一判定，因我脚本里 coverage.m_measured 把 N 误填成 m（记录字段错，不影响 verdict），修好后重跑留干净证据。两次 exit_code 均为 0，无报错原文可抄。\\n\\n【确定性判定（只认 scripts/conj000000_verdict_gate.py 的输出）】gate_status=disqualified，四条理由原话：\\n- Q3_range_violated: 7 条读数落在 (0,k] 之外（例 k=2 N=8 delta=4.983578955307086）\\n- Q1_divergence: worst |ratio-1| = 0.663 > 0.15\\n- Q2_not_tested: 没有任何 (estimator,k,N) 有 >=2 个 seed\\n- Q4_not_tested: 没有同一 (k,N,seed) 下不同 normalization_scale 的读数\\ncriterion_status=insufficient_data，理由原话：「gate=disqualified ⇒ 结构性缺口（缺合格估计器），不是反驳」。\\n候选估计器（scripts/f_conj000000_delta.py 那套 8 字母环境均匀采样，delta_hat=ln(V_env·p_hat)/ln N）与已作废代理量 E2 同形，随 N 发散，过不了 Q1/Q3，所以 ①/② 一条读数都没拿到。这不是「数据不足」，是缺估计器，不得读成猜想被反驳。\\n\\n【参数域覆盖】\\n- k∈{2,3,4}：全覆盖（3/3）。\\n- N∈{8,16,32,64}：四档都有落得住的读数（k=4 四档全测，k=3 有 8,16，k=2 有 8）。12 个 (k,N) 格里实测 7 格；未采样的 5 格为 (2,16) (2,32) (2,64) (3,32) (3,64)，原因是解析命中率先验就判不可行（p_exact=1.9e-6 / 2.5e-12 / 4.2e-24 / 2.4e-5 / 5.0e-10，期望命中数 <1，脚本记 status=not_sampled_infeasible_by_analytic_precheck，未造假读数）。\\n- m∈{3,4,5}：**m=5 完全未覆盖**（没有 k=5 的读数，故 (2,5)(3,5)(4,5) 三个 m=5 对无两侧读数）；m>k 的对里只有 (2,3)(2,4)(3,4) 两侧都有读数，但因 gate 未过，这些对也不进入 D1/D2 判定。\\n- 种子：按 testable 原文「每个 N 固定一个确定性种子」，每个 (k,N) 只有 1 个 seed ⇒ Q2 结构性未测（不是我缩小了参数，是原文就只要一个种子）。\\n\\n【记录侧】scripts/conj000000_infeasible_record.py 跑通，exit_code=0，stdout：REPRO_RESULT: {\\\"verdict\\\": \\\"no_qualified_estimator_in_this_session\\\", \\\"reason_code\\\": \\\"estimator_not_qualified\\\", \\\"excluded\\\": [\\\"E1:excluded_infeasible\\\",\\\"E2:excluded_divergent\\\",\\\"E3:excluded_no_bridge\\\",\\\"E4:not_wired\\\"], \\\"spec_items\\\": 8}，落盘 reports/conj000000_infeasible_record.json。E4（重要性采样/变分微态采样器）本会话未接线 —— 缺的是数学构造，不是算力。\\n\\n【需要 D 处置的一处口径不一致（我按脚本实现执行，未自行改判据）】testable.gate_criteria 的 Q4 原",
+ "payload_sha256": "0694ed1e8004bb19e137a3e85d5764f629f901f550a8b9bd7cce248dce028d36",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000044"
+}

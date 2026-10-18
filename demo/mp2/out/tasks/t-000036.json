@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:40:48+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3843,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"审校完成，结论分两栏，不许折平：\\n\\n【一】机械通道（review.review_document，round 2，doc_id=000000）：verdict=`accepted`，新增 findings 0 条，现有 2 条 open warning（finding 000000/000001，均为 dangling_dep：lit:000000 PDF 文字层乱码、lit:000001 无本地全文，属外部来源不可得，非本轮新增缺陷）；覆盖 21/21 断言、依赖闭合已查（0 条依赖，dependencies 表按 doc_id 过滤确为 0 行）。签名已落：content_sha256=`936ad599…`、claims_hash=`f2832e65…`、evidence `doc-signatures/000000-936ad59949fef1f8-007.json`。**但这一档只覆盖引用/证据等级/否定分类/依赖闭合，不等于全门通过。**\\n\\n【二】G1–G15 完整报告（out/review/000000-review.md，revision_hash `4f4777511d6f2fff`）：verdict=`rejected`，pass=10 / fail=3（G6、G7、G8）/ unknown=1（G11）/ n/a=1（G12）。因此文档状态 `accepted` 与报告 `rejected` 并列存在，两栏覆盖面不同 —— 我把 `accepted` 读成「机械面没查出错」，不读成「这份稿子没问题」。\\n\\n【三】派活四项逐条核（读数）：\\n1) 新 claims 的 exp: 引用真实：exp:000004/000007/000008/000010/000011/000017/000018 共 7 条，`experiments` 表按 (experiment_id, evidence_kind=cross_check) 组合过滤各命中 1 行，全部存在且等级为 cross_check，与正文标称一致。\\n2) 越档措辞：fs.search `已证明|形式化验证|形式化|定理|必然|证毕|Q.E.D` 全稿 0 命中；另两处含「形式化」的句子都是「本会话 Lean 形式化已关闭、proof 档产不出来」的自述，属免责而非越档。\\n3) Rychlik 保留「未逐字核对原文」：claim-2/4/5/12/13、§3、§5.1、Q1/Q2 逐处保留；stmt:000002 现查 quote_verified=null、quote_reason 写「不是原文摘录」，与正文一致。\\n4) 未解项写清：claim-20（全局最小性只有 601 起点网格+罗盘搜索、无区间算术/分支定界证书）、claim-21（a/b>5 无读数、a/b<1.01 极近端与 a/b→1 极限无读数、Fourier |P|<0.01 被挖掉）、§8「本轮卡点」1–4 与 Q5/Q6 一致。\\n\\n【四】给 G 的可操作修订点（进报告 G6/G7/G8，属驳回门）：a. claim-17 的 numeric_evidence.script 是两条路径拼接成的一格（'scripts/eq_s3_bound_and_wide.py / scripts/eq_s3g_boundary_layer.py'），拆成一格一脚本或列表；两个文件我 fs.list 核过都在，所以这是字段格式缺陷、不是虚证 —— G6 的 error 读数应按此订正而不是补写脚本。b. claim-13、claim-20 被关键词判为数值型断言却无 numeric_evidence 行：claim-13 是纯文献断言（建议正文去掉「数值」字样或显式写「本条无数值台账」），claim-20 引 exp:000018 的 bound.not_covered，建议补 numeric_evidence（script=scripts/eq_s3i_local_analytic.py + range）。c. G8：claim-6/7/18 无本轮实跑命令，补跑留输出或在正文注明「引既往读数、本轮未复跑」——这一档我如实记「没查」，不记「没问题」。d. 体例：正文出现四个「### 4.」小节与「## 4. 断言清单」并存，编号重复，建议改为 4.1–4.4；该条只在报告里，不入 review_findings（通道不接体例项）。\\n\\n【五】我这一轮没查的（不许读成通过）：数值读数是否与 experiments 的 data 字段逐字一致（我只核了「行存在且等级一致」，没逐行比对 1.2254e-09/0",
+ "payload_sha256": "6fcaabf472024a9f632100877e25e6d537f06812e1f3b9381d7c508d1fb646a2",
+ "readings": {},
+ "role": "H",
+ "status": "done",
+ "task_id": "t-000036"
+}

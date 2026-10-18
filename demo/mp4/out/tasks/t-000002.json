@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:13:55+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 2245,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"检索活已完成：5 批指定短题名 + 2 批补充检索，search_requests 共 8 行，其中 outcome=ok 6 行（r-000002/3/4/5/6/7），outcome=no_results 1 行（r-000001，第 1 批「free group factors isomorphism problem」经 crossref 返回的 10 条全是一般群/群环同构问题，只记这 10 条没进结果、不主张这些文献不存在）。literature 登记 9 行：000000 Dykema 1994 Interpolated free group factors（核心，L(F_t) 族含全部 W*(F_k)）；000001 Popa–Shlyakhtenko 2020 Representing interpolated free group factors as group factors；000002 Houdayer 2009 Strongly solid group factors which are not interpolated free group factors；000003 Voiculescu 1999 自由熵维数 ≤1 for property T generators（分离 W*(F_k)/W*(F_m) 的主候选不变量）；000004 Shlyakhtenko 2006 Remarks on Free Entropy Dimension；000005 Popa 2007 ICM Deformation and rigidity（形变刚性技术）；000006 Juschenko–Popovych 2011（Connes 嵌入问题的自由群代数表述）；000007 Brown–Dykema–Jung 2008 Free entropy dimension in amalgamated free products；000008 Ge 1998 Applications of Free Entropy to Finite von Neumann Algebras II。各批 matched 与失败原因：第 1 批首发 precise 档把长 description 拼进检索式触发 OpenAlex HTTP 429（记 search_failed 读数，不是「没有这个主题的文献」），随后 OpenAlex 全程进入限流冷却（读数：还要 298s/199s），此后全部改走 crossref，故自由群因子这一支只有 crossref 单一源覆盖、无双库元数据可比对。两处如实缺口：① OpenAlex 无任何成功请求，不能声称「双源交叉确认」；② 9 行登记 download.status=skipped（no_local_path），本地书架无全文，B 与下游暂无逐字可回验来源——这是「全文未落盘」，不是「文献不存在」；若需引文级关系，需先补 PDF 落盘并用 text.extract 转纯文字稿。不相关候选的丢弃理由逐批写在对应 search_requests 行的 submit_note 里，可复核。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp4\\\\runs\\\\A-20261018-211355-001.json\", \"messages\": [], \"steps\": 35, \"stop_reason\": \"final\", \"summons\": []}",
+ "payload_sha256": "acd22508ef520ed421fccac115dade8a74d74122843cfb726e78e1322933ed9c",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000002"
+}

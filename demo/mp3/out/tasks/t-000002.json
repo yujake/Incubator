@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T20:04:28+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 4128,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"检索完成，已落台账：search_requests r-000001（outcome=ok，result_lit_ids=[000000,000001,000002]，attempts=4，providers=[openalex]），并已用交接手稿 000000 把三行一手文献交给 B。\\n\\n【四轮检索的真实读数】\\n1) topical 'universal enveloping algebra Noetherian infinite dimensional Lie algebra' → 15 条候选，topicality state=not_precise，整批与本问句无关（Brauer 群、symplectic reflection algebra、Cohen–Macaulay 模等）⇒ 记一次相关性失败（不是 no_results：后端确实返回了，本批被本人判为不相关）。\\n2) precise 'The universal enveloping algebra of the Witt algebra is not noetherian' → 9 条命中，全部 keyword_hit=true，on-topic。\\n3) precise 'Noetherian enveloping algebras of simple graded Lie algebras' → 6 条命中，on-topic。\\n4) topical 'non-noetherian enveloping algebra' → 3 条，on-topic（其中 lit:000001 已存在，判重复用旧 id）。\\n另：从 lit:000000 做一次 forward 引文走查 → 4 条候选，无一为「无限维 g 而 U(g) Noetherian」的反例。\\n四轮均未出现 no_results；出现的是两轮「返回了但整批不相关」，已如实记录，未折算成「该方向没有文献」。\\n\\n【已确认的一手文献行（题名/年份/DOI/出处）】\\n- lit:000000 Sierra & Walton, 'The universal enveloping algebra of the Witt algebra is not noetherian', Advances in Mathematics 262 (2014), J, DOI 10.1016/j.aim.2014.05.007。候选无摘要（summary 空），未臆造。\\n- lit:000001 Buzaglo, 'Enveloping Algebras of Krichever-Novikov Algebras are not Noetherian', Algebras and Representation Theory (2022), J, DOI 10.1007/s10468-022-10168-9。摘要原文要点：把 overarching question 明写为『无限维 Lie 代数的泛包络代数是否可能 Noetherian』；主结果——任意 Krichever–Novikov 代数的 U(g) 非 Noetherian；附带结果——h 为 g 的有限余维子代数时，U(h) Noetherian ⇔ U(g) Noetherian。\\n- lit:000002 Andruskiewitsch & Mathieu, 'Noetherian enveloping algebras of simple graded Lie algebras', J. Math. Soc. Japan (2025), J, DOI 10.2969/jmsj/93619361（arXiv:2405.15235）。摘要原句：\\\"if the universal enveloping algebra of a simple Z^n-graded Lie algebra is Noetherian, then the Lie algebra is finite-dimensional.\\\"\\n\\n【对本问句的结论（分档，强度不超过证据）】\\n(a) 已知定理侧：『U(g) Noetherian ⇒ dim g < ∞』并非无条件定理；已证实的是有条件版本——simple 且 Z^n-graded（lit:000002），以及 Noetherian 性在有限余维子代数间的不变性（lit:000001）。\\n(b) 否定侧：对无限维的 Witt 代数与一般 Krichever–Novikov 代数，U(g) 已被证明非 Noetherian（lit:000000,",
+ "payload_sha256": "170c58410ca5a1ec2b1e6ed39f213b35f17013cb68efbb0a78c651352b443e7d",
+ "readings": {},
+ "role": "A",
+ "status": "done",
+ "task_id": "t-000002"
+}

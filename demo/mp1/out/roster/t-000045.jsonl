@@ -1,0 +1,2 @@
+{"at": "2026-10-18T22:00:18+08:00", "brief": "写论文正文到 out/paper/main.tex 并编译 PDF", "first_task_id": "t-000046", "kind": "add", "name": "G1", "owner": "t-000045", "role": "G", "seq": 1, "surface": "S01", "task_id": "t-000046"}
+{"at": "2026-10-18T22:03:00+08:00", "brief": "派 H 审校论文正文 main.tex，发现落 review_findings", "first_task_id": "t-000048", "kind": "add", "name": "H1", "owner": "t-000045", "role": "H", "seq": 2, "surface": "S02", "task_id": "t-000048"}

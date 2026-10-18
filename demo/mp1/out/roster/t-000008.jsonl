@@ -1,0 +1,2 @@
+{"at": "2026-10-18T20:44:17+08:00", "brief": "检索 Pyjama 下界常数形式与 MMR 2013 原文", "first_task_id": "t-000009", "kind": "add", "name": "A1", "owner": "t-000008", "role": "A", "seq": 1, "surface": "S01", "task_id": "t-000009"}
+{"at": "2026-10-18T21:04:37+08:00", "brief": "等距族 k=3..14 两侧括号 + k≤6 加密，判最小 k", "first_task_id": "t-000010", "kind": "add", "name": "E1", "owner": "t-000008", "role": "E", "seq": 2, "surface": "S02", "task_id": "t-000010"}

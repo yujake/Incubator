@@ -1,0 +1,22 @@
+{
+ "action": "",
+ "at": "2026-10-18T21:20:29+08:00",
+ "detail": "执行完成（handler 未声明 outcome，按有产出处理）",
+ "outcome": "ok",
+ "payload_bytes": 3017,
+ "payload_keys": [
+  "blocked_remaining",
+  "final",
+  "llm_run_path",
+  "messages",
+  "steps",
+  "stop_reason",
+  "summons"
+ ],
+ "payload_preview": "{\"blocked_remaining\": {}, \"final\": \"已按 F 的派活跑完，两条 experiments 行已落盘（均 exit_code=0，无崩溃）。核心结论：脚本的确定性计数没问题，但**原脚本自带的蒙特卡洛交叉核对口径是错的**——它抽的是\\\"恰好 N 个字母、字母在 8 字母表上均匀\\\"的串（命中概率 (k/4)^N），却拿它去比 p_exact=V_X/V_env（长度≤N 的**约化词**计数）；两个口径不同，所以它在自判 converged 的档上对不上精确值。修正采样器后完全对上。\\n\\n【实验 000001｜script=scripts/f_conj000000_delta.py（经 code/f_conj000000_delta_repro.py 协议化包装，sha16=00e04e541e0d6752），method=numeric，claim_key=delta_N_Xk_conj000000，exit=0，9.656s，result=refutes，evidence_kind=cross_check，反例已登记】\\n12 档 (k,N)，k∈{2,3,4}，N∈{8,16,32,64}，0 崩溃。\\n- converged=True 共 7 档：(2,8) rel_err=0.4237、(3,8) 0.1328、(3,16) 0.2528、(4,8) 0.0、(4,16) 0.0、(4,32) 0.0、(4,64) 0.0。\\n- sampling_infeasible 共 5 档：(2,16) hits=1、(2,32) hits=0、(2,64) hits=0、(3,32) hits=4、(3,64) hits=0。\\n- 既非 converged 也非 infeasible：0 档。\\n- 事先写定的判据（converged 档上 rel_err≤0.1）在 3/7 档不成立 ⇒ 判 refutes，counterexample 取 (k=2,N=8,seed=102008,M=200000,hits=824,delta_hat=4.983579 vs delta_exact=4.559863,rel_err=0.423716)。这是\\\"原脚本的 MC 交叉核对与精确计数不一致\\\"的反例，**不是** δ_N 公式的反例。\\n\\n【实验 000003｜script=code/f_conj000000_delta_fixedsampler.py（sha16=9852f6b3a6394773），method=numeric，claim_key 同上，exit=0，24.828s，result=supports，evidence_kind=cross_check】\\n把采样改成\\\"按约化词分布、精确整数长度抽样\\\"后：\\n- 计数自检：l≤4 穷举 15 个 (k,l) 对，mismatches=0。\\n- converged 仍是那 7 档，rel_err 分别 (2,8) 0.00716、(3,8) 0.000438、(3,16) 0.00156、(4,*) 0.0 —— 全部 ≤0.1。\\n- sampling_infeasible 仍是那 5 档（这是样本量瓶颈，与采样器口径无关，修正后没有改善，如实记录）。\\n- scaling（秒/档）：k=2 的 N=8/16/32/64 为 1.0/0.79/1.46/2.86；k=3 为 1.18/0.89/1.45/2.88；k=4 为 1.68/1.47/3.17/5.86。总 24.8s，纯 Python 暴力抽样，无剪枝。\\n\\n【口径说明】δ_exact(k,N)=ln V_X(k,N)/ln N 是闭式确定性算术（V_X=1+Σ_{l≤N}2k(2k−1)^{l−1}），它本身不靠实验；实验核的是\\\"MC 能否复现它\\\"。所有读数只到 supported_not_proved，且只对标准自由生成元组 X_k=(u_1,…,u_k) 定义；δ_0 不是因子不变量。\\n\\n【复现】verify.run_experiment(script_path=code/f_conj000000_delta_repro.py | code/f_conj000000_delta_fixedsampler.py, method=numeric, claim_key=delta_N_Xk_conj000000)；日志 out/experiments/000001.log、out/experiments/000003.log。\", \"llm_run_path\": \"D:\\\\Incubator\\\\agentflow\\\\projects\\\\mp4\\",
+ "payload_sha256": "03f1d600666674b1c3caad371430e23a71f71125dbad34ad4d2e34a1a639359f",
+ "readings": {},
+ "role": "E",
+ "status": "done",
+ "task_id": "t-000007"
+}

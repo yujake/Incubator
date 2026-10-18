@@ -1,0 +1,1 @@
+{"tool": "fs.read", "args": {"path": "library/000002.txt", "max_lines": 25}, "why": "核一遍抽出来的 000002 是不是真英文正文（页标记 + 正文），不是乱码"

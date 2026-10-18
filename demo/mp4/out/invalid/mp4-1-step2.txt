@@ -1,0 +1,1 @@
+{"tool": "table_list", "args": {"table": "experiments", "limit": 20}, "why": "核对 experiments 表里每行的 result 与证据字段，写断言时按结果档位引用"}

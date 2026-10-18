@@ -1,0 +1,2 @@
+{"at": "2026-10-18T22:37:02+08:00", "brief": "只读审校 main.tex：正文编号为0、定理有证明，findings 入库", "first_task_id": "t-000064", "kind": "add", "name": "H1", "owner": "t-000063", "role": "H", "seq": 1, "surface": "S01", "task_id": "t-000064"}
+{"at": "2026-10-18T22:38:16+08:00", "brief": "重编译 main.tex 并对齐 COMPILE-RECEIPT（正文仅体例改动）", "first_task_id": "t-000066", "kind": "add", "name": "G1", "owner": "t-000063", "role": "G", "seq": 2, "surface": "S02", "task_id": "t-000066"}
