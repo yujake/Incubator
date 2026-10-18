@@ -948,6 +948,92 @@ def _dedup_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
 # ---------------------------------------------------------------- 审校（写发现）
 
 
+def record_finding(
+    store: Any,
+    *,
+    doc_id: str,
+    kind: str,
+    target: str,
+    message: str,
+    evidence: str,
+    level: str = "warning",
+    axis: str = "",
+    suggestion: str = "",
+    round_no: int | None = None,
+    verbatim_quote: str = "",
+    line: int | None = None,
+    line_unavailable_reason: str = "",
+    actor: str = "agent-H",
+) -> dict:
+    """把**H 自己读出来的**一条发现落成 `review_findings` 行（业主 2026-10-18 裁定）。
+
+    ## 这是哪一条洞的修法（读数先于修法）
+
+    `projects/mp3` 末节第 5 条那一类「面外操作」在 H 这一侧的同族形态是：
+    `review_document` / `verify_fixes` 落的发现**全部来自机械扫描**（`scan_document`），
+    而 H 自己读出来的那一条（「G8 回执没给退出码」「正文引用的那份材料盘上没有」）
+    **没有任何落点** —— 它只能写在回复或报告文件里。于是
+    `review_findings` 里有的永远是机器算得出的那几类，人（角色）的判断进不了台账。
+
+    ## 三条边界（与 `review_document` 同一套口径）
+
+    1. 只写 `review_findings`：不改 `documents.status`（那是裁决那一档的事）、
+       不碰任何知识表。改「稿件状态」需要走 `review_document` 的裁决路径 ——
+       一审一判，不许用"补一条发现"顺手把状态挪一格。
+    2. 去重键仍是 `(kind, target, message)`（`_dedup_key`，全仓唯一一份）：
+       同一条发现重复登记返回既有 `finding_id`（`created=False`），不制造重复行。
+    3. `evidence` 必填且非空：审校者的判断也要有依据（`schema.ReviewFinding` 的
+       设计核心）。空 evidence 由 `validate()` 拒，这里不写第二份判据。
+    """
+    doc_id = str(doc_id or "")
+    _doc_of(store, doc_id)  # 稿件不存在 ⇒  ValueError（不能给不存在的稿件落发现）
+    kind_s, target_s = str(kind or ""), str(target or "")
+    message_s, evidence_s = str(message or ""), str(evidence or "")
+    level_s = str(level or "warning")
+    axis_s = str(axis or "")
+    for name, value in (("kind", kind_s), ("target", target_s),
+                        ("message", message_s), ("evidence", evidence_s)):
+        if not value.strip():
+            raise ValueError(
+                f"record_finding：{name} 不能为空 —— "
+                + {"kind": f"必须从受控词表 {S.FINDING_KINDS} 里挑一个",
+                   "target": "要指明位置（claim-3 / section:2 / dep:0004）",
+                   "message": "要写清这条发现说什么",
+                   "evidence": "**审校者的判断也要有依据**：凭什么这么判"}[name]
+            )
+
+    existing = [dict(r) for r in store.rows("review_findings")
+                if str(r.get("doc_id")) == doc_id]
+    key = (kind_s, target_s, message_s)
+    dup = next((r for r in existing if _dedup_key(r) == key), None)
+    if dup is not None:
+        return {"checked": True, "created": False, "duplicate_skipped": 1,
+                "finding_id": str(dup.get("finding_id") or ""), "doc_id": doc_id,
+                "kind": kind_s, "level": str(dup.get("level") or level_s),
+                "round": int(dup.get("round") or 1), "status": str(dup.get("status") or "")}
+    round_val = int(round_no) if round_no is not None else max(
+        (int(r.get("round") or 1) for r in existing), default=0) + 1
+    if round_val < 1:
+        raise ValueError("round_no 从 1 开始")
+    with store.tx("review_findings", actor=actor,
+                  note=f"record_finding doc:{doc_id} round {round_val}") as tx:
+        row = S.ReviewFinding(
+            finding_id="", doc_id=doc_id, kind=kind_s, level=level_s, target=target_s,
+            evidence=evidence_s, message=message_s, round=round_val,
+            suggestion=str(suggestion or ""), axis=axis_s, line=line,
+            line_unavailable_reason=str(line_unavailable_reason or ""),
+            verbatim_quote=str(verbatim_quote or ""),
+            status="open", resolution_note="", created_at=S.now_iso(), created_by=actor,
+        )
+        row.finding_id = tx.alloc_id("finding")
+        row.validate()
+        payload = row.to_dict()
+        tx.upsert("review_findings", payload)
+    return {"checked": True, "created": True, "duplicate_skipped": 0,
+            "finding_id": payload["finding_id"], "doc_id": doc_id, "kind": kind_s,
+            "level": level_s, "round": round_val, "status": "open"}
+
+
 def review_document(
     store: Any,
     doc_id: str,
@@ -1868,6 +1954,59 @@ def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
                                                         semantic_judge=semantic_judge, **kw))
     )
 
+@tool(
+    "review.record_finding",
+    (
+            "把**你自己读出来的**一条发现落成 `review_findings` 行（业主 2026-10-18："
+            "只读角色的产出要能进台账）。机械扫描（`review_document`）覆盖不到的那一类"
+            "—— 「G8 回执没给退出码」「正文引用的材料盘上没有」「这条断言只有泛证」"
+            "—— 用这一件落库；只写 `review_findings`，不改稿件状态、不碰任何知识表。"
+            "`evidence` 必填：审校者的判断也要有依据"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "doc_id": {"type": "string", "description": "被审稿件号"},
+            "kind": {"type": "string", "enum": list(S.FINDING_KINDS),
+                     "description": f"发现类别（受控词表 {list(S.FINDING_KINDS)}）"},
+            "target": {"type": "string",
+                       "description": "位置：claim-3 / section:2 / dep:0004 / rel:0007"},
+            "message": {"type": "string", "description": "这条发现说什么（一句话）"},
+            "evidence": {"type": "string",
+                         "description": "凭什么这么判（必填：读数、盘上路径、回执原样）"},
+            "level": {"type": "string", "enum": list(S.FINDING_LEVELS),
+                      "description": "严重度（缺省 warning）"},
+            "axis": {"type": "string", "enum": list(G.AXES),
+                     "description": "轴（数学 / 体例 / 工程 / 证据）"},
+            "suggestion": {"type": "string", "description": "最小修法"},
+            "round_no": {"type": "integer", "minimum": 1,
+                         "description": "审校轮次（不给时按该稿件已有发现的最大轮次 +1）"},
+            "verbatim_quote": {"type": "string",
+                               "description": "≤20 词的逐字引文（G10 那一格）"},
+            "line": {"type": "integer", "minimum": 1,
+                     "description": "行号（只在版本冻结后才有意义；拿不到就别给）"},
+            "line_unavailable_reason": {"type": "string",
+                                        "description": "拿不到行号的理由（`line` 省略时必填）"},
+           },
+           "required": ["doc_id", "kind", "target", "message", "evidence"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITER_ROLES,
+    returns=("{'checked','created','duplicate_skipped','finding_id','doc_id','kind',"
+             "'level','round','status'}（`created=False` = 与已有发现去重命中，"
+             "返回既有 `finding_id`，不制造重复行）"),
+    tags=("review", "write"),
+)
+def _review_record_finding_tool(_not_wired, store, actor, **kw):
+    """`review.record_finding` 的工具体（注入值由装配期用 `partial` 绑定）。"""
+    return (
+    _not_wired()
+               if store is None
+               else _guard_result(lambda: record_finding(store, actor=actor, **kw))
+    )
+
+
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。
 #: 声明随函数走（`@tool` 写进 `fn.__tool_spec__`），这里只列装配要做的事。
 _READ_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
@@ -1883,6 +2022,8 @@ _WRITE_TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = 
     (_review_review_document_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
     (_review_verify_fixes_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
     (_review_report_tool, ('_not_wired', 'store', 'actor', 'semantic_judge')),
+    # 2026-10-18：H 自己的发现也要有落点（`review_document` 只落机械扫描算出来的那批）。
+    (_review_record_finding_tool, ('_not_wired', 'store', 'actor')),
 )
 
 

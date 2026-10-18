@@ -45,19 +45,23 @@ def test_a_blank_action_still_checks_the_edge() -> None:
     若这条破了：M 只要不写动作就能派 F/V —— 2026-10-10 那条"主控不许直接控制 F/V"
     的裁定会被一个空字符串整个架空，而**没有任何读数会报出来**。
 
-    ⚠️ 2026-10-16 实测更正：**`B` 在 M 的出边里**（`ALLOWED_EDGES['M']`
-    = `['A','B','C','D','E','G','H']`，7 条）。而 `partners_lines` 的注释与
-    `visible_partners` 的 docstring 都写着"主控不许直接控制 **B** / F / V" ——
-    **那两句是旧读数**（边表才是权威）。这条判据按边表写：**只有 F 与 V 拦**。
+    ⚠️ 2026-10-16 实测更正：**`B` 在 M 的出边里**（当时 `ALLOWED_EDGES['M']`
+    = `['A','B','C','D','E','G','H']`，7 条）；**2026-10-18 业主「给 M 开 V 出边」之后
+    `V` 也在里面**（8 条）。而 `partners_lines` 的注释与 `visible_partners` 的 docstring
+    写着"主控不许直接控制 **B** / F / V" —— **那两句是旧读数**（边表才是权威）。
+    这条判据按边表写：**只剩 F 拦**（V 现在是直接边，拿它当"该拦"的例子会变成假红）。
     """
-    for to in ("F", "V"):
+    for to in ("F",):
         assert _edge_refusal("M", to, "") == "forbidden_edge", (
             f"M 用空动作派 {to} 竟然没被拦 —— 空动作成了越权的后门"
         )
     # 直接边 + 空动作 ⇒ 放行（这才是这一格要支持的东西）
     assert _edge_refusal("M", "D", "") == "", "M 派 D 一件活（不点动作）应当放行"
-    assert _edge_refusal("M", "B", "") == "", "B 在 M 的出边里（实测 7 条含 B）"
+    assert _edge_refusal("M", "B", "") == "", "B 在 M 的出边里（实测 8 条含 B）"
+    assert _edge_refusal("M", "V", "") == "", "V 于 2026-10-18 进了 M 的出边（8 条）"
     assert _edge_refusal("D", "F", "") == "", "D 派 F 一件活（不点动作）应当放行"
+    # 反真空：这条判据仍然**真的拦过东西**（不然"succeed 的放行"三行说明不了什么）
+    assert _edge_refusal("C", "A", "") == "forbidden_edge", "C 的边是空的，空动作也拦不住"
 
 
 def test_a_blank_action_is_not_an_unknown_action() -> None:

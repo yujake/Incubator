@@ -224,6 +224,31 @@ class ParamError(ToolError):
 #: 把它拆成两个会让每一个消费点都要记得"两边都读"，而漏读一边是**静默**的。
 _SURFACE_NOTE_TAG = "［工具面重算］"
 READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    # C（业主 2026-10-18 裁定「只读角色的产出要能进台账」）：一个写入面。
+    #   `analysis.register_report` 是 C 自己的**产出登记通道**：把这一趟它算出来的
+    #   图读数 / 结构洞 / 候选缺口登记进 `analysis_reports`（复用
+    #   `agent_c._support.AnalysisReport.persist`，不另写一份落盘实现）。
+    #   为什么必须有这一条：C 的动作（`gaps` / `handle` / `paths` / …）不在 C 自己的
+    #   工具面上（它们只能由父代理 `summon` 唤起）⇒ 被派空动作的自由任务里，C 手上
+    #   一件写工具都没有。真机读数（`projects/mp3` 末节第 5 条）：`analysis_reports` = 0，
+    #   C 的图读数只活在回复与手稿里；同趟 run 记录里它两次尝试（`gaps` / `handle`）
+    #   都拿到「没有名为 … 的工具」。表级例外
+    #   （`capabilities.READ_ONLY_WRITE_EXCEPTIONS["C"]`）早就登记了 `analysis_reports`
+    #   —— 缺的正是这一件**工具**（`for_role` / `_role_surface` 把只读角色的写工具全剥掉）。
+    #   判据三条：(1) 工具面仍然全量只读 ✓（这一件是全工具面上唯一的写，`roles=("C",)`）；
+    #   (2) 写的是**成品报告的登记行**，不是知识表（`claims`/`literature`/`relations`
+    #   零写入点，由 `tests/test_readonly_output_channel.py` 用"全表行数前后不变"守）；
+    #   (3) 每一行都带 `kind`（受控词表）与 summary —— D 的读取端不会拿到表外取值。
+    "C": (
+        (
+            "analysis.register_report",
+            "C 的产出登记通道：把这一趟它算出来的分析落成 analysis_reports 一行"
+            "（产出即登记）。C 的动作面只能由父代理 summon 唤起 ⇒ 没有这一件时，"
+            "空动作的自由任务里 C 手上一件写工具都没有，图读数只能写进回复"
+            "（projects/mp3 末节第 5 条：analysis_reports = 0）。只写这一张表，"
+            "不碰 claims / literature / relations",
+        ),
+    ),
     "H": (
         (
             "review.review_document",
@@ -242,6 +267,15 @@ READONLY_CALL_EXCEPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
             "带版本 hash 与自证数字的审校报告必须落成 markdown 文件（`draft/17` §8.4），"
             "否则「审校记录能不能被接手的复核」没有落点；它只写一个报告文件，"
             "不碰任何数据表、不碰 claims",
+        ),
+        (
+            "review.record_finding",
+            "H 自己读出来的发现也要有落点（业主 2026-10-18）：`review_document` 只落"
+            "机械扫描算得出来的那批（`scan_document`），H 自己读出来的那一条"
+            "（「G8 回执没给退出码」「正文引用的材料盘上没有」）此前只能写在回复或"
+            "报告文件里 ⇒ `review_findings` 里永远只有机器算得出的那几类。"
+            "本工具只写 review_findings（不去改 documents.status、不碰知识表）："
+            "「补一条发现」与「改一格状态」是两件事",
         ),
     ),
 }

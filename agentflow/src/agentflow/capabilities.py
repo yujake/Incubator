@@ -317,6 +317,10 @@ _TOOL_MODULES: tuple[str, ...] = (
     # 这张名单是"两层声明对账"的输入：模块不在名单里，它声明的工具就比对不上，
     # 症状是导入期断言报 `D.register_conjecture` 属于"新的没比对"。
     "conjecture_tools",
+    # 2026-10-18（业主裁定「只读角色的产出要能进台账」）：C 的产出登记通道
+    # （`analysis.register_report`）。它是一件**只挂给 C 的写工具**，且由工具级例外表
+    # 逐条登记 —— 名单里没有它，这条工具就落在"两层声明对账"之外（比对不上）。
+    "analysis_tools",
 )
 
 
@@ -1351,6 +1355,20 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
     "review.report": frozenset(),
     #   ↑ `review_tools.review_report`：只写一个 markdown 报告文件（`draft/17` §8.4），
     #     它对 `review_findings` 只读（`store.rows(...)`），`store.tx` 一次都没出现
+    "review.record_finding": frozenset({"review_findings"}),
+    #   ↑ `review_tools.record_finding`（业主 2026-10-18）：H 自己读出来的发现在这里落库。
+    #     只写 `review_findings`（`tx.upsert("review_findings", …)`），**不碰
+    #     `documents`** —— 改状态是裁决那一档（`review_document` / `verify_fixes`）的事。
+    #     这一条是可以被 AST 算出来的（`tools/review_tools.py` 里有同名顶层函数），
+    #     所以它走的是 ②′ 的逐格相等判据，而不是 `_NO_WRITE_SET_SOURCE` 那一档。
+    "analysis.register_report": frozenset({"analysis_reports"}),
+    #   ↑ `analysis_tools` 的产出登记通道（C 的）：写发生在
+    #     `agent_c._support.AnalysisReport.persist()`（`st.tx("analysis_reports")` +
+    #     `tx.upsert`），工具层只是把那条路暴露给 C 自己 ⇒ 跨模块调用，扫描器
+    #     （只跟同文件顶层函数）算不出来，已登记进 `_NO_WRITE_SET_SOURCE`。
+    #     登记值 `{analysis_reports}` 同时受两条判据守着：③ 的子集检查（越界即红）
+    #     与 `tests/test_readonly_output_channel.py` 的行为读数（调用一次，除
+    #     `analysis_reports` 外所有表的行数不变）。
 }
 
 
@@ -1550,7 +1568,19 @@ def _tool_write_set_from_source(tool: str) -> frozenset[str] | None:
 #: 有同名顶层函数，`_tool_write_set_from_source` 三个都算得出来。
 #: 留着这张表是因为"算不出"必须是显式登记的一格，而不是静默跳过 ——
 #: 静默跳过会让将来新加的工具全部落在判据之外，而门照样绿（`P16`）。
-_NO_WRITE_SET_SOURCE: dict[str, str] = {}
+_NO_WRITE_SET_SOURCE: dict[str, str] = {
+    "analysis.register_report": (
+        "写发生在 `agent_c._support.AnalysisReport.persist()`（C 落盘的**唯一**实现："
+        "`st.tx(\"analysis_reports\")` + `tx.alloc_id` + `tx.upsert`），工具层只负责把"
+        "那条路暴露给 C 自己 —— 跨模块调用，而扫描器只跟**同文件**的顶层函数调用链，"
+        "所以算不出来。为什么不去 `tools/analysis_tools.py` 里重写一遍落盘：那会立刻产生"
+        "第二份'怎么存一份报告'的口径（文件名 / 号段 / 文件与登记行的先后顺序），"
+        "而两份口径漂开的那一天，`reports/<rid>-<kind>.md` 与表里的 `markdown_path` 就"
+        "对不上了（FC-03 的同族）。登记值 `{'analysis_reports'}` 由 ③ 的子集检查与"
+        "`tests/test_readonly_output_channel.py` 的行为读数（调用一次后除 "
+        "`analysis_reports` 外所有表行数不变）共同守着"
+    ),
+}
 
 
 def _h_writable_tools_is_derived() -> bool:
@@ -1989,12 +2019,17 @@ def assert_capabilities(
     # （命题与逐字出处），而 V 只由 F 唤起 —— M 够不着 B 时那一趟报「硬要求 B 不可达」，
     # `verifications` 目录压根没被创建（`reviewed_proof_rows = 0`，阈值 7）。
     # 加回 M→B 之后 **M→B→V** 两跳就够得着逐条走查；F / V 仍只走间接（② 与 ③ 两条判据照旧守它们）。
-    _INDIRECT_FROM_M = frozenset({"F", "V"})
+    # 2026-10-18 业主裁定「给 M 开 V 出边」（`projects/t3d` 三·1：`reviewed_proof_rows = 0`，
+    # V 只能经 `F→V`、那一趟没走那条链）⇒ 受限集合从 {F, V} 再收成 {F}：
+    # `M→V` 是业主明确要开的那条边，② 仍守着 F（它必须还有 `M→D→F` 这条别的进路），
+    # ③ 守着"从 M 出发到得了每一个角色"。
+    _INDIRECT_FROM_M = frozenset({"F"})
     _m_edges = frozenset(ALLOWED_EDGES.get(S.CONDUCTOR_ROLE) or ())
     assert not (_m_edges & _INDIRECT_FROM_M), (
         f"ALLOWED_EDGES[{S.CONDUCTOR_ROLE!r}] 含 {sorted(_m_edges & _INDIRECT_FROM_M)}："
-        "F / V 按 2026-10-10 的裁定只能间接由父代理转达（F 走 D、V 走 F）——"
-        "主控直接派它们仍是被明确设限的那一件事（B 已于 2026-10-13 由业主加回，见 `specs/m.py`）"
+        "F 按 2026-10-10 的裁定只能间接由父代理转达（F 走 D）——"
+        "主控直接派它仍是被明确设限的那一件事"
+        "（B 已于 2026-10-13、V 已于 2026-10-18 由业主加回，见 `specs/m.py`）"
     )
     for _role in sorted(_INDIRECT_FROM_M):
         _inbound = sorted(frm for frm, tos in ALLOWED_EDGES.items()
@@ -2109,6 +2144,23 @@ def assert_capabilities(
         "review.review_document": (
             "能力表里 H 的 action 只有 review / verify_fixes / list_findings，"
             "没有 `review_document`；它的写集今天只由 `READ_ONLY_WRITE_EXCEPTIONS` 的理由保证"
+        ),
+        "review.record_finding": (
+            "业主 2026-10-18 新增的产出登记通道：能力表里 H 的动作仍只有 "
+            "review / verify_fixes / list_findings / review_report（工具名最后一段 "
+            "`record_finding` 与任何 `handler_name` 都不相同）⇒ 唯一性约定对不上。"
+            "它的写集（`{review_findings}`）仍然由 ③ 的子集检查与 ②′ 的 AST 比对守着 "
+            "—— `tools/review_tools.py` 里有同名顶层函数 `record_finding`。"
+            "要不要把它升成 H 的一个动作，是「H 的动作面该不该多一格」的设计判断，"
+            "留给下一次人审（这一改已经动了权限面）"
+        ),
+        "analysis.register_report": (
+            "业主 2026-10-18 新增的产出登记通道：能力表里 C 的动作是 "
+            "hottest/paths/cold/gaps/handle/… —— 没有哪一个的 `handler_name` 叫 `register_report`"
+            "⇒ 唯一性约定对不上。它的写集登记值（`{analysis_reports}`）由 ③ 的子集检查"
+            "（C 的表级例外含 `analysis_reports`）与行为读数守着；"
+            "要不要把它写成 C 的 `ActionSpec`（从而被编排层按动作派活）是设计判断，"
+            "留给下一次人审"
         ),
         "review.report": (
             "H.review_report 的 handler_name 与工具名最后一段不同名（工具名 `review.report` "

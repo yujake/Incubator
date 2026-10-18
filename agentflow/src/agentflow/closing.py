@@ -185,6 +185,20 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                "`can_close=true`。`retrieval_attempts` 数的是**做过的**条数，这一档数的是"
                                "**没做的那些** —— 少了它，「请求提交了没人做」在收工门上一个读数都没有",
     # ---- 研究类（`draft/38` 的 T2：从零做一轮研究，考察 A/B/D/E/F 与 M 的调度）----
+    # 文献消化队列（业主 2026-10-18 裁定：`literature.unprocessed > 0` 不许直接 pass）：
+    "literature_unprocessed_rows": "**还没被 B 消化**的文献条数（`literature` 里 `processed` 不为真的行）"
+                                   "—— 这一档的缺省判据是**上限 0**（`implicit_max`）：登记了 32 篇而一篇"
+                                   "都没转成概念/关系行时，「检索」那一环看起来是绿的，库里的东西却没人读。"
+                                   "为什么单列（真机读数：`projects/mp2` R10 把 `unprocessed`=32 **未清零**"
+                                   "记成 pass、`projects/mp3` P8 记 20 记 pass、`projects/t3d` ⑧ 记 12）："
+                                   "「请求闭环」（`unfinished_request_rows`）数的是**检索/重抽取两条队列**，"
+                                   "而「登记了但没消化」是**第三条队列**，收工门此前没有任何一行读它 ⇒ "
+                                   "「带着 32 条没消化的文献收工」在验收表上是 pass。"
+                                   "超过上限时它自己红；同时它给 `unfinished_request_rows` 那一行提供"
+                                   "降级判据：`unprocessed > 0` 时那一行**记 `unknown`、不记 `pass`**，"
+                                   "并要求那一行写 `unprocessed_reason`（为什么可以带着它收工，例如"
+                                   "「剩下的是 metadata-only 无全文」）—— 见 `_check_acceptance`",
+    # ---- 研究类（`draft/38` 的 T2：从零做一轮研究，考察 A/B/D/E/F 与 M 的调度）----
     "research_question_rows": "立起来的研究问题行数（`research_questions`）—— 从零做研究的第一步："
                               "把「要研究什么」写成一行可追踪的问题，而不是散在对话里",
     "analysis_report_rows": "分析报告行数（`analysis_reports`）—— 这一档的**写者是 "
@@ -1372,6 +1386,32 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         if repro_note:
             detail["table_note"] = repro_note
         return len(open_search) + len(open_repro), detail
+    if kind == "literature_unprocessed_rows":
+        # 「登记了但没被 B 消化」那一档（业主 2026-10-18 口径）。
+        #
+        # 为什么需要它：`literature.unprocessed` 此前只是报告里的一句话 ——
+        # `projects/mp2` R10 逐字写「`literature.unprocessed`=32 **未清零**」却记 pass；
+        # `projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12 记成立。
+        # 三份验收表都能「如实写出这个读数」而照样绿，因为**没有任何一行判它**。
+        # 这一档把那个读数变成一条可复算的判据：缺省上限 0（与 `unfinished_request_rows`
+        # 同一根轴：越少越好），超过就要红；同时它给「请求闭环」那一行提供降级判据
+        # （`unprocessed > 0` ⇒ 那一行记 `unknown`，并要求写清为什么可以带着它收工）。
+        rows = [dict(r) for r in store.rows("literature")]
+        # 与 `pipeline.py` 的那条读法逐字一致（`not r.get("processed")`）：这是同一件事
+        # 的第二个消费点，不许在这里另定一套"什么叫没消化"（FC-03）。
+        unprocessed = [r for r in rows
+                       if not r.get("processed")]
+        return len(unprocessed), {
+            "literature": len(rows), "unprocessed": len(unprocessed),
+            "ids": [str(r.get("lit_id") or "") for r in unprocessed[:12]],
+            "titles": [str(r.get("title") or "")[:60] for r in unprocessed[:6]],
+            # 「上限 0」：这一档问的是"还剩多少没消化"，不是"消化了多少"。
+            "implicit_min": 0, "implicit_max": 0,
+            "note": ("这一档数的是**第三条队列**（B 没消化的文献）：检索请求闭环、"
+                     "重抽取请求闭环都在 `unfinished_request_rows` 里数，而"
+                     "「登记进 `literature` 但没变成概念/关系行」的那一批此前没有任何读数。"
+                     "带着它们收工不是不许，但必须写清为什么（`unprocessed_reason`）"),
+        }
     if kind == "retrieval_attempts":
         # 「盘外引文先检索」那一档（`draft/37` §105）：用户一句话点破了我的口径 ——
         # "盘上没有就 false？A 不会去查吗"。实测：`A.search_literature("An overview of
@@ -1811,11 +1851,15 @@ def _acceptance_unknown(rep: ClosingReport, code: str, detail: str, *,
 #: - `na` —— 写表的人标了 `na` + 理由（D49 的第三态出口，只豁免这一行）；
 #: - `not_applicable` —— 这一档在这个工作区算不出来（缺只读基线，CC-05 第四态）；
 #: - `unreadable` —— 这一行读不懂（不是对象 / 词表外 `kind` / `na` 无理由 /
-#:   `na` 非布尔 / `min`·`max` 非整数 / 台账读不到 / `id` 缺失或重复）。
+#:   `na` 非布尔 / `min`·`max` 非整数 / 台账读不到 / `id` 缺失或重复）；
+#: - `unknown` —— 这一行**算得出来、但按口径不许判 pass**（业主 2026-10-18：
+#:   `literature.unprocessed > 0` 时「请求闭环」那一行记 `unknown` 而不是 `pass`）。
+#:   它与 `computed` 的区别是"读数有了、结论却判不了"：那一行照样带 `got` 与 `detail`，
+#:   但它不进 `rows_read`（"算过"≠"通过了"），整格也由它落 `unknown`。
 #:
 #: 三态纪律：`unreadable` 既不是通过、也不进 `unmet`，整格由调用方落 `unknown`
 #: （绝不 `pass`）—— "没查成"不许读成"没问题"，同时不再因为一行坏就把好行的读数一起丢掉。
-ROW_STATES: tuple[str, ...] = ("computed", "na", "not_applicable", "unreadable")
+ROW_STATES: tuple[str, ...] = ("computed", "na", "not_applicable", "unreadable", "unknown")
 
 
 def acceptance_row_state(row: Mapping[str, Any]) -> str:
@@ -1937,8 +1981,27 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     #: 它们不进 `unmet`、不参与阈值判定、也不算 `computed`（见 `acceptance_row_state`）——
     #: 整格由它们落 `unknown`（绝不 `pass`），而其余行的读数照常留下。
     unreadable_rows: list[dict[str, str]] = []
+    #: 落在 `unknown`（业主 2026-10-18 口径）上的行：读数算得出来、但按口径不许判 pass。
+    #: 今天只有一条路子进这里 —— `literature.unprocessed > 0` 而「请求闭环」那一行
+    #: 已经算出 pass（且写清了 `unprocessed_reason`）。整格由它们落 `unknown`。
+    unknown_rows: list[dict[str, Any]] = []
+    #: `literature.unprocessed` 的现算读数（三态：整数 / `None` = 读不到 + 理由）。
+    #: 惰性算一次，行循环里那一格用；算不出来时**不许**读成"没有未消化"（那正是
+    #: 这一条要防的形态：`mp2` 记 32 而被当成 pass）。
+    _unprocessed_cache: dict[str, Any] = {}
     seen_ids: set[str] = set()
     duplicate_ids: list[str] = []
+
+    def _unprocessed() -> dict[str, Any]:
+        if not _unprocessed_cache:
+            try:
+                n, d = _leg_reading(store, "literature_unprocessed_rows",
+                                    Path(resolve_under_workspace(store, project_dir)))
+                _unprocessed_cache.update({"count": int(n), "detail": d})
+            except Exception as exc:  # noqa: BLE001 —— 读不到 ≠ 清零
+                _unprocessed_cache.update(
+                    {"count": None, "reason": f"{type(exc).__name__}: {exc}"})
+        return _unprocessed_cache
 
     def _mark_unreadable(idx: int, raw: Any, code: str, why: str) -> None:
         """把第 `idx` 行记成 `unreadable`（并留一条 warning）。"""
@@ -2060,8 +2123,56 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         if isinstance(detail, dict):
             detail = dict(detail)
             detail["min_overridden"] = min_overridden
-        out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "max": want_max,
-                    "got": got, "ok": ok_row, "state": "computed", "detail": detail})
+        row_out = {"id": cid, "name": name, "kind": kind, "min": want_min, "max": want_max,
+                   "got": got, "ok": ok_row, "state": "computed", "detail": detail}
+        out.append(row_out)
+        # ---- 第三条队列（业主 2026-10-18 裁定）：`literature.unprocessed > 0` ⇒ 不许 pass。
+        #
+        # 缺陷读数（本条的负控就是它）：`projects/mp2` R10 逐字写「`literature.unprocessed`=32
+        # **未清零**」而结论是 pass；`projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12
+        # 记成立。三份验收表都**如实写出了这个读数**，却没有一行判它 —— 「写出来了」不等于
+        # 「有人判了」。所以判据落在这里：这一行算出来的 `pass` 在 `unprocessed > 0` 时降成
+        # `unknown`，并要求写清为什么可以带着它收工。
+        #
+        # 三态口径与本文件其它地方一致：
+        #   - `unprocessed == 0` ⇒ 照常判（那一行该 pass 就 pass）；
+        #   - `unprocessed > 0` 且写了 `unprocessed_reason` ⇒ 这一行 `unknown`（读数留着）；
+        #   - `unprocessed > 0` 而没写理由 ⇒ `unmet`（blocker）：不许静默带着队列收工；
+        #   - 读不到 `literature` ⇒ `unknown`（"读不到"绝不是"清零了"）。
+        if kind == "unfinished_request_rows" and ok_row:
+            u = _unprocessed()
+            count = u.get("count")
+            reason = str(row.get("unprocessed_reason") or "").strip()
+            if isinstance(detail, dict):
+                detail["literature_unprocessed"] = count
+            if count is None:
+                why = (f"`literature.unprocessed` **读不到**（{u.get('reason')}）⇒ 「文献消化队列"
+                       f"清没清零」判不了 ⇒ 这一行记 `unknown`，不记 `pass`")
+                row_out.update({"state": "unknown", "ok": False, "unknown": True,
+                                "reason": why})
+                unknown_rows.append({"id": cid, "kind": kind, "unprocessed": None,
+                                     "reason": why})
+                rep.findings.append(Finding("acceptance", "acceptance_unprocessed_unreadable",
+                                            "warning", f"验收行 {cid}：{why}"))
+            elif int(count) > 0:
+                if not reason:
+                    unmet.append(
+                        f"{cid}（{name or '请求闭环'}）：`literature.unprocessed` = {count} > 0，"
+                        f"而这一行没写 `unprocessed_reason` ⇒ 队列没清零时不许记 pass。"
+                        f"两条出口：① 派 B 把剩下的消化掉（`B.run_once`）；"
+                        f"② 在这一行写 `unprocessed_reason`，逐字说清**为什么可以带着它收工**"
+                        f"（例如「剩下的是 metadata-only 无全文，`processed` 永远为假」）。"
+                        f"注意：这个读数此前已经如实写在报告里（`mp2` 记 32、`mp3` 记 20、"
+                        f"`t3d` 记 12），红的原因不是「你没写」，而是「没有一行判它」")
+                else:
+                    why = (f"`literature.unprocessed` = {count} > 0 ⇒ 这一行记 `unknown`、"
+                           f"不记 `pass`；可带着收工的理由已写在 `unprocessed_reason`：{reason}")
+                    row_out.update({"state": "unknown", "ok": False, "unknown": True,
+                                    "reason": why, "unprocessed_reason": reason})
+                    unknown_rows.append({"id": cid, "kind": kind, "unprocessed": int(count),
+                                         "reason": why, "unprocessed_reason": reason})
+                    rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
+                                                "warning", f"验收行 {cid}：{why}"))
         if not ok_row:
             if got < want_min:
                 why = f"{got} 条，要求 ≥ {want_min} 条"
@@ -2112,15 +2223,21 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         # CC-02：行级读不懂的那些（逐条给 id/kind/code/reason）+ 重复 id 的读数。
         "rows_unreadable": len(unreadable_rows),
         "unreadable_rows": list(unreadable_rows),
+        # 业主 2026-10-18：按口径判不了 pass 的行（`literature.unprocessed > 0` 那一档）
+        "rows_unknown": len(unknown_rows),
+        "unknown_rows": list(unknown_rows),
+        "literature_unprocessed": _unprocessed_cache,
         "duplicate_ids": list(duplicate_ids),
         # E-04a/E-04b 的读数：哪几个"自动分支档"只被 `na` 行顶着
         # （`na` 不再能关掉分支；这里如实报出"表里只给了 na"这件事）。
         "na_only_branch_kinds": na_only_branch_kinds,
         "note": ("`reading_version` 变了 ⇒ 与历史读数**不可直接比**（口径变了）。"
                  "`rows_read` 只数真的按台账现算过的行（`state == computed`）；"
-                 "`na` / `not_applicable` / `unreadable` 三种都不是「算过」："
+                 "`na` / `not_applicable` / `unreadable` / `unknown` 四种都不是「算过」："
                  "`na` 是写表的人对**这一行**的判断，`not_applicable` 是缺只读基线，"
-                 "`unreadable` 是这一行读不懂（有它 ⇒ 整格 `unknown`，**绝不 `pass`**）。"
+                 "`unreadable` 是这一行读不懂（有它 ⇒ 整格 `unknown`，**绝不 `pass`**），"
+                 "`unknown` 是「读数有了、按口径却判不了 pass」（`literature.unprocessed > 0` "
+                 "那一档；有它整格也记 `unknown`）。"
                  "`na` 不再能关掉门的自动分支（E-04a）"),
     }
     if out and len(na_rows) == len(out):
@@ -2262,6 +2379,18 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             + f"）⇒ 这一格记 `unknown`（不是「通过」，也不是「不满足」）。"
             "其余行的读数照常给出 —— 这与「结构级读不懂（顶层不是 JSON / 不是数组）」"
             "不同一档：那时没有任何行可读"))
+    elif unknown_rows:
+        # 业主 2026-10-18：`literature.unprocessed > 0` 时那一行记 `unknown` ⇒ 整格
+        # 也必须跟着 `unknown`（否则「行记 unknown、格记 pass」＝这一条什么都没改）。
+        rep.status["acceptance"] = "unknown"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_rows_unknown", "warning",
+            f"验收表里有 {len(unknown_rows)} 行按口径**判不了 pass**（"
+            + "；".join(f"{u['id']}：{u['reason']}" for u in unknown_rows[:4])
+            + f"）⇒ 这一格记 `unknown`（不是「通过」）。"
+            "读数留在 `rows` 里（`state == unknown`），理由逐条在上面 —— "
+            "「带着没消化的队列收工」是一条可以被接受的判断，但它必须**说得出来**，"
+            "而说出来的那一趟不该被显示成 pass"))
     else:
         rep.status["acceptance"] = "pass"
 
@@ -2340,7 +2469,7 @@ ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
 #:   ⑤只读基线有 `\bibitem` 而台账里一条 `quote_verified=True` 都没有 ⇒ 门报（T1 口径）；
 #:   ⑥有论文主稿时：`\bibitem` < 2、或本轮 `stmt:`/`exp:`/`rel:` 引用只出现在
 #:   核查章节里 ⇒ 门报（T3 口径）。读数新增 `readings["acceptance"]["content_branches"]`。
-ACCEPTANCE_READING_VERSION = "2026-10-06-C3"
+ACCEPTANCE_READING_VERSION = "2026-10-18-C4"
 
 
 class LegNotApplicable(Exception):

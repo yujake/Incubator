@@ -31,11 +31,11 @@
 
 | 事实 | 现读数 | 复跑命令 |
 |---|---|---|
-| 工具总数（完整装配 = 含 `store`） | **84**，已装模块 14 个 | `python -m agentflow.cli tools`（首行"工具总数"） |
+| 工具总数（完整装配 = 含 `store`） | **86**，已装模块 15 个 | `python -m agentflow.cli tools`（首行"工具总数"） |
 | 全部 8 个角色（A–H）**共有**的工具 | **11** 件：`fs.list` `fs.read` `fs.search` `fs.stat` `table.count` `table.get` `table.list` `table.schema` `table.search` `manuscripts.list` `manuscripts.read` | 见下方"交集"命令 |
-| 只读角色（C/H/V）工具面里的写工具 | **3** 件，全在 `H`：`review.review_document` / `review.verify_fixes` / `review.report` | `python -m agentflow.cli tools`（末段"只读角色写工具泄漏"） |
-| `side_effect` 分布（84 口径） | `read 48 / write_local 31 / none 5` | 同上 |
-| 第二根轴 `external`（84 口径） | `none 76 / egress 5 / exec 3` ⇒ 非 `none` 共 **8** 件 | 同上 |
+| 只读角色（C/H/V）工具面里的写工具 | **5** 件：`C` 1 件（`analysis.register_report`，业主 2026-10-18 的产出登记通道）+ `H` 4 件（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`）；`V` 0 件 | `python -m agentflow.cli tools`（末段"只读角色写工具泄漏"） |
+| `side_effect` 分布（86 口径） | `read 48 / write_local 33 / none 5` | 同上 |
+| 第二根轴 `external`（86 口径） | `none 78 / egress 5 / exec 3` ⇒ 非 `none` 共 **8** 件 | 同上 |
 
 **交集那一条的复跑命令**（A–H 十件里的头八个角色取交集）：
 
@@ -65,12 +65,12 @@ python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 **现读输出（2026-10-18，尾部逐字）**：
 
 ```
-工具总数：84（已装模块 14：table_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools,
+工具总数：86（已装模块 15：table_tools, fs_tools, search_tools, ocr_tools, text_tools, graph_tools,
         trace_tools, research_tools, verify_tools, attack_tools, doc_tools, review_tools,
         conductor_tools, manuscript_tools）
 
 各角色工具数：{'A': 29, 'B': 22, 'C': 21, 'D': 41, 'E': 25, 'F': 36, 'G': 37, 'H': 29, 'V': 14, 'M': 20}
-只读角色写工具泄漏：{'C': [], 'H': ['review.review_document', 'review.verify_fixes', 'review.report'], 'V': []}（!! 有泄漏）
+只读角色写工具泄漏：{'C': ['analysis.register_report'], 'H': ['review.review_document', 'review.verify_fixes', 'review.report', 'review.record_finding'], 'V': []}（!! 有泄漏）
 ```
 
 > **行尾（实测，不是约定）**：本文件与附录都是 **LF** ——
@@ -82,7 +82,7 @@ python -m agentflow.cli tools --role H     # 单个角色的逐件清单
 > | 口径 | 命令 | 工具数 |
 > |---|---|---:|
 > | **A 口径（不含 store）** | `build_registry(store=None, workspace_root='.', roles=schema.ROLES)` | 见 `cli tools` 的注释；**本文一律用 B 口径** |
-> | **B 口径（含 store 的完整装配）** | `python -m agentflow.cli tools`（= `build_registry(store=Store(ws), workspace_root=ws, roles=ROLES)`） | **84** |
+> | **B 口径（含 store 的完整装配）** | `python -m agentflow.cli tools`（= `build_registry(store=Store(ws), workspace_root=ws, roles=ROLES)`） | **86** |
 >
 > **引用工具条数时若不写口径，这个数字就是噪声**（`X-5` 同族）。
 > 逐角色的 `.4` 小节不再手抄"29/41/22…"这类会变的分份数 —— 每节给出的都是
@@ -144,7 +144,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 
 | 召唤方 | 允许召唤 |
 |---|---|
-| `M`（主控） | `A B C D E G H` —— **不许直接控制 F / V**（2026-10-10 裁定；F 走 `D`、V 走 `F`）。B 于 2026-10-13 加回（业主：「补 M 到 B」）—— 采信链要走 `M→B→V` |
+| `M`（主控） | `A B C D E G H V` —— **只剩 `F` 不许直接控制**（2026-10-10 裁定要间接转达 B / F / V，此后被业主逐个加回：`M→B` 2026-10-13「补 M 到 B」、`M→V` 2026-10-18「给 M 开 V 出边」；F 走 `M→D→F`） |
 | `A` | `B` |
 | `B` | `C H V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判） |
 | `C` | **（空）** —— 只读角色连"请求"都不直接发 |
@@ -155,7 +155,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `H` | `A E G` |
 | `V` | `F` |
 
-**边总数 = 32**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
+**边总数 = 33**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；V 落地前是 29
 —— 新增的三条是 `M→V`、`F→V`、`V→F`。观测 2026-10-06（角色 V 落地）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
 （B / F / V 改由父代理转达；见 §M.4.1 上面那段）。
@@ -170,6 +170,10 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍只读、落库代理仍钉死在
 `review_findings` / `documents.status` 上（"判"与"落"分居两处）。读数：
 `python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"`）。
+**2026-10-18 加回 `M→V` 到 33**：业主裁定逐字「给 M 开 V 出边」。理由是 `projects/t3d` 三·1 的
+读数：`reviewed_proof_rows = 0`，而那一趟正文里有三条证明级断言 —— V 的逐行走查签名一个都没有，
+因为 V 只能经 `F→V`、那一趟没走。开放这条边之后 `M→V` 是**首选路径**（`M→B→V` 仍可走，
+`M→D→F→V` 不必再绕）。复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.ALLOWED_EDGES.values()))"` ⇒ `33`。
 
 **没有任何角色能召唤 `M`**（`capabilities.NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`）。
 
@@ -237,12 +241,12 @@ B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍�
 
 ---
 
-## R0. 全局工具总表（84 个，逐条）
+## R0. 全局工具总表（86 个，逐条）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
 > `#` 列是**历史行号**（`paper_package` 退场与 `search.walk_citations` 落地都刻意**不补位**：
-> 本文别处按行号引用过旧号，补位会让那些引用静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 84。
+> 本文别处按行号引用过旧号，补位会让那些引用静默指到别的工具上）⇒ `#` 不连续，行数按实际行数算 = 86。
 
 | # | 工具 | summary | `side_effect` | 审批 | roles | 参数 | 返回结构 | 测试 | 已知问题 |
 |---:|---|---|---|---|---|---|---|---|---|
@@ -330,12 +334,14 @@ B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍�
 | 81 | `conductor.status_report` | 只读：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `read` | 否 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps,note}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反） |
 | 82 | `conductor.board` | 只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，`expects=work` 的项要交付才算完。不含建议，也不替你决定要不要重派 | `read` | 否 | M | limit | `{checked,open_items,open_count,readings}`（**读不成 ⇒ 报错**，不回一个空板：`checked=False` 是"没查成"、`open_count==0` 才是"板上没事"，折平就是本仓最忌的形态） | `tests/test_board_items.py`、`tests/test_conductor_tools.py` | **本轮新增**（业主 2026-10-08 裁 A1=甲、T16）：A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）—— M 不进 `manuscripts.*` 是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`） |
 | 83 | `conductor.broadcast` | 给我名下的**直接子代理**广播一条通告（每个收件人一条 `expects=ack` 的板项）：级联由收件人自己决定（框架不代转）—— 要覆盖全树就逐层向下调用；我名下没有子代理时如实报"没有收件人"（**不假装发出去了**）；不知道我是谁（没有台账号、也没有调用上下文）⇒ 受控拒绝 | `write_local` | **是** | A B D E F G M | subject, body | `{checked,ok,broadcast,recipients,items,cascade,readings,note}`（`readings` 把"开了几条 / seen 几条 / acked 几条"分开报：展开了 ≠ 读到了） | `tests/test_broadcast_reaches_my_children.py` | **本轮新增**（业主 T20/T21 附二 乙）：一件能力、所有角色同一个做法（T21 作废了"只有 M 有全树档"那一版）；只读角色（C/H/V）不在它的 `roles` 声明里（声明了再剥掉会被 `cli tools` 报成"声明本身应改"）；"我是谁"由 `AgentLoop._do_tool` 的 `calling_as` 挂进调用上下文 |
+| 88 | `analysis.register_report` | C 的**产出登记通道**（业主 2026-10-18：「只读角色的产出要能进台账」）：把这一趟 C 自己算出来的图读数 / 结构洞 / 候选缺口落成 `analysis_reports` 一行（复用 `agent_c._support.AnalysisReport.persist` —— 存盘顺序、号段、文件名规则都还是那一份实现）。只写这张表：`claims` / `literature` / `relations` 零写入点 | `write_local` | **是** | C | kind, summary, markdown；request, payload, params, warnings | `{checked,report_id,markdown_path,kind,summary,created_by}` | `tests/test_readonly_output_channel.py` | 根因读数（`projects/mp3` 末节第 5 条）：`analysis_reports` = 0，而 C 的图读数只活在回复与手稿里；同趟 run 记录（`projects/mp3/runs/C-20261018-201536-001.json`）里它两次尝试 `gaps` / `handle` 都拿到「没有名为 … 的工具」⇒ 它必须在**只读角色的例外表**（`READONLY_CALL_EXCEPTIONS["C"]`）里，否则 `_role_surface` 会把写工具整类剥掉 |
+| 89 | `review.record_finding` | H 把**自己读出来的**那一条发现落成 `review_findings` 行（机械扫描 `review_document` 覆盖不到的那一类）；不改 `documents.status`、不碰知识表；去重键仍是 `(kind,target,message)`（与 `review_document` 同一份） | `write_local` | **是** | H | doc_id, kind, target, message, evidence；level, axis, suggestion, round_no, verbatim_quote, line, line_unavailable_reason | `{checked,created,duplicate_skipped,finding_id,doc_id,kind,level,round,status}` | `tests/test_readonly_output_channel.py` | 与 `review_document` 的分工：后者落机器算得出的那批，这一件落角色自己读出来的那一条（「G8 回执没给退出码」「正文引用的材料盘上没有」）；`evidence` 必填且非空 —— 审校者的判断也要有依据 |
 
-### R0.1 84 个工具的公共事实（现读）
+### R0.1 86 个工具的公共事实（现读）
 
 - `params_validated_by_layer = true`：`ToolRegistry.call` 在调 handler 之前**一定**跑 `validate_params`，非法即 `fail(kind="param_error")`，**不会进 handler**。
 - `roles_consistent_with_side_effect = true`：**没有任何写工具声明了 C 或 V**（两道防线：注册期 `_effective_roles` 剥 `READ_ONLY_ROLES` + `for_role` 的结构性拦截）。**H 是唯一例外**，且例外逐条登记在 `READONLY_CALL_EXCEPTIONS['H']`（3 件落库代理，见 §H.4）。
-- handler 形态（84）：`functools.partial` **81** / `lambda` **3** / 具名闭包 **0** ⇒ 那 3 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
+- handler 形态（86）：`functools.partial` **83** / `lambda` **3** / 具名闭包 **0** ⇒ 那 3 个工具的**唯一**文档是 `ToolSpec.summary`（lambda 无法携带 docstring）。
 - 两套口径不许互换：A 口径 `build_registry(store=None, …)` 比 B 口径 `cli tools`（**84**）少"需要 store 才能注册"的那一族；**本文一律用 B 口径**。
 - **V 的 11 件公共只读**（`fs.*` 4 + `table.*` 5 + `manuscripts.*` 2）来自装配器注入的实时角色表 `tools.TOOL_ROLES`；V 自己那 3 件声明里 `roles=("V",)`。
 
@@ -620,7 +626,7 @@ B 的"没有结果"逐个列：
 | 决定要不要把缺口变成检索请求 | 候选缺口是**产出**，不是**决定** | **D**（`submit_gaps`）/ 编排层（`gaps(submit_requests=True)`） |
 | 写报告以外的东西 | C 的写集只有 `analysis_reports` | — |
 
-### C.4 工具面（21 个，实测）
+### C.4 工具面（22 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role C` ⇒ `side_effect` read 21 / write_local 0 / none 0；`external` none 21；需审批 0 件。逐件明细（分组清单 + 拿不到什么）见附录 §C.4。
 
@@ -1073,6 +1079,9 @@ C 的产出有两类，状态语义完全不同。
 | G-4 | 渲染（不写库、不落盘） | `agent_g.render` |
 | G-5 | 按库里当前数据重画 markdown（**不改数据行，只改文件**） | `agent_g.refresh_markdown` |
 | G-6 | 按 H 的发现修订稿件 | `agent_g.revise`；`review_rounds+1`、`status=revised` |
+| G-7 | **按体例写正文**（2026-10-18 起）：骨架顺序固定、第 3 节 ≥6 个定理/引理/命题且每个带分步 `proof`、正文禁令六项、内部编号与计算证据只进附录 A | `specs/g.py::SPEC.brief.policy` 里 2026-10-18 那四条；`tests/test_agent_prompts.py` 的冻结摘要 |
+
+> **2026-10-18 起**：论文正文的体例（骨架 / 第 3 节证明线 / 正文禁令 / 附录 A 落点）不再只活在 G 的手感里 —— 它是 `specs/g.py::SPEC.brief.policy` 的四条硬条目，并由 H 的审稿清单逐条对拍（H-8）。G 原有的六条动作职责（G-1…G-6）不变。
 
 ### G.3 明确不负责
 
@@ -1190,6 +1199,9 @@ C 的产出有两类，状态语义完全不同。
 | H-5 | **依赖分级**（FC-13）：`external_unavailable`=warning，`dangling`=error | `tools.review_tools.scan_document`；自检实测逐字 |
 | H-6 | 请 G 修订 / 向 A 核引文 / 向 E 核形式化 | `H → G`、`H → A`、`H → E`（`capabilities.ALLOWED_EDGES`） |
 | H-7 | **采信规则**（`draft/37` §16 P2）：采信一条命题只有两条路 —— 正文与 B 的台账**逐字一致**（`statements.quote_verified is True` 且文本可比对）+ E 的背书（`experiments.evidence_kind="proof"`）；两条都不在只能说"这条我采信不了" | 提示词口径（`ROLE_BRIEFS["H"].boundary`）；`tests/test_review_line_prompts.py` 的 H 组事实 |
+| H-8 | **按体例逐条打勾**（2026-10-18 起）：机器可判四条（proof 环境数 ≥6 / 正文内部编号 ==0 / 正文无「数值实验」类小节 / 有 Abstract＋`\bibitem`＋Appendix A）＋正文禁令六项＋骨架与证明粒度；发现稿子是研究报告 ⇒ 落 error 级 finding、裁决 `rejected`，**不许 `accepted`** | `specs/h.py::SPEC.brief.policy` 里 2026-10-18 那五条；`review.record_finding` |
+
+> **2026-10-18 起**：H 判的不再只是「说清楚没有」这一档 —— 论文体例的机器可判四条与正文禁令成为**可逐条打勾的审稿清单**（`specs/h.py::SPEC.brief.policy`），任何一条不合格都落 finding；「稿子读起来是研究报告」这一形态的裁决不许 `accepted`（error 级 ⇒ `rejected`，只报 warning 也只能是 `accepted_with_warnings`）。采信规则（H-7）不变。
 
 > **2026-09-30（`draft/28` §199，人批准）**：H 的出边由 `{G}` 扩到 `{A, E, G}`。
 > 原状的理由是"审校者若能让别人改数据，它就同时是发现者与修正者" —— 那条理由
@@ -1210,7 +1222,7 @@ C 的产出有两类，状态语义完全不同。
 | 判数学对错 | H 的工具只有机械判据（引用/等级/否定/依赖闭合）；**数学正确性不在机械判据的射程内** | 形式化检查器 / 人 |
 | 自己造证据 | 每条发现必须带 `evidence`；没有证据的发现是 error | `verify.finding_without_evidence`（error） |
 
-### H.4 工具面（29 个，实测）
+### H.4 工具面（30 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role H` ⇒ `side_effect` read 21 / write_local 3 / none 5；`external` none 29；需审批 3 件。逐件明细（分组清单 + 拿不到什么）见附录 §H.4。
 
@@ -1373,11 +1385,12 @@ C 的产出有两类，状态语义完全不同。
 
 ### V.9 接口
 
-- **能被谁召唤**：`B` 与 `F`（`capabilities.ALLOWED_EDGES`）。`M` / `D` / `E` / `G` / `H` 都不能直接召唤 V
-  —— V 的对话对象只有 F（"提交/退回"那条边是 `F ↔ V`），而 `B→V` 是 2026-10-13 加的那条
-  （业主逐字：「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」）。
-  **（此条 2026-10-18 由实跑更正：一度误记为 `M→V`）** —— `ALLOWED_EDGES["M"]` 是 `A B C D E G H`，
-  里面**没有** `V`；复跑：`python -c "from agentflow import capabilities as C;print(sorted(C.ALLOWED_EDGES['M']))"`。
+- **能被谁召唤**：`M` / `B` / `F`（`capabilities.ALLOWED_EDGES`）；`D` / `E` / `G` / `H` 不能直接召唤 V。
+  V 的对话对象仍是 F（"提交/退回"那条边是 `F ↔ V`），而 `B→V` 是 2026-10-13 加的那条
+  （业主逐字：「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」）；`M→V` 是 **2026-10-18 加的那条**
+  （业主逐字「给 M 开 V 出边」：`projects/t3d` 三·1 的读数 `reviewed_proof_rows = 0`，
+  V 只能经 `F→V`、那一趟没走那条链 ⇒ 证明级断言一行都没被逐行走查签过名）。
+  复跑：`python -c "from agentflow import capabilities as C;print(sorted(C.ALLOWED_EDGES['M']))"` ⇒ 含 `V`。
 - **V 能召唤谁**：**只有 `F`**（`capabilities.ALLOWED_EDGES["V"] == {"F"}`）。
 - **入参从哪来**：`statements` 行（命题全文与完整假设）+ `proof_text`（不给时从 `statements` 取）
   + 调用方取好的 `readonly_facts`（只读读数：命题现状 / 文献与实验台账摘要 ——
@@ -1439,12 +1452,15 @@ C 的产出有两类，状态语义完全不同。
 
 **现读**：`python -m agentflow.cli tools --role M` ⇒ `side_effect` read 12 / write_local 8 / none 0；`external` none 20；需审批 8 件。逐件明细（分组清单 + 拿不到什么）见附录 §M.4。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（54 个可召唤动作）
+#### M.4.1 M 能召唤的 8 个角色 × 它们的动作（57 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
-> **`M` 的出边不含 `F` / `V`**（2026-10-10 裁定）：F 走 `M→D→F`、V 走 `M→D→F→V`；
-> **`B` 于 2026-10-13 加回**（业主逐字「补 M 到 B」：采信链第一环要够得到 `M→B→V`）。
+> **`M` 的出边今天只剩 `F` 不在里面**（2026-10-10 裁定要间接转达的那三个角色，
+> 此后被业主逐个加回）：`B` 于 2026-10-13 加回（逐字「补 M 到 B」：采信链第一环要够得到），
+> **`V` 于 2026-10-18 加回**（逐字「给 M 开 V 出边」：`projects/t3d` 三·1 的读数
+> `reviewed_proof_rows = 0`，V 只能经 `F→V` ⇒ 证明级断言一行都没被逐行走查签过名）。
+> 今天 `F` 走 `M→D→F`；V 有两条进路（`M→V` 是首选，`M→B→V` 仍可走）。
 > 被拒时的理由码是 `forbidden_edge`（"这条边不存在"，不是故障）。
 
 | 角色 | 可召唤动作数 | 动作名 |
@@ -1456,6 +1472,7 @@ C 的产出有两类，状态语义完全不同。
 | E | 5 | `run_experiment` `check_formal` `evidence_for` `list_experiments` `run_script_experiment` |
 | G | 6 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` |
 | H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
+| V | 3 | `verify_proof` `list_verifications` `read_proof` |
 
 > **`M.4.2`（召唤面的 9 道策略判定）与 `M.4.3`（写集相交 ⇒ 串行的并发判据）已移入附录**，
 > 因为这两节的主体是**读数**（`REFUSAL_REASONS` 的取值表、波次划分的实测）：
@@ -1561,7 +1578,8 @@ C 的产出有两类，状态语义完全不同。
 
 - **能被谁召唤**：**没人**（`NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`；
   `policy.check` 在 `d.to in NON_SUMMONABLE` 时返回 `forbidden_edge`，`policy.check`）。
-- **M 能召唤谁**：`A B C D E G H`（**7 个**；`capabilities.ALLOWED_EDGES` 的 `M` 那一行**不含 `F` / `V`**）。
+- **M 能召唤谁**：`A B C D E G H V`（**8 个**；`capabilities.ALLOWED_EDGES` 的 `M` 那一行**只不含 `F`** ——
+  F 仍走 `M→D→F`；V 于 2026-10-18 由业主加回，`M→V` 是走查证明的首选路径）。
 - **入参从哪来**：
   - `plan: Sequence[TaskCall]`（`scheduler.TaskCall`，`scheduler.py:46`）—— **由调用方给**；
   - `Policy`（人 + 调用方配）；

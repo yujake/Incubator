@@ -96,7 +96,9 @@ def full_ctx(ws, **over):
         "workspace_root": ws,
         "run_evidence": {
             "checked": True,
-            "commands": [{"claim_id": "claim-1", "command": "python code/p1.py", "output_tail": "ALL CHECKS PASS"}],
+            # 回执带退出码（业主 2026-10-18：G8 要分出"跑过且绿"与"跑过且红"）
+            "commands": [{"claim_id": "claim-1", "command": "python code/p1.py", "exit_code": 0,
+                          "output_tail": "ALL CHECKS PASS"}],
         },
         "findings": [
             {

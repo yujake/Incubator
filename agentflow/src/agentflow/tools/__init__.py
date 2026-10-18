@@ -224,6 +224,10 @@ _MODULES: tuple[str, ...] = (
     "review_tools",
     "conductor_tools",
     "manuscript_tools",
+    # 2026-10-18（业主裁定「只读角色的产出要能进台账」）：C 的产出登记通道
+    # （`analysis.register_report`）。组前缀 `analysis` 由模块名机械派生
+    # （`_TOOL_GROUP_PREFIXES`），所以这一行也等于给那件工具一个可核的组前缀。
+    "analysis_tools",
 )
 
 #: `_MODULES` 里每个模块产出的工具名组前缀（`verify_tools` ⇒ `verify`）。

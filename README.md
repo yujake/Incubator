@@ -109,6 +109,9 @@ This exercises the whole record path without touching the network.
 python -m agentflow.cli --root workspace demo
 ```
 
+> `cli demo` is the **旧路径** (old path): kept reachable, needs no model key. The main path is
+> `run-agent` in §4; this demo stays only as the offline end-to-end smoke test.
+
 ### 4. Start a research run
 
 The workspace is selected by a global argument that goes before the subcommand
@@ -386,6 +389,9 @@ closing      run the closing gate
 
 The remaining entries are sub-subcommands of `project` and `evidence`, which the parser exposes separately.
 
+> 旧流水线教学段（`project plan` / `project run` 那一套）**已退场**：子命令本身保留可达，
+> 但"怎么跑那套旧流水线"的整段教学已删除。逐字留痕与理由见 `draft/65a` §A-2。
+
 ## Testing
 
 ```bash
@@ -422,9 +428,11 @@ See the repository root for license information.
 
 ```
 agentflow/.noai-paths            禁改区清单（**43** 条 glob / **40** 条唯一路径，**7** 个分组）
-agentflow/src/agentflow/tools/   **15** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
+agentflow/src/agentflow/tools/   **16** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
 ```
 
 三个带 `--json` 出口的脚本（`scripts/lint_rules.py`、`tools/release_all.py`、`tools/run_each_test_file.py`）
 一律 `open(..., newline="")` 写文件，**不经过 `Path.write_text`** ⇒ 当次产物的行尾是
 **CR=0**（纯 LF），与他平台无关。
+
+lint 规则范围 **R001–R012**（规则 12 条；`R004`/`R006` 已退休并登记去向，见 `scripts/lint_rules.py` 的 `RETIRED_RULES`）。

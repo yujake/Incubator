@@ -52,8 +52,9 @@ def test_the_negative_control_catches_a_fabricated_action(monkeypatch):
 def test_the_negative_control_catches_an_unreachable_action(monkeypatch):
     """反负控之二：动作**真实存在**但那个角色不在本角色的出边里 ⇒ 也必须红。
 
-    这一条挡的是"把别人的活写进我的操作手册"：M 派不动 F/V 的动作（那两条边不存在），
-    写进 M 的 skill 就是一句做不到的指令。
+    这一条挡的是"把别人的活写进我的操作手册"：M 派不动 **F** 的动作（那条边不存在；
+    V 于 2026-10-18 已由业主加回 M 的出边，所以这里拿 F 当反例 —— 判据本身没变，
+    变的是"哪条边不存在"这个事实），写进 M 的 skill 就是一句做不到的指令。
     """
     bad = AS.Skill(slug="越权", title="越权", summary="一句话", when="任何时候",
                    body="正文", actions=("F.step",))
@@ -384,20 +385,28 @@ def test_every_role_index_is_generated_from_the_catalog():
             assert slug not in block, f"{role} 的索引里混进了别人的条目：{slug}"
 
 
-def test_the_conductor_skill_records_the_two_indirect_routes():
-    """M 的"派给谁"那一条必须写着两条间接链的**现状**，而不是旧路线。
+def test_the_conductor_skill_records_the_current_dispatch_routes():
+    """M 的"派给谁"那一条必须写着**现状**，而不是旧路线（2026-10-18 更正读数）。
 
     与 `tests/test_the_conductor_does_not_directly_control_bfv.py` 同一条裁定的另一侧：
-    权限面不许直接控制 F / V，那么"要 F / 要 V 派给谁"就必须在 M 的操作手册里写成链。
-    这条判据刻意不写死整段文字，只钉住三件事：指明 F 在 M 的出边外、给出 `D → F`、
-    以及"派 V 会被 `forbidden_edge` 拒"这个读数 —— 换一句话写仍然过。
+    权限面里**只剩 `F`** 不许直接控制（`B` 于 2026-10-13、`V` 于 2026-10-18 被业主加回）
+    ⇒ "要 F 派给谁"必须在 M 的操作手册里写成链，"要 V 走查"必须写成**直接派 V**。
+    这条判据刻意不写死整段文字，只钉住四件事：
+      ① F 仍然在 M 的出边外，手册给出那条链（`M → D → F`）；
+      ② V 现在是**直接边**，手册要写 `M → V` 并且 V 的动作可以出现在这个条目的
+         可派清单里（旧断言写的是"V 不许出现"，那是 2026-10-18 之前的读数）；
+      ③ `forbidden_edge` 这个读数仍在（被拒时换链的依据）；
+      ④ 条目里不许把 F 列成能直接派的。
     """
     route = next(s for s in AS.CATALOG["M"] if "按任务类型" in s.slug)
     body = route.body
-    assert "D → F" in body and "F → V" in body, body[:200]
+    heads = {a.split(".")[0] for a in route.actions}
+    assert "M → D → F" in body or "D → F" in body, body[:300]
     assert "forbidden_edge" in body, "没写「被拒的读数长什么样」"
-    assert "F" not in route.actions and "V" not in {a.split(".")[0] for a in route.actions}, \
-        f"M 的条目里不许把 F / V 列成能直接派的：{route.actions}"
+    assert "F" not in heads, f"M 的条目里不许把 F 列成能直接派的：{route.actions}"
+    # 2026-10-18 的裁定：V 是直接边 ⇒ 条目里**可以**出现 V 的动作，而且手册要写清 M→V
+    assert "V" in heads and "V.verify_proof" in route.actions, route.actions
+    assert "M→V" in body or "M → V" in body, body[:300]
     assert "D.propose_question" in route.actions and "B.run_once" in route.actions, route.actions
 
 

@@ -1994,7 +1994,31 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 
 
 
-PROMPT_VERSION = "p156"
+#: p157 → p158（2026-10-18，业主的三条裁定一起落进提示词）：
+#:   ① 「给 M 开 V 出边」⇒ M 的 policy 从「F / V 只能间接」改成「只剩 F 只能间接」，
+#:      伙伴表里 V 那一行同时从"唤不起"翻成"直接出边"（`partners_lines` 现算，故 M 那一格必换）；
+#:   ② G8 由 **M 代跑、H 判回执**（`run_evidence` 的四个键与"没跑要写理由"）；
+#:   ③ C / H 的产出登记通道（`analysis.register_report` / `record_finding`）+ 第三条队列
+#:      （`literature.unprocessed > 0` ⇒ 那一行记 `unknown`）。
+#:      走查读数：A / B / C / D / E / F / G / H / M / V 十格中，M 至少必换
+#:      （policy 与伙伴表都动了）；C 与 H 换（各自的 brief 加了登记通道）；其余看伙伴表是否波及
+#:      —— `_FROZEN_PROMPT_DIGESTS` 是逐格现算的，这里不预先猜。
+#: p158 → p159（2026-10-18，业主逐条定的「论文体例」进提示词；p158 那一格已经由
+#:   并行线的「M→V 出边 / 产出登记通道」那批改动占用，两批落在同一棵树上 ⇒ 这一批按新的一格记，
+#:   与 `p41` 那次「两条并行线各自抬到 p40 ⇒ 合并时再抬一格」同一条纪律）：
+#:   ① G 的 policy 新增四条 —— 体例骨架（顺序固定）/ 第 3 节证明线（≥6 个定理与分步证明）/
+#:      正文禁令（内部编号、自审小节、过程词、内部术语、计算证据、凑长度）/ 附录 A 落点；
+#:      并把「`lit:` 与 `stmt:`」那两条就地补上 2026-10-18 的口径（正文只许 `\cite` / `\bibitem`）；
+#:   ② H 的 policy 从空变成五条可逐条打勾的审稿清单（机器可判四条 + 正文禁令 + 骨架与证明粒度
+#:      + 落成研究报告时不许 `accepted` + 每条要指得到行）。
+#:   走查读数：只有 G / H 两格换值（伙伴表印的是每个伙伴的 duty 与 boundary，不含 policy），
+#:   其余八格逐字不动 —— 现算读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`。
+#: p159 → p160（2026-10-18，**业主改口径：导言区从"唯一模板"降成推荐、语言改成硬线**）：
+#:   只动 G 的 policy —— 追加一条「导言区是配方，语言是硬线」（mp3 那份作推荐配方，
+#:   宏包与定理环境名可调；硬线只有"全文英文、CJK = 0，注释里也不留中文"）。
+#:   走查读数：只有 **G** 一格换值，其余九格逐字不动（改的是 `policy`，而伙伴表只印
+#:   `duty` / `boundary`）—— 现算读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`。
+PROMPT_VERSION = "p160"
 
 
 
@@ -5693,15 +5717,15 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-                       "（业主 2026-10-10 裁定：主控不许直接控制 F / V）："
+                       "（业主 2026-10-10 裁定：主控不许直接控制 F；V 已于 2026-10-18 由业主加回 M 的出边）："
 
 
 
-                       "派它们会被判 `forbidden_edge` —— 那句话的意思是「这条边不存在」，"
+                       "派 F 会被判 `forbidden_edge` —— 那句话的意思是「这条边不存在」，"
 
 
 
-                       "不是故障；要它们干活就走别的角色转达（policy 里逐条写了走哪条链）。"
+                       "不是故障；要 F 干活就派 D 转达（policy 里写了走哪条链）；"
 
 
 
@@ -5773,7 +5797,7 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 
-                # 看得到但唤不起（主控那一档的 B / F / V，2026-10-10 裁定第 4 条）。
+                # 看得到但唤不起（主控那一档的 F；V 已于 2026-10-18 由业主加回 M 的出边）。
 
 
 

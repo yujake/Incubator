@@ -1194,8 +1194,11 @@ def test_partner_bullets_follow_the_edge_table(registry: ToolRegistry):
         if role in C.NON_SUMMONABLE:
             assert "不可以被任何人唤起" in text, f"{role} 不可召唤，但提示词没写"
     # 反真空：这一批就是因为主控有"看得见、唤不起"的角色才加的。
-    # 2026-10-13：业主「补 M 到 B」之后，主控唤不起的只剩 F / V（B 已能直接派）。
-    assert gaps["M"] == {"F", "V"}, gaps["M"]
+    # 2026-10-13：业主「补 M 到 B」之后，主控唤不起的从 {B,F,V} 收成 {F,V}；
+    # 2026-10-18：业主「给 M 开 V 出边」之后只剩 {F} —— 而这一条**必须非空**，
+    # 否则下面那句"看得见但唤不起"的判据整体空转（`gaps[M]` 为空时它一句都不验）。
+    assert gaps["M"] == {"F"}, gaps["M"]
+    assert gaps["M"], "主控的『唤不起』集合空了 ⇒ 这一整条判据退化成空转"
     assert not any(gaps[r] for r in gaps if r != "M"), \
         f"只有主控该有这一档（其余角色的条目就是出边）：{ {r: g for r, g in gaps.items() if g} }"
 
@@ -2411,18 +2414,51 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #: p119 → p120（2026-10-15，**引文图第 ③ 步：动作面**）：`A.walk_citations` 进能力表 ⇒
 #: ① A 自己的段多一条动作；② **伙伴表里那一行**也跟着变 ⇒ 以 A 为伙伴的角色（D/F/G/H/M）
 #: **一起**换值。实测 **6 格换值、4 格不动**（B/C/E/V —— V 没有以 A 为伙伴）。
-_FROZEN_PROMPT_VERSION = "p156"
+#: p157 → p158（2026-10-18）：三条业主裁定一起落进提示词 ——
+#:   ① 「给 M 开 V 出边」：M 的 policy 从「F / V 只能间接」改成「只剩 F 只能间接」，
+#:      伙伴表里 V 那一行从"唤不起"翻成"直接出边"（`partners_lines` 现算）；
+#:   ② G8 由 **M 代跑、H 判回执**（M / H 的 brief 各加一条）；
+#:   ③ C / H 的产出登记通道（`analysis.register_report` / `record_finding`）+ 第三条队列
+#:      （`literature.unprocessed > 0` ⇒ 那一行记 `unknown`，写进 M 的验收口径）。
+#:
+#: **实测 7 格换值、3 格不动**（现场现算，不是猜的）：换值 = B / C / D / F / H / M / V；
+#: 不动 = A / E / G。原因对得上：伙伴表把**每条 brief 的职责与边界原文**印进提示词，
+#: 而这一轮改的是 M / C / H 的 brief 与 M 的出边 ⇒ 以 C / H 为伙伴的那些格（B / D / F）
+#: 与入边里有 M 的那些格（V）跟着换；A 只看得见 B、E 与 G 的伙伴表里没有 C/H/M，
+#: 所以那三格逐字不动 —— 反过来，若有人改的是"共用段"，十格会一起换（p124 那次就是这样）。
+#:
+#: ⚠️ 现算这一步必须在 **pytest 的环境里**跑：`tests/conftest.py` 钉了
+#: `AGENTFLOW_SETTINGS` / `AGENTFLOW_LEAN_ENABLED`，提示词里那几段由设置驱动的文本会不同 ⇒
+#: 在裸 `python -c` 里算出来的十格与这里不是同一组读数（实测踩过：十格全"变"了）。
+#: 复跑：`python -m pytest tests/test_agent_prompts.py::test_the_prompt_version_moves_with_the_sections`
+#: p158 → p159（2026-10-18，**业主逐条定的「论文体例」**；p158 那一格已由并行线的
+#:   「M→V 出边 / 产出登记通道」那批占用 ⇒ 这一批按 p159 记，与 `p41` 同一条纪律）：
+#:   G 的 policy 新增四条（体例骨架 / 第 3 节证明线 / 正文禁令 / 附录 A 落点）并就地补了
+#:   `lit:` 与 `stmt:` 两条的 2026-10-18 口径；H 的 policy 从空变成五条可逐条打勾的审稿清单。
+#:
+#: **实测 2 格换值、8 格不动**（现场现算）：换值 = G / H；不动 = A / B / C / D / E / F / V / M。
+#: 原因对得上：伙伴表印的是每个伙伴的 `duty` 与 `boundary`（不是 policy），这一轮只动 G / H 的
+#: `policy` ⇒ 那八格逐字不变。这条读数本身就是「改动作用域」的证据：若哪天 G 的 `duty`/`boundary`
+#: 也变了，换的格数会跟着变多。
+#: p159 → p160（2026-10-18，**业主改口径：导言区从"唯一模板"降成推荐、语言改成硬线**）：
+#:   G 的 policy 追加一条「导言区是配方，语言是硬线」—— mp3 那份只作推荐配方（宏包与定理
+#:   环境名可调），硬线只有"全文英文、CJK 字符数 = 0、注释里也不留中文"。上一版"模板逐字
+#:   照抄"的三条（照抄 / 只许追加 / 禁用包清单）随口径一起作废，没有落进提示词。
+#:
+#: **实测 1 格换值、9 格不动**（现场现算）：换值 = G；不动 = A / B / C / D / E / F / H / V / M。
+#: 原因同上：这一轮只动 G 的 `policy`。
+_FROZEN_PROMPT_VERSION = "p160"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "5756cb544e2fcb349f7f898fc819a176bb93284d9ae4bca7d215d390cc658e9a",
-    "B": "124cd85e1e4bf0c361cb29ce54892afebca758eefb14cb0ad3ea9ff9815811f3",
-    "C": "f4e0d6eb0641db4f135b1bb622eea75c0b343c667a5e7e6ef09e12c7fa248d94",
-    "D": "5443f6d77180bf8cd3edec98a0f33e3909dc4b11bf163c6a3d296f57db5d2896",
+    "B": "54ee5606b547ae5d770059e93101be66ebe105b42e12206d682f4343a07a234a",
+    "C": "8f0f373ec18a666c402567e7980948405c94d066f3ac49bc9e68bcba58a41f07",
+    "D": "4e5fbf874cb79096391b5cfe650022a017c0c23bfb174565c2a20e6fab2507e0",
     "E": "a3efeda58c58b95acd2e14364aee71ea5bd5921287b69542eca48163584cdb0d",
-    "F": "99fdbb7cffabb262d82447caa2887dfad6d4323a0200286c6117a304819eeca5",
-    "G": "23497a3085f84ecb889707af6aac192ca0d4d863626f65ca26a42851aa40808c",
-    "H": "8a6209daf07953a83c5c35645161d59ca01e18ffcc362c07734f013a00156fbb",
-    "M": "3334884671ec48970a059249883486055f771bde6e3b69e4987c3b6a944501aa",
-    "V": "fe25e37204679e1e3d32a107a98628d00ef1b1271e5eebed2336d3f221991fd3",
+    "F": "47196fc6305bb2e91c0d174f2de228d92ac41d81ad308b5e46aa772967071457",
+    "G": "d07ab0f82d450a082fc35ae06ffda4fa49dd17288b7b5debd6e61e26e8a558fb",
+    "H": "fea26e2492999641eb2dceebde13647311fd93debd0abb450f710b00e36fe608",
+    "V": "8b6a92a7101060876b4c147e210f79354924456098f19f8584e18bcc7be33cc3",
+    "M": "8d272000ee326e5010aee9d59460bcae3d759bad66af0980d8743d941621530c",
 }
 
 

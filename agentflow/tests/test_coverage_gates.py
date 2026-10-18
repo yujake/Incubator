@@ -130,8 +130,10 @@ def _ctx(ws: Path, proof_location: str = "code/p1.py:12", **over: object) -> G.G
         "workspace_root": ws,
         "run_evidence": {
             "checked": True,
+            # 回执必须带退出码（业主 2026-10-18：G8 要能分出"跑过且绿"与"跑过且红"）——
+            # 这一格是"合格回执"的正样本，所以四个键都齐。
             "commands": [{"claim_id": "claim-1", "command": "python code/p1.py",
-                          "output_tail": "ALL CHECKS PASS"}],
+                          "exit_code": 0, "output_tail": "ALL CHECKS PASS"}],
         },
         "findings": [],
         "claim_counts": {"declared_claim_count": 1, "declared_counterexample_count": 0,

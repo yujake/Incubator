@@ -1328,6 +1328,45 @@ def gate_g7(ctx: GateContext) -> GateResult:
 # ---- G8 可复跑门 ----------------------------------------------------------
 
 
+#: G8 回执（`run_evidence.commands[*]`）的必备键（业主 2026-10-18 裁定：
+#: G8 改由 **M 代跑**、把回执交给 H 核，H 只判「回执是否合格」）。
+#:
+#: 为什么是这四个：`claim_id` 让回执与断面对上；`command` 是"精确命令"；
+#: `exit_code` 是"跑过没有 + 绿还是红"的唯一机器读数（少了它，红与绿分不开 ——
+#: 旧实现根本不读退出码，所以「跑过而且红了」与「跑过而且绿了」在门上同形）；
+#: `output_tail` 是"留了输出"（§8.4 那半句"并留输出"）。
+G8_RECEIPT_KEYS: tuple[str, ...] = ("claim_id", "command", "exit_code", "output_tail")
+
+
+def g8_receipt_problems(commands: Sequence[Mapping[str, Any]]) -> list[str]:
+    """逐条判「这份回执合不合格」⇒ 返回问题清单（空列表 = 合格）。
+
+    为什么把"合格"做成判据而不是信任调用方：G8 的输入是**调用方给的**，
+    而"调用方给了一份读不懂的回执"在旧实现里有两条静默路径 ——
+      - `commands` 不是数组时（真机：`{"checked": true, "commands": "     "}`），
+        旧代码 `[dict(x) for x in "     " if isinstance(x, Mapping)]` 得到 `[]`；
+      - 逐条缺键时，那些键的缺失没有任何读数。
+    两条路径都会让门在"什么都没有"的输入上继续往下判，而 §8.4 要的恰恰是
+    "每条数值断言都有精确命令，且本轮实跑过并留输出"。
+    """
+    problems: list[str] = []
+    for i, c in enumerate(commands):
+        if not isinstance(c, Mapping):
+            problems.append(f"第 {i + 1} 条：不是对象（{type(c).__name__}）")
+            continue
+        missing: list[str] = []
+        for k in G8_RECEIPT_KEYS:
+            if k == "exit_code":
+                # 退出码必须是整数：它要参与"绿/红"判定，字符串或缺失都不合格。
+                if not isinstance(c.get(k), int):
+                    missing.append(k)
+            elif not str(c.get(k) or "").strip():
+                missing.append(k)
+        if missing:
+            problems.append(f"第 {i + 1} 条：缺 {missing}（回执不合格 ⇒ 分不出『跑过没有』）")
+    return problems
+
+
 def gate_g8(ctx: GateContext) -> GateResult:
     """G8 可复跑门（§8.4 标注为新增，摘自 `RP/00_STANDARD.md:149-150` 门 B）。
 
@@ -1368,18 +1407,75 @@ def gate_g8(ctx: GateContext) -> GateResult:
             criterion_revision=criterion_revision,
         )
     if ev.get("checked") is not True:
+        # ---- 第三态（业主 2026-10-18：「没跑 ⇒ unknown **并写明为什么没跑**，不许静默」）。
+        #
+        # 缺陷读数（本条的第一条负控）：`projects/mp3` 末节第 4 条与 `projects/t3d` 三·4
+        # 都逐字写着「H 只读、拿不到执行工具 ⇒ G8 只能记 unknown」—— 那一档从"读数"退化成
+        # "权限的必然结果"，谁都不会再问"这一轮到底跑了没有"。
+        # 现在 unknown 也有义务：必须带一行原因，否则连"为什么没跑"都留不下来。
+        why = str(ev.get("reason") or "").strip()
+        if not why:
+            return GateResult(
+                gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+                verdict="unknown",
+                reason=(
+                    f"调用方**显式声明本轮没有实跑**（run_evidence.checked={ev.get('checked')!r}），"
+                    "却**没有写为什么没跑** ⇒ 『没查』有读数，『为什么没查』没有。"
+                    "按 2026-10-18 的口径，「H 只读、拿不到执行工具」与「忘了跑」必须分得开："
+                    "前者要写清『该谁跑』（M 代跑并把回执交给 H），后者要写清『这一轮为什么不算数』。"
+                ),
+                findings=(
+                    {
+                        "gate": gate_id, "axis": axis, "severity": "warning",
+                        "target": "run_evidence.reason",
+                        "message": "G8 判 unknown 却没写「为什么没跑」",
+                        "evidence": (
+                            "run_evidence 给了 checked≠True，但没有 reason ⇒ "
+                            "这一条 unknown 与『本轮只改措辞』、『权限不允许』都分不开"
+                        ),
+                    },
+                ),
+                counts={"需要命令的数值断言数": len(numeric), "本轮实跑记录": 0,
+                        "没跑的理由": "**未写**"},
+                evidence_used=("ctx.run_evidence",),
+                criterion_revision=criterion_revision,
+            )
         return GateResult(
             gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
             verdict="unknown",
             reason=(
                 f"调用方**显式声明本轮没有实跑**（run_evidence.checked={ev.get('checked')!r}）"
-                f"⇒ 可复跑性**没查**。原因：{ev.get('reason') or '未给'}"
+                f"⇒ 可复跑性**没查**。原因：{why}"
             ),
-            counts={"需要命令的数值断言数": len(numeric), "本轮实跑记录": 0},
+            counts={"需要命令的数值断言数": len(numeric), "本轮实跑记录": 0,
+                    "没跑的理由": why},
             evidence_used=("ctx.run_evidence",),
             criterion_revision=criterion_revision,
         )
-    commands = [dict(x) for x in (ev.get("commands") or []) if isinstance(x, Mapping)]
+    # ---- 回执的形状：先要求"读得懂"，再判"覆盖了没有"。
+    #
+    # 真机读数（`projects/mp3` round 2，H 传给 `review.report` 的 run_evidence）：
+    #   {"checked": true, "commands": "     "}
+    # 旧实现把那个空白字符串当可迭代对象遍历了一遍（每个字符都不是 Mapping），
+    # 得到 `commands = []`；而那一轮 `numeric = 0` ⇒ 差集为空 ⇒ **G8 = pass**，
+    # 报告里写着"0 条实跑记录覆盖全部数值断言"。这就是"回执读不懂"被读成"覆盖了"。
+    raw = ev.get("commands")
+    if not isinstance(raw, (list, tuple)):
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="unknown",
+            reason=(
+                f"回执**不合格**：`run_evidence.commands` 是 {type(raw).__name__}，不是数组 ⇒ "
+                "这份回执读不成逐条记录（『本轮实跑过』无法判定）。合格回执的形状是 "
+                "`{'checked': true, 'commands': [{'claim_id','command','exit_code','output_tail'}]}`；"
+                "空白字符串、`{}`、单个对象都不算 —— 把『读不懂』当『没问题』正是 G8 要防的形态"
+            ),
+            counts={"需要命令的数值断言数": len(numeric), "本轮实跑记录": "回执不合格",
+                    "回执类型": type(raw).__name__},
+            evidence_used=("ctx.run_evidence.commands",),
+            criterion_revision=criterion_revision,
+        )
+    commands = [dict(x) for x in raw if isinstance(x, Mapping)]
     have = {str(c.get("claim_id")) for c in commands}
     findings: list[dict] = []
     for c in numeric:
@@ -1395,20 +1491,100 @@ def gate_g8(ctx: GateContext) -> GateResult:
                     ),
                 }
             )
-    counts = {
+    # ---- 回执的资格（业主 2026-10-18）：H 只判"回执合不合格"，而这条判据必须在门上。
+    #
+    # 三态口径（与 G8 的其余部分一致）：
+    #   * 没有实跑记录（`checked=true` 却一条都没有）⇒ `unknown`（不是 vacuous pass）；
+    #   * 回执缺键 ⇒ `unknown` + 逐条问题（不许静默跳过缺键的那一条）；
+    #   * 回执齐但退出码非零 ⇒ **`fail`**（"跑过而且红了"）。
+    receipt_problems = g8_receipt_problems(commands)
+    counts_base = {
         "需要命令的数值断言数": len(numeric),
         "本轮实跑记录": len(commands),
         "缺命令": len(findings),
         "留了输出": len([c for c in commands if str(c.get("output_tail") or "").strip()]),
     }
-    proc = f"把 claims 里 {len(numeric)} 条带 numeric_evidence.script 的断言与本轮 {len(commands)} 条实跑记录按 claim_id 求差集"
+    if findings:
+        # 差集非空 ⇒ 阻断（这一条优先：它是"没跑"的最硬形态）。
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="fail",
+            reason=f"{len(findings)} 条数值断言没有本轮实跑命令 ⇒ 阻断",
+            findings=tuple(findings),
+            self_attestation=_attest_text(
+                attest(f"把 claims 里 {len(numeric)} 条带 numeric_evidence.script 的断言与"
+                       f"本轮 {len(commands)} 条实跑记录按 claim_id 求差集",
+                       counts_base,
+                       evidence_used=("ctx.run_evidence", "documents.claims[*].numeric_evidence"))),
+            counts=counts_base,
+            evidence_used=("ctx.run_evidence.commands", "documents.claims[*].numeric_evidence.script"),
+            criterion_revision=criterion_revision,
+        )
+    if not commands:
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="unknown",
+            reason=(
+                "调用方声明 checked=true，但 `run_evidence.commands` 是**空的** ⇒ "
+                "『本轮实跑过』没有一条记录可判。空回执不是通过：没有实跑记录时，"
+                "这一档要么由 M 代跑（派 E 用 `verify.run_experiment` 重跑那几条命令，"
+                "把 `claim_id` / `command` / `exit_code` / `output_tail` 带回来给 H），"
+                "要么按 checked=false 写清为什么没跑"
+            ),
+            counts={**counts_base, "本轮实跑记录": 0},
+            evidence_used=("ctx.run_evidence.commands",),
+            criterion_revision=criterion_revision,
+        )
+    if receipt_problems:
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="unknown",
+            reason=(
+                f"回执**不合格**（{len(receipt_problems)} 处）：" + "；".join(receipt_problems[:4])
+                + "。合格回执的每一条都必须带 "
+                f"{list(G8_RECEIPT_KEYS)} —— 少了 `exit_code` 就分不出绿与红，"
+                "少了 `output_tail` 就是『跑了但没留输出』（§8.4 那半句没兑现）"
+            ),
+            counts={**counts_base, "回执不合格": len(receipt_problems)},
+            evidence_used=("ctx.run_evidence.commands",),
+            criterion_revision=criterion_revision,
+        )
+    red = [c for c in commands if int(c.get("exit_code")) != 0]
+    if red:
+        red_findings = [
+            {
+                "gate": gate_id, "axis": axis, "severity": "error",
+                "target": str(c.get("claim_id") or "?"),
+                "message": f"实跑**跑挂了**（exit_code={c.get('exit_code')}）⇒ 阻断",
+                "evidence": (
+                    f"claim_id={c.get('claim_id')} command={str(c.get('command'))!r} "
+                    f"exit_code={c.get('exit_code')} output_tail={str(c.get('output_tail'))[:160]!r}"
+                ),
+            }
+            for c in red
+        ]
+        return GateResult(
+            gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
+            verdict="fail",
+            reason=(f"{len(red)} 条实跑记录**退出码非零** ⇒ 跑过但红了，"
+                    f"不能算『可复跑』（绿的那几条已覆盖断言，红的是命令本身失败）"),
+            findings=tuple(red_findings),
+            counts={**counts_base, "退出码非零": len(red)},
+            evidence_used=("ctx.run_evidence.commands", "documents.claims[*].numeric_evidence.script"),
+            criterion_revision=criterion_revision,
+        )
+    proc = (f"把 claims 里 {len(numeric)} 条带 numeric_evidence.script 的断言与本轮 "
+            f"{len(commands)} 条实跑记录按 claim_id 求差集；再逐条核回执的 "
+            f"{len(G8_RECEIPT_KEYS)} 个键与退出码")
     return GateResult(
         gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
-        verdict="fail" if findings else "pass",
-        reason=(f"{len(findings)} 条数值断言没有本轮实跑命令 ⇒ 阻断" if findings else f"{len(commands)} 条实跑记录覆盖全部数值断言"),
-        findings=tuple(findings),
-        self_attestation=_attest_text(attest(proc, counts, evidence_used=("ctx.run_evidence", "documents.claims[*].numeric_evidence"))),
-        counts=counts,
+        verdict="pass",
+        reason=(f"{len(commands)} 条实跑记录覆盖全部数值断言，且逐条带退出码（全绿）与输出"),
+        findings=(),
+        self_attestation=_attest_text(
+            attest(proc, {**counts_base, "退出码非零": 0},
+                   evidence_used=("ctx.run_evidence", "documents.claims[*].numeric_evidence"))),
+        counts={**counts_base, "退出码非零": 0},
         evidence_used=("ctx.run_evidence.commands", "documents.claims[*].numeric_evidence.script"),
         criterion_revision=criterion_revision,
     )

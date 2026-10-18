@@ -248,7 +248,25 @@ def test_the_source_scan_actually_computes_the_declared_write_sets() -> None:
     assert real["review.review_document"] == ["documents", "review_findings"], real
     assert real["review.report"] == [], real
     for tool, tables in real.items():
+        if tool in C._NO_WRITE_SET_SOURCE:
+            # ---- 2026-10-18：**显式登记的"算不出"**（`analysis.register_report`）。
+            #
+            # 它的写发生在 `agent_c._support.AnalysisReport.persist()`（跨模块），
+            # 而扫描器只跟**同文件**的顶层函数链 ⇒ 算不出来。这一支不放松判据，只是把
+            # 第三态（"没查成"）与"查过了、不写表"分开，并且**两条额外约束**补上：
+            #   ① 登记值不许为空集 —— 空集是"漏报"方向（`R4-5` 的教训），
+            #      而"算不出"这种工具最容易被顺手登记成空集；
+            #   ② 理由必须非空（"算不出"必须能说出为什么）。
+            # 登记值本身由 `[5c]` ③ 的子集检查与 `tests/test_readonly_output_channel.py`
+            # 的行为读数（调用一次后除 `analysis_reports` 外所有表行数不变）共同守着。
+            assert C.TOOL_WRITE_SETS[tool], (
+                f"{tool} 在 `_NO_WRITE_SET_SOURCE` 里登记了『算不出』，写集却是**空集** ——"
+                " 空集意味着『它不写任何表』，而它写的表恰恰没人比对（漏报方向）")
+            assert C._NO_WRITE_SET_SOURCE[tool].strip(), f"{tool} 的『算不出』没写理由"
+            continue
         assert sorted(C.TOOL_WRITE_SETS[tool]) == tables, (tool, tables)
+    # 反真空：那一支真的被走到了（否则上面那几行是空转）
+    assert "analysis.register_report" in C._NO_WRITE_SET_SOURCE, sorted(C._NO_WRITE_SET_SOURCE)
 
 
 def test_emptying_a_registered_write_set_is_caught(monkeypatch) -> None:

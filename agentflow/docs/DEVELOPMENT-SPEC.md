@@ -77,19 +77,19 @@ lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 43   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 40   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
-tools_star_tools_py     = 15   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
+tools_star_tools_py     = 16   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 16   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total         = 84   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
-cli_tools_modules       = 14   # 同一行"已装模块 N"
+cli_tools_total         = 86   # `python -m agentflow.cli tools` 摘要行"工具总数：N"（含 store 的完整装配口径）
+cli_tools_modules       = 15   # 同一行"已装模块 N"
 cli_tools_role_a        = 29   # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b        = 22
-cli_tools_role_c        = 21
+cli_tools_role_c        = 22
 cli_tools_role_d        = 41
 cli_tools_role_e        = 25
 cli_tools_role_f        = 36
 cli_tools_role_g        = 37
-cli_tools_role_h        = 29
+cli_tools_role_h        = 30
 cli_tools_role_v        = 14
 cli_tools_role_m        = 20
 webui_modules           = 9    # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
@@ -181,7 +181,7 @@ LIVE-READINGS:END
 | 字面量 | 量法（复跑命令） |
 |---|---|
 | 动作总数 **61** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"` |
-| 可召唤动作数 **54** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])` |
+| 可召唤动作数 **57** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])` |
 | 子命令数 **25** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices） |
 
 **两条使用规矩**（与 §1.1 同源）：
