@@ -458,3 +458,14 @@ desktop.ini
 /agentflow/demo/selftest/
 /agentflow/demo/sources/
 
+
+# ---- 2026-10-18 清理二批：残留工作区 / 截图 / 构建缓存
+/agentflow/xyz/
+/agentflow/out/
+/agentflow/ui_pictures/
+/agentflow/.pytest_cache/
+/.pytest_cache/
+/.pnpm-store/
+/_archive/
+__pycache__/
+
