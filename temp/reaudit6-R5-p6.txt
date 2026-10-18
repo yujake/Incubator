@@ -1,8 +1,0 @@
-[PASS] E1-sequential-runs-get-distinct-task-ids: A={'topic': '顺序甲', 'exit_code': 0, 'reason': 'success', 'my_usage_task_ids': ['t-0001'], 'my_usage_ids': ['0000']} B={'topic': '顺序乙', 'exit_code': 0, 'reason': 'success', 'my_usage_task_ids': ['t-0002'], 'my_usage_ids': ['0001']} tasks=[('t-0001', '顺序甲', 14), ('t-0002', '顺序乙', 14)] codes=[] err=
-[PASS] E2-concurrent-runs-allocate-the-same-task-id: A={'topic': '并发甲', 'exit_code': 0, 'reason': 'success', 'my_usage_task_ids': ['t-0001'], 'my_usage_ids': ['0001']} B={'topic': '并发乙', 'exit_code': 0, 'reason': 'success', 'my_usage_task_ids': ['t-0001'], 'my_usage_ids': ['0000']}（两跑的 task_id 相同 ⇒ 取号没有在临界区内；A.err='' B.err=''）
-[PASS] E3-one-run-row-silently-lost: tasks=[('t-0001', '并发甲', 28)] usage=[('0000', 't-0001', 14), ('0001', 't-0001', 14)] verify=[]
-[PASS] E4-verify-does-not-report-it: verify_all 的 code 集合=[]（没有一条报这件事）
-
-===== 汇总 =====
-PASS 4/4
-（E2/E3/E4 是**探针的观察**：它们 PASS = 缺陷成立）工作区=C:\Users\ysc20\AppData\Local\Temp\dsh-9cwXnF\reaudit6R5conc-mw9l35k1

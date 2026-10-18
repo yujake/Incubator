@@ -1,1 +1,0 @@
-An ideal is an additive subgroup of a ring that is closed under multiplication by arbitrary ring elements.

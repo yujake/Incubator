@@ -442,3 +442,10 @@ desktop.ini
 !/temp/zone-backup-r4-src_agentflow_tools_base.py
 !/temp/zone-backup-r4-src_agentflow_tools_verify_tools.py
 # <<< CITED-TEMP-EVIDENCE:END >>>
+
+# ---- 业主 2026-10-18 明令：这三处一律不许上传（本地证据 / 草稿 / 旧原型）
+/temp/
+/draft/
+/test/
+/agentflow/temp/
+

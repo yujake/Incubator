@@ -1,1 +1,0 @@
-An abelian group is a group in which the commutative law holds for every pair of elements.

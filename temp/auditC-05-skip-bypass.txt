@@ -1,8 +1,0 @@
-
-===== [lint] =====
-  [PASS] linter（error = 0）
-
-========================================================================
-发布检查总判定：PASS    pass=1 fail=0 unknown=0
-⚠️ overall=pass 只说明这八项都通过了，**不构成发布许可**：
-   本脚本自身在禁 AI 区（`.noai-paths` 的 release-deploy 类），按 FC-27 仍需人逐行走查 + 2 名 reviewer 批准。

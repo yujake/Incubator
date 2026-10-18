@@ -1,1 +1,0 @@
-A ring is an algebraic structure equipped with two binary operations, usually called addition and multiplication.

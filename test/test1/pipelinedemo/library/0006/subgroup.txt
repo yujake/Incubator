@@ -1,1 +1,0 @@
-A subgroup is a subset of a group that is itself a group under the inherited operation.

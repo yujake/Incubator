@@ -1,8 +1,0 @@
-Task.to_dict 字段顺序 = ['task_id', 'role', 'action', 'called_by', 'parent_task_id', 'depth', 'input_key', 'status', 'outcome', 'refusal_reason', 'detail', 'error', 'started_at', 'ended_at', 'tokens', 'usd', 'artifacts', 'inputs']
-占位行键顺序         = ['task_id', 'role', 'action', 'called_by', 'parent_task_id', 'depth', 'input_key', 'status', 'outcome', 'refusal_reason', 'detail', 'error', 'started_at', 'ended_at', 'tokens', 'usd', 'artifacts', 'inputs']
-终态行键顺序         = ['task_id', 'role', 'action', 'called_by', 'parent_task_id', 'depth', 'input_key', 'status', 'outcome', 'refusal_reason', 'detail', 'error', 'started_at', 'ended_at', 'tokens', 'usd', 'artifacts', 'inputs']
-K1 占位行顺序 == 字段顺序 = True
-K1 终态行顺序 == 字段顺序 = True
-K3 占位行 status/ended_at/tokens = running/None/0；终态 = done/2026-03-01T00:00:01+00:00/14
-盘上那一行的键顺序   = ['task_id', 'role', 'action', 'called_by', 'parent_task_id', 'depth', 'input_key', 'status', 'outcome', 'refusal_reason', 'detail', 'error', 'started_at', 'ended_at', 'tokens', 'usd', 'artifacts', 'inputs']
-K2 rebuild 前后逐字节相同 = True（1172 -> 1172 字节）
