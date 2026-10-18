@@ -1,84 +1,97 @@
 # agentflow
 
-**agentflow is an autonomous multi-agent framework for mathematical research: a conductor plans, specialist agents search, compute, formalize, write, and audit, and every claim ends up on a ledger you can re-derive.**
+**agentflow is an autonomous multi-agent framework for mathematical research: a conductor plans, specialist agents retrieve, compute, formalize, write, and review, and every claim lands on a ledger you can re-derive.**
 
-Its core capability is to turn one sentence of research intent into a traceable research record. Instead of letting a single model answer in one pass, agentflow splits the work across fixed roles with disjoint authority — retrieval, statement registration, conjecture generation, experiment execution, formal verification, manuscript writing, review, and a conductor that dispatches — and makes each step land in an append-only ledger with evidence, cost, and an audit trail.
+Its central capability is to turn one sentence of research intent into a traceable research record. Rather than letting a single model answer in one pass, agentflow assigns the work to fixed roles with disjoint authority — retrieval, statement registration, relation analysis, conjecture generation, experiments, attack steps, manuscripts, review, verification, and a conductor that dispatches — and makes each step land on an append-only ledger with evidence, cost, and an audit trail.
 
-agentflow can also run a single role as a normal chat-like loop, but its main strength is research mode: a persistent project workspace where many roles work across many turns and sessions while keeping a re-derivable record of what was claimed, what was checked, and what was refused.
+agentflow can also drive a single role as a chat-like loop, but its main strength is research mode: a persistent workspace where many roles work across many turns and sessions while keeping a record of what was claimed, what was checked, what was refused, and what it cost.
 
 ## Highlights
 
-- Fixed roles with disjoint authority: A retrieval, B statement ledger, C relation analysis, D conjectures and attack plans, E experiments, F attack steps, G manuscripts, H review, V verification, M conductor.
-- Seven explicit layers: data, declaration, tool, role, loop, wiring, quality — each with its own judge.
-- Append-only ledger: JSON snapshots plus `events.jsonl`, re-derivable with `rebuild`.
-- Evidence grading: `proof` / `proof_review` / `cross_check` / `heuristic`, with a five-bit evidence model (`numeric` / `proof` / `reviewed` / `formal` / `audited`).
-- Formal verification bridge to Lean, with a controlled refusal when the toolchain is absent (`lean_disabled` / `no_backend` / `tool_crashed` / `import_unavailable`).
-- Quote verification that compares a claim against source text word by word.
-- Conjecture-driven research: conjectures, attack plans, refutations, and counterexample search are first-class records.
-- Closing gate with a fixed set of acceptance cells, computed from the ledger rather than typed by hand.
-- Per-run budget with hard cap, per-call cost accounting, and a usage ledger.
-- Two independent switches for formal work (a CLI flag for the topic pipeline, a setting for agent loops), and a documented no-Lean mode.
-- Graceful stop and force stop with process-tree termination; checkpoint-based session continuation.
-- Offline demo that never touches the network.
+- Ten fixed roles with disjoint authority: A retrieval, B statement ledger, C relation analysis, D conjectures and attack plans, E experiments, F attack steps, G manuscripts, H review, V proof-step verification, M conductor.
+- Sixty-one declared actions across those roles, derived from one declaration into capabilities, edges, and write sets.
+- Seven explicit layers — data, declaration, tool, role, loop, wiring, quality — each with its own judges.
+- Sixteen ledger tables (statements, conjectures, attack plans, experiments, documents, review findings, research questions, dependencies, tasks, usage, and more) plus an append-only event log that can rebuild every snapshot.
+- Evidence grading with a five-bit model: `numeric`, `proof`, `reviewed`, `formal`, `audited`. A row that says "proved" must be readable in the table that owns proofs.
+- A formal verification bridge to Lean, with controlled refusals (`lean_disabled`, `no_backend`, `tool_crashed`, `import_unavailable`) instead of confident silence.
+- Word-by-word quote verification against extracted source text.
+- Conjecture-driven research: conjectures, attack plans, refutations, and counterexample search are first-class records, not chat asides.
+- A closing gate whose acceptance cells are computed from the ledger, never typed by hand.
+- A hard per-run budget with per-call accounting and a usage ledger.
+- Graceful stop, force stop with process-tree termination, and transcript-based continuation.
+- An offline demo that never touches the network.
 
 ## Latest Updates
 
 ### 2026-10
 
-- Fixed a scoping defect in the tool call path: any call carrying a `why` argument raised `UnboundLocalError` when call logging was off (the production default). One fix explained three separate machine-reported crashes.
-- Rate limiting no longer sleeps through a long `Retry-After`; the provider is put on a short cooldown instead, and later queries stop hammering it.
-- `--wall-clock-sec` now means what it says: omitted means no limit, and an explicit value means exactly that value.
-- Session continuation now rebuilds from the session transcript when no checkpoint exists, so a killed run can actually be resumed.
-- Stale `running` task rows are swept when a new top-level run opens.
+- Fixed a scoping defect on the tool call path: any call carrying a `why` argument raised `UnboundLocalError` when call logging was off, which is the production default. One fix explained three separately reported crashes.
+- Rate limiting no longer sleeps through a long `Retry-After`; the provider goes on a short cooldown and later queries stop retrying it.
+- The wall-clock limit now means what it says: omitted means no limit, and an explicit value means exactly that value.
+- Continuation rebuilds from the session transcript when no checkpoint exists, so a killed run can actually be resumed.
+- Stale `running` task rows are swept when a new top-level run opens (matched by topology, not by caller).
 - `table.schema` accepts a single-table filter, cutting its payload from about 47 KB to 8 KB.
-- `created_by` records the real writing actor instead of a per-table default.
-- Added an audit check that a statement claiming `proof` must be backed by a formal experiment.
+- `created_by` records the writing actor instead of a per-table default.
+- An audit check now requires that a statement claiming `proof` be backed by a formal experiment.
+- A review report and a ledger verdict are documented as two deliberately separate records.
 
 ### 2026-09
 
 - Introduced the role spec layer: per-role action tables derived into capabilities, edges, and write sets.
 - Added the closing gate and its acceptance-cell vocabulary.
 - Added the review tool family (review document, findings, report, fix verification).
-- Added formal experiment execution with verifier output and exit code recorded on the experiment row.
+- Added formal experiment execution recording verifier output and exit code on the experiment row.
 
 ## Contents
 
 - [Latest Updates](#latest-updates)
 - [Requirements](#requirements)
 - [From Install to First Run](#from-install-to-first-run)
-- [Runtime Layout](#runtime-layout)
-- [Roles](#roles)
+- [Workspace Home](#workspace-home)
+- [Provider Setup](#provider-setup)
+- [Daily Use After Setup](#daily-use-after-setup)
+- [Agent Loop Mode](#agent-loop-mode)
 - [Research Mode](#research-mode)
-- [Evidence and Verification](#evidence-and-verification)
+- [Sessions and Continuation](#sessions-and-continuation)
+- [Ledger and Retrieval](#ledger-and-retrieval)
+- [Roles, Skills, and Tools](#roles-skills-and-tools)
+- [Experiments and Python Tools](#experiments-and-python-tools)
+- [Verification and Evidence](#verification-and-evidence)
+- [Lean Modes](#lean-modes)
 - [Budget and Stop Control](#budget-and-stop-control)
-- [Command Line](#command-line)
+- [Files and Paths](#files-and-paths)
+- [Runtime Layout](#runtime-layout)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
+- [Status](#status)
 
 ## Requirements
 
-- Python 3.11+ (the code base uses `X | None` annotations and dataclass features that need it)
-- A terminal environment
-- An LLM provider for live model calls (offline demo and most judges need none)
-- Optional: a Lean toolchain for formal verification
+- Python 3.11 or newer. The code uses `X | None` annotations and dataclass features that require it.
+- A terminal environment.
+- An LLM provider for live model calls. The offline demo and a large part of the test suite need none.
+- Optional: a Lean toolchain for formal verification.
 
-Install the Python dependencies with `pip install -r requirements.txt` (or `pip install -e .` for the package itself).
+Runtime dependencies are deliberately few — file locking, YAML presets, PDF text extraction, JSON-schema checks, and two optional HTTP clients. There is no web framework and no database server; the ledger is JSON plus an append-only event log.
 
-The framework is otherwise standard-library first. The runtime dependencies are file locking, YAML presets, PDF text extraction, and the Lean bridge; there is no web framework and no database server.
+```bash
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
 
 ## From Install to First Run
 
-This is the recommended path from a fresh checkout to a working agentflow run.
+This is the shortest path from a fresh checkout to a working run.
 
 ### 1. Install
-
-Run this from the `agentflow/` directory:
 
 ```bash
 python -m pip install -U pip setuptools wheel
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
+
+Alternatively run from the source tree with `PYTHONPATH=src` and skip the editable install.
 
 ### 2. Initialize a workspace
 
@@ -88,11 +101,9 @@ A workspace is any directory. The ledger lives under `<workspace>/data/`.
 python -m agentflow.cli --root workspace init
 ```
 
-Add `PYTHONPATH=src` (or install the package) so `agentflow.cli` is importable.
-
 ### 3. Run the offline demo
 
-This never touches the network and exercises the whole record path:
+This exercises the whole record path without touching the network.
 
 ```bash
 python -m agentflow.cli --root workspace demo
@@ -110,22 +121,172 @@ python -m agentflow.cli run-agent M \
   --provider crossref,doaj,europepmc,openalex
 ```
 
-`--budget-usd` is the hard cap for the run. Omit `--wall-clock-sec` for no time limit; pass a value to bound it.
-
-### 5. Check the record
+### 5. Read the record
 
 ```bash
 python -m agentflow.cli --root workspace status
-python -m agentflow.cli --root workspace verify     # exit 1 on error
-python -m agentflow.cli --root workspace closing    # acceptance gate, exit 0/1/2
+python -m agentflow.cli --root workspace verify       # exit 1 on an error-level finding
+python -m agentflow.cli --root workspace closing      # acceptance gate, exit 0 / 1 / 2
 ```
+
+## Workspace Home
+
+A workspace is self-describing. `init` creates `data/` with one JSON snapshot per table plus `events.jsonl`; nothing else is required to start, and every optional directory is created by whoever needs it.
+
+Because a workspace is a plain directory, it is also a unit of isolation: two workspaces share no ids, no budget, and no session, so a run in one cannot corrupt the record of another.
+
+## Provider Setup
+
+Retrieval providers are selected per run with `--provider` (comma separated: `crossref`, `doaj`, `europepmc`, `openalex`, `fixture`). Omitted, the configured default is used.
+
+Provider behaviour is honest by construction:
+
+- A provider that reports "all query paths failed" raises a distinct error instead of returning zero candidates, so "nothing was found" and "nothing was checked" stay different readings.
+- HTTP 429 with a long `Retry-After` is not slept through; the provider goes on a short cooldown so subsequent queries move on.
+- `--provider fixture` runs the whole retrieval path offline against local fixtures.
+
+Model providers are configured in `settings.json` or the environment. With no model configured, only the offline paths run.
+
+## Daily Use After Setup
+
+The common loop is:
+
+1. `run-agent M --task "..."` with a budget.
+2. Watch it dispatch roles; each dispatch returns a preview of what that role produced.
+3. `status` to read the tables, `verify` to check invariants, `closing` to see which acceptance cells can be computed.
+4. `inbox` for questions waiting on a human, `answer` to answer one.
+5. `stop` if it goes the wrong way; `--resume` afterwards to continue where it stopped.
+
+## Agent Loop Mode
+
+`run-agent <ROLE>` drives one role's loop with the model. The shape is the same for every role: a system prompt assembled from the role's declaration, a tool surface filtered to that role's authority, a step loop, and a final message.
+
+Useful flags:
+
+- `--task` — the work item (required).
+- `--budget-usd` — hard cap for this run.
+- `--max-steps` — a step-accounting reporting threshold; it does not force a finish.
+- `--wall-clock-sec` — omitted means no limit; an explicit value bounds the run.
+- `--resume` — continue a previous run, from checkpoint or from the session transcript.
+- `--sid` — session id, so separate runs stay separate.
+- `--stop-file` — the stop switch this run watches.
+
+Exit codes are part of the contract: `0` finished, `1` finished without a final message, `2` could not check (bad resume, missing checkpoint), `3` paused waiting for a user answer.
+
+## Research Mode
+
+A research run is a loop driven by the conductor. Each dispatched role returns a payload preview, a summary, and its own readings; the conductor reads them, updates the ledger, and dispatches again.
+
+What lands on the ledger is what downstream judges read:
+
+| Table | Holds |
+|---|---|
+| `literature` | retrieved documents with provenance and extraction status |
+| `statements` | registered claims with evidence kind, quote verification, and five-bit evidence |
+| `conjectures` | testable conjectures with explicit criteria |
+| `attack_plans` | attack plans and their step history |
+| `experiments` | runs with method, result, verifier output, and exit code |
+| `documents` | manuscripts with claims and citations |
+| `review_findings` | review findings with level and target |
+| `research_questions` | the questions the run is actually pursuing |
+| `dependencies` | what depends on what, including refutations |
+| `relations`, `analysis_reports` | the relation layer produced by role C |
+| `search_requests`, `reprocess_requests` | request queues with terminal states |
+| `tasks`, `usage_ledger`, `eval_results` | who did what, what it cost, and how it was scored |
+
+A run that produces experiments and conjectures but no manuscript is a normal intermediate state: manuscripts are written when there is something to write.
+
+## Sessions and Continuation
+
+Every step is an event in `sessions/<sid>.jsonl`. Two things follow:
+
+- A run can be **continued** from its checkpoint; when no checkpoint was written (a killed run), the framework rebuilds from the transcript rather than replaying from step one.
+- A run can be **inspected** after the fact: which role did what, with which arguments, and what came back.
+
+A user can interject mid-run. Interjections are delivered to the conductor at the next step boundary, are recorded as events, and are marked as seen with the step number, so "was it received" is a readable fact rather than a guess.
+
+## Ledger and Retrieval
+
+Every table is a JSON snapshot; every write is also appended to `events.jsonl`. `rebuild` replays the event log into the snapshots, which is why a damaged snapshot is recoverable and an audit can be re-run.
+
+Reads are cheap and writes are transactional: writes take a per-table file lock, so concurrent roles cannot interleave a partial row.
+
+`table.schema` reflects the live schema rather than a hand-written document, and it accepts a single table name so a caller can ask for exactly the one it needs.
+
+## Roles, Skills, and Tools
+
+A role is declared once: its actions, its edges, its write sets, and its local notes. The tool surface, the call-time authority check, and the capability table are all derived from that declaration, so "who may write what" has one definition.
+
+Read-only roles (H review, V verification) receive no write tools structurally; the few ledger-writing proxies they do have are registered one by one, each with a written reason.
+
+Skills are per-role documents under `skills/`; they are materialised from a catalogue and refreshed when the catalogue changes. They teach method, not authority.
+
+## Experiments and Python Tools
+
+Role E runs experiments through one entry point with four methods: `numeric`, `symbolic`, `exhaustive_search`, and `formal`.
+
+- Every run records its method, its result (`supports` / `refutes` / `inconclusive`), its evidence kind, and its observations.
+- A `formal` run requires a Lean source file, records the checker's own output and its real exit code, and can only claim `proof` when the checker says so.
+- A refutation is a first-class result: `refutes` rows are what stop a line of research.
+- Experiment scripts live under `code/`, and their paths are recorded on the experiment row, so a result can be re-run.
+
+## Verification and Evidence
+
+Strength is a grade, not a slogan:
+
+| Evidence kind | Meaning |
+|---|---|
+| `proof` | a checker ran and its verbatim output is recorded |
+| `proof_review` | a proof was reviewed line by line |
+| `cross_check` | another method corroborated it |
+| `heuristic` | plausible, no independent backing |
+
+Rules that are enforced rather than suggested:
+
+- `proof` requires the checker's output, a matching subject key, and a non-empty proof text.
+- The five-bit evidence model says a true `proof` bit must be findable in the table that owns proofs; otherwise it is an error.
+- A statement claiming `proof` without a formal experiment behind it is reported by the audit.
+- A review report and a ledger verdict are separate records on purpose: the report is the reviewer's written opinion, the ledger is the mechanical verdict. Both are readable, and neither silently overwrites the other.
+
+`verify` checks invariants across tables — dangling references, claims resting on unusable claims, unverified literature claims, cost attribution, request closure — and exits non-zero on an error-level finding.
+
+## Lean Modes
+
+Formal work has two independent switches:
+
+- `--lean` on the topic pipeline (`run`, `project`). It does not affect agent loops.
+- `AGENTFLOW_LEAN_ENABLED` / `toolchain.lean_enabled`. It gates formal tools, experiments, wording ceilings, and prompt rewriting.
+
+When Lean is unavailable or disabled, formal experiments are refused in a controlled way and no row can claim `proof`. The refusal distinguishes "the user turned it off" (`lean_disabled`) from "this machine has no backend" (`no_backend`), because the two fixes are different.
+
+`docs/LEAN-MODES.md` carries the full matrix: what each role may do in each mode, which actions are refused, what the evidence ceiling is, and what each closing cell checks.
+
+## Budget and Stop Control
+
+- `--budget-usd` caps a run; every model call is charged to the usage ledger with its task attribution.
+- `budget` shows the pool, sets it, or adds to it.
+- `stop` stops gracefully: the running loop finishes its current step, sub-processes are terminated, and the stop is recorded with its reason and consumer.
+- `stop --force` terminates the registered process tree.
+- `stop --status` reports whether the switch exists, which processes are still alive, and which runs consumed a stop.
+- `stop --clear` removes a leftover switch; while one exists, a new run refuses to start.
+
+## Files and Paths
+
+Paths inside a workspace are relative to the workspace root. The framework does not write outside it, and a path that escapes is rejected rather than resolved.
+
+The distinction that matters in practice:
+
+- `source/` is **input**: anything you drop there is treated as given and is never modified.
+- `out/` is **output**: manuscripts, PDFs, acceptance tables, review reports.
+- `data/` is the **record**: snapshots plus events.
+- `runs/` and `sessions/` are the **trace**: per-run transcripts, checkpoints, pid files, and step events.
 
 ## Runtime Layout
 
 ```
 <workspace>/
   data/                  ledger snapshots (one JSON per table) + events.jsonl
-  source/                inputs you drop in (papers, drafts)
+  source/                inputs (papers, drafts) — read only
   code/                  experiment scripts produced by the agents
   library/               extracted text of retrieved documents
   manuscripts/           handoff records between roles
@@ -137,70 +298,6 @@ python -m agentflow.cli --root workspace closing    # acceptance gate, exit 0/1/
   skills/                per-role skill documents
   verifications/         verification receipts
 ```
-
-Everything under `data/` is re-derivable: `rebuild` replays `events.jsonl` into the snapshots.
-
-## Roles
-
-| Role | Responsibility |
-|---|---|
-| A | Retrieval: turn a search request into registered literature rows, and report every failure |
-| B | Statement ledger: register claims, quote-verify them word by word |
-| C | Relation analysis: concepts, gaps, contradictions |
-| D | Conjectures and attack plans |
-| E | Experiments: numeric, symbolic, exhaustive search, formal |
-| F | Attack steps and counterexample search |
-| G | Manuscripts |
-| H | Review: findings, verdicts, fix verification (read-only) |
-| V | Verification of proof steps (read-only) |
-| M | Conductor: decides what happens next and dispatches |
-
-Authority is not advisory: a role table, a tool surface, and a call-time check are all derived from the same declaration, and a write by a read-only role is refused structurally.
-
-## Research Mode
-
-A research run is a loop driven by the conductor. Each dispatched role returns a `payload_preview`, a summary, and its own readings; the conductor reads them, updates the ledger, and dispatches again.
-
-What lands on the ledger is what downstream judges read:
-
-- `literature` — retrieved documents with provenance
-- `statements` — registered claims with evidence kind and quote verification
-- `conjectures` — testable conjectures with criteria
-- `attack_plans` — attack plans and their history
-- `experiments` — runs with method, result, verifier output, exit code
-- `documents` — manuscripts with claims and citations
-- `review_findings` — findings from review, with level and target
-- `research_questions`, `relations`, `concepts`, `dependencies`
-
-The closing gate reads those tables and emits acceptance cells; a cell that cannot be computed from the ledger is reported as unknown rather than guessed.
-
-## Evidence and Verification
-
-A claim's strength is a grade, not a slogan:
-
-| Evidence kind | Meaning |
-|---|---|
-| `proof` | A verifier ran and its own output is recorded |
-| `proof_review` | A human-style proof was reviewed line by line |
-| `cross_check` | Another method corroborated it |
-| `heuristic` | Plausible, no independent backing |
-
-`evidence_kind="proof"` requires a checker's verbatim output, its exit code, and a subject key that matches the claim. Statement rows carry a five-bit evidence model; the `proof` bit being true while the proof text is empty is an error, not a rounding difference.
-
-Formal work has two switches:
-
-- `--lean` on the topic pipeline (`run`, `project`)
-- `AGENTFLOW_LEAN_ENABLED` / `toolchain.lean_enabled` for agent loops and tools
-
-They are independent. When Lean is not available or not enabled, the framework refuses formal experiments in a controlled way (`lean_disabled`) instead of pretending; with the switch off no row can claim `proof`. See `docs/LEAN-MODES.md` for the full matrix.
-
-## Budget and Stop Control
-
-- `--budget-usd` caps a run; every model call is charged to the usage ledger.
-- `python -m agentflow.cli --root <ws> budget` shows and adjusts the pool.
-- `python -m agentflow.cli --root <ws> stop` stops gracefully: the running loop finishes its current step and exits; sub-processes are terminated.
-- `--force` terminates the process tree by registration.
-- `--resume` continues a run from its checkpoint, or from the session transcript when no checkpoint was written.
 
 ## Command Line
 
@@ -231,20 +328,33 @@ answer       answer a question on the user's behalf
 closing      run the closing gate
 ```
 
+The remaining entries are sub-subcommands of `project` and `evidence`, which the parser exposes separately.
+
 ## Testing
 
 ```bash
 python -m pytest -q
 ```
 
-The full suite is roughly 5.4k tests and takes about 25 minutes on a laptop. A large part of it is judge-style: it asserts what the framework refuses, not only what it produces.
+The full suite is roughly 5.4k tests and takes about 25 minutes on a laptop. Much of it is judge-style: it asserts what the framework refuses, not only what it produces. Single files run in seconds:
+
+```bash
+python -m pytest -q tests/test_user_quickstart.py
+python -m pytest -q tests/test_lean_modes_matrix.py
+```
 
 ## Troubleshooting
 
-- **`lean_disabled` on a machine that has Lean**: the setting is separate from the CLI flag. Set `toolchain.lean_enabled` or `AGENTFLOW_LEAN_ENABLED=1`.
-- **A run that stops early with no error**: check `stop --status`; a stop switch may have been left behind, and a run refuses to start while it exists. `stop --clear` removes it.
-- **`verify` exits 1**: the message names the table and row; most failures are dangling references or a claim whose evidence kind is stronger than its backing.
-- **A run ends without a manuscript**: check `documents` and the `out/` tree; the closing gate reports which acceptance cells could not be computed.
+- **`lean_disabled` on a machine that has Lean** — the setting is separate from the CLI flag. Set `toolchain.lean_enabled` or `AGENTFLOW_LEAN_ENABLED=1`.
+- **A run exits at once** — check `stop --status`; a leftover stop switch makes every new run finish at step zero.
+- **`--resume` cannot find a checkpoint** — it falls back to the session transcript; if that is empty too, the run never produced a step.
+- **`verify` exits non-zero** — the message names the table and the row. Most findings are dangling references or a claim whose evidence kind is stronger than its backing.
+- **A run ends without a manuscript** — check `documents` and `out/`; the closing gate reports which acceptance cells could not be computed.
+- **A role cannot call a tool it "should" have** — the call-time authority check is authoritative, and `tools --role <R>` prints the surface that role actually receives.
+
+## Status
+
+Feature-complete for the research loop, with a judge-backed test suite and a real-machine record on two task shapes: a review-and-revise paper package, and a from-scratch research question. Known limits are documented rather than hidden — a no-Lean run cannot produce `proof`-grade evidence, graceful stop stops the run that consumes the switch, and a tool that never observes its deadline is recorded as `deadline_passed_unobserved` instead of being force-killed.
 
 ## License
 
