@@ -2447,18 +2447,28 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #:
 #: **实测 1 格换值、9 格不动**（现场现算）：换值 = G；不动 = A / B / C / D / E / F / H / V / M。
 #: 原因同上：这一轮只动 G 的 `policy`。
-_FROZEN_PROMPT_VERSION = "p160"
+#: p160 → p161（2026-10-19，**F 闭环八处缺口**那一批的提示词面）：D 与 M 的 policy
+#:   都点名了 `F.attack.step` —— 而那个动作**根本不存在**（`find_action('F', 'attack.step')`
+#:   是 `None`；F 的四个动作是 `create_plan` / `step` / `status` / `list_plans`），
+#:   照它派只会落 `unknown_action`。改成 `F.step`；同时把"判 F 有没有推进"的口径
+#:   从"`history` 非空"改成"至少有一轮真推进"（与 `closing._round_advanced` 同一口径）。
+#:
+#: **实测 2 格换值、8 格不动**（现场现算）：换值 = D / M；不动 = A / B / C / E / F / G / H / V。
+#: 原因对得上：这一轮只动 D 与 M 的 `policy`（伙伴表印的是 `duty` / `boundary`，不含 policy）；
+#: F 的 `write_set` 加了 `statements`，但写集不进提示词正文 —— 它换的是
+#: `tests/golden/agent_surface_snapshot.json` 里 F 那一格。
+_FROZEN_PROMPT_VERSION = "p161"
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "5756cb544e2fcb349f7f898fc819a176bb93284d9ae4bca7d215d390cc658e9a",
     "B": "54ee5606b547ae5d770059e93101be66ebe105b42e12206d682f4343a07a234a",
     "C": "8f0f373ec18a666c402567e7980948405c94d066f3ac49bc9e68bcba58a41f07",
-    "D": "4e5fbf874cb79096391b5cfe650022a017c0c23bfb174565c2a20e6fab2507e0",
+    "D": "ffec2e5b33df4e66e67e271c4d4f6b3f2d26d30b4f29f07bb0d30d2ef23d595d",
     "E": "a3efeda58c58b95acd2e14364aee71ea5bd5921287b69542eca48163584cdb0d",
     "F": "47196fc6305bb2e91c0d174f2de228d92ac41d81ad308b5e46aa772967071457",
     "G": "d07ab0f82d450a082fc35ae06ffda4fa49dd17288b7b5debd6e61e26e8a558fb",
     "H": "fea26e2492999641eb2dceebde13647311fd93debd0abb450f710b00e36fe608",
     "V": "8b6a92a7101060876b4c147e210f79354924456098f19f8584e18bcc7be33cc3",
-    "M": "8d272000ee326e5010aee9d59460bcae3d759bad66af0980d8743d941621530c",
+    "M": "8fb40ff519d9cb1e0c7b17c24648a21a8fddc793879260372f70ec54e5c6659d",
 }
 
 

@@ -9,7 +9,9 @@
 
 正控：① 子树开关：那一支里的循环停（`stop_reason="stop_file"`），别的支不停；
   ② 那一支的根自己撤开关，成员不撤（同支别的循环还要读到它）；
-  ③ 缺省（没有 `root_task_id`）⇒ 全停 + 第一个读到的人撤（老行为逐字不变）。
+  ③ 缺省（没有 `root_task_id`）⇒ 全停 + 只有树根撤（业主裁定"全工作区开关 = 整棵树停"：
+  成员停但不撤、树根**读时也不撤**，撤推迟到它这一趟的收尾；逐条见
+  `test_stop_scope_is_the_whole_tree.py`）。
 
 负控：① 判不了（台账里没有我这一行 / 没给编号）⇒ 不停 + 一句读数；
   ② 别的支里那些循环不许因为"盘上有开关"就停（子树开关不是全停）。
@@ -49,10 +51,12 @@ def _child(cond: Conductor, parent: str, *, role: str, key: str) -> str:
     }, note="start:%s.run_once" % role)
 
 
-def _loop(ws: pathlib.Path, cond: Conductor, *, task_id: str, role: str = "D") -> AgentLoop:
+def _loop(ws: pathlib.Path, cond: Conductor, *, task_id: str, role: str = "D",
+          parent: str = "") -> AgentLoop:
     loop = AgentLoop(role=role, session_root=ws, registry=None, seam=None, conductor=cond,
                      sid=SID, store=None, max_steps=1, auto_secretary=False)
     loop.my_task_id = task_id
+    loop.parent_task_id = parent
     return loop
 
 
@@ -74,18 +78,19 @@ def test_a_subtree_switch_only_stops_that_branch(tmp_path: pathlib.Path):
 
     # 别的支：不停，且有一句读数（"这把开关只管 D 那一支"）
     outside = LoopRun(role="E", task="t")
-    assert _loop(ws, cond, task_id=e, role="E")._user_stop_reason(outside) == "", "E 那一支不该停"
+    assert _loop(ws, cond, task_id=e, parent=top, role="E")._user_stop_reason(outside) == "", \
+        "E 那一支不该停"
     assert outside.notes and "只管" in outside.notes[-1], outside.notes
     assert stopctl.read_stop(ws) is not None
 
     # 那一支：成员（孙）停，但开关还在（同支别人还要读）
     member = LoopRun(role="G", task="t")
-    assert _loop(ws, cond, task_id=g, role="G")._user_stop_reason(member) == "stop_file"
+    assert _loop(ws, cond, task_id=g, parent=d, role="G")._user_stop_reason(member) == "stop_file"
     assert stopctl.read_stop(ws) is not None
 
     # 那一支的根：停，并且由它撤
     root = LoopRun(role="D", task="t")
-    assert _loop(ws, cond, task_id=d)._user_stop_reason(root) == "stop_file"
+    assert _loop(ws, cond, task_id=d, parent=top)._user_stop_reason(root) == "stop_file"
     assert stopctl.read_stop(ws) is None
 
 
@@ -96,11 +101,11 @@ def test_the_root_of_the_branch_removes_the_switch_members_do_not(tmp_path: path
     g = _child(cond, d, role="G", key="s4a@g")
     stopctl.request_stop(ws, reason="user", by="M", root_task_id=d)
 
-    member = _loop(ws, cond, task_id=g, role="G")
+    member = _loop(ws, cond, task_id=g, parent=d, role="G")
     assert member._user_stop_reason(LoopRun(role="G", task="t")) == "stop_file"
     assert stopctl.read_stop(ws) is not None, "成员读到之后开关必须还在（同支别人还要读）"
 
-    root = _loop(ws, cond, task_id=d, role="D")
+    root = _loop(ws, cond, task_id=d, parent=top, role="D")
     assert root._user_stop_reason(LoopRun(role="D", task="t")) == "stop_file"
     assert stopctl.read_stop(ws) is None, "那一支的根读完就撤（一次性信号）"
 
@@ -110,14 +115,30 @@ def test_the_root_of_the_branch_removes_the_switch_members_do_not(tmp_path: path
 
 
 def test_the_default_switch_still_stops_everyone(tmp_path: pathlib.Path):
-    """正控③：缺省开关（没有 `root_task_id`）⇒ 全停 + 读到的人撤（老行为逐字不变）。"""
+    """正控③：缺省开关（没有 `root_task_id`）⇒ 全停 + 只有树根撤。
+
+    业主裁定（"全工作区开关 = 整棵树停"）之后，这一档的**停**没变（谁读到都停），
+    **撤**变了：成员不许撤（`remove=False`，别人还要读到它），只有树根撤
+    （`_is_tree_root`）。四档逐条见 `test_stop_scope_is_the_whole_tree.py`。
+    """
     _st, cond, ws, top = _env(tmp_path)
     d = _child(cond, top, role="D", key="s4a@d")
     stopctl.request_stop(ws, reason="user", by="user")
     scope = stopctl.stop_scope(stopctl.read_stop(ws))
     assert scope["scope"] == "all" and scope["root_task_id"] == "", scope
-    assert _loop(ws, cond, task_id=d)._user_stop_reason(LoopRun(role="D", task="t")) == "stop_file"
-    assert stopctl.read_stop(ws) is None, "全工作区那一档仍然是'读到就撤'"
+
+    # 成员（有父）：停，但不撤
+    member = _loop(ws, cond, task_id=d, parent=top, role="D")
+    assert member._user_stop_reason(LoopRun(role="D", task="t")) == "stop_file"
+    assert stopctl.read_stop(ws) is not None, "成员不当'第一个读到的人'（别人还要读）"
+
+    # 树根（顶趟，父落在自己身上）：停；**读时不撤**（业主「M 停整棵树」的删除半），
+    # 撤发生在这一趟自己的收尾（`run()` 末尾 / `_consume_stop_at_teardown`）。
+    root = _loop(ws, cond, task_id=top, parent=top, role="M")
+    assert root._user_stop_reason(LoopRun(role="M", task="t")) == "stop_file"
+    assert stopctl.read_stop(ws) is not None, "树根读到也不许当场撤（兄弟/子孙还没读到）"
+    root._consume_stop_at_teardown()
+    assert stopctl.read_stop(ws) is None, "撤销发生在这一趟的收尾（一次性信号由树根执行）"
 
 
 # ------------------------------------------------------------------ 判不了 / 别停错
@@ -150,7 +171,7 @@ def test_a_switch_on_another_branch_does_not_stop_me(tmp_path: pathlib.Path):
     e = _child(cond, top, role="E", key="s4a@e")
     stopctl.request_stop(ws, reason="user", by="M", root_task_id=d)
     run = LoopRun(role="E", task="t")
-    assert _loop(ws, cond, task_id=e, role="E")._user_stop_reason(run) == ""
+    assert _loop(ws, cond, task_id=e, parent=top, role="E")._user_stop_reason(run) == ""
     assert stopctl.read_stop(ws) is not None
     assert run.notes and "不在那一支里" in run.notes[-1], run.notes
 

@@ -319,8 +319,16 @@ def test_a_broken_seam_is_recorded_as_not_checked_not_as_a_dead_end(store: Store
 
 
 def test_a_malformed_round_comes_back_with_the_original_reason(store: Store):
-    """不成形 ⇒ 原话带回去（而不是只说"没进展"）：调用方要能据它改提示词。"""
-    llm = FakeLLM(_round(product="reduction", new_subgoals=[]))   # reduction 必须给 1–3 条
+    """不成形 ⇒ 原话带回去（而不是只说"没进展"）：调用方要能据它改提示词。
+
+    2026-10-19（`draft/44` P3-5）：**原话要带进下一次提问**，不是只写进 history。
+    改前 `RoundError` 一次就把子目标标成 `blocked` + `in_flight=True`，而 `step` 的
+    选目标过滤会摘掉 `in_flight` 的子目标 ⇒ 一次不成形的回答 = 这条路**永久封存**
+    （预算里的 `max_persist_attempts` 在 F 侧零消费者）。现在重问到上限才 blocked，
+    且重试用尽的 blocked **不带** `in_flight`（下轮仍会重试它）。
+    """
+    bad = _round(product="reduction", new_subgoals=[])            # reduction 必须给 1–3 条
+    llm = FakeLLM(bad, bad)                                       # 预算里 max_persist_attempts=2
     f = _f(store, llm=llm)
     pid = _new_plan(f)
     out = f.step(pid)
@@ -329,6 +337,12 @@ def test_a_malformed_round_comes_back_with_the_original_reason(store: Store):
     assert out["outcome"] == "no_change", out
     assert rec.get("product_detail") is None, rec
     assert "不成形" in rec["detail"] and "1–3" in rec["detail"], rec["detail"]
+    # 判据①：真的重问了（不是同一个问题原样再发一遍）—— 原因必须进第二次的提示词
+    assert len(llm.prompts) == 2, llm.prompts
+    assert "不成形" in llm.prompts[1] and "1–3" in llm.prompts[1], llm.prompts[1]
+    # 判据②：重试用尽 ≠ 永久封存 —— blocked 与 in_flight 是两件事
+    sg = store.rows("attack_plans")[0]["subgoals"][0]
+    assert sg["status"] == "blocked" and sg.get("in_flight") is not True, sg
 
 
 def test_the_pre_spend_gate_stops_the_call_before_any_money_is_spent(store: Store):

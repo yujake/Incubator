@@ -156,6 +156,15 @@ SPEC = AgentSpec(
                      'attack_plans',
                      'reprocess_requests',
                      'search_requests',
+                     # 2026-10-19（`draft/44` 的 P3-6）：`proof` 那一档的产物出口。
+                     # 改前 F 交出的论证只活在 `history.product_detail` 里（全仓没有读者），
+                     # 而 policy 第 2 条要求"够格的中间结论交 B 登记成 `statements`" ——
+                     # 那条路在真机里从来没有走通过（F 没有这条路，M 也不会替它派）。
+                     # 现在 F 自己落一行（`evidence_kind="heuristic"`、`bits` 留空：
+                     # **V 没签过，等级不许自报更高**），可复核的那一份因此存在了。
+                     # ⚠️ 这是**写集扩容**（F 从此会写 `statements`）⇒ 落在 FC-27 的
+                     # 人工复核面里：本批只做、不签。
+                     'statements',
                  )),
     class_path='agentflow.agent_f:AgentF',
     actions=ACTIONS,

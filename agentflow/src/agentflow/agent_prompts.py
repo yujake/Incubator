@@ -2018,7 +2018,16 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   宏包与定理环境名可调；硬线只有"全文英文、CJK = 0，注释里也不留中文"）。
 #:   走查读数：只有 **G** 一格换值，其余九格逐字不动（改的是 `policy`，而伙伴表只印
 #:   `duty` / `boundary`）—— 现算读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`。
-PROMPT_VERSION = "p160"
+#: p160 → p161（2026-10-19，**F 的闭环八处缺口**那一批：`draft/44` 的 P1-2 / P1-1 口径进提示词）：
+#:   ① D 的 policy：`F.attack.step` → `F.step`（那个动作**根本不存在**，
+#:      `find_action('F','attack.step')` 是 `None`），并把"判 F 有没有推进"的口径
+#:      从"`history` 非空"改成"至少有一轮真推进"；
+#:   ② M 的 policy：同一处错名改成 `F.step`，`plan_progress_rows` 的口径同步改
+#:      （只数"至少有一轮真推进"的计划；只派检索请求的轮不算）；
+#:   ③ F 的 `write_set` 加了 `statements`（`proof` 的产物出口）—— 写集不进提示词正文，
+#:      但 `agent_surface_snapshot.json` 会跟着换一格。
+#:   走查读数见 `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（现算，不预先猜）。
+PROMPT_VERSION = "p161"
 
 
 

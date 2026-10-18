@@ -2174,6 +2174,11 @@ class AgentLoop:
     #: 最近一次摘要调用的读数（S-B：`{"note": "compaction"}` 那一族）。
     #: 判据与 `compaction_summary` 事件都读它 —— 于是"这一笔钱是压缩花的"可归口。
     _last_summary_note: dict[str, Any] = field(default_factory=dict)
+    #: 「收工时由我撤」的那把全工作区开关（业主裁定：删是整棵树的事，不是第一个读者的）。
+    #: 空 = 这一趟没有读到过该由我收尾撤的开关（或已经撤过）。由 `_stop_applies` 的
+    #: `consume_at_end` 决定、由 `_arm_stop_teardown` 记下、由
+    #: `_consume_stop_at_teardown` 在 `run()` 收尾（`agent_run_end` 落盘之后）兑现。
+    _stop_to_consume_at_end: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """T14：每唤起一个智能体就自带一个秘书（不传就派生）。
@@ -3611,6 +3616,11 @@ class AgentLoop:
             # 两处存的是同一件事，截断口径不该有两份。
             "final_payload": dict(run.final_payload),
         }, sid=self.sid)
+        # ---- 业主裁定（「M 停整棵树」的删除半）：全工作区开关的删除推迟到这一趟收尾，
+        # 且只有树根删（`_stop_to_consume_at_end` 只由树根挂上）。位置必须在这里 ——
+        # `agent_run_end`（含 `final`/台账读数）已经落盘，再撤信号；反过来一旦写台账失败，
+        # 盘上就只剩"开关没了"，没有任何东西说明"该停"。
+        self._consume_stop_at_teardown()
         return run
 
     # -------------------------------------------------------------- 执行
@@ -3805,23 +3815,69 @@ class AgentLoop:
             out["problem"] = problem
         return out
 
+    def _is_tree_root(self) -> bool:
+        """这一趟是不是「这棵树」的根（业主裁定：全工作区开关 = M 把整棵树停了）。
+
+        业主的口径：一个停机开关落下后，M 那一趟**以及它派出去的所有子孙循环**都必须停；
+        "谁是第一个读到的"不许决定别人停不停。所以撤开关这件事只能落在树根身上
+        —— 任何成员撤它，都会让还没读到的那一支静默继续跑（方向正好相反的那个 §140 bug）。
+
+        判据三档（取第一个成立的）：
+
+        1. 这一趟没有台账号（`my_task_id` 空）⇒ 它就是树的起点：没落台账的顶趟、
+           没接主控的那条路都没有别人可挂在下面；
+        2. 没有父任务（`parent_task_id` 空）⇒ 树根；
+        3. `parent_task_id == my_task_id` ⇒ 也是没有父：`_resolve_parent` 的第三条分支
+           把"顶层发起"的收件人落回自己（台账里那一行 `parent_task_id` 是空时，
+           `_resolve_parent` 逐字 `return str(self.my_task_id or ""), …`）——
+           所以顶趟的 `parent_task_id` 长得像"有个父"，而那个父就是它自己。
+
+        其余一律是成员。为什么"没有台账号"也算树根而不算判不了：台账号是被召唤那一刻
+        由调用方给的（`LlmBackend.call` 从它那一行读出来），没有台账号的循环**不可能**
+        是别人派出来的 —— 这一档不是"不知道"，而是"确定没有父"。
+        """
+        mine = str(self.my_task_id or "")
+        if not mine:
+            return True
+        parent = str(getattr(self, "parent_task_id", "") or "")
+        return (not parent) or (parent == mine)
+
     def _stop_applies(self, state: Mapping[str, Any]) -> dict[str, Any]:
         """盘上这把停机开关管不管我（S4，`draft/90` E7 / `draft/84` §2.2）。
 
-        返回 `{"stop","remove","why"}`：
+        返回 `{"stop","remove","why"}`；全工作区那一档多一格 `consume_at_end`：
 
         | 开关 | 我 | 结论 |
         |---|---|---|
-        | 全工作区（没有 `root_task_id`） | 谁 | 停；读到的第一个撤掉它（老行为逐字不变） |
-        | 子树（有 `root_task_id`） | 我在那一支里、我就是那一支的根 | 停，并且由我撤（`remove=True`） |
+        | 全工作区（没有 `root_task_id`） | 树根 | 停，**读时不撤**；`consume_at_end=True` ⇒ 由我收尾时撤 |
+        | 全工作区 | 成员（有父） | 停，不撤（`remove=False`、`consume_at_end=False`）—— 别人还要读到它 |
+        | 子树（有 `root_task_id`） | 我在那一支里、我就是那一支的根 | 停，并且由我撤（`remove=True`，读时即撤） |
         | 子树 | 我在那一支里、是成员 | 停，但不撤（`remove=False`）—— 同支别的循环还要读到它 |
         | 子树 | 我不在那一支里 | 不停（"停 D 那一支"不许停到 E 那一支） |
         | 子树 | 判不了（台账读不成 / 我没编号） | 不停 + 一句读数（判不了 ≠ 适用） |
 
-        为什么"不撤"这一档必须存在：一次性开关的语义（§140）是为"全工作区"设计的；
-        子树开关要一支上多个循环各自读到，谁先读到谁撤就会让后面的人静默不停
-        —— 那与 §140 那个 bug 是同一族，只是方向反过来。撤的责任落在那一支的根
-        （通常就是叫停的人自己那一趟）。
+        ## 为什么全工作区那一档是"读时不删、收工时树根才删"
+
+        业主裁定：**全工作区开关 = 整棵树停**。改前那一档是"读到的第一个撤掉它"
+        （§140 的一次性信号），可是并行的子孙循环各有各的步边界：谁先读到谁把开关撤了，
+        其余的人下一刻读到的就是"没人叫停"—— 它们静默继续跑。
+
+        第一次修（"只有树根撤"）只挡住了一半：树根**在自己的步边界读到**那一刻就把文件
+        删了，还没走到步边界的兄弟/子孙下一刻同样读不到 —— 真机读数：第 1 趟
+        `s1 stop_reason='stop_file' … 开关还在=False`，第 2 趟 `s2 stop_reason='final'`
+        ⇒ 静默继续跑（这正是本格要闭合的那个窗口）。
+
+        现在把**删除**从"读到时"推迟到"这一趟收工时"：任何循环读到它都 `stop=True`
+        （谁读到都得停），但谁都不在这一刻删它；只有树根带着 `consume_at_end=True` 走到
+        收尾（`run()` 末尾、`agent_run_end` 落盘之后）才由 `_consume_stop_at_teardown`
+        调 `consume_stop(remove=True)`。成员一律 `remove=False`、`consume_at_end=False`，
+        只把这一笔记进 `runs/stop-history.jsonl`（`removed=False`）——
+        "谁读到过、谁撤的"事后分得开。
+
+        子树那一档的语义一个字没动（`stop_scope` = `"subtree"` 时仍按
+        `inside_subtree` 的四档判）：本支根读时即撤、成员不撤、不在本支不停、判不了不停。
+        `force` 与 `stop_file` 两种 level 走的是同一条判据（`_user_stop_reason` 只在
+        理由码上分岔），所以"强制也只由树根收尾撤"不需要另写一条分支。
         """
         try:
             from . import stopctl
@@ -3832,7 +3888,10 @@ class AgentLoop:
             return {"stop": False, "remove": False,
                     "why": f"作用面判不了（{scope.get('reason')}）⇒ 不停（判不了 ≠ 适用）"}
         if scope["scope"] != "subtree":
-            return {"stop": True, "remove": True, "why": ""}
+            # 全工作区 = 整棵树停：谁都停，但读的时候谁都不删；只有树根收尾时撤
+            # （`consume_at_end`，见 docstring 那一节与 `_consume_stop_at_teardown`）。
+            return {"stop": True, "remove": False,
+                    "consume_at_end": self._is_tree_root(), "why": ""}
         root_tid = str(scope["root_task_id"])
         cond = self.conductor
         mine = str(self.my_task_id or "")
@@ -3856,6 +3915,82 @@ class AgentLoop:
             return {"stop": False, "remove": False,
                     "why": f"这把开关只管 {root_tid} 那一支，我不在那一支里"}
         return {"stop": True, "remove": mine == root_tid, "why": ""}
+
+    def _arm_stop_teardown(self, reason: str, *, explicit: str = "") -> None:
+        """记下「这一趟收工时该由我撤」的那把全工作区开关（业主裁定：删是整棵树的事）。
+
+        只有树根会走到这里 —— `_stop_applies` 只在「全工作区 + `_is_tree_root()`」时
+        给出 `consume_at_end=True`。成员一律不记：它们撤了，同一棵树上还没读到的
+        那一支下一刻就是"没人叫停"（静默继续跑）。
+
+        `explicit` 原样带着：这一趟读的是 `--stop-file` 给的路径，收尾要撤的也必须是它
+        —— 工作区里可能同时有 `.agentflow-stop` 与一个显式路径，撤错文件等于没撤。
+        """
+        self._stop_to_consume_at_end = {"reason": str(reason or "stop_file"),
+                                        "explicit": str(explicit or "")}
+
+    def _consume_stop_at_teardown(self) -> str:
+        """树根收工时撤掉那把全工作区开关；返回一句读数（空串 = 没什么要报的）。
+
+        ## 为什么删除落在这里，而不在"读到时"
+
+        读的那一刻删 ⇒ 还没走到步边界的兄弟/子孙下一刻读不到文件 ⇒ 静默继续跑。
+        真机读数（前代理实测）：第 1 趟 `s1 stop_reason='stop_file' … 开关还在=False`，
+        第 2 趟 `s2 stop_reason='final'` —— 继续跑。所以读只记录"该停"与"该由我撤"
+        （`_arm_stop_teardown`），删除统一落到这一趟自己的收尾。
+
+        ## 为什么只有树根
+
+        成员删它等于替整棵树做了决定（同树别的循环还没读到）。
+        `_stop_applies` 只在 `_is_tree_root()` 为真时给 `consume_at_end=True`。
+
+        ## 顺序：先写 final/台账，再删开关
+
+        调用点在 `run()` 末尾、`agent_run_end`（含 `final` 与这一趟的台账读数）落盘之后。
+        反过来一旦写台账失败，盘上就只剩"开关没了"、没有任何东西说明"该停"——
+        停的意图凭空消失。
+
+        ## 三态（不许把"没撤成"读成"没叫停"）
+
+        撤成功 ⇒ 空串；走到收尾时开关已经不在盘上（别处 `--clear` 或另一个进程撤走）
+        ⇒ 一句读数（这一笔不是我撤的）；历史记了但文件还在（被别的进程占着）
+        ⇒ 一句读数。三者都不改变"这一趟已停"这个事实（`stop_reason` 早已是
+        `stop_file`/`force_stop`）。
+        """
+        pending = self._stop_to_consume_at_end
+        self._stop_to_consume_at_end = {}
+        if not pending:
+            return ""
+        explicit = str(pending.get("explicit") or "") or None
+        try:
+            from . import stopctl
+
+            record = stopctl.consume_stop(
+                self.session_root, sid=self.sid,
+                level=str(pending.get("reason") or "stop_file"),
+                explicit=explicit, remove=True)
+        except Exception as exc:  # noqa: BLE001 —— 撤开关失败不许带走这一趟的产出
+            note = (f"收工撤停机开关失败（{type(exc).__name__}: {exc}）"
+                    "⇒ 开关可能还在盘上，下一趟会被它再停一次")
+        else:
+            if not record:
+                note = ("收工撤停机开关：走到收尾时开关已经不在盘上了"
+                        "（别处 `--clear` 或另一个进程撤走了）⇒ 这一笔不是我撤的")
+            else:
+                try:
+                    still = stopctl.stop_path(self.session_root, explicit=explicit).is_file()
+                except Exception:  # noqa: BLE001 —— 判不了就不猜（不许把没查成报成没撤掉）
+                    return ""
+                if not still:
+                    return ""
+                note = ("收工撤停机开关：历史记下了（`removed=True`）但文件还在盘上"
+                        "（多半被别的进程占着）⇒ 下一趟会被它再停一次")
+        try:
+            SS.append(self.session_root, {"kind": "agent_note", "role": self.role,
+                                          "note": note}, sid=self.sid)
+        except Exception:  # noqa: BLE001 —— 连读数都写不成也不许带走这一趟
+            pass
+        return note
 
     def _user_stop_reason(self, run: "AgentLoop.LoopRun") -> str:
         """人叫停了吗（`draft/37` §125）。返回停止原因（空串 = 没叫停，继续跑）。
@@ -3884,9 +4019,14 @@ class AgentLoop:
         实测（`temp/_stop_probe.py`）：`conductor.stop` 停了一趟之后开关留在盘上，
         而紧接着的 `--resume` 在第 0 步就被同一把开关停掉（0 步、0 次模型调用）——
         同一个工具的产物里却写着"可续跑的步检查点 + 续跑简报"，两者互相拆台。
-        处置：判定生效的这一刻调 `stopctl.consume_stop(...)`（审计进
-        `runs/stop-history.jsonl`，开关撤走）。这样 E 的子进程、续跑、以及"用户第二次叫停"
+        处置：判定生效就调 `stopctl.consume_stop(...)`（审计进
+        `runs/stop-history.jsonl`）。这样 E 的子进程、续跑、以及"用户第二次叫停"
         三条路都不再被一把旧开关卡住。
+
+        全工作区那一档的**删除**再往后挪一格（业主裁定「M 停整棵树」）：读的这一刻
+        谁都不删（只把成员那一笔记进历史），树根的删除推迟到这一趟收尾
+        （`_consume_stop_at_teardown`，排在 `agent_run_end` 之后）——
+        否则树根读到即删，还没走到步边界的兄弟下一刻读到的就是"没人叫停"。
         """
         # ---- S-H（裁定 14）：父叫停某一个孩子当前那一轮的那一份信号。
         #
@@ -3922,13 +4062,18 @@ class AgentLoop:
                     run.notes.append(f"停机开关在盘上，但{verdict['why']}")
                     return ""
                 reason = "force_stop" if bool(state.get("force")) else "stop_file"
-                try:
-                    from . import stopctl
+                if verdict.get("consume_at_end"):
+                    # 全工作区 + 我是树根：读的这一刻**不删**（兄弟/子孙还没读到），
+                    # 只记下"这一趟收工时该我撤"——见 `_consume_stop_at_teardown`。
+                    self._arm_stop_teardown(reason, explicit=self.stop_file)
+                else:
+                    try:
+                        from . import stopctl
 
-                    stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
-                                         explicit=self.stop_file, remove=verdict["remove"])
-                except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
-                    pass
+                        stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
+                                             explicit=self.stop_file, remove=verdict["remove"])
+                    except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
+                        pass
                 return reason
             return ""
         try:
@@ -3943,13 +4088,17 @@ class AgentLoop:
                 run.notes.append(f"停机开关在盘上，但{verdict['why']}")
                 return ""
             reason = "force_stop" if bool(state.get("force")) else "stop_file"
-            try:
-                from . import stopctl
+            if verdict.get("consume_at_end"):
+                # 全工作区 + 我是树根：读时不删，收尾才删（见 `_stop_applies`）。
+                self._arm_stop_teardown(reason)
+            else:
+                try:
+                    from . import stopctl
 
-                stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
-                                     remove=verdict["remove"])
-            except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
-                pass
+                    stopctl.consume_stop(self.session_root, sid=self.sid, level=reason,
+                                         remove=verdict["remove"])
+                except Exception:  # noqa: BLE001 —— 记账失败不让"停下"这件事失效
+                    pass
             return reason
         started = str(getattr(run, "started_at", "") or "")
         if not started:

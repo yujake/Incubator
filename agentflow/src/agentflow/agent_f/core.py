@@ -43,16 +43,51 @@ default_llm = _f_role_seam
 set_default_llm = _f_set_role_seam
 
 
+#: 一条证据正文在提示词里最多占多少字（超出截断，并在提示词里写明"截断了"）。
+_EVIDENCE_ITEM_CHARS = 200
+#: 整块证据正文的上限（防止一个子目标挂了几十条证据把提示词撑爆）。
+_EVIDENCE_BLOCK_CHARS = 2000
+#: 回灌几轮 history（`draft/44` P2-4：只给 id / 不给上一轮，模型会逐字重复）。
+_HISTORY_ROUNDS = 3
+#: 一轮 history 里 `detail` 摘要的字数上限。
+_HISTORY_DETAIL_CHARS = 160
+
+
+def _clip(text: str, limit: int) -> str:
+    """按字数截断，并把"截断了、原长多少"写在结果里（不许静默截断）。"""
+    s = " ".join(str(text or "").split())
+    if len(s) <= limit:
+        return s
+    return s[: limit - 1] + f"…（已截断，原长 {len(s)} 字）"
+
+
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
-                   tried: Sequence[str]) -> str:
+                   tried: Sequence[str], evidence: Sequence[str] = (),
+                   history: Sequence[str] = (), retry_note: str = "") -> str:
     """F 自己推理那一轮的提示词（D42）。
 
     受控值从 `attackround` 现取，不在这里手抄一遍：四种产物、九招工具箱、
     `dead_end` 的七个受控理由、`#5` 的禁用标记 —— 抄一遍就多一处会漂的地方，
     而这一处的漂移形态恰好是"模型按提示词写、判据按常量拒"。
 
-    提示词只做两件事：把这个子目标已知的东西摆出来，把这一轮必须交什么说清。
-    它不告诉模型该怎么证（那是它的活），也不给它任何本题的构造。
+    提示词只做三件事：把这个子目标**已知的东西摆出来**（含证据正文与上一轮发生了什么）、
+    把这一轮必须交什么说清、把"上一轮为什么不算"带回去。它不告诉模型该怎么证
+    （那是它的活），也不给它任何本题的构造。
+
+    ## 为什么证据要带正文、history 要回灌（`draft/44` 的 P2-3 / P2-4）
+
+    改前这一格只印 id 列表（`已跑实验：['000001']`）—— 模型拿不到"那条证据说了什么"，
+    于是它每一轮都在同一个盲点上重说一遍同一句话（真机 mp3 `000001`：r1/r3/r4 逐字相同）。
+    现在：证据正文（有字数上限、超出截断并写明）+ 前几轮发生了什么（outcome/产物/结论摘要）
+    + 同一招连续出现时**显式**要求换一招。三样都是"这一轮之前已经发生的事实"，
+    不是提示，所以它们进提示词不改变"模型该不该自己想办法"这件事。
+
+    参数
+    ----
+    evidence : 已经渲染好的证据正文行（`id（类型）：正文摘要`），由
+        `_Core._evidence_digest` 现算 —— 这一层拿不到 store。
+    history : 已经渲染好的"上一轮/前几轮"行，由 `_Core._history_digest` 现算。
+    retry_note : 上一次交的产物**为什么不成形**（P3-5 的重问）；为空表示这是第一次问。
     """
     from .. import attackround as AR
 
@@ -69,6 +104,34 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         f"已跑实验：{list(sg.get('experiment_ids') or []) or '（无）'}；"
         f"已试过的招：{list(tried) or '（无）'}",
         "",
+    ]
+    # ---- P2-3：证据**正文**（不只是 id）
+    if evidence:
+        lines += [
+            "这些证据**已经在本台账里了**，正文摘要如下（不要当成没做过、也不要再引一个"
+            f"台账里没有的 id）：每条最多 {_EVIDENCE_ITEM_CHARS} 字、整块最多 "
+            f"{_EVIDENCE_BLOCK_CHARS} 字，超出即截断（截断处会写明原长）——",
+        ]
+        lines += [f"- {line}" for line in evidence]
+        lines.append("")
+    else:
+        lines += ["这条子目标**还没有任何证据正文可读**（`evidence_ids` 是空的）—— "
+                  "这一轮的产物要么造出新东西（新子目标 / 实验判据），要么如实 `dead_end`。", ""]
+    # ---- P2-4：上一轮/前几轮发生了什么（history 回灌）
+    if history:
+        lines += [
+            "此前几轮**已经发生过**的事（按轮给；别把它们当成没做过，也别逐字重说一遍）：",
+        ]
+        lines += [f"- {line}" for line in history]
+        lines.append("")
+    # ---- P3-5：上一次交的产物为什么不成形（带原因重问）
+    if retry_note:
+        lines += [
+            f"⚠️ 你上一次的产物**不成形**：{retry_note}",
+            "按下面的受控形状**重说一次**（只改不成形的地方，别把已经想对的部分丢掉）：",
+            "",
+        ]
+    lines += [
         "产物必须是下面四档之一（`product` 字段），其余字段按那一档给全：",
         f"1. `reduction`：把难题归约成 1–3 条新的、可检验的子目标。"
         f"要给 `new_subgoals`（每条 {{goal, testable}}，两个都非空）、`reason`。",
@@ -458,6 +521,206 @@ class _Core:
             i += 1
         return f"s{i}"
 
+    # ---------------------------------------------------------- 提示词里的"已知事实"（P2-3/4）
+
+    #: 证据 id 的落点：前缀 ⇒ `(表, 主键列, 正文列们)`。
+    #:
+    #: 与 `_CITE_ID_SOURCES` 同一套前缀（那是"这个 id 在不在册"的判据，这一处是
+    #: "它说了什么"的渲染）—— 两张表共用同一份前缀词表是因为**它们是同一件事的两个
+    #: 用途**；分开写会漂，漂的后果是"判据说在册的证据，提示词里取不到正文"。
+    _EVIDENCE_SOURCES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+        ("req", "search_requests", "request_id",
+         ("topic", "content_description", "outcome", "result_lit_ids")),
+        ("exp", "experiments", "experiment_id",
+         ("claim", "result", "evidence_kind", "verdict_reason")),
+        ("stmt", "statements", "stmt_id", ("statement_text", "evidence_kind", "status")),
+        ("rel", "relations", "relation_id", ("description", "negation_kind")),
+        ("lit", "literature", "lit_id", ("title", "abstract", "doi")),
+        ("doc", "documents", "doc_id", ("title", "summary")),
+        ("conj", "conjectures", "conjecture_id", ("statement", "status")),
+        ("plan", "attack_plans", "plan_id", ("problem", "status")),
+    )
+
+    #: 没有前缀的证据 id（`_deploy_e` 落的是裸号 `000001`）按这张顺序试。
+    _EVIDENCE_BARE_ORDER: tuple[str, ...] = (
+        "experiments", "statements", "relations", "literature", "search_requests")
+
+    def _evidence_rows(self) -> tuple[dict[str, dict[str, dict[str, Any]]], list[str]]:
+        """把"可能被引到的"那几张表读成 `{表: {主键: 行}}`，并如实记下读不到的表。
+
+        读不到**不许折成"没有这条证据"**（三态纪律）：读失败的表进第二个返回值，
+        提示词里会写明"这几张读不到 ⇒ 那几条证据的正文没取到，不是它们不存在"。
+        """
+        index: dict[str, dict[str, dict[str, Any]]] = {}
+        unreadable: list[str] = []
+        tables = {t for _, t, _, _ in self._EVIDENCE_SOURCES} | set(self._EVIDENCE_BARE_ORDER)
+        for table in sorted(tables):
+            column = next((c for _, t, c, _ in self._EVIDENCE_SOURCES if t == table), "")
+            if not column:
+                continue
+            try:
+                rows = list(self.store.rows(table))
+            except Exception as exc:  # noqa: BLE001 - 读不到要如实记，不许静默当成空
+                unreadable.append(f"{table}（{type(exc).__name__}: {exc}）")
+                continue
+            index[table] = {str(r.get(column) or r.get("id") or "").strip(): dict(r)
+                            for r in rows if str(r.get(column) or r.get("id") or "").strip()}
+        return index, unreadable
+
+    @staticmethod
+    def _evidence_body(table: str, row: Mapping[str, Any],
+                       fields: Sequence[str]) -> str:
+        """取一行里"说了什么"的那几格（跳过空值），拼成一句可读的摘要。"""
+        bits: list[str] = []
+        for key in fields:
+            value = row.get(key)
+            if value in (None, "", [], {}):
+                continue
+            if isinstance(value, (list, tuple)):
+                value = "、".join(str(x) for x in list(value)[:6])
+            elif isinstance(value, Mapping):
+                value = "；".join(f"{k}={v}" for k, v in list(value.items())[:4])
+            bits.append(f"{key}={str(value).strip()}")
+        if not bits:
+            bits = [f"{table} 里这一行的正文是空的（只有 id）"]
+        return "；".join(bits)
+
+    def _evidence_digest(self, sg: Mapping[str, Any],
+                         plan: Mapping[str, Any]) -> list[str]:
+        """这条子目标已有的证据 ⇒ 提示词里那一块正文行（**带正文，不只给 id**）。
+
+        `draft/44` 的 P2-3：改前提示词里只有 `['000001']` 这样的 id 列表，模型拿不到
+        "那条证据说了什么" ⇒ 每一轮都在同一个盲点上重说同一句话（真机 mp3 `000001`
+        的 r1/r3/r4 逐字相同）。这里的判据是：**能读出正文的就读出来**，读不到的
+        （表读不了 / id 不在册）如实写"读不到 / 不在册"，绝不静默丢掉。
+        """
+        raw_ids: list[str] = []
+        for key in ("evidence_ids", "experiment_ids", "proof_experiment_ids"):
+            raw_ids += [str(x) for x in (sg.get(key) or [])]
+        ids = [x for x in dict.fromkeys(x for x in raw_ids if x.strip())]
+        subgoals = {str(s.get("sid") or ""): dict(s) for s in (plan.get("subgoals") or [])}
+        if not ids:
+            return []
+        index, unreadable = self._evidence_rows()
+        out: list[str] = []
+        left = _EVIDENCE_BLOCK_CHARS
+        skipped = 0
+        for raw in ids:
+            head, _, tail = raw.partition(":")
+            prefix, key = (head.strip(), tail.strip()) if tail else ("", raw.strip())
+            body = ""
+            label = ""
+            source = next((s for s in self._EVIDENCE_SOURCES if s[0] == prefix), None)
+            if prefix and source is not None:
+                _, table, _column, fields = source
+                row = (index.get(table) or {}).get(key.split("#", 1)[0].strip())
+                label = f"{table}"
+                body = (self._evidence_body(table, row, fields) if row is not None
+                        else "**这一条不在册**（台账里没有这个 id ⇒ 引它算伪造引用，会被拒收）")
+            elif prefix and prefix not in {s[0] for s in self._EVIDENCE_SOURCES}:
+                label = f"{prefix}:（这一类不落表）"
+                body = "（这一类证据不在 `store` 的表里，只有 id）"
+            elif key in subgoals:
+                sg_row = subgoals[key]
+                label = "子目标"
+                body = (f"text={sg_row.get('text')}；owner={sg_row.get('owner')}；"
+                        f"status={sg_row.get('status')}；testable={sg_row.get('testable') or '（无）'}")
+            else:
+                for table in self._EVIDENCE_BARE_ORDER:
+                    row = (index.get(table) or {}).get(key.split("#", 1)[0].strip())
+                    if row is not None:
+                        _, _, _column, fields = next(s for s in self._EVIDENCE_SOURCES
+                                                     if s[1] == table)
+                        label = table
+                        body = self._evidence_body(table, row, fields)
+                        break
+                else:
+                    label = "不在册"
+                    body = "**台账里查不到这个 id** ⇒ 引它算伪造引用，会被当场拒收"
+            line = _clip(f"{raw}（{label}）：{body}", _EVIDENCE_ITEM_CHARS)
+            if len(line) > left:
+                skipped += 1
+                continue
+            left -= len(line)
+            out.append(line)
+        if unreadable:
+            out.append("（这几张表这一次读不到，所以它们的正文没取到 —— 那是「读不到」，"
+                       "不是「没有这条证据」：" + "；".join(unreadable) + "）")
+        if skipped:
+            out.append(f"（另有 {skipped} 条证据没列出来：这一块的字数上限是 "
+                       f"{_EVIDENCE_BLOCK_CHARS} 字 —— 它们**在册**，只是没进这一轮的提示词）")
+        return out
+
+    def _history_digest(self, plan: Mapping[str, Any],
+                        tried: Sequence[str] = ()) -> tuple[list[str], str]:
+        """前几轮**发生过什么** ⇒ `(提示词里的行, 换招提示)`。
+
+        `draft/44` 的 P2-4：改前 history 一个字都不回灌，模型看不见自己上一轮交了
+        什么、用了哪一招 ⇒ 同一招连续用三遍、产出逐字重复（mp3 `000001` 的 r1/r3/r4）。
+        这里把最近 `_HISTORY_ROUNDS` 轮的 `outcome / 产物 / 招 / 结论摘要 / 产物要点`
+        摆出来；**同一招连续出现**时另外给一句"换个招"（要求的形态是显式，不是暗示）。
+
+        `tried` 是子目标上累计的"已试过的招"（`step` 写回的那一格）：它比最近三轮更全，
+        所以"还没试过的那几招"按它算 —— 只按最近三轮算会把早先试过的招又推荐一遍。
+        """
+        from .. import attackround as AR
+
+        hist = [dict(h) for h in (plan.get("history") or []) if isinstance(h, Mapping)]
+        recent = hist[-_HISTORY_ROUNDS:]
+        tried_set = set(str(x) for x in tried) | {
+            str(h.get("strategy") or "") for h in hist if str(h.get("strategy") or "").strip()}
+        lines: list[str] = []
+        strategies: list[str] = []
+        for h in recent:
+            head = (f"第 {int(h.get('round') or 0)} 轮 · 子目标 {h.get('sid')} · "
+                    f"action={h.get('action')} · outcome={h.get('outcome')}")
+            if str(h.get("product") or "").strip():
+                head += f" · 产物={h.get('product')}"
+            if str(h.get("strategy") or "").strip():
+                head += f" · 招={h.get('strategy')}"
+                strategies.append(str(h["strategy"]))
+            lines.append(head + f"；结论摘要：{_clip(str(h.get('detail') or ''), _HISTORY_DETAIL_CHARS)}")
+            product = dict(h["product_detail"]) if isinstance(h.get("product_detail"), Mapping) else {}
+            if product:
+                if product.get("new_subgoals"):
+                    goals = [str(g.get("goal") or "") for g in product["new_subgoals"]
+                             if isinstance(g, Mapping)]
+                    lines.append("  · 这一轮归约出的子目标：" + _clip("／".join(goals),
+                                                               _HISTORY_DETAIL_CHARS))
+                steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
+                if steps:
+                    cites = [str(c) for s in steps for c in (s.get("cites") or [])]
+                    lines.append(f"  · 这一轮的论证 {len(steps)} 步，引到 {cites[:6] or ['（无）']}；"
+                                 "首步：" + _clip(str(steps[0].get("text") or ""), 120))
+                if product.get("script_spec"):
+                    lines.append("  · 这一轮派给 E 的判据：" + _clip(str(product["script_spec"]), 160))
+            if h.get("best_partial"):
+                what = [str(x.get("what") or "") for x in (h.get("best_partial") or [])
+                        if isinstance(x, Mapping)]
+                lines.append("  · best_partial：" + _clip("／".join(what), _HISTORY_DETAIL_CHARS))
+            if str(h.get("dead_end_reason") or "").strip():
+                lines.append(f"  · 这一轮被判死路的受控理由：{h.get('dead_end_reason')}")
+
+        switch = ""
+        if strategies:
+            last = strategies[-1]
+            run = 0
+            for name in reversed(strategies):
+                if name == last:
+                    run += 1
+                else:
+                    break
+            fresh = [s for s in AR.STRATEGIES if s not in tried_set]
+            if run >= 2:
+                switch = (f"⚠️ 同一招「{last}」已经**连续 {run} 轮**了 ⇒ 这一轮**换一招**："
+                          f"还没试过的有 {fresh or '（九招都用过了：那就换子目标或交 dead_end）'}。"
+                          "把同一招做得更用力不是换路（`draft/44` P2-4 要的正是这一句显式的话）。")
+            elif len(strategies) != len(set(strategies)):
+                dup = sorted({s for s in strategies if strategies.count(s) > 1})
+                switch = (f"「{'、'.join(dup)}」在这几轮里用过不止一次 ⇒ 这一轮优先换一招："
+                          f"还没试过的有 {fresh or '（九招都用过了）'}。")
+        return lines, switch
+
     def _reason_self(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any],
                      owner: str) -> dict:
         """owner 属于"要自己推理"的那一类、而模型缝已接线 ⇒ 真的推一轮。
@@ -516,35 +779,72 @@ class _Core:
                 blocked_reason=str(decision["note"]),
             ), checks)
 
-        prompt = _attack_prompt(plan=plan, sg=sg, owner=owner, tried=tried)
-        data, problem = J.judge_json(self.llm, prompt, point="F.step")
-        if problem or not data:
+        # ---- P2（`draft/44`）：把"已知的事实"摆进提示词
+        #
+        # 证据**正文**（不是只有 id）与前几轮**发生过什么**（不是从头开始）。
+        # 改前这两样都不进提示词 ⇒ 模型每一轮都在同一个盲点上重说同一句话
+        # （真机 mp3 `000001`：r1/r3/r4 逐字相同，因为它在提示词里看不到 r1/r3）。
+        evidence_lines = self._evidence_digest(sg, plan)
+        history_lines, switch_note = self._history_digest(plan, tried=tried)
+        if switch_note:
+            history_lines = [*history_lines, switch_note]
+        # ---- P3-5（`draft/44`）：不成形就**带着原因**重问，问到 `max_persist_attempts` 为止
+        #
+        # 改前 `max_persist_attempts` 在 F 侧零消费者：`RoundError` 一次就把子目标标成
+        # `blocked` + `in_flight=True`，而 `step` 的选目标过滤会摘掉 `in_flight` 的子目标
+        # ⇒ **一次不成形的回答 = 这条路永久封存**（下轮永不再选，`step.py:181`）。
+        # 预算里明明写着"同一个子目标最多尝试几次"，那个数却没人读。
+        #
+        # 现在：不成形 ⇒ 把 `exc` 的原话带回提示词重问（同一轮里，不额外占预算轮次），
+        # 问到上限才 `blocked`；而且 `blocked` 时**不再** `in_flight=True` ——
+        # "卡住了"与"不许再碰"是两件事（`in_flight` 的语义是"这一轮之后没有新事情可做"，
+        # 而"模型这次没说成形"恰恰是下一次可以再问的）。
+        persist = max(1, int(dict(plan.get("budget") or {}).get("max_persist_attempts") or 1))
+        retry_note = ""
+        last_error: Any = None
+        product: dict[str, Any] = {}
+        for _attempt in range(1, persist + 1):
+            prompt = _attack_prompt(plan=plan, sg=sg, owner=owner, tried=tried,
+                                    evidence=evidence_lines, history=history_lines,
+                                    retry_note=retry_note)
+            data, problem = J.judge_json(self.llm, prompt, point="F.step")
+            if problem or not data:
+                # 缝没答上来不是"这一轮想错了"：重问一次还是同一句话（同一台网关），
+                # 所以不重试 —— 如实记 `judge_*`，别把"没查成"折成"这条路死了"。
+                return self._with_checks({
+                    "action": "no_change",
+                    "outcome": "no_change",
+                    "detail": (f"子目标 {sg.get('sid')}（owner={owner}）的推理缝没查成："
+                               f"{J.reason_of(problem, point='F.step')} ⇒ **未推进**"
+                               "（不是'做了但没结果'，也不是'这条路死了'）"),
+                    "evidence": [],
+                    "status": "blocked",
+                    "blocked_reason": J.reason_of(problem, point="F.step"),
+                    "in_flight": True,
+                    "count_attempt": False,
+                }, checks)
+            try:
+                product = AR.parse_round(_json.dumps(data, ensure_ascii=False))
+                break
+            except AR.RoundError as exc:
+                # 不成形 ≠ 没做：模型确实说了话，只是没按受控形状说 —— 把**它的原话**
+                # 带回去重问（下一圈的提示词里带 `retry_note`）。
+                last_error = exc
+                retry_note = str(exc)
+                product = {}
+        if not product:
+            # 重试用尽：如实 blocked，且**不留 in_flight**（下一次还有人可以再问它）。
             return self._with_checks({
                 "action": "no_change",
                 "outcome": "no_change",
-                "detail": (f"子目标 {sg.get('sid')}（owner={owner}）的推理缝没查成："
-                           f"{J.reason_of(problem, point='F.step')} ⇒ **未推进**"
-                           "（不是'做了但没结果'，也不是'这条路死了'）"),
+                "detail": (f"子目标 {sg.get('sid')} 的这一轮不成形（{last_error}）⇒ **未推进**；"
+                           f"已按预算里的 `max_persist_attempts={persist}` 带着原因重问了 "
+                           f"{persist} 次，四种产物与九招工具箱的受控值写在提示词里 —— "
+                           "**这一条没有被永久封存**（下一次仍会重试它），但重问次数已到上限"),
                 "evidence": [],
                 "status": "blocked",
-                "blocked_reason": J.reason_of(problem, point="F.step"),
-                "in_flight": True,
-                "count_attempt": False,
-            }, checks)
-        try:
-            product = AR.parse_round(_json.dumps(data, ensure_ascii=False))
-        except AR.RoundError as exc:
-            # 不成形 ≠ 没做：模型确实说了话，只是没按受控形状说 —— 原话带回去，
-            # 让调用方（M/D）能据它改提示词，而不是只看到一句"没进展"。
-            return self._with_checks({
-                "action": "no_change",
-                "outcome": "no_change",
-                "detail": (f"子目标 {sg.get('sid')} 的这一轮不成形（{exc}）⇒ **未推进**；"
-                           "四种产物与九招工具箱的受控值写在提示词里，按那个形状重说一次"),
-                "evidence": [],
-                "status": "blocked",
-                "blocked_reason": f"这一轮不成形：{exc}",
-                "in_flight": True,
+                "blocked_reason": f"这一轮不成形（已重问 {persist} 次）：{last_error}",
+                "in_flight": False,
                 "count_attempt": False,
             }, checks)
         # ---- R-03（`draft/44`）：伪造引用当场拒收。
@@ -638,6 +938,137 @@ class _Core:
             "count_attempt": True,
         }
 
+    # ---------------------------------------------------------------- 产物出口（P3-6）
+
+    #: 攻坚台账的落点（工作区相对）。与 `specs/f.py` 的 policy 逐字一致
+    #: （"每推进一条引理就写进 `reports/attack-<plan_id>.md`（一条一行：状态 / 依据 / 下一步）"）。
+    REPORT_DIR = "reports"
+
+    def report_path(self, plan: Mapping[str, Any]) -> str:
+        """这一份计划的攻坚台账路径（工作区相对）。"""
+        return f"{self.REPORT_DIR}/attack-{plan.get('plan_id')}.md"
+
+    def _report_header(self, plan: Mapping[str, Any]) -> str:
+        return (
+            f"# 攻坚台账：{plan.get('problem')}\n\n"
+            f"- plan_id：`{plan.get('plan_id')}`；problem_key：`{plan.get('problem_key')}`\n"
+            "- 一条一行：**轮次 · 状态 · 依据 · 下一步**。\n"
+            "- 这一份是**给人读的推进台账**；可复核的那一份在 `statements`（行里写着 `stmt:` 编号）。\n"
+            "- 状态口径：`progress` = 这一轮产出了新东西；`no_change` = 这一轮没有新事实"
+            "（卡点见「状态」那一格）。\n\n"
+        )
+
+    def _report_append(self, plan: Mapping[str, Any], line: str) -> dict:
+        """往攻坚台账追加一行（不存在就带上表头）。
+
+        为什么由 F 自己写（而不是"交给 M 汇总"）：`specs/f.py` 的 policy 第 2 条
+        （业主 2026-10-14 裁定）要求**阶段性中间成果落一处一条**，而 `step` 这一层
+        此前只把产物写进 `history` 的一个字段 —— 盘上**一个字节都没有**
+        （`product_detail` 只写不读：`step.py` 里那一行是全仓唯一出现点）。
+        写失败不许静默：返回 `{"ok": False, "why": …}`，由调用方写进 `detail`。
+        """
+        rel = self.report_path(plan)
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        try:
+            path = Path(root) / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fresh = (not path.exists()) or path.stat().st_size == 0
+            with path.open("a", encoding="utf-8") as fh:
+                if fresh:
+                    fh.write(self._report_header(plan))
+                fh.write(line.rstrip() + "\n")
+        except Exception as exc:  # noqa: BLE001 - 台账写不成不该让整轮崩掉，但必须如实说
+            return {"ok": False, "path": rel, "why": f"{type(exc).__name__}: {exc}"}
+        return {"ok": True, "path": rel, "why": ""}
+
+    def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
+                      plan: Mapping[str, Any]) -> dict:
+        """把这一轮的 `proof` 落成**可复核的一行** `statements`（P3-6 的第一半）。
+
+        ## 改前为什么是"没有出口"
+
+        `_apply_round` 的 proof 分支只写一段 `detail` 与 `history.product_detail`，
+        而 `product_detail` 的**唯一出现点是 `step.py` 的写入** —— 全仓没有任何读者。
+        后果：F 交出一篇论证之后，它只活在这一次运行的会话记录里；M 读不到、V 审不到、
+        盘上也找不到（policy 第 2 条要求的 `reports/attack-<plan_id>.md` 同样没人写）。
+
+        ## 等级为什么只能是 `heuristic`
+
+        `proof_review` 要 V 真的看过并签了字（`verifications/*.jsonl` 里那一行），
+        本批没有接 V 的回路 ⇒ 这一行**不许**自报更高等级。`bits` 留空（三态：
+        五位全空 = 这一行还没有任何位记录），等级由 `evidencebits.derive_grade` 现算
+        —— 现算的结果就是"猜想级"，那是**诚实**的读数，不是缺陷：它明说了"还差一次审"。
+
+        ## 幂等
+
+        同一条子目标交出**逐字相同**的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），
+        不再登记第二行 —— 重复登记会把 `statement_rows` / `reviewed_proof_rows` 的
+        读数虚高（与 `_deploy_e` 的"同一脚本不重跑"同一条理由）。
+        """
+        steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
+        sid = str(sg.get("sid") or "")
+        cites = [str(c) for s in steps for c in (s.get("cites") or [])]
+        assumptions = [str(s.get("text") or "") for s in steps if s.get("assumption") is True]
+        body = "\n".join(
+            f"{int(s.get('n') or i)}. {s.get('text')}"
+            + (f"（依据：{'、'.join(str(c) for c in (s.get('cites') or []))}）"
+               if s.get("cites") else "（前提）")
+            for i, s in enumerate(steps, 1))
+        text = str(sg.get("text") or "").strip()
+        full = (text + (f"；这一条的可检验形式：{sg.get('testable')}" if sg.get("testable") else "")
+                + ("；显式声明的前提：" + "／".join(assumptions) if assumptions else ""))
+        try:
+            existing = list(self.store.rows("statements"))
+        except Exception as exc:  # noqa: BLE001 - 读不到就当"没有可复用的"，但要说出来
+            existing = []
+            self._log(f"statements 读不到：{type(exc).__name__}: {exc}")
+        for row in existing:
+            if (str(row.get("statement_full") or "").strip() == full.strip()
+                    and str(row.get("proof_text") or "").strip() == body.strip()):
+                return {"ok": True, "statement_id": str(row.get("stmt_id") or ""),
+                        "reused": True, "why": "", "cites": cites}
+        # `derived_from` 只认本表内的裸编号（`require_id` 不接 `stmt:` 前缀）：
+        # 所以只有真的在册的 `stmt:` 引用才进这一格，其余（`exp:`/`lit:`）留在 `cites` 里。
+        known = {str(r.get("stmt_id") or "") for r in existing}
+        deps = sorted({c.split(":", 1)[1].split("#", 1)[0].strip()
+                       for c in cites if c.startswith("stmt:")} & known)
+        try:
+            with self.store.tx("statements", actor=self.actor,
+                               note=f"f.step:proof:{sid}") as tx:
+                stmt_id = tx.alloc_id("stmt")
+                row = S.Statement(
+                    stmt_id=stmt_id,
+                    origin="own_result",
+                    kind="lemma",
+                    label=f"F 攻坚 {plan.get('plan_id')} 子目标 {sid}",
+                    statement_text=text,
+                    statement_full=full,
+                    proof_text=body,
+                    # 只到 `heuristic`：V 没签过（见方法 docstring 的那一条边界）。
+                    evidence_kind="heuristic",
+                    status="active",
+                    quote_verified=None,
+                    quote_reason=("这一条是 F 自己写的论证，不是从文献里摘的 ⇒ 没有逐字比对的对象；"
+                                  "等级只到 `heuristic`，要 V 真审过（`proof_review`）才会升档"),
+                    derived_from=deps,
+                    created_at=self._stamp(),
+                    created_by=self.actor,
+                )
+                row.validate()
+                tx.upsert("statements", row.to_dict(), note=f"f.step:proof:{sid}")
+        except Exception as exc:  # noqa: BLE001 - 写不进 statements 要说出来，不许当成写过了
+            return {"ok": False, "statement_id": "", "reused": False,
+                    "why": f"{type(exc).__name__}: {exc}", "cites": cites}
+        return {"ok": True, "statement_id": stmt_id, "reused": False, "why": "",
+                "cites": cites}
+
+    def _round_line(self, *, plan: Mapping[str, Any], round_no: int, kind: str,
+                    product: Mapping[str, Any], status: str, basis: str,
+                    next_step: str) -> str:
+        """攻坚台账的一行（状态 / 依据 / 下一步 —— 与 policy 第 2 条同一个三段）。"""
+        return (f"- 第 {round_no} 轮（`{kind}`，{product.get('strategy')}）状态：{status}"
+                f"｜依据：{basis}｜下一步：{next_step}")
+
     def _apply_round(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                      plan: Mapping[str, Any], owner: str) -> dict:
         """把一轮成形产物落成"这一轮做了什么"（受控四档 → 动作/状态/新子目标）。
@@ -652,7 +1083,10 @@ class _Core:
         """
         kind = str(product.get("product") or "")
         sid = str(sg.get("sid") or "")
+        round_no = int(plan.get("rounds") or 0) + 1
         new_goals: list[dict[str, Any]] = []
+        statement_id = ""
+        outlet_note = ""
         if kind == "reduction":
             existing = list(plan.get("subgoals") or [])
             taken: list[str] = []
@@ -668,9 +1102,22 @@ class _Core:
             status = "in_progress"
         elif kind == "proof":
             steps = product.get("steps") or []
+            # ---- P3-6：产物要有出口。改前这一支只写 `detail` + `history.product_detail`，
+            # 而 `product_detail` 全仓没有读者（`step.py` 里那一行是唯一出现点）——
+            # 论证交出来之后，M 看不到、V 审不到、盘上也没有。
+            outlet = self._proof_outlet(product, sg, plan=plan)
+            statement_id = str(outlet.get("statement_id") or "")
+            if outlet.get("ok") and statement_id:
+                outlet_note = (
+                    f"已落 `stmt:{statement_id}`（statements，evidence_kind=heuristic ——"
+                    "**这是 F 自己的论证，V 没签过，等级不许自报更高**）"
+                    + ("（与既有那一行逐字相同 ⇒ 复用，不重复登记）" if outlet.get("reused") else ""))
+                evidence = [f"stmt:{statement_id}"]
+            else:
+                outlet_note = f"⚠️ 论证**没能**落进 statements（{outlet.get('why')}）—— 那是没做成，不是做过了"
+                evidence = []
             detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
-                      f"这一轮是**论证**不是机器核验 ⇒ 子目标不关闭（FC-22）")
-            evidence = []
+                      f"这一轮是**论证**不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
             status = "in_progress"
         elif kind == "counterexample_request":
             spec = dict(product.get("script_spec") or {})
@@ -693,6 +1140,30 @@ class _Core:
                       f"已交 best_partial {len(product.get('best_partial') or [])} 条")
             evidence = []
             status = "blocked"
+        # ---- P3-6 的第二半：这一段进 `reports/attack-<plan_id>.md`（一条一行），
+        # 并把落点写进 `detail` —— M 读 `attack.status` 就看得见"产物在哪"。
+        if kind == "counterexample_request":
+            basis = (f"新子目标 {evidence[0]}"
+                     f"（判据 {dict(product.get('script_spec') or {}).get('criterion')}）")
+            next_step = f"等 E 子目标 {evidence[0]} 跑出实验读数"
+        elif kind == "reduction":
+            basis = f"归约出 {evidence}"
+            next_step = f"下一轮推进 {evidence[0]}（新子目标优先于父目标）"
+        elif kind == "proof":
+            basis = f"论证 {len(product.get('steps') or [])} 步" + (
+                f"；`stmt:{statement_id}`" if statement_id else "")
+            next_step = "交 V 复核这一段论证（`proof_review` 要 V 那一步）"
+        else:
+            basis = (f"受控理由 {product.get('reason')}；"
+                     f"best_partial {len(product.get('best_partial') or [])} 条")
+            next_step = "换一个子目标（这一条已标 blocked）"
+        written = self._report_append(plan, self._round_line(
+            plan=plan, round_no=round_no, kind=kind, product=product,
+            status=f"{status}（outcome={'no_change' if kind == 'dead_end' else 'progress'}）",
+            basis=basis, next_step=next_step))
+        report_note = (f"台账 `{written['path']}`" if written["ok"]
+                       else f"⚠️ 台账没写成（{written['path']}：{written['why']}）")
+        detail = f"{detail}；{report_note}"
         return {
             "action": kind,
             "outcome": "no_change" if kind == "dead_end" else "progress",
@@ -703,8 +1174,82 @@ class _Core:
             "blocked_reason": (str(product.get("evidence") or "") if kind == "dead_end" else ""),
             "in_flight": kind == "dead_end",
             "count_attempt": True,
+            "statement_id": statement_id,
+            "report_path": str(written["path"]),
+            # P4-7：这一轮派出去的活由谁接 —— 父目标因此不再"每轮都压住子目标"
+            # （`attack_tools.pick_next_subgoal` 按它排次序，见那里的 docstring）。
+            "waiting_on": [str(g["sid"]) for g in new_goals],
             "new_subgoals": new_goals,
         }
+
+    def _spec_from_testable(self, sg: Mapping[str, Any], *,
+                            plan: Mapping[str, Any]) -> dict:
+        """把子目标那句 `testable` 变成一次实验的三件套判据（P4-8 的第二半）。
+
+        ## 改前为什么"手写的 E 子目标必然缺 `script_path`"
+
+        `create_plan` 收的子目标通常只带 `testable`（"怎么判它成立/不成立"一句话），
+        而 `_deploy_e` 只认 `script_path` / `script_spec` ⇒ 每一轮都落
+        "缺 `script_path` ⇒ 未推进"，直到计划 `stalled`。那句 `testable` 于是成了一句
+        永远没人执行的话。
+
+        ## 为什么由模型给，而不是框架按模板编
+
+        从 `testable="n<=18"` 凭空造出 `params`/`expected_bound`，等于把"不知道该判什么"
+        伪装成"有实验在跑" —— 那正是
+        `tests/test_agent_e_author_script.py::test_deploy_e_writes_nothing_without_a_spec`
+        这条反负控守的东西（它必须继续绿）。所以这里只做一件事：**问 F 自己**。
+        判据仍然只有一份（`attackround.parse_round` 校验三件套），本函数不抄第二份。
+
+        返回 `{"spec": {...}|{}, "why": str}`：`why` 是给人读的那句话，会进 `detail`
+        与 `blocked_reason` —— "没做成"必须说清缺什么，不是一句"未推进"。
+        """
+        from .. import attackround as AR
+        from .. import judge as J
+
+        testable = str(sg.get("testable") or "").strip()
+        if not testable:
+            # 没有可检验形式 ⇒ 这一条不是"问一句就能补"的：照旧走"缺 script_path"那一条。
+            return {"spec": {}, "why": ""}
+        if self.llm is None:
+            return {"spec": {}, "why": (
+                "；这条子目标只有 `testable`（" + _clip(testable, 120) + "）、没有三件套判据"
+                "（判据 / 参数 / 期望界），而 F 这一次没有接推理缝 ⇒ 没法把它变成能跑的判据")}
+        prompt = "\n".join([
+            "你在给一条**攻坚子目标**造一次能判决它的实验判据（只造判据，不写脚本）。",
+            "",
+            f"难题：{plan.get('problem')}",
+            f"子目标：{sg.get('text')}",
+            f"它的可检验形式（人写的那一句）：{testable}",
+            "",
+            "把它变成一次可执行的实验判据，按 `counterexample_request` 这一档交出：",
+            "- `script_spec`：{criterion（判什么）, params（参数取值）, expected_bound（期望界）}"
+            "三项都非空、都要具体到能照着写脚本；",
+            "- `why_it_decides`：这个实验凭什么能判这条命题；",
+            f"- `strategy`：{list(AR.STRATEGIES)} 之一；`why_strategy`：这一招为什么合适。",
+            "只输出一个 JSON 对象（`product` 必须是 `counterexample_request`），"
+            "不要写解释、不要写 Markdown 围栏。",
+        ])
+        data, problem = J.judge_json(self.llm, prompt, point="F.step")
+        if problem or not data:
+            return {"spec": {}, "why": (
+                "；想把 `testable` 变成判据，但推理缝没查成："
+                + J.reason_of(problem, point="F.step"))}
+        import json as _json
+
+        try:
+            product = AR.parse_round(_json.dumps(data, ensure_ascii=False))
+        except AR.RoundError as exc:
+            return {"spec": {}, "why": f"；`testable` 没能变成成形判据（{exc}）"}
+        if str(product.get("product") or "") != "counterexample_request":
+            return {"spec": {}, "why": (
+                f"；`testable` 没能变成判据（模型交的是 `{product.get('product')}`，"
+                "不是一次实验请求）")}
+        spec = dict(product.get("script_spec") or {})
+        return {"spec": spec, "why": (
+            "；判据是本轮由 F 从 `testable` 推出来的（"
+            f"判据「{spec.get('criterion')}」/ 参数 {spec.get('params')} / "
+            f"期望界 {spec.get('expected_bound')}）—— 已写回子目标，下一轮直接用")}
 
     def _deploy_e(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict:
         """E 的子目标：跑实验并登记。
@@ -731,6 +1276,24 @@ class _Core:
 
         script_path = str(sg.get("script_path") or "").strip()
         spec = dict(sg.get("script_spec") or {})
+        # ---- P4-8（`draft/44`）：手写的 E 子目标只带 `testable` ⇒ 现在由 F 把它变成判据
+        #
+        # 改前：手写子目标通常只带 `testable`（"怎么判它成立/不成立"那一句），而这里只认
+        # `script_path` / `script_spec` ⇒ **必然**落"缺 `script_path`"，一步都动不了。
+        # 现在：有 `testable` 就先让 **F 的模型**把那一句变成三件套判据
+        # （criterion / params / expected_bound）。为什么必须由模型给而不是框架编：
+        # 从 `testable="n<=18"` 凭空造一个 `params` 出来，正是
+        # `test_agent_e_author_script.py::test_deploy_e_writes_nothing_without_a_spec`
+        # 守的那条反负控（"没有判据 ⇒ 一份脚本都不许写"）—— 框架替它编就是把
+        # "不知道该判什么"伪装成"有实验在跑"。F 没有缝时照旧如实拒绝。
+        derived_note = ""
+        derived_spec: dict[str, Any] = {}
+        if not script_path and not spec:
+            made = self._spec_from_testable(sg, plan=plan)
+            derived_note = str(made.get("why") or "")
+            if made.get("spec"):
+                spec = dict(made["spec"])
+                derived_spec = dict(spec)
         if not script_path and not spec:
             # 这不是失败，是我没法做：缺执行参数。如实记，并让子目标保持在
             # 可重试位置（下一次有人补上 script_path 就能跑）。
@@ -748,11 +1311,11 @@ class _Core:
                 "outcome": "no_change",
                 "detail": (
                     f"子目标 {sid} 派给 E，但没有给 `script_path` ⇒ **未推进**"
-                    "（没有脚本就没有实验可跑；这不是'跑了但没结果'）"
+                    "（没有脚本就没有实验可跑；这不是'跑了但没结果'）" + derived_note
                 ),
                 "evidence": [],
                 "status": "todo",
-                "blocked_reason": "缺 `script_path`（E 要先写脚本）",
+                "blocked_reason": "缺 `script_path`（E 要先写脚本）" + derived_note,
                 "count_attempt": False,
             }
 
@@ -850,6 +1413,7 @@ class _Core:
                 "blocked_reason": f"实验执行失败：{type(ex).__name__}: {ex}",
                 # 脚本是这一轮写的 ⇒ 即便跑失败也要留落点（复核时要看的就是它）
                 "script_path": script_path,
+                "script_spec": derived_spec,
                 "count_attempt": True,
             }
         eid = str(res.get("experiment_id"))
@@ -872,6 +1436,7 @@ class _Core:
                 # S-10(a)：脚本是这一轮才写出来的 ⇒ 把落点写回子目标（下一轮要重跑/复核
                 # 时得知道跑的是哪一份），否则"它到底写了哪个脚本"只活在 history 的一句话里。
                 "script_path": script_path,
+                "script_spec": derived_spec,
                 "count_attempt": True,
             }
         if result == "supports":
@@ -888,6 +1453,7 @@ class _Core:
                 "status": "supported_not_proved",
                 "negation_kind": res.get("negation_kind") or "not_proved",
                 "script_path": script_path,
+                "script_spec": derived_spec,
                 "count_attempt": True,
             }
         return {
@@ -903,6 +1469,7 @@ class _Core:
             "status": "in_progress",
             "negation_kind": res.get("negation_kind") or "no_local_evidence",
             "script_path": script_path,
+            "script_spec": derived_spec,
             "count_attempt": True,
         }
     def _deploy_a(self, sg: Mapping[str, Any], *, plan: Mapping[str, Any]) -> dict:

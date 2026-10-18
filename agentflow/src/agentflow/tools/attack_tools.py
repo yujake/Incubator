@@ -250,6 +250,7 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
 
     次序（每一步都是"为什么它更该先做"）：
 
+    0. **不在等子目标的**先选（见下面那一段 P4-7）；
     1. `in_progress` —— 已经开始的最先接着做（避免半途而废的子目标永远烂在那里）；
     2. `todo` 且 `owner` 有明确归属 —— 可执行的优先；
     3. `blocked` —— 排在最后（它需要先解决卡点，而不是重试）。
@@ -257,6 +258,21 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
     `closed` / `dropped` / `supported_not_proved` 一律不选：前两者是终态，
     第三者表示"数值支持但没有证明" —— 它已经被推进到本框架能推进的尽头了，
     再选它只会把资源从真正待办的子目标上挪走（FC-22）。
+
+    ## 0. `waiting_on`：父目标不许永远压住它派出去的子目标（`draft/44` 的 P4-7）
+
+    改前的次序是"`in_progress` 最先"，而 `counterexample_request` / `reduction` 造出新
+    子目标之后**父目标仍是 `in_progress`** ⇒ 每一轮都重新选中父目标，新子目标永远停在
+    `todo`（真机：`s1/s5/s6` 一直 `todo`，计划一轮一轮地在父目标上打转）。
+
+    现在父目标身上会写一个 `waiting_on: [子目标号…]`（`agent_f._apply_round` 那一跳），
+    这里按它排序：**只要它等的那几条里还有能干的（`todo`/`in_progress`），父目标就排到
+    最后**。两条边界写清：
+
+    - 等的那几条全都做完了 / 都被卡住了 ⇒ 父目标立刻恢复可选的次序首位
+      （否则"等"会变成死锁）；
+    - 全部子目标都在等（互相等）⇒ 仍然按原次序选一个（**不许返回"没有可推进的"** ——
+      那会把死锁读成"计划已经没事可做"）。
 
     全部不可选时返回 ``{"picked": False, "reason": ...}`` ——
     不能返回 None 让调用方自己猜。
@@ -289,8 +305,29 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
             "subgoal": None,
             "reason": "没有可推进的子目标（全部 closed/dropped/supported_not_proved 或列表为空）",
         }
-    pool.sort(key=rank)
-    return {"picked": True, "subgoal": pool[0], "reason": f"按确定性次序选中 {pool[0].get('sid')}"}
+    # 还在等的那几条里"能干的"（`todo`/`in_progress`）—— 等它们把活做完，父目标才回来。
+    workable = {str(s.get("sid") or "") for s in subgoals
+                if str(s.get("status") or "") in ("todo", "in_progress")}
+
+    def waiting(sg: dict) -> list[str]:
+        return [str(x) for x in (sg.get("waiting_on") or []) if str(x) in workable]
+
+    blocked_by_wait = {str(s.get("sid") or "") for s in pool if waiting(s)}
+    # 全部都在等 ⇒ 不许判"没有可推进的"（那是把死锁读成"没事可做"），按原次序选一个。
+    if len(blocked_by_wait) == len(pool):
+        blocked_by_wait = set()
+
+    def order_key(sg: dict) -> tuple:
+        return ((1 if str(sg.get("sid") or "") in blocked_by_wait else 0),) + rank(sg)
+
+    pool.sort(key=order_key)
+    chosen = pool[0]
+    sid = str(chosen.get("sid") or "")
+    waited = waiting(chosen)
+    reason = f"按确定性次序选中 {sid}"
+    if sid in blocked_by_wait:
+        reason += f"（在等 {waited}；它们都做完/被卡住之后它的次序会恢复）"
+    return {"picked": True, "subgoal": chosen, "reason": reason}
 
 
 def _root_for(root: Any, store: Any) -> Any:

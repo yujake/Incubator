@@ -338,7 +338,9 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
     而"没查成"与"查过了没问题"必须分得开（本项目的三态纪律）。
 
     开关的生命周期见 `consume_stop`（`draft/37` §140 修的 bug）：它是一份"信号"，
-    被一趟运行消费之后就撤走，审计留在 `runs/stop-history.jsonl` 里。
+    被一趟运行消费之后就撤走，审计留在 `runs/stop-history.jsonl` 里。全工作区那一档
+    是**树根**在**那一趟收尾**时才撤（业主裁定「M 停整棵树」：读的时候谁都不删，
+    见 `AgentLoop._consume_stop_at_teardown`），不是"第一个读到的"。
     """
     path = stop_path(root, explicit)
     if not path.is_file():
@@ -376,12 +378,21 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     改后：开关是一次性信号（停一趟、记一笔、撤走），下一次叫停要重新写一份
     （`request_stop` 于是不会把"用户第二次叫停"当成幂等请求吃掉）。
 
-    ## `remove=False`（S4，子树开关）：记一笔但不撤
+    ## `remove=False`（S4 子树开关 + 业主裁定的「整棵树」）
 
-    子树开关（`stop_scope` = `"subtree"`）要一支上多个循环各自读到，所以只有
-    那一支的根（`my_task_id == root_task_id`）撤它；别的成员只记一笔（`level` 里带
-    自己是哪一档）—— 否则"先读到的那个把开关吃掉"，后面的成员静默不停
+    一档上多个循环（同一棵树里并行的子孙、或同一支上的多个循环）各自都要读到
+    这把开关，所以只有「撤它有责任的那一个」撤它 —— 全工作区开关是**树根**
+    （`AgentLoop._is_tree_root`：没有台账号 / 没有父任务的那一趟），子树开关是
+    **那一支的根**（`my_task_id == root_task_id`）；别的人都只记一笔
+    （`removed=False`，`level` 里带自己是哪一档）。否则"先读到的那个把开关吃掉"，
+    后面的成员下一刻读到的就是"没人叫停"、静默继续跑
     （与 §140 那个 bug 同一族，只是方向反过来）。
+
+    读的时候**连树根也不删**（业主裁定「M 停整棵树」的删除半）：树根的删除推迟到
+    **这一趟自己的收尾**（`AgentLoop._consume_stop_at_teardown`，排在 `agent_run_end`
+    之后），因为树根也是"先读到的那一个"—— 读到即删，还没走到步边界的兄弟/子孙
+    下一刻读到的同样是"没人叫停"。所以本函数的调用分两处：成员在读取时以
+    `remove=False` 记一笔，树根在收工时以 `remove=True` 记这一笔并撤走文件。
     撤不掉/写不进历史都不改变"这一趟已收工"这个事实（照旧返回负载）。
 
     ## 为什么审计不丢

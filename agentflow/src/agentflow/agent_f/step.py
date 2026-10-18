@@ -241,9 +241,36 @@ class _Step:
             # 在 `_deploy_e` 里直接改 `plan["subgoals"]` 会被这一步静默覆盖
             # （下面那段 `new_subgoals` 的注释记的就是同一条）。
             sg["script_path"] = str(deploy["script_path"])
+        if deploy.get("script_spec"):
+            # P4-8：判据是这一轮才由 F 从 `testable` 推出来的 ⇒ 写回子目标，
+            # 下一轮直接用（不必每轮花一次模型调用重新推）。
+            sg["script_spec"] = dict(deploy["script_spec"])
         if deploy.get("in_flight") is not None:
             sg["in_flight"] = bool(deploy["in_flight"])
         sg["attempts"] = int(sg.get("attempts") or 0) + (1 if deploy.get("count_attempt") else 0)
+
+        # ---- P4-8（`draft/44`）：`tried_strategies` 写回
+        #
+        # 改前 `tried_strategies` **只读不写**（`core.py` 的 `_reason_self` 里那一处是
+        # 全仓唯一出现点）⇒ 它是一个永远为空的读数：`pre_spend_gate` 的
+        # `strategies_tried`（"九招里试过几招、还剩几招"）每一轮都读到 0，
+        # 提示词里的"已试过的招"永远是"（无）"—— 于是模型每一轮都可以合法地重挑同一招。
+        # 这一招真的用过了（产物里有 `strategy`）就记下来，去重后写回子目标。
+        tried_now = str(dict(deploy.get("product") or {}).get("strategy") or "")
+        if tried_now:
+            sg["tried_strategies"] = sorted(
+                set(list(sg.get("tried_strategies") or []) + [tried_now]))
+
+        # ---- P4-7（`draft/44`）：父目标让位给刚派出去的子目标
+        #
+        # `counterexample_request` / `reduction` 造出新子目标之后，父目标原先仍是
+        # `in_progress`，而 `pick_next_subgoal` 的次序是 `in_progress` 最先 ⇒ **每一轮都
+        # 重新选中父目标**，新子目标永远停在 `todo`（真机：`s1/s5/s6` 一直 `todo`）。
+        # `waiting_on` 是这一件事的显式读数（"我在等这几条"），由
+        # `attack_tools.pick_next_subgoal` 消费 —— 不靠改状态来暗示。
+        if deploy.get("waiting_on"):
+            sg["waiting_on"] = sorted(
+                set(list(sg.get("waiting_on") or []) + [str(x) for x in deploy["waiting_on"]]))
 
         # ---- 归约产生的新子目标挂进计划（`draft/39` §6.31 的 D42）
         #
@@ -288,6 +315,15 @@ class _Step:
             # `product_detail["reason"]` 里（整份产物照旧进 history）。
             if str(product.get("product") or "") == "dead_end" and product.get("reason"):
                 history_row["dead_end_reason"] = str(product["reason"])
+        # ---- P3-6（`draft/44`）：产物的**落点**进 history（M 读 `attack.status` 就看得见）
+        #
+        # 改前 `product_detail` 只写不读（本文件的那一行是全仓唯一出现点）⇒ F 交出的论证
+        # 在盘上与台账上都没有第二个读者。现在：`statement_id`（可复核的那一份）与
+        # `report_path`（给人读的推进台账）都会落进 history，也都在 `step` 的返回值里。
+        if deploy.get("statement_id"):
+            history_row["statement_id"] = str(deploy["statement_id"])
+        if deploy.get("report_path"):
+            history_row["report_path"] = str(deploy["report_path"])
         history.append(history_row)
         row["subgoals"] = subgoals
         row["history"] = history
@@ -311,5 +347,10 @@ class _Step:
             "budget_reading": reading,
             "reason": deploy["detail"],
         }
+        # P3-6：产物落点也进返回值（调用方不必再读一遍 history 才知道去哪看）。
+        if deploy.get("statement_id"):
+            out["statement_id"] = str(deploy["statement_id"])
+        if deploy.get("report_path"):
+            out["report_path"] = str(deploy["report_path"])
         self.last_step = out
         return out

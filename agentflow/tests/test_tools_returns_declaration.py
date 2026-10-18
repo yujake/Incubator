@@ -88,7 +88,9 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 2026-10-13 随 `paper_package` 退场（`draft/117`）从 83 改成 79：
 #: 四条旧工具（`paper_render` / `paper_build` / `paper_anchor` / `paper_state`）
 #: 一起下线，编译那一格由既有的 `doc.paper_compile` 接手。
-TOOL_COUNT = 84
+#: 2026-10-18：84 → **86**（业主裁定给只读角色开产出登记通道：
+#: `analysis.register_report`（C→`analysis_reports`）、`review.record_finding`（H→`review_findings`））。
+TOOL_COUNT = 86
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -220,6 +222,23 @@ def tool_params() -> dict[str, dict]:
     """55 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
     return {
+        # ---- 只读角色的两件产出登记工具（2026-10-18 业主裁定；判据 `test_readonly_output_channel`）----
+        # 参数取最小合规形态：C 交一份报告、H 记一条自己读出来的发现。
+        "analysis.register_report": {
+            "kind": "gaps",
+            "summary": "探针：登记一份最小报告",
+            "markdown": "# 探针\n\n这是一份用于判据的最小分析报告。\n",
+        },
+        "review.record_finding": {
+            # 夹具里唯一那份稿件是 `0000`（与 `review.review_document` 同号）；
+            # 不存在的稿号会被工具按校验拒绝（那属于『没查成』，判据不认）。
+            "doc_id": "0000",
+            "kind": "unsupported_claim",
+            "target": "claim:000000",
+            "message": "探针：这条断言没有给依据",
+            "evidence": "判据探针用",
+            "level": "warning",
+        },
         # ---- 主控的编排面工具（T0-9）：探针参数一律用"不会真的派活出去"的形态 ——
         # 主控的 Conductor 默认没有角色接线，派活会以 refused/not_wired 如实落台账，
         # 而 `ok(...)` 照样返回（拒绝 ≠ 工具失败）。`ensure_project` 的落点由夹具注入临时目录。
@@ -376,6 +395,7 @@ def tool_params() -> dict[str, dict]:
 #:     （`ocr.run`）。
 EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
     {
+        "analysis.register_report",
         "attack.check_budget", "attack.create_plan", "attack.list_plans", "attack.pick_next_subgoal",
         "attack.status", "attack.step",
         "doc.build_document", "doc.compose_claim", "doc.list_documents", "doc.register_dependency",
@@ -387,7 +407,7 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "ocr.backends", "ocr.detect_text_layer",
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
         "research.write_note",
-        "review.list_findings", "review.scan_document",
+        "review.list_findings", "review.record_finding", "review.scan_document",
         "search.dedup_check", "search.ingest_local", "search.literature", "search.local",
         "search.providers",
         "search.register",

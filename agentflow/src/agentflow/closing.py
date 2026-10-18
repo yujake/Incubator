@@ -268,9 +268,13 @@ LEG_CHECK_KINDS: dict[str, str] = {
     "statement_rows": "命题台账行数（`statements`）—— 文献里逐字核过的断言（`quote_verified` 非 null）"
                       "与我方派生的断言都记在这张表；它此前也全程 0 行，于是「手稿里的每句话从哪来」"
                       "在台账上没有落点",
-    "plan_progress_rows": "真的被推进过的攻坚计划数（`attack_plans` 里 `history` 非空的行）"
-                          "—— 立项 ≠ 推进：T2 里 `attack_plans` 有 2 行，`history` 一次都没长过，"
-                          "而计划的意义正是「一轮一轮逼近」（子目标进展 + 终止原因）",
+    "plan_progress_rows": "**真的被推进过**的攻坚计划数（`attack_plans` 里至少有一轮 "
+                          "`outcome=progress` 且该轮有 `cites` / 新子目标 / 新实验的行，见 "
+                          "`_round_advanced`）—— 立项 ≠ 推进，被 step 过也 ≠ 推进："
+                          "T2 里 `attack_plans` 有 2 行，`history` 一次都没长过，"
+                          "而计划的意义正是「一轮一轮逼近」（子目标进展 + 终止原因）；"
+                          "2026-10-19 之前这一档只数 `history` 非空 ⇒ 两轮全 `no_change` 的"
+                          "计划与四轮全 `progress` 的计划**等值**（mp3 实测），这一格因此量不到东西",
     "counterexample_or_proof_rows": "判决性证据行数：`experiments` 里 `evidence_kind=proof` 的行，"
                                     "或 `result=refutes` 且带非空 `counterexample` 的行 —— "
                                     "数学研究的推进只有三种：证明、反例、以及诚实的「还没有」；"
@@ -943,6 +947,60 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
     if bad_lines:
         detail["ledger_bad_lines"] = bad_lines[:3]
     return got, detail
+
+
+def _round_advanced(rec: Mapping[str, Any]) -> tuple[bool, str]:
+    """这一条 `attack_plans.history` 记录算不算"这一轮真的推进了"（`plan_progress_rows` 的唯一口径）。
+
+    ## 为什么要有它（改前的读数）
+
+    改前那一档的口径只有一句"`history` 非空"（`closing.py` 的 `advanced = [r for r in
+    rows if r["history"]]`）⇒ 一份两轮全 `no_change` 的计划与一份四轮全 `progress` 的
+    计划在「攻（攻坚推进）」那一格上**等值**（真机 mp3：`000000` 与 `000001` 读到同一个数）。
+    那一格是这一环节的唯一读数，等值就等于这一格没有量到任何东西。
+
+    ## 判据（三条，`outcome` 那一半与"产出了什么"那一半缺一不可）
+
+    ① `outcome == "progress"` —— `no_change` / `blocked` 都不是推进：前者是"这一轮没有
+       新事实"（`dead_end` 逐轮落库时就是它），后者是"卡住了"（等回填 / 不成形 / 假引用被拒）；
+    ② **有据可依**：产物里有 `cites`（`proof` 的 `steps[].cites`、`dead_end` 的
+       `best_partial[].ids`）—— 这是"这一步真的落到了台账里的某条东西上"；
+    ③ **或者产出了新东西**：`reduction` 的 `new_subgoals` 非空（计划里真的多了子目标）、
+       `counterexample_request` 派出了 E 子目标、`run_experiment` 落了一行实验。
+
+    ②与③是"或"：一条纯粹派发检索请求的轮（`submit_search_request`）两条都不满足
+    ⇒ **不算推进**。这是刻意的：把活递出去（`search_requests` / `reprocess_requests`）
+    会在台账上多一行请求，但难题本身一步没动 —— 它该由「闭（请求闭环）」那一档读，
+    不该让「攻」变绿（`plan_progress_rows` 改前的形态正是被这一条蒙过去的）。
+
+    返回 `(算不算, 为什么)`：`why` 是**读数**，不是装饰 —— 一份计划为什么读到 0，
+    要能从这一格里直接看出来（三态纪律：读不到 0 与 真的是 0 必须分得开）。
+    """
+    outcome = str(rec.get("outcome") or "")
+    if outcome != "progress":
+        return False, f"outcome={outcome or '（空）'}（不是 progress）"
+    raw_detail = rec.get("product_detail")
+    product = dict(raw_detail) if isinstance(raw_detail, Mapping) else {}
+    cites: list[str] = []
+    for step in (product.get("steps") or []):
+        if isinstance(step, Mapping):
+            cites += [str(x) for x in (step.get("cites") or [])]
+    for item in (product.get("best_partial") or []):
+        if isinstance(item, Mapping):
+            cites += [str(x) for x in (item.get("ids") or [])]
+    if cites:
+        return True, f"产物引到 {len(cites)} 个在册 id"
+    new_goals = [g for g in (product.get("new_subgoals") or []) if isinstance(g, Mapping)]
+    if new_goals:
+        return True, f"归约出 {len(new_goals)} 条新子目标（计划里真的多了行）"
+    action = str(rec.get("action") or "")
+    evidence = [str(x) for x in (rec.get("evidence") or [])]
+    if action == "counterexample_request" and evidence:
+        return True, f"派出一条 E 子目标 {evidence[:3]}（实验请求已落地）"
+    if action == "run_experiment" and evidence:
+        return True, f"落了一行实验 {evidence[:3]}"
+    return False, (f"action={action or '（空）'}：既没有 cites、也没有新子目标/新实验"
+                   "（派出去的请求不算攻坚推进 —— 那是「闭」那一档的事）")
 
 
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
@@ -1743,16 +1801,47 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "with_quote_verdict": len(verified), "derived": len(derived),
             "note": "文献来的要带 `quote_verified`（真/假/未查+理由），我方派生的要在 `derived_from` 里给出处"}
     if kind == "plan_progress_rows":
+        # 口径（2026-10-19 修，`draft/44` 的「攻」那一格）：**真的推进过的计划**才算。
+        #
+        # 改前的实现是 `advanced = [r for r in rows if r["history"]]` —— 它只问
+        # "这份计划被 step 过没有"，不问"step 出了什么"。于是两轮全 `no_change`
+        # 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全 `progress` 的计划
+        # 在这一格上**等值**（真机 mp3：`000000` 与 `000001` 读到同一个数）。
+        # 这一格是"攻（攻坚推进）"的唯一读数，等值 = 那一格量不到任何东西。
+        # 判据本体在 :func:`_round_advanced`（一处口径，读不到两种说法）。
         rows = list(store.rows("attack_plans"))
-        advanced = [r for r in rows if list(r.get("history") or [])]
-        return len(advanced), {"plans": [
-            {"id": str(r.get("plan_id") or ""), "status": str(r.get("status") or ""),
-             "rounds": int(r.get("rounds") or 0),
-             "history_len": len(list(r.get("history") or [])),
-             "subgoals": len(list(r.get("subgoals") or []))} for r in rows[:8]],
-            "total_plans": len(rows),
-            "note": "「立项」不算推进：`F.step` 每推进一轮才追加一条 `history`；"
-                    "一份从没被推进过的计划只说明问题被记下来了"}
+        plans: list[dict[str, Any]] = []
+        advanced: list[dict[str, Any]] = []
+        for r in rows:
+            hist = [h for h in (r.get("history") or []) if isinstance(h, Mapping)]
+            hits = [(h, *_round_advanced(h)) for h in hist]
+            gone = [{"round": int(h.get("round") or 0),
+                     "action": str(h.get("action") or ""),
+                     "outcome": str(h.get("outcome") or ""), "why": why}
+                    for h, ok, why in hits if not ok]
+            progressed = [{"round": int(h.get("round") or 0),
+                           "action": str(h.get("action") or ""), "why": why}
+                          for h, ok, why in hits if ok]
+            entry = {"id": str(r.get("plan_id") or r.get("id") or ""),
+                     "status": str(r.get("status") or ""),
+                     "rounds": int(r.get("rounds") or 0),
+                     "history_len": len(hist),
+                     "subgoals": len(list(r.get("subgoals") or [])),
+                     "progress_rounds": len(progressed),
+                     "no_progress_rounds": len(gone)}
+            plans.append(entry)
+            if progressed:
+                advanced.append({**entry, "advanced_rounds": progressed,
+                                 "not_advanced_rounds": gone})
+        return len(advanced), {
+            "plans": plans[:8], "total_plans": len(rows),
+            "advanced_plans": advanced[:8],
+            "note": ("「立项」不算推进、「被 step 过」也不算：这一档数的是**至少有一轮"
+                     "真推进**的计划（`outcome=progress` 且该轮有 `cites` 或产出新子目标/"
+                     "新实验）。只派检索/重抽取请求的那种轮**不算推进** —— 把活递出去会在"
+                     "台账上多一行请求，但难题一步没动，那是「闭（请求闭环）」那一档的读数。"
+                     "逐轮读数在 `advanced_plans` 里 —— 每一轮为什么算/不算都写在那句 `why` 上，"
+                     "读不到两种说法")}
     if kind == "counterexample_or_proof_rows":
         proof = [r for r in store.rows("experiments")
                  if str(r.get("evidence_kind") or "") == "proof"]
