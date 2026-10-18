@@ -259,6 +259,62 @@ Formal work has two independent switches:
 
 When Lean is unavailable or disabled, formal experiments are refused in a controlled way and no row can claim `proof`. The refusal distinguishes "the user turned it off" (`lean_disabled`) from "this machine has no backend" (`no_backend`), because the two fixes are different.
 
+### Setting up a Lean toolchain
+
+The toolchain is **not** shipped in this repository. Install it once and point the
+settings at it; nothing else in the framework needs it.
+
+**1. Get Lean 4.7.0 (the pinned version).** Either the official Windows/Linux
+release archive, or `elan`:
+
+```bash
+elan toolchain install leanprover/lean4:v4.7.0
+```
+
+A convention that keeps the workspace tidy (this directory is git-ignored):
+
+```
+<repo>/_env/lean470/lean-4.7.0-windows/bin/lean.exe
+<repo>/_env/mathlib-pinned2/mathlib4-4.7.0/          # optional, for Mathlib imports
+```
+
+**2. Point the settings at it.** Paths are resolved relative to the repository
+root, not to `agentflow/`:
+
+```json
+{
+  "toolchain": {
+    "lean_enabled": false,
+    "lean_bin": "_env/lean470/lean-4.7.0-windows/bin",
+    "mathlib_root": "_env/mathlib-pinned2/mathlib4-4.7.0"
+  }
+}
+```
+
+`lean_enabled` stays `false` until you want formal work: leaving it off is the
+default and is what a no-Lean run looks like.
+
+**3. Check the reading before trusting it.**
+
+```bash
+python -c "import sys; sys.path.insert(0, 'agentflow/src');
+from agentflow import toolchain as TC; r = TC.toolchain_report();
+print(r['lean_ready'], r['lean_path'], r['lean_version'])"
+```
+
+`lean_ready=True` and a real `lean_version` string mean the bridge found a
+working binary. `lean_path=''` means it did not — and then every formal call
+refuses with `no_backend`, which is a different message from `lean_disabled`.
+
+**4. Turn formal work on** for agent loops by setting `AGENTFLOW_LEAN_ENABLED=1`
+(or `toolchain.lean_enabled: true`). For the topic pipeline, `--lean` is the
+switch. `can_do_formal` is the combined reading: the switch is on **and** a
+binary answered.
+
+`Mathlib` is only needed when the formalized statement imports it. A
+self-contained lemma (for example `theorem t : (1 : Nat) + 1 = 2 := rfl`) proves
+without it, which is enough to exercise the whole bridge end to end.
+
 `docs/LEAN-MODES.md` carries the full matrix: what each role may do in each mode, which actions are refused, what the evidence ceiling is, and what each closing cell checks.
 
 ## Budget and Stop Control

@@ -34,9 +34,13 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 
 
 def _read(rel: str) -> str:
-    path = REPO / rel
-    assert path.is_file(), f"文档不在盘上：{path}"
-    return path.read_text(encoding="utf-8")
+    # 2026-10-18（业主）：README 挪到**仓库根**（`D:\\Incubator/README.md`）。
+    # 读取器先看仓库根，再退回本目录 —— 两种布局都判得动，且"找不到"仍然算红。
+    for base in (REPO, REPO.parent):
+        path = base / rel
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+    assert False, f"文档不在盘上：{REPO / rel}（也不在 {REPO.parent / rel}）"
 
 
 def _int_of_cn(text: str) -> int | None:
@@ -202,7 +206,15 @@ def _gate_count_scan_all(want: int) -> tuple[list[str], dict[str, int]]:
     """扫整个教人文本面；返回 (问题清单, 反真空读数)。"""
     bad: list[str] = []
     reading = {"md_files": 0, "py_files": 0, "blocks": 0, "sites": 0, "unreadable": 0}
-    mds = [REPO / rel for rel in _TAUGHT_MD] + sorted((REPO / "docs").glob("*.md"))
+    # 2026-10-18（业主）：README 挪到仓库根 ⇒ 这里按"仓库根优先、本目录兜底"解析，
+    # 缺文件仍然记成红（不许因为找不到就通过）。
+    def _resolve(rel):
+        for base in (REPO, REPO.parent):
+            cand = base / rel
+            if cand.is_file():
+                return cand
+        return REPO / rel
+    mds = [_resolve(rel) for rel in _TAUGHT_MD] + sorted((REPO / "docs").glob("*.md"))
     for path in mds:
         if not path.is_file():
             bad.append(f"{path.name}: 判据要读的文档不在盘上（不许因为找不到就通过）")

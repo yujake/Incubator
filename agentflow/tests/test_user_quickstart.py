@@ -21,6 +21,11 @@ from agentflow import cli
 
 #: 仓库根（`agentflow/`）：fixture 素材要从这里拷进临时工作区。
 REPO = Path(__file__).resolve().parents[1]
+# 2026-10-18（业主）：README 挪到**仓库根**（`D:\Incubator/README.md`）。
+# 判据跟着改锚点：优先读仓库根，读不到再退回本目录（两种布局都判得动）。
+def _readme_path() -> Path:
+    root = REPO.parent / "README.md"
+    return root if root.exists() else (REPO / "README.md")
 
 
 def _run(argv: list[str]) -> tuple[int, str]:
@@ -151,7 +156,7 @@ def test_the_readme_subcommand_count_matches_the_live_parser():
     assert sub is not None, "夹具前提变了：`build_parser()` 里找不到子命令那个 action"
     live = len(sub.choices)
 
-    text = (REPO / "README.md").read_text(encoding="utf-8")
+    text = _readme_path().read_text(encoding="utf-8")
     found = [int(n) for n in re.findall(r"(\d+)\s*(?:个子命令|subcommands)", text)]
     assert found, "README 里没有『N 个子命令 / N subcommands』这个读数了 —— 要么删干净、要么改这条判据"
     wrong = [n for n in found if n != live]
@@ -167,7 +172,7 @@ def test_the_readme_does_not_document_a_flag_that_does_not_exist():
     `unrecognized arguments: --role`。判据只取以 `run-agent` 开头的那几行里的
     `--xxx`（不牵连别的子命令的开关：`§0` 里同一段还有 `project run --books` 之类）。
     """
-    text = (REPO / "README.md").read_text(encoding="utf-8")
+    text = _readme_path().read_text(encoding="utf-8")
     # 2026-10-18：README 改成 Moonshine 骨架后不再有 `## 0. 先跑通`；
     # 锚点改成语义等价的那一节（首次运行里的 run-agent 示例），判据意图不变。
     start = text.index("### 4. Start a research run")
